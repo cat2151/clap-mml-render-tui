@@ -2,12 +2,15 @@
 
 use anyhow::Result;
 use clack_host::prelude::PluginEntry;
-use std::io::Cursor;
+use std::io::{Cursor, Read};
 
 use crate::config::Config;
 use crate::pipeline::mml_render;
 
 pub const DEFAULT_PORT: u16 = 62151;
+
+/// POSTボディのサイズ上限（バイト）。これを超えると 413 を返す。
+const MAX_BODY_BYTES: u64 = 1024 * 1024; // 1 MiB
 
 /// --server モードのメインループ
 ///
@@ -32,9 +35,18 @@ pub fn run_server(cfg: &Config, entry: &PluginEntry, port: u16) -> Result<()> {
             continue;
         }
 
-        // bodyを読み取る
+        // bodyを読み取る（サイズ上限を設けてメモリ枯渇を防ぐ）
         let mut body = String::new();
-        if let Err(e) = request.as_reader().read_to_string(&mut body) {
+        let reader = request.as_reader().take(MAX_BODY_BYTES + 1);
+        let read_result = std::io::BufReader::new(reader).read_to_string(&mut body);
+        if body.len() as u64 > MAX_BODY_BYTES {
+            let response =
+                tiny_http::Response::from_string("リクエストbodyが大きすぎます\n")
+                    .with_status_code(413);
+            let _ = request.respond(response);
+            continue;
+        }
+        if let Err(e) = read_result {
             eprintln!("リクエストbodyの読み取りに失敗: {}", e);
             let response =
                 tiny_http::Response::from_string("bodyの読み取りに失敗しました\n")
@@ -51,7 +63,7 @@ pub fn run_server(cfg: &Config, entry: &PluginEntry, port: u16) -> Result<()> {
             continue;
         }
 
-        let mml_preview = if mml.len() > 80 { &mml[..80] } else { &mml };
+        let mml_preview: String = mml.chars().take(80).collect();
         println!("MML受信: {}", mml_preview.escape_default());
 
         match mml_render(&mml, cfg, entry) {
