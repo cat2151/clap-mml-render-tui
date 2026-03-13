@@ -31,6 +31,18 @@ fn main() -> Result<()> {
 
     let cfg = config::Config::load()?;
 
+    // plugin_path が未設定の場合は設定ファイルを編集するよう案内する
+    if cfg.plugin_path.is_empty() {
+        let path_hint = match config::config_file_path() {
+            Some(p) => p.display().to_string(),
+            None => "(不明)".to_string(),
+        };
+        anyhow::bail!(
+            "plugin_path が設定されていません。設定ファイルを編集して CLAP プラグインのパスを指定してください。\n設定ファイル: {}",
+            path_hint
+        );
+    }
+
     // CLAP プラグインエントリをロード（TUI/CLI 共通）
     let entry = host::load_entry(&cfg.plugin_path)?;
 
