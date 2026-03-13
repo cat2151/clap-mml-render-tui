@@ -39,6 +39,8 @@ use crate::patch_list::{collect_patches, to_relative};
 pub const TRACKS: usize = 8;
 /// 小節数（固定）。measure 0 = 音色列。measure 1..=MEASURES = 通常小節。
 pub const MEASURES: usize = 8;
+/// track 0 はグローバルヘッダ（テンポ等）専用。演奏 track は 1 から始まる。
+const FIRST_PLAYABLE_TRACK: usize = 1;
 
 const DAW_FILE: &str = "daw.txt";
 
@@ -49,6 +51,7 @@ enum CacheState {
     Empty,   // MML が空
     Pending, // MML あり、レンダリング待ち or 実行中
     Ready,   // レンダリング済み
+    Error,   // レンダリング失敗
 }
 
 #[derive(Clone)]
@@ -96,6 +99,10 @@ pub struct DawApp {
     /// セルごとのキャッシュ [track][measure]
     cache: Arc<Mutex<Vec<Vec<CellCache>>>>,
 
+    /// キャッシュワーカースレッドへのジョブチャネル: (track, measure, mml)
+    /// シリアルな単一ワーカーで処理することでファイル書き込みの競合を防ぐ
+    cache_tx: std::sync::mpsc::Sender<(usize, usize, String)>,
+
     play_state: Arc<Mutex<DawPlayState>>,
 }
 
@@ -109,6 +116,32 @@ impl DawApp {
             vec![vec![CellCache::empty(); MEASURES + 1]; TRACKS],
         ));
 
+        // シリアルなキャッシュワーカースレッドを起動する。
+        // チャネルが送信側（cache_tx）を介してジョブを受け取り順次レンダリングすることで
+        // ファイル書き込み（pass1_tokens.json 等）の競合と過剰スレッド生成を防ぐ。
+        let (cache_tx, cache_rx) = std::sync::mpsc::channel::<(usize, usize, String)>();
+        {
+            let cache_worker = Arc::clone(&cache);
+            let cfg_worker = Arc::clone(&cfg);
+            std::thread::spawn(move || {
+                // SAFETY: entry は main() のスタックに生存している
+                let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
+                let mut daw_cfg = (*cfg_worker).clone();
+                daw_cfg.random_patch = false;
+
+                for (track, measure, mml) in cache_rx {
+                    match crate::pipeline::mml_render_for_cache(&mml, &daw_cfg, entry_ref) {
+                        Ok(_) => {
+                            cache_worker.lock().unwrap()[track][measure].state = CacheState::Ready;
+                        }
+                        Err(_) => {
+                            cache_worker.lock().unwrap()[track][measure].state = CacheState::Error;
+                        }
+                    }
+                }
+            });
+        }
+
         let mut app = Self {
             data,
             cursor_track: 0,
@@ -118,6 +151,7 @@ impl DawApp {
             cfg,
             entry_ptr,
             cache,
+            cache_tx,
             play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
         };
 
@@ -179,42 +213,17 @@ impl DawApp {
         }
     }
 
-    /// 指定セルの非同期レンダリングを開始する
+    /// 指定セルのキャッシュジョブをワーカーキューに投入する
     fn kick_cache(&self, track: usize, measure: usize) {
         let mml = self.build_cell_mml(track, measure);
         if mml.trim().is_empty() {
             return;
         }
-
-        let cache = Arc::clone(&self.cache);
-        let cfg = Arc::clone(&self.cfg);
-        let entry_ptr = self.entry_ptr;
-
-        std::thread::spawn(move || {
-            // SAFETY: entry は main() のスタックに生存している
-            let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
-
-            // DAW モードは random_patch の影響を受けない
-            let mut daw_cfg = (*cfg).clone();
-            daw_cfg.random_patch = false;
-
-            match crate::pipeline::mml_render(&mml, &daw_cfg, entry_ref) {
-                Ok((_, _)) => {
-                    let mut lock = cache.lock().unwrap();
-                    lock[track][measure] = CellCache {
-                        state: CacheState::Ready,
-                    };
-                }
-                Err(_) => {
-                    // エラー時は Empty に戻す
-                    let mut lock = cache.lock().unwrap();
-                    lock[track][measure].state = CacheState::Empty;
-                }
-            }
-        });
+        // チャネルが既に閉じていれば送信は無視する（DawApp 終了後の残留呼び出しへの安全策）
+        let _ = self.cache_tx.send((track, measure, mml));
     }
 
-    /// Pending 状態のすべてのセルのレンダリングを開始する
+    /// Pending 状態のすべてのセルをワーカーキューに投入する
     fn kick_all_pending(&self) {
         let pending: Vec<(usize, usize)> = {
             let cache = self.cache.lock().unwrap();
@@ -243,13 +252,15 @@ impl DawApp {
     }
 
     /// 全 track を結合したフル曲 MML を構築する（演奏用）
+    /// track 0 はグローバルヘッダ（テンポ等）として各 track の先頭に付加するが、
+    /// それ自体を独立した再生 track としては扱わない。
     fn build_full_mml(&self) -> String {
         let track0: String = (0..=MEASURES)
             .map(|m| self.data[0][m].trim())
             .collect::<Vec<_>>()
             .join("");
 
-        let track_mmls: Vec<String> = (0..TRACKS)
+        let track_mmls: Vec<String> = (FIRST_PLAYABLE_TRACK..TRACKS)
             .filter_map(|t| {
                 let timbre = self.data[t][0].trim();
                 let notes: String = (1..=MEASURES)
@@ -523,6 +534,7 @@ impl DawApp {
                         CacheState::Empty => (Color::DarkGray, Color::Reset),
                         CacheState::Pending => (Color::White, Color::Reset),
                         CacheState::Ready => (Color::Green, Color::Reset),
+                        CacheState::Error => (Color::Red, Color::Reset),
                     }
                 };
 
@@ -536,6 +548,7 @@ impl DawApp {
                     CacheState::Empty => "     ",
                     CacheState::Pending => "...  ",
                     CacheState::Ready => "●    ",
+                    CacheState::Error => "✗    ",
                 };
                 let ind_fg = if is_cursor {
                     Color::Yellow
@@ -544,6 +557,7 @@ impl DawApp {
                         CacheState::Empty => Color::DarkGray,
                         CacheState::Pending => Color::Yellow,
                         CacheState::Ready => Color::Green,
+                        CacheState::Error => Color::Red,
                     }
                 };
                 row2.push(Span::styled(indicator, Style::default().fg(ind_fg)));
