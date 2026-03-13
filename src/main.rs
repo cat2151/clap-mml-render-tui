@@ -54,6 +54,11 @@ fn main() -> Result<()> {
     // CLAP プラグインエントリをロード（TUI/CLI/サーバー 共通）
     let entry = host::load_entry(&cfg.plugin_path)?;
 
+    // --mml は廃止済み。旧来の使い方をしたユーザーに新しい使い方を案内する
+    if args.iter().any(|a| a == "--mml") {
+        anyhow::bail!("`--mml` オプションは廃止されました。`cmrt <mml>` の形式で指定してください。\n例: cmrt cde");
+    }
+
     if let Some(pos) = args.iter().position(|a| a == "--server") {
         // --server [port] の次の引数をポート番号として解釈する（省略時はデフォルト）
         let port = args
