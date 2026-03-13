@@ -83,15 +83,6 @@ pub fn config_file_path() -> Option<PathBuf> {
 
 impl Config {
     pub fn load() -> anyhow::Result<Self> {
-        // カレントディレクトリの config.toml を最優先（後方互換性・Windows 向け）
-        let cwd_path = std::path::Path::new("config.toml");
-        if cwd_path.exists() {
-            let text = std::fs::read_to_string(cwd_path)
-                .map_err(|e| anyhow::anyhow!("config.toml が読めない ({}): {}", cwd_path.display(), e))?;
-            return toml::from_str(&text)
-                .map_err(|e| anyhow::anyhow!("config.toml のパースに失敗 ({}): {}", cwd_path.display(), e));
-        }
-
         let path = config_file_path().ok_or_else(|| {
             anyhow::anyhow!(
                 "システムの設定ディレクトリが取得できません。HOME 環境変数などを確認してください。"
