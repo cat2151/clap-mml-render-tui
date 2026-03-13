@@ -1,0 +1,17 @@
+# clap-midi-render config
+plugin_path = 'C:\Program Files\Common Files\CLAP\Surge Synth Team\Surge XT.clap'
+input_midi  = "input.mid"
+output_midi = "output.mid"
+output_wav  = "output.wav"
+sample_rate = 44100
+buffer_size = 512
+
+# ファクトリパッチのルートディレクトリ
+patches_dir = 'C:\ProgramData\Surge XT\patches_factory'
+
+# true: 演奏ごとにランダムなパッチを選ぶ（デフォルト true）
+# false: 下の patch_path を使う
+random_patch = true
+
+# random_patch = false のときに使う音色
+# patch_path = 'C:\ProgramData\Surge XT\patches_factory\Pads\Pad 1.fxp'
