@@ -140,17 +140,12 @@ impl<'a> TuiApp<'a> {
             });
         }
 
+        // `lines` は常に1行以上を保持する（不変条件）。
         let lines = vec!["cde".to_string()];
         let session = crate::history::load_session_state();
-        let initial_cursor = if lines.is_empty() {
-            0
-        } else {
-            session.cursor.min(lines.len() - 1)
-        };
+        let initial_cursor = session.cursor.min(lines.len() - 1);
         let mut list_state = ListState::default();
-        if !lines.is_empty() {
-            list_state.select(Some(initial_cursor));
-        }
+        list_state.select(Some(initial_cursor));
 
         Self {
             mode: Mode::Normal,
@@ -429,12 +424,16 @@ impl<'a> TuiApp<'a> {
             }
         }
 
-        disable_raw_mode()?;
-        execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-        // 保存失敗はベストエフォートとして無視する（終了処理のため通知手段がない）
+        // 終了前にセッション状態を保存する（端末クリーンアップの成否に関わらず実行）。
+        // 保存失敗はベストエフォートとして無視する（終了処理のため通知手段がない）。
         let _ = crate::history::save_session_state(&crate::history::SessionState {
             cursor: self.cursor,
         });
+
+        let raw_mode_result = disable_raw_mode();
+        let alternate_screen_result = execute!(terminal.backend_mut(), LeaveAlternateScreen);
+        raw_mode_result?;
+        alternate_screen_result?;
         Ok(())
     }
 }

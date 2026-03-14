@@ -14,30 +14,36 @@ pub struct SessionState {
     pub cursor: usize,
 }
 
-fn history_dir() -> PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("clap-mml-render-tui")
+/// OS ごとのデータディレクトリ配下の `cmrt` サブディレクトリを返す。
+/// config.toml と同じ `cmrt` プレフィックスに揃えることで、ユーザーデータの場所を一貫させる。
+/// `dirs::data_local_dir()` が利用できない環境では `None` を返し、保存・復元をスキップする。
+fn history_dir() -> Option<PathBuf> {
+    dirs::data_local_dir().map(|d| d.join("cmrt"))
 }
 
-fn session_state_path() -> PathBuf {
-    history_dir().join("history.json")
+fn session_state_path() -> Option<PathBuf> {
+    history_dir().map(|d| d.join("history.json"))
 }
 
 /// セッション状態（現在行番号）を history.json に保存する。
+/// データディレクトリが利用できない場合はベストエフォートでスキップする。
 pub fn save_session_state(state: &SessionState) -> Result<()> {
-    let dir = history_dir();
-    std::fs::create_dir_all(&dir)?;
-    let path = session_state_path();
+    let Some(path) = session_state_path() else { return Ok(()); };
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
     let json = serde_json::to_string_pretty(state)?;
     std::fs::write(&path, json)?;
     Ok(())
 }
 
 /// history.json からセッション状態を読み込む。
-/// ファイルが存在しない場合や読み込みに失敗した場合はデフォルト値を返す。
+/// ファイルが存在しない場合・データディレクトリが利用できない場合・読み込みに失敗した場合は
+/// デフォルト値を返す。
 pub fn load_session_state() -> SessionState {
-    let path = session_state_path();
+    let Some(path) = session_state_path() else {
+        return SessionState::default();
+    };
     if !path.exists() {
         return SessionState::default();
     }
