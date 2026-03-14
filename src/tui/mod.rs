@@ -22,7 +22,11 @@ use crossterm::{
 use ratatui::{backend::CrosstermBackend, widgets::ListState, Frame, Terminal};
 use tui_textarea::TextArea;
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+
+/// audio_cache の最大エントリ数。超過時はキャッシュ全体をクリアしてから挿入する。
+const AUDIO_CACHE_MAX_ENTRIES: usize = 64;
 
 use crate::config::Config;
 
@@ -40,6 +44,39 @@ fn filter_patches(all: &[(String, String)], query: &str) -> Vec<String> {
         .filter(|(_, lower)| terms.iter().all(|t| lower.contains(t.as_str())))
         .map(|(orig, _)| orig.clone())
         .collect()
+}
+
+/// キャッシュからサンプルを取得する。`random_patch` が true の場合は常に `None` を返す。
+fn resolve_cached_samples(
+    cache: &HashMap<String, Vec<f32>>,
+    mml: &str,
+    random_patch: bool,
+) -> Option<Vec<f32>> {
+    if random_patch {
+        None
+    } else {
+        cache.get(mml).cloned()
+    }
+}
+
+/// キャッシュにサンプルを挿入する。上限に達した場合はキャッシュ全体をクリアしてから挿入する。
+/// `random_patch` が true の場合は何もしない。
+///
+/// 呼び出し元は `audio_cache` のロックを保持した状態で `&mut HashMap` を渡すこと。
+/// この関数自体は非同期に呼び出されないため、len 確認と insert は事実上アトミックである。
+fn try_insert_cache(
+    cache: &mut HashMap<String, Vec<f32>>,
+    mml: String,
+    samples: Vec<f32>,
+    random_patch: bool,
+) {
+    if random_patch {
+        return;
+    }
+    if cache.len() >= AUDIO_CACHE_MAX_ENTRIES && !cache.contains_key(&mml) {
+        cache.clear();
+    }
+    cache.insert(mml, samples);
 }
 
 /// バックグラウンドパッチ読み込みの状態
@@ -81,6 +118,8 @@ pub struct TuiApp<'a> {
     cfg: Arc<Config>,
     entry_ptr: usize, // *const PluginEntry as usize (main() に生存保証)
     pub(super) play_state: Arc<Mutex<PlayState>>,
+    /// MML文字列 → レンダリング済みサンプルのキャッシュ（random_patchモード時は使用しない）
+    pub(super) audio_cache: Arc<Mutex<HashMap<String, Vec<f32>>>>,
     // 音色選択モード用
     /// バックグラウンドスレッドが収集したパッチリストの状態
     patch_load_state: Arc<Mutex<PatchLoadState>>,
@@ -156,6 +195,7 @@ impl<'a> TuiApp<'a> {
             cfg: cfg_arc,
             entry_ptr: entry as *const PluginEntry as usize,
             play_state: Arc::new(Mutex::new(PlayState::Idle)),
+            audio_cache: Arc::new(Mutex::new(HashMap::new())),
             patch_load_state,
             patch_all: Vec::new(),
             patch_query: String::new(),
@@ -168,36 +208,64 @@ impl<'a> TuiApp<'a> {
     fn kick_play(&self, mml: String) {
         let cfg = Arc::clone(&self.cfg);
         let state = Arc::clone(&self.play_state);
+        let cache = Arc::clone(&self.audio_cache);
         let entry_ptr = self.entry_ptr;
 
-        *state.lock().unwrap() = PlayState::Running(mml.clone());
+        // キャッシュを確認（random_patchモード時はキャッシュを使用しない）
+        let cached_samples = resolve_cached_samples(&cache.lock().unwrap(), &mml, cfg.random_patch);
 
-        std::thread::spawn(move || {
-            // SAFETY: entry は main() のスタックに生存している
-            let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
+        if let Some(samples) = cached_samples {
+            // キャッシュヒット: レンダリングをスキップして即時再生
+            let msg = format!("(cached) | {}", mml);
+            *state.lock().unwrap() = PlayState::Playing(msg.clone());
 
-            // レンダリング
-            let render_result = crate::pipeline::mml_render(&mml, &cfg, entry_ref);
+            std::thread::spawn(move || {
+                let play_result = crate::pipeline::play_samples(samples, cfg.sample_rate as u32);
 
-            match render_result {
-                Err(e) => {
-                    *state.lock().unwrap() = PlayState::Err(format!("エラー: {}", e));
+                *state.lock().unwrap() = match play_result {
+                    Ok(_)  => PlayState::Done(msg),
+                    Err(e) => PlayState::Err(format!("エラー: {}", e)),
+                };
+            });
+        } else {
+            // キャッシュミス: レンダリングが必要
+            *state.lock().unwrap() = PlayState::Running(mml.clone());
+
+            std::thread::spawn(move || {
+                // SAFETY: entry は main() のスタックに生存している
+                let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
+
+                // レンダリング
+                let render_result = crate::pipeline::mml_render(&mml, &cfg, entry_ref);
+
+                match render_result {
+                    Err(e) => {
+                        *state.lock().unwrap() = PlayState::Err(format!("エラー: {}", e));
+                    }
+                    Ok((samples, patch_name)) => {
+                        // キャッシュに保存（random_patchモード時はキャッシュしない、上限超過時はクリア）
+                        try_insert_cache(
+                            &mut cache.lock().unwrap(),
+                            mml.clone(),
+                            samples.clone(),
+                            cfg.random_patch,
+                        );
+
+                        let msg = format!("{} | {}", patch_name, mml);
+                        // 演奏中に切り替え
+                        *state.lock().unwrap() = PlayState::Playing(msg.clone());
+
+                        // 再生（ブロッキング）
+                        let play_result = crate::pipeline::play_samples(samples, cfg.sample_rate as u32);
+
+                        *state.lock().unwrap() = match play_result {
+                            Ok(_)  => PlayState::Done(msg),
+                            Err(e) => PlayState::Err(format!("エラー: {}", e)),
+                        };
+                    }
                 }
-                Ok((samples, patch_name)) => {
-                    let msg = format!("{} | {}", patch_name, mml);
-                    // 演奏中に切り替え
-                    *state.lock().unwrap() = PlayState::Playing(msg.clone());
-
-                    // 再生（ブロッキング）
-                    let play_result = crate::pipeline::play_samples(samples, cfg.sample_rate as u32);
-
-                    *state.lock().unwrap() = match play_result {
-                        Ok(_)  => PlayState::Done(format!("✓ {}", msg)),
-                        Err(e) => PlayState::Err(format!("エラー: {}", e)),
-                    };
-                }
-            }
-        });
+            });
+        }
     }
 
     fn start_insert(&mut self) {
