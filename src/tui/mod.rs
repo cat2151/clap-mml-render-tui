@@ -141,13 +141,21 @@ impl<'a> TuiApp<'a> {
         }
 
         let lines = vec!["cde".to_string()];
+        let session = crate::history::load_session_state();
+        let initial_cursor = if lines.is_empty() {
+            0
+        } else {
+            session.cursor.min(lines.len() - 1)
+        };
         let mut list_state = ListState::default();
-        list_state.select(Some(0));
+        if !lines.is_empty() {
+            list_state.select(Some(initial_cursor));
+        }
 
         Self {
             mode: Mode::Normal,
             lines,
-            cursor: 0,
+            cursor: initial_cursor,
             list_state,
             textarea: TextArea::default(),
             cfg: cfg_arc,
@@ -423,6 +431,10 @@ impl<'a> TuiApp<'a> {
 
         disable_raw_mode()?;
         execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+        // 保存失敗はベストエフォートとして無視する（終了処理のため通知手段がない）
+        let _ = crate::history::save_session_state(&crate::history::SessionState {
+            cursor: self.cursor,
+        });
         Ok(())
     }
 }
