@@ -26,6 +26,24 @@ fn config_file_path_contains_cmrt_subdir() {
 }
 
 #[test]
+#[cfg(target_os = "windows")]
+fn config_file_path_uses_local_not_roaming_on_windows() {
+    if let Some(path) = config_file_path() {
+        let path_str = path.to_string_lossy().to_lowercase();
+        assert!(
+            !path_str.contains("roaming"),
+            "config_file_path が Roaming を使っている（Local を使うべき）: {}",
+            path.display()
+        );
+        assert!(
+            path_str.contains("local"),
+            "config_file_path が Local を含んでいない: {}",
+            path.display()
+        );
+    }
+}
+
+#[test]
 fn config_parse_valid_toml() {
     let toml_str = r#"
 plugin_path = "/usr/lib/clap/Surge XT.clap"
