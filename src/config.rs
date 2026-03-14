@@ -124,12 +124,12 @@ random_patch = true
 }
 
 /// OS 標準の設定ディレクトリ内の config.toml パスを返す。
-/// - Windows: %APPDATA%\cmrt\config.toml
+/// - Windows: %LOCALAPPDATA%\cmrt\config.toml  (Local 側)
 /// - Linux:   ~/.config/cmrt/config.toml
 /// - macOS:   ~/Library/Application Support/cmrt/config.toml
 /// システムの設定ディレクトリが取得できない場合は `None` を返す。
 pub fn config_file_path() -> Option<PathBuf> {
-    dirs::config_dir().map(|d| d.join("cmrt").join("config.toml"))
+    dirs::config_local_dir().map(|d| d.join("cmrt").join("config.toml"))
 }
 
 impl Config {
