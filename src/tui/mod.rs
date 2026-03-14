@@ -24,6 +24,7 @@ use tui_textarea::TextArea;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// audio_cache の最大エントリ数。超過時はキャッシュ全体をクリアしてから挿入する。
 const AUDIO_CACHE_MAX_ENTRIES: usize = 64;
@@ -129,6 +130,8 @@ pub struct TuiApp<'a> {
     pub(super) patch_filtered: Vec<String>,  // フィルタ結果（表示名のみ）
     pub(super) patch_cursor: usize,          // フィルタ結果内のカーソル位置
     pub(super) patch_list_state: ListState,  // 音色選択リスト描画用
+    /// バックグラウンドのアップデートチェックがtrueにセットしたらアップデート実行
+    pub update_available: Arc<AtomicBool>,
 }
 
 impl<'a> TuiApp<'a> {
@@ -202,6 +205,7 @@ impl<'a> TuiApp<'a> {
             patch_filtered: Vec::new(),
             patch_cursor: 0,
             patch_list_state: ListState::default(),
+            update_available: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -458,6 +462,11 @@ impl<'a> TuiApp<'a> {
 
         loop {
             terminal.draw(|f| self.draw(f))?;
+
+            // アップデートが利用可能になったら自動的にループを抜けてアップデートを実行する
+            if self.update_available.load(Ordering::Relaxed) && self.mode == Mode::Normal {
+                break;
+            }
 
             if event::poll(std::time::Duration::from_millis(50))? {
                 if let Event::Key(key) = event::read()? {

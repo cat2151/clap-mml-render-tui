@@ -8,6 +8,7 @@ mod pipeline;
 mod render;
 mod server;
 mod tui;
+mod updater;
 
 use anyhow::Result;
 
@@ -80,7 +81,18 @@ fn main() -> Result<()> {
 
     // TUI モード
     let mut app = tui::TuiApp::new(&cfg, &entry);
+
+    // バックグラウンドで自動アップデートチェックを開始する
+    updater::spawn_update_check(std::sync::Arc::clone(&app.update_available));
+
     app.run()?;
+
+    // アップデートが利用可能であれば実行する
+    if app.update_available.load(std::sync::atomic::Ordering::Relaxed) {
+        if let Err(e) = updater::run_foreground_update() {
+            eprintln!("アップデートに失敗しました: {}", e);
+        }
+    }
 
     Ok(())
 }
