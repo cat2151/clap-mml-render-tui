@@ -132,6 +132,8 @@ pub struct TuiApp<'a> {
     pub(super) patch_list_state: ListState,  // 音色選択リスト描画用
     /// バックグラウンドのアップデートチェックがtrueにセットしたらアップデートを実行
     pub update_available: Arc<AtomicBool>,
+    /// 終了時 DAW モードだったかどうか（history.json に保存・復元する）
+    pub(super) is_daw_mode: bool,
 }
 
 impl<'a> TuiApp<'a> {
@@ -184,7 +186,7 @@ impl<'a> TuiApp<'a> {
 
         // `lines` は常に1行以上を保持する（不変条件）。
         // load_session_state() は lines が空でないことを保証している。
-        let crate::history::SessionState { cursor, lines } = crate::history::load_session_state();
+        let crate::history::SessionState { cursor, lines, is_daw_mode } = crate::history::load_session_state();
         let initial_cursor = cursor.min(lines.len() - 1);
         let mut list_state = ListState::default();
         list_state.select(Some(initial_cursor));
@@ -206,6 +208,7 @@ impl<'a> TuiApp<'a> {
             patch_cursor: 0,
             patch_list_state: ListState::default(),
             update_available: Arc::new(AtomicBool::new(false)),
+            is_daw_mode,
         }
     }
 
@@ -283,7 +286,24 @@ impl<'a> TuiApp<'a> {
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
 
+        // 前回 DAW モードで終了していた場合は直接 DAW モードで起動する
+        let mut quit_from_startup_daw = false;
+        if self.is_daw_mode {
+            let mut daw = crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
+            match daw.run_with_terminal(&mut terminal)? {
+                crate::daw::DawExitReason::ReturnToTui => {
+                    self.is_daw_mode = false;
+                }
+                crate::daw::DawExitReason::QuitApp => {
+                    quit_from_startup_daw = true;
+                }
+            }
+        }
+
         loop {
+            if quit_from_startup_daw {
+                break;
+            }
             terminal.draw(|f| self.draw(f))?;
 
             // アップデートが利用可能になったら自動的にループを抜けてアップデートを実行する
@@ -312,7 +332,15 @@ impl<'a> TuiApp<'a> {
                                         Arc::clone(&self.cfg),
                                         self.entry_ptr,
                                     );
-                                    daw.run_with_terminal(&mut terminal)?;
+                                    match daw.run_with_terminal(&mut terminal)? {
+                                        crate::daw::DawExitReason::ReturnToTui => {
+                                            self.is_daw_mode = false;
+                                        }
+                                        crate::daw::DawExitReason::QuitApp => {
+                                            self.is_daw_mode = true;
+                                            break;
+                                        }
+                                    }
                                 }
                                 NormalAction::Continue => {}
                             }
@@ -329,6 +357,7 @@ impl<'a> TuiApp<'a> {
         let _ = crate::history::save_session_state(&crate::history::SessionState {
             cursor: self.cursor,
             lines: self.lines.clone(),
+            is_daw_mode: self.is_daw_mode,
         });
 
         let raw_mode_result = disable_raw_mode();
