@@ -74,8 +74,13 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
             },
         )];
 
-        // 行 2: 状態インジケータ
-        let mut row2: Vec<Span> = vec![Span::styled("     ", Style::default())];
+        // INSERTモード時はカーソルtrackのインジケータ行（行2）が不要なので生成をスキップする。
+        let show_indicators = !(is_cursor_track && app.mode == DawMode::Insert);
+        let mut row2: Vec<Span> = if show_indicators {
+            vec![Span::styled("     ", Style::default())]
+        } else {
+            vec![]
+        };
 
         for m in 0..=MEASURES {
             let is_cursor = is_cursor_track && m == app.cursor_measure;
@@ -106,24 +111,26 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
                 Style::default().fg(fg).bg(bg),
             ));
 
-            // 状態インジケータ (4 chars + 1 space)
-            let indicator = match cs {
-                CacheState::Empty => "     ",
-                CacheState::Pending => "...  ",
-                CacheState::Ready => "●    ",
-                CacheState::Error => "✗    ",
-            };
-            let ind_fg = if is_cursor {
-                Color::Yellow
-            } else {
-                match cs {
-                    CacheState::Empty => Color::DarkGray,
-                    CacheState::Pending => Color::Yellow,
-                    CacheState::Ready => Color::Green,
-                    CacheState::Error => Color::Red,
-                }
-            };
-            row2.push(Span::styled(indicator, Style::default().fg(ind_fg)));
+            // 状態インジケータ (4 chars + 1 space): INSERTモードのカーソルtrackはスキップ
+            if show_indicators {
+                let indicator = match cs {
+                    CacheState::Empty => "     ",
+                    CacheState::Pending => "...  ",
+                    CacheState::Ready => "●    ",
+                    CacheState::Error => "✗    ",
+                };
+                let ind_fg = if is_cursor {
+                    Color::Yellow
+                } else {
+                    match cs {
+                        CacheState::Empty => Color::DarkGray,
+                        CacheState::Pending => Color::Yellow,
+                        CacheState::Ready => Color::Green,
+                        CacheState::Error => Color::Red,
+                    }
+                };
+                row2.push(Span::styled(indicator, Style::default().fg(ind_fg)));
+            }
         }
 
         f.render_widget(
@@ -132,14 +139,14 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
         );
 
         // INSERTモード時は、カーソルtrackのインジケータ行にインラインで textarea を描画する。
-        if is_cursor_track && app.mode == DawMode::Insert {
+        if show_indicators {
             f.render_widget(
-                &app.textarea,
+                Paragraph::new(Line::from(row2)),
                 Rect { x: area.x, y: row_y + 1, width: area.width, height: 1 },
             );
         } else {
             f.render_widget(
-                Paragraph::new(Line::from(row2)),
+                &app.textarea,
                 Rect { x: area.x, y: row_y + 1, width: area.width, height: 1 },
             );
         }
