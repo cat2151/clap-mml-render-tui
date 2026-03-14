@@ -107,6 +107,11 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_color: 
     let is_insert = app.mode == Mode::Insert;
     let cursor = app.cursor;
 
+    // キャッシュ済みMMLのセットを取得（描画時に一度だけロックして解放）
+    let cached_mmls: std::collections::HashSet<String> = {
+        app.audio_cache.lock().unwrap().keys().cloned().collect()
+    };
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -117,8 +122,12 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_color: 
         .split(f.area());
 
     let items: Vec<ListItem> = app.lines.iter().enumerate().map(|(i, line)| {
+        let mml = line.trim().to_string();
+        let is_cached = !mml.is_empty() && cached_mmls.contains(&mml);
         let style = if i == cursor {
             Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        } else if is_cached {
+            Style::default().fg(Color::Cyan)
         } else {
             Style::default()
         };
