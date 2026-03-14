@@ -11,8 +11,11 @@ use ratatui::{
 use super::{Mode, PlayState, TuiApp};
 
 pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
-    let status = status_text(app);
-    let status_color = status_color(app);
+    // play_state を一度だけロックしてスナップショットを取り、
+    // status_text と status_color を同じ状態から導出する（二重ロック・状態不整合を防ぐ）。
+    let play_state = app.play_state.lock().unwrap().clone();
+    let status = status_text(app, &play_state);
+    let status_color = status_color(&play_state);
 
     if app.mode == Mode::PatchSelect {
         draw_patch_select(app, f, &status, status_color);
@@ -21,8 +24,8 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     }
 }
 
-fn status_color(app: &TuiApp<'_>) -> Color {
-    match &*app.play_state.lock().unwrap() {
+fn status_color(play_state: &PlayState) -> Color {
+    match play_state {
         PlayState::Err(_)     => Color::Red,
         PlayState::Running(_) => Color::Magenta,
         PlayState::Playing(_) => Color::Yellow,
@@ -31,9 +34,8 @@ fn status_color(app: &TuiApp<'_>) -> Color {
     }
 }
 
-fn status_text(app: &TuiApp<'_>) -> String {
-    let play = app.play_state.lock().unwrap().clone();
-    let play_str = match play {
+fn status_text(app: &TuiApp<'_>, play_state: &PlayState) -> String {
+    let play_str = match play_state {
         PlayState::Idle           => "".to_string(),
         PlayState::Running(mml)   => format!("  ⚙ レンダリング中: {}", mml),
         PlayState::Playing(msg)   => format!("  ▶ 演奏中: {}", msg),
