@@ -45,7 +45,6 @@ use crate::patch_list::{collect_patches, to_relative};
 
 // ─── 再エクスポート ───────────────────────────────────────────
 
-pub(super) use timing::{compute_measure_samples, parse_beat_numerator, parse_tempo_bpm};
 pub(super) use types::{CacheState, CellCache, DawMode, DawNormalAction, DawPlayState};
 pub use types::DawExitReason;
 

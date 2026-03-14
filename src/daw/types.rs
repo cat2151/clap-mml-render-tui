@@ -16,7 +16,7 @@ pub struct CellCache {
 }
 
 impl CellCache {
-    pub fn empty() -> Self {
+    pub(super) fn empty() -> Self {
         Self { state: CacheState::Empty }
     }
 }
