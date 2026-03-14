@@ -99,6 +99,11 @@ pub struct DawApp {
     /// シリアルな単一ワーカーで処理することでファイル書き込みの競合を防ぐ
     cache_tx: std::sync::mpsc::Sender<(usize, usize, String)>,
 
+    /// `mml_render_for_cache` の排他実行ロック。
+    /// キャッシュワーカーと再生スレッドが同時に daw_cache.mid/wav を書き込まないよう、
+    /// `mml_render_for_cache` 呼び出し前に必ずこのロックを取得すること。
+    render_lock: Arc<Mutex<()>>,
+
     pub(super) play_state: Arc<Mutex<DawPlayState>>,
 
     /// 再生スレッドと共有する現在の MML。
@@ -121,9 +126,15 @@ impl DawApp {
         // チャネルが送信側（cache_tx）を介してジョブを受け取り順次レンダリングすることで
         // ファイル書き込み（pass1_tokens.json 等）の競合と過剰スレッド生成を防ぐ。
         let (cache_tx, cache_rx) = std::sync::mpsc::channel::<(usize, usize, String)>();
+
+        // `mml_render_for_cache` はキャッシュワーカーと再生スレッドの両方から呼ばれるため、
+        // daw_cache.mid/wav への同時書き込みを防ぐ排他ロックを共有する。
+        let render_lock: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
+
         {
             let cache_worker = Arc::clone(&cache);
             let cfg_worker = Arc::clone(&cfg);
+            let render_lock_worker = Arc::clone(&render_lock);
             std::thread::spawn(move || {
                 // SAFETY: entry は main() のスタックに生存している
                 let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
@@ -131,6 +142,7 @@ impl DawApp {
                 daw_cfg.random_patch = false;
 
                 for (track, measure, mml) in cache_rx {
+                    let _guard = render_lock_worker.lock().unwrap();
                     match crate::pipeline::mml_render_for_cache(&mml, &daw_cfg, entry_ref) {
                         Ok(_) => {
                             cache_worker.lock().unwrap()[track][measure].state = CacheState::Ready;
@@ -153,6 +165,7 @@ impl DawApp {
             entry_ptr,
             cache,
             cache_tx,
+            render_lock,
             play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
             play_mml: Arc::new(Mutex::new(String::new())),
         };
@@ -298,6 +311,7 @@ impl DawApp {
 
         let play_state = Arc::clone(&self.play_state);
         let play_mml = Arc::clone(&self.play_mml);
+        let render_lock = Arc::clone(&self.render_lock);
         let cfg = Arc::clone(&self.cfg);
         let entry_ptr = self.entry_ptr;
 
@@ -316,8 +330,14 @@ impl DawApp {
                 // ループの先頭で毎回 play_mml を読み取ることで、
                 // セル編集・音色変更を次ループから即座に反映する（hot reload）
                 let mml = play_mml.lock().unwrap().clone();
-                // mml_render_for_cache を使用することで patch_history.txt への追記を行わない
-                match crate::pipeline::mml_render_for_cache(&mml, &daw_cfg, entry_ref) {
+                // render_lock を取得してからレンダリングすることで、
+                // キャッシュワーカーと同時に daw_cache.mid/wav を書き込まないようにする
+                let result = {
+                    let _guard = render_lock.lock().unwrap();
+                    // mml_render_for_cache を使用することで patch_history.txt への追記を行わない
+                    crate::pipeline::mml_render_for_cache(&mml, &daw_cfg, entry_ref)
+                };
+                match result {
                     Ok(samples) => {
                         if *play_state.lock().unwrap() != DawPlayState::Playing {
                             break;
@@ -390,8 +410,10 @@ impl DawApp {
 
         self.save();
 
-        // hot reload: play 中であれば次ループから新しい MML を反映する
-        *self.play_mml.lock().unwrap() = self.build_full_mml();
+        // hot reload: 次の再生ループから新しい MML を反映する
+        // ロックを最小限に保つため、build_full_mml() をロック取得前に実行する
+        let new_mml = self.build_full_mml();
+        *self.play_mml.lock().unwrap() = new_mml;
     }
 
     // ─── キー処理 ─────────────────────────────────────────────
@@ -441,8 +463,10 @@ impl DawApp {
                     self.kick_cache(self.cursor_track, 0);
                     self.save();
 
-                    // hot reload: play 中であれば次ループから新しい音色を反映する
-                    *self.play_mml.lock().unwrap() = self.build_full_mml();
+                    // hot reload: 次の再生ループから新しい音色を反映する
+                    // ロックを最小限に保つため、build_full_mml() をロック取得前に実行する
+                    let new_mml = self.build_full_mml();
+                    *self.play_mml.lock().unwrap() = new_mml;
                 }
             }
 
