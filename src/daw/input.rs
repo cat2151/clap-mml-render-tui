@@ -40,9 +40,9 @@ impl DawApp {
         self.save();
 
         // hot reload: 次の再生ループから新しい MML を反映する
-        // ロックを最小限に保つため、build_full_mml() をロック取得前に実行する
-        let new_mml = self.build_full_mml();
-        *self.play_mml.lock().unwrap() = new_mml;
+        // ロックを最小限に保つため、build_measure_mmls() をロック取得前に実行する
+        let new_mmls = self.build_measure_mmls();
+        *self.play_measure_mmls.lock().unwrap() = new_mmls;
     }
 
     // ─── キー処理 ─────────────────────────────────────────────
@@ -111,9 +111,9 @@ impl DawApp {
                     self.save();
 
                     // hot reload: 次の再生ループから新しい音色を反映する
-                    // ロックを最小限に保つため、build_full_mml() をロック取得前に実行する
-                    let new_mml = self.build_full_mml();
-                    *self.play_mml.lock().unwrap() = new_mml;
+                    // ロックを最小限に保つため、build_measure_mmls() をロック取得前に実行する
+                    let new_mmls = self.build_measure_mmls();
+                    *self.play_measure_mmls.lock().unwrap() = new_mmls;
                 }
             }
 
