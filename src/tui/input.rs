@@ -146,7 +146,7 @@ impl<'a> TuiApp<'a> {
                     self.list_state.select(Some(self.cursor));
                 }
             }
-            KeyCode::Char('k') => {
+            KeyCode::Char('k') | KeyCode::Up => {
                 if self.cursor > 0 {
                     self.cursor -= 1;
                     self.list_state.select(Some(self.cursor));
