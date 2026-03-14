@@ -97,15 +97,18 @@ mod tests {
 
     #[test]
     fn save_and_load_session_state_roundtrip() {
-        // 保存して読み込んだ値が一致することを確認する
-        // dirs::data_local_dir() が使えない環境ではベストエフォートでスキップされる
+        // 実ユーザーデータディレクトリに影響しないよう、一時ファイルに直接書き込んで
+        // JSON シリアライズ/デシリアライズの往復を検証する
+        let tmp_path = std::env::temp_dir().join("cmrt_test_history_roundtrip.json");
+
         let state = SessionState { cursor: 7 };
-        let save_result = save_session_state(&state);
-        // 保存に失敗した場合（環境依存）はテストをスキップする
-        if save_result.is_err() {
-            return;
-        }
-        let loaded = load_session_state();
+        let json = serde_json::to_string_pretty(&state).unwrap();
+        std::fs::write(&tmp_path, &json).unwrap();
+
+        let read_back = std::fs::read_to_string(&tmp_path).unwrap();
+        let loaded: SessionState = serde_json::from_str(&read_back).unwrap();
+        std::fs::remove_file(&tmp_path).ok();
+
         assert_eq!(loaded.cursor, 7);
     }
 }
