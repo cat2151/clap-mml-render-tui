@@ -87,8 +87,8 @@ fn main() -> Result<()> {
 
     app.run()?;
 
-    // アップデートが利用可能であれば実行する
-    if app.update_available.load(std::sync::atomic::Ordering::Relaxed) {
+    // ユーザーが 'u' キーを押してアップデートを選択した場合に実行する
+    if app.do_update {
         if let Err(e) = updater::run_foreground_update() {
             eprintln!("アップデートに失敗しました: {}", e);
         }

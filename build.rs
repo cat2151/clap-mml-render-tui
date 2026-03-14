@@ -27,7 +27,4 @@ fn main() {
         // 個々のファイルではなく packed-refs に格納される場合もある
         println!("cargo:rerun-if-changed=.git/packed-refs");
     }
-
-    // インデックスの変更も監視
-    println!("cargo:rerun-if-changed=.git/index");
 }
