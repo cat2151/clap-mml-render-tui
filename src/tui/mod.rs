@@ -99,7 +99,6 @@ enum NormalAction {
     Continue,
     Quit,
     LaunchDaw,
-    Update,
 }
 
 #[derive(Clone, PartialEq)]
@@ -131,10 +130,8 @@ pub struct TuiApp<'a> {
     pub(super) patch_filtered: Vec<String>,  // フィルタ結果（表示名のみ）
     pub(super) patch_cursor: usize,          // フィルタ結果内のカーソル位置
     pub(super) patch_list_state: ListState,  // 音色選択リスト描画用
-    /// バックグラウンドのアップデートチェックがtrueにセットしたらアップデート通知を表示
+    /// バックグラウンドのアップデートチェックがtrueにセットしたらアップデートを実行
     pub update_available: Arc<AtomicBool>,
-    /// ユーザーが 'u' キーでアップデートを選択したときにtrueになる
-    pub do_update: bool,
 }
 
 impl<'a> TuiApp<'a> {
@@ -209,7 +206,6 @@ impl<'a> TuiApp<'a> {
             patch_cursor: 0,
             patch_list_state: ListState::default(),
             update_available: Arc::new(AtomicBool::new(false)),
-            do_update: false,
         }
     }
 
@@ -367,9 +363,6 @@ impl<'a> TuiApp<'a> {
         match key {
             KeyCode::Char('q') => return NormalAction::Quit,
             KeyCode::Char('d') => return NormalAction::LaunchDaw,
-            KeyCode::Char('u') if self.update_available.load(Ordering::Relaxed) => {
-                return NormalAction::Update;
-            }
             KeyCode::Char('i') => self.start_insert(),
             KeyCode::Char('t') => {
                 if self.cfg.random_patch {
@@ -470,6 +463,11 @@ impl<'a> TuiApp<'a> {
         loop {
             terminal.draw(|f| self.draw(f))?;
 
+            // アップデートが利用可能になったら自動的にループを抜けてアップデートを実行する
+            if self.update_available.load(Ordering::Relaxed) && self.mode == Mode::Normal {
+                break;
+            }
+
             if event::poll(std::time::Duration::from_millis(50))? {
                 if let Event::Key(key) = event::read()? {
                     // Press のみ処理。Release/Repeat は無視（二重発火防止）
@@ -486,10 +484,6 @@ impl<'a> TuiApp<'a> {
                         Mode::Normal => {
                             match self.handle_normal(key.code) {
                                 NormalAction::Quit => break,
-                                NormalAction::Update => {
-                                    self.do_update = true;
-                                    break;
-                                }
                                 NormalAction::LaunchDaw => {
                                     let mut daw = crate::daw::DawApp::new(
                                         Arc::clone(&self.cfg),
