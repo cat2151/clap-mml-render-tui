@@ -32,21 +32,26 @@ use std::sync::{Arc, Mutex};
 use crate::config::Config;
 
 /// クエリ文字列（空白区切りでAND条件）でパッチリストをフィルタする。
-fn filter_patches(all: &[String], query: &str) -> Vec<String> {
+/// `all` は (表示名, 小文字化済み表示名) のペアであること（起動時に一度だけ計算）。
+fn filter_patches(all: &[(String, String)], query: &str) -> Vec<String> {
     let terms: Vec<String> = query
         .split_whitespace()
         .map(|t| t.to_lowercase())
         .collect();
     if terms.is_empty() {
-        return all.to_vec();
+        return all.iter().map(|(orig, _)| orig.clone()).collect();
     }
     all.iter()
-        .filter(|p| {
-            let lower = p.to_lowercase();
-            terms.iter().all(|t| lower.contains(t.as_str()))
-        })
-        .cloned()
+        .filter(|(_, lower)| terms.iter().all(|t| lower.contains(t.as_str())))
+        .map(|(orig, _)| orig.clone())
         .collect()
+}
+
+/// バックグラウンドパッチ読み込みの状態
+enum PatchLoadState {
+    Loading,
+    Ready(Vec<(String, String)>), // (表示名, 小文字化済み表示名)
+    Err(String),
 }
 
 #[derive(PartialEq)]
@@ -82,9 +87,12 @@ pub struct TuiApp<'a> {
     entry_ptr: usize, // *const PluginEntry as usize (main() に生存保証)
     play_state: Arc<Mutex<PlayState>>,
     // 音色選択モード用
-    patch_all: Vec<String>,       // 起動時に収集した全パッチ（相対パス）
+    /// バックグラウンドスレッドが収集したパッチリストの状態
+    patch_load_state: Arc<Mutex<PatchLoadState>>,
+    /// PatchSelect 起動時にスナップショットした (表示名, 小文字化済み) ペアのリスト
+    patch_all: Vec<(String, String)>,
     patch_query: String,          // 検索クエリ
-    patch_filtered: Vec<String>,  // フィルタ結果
+    patch_filtered: Vec<String>,  // フィルタ結果（表示名のみ）
     patch_cursor: usize,          // フィルタ結果内のカーソル位置
     patch_list_state: ListState,  // 音色選択リスト描画用
 }
@@ -103,16 +111,39 @@ impl<'a> TuiApp<'a> {
             random_patch: cfg.random_patch,
         });
 
-        // 起動時にパッチリストを収集する
-        let patch_all: Vec<String> = if let Some(ref dir) = cfg.patches_dir {
-            crate::patch_list::collect_patches(dir)
-                .unwrap_or_default()
-                .into_iter()
-                .map(|p| crate::patch_list::to_relative(dir, &p))
-                .collect()
-        } else {
-            Vec::new()
-        };
+        // パッチリストはバックグラウンドスレッドで収集する。
+        // 起動時の同期スキャンによる遅延を避けるため。
+        let patch_load_state: Arc<Mutex<PatchLoadState>> =
+            Arc::new(Mutex::new(PatchLoadState::Loading));
+        {
+            let state_bg = Arc::clone(&patch_load_state);
+            let patches_dir = cfg.patches_dir.clone();
+            std::thread::spawn(move || {
+                match patches_dir {
+                    None => {
+                        *state_bg.lock().unwrap() = PatchLoadState::Ready(Vec::new());
+                    }
+                    Some(dir) => {
+                        match crate::patch_list::collect_patches(&dir) {
+                            Ok(paths) => {
+                                let pairs: Vec<(String, String)> = paths
+                                    .into_iter()
+                                    .map(|p| {
+                                        let rel = crate::patch_list::to_relative(&dir, &p);
+                                        let lower = rel.to_lowercase();
+                                        (rel, lower)
+                                    })
+                                    .collect();
+                                *state_bg.lock().unwrap() = PatchLoadState::Ready(pairs);
+                            }
+                            Err(e) => {
+                                *state_bg.lock().unwrap() = PatchLoadState::Err(e.to_string());
+                            }
+                        }
+                    }
+                }
+            });
+        }
 
         let lines = vec!["cde".to_string()];
         let mut list_state = ListState::default();
@@ -127,7 +158,8 @@ impl<'a> TuiApp<'a> {
             cfg: cfg_arc,
             entry_ptr: entry as *const PluginEntry as usize,
             play_state: Arc::new(Mutex::new(PlayState::Idle)),
-            patch_all,
+            patch_load_state,
+            patch_all: Vec::new(),
             patch_query: String::new(),
             patch_filtered: Vec::new(),
             patch_cursor: 0,
@@ -180,8 +212,15 @@ impl<'a> TuiApp<'a> {
     }
 
     fn start_patch_select(&mut self) {
+        // ロードが完了したパッチリストをスナップショットする
+        {
+            let state = self.patch_load_state.lock().unwrap();
+            if let PatchLoadState::Ready(pairs) = &*state {
+                self.patch_all = pairs.clone();
+            }
+        }
         self.patch_query = String::new();
-        self.patch_filtered = self.patch_all.clone();
+        self.patch_filtered = self.patch_all.iter().map(|(orig, _)| orig.clone()).collect();
         self.patch_cursor = 0;
         let mut ls = ListState::default();
         if !self.patch_filtered.is_empty() {
@@ -264,12 +303,23 @@ impl<'a> TuiApp<'a> {
                     *self.play_state.lock().unwrap() = PlayState::Err(
                         "patches_dir が設定されていません".to_string(),
                     );
-                } else if self.patch_all.is_empty() {
-                    *self.play_state.lock().unwrap() = PlayState::Err(
-                        "patches_dir にパッチが見つかりません".to_string(),
-                    );
                 } else {
-                    self.start_patch_select();
+                    // バックグラウンドロードの状態を確認する
+                    let action = {
+                        let state = self.patch_load_state.lock().unwrap();
+                        match &*state {
+                            PatchLoadState::Loading => Err("パッチを読み込み中です...".to_string()),
+                            PatchLoadState::Err(e)  => Err(format!("パッチの読み込みに失敗: {}", e)),
+                            PatchLoadState::Ready(p) if p.is_empty() => {
+                                Err("patches_dir にパッチが見つかりません".to_string())
+                            }
+                            PatchLoadState::Ready(_) => Ok(()),
+                        }
+                    };
+                    match action {
+                        Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
+                        Ok(())   => self.start_patch_select(),
+                    }
                 }
             }
             KeyCode::Char('o') => {
@@ -341,7 +391,7 @@ impl<'a> TuiApp<'a> {
         match self.mode {
             Mode::Normal => format!("NORMAL  i:INSERT  t:音色選択  j/k:移動  Enter:再生  d:DAW  q:終了{}", play_str),
             Mode::Insert => format!("INSERT  ESC:確定→NORMAL  Enter:確定→次行{}", play_str),
-            Mode::PatchSelect => "音色選択  Enter:決定  ESC:キャンセル  ↑↓:移動  文字入力:フィルタ  Space:AND条件".to_string(),
+            Mode::PatchSelect => format!("音色選択  Enter:決定  ESC:キャンセル  ↑↓:移動  文字入力:フィルタ  Space:AND条件{}", play_str),
         }
     }
 
@@ -416,7 +466,7 @@ impl<'a> TuiApp<'a> {
                     );
 
                     f.render_widget(
-                        Paragraph::new(status.clone()).style(Style::default().fg(Color::Cyan)),
+                        Paragraph::new(status.clone()).style(Style::default().fg(status_color)),
                         chunks[2],
                     );
                 } else {
