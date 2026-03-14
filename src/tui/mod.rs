@@ -25,6 +25,9 @@ use tui_textarea::TextArea;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+/// audio_cache の最大エントリ数。超過時はキャッシュ全体をクリアしてから挿入する。
+const AUDIO_CACHE_MAX_ENTRIES: usize = 64;
+
 use crate::config::Config;
 
 /// クエリ文字列（空白区切りでAND条件）でパッチリストをフィルタする。
@@ -41,6 +44,39 @@ fn filter_patches(all: &[(String, String)], query: &str) -> Vec<String> {
         .filter(|(_, lower)| terms.iter().all(|t| lower.contains(t.as_str())))
         .map(|(orig, _)| orig.clone())
         .collect()
+}
+
+/// キャッシュからサンプルを取得する。`random_patch` が true の場合は常に `None` を返す。
+fn resolve_cached_samples(
+    cache: &HashMap<String, Vec<f32>>,
+    mml: &str,
+    random_patch: bool,
+) -> Option<Vec<f32>> {
+    if random_patch {
+        None
+    } else {
+        cache.get(mml).cloned()
+    }
+}
+
+/// キャッシュにサンプルを挿入する。上限に達した場合はキャッシュ全体をクリアしてから挿入する。
+/// `random_patch` が true の場合は何もしない。
+///
+/// 呼び出し元は `audio_cache` のロックを保持した状態で `&mut HashMap` を渡すこと。
+/// この関数自体は非同期に呼び出されないため、len 確認と insert は事実上アトミックである。
+fn try_insert_cache(
+    cache: &mut HashMap<String, Vec<f32>>,
+    mml: String,
+    samples: Vec<f32>,
+    random_patch: bool,
+) {
+    if random_patch {
+        return;
+    }
+    if cache.len() >= AUDIO_CACHE_MAX_ENTRIES && !cache.contains_key(&mml) {
+        cache.clear();
+    }
+    cache.insert(mml, samples);
 }
 
 /// バックグラウンドパッチ読み込みの状態
@@ -176,11 +212,7 @@ impl<'a> TuiApp<'a> {
         let entry_ptr = self.entry_ptr;
 
         // キャッシュを確認（random_patchモード時はキャッシュを使用しない）
-        let cached_samples = if !cfg.random_patch {
-            cache.lock().unwrap().get(&mml).cloned()
-        } else {
-            None
-        };
+        let cached_samples = resolve_cached_samples(&cache.lock().unwrap(), &mml, cfg.random_patch);
 
         if let Some(samples) = cached_samples {
             // キャッシュヒット: レンダリングをスキップして即時再生
@@ -191,7 +223,7 @@ impl<'a> TuiApp<'a> {
                 let play_result = crate::pipeline::play_samples(samples, cfg.sample_rate as u32);
 
                 *state.lock().unwrap() = match play_result {
-                    Ok(_)  => PlayState::Done(format!("✓ {}", msg)),
+                    Ok(_)  => PlayState::Done(msg),
                     Err(e) => PlayState::Err(format!("エラー: {}", e)),
                 };
             });
@@ -211,10 +243,13 @@ impl<'a> TuiApp<'a> {
                         *state.lock().unwrap() = PlayState::Err(format!("エラー: {}", e));
                     }
                     Ok((samples, patch_name)) => {
-                        // キャッシュに保存（random_patchモード時はキャッシュしない）
-                        if !cfg.random_patch {
-                            cache.lock().unwrap().insert(mml.clone(), samples.clone());
-                        }
+                        // キャッシュに保存（random_patchモード時はキャッシュしない、上限超過時はクリア）
+                        try_insert_cache(
+                            &mut cache.lock().unwrap(),
+                            mml.clone(),
+                            samples.clone(),
+                            cfg.random_patch,
+                        );
 
                         let msg = format!("{} | {}", patch_name, mml);
                         // 演奏中に切り替え
@@ -224,7 +259,7 @@ impl<'a> TuiApp<'a> {
                         let play_result = crate::pipeline::play_samples(samples, cfg.sample_rate as u32);
 
                         *state.lock().unwrap() = match play_result {
-                            Ok(_)  => PlayState::Done(format!("✓ {}", msg)),
+                            Ok(_)  => PlayState::Done(msg),
                             Err(e) => PlayState::Err(format!("エラー: {}", e)),
                         };
                     }
