@@ -287,6 +287,7 @@ impl<'a> TuiApp<'a> {
         let mut terminal = Terminal::new(backend)?;
 
         // 前回 DAW モードで終了していた場合は直接 DAW モードで起動する
+        let mut quit_from_startup_daw = false;
         if self.is_daw_mode {
             let mut daw = crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
             match daw.run_with_terminal(&mut terminal)? {
@@ -294,22 +295,15 @@ impl<'a> TuiApp<'a> {
                     self.is_daw_mode = false;
                 }
                 crate::daw::DawExitReason::QuitApp => {
-                    let _ = crate::history::save_session_state(&crate::history::SessionState {
-                        cursor: self.cursor,
-                        lines: self.lines.clone(),
-                        is_daw_mode: self.is_daw_mode,
-                    });
-                    let raw_mode_result = disable_raw_mode();
-                    let alternate_screen_result =
-                        execute!(terminal.backend_mut(), LeaveAlternateScreen);
-                    raw_mode_result?;
-                    alternate_screen_result?;
-                    return Ok(());
+                    quit_from_startup_daw = true;
                 }
             }
         }
 
         loop {
+            if quit_from_startup_daw {
+                break;
+            }
             terminal.draw(|f| self.draw(f))?;
 
             // アップデートが利用可能になったら自動的にループを抜けてアップデートを実行する
