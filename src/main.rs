@@ -13,7 +13,7 @@ use anyhow::Result;
 fn main() -> Result<()> {
     // 引数なし → TUI モード
     // --help / -h → ヘルプ表示（config パスを含む）
-    // --mml "cde" → CLI パイプラインモード（テスト用）
+    // <mml> → CLI パイプラインモード（テスト用）
     // --server [port] → サーバーモード（デフォルト port 62151）
     let args: Vec<String> = std::env::args().collect();
 
@@ -22,7 +22,7 @@ fn main() -> Result<()> {
         println!();
         println!("使い方:");
         println!("  cmrt                    TUI モードで起動");
-        println!("  cmrt --mml <mml>        CLI モード（テスト用）");
+        println!("  cmrt <mml>              CLI モード（テスト用）");
         println!("  cmrt --server           サーバーモード（port {}）", server::DEFAULT_PORT);
         println!("  cmrt --server <port>    サーバーモード（指定port）");
         println!("  cmrt --help             このヘルプを表示");
@@ -54,6 +54,11 @@ fn main() -> Result<()> {
     // CLAP プラグインエントリをロード（TUI/CLI/サーバー 共通）
     let entry = host::load_entry(&cfg.plugin_path)?;
 
+    // --mml は廃止済み。旧来の使い方をしたユーザーに新しい使い方を案内する
+    if args.iter().any(|a| a == "--mml") {
+        anyhow::bail!("`--mml` オプションは廃止されました。`cmrt <mml>` の形式で指定してください。\n例: cmrt cde");
+    }
+
     if let Some(pos) = args.iter().position(|a| a == "--server") {
         // --server [port] の次の引数をポート番号として解釈する（省略時はデフォルト）
         let port = args
@@ -63,13 +68,13 @@ fn main() -> Result<()> {
         return server::run_server(&cfg, &entry, port);
     }
 
-    if let Some(pos) = args.iter().position(|a| a == "--mml") {
-        if let Some(mml) = args.get(pos + 1) {
-            println!("CLI モード: MML = {}", mml);
-            let patch = pipeline::mml_to_play(mml, &cfg, &entry)?;
-            println!("patch: {}", patch);
-            return Ok(());
-        }
+    // 引数が1つかつフラグでなければ CLI モード
+    if args.len() == 2 && !args[1].starts_with('-') {
+        let mml = &args[1];
+        println!("CLI モード: MML = {}", mml);
+        let patch = pipeline::mml_to_play(mml, &cfg, &entry)?;
+        println!("patch: {}", patch);
+        return Ok(());
     }
 
     // TUI モード
