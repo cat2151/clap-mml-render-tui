@@ -100,8 +100,8 @@ fn default_config_content() -> String {
 {plugin_path_line}
 
 input_midi  = "input.mid"
-output_midi = "output.mid"
-output_wav  = "output.wav"
+output_midi = "cmrt/output.mid"
+output_wav  = "cmrt/output.wav"
 sample_rate = 44100
 buffer_size = 512
 
