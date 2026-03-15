@@ -10,8 +10,18 @@ impl DawApp {
     /// = track[t][0] (音色) + track0 全体 + track[t][m] (音符)
     /// 音色 JSON を先頭に置くことで extract_embedded_json が正しく解析できる
     pub(super) fn build_cell_mml(&self, track: usize, measure: usize) -> String {
+        use mmlabc_to_smf::mml_preprocessor;
         let track0: String = (0..=MEASURES)
-            .map(|m| self.data[0][m].trim())
+            .map(|m| {
+                let cell = self.data[0][m].trim();
+                if m == 0 {
+                    // data[0][0] には beat JSON（DAW用メタ情報）が含まれる場合があるため、
+                    // MML パーサに渡す前に JSON 部分を除去して残りの MML のみを使う
+                    mml_preprocessor::extract_embedded_json(cell).remaining_mml
+                } else {
+                    cell.to_string()
+                }
+            })
             .collect::<Vec<_>>()
             .join("");
         let timbre = self.data[track][0].trim();
@@ -24,8 +34,18 @@ impl DawApp {
     /// それ自体を独立した再生 track としては扱わない。
     /// 音色 JSON を先頭に置くことで extract_embedded_json が正しく解析できる
     pub(super) fn build_measure_mml(&self, measure: usize) -> String {
+        use mmlabc_to_smf::mml_preprocessor;
         let track0: String = (0..=MEASURES)
-            .map(|m| self.data[0][m].trim())
+            .map(|m| {
+                let cell = self.data[0][m].trim();
+                if m == 0 {
+                    // data[0][0] には beat JSON（DAW用メタ情報）が含まれる場合があるため、
+                    // MML パーサに渡す前に JSON 部分を除去して残りの MML のみを使う
+                    mml_preprocessor::extract_embedded_json(cell).remaining_mml
+                } else {
+                    cell.to_string()
+                }
+            })
             .collect::<Vec<_>>()
             .join("");
 

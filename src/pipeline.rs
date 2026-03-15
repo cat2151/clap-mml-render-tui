@@ -239,10 +239,18 @@ fn append_history(mml: &str, patch: &Option<String>, cfg: &Config) -> Result<()>
     let line = format!("{} {}\n", json, mml_body);
 
     use std::io::Write;
+    let Some(path) = dirs::config_local_dir().map(|d| d.join("cmrt").join("patch_history.txt"))
+    else {
+        return Ok(()); // ディレクトリが取得できない場合はスキップ
+    };
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)
+            .map_err(|e| anyhow::anyhow!("patch_history.txt のディレクトリ作成失敗: {}", e))?;
+    }
     let mut file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open("patch_history.txt")
+        .open(&path)
         .map_err(|e| anyhow::anyhow!("patch_history.txt を開けない: {}", e))?;
     file.write_all(line.as_bytes())
         .map_err(|e| anyhow::anyhow!("patch_history.txt への書き込み失敗: {}", e))?;
