@@ -31,8 +31,6 @@ impl DawApp {
         let render_lock = Arc::clone(&self.render_lock);
         let cfg = Arc::clone(&self.cfg);
         let entry_ptr = self.entry_ptr;
-        let beat_count = self.beat_numerator();
-        let beat_duration_secs = 60.0 / self.tempo_bpm();
 
         *play_state.lock().unwrap() = DawPlayState::Playing;
 
@@ -43,18 +41,27 @@ impl DawApp {
             daw_cfg.random_patch = false;
             let sample_rate = daw_cfg.sample_rate as u32;
 
-            // OutputStream と Sink をスレッドに 1 つだけ作成し、小節をまたいで再利用する。
-            // これにより小節ごとのオーディオ初期化オーバーヘッドとグリッチを防ぐ。
-            let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else {
-                *play_state.lock().unwrap() = DawPlayState::Idle;
+        // OutputStream と Sink をスレッドに 1 つだけ作成し、小節をまたいで再利用する。
+        // これにより小節ごとのオーディオ初期化オーバーヘッドとグリッチを防ぐ。
+        let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else {
+            // Audio init failed: only reset to Idle if we are still the active Playing session.
+            let mut state = play_state.lock().unwrap();
+            if *state == DawPlayState::Playing {
+                *state = DawPlayState::Idle;
+                drop(state);
                 *play_position.lock().unwrap() = None;
-                return;
-            };
-            let Ok(sink) = rodio::Sink::try_new(&stream_handle) else {
-                *play_state.lock().unwrap() = DawPlayState::Idle;
+            }
+            return;
+        };
+        let Ok(sink) = rodio::Sink::try_new(&stream_handle) else {
+            let mut state = play_state.lock().unwrap();
+            if *state == DawPlayState::Playing {
+                *state = DawPlayState::Idle;
+                drop(state);
                 *play_position.lock().unwrap() = None;
-                return;
-            };
+            }
+            return;
+        };
 
             'outer: loop {
                 if *play_state.lock().unwrap() != DawPlayState::Playing {
@@ -103,8 +110,6 @@ impl DawApp {
                     *play_position.lock().unwrap() = Some(PlayPosition {
                         measure_index,
                         measure_start: std::time::Instant::now(),
-                        beat_count,
-                        beat_duration_secs,
                     });
                     // 既存の Sink に追加して再生完了を待つ（OutputStream/Sink は使い回す）
                     let source = rodio::buffer::SamplesBuffer::new(2, sample_rate, samples);
@@ -113,8 +118,14 @@ impl DawApp {
                 }
             }
 
-            *play_state.lock().unwrap() = DawPlayState::Idle;
-            *play_position.lock().unwrap() = None;
+            // Only reset to Idle if we are still the active Playing session.
+            // An unconditional write would clobber a newer session started after stop.
+            let mut state = play_state.lock().unwrap();
+            if *state == DawPlayState::Playing {
+                *state = DawPlayState::Idle;
+                drop(state);
+                *play_position.lock().unwrap() = None;
+            }
         });
     }
 
@@ -132,8 +143,6 @@ impl DawApp {
         let render_lock = Arc::clone(&self.render_lock);
         let cfg = Arc::clone(&self.cfg);
         let entry_ptr = self.entry_ptr;
-        let beat_count = self.beat_numerator();
-        let beat_duration_secs = 60.0 / self.tempo_bpm();
 
         *play_state.lock().unwrap() = DawPlayState::Preview;
 
@@ -145,13 +154,22 @@ impl DawApp {
             let sample_rate = daw_cfg.sample_rate as u32;
 
             let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else {
-                *play_state.lock().unwrap() = DawPlayState::Idle;
-                *play_position.lock().unwrap() = None;
+                // Audio init failed: only reset to Idle if we are still the active Preview session.
+                let mut state = play_state.lock().unwrap();
+                if *state == DawPlayState::Preview {
+                    *state = DawPlayState::Idle;
+                    drop(state);
+                    *play_position.lock().unwrap() = None;
+                }
                 return;
             };
             let Ok(sink) = rodio::Sink::try_new(&stream_handle) else {
-                *play_state.lock().unwrap() = DawPlayState::Idle;
-                *play_position.lock().unwrap() = None;
+                let mut state = play_state.lock().unwrap();
+                if *state == DawPlayState::Preview {
+                    *state = DawPlayState::Idle;
+                    drop(state);
+                    *play_position.lock().unwrap() = None;
+                }
                 return;
             };
 
@@ -160,13 +178,14 @@ impl DawApp {
                 crate::pipeline::mml_render_for_cache(&mml, &daw_cfg, entry_ref)
             };
 
-            // render が終わったら再生開始時刻を更新する
-            *play_position.lock().unwrap() = Some(PlayPosition {
-                measure_index,
-                measure_start: std::time::Instant::now(),
-                beat_count,
-                beat_duration_secs,
-            });
+            // render が終わったら、まだ Preview セッションが有効なときだけ再生開始時刻を更新する。
+            // stop や新しい演奏開始後に上書きしないようガードする。
+            if *play_state.lock().unwrap() == DawPlayState::Preview {
+                *play_position.lock().unwrap() = Some(PlayPosition {
+                    measure_index,
+                    measure_start: std::time::Instant::now(),
+                });
+            }
 
             if let Ok(mut samples) = result {
                 if samples.len() < measure_samples {
@@ -182,8 +201,14 @@ impl DawApp {
                 }
             }
 
-            *play_state.lock().unwrap() = DawPlayState::Idle;
-            *play_position.lock().unwrap() = None;
+            // Only reset to Idle if we are still the active Preview session.
+            // An unconditional write would clobber a newer session started after stop.
+            let mut state = play_state.lock().unwrap();
+            if *state == DawPlayState::Preview {
+                *state = DawPlayState::Idle;
+                drop(state);
+                *play_position.lock().unwrap() = None;
+            }
         });
     }
 
