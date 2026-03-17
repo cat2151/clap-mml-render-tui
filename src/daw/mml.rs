@@ -3,6 +3,43 @@
 use super::{DawApp, FIRST_PLAYABLE_TRACK, MEASURES, TRACKS};
 use super::timing::{compute_measure_samples, parse_beat_numerator, parse_tempo_bpm};
 
+// ─── 純粋関数（テスト用） ──────────────────────────────────────
+
+/// data 配列からセル MML を構築する純粋関数。
+///
+/// `data[0][*]` がグローバルヘッダ（track0）、`data[track][0]` が音色、`data[track][measure]` が音符。
+/// `build_cell_mml` と同じ MML を返すが、`DawApp` インスタンスを必要としないためテストで利用できる。
+///
+/// # 引数
+/// - `data`: `data[track][measure]` の文字列スライス（`data[0]` が track0）
+/// - `num_measures`: 小節数（`data[0].len() - 1`）
+/// - `track`: 対象 track インデックス
+/// - `measure`: 対象小節インデックス（0 = 音色列）
+pub(super) fn build_cell_mml_from_data(
+    data: &[Vec<String>],
+    num_measures: usize,
+    track: usize,
+    measure: usize,
+) -> String {
+    use mmlabc_to_smf::mml_preprocessor;
+    let track0: String = (0..=num_measures)
+        .filter_map(|m| data[0].get(m))
+        .enumerate()
+        .map(|(m, cell)| {
+            let cell = cell.trim();
+            if m == 0 {
+                mml_preprocessor::extract_embedded_json(cell).remaining_mml
+            } else {
+                cell.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("");
+    let timbre = data.get(track).and_then(|r| r.get(0)).map(|s| s.trim()).unwrap_or("");
+    let notes  = data.get(track).and_then(|r| r.get(measure)).map(|s| s.trim()).unwrap_or("");
+    format!("{}{}{}", timbre, track0, notes)
+}
+
 impl DawApp {
     // ─── MML 構築 ─────────────────────────────────────────────
 
