@@ -57,8 +57,6 @@ pub const MEASURES: usize = 8;
 /// track 0 はグローバルヘッダ（テンポ等）専用。演奏 track は 1 から始まる。
 const FIRST_PLAYABLE_TRACK: usize = 1;
 
-const DAW_MML_DEBUG_FILE: &str = "cmrt/daw_mml_debug.txt";
-
 /// インメモリキャッシュに保持するサンプル数の上限（ステレオ、インターリーブ）。
 ///
 /// 2_000_000 サンプル / 2 ch = 1_000_000 samples per ch / 44100 Hz ≈ 22.7 秒 / 小節。
@@ -122,11 +120,11 @@ impl DawApp {
 
         // シリアルなキャッシュワーカースレッドを起動する。
         // チャネルが送信側（cache_tx）を介してジョブを受け取り順次レンダリングすることで
-        // ファイル書き込み（cmrt/pass1_tokens.json 等）の競合と過剰スレッド生成を防ぐ。
+        // ファイル書き込み（clap-mml-render-tui/pass1_tokens.json 等）の競合と過剰スレッド生成を防ぐ。
         let (cache_tx, cache_rx) = std::sync::mpsc::channel::<(usize, usize, String)>();
 
         // `mml_render_for_cache` はキャッシュワーカーと再生スレッドの両方から呼ばれるため、
-        // cmrt/daw_cache.mid/wav への同時書き込みを防ぐ排他ロックを共有する。
+        // clap-mml-render-tui/daw/daw_cache.mid/wav への同時書き込みを防ぐ排他ロックを共有する。
         let render_lock: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
 
         {
@@ -146,12 +144,16 @@ impl DawApp {
                             // 開発用: track/measure ごとに WAV ファイルを出力する
                             // measure 0 は音色/ヘッダセルであり演奏内容ではないためスキップ
                             let wav_ok = if measure > 0 {
-                                let wav_path = format!("cmrt/track{}_meas{}.wav", track, measure);
-                                crate::pipeline::write_wav(
-                                    &samples,
-                                    daw_cfg.sample_rate as u32,
-                                    &wav_path,
-                                ).is_ok()
+                                if let Ok(daw_dir) = crate::pipeline::ensure_daw_dir() {
+                                    let wav_path = daw_dir.join(format!("track{}_meas{}.wav", track, measure));
+                                    crate::pipeline::write_wav(
+                                        &samples,
+                                        daw_cfg.sample_rate as u32,
+                                        &wav_path,
+                                    ).is_ok()
+                                } else {
+                                    false
+                                }
                             } else {
                                 true
                             };
