@@ -1,6 +1,6 @@
 //! DawApp の MML 構築・拍子/テンポ解析メソッド
 
-use super::{DawApp, FIRST_PLAYABLE_TRACK, MEASURES, TRACKS};
+use super::{DawApp, FIRST_PLAYABLE_TRACK};
 use super::timing::{compute_measure_samples, parse_beat_numerator, parse_tempo_bpm};
 
 // ─── 純粋関数（テスト用） ──────────────────────────────────────
@@ -47,7 +47,7 @@ impl DawApp {
     /// = track[t][0] (音色) + track0 全体 + track[t][m] (音符)
     /// 音色 JSON を先頭に置くことで extract_embedded_json が正しく解析できる
     pub(super) fn build_cell_mml(&self, track: usize, measure: usize) -> String {
-        build_cell_mml_from_data(&self.data, MEASURES, track, measure)
+        build_cell_mml_from_data(&self.data, self.measures, track, measure)
     }
 
     /// 指定小節の全 track を結合した MML を構築する（1小節分の演奏用）
@@ -56,7 +56,7 @@ impl DawApp {
     /// 音色 JSON を先頭に置くことで extract_embedded_json が正しく解析できる
     pub(super) fn build_measure_mml(&self, measure: usize) -> String {
         use mmlabc_to_smf::mml_preprocessor;
-        let track0: String = (0..=MEASURES)
+        let track0: String = (0..=self.measures)
             .map(|m| {
                 let cell = self.data[0][m].trim();
                 if m == 0 {
@@ -70,7 +70,7 @@ impl DawApp {
             .collect::<Vec<_>>()
             .join("");
 
-        let track_mmls: Vec<String> = (FIRST_PLAYABLE_TRACK..TRACKS)
+        let track_mmls: Vec<String> = (FIRST_PLAYABLE_TRACK..self.tracks)
             .filter_map(|t| {
                 let timbre = self.data[t][0].trim();
                 let notes = self.data[t][measure].trim();
@@ -88,7 +88,7 @@ impl DawApp {
     /// 全小節の per-measure MML ベクターを構築する（演奏用; hot reload に使用）
     /// index i → meas i+1 の MML（空小節は空文字列）
     pub(super) fn build_measure_mmls(&self) -> Vec<String> {
-        (1..=MEASURES)
+        (1..=self.measures)
             .map(|m| self.build_measure_mml(m))
             .collect()
     }
@@ -109,7 +109,7 @@ impl DawApp {
     /// `t120` → 120.0。解析できない場合は 120.0 (デフォルト)。[1.0, 960.0] にクランプ。
     pub(super) fn tempo_bpm(&self) -> f64 {
         use mmlabc_to_smf::mml_preprocessor;
-        let track0: String = (0..=MEASURES)
+        let track0: String = (0..=self.measures)
             .map(|m| self.data[0][m].trim())
             .collect::<Vec<_>>()
             .join("");

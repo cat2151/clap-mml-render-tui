@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use clack_host::prelude::PluginEntry;
 
-use super::{CacheState, CellCache, DawApp, DawPlayState, PlayPosition, FIRST_PLAYABLE_TRACK, TRACKS};
+use super::{CacheState, CellCache, DawApp, DawPlayState, PlayPosition, FIRST_PLAYABLE_TRACK};
 
 /// 末尾の空小節を除いた有効な小節数を計算する。
 ///
@@ -16,7 +16,7 @@ pub(super) fn effective_measure_count(mmls: &[String]) -> Option<usize> {
 
 /// キャッシュ済みのサンプルをミックスして返す。
 ///
-/// 指定小節（`measure`、1始まり）のすべての playable track（`FIRST_PLAYABLE_TRACK..TRACKS`）の
+/// 指定小節（`measure`、1始まり）のすべての playable track（`FIRST_PLAYABLE_TRACK..tracks`）の
 /// キャッシュを調べ、合算したサンプルを返す。
 /// いずれかの playable track が `Ready` でない（Pending / Error）場合は `None` を返し、
 /// 呼び出し元はフレッシュレンダリングにフォールバックすること。
@@ -26,13 +26,14 @@ fn try_get_cached_samples(
     cache: &Arc<Mutex<Vec<Vec<CellCache>>>>,
     measure: usize,
     measure_samples: usize,
+    tracks: usize,
 ) -> Option<Vec<f32>> {
     // ロック下では Arc ハンドルの収集のみ行い、ミックス処理はロック外で実施する。
     // これによりキャッシュワーカーや UI スレッドとのロック競合を最小化する。
     let track_samples: Option<Vec<Option<Arc<Vec<f32>>>>> = {
         let cache = cache.lock().unwrap();
-        let mut result = Vec::with_capacity(TRACKS - FIRST_PLAYABLE_TRACK);
-        for t in FIRST_PLAYABLE_TRACK..TRACKS {
+        let mut result = Vec::with_capacity(tracks - FIRST_PLAYABLE_TRACK);
+        for t in FIRST_PLAYABLE_TRACK..tracks {
             match cache[t][measure].state {
                 CacheState::Empty => {
                     result.push(None); // 空トラック
@@ -106,6 +107,7 @@ impl DawApp {
         let cache = Arc::clone(&self.cache);
         let cfg = Arc::clone(&self.cfg);
         let entry_ptr = self.entry_ptr;
+        let tracks = self.tracks;
 
         *play_state.lock().unwrap() = DawPlayState::Playing;
 
@@ -167,7 +169,7 @@ impl DawApp {
                     let samples = if mml.trim().is_empty() {
                         // 中間の空小節は無音で維持（前後の小節とのタイミングを保持）
                         vec![0.0f32; measure_samples]
-                    } else if let Some(cached) = try_get_cached_samples(&cache, measure_index + 1, measure_samples) {
+                    } else if let Some(cached) = try_get_cached_samples(&cache, measure_index + 1, measure_samples, tracks) {
                         // キャッシュヒット: 事前レンダリング済みサンプルをそのまま使用
                         cached
                     } else {
@@ -282,6 +284,7 @@ impl DawApp {
         let cache = Arc::clone(&self.cache);
         let cfg = Arc::clone(&self.cfg);
         let entry_ptr = self.entry_ptr;
+        let tracks = self.tracks;
 
         *play_state.lock().unwrap() = DawPlayState::Preview;
 
@@ -313,7 +316,7 @@ impl DawApp {
             };
 
             // キャッシュヒット時は即時再生、ミス時はレンダリングにフォールバック
-            let samples_opt = if let Some(cached) = try_get_cached_samples(&cache, measure_index + 1, measure_samples) {
+            let samples_opt = if let Some(cached) = try_get_cached_samples(&cache, measure_index + 1, measure_samples, tracks) {
                 Some(cached)
             } else {
                 let result = {
