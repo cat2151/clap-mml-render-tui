@@ -149,7 +149,12 @@ impl DawApp {
                             // WAV 書き出し失敗はデバッグ出力の問題であり、レンダリング自体は成功している。
                             // そのため WAV 失敗時は Error としてユーザーに通知する。
                             let state = if wav_ok { CacheState::Ready } else { CacheState::Error };
-                            cache_worker.lock().unwrap()[track][measure].state = state;
+                            let mut cache = cache_worker.lock().unwrap();
+                            cache[track][measure].state = state;
+                            // Ready 状態のときのみサンプルをメモリに保持する（再生時のキャッシュ利用）
+                            if wav_ok {
+                                cache[track][measure].samples = Some(Arc::new(samples));
+                            }
                         }
                         Err(_) => {
                             cache_worker.lock().unwrap()[track][measure].state = CacheState::Error;
@@ -238,7 +243,7 @@ impl DawApp {
         if self.data[track][measure].trim().is_empty() {
             cache[track][measure] = CellCache::empty();
         } else {
-            cache[track][measure] = CellCache { state: CacheState::Pending };
+            cache[track][measure] = CellCache { state: CacheState::Pending, samples: None };
         }
     }
 

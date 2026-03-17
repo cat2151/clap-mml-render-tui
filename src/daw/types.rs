@@ -1,5 +1,7 @@
 //! DAW モードの型定義
 
+use std::sync::Arc;
+
 // ─── キャッシュ ───────────────────────────────────────────────
 
 #[derive(Clone, PartialEq)]
@@ -13,11 +15,13 @@ pub enum CacheState {
 #[derive(Clone)]
 pub struct CellCache {
     pub(super) state: CacheState,
+    /// レンダリング済みのステレオサンプル（Ready 状態のときのみ Some）
+    pub(super) samples: Option<Arc<Vec<f32>>>,
 }
 
 impl CellCache {
     pub(super) fn empty() -> Self {
-        Self { state: CacheState::Empty }
+        Self { state: CacheState::Empty, samples: None }
     }
 }
 
