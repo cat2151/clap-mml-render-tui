@@ -50,8 +50,8 @@ pub use types::DawExitReason;
 
 // ─── 定数 ─────────────────────────────────────────────────────
 
-/// track 数（固定）
-pub const TRACKS: usize = 8;
+/// track 数（固定）。track 0 = Tempo、track 1..=8 = 演奏 track。
+pub const TRACKS: usize = 9;
 /// 小節数（固定）。measure 0 = 音色列。measure 1..=MEASURES = 通常小節。
 pub const MEASURES: usize = 8;
 /// track 0 はグローバルヘッダ（テンポ等）専用。演奏 track は 1 から始まる。
