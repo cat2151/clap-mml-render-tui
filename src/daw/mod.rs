@@ -144,15 +144,16 @@ impl DawApp {
                             // 開発用: track/measure ごとに WAV ファイルを出力する
                             // measure 0 は音色/ヘッダセルであり演奏内容ではないためスキップ
                             let wav_ok = if measure > 0 {
-                                let wav_ok_inner = crate::pipeline::ensure_daw_dir().ok().map(|daw_dir| {
+                                if let Ok(daw_dir) = crate::pipeline::ensure_daw_dir() {
                                     let wav_path = daw_dir.join(format!("track{}_meas{}.wav", track, measure));
                                     crate::pipeline::write_wav(
                                         &samples,
                                         daw_cfg.sample_rate as u32,
-                                        &wav_path.to_string_lossy(),
+                                        &wav_path,
                                     ).is_ok()
-                                });
-                                wav_ok_inner.unwrap_or(false)
+                                } else {
+                                    false
+                                }
                             } else {
                                 true
                             };
