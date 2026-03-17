@@ -1,5 +1,6 @@
 use super::timing::{compute_measure_samples, parse_beat_numerator, parse_tempo_bpm};
 use super::mml::build_cell_mml_from_data;
+use super::playback::effective_measure_count;
 
 // ─── parse_tempo_bpm ──────────────────────────────────────────
 
@@ -236,8 +237,6 @@ fn build_cell_mml_empty_notes_cell_has_no_note_content() {
 }
 
 // ─── effective_measure_count ──────────────────────────────────
-
-use super::playback::effective_measure_count;
 
 #[test]
 fn effective_measure_count_all_empty_returns_none() {

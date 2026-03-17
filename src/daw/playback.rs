@@ -199,22 +199,27 @@ impl DawApp {
                     break 'outer;
                 }
 
-                // 全サンプルを Sink にまとめてキューイングしてシームレス再生を実現する（issue #68）。
-                // loop_start は最初の append 直前に記録し、各小節の期待開始時刻の基準とする。
+                // インデックスとバッファを分離する。
+                // バッファは clone せず所有権ごと Sink に移動することでメモリコピーを回避する。
+                let (measure_indices, sample_bufs): (Vec<usize>, Vec<Vec<f32>>) =
+                    all_samples.into_iter().unzip();
+
                 // measure_samples はステレオインターリーブ（L/R 各 1 サンプル = 2 要素）のため
                 // 実時間 = measure_samples / (sample_rate * 2) となる。
                 let measure_duration_secs =
                     measure_samples as f64 / (sample_rate as f64 * 2.0);
+
+                // 全サンプルを Sink にまとめてキューイングしてシームレス再生を実現する（issue #68）。
+                // loop_start は最初の append 直前に記録することで、実際のオーディオ開始と
+                // できる限り近いタイムスタンプを得て位置推定の精度を高める。
                 let loop_start = std::time::Instant::now();
-                for (_, samples) in &all_samples {
-                    let source =
-                        rodio::buffer::SamplesBuffer::new(2, sample_rate, samples.clone());
-                    sink.append(source);
+                for buf in sample_bufs {
+                    sink.append(rodio::buffer::SamplesBuffer::new(2, sample_rate, buf));
                 }
 
                 // 時間ベースで各小節の再生開始位置を更新する。
                 // 10 ms 粒度でポーリングすることで停止要求に素早く応答できる（issue #68）。
-                for (i, (measure_index, _)) in all_samples.iter().enumerate() {
+                for (i, measure_index) in measure_indices.iter().enumerate() {
                     let measure_start_target = loop_start
                         + std::time::Duration::from_secs_f64(
                             i as f64 * measure_duration_secs,
