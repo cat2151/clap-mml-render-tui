@@ -150,6 +150,8 @@ impl<'a> TuiApp<'a> {
             patch_path: cfg.patch_path.clone(),
             patches_dir: cfg.patches_dir.clone(),
             random_patch: cfg.random_patch,
+            daw_tracks:  cfg.daw_tracks,
+            daw_measures: cfg.daw_measures,
         });
 
         // パッチリストはバックグラウンドスレッドで収集する。

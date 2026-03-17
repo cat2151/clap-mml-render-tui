@@ -61,6 +61,8 @@ pub fn mml_render(mml: &str, cfg: &Config, entry: &PluginEntry) -> Result<(Vec<f
         patch_path:  effective_patch.clone(),
         patches_dir: cfg.patches_dir.clone(),
         random_patch: cfg.random_patch,
+        daw_tracks:  cfg.daw_tracks,
+        daw_measures: cfg.daw_measures,
     };
 
     let samples = render_to_memory(&patched_cfg, entry, events, total_samples)?;
@@ -121,6 +123,8 @@ pub fn mml_render_for_cache(mml: &str, cfg: &Config, entry: &PluginEntry) -> Res
         patch_path:  effective_patch,
         patches_dir: cfg.patches_dir.clone(),
         random_patch: false,
+        daw_tracks:  cfg.daw_tracks,
+        daw_measures: cfg.daw_measures,
     };
 
     let samples = render_to_memory(&patched_cfg, entry, events, total_samples)?;
@@ -189,6 +193,8 @@ pub fn mml_to_play(mml: &str, cfg: &Config, entry: &PluginEntry) -> Result<Strin
         patch_path:  effective_patch,
         patches_dir: cfg.patches_dir.clone(),
         random_patch: cfg.random_patch,
+        daw_tracks:  cfg.daw_tracks,
+        daw_measures: cfg.daw_measures,
     };
 
     let samples = render_to_memory(&patched_cfg, entry, events, total_samples)?;

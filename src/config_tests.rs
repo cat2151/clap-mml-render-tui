@@ -105,3 +105,48 @@ buffer_size = 512
     assert!(cfg.patch_path.is_none());
     assert!(cfg.patches_dir.is_none());
 }
+
+#[test]
+fn config_daw_tracks_defaults_to_9() {
+    let toml_str = r#"
+plugin_path = "/usr/lib/clap/Surge XT.clap"
+input_midi  = "input.mid"
+output_midi = "output.mid"
+output_wav  = "output.wav"
+sample_rate = 44100
+buffer_size = 512
+"#;
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+    assert_eq!(cfg.daw_tracks, 9, "daw_tracks のデフォルトは 9 であるべき");
+}
+
+#[test]
+fn config_daw_measures_defaults_to_8() {
+    let toml_str = r#"
+plugin_path = "/usr/lib/clap/Surge XT.clap"
+input_midi  = "input.mid"
+output_midi = "output.mid"
+output_wav  = "output.wav"
+sample_rate = 44100
+buffer_size = 512
+"#;
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+    assert_eq!(cfg.daw_measures, 8, "daw_measures のデフォルトは 8 であるべき");
+}
+
+#[test]
+fn config_daw_tracks_can_be_set() {
+    let toml_str = r#"
+plugin_path = "/usr/lib/clap/Surge XT.clap"
+input_midi  = "input.mid"
+output_midi = "output.mid"
+output_wav  = "output.wav"
+sample_rate = 44100
+buffer_size = 512
+daw_tracks  = 5
+daw_measures = 4
+"#;
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+    assert_eq!(cfg.daw_tracks, 5);
+    assert_eq!(cfg.daw_measures, 4);
+}

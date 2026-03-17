@@ -69,17 +69,22 @@ pub(super) const MAX_CACHED_SAMPLES: usize = 2_000_000;
 // ─── DawApp ───────────────────────────────────────────────────
 
 pub struct DawApp {
-    /// data[track][measure]: track 0..TRACKS, measure 0..=MEASURES
+    /// data[track][measure]: track 0..tracks, measure 0..=measures
     pub(super) data: Vec<Vec<String>>,
 
-    pub(super) cursor_track: usize,   // 0..TRACKS-1
-    pub(super) cursor_measure: usize, // 0..=MEASURES  (0 = 音色列)
+    pub(super) cursor_track: usize,   // 0..tracks-1
+    pub(super) cursor_measure: usize, // 0..=measures  (0 = 音色列)
 
     pub(super) mode: DawMode,
     pub(super) textarea: TextArea<'static>,
 
     cfg: Arc<Config>,
     entry_ptr: usize, // *const PluginEntry as usize (main() に生存保証)
+
+    /// config から読み込んだトラック数（track 0 = ヘッダ/テンポ、track 1.. = 演奏トラック）
+    pub(super) tracks: usize,
+    /// config から読み込んだ小節数（measure 0 = 音色列、measure 1.. = 通常小節）
+    pub(super) measures: usize,
 
     /// セルごとのキャッシュ [track][measure]
     pub(super) cache: Arc<Mutex<Vec<Vec<CellCache>>>>,
@@ -110,12 +115,14 @@ pub struct DawApp {
 
 impl DawApp {
     pub fn new(cfg: Arc<Config>, entry_ptr: usize) -> Self {
-        let mut data = vec![vec![String::new(); MEASURES + 1]; TRACKS];
+        let tracks = cfg.daw_tracks.max(2);
+        let measures = cfg.daw_measures.max(1);
+        let mut data = vec![vec![String::new(); measures + 1]; tracks];
         // track 0 のデフォルトは拍子指定 JSON + テンポ設定
         data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
 
         let cache = Arc::new(Mutex::new(
-            vec![vec![CellCache::empty(); MEASURES + 1]; TRACKS],
+            vec![vec![CellCache::empty(); measures + 1]; tracks],
         ));
 
         // シリアルなキャッシュワーカースレッドを起動する。
@@ -189,12 +196,14 @@ impl DawApp {
             textarea: TextArea::default(),
             cfg,
             entry_ptr,
+            tracks,
+            measures,
             cache,
             cache_tx,
             render_lock,
             play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
             play_position: Arc::new(Mutex::new(None)),
-            play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); MEASURES])),
+            play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
             play_measure_samples: Arc::new(Mutex::new(0)),
         };
 
@@ -211,11 +220,11 @@ impl DawApp {
             .and_then(|p| std::fs::read_to_string(p).ok());
         if let Some(content) = content {
             for (t, track_str) in content.split(';').enumerate() {
-                if t >= TRACKS {
+                if t >= self.tracks {
                     break;
                 }
                 for (m, cell) in track_str.split('\n').enumerate() {
-                    if m > MEASURES {
+                    if m > self.measures {
                         break;
                     }
                     self.data[t][m] = cell.to_string();
@@ -243,8 +252,8 @@ impl DawApp {
     /// data の内容に合わせてキャッシュ状態を同期する（data 変更後に呼ぶ）
     fn sync_cache_states(&self) {
         let mut cache = self.cache.lock().unwrap();
-        for t in 0..TRACKS {
-            for m in 0..=MEASURES {
+        for t in 0..self.tracks {
+            for m in 0..=self.measures {
                 if self.data[t][m].trim().is_empty() {
                     cache[t][m] = CellCache::empty();
                 } else if cache[t][m].state == CacheState::Empty {
@@ -284,16 +293,16 @@ impl DawApp {
     /// `build_cell_mml(t, m)` はセル自身の内容に加え track0（グローバルヘッダ）と
     /// 音色セル `data[t][0]` を参照するため、それらが変化した際に依存セルも再レンダリングが必要。
     ///
-    /// - track == 0（グローバルヘッダ変更）→ 全演奏トラック（1..TRACKS）の全小節を再キャッシュ
-    /// - measure == 0 かつ track > 0（音色変更）→ 同トラックの全小節（1..=MEASURES）を再キャッシュ
+    /// - track == 0（グローバルヘッダ変更）→ 全演奏トラック（1..tracks）の全小節を再キャッシュ
+    /// - measure == 0 かつ track > 0（音色変更）→ 同トラックの全小節（1..=measures）を再キャッシュ
     /// - それ以外 → 追加の依存セルなし（呼び出し元が個別に処理済み）
     pub(super) fn invalidate_and_kick_dependent_cells(&self, track: usize, measure: usize) {
         if track == 0 {
             // track0 セル変更: 全演奏トラックの全小節が影響を受ける
             {
                 let mut cache = self.cache.lock().unwrap();
-                for t in 1..TRACKS {
-                    for m in 1..=MEASURES {
+                for t in 1..self.tracks {
+                    for m in 1..=self.measures {
                         if self.data[t][m].trim().is_empty() {
                             cache[t][m] = CellCache::empty();
                         } else {
@@ -302,8 +311,8 @@ impl DawApp {
                     }
                 }
             }
-            for t in 1..TRACKS {
-                for m in 1..=MEASURES {
+            for t in 1..self.tracks {
+                for m in 1..=self.measures {
                     self.kick_cache(t, m);
                 }
             }
@@ -311,7 +320,7 @@ impl DawApp {
             // 音色セル（data[track][0]）変更: 同トラックの全小節が影響を受ける（issue #67 参照）
             {
                 let mut cache = self.cache.lock().unwrap();
-                for m in 1..=MEASURES {
+                for m in 1..=self.measures {
                     if self.data[track][m].trim().is_empty() {
                         cache[track][m] = CellCache::empty();
                     } else {
@@ -319,7 +328,7 @@ impl DawApp {
                     }
                 }
             }
-            for m in 1..=MEASURES {
+            for m in 1..=self.measures {
                 self.kick_cache(track, m);
             }
         }
@@ -330,8 +339,8 @@ impl DawApp {
     fn kick_all_pending(&self) {
         let pending: Vec<(usize, usize)> = {
             let cache = self.cache.lock().unwrap();
-            (0..TRACKS)
-                .flat_map(|t| (0..=MEASURES).map(move |m| (t, m)))
+            (0..self.tracks)
+                .flat_map(|t| (0..=self.measures).map(move |m| (t, m)))
                 .filter(|&(t, m)| cache[t][m].state == CacheState::Pending)
                 .collect()
         };

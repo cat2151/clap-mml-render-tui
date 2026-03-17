@@ -17,10 +17,26 @@ pub struct Config {
     /// true のとき演奏ごとにランダムなパッチを選ぶ（デフォルト true）
     #[serde(default = "default_random_patch")]
     pub random_patch: bool,
+    /// DAW モードのトラック数（track 0 = ヘッダ/テンポ、track 1.. = 演奏トラック）。
+    /// デフォルト: 9 (1 + 8)
+    #[serde(default = "default_daw_tracks")]
+    pub daw_tracks: usize,
+    /// DAW モードの小節数（measure 0 = 音色列、measure 1.. = 通常小節）。
+    /// デフォルト: 8
+    #[serde(default = "default_daw_measures")]
+    pub daw_measures: usize,
 }
 
 fn default_random_patch() -> bool {
     true
+}
+
+fn default_daw_tracks() -> usize {
+    9
+}
+
+fn default_daw_measures() -> usize {
+    8
 }
 
 /// OS ごとのデフォルト plugin_path を返す。
@@ -119,6 +135,12 @@ random_patch = true
 
 # 【省略可】random_patch = false のときに使う音色
 # patch_path = ""
+
+# DAW モード設定
+# daw_tracks: トラック数（track 0 = ヘッダ/テンポ、track 1.. = 演奏トラック）デフォルト: 9 (1+8)
+# daw_measures: 小節数（measure 0 = 音色列、measure 1.. = 通常小節）デフォルト: 8
+daw_tracks   = 9
+daw_measures = 8
 "#,
         plugin_path_line = plugin_path_line,
         patches_dir_line = patches_dir_line

@@ -8,7 +8,7 @@ use ratatui::{
     Frame,
 };
 
-use super::{CacheState, DawApp, DawMode, DawPlayState, MEASURES, TRACKS};
+use super::{CacheState, DawApp, DawMode, DawPlayState};
 
 pub(super) fn draw(app: &DawApp, f: &mut Frame) {
     let area = f.area();
@@ -34,14 +34,14 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
     // これによりキャッシュワーカースレッドとの競合を最小化する。
     let cache_states: Vec<Vec<CacheState>> = {
         let cache = app.cache.lock().unwrap();
-        (0..TRACKS)
-            .map(|t| (0..=MEASURES).map(|m| cache[t][m].state.clone()).collect())
+        (0..app.tracks)
+            .map(|t| (0..=app.measures).map(|m| cache[t][m].state.clone()).collect())
             .collect()
     };
 
     // ヘッダ行（列ラベル）
     let mut header_spans = vec![Span::styled("     ", Style::default())];
-    for m in 0..=MEASURES {
+    for m in 0..=app.measures {
         let label = if m == 0 {
             " Tmb".to_string()
         } else {
@@ -60,7 +60,7 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
     }
 
     // track 行（2 行ずつ）
-    for t in 0..TRACKS {
+    for t in 0..app.tracks {
         let row_y = area.y + 1 + (t as u16) * 2;
         if row_y + 1 >= area.y + area.height {
             break;
@@ -86,7 +86,7 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
             vec![]
         };
 
-        for m in 0..=MEASURES {
+        for m in 0..=app.measures {
             let is_cursor = is_cursor_track && m == app.cursor_measure;
             let mml = &app.data[t][m];
             let cs = &cache_states[t][m];

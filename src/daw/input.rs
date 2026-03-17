@@ -2,7 +2,7 @@
 
 use crossterm::event::KeyCode;
 
-use super::{DawApp, DawMode, DawNormalAction, DawPlayState, MEASURES, TRACKS};
+use super::{DawApp, DawMode, DawNormalAction, DawPlayState};
 
 impl DawApp {
     // ─── INSERT モード ────────────────────────────────────────
@@ -24,7 +24,7 @@ impl DawApp {
             // セミコロンで分割して下の track に順に追加
             for (i, part) in text.split(';').enumerate() {
                 let t = self.cursor_track + i;
-                if t >= TRACKS {
+                if t >= self.tracks {
                     break;
                 }
                 self.data[t][self.cursor_measure] = part.to_string();
@@ -71,12 +71,12 @@ impl DawApp {
                 }
             }
             KeyCode::Char('l') | KeyCode::Right => {
-                if self.cursor_measure < MEASURES {
+                if self.cursor_measure < self.measures {
                     self.cursor_measure += 1;
                 }
             }
             KeyCode::Char('j') | KeyCode::Down => {
-                if self.cursor_track + 1 < TRACKS {
+                if self.cursor_track + 1 < self.tracks {
                     self.cursor_track += 1;
                 }
             }
@@ -89,10 +89,10 @@ impl DawApp {
                 self.cursor_track = 0;
             }
             KeyCode::Char('M') => {
-                self.cursor_track = TRACKS / 2;
+                self.cursor_track = self.tracks / 2;
             }
             KeyCode::Char('L') => {
-                self.cursor_track = TRACKS - 1;
+                self.cursor_track = self.tracks - 1;
             }
 
             KeyCode::Char('i') => self.start_insert(),
@@ -157,7 +157,7 @@ impl DawApp {
                 {
                     self.start_preview(confirmed_measure - 1);
                 }
-                if self.cursor_measure < MEASURES {
+                if self.cursor_measure < self.measures {
                     self.cursor_measure += 1;
                 }
                 self.start_insert();
