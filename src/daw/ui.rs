@@ -59,6 +59,15 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
         );
     }
 
+    // Pending セル用アニメーションフレーム（0/1/2 を 250ms サイクルで切り替え）
+    let anim_frame = {
+        let millis = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        ((millis / 250) % 3) as u32
+    };
+
     // track 行（2 行ずつ）
     for t in 0..app.tracks {
         let row_y = area.y + 1 + (t as u16) * 2;
@@ -72,7 +81,7 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
         let mut row1: Vec<Span> = vec![Span::styled(
             format!("T{:<2}  ", t),
             if is_cursor_track {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::DarkGray)
             },
@@ -100,12 +109,12 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
             };
 
             let (fg, bg) = if is_cursor {
-                (Color::Black, Color::Yellow)
+                (Color::Black, Color::Cyan)
             } else {
                 match cs {
                     CacheState::Empty => (Color::DarkGray, Color::Reset),
-                    CacheState::Pending => (Color::White, Color::Reset),
-                    CacheState::Ready => (Color::Green, Color::Reset),
+                    CacheState::Pending => (Color::DarkGray, Color::Reset),
+                    CacheState::Ready => (Color::White, Color::Reset),
                     CacheState::Error => (Color::Red, Color::Reset),
                 }
             };
@@ -119,17 +128,21 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
             if show_indicators {
                 let indicator = match cs {
                     CacheState::Empty => "     ",
-                    CacheState::Pending => "...  ",
+                    CacheState::Pending => match anim_frame {
+                        0 => ".    ",
+                        1 => "..   ",
+                        _ => "...  ",
+                    },
                     CacheState::Ready => "     ",
                     CacheState::Error => "✗    ",
                 };
                 let ind_fg = if is_cursor {
-                    Color::Yellow
+                    Color::Cyan
                 } else {
                     match cs {
                         CacheState::Empty => Color::DarkGray,
-                        CacheState::Pending => Color::Yellow,
-                        CacheState::Ready => Color::Green,
+                        CacheState::Pending => Color::DarkGray,
+                        CacheState::Ready => Color::DarkGray,
                         CacheState::Error => Color::Red,
                     }
                 };
