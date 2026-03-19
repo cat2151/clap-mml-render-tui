@@ -163,7 +163,7 @@ pub fn run_foreground_update() -> Result<()> {
     {
         println!("アップデートを開始します...");
         println!(
-            "cargo install --force --git https://github.com/{}/{}",
+            "cargo install --force --git https://github.com/{}/{} --package clap-mml-render-tui",
             REPO_OWNER, REPO_NAME
         );
 
@@ -173,6 +173,8 @@ pub fn run_foreground_update() -> Result<()> {
                 "--force",
                 "--git",
                 &format!("https://github.com/{}/{}", REPO_OWNER, REPO_NAME),
+                "--package",
+                "clap-mml-render-tui",
             ])
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit())
@@ -206,7 +208,7 @@ fn spawn_updater_process() -> Result<()> {
         .unwrap_or(0);
     let script_path = std::env::temp_dir().join(format!("cmrt_updater_{}.bat", suffix));
     let script = format!(
-        "@echo off\r\ntimeout /t 3 /nobreak >nul\r\ncargo install --force --git https://github.com/{}/{}\r\ncmrt\r\n(goto) 2>nul & del \"%~f0\"\r\n",
+        "@echo off\r\ntimeout /t 3 /nobreak >nul\r\ncargo install --force --git https://github.com/{}/{} --package clap-mml-render-tui\r\ncmrt\r\n(goto) 2>nul & del \"%~f0\"\r\n",
         REPO_OWNER, REPO_NAME
     );
     std::fs::write(&script_path, &script)?;
