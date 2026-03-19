@@ -12,7 +12,8 @@ use anyhow::Result;
 const REPO_OWNER: &str = "cat2151";
 const REPO_NAME: &str = "clap-mml-render-tui";
 /// ワークスペース構成の `cargo install` で指定する対象パッケージ名。
-/// app/Cargo.toml の `[package].name` と一致している必要がある。
+/// app/Cargo.toml の `[package] name = "clap-mml-render-tui"` と
+/// 一致している必要がある。
 const INSTALL_PACKAGE: &str = "clap-mml-render-tui";
 
 /// ビルド時に埋め込まれたgit commit hash
