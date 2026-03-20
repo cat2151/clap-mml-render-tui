@@ -115,8 +115,7 @@ impl DawApp {
         std::thread::spawn(move || {
             // SAFETY: entry は main() のスタックに生存している
             let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
-            let mut daw_cfg = (*cfg).clone();
-            daw_cfg.random_patch = false;
+            let daw_cfg = (*cfg).clone();
             let sample_rate = daw_cfg.sample_rate as u32;
 
         // OutputStream と Sink をスレッドに 1 つだけ作成し、小節をまたいで再利用する。
@@ -293,8 +292,7 @@ impl DawApp {
         std::thread::spawn(move || {
             // SAFETY: entry は main() のスタックに生存している
             let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
-            let mut daw_cfg = (*cfg).clone();
-            daw_cfg.random_patch = false;
+            let daw_cfg = (*cfg).clone();
             let sample_rate = daw_cfg.sample_rate as u32;
 
             let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else {

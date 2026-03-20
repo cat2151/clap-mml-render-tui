@@ -1,4 +1,5 @@
 use super::*;
+use crossterm::event::KeyCode;
 
 fn make_patches(items: &[&str]) -> Vec<(String, String)> {
     items
@@ -30,11 +31,7 @@ fn filter_patches_case_insensitive() {
 
 #[test]
 fn filter_patches_multiple_terms_act_as_and() {
-    let all = make_patches(&[
-        "Pads/Soft Pad.fxp",
-        "Pads/Hard Pad.fxp",
-        "Leads/Lead 1.fxp",
-    ]);
+    let all = make_patches(&["Pads/Soft Pad.fxp", "Pads/Hard Pad.fxp", "Leads/Lead 1.fxp"]);
     let result = filter_patches(&all, "pad soft");
     assert_eq!(result, vec!["Pads/Soft Pad.fxp"]);
 }
@@ -64,26 +61,25 @@ fn filter_patches_empty_list_returns_empty() {
 // --- audio cache helper tests ---
 
 #[test]
-fn resolve_cached_samples_returns_none_when_random_patch_true() {
-    let mut cache = HashMap::new();
-    cache.insert("cde".to_string(), vec![0.0f32, 1.0]);
-    // random_patch=true: キャッシュが存在していてもNoneを返す
-    let result = resolve_cached_samples(&cache, "cde", true);
-    assert!(result.is_none());
-}
-
-#[test]
 fn resolve_cached_samples_returns_samples_on_cache_hit() {
     let mut cache = HashMap::new();
     cache.insert("cde".to_string(), vec![0.5f32, 0.6]);
-    let result = resolve_cached_samples(&cache, "cde", false);
+    let result = resolve_cached_samples(Some(&cache), "cde");
     assert_eq!(result, Some(vec![0.5f32, 0.6]));
 }
 
 #[test]
 fn resolve_cached_samples_returns_none_on_cache_miss() {
     let cache: HashMap<String, Vec<f32>> = HashMap::new();
-    let result = resolve_cached_samples(&cache, "cde", false);
+    let result = resolve_cached_samples(Some(&cache), "cde");
+    assert!(result.is_none());
+}
+
+#[test]
+fn resolve_cached_samples_returns_none_without_cache_reference() {
+    let mut cache = HashMap::new();
+    cache.insert("cde".to_string(), vec![0.0f32, 1.0]);
+    let result = resolve_cached_samples(None, "cde");
     assert!(result.is_none());
 }
 
@@ -131,4 +127,58 @@ fn try_insert_cache_updates_existing_key_when_full() {
     try_insert_cache(&mut cache, "cde".to_string(), vec![0.9f32], false);
     assert_eq!(cache.len(), AUDIO_CACHE_MAX_ENTRIES);
     assert_eq!(cache["cde"], vec![0.9f32]);
+}
+
+fn test_config() -> crate::config::Config {
+    crate::config::Config {
+        plugin_path: "/tmp/Surge XT.clap".to_string(),
+        input_midi: "input.mid".to_string(),
+        output_midi: "output.mid".to_string(),
+        output_wav: "output.wav".to_string(),
+        sample_rate: 44_100.0,
+        buffer_size: 512,
+        patch_path: None,
+        patches_dir: Some("/tmp/patches".to_string()),
+        daw_tracks: 9,
+        daw_measures: 8,
+    }
+}
+
+#[test]
+fn handle_normal_r_toggles_random_timbre_mode() {
+    let mut app = TuiApp::new_for_test(test_config());
+    assert!(!app.random_timbre_enabled);
+
+    let result = app.handle_normal(KeyCode::Char('r'));
+    assert!(matches!(result, NormalAction::Continue));
+    assert!(app.random_timbre_enabled);
+
+    app.handle_normal(KeyCode::Char('r'));
+    assert!(!app.random_timbre_enabled);
+}
+
+#[test]
+fn handle_normal_t_shows_error_when_random_timbre_enabled() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.random_timbre_enabled = true;
+
+    app.handle_normal(KeyCode::Char('t'));
+
+    assert!(
+        matches!(&*app.play_state.lock().unwrap(), PlayState::Err(msg) if msg == "ランダム音色モードでは音色選択は使えません")
+    );
+    assert!(matches!(app.mode, Mode::Normal));
+}
+
+#[test]
+fn handle_normal_t_enters_patch_select_when_random_timbre_disabled() {
+    let mut app = TuiApp::new_for_test(test_config());
+    let patches = make_patches(&["Pads/Pad 1.fxp"]);
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(patches.clone())));
+
+    app.handle_normal(KeyCode::Char('t'));
+
+    assert!(matches!(app.mode, Mode::PatchSelect));
+    assert_eq!(app.patch_all, patches);
+    assert_eq!(app.patch_filtered, vec!["Pads/Pad 1.fxp"]);
 }

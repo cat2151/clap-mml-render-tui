@@ -5,7 +5,8 @@ fn config_file_path_ends_with_cmrt_config_toml() {
     if let Some(path) = config_file_path() {
         let path_str = path.to_string_lossy();
         assert!(
-            path_str.ends_with("clap-mml-render-tui/config.toml") || path_str.ends_with(r"clap-mml-render-tui\config.toml"),
+            path_str.ends_with("clap-mml-render-tui/config.toml")
+                || path_str.ends_with(r"clap-mml-render-tui\config.toml"),
             "config_file_path が clap-mml-render-tui/config.toml で終わっていない: {}",
             path_str
         );
@@ -59,25 +60,10 @@ buffer_size = 512
     assert_eq!(cfg.output_wav, "output.wav");
     assert!((cfg.sample_rate - 44100.0).abs() < f64::EPSILON);
     assert_eq!(cfg.buffer_size, 512);
-    assert!(cfg.random_patch); // デフォルトは true
 }
 
 #[test]
-fn config_random_patch_defaults_to_true() {
-    let toml_str = r#"
-plugin_path = "/usr/lib/clap/Surge XT.clap"
-input_midi  = "input.mid"
-output_midi = "output.mid"
-output_wav  = "output.wav"
-sample_rate = 44100
-buffer_size = 512
-"#;
-    let cfg: Config = toml::from_str(toml_str).unwrap();
-    assert!(cfg.random_patch, "random_patch のデフォルトは true であるべき");
-}
-
-#[test]
-fn config_random_patch_can_be_set_false() {
+fn config_parse_accepts_legacy_random_patch_field() {
     let toml_str = r#"
 plugin_path = "/usr/lib/clap/Surge XT.clap"
 input_midi  = "input.mid"
@@ -88,7 +74,27 @@ buffer_size = 512
 random_patch = false
 "#;
     let cfg: Config = toml::from_str(toml_str).unwrap();
-    assert!(!cfg.random_patch);
+    assert_eq!(cfg.plugin_path, "/usr/lib/clap/Surge XT.clap");
+}
+
+#[test]
+fn core_config_from_config_disables_random_patch() {
+    let toml_str = r#"
+plugin_path = "/usr/lib/clap/Surge XT.clap"
+input_midi  = "input.mid"
+output_midi = "output.mid"
+output_wav  = "output.wav"
+sample_rate = 44100
+buffer_size = 512
+patches_dir = "/tmp/patches"
+"#;
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+    let core_cfg = cmrt_core::CoreConfig::from(&cfg);
+    assert!(
+        !core_cfg.random_patch,
+        "Config から生成した CoreConfig は常に random_patch=false にする"
+    );
+    assert_eq!(core_cfg.patches_dir.as_deref(), Some("/tmp/patches"));
 }
 
 #[test]
@@ -131,7 +137,10 @@ sample_rate = 44100
 buffer_size = 512
 "#;
     let cfg: Config = toml::from_str(toml_str).unwrap();
-    assert_eq!(cfg.daw_measures, 8, "daw_measures のデフォルトは 8 であるべき");
+    assert_eq!(
+        cfg.daw_measures, 8,
+        "daw_measures のデフォルトは 8 であるべき"
+    );
 }
 
 #[test]
