@@ -15,6 +15,16 @@ const ANIM_FRAME_MS: u128 = 250;
 /// Pending インジケータのアニメーションフレーム数（"." / ".." / "..."）
 const ANIM_FRAME_COUNT: u128 = 3;
 
+fn loop_status_label(mmls: &[String]) -> Option<String> {
+    super::playback::effective_measure_count(mmls).map(|count| {
+        if count == 1 {
+            "loop: meas1のみ (1小節)".to_string()
+        } else {
+            format!("loop: meas1〜meas{count} ({count}小節)")
+        }
+    })
+}
+
 pub(super) fn draw(app: &DawApp, f: &mut Frame) {
     let area = f.area();
 
@@ -184,6 +194,12 @@ fn draw_status(app: &DawApp, f: &mut Frame, area: Rect) {
     // play_state と play_position を一度だけロックしてスナップショットを取る。
     let play_state = app.play_state.lock().unwrap().clone();
     let play_position = app.play_position.lock().unwrap().clone();
+    let loop_label = if play_state == DawPlayState::Playing {
+        let play_measure_mmls = app.play_measure_mmls.lock().unwrap().clone();
+        loop_status_label(&play_measure_mmls)
+    } else {
+        None
+    };
 
     // 拍子・テンポは常に現在の app 状態から取得することで、
     // hot reload 後もビート表示が正確に保たれる。
@@ -193,7 +209,11 @@ fn draw_status(app: &DawApp, f: &mut Frame, area: Rect) {
     let play_str = match &play_state {
         DawPlayState::Idle => "".to_string(),
         DawPlayState::Playing | DawPlayState::Preview => {
-            let label = if play_state == DawPlayState::Preview { "PREVIEW" } else { "loop" };
+            let label = if play_state == DawPlayState::Preview {
+                "PREVIEW".to_string()
+            } else {
+                loop_label.unwrap_or_else(|| "loop".to_string())
+            };
             let pos_str = if let Some(pos) = &play_position {
                 let elapsed = pos.measure_start.elapsed().as_secs_f64();
                 let raw_beat = (elapsed / beat_duration_secs) as u32;
@@ -236,6 +256,39 @@ fn draw_status(app: &DawApp, f: &mut Frame, area: Rect) {
         Paragraph::new(text).style(Style::default().fg(color)),
         area,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{super::MEASURES, loop_status_label};
+
+    #[test]
+    fn loop_status_label_single_measure_shows_single_measure_loop() {
+        let mut mmls = vec![String::new(); MEASURES];
+        mmls[0] = "c".to_string();
+
+        assert_eq!(
+            loop_status_label(&mmls),
+            Some("loop: meas1のみ (1小節)".to_string())
+        );
+    }
+
+    #[test]
+    fn loop_status_label_uses_last_non_empty_measure() {
+        let mut mmls = vec![String::new(); MEASURES];
+        mmls[0] = "c".to_string();
+        mmls[2] = "g".to_string();
+
+        assert_eq!(
+            loop_status_label(&mmls),
+            Some("loop: meas1〜meas3 (3小節)".to_string())
+        );
+    }
+
+    #[test]
+    fn loop_status_label_all_empty_returns_none() {
+        assert_eq!(loop_status_label(&vec![String::new(); MEASURES]), None);
+    }
 }
 
 fn draw_help(f: &mut Frame, area: Rect) {
