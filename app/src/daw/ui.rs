@@ -195,7 +195,7 @@ fn draw_status(app: &DawApp, f: &mut Frame, area: Rect) {
     let play_state = app.play_state.lock().unwrap().clone();
     let play_position = app.play_position.lock().unwrap().clone();
     let loop_label = if play_state == DawPlayState::Playing {
-        let play_measure_mmls = app.play_measure_mmls.lock().unwrap().clone();
+        let play_measure_mmls = app.play_measure_mmls.lock().unwrap();
         loop_status_label(&play_measure_mmls)
     } else {
         None
