@@ -106,8 +106,11 @@ impl<'a> TuiApp<'a> {
             KeyCode::Char('q') => return NormalAction::Quit,
             KeyCode::Char('d') => return NormalAction::LaunchDaw,
             KeyCode::Char('i') => self.start_insert(),
+            KeyCode::Char('r') => {
+                self.random_timbre_enabled = !self.random_timbre_enabled;
+            }
             KeyCode::Char('t') => {
-                if self.cfg.random_patch {
+                if self.random_timbre_enabled {
                     *self.play_state.lock().unwrap() = PlayState::Err(
                         "random音色モードでは音色選択は使えません".to_string(),
                     );

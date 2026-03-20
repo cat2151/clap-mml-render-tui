@@ -1,4 +1,5 @@
 use super::*;
+use crossterm::event::KeyCode;
 
 fn make_patches(items: &[&str]) -> Vec<(String, String)> {
     items
@@ -131,4 +132,56 @@ fn try_insert_cache_updates_existing_key_when_full() {
     try_insert_cache(&mut cache, "cde".to_string(), vec![0.9f32], false);
     assert_eq!(cache.len(), AUDIO_CACHE_MAX_ENTRIES);
     assert_eq!(cache["cde"], vec![0.9f32]);
+}
+
+fn test_config() -> crate::config::Config {
+    crate::config::Config {
+        plugin_path: "/tmp/Surge XT.clap".to_string(),
+        input_midi: "input.mid".to_string(),
+        output_midi: "output.mid".to_string(),
+        output_wav: "output.wav".to_string(),
+        sample_rate: 44_100.0,
+        buffer_size: 512,
+        patch_path: None,
+        patches_dir: Some("/tmp/patches".to_string()),
+        daw_tracks: 9,
+        daw_measures: 8,
+    }
+}
+
+#[test]
+fn handle_normal_r_toggles_random_timbre_mode() {
+    let mut app = TuiApp::new_for_test(test_config());
+    assert!(!app.random_timbre_enabled);
+
+    let result = app.handle_normal(KeyCode::Char('r'));
+    assert!(matches!(result, NormalAction::Continue));
+    assert!(app.random_timbre_enabled);
+
+    app.handle_normal(KeyCode::Char('r'));
+    assert!(!app.random_timbre_enabled);
+}
+
+#[test]
+fn handle_normal_t_shows_error_when_random_timbre_enabled() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.random_timbre_enabled = true;
+
+    app.handle_normal(KeyCode::Char('t'));
+
+    assert!(matches!(&*app.play_state.lock().unwrap(), PlayState::Err(msg) if msg == "random音色モードでは音色選択は使えません"));
+    assert_eq!(app.mode, Mode::Normal);
+}
+
+#[test]
+fn handle_normal_t_enters_patch_select_when_random_timbre_disabled() {
+    let mut app = TuiApp::new_for_test(test_config());
+    let patches = make_patches(&["Pads/Pad 1.fxp"]);
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(patches.clone())));
+
+    app.handle_normal(KeyCode::Char('t'));
+
+    assert_eq!(app.mode, Mode::PatchSelect);
+    assert_eq!(app.patch_all, patches);
+    assert_eq!(app.patch_filtered, vec!["Pads/Pad 1.fxp"]);
 }

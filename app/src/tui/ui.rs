@@ -45,8 +45,9 @@ fn status_text(app: &TuiApp<'_>, play_state: &PlayState) -> String {
         PlayState::Done(msg)      => format!("  ✓ {}", msg),
         PlayState::Err(msg)       => format!("  ✗ {}", msg),
     };
+    let random_timbre = if app.random_timbre_enabled { "ON" } else { "OFF" };
     match app.mode {
-        Mode::Normal => format!("NORMAL  i:INSERT  t:音色選択  j/k:移動  Enter:再生  d:DAW  K:ヘルプ  q:終了{}", play_str),
+        Mode::Normal => format!("NORMAL  i:INSERT  r:random音色[{random_timbre}]  t:音色選択  j/k:移動  Enter:再生  d:DAW  K:ヘルプ  q:終了{}", play_str),
         Mode::Insert => format!("ESC:確定→NORMAL  Enter:確定→次行{}", play_str),
         Mode::PatchSelect => format!("音色選択  Enter:決定  ESC:キャンセル  ↑↓:移動  文字入力:フィルタ  Space:AND条件{}", play_str),
         Mode::Help => format!("HELP  ESC:キャンセル{}", play_str),
@@ -123,7 +124,7 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_color: 
     let cache_guard = app.audio_cache.lock().unwrap();
     let items: Vec<ListItem> = app.lines.iter().enumerate().map(|(i, line)| {
         let mml = line.trim();
-        let is_cached = !mml.is_empty() && cache_guard.contains_key(mml);
+        let is_cached = !app.random_timbre_enabled && !mml.is_empty() && cache_guard.contains_key(mml);
         let style = if i == cursor {
             Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
         } else if is_cached {
@@ -188,6 +189,7 @@ fn draw_help(f: &mut Frame) {
         Line::from("  Enter/Space : 再生"),
         Line::from("  i           : INSERT モード"),
         Line::from("  o           : 次行に挿入 → INSERT"),
+        Line::from("  r           : random 音色 ON/OFF"),
         Line::from("  t           : 音色選択"),
         Line::from("  d           : DAW モード"),
         Line::from("  K           : ヘルプ (このページ)"),

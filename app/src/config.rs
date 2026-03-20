@@ -15,9 +15,6 @@ pub struct Config {
     pub patch_path: Option<String>,
     /// ファクトリパッチのルートディレクトリ
     pub patches_dir: Option<String>,
-    /// true のとき演奏ごとにランダムなパッチを選ぶ（デフォルト true）
-    #[serde(default = "default_random_patch")]
-    pub random_patch: bool,
     /// DAW モードのトラック数（track 0 = ヘッダ/テンポ、track 1.. = 演奏トラック）。
     /// デフォルト: 9 (1 + 8)
     #[serde(default = "default_daw_tracks")]
@@ -26,10 +23,6 @@ pub struct Config {
     /// デフォルト: 8
     #[serde(default = "default_daw_measures")]
     pub daw_measures: usize,
-}
-
-fn default_random_patch() -> bool {
-    true
 }
 
 fn default_daw_tracks() -> usize {
@@ -124,17 +117,13 @@ output_wav  = "output.wav"
 sample_rate = 44100
 buffer_size = 512
 
-# 【省略可】ファクトリパッチのルートディレクトリ（random_patch = true のときに使う）
+# 【省略可】ファクトリパッチのルートディレクトリ（TUI の音色選択・ランダム音色で使う）
 # 例 (Windows): patches_dir = 'C:\ProgramData\Surge XT\patches_factory'
 # 例 (Linux):   patches_dir = '/home/user/.local/share/surge-data/patches_factory'
 # 例 (macOS):   patches_dir = '/Library/Application Support/Surge XT/patches_factory'
 {patches_dir_line}
 
-# true: 演奏ごとにランダムなパッチを選ぶ（デフォルト true）
-# false: 下の patch_path を使う
-random_patch = true
-
-# 【省略可】random_patch = false のときに使う音色
+# 【省略可】固定で使う音色
 # patch_path = ""
 
 # DAW モード設定
@@ -232,7 +221,7 @@ impl From<&Config> for CoreConfig {
             buffer_size: value.buffer_size,
             patch_path: value.patch_path.clone(),
             patches_dir: value.patches_dir.clone(),
-            random_patch: value.random_patch,
+            random_patch: false,
         }
     }
 }

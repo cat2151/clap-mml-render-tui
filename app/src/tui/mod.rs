@@ -1,7 +1,7 @@
 //! vim 風 TUI
 //!
 //! モード:
-//!   NORMAL : j/k で行移動、H/M/L で先頭/中央/末尾行へ移動、i/o で INSERT、t で音色選択、Enter/Space で再生、q で終了
+//!   NORMAL : j/k で行移動、H/M/L で先頭/中央/末尾行へ移動、i/o で INSERT、r でランダム音色切替、t で音色選択、Enter/Space で再生、q で終了
 //!   INSERT : tui-textarea で編集
 //!            ESC   → 確定 → NORMAL（再生開始）
 //!            Enter → 確定 → 次行に新規行挿入 → INSERT 継続
@@ -133,6 +133,7 @@ pub struct TuiApp<'a> {
     pub(super) patch_filtered: Vec<String>,  // フィルタ結果（表示名のみ）
     pub(super) patch_cursor: usize,          // フィルタ結果内のカーソル位置
     pub(super) patch_list_state: ListState,  // 音色選択リスト描画用
+    pub(super) random_timbre_enabled: bool,
     /// バックグラウンドのアップデートチェックがtrueにセットしたらアップデートを実行
     pub update_available: Arc<AtomicBool>,
     /// 終了時 DAW モードだったかどうか（history.json に保存・復元する）
@@ -200,6 +201,7 @@ impl<'a> TuiApp<'a> {
             patch_filtered: Vec::new(),
             patch_cursor: 0,
             patch_list_state: ListState::default(),
+            random_timbre_enabled: false,
             update_available: Arc::new(AtomicBool::new(false)),
             is_daw_mode,
         }
@@ -210,9 +212,11 @@ impl<'a> TuiApp<'a> {
         let state = Arc::clone(&self.play_state);
         let cache = Arc::clone(&self.audio_cache);
         let entry_ptr = self.entry_ptr;
+        let random_timbre_enabled = self.random_timbre_enabled;
 
         // キャッシュを確認（random_patchモード時はキャッシュを使用しない）
-        let cached_samples = resolve_cached_samples(&cache.lock().unwrap(), &mml, cfg.random_patch);
+        let cached_samples =
+            resolve_cached_samples(&cache.lock().unwrap(), &mml, random_timbre_enabled);
 
         if let Some(samples) = cached_samples {
             // キャッシュヒット: レンダリングをスキップして即時再生
@@ -236,7 +240,8 @@ impl<'a> TuiApp<'a> {
                 let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
 
                 // レンダリング
-                let core_cfg = CoreConfig::from(cfg.as_ref());
+                let mut core_cfg = CoreConfig::from(cfg.as_ref());
+                core_cfg.random_patch = random_timbre_enabled;
                 let render_result = mml_render(&mml, &core_cfg, entry_ref);
 
                 match render_result {
@@ -249,7 +254,7 @@ impl<'a> TuiApp<'a> {
                             &mut cache.lock().unwrap(),
                             mml.clone(),
                             samples.clone(),
-                            cfg.random_patch,
+                            random_timbre_enabled,
                         );
 
                         let msg = format!("{} | {}", patch_name, mml);
@@ -360,6 +365,34 @@ impl<'a> TuiApp<'a> {
         raw_mode_result?;
         alternate_screen_result?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+impl TuiApp<'static> {
+    pub(super) fn new_for_test(cfg: Config) -> Self {
+        let mut list_state = ListState::default();
+        list_state.select(Some(0));
+        Self {
+            mode: Mode::Normal,
+            lines: vec![String::new()],
+            cursor: 0,
+            list_state,
+            textarea: TextArea::default(),
+            cfg: Arc::new(cfg),
+            entry_ptr: 0,
+            play_state: Arc::new(Mutex::new(PlayState::Idle)),
+            audio_cache: Arc::new(Mutex::new(HashMap::new())),
+            patch_load_state: Arc::new(Mutex::new(PatchLoadState::Ready(Vec::new()))),
+            patch_all: Vec::new(),
+            patch_query: String::new(),
+            patch_filtered: Vec::new(),
+            patch_cursor: 0,
+            patch_list_state: ListState::default(),
+            random_timbre_enabled: false,
+            update_available: Arc::new(AtomicBool::new(false)),
+            is_daw_mode: false,
+        }
     }
 }
 
