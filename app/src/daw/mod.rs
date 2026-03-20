@@ -99,7 +99,8 @@ pub struct DawApp {
     cache_tx: std::sync::mpsc::Sender<(usize, usize, String)>,
 
     /// `mml_render_for_cache` の排他実行ロック。
-    /// キャッシュワーカーと再生スレッドが同時に daw_cache.mid/wav を書き込まないよう、
+    /// `mml_str_to_smf_bytes` が書き出す共有デバッグファイル
+    /// （`pass1_tokens.json` など）を同時に書き込まないよう、
     /// `mml_render_for_cache` 呼び出し前に必ずこのロックを取得すること。
     render_lock: Arc<Mutex<()>>,
 
@@ -136,7 +137,8 @@ impl DawApp {
         let (cache_tx, cache_rx) = std::sync::mpsc::channel::<(usize, usize, String)>();
 
         // `mml_render_for_cache` はキャッシュワーカーと再生スレッドの両方から呼ばれるため、
-        // clap-mml-render-tui/daw/daw_cache.mid/wav への同時書き込みを防ぐ排他ロックを共有する。
+        // `mml_str_to_smf_bytes` が書き出す共有デバッグファイル
+        // （`pass1_tokens.json` など）への同時書き込みを防ぐ排他ロックを共有する。
         let render_lock: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
 
         {

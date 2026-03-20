@@ -362,7 +362,11 @@ checksum = "4bfbf56724aa9eca8afa4fcfadeb479e722935bb2a0900c2d37e0cc477af0688"
 name = "cmrt-core"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "clack-host",
  "cmrt-core 0.1.0 (git+https://github.com/cat2151/clap-mml-play-server?rev=0c43002a306bfd68e7019a0343dc6238e483603f)",
+ "mmlabc-to-smf",
+ "serde_json",
 ]
 
 [[package]]

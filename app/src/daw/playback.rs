@@ -175,7 +175,8 @@ impl DawApp {
                     } else {
                         // キャッシュミス: レンダリングにフォールバック
                         // render_lock を取得してからレンダリングすることで、
-                        // キャッシュワーカーと同時に clap-mml-render-tui/daw/daw_cache.mid/wav を書き込まないようにする
+                        // `mml_str_to_smf_bytes` が書き出す共有デバッグファイルへ
+                        // キャッシュワーカーと同時書き込みしないようにする
                         let result = {
                             let _guard = render_lock.lock().unwrap();
                             // mml_render_for_cache を使用することで patch_history.txt への追記を行わない
