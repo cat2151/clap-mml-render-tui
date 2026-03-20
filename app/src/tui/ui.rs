@@ -123,15 +123,21 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_color: 
         .split(f.area());
 
     // キャッシュのガードを保持したままイテレートすることで、全キーのクローンを避ける。
-    let cache_guard = app.audio_cache.lock().unwrap();
+    // ランダム音色 ON 時はキャッシュを参照しないため、ロック自体を取得しない。
+    let cache_guard = if app.random_timbre_enabled {
+        None
+    } else {
+        Some(app.audio_cache.lock().unwrap())
+    };
     let items: Vec<ListItem> = app
         .lines
         .iter()
         .enumerate()
         .map(|(i, line)| {
             let mml = line.trim();
-            let is_cached =
-                !app.random_timbre_enabled && !mml.is_empty() && cache_guard.contains_key(mml);
+            let is_cached = cache_guard
+                .as_ref()
+                .is_some_and(|cache| !mml.is_empty() && cache.contains_key(mml));
             let style = if i == cursor {
                 Style::default()
                     .fg(Color::Yellow)
@@ -150,7 +156,6 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_color: 
             ]))
         })
         .collect();
-    drop(cache_guard);
 
     f.render_stateful_widget(
         List::new(items)

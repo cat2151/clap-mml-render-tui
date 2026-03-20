@@ -46,17 +46,13 @@ fn filter_patches(all: &[(String, String)], query: &str) -> Vec<String> {
         .collect()
 }
 
-/// キャッシュからサンプルを取得する。`random_patch` が true の場合は常に `None` を返す。
+/// キャッシュからサンプルを取得する。
+/// キャッシュ参照がない場合は `None` を返す。
 fn resolve_cached_samples(
-    cache: &HashMap<String, Vec<f32>>,
+    cache: Option<&HashMap<String, Vec<f32>>>,
     mml: &str,
-    random_patch: bool,
 ) -> Option<Vec<f32>> {
-    if random_patch {
-        None
-    } else {
-        cache.get(mml).cloned()
-    }
+    cache.and_then(|cache| cache.get(mml).cloned())
 }
 
 /// キャッシュにサンプルを挿入する。上限に達した場合はキャッシュ全体をクリアしてから挿入する。
@@ -212,8 +208,15 @@ impl<'a> TuiApp<'a> {
         let random_timbre_enabled = self.random_timbre_enabled;
 
         // キャッシュを確認（random_patchモード時はキャッシュを使用しない）
-        let cached_samples =
-            resolve_cached_samples(&cache.lock().unwrap(), &mml, random_timbre_enabled);
+        let cached_samples = {
+            let cache_guard = if random_timbre_enabled {
+                // ランダム音色 ON 時はキャッシュを参照しない（ロックも取得しない）
+                None
+            } else {
+                Some(cache.lock().unwrap())
+            };
+            resolve_cached_samples(cache_guard.as_deref(), &mml)
+        };
 
         if let Some(samples) = cached_samples {
             // キャッシュヒット: レンダリングをスキップして即時再生

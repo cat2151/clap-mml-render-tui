@@ -61,26 +61,25 @@ fn filter_patches_empty_list_returns_empty() {
 // --- audio cache helper tests ---
 
 #[test]
-fn resolve_cached_samples_returns_none_when_random_patch_true() {
-    let mut cache = HashMap::new();
-    cache.insert("cde".to_string(), vec![0.0f32, 1.0]);
-    // random_patch=true: キャッシュが存在していてもNoneを返す
-    let result = resolve_cached_samples(&cache, "cde", true);
-    assert!(result.is_none());
-}
-
-#[test]
 fn resolve_cached_samples_returns_samples_on_cache_hit() {
     let mut cache = HashMap::new();
     cache.insert("cde".to_string(), vec![0.5f32, 0.6]);
-    let result = resolve_cached_samples(&cache, "cde", false);
+    let result = resolve_cached_samples(Some(&cache), "cde");
     assert_eq!(result, Some(vec![0.5f32, 0.6]));
 }
 
 #[test]
 fn resolve_cached_samples_returns_none_on_cache_miss() {
     let cache: HashMap<String, Vec<f32>> = HashMap::new();
-    let result = resolve_cached_samples(&cache, "cde", false);
+    let result = resolve_cached_samples(Some(&cache), "cde");
+    assert!(result.is_none());
+}
+
+#[test]
+fn resolve_cached_samples_returns_none_without_cache_reference() {
+    let mut cache = HashMap::new();
+    cache.insert("cde".to_string(), vec![0.0f32, 1.0]);
+    let result = resolve_cached_samples(None, "cde");
     assert!(result.is_none());
 }
 
