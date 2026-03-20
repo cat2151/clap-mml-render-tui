@@ -140,9 +140,7 @@ impl DawApp {
                 let confirmed_measure = self.cursor_measure;
                 self.commit_insert();
                 // 非演奏中の場合、確定した小節をプレビュー再生する
-                if *self.play_state.lock().unwrap() == DawPlayState::Idle
-                    && confirmed_measure > 0
-                {
+                if *self.play_state.lock().unwrap() == DawPlayState::Idle && confirmed_measure > 0 {
                     self.start_preview(confirmed_measure - 1);
                 }
                 self.mode = DawMode::Normal;
@@ -152,9 +150,7 @@ impl DawApp {
                 let confirmed_measure = self.cursor_measure;
                 self.commit_insert();
                 // 非演奏中の場合、確定した小節をプレビュー再生する
-                if *self.play_state.lock().unwrap() == DawPlayState::Idle
-                    && confirmed_measure > 0
-                {
+                if *self.play_state.lock().unwrap() == DawPlayState::Idle && confirmed_measure > 0 {
                     self.start_preview(confirmed_measure - 1);
                 }
                 if self.cursor_measure < self.measures {

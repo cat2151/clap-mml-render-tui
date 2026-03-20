@@ -25,7 +25,10 @@ impl DawApp {
         if self.data[track][measure].trim().is_empty() {
             cache[track][measure] = CellCache::empty();
         } else {
-            cache[track][measure] = CellCache { state: CacheState::Pending, samples: None };
+            cache[track][measure] = CellCache {
+                state: CacheState::Pending,
+                samples: None,
+            };
         }
     }
 
@@ -62,7 +65,10 @@ impl DawApp {
                         if self.data[t][m].trim().is_empty() {
                             cache[t][m] = CellCache::empty();
                         } else {
-                            cache[t][m] = CellCache { state: CacheState::Pending, samples: None };
+                            cache[t][m] = CellCache {
+                                state: CacheState::Pending,
+                                samples: None,
+                            };
                         }
                     }
                 }
@@ -80,7 +86,10 @@ impl DawApp {
                     if self.data[track][m].trim().is_empty() {
                         cache[track][m] = CellCache::empty();
                     } else {
-                        cache[track][m] = CellCache { state: CacheState::Pending, samples: None };
+                        cache[track][m] = CellCache {
+                            state: CacheState::Pending,
+                            samples: None,
+                        };
                     }
                 }
             }

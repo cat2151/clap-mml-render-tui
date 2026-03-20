@@ -56,7 +56,9 @@ pub fn daw_file_path() -> Option<PathBuf> {
 /// セッション状態（現在行番号）を history.json に保存する。
 /// データディレクトリが利用できない場合はベストエフォートでスキップする。
 pub fn save_session_state(state: &SessionState) -> Result<()> {
-    let Some(path) = session_state_path() else { return Ok(()); };
+    let Some(path) = session_state_path() else {
+        return Ok(());
+    };
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
