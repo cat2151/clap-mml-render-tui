@@ -146,8 +146,7 @@ impl DawApp {
             std::thread::spawn(move || {
                 // SAFETY: entry は main() のスタックに生存している
                 let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
-                let mut daw_cfg = (*cfg_worker).clone();
-                daw_cfg.random_patch = false;
+                let daw_cfg = (*cfg_worker).clone();
 
                 for (track, measure, mml) in cache_rx {
                     let _guard = render_lock_worker.lock().unwrap();

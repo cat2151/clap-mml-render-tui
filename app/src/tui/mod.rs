@@ -15,7 +15,7 @@ mod ui;
 
 use anyhow::Result;
 use clack_host::prelude::PluginEntry;
-use cmrt_core::{CoreConfig, collect_patches, mml_render, play_samples, to_relative};
+use cmrt_core::{collect_patches, mml_render, play_samples, to_relative, CoreConfig};
 use crossterm::{
     event::{self, Event, KeyCode, KeyModifiers},
     execute,
@@ -25,8 +25,8 @@ use ratatui::{backend::CrosstermBackend, widgets::ListState, Frame, Terminal};
 use tui_textarea::TextArea;
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 /// audio_cache の最大エントリ数。超過時はキャッシュ全体をクリアしてから挿入する。
 const AUDIO_CACHE_MAX_ENTRIES: usize = 64;
@@ -36,10 +36,7 @@ use crate::config::Config;
 /// クエリ文字列（空白区切りでAND条件）でパッチリストをフィルタする。
 /// `all` は (表示名, 小文字化済み表示名) のペアであること（起動時に一度だけ計算）。
 fn filter_patches(all: &[(String, String)], query: &str) -> Vec<String> {
-    let terms: Vec<String> = query
-        .split_whitespace()
-        .map(|t| t.to_lowercase())
-        .collect();
+    let terms: Vec<String> = query.split_whitespace().map(|t| t.to_lowercase()).collect();
     if terms.is_empty() {
         return all.iter().map(|(orig, _)| orig.clone()).collect();
     }
@@ -107,8 +104,8 @@ enum NormalAction {
 #[derive(Clone, PartialEq)]
 pub(super) enum PlayState {
     Idle,
-    Running(String),  // レンダリング中
-    Playing(String),  // 演奏中
+    Running(String), // レンダリング中
+    Playing(String), // 演奏中
     Done(String),
     Err(String),
 }
@@ -129,10 +126,10 @@ pub struct TuiApp<'a> {
     patch_load_state: Arc<Mutex<PatchLoadState>>,
     /// PatchSelect 起動時にスナップショットした (表示名, 小文字化済み) ペアのリスト
     pub(super) patch_all: Vec<(String, String)>,
-    pub(super) patch_query: String,          // 検索クエリ
-    pub(super) patch_filtered: Vec<String>,  // フィルタ結果（表示名のみ）
-    pub(super) patch_cursor: usize,          // フィルタ結果内のカーソル位置
-    pub(super) patch_list_state: ListState,  // 音色選択リスト描画用
+    pub(super) patch_query: String,         // 検索クエリ
+    pub(super) patch_filtered: Vec<String>, // フィルタ結果（表示名のみ）
+    pub(super) patch_cursor: usize,         // フィルタ結果内のカーソル位置
+    pub(super) patch_list_state: ListState, // 音色選択リスト描画用
     pub(super) random_timbre_enabled: bool,
     /// バックグラウンドのアップデートチェックがtrueにセットしたらアップデートを実行
     pub update_available: Arc<AtomicBool>,
@@ -151,36 +148,36 @@ impl<'a> TuiApp<'a> {
         {
             let state_bg = Arc::clone(&patch_load_state);
             let patches_dir = cfg.patches_dir.clone();
-            std::thread::spawn(move || {
-                match patches_dir {
-                    None => {
-                        *state_bg.lock().unwrap() = PatchLoadState::Ready(Vec::new());
-                    }
-                    Some(dir) => {
-                        match collect_patches(&dir) {
-                            Ok(paths) => {
-                                let pairs: Vec<(String, String)> = paths
-                                    .into_iter()
-                                    .map(|p| {
-                                        let rel = to_relative(&dir, &p);
-                                        let lower = rel.to_lowercase();
-                                        (rel, lower)
-                                    })
-                                    .collect();
-                                *state_bg.lock().unwrap() = PatchLoadState::Ready(pairs);
-                            }
-                            Err(e) => {
-                                *state_bg.lock().unwrap() = PatchLoadState::Err(e.to_string());
-                            }
-                        }
-                    }
+            std::thread::spawn(move || match patches_dir {
+                None => {
+                    *state_bg.lock().unwrap() = PatchLoadState::Ready(Vec::new());
                 }
+                Some(dir) => match collect_patches(&dir) {
+                    Ok(paths) => {
+                        let pairs: Vec<(String, String)> = paths
+                            .into_iter()
+                            .map(|p| {
+                                let rel = to_relative(&dir, &p);
+                                let lower = rel.to_lowercase();
+                                (rel, lower)
+                            })
+                            .collect();
+                        *state_bg.lock().unwrap() = PatchLoadState::Ready(pairs);
+                    }
+                    Err(e) => {
+                        *state_bg.lock().unwrap() = PatchLoadState::Err(e.to_string());
+                    }
+                },
             });
         }
 
         // `lines` は常に1行以上を保持する（不変条件）。
         // load_session_state() は lines が空でないことを保証している。
-        let crate::history::SessionState { cursor, lines, is_daw_mode } = crate::history::load_session_state();
+        let crate::history::SessionState {
+            cursor,
+            lines,
+            is_daw_mode,
+        } = crate::history::load_session_state();
         let initial_cursor = cursor.min(lines.len() - 1);
         let mut list_state = ListState::default();
         list_state.select(Some(initial_cursor));
@@ -227,7 +224,7 @@ impl<'a> TuiApp<'a> {
                 let play_result = play_samples(samples, cfg.sample_rate as u32);
 
                 *state.lock().unwrap() = match play_result {
-                    Ok(_)  => PlayState::Done(msg),
+                    Ok(_) => PlayState::Done(msg),
                     Err(e) => PlayState::Err(format!("エラー: {}", e)),
                 };
             });
@@ -265,7 +262,7 @@ impl<'a> TuiApp<'a> {
                         let play_result = play_samples(samples, cfg.sample_rate as u32);
 
                         *state.lock().unwrap() = match play_result {
-                            Ok(_)  => PlayState::Done(msg),
+                            Ok(_) => PlayState::Done(msg),
                             Err(e) => PlayState::Err(format!("エラー: {}", e)),
                         };
                     }
@@ -323,27 +320,23 @@ impl<'a> TuiApp<'a> {
                         break;
                     }
                     match self.mode {
-                        Mode::Normal => {
-                            match self.handle_normal(key.code) {
-                                NormalAction::Quit => break,
-                                NormalAction::LaunchDaw => {
-                                    let mut daw = crate::daw::DawApp::new(
-                                        Arc::clone(&self.cfg),
-                                        self.entry_ptr,
-                                    );
-                                    match daw.run_with_terminal(&mut terminal)? {
-                                        crate::daw::DawExitReason::ReturnToTui => {
-                                            self.is_daw_mode = false;
-                                        }
-                                        crate::daw::DawExitReason::QuitApp => {
-                                            self.is_daw_mode = true;
-                                            break;
-                                        }
+                        Mode::Normal => match self.handle_normal(key.code) {
+                            NormalAction::Quit => break,
+                            NormalAction::LaunchDaw => {
+                                let mut daw =
+                                    crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
+                                match daw.run_with_terminal(&mut terminal)? {
+                                    crate::daw::DawExitReason::ReturnToTui => {
+                                        self.is_daw_mode = false;
+                                    }
+                                    crate::daw::DawExitReason::QuitApp => {
+                                        self.is_daw_mode = true;
+                                        break;
                                     }
                                 }
-                                NormalAction::Continue => {}
                             }
-                        }
+                            NormalAction::Continue => {}
+                        },
                         Mode::Insert => self.handle_insert(key),
                         Mode::PatchSelect => self.handle_patch_select(key),
                         Mode::Help => self.handle_help(key.code),

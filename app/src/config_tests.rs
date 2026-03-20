@@ -5,7 +5,8 @@ fn config_file_path_ends_with_cmrt_config_toml() {
     if let Some(path) = config_file_path() {
         let path_str = path.to_string_lossy();
         assert!(
-            path_str.ends_with("clap-mml-render-tui/config.toml") || path_str.ends_with(r"clap-mml-render-tui\config.toml"),
+            path_str.ends_with("clap-mml-render-tui/config.toml")
+                || path_str.ends_with(r"clap-mml-render-tui\config.toml"),
             "config_file_path が clap-mml-render-tui/config.toml で終わっていない: {}",
             path_str
         );
@@ -89,7 +90,10 @@ patches_dir = "/tmp/patches"
 "#;
     let cfg: Config = toml::from_str(toml_str).unwrap();
     let core_cfg = cmrt_core::CoreConfig::from(&cfg);
-    assert!(!core_cfg.random_patch, "Config から生成した CoreConfig は常に random_patch=false にする");
+    assert!(
+        !core_cfg.random_patch,
+        "Config から生成した CoreConfig は常に random_patch=false にする"
+    );
     assert_eq!(core_cfg.patches_dir.as_deref(), Some("/tmp/patches"));
 }
 
@@ -133,7 +137,10 @@ sample_rate = 44100
 buffer_size = 512
 "#;
     let cfg: Config = toml::from_str(toml_str).unwrap();
-    assert_eq!(cfg.daw_measures, 8, "daw_measures のデフォルトは 8 であるべき");
+    assert_eq!(
+        cfg.daw_measures, 8,
+        "daw_measures のデフォルトは 8 であるべき"
+    );
 }
 
 #[test]

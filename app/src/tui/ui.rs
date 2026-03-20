@@ -29,23 +29,27 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
 
 fn status_color(play_state: &PlayState) -> Color {
     match play_state {
-        PlayState::Err(_)     => Color::Red,
+        PlayState::Err(_) => Color::Red,
         PlayState::Running(_) => Color::Magenta,
         PlayState::Playing(_) => Color::Yellow,
-        PlayState::Done(_)    => Color::Green,
-        PlayState::Idle       => Color::Cyan,
+        PlayState::Done(_) => Color::Green,
+        PlayState::Idle => Color::Cyan,
     }
 }
 
 fn status_text(app: &TuiApp<'_>, play_state: &PlayState) -> String {
     let play_str = match play_state {
-        PlayState::Idle           => "".to_string(),
-        PlayState::Running(mml)   => format!("  ⚙ レンダリング中: {}", mml),
-        PlayState::Playing(msg)   => format!("  ▶ 演奏中: {}", msg),
-        PlayState::Done(msg)      => format!("  ✓ {}", msg),
-        PlayState::Err(msg)       => format!("  ✗ {}", msg),
+        PlayState::Idle => "".to_string(),
+        PlayState::Running(mml) => format!("  ⚙ レンダリング中: {}", mml),
+        PlayState::Playing(msg) => format!("  ▶ 演奏中: {}", msg),
+        PlayState::Done(msg) => format!("  ✓ {}", msg),
+        PlayState::Err(msg) => format!("  ✗ {}", msg),
     };
-    let random_timbre = if app.random_timbre_enabled { "ON" } else { "OFF" };
+    let random_timbre = if app.random_timbre_enabled {
+        "ON"
+    } else {
+        "OFF"
+    };
     match app.mode {
         Mode::Normal => format!("NORMAL  i:INSERT  r:random音色[{random_timbre}]  t:音色選択  j/k:移動  Enter:再生  d:DAW  K:ヘルプ  q:終了{}", play_str),
         Mode::Insert => format!("ESC:確定→NORMAL  Enter:確定→次行{}", play_str),
@@ -65,13 +69,12 @@ fn draw_patch_select(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
         .split(f.area());
 
     f.render_widget(
-        Paragraph::new(format!("> {}", app.patch_query))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(" 音色選択 - 検索 (space=AND) ")
-                    .border_style(Style::default().fg(Color::Yellow)),
-            ),
+        Paragraph::new(format!("> {}", app.patch_query)).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" 音色選択 - 検索 (space=AND) ")
+                .border_style(Style::default().fg(Color::Yellow)),
+        ),
         chunks[0],
     );
 
@@ -86,7 +89,9 @@ fn draw_patch_select(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
         .enumerate()
         .map(|(i, p)| {
             let style = if i == app.patch_cursor {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             };
@@ -114,29 +119,37 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_color: 
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(3),
-            Constraint::Length(1),
-        ])
+        .constraints([Constraint::Min(3), Constraint::Length(1)])
         .split(f.area());
 
     // キャッシュのガードを保持したままイテレートすることで、全キーのクローンを避ける。
     let cache_guard = app.audio_cache.lock().unwrap();
-    let items: Vec<ListItem> = app.lines.iter().enumerate().map(|(i, line)| {
-        let mml = line.trim();
-        let is_cached = !app.random_timbre_enabled && !mml.is_empty() && cache_guard.contains_key(mml);
-        let style = if i == cursor {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
-        } else if is_cached {
-            Style::default().fg(Color::Cyan)
-        } else {
-            Style::default()
-        };
-        ListItem::new(Line::from(vec![
-            Span::styled(format!("{:>3} ", i + 1), Style::default().fg(Color::DarkGray)),
-            Span::styled(line.clone(), style),
-        ]))
-    }).collect();
+    let items: Vec<ListItem> = app
+        .lines
+        .iter()
+        .enumerate()
+        .map(|(i, line)| {
+            let mml = line.trim();
+            let is_cached =
+                !app.random_timbre_enabled && !mml.is_empty() && cache_guard.contains_key(mml);
+            let style = if i == cursor {
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
+            } else if is_cached {
+                Style::default().fg(Color::Cyan)
+            } else {
+                Style::default()
+            };
+            ListItem::new(Line::from(vec![
+                Span::styled(
+                    format!("{:>3} ", i + 1),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::styled(line.clone(), style),
+            ]))
+        })
+        .collect();
     drop(cache_guard);
 
     f.render_stateful_widget(
@@ -180,7 +193,12 @@ fn draw_help(f: &mut Frame) {
     f.render_widget(Clear, area);
 
     let help_lines = vec![
-        Line::from(Span::styled("NORMAL モード", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(
+            "NORMAL モード",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
         Line::from("  j / ↓       : 下へ移動"),
         Line::from("  k / ↑       : 上へ移動"),
         Line::from("  H           : 先頭行へ移動"),
@@ -196,27 +214,39 @@ fn draw_help(f: &mut Frame) {
         Line::from("  q           : 終了"),
         Line::from("  Ctrl+C      : 強制終了"),
         Line::from(""),
-        Line::from(Span::styled("INSERT モード", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(
+            "INSERT モード",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
         Line::from("  ESC   : 確定 → NORMAL (再生)"),
         Line::from("  Enter : 確定 → 次行挿入 → INSERT 継続"),
         Line::from(""),
-        Line::from(Span::styled("音色選択モード", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(
+            "音色選択モード",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
         Line::from("  文字入力 : フィルタ (Space=AND条件)"),
         Line::from("  ↑↓      : リスト移動"),
         Line::from("  Enter   : 音色決定"),
         Line::from("  ESC     : キャンセル"),
         Line::from(""),
-        Line::from(Span::styled("  [ESC] でキャンセル", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled(
+            "  [ESC] でキャンセル",
+            Style::default().fg(Color::DarkGray),
+        )),
     ];
 
     f.render_widget(
-        Paragraph::new(help_lines)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(" ヘルプ (Keybinds) ")
-                    .border_style(Style::default().fg(Color::Cyan)),
-            ),
+        Paragraph::new(help_lines).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" ヘルプ (Keybinds) ")
+                .border_style(Style::default().fg(Color::Cyan)),
+        ),
         area,
     );
 }

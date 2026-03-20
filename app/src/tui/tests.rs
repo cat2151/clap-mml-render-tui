@@ -31,11 +31,7 @@ fn filter_patches_case_insensitive() {
 
 #[test]
 fn filter_patches_multiple_terms_act_as_and() {
-    let all = make_patches(&[
-        "Pads/Soft Pad.fxp",
-        "Pads/Hard Pad.fxp",
-        "Leads/Lead 1.fxp",
-    ]);
+    let all = make_patches(&["Pads/Soft Pad.fxp", "Pads/Hard Pad.fxp", "Leads/Lead 1.fxp"]);
     let result = filter_patches(&all, "pad soft");
     assert_eq!(result, vec!["Pads/Soft Pad.fxp"]);
 }
@@ -169,8 +165,10 @@ fn handle_normal_t_shows_error_when_random_timbre_enabled() {
 
     app.handle_normal(KeyCode::Char('t'));
 
-    assert!(matches!(&*app.play_state.lock().unwrap(), PlayState::Err(msg) if msg == "random音色モードでは音色選択は使えません"));
-    assert_eq!(app.mode, Mode::Normal);
+    assert!(
+        matches!(&*app.play_state.lock().unwrap(), PlayState::Err(msg) if msg == "random音色モードでは音色選択は使えません")
+    );
+    assert!(matches!(app.mode, Mode::Normal));
 }
 
 #[test]
@@ -181,7 +179,7 @@ fn handle_normal_t_enters_patch_select_when_random_timbre_disabled() {
 
     app.handle_normal(KeyCode::Char('t'));
 
-    assert_eq!(app.mode, Mode::PatchSelect);
+    assert!(matches!(app.mode, Mode::PatchSelect));
     assert_eq!(app.patch_all, patches);
     assert_eq!(app.patch_filtered, vec!["Pads/Pad 1.fxp"]);
 }

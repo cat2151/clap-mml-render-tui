@@ -26,7 +26,11 @@ impl<'a> TuiApp<'a> {
             }
         }
         self.patch_query = String::new();
-        self.patch_filtered = self.patch_all.iter().map(|(orig, _)| orig.clone()).collect();
+        self.patch_filtered = self
+            .patch_all
+            .iter()
+            .map(|(orig, _)| orig.clone())
+            .collect();
         self.patch_cursor = 0;
         let mut ls = ListState::default();
         if !self.patch_filtered.is_empty() {
@@ -57,7 +61,8 @@ impl<'a> TuiApp<'a> {
                     // serde_json を使って値を適切にエスケープする（パスに引用符・バックスラッシュが含まれる場合も安全）
                     let json = format!(
                         "{{\"Surge XT patch\": {}}}",
-                        serde_json::to_string(&selected).unwrap_or_else(|_| format!("\"{}\"", selected))
+                        serde_json::to_string(&selected)
+                            .unwrap_or_else(|_| format!("\"{}\"", selected))
                     );
                     // 現在行の既存JSON（あれば）を除去して先頭に新しいJSONを挿入する
                     let current = self.lines[self.cursor].clone();
@@ -111,20 +116,18 @@ impl<'a> TuiApp<'a> {
             }
             KeyCode::Char('t') => {
                 if self.random_timbre_enabled {
-                    *self.play_state.lock().unwrap() = PlayState::Err(
-                        "random音色モードでは音色選択は使えません".to_string(),
-                    );
+                    *self.play_state.lock().unwrap() =
+                        PlayState::Err("random音色モードでは音色選択は使えません".to_string());
                 } else if self.cfg.patches_dir.is_none() {
-                    *self.play_state.lock().unwrap() = PlayState::Err(
-                        "patches_dir が設定されていません".to_string(),
-                    );
+                    *self.play_state.lock().unwrap() =
+                        PlayState::Err("patches_dir が設定されていません".to_string());
                 } else {
                     // バックグラウンドロードの状態を確認する
                     let action = {
                         let state = self.patch_load_state.lock().unwrap();
                         match &*state {
                             PatchLoadState::Loading => Err("パッチを読み込み中です...".to_string()),
-                            PatchLoadState::Err(e)  => Err(format!("パッチの読み込みに失敗: {}", e)),
+                            PatchLoadState::Err(e) => Err(format!("パッチの読み込みに失敗: {}", e)),
                             PatchLoadState::Ready(p) if p.is_empty() => {
                                 Err("patches_dir にパッチが見つかりません".to_string())
                             }
@@ -133,7 +136,7 @@ impl<'a> TuiApp<'a> {
                     };
                     match action {
                         Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
-                        Ok(())   => self.start_patch_select(),
+                        Ok(()) => self.start_patch_select(),
                     }
                 }
             }

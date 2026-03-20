@@ -1,6 +1,6 @@
+use cmrt_core::CoreConfig;
 use serde::Deserialize;
 use std::path::PathBuf;
-use cmrt_core::CoreConfig;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
@@ -89,14 +89,16 @@ fn default_config_content() -> String {
     let plugin_path = default_plugin_path();
     let plugin_path_line = if plugin_path.is_empty() {
         // 未知の OS: ユーザーに設定を促すためコメントアウト状態で出力する
-        "# plugin_path = \"\"  # ← お使いの CLAP プラグインのパスをここに設定してください".to_string()
+        "# plugin_path = \"\"  # ← お使いの CLAP プラグインのパスをここに設定してください"
+            .to_string()
     } else {
         format!("plugin_path = '{plugin_path}'", plugin_path = plugin_path)
     };
     let patches_dir = default_patches_dir();
     let patches_dir_line = if patches_dir.is_empty() {
         // 未知の OS またはホームディレクトリが取得できない場合
-        "# patches_dir = \"\"  # ← ファクトリパッチのルートディレクトリを設定してください".to_string()
+        "# patches_dir = \"\"  # ← ファクトリパッチのルートディレクトリを設定してください"
+            .to_string()
     } else {
         format!("patches_dir = '{patches_dir}'", patches_dir = patches_dir)
     };
