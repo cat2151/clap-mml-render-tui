@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use crate::history::{DawCachedMeasure, DawSessionState};
+use crate::history::{daw_cache_mml_hash, DawCachedMeasure, DawSessionState};
 
 use super::{CacheState, CellCache, DawApp};
 
@@ -26,7 +26,7 @@ impl DawApp {
                 if self.data[t][m].trim().is_empty() {
                     cache[t][m] = CellCache::empty();
                 } else if cache[t][m].state == CacheState::Empty {
-                    cache[t][m].state = CacheState::Pending;
+                    cache[t][m].set_pending();
                 }
             }
         }
@@ -41,10 +41,7 @@ impl DawApp {
         if self.data[track][measure].trim().is_empty() {
             cache[track][measure] = CellCache::empty();
         } else {
-            cache[track][measure] = CellCache {
-                state: CacheState::Pending,
-                samples: None,
-            };
+            cache[track][measure].set_pending();
         }
     }
 
@@ -59,8 +56,19 @@ impl DawApp {
             return;
         }
         let mml = self.build_cell_mml(track, measure);
+        let rendered_mml_hash = daw_cache_mml_hash(&mml);
+        let generation = {
+            let cache = self.cache.lock().unwrap();
+            cache[track][measure].generation
+        };
         // チャネルが既に閉じていれば送信は無視する（DawApp 終了後の残留呼び出しへの安全策）
-        let _ = self.cache_tx.send((track, measure, mml));
+        let _ = self.cache_tx.send(super::CacheJob {
+            track,
+            measure,
+            generation,
+            rendered_mml_hash,
+            mml,
+        });
     }
 
     /// 依存セルを一括で無効化してキャッシュジョブを投入する。
@@ -84,10 +92,7 @@ impl DawApp {
                             if let Some(path) = cache_wav_path(t, m) {
                                 let _ = std::fs::remove_file(path);
                             }
-                            cache[t][m] = CellCache {
-                                state: CacheState::Pending,
-                                samples: None,
-                            };
+                            cache[t][m].set_pending();
                         }
                     }
                 }
@@ -108,10 +113,7 @@ impl DawApp {
                         if let Some(path) = cache_wav_path(track, m) {
                             let _ = std::fs::remove_file(path);
                         }
-                        cache[track][m] = CellCache {
-                            state: CacheState::Pending,
-                            samples: None,
-                        };
+                        cache[track][m].set_pending();
                     }
                 }
             }
@@ -137,40 +139,52 @@ impl DawApp {
     }
 
     pub(super) fn restore_cache_from_history(&self, history: &DawSessionState) {
-        let cached_mmls: std::collections::HashMap<(usize, usize), &str> = history
-            .cached_measures
-            .iter()
-            .map(|entry| ((entry.track, entry.measure), entry.mml.as_str()))
-            .collect();
-
         let mut cache = self.cache.lock().unwrap();
         for t in 0..self.tracks {
             for m in 1..=self.measures {
-                let Some(saved_mml) = cached_mmls.get(&(t, m)) else {
+                let Some(saved) = history
+                    .cached_measures
+                    .iter()
+                    .find(|entry| entry.track == t && entry.measure == m)
+                else {
                     continue;
                 };
                 if self.data[t][m].trim().is_empty() {
                     continue;
                 }
-                let current_mml = self.build_cell_mml(t, m);
-                if current_mml != *saved_mml {
+                let current_mml_hash = daw_cache_mml_hash(&self.build_cell_mml(t, m));
+                if current_mml_hash != saved.mml_hash {
                     continue;
                 }
                 let Some(path) = cache_wav_path(t, m) else {
                     continue;
                 };
-                match super::load_wav_samples(&path) {
-                    Ok(samples) => {
+                match super::read_wav_cache_info(&path) {
+                    Ok(info)
+                        if info.spec.sample_rate == self.cfg.sample_rate as u32
+                            && info.spec.channels == 2 =>
+                    {
                         cache[t][m].state = CacheState::Ready;
-                        if samples.len() <= super::MAX_CACHED_SAMPLES {
-                            cache[t][m].samples = Some(std::sync::Arc::new(samples));
+                        cache[t][m].rendered_mml_hash = Some(saved.mml_hash);
+                        if info.interleaved_sample_count <= super::MAX_CACHED_SAMPLES {
+                            match super::load_wav_samples(&path) {
+                                Ok(samples) => {
+                                    cache[t][m].samples = Some(std::sync::Arc::new(samples));
+                                }
+                                Err(_) => {
+                                    cache[t][m].state = CacheState::Pending;
+                                    cache[t][m].samples = None;
+                                    cache[t][m].rendered_mml_hash = None;
+                                }
+                            }
                         } else {
                             cache[t][m].samples = None;
                         }
                     }
-                    Err(_) => {
+                    Ok(_) | Err(_) => {
                         cache[t][m].state = CacheState::Pending;
                         cache[t][m].samples = None;
+                        cache[t][m].rendered_mml_hash = None;
                     }
                 }
             }
@@ -182,11 +196,16 @@ impl DawApp {
         let mut cached_measures = Vec::new();
         for t in 0..self.tracks {
             for m in 1..=self.measures {
-                if cache[t][m].state == CacheState::Ready && !self.data[t][m].trim().is_empty() {
+                let current_mml_hash = daw_cache_mml_hash(&self.build_cell_mml(t, m));
+                if cache[t][m].state == CacheState::Ready
+                    && cache[t][m].rendered_mml_hash == Some(current_mml_hash)
+                    && !self.data[t][m].trim().is_empty()
+                {
                     cached_measures.push(DawCachedMeasure {
                         track: t,
                         measure: m,
-                        mml: self.build_cell_mml(t, m),
+                        mml_hash: current_mml_hash,
+                        legacy_mml: None,
                     });
                 }
             }

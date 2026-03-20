@@ -4,6 +4,10 @@
 //! 起動時に復元する。
 
 use std::path::PathBuf;
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+};
 
 use anyhow::Result;
 use serde_json::{Map, Value};
@@ -35,17 +39,37 @@ pub struct DawSessionState {
     /// DAW カーソルの measure 位置。
     #[serde(default)]
     pub cursor_measure: usize,
-    /// 既存 WAV キャッシュと対応付けるためのレンダリング用 MML。
+    /// 既存 WAV キャッシュと対応付けるためのレンダリング用 MML ハッシュ。
     #[serde(default)]
     pub cached_measures: Vec<DawCachedMeasure>,
 }
 
-/// 既存 WAV キャッシュと一致確認するための track / measure ごとの MML。
+/// 既存 WAV キャッシュと一致確認するための track / measure ごとの MML ハッシュ。
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DawCachedMeasure {
     pub track: usize,
     pub measure: usize,
-    pub mml: String,
+    #[serde(default)]
+    pub mml_hash: u64,
+    #[serde(default, skip_serializing, alias = "mml")]
+    pub(crate) legacy_mml: Option<String>,
+}
+
+impl DawCachedMeasure {
+    fn normalize(&mut self) {
+        if self.mml_hash == 0 {
+            if let Some(mml) = self.legacy_mml.as_deref() {
+                self.mml_hash = daw_cache_mml_hash(mml);
+            }
+        }
+        self.legacy_mml = None;
+    }
+}
+
+pub(crate) fn daw_cache_mml_hash(mml: &str) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    mml.hash(&mut hasher);
+    hasher.finish()
 }
 
 impl Default for SessionState {
@@ -112,14 +136,18 @@ fn migrate_daw_session_state_from_history_json() -> Option<DawSessionState> {
     let content = std::fs::read_to_string(&path).ok()?;
     let mut value = serde_json::from_str::<Value>(&content).ok()?;
     let raw = value.as_object_mut()?;
-    let daw_state = extract_daw_session_state(raw)?;
+    let mut daw_state = extract_daw_session_state(raw)?;
+    for measure in &mut daw_state.cached_measures {
+        measure.normalize();
+    }
+
+    save_daw_session_state(&daw_state).ok()?;
 
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).ok()?;
     }
     let rewritten = serde_json::to_string_pretty(&value).ok()?;
     std::fs::write(&path, rewritten).ok()?;
-    save_daw_session_state(&daw_state).ok()?;
     Some(daw_state)
 }
 
@@ -180,10 +208,14 @@ pub fn load_daw_session_state() -> DawSessionState {
         return DawSessionState::default();
     };
     if path.exists() {
-        return std::fs::read_to_string(&path)
+        let mut state: DawSessionState = std::fs::read_to_string(&path)
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default();
+        for measure in &mut state.cached_measures {
+            measure.normalize();
+        }
+        return state;
     }
     migrate_daw_session_state_from_history_json().unwrap_or_default()
 }
