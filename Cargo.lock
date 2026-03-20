@@ -300,7 +300,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clack-host",
- "cmrt-core",
+ "cmrt-core 0.1.0",
  "crossterm",
  "dirs",
  "hound",
@@ -361,6 +361,14 @@ checksum = "4bfbf56724aa9eca8afa4fcfadeb479e722935bb2a0900c2d37e0cc477af0688"
 [[package]]
 name = "cmrt-core"
 version = "0.1.0"
+dependencies = [
+ "cmrt-core 0.1.0 (git+https://github.com/cat2151/clap-mml-play-server)",
+]
+
+[[package]]
+name = "cmrt-core"
+version = "0.1.0"
+source = "git+https://github.com/cat2151/clap-mml-play-server#0c43002a306bfd68e7019a0343dc6238e483603f"
 dependencies = [
  "anyhow",
  "clack-extensions",

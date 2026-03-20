@@ -1,23 +1,31 @@
-pub mod host;
-pub mod midi;
-pub mod patch_list;
-pub mod pipeline;
-pub mod render;
+pub use clap_mml_play_server_core::*;
 
-#[derive(Debug, Clone)]
-pub struct CoreConfig {
-    pub output_midi: String,
-    pub output_wav: String,
-    pub sample_rate: f64,
-    pub buffer_size: usize,
-    pub patch_path: Option<String>,
-    pub patches_dir: Option<String>,
-    pub random_patch: bool,
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn reexports_core_config() {
+        let config = CoreConfig {
+            output_midi: "out.mid".into(),
+            output_wav: "out.wav".into(),
+            sample_rate: 44_100.0,
+            buffer_size: 512,
+            patch_path: None,
+            patches_dir: Some("/patches".into()),
+            random_patch: false,
+        };
+
+        assert_eq!(config.buffer_size, 512);
+        assert_eq!(config.patches_dir.as_deref(), Some("/patches"));
+    }
+
+    #[test]
+    fn reexports_patch_helpers() {
+        assert_eq!(
+            to_relative("/patches", Path::new("/patches/Pads/Pad 1.fxp")),
+            "Pads/Pad 1.fxp"
+        );
+    }
 }
-
-pub use host::load_entry;
-pub use patch_list::{collect_patches, to_relative};
-pub use pipeline::{
-    ensure_cmrt_dir, ensure_daw_dir, ensure_phrase_dir, mml_render, mml_render_for_cache,
-    mml_str_to_smf_bytes, mml_to_play, mml_to_smf_bytes, play_samples, write_wav,
-};
