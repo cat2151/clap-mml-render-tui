@@ -8,4 +8,4 @@ name = "cmrt_core"
 path = "src/lib.rs"
 
 [dependencies]
-clap-mml-play-server-core = { git = "https://github.com/cat2151/clap-mml-play-server", package = "cmrt-core" }
+clap-mml-play-server-core = { git = "https://github.com/cat2151/clap-mml-play-server", rev = "0c43002a306bfd68e7019a0343dc6238e483603f", package = "cmrt-core" }
