@@ -12,8 +12,13 @@ if ! command -v apt-get >/dev/null 2>&1; then
 fi
 
 apt_get=(apt-get)
-if command -v sudo >/dev/null 2>&1; then
-  apt_get=(sudo apt-get)
+if [[ "$(id -u)" -ne 0 ]]; then
+  if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+    apt_get=(sudo apt-get)
+  else
+    echo "setup-cargo-test-env: need root privileges to install packages; run as root or configure passwordless sudo" >&2
+    exit 1
+  fi
 fi
 
 packages=()

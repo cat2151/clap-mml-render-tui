@@ -1,6 +1,6 @@
 # Agent setup
 
-Before running Rust checks in this repository, prepare the test environment:
+Before running Rust checks in this repository, from the repository root prepare the test environment:
 
 ```bash
 ./scripts/setup-cargo-test-env.sh
