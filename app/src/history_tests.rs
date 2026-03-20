@@ -62,7 +62,8 @@ fn session_state_serialize_deserialize_is_daw_mode_true() {
 #[test]
 fn session_state_json_from_invalid_returns_default() {
     // 不正なJSONはデフォルト値を返す
-    let result: SessionState = serde_json::from_str("not json").unwrap_or_default();
+    let result: SessionState = serde_json::from_str("not json")
+        .unwrap_or_default();
     assert_eq!(result.cursor, 0);
     assert_eq!(result.lines, vec!["cde".to_string()]);
     assert!(!result.is_daw_mode);
@@ -71,7 +72,8 @@ fn session_state_json_from_invalid_returns_default() {
 #[test]
 fn session_state_json_missing_field_returns_default() {
     // cursor フィールドがない場合はデフォルト値を返す
-    let result: SessionState = serde_json::from_str("{}").unwrap_or_default();
+    let result: SessionState = serde_json::from_str("{}")
+        .unwrap_or_default();
     assert_eq!(result.cursor, 0);
     assert_eq!(result.lines, vec!["cde".to_string()]);
     assert!(!result.is_daw_mode);

@@ -20,7 +20,10 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
         .split(area);
 
     draw_grid(app, f, chunks[0]);
@@ -37,11 +40,7 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
     let cache_states: Vec<Vec<CacheState>> = {
         let cache = app.cache.lock().unwrap();
         (0..app.tracks)
-            .map(|t| {
-                (0..=app.measures)
-                    .map(|m| cache[t][m].state.clone())
-                    .collect()
-            })
+            .map(|t| (0..=app.measures).map(|m| cache[t][m].state.clone()).collect())
             .collect()
     };
 
@@ -61,12 +60,7 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
     if area.height > 0 {
         f.render_widget(
             Paragraph::new(Line::from(header_spans)),
-            Rect {
-                x: area.x,
-                y: area.y,
-                width: area.width,
-                height: 1,
-            },
+            Rect { x: area.x, y: area.y, width: area.width, height: 1 },
         );
     }
 
@@ -97,9 +91,7 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
         let mut row1: Vec<Span> = vec![Span::styled(
             track_label,
             if is_cursor_track {
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD)
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::DarkGray)
             },
@@ -170,34 +162,19 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
 
         f.render_widget(
             Paragraph::new(Line::from(row1)),
-            Rect {
-                x: area.x,
-                y: row_y,
-                width: area.width,
-                height: 1,
-            },
+            Rect { x: area.x, y: row_y, width: area.width, height: 1 },
         );
 
         // INSERTモード時は、カーソルtrackのインジケータ行にインラインで textarea を描画する。
         if show_indicators {
             f.render_widget(
                 Paragraph::new(Line::from(row2)),
-                Rect {
-                    x: area.x,
-                    y: row_y + 1,
-                    width: area.width,
-                    height: 1,
-                },
+                Rect { x: area.x, y: row_y + 1, width: area.width, height: 1 },
             );
         } else {
             f.render_widget(
                 &app.textarea,
-                Rect {
-                    x: area.x,
-                    y: row_y + 1,
-                    width: area.width,
-                    height: 1,
-                },
+                Rect { x: area.x, y: row_y + 1, width: area.width, height: 1 },
             );
         }
     }
@@ -216,11 +193,7 @@ fn draw_status(app: &DawApp, f: &mut Frame, area: Rect) {
     let play_str = match &play_state {
         DawPlayState::Idle => "".to_string(),
         DawPlayState::Playing | DawPlayState::Preview => {
-            let label = if play_state == DawPlayState::Preview {
-                "PREVIEW"
-            } else {
-                "loop"
-            };
+            let label = if play_state == DawPlayState::Preview { "PREVIEW" } else { "loop" };
             let pos_str = if let Some(pos) = &play_position {
                 let elapsed = pos.measure_start.elapsed().as_secs_f64();
                 let raw_beat = (elapsed / beat_duration_secs) as u32;
@@ -259,7 +232,10 @@ fn draw_status(app: &DawApp, f: &mut Frame, area: Rect) {
         DawPlayState::Preview => Color::Magenta,
     };
 
-    f.render_widget(Paragraph::new(text).style(Style::default().fg(color)), area);
+    f.render_widget(
+        Paragraph::new(text).style(Style::default().fg(color)),
+        area,
+    );
 }
 
 fn draw_help(f: &mut Frame, area: Rect) {
@@ -267,12 +243,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, popup);
 
     let help_lines = vec![
-        Line::from(Span::styled(
-            "NORMAL モード",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        )),
+        Line::from(Span::styled("NORMAL モード", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
         Line::from("  h / ←  : 小節移動（左）"),
         Line::from("  l / →  : 小節移動（右）"),
         Line::from("  j / ↓  : track 移動（下）"),
@@ -288,29 +259,22 @@ fn draw_help(f: &mut Frame, area: Rect) {
         Line::from("  q      : 終了"),
         Line::from("  Ctrl+C : 強制終了"),
         Line::from(""),
-        Line::from(Span::styled(
-            "INSERT モード",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        )),
+        Line::from(Span::styled("INSERT モード", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
         Line::from("  ESC   : 確定 → NORMAL"),
         Line::from("  Enter : 確定 → 次小節 → INSERT 継続"),
         Line::from("  ;     : 分割して下の track に追加"),
         Line::from(""),
-        Line::from(Span::styled(
-            "  [ESC] でキャンセル",
-            Style::default().fg(Color::DarkGray),
-        )),
+        Line::from(Span::styled("  [ESC] でキャンセル", Style::default().fg(Color::DarkGray))),
     ];
 
     f.render_widget(
-        Paragraph::new(help_lines).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" ヘルプ (Keybinds) ")
-                .border_style(Style::default().fg(Color::Cyan)),
-        ),
+        Paragraph::new(help_lines)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" ヘルプ (Keybinds) ")
+                    .border_style(Style::default().fg(Color::Cyan)),
+            ),
         popup,
     );
 }

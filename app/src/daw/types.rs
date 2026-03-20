@@ -29,10 +29,7 @@ pub struct CellCache {
 
 impl CellCache {
     pub(super) fn empty() -> Self {
-        Self {
-            state: CacheState::Empty,
-            samples: None,
-        }
+        Self { state: CacheState::Empty, samples: None }
     }
 }
 
