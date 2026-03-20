@@ -41,14 +41,17 @@ use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{backend::CrosstermBackend, Frame, Terminal};
 use tui_textarea::TextArea;
 
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use crate::config::Config;
 
 // ─── 再エクスポート ───────────────────────────────────────────
 
-pub(super) use types::{CacheState, CellCache, DawMode, DawNormalAction, DawPlayState, PlayPosition};
 pub use types::DawExitReason;
+pub(super) use types::{
+    CacheState, CellCache, DawMode, DawNormalAction, DawPlayState, PlayPosition,
+};
 
 // ─── 定数 ─────────────────────────────────────────────────────
 
@@ -70,6 +73,22 @@ pub(super) const DEFAULT_TRACK0_MML: &str = r#"{"beat": "4/4"}t120"#;
 /// 再生時にフォールバックレンダリングする。
 /// ≈ 2_000_000 × 4 bytes ≈ 8 MB / cell。
 pub(super) const MAX_CACHED_SAMPLES: usize = 2_000_000;
+
+fn load_wav_samples(path: &Path) -> anyhow::Result<Vec<f32>> {
+    let mut reader = hound::WavReader::open(path)?;
+    let spec = reader.spec();
+    match spec.sample_format {
+        hound::SampleFormat::Float => Ok(reader.samples::<f32>().collect::<Result<Vec<_>, _>>()?),
+        hound::SampleFormat::Int => {
+            let scale = ((1_i64 << (spec.bits_per_sample.saturating_sub(1) as u32)) - 1) as f32;
+            let samples = reader
+                .samples::<i32>()
+                .map(|sample| sample.map(|value| value as f32 / scale))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(samples)
+        }
+    }
+}
 
 // ─── DawApp ───────────────────────────────────────────────────
 
@@ -127,9 +146,10 @@ impl DawApp {
         // track 0 のデフォルトは拍子指定 JSON + テンポ設定
         data[0][0] = DEFAULT_TRACK0_MML.to_string();
 
-        let cache = Arc::new(Mutex::new(
-            vec![vec![CellCache::empty(); measures + 1]; tracks],
-        ));
+        let cache = Arc::new(Mutex::new(vec![
+            vec![CellCache::empty(); measures + 1];
+            tracks
+        ]));
 
         // シリアルなキャッシュワーカースレッドを起動する。
         // チャネルが送信側（cache_tx）を介してジョブを受け取り順次レンダリングすることで
@@ -151,6 +171,13 @@ impl DawApp {
                 let daw_cfg = (*cfg_worker).clone();
 
                 for (track, measure, mml) in cache_rx {
+                    {
+                        let mut cache = cache_worker.lock().unwrap();
+                        if cache[track][measure].state != CacheState::Empty {
+                            cache[track][measure].state = CacheState::Rendering;
+                            cache[track][measure].samples = None;
+                        }
+                    }
                     let _guard = render_lock_worker.lock().unwrap();
                     let core_cfg = cmrt_core::CoreConfig::from(&daw_cfg);
                     match mml_render_for_cache(&mml, &core_cfg, entry_ref) {
@@ -159,12 +186,10 @@ impl DawApp {
                             // measure 0 は音色/ヘッダセルであり演奏内容ではないためスキップ
                             let wav_ok = if measure > 0 {
                                 if let Ok(daw_dir) = ensure_daw_dir() {
-                                    let wav_path = daw_dir.join(format!("track{}_meas{}.wav", track, measure));
-                                    write_wav(
-                                        &samples,
-                                        daw_cfg.sample_rate as u32,
-                                        &wav_path,
-                                    ).is_ok()
+                                    let wav_path =
+                                        daw_dir.join(format!("track{}_meas{}.wav", track, measure));
+                                    write_wav(&samples, daw_cfg.sample_rate as u32, &wav_path)
+                                        .is_ok()
                                 } else {
                                     false
                                 }
@@ -173,7 +198,11 @@ impl DawApp {
                             };
                             // WAV 書き出し失敗はデバッグ出力の問題であり、レンダリング自体は成功している。
                             // そのため WAV 失敗時は Error としてユーザーに通知する。
-                            let new_state = if wav_ok { CacheState::Ready } else { CacheState::Error };
+                            let new_state = if wav_ok {
+                                CacheState::Ready
+                            } else {
+                                CacheState::Error
+                            };
                             let mut cache = cache_worker.lock().unwrap();
                             cache[track][measure].state = new_state;
                             // Ready かつサイズ上限以内のときのみサンプルをメモリに保持する。
@@ -267,6 +296,7 @@ impl DawApp {
                         && key.code == KeyCode::Char('c')
                     {
                         self.stop_play();
+                        self.save_history_state();
                         return Ok(DawExitReason::QuitApp);
                     }
 
@@ -274,10 +304,12 @@ impl DawApp {
                         DawMode::Normal => match self.handle_normal(key.code) {
                             DawNormalAction::ReturnToTui => {
                                 self.stop_play();
+                                self.save_history_state();
                                 return Ok(DawExitReason::ReturnToTui);
                             }
                             DawNormalAction::QuitApp => {
                                 self.stop_play();
+                                self.save_history_state();
                                 return Ok(DawExitReason::QuitApp);
                             }
                             DawNormalAction::Continue => {}
@@ -292,5 +324,32 @@ impl DawApp {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::load_wav_samples;
+
+    #[test]
+    fn load_wav_samples_reads_back_float_wav_cache() {
+        let tmp = std::env::temp_dir().join("cmrt_test_daw_cache.wav");
+        let spec = hound::WavSpec {
+            channels: 2,
+            sample_rate: 44_100,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        {
+            let mut writer = hound::WavWriter::create(&tmp, spec).unwrap();
+            writer.write_sample(0.25f32).unwrap();
+            writer.write_sample(-0.25f32).unwrap();
+            writer.finalize().unwrap();
+        }
+
+        let samples = load_wav_samples(&tmp).unwrap();
+        std::fs::remove_file(&tmp).ok();
+
+        assert_eq!(samples, vec![0.25, -0.25]);
     }
 }

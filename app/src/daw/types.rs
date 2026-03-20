@@ -6,10 +6,11 @@ use std::sync::Arc;
 
 #[derive(Clone, PartialEq)]
 pub enum CacheState {
-    Empty,   // MML が空
-    Pending, // MML あり、レンダリング待ち or 実行中
-    Ready,   // レンダリング済み
-    Error,   // レンダリング失敗
+    Empty,     // MML が空
+    Pending,   // MML あり、キャッシュ未作成
+    Rendering, // キャッシュ生成中
+    Ready,     // レンダリング済み
+    Error,     // レンダリング失敗
 }
 
 /// セルごとのレンダリングキャッシュ。
@@ -29,7 +30,10 @@ pub struct CellCache {
 
 impl CellCache {
     pub(super) fn empty() -> Self {
-        Self { state: CacheState::Empty, samples: None }
+        Self {
+            state: CacheState::Empty,
+            samples: None,
+        }
     }
 }
 
