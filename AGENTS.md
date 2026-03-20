@@ -1,0 +1,15 @@
+# Agent setup
+
+Before running Rust checks in this repository, prepare the test environment:
+
+```bash
+./scripts/setup-cargo-test-env.sh
+```
+
+After setup, validate from the repository root with:
+
+```bash
+cargo test
+```
+
+The setup script installs the Linux packages needed for this workspace's `rodio`/`cpal` dependency chain to build `alsa-sys`.
