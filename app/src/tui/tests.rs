@@ -166,7 +166,7 @@ fn handle_normal_t_shows_error_when_random_timbre_enabled() {
     app.handle_normal(KeyCode::Char('t'));
 
     assert!(
-        matches!(&*app.play_state.lock().unwrap(), PlayState::Err(msg) if msg == "random音色モードでは音色選択は使えません")
+        matches!(&*app.play_state.lock().unwrap(), PlayState::Err(msg) if msg == "ランダム音色モードでは音色選択は使えません")
     );
     assert!(matches!(app.mode, Mode::Normal));
 }

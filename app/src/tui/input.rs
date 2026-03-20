@@ -117,7 +117,7 @@ impl<'a> TuiApp<'a> {
             KeyCode::Char('t') => {
                 if self.random_timbre_enabled {
                     *self.play_state.lock().unwrap() =
-                        PlayState::Err("random音色モードでは音色選択は使えません".to_string());
+                        PlayState::Err("ランダム音色モードでは音色選択は使えません".to_string());
                 } else if self.cfg.patches_dir.is_none() {
                     *self.play_state.lock().unwrap() =
                         PlayState::Err("patches_dir が設定されていません".to_string());
