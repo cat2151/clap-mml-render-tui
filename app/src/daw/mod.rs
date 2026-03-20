@@ -47,8 +47,10 @@ use crate::config::Config;
 
 // ─── 再エクスポート ───────────────────────────────────────────
 
-pub(super) use types::{CacheState, CellCache, DawMode, DawNormalAction, DawPlayState, PlayPosition};
 pub use types::DawExitReason;
+pub(super) use types::{
+    CacheState, CellCache, DawMode, DawNormalAction, DawPlayState, PlayPosition,
+};
 
 // ─── 定数 ─────────────────────────────────────────────────────
 
@@ -99,7 +101,7 @@ pub struct DawApp {
     cache_tx: std::sync::mpsc::Sender<(usize, usize, String)>,
 
     /// `mml_render_for_cache` の排他実行ロック。
-    /// キャッシュワーカーと再生スレッドが同時に daw_cache.mid/wav を書き込まないよう、
+    /// キャッシュワーカーと再生スレッドが共有の中間ファイルを同時に書き込まないよう、
     /// `mml_render_for_cache` 呼び出し前に必ずこのロックを取得すること。
     render_lock: Arc<Mutex<()>>,
 
@@ -126,9 +128,10 @@ impl DawApp {
         // track 0 のデフォルトは拍子指定 JSON + テンポ設定
         data[0][0] = DEFAULT_TRACK0_MML.to_string();
 
-        let cache = Arc::new(Mutex::new(
-            vec![vec![CellCache::empty(); measures + 1]; tracks],
-        ));
+        let cache = Arc::new(Mutex::new(vec![
+            vec![CellCache::empty(); measures + 1];
+            tracks
+        ]));
 
         // シリアルなキャッシュワーカースレッドを起動する。
         // チャネルが送信側（cache_tx）を介してジョブを受け取り順次レンダリングすることで
@@ -136,7 +139,7 @@ impl DawApp {
         let (cache_tx, cache_rx) = std::sync::mpsc::channel::<(usize, usize, String)>();
 
         // `mml_render_for_cache` はキャッシュワーカーと再生スレッドの両方から呼ばれるため、
-        // clap-mml-render-tui/daw/daw_cache.mid/wav への同時書き込みを防ぐ排他ロックを共有する。
+        // 共有の中間ファイルへの同時書き込みを防ぐ排他ロックを共有する。
         let render_lock: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
 
         {
@@ -157,12 +160,10 @@ impl DawApp {
                             // measure 0 は音色/ヘッダセルであり演奏内容ではないためスキップ
                             let wav_ok = if measure > 0 {
                                 if let Ok(daw_dir) = ensure_daw_dir() {
-                                    let wav_path = daw_dir.join(format!("track{}_meas{}.wav", track, measure));
-                                    write_wav(
-                                        &samples,
-                                        daw_cfg.sample_rate as u32,
-                                        &wav_path,
-                                    ).is_ok()
+                                    let wav_path =
+                                        daw_dir.join(format!("track{}_meas{}.wav", track, measure));
+                                    write_wav(&samples, daw_cfg.sample_rate as u32, &wav_path)
+                                        .is_ok()
                                 } else {
                                     false
                                 }
@@ -171,7 +172,11 @@ impl DawApp {
                             };
                             // WAV 書き出し失敗はデバッグ出力の問題であり、レンダリング自体は成功している。
                             // そのため WAV 失敗時は Error としてユーザーに通知する。
-                            let new_state = if wav_ok { CacheState::Ready } else { CacheState::Error };
+                            let new_state = if wav_ok {
+                                CacheState::Ready
+                            } else {
+                                CacheState::Error
+                            };
                             let mut cache = cache_worker.lock().unwrap();
                             cache[track][measure].state = new_state;
                             // Ready かつサイズ上限以内のときのみサンプルをメモリに保持する。
