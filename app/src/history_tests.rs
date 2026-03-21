@@ -1,4 +1,59 @@
 use super::*;
+use std::ffi::OsStr;
+use std::sync::{Mutex, OnceLock};
+
+fn env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+struct TestEnvVarGuard {
+    key: &'static str,
+    original: Option<String>,
+}
+
+fn set_data_local_dir_envs(base: &std::path::Path) -> Vec<TestEnvVarGuard> {
+    let mut guards = Vec::new();
+    #[cfg(unix)]
+    {
+        let xdg_data_home = base.join("xdg-data");
+        let home = base.join("home");
+        std::fs::create_dir_all(&xdg_data_home).ok();
+        std::fs::create_dir_all(&home).ok();
+        guards.push(TestEnvVarGuard::set("XDG_DATA_HOME", &xdg_data_home));
+        guards.push(TestEnvVarGuard::set("HOME", &home));
+    }
+    #[cfg(windows)]
+    {
+        let local_app_data = base.join("LocalAppData");
+        let app_data = base.join("AppData");
+        let user_profile = base.join("UserProfile");
+        std::fs::create_dir_all(&local_app_data).ok();
+        std::fs::create_dir_all(&app_data).ok();
+        std::fs::create_dir_all(&user_profile).ok();
+        guards.push(TestEnvVarGuard::set("LOCALAPPDATA", &local_app_data));
+        guards.push(TestEnvVarGuard::set("APPDATA", &app_data));
+        guards.push(TestEnvVarGuard::set("USERPROFILE", &user_profile));
+    }
+    guards
+}
+
+impl TestEnvVarGuard {
+    fn set(key: &'static str, value: impl AsRef<OsStr>) -> Self {
+        let original = std::env::var(key).ok();
+        std::env::set_var(key, value);
+        Self { key, original }
+    }
+}
+
+impl Drop for TestEnvVarGuard {
+    fn drop(&mut self) {
+        match &self.original {
+            Some(v) => std::env::set_var(self.key, v),
+            None => std::env::remove_var(self.key),
+        }
+    }
+}
 
 #[test]
 fn session_state_default_cursor_is_zero() {
@@ -62,8 +117,7 @@ fn session_state_serialize_deserialize_is_daw_mode_true() {
 #[test]
 fn session_state_json_from_invalid_returns_default() {
     // 不正なJSONはデフォルト値を返す
-    let result: SessionState = serde_json::from_str("not json")
-        .unwrap_or_default();
+    let result: SessionState = serde_json::from_str("not json").unwrap_or_default();
     assert_eq!(result.cursor, 0);
     assert_eq!(result.lines, vec!["cde".to_string()]);
     assert!(!result.is_daw_mode);
@@ -72,8 +126,7 @@ fn session_state_json_from_invalid_returns_default() {
 #[test]
 fn session_state_json_missing_field_returns_default() {
     // cursor フィールドがない場合はデフォルト値を返す
-    let result: SessionState = serde_json::from_str("{}")
-        .unwrap_or_default();
+    let result: SessionState = serde_json::from_str("{}").unwrap_or_default();
     assert_eq!(result.cursor, 0);
     assert_eq!(result.lines, vec!["cde".to_string()]);
     assert!(!result.is_daw_mode);
@@ -169,4 +222,81 @@ fn save_and_load_session_state_roundtrip_daw_mode() {
     std::fs::remove_file(&tmp_path).ok();
 
     assert!(loaded.is_daw_mode);
+}
+
+#[test]
+fn load_daw_session_state_reads_history_daw_json() {
+    let _lock = env_lock().lock().unwrap();
+    let tmp = std::env::temp_dir().join("cmrt_test_history_daw_load");
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = set_data_local_dir_envs(&tmp);
+
+    let state = DawSessionState {
+        cursor_track: 3,
+        cursor_measure: 4,
+        cached_measures: vec![DawCachedMeasure {
+            track: 2,
+            measure: 5,
+            mml_hash: daw_cache_mml_hash("t120cdef"),
+            legacy_mml: None,
+        }],
+    };
+    save_daw_session_state(&state).unwrap();
+
+    assert_eq!(load_daw_session_state(), state);
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn load_daw_session_state_migrates_from_history_json() {
+    let _lock = env_lock().lock().unwrap();
+    let tmp = std::env::temp_dir().join("cmrt_test_history_daw_migrate");
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = set_data_local_dir_envs(&tmp);
+
+    let history_dir = super::history_dir().unwrap();
+    std::fs::create_dir_all(&history_dir).unwrap();
+    let history_path = history_dir.join("history.json");
+    std::fs::write(
+        &history_path,
+        r#"{
+  "cursor": 7,
+  "lines": ["cde"],
+  "is_daw_mode": true,
+  "daw_cursor_track": 4,
+  "daw_cursor_measure": 2,
+  "daw_cached_measures": [
+    { "track": 1, "measure": 3, "mml": "t120gab" }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let daw_state = load_daw_session_state();
+    assert_eq!(
+        daw_state,
+        DawSessionState {
+            cursor_track: 4,
+            cursor_measure: 2,
+            cached_measures: vec![DawCachedMeasure {
+                track: 1,
+                measure: 3,
+                mml_hash: daw_cache_mml_hash("t120gab"),
+                legacy_mml: None,
+            }],
+        }
+    );
+
+    let migrated_history = std::fs::read_to_string(&history_path).unwrap();
+    assert!(!migrated_history.contains("daw_cursor_track"));
+    assert!(!migrated_history.contains("daw_cached_measures"));
+
+    let history_daw_path = super::daw_session_state_path().unwrap();
+    let stored = std::fs::read_to_string(&history_daw_path).unwrap();
+    assert!(stored.contains("\"cursor_track\": 4"));
+    assert!(stored.contains("\"cursor_measure\": 2"));
+    assert!(stored.contains("\"mml_hash\""));
+    assert!(!stored.contains("t120gab"));
+
+    std::fs::remove_dir_all(&tmp).ok();
 }

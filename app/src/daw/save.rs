@@ -29,26 +29,53 @@ pub(super) struct DawSaveMeas {
 }
 
 /// data グリッドを `DawSaveFile` に変換する（空トラック・空小節は除外）。
-pub(super) fn data_to_save_file(data: &[Vec<String>], tracks: usize, measures: usize) -> DawSaveFile {
+pub(super) fn data_to_save_file(
+    data: &[Vec<String>],
+    tracks: usize,
+    measures: usize,
+) -> DawSaveFile {
     let mut save_tracks: Vec<DawSaveTrack> = Vec::new();
     for t in 0..tracks {
         let mut save_meas: Vec<DawSaveMeas> = Vec::new();
         for m in 0..=measures {
             if !data[t][m].trim().is_empty() {
-                let description = if m == 0 { Some("initial".to_string()) } else { None };
-                save_meas.push(DawSaveMeas { meas: m, description, mml: data[t][m].clone() });
+                let description = if m == 0 {
+                    Some("initial".to_string())
+                } else {
+                    None
+                };
+                save_meas.push(DawSaveMeas {
+                    meas: m,
+                    description,
+                    mml: data[t][m].clone(),
+                });
             }
         }
         if !save_meas.is_empty() {
-            let description = if t == 0 { Some("tempo track".to_string()) } else { None };
-            save_tracks.push(DawSaveTrack { track: t, description, meas: save_meas });
+            let description = if t == 0 {
+                Some("tempo track".to_string())
+            } else {
+                None
+            };
+            save_tracks.push(DawSaveTrack {
+                track: t,
+                description,
+                meas: save_meas,
+            });
         }
     }
-    DawSaveFile { tracks: save_tracks }
+    DawSaveFile {
+        tracks: save_tracks,
+    }
 }
 
 /// `DawSaveFile` を data グリッドに書き込む（範囲外インデックスは無視）。
-pub(super) fn apply_save_file_to_data(file: &DawSaveFile, data: &mut Vec<Vec<String>>, tracks: usize, measures: usize) {
+pub(super) fn apply_save_file_to_data(
+    file: &DawSaveFile,
+    data: &mut Vec<Vec<String>>,
+    tracks: usize,
+    measures: usize,
+) {
     for save_track in &file.tracks {
         let t = save_track.track;
         if t >= tracks {
@@ -69,9 +96,7 @@ impl DawApp {
 
     pub(super) fn load(&mut self) {
         let path = crate::history::daw_file_path();
-        let content = path
-            .as_ref()
-            .and_then(|p| std::fs::read_to_string(p).ok());
+        let content = path.as_ref().and_then(|p| std::fs::read_to_string(p).ok());
         if let Some(content) = content {
             if let Ok(file) = serde_json::from_str::<DawSaveFile>(&content) {
                 // JSON が正常にパースできた場合は、ファイルが正式な保存データであるとみなす。
@@ -86,10 +111,16 @@ impl DawApp {
             }
         }
         self.sync_cache_states();
+        let daw_state = crate::history::load_daw_session_state();
+        self.cursor_track = daw_state.cursor_track.min(self.tracks - 1);
+        self.cursor_measure = daw_state.cursor_measure.min(self.measures);
+        self.restore_cache_from_history(&daw_state);
     }
 
     pub(super) fn save(&self) {
-        let Some(path) = crate::history::daw_file_path() else { return; };
+        let Some(path) = crate::history::daw_file_path() else {
+            return;
+        };
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
@@ -98,12 +129,20 @@ impl DawApp {
             let _ = std::fs::write(&path, json);
         }
     }
+
+    pub(super) fn save_history_state(&self) {
+        let _ = crate::history::save_daw_session_state(&crate::history::DawSessionState {
+            cursor_track: self.cursor_track,
+            cursor_measure: self.cursor_measure,
+            cached_measures: self.cached_measures_for_history(),
+        });
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_save_file_to_data, data_to_save_file, DawSaveFile};
     use super::super::{DEFAULT_TRACK0_MML, MEASURES, TRACKS};
+    use super::{apply_save_file_to_data, data_to_save_file, DawSaveFile};
     use std::ffi::OsStr;
 
     struct TestEnvVarGuard {
@@ -185,12 +224,24 @@ mod tests {
         let json = serde_json::to_string_pretty(&file).unwrap();
 
         // JSON にトラック 2 以上は含まれない
-        assert!(!json.contains("\"track\": 2"), "空トラックが JSON に含まれている: {json}");
+        assert!(
+            !json.contains("\"track\": 2"),
+            "空トラックが JSON に含まれている: {json}"
+        );
         // 空小節 2 以降も含まれない
-        assert!(!json.contains("\"meas\": 2"), "空小節が JSON に含まれている: {json}");
+        assert!(
+            !json.contains("\"meas\": 2"),
+            "空小節が JSON に含まれている: {json}"
+        );
         // 非空データは含まれる
-        assert!(json.contains("t120"), "track0/meas0 の MML が含まれていない: {json}");
-        assert!(json.contains("cde"), "track1/meas1 の MML が含まれていない: {json}");
+        assert!(
+            json.contains("t120"),
+            "track0/meas0 の MML が含まれていない: {json}"
+        );
+        assert!(
+            json.contains("cde"),
+            "track1/meas1 の MML が含まれていない: {json}"
+        );
     }
 
     #[test]
@@ -202,7 +253,10 @@ mod tests {
         let file = data_to_save_file(&data, TRACKS, MEASURES);
         let json = serde_json::to_string_pretty(&file).unwrap();
 
-        assert!(json.contains("\"tempo track\""), "track0 の description が JSON に含まれていない: {json}");
+        assert!(
+            json.contains("\"tempo track\""),
+            "track0 の description が JSON に含まれていない: {json}"
+        );
     }
 
     #[test]
@@ -214,7 +268,10 @@ mod tests {
         let file = data_to_save_file(&data, TRACKS, MEASURES);
         let json = serde_json::to_string_pretty(&file).unwrap();
 
-        assert!(json.contains("\"initial\""), "meas0 の description が JSON に含まれていない: {json}");
+        assert!(
+            json.contains("\"initial\""),
+            "meas0 の description が JSON に含まれていない: {json}"
+        );
     }
 
     #[test]
@@ -228,20 +285,28 @@ mod tests {
         // DawSaveMeas の description フィールドを直接確認する
         let track1 = file.tracks.iter().find(|t| t.track == 1).unwrap();
         let meas1 = track1.meas.iter().find(|m| m.meas == 1).unwrap();
-        assert!(meas1.description.is_none(), "meas1 に description が付いている: {:?}", meas1.description);
+        assert!(
+            meas1.description.is_none(),
+            "meas1 に description が付いている: {:?}",
+            meas1.description
+        );
     }
 
     #[test]
     fn daw_save_json_out_of_range_indices_are_ignored_on_load() {
         // JSON に含まれるトラック・小節インデックスが範囲外の場合は無視されること
-        let json = r#"{"tracks":[{"track":100,"meas":[{"meas":0,"description":"initial","mml":"cde"}]}]}"#;
+        let json =
+            r#"{"tracks":[{"track":100,"meas":[{"meas":0,"description":"initial","mml":"cde"}]}]}"#;
         let file: DawSaveFile = serde_json::from_str(json).unwrap();
         let mut data = empty_data(TRACKS, MEASURES);
         apply_save_file_to_data(&file, &mut data, TRACKS, MEASURES);
         // data は変更されていないこと
         for t in 0..TRACKS {
             for m in 0..=MEASURES {
-                assert!(data[t][m].is_empty(), "範囲外インデックスが data を変更した: t={t}, m={m}");
+                assert!(
+                    data[t][m].is_empty(),
+                    "範囲外インデックスが data を変更した: t={t}, m={m}"
+                );
             }
         }
     }
@@ -293,8 +358,10 @@ mod tests {
             let loaded: DawSaveFile = serde_json::from_str(&json).unwrap();
             let mut data_no_clear = data.clone();
             apply_save_file_to_data(&loaded, &mut data_no_clear, TRACKS, MEASURES);
-            assert_eq!(data_no_clear[0][0], DEFAULT_TRACK0_MML,
-                "クリアなしでは空 JSON を適用してもデフォルト値が残る（バグの再現）");
+            assert_eq!(
+                data_no_clear[0][0], DEFAULT_TRACK0_MML,
+                "クリアなしでは空 JSON を適用してもデフォルト値が残る（バグの再現）"
+            );
         }
 
         // ② クリアしてから apply するとデフォルト値は消える（修正後の正しい挙動）
@@ -306,8 +373,10 @@ mod tests {
                 }
             }
             apply_save_file_to_data(&loaded, &mut data, TRACKS, MEASURES);
-            assert!(data[0][0].is_empty(),
-                "クリア後に空 JSON を適用すると track0/meas0 は空になるべき");
+            assert!(
+                data[0][0].is_empty(),
+                "クリア後に空 JSON を適用すると track0/meas0 は空になるべき"
+            );
         }
     }
 }

@@ -15,6 +15,28 @@ const ANIM_FRAME_MS: u128 = 250;
 /// Pending インジケータのアニメーションフレーム数（"." / ".." / "..."）
 const ANIM_FRAME_COUNT: u128 = 3;
 
+fn cache_text_color(cs: &CacheState) -> Color {
+    match cs {
+        CacheState::Empty => Color::DarkGray,
+        CacheState::Pending | CacheState::Rendering | CacheState::Ready => Color::White,
+        CacheState::Error => Color::Red,
+    }
+}
+
+fn cache_indicator(cs: &CacheState, anim_frame: u128) -> &'static str {
+    match cs {
+        CacheState::Empty => "     ",
+        CacheState::Pending => ".    ",
+        CacheState::Rendering => match anim_frame {
+            0 => ".    ",
+            1 => "..   ",
+            _ => "...  ",
+        },
+        CacheState::Ready => "     ",
+        CacheState::Error => "✗    ",
+    }
+}
+
 fn loop_status_label(mmls: &[String]) -> Option<String> {
     super::playback::effective_measure_count(mmls).map(|count| {
         if count == 1 {
@@ -30,10 +52,7 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(1),
-            Constraint::Length(1),
-        ])
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(area);
 
     draw_grid(app, f, chunks[0]);
@@ -50,7 +69,11 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
     let cache_states: Vec<Vec<CacheState>> = {
         let cache = app.cache.lock().unwrap();
         (0..app.tracks)
-            .map(|t| (0..=app.measures).map(|m| cache[t][m].state.clone()).collect())
+            .map(|t| {
+                (0..=app.measures)
+                    .map(|m| cache[t][m].state.clone())
+                    .collect()
+            })
             .collect()
     };
 
@@ -70,7 +93,12 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
     if area.height > 0 {
         f.render_widget(
             Paragraph::new(Line::from(header_spans)),
-            Rect { x: area.x, y: area.y, width: area.width, height: 1 },
+            Rect {
+                x: area.x,
+                y: area.y,
+                width: area.width,
+                height: 1,
+            },
         );
     }
 
@@ -101,7 +129,9 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
         let mut row1: Vec<Span> = vec![Span::styled(
             track_label,
             if is_cursor_track {
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::DarkGray)
             },
@@ -131,12 +161,7 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
             let (fg, bg) = if is_cursor {
                 (Color::Black, Color::Cyan)
             } else {
-                match cs {
-                    CacheState::Empty => (Color::DarkGray, Color::Reset),
-                    CacheState::Pending => (Color::DarkGray, Color::Reset),
-                    CacheState::Ready => (Color::White, Color::Reset),
-                    CacheState::Error => (Color::Red, Color::Reset),
-                }
+                (cache_text_color(cs), Color::Reset)
             };
 
             row1.push(Span::styled(
@@ -146,22 +171,14 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
 
             // 状態インジケータ (4 chars + 1 space): INSERTモードのカーソルtrackはスキップ
             if show_indicators {
-                let indicator = match cs {
-                    CacheState::Empty => "     ",
-                    CacheState::Pending => match anim_frame {
-                        0 => ".    ",
-                        1 => "..   ",
-                        _ => "...  ",
-                    },
-                    CacheState::Ready => "     ",
-                    CacheState::Error => "✗    ",
-                };
+                let indicator = cache_indicator(cs, anim_frame);
                 let ind_fg = if is_cursor {
                     Color::Cyan
                 } else {
                     match cs {
                         CacheState::Empty => Color::DarkGray,
                         CacheState::Pending => Color::DarkGray,
+                        CacheState::Rendering => Color::DarkGray,
                         CacheState::Ready => Color::DarkGray,
                         CacheState::Error => Color::Red,
                     }
@@ -172,19 +189,34 @@ fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
 
         f.render_widget(
             Paragraph::new(Line::from(row1)),
-            Rect { x: area.x, y: row_y, width: area.width, height: 1 },
+            Rect {
+                x: area.x,
+                y: row_y,
+                width: area.width,
+                height: 1,
+            },
         );
 
         // INSERTモード時は、カーソルtrackのインジケータ行にインラインで textarea を描画する。
         if show_indicators {
             f.render_widget(
                 Paragraph::new(Line::from(row2)),
-                Rect { x: area.x, y: row_y + 1, width: area.width, height: 1 },
+                Rect {
+                    x: area.x,
+                    y: row_y + 1,
+                    width: area.width,
+                    height: 1,
+                },
             );
         } else {
             f.render_widget(
                 &app.textarea,
-                Rect { x: area.x, y: row_y + 1, width: area.width, height: 1 },
+                Rect {
+                    x: area.x,
+                    y: row_y + 1,
+                    width: area.width,
+                    height: 1,
+                },
             );
         }
     }
@@ -252,15 +284,76 @@ fn draw_status(app: &DawApp, f: &mut Frame, area: Rect) {
         DawPlayState::Preview => Color::Magenta,
     };
 
-    f.render_widget(
-        Paragraph::new(text).style(Style::default().fg(color)),
-        area,
-    );
+    f.render_widget(Paragraph::new(text).style(Style::default().fg(color)), area);
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{super::MEASURES, loop_status_label};
+    use std::sync::{Arc, Mutex};
+
+    use ratatui::{backend::TestBackend, style::Color, Terminal};
+    use tui_textarea::TextArea;
+
+    use crate::config::Config;
+
+    use super::{
+        super::{CacheState, CellCache, DawApp, DawMode, DawPlayState, MEASURES},
+        cache_indicator, cache_text_color, draw, loop_status_label,
+    };
+
+    fn build_test_app() -> DawApp {
+        let tracks = 3;
+        let measures = 2;
+        let (cache_tx, _cache_rx) = std::sync::mpsc::channel();
+        DawApp {
+            data: vec![vec![String::new(); measures + 1]; tracks],
+            cursor_track: 0,
+            cursor_measure: 0,
+            mode: DawMode::Normal,
+            textarea: TextArea::default(),
+            cfg: Arc::new(Config {
+                plugin_path: String::new(),
+                input_midi: String::new(),
+                output_midi: String::new(),
+                output_wav: String::new(),
+                sample_rate: 44_100.0,
+                buffer_size: 512,
+                patch_path: None,
+                patches_dir: None,
+                daw_tracks: tracks,
+                daw_measures: measures,
+            }),
+            entry_ptr: 0,
+            tracks,
+            measures,
+            cache: Arc::new(Mutex::new(vec![
+                vec![CellCache::empty(); measures + 1];
+                tracks
+            ])),
+            cache_tx,
+            render_lock: Arc::new(Mutex::new(())),
+            play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
+            play_position: Arc::new(Mutex::new(None)),
+            play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
+            play_measure_samples: Arc::new(Mutex::new(0)),
+        }
+    }
+
+    fn render_lines(app: &DawApp, width: u16, height: u16) -> Vec<String> {
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| draw(app, f)).unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        (0..height)
+            .map(|y| {
+                (0..width)
+                    .map(|x| buffer.cell((x, y)).unwrap().symbol().to_string())
+                    .collect::<String>()
+                    .trim_end()
+                    .to_string()
+            })
+            .collect()
+    }
 
     #[test]
     fn loop_status_label_single_measure_shows_single_measure_loop() {
@@ -289,6 +382,48 @@ mod tests {
     fn loop_status_label_all_empty_returns_none() {
         assert_eq!(loop_status_label(&vec![String::new(); MEASURES]), None);
     }
+
+    #[test]
+    fn cache_indicator_uses_single_dot_for_uncached_cells() {
+        assert_eq!(cache_indicator(&CacheState::Pending, 0), ".    ");
+        assert_eq!(cache_indicator(&CacheState::Pending, 2), ".    ");
+    }
+
+    #[test]
+    fn cache_indicator_animates_only_while_rendering() {
+        assert_eq!(cache_indicator(&CacheState::Rendering, 0), ".    ");
+        assert_eq!(cache_indicator(&CacheState::Rendering, 1), "..   ");
+        assert_eq!(cache_indicator(&CacheState::Rendering, 2), "...  ");
+    }
+
+    #[test]
+    fn cache_text_color_keeps_uncached_mml_visible() {
+        assert_eq!(cache_text_color(&CacheState::Pending), Color::White);
+        assert_eq!(cache_text_color(&CacheState::Rendering), Color::White);
+    }
+
+    #[test]
+    fn draw_shows_mml_and_uncached_dot_before_cache_is_ready() {
+        let mut app = build_test_app();
+        app.data[1][1] = "cdef".to_string();
+        {
+            let mut cache = app.cache.lock().unwrap();
+            cache[1][1].state = CacheState::Pending;
+        }
+
+        let lines = render_lines(&app, 40, 8);
+
+        assert!(
+            lines.iter().any(|line| line.contains("cdef")),
+            "lines: {:?}",
+            lines
+        );
+        assert!(
+            lines.iter().any(|line| line.contains('.')),
+            "lines: {:?}",
+            lines
+        );
+    }
 }
 
 fn draw_help(f: &mut Frame, area: Rect) {
@@ -296,7 +431,12 @@ fn draw_help(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, popup);
 
     let help_lines = vec![
-        Line::from(Span::styled("NORMAL モード", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(
+            "NORMAL モード",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
         Line::from("  h / ←  : 小節移動（左）"),
         Line::from("  l / →  : 小節移動（右）"),
         Line::from("  j / ↓  : track 移動（下）"),
@@ -312,22 +452,29 @@ fn draw_help(f: &mut Frame, area: Rect) {
         Line::from("  q      : 終了"),
         Line::from("  Ctrl+C : 強制終了"),
         Line::from(""),
-        Line::from(Span::styled("INSERT モード", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(
+            "INSERT モード",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
         Line::from("  ESC   : 確定 → NORMAL"),
         Line::from("  Enter : 確定 → 次小節 → INSERT 継続"),
         Line::from("  ;     : 分割して下の track に追加"),
         Line::from(""),
-        Line::from(Span::styled("  [ESC] でキャンセル", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled(
+            "  [ESC] でキャンセル",
+            Style::default().fg(Color::DarkGray),
+        )),
     ];
 
     f.render_widget(
-        Paragraph::new(help_lines)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(" ヘルプ (Keybinds) ")
-                    .border_style(Style::default().fg(Color::Cyan)),
-            ),
+        Paragraph::new(help_lines).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" ヘルプ (Keybinds) ")
+                .border_style(Style::default().fg(Color::Cyan)),
+        ),
         popup,
     );
 }

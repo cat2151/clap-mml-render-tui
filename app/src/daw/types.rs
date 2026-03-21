@@ -6,10 +6,11 @@ use std::sync::Arc;
 
 #[derive(Clone, PartialEq)]
 pub enum CacheState {
-    Empty,   // MML が空
-    Pending, // MML あり、レンダリング待ち or 実行中
-    Ready,   // レンダリング済み
-    Error,   // レンダリング失敗
+    Empty,     // MML が空
+    Pending,   // MML あり、キャッシュ未作成
+    Rendering, // キャッシュ生成中
+    Ready,     // レンダリング済み
+    Error,     // レンダリング失敗
 }
 
 /// セルごとのレンダリングキャッシュ。
@@ -25,11 +26,30 @@ pub struct CellCache {
     pub(super) state: CacheState,
     /// レンダリング済みのステレオサンプル（Ready かつサイズ上限以内のときのみ Some）
     pub(super) samples: Option<Arc<Vec<f32>>>,
+    /// 現在セルに対して有効なレンダリング世代。
+    pub(super) generation: u64,
+    /// 現在 Ready な WAV を生成したレンダリング MML のハッシュ。
+    pub(super) rendered_mml_hash: Option<u64>,
 }
 
 impl CellCache {
     pub(super) fn empty() -> Self {
-        Self { state: CacheState::Empty, samples: None }
+        Self {
+            state: CacheState::Empty,
+            samples: None,
+            generation: 0,
+            rendered_mml_hash: None,
+        }
+    }
+
+    pub(super) fn set_pending(&mut self) {
+        self.generation = self.generation.wrapping_add(1);
+        if self.generation == 0 {
+            self.generation = 1;
+        }
+        self.state = CacheState::Pending;
+        self.samples = None;
+        self.rendered_mml_hash = None;
     }
 }
 
