@@ -143,29 +143,6 @@ impl DawApp {
 mod tests {
     use super::super::{DEFAULT_TRACK0_MML, MEASURES, TRACKS};
     use super::{apply_save_file_to_data, data_to_save_file, DawSaveFile};
-    use std::ffi::OsStr;
-
-    struct TestEnvVarGuard {
-        key: &'static str,
-        original: Option<String>,
-    }
-
-    impl TestEnvVarGuard {
-        fn set(key: &'static str, value: impl AsRef<OsStr>) -> Self {
-            let original = std::env::var(key).ok();
-            std::env::set_var(key, value);
-            Self { key, original }
-        }
-    }
-
-    impl Drop for TestEnvVarGuard {
-        fn drop(&mut self) {
-            match &self.original {
-                Some(v) => std::env::set_var(self.key, v),
-                None => std::env::remove_var(self.key),
-            }
-        }
-    }
 
     /// テスト用ヘルパー: TRACKS×(MEASURES+1) の空 data を作成する
     fn empty_data(tracks: usize, measures: usize) -> Vec<Vec<String>> {
@@ -178,7 +155,7 @@ mod tests {
     fn ensure_cmrt_dir_is_idempotent() {
         // 複数回呼んでもエラーにならない（一時ディレクトリを使って設定ディレクトリを汚染しない）
         let tmp = std::env::temp_dir().join("cmrt_test_daw_idempotent");
-        let guard = TestEnvVarGuard::set("CMRT_BASE_DIR", &tmp);
+        let guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
         std::fs::remove_dir_all(&tmp).ok();
 
         let r1 = cmrt_core::ensure_cmrt_dir();

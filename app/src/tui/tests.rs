@@ -1,89 +1,8 @@
 use super::*;
 use crossterm::event::KeyCode;
-use std::ffi::OsStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Mutex, OnceLock};
 
 static NEXT_TEST_ID: AtomicUsize = AtomicUsize::new(0);
-
-/// Prevents history tests that mutate environment variables from interfering when run in parallel.
-fn env_lock() -> &'static Mutex<()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-}
-
-struct TestEnvVarGuard {
-    key: &'static str,
-    original: Option<String>,
-}
-
-/// Redirects OS-specific data directory environment variables to a test-only path so history.json
-/// writes do not touch the real user data directory.
-fn set_data_local_dir_envs(base: &std::path::Path) -> Vec<TestEnvVarGuard> {
-    let mut guards = Vec::new();
-    #[cfg(unix)]
-    {
-        let xdg_data_home = base.join("xdg-data");
-        let home = base.join("home");
-        std::fs::create_dir_all(&xdg_data_home).ok();
-        std::fs::create_dir_all(&home).ok();
-        guards.push(TestEnvVarGuard::set("XDG_DATA_HOME", &xdg_data_home));
-        guards.push(TestEnvVarGuard::set("HOME", &home));
-    }
-    #[cfg(windows)]
-    {
-        let local_app_data = base.join("LocalAppData");
-        let app_data = base.join("AppData");
-        let user_profile = base.join("UserProfile");
-        std::fs::create_dir_all(&local_app_data).ok();
-        std::fs::create_dir_all(&app_data).ok();
-        std::fs::create_dir_all(&user_profile).ok();
-        guards.push(TestEnvVarGuard::set("LOCALAPPDATA", &local_app_data));
-        guards.push(TestEnvVarGuard::set("APPDATA", &app_data));
-        guards.push(TestEnvVarGuard::set("USERPROFILE", &user_profile));
-    }
-    guards
-}
-
-/// Builds the expected test history.json path using the same rules as production
-/// history_dir/session_state_path resolution.
-fn session_state_path_for_test(base: &std::path::Path) -> std::path::PathBuf {
-    #[cfg(unix)]
-    {
-        return base
-            .join("xdg-data")
-            .join("clap-mml-render-tui")
-            .join("history.json");
-    }
-    #[cfg(windows)]
-    {
-        return base
-            .join("LocalAppData")
-            .join("clap-mml-render-tui")
-            .join("history.json");
-    }
-    #[cfg(not(any(unix, windows)))]
-    {
-        return base.join("clap-mml-render-tui").join("history.json");
-    }
-}
-
-impl TestEnvVarGuard {
-    fn set(key: &'static str, value: impl AsRef<OsStr>) -> Self {
-        let original = std::env::var(key).ok();
-        std::env::set_var(key, value);
-        Self { key, original }
-    }
-}
-
-impl Drop for TestEnvVarGuard {
-    fn drop(&mut self) {
-        match &self.original {
-            Some(v) => std::env::set_var(self.key, v),
-            None => std::env::remove_var(self.key),
-        }
-    }
-}
 
 fn make_patches(items: &[&str]) -> Vec<(String, String)> {
     items
@@ -269,9 +188,6 @@ fn handle_normal_t_enters_patch_select_when_random_timbre_disabled() {
 
 #[test]
 fn save_history_state_persists_tui_cursor_lines_and_mode_flag() {
-    let _lock = env_lock()
-        .lock()
-        .expect("environment lock should not be poisoned during TUI history test");
     let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
     let tmp = std::env::temp_dir().join(format!(
         "cmrt_test_tui_save_history_state_{}_{}",
@@ -279,7 +195,7 @@ fn save_history_state_persists_tui_cursor_lines_and_mode_flag() {
         unique
     ));
     std::fs::remove_dir_all(&tmp).ok();
-    let _env_guards = set_data_local_dir_envs(&tmp);
+    let _env_guards = crate::test_utils::set_data_local_dir_envs(&tmp);
 
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["abc".to_string(), "def".to_string(), "ghi".to_string()];
@@ -288,7 +204,8 @@ fn save_history_state_persists_tui_cursor_lines_and_mode_flag() {
 
     app.save_history_state();
 
-    let history_path = session_state_path_for_test(&tmp);
+    let history_path = crate::test_utils::session_state_path_for_test()
+        .expect("data local dir should resolve in isolated TUI history test");
     assert!(
         history_path.exists(),
         "expected isolated history file to be created at {}",

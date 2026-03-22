@@ -176,45 +176,13 @@ impl DawApp {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        ffi::OsStr,
-        sync::{Arc, Mutex, MutexGuard, OnceLock},
-    };
+    use std::sync::{Arc, Mutex};
 
     use tui_textarea::TextArea;
 
     use crate::config::Config;
 
     use super::super::{CacheState, CellCache, DawApp, DawMode, DawPlayState};
-
-    struct TestEnvVarGuard {
-        _lock: MutexGuard<'static, ()>,
-        key: &'static str,
-        original: Option<String>,
-    }
-
-    impl TestEnvVarGuard {
-        fn set(key: &'static str, value: impl AsRef<OsStr>) -> Self {
-            static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-            let lock = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
-            let original = std::env::var(key).ok();
-            std::env::set_var(key, value);
-            Self {
-                _lock: lock,
-                key,
-                original,
-            }
-        }
-    }
-
-    impl Drop for TestEnvVarGuard {
-        fn drop(&mut self) {
-            match &self.original {
-                Some(v) => std::env::set_var(self.key, v),
-                None => std::env::remove_var(self.key),
-            }
-        }
-    }
 
     fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob>) {
         let tracks = 3;
@@ -263,7 +231,7 @@ mod tests {
         std::fs::remove_dir_all(&tmp).ok();
 
         {
-            let _guard = TestEnvVarGuard::set("CMRT_BASE_DIR", &tmp);
+            let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
 
             let (mut app, cache_rx) = build_test_app();
             app.data[1][1] = "cdef".to_string();
@@ -295,7 +263,7 @@ mod tests {
         std::fs::remove_dir_all(&tmp).ok();
 
         {
-            let _guard = TestEnvVarGuard::set("CMRT_BASE_DIR", &tmp);
+            let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
 
             let (mut app, cache_rx) = build_test_app();
             app.data[1][1] = "cdef".to_string();
