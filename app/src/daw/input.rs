@@ -7,6 +7,18 @@ use super::{DawApp, DawMode, DawNormalAction, DawPlayState};
 impl DawApp {
     // ─── INSERT モード ────────────────────────────────────────
 
+    fn commit_insert_cell(&mut self, track: usize, measure: usize, text: &str) -> bool {
+        if self.data[track][measure] == text {
+            return false;
+        }
+        self.data[track][measure] = text.to_string();
+        self.invalidate_cell(track, measure);
+        self.kick_cache(track, measure);
+        // track0 または音色セル変更時は依存セルも再キャッシュする
+        self.invalidate_and_kick_dependent_cells(track, measure);
+        true
+    }
+
     pub(super) fn start_insert(&mut self) {
         let mut ta = tui_textarea::TextArea::default();
         for ch in self.data[self.cursor_track][self.cursor_measure].chars() {
@@ -19,6 +31,7 @@ impl DawApp {
     /// 編集内容を確定してキャッシュ更新・保存を行う
     pub(super) fn commit_insert(&mut self) {
         let text = self.textarea.lines().join("");
+        let mut changed = false;
 
         if text.contains(';') {
             // セミコロンで分割して下の track に順に追加
@@ -27,18 +40,14 @@ impl DawApp {
                 if t >= self.tracks {
                     break;
                 }
-                self.data[t][self.cursor_measure] = part.to_string();
-                self.invalidate_cell(t, self.cursor_measure);
-                self.kick_cache(t, self.cursor_measure);
-                // track0 または音色セル変更時は依存セルも再キャッシュする
-                self.invalidate_and_kick_dependent_cells(t, self.cursor_measure);
+                changed |= self.commit_insert_cell(t, self.cursor_measure, part);
             }
         } else {
-            self.data[self.cursor_track][self.cursor_measure] = text;
-            self.invalidate_cell(self.cursor_track, self.cursor_measure);
-            self.kick_cache(self.cursor_track, self.cursor_measure);
-            // track0 または音色セル変更時は依存セルも再キャッシュする
-            self.invalidate_and_kick_dependent_cells(self.cursor_track, self.cursor_measure);
+            changed = self.commit_insert_cell(self.cursor_track, self.cursor_measure, &text);
+        }
+
+        if !changed {
+            return;
         }
 
         self.save();
@@ -140,9 +149,7 @@ impl DawApp {
                 let confirmed_measure = self.cursor_measure;
                 self.commit_insert();
                 // 非演奏中の場合、確定した小節をプレビュー再生する
-                if *self.play_state.lock().unwrap() == DawPlayState::Idle
-                    && confirmed_measure > 0
-                {
+                if *self.play_state.lock().unwrap() == DawPlayState::Idle && confirmed_measure > 0 {
                     self.start_preview(confirmed_measure - 1);
                 }
                 self.mode = DawMode::Normal;
@@ -152,9 +159,7 @@ impl DawApp {
                 let confirmed_measure = self.cursor_measure;
                 self.commit_insert();
                 // 非演奏中の場合、確定した小節をプレビュー再生する
-                if *self.play_state.lock().unwrap() == DawPlayState::Idle
-                    && confirmed_measure > 0
-                {
+                if *self.play_state.lock().unwrap() == DawPlayState::Idle && confirmed_measure > 0 {
                     self.start_preview(confirmed_measure - 1);
                 }
                 if self.cursor_measure < self.measures {
@@ -166,5 +171,160 @@ impl DawApp {
                 self.textarea.input(key_event);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        ffi::OsStr,
+        sync::{Arc, Mutex, MutexGuard, OnceLock},
+    };
+
+    use tui_textarea::TextArea;
+
+    use crate::config::Config;
+
+    use super::super::{CacheState, CellCache, DawApp, DawMode, DawPlayState};
+
+    struct TestEnvVarGuard {
+        _lock: MutexGuard<'static, ()>,
+        key: &'static str,
+        original: Option<String>,
+    }
+
+    impl TestEnvVarGuard {
+        fn set(key: &'static str, value: impl AsRef<OsStr>) -> Self {
+            static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+            let lock = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+            let original = std::env::var(key).ok();
+            std::env::set_var(key, value);
+            Self {
+                _lock: lock,
+                key,
+                original,
+            }
+        }
+    }
+
+    impl Drop for TestEnvVarGuard {
+        fn drop(&mut self) {
+            match &self.original {
+                Some(v) => std::env::set_var(self.key, v),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
+    fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob>) {
+        let tracks = 3;
+        let measures = 2;
+        let (cache_tx, cache_rx) = std::sync::mpsc::channel();
+        (
+            DawApp {
+                data: vec![vec![String::new(); measures + 1]; tracks],
+                cursor_track: 1,
+                cursor_measure: 1,
+                mode: DawMode::Normal,
+                textarea: TextArea::default(),
+                cfg: Arc::new(Config {
+                    plugin_path: String::new(),
+                    input_midi: String::new(),
+                    output_midi: String::new(),
+                    output_wav: String::new(),
+                    sample_rate: 44_100.0,
+                    buffer_size: 512,
+                    patch_path: None,
+                    patches_dir: None,
+                    daw_tracks: tracks,
+                    daw_measures: measures,
+                }),
+                entry_ptr: 0,
+                tracks,
+                measures,
+                cache: Arc::new(Mutex::new(vec![
+                    vec![CellCache::empty(); measures + 1];
+                    tracks
+                ])),
+                cache_tx,
+                render_lock: Arc::new(Mutex::new(())),
+                play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
+                play_position: Arc::new(Mutex::new(None)),
+                play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
+                play_measure_samples: Arc::new(Mutex::new(0)),
+            },
+            cache_rx,
+        )
+    }
+
+    #[test]
+    fn commit_insert_skips_cache_refresh_when_text_is_unchanged() {
+        let tmp = std::env::temp_dir().join("cmrt_test_commit_insert_skips_cache_refresh");
+        std::fs::remove_dir_all(&tmp).ok();
+
+        {
+            let _guard = TestEnvVarGuard::set("CMRT_BASE_DIR", &tmp);
+
+            let (mut app, cache_rx) = build_test_app();
+            app.data[1][1] = "cdef".to_string();
+            {
+                let mut cache = app.cache.lock().unwrap();
+                cache[1][1].state = CacheState::Ready;
+                cache[1][1].generation = 7;
+            }
+
+            app.start_insert();
+            app.commit_insert();
+
+            let cache = app.cache.lock().unwrap();
+            assert_eq!(app.data[1][1], "cdef");
+            assert!(matches!(cache[1][1].state, CacheState::Ready));
+            assert_eq!(cache[1][1].generation, 7);
+            assert!(
+                cache_rx.try_recv().is_err(),
+                "unchanged insert queued a cache job"
+            );
+        }
+
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn commit_insert_triggers_cache_refresh_when_text_changes() {
+        let tmp = std::env::temp_dir().join("cmrt_test_commit_insert_refreshes_cache");
+        std::fs::remove_dir_all(&tmp).ok();
+
+        {
+            let _guard = TestEnvVarGuard::set("CMRT_BASE_DIR", &tmp);
+
+            let (mut app, cache_rx) = build_test_app();
+            app.data[1][1] = "cdef".to_string();
+            {
+                let mut cache = app.cache.lock().unwrap();
+                cache[1][1].state = CacheState::Ready;
+                cache[1][1].generation = 7;
+            }
+
+            app.start_insert();
+            app.textarea = TextArea::default();
+            for ch in "gfed".chars() {
+                app.textarea.insert_char(ch);
+            }
+            app.commit_insert();
+
+            let cache = app.cache.lock().unwrap();
+            assert_eq!(app.data[1][1], "gfed");
+            assert!(matches!(cache[1][1].state, CacheState::Pending));
+            assert_eq!(cache[1][1].generation, 8);
+
+            let job = cache_rx
+                .try_recv()
+                .expect("changed insert did not queue a cache job");
+            assert_eq!(job.track, 1);
+            assert_eq!(job.measure, 1);
+            assert_eq!(job.generation, 8);
+        }
+
+        std::fs::remove_dir_all(&tmp).ok();
     }
 }
