@@ -31,6 +31,12 @@ cmrt
 
 TUI画面でMML入力して遊べます
 
+### updateコマンド
+
+```
+cmrt update
+```
+
 ### serverモード
 
 ```

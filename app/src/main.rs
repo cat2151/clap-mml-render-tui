@@ -2,6 +2,17 @@ use anyhow::Result;
 use clap_mml_render_tui::{config, server, tui, updater};
 use cmrt_core::{CoreConfig, load_entry, mml_to_play};
 
+fn is_update_subcommand(args: &[String]) -> bool {
+    matches!(args.get(1).map(String::as_str), Some("update"))
+}
+
+fn cli_mml_arg(args: &[String]) -> Option<&str> {
+    match args {
+        [_, arg] if !arg.starts_with('-') && arg != "update" => Some(arg.as_str()),
+        _ => None,
+    }
+}
+
 fn main() -> Result<()> {
     // 引数なし → TUI モード
     // --help / -h → ヘルプ表示（config パスを含む）
@@ -15,6 +26,7 @@ fn main() -> Result<()> {
         println!("使い方:");
         println!("  cmrt                    TUI モードで起動");
         println!("  cmrt <mml>              CLI モード（テスト用）");
+        println!("  cmrt update             アップデートを実行");
         println!("  cmrt --server           サーバーモード（port {}）", server::DEFAULT_PORT);
         println!("  cmrt --server <port>    サーバーモード（指定port）");
         println!("  cmrt --shutdown         サーバーを停止（port {}）", server::DEFAULT_PORT);
@@ -45,6 +57,20 @@ fn main() -> Result<()> {
         server::shutdown_server(port)?;
         println!("サーバー（port {}）にシャットダウン要求を送りました。", port);
         return Ok(());
+    }
+
+    if is_update_subcommand(&args) {
+        if args.len() > 2 {
+            anyhow::bail!("`update` サブコマンドは追加引数を取りません。");
+        }
+        if let Err(e) = server::shutdown_server(server::DEFAULT_PORT) {
+            eprintln!(
+                "サーバー停止要求の送信に失敗しました（port {}）: {}",
+                server::DEFAULT_PORT,
+                e
+            );
+        }
+        return updater::run_foreground_update();
     }
 
     let cfg = config::Config::load()?;
@@ -79,8 +105,7 @@ fn main() -> Result<()> {
     }
 
     // 引数が1つかつフラグでなければ CLI モード
-    if args.len() == 2 && !args[1].starts_with('-') {
-        let mml = &args[1];
+    if let Some(mml) = cli_mml_arg(&args) {
         println!("CLI モード: MML = {}", mml);
         let core_cfg = CoreConfig::from(&cfg);
         let patch = mml_to_play(mml, &core_cfg, &entry)?;
@@ -107,3 +132,7 @@ fn main() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "main_tests.rs"]
+mod tests;
