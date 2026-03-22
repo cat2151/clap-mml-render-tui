@@ -3,7 +3,7 @@
 use std::sync::{Arc, Mutex};
 
 use clack_host::prelude::PluginEntry;
-use cmrt_core::{ensure_daw_dir, mml_render_for_cache, CoreConfig};
+use cmrt_core::{CoreConfig, ensure_daw_dir, mml_render_for_cache};
 
 use super::{CacheState, CellCache, DawApp, DawPlayState, PlayPosition, FIRST_PLAYABLE_TRACK};
 
@@ -12,9 +12,7 @@ use super::{CacheState, CellCache, DawApp, DawPlayState, PlayPosition, FIRST_PLA
 /// すべての小節が空の場合は `None` を返す。
 /// これにより meas3-8 が空のときは meas1-2 だけをループする（issue #68）。
 pub(super) fn effective_measure_count(mmls: &[String]) -> Option<usize> {
-    mmls.iter()
-        .rposition(|m| !m.trim().is_empty())
-        .map(|idx| idx + 1)
+    mmls.iter().rposition(|m| !m.trim().is_empty()).map(|idx| idx + 1)
 }
 
 /// キャッシュ済みのサンプルをミックスして返す。
@@ -120,27 +118,27 @@ impl DawApp {
             let daw_cfg = (*cfg).clone();
             let sample_rate = daw_cfg.sample_rate as u32;
 
-            // OutputStream と Sink をスレッドに 1 つだけ作成し、小節をまたいで再利用する。
-            // これにより小節ごとのオーディオ初期化オーバーヘッドとグリッチを防ぐ。
-            let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else {
-                // Audio init failed: only reset to Idle if we are still the active Playing session.
-                let mut state = play_state.lock().unwrap();
-                if *state == DawPlayState::Playing {
-                    *state = DawPlayState::Idle;
-                    drop(state);
-                    *play_position.lock().unwrap() = None;
-                }
-                return;
-            };
-            let Ok(sink) = rodio::Sink::try_new(&stream_handle) else {
-                let mut state = play_state.lock().unwrap();
-                if *state == DawPlayState::Playing {
-                    *state = DawPlayState::Idle;
-                    drop(state);
-                    *play_position.lock().unwrap() = None;
-                }
-                return;
-            };
+        // OutputStream と Sink をスレッドに 1 つだけ作成し、小節をまたいで再利用する。
+        // これにより小節ごとのオーディオ初期化オーバーヘッドとグリッチを防ぐ。
+        let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else {
+            // Audio init failed: only reset to Idle if we are still the active Playing session.
+            let mut state = play_state.lock().unwrap();
+            if *state == DawPlayState::Playing {
+                *state = DawPlayState::Idle;
+                drop(state);
+                *play_position.lock().unwrap() = None;
+            }
+            return;
+        };
+        let Ok(sink) = rodio::Sink::try_new(&stream_handle) else {
+            let mut state = play_state.lock().unwrap();
+            if *state == DawPlayState::Playing {
+                *state = DawPlayState::Idle;
+                drop(state);
+                *play_position.lock().unwrap() = None;
+            }
+            return;
+        };
 
             'outer: loop {
                 if *play_state.lock().unwrap() != DawPlayState::Playing {
@@ -171,9 +169,7 @@ impl DawApp {
                     let samples = if mml.trim().is_empty() {
                         // 中間の空小節は無音で維持（前後の小節とのタイミングを保持）
                         vec![0.0f32; measure_samples]
-                    } else if let Some(cached) =
-                        try_get_cached_samples(&cache, measure_index + 1, measure_samples, tracks)
-                    {
+                    } else if let Some(cached) = try_get_cached_samples(&cache, measure_index + 1, measure_samples, tracks) {
                         // キャッシュヒット: 事前レンダリング済みサンプルをそのまま使用
                         cached
                     } else {
@@ -214,7 +210,8 @@ impl DawApp {
 
                 // measure_samples はステレオインターリーブ（L/R 各 1 サンプル = 2 要素）のため
                 // 実時間 = measure_samples / (sample_rate * 2) となる。
-                let measure_duration_secs = measure_samples as f64 / (sample_rate as f64 * 2.0);
+                let measure_duration_secs =
+                    measure_samples as f64 / (sample_rate as f64 * 2.0);
 
                 // 全サンプルを Sink にまとめてキューイングしてシームレス再生を実現する（issue #68）。
                 // loop_start は最初の append 直前に記録することで、実際のオーディオ開始と
@@ -228,7 +225,9 @@ impl DawApp {
                 // 10 ms 粒度でポーリングすることで停止要求に素早く応答できる（issue #68）。
                 for (i, measure_index) in measure_indices.iter().enumerate() {
                     let measure_start_target = loop_start
-                        + std::time::Duration::from_secs_f64(i as f64 * measure_duration_secs);
+                        + std::time::Duration::from_secs_f64(
+                            i as f64 * measure_duration_secs,
+                        );
                     // この小節の期待開始時刻まで待機（停止チェック付き）
                     loop {
                         if std::time::Instant::now() >= measure_start_target {
@@ -318,9 +317,7 @@ impl DawApp {
             };
 
             // キャッシュヒット時は即時再生、ミス時はレンダリングにフォールバック
-            let samples_opt = if let Some(cached) =
-                try_get_cached_samples(&cache, measure_index + 1, measure_samples, tracks)
-            {
+            let samples_opt = if let Some(cached) = try_get_cached_samples(&cache, measure_index + 1, measure_samples, tracks) {
                 Some(cached)
             } else {
                 let result = {
@@ -375,8 +372,8 @@ impl DawApp {
 
 #[cfg(test)]
 mod tests {
-    use super::super::MEASURES;
     use super::effective_measure_count;
+    use super::super::MEASURES;
 
     // ─── effective_measure_count ──────────────────────────────────
 

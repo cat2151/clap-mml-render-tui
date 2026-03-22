@@ -154,9 +154,11 @@ mod tests {
             random_patch: true,
         };
 
-        let (patched_cfg, events, total_samples) =
-            prepare_cache_render(r#"{"Surge XT patch":"Pads/Pad 1.fxp"}t120o4c"#, &config)
-                .expect("cache render inputs should be prepared");
+        let (patched_cfg, events, total_samples) = prepare_cache_render(
+            r#"{"Surge XT patch":"Pads/Pad 1.fxp"}t120o4c"#,
+            &config,
+        )
+        .expect("cache render inputs should be prepared");
 
         assert_eq!(
             patched_cfg.patch_path.as_deref(),
@@ -173,9 +175,6 @@ mod tests {
             "random patch selection should be disabled for cache renders"
         );
         assert!(!events.is_empty(), "valid MML should produce MIDI events");
-        assert!(
-            total_samples > 0,
-            "valid MML should produce a positive sample length"
-        );
+        assert!(total_samples > 0, "valid MML should produce a positive sample length");
     }
 }
