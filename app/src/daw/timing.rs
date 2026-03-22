@@ -136,7 +136,11 @@ mod tests {
         for beat in [1u32, 2, 3, 4, 6] {
             for bpm in [60.0f64, 120.0, 96.0, 180.0] {
                 let result = compute_measure_samples(beat, bpm, 44100.0);
-                assert_eq!(result % 2, 0, "beat={beat}, bpm={bpm} のとき偶数でない: {result}");
+                assert_eq!(
+                    result % 2,
+                    0,
+                    "beat={beat}, bpm={bpm} のとき偶数でない: {result}"
+                );
             }
         }
     }
