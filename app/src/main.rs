@@ -63,7 +63,13 @@ fn main() -> Result<()> {
         if args.len() > 2 {
             anyhow::bail!("`update` サブコマンドは追加引数を取りません。");
         }
-        let _ = server::shutdown_server(server::DEFAULT_PORT);
+        if let Err(e) = server::shutdown_server(server::DEFAULT_PORT) {
+            eprintln!(
+                "サーバー停止要求の送信に失敗しました（port {}）: {}",
+                server::DEFAULT_PORT,
+                e
+            );
+        }
         return updater::run_foreground_update();
     }
 

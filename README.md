@@ -31,7 +31,7 @@ cmrt
 
 You can experiment with sounds by inputting MML in the TUI screen.
 
-### Update
+### Update Command
 
 ```
 cmrt update
