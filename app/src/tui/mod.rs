@@ -278,6 +278,14 @@ impl<'a> TuiApp<'a> {
         ui::draw(self, f);
     }
 
+    fn save_history_state(&self) {
+        let _ = crate::history::save_session_state(&crate::history::SessionState {
+            cursor: self.cursor,
+            lines: self.lines.clone(),
+            is_daw_mode: self.is_daw_mode,
+        });
+    }
+
     pub fn run(&mut self) -> Result<()> {
         enable_raw_mode()?;
         let mut stdout = std::io::stdout();
@@ -326,6 +334,7 @@ impl<'a> TuiApp<'a> {
                         Mode::Normal => match self.handle_normal(key.code) {
                             NormalAction::Quit => break,
                             NormalAction::LaunchDaw => {
+                                self.save_history_state();
                                 let mut daw =
                                     crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
                                 match daw.run_with_terminal(&mut terminal)? {
@@ -350,11 +359,7 @@ impl<'a> TuiApp<'a> {
 
         // 終了前にセッション状態を保存する（端末クリーンアップの成否に関わらず実行）。
         // 保存失敗はベストエフォートとして無視する（終了処理のため通知手段がない）。
-        let _ = crate::history::save_session_state(&crate::history::SessionState {
-            cursor: self.cursor,
-            lines: self.lines.clone(),
-            is_daw_mode: self.is_daw_mode,
-        });
+        self.save_history_state();
 
         let raw_mode_result = disable_raw_mode();
         let alternate_screen_result = execute!(terminal.backend_mut(), LeaveAlternateScreen);

@@ -1,5 +1,8 @@
 use super::*;
 use crossterm::event::KeyCode;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+static NEXT_TEST_ID: AtomicUsize = AtomicUsize::new(0);
 
 fn make_patches(items: &[&str]) -> Vec<(String, String)> {
     items
@@ -181,4 +184,37 @@ fn handle_normal_t_enters_patch_select_when_random_timbre_disabled() {
     assert!(matches!(app.mode, Mode::PatchSelect));
     assert_eq!(app.patch_all, patches);
     assert_eq!(app.patch_filtered, vec!["Pads/Pad 1.fxp"]);
+}
+
+#[test]
+fn save_history_state_persists_tui_cursor_lines_and_mode_flag() {
+    let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
+    let tmp = std::env::temp_dir().join(format!(
+        "cmrt_test_tui_save_history_state_{}_{}",
+        std::process::id(),
+        unique
+    ));
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_utils::set_data_local_dir_envs(&tmp);
+
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["abc".to_string(), "def".to_string(), "ghi".to_string()];
+    app.cursor = 2;
+    app.is_daw_mode = true;
+
+    app.save_history_state();
+
+    let history_path = crate::test_utils::session_state_path_for_test()
+        .expect("data local dir should resolve in isolated TUI history test");
+    assert!(
+        history_path.exists(),
+        "expected isolated history file to be created at {}",
+        history_path.display()
+    );
+    let saved = crate::history::load_session_state();
+    assert_eq!(saved.cursor, 2);
+    assert_eq!(saved.lines, app.lines);
+    assert!(saved.is_daw_mode);
+
+    std::fs::remove_dir_all(&tmp).ok();
 }
