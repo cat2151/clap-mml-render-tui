@@ -1,8 +1,12 @@
 use super::*;
 use crossterm::event::KeyCode;
 use std::ffi::OsStr;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
+static NEXT_TEST_ID: AtomicUsize = AtomicUsize::new(0);
+
+/// Prevents history tests that mutate environment variables from interfering when run in parallel.
 fn env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
@@ -13,6 +17,8 @@ struct TestEnvVarGuard {
     original: Option<String>,
 }
 
+/// Redirects OS-specific data directory environment variables to a test-only path so history.json
+/// writes do not touch the real user data directory.
 fn set_data_local_dir_envs(base: &std::path::Path) -> Vec<TestEnvVarGuard> {
     let mut guards = Vec::new();
     #[cfg(unix)]
@@ -37,6 +43,29 @@ fn set_data_local_dir_envs(base: &std::path::Path) -> Vec<TestEnvVarGuard> {
         guards.push(TestEnvVarGuard::set("USERPROFILE", &user_profile));
     }
     guards
+}
+
+/// Builds the expected test history.json path using the same rules as production
+/// history_dir/session_state_path resolution.
+fn session_state_path_for_test(base: &std::path::Path) -> std::path::PathBuf {
+    #[cfg(unix)]
+    {
+        return base
+            .join("xdg-data")
+            .join("clap-mml-render-tui")
+            .join("history.json");
+    }
+    #[cfg(windows)]
+    {
+        return base
+            .join("LocalAppData")
+            .join("clap-mml-render-tui")
+            .join("history.json");
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        return base.join("clap-mml-render-tui").join("history.json");
+    }
 }
 
 impl TestEnvVarGuard {
@@ -239,23 +268,36 @@ fn handle_normal_t_enters_patch_select_when_random_timbre_disabled() {
 }
 
 #[test]
-fn save_history_state_persists_tui_cursor_and_lines() {
-    let _lock = env_lock().lock().unwrap();
-    let tmp = std::env::temp_dir().join("cmrt_test_tui_save_history_state");
+fn save_history_state_persists_tui_cursor_lines_and_mode_flag() {
+    let _lock = env_lock()
+        .lock()
+        .expect("environment lock should not be poisoned during TUI history test");
+    let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
+    let tmp = std::env::temp_dir().join(format!(
+        "cmrt_test_tui_save_history_state_{}_{}",
+        std::process::id(),
+        unique
+    ));
     std::fs::remove_dir_all(&tmp).ok();
     let _env_guards = set_data_local_dir_envs(&tmp);
 
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["abc".to_string(), "def".to_string(), "ghi".to_string()];
     app.cursor = 2;
-    app.is_daw_mode = false;
+    app.is_daw_mode = true;
 
     app.save_history_state();
 
+    let history_path = session_state_path_for_test(&tmp);
+    assert!(
+        history_path.exists(),
+        "expected isolated history file to be created at {}",
+        history_path.display()
+    );
     let saved = crate::history::load_session_state();
     assert_eq!(saved.cursor, 2);
     assert_eq!(saved.lines, app.lines);
-    assert!(!saved.is_daw_mode);
+    assert!(saved.is_daw_mode);
 
     std::fs::remove_dir_all(&tmp).ok();
 }
