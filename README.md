@@ -2,14 +2,14 @@
 
 ### Usage
 
-- For playing around with sound using MML.
-- Easy to install; only requires Rust.
+- For playing around with MML to generate sounds.
+- For casual installation. Just having Rust is enough.
 
-### Technology Stack
+### Technical Stack
 - Plugin host library
   - https://github.com/prokopyl/clack
 
-### Prerequisites
+### Setup
 
 Please install [Surge XT](https://surge-synthesizer.github.io/).
 
@@ -17,19 +17,19 @@ Please install [Surge XT](https://surge-synthesizer.github.io/).
 winget install "Surge XT"
 ```
 
-### Installation
+### Install
 
 ``` 
 cargo install --force --git https://github.com/cat2151/clap-mml-render-tui --package clap-mml-render-tui
 ```
 
-### Running
+### Execution
 
 ```
 cmrt
 ```
 
-You can experiment with sounds by inputting MML in the TUI screen.
+You can input MML in the TUI screen and play around.
 
 ### Update Command
 
@@ -43,14 +43,14 @@ cmrt update
 cmrt --server
 ```
 
-- Integrates with the bluesky-text-to-audio Chrome extension.
-  - When MML is found in a Bluesky post, it can be played using Surge XT.
+- Works in conjunction with the bluesky-text-to-audio Chrome extension.
+  - When an MML snippet is found in a Bluesky post, it can be played with Surge XT.
 
 # Breaking Changes
-- Frequent daily breaking changes are introduced.
+- Frequent breaking changes are made daily.
 
-# Roadmap
-- Option to disable automatic updates via TOML; in that case, upon quitting, an "update available" message will display the update command. Further automation has been determined to be outside the scope due to its complexity outweighing its benefits.
+# Future Plans
+- Disable automatic updates via TOML. In that case, after quitting, display the command with a message like "An update is available. The update command is...". Further automation has been verified to be more complex with more drawbacks than benefits, thus it's out of scope.
 
 # Out of Scope
-- Effects are likely to require editing, so for now, they are considered out of scope and will be deferred to a much later stage.
+- Effects are likely essential to edit, so for now, they are out of scope and will be deferred to a much later stage.
