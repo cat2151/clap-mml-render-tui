@@ -178,7 +178,7 @@ impl DawApp {
 mod tests {
     use std::{
         ffi::OsStr,
-        sync::{Arc, Mutex},
+        sync::{Arc, Mutex, MutexGuard, OnceLock},
     };
 
     use tui_textarea::TextArea;
@@ -188,15 +188,22 @@ mod tests {
     use super::super::{CacheState, CellCache, DawApp, DawMode, DawPlayState};
 
     struct TestEnvVarGuard {
+        _lock: MutexGuard<'static, ()>,
         key: &'static str,
         original: Option<String>,
     }
 
     impl TestEnvVarGuard {
         fn set(key: &'static str, value: impl AsRef<OsStr>) -> Self {
+            static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+            let lock = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
             let original = std::env::var(key).ok();
             std::env::set_var(key, value);
-            Self { key, original }
+            Self {
+                _lock: lock,
+                key,
+                original,
+            }
         }
     }
 
@@ -253,28 +260,31 @@ mod tests {
     #[test]
     fn commit_insert_skips_cache_refresh_when_text_is_unchanged() {
         let tmp = std::env::temp_dir().join("cmrt_test_commit_insert_skips_cache_refresh");
-        let _guard = TestEnvVarGuard::set("CMRT_BASE_DIR", &tmp);
         std::fs::remove_dir_all(&tmp).ok();
 
-        let (mut app, cache_rx) = build_test_app();
-        app.data[1][1] = "cdef".to_string();
         {
-            let mut cache = app.cache.lock().unwrap();
-            cache[1][1].state = CacheState::Ready;
-            cache[1][1].generation = 7;
+            let _guard = TestEnvVarGuard::set("CMRT_BASE_DIR", &tmp);
+
+            let (mut app, cache_rx) = build_test_app();
+            app.data[1][1] = "cdef".to_string();
+            {
+                let mut cache = app.cache.lock().unwrap();
+                cache[1][1].state = CacheState::Ready;
+                cache[1][1].generation = 7;
+            }
+
+            app.start_insert();
+            app.commit_insert();
+
+            let cache = app.cache.lock().unwrap();
+            assert_eq!(app.data[1][1], "cdef");
+            assert!(matches!(cache[1][1].state, CacheState::Ready));
+            assert_eq!(cache[1][1].generation, 7);
+            assert!(
+                cache_rx.try_recv().is_err(),
+                "unchanged insert queued a cache job"
+            );
         }
-
-        app.start_insert();
-        app.commit_insert();
-
-        let cache = app.cache.lock().unwrap();
-        assert_eq!(app.data[1][1], "cdef");
-        assert!(matches!(cache[1][1].state, CacheState::Ready));
-        assert_eq!(cache[1][1].generation, 7);
-        assert!(
-            cache_rx.try_recv().is_err(),
-            "unchanged insert queued a cache job"
-        );
 
         std::fs::remove_dir_all(&tmp).ok();
     }
@@ -282,35 +292,38 @@ mod tests {
     #[test]
     fn commit_insert_triggers_cache_refresh_when_text_changes() {
         let tmp = std::env::temp_dir().join("cmrt_test_commit_insert_refreshes_cache");
-        let _guard = TestEnvVarGuard::set("CMRT_BASE_DIR", &tmp);
         std::fs::remove_dir_all(&tmp).ok();
 
-        let (mut app, cache_rx) = build_test_app();
-        app.data[1][1] = "cdef".to_string();
         {
-            let mut cache = app.cache.lock().unwrap();
-            cache[1][1].state = CacheState::Ready;
-            cache[1][1].generation = 7;
+            let _guard = TestEnvVarGuard::set("CMRT_BASE_DIR", &tmp);
+
+            let (mut app, cache_rx) = build_test_app();
+            app.data[1][1] = "cdef".to_string();
+            {
+                let mut cache = app.cache.lock().unwrap();
+                cache[1][1].state = CacheState::Ready;
+                cache[1][1].generation = 7;
+            }
+
+            app.start_insert();
+            app.textarea = TextArea::default();
+            for ch in "gfed".chars() {
+                app.textarea.insert_char(ch);
+            }
+            app.commit_insert();
+
+            let cache = app.cache.lock().unwrap();
+            assert_eq!(app.data[1][1], "gfed");
+            assert!(matches!(cache[1][1].state, CacheState::Pending));
+            assert_eq!(cache[1][1].generation, 8);
+
+            let job = cache_rx
+                .try_recv()
+                .expect("changed insert did not queue a cache job");
+            assert_eq!(job.track, 1);
+            assert_eq!(job.measure, 1);
+            assert_eq!(job.generation, 8);
         }
-
-        app.start_insert();
-        app.textarea = TextArea::default();
-        for ch in "gfed".chars() {
-            app.textarea.insert_char(ch);
-        }
-        app.commit_insert();
-
-        let cache = app.cache.lock().unwrap();
-        assert_eq!(app.data[1][1], "gfed");
-        assert!(matches!(cache[1][1].state, CacheState::Pending));
-        assert_eq!(cache[1][1].generation, 8);
-
-        let job = cache_rx
-            .try_recv()
-            .expect("changed insert did not queue a cache job");
-        assert_eq!(job.track, 1);
-        assert_eq!(job.measure, 1);
-        assert_eq!(job.generation, 8);
 
         std::fs::remove_dir_all(&tmp).ok();
     }
