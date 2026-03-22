@@ -280,7 +280,7 @@ mod tests {
     }
 
     #[test]
-    fn commit_insert_refreshes_cache_when_text_changes() {
+    fn commit_insert_triggers_cache_refresh_when_text_changes() {
         let tmp = std::env::temp_dir().join("cmrt_test_commit_insert_refreshes_cache");
         let _guard = TestEnvVarGuard::set("CMRT_BASE_DIR", &tmp);
         std::fs::remove_dir_all(&tmp).ok();
