@@ -54,11 +54,15 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Min(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
         .split(area);
 
     grid::draw_grid(app, f, chunks[0]);
-    status::draw_status(app, f, chunks[1]);
+    status::draw_status(app, f, chunks[1], chunks[2]);
 
     if app.mode == DawMode::Help {
         help::draw_help(f, area);
@@ -201,5 +205,43 @@ mod tests {
             "lines: {:?}",
             lines
         );
+    }
+
+    #[test]
+    fn draw_places_playback_status_on_second_to_last_row_left_edge() {
+        let app = build_test_app();
+        {
+            let mut play_state = app.play_state.lock().unwrap();
+            *play_state = DawPlayState::Playing;
+        }
+        {
+            let mut play_position = app.play_position.lock().unwrap();
+            *play_position = Some(super::super::PlayPosition {
+                measure_index: 1,
+                measure_start: std::time::Instant::now(),
+            });
+        }
+        {
+            let mut play_measure_mmls = app.play_measure_mmls.lock().unwrap();
+            play_measure_mmls[0] = "c".to_string();
+        }
+
+        let lines = render_lines(&app, 120, 8);
+
+        assert!(lines[6].starts_with("▶ meas2, beat"), "lines: {:?}", lines);
+        assert!(lines[6].contains("loop:"), "lines: {:?}", lines);
+        assert!(lines[6].contains("meas1"), "lines: {:?}", lines);
+        assert!(lines[7].starts_with("DAW"), "lines: {:?}", lines);
+        assert!(!lines[7].contains("▶"), "lines: {:?}", lines);
+    }
+
+    #[test]
+    fn draw_keeps_footer_on_last_row_when_idle() {
+        let app = build_test_app();
+
+        let lines = render_lines(&app, 120, 8);
+
+        assert_eq!(lines[6], "", "lines: {:?}", lines);
+        assert!(lines[7].starts_with("DAW"), "lines: {:?}", lines);
     }
 }

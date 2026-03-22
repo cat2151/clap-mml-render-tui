@@ -10,7 +10,7 @@ use super::{
     loop_status_label,
 };
 
-pub(super) fn draw_status(app: &DawApp, f: &mut Frame, area: Rect) {
+pub(super) fn draw_status(app: &DawApp, f: &mut Frame, play_area: Rect, footer_area: Rect) {
     // play_state と play_position を一度だけロックしてスナップショットを取る。
     let play_state = app.play_state.lock().unwrap().clone();
     let play_position = app.play_position.lock().unwrap().clone();
@@ -26,8 +26,8 @@ pub(super) fn draw_status(app: &DawApp, f: &mut Frame, area: Rect) {
     let beat_count = app.beat_numerator();
     let beat_duration_secs = 60.0 / app.tempo_bpm();
 
-    let play_str = match &play_state {
-        DawPlayState::Idle => "".to_string(),
+    let play_text = match &play_state {
+        DawPlayState::Idle => String::new(),
         DawPlayState::Playing | DawPlayState::Preview => {
             let label = if play_state == DawPlayState::Preview {
                 "PREVIEW".to_string()
@@ -39,30 +39,23 @@ pub(super) fn draw_status(app: &DawApp, f: &mut Frame, area: Rect) {
                 let raw_beat = (elapsed / beat_duration_secs) as u32;
                 let current_beat = (raw_beat % beat_count) + 1;
                 format!(
-                    "  ▶ meas{}, beat{} ({})",
+                    "▶ meas{}, beat{} ({})",
                     pos.measure_index + 1,
                     current_beat,
                     label
                 )
             } else {
-                format!("  ▶ 演奏中 ({})", label)
+                format!("▶ 演奏中 ({})", label)
             }
         }
     };
 
-    let text = match app.mode {
-        DawMode::Normal => format!(
-            "DAW  h/l:小節移動  j/k:track移動  i:INSERT  p:play/stop  r:random音色  K:ヘルプ  d/ESC:戻る  q:終了{}",
-            play_str
-        ),
-        DawMode::Insert => format!(
-            "ESC:確定→NORMAL  Enter:確定→次小節{}",
-            play_str
-        ),
-        DawMode::Help => format!(
-            "HELP  ESC:キャンセル{}",
-            play_str
-        ),
+    let footer_text = match app.mode {
+        DawMode::Normal => {
+            "DAW  h/l:小節移動  j/k:track移動  i:INSERT  p:play/stop  r:random音色  K:ヘルプ  d/ESC:戻る  q:終了"
+        }
+        DawMode::Insert => "ESC:確定→NORMAL  Enter:確定→次小節",
+        DawMode::Help => "HELP  ESC:キャンセル",
     };
 
     let color = match play_state {
@@ -71,5 +64,12 @@ pub(super) fn draw_status(app: &DawApp, f: &mut Frame, area: Rect) {
         DawPlayState::Preview => Color::Magenta,
     };
 
-    f.render_widget(Paragraph::new(text).style(Style::default().fg(color)), area);
+    f.render_widget(
+        Paragraph::new(play_text).style(Style::default().fg(color)),
+        play_area,
+    );
+    f.render_widget(
+        Paragraph::new(footer_text).style(Style::default().fg(color)),
+        footer_area,
+    );
 }
