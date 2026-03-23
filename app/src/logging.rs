@@ -28,7 +28,8 @@ fn append_log_line_to_path(path: &Path, line: &str) -> std::io::Result<()> {
         .lock()
         .expect("log file lock should not be poisoned");
     let mut file = OpenOptions::new().create(true).append(true).open(path)?;
-    file.write_all(format!("{line}\n").as_bytes())?;
+    file.write_all(line.as_bytes())?;
+    file.write_all(b"\n")?;
     file.flush()
 }
 
