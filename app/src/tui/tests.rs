@@ -203,11 +203,15 @@ fn set_play_state_if_current_ignores_stale_session() {
 
     let stale = app.begin_playback_session();
     let current = app.begin_playback_session();
+    let newer = app.begin_playback_session();
 
     app.set_play_state_if_current(stale, PlayState::Done("old".to_string()));
     assert!(matches!(&*app.play_state.lock().unwrap(), PlayState::Idle));
 
     app.set_play_state_if_current(current, PlayState::Running("new".to_string()));
+    assert!(matches!(&*app.play_state.lock().unwrap(), PlayState::Idle));
+
+    app.set_play_state_if_current(newer, PlayState::Running("new".to_string()));
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
         PlayState::Running(msg) if msg == "new"
