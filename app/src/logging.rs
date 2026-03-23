@@ -24,7 +24,9 @@ fn append_log_line_to_path(path: &Path, line: &str) -> std::io::Result<()> {
         std::fs::create_dir_all(parent)?;
     }
 
-    let _guard = log_file_lock().lock().unwrap();
+    let _guard = log_file_lock()
+        .lock()
+        .expect("log file lock should not be poisoned");
     let mut file = OpenOptions::new().create(true).append(true).open(path)?;
     file.write_all(format!("{line}\n").as_bytes())?;
     file.flush()

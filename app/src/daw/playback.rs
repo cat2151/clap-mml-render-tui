@@ -430,6 +430,7 @@ mod tests {
         effective_measure_count,
     };
 
+    /// stop_play のログ出力を検証するための最小構成の DawApp を作る。
     fn build_test_app() -> DawApp {
         let tracks = 3;
         let measures = 2;
