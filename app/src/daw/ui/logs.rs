@@ -8,12 +8,14 @@ use ratatui::{
 
 use super::super::DawApp;
 
+const LOG_BLOCK_DECORATION_HEIGHT: u16 = 1;
+
 pub(super) fn draw_logs(app: &DawApp, f: &mut Frame, area: Rect) {
     if area.width == 0 || area.height == 0 {
         return;
     }
 
-    let visible_height = area.height.saturating_sub(1) as usize;
+    let visible_height = area.height.saturating_sub(LOG_BLOCK_DECORATION_HEIGHT) as usize;
     let mut visible_lines: Vec<Line> = {
         let log_lines = app.log_lines.lock().unwrap();
         log_lines

@@ -161,11 +161,11 @@ impl DawApp {
                         break 'outer;
                     }
 
-                    let measure_label = measure_index + 1;
+                    let measure_number = measure_index + 1;
                     let samples = if mml.trim().is_empty() {
                         crate::logging::append_log_line(
                             &log_lines,
-                            format!("meas{measure_label}: empty -> silence"),
+                            format!("meas{measure_number}: empty -> silence"),
                         );
                         // 中間の空小節は無音で維持（前後の小節とのタイミングを保持）
                         vec![0.0f32; measure_samples]
@@ -174,14 +174,14 @@ impl DawApp {
                     {
                         crate::logging::append_log_line(
                             &log_lines,
-                            format!("meas{measure_label}: cache hit"),
+                            format!("meas{measure_number}: cache hit"),
                         );
                         // キャッシュヒット: 事前レンダリング済みサンプルをそのまま使用
                         cached
                     } else {
                         crate::logging::append_log_line(
                             &log_lines,
-                            format!("meas{measure_label}: render"),
+                            format!("meas{measure_number}: render"),
                         );
                         // キャッシュミス: レンダリングにフォールバック
                         // render_lock を取得してからレンダリングすることで、
@@ -206,7 +206,7 @@ impl DawApp {
                             Err(_) => {
                                 crate::logging::append_log_line(
                                     &log_lines,
-                                    format!("meas{measure_label}: render error"),
+                                    format!("meas{measure_number}: render error"),
                                 );
                                 break 'outer;
                             }
