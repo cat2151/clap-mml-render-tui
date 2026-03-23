@@ -41,6 +41,7 @@ use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{backend::CrosstermBackend, Frame, Terminal};
 use tui_textarea::TextArea;
 
+use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -159,6 +160,9 @@ pub struct DawApp {
     /// 再生スレッドと共有する 1 小節のステレオサンプル数。
     /// セル編集・ランダム音色変更のたびに `play_measure_mmls` と一緒に更新される。
     play_measure_samples: Arc<Mutex<usize>>,
+
+    /// DAW モード下部に表示するデバッグログ。
+    pub(super) log_lines: Arc<Mutex<VecDeque<String>>>,
 }
 
 impl DawApp {
@@ -183,6 +187,7 @@ impl DawApp {
         // `mml_str_to_smf_bytes` が書き出す共有デバッグファイル
         // （`pass1_tokens.json` など）への同時書き込みを防ぐ排他ロックを共有する。
         let render_lock: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
+        let log_lines = Arc::new(Mutex::new(crate::logging::load_log_lines()));
 
         {
             let cache_worker = Arc::clone(&cache);
@@ -280,9 +285,11 @@ impl DawApp {
             play_position: Arc::new(Mutex::new(None)),
             play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
             play_measure_samples: Arc::new(Mutex::new(0)),
+            log_lines,
         };
 
         app.load();
+        app.append_log_line("=== DAW mode ready ===");
         app
     }
 
@@ -307,6 +314,10 @@ impl DawApp {
 
     fn draw(&self, f: &mut Frame) {
         ui::draw(self, f);
+    }
+
+    fn append_log_line(&self, message: impl Into<String>) {
+        crate::logging::append_log_line(&self.log_lines, message);
     }
 
     // ─── メインループ ─────────────────────────────────────────

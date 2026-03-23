@@ -1,6 +1,7 @@
 pub mod config;
 pub mod daw;
 pub mod history;
+pub mod logging;
 pub mod server;
 #[cfg(test)]
 pub(crate) mod test_utils;

@@ -3,7 +3,7 @@
 use std::sync::{Arc, Mutex};
 
 use clack_host::prelude::PluginEntry;
-use cmrt_core::{CoreConfig, mml_render_for_cache};
+use cmrt_core::{mml_render_for_cache, CoreConfig};
 
 use super::{CacheState, CellCache, DawApp, DawPlayState, PlayPosition, FIRST_PLAYABLE_TRACK};
 
@@ -12,7 +12,9 @@ use super::{CacheState, CellCache, DawApp, DawPlayState, PlayPosition, FIRST_PLA
 /// すべての小節が空の場合は `None` を返す。
 /// これにより meas3-8 が空のときは meas1-2 だけをループする（issue #68）。
 pub(super) fn effective_measure_count(mmls: &[String]) -> Option<usize> {
-    mmls.iter().rposition(|m| !m.trim().is_empty()).map(|idx| idx + 1)
+    mmls.iter()
+        .rposition(|m| !m.trim().is_empty())
+        .map(|idx| idx + 1)
 }
 
 /// キャッシュ済みのサンプルをミックスして返す。
@@ -42,9 +44,7 @@ fn try_get_cached_samples(
                 CacheState::Ready => {
                     // samples が None の場合（サイズ上限超過等）もフォールバック
                     let arc = cache[t][measure].samples.clone();
-                    if arc.is_none() {
-                        return None;
-                    }
+                    arc.as_ref()?;
                     result.push(arc);
                 }
                 _ => {
@@ -63,13 +63,11 @@ fn try_get_cached_samples(
     let mut mixed = vec![0.0f32; measure_samples];
     let mut any_ready = false;
 
-    for arc_opt in &track_samples {
-        if let Some(s) = arc_opt {
-            any_ready = true;
-            let n = s.len().min(measure_samples);
-            for i in 0..n {
-                mixed[i] += s[i];
-            }
+    for s in track_samples.iter().flatten() {
+        any_ready = true;
+        let n = s.len().min(measure_samples);
+        for i in 0..n {
+            mixed[i] += s[i];
         }
     }
 
@@ -101,10 +99,12 @@ impl DawApp {
         let render_lock = Arc::clone(&self.render_lock);
         let cache = Arc::clone(&self.cache);
         let cfg = Arc::clone(&self.cfg);
+        let log_lines = Arc::clone(&self.log_lines);
         let entry_ptr = self.entry_ptr;
         let tracks = self.tracks;
 
         *play_state.lock().unwrap() = DawPlayState::Playing;
+        crate::logging::append_log_line(&log_lines, "play: start");
 
         std::thread::spawn(move || {
             // SAFETY: entry は main() のスタックに生存している
@@ -112,27 +112,29 @@ impl DawApp {
             let daw_cfg = (*cfg).clone();
             let sample_rate = daw_cfg.sample_rate as u32;
 
-        // OutputStream と Sink をスレッドに 1 つだけ作成し、小節をまたいで再利用する。
-        // これにより小節ごとのオーディオ初期化オーバーヘッドとグリッチを防ぐ。
-        let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else {
-            // Audio init failed: only reset to Idle if we are still the active Playing session.
-            let mut state = play_state.lock().unwrap();
-            if *state == DawPlayState::Playing {
-                *state = DawPlayState::Idle;
-                drop(state);
-                *play_position.lock().unwrap() = None;
-            }
-            return;
-        };
-        let Ok(sink) = rodio::Sink::try_new(&stream_handle) else {
-            let mut state = play_state.lock().unwrap();
-            if *state == DawPlayState::Playing {
-                *state = DawPlayState::Idle;
-                drop(state);
-                *play_position.lock().unwrap() = None;
-            }
-            return;
-        };
+            // OutputStream と Sink をスレッドに 1 つだけ作成し、小節をまたいで再利用する。
+            // これにより小節ごとのオーディオ初期化オーバーヘッドとグリッチを防ぐ。
+            let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else {
+                // Audio init failed: only reset to Idle if we are still the active Playing session.
+                crate::logging::append_log_line(&log_lines, "play: audio init failed");
+                let mut state = play_state.lock().unwrap();
+                if *state == DawPlayState::Playing {
+                    *state = DawPlayState::Idle;
+                    drop(state);
+                    *play_position.lock().unwrap() = None;
+                }
+                return;
+            };
+            let Ok(sink) = rodio::Sink::try_new(&stream_handle) else {
+                crate::logging::append_log_line(&log_lines, "play: sink init failed");
+                let mut state = play_state.lock().unwrap();
+                if *state == DawPlayState::Playing {
+                    *state = DawPlayState::Idle;
+                    drop(state);
+                    *play_position.lock().unwrap() = None;
+                }
+                return;
+            };
 
             'outer: loop {
                 if *play_state.lock().unwrap() != DawPlayState::Playing {
@@ -154,19 +156,33 @@ impl DawApp {
                 // シームレス再生のため、全サンプルをまとめて Sink にキューイングしてから
                 // 時間ベースで位置を更新する（issue #68）。
                 let mut all_samples: Vec<(usize, Vec<f32>)> = Vec::with_capacity(effective_count);
-                for measure_index in 0..effective_count {
+                for (measure_index, mml) in mmls.iter().enumerate().take(effective_count) {
                     if *play_state.lock().unwrap() != DawPlayState::Playing {
                         break 'outer;
                     }
 
-                    let mml = &mmls[measure_index];
+                    let measure_label = measure_index + 1;
                     let samples = if mml.trim().is_empty() {
+                        crate::logging::append_log_line(
+                            &log_lines,
+                            format!("meas{measure_label}: empty -> silence"),
+                        );
                         // 中間の空小節は無音で維持（前後の小節とのタイミングを保持）
                         vec![0.0f32; measure_samples]
-                    } else if let Some(cached) = try_get_cached_samples(&cache, measure_index + 1, measure_samples, tracks) {
+                    } else if let Some(cached) =
+                        try_get_cached_samples(&cache, measure_index + 1, measure_samples, tracks)
+                    {
+                        crate::logging::append_log_line(
+                            &log_lines,
+                            format!("meas{measure_label}: cache hit"),
+                        );
                         // キャッシュヒット: 事前レンダリング済みサンプルをそのまま使用
                         cached
                     } else {
+                        crate::logging::append_log_line(
+                            &log_lines,
+                            format!("meas{measure_label}: render"),
+                        );
                         // キャッシュミス: レンダリングにフォールバック
                         // render_lock を取得してからレンダリングすることで、
                         // `mml_str_to_smf_bytes` が書き出す共有デバッグファイルへ
@@ -187,7 +203,13 @@ impl DawApp {
                                 }
                                 s
                             }
-                            Err(_) => break 'outer,
+                            Err(_) => {
+                                crate::logging::append_log_line(
+                                    &log_lines,
+                                    format!("meas{measure_label}: render error"),
+                                );
+                                break 'outer;
+                            }
                         }
                     };
                     all_samples.push((measure_index, samples));
@@ -204,8 +226,7 @@ impl DawApp {
 
                 // measure_samples はステレオインターリーブ（L/R 各 1 サンプル = 2 要素）のため
                 // 実時間 = measure_samples / (sample_rate * 2) となる。
-                let measure_duration_secs =
-                    measure_samples as f64 / (sample_rate as f64 * 2.0);
+                let measure_duration_secs = measure_samples as f64 / (sample_rate as f64 * 2.0);
 
                 // 全サンプルを Sink にまとめてキューイングしてシームレス再生を実現する（issue #68）。
                 // loop_start は最初の append 直前に記録することで、実際のオーディオ開始と
@@ -219,9 +240,7 @@ impl DawApp {
                 // 10 ms 粒度でポーリングすることで停止要求に素早く応答できる（issue #68）。
                 for (i, measure_index) in measure_indices.iter().enumerate() {
                     let measure_start_target = loop_start
-                        + std::time::Duration::from_secs_f64(
-                            i as f64 * measure_duration_secs,
-                        );
+                        + std::time::Duration::from_secs_f64(i as f64 * measure_duration_secs);
                     // この小節の期待開始時刻まで待機（停止チェック付き）
                     loop {
                         if std::time::Instant::now() >= measure_start_target {
@@ -261,6 +280,7 @@ impl DawApp {
                 *state = DawPlayState::Idle;
                 drop(state);
                 *play_position.lock().unwrap() = None;
+                crate::logging::append_log_line(&log_lines, "play: finished");
             }
         });
     }
@@ -279,10 +299,12 @@ impl DawApp {
         let render_lock = Arc::clone(&self.render_lock);
         let cache = Arc::clone(&self.cache);
         let cfg = Arc::clone(&self.cfg);
+        let log_lines = Arc::clone(&self.log_lines);
         let entry_ptr = self.entry_ptr;
         let tracks = self.tracks;
 
         *play_state.lock().unwrap() = DawPlayState::Preview;
+        crate::logging::append_log_line(&log_lines, format!("preview: meas{}", measure_index + 1));
 
         std::thread::spawn(move || {
             // SAFETY: entry は main() のスタックに生存している
@@ -292,6 +314,7 @@ impl DawApp {
 
             let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else {
                 // Audio init failed: only reset to Idle if we are still the active Preview session.
+                crate::logging::append_log_line(&log_lines, "preview: audio init failed");
                 let mut state = play_state.lock().unwrap();
                 if *state == DawPlayState::Preview {
                     *state = DawPlayState::Idle;
@@ -301,6 +324,7 @@ impl DawApp {
                 return;
             };
             let Ok(sink) = rodio::Sink::try_new(&stream_handle) else {
+                crate::logging::append_log_line(&log_lines, "preview: sink init failed");
                 let mut state = play_state.lock().unwrap();
                 if *state == DawPlayState::Preview {
                     *state = DawPlayState::Idle;
@@ -311,9 +335,19 @@ impl DawApp {
             };
 
             // キャッシュヒット時は即時再生、ミス時はレンダリングにフォールバック
-            let samples_opt = if let Some(cached) = try_get_cached_samples(&cache, measure_index + 1, measure_samples, tracks) {
+            let samples_opt = if let Some(cached) =
+                try_get_cached_samples(&cache, measure_index + 1, measure_samples, tracks)
+            {
+                crate::logging::append_log_line(
+                    &log_lines,
+                    format!("meas{}: cache hit", measure_index + 1),
+                );
                 Some(cached)
             } else {
+                crate::logging::append_log_line(
+                    &log_lines,
+                    format!("meas{}: render", measure_index + 1),
+                );
                 let result = {
                     let _guard = render_lock.lock().unwrap();
                     let core_cfg = CoreConfig::from(&daw_cfg);
@@ -345,6 +379,11 @@ impl DawApp {
                     sink.append(source);
                     sink.sleep_until_end();
                 }
+            } else {
+                crate::logging::append_log_line(
+                    &log_lines,
+                    format!("meas{}: render error", measure_index + 1),
+                );
             }
 
             // Only reset to Idle if we are still the active Preview session.
@@ -354,11 +393,15 @@ impl DawApp {
                 *state = DawPlayState::Idle;
                 drop(state);
                 *play_position.lock().unwrap() = None;
+                crate::logging::append_log_line(&log_lines, "preview: finished");
             }
         });
     }
 
     pub(super) fn stop_play(&self) {
+        if *self.play_state.lock().unwrap() != DawPlayState::Idle {
+            self.append_log_line("play: stop");
+        }
         *self.play_state.lock().unwrap() = DawPlayState::Idle;
         *self.play_position.lock().unwrap() = None;
     }
@@ -366,8 +409,8 @@ impl DawApp {
 
 #[cfg(test)]
 mod tests {
-    use super::effective_measure_count;
     use super::super::MEASURES;
+    use super::effective_measure_count;
 
     // ─── effective_measure_count ──────────────────────────────────
 

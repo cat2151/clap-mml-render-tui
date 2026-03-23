@@ -158,8 +158,9 @@ pub fn run_foreground_update() -> Result<()> {
     #[cfg(target_os = "windows")]
     {
         println!("アップデートをバッチファイルで開始します...");
-        spawn_updater_process()
-            .map_err(|e| anyhow::anyhow!("バッチファイルアップデーターの起動に失敗しました: {}", e))?;
+        spawn_updater_process().map_err(|e| {
+            anyhow::anyhow!("バッチファイルアップデーターの起動に失敗しました: {}", e)
+        })?;
         return Ok(());
     }
 
@@ -173,13 +174,7 @@ pub fn run_foreground_update() -> Result<()> {
         );
 
         let status = std::process::Command::new("cargo")
-            .args([
-                "install",
-                "--force",
-                "--git",
-                &repo_url,
-                INSTALL_PACKAGE,
-            ])
+            .args(["install", "--force", "--git", &repo_url, INSTALL_PACKAGE])
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit())
             .status()?;
@@ -192,7 +187,10 @@ pub fn run_foreground_update() -> Result<()> {
                     std::process::exit(0);
                 }
                 Err(e) => {
-                    eprintln!("cmrtの再起動に失敗しました: {}。手動で再起動してください。", e);
+                    eprintln!(
+                        "cmrtの再起動に失敗しました: {}。手動で再起動してください。",
+                        e
+                    );
                 }
             }
         } else {
