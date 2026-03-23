@@ -401,7 +401,7 @@ impl DawApp {
     pub(super) fn stop_play(&self) {
         let prev_state = {
             let mut play_state = self.play_state.lock().unwrap();
-            let prev_state = play_state.clone();
+            let prev_state = *play_state;
             *play_state = DawPlayState::Idle;
             prev_state
         };

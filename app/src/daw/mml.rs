@@ -1,7 +1,7 @@
 //! DawApp の MML 構築・拍子/テンポ解析メソッド
 
-use super::{DawApp, FIRST_PLAYABLE_TRACK};
 use super::timing::{compute_measure_samples, parse_beat_numerator, parse_tempo_bpm};
+use super::{DawApp, FIRST_PLAYABLE_TRACK};
 
 // ─── 純粋関数（テスト用） ──────────────────────────────────────
 
@@ -35,8 +35,16 @@ pub(super) fn build_cell_mml_from_data(
         })
         .collect::<Vec<_>>()
         .join("");
-    let timbre = data.get(track).and_then(|r| r.get(0)).map(|s| s.trim()).unwrap_or("");
-    let notes  = data.get(track).and_then(|r| r.get(measure)).map(|s| s.trim()).unwrap_or("");
+    let timbre = data
+        .get(track)
+        .and_then(|r| r.get(0))
+        .map(|s| s.trim())
+        .unwrap_or("");
+    let notes = data
+        .get(track)
+        .and_then(|r| r.get(measure))
+        .map(|s| s.trim())
+        .unwrap_or("");
     format!("{}{}{}", timbre, track0, notes)
 }
 
@@ -122,14 +130,18 @@ impl DawApp {
     /// 1小節のサンプル数を計算する（ステレオ: L/R インターリーブ）。
     /// beat_numerator * (60 / bpm) * sample_rate * 2
     pub(super) fn measure_duration_samples(&self) -> usize {
-        compute_measure_samples(self.beat_numerator(), self.tempo_bpm(), self.cfg.sample_rate)
+        compute_measure_samples(
+            self.beat_numerator(),
+            self.tempo_bpm(),
+            self.cfg.sample_rate,
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::build_cell_mml_from_data;
     use super::super::{DEFAULT_TRACK0_MML, MEASURES, TRACKS};
+    use super::build_cell_mml_from_data;
 
     /// テスト用ヘルパー: TRACKS×(MEASURES+1) の空 data を作成する
     fn empty_data(tracks: usize, measures: usize) -> Vec<Vec<String>> {
@@ -147,7 +159,11 @@ mod tests {
         data[1][1] = "cde".to_string();
 
         let mml = build_cell_mml_from_data(&data, MEASURES, 1, 1);
-        assert!(mml.contains(r#"{"Surge XT patch": "piano"}"#), "音色 JSON が MML に含まれていない: {}", mml);
+        assert!(
+            mml.contains(r#"{"Surge XT patch": "piano"}"#),
+            "音色 JSON が MML に含まれていない: {}",
+            mml
+        );
         assert!(mml.contains("cde"), "音符が MML に含まれていない: {}", mml);
     }
 
@@ -160,7 +176,11 @@ mod tests {
         data[1][1] = "cde".to_string();
 
         let mml = build_cell_mml_from_data(&data, MEASURES, 1, 1);
-        assert!(mml.contains("t180"), "track0 のテンポ指定が MML に含まれていない: {}", mml);
+        assert!(
+            mml.contains("t180"),
+            "track0 のテンポ指定が MML に含まれていない: {}",
+            mml
+        );
         assert!(mml.contains("cde"), "音符が MML に含まれていない: {}", mml);
     }
 
@@ -176,10 +196,13 @@ mod tests {
         let mut data_guitar = data_piano.clone();
         data_guitar[1][0] = r#"{"Surge XT patch": "guitar"}"#.to_string();
 
-        let mml_piano  = build_cell_mml_from_data(&data_piano,  MEASURES, 1, 1);
+        let mml_piano = build_cell_mml_from_data(&data_piano, MEASURES, 1, 1);
         let mml_guitar = build_cell_mml_from_data(&data_guitar, MEASURES, 1, 1);
 
-        assert_ne!(mml_piano, mml_guitar, "音色変更後の MML が同一になっており、キャッシュ無効化が必要");
+        assert_ne!(
+            mml_piano, mml_guitar,
+            "音色変更後の MML が同一になっており、キャッシュ無効化が必要"
+        );
     }
 
     #[test]
@@ -197,7 +220,10 @@ mod tests {
         let mml_t120 = build_cell_mml_from_data(&data_t120, MEASURES, 1, 1);
         let mml_t200 = build_cell_mml_from_data(&data_t200, MEASURES, 1, 1);
 
-        assert_ne!(mml_t120, mml_t200, "track0 変更後の MML が同一になっており、全小節の再キャッシュが必要");
+        assert_ne!(
+            mml_t120, mml_t200,
+            "track0 変更後の MML が同一になっており、全小節の再キャッシュが必要"
+        );
     }
 
     #[test]
@@ -217,11 +243,17 @@ mod tests {
         // kick_cache は data[track][measure] の生の値で空判定するため、
         // このセルはキャッシュジョブが投入されない
         let combined_mml = build_cell_mml_from_data(&data, MEASURES, 1, 1);
-        assert!(!combined_mml.trim().is_empty(), "結合 MML は track0 を含むため非空");
+        assert!(
+            !combined_mml.trim().is_empty(),
+            "結合 MML は track0 を含むため非空"
+        );
         // kick_cache の正しい実装: data[track][measure].trim().is_empty() で早期リターン
         // （combined_mml が非空でもセル自身が空なら投入しない）
         let should_kick = !data[1][1].trim().is_empty();
-        assert!(!should_kick, "空の音符セルは kick_cache に投入されるべきでない");
+        assert!(
+            !should_kick,
+            "空の音符セルは kick_cache に投入されるべきでない"
+        );
     }
 
     // ─── track8（最終演奏トラック）のテスト ───────────────────────
@@ -236,8 +268,20 @@ mod tests {
         data[last_track][1] = "c4d4e4f4".to_string();
 
         let mml = build_cell_mml_from_data(&data, MEASURES, last_track, 1);
-        assert!(mml.contains(r#"{"Surge XT patch": "bass"}"#), "track8 の音色 JSON が MML に含まれていない: {}", mml);
-        assert!(mml.contains("c4d4e4f4"), "track8 の音符が MML に含まれていない: {}", mml);
-        assert!(mml.contains("t120"), "track0 のテンポが track8 の MML に含まれていない: {}", mml);
+        assert!(
+            mml.contains(r#"{"Surge XT patch": "bass"}"#),
+            "track8 の音色 JSON が MML に含まれていない: {}",
+            mml
+        );
+        assert!(
+            mml.contains("c4d4e4f4"),
+            "track8 の音符が MML に含まれていない: {}",
+            mml
+        );
+        assert!(
+            mml.contains("t120"),
+            "track0 のテンポが track8 の MML に含まれていない: {}",
+            mml
+        );
     }
 }
