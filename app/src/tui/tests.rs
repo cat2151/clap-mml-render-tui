@@ -187,6 +187,38 @@ fn handle_normal_t_enters_patch_select_when_random_timbre_disabled() {
 }
 
 #[test]
+fn begin_playback_session_invalidates_previous_session() {
+    let app = TuiApp::new_for_test(test_config());
+
+    let first = app.begin_playback_session();
+    let second = app.begin_playback_session();
+
+    assert!(!app.is_current_playback_session(first));
+    assert!(app.is_current_playback_session(second));
+}
+
+#[test]
+fn set_play_state_if_current_ignores_stale_session() {
+    let app = TuiApp::new_for_test(test_config());
+
+    let stale = app.begin_playback_session();
+    let current = app.begin_playback_session();
+    let newer = app.begin_playback_session();
+
+    app.set_play_state_if_current(stale, PlayState::Done("old".to_string()));
+    assert!(matches!(&*app.play_state.lock().unwrap(), PlayState::Idle));
+
+    app.set_play_state_if_current(current, PlayState::Running("new".to_string()));
+    assert!(matches!(&*app.play_state.lock().unwrap(), PlayState::Idle));
+
+    app.set_play_state_if_current(newer, PlayState::Running("new".to_string()));
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == "new"
+    ));
+}
+
+#[test]
 fn save_history_state_persists_tui_cursor_lines_and_mode_flag() {
     let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
     let tmp = std::env::temp_dir().join(format!(

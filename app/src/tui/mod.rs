@@ -15,7 +15,7 @@ mod ui;
 
 use anyhow::Result;
 use clack_host::prelude::PluginEntry;
-use cmrt_core::{collect_patches, mml_render, play_samples, to_relative, CoreConfig};
+use cmrt_core::{collect_patches, mml_render, to_relative, CoreConfig};
 use crossterm::{
     event::{self, Event, KeyCode, KeyModifiers},
     execute,
@@ -25,7 +25,7 @@ use ratatui::{backend::CrosstermBackend, widgets::ListState, Frame, Terminal};
 use tui_textarea::TextArea;
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// audio_cache の最大エントリ数。超過時はキャッシュ全体をクリアしてから挿入する。
@@ -115,6 +115,8 @@ pub struct TuiApp<'a> {
     cfg: Arc<Config>,
     entry_ptr: usize, // *const PluginEntry as usize (main() に生存保証)
     pub(super) play_state: Arc<Mutex<PlayState>>,
+    playback_session: Arc<AtomicU64>,
+    active_sink: Arc<Mutex<Option<Arc<rodio::Sink>>>>,
     /// MML文字列 → レンダリング済みサンプルのキャッシュ（random_patchモード時は使用しない）
     pub(super) audio_cache: Arc<Mutex<HashMap<String, Vec<f32>>>>,
     // 音色選択モード用
@@ -134,6 +136,88 @@ pub struct TuiApp<'a> {
 }
 
 impl<'a> TuiApp<'a> {
+    fn playback_session_is_current(playback_session: &AtomicU64, session: u64) -> bool {
+        playback_session.load(Ordering::Acquire) == session
+    }
+
+    fn set_play_state_for_session(
+        state: &Mutex<PlayState>,
+        playback_session: &AtomicU64,
+        session: u64,
+        next_state: PlayState,
+    ) {
+        let mut state = state.lock().unwrap();
+        if Self::playback_session_is_current(playback_session, session) {
+            *state = next_state;
+        }
+    }
+
+    fn clear_active_sink_for_session(
+        active_sink: &Mutex<Option<Arc<rodio::Sink>>>,
+        playback_session: &AtomicU64,
+        session: u64,
+    ) {
+        let mut active_sink = active_sink.lock().unwrap();
+        if Self::playback_session_is_current(playback_session, session) {
+            active_sink.take();
+        }
+    }
+
+    fn play_samples_for_session(
+        state: &Mutex<PlayState>,
+        playback_session: &AtomicU64,
+        active_sink: &Mutex<Option<Arc<rodio::Sink>>>,
+        session: u64,
+        sample_rate: u32,
+        samples: Vec<f32>,
+        msg: String,
+    ) {
+        if !Self::playback_session_is_current(playback_session, session) {
+            return;
+        }
+
+        let (_stream, stream_handle) = match rodio::OutputStream::try_default() {
+            Ok(stream_and_handle) => stream_and_handle,
+            Err(e) => {
+                Self::clear_active_sink_for_session(active_sink, playback_session, session);
+                Self::set_play_state_for_session(
+                    state,
+                    playback_session,
+                    session,
+                    PlayState::Err(format!("エラー: audio init failed: {e}")),
+                );
+                return;
+            }
+        };
+        let sink = match rodio::Sink::try_new(&stream_handle) {
+            Ok(sink) => sink,
+            Err(e) => {
+                Self::clear_active_sink_for_session(active_sink, playback_session, session);
+                Self::set_play_state_for_session(
+                    state,
+                    playback_session,
+                    session,
+                    PlayState::Err(format!("エラー: sink init failed: {e}")),
+                );
+                return;
+            }
+        };
+        let sink = Arc::new(sink);
+        sink.append(rodio::buffer::SamplesBuffer::new(2, sample_rate, samples));
+        {
+            let mut active_sink_guard = active_sink.lock().unwrap();
+            if !Self::playback_session_is_current(playback_session, session) {
+                sink.stop();
+                return;
+            }
+            *active_sink_guard = Some(Arc::clone(&sink));
+        }
+        sink.sleep_until_end();
+
+        Self::clear_active_sink_for_session(active_sink, playback_session, session);
+        Self::set_play_state_for_session(state, playback_session, session, PlayState::Done(msg));
+    }
+
     pub fn new(cfg: &'a Config, entry: &'a PluginEntry) -> Self {
         let cfg_arc = Arc::new(cfg.clone());
 
@@ -187,6 +271,8 @@ impl<'a> TuiApp<'a> {
             cfg: cfg_arc,
             entry_ptr: entry as *const PluginEntry as usize,
             play_state: Arc::new(Mutex::new(PlayState::Idle)),
+            playback_session: Arc::new(AtomicU64::new(0)),
+            active_sink: Arc::new(Mutex::new(None)),
             audio_cache: Arc::new(Mutex::new(HashMap::new())),
             patch_load_state,
             patch_all: Vec::new(),
@@ -200,12 +286,37 @@ impl<'a> TuiApp<'a> {
         }
     }
 
+    fn begin_playback_session(&self) -> u64 {
+        let session = self.playback_session.fetch_add(1, Ordering::AcqRel) + 1;
+        if let Some(sink) = self.active_sink.lock().unwrap().take() {
+            sink.stop();
+        }
+        session
+    }
+
+    #[cfg(test)]
+    fn is_current_playback_session(&self, session: u64) -> bool {
+        Self::playback_session_is_current(&self.playback_session, session)
+    }
+
+    fn set_play_state_if_current(&self, session: u64, next_state: PlayState) {
+        Self::set_play_state_for_session(
+            &self.play_state,
+            &self.playback_session,
+            session,
+            next_state,
+        );
+    }
+
     fn kick_play(&self, mml: String) {
         let cfg = Arc::clone(&self.cfg);
         let state = Arc::clone(&self.play_state);
+        let playback_session = Arc::clone(&self.playback_session);
+        let active_sink = Arc::clone(&self.active_sink);
         let cache = Arc::clone(&self.audio_cache);
         let entry_ptr = self.entry_ptr;
         let random_timbre_enabled = self.random_timbre_enabled;
+        let session = self.begin_playback_session();
 
         // キャッシュを確認（random_patchモード時はキャッシュを使用しない）
         let cached_samples = {
@@ -221,19 +332,22 @@ impl<'a> TuiApp<'a> {
         if let Some(samples) = cached_samples {
             // キャッシュヒット: レンダリングをスキップして即時再生
             let msg = format!("(cached) | {}", mml);
-            *state.lock().unwrap() = PlayState::Playing(msg.clone());
+            self.set_play_state_if_current(session, PlayState::Playing(msg.clone()));
 
             std::thread::spawn(move || {
-                let play_result = play_samples(samples, cfg.sample_rate as u32);
-
-                *state.lock().unwrap() = match play_result {
-                    Ok(_) => PlayState::Done(msg),
-                    Err(e) => PlayState::Err(format!("エラー: {}", e)),
-                };
+                Self::play_samples_for_session(
+                    &state,
+                    &playback_session,
+                    &active_sink,
+                    session,
+                    cfg.sample_rate as u32,
+                    samples,
+                    msg,
+                );
             });
         } else {
             // キャッシュミス: レンダリングが必要
-            *state.lock().unwrap() = PlayState::Running(mml.clone());
+            self.set_play_state_if_current(session, PlayState::Running(mml.clone()));
 
             std::thread::spawn(move || {
                 // SAFETY: entry は main() のスタックに生存している
@@ -246,9 +360,17 @@ impl<'a> TuiApp<'a> {
 
                 match render_result {
                     Err(e) => {
-                        *state.lock().unwrap() = PlayState::Err(format!("エラー: {}", e));
+                        Self::set_play_state_for_session(
+                            &state,
+                            &playback_session,
+                            session,
+                            PlayState::Err(format!("エラー: {}", e)),
+                        );
                     }
                     Ok((samples, patch_name)) => {
+                        if !Self::playback_session_is_current(&playback_session, session) {
+                            return;
+                        }
                         // キャッシュに保存（random_patchモード時はキャッシュしない、上限超過時はクリア）
                         try_insert_cache(
                             &mut cache.lock().unwrap(),
@@ -259,15 +381,21 @@ impl<'a> TuiApp<'a> {
 
                         let msg = format!("{} | {}", patch_name, mml);
                         // 演奏中に切り替え
-                        *state.lock().unwrap() = PlayState::Playing(msg.clone());
-
-                        // 再生（ブロッキング）
-                        let play_result = play_samples(samples, cfg.sample_rate as u32);
-
-                        *state.lock().unwrap() = match play_result {
-                            Ok(_) => PlayState::Done(msg),
-                            Err(e) => PlayState::Err(format!("エラー: {}", e)),
-                        };
+                        Self::set_play_state_for_session(
+                            &state,
+                            &playback_session,
+                            session,
+                            PlayState::Playing(msg.clone()),
+                        );
+                        Self::play_samples_for_session(
+                            &state,
+                            &playback_session,
+                            &active_sink,
+                            session,
+                            cfg.sample_rate as u32,
+                            samples,
+                            msg,
+                        );
                     }
                 }
             });
@@ -383,6 +511,8 @@ impl TuiApp<'static> {
             cfg: Arc::new(cfg),
             entry_ptr: 0,
             play_state: Arc::new(Mutex::new(PlayState::Idle)),
+            playback_session: Arc::new(AtomicU64::new(0)),
+            active_sink: Arc::new(Mutex::new(None)),
             audio_cache: Arc::new(Mutex::new(HashMap::new())),
             patch_load_state: Arc::new(Mutex::new(PatchLoadState::Ready(Vec::new()))),
             patch_all: Vec::new(),
