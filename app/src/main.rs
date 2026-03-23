@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap_mml_render_tui::{config, server, tui, updater};
-use cmrt_core::{load_entry, mml_to_play, CoreConfig};
+use cmrt_core::{CoreConfig, load_entry, mml_to_play};
 
 fn is_update_subcommand(args: &[String]) -> bool {
     matches!(args.get(1).map(String::as_str), Some("update"))
@@ -27,23 +27,14 @@ fn main() -> Result<()> {
         println!("  cmrt                    TUI モードで起動");
         println!("  cmrt <mml>              CLI モード（テスト用）");
         println!("  cmrt update             アップデートを実行");
-        println!(
-            "  cmrt --server           サーバーモード（port {}）",
-            server::DEFAULT_PORT
-        );
+        println!("  cmrt --server           サーバーモード（port {}）", server::DEFAULT_PORT);
         println!("  cmrt --server <port>    サーバーモード（指定port）");
-        println!(
-            "  cmrt --shutdown         サーバーを停止（port {}）",
-            server::DEFAULT_PORT
-        );
+        println!("  cmrt --shutdown         サーバーを停止（port {}）", server::DEFAULT_PORT);
         println!("  cmrt --shutdown <port>  サーバーを停止（指定port）");
         println!("  cmrt --help             このヘルプを表示");
         println!();
         println!("サーバーモードでは HTTP POST でMMLを受け取りWAVデータを返します。");
-        println!(
-            "  例: curl -X POST http://127.0.0.1:{}/  --data 'cde'",
-            server::DEFAULT_PORT
-        );
+        println!("  例: curl -X POST http://127.0.0.1:{}/  --data 'cde'", server::DEFAULT_PORT);
         println!();
         match config::config_file_path() {
             Some(p) => println!("設定ファイル: {}", p.display()),
@@ -64,10 +55,7 @@ fn main() -> Result<()> {
             None => server::DEFAULT_PORT,
         };
         server::shutdown_server(port)?;
-        println!(
-            "サーバー（port {}）にシャットダウン要求を送りました。",
-            port
-        );
+        println!("サーバー（port {}）にシャットダウン要求を送りました。", port);
         return Ok(());
     }
 
@@ -134,10 +122,7 @@ fn main() -> Result<()> {
     app.run()?;
 
     // アップデートが利用可能な場合、問答無用でアップデートを実行する
-    if app
-        .update_available
-        .load(std::sync::atomic::Ordering::Relaxed)
-    {
+    if app.update_available.load(std::sync::atomic::Ordering::Relaxed) {
         // サーバーが起動していればシャットダウンしてからアップデートする（未起動の場合は無視）
         let _ = server::shutdown_server(server::DEFAULT_PORT);
         if let Err(e) = updater::run_foreground_update() {
