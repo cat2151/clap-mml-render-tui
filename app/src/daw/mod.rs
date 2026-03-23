@@ -29,6 +29,7 @@ mod cache;
 mod input;
 mod mml;
 mod playback;
+mod playback_util;
 mod save;
 mod timing;
 mod types;

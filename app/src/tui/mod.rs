@@ -10,7 +10,9 @@
 //!            ↑↓:リスト移動  Enter:現在行の先頭にJSONで挿入（上書き）  ESC:キャンセル
 //!   HELP : K で表示、ESC でキャンセル
 
+mod cache;
 mod input;
+mod playback_session;
 mod ui;
 
 use anyhow::Result;
@@ -31,49 +33,8 @@ use std::sync::{Arc, Mutex};
 /// audio_cache の最大エントリ数。超過時はキャッシュ全体をクリアしてから挿入する。
 const AUDIO_CACHE_MAX_ENTRIES: usize = 64;
 
+use self::cache::{filter_patches, resolve_cached_samples, try_insert_cache};
 use crate::config::Config;
-
-/// クエリ文字列（空白区切りでAND条件）でパッチリストをフィルタする。
-/// `all` は (表示名, 小文字化済み表示名) のペアであること（起動時に一度だけ計算）。
-fn filter_patches(all: &[(String, String)], query: &str) -> Vec<String> {
-    let terms: Vec<String> = query.split_whitespace().map(|t| t.to_lowercase()).collect();
-    if terms.is_empty() {
-        return all.iter().map(|(orig, _)| orig.clone()).collect();
-    }
-    all.iter()
-        .filter(|(_, lower)| terms.iter().all(|t| lower.contains(t.as_str())))
-        .map(|(orig, _)| orig.clone())
-        .collect()
-}
-
-/// キャッシュからサンプルを取得する。
-/// キャッシュ参照がない場合は `None` を返す。
-fn resolve_cached_samples(
-    cache: Option<&HashMap<String, Vec<f32>>>,
-    mml: &str,
-) -> Option<Vec<f32>> {
-    cache.and_then(|cache| cache.get(mml).cloned())
-}
-
-/// キャッシュにサンプルを挿入する。上限に達した場合はキャッシュ全体をクリアしてから挿入する。
-/// `random_patch` が true の場合は何もしない。
-///
-/// 呼び出し元は `audio_cache` のロックを保持した状態で `&mut HashMap` を渡すこと。
-/// この関数自体は非同期に呼び出されないため、len 確認と insert は事実上アトミックである。
-fn try_insert_cache(
-    cache: &mut HashMap<String, Vec<f32>>,
-    mml: String,
-    samples: Vec<f32>,
-    random_patch: bool,
-) {
-    if random_patch {
-        return;
-    }
-    if cache.len() >= AUDIO_CACHE_MAX_ENTRIES && !cache.contains_key(&mml) {
-        cache.clear();
-    }
-    cache.insert(mml, samples);
-}
 
 /// バックグラウンドパッチ読み込みの状態
 enum PatchLoadState {
@@ -136,88 +97,6 @@ pub struct TuiApp<'a> {
 }
 
 impl<'a> TuiApp<'a> {
-    fn playback_session_is_current(playback_session: &AtomicU64, session: u64) -> bool {
-        playback_session.load(Ordering::Acquire) == session
-    }
-
-    fn set_play_state_for_session(
-        state: &Mutex<PlayState>,
-        playback_session: &AtomicU64,
-        session: u64,
-        next_state: PlayState,
-    ) {
-        let mut state = state.lock().unwrap();
-        if Self::playback_session_is_current(playback_session, session) {
-            *state = next_state;
-        }
-    }
-
-    fn clear_active_sink_for_session(
-        active_sink: &Mutex<Option<Arc<rodio::Sink>>>,
-        playback_session: &AtomicU64,
-        session: u64,
-    ) {
-        let mut active_sink = active_sink.lock().unwrap();
-        if Self::playback_session_is_current(playback_session, session) {
-            active_sink.take();
-        }
-    }
-
-    fn play_samples_for_session(
-        state: &Mutex<PlayState>,
-        playback_session: &AtomicU64,
-        active_sink: &Mutex<Option<Arc<rodio::Sink>>>,
-        session: u64,
-        sample_rate: u32,
-        samples: Vec<f32>,
-        msg: String,
-    ) {
-        if !Self::playback_session_is_current(playback_session, session) {
-            return;
-        }
-
-        let (_stream, stream_handle) = match rodio::OutputStream::try_default() {
-            Ok(stream_and_handle) => stream_and_handle,
-            Err(e) => {
-                Self::clear_active_sink_for_session(active_sink, playback_session, session);
-                Self::set_play_state_for_session(
-                    state,
-                    playback_session,
-                    session,
-                    PlayState::Err(format!("エラー: audio init failed: {e}")),
-                );
-                return;
-            }
-        };
-        let sink = match rodio::Sink::try_new(&stream_handle) {
-            Ok(sink) => sink,
-            Err(e) => {
-                Self::clear_active_sink_for_session(active_sink, playback_session, session);
-                Self::set_play_state_for_session(
-                    state,
-                    playback_session,
-                    session,
-                    PlayState::Err(format!("エラー: sink init failed: {e}")),
-                );
-                return;
-            }
-        };
-        let sink = Arc::new(sink);
-        sink.append(rodio::buffer::SamplesBuffer::new(2, sample_rate, samples));
-        {
-            let mut active_sink_guard = active_sink.lock().unwrap();
-            if !Self::playback_session_is_current(playback_session, session) {
-                sink.stop();
-                return;
-            }
-            *active_sink_guard = Some(Arc::clone(&sink));
-        }
-        sink.sleep_until_end();
-
-        Self::clear_active_sink_for_session(active_sink, playback_session, session);
-        Self::set_play_state_for_session(state, playback_session, session, PlayState::Done(msg));
-    }
-
     pub fn new(cfg: &'a Config, entry: &'a PluginEntry) -> Self {
         let cfg_arc = Arc::new(cfg.clone());
 
@@ -284,28 +163,6 @@ impl<'a> TuiApp<'a> {
             update_available: Arc::new(AtomicBool::new(false)),
             is_daw_mode,
         }
-    }
-
-    fn begin_playback_session(&self) -> u64 {
-        let session = self.playback_session.fetch_add(1, Ordering::AcqRel) + 1;
-        if let Some(sink) = self.active_sink.lock().unwrap().take() {
-            sink.stop();
-        }
-        session
-    }
-
-    #[cfg(test)]
-    fn is_current_playback_session(&self, session: u64) -> bool {
-        Self::playback_session_is_current(&self.playback_session, session)
-    }
-
-    fn set_play_state_if_current(&self, session: u64, next_state: PlayState) {
-        Self::set_play_state_for_session(
-            &self.play_state,
-            &self.playback_session,
-            session,
-            next_state,
-        );
     }
 
     fn kick_play(&self, mml: String) {
