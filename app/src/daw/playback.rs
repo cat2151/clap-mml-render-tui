@@ -3,7 +3,7 @@
 use std::sync::{Arc, Mutex};
 
 use clack_host::prelude::PluginEntry;
-use cmrt_core::{CoreConfig, ensure_daw_dir, mml_render_for_cache};
+use cmrt_core::{CoreConfig, mml_render_for_cache};
 
 use super::{CacheState, CellCache, DawApp, DawPlayState, PlayPosition, FIRST_PLAYABLE_TRACK};
 
@@ -88,12 +88,6 @@ impl DawApp {
         let measure_mmls = self.build_measure_mmls();
         if measure_mmls.iter().all(|m| m.trim().is_empty()) {
             return;
-        }
-
-        // daw/ ディレクトリを確保してからデバッグファイルを書き出す
-        if let Ok(daw_dir) = ensure_daw_dir() {
-            let debug_file = daw_dir.join("daw_mml_debug.txt");
-            let _ = std::fs::write(&debug_file, measure_mmls.join("\n---\n"));
         }
 
         // play_measure_mmls と play_measure_samples を最新の値で更新してからスレッドに共有する
