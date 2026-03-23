@@ -24,6 +24,5 @@ target
 pass1_tokens.json
 pass2_ast.json
 pass3_events.json
-daw_mml_debug.txt
 # DAW モード出力ディレクトリ（中間ファイル・開発用 WAV 等）
 cmrt/
