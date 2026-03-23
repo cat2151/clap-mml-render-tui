@@ -73,7 +73,7 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use ratatui::{backend::TestBackend, style::Color, Terminal};
+    use ratatui::{backend::TestBackend, buffer::Buffer, style::Color, Terminal};
     use tui_textarea::TextArea;
 
     use crate::config::Config;
@@ -135,6 +135,13 @@ mod tests {
                     .to_string()
             })
             .collect()
+    }
+
+    fn render_buffer(app: &DawApp, width: u16, height: u16) -> Buffer {
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| draw(app, f)).unwrap();
+        terminal.backend().buffer().clone()
     }
 
     #[test]
@@ -243,5 +250,28 @@ mod tests {
 
         assert_eq!(lines[6], "", "lines: {:?}", lines);
         assert!(lines[7].starts_with("DAW"), "lines: {:?}", lines);
+    }
+
+    #[test]
+    fn draw_keeps_footer_color_cyan_across_play_states() {
+        for play_state in [
+            DawPlayState::Idle,
+            DawPlayState::Playing,
+            DawPlayState::Preview,
+        ] {
+            let app = build_test_app();
+            {
+                let mut state = app.play_state.lock().unwrap();
+                *state = play_state;
+            }
+
+            let buffer = render_buffer(&app, 120, 8);
+
+            assert_eq!(
+                buffer.cell((0, 7)).unwrap().fg,
+                Color::Cyan,
+                "footer color should stay cyan"
+            );
+        }
     }
 }
