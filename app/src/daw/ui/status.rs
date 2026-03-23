@@ -7,18 +7,27 @@ use ratatui::{
 
 use super::{
     super::{DawApp, DawMode, DawPlayState},
-    loop_status_label,
+    loop_measure_summary_label, loop_status_label,
 };
 
-pub(super) fn draw_status(app: &DawApp, f: &mut Frame, play_area: Rect, footer_area: Rect) {
+pub(super) fn draw_status(
+    app: &DawApp,
+    f: &mut Frame,
+    play_area: Rect,
+    info_area: Rect,
+    footer_area: Rect,
+) {
     // play_state と play_position を一度だけロックしてスナップショットを取る。
-    let play_state = app.play_state.lock().unwrap().clone();
+    let play_state = *app.play_state.lock().unwrap();
     let play_position = app.play_position.lock().unwrap().clone();
-    let loop_label = if play_state == DawPlayState::Playing {
+    let (loop_label, loop_summary) = if play_state == DawPlayState::Playing {
         let play_measure_mmls = app.play_measure_mmls.lock().unwrap();
-        loop_status_label(&play_measure_mmls)
+        (
+            loop_status_label(&play_measure_mmls),
+            loop_measure_summary_label(&play_measure_mmls),
+        )
     } else {
-        None
+        (None, None)
     };
 
     // 拍子・テンポは常に現在の app 状態から取得することで、
@@ -67,6 +76,10 @@ pub(super) fn draw_status(app: &DawApp, f: &mut Frame, play_area: Rect, footer_a
     f.render_widget(
         Paragraph::new(play_text).style(Style::default().fg(play_color)),
         play_area,
+    );
+    f.render_widget(
+        Paragraph::new(loop_summary.unwrap_or_default()).style(Style::default().fg(Color::Yellow)),
+        info_area,
     );
     f.render_widget(
         Paragraph::new(footer_text).style(Style::default().fg(Color::Cyan)),
