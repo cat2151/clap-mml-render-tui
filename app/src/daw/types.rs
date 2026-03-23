@@ -55,7 +55,7 @@ impl CellCache {
 
 // ─── 演奏状態 ─────────────────────────────────────────────────
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum DawPlayState {
     Idle,
     Playing,

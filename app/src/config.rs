@@ -145,9 +145,16 @@ daw_measures = 8
 /// - Windows: %LOCALAPPDATA%\clap-mml-render-tui\config.toml  (Local 側)
 /// - Linux:   ~/.config/clap-mml-render-tui/config.toml
 /// - macOS:   ~/Library/Application Support/clap-mml-render-tui/config.toml
+///
 /// システムの設定ディレクトリが取得できない場合は `None` を返す。
 pub fn config_file_path() -> Option<PathBuf> {
     dirs::config_local_dir().map(|d| d.join("clap-mml-render-tui").join("config.toml"))
+}
+
+/// DAW デバッグログ (`log/log.txt`) のパスを返す。
+/// `config.toml` と同じ config_local_dir 配下に配置する。
+pub fn log_file_path() -> Option<PathBuf> {
+    dirs::config_local_dir().map(|d| d.join("clap-mml-render-tui").join("log").join("log.txt"))
 }
 
 impl Config {

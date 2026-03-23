@@ -176,7 +176,10 @@ impl DawApp {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use std::{
+        collections::VecDeque,
+        sync::{Arc, Mutex},
+    };
 
     use tui_textarea::TextArea;
 
@@ -220,6 +223,7 @@ mod tests {
                 play_position: Arc::new(Mutex::new(None)),
                 play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
                 play_measure_samples: Arc::new(Mutex::new(0)),
+                log_lines: Arc::new(Mutex::new(VecDeque::new())),
             },
             cache_rx,
         )

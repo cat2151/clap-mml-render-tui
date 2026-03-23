@@ -2,6 +2,7 @@
 
 mod grid;
 mod help;
+mod logs;
 mod status;
 
 use ratatui::{
@@ -61,7 +62,13 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
         ])
         .split(area);
 
-    grid::draw_grid(app, f, chunks[0]);
+    let body_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[0]);
+
+    grid::draw_grid(app, f, body_chunks[0]);
+    logs::draw_logs(app, f, body_chunks[1]);
     status::draw_status(app, f, chunks[1], chunks[2]);
 
     if app.mode == DawMode::Help {
@@ -71,7 +78,10 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use std::{
+        collections::VecDeque,
+        sync::{Arc, Mutex},
+    };
 
     use ratatui::{backend::TestBackend, buffer::Buffer, style::Color, Terminal};
     use tui_textarea::TextArea;
@@ -118,6 +128,7 @@ mod tests {
             play_position: Arc::new(Mutex::new(None)),
             play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
             play_measure_samples: Arc::new(Mutex::new(0)),
+            log_lines: Arc::new(Mutex::new(VecDeque::new())),
         }
     }
 
@@ -200,7 +211,7 @@ mod tests {
             cache[1][1].state = CacheState::Pending;
         }
 
-        let lines = render_lines(&app, 40, 8);
+        let lines = render_lines(&app, 40, 12);
 
         assert!(
             lines.iter().any(|line| line.contains("cdef")),
@@ -273,5 +284,53 @@ mod tests {
                 "footer color should stay cyan"
             );
         }
+    }
+
+    #[test]
+    fn draw_shows_log_pane_in_lower_half() {
+        let app = build_test_app();
+
+        let lines = render_lines(&app, 60, 10);
+
+        assert!(lines[4].contains("log"), "lines: {:?}", lines);
+        assert!(lines[8].is_empty(), "lines: {:?}", lines);
+        assert!(lines[9].starts_with("DAW"), "lines: {:?}", lines);
+    }
+
+    #[test]
+    fn draw_shows_recent_log_lines() {
+        let app = build_test_app();
+        {
+            let mut log_lines = app.log_lines.lock().unwrap();
+            log_lines.push_back("old".to_string());
+            log_lines.push_back("meas1: cache hit".to_string());
+            log_lines.push_back("meas2: render".to_string());
+            log_lines.push_back("meas3: empty -> silence".to_string());
+        }
+
+        let lines = render_lines(&app, 60, 10);
+
+        assert!(
+            !lines.iter().any(|line| line.contains("old")),
+            "lines: {:?}",
+            lines
+        );
+        assert!(
+            lines.iter().any(|line| line.contains("meas1: cache hit")),
+            "lines: {:?}",
+            lines
+        );
+        assert!(
+            lines.iter().any(|line| line.contains("meas2: render")),
+            "lines: {:?}",
+            lines
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.contains("meas3: empty -> silence")),
+            "lines: {:?}",
+            lines
+        );
     }
 }

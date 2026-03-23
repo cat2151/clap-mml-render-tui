@@ -1,0 +1,139 @@
+use std::{
+    collections::VecDeque,
+    fs::{File, OpenOptions},
+    io::{BufRead, BufReader, Write},
+    path::Path,
+    sync::{Arc, Mutex, OnceLock},
+};
+
+const MAX_LOG_LINES: usize = 256;
+
+fn log_file_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+fn trim_log_lines(lines: &mut VecDeque<String>) {
+    while lines.len() > MAX_LOG_LINES {
+        lines.pop_front();
+    }
+}
+
+fn append_log_line_to_path(path: &Path, line: &str) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    let _guard = log_file_lock()
+        .lock()
+        .expect("log file lock should not be poisoned");
+    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    file.write_all(line.as_bytes())?;
+    file.write_all(b"\n")?;
+    file.flush()
+}
+
+fn append_log_line_to_file(line: &str) -> std::io::Result<()> {
+    let Some(path) = crate::config::log_file_path() else {
+        return Ok(());
+    };
+    append_log_line_to_path(&path, line)
+}
+
+fn push_log_line(log_lines: &Arc<Mutex<VecDeque<String>>>, line: String) {
+    let mut lines = log_lines.lock().unwrap();
+    lines.push_back(line);
+    trim_log_lines(&mut lines);
+}
+
+pub(crate) fn append_log_line(log_lines: &Arc<Mutex<VecDeque<String>>>, line: impl Into<String>) {
+    let line = line.into();
+    if let Err(err) = append_log_line_to_file(&line) {
+        push_log_line(log_lines, format!("[log write error] {err}"));
+    }
+    push_log_line(log_lines, line);
+}
+
+pub(crate) fn load_log_lines() -> VecDeque<String> {
+    let Some(path) = crate::config::log_file_path() else {
+        return VecDeque::new();
+    };
+    let Ok(file) = File::open(path) else {
+        return VecDeque::new();
+    };
+
+    let mut lines = VecDeque::new();
+    for line in BufReader::new(file).lines().map_while(Result::ok) {
+        if lines.len() == MAX_LOG_LINES {
+            lines.pop_front();
+        }
+        lines.push_back(line);
+    }
+    lines
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashSet, sync::Arc, thread};
+
+    use super::append_log_line_to_path;
+
+    #[test]
+    fn append_log_line_to_path_keeps_concurrent_lines_intact() {
+        let tmp = std::env::temp_dir().join(format!(
+            "cmrt_test_logging_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let path = tmp.join("log").join("log.txt");
+        let thread_count = 8;
+        let lines_per_thread = 16;
+        let expected_lines: Arc<Vec<String>> = Arc::new(
+            (0..thread_count)
+                .flat_map(|thread_idx| {
+                    (0..lines_per_thread).map(move |line_idx| {
+                        format!(
+                            "thread-{thread_idx:02}-line-{line_idx:02}-{}",
+                            "x".repeat(128)
+                        )
+                    })
+                })
+                .collect(),
+        );
+
+        let mut handles = Vec::new();
+        for thread_idx in 0..thread_count {
+            let path = path.clone();
+            let expected_lines = Arc::clone(&expected_lines);
+            handles.push(thread::spawn(move || {
+                for line_idx in 0..lines_per_thread {
+                    append_log_line_to_path(
+                        &path,
+                        &expected_lines[thread_idx * lines_per_thread + line_idx],
+                    )
+                    .unwrap();
+                }
+            }));
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        let actual_lines: Vec<String> = std::fs::read_to_string(&path)
+            .unwrap()
+            .lines()
+            .map(ToOwned::to_owned)
+            .collect();
+        let expected_set: HashSet<String> = expected_lines.iter().cloned().collect();
+        let actual_set: HashSet<String> = actual_lines.iter().cloned().collect();
+
+        assert_eq!(actual_lines.len(), thread_count * lines_per_thread);
+        assert_eq!(actual_set, expected_set);
+
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+}
