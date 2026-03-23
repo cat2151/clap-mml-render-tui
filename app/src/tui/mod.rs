@@ -137,7 +137,7 @@ pub struct TuiApp<'a> {
 
 impl<'a> TuiApp<'a> {
     fn playback_session_is_current(playback_session: &AtomicU64, session: u64) -> bool {
-        playback_session.load(Ordering::Relaxed) == session
+        playback_session.load(Ordering::Acquire) == session
     }
 
     fn set_play_state_for_session(
@@ -146,8 +146,9 @@ impl<'a> TuiApp<'a> {
         session: u64,
         next_state: PlayState,
     ) {
+        let mut state = state.lock().unwrap();
         if Self::playback_session_is_current(playback_session, session) {
-            *state.lock().unwrap() = next_state;
+            *state = next_state;
         }
     }
 
@@ -156,8 +157,9 @@ impl<'a> TuiApp<'a> {
         playback_session: &AtomicU64,
         session: u64,
     ) {
+        let mut active_sink = active_sink.lock().unwrap();
         if Self::playback_session_is_current(playback_session, session) {
-            active_sink.lock().unwrap().take();
+            active_sink.take();
         }
     }
 
@@ -174,44 +176,43 @@ impl<'a> TuiApp<'a> {
             return;
         }
 
-        let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else {
-            Self::clear_active_sink_for_session(active_sink, playback_session, session);
-            Self::set_play_state_for_session(
-                state,
-                playback_session,
-                session,
-                PlayState::Err("エラー: audio init failed".into()),
-            );
-            return;
+        let (_stream, stream_handle) = match rodio::OutputStream::try_default() {
+            Ok(stream_and_handle) => stream_and_handle,
+            Err(e) => {
+                Self::clear_active_sink_for_session(active_sink, playback_session, session);
+                Self::set_play_state_for_session(
+                    state,
+                    playback_session,
+                    session,
+                    PlayState::Err(format!("エラー: audio init failed: {e}")),
+                );
+                return;
+            }
         };
-        let Ok(sink) = rodio::Sink::try_new(&stream_handle) else {
-            Self::clear_active_sink_for_session(active_sink, playback_session, session);
-            Self::set_play_state_for_session(
-                state,
-                playback_session,
-                session,
-                PlayState::Err("エラー: sink init failed".into()),
-            );
-            return;
+        let sink = match rodio::Sink::try_new(&stream_handle) {
+            Ok(sink) => sink,
+            Err(e) => {
+                Self::clear_active_sink_for_session(active_sink, playback_session, session);
+                Self::set_play_state_for_session(
+                    state,
+                    playback_session,
+                    session,
+                    PlayState::Err(format!("エラー: sink init failed: {e}")),
+                );
+                return;
+            }
         };
         let sink = Arc::new(sink);
         sink.append(rodio::buffer::SamplesBuffer::new(2, sample_rate, samples));
-        if !Self::playback_session_is_current(playback_session, session) {
-            sink.stop();
-            return;
-        }
-        *active_sink.lock().unwrap() = Some(Arc::clone(&sink));
-
-        loop {
-            if sink.empty() {
-                break;
-            }
+        {
+            let mut active_sink_guard = active_sink.lock().unwrap();
             if !Self::playback_session_is_current(playback_session, session) {
                 sink.stop();
-                break;
+                return;
             }
-            std::thread::sleep(std::time::Duration::from_millis(10));
+            *active_sink_guard = Some(Arc::clone(&sink));
         }
+        sink.sleep_until_end();
 
         Self::clear_active_sink_for_session(active_sink, playback_session, session);
         Self::set_play_state_for_session(state, playback_session, session, PlayState::Done(msg));
@@ -286,7 +287,7 @@ impl<'a> TuiApp<'a> {
     }
 
     fn begin_playback_session(&self) -> u64 {
-        let session = self.playback_session.fetch_add(1, Ordering::Relaxed) + 1;
+        let session = self.playback_session.fetch_add(1, Ordering::AcqRel) + 1;
         if let Some(sink) = self.active_sink.lock().unwrap().take() {
             sink.stop();
         }
