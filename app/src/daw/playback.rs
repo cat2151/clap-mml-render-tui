@@ -399,18 +399,75 @@ impl DawApp {
     }
 
     pub(super) fn stop_play(&self) {
-        if *self.play_state.lock().unwrap() != DawPlayState::Idle {
-            self.append_log_line("play: stop");
+        let prev_state = {
+            let mut play_state = self.play_state.lock().unwrap();
+            let prev_state = play_state.clone();
+            *play_state = DawPlayState::Idle;
+            prev_state
+        };
+        match prev_state {
+            DawPlayState::Idle => {}
+            DawPlayState::Preview => self.append_log_line("preview: stop"),
+            DawPlayState::Playing => self.append_log_line("play: stop"),
         }
-        *self.play_state.lock().unwrap() = DawPlayState::Idle;
         *self.play_position.lock().unwrap() = None;
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::MEASURES;
-    use super::effective_measure_count;
+    use std::{
+        collections::VecDeque,
+        sync::{Arc, Mutex},
+    };
+
+    use tui_textarea::TextArea;
+
+    use crate::config::Config;
+
+    use super::{
+        super::{CellCache, DawApp, DawMode, DawPlayState, MEASURES},
+        effective_measure_count,
+    };
+
+    fn build_test_app() -> DawApp {
+        let tracks = 3;
+        let measures = 2;
+        let (cache_tx, _cache_rx) = std::sync::mpsc::channel();
+        DawApp {
+            data: vec![vec![String::new(); measures + 1]; tracks],
+            cursor_track: 0,
+            cursor_measure: 0,
+            mode: DawMode::Normal,
+            textarea: TextArea::default(),
+            cfg: Arc::new(Config {
+                plugin_path: String::new(),
+                input_midi: String::new(),
+                output_midi: String::new(),
+                output_wav: String::new(),
+                sample_rate: 44_100.0,
+                buffer_size: 512,
+                patch_path: None,
+                patches_dir: None,
+                daw_tracks: tracks,
+                daw_measures: measures,
+            }),
+            entry_ptr: 0,
+            tracks,
+            measures,
+            cache: Arc::new(Mutex::new(vec![
+                vec![CellCache::empty(); measures + 1];
+                tracks
+            ])),
+            cache_tx,
+            render_lock: Arc::new(Mutex::new(())),
+            play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
+            play_position: Arc::new(Mutex::new(None)),
+            play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
+            play_measure_samples: Arc::new(Mutex::new(0)),
+            log_lines: Arc::new(Mutex::new(VecDeque::new())),
+        }
+    }
 
     // ─── effective_measure_count ──────────────────────────────────
 
@@ -457,5 +514,39 @@ mod tests {
         mmls[0] = "cde".to_string();
         mmls[1] = "   ".to_string(); // whitespace-only → treated as empty (trailing)
         assert_eq!(effective_measure_count(&mmls), Some(1));
+    }
+
+    #[test]
+    fn stop_play_logs_preview_stop_for_preview_state() {
+        let app = build_test_app();
+        *app.play_state.lock().unwrap() = DawPlayState::Preview;
+
+        app.stop_play();
+
+        assert!(matches!(
+            *app.play_state.lock().unwrap(),
+            DawPlayState::Idle
+        ));
+        assert_eq!(
+            app.log_lines.lock().unwrap().back().map(String::as_str),
+            Some("preview: stop")
+        );
+    }
+
+    #[test]
+    fn stop_play_logs_play_stop_for_playing_state() {
+        let app = build_test_app();
+        *app.play_state.lock().unwrap() = DawPlayState::Playing;
+
+        app.stop_play();
+
+        assert!(matches!(
+            *app.play_state.lock().unwrap(),
+            DawPlayState::Idle
+        ));
+        assert_eq!(
+            app.log_lines.lock().unwrap().back().map(String::as_str),
+            Some("play: stop")
+        );
     }
 }
