@@ -58,18 +58,18 @@ pub(super) fn draw_status(app: &DawApp, f: &mut Frame, play_area: Rect, footer_a
         DawMode::Help => "HELP  ESC:キャンセル",
     };
 
-    let color = match play_state {
+    let play_color = match play_state {
         DawPlayState::Idle => Color::Cyan,
         DawPlayState::Playing => Color::Yellow,
         DawPlayState::Preview => Color::Magenta,
     };
 
     f.render_widget(
-        Paragraph::new(play_text).style(Style::default().fg(color)),
+        Paragraph::new(play_text).style(Style::default().fg(play_color)),
         play_area,
     );
     f.render_widget(
-        Paragraph::new(footer_text).style(Style::default().fg(color)),
+        Paragraph::new(footer_text).style(Style::default().fg(Color::Cyan)),
         footer_area,
     );
 }
