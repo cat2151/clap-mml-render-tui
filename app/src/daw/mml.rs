@@ -35,9 +35,51 @@ pub(super) fn build_cell_mml_from_data(
         })
         .collect::<Vec<_>>()
         .join("");
-    let timbre = data.get(track).and_then(|r| r.get(0)).map(|s| s.trim()).unwrap_or("");
+    let timbre = data
+        .get(track)
+        .and_then(|r| r.first())
+        .map(|s| s.trim())
+        .unwrap_or("");
     let notes  = data.get(track).and_then(|r| r.get(measure)).map(|s| s.trim()).unwrap_or("");
     format!("{}{}{}", timbre, track0, notes)
+}
+
+/// data 配列から指定小節の演奏用 MML を構築する純粋関数。
+///
+/// 音符が 1 つもない小節は空文字列を返す。
+pub(super) fn build_measure_mml_from_data(
+    data: &[Vec<String>],
+    num_measures: usize,
+    tracks: usize,
+    measure: usize,
+) -> String {
+    use mmlabc_to_smf::mml_preprocessor;
+
+    let track0: String = (0..=num_measures)
+        .map(|m| {
+            let cell = data[0][m].trim();
+            if m == 0 {
+                mml_preprocessor::extract_embedded_json(cell).remaining_mml
+            } else {
+                cell.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("");
+
+    let track_mmls: Vec<String> = (FIRST_PLAYABLE_TRACK..tracks)
+        .filter_map(|t| {
+            let timbre = data[t][0].trim();
+            let notes = data[t][measure].trim();
+            if notes.is_empty() {
+                None
+            } else {
+                Some(format!("{}{}{}", timbre, track0, notes))
+            }
+        })
+        .collect();
+
+    track_mmls.join(";")
 }
 
 impl DawApp {
@@ -55,34 +97,7 @@ impl DawApp {
     /// それ自体を独立した再生 track としては扱わない。
     /// 音色 JSON を先頭に置くことで extract_embedded_json が正しく解析できる
     pub(super) fn build_measure_mml(&self, measure: usize) -> String {
-        use mmlabc_to_smf::mml_preprocessor;
-        let track0: String = (0..=self.measures)
-            .map(|m| {
-                let cell = self.data[0][m].trim();
-                if m == 0 {
-                    // data[0][0] には beat JSON（DAW用メタ情報）が含まれる場合があるため、
-                    // MML パーサに渡す前に JSON 部分を除去して残りの MML のみを使う
-                    mml_preprocessor::extract_embedded_json(cell).remaining_mml
-                } else {
-                    cell.to_string()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("");
-
-        let track_mmls: Vec<String> = (FIRST_PLAYABLE_TRACK..self.tracks)
-            .filter_map(|t| {
-                let timbre = self.data[t][0].trim();
-                let notes = self.data[t][measure].trim();
-                if timbre.is_empty() && notes.is_empty() {
-                    None
-                } else {
-                    Some(format!("{}{}{}", timbre, track0, notes))
-                }
-            })
-            .collect();
-
-        track_mmls.join(";")
+        build_measure_mml_from_data(&self.data, self.measures, self.tracks, measure)
     }
 
     /// 全小節の per-measure MML ベクターを構築する（演奏用; hot reload に使用）
@@ -128,7 +143,7 @@ impl DawApp {
 
 #[cfg(test)]
 mod tests {
-    use super::build_cell_mml_from_data;
+    use super::{build_cell_mml_from_data, build_measure_mml_from_data};
     use super::super::{DEFAULT_TRACK0_MML, MEASURES, TRACKS};
 
     /// テスト用ヘルパー: TRACKS×(MEASURES+1) の空 data を作成する
@@ -222,6 +237,36 @@ mod tests {
         // （combined_mml が非空でもセル自身が空なら投入しない）
         let should_kick = !data[1][1].trim().is_empty();
         assert!(!should_kick, "空の音符セルは kick_cache に投入されるべきでない");
+    }
+
+    #[test]
+    fn build_measure_mml_returns_empty_when_measure_has_no_notes() {
+        let mut data = empty_data(TRACKS, MEASURES);
+        data[0][0] = DEFAULT_TRACK0_MML.to_string();
+        data[1][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
+        data[2][0] = r#"{"Surge XT patch": "brass"}"#.to_string();
+
+        let mml = build_measure_mml_from_data(&data, MEASURES, TRACKS, 1);
+
+        assert_eq!(mml, "");
+    }
+
+    #[test]
+    fn build_measure_mml_keeps_only_tracks_with_notes() {
+        let mut data = empty_data(TRACKS, MEASURES);
+        data[0][0] = DEFAULT_TRACK0_MML.to_string();
+        data[1][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
+        data[1][1] = "cde".to_string();
+        data[2][0] = r#"{"Surge XT patch": "brass"}"#.to_string();
+
+        let mml = build_measure_mml_from_data(&data, MEASURES, TRACKS, 1);
+
+        assert!(mml.contains("cde"), "音符が MML に含まれていない: {}", mml);
+        assert!(
+            !mml.contains(r#"{"Surge XT patch": "brass"}"#),
+            "音符のない track が MML に含まれている: {}",
+            mml
+        );
     }
 
     // ─── track8（最終演奏トラック）のテスト ───────────────────────

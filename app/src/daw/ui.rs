@@ -50,6 +50,10 @@ fn loop_status_label(mmls: &[String]) -> Option<String> {
     })
 }
 
+fn loop_measure_summary_label(mmls: &[String]) -> Option<String> {
+    super::playback::loop_measure_summary_label(mmls)
+}
+
 pub(super) fn draw(app: &DawApp, f: &mut Frame) {
     let area = f.area();
 
@@ -57,6 +61,7 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(1),
+            Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
         ])
@@ -69,7 +74,7 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
 
     grid::draw_grid(app, f, body_chunks[0]);
     logs::draw_logs(app, f, body_chunks[1]);
-    status::draw_status(app, f, chunks[1], chunks[2]);
+    status::draw_status(app, f, chunks[1], chunks[2], chunks[3]);
 
     if app.mode == DawMode::Help {
         help::draw_help(f, area);
@@ -90,7 +95,7 @@ mod tests {
 
     use super::{
         super::{CacheState, CellCache, DawApp, DawMode, DawPlayState, MEASURES},
-        cache_indicator, cache_text_color, draw, loop_status_label,
+        cache_indicator, cache_text_color, draw, loop_measure_summary_label, loop_status_label,
     };
 
     fn build_test_app() -> DawApp {
@@ -184,6 +189,17 @@ mod tests {
     }
 
     #[test]
+    fn loop_measure_summary_label_lists_loop_and_empty_ranges() {
+        let mut mmls = vec![String::new(); MEASURES];
+        mmls[0] = "c".to_string();
+
+        assert_eq!(
+            loop_measure_summary_label(&mmls),
+            Some("loop meas : meas 1, empty meas : meas 2～8".to_string())
+        );
+    }
+
+    #[test]
     fn cache_indicator_uses_single_dot_for_uncached_cells() {
         assert_eq!(cache_indicator(&CacheState::Pending, 0), ".    ");
         assert_eq!(cache_indicator(&CacheState::Pending, 2), ".    ");
@@ -226,7 +242,7 @@ mod tests {
     }
 
     #[test]
-    fn draw_places_playback_status_on_second_to_last_row_left_edge() {
+    fn draw_places_playback_status_and_loop_summary_above_footer() {
         let app = build_test_app();
         {
             let mut play_state = app.play_state.lock().unwrap();
@@ -246,9 +262,11 @@ mod tests {
 
         let lines = render_lines(&app, 120, 8);
 
-        assert!(lines[6].starts_with("▶ meas2, beat"), "lines: {:?}", lines);
-        assert!(lines[6].contains("loop:"), "lines: {:?}", lines);
-        assert!(lines[6].contains("meas1"), "lines: {:?}", lines);
+        assert!(lines[5].starts_with("▶ meas2, beat"), "lines: {:?}", lines);
+        assert!(lines[5].contains("loop:"), "lines: {:?}", lines);
+        assert!(lines[5].contains("meas1"), "lines: {:?}", lines);
+        assert!(lines[6].starts_with("loop meas :"), "lines: {:?}", lines);
+        assert!(lines[6].contains("empty meas :"), "lines: {:?}", lines);
         assert!(lines[7].starts_with("DAW"), "lines: {:?}", lines);
         assert!(!lines[7].contains("▶"), "lines: {:?}", lines);
     }
@@ -259,6 +277,7 @@ mod tests {
 
         let lines = render_lines(&app, 120, 8);
 
+        assert_eq!(lines[5], "", "lines: {:?}", lines);
         assert_eq!(lines[6], "", "lines: {:?}", lines);
         assert!(lines[7].starts_with("DAW"), "lines: {:?}", lines);
     }
@@ -293,6 +312,7 @@ mod tests {
         let lines = render_lines(&app, 60, 10);
 
         assert!(lines[4].contains("log"), "lines: {:?}", lines);
+        assert!(lines[7].is_empty(), "lines: {:?}", lines);
         assert!(lines[8].is_empty(), "lines: {:?}", lines);
         assert!(lines[9].starts_with("DAW"), "lines: {:?}", lines);
     }
@@ -316,11 +336,6 @@ mod tests {
             lines
         );
         assert!(
-            lines.iter().any(|line| line.contains("meas1: cache hit")),
-            "lines: {:?}",
-            lines
-        );
-        assert!(
             lines.iter().any(|line| line.contains("meas2: render")),
             "lines: {:?}",
             lines
@@ -329,6 +344,11 @@ mod tests {
             lines
                 .iter()
                 .any(|line| line.contains("meas3: empty -> silence")),
+            "lines: {:?}",
+            lines
+        );
+        assert!(
+            !lines.iter().any(|line| line.contains("meas1: cache hit")),
             "lines: {:?}",
             lines
         );
