@@ -216,6 +216,7 @@ mod tests {
                 cache_tx,
                 render_lock: Arc::new(Mutex::new(())),
                 play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
+                play_transition_lock: Arc::new(Mutex::new(())),
                 play_position: Arc::new(Mutex::new(None)),
                 play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
                 play_measure_samples: Arc::new(Mutex::new(0)),

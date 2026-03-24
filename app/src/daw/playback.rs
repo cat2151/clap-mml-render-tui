@@ -281,6 +281,7 @@ impl DawApp {
     }
 
     pub(super) fn stop_play(&self) {
+        let _transition_guard = self.play_transition_lock.lock().unwrap();
         let prev_state = {
             let mut play_state = self.play_state.lock().unwrap();
             let prev_state = *play_state;
@@ -342,6 +343,7 @@ mod tests {
             cache_tx,
             render_lock: Arc::new(Mutex::new(())),
             play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
+            play_transition_lock: Arc::new(Mutex::new(())),
             play_position: Arc::new(Mutex::new(None)),
             play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
             play_measure_samples: Arc::new(Mutex::new(0)),

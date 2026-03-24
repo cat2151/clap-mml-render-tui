@@ -9,6 +9,7 @@ use super::playback::try_get_cached_samples;
 use super::{DawApp, DawPlayState, PlayPosition};
 
 fn begin_preview_output<F>(
+    play_transition_lock: &Arc<Mutex<()>>,
     play_state: &Arc<Mutex<DawPlayState>>,
     play_position: &Arc<Mutex<Option<PlayPosition>>>,
     measure_index: usize,
@@ -17,8 +18,8 @@ fn begin_preview_output<F>(
 where
     F: FnOnce(),
 {
-    let play_state = play_state.lock().unwrap();
-    if *play_state != DawPlayState::Preview {
+    let _transition_guard = play_transition_lock.lock().unwrap();
+    if *play_state.lock().unwrap() != DawPlayState::Preview {
         return false;
     }
     *play_position.lock().unwrap() = Some(PlayPosition {
@@ -40,6 +41,7 @@ impl DawApp {
 
         let measure_samples = self.measure_duration_samples();
         let play_state = Arc::clone(&self.play_state);
+        let play_transition_lock = Arc::clone(&self.play_transition_lock);
         let play_position = Arc::clone(&self.play_position);
         let render_lock = Arc::clone(&self.render_lock);
         let cache = Arc::clone(&self.cache);
@@ -108,11 +110,16 @@ impl DawApp {
             };
 
             if let Some(samples) = samples_opt {
-                let preview_active =
-                    begin_preview_output(&play_state, &play_position, measure_index, || {
+                let preview_active = begin_preview_output(
+                    &play_transition_lock,
+                    &play_state,
+                    &play_position,
+                    measure_index,
+                    || {
                         let source = rodio::buffer::SamplesBuffer::new(2, sample_rate, samples);
                         sink.append(source);
-                    });
+                    },
+                );
                 if preview_active {
                     sink.sleep_until_end();
                 }
@@ -145,13 +152,20 @@ mod tests {
 
     #[test]
     fn begin_preview_output_skips_enqueue_when_preview_stopped() {
+        let play_transition_lock = Arc::new(Mutex::new(()));
         let play_state = Arc::new(Mutex::new(DawPlayState::Idle));
         let play_position = Arc::new(Mutex::new(None::<PlayPosition>));
         let enqueue_calls = Arc::new(AtomicUsize::new(0));
 
-        let started = begin_preview_output(&play_state, &play_position, 2, || {
-            enqueue_calls.fetch_add(1, Ordering::SeqCst);
-        });
+        let started = begin_preview_output(
+            &play_transition_lock,
+            &play_state,
+            &play_position,
+            2,
+            || {
+                enqueue_calls.fetch_add(1, Ordering::SeqCst);
+            },
+        );
 
         assert!(!started);
         assert_eq!(enqueue_calls.load(Ordering::SeqCst), 0);
@@ -160,21 +174,23 @@ mod tests {
 
     #[test]
     fn begin_preview_output_updates_position_before_enqueue() {
+        let play_transition_lock = Arc::new(Mutex::new(()));
         let play_state = Arc::new(Mutex::new(DawPlayState::Preview));
         let play_position = Arc::new(Mutex::new(None::<PlayPosition>));
         let observed_measure = Arc::new(Mutex::new(None));
 
-        let started = begin_preview_output(&play_state, &play_position, 3, {
-            let play_position = Arc::clone(&play_position);
-            let observed_measure = Arc::clone(&observed_measure);
-            move || {
-                *observed_measure.lock().unwrap() = play_position
-                    .lock()
-                    .unwrap()
-                    .as_ref()
-                    .map(|position| position.measure_index);
-            }
-        });
+        let started =
+            begin_preview_output(&play_transition_lock, &play_state, &play_position, 3, {
+                let play_position = Arc::clone(&play_position);
+                let observed_measure = Arc::clone(&observed_measure);
+                move || {
+                    *observed_measure.lock().unwrap() = play_position
+                        .lock()
+                        .unwrap()
+                        .as_ref()
+                        .map(|position| position.measure_index);
+                }
+            });
 
         assert!(started);
         assert_eq!(*observed_measure.lock().unwrap(), Some(3));

@@ -121,6 +121,11 @@ pub struct DawApp {
 
     pub(super) play_state: Arc<Mutex<DawPlayState>>,
 
+    /// プレビュー開始と停止の遷移を直列化するロック。
+    /// `stop_play()` と `start_preview()` の間で状態確認と音声キュー投入が
+    /// 交錯しないようにする。
+    play_transition_lock: Arc<Mutex<()>>,
+
     /// 再生中の小節・ビート位置（UI 描画に使用）
     pub(super) play_position: Arc<Mutex<Option<PlayPosition>>>,
 
@@ -272,6 +277,7 @@ impl DawApp {
             cache_tx,
             render_lock,
             play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
+            play_transition_lock: Arc::new(Mutex::new(())),
             play_position: Arc::new(Mutex::new(None)),
             play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
             play_measure_samples: Arc::new(Mutex::new(0)),
@@ -425,6 +431,7 @@ mod tests {
             cache_tx,
             render_lock: Arc::new(Mutex::new(())),
             play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
+            play_transition_lock: Arc::new(Mutex::new(())),
             play_position: Arc::new(Mutex::new(None)),
             play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
             play_measure_samples: Arc::new(Mutex::new(0)),
