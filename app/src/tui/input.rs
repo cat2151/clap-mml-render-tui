@@ -48,7 +48,7 @@ impl<'a> TuiApp<'a> {
             PatchLoadState::Ready(pairs) => {
                 let ns = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .map(|duration| duration.subsec_nanos())
+                    .map(|duration| duration.as_nanos())
                     .unwrap_or(0) as usize;
                 let index = ns % pairs.len();
                 Ok(pairs[index].0.clone())
