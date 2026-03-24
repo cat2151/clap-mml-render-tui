@@ -82,8 +82,17 @@ fn current_play_measure_index(current_measure_index: usize, effective_count: usi
     }
 }
 
+#[cfg(test)]
 fn next_play_measure_index(current_measure_index: usize, effective_count: usize) -> usize {
     (current_measure_index + 1) % effective_count
+}
+
+fn following_measure_index(current_measure_index: usize, effective_count: usize) -> usize {
+    if current_measure_index + 1 < effective_count {
+        current_measure_index + 1
+    } else {
+        0
+    }
 }
 
 fn build_playback_measure_samples<F, E>(
@@ -121,6 +130,13 @@ where
         samples.truncate(measure_samples);
     }
     Ok(samples)
+}
+
+#[derive(Clone)]
+struct QueuedMeasure {
+    measure_index: usize,
+    measure_start: std::time::Instant,
+    measure_duration: std::time::Duration,
 }
 
 impl DawApp {
@@ -184,62 +200,108 @@ impl DawApp {
             };
 
             let mut measure_index = 0usize;
+            let mut current_measure = None::<QueuedMeasure>;
+
             'outer: loop {
                 if *play_state.lock().unwrap() != DawPlayState::Playing {
                     break;
                 }
-                // 各小節の直前で play_measure_mmls と play_measure_samples を読み取ることで、
-                // セル編集・音色変更を次小節から反映する（issue #132）。
+
+                // 各小節の直前に最新の MML / 小節長を読み取って現在小節を決定する。
+                // 初回はここで小節を解決し、2 小節目以降は後続小節の lookahead 準備に使う。
                 let mmls = play_measure_mmls.lock().unwrap().clone();
                 let measure_samples = *play_measure_samples.lock().unwrap();
-
-                // 末尾の空小節をスキップ: 有効な最後の小節までをループ対象とする。
-                // これにより meas3-8 が空のときは meas1-2 だけをループする（issue #68）。
                 let effective_count = match effective_measure_count(&mmls) {
                     Some(n) => n,
                     None => break 'outer,
                 };
 
-                let current_measure_index =
-                    current_play_measure_index(measure_index, effective_count);
-                let mml = &mmls[current_measure_index];
+                if current_measure.is_none() {
+                    let current_measure_index =
+                        current_play_measure_index(measure_index, effective_count);
+                    let mml = &mmls[current_measure_index];
+                    let samples = match build_playback_measure_samples(
+                        &cache,
+                        current_measure_index,
+                        mml,
+                        measure_samples,
+                        tracks,
+                        &log_lines,
+                        || {
+                            let _guard = render_lock.lock().unwrap();
+                            let core_cfg = CoreConfig::from(&daw_cfg);
+                            mml_render_for_cache(mml, &core_cfg, entry_ref)
+                        },
+                    ) {
+                        Ok(samples) => samples,
+                        Err(_) => {
+                            crate::logging::append_log_line(
+                                &log_lines,
+                                format!("meas{}: render error", current_measure_index + 1),
+                            );
+                            break 'outer;
+                        }
+                    };
+                    let measure_start = std::time::Instant::now();
+                    let measure_duration = std::time::Duration::from_secs_f64(
+                        measure_samples as f64 / (sample_rate as f64 * 2.0),
+                    );
+                    sink.append(rodio::buffer::SamplesBuffer::new(2, sample_rate, samples));
+                    *play_position.lock().unwrap() = Some(PlayPosition {
+                        measure_index: current_measure_index,
+                        measure_start,
+                    });
+                    current_measure = Some(QueuedMeasure {
+                        measure_index: current_measure_index,
+                        measure_start,
+                        measure_duration,
+                    });
+                }
 
-                let samples = match build_playback_measure_samples(
+                let Some(current) = current_measure.clone() else {
+                    break 'outer;
+                };
+
+                // 現在小節の再生中に次小節を 1 つ先読みし、Sink が空になる前に追加する。
+                // これにより cache miss 時のフォールバックレンダリングでも無音ギャップを最小化する。
+                let next_measure_index =
+                    following_measure_index(current.measure_index, effective_count);
+                let next_mml = &mmls[next_measure_index];
+                let next_samples = match build_playback_measure_samples(
                     &cache,
-                    current_measure_index,
-                    mml,
+                    next_measure_index,
+                    next_mml,
                     measure_samples,
                     tracks,
                     &log_lines,
                     || {
                         let _guard = render_lock.lock().unwrap();
                         let core_cfg = CoreConfig::from(&daw_cfg);
-                        mml_render_for_cache(mml, &core_cfg, entry_ref)
+                        mml_render_for_cache(next_mml, &core_cfg, entry_ref)
                     },
                 ) {
                     Ok(samples) => samples,
                     Err(_) => {
                         crate::logging::append_log_line(
                             &log_lines,
-                            format!("meas{}: render error", current_measure_index + 1),
+                            format!("meas{}: render error", next_measure_index + 1),
                         );
                         break 'outer;
                     }
                 };
 
-                // 1 小節ずつ Sink に投入し、その都度最新の MML / テンポ変更を次小節から反映する。
-                // append 直前の時刻を再生開始時刻として UI とログの粒度を 1 小節に合わせる。
-                let measure_start = std::time::Instant::now();
-                sink.append(rodio::buffer::SamplesBuffer::new(2, sample_rate, samples));
-                *play_position.lock().unwrap() = Some(PlayPosition {
-                    measure_index: current_measure_index,
-                    measure_start,
-                });
+                let next_measure_start = current.measure_start + current.measure_duration;
+                let next_measure_duration = std::time::Duration::from_secs_f64(
+                    measure_samples as f64 / (sample_rate as f64 * 2.0),
+                );
+                sink.append(rodio::buffer::SamplesBuffer::new(
+                    2,
+                    sample_rate,
+                    next_samples,
+                ));
 
-                // この小節の再生完了を 10 ms 粒度でポーリング待機する。
-                // sink.sleep_until_end() は停止要求を検出できないためポーリングを使用する。
                 loop {
-                    if sink.empty() {
+                    if std::time::Instant::now() >= next_measure_start {
                         break;
                     }
                     if *play_state.lock().unwrap() != DawPlayState::Playing {
@@ -248,7 +310,20 @@ impl DawApp {
                     std::thread::sleep(std::time::Duration::from_millis(10));
                 }
 
-                measure_index = next_play_measure_index(current_measure_index, effective_count);
+                if *play_state.lock().unwrap() != DawPlayState::Playing {
+                    break 'outer;
+                }
+
+                *play_position.lock().unwrap() = Some(PlayPosition {
+                    measure_index: next_measure_index,
+                    measure_start: next_measure_start,
+                });
+                current_measure = Some(QueuedMeasure {
+                    measure_index: next_measure_index,
+                    measure_start: next_measure_start,
+                    measure_duration: next_measure_duration,
+                });
+                measure_index = next_measure_index;
             }
 
             // Only reset to Idle if we are still the active Playing session.
@@ -293,7 +368,8 @@ mod tests {
 
     use super::{
         super::{CacheState, CellCache, DawApp, DawMode, DawPlayState},
-        build_playback_measure_samples, current_play_measure_index, next_play_measure_index,
+        build_playback_measure_samples, current_play_measure_index, following_measure_index,
+        next_play_measure_index,
     };
 
     /// stop_play のログ出力を検証するための最小構成の DawApp を作る。
@@ -382,6 +458,13 @@ mod tests {
     fn next_play_measure_index_wraps_after_effective_end() {
         assert_eq!(next_play_measure_index(0, 4), 1);
         assert_eq!(next_play_measure_index(3, 4), 0);
+    }
+
+    #[test]
+    fn following_measure_index_restarts_when_current_is_outside_latest_loop() {
+        assert_eq!(following_measure_index(1, 4), 2);
+        assert_eq!(following_measure_index(3, 4), 0);
+        assert_eq!(following_measure_index(7, 4), 0);
     }
 
     #[test]
