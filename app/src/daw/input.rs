@@ -31,20 +31,7 @@ impl DawApp {
     /// 編集内容を確定してキャッシュ更新・保存を行う
     pub(super) fn commit_insert(&mut self) {
         let text = self.textarea.lines().join("");
-        let mut changed = false;
-
-        if text.contains(';') {
-            // セミコロンで分割して下の track に順に追加
-            for (i, part) in text.split(';').enumerate() {
-                let t = self.cursor_track + i;
-                if t >= self.tracks {
-                    break;
-                }
-                changed |= self.commit_insert_cell(t, self.cursor_measure, part);
-            }
-        } else {
-            changed = self.commit_insert_cell(self.cursor_track, self.cursor_measure, &text);
-        }
+        let changed = self.commit_insert_cell(self.cursor_track, self.cursor_measure, &text);
 
         if !changed {
             return;
@@ -295,6 +282,49 @@ mod tests {
             assert_eq!(job.track, 1);
             assert_eq!(job.measure, 1);
             assert_eq!(job.generation, 8);
+        }
+
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn commit_insert_keeps_semicolon_text_in_same_measure() {
+        let tmp = std::env::temp_dir().join("cmrt_test_commit_insert_keeps_semicolon_text");
+        std::fs::remove_dir_all(&tmp).ok();
+
+        {
+            let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
+
+            let (mut app, cache_rx) = build_test_app();
+            app.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
+            app.data[1][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
+            app.data[2][1] = "existing".to_string();
+
+            app.start_insert();
+            app.textarea = TextArea::default();
+            for ch in "cde;gab".chars() {
+                app.textarea.insert_char(ch);
+            }
+            app.commit_insert();
+
+            assert_eq!(app.data[1][1], "cde;gab");
+            assert_eq!(app.data[2][1], "existing");
+
+            let job = cache_rx
+                .try_recv()
+                .expect("semicolon insert did not queue a cache job");
+            assert_eq!(job.track, 1);
+            assert_eq!(job.measure, 1);
+            assert_eq!(
+                job.mml.matches(r#"{"Surge XT patch": "piano"}"#).count(),
+                2,
+                "semicolon-separated phrases should each receive the track timbre: {}",
+                job.mml
+            );
+            assert!(
+                cache_rx.try_recv().is_err(),
+                "unexpected extra cache job queued"
+            );
         }
 
         std::fs::remove_dir_all(&tmp).ok();
