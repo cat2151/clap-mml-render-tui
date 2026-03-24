@@ -216,6 +216,7 @@ mod tests {
                 cache_tx,
                 render_lock: Arc::new(Mutex::new(())),
                 play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
+                play_transition_lock: Arc::new(Mutex::new(())),
                 play_position: Arc::new(Mutex::new(None)),
                 play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
                 play_measure_samples: Arc::new(Mutex::new(0)),
@@ -371,8 +372,7 @@ mod tests {
             app.handle_normal(crossterm::event::KeyCode::Char('r'));
 
             assert_eq!(
-                app.data[1][0],
-                r#"{"Surge XT patch": "Pad 1.fxp"}"#,
+                app.data[1][0], r#"{"Surge XT patch": "Pad 1.fxp"}"#,
                 "random patch should update the timbre cell"
             );
 
@@ -386,7 +386,10 @@ mod tests {
             let job1 = cache_rx.try_recv().expect("meas1 should be queued");
             let job2 = cache_rx.try_recv().expect("meas2 should be queued");
             assert_eq!(
-                vec![(job1.measure, job1.generation), (job2.measure, job2.generation)],
+                vec![
+                    (job1.measure, job1.generation),
+                    (job2.measure, job2.generation)
+                ],
                 vec![(1, expected_generations[0]), (2, expected_generations[1])]
             );
             assert!(
@@ -394,10 +397,17 @@ mod tests {
                 "measure 0 must not be queued for rerender"
             );
 
-            let logs = app.log_lines.lock().unwrap().iter().cloned().collect::<Vec<_>>();
+            let logs = app
+                .log_lines
+                .lock()
+                .unwrap()
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>();
             assert!(
                 logs.iter()
-                    .any(|line| line == "cache: rerender start track1 meas 1〜2 (random patch update)"),
+                    .any(|line| line
+                        == "cache: rerender start track1 meas 1〜2 (random patch update)"),
                 "logs: {:?}",
                 logs
             );
