@@ -25,31 +25,33 @@
 //! キー操作 (HELP):
 //!   ESC   : キャンセル → NORMAL
 
+mod batch_logging;
 mod cache;
 mod input;
 mod mml;
 mod playback;
 mod playback_util;
+mod preview;
+mod runtime;
 mod save;
 mod timing;
 mod types;
 mod ui;
+mod wav_io;
 
-use anyhow::Result;
 use clack_host::prelude::PluginEntry;
 use cmrt_core::{collect_patches, ensure_daw_dir, mml_render_for_cache, to_relative, write_wav};
-use crossterm::event::{self, Event, KeyCode, KeyModifiers};
-use ratatui::{backend::CrosstermBackend, Frame, Terminal};
+use ratatui::Frame;
 use tui_textarea::TextArea;
 
-use std::collections::{BTreeSet, VecDeque};
-use std::path::Path;
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use crate::config::Config;
 
 // ─── 再エクスポート ───────────────────────────────────────────
 
+use batch_logging::TrackRerenderBatch;
 pub use types::DawExitReason;
 pub(super) use types::{
     CacheState, CellCache, DawMode, DawNormalAction, DawPlayState, PlayPosition,
@@ -82,43 +84,6 @@ pub(super) struct CacheJob {
     generation: u64,
     rendered_mml_hash: u64,
     mml: String,
-}
-
-pub(super) struct WavCacheInfo {
-    spec: hound::WavSpec,
-    interleaved_sample_count: usize,
-}
-
-#[derive(Clone)]
-struct TrackRerenderBatch {
-    pending: BTreeSet<usize>,
-    completion_log: String,
-}
-
-pub(super) fn read_wav_cache_info(path: &Path) -> anyhow::Result<WavCacheInfo> {
-    let reader = hound::WavReader::open(path)?;
-    let spec = reader.spec();
-    let interleaved_sample_count = reader.duration() as usize * spec.channels as usize;
-    Ok(WavCacheInfo {
-        spec,
-        interleaved_sample_count,
-    })
-}
-
-fn load_wav_samples(path: &Path) -> anyhow::Result<Vec<f32>> {
-    let mut reader = hound::WavReader::open(path)?;
-    let spec = reader.spec();
-    match spec.sample_format {
-        hound::SampleFormat::Float => Ok(reader.samples::<f32>().collect::<Result<Vec<_>, _>>()?),
-        hound::SampleFormat::Int => {
-            let scale = ((1_i64 << (spec.bits_per_sample.saturating_sub(1) as u32)) - 1) as f32;
-            let samples = reader
-                .samples::<i32>()
-                .map(|sample| sample.map(|value| value as f32 / scale))
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(samples)
-        }
-    }
 }
 
 // ─── DawApp ───────────────────────────────────────────────────
@@ -345,115 +310,6 @@ impl DawApp {
     fn append_log_line(&self, message: impl Into<String>) {
         crate::logging::append_log_line(&self.log_lines, message);
     }
-
-    fn start_track_rerender_batch(&self, track: usize, measures: &[usize], reason: &str) {
-        if track == 0 {
-            return;
-        }
-        let mut batches = self.track_rerender_batches.lock().unwrap();
-        let pending: BTreeSet<usize> = measures.iter().copied().collect();
-        if pending.is_empty() {
-            batches[track] = None;
-            return;
-        }
-        let measure_range = playback_util::format_measure_list(measures)
-            .map(|label| label.replace('～', "〜"))
-            .unwrap_or_else(|| "none".to_string());
-        self.append_log_line(format!(
-            "cache: rerender start track{} {} ({reason})",
-            track, measure_range
-        ));
-        batches[track] = Some(TrackRerenderBatch {
-            pending,
-            completion_log: format!(
-                "cache: rerender done track{} {} ({reason})",
-                track, measure_range
-            ),
-        });
-    }
-
-    fn complete_track_rerender_batch_measure(
-        batches: &Arc<Mutex<Vec<Option<TrackRerenderBatch>>>>,
-        log_lines: &Arc<Mutex<VecDeque<String>>>,
-        track: usize,
-        measure: usize,
-    ) {
-        if track == 0 || measure == 0 {
-            return;
-        }
-        let completion_log = {
-            let mut batches = batches.lock().unwrap();
-            let Some(batch) = batches.get_mut(track).and_then(Option::as_mut) else {
-                return;
-            };
-            if !batch.pending.remove(&measure) {
-                return;
-            }
-            if !batch.pending.is_empty() {
-                return;
-            }
-            let completion_log = batch.completion_log.clone();
-            batches[track] = None;
-            completion_log
-        };
-        crate::logging::append_log_line(log_lines, completion_log);
-    }
-
-    // ─── メインループ ─────────────────────────────────────────
-
-    /// TuiApp と同じ terminal を受け取って DAW モードを実行する。
-    /// 終了時は `DawExitReason` を返す:
-    ///   - `ReturnToTui` : d / ESC キーで TUI に戻る
-    ///   - `QuitApp`     : q キーまたは Ctrl+C でアプリを終了する
-    pub fn run_with_terminal(
-        &mut self,
-        terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
-    ) -> Result<DawExitReason> {
-        // Pending セルのキャッシュ構築を開始
-        self.kick_all_pending();
-
-        loop {
-            terminal.draw(|f| self.draw(f))?;
-
-            if event::poll(std::time::Duration::from_millis(50))? {
-                if let Event::Key(key) = event::read()? {
-                    use crossterm::event::KeyEventKind;
-                    if key.kind != KeyEventKind::Press {
-                        continue;
-                    }
-                    if key.modifiers.contains(KeyModifiers::CONTROL)
-                        && key.code == KeyCode::Char('c')
-                    {
-                        self.stop_play();
-                        self.save_history_state();
-                        return Ok(DawExitReason::QuitApp);
-                    }
-
-                    match self.mode {
-                        DawMode::Normal => match self.handle_normal(key.code) {
-                            DawNormalAction::ReturnToTui => {
-                                self.stop_play();
-                                self.save_history_state();
-                                return Ok(DawExitReason::ReturnToTui);
-                            }
-                            DawNormalAction::QuitApp => {
-                                self.stop_play();
-                                self.save_history_state();
-                                return Ok(DawExitReason::QuitApp);
-                            }
-                            DawNormalAction::Continue => {}
-                        },
-                        DawMode::Insert => {
-                            self.handle_insert(key);
-                        }
-                        DawMode::Help => {
-                            self.handle_help(key.code);
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 #[cfg(test)]
@@ -463,8 +319,8 @@ mod tests {
         sync::{Arc, Mutex},
     };
 
-    use super::load_wav_samples;
-    use super::{DawApp, TrackRerenderBatch};
+    use super::wav_io::load_wav_samples;
+    use super::{batch_logging::TrackRerenderBatch, DawApp};
 
     #[test]
     fn load_wav_samples_reads_back_float_wav_cache() {
@@ -555,12 +411,15 @@ mod tests {
             tracks,
             measures,
             cache: Arc::new(Mutex::new(vec![
-                vec![CellCache {
-                    state: CacheState::Empty,
-                    samples: None,
-                    generation: 0,
-                    rendered_mml_hash: None,
-                }; measures + 1];
+                vec![
+                    CellCache {
+                        state: CacheState::Empty,
+                        samples: None,
+                        generation: 0,
+                        rendered_mml_hash: None,
+                    };
+                    measures + 1
+                ];
                 tracks
             ])),
             cache_tx,

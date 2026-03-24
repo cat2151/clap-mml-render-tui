@@ -17,7 +17,7 @@ use super::{CacheState, CellCache, DawApp, DawPlayState, PlayPosition, FIRST_PLA
 /// 呼び出し元はフレッシュレンダリングにフォールバックすること。
 /// 全 playable track が `Empty` の場合は無音（ゼロ埋め）を返す。
 /// 結果は `measure_samples` 長に正確に揃えて返す（超過分は切り捨て、不足分はゼロ埋め済み）。
-fn try_get_cached_samples(
+pub(super) fn try_get_cached_samples(
     cache: &Arc<Mutex<Vec<Vec<CellCache>>>>,
     measure: usize,
     measure_samples: usize,
@@ -276,119 +276,6 @@ impl DawApp {
                 drop(state);
                 *play_position.lock().unwrap() = None;
                 crate::logging::append_log_line(&log_lines, "play: finished");
-            }
-        });
-    }
-
-    /// 指定された小節を一度だけ再生するプレビュー（ループなし）
-    pub(super) fn start_preview(&self, measure_index: usize) {
-        let mmls = self.build_measure_mmls();
-        let mml = mmls.get(measure_index).cloned().unwrap_or_default();
-        if mml.trim().is_empty() {
-            return;
-        }
-
-        let measure_samples = self.measure_duration_samples();
-        let play_state = Arc::clone(&self.play_state);
-        let play_position = Arc::clone(&self.play_position);
-        let render_lock = Arc::clone(&self.render_lock);
-        let cache = Arc::clone(&self.cache);
-        let cfg = Arc::clone(&self.cfg);
-        let log_lines = Arc::clone(&self.log_lines);
-        let entry_ptr = self.entry_ptr;
-        let tracks = self.tracks;
-
-        *play_state.lock().unwrap() = DawPlayState::Preview;
-        crate::logging::append_log_line(&log_lines, format!("preview: meas{}", measure_index + 1));
-
-        std::thread::spawn(move || {
-            // SAFETY: entry は main() のスタックに生存している
-            let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
-            let daw_cfg = (*cfg).clone();
-            let sample_rate = daw_cfg.sample_rate as u32;
-
-            let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else {
-                // Audio init failed: only reset to Idle if we are still the active Preview session.
-                crate::logging::append_log_line(&log_lines, "preview: audio init failed");
-                let mut state = play_state.lock().unwrap();
-                if *state == DawPlayState::Preview {
-                    *state = DawPlayState::Idle;
-                    drop(state);
-                    *play_position.lock().unwrap() = None;
-                }
-                return;
-            };
-            let Ok(sink) = rodio::Sink::try_new(&stream_handle) else {
-                crate::logging::append_log_line(&log_lines, "preview: sink init failed");
-                let mut state = play_state.lock().unwrap();
-                if *state == DawPlayState::Preview {
-                    *state = DawPlayState::Idle;
-                    drop(state);
-                    *play_position.lock().unwrap() = None;
-                }
-                return;
-            };
-
-            // キャッシュヒット時は即時再生、ミス時はレンダリングにフォールバック
-            let samples_opt = if let Some(cached) =
-                try_get_cached_samples(&cache, measure_index + 1, measure_samples, tracks)
-            {
-                crate::logging::append_log_line(
-                    &log_lines,
-                    format!("meas{}: cache hit", measure_index + 1),
-                );
-                Some(cached)
-            } else {
-                crate::logging::append_log_line(
-                    &log_lines,
-                    format!("meas{}: render", measure_index + 1),
-                );
-                let result = {
-                    let _guard = render_lock.lock().unwrap();
-                    let core_cfg = CoreConfig::from(&daw_cfg);
-                    mml_render_for_cache(&mml, &core_cfg, entry_ref)
-                };
-                result.ok().map(|mut s| {
-                    if s.len() < measure_samples {
-                        s.resize(measure_samples, 0.0);
-                    } else {
-                        s.truncate(measure_samples);
-                    }
-                    s
-                })
-            };
-
-            if let Some(samples) = samples_opt {
-                // サンプル取得成功後、まだ Preview セッションが有効なときだけ再生開始時刻を更新する。
-                // stop や新しい演奏開始後に上書きしないようガードする。
-                // レンダリング失敗時は play_position を更新せず、UI に再生中と表示させない。
-                if *play_state.lock().unwrap() == DawPlayState::Preview {
-                    *play_position.lock().unwrap() = Some(PlayPosition {
-                        measure_index,
-                        measure_start: std::time::Instant::now(),
-                    });
-                }
-                // Preview 中に stop された場合は再生しない
-                if *play_state.lock().unwrap() == DawPlayState::Preview {
-                    let source = rodio::buffer::SamplesBuffer::new(2, sample_rate, samples);
-                    sink.append(source);
-                    sink.sleep_until_end();
-                }
-            } else {
-                crate::logging::append_log_line(
-                    &log_lines,
-                    format!("meas{}: render error", measure_index + 1),
-                );
-            }
-
-            // Only reset to Idle if we are still the active Preview session.
-            // An unconditional write would clobber a newer session started after stop.
-            let mut state = play_state.lock().unwrap();
-            if *state == DawPlayState::Preview {
-                *state = DawPlayState::Idle;
-                drop(state);
-                *play_position.lock().unwrap() = None;
-                crate::logging::append_log_line(&log_lines, "preview: finished");
             }
         });
     }
