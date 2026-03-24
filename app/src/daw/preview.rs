@@ -1,12 +1,33 @@
 //! DawApp のプレビュー再生
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use clack_host::prelude::PluginEntry;
 use cmrt_core::{mml_render_for_cache, CoreConfig};
 
 use super::playback::try_get_cached_samples;
 use super::{DawApp, DawPlayState, PlayPosition};
+
+fn begin_preview_output<F>(
+    play_state: &Arc<Mutex<DawPlayState>>,
+    play_position: &Arc<Mutex<Option<PlayPosition>>>,
+    measure_index: usize,
+    enqueue_audio: F,
+) -> bool
+where
+    F: FnOnce(),
+{
+    let play_state = play_state.lock().unwrap();
+    if *play_state != DawPlayState::Preview {
+        return false;
+    }
+    *play_position.lock().unwrap() = Some(PlayPosition {
+        measure_index,
+        measure_start: std::time::Instant::now(),
+    });
+    enqueue_audio();
+    true
+}
 
 impl DawApp {
     /// 指定された小節を一度だけ再生するプレビュー（ループなし）
@@ -87,21 +108,11 @@ impl DawApp {
             };
 
             if let Some(samples) = samples_opt {
-                let preview_active = {
-                    let play_state = play_state.lock().unwrap();
-                    if *play_state != DawPlayState::Preview {
-                        false
-                    } else {
-                        drop(play_state);
-                        *play_position.lock().unwrap() = Some(PlayPosition {
-                            measure_index,
-                            measure_start: std::time::Instant::now(),
-                        });
+                let preview_active =
+                    begin_preview_output(&play_state, &play_position, measure_index, || {
                         let source = rodio::buffer::SamplesBuffer::new(2, sample_rate, samples);
                         sink.append(source);
-                        true
-                    }
-                };
+                    });
                 if preview_active {
                     sink.sleep_until_end();
                 }
@@ -120,5 +131,60 @@ impl DawApp {
                 crate::logging::append_log_line(&log_lines, "preview: finished");
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
+    };
+
+    use super::{begin_preview_output, DawPlayState, PlayPosition};
+
+    #[test]
+    fn begin_preview_output_skips_enqueue_when_preview_stopped() {
+        let play_state = Arc::new(Mutex::new(DawPlayState::Idle));
+        let play_position = Arc::new(Mutex::new(None::<PlayPosition>));
+        let enqueue_calls = Arc::new(AtomicUsize::new(0));
+
+        let started = begin_preview_output(&play_state, &play_position, 2, || {
+            enqueue_calls.fetch_add(1, Ordering::SeqCst);
+        });
+
+        assert!(!started);
+        assert_eq!(enqueue_calls.load(Ordering::SeqCst), 0);
+        assert!(play_position.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn begin_preview_output_updates_position_before_enqueue() {
+        let play_state = Arc::new(Mutex::new(DawPlayState::Preview));
+        let play_position = Arc::new(Mutex::new(None::<PlayPosition>));
+        let observed_measure = Arc::new(Mutex::new(None));
+
+        let started = begin_preview_output(&play_state, &play_position, 3, {
+            let play_position = Arc::clone(&play_position);
+            let observed_measure = Arc::clone(&observed_measure);
+            move || {
+                *observed_measure.lock().unwrap() = play_position
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .map(|position| position.measure_index);
+            }
+        });
+
+        assert!(started);
+        assert_eq!(*observed_measure.lock().unwrap(), Some(3));
+        assert_eq!(
+            play_position
+                .lock()
+                .unwrap()
+                .as_ref()
+                .map(|position| position.measure_index),
+            Some(3)
+        );
     }
 }
