@@ -196,6 +196,45 @@ fn handle_normal_r_shows_error_when_patches_dir_is_missing() {
 }
 
 #[test]
+fn handle_normal_r_shows_error_while_patches_are_loading() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Loading));
+
+    app.handle_normal(KeyCode::Char('r'));
+
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Err(msg) if msg == "パッチを読み込み中です..."
+    ));
+}
+
+#[test]
+fn handle_normal_r_shows_error_when_patch_loading_failed() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Err("boom".to_string())));
+
+    app.handle_normal(KeyCode::Char('r'));
+
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Err(msg) if msg == "パッチの読み込みに失敗: boom"
+    ));
+}
+
+#[test]
+fn handle_normal_r_shows_error_when_patch_list_is_empty() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(Vec::new())));
+
+    app.handle_normal(KeyCode::Char('r'));
+
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Err(msg) if msg == "patches_dir にパッチが見つかりません"
+    ));
+}
+
+#[test]
 fn handle_normal_t_enters_patch_select_when_random_timbre_disabled() {
     let mut app = TuiApp::new_for_test(test_config());
     let patches = make_patches(&["Pads/Pad 1.fxp"]);

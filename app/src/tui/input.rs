@@ -49,8 +49,8 @@ impl<'a> TuiApp<'a> {
                 let ns = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .map(|duration| duration.as_nanos())
-                    .unwrap_or(0) as usize;
-                let index = ns % pairs.len();
+                    .unwrap_or(0);
+                let index = (ns % pairs.len() as u128) as usize;
                 Ok(pairs[index].0.clone())
             }
         }
