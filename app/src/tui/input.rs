@@ -15,7 +15,9 @@ const PATCH_PHRASE_LIST_MAX_LEN: usize = 100;
 
 impl<'a> TuiApp<'a> {
     fn push_front_dedup(items: &mut Vec<String>, item: String) {
-        items.retain(|existing| existing != &item);
+        if let Some(index) = items.iter().position(|existing| existing == &item) {
+            items.remove(index);
+        }
         items.insert(0, item);
         if items.len() > PATCH_PHRASE_LIST_MAX_LEN {
             items.truncate(PATCH_PHRASE_LIST_MAX_LEN);
