@@ -91,7 +91,7 @@ pub(super) struct WavCacheInfo {
 
 #[derive(Clone)]
 struct TrackRerenderBatch {
-    pending: BTreeSet<(usize, u64)>,
+    pending: BTreeSet<usize>,
     completion_log: String,
 }
 
@@ -270,7 +270,6 @@ impl DawApp {
                                 &log_lines_worker,
                                 track,
                                 measure,
-                                job.generation,
                             );
                         }
                         Err(_) => {
@@ -287,7 +286,6 @@ impl DawApp {
                                 &log_lines_worker,
                                 track,
                                 measure,
-                                job.generation,
                             );
                         }
                     }
@@ -348,23 +346,19 @@ impl DawApp {
         crate::logging::append_log_line(&self.log_lines, message);
     }
 
-    fn start_track_rerender_batch(&self, track: usize, reason: &str) {
+    fn start_track_rerender_batch(&self, track: usize, measures: &[usize], reason: &str) {
         if track == 0 {
             return;
         }
-        let pending: BTreeSet<(usize, u64)> = {
-            let cache = self.cache.lock().unwrap();
-            (1..=self.measures)
-                .filter(|&measure| !self.data[track][measure].trim().is_empty())
-                .map(|measure| (measure, cache[track][measure].generation))
-                .collect()
-        };
         let mut batches = self.track_rerender_batches.lock().unwrap();
+        let pending: BTreeSet<usize> = measures.iter().copied().collect();
         if pending.is_empty() {
             batches[track] = None;
             return;
         }
-        let measure_range = format!("meas1〜meas{}", self.measures);
+        let measure_range = playback_util::format_measure_list(measures)
+            .map(|label| label.replace('～', "〜"))
+            .unwrap_or_else(|| "none".to_string());
         self.append_log_line(format!(
             "cache: rerender start track{} {} ({reason})",
             track, measure_range
@@ -383,7 +377,6 @@ impl DawApp {
         log_lines: &Arc<Mutex<VecDeque<String>>>,
         track: usize,
         measure: usize,
-        generation: u64,
     ) {
         if track == 0 || measure == 0 {
             return;
@@ -393,7 +386,7 @@ impl DawApp {
             let Some(batch) = batches.get_mut(track).and_then(Option::as_mut) else {
                 return;
             };
-            if !batch.pending.remove(&(measure, generation)) {
+            if !batch.pending.remove(&measure) {
                 return;
             }
             if !batch.pending.is_empty() {
@@ -507,26 +500,84 @@ mod tests {
         let log_lines = Arc::new(Mutex::new(VecDeque::new()));
         let batches = Arc::new(Mutex::new(vec![None, None]));
         batches.lock().unwrap()[1] = Some(TrackRerenderBatch {
-            pending: BTreeSet::from([(1, 11_u64), (2, 12_u64)]),
-            completion_log: "cache: rerender done track1 meas1〜meas2 (random patch update)"
+            pending: BTreeSet::from([1, 2]),
+            completion_log: "cache: rerender done track1 meas 1〜2 (random patch update)"
                 .to_string(),
         });
 
-        DawApp::complete_track_rerender_batch_measure(&batches, &log_lines, 1, 1, 11);
+        DawApp::complete_track_rerender_batch_measure(&batches, &log_lines, 1, 1);
         assert!(
             log_lines.lock().unwrap().is_empty(),
             "completion log should wait for the last measure"
         );
 
-        DawApp::complete_track_rerender_batch_measure(&batches, &log_lines, 1, 2, 12);
+        DawApp::complete_track_rerender_batch_measure(&batches, &log_lines, 1, 2);
 
         assert_eq!(
             log_lines.lock().unwrap().back().map(String::as_str),
-            Some("cache: rerender done track1 meas1〜meas2 (random patch update)")
+            Some("cache: rerender done track1 meas 1〜2 (random patch update)")
         );
         assert!(
             batches.lock().unwrap()[1].is_none(),
             "completed batch should be cleared"
+        );
+    }
+
+    #[test]
+    fn start_track_rerender_batch_logs_only_targeted_measures() {
+        use crate::config::Config;
+        use crate::daw::{CacheState, CellCache, DawMode, DawPlayState};
+        use std::collections::VecDeque;
+        use tui_textarea::TextArea;
+
+        let tracks = 3;
+        let measures = 4;
+        let (cache_tx, _cache_rx) = std::sync::mpsc::channel();
+        let app = DawApp {
+            data: vec![vec![String::new(); measures + 1]; tracks],
+            cursor_track: 0,
+            cursor_measure: 0,
+            mode: DawMode::Normal,
+            textarea: TextArea::default(),
+            cfg: Arc::new(Config {
+                plugin_path: String::new(),
+                input_midi: String::new(),
+                output_midi: String::new(),
+                output_wav: String::new(),
+                sample_rate: 44_100.0,
+                buffer_size: 512,
+                patch_path: None,
+                patches_dir: None,
+                daw_tracks: tracks,
+                daw_measures: measures,
+            }),
+            entry_ptr: 0,
+            tracks,
+            measures,
+            cache: Arc::new(Mutex::new(vec![
+                vec![CellCache {
+                    state: CacheState::Empty,
+                    samples: None,
+                    generation: 0,
+                    rendered_mml_hash: None,
+                }; measures + 1];
+                tracks
+            ])),
+            cache_tx,
+            render_lock: Arc::new(Mutex::new(())),
+            play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
+            play_position: Arc::new(Mutex::new(None)),
+            play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
+            play_measure_samples: Arc::new(Mutex::new(0)),
+            log_lines: Arc::new(Mutex::new(VecDeque::new())),
+            track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
+        };
+
+        app.start_track_rerender_batch(1, &[1, 3, 4], "random patch update");
+
+        assert_eq!(
+            app.log_lines.lock().unwrap().back().map(String::as_str),
+            Some("cache: rerender start track1 meas 1, meas 3〜4 (random patch update)")
         );
     }
 }

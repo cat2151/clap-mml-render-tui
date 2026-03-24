@@ -107,12 +107,21 @@ impl DawApp {
             KeyCode::Char('r') => {
                 // measure 0 にランダム音色を設定
                 if let Some(patch) = self.pick_random_patch_name() {
+                    let affected_measures: Vec<usize> = (1..=self.measures)
+                        .filter(|&measure| !self.data[self.cursor_track][measure].trim().is_empty())
+                        .collect();
                     self.data[self.cursor_track][0] =
                         format!("{{\"Surge XT patch\": \"{}\"}}", patch);
                     self.invalidate_cell(self.cursor_track, 0);
+                    // バッチを先に登録してから依存セルの再キャッシュをキックすることで、
+                    // ワーカースレッド側の完了報告との競合状態を防ぐ。
+                    self.start_track_rerender_batch(
+                        self.cursor_track,
+                        &affected_measures,
+                        "random patch update",
+                    );
                     // 音色変更は当該 track の全小節（1..=MEASURES）に影響するため一括再キャッシュ（issue #67 参照）
                     self.invalidate_and_kick_dependent_cells(self.cursor_track, 0);
-                    self.start_track_rerender_batch(self.cursor_track, "random patch update");
                     self.save();
 
                     // hot reload: 次の再生ループから新しい音色を反映する
@@ -388,7 +397,7 @@ mod tests {
             let logs = app.log_lines.lock().unwrap().iter().cloned().collect::<Vec<_>>();
             assert!(
                 logs.iter()
-                    .any(|line| line == "cache: rerender start track1 meas1〜meas2 (random patch update)"),
+                    .any(|line| line == "cache: rerender start track1 meas 1〜2 (random patch update)"),
                 "logs: {:?}",
                 logs
             );
