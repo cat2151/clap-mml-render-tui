@@ -258,6 +258,7 @@ fn record_patch_phrase_history_truncates_to_recent_100_items() {
         .patches
         .get("Pads/Pad 1.fxp")
         .expect("patch history should be stored");
+    assert!(app.patch_phrase_store_dirty);
     assert_eq!(stored.history.len(), 100);
     assert_eq!(stored.history.first().map(String::as_str), Some("l8c104"));
     assert_eq!(stored.history.last().map(String::as_str), Some("l8c5"));
