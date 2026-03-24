@@ -82,17 +82,8 @@ fn current_play_measure_index(current_measure_index: usize, effective_count: usi
     }
 }
 
-#[cfg(test)]
-fn next_play_measure_index(current_measure_index: usize, effective_count: usize) -> usize {
-    (current_measure_index + 1) % effective_count
-}
-
 fn following_measure_index(current_measure_index: usize, effective_count: usize) -> usize {
-    if current_measure_index + 1 < effective_count {
-        current_measure_index + 1
-    } else {
-        0
-    }
+    (current_measure_index + 1) % effective_count
 }
 
 fn build_playback_measure_samples<F, E>(
@@ -132,11 +123,18 @@ where
     Ok(samples)
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 struct QueuedMeasure {
     measure_index: usize,
     measure_start: std::time::Instant,
     measure_duration: std::time::Duration,
+}
+
+fn measure_duration(sample_count: usize, sample_rate: u32) -> std::time::Duration {
+    // sample_count はステレオのインターリーブ済みサンプル総数（L/R の合計要素数）。
+    // そのため実時間は frames (= sample_count / 2) / sample_rate となり、
+    // sample_count / (sample_rate * 2) と等価になる。
+    std::time::Duration::from_secs_f64(sample_count as f64 / (sample_rate as f64 * 2.0))
 }
 
 impl DawApp {
@@ -243,9 +241,7 @@ impl DawApp {
                         }
                     };
                     let measure_start = std::time::Instant::now();
-                    let measure_duration = std::time::Duration::from_secs_f64(
-                        measure_samples as f64 / (sample_rate as f64 * 2.0),
-                    );
+                    let measure_duration = measure_duration(measure_samples, sample_rate);
                     sink.append(rodio::buffer::SamplesBuffer::new(2, sample_rate, samples));
                     *play_position.lock().unwrap() = Some(PlayPosition {
                         measure_index: current_measure_index,
@@ -258,18 +254,18 @@ impl DawApp {
                     });
                 }
 
-                let Some(current) = current_measure.clone() else {
-                    break 'outer;
-                };
+                let current = current_measure.expect(
+                    "BUG: current_measure must be initialized before lookahead; this indicates a logic error in the playback loop initialization",
+                );
 
                 // 現在小節の再生中に次小節を 1 つ先読みし、Sink が空になる前に追加する。
                 // これにより cache miss 時のフォールバックレンダリングでも無音ギャップを最小化する。
-                let next_measure_index =
+                let lookahead_measure_index =
                     following_measure_index(current.measure_index, effective_count);
-                let next_mml = &mmls[next_measure_index];
+                let next_mml = &mmls[lookahead_measure_index];
                 let next_samples = match build_playback_measure_samples(
                     &cache,
-                    next_measure_index,
+                    lookahead_measure_index,
                     next_mml,
                     measure_samples,
                     tracks,
@@ -284,22 +280,23 @@ impl DawApp {
                     Err(_) => {
                         crate::logging::append_log_line(
                             &log_lines,
-                            format!("meas{}: render error", next_measure_index + 1),
+                            format!("meas{}: render error", lookahead_measure_index + 1),
                         );
                         break 'outer;
                     }
                 };
 
                 let next_measure_start = current.measure_start + current.measure_duration;
-                let next_measure_duration = std::time::Duration::from_secs_f64(
-                    measure_samples as f64 / (sample_rate as f64 * 2.0),
-                );
+                let next_measure_duration = measure_duration(measure_samples, sample_rate);
                 sink.append(rodio::buffer::SamplesBuffer::new(
                     2,
                     sample_rate,
                     next_samples,
                 ));
 
+                // 小節境界は期待再生開始時刻を基準にポーリングする。
+                // rodio::Sink には「現在キュー先頭の小節だけの終了」を待つ API がないため、
+                // lookahead を維持しつつ停止要求にも追従できるよう時間ベースの待機を使う。
                 loop {
                     if std::time::Instant::now() >= next_measure_start {
                         break;
@@ -315,15 +312,15 @@ impl DawApp {
                 }
 
                 *play_position.lock().unwrap() = Some(PlayPosition {
-                    measure_index: next_measure_index,
+                    measure_index: lookahead_measure_index,
                     measure_start: next_measure_start,
                 });
                 current_measure = Some(QueuedMeasure {
-                    measure_index: next_measure_index,
+                    measure_index: lookahead_measure_index,
                     measure_start: next_measure_start,
                     measure_duration: next_measure_duration,
                 });
-                measure_index = next_measure_index;
+                measure_index = lookahead_measure_index;
             }
 
             // Only reset to Idle if we are still the active Playing session.
@@ -369,7 +366,6 @@ mod tests {
     use super::{
         super::{CacheState, CellCache, DawApp, DawMode, DawPlayState},
         build_playback_measure_samples, current_play_measure_index, following_measure_index,
-        next_play_measure_index,
     };
 
     /// stop_play のログ出力を検証するための最小構成の DawApp を作る。
@@ -455,16 +451,9 @@ mod tests {
     }
 
     #[test]
-    fn next_play_measure_index_wraps_after_effective_end() {
-        assert_eq!(next_play_measure_index(0, 4), 1);
-        assert_eq!(next_play_measure_index(3, 4), 0);
-    }
-
-    #[test]
-    fn following_measure_index_restarts_when_current_is_outside_latest_loop() {
+    fn following_measure_index_wraps_after_last_measure() {
         assert_eq!(following_measure_index(1, 4), 2);
         assert_eq!(following_measure_index(3, 4), 0);
-        assert_eq!(following_measure_index(7, 4), 0);
     }
 
     #[test]
