@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use clack_host::prelude::PluginEntry;
-use cmrt_core::{CoreConfig, mml_render};
+use cmrt_core::{mml_render, CoreConfig};
 use std::io::{Cursor, Read};
 
 use crate::config::Config;
@@ -50,25 +50,22 @@ pub fn run_server(cfg: &Config, entry: &PluginEntry, port: u16) -> Result<()> {
         let reader = request.as_reader().take(MAX_BODY_BYTES + 1);
         let read_result = std::io::BufReader::new(reader).read_to_string(&mut body);
         if body.len() as u64 > MAX_BODY_BYTES {
-            let response =
-                tiny_http::Response::from_string("リクエストbodyが大きすぎます\n")
-                    .with_status_code(413);
+            let response = tiny_http::Response::from_string("リクエストbodyが大きすぎます\n")
+                .with_status_code(413);
             let _ = request.respond(response);
             continue;
         }
         if let Err(e) = read_result {
             eprintln!("リクエストbodyの読み取りに失敗: {}", e);
-            let response =
-                tiny_http::Response::from_string("bodyの読み取りに失敗しました\n")
-                    .with_status_code(400);
+            let response = tiny_http::Response::from_string("bodyの読み取りに失敗しました\n")
+                .with_status_code(400);
             let _ = request.respond(response);
             continue;
         }
 
         let mml = body.trim().to_string();
         if mml.is_empty() {
-            let response =
-                tiny_http::Response::from_string("MMLが空です\n").with_status_code(400);
+            let response = tiny_http::Response::from_string("MMLが空です\n").with_status_code(400);
             let _ = request.respond(response);
             continue;
         }
@@ -84,12 +81,11 @@ pub fn run_server(cfg: &Config, entry: &PluginEntry, port: u16) -> Result<()> {
                 // WAVをメモリ上に書き出す
                 match samples_to_wav_bytes(&samples, cfg.sample_rate as u32) {
                     Ok(wav_bytes) => {
-                        let response = tiny_http::Response::from_data(wav_bytes)
-                            .with_header(
-                                "Content-Type: audio/wav"
-                                    .parse::<tiny_http::Header>()
-                                    .expect("Content-Type ヘッダのパースに失敗"),
-                            );
+                        let response = tiny_http::Response::from_data(wav_bytes).with_header(
+                            "Content-Type: audio/wav"
+                                .parse::<tiny_http::Header>()
+                                .expect("Content-Type ヘッダのパースに失敗"),
+                        );
                         if let Err(e) = request.respond(response) {
                             eprintln!("レスポンス送信失敗: {}", e);
                         }
@@ -124,10 +120,13 @@ pub fn shutdown_server(port: u16) -> Result<()> {
         .timeout_read(std::time::Duration::from_secs(5))
         .timeout_write(std::time::Duration::from_secs(5))
         .build();
-    agent
-        .get(&url)
-        .call()
-        .map_err(|e| anyhow::anyhow!("サーバーへのシャットダウン要求に失敗しました ({}): {}", url, e))?;
+    agent.get(&url).call().map_err(|e| {
+        anyhow::anyhow!(
+            "サーバーへのシャットダウン要求に失敗しました ({}): {}",
+            url,
+            e
+        )
+    })?;
     Ok(())
 }
 

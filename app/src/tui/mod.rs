@@ -48,6 +48,7 @@ pub(super) enum Mode {
     Normal,
     Insert,
     PatchSelect,
+    PatchPhrase,
     Help,
 }
 
@@ -89,11 +90,24 @@ pub struct TuiApp<'a> {
     pub(super) patch_filtered: Vec<String>, // フィルタ結果（表示名のみ）
     pub(super) patch_cursor: usize,         // フィルタ結果内のカーソル位置
     pub(super) patch_list_state: ListState, // 音色選択リスト描画用
+    pub(super) patch_phrase_store: crate::history::PatchPhraseStore,
+    pub(super) patch_phrase_name: Option<String>,
+    pub(super) patch_phrase_history_cursor: usize,
+    pub(super) patch_phrase_favorites_cursor: usize,
+    pub(super) patch_phrase_history_state: ListState,
+    pub(super) patch_phrase_favorites_state: ListState,
+    pub(super) patch_phrase_focus: PatchPhrasePane,
     pub(super) random_timbre_enabled: bool,
     /// バックグラウンドのアップデートチェックがtrueにセットしたらアップデートを実行
     pub update_available: Arc<AtomicBool>,
     /// 終了時 DAW モードだったかどうか（history.json に保存・復元する）
     pub(super) is_daw_mode: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum PatchPhrasePane {
+    History,
+    Favorites,
 }
 
 impl<'a> TuiApp<'a> {
@@ -159,6 +173,13 @@ impl<'a> TuiApp<'a> {
             patch_filtered: Vec::new(),
             patch_cursor: 0,
             patch_list_state: ListState::default(),
+            patch_phrase_store: crate::history::load_patch_phrase_store(),
+            patch_phrase_name: None,
+            patch_phrase_history_cursor: 0,
+            patch_phrase_favorites_cursor: 0,
+            patch_phrase_history_state: ListState::default(),
+            patch_phrase_favorites_state: ListState::default(),
+            patch_phrase_focus: PatchPhrasePane::History,
             random_timbre_enabled: false,
             update_available: Arc::new(AtomicBool::new(false)),
             is_daw_mode,
@@ -336,6 +357,7 @@ impl<'a> TuiApp<'a> {
                         },
                         Mode::Insert => self.handle_insert(key),
                         Mode::PatchSelect => self.handle_patch_select(key),
+                        Mode::PatchPhrase => self.handle_patch_phrase(key.code),
                         Mode::Help => self.handle_help(key.code),
                     }
                 }
@@ -377,6 +399,13 @@ impl TuiApp<'static> {
             patch_filtered: Vec::new(),
             patch_cursor: 0,
             patch_list_state: ListState::default(),
+            patch_phrase_store: crate::history::PatchPhraseStore::default(),
+            patch_phrase_name: None,
+            patch_phrase_history_cursor: 0,
+            patch_phrase_favorites_cursor: 0,
+            patch_phrase_history_state: ListState::default(),
+            patch_phrase_favorites_state: ListState::default(),
+            patch_phrase_focus: PatchPhrasePane::History,
             random_timbre_enabled: false,
             update_available: Arc::new(AtomicBool::new(false)),
             is_daw_mode: false,

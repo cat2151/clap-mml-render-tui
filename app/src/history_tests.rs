@@ -243,3 +243,41 @@ fn load_daw_session_state_migrates_from_history_json() {
 
     std::fs::remove_dir_all(&tmp).ok();
 }
+
+#[test]
+fn patch_phrase_store_serialize_deserialize_roundtrip() {
+    let mut store = PatchPhraseStore::default();
+    store.patches.insert(
+        "Pads/Soft Pad.fxp".to_string(),
+        PatchPhraseState {
+            history: vec!["o4c".to_string(), "o5g".to_string()],
+            favorites: vec!["l8cdef".to_string()],
+        },
+    );
+
+    let json = serde_json::to_string_pretty(&store).unwrap();
+    let loaded: PatchPhraseStore = serde_json::from_str(&json).unwrap();
+
+    assert_eq!(loaded, store);
+}
+
+#[test]
+fn save_and_load_patch_phrase_store_roundtrip() {
+    let tmp = std::env::temp_dir().join("cmrt_test_patch_phrase_store_roundtrip");
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_utils::set_data_local_dir_envs(&tmp);
+
+    let mut store = PatchPhraseStore::default();
+    store.patches.insert(
+        "Leads/Lead 1.fxp".to_string(),
+        PatchPhraseState {
+            history: vec!["c".to_string()],
+            favorites: vec!["g".to_string(), "o5c".to_string()],
+        },
+    );
+
+    save_patch_phrase_store(&store).unwrap();
+
+    assert_eq!(load_patch_phrase_store(), store);
+    std::fs::remove_dir_all(&tmp).ok();
+}
