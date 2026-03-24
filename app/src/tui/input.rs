@@ -74,10 +74,6 @@ impl<'a> TuiApp<'a> {
             .select(Some(self.patch_phrase_favorites_cursor));
     }
 
-    fn mark_patch_phrase_store_dirty(&mut self) {
-        self.patch_phrase_store_dirty = true;
-    }
-
     pub(super) fn flush_patch_phrase_store_if_dirty(&mut self) {
         if !self.patch_phrase_store_dirty {
             return;
@@ -100,7 +96,7 @@ impl<'a> TuiApp<'a> {
             .entry(patch_name)
             .or_default();
         Self::push_front_dedup(&mut state.history, phrase);
-        self.mark_patch_phrase_store_dirty();
+        self.patch_phrase_store_dirty = true;
     }
 
     fn patch_phrase_preview_mml(&self) -> Option<String> {
@@ -309,7 +305,7 @@ impl<'a> TuiApp<'a> {
                 self.patch_phrase_focus = PatchPhrasePane::Favorites;
                 self.patch_phrase_favorites_cursor = 0;
                 self.sync_patch_phrase_states();
-                self.mark_patch_phrase_store_dirty();
+                self.patch_phrase_store_dirty = true;
                 if let Some(mml) = self.patch_phrase_preview_mml() {
                     self.kick_play(mml);
                 }
