@@ -3,10 +3,11 @@
 //! voicevox-playground-tui に倣い、終了時に現在行番号と編集行を保存し、
 //! 起動時に復元する。
 
-use std::path::PathBuf;
 use std::{
     collections::hash_map::DefaultHasher,
+    collections::HashMap,
     hash::{Hash, Hasher},
+    path::PathBuf,
 };
 
 use anyhow::Result;
@@ -55,6 +56,20 @@ pub struct DawCachedMeasure {
     pub(crate) legacy_mml: Option<String>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PatchPhraseStore {
+    #[serde(default)]
+    pub patches: HashMap<String, PatchPhraseState>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PatchPhraseState {
+    #[serde(default)]
+    pub history: Vec<String>,
+    #[serde(default)]
+    pub favorites: Vec<String>,
+}
+
 impl DawCachedMeasure {
     fn normalize(&mut self) {
         if self.mml_hash == 0 {
@@ -95,6 +110,10 @@ fn session_state_path() -> Option<PathBuf> {
 
 fn daw_session_state_path() -> Option<PathBuf> {
     history_dir().map(|d| d.join("history_daw.json"))
+}
+
+fn patch_phrase_store_path() -> Option<PathBuf> {
+    history_dir().map(|d| d.join("patch_history.json"))
 }
 
 /// DAW データファイル (`daw.json`) のパスを返す。
@@ -178,6 +197,19 @@ pub fn save_daw_session_state(state: &DawSessionState) -> Result<()> {
     Ok(())
 }
 
+/// patch ごとの phrase history / favorites を patch_history.json に保存する。
+pub fn save_patch_phrase_store(store: &PatchPhraseStore) -> Result<()> {
+    let Some(path) = patch_phrase_store_path() else {
+        return Ok(());
+    };
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let json = serde_json::to_string_pretty(store)?;
+    std::fs::write(&path, json)?;
+    Ok(())
+}
+
 /// history.json からセッション状態を読み込む。
 /// ファイルが存在しない場合・データディレクトリが利用できない場合・読み込みに失敗した場合は
 /// デフォルト値を返す。
@@ -218,6 +250,20 @@ pub fn load_daw_session_state() -> DawSessionState {
         return state;
     }
     migrate_daw_session_state_from_history_json().unwrap_or_default()
+}
+
+/// patch ごとの phrase history / favorites を patch_history.json から読み込む。
+pub fn load_patch_phrase_store() -> PatchPhraseStore {
+    let Some(path) = patch_phrase_store_path() else {
+        return PatchPhraseStore::default();
+    };
+    if !path.exists() {
+        return PatchPhraseStore::default();
+    }
+    std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
