@@ -1,6 +1,9 @@
 //! DawApp の演奏メソッド
 
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex},
+};
 
 use clack_host::prelude::PluginEntry;
 use cmrt_core::{mml_render_for_cache, CoreConfig};
@@ -71,6 +74,55 @@ pub(super) fn try_get_cached_samples(
     Some(mixed)
 }
 
+fn current_play_measure_index(current_measure_index: usize, effective_count: usize) -> usize {
+    if current_measure_index < effective_count {
+        current_measure_index
+    } else {
+        0
+    }
+}
+
+fn next_play_measure_index(current_measure_index: usize, effective_count: usize) -> usize {
+    (current_measure_index + 1) % effective_count
+}
+
+fn build_playback_measure_samples<F, E>(
+    cache: &Arc<Mutex<Vec<Vec<CellCache>>>>,
+    measure_index: usize,
+    mml: &str,
+    measure_samples: usize,
+    tracks: usize,
+    log_lines: &Arc<Mutex<VecDeque<String>>>,
+    render_fallback: F,
+) -> Result<Vec<f32>, E>
+where
+    F: FnOnce() -> Result<Vec<f32>, E>,
+{
+    let measure_number = measure_index + 1;
+
+    if mml.trim().is_empty() {
+        crate::logging::append_log_line(
+            log_lines,
+            format!("meas{measure_number}: empty -> silence"),
+        );
+        return Ok(vec![0.0f32; measure_samples]);
+    }
+
+    if let Some(cached) = try_get_cached_samples(cache, measure_number, measure_samples, tracks) {
+        crate::logging::append_log_line(log_lines, format!("meas{measure_number}: cache hit"));
+        return Ok(cached);
+    }
+
+    crate::logging::append_log_line(log_lines, format!("meas{measure_number}: render"));
+    let mut samples = render_fallback()?;
+    if samples.len() < measure_samples {
+        samples.resize(measure_samples, 0.0);
+    } else {
+        samples.truncate(measure_samples);
+    }
+    Ok(samples)
+}
+
 impl DawApp {
     // ─── 演奏 ─────────────────────────────────────────────────
 
@@ -131,12 +183,13 @@ impl DawApp {
                 return;
             };
 
+            let mut measure_index = 0usize;
             'outer: loop {
                 if *play_state.lock().unwrap() != DawPlayState::Playing {
                     break;
                 }
-                // ループの先頭で毎回 play_measure_mmls と play_measure_samples を読み取ることで、
-                // セル編集・音色変更を次ループから即座に反映する（hot reload）
+                // 各小節の直前で play_measure_mmls と play_measure_samples を読み取ることで、
+                // セル編集・音色変更を次小節から反映する（issue #132）。
                 let mmls = play_measure_mmls.lock().unwrap().clone();
                 let measure_samples = *play_measure_samples.lock().unwrap();
 
@@ -147,115 +200,43 @@ impl DawApp {
                     None => break 'outer,
                 };
 
-                // 全有効小節のサンプルを事前収集する。
-                // シームレス再生のため、全サンプルをまとめて Sink にキューイングしてから
-                // 時間ベースで位置を更新する（issue #68）。
-                let mut all_samples: Vec<(usize, Vec<f32>)> = Vec::with_capacity(effective_count);
-                for (measure_index, mml) in mmls.iter().enumerate().take(effective_count) {
-                    if *play_state.lock().unwrap() != DawPlayState::Playing {
+                let current_measure_index =
+                    current_play_measure_index(measure_index, effective_count);
+                let mml = &mmls[current_measure_index];
+
+                let samples = match build_playback_measure_samples(
+                    &cache,
+                    current_measure_index,
+                    mml,
+                    measure_samples,
+                    tracks,
+                    &log_lines,
+                    || {
+                        let _guard = render_lock.lock().unwrap();
+                        let core_cfg = CoreConfig::from(&daw_cfg);
+                        mml_render_for_cache(mml, &core_cfg, entry_ref)
+                    },
+                ) {
+                    Ok(samples) => samples,
+                    Err(_) => {
+                        crate::logging::append_log_line(
+                            &log_lines,
+                            format!("meas{}: render error", current_measure_index + 1),
+                        );
                         break 'outer;
                     }
+                };
 
-                    let measure_number = measure_index + 1;
-                    let samples = if mml.trim().is_empty() {
-                        crate::logging::append_log_line(
-                            &log_lines,
-                            format!("meas{measure_number}: empty -> silence"),
-                        );
-                        // 中間の空小節は無音で維持（前後の小節とのタイミングを保持）
-                        vec![0.0f32; measure_samples]
-                    } else if let Some(cached) =
-                        try_get_cached_samples(&cache, measure_index + 1, measure_samples, tracks)
-                    {
-                        crate::logging::append_log_line(
-                            &log_lines,
-                            format!("meas{measure_number}: cache hit"),
-                        );
-                        // キャッシュヒット: 事前レンダリング済みサンプルをそのまま使用
-                        cached
-                    } else {
-                        crate::logging::append_log_line(
-                            &log_lines,
-                            format!("meas{measure_number}: render"),
-                        );
-                        // キャッシュミス: レンダリングにフォールバック
-                        // render_lock を取得してからレンダリングすることで、
-                        // `mml_str_to_smf_bytes` が書き出す共有デバッグファイルへ
-                        // キャッシュワーカーと同時書き込みしないようにする
-                        let result = {
-                            let _guard = render_lock.lock().unwrap();
-                            // mml_render_for_cache を使用することで patch_history.txt への追記を行わない
-                            let core_cfg = CoreConfig::from(&daw_cfg);
-                            mml_render_for_cache(mml, &core_cfg, entry_ref)
-                        };
-                        match result {
-                            Ok(mut s) => {
-                                // 設定された拍子・テンポに基づく 1 小節の長さに正確に pad / truncate する
-                                if s.len() < measure_samples {
-                                    s.resize(measure_samples, 0.0);
-                                } else {
-                                    s.truncate(measure_samples);
-                                }
-                                s
-                            }
-                            Err(_) => {
-                                crate::logging::append_log_line(
-                                    &log_lines,
-                                    format!("meas{measure_number}: render error"),
-                                );
-                                break 'outer;
-                            }
-                        }
-                    };
-                    all_samples.push((measure_index, samples));
-                }
+                // 1 小節ずつ Sink に投入し、その都度最新の MML / テンポ変更を次小節から反映する。
+                // append 直前の時刻を再生開始時刻として UI とログの粒度を 1 小節に合わせる。
+                let measure_start = std::time::Instant::now();
+                sink.append(rodio::buffer::SamplesBuffer::new(2, sample_rate, samples));
+                *play_position.lock().unwrap() = Some(PlayPosition {
+                    measure_index: current_measure_index,
+                    measure_start,
+                });
 
-                if all_samples.is_empty() {
-                    break 'outer;
-                }
-
-                // インデックスとバッファを分離する。
-                // バッファは clone せず所有権ごと Sink に移動することでメモリコピーを回避する。
-                let (measure_indices, sample_bufs): (Vec<usize>, Vec<Vec<f32>>) =
-                    all_samples.into_iter().unzip();
-
-                // measure_samples はステレオインターリーブ（L/R 各 1 サンプル = 2 要素）のため
-                // 実時間 = measure_samples / (sample_rate * 2) となる。
-                let measure_duration_secs = measure_samples as f64 / (sample_rate as f64 * 2.0);
-
-                // 全サンプルを Sink にまとめてキューイングしてシームレス再生を実現する（issue #68）。
-                // loop_start は最初の append 直前に記録することで、実際のオーディオ開始と
-                // できる限り近いタイムスタンプを得て位置推定の精度を高める。
-                let loop_start = std::time::Instant::now();
-                for buf in sample_bufs {
-                    sink.append(rodio::buffer::SamplesBuffer::new(2, sample_rate, buf));
-                }
-
-                // 時間ベースで各小節の再生開始位置を更新する。
-                // 10 ms 粒度でポーリングすることで停止要求に素早く応答できる（issue #68）。
-                for (i, measure_index) in measure_indices.iter().enumerate() {
-                    let measure_start_target = loop_start
-                        + std::time::Duration::from_secs_f64(i as f64 * measure_duration_secs);
-                    // この小節の期待開始時刻まで待機（停止チェック付き）
-                    loop {
-                        if std::time::Instant::now() >= measure_start_target {
-                            break;
-                        }
-                        if *play_state.lock().unwrap() != DawPlayState::Playing {
-                            break 'outer;
-                        }
-                        std::thread::sleep(std::time::Duration::from_millis(10));
-                    }
-                    if *play_state.lock().unwrap() != DawPlayState::Playing {
-                        break 'outer;
-                    }
-                    *play_position.lock().unwrap() = Some(PlayPosition {
-                        measure_index: *measure_index,
-                        measure_start: measure_start_target,
-                    });
-                }
-
-                // 最後の小節の再生完了を 10 ms 粒度でポーリング待機する。
+                // この小節の再生完了を 10 ms 粒度でポーリング待機する。
                 // sink.sleep_until_end() は停止要求を検出できないためポーリングを使用する。
                 loop {
                     if sink.empty() {
@@ -266,6 +247,8 @@ impl DawApp {
                     }
                     std::thread::sleep(std::time::Duration::from_millis(10));
                 }
+
+                measure_index = next_play_measure_index(current_measure_index, effective_count);
             }
 
             // Only reset to Idle if we are still the active Playing session.
@@ -308,7 +291,10 @@ mod tests {
 
     use crate::config::Config;
 
-    use super::super::{CellCache, DawApp, DawMode, DawPlayState};
+    use super::{
+        super::{CacheState, CellCache, DawApp, DawMode, DawPlayState},
+        build_playback_measure_samples, current_play_measure_index, next_play_measure_index,
+    };
 
     /// stop_play のログ出力を検証するための最小構成の DawApp を作る。
     fn build_test_app() -> DawApp {
@@ -383,6 +369,93 @@ mod tests {
         assert_eq!(
             app.log_lines.lock().unwrap().back().map(String::as_str),
             Some("play: stop")
+        );
+    }
+
+    #[test]
+    fn current_play_measure_index_wraps_to_loop_start_when_measure_count_shrinks() {
+        assert_eq!(current_play_measure_index(7, 4), 0);
+        assert_eq!(current_play_measure_index(2, 4), 2);
+    }
+
+    #[test]
+    fn next_play_measure_index_wraps_after_effective_end() {
+        assert_eq!(next_play_measure_index(0, 4), 1);
+        assert_eq!(next_play_measure_index(3, 4), 0);
+    }
+
+    #[test]
+    fn build_playback_measure_samples_returns_silence_for_empty_measure() {
+        let log_lines = Arc::new(Mutex::new(VecDeque::new()));
+        let cache = Arc::new(Mutex::new(vec![vec![CellCache::empty(); 3]; 3]));
+        let samples = build_playback_measure_samples(
+            &cache,
+            1,
+            "",
+            4,
+            3,
+            &log_lines,
+            || -> Result<Vec<f32>, ()> { panic!("empty measure should not render") },
+        )
+        .unwrap();
+
+        assert_eq!(samples, vec![0.0, 0.0, 0.0, 0.0]);
+        assert_eq!(
+            log_lines.lock().unwrap().back().map(String::as_str),
+            Some("meas2: empty -> silence")
+        );
+    }
+
+    #[test]
+    fn build_playback_measure_samples_prefers_cache_hit() {
+        let log_lines = Arc::new(Mutex::new(VecDeque::new()));
+        let cache = Arc::new(Mutex::new(vec![vec![CellCache::empty(); 3]; 3]));
+        cache.lock().unwrap()[1][1] = CellCache {
+            state: CacheState::Ready,
+            samples: Some(Arc::new(vec![0.25, -0.25, 0.5, -0.5])),
+            generation: 0,
+            rendered_mml_hash: None,
+        };
+
+        let samples = build_playback_measure_samples(
+            &cache,
+            0,
+            "c",
+            4,
+            3,
+            &log_lines,
+            || -> Result<Vec<f32>, ()> { panic!("cache hit should not render") },
+        )
+        .unwrap();
+
+        assert_eq!(samples, vec![0.25, -0.25, 0.5, -0.5]);
+        assert_eq!(
+            log_lines.lock().unwrap().back().map(String::as_str),
+            Some("meas1: cache hit")
+        );
+    }
+
+    #[test]
+    fn build_playback_measure_samples_renders_and_normalizes_length() {
+        let log_lines = Arc::new(Mutex::new(VecDeque::new()));
+        let cache = Arc::new(Mutex::new(vec![vec![CellCache::empty(); 3]; 3]));
+        cache.lock().unwrap()[1][1].state = CacheState::Pending;
+
+        let samples = build_playback_measure_samples(
+            &cache,
+            0,
+            "c",
+            4,
+            3,
+            &log_lines,
+            || -> Result<Vec<f32>, ()> { Ok(vec![1.0, 2.0]) },
+        )
+        .unwrap();
+
+        assert_eq!(samples, vec![1.0, 2.0, 0.0, 0.0]);
+        assert_eq!(
+            log_lines.lock().unwrap().back().map(String::as_str),
+            Some("meas1: render")
         );
     }
 }
