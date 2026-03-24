@@ -23,7 +23,7 @@ impl DawApp {
         let mut cache = self.cache.lock().unwrap();
         for t in 0..self.tracks {
             for m in 0..=self.measures {
-                if self.data[t][m].trim().is_empty() {
+                if m == 0 || self.data[t][m].trim().is_empty() {
                     cache[t][m] = CellCache::empty();
                 } else if cache[t][m].state == CacheState::Empty {
                     cache[t][m].set_pending();
@@ -38,7 +38,7 @@ impl DawApp {
             let _ = std::fs::remove_file(path);
         }
         let mut cache = self.cache.lock().unwrap();
-        if self.data[track][measure].trim().is_empty() {
+        if measure == 0 || self.data[track][measure].trim().is_empty() {
             cache[track][measure] = CellCache::empty();
         } else {
             cache[track][measure].set_pending();
@@ -51,6 +51,9 @@ impl DawApp {
     /// 以前は `build_cell_mml()` の結果（track0 を含む結合 MML）で空判定していたため、
     /// セルの内容を消去しても `●` インジケータが消えないバグがあった（issue #69 参照）。
     pub(super) fn kick_cache(&self, track: usize, measure: usize) {
+        if measure == 0 {
+            return;
+        }
         // セル自身の内容が空なら投入しない（track0 含む結合 MML で判定しない）
         if self.data[track][measure].trim().is_empty() {
             return;
@@ -58,7 +61,10 @@ impl DawApp {
         let mml = self.build_cell_mml(track, measure);
         let rendered_mml_hash = daw_cache_mml_hash(&mml);
         let generation = {
-            let cache = self.cache.lock().unwrap();
+            let mut cache = self.cache.lock().unwrap();
+            cache[track][measure].state = CacheState::Rendering;
+            cache[track][measure].samples = None;
+            cache[track][measure].rendered_mml_hash = None;
             cache[track][measure].generation
         };
         // チャネルが既に閉じていれば送信は無視する（DawApp 終了後の残留呼び出しへの安全策）
