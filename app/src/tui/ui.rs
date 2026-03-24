@@ -53,11 +53,20 @@ fn status_text(app: &TuiApp<'_>, play_state: &PlayState) -> String {
         "OFF"
     };
     match app.mode {
-        Mode::Normal => format!("NORMAL  i:INSERT  r:ランダム音色[{random_timbre}]  t:音色選択  p:patch phrase  j/k:移動  Enter:再生  d:DAW  K:ヘルプ  q:終了{}", play_str),
+        Mode::Normal => format!(
+            "NORMAL  i:INS  r:{random_timbre}  t:音色  p:phrase  j/k  Enter  d:DAW  K:Help  q{}",
+            play_str
+        ),
         Mode::Insert => format!("ESC:確定→NORMAL  Enter:確定→次行{}", play_str),
-        Mode::PatchSelect => format!("音色選択  Enter:決定  ESC:キャンセル  ↑↓:移動  文字入力:フィルタ  Space:AND条件{}", play_str),
+        Mode::PatchSelect => format!(
+            "音色選択  Enter:決定  ESC:キャンセル  ↑↓:移動  文字入力:フィルタ  Space:AND条件{}",
+            play_str
+        ),
         Mode::PatchPhrase => {
-            format!("patch phrase  j/k:移動して再生  h/l:ペイン切替して再生  f:お気に入り追加  ESC:戻る{}", play_str)
+            format!(
+                "patch phrase  j/k:再生移動  h/l:ペイン移動  f:お気に入り  ESC:戻る{}",
+                play_str
+            )
         }
         Mode::Help => format!("HELP  ESC:キャンセル{}", play_str),
     }

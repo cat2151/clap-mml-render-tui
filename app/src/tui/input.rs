@@ -10,7 +10,14 @@ use super::{
     filter_patches, Mode, NormalAction, PatchLoadState, PatchPhrasePane, PlayState, TuiApp,
 };
 
+const PATCH_JSON_KEY: &str = "Surge XT patch";
+
 impl<'a> TuiApp<'a> {
+    fn push_front_dedup(items: &mut Vec<String>, item: String) {
+        items.retain(|existing| existing != &item);
+        items.insert(0, item);
+    }
+
     pub(super) fn extract_patch_phrase(mml: &str) -> Option<(String, String)> {
         let preprocessed = mml_preprocessor::extract_embedded_json(mml);
         let patch_name = preprocessed
@@ -19,7 +26,7 @@ impl<'a> TuiApp<'a> {
             .and_then(|json| serde_json::from_str::<Value>(json).ok())
             .and_then(|value| {
                 value
-                    .get("Surge XT patch")
+                    .get(PATCH_JSON_KEY)
                     .and_then(Value::as_str)
                     .map(str::to_string)
             })?;
@@ -75,8 +82,7 @@ impl<'a> TuiApp<'a> {
             .patches
             .entry(patch_name)
             .or_default();
-        state.history.retain(|item| item != &phrase);
-        state.history.insert(0, phrase);
+        Self::push_front_dedup(&mut state.history, phrase);
         self.save_patch_phrase_store();
     }
 
@@ -92,7 +98,7 @@ impl<'a> TuiApp<'a> {
                 .get(self.patch_phrase_favorites_cursor)
                 .cloned(),
         }?;
-        let json = serde_json::json!({ "Surge XT patch": patch_name }).to_string();
+        let json = serde_json::json!({ PATCH_JSON_KEY: patch_name }).to_string();
         Some(format!("{json} {phrase}"))
     }
 
@@ -157,7 +163,7 @@ impl<'a> TuiApp<'a> {
                     let selected = self.patch_filtered[self.patch_cursor].clone();
                     // serde_json を使って値を適切にエスケープする（パスに引用符・バックスラッシュが含まれる場合も安全）
                     let json = format!(
-                        "{{\"Surge XT patch\": {}}}",
+                        "{{\"{PATCH_JSON_KEY}\": {}}}",
                         serde_json::to_string(&selected)
                             .unwrap_or_else(|_| format!("\"{}\"", selected))
                     );
@@ -281,8 +287,7 @@ impl<'a> TuiApp<'a> {
                     .patches
                     .entry(patch_name)
                     .or_default();
-                state.favorites.retain(|item| item != &phrase);
-                state.favorites.insert(0, phrase);
+                Self::push_front_dedup(&mut state.favorites, phrase);
                 self.patch_phrase_focus = PatchPhrasePane::Favorites;
                 self.patch_phrase_favorites_cursor = 0;
                 self.sync_patch_phrase_states();
