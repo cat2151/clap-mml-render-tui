@@ -42,7 +42,7 @@ use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{backend::CrosstermBackend, Frame, Terminal};
 use tui_textarea::TextArea;
 
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -87,6 +87,12 @@ pub(super) struct CacheJob {
 pub(super) struct WavCacheInfo {
     spec: hound::WavSpec,
     interleaved_sample_count: usize,
+}
+
+#[derive(Clone)]
+struct TrackRerenderBatch {
+    pending: BTreeSet<usize>,
+    completion_log: String,
 }
 
 pub(super) fn read_wav_cache_info(path: &Path) -> anyhow::Result<WavCacheInfo> {
@@ -164,6 +170,9 @@ pub struct DawApp {
 
     /// DAW モード下部に表示するデバッグログ。
     pub(super) log_lines: Arc<Mutex<VecDeque<String>>>,
+
+    /// track ごとの再レンダリング進捗ログ管理。
+    track_rerender_batches: Arc<Mutex<Vec<Option<TrackRerenderBatch>>>>,
 }
 
 impl DawApp {
@@ -189,11 +198,14 @@ impl DawApp {
         // （`pass1_tokens.json` など）への同時書き込みを防ぐ排他ロックを共有する。
         let render_lock: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
         let log_lines = Arc::new(Mutex::new(crate::logging::load_log_lines()));
+        let track_rerender_batches = Arc::new(Mutex::new(vec![None; tracks]));
 
         {
             let cache_worker = Arc::clone(&cache);
             let cfg_worker = Arc::clone(&cfg);
             let render_lock_worker = Arc::clone(&render_lock);
+            let log_lines_worker = Arc::clone(&log_lines);
+            let track_rerender_batches_worker = Arc::clone(&track_rerender_batches);
             std::thread::spawn(move || {
                 // SAFETY: entry は main() のスタックに生存している
                 let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
@@ -253,6 +265,12 @@ impl DawApp {
                             } else {
                                 cache[track][measure].samples = None;
                             }
+                            Self::complete_track_rerender_batch_measure(
+                                &track_rerender_batches_worker,
+                                &log_lines_worker,
+                                track,
+                                measure,
+                            );
                         }
                         Err(_) => {
                             let mut cache = cache_worker.lock().unwrap();
@@ -263,6 +281,12 @@ impl DawApp {
                             // エラー時は古いサンプルを保持しない（ステールデータの排除）
                             cache[track][measure].samples = None;
                             cache[track][measure].rendered_mml_hash = None;
+                            Self::complete_track_rerender_batch_measure(
+                                &track_rerender_batches_worker,
+                                &log_lines_worker,
+                                track,
+                                measure,
+                            );
                         }
                     }
                 }
@@ -287,6 +311,7 @@ impl DawApp {
             play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
             play_measure_samples: Arc::new(Mutex::new(0)),
             log_lines,
+            track_rerender_batches,
         };
 
         app.load();
@@ -319,6 +344,59 @@ impl DawApp {
 
     fn append_log_line(&self, message: impl Into<String>) {
         crate::logging::append_log_line(&self.log_lines, message);
+    }
+
+    fn start_track_rerender_batch(&self, track: usize, measures: &[usize], reason: &str) {
+        if track == 0 {
+            return;
+        }
+        let mut batches = self.track_rerender_batches.lock().unwrap();
+        let pending: BTreeSet<usize> = measures.iter().copied().collect();
+        if pending.is_empty() {
+            batches[track] = None;
+            return;
+        }
+        let measure_range = playback_util::format_measure_list(measures)
+            .map(|label| label.replace('～', "〜"))
+            .unwrap_or_else(|| "none".to_string());
+        self.append_log_line(format!(
+            "cache: rerender start track{} {} ({reason})",
+            track, measure_range
+        ));
+        batches[track] = Some(TrackRerenderBatch {
+            pending,
+            completion_log: format!(
+                "cache: rerender done track{} {} ({reason})",
+                track, measure_range
+            ),
+        });
+    }
+
+    fn complete_track_rerender_batch_measure(
+        batches: &Arc<Mutex<Vec<Option<TrackRerenderBatch>>>>,
+        log_lines: &Arc<Mutex<VecDeque<String>>>,
+        track: usize,
+        measure: usize,
+    ) {
+        if track == 0 || measure == 0 {
+            return;
+        }
+        let completion_log = {
+            let mut batches = batches.lock().unwrap();
+            let Some(batch) = batches.get_mut(track).and_then(Option::as_mut) else {
+                return;
+            };
+            if !batch.pending.remove(&measure) {
+                return;
+            }
+            if !batch.pending.is_empty() {
+                return;
+            }
+            let completion_log = batch.completion_log.clone();
+            batches[track] = None;
+            completion_log
+        };
+        crate::logging::append_log_line(log_lines, completion_log);
     }
 
     // ─── メインループ ─────────────────────────────────────────
@@ -380,7 +458,13 @@ impl DawApp {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        collections::{BTreeSet, VecDeque},
+        sync::{Arc, Mutex},
+    };
+
     use super::load_wav_samples;
+    use super::{DawApp, TrackRerenderBatch};
 
     #[test]
     fn load_wav_samples_reads_back_float_wav_cache() {
@@ -409,5 +493,91 @@ mod tests {
         std::fs::remove_file(&tmp).ok();
 
         assert_eq!(samples, vec![0.25, -0.25]);
+    }
+
+    #[test]
+    fn complete_track_rerender_batch_logs_only_after_last_measure_finishes() {
+        let log_lines = Arc::new(Mutex::new(VecDeque::new()));
+        let batches = Arc::new(Mutex::new(vec![None, None]));
+        batches.lock().unwrap()[1] = Some(TrackRerenderBatch {
+            pending: BTreeSet::from([1, 2]),
+            completion_log: "cache: rerender done track1 meas 1〜2 (random patch update)"
+                .to_string(),
+        });
+
+        DawApp::complete_track_rerender_batch_measure(&batches, &log_lines, 1, 1);
+        assert!(
+            log_lines.lock().unwrap().is_empty(),
+            "completion log should wait for the last measure"
+        );
+
+        DawApp::complete_track_rerender_batch_measure(&batches, &log_lines, 1, 2);
+
+        assert_eq!(
+            log_lines.lock().unwrap().back().map(String::as_str),
+            Some("cache: rerender done track1 meas 1〜2 (random patch update)")
+        );
+        assert!(
+            batches.lock().unwrap()[1].is_none(),
+            "completed batch should be cleared"
+        );
+    }
+
+    #[test]
+    fn start_track_rerender_batch_logs_only_targeted_measures() {
+        use crate::config::Config;
+        use crate::daw::{CacheState, CellCache, DawMode, DawPlayState};
+        use std::collections::VecDeque;
+        use tui_textarea::TextArea;
+
+        let tracks = 3;
+        let measures = 4;
+        let (cache_tx, _cache_rx) = std::sync::mpsc::channel();
+        let app = DawApp {
+            data: vec![vec![String::new(); measures + 1]; tracks],
+            cursor_track: 0,
+            cursor_measure: 0,
+            mode: DawMode::Normal,
+            textarea: TextArea::default(),
+            cfg: Arc::new(Config {
+                plugin_path: String::new(),
+                input_midi: String::new(),
+                output_midi: String::new(),
+                output_wav: String::new(),
+                sample_rate: 44_100.0,
+                buffer_size: 512,
+                patch_path: None,
+                patches_dir: None,
+                daw_tracks: tracks,
+                daw_measures: measures,
+            }),
+            entry_ptr: 0,
+            tracks,
+            measures,
+            cache: Arc::new(Mutex::new(vec![
+                vec![CellCache {
+                    state: CacheState::Empty,
+                    samples: None,
+                    generation: 0,
+                    rendered_mml_hash: None,
+                }; measures + 1];
+                tracks
+            ])),
+            cache_tx,
+            render_lock: Arc::new(Mutex::new(())),
+            play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
+            play_position: Arc::new(Mutex::new(None)),
+            play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
+            play_measure_samples: Arc::new(Mutex::new(0)),
+            log_lines: Arc::new(Mutex::new(VecDeque::new())),
+            track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
+        };
+
+        app.start_track_rerender_batch(1, &[1, 3, 4], "random patch update");
+
+        assert_eq!(
+            app.log_lines.lock().unwrap().back().map(String::as_str),
+            Some("cache: rerender start track1 meas 1, meas 3〜4 (random patch update)")
+        );
     }
 }

@@ -459,6 +459,7 @@ mod tests {
             play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
             play_measure_samples: Arc::new(Mutex::new(0)),
             log_lines: Arc::new(Mutex::new(VecDeque::new())),
+            track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
         }
     }
 

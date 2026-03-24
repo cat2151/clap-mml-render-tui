@@ -107,10 +107,19 @@ impl DawApp {
             KeyCode::Char('r') => {
                 // measure 0 にランダム音色を設定
                 if let Some(patch) = self.pick_random_patch_name() {
+                    let affected_measures: Vec<usize> = (1..=self.measures)
+                        .filter(|&measure| !self.data[self.cursor_track][measure].trim().is_empty())
+                        .collect();
                     self.data[self.cursor_track][0] =
                         format!("{{\"Surge XT patch\": \"{}\"}}", patch);
                     self.invalidate_cell(self.cursor_track, 0);
-                    self.kick_cache(self.cursor_track, 0);
+                    // バッチを先に登録してから依存セルの再キャッシュをキックすることで、
+                    // ワーカースレッド側の完了報告との競合状態を防ぐ。
+                    self.start_track_rerender_batch(
+                        self.cursor_track,
+                        &affected_measures,
+                        "random patch update",
+                    );
                     // 音色変更は当該 track の全小節（1..=MEASURES）に影響するため一括再キャッシュ（issue #67 参照）
                     self.invalidate_and_kick_dependent_cells(self.cursor_track, 0);
                     self.save();
@@ -211,6 +220,7 @@ mod tests {
                 play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
                 play_measure_samples: Arc::new(Mutex::new(0)),
                 log_lines: Arc::new(Mutex::new(VecDeque::new())),
+                track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
             },
             cache_rx,
         )
@@ -273,7 +283,7 @@ mod tests {
 
             let cache = app.cache.lock().unwrap();
             assert_eq!(app.data[1][1], "gfed");
-            assert!(matches!(cache[1][1].state, CacheState::Pending));
+            assert!(matches!(cache[1][1].state, CacheState::Rendering));
             assert_eq!(cache[1][1].generation, 8);
 
             let job = cache_rx
@@ -330,6 +340,66 @@ mod tests {
             assert!(
                 cache_rx.try_recv().is_err(),
                 "unexpected extra cache job queued"
+            );
+        }
+
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() {
+        let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_rerender_logs");
+        std::fs::remove_dir_all(&tmp).ok();
+        std::fs::create_dir_all(&tmp).unwrap();
+        let patch_path = tmp.join("Pad 1.fxp");
+        std::fs::write(&patch_path, b"dummy").unwrap();
+
+        {
+            let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
+
+            let (mut app, cache_rx) = build_test_app();
+            app.cursor_track = 1;
+            app.cursor_measure = 0;
+            app.cfg = Arc::new(Config {
+                patches_dir: Some(tmp.to_string_lossy().into_owned()),
+                ..(*app.cfg).clone()
+            });
+            app.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
+            app.data[1][1] = "cdef".to_string();
+            app.data[1][2] = "gabc".to_string();
+
+            app.handle_normal(crossterm::event::KeyCode::Char('r'));
+
+            assert_eq!(
+                app.data[1][0],
+                r#"{"Surge XT patch": "Pad 1.fxp"}"#,
+                "random patch should update the timbre cell"
+            );
+
+            let cache = app.cache.lock().unwrap();
+            assert!(matches!(cache[1][0].state, CacheState::Empty));
+            assert!(matches!(cache[1][1].state, CacheState::Rendering));
+            assert!(matches!(cache[1][2].state, CacheState::Rendering));
+            let expected_generations = [cache[1][1].generation, cache[1][2].generation];
+            drop(cache);
+
+            let job1 = cache_rx.try_recv().expect("meas1 should be queued");
+            let job2 = cache_rx.try_recv().expect("meas2 should be queued");
+            assert_eq!(
+                vec![(job1.measure, job1.generation), (job2.measure, job2.generation)],
+                vec![(1, expected_generations[0]), (2, expected_generations[1])]
+            );
+            assert!(
+                cache_rx.try_recv().is_err(),
+                "measure 0 must not be queued for rerender"
+            );
+
+            let logs = app.log_lines.lock().unwrap().iter().cloned().collect::<Vec<_>>();
+            assert!(
+                logs.iter()
+                    .any(|line| line == "cache: rerender start track1 meas 1〜2 (random patch update)"),
+                "logs: {:?}",
+                logs
             );
         }
 
