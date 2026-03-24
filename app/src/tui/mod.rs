@@ -97,6 +97,7 @@ pub struct TuiApp<'a> {
     pub(super) patch_phrase_history_state: ListState,
     pub(super) patch_phrase_favorites_state: ListState,
     pub(super) patch_phrase_focus: PatchPhrasePane,
+    pub(super) patch_phrase_store_dirty: bool,
     pub(super) random_timbre_enabled: bool,
     /// バックグラウンドのアップデートチェックがtrueにセットしたらアップデートを実行
     pub update_available: Arc<AtomicBool>,
@@ -180,6 +181,7 @@ impl<'a> TuiApp<'a> {
             patch_phrase_history_state: ListState::default(),
             patch_phrase_favorites_state: ListState::default(),
             patch_phrase_focus: PatchPhrasePane::History,
+            patch_phrase_store_dirty: false,
             random_timbre_enabled: false,
             update_available: Arc::new(AtomicBool::new(false)),
             is_daw_mode,
@@ -340,6 +342,7 @@ impl<'a> TuiApp<'a> {
                         Mode::Normal => match self.handle_normal(key.code) {
                             NormalAction::Quit => break,
                             NormalAction::LaunchDaw => {
+                                self.flush_patch_phrase_store_if_dirty();
                                 self.save_history_state();
                                 let mut daw =
                                     crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
@@ -366,6 +369,7 @@ impl<'a> TuiApp<'a> {
 
         // 終了前にセッション状態を保存する（端末クリーンアップの成否に関わらず実行）。
         // 保存失敗はベストエフォートとして無視する（終了処理のため通知手段がない）。
+        self.flush_patch_phrase_store_if_dirty();
         self.save_history_state();
 
         let raw_mode_result = disable_raw_mode();
@@ -406,6 +410,7 @@ impl TuiApp<'static> {
             patch_phrase_history_state: ListState::default(),
             patch_phrase_favorites_state: ListState::default(),
             patch_phrase_focus: PatchPhrasePane::History,
+            patch_phrase_store_dirty: false,
             random_timbre_enabled: false,
             update_available: Arc::new(AtomicBool::new(false)),
             is_daw_mode: false,

@@ -11,11 +11,15 @@ use super::{
 };
 
 const PATCH_JSON_KEY: &str = "Surge XT patch";
+const PATCH_PHRASE_LIST_MAX_LEN: usize = 100;
 
 impl<'a> TuiApp<'a> {
     fn push_front_dedup(items: &mut Vec<String>, item: String) {
         items.retain(|existing| existing != &item);
         items.insert(0, item);
+        if items.len() > PATCH_PHRASE_LIST_MAX_LEN {
+            items.truncate(PATCH_PHRASE_LIST_MAX_LEN);
+        }
     }
 
     pub(super) fn extract_patch_phrase(mml: &str) -> Option<(String, String)> {
@@ -65,8 +69,16 @@ impl<'a> TuiApp<'a> {
             .select(Some(self.patch_phrase_favorites_cursor));
     }
 
-    fn save_patch_phrase_store(&self) {
+    fn mark_patch_phrase_store_dirty(&mut self) {
+        self.patch_phrase_store_dirty = true;
+    }
+
+    pub(super) fn flush_patch_phrase_store_if_dirty(&mut self) {
+        if !self.patch_phrase_store_dirty {
+            return;
+        }
         let _ = crate::history::save_patch_phrase_store(&self.patch_phrase_store);
+        self.patch_phrase_store_dirty = false;
     }
 
     pub(super) fn record_patch_phrase_history(&mut self, mml: &str) {
@@ -83,7 +95,7 @@ impl<'a> TuiApp<'a> {
             .entry(patch_name)
             .or_default();
         Self::push_front_dedup(&mut state.history, phrase);
-        self.save_patch_phrase_store();
+        self.mark_patch_phrase_store_dirty();
     }
 
     fn patch_phrase_preview_mml(&self) -> Option<String> {
@@ -215,6 +227,7 @@ impl<'a> TuiApp<'a> {
 
         match key {
             KeyCode::Esc => {
+                self.flush_patch_phrase_store_if_dirty();
                 self.mode = Mode::Normal;
             }
             KeyCode::Char('h') => {
@@ -291,7 +304,7 @@ impl<'a> TuiApp<'a> {
                 self.patch_phrase_focus = PatchPhrasePane::Favorites;
                 self.patch_phrase_favorites_cursor = 0;
                 self.sync_patch_phrase_states();
-                self.save_patch_phrase_store();
+                self.mark_patch_phrase_store_dirty();
                 if let Some(mml) = self.patch_phrase_preview_mml() {
                     self.kick_play(mml);
                 }
