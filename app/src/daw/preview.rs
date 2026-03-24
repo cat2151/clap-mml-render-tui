@@ -31,7 +31,8 @@ impl DawApp {
         crate::logging::append_log_line(&log_lines, format!("preview: meas{}", measure_index + 1));
 
         std::thread::spawn(move || {
-            // SAFETY: entry は main() のスタックに生存している
+            // SAFETY: `entry_ptr` は `main` から渡された `PluginEntry` を指し、
+            // アプリ終了まで生存する契約で `DawApp` に保持されている。
             let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
             let daw_cfg = (*cfg).clone();
             let sample_rate = daw_cfg.sample_rate as u32;
@@ -86,15 +87,22 @@ impl DawApp {
             };
 
             if let Some(samples) = samples_opt {
-                if *play_state.lock().unwrap() == DawPlayState::Preview {
-                    *play_position.lock().unwrap() = Some(PlayPosition {
-                        measure_index,
-                        measure_start: std::time::Instant::now(),
-                    });
-                }
-                if *play_state.lock().unwrap() == DawPlayState::Preview {
-                    let source = rodio::buffer::SamplesBuffer::new(2, sample_rate, samples);
-                    sink.append(source);
+                let preview_active = {
+                    let play_state = play_state.lock().unwrap();
+                    if *play_state != DawPlayState::Preview {
+                        false
+                    } else {
+                        drop(play_state);
+                        *play_position.lock().unwrap() = Some(PlayPosition {
+                            measure_index,
+                            measure_start: std::time::Instant::now(),
+                        });
+                        let source = rodio::buffer::SamplesBuffer::new(2, sample_rate, samples);
+                        sink.append(source);
+                        true
+                    }
+                };
+                if preview_active {
                     sink.sleep_until_end();
                 }
             } else {
