@@ -148,29 +148,90 @@ fn test_config() -> crate::config::Config {
 }
 
 #[test]
-fn handle_normal_r_toggles_random_timbre_mode() {
+fn handle_normal_r_inserts_random_patch_at_start_of_plain_line() {
     let mut app = TuiApp::new_for_test(test_config());
-    assert!(!app.random_timbre_enabled);
+    app.lines = vec!["cde".to_string()];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "Pads/Pad 1.fxp",
+    ]))));
 
     let result = app.handle_normal(KeyCode::Char('r'));
-    assert!(matches!(result, NormalAction::Continue));
-    assert!(app.random_timbre_enabled);
 
-    app.handle_normal(KeyCode::Char('r'));
-    assert!(!app.random_timbre_enabled);
+    assert!(matches!(result, NormalAction::Continue));
+    assert_eq!(
+        app.lines,
+        vec![r#"{"Surge XT patch": "Pads/Pad 1.fxp"} cde"#.to_string()]
+    );
 }
 
 #[test]
-fn handle_normal_t_shows_error_when_random_timbre_enabled() {
+fn handle_normal_r_replaces_existing_patch_at_start_of_current_line() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.random_timbre_enabled = true;
+    app.lines = vec![r#"{"Surge XT patch":"Old/Pad.fxp"} cde"#.to_string()];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "Leads/Lead 1.fxp",
+    ]))));
 
-    app.handle_normal(KeyCode::Char('t'));
+    let result = app.handle_normal(KeyCode::Char('r'));
 
-    assert!(
-        matches!(&*app.play_state.lock().unwrap(), PlayState::Err(msg) if msg == "ランダム音色モードでは音色選択は使えません")
+    assert!(matches!(result, NormalAction::Continue));
+    assert_eq!(
+        app.lines,
+        vec![r#"{"Surge XT patch": "Leads/Lead 1.fxp"} cde"#.to_string()]
     );
-    assert!(matches!(app.mode, Mode::Normal));
+}
+
+#[test]
+fn handle_normal_r_shows_error_when_patches_dir_is_missing() {
+    let mut cfg = test_config();
+    cfg.patches_dir = None;
+    let mut app = TuiApp::new_for_test(cfg);
+
+    app.handle_normal(KeyCode::Char('r'));
+
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Err(msg) if msg == "patches_dir が設定されていません"
+    ));
+}
+
+#[test]
+fn handle_normal_r_shows_error_while_patches_are_loading() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Loading));
+
+    app.handle_normal(KeyCode::Char('r'));
+
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Err(msg) if msg == "パッチを読み込み中です..."
+    ));
+}
+
+#[test]
+fn handle_normal_r_shows_error_when_patch_loading_failed() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Err("boom".to_string())));
+
+    app.handle_normal(KeyCode::Char('r'));
+
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Err(msg) if msg == "パッチの読み込みに失敗: boom"
+    ));
+}
+
+#[test]
+fn handle_normal_r_shows_error_when_patch_list_is_empty() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(Vec::new())));
+
+    app.handle_normal(KeyCode::Char('r'));
+
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Err(msg) if msg == "patches_dir にパッチが見つかりません"
+    ));
 }
 
 #[test]

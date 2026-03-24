@@ -47,14 +47,9 @@ fn status_text(app: &TuiApp<'_>, play_state: &PlayState) -> String {
         PlayState::Done(msg) => format!("  ✓ {}", msg),
         PlayState::Err(msg) => format!("  ✗ {}", msg),
     };
-    let random_timbre = if app.random_timbre_enabled {
-        "ON"
-    } else {
-        "OFF"
-    };
     match app.mode {
         Mode::Normal => format!(
-            "NORMAL  i:INS  r:{random_timbre}  t:音色  p:phrase  j/k  Enter  d:DAW  K:Help  q{}",
+            "NORMAL  i:INS  r:ランダム音色  t:音色  p:phrase  j/k  Enter  d:DAW  K:Help  q{}",
             play_str
         ),
         Mode::Insert => format!("ESC:確定→NORMAL  Enter:確定→次行{}", play_str),
@@ -137,21 +132,14 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_color: 
         .split(f.area());
 
     // キャッシュのガードを保持したままイテレートすることで、全キーのクローンを避ける。
-    // ランダム音色 ON 時はキャッシュを参照しないため、ロック自体を取得しない。
-    let cache_guard = if app.random_timbre_enabled {
-        None
-    } else {
-        Some(app.audio_cache.lock().unwrap())
-    };
+    let cache_guard = app.audio_cache.lock().unwrap();
     let items: Vec<ListItem> = app
         .lines
         .iter()
         .enumerate()
         .map(|(i, line)| {
             let mml = line.trim();
-            let is_cached = cache_guard
-                .as_ref()
-                .is_some_and(|cache| !mml.is_empty() && cache.contains_key(mml));
+            let is_cached = !mml.is_empty() && cache_guard.contains_key(mml);
             let style = if i == cursor {
                 Style::default()
                     .fg(Color::Yellow)
@@ -314,7 +302,7 @@ fn draw_help(f: &mut Frame) {
         Line::from("  Enter/Space : 再生"),
         Line::from("  i           : INSERT モード"),
         Line::from("  o           : 次行に挿入 → INSERT"),
-        Line::from("  r           : ランダム音色 ON/OFF"),
+        Line::from("  r           : 現在行の先頭にランダム音色を挿入/置換"),
         Line::from("  t           : 音色選択"),
         Line::from("  p           : patch phrase 画面"),
         Line::from("  d           : DAW モード"),
