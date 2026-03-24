@@ -4,6 +4,7 @@ use crossterm::event::KeyCode;
 use mmlabc_to_smf::mml_preprocessor;
 use ratatui::widgets::ListState;
 use serde_json::Value;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tui_textarea::TextArea;
 
 use super::{
@@ -14,6 +15,47 @@ const PATCH_JSON_KEY: &str = "Surge XT patch";
 const PATCH_PHRASE_LIST_MAX_LEN: usize = 100;
 
 impl<'a> TuiApp<'a> {
+    fn build_patch_json(patch_name: &str) -> String {
+        format!(
+            "{{\"{PATCH_JSON_KEY}\": {}}}",
+            serde_json::to_string(patch_name).unwrap_or_else(|_| format!("\"{}\"", patch_name))
+        )
+    }
+
+    fn replace_current_line_patch(&mut self, patch_name: &str) {
+        let json = Self::build_patch_json(patch_name);
+        let current = self.lines[self.cursor].clone();
+        let preprocessed = mml_preprocessor::extract_embedded_json(&current);
+        let remaining = preprocessed.remaining_mml.trim().to_string();
+        self.lines[self.cursor] = if remaining.is_empty() {
+            json
+        } else {
+            format!("{json} {remaining}")
+        };
+    }
+
+    fn pick_random_patch_name(&self) -> Result<String, String> {
+        if self.cfg.patches_dir.is_none() {
+            return Err("patches_dir が設定されていません".to_string());
+        }
+        let state = self.patch_load_state.lock().unwrap();
+        match &*state {
+            PatchLoadState::Loading => Err("パッチを読み込み中です...".to_string()),
+            PatchLoadState::Err(e) => Err(format!("パッチの読み込みに失敗: {}", e)),
+            PatchLoadState::Ready(pairs) if pairs.is_empty() => {
+                Err("patches_dir にパッチが見つかりません".to_string())
+            }
+            PatchLoadState::Ready(pairs) => {
+                let ns = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|duration| duration.subsec_nanos())
+                    .unwrap_or(0) as usize;
+                let index = ns % pairs.len();
+                Ok(pairs[index].0.clone())
+            }
+        }
+    }
+
     fn push_front_dedup(items: &mut Vec<String>, item: String) {
         if let Some(index) = items.iter().position(|existing| existing == &item) {
             if index == 0 {
@@ -174,21 +216,7 @@ impl<'a> TuiApp<'a> {
             KeyCode::Enter => {
                 if !self.patch_filtered.is_empty() {
                     let selected = self.patch_filtered[self.patch_cursor].clone();
-                    // serde_json を使って値を適切にエスケープする（パスに引用符・バックスラッシュが含まれる場合も安全）
-                    let json = format!(
-                        "{{\"{PATCH_JSON_KEY}\": {}}}",
-                        serde_json::to_string(&selected)
-                            .unwrap_or_else(|_| format!("\"{}\"", selected))
-                    );
-                    // 現在行の既存JSON（あれば）を除去して先頭に新しいJSONを挿入する
-                    let current = self.lines[self.cursor].clone();
-                    let preprocessed = mml_preprocessor::extract_embedded_json(&current);
-                    let remaining = preprocessed.remaining_mml.trim().to_string();
-                    self.lines[self.cursor] = if remaining.is_empty() {
-                        json
-                    } else {
-                        format!("{} {}", json, remaining)
-                    };
+                    self.replace_current_line_patch(&selected);
                 }
                 self.mode = Mode::Normal;
             }
@@ -319,14 +347,12 @@ impl<'a> TuiApp<'a> {
             KeyCode::Char('q') => return NormalAction::Quit,
             KeyCode::Char('d') => return NormalAction::LaunchDaw,
             KeyCode::Char('i') => self.start_insert(),
-            KeyCode::Char('r') => {
-                self.random_timbre_enabled = !self.random_timbre_enabled;
-            }
+            KeyCode::Char('r') => match self.pick_random_patch_name() {
+                Ok(patch_name) => self.replace_current_line_patch(&patch_name),
+                Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
+            },
             KeyCode::Char('t') => {
-                if self.random_timbre_enabled {
-                    *self.play_state.lock().unwrap() =
-                        PlayState::Err("ランダム音色モードでは音色選択は使えません".to_string());
-                } else if self.cfg.patches_dir.is_none() {
+                if self.cfg.patches_dir.is_none() {
                     *self.play_state.lock().unwrap() =
                         PlayState::Err("patches_dir が設定されていません".to_string());
                 } else {

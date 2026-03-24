@@ -1,7 +1,7 @@
 //! vim 風 TUI
 //!
 //! モード:
-//!   NORMAL : j/k で行移動、H/M/L で先頭/中央/末尾行へ移動、i/o で INSERT、r でランダム音色切替、t で音色選択、Enter/Space で再生、q で終了
+//!   NORMAL : j/k で行移動、H/M/L で先頭/中央/末尾行へ移動、i/o で INSERT、r で現在行の先頭にランダム音色を挿入/置換、t で音色選択、Enter/Space で再生、q で終了
 //!   INSERT : tui-textarea で編集
 //!            ESC   → 確定 → NORMAL（再生開始）
 //!            Enter → 確定 → 次行に新規行挿入 → INSERT 継続
@@ -79,7 +79,7 @@ pub struct TuiApp<'a> {
     pub(super) play_state: Arc<Mutex<PlayState>>,
     playback_session: Arc<AtomicU64>,
     active_sink: Arc<Mutex<Option<Arc<rodio::Sink>>>>,
-    /// MML文字列 → レンダリング済みサンプルのキャッシュ（random_patchモード時は使用しない）
+    /// MML文字列 → レンダリング済みサンプルのキャッシュ
     pub(super) audio_cache: Arc<Mutex<HashMap<String, Vec<f32>>>>,
     // 音色選択モード用
     /// バックグラウンドスレッドが収集したパッチリストの状態
@@ -98,7 +98,6 @@ pub struct TuiApp<'a> {
     pub(super) patch_phrase_favorites_state: ListState,
     pub(super) patch_phrase_focus: PatchPhrasePane,
     pub(super) patch_phrase_store_dirty: bool,
-    pub(super) random_timbre_enabled: bool,
     /// バックグラウンドのアップデートチェックがtrueにセットしたらアップデートを実行
     pub update_available: Arc<AtomicBool>,
     /// 終了時 DAW モードだったかどうか（history.json に保存・復元する）
@@ -182,7 +181,6 @@ impl<'a> TuiApp<'a> {
             patch_phrase_favorites_state: ListState::default(),
             patch_phrase_focus: PatchPhrasePane::History,
             patch_phrase_store_dirty: false,
-            random_timbre_enabled: false,
             update_available: Arc::new(AtomicBool::new(false)),
             is_daw_mode,
         }
@@ -195,19 +193,11 @@ impl<'a> TuiApp<'a> {
         let active_sink = Arc::clone(&self.active_sink);
         let cache = Arc::clone(&self.audio_cache);
         let entry_ptr = self.entry_ptr;
-        let random_timbre_enabled = self.random_timbre_enabled;
         let session = self.begin_playback_session();
 
-        // キャッシュを確認（random_patchモード時はキャッシュを使用しない）
-        let cached_samples = {
-            let cache_guard = if random_timbre_enabled {
-                // ランダム音色 ON 時はキャッシュを参照しない（ロックも取得しない）
-                None
-            } else {
-                Some(cache.lock().unwrap())
-            };
-            resolve_cached_samples(cache_guard.as_deref(), &mml)
-        };
+        let cache_guard = cache.lock().unwrap();
+        let cached_samples = resolve_cached_samples(Some(&cache_guard), &mml);
+        drop(cache_guard);
 
         if let Some(samples) = cached_samples {
             // キャッシュヒット: レンダリングをスキップして即時再生
@@ -234,8 +224,7 @@ impl<'a> TuiApp<'a> {
                 let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
 
                 // レンダリング
-                let mut core_cfg = CoreConfig::from(cfg.as_ref());
-                core_cfg.random_patch = random_timbre_enabled;
+                let core_cfg = CoreConfig::from(cfg.as_ref());
                 let render_result = mml_render(&mml, &core_cfg, entry_ref);
 
                 match render_result {
@@ -251,12 +240,11 @@ impl<'a> TuiApp<'a> {
                         if !Self::playback_session_is_current(&playback_session, session) {
                             return;
                         }
-                        // キャッシュに保存（random_patchモード時はキャッシュしない、上限超過時はクリア）
                         try_insert_cache(
                             &mut cache.lock().unwrap(),
                             mml.clone(),
                             samples.clone(),
-                            random_timbre_enabled,
+                            false,
                         );
 
                         let msg = format!("{} | {}", patch_name, mml);
@@ -411,7 +399,6 @@ impl TuiApp<'static> {
             patch_phrase_favorites_state: ListState::default(),
             patch_phrase_focus: PatchPhrasePane::History,
             patch_phrase_store_dirty: false,
-            random_timbre_enabled: false,
             update_available: Arc::new(AtomicBool::new(false)),
             is_daw_mode: false,
         }
