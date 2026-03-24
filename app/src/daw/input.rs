@@ -321,6 +321,12 @@ mod tests {
                 "semicolon-separated phrases should each receive the track timbre: {}",
                 job.mml
             );
+            assert_eq!(
+                job.mml.matches("t120").count(),
+                2,
+                "semicolon-separated phrases should each receive the track0/header content (t120): {}",
+                job.mml
+            );
             assert!(
                 cache_rx.try_recv().is_err(),
                 "unexpected extra cache job queued"

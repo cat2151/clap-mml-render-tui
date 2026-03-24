@@ -331,6 +331,12 @@ mod tests {
             "each semicolon branch should receive timbre JSON: {}",
             mml
         );
+        assert_eq!(
+            mml.matches("t120").count(),
+            2,
+            "each semicolon branch should receive the track0 tempo token: {}",
+            mml
+        );
         assert!(
             mml.contains("cde"),
             "first branch missing from MML: {}",
