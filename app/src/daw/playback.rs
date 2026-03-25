@@ -459,10 +459,18 @@ impl DawApp {
                     samples: next_samples,
                     source: next_source,
                 } = next_playback_audio;
+                let next_chunk =
+                    mix_measure_chunk(&mut active_layers, next_samples, measure_samples);
+                sink.append(rodio::buffer::SamplesBuffer::new(
+                    2,
+                    sample_rate,
+                    next_chunk,
+                ));
 
                 // 小節境界は期待再生開始時刻を基準にポーリングする。
+                // 直前で次小節チャンクを append して 1 小節先読みを維持したうえで、
                 // rodio::Sink には「現在キュー先頭の小節だけの終了」を待つ API がないため、
-                // lookahead を維持しつつ停止要求にも追従できるよう時間ベースの待機を使う。
+                // play_position / ログ更新だけを時間ベースで境界に同期する。
                 loop {
                     if std::time::Instant::now() >= next_measure_start {
                         break;
@@ -477,13 +485,6 @@ impl DawApp {
                     break 'outer;
                 }
 
-                let next_chunk =
-                    mix_measure_chunk(&mut active_layers, next_samples, measure_samples);
-                sink.append(rodio::buffer::SamplesBuffer::new(
-                    2,
-                    sample_rate,
-                    next_chunk,
-                ));
                 *play_position.lock().unwrap() = Some(PlayPosition {
                     measure_index: lookahead_measure_index,
                     measure_start: next_measure_start,
