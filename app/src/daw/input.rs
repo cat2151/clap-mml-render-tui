@@ -2,7 +2,9 @@
 
 use crossterm::event::KeyCode;
 
-use super::{playback_util::effective_measure_count, DawApp, DawMode, DawNormalAction, DawPlayState};
+use super::{
+    playback_util::effective_measure_count, DawApp, DawMode, DawNormalAction, DawPlayState,
+};
 
 fn format_random_patch_hot_reload_log(
     track: usize,

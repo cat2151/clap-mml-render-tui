@@ -1,8 +1,6 @@
 //! DawApp の演奏メソッド
 
-use std::{
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use clack_host::prelude::PluginEntry;
 use cmrt_core::{mml_render_for_cache, CoreConfig};
@@ -15,14 +13,12 @@ use super::playback_util::play_start_log_lines;
 pub(super) use super::playback_util::{effective_measure_count, loop_measure_summary_label};
 use super::{DawApp, DawPlayState, PlayPosition};
 use cache_mixer::build_playback_measure_samples;
-use measure_math::{
-    format_playback_measure_advance_log, format_playback_measure_resolution_log,
-};
+pub(super) use cache_mixer::{pad_playback_measure_samples, try_get_cached_samples};
+pub(super) use measure_math::{current_play_measure_index, following_measure_index};
+use measure_math::{format_playback_measure_advance_log, format_playback_measure_resolution_log};
 use measure_mixer::{
     mix_measure_chunk, ActiveMeasureLayer, PlaybackMeasureAudio, PlaybackMeasureSource,
 };
-pub(super) use cache_mixer::{pad_playback_measure_samples, try_get_cached_samples};
-pub(super) use measure_math::{current_play_measure_index, following_measure_index};
 
 #[derive(Clone)]
 struct QueuedMeasure {
