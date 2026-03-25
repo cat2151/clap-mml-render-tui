@@ -1,6 +1,7 @@
 use super::*;
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use tui_textarea::{CursorMove, TextArea};
 
 static NEXT_TEST_ID: AtomicUsize = AtomicUsize::new(0);
 
@@ -268,6 +269,49 @@ fn handle_normal_p_shows_error_when_current_line_has_no_patch_json() {
         PlayState::Err(msg) if msg == "現在行の先頭に patch name JSON がありません"
     ));
     assert!(matches!(app.mode, Mode::Normal));
+}
+
+#[test]
+fn handle_insert_ctrl_c_copies_selected_text() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::Insert;
+    app.textarea = TextArea::from(["Hello World"]);
+    app.textarea.move_cursor(CursorMove::WordForward);
+    app.textarea.start_selection();
+    app.textarea.move_cursor(CursorMove::End);
+
+    app.handle_insert(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+
+    assert_eq!(app.textarea.yank_text(), "World");
+    assert_eq!(app.textarea.lines().join(""), "Hello World");
+}
+
+#[test]
+fn handle_insert_ctrl_x_cuts_selected_text() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::Insert;
+    app.textarea = TextArea::from(["Hello World"]);
+    app.textarea.move_cursor(CursorMove::WordForward);
+    app.textarea.start_selection();
+    app.textarea.move_cursor(CursorMove::End);
+
+    app.handle_insert(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
+
+    assert_eq!(app.textarea.yank_text(), "World");
+    assert_eq!(app.textarea.lines().join(""), "Hello ");
+}
+
+#[test]
+fn handle_insert_ctrl_v_pastes_yanked_text() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::Insert;
+    app.textarea = TextArea::from(["Hello"]);
+    app.textarea.move_cursor(CursorMove::End);
+    app.textarea.set_yank_text(" World");
+
+    app.handle_insert(KeyEvent::new(KeyCode::Char('v'), KeyModifiers::CONTROL));
+
+    assert_eq!(app.textarea.lines().join(""), "Hello World");
 }
 
 #[test]

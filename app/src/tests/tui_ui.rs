@@ -70,3 +70,23 @@ fn patch_phrase_screen_uses_c_as_fallback_for_empty_lists() {
 
     assert!(lines.contains("▶ c"));
 }
+
+#[test]
+fn help_screen_mentions_ctrl_clipboard_shortcuts() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::Help;
+
+    let normalized_lines: Vec<String> = render_lines(&mut app, 80, 30)
+        .into_iter()
+        .map(|line| line.replace(' ', ""))
+        .collect();
+
+    assert!(normalized_lines.iter().any(|line| line.contains("Ctrl+C:コピー")));
+    assert!(normalized_lines.iter().any(|line| line.contains("Ctrl+X:カット")));
+    assert!(normalized_lines.iter().any(|line| line.contains("Ctrl+V:ペースト")));
+    assert!(
+        !normalized_lines
+            .iter()
+            .any(|line| line.contains("Ctrl+C:強制終了"))
+    );
+}
