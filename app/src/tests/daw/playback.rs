@@ -10,7 +10,8 @@ use crate::config::Config;
 use super::{
     super::{CacheState, CellCache, DawApp, DawMode, DawPlayState},
     build_playback_measure_samples, current_play_measure_index, following_measure_index,
-    format_playback_measure_advance_log, format_playback_measure_resolution_log,
+    format_playback_measure_advance_log, format_playback_measure_resolution_log, mix_measure_chunk,
+    try_get_cached_samples, ActiveMeasureLayer,
 };
 
 /// stop_play のログ出力を検証するための最小構成の DawApp を作る。
@@ -190,4 +191,52 @@ fn build_playback_measure_samples_renders_and_normalizes_length() {
         log_lines.lock().unwrap().back().map(String::as_str),
         Some("meas1: render")
     );
+}
+
+#[test]
+fn build_playback_measure_samples_preserves_rendered_tail() {
+    let log_lines = Arc::new(Mutex::new(VecDeque::new()));
+    let cache = Arc::new(Mutex::new(vec![vec![CellCache::empty(); 3]; 3]));
+    cache.lock().unwrap()[1][1].state = CacheState::Pending;
+
+    let samples = build_playback_measure_samples(
+        &cache,
+        0,
+        "c",
+        4,
+        3,
+        &log_lines,
+        || -> Result<Vec<f32>, ()> { Ok(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]) },
+    )
+    .unwrap();
+
+    assert_eq!(samples.samples, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+}
+
+#[test]
+fn try_get_cached_samples_preserves_cached_tail_beyond_measure_length() {
+    let cache = Arc::new(Mutex::new(vec![vec![CellCache::empty(); 3]; 3]));
+    cache.lock().unwrap()[1][1] = CellCache {
+        state: CacheState::Ready,
+        samples: Some(Arc::new(vec![0.25, -0.25, 0.5, -0.5, 0.75, -0.75])),
+        generation: 0,
+        rendered_mml_hash: None,
+    };
+
+    let samples = try_get_cached_samples(&cache, 1, 4, 3).unwrap();
+
+    assert_eq!(samples.samples, vec![0.25, -0.25, 0.5, -0.5, 0.75, -0.75]);
+    assert_eq!(samples.cached_tracks, vec![1]);
+}
+
+#[test]
+fn mix_measure_chunk_overlaps_previous_tail_with_next_measure_start() {
+    let mut active_layers = Vec::<ActiveMeasureLayer>::new();
+
+    let first_chunk = mix_measure_chunk(&mut active_layers, vec![1.0; 6], 4);
+    let second_chunk = mix_measure_chunk(&mut active_layers, vec![2.0; 4], 4);
+
+    assert_eq!(first_chunk, vec![1.0, 1.0, 1.0, 1.0]);
+    assert_eq!(second_chunk, vec![3.0, 3.0, 2.0, 2.0]);
+    assert!(active_layers.is_empty());
 }

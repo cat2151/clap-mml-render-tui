@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use clack_host::prelude::PluginEntry;
 use cmrt_core::{mml_render_for_cache, CoreConfig};
 
-use super::playback::try_get_cached_samples;
+use super::playback::{pad_playback_measure_samples, try_get_cached_samples};
 use super::{DawApp, DawPlayState, PlayPosition};
 
 fn begin_preview_output<F>(
@@ -112,14 +112,9 @@ impl DawApp {
                     let core_cfg = CoreConfig::from(&daw_cfg);
                     mml_render_for_cache(&mml, &core_cfg, entry_ref)
                 };
-                result.ok().map(|mut s| {
-                    if s.len() < measure_samples {
-                        s.resize(measure_samples, 0.0);
-                    } else {
-                        s.truncate(measure_samples);
-                    }
-                    s
-                })
+                result
+                    .ok()
+                    .map(|samples| pad_playback_measure_samples(samples, measure_samples))
             };
 
             if let Some(samples) = samples_opt {
