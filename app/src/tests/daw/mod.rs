@@ -108,7 +108,7 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
     let tracks = 3;
     let measures = 4;
     let (cache_tx, _cache_rx) = std::sync::mpsc::channel();
-    let app = DawApp {
+    let mut app = DawApp {
         data: vec![vec![String::new(); measures + 1]; tracks],
         cursor_track: 0,
         cursor_measure: 0,
@@ -151,16 +151,19 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
         log_lines: Arc::new(Mutex::new(VecDeque::new())),
         track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
     };
+    app.data[1][1] = "c".to_string();
+    app.data[1][3] = "e".to_string();
+    app.data[1][4] = "g".to_string();
 
     app.start_track_rerender_batch(1, &[1, 3, 4], "random patch update");
 
     let logs = app.log_lines.lock().unwrap().clone();
     assert!(
         logs.iter()
-            .any(|line| line == "cache: rerender start track1 meas 1, meas 3〜4 (random patch update)")
+            .any(|line| line
+                == "cache: rerender start track1 meas 1, meas 3〜4 (random patch update)")
     );
-    assert!(
-        logs.iter()
-            .any(|line| line == "cache: rerender reserve track1 meas1 (meas1 -> meas3 -> meas4)")
-    );
+    assert!(logs
+        .iter()
+        .any(|line| line == "cache: rerender reserve track1 meas1 (meas1 -> meas3 -> meas4)"));
 }

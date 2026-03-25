@@ -38,6 +38,9 @@ fn prioritized_measure_order(
     let next_measure =
         playback::following_measure_index(current_measure_index, effective_count) + 1;
     ordered.sort_by_key(|&measure| {
+        // play 中は「現在演奏中の次 meas」から順に 1 周する距離で優先度を決める。
+        // これにより meas7 演奏中なら meas8 を先頭にし、その後 meas1, meas2... と続く。
+        // ループ終端の外側にある小節は現在の再生到達に寄与しないため末尾に回す。
         let loop_distance = if measure <= effective_count {
             (measure + effective_count - next_measure) % effective_count
         } else {
@@ -145,18 +148,23 @@ impl DawApp {
                     &play_measure_mmls,
                 );
                 if let Some(next_measure) = priority_order.first().copied() {
-                    let next_job = batch.pending.remove(&next_measure);
-                    batch.active_measure = Some(next_measure);
-                    (
-                        next_job,
-                        Some(format!(
-                            "cache: rerender reserve track{} meas{} ({})",
-                            track,
-                            next_measure,
-                            format_measure_order(&priority_order)
-                        )),
-                        None,
-                    )
+                    if let Some(next_job) = batch.pending.remove(&next_measure) {
+                        batch.active_measure = Some(next_measure);
+                        (
+                            Some(next_job),
+                            Some(format!(
+                                "cache: rerender reserve track{} meas{} ({})",
+                                track,
+                                next_measure,
+                                format_measure_order(&priority_order)
+                            )),
+                            None,
+                        )
+                    } else {
+                        let completion_log = batch.completion_log.clone();
+                        batches[track] = None;
+                        (None, None, Some(completion_log))
+                    }
                 } else {
                     let completion_log = batch.completion_log.clone();
                     batches[track] = None;

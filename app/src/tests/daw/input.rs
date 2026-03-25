@@ -212,7 +212,10 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
         let job1 = cache_rx
             .try_recv()
             .expect("highest-priority measure should be reserved");
-        assert_eq!((job1.measure, job1.generation), (1, expected_generations[0]));
+        assert_eq!(
+            (job1.measure, job1.generation),
+            (1, expected_generations[0])
+        );
         assert!(
             cache_rx.try_recv().is_err(),
             "only one measure should be reserved at a time"

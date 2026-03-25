@@ -135,7 +135,10 @@ pub(super) fn current_play_measure_index(
     }
 }
 
-pub(super) fn following_measure_index(current_measure_index: usize, effective_count: usize) -> usize {
+pub(super) fn following_measure_index(
+    current_measure_index: usize,
+    effective_count: usize,
+) -> usize {
     (current_measure_index + 1) % effective_count
 }
 
@@ -319,15 +322,8 @@ impl DawApp {
                     };
                     let measure_start = std::time::Instant::now();
                     let measure_duration = measure_duration(measure_samples, sample_rate);
-                    let PlaybackMeasureAudio {
-                        samples,
-                        source,
-                    } = playback_audio;
-                    sink.append(rodio::buffer::SamplesBuffer::new(
-                        2,
-                        sample_rate,
-                        samples,
-                    ));
+                    let PlaybackMeasureAudio { samples, source } = playback_audio;
+                    sink.append(rodio::buffer::SamplesBuffer::new(2, sample_rate, samples));
                     *play_position.lock().unwrap() = Some(PlayPosition {
                         measure_index: current_measure_index,
                         measure_start,
