@@ -76,11 +76,17 @@ fn help_screen_mentions_ctrl_clipboard_shortcuts() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::Help;
 
-    let lines = render_lines(&mut app, 80, 30).join("\n");
-    let normalized = lines.replace(' ', "");
+    let normalized_lines: Vec<String> = render_lines(&mut app, 80, 30)
+        .into_iter()
+        .map(|line| line.replace(' ', ""))
+        .collect();
 
-    assert!(normalized.contains("Ctrl+C:コピー"));
-    assert!(normalized.contains("Ctrl+X:カット"));
-    assert!(normalized.contains("Ctrl+V:ペースト"));
-    assert!(!lines.contains("Ctrl+C      : 強制終了"));
+    assert!(normalized_lines.iter().any(|line| line.contains("Ctrl+C:コピー")));
+    assert!(normalized_lines.iter().any(|line| line.contains("Ctrl+X:カット")));
+    assert!(normalized_lines.iter().any(|line| line.contains("Ctrl+V:ペースト")));
+    assert!(
+        !normalized_lines
+            .iter()
+            .any(|line| line.contains("Ctrl+C:強制終了"))
+    );
 }
