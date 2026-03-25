@@ -1,4 +1,4 @@
-use super::*;
+use clap_mml_render_tui::config::{config_file_path, log_file_path, Config};
 
 #[test]
 fn config_file_path_ends_with_cmrt_config_toml() {

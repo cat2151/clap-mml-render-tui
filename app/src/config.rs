@@ -234,7 +234,3 @@ impl From<&Config> for CoreConfig {
         }
     }
 }
-
-#[cfg(test)]
-#[path = "tests/config.rs"]
-mod tests;
