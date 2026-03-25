@@ -34,10 +34,8 @@ impl TuiApp<'static> {
             is_daw_mode: false,
         }
     }
-}
 
-impl TuiApp<'static> {
-    pub(super) fn is_current_playback_session(&self, session: u64) -> bool {
+    pub(super) fn test_is_current_playback_session(&self, session: u64) -> bool {
         Self::playback_session_is_current(&self.playback_session, session)
     }
 }
