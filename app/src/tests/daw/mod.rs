@@ -42,6 +42,12 @@ fn complete_track_rerender_batch_logs_only_after_last_measure_finishes() {
     let play_position = Arc::new(Mutex::new(None));
     let play_measure_mmls = Arc::new(Mutex::new(vec!["c".to_string(), "d".to_string()]));
     let (cache_tx, cache_rx) = std::sync::mpsc::channel();
+    let cache = Arc::new(Mutex::new(vec![vec![super::CellCache::empty(); 3]; 2]));
+    {
+        let mut cache_guard = cache.lock().unwrap();
+        cache_guard[1][2].state = super::CacheState::Pending;
+        cache_guard[1][2].generation = 1;
+    }
     batches.lock().unwrap()[1] = Some(TrackRerenderBatch {
         pending: BTreeMap::from([(
             2,
@@ -60,7 +66,7 @@ fn complete_track_rerender_batch_logs_only_after_last_measure_finishes() {
     DawApp::complete_track_rerender_batch_measure(
         &batches,
         &log_lines,
-        &Arc::new(Mutex::new(vec![vec![super::CellCache::empty(); 3]; 2])),
+        &cache,
         &play_position,
         &play_measure_mmls,
         &cache_tx,
@@ -80,7 +86,7 @@ fn complete_track_rerender_batch_logs_only_after_last_measure_finishes() {
     DawApp::complete_track_rerender_batch_measure(
         &batches,
         &log_lines,
-        &Arc::new(Mutex::new(vec![vec![super::CellCache::empty(); 3]; 2])),
+        &cache,
         &play_position,
         &play_measure_mmls,
         &cache_tx,
@@ -95,6 +101,83 @@ fn complete_track_rerender_batch_logs_only_after_last_measure_finishes() {
     assert!(
         batches.lock().unwrap()[1].is_none(),
         "completed batch should be cleared"
+    );
+}
+
+#[test]
+fn complete_track_rerender_batch_skips_stale_pending_job_and_reserves_next_measure() {
+    let log_lines = Arc::new(Mutex::new(VecDeque::new()));
+    let batches = Arc::new(Mutex::new(vec![None, None]));
+    let play_position = Arc::new(Mutex::new(None));
+    let play_measure_mmls = Arc::new(Mutex::new(vec![
+        "c".to_string(),
+        "d".to_string(),
+        "e".to_string(),
+    ]));
+    let (cache_tx, cache_rx) = std::sync::mpsc::channel();
+    let cache = Arc::new(Mutex::new(vec![vec![super::CellCache::empty(); 4]; 2]));
+    {
+        let mut cache_guard = cache.lock().unwrap();
+        cache_guard[1][2].state = super::CacheState::Pending;
+        cache_guard[1][2].generation = 2;
+        cache_guard[1][3].state = super::CacheState::Pending;
+        cache_guard[1][3].generation = 1;
+    }
+    batches.lock().unwrap()[1] = Some(TrackRerenderBatch {
+        pending: BTreeMap::from([
+            (
+                2,
+                CacheJob {
+                    track: 1,
+                    measure: 2,
+                    generation: 1,
+                    rendered_mml_hash: 2,
+                    mml: "d".to_string(),
+                },
+            ),
+            (
+                3,
+                CacheJob {
+                    track: 1,
+                    measure: 3,
+                    generation: 1,
+                    rendered_mml_hash: 3,
+                    mml: "e".to_string(),
+                },
+            ),
+        ]),
+        active_measure: Some(1),
+        completion_log: "cache: rerender done track1 meas 1〜3 (random patch update)".to_string(),
+    });
+
+    DawApp::complete_track_rerender_batch_measure(
+        &batches,
+        &log_lines,
+        &cache,
+        &play_position,
+        &play_measure_mmls,
+        &cache_tx,
+        1,
+        1,
+    );
+
+    let next_job = cache_rx
+        .try_recv()
+        .expect("next valid measure should be reserved");
+    assert_eq!(next_job.measure, 3);
+    let logs = log_lines.lock().unwrap().clone();
+    assert!(
+        logs.iter()
+            .any(|line| line == "cache: rerender reserve track1 meas3 (meas3)"),
+        "logs: {:?}",
+        logs
+    );
+    let batch = batches.lock().unwrap();
+    let current_batch = batch[1].as_ref().expect("batch should continue");
+    assert_eq!(current_batch.active_measure, Some(3));
+    assert!(
+        !current_batch.pending.contains_key(&2),
+        "stale pending measure should be dropped"
     );
 }
 
@@ -154,6 +237,12 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
     app.data[1][1] = "c".to_string();
     app.data[1][3] = "e".to_string();
     app.data[1][4] = "g".to_string();
+    {
+        let mut cache = app.cache.lock().unwrap();
+        cache[1][1].state = super::CacheState::Pending;
+        cache[1][3].state = super::CacheState::Pending;
+        cache[1][4].state = super::CacheState::Pending;
+    }
 
     app.start_track_rerender_batch(1, &[1, 3, 4], "random patch update");
 

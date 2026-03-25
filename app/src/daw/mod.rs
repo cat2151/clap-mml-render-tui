@@ -190,87 +190,122 @@ impl DawApp {
                 for job in cache_rx {
                     let track = job.track;
                     let measure = job.measure;
+                    let mut skipped_stale_job = false;
                     {
                         let mut cache = cache_worker.lock().unwrap();
                         let cell = &mut cache[track][measure];
                         if cell.state == CacheState::Empty || cell.generation != job.generation {
-                            continue;
+                            skipped_stale_job = true;
+                        } else {
+                            cell.state = CacheState::Rendering;
+                            cell.samples = None;
+                            cell.rendered_mml_hash = None;
                         }
-                        cell.state = CacheState::Rendering;
-                        cell.samples = None;
-                        cell.rendered_mml_hash = None;
+                    }
+                    if skipped_stale_job {
+                        Self::complete_track_rerender_batch_measure(
+                            &track_rerender_batches_worker,
+                            &log_lines_worker,
+                            &cache_worker,
+                            &play_position_worker,
+                            &play_measure_mmls_worker,
+                            &cache_tx_worker,
+                            track,
+                            measure,
+                        );
+                        continue;
                     }
                     let _guard = render_lock_worker.lock().unwrap();
                     let core_cfg = cmrt_core::CoreConfig::from(&daw_cfg);
                     match mml_render_for_cache(&job.mml, &core_cfg, entry_ref) {
                         Ok(samples) => {
-                            let mut cache = cache_worker.lock().unwrap();
-                            if cache[track][measure].generation != job.generation {
-                                continue;
-                            }
-                            // 開発用: track/measure ごとに WAV ファイルを出力する
-                            // measure 0 は音色/ヘッダセルであり演奏内容ではないためスキップ
-                            let wav_ok = if measure > 0 {
-                                if let Ok(daw_dir) = ensure_daw_dir() {
-                                    let wav_path =
-                                        daw_dir.join(format!("track{}_meas{}.wav", track, measure));
-                                    write_wav(&samples, daw_cfg.sample_rate as u32, &wav_path)
-                                        .is_ok()
+                            let mut should_complete_batch = false;
+                            {
+                                let mut cache = cache_worker.lock().unwrap();
+                                if cache[track][measure].generation != job.generation {
+                                    skipped_stale_job = true;
                                 } else {
-                                    false
+                                    // 開発用: track/measure ごとに WAV ファイルを出力する
+                                    // measure 0 は音色/ヘッダセルであり演奏内容ではないためスキップ
+                                    let wav_ok = if measure > 0 {
+                                        if let Ok(daw_dir) = ensure_daw_dir() {
+                                            let wav_path = daw_dir.join(format!(
+                                                "track{}_meas{}.wav",
+                                                track, measure
+                                            ));
+                                            write_wav(
+                                                &samples,
+                                                daw_cfg.sample_rate as u32,
+                                                &wav_path,
+                                            )
+                                            .is_ok()
+                                        } else {
+                                            false
+                                        }
+                                    } else {
+                                        true
+                                    };
+                                    // WAV 書き出し失敗はデバッグ出力の問題であり、レンダリング自体は成功している。
+                                    // そのため WAV 失敗時は Error としてユーザーに通知する。
+                                    cache[track][measure].state = if wav_ok {
+                                        CacheState::Ready
+                                    } else {
+                                        CacheState::Error
+                                    };
+                                    cache[track][measure].rendered_mml_hash = if wav_ok {
+                                        Some(job.rendered_mml_hash)
+                                    } else {
+                                        None
+                                    };
+                                    // Ready かつサイズ上限以内のときのみサンプルをメモリに保持する。
+                                    // 上限超過（低 BPM 等）や WAV 失敗時はサンプルを保持しない。
+                                    if wav_ok && samples.len() <= MAX_CACHED_SAMPLES {
+                                        cache[track][measure].samples = Some(Arc::new(samples));
+                                    } else {
+                                        cache[track][measure].samples = None;
+                                    }
+                                    should_complete_batch = true;
                                 }
-                            } else {
-                                true
-                            };
-                            // WAV 書き出し失敗はデバッグ出力の問題であり、レンダリング自体は成功している。
-                            // そのため WAV 失敗時は Error としてユーザーに通知する。
-                            cache[track][measure].state = if wav_ok {
-                                CacheState::Ready
-                            } else {
-                                CacheState::Error
-                            };
-                            cache[track][measure].rendered_mml_hash = if wav_ok {
-                                Some(job.rendered_mml_hash)
-                            } else {
-                                None
-                            };
-                            // Ready かつサイズ上限以内のときのみサンプルをメモリに保持する。
-                            // 上限超過（低 BPM 等）や WAV 失敗時はサンプルを保持しない。
-                            if wav_ok && samples.len() <= MAX_CACHED_SAMPLES {
-                                cache[track][measure].samples = Some(Arc::new(samples));
-                            } else {
-                                cache[track][measure].samples = None;
                             }
-                            Self::complete_track_rerender_batch_measure(
-                                &track_rerender_batches_worker,
-                                &log_lines_worker,
-                                &cache_worker,
-                                &play_position_worker,
-                                &play_measure_mmls_worker,
-                                &cache_tx_worker,
-                                track,
-                                measure,
-                            );
+                            if skipped_stale_job || should_complete_batch {
+                                Self::complete_track_rerender_batch_measure(
+                                    &track_rerender_batches_worker,
+                                    &log_lines_worker,
+                                    &cache_worker,
+                                    &play_position_worker,
+                                    &play_measure_mmls_worker,
+                                    &cache_tx_worker,
+                                    track,
+                                    measure,
+                                );
+                            }
                         }
                         Err(_) => {
-                            let mut cache = cache_worker.lock().unwrap();
-                            if cache[track][measure].generation != job.generation {
-                                continue;
+                            let mut should_complete_batch = false;
+                            {
+                                let mut cache = cache_worker.lock().unwrap();
+                                if cache[track][measure].generation != job.generation {
+                                    skipped_stale_job = true;
+                                } else {
+                                    cache[track][measure].state = CacheState::Error;
+                                    // エラー時は古いサンプルを保持しない（ステールデータの排除）
+                                    cache[track][measure].samples = None;
+                                    cache[track][measure].rendered_mml_hash = None;
+                                    should_complete_batch = true;
+                                }
                             }
-                            cache[track][measure].state = CacheState::Error;
-                            // エラー時は古いサンプルを保持しない（ステールデータの排除）
-                            cache[track][measure].samples = None;
-                            cache[track][measure].rendered_mml_hash = None;
-                            Self::complete_track_rerender_batch_measure(
-                                &track_rerender_batches_worker,
-                                &log_lines_worker,
-                                &cache_worker,
-                                &play_position_worker,
-                                &play_measure_mmls_worker,
-                                &cache_tx_worker,
-                                track,
-                                measure,
-                            );
+                            if skipped_stale_job || should_complete_batch {
+                                Self::complete_track_rerender_batch_measure(
+                                    &track_rerender_batches_worker,
+                                    &log_lines_worker,
+                                    &cache_worker,
+                                    &play_position_worker,
+                                    &play_measure_mmls_worker,
+                                    &cache_tx_worker,
+                                    track,
+                                    measure,
+                                );
+                            }
                         }
                     }
                 }

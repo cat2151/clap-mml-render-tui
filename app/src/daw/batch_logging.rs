@@ -1,9 +1,9 @@
 //! DAW キャッシュ再レンダリングの進捗ログ管理
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Arc, Mutex};
 
-use super::{playback, playback_util, CacheJob, DawApp, PlayPosition};
+use super::{playback, playback_util, CacheJob, CacheState, DawApp, PlayPosition};
 
 #[derive(Clone)]
 pub(super) struct TrackRerenderBatch {
@@ -51,6 +51,41 @@ fn prioritized_measure_order(
     ordered
 }
 
+fn take_next_batch_job(
+    pending: &mut BTreeMap<usize, CacheJob>,
+    track: usize,
+    cache: &Arc<Mutex<Vec<Vec<super::CellCache>>>>,
+    play_position: Option<PlayPosition>,
+    play_measure_mmls: &[String],
+) -> Option<(usize, CacheJob, String)> {
+    let priority_order =
+        prioritized_measure_order(pending.keys().copied(), play_position, play_measure_mmls);
+    let valid_order: Vec<usize> = {
+        let cache = cache.lock().unwrap();
+        priority_order
+            .iter()
+            .copied()
+            .filter(|measure| {
+                pending.get(measure).is_some_and(|job| {
+                    let cell = &cache[track][*measure];
+                    cell.state != CacheState::Empty && cell.generation == job.generation
+                })
+            })
+            .collect()
+    };
+
+    let valid_measure_set: BTreeSet<usize> = valid_order.iter().copied().collect();
+    for measure in &priority_order {
+        if !valid_measure_set.contains(measure) {
+            pending.remove(measure);
+        }
+    }
+
+    let first_measure = valid_order.first().copied()?;
+    let first_job = pending.remove(&first_measure)?;
+    Some((first_measure, first_job, format_measure_order(&valid_order)))
+}
+
 impl DawApp {
     pub(super) fn start_track_rerender_batch(
         &self,
@@ -76,30 +111,26 @@ impl DawApp {
         let measure_range = super::playback_util::format_measure_list(measures)
             .map(|label| label.replace('～', "〜"))
             .unwrap_or_else(|| "none".to_string());
-        let priority_order = prioritized_measure_order(
-            pending.keys().copied(),
-            self.play_position.lock().unwrap().clone(),
-            &self.play_measure_mmls.lock().unwrap(),
-        );
-        let Some(first_measure) = priority_order.first().copied() else {
-            self.track_rerender_batches.lock().unwrap()[track] = None;
-            return;
-        };
-        let Some(first_job) = pending.get(&first_measure).cloned() else {
-            self.track_rerender_batches.lock().unwrap()[track] = None;
-            return;
-        };
+        let play_position = self.play_position.lock().unwrap().clone();
+        let play_measure_mmls = self.play_measure_mmls.lock().unwrap().clone();
         let mut remaining = pending;
-        remaining.remove(&first_measure);
+        let Some((first_measure, first_job, priority_order_label)) = take_next_batch_job(
+            &mut remaining,
+            track,
+            &self.cache,
+            play_position,
+            &play_measure_mmls,
+        ) else {
+            self.track_rerender_batches.lock().unwrap()[track] = None;
+            return;
+        };
         self.append_log_line(format!(
             "cache: rerender start track{} {} ({reason})",
             track, measure_range
         ));
         self.append_log_line(format!(
             "cache: rerender reserve track{} meas{} ({})",
-            track,
-            first_measure,
-            format_measure_order(&priority_order)
+            track, first_measure, priority_order_label
         ));
         self.track_rerender_batches.lock().unwrap()[track] = Some(TrackRerenderBatch {
             pending: remaining,
@@ -142,29 +173,22 @@ impl DawApp {
                 batches[track] = None;
                 (None, None, Some(completion_log))
             } else {
-                let priority_order = prioritized_measure_order(
-                    batch.pending.keys().copied(),
+                if let Some((next_measure, next_job, priority_order_label)) = take_next_batch_job(
+                    &mut batch.pending,
+                    track,
+                    cache,
                     play_position,
                     &play_measure_mmls,
-                );
-                if let Some(next_measure) = priority_order.first().copied() {
-                    if let Some(next_job) = batch.pending.remove(&next_measure) {
-                        batch.active_measure = Some(next_measure);
-                        (
-                            Some(next_job),
-                            Some(format!(
-                                "cache: rerender reserve track{} meas{} ({})",
-                                track,
-                                next_measure,
-                                format_measure_order(&priority_order)
-                            )),
-                            None,
-                        )
-                    } else {
-                        let completion_log = batch.completion_log.clone();
-                        batches[track] = None;
-                        (None, None, Some(completion_log))
-                    }
+                ) {
+                    batch.active_measure = Some(next_measure);
+                    (
+                        Some(next_job),
+                        Some(format!(
+                            "cache: rerender reserve track{} meas{} ({})",
+                            track, next_measure, priority_order_label
+                        )),
+                        None,
+                    )
                 } else {
                     let completion_log = batch.completion_log.clone();
                     batches[track] = None;
