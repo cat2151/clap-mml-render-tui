@@ -97,11 +97,6 @@ impl<'a> TuiApp<'a> {
         session
     }
 
-    #[cfg(test)]
-    pub(super) fn is_current_playback_session(&self, session: u64) -> bool {
-        Self::playback_session_is_current(&self.playback_session, session)
-    }
-
     pub(super) fn set_play_state_if_current(&self, session: u64, next_state: PlayState) {
         Self::set_play_state_for_session(
             &self.play_state,
