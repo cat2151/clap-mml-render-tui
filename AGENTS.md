@@ -13,3 +13,6 @@ cargo test
 ```
 
 The setup script installs the Linux packages needed for this workspace's `rodio`/`cpal` dependency chain to build `alsa-sys`.
+
+# プルリクエスト
+- プルリクエストは日本語で書くこと
