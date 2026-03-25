@@ -78,11 +78,8 @@ fn help_screen_mentions_ctrl_clipboard_shortcuts() {
 
     let lines = render_lines(&mut app, 80, 30).join("\n");
 
-    assert!(lines.contains("Ctrl+C"));
-    assert!(lines.contains("Ctrl+X"));
-    assert!(lines.contains("Ctrl+V"));
-    assert!(lines.contains("コ ピ ー"));
-    assert!(lines.contains("カ ッ ト"));
-    assert!(lines.contains("ペ ー ス ト"));
+    assert!(lines.contains("Ctrl+C: コ ピ ー"));
+    assert!(lines.contains("Ctrl+X: カ ッ ト"));
+    assert!(lines.contains("Ctrl+V: ペ ー ス ト"));
     assert!(!lines.contains("Ctrl+C      : 強制終了"));
 }
