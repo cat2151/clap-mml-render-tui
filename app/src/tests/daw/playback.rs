@@ -115,7 +115,7 @@ fn build_playback_measure_samples_returns_silence_for_empty_measure() {
     )
     .unwrap();
 
-    assert_eq!(samples, vec![0.0, 0.0, 0.0, 0.0]);
+    assert_eq!(samples.samples, vec![0.0, 0.0, 0.0, 0.0]);
     assert_eq!(
         log_lines.lock().unwrap().back().map(String::as_str),
         Some("meas2: empty -> silence")
@@ -144,10 +144,10 @@ fn build_playback_measure_samples_prefers_cache_hit() {
     )
     .unwrap();
 
-    assert_eq!(samples, vec![0.25, -0.25, 0.5, -0.5]);
+    assert_eq!(samples.samples, vec![0.25, -0.25, 0.5, -0.5]);
     assert_eq!(
         log_lines.lock().unwrap().back().map(String::as_str),
-        Some("meas1: cache hit")
+        Some("meas1: cache hit track1/meas1")
     );
 }
 
@@ -168,7 +168,7 @@ fn build_playback_measure_samples_renders_and_normalizes_length() {
     )
     .unwrap();
 
-    assert_eq!(samples, vec![1.0, 2.0, 0.0, 0.0]);
+    assert_eq!(samples.samples, vec![1.0, 2.0, 0.0, 0.0]);
     assert_eq!(
         log_lines.lock().unwrap().back().map(String::as_str),
         Some("meas1: render")

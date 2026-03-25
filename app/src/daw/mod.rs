@@ -78,6 +78,7 @@ pub(super) const DEFAULT_TRACK0_MML: &str = r#"{"beat": "4/4"}t120"#;
 /// ≈ 2_000_000 × 4 bytes ≈ 8 MB / cell。
 pub(super) const MAX_CACHED_SAMPLES: usize = 2_000_000;
 
+#[derive(Clone)]
 pub(super) struct CacheJob {
     track: usize,
     measure: usize,
@@ -169,6 +170,8 @@ impl DawApp {
         let render_lock: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
         let log_lines = Arc::new(Mutex::new(crate::logging::load_log_lines()));
         let track_rerender_batches = Arc::new(Mutex::new(vec![None; tracks]));
+        let play_position = Arc::new(Mutex::new(None));
+        let play_measure_mmls = Arc::new(Mutex::new(vec![String::new(); measures]));
 
         {
             let cache_worker = Arc::clone(&cache);
@@ -176,6 +179,9 @@ impl DawApp {
             let render_lock_worker = Arc::clone(&render_lock);
             let log_lines_worker = Arc::clone(&log_lines);
             let track_rerender_batches_worker = Arc::clone(&track_rerender_batches);
+            let play_position_worker = Arc::clone(&play_position);
+            let play_measure_mmls_worker = Arc::clone(&play_measure_mmls);
+            let cache_tx_worker = cache_tx.clone();
             std::thread::spawn(move || {
                 // SAFETY: entry は main() のスタックに生存している
                 let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
@@ -238,6 +244,10 @@ impl DawApp {
                             Self::complete_track_rerender_batch_measure(
                                 &track_rerender_batches_worker,
                                 &log_lines_worker,
+                                &cache_worker,
+                                &play_position_worker,
+                                &play_measure_mmls_worker,
+                                &cache_tx_worker,
                                 track,
                                 measure,
                             );
@@ -254,6 +264,10 @@ impl DawApp {
                             Self::complete_track_rerender_batch_measure(
                                 &track_rerender_batches_worker,
                                 &log_lines_worker,
+                                &cache_worker,
+                                &play_position_worker,
+                                &play_measure_mmls_worker,
+                                &cache_tx_worker,
                                 track,
                                 measure,
                             );
@@ -278,8 +292,8 @@ impl DawApp {
             render_lock,
             play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
             play_transition_lock: Arc::new(Mutex::new(())),
-            play_position: Arc::new(Mutex::new(None)),
-            play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
+            play_position,
+            play_measure_mmls,
             play_measure_samples: Arc::new(Mutex::new(0)),
             log_lines,
             track_rerender_batches,

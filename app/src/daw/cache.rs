@@ -45,36 +45,97 @@ impl DawApp {
         }
     }
 
-    /// 指定セルのキャッシュジョブをワーカーキューに投入する
+    /// 指定セルのキャッシュジョブ内容をスナップショットとして構築する。
     ///
-    /// セル自身の内容（`data[track][measure]`）が空のときはジョブを投入しない。
+    /// セル自身の内容（`data[track][measure]`）が空のときはジョブを作らない。
     /// 以前は `build_cell_mml()` の結果（track0 を含む結合 MML）で空判定していたため、
     /// セルの内容を消去しても `●` インジケータが消えないバグがあった（issue #69 参照）。
-    pub(super) fn kick_cache(&self, track: usize, measure: usize) {
+    pub(super) fn prepare_cache_job(
+        &self,
+        track: usize,
+        measure: usize,
+    ) -> Option<super::CacheJob> {
         if measure == 0 {
-            return;
+            return None;
         }
         // セル自身の内容が空なら投入しない（track0 含む結合 MML で判定しない）
         if self.data[track][measure].trim().is_empty() {
-            return;
+            return None;
         }
         let mml = self.build_cell_mml(track, measure);
         let rendered_mml_hash = daw_cache_mml_hash(&mml);
-        let generation = {
-            let mut cache = self.cache.lock().unwrap();
-            cache[track][measure].state = CacheState::Rendering;
-            cache[track][measure].samples = None;
-            cache[track][measure].rendered_mml_hash = None;
-            cache[track][measure].generation
-        };
-        // チャネルが既に閉じていれば送信は無視する（DawApp 終了後の残留呼び出しへの安全策）
-        let _ = self.cache_tx.send(super::CacheJob {
+        let generation = self.cache.lock().unwrap()[track][measure].generation;
+        Some(super::CacheJob {
             track,
             measure,
             generation,
             rendered_mml_hash,
             mml,
-        });
+        })
+    }
+
+    pub(super) fn mark_cache_rendering(&self, track: usize, measure: usize) {
+        Self::mark_cache_rendering_in(&self.cache, track, measure);
+    }
+
+    pub(super) fn mark_cache_rendering_in(
+        cache: &std::sync::Arc<std::sync::Mutex<Vec<Vec<CellCache>>>>,
+        track: usize,
+        measure: usize,
+    ) {
+        let mut cache = cache.lock().unwrap();
+        cache[track][measure].state = CacheState::Rendering;
+        cache[track][measure].samples = None;
+        cache[track][measure].rendered_mml_hash = None;
+    }
+
+    /// 指定セルのキャッシュジョブをワーカーキューに投入する
+    pub(super) fn kick_cache(&self, track: usize, measure: usize) {
+        // チャネルが既に閉じていれば送信は無視する（DawApp 終了後の残留呼び出しへの安全策）
+        if let Some(job) = self.prepare_cache_job(track, measure) {
+            self.mark_cache_rendering(track, measure);
+            let _ = self.cache_tx.send(job);
+        }
+    }
+
+    pub(super) fn invalidate_dependent_cells(
+        &self,
+        track: usize,
+        measure: usize,
+    ) -> Vec<(usize, usize)> {
+        let mut affected = Vec::new();
+        if track == 0 {
+            // track0 セル変更: 全演奏トラックの全小節が影響を受ける
+            let mut cache = self.cache.lock().unwrap();
+            for t in 1..self.tracks {
+                for m in 1..=self.measures {
+                    if self.data[t][m].trim().is_empty() {
+                        cache[t][m] = CellCache::empty();
+                    } else {
+                        if let Some(path) = cache_wav_path(t, m) {
+                            let _ = std::fs::remove_file(path);
+                        }
+                        cache[t][m].set_pending();
+                        affected.push((t, m));
+                    }
+                }
+            }
+        } else if measure == 0 {
+            // 音色セル（data[track][0]）変更: 同トラックの全小節が影響を受ける（issue #67 参照）
+            let mut cache = self.cache.lock().unwrap();
+            for m in 1..=self.measures {
+                if self.data[track][m].trim().is_empty() {
+                    cache[track][m] = CellCache::empty();
+                } else {
+                    if let Some(path) = cache_wav_path(track, m) {
+                        let _ = std::fs::remove_file(path);
+                    }
+                    cache[track][m].set_pending();
+                    affected.push((track, m));
+                }
+            }
+        }
+        affected
     }
 
     /// 依存セルを一括で無効化してキャッシュジョブを投入する。
@@ -86,46 +147,8 @@ impl DawApp {
     /// - measure == 0 かつ track > 0（音色変更）→ 同トラックの全小節（1..=measures）を再キャッシュ
     /// - それ以外 → 追加の依存セルなし（呼び出し元が個別に処理済み）
     pub(super) fn invalidate_and_kick_dependent_cells(&self, track: usize, measure: usize) {
-        if track == 0 {
-            // track0 セル変更: 全演奏トラックの全小節が影響を受ける
-            {
-                let mut cache = self.cache.lock().unwrap();
-                for t in 1..self.tracks {
-                    for m in 1..=self.measures {
-                        if self.data[t][m].trim().is_empty() {
-                            cache[t][m] = CellCache::empty();
-                        } else {
-                            if let Some(path) = cache_wav_path(t, m) {
-                                let _ = std::fs::remove_file(path);
-                            }
-                            cache[t][m].set_pending();
-                        }
-                    }
-                }
-            }
-            for t in 1..self.tracks {
-                for m in 1..=self.measures {
-                    self.kick_cache(t, m);
-                }
-            }
-        } else if measure == 0 {
-            // 音色セル（data[track][0]）変更: 同トラックの全小節が影響を受ける（issue #67 参照）
-            {
-                let mut cache = self.cache.lock().unwrap();
-                for m in 1..=self.measures {
-                    if self.data[track][m].trim().is_empty() {
-                        cache[track][m] = CellCache::empty();
-                    } else {
-                        if let Some(path) = cache_wav_path(track, m) {
-                            let _ = std::fs::remove_file(path);
-                        }
-                        cache[track][m].set_pending();
-                    }
-                }
-            }
-            for m in 1..=self.measures {
-                self.kick_cache(track, m);
-            }
+        for (track, measure) in self.invalidate_dependent_cells(track, measure) {
+            self.kick_cache(track, measure);
         }
         // measure > 0 かつ track > 0 の場合は依存セルなし
     }

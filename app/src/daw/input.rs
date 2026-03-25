@@ -113,15 +113,13 @@ impl DawApp {
                     self.data[self.cursor_track][0] =
                         format!("{{\"Surge XT patch\": \"{}\"}}", patch);
                     self.invalidate_cell(self.cursor_track, 0);
-                    // バッチを先に登録してから依存セルの再キャッシュをキックすることで、
-                    // ワーカースレッド側の完了報告との競合状態を防ぐ。
+                    self.invalidate_dependent_cells(self.cursor_track, 0);
+                    // 依存セルはまとめてキュー投入せず、次の再生小節を優先して 1 件ずつ予約する。
                     self.start_track_rerender_batch(
                         self.cursor_track,
                         &affected_measures,
                         "random patch update",
                     );
-                    // 音色変更は当該 track の全小節（1..=MEASURES）に影響するため一括再キャッシュ（issue #67 参照）
-                    self.invalidate_and_kick_dependent_cells(self.cursor_track, 0);
                     self.save();
 
                     // hot reload: 次の再生ループから新しい音色を反映する

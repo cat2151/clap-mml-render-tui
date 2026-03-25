@@ -86,9 +86,22 @@ impl DawApp {
             {
                 crate::logging::append_log_line(
                     &log_lines,
-                    format!("meas{}: cache hit", measure_index + 1),
+                    format!(
+                        "meas{}: cache hit {}",
+                        measure_index + 1,
+                        if cached.cached_tracks.is_empty() {
+                            "empty-tracks".to_string()
+                        } else {
+                            cached
+                                .cached_tracks
+                                .iter()
+                                .map(|track| format!("track{track}/meas{}", measure_index + 1))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        }
+                    ),
                 );
-                Some(cached)
+                Some(cached.samples)
             } else {
                 crate::logging::append_log_line(
                     &log_lines,

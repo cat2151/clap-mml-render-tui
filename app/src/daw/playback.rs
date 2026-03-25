@@ -12,6 +12,45 @@ use super::playback_util::play_start_log_lines;
 pub(super) use super::playback_util::{effective_measure_count, loop_measure_summary_label};
 use super::{CacheState, CellCache, DawApp, DawPlayState, PlayPosition, FIRST_PLAYABLE_TRACK};
 
+#[derive(Clone)]
+pub(super) struct CachedMeasureSamples {
+    pub(super) samples: Vec<f32>,
+    pub(super) cached_tracks: Vec<usize>,
+}
+
+#[derive(Clone)]
+enum PlaybackMeasureSource {
+    Empty,
+    Cache { tracks: Vec<usize> },
+    Render,
+}
+
+impl PlaybackMeasureSource {
+    fn build_log_line(&self, measure_number: usize) -> String {
+        match self {
+            Self::Empty => format!("play: start meas{measure_number} empty -> silence"),
+            Self::Cache { tracks } => {
+                if tracks.is_empty() {
+                    format!("play: start meas{measure_number} cache empty-tracks")
+                } else {
+                    let cache_entries = tracks
+                        .iter()
+                        .map(|track| format!("track{track}/meas{measure_number}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("play: start meas{measure_number} cache {cache_entries}")
+                }
+            }
+            Self::Render => format!("play: start meas{measure_number} render fallback"),
+        }
+    }
+}
+
+struct PlaybackMeasureAudio {
+    samples: Vec<f32>,
+    source: PlaybackMeasureSource,
+}
+
 /// キャッシュ済みのサンプルをミックスして返す。
 ///
 /// 指定小節（`measure`、1始まり）のすべての playable track（`FIRST_PLAYABLE_TRACK..tracks`）の
@@ -25,22 +64,22 @@ pub(super) fn try_get_cached_samples(
     measure: usize,
     measure_samples: usize,
     tracks: usize,
-) -> Option<Vec<f32>> {
+) -> Option<CachedMeasureSamples> {
     // ロック下では Arc ハンドルの収集のみ行い、ミックス処理はロック外で実施する。
     // これによりキャッシュワーカーや UI スレッドとのロック競合を最小化する。
-    let track_samples: Option<Vec<Option<Arc<Vec<f32>>>>> = {
+    let track_samples: Option<Vec<(usize, Option<Arc<Vec<f32>>>)>> = {
         let cache = cache.lock().unwrap();
         let mut result = Vec::with_capacity(tracks - FIRST_PLAYABLE_TRACK);
         for t in FIRST_PLAYABLE_TRACK..tracks {
             match cache[t][measure].state {
                 CacheState::Empty => {
-                    result.push(None); // 空トラック
+                    result.push((t, None)); // 空トラック
                 }
                 CacheState::Ready => {
                     // samples が None の場合（サイズ上限超過等）もフォールバック
                     let arc = cache[t][measure].samples.clone();
                     arc.as_ref()?;
-                    result.push(arc);
+                    result.push((t, arc));
                 }
                 _ => {
                     // Pending または Error → キャッシュ未完成、フォールバックが必要
@@ -57,24 +96,38 @@ pub(super) fn try_get_cached_samples(
     // 最初からゼロ埋め済みのバッファを使うことで measure_samples を超える書き込みを防ぐ
     let mut mixed = vec![0.0f32; measure_samples];
     let mut any_ready = false;
+    let mut cached_tracks = Vec::new();
 
-    for s in track_samples.iter().flatten() {
+    for (track, maybe_samples) in &track_samples {
+        let Some(samples) = maybe_samples else {
+            continue;
+        };
         any_ready = true;
-        let n = s.len().min(measure_samples);
+        cached_tracks.push(*track);
+        let n = samples.len().min(measure_samples);
         for i in 0..n {
-            mixed[i] += s[i];
+            mixed[i] += samples[i];
         }
     }
 
     if !any_ready {
         // すべての playable track が Empty → 空トラックのみの小節として無音を返す
-        return Some(mixed);
+        return Some(CachedMeasureSamples {
+            samples: mixed,
+            cached_tracks,
+        });
     }
 
-    Some(mixed)
+    Some(CachedMeasureSamples {
+        samples: mixed,
+        cached_tracks,
+    })
 }
 
-fn current_play_measure_index(current_measure_index: usize, effective_count: usize) -> usize {
+pub(super) fn current_play_measure_index(
+    current_measure_index: usize,
+    effective_count: usize,
+) -> usize {
     if current_measure_index < effective_count {
         current_measure_index
     } else {
@@ -82,7 +135,7 @@ fn current_play_measure_index(current_measure_index: usize, effective_count: usi
     }
 }
 
-fn following_measure_index(current_measure_index: usize, effective_count: usize) -> usize {
+pub(super) fn following_measure_index(current_measure_index: usize, effective_count: usize) -> usize {
     (current_measure_index + 1) % effective_count
 }
 
@@ -94,7 +147,7 @@ fn build_playback_measure_samples<F, E>(
     tracks: usize,
     log_lines: &Arc<Mutex<VecDeque<String>>>,
     render_fallback: F,
-) -> Result<Vec<f32>, E>
+) -> Result<PlaybackMeasureAudio, E>
 where
     F: FnOnce() -> Result<Vec<f32>, E>,
 {
@@ -105,12 +158,33 @@ where
             log_lines,
             format!("meas{measure_number}: empty -> silence"),
         );
-        return Ok(vec![0.0f32; measure_samples]);
+        return Ok(PlaybackMeasureAudio {
+            samples: vec![0.0f32; measure_samples],
+            source: PlaybackMeasureSource::Empty,
+        });
     }
 
     if let Some(cached) = try_get_cached_samples(cache, measure_number, measure_samples, tracks) {
-        crate::logging::append_log_line(log_lines, format!("meas{measure_number}: cache hit"));
-        return Ok(cached);
+        let cache_entries = if cached.cached_tracks.is_empty() {
+            "empty-tracks".to_string()
+        } else {
+            cached
+                .cached_tracks
+                .iter()
+                .map(|track| format!("track{track}/meas{measure_number}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        crate::logging::append_log_line(
+            log_lines,
+            format!("meas{measure_number}: cache hit {cache_entries}"),
+        );
+        return Ok(PlaybackMeasureAudio {
+            samples: cached.samples,
+            source: PlaybackMeasureSource::Cache {
+                tracks: cached.cached_tracks,
+            },
+        });
     }
 
     crate::logging::append_log_line(log_lines, format!("meas{measure_number}: render"));
@@ -120,10 +194,13 @@ where
     } else {
         samples.truncate(measure_samples);
     }
-    Ok(samples)
+    Ok(PlaybackMeasureAudio {
+        samples,
+        source: PlaybackMeasureSource::Render,
+    })
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct QueuedMeasure {
     measure_index: usize,
     measure_start: std::time::Instant,
@@ -218,7 +295,7 @@ impl DawApp {
                     let current_measure_index =
                         current_play_measure_index(measure_index, effective_count);
                     let mml = &mmls[current_measure_index];
-                    let samples = match build_playback_measure_samples(
+                    let playback_audio = match build_playback_measure_samples(
                         &cache,
                         current_measure_index,
                         mml,
@@ -231,7 +308,7 @@ impl DawApp {
                             mml_render_for_cache(mml, &core_cfg, entry_ref)
                         },
                     ) {
-                        Ok(samples) => samples,
+                        Ok(playback_audio) => playback_audio,
                         Err(_) => {
                             crate::logging::append_log_line(
                                 &log_lines,
@@ -242,11 +319,23 @@ impl DawApp {
                     };
                     let measure_start = std::time::Instant::now();
                     let measure_duration = measure_duration(measure_samples, sample_rate);
-                    sink.append(rodio::buffer::SamplesBuffer::new(2, sample_rate, samples));
+                    let PlaybackMeasureAudio {
+                        samples,
+                        source,
+                    } = playback_audio;
+                    sink.append(rodio::buffer::SamplesBuffer::new(
+                        2,
+                        sample_rate,
+                        samples,
+                    ));
                     *play_position.lock().unwrap() = Some(PlayPosition {
                         measure_index: current_measure_index,
                         measure_start,
                     });
+                    crate::logging::append_log_line(
+                        &log_lines,
+                        source.build_log_line(current_measure_index + 1),
+                    );
                     current_measure = Some(QueuedMeasure {
                         measure_index: current_measure_index,
                         measure_start,
@@ -263,7 +352,7 @@ impl DawApp {
                 let lookahead_measure_index =
                     following_measure_index(current.measure_index, effective_count);
                 let next_mml = &mmls[lookahead_measure_index];
-                let next_samples = match build_playback_measure_samples(
+                let next_playback_audio = match build_playback_measure_samples(
                     &cache,
                     lookahead_measure_index,
                     next_mml,
@@ -276,7 +365,7 @@ impl DawApp {
                         mml_render_for_cache(next_mml, &core_cfg, entry_ref)
                     },
                 ) {
-                    Ok(samples) => samples,
+                    Ok(playback_audio) => playback_audio,
                     Err(_) => {
                         crate::logging::append_log_line(
                             &log_lines,
@@ -288,6 +377,10 @@ impl DawApp {
 
                 let next_measure_start = current.measure_start + current.measure_duration;
                 let next_measure_duration = measure_duration(measure_samples, sample_rate);
+                let PlaybackMeasureAudio {
+                    samples: next_samples,
+                    source: next_source,
+                } = next_playback_audio;
                 sink.append(rodio::buffer::SamplesBuffer::new(
                     2,
                     sample_rate,
@@ -315,6 +408,10 @@ impl DawApp {
                     measure_index: lookahead_measure_index,
                     measure_start: next_measure_start,
                 });
+                crate::logging::append_log_line(
+                    &log_lines,
+                    next_source.build_log_line(lookahead_measure_index + 1),
+                );
                 current_measure = Some(QueuedMeasure {
                     measure_index: lookahead_measure_index,
                     measure_start: next_measure_start,
