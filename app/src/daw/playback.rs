@@ -142,6 +142,30 @@ pub(super) fn following_measure_index(
     (current_measure_index + 1) % effective_count
 }
 
+fn format_playback_measure_resolution_log(
+    measure_index_cursor: usize,
+    resolved_measure_index: usize,
+    effective_count: usize,
+) -> String {
+    format!(
+        "play: sync resolve cursor=meas{} -> current=meas{} (effective_count={effective_count})",
+        measure_index_cursor + 1,
+        resolved_measure_index + 1,
+    )
+}
+
+fn format_playback_measure_advance_log(
+    current_measure_index: usize,
+    lookahead_measure_index: usize,
+    effective_count: usize,
+) -> String {
+    format!(
+        "play: sync advance current=meas{} -> next=meas{} (effective_count={effective_count})",
+        current_measure_index + 1,
+        lookahead_measure_index + 1,
+    )
+}
+
 fn build_playback_measure_samples<F, E>(
     cache: &Arc<Mutex<Vec<Vec<CellCache>>>>,
     measure_index: usize,
@@ -297,6 +321,14 @@ impl DawApp {
                 if current_measure.is_none() {
                     let current_measure_index =
                         current_play_measure_index(measure_index, effective_count);
+                    crate::logging::append_log_line(
+                        &log_lines,
+                        format_playback_measure_resolution_log(
+                            measure_index,
+                            current_measure_index,
+                            effective_count,
+                        ),
+                    );
                     let mml = &mmls[current_measure_index];
                     let playback_audio = match build_playback_measure_samples(
                         &cache,
@@ -404,6 +436,14 @@ impl DawApp {
                     measure_index: lookahead_measure_index,
                     measure_start: next_measure_start,
                 });
+                crate::logging::append_log_line(
+                    &log_lines,
+                    format_playback_measure_advance_log(
+                        current.measure_index,
+                        lookahead_measure_index,
+                        effective_count,
+                    ),
+                );
                 crate::logging::append_log_line(
                     &log_lines,
                     next_source.build_log_line(lookahead_measure_index + 1),

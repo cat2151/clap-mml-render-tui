@@ -2,7 +2,23 @@
 
 use crossterm::event::KeyCode;
 
-use super::{DawApp, DawMode, DawNormalAction, DawPlayState};
+use super::{playback_util::effective_measure_count, DawApp, DawMode, DawNormalAction, DawPlayState};
+
+fn format_random_patch_hot_reload_log(
+    track: usize,
+    displayed_measure_index: Option<usize>,
+    old_effective_count: Option<usize>,
+    new_effective_count: Option<usize>,
+    old_measure_samples: usize,
+    new_measure_samples: usize,
+) -> String {
+    let displayed = displayed_measure_index
+        .map(|measure_index| format!("meas{}", measure_index + 1))
+        .unwrap_or_else(|| "none".to_string());
+    format!(
+        "play: hot reload random patch track{track} display={displayed} effective_count={old_effective_count:?}->{new_effective_count:?} measure_samples={old_measure_samples}->{new_measure_samples}"
+    )
+}
 
 impl DawApp {
     // ─── INSERT モード ────────────────────────────────────────
@@ -127,6 +143,24 @@ impl DawApp {
                     // ロック取得前に実行する
                     let new_mmls = self.build_measure_mmls();
                     let new_samples = self.measure_duration_samples();
+                    let old_mmls = self.play_measure_mmls.lock().unwrap().clone();
+                    let old_effective_count = effective_measure_count(&old_mmls);
+                    let new_effective_count = effective_measure_count(&new_mmls);
+                    let old_samples = *self.play_measure_samples.lock().unwrap();
+                    let displayed_measure_index = self
+                        .play_position
+                        .lock()
+                        .unwrap()
+                        .as_ref()
+                        .map(|position| position.measure_index);
+                    self.append_log_line(format_random_patch_hot_reload_log(
+                        self.cursor_track,
+                        displayed_measure_index,
+                        old_effective_count,
+                        new_effective_count,
+                        old_samples,
+                        new_samples,
+                    ));
                     *self.play_measure_mmls.lock().unwrap() = new_mmls;
                     *self.play_measure_samples.lock().unwrap() = new_samples;
                 }
