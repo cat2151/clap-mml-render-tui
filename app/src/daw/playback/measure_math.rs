@@ -1,4 +1,7 @@
-pub(crate) fn current_play_measure_index(
+/// 現在の再生カーソルから、実際に再生すべき小節 index を求める。
+///
+/// `current_measure_index` が `effective_count` 以上なら、ループ先頭の `0` に巻き戻す。
+pub(in crate::daw) fn current_play_measure_index(
     current_measure_index: usize,
     effective_count: usize,
 ) -> usize {
@@ -9,14 +12,17 @@ pub(crate) fn current_play_measure_index(
     }
 }
 
-pub(crate) fn following_measure_index(
+/// 現在小節の次に先読みすべき小節 index を求める。
+///
+/// `effective_count` を法として 1 つ進め、末尾なら先頭へ折り返す。
+pub(in crate::daw) fn following_measure_index(
     current_measure_index: usize,
     effective_count: usize,
 ) -> usize {
     (current_measure_index + 1) % effective_count
 }
 
-pub(crate) fn format_playback_measure_resolution_log(
+pub(in crate::daw::playback) fn format_playback_measure_resolution_log(
     measure_index_cursor: usize,
     resolved_measure_index: usize,
     effective_count: usize,
@@ -28,7 +34,7 @@ pub(crate) fn format_playback_measure_resolution_log(
     )
 }
 
-pub(crate) fn format_playback_measure_advance_log(
+pub(in crate::daw::playback) fn format_playback_measure_advance_log(
     current_measure_index: usize,
     lookahead_measure_index: usize,
     effective_count: usize,

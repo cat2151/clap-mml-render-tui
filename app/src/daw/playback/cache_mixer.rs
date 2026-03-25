@@ -3,19 +3,21 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use super::{PlaybackMeasureAudio, PlaybackMeasureSource};
-use super::super::{CacheState, CellCache, FIRST_PLAYABLE_TRACK};
+use crate::daw::{CacheState, CellCache, FIRST_PLAYABLE_TRACK};
 
+use super::{PlaybackMeasureAudio, PlaybackMeasureSource};
+
+/// キャッシュ参照結果として、再生に使う合算済みサンプルとヒットした track 一覧を保持する。
 #[derive(Clone)]
-pub(crate) struct CachedMeasureSamples {
-    pub(crate) samples: Vec<f32>,
-    pub(crate) cached_tracks: Vec<usize>,
+pub(in crate::daw) struct CachedMeasureSamples {
+    pub(in crate::daw) samples: Vec<f32>,
+    pub(in crate::daw) cached_tracks: Vec<usize>,
 }
 
 /// 再生用サンプルが 1 小節に満たない場合だけ無音で末尾を埋める。
 ///
 /// 余韻を保持するため、`measure_samples` を超えるぶんは切り捨てない。
-pub(crate) fn pad_playback_measure_samples(
+pub(in crate::daw) fn pad_playback_measure_samples(
     mut samples: Vec<f32>,
     measure_samples: usize,
 ) -> Vec<f32> {
@@ -33,7 +35,7 @@ pub(crate) fn pad_playback_measure_samples(
 /// 呼び出し元はフレッシュレンダリングにフォールバックすること。
 /// 全 playable track が `Empty` の場合は無音（ゼロ埋め）を返す。
 /// 結果は少なくとも `measure_samples` 長になり、各トラックの余韻が残っていればその末尾も保持する。
-pub(crate) fn try_get_cached_samples(
+pub(in crate::daw) fn try_get_cached_samples(
     cache: &Arc<Mutex<Vec<Vec<CellCache>>>>,
     measure: usize,
     measure_samples: usize,
@@ -100,7 +102,7 @@ pub(crate) fn try_get_cached_samples(
     })
 }
 
-pub(crate) fn build_playback_measure_samples<F, E>(
+pub(in crate::daw::playback) fn build_playback_measure_samples<F, E>(
     cache: &Arc<Mutex<Vec<Vec<CellCache>>>>,
     measure_index: usize,
     mml: &str,

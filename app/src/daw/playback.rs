@@ -14,16 +14,15 @@ mod measure_mixer;
 use super::playback_util::play_start_log_lines;
 pub(super) use super::playback_util::{effective_measure_count, loop_measure_summary_label};
 use super::{DawApp, DawPlayState, PlayPosition};
-pub(crate) use cache_mixer::{
-    build_playback_measure_samples, pad_playback_measure_samples, try_get_cached_samples,
+use cache_mixer::build_playback_measure_samples;
+use measure_math::{
+    format_playback_measure_advance_log, format_playback_measure_resolution_log,
 };
-pub(crate) use measure_math::{
-    current_play_measure_index, following_measure_index, format_playback_measure_advance_log,
-    format_playback_measure_resolution_log,
-};
-pub(crate) use measure_mixer::{
+use measure_mixer::{
     mix_measure_chunk, ActiveMeasureLayer, PlaybackMeasureAudio, PlaybackMeasureSource,
 };
+pub(super) use cache_mixer::{pad_playback_measure_samples, try_get_cached_samples};
+pub(super) use measure_math::{current_play_measure_index, following_measure_index};
 
 #[derive(Clone)]
 struct QueuedMeasure {
