@@ -270,3 +270,30 @@ fn draw_shows_recent_log_lines() {
         lines
     );
 }
+
+#[test]
+fn help_does_not_show_old_semicolon_guidance() {
+    let mut app = build_test_app();
+    app.mode = DawMode::Help;
+
+    // ratatui のテスト描画では全角文字の間に空白が入るため、空白を除去して比較する。
+    let normalized_lines: Vec<String> = render_lines(&app, 100, 30)
+        .into_iter()
+        .map(|line| line.replace(' ', ""))
+        .collect();
+
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("ヘルプ(Keybinds)")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        !normalized_lines
+            .iter()
+            .any(|line| line.contains("分割して下のtrackに追加")),
+        "lines: {:?}",
+        normalized_lines
+    );
+}

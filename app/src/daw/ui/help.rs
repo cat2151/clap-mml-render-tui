@@ -40,7 +40,6 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
         )),
         Line::from("  ESC   : 確定 → NORMAL"),
         Line::from("  Enter : 確定 → 次小節 → INSERT 継続"),
-        Line::from("  ;     : 分割して下の track に追加"),
         Line::from(""),
         Line::from(Span::styled(
             "  [ESC] でキャンセル",
