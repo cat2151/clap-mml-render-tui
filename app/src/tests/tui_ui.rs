@@ -81,12 +81,16 @@ fn help_screen_mentions_ctrl_clipboard_shortcuts() {
         .map(|line| line.replace(' ', ""))
         .collect();
 
-    assert!(normalized_lines.iter().any(|line| line.contains("Ctrl+C:コピー")));
-    assert!(normalized_lines.iter().any(|line| line.contains("Ctrl+X:カット")));
-    assert!(normalized_lines.iter().any(|line| line.contains("Ctrl+V:ペースト")));
-    assert!(
-        !normalized_lines
-            .iter()
-            .any(|line| line.contains("Ctrl+C:強制終了"))
-    );
+    assert!(normalized_lines
+        .iter()
+        .any(|line| line.contains("Ctrl+C:コピー")));
+    assert!(normalized_lines
+        .iter()
+        .any(|line| line.contains("Ctrl+X:カット")));
+    assert!(normalized_lines
+        .iter()
+        .any(|line| line.contains("Ctrl+V:ペースト")));
+    assert!(!normalized_lines
+        .iter()
+        .any(|line| line.contains("Ctrl+C:強制終了")));
 }
