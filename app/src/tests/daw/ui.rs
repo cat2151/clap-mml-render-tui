@@ -1,0 +1,272 @@
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex},
+};
+
+use ratatui::{backend::TestBackend, buffer::Buffer, style::Color, Terminal};
+use tui_textarea::TextArea;
+
+use crate::config::Config;
+
+use super::{
+    super::{CacheState, CellCache, DawApp, DawMode, DawPlayState, MEASURES},
+    cache_indicator, cache_text_color, draw, loop_measure_summary_label, loop_status_label,
+};
+
+fn build_test_app() -> DawApp {
+    let tracks = 3;
+    let measures = 2;
+    let (cache_tx, _cache_rx) = std::sync::mpsc::channel();
+    DawApp {
+        data: vec![vec![String::new(); measures + 1]; tracks],
+        cursor_track: 0,
+        cursor_measure: 0,
+        mode: DawMode::Normal,
+        textarea: TextArea::default(),
+        cfg: Arc::new(Config {
+            plugin_path: String::new(),
+            input_midi: String::new(),
+            output_midi: String::new(),
+            output_wav: String::new(),
+            sample_rate: 44_100.0,
+            buffer_size: 512,
+            patch_path: None,
+            patches_dir: None,
+            daw_tracks: tracks,
+            daw_measures: measures,
+        }),
+        entry_ptr: 0,
+        tracks,
+        measures,
+        cache: Arc::new(Mutex::new(vec![
+            vec![CellCache::empty(); measures + 1];
+            tracks
+        ])),
+        cache_tx,
+        render_lock: Arc::new(Mutex::new(())),
+        play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
+        play_transition_lock: Arc::new(Mutex::new(())),
+        play_position: Arc::new(Mutex::new(None)),
+        play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
+        play_measure_samples: Arc::new(Mutex::new(0)),
+        log_lines: Arc::new(Mutex::new(VecDeque::new())),
+        track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
+    }
+}
+
+fn render_lines(app: &DawApp, width: u16, height: u16) -> Vec<String> {
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal.draw(|f| draw(app, f)).unwrap();
+    let buffer = terminal.backend().buffer().clone();
+    (0..height)
+        .map(|y| {
+            (0..width)
+                .map(|x| buffer.cell((x, y)).unwrap().symbol().to_string())
+                .collect::<String>()
+                .trim_end()
+                .to_string()
+        })
+        .collect()
+}
+
+fn render_buffer(app: &DawApp, width: u16, height: u16) -> Buffer {
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal.draw(|f| draw(app, f)).unwrap();
+    terminal.backend().buffer().clone()
+}
+
+#[test]
+fn loop_status_label_single_measure_shows_single_measure_loop() {
+    let mut mmls = vec![String::new(); MEASURES];
+    mmls[0] = "c".to_string();
+
+    assert_eq!(
+        loop_status_label(&mmls),
+        Some("loop: meas1のみ (1小節)".to_string())
+    );
+}
+
+#[test]
+fn loop_status_label_uses_last_non_empty_measure() {
+    let mut mmls = vec![String::new(); MEASURES];
+    mmls[0] = "c".to_string();
+    mmls[2] = "g".to_string();
+
+    assert_eq!(
+        loop_status_label(&mmls),
+        Some("loop: meas1〜meas3 (3小節)".to_string())
+    );
+}
+
+#[test]
+fn loop_status_label_all_empty_returns_none() {
+    assert_eq!(loop_status_label(&vec![String::new(); MEASURES]), None);
+}
+
+#[test]
+fn loop_measure_summary_label_lists_loop_and_empty_ranges() {
+    let mut mmls = vec![String::new(); MEASURES];
+    mmls[0] = "c".to_string();
+
+    assert_eq!(
+        loop_measure_summary_label(&mmls),
+        Some("loop meas : meas 1, empty meas : meas 2～8".to_string())
+    );
+}
+
+#[test]
+fn cache_indicator_uses_single_dot_for_uncached_cells() {
+    assert_eq!(cache_indicator(&CacheState::Pending, 0), ".    ");
+    assert_eq!(cache_indicator(&CacheState::Pending, 2), ".    ");
+}
+
+#[test]
+fn cache_indicator_animates_only_while_rendering() {
+    assert_eq!(cache_indicator(&CacheState::Rendering, 0), ".    ");
+    assert_eq!(cache_indicator(&CacheState::Rendering, 1), "..   ");
+    assert_eq!(cache_indicator(&CacheState::Rendering, 2), "...  ");
+}
+
+#[test]
+fn cache_text_color_keeps_uncached_mml_visible() {
+    assert_eq!(cache_text_color(&CacheState::Pending), Color::White);
+    assert_eq!(cache_text_color(&CacheState::Rendering), Color::White);
+}
+
+#[test]
+fn draw_shows_mml_and_uncached_dot_before_cache_is_ready() {
+    let mut app = build_test_app();
+    app.data[1][1] = "cdef".to_string();
+    {
+        let mut cache = app.cache.lock().unwrap();
+        cache[1][1].state = CacheState::Pending;
+    }
+
+    let lines = render_lines(&app, 40, 12);
+
+    assert!(
+        lines.iter().any(|line| line.contains("cdef")),
+        "lines: {:?}",
+        lines
+    );
+    assert!(
+        lines.iter().any(|line| line.contains('.')),
+        "lines: {:?}",
+        lines
+    );
+}
+
+#[test]
+fn draw_places_playback_status_and_loop_summary_above_footer() {
+    let app = build_test_app();
+    {
+        let mut play_state = app.play_state.lock().unwrap();
+        *play_state = DawPlayState::Playing;
+    }
+    {
+        let mut play_position = app.play_position.lock().unwrap();
+        *play_position = Some(super::super::PlayPosition {
+            measure_index: 1,
+            measure_start: std::time::Instant::now(),
+        });
+    }
+    {
+        let mut play_measure_mmls = app.play_measure_mmls.lock().unwrap();
+        play_measure_mmls[0] = "c".to_string();
+    }
+
+    let lines = render_lines(&app, 120, 8);
+
+    assert!(lines[5].starts_with("▶ meas2, beat"), "lines: {:?}", lines);
+    assert!(lines[5].contains("loop:"), "lines: {:?}", lines);
+    assert!(lines[5].contains("meas1"), "lines: {:?}", lines);
+    assert!(lines[6].starts_with("loop meas :"), "lines: {:?}", lines);
+    assert!(lines[6].contains("empty meas :"), "lines: {:?}", lines);
+    assert!(lines[7].starts_with("DAW"), "lines: {:?}", lines);
+    assert!(!lines[7].contains("▶"), "lines: {:?}", lines);
+}
+
+#[test]
+fn draw_keeps_footer_on_last_row_when_idle() {
+    let app = build_test_app();
+
+    let lines = render_lines(&app, 120, 8);
+
+    assert_eq!(lines[5], "", "lines: {:?}", lines);
+    assert_eq!(lines[6], "", "lines: {:?}", lines);
+    assert!(lines[7].starts_with("DAW"), "lines: {:?}", lines);
+}
+
+#[test]
+fn draw_keeps_footer_color_cyan_across_play_states() {
+    for play_state in [
+        DawPlayState::Idle,
+        DawPlayState::Playing,
+        DawPlayState::Preview,
+    ] {
+        let app = build_test_app();
+        {
+            let mut state = app.play_state.lock().unwrap();
+            *state = play_state;
+        }
+
+        let buffer = render_buffer(&app, 120, 8);
+
+        assert_eq!(
+            buffer.cell((0, 7)).unwrap().fg,
+            Color::Cyan,
+            "footer color should stay cyan"
+        );
+    }
+}
+
+#[test]
+fn draw_shows_log_pane_in_lower_half() {
+    let app = build_test_app();
+
+    let lines = render_lines(&app, 60, 10);
+
+    assert!(lines[4].contains("log"), "lines: {:?}", lines);
+    assert!(lines[7].is_empty(), "lines: {:?}", lines);
+    assert!(lines[8].is_empty(), "lines: {:?}", lines);
+    assert!(lines[9].starts_with("DAW"), "lines: {:?}", lines);
+}
+
+#[test]
+fn draw_shows_recent_log_lines() {
+    let app = build_test_app();
+    {
+        let mut log_lines = app.log_lines.lock().unwrap();
+        log_lines.push_back("old".to_string());
+        log_lines.push_back("meas1: cache hit".to_string());
+        log_lines.push_back("meas2: render".to_string());
+        log_lines.push_back("meas3: empty -> silence".to_string());
+    }
+
+    let lines = render_lines(&app, 60, 10);
+
+    assert!(
+        !lines.iter().any(|line| line.contains("old")),
+        "lines: {:?}",
+        lines
+    );
+    assert!(
+        lines.iter().any(|line| line.contains("meas2: render")),
+        "lines: {:?}",
+        lines
+    );
+    assert!(
+        lines
+            .iter()
+            .any(|line| line.contains("meas3: empty -> silence")),
+        "lines: {:?}",
+        lines
+    );
+    assert!(
+        !lines.iter().any(|line| line.contains("meas1: cache hit")),
+        "lines: {:?}",
+        lines
+    );
+}

@@ -370,8 +370,8 @@ fn begin_playback_session_invalidates_previous_session() {
     let first = app.begin_playback_session();
     let second = app.begin_playback_session();
 
-    assert!(!app.is_current_playback_session(first));
-    assert!(app.is_current_playback_session(second));
+    assert!(!app.test_is_current_playback_session(first));
+    assert!(app.test_is_current_playback_session(second));
 }
 
 #[test]
