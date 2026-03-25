@@ -51,6 +51,45 @@ struct PlaybackMeasureAudio {
     source: PlaybackMeasureSource,
 }
 
+pub(super) fn pad_playback_measure_samples(
+    mut samples: Vec<f32>,
+    measure_samples: usize,
+) -> Vec<f32> {
+    if samples.len() < measure_samples {
+        samples.resize(measure_samples, 0.0);
+    }
+    samples
+}
+
+struct ActiveMeasureLayer {
+    samples: Vec<f32>,
+    offset: usize,
+}
+
+fn mix_measure_chunk(
+    active_layers: &mut Vec<ActiveMeasureLayer>,
+    new_measure_samples: Vec<f32>,
+    measure_samples: usize,
+) -> Vec<f32> {
+    active_layers.push(ActiveMeasureLayer {
+        samples: new_measure_samples,
+        offset: 0,
+    });
+
+    let mut mixed = vec![0.0f32; measure_samples];
+    for layer in active_layers.iter_mut() {
+        let remaining = &layer.samples[layer.offset..];
+        let chunk_len = remaining.len().min(measure_samples);
+        for i in 0..chunk_len {
+            mixed[i] += remaining[i];
+        }
+        layer.offset += chunk_len;
+    }
+    active_layers.retain(|layer| layer.offset < layer.samples.len());
+
+    mixed
+}
+
 /// キャッシュ済みのサンプルをミックスして返す。
 ///
 /// 指定小節（`measure`、1始まり）のすべての playable track（`FIRST_PLAYABLE_TRACK..tracks`）の
@@ -58,7 +97,7 @@ struct PlaybackMeasureAudio {
 /// いずれかの playable track が `Ready` でない（Pending / Error）場合は `None` を返し、
 /// 呼び出し元はフレッシュレンダリングにフォールバックすること。
 /// 全 playable track が `Empty` の場合は無音（ゼロ埋め）を返す。
-/// 結果は `measure_samples` 長に正確に揃えて返す（超過分は切り捨て、不足分はゼロ埋め済み）。
+/// 結果は少なくとも `measure_samples` 長になり、各トラックの余韻が残っていればその末尾も保持する。
 pub(super) fn try_get_cached_samples(
     cache: &Arc<Mutex<Vec<Vec<CellCache>>>>,
     measure: usize,
@@ -93,8 +132,11 @@ pub(super) fn try_get_cached_samples(
     let track_samples = track_samples?;
 
     // ロック外でミックス処理を行う
-    // 最初からゼロ埋め済みのバッファを使うことで measure_samples を超える書き込みを防ぐ
-    let mut mixed = vec![0.0f32; measure_samples];
+    let mixed_len = track_samples
+        .iter()
+        .filter_map(|(_, maybe_samples)| maybe_samples.as_ref().map(|samples| samples.len()))
+        .fold(measure_samples, usize::max);
+    let mut mixed = vec![0.0f32; mixed_len];
     let mut any_ready = false;
     let mut cached_tracks = Vec::new();
 
@@ -104,8 +146,7 @@ pub(super) fn try_get_cached_samples(
         };
         any_ready = true;
         cached_tracks.push(*track);
-        let n = samples.len().min(measure_samples);
-        for i in 0..n {
+        for i in 0..samples.len() {
             mixed[i] += samples[i];
         }
     }
@@ -215,12 +256,7 @@ where
     }
 
     crate::logging::append_log_line(log_lines, format!("meas{measure_number}: render"));
-    let mut samples = render_fallback()?;
-    if samples.len() < measure_samples {
-        samples.resize(measure_samples, 0.0);
-    } else {
-        samples.truncate(measure_samples);
-    }
+    let samples = pad_playback_measure_samples(render_fallback()?, measure_samples);
     Ok(PlaybackMeasureAudio {
         samples,
         source: PlaybackMeasureSource::Render,
@@ -303,6 +339,7 @@ impl DawApp {
 
             let mut measure_index = 0usize;
             let mut current_measure = None::<QueuedMeasure>;
+            let mut active_layers = Vec::<ActiveMeasureLayer>::new();
 
             'outer: loop {
                 if *play_state.lock().unwrap() != DawPlayState::Playing {
@@ -355,7 +392,8 @@ impl DawApp {
                     let measure_start = std::time::Instant::now();
                     let measure_duration = measure_duration(measure_samples, sample_rate);
                     let PlaybackMeasureAudio { samples, source } = playback_audio;
-                    sink.append(rodio::buffer::SamplesBuffer::new(2, sample_rate, samples));
+                    let chunk = mix_measure_chunk(&mut active_layers, samples, measure_samples);
+                    sink.append(rodio::buffer::SamplesBuffer::new(2, sample_rate, chunk));
                     *play_position.lock().unwrap() = Some(PlayPosition {
                         measure_index: current_measure_index,
                         measure_start,
@@ -409,11 +447,6 @@ impl DawApp {
                     samples: next_samples,
                     source: next_source,
                 } = next_playback_audio;
-                sink.append(rodio::buffer::SamplesBuffer::new(
-                    2,
-                    sample_rate,
-                    next_samples,
-                ));
 
                 // 小節境界は期待再生開始時刻を基準にポーリングする。
                 // rodio::Sink には「現在キュー先頭の小節だけの終了」を待つ API がないため、
@@ -432,6 +465,13 @@ impl DawApp {
                     break 'outer;
                 }
 
+                let next_chunk =
+                    mix_measure_chunk(&mut active_layers, next_samples, measure_samples);
+                sink.append(rodio::buffer::SamplesBuffer::new(
+                    2,
+                    sample_rate,
+                    next_chunk,
+                ));
                 *play_position.lock().unwrap() = Some(PlayPosition {
                     measure_index: lookahead_measure_index,
                     measure_start: next_measure_start,
