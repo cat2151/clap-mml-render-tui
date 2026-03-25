@@ -236,5 +236,5 @@ impl From<&Config> for CoreConfig {
 }
 
 #[cfg(test)]
-#[path = "config_tests.rs"]
+#[path = "tests/config.rs"]
 mod tests;

@@ -267,5 +267,5 @@ pub fn load_patch_phrase_store() -> PatchPhraseStore {
 }
 
 #[cfg(test)]
-#[path = "history_tests.rs"]
+#[path = "tests/history.rs"]
 mod tests;

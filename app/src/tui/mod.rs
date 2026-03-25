@@ -408,4 +408,5 @@ impl TuiApp<'static> {
 }
 
 #[cfg(test)]
+#[path = "../tests/tui.rs"]
 mod tests;

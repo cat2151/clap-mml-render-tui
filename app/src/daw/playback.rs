@@ -353,5 +353,5 @@ impl DawApp {
 }
 
 #[cfg(test)]
-#[path = "playback_tests.rs"]
+#[path = "../tests/daw/playback.rs"]
 mod tests;
