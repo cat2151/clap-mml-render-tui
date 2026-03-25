@@ -51,6 +51,9 @@ struct PlaybackMeasureAudio {
     source: PlaybackMeasureSource,
 }
 
+/// 再生用サンプルが 1 小節に満たない場合だけ無音で末尾を埋める。
+///
+/// 余韻を保持するため、`measure_samples` を超えるぶんは切り捨てない。
 pub(super) fn pad_playback_measure_samples(
     mut samples: Vec<f32>,
     measure_samples: usize,
@@ -61,11 +64,20 @@ pub(super) fn pad_playback_measure_samples(
     samples
 }
 
+/// すでに鳴り始めた小節の full size サンプルと、その消費位置を保持する。
+///
+/// `offset` はこのレイヤーからすでに再生済みのインターリーブサンプル数で、
+/// 次の小節チャンクを組み立てるときに未再生の余韻だけを重ねるために使う。
 struct ActiveMeasureLayer {
     samples: Vec<f32>,
     offset: usize,
 }
 
+/// 現在の小節チャンクを生成し、前小節までの余韻と新しい小節の先頭を重ねて返す。
+///
+/// `new_measure_samples` には今この小節境界で鳴り始める full size サンプル全体を渡す。
+/// `measure_samples` は 1 小節ぶんの標準サンプル数で、返り値も常にこの長さになる。
+/// 既存レイヤーの余韻は未再生区間だけが加算され、再生し終えたレイヤーは除去される。
 fn mix_measure_chunk(
     active_layers: &mut Vec<ActiveMeasureLayer>,
     new_measure_samples: Vec<f32>,
