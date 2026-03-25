@@ -5,6 +5,7 @@
 //!   INSERT : tui-textarea で編集
 //!            ESC   → 確定 → NORMAL（再生開始）
 //!            Enter → 確定 → 次行に新規行挿入 → INSERT 継続
+//!            Ctrl+C / Ctrl+X / Ctrl+V → コピー / カット / ペースト
 //!   PATCHSELECT : インクリメンタルサーチで音色を選択
 //!            文字入力: フィルタ（space=AND条件）
 //!            ↑↓:リスト移動  Enter:現在行の先頭にJSONで挿入（上書き）  ESC:キャンセル

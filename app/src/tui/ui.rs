@@ -308,7 +308,6 @@ fn draw_help(f: &mut Frame) {
         Line::from("  d           : DAW モード"),
         Line::from("  K           : ヘルプ (このページ)"),
         Line::from("  q           : 終了"),
-        Line::from("  Ctrl+C      : 強制終了"),
         Line::from(""),
         Line::from(Span::styled(
             "INSERT モード",
@@ -318,6 +317,9 @@ fn draw_help(f: &mut Frame) {
         )),
         Line::from("  ESC   : 確定 → NORMAL (再生)"),
         Line::from("  Enter : 確定 → 次行挿入 → INSERT 継続"),
+        Line::from("  Ctrl+C: コピー"),
+        Line::from("  Ctrl+X: カット"),
+        Line::from("  Ctrl+V: ペースト"),
         Line::from(""),
         Line::from(Span::styled(
             "音色選択モード",
