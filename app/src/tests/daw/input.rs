@@ -241,8 +241,10 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
             logs
         );
         assert!(
-            logs.iter().any(|line| line
-                == "play: hot reload random patch track1 display=none effective_count=None->Some(2) measure_samples=0->176400"),
+            logs.iter().any(
+                |line| line
+                    == "play: hot reload random patch track1 display=none effective_count=None->Some(2) measure_samples=0->176400"
+            ),
             "logs: {:?}",
             logs
         );
@@ -304,8 +306,10 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
             logs
         );
         assert!(
-            logs.iter().any(|line| line
-                == "play: hot reload random patch track1 display=meas1 effective_count=Some(2)->Some(2) measure_samples=0->176400"),
+            logs.iter().any(
+                |line| line
+                    == "play: hot reload random patch track1 display=meas1 effective_count=Some(2)->Some(2) measure_samples=0->176400"
+            ),
             "logs: {:?}",
             logs
         );

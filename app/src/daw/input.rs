@@ -143,8 +143,10 @@ impl DawApp {
                     // ロック取得前に実行する
                     let new_mmls = self.build_measure_mmls();
                     let new_samples = self.measure_duration_samples();
-                    let old_mmls = self.play_measure_mmls.lock().unwrap().clone();
-                    let old_effective_count = effective_measure_count(&old_mmls);
+                    let old_effective_count = {
+                        let old_mmls = self.play_measure_mmls.lock().unwrap();
+                        effective_measure_count(&old_mmls)
+                    };
                     let new_effective_count = effective_measure_count(&new_mmls);
                     let old_samples = *self.play_measure_samples.lock().unwrap();
                     let displayed_measure_index = self
