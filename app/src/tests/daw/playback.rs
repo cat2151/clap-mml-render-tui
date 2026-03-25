@@ -10,6 +10,7 @@ use crate::config::Config;
 use super::{
     super::{CacheState, CellCache, DawApp, DawMode, DawPlayState},
     build_playback_measure_samples, current_play_measure_index, following_measure_index,
+    format_playback_measure_advance_log, format_playback_measure_resolution_log,
 };
 
 /// stop_play のログ出力を検証するための最小構成の DawApp を作る。
@@ -98,6 +99,22 @@ fn current_play_measure_index_wraps_to_loop_start_when_measure_count_shrinks() {
 fn following_measure_index_wraps_after_last_measure() {
     assert_eq!(following_measure_index(1, 4), 2);
     assert_eq!(following_measure_index(3, 4), 0);
+}
+
+#[test]
+fn format_playback_measure_resolution_log_shows_cursor_and_resolved_measure() {
+    assert_eq!(
+        format_playback_measure_resolution_log(7, 0, 4),
+        "play: sync resolve cursor=meas8 -> current=meas1 (effective_count=4)"
+    );
+}
+
+#[test]
+fn format_playback_measure_advance_log_shows_current_and_next_measure() {
+    assert_eq!(
+        format_playback_measure_advance_log(1, 2, 4),
+        "play: sync advance current=meas2 -> next=meas3 (effective_count=4)"
+    );
 }
 
 #[test]
