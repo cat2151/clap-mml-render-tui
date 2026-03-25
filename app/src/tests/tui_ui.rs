@@ -77,9 +77,10 @@ fn help_screen_mentions_ctrl_clipboard_shortcuts() {
     app.mode = Mode::Help;
 
     let lines = render_lines(&mut app, 80, 30).join("\n");
+    let normalized = lines.replace(' ', "");
 
-    assert!(lines.contains("Ctrl+C: コ ピ ー"));
-    assert!(lines.contains("Ctrl+X: カ ッ ト"));
-    assert!(lines.contains("Ctrl+V: ペ ー ス ト"));
+    assert!(normalized.contains("Ctrl+C:コピー"));
+    assert!(normalized.contains("Ctrl+X:カット"));
+    assert!(normalized.contains("Ctrl+V:ペースト"));
     assert!(!lines.contains("Ctrl+C      : 強制終了"));
 }
