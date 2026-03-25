@@ -20,7 +20,7 @@ use anyhow::Result;
 use clack_host::prelude::PluginEntry;
 use cmrt_core::{collect_patches, mml_render, to_relative, CoreConfig};
 use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers},
+    event::{self, Event},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -322,11 +322,6 @@ impl<'a> TuiApp<'a> {
                     use crossterm::event::KeyEventKind;
                     if key.kind != KeyEventKind::Press {
                         continue;
-                    }
-                    if key.modifiers.contains(KeyModifiers::CONTROL)
-                        && key.code == KeyCode::Char('c')
-                    {
-                        break;
                     }
                     match self.mode {
                         Mode::Normal => match self.handle_normal(key.code) {

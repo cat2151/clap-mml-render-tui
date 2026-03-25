@@ -1,6 +1,6 @@
 //! TUI のキー入力処理
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyModifiers};
 use mmlabc_to_smf::mml_preprocessor;
 use ratatui::widgets::ListState;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -223,6 +223,23 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn handle_insert(&mut self, key_event: crossterm::event::KeyEvent) {
+        if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+            match key_event.code {
+                KeyCode::Char('c') => {
+                    self.textarea.copy();
+                    return;
+                }
+                KeyCode::Char('x') => {
+                    self.textarea.cut();
+                    return;
+                }
+                KeyCode::Char('v') => {
+                    self.textarea.paste();
+                    return;
+                }
+                _ => {}
+            }
+        }
         match key_event.code {
             KeyCode::Esc => {
                 let text = self.textarea.lines().join("");
