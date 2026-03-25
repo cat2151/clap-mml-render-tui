@@ -9,9 +9,14 @@ use crate::config::Config;
 
 use super::{
     super::{CacheState, CellCache, DawApp, DawMode, DawPlayState},
-    build_playback_measure_samples, current_play_measure_index, following_measure_index,
-    format_playback_measure_advance_log, format_playback_measure_resolution_log, mix_measure_chunk,
-    try_get_cached_samples, ActiveMeasureLayer,
+    cache_mixer::{
+        build_playback_measure_samples, pad_playback_measure_samples, try_get_cached_samples,
+    },
+    measure_math::{
+        current_play_measure_index, following_measure_index, format_playback_measure_advance_log,
+        format_playback_measure_resolution_log,
+    },
+    measure_mixer::{mix_measure_chunk, ActiveMeasureLayer},
 };
 
 /// stop_play のログ出力を検証するための最小構成の DawApp を作る。
@@ -211,6 +216,18 @@ fn build_playback_measure_samples_preserves_rendered_tail() {
     .unwrap();
 
     assert_eq!(samples.samples, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+}
+
+#[test]
+fn pad_playback_measure_samples_only_pads_short_buffers() {
+    assert_eq!(
+        pad_playback_measure_samples(vec![1.0, 2.0], 4),
+        vec![1.0, 2.0, 0.0, 0.0]
+    );
+    assert_eq!(
+        pad_playback_measure_samples(vec![1.0, 2.0, 3.0, 4.0, 5.0], 4),
+        vec![1.0, 2.0, 3.0, 4.0, 5.0]
+    );
 }
 
 #[test]
