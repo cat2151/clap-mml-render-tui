@@ -9,7 +9,7 @@
 //!   PATCHSELECT : インクリメンタルサーチで音色を選択
 //!            文字入力: フィルタ（space=AND条件）
 //!            ↑↓:リスト移動  Enter:現在行の先頭にJSONで挿入（上書き）  ESC:キャンセル
-//!   HELP : K で表示、ESC でキャンセル
+//!   HELP : K / ? で表示、ESC でキャンセル
 
 mod cache;
 mod input;

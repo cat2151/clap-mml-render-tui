@@ -209,7 +209,7 @@ impl<'a> TuiApp<'a> {
                 self.cursor = self.lines.len().saturating_sub(1);
                 self.list_state.select(Some(self.cursor));
             }
-            KeyCode::Char('K') => self.mode = Mode::Help,
+            KeyCode::Char('K') | KeyCode::Char('?') => self.mode = Mode::Help,
             KeyCode::Enter | KeyCode::Char(' ') => {
                 let mml = self.lines[self.cursor].trim().to_string();
                 if !mml.is_empty() {

@@ -249,6 +249,16 @@ fn handle_normal_t_enters_patch_select_when_random_timbre_disabled() {
 }
 
 #[test]
+fn handle_normal_question_mark_enters_help_mode() {
+    let mut app = TuiApp::new_for_test(test_config());
+
+    let result = app.handle_normal(KeyCode::Char('?'));
+
+    assert!(matches!(result, NormalAction::Continue));
+    assert!(matches!(app.mode, Mode::Help));
+}
+
+#[test]
 fn extract_patch_phrase_reads_patch_name_and_phrase() {
     let result =
         TuiApp::extract_patch_phrase(r#"{"Surge XT patch":"Pads/Pad 1.fxp"}  l8cdef"#).unwrap();

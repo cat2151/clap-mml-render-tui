@@ -306,7 +306,7 @@ fn draw_help(f: &mut Frame) {
         Line::from("  t           : 音色選択"),
         Line::from("  p           : patch phrase 画面"),
         Line::from("  d           : DAW モード"),
-        Line::from("  K           : ヘルプ (このページ)"),
+        Line::from("  K / ?       : ヘルプ (このページ)"),
         Line::from("  q           : 終了"),
         Line::from(""),
         Line::from(Span::styled(

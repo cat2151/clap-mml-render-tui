@@ -111,7 +111,7 @@ impl DawApp {
 
             KeyCode::Char('i') => self.start_insert(),
 
-            KeyCode::Char('K') => self.mode = DawMode::Help,
+            KeyCode::Char('K') | KeyCode::Char('?') => self.mode = DawMode::Help,
 
             KeyCode::Char('p') => {
                 let state = self.play_state.lock().unwrap().clone();

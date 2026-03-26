@@ -290,6 +290,13 @@ fn help_does_not_show_old_semicolon_guidance() {
         normalized_lines
     );
     assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("K/?:ヘルプ(このページ)")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
         !normalized_lines
             .iter()
             .any(|line| line.contains("分割して下のtrackに追加")),
