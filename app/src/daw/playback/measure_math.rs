@@ -50,7 +50,8 @@ pub(in crate::daw::playback) fn format_playback_measure_advance_log(
 
 /// 次小節の開始前に append margin を確保できる最遅時刻を返す。
 ///
-/// 小節が短くて margin を確保できない場合は、現在小節の開始時刻までにクランプする。
+/// append margin を確保できる最遅時刻が現在小節の開始時刻を超えない場合は、
+/// 現在小節の開始時刻までにクランプする。
 pub(in crate::daw::playback) fn future_chunk_append_deadline(
     measure_start: Instant,
     measure_duration: Duration,
@@ -58,7 +59,9 @@ pub(in crate::daw::playback) fn future_chunk_append_deadline(
 ) -> Instant {
     let next_measure_start = measure_start + measure_duration;
     match next_measure_start.checked_sub(append_margin) {
-        // measure_duration が margin より短い場合は measure_start にフォールバックする。
+        // append margin を確保できる最遅時刻が現在小節の開始時刻を超えない場合
+        // （例: measure_duration < append_margin や Instant の表現可能範囲外へのアンダーフロー）
+        // は、measure_start までにクランプしてフォールバックする。
         Some(deadline) if deadline > measure_start => deadline,
         _ => measure_start,
     }
