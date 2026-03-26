@@ -93,3 +93,14 @@ pub(in crate::daw::playback) fn format_playback_future_append_log(
         )
     }
 }
+
+/// 次小節の実再生開始時刻を返す。
+///
+/// append が予定どおり境界前に終わった場合は `expected_measure_start` を維持し、
+/// append が境界を過ぎて遅れた場合は append 完了時刻へ再同期する。
+pub(in crate::daw::playback) fn resolved_measure_start_after_append(
+    expected_measure_start: Instant,
+    append_time: Instant,
+) -> Instant {
+    std::cmp::max(expected_measure_start, append_time)
+}

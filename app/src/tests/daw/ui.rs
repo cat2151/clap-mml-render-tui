@@ -226,12 +226,19 @@ fn draw_keeps_footer_color_cyan_across_play_states() {
 fn draw_shows_log_pane_in_lower_half() {
     let app = build_test_app();
 
-    let lines = render_lines(&app, 60, 10);
+    let lines = render_lines(&app, 60, 12);
 
-    assert!(lines[4].contains("log"), "lines: {:?}", lines);
-    assert!(lines[7].is_empty(), "lines: {:?}", lines);
-    assert!(lines[8].is_empty(), "lines: {:?}", lines);
-    assert!(lines[9].starts_with("DAW"), "lines: {:?}", lines);
+    assert!(
+        lines.iter().any(|line| line.contains("┌ log ")),
+        "lines: {:?}",
+        lines
+    );
+    assert!(
+        lines.iter().any(|line| line.contains("(no log)")),
+        "lines: {:?}",
+        lines
+    );
+    assert!(lines[11].starts_with("DAW"), "lines: {:?}", lines);
 }
 
 #[test]
@@ -245,7 +252,7 @@ fn draw_shows_recent_log_lines() {
         log_lines.push_back("meas3: empty -> silence".to_string());
     }
 
-    let lines = render_lines(&app, 60, 10);
+    let lines = render_lines(&app, 60, 12);
 
     assert!(
         !lines.iter().any(|line| line.contains("old")),
@@ -266,6 +273,58 @@ fn draw_shows_recent_log_lines() {
     );
     assert!(
         !lines.iter().any(|line| line.contains("meas1: cache hit")),
+        "lines: {:?}",
+        lines
+    );
+}
+
+#[test]
+fn draw_highlights_future_append_in_monokai_pink() {
+    let app = build_test_app();
+    {
+        let mut log_lines = app.log_lines.lock().unwrap();
+        log_lines.push_back("play: queue meas2 append lead=48ms (target_margin=50ms)".to_string());
+    }
+
+    let buffer = render_buffer(&app, 80, 10);
+
+    assert_eq!(
+        buffer.cell((1, 5)).unwrap().fg,
+        Color::Rgb(249, 38, 114),
+        "future append log should use Monokai pink"
+    );
+}
+
+#[test]
+fn draw_highlights_failed_logs_in_red() {
+    let app = build_test_app();
+    {
+        let mut log_lines = app.log_lines.lock().unwrap();
+        log_lines.push_back("play: audio init failed".to_string());
+    }
+
+    let buffer = render_buffer(&app, 80, 10);
+
+    assert_eq!(
+        buffer.cell((1, 5)).unwrap().fg,
+        Color::Red,
+        "failed logs should use error red"
+    );
+}
+
+#[test]
+fn draw_shows_log_pane_with_all_borders() {
+    let app = build_test_app();
+
+    let lines = render_lines(&app, 60, 10);
+
+    assert!(
+        lines.iter().any(|line| line.contains("┌ log ")),
+        "lines: {:?}",
+        lines
+    );
+    assert!(
+        lines.iter().any(|line| line.contains("└")),
         "lines: {:?}",
         lines
     );
