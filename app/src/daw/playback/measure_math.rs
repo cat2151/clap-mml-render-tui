@@ -48,6 +48,9 @@ pub(in crate::daw::playback) fn format_playback_measure_advance_log(
     )
 }
 
+/// 次小節の開始前に append margin を確保できる最遅時刻を返す。
+///
+/// 小節が短くて margin を確保できない場合は、現在小節の開始時刻までにクランプする。
 pub(in crate::daw::playback) fn future_chunk_append_deadline(
     measure_start: Instant,
     measure_duration: Duration,
@@ -55,11 +58,15 @@ pub(in crate::daw::playback) fn future_chunk_append_deadline(
 ) -> Instant {
     let next_measure_start = measure_start + measure_duration;
     match next_measure_start.checked_sub(append_margin) {
+        // measure_duration が margin より短い場合は measure_start にフォールバックする。
         Some(deadline) if deadline > measure_start => deadline,
         _ => measure_start,
     }
 }
 
+/// future chunk の append 実績を、次小節開始に対する lead/late 付きでログ文字列にする。
+///
+/// 例: `play: queue meas3 append lead=48ms (target_margin=50ms)`
 pub(in crate::daw::playback) fn format_playback_future_append_log(
     measure_index: usize,
     append_time: Instant,

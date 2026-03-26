@@ -19,6 +19,7 @@ use super::{
         future_chunk_append_deadline,
     },
     measure_mixer::{mix_measure_chunk, ActiveMeasureLayer},
+    wait_until_or_stop,
 };
 
 /// stop_play のログ出力を検証するための最小構成の DawApp を作る。
@@ -172,6 +173,26 @@ fn format_playback_future_append_log_reports_late_append() {
         format_playback_future_append_log(2, append_time, measure_start, Duration::from_millis(50),),
         "play: queue meas3 append late=12ms (target_margin=50ms)"
     );
+}
+
+#[test]
+fn wait_until_or_stop_returns_false_when_playback_is_not_running() {
+    let play_state = Arc::new(Mutex::new(DawPlayState::Idle));
+
+    assert!(!wait_until_or_stop(
+        &play_state,
+        Instant::now() + Duration::from_millis(50)
+    ));
+}
+
+#[test]
+fn wait_until_or_stop_returns_true_when_deadline_is_already_reached() {
+    let play_state = Arc::new(Mutex::new(DawPlayState::Playing));
+
+    assert!(wait_until_or_stop(
+        &play_state,
+        Instant::now() - Duration::from_millis(1)
+    ));
 }
 
 #[test]

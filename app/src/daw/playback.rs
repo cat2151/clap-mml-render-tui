@@ -40,6 +40,9 @@ fn measure_duration(sample_count: usize, sample_rate: u32) -> std::time::Duratio
 
 const FUTURE_CHUNK_APPEND_MARGIN: Duration = Duration::from_millis(50);
 
+/// 指定時刻まで再生継続中なら待機し、deadline 到達で `true` を返す。
+///
+/// 再生中に state が `Playing` 以外へ変わった場合は早期に `false` を返す。
 fn wait_until_or_stop(play_state: &Arc<std::sync::Mutex<DawPlayState>>, deadline: Instant) -> bool {
     loop {
         if *play_state.lock().unwrap() != DawPlayState::Playing {
