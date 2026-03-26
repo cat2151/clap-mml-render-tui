@@ -86,6 +86,9 @@ fn help_screen_mentions_ctrl_clipboard_shortcuts() {
         .any(|line| line.contains("Ctrl+C:コピー")));
     assert!(normalized_lines
         .iter()
+        .any(|line| line.contains("K/?:ヘルプ(このページ)")));
+    assert!(normalized_lines
+        .iter()
         .any(|line| line.contains("Ctrl+X:カット")));
     assert!(normalized_lines
         .iter()

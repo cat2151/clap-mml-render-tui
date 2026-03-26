@@ -317,3 +317,13 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
 
     std::fs::remove_dir_all(&tmp).ok();
 }
+
+#[test]
+fn handle_normal_question_mark_enters_help_mode() {
+    let (mut app, _cache_rx) = build_test_app();
+
+    let result = app.handle_normal(crossterm::event::KeyCode::Char('?'));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert!(matches!(app.mode, DawMode::Help));
+}
