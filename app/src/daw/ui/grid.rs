@@ -8,7 +8,7 @@ use ratatui::{
 
 use super::{
     super::{CacheState, DawApp, DawMode},
-    cache_indicator, cache_text_color, ANIM_FRAME_COUNT, ANIM_FRAME_MS,
+    cache_indicator, cache_indicator_color, cache_text_color, ANIM_FRAME_COUNT, ANIM_FRAME_MS,
 };
 
 pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
@@ -123,13 +123,7 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
                 let ind_fg = if is_cursor {
                     Color::Cyan
                 } else {
-                    match cs {
-                        CacheState::Empty => Color::DarkGray,
-                        CacheState::Pending => Color::DarkGray,
-                        CacheState::Rendering => Color::DarkGray,
-                        CacheState::Ready => Color::DarkGray,
-                        CacheState::Error => Color::Red,
-                    }
+                    cache_indicator_color(cs)
                 };
                 row2.push(Span::styled(indicator, Style::default().fg(ind_fg)));
             }
