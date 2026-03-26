@@ -270,7 +270,8 @@ fn draw_shows_log_pane_in_lower_half() {
         "lines: {:?}",
         lines
     );
-    assert!(lines[lines.len() - 2].contains("DAW"), "lines: {:?}", lines);
+    let footer_row = lines.len() - 2;
+    assert!(lines[footer_row].contains("DAW"), "lines: {:?}", lines);
 }
 
 #[test]

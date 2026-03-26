@@ -56,8 +56,7 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
                 Block::default()
                     .borders(Borders::ALL)
                     .title(" ヘルプ (Keybinds) ")
-                    .border_style(Style::default().fg(MONOKAI_CYAN))
-                    .style(Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG)),
+                    .border_style(Style::default().fg(MONOKAI_CYAN)),
             ),
         popup,
     );
