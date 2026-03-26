@@ -7,9 +7,9 @@ use ratatui::{
 };
 
 use super::super::DawApp;
+use super::{MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GREEN, MONOKAI_PINK, MONOKAI_YELLOW};
 
 const LOG_BLOCK_DECORATION_HEIGHT: u16 = 2;
-use super::{MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GREEN, MONOKAI_PINK, MONOKAI_YELLOW};
 
 fn is_error_log(line: &str) -> bool {
     line.contains("error") || line.contains("failed") || line.contains('✗')

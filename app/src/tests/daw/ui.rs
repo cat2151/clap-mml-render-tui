@@ -11,7 +11,7 @@ use crate::config::Config;
 use super::{
     super::{CacheState, CellCache, DawApp, DawMode, DawPlayState, MEASURES},
     cache_indicator, cache_indicator_color, cache_text_color, draw, loop_measure_summary_label,
-    loop_status_label,
+    loop_status_label, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_PINK,
 };
 
 fn build_test_app() -> DawApp {
@@ -132,22 +132,16 @@ fn cache_indicator_animates_only_while_rendering() {
 
 #[test]
 fn cache_text_color_keeps_uncached_mml_visible() {
-    assert_eq!(cache_text_color(&CacheState::Pending), Color::Rgb(248, 248, 242));
-    assert_eq!(cache_text_color(&CacheState::Rendering), Color::Rgb(248, 248, 242));
+    assert_eq!(cache_text_color(&CacheState::Pending), MONOKAI_FG);
+    assert_eq!(cache_text_color(&CacheState::Rendering), MONOKAI_FG);
 }
 
 #[test]
 fn cache_indicator_color_keeps_pending_animation_visible() {
-    assert_eq!(cache_indicator_color(&CacheState::Empty), Color::Rgb(160, 160, 160));
-    assert_eq!(
-        cache_indicator_color(&CacheState::Pending),
-        Color::Rgb(248, 248, 242)
-    );
-    assert_eq!(
-        cache_indicator_color(&CacheState::Rendering),
-        Color::Rgb(248, 248, 242)
-    );
-    assert_eq!(cache_indicator_color(&CacheState::Ready), Color::Rgb(160, 160, 160));
+    assert_eq!(cache_indicator_color(&CacheState::Empty), MONOKAI_GRAY);
+    assert_eq!(cache_indicator_color(&CacheState::Pending), MONOKAI_FG);
+    assert_eq!(cache_indicator_color(&CacheState::Rendering), MONOKAI_FG);
+    assert_eq!(cache_indicator_color(&CacheState::Ready), MONOKAI_GRAY);
     assert_eq!(cache_indicator_color(&CacheState::Error), Color::Red);
 }
 
@@ -185,7 +179,7 @@ fn draw_renders_pending_indicator_in_visible_color() {
     let buffer = render_buffer(&app, 40, 14);
 
     assert_eq!(buffer.cell((11, 5)).unwrap().symbol(), ".");
-    assert_eq!(buffer.cell((11, 5)).unwrap().fg, Color::Rgb(248, 248, 242));
+    assert_eq!(buffer.cell((11, 5)).unwrap().fg, MONOKAI_FG);
 }
 
 #[test]
@@ -254,7 +248,7 @@ fn draw_keeps_footer_color_cyan_across_play_states() {
 
         assert_eq!(
             buffer.cell((1, 8)).unwrap().fg,
-            Color::Rgb(102, 217, 239),
+            MONOKAI_CYAN,
             "footer color should stay cyan"
         );
     }
@@ -276,7 +270,7 @@ fn draw_shows_log_pane_in_lower_half() {
         "lines: {:?}",
         lines
     );
-    assert!(lines[12].contains("DAW"), "lines: {:?}", lines);
+    assert!(lines[lines.len() - 2].contains("DAW"), "lines: {:?}", lines);
 }
 
 #[test]
@@ -328,7 +322,7 @@ fn draw_highlights_future_append_in_monokai_pink() {
 
     assert_eq!(
         buffer.cell((2, 6)).unwrap().fg,
-        Color::Rgb(249, 38, 114),
+        MONOKAI_PINK,
         "future append log should use Monokai pink"
     );
 }

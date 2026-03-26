@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use super::{MONOKAI_CYAN, MONOKAI_GRAY, MONOKAI_YELLOW};
+use super::{MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_YELLOW};
 
 pub(super) fn draw_help(f: &mut Frame, area: Rect) {
     let popup = crate::ui_utils::centered_rect(60, 80, area);
@@ -50,12 +50,15 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
     ];
 
     f.render_widget(
-        Paragraph::new(help_lines).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" ヘルプ (Keybinds) ")
-                .border_style(Style::default().fg(MONOKAI_CYAN)),
-        ),
+        Paragraph::new(help_lines)
+            .style(Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" ヘルプ (Keybinds) ")
+                    .border_style(Style::default().fg(MONOKAI_CYAN))
+                    .style(Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG)),
+            ),
         popup,
     );
 }
