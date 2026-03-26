@@ -10,7 +10,8 @@ use crate::config::Config;
 
 use super::{
     super::{CacheState, CellCache, DawApp, DawMode, DawPlayState, MEASURES},
-    cache_indicator, cache_text_color, draw, loop_measure_summary_label, loop_status_label,
+    cache_indicator, cache_indicator_color, cache_text_color, draw, loop_measure_summary_label,
+    loop_status_label,
 };
 
 fn build_test_app() -> DawApp {
@@ -136,6 +137,12 @@ fn cache_text_color_keeps_uncached_mml_visible() {
 }
 
 #[test]
+fn cache_indicator_color_keeps_pending_animation_visible() {
+    assert_eq!(cache_indicator_color(&CacheState::Pending), Color::White);
+    assert_eq!(cache_indicator_color(&CacheState::Rendering), Color::White);
+}
+
+#[test]
 fn draw_shows_mml_and_uncached_dot_before_cache_is_ready() {
     let mut app = build_test_app();
     app.data[1][1] = "cdef".to_string();
@@ -156,6 +163,20 @@ fn draw_shows_mml_and_uncached_dot_before_cache_is_ready() {
         "lines: {:?}",
         lines
     );
+}
+
+#[test]
+fn draw_renders_pending_indicator_in_visible_color() {
+    let app = build_test_app();
+    {
+        let mut cache = app.cache.lock().unwrap();
+        cache[1][1].state = CacheState::Pending;
+    }
+
+    let buffer = render_buffer(&app, 40, 12);
+
+    assert_eq!(buffer.cell((10, 4)).unwrap().symbol(), ".");
+    assert_eq!(buffer.cell((10, 4)).unwrap().fg, Color::White);
 }
 
 #[test]

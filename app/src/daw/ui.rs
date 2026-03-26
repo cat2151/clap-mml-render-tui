@@ -40,6 +40,14 @@ fn cache_indicator(cs: &CacheState, anim_frame: u128) -> &'static str {
     }
 }
 
+fn cache_indicator_color(cs: &CacheState) -> Color {
+    match cs {
+        CacheState::Empty | CacheState::Ready => Color::DarkGray,
+        CacheState::Pending | CacheState::Rendering => Color::White,
+        CacheState::Error => Color::Red,
+    }
+}
+
 fn loop_status_label(mmls: &[String]) -> Option<String> {
     super::playback::effective_measure_count(mmls).map(|count| {
         if count == 1 {
