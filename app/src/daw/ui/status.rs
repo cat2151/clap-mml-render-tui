@@ -1,13 +1,8 @@
-use ratatui::{
-    layout::Rect,
-    style::{Color, Style},
-    widgets::Paragraph,
-    Frame,
-};
+use ratatui::{layout::Rect, style::Style, widgets::Paragraph, Frame};
 
 use super::{
     super::{DawApp, DawMode, DawPlayState},
-    loop_measure_summary_label, loop_status_label,
+    loop_measure_summary_label, loop_status_label, MONOKAI_CYAN, MONOKAI_PURPLE, MONOKAI_YELLOW,
 };
 
 pub(super) fn draw_status(
@@ -68,9 +63,9 @@ pub(super) fn draw_status(
     };
 
     let play_color = match play_state {
-        DawPlayState::Idle => Color::Cyan,
-        DawPlayState::Playing => Color::Yellow,
-        DawPlayState::Preview => Color::Magenta,
+        DawPlayState::Idle => MONOKAI_CYAN,
+        DawPlayState::Playing => MONOKAI_YELLOW,
+        DawPlayState::Preview => MONOKAI_PURPLE,
     };
 
     f.render_widget(
@@ -78,11 +73,11 @@ pub(super) fn draw_status(
         play_area,
     );
     f.render_widget(
-        Paragraph::new(loop_summary.unwrap_or_default()).style(Style::default().fg(Color::Yellow)),
+        Paragraph::new(loop_summary.unwrap_or_default()).style(Style::default().fg(MONOKAI_YELLOW)),
         info_area,
     );
     f.render_widget(
-        Paragraph::new(footer_text).style(Style::default().fg(Color::Cyan)),
+        Paragraph::new(footer_text).style(Style::default().fg(MONOKAI_CYAN)),
         footer_area,
     );
 }

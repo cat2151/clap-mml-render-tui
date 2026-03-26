@@ -9,7 +9,7 @@ use ratatui::{
 use super::super::DawApp;
 
 const LOG_BLOCK_DECORATION_HEIGHT: u16 = 2;
-const MONOKAI_PINK: Color = Color::Rgb(249, 38, 114);
+use super::{MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GREEN, MONOKAI_PINK, MONOKAI_YELLOW};
 
 fn is_error_log(line: &str) -> bool {
     line.contains("error") || line.contains("failed") || line.contains('✗')
@@ -21,13 +21,13 @@ fn log_line_style(line: &str) -> Style {
     } else if line.starts_with("play: queue ") {
         Style::default().fg(MONOKAI_PINK)
     } else if line.starts_with("play: ") {
-        Style::default().fg(Color::Yellow)
+        Style::default().fg(MONOKAI_YELLOW)
     } else if line.starts_with("cache: rerender done ") {
-        Style::default().fg(Color::Green)
+        Style::default().fg(MONOKAI_GREEN)
     } else if line.starts_with("cache: ") {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(MONOKAI_CYAN)
     } else {
-        Style::default().fg(Color::White)
+        Style::default().fg(MONOKAI_FG)
     }
 }
 
@@ -62,9 +62,10 @@ pub(super) fn draw_logs(app: &DawApp, f: &mut Frame, area: Rect) {
                 Block::default()
                     .title(" log ")
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::DarkGray)),
+                    .border_style(Style::default().fg(MONOKAI_CYAN))
+                    .style(Style::default().bg(MONOKAI_BG)),
             )
-            .style(Style::default().fg(Color::White)),
+            .style(Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG)),
         area,
     );
 }

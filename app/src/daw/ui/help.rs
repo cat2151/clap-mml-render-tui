@@ -1,10 +1,12 @@
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
+
+use super::{MONOKAI_CYAN, MONOKAI_GRAY, MONOKAI_YELLOW};
 
 pub(super) fn draw_help(f: &mut Frame, area: Rect) {
     let popup = crate::ui_utils::centered_rect(60, 80, area);
@@ -14,7 +16,7 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
         Line::from(Span::styled(
             "NORMAL モード",
             Style::default()
-                .fg(Color::Yellow)
+                .fg(MONOKAI_YELLOW)
                 .add_modifier(Modifier::BOLD),
         )),
         Line::from("  h / ←  : 小節移動（左）"),
@@ -35,7 +37,7 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
         Line::from(Span::styled(
             "INSERT モード",
             Style::default()
-                .fg(Color::Yellow)
+                .fg(MONOKAI_YELLOW)
                 .add_modifier(Modifier::BOLD),
         )),
         Line::from("  ESC   : 確定 → NORMAL"),
@@ -43,7 +45,7 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
         Line::from(""),
         Line::from(Span::styled(
             "  [ESC] でキャンセル",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(MONOKAI_GRAY),
         )),
     ];
 
@@ -52,7 +54,7 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
             Block::default()
                 .borders(Borders::ALL)
                 .title(" ヘルプ (Keybinds) ")
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(MONOKAI_CYAN)),
         ),
         popup,
     );

@@ -132,16 +132,22 @@ fn cache_indicator_animates_only_while_rendering() {
 
 #[test]
 fn cache_text_color_keeps_uncached_mml_visible() {
-    assert_eq!(cache_text_color(&CacheState::Pending), Color::White);
-    assert_eq!(cache_text_color(&CacheState::Rendering), Color::White);
+    assert_eq!(cache_text_color(&CacheState::Pending), Color::Rgb(248, 248, 242));
+    assert_eq!(cache_text_color(&CacheState::Rendering), Color::Rgb(248, 248, 242));
 }
 
 #[test]
 fn cache_indicator_color_keeps_pending_animation_visible() {
-    assert_eq!(cache_indicator_color(&CacheState::Empty), Color::DarkGray);
-    assert_eq!(cache_indicator_color(&CacheState::Pending), Color::White);
-    assert_eq!(cache_indicator_color(&CacheState::Rendering), Color::White);
-    assert_eq!(cache_indicator_color(&CacheState::Ready), Color::DarkGray);
+    assert_eq!(cache_indicator_color(&CacheState::Empty), Color::Rgb(160, 160, 160));
+    assert_eq!(
+        cache_indicator_color(&CacheState::Pending),
+        Color::Rgb(248, 248, 242)
+    );
+    assert_eq!(
+        cache_indicator_color(&CacheState::Rendering),
+        Color::Rgb(248, 248, 242)
+    );
+    assert_eq!(cache_indicator_color(&CacheState::Ready), Color::Rgb(160, 160, 160));
     assert_eq!(cache_indicator_color(&CacheState::Error), Color::Red);
 }
 
@@ -154,7 +160,7 @@ fn draw_shows_mml_and_uncached_dot_before_cache_is_ready() {
         cache[1][1].state = CacheState::Pending;
     }
 
-    let lines = render_lines(&app, 40, 12);
+    let lines = render_lines(&app, 40, 14);
 
     assert!(
         lines.iter().any(|line| line.contains("cdef")),
@@ -176,10 +182,10 @@ fn draw_renders_pending_indicator_in_visible_color() {
         cache[1][1].state = CacheState::Pending;
     }
 
-    let buffer = render_buffer(&app, 40, 12);
+    let buffer = render_buffer(&app, 40, 14);
 
-    assert_eq!(buffer.cell((10, 4)).unwrap().symbol(), ".");
-    assert_eq!(buffer.cell((10, 4)).unwrap().fg, Color::White);
+    assert_eq!(buffer.cell((11, 5)).unwrap().symbol(), ".");
+    assert_eq!(buffer.cell((11, 5)).unwrap().fg, Color::Rgb(248, 248, 242));
 }
 
 #[test]
@@ -201,26 +207,34 @@ fn draw_places_playback_status_and_loop_summary_above_footer() {
         play_measure_mmls[0] = "c".to_string();
     }
 
-    let lines = render_lines(&app, 120, 8);
+    let lines = render_lines(&app, 120, 10);
 
-    assert!(lines[5].starts_with("▶ meas2, beat"), "lines: {:?}", lines);
-    assert!(lines[5].contains("loop:"), "lines: {:?}", lines);
-    assert!(lines[5].contains("meas1"), "lines: {:?}", lines);
-    assert!(lines[6].starts_with("loop meas :"), "lines: {:?}", lines);
-    assert!(lines[6].contains("empty meas :"), "lines: {:?}", lines);
-    assert!(lines[7].starts_with("DAW"), "lines: {:?}", lines);
-    assert!(!lines[7].contains("▶"), "lines: {:?}", lines);
+    let play_row = lines.len() - 4;
+    let info_row = lines.len() - 3;
+    let footer_row = lines.len() - 2;
+
+    assert!(lines[play_row].contains("▶ meas2, beat"), "lines: {:?}", lines);
+    assert!(lines[play_row].contains("loop:"), "lines: {:?}", lines);
+    assert!(lines[play_row].contains("meas1"), "lines: {:?}", lines);
+    assert!(lines[info_row].contains("loop meas :"), "lines: {:?}", lines);
+    assert!(lines[info_row].contains("empty meas :"), "lines: {:?}", lines);
+    assert!(lines[footer_row].contains("DAW"), "lines: {:?}", lines);
+    assert!(!lines[footer_row].contains("▶"), "lines: {:?}", lines);
 }
 
 #[test]
 fn draw_keeps_footer_on_last_row_when_idle() {
     let app = build_test_app();
 
-    let lines = render_lines(&app, 120, 8);
+    let lines = render_lines(&app, 120, 10);
 
-    assert_eq!(lines[5], "", "lines: {:?}", lines);
-    assert_eq!(lines[6], "", "lines: {:?}", lines);
-    assert!(lines[7].starts_with("DAW"), "lines: {:?}", lines);
+    let play_row = lines.len() - 4;
+    let info_row = lines.len() - 3;
+    let footer_row = lines.len() - 2;
+
+    assert!(!lines[play_row].contains('▶'), "lines: {:?}", lines);
+    assert!(!lines[info_row].contains("loop meas :"), "lines: {:?}", lines);
+    assert!(lines[footer_row].contains("DAW"), "lines: {:?}", lines);
 }
 
 #[test]
@@ -236,11 +250,11 @@ fn draw_keeps_footer_color_cyan_across_play_states() {
             *state = play_state;
         }
 
-        let buffer = render_buffer(&app, 120, 8);
+        let buffer = render_buffer(&app, 120, 10);
 
         assert_eq!(
-            buffer.cell((0, 7)).unwrap().fg,
-            Color::Cyan,
+            buffer.cell((1, 8)).unwrap().fg,
+            Color::Rgb(102, 217, 239),
             "footer color should stay cyan"
         );
     }
@@ -250,7 +264,7 @@ fn draw_keeps_footer_color_cyan_across_play_states() {
 fn draw_shows_log_pane_in_lower_half() {
     let app = build_test_app();
 
-    let lines = render_lines(&app, 60, 12);
+    let lines = render_lines(&app, 60, 14);
 
     assert!(
         lines.iter().any(|line| line.contains("┌ log ")),
@@ -262,7 +276,7 @@ fn draw_shows_log_pane_in_lower_half() {
         "lines: {:?}",
         lines
     );
-    assert!(lines[11].starts_with("DAW"), "lines: {:?}", lines);
+    assert!(lines[12].contains("DAW"), "lines: {:?}", lines);
 }
 
 #[test]
@@ -276,7 +290,7 @@ fn draw_shows_recent_log_lines() {
         log_lines.push_back("meas3: empty -> silence".to_string());
     }
 
-    let lines = render_lines(&app, 60, 12);
+    let lines = render_lines(&app, 60, 14);
 
     assert!(
         !lines.iter().any(|line| line.contains("old")),
@@ -310,10 +324,10 @@ fn draw_highlights_future_append_in_monokai_pink() {
         log_lines.push_back("play: queue meas2 append lead=48ms (target_margin=50ms)".to_string());
     }
 
-    let buffer = render_buffer(&app, 80, 10);
+    let buffer = render_buffer(&app, 80, 12);
 
     assert_eq!(
-        buffer.cell((1, 5)).unwrap().fg,
+        buffer.cell((2, 6)).unwrap().fg,
         Color::Rgb(249, 38, 114),
         "future append log should use Monokai pink"
     );
@@ -327,10 +341,10 @@ fn draw_highlights_failed_logs_in_red() {
         log_lines.push_back("play: audio init failed".to_string());
     }
 
-    let buffer = render_buffer(&app, 80, 10);
+    let buffer = render_buffer(&app, 80, 12);
 
     assert_eq!(
-        buffer.cell((1, 5)).unwrap().fg,
+        buffer.cell((2, 6)).unwrap().fg,
         Color::Red,
         "failed logs should use error red"
     );
@@ -352,6 +366,19 @@ fn draw_shows_log_pane_with_all_borders() {
         "lines: {:?}",
         lines
     );
+}
+
+#[test]
+fn draw_shows_outer_border_in_monokai_cyan() {
+    let app = build_test_app();
+
+    let buffer = render_buffer(&app, 60, 10);
+
+    assert_eq!(buffer.cell((0, 0)).unwrap().symbol(), "┌");
+    assert_eq!(buffer.cell((59, 0)).unwrap().symbol(), "┐");
+    assert_eq!(buffer.cell((0, 9)).unwrap().symbol(), "└");
+    assert_eq!(buffer.cell((59, 9)).unwrap().symbol(), "┘");
+    assert_eq!(buffer.cell((0, 0)).unwrap().fg, Color::Rgb(102, 217, 239));
 }
 
 #[test]
