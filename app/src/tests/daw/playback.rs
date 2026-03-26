@@ -1,6 +1,7 @@
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 
 use tui_textarea::TextArea;
@@ -13,8 +14,9 @@ use super::{
         build_playback_measure_samples, pad_playback_measure_samples, try_get_cached_samples,
     },
     measure_math::{
-        current_play_measure_index, following_measure_index, format_playback_measure_advance_log,
-        format_playback_measure_resolution_log,
+        current_play_measure_index, following_measure_index, format_playback_future_append_log,
+        format_playback_measure_advance_log, format_playback_measure_resolution_log,
+        future_chunk_append_deadline,
     },
     measure_mixer::{mix_measure_chunk, ActiveMeasureLayer},
 };
@@ -120,6 +122,55 @@ fn format_playback_measure_advance_log_shows_current_and_next_measure() {
     assert_eq!(
         format_playback_measure_advance_log(1, 2, 4),
         "play: sync advance current=meas2 -> next=meas3 (effective_count=4)"
+    );
+}
+
+#[test]
+fn future_chunk_append_deadline_uses_50ms_margin_before_next_measure() {
+    let measure_start = Instant::now();
+    let deadline = future_chunk_append_deadline(
+        measure_start,
+        Duration::from_millis(400),
+        Duration::from_millis(50),
+    );
+
+    assert_eq!(
+        deadline.duration_since(measure_start),
+        Duration::from_millis(350)
+    );
+}
+
+#[test]
+fn future_chunk_append_deadline_clamps_to_measure_start_for_short_measures() {
+    let measure_start = Instant::now();
+    let deadline = future_chunk_append_deadline(
+        measure_start,
+        Duration::from_millis(30),
+        Duration::from_millis(50),
+    );
+
+    assert_eq!(deadline, measure_start);
+}
+
+#[test]
+fn format_playback_future_append_log_reports_append_lead_time() {
+    let append_time = Instant::now();
+    let measure_start = append_time + Duration::from_millis(48);
+
+    assert_eq!(
+        format_playback_future_append_log(2, append_time, measure_start, Duration::from_millis(50),),
+        "play: queue meas3 append lead=48ms (target_margin=50ms)"
+    );
+}
+
+#[test]
+fn format_playback_future_append_log_reports_late_append() {
+    let measure_start = Instant::now();
+    let append_time = measure_start + Duration::from_millis(12);
+
+    assert_eq!(
+        format_playback_future_append_log(2, append_time, measure_start, Duration::from_millis(50),),
+        "play: queue meas3 append late=12ms (target_margin=50ms)"
     );
 }
 
