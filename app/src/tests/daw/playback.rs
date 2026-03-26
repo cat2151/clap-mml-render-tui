@@ -16,7 +16,7 @@ use super::{
     measure_math::{
         current_play_measure_index, following_measure_index, format_playback_future_append_log,
         format_playback_measure_advance_log, format_playback_measure_resolution_log,
-        future_chunk_append_deadline,
+        future_chunk_append_deadline, resolved_measure_start_after_append,
     },
     measure_mixer::{mix_measure_chunk, ActiveMeasureLayer},
     wait_until_or_stop,
@@ -172,6 +172,28 @@ fn format_playback_future_append_log_reports_late_append() {
     assert_eq!(
         format_playback_future_append_log(2, append_time, measure_start, Duration::from_millis(50),),
         "play: queue meas3 append late=12ms (target_margin=50ms)"
+    );
+}
+
+#[test]
+fn resolved_measure_start_after_append_keeps_expected_start_when_append_is_early() {
+    let expected_measure_start = Instant::now() + Duration::from_millis(50);
+    let append_time = expected_measure_start - Duration::from_millis(12);
+
+    assert_eq!(
+        resolved_measure_start_after_append(expected_measure_start, append_time),
+        expected_measure_start
+    );
+}
+
+#[test]
+fn resolved_measure_start_after_append_resyncs_to_late_append_time() {
+    let expected_measure_start = Instant::now();
+    let append_time = expected_measure_start + Duration::from_millis(12);
+
+    assert_eq!(
+        resolved_measure_start_after_append(expected_measure_start, append_time),
+        append_time
     );
 }
 

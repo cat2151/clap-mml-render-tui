@@ -21,6 +21,7 @@ pub(super) use measure_math::{current_play_measure_index, following_measure_inde
 use measure_math::{
     format_playback_future_append_log, format_playback_measure_advance_log,
     format_playback_measure_resolution_log, future_chunk_append_deadline,
+    resolved_measure_start_after_append,
 };
 use measure_mixer::{mix_measure_chunk, ActiveMeasureLayer, PlaybackMeasureAudio};
 
@@ -192,7 +193,7 @@ impl DawApp {
                     "BUG: current_measure must be initialized before lookahead; this indicates a logic error in the playback loop initialization",
                 );
 
-                let next_measure_start = current.measure_start + current.measure_duration;
+                let expected_next_measure_start = current.measure_start + current.measure_duration;
                 let append_deadline = future_chunk_append_deadline(
                     current.measure_start,
                     current.measure_duration,
@@ -248,12 +249,15 @@ impl DawApp {
                     sample_rate,
                     next_chunk,
                 ));
+                let append_time = Instant::now();
+                let next_measure_start =
+                    resolved_measure_start_after_append(expected_next_measure_start, append_time);
                 crate::logging::append_log_line(
                     &log_lines,
                     format_playback_future_append_log(
                         lookahead_measure_index,
-                        Instant::now(),
-                        next_measure_start,
+                        append_time,
+                        expected_next_measure_start,
                         FUTURE_CHUNK_APPEND_MARGIN,
                     ),
                 );

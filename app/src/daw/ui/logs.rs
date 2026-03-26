@@ -1,14 +1,31 @@
 use ratatui::{
     layout::Rect,
     style::{Color, Style},
-    text::Line,
+    text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
 
 use super::super::DawApp;
 
-const LOG_BLOCK_DECORATION_HEIGHT: u16 = 1;
+const LOG_BLOCK_DECORATION_HEIGHT: u16 = 2;
+const MONOKAI_PINK: Color = Color::Rgb(249, 38, 114);
+
+fn log_line_style(line: &str) -> Style {
+    if line.starts_with("play: queue ") {
+        Style::default().fg(MONOKAI_PINK)
+    } else if line.starts_with("play: ") {
+        Style::default().fg(Color::Yellow)
+    } else if line.starts_with("cache: rerender done ") {
+        Style::default().fg(Color::Green)
+    } else if line.starts_with("cache: ") {
+        Style::default().fg(Color::Cyan)
+    } else if line.contains("error") || line.contains('✗') {
+        Style::default().fg(Color::Red)
+    } else {
+        Style::default().fg(Color::White)
+    }
+}
 
 pub(super) fn draw_logs(app: &DawApp, f: &mut Frame, area: Rect) {
     if area.width == 0 || area.height == 0 {
@@ -23,7 +40,7 @@ pub(super) fn draw_logs(app: &DawApp, f: &mut Frame, area: Rect) {
             .rev()
             .take(visible_height)
             .cloned()
-            .map(Line::from)
+            .map(|line| Line::from(Span::styled(line.clone(), log_line_style(&line))))
             .collect()
     };
     visible_lines.reverse();
@@ -37,7 +54,7 @@ pub(super) fn draw_logs(app: &DawApp, f: &mut Frame, area: Rect) {
             .block(
                 Block::default()
                     .title(" log ")
-                    .borders(Borders::TOP)
+                    .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::DarkGray)),
             )
             .style(Style::default().fg(Color::White)),
