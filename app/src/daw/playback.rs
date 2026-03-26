@@ -1,6 +1,9 @@
 //! DawApp の演奏メソッド
 
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use clack_host::prelude::PluginEntry;
 use cmrt_core::{mml_render_for_cache, CoreConfig};
@@ -15,10 +18,11 @@ use super::{DawApp, DawPlayState, PlayPosition};
 use cache_mixer::build_playback_measure_samples;
 pub(super) use cache_mixer::{pad_playback_measure_samples, try_get_cached_samples};
 pub(super) use measure_math::{current_play_measure_index, following_measure_index};
-use measure_math::{format_playback_measure_advance_log, format_playback_measure_resolution_log};
-use measure_mixer::{
-    mix_measure_chunk, ActiveMeasureLayer, PlaybackMeasureAudio, PlaybackMeasureSource,
+use measure_math::{
+    format_playback_future_append_log, format_playback_measure_advance_log,
+    format_playback_measure_resolution_log, future_chunk_append_deadline,
 };
+use measure_mixer::{mix_measure_chunk, ActiveMeasureLayer, PlaybackMeasureAudio};
 
 #[derive(Clone)]
 struct QueuedMeasure {
@@ -32,6 +36,26 @@ fn measure_duration(sample_count: usize, sample_rate: u32) -> std::time::Duratio
     // そのため実時間は frames (= sample_count / 2) / sample_rate となり、
     // sample_count / (sample_rate * 2) と等価になる。
     std::time::Duration::from_secs_f64(sample_count as f64 / (sample_rate as f64 * 2.0))
+}
+
+const FUTURE_CHUNK_APPEND_MARGIN: Duration = Duration::from_millis(50);
+
+/// 指定時刻まで再生継続中なら待機し、deadline 到達で `true` を返す。
+///
+/// 再生中に state が `Playing` 以外へ変わった場合は早期に `false` を返す。
+fn wait_until_or_stop(play_state: &Arc<std::sync::Mutex<DawPlayState>>, deadline: Instant) -> bool {
+    loop {
+        if *play_state.lock().unwrap() != DawPlayState::Playing {
+            return false;
+        }
+
+        let now = Instant::now();
+        if now >= deadline {
+            return true;
+        }
+
+        std::thread::sleep((deadline - now).min(Duration::from_millis(10)));
+    }
 }
 
 impl DawApp {
@@ -103,16 +127,14 @@ impl DawApp {
                     break;
                 }
 
-                // 各小節の直前に最新の MML / 小節長を読み取って現在小節を決定する。
-                // 初回はここで小節を解決し、2 小節目以降は後続小節の lookahead 準備に使う。
-                let mmls = play_measure_mmls.lock().unwrap().clone();
-                let measure_samples = *play_measure_samples.lock().unwrap();
-                let effective_count = match effective_measure_count(&mmls) {
-                    Some(n) => n,
-                    None => break 'outer,
-                };
-
                 if current_measure.is_none() {
+                    // 初回の現在小節だけはすぐに解決して再生を開始する。
+                    let mmls = play_measure_mmls.lock().unwrap().clone();
+                    let measure_samples = *play_measure_samples.lock().unwrap();
+                    let effective_count = match effective_measure_count(&mmls) {
+                        Some(n) => n,
+                        None => break 'outer,
+                    };
                     let current_measure_index =
                         current_play_measure_index(measure_index, effective_count);
                     crate::logging::append_log_line(
@@ -170,8 +192,24 @@ impl DawApp {
                     "BUG: current_measure must be initialized before lookahead; this indicates a logic error in the playback loop initialization",
                 );
 
-                // 現在小節の再生中に次小節を 1 つ先読みし、Sink が空になる前に追加する。
-                // これにより cache miss 時のフォールバックレンダリングでも無音ギャップを最小化する。
+                let next_measure_start = current.measure_start + current.measure_duration;
+                let append_deadline = future_chunk_append_deadline(
+                    current.measure_start,
+                    current.measure_duration,
+                    FUTURE_CHUNK_APPEND_MARGIN,
+                );
+                if !wait_until_or_stop(&play_state, append_deadline) {
+                    break 'outer;
+                }
+
+                // 次小節の解決と append は境界直前まで遅らせ、再 render の反映余地を広げる。
+                // そのぶん render が間に合わないケースを観測しやすいよう、append 実績もログに残す。
+                let mmls = play_measure_mmls.lock().unwrap().clone();
+                let measure_samples = *play_measure_samples.lock().unwrap();
+                let effective_count = match effective_measure_count(&mmls) {
+                    Some(n) => n,
+                    None => break 'outer,
+                };
                 let lookahead_measure_index =
                     following_measure_index(current.measure_index, effective_count);
                 let next_mml = &mmls[lookahead_measure_index];
@@ -198,7 +236,6 @@ impl DawApp {
                     }
                 };
 
-                let next_measure_start = current.measure_start + current.measure_duration;
                 let next_measure_duration = measure_duration(measure_samples, sample_rate);
                 let PlaybackMeasureAudio {
                     samples: next_samples,
@@ -211,22 +248,21 @@ impl DawApp {
                     sample_rate,
                     next_chunk,
                 ));
+                crate::logging::append_log_line(
+                    &log_lines,
+                    format_playback_future_append_log(
+                        lookahead_measure_index,
+                        Instant::now(),
+                        next_measure_start,
+                        FUTURE_CHUNK_APPEND_MARGIN,
+                    ),
+                );
 
                 // 小節境界は期待再生開始時刻を基準にポーリングする。
-                // 直前で次小節チャンクを append して 1 小節先読みを維持したうえで、
+                // 50ms 前を目標に次小節チャンクを append したうえで、
                 // rodio::Sink には「現在キュー先頭の小節だけの終了」を待つ API がないため、
                 // play_position / ログ更新だけを時間ベースで境界に同期する。
-                loop {
-                    if std::time::Instant::now() >= next_measure_start {
-                        break;
-                    }
-                    if *play_state.lock().unwrap() != DawPlayState::Playing {
-                        break 'outer;
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(10));
-                }
-
-                if *play_state.lock().unwrap() != DawPlayState::Playing {
+                if !wait_until_or_stop(&play_state, next_measure_start) {
                     break 'outer;
                 }
 
