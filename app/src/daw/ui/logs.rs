@@ -11,8 +11,14 @@ use super::super::DawApp;
 const LOG_BLOCK_DECORATION_HEIGHT: u16 = 2;
 const MONOKAI_PINK: Color = Color::Rgb(249, 38, 114);
 
+fn is_error_log(line: &str) -> bool {
+    line.contains("error") || line.contains("failed") || line.contains('✗')
+}
+
 fn log_line_style(line: &str) -> Style {
-    if line.starts_with("play: queue ") {
+    if is_error_log(line) {
+        Style::default().fg(Color::Red)
+    } else if line.starts_with("play: queue ") {
         Style::default().fg(MONOKAI_PINK)
     } else if line.starts_with("play: ") {
         Style::default().fg(Color::Yellow)
@@ -20,8 +26,6 @@ fn log_line_style(line: &str) -> Style {
         Style::default().fg(Color::Green)
     } else if line.starts_with("cache: ") {
         Style::default().fg(Color::Cyan)
-    } else if line.contains("error") || line.contains('✗') {
-        Style::default().fg(Color::Red)
     } else {
         Style::default().fg(Color::White)
     }
@@ -40,7 +44,10 @@ pub(super) fn draw_logs(app: &DawApp, f: &mut Frame, area: Rect) {
             .rev()
             .take(visible_height)
             .cloned()
-            .map(|line| Line::from(Span::styled(line.clone(), log_line_style(&line))))
+            .map(|line| {
+                let style = log_line_style(&line);
+                Line::from(Span::styled(line, style))
+            })
             .collect()
     };
     visible_lines.reverse();

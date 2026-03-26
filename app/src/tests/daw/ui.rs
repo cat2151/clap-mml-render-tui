@@ -296,6 +296,23 @@ fn draw_highlights_future_append_in_monokai_pink() {
 }
 
 #[test]
+fn draw_highlights_failed_logs_in_red() {
+    let app = build_test_app();
+    {
+        let mut log_lines = app.log_lines.lock().unwrap();
+        log_lines.push_back("play: audio init failed".to_string());
+    }
+
+    let buffer = render_buffer(&app, 80, 10);
+
+    assert_eq!(
+        buffer.cell((1, 5)).unwrap().fg,
+        Color::Red,
+        "failed logs should use error red"
+    );
+}
+
+#[test]
 fn draw_shows_log_pane_with_all_borders() {
     let app = build_test_app();
 
