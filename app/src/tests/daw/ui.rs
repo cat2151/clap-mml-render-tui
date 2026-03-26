@@ -138,8 +138,11 @@ fn cache_text_color_keeps_uncached_mml_visible() {
 
 #[test]
 fn cache_indicator_color_keeps_pending_animation_visible() {
+    assert_eq!(cache_indicator_color(&CacheState::Empty), Color::DarkGray);
     assert_eq!(cache_indicator_color(&CacheState::Pending), Color::White);
     assert_eq!(cache_indicator_color(&CacheState::Rendering), Color::White);
+    assert_eq!(cache_indicator_color(&CacheState::Ready), Color::DarkGray);
+    assert_eq!(cache_indicator_color(&CacheState::Error), Color::Red);
 }
 
 #[test]
