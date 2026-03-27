@@ -21,13 +21,21 @@ impl<'a> TuiApp<'a> {
     fn replace_current_line_patch(&mut self, patch_name: &str) {
         let json = Self::build_patch_json(patch_name);
         let current = self.lines[self.cursor].clone();
-        let preprocessed = mml_preprocessor::extract_embedded_json(&current);
-        let remaining = preprocessed.remaining_mml.trim().to_string();
-        self.lines[self.cursor] = if remaining.is_empty() {
-            json
-        } else {
-            format!("{json} {remaining}")
-        };
+        let replaced = current
+            .split(';')
+            .map(|part| {
+                let part = part.trim_start();
+                let preprocessed = mml_preprocessor::extract_embedded_json(part);
+                let remaining = preprocessed.remaining_mml.trim();
+                if remaining.is_empty() {
+                    String::new()
+                } else {
+                    format!("{json} {remaining}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(";");
+        self.lines[self.cursor] = if replaced.is_empty() { json } else { replaced };
     }
 
     fn pick_random_patch_name(&self) -> Result<String, String> {

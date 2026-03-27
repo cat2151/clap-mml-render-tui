@@ -183,6 +183,48 @@ fn handle_normal_r_replaces_existing_patch_at_start_of_current_line() {
 }
 
 #[test]
+fn handle_normal_r_reapplies_same_patch_to_each_semicolon_branch() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Old/Pad.fxp"} c;f"#.to_string()];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "Leads/Lead 1.fxp",
+    ]))));
+
+    let result = app.handle_normal(KeyCode::Char('r'));
+
+    assert!(matches!(result, NormalAction::Continue));
+    assert_eq!(
+        app.lines,
+        vec![
+            r#"{"Surge XT patch": "Leads/Lead 1.fxp"} c;{"Surge XT patch": "Leads/Lead 1.fxp"} f"#
+                .to_string()
+        ]
+    );
+}
+
+#[test]
+fn handle_normal_r_replaces_spaced_semicolon_branch_patch_without_duplication() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![
+        r#"{"Surge XT patch":"Old/Pad.fxp"} c; {"Surge XT patch":"Older/Lead.fxp"} f"#.to_string(),
+    ];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "Leads/Lead 1.fxp",
+    ]))));
+
+    let result = app.handle_normal(KeyCode::Char('r'));
+
+    assert!(matches!(result, NormalAction::Continue));
+    assert_eq!(
+        app.lines,
+        vec![
+            r#"{"Surge XT patch": "Leads/Lead 1.fxp"} c;{"Surge XT patch": "Leads/Lead 1.fxp"} f"#
+                .to_string()
+        ]
+    );
+}
+
+#[test]
 fn handle_normal_r_shows_error_when_patches_dir_is_missing() {
     let mut cfg = test_config();
     cfg.patches_dir = None;
