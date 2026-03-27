@@ -31,8 +31,11 @@ pub(in crate::daw) fn pad_playback_measure_samples(
 ///
 /// 指定小節（`measure`、1始まり）のすべての playable track（`FIRST_PLAYABLE_TRACK..tracks`）の
 /// キャッシュを調べ、合算したサンプルを返す。
-/// いずれかの playable track が `Ready` でない（Pending / Error）場合は `None` を返し、
+/// いずれかの playable track に再生可能なサンプルがまだ無い場合は `None` を返し、
 /// 呼び出し元はフレッシュレンダリングにフォールバックすること。
+///
+/// `Pending` / `Rendering` でも直前世代のサンプルを保持している間はそれを優先して返す。
+/// これにより再 render 中でも future chunk append を止めず、古いキャッシュで継続再生できる。
 /// 全 playable track が `Empty` の場合は無音（ゼロ埋め）を返す。
 /// 結果は少なくとも `measure_samples` 長になり、各トラックの余韻が残っていればその末尾も保持する。
 pub(in crate::daw) fn try_get_cached_samples(
@@ -51,14 +54,18 @@ pub(in crate::daw) fn try_get_cached_samples(
                 CacheState::Empty => {
                     result.push((t, None)); // 空トラック
                 }
-                CacheState::Ready => {
-                    // samples が None の場合（サイズ上限超過等）もフォールバック
-                    let arc = cache[t][measure].samples.clone();
+                CacheState::Ready | CacheState::Pending | CacheState::Rendering => {
+                    // samples が None の場合（サイズ上限超過や初回未完成等）はフォールバック
+                    let cell = &cache[t][measure];
+                    let arc = cell.samples.clone();
                     arc.as_ref()?;
+                    if cell.rendered_measure_samples != Some(measure_samples) {
+                        return None;
+                    }
                     result.push((t, arc));
                 }
-                _ => {
-                    // Pending または Error → キャッシュ未完成、フォールバックが必要
+                CacheState::Error => {
+                    // エラー中のセルはステールサンプルに頼らずフォールバックする。
                     return None;
                 }
             }

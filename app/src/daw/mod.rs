@@ -82,6 +82,7 @@ pub(super) const MAX_CACHED_SAMPLES: usize = 2_000_000;
 pub(super) struct CacheJob {
     track: usize,
     measure: usize,
+    measure_samples: usize,
     generation: u64,
     rendered_mml_hash: u64,
     mml: String,
@@ -198,7 +199,6 @@ impl DawApp {
                             skipped_stale_job = true;
                         } else {
                             cell.state = CacheState::Rendering;
-                            cell.samples = None;
                             cell.rendered_mml_hash = None;
                         }
                     }
@@ -261,8 +261,11 @@ impl DawApp {
                                     // 上限超過（低 BPM 等）や WAV 失敗時はサンプルを保持しない。
                                     if wav_ok && samples.len() <= MAX_CACHED_SAMPLES {
                                         cache[track][measure].samples = Some(Arc::new(samples));
+                                        cache[track][measure].rendered_measure_samples =
+                                            Some(job.measure_samples);
                                     } else {
                                         cache[track][measure].samples = None;
+                                        cache[track][measure].rendered_measure_samples = None;
                                     }
                                     should_complete_batch = true;
                                 }
@@ -290,6 +293,7 @@ impl DawApp {
                                     cache[track][measure].state = CacheState::Error;
                                     // エラー時は古いサンプルを保持しない（ステールデータの排除）
                                     cache[track][measure].samples = None;
+                                    cache[track][measure].rendered_measure_samples = None;
                                     cache[track][measure].rendered_mml_hash = None;
                                     should_complete_batch = true;
                                 }

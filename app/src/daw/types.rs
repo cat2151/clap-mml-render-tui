@@ -19,13 +19,23 @@ pub enum CacheState {
 /// 低 BPM では 1 小節が非常に長くなり得るため（BPM=1, 4/4, 44100 Hz → ~21M サンプル ≈ 85 MB/cell）、
 /// キャッシュワーカーはサイズが [`MAX_CACHED_SAMPLES`] を超えるセルのサンプルを保持しない
 /// （その場合 `state` は `Ready` だが `samples` は `None` のまま残り、再生時にフォールバックレンダリングされる）。
+/// また、再 render 中の継続再生のため、`Pending` / `Rendering` でも直前世代の `samples` と
+/// `rendered_measure_samples` を保持している場合がある。
 ///
 /// [`MAX_CACHED_SAMPLES`]: super::MAX_CACHED_SAMPLES
 #[derive(Clone)]
 pub struct CellCache {
     pub(super) state: CacheState,
-    /// レンダリング済みのステレオサンプル（Ready かつサイズ上限以内のときのみ Some）
+    /// レンダリング済みのステレオサンプル。
+    ///
+    /// 通常は `Ready` かつサイズ上限以内のときに `Some` だが、再 render 中の playback fallback 用に
+    /// `Pending` / `Rendering` でも直前世代の `Some` を保持しうる。
     pub(super) samples: Option<Arc<Vec<f32>>>,
+    /// `samples` が対応している「1 小節ぶん」のサンプル数。
+    ///
+    /// サンプル末尾の余韻により `samples.len()` はこの値より長いことがあるため、
+    /// playback 側では `samples.len()` ではなくこの値で互換性を判定する。
+    pub(super) rendered_measure_samples: Option<usize>,
     /// 現在セルに対して有効なレンダリング世代。
     pub(super) generation: u64,
     /// 現在 Ready な WAV を生成したレンダリング MML のハッシュ。
@@ -37,18 +47,22 @@ impl CellCache {
         Self {
             state: CacheState::Empty,
             samples: None,
+            rendered_measure_samples: None,
             generation: 0,
             rendered_mml_hash: None,
         }
     }
 
+    /// セルを Pending に戻す。
+    ///
+    /// 再 render 中でも演奏を止めないため、旧世代の `samples` / `rendered_measure_samples` はここでは消さない。
+    /// 新しい render が完了して `Ready` になるまで、playback fallback 用のステールキャッシュとして扱う。
     pub(super) fn set_pending(&mut self) {
         self.generation = self.generation.wrapping_add(1);
         if self.generation == 0 {
             self.generation = 1;
         }
         self.state = CacheState::Pending;
-        self.samples = None;
         self.rendered_mml_hash = None;
     }
 }

@@ -54,6 +54,7 @@ fn complete_track_rerender_batch_logs_only_after_last_measure_finishes() {
             CacheJob {
                 track: 1,
                 measure: 2,
+                measure_samples: 4,
                 generation: 1,
                 rendered_mml_hash: 2,
                 mml: "d".to_string(),
@@ -130,6 +131,7 @@ fn complete_track_rerender_batch_skips_stale_pending_job_and_reserves_next_measu
                 CacheJob {
                     track: 1,
                     measure: 2,
+                    measure_samples: 4,
                     generation: 1,
                     rendered_mml_hash: 2,
                     mml: "d".to_string(),
@@ -140,6 +142,7 @@ fn complete_track_rerender_batch_skips_stale_pending_job_and_reserves_next_measu
                 CacheJob {
                     track: 1,
                     measure: 3,
+                    measure_samples: 4,
                     generation: 1,
                     rendered_mml_hash: 3,
                     mml: "e".to_string(),
@@ -217,6 +220,7 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
                 CellCache {
                     state: CacheState::Empty,
                     samples: None,
+                    rendered_measure_samples: None,
                     generation: 0,
                     rendered_mml_hash: None,
                 };

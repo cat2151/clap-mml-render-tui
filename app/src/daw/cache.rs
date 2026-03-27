@@ -65,9 +65,11 @@ impl DawApp {
         let mml = self.build_cell_mml(track, measure);
         let rendered_mml_hash = daw_cache_mml_hash(&mml);
         let generation = self.cache.lock().unwrap()[track][measure].generation;
+        let measure_samples = self.measure_duration_samples();
         Some(super::CacheJob {
             track,
             measure,
+            measure_samples,
             generation,
             rendered_mml_hash,
             mml,
@@ -85,7 +87,6 @@ impl DawApp {
     ) {
         let mut cache = cache.lock().unwrap();
         cache[track][measure].state = CacheState::Rendering;
-        cache[track][measure].samples = None;
         cache[track][measure].rendered_mml_hash = None;
     }
 
@@ -199,20 +200,25 @@ impl DawApp {
                             match super::wav_io::load_wav_samples(&path) {
                                 Ok(samples) => {
                                     cache[t][m].samples = Some(std::sync::Arc::new(samples));
+                                    cache[t][m].rendered_measure_samples =
+                                        Some(self.measure_duration_samples());
                                 }
                                 Err(_) => {
                                     cache[t][m].state = CacheState::Pending;
                                     cache[t][m].samples = None;
+                                    cache[t][m].rendered_measure_samples = None;
                                     cache[t][m].rendered_mml_hash = None;
                                 }
                             }
                         } else {
                             cache[t][m].samples = None;
+                            cache[t][m].rendered_measure_samples = None;
                         }
                     }
                     Ok(_) | Err(_) => {
                         cache[t][m].state = CacheState::Pending;
                         cache[t][m].samples = None;
+                        cache[t][m].rendered_measure_samples = None;
                         cache[t][m].rendered_mml_hash = None;
                     }
                 }
