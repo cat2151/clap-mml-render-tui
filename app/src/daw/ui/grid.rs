@@ -1,6 +1,6 @@
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
     Frame,
@@ -9,6 +9,7 @@ use ratatui::{
 use super::{
     super::{CacheState, DawApp, DawMode},
     cache_indicator, cache_indicator_color, cache_text_color, ANIM_FRAME_COUNT, ANIM_FRAME_MS,
+    MONOKAI_BG, MONOKAI_CYAN, MONOKAI_GRAY,
 };
 
 pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
@@ -35,7 +36,7 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
         };
         header_spans.push(Span::styled(
             format!("{:<5}", label),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(MONOKAI_GRAY),
         ));
     }
     if area.height > 0 {
@@ -78,10 +79,10 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
             track_label,
             if is_cursor_track {
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(MONOKAI_CYAN)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(MONOKAI_GRAY)
             },
         )];
 
@@ -107,9 +108,9 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
             };
 
             let (fg, bg) = if is_cursor {
-                (Color::Black, Color::Cyan)
+                (MONOKAI_BG, MONOKAI_CYAN)
             } else {
-                (cache_text_color(cs), Color::Reset)
+                (cache_text_color(cs), MONOKAI_BG)
             };
 
             row1.push(Span::styled(
@@ -121,7 +122,7 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
             if show_indicators {
                 let indicator = cache_indicator(cs, anim_frame);
                 let ind_fg = if is_cursor {
-                    Color::Cyan
+                    MONOKAI_CYAN
                 } else {
                     cache_indicator_color(cs)
                 };
