@@ -246,6 +246,7 @@ fn build_playback_measure_samples_prefers_cache_hit() {
     cache.lock().unwrap()[1][1] = CellCache {
         state: CacheState::Ready,
         samples: Some(Arc::new(vec![0.25, -0.25, 0.5, -0.5])),
+        rendered_measure_samples: Some(4),
         generation: 0,
         rendered_mml_hash: None,
     };
@@ -275,6 +276,7 @@ fn build_playback_measure_samples_uses_stale_cache_while_measure_is_pending() {
     cache.lock().unwrap()[1][1] = CellCache {
         state: CacheState::Pending,
         samples: Some(Arc::new(vec![0.25, -0.25, 0.5, -0.5])),
+        rendered_measure_samples: Some(4),
         generation: 1,
         rendered_mml_hash: None,
     };
@@ -322,6 +324,36 @@ fn build_playback_measure_samples_renders_and_normalizes_length() {
 }
 
 #[test]
+fn build_playback_measure_samples_rerenders_when_stale_cache_measure_length_differs() {
+    let log_lines = Arc::new(Mutex::new(VecDeque::new()));
+    let cache = Arc::new(Mutex::new(vec![vec![CellCache::empty(); 3]; 3]));
+    cache.lock().unwrap()[1][1] = CellCache {
+        state: CacheState::Pending,
+        samples: Some(Arc::new(vec![0.25, -0.25, 0.5, -0.5, 0.75, -0.75])),
+        rendered_measure_samples: Some(6),
+        generation: 1,
+        rendered_mml_hash: None,
+    };
+
+    let samples = build_playback_measure_samples(
+        &cache,
+        0,
+        "c",
+        4,
+        3,
+        &log_lines,
+        || -> Result<Vec<f32>, ()> { Ok(vec![1.0, 2.0, 3.0, 4.0]) },
+    )
+    .unwrap();
+
+    assert_eq!(samples.samples, vec![1.0, 2.0, 3.0, 4.0]);
+    assert_eq!(
+        log_lines.lock().unwrap().back().map(String::as_str),
+        Some("meas1: render")
+    );
+}
+
+#[test]
 fn build_playback_measure_samples_preserves_rendered_tail() {
     let log_lines = Arc::new(Mutex::new(VecDeque::new()));
     let cache = Arc::new(Mutex::new(vec![vec![CellCache::empty(); 3]; 3]));
@@ -359,6 +391,7 @@ fn try_get_cached_samples_preserves_cached_tail_beyond_measure_length() {
     cache.lock().unwrap()[1][1] = CellCache {
         state: CacheState::Ready,
         samples: Some(Arc::new(vec![0.25, -0.25, 0.5, -0.5, 0.75, -0.75])),
+        rendered_measure_samples: Some(4),
         generation: 0,
         rendered_mml_hash: None,
     };
@@ -375,6 +408,7 @@ fn try_get_cached_samples_uses_stale_samples_while_rendering() {
     cache.lock().unwrap()[1][1] = CellCache {
         state: CacheState::Rendering,
         samples: Some(Arc::new(vec![0.25, -0.25, 0.5, -0.5])),
+        rendered_measure_samples: Some(4),
         generation: 1,
         rendered_mml_hash: None,
     };
@@ -386,12 +420,27 @@ fn try_get_cached_samples_uses_stale_samples_while_rendering() {
 }
 
 #[test]
+fn try_get_cached_samples_rejects_stale_samples_when_measure_length_differs() {
+    let cache = Arc::new(Mutex::new(vec![vec![CellCache::empty(); 3]; 3]));
+    cache.lock().unwrap()[1][1] = CellCache {
+        state: CacheState::Rendering,
+        samples: Some(Arc::new(vec![0.25, -0.25, 0.5, -0.5, 0.75, -0.75])),
+        rendered_measure_samples: Some(6),
+        generation: 1,
+        rendered_mml_hash: None,
+    };
+
+    assert!(try_get_cached_samples(&cache, 1, 4, 3).is_none());
+}
+
+#[test]
 fn mark_cache_rendering_in_preserves_previous_samples_for_playback_fallback() {
     let cache = Arc::new(Mutex::new(vec![vec![CellCache::empty(); 3]; 3]));
     let previous_samples = Arc::new(vec![0.25, -0.25, 0.5, -0.5]);
     cache.lock().unwrap()[1][1] = CellCache {
         state: CacheState::Ready,
         samples: Some(Arc::clone(&previous_samples)),
+        rendered_measure_samples: Some(4),
         generation: 7,
         rendered_mml_hash: Some(42),
     };
@@ -404,6 +453,7 @@ fn mark_cache_rendering_in_preserves_previous_samples_for_playback_fallback() {
         cache[1][1].samples.as_ref().map(|samples| samples.as_ref()),
         Some(previous_samples.as_ref())
     );
+    assert_eq!(cache[1][1].rendered_measure_samples, Some(4));
     assert_eq!(cache[1][1].rendered_mml_hash, None);
 }
 

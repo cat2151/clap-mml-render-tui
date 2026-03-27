@@ -56,8 +56,12 @@ pub(in crate::daw) fn try_get_cached_samples(
                 }
                 CacheState::Ready | CacheState::Pending | CacheState::Rendering => {
                     // samples が None の場合（サイズ上限超過や初回未完成等）はフォールバック
-                    let arc = cache[t][measure].samples.clone();
+                    let cell = &cache[t][measure];
+                    let arc = cell.samples.clone();
                     arc.as_ref()?;
+                    if cell.rendered_measure_samples != Some(measure_samples) {
+                        return None;
+                    }
                     result.push((t, arc));
                 }
                 CacheState::Error => {
