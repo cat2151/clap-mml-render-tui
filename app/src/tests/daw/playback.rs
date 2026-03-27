@@ -286,7 +286,7 @@ fn build_playback_measure_samples_uses_stale_cache_while_measure_is_pending() {
         4,
         3,
         &log_lines,
-        || -> Result<Vec<f32>, ()> { panic!("stale cache should be reused while rerendering") },
+        || -> Result<Vec<f32>, ()> { panic!("stale cache should be reused while re-rendering") },
     )
     .unwrap();
 
