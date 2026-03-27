@@ -161,7 +161,7 @@ pub fn run_foreground_update() -> Result<()> {
         spawn_updater_process().map_err(|e| {
             anyhow::anyhow!("バッチファイルアップデーターの起動に失敗しました: {}", e)
         })?;
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(target_os = "windows"))]
