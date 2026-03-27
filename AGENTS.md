@@ -16,3 +16,7 @@ The setup script installs the Linux packages needed for this workspace's `rodio`
 
 # プルリクエスト
 - プルリクエストは日本語で書くこと
+
+# formatとlinter
+- cargoのformatとlinterを使うこと
+
