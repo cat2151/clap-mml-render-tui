@@ -198,7 +198,6 @@ impl DawApp {
                             skipped_stale_job = true;
                         } else {
                             cell.state = CacheState::Rendering;
-                            cell.samples = None;
                             cell.rendered_mml_hash = None;
                         }
                     }

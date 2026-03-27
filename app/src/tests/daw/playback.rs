@@ -269,6 +269,35 @@ fn build_playback_measure_samples_prefers_cache_hit() {
 }
 
 #[test]
+fn build_playback_measure_samples_uses_stale_cache_while_measure_is_pending() {
+    let log_lines = Arc::new(Mutex::new(VecDeque::new()));
+    let cache = Arc::new(Mutex::new(vec![vec![CellCache::empty(); 3]; 3]));
+    cache.lock().unwrap()[1][1] = CellCache {
+        state: CacheState::Pending,
+        samples: Some(Arc::new(vec![0.25, -0.25, 0.5, -0.5])),
+        generation: 1,
+        rendered_mml_hash: None,
+    };
+
+    let samples = build_playback_measure_samples(
+        &cache,
+        0,
+        "c",
+        4,
+        3,
+        &log_lines,
+        || -> Result<Vec<f32>, ()> { panic!("stale cache should be reused while rerendering") },
+    )
+    .unwrap();
+
+    assert_eq!(samples.samples, vec![0.25, -0.25, 0.5, -0.5]);
+    assert_eq!(
+        log_lines.lock().unwrap().back().map(String::as_str),
+        Some("meas1: cache hit track1/meas1")
+    );
+}
+
+#[test]
 fn build_playback_measure_samples_renders_and_normalizes_length() {
     let log_lines = Arc::new(Mutex::new(VecDeque::new()));
     let cache = Arc::new(Mutex::new(vec![vec![CellCache::empty(); 3]; 3]));
@@ -338,6 +367,44 @@ fn try_get_cached_samples_preserves_cached_tail_beyond_measure_length() {
 
     assert_eq!(samples.samples, vec![0.25, -0.25, 0.5, -0.5, 0.75, -0.75]);
     assert_eq!(samples.cached_tracks, vec![1]);
+}
+
+#[test]
+fn try_get_cached_samples_uses_stale_samples_while_rendering() {
+    let cache = Arc::new(Mutex::new(vec![vec![CellCache::empty(); 3]; 3]));
+    cache.lock().unwrap()[1][1] = CellCache {
+        state: CacheState::Rendering,
+        samples: Some(Arc::new(vec![0.25, -0.25, 0.5, -0.5])),
+        generation: 1,
+        rendered_mml_hash: None,
+    };
+
+    let samples = try_get_cached_samples(&cache, 1, 4, 3).unwrap();
+
+    assert_eq!(samples.samples, vec![0.25, -0.25, 0.5, -0.5]);
+    assert_eq!(samples.cached_tracks, vec![1]);
+}
+
+#[test]
+fn mark_cache_rendering_in_preserves_previous_samples_for_playback_fallback() {
+    let cache = Arc::new(Mutex::new(vec![vec![CellCache::empty(); 3]; 3]));
+    let previous_samples = Arc::new(vec![0.25, -0.25, 0.5, -0.5]);
+    cache.lock().unwrap()[1][1] = CellCache {
+        state: CacheState::Ready,
+        samples: Some(Arc::clone(&previous_samples)),
+        generation: 7,
+        rendered_mml_hash: Some(42),
+    };
+
+    DawApp::mark_cache_rendering_in(&cache, 1, 1);
+
+    let cache = cache.lock().unwrap();
+    assert!(matches!(cache[1][1].state, CacheState::Rendering));
+    assert_eq!(
+        cache[1][1].samples.as_ref().map(|samples| samples.as_ref()),
+        Some(previous_samples.as_ref())
+    );
+    assert_eq!(cache[1][1].rendered_mml_hash, None);
 }
 
 #[test]

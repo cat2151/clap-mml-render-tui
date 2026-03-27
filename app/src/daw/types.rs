@@ -48,7 +48,6 @@ impl CellCache {
             self.generation = 1;
         }
         self.state = CacheState::Pending;
-        self.samples = None;
         self.rendered_mml_hash = None;
     }
 }

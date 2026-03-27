@@ -85,7 +85,6 @@ impl DawApp {
     ) {
         let mut cache = cache.lock().unwrap();
         cache[track][measure].state = CacheState::Rendering;
-        cache[track][measure].samples = None;
         cache[track][measure].rendered_mml_hash = None;
     }
 
