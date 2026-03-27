@@ -4,7 +4,10 @@ use std::{
 };
 
 use super::wav_io::load_wav_samples;
-use super::{batch_logging::TrackRerenderBatch, CacheJob, DawApp};
+use super::{
+    batch_logging::{TrackRerenderBatch, TrackRerenderBatchCompletionContext},
+    CacheJob, DawApp,
+};
 
 #[test]
 fn load_wav_samples_reads_back_float_wav_cache() {
@@ -43,6 +46,14 @@ fn complete_track_rerender_batch_logs_only_after_last_measure_finishes() {
     let play_measure_mmls = Arc::new(Mutex::new(vec!["c".to_string(), "d".to_string()]));
     let (cache_tx, cache_rx) = std::sync::mpsc::channel();
     let cache = Arc::new(Mutex::new(vec![vec![super::CellCache::empty(); 3]; 2]));
+    let completion_ctx = TrackRerenderBatchCompletionContext {
+        batches: Arc::clone(&batches),
+        log_lines: Arc::clone(&log_lines),
+        cache: Arc::clone(&cache),
+        play_position: Arc::clone(&play_position),
+        play_measure_mmls: Arc::clone(&play_measure_mmls),
+        cache_tx,
+    };
     {
         let mut cache_guard = cache.lock().unwrap();
         cache_guard[1][2].state = super::CacheState::Pending;
@@ -64,16 +75,7 @@ fn complete_track_rerender_batch_logs_only_after_last_measure_finishes() {
         completion_log: "cache: rerender done track1 meas 1〜2 (random patch update)".to_string(),
     });
 
-    DawApp::complete_track_rerender_batch_measure(
-        &batches,
-        &log_lines,
-        &cache,
-        &play_position,
-        &play_measure_mmls,
-        &cache_tx,
-        1,
-        1,
-    );
+    DawApp::complete_track_rerender_batch_measure(&completion_ctx, 1, 1);
     assert!(
         log_lines
             .lock()
@@ -84,16 +86,7 @@ fn complete_track_rerender_batch_logs_only_after_last_measure_finishes() {
     );
     assert_eq!(cache_rx.try_recv().unwrap().measure, 2);
 
-    DawApp::complete_track_rerender_batch_measure(
-        &batches,
-        &log_lines,
-        &cache,
-        &play_position,
-        &play_measure_mmls,
-        &cache_tx,
-        1,
-        2,
-    );
+    DawApp::complete_track_rerender_batch_measure(&completion_ctx, 1, 2);
 
     assert_eq!(
         log_lines.lock().unwrap().back().map(String::as_str),
@@ -117,6 +110,14 @@ fn complete_track_rerender_batch_skips_stale_pending_job_and_reserves_next_measu
     ]));
     let (cache_tx, cache_rx) = std::sync::mpsc::channel();
     let cache = Arc::new(Mutex::new(vec![vec![super::CellCache::empty(); 4]; 2]));
+    let completion_ctx = TrackRerenderBatchCompletionContext {
+        batches: Arc::clone(&batches),
+        log_lines: Arc::clone(&log_lines),
+        cache: Arc::clone(&cache),
+        play_position: Arc::clone(&play_position),
+        play_measure_mmls: Arc::clone(&play_measure_mmls),
+        cache_tx,
+    };
     {
         let mut cache_guard = cache.lock().unwrap();
         cache_guard[1][2].state = super::CacheState::Pending;
@@ -153,16 +154,7 @@ fn complete_track_rerender_batch_skips_stale_pending_job_and_reserves_next_measu
         completion_log: "cache: rerender done track1 meas 1〜3 (random patch update)".to_string(),
     });
 
-    DawApp::complete_track_rerender_batch_measure(
-        &batches,
-        &log_lines,
-        &cache,
-        &play_position,
-        &play_measure_mmls,
-        &cache_tx,
-        1,
-        1,
-    );
+    DawApp::complete_track_rerender_batch_measure(&completion_ctx, 1, 1);
 
     let next_job = cache_rx
         .try_recv()

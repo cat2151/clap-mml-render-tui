@@ -114,7 +114,7 @@ impl DawApp {
             KeyCode::Char('K') | KeyCode::Char('?') => self.mode = DawMode::Help,
 
             KeyCode::Char('p') => {
-                let state = self.play_state.lock().unwrap().clone();
+                let state = *self.play_state.lock().unwrap();
                 if state == DawPlayState::Playing || state == DawPlayState::Preview {
                     self.stop_play();
                 } else {

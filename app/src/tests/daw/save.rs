@@ -135,10 +135,10 @@ fn daw_save_json_out_of_range_indices_are_ignored_on_load() {
     let mut data = empty_data(TRACKS, MEASURES);
     apply_save_file_to_data(&file, &mut data, TRACKS, MEASURES);
     // data は変更されていないこと
-    for t in 0..TRACKS {
-        for m in 0..=MEASURES {
+    for (t, row) in data.iter().enumerate().take(TRACKS) {
+        for (m, cell) in row.iter().enumerate().take(MEASURES + 1) {
             assert!(
-                data[t][m].is_empty(),
+                cell.is_empty(),
                 "範囲外インデックスが data を変更した: t={t}, m={m}"
             );
         }

@@ -35,10 +35,10 @@ pub(super) fn data_to_save_file(
     measures: usize,
 ) -> DawSaveFile {
     let mut save_tracks: Vec<DawSaveTrack> = Vec::new();
-    for t in 0..tracks {
+    for (t, row) in data.iter().enumerate().take(tracks) {
         let mut save_meas: Vec<DawSaveMeas> = Vec::new();
-        for m in 0..=measures {
-            if !data[t][m].trim().is_empty() {
+        for (m, cell) in row.iter().enumerate().take(measures + 1) {
+            if !cell.trim().is_empty() {
                 let description = if m == 0 {
                     Some("initial".to_string())
                 } else {
@@ -47,7 +47,7 @@ pub(super) fn data_to_save_file(
                 save_meas.push(DawSaveMeas {
                     meas: m,
                     description,
-                    mml: data[t][m].clone(),
+                    mml: cell.clone(),
                 });
             }
         }
@@ -72,7 +72,7 @@ pub(super) fn data_to_save_file(
 /// `DawSaveFile` を data グリッドに書き込む（範囲外インデックスは無視）。
 pub(super) fn apply_save_file_to_data(
     file: &DawSaveFile,
-    data: &mut Vec<Vec<String>>,
+    data: &mut [Vec<String>],
     tracks: usize,
     measures: usize,
 ) {

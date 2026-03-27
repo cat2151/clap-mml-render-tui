@@ -51,7 +51,7 @@ use crate::config::Config;
 
 // ─── 再エクスポート ───────────────────────────────────────────
 
-use batch_logging::TrackRerenderBatch;
+use batch_logging::{TrackRerenderBatch, TrackRerenderBatchCompletionContext};
 pub use types::DawExitReason;
 pub(super) use types::{
     CacheState, CellCache, DawMode, DawNormalAction, DawPlayState, PlayPosition,
@@ -187,6 +187,14 @@ impl DawApp {
                 // SAFETY: entry は main() のスタックに生存している
                 let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
                 let daw_cfg = (*cfg_worker).clone();
+                let rerender_completion_ctx = TrackRerenderBatchCompletionContext {
+                    batches: Arc::clone(&track_rerender_batches_worker),
+                    log_lines: Arc::clone(&log_lines_worker),
+                    cache: Arc::clone(&cache_worker),
+                    play_position: Arc::clone(&play_position_worker),
+                    play_measure_mmls: Arc::clone(&play_measure_mmls_worker),
+                    cache_tx: cache_tx_worker.clone(),
+                };
 
                 for job in cache_rx {
                     let track = job.track;
@@ -204,12 +212,7 @@ impl DawApp {
                     }
                     if skipped_stale_job {
                         Self::complete_track_rerender_batch_measure(
-                            &track_rerender_batches_worker,
-                            &log_lines_worker,
-                            &cache_worker,
-                            &play_position_worker,
-                            &play_measure_mmls_worker,
-                            &cache_tx_worker,
+                            &rerender_completion_ctx,
                             track,
                             measure,
                         );
@@ -272,12 +275,7 @@ impl DawApp {
                             }
                             if skipped_stale_job || should_complete_batch {
                                 Self::complete_track_rerender_batch_measure(
-                                    &track_rerender_batches_worker,
-                                    &log_lines_worker,
-                                    &cache_worker,
-                                    &play_position_worker,
-                                    &play_measure_mmls_worker,
-                                    &cache_tx_worker,
+                                    &rerender_completion_ctx,
                                     track,
                                     measure,
                                 );
@@ -300,12 +298,7 @@ impl DawApp {
                             }
                             if skipped_stale_job || should_complete_batch {
                                 Self::complete_track_rerender_batch_measure(
-                                    &track_rerender_batches_worker,
-                                    &log_lines_worker,
-                                    &cache_worker,
-                                    &play_position_worker,
-                                    &play_measure_mmls_worker,
-                                    &cache_tx_worker,
+                                    &rerender_completion_ctx,
                                     track,
                                     measure,
                                 );
