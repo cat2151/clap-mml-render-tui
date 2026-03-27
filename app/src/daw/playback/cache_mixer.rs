@@ -7,6 +7,8 @@ use crate::daw::{CacheState, CellCache, FIRST_PLAYABLE_TRACK};
 
 use super::measure_mixer::{PlaybackMeasureAudio, PlaybackMeasureSource};
 
+type TrackCachedSamples = Vec<(usize, Option<Arc<Vec<f32>>>)>;
+
 /// キャッシュ参照結果として、再生に使う合算済みサンプルとヒットした track 一覧を保持する。
 #[derive(Clone)]
 pub(in crate::daw) struct CachedMeasureSamples {
@@ -46,7 +48,7 @@ pub(in crate::daw) fn try_get_cached_samples(
 ) -> Option<CachedMeasureSamples> {
     // ロック下では Arc ハンドルの収集のみ行い、ミックス処理はロック外で実施する。
     // これによりキャッシュワーカーや UI スレッドとのロック競合を最小化する。
-    let track_samples: Option<Vec<(usize, Option<Arc<Vec<f32>>>)>> = {
+    let track_samples: Option<TrackCachedSamples> = {
         let cache = cache.lock().unwrap();
         let mut result = Vec::with_capacity(tracks - FIRST_PLAYABLE_TRACK);
         for t in FIRST_PLAYABLE_TRACK..tracks {

@@ -61,7 +61,13 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
     };
 
     // track 行（2 行ずつ）
-    for t in 0..app.tracks {
+    for (t, (data_row, cache_row)) in app
+        .data
+        .iter()
+        .zip(cache_states.iter())
+        .enumerate()
+        .take(app.tracks)
+    {
         let row_y = area.y + 1 + (t as u16) * 2;
         if row_y + 1 >= area.y + area.height {
             break;
@@ -94,10 +100,13 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
             vec![]
         };
 
-        for m in 0..=app.measures {
+        for (m, (mml, cs)) in data_row
+            .iter()
+            .zip(cache_row.iter())
+            .enumerate()
+            .take(app.measures + 1)
+        {
             let is_cursor = is_cursor_track && m == app.cursor_measure;
-            let mml = &app.data[t][m];
-            let cs = &cache_states[t][m];
 
             // セル表示 (4 chars)
             let display: String = if mml.is_empty() {

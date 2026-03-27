@@ -12,6 +12,15 @@ pub(super) struct TrackRerenderBatch {
     pub(super) completion_log: String,
 }
 
+pub(super) struct TrackRerenderBatchCompletionContext {
+    pub(super) batches: Arc<Mutex<Vec<Option<TrackRerenderBatch>>>>,
+    pub(super) log_lines: Arc<Mutex<VecDeque<String>>>,
+    pub(super) cache: Arc<Mutex<Vec<Vec<super::CellCache>>>>,
+    pub(super) play_position: Arc<Mutex<Option<PlayPosition>>>,
+    pub(super) play_measure_mmls: Arc<Mutex<Vec<String>>>,
+    pub(super) cache_tx: std::sync::mpsc::Sender<CacheJob>,
+}
+
 fn format_measure_order(measures: &[usize]) -> String {
     measures
         .iter()
@@ -145,22 +154,17 @@ impl DawApp {
     }
 
     pub(super) fn complete_track_rerender_batch_measure(
-        batches: &Arc<Mutex<Vec<Option<TrackRerenderBatch>>>>,
-        log_lines: &Arc<Mutex<VecDeque<String>>>,
-        cache: &Arc<Mutex<Vec<Vec<super::CellCache>>>>,
-        play_position: &Arc<Mutex<Option<PlayPosition>>>,
-        play_measure_mmls: &Arc<Mutex<Vec<String>>>,
-        cache_tx: &std::sync::mpsc::Sender<CacheJob>,
+        ctx: &TrackRerenderBatchCompletionContext,
         track: usize,
         measure: usize,
     ) {
         if track == 0 || measure == 0 {
             return;
         }
-        let play_position = play_position.lock().unwrap().clone();
-        let play_measure_mmls = play_measure_mmls.lock().unwrap().clone();
+        let play_position = ctx.play_position.lock().unwrap().clone();
+        let play_measure_mmls = ctx.play_measure_mmls.lock().unwrap().clone();
         let (next_job, queued_log, completion_log) = {
-            let mut batches = batches.lock().unwrap();
+            let mut batches = ctx.batches.lock().unwrap();
             let Some(batch) = batches.get_mut(track).and_then(Option::as_mut) else {
                 return;
             };
@@ -176,7 +180,7 @@ impl DawApp {
                 if let Some((next_measure, next_job, priority_order_label)) = take_next_batch_job(
                     &mut batch.pending,
                     track,
-                    cache,
+                    &ctx.cache,
                     play_position,
                     &play_measure_mmls,
                 ) {
@@ -197,14 +201,14 @@ impl DawApp {
             }
         };
         if let Some(queued_log) = queued_log {
-            crate::logging::append_log_line(log_lines, queued_log);
+            crate::logging::append_log_line(&ctx.log_lines, queued_log);
         }
         if let Some(next_job) = next_job {
-            Self::mark_cache_rendering_in(cache, next_job.track, next_job.measure);
-            let _ = cache_tx.send(next_job);
+            Self::mark_cache_rendering_in(&ctx.cache, next_job.track, next_job.measure);
+            let _ = ctx.cache_tx.send(next_job);
         }
         if let Some(completion_log) = completion_log {
-            crate::logging::append_log_line(log_lines, completion_log);
+            crate::logging::append_log_line(&ctx.log_lines, completion_log);
         }
     }
 }

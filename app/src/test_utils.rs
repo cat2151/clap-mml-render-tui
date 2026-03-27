@@ -47,10 +47,10 @@ pub(crate) fn set_data_local_dir_envs(base: &Path) -> TestEnvGuard {
         let home = base.join("home");
         std::fs::create_dir_all(&xdg_data_home).ok();
         std::fs::create_dir_all(&home).ok();
-        return TestEnvGuard {
+        TestEnvGuard {
             _lock: lock,
             vars: set_env_vars([("XDG_DATA_HOME", &xdg_data_home), ("HOME", &home)]),
-        };
+        }
     }
     #[cfg(windows)]
     {
@@ -60,19 +60,19 @@ pub(crate) fn set_data_local_dir_envs(base: &Path) -> TestEnvGuard {
         std::fs::create_dir_all(&local_app_data).ok();
         std::fs::create_dir_all(&app_data).ok();
         std::fs::create_dir_all(&user_profile).ok();
-        return TestEnvGuard {
+        TestEnvGuard {
             _lock: lock,
             vars: set_env_vars([
                 ("LOCALAPPDATA", &local_app_data),
                 ("APPDATA", &app_data),
                 ("USERPROFILE", &user_profile),
             ]),
-        };
+        }
     }
     #[cfg(not(any(unix, windows)))]
     {
         let vars = Vec::new();
-        return TestEnvGuard { _lock: lock, vars };
+        TestEnvGuard { _lock: lock, vars }
     }
 }
 
