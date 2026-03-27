@@ -207,11 +207,23 @@ fn draw_places_playback_status_and_loop_summary_above_footer() {
     let info_row = lines.len() - 3;
     let footer_row = lines.len() - 2;
 
-    assert!(lines[play_row].contains("▶ meas2, beat"), "lines: {:?}", lines);
+    assert!(
+        lines[play_row].contains("▶ meas2, beat"),
+        "lines: {:?}",
+        lines
+    );
     assert!(lines[play_row].contains("loop:"), "lines: {:?}", lines);
     assert!(lines[play_row].contains("meas1"), "lines: {:?}", lines);
-    assert!(lines[info_row].contains("loop meas :"), "lines: {:?}", lines);
-    assert!(lines[info_row].contains("empty meas :"), "lines: {:?}", lines);
+    assert!(
+        lines[info_row].contains("loop meas :"),
+        "lines: {:?}",
+        lines
+    );
+    assert!(
+        lines[info_row].contains("empty meas :"),
+        "lines: {:?}",
+        lines
+    );
     assert!(lines[footer_row].contains("DAW"), "lines: {:?}", lines);
     assert!(!lines[footer_row].contains("▶"), "lines: {:?}", lines);
 }
@@ -227,7 +239,11 @@ fn draw_keeps_footer_on_last_row_when_idle() {
     let footer_row = lines.len() - 2;
 
     assert!(!lines[play_row].contains('▶'), "lines: {:?}", lines);
-    assert!(!lines[info_row].contains("loop meas :"), "lines: {:?}", lines);
+    assert!(
+        !lines[info_row].contains("loop meas :"),
+        "lines: {:?}",
+        lines
+    );
     assert!(lines[footer_row].contains("DAW"), "lines: {:?}", lines);
 }
 
