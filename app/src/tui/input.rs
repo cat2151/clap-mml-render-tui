@@ -24,6 +24,7 @@ impl<'a> TuiApp<'a> {
         let replaced = current
             .split(';')
             .map(|part| {
+                let part = part.trim_start();
                 let preprocessed = mml_preprocessor::extract_embedded_json(part);
                 let remaining = preprocessed.remaining_mml.trim();
                 if remaining.is_empty() {
