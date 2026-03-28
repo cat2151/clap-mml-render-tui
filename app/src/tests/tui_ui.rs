@@ -59,6 +59,31 @@ fn patch_phrase_screen_renders_history_and_favorites_lists() {
 }
 
 #[test]
+fn patch_select_screen_renders_as_overlay_on_normal_screen() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} abc"#.to_string()];
+    app.patch_all = vec![
+        ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
+        (
+            "Leads/Lead 1.fxp".to_string(),
+            "leads/lead 1.fxp".to_string(),
+        ),
+    ];
+    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()];
+    app.patch_list_state.select(Some(0));
+    app.mode = Mode::PatchSelect;
+
+    let lines = render_lines(&mut app, 80, 16).join("\n");
+    let normalized = lines.replace(' ', "");
+
+    assert!(lines.contains("▶ {\"Surge XT patch\":\"Pads/Pad 1.fxp\"} abc"));
+    assert!(normalized.contains("音色選択-検索"));
+    assert!(normalized.contains("パッチ(2/2)"));
+    assert!(lines.contains("Pads/Pad 1.fxp"));
+    assert!(lines.contains("Leads/Lead 1.fxp"));
+}
+
+#[test]
 fn patch_phrase_screen_uses_c_as_fallback_for_empty_lists() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::PatchPhrase;
