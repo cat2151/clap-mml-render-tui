@@ -111,7 +111,7 @@ fn handle_notepad_history_enter_flushes_store() {
         std::process::id(),
         unique
     ));
-    std::fs::remove_dir_all(&tmp).ok();
+    let _ = std::fs::remove_dir_all(&tmp);
     let _env_guards = crate::test_utils::set_data_local_dir_envs(&tmp);
 
     let mut app = TuiApp::new_for_test(test_config());
@@ -123,10 +123,13 @@ fn handle_notepad_history_enter_flushes_store() {
     app.handle_notepad_history(KeyCode::Enter);
 
     let loaded = crate::history::load_patch_phrase_store();
-    assert_eq!(loaded.notepad.history.first().map(String::as_str), Some("after"));
+    assert_eq!(
+        loaded.notepad.history.first().map(String::as_str),
+        Some("after")
+    );
     assert!(!app.patch_phrase_store_dirty);
 
-    std::fs::remove_dir_all(&tmp).ok();
+    let _ = std::fs::remove_dir_all(&tmp);
 }
 
 #[test]
@@ -137,7 +140,7 @@ fn handle_notepad_history_esc_flushes_store() {
         std::process::id(),
         unique
     ));
-    std::fs::remove_dir_all(&tmp).ok();
+    let _ = std::fs::remove_dir_all(&tmp);
     let _env_guards = crate::test_utils::set_data_local_dir_envs(&tmp);
 
     let mut app = TuiApp::new_for_test(test_config());
@@ -148,10 +151,13 @@ fn handle_notepad_history_esc_flushes_store() {
     app.handle_notepad_history(KeyCode::Esc);
 
     let loaded = crate::history::load_patch_phrase_store();
-    assert_eq!(loaded.notepad.history.first().map(String::as_str), Some("after"));
+    assert_eq!(
+        loaded.notepad.history.first().map(String::as_str),
+        Some("after")
+    );
     assert!(!app.patch_phrase_store_dirty);
 
-    std::fs::remove_dir_all(&tmp).ok();
+    let _ = std::fs::remove_dir_all(&tmp);
 }
 
 #[test]
