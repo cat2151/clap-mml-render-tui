@@ -285,6 +285,73 @@ fn handle_normal_m_enters_mixer_mode_on_playable_track() {
 }
 
 #[test]
+fn handle_normal_h_and_j_preview_new_target_when_not_playing() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 2;
+    app.data[1][1] = "cdef".to_string();
+    app.data[2][1] = "gabc".to_string();
+
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert_eq!(app.cursor_measure, 1);
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Preview
+    ));
+    assert_eq!(
+        app.play_position
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|position| position.measure_index),
+        Some(0)
+    );
+
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert_eq!(app.cursor_track, 2);
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Preview
+    ));
+    assert_eq!(
+        app.log_lines.lock().unwrap().back().map(String::as_str),
+        Some("preview: meas1")
+    );
+}
+
+#[test]
+fn handle_normal_l_and_k_do_not_start_preview_while_playing() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 2;
+    app.cursor_measure = 1;
+    *app.play_state.lock().unwrap() = DawPlayState::Playing;
+
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert_eq!(app.cursor_measure, 2);
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Playing
+    ));
+    assert!(app.play_position.lock().unwrap().is_none());
+
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert_eq!(app.cursor_track, 1);
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Playing
+    ));
+    assert!(app.play_position.lock().unwrap().is_none());
+}
+
+#[test]
 fn normal_playback_shortcut_maps_enter_space_and_shift_p() {
     assert_eq!(
         normal_playback_shortcut(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),

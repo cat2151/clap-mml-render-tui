@@ -341,6 +341,33 @@ impl DawApp {
         self.start_preview_on_tracks(measure_index, &target_tracks);
     }
 
+    fn preview_current_target_if_stopped(&mut self) {
+        if *self.play_state.lock().unwrap() == DawPlayState::Playing {
+            return;
+        }
+        if self.cursor_play_measure_index().is_none() {
+            return;
+        }
+        if self.cursor_track < FIRST_PLAYABLE_TRACK || self.cursor_track >= self.tracks {
+            return;
+        }
+        #[cfg(test)]
+        if self.entry_ptr == 0 {
+            let measure_index = self.cursor_play_measure_index().unwrap_or(0);
+            if *self.play_state.lock().unwrap() == DawPlayState::Preview {
+                self.stop_play();
+            }
+            *self.play_state.lock().unwrap() = DawPlayState::Preview;
+            *self.play_position.lock().unwrap() = Some(super::PlayPosition {
+                measure_index,
+                measure_start: std::time::Instant::now(),
+            });
+            self.append_log_line(format!("preview: meas{}", measure_index + 1));
+            return;
+        }
+        self.start_preview_for_target_tracks(false);
+    }
+
     fn start_play_from_cursor_measure(&self) {
         if *self.play_state.lock().unwrap() != DawPlayState::Idle {
             return;
@@ -516,6 +543,7 @@ impl DawApp {
                 if self.cursor_measure > 0 {
                     self.cursor_measure -= 1;
                     self.update_ab_repeat_follow_end_with_cursor();
+                    self.preview_current_target_if_stopped();
                 }
             }
             KeyCode::Char('H') => {
@@ -525,16 +553,19 @@ impl DawApp {
                 if self.cursor_measure < self.measures {
                     self.cursor_measure += 1;
                     self.update_ab_repeat_follow_end_with_cursor();
+                    self.preview_current_target_if_stopped();
                 }
             }
             KeyCode::Char('j') | KeyCode::Down => {
                 if self.cursor_track + 1 < self.tracks {
                     self.cursor_track += 1;
+                    self.preview_current_target_if_stopped();
                 }
             }
             KeyCode::Char('k') | KeyCode::Up => {
                 if self.cursor_track > 0 {
                     self.cursor_track -= 1;
+                    self.preview_current_target_if_stopped();
                 }
             }
             KeyCode::Char('M') => {

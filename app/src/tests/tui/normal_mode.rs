@@ -223,10 +223,18 @@ fn handle_normal_page_down_and_page_up_move_by_visible_page() {
     app.handle_normal(KeyCode::PageDown);
     assert_eq!(app.cursor, 4);
     assert_eq!(app.list_state.selected(), Some(4));
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == "line 4"
+    ));
 
     app.handle_normal(KeyCode::PageUp);
     assert_eq!(app.cursor, 1);
     assert_eq!(app.list_state.selected(), Some(1));
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == "line 1"
+    ));
 }
 
 #[test]
@@ -244,14 +252,145 @@ fn handle_normal_p_shows_error_when_current_line_has_no_patch_json() {
 }
 
 #[test]
-fn handle_normal_p_enters_patch_phrase_for_current_patch() {
+fn handle_normal_f_enters_patch_phrase_for_current_patch() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} cde"#.to_string()];
 
-    app.handle_normal(KeyCode::Char('p'));
+    app.handle_normal(KeyCode::Char('f'));
 
     assert!(matches!(app.mode, Mode::PatchPhrase));
     assert_eq!(app.patch_phrase_name.as_deref(), Some("Pads/Pad 1.fxp"));
     assert_eq!(app.patch_phrase_history_items(), vec!["c".to_string()]);
     assert_eq!(app.patch_phrase_favorite_items(), vec!["c".to_string()]);
+}
+
+#[test]
+fn handle_normal_o_and_o_insert_blank_line_and_enter_insert_mode() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["line 0".to_string(), "line 1".to_string()];
+    app.cursor = 1;
+    app.list_state.select(Some(1));
+
+    app.handle_normal(KeyCode::Char('o'));
+
+    assert_eq!(
+        app.lines,
+        vec!["line 0".to_string(), "line 1".to_string(), String::new()]
+    );
+    assert_eq!(app.cursor, 2);
+    assert_eq!(app.list_state.selected(), Some(2));
+    assert!(matches!(app.mode, Mode::Insert));
+
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["line 0".to_string(), "line 1".to_string()];
+    app.cursor = 1;
+    app.list_state.select(Some(1));
+
+    app.handle_normal(KeyCode::Char('O'));
+
+    assert_eq!(
+        app.lines,
+        vec!["line 0".to_string(), String::new(), "line 1".to_string()]
+    );
+    assert_eq!(app.cursor, 1);
+    assert_eq!(app.list_state.selected(), Some(1));
+    assert!(matches!(app.mode, Mode::Insert));
+}
+
+#[test]
+fn handle_normal_delete_yanks_current_line_and_keeps_notepad_non_empty() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![
+        "line 0".to_string(),
+        "line 1".to_string(),
+        "line 2".to_string(),
+    ];
+    app.cursor = 1;
+    app.list_state.select(Some(1));
+
+    app.handle_normal(KeyCode::Delete);
+
+    assert_eq!(app.lines, vec!["line 0".to_string(), "line 2".to_string()]);
+    assert_eq!(app.cursor, 1);
+    assert_eq!(app.list_state.selected(), Some(1));
+    assert_eq!(app.yank_buffer.as_deref(), Some("line 1"));
+
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["only".to_string()];
+
+    app.handle_normal(KeyCode::Delete);
+
+    assert_eq!(app.lines, vec![String::new()]);
+    assert_eq!(app.cursor, 0);
+    assert_eq!(app.yank_buffer.as_deref(), Some("only"));
+}
+
+#[test]
+fn handle_normal_p_and_p_paste_yanked_line_below_or_above_cursor() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["line 0".to_string(), "line 1".to_string()];
+    app.cursor = 0;
+    app.list_state.select(Some(0));
+    app.yank_buffer = Some("yanked".to_string());
+
+    app.handle_normal(KeyCode::Char('p'));
+
+    assert_eq!(
+        app.lines,
+        vec![
+            "line 0".to_string(),
+            "yanked".to_string(),
+            "line 1".to_string()
+        ]
+    );
+    assert_eq!(app.cursor, 1);
+    assert_eq!(app.list_state.selected(), Some(1));
+
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["line 0".to_string(), "line 1".to_string()];
+    app.cursor = 1;
+    app.list_state.select(Some(1));
+    app.yank_buffer = Some("yanked".to_string());
+
+    app.handle_normal(KeyCode::Char('P'));
+
+    assert_eq!(
+        app.lines,
+        vec![
+            "line 0".to_string(),
+            "yanked".to_string(),
+            "line 1".to_string()
+        ]
+    );
+    assert_eq!(app.cursor, 1);
+    assert_eq!(app.list_state.selected(), Some(1));
+}
+
+#[test]
+fn handle_normal_h_and_l_move_to_edges_and_play_destination_line() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![
+        "line 0".to_string(),
+        "line 1".to_string(),
+        "line 2".to_string(),
+        "line 3".to_string(),
+    ];
+    app.cursor = 1;
+    app.list_state.select(Some(1));
+
+    app.handle_normal(KeyCode::Char('L'));
+
+    assert_eq!(app.cursor, 3);
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == "line 3"
+    ));
+
+    app.handle_normal(KeyCode::Char('H'));
+
+    assert_eq!(app.cursor, 0);
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == "line 0"
+    ));
 }

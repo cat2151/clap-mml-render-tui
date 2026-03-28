@@ -13,13 +13,18 @@ use super::{
 const PATCH_SELECT_PREVIEW_FALLBACK_PHRASE: &str = "c";
 
 impl<'a> TuiApp<'a> {
-    fn move_normal_cursor_by(&mut self, delta: isize) {
-        let max_cursor = self.lines.len().saturating_sub(1) as isize;
-        let next_cursor = (self.cursor as isize + delta).clamp(0, max_cursor) as usize;
+    fn set_normal_cursor(&mut self, next_cursor: usize) {
         if next_cursor != self.cursor {
             self.cursor = next_cursor;
             self.list_state.select(Some(self.cursor));
+            self.play_current_line();
         }
+    }
+
+    fn move_normal_cursor_by(&mut self, delta: isize) {
+        let max_cursor = self.lines.len().saturating_sub(1) as isize;
+        let next_cursor = (self.cursor as isize + delta).clamp(0, max_cursor) as usize;
+        self.set_normal_cursor(next_cursor);
     }
 
     fn move_patch_cursor_by(&mut self, delta: isize) {
@@ -117,6 +122,46 @@ impl<'a> TuiApp<'a> {
             self.textarea.insert_char(ch);
         }
         self.mode = Mode::Insert;
+    }
+
+    fn insert_empty_line_and_start_insert(&mut self, index: usize) {
+        self.lines.insert(index, String::new());
+        self.cursor = index;
+        self.list_state.select(Some(self.cursor));
+        self.start_insert();
+    }
+
+    fn delete_current_line(&mut self) {
+        self.yank_buffer = Some(self.lines.remove(self.cursor));
+        if self.lines.is_empty() {
+            self.lines.push(String::new());
+            self.cursor = 0;
+        } else if self.cursor >= self.lines.len() {
+            self.cursor = self.lines.len().saturating_sub(1);
+        }
+        self.list_state.select(Some(self.cursor));
+    }
+
+    fn paste_yanked_line(&mut self, before: bool) -> bool {
+        let Some(yanked) = self.yank_buffer.clone() else {
+            return false;
+        };
+        let insert_at = if before { self.cursor } else { self.cursor + 1 };
+        self.lines.insert(insert_at, yanked);
+        self.cursor = insert_at;
+        self.list_state.select(Some(self.cursor));
+        true
+    }
+
+    fn start_patch_phrase_for_current_line(&mut self) {
+        let current = self.lines[self.cursor].clone();
+        match Self::extract_patch_phrase(&current) {
+            Some((patch_name, _)) => self.start_patch_phrase(patch_name),
+            None => {
+                *self.play_state.lock().unwrap() =
+                    PlayState::Err("現在行の先頭に patch name JSON がありません".to_string());
+            }
+        }
     }
 
     pub(super) fn start_patch_select(&mut self) {
@@ -283,38 +328,36 @@ impl<'a> TuiApp<'a> {
                 }
             }
             KeyCode::Char('p') => {
-                let current = self.lines[self.cursor].clone();
-                match Self::extract_patch_phrase(&current) {
-                    Some((patch_name, _)) => self.start_patch_phrase(patch_name),
-                    None => {
-                        *self.play_state.lock().unwrap() = PlayState::Err(
-                            "現在行の先頭に patch name JSON がありません".to_string(),
-                        );
-                    }
+                if !self.paste_yanked_line(false) {
+                    self.start_patch_phrase_for_current_line();
                 }
             }
+            KeyCode::Char('P') => {
+                self.paste_yanked_line(true);
+            }
+            KeyCode::Char('f') => self.start_patch_phrase_for_current_line(),
             KeyCode::Char('h') => self.start_notepad_history(),
             KeyCode::Char('o') => {
-                self.lines.insert(self.cursor + 1, String::new());
-                self.cursor += 1;
-                self.list_state.select(Some(self.cursor));
-                self.start_insert();
+                self.insert_empty_line_and_start_insert(self.cursor + 1);
+            }
+            KeyCode::Char('O') => {
+                self.insert_empty_line_and_start_insert(self.cursor);
+            }
+            KeyCode::Delete => {
+                self.delete_current_line();
             }
             KeyCode::Char('j') | KeyCode::Down => self.move_normal_cursor_by(1),
             KeyCode::Char('k') | KeyCode::Up => self.move_normal_cursor_by(-1),
             KeyCode::PageDown => self.move_normal_cursor_by(self.normal_page_size as isize),
             KeyCode::PageUp => self.move_normal_cursor_by(-(self.normal_page_size as isize)),
             KeyCode::Char('H') => {
-                self.cursor = 0;
-                self.list_state.select(Some(self.cursor));
+                self.set_normal_cursor(0);
             }
             KeyCode::Char('M') => {
-                self.cursor = self.lines.len() / 2;
-                self.list_state.select(Some(self.cursor));
+                self.set_normal_cursor(self.lines.len() / 2);
             }
             KeyCode::Char('L') => {
-                self.cursor = self.lines.len().saturating_sub(1);
-                self.list_state.select(Some(self.cursor));
+                self.set_normal_cursor(self.lines.len().saturating_sub(1));
             }
             KeyCode::Char('K') | KeyCode::Char('?') => self.mode = Mode::Help,
             KeyCode::Enter | KeyCode::Char(' ') => self.play_current_line(),

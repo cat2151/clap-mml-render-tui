@@ -91,7 +91,7 @@ fn notepad_mode_title(app: &TuiApp<'_>) -> &'static str {
 fn keybind_text(mode: &Mode) -> &'static str {
     match mode {
         Mode::Normal => {
-            "q:quit  ?:help  i:insert  r:ランダム音色  t:音色  p:phrase  j/k・↑↓・PgUp/PgDn  Enter/Space  d:DAW"
+            "q:quit  ?:help  i:insert  o/O:行挿入  Del:行cut  p/P:貼付  f:phrase  r:ランダム音色  t:音色  h:history  j/k・↑↓・PgUp/PgDn・H/M/L:移動再生  Enter/Space  d:DAW"
         }
         Mode::Insert => "ESC:確定→NORMAL  Enter:確定→次行",
         Mode::PatchSelect => {
@@ -480,20 +480,23 @@ fn draw_help(f: &mut Frame) {
             "NORMAL モード",
             base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD),
         )),
-        Line::from("  j / ↓       : 下へ移動"),
-        Line::from("  k / ↑       : 上へ移動"),
-        Line::from("  PageDown    : 1画面下へ移動"),
-        Line::from("  PageUp      : 1画面上へ移動"),
-        Line::from("  H           : 先頭行へ移動"),
-        Line::from("  M           : 中央行へ移動"),
-        Line::from("  L           : 末尾行へ移動"),
+        Line::from("  j / ↓       : 下へ移動して再生"),
+        Line::from("  k / ↑       : 上へ移動して再生"),
+        Line::from("  PageDown    : 1画面下へ移動して再生"),
+        Line::from("  PageUp      : 1画面上へ移動して再生"),
+        Line::from("  H           : 先頭行へ移動して再生"),
+        Line::from("  M           : 中央行へ移動して再生"),
+        Line::from("  L           : 末尾行へ移動して再生"),
         Line::from("  Enter/Space : 再生"),
         Line::from("  i           : INSERT モード"),
         Line::from("  o           : 次行に挿入 → INSERT"),
+        Line::from("  O           : 現在行の上に挿入 → INSERT"),
+        Line::from("  Del         : 現在行をヤンクして削除"),
+        Line::from("  p / P       : ヤンク行を下 / 上に貼り付け"),
         Line::from("  r           : ランダム音色を挿入/置換して再生"),
         Line::from("  t           : 音色選択"),
         Line::from("  h           : notepad history"),
-        Line::from("  p           : patch phrase 画面"),
+        Line::from("  f           : patch phrase 画面"),
         Line::from("  d           : DAW モード"),
         Line::from("  K / ?       : ヘルプ (このページ)"),
         Line::from("  q           : 終了"),
