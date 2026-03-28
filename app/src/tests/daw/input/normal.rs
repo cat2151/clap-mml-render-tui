@@ -288,23 +288,23 @@ fn handle_normal_m_enters_mixer_mode_on_playable_track() {
 fn normal_playback_shortcut_maps_enter_space_and_shift_p() {
     assert_eq!(
         normal_playback_shortcut(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
-        Some(NormalPlaybackShortcut::PreviewCurrentTrackMeasure)
+        Some(NormalPlaybackShortcut::PreviewCurrentTrack)
     );
     assert_eq!(
         normal_playback_shortcut(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE)),
-        Some(NormalPlaybackShortcut::PreviewCurrentTrackMeasure)
+        Some(NormalPlaybackShortcut::PreviewCurrentTrack)
     );
     assert_eq!(
         normal_playback_shortcut(KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT)),
-        Some(NormalPlaybackShortcut::PreviewAllTracksMeasure)
+        Some(NormalPlaybackShortcut::PreviewAllTracks)
     );
     assert_eq!(
         normal_playback_shortcut(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::SHIFT)),
-        Some(NormalPlaybackShortcut::PreviewAllTracksMeasure)
+        Some(NormalPlaybackShortcut::PreviewAllTracks)
     );
     assert_eq!(
         normal_playback_shortcut(KeyEvent::new(KeyCode::Char('P'), KeyModifiers::SHIFT)),
-        Some(NormalPlaybackShortcut::PlayFromCurrentMeasure)
+        Some(NormalPlaybackShortcut::PlayFromCursor)
     );
 }
 

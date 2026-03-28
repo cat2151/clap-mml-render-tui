@@ -9,7 +9,7 @@ use ratatui::{
 use super::{MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_YELLOW};
 
 pub(super) fn draw_help(f: &mut Frame, area: Rect) {
-    let popup = crate::ui_utils::centered_rect(60, 96, area);
+    let popup = crate::ui_utils::centered_rect(82, 100, area);
     f.render_widget(Clear, popup);
 
     let help_lines = vec![

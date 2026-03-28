@@ -9,9 +9,9 @@ use super::{
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum NormalPlaybackShortcut {
-    PreviewCurrentTrackMeasure,
-    PreviewAllTracksMeasure,
-    PlayFromCurrentMeasure,
+    PreviewCurrentTrack,
+    PreviewAllTracks,
+    PlayFromCursor,
 }
 
 fn normal_playback_shortcut(
@@ -20,13 +20,11 @@ fn normal_playback_shortcut(
     let shift = key_event.modifiers.contains(KeyModifiers::SHIFT);
     match key_event.code {
         KeyCode::Enter | KeyCode::Char(' ') if shift => {
-            Some(NormalPlaybackShortcut::PreviewAllTracksMeasure)
+            Some(NormalPlaybackShortcut::PreviewAllTracks)
         }
-        KeyCode::Enter | KeyCode::Char(' ') => {
-            Some(NormalPlaybackShortcut::PreviewCurrentTrackMeasure)
-        }
+        KeyCode::Enter | KeyCode::Char(' ') => Some(NormalPlaybackShortcut::PreviewCurrentTrack),
         KeyCode::Char('p') | KeyCode::Char('P') if shift => {
-            Some(NormalPlaybackShortcut::PlayFromCurrentMeasure)
+            Some(NormalPlaybackShortcut::PlayFromCursor)
         }
         _ => None,
     }
@@ -243,15 +241,15 @@ impl DawApp {
     ) -> DawNormalAction {
         if *self.play_state.lock().unwrap() == DawPlayState::Idle {
             match normal_playback_shortcut(key_event) {
-                Some(NormalPlaybackShortcut::PreviewCurrentTrackMeasure) => {
+                Some(NormalPlaybackShortcut::PreviewCurrentTrack) => {
                     self.start_preview_with_temporary_solo_tracks(false);
                     return DawNormalAction::Continue;
                 }
-                Some(NormalPlaybackShortcut::PreviewAllTracksMeasure) => {
+                Some(NormalPlaybackShortcut::PreviewAllTracks) => {
                     self.start_preview_with_temporary_solo_tracks(true);
                     return DawNormalAction::Continue;
                 }
-                Some(NormalPlaybackShortcut::PlayFromCurrentMeasure) => {
+                Some(NormalPlaybackShortcut::PlayFromCursor) => {
                     self.start_play_from_cursor_measure();
                     return DawNormalAction::Continue;
                 }
@@ -380,6 +378,7 @@ impl DawApp {
         DawNormalAction::Continue
     }
 
+    #[cfg(test)]
     pub(super) fn handle_normal(&mut self, key: KeyCode) -> DawNormalAction {
         self.handle_normal_key_event(crossterm::event::KeyEvent::new(key, KeyModifiers::NONE))
     }
