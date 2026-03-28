@@ -97,3 +97,32 @@ fn help_screen_mentions_ctrl_clipboard_shortcuts() {
         .iter()
         .any(|line| line.contains("Ctrl+C:強制終了")));
 }
+
+#[test]
+fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["abc".to_string()];
+
+    let lines = render_lines(&mut app, 80, 8);
+    let screen = lines.join("\n");
+
+    assert!(screen.contains("▶ abc"));
+    assert!(!screen.contains("MML Lines"));
+    assert!(!screen.contains("▶   1 abc"));
+    assert_eq!(lines[6].trim_start(), "NORMAL");
+    assert!(lines[7].contains("q:quit  ?:help  i:insert"));
+}
+
+#[test]
+fn insert_screen_shows_insert_title_without_duplicate_line_text() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["abc".to_string()];
+    app.start_insert();
+
+    let lines = render_lines(&mut app, 80, 8);
+    let screen = lines.join("\n");
+
+    assert!(screen.contains("[INSERT]"));
+    assert_eq!(screen.matches("abc").count(), 1);
+    assert!(lines.iter().any(|line| line.contains("▶ abc")));
+}

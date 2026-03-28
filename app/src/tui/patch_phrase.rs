@@ -132,14 +132,14 @@ impl<'a> TuiApp<'a> {
                 self.patch_phrase_focus = PatchPhrasePane::History;
                 self.sync_patch_phrase_states();
                 if let Some(mml) = self.patch_phrase_preview_mml() {
-                    self.kick_play(mml);
+                    self.play_mml(mml);
                 }
             }
             KeyCode::Char('l') => {
                 self.patch_phrase_focus = PatchPhrasePane::Favorites;
                 self.sync_patch_phrase_states();
                 if let Some(mml) = self.patch_phrase_preview_mml() {
-                    self.kick_play(mml);
+                    self.play_mml(mml);
                 }
             }
             KeyCode::Char('j') | KeyCode::Down => {
@@ -158,7 +158,7 @@ impl<'a> TuiApp<'a> {
                 }
                 self.sync_patch_phrase_states();
                 if let Some(mml) = self.patch_phrase_preview_mml() {
-                    self.kick_play(mml);
+                    self.play_mml(mml);
                 }
             }
             KeyCode::Char('k') | KeyCode::Up => {
@@ -173,7 +173,18 @@ impl<'a> TuiApp<'a> {
                 }
                 self.sync_patch_phrase_states();
                 if let Some(mml) = self.patch_phrase_preview_mml() {
-                    self.kick_play(mml);
+                    self.play_mml(mml);
+                }
+            }
+            KeyCode::Enter | KeyCode::Char(' ') => {
+                if let Some(mml) = self.patch_phrase_preview_mml() {
+                    self.play_mml(mml);
+                }
+            }
+            KeyCode::Char('i') if self.patch_phrase_focus == PatchPhrasePane::History => {
+                if let Some(mml) = self.patch_phrase_preview_mml() {
+                    self.lines[self.cursor] = mml;
+                    self.start_insert();
                 }
             }
             KeyCode::Char('f') => {
@@ -204,7 +215,7 @@ impl<'a> TuiApp<'a> {
                 self.sync_patch_phrase_states();
                 self.patch_phrase_store_dirty = true;
                 if let Some(mml) = self.patch_phrase_preview_mml() {
-                    self.kick_play(mml);
+                    self.play_mml(mml);
                 }
             }
             _ => {}

@@ -180,6 +180,10 @@ fn handle_normal_r_replaces_existing_patch_at_start_of_current_line() {
         app.lines,
         vec![r#"{"Surge XT patch": "Leads/Lead 1.fxp"} cde"#.to_string()]
     );
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Leads/Lead 1.fxp"} cde"#
+    ));
 }
 
 #[test]
@@ -222,6 +226,48 @@ fn handle_normal_r_replaces_spaced_semicolon_branch_patch_without_duplication() 
                 .to_string()
         ]
     );
+}
+
+#[test]
+fn handle_normal_r_inserts_c_for_empty_line_before_playing() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![String::new()];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "Pads/Pad 1.fxp",
+    ]))));
+
+    let result = app.handle_normal(KeyCode::Char('r'));
+
+    assert!(matches!(result, NormalAction::Continue));
+    assert_eq!(
+        app.lines,
+        vec![r#"{"Surge XT patch": "Pads/Pad 1.fxp"} c"#.to_string()]
+    );
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Pads/Pad 1.fxp"} c"#
+    ));
+}
+
+#[test]
+fn handle_normal_r_inserts_c_when_all_semicolon_branches_are_empty() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![" ; ".to_string()];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "Pads/Pad 1.fxp",
+    ]))));
+
+    let result = app.handle_normal(KeyCode::Char('r'));
+
+    assert!(matches!(result, NormalAction::Continue));
+    assert_eq!(
+        app.lines,
+        vec![r#"{"Surge XT patch": "Pads/Pad 1.fxp"} c"#.to_string()]
+    );
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Pads/Pad 1.fxp"} c"#
+    ));
 }
 
 #[test]
@@ -377,6 +423,53 @@ fn handle_normal_p_enters_patch_phrase_for_current_patch() {
     assert_eq!(app.patch_phrase_name.as_deref(), Some("Pads/Pad 1.fxp"));
     assert_eq!(app.patch_phrase_history_items(), vec!["c".to_string()]);
     assert_eq!(app.patch_phrase_favorite_items(), vec!["c".to_string()]);
+}
+
+#[test]
+fn handle_patch_phrase_enter_replays_current_preview() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["l8cdef".to_string()],
+            favorites: vec![],
+        },
+    );
+    app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
+
+    app.handle_patch_phrase(KeyCode::Enter);
+
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#
+    ));
+}
+
+#[test]
+fn handle_patch_phrase_i_from_history_enters_insert_with_preview_mml() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["before".to_string()];
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["l8cdef".to_string()],
+            favorites: vec!["o5g".to_string()],
+        },
+    );
+    app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
+
+    app.handle_patch_phrase(KeyCode::Char('i'));
+
+    assert!(matches!(app.mode, Mode::Insert));
+    assert_eq!(
+        app.lines,
+        vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()]
+    );
+    assert_eq!(
+        app.textarea.lines().join(""),
+        r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#
+    );
 }
 
 #[test]
