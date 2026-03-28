@@ -71,10 +71,12 @@ fn normal_status_text(app: &TuiApp<'_>, play_state: &PlayState) -> String {
 }
 
 fn notepad_mode_title(app: &TuiApp<'_>) -> &'static str {
-    if app.mode == Mode::Insert {
-        " [INSERT] notepad mode "
-    } else {
-        " [NORMAL] notepad mode "
+    match app.mode {
+        Mode::Normal => " [NORMAL] notepad mode ",
+        Mode::Insert => " [INSERT] notepad mode ",
+        Mode::PatchSelect => " [PATCH SELECT] notepad mode ",
+        Mode::PatchPhrase => " [PATCH PHRASE] notepad mode ",
+        Mode::Help => " [HELP] notepad mode ",
     }
 }
 
