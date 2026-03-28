@@ -14,7 +14,6 @@ impl TuiApp<'static> {
             entry_ptr: 0,
             play_state: Arc::new(Mutex::new(PlayState::Idle)),
             playback_session: Arc::new(AtomicU64::new(0)),
-            cursor_preview_session: Arc::new(AtomicU64::new(0)),
             active_sink: Arc::new(Mutex::new(None)),
             audio_cache: Arc::new(Mutex::new(HashMap::new())),
             patch_load_state: Arc::new(Mutex::new(PatchLoadState::Ready(Vec::new()))),

@@ -324,6 +324,47 @@ fn handle_normal_h_and_j_preview_new_target_when_not_playing() {
 }
 
 #[test]
+fn handle_normal_cursor_move_restarts_preview_on_new_target() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 2;
+    *app.play_state.lock().unwrap() = DawPlayState::Preview;
+    *app.play_position.lock().unwrap() = Some(PlayPosition {
+        measure_index: 1,
+        measure_start: std::time::Instant::now(),
+    });
+
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert_eq!(app.cursor_measure, 1);
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Preview
+    ));
+    assert_eq!(
+        app.play_position
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|position| position.measure_index),
+        Some(0)
+    );
+    let logs = app
+        .log_lines
+        .lock()
+        .unwrap()
+        .iter()
+        .cloned()
+        .collect::<Vec<_>>();
+    assert!(
+        logs.ends_with(&["preview: stop".to_string(), "preview: meas1".to_string()]),
+        "logs: {:?}",
+        logs
+    );
+}
+
+#[test]
 fn handle_normal_l_and_k_do_not_start_preview_while_playing() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_track = 2;
