@@ -118,6 +118,7 @@ fn patch_select_screen_renders_as_overlay_on_normal_screen() {
     let lines = render_lines(&mut app, 80, 16).join("\n");
     let normalized = lines.replace(' ', "");
 
+    assert!(lines.contains("[PATCH SELECT] notepad mode"));
     assert!(lines.contains("▶ {\"Surge XT patch\":\"Pads/Pad 1.fxp\"} abc"));
     assert!(normalized.contains("音色選択-検索"));
     assert!(normalized.contains("パッチ(2/2)"));
@@ -170,11 +171,11 @@ fn help_screen_mentions_ctrl_clipboard_shortcuts() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::Help;
 
-    let normalized_lines: Vec<String> = render_lines(&mut app, 80, 50)
-        .into_iter()
-        .map(|line| line.replace(' ', ""))
-        .collect();
+    let lines = render_lines(&mut app, 80, 50);
+    let screen = lines.join("\n");
+    let normalized_lines: Vec<String> = lines.iter().map(|line| line.replace(' ', "")).collect();
 
+    assert!(screen.contains("[HELP] notepad mode"));
     assert!(normalized_lines
         .iter()
         .any(|line| line.contains("Ctrl+C:コピー")));
@@ -246,6 +247,7 @@ fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
     let lines = render_lines(&mut app, 80, 8);
     let screen = lines.join("\n");
 
+    assert!(screen.contains("[NORMAL] notepad mode"));
     assert!(screen.contains("▶ abc"));
     assert!(!screen.contains("MML Lines"));
     assert!(!screen.contains("▶   1 abc"));
@@ -262,7 +264,7 @@ fn insert_screen_shows_insert_title_without_duplicate_line_text() {
     let lines = render_lines(&mut app, 80, 8);
     let screen = lines.join("\n");
 
-    assert!(screen.contains("[INSERT]"));
+    assert!(screen.contains("[INSERT] notepad mode"));
     assert_eq!(screen.matches("abc").count(), 1);
     assert!(lines.iter().any(|line| line.contains("▶ abc")));
 }
