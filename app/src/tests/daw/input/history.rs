@@ -101,12 +101,12 @@ fn handle_history_overlay_enter_without_track_patch_sets_patch_and_backs_up_old_
     app.handle_history_overlay(KeyCode::Enter);
 
     assert!(matches!(app.mode, DawMode::Normal));
-    assert_eq!(app.data[1][0], r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#);
+    assert_eq!(app.data[1][0], r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#);
     assert_eq!(app.data[1][2], "l8cdef");
     assert_eq!(
         app.patch_phrase_store.notepad.history,
         vec![
-            r#"{"Surge XT patch": "Pads/Pad 1.fxp"} before"#.to_string(),
+            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} before"#.to_string(),
             r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()
         ]
     );

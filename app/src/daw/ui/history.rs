@@ -114,7 +114,7 @@ pub(super) fn draw_history(f: &mut Frame, app: &DawApp, area: Rect) {
         chunks[1],
     );
     f.render_widget(
-        Paragraph::new(match app.history_overlay_patch_name {
+        Paragraph::new(match app.history_overlay_patch_name.as_deref() {
             Some(_) => "現在 track の patch phrase を現在 meas に反映".to_string(),
             None => "選択行の patch を init に、phrase を現在 meas に反映".to_string(),
         })

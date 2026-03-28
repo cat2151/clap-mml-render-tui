@@ -110,7 +110,7 @@ impl DawApp {
     }
 
     fn build_patch_json(patch_name: &str) -> String {
-        format!(r#"{{"{PATCH_JSON_KEY}": "{patch_name}"}}"#)
+        serde_json::json!({ PATCH_JSON_KEY: patch_name }).to_string()
     }
 
     fn current_track_patch_name(&self) -> Option<String> {
