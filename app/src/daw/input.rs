@@ -44,10 +44,6 @@ fn preview_target_tracks(
     Some(vec![cursor_track])
 }
 
-fn play_from_cursor_measure_index(cursor_measure_index: Option<usize>) -> Option<usize> {
-    cursor_measure_index
-}
-
 fn format_random_patch_hot_reload_log(
     track: usize,
     displayed_measure_index: Option<usize>,
@@ -139,8 +135,7 @@ impl DawApp {
         if *self.play_state.lock().unwrap() != DawPlayState::Idle {
             return;
         }
-        let Some(measure_index) = play_from_cursor_measure_index(self.cursor_play_measure_index())
-        else {
+        let Some(measure_index) = self.cursor_play_measure_index() else {
             return;
         };
         self.start_play_from_measure(measure_index);

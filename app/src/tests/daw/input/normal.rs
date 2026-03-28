@@ -326,9 +326,3 @@ fn preview_solo_tracks_can_temporarily_open_all_tracks() {
 fn preview_solo_tracks_rejects_non_playable_current_track() {
     assert_eq!(preview_target_tracks(3, 0, false), None);
 }
-
-#[test]
-fn play_from_cursor_measure_index_targets_the_current_measure() {
-    assert_eq!(play_from_cursor_measure_index(Some(1)), Some(1));
-    assert_eq!(play_from_cursor_measure_index(None), None);
-}

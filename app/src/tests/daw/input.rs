@@ -11,10 +11,7 @@ pub(super) use crate::config::Config;
 pub(super) use super::super::{
     AbRepeatState, CacheState, CellCache, DawApp, DawMode, DawPlayState, PlayPosition,
 };
-pub(super) use super::{
-    normal_playback_shortcut, play_from_cursor_measure_index, preview_target_tracks,
-    NormalPlaybackShortcut,
-};
+pub(super) use super::{normal_playback_shortcut, preview_target_tracks, NormalPlaybackShortcut};
 
 /// -6dB を線形 gain 値に変換する（10^(-6/20)）。
 fn track1_minus_6_db_gain() -> f32 {
