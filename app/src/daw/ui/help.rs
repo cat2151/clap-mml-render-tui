@@ -9,7 +9,7 @@ use ratatui::{
 use super::{MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_YELLOW};
 
 pub(super) fn draw_help(f: &mut Frame, area: Rect) {
-    let popup = crate::ui_utils::centered_rect(60, 80, area);
+    let popup = crate::ui_utils::centered_rect(60, 96, area);
     f.render_widget(Clear, popup);
 
     let help_lines = vec![
@@ -34,6 +34,7 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
         Line::from("  K / ?  : ヘルプ (このページ)"),
         Line::from("  d/ESC  : TUI に戻る"),
         Line::from("  q      : 終了"),
+        Line::from(""),
         Line::from(Span::styled(
             "INSERT モード",
             Style::default()

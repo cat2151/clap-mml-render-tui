@@ -16,6 +16,14 @@ pub(in crate::daw) struct CachedMeasureSamples {
     pub(in crate::daw) cached_tracks: Vec<usize>,
 }
 
+pub(in crate::daw::playback) struct PlaybackMeasureRequest<'a> {
+    pub(in crate::daw::playback) measure_index: usize,
+    pub(in crate::daw::playback) track_mmls: &'a [String],
+    pub(in crate::daw::playback) measure_samples: usize,
+    pub(in crate::daw::playback) tracks: usize,
+    pub(in crate::daw::playback) track_gains: &'a [f32],
+}
+
 /// 再生用サンプルが 1 小節に満たない場合だけ無音で末尾を埋める。
 ///
 /// 余韻を保持するため、`measure_samples` を超えるぶんは切り捨てない。
@@ -125,17 +133,20 @@ pub(in crate::daw) fn try_get_cached_samples(
 
 pub(in crate::daw::playback) fn build_playback_measure_samples<F, E>(
     cache: &Arc<Mutex<Vec<Vec<CellCache>>>>,
-    measure_index: usize,
-    track_mmls: &[String],
-    measure_samples: usize,
-    tracks: usize,
-    track_gains: &[f32],
+    request: PlaybackMeasureRequest<'_>,
     log_lines: &Arc<Mutex<VecDeque<String>>>,
     mut render_fallback: F,
 ) -> Result<PlaybackMeasureAudio, E>
 where
     F: FnMut(usize, &str) -> Result<Vec<f32>, E>,
 {
+    let PlaybackMeasureRequest {
+        measure_index,
+        track_mmls,
+        measure_samples,
+        tracks,
+        track_gains,
+    } = request;
     let measure_number = measure_index + 1;
     let active_tracks: Vec<usize> = (FIRST_PLAYABLE_TRACK..tracks)
         .filter(|&track| {

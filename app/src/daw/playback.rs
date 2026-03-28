@@ -15,7 +15,7 @@ mod measure_mixer;
 use super::playback_util::play_start_log_lines;
 pub(super) use super::playback_util::{effective_measure_count, loop_measure_summary_label};
 use super::{DawApp, DawPlayState, PlayPosition};
-use cache_mixer::build_playback_measure_samples;
+use cache_mixer::{build_playback_measure_samples, PlaybackMeasureRequest};
 pub(super) use cache_mixer::{pad_playback_measure_samples, try_get_cached_samples};
 pub(super) use measure_math::{current_play_measure_index, following_measure_index};
 use measure_math::{
@@ -157,11 +157,13 @@ impl DawApp {
                     let track_mmls = &measure_track_mmls[current_measure_index];
                     let playback_audio = match build_playback_measure_samples(
                         &cache,
-                        current_measure_index,
-                        track_mmls,
-                        measure_samples,
-                        tracks,
-                        &track_gains,
+                        PlaybackMeasureRequest {
+                            measure_index: current_measure_index,
+                            track_mmls,
+                            measure_samples,
+                            tracks,
+                            track_gains: &track_gains,
+                        },
                         &log_lines,
                         |_track, mml| {
                             let _guard = render_lock.lock().unwrap();
@@ -227,16 +229,17 @@ impl DawApp {
                 let next_track_mmls = &measure_track_mmls[lookahead_measure_index];
                 let next_playback_audio = match build_playback_measure_samples(
                     &cache,
-                    lookahead_measure_index,
-                    next_track_mmls,
-                    measure_samples,
-                    tracks,
-                    &track_gains,
+                    PlaybackMeasureRequest {
+                        measure_index: lookahead_measure_index,
+                        track_mmls: next_track_mmls,
+                        measure_samples,
+                        tracks,
+                        track_gains: &track_gains,
+                    },
                     &log_lines,
-                    |track, mml| {
+                    |_track, mml| {
                         let _guard = render_lock.lock().unwrap();
                         let core_cfg = CoreConfig::from(&daw_cfg);
-                        let _ = track;
                         mml_render_for_cache(mml, &core_cfg, entry_ref)
                     },
                 ) {
