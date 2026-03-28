@@ -94,7 +94,7 @@ fn keybind_text(mode: &Mode) -> &'static str {
             "Enter:決定  ESC:キャンセル  Ctrl+F:お気に入り  j/k・↑↓:移動  文字入力:フィルタ  Space:AND条件"
         }
         Mode::NotepadHistory => {
-            "Enter:確定  ESC:閉じる  h/l:ペイン移動  j/k:移動して再生  f:お気に入り  dd:削除"
+            "Enter:確定  ESC:閉じる  h/l・←/→:ペイン移動  j/k:移動して再生  f:お気に入り  dd:削除"
         }
         Mode::PatchPhrase => {
             "j/k:再生移動  h/l:ペイン移動  Space/Enter:再生  i:編集  f:お気に入り  ESC:戻る"
@@ -512,7 +512,7 @@ fn draw_help(f: &mut Frame) {
             "notepad history 画面",
             base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD),
         )),
-        Line::from("  h / l       : ペイン切替"),
+        Line::from("  h / l ・ ← / → : ペイン切替"),
         Line::from("  j / k       : 上下移動して再生"),
         Line::from("  Enter       : 現在行へ確定"),
         Line::from("  f           : History行をお気に入りに追加"),

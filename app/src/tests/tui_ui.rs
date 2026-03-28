@@ -173,6 +173,23 @@ fn notepad_history_overlay_renders_history_and_favorites_lists() {
 }
 
 #[test]
+fn notepad_history_overlay_shows_left_right_pane_keybinds() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_phrase_store.notepad = PatchPhraseState {
+        history: vec!["l8cdef".to_string()],
+        favorites: vec!["o5g".to_string()],
+    };
+    app.start_notepad_history();
+
+    let lines = render_lines(&mut app, 120, 16);
+    let normalized_lines: Vec<String> = lines.iter().map(|line| line.replace(' ', "")).collect();
+
+    assert!(normalized_lines
+        .iter()
+        .any(|line| line.contains("h/l・←/→:ペイン移動")));
+}
+
+#[test]
 fn patch_phrase_screen_uses_c_as_fallback_for_empty_lists() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::PatchPhrase;
@@ -190,8 +207,9 @@ fn help_screen_mentions_ctrl_clipboard_shortcuts() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::Help;
 
-    let lines = render_lines(&mut app, 80, 60);
+    let lines = render_lines(&mut app, 120, 60);
     let screen = lines.join("\n");
+    let normalized_screen = screen.replace([' ', '\n'], "");
     let normalized_lines: Vec<String> = lines.iter().map(|line| line.replace(' ', "")).collect();
 
     assert!(screen.contains("[HELP] notepad mode"));
@@ -213,6 +231,7 @@ fn help_screen_mentions_ctrl_clipboard_shortcuts() {
     assert!(normalized_lines
         .iter()
         .any(|line| line.contains("h:notepadhistory")));
+    assert!(normalized_screen.contains("h/l・←/→:ペイン切替"));
     assert!(!normalized_lines
         .iter()
         .any(|line| line.contains("Ctrl+C:強制終了")));
