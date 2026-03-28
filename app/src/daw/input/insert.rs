@@ -3,12 +3,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use super::{DawApp, DawMode, DawPlayState};
 
 impl DawApp {
-    pub(in crate::daw::input) fn commit_insert_cell(
-        &mut self,
-        track: usize,
-        measure: usize,
-        text: &str,
-    ) -> bool {
+    pub(super) fn commit_insert_cell(&mut self, track: usize, measure: usize, text: &str) -> bool {
         if self.data[track][measure] == text {
             return false;
         }
