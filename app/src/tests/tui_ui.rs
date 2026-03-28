@@ -149,6 +149,7 @@ fn patch_select_screen_splits_status_and_keybinds() {
 
     assert!(!normalized_lines[status_row].contains("Enter:決定"));
     assert_eq!(keybind_row, status_row + 1);
+    assert!(normalized_lines[keybind_row].contains("Ctrl+F:お気に入り"));
 }
 
 #[test]
@@ -169,7 +170,7 @@ fn help_screen_mentions_ctrl_clipboard_shortcuts() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::Help;
 
-    let normalized_lines: Vec<String> = render_lines(&mut app, 80, 30)
+    let normalized_lines: Vec<String> = render_lines(&mut app, 80, 50)
         .into_iter()
         .map(|line| line.replace(' ', ""))
         .collect();
@@ -186,6 +187,9 @@ fn help_screen_mentions_ctrl_clipboard_shortcuts() {
     assert!(normalized_lines
         .iter()
         .any(|line| line.contains("Ctrl+V:ペースト")));
+    assert!(normalized_lines
+        .iter()
+        .any(|line| line.contains("Ctrl+F:現在音色とMMLをFavorites追加")));
     assert!(!normalized_lines
         .iter()
         .any(|line| line.contains("Ctrl+C:強制終了")));

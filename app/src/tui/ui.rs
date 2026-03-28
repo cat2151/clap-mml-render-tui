@@ -77,7 +77,7 @@ fn keybind_text(mode: &Mode) -> &'static str {
         }
         Mode::Insert => "ESC:確定→NORMAL  Enter:確定→次行",
         Mode::PatchSelect => {
-            "Enter:決定  ESC:キャンセル  j/k・↑↓:移動  文字入力:フィルタ  Space:AND条件"
+            "Enter:決定  ESC:キャンセル  Ctrl+F:お気に入り  j/k・↑↓:移動  文字入力:フィルタ  Space:AND条件"
         }
         Mode::PatchPhrase => {
             "j/k:再生移動  h/l:ペイン移動  Space/Enter:再生  i:編集  f:お気に入り  ESC:戻る"
@@ -383,6 +383,7 @@ fn draw_help(f: &mut Frame) {
         Line::from("  文字入力 : フィルタ (Space=AND条件)"),
         Line::from("  ↑↓      : リスト移動"),
         Line::from("  Enter   : 音色決定"),
+        Line::from("  Ctrl+F  : 現在音色とMMLをFavorites追加"),
         Line::from("  ESC     : キャンセル"),
         Line::from(""),
         Line::from(Span::styled(
@@ -395,7 +396,6 @@ fn draw_help(f: &mut Frame) {
         Line::from("  i           : History行を編集"),
         Line::from("  f     : 現在行をお気に入りに追加"),
         Line::from("  ESC   : NORMAL に戻る"),
-        Line::from(""),
         Line::from(Span::styled(
             "  [ESC] でキャンセル",
             base_style().fg(MONOKAI_GRAY),

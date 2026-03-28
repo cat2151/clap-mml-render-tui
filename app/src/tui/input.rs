@@ -157,6 +157,25 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn handle_patch_select(&mut self, key_event: crossterm::event::KeyEvent) {
+        if key_event.modifiers.contains(KeyModifiers::CONTROL)
+            && matches!(key_event.code, KeyCode::Char('f') | KeyCode::Char('F'))
+        {
+            let Some(patch_name) = self.patch_filtered.get(self.patch_cursor).cloned() else {
+                return;
+            };
+            let Some(line) = self.lines.get(self.cursor) else {
+                return;
+            };
+            let preprocessed = mml_preprocessor::extract_embedded_json(line);
+            let phrase = match preprocessed.remaining_mml.trim() {
+                "" => PATCH_SELECT_PREVIEW_FALLBACK_PHRASE.to_string(),
+                remaining => remaining.to_string(),
+            };
+            self.add_patch_phrase_favorite(patch_name, phrase);
+            self.preview_selected_patch();
+            return;
+        }
+
         match key_event.code {
             KeyCode::Esc => {
                 self.mode = Mode::Normal;

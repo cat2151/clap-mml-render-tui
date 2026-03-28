@@ -94,6 +94,16 @@ impl<'a> TuiApp<'a> {
         self.patch_phrase_store_dirty = true;
     }
 
+    pub(super) fn add_patch_phrase_favorite(&mut self, patch_name: String, phrase: String) {
+        let state = self
+            .patch_phrase_store
+            .patches
+            .entry(patch_name)
+            .or_default();
+        Self::push_front_dedup(&mut state.favorites, phrase);
+        self.patch_phrase_store_dirty = true;
+    }
+
     fn patch_phrase_preview_mml(&self) -> Option<String> {
         let patch_name = self.patch_phrase_name.as_deref()?;
         let phrase = match self.patch_phrase_focus {
@@ -204,16 +214,10 @@ impl<'a> TuiApp<'a> {
                 let Some(phrase) = phrase else {
                     return;
                 };
-                let state = self
-                    .patch_phrase_store
-                    .patches
-                    .entry(patch_name)
-                    .or_default();
-                Self::push_front_dedup(&mut state.favorites, phrase);
+                self.add_patch_phrase_favorite(patch_name, phrase);
                 self.patch_phrase_focus = PatchPhrasePane::Favorites;
                 self.patch_phrase_favorites_cursor = 0;
                 self.sync_patch_phrase_states();
-                self.patch_phrase_store_dirty = true;
                 if let Some(mml) = self.patch_phrase_preview_mml() {
                     self.play_mml(mml);
                 }
