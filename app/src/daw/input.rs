@@ -351,7 +351,7 @@ impl DawApp {
         if self.cursor_track < FIRST_PLAYABLE_TRACK || self.cursor_track >= self.tracks {
             return;
         }
-        if self.start_preview_for_test_if_needed() {
+        if self.try_start_preview_for_test() {
             return;
         }
         self.start_preview_for_target_tracks(false);
@@ -360,7 +360,7 @@ impl DawApp {
     // `new_for_test()` の DAW は PluginEntry を持たないため、
     // 実オーディオ preview を起動せず状態更新だけを検証する。
     #[cfg(test)]
-    fn start_preview_for_test_if_needed(&mut self) -> bool {
+    fn try_start_preview_for_test(&mut self) -> bool {
         if self.entry_ptr != 0 {
             return false;
         }
@@ -378,7 +378,7 @@ impl DawApp {
     }
 
     #[cfg(not(test))]
-    fn start_preview_for_test_if_needed(&mut self) -> bool {
+    fn try_start_preview_for_test(&mut self) -> bool {
         false
     }
 

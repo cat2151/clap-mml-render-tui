@@ -142,11 +142,15 @@ impl<'a> TuiApp<'a> {
         self.list_state.select(Some(self.cursor));
     }
 
-    fn paste_yanked_line(&mut self, before: bool) -> bool {
+    fn paste_yanked_line(&mut self, insert_above: bool) -> bool {
         let Some(yanked) = self.yank_buffer.as_ref() else {
             return false;
         };
-        let insert_at = if before { self.cursor } else { self.cursor + 1 };
+        let insert_at = if insert_above {
+            self.cursor
+        } else {
+            self.cursor + 1
+        };
         self.lines.insert(insert_at, yanked.clone());
         self.cursor = insert_at;
         self.list_state.select(Some(self.cursor));
