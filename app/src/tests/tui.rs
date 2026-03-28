@@ -523,6 +523,27 @@ fn handle_patch_phrase_enter_replays_current_preview() {
 }
 
 #[test]
+fn handle_patch_phrase_space_replays_current_preview() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["l8cdef".to_string()],
+            favorites: vec![],
+        },
+    );
+    app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
+
+    app.handle_patch_phrase(KeyCode::Char(' '));
+
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#
+    ));
+}
+
+#[test]
 fn handle_patch_phrase_i_from_history_enters_insert_with_preview_mml() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["before".to_string()];
@@ -546,6 +567,26 @@ fn handle_patch_phrase_i_from_history_enters_insert_with_preview_mml() {
         app.textarea.lines().join(""),
         r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#
     );
+}
+
+#[test]
+fn handle_patch_phrase_i_from_favorites_stays_in_patch_phrase() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["before".to_string()];
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["l8cdef".to_string()],
+            favorites: vec!["o5g".to_string()],
+        },
+    );
+    app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
+    app.handle_patch_phrase(KeyCode::Char('l'));
+
+    app.handle_patch_phrase(KeyCode::Char('i'));
+
+    assert!(matches!(app.mode, Mode::PatchPhrase));
+    assert_eq!(app.lines, vec!["before".to_string()]);
 }
 
 #[test]
