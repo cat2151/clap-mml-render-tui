@@ -10,9 +10,14 @@ fn extract_patch_phrase_reads_patch_name_and_phrase() {
 }
 
 #[test]
-fn handle_patch_phrase_enter_replays_current_preview() {
+fn handle_patch_phrase_enter_inserts_preview_above_current_line_and_closes() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
+    app.lines = vec![
+        "top".to_string(),
+        r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string(),
+    ];
+    app.cursor = 1;
+    app.list_state.select(Some(1));
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -24,6 +29,16 @@ fn handle_patch_phrase_enter_replays_current_preview() {
 
     app.handle_patch_phrase(KeyCode::Enter);
 
+    assert!(matches!(app.mode, Mode::Normal));
+    assert_eq!(
+        app.lines,
+        vec![
+            "top".to_string(),
+            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string(),
+            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()
+        ]
+    );
+    assert_eq!(app.cursor, 1);
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
         PlayState::Running(msg) if msg == r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#

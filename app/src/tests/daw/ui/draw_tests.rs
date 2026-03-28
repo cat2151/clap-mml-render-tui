@@ -358,6 +358,20 @@ fn help_does_not_show_old_semicolon_guidance() {
     assert!(
         normalized_lines
             .iter()
+            .any(|line| line.contains("Shift+H:historyoverlay")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("h/←・l/→:小節移動")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
             .any(|line| line.contains("a:off→start固定/end追従→end固定→off")),
         "lines: {:?}",
         normalized_lines
@@ -373,6 +387,31 @@ fn help_does_not_show_old_semicolon_guidance() {
         !normalized_lines
             .iter()
             .any(|line| line.contains("分割して下のtrackに追加")),
+        "lines: {:?}",
+        normalized_lines
+    );
+}
+
+#[test]
+fn normal_footer_shows_shift_h_history_shortcut() {
+    let app = build_test_app();
+
+    let normalized_lines: Vec<String> = render_lines(&app, 180, 20)
+        .into_iter()
+        .map(|line| line.replace(' ', ""))
+        .collect();
+
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("Shift+H:history")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("h/←・l/→:meas")),
         "lines: {:?}",
         normalized_lines
     );
@@ -430,5 +469,44 @@ fn draw_highlights_selected_mixer_track_in_cyan() {
     assert!(
         !cyan_positions.is_empty(),
         "selected mixer track label should be cyan"
+    );
+}
+
+#[test]
+fn draw_shows_history_overlay_title_and_items() {
+    let mut app = build_test_app();
+    app.mode = DawMode::History;
+    app.history_overlay_patch_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["l8cdef".to_string()],
+            favorites: vec!["o5g".to_string()],
+        },
+    );
+
+    let normalized_lines: Vec<String> = render_lines(&app, 100, 30)
+        .into_iter()
+        .map(|line| line.to_lowercase())
+        .collect();
+
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("patch history - pads/pad 1.fxp")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines.iter().any(|line| line.contains("l8cdef")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("favorites")),
+        "lines: {:?}",
+        normalized_lines
     );
 }

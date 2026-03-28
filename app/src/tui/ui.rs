@@ -97,7 +97,7 @@ fn keybind_text(mode: &Mode) -> &'static str {
             "Enter:確定  ESC:閉じる  h/l・←/→:ペイン移動  j/k:移動して再生  f:お気に入り  dd:削除"
         }
         Mode::PatchPhrase => {
-            "j/k:再生移動  h/l:ペイン移動  Space/Enter:再生  i:編集  f:お気に入り  ESC:戻る"
+            "j/k:再生移動  h/l:ペイン移動  Space:再生  Enter:現在行の上に挿入  i:編集  f:お気に入り  ESC:戻る"
         }
         Mode::Help => "ESC:キャンセル",
     }
@@ -525,7 +525,8 @@ fn draw_help(f: &mut Frame) {
         )),
         Line::from("  j / k       : 上下移動して再生"),
         Line::from("  h / l       : ペイン切替して再生"),
-        Line::from("  Space/Enter : 現在行を再生"),
+        Line::from("  Space       : 現在行を再生"),
+        Line::from("  Enter       : 現在行の上に挿入"),
         Line::from("  i           : History行を編集"),
         Line::from("  f     : 現在行をお気に入りに追加"),
         Line::from("  ESC   : NORMAL に戻る"),
