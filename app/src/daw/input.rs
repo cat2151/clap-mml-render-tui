@@ -44,6 +44,18 @@ fn preview_target_tracks(
     Some(vec![cursor_track])
 }
 
+fn resolve_playback_start_measure_index(
+    cursor_measure_index: Option<usize>,
+    shortcut: NormalPlaybackShortcut,
+) -> Option<usize> {
+    match shortcut {
+        NormalPlaybackShortcut::PlayFromCursor => cursor_measure_index,
+        NormalPlaybackShortcut::PreviewCurrentTrack | NormalPlaybackShortcut::PreviewAllTracks => {
+            Some(0)
+        }
+    }
+}
+
 fn format_random_patch_hot_reload_log(
     track: usize,
     displayed_measure_index: Option<usize>,
@@ -135,7 +147,10 @@ impl DawApp {
         if *self.play_state.lock().unwrap() != DawPlayState::Idle {
             return;
         }
-        let Some(measure_index) = self.cursor_play_measure_index() else {
+        let Some(measure_index) = resolve_playback_start_measure_index(
+            self.cursor_play_measure_index(),
+            NormalPlaybackShortcut::PlayFromCursor,
+        ) else {
             return;
         };
         self.start_play_from_measure(measure_index);
