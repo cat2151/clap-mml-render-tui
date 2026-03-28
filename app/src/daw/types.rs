@@ -93,6 +93,7 @@ pub enum DawMode {
     Normal,
     Insert,
     Help,
+    Mixer,
 }
 
 /// handle_normal の戻り値

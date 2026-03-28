@@ -60,6 +60,7 @@ pub(super) fn draw_status(
         }
         DawMode::Insert => "ESC:確定→NORMAL  Enter:確定→次小節",
         DawMode::Help => "HELP  ESC:キャンセル",
+        DawMode::Mixer => "MIXER  h/l:track移動  j/k:-/+3dB  ESC:閉じる",
     };
 
     let play_color = match play_state {

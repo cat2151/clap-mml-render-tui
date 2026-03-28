@@ -64,18 +64,24 @@ impl DawApp {
 
     pub(super) fn start_play(&self) {
         let measure_mmls = self.build_measure_mmls();
+        let measure_track_mmls = self.build_measure_track_mmls();
+        let track_gains = self.playback_track_gains();
         if measure_mmls.iter().all(|m| m.trim().is_empty()) {
             return;
         }
 
-        // play_measure_mmls と play_measure_samples を最新の値で更新してからスレッドに共有する
+        // play 状態を最新の値で更新してからスレッドに共有する
         *self.play_measure_mmls.lock().unwrap() = measure_mmls;
+        *self.play_measure_track_mmls.lock().unwrap() = measure_track_mmls;
         *self.play_measure_samples.lock().unwrap() = self.measure_duration_samples();
+        *self.play_track_gains.lock().unwrap() = track_gains;
 
         let play_state = Arc::clone(&self.play_state);
         let play_position = Arc::clone(&self.play_position);
         let play_measure_mmls = Arc::clone(&self.play_measure_mmls);
+        let play_measure_track_mmls = Arc::clone(&self.play_measure_track_mmls);
         let play_measure_samples = Arc::clone(&self.play_measure_samples);
+        let play_track_gains = Arc::clone(&self.play_track_gains);
         let render_lock = Arc::clone(&self.render_lock);
         let cache = Arc::clone(&self.cache);
         let cfg = Arc::clone(&self.cfg);
@@ -131,6 +137,8 @@ impl DawApp {
                 if current_measure.is_none() {
                     // 初回の現在小節だけはすぐに解決して再生を開始する。
                     let mmls = play_measure_mmls.lock().unwrap().clone();
+                    let measure_track_mmls = play_measure_track_mmls.lock().unwrap().clone();
+                    let track_gains = play_track_gains.lock().unwrap().clone();
                     let measure_samples = *play_measure_samples.lock().unwrap();
                     let effective_count = match effective_measure_count(&mmls) {
                         Some(n) => n,
@@ -146,15 +154,16 @@ impl DawApp {
                             effective_count,
                         ),
                     );
-                    let mml = &mmls[current_measure_index];
+                    let track_mmls = &measure_track_mmls[current_measure_index];
                     let playback_audio = match build_playback_measure_samples(
                         &cache,
                         current_measure_index,
-                        mml,
+                        track_mmls,
                         measure_samples,
                         tracks,
+                        &track_gains,
                         &log_lines,
-                        || {
+                        |_track, mml| {
                             let _guard = render_lock.lock().unwrap();
                             let core_cfg = CoreConfig::from(&daw_cfg);
                             mml_render_for_cache(mml, &core_cfg, entry_ref)
@@ -206,6 +215,8 @@ impl DawApp {
                 // 次小節の解決と append は境界直前まで遅らせ、再 render の反映余地を広げる。
                 // そのぶん render が間に合わないケースを観測しやすいよう、append 実績もログに残す。
                 let mmls = play_measure_mmls.lock().unwrap().clone();
+                let measure_track_mmls = play_measure_track_mmls.lock().unwrap().clone();
+                let track_gains = play_track_gains.lock().unwrap().clone();
                 let measure_samples = *play_measure_samples.lock().unwrap();
                 let effective_count = match effective_measure_count(&mmls) {
                     Some(n) => n,
@@ -213,18 +224,20 @@ impl DawApp {
                 };
                 let lookahead_measure_index =
                     following_measure_index(current.measure_index, effective_count);
-                let next_mml = &mmls[lookahead_measure_index];
+                let next_track_mmls = &measure_track_mmls[lookahead_measure_index];
                 let next_playback_audio = match build_playback_measure_samples(
                     &cache,
                     lookahead_measure_index,
-                    next_mml,
+                    next_track_mmls,
                     measure_samples,
                     tracks,
+                    &track_gains,
                     &log_lines,
-                    || {
+                    |track, mml| {
                         let _guard = render_lock.lock().unwrap();
                         let core_cfg = CoreConfig::from(&daw_cfg);
-                        mml_render_for_cache(next_mml, &core_cfg, entry_ref)
+                        let _ = track;
+                        mml_render_for_cache(mml, &core_cfg, entry_ref)
                     },
                 ) {
                     Ok(playback_audio) => playback_audio,

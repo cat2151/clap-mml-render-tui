@@ -33,9 +33,22 @@ where
 impl DawApp {
     /// 指定された小節を一度だけ再生するプレビュー（ループなし）
     pub(super) fn start_preview(&self, measure_index: usize) {
-        let mmls = self.build_measure_mmls();
-        let mml = mmls.get(measure_index).cloned().unwrap_or_default();
-        if mml.trim().is_empty() {
+        let measure_track_mmls = self.build_measure_track_mmls();
+        let track_mmls = measure_track_mmls
+            .get(measure_index)
+            .cloned()
+            .unwrap_or_else(|| vec![String::new(); self.tracks]);
+        let track_gains = self.playback_track_gains();
+        let active_tracks: Vec<usize> = (super::FIRST_PLAYABLE_TRACK..self.tracks)
+            .filter(|&track| {
+                track_gains.get(track).copied().unwrap_or(1.0) > 0.0
+                    && track_mmls
+                        .get(track)
+                        .map(|mml| !mml.trim().is_empty())
+                        .unwrap_or(false)
+            })
+            .collect();
+        if active_tracks.is_empty() {
             return;
         }
 
@@ -81,40 +94,71 @@ impl DawApp {
                 return;
             };
 
-            let samples_opt = if let Some(cached) =
-                try_get_cached_samples(&cache, measure_index + 1, measure_samples, tracks)
-            {
-                crate::logging::append_log_line(
-                    &log_lines,
-                    format!(
-                        "meas{}: cache hit {}",
-                        measure_index + 1,
-                        if cached.cached_tracks.is_empty() {
-                            "empty-tracks".to_string()
-                        } else {
-                            cached
-                                .cached_tracks
-                                .iter()
-                                .map(|track| format!("track{track}/meas{}", measure_index + 1))
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        }
-                    ),
-                );
-                Some(cached.samples)
+            let render_mixed_tracks = || -> Option<Vec<f32>> {
+                let mut mixed = vec![0.0f32; measure_samples];
+                for track in &active_tracks {
+                    let gain = track_gains.get(*track).copied().unwrap_or(1.0);
+                    let mml = track_mmls
+                        .get(*track)
+                        .map(String::as_str)
+                        .unwrap_or_default();
+                    let result = {
+                        let _guard = render_lock.lock().unwrap();
+                        let core_cfg = CoreConfig::from(&daw_cfg);
+                        mml_render_for_cache(mml, &core_cfg, entry_ref)
+                    };
+                    let samples = result
+                        .ok()
+                        .map(|samples| pad_playback_measure_samples(samples, measure_samples))?;
+                    if mixed.len() < samples.len() {
+                        mixed.resize(samples.len(), 0.0);
+                    }
+                    for (index, sample) in samples.iter().enumerate() {
+                        mixed[index] += *sample * gain;
+                    }
+                }
+                Some(mixed)
+            };
+
+            let samples_opt = if let Some(cached) = try_get_cached_samples(
+                &cache,
+                measure_index + 1,
+                measure_samples,
+                tracks,
+                &track_gains,
+            ) {
+                if cached.cached_tracks.len() != active_tracks.len() {
+                    crate::logging::append_log_line(
+                        &log_lines,
+                        format!("meas{}: render", measure_index + 1),
+                    );
+                    render_mixed_tracks()
+                } else {
+                    crate::logging::append_log_line(
+                        &log_lines,
+                        format!(
+                            "meas{}: cache hit {}",
+                            measure_index + 1,
+                            if cached.cached_tracks.is_empty() {
+                                "empty-tracks".to_string()
+                            } else {
+                                cached
+                                    .cached_tracks
+                                    .iter()
+                                    .map(|track| format!("track{track}/meas{}", measure_index + 1))
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            }
+                        ),
+                    );
+                    Some(cached.samples)
+                }
             } else {
                 crate::logging::append_log_line(
                     &log_lines,
                     format!("meas{}: render", measure_index + 1),
                 );
-                let result = {
-                    let _guard = render_lock.lock().unwrap();
-                    let core_cfg = CoreConfig::from(&daw_cfg);
-                    mml_render_for_cache(&mml, &core_cfg, entry_ref)
-                };
-                result
-                    .ok()
-                    .map(|samples| pad_playback_measure_samples(samples, measure_samples))
+                render_mixed_tracks()
             };
 
             if let Some(samples) = samples_opt {

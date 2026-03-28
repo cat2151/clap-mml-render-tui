@@ -27,13 +27,13 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
         Line::from("  M      : 中央 track へ移動"),
         Line::from("  L      : 末尾 track へ移動"),
         Line::from("  i      : INSERT モード"),
+        Line::from("  m      : mixer overlay"),
         Line::from("  p      : 演奏 / 停止"),
         Line::from("  s      : solo toggle"),
         Line::from("  r      : random 音色設定"),
         Line::from("  K / ?  : ヘルプ (このページ)"),
         Line::from("  d/ESC  : TUI に戻る"),
         Line::from("  q      : 終了"),
-        Line::from(""),
         Line::from(Span::styled(
             "INSERT モード",
             Style::default()
@@ -42,9 +42,16 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
         )),
         Line::from("  ESC   : 確定 → NORMAL"),
         Line::from("  Enter : 確定 → 次小節 → INSERT 継続"),
-        Line::from("  Ctrl+C: コピー"),
-        Line::from("  Ctrl+X: カット"),
-        Line::from("  Ctrl+V: ペースト"),
+        Line::from("  Ctrl+C/X/V: コピー / カット / ペースト"),
+        Line::from(Span::styled(
+            "MIXER overlay",
+            Style::default()
+                .fg(MONOKAI_YELLOW)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from("  h/l, ←/→ : track 移動"),
+        Line::from("  j/k, ↓/↑ : volume -/+3dB"),
+        Line::from("  ESC      : 閉じる"),
         Line::from(""),
         Line::from(Span::styled(
             "  [ESC] でキャンセル",

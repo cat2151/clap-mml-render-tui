@@ -3,6 +3,7 @@
 mod grid;
 mod help;
 mod logs;
+mod mixer;
 mod status;
 
 use ratatui::{
@@ -102,6 +103,8 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
 
     if app.mode == DawMode::Help {
         help::draw_help(f, inner);
+    } else if app.mode == DawMode::Mixer {
+        mixer::draw_mixer(f, app, inner);
     }
 }
 

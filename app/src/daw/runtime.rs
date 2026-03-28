@@ -51,6 +51,7 @@ impl DawApp {
                         },
                         DawMode::Insert => self.handle_insert(key),
                         DawMode::Help => self.handle_help(key.code),
+                        DawMode::Mixer => self.handle_mixer(key.code),
                     }
                 }
             }
