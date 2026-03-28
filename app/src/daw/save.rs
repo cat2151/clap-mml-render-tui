@@ -1,6 +1,6 @@
 //! DAW セッションの保存・読み込み
 
-use super::DawApp;
+use super::{DawApp, FIRST_PLAYABLE_TRACK, MIXER_MAX_DB, MIXER_MIN_DB};
 
 // ─── 保存形式 ─────────────────────────────────────────────────
 
@@ -106,10 +106,13 @@ pub(super) fn apply_save_file_to_track_volumes(
 ) {
     for save_track in &file.tracks {
         let t = save_track.track;
-        if t >= tracks {
+        if t >= tracks || t < FIRST_PLAYABLE_TRACK {
             continue;
         }
-        track_volumes_db[t] = save_track.volume_db.unwrap_or(0);
+        track_volumes_db[t] = save_track
+            .volume_db
+            .unwrap_or(0)
+            .clamp(MIXER_MIN_DB, MIXER_MAX_DB);
     }
 }
 

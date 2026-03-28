@@ -208,6 +208,25 @@ fn daw_save_json_keeps_track_volume_for_empty_track() {
 }
 
 #[test]
+fn daw_load_clamps_track_volume_and_ignores_track0_volume() {
+    let json = r#"{"tracks":[{"track":0,"volume_db":99,"meas":[]},{"track":1,"volume_db":-999,"meas":[]},{"track":2,"volume_db":99,"meas":[]}]}"#;
+    let file: DawSaveFile = serde_json::from_str(json).unwrap();
+    let mut track_volumes = empty_track_volumes(TRACKS);
+
+    apply_save_file_to_track_volumes(&file, &mut track_volumes, TRACKS);
+
+    assert_eq!(track_volumes[0], 0, "track0 volume should be ignored");
+    assert_eq!(
+        track_volumes[1], -36,
+        "playable track volume should clamp to min"
+    );
+    assert_eq!(
+        track_volumes[2], 6,
+        "playable track volume should clamp to max"
+    );
+}
+
+#[test]
 fn daw_load_clears_defaults_before_applying_json() {
     // JSON が正常にパースできた場合、new() が設定したデフォルト値（data[0][0]）は
     // クリアされてから JSON の内容が適用されること。

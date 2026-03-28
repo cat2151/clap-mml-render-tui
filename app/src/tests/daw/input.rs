@@ -11,6 +11,10 @@ use crate::config::Config;
 
 use super::super::{CacheState, CellCache, DawApp, DawMode, DawPlayState, PlayPosition};
 
+fn track1_minus_6_db_gain() -> f32 {
+    10.0f32.powf(-6.0 / 20.0)
+}
+
 fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob>) {
     let tracks = 3;
     let measures = 2;
@@ -224,6 +228,12 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
         app.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
         app.data[1][1] = "cdef".to_string();
         app.data[1][2] = "gabc".to_string();
+        app.track_volumes_db[1] = -6;
+        // 共有 playback 状態を意図的に古い空データへしておき、
+        // random patch 更新が hot reload 時に全共有 state を同期することを検証する。
+        *app.play_measure_track_mmls.lock().unwrap() =
+            vec![vec![String::new(); app.tracks]; app.measures];
+        *app.play_track_gains.lock().unwrap() = vec![0.0; app.tracks];
 
         app.handle_normal(crossterm::event::KeyCode::Char('r'));
 
@@ -277,6 +287,18 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
             ),
             "logs: {:?}",
             logs
+        );
+        let play_measure_track_mmls = app.play_measure_track_mmls.lock().unwrap().clone();
+        assert!(
+            play_measure_track_mmls[0][1].contains(r#"{"Surge XT patch": "Pad 1.fxp"}"#),
+            "hot reload should refresh per-track playback MMLs: {:?}",
+            play_measure_track_mmls
+        );
+        let play_track_gains = app.play_track_gains.lock().unwrap().clone();
+        assert!(
+            (play_track_gains[1] - track1_minus_6_db_gain()).abs() < f32::EPSILON,
+            "hot reload should refresh playback gains: {:?}",
+            play_track_gains
         );
     }
 

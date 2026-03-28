@@ -223,8 +223,7 @@ impl DawApp {
                         old_samples,
                         new_samples,
                     ));
-                    *self.play_measure_mmls.lock().unwrap() = new_mmls;
-                    *self.play_measure_samples.lock().unwrap() = new_samples;
+                    self.sync_playback_mml_state();
                 }
             }
 
