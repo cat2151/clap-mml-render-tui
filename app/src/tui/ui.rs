@@ -17,6 +17,10 @@ pub(super) use crate::ui_theme::{
 const LIST_HIGHLIGHT_SYMBOL: &str = "▶ ";
 const LIST_HIGHLIGHT_WIDTH: u16 = 2;
 
+fn visible_list_page_size(area: Rect) -> usize {
+    usize::from(area.height.saturating_sub(2).max(1))
+}
+
 fn base_style() -> Style {
     Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG)
 }
@@ -87,17 +91,17 @@ fn notepad_mode_title(app: &TuiApp<'_>) -> &'static str {
 fn keybind_text(mode: &Mode) -> &'static str {
     match mode {
         Mode::Normal => {
-            "q:quit  ?:help  i:insert  r:ランダム音色  t:音色  p:phrase  j/k  Enter/Space  d:DAW"
+            "q:quit  ?:help  i:insert  r:ランダム音色  t:音色  p:phrase  j/k・↑↓/PgUp/PgDn  Enter/Space  d:DAW"
         }
         Mode::Insert => "ESC:確定→NORMAL  Enter:確定→次行",
         Mode::PatchSelect => {
-            "Enter:決定  ESC:キャンセル  Ctrl+F:お気に入り  j/k・↑↓:移動  文字入力:フィルタ  Space:AND条件"
+            "Enter:決定  ESC:キャンセル  Ctrl+F:お気に入り  Ctrl+J/N・Ctrl+K/P・↑↓・PgUp/PgDn:移動  文字入力:フィルタ  Space:AND条件"
         }
         Mode::NotepadHistory => {
-            "Enter:確定  ESC:閉じる  h/l・←/→:ペイン移動  j/k:移動して再生  f:お気に入り  dd:削除"
+            "Enter:確定  ESC:閉じる  h/l・←/→:ペイン移動  j/k・↑↓:移動して再生  PgUp/PgDn:1画面移動  f:お気に入り  dd:削除"
         }
         Mode::PatchPhrase => {
-            "j/k:再生移動  h/l:ペイン移動  Space:再生  Enter:現在行の上に挿入  i:編集  f:お気に入り  ESC:戻る"
+            "j/k・↑↓:再生移動  PgUp/PgDn:1画面移動  h/l:ペイン移動  Space:再生  Enter:現在行の上に挿入  i:編集  f:お気に入り  ESC:戻る"
         }
         Mode::Help => "ESC:キャンセル",
     }
@@ -125,6 +129,7 @@ fn draw_patch_select(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
             Constraint::Length(1),
         ])
         .split(area);
+    app.patch_select_page_size = visible_list_page_size(chunks[1]);
 
     f.render_widget(
         Paragraph::new(format!("> {}", app.patch_query))
@@ -197,6 +202,7 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, play_state: &PlayState, stat
             Constraint::Length(1),
         ])
         .split(f.area());
+    app.normal_page_size = visible_list_page_size(chunks[0]);
 
     let items: Vec<ListItem> = app
         .lines
@@ -277,6 +283,7 @@ fn draw_patch_phrase(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[0]);
+    app.patch_phrase_page_size = visible_list_page_size(panes[0]);
 
     let patch_name = app.patch_phrase_name.as_deref().unwrap_or("(unknown)");
     let history_items: Vec<ListItem> = app
@@ -375,6 +382,7 @@ fn draw_notepad_history(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, statu
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[0]);
+    app.notepad_history_page_size = visible_list_page_size(panes[0]);
 
     let history_items: Vec<ListItem> = app
         .notepad_history_items()
@@ -474,6 +482,8 @@ fn draw_help(f: &mut Frame) {
         )),
         Line::from("  j / ↓       : 下へ移動"),
         Line::from("  k / ↑       : 上へ移動"),
+        Line::from("  PageDown    : 1画面下へ移動"),
+        Line::from("  PageUp      : 1画面上へ移動"),
         Line::from("  H           : 先頭行へ移動"),
         Line::from("  M           : 中央行へ移動"),
         Line::from("  L           : 末尾行へ移動"),
@@ -503,7 +513,9 @@ fn draw_help(f: &mut Frame) {
             base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD),
         )),
         Line::from("  文字入力 : フィルタ (Space=AND条件)"),
-        Line::from("  ↑↓      : リスト移動"),
+        Line::from("  Ctrl+J / Ctrl+N / ↓ : 下へ移動"),
+        Line::from("  Ctrl+K / Ctrl+P / ↑ : 上へ移動"),
+        Line::from("  PageUp / PageDown   : 1画面移動"),
         Line::from("  Enter   : 音色決定"),
         Line::from("  Ctrl+F  : 現在音色とMMLをFavorites追加"),
         Line::from("  ESC     : キャンセル"),
@@ -514,6 +526,7 @@ fn draw_help(f: &mut Frame) {
         )),
         Line::from("  h / l ・ ← / → : ペイン切替"),
         Line::from("  j / k       : 上下移動して再生"),
+        Line::from("  PageUp / PageDown : 1画面移動して再生"),
         Line::from("  Enter       : 現在行へ確定"),
         Line::from("  f           : History行をお気に入りに追加"),
         Line::from("  dd          : Favorites行を削除してHistory先頭へ移動"),
@@ -524,6 +537,7 @@ fn draw_help(f: &mut Frame) {
             base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD),
         )),
         Line::from("  j / k       : 上下移動して再生"),
+        Line::from("  PageUp / PageDown : 1画面移動して再生"),
         Line::from("  h / l       : ペイン切替して再生"),
         Line::from("  Space       : 現在行を再生"),
         Line::from("  Enter       : 現在行の上に挿入"),

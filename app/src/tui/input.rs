@@ -13,6 +13,28 @@ use super::{
 const PATCH_SELECT_PREVIEW_FALLBACK_PHRASE: &str = "c";
 
 impl<'a> TuiApp<'a> {
+    fn move_normal_cursor_by(&mut self, delta: isize) {
+        let max_cursor = self.lines.len().saturating_sub(1) as isize;
+        let next_cursor = (self.cursor as isize + delta).clamp(0, max_cursor) as usize;
+        if next_cursor != self.cursor {
+            self.cursor = next_cursor;
+            self.list_state.select(Some(self.cursor));
+        }
+    }
+
+    fn move_patch_cursor_by(&mut self, delta: isize) {
+        if self.patch_filtered.is_empty() {
+            return;
+        }
+        let max_cursor = self.patch_filtered.len().saturating_sub(1) as isize;
+        let next_cursor = (self.patch_cursor as isize + delta).clamp(0, max_cursor) as usize;
+        if next_cursor != self.patch_cursor {
+            self.patch_cursor = next_cursor;
+            self.patch_list_state.select(Some(self.patch_cursor));
+            self.preview_selected_patch();
+        }
+    }
+
     fn build_patch_json(patch_name: &str) -> String {
         format!(
             "{{\"{PATCH_JSON_KEY}\": {}}}",
@@ -164,17 +186,36 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn handle_patch_select(&mut self, key_event: crossterm::event::KeyEvent) {
-        if key_event.modifiers.contains(KeyModifiers::CONTROL)
-            && matches!(key_event.code, KeyCode::Char('f') | KeyCode::Char('F'))
-        {
-            let Some(patch_name) = self.patch_filtered.get(self.patch_cursor).cloned() else {
-                return;
+        if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+            let handled = match key_event.code {
+                KeyCode::Char(c) => match c.to_ascii_lowercase() {
+                    'f' => {
+                        let Some(patch_name) = self.patch_filtered.get(self.patch_cursor).cloned()
+                        else {
+                            return;
+                        };
+                        let Some(phrase) = self.patch_select_current_phrase() else {
+                            return;
+                        };
+                        self.add_patch_phrase_favorite(patch_name, phrase);
+                        self.preview_selected_patch();
+                        true
+                    }
+                    'j' | 'n' => {
+                        self.move_patch_cursor_by(1);
+                        true
+                    }
+                    'k' | 'p' => {
+                        self.move_patch_cursor_by(-1);
+                        true
+                    }
+                    _ => false,
+                },
+                _ => false,
             };
-            let Some(phrase) = self.patch_select_current_phrase() else {
+            if handled {
                 return;
-            };
-            self.add_patch_phrase_favorite(patch_name, phrase);
-            self.preview_selected_patch();
+            }
             return;
         }
 
@@ -191,20 +232,10 @@ impl<'a> TuiApp<'a> {
                 }
                 self.mode = Mode::Normal;
             }
-            KeyCode::Char('j') | KeyCode::Down => {
-                if self.patch_cursor + 1 < self.patch_filtered.len() {
-                    self.patch_cursor += 1;
-                    self.patch_list_state.select(Some(self.patch_cursor));
-                    self.preview_selected_patch();
-                }
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
-                if self.patch_cursor > 0 {
-                    self.patch_cursor -= 1;
-                    self.patch_list_state.select(Some(self.patch_cursor));
-                    self.preview_selected_patch();
-                }
-            }
+            KeyCode::Down => self.move_patch_cursor_by(1),
+            KeyCode::Up => self.move_patch_cursor_by(-1),
+            KeyCode::PageDown => self.move_patch_cursor_by(self.patch_select_page_size as isize),
+            KeyCode::PageUp => self.move_patch_cursor_by(-(self.patch_select_page_size as isize)),
             KeyCode::Backspace => {
                 self.patch_query.pop();
                 self.update_patch_filter();
@@ -276,18 +307,10 @@ impl<'a> TuiApp<'a> {
                 self.list_state.select(Some(self.cursor));
                 self.start_insert();
             }
-            KeyCode::Char('j') | KeyCode::Down => {
-                if self.cursor + 1 < self.lines.len() {
-                    self.cursor += 1;
-                    self.list_state.select(Some(self.cursor));
-                }
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
-                if self.cursor > 0 {
-                    self.cursor -= 1;
-                    self.list_state.select(Some(self.cursor));
-                }
-            }
+            KeyCode::Char('j') | KeyCode::Down => self.move_normal_cursor_by(1),
+            KeyCode::Char('k') | KeyCode::Up => self.move_normal_cursor_by(-1),
+            KeyCode::PageDown => self.move_normal_cursor_by(self.normal_page_size as isize),
+            KeyCode::PageUp => self.move_normal_cursor_by(-(self.normal_page_size as isize)),
             KeyCode::Char('H') => {
                 self.cursor = 0;
                 self.list_state.select(Some(self.cursor));

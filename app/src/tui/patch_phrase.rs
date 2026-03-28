@@ -9,6 +9,28 @@ use super::{Mode, PatchPhrasePane, TuiApp, PATCH_JSON_KEY};
 const PATCH_PHRASE_LIST_MAX_LEN: usize = 100;
 
 impl<'a> TuiApp<'a> {
+    fn move_patch_phrase_selection_by(
+        &mut self,
+        delta: isize,
+        history_len: usize,
+        favorites_len: usize,
+    ) {
+        match self.patch_phrase_focus {
+            PatchPhrasePane::History => {
+                let max_cursor = history_len.saturating_sub(1) as isize;
+                self.patch_phrase_history_cursor =
+                    (self.patch_phrase_history_cursor as isize + delta).clamp(0, max_cursor)
+                        as usize;
+            }
+            PatchPhrasePane::Favorites => {
+                let max_cursor = favorites_len.saturating_sub(1) as isize;
+                self.patch_phrase_favorites_cursor =
+                    (self.patch_phrase_favorites_cursor as isize + delta).clamp(0, max_cursor)
+                        as usize;
+            }
+        }
+    }
+
     pub(super) fn push_front_dedup(items: &mut Vec<String>, item: String) {
         if let Some(index) = items.iter().position(|existing| existing == &item) {
             if index == 0 {
@@ -155,19 +177,7 @@ impl<'a> TuiApp<'a> {
                 }
             }
             KeyCode::Char('j') | KeyCode::Down => {
-                match self.patch_phrase_focus {
-                    PatchPhrasePane::History
-                        if self.patch_phrase_history_cursor + 1 < history_len =>
-                    {
-                        self.patch_phrase_history_cursor += 1;
-                    }
-                    PatchPhrasePane::Favorites
-                        if self.patch_phrase_favorites_cursor + 1 < favorites_len =>
-                    {
-                        self.patch_phrase_favorites_cursor += 1;
-                    }
-                    _ => {}
-                }
+                self.move_patch_phrase_selection_by(1, history_len, favorites_len);
                 self.sync_patch_phrase_states();
                 if let Some(mml) = self.patch_phrase_preview_mml() {
                     self.record_notepad_history(&mml);
@@ -175,15 +185,31 @@ impl<'a> TuiApp<'a> {
                 }
             }
             KeyCode::Char('k') | KeyCode::Up => {
-                match self.patch_phrase_focus {
-                    PatchPhrasePane::History if self.patch_phrase_history_cursor > 0 => {
-                        self.patch_phrase_history_cursor -= 1;
-                    }
-                    PatchPhrasePane::Favorites if self.patch_phrase_favorites_cursor > 0 => {
-                        self.patch_phrase_favorites_cursor -= 1;
-                    }
-                    _ => {}
+                self.move_patch_phrase_selection_by(-1, history_len, favorites_len);
+                self.sync_patch_phrase_states();
+                if let Some(mml) = self.patch_phrase_preview_mml() {
+                    self.record_notepad_history(&mml);
+                    self.play_mml(mml);
                 }
+            }
+            KeyCode::PageDown => {
+                self.move_patch_phrase_selection_by(
+                    self.patch_phrase_page_size as isize,
+                    history_len,
+                    favorites_len,
+                );
+                self.sync_patch_phrase_states();
+                if let Some(mml) = self.patch_phrase_preview_mml() {
+                    self.record_notepad_history(&mml);
+                    self.play_mml(mml);
+                }
+            }
+            KeyCode::PageUp => {
+                self.move_patch_phrase_selection_by(
+                    -(self.patch_phrase_page_size as isize),
+                    history_len,
+                    favorites_len,
+                );
                 self.sync_patch_phrase_states();
                 if let Some(mml) = self.patch_phrase_preview_mml() {
                     self.record_notepad_history(&mml);
