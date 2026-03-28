@@ -229,6 +229,7 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
         play_measure_samples: Arc::new(Mutex::new(0)),
         log_lines: Arc::new(Mutex::new(VecDeque::new())),
         track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
+        solo_tracks: vec![false; tracks],
     };
     app.data[1][1] = "c".to_string();
     app.data[1][3] = "e".to_string();

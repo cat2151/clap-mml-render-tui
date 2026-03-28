@@ -6,6 +6,10 @@ fn empty_data(tracks: usize, measures: usize) -> Vec<Vec<String>> {
     vec![vec![String::new(); measures + 1]; tracks]
 }
 
+fn no_solo_tracks(tracks: usize) -> Vec<bool> {
+    vec![false; tracks]
+}
+
 // ─── build_cell_mml_from_data ─────────────────────────────────
 
 #[test]
@@ -121,7 +125,7 @@ fn build_measure_mml_returns_empty_when_measure_has_no_notes() {
     data[1][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
     data[2][0] = r#"{"Surge XT patch": "brass"}"#.to_string();
 
-    let mml = build_measure_mml_from_data(&data, MEASURES, TRACKS, 1);
+    let mml = build_measure_mml_from_data(&data, MEASURES, TRACKS, 1, &no_solo_tracks(TRACKS));
 
     assert_eq!(mml, "");
 }
@@ -134,7 +138,7 @@ fn build_measure_mml_keeps_only_tracks_with_notes() {
     data[1][1] = "cde".to_string();
     data[2][0] = r#"{"Surge XT patch": "brass"}"#.to_string();
 
-    let mml = build_measure_mml_from_data(&data, MEASURES, TRACKS, 1);
+    let mml = build_measure_mml_from_data(&data, MEASURES, TRACKS, 1, &no_solo_tracks(TRACKS));
 
     assert!(mml.contains("cde"), "音符が MML に含まれていない: {}", mml);
     assert!(
@@ -151,7 +155,7 @@ fn build_measure_mml_reapplies_timbre_to_semicolon_branches_in_same_track() {
     data[1][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
     data[1][1] = "cde;gab".to_string();
 
-    let mml = build_measure_mml_from_data(&data, MEASURES, TRACKS, 1);
+    let mml = build_measure_mml_from_data(&data, MEASURES, TRACKS, 1, &no_solo_tracks(TRACKS));
 
     assert_eq!(
         mml.matches(r#"{"Surge XT patch": "piano"}"#).count(),
@@ -173,6 +177,31 @@ fn build_measure_mml_reapplies_timbre_to_semicolon_branches_in_same_track() {
     assert!(
         mml.contains("gab"),
         "second branch missing from MML: {}",
+        mml
+    );
+}
+
+#[test]
+fn build_measure_mml_keeps_only_solo_tracks_when_solo_mode_is_active() {
+    let mut data = empty_data(TRACKS, MEASURES);
+    data[0][0] = DEFAULT_TRACK0_MML.to_string();
+    data[1][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
+    data[1][1] = "cde".to_string();
+    data[2][0] = r#"{"Surge XT patch": "brass"}"#.to_string();
+    data[2][1] = "gab".to_string();
+
+    let mut solo_tracks = no_solo_tracks(TRACKS);
+    solo_tracks[1] = true;
+    let mml = build_measure_mml_from_data(&data, MEASURES, TRACKS, 1, &solo_tracks);
+
+    assert!(
+        mml.contains("cde"),
+        "solo track should remain audible: {}",
+        mml
+    );
+    assert!(
+        !mml.contains("gab"),
+        "non-solo track should be removed while solo mode is active: {}",
         mml
     );
 }

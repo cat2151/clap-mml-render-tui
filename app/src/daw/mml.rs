@@ -75,6 +75,7 @@ pub(super) fn build_measure_mml_from_data(
     num_measures: usize,
     tracks: usize,
     measure: usize,
+    solo_tracks: &[bool],
 ) -> String {
     use mmlabc_to_smf::mml_preprocessor;
 
@@ -89,9 +90,13 @@ pub(super) fn build_measure_mml_from_data(
         })
         .collect::<Vec<_>>()
         .join("");
+    let solo_mode_active = solo_tracks.iter().any(|&is_solo| is_solo);
 
     let track_mmls: Vec<String> = (FIRST_PLAYABLE_TRACK..tracks)
         .filter_map(|t| {
+            if solo_mode_active && !solo_tracks.get(t).copied().unwrap_or(false) {
+                return None;
+            }
             let timbre = data[t][0].trim();
             let notes = data[t][measure].trim();
             if notes.is_empty() {
@@ -120,7 +125,13 @@ impl DawApp {
     /// それ自体を独立した再生 track としては扱わない。
     /// 音色 JSON を先頭に置くことで extract_embedded_json が正しく解析できる
     pub(super) fn build_measure_mml(&self, measure: usize) -> String {
-        build_measure_mml_from_data(&self.data, self.measures, self.tracks, measure)
+        build_measure_mml_from_data(
+            &self.data,
+            self.measures,
+            self.tracks,
+            measure,
+            &self.solo_tracks,
+        )
     }
 
     /// 全小節の per-measure MML ベクターを構築する（演奏用; hot reload に使用）
