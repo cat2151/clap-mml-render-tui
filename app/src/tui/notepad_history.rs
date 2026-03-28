@@ -77,6 +77,8 @@ impl<'a> TuiApp<'a> {
     fn delete_notepad_favorite(&mut self) {
         let favorites = &mut self.patch_phrase_store.notepad.favorites;
         if self.notepad_favorites_cursor >= favorites.len() {
+            self.notepad_pending_delete = false;
+            self.sync_notepad_history_states();
             return;
         }
 
@@ -109,6 +111,7 @@ impl<'a> TuiApp<'a> {
         match key {
             KeyCode::Esc => {
                 self.notepad_pending_delete = false;
+                self.flush_patch_phrase_store_if_dirty();
                 self.mode = Mode::Normal;
             }
             KeyCode::Char('h') => {
@@ -152,6 +155,7 @@ impl<'a> TuiApp<'a> {
                     self.lines[self.cursor] = mml.clone();
                     self.record_notepad_history(&mml);
                     self.play_mml(mml);
+                    self.flush_patch_phrase_store_if_dirty();
                     self.mode = Mode::Normal;
                 }
             }
@@ -164,7 +168,7 @@ impl<'a> TuiApp<'a> {
             KeyCode::Char('d') if self.notepad_focus == PatchPhrasePane::Favorites => {
                 if was_pending_delete {
                     self.delete_notepad_favorite();
-                } else {
+                } else if self.selected_notepad_item().is_some() {
                     self.notepad_pending_delete = true;
                 }
             }
