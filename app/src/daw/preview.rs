@@ -74,8 +74,9 @@ impl DawApp {
                 sink.stop();
             }
             *play_position.lock().unwrap() = None;
+            let session = preview_session.fetch_add(1, Ordering::AcqRel) + 1;
             *play_state.lock().unwrap() = DawPlayState::Preview;
-            preview_session.fetch_add(1, Ordering::AcqRel) + 1
+            session
         };
         crate::logging::append_log_line(&log_lines, format!("preview: meas{}", measure_index + 1));
 

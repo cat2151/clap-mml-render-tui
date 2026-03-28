@@ -309,7 +309,7 @@ fn normal_playback_shortcut_maps_enter_space_and_shift_p() {
 }
 
 #[test]
-fn handle_normal_enter_stops_current_preview_before_restarting() {
+fn handle_normal_enter_stops_current_preview_before_restart_attempt() {
     let (mut app, _cache_rx) = build_test_app();
     *app.play_state.lock().unwrap() = DawPlayState::Preview;
 
@@ -327,7 +327,7 @@ fn handle_normal_enter_stops_current_preview_before_restarting() {
 }
 
 #[test]
-fn handle_normal_space_stops_current_preview_before_restarting() {
+fn handle_normal_space_stops_current_preview_before_restart_attempt() {
     let (mut app, _cache_rx) = build_test_app();
     *app.play_state.lock().unwrap() = DawPlayState::Preview;
 
