@@ -7,5 +7,6 @@ pub mod server;
 #[cfg(test)]
 pub(crate) mod test_utils;
 pub mod tui;
+pub(crate) mod ui_theme;
 pub mod ui_utils;
 pub mod updater;

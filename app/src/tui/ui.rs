@@ -9,16 +9,13 @@ use ratatui::{
 };
 
 use super::{Mode, PatchPhrasePane, PlayState, TuiApp};
+pub(super) use crate::ui_theme::{
+    MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_PURPLE,
+    MONOKAI_YELLOW,
+};
 
 const LIST_HIGHLIGHT_SYMBOL: &str = "▶ ";
 const LIST_HIGHLIGHT_WIDTH: u16 = 2;
-const MONOKAI_BG: Color = Color::Rgb(39, 40, 34);
-const MONOKAI_FG: Color = Color::Rgb(248, 248, 242);
-const MONOKAI_GRAY: Color = Color::Rgb(160, 160, 160);
-const MONOKAI_YELLOW: Color = Color::Rgb(230, 219, 116);
-const MONOKAI_GREEN: Color = Color::Rgb(166, 226, 46);
-const MONOKAI_CYAN: Color = Color::Rgb(102, 217, 239);
-const MONOKAI_PURPLE: Color = Color::Rgb(174, 129, 255);
 
 fn base_style() -> Style {
     Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG)
