@@ -24,6 +24,7 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
         draw_normal(app, f, &play_state, status_color);
         draw_help(f);
     } else if app.mode == Mode::PatchSelect {
+        draw_normal(app, f, &play_state, status_color);
         draw_patch_select(app, f, &status, status_color);
     } else if app.mode == Mode::PatchPhrase {
         draw_patch_phrase(app, f, &status, status_color);
@@ -68,7 +69,7 @@ fn keybind_text(mode: &Mode) -> &'static str {
         }
         Mode::Insert => "ESC:確定→NORMAL  Enter:確定→次行",
         Mode::PatchSelect => {
-            "Enter:決定  ESC:キャンセル  ↑↓:移動  文字入力:フィルタ  Space:AND条件"
+            "Enter:決定  ESC:キャンセル  j/k・↑↓:移動  文字入力:フィルタ  Space:AND条件"
         }
         Mode::PatchPhrase => {
             "j/k:再生移動  h/l:ペイン移動  Space/Enter:再生  i:編集  f:お気に入り  ESC:戻る"
@@ -87,6 +88,8 @@ fn status_text(app: &TuiApp<'_>, play_state: &PlayState) -> String {
 }
 
 fn draw_patch_select(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_color: Color) {
+    let area = crate::ui_utils::centered_rect(70, 70, f.area());
+    f.render_widget(Clear, area);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -94,7 +97,7 @@ fn draw_patch_select(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
             Constraint::Min(1),
             Constraint::Length(1),
         ])
-        .split(f.area());
+        .split(area);
 
     f.render_widget(
         Paragraph::new(format!("> {}", app.patch_query)).block(

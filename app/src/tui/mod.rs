@@ -8,7 +8,8 @@
 //!            Ctrl+C / Ctrl+X / Ctrl+V → コピー / カット / ペースト
 //!   PATCHSELECT : インクリメンタルサーチで音色を選択
 //!            文字入力: フィルタ（space=AND条件）
-//!            ↑↓:リスト移動  Enter:現在行の先頭にJSONで挿入（上書き）  ESC:キャンセル
+//!            j/k, ↑↓:リスト移動（移動ごとにpreview再生）
+//!            Enter:現在行の先頭にJSONで挿入（上書き）  ESC:キャンセル
 //!   HELP : K / ? で表示、ESC でキャンセル
 
 mod cache;

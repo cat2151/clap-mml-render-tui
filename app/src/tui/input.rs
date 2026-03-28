@@ -108,13 +108,35 @@ impl<'a> TuiApp<'a> {
             .iter()
             .map(|(orig, _)| orig.clone())
             .collect();
-        self.patch_cursor = 0;
+        self.patch_cursor = self
+            .lines
+            .get(self.cursor)
+            .and_then(|line| Self::extract_patch_phrase(line))
+            .and_then(|(patch_name, _)| {
+                self.patch_filtered
+                    .iter()
+                    .position(|patch| patch == &patch_name)
+            })
+            .unwrap_or(0);
         let mut ls = ListState::default();
         if !self.patch_filtered.is_empty() {
-            ls.select(Some(0));
+            ls.select(Some(self.patch_cursor));
         }
         self.patch_list_state = ls;
         self.mode = Mode::PatchSelect;
+    }
+
+    fn patch_select_preview_mml(&self) -> Option<String> {
+        let patch_name = self.patch_filtered.get(self.patch_cursor)?;
+        let (_, phrase) = Self::extract_patch_phrase(self.lines.get(self.cursor)?)?;
+        let json = serde_json::json!({ PATCH_JSON_KEY: patch_name }).to_string();
+        Some(format!("{json} {phrase}"))
+    }
+
+    fn preview_selected_patch(&mut self) {
+        if let Some(mml) = self.patch_select_preview_mml() {
+            self.play_mml(mml);
+        }
     }
 
     pub(super) fn update_patch_filter(&mut self) {
@@ -139,16 +161,18 @@ impl<'a> TuiApp<'a> {
                 }
                 self.mode = Mode::Normal;
             }
-            KeyCode::Down => {
+            KeyCode::Char('j') | KeyCode::Down => {
                 if self.patch_cursor + 1 < self.patch_filtered.len() {
                     self.patch_cursor += 1;
                     self.patch_list_state.select(Some(self.patch_cursor));
+                    self.preview_selected_patch();
                 }
             }
-            KeyCode::Up => {
+            KeyCode::Char('k') | KeyCode::Up => {
                 if self.patch_cursor > 0 {
                     self.patch_cursor -= 1;
                     self.patch_list_state.select(Some(self.patch_cursor));
+                    self.preview_selected_patch();
                 }
             }
             KeyCode::Backspace => {
