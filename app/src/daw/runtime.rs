@@ -36,7 +36,7 @@ impl DawApp {
                     }
 
                     match self.mode {
-                        DawMode::Normal => match self.handle_normal(key.code) {
+                        DawMode::Normal => match self.handle_normal_key_event(key) {
                             DawNormalAction::ReturnToTui => {
                                 self.stop_play();
                                 self.save_history_state();

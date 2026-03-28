@@ -7,6 +7,54 @@ use super::{
     DawPlayState, FIRST_PLAYABLE_TRACK,
 };
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum NormalPlaybackShortcut {
+    PreviewCurrentTrackMeasure,
+    PreviewAllTracksMeasure,
+    PlayFromCurrentMeasure,
+}
+
+fn normal_playback_shortcut(
+    key_event: crossterm::event::KeyEvent,
+) -> Option<NormalPlaybackShortcut> {
+    let shift = key_event.modifiers.contains(KeyModifiers::SHIFT);
+    match key_event.code {
+        KeyCode::Enter | KeyCode::Char(' ') if shift => {
+            Some(NormalPlaybackShortcut::PreviewAllTracksMeasure)
+        }
+        KeyCode::Enter | KeyCode::Char(' ') => {
+            Some(NormalPlaybackShortcut::PreviewCurrentTrackMeasure)
+        }
+        KeyCode::Char('p') | KeyCode::Char('P') if shift => {
+            Some(NormalPlaybackShortcut::PlayFromCurrentMeasure)
+        }
+        _ => None,
+    }
+}
+
+fn preview_solo_tracks(
+    tracks: usize,
+    cursor_track: usize,
+    preview_all_tracks: bool,
+) -> Option<Vec<bool>> {
+    if preview_all_tracks {
+        return Some(vec![false; tracks]);
+    }
+    if cursor_track < FIRST_PLAYABLE_TRACK || cursor_track >= tracks {
+        return None;
+    }
+    let mut solo_tracks = vec![false; tracks];
+    solo_tracks[cursor_track] = true;
+    Some(solo_tracks)
+}
+
+fn play_from_cursor_ab_repeat(cursor_measure_index: Option<usize>) -> Option<AbRepeatState> {
+    cursor_measure_index.map(|measure_index| AbRepeatState::FixStart {
+        start_measure_index: measure_index,
+        end_measure_index: measure_index,
+    })
+}
+
 fn format_random_patch_hot_reload_log(
     track: usize,
     displayed_measure_index: Option<usize>,
@@ -77,6 +125,37 @@ impl DawApp {
         *self.play_measure_track_mmls.lock().unwrap() = new_track_mmls;
         *self.play_measure_samples.lock().unwrap() = new_samples;
         *self.play_track_gains.lock().unwrap() = new_track_gains;
+    }
+
+    fn start_preview_with_temporary_solo_tracks(&mut self, preview_all_tracks: bool) {
+        if *self.play_state.lock().unwrap() != DawPlayState::Idle {
+            return;
+        }
+        let Some(measure_index) = self.cursor_play_measure_index() else {
+            return;
+        };
+        let Some(solo_tracks) =
+            preview_solo_tracks(self.tracks, self.cursor_track, preview_all_tracks)
+        else {
+            return;
+        };
+
+        let original_solo_tracks = std::mem::replace(&mut self.solo_tracks, solo_tracks);
+        self.start_preview(measure_index);
+        self.solo_tracks = original_solo_tracks;
+    }
+
+    fn start_play_from_cursor_measure(&self) {
+        if *self.play_state.lock().unwrap() != DawPlayState::Idle {
+            return;
+        }
+        let Some(ab_repeat_state) = play_from_cursor_ab_repeat(self.cursor_play_measure_index())
+        else {
+            return;
+        };
+        *self.ab_repeat.lock().unwrap() = ab_repeat_state;
+        self.start_play();
+        *self.ab_repeat.lock().unwrap() = AbRepeatState::Off;
     }
 
     // ─── INSERT モード ────────────────────────────────────────
@@ -158,8 +237,29 @@ impl DawApp {
         }
     }
 
-    pub(super) fn handle_normal(&mut self, key: KeyCode) -> DawNormalAction {
-        match key {
+    pub(super) fn handle_normal_key_event(
+        &mut self,
+        key_event: crossterm::event::KeyEvent,
+    ) -> DawNormalAction {
+        if *self.play_state.lock().unwrap() == DawPlayState::Idle {
+            match normal_playback_shortcut(key_event) {
+                Some(NormalPlaybackShortcut::PreviewCurrentTrackMeasure) => {
+                    self.start_preview_with_temporary_solo_tracks(false);
+                    return DawNormalAction::Continue;
+                }
+                Some(NormalPlaybackShortcut::PreviewAllTracksMeasure) => {
+                    self.start_preview_with_temporary_solo_tracks(true);
+                    return DawNormalAction::Continue;
+                }
+                Some(NormalPlaybackShortcut::PlayFromCurrentMeasure) => {
+                    self.start_play_from_cursor_measure();
+                    return DawNormalAction::Continue;
+                }
+                None => {}
+            }
+        }
+
+        match key_event.code {
             KeyCode::Char('q') => return DawNormalAction::QuitApp,
             KeyCode::Char('d') | KeyCode::Esc => return DawNormalAction::ReturnToTui,
 
@@ -278,6 +378,10 @@ impl DawApp {
             _ => {}
         }
         DawNormalAction::Continue
+    }
+
+    pub(super) fn handle_normal(&mut self, key: KeyCode) -> DawNormalAction {
+        self.handle_normal_key_event(crossterm::event::KeyEvent::new(key, KeyModifiers::NONE))
     }
 
     pub(super) fn handle_insert(&mut self, key_event: crossterm::event::KeyEvent) {

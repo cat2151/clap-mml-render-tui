@@ -283,3 +283,58 @@ fn handle_normal_m_enters_mixer_mode_on_playable_track() {
     assert!(matches!(app.mode, DawMode::Mixer));
     assert_eq!(app.mixer_cursor_track, 1);
 }
+
+#[test]
+fn normal_playback_shortcut_maps_enter_space_and_shift_p() {
+    assert_eq!(
+        normal_playback_shortcut(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+        Some(NormalPlaybackShortcut::PreviewCurrentTrackMeasure)
+    );
+    assert_eq!(
+        normal_playback_shortcut(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE)),
+        Some(NormalPlaybackShortcut::PreviewCurrentTrackMeasure)
+    );
+    assert_eq!(
+        normal_playback_shortcut(KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT)),
+        Some(NormalPlaybackShortcut::PreviewAllTracksMeasure)
+    );
+    assert_eq!(
+        normal_playback_shortcut(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::SHIFT)),
+        Some(NormalPlaybackShortcut::PreviewAllTracksMeasure)
+    );
+    assert_eq!(
+        normal_playback_shortcut(KeyEvent::new(KeyCode::Char('P'), KeyModifiers::SHIFT)),
+        Some(NormalPlaybackShortcut::PlayFromCurrentMeasure)
+    );
+}
+
+#[test]
+fn preview_solo_tracks_can_force_current_track_even_when_solo_mode_differs() {
+    let solo_tracks = preview_solo_tracks(3, 2, false).expect("playable current track");
+
+    assert_eq!(solo_tracks, vec![false, false, true]);
+}
+
+#[test]
+fn preview_solo_tracks_can_temporarily_open_all_tracks() {
+    let solo_tracks = preview_solo_tracks(3, 2, true).expect("all-track preview");
+
+    assert_eq!(solo_tracks, vec![false, false, false]);
+}
+
+#[test]
+fn preview_solo_tracks_rejects_non_playable_current_track() {
+    assert_eq!(preview_solo_tracks(3, 0, false), None);
+}
+
+#[test]
+fn play_from_cursor_ab_repeat_targets_only_the_current_measure() {
+    assert_eq!(
+        play_from_cursor_ab_repeat(Some(1)),
+        Some(AbRepeatState::FixStart {
+            start_measure_index: 1,
+            end_measure_index: 1,
+        })
+    );
+    assert_eq!(play_from_cursor_ab_repeat(None), None);
+}
