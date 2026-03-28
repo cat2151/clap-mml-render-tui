@@ -10,6 +10,8 @@ use super::{
     filter_patches, Mode, NormalAction, PatchLoadState, PlayState, TuiApp, PATCH_JSON_KEY,
 };
 
+const PATCH_SELECT_PREVIEW_FALLBACK_PHRASE: &str = "c";
+
 impl<'a> TuiApp<'a> {
     fn build_patch_json(patch_name: &str) -> String {
         format!(
@@ -128,8 +130,13 @@ impl<'a> TuiApp<'a> {
 
     fn patch_select_preview_mml(&self) -> Option<String> {
         let patch_name = self.patch_filtered.get(self.patch_cursor)?;
-        let (_, phrase) = Self::extract_patch_phrase(self.lines.get(self.cursor)?)?;
-        let json = serde_json::json!({ PATCH_JSON_KEY: patch_name }).to_string();
+        let line = self.lines.get(self.cursor)?;
+        let preprocessed = mml_preprocessor::extract_embedded_json(line);
+        let phrase = match preprocessed.remaining_mml.trim() {
+            "" => PATCH_SELECT_PREVIEW_FALLBACK_PHRASE.to_string(),
+            remaining => remaining.to_string(),
+        };
+        let json = Self::build_patch_json(patch_name);
         Some(format!("{json} {phrase}"))
     }
 
