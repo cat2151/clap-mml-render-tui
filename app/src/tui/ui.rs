@@ -82,8 +82,8 @@ fn status_text(app: &TuiApp<'_>, play_state: &PlayState) -> String {
     let play_str = play_status_suffix(play_state);
     match app.mode {
         Mode::Normal | Mode::Insert | Mode::Help => normal_status_text(app, play_state),
-        Mode::PatchSelect => format!("音色選択  {}{}", keybind_text(&app.mode), play_str),
-        Mode::PatchPhrase => format!("patch phrase  {}{}", keybind_text(&app.mode), play_str),
+        Mode::PatchSelect => format!("音色選択{}", play_str),
+        Mode::PatchPhrase => format!("patch phrase{}", play_str),
     }
 }
 
@@ -95,6 +95,7 @@ fn draw_patch_select(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
         .constraints([
             Constraint::Length(3),
             Constraint::Min(1),
+            Constraint::Length(1),
             Constraint::Length(1),
         ])
         .split(area);
@@ -142,6 +143,7 @@ fn draw_patch_select(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
         Paragraph::new(status.to_string()).style(Style::default().fg(status_color)),
         chunks[2],
     );
+    f.render_widget(Paragraph::new(keybind_text(&app.mode)), chunks[3]);
 }
 
 fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, play_state: &PlayState, status_color: Color) {
@@ -227,7 +229,11 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, play_state: &PlayState, stat
 fn draw_patch_phrase(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_color: Color) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(3), Constraint::Length(1)])
+        .constraints([
+            Constraint::Min(3),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
         .split(f.area());
     let panes = Layout::default()
         .direction(Direction::Horizontal)
@@ -310,6 +316,7 @@ fn draw_patch_phrase(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
         Paragraph::new(status.to_string()).style(Style::default().fg(status_color)),
         chunks[1],
     );
+    f.render_widget(Paragraph::new(keybind_text(&app.mode)), chunks[2]);
 }
 
 fn draw_help(f: &mut Frame) {
