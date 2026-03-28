@@ -94,7 +94,7 @@ impl DawApp {
                 {
                     *state = DawPlayState::Idle;
                     drop(state);
-                    preview_sink.lock().unwrap().take();
+                    *preview_sink.lock().unwrap() = None;
                     *play_position.lock().unwrap() = None;
                 }
                 return;
@@ -107,12 +107,12 @@ impl DawApp {
                 {
                     *state = DawPlayState::Idle;
                     drop(state);
-                    preview_sink.lock().unwrap().take();
+                    *preview_sink.lock().unwrap() = None;
                     *play_position.lock().unwrap() = None;
                 }
                 return;
             };
-            let sink = Arc::new(sink);
+            let shared_sink = Arc::new(sink);
 
             let render_mixed_tracks = || -> Option<Vec<f32>> {
                 let mut mixed = vec![0.0f32; measure_samples];
@@ -191,12 +191,12 @@ impl DawApp {
                     measure_index,
                     || {
                         let source = rodio::buffer::SamplesBuffer::new(2, sample_rate, samples);
-                        *preview_sink.lock().unwrap() = Some(Arc::clone(&sink));
-                        sink.append(source);
+                        *preview_sink.lock().unwrap() = Some(Arc::clone(&shared_sink));
+                        shared_sink.append(source);
                     },
                 );
                 if preview_active {
-                    sink.sleep_until_end();
+                    shared_sink.sleep_until_end();
                 }
             } else {
                 crate::logging::append_log_line(

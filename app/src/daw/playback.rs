@@ -1,6 +1,7 @@
 //! DawApp の演奏メソッド
 
 use std::{
+    sync::atomic::Ordering,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -58,8 +59,6 @@ fn wait_until_or_stop(play_state: &Arc<std::sync::Mutex<DawPlayState>>, deadline
         std::thread::sleep((deadline - now).min(Duration::from_millis(10)));
     }
 }
-
-use std::sync::atomic::Ordering;
 
 impl DawApp {
     // ─── 演奏 ─────────────────────────────────────────────────
