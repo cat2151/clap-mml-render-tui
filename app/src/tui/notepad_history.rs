@@ -114,11 +114,11 @@ impl<'a> TuiApp<'a> {
                 self.flush_patch_phrase_store_if_dirty();
                 self.mode = Mode::Normal;
             }
-            KeyCode::Char('h') => {
+            KeyCode::Char('h') | KeyCode::Left => {
                 self.notepad_focus = PatchPhrasePane::History;
                 self.sync_notepad_history_states();
             }
-            KeyCode::Char('l') => {
+            KeyCode::Char('l') | KeyCode::Right => {
                 self.notepad_focus = PatchPhrasePane::Favorites;
                 self.sync_notepad_history_states();
             }
