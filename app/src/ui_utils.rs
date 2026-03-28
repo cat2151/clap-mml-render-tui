@@ -38,9 +38,10 @@ pub(crate) fn cut_textarea_selection(textarea: &mut TextArea<'_>) {
 }
 
 pub(crate) fn paste_textarea_selection(textarea: &mut TextArea<'_>) {
-    if let Some(text) = read_clipboard_text() {
-        textarea.set_yank_text(&text);
-    }
+    let Some(text) = read_clipboard_text() else {
+        return;
+    };
+    textarea.set_yank_text(&text);
     textarea.paste();
 }
 

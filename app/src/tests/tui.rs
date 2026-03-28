@@ -419,6 +419,21 @@ fn handle_insert_ctrl_v_pastes_yanked_text() {
 }
 
 #[test]
+fn handle_insert_ctrl_v_is_noop_when_clipboard_is_unavailable() {
+    let _clipboard = TestClipboardGuard::new(None);
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::Insert;
+    app.textarea = TextArea::from(["Hello"]);
+    app.textarea.move_cursor(CursorMove::End);
+    app.textarea.set_yank_text(" stale");
+
+    app.handle_insert(KeyEvent::new(KeyCode::Char('v'), KeyModifiers::CONTROL));
+
+    assert_eq!(app.textarea.lines().join(""), "Hello");
+    assert_eq!(app.textarea.yank_text(), " stale");
+}
+
+#[test]
 fn handle_normal_p_enters_patch_phrase_for_current_patch() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} cde"#.to_string()];
