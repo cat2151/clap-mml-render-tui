@@ -10,7 +10,7 @@ use std::cell::RefCell;
 
 #[cfg(test)]
 thread_local! {
-    static TEST_CLIPBOARD: RefCell<Option<String>> = const { RefCell::new(None) };
+    static TEST_CLIPBOARD: RefCell<Option<String>> = RefCell::new(None);
 }
 
 #[cfg(test)]
