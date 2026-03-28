@@ -30,27 +30,22 @@ fn normal_playback_shortcut(
     }
 }
 
-fn preview_solo_tracks(
+fn preview_target_tracks(
     tracks: usize,
     cursor_track: usize,
     preview_all_tracks: bool,
-) -> Option<Vec<bool>> {
+) -> Option<Vec<usize>> {
     if preview_all_tracks {
-        return Some(vec![false; tracks]);
+        return Some((FIRST_PLAYABLE_TRACK..tracks).collect());
     }
     if cursor_track < FIRST_PLAYABLE_TRACK || cursor_track >= tracks {
         return None;
     }
-    let mut solo_tracks = vec![false; tracks];
-    solo_tracks[cursor_track] = true;
-    Some(solo_tracks)
+    Some(vec![cursor_track])
 }
 
-fn play_from_cursor_ab_repeat(cursor_measure_index: Option<usize>) -> Option<AbRepeatState> {
-    cursor_measure_index.map(|measure_index| AbRepeatState::FixStart {
-        start_measure_index: measure_index,
-        end_measure_index: measure_index,
-    })
+fn play_from_cursor_measure_index(cursor_measure_index: Option<usize>) -> Option<usize> {
+    cursor_measure_index
 }
 
 fn format_random_patch_hot_reload_log(
@@ -125,35 +120,30 @@ impl DawApp {
         *self.play_track_gains.lock().unwrap() = new_track_gains;
     }
 
-    fn start_preview_with_temporary_solo_tracks(&mut self, preview_all_tracks: bool) {
+    fn start_preview_for_target_tracks(&self, preview_all_tracks: bool) {
         if *self.play_state.lock().unwrap() != DawPlayState::Idle {
             return;
         }
         let Some(measure_index) = self.cursor_play_measure_index() else {
             return;
         };
-        let Some(solo_tracks) =
-            preview_solo_tracks(self.tracks, self.cursor_track, preview_all_tracks)
+        let Some(target_tracks) =
+            preview_target_tracks(self.tracks, self.cursor_track, preview_all_tracks)
         else {
             return;
         };
-
-        let original_solo_tracks = std::mem::replace(&mut self.solo_tracks, solo_tracks);
-        self.start_preview(measure_index);
-        self.solo_tracks = original_solo_tracks;
+        self.start_preview_on_tracks(measure_index, &target_tracks);
     }
 
     fn start_play_from_cursor_measure(&self) {
         if *self.play_state.lock().unwrap() != DawPlayState::Idle {
             return;
         }
-        let Some(ab_repeat_state) = play_from_cursor_ab_repeat(self.cursor_play_measure_index())
+        let Some(measure_index) = play_from_cursor_measure_index(self.cursor_play_measure_index())
         else {
             return;
         };
-        *self.ab_repeat.lock().unwrap() = ab_repeat_state;
-        self.start_play();
-        *self.ab_repeat.lock().unwrap() = AbRepeatState::Off;
+        self.start_play_from_measure(measure_index);
     }
 
     // ─── INSERT モード ────────────────────────────────────────
@@ -242,11 +232,11 @@ impl DawApp {
         if *self.play_state.lock().unwrap() == DawPlayState::Idle {
             match normal_playback_shortcut(key_event) {
                 Some(NormalPlaybackShortcut::PreviewCurrentTrack) => {
-                    self.start_preview_with_temporary_solo_tracks(false);
+                    self.start_preview_for_target_tracks(false);
                     return DawNormalAction::Continue;
                 }
                 Some(NormalPlaybackShortcut::PreviewAllTracks) => {
-                    self.start_preview_with_temporary_solo_tracks(true);
+                    self.start_preview_for_target_tracks(true);
                     return DawNormalAction::Continue;
                 }
                 Some(NormalPlaybackShortcut::PlayFromCursor) => {

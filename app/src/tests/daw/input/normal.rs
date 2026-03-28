@@ -310,31 +310,25 @@ fn normal_playback_shortcut_maps_enter_space_and_shift_p() {
 
 #[test]
 fn preview_solo_tracks_can_force_current_track_even_when_solo_mode_differs() {
-    let solo_tracks = preview_solo_tracks(3, 2, false).expect("playable current track");
+    let target_tracks = preview_target_tracks(3, 2, false).expect("playable current track");
 
-    assert_eq!(solo_tracks, vec![false, false, true]);
+    assert_eq!(target_tracks, vec![2]);
 }
 
 #[test]
 fn preview_solo_tracks_can_temporarily_open_all_tracks() {
-    let solo_tracks = preview_solo_tracks(3, 2, true).expect("all-track preview");
+    let target_tracks = preview_target_tracks(3, 2, true).expect("all-track preview");
 
-    assert_eq!(solo_tracks, vec![false, false, false]);
+    assert_eq!(target_tracks, vec![1, 2]);
 }
 
 #[test]
 fn preview_solo_tracks_rejects_non_playable_current_track() {
-    assert_eq!(preview_solo_tracks(3, 0, false), None);
+    assert_eq!(preview_target_tracks(3, 0, false), None);
 }
 
 #[test]
-fn play_from_cursor_ab_repeat_targets_only_the_current_measure() {
-    assert_eq!(
-        play_from_cursor_ab_repeat(Some(1)),
-        Some(AbRepeatState::FixStart {
-            start_measure_index: 1,
-            end_measure_index: 1,
-        })
-    );
-    assert_eq!(play_from_cursor_ab_repeat(None), None);
+fn play_from_cursor_measure_index_targets_the_current_measure() {
+    assert_eq!(play_from_cursor_measure_index(Some(1)), Some(1));
+    assert_eq!(play_from_cursor_measure_index(None), None);
 }

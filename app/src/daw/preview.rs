@@ -6,7 +6,7 @@ use clack_host::prelude::PluginEntry;
 use cmrt_core::{mml_render_for_cache, CoreConfig};
 
 use super::playback::{pad_playback_measure_samples, try_get_cached_samples};
-use super::{DawApp, DawPlayState, PlayPosition};
+use super::{DawApp, DawPlayState, PlayPosition, FIRST_PLAYABLE_TRACK};
 
 fn begin_preview_output<F>(
     play_transition_lock: &Arc<Mutex<()>>,
@@ -31,15 +31,13 @@ where
 }
 
 impl DawApp {
-    /// 指定された小節を一度だけ再生するプレビュー（ループなし）
-    pub(super) fn start_preview(&self, measure_index: usize) {
-        let measure_track_mmls = self.build_measure_track_mmls();
-        let track_mmls = measure_track_mmls
-            .get(measure_index)
-            .cloned()
-            .unwrap_or_else(|| vec![String::new(); self.tracks]);
-        let track_gains = self.playback_track_gains();
-        let active_tracks: Vec<usize> = (super::FIRST_PLAYABLE_TRACK..self.tracks)
+    fn start_preview_with_snapshot(
+        &self,
+        measure_index: usize,
+        track_mmls: Vec<String>,
+        track_gains: Vec<f32>,
+    ) {
+        let active_tracks: Vec<usize> = (FIRST_PLAYABLE_TRACK..self.tracks)
             .filter(|&track| {
                 track_gains.get(track).copied().unwrap_or(1.0) > 0.0
                     && track_mmls
@@ -190,6 +188,40 @@ impl DawApp {
                 crate::logging::append_log_line(&log_lines, "preview: finished");
             }
         });
+    }
+
+    /// 指定された小節を一度だけ再生するプレビュー（ループなし）
+    pub(super) fn start_preview(&self, measure_index: usize) {
+        let measure_track_mmls = self.build_measure_track_mmls();
+        let track_mmls = measure_track_mmls
+            .get(measure_index)
+            .cloned()
+            .unwrap_or_else(|| vec![String::new(); self.tracks]);
+        let track_gains = self.playback_track_gains();
+        self.start_preview_with_snapshot(measure_index, track_mmls, track_gains);
+    }
+
+    pub(super) fn start_preview_on_tracks(&self, measure_index: usize, selected_tracks: &[usize]) {
+        let mut track_mmls = vec![String::new(); self.tracks];
+        let mut track_gains = vec![0.0; self.tracks];
+        let displayed_measure = measure_index + 1;
+        for &track in selected_tracks {
+            if track < FIRST_PLAYABLE_TRACK || track >= self.tracks {
+                continue;
+            }
+            let notes = self
+                .data
+                .get(track)
+                .and_then(|row| row.get(displayed_measure))
+                .map(String::as_str)
+                .unwrap_or_default();
+            if notes.trim().is_empty() {
+                continue;
+            }
+            track_mmls[track] = self.build_cell_mml(track, displayed_measure);
+            track_gains[track] = 10.0f32.powf(self.track_volume_db(track) as f32 / 20.0);
+        }
+        self.start_preview_with_snapshot(measure_index, track_mmls, track_gains);
     }
 }
 
