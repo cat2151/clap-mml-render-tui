@@ -35,7 +35,29 @@ impl<'a> TuiApp<'a> {
             })
             .collect::<Vec<_>>()
             .join(";");
-        self.lines[self.cursor] = if replaced.is_empty() { json } else { replaced };
+        self.lines[self.cursor] = if replaced.is_empty() {
+            format!("{json} c")
+        } else {
+            replaced
+        };
+    }
+
+    pub(super) fn play_mml(&mut self, mml: String) {
+        #[cfg(test)]
+        if self.entry_ptr == 0 {
+            *self.play_state.lock().unwrap() = PlayState::Running(mml);
+            return;
+        }
+
+        self.kick_play(mml);
+    }
+
+    fn play_current_line(&mut self) {
+        let mml = self.lines[self.cursor].trim().to_string();
+        if !mml.is_empty() {
+            self.record_patch_phrase_history(&mml);
+            self.play_mml(mml);
+        }
     }
 
     fn pick_random_patch_name(&self) -> Result<String, String> {
@@ -150,7 +172,10 @@ impl<'a> TuiApp<'a> {
             KeyCode::Char('d') => return NormalAction::LaunchDaw,
             KeyCode::Char('i') => self.start_insert(),
             KeyCode::Char('r') => match self.pick_random_patch_name() {
-                Ok(patch_name) => self.replace_current_line_patch(&patch_name),
+                Ok(patch_name) => {
+                    self.replace_current_line_patch(&patch_name);
+                    self.play_current_line();
+                }
                 Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
             },
             KeyCode::Char('t') => {
@@ -218,13 +243,7 @@ impl<'a> TuiApp<'a> {
                 self.list_state.select(Some(self.cursor));
             }
             KeyCode::Char('K') | KeyCode::Char('?') => self.mode = Mode::Help,
-            KeyCode::Enter | KeyCode::Char(' ') => {
-                let mml = self.lines[self.cursor].trim().to_string();
-                if !mml.is_empty() {
-                    self.record_patch_phrase_history(&mml);
-                    self.kick_play(mml);
-                }
-            }
+            KeyCode::Enter | KeyCode::Char(' ') => self.play_current_line(),
             _ => {}
         }
         NormalAction::Continue
@@ -255,7 +274,7 @@ impl<'a> TuiApp<'a> {
                 self.mode = Mode::Normal;
                 if !text.trim().is_empty() {
                     self.record_patch_phrase_history(text.trim());
-                    self.kick_play(text.trim().to_string());
+                    self.play_mml(text.trim().to_string());
                 }
             }
             KeyCode::Enter => {
@@ -264,7 +283,7 @@ impl<'a> TuiApp<'a> {
                 self.lines[self.cursor] = text.clone();
                 if !text.trim().is_empty() {
                     self.record_patch_phrase_history(text.trim());
-                    self.kick_play(text.trim().to_string());
+                    self.play_mml(text.trim().to_string());
                 }
                 self.lines.insert(self.cursor + 1, String::new());
                 self.cursor += 1;

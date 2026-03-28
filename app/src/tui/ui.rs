@@ -18,14 +18,14 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     let status_color = status_color(&play_state);
 
     if app.mode == Mode::Help {
-        draw_normal(app, f, &status, status_color);
+        draw_normal(app, f, &play_state, status_color);
         draw_help(f);
     } else if app.mode == Mode::PatchSelect {
         draw_patch_select(app, f, &status, status_color);
     } else if app.mode == Mode::PatchPhrase {
         draw_patch_phrase(app, f, &status, status_color);
     } else {
-        draw_normal(app, f, &status, status_color);
+        draw_normal(app, f, &play_state, status_color);
     }
 }
 
@@ -39,31 +39,47 @@ fn status_color(play_state: &PlayState) -> Color {
     }
 }
 
-fn status_text(app: &TuiApp<'_>, play_state: &PlayState) -> String {
-    let play_str = match play_state {
+fn play_status_suffix(play_state: &PlayState) -> String {
+    match play_state {
         PlayState::Idle => "".to_string(),
         PlayState::Running(mml) => format!("  ⚙ レンダリング中: {}", mml),
         PlayState::Playing(msg) => format!("  ▶ 演奏中: {}", msg),
         PlayState::Done(msg) => format!("  ✓ {}", msg),
         PlayState::Err(msg) => format!("  ✗ {}", msg),
+    }
+}
+
+fn normal_status_text(app: &TuiApp<'_>, play_state: &PlayState) -> String {
+    let mode = match app.mode {
+        Mode::Insert => "INSERT",
+        Mode::Help => "HELP",
+        _ => "NORMAL",
     };
-    match app.mode {
-        Mode::Normal => format!(
-            "NORMAL  i:INS  r:ランダム音色  t:音色  p:phrase  j/k  Enter  d:DAW  K:Help  q{}",
-            play_str
-        ),
-        Mode::Insert => format!("ESC:確定→NORMAL  Enter:確定→次行{}", play_str),
-        Mode::PatchSelect => format!(
-            "音色選択  Enter:決定  ESC:キャンセル  ↑↓:移動  文字入力:フィルタ  Space:AND条件{}",
-            play_str
-        ),
-        Mode::PatchPhrase => {
-            format!(
-                "patch phrase  j/k:再生移動  h/l:ペイン移動  f:お気に入り  ESC:戻る{}",
-                play_str
-            )
+    format!("{mode}{}", play_status_suffix(play_state))
+}
+
+fn keybind_text(mode: &Mode) -> &'static str {
+    match mode {
+        Mode::Normal => {
+            "q:quit  ?:help  i:insert  r:ランダム音色  t:音色  p:phrase  j/k  Enter/Space  d:DAW"
         }
-        Mode::Help => format!("HELP  ESC:キャンセル{}", play_str),
+        Mode::Insert => "ESC:確定→NORMAL  Enter:確定→次行",
+        Mode::PatchSelect => {
+            "Enter:決定  ESC:キャンセル  ↑↓:移動  文字入力:フィルタ  Space:AND条件"
+        }
+        Mode::PatchPhrase => {
+            "j/k:再生移動  h/l:ペイン移動  Space/Enter:再生  i:編集  f:お気に入り  ESC:戻る"
+        }
+        Mode::Help => "ESC:キャンセル",
+    }
+}
+
+fn status_text(app: &TuiApp<'_>, play_state: &PlayState) -> String {
+    let play_str = play_status_suffix(play_state);
+    match app.mode {
+        Mode::Normal | Mode::Insert | Mode::Help => normal_status_text(app, play_state),
+        Mode::PatchSelect => format!("音色選択  {}{}", keybind_text(&app.mode), play_str),
+        Mode::PatchPhrase => format!("patch phrase  {}{}", keybind_text(&app.mode), play_str),
     }
 }
 
@@ -122,46 +138,49 @@ fn draw_patch_select(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
     );
 }
 
-fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_color: Color) {
+fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, play_state: &PlayState, status_color: Color) {
     let is_insert = app.mode == Mode::Insert;
     let cursor = app.cursor;
+    let status = normal_status_text(app, play_state);
+    let keybinds = keybind_text(&app.mode);
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(3), Constraint::Length(1)])
+        .constraints([
+            Constraint::Min(3),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
         .split(f.area());
 
-    // キャッシュのガードを保持したままイテレートすることで、全キーのクローンを避ける。
-    let cache_guard = app.audio_cache.lock().unwrap();
     let items: Vec<ListItem> = app
         .lines
         .iter()
         .enumerate()
         .map(|(i, line)| {
-            let mml = line.trim();
-            let is_cached = !mml.is_empty() && cache_guard.contains_key(mml);
             let style = if i == cursor {
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD)
-            } else if is_cached {
-                Style::default().fg(Color::Cyan)
             } else {
-                Style::default()
+                Style::default().fg(Color::White)
             };
-            ListItem::new(Line::from(vec![
-                Span::styled(
-                    format!("{:>3} ", i + 1),
-                    Style::default().fg(Color::DarkGray),
-                ),
-                Span::styled(line.clone(), style),
-            ]))
+            let content = if is_insert && i == cursor {
+                String::new()
+            } else {
+                line.clone()
+            };
+            ListItem::new(Line::from(Span::styled(content, style)))
         })
         .collect();
 
     f.render_stateful_widget(
         List::new(items)
-            .block(Block::default().borders(Borders::ALL).title(" MML Lines "))
+            .block(Block::default().borders(Borders::ALL).title(if is_insert {
+                " [INSERT] "
+            } else {
+                ""
+            }))
             .highlight_symbol("▶ "),
         chunks[0],
         &mut app.list_state,
@@ -184,15 +203,17 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_color: 
                     width: list_area.width.saturating_sub(2),
                     height: 1,
                 };
+                f.render_widget(Clear, textarea_area);
                 f.render_widget(&app.textarea, textarea_area);
             }
         }
     }
 
     f.render_widget(
-        Paragraph::new(status.to_string()).style(Style::default().fg(status_color)),
+        Paragraph::new(status).style(Style::default().fg(status_color)),
         chunks[1],
     );
+    f.render_widget(Paragraph::new(keybinds), chunks[2]);
 }
 
 fn draw_patch_phrase(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_color: Color) {
@@ -215,10 +236,10 @@ fn draw_patch_phrase(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
                 && i == app.patch_phrase_history_cursor;
             let style = if is_selected {
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default()
+                Style::default().fg(Color::White)
             };
             ListItem::new(Span::styled(phrase, style))
         })
@@ -232,22 +253,22 @@ fn draw_patch_phrase(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
                 && i == app.patch_phrase_favorites_cursor;
             let style = if is_selected {
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default()
+                Style::default().fg(Color::White)
             };
             ListItem::new(Span::styled(phrase, style))
         })
         .collect();
 
     let history_border = if app.patch_phrase_focus == PatchPhrasePane::History {
-        Style::default().fg(Color::Yellow)
+        Style::default().fg(Color::Cyan)
     } else {
         Style::default().fg(Color::White)
     };
     let favorites_border = if app.patch_phrase_focus == PatchPhrasePane::Favorites {
-        Style::default().fg(Color::Yellow)
+        Style::default().fg(Color::Cyan)
     } else {
         Style::default().fg(Color::White)
     };
@@ -302,7 +323,7 @@ fn draw_help(f: &mut Frame) {
         Line::from("  Enter/Space : 再生"),
         Line::from("  i           : INSERT モード"),
         Line::from("  o           : 次行に挿入 → INSERT"),
-        Line::from("  r           : 現在行の先頭にランダム音色を挿入/置換"),
+        Line::from("  r           : ランダム音色を挿入/置換して再生"),
         Line::from("  t           : 音色選択"),
         Line::from("  p           : patch phrase 画面"),
         Line::from("  d           : DAW モード"),
@@ -338,8 +359,10 @@ fn draw_help(f: &mut Frame) {
                 .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
         )),
-        Line::from("  j / k : 上下移動して再生"),
-        Line::from("  h / l : ペイン切替して再生"),
+        Line::from("  j / k       : 上下移動して再生"),
+        Line::from("  h / l       : ペイン切替して再生"),
+        Line::from("  Space/Enter : 現在行を再生"),
+        Line::from("  i           : History行を編集"),
         Line::from("  f     : 現在行をお気に入りに追加"),
         Line::from("  ESC   : NORMAL に戻る"),
         Line::from(""),
