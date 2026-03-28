@@ -59,6 +59,8 @@ fn wait_until_or_stop(play_state: &Arc<std::sync::Mutex<DawPlayState>>, deadline
     }
 }
 
+use std::sync::atomic::Ordering;
+
 impl DawApp {
     // ─── 演奏 ─────────────────────────────────────────────────
 
@@ -347,7 +349,13 @@ impl DawApp {
         };
         match prev_state {
             DawPlayState::Idle => {}
-            DawPlayState::Preview => self.append_log_line("preview: stop"),
+            DawPlayState::Preview => {
+                self.preview_session.fetch_add(1, Ordering::AcqRel);
+                if let Some(sink) = self.preview_sink.lock().unwrap().take() {
+                    sink.stop();
+                }
+                self.append_log_line("preview: stop");
+            }
             DawPlayState::Playing => self.append_log_line("play: stop"),
         }
         *self.play_position.lock().unwrap() = None;

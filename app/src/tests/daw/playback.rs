@@ -57,6 +57,8 @@ fn build_test_app() -> DawApp {
         render_lock: Arc::new(Mutex::new(())),
         play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
         play_transition_lock: Arc::new(Mutex::new(())),
+        preview_session: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        preview_sink: Arc::new(Mutex::new(None)),
         play_position: Arc::new(Mutex::new(None)),
         ab_repeat: Arc::new(Mutex::new(AbRepeatState::Off)),
         play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),

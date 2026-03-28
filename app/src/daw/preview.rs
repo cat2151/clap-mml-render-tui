@@ -1,5 +1,6 @@
 //! DawApp のプレビュー再生
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use clack_host::prelude::PluginEntry;
@@ -12,6 +13,8 @@ fn begin_preview_output<F>(
     play_transition_lock: &Arc<Mutex<()>>,
     play_state: &Arc<Mutex<DawPlayState>>,
     play_position: &Arc<Mutex<Option<PlayPosition>>>,
+    preview_session: &AtomicU64,
+    session: u64,
     measure_index: usize,
     enqueue_audio: F,
 ) -> bool
@@ -19,7 +22,9 @@ where
     F: FnOnce(),
 {
     let _transition_guard = play_transition_lock.lock().unwrap();
-    if *play_state.lock().unwrap() != DawPlayState::Preview {
+    if *play_state.lock().unwrap() != DawPlayState::Preview
+        || preview_session.load(Ordering::Acquire) != session
+    {
         return false;
     }
     *play_position.lock().unwrap() = Some(PlayPosition {
@@ -53,6 +58,8 @@ impl DawApp {
         let measure_samples = self.measure_duration_samples();
         let play_state = Arc::clone(&self.play_state);
         let play_transition_lock = Arc::clone(&self.play_transition_lock);
+        let preview_session = Arc::clone(&self.preview_session);
+        let preview_sink = Arc::clone(&self.preview_sink);
         let play_position = Arc::clone(&self.play_position);
         let render_lock = Arc::clone(&self.render_lock);
         let cache = Arc::clone(&self.cache);
@@ -61,7 +68,15 @@ impl DawApp {
         let entry_ptr = self.entry_ptr;
         let tracks = self.tracks;
 
-        *play_state.lock().unwrap() = DawPlayState::Preview;
+        let session = {
+            let _transition_guard = play_transition_lock.lock().unwrap();
+            if let Some(sink) = preview_sink.lock().unwrap().take() {
+                sink.stop();
+            }
+            *play_position.lock().unwrap() = None;
+            *play_state.lock().unwrap() = DawPlayState::Preview;
+            preview_session.fetch_add(1, Ordering::AcqRel) + 1
+        };
         crate::logging::append_log_line(&log_lines, format!("preview: meas{}", measure_index + 1));
 
         std::thread::spawn(move || {
@@ -74,9 +89,12 @@ impl DawApp {
             let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else {
                 crate::logging::append_log_line(&log_lines, "preview: audio init failed");
                 let mut state = play_state.lock().unwrap();
-                if *state == DawPlayState::Preview {
+                if *state == DawPlayState::Preview
+                    && preview_session.load(Ordering::Acquire) == session
+                {
                     *state = DawPlayState::Idle;
                     drop(state);
+                    preview_sink.lock().unwrap().take();
                     *play_position.lock().unwrap() = None;
                 }
                 return;
@@ -84,13 +102,17 @@ impl DawApp {
             let Ok(sink) = rodio::Sink::try_new(&stream_handle) else {
                 crate::logging::append_log_line(&log_lines, "preview: sink init failed");
                 let mut state = play_state.lock().unwrap();
-                if *state == DawPlayState::Preview {
+                if *state == DawPlayState::Preview
+                    && preview_session.load(Ordering::Acquire) == session
+                {
                     *state = DawPlayState::Idle;
                     drop(state);
+                    preview_sink.lock().unwrap().take();
                     *play_position.lock().unwrap() = None;
                 }
                 return;
             };
+            let sink = Arc::new(sink);
 
             let render_mixed_tracks = || -> Option<Vec<f32>> {
                 let mut mixed = vec![0.0f32; measure_samples];
@@ -164,9 +186,12 @@ impl DawApp {
                     &play_transition_lock,
                     &play_state,
                     &play_position,
+                    &preview_session,
+                    session,
                     measure_index,
                     || {
                         let source = rodio::buffer::SamplesBuffer::new(2, sample_rate, samples);
+                        *preview_sink.lock().unwrap() = Some(Arc::clone(&sink));
                         sink.append(source);
                     },
                 );
@@ -181,9 +206,11 @@ impl DawApp {
             }
 
             let mut state = play_state.lock().unwrap();
-            if *state == DawPlayState::Preview {
+            if *state == DawPlayState::Preview && preview_session.load(Ordering::Acquire) == session
+            {
                 *state = DawPlayState::Idle;
                 drop(state);
+                preview_sink.lock().unwrap().take();
                 *play_position.lock().unwrap() = None;
                 crate::logging::append_log_line(&log_lines, "preview: finished");
             }

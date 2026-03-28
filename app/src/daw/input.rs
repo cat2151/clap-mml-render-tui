@@ -323,8 +323,12 @@ impl DawApp {
     }
 
     fn start_preview_for_target_tracks(&self, preview_all_tracks: bool) {
-        if *self.play_state.lock().unwrap() != DawPlayState::Idle {
+        let play_state = *self.play_state.lock().unwrap();
+        if play_state == DawPlayState::Playing {
             return;
+        }
+        if play_state == DawPlayState::Preview {
+            self.stop_play();
         }
         let Some(measure_index) = self.cursor_play_measure_index() else {
             return;
@@ -486,22 +490,22 @@ impl DawApp {
         &mut self,
         key_event: crossterm::event::KeyEvent,
     ) -> DawNormalAction {
-        if *self.play_state.lock().unwrap() == DawPlayState::Idle {
-            match normal_playback_shortcut(key_event) {
-                Some(NormalPlaybackShortcut::PreviewCurrentTrack) => {
-                    self.start_preview_for_target_tracks(false);
-                    return DawNormalAction::Continue;
-                }
-                Some(NormalPlaybackShortcut::PreviewAllTracks) => {
-                    self.start_preview_for_target_tracks(true);
-                    return DawNormalAction::Continue;
-                }
-                Some(NormalPlaybackShortcut::PlayFromCursor) => {
+        match normal_playback_shortcut(key_event) {
+            Some(NormalPlaybackShortcut::PreviewCurrentTrack) => {
+                self.start_preview_for_target_tracks(false);
+                return DawNormalAction::Continue;
+            }
+            Some(NormalPlaybackShortcut::PreviewAllTracks) => {
+                self.start_preview_for_target_tracks(true);
+                return DawNormalAction::Continue;
+            }
+            Some(NormalPlaybackShortcut::PlayFromCursor) => {
+                if *self.play_state.lock().unwrap() == DawPlayState::Idle {
                     self.start_play_from_cursor_measure();
                     return DawNormalAction::Continue;
                 }
-                None => {}
             }
+            None => {}
         }
 
         match key_event.code {
