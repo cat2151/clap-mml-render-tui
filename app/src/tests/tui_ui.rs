@@ -1,8 +1,11 @@
-use ratatui::{backend::TestBackend, Terminal};
+use ratatui::{backend::TestBackend, buffer::Buffer, style::Color, Terminal};
 
 use crate::{config::Config, history::PatchPhraseState, tui::TuiApp};
 
-use super::{draw, Mode};
+use super::{
+    draw, status_color, Mode, PlayState, MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY,
+    MONOKAI_GREEN, MONOKAI_PURPLE, MONOKAI_YELLOW,
+};
 
 fn test_config() -> Config {
     Config {
@@ -33,6 +36,25 @@ fn render_lines(app: &mut TuiApp<'static>, width: u16, height: u16) -> Vec<Strin
                 .to_string()
         })
         .collect()
+}
+
+fn render_buffer(app: &mut TuiApp<'static>, width: u16, height: u16) -> Buffer {
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal.draw(|f| draw(app, f)).unwrap();
+    terminal.backend().buffer().clone()
+}
+
+fn find_text(buffer: &Buffer, text: &str) -> (u16, u16) {
+    for y in 0..buffer.area.height {
+        let line: String = (0..buffer.area.width)
+            .map(|x| buffer.cell((x, y)).unwrap().symbol().to_string())
+            .collect();
+        if let Some(x) = line.find(text) {
+            return (x as u16, y);
+        }
+    }
+    panic!("text not found in buffer: {text}");
 }
 
 #[test]
@@ -170,6 +192,49 @@ fn help_screen_mentions_ctrl_clipboard_shortcuts() {
 }
 
 #[test]
+fn normal_screen_uses_monokai_background_and_cursor_color() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["abc".to_string()];
+
+    let buffer = render_buffer(&mut app, 80, 8);
+
+    assert_eq!(buffer.cell((0, 0)).unwrap().fg, MONOKAI_CYAN);
+    assert_eq!(buffer.cell((0, 0)).unwrap().bg, MONOKAI_BG);
+    assert_eq!(buffer.cell((4, 6)).unwrap().fg, MONOKAI_CYAN);
+    assert_eq!(buffer.cell((4, 6)).unwrap().bg, MONOKAI_BG);
+}
+
+#[test]
+fn help_screen_uses_light_gray_escape_hint_on_monokai_background() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::Help;
+
+    let buffer = render_buffer(&mut app, 80, 50);
+    let (x, y) = find_text(&buffer, "[ESC]");
+
+    assert_eq!(buffer.cell((x, y)).unwrap().fg, MONOKAI_GRAY);
+    assert_eq!(buffer.cell((x, y)).unwrap().bg, MONOKAI_BG);
+}
+
+#[test]
+fn status_color_uses_monokai_palette() {
+    assert_eq!(status_color(&PlayState::Idle), MONOKAI_CYAN);
+    assert_eq!(
+        status_color(&PlayState::Running("render".to_string())),
+        MONOKAI_PURPLE
+    );
+    assert_eq!(
+        status_color(&PlayState::Playing("play".to_string())),
+        MONOKAI_YELLOW
+    );
+    assert_eq!(
+        status_color(&PlayState::Done("done".to_string())),
+        MONOKAI_GREEN
+    );
+    assert_eq!(status_color(&PlayState::Err("err".to_string())), Color::Red);
+}
+
+#[test]
 fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["abc".to_string()];
@@ -196,4 +261,24 @@ fn insert_screen_shows_insert_title_without_duplicate_line_text() {
     assert!(screen.contains("[INSERT]"));
     assert_eq!(screen.matches("abc").count(), 1);
     assert!(lines.iter().any(|line| line.contains("▶ abc")));
+}
+
+#[test]
+fn patch_phrase_screen_uses_monokai_foreground_for_unfocused_list() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::PatchPhrase;
+    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        PatchPhraseState {
+            history: vec!["l8cdef".to_string()],
+            favorites: vec!["o5g".to_string()],
+        },
+    );
+
+    let buffer = render_buffer(&mut app, 80, 10);
+    let (x, y) = find_text(&buffer, "o5g");
+
+    assert_eq!(buffer.cell((x, y)).unwrap().fg, MONOKAI_FG);
+    assert_eq!(buffer.cell((x, y)).unwrap().bg, MONOKAI_BG);
 }

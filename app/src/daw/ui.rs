@@ -19,14 +19,10 @@ use super::{AbRepeatState, CacheState, DawApp, DawMode};
 const ANIM_FRAME_MS: u128 = 250;
 /// Pending インジケータのアニメーションフレーム数（"." / ".." / "..."）
 const ANIM_FRAME_COUNT: u128 = 3;
-pub(super) const MONOKAI_BG: Color = Color::Rgb(39, 40, 34);
-pub(super) const MONOKAI_FG: Color = Color::Rgb(248, 248, 242);
-pub(super) const MONOKAI_GRAY: Color = Color::Rgb(160, 160, 160);
-pub(super) const MONOKAI_PINK: Color = Color::Rgb(249, 38, 114);
-pub(super) const MONOKAI_YELLOW: Color = Color::Rgb(230, 219, 116);
-pub(super) const MONOKAI_GREEN: Color = Color::Rgb(166, 226, 46);
-pub(super) const MONOKAI_CYAN: Color = Color::Rgb(102, 217, 239);
-pub(super) const MONOKAI_PURPLE: Color = Color::Rgb(174, 129, 255);
+pub(super) use crate::ui_theme::{
+    MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_PINK,
+    MONOKAI_PURPLE, MONOKAI_YELLOW,
+};
 
 fn cache_text_color(cs: &CacheState) -> Color {
     match cs {
