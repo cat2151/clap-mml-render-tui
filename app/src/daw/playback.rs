@@ -63,6 +63,10 @@ impl DawApp {
     // ─── 演奏 ─────────────────────────────────────────────────
 
     pub(super) fn start_play(&self) {
+        self.start_play_from_measure(0);
+    }
+
+    pub(super) fn start_play_from_measure(&self, start_measure_index: usize) {
         let measure_mmls = self.build_measure_mmls();
         let measure_track_mmls = self.build_measure_track_mmls();
         let track_gains = self.playback_track_gains();
@@ -129,7 +133,7 @@ impl DawApp {
                 return;
             };
 
-            let mut measure_index = 0usize;
+            let mut measure_index = start_measure_index;
             let mut current_measure = None::<QueuedMeasure>;
             let mut active_layers = Vec::<ActiveMeasureLayer>::new();
 

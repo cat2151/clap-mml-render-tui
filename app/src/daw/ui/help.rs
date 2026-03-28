@@ -8,8 +8,12 @@ use ratatui::{
 
 use super::{MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_YELLOW};
 
+const HELP_POPUP_WIDTH_PERCENT: u16 = 82;
+const HELP_POPUP_HEIGHT_PERCENT: u16 = 100;
+
 pub(super) fn draw_help(f: &mut Frame, area: Rect) {
-    let popup = crate::ui_utils::centered_rect(60, 96, area);
+    let popup =
+        crate::ui_utils::centered_rect(HELP_POPUP_WIDTH_PERCENT, HELP_POPUP_HEIGHT_PERCENT, area);
     f.render_widget(Clear, popup);
 
     let help_lines = vec![
@@ -30,6 +34,9 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
         Line::from("  a      : off → start固定/end追従 → end固定 → off"),
         Line::from("  m      : mixer overlay"),
         Line::from("  p      : 演奏 / 停止"),
+        Line::from("  Enter/Space : 非play時、現在trackの現在measを再生"),
+        Line::from("  Shift+Enter/Space : 非play時、現在measの全trackを再生"),
+        Line::from("  Shift+P : 非play時、現在measから演奏開始して継続"),
         Line::from("  s      : solo toggle"),
         Line::from("  r      : random 音色設定"),
         Line::from("  K / ?  : ヘルプ (このページ)"),

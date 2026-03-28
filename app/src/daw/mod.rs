@@ -13,6 +13,9 @@
 //!   i      : INSERT モード（現在セルを編集）
 //!   m      : mixer overlay を開く
 //!   p      : 演奏 / 停止 toggle
+//!   Enter / Space       : 非play時、現在 track の現在 meas を一発再生
+//!   Shift+Enter / Space : 非play時、現在 meas の全 track を一発再生
+//!   Shift+P             : 非play時、現在 meas から演奏開始して継続
 //!   s      : 現在 track の solo toggle
 //!   r      : measure 0 にランダム音色を設定
 //!   K / ?  : ヘルプ表示

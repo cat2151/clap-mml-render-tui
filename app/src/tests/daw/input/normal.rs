@@ -283,3 +283,62 @@ fn handle_normal_m_enters_mixer_mode_on_playable_track() {
     assert!(matches!(app.mode, DawMode::Mixer));
     assert_eq!(app.mixer_cursor_track, 1);
 }
+
+#[test]
+fn normal_playback_shortcut_maps_enter_space_and_shift_p() {
+    assert_eq!(
+        normal_playback_shortcut(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+        Some(NormalPlaybackShortcut::PreviewCurrentTrack)
+    );
+    assert_eq!(
+        normal_playback_shortcut(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE)),
+        Some(NormalPlaybackShortcut::PreviewCurrentTrack)
+    );
+    assert_eq!(
+        normal_playback_shortcut(KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT)),
+        Some(NormalPlaybackShortcut::PreviewAllTracks)
+    );
+    assert_eq!(
+        normal_playback_shortcut(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::SHIFT)),
+        Some(NormalPlaybackShortcut::PreviewAllTracks)
+    );
+    assert_eq!(
+        normal_playback_shortcut(KeyEvent::new(KeyCode::Char('P'), KeyModifiers::SHIFT)),
+        Some(NormalPlaybackShortcut::PlayFromCursor)
+    );
+}
+
+#[test]
+fn preview_target_tracks_can_force_current_track_even_when_solo_mode_differs() {
+    let target_tracks = preview_target_tracks(3, 2, false).expect("playable current track");
+
+    assert_eq!(target_tracks, vec![2]);
+}
+
+#[test]
+fn preview_target_tracks_can_temporarily_open_all_tracks() {
+    let target_tracks = preview_target_tracks(3, 2, true).expect("all-track preview");
+
+    assert_eq!(target_tracks, vec![1, 2]);
+}
+
+#[test]
+fn preview_target_tracks_rejects_non_playable_current_track() {
+    assert_eq!(preview_target_tracks(3, 0, false), None);
+}
+
+#[test]
+fn play_from_cursor_uses_cursor_measure_index_for_start_position() {
+    let start_measure_index =
+        resolve_playback_start_measure_index(Some(1), NormalPlaybackShortcut::PlayFromCursor);
+
+    assert_eq!(start_measure_index, Some(1));
+}
+
+#[test]
+fn preview_shortcuts_keep_default_playback_start_position() {
+    let start_measure_index =
+        resolve_playback_start_measure_index(Some(1), NormalPlaybackShortcut::PreviewCurrentTrack);
+
+    assert_eq!(start_measure_index, Some(0));
+}
