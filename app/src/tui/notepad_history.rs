@@ -68,6 +68,12 @@ impl<'a> TuiApp<'a> {
         }
     }
 
+    fn preview_selected_notepad_item(&mut self) {
+        if let Some(mml) = self.selected_notepad_item() {
+            self.play_mml(mml);
+        }
+    }
+
     fn delete_notepad_favorite(&mut self) {
         let favorites = &mut self.patch_phrase_store.notepad.favorites;
         if self.notepad_favorites_cursor >= favorites.len() {
@@ -126,9 +132,7 @@ impl<'a> TuiApp<'a> {
                     _ => {}
                 }
                 self.sync_notepad_history_states();
-                if let Some(mml) = self.selected_notepad_item() {
-                    self.play_mml(mml);
-                }
+                self.preview_selected_notepad_item();
             }
             KeyCode::Char('k') | KeyCode::Up => {
                 match self.notepad_focus {
@@ -141,9 +145,7 @@ impl<'a> TuiApp<'a> {
                     _ => {}
                 }
                 self.sync_notepad_history_states();
-                if let Some(mml) = self.selected_notepad_item() {
-                    self.play_mml(mml);
-                }
+                self.preview_selected_notepad_item();
             }
             KeyCode::Enter => {
                 if let Some(mml) = self.selected_notepad_item() {
@@ -154,11 +156,10 @@ impl<'a> TuiApp<'a> {
                 }
             }
             KeyCode::Char('f') if self.notepad_focus == PatchPhrasePane::History => {
-                let Some(mml) = self.selected_notepad_item() else {
-                    return;
-                };
-                self.add_notepad_favorite(mml);
-                self.sync_notepad_history_states();
+                if let Some(mml) = self.selected_notepad_item() {
+                    self.add_notepad_favorite(mml);
+                    self.sync_notepad_history_states();
+                }
             }
             KeyCode::Char('d') if self.notepad_focus == PatchPhrasePane::Favorites => {
                 if was_pending_delete {
