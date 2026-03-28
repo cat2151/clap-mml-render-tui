@@ -6,7 +6,7 @@ fn loop_status_label_single_measure_shows_single_measure_loop() {
     mmls[0] = "c".to_string();
 
     assert_eq!(
-        loop_status_label(&mmls),
+        loop_status_label(&mmls, AbRepeatState::Off),
         Some("loop: meas1のみ (1小節)".to_string())
     );
 }
@@ -18,14 +18,35 @@ fn loop_status_label_uses_last_non_empty_measure() {
     mmls[2] = "g".to_string();
 
     assert_eq!(
-        loop_status_label(&mmls),
+        loop_status_label(&mmls, AbRepeatState::Off),
         Some("loop: meas1〜meas3 (3小節)".to_string())
     );
 }
 
 #[test]
 fn loop_status_label_all_empty_returns_none() {
-    assert_eq!(loop_status_label(&vec![String::new(); MEASURES]), None);
+    assert_eq!(
+        loop_status_label(&vec![String::new(); MEASURES], AbRepeatState::Off),
+        None
+    );
+}
+
+#[test]
+fn loop_status_label_shows_ab_repeat_range_when_active() {
+    let mut mmls = vec![String::new(); MEASURES];
+    mmls[0] = "c".to_string();
+    mmls[2] = "g".to_string();
+
+    assert_eq!(
+        loop_status_label(
+            &mmls,
+            AbRepeatState::FixEnd {
+                start_measure_index: 1,
+                end_measure_index: 2,
+            }
+        ),
+        Some("A-B: meas2〜meas3 (2小節)".to_string())
+    );
 }
 
 #[test]
@@ -34,7 +55,7 @@ fn loop_measure_summary_label_lists_loop_and_empty_ranges() {
     mmls[0] = "c".to_string();
 
     assert_eq!(
-        loop_measure_summary_label(&mmls),
+        loop_measure_summary_label(&mmls, AbRepeatState::Off),
         Some("loop meas : meas 1, empty meas : meas 2～8".to_string())
     );
 }

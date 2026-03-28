@@ -78,6 +78,7 @@ impl DawApp {
 
         let play_state = Arc::clone(&self.play_state);
         let play_position = Arc::clone(&self.play_position);
+        let ab_repeat = Arc::clone(&self.ab_repeat);
         let play_measure_mmls = Arc::clone(&self.play_measure_mmls);
         let play_measure_track_mmls = Arc::clone(&self.play_measure_track_mmls);
         let play_measure_samples = Arc::clone(&self.play_measure_samples);
@@ -91,7 +92,10 @@ impl DawApp {
 
         *play_state.lock().unwrap() = DawPlayState::Playing;
         crate::logging::append_log_line(&log_lines, "play: start");
-        for line in play_start_log_lines(&self.play_measure_mmls.lock().unwrap()) {
+        for line in play_start_log_lines(
+            &self.play_measure_mmls.lock().unwrap(),
+            self.ab_repeat_state(),
+        ) {
             crate::logging::append_log_line(&log_lines, line);
         }
 
@@ -144,8 +148,10 @@ impl DawApp {
                         Some(n) => n,
                         None => break 'outer,
                     };
+                    let ab_repeat_range =
+                        (*ab_repeat.lock().unwrap()).normalized_range(effective_count);
                     let current_measure_index =
-                        current_play_measure_index(measure_index, effective_count);
+                        current_play_measure_index(measure_index, effective_count, ab_repeat_range);
                     crate::logging::append_log_line(
                         &log_lines,
                         format_playback_measure_resolution_log(
@@ -224,8 +230,13 @@ impl DawApp {
                     Some(n) => n,
                     None => break 'outer,
                 };
-                let lookahead_measure_index =
-                    following_measure_index(current.measure_index, effective_count);
+                let ab_repeat_range =
+                    (*ab_repeat.lock().unwrap()).normalized_range(effective_count);
+                let lookahead_measure_index = following_measure_index(
+                    current.measure_index,
+                    effective_count,
+                    ab_repeat_range,
+                );
                 let next_track_mmls = &measure_track_mmls[lookahead_measure_index];
                 let next_playback_audio = match build_playback_measure_samples(
                     &cache,

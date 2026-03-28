@@ -6,11 +6,14 @@ use std::time::{Duration, Instant};
 pub(in crate::daw) fn current_play_measure_index(
     current_measure_index: usize,
     effective_count: usize,
+    ab_repeat_range: Option<(usize, usize)>,
 ) -> usize {
-    if current_measure_index < effective_count {
+    let (loop_start_measure_index, loop_end_measure_index) =
+        ab_repeat_range.unwrap_or((0, effective_count - 1));
+    if (loop_start_measure_index..=loop_end_measure_index).contains(&current_measure_index) {
         current_measure_index
     } else {
-        0
+        loop_start_measure_index
     }
 }
 
@@ -20,8 +23,15 @@ pub(in crate::daw) fn current_play_measure_index(
 pub(in crate::daw) fn following_measure_index(
     current_measure_index: usize,
     effective_count: usize,
+    ab_repeat_range: Option<(usize, usize)>,
 ) -> usize {
-    (current_measure_index + 1) % effective_count
+    let (loop_start_measure_index, loop_end_measure_index) =
+        ab_repeat_range.unwrap_or((0, effective_count - 1));
+    if current_measure_index >= loop_end_measure_index {
+        loop_start_measure_index
+    } else {
+        current_measure_index + 1
+    }
 }
 
 pub(in crate::daw::playback) fn format_playback_measure_resolution_log(

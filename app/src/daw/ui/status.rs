@@ -15,11 +15,12 @@ pub(super) fn draw_status(
     // play_state と play_position を一度だけロックしてスナップショットを取る。
     let play_state = *app.play_state.lock().unwrap();
     let play_position = app.play_position.lock().unwrap().clone();
+    let ab_repeat_state = app.ab_repeat_state();
     let (loop_label, loop_summary) = if play_state == DawPlayState::Playing {
         let play_measure_mmls = app.play_measure_mmls.lock().unwrap();
         (
-            loop_status_label(&play_measure_mmls),
-            loop_measure_summary_label(&play_measure_mmls),
+            loop_status_label(&play_measure_mmls, ab_repeat_state),
+            loop_measure_summary_label(&play_measure_mmls, ab_repeat_state),
         )
     } else {
         (None, None)
@@ -56,7 +57,7 @@ pub(super) fn draw_status(
 
     let footer_text = match app.mode {
         DawMode::Normal => {
-            "DAW  h/l:小節移動  j/k:track移動  i:INSERT  p:play/stop  s:solo  r:random音色  K:ヘルプ  d/ESC:戻る  q:終了"
+            "DAW  h/l:小節移動  j/k:track移動  i:INSERT  a:A-B  p:play/stop  s:solo  r:random音色  K:ヘルプ  d/ESC:戻る  q:終了"
         }
         DawMode::Insert => "ESC:確定→NORMAL  Enter:確定→次小節",
         DawMode::Help => "HELP  ESC:キャンセル",

@@ -9,7 +9,8 @@ use ratatui::{
 use super::{
     super::{CacheState, DawApp, DawMode},
     cache_indicator, cache_indicator_color, cache_text_color, ANIM_FRAME_COUNT, ANIM_FRAME_MS,
-    MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY,
+    MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_PURPLE,
+    MONOKAI_YELLOW,
 };
 
 pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
@@ -27,19 +28,46 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
     };
 
     let solo_mode_active = app.solo_mode_active();
+    let ab_repeat_markers = app.ab_repeat_state().marker_indices();
 
     // ヘッダ行（列ラベル）
     let mut header_spans = vec![Span::styled("     ", Style::default())];
     for m in 0..=app.measures {
-        let label = if m == 0 {
-            " Init".to_string()
+        let (label, style) = if m == 0 {
+            (" Init".to_string(), Style::default().fg(MONOKAI_GRAY))
         } else {
-            format!(" M{:<2}", m)
+            let measure_index = m - 1;
+            match ab_repeat_markers {
+                Some((start_measure_index, end_measure_index))
+                    if start_measure_index == measure_index
+                        && end_measure_index == measure_index =>
+                {
+                    (
+                        format!("{:<5}", format!("AB{m}")),
+                        Style::default()
+                            .fg(MONOKAI_YELLOW)
+                            .add_modifier(Modifier::BOLD),
+                    )
+                }
+                Some((start_measure_index, _)) if start_measure_index == measure_index => (
+                    format!("{:<5}", format!("A{m}")),
+                    Style::default()
+                        .fg(MONOKAI_GREEN)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Some((_, end_measure_index)) if end_measure_index == measure_index => (
+                    format!("{:<5}", format!("B{m}")),
+                    Style::default()
+                        .fg(MONOKAI_PURPLE)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                _ => (
+                    format!("{:<5}", format!("M{m}")),
+                    Style::default().fg(MONOKAI_GRAY),
+                ),
+            }
         };
-        header_spans.push(Span::styled(
-            format!("{:<5}", label),
-            Style::default().fg(MONOKAI_GRAY),
-        ));
+        header_spans.push(Span::styled(label, style));
     }
     if area.height > 0 {
         f.render_widget(

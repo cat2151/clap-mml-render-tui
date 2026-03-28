@@ -8,7 +8,9 @@ pub(super) use tui_textarea::{CursorMove, TextArea};
 
 pub(super) use crate::config::Config;
 
-pub(super) use super::super::{CacheState, CellCache, DawApp, DawMode, DawPlayState, PlayPosition};
+pub(super) use super::super::{
+    AbRepeatState, CacheState, CellCache, DawApp, DawMode, DawPlayState, PlayPosition,
+};
 
 /// -6dB を線形 gain 値に変換する（10^(-6/20)）。
 fn track1_minus_6_db_gain() -> f32 {
@@ -50,6 +52,7 @@ fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob
             play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
             play_transition_lock: Arc::new(Mutex::new(())),
             play_position: Arc::new(Mutex::new(None)),
+            ab_repeat: Arc::new(Mutex::new(AbRepeatState::Off)),
             play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
             play_measure_track_mmls: Arc::new(Mutex::new(vec![
                 vec![String::new(); tracks];

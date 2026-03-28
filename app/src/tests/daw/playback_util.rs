@@ -2,6 +2,7 @@ use super::super::MEASURES;
 use super::{
     effective_measure_count, format_measure_list, loop_measure_summary_label, play_start_log_lines,
 };
+use crate::daw::AbRepeatState;
 
 #[test]
 fn effective_measure_count_all_empty_returns_none() {
@@ -61,8 +62,26 @@ fn loop_measure_summary_label_lists_loop_and_empty_ranges() {
     mmls[2] = "g".to_string();
 
     assert_eq!(
-        loop_measure_summary_label(&mmls),
+        loop_measure_summary_label(&mmls, AbRepeatState::Off),
         Some("loop meas : meas 1～3, empty meas : meas 2, meas 4～8".to_string())
+    );
+}
+
+#[test]
+fn loop_measure_summary_label_uses_ab_repeat_range_when_active() {
+    let mut mmls = vec![String::new(); MEASURES];
+    mmls[0] = "c".to_string();
+    mmls[2] = "g".to_string();
+
+    assert_eq!(
+        loop_measure_summary_label(
+            &mmls,
+            AbRepeatState::FixEnd {
+                start_measure_index: 1,
+                end_measure_index: 2,
+            }
+        ),
+        Some("loop meas : meas 2～3, empty meas : meas 2, meas 4～8".to_string())
     );
 }
 
@@ -72,7 +91,7 @@ fn play_start_log_lines_describe_active_and_empty_measures() {
     mmls[0] = "c".to_string();
 
     assert_eq!(
-        play_start_log_lines(&mmls),
+        play_start_log_lines(&mmls, AbRepeatState::Off),
         vec![
             "meas1 : 内容があります".to_string(),
             "meas2 : empty".to_string(),
@@ -86,6 +105,30 @@ fn play_start_log_lines_describe_active_and_empty_measures() {
             "empty meas : meas 2～8".to_string(),
             "loop start meas : meas1".to_string(),
             "loop end meas : meas1".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn play_start_log_lines_use_ab_repeat_start_and_end_when_active() {
+    let mut mmls = vec![String::new(); MEASURES];
+    mmls[0] = "c".to_string();
+    mmls[1] = "d".to_string();
+    mmls[2] = "e".to_string();
+
+    let loop_lines = play_start_log_lines(
+        &mmls,
+        AbRepeatState::FixEnd {
+            start_measure_index: 1,
+            end_measure_index: 2,
+        },
+    );
+
+    assert_eq!(
+        &loop_lines[loop_lines.len() - 2..],
+        &[
+            "loop start meas : meas2".to_string(),
+            "loop end meas : meas3".to_string(),
         ]
     );
 }
