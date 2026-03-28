@@ -26,28 +26,29 @@ impl DawApp {
                     if key.kind != KeyEventKind::Press {
                         continue;
                     }
-                    if key.modifiers.contains(KeyModifiers::CONTROL)
-                        && key.code == KeyCode::Char('c')
-                    {
-                        self.stop_play();
-                        self.save_history_state();
-                        return Ok(DawExitReason::QuitApp);
-                    }
-
                     match self.mode {
-                        DawMode::Normal => match self.handle_normal(key.code) {
-                            DawNormalAction::ReturnToTui => {
-                                self.stop_play();
-                                self.save_history_state();
-                                return Ok(DawExitReason::ReturnToTui);
-                            }
-                            DawNormalAction::QuitApp => {
+                        DawMode::Normal => {
+                            if key.modifiers.contains(KeyModifiers::CONTROL)
+                                && key.code == KeyCode::Char('c')
+                            {
                                 self.stop_play();
                                 self.save_history_state();
                                 return Ok(DawExitReason::QuitApp);
                             }
-                            DawNormalAction::Continue => {}
-                        },
+                            match self.handle_normal(key.code) {
+                                DawNormalAction::ReturnToTui => {
+                                    self.stop_play();
+                                    self.save_history_state();
+                                    return Ok(DawExitReason::ReturnToTui);
+                                }
+                                DawNormalAction::QuitApp => {
+                                    self.stop_play();
+                                    self.save_history_state();
+                                    return Ok(DawExitReason::QuitApp);
+                                }
+                                DawNormalAction::Continue => {}
+                            }
+                        }
                         DawMode::Insert => self.handle_insert(key),
                         DawMode::Help => self.handle_help(key.code),
                     }

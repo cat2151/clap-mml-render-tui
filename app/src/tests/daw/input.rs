@@ -3,9 +3,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use tui_textarea::TextArea;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use tui_textarea::{CursorMove, TextArea};
 
-use crate::config::Config;
+use crate::{config::Config, ui_utils::TestClipboardGuard};
 
 use super::super::{CacheState, CellCache, DawApp, DawMode, DawPlayState, PlayPosition};
 
@@ -171,6 +172,53 @@ fn commit_insert_keeps_semicolon_text_in_same_measure() {
     }
 
     std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn handle_insert_ctrl_c_copies_selected_text() {
+    let clipboard = TestClipboardGuard::new(None);
+    let (mut app, _cache_rx) = build_test_app();
+    app.mode = DawMode::Insert;
+    app.textarea = TextArea::from(["Hello World"]);
+    app.textarea.move_cursor(CursorMove::WordForward);
+    app.textarea.start_selection();
+    app.textarea.move_cursor(CursorMove::End);
+
+    app.handle_insert(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+
+    assert_eq!(app.textarea.yank_text(), "World");
+    assert_eq!(clipboard.text().as_deref(), Some("World"));
+    assert_eq!(app.textarea.lines().join(""), "Hello World");
+}
+
+#[test]
+fn handle_insert_ctrl_x_cuts_selected_text() {
+    let clipboard = TestClipboardGuard::new(None);
+    let (mut app, _cache_rx) = build_test_app();
+    app.mode = DawMode::Insert;
+    app.textarea = TextArea::from(["Hello World"]);
+    app.textarea.move_cursor(CursorMove::WordForward);
+    app.textarea.start_selection();
+    app.textarea.move_cursor(CursorMove::End);
+
+    app.handle_insert(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
+
+    assert_eq!(app.textarea.yank_text(), "World");
+    assert_eq!(clipboard.text().as_deref(), Some("World"));
+    assert_eq!(app.textarea.lines().join(""), "Hello ");
+}
+
+#[test]
+fn handle_insert_ctrl_v_pastes_clipboard_text() {
+    let _clipboard = TestClipboardGuard::new(Some(" World"));
+    let (mut app, _cache_rx) = build_test_app();
+    app.mode = DawMode::Insert;
+    app.textarea = TextArea::from(["Hello"]);
+    app.textarea.move_cursor(CursorMove::End);
+
+    app.handle_insert(KeyEvent::new(KeyCode::Char('v'), KeyModifiers::CONTROL));
+
+    assert_eq!(app.textarea.lines().join(""), "Hello World");
 }
 
 #[test]

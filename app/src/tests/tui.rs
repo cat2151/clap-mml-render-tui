@@ -3,6 +3,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tui_textarea::{CursorMove, TextArea};
 
+use crate::ui_utils::TestClipboardGuard;
+
 static NEXT_TEST_ID: AtomicUsize = AtomicUsize::new(0);
 
 fn make_patches(items: &[&str]) -> Vec<(String, String)> {
@@ -371,6 +373,7 @@ fn handle_normal_p_shows_error_when_current_line_has_no_patch_json() {
 
 #[test]
 fn handle_insert_ctrl_c_copies_selected_text() {
+    let clipboard = TestClipboardGuard::new(None);
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::Insert;
     app.textarea = TextArea::from(["Hello World"]);
@@ -381,11 +384,13 @@ fn handle_insert_ctrl_c_copies_selected_text() {
     app.handle_insert(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
 
     assert_eq!(app.textarea.yank_text(), "World");
+    assert_eq!(clipboard.text().as_deref(), Some("World"));
     assert_eq!(app.textarea.lines().join(""), "Hello World");
 }
 
 #[test]
 fn handle_insert_ctrl_x_cuts_selected_text() {
+    let clipboard = TestClipboardGuard::new(None);
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::Insert;
     app.textarea = TextArea::from(["Hello World"]);
@@ -396,16 +401,17 @@ fn handle_insert_ctrl_x_cuts_selected_text() {
     app.handle_insert(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
 
     assert_eq!(app.textarea.yank_text(), "World");
+    assert_eq!(clipboard.text().as_deref(), Some("World"));
     assert_eq!(app.textarea.lines().join(""), "Hello ");
 }
 
 #[test]
 fn handle_insert_ctrl_v_pastes_yanked_text() {
+    let _clipboard = TestClipboardGuard::new(Some(" World"));
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::Insert;
     app.textarea = TextArea::from(["Hello"]);
     app.textarea.move_cursor(CursorMove::End);
-    app.textarea.set_yank_text(" World");
 
     app.handle_insert(KeyEvent::new(KeyCode::Char('v'), KeyModifiers::CONTROL));
 
@@ -470,6 +476,32 @@ fn handle_patch_phrase_i_from_history_enters_insert_with_preview_mml() {
         app.textarea.lines().join(""),
         r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#
     );
+}
+
+#[test]
+fn handle_patch_phrase_insert_ctrl_c_copies_selected_text() {
+    let clipboard = TestClipboardGuard::new(None);
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["before".to_string()];
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["l8cdef".to_string()],
+            favorites: vec![],
+        },
+    );
+    app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
+    app.handle_patch_phrase(KeyCode::Char('i'));
+    app.textarea = TextArea::from(["Hello World"]);
+    app.textarea.move_cursor(CursorMove::WordForward);
+    app.textarea.start_selection();
+    app.textarea.move_cursor(CursorMove::End);
+
+    app.handle_insert(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+
+    assert!(matches!(app.mode, Mode::Insert));
+    assert_eq!(app.textarea.yank_text(), "World");
+    assert_eq!(clipboard.text().as_deref(), Some("World"));
 }
 
 #[test]

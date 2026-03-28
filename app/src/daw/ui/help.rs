@@ -42,6 +42,9 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
         )),
         Line::from("  ESC   : 確定 → NORMAL"),
         Line::from("  Enter : 確定 → 次小節 → INSERT 継続"),
+        Line::from("  Ctrl+C: コピー"),
+        Line::from("  Ctrl+X: カット"),
+        Line::from("  Ctrl+V: ペースト"),
         Line::from(""),
         Line::from(Span::styled(
             "  [ESC] でキャンセル",

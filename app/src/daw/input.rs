@@ -1,6 +1,6 @@
 //! DAW モードのキー入力処理
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyModifiers};
 
 use super::{
     playback_util::effective_measure_count, DawApp, DawMode, DawNormalAction, DawPlayState,
@@ -176,6 +176,24 @@ impl DawApp {
     }
 
     pub(super) fn handle_insert(&mut self, key_event: crossterm::event::KeyEvent) {
+        if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+            match key_event.code {
+                KeyCode::Char('c') => {
+                    crate::ui_utils::copy_textarea_selection(&mut self.textarea);
+                    return;
+                }
+                KeyCode::Char('x') => {
+                    crate::ui_utils::cut_textarea_selection(&mut self.textarea);
+                    return;
+                }
+                KeyCode::Char('v') => {
+                    crate::ui_utils::paste_textarea_selection(&mut self.textarea);
+                    return;
+                }
+                _ => {}
+            }
+        }
+
         match key_event.code {
             KeyCode::Esc => {
                 let confirmed_measure = self.cursor_measure;

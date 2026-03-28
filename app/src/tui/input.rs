@@ -256,15 +256,15 @@ impl<'a> TuiApp<'a> {
         if key_event.modifiers.contains(KeyModifiers::CONTROL) {
             match key_event.code {
                 KeyCode::Char('c') => {
-                    self.textarea.copy();
+                    crate::ui_utils::copy_textarea_selection(&mut self.textarea);
                     return;
                 }
                 KeyCode::Char('x') => {
-                    self.textarea.cut();
+                    crate::ui_utils::cut_textarea_selection(&mut self.textarea);
                     return;
                 }
                 KeyCode::Char('v') => {
-                    self.textarea.paste();
+                    crate::ui_utils::paste_textarea_selection(&mut self.textarea);
                     return;
                 }
                 _ => {}
