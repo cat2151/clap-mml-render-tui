@@ -2,26 +2,44 @@ use std::time::{Duration, Instant};
 
 /// 現在の再生カーソルから、実際に再生すべき小節 index を求める。
 ///
-/// `current_measure_index` が `effective_count` 以上なら、ループ先頭の `0` に巻き戻す。
+/// `current_measure_index` が現在のループ範囲外なら、そのループ先頭へ巻き戻す。
+/// `effective_count == 0` は呼び出し側で避けているが、安全のため 0 を返す。
 pub(in crate::daw) fn current_play_measure_index(
     current_measure_index: usize,
     effective_count: usize,
+    ab_repeat_range: Option<(usize, usize)>,
 ) -> usize {
-    if current_measure_index < effective_count {
+    if effective_count == 0 {
+        return 0;
+    }
+    let (loop_start_measure_index, loop_end_measure_index) =
+        ab_repeat_range.unwrap_or((0, effective_count - 1));
+    if (loop_start_measure_index..=loop_end_measure_index).contains(&current_measure_index) {
         current_measure_index
     } else {
-        0
+        loop_start_measure_index
     }
 }
 
 /// 現在小節の次に先読みすべき小節 index を求める。
 ///
-/// `effective_count` を法として 1 つ進め、末尾なら先頭へ折り返す。
+/// 現在のループ範囲内で 1 つ進め、末尾ならそのループ先頭へ折り返す。
+/// `effective_count == 0` は呼び出し側で避けているが、安全のため 0 を返す。
 pub(in crate::daw) fn following_measure_index(
     current_measure_index: usize,
     effective_count: usize,
+    ab_repeat_range: Option<(usize, usize)>,
 ) -> usize {
-    (current_measure_index + 1) % effective_count
+    if effective_count == 0 {
+        return 0;
+    }
+    let (loop_start_measure_index, loop_end_measure_index) =
+        ab_repeat_range.unwrap_or((0, effective_count - 1));
+    if current_measure_index >= loop_end_measure_index {
+        loop_start_measure_index
+    } else {
+        current_measure_index + 1
+    }
 }
 
 pub(in crate::daw::playback) fn format_playback_measure_resolution_log(

@@ -62,7 +62,7 @@ use crate::config::Config;
 use batch_logging::{TrackRerenderBatch, TrackRerenderBatchCompletionContext};
 pub use types::DawExitReason;
 pub(super) use types::{
-    CacheState, CellCache, DawMode, DawNormalAction, DawPlayState, PlayPosition,
+    AbRepeatState, CacheState, CellCache, DawMode, DawNormalAction, DawPlayState, PlayPosition,
 };
 
 // ─── 定数 ─────────────────────────────────────────────────────
@@ -140,6 +140,7 @@ pub struct DawApp {
 
     /// 再生中の小節・ビート位置（UI 描画に使用）
     pub(super) play_position: Arc<Mutex<Option<PlayPosition>>>,
+    pub(super) ab_repeat: Arc<Mutex<AbRepeatState>>,
 
     /// 再生スレッドと共有する各小節の MML ベクター（measures 要素, index i → meas i+1）。
     /// セル編集・ランダム音色変更のたびに更新されることで、
@@ -194,6 +195,7 @@ impl DawApp {
         let log_lines = Arc::new(Mutex::new(crate::logging::load_log_lines()));
         let track_rerender_batches = Arc::new(Mutex::new(vec![None; tracks]));
         let play_position = Arc::new(Mutex::new(None));
+        let ab_repeat = Arc::new(Mutex::new(AbRepeatState::Off));
         let play_measure_mmls = Arc::new(Mutex::new(vec![String::new(); measures]));
         let play_measure_track_mmls =
             Arc::new(Mutex::new(vec![vec![String::new(); tracks]; measures]));
@@ -206,6 +208,7 @@ impl DawApp {
             let log_lines_worker = Arc::clone(&log_lines);
             let track_rerender_batches_worker = Arc::clone(&track_rerender_batches);
             let play_position_worker = Arc::clone(&play_position);
+            let ab_repeat_worker = Arc::clone(&ab_repeat);
             let play_measure_mmls_worker = Arc::clone(&play_measure_mmls);
             let cache_tx_worker = cache_tx.clone();
             std::thread::spawn(move || {
@@ -217,6 +220,7 @@ impl DawApp {
                     log_lines: Arc::clone(&log_lines_worker),
                     cache: Arc::clone(&cache_worker),
                     play_position: Arc::clone(&play_position_worker),
+                    ab_repeat: Arc::clone(&ab_repeat_worker),
                     play_measure_mmls: Arc::clone(&play_measure_mmls_worker),
                     cache_tx: cache_tx_worker.clone(),
                 };
@@ -350,6 +354,7 @@ impl DawApp {
             play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
             play_transition_lock: Arc::new(Mutex::new(())),
             play_position,
+            ab_repeat,
             play_measure_mmls,
             play_measure_track_mmls,
             play_measure_samples: Arc::new(Mutex::new(0)),
@@ -364,6 +369,10 @@ impl DawApp {
         app.load();
         app.append_log_line("=== DAW mode ready ===");
         app
+    }
+
+    pub(super) fn ab_repeat_state(&self) -> AbRepeatState {
+        *self.ab_repeat.lock().unwrap()
     }
 
     // ─── ランダム音色 ─────────────────────────────────────────

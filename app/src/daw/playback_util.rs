@@ -1,3 +1,5 @@
+use super::AbRepeatState;
+
 /// 末尾の空小節を除いた有効な小節数を計算する。
 ///
 /// すべての小節が空の場合は `None` を返す。
@@ -56,9 +58,16 @@ pub(super) fn format_measure_list(indices: &[usize]) -> Option<String> {
     Some(parts.join(", "))
 }
 
-pub(super) fn loop_measure_summary_label(mmls: &[String]) -> Option<String> {
+pub(super) fn loop_measure_summary_label(
+    mmls: &[String],
+    ab_repeat_state: AbRepeatState,
+) -> Option<String> {
     let effective_count = effective_measure_count(mmls)?;
-    let loop_measures: Vec<usize> = (1..=effective_count).collect();
+    let (loop_start_measure_index, loop_end_measure_index) = ab_repeat_state
+        .normalized_range(effective_count)
+        .unwrap_or((0, effective_count - 1));
+    let loop_measures: Vec<usize> =
+        (loop_start_measure_index + 1..=loop_end_measure_index + 1).collect();
     let loop_label = format_measure_list(&loop_measures)?;
     let empty_label =
         format_measure_list(&empty_measure_indices(mmls)).unwrap_or_else(|| "none".to_string());
@@ -67,10 +76,13 @@ pub(super) fn loop_measure_summary_label(mmls: &[String]) -> Option<String> {
     ))
 }
 
-pub(super) fn play_start_log_lines(mmls: &[String]) -> Vec<String> {
+pub(super) fn play_start_log_lines(mmls: &[String], ab_repeat_state: AbRepeatState) -> Vec<String> {
     let Some(effective_count) = effective_measure_count(mmls) else {
         return Vec::new();
     };
+    let (loop_start_measure_index, loop_end_measure_index) = ab_repeat_state
+        .normalized_range(effective_count)
+        .unwrap_or((0, effective_count - 1));
 
     let active_measures = non_empty_measure_indices(mmls);
     let empty_measures = empty_measure_indices(mmls);
@@ -94,8 +106,14 @@ pub(super) fn play_start_log_lines(mmls: &[String]) -> Vec<String> {
         "empty meas : {}",
         format_measure_list(&empty_measures).unwrap_or_else(|| "none".to_string())
     ));
-    lines.push("loop start meas : meas1".to_string());
-    lines.push(format!("loop end meas : meas{effective_count}"));
+    lines.push(format!(
+        "loop start meas : meas{}",
+        loop_start_measure_index + 1
+    ));
+    lines.push(format!(
+        "loop end meas : meas{}",
+        loop_end_measure_index + 1
+    ));
     lines
 }
 

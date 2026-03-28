@@ -17,6 +17,7 @@ pub(super) struct TrackRerenderBatchCompletionContext {
     pub(super) log_lines: Arc<Mutex<VecDeque<String>>>,
     pub(super) cache: Arc<Mutex<Vec<Vec<super::CellCache>>>>,
     pub(super) play_position: Arc<Mutex<Option<PlayPosition>>>,
+    pub(super) ab_repeat: Arc<Mutex<super::AbRepeatState>>,
     pub(super) play_measure_mmls: Arc<Mutex<Vec<String>>>,
     pub(super) cache_tx: std::sync::mpsc::Sender<CacheJob>,
 }
@@ -32,6 +33,7 @@ fn format_measure_order(measures: &[usize]) -> String {
 fn prioritized_measure_order(
     measures: impl IntoIterator<Item = usize>,
     play_position: Option<PlayPosition>,
+    ab_repeat: &Arc<Mutex<super::AbRepeatState>>,
     play_measure_mmls: &[String],
 ) -> Vec<usize> {
     let mut ordered: Vec<usize> = measures.into_iter().collect();
@@ -42,10 +44,15 @@ fn prioritized_measure_order(
     let Some(effective_count) = playback_util::effective_measure_count(play_measure_mmls) else {
         return ordered;
     };
-    let current_measure_index =
-        playback::current_play_measure_index(position.measure_index, effective_count);
+    let ab_repeat_range = (*ab_repeat.lock().unwrap()).normalized_range(effective_count);
+    let current_measure_index = playback::current_play_measure_index(
+        position.measure_index,
+        effective_count,
+        ab_repeat_range,
+    );
     let next_measure =
-        playback::following_measure_index(current_measure_index, effective_count) + 1;
+        playback::following_measure_index(current_measure_index, effective_count, ab_repeat_range)
+            + 1;
     ordered.sort_by_key(|&measure| {
         // play 中は「現在演奏中の次 meas」から順に 1 周する距離で優先度を決める。
         // これにより meas7 演奏中なら meas8 を先頭にし、その後 meas1, meas2... と続く。
@@ -65,10 +72,15 @@ fn take_next_batch_job(
     track: usize,
     cache: &Arc<Mutex<Vec<Vec<super::CellCache>>>>,
     play_position: Option<PlayPosition>,
+    ab_repeat: &Arc<Mutex<super::AbRepeatState>>,
     play_measure_mmls: &[String],
 ) -> Option<(usize, CacheJob, String)> {
-    let priority_order =
-        prioritized_measure_order(pending.keys().copied(), play_position, play_measure_mmls);
+    let priority_order = prioritized_measure_order(
+        pending.keys().copied(),
+        play_position,
+        ab_repeat,
+        play_measure_mmls,
+    );
     let valid_order: Vec<usize> = {
         let cache = cache.lock().unwrap();
         priority_order
@@ -128,6 +140,7 @@ impl DawApp {
             track,
             &self.cache,
             play_position,
+            &self.ab_repeat,
             &play_measure_mmls,
         ) else {
             self.track_rerender_batches.lock().unwrap()[track] = None;
@@ -182,6 +195,7 @@ impl DawApp {
                     track,
                     &ctx.cache,
                     play_position,
+                    &ctx.ab_repeat,
                     &play_measure_mmls,
                 ) {
                     batch.active_measure = Some(next_measure);

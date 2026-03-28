@@ -77,6 +77,61 @@ pub enum DawPlayState {
     Preview,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AbRepeatState {
+    #[default]
+    Off,
+    FixStart {
+        start_measure_index: usize,
+        end_measure_index: usize,
+    },
+    FixEnd {
+        start_measure_index: usize,
+        end_measure_index: usize,
+    },
+}
+
+impl AbRepeatState {
+    pub fn normalized_range(self, effective_count: usize) -> Option<(usize, usize)> {
+        if effective_count == 0 {
+            return None;
+        }
+        match self {
+            Self::Off => None,
+            Self::FixStart {
+                start_measure_index,
+                end_measure_index,
+            }
+            | Self::FixEnd {
+                start_measure_index,
+                end_measure_index,
+            } => {
+                let last_measure_index = effective_count - 1;
+                let start_measure_index = start_measure_index.min(last_measure_index);
+                let end_measure_index = end_measure_index.min(last_measure_index);
+                Some((
+                    start_measure_index.min(end_measure_index),
+                    start_measure_index.max(end_measure_index),
+                ))
+            }
+        }
+    }
+
+    pub fn marker_indices(self) -> Option<(usize, usize)> {
+        match self {
+            Self::Off => None,
+            Self::FixStart {
+                start_measure_index,
+                end_measure_index,
+            }
+            | Self::FixEnd {
+                start_measure_index,
+                end_measure_index,
+            } => Some((start_measure_index, end_measure_index)),
+        }
+    }
+}
+
 /// 再生中の小節・ビート位置
 #[derive(Clone)]
 pub struct PlayPosition {

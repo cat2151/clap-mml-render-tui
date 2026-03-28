@@ -2,14 +2,32 @@ use super::*;
 
 #[test]
 fn current_play_measure_index_wraps_to_loop_start_when_measure_count_shrinks() {
-    assert_eq!(current_play_measure_index(7, 4), 0);
-    assert_eq!(current_play_measure_index(2, 4), 2);
+    assert_eq!(current_play_measure_index(7, 4, None), 0);
+    assert_eq!(current_play_measure_index(2, 4, None), 2);
 }
 
 #[test]
 fn following_measure_index_wraps_after_last_measure() {
-    assert_eq!(following_measure_index(1, 4), 2);
-    assert_eq!(following_measure_index(3, 4), 0);
+    assert_eq!(following_measure_index(1, 4, None), 2);
+    assert_eq!(following_measure_index(3, 4, None), 0);
+}
+
+#[test]
+fn current_play_measure_index_jumps_to_ab_repeat_start_outside_active_range() {
+    assert_eq!(current_play_measure_index(0, 4, Some((1, 2))), 1);
+    assert_eq!(current_play_measure_index(2, 4, Some((1, 2))), 2);
+}
+
+#[test]
+fn following_measure_index_wraps_inside_ab_repeat_range() {
+    assert_eq!(following_measure_index(1, 4, Some((1, 2))), 2);
+    assert_eq!(following_measure_index(2, 4, Some((1, 2))), 1);
+}
+
+#[test]
+fn measure_indices_return_zero_when_effective_count_is_zero() {
+    assert_eq!(current_play_measure_index(3, 0, None), 0);
+    assert_eq!(following_measure_index(3, 0, None), 0);
 }
 
 #[test]

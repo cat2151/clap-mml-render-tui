@@ -13,7 +13,7 @@ use ratatui::{
     Frame,
 };
 
-use super::{CacheState, DawApp, DawMode};
+use super::{AbRepeatState, CacheState, DawApp, DawMode};
 
 /// Pending インジケータのアニメーション 1 フレームの長さ（ミリ秒）
 const ANIM_FRAME_MS: u128 = 250;
@@ -58,18 +58,34 @@ fn cache_indicator_color(cs: &CacheState) -> Color {
     }
 }
 
-fn loop_status_label(mmls: &[String]) -> Option<String> {
+fn loop_status_label(mmls: &[String], ab_repeat_state: AbRepeatState) -> Option<String> {
     super::playback::effective_measure_count(mmls).map(|count| {
-        if count == 1 {
-            "loop: meas1のみ (1小節)".to_string()
+        let (loop_start_measure_index, loop_end_measure_index) = ab_repeat_state
+            .normalized_range(count)
+            .unwrap_or((0, count - 1));
+        let loop_count = loop_end_measure_index - loop_start_measure_index + 1;
+        let label_prefix = if ab_repeat_state == AbRepeatState::Off {
+            "loop"
         } else {
-            format!("loop: meas1〜meas{count} ({count}小節)")
+            "A-B"
+        };
+        if loop_count == 1 {
+            format!(
+                "{label_prefix}: meas{}のみ (1小節)",
+                loop_start_measure_index + 1
+            )
+        } else {
+            format!(
+                "{label_prefix}: meas{}〜meas{} ({loop_count}小節)",
+                loop_start_measure_index + 1,
+                loop_end_measure_index + 1
+            )
         }
     })
 }
 
-fn loop_measure_summary_label(mmls: &[String]) -> Option<String> {
-    super::playback::loop_measure_summary_label(mmls)
+fn loop_measure_summary_label(mmls: &[String], ab_repeat_state: AbRepeatState) -> Option<String> {
+    super::playback::loop_measure_summary_label(mmls, ab_repeat_state)
 }
 
 pub(super) fn draw(app: &DawApp, f: &mut Frame) {

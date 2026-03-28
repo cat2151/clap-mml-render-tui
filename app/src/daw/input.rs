@@ -3,8 +3,8 @@
 use crossterm::event::{KeyCode, KeyModifiers};
 
 use super::{
-    playback_util::effective_measure_count, DawApp, DawMode, DawNormalAction, DawPlayState,
-    FIRST_PLAYABLE_TRACK,
+    playback_util::effective_measure_count, AbRepeatState, DawApp, DawMode, DawNormalAction,
+    DawPlayState, FIRST_PLAYABLE_TRACK,
 };
 
 fn format_random_patch_hot_reload_log(
@@ -24,6 +24,50 @@ fn format_random_patch_hot_reload_log(
 }
 
 impl DawApp {
+    fn cursor_play_measure_index(&self) -> Option<usize> {
+        // cursor_measure の 0 は Init 列なので対象外。
+        // A-B リピートは通常 meas のみを扱うため、1-based の小節番号を 0-based index に変換する。
+        self.cursor_measure.checked_sub(1)
+    }
+
+    fn update_ab_repeat_follow_end_with_cursor(&self) {
+        let Some(end_measure_index) = self.cursor_play_measure_index() else {
+            return;
+        };
+        let mut ab_repeat = self.ab_repeat.lock().unwrap();
+        if let AbRepeatState::FixStart {
+            start_measure_index,
+            ..
+        } = *ab_repeat
+        {
+            *ab_repeat = AbRepeatState::FixStart {
+                start_measure_index,
+                end_measure_index,
+            };
+        }
+    }
+
+    fn cycle_ab_repeat(&self) {
+        let cursor_measure_index = self.cursor_play_measure_index();
+        let mut ab_repeat = self.ab_repeat.lock().unwrap();
+        *ab_repeat = match *ab_repeat {
+            AbRepeatState::Off => cursor_measure_index
+                .map(|cursor_measure_index| AbRepeatState::FixStart {
+                    start_measure_index: cursor_measure_index,
+                    end_measure_index: cursor_measure_index,
+                })
+                .unwrap_or(AbRepeatState::Off),
+            AbRepeatState::FixStart {
+                start_measure_index,
+                end_measure_index,
+            } => AbRepeatState::FixEnd {
+                start_measure_index,
+                end_measure_index: cursor_measure_index.unwrap_or(end_measure_index),
+            },
+            AbRepeatState::FixEnd { .. } => AbRepeatState::Off,
+        };
+    }
+
     fn sync_playback_mml_state(&self) {
         let new_mmls = self.build_measure_mmls();
         let new_track_mmls = self.build_measure_track_mmls();
@@ -122,11 +166,13 @@ impl DawApp {
             KeyCode::Char('h') | KeyCode::Left => {
                 if self.cursor_measure > 0 {
                     self.cursor_measure -= 1;
+                    self.update_ab_repeat_follow_end_with_cursor();
                 }
             }
             KeyCode::Char('l') | KeyCode::Right => {
                 if self.cursor_measure < self.measures {
                     self.cursor_measure += 1;
+                    self.update_ab_repeat_follow_end_with_cursor();
                 }
             }
             KeyCode::Char('j') | KeyCode::Down => {
@@ -167,6 +213,8 @@ impl DawApp {
                     self.start_play();
                 }
             }
+
+            KeyCode::Char('a') => self.cycle_ab_repeat(),
 
             KeyCode::Char('s') => {
                 if self.cursor_track >= FIRST_PLAYABLE_TRACK {
@@ -271,6 +319,7 @@ impl DawApp {
                 }
                 if self.cursor_measure < self.measures {
                     self.cursor_measure += 1;
+                    self.update_ab_repeat_follow_end_with_cursor();
                 }
                 self.start_insert();
             }

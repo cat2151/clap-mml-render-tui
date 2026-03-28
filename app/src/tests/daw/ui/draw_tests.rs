@@ -84,6 +84,37 @@ fn draw_places_playback_status_and_loop_summary_above_footer() {
 }
 
 #[test]
+fn draw_shows_ab_repeat_markers_and_footer_shortcut() {
+    let app = build_test_app();
+    {
+        let mut ab_repeat = app.ab_repeat.lock().unwrap();
+        *ab_repeat = AbRepeatState::FixEnd {
+            start_measure_index: 0,
+            end_measure_index: 1,
+        };
+    }
+
+    let normalized_lines: Vec<String> = render_lines(&app, 80, 12)
+        .into_iter()
+        .map(|line| line.replace(' ', ""))
+        .collect();
+    let footer_row = normalized_lines.len() - 2;
+
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("InitA1B2")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines[footer_row].contains("a:A-B"),
+        "lines: {:?}",
+        normalized_lines
+    );
+}
+
+#[test]
 fn draw_keeps_footer_on_last_row_when_idle() {
     let app = build_test_app();
 
@@ -321,6 +352,13 @@ fn help_does_not_show_old_semicolon_guidance() {
         normalized_lines
             .iter()
             .any(|line| line.contains("m:mixeroverlay")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("a:off→start固定/end追従→end固定→off")),
         "lines: {:?}",
         normalized_lines
     );

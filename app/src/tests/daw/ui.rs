@@ -9,7 +9,9 @@ pub(super) use tui_textarea::TextArea;
 pub(super) use crate::config::Config;
 
 pub(super) use super::{
-    super::{CacheState, CellCache, DawApp, DawMode, DawPlayState, PlayPosition, MEASURES},
+    super::{
+        AbRepeatState, CacheState, CellCache, DawApp, DawMode, DawPlayState, PlayPosition, MEASURES,
+    },
     cache_indicator, cache_indicator_color, cache_text_color, draw, loop_measure_summary_label,
     loop_status_label, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_PINK,
 };
@@ -48,6 +50,7 @@ fn build_test_app() -> DawApp {
         play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
         play_transition_lock: Arc::new(Mutex::new(())),
         play_position: Arc::new(Mutex::new(None)),
+        ab_repeat: Arc::new(Mutex::new(AbRepeatState::Off)),
         play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
         play_measure_track_mmls: Arc::new(Mutex::new(vec![vec![String::new(); tracks]; measures])),
         play_measure_samples: Arc::new(Mutex::new(0)),
