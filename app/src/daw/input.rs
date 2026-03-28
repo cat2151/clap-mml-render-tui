@@ -351,21 +351,33 @@ impl DawApp {
         if self.cursor_track < FIRST_PLAYABLE_TRACK || self.cursor_track >= self.tracks {
             return;
         }
-        #[cfg(test)]
-        if self.entry_ptr == 0 {
-            let measure_index = self.cursor_play_measure_index().unwrap_or(0);
-            if *self.play_state.lock().unwrap() == DawPlayState::Preview {
-                self.stop_play();
-            }
-            *self.play_state.lock().unwrap() = DawPlayState::Preview;
-            *self.play_position.lock().unwrap() = Some(super::PlayPosition {
-                measure_index,
-                measure_start: std::time::Instant::now(),
-            });
-            self.append_log_line(format!("preview: meas{}", measure_index + 1));
+        if self.start_preview_for_test_if_needed() {
             return;
         }
         self.start_preview_for_target_tracks(false);
+    }
+
+    #[cfg(test)]
+    fn start_preview_for_test_if_needed(&mut self) -> bool {
+        if self.entry_ptr != 0 {
+            return false;
+        }
+        let measure_index = self.cursor_play_measure_index().unwrap_or(0);
+        if *self.play_state.lock().unwrap() == DawPlayState::Preview {
+            self.stop_play();
+        }
+        *self.play_state.lock().unwrap() = DawPlayState::Preview;
+        *self.play_position.lock().unwrap() = Some(super::PlayPosition {
+            measure_index,
+            measure_start: std::time::Instant::now(),
+        });
+        self.append_log_line(format!("preview: meas{}", measure_index + 1));
+        true
+    }
+
+    #[cfg(not(test))]
+    fn start_preview_for_test_if_needed(&mut self) -> bool {
+        false
     }
 
     fn start_play_from_cursor_measure(&self) {
