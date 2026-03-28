@@ -27,7 +27,7 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
         Line::from("  M      : 中央 track へ移動"),
         Line::from("  L      : 末尾 track へ移動"),
         Line::from("  i      : INSERT モード"),
-        Line::from("  a      : A-B repeat (start固定 → end固定 → off)"),
+        Line::from("  a      : off → start固定/end追従 → end固定 → off"),
         Line::from("  m      : mixer overlay"),
         Line::from("  p      : 演奏 / 停止"),
         Line::from("  s      : solo toggle"),

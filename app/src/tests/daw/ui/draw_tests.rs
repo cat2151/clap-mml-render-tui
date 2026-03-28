@@ -358,7 +358,7 @@ fn help_does_not_show_old_semicolon_guidance() {
     assert!(
         normalized_lines
             .iter()
-            .any(|line| line.contains("a:A-Brepeat(start固定→end固定→off)")),
+            .any(|line| line.contains("a:off→start固定/end追従→end固定→off")),
         "lines: {:?}",
         normalized_lines
     );

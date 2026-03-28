@@ -48,21 +48,21 @@ impl DawApp {
     }
 
     fn cycle_ab_repeat(&self) {
-        let Some(cursor_measure_index) = self.cursor_play_measure_index() else {
-            return;
-        };
+        let cursor_measure_index = self.cursor_play_measure_index();
         let mut ab_repeat = self.ab_repeat.lock().unwrap();
         *ab_repeat = match *ab_repeat {
-            AbRepeatState::Off => AbRepeatState::FixStart {
-                start_measure_index: cursor_measure_index,
-                end_measure_index: cursor_measure_index,
-            },
+            AbRepeatState::Off => cursor_measure_index
+                .map(|cursor_measure_index| AbRepeatState::FixStart {
+                    start_measure_index: cursor_measure_index,
+                    end_measure_index: cursor_measure_index,
+                })
+                .unwrap_or(AbRepeatState::Off),
             AbRepeatState::FixStart {
                 start_measure_index,
-                ..
+                end_measure_index,
             } => AbRepeatState::FixEnd {
                 start_measure_index,
-                end_measure_index: cursor_measure_index,
+                end_measure_index: cursor_measure_index.unwrap_or(end_measure_index),
             },
             AbRepeatState::FixEnd { .. } => AbRepeatState::Off,
         };

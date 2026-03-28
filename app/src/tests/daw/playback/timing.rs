@@ -25,6 +25,12 @@ fn following_measure_index_wraps_inside_ab_repeat_range() {
 }
 
 #[test]
+fn measure_indices_return_zero_when_effective_count_is_zero() {
+    assert_eq!(current_play_measure_index(3, 0, None), 0);
+    assert_eq!(following_measure_index(3, 0, None), 0);
+}
+
+#[test]
 fn format_playback_measure_resolution_log_shows_cursor_and_resolved_measure() {
     assert_eq!(
         format_playback_measure_resolution_log(7, 0, 4),
