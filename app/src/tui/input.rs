@@ -128,14 +128,18 @@ impl<'a> TuiApp<'a> {
         self.mode = Mode::PatchSelect;
     }
 
-    fn patch_select_preview_mml(&self) -> Option<String> {
-        let patch_name = self.patch_filtered.get(self.patch_cursor)?;
+    fn patch_select_current_phrase(&self) -> Option<String> {
         let line = self.lines.get(self.cursor)?;
         let preprocessed = mml_preprocessor::extract_embedded_json(line);
-        let phrase = match preprocessed.remaining_mml.trim() {
+        Some(match preprocessed.remaining_mml.trim() {
             "" => PATCH_SELECT_PREVIEW_FALLBACK_PHRASE.to_string(),
             remaining => remaining.to_string(),
-        };
+        })
+    }
+
+    fn patch_select_preview_mml(&self) -> Option<String> {
+        let patch_name = self.patch_filtered.get(self.patch_cursor)?;
+        let phrase = self.patch_select_current_phrase()?;
         let json = Self::build_patch_json(patch_name);
         Some(format!("{json} {phrase}"))
     }
@@ -163,13 +167,8 @@ impl<'a> TuiApp<'a> {
             let Some(patch_name) = self.patch_filtered.get(self.patch_cursor).cloned() else {
                 return;
             };
-            let Some(line) = self.lines.get(self.cursor) else {
+            let Some(phrase) = self.patch_select_current_phrase() else {
                 return;
-            };
-            let preprocessed = mml_preprocessor::extract_embedded_json(line);
-            let phrase = match preprocessed.remaining_mml.trim() {
-                "" => PATCH_SELECT_PREVIEW_FALLBACK_PHRASE.to_string(),
-                remaining => remaining.to_string(),
             };
             self.add_patch_phrase_favorite(patch_name, phrase);
             self.preview_selected_patch();
