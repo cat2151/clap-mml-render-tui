@@ -164,6 +164,10 @@ impl<'a> TuiApp<'a> {
         }
     }
 
+    fn set_empty_yank_error(&mut self) {
+        *self.play_state.lock().unwrap() = PlayState::Err("yank バッファが空です".to_string());
+    }
+
     pub(super) fn start_patch_select(&mut self) {
         // ロードが完了したパッチリストをスナップショットする
         {
@@ -329,11 +333,13 @@ impl<'a> TuiApp<'a> {
             }
             KeyCode::Char('p') => {
                 if !self.paste_yanked_line(false) {
-                    self.start_patch_phrase_for_current_line();
+                    self.set_empty_yank_error();
                 }
             }
             KeyCode::Char('P') => {
-                self.paste_yanked_line(true);
+                if !self.paste_yanked_line(true) {
+                    self.set_empty_yank_error();
+                }
             }
             KeyCode::Char('f') => self.start_patch_phrase_for_current_line(),
             KeyCode::Char('h') => self.start_notepad_history(),

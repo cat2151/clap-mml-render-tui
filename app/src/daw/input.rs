@@ -357,6 +357,8 @@ impl DawApp {
         self.start_preview_for_target_tracks(false);
     }
 
+    // `new_for_test()` の DAW は PluginEntry を持たないため、
+    // 実オーディオ preview を起動せず状態更新だけを検証する。
     #[cfg(test)]
     fn start_preview_for_test_if_needed(&mut self) -> bool {
         if self.entry_ptr != 0 {

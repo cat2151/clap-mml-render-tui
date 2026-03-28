@@ -91,7 +91,7 @@ fn notepad_mode_title(app: &TuiApp<'_>) -> &'static str {
 fn keybind_text(mode: &Mode) -> &'static str {
     match mode {
         Mode::Normal => {
-            "q:quit  ?:help  i:insert  o/O:行挿入  Del:行cut  p/P:貼付  f:phrase  r:ランダム音色  t:音色  h:history  j/k・↑↓・PgUp/PgDn・H/M/L:移動再生  Enter/Space  d:DAW"
+            "q ?:help i:insert o/O:挿入 Del:cut p/P:貼付 f:phrase r:random t:音色 h:history j/k・↑↓・PgUp/PgDn・H/M/L:再生移動 Enter/Space d:DAW"
         }
         Mode::Insert => "ESC:確定→NORMAL  Enter:確定→次行",
         Mode::PatchSelect => {

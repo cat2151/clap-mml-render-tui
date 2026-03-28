@@ -238,7 +238,21 @@ fn handle_normal_page_down_and_page_up_move_by_visible_page() {
 }
 
 #[test]
-fn handle_normal_p_shows_error_when_current_line_has_no_patch_json() {
+fn handle_normal_f_shows_error_when_current_line_has_no_patch_json() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["cde".to_string()];
+
+    app.handle_normal(KeyCode::Char('f'));
+
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Err(msg) if msg == "現在行の先頭に patch name JSON がありません"
+    ));
+    assert!(matches!(app.mode, Mode::Normal));
+}
+
+#[test]
+fn handle_normal_p_shows_error_when_yank_buffer_is_empty() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["cde".to_string()];
 
@@ -246,9 +260,9 @@ fn handle_normal_p_shows_error_when_current_line_has_no_patch_json() {
 
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
-        PlayState::Err(msg) if msg == "現在行の先頭に patch name JSON がありません"
+        PlayState::Err(msg) if msg == "yank バッファが空です"
     ));
-    assert!(matches!(app.mode, Mode::Normal));
+    assert_eq!(app.lines, vec!["cde".to_string()]);
 }
 
 #[test]
