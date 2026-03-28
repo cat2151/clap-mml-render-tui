@@ -45,6 +45,8 @@ impl<'a> TuiApp<'a> {
     pub(super) fn play_mml(&mut self, mml: String) {
         #[cfg(test)]
         if self.entry_ptr == 0 {
+            // new_for_test() では PluginEntry を持たないため、
+            // テスト中は再生スレッドを起動せず play_state 更新だけを検証する。
             *self.play_state.lock().unwrap() = PlayState::Running(mml);
             return;
         }

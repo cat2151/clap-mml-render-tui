@@ -165,6 +165,8 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, play_state: &PlayState, stat
             } else {
                 Style::default().fg(Color::White)
             };
+            // INSERT 時のカーソル行は textarea で別描画するため、
+            // List 側は空文字にして重なり表示を防ぐ。
             let content = if is_insert && i == cursor {
                 String::new()
             } else {
