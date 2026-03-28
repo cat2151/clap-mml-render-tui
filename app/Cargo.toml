@@ -14,6 +14,7 @@ cmrt-core = { path = "../core-lib" }
 ratatui = "0.28"
 tui-textarea = { version = "0.6", features = ["crossterm"] }
 crossterm = "0.28"
+arboard = "3.6.1"
 
 # Config
 serde = { version = "1", features = ["derive"] }

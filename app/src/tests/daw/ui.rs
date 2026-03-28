@@ -418,6 +418,20 @@ fn help_does_not_show_old_semicolon_guidance() {
         normalized_lines
     );
     assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("Ctrl+C:コピー")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        !normalized_lines
+            .iter()
+            .any(|line| line.contains("Ctrl+C:強制終了")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
         !normalized_lines
             .iter()
             .any(|line| line.contains("分割して下のtrackに追加")),

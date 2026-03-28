@@ -10,7 +10,7 @@ impl DawApp {
     /// TuiApp と同じ terminal を受け取って DAW モードを実行する。
     /// 終了時は `DawExitReason` を返す:
     ///   - `ReturnToTui` : d / ESC キーで TUI に戻る
-    ///   - `QuitApp`     : q キーまたは Ctrl+C でアプリを終了する
+    ///   - `QuitApp`     : q キーでアプリを終了する
     pub fn run_with_terminal(
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
@@ -29,9 +29,10 @@ impl DawApp {
                     if key.modifiers.contains(KeyModifiers::CONTROL)
                         && key.code == KeyCode::Char('c')
                     {
-                        self.stop_play();
-                        self.save_history_state();
-                        return Ok(DawExitReason::QuitApp);
+                        if self.mode == DawMode::Insert {
+                            self.handle_insert(key);
+                        }
+                        continue;
                     }
 
                     match self.mode {

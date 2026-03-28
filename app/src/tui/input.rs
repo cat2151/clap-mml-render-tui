@@ -257,6 +257,7 @@ impl<'a> TuiApp<'a> {
             match key_event.code {
                 KeyCode::Char('c') => {
                     self.textarea.copy();
+                    crate::clipboard::set_text(self.textarea.yank_text().to_string());
                     return;
                 }
                 KeyCode::Char('x') => {

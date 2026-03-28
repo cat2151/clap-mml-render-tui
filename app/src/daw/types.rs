@@ -106,6 +106,6 @@ pub enum DawNormalAction {
 pub enum DawExitReason {
     /// d / ESC キーで TUI に戻る
     ReturnToTui,
-    /// q キーまたは Ctrl+C でアプリを終了する
+    /// q キーでアプリを終了する
     QuitApp,
 }

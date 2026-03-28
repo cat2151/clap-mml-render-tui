@@ -32,7 +32,6 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
         Line::from("  K / ?  : ヘルプ (このページ)"),
         Line::from("  d/ESC  : TUI に戻る"),
         Line::from("  q      : 終了"),
-        Line::from("  Ctrl+C : 強制終了"),
         Line::from(""),
         Line::from(Span::styled(
             "INSERT モード",
@@ -42,6 +41,9 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
         )),
         Line::from("  ESC   : 確定 → NORMAL"),
         Line::from("  Enter : 確定 → 次小節 → INSERT 継続"),
+        Line::from("  Ctrl+C: コピー"),
+        Line::from("  Ctrl+X: カット"),
+        Line::from("  Ctrl+V: ペースト"),
         Line::from(""),
         Line::from(Span::styled(
             "  [ESC] でキャンセル",
