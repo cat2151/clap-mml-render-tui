@@ -1,7 +1,7 @@
-use super::*;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use tui_textarea::{CursorMove, TextArea};
+pub(super) use super::*;
+pub(super) use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+pub(super) use std::sync::atomic::{AtomicUsize, Ordering};
+pub(super) use tui_textarea::{CursorMove, TextArea};
 
 mod filter_cache;
 mod insert_mode;
