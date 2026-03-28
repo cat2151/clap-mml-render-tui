@@ -98,3 +98,5 @@ fn render_buffer(app: &DawApp, width: u16, height: u16) -> Buffer {
 mod draw_tests;
 #[path = "ui/helpers.rs"]
 mod helpers;
+#[path = "ui/overlay_tests.rs"]
+mod overlay_tests;
