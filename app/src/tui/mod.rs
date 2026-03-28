@@ -21,7 +21,7 @@ use anyhow::Result;
 use clack_host::prelude::PluginEntry;
 use cmrt_core::{collect_patches, mml_render, to_relative, CoreConfig};
 use crossterm::{
-    event::{self, Event},
+    event::{self, Event, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -322,6 +322,14 @@ impl<'a> TuiApp<'a> {
                     // Press のみ処理。Release/Repeat は無視（二重発火防止）
                     use crossterm::event::KeyEventKind;
                     if key.kind != KeyEventKind::Press {
+                        continue;
+                    }
+                    if key.modifiers.contains(KeyModifiers::CONTROL)
+                        && key.code == KeyCode::Char('c')
+                    {
+                        if self.mode == Mode::Insert {
+                            self.handle_insert(key);
+                        }
                         continue;
                     }
                     match self.mode {

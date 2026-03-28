@@ -1,3 +1,4 @@
+pub(crate) mod clipboard;
 pub mod config;
 pub mod daw;
 pub mod history;

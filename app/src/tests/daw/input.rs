@@ -3,6 +3,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use tui_textarea::CursorMove;
 use tui_textarea::TextArea;
 
 use crate::config::Config;
@@ -83,6 +85,26 @@ fn commit_insert_skips_cache_refresh_when_text_is_unchanged() {
     }
 
     std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn handle_insert_ctrl_c_copies_selected_text() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.mode = DawMode::Insert;
+    app.textarea = TextArea::from(["Hello World"]);
+    assert_eq!(crate::clipboard::take_text_for_test(), None);
+    app.textarea.move_cursor(CursorMove::WordForward);
+    app.textarea.start_selection();
+    app.textarea.move_cursor(CursorMove::End);
+
+    app.handle_insert(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+
+    assert_eq!(app.textarea.yank_text(), "World");
+    assert_eq!(app.textarea.lines().join(""), "Hello World");
+    assert_eq!(
+        crate::clipboard::take_text_for_test(),
+        Some("World".to_string())
+    );
 }
 
 #[test]
