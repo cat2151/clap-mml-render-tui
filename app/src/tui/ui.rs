@@ -91,11 +91,11 @@ fn notepad_mode_title(app: &TuiApp<'_>) -> &'static str {
 fn keybind_text(mode: &Mode) -> &'static str {
     match mode {
         Mode::Normal => {
-            "q:quit  ?:help  i:insert  r:ランダム音色  t:音色  p:phrase  j/k・↑↓/PgUp/PgDn  Enter/Space  d:DAW"
+            "q:quit  ?:help  i:insert  r:ランダム音色  t:音色  p:phrase  j/k・↑↓・PgUp/PgDn  Enter/Space  d:DAW"
         }
         Mode::Insert => "ESC:確定→NORMAL  Enter:確定→次行",
         Mode::PatchSelect => {
-            "Enter:決定  ESC:キャンセル  Ctrl+F:お気に入り  Ctrl+J/N・Ctrl+K/P・↑↓・PgUp/PgDn:移動  文字入力:フィルタ  Space:AND条件"
+            "Enter:決定  ESC:キャンセル  Ctrl+F:お気に入り  Ctrl+J/Ctrl+N・Ctrl+K/Ctrl+P・↑↓・PgUp/PgDn:移動  文字入力:フィルタ  Space:AND条件"
         }
         Mode::NotepadHistory => {
             "Enter:確定  ESC:閉じる  h/l・←/→:ペイン移動  j/k・↑↓:移動して再生  PgUp/PgDn:1画面移動  f:お気に入り  dd:削除"
@@ -472,7 +472,7 @@ fn draw_notepad_history(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, statu
 }
 
 fn draw_help(f: &mut Frame) {
-    let area = crate::ui_utils::centered_rect(60, 90, f.area());
+    let area = crate::ui_utils::centered_rect(60, 95, f.area());
     f.render_widget(Clear, area);
 
     let help_lines = vec![

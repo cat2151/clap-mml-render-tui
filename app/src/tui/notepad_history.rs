@@ -3,7 +3,12 @@ use crossterm::event::KeyCode;
 use super::{Mode, PatchPhrasePane, TuiApp};
 
 impl<'a> TuiApp<'a> {
-    fn move_notepad_selection_by(&mut self, delta: isize, history_len: usize, favorites_len: usize) {
+    fn move_notepad_selection_by(
+        &mut self,
+        delta: isize,
+        history_len: usize,
+        favorites_len: usize,
+    ) {
         match self.notepad_focus {
             PatchPhrasePane::History => {
                 if history_len == 0 {

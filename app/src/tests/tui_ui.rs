@@ -151,7 +151,7 @@ fn patch_select_screen_splits_status_and_keybinds() {
     assert!(!normalized_lines[status_row].contains("Enter:決定"));
     assert_eq!(keybind_row, status_row + 1);
     assert!(normalized_lines[keybind_row].contains("Ctrl+F:お気に入り"));
-    assert!(normalized_lines[keybind_row].contains("Ctrl+J/N・Ctrl+K/P"));
+    assert!(normalized_lines[keybind_row].contains("Ctrl+J/Ctrl+N・Ctrl+K/Ctrl+P"));
 }
 
 #[test]

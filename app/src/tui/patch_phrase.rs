@@ -17,12 +17,18 @@ impl<'a> TuiApp<'a> {
     ) {
         match self.patch_phrase_focus {
             PatchPhrasePane::History => {
+                if history_len == 0 {
+                    return;
+                }
                 let max_cursor = history_len.saturating_sub(1) as isize;
                 self.patch_phrase_history_cursor =
                     (self.patch_phrase_history_cursor as isize + delta).clamp(0, max_cursor)
                         as usize;
             }
             PatchPhrasePane::Favorites => {
+                if favorites_len == 0 {
+                    return;
+                }
                 let max_cursor = favorites_len.saturating_sub(1) as isize;
                 self.patch_phrase_favorites_cursor =
                     (self.patch_phrase_favorites_cursor as isize + delta).clamp(0, max_cursor)
