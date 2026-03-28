@@ -380,5 +380,5 @@ impl<'a> TuiApp<'a> {
 mod test_helpers;
 
 #[cfg(test)]
-#[path = "../tests/tui.rs"]
+#[path = "../tests/tui/mod.rs"]
 mod tests;
