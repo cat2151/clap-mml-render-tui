@@ -117,10 +117,12 @@ impl<'a> TuiApp<'a> {
             KeyCode::Char('h') | KeyCode::Left => {
                 self.notepad_focus = PatchPhrasePane::History;
                 self.sync_notepad_history_states();
+                self.preview_selected_notepad_item();
             }
             KeyCode::Char('l') | KeyCode::Right => {
                 self.notepad_focus = PatchPhrasePane::Favorites;
                 self.sync_notepad_history_states();
+                self.preview_selected_notepad_item();
             }
             KeyCode::Char('j') | KeyCode::Down => {
                 match self.notepad_focus {
