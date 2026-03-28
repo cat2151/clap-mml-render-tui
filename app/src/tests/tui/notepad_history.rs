@@ -187,6 +187,10 @@ fn handle_notepad_history_right_switches_focus_to_favorites() {
     assert!(matches!(app.notepad_focus, PatchPhrasePane::Favorites));
     assert_eq!(app.notepad_history_state.selected(), Some(0));
     assert_eq!(app.notepad_favorites_state.selected(), Some(0));
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == "beta"
+    ));
 }
 
 #[test]
@@ -202,6 +206,10 @@ fn handle_notepad_history_left_switches_focus_to_history() {
     assert!(matches!(app.notepad_focus, PatchPhrasePane::History));
     assert_eq!(app.notepad_history_state.selected(), Some(0));
     assert_eq!(app.notepad_favorites_state.selected(), Some(0));
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == "alpha"
+    ));
 }
 
 #[test]

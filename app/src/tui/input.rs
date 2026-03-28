@@ -160,6 +160,7 @@ impl<'a> TuiApp<'a> {
         } else {
             self.patch_list_state.select(None);
         }
+        self.preview_selected_patch();
     }
 
     pub(super) fn handle_patch_select(&mut self, key_event: crossterm::event::KeyEvent) {
