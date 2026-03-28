@@ -190,7 +190,17 @@ impl<'a> TuiApp<'a> {
                     self.play_mml(mml);
                 }
             }
-            KeyCode::Enter | KeyCode::Char(' ') => {
+            KeyCode::Enter => {
+                if let Some(mml) = self.patch_phrase_preview_mml() {
+                    self.lines.insert(self.cursor, mml.clone());
+                    self.list_state.select(Some(self.cursor));
+                    self.record_notepad_history(&mml);
+                    self.play_mml(mml);
+                    self.flush_patch_phrase_store_if_dirty();
+                    self.mode = Mode::Normal;
+                }
+            }
+            KeyCode::Char(' ') => {
                 if let Some(mml) = self.patch_phrase_preview_mml() {
                     self.record_notepad_history(&mml);
                     self.play_mml(mml);

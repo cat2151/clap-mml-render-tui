@@ -57,11 +57,12 @@ pub(super) fn draw_status(
 
     let footer_text = match app.mode {
         DawMode::Normal => {
-            "DAW  h/l:meas  j/k:track  i:INS  a:A-B  p:play/stop  Enter/Space:1trk  Shift+Enter/Space:all  Shift+P:from here (stopped only)"
+            "DAW  h:history  ←/→・l:meas  j/k:track  i:INS  a:A-B  p:play/stop  Enter/Space:1trk  Shift+Enter/Space:all  Shift+P:from here (stopped only)"
         }
         DawMode::Insert => "ESC:確定→NORMAL  Enter:確定→次小節",
         DawMode::Help => "HELP  ESC:キャンセル",
         DawMode::Mixer => "MIXER  h/l:track移動  j/k:-/+3dB  ESC:閉じる",
+        DawMode::History => "HISTORY  Enter:確定  ESC:閉じる  h/l・←/→:ペイン移動  j/k:移動",
     };
 
     let play_color = match play_state {

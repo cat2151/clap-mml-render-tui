@@ -9,7 +9,8 @@ pub(super) use tui_textarea::{CursorMove, TextArea};
 pub(super) use crate::config::Config;
 
 pub(super) use super::super::{
-    AbRepeatState, CacheState, CellCache, DawApp, DawMode, DawPlayState, PlayPosition,
+    AbRepeatState, CacheState, CellCache, DawApp, DawHistoryPane, DawMode, DawPlayState,
+    PlayPosition,
 };
 pub(super) use super::{
     normal_playback_shortcut, preview_target_tracks, resolve_playback_start_measure_index,
@@ -69,11 +70,18 @@ fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob
             track_volumes_db: vec![0; tracks],
             mixer_cursor_track: 1,
             play_track_gains: Arc::new(Mutex::new(vec![0.0; tracks])),
+            patch_phrase_store: crate::history::PatchPhraseStore::default(),
+            history_overlay_patch_name: None,
+            history_overlay_history_cursor: 0,
+            history_overlay_favorites_cursor: 0,
+            history_overlay_focus: DawHistoryPane::History,
         },
         cache_rx,
     )
 }
 
+#[path = "input/history.rs"]
+mod history;
 #[path = "input/insert.rs"]
 mod insert;
 #[path = "input/mixer.rs"]

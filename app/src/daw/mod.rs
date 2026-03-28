@@ -5,7 +5,8 @@
 //!   track   0 = 拍子JSON + テンポ (例: `{"beat": "4/4"}t120`) → render 時に全小節の先頭にくっつける
 //!
 //! キー操作 (NORMAL):
-//!   h/l    : 小節 (列) 移動
+//!   h      : history overlay を開く
+//!   ← / l  : 小節 (列) 移動
 //!   j/k    : track (行) 移動
 //!   H      : 先頭 track へ移動
 //!   M      : 中央 track へ移動
@@ -26,6 +27,12 @@
 //!   h/l    : track 移動
 //!   j/k    : volume -/+3dB
 //!   ESC    : overlay を閉じる → NORMAL
+//!
+//! キー操作 (HISTORY):
+//!   h/l・←/→ : History/Favorites ペイン切り替え
+//!   j/k      : 行移動
+//!   Enter    : 選択内容を現在 track/meas に適用
+//!   ESC      : overlay を閉じる → NORMAL
 //!
 //! キー操作 (INSERT):
 //!   ESC   : 確定 → NORMAL
@@ -65,7 +72,8 @@ use crate::config::Config;
 use batch_logging::{TrackRerenderBatch, TrackRerenderBatchCompletionContext};
 pub use types::DawExitReason;
 pub(super) use types::{
-    AbRepeatState, CacheState, CellCache, DawMode, DawNormalAction, DawPlayState, PlayPosition,
+    AbRepeatState, CacheState, CellCache, DawHistoryPane, DawMode, DawNormalAction, DawPlayState,
+    PlayPosition,
 };
 
 // ─── 定数 ─────────────────────────────────────────────────────
@@ -171,6 +179,11 @@ pub struct DawApp {
     pub(super) mixer_cursor_track: usize,
     /// 再生スレッドと共有する track ごとの gain。
     play_track_gains: Arc<Mutex<Vec<f32>>>,
+    pub(super) patch_phrase_store: crate::history::PatchPhraseStore,
+    pub(super) history_overlay_patch_name: Option<String>,
+    pub(super) history_overlay_history_cursor: usize,
+    pub(super) history_overlay_favorites_cursor: usize,
+    pub(super) history_overlay_focus: DawHistoryPane,
 }
 
 impl DawApp {
@@ -367,6 +380,11 @@ impl DawApp {
             track_volumes_db: vec![0; tracks],
             mixer_cursor_track: FIRST_PLAYABLE_TRACK.min(tracks - 1),
             play_track_gains,
+            patch_phrase_store: crate::history::load_patch_phrase_store(),
+            history_overlay_patch_name: None,
+            history_overlay_history_cursor: 0,
+            history_overlay_favorites_cursor: 0,
+            history_overlay_focus: DawHistoryPane::History,
         };
 
         app.load();

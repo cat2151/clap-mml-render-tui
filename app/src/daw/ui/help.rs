@@ -23,8 +23,8 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
                 .fg(MONOKAI_YELLOW)
                 .add_modifier(Modifier::BOLD),
         )),
-        Line::from("  h / ←  : 小節移動（左）"),
-        Line::from("  l / →  : 小節移動（右）"),
+        Line::from("  h      : history overlay"),
+        Line::from("  ← / → / l : 小節移動（h は history）"),
         Line::from("  j / ↓  : track 移動（下）"),
         Line::from("  k / ↑  : track 移動（上）"),
         Line::from("  H      : 先頭 track へ移動"),
@@ -60,6 +60,17 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
         )),
         Line::from("  h/l, ←/→ : track 移動"),
         Line::from("  j/k, ↓/↑ : volume -/+3dB"),
+        Line::from("  ESC      : 閉じる"),
+        Line::from(""),
+        Line::from(Span::styled(
+            "HISTORY overlay",
+            Style::default()
+                .fg(MONOKAI_YELLOW)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from("  h/l, ←/→ : History / Favorites 切り替え"),
+        Line::from("  j/k, ↓/↑ : 項目移動"),
+        Line::from("  Enter    : 現在 track/meas に反映"),
         Line::from("  ESC      : 閉じる"),
         Line::from(""),
         Line::from(Span::styled(

@@ -149,6 +149,13 @@ pub enum DawMode {
     Insert,
     Help,
     Mixer,
+    History,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum DawHistoryPane {
+    History,
+    Favorites,
 }
 
 /// handle_normal の戻り値

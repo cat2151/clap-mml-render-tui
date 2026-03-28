@@ -2,6 +2,7 @@
 
 mod grid;
 mod help;
+mod history;
 mod logs;
 mod mixer;
 mod status;
@@ -117,6 +118,8 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
         help::draw_help(f, inner);
     } else if app.mode == DawMode::Mixer {
         mixer::draw_mixer(f, app, inner);
+    } else if app.mode == DawMode::History {
+        history::draw_history(f, app, inner);
     }
 }
 
