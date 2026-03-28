@@ -34,6 +34,9 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     } else if app.mode == Mode::PatchSelect {
         draw_normal(app, f, &play_state, status_color);
         draw_patch_select(app, f, &status, status_color);
+    } else if app.mode == Mode::NotepadHistory {
+        draw_normal(app, f, &play_state, status_color);
+        draw_notepad_history(app, f, &status, status_color);
     } else if app.mode == Mode::PatchPhrase {
         draw_patch_phrase(app, f, &status, status_color);
     } else {
@@ -75,6 +78,7 @@ fn notepad_mode_title(app: &TuiApp<'_>) -> &'static str {
         Mode::Normal => " [NORMAL] notepad mode ",
         Mode::Insert => " [INSERT] notepad mode ",
         Mode::PatchSelect => " [PATCH SELECT] notepad mode ",
+        Mode::NotepadHistory => " [HISTORY] notepad mode ",
         Mode::PatchPhrase => " [PATCH PHRASE] notepad mode ",
         Mode::Help => " [HELP] notepad mode ",
     }
@@ -89,6 +93,9 @@ fn keybind_text(mode: &Mode) -> &'static str {
         Mode::PatchSelect => {
             "Enter:決定  ESC:キャンセル  Ctrl+F:お気に入り  j/k・↑↓:移動  文字入力:フィルタ  Space:AND条件"
         }
+        Mode::NotepadHistory => {
+            "Enter:確定  ESC:閉じる  h/l:ペイン移動  j/k:移動して再生  f:お気に入り  dd:削除"
+        }
         Mode::PatchPhrase => {
             "j/k:再生移動  h/l:ペイン移動  Space/Enter:再生  i:編集  f:お気に入り  ESC:戻る"
         }
@@ -101,6 +108,7 @@ fn status_text(app: &TuiApp<'_>, play_state: &PlayState) -> String {
     match app.mode {
         Mode::Normal | Mode::Insert | Mode::Help => normal_status_text(app, play_state),
         Mode::PatchSelect => format!("音色選択{}", play_str),
+        Mode::NotepadHistory => format!("notepad history{}", play_str),
         Mode::PatchPhrase => format!("patch phrase{}", play_str),
     }
 }
@@ -352,6 +360,108 @@ fn draw_patch_phrase(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
     );
 }
 
+fn draw_notepad_history(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_color: Color) {
+    let area = crate::ui_utils::centered_rect(80, 70, f.area());
+    f.render_widget(Clear, area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(3),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(area);
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[0]);
+
+    let history_items: Vec<ListItem> = app
+        .notepad_history_items()
+        .into_iter()
+        .enumerate()
+        .map(|(i, mml)| {
+            let is_selected =
+                app.notepad_focus == PatchPhrasePane::History && i == app.notepad_history_cursor;
+            let style = if is_selected {
+                base_style().fg(MONOKAI_CYAN).add_modifier(Modifier::BOLD)
+            } else {
+                base_style()
+            };
+            ListItem::new(Span::styled(mml, style))
+        })
+        .collect();
+    let favorite_items: Vec<ListItem> = app
+        .notepad_favorite_items()
+        .into_iter()
+        .enumerate()
+        .map(|(i, mml)| {
+            let is_selected = app.notepad_focus == PatchPhrasePane::Favorites
+                && i == app.notepad_favorites_cursor;
+            let style = if is_selected {
+                base_style().fg(MONOKAI_CYAN).add_modifier(Modifier::BOLD)
+            } else {
+                base_style()
+            };
+            ListItem::new(Span::styled(mml, style))
+        })
+        .collect();
+
+    let history_border = if app.notepad_focus == PatchPhrasePane::History {
+        base_style().fg(MONOKAI_CYAN)
+    } else {
+        base_style()
+    };
+    let favorites_border = if app.notepad_focus == PatchPhrasePane::Favorites {
+        base_style().fg(MONOKAI_CYAN)
+    } else {
+        base_style()
+    };
+    let favorites_title = if app.notepad_focus == PatchPhrasePane::Favorites && app.notepad_pending_delete {
+        " Favorites (dd:削除) "
+    } else {
+        " Favorites "
+    };
+
+    f.render_stateful_widget(
+        List::new(history_items)
+            .style(base_style())
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" History ")
+                    .style(base_style())
+                    .border_style(history_border),
+            )
+            .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
+        panes[0],
+        &mut app.notepad_history_state,
+    );
+    f.render_stateful_widget(
+        List::new(favorite_items)
+            .style(base_style())
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(favorites_title)
+                    .style(base_style())
+                    .border_style(favorites_border),
+            )
+            .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
+        panes[1],
+        &mut app.notepad_favorites_state,
+    );
+
+    f.render_widget(
+        Paragraph::new(status.to_string()).style(base_style().fg(status_color)),
+        chunks[1],
+    );
+    f.render_widget(
+        Paragraph::new(keybind_text(&app.mode)).style(base_style()),
+        chunks[2],
+    );
+}
+
 fn draw_help(f: &mut Frame) {
     let area = crate::ui_utils::centered_rect(60, 80, f.area());
     f.render_widget(Clear, area);
@@ -371,6 +481,7 @@ fn draw_help(f: &mut Frame) {
         Line::from("  o           : 次行に挿入 → INSERT"),
         Line::from("  r           : ランダム音色を挿入/置換して再生"),
         Line::from("  t           : 音色選択"),
+        Line::from("  h           : notepad history"),
         Line::from("  p           : patch phrase 画面"),
         Line::from("  d           : DAW モード"),
         Line::from("  K / ?       : ヘルプ (このページ)"),
@@ -395,6 +506,17 @@ fn draw_help(f: &mut Frame) {
         Line::from("  Enter   : 音色決定"),
         Line::from("  Ctrl+F  : 現在音色とMMLをFavorites追加"),
         Line::from("  ESC     : キャンセル"),
+        Line::from(""),
+        Line::from(Span::styled(
+            "notepad history 画面",
+            base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD),
+        )),
+        Line::from("  h / l       : ペイン切替"),
+        Line::from("  j / k       : 上下移動して再生"),
+        Line::from("  Enter       : 現在行へ確定"),
+        Line::from("  f           : History行をお気に入りに追加"),
+        Line::from("  dd          : Favorites行を削除してHistory先頭へ移動"),
+        Line::from("  ESC         : 閉じる"),
         Line::from(""),
         Line::from(Span::styled(
             "patch phrase 画面",

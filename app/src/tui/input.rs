@@ -60,6 +60,7 @@ impl<'a> TuiApp<'a> {
     fn play_current_line(&mut self) {
         let mml = self.lines[self.cursor].trim().to_string();
         if !mml.is_empty() {
+            self.record_notepad_history(&mml);
             self.record_patch_phrase_history(&mml);
             self.play_mml(mml);
         }
@@ -146,6 +147,7 @@ impl<'a> TuiApp<'a> {
 
     fn preview_selected_patch(&mut self) {
         if let Some(mml) = self.patch_select_preview_mml() {
+            self.record_notepad_history(&mml);
             self.play_mml(mml);
         }
     }
@@ -183,6 +185,8 @@ impl<'a> TuiApp<'a> {
                 if !self.patch_filtered.is_empty() {
                     let selected = self.patch_filtered[self.patch_cursor].clone();
                     self.replace_current_line_patch(&selected);
+                    let line = self.lines[self.cursor].clone();
+                    self.record_notepad_history(&line);
                 }
                 self.mode = Mode::Normal;
             }
@@ -264,6 +268,7 @@ impl<'a> TuiApp<'a> {
                     }
                 }
             }
+            KeyCode::Char('h') => self.start_notepad_history(),
             KeyCode::Char('o') => {
                 self.lines.insert(self.cursor + 1, String::new());
                 self.cursor += 1;
@@ -326,6 +331,7 @@ impl<'a> TuiApp<'a> {
                 self.lines[self.cursor] = text.clone();
                 self.mode = Mode::Normal;
                 if !text.trim().is_empty() {
+                    self.record_notepad_history(text.trim());
                     self.record_patch_phrase_history(text.trim());
                     self.play_mml(text.trim().to_string());
                 }
@@ -335,6 +341,7 @@ impl<'a> TuiApp<'a> {
                 let text = self.textarea.lines().join("");
                 self.lines[self.cursor] = text.clone();
                 if !text.trim().is_empty() {
+                    self.record_notepad_history(text.trim());
                     self.record_patch_phrase_history(text.trim());
                     self.play_mml(text.trim().to_string());
                 }

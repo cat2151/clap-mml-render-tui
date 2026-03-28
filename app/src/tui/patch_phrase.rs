@@ -9,7 +9,7 @@ use super::{Mode, PatchPhrasePane, TuiApp, PATCH_JSON_KEY};
 const PATCH_PHRASE_LIST_MAX_LEN: usize = 100;
 
 impl<'a> TuiApp<'a> {
-    fn push_front_dedup(items: &mut Vec<String>, item: String) {
+    pub(super) fn push_front_dedup(items: &mut Vec<String>, item: String) {
         if let Some(index) = items.iter().position(|existing| existing == &item) {
             if index == 0 {
                 return;
@@ -142,6 +142,7 @@ impl<'a> TuiApp<'a> {
                 self.patch_phrase_focus = PatchPhrasePane::History;
                 self.sync_patch_phrase_states();
                 if let Some(mml) = self.patch_phrase_preview_mml() {
+                    self.record_notepad_history(&mml);
                     self.play_mml(mml);
                 }
             }
@@ -149,6 +150,7 @@ impl<'a> TuiApp<'a> {
                 self.patch_phrase_focus = PatchPhrasePane::Favorites;
                 self.sync_patch_phrase_states();
                 if let Some(mml) = self.patch_phrase_preview_mml() {
+                    self.record_notepad_history(&mml);
                     self.play_mml(mml);
                 }
             }
@@ -168,6 +170,7 @@ impl<'a> TuiApp<'a> {
                 }
                 self.sync_patch_phrase_states();
                 if let Some(mml) = self.patch_phrase_preview_mml() {
+                    self.record_notepad_history(&mml);
                     self.play_mml(mml);
                 }
             }
@@ -183,11 +186,13 @@ impl<'a> TuiApp<'a> {
                 }
                 self.sync_patch_phrase_states();
                 if let Some(mml) = self.patch_phrase_preview_mml() {
+                    self.record_notepad_history(&mml);
                     self.play_mml(mml);
                 }
             }
             KeyCode::Enter | KeyCode::Char(' ') => {
                 if let Some(mml) = self.patch_phrase_preview_mml() {
+                    self.record_notepad_history(&mml);
                     self.play_mml(mml);
                 }
             }
@@ -219,6 +224,7 @@ impl<'a> TuiApp<'a> {
                 self.patch_phrase_favorites_cursor = 0;
                 self.sync_patch_phrase_states();
                 if let Some(mml) = self.patch_phrase_preview_mml() {
+                    self.record_notepad_history(&mml);
                     self.play_mml(mml);
                 }
             }

@@ -154,6 +154,25 @@ fn patch_select_screen_splits_status_and_keybinds() {
 }
 
 #[test]
+fn notepad_history_overlay_renders_history_and_favorites_lists() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["before".to_string()];
+    app.patch_phrase_store.notepad = PatchPhraseState {
+        history: vec!["l8cdef".to_string()],
+        favorites: vec!["o5g".to_string()],
+    };
+    app.start_notepad_history();
+
+    let lines = render_lines(&mut app, 100, 16).join("\n");
+
+    assert!(lines.contains("[HISTORY] notepad mode"));
+    assert!(lines.contains("History"));
+    assert!(lines.contains("Favorites"));
+    assert!(lines.contains("l8cdef"));
+    assert!(lines.contains("o5g"));
+}
+
+#[test]
 fn patch_phrase_screen_uses_c_as_fallback_for_empty_lists() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::PatchPhrase;
@@ -191,6 +210,9 @@ fn help_screen_mentions_ctrl_clipboard_shortcuts() {
     assert!(normalized_lines
         .iter()
         .any(|line| line.contains("Ctrl+F:現在音色とMMLをFavorites追加")));
+    assert!(normalized_lines
+        .iter()
+        .any(|line| line.contains("h:notepadhistory")));
     assert!(!normalized_lines
         .iter()
         .any(|line| line.contains("Ctrl+C:強制終了")));
