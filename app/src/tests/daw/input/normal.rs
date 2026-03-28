@@ -309,6 +309,42 @@ fn normal_playback_shortcut_maps_enter_space_and_shift_p() {
 }
 
 #[test]
+fn handle_normal_enter_stops_current_preview_before_restart_attempt() {
+    let (mut app, _cache_rx) = build_test_app();
+    *app.play_state.lock().unwrap() = DawPlayState::Preview;
+
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Idle
+    ));
+    assert_eq!(
+        app.log_lines.lock().unwrap().back().map(String::as_str),
+        Some("preview: stop")
+    );
+}
+
+#[test]
+fn handle_normal_space_stops_current_preview_before_restart_attempt() {
+    let (mut app, _cache_rx) = build_test_app();
+    *app.play_state.lock().unwrap() = DawPlayState::Preview;
+
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Idle
+    ));
+    assert_eq!(
+        app.log_lines.lock().unwrap().back().map(String::as_str),
+        Some("preview: stop")
+    );
+}
+
+#[test]
 fn preview_target_tracks_can_force_current_track_even_when_solo_mode_differs() {
     let target_tracks = preview_target_tracks(3, 2, false).expect("playable current track");
 

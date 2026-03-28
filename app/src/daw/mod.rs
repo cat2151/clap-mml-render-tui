@@ -63,6 +63,7 @@ use ratatui::Frame;
 use tui_textarea::TextArea;
 
 use std::collections::VecDeque;
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 
 use crate::config::Config;
@@ -148,6 +149,12 @@ pub struct DawApp {
     /// `stop_play()` と `start_preview()` の間で状態確認と音声キュー投入が
     /// 交錯しないようにする。
     play_transition_lock: Arc<Mutex<()>>,
+    /// 現在の preview セッション ID。
+    /// restart 時に古い preview スレッドが新しい状態を上書きしないようにする。
+    preview_session: Arc<AtomicU64>,
+    /// 現在アクティブな preview sink。
+    /// preview restart 時に既存音声を即時停止するために保持する。
+    preview_sink: Arc<Mutex<Option<Arc<rodio::Sink>>>>,
 
     /// 再生中の小節・ビート位置（UI 描画に使用）
     pub(super) play_position: Arc<Mutex<Option<PlayPosition>>>,
@@ -369,6 +376,8 @@ impl DawApp {
             render_lock,
             play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
             play_transition_lock: Arc::new(Mutex::new(())),
+            preview_session: Arc::new(AtomicU64::new(0)),
+            preview_sink: Arc::new(Mutex::new(None)),
             play_position,
             ab_repeat,
             play_measure_mmls,
