@@ -12,6 +12,17 @@ use super::{Mode, PatchPhrasePane, PlayState, TuiApp};
 
 const LIST_HIGHLIGHT_SYMBOL: &str = "▶ ";
 const LIST_HIGHLIGHT_WIDTH: u16 = 2;
+const MONOKAI_BG: Color = Color::Rgb(39, 40, 34);
+const MONOKAI_FG: Color = Color::Rgb(248, 248, 242);
+const MONOKAI_GRAY: Color = Color::Rgb(160, 160, 160);
+const MONOKAI_YELLOW: Color = Color::Rgb(230, 219, 116);
+const MONOKAI_GREEN: Color = Color::Rgb(166, 226, 46);
+const MONOKAI_CYAN: Color = Color::Rgb(102, 217, 239);
+const MONOKAI_PURPLE: Color = Color::Rgb(174, 129, 255);
+
+fn base_style() -> Style {
+    Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG)
+}
 
 pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     // play_state を一度だけロックしてスナップショットを取り、
@@ -36,10 +47,10 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
 fn status_color(play_state: &PlayState) -> Color {
     match play_state {
         PlayState::Err(_) => Color::Red,
-        PlayState::Running(_) => Color::Magenta,
-        PlayState::Playing(_) => Color::Yellow,
-        PlayState::Done(_) => Color::Green,
-        PlayState::Idle => Color::Cyan,
+        PlayState::Running(_) => MONOKAI_PURPLE,
+        PlayState::Playing(_) => MONOKAI_YELLOW,
+        PlayState::Done(_) => MONOKAI_GREEN,
+        PlayState::Idle => MONOKAI_CYAN,
     }
 }
 
@@ -101,12 +112,15 @@ fn draw_patch_select(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
         .split(area);
 
     f.render_widget(
-        Paragraph::new(format!("> {}", app.patch_query)).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" 音色選択 - 検索 (space=AND) ")
-                .border_style(Style::default().fg(Color::Yellow)),
-        ),
+        Paragraph::new(format!("> {}", app.patch_query))
+            .style(base_style())
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" 音色選択 - 検索 (space=AND) ")
+                    .style(base_style())
+                    .border_style(base_style().fg(MONOKAI_YELLOW)),
+            ),
         chunks[0],
     );
 
@@ -121,11 +135,9 @@ fn draw_patch_select(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
         .enumerate()
         .map(|(i, p)| {
             let style = if i == app.patch_cursor {
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD)
+                base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD)
             } else {
-                Style::default()
+                base_style()
             };
             ListItem::new(Span::styled(p.clone(), style))
         })
@@ -133,17 +145,27 @@ fn draw_patch_select(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
 
     f.render_stateful_widget(
         List::new(patch_items)
-            .block(Block::default().borders(Borders::ALL).title(count_title))
+            .style(base_style())
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(count_title)
+                    .style(base_style())
+                    .border_style(base_style().fg(MONOKAI_CYAN)),
+            )
             .highlight_symbol("▶ "),
         chunks[1],
         &mut app.patch_list_state,
     );
 
     f.render_widget(
-        Paragraph::new(status.to_string()).style(Style::default().fg(status_color)),
+        Paragraph::new(status.to_string()).style(base_style().fg(status_color)),
         chunks[2],
     );
-    f.render_widget(Paragraph::new(keybind_text(&app.mode)), chunks[3]);
+    f.render_widget(
+        Paragraph::new(keybind_text(&app.mode)).style(base_style()),
+        chunks[3],
+    );
 }
 
 fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, play_state: &PlayState, status_color: Color) {
@@ -167,11 +189,9 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, play_state: &PlayState, stat
         .enumerate()
         .map(|(i, line)| {
             let style = if i == cursor {
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD)
+                base_style().fg(MONOKAI_CYAN).add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::White)
+                base_style()
             };
             // INSERT 時のカーソル行は textarea で別描画するため、
             // List 側は空文字にして重なり表示を防ぐ。
@@ -186,11 +206,14 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, play_state: &PlayState, stat
 
     f.render_stateful_widget(
         List::new(items)
-            .block(Block::default().borders(Borders::ALL).title(if is_insert {
-                " [INSERT] "
-            } else {
-                ""
-            }))
+            .style(base_style())
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(if is_insert { " [INSERT] " } else { "" })
+                    .style(base_style())
+                    .border_style(base_style().fg(MONOKAI_CYAN)),
+            )
             .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
         chunks[0],
         &mut app.list_state,
@@ -220,10 +243,10 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, play_state: &PlayState, stat
     }
 
     f.render_widget(
-        Paragraph::new(status).style(Style::default().fg(status_color)),
+        Paragraph::new(status).style(base_style().fg(status_color)),
         chunks[1],
     );
-    f.render_widget(Paragraph::new(keybinds), chunks[2]);
+    f.render_widget(Paragraph::new(keybinds).style(base_style()), chunks[2]);
 }
 
 fn draw_patch_phrase(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_color: Color) {
@@ -249,11 +272,9 @@ fn draw_patch_phrase(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
             let is_selected = app.patch_phrase_focus == PatchPhrasePane::History
                 && i == app.patch_phrase_history_cursor;
             let style = if is_selected {
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD)
+                base_style().fg(MONOKAI_CYAN).add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::White)
+                base_style()
             };
             ListItem::new(Span::styled(phrase, style))
         })
@@ -266,33 +287,33 @@ fn draw_patch_phrase(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
             let is_selected = app.patch_phrase_focus == PatchPhrasePane::Favorites
                 && i == app.patch_phrase_favorites_cursor;
             let style = if is_selected {
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD)
+                base_style().fg(MONOKAI_CYAN).add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::White)
+                base_style()
             };
             ListItem::new(Span::styled(phrase, style))
         })
         .collect();
 
     let history_border = if app.patch_phrase_focus == PatchPhrasePane::History {
-        Style::default().fg(Color::Cyan)
+        base_style().fg(MONOKAI_CYAN)
     } else {
-        Style::default().fg(Color::White)
+        base_style()
     };
     let favorites_border = if app.patch_phrase_focus == PatchPhrasePane::Favorites {
-        Style::default().fg(Color::Cyan)
+        base_style().fg(MONOKAI_CYAN)
     } else {
-        Style::default().fg(Color::White)
+        base_style()
     };
 
     f.render_stateful_widget(
         List::new(history_items)
+            .style(base_style())
             .block(
                 Block::default()
                     .borders(Borders::ALL)
                     .title(format!(" History - {patch_name} "))
+                    .style(base_style())
                     .border_style(history_border),
             )
             .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
@@ -301,10 +322,12 @@ fn draw_patch_phrase(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
     );
     f.render_stateful_widget(
         List::new(favorite_items)
+            .style(base_style())
             .block(
                 Block::default()
                     .borders(Borders::ALL)
                     .title(" Favorites ")
+                    .style(base_style())
                     .border_style(favorites_border),
             )
             .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
@@ -313,10 +336,13 @@ fn draw_patch_phrase(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
     );
 
     f.render_widget(
-        Paragraph::new(status.to_string()).style(Style::default().fg(status_color)),
+        Paragraph::new(status.to_string()).style(base_style().fg(status_color)),
         chunks[1],
     );
-    f.render_widget(Paragraph::new(keybind_text(&app.mode)), chunks[2]);
+    f.render_widget(
+        Paragraph::new(keybind_text(&app.mode)).style(base_style()),
+        chunks[2],
+    );
 }
 
 fn draw_help(f: &mut Frame) {
@@ -326,9 +352,7 @@ fn draw_help(f: &mut Frame) {
     let help_lines = vec![
         Line::from(Span::styled(
             "NORMAL モード",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
+            base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD),
         )),
         Line::from("  j / ↓       : 下へ移動"),
         Line::from("  k / ↑       : 上へ移動"),
@@ -347,9 +371,7 @@ fn draw_help(f: &mut Frame) {
         Line::from(""),
         Line::from(Span::styled(
             "INSERT モード",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
+            base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD),
         )),
         Line::from("  ESC   : 確定 → NORMAL (再生)"),
         Line::from("  Enter : 確定 → 次行挿入 → INSERT 継続"),
@@ -359,9 +381,7 @@ fn draw_help(f: &mut Frame) {
         Line::from(""),
         Line::from(Span::styled(
             "音色選択モード",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
+            base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD),
         )),
         Line::from("  文字入力 : フィルタ (Space=AND条件)"),
         Line::from("  ↑↓      : リスト移動"),
@@ -370,9 +390,7 @@ fn draw_help(f: &mut Frame) {
         Line::from(""),
         Line::from(Span::styled(
             "patch phrase 画面",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
+            base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD),
         )),
         Line::from("  j / k       : 上下移動して再生"),
         Line::from("  h / l       : ペイン切替して再生"),
@@ -383,16 +401,17 @@ fn draw_help(f: &mut Frame) {
         Line::from(""),
         Line::from(Span::styled(
             "  [ESC] でキャンセル",
-            Style::default().fg(Color::DarkGray),
+            base_style().fg(MONOKAI_GRAY),
         )),
     ];
 
     f.render_widget(
-        Paragraph::new(help_lines).block(
+        Paragraph::new(help_lines).style(base_style()).block(
             Block::default()
                 .borders(Borders::ALL)
                 .title(" ヘルプ (Keybinds) ")
-                .border_style(Style::default().fg(Color::Cyan)),
+                .style(base_style())
+                .border_style(base_style().fg(MONOKAI_CYAN)),
         ),
         area,
     );
