@@ -117,6 +117,19 @@ fn handle_notepad_history_page_down_and_page_up_move_by_visible_page() {
 }
 
 #[test]
+fn handle_notepad_history_page_up_at_top_does_not_repreview() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_phrase_store.notepad.history = vec!["alpha".to_string(), "beta".to_string()];
+    app.notepad_history_page_size = 2;
+    app.start_notepad_history();
+
+    app.handle_notepad_history(KeyCode::PageUp);
+
+    assert_eq!(app.notepad_history_cursor, 0);
+    assert!(matches!(&*app.play_state.lock().unwrap(), PlayState::Idle));
+}
+
+#[test]
 fn handle_notepad_history_enter_overwrites_current_line_and_closes() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["before".to_string()];

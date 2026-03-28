@@ -14,27 +14,34 @@ impl<'a> TuiApp<'a> {
         delta: isize,
         history_len: usize,
         favorites_len: usize,
-    ) {
+    ) -> bool {
         match self.patch_phrase_focus {
             PatchPhrasePane::History => {
                 if history_len == 0 {
-                    return;
+                    return false;
                 }
                 let max_cursor = history_len.saturating_sub(1) as isize;
-                self.patch_phrase_history_cursor =
-                    (self.patch_phrase_history_cursor as isize + delta).clamp(0, max_cursor)
-                        as usize;
+                let next_cursor = (self.patch_phrase_history_cursor as isize + delta)
+                    .clamp(0, max_cursor) as usize;
+                if next_cursor == self.patch_phrase_history_cursor {
+                    return false;
+                }
+                self.patch_phrase_history_cursor = next_cursor;
             }
             PatchPhrasePane::Favorites => {
                 if favorites_len == 0 {
-                    return;
+                    return false;
                 }
                 let max_cursor = favorites_len.saturating_sub(1) as isize;
-                self.patch_phrase_favorites_cursor =
-                    (self.patch_phrase_favorites_cursor as isize + delta).clamp(0, max_cursor)
-                        as usize;
+                let next_cursor = (self.patch_phrase_favorites_cursor as isize + delta)
+                    .clamp(0, max_cursor) as usize;
+                if next_cursor == self.patch_phrase_favorites_cursor {
+                    return false;
+                }
+                self.patch_phrase_favorites_cursor = next_cursor;
             }
         }
+        true
     }
 
     pub(super) fn push_front_dedup(items: &mut Vec<String>, item: String) {
@@ -183,43 +190,47 @@ impl<'a> TuiApp<'a> {
                 }
             }
             KeyCode::Char('j') | KeyCode::Down => {
-                self.move_patch_phrase_selection_by(1, history_len, favorites_len);
-                self.sync_patch_phrase_states();
-                if let Some(mml) = self.patch_phrase_preview_mml() {
-                    self.record_notepad_history(&mml);
-                    self.play_mml(mml);
+                if self.move_patch_phrase_selection_by(1, history_len, favorites_len) {
+                    self.sync_patch_phrase_states();
+                    if let Some(mml) = self.patch_phrase_preview_mml() {
+                        self.record_notepad_history(&mml);
+                        self.play_mml(mml);
+                    }
                 }
             }
             KeyCode::Char('k') | KeyCode::Up => {
-                self.move_patch_phrase_selection_by(-1, history_len, favorites_len);
-                self.sync_patch_phrase_states();
-                if let Some(mml) = self.patch_phrase_preview_mml() {
-                    self.record_notepad_history(&mml);
-                    self.play_mml(mml);
+                if self.move_patch_phrase_selection_by(-1, history_len, favorites_len) {
+                    self.sync_patch_phrase_states();
+                    if let Some(mml) = self.patch_phrase_preview_mml() {
+                        self.record_notepad_history(&mml);
+                        self.play_mml(mml);
+                    }
                 }
             }
             KeyCode::PageDown => {
-                self.move_patch_phrase_selection_by(
+                if self.move_patch_phrase_selection_by(
                     self.patch_phrase_page_size as isize,
                     history_len,
                     favorites_len,
-                );
-                self.sync_patch_phrase_states();
-                if let Some(mml) = self.patch_phrase_preview_mml() {
-                    self.record_notepad_history(&mml);
-                    self.play_mml(mml);
+                ) {
+                    self.sync_patch_phrase_states();
+                    if let Some(mml) = self.patch_phrase_preview_mml() {
+                        self.record_notepad_history(&mml);
+                        self.play_mml(mml);
+                    }
                 }
             }
             KeyCode::PageUp => {
-                self.move_patch_phrase_selection_by(
+                if self.move_patch_phrase_selection_by(
                     -(self.patch_phrase_page_size as isize),
                     history_len,
                     favorites_len,
-                );
-                self.sync_patch_phrase_states();
-                if let Some(mml) = self.patch_phrase_preview_mml() {
-                    self.record_notepad_history(&mml);
-                    self.play_mml(mml);
+                ) {
+                    self.sync_patch_phrase_states();
+                    if let Some(mml) = self.patch_phrase_preview_mml() {
+                        self.record_notepad_history(&mml);
+                        self.play_mml(mml);
+                    }
                 }
             }
             KeyCode::Enter => {

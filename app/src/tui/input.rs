@@ -187,8 +187,8 @@ impl<'a> TuiApp<'a> {
 
     pub(super) fn handle_patch_select(&mut self, key_event: crossterm::event::KeyEvent) {
         if key_event.modifiers.contains(KeyModifiers::CONTROL) {
-            let handled = match key_event.code {
-                KeyCode::Char(c) => match c.to_ascii_lowercase() {
+            if let KeyCode::Char(c) = key_event.code {
+                match c.to_ascii_lowercase() {
                     'f' => {
                         let Some(patch_name) = self.patch_filtered.get(self.patch_cursor).cloned()
                         else {
@@ -199,22 +199,15 @@ impl<'a> TuiApp<'a> {
                         };
                         self.add_patch_phrase_favorite(patch_name, phrase);
                         self.preview_selected_patch();
-                        true
                     }
                     'j' | 'n' => {
                         self.move_patch_cursor_by(1);
-                        true
                     }
                     'k' | 'p' => {
                         self.move_patch_cursor_by(-1);
-                        true
                     }
-                    _ => false,
-                },
-                _ => false,
-            };
-            if handled {
-                return;
+                    _ => {}
+                }
             }
             return;
         }

@@ -149,6 +149,27 @@ fn handle_patch_phrase_page_down_and_page_up_move_by_visible_page() {
 }
 
 #[test]
+fn handle_patch_phrase_page_up_at_top_does_not_repreview() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["before".to_string()];
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["zero".to_string(), "one".to_string()],
+            favorites: vec!["fav".to_string()],
+        },
+    );
+    app.patch_phrase_page_size = 2;
+    app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
+
+    app.handle_patch_phrase(KeyCode::PageUp);
+
+    assert_eq!(app.patch_phrase_history_cursor, 0);
+    assert!(matches!(&*app.play_state.lock().unwrap(), PlayState::Idle));
+    assert!(app.patch_phrase_store.notepad.history.is_empty());
+}
+
+#[test]
 fn record_patch_phrase_history_uses_phrase_without_embedded_json() {
     let mut app = TuiApp::new_for_test(test_config());
 
