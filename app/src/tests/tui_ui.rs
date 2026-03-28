@@ -65,9 +65,10 @@ fn patch_phrase_screen_splits_status_and_keybinds() {
 
     let lines = render_lines(&mut app, 120, 10);
     let normalized_lines: Vec<String> = lines.iter().map(|line| line.replace(' ', "")).collect();
+    let normalized_status = "patch phrase".replace(' ', "");
     let status_row = normalized_lines
         .iter()
-        .position(|line| line == "patchphrase")
+        .position(|line| line == &normalized_status)
         .unwrap();
     let keybind_row = normalized_lines
         .iter()
