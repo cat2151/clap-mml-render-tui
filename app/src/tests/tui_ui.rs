@@ -300,7 +300,7 @@ fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
     assert!(!screen.contains("MML Lines"));
     assert!(!screen.contains("▶   1 abc"));
     assert_eq!(lines[6].trim_start(), "NORMAL");
-    assert!(lines[7].contains("q:quit  ?:help  i:insert"));
+    assert!(lines[7].contains("q ?:help i:insert"));
 }
 
 #[test]

@@ -341,6 +341,51 @@ impl DawApp {
         self.start_preview_on_tracks(measure_index, &target_tracks);
     }
 
+    fn preview_current_target_if_stopped(&mut self) {
+        let play_state = *self.play_state.lock().unwrap();
+        if play_state == DawPlayState::Playing {
+            return;
+        }
+        let is_previewable = self.cursor_play_measure_index().is_some()
+            && self.cursor_track >= FIRST_PLAYABLE_TRACK
+            && self.cursor_track < self.tracks;
+        if !is_previewable {
+            if play_state == DawPlayState::Preview {
+                self.stop_play();
+            }
+            return;
+        }
+        if self.try_start_preview_for_test() {
+            return;
+        }
+        self.start_preview_for_target_tracks(false);
+    }
+
+    // `new_for_test()` の DAW は PluginEntry を持たないため、
+    // 実オーディオ preview を起動せず状態更新だけを検証する。
+    #[cfg(test)]
+    fn try_start_preview_for_test(&mut self) -> bool {
+        if self.entry_ptr != 0 {
+            return false;
+        }
+        let measure_index = self.cursor_play_measure_index().unwrap_or(0);
+        if *self.play_state.lock().unwrap() == DawPlayState::Preview {
+            self.stop_play();
+        }
+        *self.play_state.lock().unwrap() = DawPlayState::Preview;
+        *self.play_position.lock().unwrap() = Some(super::PlayPosition {
+            measure_index,
+            measure_start: std::time::Instant::now(),
+        });
+        self.append_log_line(format!("preview: meas{}", measure_index + 1));
+        true
+    }
+
+    #[cfg(not(test))]
+    fn try_start_preview_for_test(&mut self) -> bool {
+        false
+    }
+
     fn start_play_from_cursor_measure(&self) {
         if *self.play_state.lock().unwrap() != DawPlayState::Idle {
             return;
@@ -516,6 +561,7 @@ impl DawApp {
                 if self.cursor_measure > 0 {
                     self.cursor_measure -= 1;
                     self.update_ab_repeat_follow_end_with_cursor();
+                    self.preview_current_target_if_stopped();
                 }
             }
             KeyCode::Char('H') => {
@@ -525,16 +571,19 @@ impl DawApp {
                 if self.cursor_measure < self.measures {
                     self.cursor_measure += 1;
                     self.update_ab_repeat_follow_end_with_cursor();
+                    self.preview_current_target_if_stopped();
                 }
             }
             KeyCode::Char('j') | KeyCode::Down => {
                 if self.cursor_track + 1 < self.tracks {
                     self.cursor_track += 1;
+                    self.preview_current_target_if_stopped();
                 }
             }
             KeyCode::Char('k') | KeyCode::Up => {
                 if self.cursor_track > 0 {
                     self.cursor_track -= 1;
+                    self.preview_current_target_if_stopped();
                 }
             }
             KeyCode::Char('M') => {
