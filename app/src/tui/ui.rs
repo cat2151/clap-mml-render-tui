@@ -199,10 +199,11 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, play_state: &PlayState, stat
             let inner_bottom = list_area.y + list_area.height.saturating_sub(1); // 下ボーダーの位置
             let textarea_y = inner_top + row_in_visible;
             if textarea_y < inner_bottom {
+                let highlight_width = 2;
                 let textarea_area = Rect {
-                    x: list_area.x + 1,
+                    x: list_area.x + 1 + highlight_width,
                     y: textarea_y,
-                    width: list_area.width.saturating_sub(2),
+                    width: list_area.width.saturating_sub(2 + highlight_width),
                     height: 1,
                 };
                 f.render_widget(Clear, textarea_area);

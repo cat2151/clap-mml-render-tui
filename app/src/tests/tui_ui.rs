@@ -119,8 +119,10 @@ fn insert_screen_shows_insert_title_without_duplicate_line_text() {
     app.lines = vec!["abc".to_string()];
     app.start_insert();
 
-    let screen = render_lines(&mut app, 80, 8).join("\n");
+    let lines = render_lines(&mut app, 80, 8);
+    let screen = lines.join("\n");
 
     assert!(screen.contains("[INSERT]"));
     assert_eq!(screen.matches("abc").count(), 1);
+    assert!(lines.iter().any(|line| line.contains("▶ abc")));
 }

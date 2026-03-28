@@ -21,7 +21,7 @@ impl<'a> TuiApp<'a> {
     fn replace_current_line_patch(&mut self, patch_name: &str) {
         let json = Self::build_patch_json(patch_name);
         let current = self.lines[self.cursor].clone();
-        let replaced = current
+        let replaced_parts = current
             .split(';')
             .map(|part| {
                 let part = part.trim_start();
@@ -33,12 +33,13 @@ impl<'a> TuiApp<'a> {
                     format!("{json} {remaining}")
                 }
             })
-            .collect::<Vec<_>>()
-            .join(";");
-        self.lines[self.cursor] = if replaced.is_empty() {
-            format!("{json} c")
-        } else {
+            .collect::<Vec<_>>();
+        let replaced = replaced_parts.join(";");
+        let has_playable_branch = replaced_parts.iter().any(|part| !part.trim().is_empty());
+        self.lines[self.cursor] = if has_playable_branch {
             replaced
+        } else {
+            format!("{json} c")
         };
     }
 
