@@ -3,6 +3,41 @@ use crossterm::event::KeyCode;
 use super::{Mode, PatchPhrasePane, TuiApp};
 
 impl<'a> TuiApp<'a> {
+    fn move_notepad_selection_by(
+        &mut self,
+        delta: isize,
+        history_len: usize,
+        favorites_len: usize,
+    ) -> bool {
+        match self.notepad_focus {
+            PatchPhrasePane::History => {
+                if history_len == 0 {
+                    return false;
+                }
+                let max_cursor = history_len.saturating_sub(1) as isize;
+                let next_cursor =
+                    (self.notepad_history_cursor as isize + delta).clamp(0, max_cursor) as usize;
+                if next_cursor == self.notepad_history_cursor {
+                    return false;
+                }
+                self.notepad_history_cursor = next_cursor;
+            }
+            PatchPhrasePane::Favorites => {
+                if favorites_len == 0 {
+                    return false;
+                }
+                let max_cursor = favorites_len.saturating_sub(1) as isize;
+                let next_cursor =
+                    (self.notepad_favorites_cursor as isize + delta).clamp(0, max_cursor) as usize;
+                if next_cursor == self.notepad_favorites_cursor {
+                    return false;
+                }
+                self.notepad_favorites_cursor = next_cursor;
+            }
+        }
+        true
+    }
+
     pub(super) fn notepad_history_items(&self) -> Vec<String> {
         self.patch_phrase_store.notepad.history.clone()
     }
@@ -125,32 +160,36 @@ impl<'a> TuiApp<'a> {
                 self.preview_selected_notepad_item();
             }
             KeyCode::Char('j') | KeyCode::Down => {
-                match self.notepad_focus {
-                    PatchPhrasePane::History if self.notepad_history_cursor + 1 < history_len => {
-                        self.notepad_history_cursor += 1;
-                    }
-                    PatchPhrasePane::Favorites
-                        if self.notepad_favorites_cursor + 1 < favorites_len =>
-                    {
-                        self.notepad_favorites_cursor += 1;
-                    }
-                    _ => {}
+                if self.move_notepad_selection_by(1, history_len, favorites_len) {
+                    self.sync_notepad_history_states();
+                    self.preview_selected_notepad_item();
                 }
-                self.sync_notepad_history_states();
-                self.preview_selected_notepad_item();
             }
             KeyCode::Char('k') | KeyCode::Up => {
-                match self.notepad_focus {
-                    PatchPhrasePane::History if self.notepad_history_cursor > 0 => {
-                        self.notepad_history_cursor -= 1;
-                    }
-                    PatchPhrasePane::Favorites if self.notepad_favorites_cursor > 0 => {
-                        self.notepad_favorites_cursor -= 1;
-                    }
-                    _ => {}
+                if self.move_notepad_selection_by(-1, history_len, favorites_len) {
+                    self.sync_notepad_history_states();
+                    self.preview_selected_notepad_item();
                 }
-                self.sync_notepad_history_states();
-                self.preview_selected_notepad_item();
+            }
+            KeyCode::PageDown => {
+                if self.move_notepad_selection_by(
+                    self.notepad_history_page_size as isize,
+                    history_len,
+                    favorites_len,
+                ) {
+                    self.sync_notepad_history_states();
+                    self.preview_selected_notepad_item();
+                }
+            }
+            KeyCode::PageUp => {
+                if self.move_notepad_selection_by(
+                    -(self.notepad_history_page_size as isize),
+                    history_len,
+                    favorites_len,
+                ) {
+                    self.sync_notepad_history_states();
+                    self.preview_selected_notepad_item();
+                }
             }
             KeyCode::Enter => {
                 if let Some(mml) = self.selected_notepad_item() {

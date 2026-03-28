@@ -94,7 +94,7 @@ fn patch_phrase_screen_splits_status_and_keybinds() {
         .unwrap();
     let keybind_row = normalized_lines
         .iter()
-        .position(|line| line.contains("j/k:再生移動h/l:ペイン移動"))
+        .position(|line| line.contains("j/k・↑↓:再生移動PgUp/PgDn:1画面移動"))
         .unwrap();
 
     assert_eq!(keybind_row, status_row + 1);
@@ -151,6 +151,7 @@ fn patch_select_screen_splits_status_and_keybinds() {
     assert!(!normalized_lines[status_row].contains("Enter:決定"));
     assert_eq!(keybind_row, status_row + 1);
     assert!(normalized_lines[keybind_row].contains("Ctrl+F:お気に入り"));
+    assert!(normalized_lines[keybind_row].contains("Ctrl+J/Ctrl+N・Ctrl+K/Ctrl+P"));
 }
 
 #[test]
@@ -228,6 +229,12 @@ fn help_screen_mentions_ctrl_clipboard_shortcuts() {
     assert!(normalized_lines
         .iter()
         .any(|line| line.contains("Ctrl+F:現在音色とMMLをFavorites追加")));
+    assert!(normalized_lines
+        .iter()
+        .any(|line| line.contains("Ctrl+J/Ctrl+N/↓:下へ移動")));
+    assert!(normalized_lines
+        .iter()
+        .any(|line| line.contains("PageUp/PageDown:1画面移動")));
     assert!(normalized_lines
         .iter()
         .any(|line| line.contains("h:notepadhistory")));

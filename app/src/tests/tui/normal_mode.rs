@@ -213,6 +213,23 @@ fn handle_normal_question_mark_enters_help_mode() {
 }
 
 #[test]
+fn handle_normal_page_down_and_page_up_move_by_visible_page() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = (0..8).map(|i| format!("line {i}")).collect();
+    app.normal_page_size = 3;
+    app.cursor = 1;
+    app.list_state.select(Some(1));
+
+    app.handle_normal(KeyCode::PageDown);
+    assert_eq!(app.cursor, 4);
+    assert_eq!(app.list_state.selected(), Some(4));
+
+    app.handle_normal(KeyCode::PageUp);
+    assert_eq!(app.cursor, 1);
+    assert_eq!(app.list_state.selected(), Some(1));
+}
+
+#[test]
 fn handle_normal_p_shows_error_when_current_line_has_no_patch_json() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["cde".to_string()];

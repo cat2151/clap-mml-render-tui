@@ -1,14 +1,15 @@
 //! vim 風 TUI
 //!
 //! モード:
-//!   NORMAL : j/k で行移動、H/M/L で先頭/中央/末尾行へ移動、i/o で INSERT、r で現在行の先頭にランダム音色を挿入/置換、t で音色選択、Enter/Space で再生、q で終了
+//!   NORMAL : j/k で行移動、PageUp/PageDown で1画面移動、H/M/L で先頭/中央/末尾行へ移動、i/o で INSERT、r で現在行の先頭にランダム音色を挿入/置換、t で音色選択、Enter/Space で再生、q で終了
 //!   INSERT : tui-textarea で編集
 //!            ESC   → 確定 → NORMAL（再生開始）
 //!            Enter → 確定 → 次行に新規行挿入 → INSERT 継続
 //!            Ctrl+C / Ctrl+X / Ctrl+V → コピー / カット / ペースト
 //!   PATCHSELECT : インクリメンタルサーチで音色を選択
 //!            文字入力: フィルタ（space=AND条件）
-//!            j/k, ↑↓:リスト移動（移動ごとにpreview再生）
+//!            Ctrl+J/Ctrl+N・Ctrl+K/Ctrl+P・↑↓:リスト移動（移動ごとにpreview再生）
+//!            PageUp/PageDown:1画面ぶん移動
 //!            Enter:現在行の先頭にJSONで挿入（上書き）  ESC:キャンセル
 //!   HELP : K / ? で表示、ESC でキャンセル
 
@@ -96,6 +97,10 @@ pub struct TuiApp<'a> {
     pub(super) patch_filtered: Vec<String>, // フィルタ結果（表示名のみ）
     pub(super) patch_cursor: usize,         // フィルタ結果内のカーソル位置
     pub(super) patch_list_state: ListState, // 音色選択リスト描画用
+    pub(super) normal_page_size: usize,
+    pub(super) patch_select_page_size: usize,
+    pub(super) notepad_history_page_size: usize,
+    pub(super) patch_phrase_page_size: usize,
     pub(super) patch_phrase_store: crate::history::PatchPhraseStore,
     pub(super) notepad_history_cursor: usize,
     pub(super) notepad_favorites_cursor: usize,
@@ -185,6 +190,10 @@ impl<'a> TuiApp<'a> {
             patch_filtered: Vec::new(),
             patch_cursor: 0,
             patch_list_state: ListState::default(),
+            normal_page_size: 1,
+            patch_select_page_size: 1,
+            notepad_history_page_size: 1,
+            patch_phrase_page_size: 1,
             patch_phrase_store: crate::history::load_patch_phrase_store(),
             notepad_history_cursor: 0,
             notepad_favorites_cursor: 0,
