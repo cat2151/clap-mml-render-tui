@@ -417,11 +417,12 @@ fn draw_notepad_history(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, statu
     } else {
         base_style()
     };
-    let favorites_title = if app.notepad_focus == PatchPhrasePane::Favorites && app.notepad_pending_delete {
-        " Favorites (dd:削除) "
-    } else {
-        " Favorites "
-    };
+    let favorites_title =
+        if app.notepad_focus == PatchPhrasePane::Favorites && app.notepad_pending_delete {
+            " Favorites (dd:削除) "
+        } else {
+            " Favorites "
+        };
 
     f.render_stateful_widget(
         List::new(history_items)
@@ -463,7 +464,7 @@ fn draw_notepad_history(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, statu
 }
 
 fn draw_help(f: &mut Frame) {
-    let area = crate::ui_utils::centered_rect(60, 80, f.area());
+    let area = crate::ui_utils::centered_rect(60, 90, f.area());
     f.render_widget(Clear, area);
 
     let help_lines = vec![

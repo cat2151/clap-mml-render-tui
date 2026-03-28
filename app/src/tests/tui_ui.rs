@@ -190,7 +190,7 @@ fn help_screen_mentions_ctrl_clipboard_shortcuts() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::Help;
 
-    let lines = render_lines(&mut app, 80, 50);
+    let lines = render_lines(&mut app, 80, 60);
     let screen = lines.join("\n");
     let normalized_lines: Vec<String> = lines.iter().map(|line| line.replace(' ', "")).collect();
 
@@ -236,7 +236,7 @@ fn help_screen_uses_light_gray_escape_hint_on_monokai_background() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::Help;
 
-    let buffer = render_buffer(&mut app, 80, 50);
+    let buffer = render_buffer(&mut app, 80, 60);
     let (x, y) = find_text(&buffer, "[ESC]");
 
     assert_eq!(buffer.cell((x, y)).unwrap().fg, MONOKAI_GRAY);

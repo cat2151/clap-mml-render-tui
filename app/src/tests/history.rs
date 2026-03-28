@@ -246,10 +246,12 @@ fn load_daw_session_state_migrates_from_history_json() {
 
 #[test]
 fn patch_phrase_store_serialize_deserialize_roundtrip() {
-    let mut store = PatchPhraseStore::default();
-    store.notepad = PatchPhraseState {
-        history: vec!["cde".to_string()],
-        favorites: vec!["gab".to_string()],
+    let mut store = PatchPhraseStore {
+        notepad: PatchPhraseState {
+            history: vec!["cde".to_string()],
+            favorites: vec!["gab".to_string()],
+        },
+        ..Default::default()
     };
     store.patches.insert(
         "Pads/Soft Pad.fxp".to_string(),
@@ -271,10 +273,12 @@ fn save_and_load_patch_phrase_store_roundtrip() {
     std::fs::remove_dir_all(&tmp).ok();
     let _env_guards = crate::test_utils::set_data_local_dir_envs(&tmp);
 
-    let mut store = PatchPhraseStore::default();
-    store.notepad = PatchPhraseState {
-        history: vec!["abc".to_string()],
-        favorites: vec!["xyz".to_string()],
+    let mut store = PatchPhraseStore {
+        notepad: PatchPhraseState {
+            history: vec!["abc".to_string()],
+            favorites: vec!["xyz".to_string()],
+        },
+        ..Default::default()
     };
     store.patches.insert(
         "Leads/Lead 1.fxp".to_string(),

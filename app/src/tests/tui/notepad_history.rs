@@ -10,7 +10,7 @@ fn handle_normal_h_enters_notepad_history_overlay() {
 
     assert!(matches!(result, NormalAction::Continue));
     assert!(matches!(app.mode, Mode::NotepadHistory));
-    assert_eq!(app.notepad_focus, PatchPhrasePane::History);
+    assert!(matches!(app.notepad_focus, PatchPhrasePane::History));
     assert_eq!(app.notepad_history_state.selected(), Some(0));
     assert_eq!(app.notepad_favorites_state.selected(), Some(0));
 }
