@@ -59,6 +59,8 @@ pub struct DawCachedMeasure {
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PatchPhraseStore {
     #[serde(default)]
+    pub notepad: PatchPhraseState,
+    #[serde(default)]
     pub patches: HashMap<String, PatchPhraseState>,
 }
 
@@ -197,7 +199,7 @@ pub fn save_daw_session_state(state: &DawSessionState) -> Result<()> {
     Ok(())
 }
 
-/// patch ごとの phrase history / favorites を patch_history.json に保存する。
+/// notepad / patch ごとの phrase history / favorites を patch_history.json に保存する。
 pub fn save_patch_phrase_store(store: &PatchPhraseStore) -> Result<()> {
     let Some(path) = patch_phrase_store_path() else {
         return Ok(());
@@ -252,7 +254,7 @@ pub fn load_daw_session_state() -> DawSessionState {
     migrate_daw_session_state_from_history_json().unwrap_or_default()
 }
 
-/// patch ごとの phrase history / favorites を patch_history.json から読み込む。
+/// notepad / patch ごとの phrase history / favorites を patch_history.json から読み込む。
 pub fn load_patch_phrase_store() -> PatchPhraseStore {
     let Some(path) = patch_phrase_store_path() else {
         return PatchPhraseStore::default();

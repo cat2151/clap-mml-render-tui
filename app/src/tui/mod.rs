@@ -14,6 +14,7 @@
 
 mod cache;
 mod input;
+mod notepad_history;
 mod patch_phrase;
 mod playback_session;
 mod ui;
@@ -52,6 +53,7 @@ pub(super) enum Mode {
     Normal,
     Insert,
     PatchSelect,
+    NotepadHistory,
     PatchPhrase,
     Help,
 }
@@ -95,6 +97,12 @@ pub struct TuiApp<'a> {
     pub(super) patch_cursor: usize,         // フィルタ結果内のカーソル位置
     pub(super) patch_list_state: ListState, // 音色選択リスト描画用
     pub(super) patch_phrase_store: crate::history::PatchPhraseStore,
+    pub(super) notepad_history_cursor: usize,
+    pub(super) notepad_favorites_cursor: usize,
+    pub(super) notepad_history_state: ListState,
+    pub(super) notepad_favorites_state: ListState,
+    pub(super) notepad_focus: PatchPhrasePane,
+    pub(super) notepad_pending_delete: bool,
     pub(super) patch_phrase_name: Option<String>,
     pub(super) patch_phrase_history_cursor: usize,
     pub(super) patch_phrase_favorites_cursor: usize,
@@ -178,6 +186,12 @@ impl<'a> TuiApp<'a> {
             patch_cursor: 0,
             patch_list_state: ListState::default(),
             patch_phrase_store: crate::history::load_patch_phrase_store(),
+            notepad_history_cursor: 0,
+            notepad_favorites_cursor: 0,
+            notepad_history_state: ListState::default(),
+            notepad_favorites_state: ListState::default(),
+            notepad_focus: PatchPhrasePane::History,
+            notepad_pending_delete: false,
             patch_phrase_name: None,
             patch_phrase_history_cursor: 0,
             patch_phrase_favorites_cursor: 0,
@@ -355,6 +369,7 @@ impl<'a> TuiApp<'a> {
                         },
                         Mode::Insert => self.handle_insert(key),
                         Mode::PatchSelect => self.handle_patch_select(key),
+                        Mode::NotepadHistory => self.handle_notepad_history(key.code),
                         Mode::PatchPhrase => self.handle_patch_phrase(key.code),
                         Mode::Help => self.handle_help(key.code),
                     }
