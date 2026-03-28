@@ -1,9 +1,15 @@
 use super::super::{DEFAULT_TRACK0_MML, MEASURES, TRACKS};
-use super::{apply_save_file_to_data, data_to_save_file, DawSaveFile};
+use super::{
+    apply_save_file_to_data, apply_save_file_to_track_volumes, data_to_save_file, DawSaveFile,
+};
 
 /// テスト用ヘルパー: TRACKS×(MEASURES+1) の空 data を作成する
 fn empty_data(tracks: usize, measures: usize) -> Vec<Vec<String>> {
     vec![vec![String::new(); measures + 1]; tracks]
+}
+
+fn empty_track_volumes(tracks: usize) -> Vec<i32> {
+    vec![0; tracks]
 }
 
 // ─── ensure_cmrt_dir ──────────────────────────────────────────
@@ -31,9 +37,10 @@ fn ensure_cmrt_dir_is_idempotent() {
 fn daw_save_json_roundtrip_default_data() {
     // デフォルト data（track0/meas0 のみ非空）が JSON 経由で復元されること
     let mut data = empty_data(TRACKS, MEASURES);
+    let track_volumes = empty_track_volumes(TRACKS);
     data[0][0] = DEFAULT_TRACK0_MML.to_string();
 
-    let file = data_to_save_file(&data, TRACKS, MEASURES);
+    let file = data_to_save_file(&data, &track_volumes, TRACKS, MEASURES);
     let json = serde_json::to_string_pretty(&file).unwrap();
 
     let loaded_file: DawSaveFile = serde_json::from_str(&json).unwrap();
@@ -50,11 +57,12 @@ fn daw_save_json_roundtrip_default_data() {
 fn daw_save_json_skips_empty_tracks_and_meas() {
     // 空トラック・空小節は JSON に含まれないこと
     let mut data = empty_data(TRACKS, MEASURES);
+    let track_volumes = empty_track_volumes(TRACKS);
     data[0][0] = DEFAULT_TRACK0_MML.to_string();
     data[1][1] = "cde".to_string();
     // track2..8, meas2..MEASURES は空
 
-    let file = data_to_save_file(&data, TRACKS, MEASURES);
+    let file = data_to_save_file(&data, &track_volumes, TRACKS, MEASURES);
     let json = serde_json::to_string_pretty(&file).unwrap();
 
     // JSON にトラック 2 以上は含まれない
@@ -82,9 +90,10 @@ fn daw_save_json_skips_empty_tracks_and_meas() {
 fn daw_save_json_track0_has_tempo_description() {
     // track0 のエントリに "tempo track" という description が付くこと
     let mut data = empty_data(TRACKS, MEASURES);
+    let track_volumes = empty_track_volumes(TRACKS);
     data[0][0] = DEFAULT_TRACK0_MML.to_string();
 
-    let file = data_to_save_file(&data, TRACKS, MEASURES);
+    let file = data_to_save_file(&data, &track_volumes, TRACKS, MEASURES);
     let json = serde_json::to_string_pretty(&file).unwrap();
 
     assert!(
@@ -97,9 +106,10 @@ fn daw_save_json_track0_has_tempo_description() {
 fn daw_save_json_meas0_has_initial_description() {
     // meas0 のエントリに "initial" という description が付くこと
     let mut data = empty_data(TRACKS, MEASURES);
+    let track_volumes = empty_track_volumes(TRACKS);
     data[0][0] = DEFAULT_TRACK0_MML.to_string();
 
-    let file = data_to_save_file(&data, TRACKS, MEASURES);
+    let file = data_to_save_file(&data, &track_volumes, TRACKS, MEASURES);
     let json = serde_json::to_string_pretty(&file).unwrap();
 
     assert!(
@@ -112,10 +122,11 @@ fn daw_save_json_meas0_has_initial_description() {
 fn daw_save_json_non_initial_meas_has_no_description() {
     // meas1 以降のエントリには description が付かないこと（ムダな情報を書かない）
     let mut data = empty_data(TRACKS, MEASURES);
+    let track_volumes = empty_track_volumes(TRACKS);
     data[0][0] = DEFAULT_TRACK0_MML.to_string();
     data[1][1] = "cde".to_string();
 
-    let file = data_to_save_file(&data, TRACKS, MEASURES);
+    let file = data_to_save_file(&data, &track_volumes, TRACKS, MEASURES);
     // DawSaveMeas の description フィールドを直接確認する
     let track1 = file.tracks.iter().find(|t| t.track == 1).unwrap();
     let meas1 = track1.meas.iter().find(|m| m.meas == 1).unwrap();
@@ -149,25 +160,70 @@ fn daw_save_json_out_of_range_indices_are_ignored_on_load() {
 fn daw_save_json_roundtrip_with_notes() {
     // 複数トラック・複数小節のデータが JSON 経由で正確に復元されること
     let mut data = empty_data(TRACKS, MEASURES);
+    let mut track_volumes = empty_track_volumes(TRACKS);
+    let mut restored_track_volumes = empty_track_volumes(TRACKS);
     data[0][0] = DEFAULT_TRACK0_MML.to_string();
     data[1][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
     data[1][1] = "cde".to_string();
     data[1][2] = "efg".to_string();
     data[2][1] = "abc".to_string();
+    track_volumes[1] = -6;
+    track_volumes[2] = 3;
 
-    let file = data_to_save_file(&data, TRACKS, MEASURES);
+    let file = data_to_save_file(&data, &track_volumes, TRACKS, MEASURES);
     let json = serde_json::to_string_pretty(&file).unwrap();
     let loaded: DawSaveFile = serde_json::from_str(&json).unwrap();
     let mut restored = empty_data(TRACKS, MEASURES);
     apply_save_file_to_data(&loaded, &mut restored, TRACKS, MEASURES);
+    apply_save_file_to_track_volumes(&loaded, &mut restored_track_volumes, TRACKS);
 
     assert_eq!(restored[0][0], data[0][0]);
     assert_eq!(restored[1][0], data[1][0]);
     assert_eq!(restored[1][1], data[1][1]);
     assert_eq!(restored[1][2], data[1][2]);
     assert_eq!(restored[2][1], data[2][1]);
+    assert_eq!(restored_track_volumes[1], -6);
+    assert_eq!(restored_track_volumes[2], 3);
     // 空セルは空のまま
     assert!(restored[3][1].is_empty());
+}
+
+#[test]
+fn daw_save_json_keeps_track_volume_for_empty_track() {
+    let data = empty_data(TRACKS, MEASURES);
+    let mut track_volumes = empty_track_volumes(TRACKS);
+    track_volumes[2] = -9;
+
+    let file = data_to_save_file(&data, &track_volumes, TRACKS, MEASURES);
+    let json = serde_json::to_string_pretty(&file).unwrap();
+
+    assert!(
+        json.contains("\"track\": 2"),
+        "音量だけ変更したトラックが JSON に含まれていない: {json}"
+    );
+    assert!(
+        json.contains("\"volume_db\": -9"),
+        "track volume_db が JSON に含まれていない: {json}"
+    );
+}
+
+#[test]
+fn daw_load_clamps_track_volume_and_ignores_track0_volume() {
+    let json = r#"{"tracks":[{"track":0,"volume_db":99,"meas":[]},{"track":1,"volume_db":-999,"meas":[]},{"track":2,"volume_db":99,"meas":[]}]}"#;
+    let file: DawSaveFile = serde_json::from_str(json).unwrap();
+    let mut track_volumes = empty_track_volumes(TRACKS);
+
+    apply_save_file_to_track_volumes(&file, &mut track_volumes, TRACKS);
+
+    assert_eq!(track_volumes[0], 0, "track0 volume should be ignored");
+    assert_eq!(
+        track_volumes[1], -36,
+        "playable track volume should clamp to min"
+    );
+    assert_eq!(
+        track_volumes[2], 6,
+        "playable track volume should clamp to max"
+    );
 }
 
 #[test]

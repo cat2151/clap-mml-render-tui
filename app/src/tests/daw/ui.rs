@@ -49,10 +49,14 @@ fn build_test_app() -> DawApp {
         play_transition_lock: Arc::new(Mutex::new(())),
         play_position: Arc::new(Mutex::new(None)),
         play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
+        play_measure_track_mmls: Arc::new(Mutex::new(vec![vec![String::new(); tracks]; measures])),
         play_measure_samples: Arc::new(Mutex::new(0)),
         log_lines: Arc::new(Mutex::new(VecDeque::new())),
         track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
         solo_tracks: vec![false; tracks],
+        track_volumes_db: vec![0; tracks],
+        mixer_cursor_track: 1,
+        play_track_gains: Arc::new(Mutex::new(vec![0.0; tracks])),
     }
 }
 
@@ -452,7 +456,7 @@ fn help_does_not_show_old_semicolon_guidance() {
     assert!(
         normalized_lines
             .iter()
-            .any(|line| line.contains("Ctrl+C:コピー")),
+            .any(|line| line.contains("Ctrl+C/X/V:コピー/カット/ペースト")),
         "lines: {:?}",
         normalized_lines
     );
@@ -460,6 +464,13 @@ fn help_does_not_show_old_semicolon_guidance() {
         normalized_lines
             .iter()
             .any(|line| line.contains("s:solotoggle")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("m:mixeroverlay")),
         "lines: {:?}",
         normalized_lines
     );
@@ -476,5 +487,60 @@ fn help_does_not_show_old_semicolon_guidance() {
             .any(|line| line.contains("分割して下のtrackに追加")),
         "lines: {:?}",
         normalized_lines
+    );
+}
+
+#[test]
+fn draw_shows_mixer_overlay_with_track_labels_and_db_values() {
+    let mut app = build_test_app();
+    app.mode = DawMode::Mixer;
+    app.mixer_cursor_track = 1;
+    app.track_volumes_db[1] = -3;
+    app.track_volumes_db[2] = 6;
+
+    let normalized_lines: Vec<String> = render_lines(&app, 100, 30)
+        .into_iter()
+        .map(|line| line.to_lowercase())
+        .collect();
+
+    assert!(
+        normalized_lines.iter().any(|line| line.contains("mixer")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("track1") && line.contains("track2")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("-3db") && line.contains("+6db")),
+        "lines: {:?}",
+        normalized_lines
+    );
+}
+
+#[test]
+fn draw_highlights_selected_mixer_track_in_cyan() {
+    let mut app = build_test_app();
+    app.mode = DawMode::Mixer;
+    app.mixer_cursor_track = 1;
+
+    let buffer = render_buffer(&app, 100, 30);
+    let cyan_positions: Vec<(u16, u16)> = (0..100)
+        .flat_map(|x| (0..30).map(move |y| (x, y)))
+        .filter(|(x, y)| {
+            let cell = buffer.cell((*x, *y)).unwrap();
+            cell.symbol() == "t" && cell.fg == MONOKAI_CYAN
+        })
+        .collect();
+
+    assert!(
+        !cyan_positions.is_empty(),
+        "selected mixer track label should be cyan"
     );
 }

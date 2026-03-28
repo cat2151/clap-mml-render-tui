@@ -142,6 +142,29 @@ impl DawApp {
             .collect()
     }
 
+    /// 全小節の per-track MML ベクターを構築する（演奏用）。
+    /// index i → meas i+1, inner index t → track t の MML（再生しない track は空文字列）。
+    pub(super) fn build_measure_track_mmls(&self) -> Vec<Vec<String>> {
+        (1..=self.measures)
+            .map(|measure| {
+                (0..self.tracks)
+                    .map(|track| {
+                        if track < FIRST_PLAYABLE_TRACK || !self.track_is_audible(track) {
+                            String::new()
+                        } else {
+                            let notes = self.data[track][measure].trim();
+                            if notes.is_empty() {
+                                String::new()
+                            } else {
+                                self.build_cell_mml(track, measure)
+                            }
+                        }
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
     // ─── 拍子 / テンポ解析 ────────────────────────────────────
 
     /// track0[0] の JSON から beat (拍子分子) を解析する。

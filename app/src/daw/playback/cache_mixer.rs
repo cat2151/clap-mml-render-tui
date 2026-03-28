@@ -7,13 +7,21 @@ use crate::daw::{CacheState, CellCache, FIRST_PLAYABLE_TRACK};
 
 use super::measure_mixer::{PlaybackMeasureAudio, PlaybackMeasureSource};
 
-type TrackCachedSamples = Vec<(usize, Option<Arc<Vec<f32>>>)>;
+type TrackCachedSamples = Vec<(usize, f32, Option<Arc<Vec<f32>>>)>;
 
 /// キャッシュ参照結果として、再生に使う合算済みサンプルとヒットした track 一覧を保持する。
 #[derive(Clone)]
 pub(in crate::daw) struct CachedMeasureSamples {
     pub(in crate::daw) samples: Vec<f32>,
     pub(in crate::daw) cached_tracks: Vec<usize>,
+}
+
+pub(in crate::daw::playback) struct PlaybackMeasureRequest<'a> {
+    pub(in crate::daw::playback) measure_index: usize,
+    pub(in crate::daw::playback) track_mmls: &'a [String],
+    pub(in crate::daw::playback) measure_samples: usize,
+    pub(in crate::daw::playback) tracks: usize,
+    pub(in crate::daw::playback) track_gains: &'a [f32],
 }
 
 /// 再生用サンプルが 1 小節に満たない場合だけ無音で末尾を埋める。
@@ -27,6 +35,15 @@ pub(in crate::daw) fn pad_playback_measure_samples(
         samples.resize(measure_samples, 0.0);
     }
     samples
+}
+
+fn mix_track_into_buffer(mixed: &mut Vec<f32>, samples: &[f32], gain: f32) {
+    if mixed.len() < samples.len() {
+        mixed.resize(samples.len(), 0.0);
+    }
+    for (index, sample) in samples.iter().enumerate() {
+        mixed[index] += *sample * gain;
+    }
 }
 
 /// キャッシュ済みのサンプルをミックスして返す。
@@ -45,6 +62,7 @@ pub(in crate::daw) fn try_get_cached_samples(
     measure: usize,
     measure_samples: usize,
     tracks: usize,
+    track_gains: &[f32],
 ) -> Option<CachedMeasureSamples> {
     // ロック下では Arc ハンドルの収集のみ行い、ミックス処理はロック外で実施する。
     // これによりキャッシュワーカーや UI スレッドとのロック競合を最小化する。
@@ -52,9 +70,13 @@ pub(in crate::daw) fn try_get_cached_samples(
         let cache = cache.lock().unwrap();
         let mut result = Vec::with_capacity(tracks - FIRST_PLAYABLE_TRACK);
         for t in FIRST_PLAYABLE_TRACK..tracks {
+            let gain = track_gains.get(t).copied().unwrap_or(1.0);
+            if gain == 0.0 {
+                continue;
+            }
             match cache[t][measure].state {
                 CacheState::Empty => {
-                    result.push((t, None)); // 空トラック
+                    result.push((t, gain, None)); // 空トラック
                 }
                 CacheState::Ready | CacheState::Pending | CacheState::Rendering => {
                     // samples が None の場合（サイズ上限超過や初回未完成等）はフォールバック
@@ -64,7 +86,7 @@ pub(in crate::daw) fn try_get_cached_samples(
                     if cell.rendered_measure_samples != Some(measure_samples) {
                         return None;
                     }
-                    result.push((t, arc));
+                    result.push((t, gain, arc));
                 }
                 CacheState::Error => {
                     // エラー中のセルはステールサンプルに頼らずフォールバックする。
@@ -80,21 +102,19 @@ pub(in crate::daw) fn try_get_cached_samples(
     // ロック外でミックス処理を行う
     let mixed_len = track_samples
         .iter()
-        .filter_map(|(_, maybe_samples)| maybe_samples.as_ref().map(|samples| samples.len()))
+        .filter_map(|(_, _, maybe_samples)| maybe_samples.as_ref().map(|samples| samples.len()))
         .fold(measure_samples, usize::max);
     let mut mixed = vec![0.0f32; mixed_len];
     let mut any_ready = false;
     let mut cached_tracks = Vec::new();
 
-    for (track, maybe_samples) in &track_samples {
+    for (track, gain, maybe_samples) in &track_samples {
         let Some(samples) = maybe_samples else {
             continue;
         };
         any_ready = true;
         cached_tracks.push(*track);
-        for i in 0..samples.len() {
-            mixed[i] += samples[i];
-        }
+        mix_track_into_buffer(&mut mixed, samples, *gain);
     }
 
     if !any_ready {
@@ -113,19 +133,32 @@ pub(in crate::daw) fn try_get_cached_samples(
 
 pub(in crate::daw::playback) fn build_playback_measure_samples<F, E>(
     cache: &Arc<Mutex<Vec<Vec<CellCache>>>>,
-    measure_index: usize,
-    mml: &str,
-    measure_samples: usize,
-    tracks: usize,
+    request: PlaybackMeasureRequest<'_>,
     log_lines: &Arc<Mutex<VecDeque<String>>>,
-    render_fallback: F,
+    mut render_fallback: F,
 ) -> Result<PlaybackMeasureAudio, E>
 where
-    F: FnOnce() -> Result<Vec<f32>, E>,
+    F: FnMut(usize, &str) -> Result<Vec<f32>, E>,
 {
+    let PlaybackMeasureRequest {
+        measure_index,
+        track_mmls,
+        measure_samples,
+        tracks,
+        track_gains,
+    } = request;
     let measure_number = measure_index + 1;
+    let active_tracks: Vec<usize> = (FIRST_PLAYABLE_TRACK..tracks)
+        .filter(|&track| {
+            track_gains.get(track).copied().unwrap_or(1.0) > 0.0
+                && track_mmls
+                    .get(track)
+                    .map(|mml| !mml.trim().is_empty())
+                    .unwrap_or(false)
+        })
+        .collect();
 
-    if mml.trim().is_empty() {
+    if active_tracks.is_empty() {
         crate::logging::append_log_line(
             log_lines,
             format!("meas{measure_number}: empty -> silence"),
@@ -136,7 +169,27 @@ where
         });
     }
 
-    if let Some(cached) = try_get_cached_samples(cache, measure_number, measure_samples, tracks) {
+    if let Some(cached) =
+        try_get_cached_samples(cache, measure_number, measure_samples, tracks, track_gains)
+    {
+        if cached.cached_tracks.len() != active_tracks.len() {
+            crate::logging::append_log_line(log_lines, format!("meas{measure_number}: render"));
+            let mut mixed = vec![0.0f32; measure_samples];
+            for track in active_tracks {
+                let gain = track_gains.get(track).copied().unwrap_or(1.0);
+                let mml = track_mmls
+                    .get(track)
+                    .map(String::as_str)
+                    .unwrap_or_default();
+                let samples =
+                    pad_playback_measure_samples(render_fallback(track, mml)?, measure_samples);
+                mix_track_into_buffer(&mut mixed, &samples, gain);
+            }
+            return Ok(PlaybackMeasureAudio {
+                samples: mixed,
+                source: PlaybackMeasureSource::Render,
+            });
+        }
         let cache_entries = if cached.cached_tracks.is_empty() {
             "empty-tracks".to_string()
         } else {
@@ -160,9 +213,18 @@ where
     }
 
     crate::logging::append_log_line(log_lines, format!("meas{measure_number}: render"));
-    let samples = pad_playback_measure_samples(render_fallback()?, measure_samples);
+    let mut mixed = vec![0.0f32; measure_samples];
+    for track in active_tracks {
+        let gain = track_gains.get(track).copied().unwrap_or(1.0);
+        let mml = track_mmls
+            .get(track)
+            .map(String::as_str)
+            .unwrap_or_default();
+        let samples = pad_playback_measure_samples(render_fallback(track, mml)?, measure_samples);
+        mix_track_into_buffer(&mut mixed, &samples, gain);
+    }
     Ok(PlaybackMeasureAudio {
-        samples,
+        samples: mixed,
         source: PlaybackMeasureSource::Render,
     })
 }

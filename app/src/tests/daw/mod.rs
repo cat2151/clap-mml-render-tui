@@ -226,10 +226,14 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
         play_transition_lock: Arc::new(Mutex::new(())),
         play_position: Arc::new(Mutex::new(None)),
         play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
+        play_measure_track_mmls: Arc::new(Mutex::new(vec![vec![String::new(); tracks]; measures])),
         play_measure_samples: Arc::new(Mutex::new(0)),
         log_lines: Arc::new(Mutex::new(VecDeque::new())),
         track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
         solo_tracks: vec![false; tracks],
+        track_volumes_db: vec![0; tracks],
+        mixer_cursor_track: 1,
+        play_track_gains: Arc::new(Mutex::new(vec![0.0; tracks])),
     };
     app.data[1][1] = "c".to_string();
     app.data[1][3] = "e".to_string();

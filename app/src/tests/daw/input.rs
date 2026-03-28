@@ -11,6 +11,11 @@ use crate::config::Config;
 
 use super::super::{CacheState, CellCache, DawApp, DawMode, DawPlayState, PlayPosition};
 
+/// -6dB を線形 gain 値に変換する（10^(-6/20)）。
+fn track1_minus_6_db_gain() -> f32 {
+    10.0f32.powf(-6.0 / 20.0)
+}
+
 fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob>) {
     let tracks = 3;
     let measures = 2;
@@ -47,10 +52,17 @@ fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob
             play_transition_lock: Arc::new(Mutex::new(())),
             play_position: Arc::new(Mutex::new(None)),
             play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
+            play_measure_track_mmls: Arc::new(Mutex::new(vec![
+                vec![String::new(); tracks];
+                measures
+            ])),
             play_measure_samples: Arc::new(Mutex::new(0)),
             log_lines: Arc::new(Mutex::new(VecDeque::new())),
             track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
             solo_tracks: vec![false; tracks],
+            track_volumes_db: vec![0; tracks],
+            mixer_cursor_track: 1,
+            play_track_gains: Arc::new(Mutex::new(vec![0.0; tracks])),
         },
         cache_rx,
     )
@@ -217,6 +229,12 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
         app.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
         app.data[1][1] = "cdef".to_string();
         app.data[1][2] = "gabc".to_string();
+        app.track_volumes_db[1] = -6;
+        // 共有 playback 状態を意図的に古い空データにしておき、
+        // random patch 更新が hot reload 時に全共有 state を同期することを検証する。
+        *app.play_measure_track_mmls.lock().unwrap() =
+            vec![vec![String::new(); app.tracks]; app.measures];
+        *app.play_track_gains.lock().unwrap() = vec![0.0; app.tracks];
 
         app.handle_normal(crossterm::event::KeyCode::Char('r'));
 
@@ -270,6 +288,18 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
             ),
             "logs: {:?}",
             logs
+        );
+        let play_measure_track_mmls = app.play_measure_track_mmls.lock().unwrap().clone();
+        assert!(
+            play_measure_track_mmls[0][1].contains(r#"{"Surge XT patch": "Pad 1.fxp"}"#),
+            "hot reload should refresh per-track playback MMLs: {:?}",
+            play_measure_track_mmls
+        );
+        let play_track_gains = app.play_track_gains.lock().unwrap().clone();
+        assert!(
+            (play_track_gains[1] - track1_minus_6_db_gain()).abs() < f32::EPSILON,
+            "hot reload should refresh playback gains: {:?}",
+            play_track_gains
         );
     }
 
@@ -390,4 +420,57 @@ fn handle_normal_s_toggles_tracks_and_turns_off_solo_mode_when_all_false() {
     app.handle_normal(crossterm::event::KeyCode::Char('s'));
     assert_eq!(app.solo_tracks, vec![false, false, false]);
     assert!(!app.solo_mode_active());
+}
+
+#[test]
+fn handle_normal_m_enters_mixer_mode_on_playable_track() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 0;
+
+    let result = app.handle_normal(crossterm::event::KeyCode::Char('m'));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert!(matches!(app.mode, DawMode::Mixer));
+    assert_eq!(app.mixer_cursor_track, 1);
+}
+
+#[test]
+fn handle_mixer_supports_track_navigation_and_escape() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.mode = DawMode::Mixer;
+    app.mixer_cursor_track = 1;
+
+    app.handle_mixer(crossterm::event::KeyCode::Char('l'));
+    assert_eq!(app.mixer_cursor_track, 2);
+
+    app.handle_mixer(crossterm::event::KeyCode::Char('h'));
+    assert_eq!(app.mixer_cursor_track, 1);
+
+    app.handle_mixer(crossterm::event::KeyCode::Esc);
+    assert!(matches!(app.mode, DawMode::Normal));
+}
+
+#[test]
+fn handle_mixer_adjusts_volume_in_3db_steps() {
+    let tmp = std::env::temp_dir().join("cmrt_test_handle_mixer_adjusts_volume");
+    std::fs::remove_dir_all(&tmp).ok();
+
+    {
+        let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
+        let (mut app, _cache_rx) = build_test_app();
+        app.mode = DawMode::Mixer;
+        app.mixer_cursor_track = 1;
+
+        app.handle_mixer(crossterm::event::KeyCode::Char('j'));
+        app.handle_mixer(crossterm::event::KeyCode::Char('k'));
+        app.handle_mixer(crossterm::event::KeyCode::Char('k'));
+
+        assert_eq!(app.track_volume_db(1), 3);
+        assert_eq!(
+            app.play_track_gains.lock().unwrap()[1],
+            10.0f32.powf(3.0 / 20.0)
+        );
+    }
+
+    std::fs::remove_dir_all(&tmp).ok();
 }

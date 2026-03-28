@@ -26,9 +26,13 @@ fn format_random_patch_hot_reload_log(
 impl DawApp {
     fn sync_playback_mml_state(&self) {
         let new_mmls = self.build_measure_mmls();
+        let new_track_mmls = self.build_measure_track_mmls();
         let new_samples = self.measure_duration_samples();
+        let new_track_gains = self.playback_track_gains();
         *self.play_measure_mmls.lock().unwrap() = new_mmls;
+        *self.play_measure_track_mmls.lock().unwrap() = new_track_mmls;
         *self.play_measure_samples.lock().unwrap() = new_samples;
+        *self.play_track_gains.lock().unwrap() = new_track_gains;
     }
 
     // ─── INSERT モード ────────────────────────────────────────
@@ -79,6 +83,37 @@ impl DawApp {
         }
     }
 
+    pub(super) fn handle_mixer(&mut self, key: KeyCode) {
+        match key {
+            KeyCode::Esc => {
+                self.mode = DawMode::Normal;
+            }
+            KeyCode::Char('h') | KeyCode::Left => {
+                if self.mixer_cursor_track > FIRST_PLAYABLE_TRACK {
+                    self.mixer_cursor_track -= 1;
+                }
+            }
+            KeyCode::Char('l') | KeyCode::Right => {
+                if self.mixer_cursor_track + 1 < self.tracks {
+                    self.mixer_cursor_track += 1;
+                }
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                if self.adjust_track_volume_db(self.mixer_cursor_track, -3) {
+                    self.save();
+                    self.sync_playback_mml_state();
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                if self.adjust_track_volume_db(self.mixer_cursor_track, 3) {
+                    self.save();
+                    self.sync_playback_mml_state();
+                }
+            }
+            _ => {}
+        }
+    }
+
     pub(super) fn handle_normal(&mut self, key: KeyCode) -> DawNormalAction {
         match key {
             KeyCode::Char('q') => return DawNormalAction::QuitApp,
@@ -115,6 +150,12 @@ impl DawApp {
             }
 
             KeyCode::Char('i') => self.start_insert(),
+            KeyCode::Char('m') => {
+                self.mixer_cursor_track = self
+                    .cursor_track
+                    .clamp(FIRST_PLAYABLE_TRACK, self.tracks - 1);
+                self.mode = DawMode::Mixer;
+            }
 
             KeyCode::Char('K') | KeyCode::Char('?') => self.mode = DawMode::Help,
 
@@ -182,8 +223,7 @@ impl DawApp {
                         old_samples,
                         new_samples,
                     ));
-                    *self.play_measure_mmls.lock().unwrap() = new_mmls;
-                    *self.play_measure_samples.lock().unwrap() = new_samples;
+                    self.sync_playback_mml_state();
                 }
             }
 

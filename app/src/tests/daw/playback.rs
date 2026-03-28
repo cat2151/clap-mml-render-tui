@@ -12,6 +12,7 @@ use super::{
     super::{CacheState, CellCache, DawApp, DawMode, DawPlayState},
     cache_mixer::{
         build_playback_measure_samples, pad_playback_measure_samples, try_get_cached_samples,
+        PlaybackMeasureRequest,
     },
     measure_math::{
         current_play_measure_index, following_measure_index, format_playback_future_append_log,
@@ -58,11 +59,25 @@ fn build_test_app() -> DawApp {
         play_transition_lock: Arc::new(Mutex::new(())),
         play_position: Arc::new(Mutex::new(None)),
         play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
+        play_measure_track_mmls: Arc::new(Mutex::new(vec![vec![String::new(); tracks]; measures])),
         play_measure_samples: Arc::new(Mutex::new(0)),
         log_lines: Arc::new(Mutex::new(VecDeque::new())),
         track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
         solo_tracks: vec![false; tracks],
+        track_volumes_db: vec![0; tracks],
+        mixer_cursor_track: 1,
+        play_track_gains: Arc::new(Mutex::new(vec![0.0; tracks])),
     }
+}
+
+fn playback_track_mmls(track: usize, mml: &str) -> Vec<String> {
+    let mut track_mmls = vec![String::new(); 3];
+    track_mmls[track] = mml.to_string();
+    track_mmls
+}
+
+fn playback_track_gains() -> Vec<f32> {
+    vec![0.0, 1.0, 1.0]
 }
 
 #[test]
@@ -222,14 +237,19 @@ fn wait_until_or_stop_returns_true_when_deadline_is_already_reached() {
 fn build_playback_measure_samples_returns_silence_for_empty_measure() {
     let log_lines = Arc::new(Mutex::new(VecDeque::new()));
     let cache = Arc::new(Mutex::new(vec![vec![CellCache::empty(); 3]; 3]));
+    let track_mmls = vec![String::new(); 3];
+    let track_gains = playback_track_gains();
     let samples = build_playback_measure_samples(
         &cache,
-        1,
-        "",
-        4,
-        3,
+        PlaybackMeasureRequest {
+            measure_index: 1,
+            track_mmls: &track_mmls,
+            measure_samples: 4,
+            tracks: 3,
+            track_gains: &track_gains,
+        },
         &log_lines,
-        || -> Result<Vec<f32>, ()> { panic!("empty measure should not render") },
+        |_, _| -> Result<Vec<f32>, ()> { panic!("empty measure should not render") },
     )
     .unwrap();
 
@@ -251,15 +271,20 @@ fn build_playback_measure_samples_prefers_cache_hit() {
         generation: 0,
         rendered_mml_hash: None,
     };
+    let track_mmls = playback_track_mmls(1, "c");
+    let track_gains = playback_track_gains();
 
     let samples = build_playback_measure_samples(
         &cache,
-        0,
-        "c",
-        4,
-        3,
+        PlaybackMeasureRequest {
+            measure_index: 0,
+            track_mmls: &track_mmls,
+            measure_samples: 4,
+            tracks: 3,
+            track_gains: &track_gains,
+        },
         &log_lines,
-        || -> Result<Vec<f32>, ()> { panic!("cache hit should not render") },
+        |_, _| -> Result<Vec<f32>, ()> { panic!("cache hit should not render") },
     )
     .unwrap();
 
@@ -281,15 +306,22 @@ fn build_playback_measure_samples_uses_stale_cache_while_measure_is_pending() {
         generation: 1,
         rendered_mml_hash: None,
     };
+    let track_mmls = playback_track_mmls(1, "c");
+    let track_gains = playback_track_gains();
 
     let samples = build_playback_measure_samples(
         &cache,
-        0,
-        "c",
-        4,
-        3,
+        PlaybackMeasureRequest {
+            measure_index: 0,
+            track_mmls: &track_mmls,
+            measure_samples: 4,
+            tracks: 3,
+            track_gains: &track_gains,
+        },
         &log_lines,
-        || -> Result<Vec<f32>, ()> { panic!("stale cache should be reused while re-rendering") },
+        |_, _| -> Result<Vec<f32>, ()> {
+            panic!("stale cache should be reused while re-rendering")
+        },
     )
     .unwrap();
 
@@ -305,15 +337,20 @@ fn build_playback_measure_samples_renders_and_normalizes_length() {
     let log_lines = Arc::new(Mutex::new(VecDeque::new()));
     let cache = Arc::new(Mutex::new(vec![vec![CellCache::empty(); 3]; 3]));
     cache.lock().unwrap()[1][1].state = CacheState::Pending;
+    let track_mmls = playback_track_mmls(1, "c");
+    let track_gains = playback_track_gains();
 
     let samples = build_playback_measure_samples(
         &cache,
-        0,
-        "c",
-        4,
-        3,
+        PlaybackMeasureRequest {
+            measure_index: 0,
+            track_mmls: &track_mmls,
+            measure_samples: 4,
+            tracks: 3,
+            track_gains: &track_gains,
+        },
         &log_lines,
-        || -> Result<Vec<f32>, ()> { Ok(vec![1.0, 2.0]) },
+        |_, _| -> Result<Vec<f32>, ()> { Ok(vec![1.0, 2.0]) },
     )
     .unwrap();
 
@@ -335,15 +372,20 @@ fn build_playback_measure_samples_rerenders_when_stale_cache_measure_length_diff
         generation: 1,
         rendered_mml_hash: None,
     };
+    let track_mmls = playback_track_mmls(1, "c");
+    let track_gains = playback_track_gains();
 
     let samples = build_playback_measure_samples(
         &cache,
-        0,
-        "c",
-        4,
-        3,
+        PlaybackMeasureRequest {
+            measure_index: 0,
+            track_mmls: &track_mmls,
+            measure_samples: 4,
+            tracks: 3,
+            track_gains: &track_gains,
+        },
         &log_lines,
-        || -> Result<Vec<f32>, ()> { Ok(vec![1.0, 2.0, 3.0, 4.0]) },
+        |_, _| -> Result<Vec<f32>, ()> { Ok(vec![1.0, 2.0, 3.0, 4.0]) },
     )
     .unwrap();
 
@@ -359,15 +401,20 @@ fn build_playback_measure_samples_preserves_rendered_tail() {
     let log_lines = Arc::new(Mutex::new(VecDeque::new()));
     let cache = Arc::new(Mutex::new(vec![vec![CellCache::empty(); 3]; 3]));
     cache.lock().unwrap()[1][1].state = CacheState::Pending;
+    let track_mmls = playback_track_mmls(1, "c");
+    let track_gains = playback_track_gains();
 
     let samples = build_playback_measure_samples(
         &cache,
-        0,
-        "c",
-        4,
-        3,
+        PlaybackMeasureRequest {
+            measure_index: 0,
+            track_mmls: &track_mmls,
+            measure_samples: 4,
+            tracks: 3,
+            track_gains: &track_gains,
+        },
         &log_lines,
-        || -> Result<Vec<f32>, ()> { Ok(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]) },
+        |_, _| -> Result<Vec<f32>, ()> { Ok(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]) },
     )
     .unwrap();
 
@@ -397,7 +444,7 @@ fn try_get_cached_samples_preserves_cached_tail_beyond_measure_length() {
         rendered_mml_hash: None,
     };
 
-    let samples = try_get_cached_samples(&cache, 1, 4, 3).unwrap();
+    let samples = try_get_cached_samples(&cache, 1, 4, 3, &playback_track_gains()).unwrap();
 
     assert_eq!(samples.samples, vec![0.25, -0.25, 0.5, -0.5, 0.75, -0.75]);
     assert_eq!(samples.cached_tracks, vec![1]);
@@ -414,7 +461,7 @@ fn try_get_cached_samples_uses_stale_samples_while_rendering() {
         rendered_mml_hash: None,
     };
 
-    let samples = try_get_cached_samples(&cache, 1, 4, 3).unwrap();
+    let samples = try_get_cached_samples(&cache, 1, 4, 3, &playback_track_gains()).unwrap();
 
     assert_eq!(samples.samples, vec![0.25, -0.25, 0.5, -0.5]);
     assert_eq!(samples.cached_tracks, vec![1]);
@@ -431,7 +478,7 @@ fn try_get_cached_samples_rejects_stale_samples_when_measure_length_differs() {
         rendered_mml_hash: None,
     };
 
-    assert!(try_get_cached_samples(&cache, 1, 4, 3).is_none());
+    assert!(try_get_cached_samples(&cache, 1, 4, 3, &playback_track_gains()).is_none());
 }
 
 #[test]
@@ -468,4 +515,61 @@ fn mix_measure_chunk_overlaps_previous_tail_with_next_measure_start() {
     assert_eq!(first_chunk, vec![1.0, 1.0, 1.0, 1.0]);
     assert_eq!(second_chunk, vec![3.0, 3.0, 2.0, 2.0]);
     assert!(active_layers.is_empty());
+}
+
+#[test]
+fn try_get_cached_samples_applies_track_gain_per_track() {
+    let cache = Arc::new(Mutex::new(vec![vec![CellCache::empty(); 3]; 3]));
+    cache.lock().unwrap()[1][1] = CellCache {
+        state: CacheState::Ready,
+        samples: Some(Arc::new(vec![1.0, 1.0, 1.0, 1.0])),
+        rendered_measure_samples: Some(4),
+        generation: 0,
+        rendered_mml_hash: None,
+    };
+    cache.lock().unwrap()[2][1] = CellCache {
+        state: CacheState::Ready,
+        samples: Some(Arc::new(vec![1.0, 1.0, 1.0, 1.0])),
+        rendered_measure_samples: Some(4),
+        generation: 0,
+        rendered_mml_hash: None,
+    };
+
+    let samples = try_get_cached_samples(&cache, 1, 4, 3, &[0.0, 1.0, 0.5]).unwrap();
+
+    assert_eq!(samples.samples, vec![1.5, 1.5, 1.5, 1.5]);
+}
+
+#[test]
+fn build_playback_measure_samples_renders_each_track_with_gain() {
+    let log_lines = Arc::new(Mutex::new(VecDeque::new()));
+    let cache = Arc::new(Mutex::new(vec![vec![CellCache::empty(); 3]; 3]));
+    let track_mmls = vec![String::new(), "track1".to_string(), "track2".to_string()];
+    let track_gains = vec![0.0, 1.0, 0.5];
+
+    let samples = build_playback_measure_samples(
+        &cache,
+        PlaybackMeasureRequest {
+            measure_index: 0,
+            track_mmls: &track_mmls,
+            measure_samples: 4,
+            tracks: 3,
+            track_gains: &track_gains,
+        },
+        &log_lines,
+        |track, _| -> Result<Vec<f32>, ()> {
+            Ok(if track == 1 {
+                vec![1.0, 1.0, 1.0, 1.0]
+            } else {
+                vec![2.0, 2.0, 2.0, 2.0]
+            })
+        },
+    )
+    .unwrap();
+
+    assert_eq!(samples.samples, vec![2.0, 2.0, 2.0, 2.0]);
+    assert_eq!(
+        log_lines.lock().unwrap().back().map(String::as_str),
+        Some("meas1: render")
+    );
 }
