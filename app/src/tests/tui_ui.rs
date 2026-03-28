@@ -246,6 +246,7 @@ fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
     let lines = render_lines(&mut app, 80, 8);
     let screen = lines.join("\n");
 
+    assert!(screen.contains("[NORMAL] notepad mode"));
     assert!(screen.contains("▶ abc"));
     assert!(!screen.contains("MML Lines"));
     assert!(!screen.contains("▶   1 abc"));
@@ -262,7 +263,7 @@ fn insert_screen_shows_insert_title_without_duplicate_line_text() {
     let lines = render_lines(&mut app, 80, 8);
     let screen = lines.join("\n");
 
-    assert!(screen.contains("[INSERT]"));
+    assert!(screen.contains("[INSERT] notepad mode"));
     assert_eq!(screen.matches("abc").count(), 1);
     assert!(lines.iter().any(|line| line.contains("▶ abc")));
 }

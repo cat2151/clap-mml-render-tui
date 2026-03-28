@@ -70,6 +70,14 @@ fn normal_status_text(app: &TuiApp<'_>, play_state: &PlayState) -> String {
     format!("{mode}{}", play_status_suffix(play_state))
 }
 
+fn notepad_mode_title(app: &TuiApp<'_>) -> &'static str {
+    if app.mode == Mode::Insert {
+        " [INSERT] notepad mode "
+    } else {
+        " [NORMAL] notepad mode "
+    }
+}
+
 fn keybind_text(mode: &Mode) -> &'static str {
     match mode {
         Mode::Normal => {
@@ -207,7 +215,7 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, play_state: &PlayState, stat
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(if is_insert { " [INSERT] " } else { "" })
+                    .title(notepad_mode_title(app))
                     .style(base_style())
                     .border_style(base_style().fg(MONOKAI_CYAN)),
             )
