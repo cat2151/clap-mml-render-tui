@@ -43,28 +43,25 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
                         && end_measure_index == measure_index =>
                 {
                     (
-                        format!("{:<5}", format!("AB{m}")),
+                        format!("AB{m:<3}"),
                         Style::default()
                             .fg(MONOKAI_YELLOW)
                             .add_modifier(Modifier::BOLD),
                     )
                 }
                 Some((start_measure_index, _)) if start_measure_index == measure_index => (
-                    format!("{:<5}", format!("A{m}")),
+                    format!("A{m:<4}"),
                     Style::default()
                         .fg(MONOKAI_GREEN)
                         .add_modifier(Modifier::BOLD),
                 ),
                 Some((_, end_measure_index)) if end_measure_index == measure_index => (
-                    format!("{:<5}", format!("B{m}")),
+                    format!("B{m:<4}"),
                     Style::default()
                         .fg(MONOKAI_PURPLE)
                         .add_modifier(Modifier::BOLD),
                 ),
-                _ => (
-                    format!("{:<5}", format!("M{m}")),
-                    Style::default().fg(MONOKAI_GRAY),
-                ),
+                _ => (format!("M{m:<4}"), Style::default().fg(MONOKAI_GRAY)),
             }
         };
         header_spans.push(Span::styled(label, style));

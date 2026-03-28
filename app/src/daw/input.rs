@@ -25,6 +25,8 @@ fn format_random_patch_hot_reload_log(
 
 impl DawApp {
     fn cursor_play_measure_index(&self) -> Option<usize> {
+        // cursor_measure の 0 は Init 列なので対象外。
+        // A-B リピートは通常 meas のみを扱うため、1-based の小節番号を 0-based index に変換する。
         self.cursor_measure.checked_sub(1)
     }
 
