@@ -10,6 +10,9 @@ use ratatui::{
 
 use super::{Mode, PatchPhrasePane, PlayState, TuiApp};
 
+const LIST_HIGHLIGHT_SYMBOL: &str = "▶ ";
+const LIST_HIGHLIGHT_WIDTH: u16 = 2;
+
 pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     // play_state を一度だけロックしてスナップショットを取り、
     // status_text と status_color を同じ状態から導出する（二重ロック・状態不整合を防ぐ）。
@@ -183,7 +186,7 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, play_state: &PlayState, stat
             } else {
                 ""
             }))
-            .highlight_symbol("▶ "),
+            .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
         chunks[0],
         &mut app.list_state,
     );
@@ -199,11 +202,10 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, play_state: &PlayState, stat
             let inner_bottom = list_area.y + list_area.height.saturating_sub(1); // 下ボーダーの位置
             let textarea_y = inner_top + row_in_visible;
             if textarea_y < inner_bottom {
-                let highlight_width = 2;
                 let textarea_area = Rect {
-                    x: list_area.x + 1 + highlight_width,
+                    x: list_area.x + 1 + LIST_HIGHLIGHT_WIDTH,
                     y: textarea_y,
-                    width: list_area.width.saturating_sub(2 + highlight_width),
+                    width: list_area.width.saturating_sub(2 + LIST_HIGHLIGHT_WIDTH),
                     height: 1,
                 };
                 f.render_widget(Clear, textarea_area);
@@ -284,7 +286,7 @@ fn draw_patch_phrase(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
                     .title(format!(" History - {patch_name} "))
                     .border_style(history_border),
             )
-            .highlight_symbol("▶ "),
+            .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
         panes[0],
         &mut app.patch_phrase_history_state,
     );
@@ -296,7 +298,7 @@ fn draw_patch_phrase(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_c
                     .title(" Favorites ")
                     .border_style(favorites_border),
             )
-            .highlight_symbol("▶ "),
+            .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
         panes[1],
         &mut app.patch_phrase_favorites_state,
     );

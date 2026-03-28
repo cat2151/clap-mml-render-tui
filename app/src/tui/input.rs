@@ -35,8 +35,8 @@ impl<'a> TuiApp<'a> {
             })
             .collect::<Vec<_>>();
         let replaced = replaced_parts.join(";");
-        let has_playable_branch = replaced_parts.iter().any(|part| !part.trim().is_empty());
-        self.lines[self.cursor] = if has_playable_branch {
+        let has_content = replaced_parts.iter().any(|part| !part.trim().is_empty());
+        self.lines[self.cursor] = if has_content {
             replaced
         } else {
             format!("{json} c")
