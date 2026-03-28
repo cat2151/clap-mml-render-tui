@@ -5,10 +5,10 @@
 //!   track   0 = 拍子JSON + テンポ (例: `{"beat": "4/4"}t120`) → render 時に全小節の先頭にくっつける
 //!
 //! キー操作 (NORMAL):
-//!   h      : history overlay を開く
-//!   ← / l  : 小節 (列) 移動
+//!   Shift+H: history overlay を開く
+//!   h / ←  : 小節 (列) を左へ移動
+//!   l / →  : 小節 (列) を右へ移動
 //!   j/k    : track (行) 移動
-//!   H      : 先頭 track へ移動
 //!   M      : 中央 track へ移動
 //!   L      : 末尾 track へ移動
 //!   i      : INSERT モード（現在セルを編集）

@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn handle_normal_h_opens_patch_history_overlay_for_track_patch() {
+fn handle_normal_shift_h_opens_patch_history_overlay_for_track_patch() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_track = 1;
     app.cursor_measure = 2;
@@ -14,10 +14,11 @@ fn handle_normal_h_opens_patch_history_overlay_for_track_patch() {
         },
     );
 
-    let result = app.handle_normal(KeyCode::Char('h'));
+    let result = app.handle_normal(KeyCode::Char('H'));
 
     assert!(matches!(result, super::super::DawNormalAction::Continue));
     assert!(matches!(app.mode, DawMode::History));
+    assert_eq!(app.cursor_track, 1);
     assert_eq!(
         app.history_overlay_patch_name.as_deref(),
         Some("Pads/Pad 1.fxp")
@@ -28,13 +29,15 @@ fn handle_normal_h_opens_patch_history_overlay_for_track_patch() {
 }
 
 #[test]
-fn handle_normal_left_still_moves_measure_cursor_left() {
+fn handle_normal_h_moves_measure_cursor_left() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_measure = 2;
+    let cursor_track = app.cursor_track;
 
-    app.handle_normal(KeyCode::Left);
+    app.handle_normal(KeyCode::Char('h'));
 
     assert_eq!(app.cursor_measure, 1);
+    assert_eq!(app.cursor_track, cursor_track);
     assert!(matches!(app.mode, DawMode::Normal));
 }
 
@@ -69,7 +72,7 @@ fn handle_history_overlay_enter_overwrites_measure_and_backs_up_old_phrase() {
 }
 
 #[test]
-fn handle_normal_h_without_track_patch_opens_filtered_history_overlay() {
+fn handle_normal_shift_h_without_track_patch_opens_filtered_history_overlay() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_track = 1;
     app.cursor_measure = 1;
@@ -78,7 +81,7 @@ fn handle_normal_h_without_track_patch_opens_filtered_history_overlay() {
         r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string(),
     ];
 
-    app.handle_normal(KeyCode::Char('h'));
+    app.handle_normal(KeyCode::Char('H'));
 
     assert!(matches!(app.mode, DawMode::History));
     assert_eq!(app.history_overlay_patch_name, None);

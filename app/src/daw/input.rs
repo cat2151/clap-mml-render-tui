@@ -508,14 +508,14 @@ impl DawApp {
             KeyCode::Char('q') => return DawNormalAction::QuitApp,
             KeyCode::Char('d') | KeyCode::Esc => return DawNormalAction::ReturnToTui,
 
-            KeyCode::Char('h') => {
-                self.start_history_overlay();
-            }
-            KeyCode::Left => {
+            KeyCode::Char('h') | KeyCode::Left => {
                 if self.cursor_measure > 0 {
                     self.cursor_measure -= 1;
                     self.update_ab_repeat_follow_end_with_cursor();
                 }
+            }
+            KeyCode::Char('H') => {
+                self.start_history_overlay();
             }
             KeyCode::Char('l') | KeyCode::Right => {
                 if self.cursor_measure < self.measures {
@@ -532,9 +532,6 @@ impl DawApp {
                 if self.cursor_track > 0 {
                     self.cursor_track -= 1;
                 }
-            }
-            KeyCode::Char('H') => {
-                self.cursor_track = 0;
             }
             KeyCode::Char('M') => {
                 self.cursor_track = self.tracks / 2;

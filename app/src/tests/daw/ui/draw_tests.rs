@@ -358,6 +358,20 @@ fn help_does_not_show_old_semicolon_guidance() {
     assert!(
         normalized_lines
             .iter()
+            .any(|line| line.contains("Shift+H:historyoverlay")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("h/←・l/→:小節移動")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
             .any(|line| line.contains("a:off→start固定/end追従→end固定→off")),
         "lines: {:?}",
         normalized_lines
@@ -373,6 +387,31 @@ fn help_does_not_show_old_semicolon_guidance() {
         !normalized_lines
             .iter()
             .any(|line| line.contains("分割して下のtrackに追加")),
+        "lines: {:?}",
+        normalized_lines
+    );
+}
+
+#[test]
+fn normal_footer_shows_shift_h_history_shortcut() {
+    let app = build_test_app();
+
+    let normalized_lines: Vec<String> = render_lines(&app, 180, 20)
+        .into_iter()
+        .map(|line| line.replace(' ', ""))
+        .collect();
+
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("Shift+H:history")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("h/←・l/→:meas")),
         "lines: {:?}",
         normalized_lines
     );
