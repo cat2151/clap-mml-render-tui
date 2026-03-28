@@ -52,6 +52,7 @@ fn build_test_app() -> DawApp {
         play_measure_samples: Arc::new(Mutex::new(0)),
         log_lines: Arc::new(Mutex::new(VecDeque::new())),
         track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
+        solo_tracks: vec![false; tracks],
     }
 }
 
@@ -393,6 +394,37 @@ fn draw_shows_outer_border_in_monokai_cyan() {
 }
 
 #[test]
+fn draw_shows_solo_and_mute_below_init_meas_during_solo_mode() {
+    let mut app = build_test_app();
+    app.solo_tracks[1] = true;
+
+    let lines = render_lines(&app, 60, 20);
+
+    assert!(
+        lines.iter().any(|line| line.contains("solo")),
+        "lines: {:?}",
+        lines
+    );
+    assert!(
+        lines.iter().any(|line| line.contains("mute")),
+        "lines: {:?}",
+        lines
+    );
+}
+
+#[test]
+fn draw_grays_out_muted_tracks_during_solo_mode() {
+    let mut app = build_test_app();
+    app.data[2][1] = "gabc".to_string();
+    app.solo_tracks[1] = true;
+
+    let buffer = render_buffer(&app, 60, 20);
+
+    assert_eq!(buffer.cell((1, 6)).unwrap().fg, MONOKAI_GRAY);
+    assert_eq!(buffer.cell((11, 6)).unwrap().fg, MONOKAI_GRAY);
+}
+
+#[test]
 fn help_does_not_show_old_semicolon_guidance() {
     let mut app = build_test_app();
     app.mode = DawMode::Help;
@@ -421,6 +453,13 @@ fn help_does_not_show_old_semicolon_guidance() {
         normalized_lines
             .iter()
             .any(|line| line.contains("Ctrl+C:コピー")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("s:solotoggle")),
         "lines: {:?}",
         normalized_lines
     );

@@ -61,6 +61,7 @@ fn build_test_app() -> DawApp {
         play_measure_samples: Arc::new(Mutex::new(0)),
         log_lines: Arc::new(Mutex::new(VecDeque::new())),
         track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
+        solo_tracks: vec![false; tracks],
     }
 }
 

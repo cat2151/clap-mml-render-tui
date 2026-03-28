@@ -28,6 +28,7 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
         Line::from("  L      : 末尾 track へ移動"),
         Line::from("  i      : INSERT モード"),
         Line::from("  p      : 演奏 / 停止"),
+        Line::from("  s      : solo toggle"),
         Line::from("  r      : random 音色設定"),
         Line::from("  K / ?  : ヘルプ (このページ)"),
         Line::from("  d/ESC  : TUI に戻る"),

@@ -4,6 +4,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 
 use super::{
     playback_util::effective_measure_count, DawApp, DawMode, DawNormalAction, DawPlayState,
+    FIRST_PLAYABLE_TRACK,
 };
 
 fn format_random_patch_hot_reload_log(
@@ -23,6 +24,13 @@ fn format_random_patch_hot_reload_log(
 }
 
 impl DawApp {
+    fn sync_playback_mml_state(&self) {
+        let new_mmls = self.build_measure_mmls();
+        let new_samples = self.measure_duration_samples();
+        *self.play_measure_mmls.lock().unwrap() = new_mmls;
+        *self.play_measure_samples.lock().unwrap() = new_samples;
+    }
+
     // ─── INSERT モード ────────────────────────────────────────
 
     fn commit_insert_cell(&mut self, track: usize, measure: usize, text: &str) -> bool {
@@ -60,10 +68,7 @@ impl DawApp {
         // hot reload: 次の再生ループから新しい MML と小節サンプル数を反映する
         // ロックを最小限に保つため、build_measure_mmls() と measure_duration_samples() を
         // ロック取得前に実行する
-        let new_mmls = self.build_measure_mmls();
-        let new_samples = self.measure_duration_samples();
-        *self.play_measure_mmls.lock().unwrap() = new_mmls;
-        *self.play_measure_samples.lock().unwrap() = new_samples;
+        self.sync_playback_mml_state();
     }
 
     // ─── キー処理 ─────────────────────────────────────────────
@@ -119,6 +124,18 @@ impl DawApp {
                     self.stop_play();
                 } else {
                     self.start_play();
+                }
+            }
+
+            KeyCode::Char('s') => {
+                if self.cursor_track >= FIRST_PLAYABLE_TRACK {
+                    if !self.solo_mode_active() {
+                        self.solo_tracks.fill(false);
+                        self.solo_tracks[self.cursor_track] = true;
+                    } else if let Some(is_solo) = self.solo_tracks.get_mut(self.cursor_track) {
+                        *is_solo = !*is_solo;
+                    }
+                    self.sync_playback_mml_state();
                 }
             }
 

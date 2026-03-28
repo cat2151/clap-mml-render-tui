@@ -50,6 +50,7 @@ fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob
             play_measure_samples: Arc::new(Mutex::new(0)),
             log_lines: Arc::new(Mutex::new(VecDeque::new())),
             track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
+            solo_tracks: vec![false; tracks],
         },
         cache_rx,
     )
@@ -348,4 +349,45 @@ fn handle_normal_question_mark_enters_help_mode() {
 
     assert!(matches!(result, super::super::DawNormalAction::Continue));
     assert!(matches!(app.mode, DawMode::Help));
+}
+
+#[test]
+fn handle_normal_s_enables_solo_for_current_track() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
+    app.data[1][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
+    app.data[1][1] = "cde".to_string();
+    app.data[2][0] = r#"{"Surge XT patch": "brass"}"#.to_string();
+    app.data[2][1] = "gab".to_string();
+
+    app.handle_normal(crossterm::event::KeyCode::Char('s'));
+
+    assert_eq!(app.solo_tracks, vec![false, true, false]);
+    assert!(app.solo_mode_active());
+    assert!(app.play_measure_mmls.lock().unwrap()[0].contains("cde"));
+    assert!(!app.play_measure_mmls.lock().unwrap()[0].contains("gab"));
+}
+
+#[test]
+fn handle_normal_s_toggles_tracks_and_turns_off_solo_mode_when_all_false() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+
+    app.handle_normal(crossterm::event::KeyCode::Char('s'));
+    assert_eq!(app.solo_tracks, vec![false, true, false]);
+
+    app.cursor_track = 2;
+    app.handle_normal(crossterm::event::KeyCode::Char('s'));
+    assert_eq!(app.solo_tracks, vec![false, true, true]);
+
+    app.cursor_track = 1;
+    app.handle_normal(crossterm::event::KeyCode::Char('s'));
+    assert_eq!(app.solo_tracks, vec![false, false, true]);
+    assert!(app.solo_mode_active());
+
+    app.cursor_track = 2;
+    app.handle_normal(crossterm::event::KeyCode::Char('s'));
+    assert_eq!(app.solo_tracks, vec![false, false, false]);
+    assert!(!app.solo_mode_active());
 }

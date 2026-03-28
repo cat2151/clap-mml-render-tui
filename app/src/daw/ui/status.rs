@@ -56,7 +56,7 @@ pub(super) fn draw_status(
 
     let footer_text = match app.mode {
         DawMode::Normal => {
-            "DAW  h/l:小節移動  j/k:track移動  i:INSERT  p:play/stop  r:random音色  K:ヘルプ  d/ESC:戻る  q:終了"
+            "DAW  h/l:小節移動  j/k:track移動  i:INSERT  p:play/stop  s:solo  r:random音色  K:ヘルプ  d/ESC:戻る  q:終了"
         }
         DawMode::Insert => "ESC:確定→NORMAL  Enter:確定→次小節",
         DawMode::Help => "HELP  ESC:キャンセル",

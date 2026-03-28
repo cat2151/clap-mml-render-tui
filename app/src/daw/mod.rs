@@ -12,6 +12,7 @@
 //!   L      : 末尾 track へ移動
 //!   i      : INSERT モード（現在セルを編集）
 //!   p      : 演奏 / 停止 toggle
+//!   s      : 現在 track の solo toggle
 //!   r      : measure 0 にランダム音色を設定
 //!   K / ?  : ヘルプ表示
 //!   q      : アプリ終了
@@ -146,6 +147,9 @@ pub struct DawApp {
 
     /// track ごとの再レンダリング進捗ログ管理。
     track_rerender_batches: Arc<Mutex<Vec<Option<TrackRerenderBatch>>>>,
+
+    /// playable track ごとの solo 状態。いずれかが true の間だけ solo モード。
+    pub(super) solo_tracks: Vec<bool>,
 }
 
 impl DawApp {
@@ -330,6 +334,7 @@ impl DawApp {
             play_measure_samples: Arc::new(Mutex::new(0)),
             log_lines,
             track_rerender_batches,
+            solo_tracks: vec![false; tracks],
         };
 
         app.load();
@@ -352,6 +357,25 @@ impl DawApp {
             .unwrap_or(0) as usize;
         let idx = ns % patches.len();
         Some(to_relative(dir, &patches[idx]))
+    }
+
+    pub(super) fn solo_mode_active(&self) -> bool {
+        self.solo_tracks
+            .iter()
+            .enumerate()
+            .skip(FIRST_PLAYABLE_TRACK)
+            .any(|(_, &is_solo)| is_solo)
+    }
+
+    pub(super) fn track_is_soloed(&self, track: usize) -> bool {
+        self.solo_tracks.get(track).copied().unwrap_or(false)
+    }
+
+    pub(super) fn track_is_audible(&self, track: usize) -> bool {
+        if track < FIRST_PLAYABLE_TRACK || !self.solo_mode_active() {
+            return true;
+        }
+        self.track_is_soloed(track)
     }
 
     // ─── 描画 ─────────────────────────────────────────────────
