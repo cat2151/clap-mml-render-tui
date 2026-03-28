@@ -3,6 +3,9 @@
 use crossterm::event::{KeyCode, KeyModifiers};
 use mmlabc_to_smf::mml_preprocessor;
 use ratatui::widgets::ListState;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tui_textarea::TextArea;
 
@@ -11,13 +14,14 @@ use super::{
 };
 
 const PATCH_SELECT_PREVIEW_FALLBACK_PHRASE: &str = "c";
+const NORMAL_CURSOR_PREVIEW_DEBOUNCE_MS: u64 = 60;
 
 impl<'a> TuiApp<'a> {
     fn set_normal_cursor(&mut self, next_cursor: usize) {
         if next_cursor != self.cursor {
             self.cursor = next_cursor;
             self.list_state.select(Some(self.cursor));
-            self.play_current_line();
+            self.preview_current_line_after_cursor_move();
         }
     }
 
@@ -91,6 +95,49 @@ impl<'a> TuiApp<'a> {
             self.record_patch_phrase_history(&mml);
             self.play_mml(mml);
         }
+    }
+
+    fn preview_current_line_after_cursor_move(&mut self) {
+        let mml = self.lines[self.cursor].trim().to_string();
+        if mml.is_empty() {
+            return;
+        }
+        #[cfg(test)]
+        if self.entry_ptr == 0 {
+            // new_for_test() では PluginEntry を持たないため、
+            // テスト中は遅延 preview スレッドを起動せず play_state 更新だけを検証する。
+            self.play_mml(mml);
+            return;
+        }
+
+        let preview_session = self.cursor_preview_session.fetch_add(1, Ordering::AcqRel) + 1;
+        let scheduled_playback_session = self.playback_session.load(Ordering::Acquire);
+        let cursor_preview_session = Arc::clone(&self.cursor_preview_session);
+        let cfg = Arc::clone(&self.cfg);
+        let play_state = Arc::clone(&self.play_state);
+        let playback_session = Arc::clone(&self.playback_session);
+        let active_sink = Arc::clone(&self.active_sink);
+        let cache = Arc::clone(&self.audio_cache);
+        let entry_ptr = self.entry_ptr;
+
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(NORMAL_CURSOR_PREVIEW_DEBOUNCE_MS));
+            if cursor_preview_session.load(Ordering::Acquire) != preview_session {
+                return;
+            }
+            if playback_session.load(Ordering::Acquire) != scheduled_playback_session {
+                return;
+            }
+            Self::kick_play_with_resources(
+                cfg,
+                play_state,
+                playback_session,
+                active_sink,
+                cache,
+                entry_ptr,
+                mml,
+            );
+        });
     }
 
     fn pick_random_patch_name(&self) -> Result<String, String> {

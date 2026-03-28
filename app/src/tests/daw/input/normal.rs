@@ -352,6 +352,58 @@ fn handle_normal_l_and_k_do_not_start_preview_while_playing() {
 }
 
 #[test]
+fn handle_normal_stops_preview_when_cursor_moves_to_init_column() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    *app.play_state.lock().unwrap() = DawPlayState::Preview;
+    *app.play_position.lock().unwrap() = Some(PlayPosition {
+        measure_index: 0,
+        measure_start: std::time::Instant::now(),
+    });
+
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert_eq!(app.cursor_measure, 0);
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Idle
+    ));
+    assert!(app.play_position.lock().unwrap().is_none());
+    assert_eq!(
+        app.log_lines.lock().unwrap().back().map(String::as_str),
+        Some("preview: stop")
+    );
+}
+
+#[test]
+fn handle_normal_stops_preview_when_cursor_moves_to_non_playable_track() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    *app.play_state.lock().unwrap() = DawPlayState::Preview;
+    *app.play_position.lock().unwrap() = Some(PlayPosition {
+        measure_index: 0,
+        measure_start: std::time::Instant::now(),
+    });
+
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert_eq!(app.cursor_track, 0);
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Idle
+    ));
+    assert!(app.play_position.lock().unwrap().is_none());
+    assert_eq!(
+        app.log_lines.lock().unwrap().back().map(String::as_str),
+        Some("preview: stop")
+    );
+}
+
+#[test]
 fn normal_playback_shortcut_maps_enter_space_and_shift_p() {
     assert_eq!(
         normal_playback_shortcut(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),

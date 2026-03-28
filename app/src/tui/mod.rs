@@ -85,6 +85,7 @@ pub struct TuiApp<'a> {
     entry_ptr: usize, // *const PluginEntry as usize (main() に生存保証)
     pub(super) play_state: Arc<Mutex<PlayState>>,
     playback_session: Arc<AtomicU64>,
+    cursor_preview_session: Arc<AtomicU64>,
     active_sink: Arc<Mutex<Option<Arc<rodio::Sink>>>>,
     /// MML文字列 → レンダリング済みサンプルのキャッシュ
     pub(super) audio_cache: Arc<Mutex<HashMap<String, Vec<f32>>>>,
@@ -183,6 +184,7 @@ impl<'a> TuiApp<'a> {
             entry_ptr: entry as *const PluginEntry as usize,
             play_state: Arc::new(Mutex::new(PlayState::Idle)),
             playback_session: Arc::new(AtomicU64::new(0)),
+            cursor_preview_session: Arc::new(AtomicU64::new(0)),
             active_sink: Arc::new(Mutex::new(None)),
             audio_cache: Arc::new(Mutex::new(HashMap::new())),
             patch_load_state,
@@ -216,13 +218,27 @@ impl<'a> TuiApp<'a> {
     }
 
     fn kick_play(&self, mml: String) {
-        let cfg = Arc::clone(&self.cfg);
-        let state = Arc::clone(&self.play_state);
-        let playback_session = Arc::clone(&self.playback_session);
-        let active_sink = Arc::clone(&self.active_sink);
-        let cache = Arc::clone(&self.audio_cache);
-        let entry_ptr = self.entry_ptr;
-        let session = self.begin_playback_session();
+        Self::kick_play_with_resources(
+            Arc::clone(&self.cfg),
+            Arc::clone(&self.play_state),
+            Arc::clone(&self.playback_session),
+            Arc::clone(&self.active_sink),
+            Arc::clone(&self.audio_cache),
+            self.entry_ptr,
+            mml,
+        );
+    }
+
+    fn kick_play_with_resources(
+        cfg: Arc<Config>,
+        state: Arc<Mutex<PlayState>>,
+        playback_session: Arc<AtomicU64>,
+        active_sink: Arc<Mutex<Option<Arc<rodio::Sink>>>>,
+        cache: Arc<Mutex<HashMap<String, Vec<f32>>>>,
+        entry_ptr: usize,
+        mml: String,
+    ) {
+        let session = Self::begin_playback_session_shared(&playback_session, &active_sink);
 
         let cache_guard = cache.lock().unwrap();
         let cached_samples = resolve_cached_samples(Some(&cache_guard), &mml);
@@ -231,7 +247,12 @@ impl<'a> TuiApp<'a> {
         if let Some(samples) = cached_samples {
             // キャッシュヒット: レンダリングをスキップして即時再生
             let msg = format!("(cached) | {}", mml);
-            self.set_play_state_if_current(session, PlayState::Playing(msg.clone()));
+            Self::set_play_state_for_session(
+                &state,
+                &playback_session,
+                session,
+                PlayState::Playing(msg.clone()),
+            );
 
             std::thread::spawn(move || {
                 Self::play_samples_for_session(
@@ -246,7 +267,12 @@ impl<'a> TuiApp<'a> {
             });
         } else {
             // キャッシュミス: レンダリングが必要
-            self.set_play_state_if_current(session, PlayState::Running(mml.clone()));
+            Self::set_play_state_for_session(
+                &state,
+                &playback_session,
+                session,
+                PlayState::Running(mml.clone()),
+            );
 
             std::thread::spawn(move || {
                 // SAFETY: entry は main() のスタックに生存している

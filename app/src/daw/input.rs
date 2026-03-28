@@ -342,13 +342,17 @@ impl DawApp {
     }
 
     fn preview_current_target_if_stopped(&mut self) {
-        if *self.play_state.lock().unwrap() == DawPlayState::Playing {
+        let play_state = *self.play_state.lock().unwrap();
+        if play_state == DawPlayState::Playing {
             return;
         }
-        if self.cursor_play_measure_index().is_none() {
-            return;
-        }
-        if self.cursor_track < FIRST_PLAYABLE_TRACK || self.cursor_track >= self.tracks {
+        let is_previewable = self.cursor_play_measure_index().is_some()
+            && self.cursor_track >= FIRST_PLAYABLE_TRACK
+            && self.cursor_track < self.tracks;
+        if !is_previewable {
+            if play_state == DawPlayState::Preview {
+                self.stop_play();
+            }
             return;
         }
         if self.try_start_preview_for_test() {

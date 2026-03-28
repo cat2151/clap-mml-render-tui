@@ -89,14 +89,23 @@ impl<'a> TuiApp<'a> {
         Self::set_play_state_for_session(state, playback_session, session, PlayState::Done(msg));
     }
 
+    #[cfg(test)]
     pub(super) fn begin_playback_session(&self) -> u64 {
-        let session = self.playback_session.fetch_add(1, Ordering::AcqRel) + 1;
-        if let Some(sink) = self.active_sink.lock().unwrap().take() {
+        Self::begin_playback_session_shared(&self.playback_session, &self.active_sink)
+    }
+
+    pub(super) fn begin_playback_session_shared(
+        playback_session: &std::sync::atomic::AtomicU64,
+        active_sink: &Mutex<Option<Arc<rodio::Sink>>>,
+    ) -> u64 {
+        let session = playback_session.fetch_add(1, Ordering::AcqRel) + 1;
+        if let Some(sink) = active_sink.lock().unwrap().take() {
             sink.stop();
         }
         session
     }
 
+    #[cfg(test)]
     pub(super) fn set_play_state_if_current(&self, session: u64, next_state: PlayState) {
         Self::set_play_state_for_session(
             &self.play_state,
