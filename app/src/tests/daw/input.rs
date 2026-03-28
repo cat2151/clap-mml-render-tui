@@ -11,6 +11,7 @@ use crate::config::Config;
 
 use super::super::{CacheState, CellCache, DawApp, DawMode, DawPlayState, PlayPosition};
 
+/// -6dB を線形 gain 値に変換する（10^(-6/20)）。
 fn track1_minus_6_db_gain() -> f32 {
     10.0f32.powf(-6.0 / 20.0)
 }
@@ -229,7 +230,7 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
         app.data[1][1] = "cdef".to_string();
         app.data[1][2] = "gabc".to_string();
         app.track_volumes_db[1] = -6;
-        // 共有 playback 状態を意図的に古い空データへしておき、
+        // 共有 playback 状態を意図的に古い空データにしておき、
         // random patch 更新が hot reload 時に全共有 state を同期することを検証する。
         *app.play_measure_track_mmls.lock().unwrap() =
             vec![vec![String::new(); app.tracks]; app.measures];
