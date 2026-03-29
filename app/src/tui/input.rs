@@ -302,10 +302,8 @@ impl<'a> TuiApp<'a> {
 
     pub(super) fn handle_help(&mut self, key: KeyCode) {
         if key == KeyCode::Esc {
-            self.mode = match self.help_origin {
-                Mode::Help => Mode::Normal,
-                mode => mode,
-            };
+            debug_assert_ne!(self.help_origin, Mode::Help);
+            self.mode = self.help_origin;
         }
     }
 

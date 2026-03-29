@@ -23,7 +23,7 @@ pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
             Line::from("  PageUp / PageDown   : 1画面移動"),
             Line::from("  Enter       : 音色決定"),
             Line::from("  Ctrl+F      : 現在音色とMMLをFavorites追加"),
-            Line::from(escape_hint()),
+            escape_hint(),
         ],
         Mode::NotepadHistory => vec![
             section_title("notepad history 画面"),
@@ -34,7 +34,7 @@ pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
             Line::from("  Enter             : 現在行へ確定"),
             Line::from("  f                 : History行をお気に入りに追加"),
             Line::from("  dd                : Favorites行を削除してHistory先頭へ移動"),
-            Line::from(escape_hint()),
+            escape_hint(),
         ],
         Mode::PatchPhrase => vec![
             section_title("patch phrase 画面"),
@@ -46,7 +46,7 @@ pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
             Line::from("  Enter             : 現在行の上に挿入"),
             Line::from("  i                 : History行を編集"),
             Line::from("  f                 : 現在行をお気に入りに追加"),
-            Line::from(escape_hint()),
+            escape_hint(),
         ],
         _ => vec![
             section_title("NORMAL モード"),
@@ -75,7 +75,7 @@ pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
             Line::from("  Ctrl+C: コピー"),
             Line::from("  Ctrl+X: カット"),
             Line::from("  Ctrl+V: ペースト"),
-            Line::from(escape_hint()),
+            escape_hint(),
         ],
     };
 
@@ -98,6 +98,9 @@ fn section_title(text: &'static str) -> Line<'static> {
     ))
 }
 
-fn escape_hint() -> Span<'static> {
-    Span::styled("  [ESC] でキャンセル", base_style().fg(MONOKAI_GRAY))
+fn escape_hint() -> Line<'static> {
+    Line::from(Span::styled(
+        "  [ESC] でキャンセル",
+        base_style().fg(MONOKAI_GRAY),
+    ))
 }

@@ -49,7 +49,7 @@ enum PatchLoadState {
     Err(String),
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum Mode {
     Normal,
     Insert,
