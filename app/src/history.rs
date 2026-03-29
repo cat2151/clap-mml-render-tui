@@ -135,6 +135,7 @@ fn migrate_legacy_history_file(file_name: &str) -> Option<PathBuf> {
     }
     if std::fs::rename(&legacy_path, &path).is_err() {
         std::fs::copy(&legacy_path, &path).ok()?;
+        std::fs::remove_file(&legacy_path).ok();
     }
     Some(path)
 }
