@@ -3,7 +3,7 @@ use ratatui::{
     style::{Color, Style},
 };
 
-use super::{Mode, PlayState, TuiApp};
+use super::{Mode, PlayState};
 use crate::ui_theme::{
     MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GREEN, MONOKAI_PURPLE, MONOKAI_YELLOW,
 };
@@ -75,10 +75,10 @@ pub(super) fn keybind_text(mode: &Mode) -> &'static str {
     }
 }
 
-pub(super) fn status_text(app: &TuiApp<'_>, play_state: &PlayState) -> String {
+pub(super) fn status_text(mode: &Mode, play_state: &PlayState) -> String {
     let play_str = play_status_suffix(play_state);
-    match app.mode {
-        Mode::Normal | Mode::Insert | Mode::Help => normal_status_text(&app.mode, play_state),
+    match mode {
+        Mode::Normal | Mode::Insert | Mode::Help => normal_status_text(mode, play_state),
         Mode::PatchSelect => format!("音色選択{}", play_str),
         Mode::NotepadHistory => format!("notepad history{}", play_str),
         Mode::PatchPhrase => format!("patch phrase{}", play_str),

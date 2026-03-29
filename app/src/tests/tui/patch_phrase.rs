@@ -249,3 +249,18 @@ fn patch_phrase_store_flushes_only_when_requested() {
 
     std::fs::remove_dir_all(&tmp).ok();
 }
+
+#[test]
+fn handle_patch_phrase_question_mark_enters_help_and_esc_returns_to_patch_phrase() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
+
+    app.handle_patch_phrase(KeyCode::Char('?'));
+
+    assert!(matches!(app.mode, Mode::Help));
+    assert!(matches!(app.help_origin, Mode::PatchPhrase));
+
+    app.handle_help(KeyCode::Esc);
+
+    assert!(matches!(app.mode, Mode::PatchPhrase));
+}

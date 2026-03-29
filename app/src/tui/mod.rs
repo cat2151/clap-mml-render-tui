@@ -49,7 +49,7 @@ enum PatchLoadState {
     Err(String),
 }
 
-#[derive(PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub(super) enum Mode {
     Normal,
     Insert,
@@ -77,6 +77,7 @@ pub(super) enum PlayState {
 
 pub struct TuiApp<'a> {
     pub(super) mode: Mode,
+    pub(super) help_origin: Mode,
     pub(super) lines: Vec<String>,
     pub(super) cursor: usize,
     pub(super) list_state: ListState,
@@ -176,6 +177,7 @@ impl<'a> TuiApp<'a> {
 
         Self {
             mode: Mode::Normal,
+            help_origin: Mode::Normal,
             lines,
             cursor: initial_cursor,
             list_state,

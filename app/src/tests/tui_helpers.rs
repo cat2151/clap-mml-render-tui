@@ -6,6 +6,7 @@ impl TuiApp<'static> {
         list_state.select(Some(0));
         Self {
             mode: Mode::Normal,
+            help_origin: Mode::Normal,
             lines: vec![String::new()],
             cursor: 0,
             list_state,
