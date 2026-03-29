@@ -33,6 +33,7 @@ impl TuiApp<'static> {
             notepad_favorites_state: ListState::default(),
             notepad_focus: PatchPhrasePane::History,
             notepad_pending_delete: false,
+            normal_pending_delete: false,
             yank_buffer: None,
             patch_phrase_name: None,
             patch_phrase_history_cursor: 0,

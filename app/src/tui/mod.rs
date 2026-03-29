@@ -1,7 +1,7 @@
 //! vim 風 TUI
 //!
 //! モード:
-//!   NORMAL : j/k で行移動、PageUp/PageDown で1画面移動、H/M/L で先頭/中央/末尾行へ移動、i/o で INSERT、r で現在行の先頭にランダム音色を挿入/置換、t で音色選択、Enter/Space で再生、q で終了
+//!   NORMAL : j/k で行移動、PageUp/PageDown で1画面移動、H/M/L で先頭/中央/末尾行へ移動、i/o で INSERT、dd / Delete で現在行をヤンク削除、r で現在行の先頭にランダム音色を挿入/置換、t で音色選択、w で DAW、Enter/Space で再生、q で終了
 //!   INSERT : tui-textarea で編集
 //!            ESC   → 確定 → NORMAL（再生開始）
 //!            Enter → 確定 → 次行に新規行挿入 → INSERT 継続
@@ -108,6 +108,7 @@ pub struct TuiApp<'a> {
     pub(super) notepad_favorites_state: ListState,
     pub(super) notepad_focus: PatchPhrasePane,
     pub(super) notepad_pending_delete: bool,
+    pub(super) normal_pending_delete: bool,
     pub(super) yank_buffer: Option<String>,
     pub(super) patch_phrase_name: Option<String>,
     pub(super) patch_phrase_history_cursor: usize,
@@ -202,6 +203,7 @@ impl<'a> TuiApp<'a> {
             notepad_favorites_state: ListState::default(),
             notepad_focus: PatchPhrasePane::History,
             notepad_pending_delete: false,
+            normal_pending_delete: false,
             yank_buffer: None,
             patch_phrase_name: None,
             patch_phrase_history_cursor: 0,

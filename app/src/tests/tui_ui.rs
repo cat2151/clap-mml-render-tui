@@ -238,6 +238,12 @@ fn help_screen_mentions_ctrl_clipboard_shortcuts() {
     assert!(normalized_lines
         .iter()
         .any(|line| line.contains("h:notepadhistory")));
+    assert!(normalized_lines
+        .iter()
+        .any(|line| line.contains("dd/Del:現在行削除（ヤンク）")));
+    assert!(normalized_lines
+        .iter()
+        .any(|line| line.contains("w:DAWモード")));
     assert!(normalized_screen.contains("h/l・←/→:ペイン切替"));
     assert!(!normalized_lines
         .iter()
@@ -292,7 +298,7 @@ fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["abc".to_string()];
 
-    let lines = render_lines(&mut app, 80, 8);
+    let lines = render_lines(&mut app, 160, 8);
     let screen = lines.join("\n");
 
     assert!(screen.contains("[NORMAL] notepad mode"));
@@ -301,6 +307,8 @@ fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
     assert!(!screen.contains("▶   1 abc"));
     assert_eq!(lines[6].trim_start(), "NORMAL");
     assert!(lines[7].contains("q ?:help i:insert"));
+    assert!(lines[7].contains("dd/Del:cut"));
+    assert!(lines[7].contains("w:DAW"));
 }
 
 #[test]

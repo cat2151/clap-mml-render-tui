@@ -301,9 +301,22 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn handle_normal(&mut self, key: KeyCode) -> NormalAction {
+        let was_pending_delete = self.normal_pending_delete;
+        if key != KeyCode::Char('d') {
+            self.normal_pending_delete = false;
+        }
+
         match key {
             KeyCode::Char('q') => return NormalAction::Quit,
-            KeyCode::Char('d') => return NormalAction::LaunchDaw,
+            KeyCode::Char('w') => return NormalAction::LaunchDaw,
+            KeyCode::Char('d') => {
+                if was_pending_delete {
+                    self.normal_pending_delete = false;
+                    self.delete_current_line();
+                } else {
+                    self.normal_pending_delete = true;
+                }
+            }
             KeyCode::Char('i') => self.start_insert(),
             KeyCode::Char('r') => match self.pick_random_patch_name() {
                 Ok(patch_name) => {
