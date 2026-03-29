@@ -13,6 +13,9 @@ use std::{
 use anyhow::Result;
 use serde_json::{Map, Value};
 
+const APP_DIR_NAME: &str = "clap-mml-render-tui";
+const HISTORY_DIR_NAME: &str = "history";
+
 fn default_lines() -> Vec<String> {
     vec!["cde".to_string()]
 }
@@ -99,30 +102,80 @@ impl Default for SessionState {
     }
 }
 
-/// OS ごとのデータディレクトリ配下の `clap-mml-render-tui` サブディレクトリを返す。
-/// config.toml と同じ `clap-mml-render-tui` プレフィックスに揃えることで、ユーザーデータの場所を一貫させる。
-/// `dirs::data_local_dir()` が利用できない環境では `None` を返し、保存・復元をスキップする。
+/// OS ごとの設定ディレクトリ配下の `clap-mml-render-tui/history` サブディレクトリを返す。
+/// Windows では `%LOCALAPPDATA%/clap-mml-render-tui/history/` 配下に保存される。
+/// `dirs::config_local_dir()` が利用できない環境では `None` を返し、保存・復元をスキップする。
 fn history_dir() -> Option<PathBuf> {
-    dirs::data_local_dir().map(|d| d.join("clap-mml-render-tui"))
+    dirs::config_local_dir().map(|d| d.join(APP_DIR_NAME).join(HISTORY_DIR_NAME))
+}
+
+fn legacy_history_dir() -> Option<PathBuf> {
+    dirs::data_local_dir().map(|d| d.join(APP_DIR_NAME))
+}
+
+fn history_file_path(file_name: &str) -> Option<PathBuf> {
+    history_dir().map(|d| d.join(file_name))
+}
+
+fn legacy_history_file_path(file_name: &str) -> Option<PathBuf> {
+    legacy_history_dir().map(|d| d.join(file_name))
+}
+
+fn migrate_legacy_history_file(file_name: &str) -> Option<PathBuf> {
+    let path = history_file_path(file_name)?;
+    if path.exists() {
+        return Some(path);
+    }
+    let legacy_path = legacy_history_file_path(file_name)?;
+    if !legacy_path.exists() {
+        return Some(path);
+    }
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).ok()?;
+    }
+    if std::fs::rename(&legacy_path, &path).is_err() {
+        std::fs::copy(&legacy_path, &path).ok()?;
+        std::fs::remove_file(&legacy_path).ok();
+    }
+    Some(path)
+}
+
+fn resolved_history_file_path(file_name: &str) -> Option<PathBuf> {
+    let path = history_file_path(file_name)?;
+    if path.exists() {
+        return Some(path);
+    }
+    let legacy_path = legacy_history_file_path(file_name)?;
+    if !legacy_path.exists() {
+        return Some(path);
+    }
+    match migrate_legacy_history_file(file_name) {
+        Some(migrated) if migrated.exists() => Some(migrated),
+        _ => Some(legacy_path),
+    }
 }
 
 fn session_state_path() -> Option<PathBuf> {
-    history_dir().map(|d| d.join("history.json"))
+    history_file_path("history.json")
 }
 
 fn daw_session_state_path() -> Option<PathBuf> {
-    history_dir().map(|d| d.join("history_daw.json"))
+    history_file_path("history_daw.json")
 }
 
 fn patch_phrase_store_path() -> Option<PathBuf> {
-    history_dir().map(|d| d.join("patch_history.json"))
+    history_file_path("patch_history.json")
 }
 
 /// DAW データファイル (`daw.json`) のパスを返す。
 /// `history.json` と同じディレクトリに配置することでユーザーデータの場所を統一する。
-/// `dirs::data_local_dir()` が利用できない環境では `None` を返す。
+/// `dirs::config_local_dir()` が利用できない環境では `None` を返す。
 pub fn daw_file_path() -> Option<PathBuf> {
-    history_dir().map(|d| d.join("daw.json"))
+    history_file_path("daw.json")
+}
+
+pub(crate) fn daw_file_load_path() -> Option<PathBuf> {
+    resolved_history_file_path("daw.json")
 }
 
 fn extract_daw_session_state(raw: &mut Map<String, Value>) -> Option<DawSessionState> {
@@ -149,7 +202,7 @@ fn extract_daw_session_state(raw: &mut Map<String, Value>) -> Option<DawSessionS
 }
 
 fn migrate_daw_session_state_from_history_json() -> Option<DawSessionState> {
-    let path = session_state_path()?;
+    let path = resolved_history_file_path("history.json")?;
     if !path.exists() {
         return None;
     }
@@ -175,6 +228,7 @@ fn migrate_daw_session_state_from_history_json() -> Option<DawSessionState> {
 /// セッション状態（現在行番号）を history.json に保存する。
 /// データディレクトリが利用できない場合はベストエフォートでスキップする。
 pub fn save_session_state(state: &SessionState) -> Result<()> {
+    let _ = migrate_legacy_history_file("history.json");
     let Some(path) = session_state_path() else {
         return Ok(());
     };
@@ -188,6 +242,7 @@ pub fn save_session_state(state: &SessionState) -> Result<()> {
 
 /// DAW 専用履歴を history_daw.json に保存する。
 pub fn save_daw_session_state(state: &DawSessionState) -> Result<()> {
+    let _ = migrate_legacy_history_file("history_daw.json");
     let Some(path) = daw_session_state_path() else {
         return Ok(());
     };
@@ -201,6 +256,7 @@ pub fn save_daw_session_state(state: &DawSessionState) -> Result<()> {
 
 /// notepad / patch ごとの phrase history / favorites を patch_history.json に保存する。
 pub fn save_patch_phrase_store(store: &PatchPhraseStore) -> Result<()> {
+    let _ = migrate_legacy_history_file("patch_history.json");
     let Some(path) = patch_phrase_store_path() else {
         return Ok(());
     };
@@ -218,7 +274,7 @@ pub fn save_patch_phrase_store(store: &PatchPhraseStore) -> Result<()> {
 /// `lines` が空の場合（`"lines": []` のような入力）はデフォルト値で補填し、
 /// `lines` が常に1行以上という不変条件を保証する。
 pub fn load_session_state() -> SessionState {
-    let Some(path) = session_state_path() else {
+    let Some(path) = resolved_history_file_path("history.json") else {
         return SessionState::default();
     };
     if !path.exists() {
@@ -238,7 +294,7 @@ pub fn load_session_state() -> SessionState {
 /// ファイルが存在しない場合は、旧 history.json に埋め込まれていた DAW 情報を
 /// 見つけたときのみ移行して返す。
 pub fn load_daw_session_state() -> DawSessionState {
-    let Some(path) = daw_session_state_path() else {
+    let Some(path) = resolved_history_file_path("history_daw.json") else {
         return DawSessionState::default();
     };
     if path.exists() {
@@ -256,7 +312,7 @@ pub fn load_daw_session_state() -> DawSessionState {
 
 /// notepad / patch ごとの phrase history / favorites を patch_history.json から読み込む。
 pub fn load_patch_phrase_store() -> PatchPhraseStore {
-    let Some(path) = patch_phrase_store_path() else {
+    let Some(path) = resolved_history_file_path("patch_history.json") else {
         return PatchPhraseStore::default();
     };
     if !path.exists() {

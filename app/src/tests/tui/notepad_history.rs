@@ -155,7 +155,7 @@ fn handle_notepad_history_enter_flushes_store() {
         unique
     ));
     let _ = std::fs::remove_dir_all(&tmp);
-    let _env_guards = crate::test_utils::set_data_local_dir_envs(&tmp);
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
 
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["before".to_string()];
@@ -184,7 +184,7 @@ fn handle_notepad_history_esc_flushes_store() {
         unique
     ));
     let _ = std::fs::remove_dir_all(&tmp);
-    let _env_guards = crate::test_utils::set_data_local_dir_envs(&tmp);
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
 
     let mut app = TuiApp::new_for_test(test_config());
     app.patch_phrase_store.notepad.history = vec!["after".to_string()];

@@ -220,14 +220,15 @@ fn patch_phrase_store_flushes_only_when_requested() {
         unique
     ));
     std::fs::remove_dir_all(&tmp).ok();
-    let _env_guards = crate::test_utils::set_data_local_dir_envs(&tmp);
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
 
     let mut app = TuiApp::new_for_test(test_config());
     app.record_patch_phrase_history(r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#);
 
-    let patch_history_path = dirs::data_local_dir()
-        .expect("data local dir should resolve in isolated test")
+    let patch_history_path = dirs::config_local_dir()
+        .expect("config local dir should resolve in isolated test")
         .join("clap-mml-render-tui")
+        .join("history")
         .join("patch_history.json");
     assert!(
         !patch_history_path.exists(),
