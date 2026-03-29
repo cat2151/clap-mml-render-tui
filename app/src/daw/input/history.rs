@@ -1,9 +1,11 @@
 use crossterm::event::KeyCode;
 
 use super::super::DawHistoryPane;
-use super::super::{mml::build_cell_mml_from_data, DawApp, DawMode, DawPlayState, FIRST_PLAYABLE_TRACK};
 #[cfg(test)]
 use super::super::PlayPosition;
+use super::super::{
+    mml::build_cell_mml_from_data, DawApp, DawMode, DawPlayState, FIRST_PLAYABLE_TRACK,
+};
 
 impl DawApp {
     pub(in crate::daw) fn history_overlay_history_items(&self) -> Vec<String> {
