@@ -163,7 +163,8 @@ impl DawApp {
         }
     }
 
-    pub(super) fn save_history_state(&self) {
+    pub(super) fn save_history_state(&mut self) {
+        self.flush_patch_phrase_store_if_dirty();
         let _ = crate::history::save_daw_session_state(&crate::history::DawSessionState {
             cursor_track: self.cursor_track,
             cursor_measure: self.cursor_measure,

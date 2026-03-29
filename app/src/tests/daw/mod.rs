@@ -242,6 +242,7 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
         yank_buffer: None,
         normal_pending_delete: false,
         patch_phrase_store: crate::history::PatchPhraseStore::default(),
+        patch_phrase_store_dirty: false,
         history_overlay_patch_name: None,
         history_overlay_history_cursor: 0,
         history_overlay_favorites_cursor: 0,

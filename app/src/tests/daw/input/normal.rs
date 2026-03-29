@@ -490,6 +490,10 @@ fn normal_playback_shortcuts_map_correctly() {
         normal_playback_shortcut(KeyEvent::new(KeyCode::Char('P'), KeyModifiers::SHIFT)),
         Some(NormalPlaybackShortcut::TogglePlay)
     );
+    assert_eq!(
+        normal_playback_shortcut(KeyEvent::new(KeyCode::Char('P'), KeyModifiers::NONE)),
+        Some(NormalPlaybackShortcut::TogglePlay)
+    );
 }
 
 #[test]
@@ -521,6 +525,7 @@ fn handle_normal_dd_yanks_current_measure_clears_it_and_records_patch_history() 
             .map(|state| state.history.clone()),
         Some(vec!["cdef".to_string()])
     );
+    assert!(app.patch_phrase_store_dirty);
     assert_eq!(app.play_measure_mmls.lock().unwrap()[0], "");
 }
 
@@ -545,6 +550,7 @@ fn handle_normal_p_overwrites_current_measure_from_yank_and_records_previous_phr
             .map(|state| state.history.clone()),
         Some(vec!["old".to_string()])
     );
+    assert!(app.patch_phrase_store_dirty);
 }
 
 #[test]

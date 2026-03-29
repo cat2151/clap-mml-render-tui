@@ -2,6 +2,10 @@ use super::super::{DEFAULT_TRACK0_MML, MEASURES, TRACKS};
 use super::{
     apply_save_file_to_data, apply_save_file_to_track_volumes, data_to_save_file, DawSaveFile,
 };
+use crate::daw::{AbRepeatState, CellCache, DawApp, DawHistoryPane, DawMode, DawPlayState};
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+use tui_textarea::TextArea;
 
 /// テスト用ヘルパー: TRACKS×(MEASURES+1) の空 data を作成する
 fn empty_data(tracks: usize, measures: usize) -> Vec<Vec<String>> {
@@ -12,13 +16,68 @@ fn empty_track_volumes(tracks: usize) -> Vec<i32> {
     vec![0; tracks]
 }
 
+fn build_test_app(tracks: usize, measures: usize) -> DawApp {
+    let (cache_tx, _cache_rx) = std::sync::mpsc::channel();
+    DawApp {
+        data: vec![vec![String::new(); measures + 1]; tracks],
+        cursor_track: 1.min(tracks - 1),
+        cursor_measure: 1.min(measures),
+        mode: DawMode::Normal,
+        textarea: TextArea::default(),
+        cfg: Arc::new(crate::config::Config {
+            plugin_path: String::new(),
+            input_midi: String::new(),
+            output_midi: String::new(),
+            output_wav: String::new(),
+            sample_rate: 44_100.0,
+            buffer_size: 512,
+            patch_path: None,
+            patches_dir: None,
+            daw_tracks: tracks,
+            daw_measures: measures,
+        }),
+        entry_ptr: 0,
+        tracks,
+        measures,
+        cache: Arc::new(Mutex::new(vec![
+            vec![CellCache::empty(); measures + 1];
+            tracks
+        ])),
+        cache_tx,
+        render_lock: Arc::new(Mutex::new(())),
+        play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
+        play_transition_lock: Arc::new(Mutex::new(())),
+        preview_session: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        preview_sink: Arc::new(Mutex::new(None)),
+        play_position: Arc::new(Mutex::new(None)),
+        ab_repeat: Arc::new(Mutex::new(AbRepeatState::Off)),
+        play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
+        play_measure_track_mmls: Arc::new(Mutex::new(vec![vec![String::new(); tracks]; measures])),
+        play_measure_samples: Arc::new(Mutex::new(0)),
+        log_lines: Arc::new(Mutex::new(VecDeque::new())),
+        track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
+        solo_tracks: vec![false; tracks],
+        track_volumes_db: vec![0; tracks],
+        mixer_cursor_track: 1.min(tracks - 1),
+        play_track_gains: Arc::new(Mutex::new(vec![0.0; tracks])),
+        yank_buffer: None,
+        normal_pending_delete: false,
+        patch_phrase_store: crate::history::PatchPhraseStore::default(),
+        patch_phrase_store_dirty: false,
+        history_overlay_patch_name: None,
+        history_overlay_history_cursor: 0,
+        history_overlay_favorites_cursor: 0,
+        history_overlay_focus: DawHistoryPane::History,
+    }
+}
+
 // ─── ensure_cmrt_dir ──────────────────────────────────────────
 
 #[test]
 fn ensure_cmrt_dir_is_idempotent() {
     // 複数回呼んでもエラーにならない（一時ディレクトリを使って設定ディレクトリを汚染しない）
     let tmp = std::env::temp_dir().join("cmrt_test_daw_idempotent");
-    let guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
+    let _env_guard = crate::test_utils::set_local_dir_envs(&tmp);
     std::fs::remove_dir_all(&tmp).ok();
 
     let r1 = cmrt_core::ensure_cmrt_dir();
@@ -27,7 +86,38 @@ fn ensure_cmrt_dir_is_idempotent() {
     assert!(r1.is_ok(), "初回 ensure_cmrt_dir が失敗: {:?}", r1.err());
     assert!(r2.is_ok(), "2回目 ensure_cmrt_dir が失敗: {:?}", r2.err());
 
-    drop(guard); // CMRT_BASE_DIR を復元してからクリーンアップする
+    drop(_env_guard);
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn save_history_state_flushes_dirty_patch_phrase_store() {
+    let tmp = std::env::temp_dir().join("cmrt_test_daw_flush_patch_store");
+    std::fs::remove_dir_all(&tmp).ok();
+    std::fs::create_dir_all(&tmp).unwrap();
+    let _guard = crate::test_utils::set_local_dir_envs(&tmp);
+
+    let mut app = build_test_app(3, 2);
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["cdef".to_string()],
+            favorites: vec![],
+        },
+    );
+    app.patch_phrase_store_dirty = true;
+
+    app.save_history_state();
+
+    let loaded = crate::history::load_patch_phrase_store();
+    assert_eq!(
+        loaded
+            .patches
+            .get("Pads/Pad 1.fxp")
+            .map(|state| state.history.clone()),
+        Some(vec!["cdef".to_string()])
+    );
+
     std::fs::remove_dir_all(&tmp).ok();
 }
 

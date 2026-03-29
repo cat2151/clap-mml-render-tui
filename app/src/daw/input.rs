@@ -31,9 +31,7 @@ fn normal_playback_shortcut(
         KeyCode::Enter if shift => Some(NormalPlaybackShortcut::PreviewAllTracks),
         KeyCode::Char(' ') if shift => Some(NormalPlaybackShortcut::PlayFromCursor),
         KeyCode::Enter | KeyCode::Char(' ') => Some(NormalPlaybackShortcut::PreviewCurrentTrack),
-        KeyCode::Char('p') | KeyCode::Char('P') if shift => {
-            Some(NormalPlaybackShortcut::TogglePlay)
-        }
+        KeyCode::Char('P') => Some(NormalPlaybackShortcut::TogglePlay),
         _ => None,
     }
 }
@@ -125,8 +123,16 @@ impl DawApp {
             .map(|(patch_name, _)| patch_name)
     }
 
-    fn save_patch_phrase_store(&self) {
+    fn mark_patch_phrase_store_dirty(&mut self) {
+        self.patch_phrase_store_dirty = true;
+    }
+
+    pub(in crate::daw) fn flush_patch_phrase_store_if_dirty(&mut self) {
+        if !self.patch_phrase_store_dirty {
+            return;
+        }
         let _ = crate::history::save_patch_phrase_store(&self.patch_phrase_store);
+        self.patch_phrase_store_dirty = false;
     }
 
     fn record_current_measure_to_patch_history(&mut self, mml: &str) {
@@ -143,7 +149,7 @@ impl DawApp {
                     .entry(patch_name)
                     .or_default();
                 Self::push_front_dedup(&mut state.history, mml.to_string());
-                self.save_patch_phrase_store();
+                self.mark_patch_phrase_store_dirty();
                 return;
             }
         }
@@ -160,7 +166,7 @@ impl DawApp {
             .entry(patch_name)
             .or_default();
         Self::push_front_dedup(&mut state.history, phrase);
-        self.save_patch_phrase_store();
+        self.mark_patch_phrase_store_dirty();
     }
 
     fn cut_current_measure(&mut self) {

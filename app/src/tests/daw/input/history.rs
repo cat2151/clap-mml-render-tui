@@ -69,6 +69,7 @@ fn handle_history_overlay_enter_overwrites_measure_and_backs_up_old_phrase() {
             .history,
         vec!["before".to_string(), "after".to_string()]
     );
+    assert!(app.patch_phrase_store_dirty);
 }
 
 #[test]
@@ -113,6 +114,7 @@ fn handle_history_overlay_enter_without_track_patch_sets_patch_and_backs_up_old_
             r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()
         ]
     );
+    assert!(app.patch_phrase_store_dirty);
 }
 
 #[test]
