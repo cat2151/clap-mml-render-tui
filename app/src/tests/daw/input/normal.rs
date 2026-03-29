@@ -605,58 +605,52 @@ fn handle_normal_p_logs_when_yank_buffer_is_empty() {
 }
 
 #[test]
-fn handle_normal_enter_stops_current_preview_before_restart_attempt() {
+fn handle_normal_enter_stops_current_preview() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_track = 1;
     app.cursor_measure = 1;
     *app.play_state.lock().unwrap() = DawPlayState::Preview;
+    *app.play_position.lock().unwrap() = Some(PlayPosition {
+        measure_index: 0,
+        measure_start: std::time::Instant::now(),
+    });
 
     let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     assert!(matches!(result, super::super::DawNormalAction::Continue));
     assert!(matches!(
         *app.play_state.lock().unwrap(),
-        DawPlayState::Preview
+        DawPlayState::Idle
     ));
-    assert_eq!(
-        app.play_position
-            .lock()
-            .unwrap()
-            .as_ref()
-            .map(|pos| pos.measure_index),
-        Some(0)
-    );
+    assert!(app.play_position.lock().unwrap().is_none());
     assert_eq!(
         app.log_lines.lock().unwrap().back().map(String::as_str),
-        Some("preview: meas1")
+        Some("preview: stop")
     );
 }
 
 #[test]
-fn handle_normal_space_stops_current_preview_before_restart_attempt() {
+fn handle_normal_enter_stops_current_play() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_track = 1;
     app.cursor_measure = 1;
-    *app.play_state.lock().unwrap() = DawPlayState::Preview;
+    *app.play_state.lock().unwrap() = DawPlayState::Playing;
+    *app.play_position.lock().unwrap() = Some(PlayPosition {
+        measure_index: 0,
+        measure_start: std::time::Instant::now(),
+    });
 
-    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     assert!(matches!(result, super::super::DawNormalAction::Continue));
     assert!(matches!(
         *app.play_state.lock().unwrap(),
-        DawPlayState::Preview
+        DawPlayState::Idle
     ));
-    assert_eq!(
-        app.play_position
-            .lock()
-            .unwrap()
-            .as_ref()
-            .map(|pos| pos.measure_index),
-        Some(0)
-    );
+    assert!(app.play_position.lock().unwrap().is_none());
     assert_eq!(
         app.log_lines.lock().unwrap().back().map(String::as_str),
-        Some("preview: meas1")
+        Some("play: stop")
     );
 }
 
@@ -684,6 +678,57 @@ fn handle_normal_enter_uses_test_preview_path_when_entry_ptr_is_unavailable() {
     assert_eq!(
         app.log_lines.lock().unwrap().back().map(String::as_str),
         Some("preview: meas1")
+    );
+}
+
+#[test]
+fn handle_normal_shift_space_stops_current_preview() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    *app.play_state.lock().unwrap() = DawPlayState::Preview;
+    *app.play_position.lock().unwrap() = Some(PlayPosition {
+        measure_index: 0,
+        measure_start: std::time::Instant::now(),
+    });
+
+    let result =
+        app.handle_normal_key_event(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::SHIFT));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Idle
+    ));
+    assert!(app.play_position.lock().unwrap().is_none());
+    assert_eq!(
+        app.log_lines.lock().unwrap().back().map(String::as_str),
+        Some("preview: stop")
+    );
+}
+
+#[test]
+fn handle_normal_shift_enter_stops_current_play() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    *app.play_state.lock().unwrap() = DawPlayState::Playing;
+    *app.play_position.lock().unwrap() = Some(PlayPosition {
+        measure_index: 0,
+        measure_start: std::time::Instant::now(),
+    });
+
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Idle
+    ));
+    assert!(app.play_position.lock().unwrap().is_none());
+    assert_eq!(
+        app.log_lines.lock().unwrap().back().map(String::as_str),
+        Some("play: stop")
     );
 }
 
