@@ -5,7 +5,9 @@ use ratatui::{
     Frame,
 };
 
-use super::{base_style, MONOKAI_CYAN, MONOKAI_GRAY, MONOKAI_YELLOW};
+use crate::ui_theme::{MONOKAI_CYAN, MONOKAI_GRAY, MONOKAI_YELLOW};
+
+use super::base_style;
 
 pub(super) fn draw_help(f: &mut Frame) {
     let area = crate::ui_utils::centered_rect(60, 95, f.area());
