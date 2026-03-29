@@ -116,6 +116,8 @@ impl DawApp {
         let play_state = *self.play_state.lock().unwrap();
         match play_state {
             DawPlayState::Idle => {}
+            // カーソル移動に追従する preview は、現在の preview を止めて
+            // 新しい対象に張り替える。一方で通常再生中は preview を挟まない。
             DawPlayState::Preview => self.stop_play(),
             DawPlayState::Playing => return,
         }
