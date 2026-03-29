@@ -281,6 +281,7 @@ impl<'a> TuiApp<'a> {
                     self.play_mml(mml);
                 }
             }
+            KeyCode::Char('?') => self.enter_help(),
             _ => {}
         }
     }

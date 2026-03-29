@@ -11,7 +11,7 @@ use crate::ui_theme::{MONOKAI_CYAN, MONOKAI_YELLOW};
 
 use super::{
     status::{base_style, keybind_text, visible_list_page_size},
-    TuiApp, LIST_HIGHLIGHT_SYMBOL,
+    Mode, TuiApp, LIST_HIGHLIGHT_SYMBOL,
 };
 
 pub(super) fn draw_patch_select(
@@ -19,6 +19,7 @@ pub(super) fn draw_patch_select(
     f: &mut Frame,
     status: &str,
     status_color: Color,
+    mode: Mode,
 ) {
     let area = crate::ui_utils::centered_rect(70, 70, f.area());
     f.render_widget(Clear, area);
@@ -85,7 +86,7 @@ pub(super) fn draw_patch_select(
         chunks[2],
     );
     f.render_widget(
-        Paragraph::new(keybind_text(&app.mode)).style(base_style()),
+        Paragraph::new(keybind_text(&mode)).style(base_style()),
         chunks[3],
     );
 }
@@ -95,6 +96,7 @@ pub(super) fn draw_patch_phrase(
     f: &mut Frame,
     status: &str,
     status_color: Color,
+    mode: Mode,
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -187,7 +189,7 @@ pub(super) fn draw_patch_phrase(
         chunks[1],
     );
     f.render_widget(
-        Paragraph::new(keybind_text(&app.mode)).style(base_style()),
+        Paragraph::new(keybind_text(&mode)).style(base_style()),
         chunks[2],
     );
 }
@@ -197,6 +199,7 @@ pub(super) fn draw_notepad_history(
     f: &mut Frame,
     status: &str,
     status_color: Color,
+    mode: Mode,
 ) {
     let area = crate::ui_utils::centered_rect(80, 70, f.area());
     f.render_widget(Clear, area);
@@ -296,7 +299,7 @@ pub(super) fn draw_notepad_history(
         chunks[1],
     );
     f.render_widget(
-        Paragraph::new(keybind_text(&app.mode)).style(base_style()),
+        Paragraph::new(keybind_text(&mode)).style(base_style()),
         chunks[2],
     );
 }

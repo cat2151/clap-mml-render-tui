@@ -24,22 +24,40 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     // play_state を一度だけロックしてスナップショットを取り、
     // status_text と status_color を同じ状態から導出する（二重ロック・状態不整合を防ぐ）。
     let play_state = app.play_state.lock().unwrap().clone();
-    let status = status_text(app, &play_state);
+    let mode = app.mode;
+    let help_origin = app.help_origin;
+    let status = status_text(&mode, &play_state);
     let status_color = status_color(&play_state);
 
-    if app.mode == Mode::Help {
-        draw_normal(app, f, &play_state, status_color);
-        help::draw_help(f);
-    } else if app.mode == Mode::PatchSelect {
-        draw_normal(app, f, &play_state, status_color);
-        overlay::draw_patch_select(app, f, &status, status_color);
-    } else if app.mode == Mode::NotepadHistory {
-        draw_normal(app, f, &play_state, status_color);
-        overlay::draw_notepad_history(app, f, &status, status_color);
-    } else if app.mode == Mode::PatchPhrase {
-        overlay::draw_patch_phrase(app, f, &status, status_color);
+    if mode == Mode::Help {
+        match help_origin {
+            Mode::PatchSelect => {
+                draw_normal(app, f, &play_state, status_color, help_origin);
+                let overlay_status = status_text(&help_origin, &play_state);
+                overlay::draw_patch_select(app, f, &overlay_status, status_color, help_origin);
+            }
+            Mode::NotepadHistory => {
+                draw_normal(app, f, &play_state, status_color, help_origin);
+                let overlay_status = status_text(&help_origin, &play_state);
+                overlay::draw_notepad_history(app, f, &overlay_status, status_color, help_origin);
+            }
+            Mode::PatchPhrase => {
+                let overlay_status = status_text(&help_origin, &play_state);
+                overlay::draw_patch_phrase(app, f, &overlay_status, status_color, help_origin);
+            }
+            _ => draw_normal(app, f, &play_state, status_color, mode),
+        }
+        help::draw_help(f, help_origin);
+    } else if mode == Mode::PatchSelect {
+        draw_normal(app, f, &play_state, status_color, mode);
+        overlay::draw_patch_select(app, f, &status, status_color, mode);
+    } else if mode == Mode::NotepadHistory {
+        draw_normal(app, f, &play_state, status_color, mode);
+        overlay::draw_notepad_history(app, f, &status, status_color, mode);
+    } else if mode == Mode::PatchPhrase {
+        overlay::draw_patch_phrase(app, f, &status, status_color, mode);
     } else {
-        draw_normal(app, f, &play_state, status_color);
+        draw_normal(app, f, &play_state, status_color, mode);
     }
 }
 
@@ -47,11 +65,17 @@ fn status_color(play_state: &PlayState) -> Color {
     status::status_color(play_state)
 }
 
-fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, play_state: &PlayState, status_color: Color) {
-    let is_insert = app.mode == Mode::Insert;
+fn draw_normal(
+    app: &mut TuiApp<'_>,
+    f: &mut Frame,
+    play_state: &PlayState,
+    status_color: Color,
+    mode: Mode,
+) {
+    let is_insert = mode == Mode::Insert;
     let cursor = app.cursor;
-    let status = normal_status_text(&app.mode, play_state);
-    let keybinds = keybind_text(&app.mode);
+    let status = normal_status_text(&mode, play_state);
+    let keybinds = keybind_text(&mode);
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -90,7 +114,7 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, play_state: &PlayState, stat
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(notepad_mode_title(&app.mode))
+                    .title(notepad_mode_title(&mode))
                     .style(base_style())
                     .border_style(base_style().fg(MONOKAI_CYAN)),
             )

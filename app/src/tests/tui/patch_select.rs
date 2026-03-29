@@ -175,3 +175,18 @@ fn handle_patch_select_backspace_refilters_and_previews_first_result() {
         PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Pads/Pad 1.fxp"} l8cdef"#
     ));
 }
+
+#[test]
+fn handle_patch_select_question_mark_enters_help_and_esc_returns_to_patch_select() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::PatchSelect;
+
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE));
+
+    assert!(matches!(app.mode, Mode::Help));
+    assert!(matches!(app.help_origin, Mode::PatchSelect));
+
+    app.handle_help(KeyCode::Esc);
+
+    assert!(matches!(app.mode, Mode::PatchSelect));
+}

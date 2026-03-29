@@ -213,6 +213,7 @@ impl<'a> TuiApp<'a> {
                     self.notepad_pending_delete = true;
                 }
             }
+            KeyCode::Char('?') => self.enter_help(),
             _ => {}
         }
     }

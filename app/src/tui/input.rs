@@ -13,6 +13,11 @@ use super::{
 const PATCH_SELECT_PREVIEW_FALLBACK_PHRASE: &str = "c";
 
 impl<'a> TuiApp<'a> {
+    pub(super) fn enter_help(&mut self) {
+        self.help_origin = self.mode;
+        self.mode = Mode::Help;
+    }
+
     fn set_normal_cursor(&mut self, next_cursor: usize) {
         if next_cursor != self.cursor {
             self.cursor = next_cursor;
@@ -286,6 +291,7 @@ impl<'a> TuiApp<'a> {
                 self.patch_query.pop();
                 self.update_patch_filter();
             }
+            KeyCode::Char('?') => self.enter_help(),
             KeyCode::Char(c) => {
                 self.patch_query.push(c);
                 self.update_patch_filter();
@@ -296,7 +302,8 @@ impl<'a> TuiApp<'a> {
 
     pub(super) fn handle_help(&mut self, key: KeyCode) {
         if key == KeyCode::Esc {
-            self.mode = Mode::Normal;
+            debug_assert_ne!(self.help_origin, Mode::Help);
+            self.mode = self.help_origin;
         }
     }
 
@@ -386,7 +393,7 @@ impl<'a> TuiApp<'a> {
                     KeyCode::Char('L') => {
                         self.set_normal_cursor(self.lines.len().saturating_sub(1));
                     }
-                    KeyCode::Char('K') | KeyCode::Char('?') => self.mode = Mode::Help,
+                    KeyCode::Char('K') | KeyCode::Char('?') => self.enter_help(),
                     KeyCode::Enter | KeyCode::Char(' ') => self.play_current_line(),
                     _ => {}
                 }
