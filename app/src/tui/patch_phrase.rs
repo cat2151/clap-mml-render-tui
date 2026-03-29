@@ -236,6 +236,8 @@ impl<'a> TuiApp<'a> {
                 self.start_notepad_history();
             }
             KeyCode::Char('p') => {
+                // overlay 切替キーを統一するため、patch history 中でも p で
+                // 現在 patch の History 先頭・検索解除の初期状態へ戻せるようにする。
                 self.start_patch_phrase_for_patch_name(self.patch_phrase_name.clone());
             }
             KeyCode::Char('t') => {

@@ -175,6 +175,7 @@ fn handle_notepad_history_n_p_t_switch_to_corresponding_overlays() {
     );
     app.start_notepad_history();
 
+    // overlay 切替キーを統一するため、notepad history 中でも n で先頭選択の初期状態に戻せるようにする。
     app.handle_notepad_history(KeyCode::Char('n'));
     assert!(matches!(app.mode, Mode::NotepadHistory));
     assert_eq!(app.notepad_history_cursor, 0);

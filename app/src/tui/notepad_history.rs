@@ -194,6 +194,8 @@ impl<'a> TuiApp<'a> {
                 self.mode = Mode::Normal;
             }
             KeyCode::Char('n') => {
+                // overlay 切替キーを統一するため、notepad history 中でも n で
+                // History ペイン先頭・検索解除の初期状態へ戻せるようにする。
                 self.start_notepad_history();
             }
             KeyCode::Char('p') => {

@@ -189,10 +189,6 @@ impl<'a> TuiApp<'a> {
         self.start_patch_phrase_for_patch_name(self.current_line_patch_name());
     }
 
-    fn set_empty_yank_error(&mut self) {
-        *self.play_state.lock().unwrap() = PlayState::Err("yank バッファが空です".to_string());
-    }
-
     pub(super) fn current_line_patch_name(&self) -> Option<String> {
         self.lines
             .get(self.cursor)
@@ -275,6 +271,10 @@ impl<'a> TuiApp<'a> {
                 None => self.start_patch_select(),
             },
         }
+    }
+
+    fn set_empty_yank_error(&mut self) {
+        *self.play_state.lock().unwrap() = PlayState::Err("yank バッファが空です".to_string());
     }
 
     fn patch_select_current_phrase(&self) -> Option<String> {
@@ -414,6 +414,7 @@ impl<'a> TuiApp<'a> {
                 self.start_patch_phrase_for_patch_name(self.patch_select_selected_patch_name());
             }
             KeyCode::Char('t') if !self.patch_select_filter_active => {
+                // overlay 切替キーを統一するため、音色選択中でも t で現在選択に揃えて開き直せるようにする。
                 let selected_patch_name = self.patch_select_selected_patch_name();
                 self.open_patch_select_overlay(selected_patch_name.as_deref());
             }
