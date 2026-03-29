@@ -1,6 +1,6 @@
 use crossterm::event::KeyCode;
 
-use super::{DawApp, DawMode, FIRST_PLAYABLE_TRACK};
+use super::super::{DawApp, DawMode, FIRST_PLAYABLE_TRACK};
 
 impl DawApp {
     pub(in crate::daw) fn handle_help(&mut self, key: KeyCode) {

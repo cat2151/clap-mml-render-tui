@@ -164,6 +164,40 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
 }
 
 #[test]
+fn handle_normal_r_ignores_non_playable_track_and_keeps_header_unchanged() {
+    let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_ignores_non_playable_track");
+    std::fs::remove_dir_all(&tmp).ok();
+    std::fs::create_dir_all(&tmp).unwrap();
+    let patch_path = tmp.join("Pad 1.fxp");
+    std::fs::write(&patch_path, b"dummy").unwrap();
+
+    {
+        let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
+
+        let (mut app, cache_rx) = build_test_app();
+        app.cursor_track = 0;
+        app.cursor_measure = 0;
+        app.cfg = Arc::new(Config {
+            patches_dir: Some(tmp.to_string_lossy().into_owned()),
+            ..(*app.cfg).clone()
+        });
+        app.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
+
+        let result = app.handle_normal(crossterm::event::KeyCode::Char('r'));
+
+        assert!(matches!(result, super::super::DawNormalAction::Continue));
+        assert_eq!(app.data[0][0], r#"{"beat": "4/4"}t120"#);
+        assert!(cache_rx.try_recv().is_err());
+        assert_eq!(
+            app.log_lines.lock().unwrap().back().map(String::as_str),
+            Some("ランダム音色は演奏トラックでのみ使用できます")
+        );
+    }
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
 fn handle_normal_question_mark_enters_help_mode() {
     let (mut app, _cache_rx) = build_test_app();
 
@@ -573,6 +607,8 @@ fn handle_normal_p_logs_when_yank_buffer_is_empty() {
 #[test]
 fn handle_normal_enter_stops_current_preview_before_restart_attempt() {
     let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
     *app.play_state.lock().unwrap() = DawPlayState::Preview;
 
     let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
@@ -580,17 +616,27 @@ fn handle_normal_enter_stops_current_preview_before_restart_attempt() {
     assert!(matches!(result, super::super::DawNormalAction::Continue));
     assert!(matches!(
         *app.play_state.lock().unwrap(),
-        DawPlayState::Idle
+        DawPlayState::Preview
     ));
     assert_eq!(
+        app.play_position
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|pos| pos.measure_index),
+        Some(0)
+    );
+    assert_eq!(
         app.log_lines.lock().unwrap().back().map(String::as_str),
-        Some("preview: stop")
+        Some("preview: meas1")
     );
 }
 
 #[test]
 fn handle_normal_space_stops_current_preview_before_restart_attempt() {
     let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
     *app.play_state.lock().unwrap() = DawPlayState::Preview;
 
     let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
@@ -598,11 +644,46 @@ fn handle_normal_space_stops_current_preview_before_restart_attempt() {
     assert!(matches!(result, super::super::DawNormalAction::Continue));
     assert!(matches!(
         *app.play_state.lock().unwrap(),
-        DawPlayState::Idle
+        DawPlayState::Preview
     ));
     assert_eq!(
+        app.play_position
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|pos| pos.measure_index),
+        Some(0)
+    );
+    assert_eq!(
         app.log_lines.lock().unwrap().back().map(String::as_str),
-        Some("preview: stop")
+        Some("preview: meas1")
+    );
+}
+
+#[test]
+fn handle_normal_enter_uses_test_preview_path_when_entry_ptr_is_unavailable() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Preview
+    ));
+    assert_eq!(
+        app.play_position
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|pos| pos.measure_index),
+        Some(0)
+    );
+    assert_eq!(
+        app.log_lines.lock().unwrap().back().map(String::as_str),
+        Some("preview: meas1")
     );
 }
 

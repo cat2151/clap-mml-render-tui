@@ -1,7 +1,7 @@
 use crossterm::event::KeyCode;
 
 use super::super::DawHistoryPane;
-use super::{DawApp, DawMode, DawPlayState, FIRST_PLAYABLE_TRACK};
+use super::super::{DawApp, DawMode, DawPlayState, FIRST_PLAYABLE_TRACK};
 
 impl DawApp {
     pub(in crate::daw) fn history_overlay_history_items(&self) -> Vec<String> {
