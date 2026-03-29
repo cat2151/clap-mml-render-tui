@@ -36,7 +36,7 @@ impl Drop for TestEnvGuard {
     }
 }
 
-/// Redirects OS-specific data-directory environment variables to a test-only path.
+/// Redirects OS-specific data/config directory environment variables to a test-only path.
 pub(crate) fn set_data_local_dir_envs(base: &Path) -> TestEnvGuard {
     let lock = env_lock()
         .lock()
@@ -44,12 +44,18 @@ pub(crate) fn set_data_local_dir_envs(base: &Path) -> TestEnvGuard {
     #[cfg(unix)]
     {
         let xdg_data_home = base.join("xdg-data");
+        let xdg_config_home = base.join("xdg-config");
         let home = base.join("home");
         std::fs::create_dir_all(&xdg_data_home).ok();
+        std::fs::create_dir_all(&xdg_config_home).ok();
         std::fs::create_dir_all(&home).ok();
         TestEnvGuard {
             _lock: lock,
-            vars: set_env_vars([("XDG_DATA_HOME", &xdg_data_home), ("HOME", &home)]),
+            vars: set_env_vars([
+                ("XDG_DATA_HOME", &xdg_data_home),
+                ("XDG_CONFIG_HOME", &xdg_config_home),
+                ("HOME", &home),
+            ]),
         }
     }
     #[cfg(windows)]
@@ -78,7 +84,11 @@ pub(crate) fn set_data_local_dir_envs(base: &Path) -> TestEnvGuard {
 
 /// Builds the expected history.json path using the same production resolver as history.rs.
 pub(crate) fn session_state_path_for_test() -> Option<PathBuf> {
-    dirs::data_local_dir().map(|d| d.join("clap-mml-render-tui").join("history.json"))
+    dirs::config_local_dir().map(|d| {
+        d.join("clap-mml-render-tui")
+            .join("history")
+            .join("history.json")
+    })
 }
 
 fn set_env_vars<'a, I, V>(vars: I) -> Vec<(&'static str, Option<String>)>

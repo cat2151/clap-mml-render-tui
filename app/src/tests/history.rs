@@ -125,6 +125,19 @@ fn save_and_load_session_state_roundtrip() {
 }
 
 #[test]
+fn session_state_path_ends_with_history_history_json() {
+    if let Some(path) = super::session_state_path() {
+        let path_str = path.to_string_lossy();
+        assert!(
+            path_str.ends_with("clap-mml-render-tui/history/history.json")
+                || path_str.ends_with(r"clap-mml-render-tui\history\history.json"),
+            "session_state_path が clap-mml-render-tui/history/history.json で終わっていない: {}",
+            path_str
+        );
+    }
+}
+
+#[test]
 fn daw_file_path_ends_with_daw_json() {
     // daw_file_path() が利用可能な環境では "daw.json" という名前で終わること
     if let Some(path) = super::daw_file_path() {
@@ -146,6 +159,24 @@ fn daw_file_path_same_dir_as_history_json() {
         }
         (Some(_), None) => panic!("session_state_path() は Some だが daw_file_path() は None"),
         (None, Some(_)) => panic!("daw_file_path() は Some だが session_state_path() は None"),
+    }
+}
+
+#[test]
+fn patch_phrase_store_path_same_dir_as_history_json() {
+    let history_path = super::session_state_path();
+    let patch_history_path = super::patch_phrase_store_path();
+    match (history_path, patch_history_path) {
+        (None, None) => {}
+        (Some(h), Some(p)) => {
+            assert_eq!(h.parent(), p.parent());
+        }
+        (Some(_), None) => {
+            panic!("session_state_path() は Some だが patch_phrase_store_path() は None")
+        }
+        (None, Some(_)) => {
+            panic!("patch_phrase_store_path() は Some だが session_state_path() は None")
+        }
     }
 }
 
@@ -188,6 +219,11 @@ fn load_daw_session_state_reads_history_daw_json() {
     save_daw_session_state(&state).unwrap();
 
     assert_eq!(load_daw_session_state(), state);
+    let saved_path = super::daw_session_state_path().unwrap();
+    assert_eq!(
+        saved_path.parent(),
+        Some(super::history_dir().unwrap().as_path())
+    );
     std::fs::remove_dir_all(&tmp).ok();
 }
 

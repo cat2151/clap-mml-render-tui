@@ -99,11 +99,11 @@ impl Default for SessionState {
     }
 }
 
-/// OS ごとのデータディレクトリ配下の `clap-mml-render-tui` サブディレクトリを返す。
-/// config.toml と同じ `clap-mml-render-tui` プレフィックスに揃えることで、ユーザーデータの場所を一貫させる。
-/// `dirs::data_local_dir()` が利用できない環境では `None` を返し、保存・復元をスキップする。
+/// OS ごとの設定ディレクトリ配下の `clap-mml-render-tui/history` サブディレクトリを返す。
+/// Windows では `%LOCALAPPDATA%/clap-mml-render-tui/history/` 配下に保存される。
+/// `dirs::config_local_dir()` が利用できない環境では `None` を返し、保存・復元をスキップする。
 fn history_dir() -> Option<PathBuf> {
-    dirs::data_local_dir().map(|d| d.join("clap-mml-render-tui"))
+    dirs::config_local_dir().map(|d| d.join("clap-mml-render-tui").join("history"))
 }
 
 fn session_state_path() -> Option<PathBuf> {
@@ -120,7 +120,7 @@ fn patch_phrase_store_path() -> Option<PathBuf> {
 
 /// DAW データファイル (`daw.json`) のパスを返す。
 /// `history.json` と同じディレクトリに配置することでユーザーデータの場所を統一する。
-/// `dirs::data_local_dir()` が利用できない環境では `None` を返す。
+/// `dirs::config_local_dir()` が利用できない環境では `None` を返す。
 pub fn daw_file_path() -> Option<PathBuf> {
     history_dir().map(|d| d.join("daw.json"))
 }
