@@ -201,7 +201,7 @@ impl<'a> TuiApp<'a> {
             Some(patch_name) => self.start_patch_phrase(patch_name),
             None => {
                 *self.play_state.lock().unwrap() =
-                    PlayState::Err("現在行の先頭に patch name JSON がありません".to_string());
+                    PlayState::Err("patch name JSON が見つかりません".to_string());
             }
         }
     }

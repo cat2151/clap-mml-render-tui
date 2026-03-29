@@ -246,7 +246,7 @@ fn handle_normal_f_shows_error_when_current_line_has_no_patch_json() {
 
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
-        PlayState::Err(msg) if msg == "現在行の先頭に patch name JSON がありません"
+        PlayState::Err(msg) if msg == "patch name JSON が見つかりません"
     ));
     assert!(matches!(app.mode, Mode::Normal));
 }
