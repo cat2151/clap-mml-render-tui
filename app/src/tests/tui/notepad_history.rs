@@ -1,19 +1,26 @@
 use super::*;
 
 #[test]
-fn handle_normal_shift_h_enters_notepad_history_overlay() {
+fn handle_normal_shift_h_enters_patch_phrase_overlay() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.patch_phrase_store.notepad.history = vec!["l8cdef".to_string()];
-    app.patch_phrase_store.notepad.favorites = vec!["o5g".to_string()];
+    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["l8cdef".to_string()],
+            favorites: vec!["o5g".to_string()],
+        },
+    );
 
     let result =
         app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('H'), KeyModifiers::SHIFT));
 
     assert!(matches!(result, NormalAction::Continue));
-    assert!(matches!(app.mode, Mode::NotepadHistory));
-    assert!(matches!(app.notepad_focus, PatchPhrasePane::History));
-    assert_eq!(app.notepad_history_state.selected(), Some(0));
-    assert_eq!(app.notepad_favorites_state.selected(), Some(0));
+    assert!(matches!(app.mode, Mode::PatchPhrase));
+    assert_eq!(app.patch_phrase_name.as_deref(), Some("Pads/Pad 1.fxp"));
+    assert!(matches!(app.patch_phrase_focus, PatchPhrasePane::History));
+    assert_eq!(app.patch_phrase_history_state.selected(), Some(0));
+    assert_eq!(app.patch_phrase_favorites_state.selected(), Some(0));
 }
 
 #[test]
@@ -144,6 +151,44 @@ fn handle_notepad_history_allows_slash_character_in_filter_query() {
     assert!(app.notepad_filter_active);
     assert_eq!(app.notepad_query, "/n");
     assert_eq!(app.notepad_history_items(), vec!["dir/name".to_string()]);
+}
+
+#[test]
+fn handle_notepad_history_n_p_t_switch_to_corresponding_overlays() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Line Patch"} line phrase"#.to_string()];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "Line Patch",
+        "Pads/Pad 1.fxp",
+    ]))));
+    app.patch_phrase_store.notepad.history = vec![
+        r#"{"Surge XT patch":"Pads/Pad 1.fxp"} selected phrase"#.to_string(),
+        "plain phrase".to_string(),
+    ];
+    app.patch_phrase_store.notepad.favorites = vec!["favorite".to_string()];
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["selected phrase".to_string()],
+            favorites: vec!["fav".to_string()],
+        },
+    );
+    app.start_notepad_history();
+
+    // overlay 切替キーを統一するため、notepad history 中でも n で先頭選択の初期状態に戻せるようにする。
+    app.handle_notepad_history(KeyCode::Char('n'));
+    assert!(matches!(app.mode, Mode::NotepadHistory));
+    assert_eq!(app.notepad_history_cursor, 0);
+
+    app.start_notepad_history();
+    app.handle_notepad_history(KeyCode::Char('p'));
+    assert!(matches!(app.mode, Mode::PatchPhrase));
+    assert_eq!(app.patch_phrase_name.as_deref(), Some("Pads/Pad 1.fxp"));
+
+    app.start_notepad_history();
+    app.handle_notepad_history(KeyCode::Char('t'));
+    assert!(matches!(app.mode, Mode::PatchSelect));
+    assert_eq!(app.patch_filtered[app.patch_cursor], "Pads/Pad 1.fxp");
 }
 
 #[test]

@@ -59,17 +59,17 @@ pub(super) fn notepad_mode_title(mode: &Mode) -> &'static str {
 pub(super) fn keybind_text(mode: &Mode) -> &'static str {
     match mode {
         Mode::Normal => {
-            "q ?:help i:insert o/O:挿入 dd/Del:cut p/P:貼付 f:phrase r:ランダム音色 t:音色 Shift+H:history j/k・↑↓・PgUp/PgDn・Home/M/L:再生移動 Enter/Space w:DAW"
+            "q ?:help i:insert o/O:挿入 dd/Del:cut p/P:貼付 f:phrase r:ランダム音色 t:音色 Shift+H:patch history j/k・↑↓・PgUp/PgDn・Home/M/L:再生移動 Enter/Space w:DAW"
         }
         Mode::Insert => "ESC:確定→NORMAL  Enter:確定→次行",
         Mode::PatchSelect => {
-            "/:検索入力  Enter:検索確定/決定  ESC:キャンセル  f:お気に入り  h/l・←/→:ペイン移動  j/k・↑↓・PgUp/PgDn:移動して再生"
+            "/:検索入力  Enter:検索確定/決定  ESC:キャンセル  n/p/t:overlay切替  f:お気に入り  h/l・←/→:ペイン移動  j/k・↑↓・PgUp/PgDn:移動して再生"
         }
         Mode::NotepadHistory => {
-            "/:検索入力  Enter:検索確定/確定  ESC:閉じる  h/l・←/→:ペイン移動  j/k・↑↓:移動して再生  PgUp/PgDn:1画面移動  f:お気に入り  dd:削除"
+            "/:検索入力  Enter:検索確定/確定  ESC:閉じる  n/p/t:overlay切替  h/l・←/→:ペイン移動  j/k・↑↓:移動して再生  PgUp/PgDn:1画面移動  f:お気に入り  dd:削除"
         }
         Mode::PatchPhrase => {
-            "/:検索入力  Enter:検索確定/現在行の上に挿入  j/k・↑↓:再生移動  PgUp/PgDn:1画面移動  h/l・←/→:ペイン移動  Space:再生  i:編集  f:お気に入り  ESC:戻る"
+            "/:検索入力  Enter:検索確定/現在行の上に挿入  n/p/t:overlay切替  j/k・↑↓:再生移動  PgUp/PgDn:1画面移動  h/l・←/→:ペイン移動  Space:再生  i:編集  f:お気に入り  ESC:戻る"
         }
         Mode::Help => "ESC:キャンセル",
     }

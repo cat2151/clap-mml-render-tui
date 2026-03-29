@@ -186,21 +186,27 @@ impl<'a> TuiApp<'a> {
     }
 
     fn start_patch_phrase_for_current_line(&mut self) {
-        let current = self.lines[self.cursor].clone();
-        match Self::extract_patch_phrase(&current) {
-            Some((patch_name, _)) => self.start_patch_phrase(patch_name),
+        self.start_patch_phrase_for_patch_name(self.current_line_patch_name());
+    }
+
+    pub(super) fn current_line_patch_name(&self) -> Option<String> {
+        self.lines
+            .get(self.cursor)
+            .and_then(|line| Self::extract_patch_phrase(line))
+            .map(|(patch_name, _)| patch_name)
+    }
+
+    pub(super) fn start_patch_phrase_for_patch_name(&mut self, patch_name: Option<String>) {
+        match patch_name {
+            Some(patch_name) => self.start_patch_phrase(patch_name),
             None => {
                 *self.play_state.lock().unwrap() =
-                    PlayState::Err("現在行の先頭に patch name JSON がありません".to_string());
+                    PlayState::Err("patch name JSON が見つかりません".to_string());
             }
         }
     }
 
-    fn set_empty_yank_error(&mut self) {
-        *self.play_state.lock().unwrap() = PlayState::Err("yank バッファが空です".to_string());
-    }
-
-    pub(super) fn start_patch_select(&mut self) {
+    fn start_patch_select_with_initial_patch_name(&mut self, initial_patch_name: Option<&str>) {
         // ロードが完了したパッチリストをスナップショットする
         {
             let state = self.patch_load_state.lock().unwrap();
@@ -216,11 +222,10 @@ impl<'a> TuiApp<'a> {
             .collect();
         self.patch_select_focus = PatchSelectPane::Patches;
         self.patch_select_filter_active = false;
-        self.patch_cursor = self
-            .lines
-            .get(self.cursor)
-            .and_then(|line| Self::extract_patch_phrase(line))
-            .and_then(|(patch_name, _)| {
+        self.patch_cursor = initial_patch_name
+            .map(str::to_string)
+            .or_else(|| self.current_line_patch_name())
+            .and_then(|patch_name| {
                 self.patch_filtered
                     .iter()
                     .position(|patch| patch == &patch_name)
@@ -232,6 +237,44 @@ impl<'a> TuiApp<'a> {
         self.patch_favorites_state = ListState::default();
         self.sync_patch_select_states();
         self.mode = Mode::PatchSelect;
+    }
+
+    pub(super) fn start_patch_select(&mut self) {
+        self.start_patch_select_with_initial_patch_name(None);
+    }
+
+    pub(super) fn open_patch_select_overlay(&mut self, initial_patch_name: Option<&str>) {
+        if self.cfg.patches_dir.is_none() {
+            *self.play_state.lock().unwrap() =
+                PlayState::Err("patches_dir が設定されていません".to_string());
+            return;
+        }
+
+        let action = {
+            let state = self.patch_load_state.lock().unwrap();
+            match &*state {
+                PatchLoadState::Loading => Err("パッチを読み込み中です...".to_string()),
+                PatchLoadState::Err(e) => Err(format!("パッチの読み込みに失敗: {}", e)),
+                PatchLoadState::Ready(p) if p.is_empty() => {
+                    Err("patches_dir にパッチが見つかりません".to_string())
+                }
+                PatchLoadState::Ready(_) => Ok(()),
+            }
+        };
+
+        match action {
+            Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
+            Ok(()) => match initial_patch_name {
+                Some(patch_name) => {
+                    self.start_patch_select_with_initial_patch_name(Some(patch_name))
+                }
+                None => self.start_patch_select(),
+            },
+        }
+    }
+
+    fn set_empty_yank_error(&mut self) {
+        *self.play_state.lock().unwrap() = PlayState::Err("yank バッファが空です".to_string());
     }
 
     fn patch_select_current_phrase(&self) -> Option<String> {
@@ -364,6 +407,17 @@ impl<'a> TuiApp<'a> {
             KeyCode::Esc => {
                 self.mode = Mode::Normal;
             }
+            KeyCode::Char('n') if !self.patch_select_filter_active => {
+                self.start_notepad_history();
+            }
+            KeyCode::Char('p') if !self.patch_select_filter_active => {
+                self.start_patch_phrase_for_patch_name(self.patch_select_selected_patch_name());
+            }
+            KeyCode::Char('t') if !self.patch_select_filter_active => {
+                // overlay 切替キーを統一するため、音色選択中でも t で現在選択に揃えて開き直せるようにする。
+                let selected_patch_name = self.patch_select_selected_patch_name();
+                self.open_patch_select_overlay(selected_patch_name.as_deref());
+            }
             KeyCode::Enter if self.patch_select_filter_active => {
                 self.patch_select_filter_active = false;
                 self.sync_patch_select_states();
@@ -458,7 +512,7 @@ impl<'a> TuiApp<'a> {
         if key_event.modifiers.contains(KeyModifiers::SHIFT) && key_event.code == KeyCode::Char('H')
         {
             self.normal_pending_delete = false;
-            self.start_notepad_history();
+            self.start_patch_phrase_for_current_line();
             return NormalAction::Continue;
         }
 
@@ -489,31 +543,7 @@ impl<'a> TuiApp<'a> {
                         Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
                     },
                     KeyCode::Char('t') => {
-                        if self.cfg.patches_dir.is_none() {
-                            *self.play_state.lock().unwrap() =
-                                PlayState::Err("patches_dir が設定されていません".to_string());
-                        } else {
-                            // バックグラウンドロードの状態を確認する
-                            let action = {
-                                let state = self.patch_load_state.lock().unwrap();
-                                match &*state {
-                                    PatchLoadState::Loading => {
-                                        Err("パッチを読み込み中です...".to_string())
-                                    }
-                                    PatchLoadState::Err(e) => {
-                                        Err(format!("パッチの読み込みに失敗: {}", e))
-                                    }
-                                    PatchLoadState::Ready(p) if p.is_empty() => {
-                                        Err("patches_dir にパッチが見つかりません".to_string())
-                                    }
-                                    PatchLoadState::Ready(_) => Ok(()),
-                                }
-                            };
-                            match action {
-                                Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
-                                Ok(()) => self.start_patch_select(),
-                            }
-                        }
+                        self.open_patch_select_overlay(None);
                     }
                     KeyCode::Char('p') => {
                         if !self.paste_yanked_line(false) {
