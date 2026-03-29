@@ -174,10 +174,10 @@ fn handle_normal_question_mark_enters_help_mode() {
 }
 
 #[test]
-fn handle_normal_d_returns_to_tui() {
+fn handle_normal_n_returns_to_tui() {
     let (mut app, _cache_rx) = build_test_app();
 
-    let result = app.handle_normal(crossterm::event::KeyCode::Char('d'));
+    let result = app.handle_normal(crossterm::event::KeyCode::Char('n'));
 
     assert!(matches!(result, super::super::DawNormalAction::ReturnToTui));
     assert!(matches!(app.mode, DawMode::Normal));

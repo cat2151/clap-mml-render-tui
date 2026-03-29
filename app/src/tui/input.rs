@@ -302,76 +302,95 @@ impl<'a> TuiApp<'a> {
 
     pub(super) fn handle_normal(&mut self, key: KeyCode) -> NormalAction {
         match key {
-            KeyCode::Char('q') => return NormalAction::Quit,
-            KeyCode::Char('d') => return NormalAction::LaunchDaw,
-            KeyCode::Char('i') => self.start_insert(),
-            KeyCode::Char('r') => match self.pick_random_patch_name() {
-                Ok(patch_name) => {
-                    self.replace_current_line_patch(&patch_name);
-                    self.play_current_line();
-                }
-                Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
-            },
-            KeyCode::Char('t') => {
-                if self.cfg.patches_dir.is_none() {
-                    *self.play_state.lock().unwrap() =
-                        PlayState::Err("patches_dir が設定されていません".to_string());
+            KeyCode::Char('d') => {
+                if self.normal_pending_delete {
+                    self.normal_pending_delete = false;
+                    self.delete_current_line();
                 } else {
-                    // バックグラウンドロードの状態を確認する
-                    let action = {
-                        let state = self.patch_load_state.lock().unwrap();
-                        match &*state {
-                            PatchLoadState::Loading => Err("パッチを読み込み中です...".to_string()),
-                            PatchLoadState::Err(e) => Err(format!("パッチの読み込みに失敗: {}", e)),
-                            PatchLoadState::Ready(p) if p.is_empty() => {
-                                Err("patches_dir にパッチが見つかりません".to_string())
-                            }
-                            PatchLoadState::Ready(_) => Ok(()),
+                    self.normal_pending_delete = true;
+                }
+            }
+            _ => {
+                self.normal_pending_delete = false;
+                match key {
+                    KeyCode::Char('q') => return NormalAction::Quit,
+                    KeyCode::Char('w') => return NormalAction::LaunchDaw,
+                    KeyCode::Char('i') => self.start_insert(),
+                    KeyCode::Char('r') => match self.pick_random_patch_name() {
+                        Ok(patch_name) => {
+                            self.replace_current_line_patch(&patch_name);
+                            self.play_current_line();
                         }
-                    };
-                    match action {
                         Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
-                        Ok(()) => self.start_patch_select(),
+                    },
+                    KeyCode::Char('t') => {
+                        if self.cfg.patches_dir.is_none() {
+                            *self.play_state.lock().unwrap() =
+                                PlayState::Err("patches_dir が設定されていません".to_string());
+                        } else {
+                            // バックグラウンドロードの状態を確認する
+                            let action = {
+                                let state = self.patch_load_state.lock().unwrap();
+                                match &*state {
+                                    PatchLoadState::Loading => {
+                                        Err("パッチを読み込み中です...".to_string())
+                                    }
+                                    PatchLoadState::Err(e) => {
+                                        Err(format!("パッチの読み込みに失敗: {}", e))
+                                    }
+                                    PatchLoadState::Ready(p) if p.is_empty() => {
+                                        Err("patches_dir にパッチが見つかりません".to_string())
+                                    }
+                                    PatchLoadState::Ready(_) => Ok(()),
+                                }
+                            };
+                            match action {
+                                Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
+                                Ok(()) => self.start_patch_select(),
+                            }
+                        }
                     }
+                    KeyCode::Char('p') => {
+                        if !self.paste_yanked_line(false) {
+                            self.set_empty_yank_error();
+                        }
+                    }
+                    KeyCode::Char('P') => {
+                        if !self.paste_yanked_line(true) {
+                            self.set_empty_yank_error();
+                        }
+                    }
+                    KeyCode::Char('f') => self.start_patch_phrase_for_current_line(),
+                    KeyCode::Char('h') => self.start_notepad_history(),
+                    KeyCode::Char('o') => {
+                        self.insert_empty_line_and_start_insert(self.cursor + 1);
+                    }
+                    KeyCode::Char('O') => {
+                        self.insert_empty_line_and_start_insert(self.cursor);
+                    }
+                    KeyCode::Delete => {
+                        self.delete_current_line();
+                    }
+                    KeyCode::Char('j') | KeyCode::Down => self.move_normal_cursor_by(1),
+                    KeyCode::Char('k') | KeyCode::Up => self.move_normal_cursor_by(-1),
+                    KeyCode::PageDown => self.move_normal_cursor_by(self.normal_page_size as isize),
+                    KeyCode::PageUp => {
+                        self.move_normal_cursor_by(-(self.normal_page_size as isize))
+                    }
+                    KeyCode::Char('H') => {
+                        self.set_normal_cursor(0);
+                    }
+                    KeyCode::Char('M') => {
+                        self.set_normal_cursor(self.lines.len() / 2);
+                    }
+                    KeyCode::Char('L') => {
+                        self.set_normal_cursor(self.lines.len().saturating_sub(1));
+                    }
+                    KeyCode::Char('K') | KeyCode::Char('?') => self.mode = Mode::Help,
+                    KeyCode::Enter | KeyCode::Char(' ') => self.play_current_line(),
+                    _ => {}
                 }
             }
-            KeyCode::Char('p') => {
-                if !self.paste_yanked_line(false) {
-                    self.set_empty_yank_error();
-                }
-            }
-            KeyCode::Char('P') => {
-                if !self.paste_yanked_line(true) {
-                    self.set_empty_yank_error();
-                }
-            }
-            KeyCode::Char('f') => self.start_patch_phrase_for_current_line(),
-            KeyCode::Char('h') => self.start_notepad_history(),
-            KeyCode::Char('o') => {
-                self.insert_empty_line_and_start_insert(self.cursor + 1);
-            }
-            KeyCode::Char('O') => {
-                self.insert_empty_line_and_start_insert(self.cursor);
-            }
-            KeyCode::Delete => {
-                self.delete_current_line();
-            }
-            KeyCode::Char('j') | KeyCode::Down => self.move_normal_cursor_by(1),
-            KeyCode::Char('k') | KeyCode::Up => self.move_normal_cursor_by(-1),
-            KeyCode::PageDown => self.move_normal_cursor_by(self.normal_page_size as isize),
-            KeyCode::PageUp => self.move_normal_cursor_by(-(self.normal_page_size as isize)),
-            KeyCode::Char('H') => {
-                self.set_normal_cursor(0);
-            }
-            KeyCode::Char('M') => {
-                self.set_normal_cursor(self.lines.len() / 2);
-            }
-            KeyCode::Char('L') => {
-                self.set_normal_cursor(self.lines.len().saturating_sub(1));
-            }
-            KeyCode::Char('K') | KeyCode::Char('?') => self.mode = Mode::Help,
-            KeyCode::Enter | KeyCode::Char(' ') => self.play_current_line(),
-            _ => {}
         }
         NormalAction::Continue
     }

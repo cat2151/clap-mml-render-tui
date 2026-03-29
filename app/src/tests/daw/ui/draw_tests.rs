@@ -377,6 +377,13 @@ fn help_does_not_show_old_semicolon_guidance() {
         normalized_lines
     );
     assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("n:notepadへ切替")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
         !normalized_lines
             .iter()
             .any(|line| line.contains("Ctrl+C:強制終了")),
@@ -412,6 +419,13 @@ fn normal_footer_shows_shift_h_history_shortcut() {
         normalized_lines
             .iter()
             .any(|line| line.contains("h/←・l/→:meas")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("n:notepad")),
         "lines: {:?}",
         normalized_lines
     );
