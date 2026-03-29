@@ -363,7 +363,7 @@ impl<'a> TuiApp<'a> {
                         continue;
                     }
                     match self.mode {
-                        Mode::Normal => match self.handle_normal(key.code) {
+                        Mode::Normal => match self.handle_normal_key_event(key) {
                             NormalAction::Quit => break,
                             NormalAction::LaunchDaw => {
                                 self.flush_patch_phrase_store_if_dirty();

@@ -307,6 +307,20 @@ impl<'a> TuiApp<'a> {
         }
     }
 
+    pub(super) fn handle_normal_key_event(
+        &mut self,
+        key_event: crossterm::event::KeyEvent,
+    ) -> NormalAction {
+        if key_event.modifiers.contains(KeyModifiers::SHIFT) && key_event.code == KeyCode::Char('H')
+        {
+            self.normal_pending_delete = false;
+            self.start_notepad_history();
+            return NormalAction::Continue;
+        }
+
+        self.handle_normal(key_event.code)
+    }
+
     pub(super) fn handle_normal(&mut self, key: KeyCode) -> NormalAction {
         match key {
             KeyCode::Char('d') => {
@@ -368,7 +382,6 @@ impl<'a> TuiApp<'a> {
                         }
                     }
                     KeyCode::Char('f') => self.start_patch_phrase_for_current_line(),
-                    KeyCode::Char('h') => self.start_notepad_history(),
                     KeyCode::Char('o') => {
                         self.insert_empty_line_and_start_insert(self.cursor + 1);
                     }

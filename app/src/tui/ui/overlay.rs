@@ -201,7 +201,7 @@ pub(super) fn draw_notepad_history(
     status_color: Color,
     mode: Mode,
 ) {
-    let area = crate::ui_utils::centered_rect(80, 70, f.area());
+    let area = crate::ui_utils::centered_rect(88, 76, f.area());
     f.render_widget(Clear, area);
     let chunks = Layout::default()
         .direction(Direction::Vertical)

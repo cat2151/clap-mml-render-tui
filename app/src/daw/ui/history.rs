@@ -109,7 +109,9 @@ pub(super) fn draw_history(f: &mut Frame, app: &DawApp, area: Rect) {
         panes[1],
     );
     f.render_widget(
-        Paragraph::new("Enter:確定  ESC:閉じる  h/l・←/→:ペイン移動  j/k:移動")
+        Paragraph::new(
+            "Enter:確定  Space:preview  ESC:閉じる  h/l・←/→:ペイン移動してpreview  j/k・↑/↓:移動してpreview",
+        )
             .style(Style::default().fg(MONOKAI_CYAN)),
         chunks[1],
     );
