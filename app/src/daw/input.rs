@@ -283,7 +283,7 @@ impl DawApp {
 
         match key_event.code {
             KeyCode::Char('q') => return DawNormalAction::QuitApp,
-            KeyCode::Char('d') | KeyCode::Esc => return DawNormalAction::ReturnToTui,
+            KeyCode::Char('d') => return DawNormalAction::ReturnToTui,
 
             KeyCode::Char('h') | KeyCode::Left => {
                 if self.cursor_measure > 0 {

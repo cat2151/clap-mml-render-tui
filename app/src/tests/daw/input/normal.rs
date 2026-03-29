@@ -174,6 +174,30 @@ fn handle_normal_question_mark_enters_help_mode() {
 }
 
 #[test]
+fn handle_normal_d_returns_to_tui() {
+    let (mut app, _cache_rx) = build_test_app();
+
+    let result = app.handle_normal(crossterm::event::KeyCode::Char('d'));
+
+    assert!(matches!(result, super::super::DawNormalAction::ReturnToTui));
+    assert!(matches!(app.mode, DawMode::Normal));
+}
+
+#[test]
+fn handle_normal_esc_has_no_effect() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 2;
+    app.cursor_measure = 1;
+
+    let result = app.handle_normal(crossterm::event::KeyCode::Esc);
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert!(matches!(app.mode, DawMode::Normal));
+    assert_eq!(app.cursor_track, 2);
+    assert_eq!(app.cursor_measure, 1);
+}
+
+#[test]
 fn handle_normal_a_cycles_ab_repeat_and_tracks_cursor_until_end_is_fixed() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_measure = 1;
