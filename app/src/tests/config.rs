@@ -76,6 +76,17 @@ buffer_size = 512
 }
 
 #[test]
+fn default_config_content_uses_48000_sample_rate() {
+    let content = default_config_content();
+
+    assert!(
+        content.contains("sample_rate = 48000"),
+        "default config の sample_rate は 48000Hz であるべき: {}",
+        content
+    );
+}
+
+#[test]
 fn config_parse_accepts_legacy_random_patch_field() {
     let toml_str = r#"
 plugin_path = "/usr/lib/clap/Surge XT.clap"
