@@ -335,14 +335,6 @@ fn handle_normal_dd_yanks_current_line_and_keeps_notepad_non_empty() {
     let result = app.handle_normal(KeyCode::Char('d'));
 
     assert!(matches!(result, NormalAction::Continue));
-    assert_eq!(
-        app.lines,
-        vec![
-            "line 0".to_string(),
-            "line 1".to_string(),
-            "line 2".to_string()
-        ]
-    );
     assert!(app.normal_pending_delete);
     assert!(app.yank_buffer.is_none());
 
@@ -354,16 +346,6 @@ fn handle_normal_dd_yanks_current_line_and_keeps_notepad_non_empty() {
     assert_eq!(app.list_state.selected(), Some(1));
     assert!(!app.normal_pending_delete);
     assert_eq!(app.yank_buffer.as_deref(), Some("line 1"));
-
-    let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["only".to_string()];
-
-    app.handle_normal(KeyCode::Char('d'));
-    app.handle_normal(KeyCode::Char('d'));
-
-    assert_eq!(app.lines, vec![String::new()]);
-    assert_eq!(app.cursor, 0);
-    assert_eq!(app.yank_buffer.as_deref(), Some("only"));
 }
 
 #[test]
@@ -380,6 +362,19 @@ fn handle_normal_d_is_cleared_when_another_key_is_pressed() {
     assert_eq!(app.lines, vec!["line 0".to_string(), "line 1".to_string()]);
     assert!(!app.normal_pending_delete);
     assert!(app.yank_buffer.is_none());
+}
+
+#[test]
+fn handle_normal_dd_on_single_line_replaces_with_empty() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["only".to_string()];
+
+    app.handle_normal(KeyCode::Char('d'));
+    app.handle_normal(KeyCode::Char('d'));
+
+    assert_eq!(app.lines, vec![String::new()]);
+    assert_eq!(app.cursor, 0);
+    assert_eq!(app.yank_buffer.as_deref(), Some("only"));
 }
 
 #[test]

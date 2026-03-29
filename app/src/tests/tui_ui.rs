@@ -240,7 +240,7 @@ fn help_screen_mentions_ctrl_clipboard_shortcuts() {
         .any(|line| line.contains("h:notepadhistory")));
     assert!(normalized_lines
         .iter()
-        .any(|line| line.contains("dd/Del:現在行削除（ヤンク）")));
+        .any(|line| line.contains("dd/Del:削除（ヤンク）p/P:下貼付/上貼付")));
     assert!(normalized_lines
         .iter()
         .any(|line| line.contains("w:DAWモード")));
