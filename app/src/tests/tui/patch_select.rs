@@ -88,6 +88,35 @@ fn handle_patch_select_ctrl_p_moves_cursor_up() {
 }
 
 #[test]
+fn start_patch_select_builds_favorite_items_once_in_patch_order_then_extra_sorted() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "Pad B", "Pad A",
+    ]))));
+    app.patch_phrase_store.patches.insert(
+        "Pad A".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec![],
+            favorites: vec!["l8cdef".to_string()],
+        },
+    );
+    app.patch_phrase_store.patches.insert(
+        "Pad C".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec![],
+            favorites: vec!["o5g".to_string()],
+        },
+    );
+
+    app.start_patch_select();
+
+    assert_eq!(
+        app.patch_favorite_items,
+        vec!["Pad A".to_string(), "Pad C".to_string()]
+    );
+}
+
+#[test]
 fn handle_patch_select_ctrl_n_and_ctrl_k_move_cursor() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![r#"{"Surge XT patch":"Pad 1"} l8cdef"#.to_string()];
@@ -146,6 +175,10 @@ fn handle_patch_select_f_adds_selected_patch_and_phrase_to_favorites() {
         .get("Leads/Lead 1.fxp")
         .expect("favorite should be stored for selected patch");
     assert_eq!(stored.favorites, vec!["l8cdef".to_string()]);
+    assert_eq!(
+        app.patch_favorite_items,
+        vec!["Leads/Lead 1.fxp".to_string()]
+    );
     assert!(app.patch_phrase_store_dirty);
     assert!(matches!(app.mode, Mode::PatchSelect));
     assert_eq!(app.patch_query, "");
@@ -168,6 +201,7 @@ fn handle_patch_select_l_moves_focus_to_favorites_and_previews_selected_patch() 
             favorites: vec!["l8cdef".to_string()],
         },
     );
+    app.patch_favorite_items = vec!["Leads/Lead 1.fxp".to_string()];
     app.patch_list_state.select(Some(0));
     app.patch_favorites_state.select(Some(0));
     app.mode = Mode::PatchSelect;
@@ -197,6 +231,12 @@ fn handle_patch_select_page_down_moves_favorites_when_favorites_pane_is_focused(
             },
         );
     }
+    app.patch_favorite_items = vec![
+        "Fav 0".to_string(),
+        "Fav 1".to_string(),
+        "Fav 2".to_string(),
+        "Fav 3".to_string(),
+    ];
     app.patch_select_focus = PatchSelectPane::Favorites;
     app.patch_select_page_size = 2;
     app.patch_favorites_cursor = 0;
@@ -265,6 +305,7 @@ fn handle_patch_select_backspace_refilters_and_previews_first_result() {
         app.patch_filtered,
         vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()]
     );
+    assert!(!app.patch_select_filter_active);
     assert_eq!(app.patch_cursor, 0);
     assert_eq!(app.patch_list_state.selected(), Some(0));
     assert!(matches!(

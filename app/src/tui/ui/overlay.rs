@@ -80,21 +80,26 @@ pub(super) fn draw_patch_select(
             ListItem::new(Span::styled(p.clone(), style))
         })
         .collect();
-    let favorite_items: Vec<ListItem> = app
-        .patch_select_favorite_items()
-        .into_iter()
-        .enumerate()
-        .map(|(i, p)| {
-            let style = if app.patch_select_focus == PatchSelectPane::Favorites
-                && i == app.patch_favorites_cursor
-            {
-                base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD)
-            } else {
-                base_style()
-            };
-            ListItem::new(Span::styled(p, style))
-        })
-        .collect();
+    let (favorite_count, favorite_items): (usize, Vec<ListItem>) = {
+        let favorites = app.patch_select_favorite_items();
+        (
+            favorites.len(),
+            favorites
+                .iter()
+                .enumerate()
+                .map(|(i, p)| {
+                    let style = if app.patch_select_focus == PatchSelectPane::Favorites
+                        && i == app.patch_favorites_cursor
+                    {
+                        base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD)
+                    } else {
+                        base_style()
+                    };
+                    ListItem::new(Span::styled(p.clone(), style))
+                })
+                .collect(),
+        )
+    };
     let patch_border = if app.patch_select_focus == PatchSelectPane::Patches {
         base_style().fg(MONOKAI_CYAN)
     } else {
@@ -126,10 +131,7 @@ pub(super) fn draw_patch_select(
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(format!(
-                        " Favorite音色 ({}) ",
-                        app.patch_select_favorite_items().len()
-                    ))
+                    .title(format!(" Favorite音色 ({}) ", favorite_count))
                     .style(base_style())
                     .border_style(favorite_border),
             )

@@ -121,6 +121,7 @@ fn patch_select_screen_renders_as_overlay_on_normal_screen() {
             favorites: vec!["abc".to_string()],
         },
     );
+    app.patch_favorite_items = vec!["Leads/Lead 1.fxp".to_string()];
     app.patch_list_state.select(Some(0));
     app.mode = Mode::PatchSelect;
 

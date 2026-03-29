@@ -9,7 +9,7 @@
 //!   PATCHSELECT : 音色を選択
 //!            / の後に文字入力: patch name フィルタ（space=AND条件）
 //!            j/k・↑↓・PageUp/PageDown:リスト移動（移動ごとにpreview再生）
-//!            h/l・←→:左右ペイン移動（移動ごとにpreview再生）
+//!            h/l・←/→:左右ペイン移動（移動ごとにpreview再生）
 //!            f:現在音色とMMLをFavorites追加
 //!            Enter:現在行の先頭にJSONで挿入（上書き）  ESC:キャンセル
 //!   HELP : K / ? で表示、ESC でキャンセル
@@ -99,6 +99,7 @@ pub struct TuiApp<'a> {
     pub(super) patch_filtered: Vec<String>, // フィルタ結果（表示名のみ）
     pub(super) patch_cursor: usize,         // フィルタ結果内のカーソル位置
     pub(super) patch_list_state: ListState, // 音色選択リスト描画用
+    pub(super) patch_favorite_items: Vec<String>,
     pub(super) patch_favorites_cursor: usize,
     pub(super) patch_favorites_state: ListState,
     pub(super) patch_select_focus: PatchSelectPane,
@@ -205,6 +206,7 @@ impl<'a> TuiApp<'a> {
             patch_filtered: Vec::new(),
             patch_cursor: 0,
             patch_list_state: ListState::default(),
+            patch_favorite_items: Vec::new(),
             patch_favorites_cursor: 0,
             patch_favorites_state: ListState::default(),
             patch_select_focus: PatchSelectPane::Patches,

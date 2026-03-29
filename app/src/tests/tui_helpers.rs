@@ -23,6 +23,7 @@ impl TuiApp<'static> {
             patch_filtered: Vec::new(),
             patch_cursor: 0,
             patch_list_state: ListState::default(),
+            patch_favorite_items: Vec::new(),
             patch_favorites_cursor: 0,
             patch_favorites_state: ListState::default(),
             patch_select_focus: PatchSelectPane::Patches,

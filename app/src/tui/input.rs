@@ -47,11 +47,10 @@ impl<'a> TuiApp<'a> {
     }
 
     fn move_patch_favorites_cursor_by(&mut self, delta: isize) {
-        let favorites = self.patch_select_favorite_items();
-        if favorites.is_empty() {
+        if self.patch_favorite_items.is_empty() {
             return;
         }
-        let max_cursor = favorites.len().saturating_sub(1) as isize;
+        let max_cursor = self.patch_favorite_items.len().saturating_sub(1) as isize;
         let next_cursor =
             (self.patch_favorites_cursor as isize + delta).clamp(0, max_cursor) as usize;
         if next_cursor != self.patch_favorites_cursor {
@@ -227,6 +226,7 @@ impl<'a> TuiApp<'a> {
                     .position(|patch| patch == &patch_name)
             })
             .unwrap_or(0);
+        self.refresh_patch_select_favorites();
         self.patch_favorites_cursor = 0;
         self.patch_list_state = ListState::default();
         self.patch_favorites_state = ListState::default();
@@ -243,7 +243,7 @@ impl<'a> TuiApp<'a> {
         })
     }
 
-    pub(super) fn patch_select_favorite_items(&self) -> Vec<String> {
+    fn rebuild_patch_select_favorite_items(&self) -> Vec<String> {
         let mut favorites = Vec::new();
         let mut seen = std::collections::HashSet::new();
 
@@ -273,6 +273,14 @@ impl<'a> TuiApp<'a> {
         favorites
     }
 
+    fn refresh_patch_select_favorites(&mut self) {
+        self.patch_favorite_items = self.rebuild_patch_select_favorite_items();
+    }
+
+    pub(super) fn patch_select_favorite_items(&self) -> &[String] {
+        &self.patch_favorite_items
+    }
+
     fn sync_patch_select_states(&mut self) {
         if self.patch_filtered.is_empty() {
             self.patch_cursor = 0;
@@ -282,7 +290,7 @@ impl<'a> TuiApp<'a> {
             self.patch_list_state.select(Some(self.patch_cursor));
         }
 
-        let favorites_len = self.patch_select_favorite_items().len();
+        let favorites_len = self.patch_favorite_items.len();
         if favorites_len == 0 {
             self.patch_favorites_cursor = 0;
             self.patch_favorites_state.select(None);
@@ -297,7 +305,7 @@ impl<'a> TuiApp<'a> {
         match self.patch_select_focus {
             PatchSelectPane::Patches => self.patch_filtered.get(self.patch_cursor).cloned(),
             PatchSelectPane::Favorites => self
-                .patch_select_favorite_items()
+                .patch_favorite_items
                 .get(self.patch_favorites_cursor)
                 .cloned(),
         }
@@ -336,6 +344,7 @@ impl<'a> TuiApp<'a> {
                             return;
                         };
                         self.add_patch_phrase_favorite(patch_name, phrase);
+                        self.refresh_patch_select_favorites();
                         self.sync_patch_select_states();
                         self.preview_selected_patch();
                     }
@@ -397,6 +406,7 @@ impl<'a> TuiApp<'a> {
                     return;
                 };
                 self.add_patch_phrase_favorite(patch_name, phrase);
+                self.refresh_patch_select_favorites();
                 self.sync_patch_select_states();
                 self.preview_selected_patch();
             }
@@ -415,6 +425,9 @@ impl<'a> TuiApp<'a> {
             }
             KeyCode::Backspace if self.patch_select_filter_active => {
                 if self.patch_query.pop().is_some() {
+                    if self.patch_query.is_empty() {
+                        self.patch_select_filter_active = false;
+                    }
                     self.update_patch_filter();
                 } else {
                     self.patch_select_filter_active = false;
