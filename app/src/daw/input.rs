@@ -11,7 +11,7 @@ mod normal;
 use super::{AbRepeatState, DawApp, FIRST_PLAYABLE_TRACK};
 
 #[cfg(test)]
-pub(super) use {
+use {
     super::DawNormalAction,
     normal::{
         normal_playback_shortcut, preview_target_tracks, resolve_playback_start_measure_index,

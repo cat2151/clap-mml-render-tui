@@ -6,16 +6,14 @@ use super::super::{
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(in crate::daw) enum NormalPlaybackShortcut {
+pub(super) enum NormalPlaybackShortcut {
     PreviewCurrentTrack,
     PreviewAllTracks,
     PlayFromCursor,
     TogglePlay,
 }
 
-pub(in crate::daw) fn normal_playback_shortcut(
-    key_event: KeyEvent,
-) -> Option<NormalPlaybackShortcut> {
+pub(super) fn normal_playback_shortcut(key_event: KeyEvent) -> Option<NormalPlaybackShortcut> {
     let shift = key_event.modifiers.contains(KeyModifiers::SHIFT);
     match key_event.code {
         KeyCode::Enter if shift => Some(NormalPlaybackShortcut::PreviewAllTracks),
@@ -26,7 +24,7 @@ pub(in crate::daw) fn normal_playback_shortcut(
     }
 }
 
-pub(in crate::daw) fn preview_target_tracks(
+pub(super) fn preview_target_tracks(
     tracks: usize,
     cursor_track: usize,
     preview_all_tracks: bool,
@@ -40,7 +38,7 @@ pub(in crate::daw) fn preview_target_tracks(
     Some(vec![cursor_track])
 }
 
-pub(in crate::daw) fn resolve_playback_start_measure_index(
+pub(super) fn resolve_playback_start_measure_index(
     cursor_measure_index: Option<usize>,
     shortcut: NormalPlaybackShortcut,
 ) -> Option<usize> {
@@ -114,7 +112,7 @@ impl DawApp {
         };
     }
 
-    fn start_preview_for_target_tracks(&self, preview_all_tracks: bool) {
+    fn start_preview_for_target_tracks(&mut self, preview_all_tracks: bool) {
         let play_state = *self.play_state.lock().unwrap();
         if play_state == DawPlayState::Playing {
             return;
@@ -130,6 +128,9 @@ impl DawApp {
         else {
             return;
         };
+        if self.try_start_preview_for_test() {
+            return;
+        }
         self.start_preview_on_tracks(measure_index, &target_tracks);
     }
 
@@ -306,6 +307,12 @@ impl DawApp {
             }
 
             KeyCode::Char('r') => {
+                if self.cursor_track < FIRST_PLAYABLE_TRACK {
+                    self.append_log_line(
+                        "ランダム音色は演奏トラックでのみ使用できます".to_string(),
+                    );
+                    return DawNormalAction::Continue;
+                }
                 if let Some(patch) = self.pick_random_patch_name() {
                     let affected_measures: Vec<usize> = (1..=self.measures)
                         .filter(|&measure| !self.data[self.cursor_track][measure].trim().is_empty())
