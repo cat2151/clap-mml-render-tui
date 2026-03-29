@@ -50,7 +50,7 @@ fn status_color(play_state: &PlayState) -> Color {
 fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, play_state: &PlayState, status_color: Color) {
     let is_insert = app.mode == Mode::Insert;
     let cursor = app.cursor;
-    let status = normal_status_text(app, play_state);
+    let status = normal_status_text(&app.mode, play_state);
     let keybinds = keybind_text(&app.mode);
 
     let chunks = Layout::default()
@@ -90,7 +90,7 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, play_state: &PlayState, stat
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(notepad_mode_title(app))
+                    .title(notepad_mode_title(&app.mode))
                     .style(base_style())
                     .border_style(base_style().fg(MONOKAI_CYAN)),
             )

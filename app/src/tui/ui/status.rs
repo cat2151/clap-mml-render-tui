@@ -36,8 +36,8 @@ fn play_status_suffix(play_state: &PlayState) -> String {
     }
 }
 
-pub(super) fn normal_status_text(app: &TuiApp<'_>, play_state: &PlayState) -> String {
-    let mode = match app.mode {
+pub(super) fn normal_status_text(mode: &Mode, play_state: &PlayState) -> String {
+    let mode = match mode {
         Mode::Insert => "INSERT",
         Mode::Help => "HELP",
         _ => "NORMAL",
@@ -45,8 +45,8 @@ pub(super) fn normal_status_text(app: &TuiApp<'_>, play_state: &PlayState) -> St
     format!("{mode}{}", play_status_suffix(play_state))
 }
 
-pub(super) fn notepad_mode_title(app: &TuiApp<'_>) -> &'static str {
-    match app.mode {
+pub(super) fn notepad_mode_title(mode: &Mode) -> &'static str {
+    match mode {
         Mode::Normal => " [NORMAL] notepad mode ",
         Mode::Insert => " [INSERT] notepad mode ",
         Mode::PatchSelect => " [PATCH SELECT] notepad mode ",
@@ -78,7 +78,7 @@ pub(super) fn keybind_text(mode: &Mode) -> &'static str {
 pub(super) fn status_text(app: &TuiApp<'_>, play_state: &PlayState) -> String {
     let play_str = play_status_suffix(play_state);
     match app.mode {
-        Mode::Normal | Mode::Insert | Mode::Help => normal_status_text(app, play_state),
+        Mode::Normal | Mode::Insert | Mode::Help => normal_status_text(&app.mode, play_state),
         Mode::PatchSelect => format!("音色選択{}", play_str),
         Mode::NotepadHistory => format!("notepad history{}", play_str),
         Mode::PatchPhrase => format!("patch phrase{}", play_str),
