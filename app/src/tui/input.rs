@@ -7,7 +7,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tui_textarea::TextArea;
 
 use super::{
-    filter_patches, Mode, NormalAction, PatchLoadState, PlayState, TuiApp, PATCH_JSON_KEY,
+    filter_patches, Mode, NormalAction, PatchLoadState, PatchSelectPane, PlayState, TuiApp,
+    PATCH_JSON_KEY,
 };
 
 const PATCH_SELECT_PREVIEW_FALLBACK_PHRASE: &str = "c";
@@ -42,6 +43,28 @@ impl<'a> TuiApp<'a> {
             self.patch_cursor = next_cursor;
             self.patch_list_state.select(Some(self.patch_cursor));
             self.preview_selected_patch();
+        }
+    }
+
+    fn move_patch_favorites_cursor_by(&mut self, delta: isize) {
+        if self.patch_favorite_items.is_empty() {
+            return;
+        }
+        let max_cursor = self.patch_favorite_items.len().saturating_sub(1) as isize;
+        let next_cursor =
+            (self.patch_favorites_cursor as isize + delta).clamp(0, max_cursor) as usize;
+        if next_cursor != self.patch_favorites_cursor {
+            self.patch_favorites_cursor = next_cursor;
+            self.patch_favorites_state
+                .select(Some(self.patch_favorites_cursor));
+            self.preview_selected_patch();
+        }
+    }
+
+    fn move_patch_select_selection_by(&mut self, delta: isize) {
+        match self.patch_select_focus {
+            PatchSelectPane::Patches => self.move_patch_cursor_by(delta),
+            PatchSelectPane::Favorites => self.move_patch_favorites_cursor_by(delta),
         }
     }
 
@@ -191,6 +214,8 @@ impl<'a> TuiApp<'a> {
             .iter()
             .map(|(orig, _)| orig.clone())
             .collect();
+        self.patch_select_focus = PatchSelectPane::Patches;
+        self.patch_select_filter_active = false;
         self.patch_cursor = self
             .lines
             .get(self.cursor)
@@ -201,11 +226,11 @@ impl<'a> TuiApp<'a> {
                     .position(|patch| patch == &patch_name)
             })
             .unwrap_or(0);
-        let mut ls = ListState::default();
-        if !self.patch_filtered.is_empty() {
-            ls.select(Some(self.patch_cursor));
-        }
-        self.patch_list_state = ls;
+        self.refresh_patch_select_favorites();
+        self.patch_favorites_cursor = 0;
+        self.patch_list_state = ListState::default();
+        self.patch_favorites_state = ListState::default();
+        self.sync_patch_select_states();
         self.mode = Mode::PatchSelect;
     }
 
@@ -218,10 +243,78 @@ impl<'a> TuiApp<'a> {
         })
     }
 
+    fn rebuild_patch_select_favorite_items(&self) -> Vec<String> {
+        let mut favorites = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+
+        for (patch_name, _) in &self.patch_all {
+            let is_favorite = self
+                .patch_phrase_store
+                .patches
+                .get(patch_name)
+                .is_some_and(|state| !state.favorites.is_empty());
+            if is_favorite && seen.insert(patch_name.clone()) {
+                favorites.push(patch_name.clone());
+            }
+        }
+
+        let mut extra_favorites = self
+            .patch_phrase_store
+            .patches
+            .iter()
+            .filter_map(|(patch_name, state)| {
+                (!state.favorites.is_empty() && seen.insert(patch_name.clone()))
+                    .then_some(patch_name.clone())
+            })
+            .collect::<Vec<_>>();
+        extra_favorites.sort();
+        favorites.extend(extra_favorites);
+
+        favorites
+    }
+
+    fn refresh_patch_select_favorites(&mut self) {
+        self.patch_favorite_items = self.rebuild_patch_select_favorite_items();
+    }
+
+    pub(super) fn patch_select_favorite_items(&self) -> &[String] {
+        &self.patch_favorite_items
+    }
+
+    fn sync_patch_select_states(&mut self) {
+        if self.patch_filtered.is_empty() {
+            self.patch_cursor = 0;
+            self.patch_list_state.select(None);
+        } else {
+            self.patch_cursor = self.patch_cursor.min(self.patch_filtered.len() - 1);
+            self.patch_list_state.select(Some(self.patch_cursor));
+        }
+
+        let favorites_len = self.patch_favorite_items.len();
+        if favorites_len == 0 {
+            self.patch_favorites_cursor = 0;
+            self.patch_favorites_state.select(None);
+        } else {
+            self.patch_favorites_cursor = self.patch_favorites_cursor.min(favorites_len - 1);
+            self.patch_favorites_state
+                .select(Some(self.patch_favorites_cursor));
+        }
+    }
+
+    fn patch_select_selected_patch_name(&self) -> Option<String> {
+        match self.patch_select_focus {
+            PatchSelectPane::Patches => self.patch_filtered.get(self.patch_cursor).cloned(),
+            PatchSelectPane::Favorites => self
+                .patch_favorite_items
+                .get(self.patch_favorites_cursor)
+                .cloned(),
+        }
+    }
+
     fn patch_select_preview_mml(&self) -> Option<String> {
-        let patch_name = self.patch_filtered.get(self.patch_cursor)?;
+        let patch_name = self.patch_select_selected_patch_name()?;
         let phrase = self.patch_select_current_phrase()?;
-        let json = Self::build_patch_json(patch_name);
+        let json = Self::build_patch_json(&patch_name);
         Some(format!("{json} {phrase}"))
     }
 
@@ -235,11 +328,7 @@ impl<'a> TuiApp<'a> {
     pub(super) fn update_patch_filter(&mut self) {
         self.patch_filtered = filter_patches(&self.patch_all, &self.patch_query);
         self.patch_cursor = 0;
-        if !self.patch_filtered.is_empty() {
-            self.patch_list_state.select(Some(0));
-        } else {
-            self.patch_list_state.select(None);
-        }
+        self.sync_patch_select_states();
         self.preview_selected_patch();
     }
 
@@ -248,21 +337,22 @@ impl<'a> TuiApp<'a> {
             if let KeyCode::Char(c) = key_event.code {
                 match c.to_ascii_lowercase() {
                     'f' => {
-                        let Some(patch_name) = self.patch_filtered.get(self.patch_cursor).cloned()
-                        else {
+                        let Some(patch_name) = self.patch_select_selected_patch_name() else {
                             return;
                         };
                         let Some(phrase) = self.patch_select_current_phrase() else {
                             return;
                         };
                         self.add_patch_phrase_favorite(patch_name, phrase);
+                        self.refresh_patch_select_favorites();
+                        self.sync_patch_select_states();
                         self.preview_selected_patch();
                     }
                     'j' | 'n' => {
-                        self.move_patch_cursor_by(1);
+                        self.move_patch_select_selection_by(1);
                     }
                     'k' | 'p' => {
-                        self.move_patch_cursor_by(-1);
+                        self.move_patch_select_selection_by(-1);
                     }
                     _ => {}
                 }
@@ -275,24 +365,74 @@ impl<'a> TuiApp<'a> {
                 self.mode = Mode::Normal;
             }
             KeyCode::Enter => {
-                if !self.patch_filtered.is_empty() {
-                    let selected = self.patch_filtered[self.patch_cursor].clone();
+                if let Some(selected) = self.patch_select_selected_patch_name() {
                     self.replace_current_line_patch(&selected);
                     let line = self.lines[self.cursor].clone();
                     self.record_notepad_history(&line);
                 }
                 self.mode = Mode::Normal;
             }
-            KeyCode::Down => self.move_patch_cursor_by(1),
-            KeyCode::Up => self.move_patch_cursor_by(-1),
-            KeyCode::PageDown => self.move_patch_cursor_by(self.patch_select_page_size as isize),
-            KeyCode::PageUp => self.move_patch_cursor_by(-(self.patch_select_page_size as isize)),
-            KeyCode::Backspace => {
-                self.patch_query.pop();
-                self.update_patch_filter();
+            KeyCode::Left => {
+                self.patch_select_focus = PatchSelectPane::Patches;
+                self.sync_patch_select_states();
+                self.preview_selected_patch();
+            }
+            KeyCode::Right => {
+                self.patch_select_focus = PatchSelectPane::Favorites;
+                self.sync_patch_select_states();
+                self.preview_selected_patch();
+            }
+            KeyCode::Char('h') if !self.patch_select_filter_active => {
+                self.patch_select_focus = PatchSelectPane::Patches;
+                self.sync_patch_select_states();
+                self.preview_selected_patch();
+            }
+            KeyCode::Char('l') if !self.patch_select_filter_active => {
+                self.patch_select_focus = PatchSelectPane::Favorites;
+                self.sync_patch_select_states();
+                self.preview_selected_patch();
+            }
+            KeyCode::Char('j') if !self.patch_select_filter_active => {
+                self.move_patch_select_selection_by(1);
+            }
+            KeyCode::Char('k') if !self.patch_select_filter_active => {
+                self.move_patch_select_selection_by(-1);
+            }
+            KeyCode::Char('f') if !self.patch_select_filter_active => {
+                let Some(patch_name) = self.patch_select_selected_patch_name() else {
+                    return;
+                };
+                let Some(phrase) = self.patch_select_current_phrase() else {
+                    return;
+                };
+                self.add_patch_phrase_favorite(patch_name, phrase);
+                self.refresh_patch_select_favorites();
+                self.sync_patch_select_states();
+                self.preview_selected_patch();
+            }
+            KeyCode::Down => self.move_patch_select_selection_by(1),
+            KeyCode::Up => self.move_patch_select_selection_by(-1),
+            KeyCode::PageDown => {
+                self.move_patch_select_selection_by(self.patch_select_page_size as isize)
+            }
+            KeyCode::PageUp => {
+                self.move_patch_select_selection_by(-(self.patch_select_page_size as isize))
+            }
+            KeyCode::Char('/') => {
+                self.patch_select_focus = PatchSelectPane::Patches;
+                self.patch_select_filter_active = true;
+                self.sync_patch_select_states();
+            }
+            KeyCode::Backspace if self.patch_select_filter_active => {
+                if self.patch_query.pop().is_some() {
+                    self.update_patch_filter();
+                }
+                if self.patch_query.is_empty() {
+                    self.patch_select_filter_active = false;
+                }
             }
             KeyCode::Char('?') => self.enter_help(),
-            KeyCode::Char(c) => {
+            KeyCode::Char(c) if self.patch_select_filter_active => {
                 self.patch_query.push(c);
                 self.update_patch_filter();
             }

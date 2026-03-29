@@ -114,6 +114,14 @@ fn patch_select_screen_renders_as_overlay_on_normal_screen() {
         ),
     ];
     app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()];
+    app.patch_phrase_store.patches.insert(
+        "Leads/Lead 1.fxp".to_string(),
+        PatchPhraseState {
+            history: vec![],
+            favorites: vec!["abc".to_string()],
+        },
+    );
+    app.patch_favorite_items = vec!["Leads/Lead 1.fxp".to_string()];
     app.patch_list_state.select(Some(0));
     app.mode = Mode::PatchSelect;
 
@@ -122,8 +130,9 @@ fn patch_select_screen_renders_as_overlay_on_normal_screen() {
 
     assert!(lines.contains("[PATCH SELECT] notepad mode"));
     assert!(lines.contains("▶ {\"Surge XT patch\":\"Pads/Pad 1.fxp\"} abc"));
-    assert!(normalized.contains("音色選択-検索"));
+    assert!(normalized.contains("音色選択-/でpatchname検索"));
     assert!(normalized.contains("パッチ(2/2)"));
+    assert!(normalized.contains("Favorite音色(1)"));
     assert!(lines.contains("Pads/Pad 1.fxp"));
     assert!(lines.contains("Leads/Lead 1.fxp"));
 }
@@ -139,6 +148,7 @@ fn patch_select_screen_splits_status_and_keybinds() {
 
     let lines = render_lines(&mut app, 120, 16);
     let normalized_lines: Vec<String> = lines.iter().map(|line| line.replace(' ', "")).collect();
+    let normalized_screen = lines.join("\n").replace([' ', '\n'], "");
     let status_row = normalized_lines
         .iter()
         .position(|line| {
@@ -152,8 +162,10 @@ fn patch_select_screen_splits_status_and_keybinds() {
 
     assert!(!normalized_lines[status_row].contains("Enter:決定"));
     assert_eq!(keybind_row, status_row + 1);
-    assert!(normalized_lines[keybind_row].contains("Ctrl+F:お気に入り"));
-    assert!(normalized_lines[keybind_row].contains("Ctrl+J/Ctrl+N・Ctrl+K/Ctrl+P"));
+    assert!(normalized_lines[keybind_row].contains("/:検索開始"));
+    assert!(normalized_lines[keybind_row].contains("f:お気に入り"));
+    assert!(normalized_screen.contains("h/l・←/→:ペイン移動"));
+    assert!(normalized_screen.contains("j/k・↑↓・PgUp/PgDn:移動して再生"));
 }
 
 #[test]
@@ -295,8 +307,9 @@ fn patch_select_help_screen_shows_patch_select_shortcuts() {
     let normalized_screen = lines.join("\n").replace([' ', '\n'], "");
 
     assert!(normalized_screen.contains("音色選択モード"));
-    assert!(normalized_screen.contains("Ctrl+F:現在音色とMMLをFavorites追加"));
-    assert!(normalized_screen.contains("Ctrl+J/Ctrl+N/↓:下へ移動"));
+    assert!(normalized_screen.contains("/:patchname絞り込み開始"));
+    assert!(normalized_screen.contains("f:現在音色とMMLをFavorites追加"));
+    assert!(normalized_screen.contains("h/l・←/→:ペイン切替して再生"));
     assert!(!normalized_screen.contains("Ctrl+C:コピー"));
 }
 

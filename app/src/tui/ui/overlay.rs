@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::tui::PatchPhrasePane;
+use crate::tui::{PatchPhrasePane, PatchSelectPane};
 use crate::ui_theme::{MONOKAI_CYAN, MONOKAI_YELLOW};
 
 use super::{
@@ -21,7 +21,7 @@ pub(super) fn draw_patch_select(
     status_color: Color,
     mode: Mode,
 ) {
-    let area = crate::ui_utils::centered_rect(70, 70, f.area());
+    let area = crate::ui_utils::centered_rect(82, 70, f.area());
     f.render_widget(Clear, area);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -32,18 +32,32 @@ pub(super) fn draw_patch_select(
             Constraint::Length(1),
         ])
         .split(area);
-    app.patch_select_page_size = visible_list_page_size(chunks[1]);
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[1]);
+    app.patch_select_page_size = visible_list_page_size(panes[0]);
 
+    let search_title = if app.patch_select_filter_active {
+        " 音色選択 - patch name 検索 (space=AND) "
+    } else {
+        " 音色選択 - / で patch name 検索 "
+    };
+    let search_body = if app.patch_select_filter_active {
+        format!("/ {}", app.patch_query)
+    } else if app.patch_query.is_empty() {
+        "/ を押して検索開始".to_string()
+    } else {
+        format!("/ {}", app.patch_query)
+    };
     f.render_widget(
-        Paragraph::new(format!("> {}", app.patch_query))
-            .style(base_style())
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(" 音色選択 - 検索 (space=AND) ")
-                    .style(base_style())
-                    .border_style(base_style().fg(MONOKAI_YELLOW)),
-            ),
+        Paragraph::new(search_body).style(base_style()).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(search_title)
+                .style(base_style())
+                .border_style(base_style().fg(MONOKAI_YELLOW)),
+        ),
         chunks[0],
     );
 
@@ -57,14 +71,45 @@ pub(super) fn draw_patch_select(
         .iter()
         .enumerate()
         .map(|(i, p)| {
-            let style = if i == app.patch_cursor {
-                base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD)
-            } else {
-                base_style()
-            };
+            let style =
+                if app.patch_select_focus == PatchSelectPane::Patches && i == app.patch_cursor {
+                    base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD)
+                } else {
+                    base_style()
+                };
             ListItem::new(Span::styled(p.clone(), style))
         })
         .collect();
+    let (favorite_count, favorite_items): (usize, Vec<ListItem>) = {
+        let favorites = app.patch_select_favorite_items();
+        (
+            favorites.len(),
+            favorites
+                .iter()
+                .enumerate()
+                .map(|(i, p)| {
+                    let style = if app.patch_select_focus == PatchSelectPane::Favorites
+                        && i == app.patch_favorites_cursor
+                    {
+                        base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD)
+                    } else {
+                        base_style()
+                    };
+                    ListItem::new(Span::styled(p.clone(), style))
+                })
+                .collect(),
+        )
+    };
+    let patch_border = if app.patch_select_focus == PatchSelectPane::Patches {
+        base_style().fg(MONOKAI_CYAN)
+    } else {
+        base_style()
+    };
+    let favorite_border = if app.patch_select_focus == PatchSelectPane::Favorites {
+        base_style().fg(MONOKAI_CYAN)
+    } else {
+        base_style()
+    };
 
     f.render_stateful_widget(
         List::new(patch_items)
@@ -74,11 +119,25 @@ pub(super) fn draw_patch_select(
                     .borders(Borders::ALL)
                     .title(count_title)
                     .style(base_style())
-                    .border_style(base_style().fg(MONOKAI_CYAN)),
+                    .border_style(patch_border),
             )
             .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
-        chunks[1],
+        panes[0],
         &mut app.patch_list_state,
+    );
+    f.render_stateful_widget(
+        List::new(favorite_items)
+            .style(base_style())
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(format!(" Favorite音色 ({}) ", favorite_count))
+                    .style(base_style())
+                    .border_style(favorite_border),
+            )
+            .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
+        panes[1],
+        &mut app.patch_favorites_state,
     );
 
     f.render_widget(

@@ -17,12 +17,13 @@ pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
         Mode::PatchSelect => vec![
             section_title("音色選択モード"),
             Line::from("  ?           : ヘルプ (このページ)"),
-            Line::from("  文字入力    : フィルタ (Space=AND条件)"),
-            Line::from("  Ctrl+J / Ctrl+N / ↓ : 下へ移動"),
-            Line::from("  Ctrl+K / Ctrl+P / ↑ : 上へ移動"),
-            Line::from("  PageUp / PageDown   : 1画面移動"),
+            Line::from("  /           : patch name 絞り込み開始"),
+            Line::from("  / の後に文字入力 : フィルタ (Space=AND条件)"),
+            Line::from("  j / k ・ ↑ / ↓    : 上下移動して再生"),
+            Line::from("  PageUp / PageDown : 1画面移動して再生"),
+            Line::from("  h / l ・ ← / →    : ペイン切替して再生"),
             Line::from("  Enter       : 音色決定"),
-            Line::from("  Ctrl+F      : 現在音色とMMLをFavorites追加"),
+            Line::from("  f           : 現在音色とMMLをFavorites追加"),
             escape_hint(),
         ],
         Mode::NotepadHistory => vec![
