@@ -54,7 +54,7 @@ pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
             Line::from("  k / ↑       : 上へ移動して再生"),
             Line::from("  PageDown    : 1画面下へ移動して再生"),
             Line::from("  PageUp      : 1画面上へ移動して再生"),
-            Line::from("  H           : 先頭行へ移動して再生"),
+            Line::from("  Home        : 先頭行へ移動して再生"),
             Line::from("  M           : 中央行へ移動して再生"),
             Line::from("  L           : 末尾行へ移動して再生"),
             Line::from("  Enter/Space : 再生"),

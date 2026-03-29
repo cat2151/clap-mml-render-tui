@@ -397,7 +397,7 @@ impl<'a> TuiApp<'a> {
                     KeyCode::PageUp => {
                         self.move_normal_cursor_by(-(self.normal_page_size as isize))
                     }
-                    KeyCode::Char('H') => {
+                    KeyCode::Home => {
                         self.set_normal_cursor(0);
                     }
                     KeyCode::Char('M') => {

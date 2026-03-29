@@ -167,20 +167,8 @@ impl DawApp {
     // 実オーディオ preview を起動せず状態更新だけを検証する。
     #[cfg(test)]
     fn try_start_preview_for_test(&mut self) -> bool {
-        if self.entry_ptr != 0 {
-            return false;
-        }
         let measure_index = self.cursor_play_measure_index().unwrap_or(0);
-        if *self.play_state.lock().unwrap() == DawPlayState::Preview {
-            self.stop_play();
-        }
-        *self.play_state.lock().unwrap() = DawPlayState::Preview;
-        *self.play_position.lock().unwrap() = Some(super::super::PlayPosition {
-            measure_index,
-            measure_start: std::time::Instant::now(),
-        });
-        self.append_log_line(format!("preview: meas{}", measure_index + 1));
-        true
+        self.try_start_preview_with_track_mmls_for_test(measure_index, None)
     }
 
     #[cfg(not(test))]

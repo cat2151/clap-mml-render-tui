@@ -2,6 +2,8 @@
 
 use mmlabc_to_smf::mml_preprocessor;
 use serde_json::Value;
+#[cfg(test)]
+use std::time::Instant;
 
 mod history;
 mod insert;
@@ -144,6 +146,46 @@ impl DawApp {
         *self.play_measure_track_mmls.lock().unwrap() = new_track_mmls;
         *self.play_measure_samples.lock().unwrap() = new_samples;
         *self.play_track_gains.lock().unwrap() = new_track_gains;
+    }
+
+    #[cfg(test)]
+    fn try_start_preview_with_track_mmls_for_test(
+        &mut self,
+        measure_index: usize,
+        track_mmls: Option<Vec<String>>,
+    ) -> bool {
+        if self.entry_ptr != 0 {
+            return false;
+        }
+        if *self.play_state.lock().unwrap() == super::DawPlayState::Preview {
+            self.stop_play();
+        }
+        if let Some(track_mmls) = track_mmls {
+            if let Some(measure_track_mmls) = self
+                .play_measure_track_mmls
+                .lock()
+                .unwrap()
+                .get_mut(measure_index)
+            {
+                *measure_track_mmls = track_mmls;
+            }
+        }
+        *self.play_state.lock().unwrap() = super::DawPlayState::Preview;
+        *self.play_position.lock().unwrap() = Some(super::PlayPosition {
+            measure_index,
+            measure_start: Instant::now(),
+        });
+        self.append_log_line(format!("preview: meas{}", measure_index + 1));
+        true
+    }
+
+    #[cfg(not(test))]
+    fn try_start_preview_with_track_mmls_for_test(
+        &mut self,
+        _measure_index: usize,
+        _track_mmls: Option<Vec<String>>,
+    ) -> bool {
+        false
     }
 }
 

@@ -59,7 +59,7 @@ pub(super) fn notepad_mode_title(mode: &Mode) -> &'static str {
 pub(super) fn keybind_text(mode: &Mode) -> &'static str {
     match mode {
         Mode::Normal => {
-            "q ?:help i:insert o/O:挿入 dd/Del:cut p/P:貼付 f:phrase r:ランダム音色 t:音色 Shift+H:history j/k・↑↓・PgUp/PgDn・H/M/L:再生移動 Enter/Space w:DAW"
+            "q ?:help i:insert o/O:挿入 dd/Del:cut p/P:貼付 f:phrase r:ランダム音色 t:音色 Shift+H:history j/k・↑↓・PgUp/PgDn・Home/M/L:再生移動 Enter/Space w:DAW"
         }
         Mode::Insert => "ESC:確定→NORMAL  Enter:確定→次行",
         Mode::PatchSelect => {

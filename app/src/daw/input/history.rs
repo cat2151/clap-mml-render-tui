@@ -1,8 +1,6 @@
 use crossterm::event::KeyCode;
 
 use super::super::DawHistoryPane;
-#[cfg(test)]
-use super::super::PlayPosition;
 use super::super::{
     mml::build_cell_mml_from_data, DawApp, DawMode, DawPlayState, FIRST_PLAYABLE_TRACK,
 };
@@ -106,51 +104,26 @@ impl DawApp {
             return;
         };
 
-        let mut preview_data = self.data.clone();
+        let mut preview_data = vec![self.data[0].clone(), self.data[self.cursor_track].clone()];
         match self.history_overlay_patch_name.as_deref() {
             Some(_) => {
-                preview_data[self.cursor_track][target_measure] = selected;
+                preview_data[1][target_measure] = selected;
             }
             None => {
                 let Some((patch_name, phrase)) = Self::extract_patch_phrase(&selected) else {
                     return;
                 };
-                preview_data[self.cursor_track][0] = Self::build_patch_json(&patch_name);
-                preview_data[self.cursor_track][target_measure] = phrase;
+                preview_data[1][0] = Self::build_patch_json(&patch_name);
+                preview_data[1][target_measure] = phrase;
             }
         }
 
-        let mut track_mmls = self
-            .build_measure_track_mmls()
-            .get(measure_index)
-            .cloned()
-            .unwrap_or_else(|| vec![String::new(); self.tracks]);
-        track_mmls[self.cursor_track] = build_cell_mml_from_data(
-            &preview_data,
-            self.measures,
-            self.cursor_track,
-            target_measure,
-        );
+        let mut track_mmls = self.build_measure_track_mmls_for_measure(target_measure);
+        track_mmls[self.cursor_track] =
+            build_cell_mml_from_data(&preview_data, self.measures, 1, target_measure);
 
-        #[cfg(test)]
-        if self.entry_ptr == 0 {
-            if *self.play_state.lock().unwrap() == DawPlayState::Preview {
-                self.stop_play();
-            }
-            if let Some(measure_track_mmls) = self
-                .play_measure_track_mmls
-                .lock()
-                .unwrap()
-                .get_mut(measure_index)
-            {
-                *measure_track_mmls = track_mmls;
-            }
-            *self.play_state.lock().unwrap() = DawPlayState::Preview;
-            *self.play_position.lock().unwrap() = Some(PlayPosition {
-                measure_index,
-                measure_start: std::time::Instant::now(),
-            });
-            self.append_log_line(format!("preview: meas{}", measure_index + 1));
+        if self.try_start_preview_with_track_mmls_for_test(measure_index, Some(track_mmls.clone()))
+        {
             return;
         }
 

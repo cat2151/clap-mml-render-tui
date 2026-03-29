@@ -1,3 +1,4 @@
+use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::{backend::TestBackend, buffer::Buffer, style::Color, Terminal};
 
 use crate::ui_theme::{
@@ -185,10 +186,25 @@ fn notepad_history_overlay_is_centered_like_daw_overlay() {
     app.start_notepad_history();
 
     let buffer = render_buffer(&mut app, 100, 20);
+    let overlay_area = crate::ui_utils::centered_rect(88, 76, buffer.area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(3),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(overlay_area);
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[0]);
     let (title_x, title_y) = find_text(&buffer, "History");
 
-    assert!(title_x > 0);
-    assert!(title_y > 0);
+    assert_eq!(title_y, panes[0].y);
+    assert!((panes[0].x..panes[0].x + panes[0].width / 4).contains(&title_x));
+    assert!(overlay_area.x > 0);
+    assert!(overlay_area.y > 0);
     assert!(buffer.content().iter().any(|cell| cell.symbol() == "▶"));
 }
 
