@@ -9,14 +9,14 @@ mod mixer;
 mod normal;
 
 use super::{AbRepeatState, DawApp, FIRST_PLAYABLE_TRACK};
-pub(super) use super::{DawMode, DawPlayState};
 
 #[cfg(test)]
-pub(super) use super::DawNormalAction;
-#[cfg(test)]
-pub(super) use normal::{
-    normal_playback_shortcut, preview_target_tracks, resolve_playback_start_measure_index,
-    NormalPlaybackShortcut,
+pub(super) use {
+    super::DawNormalAction,
+    normal::{
+        normal_playback_shortcut, preview_target_tracks, resolve_playback_start_measure_index,
+        NormalPlaybackShortcut,
+    },
 };
 
 const PATCH_JSON_KEY: &str = "Surge XT patch";
