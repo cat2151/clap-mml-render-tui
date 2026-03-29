@@ -125,7 +125,7 @@ fn save_and_load_session_state_roundtrip() {
 }
 
 #[test]
-fn session_state_path_ends_with_history_history_json() {
+fn session_state_path_is_in_history_dir() {
     if let Some(path) = super::session_state_path() {
         let path_str = path.to_string_lossy();
         assert!(
