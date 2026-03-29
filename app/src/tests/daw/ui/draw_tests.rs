@@ -379,7 +379,7 @@ fn help_does_not_show_old_semicolon_guidance() {
     assert!(
         normalized_lines
             .iter()
-            .any(|line| line.contains("n/ESC:TUIに戻る")),
+            .any(|line| line.contains("n:TUIに戻る")),
         "lines: {:?}",
         normalized_lines
     );
