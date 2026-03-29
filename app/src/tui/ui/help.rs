@@ -19,6 +19,7 @@ pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
             Line::from("  ?           : ヘルプ (このページ)"),
             Line::from("  /           : patch name 絞り込み開始"),
             Line::from("  / の後に文字入力 : フィルタ (Space=AND条件)"),
+            Line::from("  Enter       : 絞り込み入力を確定して操作に戻る"),
             Line::from("  j / k ・ ↑ / ↓    : 上下移動して再生"),
             Line::from("  PageUp / PageDown : 1画面移動して再生"),
             Line::from("  h / l ・ ← / →    : ペイン切替して再生"),
@@ -29,6 +30,9 @@ pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
         Mode::NotepadHistory => vec![
             section_title("notepad history 画面"),
             Line::from("  ?                 : ヘルプ (このページ)"),
+            Line::from("  /                 : MML 絞り込み開始"),
+            Line::from("  / の後に文字入力 : フィルタ"),
+            Line::from("  Enter             : 絞り込み入力を確定して操作に戻る"),
             Line::from("  h / l ・ ← / →    : ペイン切替"),
             Line::from("  j / k ・ ↑ / ↓    : 上下移動して再生"),
             Line::from("  PageUp / PageDown : 1画面移動して再生"),
@@ -40,6 +44,9 @@ pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
         Mode::PatchPhrase => vec![
             section_title("patch phrase 画面"),
             Line::from("  ?                 : ヘルプ (このページ)"),
+            Line::from("  /                 : MML 絞り込み開始"),
+            Line::from("  / の後に文字入力 : フィルタ"),
+            Line::from("  Enter             : 絞り込み入力を確定して操作に戻る"),
             Line::from("  j / k ・ ↑ / ↓    : 上下移動して再生"),
             Line::from("  PageUp / PageDown : 1画面移動して再生"),
             Line::from("  h / l ・ ← / →    : ペイン切替して再生"),

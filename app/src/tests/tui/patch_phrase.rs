@@ -179,6 +179,42 @@ fn handle_patch_phrase_page_down_and_page_up_move_by_visible_page() {
 }
 
 #[test]
+fn handle_patch_phrase_slash_then_enter_keeps_filtered_results_for_j_navigation() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["before".to_string()];
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec![
+                "alpha".to_string(),
+                "beta jk".to_string(),
+                "gamma jk".to_string(),
+            ],
+            favorites: vec!["fav".to_string()],
+        },
+    );
+    app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
+
+    app.handle_patch_phrase(KeyCode::Char('/'));
+    app.handle_patch_phrase(KeyCode::Char('j'));
+    app.handle_patch_phrase(KeyCode::Char('k'));
+    app.handle_patch_phrase(KeyCode::Enter);
+    app.handle_patch_phrase(KeyCode::Char('j'));
+
+    assert!(!app.patch_phrase_filter_active);
+    assert_eq!(app.patch_phrase_query, "jk");
+    assert_eq!(
+        app.patch_phrase_history_items(),
+        vec!["beta jk".to_string(), "gamma jk".to_string()]
+    );
+    assert_eq!(app.patch_phrase_history_cursor, 1);
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == r#"{"Surge XT patch":"Pads/Pad 1.fxp"} gamma jk"#
+    ));
+}
+
+#[test]
 fn handle_patch_phrase_page_up_at_top_does_not_repreview() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["before".to_string()];

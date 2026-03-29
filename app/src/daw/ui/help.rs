@@ -69,6 +69,8 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
                 .fg(MONOKAI_YELLOW)
                 .add_modifier(Modifier::BOLD),
         )),
+        Line::from("  /        : MML 絞り込み開始"),
+        Line::from("  Enter    : 絞り込み入力を確定して操作に戻る"),
         Line::from("  h/l, ←/→ : History / Favorites 切り替え"),
         Line::from("  j/k, ↓/↑ : 項目移動"),
         Line::from("  Enter    : 現在 track/meas に反映"),

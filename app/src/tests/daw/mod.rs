@@ -244,9 +244,11 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
         patch_phrase_store: crate::history::PatchPhraseStore::default(),
         patch_phrase_store_dirty: false,
         history_overlay_patch_name: None,
+        history_overlay_query: String::new(),
         history_overlay_history_cursor: 0,
         history_overlay_favorites_cursor: 0,
         history_overlay_focus: DawHistoryPane::History,
+        history_overlay_filter_active: false,
     };
     app.data[1][1] = "c".to_string();
     app.data[1][3] = "e".to_string();

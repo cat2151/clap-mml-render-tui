@@ -1,6 +1,6 @@
 use crossterm::event::KeyCode;
 
-use super::{Mode, PatchPhrasePane, TuiApp};
+use super::{filter_items, Mode, PatchPhrasePane, TuiApp};
 
 impl<'a> TuiApp<'a> {
     fn move_notepad_selection_by(
@@ -39,11 +39,17 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn notepad_history_items(&self) -> Vec<String> {
-        self.patch_phrase_store.notepad.history.clone()
+        filter_items(
+            &self.patch_phrase_store.notepad.history,
+            &self.notepad_query,
+        )
     }
 
     pub(super) fn notepad_favorite_items(&self) -> Vec<String> {
-        self.patch_phrase_store.notepad.favorites.clone()
+        filter_items(
+            &self.patch_phrase_store.notepad.favorites,
+            &self.notepad_query,
+        )
     }
 
     fn sync_notepad_history_states(&mut self) {
@@ -110,14 +116,19 @@ impl<'a> TuiApp<'a> {
     }
 
     fn delete_notepad_favorite(&mut self) {
-        let favorites = &mut self.patch_phrase_store.notepad.favorites;
-        if self.notepad_favorites_cursor >= favorites.len() {
+        let Some(selected) = self.selected_notepad_item() else {
             self.notepad_pending_delete = false;
             self.sync_notepad_history_states();
             return;
-        }
+        };
+        let favorites = &mut self.patch_phrase_store.notepad.favorites;
+        let Some(index) = favorites.iter().position(|item| item == &selected) else {
+            self.notepad_pending_delete = false;
+            self.sync_notepad_history_states();
+            return;
+        };
 
-        let mml = favorites.remove(self.notepad_favorites_cursor);
+        let mml = favorites.remove(index);
         Self::push_front_dedup(&mut self.patch_phrase_store.notepad.history, mml);
         self.patch_phrase_store_dirty = true;
         self.notepad_pending_delete = false;
@@ -128,12 +139,46 @@ impl<'a> TuiApp<'a> {
         self.notepad_focus = PatchPhrasePane::History;
         self.notepad_history_cursor = 0;
         self.notepad_favorites_cursor = 0;
+        self.notepad_query.clear();
+        self.notepad_filter_active = false;
         self.notepad_pending_delete = false;
         self.sync_notepad_history_states();
         self.mode = Mode::NotepadHistory;
     }
 
     pub(super) fn handle_notepad_history(&mut self, key: KeyCode) {
+        if self.notepad_filter_active {
+            match key {
+                KeyCode::Esc => {
+                    self.notepad_pending_delete = false;
+                    self.notepad_filter_active = false;
+                    self.flush_patch_phrase_store_if_dirty();
+                    self.mode = Mode::Normal;
+                }
+                KeyCode::Enter => {
+                    self.notepad_filter_active = false;
+                    self.sync_notepad_history_states();
+                }
+                KeyCode::Backspace => {
+                    self.notepad_query.pop();
+                    self.sync_notepad_history_states();
+                    self.preview_selected_notepad_item();
+                    if self.notepad_query.is_empty() {
+                        self.notepad_filter_active = false;
+                    }
+                }
+                KeyCode::Char('?') => self.enter_help(),
+                KeyCode::Char('/') => {}
+                KeyCode::Char(c) => {
+                    self.notepad_query.push(c);
+                    self.sync_notepad_history_states();
+                    self.preview_selected_notepad_item();
+                }
+                _ => {}
+            }
+            return;
+        }
+
         let was_pending_delete = self.notepad_pending_delete;
         if !(matches!(key, KeyCode::Char('d')) && self.notepad_focus == PatchPhrasePane::Favorites)
         {
@@ -190,6 +235,11 @@ impl<'a> TuiApp<'a> {
                     self.sync_notepad_history_states();
                     self.preview_selected_notepad_item();
                 }
+            }
+            KeyCode::Char('/') => {
+                self.notepad_filter_active = true;
+                self.notepad_pending_delete = false;
+                self.sync_notepad_history_states();
             }
             KeyCode::Enter => {
                 if let Some(mml) = self.selected_notepad_item() {

@@ -40,7 +40,7 @@ use std::sync::{Arc, Mutex};
 const AUDIO_CACHE_MAX_ENTRIES: usize = 64;
 pub(super) const PATCH_JSON_KEY: &str = "Surge XT patch";
 
-use self::cache::{filter_patches, resolve_cached_samples, try_insert_cache};
+use self::cache::{filter_items, filter_patches, resolve_cached_samples, try_insert_cache};
 use crate::config::Config;
 
 /// バックグラウンドパッチ読み込みの状態
@@ -114,6 +114,8 @@ pub struct TuiApp<'a> {
     pub(super) notepad_history_state: ListState,
     pub(super) notepad_favorites_state: ListState,
     pub(super) notepad_focus: PatchPhrasePane,
+    pub(super) notepad_query: String,
+    pub(super) notepad_filter_active: bool,
     pub(super) notepad_pending_delete: bool,
     pub(super) normal_pending_delete: bool,
     pub(super) yank_buffer: Option<String>,
@@ -123,6 +125,8 @@ pub struct TuiApp<'a> {
     pub(super) patch_phrase_history_state: ListState,
     pub(super) patch_phrase_favorites_state: ListState,
     pub(super) patch_phrase_focus: PatchPhrasePane,
+    pub(super) patch_phrase_query: String,
+    pub(super) patch_phrase_filter_active: bool,
     pub(super) patch_phrase_store_dirty: bool,
     /// バックグラウンドのアップデートチェックがtrueにセットしたらアップデートを実行
     pub update_available: Arc<AtomicBool>,
@@ -221,6 +225,8 @@ impl<'a> TuiApp<'a> {
             notepad_history_state: ListState::default(),
             notepad_favorites_state: ListState::default(),
             notepad_focus: PatchPhrasePane::History,
+            notepad_query: String::new(),
+            notepad_filter_active: false,
             notepad_pending_delete: false,
             normal_pending_delete: false,
             yank_buffer: None,
@@ -230,6 +236,8 @@ impl<'a> TuiApp<'a> {
             patch_phrase_history_state: ListState::default(),
             patch_phrase_favorites_state: ListState::default(),
             patch_phrase_focus: PatchPhrasePane::History,
+            patch_phrase_query: String::new(),
+            patch_phrase_filter_active: false,
             patch_phrase_store_dirty: false,
             update_available: Arc::new(AtomicBool::new(false)),
             is_daw_mode,

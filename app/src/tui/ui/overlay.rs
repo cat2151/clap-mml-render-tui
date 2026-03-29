@@ -160,6 +160,7 @@ pub(super) fn draw_patch_phrase(
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
+            Constraint::Length(3),
             Constraint::Min(3),
             Constraint::Length(1),
             Constraint::Length(1),
@@ -168,10 +169,32 @@ pub(super) fn draw_patch_phrase(
     let panes = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(chunks[0]);
+        .split(chunks[1]);
     app.patch_phrase_page_size = visible_list_page_size(panes[0]);
 
     let patch_name = app.patch_phrase_name.as_deref().unwrap_or("(unknown)");
+    let search_title = if app.patch_phrase_filter_active {
+        " patch phrase - MML 検索 "
+    } else {
+        " patch phrase - / で MML 検索 "
+    };
+    let search_body = if app.patch_phrase_filter_active {
+        format!("/ {}", app.patch_phrase_query)
+    } else if app.patch_phrase_query.is_empty() {
+        "/ を押して検索開始".to_string()
+    } else {
+        format!("/ {}", app.patch_phrase_query)
+    };
+    f.render_widget(
+        Paragraph::new(search_body).style(base_style()).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(search_title)
+                .style(base_style())
+                .border_style(base_style().fg(MONOKAI_YELLOW)),
+        ),
+        chunks[0],
+    );
     let history_items: Vec<ListItem> = app
         .patch_phrase_history_items()
         .into_iter()
@@ -245,11 +268,11 @@ pub(super) fn draw_patch_phrase(
 
     f.render_widget(
         Paragraph::new(status.to_string()).style(base_style().fg(status_color)),
-        chunks[1],
+        chunks[2],
     );
     f.render_widget(
         Paragraph::new(keybind_text(&mode)).style(base_style()),
-        chunks[2],
+        chunks[3],
     );
 }
 
@@ -265,6 +288,7 @@ pub(super) fn draw_notepad_history(
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
+            Constraint::Length(3),
             Constraint::Min(3),
             Constraint::Length(1),
             Constraint::Length(1),
@@ -273,9 +297,31 @@ pub(super) fn draw_notepad_history(
     let panes = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(chunks[0]);
+        .split(chunks[1]);
     app.notepad_history_page_size = visible_list_page_size(panes[0]);
 
+    let search_title = if app.notepad_filter_active {
+        " notepad history - MML 検索 "
+    } else {
+        " notepad history - / で MML 検索 "
+    };
+    let search_body = if app.notepad_filter_active {
+        format!("/ {}", app.notepad_query)
+    } else if app.notepad_query.is_empty() {
+        "/ を押して検索開始".to_string()
+    } else {
+        format!("/ {}", app.notepad_query)
+    };
+    f.render_widget(
+        Paragraph::new(search_body).style(base_style()).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(search_title)
+                .style(base_style())
+                .border_style(base_style().fg(MONOKAI_YELLOW)),
+        ),
+        chunks[0],
+    );
     let history_items: Vec<ListItem> = app
         .notepad_history_items()
         .into_iter()
@@ -355,10 +401,10 @@ pub(super) fn draw_notepad_history(
 
     f.render_widget(
         Paragraph::new(status.to_string()).style(base_style().fg(status_color)),
-        chunks[1],
+        chunks[2],
     );
     f.render_widget(
         Paragraph::new(keybind_text(&mode)).style(base_style()),
-        chunks[2],
+        chunks[3],
     );
 }

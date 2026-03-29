@@ -69,6 +69,7 @@ pub(super) fn draw_history(f: &mut Frame, app: &DawApp, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
+            Constraint::Length(3),
             Constraint::Min(3),
             Constraint::Length(1),
             Constraint::Length(1),
@@ -77,7 +78,31 @@ pub(super) fn draw_history(f: &mut Frame, app: &DawApp, area: Rect) {
     let panes = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(chunks[0]);
+        .split(chunks[1]);
+
+    let search_title = if app.history_overlay_filter_active {
+        " history overlay - MML 検索 "
+    } else {
+        " history overlay - / で MML 検索 "
+    };
+    let search_body = if app.history_overlay_filter_active {
+        format!("/ {}", app.history_overlay_query)
+    } else if app.history_overlay_query.is_empty() {
+        "/ を押して検索開始".to_string()
+    } else {
+        format!("/ {}", app.history_overlay_query)
+    };
+    f.render_widget(
+        Paragraph::new(search_body)
+            .style(Style::default().fg(MONOKAI_FG))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(search_title)
+                    .border_style(Style::default().fg(MONOKAI_CYAN)),
+            ),
+        chunks[0],
+    );
 
     let history_border = if app.history_overlay_focus == DawHistoryPane::History {
         Style::default().fg(MONOKAI_CYAN)
@@ -110,10 +135,10 @@ pub(super) fn draw_history(f: &mut Frame, app: &DawApp, area: Rect) {
     );
     f.render_widget(
         Paragraph::new(
-            "Enter:確定  Space:preview  ESC:閉じる  h/l・←/→:ペイン移動してpreview  j/k・↑/↓:移動してpreview",
+            "/:検索入力  Enter:検索確定/確定  Space:preview  ESC:閉じる  h/l・←/→:ペイン移動してpreview  j/k・↑/↓:移動してpreview",
         )
             .style(Style::default().fg(MONOKAI_CYAN)),
-        chunks[1],
+        chunks[2],
     );
     f.render_widget(
         Paragraph::new(match app.history_overlay_patch_name.as_deref() {
@@ -121,6 +146,6 @@ pub(super) fn draw_history(f: &mut Frame, app: &DawApp, area: Rect) {
             None => "選択行の patch を init に、phrase を現在 meas に反映".to_string(),
         })
         .style(Style::default().fg(MONOKAI_FG)),
-        chunks[2],
+        chunks[3],
     );
 }

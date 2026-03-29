@@ -68,6 +68,35 @@ fn handle_patch_select_slash_then_chars_filter_and_preview_first_result() {
 }
 
 #[test]
+fn handle_patch_select_enter_exits_filter_input_and_keeps_filtered_results() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.patch_all = make_patches(&["Pads/Pad 1.fxp", "JK Brass/Bass 1.fxp", "JK Lead.fxp"]);
+    app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
+    app.patch_list_state.select(Some(0));
+    app.mode = Mode::PatchSelect;
+
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE));
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
+    app.handle_patch_select(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
+
+    assert!(!app.patch_select_filter_active);
+    assert_eq!(app.patch_query, "jk");
+    assert_eq!(
+        app.patch_filtered,
+        vec!["JK Brass/Bass 1.fxp".to_string(), "JK Lead.fxp".to_string()]
+    );
+    assert_eq!(app.patch_cursor, 1);
+    assert_eq!(app.patch_list_state.selected(), Some(1));
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "JK Lead.fxp"} l8cdef"#
+    ));
+}
+
+#[test]
 fn handle_patch_select_ctrl_p_moves_cursor_up() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];

@@ -99,6 +99,35 @@ fn handle_notepad_history_j_previews_without_reordering_history() {
 }
 
 #[test]
+fn handle_notepad_history_slash_then_enter_keeps_filtered_results_for_j_navigation() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_phrase_store.notepad.history = vec![
+        "alpha".to_string(),
+        "beta jk".to_string(),
+        "gamma jk".to_string(),
+    ];
+    app.start_notepad_history();
+
+    app.handle_notepad_history(KeyCode::Char('/'));
+    app.handle_notepad_history(KeyCode::Char('j'));
+    app.handle_notepad_history(KeyCode::Char('k'));
+    app.handle_notepad_history(KeyCode::Enter);
+    app.handle_notepad_history(KeyCode::Char('j'));
+
+    assert!(!app.notepad_filter_active);
+    assert_eq!(app.notepad_query, "jk");
+    assert_eq!(
+        app.notepad_history_items(),
+        vec!["beta jk".to_string(), "gamma jk".to_string()]
+    );
+    assert_eq!(app.notepad_history_cursor, 1);
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == "gamma jk"
+    ));
+}
+
+#[test]
 fn handle_notepad_history_page_down_and_page_up_move_by_visible_page() {
     let mut app = TuiApp::new_for_test(test_config());
     app.patch_phrase_store.notepad.history = vec![

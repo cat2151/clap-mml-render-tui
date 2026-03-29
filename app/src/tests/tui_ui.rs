@@ -177,12 +177,14 @@ fn notepad_history_overlay_renders_history_and_favorites_lists() {
         favorites: vec!["o5g".to_string()],
     };
     app.start_notepad_history();
+    app.notepad_filter_active = true;
 
     let lines = render_lines(&mut app, 100, 16).join("\n");
 
     assert!(lines.contains("[HISTORY] notepad mode"));
     assert!(lines.contains("History"));
     assert!(lines.contains("Favorites"));
+    assert!(lines.contains("/"));
     assert!(lines.contains("l8cdef"));
     assert!(lines.contains("o5g"));
 }
@@ -248,6 +250,19 @@ fn patch_phrase_screen_uses_c_as_fallback_for_empty_lists() {
     let lines = render_lines(&mut app, 80, 10).join("\n");
 
     assert!(lines.contains("▶ c"));
+}
+
+#[test]
+fn patch_phrase_screen_shows_search_prompt() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::PatchPhrase;
+    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase_query = "jk".to_string();
+    app.patch_phrase_filter_active = true;
+
+    let lines = render_lines(&mut app, 120, 12).join("\n");
+
+    assert!(lines.contains("/ jk"));
 }
 
 #[test]

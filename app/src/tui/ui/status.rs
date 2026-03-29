@@ -63,13 +63,13 @@ pub(super) fn keybind_text(mode: &Mode) -> &'static str {
         }
         Mode::Insert => "ESC:確定→NORMAL  Enter:確定→次行",
         Mode::PatchSelect => {
-            "Enter:決定  ESC:キャンセル  /:検索開始  f:お気に入り  h/l・←/→:ペイン移動  j/k・↑↓・PgUp/PgDn:移動して再生"
+            "/:検索入力  Enter:検索確定/決定  ESC:キャンセル  f:お気に入り  h/l・←/→:ペイン移動  j/k・↑↓・PgUp/PgDn:移動して再生"
         }
         Mode::NotepadHistory => {
-            "Enter:確定  ESC:閉じる  h/l・←/→:ペイン移動  j/k・↑↓:移動して再生  PgUp/PgDn:1画面移動  f:お気に入り  dd:削除"
+            "/:検索入力  Enter:検索確定/確定  ESC:閉じる  h/l・←/→:ペイン移動  j/k・↑↓:移動して再生  PgUp/PgDn:1画面移動  f:お気に入り  dd:削除"
         }
         Mode::PatchPhrase => {
-            "j/k・↑↓:再生移動  PgUp/PgDn:1画面移動  h/l・←/→:ペイン移動  Space:再生  Enter:現在行の上に挿入  i:編集  f:お気に入り  ESC:戻る"
+            "/:検索入力  Enter:検索確定/現在行の上に挿入  j/k・↑↓:再生移動  PgUp/PgDn:1画面移動  h/l・←/→:ペイン移動  Space:再生  i:編集  f:お気に入り  ESC:戻る"
         }
         Mode::Help => "ESC:キャンセル",
     }

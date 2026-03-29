@@ -215,3 +215,45 @@ fn handle_history_overlay_down_previews_next_history_item() {
         r#"{"Surge XT patch": "Pads/Pad 1.fxp"}second"#
     );
 }
+
+#[test]
+fn handle_history_overlay_slash_then_enter_keeps_filtered_results_for_j_navigation() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    app.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec![
+                "alpha".to_string(),
+                "beta jk".to_string(),
+                "gamma jk".to_string(),
+            ],
+            favorites: vec![],
+        },
+    );
+    app.start_history_overlay();
+
+    app.handle_history_overlay(KeyCode::Char('/'));
+    app.handle_history_overlay(KeyCode::Char('j'));
+    app.handle_history_overlay(KeyCode::Char('k'));
+    app.handle_history_overlay(KeyCode::Enter);
+    app.handle_history_overlay(KeyCode::Char('j'));
+
+    assert!(!app.history_overlay_filter_active);
+    assert_eq!(app.history_overlay_query, "jk");
+    assert_eq!(
+        app.history_overlay_history_items(),
+        vec!["beta jk".to_string(), "gamma jk".to_string()]
+    );
+    assert_eq!(app.history_overlay_history_cursor, 1);
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Preview
+    ));
+    assert_eq!(
+        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        r#"{"Surge XT patch": "Pads/Pad 1.fxp"}gamma jk"#
+    );
+}
