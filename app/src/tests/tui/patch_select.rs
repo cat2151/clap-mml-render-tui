@@ -357,3 +357,41 @@ fn handle_patch_select_question_mark_enters_help_and_esc_returns_to_patch_select
 
     assert!(matches!(app.mode, Mode::PatchSelect));
 }
+
+#[test]
+fn handle_patch_select_n_p_t_switch_to_corresponding_overlays() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "Pads/Pad 1.fxp",
+        "Leads/Lead 1.fxp",
+    ]))));
+    app.patch_phrase_store.notepad.history = vec!["line history".to_string()];
+    app.patch_phrase_store.patches.insert(
+        "Leads/Lead 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["lead history".to_string()],
+            favorites: vec!["lead favorite".to_string()],
+        },
+    );
+    app.open_patch_select_overlay(None);
+    app.patch_cursor = 1;
+    app.patch_list_state.select(Some(1));
+
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+    assert!(matches!(app.mode, Mode::NotepadHistory));
+
+    app.open_patch_select_overlay(None);
+    app.patch_cursor = 1;
+    app.patch_list_state.select(Some(1));
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
+    assert!(matches!(app.mode, Mode::PatchPhrase));
+    assert_eq!(app.patch_phrase_name.as_deref(), Some("Leads/Lead 1.fxp"));
+
+    app.open_patch_select_overlay(None);
+    app.patch_cursor = 1;
+    app.patch_list_state.select(Some(1));
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE));
+    assert!(matches!(app.mode, Mode::PatchSelect));
+    assert_eq!(app.patch_filtered[app.patch_cursor], "Leads/Lead 1.fxp");
+}

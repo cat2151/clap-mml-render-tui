@@ -232,6 +232,16 @@ impl<'a> TuiApp<'a> {
                 self.flush_patch_phrase_store_if_dirty();
                 self.mode = Mode::Normal;
             }
+            KeyCode::Char('n') => {
+                self.start_notepad_history();
+            }
+            KeyCode::Char('p') => {
+                self.start_patch_phrase_for_patch_name(self.patch_phrase_name.clone());
+            }
+            KeyCode::Char('t') => {
+                let patch_name = self.patch_phrase_name.clone();
+                self.open_patch_select_overlay(patch_name.as_deref());
+            }
             KeyCode::Char('h') | KeyCode::Left => {
                 self.patch_phrase_focus = PatchPhrasePane::History;
                 self.sync_patch_phrase_states();

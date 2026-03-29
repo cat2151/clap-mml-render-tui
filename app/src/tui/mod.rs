@@ -1,13 +1,14 @@
 //! vim 風 TUI
 //!
 //! モード:
-//!   NORMAL : j/k で行移動、PageUp/PageDown で1画面移動、Home/M/L で先頭/中央/末尾行へ移動、i/o で INSERT、dd / Delete で現在行をヤンク削除、r で現在行の先頭にランダム音色を挿入/置換、t で音色選択、w で DAW、Enter/Space で再生、q で終了
+//!   NORMAL : j/k で行移動、PageUp/PageDown で1画面移動、Home/M/L で先頭/中央/末尾行へ移動、i/o で INSERT、dd / Delete で現在行をヤンク削除、r で現在行の先頭にランダム音色を挿入/置換、t で音色選択、Shift+H / f で patch history、w で DAW、Enter/Space で再生、q で終了
 //!   INSERT : tui-textarea で編集
 //!            ESC   → 確定 → NORMAL（再生開始）
 //!            Enter → 確定 → 次行に新規行挿入 → INSERT 継続
 //!            Ctrl+C / Ctrl+X / Ctrl+V → コピー / カット / ペースト
 //!   PATCHSELECT : 音色を選択
 //!            / の後に文字入力: patch name フィルタ（space=AND条件）
+//!            n/p/t: notepad history / patch history / 音色選択
 //!            j/k・↑↓・PageUp/PageDown:リスト移動（移動ごとにpreview再生）
 //!            h/l・←/→:左右ペイン移動（移動ごとにpreview再生）
 //!            f:現在音色とMMLをFavorites追加

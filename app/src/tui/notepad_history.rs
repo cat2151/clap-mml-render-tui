@@ -193,6 +193,28 @@ impl<'a> TuiApp<'a> {
                 self.flush_patch_phrase_store_if_dirty();
                 self.mode = Mode::Normal;
             }
+            KeyCode::Char('n') => {
+                self.start_notepad_history();
+            }
+            KeyCode::Char('p') => {
+                let selected_patch_name = self.selected_notepad_item().and_then(|mml| {
+                    Self::extract_patch_phrase(&mml).map(|(patch_name, _)| patch_name)
+                });
+                self.start_patch_phrase_for_patch_name(
+                    selected_patch_name.or_else(|| self.current_line_patch_name()),
+                );
+            }
+            KeyCode::Char('t') => {
+                let selected_patch_name = self.selected_notepad_item().and_then(|mml| {
+                    Self::extract_patch_phrase(&mml).map(|(patch_name, _)| patch_name)
+                });
+                let current_patch_name = self.current_line_patch_name();
+                self.open_patch_select_overlay(
+                    selected_patch_name
+                        .as_deref()
+                        .or(current_patch_name.as_deref()),
+                );
+            }
             KeyCode::Char('h') | KeyCode::Left => {
                 self.notepad_focus = PatchPhrasePane::History;
                 self.sync_notepad_history_states();
