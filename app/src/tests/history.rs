@@ -170,6 +170,13 @@ fn patch_phrase_store_path_same_dir_as_history_json() {
         (None, None) => {}
         (Some(h), Some(p)) => {
             assert_eq!(h.parent(), p.parent());
+            let parent = p.parent().and_then(|dir| dir.to_str()).unwrap_or_default();
+            assert!(
+                parent.ends_with("clap-mml-render-tui/history")
+                    || parent.ends_with(r"clap-mml-render-tui\history"),
+                "patch_phrase_store_path の親ディレクトリが history ではない: {}",
+                parent
+            );
         }
         (Some(_), None) => {
             panic!("session_state_path() は Some だが patch_phrase_store_path() は None")
