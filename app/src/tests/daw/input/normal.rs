@@ -165,7 +165,7 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
 
 #[test]
 fn handle_normal_r_ignores_non_playable_track_and_keeps_header_unchanged() {
-    let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_ignores_track0");
+    let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_ignores_non_playable_track");
     std::fs::remove_dir_all(&tmp).ok();
     std::fs::create_dir_all(&tmp).unwrap();
     let patch_path = tmp.join("Pad 1.fxp");
