@@ -13,10 +13,12 @@
 //!   L      : 末尾 track へ移動
 //!   i      : INSERT モード（現在セルを編集）
 //!   m      : mixer overlay を開く
-//!   p      : 演奏 / 停止 toggle
+//!   dd     : 現在セルを yank して空にする
+//!   p      : yank 内容で現在セルを上書き
 //!   Enter / Space       : 非play時、現在 track の現在 meas を一発再生
-//!   Shift+Enter / Space : 非play時、現在 meas の全 track を一発再生
-//!   Shift+P             : 非play時、現在 meas から演奏開始して継続
+//!   Shift+Enter         : 非play時、現在 meas の全 track を一発再生
+//!   Shift+P             : 演奏 / 停止 toggle
+//!   Shift+Space         : 非play時、現在 meas から演奏開始して継続
 //!   s      : 現在 track の solo toggle
 //!   r      : measure 0 にランダム音色を設定
 //!   K / ?  : ヘルプ表示
@@ -187,7 +189,10 @@ pub struct DawApp {
     pub(super) mixer_cursor_track: usize,
     /// 再生スレッドと共有する track ごとの gain。
     play_track_gains: Arc<Mutex<Vec<f32>>>,
+    pub(super) yank_buffer: Option<String>,
+    pub(super) normal_pending_delete: bool,
     pub(super) patch_phrase_store: crate::history::PatchPhraseStore,
+    pub(super) patch_phrase_store_dirty: bool,
     pub(super) history_overlay_patch_name: Option<String>,
     pub(super) history_overlay_history_cursor: usize,
     pub(super) history_overlay_favorites_cursor: usize,
@@ -390,7 +395,10 @@ impl DawApp {
             track_volumes_db: vec![0; tracks],
             mixer_cursor_track: FIRST_PLAYABLE_TRACK.min(tracks - 1),
             play_track_gains,
+            yank_buffer: None,
+            normal_pending_delete: false,
             patch_phrase_store: crate::history::load_patch_phrase_store(),
+            patch_phrase_store_dirty: false,
             history_overlay_patch_name: None,
             history_overlay_history_cursor: 0,
             history_overlay_favorites_cursor: 0,

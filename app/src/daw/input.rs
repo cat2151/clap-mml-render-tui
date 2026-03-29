@@ -20,6 +20,7 @@ enum NormalPlaybackShortcut {
     PreviewCurrentTrack,
     PreviewAllTracks,
     PlayFromCursor,
+    TogglePlay,
 }
 
 fn normal_playback_shortcut(
@@ -27,13 +28,10 @@ fn normal_playback_shortcut(
 ) -> Option<NormalPlaybackShortcut> {
     let shift = key_event.modifiers.contains(KeyModifiers::SHIFT);
     match key_event.code {
-        KeyCode::Enter | KeyCode::Char(' ') if shift => {
-            Some(NormalPlaybackShortcut::PreviewAllTracks)
-        }
+        KeyCode::Enter if shift => Some(NormalPlaybackShortcut::PreviewAllTracks),
+        KeyCode::Char(' ') if shift => Some(NormalPlaybackShortcut::PlayFromCursor),
         KeyCode::Enter | KeyCode::Char(' ') => Some(NormalPlaybackShortcut::PreviewCurrentTrack),
-        KeyCode::Char('p') | KeyCode::Char('P') if shift => {
-            Some(NormalPlaybackShortcut::PlayFromCursor)
-        }
+        KeyCode::Char('P') => Some(NormalPlaybackShortcut::TogglePlay),
         _ => None,
     }
 }
@@ -58,9 +56,9 @@ fn resolve_playback_start_measure_index(
 ) -> Option<usize> {
     match shortcut {
         NormalPlaybackShortcut::PlayFromCursor => cursor_measure_index,
-        NormalPlaybackShortcut::PreviewCurrentTrack | NormalPlaybackShortcut::PreviewAllTracks => {
-            Some(0)
-        }
+        NormalPlaybackShortcut::PreviewCurrentTrack
+        | NormalPlaybackShortcut::PreviewAllTracks
+        | NormalPlaybackShortcut::TogglePlay => Some(0),
     }
 }
 
@@ -123,6 +121,76 @@ impl DawApp {
         }
         Self::extract_patch_phrase(&self.data[self.cursor_track][0])
             .map(|(patch_name, _)| patch_name)
+    }
+
+    fn mark_patch_phrase_store_dirty(&mut self) {
+        self.patch_phrase_store_dirty = true;
+    }
+
+    pub(in crate::daw) fn flush_patch_phrase_store_if_dirty(&mut self) {
+        if !self.patch_phrase_store_dirty {
+            return;
+        }
+        let _ = crate::history::save_patch_phrase_store(&self.patch_phrase_store);
+        self.patch_phrase_store_dirty = false;
+    }
+
+    fn record_current_measure_to_patch_history(&mut self, mml: &str) {
+        let mml = mml.trim();
+        if mml.is_empty() {
+            return;
+        }
+
+        if self.cursor_measure > 0 {
+            if let Some(patch_name) = self.current_track_patch_name() {
+                let state = self
+                    .patch_phrase_store
+                    .patches
+                    .entry(patch_name)
+                    .or_default();
+                Self::push_front_dedup(&mut state.history, mml.to_string());
+                self.mark_patch_phrase_store_dirty();
+                return;
+            }
+        }
+
+        let Some((patch_name, phrase)) = Self::extract_patch_phrase(mml) else {
+            return;
+        };
+        if phrase.is_empty() {
+            return;
+        }
+        let state = self
+            .patch_phrase_store
+            .patches
+            .entry(patch_name)
+            .or_default();
+        Self::push_front_dedup(&mut state.history, phrase);
+        self.mark_patch_phrase_store_dirty();
+    }
+
+    fn cut_current_measure(&mut self) {
+        let current = self.data[self.cursor_track][self.cursor_measure].clone();
+        self.record_current_measure_to_patch_history(&current);
+        self.yank_buffer = Some(current);
+        if self.commit_insert_cell(self.cursor_track, self.cursor_measure, "") {
+            self.save();
+            self.sync_playback_mml_state();
+        }
+    }
+
+    fn paste_yanked_measure(&mut self) -> bool {
+        let Some(yanked) = self.yank_buffer.as_deref() else {
+            return false;
+        };
+        let yanked = yanked.to_string();
+        let previous = self.data[self.cursor_track][self.cursor_measure].clone();
+        self.record_current_measure_to_patch_history(&previous);
+        if self.commit_insert_cell(self.cursor_track, self.cursor_measure, &yanked) {
+            self.save();
+            self.sync_playback_mml_state();
+        }
+        true
     }
 
     fn cursor_play_measure_index(&self) -> Option<usize> {
@@ -263,6 +331,19 @@ impl DawApp {
         &mut self,
         key_event: crossterm::event::KeyEvent,
     ) -> DawNormalAction {
+        let is_plain_d_key =
+            key_event.code == KeyCode::Char('d') && key_event.modifiers == KeyModifiers::NONE;
+        if is_plain_d_key {
+            if self.normal_pending_delete {
+                self.normal_pending_delete = false;
+                self.cut_current_measure();
+            } else {
+                self.normal_pending_delete = true;
+            }
+            return DawNormalAction::Continue;
+        }
+        self.normal_pending_delete = false;
+
         match normal_playback_shortcut(key_event) {
             Some(NormalPlaybackShortcut::PreviewCurrentTrack) => {
                 self.start_preview_for_target_tracks(false);
@@ -277,6 +358,15 @@ impl DawApp {
                     self.start_play_from_cursor_measure();
                     return DawNormalAction::Continue;
                 }
+            }
+            Some(NormalPlaybackShortcut::TogglePlay) => {
+                let state = *self.play_state.lock().unwrap();
+                if state == DawPlayState::Playing || state == DawPlayState::Preview {
+                    self.stop_play();
+                } else {
+                    self.start_play();
+                }
+                return DawNormalAction::Continue;
             }
             None => {}
         }
@@ -332,11 +422,8 @@ impl DawApp {
             KeyCode::Char('K') | KeyCode::Char('?') => self.mode = DawMode::Help,
 
             KeyCode::Char('p') => {
-                let state = *self.play_state.lock().unwrap();
-                if state == DawPlayState::Playing || state == DawPlayState::Preview {
-                    self.stop_play();
-                } else {
-                    self.start_play();
+                if !self.paste_yanked_measure() {
+                    self.append_log_line("ヤンクバッファが空です".to_string());
                 }
             }
 

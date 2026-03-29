@@ -469,7 +469,7 @@ fn handle_normal_stops_preview_when_cursor_moves_to_non_playable_track() {
 }
 
 #[test]
-fn normal_playback_shortcut_maps_enter_space_and_shift_p() {
+fn normal_playback_shortcuts_map_correctly() {
     assert_eq!(
         normal_playback_shortcut(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
         Some(NormalPlaybackShortcut::PreviewCurrentTrack)
@@ -484,11 +484,89 @@ fn normal_playback_shortcut_maps_enter_space_and_shift_p() {
     );
     assert_eq!(
         normal_playback_shortcut(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::SHIFT)),
-        Some(NormalPlaybackShortcut::PreviewAllTracks)
+        Some(NormalPlaybackShortcut::PlayFromCursor)
     );
     assert_eq!(
         normal_playback_shortcut(KeyEvent::new(KeyCode::Char('P'), KeyModifiers::SHIFT)),
-        Some(NormalPlaybackShortcut::PlayFromCursor)
+        Some(NormalPlaybackShortcut::TogglePlay)
+    );
+    assert_eq!(
+        normal_playback_shortcut(KeyEvent::new(KeyCode::Char('P'), KeyModifiers::NONE)),
+        Some(NormalPlaybackShortcut::TogglePlay)
+    );
+}
+
+#[test]
+fn handle_normal_dd_yanks_current_measure_clears_it_and_records_patch_history() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    app.data[1][0] = r#"{"Surge XT patch": "Pad 1.fxp"}"#.to_string();
+    app.data[1][1] = "cdef".to_string();
+    app.play_measure_mmls.lock().unwrap()[0] = "stale".to_string();
+
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert!(app.normal_pending_delete);
+    assert_eq!(app.data[1][1], "cdef");
+    assert!(app.yank_buffer.is_none());
+
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert!(!app.normal_pending_delete);
+    assert_eq!(app.data[1][1], "");
+    assert_eq!(app.yank_buffer.as_deref(), Some("cdef"));
+    assert_eq!(
+        app.patch_phrase_store
+            .patches
+            .get("Pad 1.fxp")
+            .map(|state| state.history.clone()),
+        Some(vec!["cdef".to_string()])
+    );
+    assert!(app.patch_phrase_store_dirty);
+    assert_eq!(app.play_measure_mmls.lock().unwrap()[0], "");
+}
+
+#[test]
+fn handle_normal_p_overwrites_current_measure_from_yank_and_records_previous_phrase() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    app.data[1][0] = r#"{"Surge XT patch": "Pad 1.fxp"}"#.to_string();
+    app.data[1][1] = "old".to_string();
+    app.yank_buffer = Some("new".to_string());
+
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert_eq!(app.data[1][1], "new");
+    assert_eq!(app.yank_buffer.as_deref(), Some("new"));
+    assert_eq!(
+        app.patch_phrase_store
+            .patches
+            .get("Pad 1.fxp")
+            .map(|state| state.history.clone()),
+        Some(vec!["old".to_string()])
+    );
+    assert!(app.patch_phrase_store_dirty);
+}
+
+#[test]
+fn handle_normal_p_logs_when_yank_buffer_is_empty() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    app.data[1][1] = "old".to_string();
+
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert_eq!(app.data[1][1], "old");
+    assert_eq!(
+        app.log_lines.lock().unwrap().back().map(String::as_str),
+        Some("ヤンクバッファが空です")
     );
 }
 
