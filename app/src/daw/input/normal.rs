@@ -116,9 +116,7 @@ impl DawApp {
         let play_state = *self.play_state.lock().unwrap();
         match play_state {
             DawPlayState::Idle => {}
-            DawPlayState::Preview => {
-                self.stop_play();
-            }
+            DawPlayState::Preview => self.stop_play(),
             DawPlayState::Playing => return,
         }
         let Some(measure_index) = self.cursor_play_measure_index() else {
