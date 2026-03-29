@@ -168,7 +168,6 @@ impl<'a> TuiApp<'a> {
                     }
                 }
                 KeyCode::Char('?') => self.enter_help(),
-                KeyCode::Char('/') => {}
                 KeyCode::Char(c) => {
                     self.notepad_query.push(c);
                     self.sync_notepad_history_states();

@@ -318,7 +318,7 @@ fn help_does_not_show_old_semicolon_guidance() {
     app.mode = DawMode::Help;
 
     // ratatui のテスト描画では全角文字の間に空白が入るため、空白を除去して比較する。
-    let normalized_lines: Vec<String> = render_lines(&app, 100, 30)
+    let normalized_lines: Vec<String> = render_lines(&app, 100, 52)
         .into_iter()
         .map(|line| line.replace(' ', ""))
         .collect();
@@ -425,6 +425,27 @@ fn help_does_not_show_old_semicolon_guidance() {
         !normalized_lines
             .iter()
             .any(|line| line.contains("分割して下のtrackに追加")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("スペース区切りでAND条件(例:basssoft)")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("Enter:(検索中)絞り込み入力を確定して操作に戻る")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("Enter:(通常)現在track/measに反映")),
         "lines: {:?}",
         normalized_lines
     );

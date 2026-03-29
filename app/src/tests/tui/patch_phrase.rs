@@ -215,6 +215,35 @@ fn handle_patch_phrase_slash_then_enter_keeps_filtered_results_for_j_navigation(
 }
 
 #[test]
+fn handle_patch_phrase_allows_slash_character_in_filter_query() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["before".to_string()];
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec![
+                "alpha".to_string(),
+                "dir/name".to_string(),
+                "dir other".to_string(),
+            ],
+            favorites: vec![],
+        },
+    );
+    app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
+
+    app.handle_patch_phrase(KeyCode::Char('/'));
+    app.handle_patch_phrase(KeyCode::Char('/'));
+    app.handle_patch_phrase(KeyCode::Char('n'));
+
+    assert!(app.patch_phrase_filter_active);
+    assert_eq!(app.patch_phrase_query, "/n");
+    assert_eq!(
+        app.patch_phrase_history_items(),
+        vec!["dir/name".to_string()]
+    );
+}
+
+#[test]
 fn handle_patch_phrase_page_up_at_top_does_not_repreview() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["before".to_string()];

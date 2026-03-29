@@ -174,14 +174,14 @@ pub(super) fn draw_patch_phrase(
 
     let patch_name = app.patch_phrase_name.as_deref().unwrap_or("(unknown)");
     let search_title = if app.patch_phrase_filter_active {
-        " patch phrase - MML 検索 "
+        " patch phrase - MML 検索 (space=AND) "
     } else {
-        " patch phrase - / で MML 検索 "
+        " patch phrase - / で MML 検索 (space=AND) "
     };
     let search_body = if !app.patch_phrase_query.is_empty() || app.patch_phrase_filter_active {
         format!("/ {}", app.patch_phrase_query)
     } else {
-        "/ を押して検索開始".to_string()
+        "/ を押して検索開始 (space=AND)".to_string()
     };
     f.render_widget(
         Paragraph::new(search_body).style(base_style()).block(
@@ -299,14 +299,14 @@ pub(super) fn draw_notepad_history(
     app.notepad_history_page_size = visible_list_page_size(panes[0]);
 
     let search_title = if app.notepad_filter_active {
-        " notepad history - MML 検索 "
+        " notepad history - MML 検索 (space=AND) "
     } else {
-        " notepad history - / で MML 検索 "
+        " notepad history - / で MML 検索 (space=AND) "
     };
     let search_body = if !app.notepad_query.is_empty() || app.notepad_filter_active {
         format!("/ {}", app.notepad_query)
     } else {
-        "/ を押して検索開始".to_string()
+        "/ を押して検索開始 (space=AND)".to_string()
     };
     f.render_widget(
         Paragraph::new(search_body).style(base_style()).block(

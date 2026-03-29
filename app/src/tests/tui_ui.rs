@@ -362,6 +362,7 @@ fn notepad_history_help_screen_shows_history_shortcuts() {
     let normalized_screen = lines.join("\n").replace([' ', '\n'], "");
 
     assert!(normalized_screen.contains("notepadhistory画面"));
+    assert!(normalized_screen.contains("/の後に文字入力:フィルタ(Space=AND条件)"));
     assert!(normalized_screen.contains("h/l・←/→:ペイン切替"));
     assert!(normalized_screen.contains("dd:Favorites行を削除してHistory先頭へ移動"));
     assert!(!normalized_screen.contains("Ctrl+C:コピー"));
@@ -404,6 +405,7 @@ fn patch_phrase_help_screen_shows_patch_phrase_shortcuts() {
     let normalized_screen = lines.join("\n").replace([' ', '\n'], "");
 
     assert!(normalized_screen.contains("patchphrase画面"));
+    assert!(normalized_screen.contains("/の後に文字入力:フィルタ(Space=AND条件)"));
     assert!(normalized_screen.contains("h/l・←/→:ペイン切替して再生"));
     assert!(normalized_screen.contains("Space:現在行を再生"));
     assert!(normalized_screen.contains("f:現在行をお気に入りに追加"));

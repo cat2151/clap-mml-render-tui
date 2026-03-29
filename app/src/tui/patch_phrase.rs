@@ -9,6 +9,16 @@ use super::{filter_items, Mode, PatchPhrasePane, TuiApp, PATCH_JSON_KEY};
 const PATCH_PHRASE_LIST_MAX_LEN: usize = 100;
 
 impl<'a> TuiApp<'a> {
+    fn filtered_patch_phrase_items(&self, items: Option<&[String]>) -> Vec<String> {
+        match items.filter(|items| !items.is_empty()) {
+            Some(items) => filter_items(items, &self.patch_phrase_query),
+            None => {
+                let fallback = [String::from("c")];
+                filter_items(&fallback, &self.patch_phrase_query)
+            }
+        }
+    }
+
     fn move_patch_phrase_selection_by(
         &mut self,
         delta: isize,
@@ -74,25 +84,21 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn patch_phrase_history_items(&self) -> Vec<String> {
-        let items = self
-            .patch_phrase_name
-            .as_deref()
-            .and_then(|patch| self.patch_phrase_store.patches.get(patch))
-            .map(|state| state.history.clone())
-            .filter(|items| !items.is_empty())
-            .unwrap_or_else(|| vec!["c".to_string()]);
-        filter_items(&items, &self.patch_phrase_query)
+        self.filtered_patch_phrase_items(
+            self.patch_phrase_name
+                .as_deref()
+                .and_then(|patch| self.patch_phrase_store.patches.get(patch))
+                .map(|state| state.history.as_slice()),
+        )
     }
 
     pub(super) fn patch_phrase_favorite_items(&self) -> Vec<String> {
-        let items = self
-            .patch_phrase_name
-            .as_deref()
-            .and_then(|patch| self.patch_phrase_store.patches.get(patch))
-            .map(|state| state.favorites.clone())
-            .filter(|items| !items.is_empty())
-            .unwrap_or_else(|| vec!["c".to_string()]);
-        filter_items(&items, &self.patch_phrase_query)
+        self.filtered_patch_phrase_items(
+            self.patch_phrase_name
+                .as_deref()
+                .and_then(|patch| self.patch_phrase_store.patches.get(patch))
+                .map(|state| state.favorites.as_slice()),
+        )
     }
 
     fn sync_patch_phrase_states(&mut self) {
@@ -205,7 +211,6 @@ impl<'a> TuiApp<'a> {
                     }
                 }
                 KeyCode::Char('?') => self.enter_help(),
-                KeyCode::Char('/') => {}
                 KeyCode::Char(c) => {
                     self.patch_phrase_query.push(c);
                     self.sync_patch_phrase_states();

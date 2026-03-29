@@ -214,7 +214,6 @@ impl DawApp {
                         self.history_overlay_filter_active = false;
                     }
                 }
-                KeyCode::Char('/') => {}
                 KeyCode::Char(c) => {
                     self.history_overlay_query.push(c);
                     self.sync_history_overlay_cursors();

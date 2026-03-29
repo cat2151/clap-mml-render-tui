@@ -128,6 +128,25 @@ fn handle_notepad_history_slash_then_enter_keeps_filtered_results_for_j_navigati
 }
 
 #[test]
+fn handle_notepad_history_allows_slash_character_in_filter_query() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_phrase_store.notepad.history = vec![
+        "alpha".to_string(),
+        "dir/name".to_string(),
+        "dir other".to_string(),
+    ];
+    app.start_notepad_history();
+
+    app.handle_notepad_history(KeyCode::Char('/'));
+    app.handle_notepad_history(KeyCode::Char('/'));
+    app.handle_notepad_history(KeyCode::Char('n'));
+
+    assert!(app.notepad_filter_active);
+    assert_eq!(app.notepad_query, "/n");
+    assert_eq!(app.notepad_history_items(), vec!["dir/name".to_string()]);
+}
+
+#[test]
 fn handle_notepad_history_page_down_and_page_up_move_by_visible_page() {
     let mut app = TuiApp::new_for_test(test_config());
     app.patch_phrase_store.notepad.history = vec![

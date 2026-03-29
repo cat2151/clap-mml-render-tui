@@ -81,15 +81,15 @@ pub(super) fn draw_history(f: &mut Frame, app: &DawApp, area: Rect) {
         .split(chunks[1]);
 
     let search_title = if app.history_overlay_filter_active {
-        " history overlay - MML 検索 "
+        " history overlay - MML 検索 (space=AND) "
     } else {
-        " history overlay - / で MML 検索 "
+        " history overlay - / で MML 検索 (space=AND) "
     };
     let search_body = if !app.history_overlay_query.is_empty() || app.history_overlay_filter_active
     {
         format!("/ {}", app.history_overlay_query)
     } else {
-        "/ を押して検索開始".to_string()
+        "/ を押して検索開始 (space=AND)".to_string()
     };
     f.render_widget(
         Paragraph::new(search_body)
