@@ -1,11 +1,12 @@
 use ratatui::{backend::TestBackend, buffer::Buffer, style::Color, Terminal};
 
+use crate::ui_theme::{
+    MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_PURPLE,
+    MONOKAI_YELLOW,
+};
 use crate::{config::Config, history::PatchPhraseState, tui::TuiApp};
 
-use super::{
-    draw, status_color, Mode, PlayState, MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY,
-    MONOKAI_GREEN, MONOKAI_PURPLE, MONOKAI_YELLOW,
-};
+use super::{draw, status_color, Mode, PlayState};
 
 fn test_config() -> Config {
     Config {

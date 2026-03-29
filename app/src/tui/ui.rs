@@ -1,31 +1,24 @@
 //! TUI 描画
 
 mod help;
+mod overlay;
+mod status;
 
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Color, Modifier},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
     Frame,
 };
 
-use super::{Mode, PatchPhrasePane, PlayState, TuiApp};
-pub(super) use crate::ui_theme::{
-    MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_PURPLE,
-    MONOKAI_YELLOW,
-};
+use super::{Mode, PlayState, TuiApp};
+use crate::ui_theme::MONOKAI_CYAN;
+use status::notepad_mode_title;
+use status::{base_style, keybind_text, normal_status_text, status_text, visible_list_page_size};
 
 const LIST_HIGHLIGHT_SYMBOL: &str = "▶ ";
 const LIST_HIGHLIGHT_WIDTH: u16 = 2;
-
-fn visible_list_page_size(area: Rect) -> usize {
-    usize::from(area.height.saturating_sub(2).max(1))
-}
-
-fn base_style() -> Style {
-    Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG)
-}
 
 pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     // play_state を一度だけロックしてスナップショットを取り、
@@ -39,155 +32,19 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
         help::draw_help(f);
     } else if app.mode == Mode::PatchSelect {
         draw_normal(app, f, &play_state, status_color);
-        draw_patch_select(app, f, &status, status_color);
+        overlay::draw_patch_select(app, f, &status, status_color);
     } else if app.mode == Mode::NotepadHistory {
         draw_normal(app, f, &play_state, status_color);
-        draw_notepad_history(app, f, &status, status_color);
+        overlay::draw_notepad_history(app, f, &status, status_color);
     } else if app.mode == Mode::PatchPhrase {
-        draw_patch_phrase(app, f, &status, status_color);
+        overlay::draw_patch_phrase(app, f, &status, status_color);
     } else {
         draw_normal(app, f, &play_state, status_color);
     }
 }
 
 fn status_color(play_state: &PlayState) -> Color {
-    match play_state {
-        PlayState::Err(_) => Color::Red,
-        PlayState::Running(_) => MONOKAI_PURPLE,
-        PlayState::Playing(_) => MONOKAI_YELLOW,
-        PlayState::Done(_) => MONOKAI_GREEN,
-        PlayState::Idle => MONOKAI_CYAN,
-    }
-}
-
-fn play_status_suffix(play_state: &PlayState) -> String {
-    match play_state {
-        PlayState::Idle => "".to_string(),
-        PlayState::Running(mml) => format!("  ⚙ レンダリング中: {}", mml),
-        PlayState::Playing(msg) => format!("  ▶ 演奏中: {}", msg),
-        PlayState::Done(msg) => format!("  ✓ {}", msg),
-        PlayState::Err(msg) => format!("  ✗ {}", msg),
-    }
-}
-
-fn normal_status_text(app: &TuiApp<'_>, play_state: &PlayState) -> String {
-    let mode = match app.mode {
-        Mode::Insert => "INSERT",
-        Mode::Help => "HELP",
-        _ => "NORMAL",
-    };
-    format!("{mode}{}", play_status_suffix(play_state))
-}
-
-fn notepad_mode_title(app: &TuiApp<'_>) -> &'static str {
-    match app.mode {
-        Mode::Normal => " [NORMAL] notepad mode ",
-        Mode::Insert => " [INSERT] notepad mode ",
-        Mode::PatchSelect => " [PATCH SELECT] notepad mode ",
-        Mode::NotepadHistory => " [HISTORY] notepad mode ",
-        Mode::PatchPhrase => " [PATCH PHRASE] notepad mode ",
-        Mode::Help => " [HELP] notepad mode ",
-    }
-}
-
-fn keybind_text(mode: &Mode) -> &'static str {
-    match mode {
-        Mode::Normal => {
-            "q ?:help i:insert o/O:挿入 dd/Del:cut p/P:貼付 f:phrase r:ランダム音色 t:音色 h:history j/k・↑↓・PgUp/PgDn・H/M/L:再生移動 Enter/Space w:DAW"
-        }
-        Mode::Insert => "ESC:確定→NORMAL  Enter:確定→次行",
-        Mode::PatchSelect => {
-            "Enter:決定  ESC:キャンセル  Ctrl+F:お気に入り  Ctrl+J/Ctrl+N・Ctrl+K/Ctrl+P・↑↓・PgUp/PgDn:移動  文字入力:フィルタ  Space:AND条件"
-        }
-        Mode::NotepadHistory => {
-            "Enter:確定  ESC:閉じる  h/l・←/→:ペイン移動  j/k・↑↓:移動して再生  PgUp/PgDn:1画面移動  f:お気に入り  dd:削除"
-        }
-        Mode::PatchPhrase => {
-            "j/k・↑↓:再生移動  PgUp/PgDn:1画面移動  h/l:ペイン移動  Space:再生  Enter:現在行の上に挿入  i:編集  f:お気に入り  ESC:戻る"
-        }
-        Mode::Help => "ESC:キャンセル",
-    }
-}
-
-fn status_text(app: &TuiApp<'_>, play_state: &PlayState) -> String {
-    let play_str = play_status_suffix(play_state);
-    match app.mode {
-        Mode::Normal | Mode::Insert | Mode::Help => normal_status_text(app, play_state),
-        Mode::PatchSelect => format!("音色選択{}", play_str),
-        Mode::NotepadHistory => format!("notepad history{}", play_str),
-        Mode::PatchPhrase => format!("patch phrase{}", play_str),
-    }
-}
-
-fn draw_patch_select(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_color: Color) {
-    let area = crate::ui_utils::centered_rect(70, 70, f.area());
-    f.render_widget(Clear, area);
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(1),
-            Constraint::Length(1),
-            Constraint::Length(1),
-        ])
-        .split(area);
-    app.patch_select_page_size = visible_list_page_size(chunks[1]);
-
-    f.render_widget(
-        Paragraph::new(format!("> {}", app.patch_query))
-            .style(base_style())
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(" 音色選択 - 検索 (space=AND) ")
-                    .style(base_style())
-                    .border_style(base_style().fg(MONOKAI_YELLOW)),
-            ),
-        chunks[0],
-    );
-
-    let count_title = format!(
-        " パッチ ({}/{}) ",
-        app.patch_filtered.len(),
-        app.patch_all.len()
-    );
-    let patch_items: Vec<ListItem> = app
-        .patch_filtered
-        .iter()
-        .enumerate()
-        .map(|(i, p)| {
-            let style = if i == app.patch_cursor {
-                base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD)
-            } else {
-                base_style()
-            };
-            ListItem::new(Span::styled(p.clone(), style))
-        })
-        .collect();
-
-    f.render_stateful_widget(
-        List::new(patch_items)
-            .style(base_style())
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(count_title)
-                    .style(base_style())
-                    .border_style(base_style().fg(MONOKAI_CYAN)),
-            )
-            .highlight_symbol("▶ "),
-        chunks[1],
-        &mut app.patch_list_state,
-    );
-
-    f.render_widget(
-        Paragraph::new(status.to_string()).style(base_style().fg(status_color)),
-        chunks[2],
-    );
-    f.render_widget(
-        Paragraph::new(keybind_text(&app.mode)).style(base_style()),
-        chunks[3],
-    );
+    status::status_color(play_state)
 }
 
 fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, play_state: &PlayState, status_color: Color) {
@@ -270,207 +127,6 @@ fn draw_normal(app: &mut TuiApp<'_>, f: &mut Frame, play_state: &PlayState, stat
         chunks[1],
     );
     f.render_widget(Paragraph::new(keybinds).style(base_style()), chunks[2]);
-}
-
-fn draw_patch_phrase(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_color: Color) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(3),
-            Constraint::Length(1),
-            Constraint::Length(1),
-        ])
-        .split(f.area());
-    let panes = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(chunks[0]);
-    app.patch_phrase_page_size = visible_list_page_size(panes[0]);
-
-    let patch_name = app.patch_phrase_name.as_deref().unwrap_or("(unknown)");
-    let history_items: Vec<ListItem> = app
-        .patch_phrase_history_items()
-        .into_iter()
-        .enumerate()
-        .map(|(i, phrase)| {
-            let is_selected = app.patch_phrase_focus == PatchPhrasePane::History
-                && i == app.patch_phrase_history_cursor;
-            let style = if is_selected {
-                base_style().fg(MONOKAI_CYAN).add_modifier(Modifier::BOLD)
-            } else {
-                base_style()
-            };
-            ListItem::new(Span::styled(phrase, style))
-        })
-        .collect();
-    let favorite_items: Vec<ListItem> = app
-        .patch_phrase_favorite_items()
-        .into_iter()
-        .enumerate()
-        .map(|(i, phrase)| {
-            let is_selected = app.patch_phrase_focus == PatchPhrasePane::Favorites
-                && i == app.patch_phrase_favorites_cursor;
-            let style = if is_selected {
-                base_style().fg(MONOKAI_CYAN).add_modifier(Modifier::BOLD)
-            } else {
-                base_style()
-            };
-            ListItem::new(Span::styled(phrase, style))
-        })
-        .collect();
-
-    let history_border = if app.patch_phrase_focus == PatchPhrasePane::History {
-        base_style().fg(MONOKAI_CYAN)
-    } else {
-        base_style()
-    };
-    let favorites_border = if app.patch_phrase_focus == PatchPhrasePane::Favorites {
-        base_style().fg(MONOKAI_CYAN)
-    } else {
-        base_style()
-    };
-
-    f.render_stateful_widget(
-        List::new(history_items)
-            .style(base_style())
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(format!(" History - {patch_name} "))
-                    .style(base_style())
-                    .border_style(history_border),
-            )
-            .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
-        panes[0],
-        &mut app.patch_phrase_history_state,
-    );
-    f.render_stateful_widget(
-        List::new(favorite_items)
-            .style(base_style())
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(" Favorites ")
-                    .style(base_style())
-                    .border_style(favorites_border),
-            )
-            .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
-        panes[1],
-        &mut app.patch_phrase_favorites_state,
-    );
-
-    f.render_widget(
-        Paragraph::new(status.to_string()).style(base_style().fg(status_color)),
-        chunks[1],
-    );
-    f.render_widget(
-        Paragraph::new(keybind_text(&app.mode)).style(base_style()),
-        chunks[2],
-    );
-}
-
-fn draw_notepad_history(app: &mut TuiApp<'_>, f: &mut Frame, status: &str, status_color: Color) {
-    let area = crate::ui_utils::centered_rect(80, 70, f.area());
-    f.render_widget(Clear, area);
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(3),
-            Constraint::Length(1),
-            Constraint::Length(1),
-        ])
-        .split(area);
-    let panes = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(chunks[0]);
-    app.notepad_history_page_size = visible_list_page_size(panes[0]);
-
-    let history_items: Vec<ListItem> = app
-        .notepad_history_items()
-        .into_iter()
-        .enumerate()
-        .map(|(i, mml)| {
-            let is_selected =
-                app.notepad_focus == PatchPhrasePane::History && i == app.notepad_history_cursor;
-            let style = if is_selected {
-                base_style().fg(MONOKAI_CYAN).add_modifier(Modifier::BOLD)
-            } else {
-                base_style()
-            };
-            ListItem::new(Span::styled(mml, style))
-        })
-        .collect();
-    let favorite_items: Vec<ListItem> = app
-        .notepad_favorite_items()
-        .into_iter()
-        .enumerate()
-        .map(|(i, mml)| {
-            let is_selected = app.notepad_focus == PatchPhrasePane::Favorites
-                && i == app.notepad_favorites_cursor;
-            let style = if is_selected {
-                base_style().fg(MONOKAI_CYAN).add_modifier(Modifier::BOLD)
-            } else {
-                base_style()
-            };
-            ListItem::new(Span::styled(mml, style))
-        })
-        .collect();
-
-    let history_border = if app.notepad_focus == PatchPhrasePane::History {
-        base_style().fg(MONOKAI_CYAN)
-    } else {
-        base_style()
-    };
-    let favorites_border = if app.notepad_focus == PatchPhrasePane::Favorites {
-        base_style().fg(MONOKAI_CYAN)
-    } else {
-        base_style()
-    };
-    let favorites_title =
-        if app.notepad_focus == PatchPhrasePane::Favorites && app.notepad_pending_delete {
-            " Favorites (dd:削除) "
-        } else {
-            " Favorites "
-        };
-
-    f.render_stateful_widget(
-        List::new(history_items)
-            .style(base_style())
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(" History ")
-                    .style(base_style())
-                    .border_style(history_border),
-            )
-            .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
-        panes[0],
-        &mut app.notepad_history_state,
-    );
-    f.render_stateful_widget(
-        List::new(favorite_items)
-            .style(base_style())
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(favorites_title)
-                    .style(base_style())
-                    .border_style(favorites_border),
-            )
-            .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
-        panes[1],
-        &mut app.notepad_favorites_state,
-    );
-
-    f.render_widget(
-        Paragraph::new(status.to_string()).style(base_style().fg(status_color)),
-        chunks[1],
-    );
-    f.render_widget(
-        Paragraph::new(keybind_text(&app.mode)).style(base_style()),
-        chunks[2],
-    );
 }
 
 #[cfg(test)]
