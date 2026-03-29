@@ -32,12 +32,12 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     if mode == Mode::Help {
         match help_origin {
             Mode::PatchSelect => {
-                draw_normal(app, f, &play_state, status_color, mode);
+                draw_normal(app, f, &play_state, status_color, help_origin);
                 let overlay_status = status_text(&help_origin, &play_state);
                 overlay::draw_patch_select(app, f, &overlay_status, status_color, help_origin);
             }
             Mode::NotepadHistory => {
-                draw_normal(app, f, &play_state, status_color, mode);
+                draw_normal(app, f, &play_state, status_color, help_origin);
                 let overlay_status = status_text(&help_origin, &play_state);
                 overlay::draw_notepad_history(app, f, &overlay_status, status_color, help_origin);
             }
