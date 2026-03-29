@@ -220,7 +220,7 @@ fn patch_phrase_store_flushes_only_when_requested() {
         unique
     ));
     std::fs::remove_dir_all(&tmp).ok();
-    let _env_guards = crate::test_utils::set_data_local_dir_envs(&tmp);
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
 
     let mut app = TuiApp::new_for_test(test_config());
     app.record_patch_phrase_history(r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#);

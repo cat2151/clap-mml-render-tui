@@ -120,7 +120,7 @@ impl DawApp {
     // ─── 保存 / 読み込み ──────────────────────────────────────
 
     pub(super) fn load(&mut self) {
-        let path = crate::history::daw_file_path();
+        let path = crate::history::daw_file_load_path();
         let content = path.as_ref().and_then(|p| std::fs::read_to_string(p).ok());
         if let Some(content) = content {
             if let Ok(file) = serde_json::from_str::<DawSaveFile>(&content) {

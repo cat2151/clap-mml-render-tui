@@ -1,4 +1,34 @@
 use super::*;
+use std::path::Path;
+
+fn assert_history_file_path(path: &Path, file_name: &str) {
+    assert_eq!(
+        path.file_name().and_then(|n| n.to_str()),
+        Some(file_name),
+        "history ファイル名が期待と異なる: {:?}",
+        path
+    );
+
+    let history_dir = path
+        .parent()
+        .expect("history ファイルに親ディレクトリがない");
+    assert_eq!(
+        history_dir.file_name().and_then(|n| n.to_str()),
+        Some("history"),
+        "history ファイルの親ディレクトリ名が history ではない: {:?}",
+        history_dir
+    );
+
+    let app_dir = history_dir
+        .parent()
+        .expect("history ディレクトリにアプリディレクトリがない");
+    assert_eq!(
+        app_dir.file_name().and_then(|n| n.to_str()),
+        Some("clap-mml-render-tui"),
+        "history ファイルのアプリディレクトリ名が clap-mml-render-tui ではない: {:?}",
+        app_dir
+    );
+}
 
 #[test]
 fn session_state_default_cursor_is_zero() {
@@ -128,15 +158,7 @@ fn save_and_load_session_state_roundtrip() {
 fn session_state_path_is_in_history_dir() {
     match super::session_state_path() {
         None => { /* dirs 利用不可の環境ではスキップ */ }
-        Some(path) => {
-            let path_str = path.to_string_lossy();
-            assert!(
-                path_str.ends_with("clap-mml-render-tui/history/history.json")
-                    || path_str.ends_with(r"clap-mml-render-tui\history\history.json"),
-                "session_state_path が clap-mml-render-tui/history/history.json で終わっていない: {}",
-                path_str
-            );
-        }
+        Some(path) => assert_history_file_path(&path, "history.json"),
     }
 }
 
@@ -173,13 +195,7 @@ fn patch_phrase_store_path_same_dir_as_history_json() {
         (None, None) => { /* dirs 利用不可の環境ではスキップ */ }
         (Some(h), Some(p)) => {
             assert_eq!(h.parent(), p.parent());
-            let parent = p.parent().and_then(|dir| dir.to_str()).unwrap_or_default();
-            assert!(
-                parent.ends_with("clap-mml-render-tui/history")
-                    || parent.ends_with(r"clap-mml-render-tui\history"),
-                "patch_phrase_store_path の親ディレクトリが history ではない: {}",
-                parent
-            );
+            assert_history_file_path(&p, "patch_history.json");
         }
         (Some(_), None) => {
             panic!("session_state_path() は Some だが patch_phrase_store_path() は None")
@@ -214,7 +230,7 @@ fn save_and_load_session_state_roundtrip_daw_mode() {
 fn load_daw_session_state_reads_history_daw_json() {
     let tmp = std::env::temp_dir().join("cmrt_test_history_daw_load");
     std::fs::remove_dir_all(&tmp).ok();
-    let _env_guards = crate::test_utils::set_data_local_dir_envs(&tmp);
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
 
     let state = DawSessionState {
         cursor_track: 3,
@@ -241,7 +257,7 @@ fn load_daw_session_state_reads_history_daw_json() {
 fn load_daw_session_state_migrates_from_history_json() {
     let tmp = std::env::temp_dir().join("cmrt_test_history_daw_migrate");
     std::fs::remove_dir_all(&tmp).ok();
-    let _env_guards = crate::test_utils::set_data_local_dir_envs(&tmp);
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
 
     let history_dir = super::history_dir().unwrap();
     std::fs::create_dir_all(&history_dir).unwrap();
@@ -317,7 +333,7 @@ fn patch_phrase_store_serialize_deserialize_roundtrip() {
 fn save_and_load_patch_phrase_store_roundtrip() {
     let tmp = std::env::temp_dir().join("cmrt_test_patch_phrase_store_roundtrip");
     std::fs::remove_dir_all(&tmp).ok();
-    let _env_guards = crate::test_utils::set_data_local_dir_envs(&tmp);
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
 
     let mut store = PatchPhraseStore {
         notepad: PatchPhraseState {
@@ -337,5 +353,143 @@ fn save_and_load_patch_phrase_store_roundtrip() {
     save_patch_phrase_store(&store).unwrap();
 
     assert_eq!(load_patch_phrase_store(), store);
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn load_session_state_migrates_from_legacy_data_local_history_json() {
+    let tmp = std::env::temp_dir().join("cmrt_test_legacy_history_json_migrate");
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
+
+    let legacy_path = crate::test_utils::legacy_session_state_path_for_test().unwrap();
+    std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
+    std::fs::write(
+        &legacy_path,
+        r#"{
+  "cursor": 9,
+  "lines": ["abc", "def"],
+  "is_daw_mode": true
+}"#,
+    )
+    .unwrap();
+
+    let state = load_session_state();
+    assert_eq!(state.cursor, 9);
+    assert_eq!(state.lines, vec!["abc".to_string(), "def".to_string()]);
+    assert!(state.is_daw_mode);
+
+    let new_path = super::session_state_path().unwrap();
+    assert!(
+        new_path.exists(),
+        "migrated history.json が新配置に存在しない"
+    );
+    let migrated: SessionState =
+        serde_json::from_str(&std::fs::read_to_string(&new_path).unwrap()).unwrap();
+    assert_eq!(migrated.cursor, 9);
+    assert_eq!(migrated.lines, vec!["abc".to_string(), "def".to_string()]);
+    assert!(migrated.is_daw_mode);
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn load_daw_session_state_migrates_from_legacy_history_daw_json() {
+    let tmp = std::env::temp_dir().join("cmrt_test_legacy_history_daw_json_migrate");
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
+
+    let legacy_path = crate::test_utils::legacy_daw_session_state_path_for_test().unwrap();
+    std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
+    std::fs::write(
+        &legacy_path,
+        r#"{
+  "cursor_track": 2,
+  "cursor_measure": 6,
+  "cached_measures": [
+    { "track": 1, "measure": 4, "mml_hash": 12345 }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let state = load_daw_session_state();
+    assert_eq!(state.cursor_track, 2);
+    assert_eq!(state.cursor_measure, 6);
+    assert_eq!(state.cached_measures.len(), 1);
+    assert_eq!(state.cached_measures[0].mml_hash, 12345);
+
+    let new_path = super::daw_session_state_path().unwrap();
+    assert!(
+        new_path.exists(),
+        "migrated history_daw.json が新配置に存在しない"
+    );
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn load_patch_phrase_store_migrates_from_legacy_patch_history_json() {
+    let tmp = std::env::temp_dir().join("cmrt_test_legacy_patch_history_json_migrate");
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
+
+    let legacy_path = crate::test_utils::legacy_patch_phrase_store_path_for_test().unwrap();
+    std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
+    std::fs::write(
+        &legacy_path,
+        r#"{
+  "notepad": {
+    "history": ["abc"],
+    "favorites": ["xyz"]
+  },
+  "patches": {
+    "Pads/Soft Pad.fxp": {
+      "history": ["l8cdef"],
+      "favorites": ["o5g"]
+    }
+  }
+}"#,
+    )
+    .unwrap();
+
+    let store = load_patch_phrase_store();
+    assert_eq!(store.notepad.history, vec!["abc".to_string()]);
+    assert_eq!(store.notepad.favorites, vec!["xyz".to_string()]);
+    assert_eq!(
+        store.patches.get("Pads/Soft Pad.fxp").unwrap().history,
+        vec!["l8cdef".to_string()]
+    );
+
+    let new_path = super::patch_phrase_store_path().unwrap();
+    assert!(
+        new_path.exists(),
+        "migrated patch_history.json が新配置に存在しない"
+    );
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn daw_file_load_path_migrates_from_legacy_daw_json() {
+    let tmp = std::env::temp_dir().join("cmrt_test_legacy_daw_json_migrate");
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
+
+    let legacy_path = crate::test_utils::legacy_daw_file_path_for_test().unwrap();
+    std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
+    std::fs::write(&legacy_path, r#"{"tracks":[]}"#).unwrap();
+
+    let migrated_path = super::daw_file_load_path().unwrap();
+    assert_history_file_path(&migrated_path, "daw.json");
+    assert!(
+        migrated_path.exists(),
+        "migrated daw.json が新配置に存在しない"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&migrated_path).unwrap(),
+        r#"{"tracks":[]}"#
+    );
+
     std::fs::remove_dir_all(&tmp).ok();
 }

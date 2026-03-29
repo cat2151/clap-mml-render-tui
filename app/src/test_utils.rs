@@ -37,7 +37,7 @@ impl Drop for TestEnvGuard {
 }
 
 /// Redirects OS-specific data/config directory environment variables to a test-only path.
-pub(crate) fn set_data_local_dir_envs(base: &Path) -> TestEnvGuard {
+pub(crate) fn set_local_dir_envs(base: &Path) -> TestEnvGuard {
     let lock = env_lock()
         .lock()
         .expect("test environment lock should not be poisoned");
@@ -82,6 +82,12 @@ pub(crate) fn set_data_local_dir_envs(base: &Path) -> TestEnvGuard {
     }
 }
 
+/// Backward-compatible wrapper for older tests using the previous helper name.
+#[allow(dead_code)]
+pub(crate) fn set_data_local_dir_envs(base: &Path) -> TestEnvGuard {
+    set_local_dir_envs(base)
+}
+
 /// Builds the expected history.json path using the same production resolver as history.rs.
 pub(crate) fn session_state_path_for_test() -> Option<PathBuf> {
     dirs::config_local_dir().map(|d| {
@@ -89,6 +95,22 @@ pub(crate) fn session_state_path_for_test() -> Option<PathBuf> {
             .join("history")
             .join("history.json")
     })
+}
+
+pub(crate) fn legacy_session_state_path_for_test() -> Option<PathBuf> {
+    dirs::data_local_dir().map(|d| d.join("clap-mml-render-tui").join("history.json"))
+}
+
+pub(crate) fn legacy_daw_session_state_path_for_test() -> Option<PathBuf> {
+    dirs::data_local_dir().map(|d| d.join("clap-mml-render-tui").join("history_daw.json"))
+}
+
+pub(crate) fn legacy_patch_phrase_store_path_for_test() -> Option<PathBuf> {
+    dirs::data_local_dir().map(|d| d.join("clap-mml-render-tui").join("patch_history.json"))
+}
+
+pub(crate) fn legacy_daw_file_path_for_test() -> Option<PathBuf> {
+    dirs::data_local_dir().map(|d| d.join("clap-mml-render-tui").join("daw.json"))
 }
 
 fn set_env_vars<'a, I, V>(vars: I) -> Vec<(&'static str, Option<String>)>

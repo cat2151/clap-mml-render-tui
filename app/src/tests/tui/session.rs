@@ -41,7 +41,7 @@ fn save_history_state_persists_tui_cursor_lines_and_mode_flag() {
         unique
     ));
     std::fs::remove_dir_all(&tmp).ok();
-    let _env_guards = crate::test_utils::set_data_local_dir_envs(&tmp);
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
 
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["abc".to_string(), "def".to_string(), "ghi".to_string()];
@@ -51,7 +51,7 @@ fn save_history_state_persists_tui_cursor_lines_and_mode_flag() {
     app.save_history_state();
 
     let history_path = crate::test_utils::session_state_path_for_test()
-        .expect("data local dir should resolve in isolated TUI history test");
+        .expect("config local dir should resolve in isolated TUI history test");
     assert!(
         history_path.exists(),
         "expected isolated history file to be created at {}",
