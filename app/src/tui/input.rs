@@ -364,6 +364,10 @@ impl<'a> TuiApp<'a> {
             KeyCode::Esc => {
                 self.mode = Mode::Normal;
             }
+            KeyCode::Enter if self.patch_select_filter_active => {
+                self.patch_select_filter_active = false;
+                self.sync_patch_select_states();
+            }
             KeyCode::Enter => {
                 if let Some(selected) = self.patch_select_selected_patch_name() {
                     self.replace_current_line_patch(&selected);

@@ -7,7 +7,7 @@ use super::super::{
 
 impl DawApp {
     pub(in crate::daw) fn history_overlay_history_items(&self) -> Vec<String> {
-        if let Some(patch_name) = self.history_overlay_patch_name.as_deref() {
+        let items = if let Some(patch_name) = self.history_overlay_patch_name.as_deref() {
             self.patch_phrase_store
                 .patches
                 .get(patch_name)
@@ -22,11 +22,12 @@ impl DawApp {
                 .filter(|item| Self::extract_patch_phrase(item).is_some())
                 .cloned()
                 .collect()
-        }
+        };
+        crate::tui::filter_items(&items, &self.history_overlay_query)
     }
 
     pub(in crate::daw) fn history_overlay_favorite_items(&self) -> Vec<String> {
-        if let Some(patch_name) = self.history_overlay_patch_name.as_deref() {
+        let items = if let Some(patch_name) = self.history_overlay_patch_name.as_deref() {
             self.patch_phrase_store
                 .patches
                 .get(patch_name)
@@ -41,7 +42,8 @@ impl DawApp {
                 .filter(|item| Self::extract_patch_phrase(item).is_some())
                 .cloned()
                 .collect()
-        }
+        };
+        crate::tui::filter_items(&items, &self.history_overlay_query)
     }
 
     fn sync_history_overlay_cursors(&mut self) {
@@ -67,9 +69,11 @@ impl DawApp {
             return;
         }
         self.history_overlay_patch_name = self.current_track_patch_name();
+        self.history_overlay_query.clear();
         self.history_overlay_focus = DawHistoryPane::History;
         self.history_overlay_history_cursor = 0;
         self.history_overlay_favorites_cursor = 0;
+        self.history_overlay_filter_active = false;
         self.sync_history_overlay_cursors();
         self.mode = DawMode::History;
     }
@@ -192,6 +196,34 @@ impl DawApp {
     }
 
     pub(in crate::daw) fn handle_history_overlay(&mut self, key: KeyCode) {
+        if self.history_overlay_filter_active {
+            match key {
+                KeyCode::Esc => {
+                    self.history_overlay_filter_active = false;
+                    self.mode = DawMode::Normal;
+                }
+                KeyCode::Enter => {
+                    self.history_overlay_filter_active = false;
+                    self.sync_history_overlay_cursors();
+                }
+                KeyCode::Backspace => {
+                    self.history_overlay_query.pop();
+                    self.sync_history_overlay_cursors();
+                    self.preview_selected_history_overlay_item();
+                    if self.history_overlay_query.is_empty() {
+                        self.history_overlay_filter_active = false;
+                    }
+                }
+                KeyCode::Char(c) => {
+                    self.history_overlay_query.push(c);
+                    self.sync_history_overlay_cursors();
+                    self.preview_selected_history_overlay_item();
+                }
+                _ => {}
+            }
+            return;
+        }
+
         let history_len = self.history_overlay_history_items().len();
         let favorites_len = self.history_overlay_favorite_items().len();
 
@@ -238,6 +270,10 @@ impl DawApp {
                 }
                 self.sync_history_overlay_cursors();
                 self.preview_selected_history_overlay_item();
+            }
+            KeyCode::Char('/') => {
+                self.history_overlay_filter_active = true;
+                self.sync_history_overlay_cursors();
             }
             KeyCode::Enter => {
                 if let Some(selected) = self.selected_history_overlay_item() {

@@ -4,11 +4,21 @@ use crossterm::event::KeyCode;
 use mmlabc_to_smf::mml_preprocessor;
 use serde_json::Value;
 
-use super::{Mode, PatchPhrasePane, TuiApp, PATCH_JSON_KEY};
+use super::{filter_items, Mode, PatchPhrasePane, TuiApp, PATCH_JSON_KEY};
 
 const PATCH_PHRASE_LIST_MAX_LEN: usize = 100;
 
 impl<'a> TuiApp<'a> {
+    fn filtered_patch_phrase_items(&self, items: Option<&[String]>) -> Vec<String> {
+        match items.filter(|items| !items.is_empty()) {
+            Some(items) => filter_items(items, &self.patch_phrase_query),
+            None => {
+                let fallback = [String::from("c")];
+                filter_items(&fallback, &self.patch_phrase_query)
+            }
+        }
+    }
+
     fn move_patch_phrase_selection_by(
         &mut self,
         delta: isize,
@@ -74,34 +84,45 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn patch_phrase_history_items(&self) -> Vec<String> {
-        self.patch_phrase_name
-            .as_deref()
-            .and_then(|patch| self.patch_phrase_store.patches.get(patch))
-            .map(|state| state.history.clone())
-            .filter(|items| !items.is_empty())
-            .unwrap_or_else(|| vec!["c".to_string()])
+        self.filtered_patch_phrase_items(
+            self.patch_phrase_name
+                .as_deref()
+                .and_then(|patch| self.patch_phrase_store.patches.get(patch))
+                .map(|state| state.history.as_slice()),
+        )
     }
 
     pub(super) fn patch_phrase_favorite_items(&self) -> Vec<String> {
-        self.patch_phrase_name
-            .as_deref()
-            .and_then(|patch| self.patch_phrase_store.patches.get(patch))
-            .map(|state| state.favorites.clone())
-            .filter(|items| !items.is_empty())
-            .unwrap_or_else(|| vec!["c".to_string()])
+        self.filtered_patch_phrase_items(
+            self.patch_phrase_name
+                .as_deref()
+                .and_then(|patch| self.patch_phrase_store.patches.get(patch))
+                .map(|state| state.favorites.as_slice()),
+        )
     }
 
     fn sync_patch_phrase_states(&mut self) {
         let history_len = self.patch_phrase_history_items().len();
-        self.patch_phrase_history_cursor = self.patch_phrase_history_cursor.min(history_len - 1);
-        self.patch_phrase_history_state
-            .select(Some(self.patch_phrase_history_cursor));
+        if history_len == 0 {
+            self.patch_phrase_history_cursor = 0;
+            self.patch_phrase_history_state.select(None);
+        } else {
+            self.patch_phrase_history_cursor =
+                self.patch_phrase_history_cursor.min(history_len - 1);
+            self.patch_phrase_history_state
+                .select(Some(self.patch_phrase_history_cursor));
+        }
 
         let favorites_len = self.patch_phrase_favorite_items().len();
-        self.patch_phrase_favorites_cursor =
-            self.patch_phrase_favorites_cursor.min(favorites_len - 1);
-        self.patch_phrase_favorites_state
-            .select(Some(self.patch_phrase_favorites_cursor));
+        if favorites_len == 0 {
+            self.patch_phrase_favorites_cursor = 0;
+            self.patch_phrase_favorites_state.select(None);
+        } else {
+            self.patch_phrase_favorites_cursor =
+                self.patch_phrase_favorites_cursor.min(favorites_len - 1);
+            self.patch_phrase_favorites_state
+                .select(Some(self.patch_phrase_favorites_cursor));
+        }
     }
 
     pub(super) fn flush_patch_phrase_store_if_dirty(&mut self) {
@@ -160,11 +181,49 @@ impl<'a> TuiApp<'a> {
         self.patch_phrase_focus = PatchPhrasePane::History;
         self.patch_phrase_history_cursor = 0;
         self.patch_phrase_favorites_cursor = 0;
+        self.patch_phrase_query.clear();
+        self.patch_phrase_filter_active = false;
         self.sync_patch_phrase_states();
         self.mode = Mode::PatchPhrase;
     }
 
     pub(super) fn handle_patch_phrase(&mut self, key: KeyCode) {
+        if self.patch_phrase_filter_active {
+            match key {
+                KeyCode::Esc => {
+                    self.patch_phrase_filter_active = false;
+                    self.flush_patch_phrase_store_if_dirty();
+                    self.mode = Mode::Normal;
+                }
+                KeyCode::Enter => {
+                    self.patch_phrase_filter_active = false;
+                    self.sync_patch_phrase_states();
+                }
+                KeyCode::Backspace => {
+                    self.patch_phrase_query.pop();
+                    self.sync_patch_phrase_states();
+                    if let Some(mml) = self.patch_phrase_preview_mml() {
+                        self.record_notepad_history(&mml);
+                        self.play_mml(mml);
+                    }
+                    if self.patch_phrase_query.is_empty() {
+                        self.patch_phrase_filter_active = false;
+                    }
+                }
+                KeyCode::Char('?') => self.enter_help(),
+                KeyCode::Char(c) => {
+                    self.patch_phrase_query.push(c);
+                    self.sync_patch_phrase_states();
+                    if let Some(mml) = self.patch_phrase_preview_mml() {
+                        self.record_notepad_history(&mml);
+                        self.play_mml(mml);
+                    }
+                }
+                _ => {}
+            }
+            return;
+        }
+
         let history_len = self.patch_phrase_history_items().len();
         let favorites_len = self.patch_phrase_favorite_items().len();
 
@@ -232,6 +291,10 @@ impl<'a> TuiApp<'a> {
                         self.play_mml(mml);
                     }
                 }
+            }
+            KeyCode::Char('/') => {
+                self.patch_phrase_filter_active = true;
+                self.sync_patch_phrase_states();
             }
             KeyCode::Enter => {
                 if let Some(mml) = self.patch_phrase_preview_mml() {

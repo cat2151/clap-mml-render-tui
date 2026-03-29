@@ -50,6 +50,24 @@ fn filter_patches_empty_list_returns_empty() {
     assert!(result.is_empty());
 }
 
+#[test]
+fn filter_items_multiple_terms_act_as_and() {
+    let items = vec![
+        "Pads/Soft Pad.fxp".to_string(),
+        "Pads/Hard Pad.fxp".to_string(),
+        "Leads/Lead 1.fxp".to_string(),
+    ];
+    let result = filter_items(&items, "pad soft");
+    assert_eq!(result, vec!["Pads/Soft Pad.fxp"]);
+}
+
+#[test]
+fn filter_items_whitespace_only_query_returns_all() {
+    let items = vec!["alpha beta".to_string(), "gamma".to_string()];
+    let result = filter_items(&items, "   ");
+    assert_eq!(result, items);
+}
+
 // --- audio cache helper tests ---
 
 #[test]

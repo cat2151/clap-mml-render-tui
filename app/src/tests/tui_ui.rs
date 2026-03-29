@@ -157,12 +157,12 @@ fn patch_select_screen_splits_status_and_keybinds() {
         .unwrap();
     let keybind_row = normalized_lines
         .iter()
-        .position(|line| line.contains("Enter:決定ESC:キャンセル"))
+        .position(|line| line.contains("Enter:検索確定/決定ESC:キャンセル"))
         .unwrap();
 
     assert!(!normalized_lines[status_row].contains("Enter:決定"));
     assert_eq!(keybind_row, status_row + 1);
-    assert!(normalized_lines[keybind_row].contains("/:検索開始"));
+    assert!(normalized_lines[keybind_row].contains("/:検索入力"));
     assert!(normalized_lines[keybind_row].contains("f:お気に入り"));
     assert!(normalized_screen.contains("h/l・←/→:ペイン移動"));
     assert!(normalized_screen.contains("j/k・↑↓・PgUp/PgDn:移動して再生"));
@@ -177,12 +177,14 @@ fn notepad_history_overlay_renders_history_and_favorites_lists() {
         favorites: vec!["o5g".to_string()],
     };
     app.start_notepad_history();
+    app.notepad_filter_active = true;
 
     let lines = render_lines(&mut app, 100, 16).join("\n");
 
     assert!(lines.contains("[HISTORY] notepad mode"));
     assert!(lines.contains("History"));
     assert!(lines.contains("Favorites"));
+    assert!(lines.contains("/"));
     assert!(lines.contains("l8cdef"));
     assert!(lines.contains("o5g"));
 }
@@ -202,6 +204,7 @@ fn notepad_history_overlay_is_centered_like_daw_overlay() {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
+            Constraint::Length(3),
             Constraint::Min(3),
             Constraint::Length(1),
             Constraint::Length(1),
@@ -210,7 +213,7 @@ fn notepad_history_overlay_is_centered_like_daw_overlay() {
     let panes = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(chunks[0]);
+        .split(chunks[1]);
     let (title_x, title_y) = find_text(&buffer, "History");
 
     assert_eq!(title_y, panes[0].y);
@@ -248,6 +251,19 @@ fn patch_phrase_screen_uses_c_as_fallback_for_empty_lists() {
     let lines = render_lines(&mut app, 80, 10).join("\n");
 
     assert!(lines.contains("▶ c"));
+}
+
+#[test]
+fn patch_phrase_screen_shows_search_prompt() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::PatchPhrase;
+    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase_query = "jk".to_string();
+    app.patch_phrase_filter_active = true;
+
+    let lines = render_lines(&mut app, 120, 12).join("\n");
+
+    assert!(lines.contains("/ jk"));
 }
 
 #[test]
@@ -346,6 +362,7 @@ fn notepad_history_help_screen_shows_history_shortcuts() {
     let normalized_screen = lines.join("\n").replace([' ', '\n'], "");
 
     assert!(normalized_screen.contains("notepadhistory画面"));
+    assert!(normalized_screen.contains("/の後に文字入力:フィルタ(Space=AND条件)"));
     assert!(normalized_screen.contains("h/l・←/→:ペイン切替"));
     assert!(normalized_screen.contains("dd:Favorites行を削除してHistory先頭へ移動"));
     assert!(!normalized_screen.contains("Ctrl+C:コピー"));
@@ -388,6 +405,7 @@ fn patch_phrase_help_screen_shows_patch_phrase_shortcuts() {
     let normalized_screen = lines.join("\n").replace([' ', '\n'], "");
 
     assert!(normalized_screen.contains("patchphrase画面"));
+    assert!(normalized_screen.contains("/の後に文字入力:フィルタ(Space=AND条件)"));
     assert!(normalized_screen.contains("h/l・←/→:ペイン切替して再生"));
     assert!(normalized_screen.contains("Space:現在行を再生"));
     assert!(normalized_screen.contains("f:現在行をお気に入りに追加"));

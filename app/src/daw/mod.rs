@@ -195,9 +195,11 @@ pub struct DawApp {
     pub(super) patch_phrase_store: crate::history::PatchPhraseStore,
     pub(super) patch_phrase_store_dirty: bool,
     pub(super) history_overlay_patch_name: Option<String>,
+    pub(super) history_overlay_query: String,
     pub(super) history_overlay_history_cursor: usize,
     pub(super) history_overlay_favorites_cursor: usize,
     pub(super) history_overlay_focus: DawHistoryPane,
+    pub(super) history_overlay_filter_active: bool,
 }
 
 impl DawApp {
@@ -401,9 +403,11 @@ impl DawApp {
             patch_phrase_store: crate::history::load_patch_phrase_store(),
             patch_phrase_store_dirty: false,
             history_overlay_patch_name: None,
+            history_overlay_query: String::new(),
             history_overlay_history_cursor: 0,
             history_overlay_favorites_cursor: 0,
             history_overlay_focus: DawHistoryPane::History,
+            history_overlay_filter_active: false,
         };
 
         app.load();
