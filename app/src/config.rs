@@ -116,7 +116,7 @@ input_midi  = "input.mid"
 # 以下の値は内部的に使用されますが、実際の出力先は上記ディレクトリになります。
 output_midi = "output.mid"
 output_wav  = "output.wav"
-sample_rate = 44100
+sample_rate = 48000
 buffer_size = 512
 
 # 【省略可】ファクトリパッチのルートディレクトリ（TUI の音色選択・ランダム音色で使う）
