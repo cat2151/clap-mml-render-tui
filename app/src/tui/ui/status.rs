@@ -63,7 +63,7 @@ pub(super) fn keybind_text(mode: &Mode) -> &'static str {
         }
         Mode::Insert => "ESC:確定→NORMAL  Enter:確定→次行",
         Mode::PatchSelect => {
-            "Enter:決定  ESC:キャンセル  Ctrl+F:お気に入り  Ctrl+J/Ctrl+N・Ctrl+K/Ctrl+P・↑↓・PgUp/PgDn:移動  文字入力:フィルタ  Space:AND条件"
+            "Enter:決定  ESC:キャンセル  /:検索開始  f:お気に入り  h/l・←/→:ペイン移動  j/k・↑↓・PgUp/PgDn:移動して再生"
         }
         Mode::NotepadHistory => {
             "Enter:確定  ESC:閉じる  h/l・←/→:ペイン移動  j/k・↑↓:移動して再生  PgUp/PgDn:1画面移動  f:お気に入り  dd:削除"

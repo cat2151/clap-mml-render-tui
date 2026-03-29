@@ -20,14 +20,40 @@ fn handle_patch_select_ctrl_j_moves_cursor_and_previews_destination_patch() {
 }
 
 #[test]
-fn handle_patch_select_j_and_k_filter_without_moving_cursor() {
+fn handle_patch_select_j_and_k_move_cursor_and_preview_destination_patch() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp", "Bass/Bass 1.fxp"]);
+    app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
+    app.patch_cursor = 1;
+    app.patch_list_state.select(Some(1));
+    app.mode = Mode::PatchSelect;
+
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
+
+    assert_eq!(app.patch_query, "");
+    assert_eq!(app.patch_cursor, 1);
+    assert_eq!(app.patch_list_state.selected(), Some(1));
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Leads/Lead 1.fxp"} l8cdef"#
+    ));
+}
+
+#[test]
+fn handle_patch_select_slash_then_chars_filter_and_preview_first_result() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_all = make_patches(&["Pads/Pad 1.fxp", "JK Brass/Bass 1.fxp"]);
-    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()];
+    app.patch_filtered = vec![
+        "Pads/Pad 1.fxp".to_string(),
+        "JK Brass/Bass 1.fxp".to_string(),
+    ];
     app.patch_list_state.select(Some(0));
     app.mode = Mode::PatchSelect;
 
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE));
     app.handle_patch_select(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
     app.handle_patch_select(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
 
@@ -103,7 +129,7 @@ fn handle_patch_select_page_down_and_page_up_move_by_visible_page() {
 }
 
 #[test]
-fn handle_patch_select_ctrl_f_adds_selected_patch_and_phrase_to_favorites() {
+fn handle_patch_select_f_adds_selected_patch_and_phrase_to_favorites() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
@@ -112,7 +138,7 @@ fn handle_patch_select_ctrl_f_adds_selected_patch_and_phrase_to_favorites() {
     app.patch_list_state.select(Some(1));
     app.mode = Mode::PatchSelect;
 
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::CONTROL));
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE));
 
     let stored = app
         .patch_phrase_store
@@ -130,7 +156,76 @@ fn handle_patch_select_ctrl_f_adds_selected_patch_and_phrase_to_favorites() {
 }
 
 #[test]
-fn handle_patch_select_char_filters_and_previews_first_result() {
+fn handle_patch_select_l_moves_focus_to_favorites_and_previews_selected_patch() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
+    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()];
+    app.patch_phrase_store.patches.insert(
+        "Leads/Lead 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec![],
+            favorites: vec!["l8cdef".to_string()],
+        },
+    );
+    app.patch_list_state.select(Some(0));
+    app.patch_favorites_state.select(Some(0));
+    app.mode = Mode::PatchSelect;
+
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE));
+
+    assert_eq!(app.patch_select_focus, PatchSelectPane::Favorites);
+    assert_eq!(app.patch_favorites_state.selected(), Some(0));
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Leads/Lead 1.fxp"} l8cdef"#
+    ));
+}
+
+#[test]
+fn handle_patch_select_page_down_moves_favorites_when_favorites_pane_is_focused() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Fav 0"} l8cdef"#.to_string()];
+    app.patch_all = make_patches(&["Fav 0", "Fav 1", "Fav 2", "Fav 3"]);
+    app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
+    for patch in ["Fav 0", "Fav 1", "Fav 2", "Fav 3"] {
+        app.patch_phrase_store.patches.insert(
+            patch.to_string(),
+            crate::history::PatchPhraseState {
+                history: vec![],
+                favorites: vec!["l8cdef".to_string()],
+            },
+        );
+    }
+    app.patch_select_focus = PatchSelectPane::Favorites;
+    app.patch_select_page_size = 2;
+    app.patch_favorites_cursor = 0;
+    app.patch_favorites_state.select(Some(0));
+    app.mode = Mode::PatchSelect;
+
+    app.handle_patch_select(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE));
+
+    assert_eq!(app.patch_favorites_cursor, 2);
+    assert_eq!(app.patch_favorites_state.selected(), Some(2));
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Fav 2"} l8cdef"#
+    ));
+}
+
+#[test]
+fn handle_patch_select_backspace_with_empty_query_exits_filter_input() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::PatchSelect;
+    app.patch_select_filter_active = true;
+
+    app.handle_patch_select(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+
+    assert!(!app.patch_select_filter_active);
+}
+
+#[test]
+fn handle_patch_select_char_filters_and_previews_first_result_after_slash() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
@@ -139,6 +234,7 @@ fn handle_patch_select_char_filters_and_previews_first_result() {
     app.patch_list_state.select(Some(1));
     app.mode = Mode::PatchSelect;
 
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE));
     app.handle_patch_select(KeyEvent::new(KeyCode::Char('L'), KeyModifiers::NONE));
 
     assert_eq!(app.patch_query, "L");
@@ -158,6 +254,7 @@ fn handle_patch_select_backspace_refilters_and_previews_first_result() {
     app.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
     app.patch_filtered = vec!["Leads/Lead 1.fxp".to_string()];
     app.patch_query = "L".to_string();
+    app.patch_select_filter_active = true;
     app.patch_list_state.select(Some(0));
     app.mode = Mode::PatchSelect;
 
