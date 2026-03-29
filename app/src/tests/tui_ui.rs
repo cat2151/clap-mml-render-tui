@@ -157,12 +157,12 @@ fn patch_select_screen_splits_status_and_keybinds() {
         .unwrap();
     let keybind_row = normalized_lines
         .iter()
-        .position(|line| line.contains("Enter:決定ESC:キャンセル"))
+        .position(|line| line.contains("Enter:検索確定/決定ESC:キャンセル"))
         .unwrap();
 
     assert!(!normalized_lines[status_row].contains("Enter:決定"));
     assert_eq!(keybind_row, status_row + 1);
-    assert!(normalized_lines[keybind_row].contains("/:検索開始"));
+    assert!(normalized_lines[keybind_row].contains("/:検索入力"));
     assert!(normalized_lines[keybind_row].contains("f:お気に入り"));
     assert!(normalized_screen.contains("h/l・←/→:ペイン移動"));
     assert!(normalized_screen.contains("j/k・↑↓・PgUp/PgDn:移動して再生"));
@@ -204,6 +204,7 @@ fn notepad_history_overlay_is_centered_like_daw_overlay() {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
+            Constraint::Length(3),
             Constraint::Min(3),
             Constraint::Length(1),
             Constraint::Length(1),
@@ -212,7 +213,7 @@ fn notepad_history_overlay_is_centered_like_daw_overlay() {
     let panes = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(chunks[0]);
+        .split(chunks[1]);
     let (title_x, title_y) = find_text(&buffer, "History");
 
     assert_eq!(title_y, panes[0].y);

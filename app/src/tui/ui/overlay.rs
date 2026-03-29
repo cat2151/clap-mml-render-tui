@@ -178,12 +178,10 @@ pub(super) fn draw_patch_phrase(
     } else {
         " patch phrase - / で MML 検索 "
     };
-    let search_body = if app.patch_phrase_filter_active {
+    let search_body = if !app.patch_phrase_query.is_empty() || app.patch_phrase_filter_active {
         format!("/ {}", app.patch_phrase_query)
-    } else if app.patch_phrase_query.is_empty() {
-        "/ を押して検索開始".to_string()
     } else {
-        format!("/ {}", app.patch_phrase_query)
+        "/ を押して検索開始".to_string()
     };
     f.render_widget(
         Paragraph::new(search_body).style(base_style()).block(
@@ -305,12 +303,10 @@ pub(super) fn draw_notepad_history(
     } else {
         " notepad history - / で MML 検索 "
     };
-    let search_body = if app.notepad_filter_active {
+    let search_body = if !app.notepad_query.is_empty() || app.notepad_filter_active {
         format!("/ {}", app.notepad_query)
-    } else if app.notepad_query.is_empty() {
-        "/ を押して検索開始".to_string()
     } else {
-        format!("/ {}", app.notepad_query)
+        "/ を押して検索開始".to_string()
     };
     f.render_widget(
         Paragraph::new(search_body).style(base_style()).block(

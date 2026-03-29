@@ -40,7 +40,8 @@ use std::sync::{Arc, Mutex};
 const AUDIO_CACHE_MAX_ENTRIES: usize = 64;
 pub(super) const PATCH_JSON_KEY: &str = "Surge XT patch";
 
-use self::cache::{filter_items, filter_patches, resolve_cached_samples, try_insert_cache};
+pub(crate) use self::cache::filter_items;
+use self::cache::{filter_patches, resolve_cached_samples, try_insert_cache};
 use crate::config::Config;
 
 /// バックグラウンドパッチ読み込みの状態

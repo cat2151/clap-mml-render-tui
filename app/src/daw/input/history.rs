@@ -6,21 +6,6 @@ use super::super::{
 };
 
 impl DawApp {
-    fn filter_history_overlay_items(items: &[String], query: &str) -> Vec<String> {
-        let terms: Vec<String> = query.split_whitespace().map(|t| t.to_lowercase()).collect();
-        if terms.is_empty() {
-            return items.to_vec();
-        }
-        items
-            .iter()
-            .filter(|item| {
-                let lower = item.to_lowercase();
-                terms.iter().all(|term| lower.contains(term.as_str()))
-            })
-            .cloned()
-            .collect()
-    }
-
     pub(in crate::daw) fn history_overlay_history_items(&self) -> Vec<String> {
         let items = if let Some(patch_name) = self.history_overlay_patch_name.as_deref() {
             self.patch_phrase_store
@@ -38,7 +23,7 @@ impl DawApp {
                 .cloned()
                 .collect()
         };
-        Self::filter_history_overlay_items(&items, &self.history_overlay_query)
+        crate::tui::filter_items(&items, &self.history_overlay_query)
     }
 
     pub(in crate::daw) fn history_overlay_favorite_items(&self) -> Vec<String> {
@@ -58,7 +43,7 @@ impl DawApp {
                 .cloned()
                 .collect()
         };
-        Self::filter_history_overlay_items(&items, &self.history_overlay_query)
+        crate::tui::filter_items(&items, &self.history_overlay_query)
     }
 
     fn sync_history_overlay_cursors(&mut self) {

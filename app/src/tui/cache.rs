@@ -16,7 +16,7 @@ pub(super) fn filter_patches(all: &[(String, String)], query: &str) -> Vec<Strin
 }
 
 /// クエリ文字列（空白区切りでAND条件）で文字列リストをフィルタする。
-pub(super) fn filter_items(items: &[String], query: &str) -> Vec<String> {
+pub(crate) fn filter_items(items: &[String], query: &str) -> Vec<String> {
     let terms: Vec<String> = query.split_whitespace().map(|t| t.to_lowercase()).collect();
     if terms.is_empty() {
         return items.to_vec();

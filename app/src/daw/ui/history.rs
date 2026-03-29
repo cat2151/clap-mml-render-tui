@@ -85,12 +85,11 @@ pub(super) fn draw_history(f: &mut Frame, app: &DawApp, area: Rect) {
     } else {
         " history overlay - / で MML 検索 "
     };
-    let search_body = if app.history_overlay_filter_active {
+    let search_body = if !app.history_overlay_query.is_empty() || app.history_overlay_filter_active
+    {
         format!("/ {}", app.history_overlay_query)
-    } else if app.history_overlay_query.is_empty() {
-        "/ を押して検索開始".to_string()
     } else {
-        format!("/ {}", app.history_overlay_query)
+        "/ を押して検索開始".to_string()
     };
     f.render_widget(
         Paragraph::new(search_body)
