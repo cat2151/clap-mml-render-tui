@@ -1,3 +1,4 @@
+use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::{backend::TestBackend, buffer::Buffer, style::Color, Terminal};
 
 use crate::ui_theme::{
@@ -175,6 +176,39 @@ fn notepad_history_overlay_renders_history_and_favorites_lists() {
 }
 
 #[test]
+fn notepad_history_overlay_is_centered_like_daw_overlay() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["before".to_string()];
+    app.patch_phrase_store.notepad = PatchPhraseState {
+        history: vec!["l8cdef".to_string()],
+        favorites: vec!["o5g".to_string()],
+    };
+    app.start_notepad_history();
+
+    let buffer = render_buffer(&mut app, 100, 20);
+    let overlay_area = crate::ui_utils::centered_rect(88, 76, buffer.area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(3),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(overlay_area);
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[0]);
+    let (title_x, title_y) = find_text(&buffer, "History");
+
+    assert_eq!(title_y, panes[0].y);
+    assert!((panes[0].x..panes[0].x + panes[0].width / 4).contains(&title_x));
+    assert!(overlay_area.x > 0);
+    assert!(overlay_area.y > 0);
+    assert!(buffer.content().iter().any(|cell| cell.symbol() == "▶"));
+}
+
+#[test]
 fn notepad_history_overlay_shows_left_right_pane_keybinds() {
     let mut app = TuiApp::new_for_test(test_config());
     app.patch_phrase_store.notepad = PatchPhraseState {
@@ -229,7 +263,7 @@ fn normal_help_screen_mentions_ctrl_clipboard_shortcuts_without_overlay_keybinds
         .any(|line| line.contains("Ctrl+V:ペースト")));
     assert!(normalized_lines
         .iter()
-        .any(|line| line.contains("h:notepadhistory")));
+        .any(|line| line.contains("Shift+H:notepadhistory")));
     assert!(normalized_lines
         .iter()
         .any(|line| line.contains("dd/Del:削除（ヤンク）p/P:下貼付/上貼付")));
@@ -341,6 +375,7 @@ fn patch_phrase_help_screen_shows_patch_phrase_shortcuts() {
     let normalized_screen = lines.join("\n").replace([' ', '\n'], "");
 
     assert!(normalized_screen.contains("patchphrase画面"));
+    assert!(normalized_screen.contains("h/l・←/→:ペイン切替して再生"));
     assert!(normalized_screen.contains("Space:現在行を再生"));
     assert!(normalized_screen.contains("f:現在行をお気に入りに追加"));
     assert!(!normalized_screen.contains("Ctrl+C:コピー"));
@@ -404,6 +439,7 @@ fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
     assert_eq!(lines[6].trim_start(), "NORMAL");
     assert!(lines[7].contains("q ?:help i:insert"));
     assert!(lines[7].contains("dd/Del:cut"));
+    assert!(lines[7].contains("Shift+H:history"));
     assert!(lines[7].contains("w:DAW"));
 }
 

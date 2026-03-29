@@ -1,7 +1,9 @@
 use crossterm::event::KeyCode;
 
 use super::super::DawHistoryPane;
-use super::super::{DawApp, DawMode, DawPlayState, FIRST_PLAYABLE_TRACK};
+use super::super::{
+    mml::build_cell_mml_from_data, DawApp, DawMode, DawPlayState, FIRST_PLAYABLE_TRACK,
+};
 
 impl DawApp {
     pub(in crate::daw) fn history_overlay_history_items(&self) -> Vec<String> {
@@ -89,6 +91,45 @@ impl DawApp {
         self.cursor_measure.max(1).min(self.measures)
     }
 
+    fn preview_selected_history_overlay_item(&mut self) {
+        if *self.play_state.lock().unwrap() == DawPlayState::Playing {
+            return;
+        }
+
+        let Some(selected) = self.selected_history_overlay_item() else {
+            return;
+        };
+        let target_measure = self.history_overlay_target_measure();
+        let Some(measure_index) = target_measure.checked_sub(1) else {
+            return;
+        };
+
+        let mut preview_data = vec![self.data[0].clone(), self.data[self.cursor_track].clone()];
+        match self.history_overlay_patch_name.as_deref() {
+            Some(_) => {
+                preview_data[1][target_measure] = selected;
+            }
+            None => {
+                let Some((patch_name, phrase)) = Self::extract_patch_phrase(&selected) else {
+                    return;
+                };
+                preview_data[1][0] = Self::build_patch_json(&patch_name);
+                preview_data[1][target_measure] = phrase;
+            }
+        }
+
+        let mut track_mmls = self.build_measure_track_mmls_for_measure(target_measure);
+        track_mmls[self.cursor_track] =
+            build_cell_mml_from_data(&preview_data, self.measures, 1, target_measure);
+
+        if self.try_start_preview_with_track_mmls_for_test(measure_index, Some(track_mmls.clone()))
+        {
+            return;
+        }
+
+        self.start_preview_with_snapshot(measure_index, track_mmls, self.playback_track_gains());
+    }
+
     fn apply_history_overlay_selection(&mut self, selected: String) {
         let target_measure = self.history_overlay_target_measure();
         if self.cursor_measure == 0 {
@@ -161,10 +202,12 @@ impl DawApp {
             KeyCode::Char('h') | KeyCode::Left => {
                 self.history_overlay_focus = DawHistoryPane::History;
                 self.sync_history_overlay_cursors();
+                self.preview_selected_history_overlay_item();
             }
             KeyCode::Char('l') | KeyCode::Right => {
                 self.history_overlay_focus = DawHistoryPane::Favorites;
                 self.sync_history_overlay_cursors();
+                self.preview_selected_history_overlay_item();
             }
             KeyCode::Char('j') | KeyCode::Down => {
                 match self.history_overlay_focus {
@@ -181,6 +224,7 @@ impl DawApp {
                     _ => {}
                 }
                 self.sync_history_overlay_cursors();
+                self.preview_selected_history_overlay_item();
             }
             KeyCode::Char('k') | KeyCode::Up => {
                 match self.history_overlay_focus {
@@ -193,11 +237,15 @@ impl DawApp {
                     _ => {}
                 }
                 self.sync_history_overlay_cursors();
+                self.preview_selected_history_overlay_item();
             }
             KeyCode::Enter => {
                 if let Some(selected) = self.selected_history_overlay_item() {
                     self.apply_history_overlay_selection(selected);
                 }
+            }
+            KeyCode::Char(' ') => {
+                self.preview_selected_history_overlay_item();
             }
             _ => {}
         }

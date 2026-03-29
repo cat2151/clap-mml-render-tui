@@ -113,6 +113,36 @@ fn handle_patch_phrase_i_from_favorites_stays_in_patch_phrase() {
 }
 
 #[test]
+fn handle_patch_phrase_arrow_keys_switch_focus_and_preview() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["before".to_string()];
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["l8cdef".to_string()],
+            favorites: vec!["o5g".to_string()],
+        },
+    );
+    app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
+
+    app.handle_patch_phrase(KeyCode::Right);
+
+    assert!(matches!(app.patch_phrase_focus, PatchPhrasePane::Favorites));
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == r#"{"Surge XT patch":"Pads/Pad 1.fxp"} o5g"#
+    ));
+
+    app.handle_patch_phrase(KeyCode::Left);
+
+    assert!(matches!(app.patch_phrase_focus, PatchPhrasePane::History));
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#
+    ));
+}
+
+#[test]
 fn handle_patch_phrase_page_down_and_page_up_move_by_visible_page() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["before".to_string()];

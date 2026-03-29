@@ -137,3 +137,81 @@ fn handle_history_overlay_enter_from_favorites_uses_selected_favorite() {
 
     assert_eq!(app.data[1][1], "favorite");
 }
+
+#[test]
+fn handle_history_overlay_arrow_and_space_preview_selected_mml() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    app.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["history".to_string()],
+            favorites: vec!["favorite".to_string()],
+        },
+    );
+    app.start_history_overlay();
+
+    app.handle_history_overlay(KeyCode::Right);
+
+    assert!(matches!(
+        app.history_overlay_focus,
+        DawHistoryPane::Favorites
+    ));
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Preview
+    ));
+    assert_eq!(
+        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        r#"{"Surge XT patch": "Pads/Pad 1.fxp"}favorite"#
+    );
+
+    app.handle_history_overlay(KeyCode::Char(' '));
+
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Preview
+    ));
+    assert_eq!(
+        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        r#"{"Surge XT patch": "Pads/Pad 1.fxp"}favorite"#
+    );
+
+    app.handle_history_overlay(KeyCode::Left);
+
+    assert!(matches!(app.history_overlay_focus, DawHistoryPane::History));
+    assert_eq!(
+        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        r#"{"Surge XT patch": "Pads/Pad 1.fxp"}history"#
+    );
+}
+
+#[test]
+fn handle_history_overlay_down_previews_next_history_item() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    app.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["first".to_string(), "second".to_string()],
+            favorites: vec![],
+        },
+    );
+    app.start_history_overlay();
+
+    app.handle_history_overlay(KeyCode::Down);
+
+    assert_eq!(app.history_overlay_history_cursor, 1);
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Preview
+    ));
+    assert_eq!(
+        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        r#"{"Surge XT patch": "Pads/Pad 1.fxp"}second"#
+    );
+}

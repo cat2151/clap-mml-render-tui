@@ -173,7 +173,7 @@ impl<'a> TuiApp<'a> {
                 self.flush_patch_phrase_store_if_dirty();
                 self.mode = Mode::Normal;
             }
-            KeyCode::Char('h') => {
+            KeyCode::Char('h') | KeyCode::Left => {
                 self.patch_phrase_focus = PatchPhrasePane::History;
                 self.sync_patch_phrase_states();
                 if let Some(mml) = self.patch_phrase_preview_mml() {
@@ -181,7 +181,7 @@ impl<'a> TuiApp<'a> {
                     self.play_mml(mml);
                 }
             }
-            KeyCode::Char('l') => {
+            KeyCode::Char('l') | KeyCode::Right => {
                 self.patch_phrase_focus = PatchPhrasePane::Favorites;
                 self.sync_patch_phrase_states();
                 if let Some(mml) = self.patch_phrase_preview_mml() {

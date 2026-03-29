@@ -447,7 +447,7 @@ fn handle_normal_p_and_p_paste_yanked_line_below_or_above_cursor() {
 }
 
 #[test]
-fn handle_normal_h_and_l_move_to_edges_and_play_destination_line() {
+fn handle_normal_home_and_l_move_to_edges_and_play_destination_line() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![
         "line 0".to_string(),
@@ -466,7 +466,7 @@ fn handle_normal_h_and_l_move_to_edges_and_play_destination_line() {
         PlayState::Running(msg) if msg == "line 3"
     ));
 
-    app.handle_normal(KeyCode::Char('H'));
+    app.handle_normal(KeyCode::Home);
 
     assert_eq!(app.cursor, 0);
     assert!(matches!(

@@ -36,7 +36,7 @@ where
 }
 
 impl DawApp {
-    fn start_preview_with_snapshot(
+    pub(super) fn start_preview_with_snapshot(
         &self,
         measure_index: usize,
         track_mmls: Vec<String>,

@@ -1,18 +1,30 @@
 use super::*;
 
 #[test]
-fn handle_normal_h_enters_notepad_history_overlay() {
+fn handle_normal_shift_h_enters_notepad_history_overlay() {
     let mut app = TuiApp::new_for_test(test_config());
     app.patch_phrase_store.notepad.history = vec!["l8cdef".to_string()];
     app.patch_phrase_store.notepad.favorites = vec!["o5g".to_string()];
 
-    let result = app.handle_normal(KeyCode::Char('h'));
+    let result =
+        app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('H'), KeyModifiers::SHIFT));
 
     assert!(matches!(result, NormalAction::Continue));
     assert!(matches!(app.mode, Mode::NotepadHistory));
     assert!(matches!(app.notepad_focus, PatchPhrasePane::History));
     assert_eq!(app.notepad_history_state.selected(), Some(0));
     assert_eq!(app.notepad_favorites_state.selected(), Some(0));
+}
+
+#[test]
+fn handle_normal_h_no_longer_enters_notepad_history_overlay() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_phrase_store.notepad.history = vec!["l8cdef".to_string()];
+
+    let result = app.handle_normal(KeyCode::Char('h'));
+
+    assert!(matches!(result, NormalAction::Continue));
+    assert!(matches!(app.mode, Mode::Normal));
 }
 
 #[test]

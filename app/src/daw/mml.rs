@@ -113,6 +113,23 @@ pub(super) fn build_measure_mml_from_data(
 impl DawApp {
     // ─── MML 構築 ─────────────────────────────────────────────
 
+    pub(super) fn build_measure_track_mmls_for_measure(&self, measure: usize) -> Vec<String> {
+        (0..self.tracks)
+            .map(|track| {
+                if track < FIRST_PLAYABLE_TRACK || !self.track_is_audible(track) {
+                    String::new()
+                } else {
+                    let notes = self.data[track][measure].trim();
+                    if notes.is_empty() {
+                        String::new()
+                    } else {
+                        self.build_cell_mml(track, measure)
+                    }
+                }
+            })
+            .collect()
+    }
+
     /// セル (track, measure) のレンダリング用 MML を構築する
     /// = track[t][0] (音色) + track0 全体 + track[t][m] (音符)
     /// 音色 JSON を先頭に置くことで extract_embedded_json が正しく解析できる
@@ -146,22 +163,7 @@ impl DawApp {
     /// index i → meas i+1, inner index t → track t の MML（再生しない track は空文字列）。
     pub(super) fn build_measure_track_mmls(&self) -> Vec<Vec<String>> {
         (1..=self.measures)
-            .map(|measure| {
-                (0..self.tracks)
-                    .map(|track| {
-                        if track < FIRST_PLAYABLE_TRACK || !self.track_is_audible(track) {
-                            String::new()
-                        } else {
-                            let notes = self.data[track][measure].trim();
-                            if notes.is_empty() {
-                                String::new()
-                            } else {
-                                self.build_cell_mml(track, measure)
-                            }
-                        }
-                    })
-                    .collect()
-            })
+            .map(|measure| self.build_measure_track_mmls_for_measure(measure))
             .collect()
     }
 
