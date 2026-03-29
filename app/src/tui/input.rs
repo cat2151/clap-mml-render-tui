@@ -425,11 +425,9 @@ impl<'a> TuiApp<'a> {
             }
             KeyCode::Backspace if self.patch_select_filter_active => {
                 if self.patch_query.pop().is_some() {
-                    if self.patch_query.is_empty() {
-                        self.patch_select_filter_active = false;
-                    }
                     self.update_patch_filter();
-                } else {
+                }
+                if self.patch_query.is_empty() {
                     self.patch_select_filter_active = false;
                 }
             }
