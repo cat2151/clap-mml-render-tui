@@ -1,5 +1,8 @@
 use super::*;
 
+const FOOTER_WIDE_TEST_WIDTH: u16 = 140;
+const FOOTER_FULL_KEYBIND_TEST_WIDTH: u16 = 220;
+
 #[test]
 fn draw_shows_mml_and_uncached_dot_before_cache_is_ready() {
     let mut app = build_test_app();
@@ -94,7 +97,7 @@ fn draw_shows_ab_repeat_markers_and_footer_shortcut() {
         };
     }
 
-    let normalized_lines: Vec<String> = render_lines(&app, 80, 12)
+    let normalized_lines: Vec<String> = render_lines(&app, FOOTER_WIDE_TEST_WIDTH, 12)
         .into_iter()
         .map(|line| line.replace(' ', ""))
         .collect();
@@ -372,6 +375,34 @@ fn help_does_not_show_old_semicolon_guidance() {
     assert!(
         normalized_lines
             .iter()
+            .any(|line| line.contains("dd:現在セルをyankして空にする")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("p:yank内容で現在セルを上書き")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("Shift+P:演奏/停止")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("Shift+Space:非play時、現在measから演奏開始して継続")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
             .any(|line| line.contains("a:off→start固定/end追従→end固定→off")),
         "lines: {:?}",
         normalized_lines
@@ -403,7 +434,7 @@ fn help_does_not_show_old_semicolon_guidance() {
 fn normal_footer_shows_shift_h_history_shortcut() {
     let app = build_test_app();
 
-    let normalized_lines: Vec<String> = render_lines(&app, 180, 20)
+    let normalized_lines: Vec<String> = render_lines(&app, FOOTER_FULL_KEYBIND_TEST_WIDTH, 20)
         .into_iter()
         .map(|line| line.replace(' ', ""))
         .collect();
@@ -412,6 +443,30 @@ fn normal_footer_shows_shift_h_history_shortcut() {
         normalized_lines
             .iter()
             .any(|line| line.contains("Shift+H:history")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines.iter().any(|line| line.contains("dd:cut")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines.iter().any(|line| line.contains("p:paste")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("Shift+P:play/stop")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("Shift+Space:fromhere")),
         "lines: {:?}",
         normalized_lines
     );

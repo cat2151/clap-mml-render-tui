@@ -70,6 +70,8 @@ fn build_test_app() -> DawApp {
         track_volumes_db: vec![0; tracks],
         mixer_cursor_track: 1,
         play_track_gains: Arc::new(Mutex::new(vec![0.0; tracks])),
+        yank_buffer: None,
+        normal_pending_delete: false,
         patch_phrase_store: crate::history::PatchPhraseStore::default(),
         history_overlay_patch_name: None,
         history_overlay_history_cursor: 0,

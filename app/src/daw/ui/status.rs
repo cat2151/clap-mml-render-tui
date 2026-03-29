@@ -57,7 +57,7 @@ pub(super) fn draw_status(
 
     let footer_text = match app.mode {
         DawMode::Normal => {
-            "DAW  Shift+H:history  h/←・l/→:meas preview  j/k:track preview  i:INS  a:A-B  p:play/stop  Enter/Space:1trk  Shift+Enter/Space:all  Shift+P:from here (stopped only)  n:notepad"
+            "DAW  Shift+H:history  h/←・l/→:meas preview  j/k:track preview  dd:cut  p:paste  i:INS  a:A-B  Shift+P:play/stop  Enter/Space:1trk  Shift+Enter:all  Shift+Space:from here  n:notepad"
         }
         DawMode::Insert => "ESC:確定→NORMAL  Enter:確定→次小節",
         DawMode::Help => "HELP  ESC:キャンセル",
