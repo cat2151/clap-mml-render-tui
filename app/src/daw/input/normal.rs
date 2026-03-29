@@ -117,7 +117,7 @@ impl DawApp {
         match play_state {
             DawPlayState::Idle => {}
             // カーソル移動に追従する preview は、現在の preview を止めて
-            // 新しい対象に切り替える。一方で通常再生中は preview を挟まない。
+            // 新しい対象に切り替える。一方で通常再生中は preview を開始しない。
             DawPlayState::Preview => self.stop_play(),
             DawPlayState::Playing => return,
         }
