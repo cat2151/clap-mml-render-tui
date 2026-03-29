@@ -165,9 +165,9 @@ pub enum DawNormalAction {
     QuitApp,
 }
 
-/// DAW モード終了後の TUI への通知
+/// DAW モード終了後の画面切替/終了通知
 pub enum DawExitReason {
-    /// n キーで TUI に戻る
+    /// n キーで notepad へ切り替える
     ReturnToTui,
     /// q キーでアプリを終了する
     QuitApp,

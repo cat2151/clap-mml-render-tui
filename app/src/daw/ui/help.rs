@@ -39,7 +39,7 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect) {
         Line::from("  s      : solo toggle"),
         Line::from("  r      : random 音色設定"),
         Line::from("  K / ?  : ヘルプ (このページ)"),
-        Line::from("  n      : TUI に戻る"),
+        Line::from("  n      : notepad へ切替"),
         Line::from("  q      : 終了"),
         Line::from(""),
         Line::from(Span::styled(
