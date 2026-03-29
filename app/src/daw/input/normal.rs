@@ -116,10 +116,10 @@ impl DawApp {
         let play_state = *self.play_state.lock().unwrap();
         match play_state {
             DawPlayState::Idle => {}
-            DawPlayState::Preview | DawPlayState::Playing => {
+            DawPlayState::Preview => {
                 self.stop_play();
-                return;
             }
+            DawPlayState::Playing => return,
         }
         let Some(measure_index) = self.cursor_play_measure_index() else {
             return;
@@ -133,6 +133,14 @@ impl DawApp {
             return;
         }
         self.start_preview_on_tracks(measure_index, &target_tracks);
+    }
+
+    fn toggle_preview_for_target_tracks(&mut self, preview_all_tracks: bool) {
+        let play_state = *self.play_state.lock().unwrap();
+        match play_state {
+            DawPlayState::Idle => self.start_preview_for_target_tracks(preview_all_tracks),
+            DawPlayState::Preview | DawPlayState::Playing => self.stop_play(),
+        }
     }
 
     fn preview_current_target_if_stopped(&mut self) {
@@ -212,11 +220,11 @@ impl DawApp {
 
         match normal_playback_shortcut(key_event) {
             Some(NormalPlaybackShortcut::PreviewCurrentTrack) => {
-                self.start_preview_for_target_tracks(false);
+                self.toggle_preview_for_target_tracks(false);
                 return DawNormalAction::Continue;
             }
             Some(NormalPlaybackShortcut::PreviewAllTracks) => {
-                self.start_preview_for_target_tracks(true);
+                self.toggle_preview_for_target_tracks(true);
                 return DawNormalAction::Continue;
             }
             Some(NormalPlaybackShortcut::PlayFromCursor) => {
