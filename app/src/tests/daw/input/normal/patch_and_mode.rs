@@ -66,14 +66,14 @@ fn handle_normal_g_rejects_init_column() {
 }
 
 #[test]
-fn apply_generate_to_current_measure_with_skips_history_when_generate_is_noop() {
+fn skips_history_when_generate_is_noop() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_track = 1;
     app.cursor_measure = 1;
     app.data[1][0] = r#"{"Surge XT patch":"Pad 1.fxp"}"#.to_string();
     app.data[1][1] = "c1".to_string();
 
-    app.apply_generate_to_current_measure_with("Pad 1.fxp".to_string(), "c1");
+    app.apply_generate_to_current_measure_with("Pad 1.fxp".to_string(), "c1", 0);
 
     assert_eq!(app.data[1][0], r#"{"Surge XT patch":"Pad 1.fxp"}"#);
     assert_eq!(app.data[1][1], "c1");

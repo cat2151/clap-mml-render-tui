@@ -74,7 +74,7 @@ impl DawApp {
             self.append_log_line("generate は演奏トラックでのみ使用できます");
             return;
         }
-        let Some(_) = self.cursor_play_measure_index() else {
+        let Some(measure_index) = self.cursor_play_measure_index() else {
             self.append_log_line("generate は init 以外の小節でのみ使用できます");
             return;
         };
@@ -83,17 +83,15 @@ impl DawApp {
         };
         let generated_phrase = crate::generate::pick_default_generate_phrase();
 
-        self.apply_generate_to_current_measure_with(patch_name, generated_phrase);
+        self.apply_generate_to_current_measure_with(patch_name, generated_phrase, measure_index);
     }
 
     pub(in crate::daw) fn apply_generate_to_current_measure_with(
         &mut self,
         patch_name: String,
         generated_phrase: &str,
+        measure_index: usize,
     ) {
-        let Some(measure_index) = self.cursor_play_measure_index() else {
-            return;
-        };
         let current = self.data[self.cursor_track][self.cursor_measure].clone();
         let next_patch_json = Self::build_patch_json(&patch_name);
         let init_changed = self.data[self.cursor_track][INIT_MEASURE] != next_patch_json;
