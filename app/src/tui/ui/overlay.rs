@@ -1,7 +1,7 @@
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
+    layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier},
-    text::Span,
+    text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
     Frame,
 };
@@ -13,6 +13,28 @@ use super::{
     status::{base_style, keybind_text, visible_list_page_size},
     Mode, TuiApp, LIST_HIGHLIGHT_SYMBOL,
 };
+
+pub(super) fn draw_notepad_history_guide(f: &mut Frame) {
+    let area = crate::ui_utils::centered_rect(56, 36, f.area());
+    f.render_widget(Clear, area);
+    f.render_widget(
+        Paragraph::new(vec![
+            Line::from("現在の行にはpatch nameがありません。"),
+            Line::from("notepad history overlayを開きます。"),
+            Line::from("ENTERを押してください"),
+        ])
+        .style(base_style())
+        .alignment(Alignment::Center)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" お知らせ ")
+                .style(base_style())
+                .border_style(base_style().fg(MONOKAI_YELLOW)),
+        ),
+        area,
+    );
+}
 
 pub(super) fn draw_patch_select(
     app: &mut TuiApp<'_>,
