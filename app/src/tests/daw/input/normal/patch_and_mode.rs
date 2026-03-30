@@ -205,6 +205,7 @@ fn handle_normal_question_mark_enters_help_mode() {
 
     assert!(matches!(result, super::super::DawNormalAction::Continue));
     assert!(matches!(app.mode, DawMode::Help));
+    assert!(matches!(app.help_origin, DawMode::Normal));
 }
 
 #[test]

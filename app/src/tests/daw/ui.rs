@@ -26,6 +26,7 @@ fn build_test_app() -> DawApp {
         cursor_track: 0,
         cursor_measure: 0,
         mode: DawMode::Normal,
+        help_origin: DawMode::Normal,
         textarea: TextArea::default(),
         cfg: Arc::new(Config {
             plugin_path: String::new(),

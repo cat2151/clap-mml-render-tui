@@ -124,6 +124,7 @@ pub struct DawApp {
     pub(super) cursor_measure: usize, // 0..=measures  (0 = 音色列)
 
     pub(super) mode: DawMode,
+    pub(super) help_origin: DawMode,
     pub(super) textarea: TextArea<'static>,
 
     cfg: Arc<Config>,
@@ -375,6 +376,7 @@ impl DawApp {
             cursor_track: 0,
             cursor_measure: 0,
             mode: DawMode::Normal,
+            help_origin: DawMode::Normal,
             textarea: TextArea::default(),
             cfg,
             entry_ptr,

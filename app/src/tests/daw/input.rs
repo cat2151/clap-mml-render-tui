@@ -32,6 +32,7 @@ fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob
             cursor_track: 1,
             cursor_measure: 1,
             mode: DawMode::Normal,
+            help_origin: DawMode::Normal,
             textarea: TextArea::default(),
             cfg: Arc::new(Config {
                 plugin_path: String::new(),

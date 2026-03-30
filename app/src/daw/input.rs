@@ -24,6 +24,11 @@ use {
 const PATCH_JSON_KEY: &str = "Surge XT patch";
 
 impl DawApp {
+    pub(in crate::daw) fn enter_help(&mut self) {
+        self.help_origin = self.mode;
+        self.mode = super::DawMode::Help;
+    }
+
     fn push_front_dedup(items: &mut Vec<String>, item: String) {
         if item.trim().is_empty() {
             return;

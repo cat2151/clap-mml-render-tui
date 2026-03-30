@@ -214,6 +214,7 @@ impl DawApp {
                         self.history_overlay_filter_active = false;
                     }
                 }
+                KeyCode::Char('?') => self.enter_help(),
                 KeyCode::Char(c) => {
                     self.history_overlay_query.push(c);
                     self.sync_history_overlay_cursors();
@@ -275,6 +276,7 @@ impl DawApp {
                 self.history_overlay_filter_active = true;
                 self.sync_history_overlay_cursors();
             }
+            KeyCode::Char('?') => self.enter_help(),
             KeyCode::Enter => {
                 if let Some(selected) = self.selected_history_overlay_item() {
                     self.apply_history_overlay_selection(selected);
