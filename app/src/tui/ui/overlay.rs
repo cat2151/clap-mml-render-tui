@@ -61,7 +61,7 @@ pub(super) fn draw_patch_select(
         chunks[0],
     );
 
-    let count_title = " 音色選択 ";
+    let patch_list_title = " 音色選択 ";
     let patch_items: Vec<ListItem> = app
         .patch_filtered
         .iter()
@@ -113,7 +113,7 @@ pub(super) fn draw_patch_select(
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(count_title)
+                    .title(patch_list_title)
                     .style(base_style())
                     .border_style(patch_border),
             )

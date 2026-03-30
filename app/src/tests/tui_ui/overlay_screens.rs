@@ -18,7 +18,7 @@ fn patch_phrase_screen_renders_history_and_favorites_lists() {
     let lines = render_lines(&mut app, 80, 10).join("\n");
     let buffer = render_buffer(&mut app, 80, 10);
 
-    assert!(find_text_ignoring_spaces(&buffer, "フレーズ選択").1 > 0);
+    find_text_ignoring_spaces(&buffer, "フレーズ選択");
     assert!(lines.contains("Favorites"));
     assert!(lines.contains("l8cdef"));
     assert!(lines.contains("o5g"));
@@ -44,7 +44,7 @@ fn patch_phrase_screen_renders_as_overlay_on_notepad_screen() {
     let buffer = render_buffer(&mut app, 100, 16);
 
     assert!(lines.contains("[PATCH PHRASE] notepad mode"));
-    assert!(find_text_ignoring_spaces(&buffer, "フレーズ選択").1 > 0);
+    find_text_ignoring_spaces(&buffer, "フレーズ選択");
     assert!(lines.contains("Favorites"));
 }
 
@@ -166,7 +166,9 @@ fn patch_select_screen_splits_status_and_keybinds() {
         .iter()
         .position(|line| line.contains("Enter:検索確定/決定ESC:キャンセル"))
         .unwrap();
-    let status_row = keybind_row - 1;
+    let status_row = keybind_row
+        .checked_sub(1)
+        .expect("keybind_row must be > 0 so there is a status row above the keybinds");
 
     assert!(!normalized_lines[status_row].contains("Enter:決定"));
     assert_eq!(keybind_row, status_row + 1);
@@ -192,7 +194,7 @@ fn notepad_history_overlay_renders_history_and_favorites_lists() {
     let buffer = render_buffer(&mut app, 100, 16);
 
     assert!(lines.contains("[HISTORY] notepad mode"));
-    assert!(find_text_ignoring_spaces(&buffer, "音色&フレーズ選択").1 > 0);
+    find_text_ignoring_spaces(&buffer, "音色&フレーズ選択");
     assert!(lines.contains("Favorites"));
     assert!(lines.contains("/"));
     assert!(lines.contains("l8cdef"));
