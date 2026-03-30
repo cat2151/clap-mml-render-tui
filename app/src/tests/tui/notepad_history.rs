@@ -24,6 +24,33 @@ fn handle_normal_shift_h_enters_patch_phrase_overlay() {
 }
 
 #[test]
+fn handle_normal_shift_h_without_patch_name_shows_notepad_history_guide() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["plain phrase".to_string()];
+    app.patch_phrase_store.notepad.history = vec!["history phrase".to_string()];
+
+    let result =
+        app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('H'), KeyModifiers::SHIFT));
+
+    assert!(matches!(result, NormalAction::Continue));
+    assert!(matches!(app.mode, Mode::NotepadHistoryGuide));
+    assert!(matches!(&*app.play_state.lock().unwrap(), PlayState::Idle));
+}
+
+#[test]
+fn handle_notepad_history_guide_enter_opens_notepad_history_overlay() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_phrase_store.notepad.history = vec!["history phrase".to_string()];
+    app.mode = Mode::NotepadHistoryGuide;
+
+    app.handle_notepad_history_guide(KeyCode::Enter);
+
+    assert!(matches!(app.mode, Mode::NotepadHistory));
+    assert_eq!(app.notepad_history_cursor, 0);
+    assert_eq!(app.notepad_history_state.selected(), Some(0));
+}
+
+#[test]
 fn handle_normal_h_no_longer_enters_notepad_history_overlay() {
     let mut app = TuiApp::new_for_test(test_config());
     app.patch_phrase_store.notepad.history = vec!["l8cdef".to_string()];

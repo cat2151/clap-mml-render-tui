@@ -40,11 +40,26 @@ impl<'a> TuiApp<'a> {
         if key_event.modifiers.contains(KeyModifiers::SHIFT) && key_event.code == KeyCode::Char('H')
         {
             self.normal_pending_delete = false;
-            self.start_patch_phrase_for_current_line();
+            match self.current_line_patch_name() {
+                Some(patch_name) => self.start_patch_phrase_for_patch_name(Some(patch_name)),
+                None => self.start_notepad_history_guide(),
+            }
             return NormalAction::Continue;
         }
 
         self.handle_normal(key_event.code)
+    }
+
+    fn start_notepad_history_guide(&mut self) {
+        self.mode = Mode::NotepadHistoryGuide;
+    }
+
+    pub(super) fn handle_notepad_history_guide(&mut self, key: KeyCode) {
+        match key {
+            KeyCode::Enter => self.start_notepad_history(),
+            KeyCode::Esc => self.mode = Mode::Normal,
+            _ => {}
+        }
     }
 
     pub(super) fn handle_normal(&mut self, key: KeyCode) -> NormalAction {
