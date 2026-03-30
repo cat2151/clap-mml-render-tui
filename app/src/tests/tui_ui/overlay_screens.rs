@@ -319,6 +319,21 @@ fn notepad_history_guide_overlay_renders_centered_message() {
 }
 
 #[test]
+fn notepad_history_guide_overlay_shows_guide_footer_keybinds() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["plain phrase".to_string()];
+    app.mode = Mode::NotepadHistoryGuide;
+
+    let normalized = render_lines(&mut app, 180, 16)
+        .join("\n")
+        .replace([' ', '\n'], "");
+
+    assert!(normalized.contains("[NORMAL]notepadmode"));
+    assert!(normalized.contains("Enter:notepadhistoryoverlayESC:キャンセル"));
+    assert!(!normalized.contains("q?:helpi:inserto/O:挿入"));
+}
+
+#[test]
 fn patch_phrase_screen_uses_c_as_fallback_for_empty_lists() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::PatchPhrase;

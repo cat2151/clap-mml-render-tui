@@ -56,7 +56,7 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
         draw_normal(app, f, &play_state, status_color, mode);
         overlay::draw_notepad_history(app, f, &status, status_color, mode);
     } else if mode == Mode::NotepadHistoryGuide {
-        draw_normal(app, f, &play_state, status_color, Mode::Normal);
+        draw_normal(app, f, &play_state, status_color, mode);
         overlay::draw_notepad_history_guide(f);
     } else if mode == Mode::PatchPhrase {
         draw_normal(app, f, &play_state, status_color, mode);
