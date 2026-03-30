@@ -24,6 +24,25 @@ fn draw_shows_mml_and_uncached_dot_before_cache_is_ready() {
 }
 
 #[test]
+fn draw_shows_normal_mode_title_in_top_border() {
+    let app = build_test_app();
+
+    let lines = render_lines(&app, 60, 10);
+
+    assert!(lines[0].contains("[NORMAL] DAW mode"), "lines: {:?}", lines);
+}
+
+#[test]
+fn draw_shows_insert_mode_title_in_top_border() {
+    let mut app = build_test_app();
+    app.mode = DawMode::Insert;
+
+    let lines = render_lines(&app, 60, 10);
+
+    assert!(lines[0].contains("[INSERT] DAW mode"), "lines: {:?}", lines);
+}
+
+#[test]
 fn draw_renders_pending_indicator_in_visible_color() {
     let app = build_test_app();
     {
