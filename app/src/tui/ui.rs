@@ -42,6 +42,7 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
                 overlay::draw_notepad_history(app, f, &overlay_status, status_color, help_origin);
             }
             Mode::PatchPhrase => {
+                draw_normal(app, f, &play_state, status_color, help_origin);
                 let overlay_status = status_text(&help_origin, &play_state);
                 overlay::draw_patch_phrase(app, f, &overlay_status, status_color, help_origin);
             }
@@ -55,6 +56,7 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
         draw_normal(app, f, &play_state, status_color, mode);
         overlay::draw_notepad_history(app, f, &status, status_color, mode);
     } else if mode == Mode::PatchPhrase {
+        draw_normal(app, f, &play_state, status_color, mode);
         overlay::draw_patch_phrase(app, f, &status, status_color, mode);
     } else {
         draw_normal(app, f, &play_state, status_color, mode);
