@@ -157,6 +157,8 @@ pub(super) fn draw_patch_phrase(
     status_color: Color,
     mode: Mode,
 ) {
+    let area = crate::ui_utils::centered_rect(88, 84, f.area());
+    f.render_widget(Clear, area);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -165,7 +167,7 @@ pub(super) fn draw_patch_phrase(
             Constraint::Length(1),
             Constraint::Length(1),
         ])
-        .split(f.area());
+        .split(area);
     let panes = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])

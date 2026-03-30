@@ -24,23 +24,93 @@ fn patch_phrase_screen_renders_history_and_favorites_lists() {
 }
 
 #[test]
-fn patch_phrase_screen_splits_status_and_keybinds() {
+fn patch_phrase_screen_renders_as_overlay_on_notepad_screen() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
+    app.mode = Mode::PatchPhrase;
+    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        PatchPhraseState {
+            history: vec!["l8cdef".to_string()],
+            favorites: vec!["o5g".to_string()],
+        },
+    );
+    app.patch_phrase_history_state.select(Some(0));
+    app.patch_phrase_favorites_state.select(Some(0));
+
+    let lines = render_lines(&mut app, 100, 16).join("\n");
+
+    assert!(lines.contains("[PATCH PHRASE] notepad mode"));
+    assert!(lines.contains("History - Pads/Pad 1.fxp"));
+    assert!(lines.contains("Favorites"));
+}
+
+#[test]
+fn patch_phrase_overlay_is_centered_like_other_overlays() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
+    app.mode = Mode::PatchPhrase;
+    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        PatchPhraseState {
+            history: vec!["l8cdef".to_string()],
+            favorites: vec!["o5g".to_string()],
+        },
+    );
+    app.patch_phrase_history_state.select(Some(0));
+    app.patch_phrase_favorites_state.select(Some(0));
+
+    let buffer = render_buffer(&mut app, 100, 20);
+    let overlay_area = crate::ui_utils::centered_rect(88, 84, buffer.area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(3),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(overlay_area);
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[1]);
+    let (title_x, title_y) = find_text(&buffer, "History - Pads/Pad 1.fxp");
+
+    assert_eq!(title_y, panes[0].y);
+    assert!((panes[0].x..panes[0].x + panes[0].width / 2).contains(&title_x));
+    assert!(overlay_area.x > 0);
+    assert!(overlay_area.y > 0);
+}
+
+#[test]
+fn patch_phrase_screen_keeps_status_below_overlay_panes() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::PatchPhrase;
+    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        PatchPhraseState {
+            history: vec!["l8cdef".to_string()],
+            favorites: vec!["o5g".to_string()],
+        },
+    );
 
-    let lines = render_lines(&mut app, 120, 10);
+    let lines = render_lines(&mut app, 220, 16);
     let normalized_lines: Vec<String> = lines.iter().map(|line| line.replace(' ', "")).collect();
     let normalized_status = "patch phrase".replace(' ', "");
+    let buffer = render_buffer(&mut app, 220, 16);
+    let (_, history_row) = find_text(&buffer, "History - Pads/Pad 1.fxp");
+    let (_, favorites_row) = find_text(&buffer, "Favorites");
     let status_row = normalized_lines
         .iter()
-        .position(|line| line == &normalized_status)
-        .unwrap();
-    let keybind_row = normalized_lines
-        .iter()
-        .position(|line| line.contains("j/k・↑↓:再生移動PgUp/PgDn:1画面移動"))
-        .unwrap();
+        .rposition(|line| line.contains(&normalized_status))
+        .unwrap() as u16;
 
-    assert_eq!(keybind_row, status_row + 1);
+    assert!(status_row > history_row);
+    assert!(status_row > favorites_row);
 }
 
 #[test]
