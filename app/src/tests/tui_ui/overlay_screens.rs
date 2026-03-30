@@ -308,8 +308,8 @@ fn notepad_history_guide_overlay_renders_centered_message() {
         .join("\n")
         .replace([' ', '\n'], "");
     let overlay_area = crate::ui_utils::centered_rect(56, 36, buffer.area);
-    let (text_x, text_y) =
-        find_text_ignoring_spaces(&buffer, "現在の行にはpatchnameがありません。");
+    let guide_message = "現在の行にはpatch nameがありません。";
+    let (text_x, text_y) = find_text_ignoring_spaces(&buffer, &guide_message.replace(' ', ""));
 
     assert!(normalized.contains("▶plainphrase"));
     assert!(normalized.contains("notepadhistoryoverlayを開きます。"));

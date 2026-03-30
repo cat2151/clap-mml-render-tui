@@ -14,8 +14,16 @@ use super::{
     Mode, TuiApp, LIST_HIGHLIGHT_SYMBOL,
 };
 
+// centered_rect() の引数は 0..=100 の割合指定。
+const GUIDE_OVERLAY_WIDTH_PERCENT: u16 = 56;
+const GUIDE_OVERLAY_HEIGHT_PERCENT: u16 = 36;
+
 pub(super) fn draw_notepad_history_guide(f: &mut Frame) {
-    let area = crate::ui_utils::centered_rect(56, 36, f.area());
+    let area = crate::ui_utils::centered_rect(
+        GUIDE_OVERLAY_WIDTH_PERCENT,
+        GUIDE_OVERLAY_HEIGHT_PERCENT,
+        f.area(),
+    );
     f.render_widget(Clear, area);
     f.render_widget(
         Paragraph::new(vec![
