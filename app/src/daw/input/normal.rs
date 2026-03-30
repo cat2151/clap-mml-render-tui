@@ -74,29 +74,40 @@ impl DawApp {
             self.append_log_line("generate は演奏トラックでのみ使用できます");
             return;
         }
-        let Some(measure_index) = self.cursor_play_measure_index() else {
+        let Some(_) = self.cursor_play_measure_index() else {
             self.append_log_line("generate は init 以外の小節でのみ使用できます");
             return;
         };
         let Some(patch_name) = self.pick_random_patch_name() else {
             return;
         };
+        let generated_phrase = crate::generate::pick_default_generate_phrase();
 
+        self.apply_generate_to_current_measure_with(patch_name, generated_phrase);
+    }
+
+    pub(in crate::daw) fn apply_generate_to_current_measure_with(
+        &mut self,
+        patch_name: String,
+        generated_phrase: &str,
+    ) {
+        let Some(measure_index) = self.cursor_play_measure_index() else {
+            return;
+        };
         let current = self.data[self.cursor_track][self.cursor_measure].clone();
-        self.record_current_measure_to_patch_history(&current);
-
-        let init_changed = self.commit_insert_cell(
-            self.cursor_track,
-            INIT_MEASURE,
-            &Self::build_patch_json(&patch_name),
-        );
-        let measure_changed = self.commit_insert_cell(
-            self.cursor_track,
-            self.cursor_measure,
-            crate::generate::pick_default_generate_phrase(),
-        );
+        let next_patch_json = Self::build_patch_json(&patch_name);
+        let init_changed = self.data[self.cursor_track][INIT_MEASURE] != next_patch_json;
+        let measure_changed = current != generated_phrase;
         if !(init_changed || measure_changed) {
             return;
+        }
+
+        self.record_current_measure_to_patch_history(&current);
+        if init_changed {
+            self.commit_insert_cell(self.cursor_track, INIT_MEASURE, &next_patch_json);
+        }
+        if measure_changed {
+            self.commit_insert_cell(self.cursor_track, self.cursor_measure, generated_phrase);
         }
 
         self.save();
