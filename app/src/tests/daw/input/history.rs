@@ -1,5 +1,25 @@
 use super::*;
 
+struct TempDirGuard(std::path::PathBuf);
+
+impl TempDirGuard {
+    fn new(name: &str) -> Self {
+        let path = std::env::temp_dir().join(name);
+        std::fs::remove_dir_all(&path).ok();
+        Self(path)
+    }
+
+    fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+}
+
+impl Drop for TempDirGuard {
+    fn drop(&mut self) {
+        std::fs::remove_dir_all(&self.0).ok();
+    }
+}
+
 #[test]
 fn handle_normal_shift_h_opens_patch_history_overlay_for_track_patch() {
     let (mut app, _cache_rx) = build_test_app();
@@ -312,4 +332,118 @@ fn handle_history_overlay_question_mark_opens_help_and_esc_returns_to_history_ov
     app.handle_help(KeyCode::Esc);
 
     assert!(matches!(app.mode, DawMode::History));
+}
+
+#[test]
+fn handle_history_overlay_n_p_t_switch_to_corresponding_overlays() {
+    let tmp = TempDirGuard::new("cmrt_test_handle_history_overlay_n_p_t");
+    std::fs::create_dir_all(tmp.path().join("Pads")).unwrap();
+    std::fs::create_dir_all(tmp.path().join("Bass")).unwrap();
+    std::fs::write(tmp.path().join("Pads").join("Pad 1.fxp"), b"dummy").unwrap();
+    std::fs::write(tmp.path().join("Bass").join("Bass 1.fxp"), b"dummy").unwrap();
+
+    let (mut app, _cache_rx) = build_test_app();
+    app.cfg = Arc::new(Config {
+        patches_dir: Some(tmp.path().to_string_lossy().into_owned()),
+        ..(*app.cfg).clone()
+    });
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    app.patch_phrase_store.notepad.history = vec![
+        r#"{"Surge XT patch":"Pads/Pad 1.fxp"} selected phrase"#.to_string(),
+        r#"{"Surge XT patch":"Bass/Bass 1.fxp"} bass phrase"#.to_string(),
+    ];
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["selected phrase".to_string()],
+            favorites: vec!["fav".to_string()],
+        },
+    );
+    app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
+    app.start_history_overlay();
+
+    app.handle_history_overlay(KeyCode::Char('n'));
+    assert!(matches!(app.mode, DawMode::History));
+    assert_eq!(app.history_overlay_patch_name, None);
+    assert_eq!(app.history_overlay_history_cursor, 0);
+
+    app.handle_history_overlay(KeyCode::Char('p'));
+    assert!(matches!(app.mode, DawMode::History));
+    assert_eq!(
+        app.history_overlay_patch_name.as_deref(),
+        Some("Pads/Pad 1.fxp")
+    );
+
+    app.handle_history_overlay(KeyCode::Char('t'));
+    assert!(matches!(app.mode, DawMode::PatchSelect));
+    assert_eq!(app.patch_filtered[app.patch_cursor], "Pads/Pad 1.fxp");
+}
+
+#[test]
+fn handle_patch_select_enter_overwrites_current_track_init_patch() {
+    let tmp = TempDirGuard::new("cmrt_test_handle_patch_select_enter");
+    std::fs::create_dir_all(tmp.path().join("Pads")).unwrap();
+    std::fs::create_dir_all(tmp.path().join("Bass")).unwrap();
+    std::fs::write(tmp.path().join("Pads").join("Pad 1.fxp"), b"dummy").unwrap();
+    std::fs::write(tmp.path().join("Bass").join("Bass 1.fxp"), b"dummy").unwrap();
+
+    let (mut app, _cache_rx) = build_test_app();
+    app.cfg = Arc::new(Config {
+        patches_dir: Some(tmp.path().to_string_lossy().into_owned()),
+        ..(*app.cfg).clone()
+    });
+    app.cursor_track = 1;
+    app.cursor_measure = 2;
+    app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
+    app.data[1][2] = "l8cdef".to_string();
+
+    app.start_patch_select_overlay(Some("Bass/Bass 1.fxp"));
+    app.handle_patch_select(KeyCode::Enter);
+
+    assert!(matches!(app.mode, DawMode::Normal));
+    assert_eq!(app.data[1][0], r#"{"Surge XT patch":"Bass/Bass 1.fxp"}"#);
+    assert_eq!(app.data[1][2], "l8cdef");
+}
+
+#[test]
+fn handle_patch_select_filter_space_adds_and_term_instead_of_previewing() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
+    app.data[1][1] = "l8cdef".to_string();
+    app.patch_all = vec![
+        ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
+        ("Bass Soft 1.fxp".to_string(), "bass soft 1.fxp".to_string()),
+        ("Bass Hard 1.fxp".to_string(), "bass hard 1.fxp".to_string()),
+    ];
+    app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
+    app.mode = DawMode::PatchSelect;
+
+    app.handle_patch_select(KeyCode::Char('/'));
+    app.handle_patch_select(KeyCode::Char('b'));
+    app.handle_patch_select(KeyCode::Char('a'));
+    app.handle_patch_select(KeyCode::Char('s'));
+    app.handle_patch_select(KeyCode::Char('s'));
+    let preview_before_space = app.play_measure_track_mmls.lock().unwrap()[0][1].clone();
+
+    app.handle_patch_select(KeyCode::Char(' '));
+    assert_eq!(app.patch_query, "bass ");
+    assert_eq!(
+        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        preview_before_space
+    );
+    app.handle_patch_select(KeyCode::Char('s'));
+    app.handle_patch_select(KeyCode::Char('o'));
+    app.handle_patch_select(KeyCode::Char('f'));
+    app.handle_patch_select(KeyCode::Char('t'));
+
+    assert!(app.patch_select_filter_active);
+    assert_eq!(app.patch_query, "bass soft");
+    assert_eq!(app.patch_filtered, vec!["Bass Soft 1.fxp".to_string()]);
+    assert_eq!(
+        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        r#"{"Surge XT patch":"Bass Soft 1.fxp"}l8cdef"#,
+    );
 }

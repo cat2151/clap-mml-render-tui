@@ -10,8 +10,8 @@ pub(super) use crate::config::Config;
 
 pub(super) use super::{
     super::{
-        AbRepeatState, CacheState, CellCache, DawApp, DawHistoryPane, DawMode, DawPlayState,
-        PlayPosition, MEASURES,
+        AbRepeatState, CacheState, CellCache, DawApp, DawHistoryPane, DawMode, DawPatchSelectPane,
+        DawPlayState, PlayPosition, MEASURES,
     },
     cache_indicator, cache_indicator_color, cache_text_color, draw, loop_measure_summary_label,
     loop_status_label, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_PINK,
@@ -74,6 +74,14 @@ fn build_test_app() -> DawApp {
         history_overlay_favorites_cursor: 0,
         history_overlay_focus: DawHistoryPane::History,
         history_overlay_filter_active: false,
+        patch_all: Vec::new(),
+        patch_query: String::new(),
+        patch_filtered: Vec::new(),
+        patch_cursor: 0,
+        patch_favorite_items: Vec::new(),
+        patch_favorites_cursor: 0,
+        patch_select_focus: DawPatchSelectPane::Patches,
+        patch_select_filter_active: false,
     }
 }
 

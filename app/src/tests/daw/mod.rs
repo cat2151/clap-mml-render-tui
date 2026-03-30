@@ -181,7 +181,9 @@ fn complete_track_rerender_batch_skips_stale_pending_job_and_reserves_next_measu
 #[test]
 fn start_track_rerender_batch_logs_only_targeted_measures() {
     use crate::config::Config;
-    use crate::daw::{CacheState, CellCache, DawHistoryPane, DawMode, DawPlayState};
+    use crate::daw::{
+        CacheState, CellCache, DawHistoryPane, DawMode, DawPatchSelectPane, DawPlayState,
+    };
     use std::collections::VecDeque;
     use tui_textarea::TextArea;
 
@@ -250,6 +252,14 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
         history_overlay_favorites_cursor: 0,
         history_overlay_focus: DawHistoryPane::History,
         history_overlay_filter_active: false,
+        patch_all: Vec::new(),
+        patch_query: String::new(),
+        patch_filtered: Vec::new(),
+        patch_cursor: 0,
+        patch_favorite_items: Vec::new(),
+        patch_favorites_cursor: 0,
+        patch_select_focus: DawPatchSelectPane::Patches,
+        patch_select_filter_active: false,
     };
     app.data[1][1] = "c".to_string();
     app.data[1][3] = "e".to_string();

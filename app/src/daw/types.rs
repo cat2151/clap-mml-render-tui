@@ -150,11 +150,18 @@ pub enum DawMode {
     Help,
     Mixer,
     History,
+    PatchSelect,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum DawHistoryPane {
     History,
+    Favorites,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum DawPatchSelectPane {
+    Patches,
     Favorites,
 }
 

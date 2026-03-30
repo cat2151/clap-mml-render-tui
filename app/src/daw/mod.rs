@@ -32,9 +32,21 @@
 //!   ESC    : overlay を閉じる → NORMAL
 //!
 //! キー操作 (HISTORY):
+//!   n        : global history へ切り替え
+//!   p        : current / selected patch history へ切り替え
+//!   t        : patch select overlay へ切り替え
 //!   h/l・←/→ : History/Favorites ペイン切り替え
 //!   j/k      : 行移動
 //!   Enter    : 選択内容を現在 track/meas に適用
+//!   ESC      : overlay を閉じる → NORMAL
+//!
+//! キー操作 (PATCH SELECT):
+//!   n        : global history へ切り替え
+//!   p        : current / selected patch history へ切り替え
+//!   t        : 現在選択 patch で開き直す
+//!   h/l・←/→ : Patches/Favorites ペイン切り替え
+//!   j/k      : 行移動
+//!   Enter    : 選択 patch で現在 track の init meas を上書き
 //!   ESC      : overlay を閉じる → NORMAL
 //!
 //! キー操作 (INSERT):
@@ -77,8 +89,8 @@ use crate::config::Config;
 use batch_logging::{TrackRerenderBatch, TrackRerenderBatchCompletionContext};
 pub use types::DawExitReason;
 pub(super) use types::{
-    AbRepeatState, CacheState, CellCache, DawHistoryPane, DawMode, DawNormalAction, DawPlayState,
-    PlayPosition,
+    AbRepeatState, CacheState, CellCache, DawHistoryPane, DawMode, DawNormalAction,
+    DawPatchSelectPane, DawPlayState, PlayPosition,
 };
 
 // ─── 定数 ─────────────────────────────────────────────────────
@@ -201,6 +213,14 @@ pub struct DawApp {
     pub(super) history_overlay_favorites_cursor: usize,
     pub(super) history_overlay_focus: DawHistoryPane,
     pub(super) history_overlay_filter_active: bool,
+    pub(super) patch_all: Vec<(String, String)>,
+    pub(super) patch_query: String,
+    pub(super) patch_filtered: Vec<String>,
+    pub(super) patch_cursor: usize,
+    pub(super) patch_favorite_items: Vec<String>,
+    pub(super) patch_favorites_cursor: usize,
+    pub(super) patch_select_focus: DawPatchSelectPane,
+    pub(super) patch_select_filter_active: bool,
 }
 
 impl DawApp {
@@ -410,6 +430,14 @@ impl DawApp {
             history_overlay_favorites_cursor: 0,
             history_overlay_focus: DawHistoryPane::History,
             history_overlay_filter_active: false,
+            patch_all: Vec::new(),
+            patch_query: String::new(),
+            patch_filtered: Vec::new(),
+            patch_cursor: 0,
+            patch_favorite_items: Vec::new(),
+            patch_favorites_cursor: 0,
+            patch_select_focus: DawPatchSelectPane::Patches,
+            patch_select_filter_active: false,
         };
 
         app.load();

@@ -249,6 +249,27 @@ fn history_help_draws_on_top_of_history_overlay() {
     assert!(
         normalized_lines
             .iter()
+            .any(|line| line.contains("n:globalhistoryへ切り替え")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("p:current/selectedpatchhistoryへ切り替え")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("t:patchselectoverlayへ切り替え")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
             .any(|line| line.contains("Enter:(通常)現在track/measに反映")),
         "lines: {:?}",
         normalized_lines

@@ -5,6 +5,7 @@ mod help;
 mod history;
 mod logs;
 mod mixer;
+mod patch_select;
 mod status;
 
 use ratatui::{
@@ -120,6 +121,7 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
         match app.help_origin {
             DawMode::Mixer => mixer::draw_mixer(f, app, inner),
             DawMode::History => history::draw_history(f, app, inner),
+            DawMode::PatchSelect => patch_select::draw_patch_select(f, app, inner),
             _ => {}
         }
         help::draw_help(f, inner, app.help_origin);
@@ -127,6 +129,8 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
         mixer::draw_mixer(f, app, inner);
     } else if app.mode == DawMode::History {
         history::draw_history(f, app, inner);
+    } else if app.mode == DawMode::PatchSelect {
+        patch_select::draw_patch_select(f, app, inner);
     }
 }
 

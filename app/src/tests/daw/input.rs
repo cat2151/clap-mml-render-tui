@@ -10,7 +10,7 @@ pub(super) use crate::config::Config;
 
 pub(super) use super::super::{
     AbRepeatState, CacheState, CellCache, DawApp, DawHistoryPane, DawMode, DawNormalAction,
-    DawPlayState, PlayPosition,
+    DawPatchSelectPane, DawPlayState, PlayPosition,
 };
 pub(super) use super::{
     normal_playback_shortcut, preview_target_tracks, resolve_playback_start_measure_index,
@@ -83,6 +83,14 @@ fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob
             history_overlay_favorites_cursor: 0,
             history_overlay_focus: DawHistoryPane::History,
             history_overlay_filter_active: false,
+            patch_all: Vec::new(),
+            patch_query: String::new(),
+            patch_filtered: Vec::new(),
+            patch_cursor: 0,
+            patch_favorite_items: Vec::new(),
+            patch_favorites_cursor: 0,
+            patch_select_focus: DawPatchSelectPane::Patches,
+            patch_select_filter_active: false,
         },
         cache_rx,
     )
