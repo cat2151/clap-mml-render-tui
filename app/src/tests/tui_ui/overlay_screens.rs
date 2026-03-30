@@ -15,10 +15,25 @@ fn patch_phrase_screen_renders_history_and_favorites_lists() {
     app.patch_phrase_history_state.select(Some(0));
     app.patch_phrase_favorites_state.select(Some(0));
 
-    let lines = render_lines(&mut app, 80, 10).join("\n");
     let buffer = render_buffer(&mut app, 80, 10);
+    let lines = render_lines(&mut app, 80, 10).join("\n");
+    let overlay_area = crate::ui_utils::centered_rect(88, 84, buffer.area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(3),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(overlay_area);
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[1]);
+    let (_, title_y) = find_text_ignoring_spaces(&buffer, "フレーズ選択");
 
-    find_text_ignoring_spaces(&buffer, "フレーズ選択");
+    assert_eq!(title_y, panes[0].y);
     assert!(lines.contains("Favorites"));
     assert!(lines.contains("l8cdef"));
     assert!(lines.contains("o5g"));
@@ -40,11 +55,26 @@ fn patch_phrase_screen_renders_as_overlay_on_notepad_screen() {
     app.patch_phrase_history_state.select(Some(0));
     app.patch_phrase_favorites_state.select(Some(0));
 
-    let lines = render_lines(&mut app, 100, 16).join("\n");
     let buffer = render_buffer(&mut app, 100, 16);
+    let lines = render_lines(&mut app, 100, 16).join("\n");
+    let overlay_area = crate::ui_utils::centered_rect(88, 84, buffer.area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(3),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(overlay_area);
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[1]);
+    let (_, title_y) = find_text_ignoring_spaces(&buffer, "フレーズ選択");
 
     assert!(lines.contains("[PATCH PHRASE] notepad mode"));
-    find_text_ignoring_spaces(&buffer, "フレーズ選択");
+    assert_eq!(title_y, panes[0].y);
     assert!(lines.contains("Favorites"));
 }
 
@@ -190,11 +220,26 @@ fn notepad_history_overlay_renders_history_and_favorites_lists() {
     app.start_notepad_history();
     app.notepad_filter_active = true;
 
-    let lines = render_lines(&mut app, 100, 16).join("\n");
     let buffer = render_buffer(&mut app, 100, 16);
+    let lines = render_lines(&mut app, 100, 16).join("\n");
+    let overlay_area = crate::ui_utils::centered_rect(88, 76, buffer.area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(3),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(overlay_area);
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[1]);
+    let (_, title_y) = find_text_ignoring_spaces(&buffer, "音色&フレーズ選択");
 
     assert!(lines.contains("[HISTORY] notepad mode"));
-    find_text_ignoring_spaces(&buffer, "音色&フレーズ選択");
+    assert_eq!(title_y, panes[0].y);
     assert!(lines.contains("Favorites"));
     assert!(lines.contains("/"));
     assert!(lines.contains("l8cdef"));
