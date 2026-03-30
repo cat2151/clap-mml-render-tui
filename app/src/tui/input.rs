@@ -78,7 +78,7 @@ impl<'a> TuiApp<'a> {
                     KeyCode::Char('q') => return NormalAction::Quit,
                     KeyCode::Char('w') => return NormalAction::LaunchDaw,
                     KeyCode::Char('i') => self.start_insert(),
-                    KeyCode::Char('g') => match self.generate_current_line() {
+                    KeyCode::Char('g') => match self.insert_generated_line_above() {
                         Ok(()) => {}
                         Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
                     },

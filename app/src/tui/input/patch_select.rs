@@ -10,7 +10,6 @@ use crate::tui::{filter_patches, PatchLoadState, PatchSelectPane, PATCH_JSON_KEY
 use super::{Mode, PlayState, TuiApp};
 
 const PATCH_SELECT_PREVIEW_FALLBACK_PHRASE: &str = "c";
-const DEFAULT_GENERATE_PHRASES: [&str; 2] = ["c1", "cfg1"];
 
 impl<'a> TuiApp<'a> {
     fn move_patch_cursor_by(&mut self, delta: isize) {
@@ -101,21 +100,12 @@ impl<'a> TuiApp<'a> {
         }
     }
 
-    fn pick_random_generate_phrase() -> &'static str {
-        let ns = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|duration| duration.as_nanos())
-            .unwrap_or(0);
-        let index = (ns % DEFAULT_GENERATE_PHRASES.len() as u128) as usize;
-        DEFAULT_GENERATE_PHRASES[index]
-    }
-
-    pub(super) fn generate_current_line(&mut self) -> Result<(), String> {
+    pub(super) fn insert_generated_line_above(&mut self) -> Result<(), String> {
         let patch_name = self.pick_random_patch_name()?;
         let mml = format!(
             "{} {}",
             Self::build_patch_json(&patch_name),
-            Self::pick_random_generate_phrase()
+            crate::generate::pick_default_generate_phrase()
         );
         self.lines.insert(self.cursor, mml.clone());
         self.list_state.select(Some(self.cursor));

@@ -5,7 +5,7 @@ use super::super::{
     DawPlayState, FIRST_PLAYABLE_TRACK,
 };
 
-const DEFAULT_GENERATE_PHRASES: [&str; 2] = ["c1", "cfg1"];
+const INIT_MEASURE: usize = 0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum NormalPlaybackShortcut {
@@ -69,18 +69,7 @@ fn format_random_patch_hot_reload_log(
 }
 
 impl DawApp {
-    fn pick_random_generate_phrase() -> &'static str {
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        let ns = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|duration| duration.as_nanos())
-            .unwrap_or(0);
-        let index = (ns % DEFAULT_GENERATE_PHRASES.len() as u128) as usize;
-        DEFAULT_GENERATE_PHRASES[index]
-    }
-
-    fn generate_current_measure(&mut self) {
+    fn apply_generate_to_current_measure(&mut self) {
         if self.cursor_track < FIRST_PLAYABLE_TRACK {
             self.append_log_line("generate は演奏トラックでのみ使用できます");
             return;
@@ -96,12 +85,15 @@ impl DawApp {
         let current = self.data[self.cursor_track][self.cursor_measure].clone();
         self.record_current_measure_to_patch_history(&current);
 
-        let init_changed =
-            self.commit_insert_cell(self.cursor_track, 0, &Self::build_patch_json(&patch_name));
+        let init_changed = self.commit_insert_cell(
+            self.cursor_track,
+            INIT_MEASURE,
+            &Self::build_patch_json(&patch_name),
+        );
         let measure_changed = self.commit_insert_cell(
             self.cursor_track,
             self.cursor_measure,
-            Self::pick_random_generate_phrase(),
+            crate::generate::pick_default_generate_phrase(),
         );
         if !(init_changed || measure_changed) {
             return;
@@ -354,7 +346,7 @@ impl DawApp {
                 }
             }
 
-            KeyCode::Char('g') => self.generate_current_measure(),
+            KeyCode::Char('g') => self.apply_generate_to_current_measure(),
             KeyCode::Char('r') => {
                 if self.cursor_track < FIRST_PLAYABLE_TRACK {
                     self.append_log_line(
@@ -366,10 +358,10 @@ impl DawApp {
                     let affected_measures: Vec<usize> = (1..=self.measures)
                         .filter(|&measure| !self.data[self.cursor_track][measure].trim().is_empty())
                         .collect();
-                    self.data[self.cursor_track][0] =
+                    self.data[self.cursor_track][INIT_MEASURE] =
                         format!("{{\"Surge XT patch\": \"{}\"}}", patch);
-                    self.invalidate_cell(self.cursor_track, 0);
-                    self.invalidate_dependent_cells(self.cursor_track, 0);
+                    self.invalidate_cell(self.cursor_track, INIT_MEASURE);
+                    self.invalidate_dependent_cells(self.cursor_track, INIT_MEASURE);
                     self.start_track_rerender_batch(
                         self.cursor_track,
                         &affected_measures,
