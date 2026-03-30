@@ -134,7 +134,7 @@ pub(super) fn draw_history(f: &mut Frame, app: &DawApp, area: Rect) {
     );
     f.render_widget(
         Paragraph::new(
-            "?:help  /:検索入力  Enter:検索確定/確定  Space:preview  ESC:閉じる  h/l・←/→:ペイン移動してpreview  j/k・↑/↓:移動してpreview",
+            "?:help  /:検索入力  Enter:検索確定/確定  Space:preview  ESC:閉じる  n/p/t:overlay切替  h/l・←/→:ペイン移動してpreview  j/k・↑/↓:移動してpreview",
         )
             .style(Style::default().fg(MONOKAI_CYAN)),
         chunks[2],

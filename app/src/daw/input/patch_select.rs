@@ -276,7 +276,7 @@ impl DawApp {
                 }
             }
             KeyCode::Char('?') => self.enter_help(),
-            KeyCode::Char(' ') => {
+            KeyCode::Char(' ') if !self.patch_select_filter_active => {
                 self.preview_selected_patch();
             }
             KeyCode::Char(c) if self.patch_select_filter_active => {
