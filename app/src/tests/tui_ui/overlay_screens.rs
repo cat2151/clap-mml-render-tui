@@ -16,9 +16,9 @@ fn patch_phrase_screen_renders_history_and_favorites_lists() {
     app.patch_phrase_favorites_state.select(Some(0));
 
     let lines = render_lines(&mut app, 80, 10).join("\n");
-    let normalized = lines.replace(' ', "");
+    let buffer = render_buffer(&mut app, 80, 10);
 
-    assert!(normalized.contains("フレーズ選択"));
+    assert!(find_text_ignoring_spaces(&buffer, "フレーズ選択").1 > 0);
     assert!(lines.contains("Favorites"));
     assert!(lines.contains("l8cdef"));
     assert!(lines.contains("o5g"));
@@ -41,10 +41,10 @@ fn patch_phrase_screen_renders_as_overlay_on_notepad_screen() {
     app.patch_phrase_favorites_state.select(Some(0));
 
     let lines = render_lines(&mut app, 100, 16).join("\n");
-    let normalized = lines.replace(' ', "");
+    let buffer = render_buffer(&mut app, 100, 16);
 
     assert!(lines.contains("[PATCH PHRASE] notepad mode"));
-    assert!(normalized.contains("フレーズ選択"));
+    assert!(find_text_ignoring_spaces(&buffer, "フレーズ選択").1 > 0);
     assert!(lines.contains("Favorites"));
 }
 
@@ -79,7 +79,7 @@ fn patch_phrase_overlay_is_centered_like_other_overlays() {
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[1]);
-    let (title_x, title_y) = find_text(&buffer, "フ レ ー ズ 選 択");
+    let (title_x, title_y) = find_text_ignoring_spaces(&buffer, "フレーズ選択");
 
     assert_eq!(title_y, panes[0].y);
     assert!((panes[0].x..panes[0].x + panes[0].width / 2).contains(&title_x));
@@ -104,7 +104,7 @@ fn patch_phrase_screen_keeps_status_below_overlay_panes() {
     let normalized_lines: Vec<String> = lines.iter().map(|line| line.replace(' ', "")).collect();
     let normalized_status = "patch phrase".replace(' ', "");
     let buffer = render_buffer(&mut app, 220, 16);
-    let (_, history_row) = find_text(&buffer, "フ レ ー ズ 選 択");
+    let (_, history_row) = find_text_ignoring_spaces(&buffer, "フレーズ選択");
     let (_, favorites_row) = find_text(&buffer, "Favorites");
     let status_row = normalized_lines
         .iter()
@@ -189,10 +189,10 @@ fn notepad_history_overlay_renders_history_and_favorites_lists() {
     app.notepad_filter_active = true;
 
     let lines = render_lines(&mut app, 100, 16).join("\n");
-    let normalized = lines.replace(' ', "");
+    let buffer = render_buffer(&mut app, 100, 16);
 
     assert!(lines.contains("[HISTORY] notepad mode"));
-    assert!(normalized.contains("音色&フレーズ選択"));
+    assert!(find_text_ignoring_spaces(&buffer, "音色&フレーズ選択").1 > 0);
     assert!(lines.contains("Favorites"));
     assert!(lines.contains("/"));
     assert!(lines.contains("l8cdef"));
@@ -224,7 +224,7 @@ fn notepad_history_overlay_is_centered_like_daw_overlay() {
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[1]);
-    let (title_x, title_y) = find_text(&buffer, "&");
+    let (title_x, title_y) = find_text_ignoring_spaces(&buffer, "音色&フレーズ選択");
 
     assert_eq!(title_y, panes[0].y);
     assert!((panes[0].x..panes[0].x + panes[0].width / 2).contains(&title_x));
