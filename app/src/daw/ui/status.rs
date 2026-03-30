@@ -5,6 +5,16 @@ use super::{
     loop_measure_summary_label, loop_status_label, MONOKAI_CYAN, MONOKAI_PURPLE, MONOKAI_YELLOW,
 };
 
+pub(super) fn daw_mode_title(mode: &DawMode) -> &'static str {
+    match mode {
+        DawMode::Normal => " [NORMAL] DAW mode ",
+        DawMode::Insert => " [INSERT] DAW mode ",
+        DawMode::Help => " [HELP] DAW mode ",
+        DawMode::Mixer => " [MIXER] DAW mode ",
+        DawMode::History => " [HISTORY] DAW mode ",
+    }
+}
+
 pub(super) fn draw_status(
     app: &DawApp,
     f: &mut Frame,

@@ -13,6 +13,7 @@ use ratatui::{
     widgets::{Block, Borders},
     Frame,
 };
+use status::daw_mode_title;
 
 use super::{AbRepeatState, CacheState, DawApp, DawMode};
 
@@ -89,6 +90,7 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
     let area = f.area();
     let block = Block::default()
         .borders(Borders::ALL)
+        .title(daw_mode_title(&app.mode))
         .border_style(Style::default().fg(MONOKAI_CYAN))
         .style(Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG));
     let inner = block.inner(area);
