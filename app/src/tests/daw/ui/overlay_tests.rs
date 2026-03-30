@@ -72,7 +72,7 @@ fn draw_shows_patch_select_overlay_title_and_items() {
     assert!(
         normalized_lines
             .iter()
-            .any(|line| line.contains("favorite音")),
+            .any(|line| line.contains("favorite patches")),
         "lines: {:?}",
         normalized_lines
     );

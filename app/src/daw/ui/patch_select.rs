@@ -127,7 +127,7 @@ pub(super) fn draw_patch_select(f: &mut Frame, app: &DawApp, area: Rect) {
             Block::default()
                 .borders(Borders::ALL)
                 .title(format!(
-                    " Favorite音色 ({}) ",
+                    " Favorite patches ({}) ",
                     app.patch_select_favorite_items().len()
                 ))
                 .border_style(favorite_border),
