@@ -9,8 +9,8 @@ pub(super) use tui_textarea::{CursorMove, TextArea};
 pub(super) use crate::config::Config;
 
 pub(super) use super::super::{
-    AbRepeatState, CacheState, CellCache, DawApp, DawHistoryPane, DawMode, DawPlayState,
-    PlayPosition,
+    AbRepeatState, CacheState, CellCache, DawApp, DawHistoryPane, DawMode, DawNormalAction,
+    DawPlayState, PlayPosition,
 };
 pub(super) use super::{
     normal_playback_shortcut, preview_target_tracks, resolve_playback_start_measure_index,
