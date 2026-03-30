@@ -100,12 +100,13 @@ fn patch_phrase_screen_keeps_status_below_overlay_panes() {
 
     let lines = render_lines(&mut app, 220, 16);
     let normalized_lines: Vec<String> = lines.iter().map(|line| line.replace(' ', "")).collect();
+    let normalized_status = "patch phrase".replace(' ', "");
     let buffer = render_buffer(&mut app, 220, 16);
     let (_, history_row) = find_text(&buffer, "History - Pads/Pad 1.fxp");
     let (_, favorites_row) = find_text(&buffer, "Favorites");
     let status_row = normalized_lines
         .iter()
-        .rposition(|line| line.contains("patchphrase"))
+        .rposition(|line| line.contains(&normalized_status))
         .unwrap() as u16;
 
     assert!(status_row > history_row);
