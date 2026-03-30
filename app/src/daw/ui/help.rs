@@ -39,6 +39,31 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect, mode: super::super::DawMode) 
                 Style::default().fg(MONOKAI_GRAY),
             )),
         ],
+        super::super::DawMode::PatchSelect => vec![
+            Line::from(Span::styled(
+                "PATCH SELECT overlay",
+                Style::default()
+                    .fg(MONOKAI_YELLOW)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from("  ?        : ヘルプ (このページ)"),
+            Line::from("  /        : patch name 絞り込み開始"),
+            Line::from("           : スペース区切りで AND 条件"),
+            Line::from("  Enter    : (検索中) 絞り込み入力を確定して操作に戻る"),
+            Line::from("  n        : global history へ切り替え"),
+            Line::from("  p        : current / selected patch history へ切り替え"),
+            Line::from("  t        : 現在選択 patch で開き直す"),
+            Line::from("  h/l, ←/→ : Patches / Favorites 切り替え"),
+            Line::from("  j/k, ↓/↑ : 項目移動して preview"),
+            Line::from("  Space    : 現在項目を preview"),
+            Line::from("  Enter    : (通常) 現在 track の init meas patch を上書き"),
+            Line::from("  ESC      : 閉じる"),
+            Line::from(""),
+            Line::from(Span::styled(
+                "  [ESC] で戻る",
+                Style::default().fg(MONOKAI_GRAY),
+            )),
+        ],
         _ => vec![
             Line::from(Span::styled(
                 "NORMAL モード",

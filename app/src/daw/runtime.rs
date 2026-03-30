@@ -53,6 +53,7 @@ impl DawApp {
                         DawMode::Help => self.handle_help(key.code),
                         DawMode::Mixer => self.handle_mixer(key.code),
                         DawMode::History => self.handle_history_overlay(key.code),
+                        DawMode::PatchSelect => self.handle_patch_select(key.code),
                     }
                 }
             }

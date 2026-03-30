@@ -6,6 +6,23 @@ use super::super::{
 };
 
 impl DawApp {
+    pub(in crate::daw) fn start_history_overlay_for_patch_name(
+        &mut self,
+        patch_name: Option<String>,
+    ) {
+        if self.cursor_track < FIRST_PLAYABLE_TRACK {
+            return;
+        }
+        self.history_overlay_patch_name = patch_name;
+        self.history_overlay_query.clear();
+        self.history_overlay_focus = DawHistoryPane::History;
+        self.history_overlay_history_cursor = 0;
+        self.history_overlay_favorites_cursor = 0;
+        self.history_overlay_filter_active = false;
+        self.sync_history_overlay_cursors();
+        self.mode = DawMode::History;
+    }
+
     pub(in crate::daw) fn history_overlay_history_items(&self) -> Vec<String> {
         let items = if let Some(patch_name) = self.history_overlay_patch_name.as_deref() {
             self.patch_phrase_store
@@ -65,17 +82,7 @@ impl DawApp {
     }
 
     pub(in crate::daw) fn start_history_overlay(&mut self) {
-        if self.cursor_track < FIRST_PLAYABLE_TRACK {
-            return;
-        }
-        self.history_overlay_patch_name = self.current_track_patch_name();
-        self.history_overlay_query.clear();
-        self.history_overlay_focus = DawHistoryPane::History;
-        self.history_overlay_history_cursor = 0;
-        self.history_overlay_favorites_cursor = 0;
-        self.history_overlay_filter_active = false;
-        self.sync_history_overlay_cursors();
-        self.mode = DawMode::History;
+        self.start_history_overlay_for_patch_name(self.current_track_patch_name());
     }
 
     fn selected_history_overlay_item(&self) -> Option<String> {
@@ -231,6 +238,31 @@ impl DawApp {
         match key {
             KeyCode::Esc => {
                 self.mode = DawMode::Normal;
+            }
+            KeyCode::Char('n') => {
+                self.start_history_overlay_for_patch_name(None);
+            }
+            KeyCode::Char('p') => {
+                let selected_patch_name = self.selected_history_overlay_item().and_then(|mml| {
+                    Self::extract_patch_phrase(&mml).map(|(patch_name, _)| patch_name)
+                });
+                let current_patch_name = self.current_track_patch_name();
+                if let Some(patch_name) = selected_patch_name.or(current_patch_name) {
+                    self.start_history_overlay_for_patch_name(Some(patch_name));
+                } else {
+                    self.append_log_line("patch name JSON が見つかりません".to_string());
+                }
+            }
+            KeyCode::Char('t') => {
+                let selected_patch_name = self.selected_history_overlay_item().and_then(|mml| {
+                    Self::extract_patch_phrase(&mml).map(|(patch_name, _)| patch_name)
+                });
+                let current_patch_name = self.current_track_patch_name();
+                self.start_patch_select_overlay(
+                    selected_patch_name
+                        .as_deref()
+                        .or(current_patch_name.as_deref()),
+                );
             }
             KeyCode::Char('h') | KeyCode::Left => {
                 self.history_overlay_focus = DawHistoryPane::History;

@@ -9,7 +9,10 @@ pub(super) use tui_textarea::TextArea;
 pub(super) use crate::config::Config;
 
 pub(super) use super::{
-    super::{AbRepeatState, CacheState, CellCache, DawApp, DawHistoryPane, DawMode, DawPlayState},
+    super::{
+        AbRepeatState, CacheState, CellCache, DawApp, DawHistoryPane, DawMode, DawPatchSelectPane,
+        DawPlayState,
+    },
     cache_mixer::{
         build_playback_measure_samples, pad_playback_measure_samples, try_get_cached_samples,
         PlaybackMeasureRequest,
@@ -81,6 +84,14 @@ fn build_test_app() -> DawApp {
         history_overlay_favorites_cursor: 0,
         history_overlay_focus: DawHistoryPane::History,
         history_overlay_filter_active: false,
+        patch_all: Vec::new(),
+        patch_query: String::new(),
+        patch_filtered: Vec::new(),
+        patch_cursor: 0,
+        patch_favorite_items: Vec::new(),
+        patch_favorites_cursor: 0,
+        patch_select_focus: DawPatchSelectPane::Patches,
+        patch_select_filter_active: false,
     }
 }
 

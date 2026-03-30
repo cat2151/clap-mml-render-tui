@@ -2,7 +2,9 @@ use super::super::{DEFAULT_TRACK0_MML, MEASURES, TRACKS};
 use super::{
     apply_save_file_to_data, apply_save_file_to_track_volumes, data_to_save_file, DawSaveFile,
 };
-use crate::daw::{AbRepeatState, CellCache, DawApp, DawHistoryPane, DawMode, DawPlayState};
+use crate::daw::{
+    AbRepeatState, CellCache, DawApp, DawHistoryPane, DawMode, DawPatchSelectPane, DawPlayState,
+};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use tui_textarea::TextArea;
@@ -71,6 +73,14 @@ fn build_test_app(tracks: usize, measures: usize) -> DawApp {
         history_overlay_favorites_cursor: 0,
         history_overlay_focus: DawHistoryPane::History,
         history_overlay_filter_active: false,
+        patch_all: Vec::new(),
+        patch_query: String::new(),
+        patch_filtered: Vec::new(),
+        patch_cursor: 0,
+        patch_favorite_items: Vec::new(),
+        patch_favorites_cursor: 0,
+        patch_select_focus: DawPatchSelectPane::Patches,
+        patch_select_filter_active: false,
     }
 }
 

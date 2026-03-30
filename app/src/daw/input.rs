@@ -9,6 +9,7 @@ mod history;
 mod insert;
 mod mixer;
 mod normal;
+mod patch_select;
 
 use super::{AbRepeatState, DawApp, FIRST_PLAYABLE_TRACK};
 
