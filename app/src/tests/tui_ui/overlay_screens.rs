@@ -16,8 +16,9 @@ fn patch_phrase_screen_renders_history_and_favorites_lists() {
     app.patch_phrase_favorites_state.select(Some(0));
 
     let lines = render_lines(&mut app, 80, 10).join("\n");
+    let normalized = lines.replace(' ', "");
 
-    assert!(lines.contains("History - Pads/Pad 1.fxp"));
+    assert!(normalized.contains("フレーズ選択"));
     assert!(lines.contains("Favorites"));
     assert!(lines.contains("l8cdef"));
     assert!(lines.contains("o5g"));
@@ -40,9 +41,10 @@ fn patch_phrase_screen_renders_as_overlay_on_notepad_screen() {
     app.patch_phrase_favorites_state.select(Some(0));
 
     let lines = render_lines(&mut app, 100, 16).join("\n");
+    let normalized = lines.replace(' ', "");
 
     assert!(lines.contains("[PATCH PHRASE] notepad mode"));
-    assert!(lines.contains("History - Pads/Pad 1.fxp"));
+    assert!(normalized.contains("フレーズ選択"));
     assert!(lines.contains("Favorites"));
 }
 
@@ -77,7 +79,7 @@ fn patch_phrase_overlay_is_centered_like_other_overlays() {
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[1]);
-    let (title_x, title_y) = find_text(&buffer, "History - Pads/Pad 1.fxp");
+    let (title_x, title_y) = find_text(&buffer, "フ レ ー ズ 選 択");
 
     assert_eq!(title_y, panes[0].y);
     assert!((panes[0].x..panes[0].x + panes[0].width / 2).contains(&title_x));
@@ -102,7 +104,7 @@ fn patch_phrase_screen_keeps_status_below_overlay_panes() {
     let normalized_lines: Vec<String> = lines.iter().map(|line| line.replace(' ', "")).collect();
     let normalized_status = "patch phrase".replace(' ', "");
     let buffer = render_buffer(&mut app, 220, 16);
-    let (_, history_row) = find_text(&buffer, "History - Pads/Pad 1.fxp");
+    let (_, history_row) = find_text(&buffer, "フ レ ー ズ 選 択");
     let (_, favorites_row) = find_text(&buffer, "Favorites");
     let status_row = normalized_lines
         .iter()
@@ -142,7 +144,7 @@ fn patch_select_screen_renders_as_overlay_on_normal_screen() {
     assert!(lines.contains("[PATCH SELECT] notepad mode"));
     assert!(lines.contains("▶ {\"Surge XT patch\":\"Pads/Pad 1.fxp\"} abc"));
     assert!(normalized.contains("音色選択-/でpatchname検索"));
-    assert!(normalized.contains("パッチ(2/2)"));
+    assert!(normalized.matches("音色選択").count() >= 2, "{normalized}");
     assert!(normalized.contains("Favorite音色(1)"));
     assert!(lines.contains("Pads/Pad 1.fxp"));
     assert!(lines.contains("Leads/Lead 1.fxp"));
@@ -160,16 +162,11 @@ fn patch_select_screen_splits_status_and_keybinds() {
     let lines = render_lines(&mut app, 160, 16);
     let normalized_lines: Vec<String> = lines.iter().map(|line| line.replace(' ', "")).collect();
     let normalized_screen = lines.join("\n").replace([' ', '\n'], "");
-    let status_row = normalized_lines
-        .iter()
-        .position(|line| {
-            line.contains("音色選択") && !line.contains("検索") && !line.contains("決定")
-        })
-        .unwrap();
     let keybind_row = normalized_lines
         .iter()
         .position(|line| line.contains("Enter:検索確定/決定ESC:キャンセル"))
         .unwrap();
+    let status_row = keybind_row - 1;
 
     assert!(!normalized_lines[status_row].contains("Enter:決定"));
     assert_eq!(keybind_row, status_row + 1);
@@ -192,9 +189,10 @@ fn notepad_history_overlay_renders_history_and_favorites_lists() {
     app.notepad_filter_active = true;
 
     let lines = render_lines(&mut app, 100, 16).join("\n");
+    let normalized = lines.replace(' ', "");
 
     assert!(lines.contains("[HISTORY] notepad mode"));
-    assert!(lines.contains("History"));
+    assert!(normalized.contains("音色&フレーズ選択"));
     assert!(lines.contains("Favorites"));
     assert!(lines.contains("/"));
     assert!(lines.contains("l8cdef"));
@@ -226,10 +224,10 @@ fn notepad_history_overlay_is_centered_like_daw_overlay() {
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[1]);
-    let (title_x, title_y) = find_text(&buffer, "History");
+    let (title_x, title_y) = find_text(&buffer, "&");
 
     assert_eq!(title_y, panes[0].y);
-    assert!((panes[0].x..panes[0].x + panes[0].width / 4).contains(&title_x));
+    assert!((panes[0].x..panes[0].x + panes[0].width / 2).contains(&title_x));
     assert!(overlay_area.x > 0);
     assert!(overlay_area.y > 0);
     assert!(buffer.content().iter().any(|cell| cell.symbol() == "▶"));

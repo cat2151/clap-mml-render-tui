@@ -61,11 +61,7 @@ pub(super) fn draw_patch_select(
         chunks[0],
     );
 
-    let count_title = format!(
-        " パッチ ({}/{}) ",
-        app.patch_filtered.len(),
-        app.patch_all.len()
-    );
+    let count_title = " 音色選択 ";
     let patch_items: Vec<ListItem> = app
         .patch_filtered
         .iter()
@@ -174,7 +170,6 @@ pub(super) fn draw_patch_phrase(
         .split(chunks[1]);
     app.patch_phrase_page_size = visible_list_page_size(panes[0]);
 
-    let patch_name = app.patch_phrase_name.as_deref().unwrap_or("(unknown)");
     let search_title = if app.patch_phrase_filter_active {
         " patch phrase - MML 検索 (space=AND) "
     } else {
@@ -243,7 +238,7 @@ pub(super) fn draw_patch_phrase(
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(format!(" History - {patch_name} "))
+                    .title(" フレーズ選択 ")
                     .style(base_style())
                     .border_style(history_border),
             )
@@ -374,7 +369,7 @@ pub(super) fn draw_notepad_history(
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" History ")
+                    .title(" 音色 & フレーズ選択 ")
                     .style(base_style())
                     .border_style(history_border),
             )
