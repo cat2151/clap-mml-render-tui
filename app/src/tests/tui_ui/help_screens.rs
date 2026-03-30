@@ -41,6 +41,9 @@ fn normal_help_screen_mentions_ctrl_clipboard_shortcuts_without_overlay_keybinds
         .any(|line| line.contains("Shift+H:patchhistory")));
     assert!(normalized_lines
         .iter()
+        .any(|line| line.contains("g:generateを上に挿入して再生")));
+    assert!(normalized_lines
+        .iter()
         .any(|line| line.contains("dd/Del:削除（ヤンク）p/P:下貼付/上貼付")));
     assert!(normalized_lines
         .iter()

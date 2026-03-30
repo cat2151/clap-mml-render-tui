@@ -5,6 +5,8 @@ use super::super::{
     DawPlayState, FIRST_PLAYABLE_TRACK,
 };
 
+const DEFAULT_GENERATE_PHRASES: [&str; 2] = ["c1", "cfg1"];
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum NormalPlaybackShortcut {
     PreviewCurrentTrack,
@@ -67,6 +69,53 @@ fn format_random_patch_hot_reload_log(
 }
 
 impl DawApp {
+    fn pick_random_generate_phrase() -> &'static str {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let ns = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0);
+        let index = (ns % DEFAULT_GENERATE_PHRASES.len() as u128) as usize;
+        DEFAULT_GENERATE_PHRASES[index]
+    }
+
+    fn generate_current_measure(&mut self) {
+        if self.cursor_track < FIRST_PLAYABLE_TRACK {
+            self.append_log_line("generate は演奏トラックでのみ使用できます");
+            return;
+        }
+        let Some(measure_index) = self.cursor_play_measure_index() else {
+            self.append_log_line("generate は init 以外の小節でのみ使用できます");
+            return;
+        };
+        let Some(patch_name) = self.pick_random_patch_name() else {
+            return;
+        };
+
+        let current = self.data[self.cursor_track][self.cursor_measure].clone();
+        self.record_current_measure_to_patch_history(&current);
+
+        let init_changed =
+            self.commit_insert_cell(self.cursor_track, 0, &Self::build_patch_json(&patch_name));
+        let measure_changed = self.commit_insert_cell(
+            self.cursor_track,
+            self.cursor_measure,
+            Self::pick_random_generate_phrase(),
+        );
+        if !(init_changed || measure_changed) {
+            return;
+        }
+
+        self.save();
+        self.sync_playback_mml_state();
+        self.stop_play();
+        if self.try_start_preview_with_track_mmls_for_test(measure_index, None) {
+            return;
+        }
+        self.start_preview(measure_index);
+    }
+
     fn cut_current_measure(&mut self) {
         let current = self.data[self.cursor_track][self.cursor_measure].clone();
         self.record_current_measure_to_patch_history(&current);
@@ -305,6 +354,7 @@ impl DawApp {
                 }
             }
 
+            KeyCode::Char('g') => self.generate_current_measure(),
             KeyCode::Char('r') => {
                 if self.cursor_track < FIRST_PLAYABLE_TRACK {
                     self.append_log_line(
