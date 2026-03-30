@@ -117,7 +117,12 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
     status::draw_status(app, f, chunks[1], chunks[2], chunks[3]);
 
     if app.mode == DawMode::Help {
-        help::draw_help(f, inner);
+        match app.help_origin {
+            DawMode::Mixer => mixer::draw_mixer(f, app, inner),
+            DawMode::History => history::draw_history(f, app, inner),
+            _ => {}
+        }
+        help::draw_help(f, inner, app.help_origin);
     } else if app.mode == DawMode::Mixer {
         mixer::draw_mixer(f, app, inner);
     } else if app.mode == DawMode::History {

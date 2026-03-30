@@ -5,7 +5,7 @@ use super::super::{DawApp, DawMode, FIRST_PLAYABLE_TRACK};
 impl DawApp {
     pub(in crate::daw) fn handle_help(&mut self, key: KeyCode) {
         if key == KeyCode::Esc {
-            self.mode = DawMode::Normal;
+            self.mode = self.help_origin;
         }
     }
 

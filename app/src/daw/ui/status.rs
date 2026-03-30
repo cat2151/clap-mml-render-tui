@@ -73,7 +73,7 @@ pub(super) fn draw_status(
         DawMode::Help => "HELP  ESC:キャンセル",
         DawMode::Mixer => "MIXER  h/l:track移動  j/k:-/+3dB  ESC:閉じる",
         DawMode::History => {
-            "HISTORY  Enter:確定  Space:preview  ESC:閉じる  h/l・←/→:ペイン移動してpreview  j/k・↑/↓:移動してpreview"
+            "HISTORY  ?:help  Enter:確定  Space:preview  ESC:閉じる  h/l・←/→:ペイン移動してpreview  j/k・↑/↓:移動してpreview"
         }
     };
 

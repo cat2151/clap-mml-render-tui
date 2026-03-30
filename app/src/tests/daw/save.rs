@@ -23,6 +23,7 @@ fn build_test_app(tracks: usize, measures: usize) -> DawApp {
         cursor_track: 1.min(tracks - 1),
         cursor_measure: 1.min(measures),
         mode: DawMode::Normal,
+        help_origin: DawMode::Normal,
         textarea: TextArea::default(),
         cfg: Arc::new(crate::config::Config {
             plugin_path: String::new(),

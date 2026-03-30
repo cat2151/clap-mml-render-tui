@@ -283,7 +283,7 @@ impl DawApp {
                 self.mode = DawMode::Mixer;
             }
 
-            KeyCode::Char('K') | KeyCode::Char('?') => self.mode = DawMode::Help,
+            KeyCode::Char('K') | KeyCode::Char('?') => self.enter_help(),
 
             KeyCode::Char('p') => {
                 if !self.paste_yanked_measure() {

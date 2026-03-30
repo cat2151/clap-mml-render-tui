@@ -288,3 +288,28 @@ fn handle_history_overlay_allows_slash_character_in_filter_query() {
         vec!["dir/name".to_string()]
     );
 }
+
+#[test]
+fn handle_history_overlay_question_mark_opens_help_and_esc_returns_to_history_overlay() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    app.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["history".to_string()],
+            favorites: vec!["favorite".to_string()],
+        },
+    );
+    app.start_history_overlay();
+
+    app.handle_history_overlay(KeyCode::Char('?'));
+
+    assert!(matches!(app.mode, DawMode::Help));
+    assert!(matches!(app.help_origin, DawMode::History));
+
+    app.handle_help(KeyCode::Esc);
+
+    assert!(matches!(app.mode, DawMode::History));
+}

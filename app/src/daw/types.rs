@@ -143,7 +143,7 @@ pub struct PlayPosition {
 
 // ─── 内部モード ───────────────────────────────────────────────
 
-#[derive(PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum DawMode {
     Normal,
     Insert,
