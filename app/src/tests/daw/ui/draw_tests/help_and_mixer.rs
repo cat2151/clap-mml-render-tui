@@ -305,7 +305,9 @@ fn normal_footer_shows_shift_h_history_shortcut() {
         normalized_lines
     );
     assert!(
-        normalized_lines.iter().any(|line| line.contains("g:generate")),
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("g:generate")),
         "lines: {:?}",
         normalized_lines
     );

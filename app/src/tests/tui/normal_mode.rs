@@ -23,18 +23,19 @@ fn handle_normal_g_inserts_generated_line_above_current_line_and_plays_it() {
             || inserted == r#"{"Surge XT patch": "Pads/Pad 1.fxp"} cfg1"#,
         "inserted: {inserted}"
     );
-    assert_eq!(app.patch_phrase_store.notepad.history, vec![inserted.clone()]);
+    assert_eq!(
+        app.patch_phrase_store.notepad.history,
+        vec![inserted.clone()]
+    );
     assert_eq!(
         app.patch_phrase_store
             .patches
             .get("Pads/Pad 1.fxp")
             .map(|state| state.history.clone()),
-        Some(vec![
-            inserted
-                .strip_prefix(r#"{"Surge XT patch": "Pads/Pad 1.fxp"} "#)
-                .unwrap()
-                .to_string()
-        ])
+        Some(vec![inserted
+            .strip_prefix(r#"{"Surge XT patch": "Pads/Pad 1.fxp"} "#)
+            .unwrap()
+            .to_string()])
     );
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
