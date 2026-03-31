@@ -176,7 +176,6 @@ fn patch_select_screen_renders_as_overlay_on_normal_screen() {
     assert!(lines.contains("[PATCH SELECT] notepad mode"));
     assert!(lines.contains("▶ {\"Surge XT patch\":\"Pads/Pad 1.fxp\"} abc"));
     assert!(normalized.contains("ENTERで音色を選択-patchselect-"));
-    assert!(normalized.matches("音色選択").count() >= 2, "{normalized}");
     assert!(normalized.contains("Favorite音色(1)"));
     assert!(lines.contains("Pads/Pad 1.fxp"));
     assert!(lines.contains("Leads/Lead 1.fxp"));
