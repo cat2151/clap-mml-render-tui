@@ -17,6 +17,7 @@ fn patch_phrase_screen_renders_history_and_favorites_lists() {
 
     let buffer = render_buffer(&mut app, 80, 10);
     let lines = render_lines(&mut app, 80, 10).join("\n");
+    let normalized = lines.replace(' ', "");
     let overlay_area = crate::ui_utils::centered_rect(88, 84, buffer.area);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -37,6 +38,7 @@ fn patch_phrase_screen_renders_history_and_favorites_lists() {
     assert!(lines.contains("Favorites"));
     assert!(lines.contains("l8cdef"));
     assert!(lines.contains("o5g"));
+    assert!(normalized.contains("ENTERでフレーズを選択-patchphrasehistory-"));
 }
 
 #[test]
@@ -173,11 +175,33 @@ fn patch_select_screen_renders_as_overlay_on_normal_screen() {
 
     assert!(lines.contains("[PATCH SELECT] notepad mode"));
     assert!(lines.contains("▶ {\"Surge XT patch\":\"Pads/Pad 1.fxp\"} abc"));
-    assert!(normalized.contains("音色選択-/でpatchname検索"));
+    assert!(normalized.contains("ENTERで音色を選択-patchselect-"));
     assert!(normalized.matches("音色選択").count() >= 2, "{normalized}");
     assert!(normalized.contains("Favorite音色(1)"));
     assert!(lines.contains("Pads/Pad 1.fxp"));
     assert!(lines.contains("Leads/Lead 1.fxp"));
+}
+
+#[test]
+fn patch_select_screen_shows_filter_confirm_title_when_filter_active() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_all = vec![
+        ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
+        (
+            "Leads/Lead 1.fxp".to_string(),
+            "leads/lead 1.fxp".to_string(),
+        ),
+    ];
+    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
+    app.patch_list_state.select(Some(0));
+    app.mode = Mode::PatchSelect;
+    app.patch_select_filter_active = true;
+    app.patch_query = "pad".to_string();
+
+    let normalized = render_lines(&mut app, 100, 16).join("\n").replace(' ', "");
+
+    assert!(normalized.contains("ENTERで絞り込みを決定-patchselect-"));
+    assert!(normalized.contains("/pad"));
 }
 
 #[test]
@@ -222,6 +246,7 @@ fn notepad_history_overlay_renders_history_and_favorites_lists() {
 
     let buffer = render_buffer(&mut app, 100, 16);
     let lines = render_lines(&mut app, 100, 16).join("\n");
+    let normalized = lines.replace(' ', "");
     let overlay_area = crate::ui_utils::centered_rect(88, 76, buffer.area);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -244,6 +269,43 @@ fn notepad_history_overlay_renders_history_and_favorites_lists() {
     assert!(lines.contains("/"));
     assert!(lines.contains("l8cdef"));
     assert!(lines.contains("o5g"));
+    assert!(normalized.contains("ENTERで絞り込みを決定-notepadhistory-"));
+}
+
+#[test]
+fn notepad_history_overlay_shows_selection_title_when_filter_inactive() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["before".to_string()];
+    app.patch_phrase_store.notepad = PatchPhraseState {
+        history: vec!["l8cdef".to_string()],
+        favorites: vec!["o5g".to_string()],
+    };
+    app.start_notepad_history();
+
+    let normalized = render_lines(&mut app, 100, 16).join("\n").replace(' ', "");
+
+    assert!(normalized.contains("ENTERで音色とフレーズを選択-notepadhistory-"));
+}
+
+#[test]
+fn patch_phrase_screen_shows_filter_confirm_title_when_filter_active() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::PatchPhrase;
+    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        PatchPhraseState {
+            history: vec!["l8cdef".to_string()],
+            favorites: vec!["o5g".to_string()],
+        },
+    );
+    app.patch_phrase_filter_active = true;
+    app.patch_phrase_query = "l8".to_string();
+
+    let normalized = render_lines(&mut app, 100, 16).join("\n").replace(' ', "");
+
+    assert!(normalized.contains("ENTERで絞り込みを決定-patchphrasehistory-"));
+    assert!(normalized.contains("/l8"));
 }
 
 #[test]
