@@ -72,6 +72,7 @@ pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
             Line::from("  i           : INSERT モード"),
             Line::from("  o / O       : 下 / 上に挿入 → INSERT"),
             Line::from("  dd / Del : 削除（ヤンク）  p / P : 下貼付 / 上貼付"),
+            Line::from("  g           : generate を上に挿入して再生"),
             Line::from("  r           : ランダム音色を挿入/置換して再生"),
             Line::from("  t           : 音色選択"),
             Line::from("  Shift+H     : patch history"),

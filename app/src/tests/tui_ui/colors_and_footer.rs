@@ -48,7 +48,7 @@ fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["abc".to_string()];
 
-    let lines = render_lines(&mut app, 160, 8);
+    let lines = render_lines(&mut app, 220, 8);
     let screen = lines.join("\n");
 
     assert!(screen.contains("[NORMAL] notepad mode"));
@@ -56,10 +56,11 @@ fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
     assert!(!screen.contains("MML Lines"));
     assert!(!screen.contains("▶   1 abc"));
     assert_eq!(lines[6].trim_start(), "NORMAL");
-    assert!(lines[7].contains("q ?:help i:insert"));
-    assert!(lines[7].contains("dd/Del:cut"));
-    assert!(lines[7].contains("Shift+H:patch history"));
-    assert!(lines[7].contains("w:DAW"));
+    assert!(screen.contains("q ?:help i:insert"));
+    assert!(screen.contains("dd/Del:cut"));
+    assert!(screen.contains("g:generate"));
+    assert!(screen.contains("Shift+H:patch history"));
+    assert!(screen.contains("w:DAW"));
 }
 
 #[test]

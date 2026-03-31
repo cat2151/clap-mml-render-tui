@@ -78,6 +78,10 @@ impl<'a> TuiApp<'a> {
                     KeyCode::Char('q') => return NormalAction::Quit,
                     KeyCode::Char('w') => return NormalAction::LaunchDaw,
                     KeyCode::Char('i') => self.start_insert(),
+                    KeyCode::Char('g') => match self.insert_generated_line_above() {
+                        Ok(()) => {}
+                        Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
+                    },
                     KeyCode::Char('r') => match self.pick_random_patch_name() {
                         Ok(patch_name) => {
                             self.replace_current_line_patch(&patch_name);

@@ -5,6 +5,8 @@ use super::super::{
     DawPlayState, FIRST_PLAYABLE_TRACK,
 };
 
+const INIT_MEASURE: usize = 0;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum NormalPlaybackShortcut {
     PreviewCurrentTrack,
@@ -67,6 +69,54 @@ fn format_random_patch_hot_reload_log(
 }
 
 impl DawApp {
+    fn apply_generate_to_current_measure(&mut self) {
+        if self.cursor_track < FIRST_PLAYABLE_TRACK {
+            self.append_log_line("generate は演奏トラックでのみ使用できます");
+            return;
+        }
+        let Some(measure_index) = self.cursor_play_measure_index() else {
+            self.append_log_line("generate は init 以外の小節でのみ使用できます");
+            return;
+        };
+        let Some(patch_name) = self.pick_random_patch_name() else {
+            return;
+        };
+        let generated_phrase = crate::generate::pick_default_generate_phrase();
+
+        self.apply_generate_to_current_measure_with(patch_name, generated_phrase, measure_index);
+    }
+
+    pub(in crate::daw) fn apply_generate_to_current_measure_with(
+        &mut self,
+        patch_name: String,
+        generated_phrase: &str,
+        measure_index: usize,
+    ) {
+        let current = self.data[self.cursor_track][self.cursor_measure].clone();
+        let next_patch_json = Self::build_patch_json(&patch_name);
+        let init_changed = self.data[self.cursor_track][INIT_MEASURE] != next_patch_json;
+        let measure_changed = current != generated_phrase;
+        if !(init_changed || measure_changed) {
+            return;
+        }
+
+        self.record_current_measure_to_patch_history(&current);
+        if init_changed {
+            self.commit_insert_cell(self.cursor_track, INIT_MEASURE, &next_patch_json);
+        }
+        if measure_changed {
+            self.commit_insert_cell(self.cursor_track, self.cursor_measure, generated_phrase);
+        }
+
+        self.save();
+        self.sync_playback_mml_state();
+        self.stop_play();
+        if self.try_start_preview_with_track_mmls_for_test(measure_index, None) {
+            return;
+        }
+        self.start_preview(measure_index);
+    }
+
     fn cut_current_measure(&mut self) {
         let current = self.data[self.cursor_track][self.cursor_measure].clone();
         self.record_current_measure_to_patch_history(&current);
@@ -305,6 +355,7 @@ impl DawApp {
                 }
             }
 
+            KeyCode::Char('g') => self.apply_generate_to_current_measure(),
             KeyCode::Char('r') => {
                 if self.cursor_track < FIRST_PLAYABLE_TRACK {
                     self.append_log_line(
@@ -316,10 +367,10 @@ impl DawApp {
                     let affected_measures: Vec<usize> = (1..=self.measures)
                         .filter(|&measure| !self.data[self.cursor_track][measure].trim().is_empty())
                         .collect();
-                    self.data[self.cursor_track][0] =
+                    self.data[self.cursor_track][INIT_MEASURE] =
                         format!("{{\"Surge XT patch\": \"{}\"}}", patch);
-                    self.invalidate_cell(self.cursor_track, 0);
-                    self.invalidate_dependent_cells(self.cursor_track, 0);
+                    self.invalidate_cell(self.cursor_track, INIT_MEASURE);
+                    self.invalidate_dependent_cells(self.cursor_track, INIT_MEASURE);
                     self.start_track_rerender_batch(
                         self.cursor_track,
                         &affected_measures,

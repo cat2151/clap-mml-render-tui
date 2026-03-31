@@ -132,6 +132,13 @@ fn help_does_not_show_old_semicolon_guidance() {
     assert!(
         normalized_lines
             .iter()
+            .any(|line| line.contains("g:現在track/measにgenerateを反映してpreview")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
             .any(|line| line.contains("Shift+P:演奏/停止")),
         "lines: {:?}",
         normalized_lines
@@ -294,6 +301,13 @@ fn normal_footer_shows_shift_h_history_shortcut() {
     );
     assert!(
         normalized_lines.iter().any(|line| line.contains("dd:cut")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("g:generate")),
         "lines: {:?}",
         normalized_lines
     );

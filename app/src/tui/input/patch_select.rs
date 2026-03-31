@@ -100,6 +100,21 @@ impl<'a> TuiApp<'a> {
         }
     }
 
+    pub(super) fn insert_generated_line_above(&mut self) -> Result<(), String> {
+        let patch_name = self.pick_random_patch_name()?;
+        let mml = format!(
+            "{} {}",
+            Self::build_patch_json(&patch_name),
+            crate::generate::pick_default_generate_phrase()
+        );
+        self.lines.insert(self.cursor, mml.clone());
+        self.list_state.select(Some(self.cursor));
+        self.record_notepad_history(&mml);
+        self.record_patch_phrase_history(&mml);
+        self.play_mml(mml);
+        Ok(())
+    }
+
     pub(super) fn pick_random_patch_name(&self) -> Result<String, String> {
         if self.cfg.patches_dir.is_none() {
             return Err("patches_dir が設定されていません".to_string());
