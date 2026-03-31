@@ -69,9 +69,9 @@ pub(super) fn draw_patch_select(
     app.patch_select_page_size = visible_list_page_size(panes[0]);
 
     let search_title = if app.patch_select_filter_active {
-        " 音色選択 - patch name 検索 (space=AND) "
+        " ENTERで絞り込みを決定 - patch select - "
     } else {
-        " 音色選択 - / で patch name 検索 "
+        " ENTERで音色を選択 - patch select - "
     };
     let search_body = if app.patch_select_filter_active {
         format!("/ {}", app.patch_query)
@@ -201,9 +201,9 @@ pub(super) fn draw_patch_phrase(
     app.patch_phrase_page_size = visible_list_page_size(panes[0]);
 
     let search_title = if app.patch_phrase_filter_active {
-        " patch phrase - MML 検索 (space=AND) "
+        " ENTERで絞り込みを決定 - patch phrase history - "
     } else {
-        " patch phrase - / で MML 検索 (space=AND) "
+        " ENTERでフレーズを選択 - patch phrase history - "
     };
     let search_body = if !app.patch_phrase_query.is_empty() || app.patch_phrase_filter_active {
         format!("/ {}", app.patch_phrase_query)
@@ -326,9 +326,9 @@ pub(super) fn draw_notepad_history(
     app.notepad_history_page_size = visible_list_page_size(panes[0]);
 
     let search_title = if app.notepad_filter_active {
-        " notepad history - MML 検索 (space=AND) "
+        " ENTERで絞り込みを決定 - notepad history - "
     } else {
-        " notepad history - / で MML 検索 (space=AND) "
+        " ENTERで音色とフレーズを選択 - notepad history - "
     };
     let search_body = if !app.notepad_query.is_empty() || app.notepad_filter_active {
         format!("/ {}", app.notepad_query)
