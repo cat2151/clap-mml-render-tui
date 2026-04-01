@@ -17,7 +17,7 @@ fn draw_shows_history_overlay_title_and_items() {
         .into_iter()
         .map(|line| line.to_lowercase())
         .collect();
-    let normalized_screen = normalized_lines.join("\n").replace([' ', '\n'], "");
+    let normalized_screen = normalized_lines.join("").replace(' ', "");
     assert!(
         normalized_lines
             .iter()
