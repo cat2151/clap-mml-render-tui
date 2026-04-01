@@ -46,7 +46,7 @@
 //!   t        : 現在選択 patch で開き直す
 //!   /        : 絞り込み条件入力モード開始
 //!   h/l・←/→ : (通常) Patches/Favorites ペイン切り替えして preview / (検索入力中) 無効
-//!   j/k      : (通常) 行移動 / (検索入力中) 文字入力
+//!   j/k      : (通常) 行移動して preview / (検索入力中) 文字入力
 //!   Space    : (通常) preview / (検索入力中) AND 条件
 //!   Enter    : (通常) 選択 patch で現在 track の init meas を上書きして overlay を閉じる / (検索入力中) 絞り込みを確定（overlay 継続）
 //!   ESC      : (通常) overlay を閉じる / (検索入力中) 絞り込み入力を中断
