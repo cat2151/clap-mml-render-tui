@@ -492,6 +492,38 @@ fn handle_patch_select_j_and_k_move_selection_until_slash_starts_filter_input() 
 }
 
 #[test]
+fn handle_patch_select_arrow_keys_move_selection_in_left_pane() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
+    app.data[1][1] = "l8cdef".to_string();
+    app.patch_all = vec![
+        ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
+        ("Bass/Bass 1.fxp".to_string(), "bass/bass 1.fxp".to_string()),
+        ("Lead/Lead 1.fxp".to_string(), "lead/lead 1.fxp".to_string()),
+    ];
+    app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
+    app.patch_cursor = 1;
+    app.mode = DawMode::PatchSelect;
+    app.patch_select_focus = DawPatchSelectPane::Patches;
+
+    app.handle_patch_select(KeyCode::Down);
+    assert_eq!(app.patch_cursor, 2);
+    assert_eq!(
+        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        r#"{"Surge XT patch":"Lead/Lead 1.fxp"}l8cdef"#,
+    );
+
+    app.handle_patch_select(KeyCode::Up);
+    assert_eq!(app.patch_cursor, 1);
+    assert_eq!(
+        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        r#"{"Surge XT patch":"Bass/Bass 1.fxp"}l8cdef"#,
+    );
+}
+
+#[test]
 fn handle_patch_select_esc_cancels_filter_input_without_closing_overlay() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_track = 1;

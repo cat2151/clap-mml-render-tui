@@ -269,16 +269,10 @@ impl DawApp {
                 self.sync_patch_select_cursors();
                 self.preview_selected_patch();
             }
-            KeyCode::Char('j') if !self.patch_select_filter_active => {
-                self.move_patch_select_selection_by(1);
-            }
-            KeyCode::Char('k') if !self.patch_select_filter_active => {
-                self.move_patch_select_selection_by(-1);
-            }
-            KeyCode::Down if !self.patch_select_filter_active => {
+            KeyCode::Char('j') | KeyCode::Down if !self.patch_select_filter_active => {
                 self.move_patch_select_selection_by(1)
             }
-            KeyCode::Up if !self.patch_select_filter_active => {
+            KeyCode::Char('k') | KeyCode::Up if !self.patch_select_filter_active => {
                 self.move_patch_select_selection_by(-1)
             }
             KeyCode::Char('/') if !self.patch_select_filter_active => {
