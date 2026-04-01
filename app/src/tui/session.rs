@@ -23,7 +23,11 @@ struct LoadedSessionState {
     is_daw_mode: bool,
 }
 
+/// 復元したセッションのカーソルを現在の行数に収まる範囲へ丸める。
+///
+/// `lines_len` は 1 以上であることを前提とする。
 pub(super) fn clamp_session_cursor(cursor: usize, lines_len: usize) -> usize {
+    debug_assert!(lines_len > 0, "session lines must not be empty");
     cursor.min(lines_len.saturating_sub(1))
 }
 
@@ -46,6 +50,7 @@ fn load_initial_session_state() -> LoadedSessionState {
     }
 }
 
+/// パッチ一覧の非同期読み込みを開始し、共有状態ハンドルを返す。
 fn spawn_patch_loader(cfg: &Config) -> Arc<Mutex<PatchLoadState>> {
     // パッチリストはバックグラウンドスレッドで収集する。
     // 起動時の同期スキャンによる遅延を避けるため。
