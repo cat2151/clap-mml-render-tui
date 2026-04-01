@@ -1,6 +1,13 @@
 use super::*;
 
 #[test]
+fn clamp_session_cursor_caps_to_last_available_line() {
+    assert_eq!(crate::tui::session::clamp_session_cursor(0, 1), 0);
+    assert_eq!(crate::tui::session::clamp_session_cursor(2, 3), 2);
+    assert_eq!(crate::tui::session::clamp_session_cursor(9, 3), 2);
+}
+
+#[test]
 fn begin_playback_session_invalidates_previous_session() {
     let app = TuiApp::new_for_test(test_config());
 
