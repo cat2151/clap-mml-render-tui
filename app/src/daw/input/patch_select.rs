@@ -152,6 +152,17 @@ impl DawApp {
         self.preview_selected_patch();
     }
 
+    fn cancel_patch_filter_input(&mut self) {
+        self.patch_select_filter_active = false;
+        if self.patch_query == self.patch_query_before_input {
+            self.sync_patch_select_cursors();
+            return;
+        }
+
+        self.patch_query = self.patch_query_before_input.clone();
+        self.update_patch_filter();
+    }
+
     pub(in crate::daw) fn start_patch_select_overlay(&mut self, initial_patch_name: Option<&str>) {
         if self.cursor_track < FIRST_PLAYABLE_TRACK {
             self.append_log_line("音色選択は演奏トラックでのみ使用できます".to_string());
@@ -180,6 +191,7 @@ impl DawApp {
             })
             .collect();
         self.patch_query.clear();
+        self.patch_query_before_input.clear();
         self.patch_filtered = self
             .patch_all
             .iter()
@@ -205,6 +217,9 @@ impl DawApp {
 
     pub(in crate::daw) fn handle_patch_select(&mut self, key: KeyCode) {
         match key {
+            KeyCode::Esc if self.patch_select_filter_active => {
+                self.cancel_patch_filter_input();
+            }
             KeyCode::Esc => {
                 self.mode = DawMode::Normal;
             }
@@ -260,19 +275,21 @@ impl DawApp {
             KeyCode::Char('k') if !self.patch_select_filter_active => {
                 self.move_patch_select_selection_by(-1);
             }
-            KeyCode::Down => self.move_patch_select_selection_by(1),
-            KeyCode::Up => self.move_patch_select_selection_by(-1),
+            KeyCode::Down if !self.patch_select_filter_active => {
+                self.move_patch_select_selection_by(1)
+            }
+            KeyCode::Up if !self.patch_select_filter_active => {
+                self.move_patch_select_selection_by(-1)
+            }
             KeyCode::Char('/') => {
                 self.patch_select_focus = DawPatchSelectPane::Patches;
+                self.patch_query_before_input = self.patch_query.clone();
                 self.patch_select_filter_active = true;
                 self.sync_patch_select_cursors();
             }
             KeyCode::Backspace if self.patch_select_filter_active => {
                 if self.patch_query.pop().is_some() {
                     self.update_patch_filter();
-                }
-                if self.patch_query.is_empty() {
-                    self.patch_select_filter_active = false;
                 }
             }
             KeyCode::Char('?') => self.enter_help(),

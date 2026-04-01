@@ -77,7 +77,7 @@ pub(super) fn draw_patch_select(f: &mut Frame, app: &DawApp, area: Rect) {
         .split(chunks[1]);
 
     let search_title = if app.patch_select_filter_active {
-        " patch select - patch name 検索 (space=AND) "
+        " patch select - patch name 検索入力 (Enter=確定 / ESC=中断) "
     } else {
         " patch select - / で patch name 検索 "
     };
@@ -135,9 +135,11 @@ pub(super) fn draw_patch_select(f: &mut Frame, app: &DawApp, area: Rect) {
         panes[1],
     );
     f.render_widget(
-        Paragraph::new(
-            "?:help  /:検索入力  Enter:検索確定/確定  Space:preview  ESC:閉じる  n/p/t:overlay切替  h/l・←/→:ペイン移動してpreview  j/k・↑/↓:移動してpreview",
-        )
+        Paragraph::new(if app.patch_select_filter_active {
+            "?:help  Enter:検索確定  ESC:検索中断  Space:AND条件  a-z:検索入力"
+        } else {
+            "?:help  /:検索入力  Enter:確定  Space:preview  ESC:閉じる  n/p/t:overlay切替  h/l・←/→:ペイン移動  j/k・↑/↓:移動してpreview"
+        })
         .style(Style::default().fg(MONOKAI_CYAN)),
         chunks[2],
     );

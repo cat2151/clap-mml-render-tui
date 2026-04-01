@@ -44,10 +44,12 @@
 //!   n        : global history へ切り替え
 //!   p        : current / selected patch history へ切り替え
 //!   t        : 現在選択 patch で開き直す
+//!   /        : 絞り込み条件入力モード開始
 //!   h/l・←/→ : Patches/Favorites ペイン切り替え
 //!   j/k      : 行移動
+//!   Space    : (通常) preview / (検索入力中) AND 条件
 //!   Enter    : 選択 patch で現在 track の init meas を上書き
-//!   ESC      : overlay を閉じる → NORMAL
+//!   ESC      : (通常) overlay を閉じる / (検索入力中) 絞り込み入力を中断
 //!
 //! キー操作 (INSERT):
 //!   ESC   : 確定 → NORMAL
@@ -215,6 +217,7 @@ pub struct DawApp {
     pub(super) history_overlay_filter_active: bool,
     pub(super) patch_all: Vec<(String, String)>,
     pub(super) patch_query: String,
+    pub(super) patch_query_before_input: String,
     pub(super) patch_filtered: Vec<String>,
     pub(super) patch_cursor: usize,
     pub(super) patch_favorite_items: Vec<String>,
@@ -432,6 +435,7 @@ impl DawApp {
             history_overlay_filter_active: false,
             patch_all: Vec::new(),
             patch_query: String::new(),
+            patch_query_before_input: String::new(),
             patch_filtered: Vec::new(),
             patch_cursor: 0,
             patch_favorite_items: Vec::new(),

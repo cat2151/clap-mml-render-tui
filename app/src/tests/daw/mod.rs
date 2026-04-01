@@ -254,6 +254,7 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
         history_overlay_filter_active: false,
         patch_all: Vec::new(),
         patch_query: String::new(),
+        patch_query_before_input: String::new(),
         patch_filtered: Vec::new(),
         patch_cursor: 0,
         patch_favorite_items: Vec::new(),
