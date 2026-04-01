@@ -17,6 +17,7 @@ fn draw_shows_history_overlay_title_and_items() {
         .into_iter()
         .map(|line| line.to_lowercase())
         .collect();
+    let normalized_screen = normalized_lines.join("\n").replace([' ', '\n'], "");
     assert!(
         normalized_lines
             .iter()
@@ -33,6 +34,11 @@ fn draw_shows_history_overlay_title_and_items() {
         normalized_lines
             .iter()
             .any(|line| line.contains("favorites")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_screen.contains("/を押して絞り込み(space=and)"),
         "lines: {:?}",
         normalized_lines
     );
@@ -73,6 +79,11 @@ fn draw_shows_patch_select_overlay_title_and_items() {
         normalized_lines
             .iter()
             .any(|line| line.contains("favorite patches")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_screen.contains("/を押して絞り込み"),
         "lines: {:?}",
         normalized_lines
     );

@@ -89,7 +89,7 @@ pub(super) fn draw_history(f: &mut Frame, app: &DawApp, area: Rect) {
     {
         format!("/ {}", app.history_overlay_query)
     } else {
-        "/ を押して検索開始 (space=AND)".to_string()
+        "/ を押して絞り込み (space=AND)".to_string()
     };
     f.render_widget(
         Paragraph::new(search_body)
