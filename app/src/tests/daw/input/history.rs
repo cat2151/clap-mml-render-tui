@@ -524,7 +524,7 @@ fn handle_patch_select_arrow_keys_move_selection_in_left_pane() {
 }
 
 #[test]
-fn test_patch_select_j_k_preview_after_favorites_switch() {
+fn handle_patch_select_j_k_preview_after_favorites_switch() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_track = 1;
     app.cursor_measure = 1;
