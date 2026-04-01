@@ -76,7 +76,7 @@ pub(super) fn draw_patch_select(
     let search_body = if app.patch_select_filter_active {
         format!("/ {}", app.patch_query)
     } else if app.patch_query.is_empty() {
-        "/ を押して検索開始".to_string()
+        "/ を押して絞り込み".to_string()
     } else {
         format!("/ {}", app.patch_query)
     };
@@ -208,7 +208,7 @@ pub(super) fn draw_patch_phrase(
     let search_body = if !app.patch_phrase_query.is_empty() || app.patch_phrase_filter_active {
         format!("/ {}", app.patch_phrase_query)
     } else {
-        "/ を押して検索開始 (space=AND)".to_string()
+        "/ を押して絞り込み (space=AND)".to_string()
     };
     f.render_widget(
         Paragraph::new(search_body).style(base_style()).block(
@@ -333,7 +333,7 @@ pub(super) fn draw_notepad_history(
     let search_body = if !app.notepad_query.is_empty() || app.notepad_filter_active {
         format!("/ {}", app.notepad_query)
     } else {
-        "/ を押して検索開始 (space=AND)".to_string()
+        "/ を押して絞り込み (space=AND)".to_string()
     };
     f.render_widget(
         Paragraph::new(search_body).style(base_style()).block(

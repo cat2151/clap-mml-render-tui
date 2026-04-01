@@ -38,6 +38,7 @@ fn patch_phrase_screen_renders_history_and_favorites_lists() {
     assert!(lines.contains("Favorites"));
     assert!(lines.contains("l8cdef"));
     assert!(lines.contains("o5g"));
+    assert!(normalized.contains("/を押して絞り込み(space=AND)"));
     assert!(normalized.contains("ENTERでフレーズを選択-patchphrasehistory-"));
 }
 
@@ -176,6 +177,7 @@ fn patch_select_screen_renders_as_overlay_on_normal_screen() {
     assert!(lines.contains("[PATCH SELECT] notepad mode"));
     assert!(lines.contains("▶ {\"Surge XT patch\":\"Pads/Pad 1.fxp\"} abc"));
     assert!(normalized.contains("ENTERで音色を選択-patchselect-"));
+    assert!(normalized.contains("/を押して絞り込み"));
     assert!(normalized.contains("Favorite音色(1)"));
     assert!(lines.contains("Pads/Pad 1.fxp"));
     assert!(lines.contains("Leads/Lead 1.fxp"));
@@ -284,6 +286,7 @@ fn notepad_history_overlay_shows_selection_title_when_filter_inactive() {
     let normalized = render_lines(&mut app, 100, 16).join("\n").replace(' ', "");
 
     assert!(normalized.contains("ENTERで音色とフレーズを選択-notepadhistory-"));
+    assert!(normalized.contains("/を押して絞り込み(space=AND)"));
 }
 
 #[test]

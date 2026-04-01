@@ -84,7 +84,7 @@ pub(super) fn draw_patch_select(f: &mut Frame, app: &DawApp, area: Rect) {
     let search_body = if !app.patch_query.is_empty() || app.patch_select_filter_active {
         format!("/ {}", app.patch_query)
     } else {
-        "/ を押して検索開始".to_string()
+        "/ を押して絞り込み".to_string()
     };
     f.render_widget(
         Paragraph::new(search_body)
