@@ -20,37 +20,27 @@ mod input;
 mod notepad_history;
 mod patch_phrase;
 mod playback_session;
+mod runtime;
+pub(crate) mod session;
 mod ui;
 
-use anyhow::Result;
 use clack_host::prelude::PluginEntry;
-use cmrt_core::{collect_patches, mml_render, to_relative, CoreConfig};
-use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers},
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-};
-use ratatui::{backend::CrosstermBackend, widgets::ListState, Frame, Terminal};
+use cmrt_core::{mml_render, CoreConfig};
+use ratatui::{widgets::ListState, Frame};
 use tui_textarea::TextArea;
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex};
 
 /// audio_cache の最大エントリ数。超過時はキャッシュ全体をクリアしてから挿入する。
 const AUDIO_CACHE_MAX_ENTRIES: usize = 64;
 pub(super) const PATCH_JSON_KEY: &str = "Surge XT patch";
 
-pub(crate) use self::cache::filter_items;
-use self::cache::{filter_patches, resolve_cached_samples, try_insert_cache};
+pub(crate) use self::cache::{filter_items, filter_patches};
+use self::cache::{resolve_cached_samples, try_insert_cache};
+pub(crate) use self::session::PatchLoadState;
 use crate::config::Config;
-
-/// バックグラウンドパッチ読み込みの状態
-enum PatchLoadState {
-    Loading,
-    Ready(Vec<(String, String)>), // (表示名, 小文字化済み表示名)
-    Err(String),
-}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum Mode {
@@ -150,103 +140,6 @@ pub(super) enum PatchSelectPane {
 }
 
 impl<'a> TuiApp<'a> {
-    pub fn new(cfg: &'a Config, entry: &'a PluginEntry) -> Self {
-        let cfg_arc = Arc::new(cfg.clone());
-
-        // パッチリストはバックグラウンドスレッドで収集する。
-        // 起動時の同期スキャンによる遅延を避けるため。
-        let patch_load_state: Arc<Mutex<PatchLoadState>> =
-            Arc::new(Mutex::new(PatchLoadState::Loading));
-        {
-            let state_bg = Arc::clone(&patch_load_state);
-            let patches_dir = cfg.patches_dir.clone();
-            std::thread::spawn(move || match patches_dir {
-                None => {
-                    *state_bg.lock().unwrap() = PatchLoadState::Ready(Vec::new());
-                }
-                Some(dir) => match collect_patches(&dir) {
-                    Ok(paths) => {
-                        let pairs: Vec<(String, String)> = paths
-                            .into_iter()
-                            .map(|p| {
-                                let rel = to_relative(&dir, &p);
-                                let lower = rel.to_lowercase();
-                                (rel, lower)
-                            })
-                            .collect();
-                        *state_bg.lock().unwrap() = PatchLoadState::Ready(pairs);
-                    }
-                    Err(e) => {
-                        *state_bg.lock().unwrap() = PatchLoadState::Err(e.to_string());
-                    }
-                },
-            });
-        }
-
-        // `lines` は常に1行以上を保持する（不変条件）。
-        // load_session_state() は lines が空でないことを保証している。
-        let crate::history::SessionState {
-            cursor,
-            lines,
-            is_daw_mode,
-        } = crate::history::load_session_state();
-        let initial_cursor = cursor.min(lines.len() - 1);
-        let mut list_state = ListState::default();
-        list_state.select(Some(initial_cursor));
-
-        Self {
-            mode: Mode::Normal,
-            help_origin: Mode::Normal,
-            lines,
-            cursor: initial_cursor,
-            list_state,
-            textarea: TextArea::default(),
-            cfg: cfg_arc,
-            entry_ptr: entry as *const PluginEntry as usize,
-            play_state: Arc::new(Mutex::new(PlayState::Idle)),
-            playback_session: Arc::new(AtomicU64::new(0)),
-            active_sink: Arc::new(Mutex::new(None)),
-            audio_cache: Arc::new(Mutex::new(HashMap::new())),
-            patch_load_state,
-            patch_all: Vec::new(),
-            patch_query: String::new(),
-            patch_filtered: Vec::new(),
-            patch_cursor: 0,
-            patch_list_state: ListState::default(),
-            patch_favorite_items: Vec::new(),
-            patch_favorites_cursor: 0,
-            patch_favorites_state: ListState::default(),
-            patch_select_focus: PatchSelectPane::Patches,
-            patch_select_filter_active: false,
-            normal_page_size: 1,
-            patch_select_page_size: 1,
-            notepad_history_page_size: 1,
-            patch_phrase_page_size: 1,
-            patch_phrase_store: crate::history::load_patch_phrase_store(),
-            notepad_history_cursor: 0,
-            notepad_favorites_cursor: 0,
-            notepad_history_state: ListState::default(),
-            notepad_favorites_state: ListState::default(),
-            notepad_focus: PatchPhrasePane::History,
-            notepad_query: String::new(),
-            notepad_filter_active: false,
-            notepad_pending_delete: false,
-            normal_pending_delete: false,
-            yank_buffer: None,
-            patch_phrase_name: None,
-            patch_phrase_history_cursor: 0,
-            patch_phrase_favorites_cursor: 0,
-            patch_phrase_history_state: ListState::default(),
-            patch_phrase_favorites_state: ListState::default(),
-            patch_phrase_focus: PatchPhrasePane::History,
-            patch_phrase_query: String::new(),
-            patch_phrase_filter_active: false,
-            patch_phrase_store_dirty: false,
-            update_available: Arc::new(AtomicBool::new(false)),
-            is_daw_mode,
-        }
-    }
-
     fn kick_play(&self, mml: String) {
         let cfg = Arc::clone(&self.cfg);
         let state = Arc::clone(&self.play_state);
@@ -333,104 +226,6 @@ impl<'a> TuiApp<'a> {
 
     fn draw(&mut self, f: &mut Frame) {
         ui::draw(self, f);
-    }
-
-    fn save_history_state(&self) {
-        let _ = crate::history::save_session_state(&crate::history::SessionState {
-            cursor: self.cursor,
-            lines: self.lines.clone(),
-            is_daw_mode: self.is_daw_mode,
-        });
-    }
-
-    pub fn run(&mut self) -> Result<()> {
-        enable_raw_mode()?;
-        let mut stdout = std::io::stdout();
-        execute!(stdout, EnterAlternateScreen)?;
-        let backend = CrosstermBackend::new(stdout);
-        let mut terminal = Terminal::new(backend)?;
-
-        // 前回 DAW モードで終了していた場合は直接 DAW モードで起動する
-        let mut quit_from_startup_daw = false;
-        if self.is_daw_mode {
-            let mut daw = crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
-            match daw.run_with_terminal(&mut terminal)? {
-                crate::daw::DawExitReason::ReturnToTui => {
-                    self.is_daw_mode = false;
-                }
-                crate::daw::DawExitReason::QuitApp => {
-                    quit_from_startup_daw = true;
-                }
-            }
-        }
-
-        loop {
-            if quit_from_startup_daw {
-                break;
-            }
-            terminal.draw(|f| self.draw(f))?;
-
-            // アップデートが利用可能になったら自動的にループを抜けてアップデートを実行する
-            if self.update_available.load(Ordering::Relaxed) && self.mode == Mode::Normal {
-                break;
-            }
-
-            if event::poll(std::time::Duration::from_millis(50))? {
-                if let Event::Key(key) = event::read()? {
-                    // Press のみ処理。Release/Repeat は無視（二重発火防止）
-                    use crossterm::event::KeyEventKind;
-                    if key.kind != KeyEventKind::Press {
-                        continue;
-                    }
-                    if key.modifiers.contains(KeyModifiers::CONTROL)
-                        && key.code == KeyCode::Char('c')
-                    {
-                        if self.mode == Mode::Insert {
-                            self.handle_insert(key);
-                        }
-                        continue;
-                    }
-                    match self.mode {
-                        Mode::Normal => match self.handle_normal_key_event(key) {
-                            NormalAction::Quit => break,
-                            NormalAction::LaunchDaw => {
-                                self.flush_patch_phrase_store_if_dirty();
-                                self.save_history_state();
-                                let mut daw =
-                                    crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
-                                match daw.run_with_terminal(&mut terminal)? {
-                                    crate::daw::DawExitReason::ReturnToTui => {
-                                        self.is_daw_mode = false;
-                                    }
-                                    crate::daw::DawExitReason::QuitApp => {
-                                        self.is_daw_mode = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            NormalAction::Continue => {}
-                        },
-                        Mode::Insert => self.handle_insert(key),
-                        Mode::PatchSelect => self.handle_patch_select(key),
-                        Mode::NotepadHistory => self.handle_notepad_history(key.code),
-                        Mode::PatchPhrase => self.handle_patch_phrase(key.code),
-                        Mode::NotepadHistoryGuide => self.handle_notepad_history_guide(key.code),
-                        Mode::Help => self.handle_help(key.code),
-                    }
-                }
-            }
-        }
-
-        // 終了前にセッション状態を保存する（端末クリーンアップの成否に関わらず実行）。
-        // 保存失敗はベストエフォートとして無視する（終了処理のため通知手段がない）。
-        self.flush_patch_phrase_store_if_dirty();
-        self.save_history_state();
-
-        let raw_mode_result = disable_raw_mode();
-        let alternate_screen_result = execute!(terminal.backend_mut(), LeaveAlternateScreen);
-        raw_mode_result?;
-        alternate_screen_result?;
-        Ok(())
     }
 }
 

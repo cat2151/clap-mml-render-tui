@@ -1,0 +1,104 @@
+use anyhow::Result;
+use crossterm::{
+    event::{self, Event, KeyCode, KeyModifiers},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use ratatui::{backend::CrosstermBackend, Terminal};
+
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+
+use super::{Mode, NormalAction, TuiApp};
+
+impl<'a> TuiApp<'a> {
+    pub fn run(&mut self) -> Result<()> {
+        enable_raw_mode()?;
+        let mut stdout = std::io::stdout();
+        execute!(stdout, EnterAlternateScreen)?;
+        let backend = CrosstermBackend::new(stdout);
+        let mut terminal = Terminal::new(backend)?;
+
+        // 前回 DAW モードで終了していた場合は直接 DAW モードで起動する
+        let mut quit_from_startup_daw = false;
+        if self.is_daw_mode {
+            let mut daw = crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
+            match daw.run_with_terminal(&mut terminal)? {
+                crate::daw::DawExitReason::ReturnToTui => {
+                    self.is_daw_mode = false;
+                }
+                crate::daw::DawExitReason::QuitApp => {
+                    quit_from_startup_daw = true;
+                }
+            }
+        }
+
+        loop {
+            if quit_from_startup_daw {
+                break;
+            }
+            terminal.draw(|f| self.draw(f))?;
+
+            // アップデートが利用可能になったら自動的にループを抜けてアップデートを実行する
+            if self.update_available.load(Ordering::Relaxed) && self.mode == Mode::Normal {
+                break;
+            }
+
+            if event::poll(std::time::Duration::from_millis(50))? {
+                if let Event::Key(key) = event::read()? {
+                    // Press のみ処理。Release/Repeat は無視（二重発火防止）
+                    use crossterm::event::KeyEventKind;
+                    if key.kind != KeyEventKind::Press {
+                        continue;
+                    }
+                    if key.modifiers.contains(KeyModifiers::CONTROL)
+                        && key.code == KeyCode::Char('c')
+                    {
+                        if self.mode == Mode::Insert {
+                            self.handle_insert(key);
+                        }
+                        continue;
+                    }
+                    match self.mode {
+                        Mode::Normal => match self.handle_normal_key_event(key) {
+                            NormalAction::Quit => break,
+                            NormalAction::LaunchDaw => {
+                                self.flush_patch_phrase_store_if_dirty();
+                                self.save_history_state();
+                                let mut daw =
+                                    crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
+                                match daw.run_with_terminal(&mut terminal)? {
+                                    crate::daw::DawExitReason::ReturnToTui => {
+                                        self.is_daw_mode = false;
+                                    }
+                                    crate::daw::DawExitReason::QuitApp => {
+                                        self.is_daw_mode = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            NormalAction::Continue => {}
+                        },
+                        Mode::Insert => self.handle_insert(key),
+                        Mode::PatchSelect => self.handle_patch_select(key),
+                        Mode::NotepadHistory => self.handle_notepad_history(key.code),
+                        Mode::PatchPhrase => self.handle_patch_phrase(key.code),
+                        Mode::NotepadHistoryGuide => self.handle_notepad_history_guide(key.code),
+                        Mode::Help => self.handle_help(key.code),
+                    }
+                }
+            }
+        }
+
+        // 終了前にセッション状態を保存する（端末クリーンアップの成否に関わらず実行）。
+        // 保存失敗はベストエフォートとして無視する（終了処理のため通知手段がない）。
+        self.flush_patch_phrase_store_if_dirty();
+        self.save_history_state();
+
+        let raw_mode_result = disable_raw_mode();
+        let alternate_screen_result = execute!(terminal.backend_mut(), LeaveAlternateScreen);
+        raw_mode_result?;
+        alternate_screen_result?;
+        Ok(())
+    }
+}
