@@ -506,6 +506,7 @@ fn handle_patch_select_arrow_keys_move_selection_in_left_pane() {
     app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
     app.patch_cursor = 1;
     app.mode = DawMode::PatchSelect;
+    app.patch_select_focus = DawPatchSelectPane::Patches;
 
     app.handle_patch_select(KeyCode::Down);
     assert_eq!(app.patch_cursor, 2);
