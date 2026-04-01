@@ -11,11 +11,32 @@ use std::sync::Arc;
 
 use super::{Mode, NormalAction, TuiApp};
 
+struct TerminalCleanup {
+    raw_mode_enabled: bool,
+    alternate_screen_enabled: bool,
+}
+
+impl Drop for TerminalCleanup {
+    fn drop(&mut self) {
+        if self.alternate_screen_enabled {
+            let _ = execute!(std::io::stdout(), LeaveAlternateScreen);
+        }
+        if self.raw_mode_enabled {
+            let _ = disable_raw_mode();
+        }
+    }
+}
+
 impl<'a> TuiApp<'a> {
     pub fn run(&mut self) -> Result<()> {
         enable_raw_mode()?;
+        let mut cleanup = TerminalCleanup {
+            raw_mode_enabled: true,
+            alternate_screen_enabled: false,
+        };
         let mut stdout = std::io::stdout();
         execute!(stdout, EnterAlternateScreen)?;
+        cleanup.alternate_screen_enabled = true;
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
 
@@ -94,11 +115,6 @@ impl<'a> TuiApp<'a> {
         // 保存失敗はベストエフォートとして無視する（終了処理のため通知手段がない）。
         self.flush_patch_phrase_store_if_dirty();
         self.save_history_state();
-
-        let raw_mode_result = disable_raw_mode();
-        let alternate_screen_result = execute!(terminal.backend_mut(), LeaveAlternateScreen);
-        raw_mode_result?;
-        alternate_screen_result?;
         Ok(())
     }
 }

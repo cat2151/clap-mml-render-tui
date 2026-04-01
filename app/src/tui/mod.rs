@@ -21,7 +21,7 @@ mod notepad_history;
 mod patch_phrase;
 mod playback_session;
 mod runtime;
-pub(crate) mod session;
+mod session;
 mod ui;
 
 use clack_host::prelude::PluginEntry;
@@ -37,9 +37,10 @@ use std::sync::{Arc, Mutex};
 const AUDIO_CACHE_MAX_ENTRIES: usize = 64;
 pub(super) const PATCH_JSON_KEY: &str = "Surge XT patch";
 
-pub(crate) use self::cache::{filter_items, filter_patches};
+pub(crate) use self::cache::filter_items;
+pub(in crate::tui) use self::cache::filter_patches;
 use self::cache::{resolve_cached_samples, try_insert_cache};
-pub(crate) use self::session::PatchLoadState;
+pub(in crate::tui) use self::session::PatchLoadState;
 use crate::config::Config;
 
 #[derive(Clone, Copy, Debug, PartialEq)]

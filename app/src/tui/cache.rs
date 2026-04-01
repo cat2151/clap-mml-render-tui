@@ -4,7 +4,7 @@ use super::AUDIO_CACHE_MAX_ENTRIES;
 
 /// クエリ文字列（空白区切りでAND条件）でパッチリストをフィルタする。
 /// `all` は (表示名, 小文字化済み表示名) のペアであること（起動時に一度だけ計算）。
-pub(crate) fn filter_patches(all: &[(String, String)], query: &str) -> Vec<String> {
+pub(super) fn filter_patches(all: &[(String, String)], query: &str) -> Vec<String> {
     let terms: Vec<String> = query.split_whitespace().map(|t| t.to_lowercase()).collect();
     if terms.is_empty() {
         return all.iter().map(|(orig, _)| orig.clone()).collect();

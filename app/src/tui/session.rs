@@ -10,7 +10,7 @@ use super::{Mode, PatchPhrasePane, PatchSelectPane, PlayState, TuiApp};
 use crate::config::Config;
 
 /// バックグラウンドパッチ読み込みの状態
-pub(crate) enum PatchLoadState {
+pub(in crate::tui) enum PatchLoadState {
     Loading,
     Ready(Vec<(String, String)>), // (表示名, 小文字化済み表示名)
     Err(String),
