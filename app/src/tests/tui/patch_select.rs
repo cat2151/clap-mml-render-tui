@@ -146,6 +146,32 @@ fn start_patch_select_builds_favorite_items_once_in_patch_order_then_extra_sorte
 }
 
 #[test]
+fn open_patch_select_overlay_selects_requested_initial_patch() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "Pads/Pad 1.fxp",
+        "Leads/Lead 1.fxp",
+        "Bass/Bass 1.fxp",
+    ]))));
+
+    app.open_patch_select_overlay(Some("Leads/Lead 1.fxp"));
+
+    assert!(matches!(app.mode, Mode::PatchSelect));
+    assert_eq!(
+        app.patch_filtered,
+        vec![
+            "Pads/Pad 1.fxp".to_string(),
+            "Leads/Lead 1.fxp".to_string(),
+            "Bass/Bass 1.fxp".to_string()
+        ]
+    );
+    assert_eq!(app.patch_cursor, 1);
+    assert_eq!(app.patch_list_state.selected(), Some(1));
+    assert_eq!(app.patch_select_focus, PatchSelectPane::Patches);
+}
+
+#[test]
 fn handle_patch_select_ctrl_n_and_ctrl_k_move_cursor() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![r#"{"Surge XT patch":"Pad 1"} l8cdef"#.to_string()];
