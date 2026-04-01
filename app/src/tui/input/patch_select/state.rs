@@ -1,9 +1,9 @@
 use mmlabc_to_smf::mml_preprocessor;
 use ratatui::widgets::ListState;
 
-use crate::tui::{PatchLoadState, PatchSelectPane};
+use crate::tui::{Mode, PatchLoadState, PatchSelectPane, TuiApp};
 
-use super::{Mode, TuiApp, PATCH_SELECT_PREVIEW_FALLBACK_PHRASE};
+use super::PATCH_SELECT_PREVIEW_FALLBACK_PHRASE;
 
 impl<'a> TuiApp<'a> {
     fn move_patch_cursor_by(&mut self, delta: isize) {
