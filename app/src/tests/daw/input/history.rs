@@ -539,3 +539,29 @@ fn handle_patch_select_backspace_with_empty_query_keeps_filter_input_active() {
     assert_eq!(app.patch_query, "");
     assert_eq!(app.patch_filtered, vec!["Pads/Pad 1.fxp".to_string()]);
 }
+
+#[test]
+fn handle_patch_select_allows_slash_character_in_filter_query_without_resetting_restore_point() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.patch_all = vec![
+        ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
+        ("Bass/Soft 1.fxp".to_string(), "bass/soft 1.fxp".to_string()),
+        ("Bass Soft 1.fxp".to_string(), "bass soft 1.fxp".to_string()),
+    ];
+    app.patch_filtered = vec!["Bass/Soft 1.fxp".to_string(), "Bass Soft 1.fxp".to_string()];
+    app.patch_query = "bass".to_string();
+    app.mode = DawMode::PatchSelect;
+
+    app.handle_patch_select(KeyCode::Char('/'));
+    app.handle_patch_select(KeyCode::Char('/'));
+    app.handle_patch_select(KeyCode::Char('s'));
+    app.handle_patch_select(KeyCode::Esc);
+
+    assert!(matches!(app.mode, DawMode::PatchSelect));
+    assert!(!app.patch_select_filter_active);
+    assert_eq!(app.patch_query, "bass");
+    assert_eq!(
+        app.patch_filtered,
+        vec!["Bass/Soft 1.fxp".to_string(), "Bass Soft 1.fxp".to_string()]
+    );
+}

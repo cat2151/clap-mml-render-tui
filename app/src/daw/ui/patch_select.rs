@@ -136,9 +136,9 @@ pub(super) fn draw_patch_select(f: &mut Frame, app: &DawApp, area: Rect) {
     );
     f.render_widget(
         Paragraph::new(if app.patch_select_filter_active {
-            "?:help  Enter:検索確定  ESC:検索中断  Space:AND条件  a-z:検索入力"
+            "?:help  Enter:検索確定  ESC:検索中断  Space:AND条件  文字:検索入力"
         } else {
-            "?:help  /:検索入力  Enter:確定  Space:preview  ESC:閉じる  n/p/t:overlay切替  h/l・←/→:ペイン移動  j/k・↑/↓:移動してpreview"
+            "?:help  /:検索入力  Enter:確定  Space:preview  ESC:閉じる  n/p/t:overlay切替  h/l・←/→:ペイン移動してpreview  j/k・↑/↓:移動してpreview"
         })
         .style(Style::default().fg(MONOKAI_CYAN)),
         chunks[2],

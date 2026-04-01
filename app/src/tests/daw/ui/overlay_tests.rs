@@ -13,11 +13,10 @@ fn draw_shows_history_overlay_title_and_items() {
         },
     );
 
-    let normalized_lines: Vec<String> = render_lines(&app, 100, 30)
+    let normalized_lines: Vec<String> = render_lines(&app, 160, 30)
         .into_iter()
         .map(|line| line.to_lowercase())
         .collect();
-
     assert!(
         normalized_lines
             .iter()
@@ -50,10 +49,11 @@ fn draw_shows_patch_select_overlay_title_and_items() {
     app.patch_filtered = app.patch_all.iter().map(|(orig, _)| orig.clone()).collect();
     app.patch_favorite_items = vec!["Pads/Pad 1.fxp".to_string()];
 
-    let normalized_lines: Vec<String> = render_lines(&app, 100, 30)
+    let normalized_lines: Vec<String> = render_lines(&app, 160, 30)
         .into_iter()
         .map(|line| line.to_lowercase())
         .collect();
+    let normalized_screen = normalized_lines.join("\n").replace([' ', '\n'], "");
 
     assert!(
         normalized_lines
@@ -73,6 +73,16 @@ fn draw_shows_patch_select_overlay_title_and_items() {
         normalized_lines
             .iter()
             .any(|line| line.contains("favorite patches")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_screen.contains("h/l・←/→:ペイン移動してpreview"),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_screen.contains("j/k・↑/↓:移動してpreview"),
         "lines: {:?}",
         normalized_lines
     );
@@ -105,7 +115,7 @@ fn draw_patch_select_shows_filter_input_keybinds_when_filter_active() {
     assert!(
         normalized_lines
             .iter()
-            .any(|line| line.contains("Enter:検索確定ESC:検索中断Space:AND条件a-z:検索入力")),
+            .any(|line| line.contains("Enter:検索確定ESC:検索中断Space:AND条件文字:検索入力")),
         "lines: {:?}",
         normalized_lines
     );

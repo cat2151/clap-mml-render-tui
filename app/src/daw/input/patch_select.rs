@@ -281,7 +281,7 @@ impl DawApp {
             KeyCode::Up if !self.patch_select_filter_active => {
                 self.move_patch_select_selection_by(-1)
             }
-            KeyCode::Char('/') => {
+            KeyCode::Char('/') if !self.patch_select_filter_active => {
                 self.patch_select_focus = DawPatchSelectPane::Patches;
                 self.patch_query_before_input = self.patch_query.clone();
                 self.patch_select_filter_active = true;
