@@ -14,11 +14,9 @@ mod patch_select;
 use super::{AbRepeatState, DawApp, FIRST_PLAYABLE_TRACK};
 
 #[cfg(test)]
-use {
-    normal::{
-        normal_playback_shortcut, preview_target_tracks, resolve_playback_start_measure_index,
-        NormalPlaybackShortcut,
-    },
+use normal::{
+    normal_playback_shortcut, preview_target_tracks, resolve_playback_start_measure_index,
+    NormalPlaybackShortcut,
 };
 
 const PATCH_JSON_KEY: &str = "Surge XT patch";
