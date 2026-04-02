@@ -13,8 +13,8 @@ pub struct Config {
     pub buffer_size: usize,
     /// オプション: .fxp パッチファイルのパス。指定しない場合は Init Saw のまま。
     pub patch_path: Option<String>,
-    /// ファクトリパッチのルートディレクトリ
-    pub patches_dir: Option<String>,
+    /// パッチ検索対象ディレクトリ一覧
+    pub patches_dirs: Option<Vec<String>>,
     /// DAW モードのトラック数（track 0 = ヘッダ/テンポ、track 1.. = 演奏トラック）。
     /// デフォルト: 9 (1 + 8)
     #[serde(default = "default_daw_tracks")]
@@ -55,33 +55,45 @@ fn default_plugin_path() -> &'static str {
     ""
 }
 
-/// OS ごとのデフォルト patches_dir を返す。
-/// 既知 OS でない場合や取得できない場合は空文字を返す（ユーザーに設定を促す）。
+/// OS ごとのデフォルト patches_dirs を返す。
+/// 既知 OS でない場合や取得できない場合は空配列を返す（ユーザーに設定を促す）。
 #[cfg(target_os = "windows")]
-fn default_patches_dir() -> String {
-    r"C:\ProgramData\Surge XT\patches_factory".to_string()
+fn default_patches_dirs() -> Vec<String> {
+    vec![
+        r"C:\ProgramData\Surge XT\patches_factory".to_string(),
+        r"C:\ProgramData\Surge XT\patches_3rdparty".to_string(),
+    ]
 }
 
 #[cfg(target_os = "macos")]
-fn default_patches_dir() -> String {
-    "/Library/Application Support/Surge XT/patches_factory".to_string()
+fn default_patches_dirs() -> Vec<String> {
+    vec![
+        "/Library/Application Support/Surge XT/patches_factory".to_string(),
+        "/Library/Application Support/Surge XT/patches_3rdparty".to_string(),
+    ]
 }
 
 #[cfg(target_os = "linux")]
-fn default_patches_dir() -> String {
+fn default_patches_dirs() -> Vec<String> {
     dirs::data_dir()
         .map(|d| {
-            d.join("surge-data")
-                .join("patches_factory")
-                .to_string_lossy()
-                .into_owned()
+            vec![
+                d.join("surge-data")
+                    .join("patches_factory")
+                    .to_string_lossy()
+                    .into_owned(),
+                d.join("surge-data")
+                    .join("patches_3rdparty")
+                    .to_string_lossy()
+                    .into_owned(),
+            ]
         })
         .unwrap_or_default()
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-fn default_patches_dir() -> String {
-    String::new()
+fn default_patches_dirs() -> Vec<String> {
+    Vec::new()
 }
 
 /// OS に応じたデフォルトの config.toml 内容を生成する。
@@ -94,13 +106,20 @@ fn default_config_content() -> String {
     } else {
         format!("plugin_path = '{plugin_path}'", plugin_path = plugin_path)
     };
-    let patches_dir = default_patches_dir();
-    let patches_dir_line = if patches_dir.is_empty() {
+    let patches_dirs = default_patches_dirs();
+    let patches_dirs_line = if patches_dirs.is_empty() {
         // 未知の OS またはホームディレクトリが取得できない場合
-        "# patches_dir = \"\"  # ← ファクトリパッチのルートディレクトリを設定してください"
+        "# patches_dirs = []  # ← Surge XT の patches_factory / patches_3rdparty を設定してください"
             .to_string()
     } else {
-        format!("patches_dir = '{patches_dir}'", patches_dir = patches_dir)
+        format!(
+            "patches_dirs = [{}]",
+            patches_dirs
+                .iter()
+                .map(|dir| format!(r#"'{}'"#, dir))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
     };
     format!(
         r#"# clap-mml-render-tui config
@@ -119,11 +138,11 @@ output_wav  = "output.wav"
 sample_rate = 48000
 buffer_size = 512
 
-# 【省略可】ファクトリパッチのルートディレクトリ（TUI の音色選択・ランダム音色で使う）
-# 例 (Windows): patches_dir = 'C:\ProgramData\Surge XT\patches_factory'
-# 例 (Linux):   patches_dir = '/home/user/.local/share/surge-data/patches_factory'
-# 例 (macOS):   patches_dir = '/Library/Application Support/Surge XT/patches_factory'
-{patches_dir_line}
+# 【省略可】Surge XT パッチの検索対象ディレクトリ一覧（TUI / DAW の音色選択・ランダム音色で使う）
+# 例 (Windows): patches_dirs = ['C:\ProgramData\Surge XT\patches_factory', 'C:\ProgramData\Surge XT\patches_3rdparty']
+# 例 (Linux):   patches_dirs = ['/home/user/.local/share/surge-data/patches_factory', '/home/user/.local/share/surge-data/patches_3rdparty']
+# 例 (macOS):   patches_dirs = ['/Library/Application Support/Surge XT/patches_factory', '/Library/Application Support/Surge XT/patches_3rdparty']
+{patches_dirs_line}
 
 # 【省略可】固定で使う音色
 # patch_path = ""
@@ -137,7 +156,7 @@ daw_tracks   = 9
 daw_measures = 8
 "#,
         plugin_path_line = plugin_path_line,
-        patches_dir_line = patches_dir_line
+        patches_dirs_line = patches_dirs_line
     )
 }
 
@@ -229,7 +248,7 @@ impl From<&Config> for CoreConfig {
             sample_rate: value.sample_rate,
             buffer_size: value.buffer_size,
             patch_path: value.patch_path.clone(),
-            patches_dir: value.patches_dir.clone(),
+            patches_dir: crate::patches::effective_patch_base_dir(value),
             random_patch: false,
         }
     }

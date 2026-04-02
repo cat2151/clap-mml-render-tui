@@ -10,7 +10,7 @@ fn handle_patch_select_enter_overwrites_current_track_init_patch() {
 
     let (mut app, _cache_rx) = build_test_app();
     app.cfg = Arc::new(Config {
-        patches_dir: Some(tmp.path().to_string_lossy().into_owned()),
+        patches_dirs: Some(vec![tmp.path().to_string_lossy().into_owned()]),
         ..(*app.cfg).clone()
     });
     app.cursor_track = 1;

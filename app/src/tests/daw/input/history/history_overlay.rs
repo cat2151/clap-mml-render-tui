@@ -324,7 +324,7 @@ fn handle_history_overlay_n_p_t_switch_to_corresponding_overlays() {
 
     let (mut app, _cache_rx) = build_test_app();
     app.cfg = Arc::new(Config {
-        patches_dir: Some(tmp.path().to_string_lossy().into_owned()),
+        patches_dirs: Some(vec![tmp.path().to_string_lossy().into_owned()]),
         ..(*app.cfg).clone()
     });
     app.cursor_track = 1;

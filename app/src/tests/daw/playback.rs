@@ -46,7 +46,7 @@ fn build_test_app() -> DawApp {
             sample_rate: 44_100.0,
             buffer_size: 512,
             patch_path: None,
-            patches_dir: None,
+            patches_dirs: None,
             daw_tracks: tracks,
             daw_measures: measures,
         }),

@@ -56,27 +56,14 @@ fn spawn_patch_loader(cfg: &Config) -> Arc<Mutex<PatchLoadState>> {
     // 起動時の同期スキャンによる遅延を避けるため。
     let patch_load_state = Arc::new(Mutex::new(PatchLoadState::Loading));
     let state_bg = Arc::clone(&patch_load_state);
-    let patches_dir = cfg.patches_dir.clone();
-    std::thread::spawn(move || match patches_dir {
-        None => {
-            *state_bg.lock().unwrap() = PatchLoadState::Ready(Vec::new());
+    let cfg = cfg.clone();
+    std::thread::spawn(move || match crate::patches::collect_patch_pairs(&cfg) {
+        Ok(pairs) => {
+            *state_bg.lock().unwrap() = PatchLoadState::Ready(pairs);
         }
-        Some(dir) => match cmrt_core::collect_patches(&dir) {
-            Ok(paths) => {
-                let pairs: Vec<(String, String)> = paths
-                    .into_iter()
-                    .map(|p| {
-                        let rel = cmrt_core::to_relative(&dir, &p);
-                        let lower = rel.to_lowercase();
-                        (rel, lower)
-                    })
-                    .collect();
-                *state_bg.lock().unwrap() = PatchLoadState::Ready(pairs);
-            }
-            Err(e) => {
-                *state_bg.lock().unwrap() = PatchLoadState::Err(e.to_string());
-            }
-        },
+        Err(e) => {
+            *state_bg.lock().unwrap() = PatchLoadState::Err(e.to_string());
+        }
     });
     patch_load_state
 }

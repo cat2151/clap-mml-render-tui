@@ -77,7 +77,7 @@ mod ui;
 mod wav_io;
 
 use clack_host::prelude::PluginEntry;
-use cmrt_core::{collect_patches, ensure_daw_dir, mml_render_for_cache, to_relative, write_wav};
+use cmrt_core::{ensure_daw_dir, mml_render_for_cache, write_wav};
 use ratatui::Frame;
 use tui_textarea::TextArea;
 
@@ -239,8 +239,7 @@ impl DawApp {
     // ─── ランダム音色 ─────────────────────────────────────────
 
     fn pick_random_patch_name(&self) -> Option<String> {
-        let dir = self.cfg.patches_dir.as_deref()?;
-        let patches = collect_patches(dir).ok()?;
+        let patches = crate::patches::collect_patch_pairs(&self.cfg).ok()?;
         if patches.is_empty() {
             return None;
         }
@@ -250,7 +249,7 @@ impl DawApp {
             .map(|d| d.subsec_nanos())
             .unwrap_or(0) as usize;
         let idx = ns % patches.len();
-        Some(to_relative(dir, &patches[idx]))
+        Some(patches[idx].0.clone())
     }
 
     // ─── 描画 ─────────────────────────────────────────────────
