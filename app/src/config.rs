@@ -158,6 +158,9 @@ daw_measures = 8
     )
 }
 
+/// `patches_dirs = [...]` の 1 行を安全な TOML 文字列として生成する。
+///
+/// パスに `'` や `\` が含まれても壊れないよう、手組みせず TOML シリアライズに任せる。
 fn serialize_patches_dirs_line(patches_dirs: &[String]) -> String {
     toml::to_string(&PatchesDirsToml { patches_dirs })
         .unwrap_or_else(|_| "patches_dirs = []".to_string())

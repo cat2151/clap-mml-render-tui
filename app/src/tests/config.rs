@@ -98,7 +98,7 @@ fn default_config_content_uses_patches_dirs_key() {
 }
 
 #[test]
-fn default_config_content_windows_example_uses_single_backslashes_for_patches_dirs() {
+fn default_config_content_preserves_windows_path_format() {
     let content = default_config_content();
 
     assert!(
