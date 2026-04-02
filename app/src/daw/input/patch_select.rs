@@ -1,7 +1,5 @@
 use crossterm::event::KeyCode;
 
-use cmrt_core::{collect_patches, to_relative};
-
 use super::super::{
     mml::build_cell_mml_from_data, DawApp, DawMode, DawPatchSelectPane, DawPlayState,
     FIRST_PLAYABLE_TRACK,
@@ -169,27 +167,20 @@ impl DawApp {
             return;
         }
 
-        let Some(dir) = self.cfg.patches_dir.as_deref() else {
-            self.append_log_line("patches_dir が設定されていません".to_string());
+        if !crate::patches::has_configured_patch_dirs(&self.cfg) {
+            self.append_log_line("patches_dirs が設定されていません".to_string());
             return;
-        };
-        let Ok(patches) = collect_patches(dir) else {
+        }
+        let Ok(patches) = crate::patches::collect_patch_pairs(&self.cfg) else {
             self.append_log_line("パッチの読み込みに失敗しました".to_string());
             return;
         };
         if patches.is_empty() {
-            self.append_log_line("patches_dir にパッチが見つかりません".to_string());
+            self.append_log_line("patches_dirs にパッチが見つかりません".to_string());
             return;
         }
 
-        self.patch_all = patches
-            .iter()
-            .map(|patch| {
-                let relative = to_relative(dir, patch);
-                let lower = relative.to_lowercase();
-                (relative, lower)
-            })
-            .collect();
+        self.patch_all = patches;
         self.patch_query.clear();
         self.patch_query_before_input.clear();
         self.patch_filtered = self

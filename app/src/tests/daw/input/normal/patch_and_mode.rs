@@ -13,7 +13,7 @@ fn handle_normal_g_sets_random_patch_and_generated_phrase_then_previews() {
 
         let (mut app, _cache_rx) = build_test_app();
         app.cfg = Arc::new(Config {
-            patches_dir: Some(tmp.to_string_lossy().into_owned()),
+            patches_dirs: Some(vec![tmp.to_string_lossy().into_owned()]),
             ..(*app.cfg).clone()
         });
         app.cursor_track = 1;
@@ -100,7 +100,7 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
         app.cursor_track = 1;
         app.cursor_measure = 0;
         app.cfg = Arc::new(Config {
-            patches_dir: Some(tmp.to_string_lossy().into_owned()),
+            patches_dirs: Some(vec![tmp.to_string_lossy().into_owned()]),
             ..(*app.cfg).clone()
         });
         app.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
@@ -198,7 +198,7 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
         app.cursor_track = 1;
         app.cursor_measure = 0;
         app.cfg = Arc::new(Config {
-            patches_dir: Some(tmp.to_string_lossy().into_owned()),
+            patches_dirs: Some(vec![tmp.to_string_lossy().into_owned()]),
             ..(*app.cfg).clone()
         });
         app.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
@@ -263,7 +263,7 @@ fn handle_normal_r_ignores_non_playable_track_and_keeps_header_unchanged() {
         app.cursor_track = 0;
         app.cursor_measure = 0;
         app.cfg = Arc::new(Config {
-            patches_dir: Some(tmp.to_string_lossy().into_owned()),
+            patches_dirs: Some(vec![tmp.to_string_lossy().into_owned()]),
             ..(*app.cfg).clone()
         });
         app.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();

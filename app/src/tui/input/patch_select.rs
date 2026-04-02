@@ -82,15 +82,15 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn pick_random_patch_name(&self) -> Result<String, String> {
-        if self.cfg.patches_dir.is_none() {
-            return Err("patches_dir が設定されていません".to_string());
+        if !crate::patches::has_configured_patch_dirs(&self.cfg) {
+            return Err("patches_dirs が設定されていません".to_string());
         }
         let state = self.patch_load_state.lock().unwrap();
         match &*state {
             PatchLoadState::Loading => Err("パッチを読み込み中です...".to_string()),
             PatchLoadState::Err(e) => Err(format!("パッチの読み込みに失敗: {}", e)),
             PatchLoadState::Ready(pairs) if pairs.is_empty() => {
-                Err("patches_dir にパッチが見つかりません".to_string())
+                Err("patches_dirs にパッチが見つかりません".to_string())
             }
             PatchLoadState::Ready(pairs) => {
                 let ns = SystemTime::now()
@@ -171,9 +171,9 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(in crate::tui) fn open_patch_select_overlay(&mut self, initial_patch_name: Option<&str>) {
-        if self.cfg.patches_dir.is_none() {
+        if !crate::patches::has_configured_patch_dirs(&self.cfg) {
             *self.play_state.lock().unwrap() =
-                PlayState::Err("patches_dir が設定されていません".to_string());
+                PlayState::Err("patches_dirs が設定されていません".to_string());
             return;
         }
 
@@ -183,7 +183,7 @@ impl<'a> TuiApp<'a> {
                 PatchLoadState::Loading => Err("パッチを読み込み中です...".to_string()),
                 PatchLoadState::Err(e) => Err(format!("パッチの読み込みに失敗: {}", e)),
                 PatchLoadState::Ready(p) if p.is_empty() => {
-                    Err("patches_dir にパッチが見つかりません".to_string())
+                    Err("patches_dirs にパッチが見つかりません".to_string())
                 }
                 PatchLoadState::Ready(_) => Ok(()),
             }

@@ -53,7 +53,7 @@ fn handle_normal_g_shows_error_when_patches_are_unavailable() {
     assert!(matches!(result, NormalAction::Continue));
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
-        PlayState::Err(msg) if msg == "patches_dir にパッチが見つかりません"
+        PlayState::Err(msg) if msg == "patches_dirs にパッチが見つかりません"
     ));
 }
 
@@ -180,16 +180,16 @@ fn handle_normal_r_inserts_c_when_all_semicolon_branches_are_empty() {
 }
 
 #[test]
-fn handle_normal_r_shows_error_when_patches_dir_is_missing() {
+fn handle_normal_r_shows_error_when_patches_dirs_is_missing() {
     let mut cfg = test_config();
-    cfg.patches_dir = None;
+    cfg.patches_dirs = None;
     let mut app = TuiApp::new_for_test(cfg);
 
     app.handle_normal(KeyCode::Char('r'));
 
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
-        PlayState::Err(msg) if msg == "patches_dir が設定されていません"
+        PlayState::Err(msg) if msg == "patches_dirs が設定されていません"
     ));
 }
 
@@ -228,7 +228,7 @@ fn handle_normal_r_shows_error_when_patch_list_is_empty() {
 
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
-        PlayState::Err(msg) if msg == "patches_dir にパッチが見つかりません"
+        PlayState::Err(msg) if msg == "patches_dirs にパッチが見つかりません"
     ));
 }
 
