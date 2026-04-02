@@ -58,6 +58,9 @@ fn shared_patch_root_dir(dirs: &[String]) -> Option<String> {
             }
         }
     }
+    if common.as_os_str().is_empty() {
+        return None;
+    }
     Some(common.to_string_lossy().into_owned())
 }
 
@@ -85,6 +88,18 @@ mod tests {
         let base = shared_patch_root_dir(&dirs);
 
         assert_eq!(base.as_deref(), Some("/tmp/surge-data"));
+    }
+
+    #[test]
+    fn shared_patch_root_dir_returns_none_when_only_empty_root_matches() {
+        let dirs = vec![
+            "patches_factory".to_string(),
+            "patches_3rdparty".to_string(),
+        ];
+
+        let base = shared_patch_root_dir(&dirs);
+
+        assert_eq!(base, None);
     }
 
     #[test]

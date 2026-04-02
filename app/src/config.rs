@@ -1,5 +1,5 @@
 use cmrt_core::CoreConfig;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -31,6 +31,11 @@ fn default_daw_tracks() -> usize {
 
 fn default_daw_measures() -> usize {
     8
+}
+
+#[derive(Serialize)]
+struct PatchesDirsToml<'a> {
+    patches_dirs: &'a [String],
 }
 
 /// OS ごとのデフォルト plugin_path を返す。
@@ -112,14 +117,7 @@ fn default_config_content() -> String {
         "# patches_dirs = []  # ← Surge XT の patches_factory / patches_3rdparty を設定してください"
             .to_string()
     } else {
-        format!(
-            "patches_dirs = [{}]",
-            patches_dirs
-                .iter()
-                .map(|dir| format!(r#"'{}'"#, dir))
-                .collect::<Vec<_>>()
-                .join(", ")
-        )
+        serialize_patches_dirs_line(&patches_dirs)
     };
     format!(
         r#"# clap-mml-render-tui config
@@ -158,6 +156,13 @@ daw_measures = 8
         plugin_path_line = plugin_path_line,
         patches_dirs_line = patches_dirs_line
     )
+}
+
+fn serialize_patches_dirs_line(patches_dirs: &[String]) -> String {
+    toml::to_string(&PatchesDirsToml { patches_dirs })
+        .unwrap_or_else(|_| "patches_dirs = []".to_string())
+        .trim()
+        .to_string()
 }
 
 /// OS 標準の設定ディレクトリ内の config.toml パスを返す。

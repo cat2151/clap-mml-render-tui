@@ -98,6 +98,48 @@ fn default_config_content_uses_patches_dirs_key() {
 }
 
 #[test]
+fn default_config_content_windows_example_uses_single_backslashes_for_patches_dirs() {
+    let content = default_config_content();
+
+    assert!(
+        content.contains(
+            r"# 例 (Windows): patches_dirs = ['C:\ProgramData\Surge XT\patches_factory', 'C:\ProgramData\Surge XT\patches_3rdparty']"
+        ),
+        "Windows の例示パスは単一バックスラッシュ表記を維持するべき: {}",
+        content
+    );
+}
+
+#[test]
+fn serialize_patches_dirs_line_escapes_single_quotes() {
+    let line = serialize_patches_dirs_line(&[
+        "/home/o'connor/.local/share/surge-data/patches_factory".to_string(),
+        "/home/o'connor/.local/share/surge-data/patches_3rdparty".to_string(),
+    ]);
+
+    let toml_str = format!(
+        r#"
+plugin_path = "/usr/lib/clap/Surge XT.clap"
+input_midi  = "input.mid"
+output_midi = "output.mid"
+output_wav  = "output.wav"
+sample_rate = 44100
+buffer_size = 512
+{line}
+"#
+    );
+
+    let cfg: Config = toml::from_str(&toml_str).unwrap();
+    assert_eq!(
+        cfg.patches_dirs,
+        Some(vec![
+            "/home/o'connor/.local/share/surge-data/patches_factory".to_string(),
+            "/home/o'connor/.local/share/surge-data/patches_3rdparty".to_string()
+        ])
+    );
+}
+
+#[test]
 fn config_parse_accepts_legacy_random_patch_field() {
     let toml_str = r#"
 plugin_path = "/usr/lib/clap/Surge XT.clap"
