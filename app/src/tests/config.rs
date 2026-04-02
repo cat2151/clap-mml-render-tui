@@ -98,6 +98,17 @@ fn default_config_content_uses_patches_dirs_key() {
 }
 
 #[test]
+fn default_config_content_does_not_include_obsolete_patch_path_comment() {
+    let content = default_config_content();
+
+    assert!(
+        !content.contains("# 【省略可】固定で使う音色"),
+        "default config に実態とずれた patch_path コメントを残すべきではない: {}",
+        content
+    );
+}
+
+#[test]
 fn default_config_content_preserves_windows_path_format() {
     let content = default_config_content();
 
