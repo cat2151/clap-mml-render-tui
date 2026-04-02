@@ -2,14 +2,14 @@
 
 ### Usage
 
-- For playing around with MML sounds
-- For casual installation. Only Rust is required.
+- For playing sounds using MML.
+- For casual installation. Requires only Rust.
 
-### Tech Stack
+### Technology Stack
 - Plugin host library
   - https://github.com/prokopyl/clack
 
-### Setup
+### Prerequisites
 
 Install [Surge XT](https://surge-synthesizer.github.io/).
 
@@ -23,13 +23,13 @@ winget install "Surge XT"
 cargo install --force --git https://github.com/cat2151/clap-mml-render-tui clap-mml-render-tui
 ```
 
-### Running
+### Run
 
 ```
 cmrt
 ```
 
-You can enter MML and enjoy playing in the TUI screen.
+You can enter MML in the TUI screen and play.
 
 ### Update Command
 
@@ -44,13 +44,14 @@ cmrt --server
 ```
 
 - Integrates with the bluesky-text-to-audio Chrome extension.
-  - This allows playing MML found in Bluesky posts with Surge XT.
+  - If an MML is present in a Bluesky post, it can be played using Surge XT.
 
 # Breaking Changes
-- Expect frequent, daily breaking changes.
+- Frequent breaking changes will occur daily.
 
 # Future Plans
-- Disable automatic updates via TOML. In this case, after quitting, the message "An update is available. The update command is ~" will be displayed along with the command. Further automation has been verified to be too complex with more disadvantages than advantages, and is therefore out of scope.
+- Disable automatic updates via `toml`. When automatic updates are off, after quitting, the message "Update available. Update command: ~" will be displayed. Further automation has been determined to be too complex with more disadvantages than advantages, and is thus out of scope.
+- Fetching Surge XT patches via API is the correct approach and will be implemented (currently, it searches for paths specified in `toml`, which is inefficient. Implementation is currently deprioritized in favor of other features).
 
 # Out of Scope
-- Effects will likely require manual editing, so we'll accept that and keep them out of scope for now, deferring them to a much later stage.
+- Effects are likely to require mandatory editing, so they are currently considered out of scope and heavily deprioritized.
