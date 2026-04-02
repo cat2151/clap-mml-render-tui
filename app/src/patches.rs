@@ -17,13 +17,13 @@ pub(crate) fn has_configured_patch_dirs(cfg: &Config) -> bool {
     !configured_patch_dirs(cfg).is_empty()
 }
 
-pub(crate) fn effective_patch_base_dir(cfg: &Config) -> Option<String> {
-    common_patch_base_dir(&configured_patch_dirs(cfg))
+pub(crate) fn core_config_patch_root_dir(cfg: &Config) -> Option<String> {
+    shared_patch_root_dir(&configured_patch_dirs(cfg))
 }
 
 pub(crate) fn collect_patch_pairs(cfg: &Config) -> Result<Vec<(String, String)>> {
     let dirs = configured_patch_dirs(cfg);
-    let Some(base_dir) = common_patch_base_dir(&dirs) else {
+    let Some(base_dir) = shared_patch_root_dir(&dirs) else {
         return collect_patch_pairs_with_optional_base(&dirs, None);
     };
     collect_patch_pairs_with_optional_base(&dirs, Some(base_dir.as_str()))
@@ -48,10 +48,10 @@ fn collect_patch_pairs_with_optional_base(
     Ok(pairs)
 }
 
-fn common_patch_base_dir(dirs: &[String]) -> Option<String> {
-    let mut dirs = dirs.iter().map(PathBuf::from);
-    let mut common = dirs.next()?;
-    for dir in dirs {
+fn shared_patch_root_dir(dirs: &[String]) -> Option<String> {
+    let mut dir_paths = dirs.iter().map(PathBuf::from);
+    let mut common = dir_paths.next()?;
+    for dir in dir_paths {
         while !Path::new(&dir).starts_with(&common) {
             if !common.pop() {
                 return None;
@@ -67,22 +67,22 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
-    fn common_patch_base_dir_returns_single_dir_as_is() {
+    fn shared_patch_root_dir_returns_single_dir_as_is() {
         let dirs = vec!["/tmp/patches_factory".to_string()];
 
-        let base = common_patch_base_dir(&dirs);
+        let base = shared_patch_root_dir(&dirs);
 
         assert_eq!(base.as_deref(), Some("/tmp/patches_factory"));
     }
 
     #[test]
-    fn common_patch_base_dir_returns_common_parent_for_multiple_dirs() {
+    fn shared_patch_root_dir_returns_common_parent_for_multiple_dirs() {
         let dirs = vec![
             "/tmp/surge-data/patches_factory".to_string(),
             "/tmp/surge-data/patches_3rdparty".to_string(),
         ];
 
-        let base = common_patch_base_dir(&dirs);
+        let base = shared_patch_root_dir(&dirs);
 
         assert_eq!(base.as_deref(), Some("/tmp/surge-data"));
     }

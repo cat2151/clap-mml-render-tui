@@ -248,7 +248,7 @@ impl From<&Config> for CoreConfig {
             sample_rate: value.sample_rate,
             buffer_size: value.buffer_size,
             patch_path: value.patch_path.clone(),
-            patches_dir: crate::patches::effective_patch_base_dir(value),
+            patches_dir: crate::patches::core_config_patch_root_dir(value),
             random_patch: false,
         }
     }
