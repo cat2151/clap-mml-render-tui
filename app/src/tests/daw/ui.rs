@@ -7,6 +7,7 @@ pub(super) use ratatui::{backend::TestBackend, buffer::Buffer, style::Color, Ter
 pub(super) use tui_textarea::TextArea;
 
 pub(super) use crate::config::Config;
+pub(super) use crate::test_utils::help_overlay_bounds;
 
 pub(super) use super::{
     super::{

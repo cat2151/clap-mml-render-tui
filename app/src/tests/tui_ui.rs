@@ -5,6 +5,7 @@ use crate::ui_theme::{
     MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_PURPLE,
     MONOKAI_YELLOW,
 };
+pub(super) use crate::test_utils::{find_text_ignoring_spaces, help_overlay_bounds};
 use crate::{config::Config, history::PatchPhraseState, tui::TuiApp};
 
 use super::{draw, status_color, Mode, PlayState};
@@ -57,28 +58,6 @@ fn find_text(buffer: &Buffer, text: &str) -> (u16, u16) {
         }
     }
     panic!("text not found in buffer: {text}");
-}
-
-fn find_text_ignoring_spaces(buffer: &Buffer, text: &str) -> (u16, u16) {
-    for y in 0..buffer.area.height {
-        let mut normalized = String::new();
-        let mut x_positions = Vec::new();
-        for x in 0..buffer.area.width {
-            let symbol = buffer.cell((x, y)).unwrap().symbol();
-            if symbol == " " || symbol.is_empty() {
-                continue;
-            }
-            for ch in symbol.chars() {
-                normalized.push(ch);
-                x_positions.push(x);
-            }
-        }
-        if let Some(byte_index) = normalized.find(text) {
-            let char_index = normalized[..byte_index].chars().count();
-            return (x_positions[char_index], y);
-        }
-    }
-    panic!("text not found in buffer when ignoring spaces: {text}");
 }
 
 #[path = "tui_ui/colors_and_footer.rs"]

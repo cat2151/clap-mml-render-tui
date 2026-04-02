@@ -1,31 +1,5 @@
 use super::*;
 
-fn help_overlay_bounds(buffer: &Buffer) -> (u16, u16, u16, u16) {
-    let (title_x, top) = find_text_ignoring_spaces(buffer, "ヘルプ(Keybinds)");
-
-    let mut left = title_x;
-    while left > 0 && buffer.cell((left, top)).unwrap().symbol() != "┌" {
-        left -= 1;
-    }
-
-    let mut right = title_x;
-    while right + 1 < buffer.area.width && buffer.cell((right, top)).unwrap().symbol() != "┐" {
-        right += 1;
-    }
-
-    let mut bottom = top;
-    while bottom + 1 < buffer.area.height {
-        if buffer.cell((left, bottom)).unwrap().symbol() == "└"
-            && buffer.cell((right, bottom)).unwrap().symbol() == "┘"
-        {
-            break;
-        }
-        bottom += 1;
-    }
-
-    (left, top, right, bottom)
-}
-
 #[test]
 fn patch_phrase_screen_shows_search_prompt() {
     let mut app = TuiApp::new_for_test(test_config());
