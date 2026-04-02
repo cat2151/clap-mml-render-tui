@@ -134,7 +134,10 @@ pub(crate) fn find_text_ignoring_spaces(buffer: &Buffer, text: &str) -> (u16, u1
         let mut normalized = String::new();
         let mut x_positions = Vec::new();
         for x in 0..buffer.area.width {
-            let symbol = buffer.cell((x, y)).unwrap().symbol();
+            let symbol = buffer
+                .cell((x, y))
+                .unwrap_or_else(|| panic!("failed to access buffer cell at ({x}, {y})"))
+                .symbol();
             if symbol == " " || symbol.is_empty() {
                 continue;
             }
@@ -155,19 +158,39 @@ pub(crate) fn help_overlay_bounds(buffer: &Buffer) -> (u16, u16, u16, u16) {
     let (title_x, top) = find_text_ignoring_spaces(buffer, "ヘルプ(Keybinds)");
 
     let mut left = title_x;
-    while left > 0 && buffer.cell((left, top)).unwrap().symbol() != "┌" {
+    while left > 0
+        && buffer
+            .cell((left, top))
+            .unwrap_or_else(|| panic!("failed to access buffer cell at ({left}, {top})"))
+            .symbol()
+            != "┌"
+    {
         left -= 1;
     }
 
     let mut right = title_x;
-    while right + 1 < buffer.area.width && buffer.cell((right, top)).unwrap().symbol() != "┐" {
+    while right + 1 < buffer.area.width
+        && buffer
+            .cell((right, top))
+            .unwrap_or_else(|| panic!("failed to access buffer cell at ({right}, {top})"))
+            .symbol()
+            != "┐"
+    {
         right += 1;
     }
 
     let mut bottom = top;
     while bottom + 1 < buffer.area.height {
-        if buffer.cell((left, bottom)).unwrap().symbol() == "└"
-            && buffer.cell((right, bottom)).unwrap().symbol() == "┘"
+        if buffer
+            .cell((left, bottom))
+            .unwrap_or_else(|| panic!("failed to access buffer cell at ({left}, {bottom})"))
+            .symbol()
+            == "└"
+            && buffer
+                .cell((right, bottom))
+                .unwrap_or_else(|| panic!("failed to access buffer cell at ({right}, {bottom})"))
+                .symbol()
+                == "┘"
         {
             break;
         }
