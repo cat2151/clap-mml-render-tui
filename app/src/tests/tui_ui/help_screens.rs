@@ -1,5 +1,31 @@
 use super::*;
 
+fn help_overlay_bounds(buffer: &Buffer) -> (u16, u16, u16, u16) {
+    let (title_x, top) = find_text_ignoring_spaces(buffer, "ヘルプ(Keybinds)");
+
+    let mut left = title_x;
+    while left > 0 && buffer.cell((left, top)).unwrap().symbol() != "┌" {
+        left -= 1;
+    }
+
+    let mut right = title_x;
+    while right + 1 < buffer.area.width && buffer.cell((right, top)).unwrap().symbol() != "┐" {
+        right += 1;
+    }
+
+    let mut bottom = top;
+    while bottom + 1 < buffer.area.height {
+        if buffer.cell((left, bottom)).unwrap().symbol() == "└"
+            && buffer.cell((right, bottom)).unwrap().symbol() == "┘"
+        {
+            break;
+        }
+        bottom += 1;
+    }
+
+    (left, top, right, bottom)
+}
+
 #[test]
 fn patch_phrase_screen_shows_search_prompt() {
     let mut app = TuiApp::new_for_test(test_config());
@@ -163,4 +189,57 @@ fn patch_phrase_help_screen_shows_patch_phrase_shortcuts() {
     assert!(normalized_screen.contains("Space:現在行を再生"));
     assert!(normalized_screen.contains("f:現在行をお気に入りに追加"));
     assert!(!normalized_screen.contains("Ctrl+C:コピー"));
+}
+
+#[test]
+fn help_overlay_size_follows_tui_help_content() {
+    let mut normal = TuiApp::new_for_test(test_config());
+    normal.mode = Mode::Help;
+    normal.help_origin = Mode::Normal;
+
+    let mut patch_select = TuiApp::new_for_test(test_config());
+    patch_select.lines = vec!["abc".to_string()];
+    patch_select.patch_all = vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
+    patch_select.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
+    patch_select.patch_list_state.select(Some(0));
+    patch_select.mode = Mode::Help;
+    patch_select.help_origin = Mode::PatchSelect;
+
+    let normal_buffer = render_buffer(&mut normal, 200, 60);
+    let patch_select_buffer = render_buffer(&mut patch_select, 200, 60);
+    let (normal_left, normal_top, normal_right, normal_bottom) =
+        help_overlay_bounds(&normal_buffer);
+    let (patch_left, patch_top, patch_right, patch_bottom) =
+        help_overlay_bounds(&patch_select_buffer);
+
+    let normal_width = normal_right - normal_left + 1;
+    let normal_height = normal_bottom - normal_top + 1;
+    let patch_width = patch_right - patch_left + 1;
+    let patch_height = patch_bottom - patch_top + 1;
+
+    assert!(
+        patch_left > 0 && patch_top > 0,
+        "bounds: {:?}",
+        (patch_left, patch_top, patch_right, patch_bottom)
+    );
+    assert!(
+        patch_right + 1 < patch_select_buffer.area.width,
+        "bounds: {:?}",
+        (patch_left, patch_top, patch_right, patch_bottom)
+    );
+    assert!(
+        patch_bottom + 1 < patch_select_buffer.area.height,
+        "bounds: {:?}",
+        (patch_left, patch_top, patch_right, patch_bottom)
+    );
+    assert!(patch_width < 100, "patch={patch_width}");
+    assert!(patch_height < 20, "patch={patch_height}");
+    assert_ne!(
+        normal_width, patch_width,
+        "normal={normal_width} patch={patch_width}"
+    );
+    assert!(
+        normal_height > patch_height,
+        "normal={normal_height} patch={patch_height}"
+    );
 }

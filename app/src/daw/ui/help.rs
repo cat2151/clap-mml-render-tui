@@ -8,14 +8,9 @@ use ratatui::{
 
 use super::{MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_YELLOW};
 
-const HELP_POPUP_WIDTH_PERCENT: u16 = 82;
-const HELP_POPUP_HEIGHT_PERCENT: u16 = 100;
+const HELP_TITLE: &str = " ヘルプ (Keybinds) ";
 
 pub(super) fn draw_help(f: &mut Frame, area: Rect, mode: super::super::DawMode) {
-    let popup =
-        crate::ui_utils::centered_rect(HELP_POPUP_WIDTH_PERCENT, HELP_POPUP_HEIGHT_PERCENT, area);
-    f.render_widget(Clear, popup);
-
     let help_lines = match mode {
         super::super::DawMode::History => vec![
             Line::from(Span::styled(
@@ -124,13 +119,16 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect, mode: super::super::DawMode) 
         ],
     };
 
+    let popup = crate::ui_utils::centered_text_block_rect(area, HELP_TITLE, &help_lines);
+    f.render_widget(Clear, popup);
+
     f.render_widget(
         Paragraph::new(help_lines)
             .style(Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG))
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" ヘルプ (Keybinds) ")
+                    .title(HELP_TITLE)
                     .border_style(Style::default().fg(MONOKAI_CYAN)),
             ),
         popup,
