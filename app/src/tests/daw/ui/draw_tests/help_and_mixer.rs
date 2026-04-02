@@ -221,7 +221,16 @@ fn history_help_draws_on_top_of_history_overlay() {
         .collect();
 
     assert!(
-        normalized_lines.iter().any(|line| line.contains("│┌p│")),
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("patchhistory-Pads/Pad1.fxp")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("┌ヘルプ(Keybinds)")),
         "lines: {:?}",
         normalized_lines
     );
@@ -280,6 +289,56 @@ fn history_help_draws_on_top_of_history_overlay() {
             .any(|line| line.contains("Enter:(通常)現在track/measに反映")),
         "lines: {:?}",
         normalized_lines
+    );
+}
+
+#[test]
+fn help_overlay_size_follows_daw_help_content() {
+    let mut normal = build_test_app();
+    normal.mode = DawMode::Help;
+
+    let mut patch_select = build_test_app();
+    patch_select.mode = DawMode::Help;
+    patch_select.help_origin = DawMode::PatchSelect;
+    patch_select.patch_all = vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
+    patch_select.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
+
+    let normal_buffer = render_buffer(&normal, 200, 60);
+    let patch_select_buffer = render_buffer(&patch_select, 200, 60);
+    let (normal_left, normal_top, normal_right, normal_bottom) =
+        help_overlay_bounds(&normal_buffer);
+    let (patch_left, patch_top, patch_right, patch_bottom) =
+        help_overlay_bounds(&patch_select_buffer);
+
+    let normal_width = normal_right - normal_left + 1;
+    let normal_height = normal_bottom - normal_top + 1;
+    let patch_width = patch_right - patch_left + 1;
+    let patch_height = patch_bottom - patch_top + 1;
+
+    assert!(
+        patch_left > 0 && patch_top > 0,
+        "bounds: {:?}",
+        (patch_left, patch_top, patch_right, patch_bottom)
+    );
+    assert!(
+        patch_right + 1 < patch_select_buffer.area.width,
+        "bounds: {:?}",
+        (patch_left, patch_top, patch_right, patch_bottom)
+    );
+    assert!(
+        patch_bottom + 1 < patch_select_buffer.area.height,
+        "bounds: {:?}",
+        (patch_left, patch_top, patch_right, patch_bottom)
+    );
+    assert!(patch_width < 120, "patch={patch_width}");
+    assert!(patch_height < 20, "patch={patch_height}");
+    assert_ne!(
+        normal_width, patch_width,
+        "normal={normal_width} patch={patch_width}"
+    );
+    assert!(
+        normal_height > patch_height,
+        "normal={normal_height} patch={patch_height}"
     );
 }
 

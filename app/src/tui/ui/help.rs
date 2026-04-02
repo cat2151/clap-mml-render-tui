@@ -9,10 +9,9 @@ use crate::ui_theme::{MONOKAI_CYAN, MONOKAI_GRAY, MONOKAI_YELLOW};
 
 use super::{base_style, Mode};
 
-pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
-    let area = crate::ui_utils::centered_rect(60, 95, f.area());
-    f.render_widget(Clear, area);
+const HELP_TITLE: &str = " ヘルプ (Keybinds) ";
 
+pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
     let help_lines = match mode {
         Mode::PatchSelect => vec![
             section_title("音色選択モード"),
@@ -91,11 +90,14 @@ pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
         ],
     };
 
+    let area = crate::ui_utils::centered_text_block_rect(f.area(), HELP_TITLE, &help_lines);
+    f.render_widget(Clear, area);
+
     f.render_widget(
         Paragraph::new(help_lines).style(base_style()).block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(" ヘルプ (Keybinds) ")
+                .title(HELP_TITLE)
                 .style(base_style())
                 .border_style(base_style().fg(MONOKAI_CYAN)),
         ),
