@@ -1,6 +1,7 @@
 use super::super::{DEFAULT_TRACK0_MML, MEASURES, TRACKS};
 use super::{
-    apply_save_file_to_data, apply_save_file_to_track_volumes, data_to_save_file, DawSaveFile,
+    apply_save_file_to_data, apply_save_file_to_track_volumes, data_to_save_file,
+    load_saved_grid_size, required_grid_size, DawSaveFile,
 };
 use crate::daw::{
     AbRepeatState, CellCache, DawApp, DawHistoryPane, DawMode, DawPatchSelectPane, DawPlayState,
@@ -35,8 +36,6 @@ fn build_test_app(tracks: usize, measures: usize) -> DawApp {
             sample_rate: 44_100.0,
             buffer_size: 512,
             patches_dirs: None,
-            daw_tracks: tracks,
-            daw_measures: measures,
         }),
         entry_ptr: 0,
         tracks,
@@ -257,6 +256,34 @@ fn daw_save_json_out_of_range_indices_are_ignored_on_load() {
             );
         }
     }
+}
+
+#[test]
+fn required_grid_size_uses_largest_saved_track_and_measure() {
+    let json =
+        r#"{"tracks":[{"track":12,"meas":[{"meas":0,"mml":"t120"},{"meas":25,"mml":"cde"}]}]}"#;
+    let file: DawSaveFile = serde_json::from_str(json).unwrap();
+
+    assert_eq!(required_grid_size(&file), (13, 25));
+}
+
+#[test]
+fn load_saved_grid_size_reads_saved_session_from_history_dir() {
+    let tmp = std::env::temp_dir().join("cmrt_test_daw_load_saved_grid_size");
+    std::fs::remove_dir_all(&tmp).ok();
+    std::fs::create_dir_all(&tmp).unwrap();
+    let _guard = crate::test_utils::set_local_dir_envs(&tmp);
+    let path = crate::history::daw_file_path().unwrap();
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(
+        &path,
+        r#"{"tracks":[{"track":10,"meas":[{"meas":0,"mml":"t120"},{"meas":18,"mml":"cde"}]}]}"#,
+    )
+    .unwrap();
+
+    assert_eq!(load_saved_grid_size(), Some((11, 18)));
+
+    std::fs::remove_dir_all(&tmp).ok();
 }
 
 #[test]

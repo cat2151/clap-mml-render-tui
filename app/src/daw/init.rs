@@ -1,8 +1,10 @@
+use super::save::load_saved_grid_size;
 use super::*;
 
 pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
-    let tracks = cfg.daw_tracks.clamp(2, 64);
-    let measures = cfg.daw_measures.clamp(1, 64);
+    let (saved_tracks, saved_measures) = load_saved_grid_size().unwrap_or((TRACKS, MEASURES));
+    let tracks = TRACKS.max(saved_tracks);
+    let measures = MEASURES.max(saved_measures);
     let mut data = vec![vec![String::new(); measures + 1]; tracks];
     // track 0 のデフォルトは拍子指定 JSON + テンポ設定
     data[0][0] = DEFAULT_TRACK0_MML.to_string();

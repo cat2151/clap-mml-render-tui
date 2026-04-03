@@ -13,22 +13,6 @@ pub struct Config {
     pub buffer_size: usize,
     /// パッチ検索対象ディレクトリ一覧
     pub patches_dirs: Option<Vec<String>>,
-    /// DAW モードのトラック数（track 0 = ヘッダ/テンポ、track 1.. = 演奏トラック）。
-    /// デフォルト: 9 (1 + 8)
-    #[serde(default = "default_daw_tracks")]
-    pub daw_tracks: usize,
-    /// DAW モードの小節数（measure 0 = 音色列、measure 1.. = 通常小節）。
-    /// デフォルト: 8
-    #[serde(default = "default_daw_measures")]
-    pub daw_measures: usize,
-}
-
-fn default_daw_tracks() -> usize {
-    9
-}
-
-fn default_daw_measures() -> usize {
-    8
 }
 
 #[derive(Serialize)]
@@ -140,13 +124,6 @@ buffer_size = 512
 # 例 (macOS):   patches_dirs = ['/Library/Application Support/Surge XT/patches_factory', '/Library/Application Support/Surge XT/patches_3rdparty']
 {patches_dirs_line}
 
-# DAW モード設定
-# daw_tracks: トラック数（track 0 = ヘッダ/テンポ、track 1.. = 演奏トラック）デフォルト: 9 (1+8)
-#   有効範囲: 2 〜 64（範囲外は自動的に最小値 2 または最大値 64 にクランプされます）
-# daw_measures: 小節数（measure 0 = 音色列、measure 1.. = 通常小節）デフォルト: 8
-#   有効範囲: 1 〜 64（範囲外は自動的に最小値 1 または最大値 64 にクランプされます）
-daw_tracks   = 9
-daw_measures = 8
 "#,
         plugin_path_line = plugin_path_line,
         patches_dirs_line = patches_dirs_line

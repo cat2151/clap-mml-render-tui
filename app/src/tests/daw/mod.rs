@@ -205,8 +205,6 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
             sample_rate: 44_100.0,
             buffer_size: 512,
             patches_dirs: None,
-            daw_tracks: tracks,
-            daw_measures: measures,
         }),
         entry_ptr: 0,
         tracks,

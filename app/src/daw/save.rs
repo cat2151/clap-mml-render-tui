@@ -30,6 +30,25 @@ pub(super) struct DawSaveMeas {
     pub(super) mml: String,
 }
 
+pub(super) fn required_grid_size(file: &DawSaveFile) -> (usize, usize) {
+    let mut tracks = FIRST_PLAYABLE_TRACK + 1;
+    let mut measures = 1;
+    for save_track in &file.tracks {
+        tracks = tracks.max(save_track.track.saturating_add(1));
+        for save_meas in &save_track.meas {
+            measures = measures.max(save_meas.meas.max(1));
+        }
+    }
+    (tracks, measures)
+}
+
+pub(super) fn load_saved_grid_size() -> Option<(usize, usize)> {
+    let path = crate::history::daw_file_load_path()?;
+    let content = std::fs::read_to_string(path).ok()?;
+    let file = serde_json::from_str::<DawSaveFile>(&content).ok()?;
+    Some(required_grid_size(&file))
+}
+
 /// data グリッドを `DawSaveFile` に変換する（空トラック・空小節は除外）。
 pub(super) fn data_to_save_file(
     data: &[Vec<String>],

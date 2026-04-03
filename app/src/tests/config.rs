@@ -205,38 +205,23 @@ buffer_size = 512
 }
 
 #[test]
-fn config_daw_tracks_defaults_to_9() {
-    let toml_str = r#"
-plugin_path = "/usr/lib/clap/Surge XT.clap"
-input_midi  = "input.mid"
-output_midi = "output.mid"
-output_wav  = "output.wav"
-sample_rate = 44100
-buffer_size = 512
-"#;
-    let cfg: Config = toml::from_str(toml_str).unwrap();
-    assert_eq!(cfg.daw_tracks, 9, "daw_tracks のデフォルトは 9 であるべき");
-}
+fn default_config_content_omits_removed_daw_size_keys() {
+    let content = default_config_content();
 
-#[test]
-fn config_daw_measures_defaults_to_8() {
-    let toml_str = r#"
-plugin_path = "/usr/lib/clap/Surge XT.clap"
-input_midi  = "input.mid"
-output_midi = "output.mid"
-output_wav  = "output.wav"
-sample_rate = 44100
-buffer_size = 512
-"#;
-    let cfg: Config = toml::from_str(toml_str).unwrap();
-    assert_eq!(
-        cfg.daw_measures, 8,
-        "daw_measures のデフォルトは 8 であるべき"
+    assert!(
+        !content.contains("daw_tracks"),
+        "default config に削除済みの daw_tracks を残すべきではない: {}",
+        content
+    );
+    assert!(
+        !content.contains("daw_measures"),
+        "default config に削除済みの daw_measures を残すべきではない: {}",
+        content
     );
 }
 
 #[test]
-fn config_daw_tracks_can_be_set() {
+fn config_parse_ignores_removed_daw_size_settings() {
     let toml_str = r#"
 plugin_path = "/usr/lib/clap/Surge XT.clap"
 input_midi  = "input.mid"
@@ -244,10 +229,9 @@ output_midi = "output.mid"
 output_wav  = "output.wav"
 sample_rate = 44100
 buffer_size = 512
-daw_tracks  = 5
-daw_measures = 4
+daw_tracks = 128
+daw_measures = 256
 "#;
     let cfg: Config = toml::from_str(toml_str).unwrap();
-    assert_eq!(cfg.daw_tracks, 5);
-    assert_eq!(cfg.daw_measures, 4);
+    assert_eq!(cfg.plugin_path, "/usr/lib/clap/Surge XT.clap");
 }
