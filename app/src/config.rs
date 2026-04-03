@@ -142,7 +142,6 @@ buffer_size = 512
 # 例 (macOS):   patches_dirs = ['/Library/Application Support/Surge XT/patches_factory', '/Library/Application Support/Surge XT/patches_3rdparty']
 {patches_dirs_line}
 
-# 【省略可】固定で使う音色
 # patch_path = ""
 
 # DAW モード設定
