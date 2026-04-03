@@ -30,12 +30,19 @@ pub(super) struct DawSaveMeas {
     pub(super) mml: String,
 }
 
+/// 保存済みセッションを欠落なく読み込める `DawApp` の最小サイズを返す。
+///
+/// 返り値の 2 要素目は「列数」ではなく `DawApp.measures` に入れる値
+/// （= 最大の playable measure index）である。
+/// そのため data/cell/cache の確保では常に `measures + 1` 列を用いる。
 pub(super) fn required_grid_size(file: &DawSaveFile) -> (usize, usize) {
     let mut tracks = FIRST_PLAYABLE_TRACK + 1;
     let mut measures = 1;
     for save_track in &file.tracks {
         tracks = tracks.max(save_track.track.saturating_add(1));
         for save_meas in &save_track.meas {
+            // `save_meas.meas` 自体が `DawApp.measures` と同じ意味の index 値。
+            // 例: meas=25 を保持するには 0..=25 を扱える `measures=25` が必要。
             measures = measures.max(save_meas.meas.max(1));
         }
     }

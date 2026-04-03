@@ -264,6 +264,7 @@ fn required_grid_size_uses_largest_saved_track_and_measure() {
         r#"{"tracks":[{"track":12,"meas":[{"meas":0,"mml":"t120"},{"meas":25,"mml":"cde"}]}]}"#;
     let file: DawSaveFile = serde_json::from_str(json).unwrap();
 
+    // 返り値の 2 要素目は列数ではなく `DawApp.measures`（最大 measure index）。
     assert_eq!(required_grid_size(&file), (13, 25));
 }
 
@@ -281,6 +282,7 @@ fn load_saved_grid_size_reads_saved_session_from_history_dir() {
     )
     .unwrap();
 
+    // load_saved_grid_size() は `DawApp.measures` にそのまま入る値を返す。
     assert_eq!(load_saved_grid_size(), Some((11, 18)));
 
     std::fs::remove_dir_all(&tmp).ok();
