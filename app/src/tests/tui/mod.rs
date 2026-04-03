@@ -28,7 +28,6 @@ fn test_config() -> crate::config::Config {
         output_wav: "output.wav".to_string(),
         sample_rate: 44_100.0,
         buffer_size: 512,
-        patch_path: None,
         patches_dirs: Some(vec!["/tmp/patches".to_string()]),
         daw_tracks: 9,
         daw_measures: 8,

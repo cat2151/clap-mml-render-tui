@@ -98,12 +98,12 @@ fn default_config_content_uses_patches_dirs_key() {
 }
 
 #[test]
-fn default_config_excludes_obsolete_patch_path_comment() {
+fn default_config_content_omits_removed_patch_path_key() {
     let content = default_config_content();
 
     assert!(
-        !content.contains("# 【省略可】固定で使う音色"),
-        "default config に実態とずれた patch_path コメントを残すべきではない: {}",
+        !content.contains("patch_path"),
+        "default config に削除済みの patch_path を残すべきではない: {}",
         content
     );
 }
@@ -151,7 +151,7 @@ buffer_size = 512
 }
 
 #[test]
-fn config_parse_accepts_legacy_random_patch_field() {
+fn config_parse_ignores_removed_patch_settings() {
     let toml_str = r#"
 plugin_path = "/usr/lib/clap/Surge XT.clap"
 input_midi  = "input.mid"
@@ -159,10 +159,15 @@ output_midi = "output.mid"
 output_wav  = "output.wav"
 sample_rate = 44100
 buffer_size = 512
-random_patch = false
+patch_path = "/tmp/Pad 1.fxp"
+random_patch = true
 "#;
     let cfg: Config = toml::from_str(toml_str).unwrap();
+    let core_cfg = cmrt_core::CoreConfig::from(&cfg);
+
     assert_eq!(cfg.plugin_path, "/usr/lib/clap/Surge XT.clap");
+    assert!(core_cfg.patch_path.is_none());
+    assert!(!core_cfg.random_patch);
 }
 
 #[test]
@@ -186,7 +191,7 @@ patches_dirs = ["/tmp/surge-data/patches_factory", "/tmp/surge-data/patches_3rdp
 }
 
 #[test]
-fn config_optional_patch_path_is_none_by_default() {
+fn config_optional_patches_dirs_is_none_by_default() {
     let toml_str = r#"
 plugin_path = "/usr/lib/clap/Surge XT.clap"
 input_midi  = "input.mid"
@@ -196,7 +201,6 @@ sample_rate = 44100
 buffer_size = 512
 "#;
     let cfg: Config = toml::from_str(toml_str).unwrap();
-    assert!(cfg.patch_path.is_none());
     assert!(cfg.patches_dirs.is_none());
 }
 

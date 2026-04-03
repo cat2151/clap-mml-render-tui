@@ -41,7 +41,6 @@ fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob
                 output_wav: String::new(),
                 sample_rate: 44_100.0,
                 buffer_size: 512,
-                patch_path: None,
                 patches_dirs: None,
                 daw_tracks: tracks,
                 daw_measures: measures,
