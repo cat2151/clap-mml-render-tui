@@ -11,8 +11,6 @@ pub struct Config {
     pub output_wav: String,
     pub sample_rate: f64,
     pub buffer_size: usize,
-    /// オプション: .fxp パッチファイルのパス。指定しない場合は Init Saw のまま。
-    pub patch_path: Option<String>,
     /// パッチ検索対象ディレクトリ一覧
     pub patches_dirs: Option<Vec<String>>,
     /// DAW モードのトラック数（track 0 = ヘッダ/テンポ、track 1.. = 演奏トラック）。
@@ -142,8 +140,6 @@ buffer_size = 512
 # 例 (macOS):   patches_dirs = ['/Library/Application Support/Surge XT/patches_factory', '/Library/Application Support/Surge XT/patches_3rdparty']
 {patches_dirs_line}
 
-# patch_path = ""
-
 # DAW モード設定
 # daw_tracks: トラック数（track 0 = ヘッダ/テンポ、track 1.. = 演奏トラック）デフォルト: 9 (1+8)
 #   有効範囲: 2 〜 64（範囲外は自動的に最小値 2 または最大値 64 にクランプされます）
@@ -254,7 +250,7 @@ impl From<&Config> for CoreConfig {
             output_wav: value.output_wav.clone(),
             sample_rate: value.sample_rate,
             buffer_size: value.buffer_size,
-            patch_path: value.patch_path.clone(),
+            patch_path: None,
             patches_dir: crate::patches::core_config_patch_root_dir(value),
             random_patch: false,
         }

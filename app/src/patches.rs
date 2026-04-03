@@ -123,7 +123,6 @@ mod tests {
             output_wav: String::new(),
             sample_rate: 44_100.0,
             buffer_size: 512,
-            patch_path: None,
             patches_dirs: Some(vec![
                 factory.to_string_lossy().into_owned(),
                 thirdparty.to_string_lossy().into_owned(),
