@@ -184,6 +184,45 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
 }
 
 #[test]
+fn handle_normal_r_uses_saved_patch_filter_query_for_random_selection() {
+    let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_uses_saved_filter");
+    std::fs::remove_dir_all(&tmp).ok();
+    std::fs::create_dir_all(tmp.join("Bass")).unwrap();
+    std::fs::create_dir_all(tmp.join("Lead")).unwrap();
+    std::fs::write(tmp.join("Bass").join("Bass 1.fxp"), b"dummy").unwrap();
+    std::fs::write(tmp.join("Bass").join("Bass 2.fxp"), b"dummy").unwrap();
+    std::fs::write(tmp.join("Lead").join("Lead 1.fxp"), b"dummy").unwrap();
+
+    {
+        let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
+
+        let (mut app, _cache_rx) = build_test_app();
+        app.cursor_track = 1;
+        app.cursor_measure = 0;
+        app.cfg = Arc::new(Config {
+            patches_dirs: Some(vec![tmp.to_string_lossy().into_owned()]),
+            ..(*app.cfg).clone()
+        });
+        app.data[1][0] =
+            r#"{"Surge XT patch":"Lead/Lead 1.fxp","Surge XT patch filter":"bass"}"#.to_string();
+
+        app.handle_normal(crossterm::event::KeyCode::Char('r'));
+
+        let init_json: serde_json::Value = serde_json::from_str(&app.data[1][0]).unwrap();
+        let selected_patch = init_json["Surge XT patch"]
+            .as_str()
+            .expect("selected patch should be stored as string");
+        assert!(
+            matches!(selected_patch, "Bass/Bass 1.fxp" | "Bass/Bass 2.fxp"),
+            "selected patch should respect saved filter query: {selected_patch}"
+        );
+        assert_eq!(init_json["Surge XT patch filter"], "bass");
+    }
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
 fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
     let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_prioritizes_next_measure");
     std::fs::remove_dir_all(&tmp).ok();

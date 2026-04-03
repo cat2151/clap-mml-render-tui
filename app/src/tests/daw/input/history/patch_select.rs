@@ -27,6 +27,34 @@ fn handle_patch_select_enter_overwrites_current_track_init_patch() {
 }
 
 #[test]
+fn handle_patch_select_enter_saves_filter_query_in_track_init_json() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
+    app.data[1][1] = "l8cdef".to_string();
+    app.patch_all = vec![
+        ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
+        ("Bass Soft 1.fxp".to_string(), "bass soft 1.fxp".to_string()),
+        ("Lead 1.fxp".to_string(), "lead 1.fxp".to_string()),
+    ];
+    app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
+    app.mode = DawMode::PatchSelect;
+
+    app.handle_patch_select(KeyCode::Char('/'));
+    for key in ['b', 'a', 's', 's'] {
+        app.handle_patch_select(KeyCode::Char(key));
+    }
+    app.handle_patch_select(KeyCode::Enter);
+    app.handle_patch_select(KeyCode::Enter);
+
+    let init_json: serde_json::Value = serde_json::from_str(&app.data[1][0]).unwrap();
+    assert!(matches!(app.mode, DawMode::Normal));
+    assert_eq!(init_json["Surge XT patch"], "Bass Soft 1.fxp");
+    assert_eq!(init_json["Surge XT patch filter"], "bass");
+}
+
+#[test]
 fn handle_patch_select_filter_space_adds_and_term_instead_of_previewing() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_track = 1;
