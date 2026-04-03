@@ -239,7 +239,23 @@ impl DawApp {
     // ─── ランダム音色 ─────────────────────────────────────────
 
     fn pick_random_patch_name(&self) -> Option<String> {
+        self.pick_random_patch_name_with_query(None)
+    }
+
+    fn pick_random_patch_name_with_query(&self, query: Option<&str>) -> Option<String> {
         let patches = crate::patches::collect_patch_pairs(&self.cfg).ok()?;
+        let patches = if let Some(query) = query.map(str::trim).filter(|query| !query.is_empty()) {
+            let terms: Vec<String> = query
+                .split_whitespace()
+                .map(|term| term.to_lowercase())
+                .collect();
+            patches
+                .into_iter()
+                .filter(|(_, lower)| terms.iter().all(|term| lower.contains(term.as_str())))
+                .collect()
+        } else {
+            patches
+        };
         if patches.is_empty() {
             return None;
         }

@@ -20,6 +20,7 @@ use normal::{
 };
 
 const PATCH_JSON_KEY: &str = "Surge XT patch";
+const PATCH_FILTER_QUERY_JSON_KEY: &str = "Surge XT patch filter";
 
 impl DawApp {
     pub(in crate::daw) fn enter_help(&mut self) {
@@ -43,24 +44,37 @@ impl DawApp {
         }
     }
 
-    fn extract_patch_phrase(mml: &str) -> Option<(String, String)> {
+    fn extract_patch_json_and_phrase(mml: &str) -> Option<(Value, String)> {
         let preprocessed = mml_preprocessor::extract_embedded_json(mml);
-        let patch_name = preprocessed
+        let value = preprocessed
             .embedded_json
             .as_deref()
-            .and_then(|json| serde_json::from_str::<Value>(json).ok())
-            .and_then(|value| {
-                value
-                    .get(PATCH_JSON_KEY)
-                    .and_then(Value::as_str)
-                    .map(str::to_string)
-            })?;
-        let phrase = preprocessed.remaining_mml.trim().to_string();
+            .and_then(|json| serde_json::from_str::<Value>(json).ok())?;
+        Some((value, preprocessed.remaining_mml.trim().to_string()))
+    }
+
+    fn extract_patch_phrase(mml: &str) -> Option<(String, String)> {
+        let (value, phrase) = Self::extract_patch_json_and_phrase(mml)?;
+        let patch_name = value
+            .get(PATCH_JSON_KEY)
+            .and_then(Value::as_str)
+            .map(str::to_string)?;
         Some((patch_name, phrase))
     }
 
     fn build_patch_json(patch_name: &str) -> String {
-        serde_json::json!({ PATCH_JSON_KEY: patch_name }).to_string()
+        Self::build_patch_json_with_filter_query(patch_name, None)
+    }
+
+    fn build_patch_json_with_filter_query(patch_name: &str, filter_query: Option<&str>) -> String {
+        let mut patch_json = serde_json::json!({ PATCH_JSON_KEY: patch_name });
+        if let Some(filter_query) = filter_query
+            .map(str::trim)
+            .filter(|query| !query.is_empty())
+        {
+            patch_json[PATCH_FILTER_QUERY_JSON_KEY] = Value::String(filter_query.to_string());
+        }
+        patch_json.to_string()
     }
 
     fn current_track_patch_name(&self) -> Option<String> {
@@ -69,6 +83,20 @@ impl DawApp {
         }
         Self::extract_patch_phrase(&self.data[self.cursor_track][0])
             .map(|(patch_name, _)| patch_name)
+    }
+
+    fn current_track_patch_filter_query(&self) -> Option<String> {
+        if self.cursor_track < FIRST_PLAYABLE_TRACK {
+            return None;
+        }
+        Self::extract_patch_json_and_phrase(&self.data[self.cursor_track][0]).and_then(
+            |(value, _)| {
+                value
+                    .get(PATCH_FILTER_QUERY_JSON_KEY)
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            },
+        )
     }
 
     fn mark_patch_phrase_store_dirty(&mut self) {

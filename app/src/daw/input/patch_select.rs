@@ -236,7 +236,10 @@ impl DawApp {
             }
             KeyCode::Enter => {
                 if let Some(selected_patch_name) = self.patch_select_selected_patch_name() {
-                    let patch_json = Self::build_patch_json(&selected_patch_name);
+                    let patch_json = Self::build_patch_json_with_filter_query(
+                        &selected_patch_name,
+                        Some(&self.patch_query),
+                    );
                     if self.commit_insert_cell(self.cursor_track, 0, &patch_json) {
                         self.save();
                         self.sync_playback_mml_state();

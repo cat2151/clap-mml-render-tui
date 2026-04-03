@@ -363,12 +363,18 @@ impl DawApp {
                     );
                     return DawNormalAction::Continue;
                 }
-                if let Some(patch) = self.pick_random_patch_name() {
+                let patch_filter_query = self.current_track_patch_filter_query();
+                if let Some(patch) =
+                    self.pick_random_patch_name_with_query(patch_filter_query.as_deref())
+                {
                     let affected_measures: Vec<usize> = (1..=self.measures)
                         .filter(|&measure| !self.data[self.cursor_track][measure].trim().is_empty())
                         .collect();
                     self.data[self.cursor_track][INIT_MEASURE] =
-                        format!("{{\"Surge XT patch\": \"{}\"}}", patch);
+                        Self::build_patch_json_with_filter_query(
+                            &patch,
+                            patch_filter_query.as_deref(),
+                        );
                     self.invalidate_cell(self.cursor_track, INIT_MEASURE);
                     self.invalidate_dependent_cells(self.cursor_track, INIT_MEASURE);
                     self.start_track_rerender_batch(
