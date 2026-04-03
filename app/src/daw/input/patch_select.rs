@@ -7,20 +7,6 @@ use super::super::{
 
 const PATCH_SELECT_PREVIEW_FALLBACK_PHRASE: &str = "c";
 
-fn filter_patches(all: &[(String, String)], query: &str) -> Vec<String> {
-    let terms: Vec<String> = query
-        .split_whitespace()
-        .map(|term| term.to_lowercase())
-        .collect();
-    if terms.is_empty() {
-        return all.iter().map(|(orig, _)| orig.clone()).collect();
-    }
-    all.iter()
-        .filter(|(_, lower)| terms.iter().all(|term| lower.contains(term.as_str())))
-        .map(|(orig, _)| orig.clone())
-        .collect()
-}
-
 impl DawApp {
     fn move_patch_select_selection_by(&mut self, delta: isize) {
         let (items_len, cursor) = match self.patch_select_focus {
@@ -144,7 +130,7 @@ impl DawApp {
     }
 
     fn update_patch_filter(&mut self) {
-        self.patch_filtered = filter_patches(&self.patch_all, &self.patch_query);
+        self.patch_filtered = Self::filter_patch_names_by_query(&self.patch_all, &self.patch_query);
         self.patch_cursor = 0;
         self.sync_patch_select_cursors();
         self.preview_selected_patch();

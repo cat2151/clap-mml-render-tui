@@ -371,7 +371,7 @@ impl DawApp {
                         .filter(|&measure| !self.data[self.cursor_track][measure].trim().is_empty())
                         .collect();
                     self.data[self.cursor_track][INIT_MEASURE] =
-                        Self::build_patch_json_with_filter_query(
+                        Self::build_random_patch_json_with_filter_query(
                             &patch,
                             patch_filter_query.as_deref(),
                         );

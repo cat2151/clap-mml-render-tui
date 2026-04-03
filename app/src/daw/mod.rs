@@ -238,24 +238,54 @@ impl DawApp {
 
     // ─── ランダム音色 ─────────────────────────────────────────
 
+    fn patch_query_terms(query: Option<&str>) -> Option<Vec<String>> {
+        query
+            .map(str::trim)
+            .filter(|query| !query.is_empty())
+            .map(|query| {
+                query
+                    .split_whitespace()
+                    .map(|term| term.to_lowercase())
+                    .collect()
+            })
+    }
+
+    fn patch_matches_query(lower_patch_name: &str, terms: &[String]) -> bool {
+        terms
+            .iter()
+            .all(|term| lower_patch_name.contains(term.as_str()))
+    }
+
+    fn filter_patch_pairs_by_query(
+        patches: Vec<(String, String)>,
+        query: Option<&str>,
+    ) -> Vec<(String, String)> {
+        let Some(terms) = Self::patch_query_terms(query) else {
+            return patches;
+        };
+        patches
+            .into_iter()
+            .filter(|(_, lower)| Self::patch_matches_query(lower, &terms))
+            .collect()
+    }
+
+    fn filter_patch_names_by_query(all: &[(String, String)], query: &str) -> Vec<String> {
+        let Some(terms) = Self::patch_query_terms(Some(query)) else {
+            return all.iter().map(|(orig, _)| orig.clone()).collect();
+        };
+        all.iter()
+            .filter(|(_, lower)| Self::patch_matches_query(lower, &terms))
+            .map(|(orig, _)| orig.clone())
+            .collect()
+    }
+
     fn pick_random_patch_name(&self) -> Option<String> {
         self.pick_random_patch_name_with_query(None)
     }
 
     fn pick_random_patch_name_with_query(&self, query: Option<&str>) -> Option<String> {
         let patches = crate::patches::collect_patch_pairs(&self.cfg).ok()?;
-        let patches = if let Some(query) = query.map(str::trim).filter(|query| !query.is_empty()) {
-            let terms: Vec<String> = query
-                .split_whitespace()
-                .map(|term| term.to_lowercase())
-                .collect();
-            patches
-                .into_iter()
-                .filter(|(_, lower)| terms.iter().all(|term| lower.contains(term.as_str())))
-                .collect()
-        } else {
-            patches
-        };
+        let patches = Self::filter_patch_pairs_by_query(patches, query);
         if patches.is_empty() {
             return None;
         }

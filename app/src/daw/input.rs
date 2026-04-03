@@ -77,6 +77,25 @@ impl DawApp {
         patch_json.to_string()
     }
 
+    fn build_random_patch_json_with_filter_query(
+        patch_name: &str,
+        filter_query: Option<&str>,
+    ) -> String {
+        let patch_name = serde_json::to_string(patch_name).unwrap();
+        match filter_query
+            .map(str::trim)
+            .filter(|query| !query.is_empty())
+        {
+            Some(filter_query) => {
+                let filter_query = serde_json::to_string(filter_query).unwrap();
+                format!(
+                    r#"{{"{PATCH_JSON_KEY}": {patch_name}, "{PATCH_FILTER_QUERY_JSON_KEY}": {filter_query}}}"#
+                )
+            }
+            None => format!(r#"{{"{PATCH_JSON_KEY}": {patch_name}}}"#),
+        }
+    }
+
     fn current_track_patch_name(&self) -> Option<String> {
         if self.cursor_track < FIRST_PLAYABLE_TRACK {
             return None;
