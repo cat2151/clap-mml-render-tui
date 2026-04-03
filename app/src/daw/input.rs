@@ -81,13 +81,13 @@ impl DawApp {
         patch_name: &str,
         filter_query: Option<&str>,
     ) -> String {
-        let patch_name = serde_json::to_string(patch_name).unwrap();
+        let patch_name = Value::String(patch_name.to_string());
         match filter_query
             .map(str::trim)
             .filter(|query| !query.is_empty())
         {
             Some(filter_query) => {
-                let filter_query = serde_json::to_string(filter_query).unwrap();
+                let filter_query = Value::String(filter_query.to_string());
                 format!(
                     r#"{{"{PATCH_JSON_KEY}": {patch_name}, "{PATCH_FILTER_QUERY_JSON_KEY}": {filter_query}}}"#
                 )
