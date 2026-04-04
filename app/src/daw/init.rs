@@ -82,8 +82,8 @@ fn try_build_grid_buffers(tracks: usize, measures: usize) -> Option<DawGridBuffe
     })
 }
 
-fn build_grid_buffers_or_default(saved_size: Option<(usize, usize)>) -> DawGridBuffers {
-    let (requested_tracks, requested_measures) = saved_size
+fn build_grid_buffers_or_default(saved_grid_dimensions: Option<(usize, usize)>) -> DawGridBuffers {
+    let (requested_tracks, requested_measures) = saved_grid_dimensions
         .map(|(tracks, measures)| (TRACKS.max(tracks), MEASURES.max(measures)))
         .unwrap_or((TRACKS, MEASURES));
 
@@ -91,6 +91,7 @@ fn build_grid_buffers_or_default(saved_size: Option<(usize, usize)>) -> DawGridB
         return buffers;
     }
 
+    // DAW アプリ本体はまだ未構築なので append_log_line() は使えず、ここでは stderr にフォールバックする。
     eprintln!(
         "DAW セッションのサイズが大きすぎるか破損しているため、デフォルトサイズ {}x{} にフォールバックします。",
         TRACKS, MEASURES
