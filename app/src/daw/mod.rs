@@ -1,8 +1,12 @@
 //! DAW 風モード
 //!
-//! 9 tracks × (0..=8 measures) の matrix
+//! 初回起動時は 9 tracks × (0..=8 measures) の matrix で開始する
 //!   measure 0 = 音色 (timbre) / track ごとの共通ヘッダ
 //!   track   0 = 拍子JSON + テンポ (例: `{"beat": "4/4"}t120`) → render 時に全小節の先頭にくっつける
+//!
+//! user は track 数・measure 数に対して実質無制限を求めている。
+//! そのためアプリ側で 64 のような小さな固定上限を設けず、言語・OS・ライブラリが許す範囲で扱うこと。
+//! 保存済みセッションが初期サイズより大きい場合は、そのサイズをそのまま受け入れる。
 //!
 //! キー操作 (NORMAL):
 //!   Shift+H: history overlay を開く
@@ -98,9 +102,9 @@ pub(super) use types::{
 
 // ─── 定数 ─────────────────────────────────────────────────────
 
-/// track 数（固定）。track 0 = Tempo、track 1..=8 = 演奏 track。
+/// 初回起動時の track 数。track 0 = Tempo、track 1..=8 = 演奏 track。
 pub const TRACKS: usize = 9;
-/// 小節数（固定）。measure 0 = 音色列。measure 1..=MEASURES = 通常小節。
+/// 初回起動時の小節数。measure 0 = 音色列。measure 1..=MEASURES = 通常小節。
 pub const MEASURES: usize = 8;
 /// track 0 はグローバルヘッダ（テンポ等）専用。演奏 track は 1 から始まる。
 pub(super) const FIRST_PLAYABLE_TRACK: usize = 1;
@@ -145,9 +149,9 @@ pub struct DawApp {
     cfg: Arc<Config>,
     entry_ptr: usize, // *const PluginEntry as usize (main() に生存保証)
 
-    /// config から読み込んだトラック数（track 0 = ヘッダ/テンポ、track 1.. = 演奏トラック）
+    /// 現在のトラック数（track 0 = ヘッダ/テンポ、track 1.. = 演奏トラック）
     pub(super) tracks: usize,
-    /// config から読み込んだ小節数（measure 0 = 音色列、measure 1.. = 通常小節）
+    /// 現在の小節数（measure 0 = 音色列、measure 1.. = 通常小節）
     pub(super) measures: usize,
 
     /// セルごとのキャッシュ [track][measure]

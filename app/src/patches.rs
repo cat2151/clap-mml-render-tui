@@ -127,8 +127,6 @@ mod tests {
                 factory.to_string_lossy().into_owned(),
                 thirdparty.to_string_lossy().into_owned(),
             ]),
-            daw_tracks: 9,
-            daw_measures: 8,
         };
 
         let pairs = collect_patch_pairs(&cfg).unwrap();
