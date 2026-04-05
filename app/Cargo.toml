@@ -25,7 +25,7 @@ dirs = "5"
 # Error handling
 anyhow = "1"
 thiserror = "1"
-cat-self-update-lib = { git = "https://github.com/cat2151/cat-self-update", package = "cat-self-update-lib", rev = "81f326b3c05d06bcec03458ab64d92c0d512966e" }
+cat-self-update-lib = { git = "https://github.com/cat2151/cat-self-update", package = "cat-self-update-lib" }
 
 # HTTP server (for --server mode)
 tiny_http = "0.12"
