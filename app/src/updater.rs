@@ -171,9 +171,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn foreground_update_uses_self_update_library_target_for_this_app() {
+    fn test_update_target_returns_correct_values() {
+        let (owner, repo, bins) = update_target();
+
+        assert!(!owner.is_empty());
+        assert!(!repo.is_empty());
+        assert!(!bins.is_empty());
+        assert!(bins.iter().all(|bin| !bin.is_empty()));
         assert_eq!(
-            update_target(),
+            (owner, repo, bins),
             ("cat2151", "clap-mml-render-tui", &["cmrt"] as &[&str])
         );
     }
