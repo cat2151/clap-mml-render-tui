@@ -11,10 +11,7 @@ use anyhow::Result;
 
 const REPO_OWNER: &str = "cat2151";
 const REPO_NAME: &str = "clap-mml-render-tui";
-/// ワークスペース構成の `cargo install` で指定する対象パッケージ名。
-/// app/Cargo.toml の `[package] name = "clap-mml-render-tui"` と
-/// 一致している必要がある。
-const INSTALL_PACKAGE: &str = "clap-mml-render-tui";
+const APP_BIN_NAMES: &[&str] = &["cmrt"];
 
 /// ビルド時に埋め込まれたgit commit hash
 const LOCAL_HASH: &str = env!("GIT_COMMIT_HASH");
@@ -155,70 +152,35 @@ fn check_for_update(update_available: Arc<AtomicBool>) -> Result<()> {
 /// フォアグラウンドでアップデートを実行する。
 /// TUIを終了してから呼び出すこと。
 pub fn run_foreground_update() -> Result<()> {
-    #[cfg(target_os = "windows")]
-    {
-        println!("アップデートをバッチファイルで開始します...");
-        spawn_updater_process().map_err(|e| {
-            anyhow::anyhow!("バッチファイルアップデーターの起動に失敗しました: {}", e)
-        })?;
-        Ok(())
-    }
+    let (owner, repo, bins) = update_target();
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        println!("アップデートを開始します...");
-        let repo_url = format!("https://github.com/{}/{}", REPO_OWNER, REPO_NAME);
-        println!(
-            "cargo install --force --git {} {}",
-            repo_url, INSTALL_PACKAGE
-        );
+    println!("アップデートを開始します...");
+    cat_self_update_lib::self_update(owner, repo, bins)
+        .map_err(|e| anyhow::anyhow!("アップデート開始に失敗しました: {}", e))?;
+    println!("アップデートをバックグラウンドで開始しました。完了後に cmrt を再起動します。");
 
-        let status = std::process::Command::new("cargo")
-            .args(["install", "--force", "--git", &repo_url, INSTALL_PACKAGE])
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .status()?;
-
-        if status.success() {
-            println!("アップデート成功！再起動します...");
-            match std::process::Command::new("cmrt").spawn() {
-                Ok(_) => {
-                    // 新しいプロセスを起動したら現在のプロセスを終了する（二重起動を防ぐ）
-                    std::process::exit(0);
-                }
-                Err(e) => {
-                    eprintln!(
-                        "cmrtの再起動に失敗しました: {}。手動で再起動してください。",
-                        e
-                    );
-                }
-            }
-        } else {
-            eprintln!("アップデートに失敗しました。");
-        }
-
-        Ok(())
-    }
+    Ok(())
 }
 
-/// Windowsでのアップデートを行うバッチファイルをspawnする。
-#[cfg(target_os = "windows")]
-fn spawn_updater_process() -> Result<()> {
-    let suffix = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let script_path = std::env::temp_dir().join(format!("cmrt_updater_{}.bat", suffix));
-    let script = format!(
-        "@echo off\r\ntimeout /t 3 /nobreak >nul\r\ncargo install --force --git https://github.com/{}/{} {}\r\ncmrt\r\n(goto) 2>nul & del \"%~f0\"\r\n",
-        REPO_OWNER, REPO_NAME, INSTALL_PACKAGE
-    );
-    std::fs::write(&script_path, &script)?;
-    let script_str = script_path
-        .to_str()
-        .ok_or_else(|| anyhow::anyhow!("Updater script path contains invalid UTF-8"))?;
-    std::process::Command::new("cmd")
-        .args(["/C", "start", "cmrt updater", script_str])
-        .spawn()?;
-    Ok(())
+fn update_target() -> (&'static str, &'static str, &'static [&'static str]) {
+    (REPO_OWNER, REPO_NAME, APP_BIN_NAMES)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_update_target_returns_correct_values() {
+        let (owner, repo, bins) = update_target();
+
+        assert!(!owner.is_empty());
+        assert!(!repo.is_empty());
+        assert!(!bins.is_empty());
+        assert!(bins.iter().all(|bin| !bin.is_empty()));
+        assert_eq!(
+            (owner, repo, bins),
+            ("cat2151", "clap-mml-render-tui", &["cmrt"] as &[&str])
+        );
+    }
 }
