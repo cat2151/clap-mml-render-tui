@@ -1,0 +1,8 @@
+title: "clap-mml-render-tui"
+description: "clap-mml-render-tui"
+theme: jekyll-theme-slate
+github:
+  is_project_page: true
+  repository_url: https://github.com/cat2151/clap-mml-render-tui
+plugins:
+  - jekyll-sitemap
