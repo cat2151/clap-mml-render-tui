@@ -51,7 +51,8 @@ impl DawApp {
                     .then_some(patch_name.clone())
             })
             .collect::<Vec<_>>();
-        extra_favorites.sort();
+        extra_favorites
+            .sort_by(|left, right| crate::patches::compare_patch_names_natural(left, right));
         favorites.extend(extra_favorites);
 
         self.patch_favorite_items = favorites;

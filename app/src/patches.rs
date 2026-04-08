@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    cmp::Ordering,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Result;
 
@@ -30,6 +33,69 @@ fn normalize_patch_lookup_key(patch_name: &str) -> String {
         .trim_start_matches("./")
         .trim_matches('/')
         .to_lowercase()
+}
+
+fn next_chunk(input: &str, start: usize) -> Option<(usize, bool)> {
+    let mut chars = input[start..].char_indices();
+    let (_, first) = chars.next()?;
+    let is_digit = first.is_ascii_digit();
+    let end = chars
+        .find(|(_, ch)| ch.is_ascii_digit() != is_digit)
+        .map(|(index, _)| start + index)
+        .unwrap_or(input.len());
+    Some((end, is_digit))
+}
+
+fn compare_natural_str(left: &str, right: &str) -> Ordering {
+    let mut left_index = 0;
+    let mut right_index = 0;
+
+    while let (Some((left_end, left_is_digit)), Some((right_end, right_is_digit))) =
+        (next_chunk(left, left_index), next_chunk(right, right_index))
+    {
+        let left_chunk = &left[left_index..left_end];
+        let right_chunk = &right[right_index..right_end];
+
+        let ordering = if left_is_digit && right_is_digit {
+            let left_trimmed = left_chunk.trim_start_matches('0');
+            let right_trimmed = right_chunk.trim_start_matches('0');
+            let left_number = if left_trimmed.is_empty() {
+                "0"
+            } else {
+                left_trimmed
+            };
+            let right_number = if right_trimmed.is_empty() {
+                "0"
+            } else {
+                right_trimmed
+            };
+
+            left_number
+                .len()
+                .cmp(&right_number.len())
+                .then_with(|| left_number.cmp(right_number))
+                .then_with(|| left_chunk.len().cmp(&right_chunk.len()))
+        } else {
+            left_chunk.cmp(right_chunk)
+        };
+
+        if ordering != Ordering::Equal {
+            return ordering;
+        }
+
+        left_index = left_end;
+        right_index = right_end;
+    }
+
+    left[left_index..].cmp(&right[right_index..])
+}
+
+pub(crate) fn compare_patch_names_natural(left: &str, right: &str) -> Ordering {
+    compare_natural_str(
+        &normalize_patch_lookup_key(left),
+        &normalize_patch_lookup_key(right),
+    )
+    .then_with(|| left.cmp(right))
 }
 
 pub(crate) fn resolve_display_patch_name(
@@ -85,6 +151,9 @@ fn collect_patch_pairs_with_optional_base(
             (display, lower)
         }));
     }
+    pairs.sort_by(|(left_display, left_lower), (right_display, right_lower)| {
+        compare_natural_str(left_lower, right_lower).then_with(|| left_display.cmp(right_display))
+    });
     Ok(pairs)
 }
 
@@ -181,6 +250,66 @@ mod tests {
         )));
 
         std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn collect_patch_pairs_sorts_display_names_naturally() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0);
+        let root = std::env::temp_dir().join(format!("cmrt_collect_patch_pairs_natural_{suffix}"));
+        let factory = root.join("patches_factory");
+        let pads = factory.join("Pads");
+        std::fs::create_dir_all(&pads).unwrap();
+        std::fs::write(pads.join("Pad 11.fxp"), b"dummy").unwrap();
+        std::fs::write(pads.join("Pad 2.fxp"), b"dummy").unwrap();
+        std::fs::write(pads.join("Pad 1.fxp"), b"dummy").unwrap();
+
+        let cfg = Config {
+            plugin_path: String::new(),
+            input_midi: String::new(),
+            output_midi: String::new(),
+            output_wav: String::new(),
+            sample_rate: 44_100.0,
+            buffer_size: 512,
+            patches_dirs: Some(vec![factory.to_string_lossy().into_owned()]),
+        };
+
+        let pairs = collect_patch_pairs(&cfg).unwrap();
+
+        assert_eq!(
+            pairs
+                .into_iter()
+                .map(|(display, _)| display)
+                .collect::<Vec<_>>(),
+            vec![
+                "Pads/Pad 1.fxp".to_string(),
+                "Pads/Pad 2.fxp".to_string(),
+                "Pads/Pad 11.fxp".to_string(),
+            ]
+        );
+
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn compare_patch_names_natural_orders_numeric_suffixes() {
+        let mut items = vec![
+            "Pads/Pad 11.fxp".to_string(),
+            "Pads/Pad 2.fxp".to_string(),
+            "Pads/Pad 1.fxp".to_string(),
+        ];
+        items.sort_by(|left, right| compare_patch_names_natural(left, right));
+
+        assert_eq!(
+            items,
+            vec![
+                "Pads/Pad 1.fxp".to_string(),
+                "Pads/Pad 2.fxp".to_string(),
+                "Pads/Pad 11.fxp".to_string(),
+            ]
+        );
     }
 
     #[test]

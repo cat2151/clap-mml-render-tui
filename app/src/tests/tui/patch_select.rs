@@ -130,10 +130,17 @@ fn start_patch_select_builds_favorite_items_once_in_patch_order_then_extra_sorte
         },
     );
     app.patch_phrase_store.patches.insert(
-        "Pad C".to_string(),
+        "Pad 11".to_string(),
         crate::history::PatchPhraseState {
             history: vec![],
             favorites: vec!["o5g".to_string()],
+        },
+    );
+    app.patch_phrase_store.patches.insert(
+        "Pad 2".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec![],
+            favorites: vec!["o4c".to_string()],
         },
     );
 
@@ -141,7 +148,11 @@ fn start_patch_select_builds_favorite_items_once_in_patch_order_then_extra_sorte
 
     assert_eq!(
         app.patch_favorite_items,
-        vec!["Pad A".to_string(), "Pad C".to_string()]
+        vec![
+            "Pad A".to_string(),
+            "Pad 2".to_string(),
+            "Pad 11".to_string()
+        ]
     );
 }
 
