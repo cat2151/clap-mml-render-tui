@@ -5,7 +5,7 @@
 
 use std::{
     collections::hash_map::DefaultHasher,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     hash::{Hash, Hasher},
     path::PathBuf,
 };
@@ -21,8 +21,9 @@ fn default_lines() -> Vec<String> {
 }
 
 fn merge_patch_phrase_items(dest: &mut Vec<String>, src: Vec<String>) {
+    let mut seen = dest.iter().cloned().collect::<HashSet<_>>();
     for item in src {
-        if !dest.iter().any(|existing| existing == &item) {
+        if seen.insert(item.clone()) {
             dest.push(item);
         }
     }

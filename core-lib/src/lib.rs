@@ -80,7 +80,7 @@ fn resolve_patch_path_from_base(base: &std::path::Path, rel: &str) -> std::path:
     }
 
     let rel_path = std::path::Path::new(rel);
-    if rel_path.components().count() == 0 {
+    if rel_path.components().next().is_none() {
         return abs;
     }
     if rel_path

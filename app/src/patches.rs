@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Result;
 
@@ -53,11 +56,15 @@ pub(crate) fn resolve_display_patch_name(
         );
     }
 
+    let resolved_pairs = pairs
+        .iter()
+        .map(|(display, _)| (normalize_patch_lookup_key(display), display))
+        .collect::<HashMap<_, _>>();
+
     candidates.into_iter().find_map(|candidate| {
-        pairs
-            .iter()
-            .find(|(display, _)| normalize_patch_lookup_key(display) == candidate)
-            .map(|(display, _)| display.clone())
+        resolved_pairs
+            .get(&candidate)
+            .map(|display| (*display).clone())
     })
 }
 
