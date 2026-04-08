@@ -35,6 +35,8 @@ fn normalize_patch_lookup_key(patch_name: &str) -> String {
         .to_lowercase()
 }
 
+/// `start` 位置から、連続する数字または非数字チャンクの終端位置と、
+/// そのチャンクが数字だけで構成されるかどうかを返す。
 fn next_chunk(input: &str, start: usize) -> Option<(usize, bool)> {
     let mut chars = input[start..].char_indices();
     let (_, first) = chars.next()?;
@@ -46,6 +48,8 @@ fn next_chunk(input: &str, start: usize) -> Option<(usize, bool)> {
     Some((end, is_digit))
 }
 
+/// 数字部分を数値として比較する自然順ソートを行う。
+/// たとえば `pad 2` は `pad 11` より前になる。
 fn compare_natural_str(left: &str, right: &str) -> Ordering {
     let mut left_index = 0;
     let mut right_index = 0;
@@ -70,6 +74,8 @@ fn compare_natural_str(left: &str, right: &str) -> Ordering {
                 right_trimmed
             };
 
+            // 数値の桁数 → 数値文字列 → 元の桁数（先頭ゼロの少なさ）の順で比較し、
+            // 文字列順ではなく自然順かつ安定した順序にする。
             left_number
                 .len()
                 .cmp(&right_number.len())
