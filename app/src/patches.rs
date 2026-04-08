@@ -4,6 +4,8 @@ use anyhow::Result;
 
 use crate::config::Config;
 
+const PATCH_DIR_PREFIXES: [&str; 2] = ["patches_factory", "patches_3rdparty"];
+
 pub(crate) fn configured_patch_dirs(cfg: &Config) -> Vec<String> {
     cfg.patches_dirs
         .clone()
@@ -19,6 +21,44 @@ pub(crate) fn has_configured_patch_dirs(cfg: &Config) -> bool {
 
 pub(crate) fn core_config_patch_root_dir(cfg: &Config) -> Option<String> {
     shared_patch_root_dir(&configured_patch_dirs(cfg))
+}
+
+fn normalize_patch_lookup_key(patch_name: &str) -> String {
+    patch_name
+        .trim()
+        .replace('\\', "/")
+        .trim_start_matches("./")
+        .trim_matches('/')
+        .to_lowercase()
+}
+
+pub(crate) fn resolve_display_patch_name(
+    pairs: &[(String, String)],
+    patch_name: &str,
+) -> Option<String> {
+    let key = normalize_patch_lookup_key(patch_name);
+    if key.is_empty() {
+        return None;
+    }
+
+    let mut candidates = vec![key.clone()];
+    if !PATCH_DIR_PREFIXES
+        .iter()
+        .any(|prefix| key == *prefix || key.starts_with(&format!("{prefix}/")))
+    {
+        candidates.extend(
+            PATCH_DIR_PREFIXES
+                .iter()
+                .map(|prefix| format!("{prefix}/{key}")),
+        );
+    }
+
+    candidates.into_iter().find_map(|candidate| {
+        pairs
+            .iter()
+            .find(|(_, lower)| lower == &candidate)
+            .map(|(display, _)| display.clone())
+    })
 }
 
 pub(crate) fn collect_patch_pairs(cfg: &Config) -> Result<Vec<(String, String)>> {
@@ -141,5 +181,41 @@ mod tests {
         )));
 
         std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn resolve_display_patch_name_adds_factory_prefix_when_missing() {
+        let pairs = vec![
+            (
+                "patches_factory/Pads/Factory Pad.fxp".to_string(),
+                "patches_factory/pads/factory pad.fxp".to_string(),
+            ),
+            (
+                "patches_3rdparty/Leads/Third Lead.fxp".to_string(),
+                "patches_3rdparty/leads/third lead.fxp".to_string(),
+            ),
+        ];
+
+        let resolved = resolve_display_patch_name(&pairs, "Pads/Factory Pad.fxp");
+
+        assert_eq!(
+            resolved.as_deref(),
+            Some("patches_factory/Pads/Factory Pad.fxp")
+        );
+    }
+
+    #[test]
+    fn resolve_display_patch_name_prefers_existing_prefixed_name() {
+        let pairs = vec![(
+            "patches_3rdparty/Leads/Third Lead.fxp".to_string(),
+            "patches_3rdparty/leads/third lead.fxp".to_string(),
+        )];
+
+        let resolved = resolve_display_patch_name(&pairs, "patches_3rdparty/Leads/Third Lead.fxp");
+
+        assert_eq!(
+            resolved.as_deref(),
+            Some("patches_3rdparty/Leads/Third Lead.fxp")
+        );
     }
 }

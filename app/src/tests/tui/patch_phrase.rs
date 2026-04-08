@@ -339,6 +339,60 @@ fn record_patch_phrase_history_truncates_to_recent_100_items() {
 }
 
 #[test]
+fn record_patch_phrase_history_resolves_factory_prefixed_patch_name() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "patches_factory/Pads/Pad 1.fxp",
+    ]))));
+
+    app.record_patch_phrase_history(r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#);
+
+    let stored = app
+        .patch_phrase_store
+        .patches
+        .get("patches_factory/Pads/Pad 1.fxp")
+        .expect("patch history should be stored with prefixed patch name");
+    assert_eq!(stored.history, vec!["l8cdef".to_string()]);
+    assert!(!app
+        .patch_phrase_store
+        .patches
+        .contains_key("Pads/Pad 1.fxp"));
+}
+
+#[test]
+fn start_patch_phrase_migrates_existing_history_and_favorites_to_prefixed_patch_name() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "patches_factory/Pads/Pad 1.fxp",
+    ]))));
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["hist".to_string()],
+            favorites: vec!["fav".to_string()],
+        },
+    );
+
+    app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
+
+    assert_eq!(
+        app.patch_phrase_name.as_deref(),
+        Some("patches_factory/Pads/Pad 1.fxp")
+    );
+    let stored = app
+        .patch_phrase_store
+        .patches
+        .get("patches_factory/Pads/Pad 1.fxp")
+        .expect("migrated patch state should exist");
+    assert_eq!(stored.history, vec!["hist".to_string()]);
+    assert_eq!(stored.favorites, vec!["fav".to_string()]);
+    assert!(!app
+        .patch_phrase_store
+        .patches
+        .contains_key("Pads/Pad 1.fxp"));
+}
+
+#[test]
 fn patch_phrase_store_flushes_only_when_requested() {
     let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
     let tmp = std::env::temp_dir().join(format!(

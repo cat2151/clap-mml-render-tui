@@ -5,7 +5,7 @@
 
 use std::{
     collections::hash_map::DefaultHasher,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     hash::{Hash, Hasher},
     path::PathBuf,
 };
@@ -18,6 +18,15 @@ const HISTORY_DIR_NAME: &str = "history";
 
 fn default_lines() -> Vec<String> {
     vec!["cde".to_string()]
+}
+
+fn merge_patch_phrase_items(dest: &mut Vec<String>, src: Vec<String>) {
+    let mut seen = dest.iter().cloned().collect::<HashSet<_>>();
+    for item in src {
+        if seen.insert(item.clone()) {
+            dest.push(item);
+        }
+    }
 }
 
 /// 起動・終了で保存・復元するセッション状態。
@@ -322,6 +331,38 @@ pub fn load_patch_phrase_store() -> PatchPhraseStore {
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default()
+}
+
+pub(crate) fn rename_patch_phrase_store_key(
+    store: &mut PatchPhraseStore,
+    from: &str,
+    to: &str,
+) -> bool {
+    if from == to {
+        return false;
+    }
+    let Some(source) = store.patches.remove(from) else {
+        return false;
+    };
+    let dest = store.patches.entry(to.to_string()).or_default();
+    merge_patch_phrase_items(&mut dest.history, source.history);
+    merge_patch_phrase_items(&mut dest.favorites, source.favorites);
+    true
+}
+
+pub(crate) fn normalize_patch_phrase_store_for_available_patches(
+    store: &mut PatchPhraseStore,
+    pairs: &[(String, String)],
+) -> bool {
+    let patch_names = store.patches.keys().cloned().collect::<Vec<_>>();
+    let mut changed = false;
+    for patch_name in patch_names {
+        let Some(resolved) = crate::patches::resolve_display_patch_name(pairs, &patch_name) else {
+            continue;
+        };
+        changed |= rename_patch_phrase_store_key(store, &patch_name, &resolved);
+    }
+    changed
 }
 
 #[cfg(test)]

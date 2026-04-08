@@ -1,5 +1,6 @@
 use super::*;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn reexports_core_config() {
@@ -102,4 +103,34 @@ fn cache_render_prepares_memory_only_render_inputs() {
         total_samples > 0,
         "valid MML should produce a positive sample length"
     );
+}
+
+#[test]
+fn cache_render_extracts_patch_from_embedded_json_with_factory_prefix_fallback() {
+    let suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    let root = std::env::temp_dir().join(format!("cmrt_core_patch_fallback_{suffix}"));
+    let factory_patch = root.join("patches_factory").join("Pads").join("Pad 1.fxp");
+    std::fs::create_dir_all(factory_patch.parent().unwrap()).unwrap();
+    std::fs::write(&factory_patch, b"dummy").unwrap();
+
+    let config = CoreConfig {
+        output_midi: "out.mid".into(),
+        output_wav: "out.wav".into(),
+        sample_rate: 44_100.0,
+        buffer_size: 512,
+        patch_path: Some("/patches/Default.fxp".into()),
+        patches_dir: Some(root.to_string_lossy().into_owned()),
+        random_patch: false,
+    };
+
+    let patch = extract_patch_from_json(Some(r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#), &config);
+
+    assert_eq!(
+        patch.as_deref(),
+        Some(factory_patch.to_string_lossy().as_ref())
+    );
+    std::fs::remove_dir_all(root).ok();
 }

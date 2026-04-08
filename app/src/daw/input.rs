@@ -23,6 +23,35 @@ const PATCH_JSON_KEY: &str = "Surge XT patch";
 const PATCH_FILTER_QUERY_JSON_KEY: &str = "Surge XT patch filter";
 
 impl DawApp {
+    fn resolve_patch_name(&self, patch_name: &str) -> Option<String> {
+        crate::patches::resolve_display_patch_name(&self.patch_all, patch_name)
+    }
+
+    fn normalize_patch_phrase_store_key(&mut self, patch_name: String) -> String {
+        let Some(resolved) = self.resolve_patch_name(&patch_name) else {
+            return patch_name;
+        };
+        if resolved != patch_name
+            && crate::history::rename_patch_phrase_store_key(
+                &mut self.patch_phrase_store,
+                &patch_name,
+                &resolved,
+            )
+        {
+            self.mark_patch_phrase_store_dirty();
+        }
+        resolved
+    }
+
+    fn normalize_patch_phrase_store_for_available_patches(&mut self, pairs: &[(String, String)]) {
+        if crate::history::normalize_patch_phrase_store_for_available_patches(
+            &mut self.patch_phrase_store,
+            pairs,
+        ) {
+            self.mark_patch_phrase_store_dirty();
+        }
+    }
+
     pub(in crate::daw) fn enter_help(&mut self) {
         self.help_origin = self.mode;
         self.mode = super::DawMode::Help;
@@ -102,6 +131,7 @@ impl DawApp {
         }
         Self::extract_patch_phrase(&self.data[self.cursor_track][0])
             .map(|(patch_name, _)| patch_name)
+            .map(|patch_name| self.resolve_patch_name(&patch_name).unwrap_or(patch_name))
     }
 
     fn current_track_patch_filter_query(&self) -> Option<String> {
@@ -155,6 +185,7 @@ impl DawApp {
         if phrase.is_empty() {
             return;
         }
+        let patch_name = self.normalize_patch_phrase_store_key(patch_name);
         let state = self
             .patch_phrase_store
             .patches

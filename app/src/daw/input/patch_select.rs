@@ -166,6 +166,12 @@ impl DawApp {
             return;
         }
 
+        if crate::history::normalize_patch_phrase_store_for_available_patches(
+            &mut self.patch_phrase_store,
+            &patches,
+        ) {
+            self.mark_patch_phrase_store_dirty();
+        }
         self.patch_all = patches;
         self.patch_query.clear();
         self.patch_query_before_input.clear();
@@ -175,7 +181,10 @@ impl DawApp {
             .map(|(orig, _)| orig.clone())
             .collect();
         self.patch_cursor = initial_patch_name
-            .map(str::to_string)
+            .map(|patch_name| {
+                crate::patches::resolve_display_patch_name(&self.patch_all, patch_name)
+                    .unwrap_or_else(|| patch_name.to_string())
+            })
             .or_else(|| self.current_track_patch_name())
             .and_then(|patch_name| {
                 self.patch_filtered
