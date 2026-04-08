@@ -51,6 +51,8 @@ impl<'a> TuiApp<'a> {
                 self.patch_all = pairs.clone();
             }
         }
+        let patch_all = self.patch_all.clone();
+        self.normalize_patch_phrase_store_for_available_patches(&patch_all);
         self.patch_query = String::new();
         self.patch_filtered = self
             .patch_all
@@ -60,7 +62,10 @@ impl<'a> TuiApp<'a> {
         self.patch_select_focus = PatchSelectPane::Patches;
         self.patch_select_filter_active = false;
         self.patch_cursor = initial_patch_name
-            .map(str::to_string)
+            .map(|patch_name| {
+                self.resolve_loaded_patch_name(patch_name)
+                    .unwrap_or_else(|| patch_name.to_string())
+            })
             .or_else(|| self.current_line_patch_name())
             .and_then(|patch_name| {
                 self.patch_filtered

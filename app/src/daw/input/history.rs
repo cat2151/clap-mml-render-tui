@@ -13,7 +13,20 @@ impl DawApp {
         if self.cursor_track < FIRST_PLAYABLE_TRACK {
             return;
         }
-        self.history_overlay_patch_name = patch_name;
+        let available_patches = if crate::patches::has_configured_patch_dirs(&self.cfg) {
+            crate::patches::collect_patch_pairs(&self.cfg).ok()
+        } else {
+            None
+        };
+        if let Some(pairs) = available_patches.as_deref() {
+            self.normalize_patch_phrase_store_for_available_patches(pairs);
+        }
+        self.history_overlay_patch_name = patch_name.map(|patch_name| {
+            available_patches
+                .as_deref()
+                .and_then(|pairs| crate::patches::resolve_display_patch_name(pairs, &patch_name))
+                .unwrap_or_else(|| self.normalize_patch_phrase_store_key(patch_name))
+        });
         self.history_overlay_query.clear();
         self.history_overlay_focus = DawHistoryPane::History;
         self.history_overlay_history_cursor = 0;

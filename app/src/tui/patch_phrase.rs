@@ -140,6 +140,7 @@ impl<'a> TuiApp<'a> {
         if phrase.is_empty() {
             return;
         }
+        let patch_name = self.normalize_patch_phrase_store_key(patch_name);
 
         let state = self
             .patch_phrase_store
@@ -151,6 +152,7 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn add_patch_phrase_favorite(&mut self, patch_name: String, phrase: String) {
+        let patch_name = self.normalize_patch_phrase_store_key(patch_name);
         let state = self
             .patch_phrase_store
             .patches
@@ -177,6 +179,17 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn start_patch_phrase(&mut self, patch_name: String) {
+        let ready_pairs = {
+            let state = self.patch_load_state.lock().unwrap();
+            match &*state {
+                crate::tui::PatchLoadState::Ready(pairs) => Some(pairs.clone()),
+                crate::tui::PatchLoadState::Loading | crate::tui::PatchLoadState::Err(_) => None,
+            }
+        };
+        if let Some(pairs) = ready_pairs.as_deref() {
+            self.normalize_patch_phrase_store_for_available_patches(pairs);
+        }
+        let patch_name = self.normalize_patch_phrase_store_key(patch_name);
         self.patch_phrase_name = Some(patch_name);
         self.patch_phrase_focus = PatchPhrasePane::History;
         self.patch_phrase_history_cursor = 0;

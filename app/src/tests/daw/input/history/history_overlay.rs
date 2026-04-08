@@ -29,6 +29,49 @@ fn handle_normal_shift_h_opens_patch_history_overlay_for_track_patch() {
 }
 
 #[test]
+fn handle_normal_shift_h_migrates_legacy_patch_name_to_factory_prefixed_patch_name() {
+    let tmp = TempDirGuard::new("cmrt_test_history_overlay_patch_prefix");
+    let factory_patch = tmp
+        .path()
+        .join("patches_factory")
+        .join("Pads")
+        .join("Pad 1.fxp");
+    std::fs::create_dir_all(factory_patch.parent().unwrap()).unwrap();
+    std::fs::write(&factory_patch, b"dummy").unwrap();
+
+    let (mut app, _cache_rx) = build_test_app();
+    app.cfg = Arc::new(Config {
+        patches_dirs: Some(vec![tmp.path().to_string_lossy().into_owned()]),
+        ..(*app.cfg).clone()
+    });
+    app.cursor_track = 1;
+    app.cursor_measure = 2;
+    app.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["l8cdef".to_string()],
+            favorites: vec!["o5g".to_string()],
+        },
+    );
+
+    app.handle_normal(KeyCode::Char('H'));
+
+    assert_eq!(
+        app.history_overlay_patch_name.as_deref(),
+        Some("patches_factory/Pads/Pad 1.fxp")
+    );
+    assert!(app
+        .patch_phrase_store
+        .patches
+        .contains_key("patches_factory/Pads/Pad 1.fxp"));
+    assert!(!app
+        .patch_phrase_store
+        .patches
+        .contains_key("Pads/Pad 1.fxp"));
+}
+
+#[test]
 fn handle_normal_h_moves_measure_cursor_left() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_measure = 2;

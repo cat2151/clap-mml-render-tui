@@ -27,6 +27,49 @@ fn handle_patch_select_enter_overwrites_current_track_init_patch() {
 }
 
 #[test]
+fn start_patch_select_overlay_migrates_prefixed_favorites_from_legacy_patch_name() {
+    let tmp = TempDirGuard::new("cmrt_test_daw_patch_select_patch_prefix");
+    let factory_patch = tmp
+        .path()
+        .join("patches_factory")
+        .join("Pads")
+        .join("Pad 1.fxp");
+    std::fs::create_dir_all(factory_patch.parent().unwrap()).unwrap();
+    std::fs::write(&factory_patch, b"dummy").unwrap();
+
+    let (mut app, _cache_rx) = build_test_app();
+    app.cfg = Arc::new(Config {
+        patches_dirs: Some(vec![tmp.path().to_string_lossy().into_owned()]),
+        ..(*app.cfg).clone()
+    });
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["hist".to_string()],
+            favorites: vec!["fav".to_string()],
+        },
+    );
+
+    app.start_patch_select_overlay(None);
+
+    assert_eq!(
+        app.patch_favorite_items,
+        vec!["patches_factory/Pads/Pad 1.fxp".to_string()]
+    );
+    assert!(app
+        .patch_phrase_store
+        .patches
+        .contains_key("patches_factory/Pads/Pad 1.fxp"));
+    assert!(!app
+        .patch_phrase_store
+        .patches
+        .contains_key("Pads/Pad 1.fxp"));
+}
+
+#[test]
 fn handle_patch_select_enter_saves_filter_query_in_track_init_json() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_track = 1;

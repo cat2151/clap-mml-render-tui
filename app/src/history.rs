@@ -20,6 +20,14 @@ fn default_lines() -> Vec<String> {
     vec!["cde".to_string()]
 }
 
+fn merge_patch_phrase_items(dest: &mut Vec<String>, src: Vec<String>) {
+    for item in src {
+        if !dest.iter().any(|existing| existing == &item) {
+            dest.push(item);
+        }
+    }
+}
+
 /// 起動・終了で保存・復元するセッション状態。
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SessionState {
@@ -322,6 +330,23 @@ pub fn load_patch_phrase_store() -> PatchPhraseStore {
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default()
+}
+
+pub(crate) fn rename_patch_phrase_store_key(
+    store: &mut PatchPhraseStore,
+    from: &str,
+    to: &str,
+) -> bool {
+    if from == to {
+        return false;
+    }
+    let Some(source) = store.patches.remove(from) else {
+        return false;
+    };
+    let dest = store.patches.entry(to.to_string()).or_default();
+    merge_patch_phrase_items(&mut dest.history, source.history);
+    merge_patch_phrase_items(&mut dest.favorites, source.favorites);
+    true
 }
 
 #[cfg(test)]

@@ -180,6 +180,27 @@ fn handle_normal_r_inserts_c_when_all_semicolon_branches_are_empty() {
 }
 
 #[test]
+fn handle_normal_enter_rewrites_legacy_patch_json_with_prefixed_patch_name() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "patches_factory/Pads/Pad 1.fxp",
+    ]))));
+
+    app.handle_normal(KeyCode::Enter);
+
+    assert_eq!(
+        app.lines,
+        vec![r#"{"Surge XT patch": "patches_factory/Pads/Pad 1.fxp"} l8cdef"#.to_string()]
+    );
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg)
+            if msg == r#"{"Surge XT patch": "patches_factory/Pads/Pad 1.fxp"} l8cdef"#
+    ));
+}
+
+#[test]
 fn handle_normal_r_shows_error_when_patches_dirs_is_missing() {
     let mut cfg = test_config();
     cfg.patches_dirs = None;

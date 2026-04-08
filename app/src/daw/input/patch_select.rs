@@ -167,6 +167,8 @@ impl DawApp {
         }
 
         self.patch_all = patches;
+        let patch_all = self.patch_all.clone();
+        self.normalize_patch_phrase_store_for_available_patches(&patch_all);
         self.patch_query.clear();
         self.patch_query_before_input.clear();
         self.patch_filtered = self
@@ -175,7 +177,10 @@ impl DawApp {
             .map(|(orig, _)| orig.clone())
             .collect();
         self.patch_cursor = initial_patch_name
-            .map(str::to_string)
+            .map(|patch_name| {
+                crate::patches::resolve_display_patch_name(&self.patch_all, patch_name)
+                    .unwrap_or_else(|| patch_name.to_string())
+            })
             .or_else(|| self.current_track_patch_name())
             .and_then(|patch_name| {
                 self.patch_filtered

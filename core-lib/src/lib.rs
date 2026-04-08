@@ -10,6 +10,8 @@ use anyhow::Result;
 use clack_host::prelude::PluginEntry;
 use mmlabc_to_smf::mml_preprocessor;
 
+const PATCH_DIR_PREFIXES: [&str; 2] = ["patches_factory", "patches_3rdparty"];
+
 /// DAW モードのプレビューキャッシュ構築専用の MML → レンダリング。
 /// - `patch_history.txt` への追記は行わない
 /// - DAW 専用の MIDI/WAV キャッシュファイル（`daw_cache.*`）は生成しない
@@ -63,11 +65,45 @@ fn extract_patch_from_json(json_str: Option<&str>, cfg: &CoreConfig) -> Option<S
     let rel = value.get("Surge XT patch")?.as_str()?;
 
     if let Some(ref base) = cfg.patches_dir {
-        let abs = std::path::Path::new(base).join(std::path::Path::new(rel));
+        let base = std::path::Path::new(base);
+        let abs = resolve_patch_path_from_base(base, rel);
         Some(abs.to_string_lossy().into_owned())
     } else {
         Some(rel.to_string())
     }
+}
+
+fn resolve_patch_path_from_base(base: &std::path::Path, rel: &str) -> std::path::PathBuf {
+    let abs = base.join(std::path::Path::new(rel));
+    if abs.exists() {
+        return abs;
+    }
+
+    let rel_path = std::path::Path::new(rel);
+    if rel_path.components().count() == 0 {
+        return abs;
+    }
+    if rel_path
+        .components()
+        .next()
+        .and_then(|component| component.as_os_str().to_str())
+        .is_some_and(|first| {
+            PATCH_DIR_PREFIXES
+                .iter()
+                .any(|prefix| first.eq_ignore_ascii_case(prefix))
+        })
+    {
+        return abs;
+    }
+
+    for prefix in PATCH_DIR_PREFIXES {
+        let candidate = base.join(prefix).join(rel_path);
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+
+    abs
 }
 
 #[cfg(test)]
