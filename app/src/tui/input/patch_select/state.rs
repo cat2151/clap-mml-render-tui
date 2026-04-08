@@ -51,8 +51,12 @@ impl<'a> TuiApp<'a> {
                 self.patch_all = pairs.clone();
             }
         }
-        let patch_all = self.patch_all.clone();
-        self.normalize_patch_phrase_store_for_available_patches(&patch_all);
+        if crate::history::normalize_patch_phrase_store_for_available_patches(
+            &mut self.patch_phrase_store,
+            &self.patch_all,
+        ) {
+            self.patch_phrase_store_dirty = true;
+        }
         self.patch_query = String::new();
         self.patch_filtered = self
             .patch_all

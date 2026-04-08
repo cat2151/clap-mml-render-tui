@@ -350,6 +350,21 @@ pub(crate) fn rename_patch_phrase_store_key(
     true
 }
 
+pub(crate) fn normalize_patch_phrase_store_for_available_patches(
+    store: &mut PatchPhraseStore,
+    pairs: &[(String, String)],
+) -> bool {
+    let patch_names = store.patches.keys().cloned().collect::<Vec<_>>();
+    let mut changed = false;
+    for patch_name in patch_names {
+        let Some(resolved) = crate::patches::resolve_display_patch_name(pairs, &patch_name) else {
+            continue;
+        };
+        changed |= rename_patch_phrase_store_key(store, &patch_name, &resolved);
+    }
+    changed
+}
+
 #[cfg(test)]
 #[path = "tests/history.rs"]
 mod tests;

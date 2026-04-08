@@ -46,25 +46,10 @@ impl<'a> TuiApp<'a> {
         &mut self,
         pairs: &[(String, String)],
     ) {
-        let patch_names = self
-            .patch_phrase_store
-            .patches
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
-        let mut changed = false;
-        for patch_name in patch_names {
-            let Some(resolved) = crate::patches::resolve_display_patch_name(pairs, &patch_name)
-            else {
-                continue;
-            };
-            changed |= crate::history::rename_patch_phrase_store_key(
-                &mut self.patch_phrase_store,
-                &patch_name,
-                &resolved,
-            );
-        }
-        if changed {
+        if crate::history::normalize_patch_phrase_store_for_available_patches(
+            &mut self.patch_phrase_store,
+            pairs,
+        ) {
             self.patch_phrase_store_dirty = true;
         }
     }

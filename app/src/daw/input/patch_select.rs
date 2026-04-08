@@ -166,9 +166,13 @@ impl DawApp {
             return;
         }
 
+        if crate::history::normalize_patch_phrase_store_for_available_patches(
+            &mut self.patch_phrase_store,
+            &patches,
+        ) {
+            self.mark_patch_phrase_store_dirty();
+        }
         self.patch_all = patches;
-        let patch_all = self.patch_all.clone();
-        self.normalize_patch_phrase_store_for_available_patches(&patch_all);
         self.patch_query.clear();
         self.patch_query_before_input.clear();
         self.patch_filtered = self

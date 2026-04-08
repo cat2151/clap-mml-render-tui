@@ -24,16 +24,7 @@ const PATCH_FILTER_QUERY_JSON_KEY: &str = "Surge XT patch filter";
 
 impl DawApp {
     fn resolve_patch_name(&self, patch_name: &str) -> Option<String> {
-        if let Some(resolved) =
-            crate::patches::resolve_display_patch_name(&self.patch_all, patch_name)
-        {
-            return Some(resolved);
-        }
-        if !crate::patches::has_configured_patch_dirs(&self.cfg) {
-            return None;
-        }
-        let pairs = crate::patches::collect_patch_pairs(&self.cfg).ok()?;
-        crate::patches::resolve_display_patch_name(&pairs, patch_name)
+        crate::patches::resolve_display_patch_name(&self.patch_all, patch_name)
     }
 
     fn normalize_patch_phrase_store_key(&mut self, patch_name: String) -> String {
@@ -53,25 +44,10 @@ impl DawApp {
     }
 
     fn normalize_patch_phrase_store_for_available_patches(&mut self, pairs: &[(String, String)]) {
-        let patch_names = self
-            .patch_phrase_store
-            .patches
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
-        let mut changed = false;
-        for patch_name in patch_names {
-            let Some(resolved) = crate::patches::resolve_display_patch_name(pairs, &patch_name)
-            else {
-                continue;
-            };
-            changed |= crate::history::rename_patch_phrase_store_key(
-                &mut self.patch_phrase_store,
-                &patch_name,
-                &resolved,
-            );
-        }
-        if changed {
+        if crate::history::normalize_patch_phrase_store_for_available_patches(
+            &mut self.patch_phrase_store,
+            pairs,
+        ) {
             self.mark_patch_phrase_store_dirty();
         }
     }
