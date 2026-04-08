@@ -96,12 +96,18 @@ fn compare_natural_str(left: &str, right: &str) -> Ordering {
     left[left_index..].cmp(&right[right_index..])
 }
 
+/// 正規化済み・小文字化済みのパッチ名同士を自然順で比較する。
+/// ソート時の余分な `String` 確保を避けたい場合はこちらを使う。
+pub(crate) fn compare_normalized_patch_names_natural(left: &str, right: &str) -> Ordering {
+    compare_natural_str(left, right).then_with(|| left.cmp(right))
+}
+
 pub(crate) fn compare_patch_names_natural(left: &str, right: &str) -> Ordering {
-    compare_natural_str(
-        &normalize_patch_lookup_key(left),
-        &normalize_patch_lookup_key(right),
-    )
-    .then_with(|| left.cmp(right))
+    let normalized_left = normalize_patch_lookup_key(left);
+    let normalized_right = normalize_patch_lookup_key(right);
+
+    compare_normalized_patch_names_natural(&normalized_left, &normalized_right)
+        .then_with(|| left.cmp(right))
 }
 
 pub(crate) fn resolve_display_patch_name(
@@ -158,7 +164,8 @@ fn collect_patch_pairs_with_optional_base(
         }));
     }
     pairs.sort_by(|(left_display, left_lower), (right_display, right_lower)| {
-        compare_natural_str(left_lower, right_lower).then_with(|| left_display.cmp(right_display))
+        compare_normalized_patch_names_natural(left_lower, right_lower)
+            .then_with(|| left_display.cmp(right_display))
     });
     Ok(pairs)
 }
@@ -314,6 +321,25 @@ mod tests {
                 "Pads/Pad 1.fxp".to_string(),
                 "Pads/Pad 2.fxp".to_string(),
                 "Pads/Pad 11.fxp".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn compare_normalized_patch_names_natural_orders_numeric_suffixes() {
+        let mut items = vec![
+            "pads/pad 11.fxp".to_string(),
+            "pads/pad 2.fxp".to_string(),
+            "pads/pad 1.fxp".to_string(),
+        ];
+        items.sort_by(|left, right| compare_normalized_patch_names_natural(left, right));
+
+        assert_eq!(
+            items,
+            vec![
+                "pads/pad 1.fxp".to_string(),
+                "pads/pad 2.fxp".to_string(),
+                "pads/pad 11.fxp".to_string(),
             ]
         );
     }
