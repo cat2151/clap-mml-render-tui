@@ -85,13 +85,9 @@ pub(super) fn draw_history(f: &mut Frame, app: &DawApp, area: Rect) {
     } else {
         " history overlay - / で MML 検索 (space=AND) "
     };
-    let mut history_query_textarea = app.history_overlay_query_textarea.clone();
-    crate::text_input::sync_single_line_textarea(
-        &mut history_query_textarea,
-        &app.history_overlay_query,
-    );
     let history_query_widget = crate::text_input::build_query_textarea_widget(
-        &history_query_textarea,
+        &app.history_overlay_query_textarea,
+        &app.history_overlay_query,
         search_title,
         "/ を押して絞り込み (space=AND)",
         MONOKAI_CYAN,

@@ -29,17 +29,28 @@ pub(crate) fn sync_single_line_textarea<'a>(textarea: &mut TextArea<'a>, text: &
     }
 }
 
+/// Return the current single-line text value by joining all textarea lines.
+///
+/// This crate uses these textareas only for single-line query inputs, so joining
+/// the internal lines yields the current text content.
 pub(crate) fn textarea_value(textarea: &TextArea<'_>) -> String {
     textarea.lines().join("")
 }
 
+/// Build a render-only textarea widget for a query input.
+///
+/// The persistent `TextArea` state is cloned on purpose so each draw can attach a
+/// frame-specific block title and placeholder without mutating the live input
+/// state that tracks the cursor position and editing history.
 pub(crate) fn build_query_textarea_widget<'a>(
     textarea: &TextArea<'a>,
+    text: &str,
     title: impl Into<String>,
     placeholder: &str,
     border_color: Color,
 ) -> TextArea<'a> {
     let mut widget = textarea.clone();
+    sync_single_line_textarea(&mut widget, text);
     widget.set_style(Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG));
     widget.set_cursor_line_style(Style::default());
     widget.set_cursor_style(

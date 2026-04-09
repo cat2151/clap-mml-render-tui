@@ -81,10 +81,9 @@ pub(super) fn draw_patch_select(f: &mut Frame, app: &DawApp, area: Rect) {
     } else {
         " patch select - / で patch name 検索 "
     };
-    let mut patch_query_textarea = app.patch_query_textarea.clone();
-    crate::text_input::sync_single_line_textarea(&mut patch_query_textarea, &app.patch_query);
     let patch_query_widget = crate::text_input::build_query_textarea_widget(
-        &patch_query_textarea,
+        &app.patch_query_textarea,
+        &app.patch_query,
         search_title,
         "/ を押して絞り込み",
         MONOKAI_CYAN,

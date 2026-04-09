@@ -73,9 +73,9 @@ pub(super) fn draw_patch_select(
     } else {
         " ENTERで音色を選択 - patch select - "
     };
-    crate::text_input::sync_single_line_textarea(&mut app.patch_query_textarea, &app.patch_query);
     let patch_query_widget = crate::text_input::build_query_textarea_widget(
         &app.patch_query_textarea,
+        &app.patch_query,
         search_title,
         "/ を押して絞り込み",
         MONOKAI_YELLOW,
@@ -196,12 +196,9 @@ pub(super) fn draw_patch_phrase(
     } else {
         " ENTERでフレーズを選択 - patch phrase history - "
     };
-    crate::text_input::sync_single_line_textarea(
-        &mut app.patch_phrase_query_textarea,
-        &app.patch_phrase_query,
-    );
     let patch_phrase_query_widget = crate::text_input::build_query_textarea_widget(
         &app.patch_phrase_query_textarea,
+        &app.patch_phrase_query,
         search_title,
         "/ を押して絞り込み (space=AND)",
         MONOKAI_YELLOW,
@@ -317,12 +314,9 @@ pub(super) fn draw_notepad_history(
     } else {
         " ENTERで音色とフレーズを選択 - notepad history - "
     };
-    crate::text_input::sync_single_line_textarea(
-        &mut app.notepad_query_textarea,
-        &app.notepad_query,
-    );
     let notepad_query_widget = crate::text_input::build_query_textarea_widget(
         &app.notepad_query_textarea,
+        &app.notepad_query,
         search_title,
         "/ を押して絞り込み (space=AND)",
         MONOKAI_YELLOW,
