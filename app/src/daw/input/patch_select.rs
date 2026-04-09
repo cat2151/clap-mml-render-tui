@@ -211,6 +211,9 @@ impl DawApp {
                     self.patch_select_filter_active = false;
                     self.sync_patch_select_cursors();
                 }
+                KeyCode::Backspace if self.patch_query.is_empty() => {
+                    self.patch_select_filter_active = false;
+                }
                 KeyCode::Char('?') => self.enter_help(),
                 _ => {
                     let previous_query = self.patch_query.clone();
@@ -225,6 +228,9 @@ impl DawApp {
                         }
                         self.patch_query = next_query;
                         self.update_patch_filter();
+                        if !previous_query.is_empty() && self.patch_query.is_empty() {
+                            self.patch_select_filter_active = false;
+                        }
                     }
                 }
             }
