@@ -80,7 +80,7 @@ pub(super) fn draw_mixer(f: &mut Frame, app: &DawApp, area: Rect) {
     for track in track_range.clone() {
         let is_selected = track == app.mixer_cursor_track;
         let style = if is_selected {
-            blinking_cursor_style(Style::default().fg(MONOKAI_YELLOW))
+            blinking_cursor_style(Style::default().fg(MONOKAI_FG))
         } else {
             Style::default().fg(MONOKAI_YELLOW)
         };

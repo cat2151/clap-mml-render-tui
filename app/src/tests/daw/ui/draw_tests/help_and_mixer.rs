@@ -461,4 +461,9 @@ fn draw_highlights_selected_mixer_track_with_bright_blinking_background() {
         !blinking_positions.is_empty(),
         "selected mixer track should use a bright blinking background"
     );
+
+    let (x, y) = find_text_ignoring_spaces(&buffer, "track1");
+    let cell = buffer.cell((x, y)).unwrap();
+    assert_eq!(cell.fg, MONOKAI_FG);
+    assert_eq!(cell.bg, MONOKAI_YELLOW);
 }
