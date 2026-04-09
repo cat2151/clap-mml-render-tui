@@ -288,6 +288,9 @@ impl<'a> TuiApp<'a> {
                     self.mode = Mode::Normal;
                 }
             }
+            KeyCode::Char(' ') => {
+                self.preview_selected_notepad_item();
+            }
             KeyCode::Char('f') if self.notepad_focus == PatchPhrasePane::History => {
                 if let Some(mml) = self.selected_notepad_item() {
                     self.add_notepad_favorite(mml);
