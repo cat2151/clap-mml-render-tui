@@ -81,22 +81,14 @@ pub(super) fn draw_patch_select(f: &mut Frame, app: &DawApp, area: Rect) {
     } else {
         " patch select - / で patch name 検索 "
     };
-    let search_body = if !app.patch_query.is_empty() || app.patch_select_filter_active {
-        format!("/ {}", app.patch_query)
-    } else {
-        "/ を押して絞り込み".to_string()
-    };
-    f.render_widget(
-        Paragraph::new(search_body)
-            .style(Style::default().fg(MONOKAI_FG))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(search_title)
-                    .border_style(Style::default().fg(MONOKAI_CYAN)),
-            ),
-        chunks[0],
+    let patch_query_widget = crate::text_input::build_query_textarea_widget(
+        &app.patch_query_textarea,
+        &app.patch_query,
+        search_title,
+        "/ を押して絞り込み",
+        MONOKAI_CYAN,
     );
+    f.render_widget(&patch_query_widget, chunks[0]);
 
     let patch_border = if app.patch_select_focus == DawPatchSelectPane::Patches {
         Style::default().fg(MONOKAI_CYAN)

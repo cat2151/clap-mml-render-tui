@@ -7,7 +7,7 @@ pub(super) use ratatui::{backend::TestBackend, buffer::Buffer, style::Color, Ter
 pub(super) use tui_textarea::TextArea;
 
 pub(super) use crate::config::Config;
-pub(super) use crate::test_utils::help_overlay_bounds;
+pub(super) use crate::test_utils::{find_text_ignoring_spaces, help_overlay_bounds};
 
 pub(super) use super::{
     super::{
@@ -15,7 +15,7 @@ pub(super) use super::{
         DawPlayState, PlayPosition, MEASURES,
     },
     cache_indicator, cache_indicator_color, cache_text_color, draw, loop_measure_summary_label,
-    loop_status_label, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_PINK,
+    loop_status_label, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_PINK, MONOKAI_YELLOW,
 };
 
 fn build_test_app() -> DawApp {
@@ -68,12 +68,14 @@ fn build_test_app() -> DawApp {
         patch_phrase_store_dirty: false,
         history_overlay_patch_name: None,
         history_overlay_query: String::new(),
+        history_overlay_query_textarea: crate::text_input::new_single_line_textarea(""),
         history_overlay_history_cursor: 0,
         history_overlay_favorites_cursor: 0,
         history_overlay_focus: DawHistoryPane::History,
         history_overlay_filter_active: false,
         patch_all: Vec::new(),
         patch_query: String::new(),
+        patch_query_textarea: crate::text_input::new_single_line_textarea(""),
         patch_query_before_input: String::new(),
         patch_filtered: Vec::new(),
         patch_cursor: 0,

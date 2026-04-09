@@ -138,6 +138,7 @@ impl DawApp {
         }
 
         self.patch_query = self.patch_query_before_input.clone();
+        self.patch_query_textarea = crate::text_input::new_single_line_textarea(&self.patch_query);
         self.update_patch_filter();
     }
 
@@ -168,6 +169,7 @@ impl DawApp {
         }
         self.patch_all = patches;
         self.patch_query.clear();
+        self.patch_query_textarea = crate::text_input::new_single_line_textarea("");
         self.patch_query_before_input.clear();
         self.patch_filtered = self
             .patch_all
@@ -196,10 +198,46 @@ impl DawApp {
     }
 
     pub(in crate::daw) fn handle_patch_select(&mut self, key: KeyCode) {
-        match key {
-            KeyCode::Esc if self.patch_select_filter_active => {
-                self.cancel_patch_filter_input();
+        if self.patch_select_filter_active {
+            crate::text_input::sync_single_line_textarea(
+                &mut self.patch_query_textarea,
+                &self.patch_query,
+            );
+            match key {
+                KeyCode::Esc => {
+                    self.cancel_patch_filter_input();
+                }
+                KeyCode::Enter => {
+                    self.patch_select_filter_active = false;
+                    self.sync_patch_select_cursors();
+                }
+                KeyCode::Backspace if self.patch_query.is_empty() => {
+                    self.patch_select_filter_active = false;
+                }
+                KeyCode::Char('?') => self.enter_help(),
+                _ => {
+                    let previous_query = self.patch_query.clone();
+                    if crate::text_input::apply_key_code_to_textarea(
+                        &mut self.patch_query_textarea,
+                        key,
+                    ) {
+                        let next_query =
+                            crate::text_input::textarea_value(&self.patch_query_textarea);
+                        if next_query == previous_query {
+                            return;
+                        }
+                        self.patch_query = next_query;
+                        self.update_patch_filter();
+                        if !previous_query.is_empty() && self.patch_query.is_empty() {
+                            self.patch_select_filter_active = false;
+                        }
+                    }
+                }
             }
+            return;
+        }
+
+        match key {
             KeyCode::Esc => {
                 self.mode = DawMode::Normal;
             }
@@ -218,10 +256,6 @@ impl DawApp {
             KeyCode::Char('t') if !self.patch_select_filter_active => {
                 let selected_patch_name = self.patch_select_selected_patch_name();
                 self.start_patch_select_overlay(selected_patch_name.as_deref());
-            }
-            KeyCode::Enter if self.patch_select_filter_active => {
-                self.patch_select_filter_active = false;
-                self.sync_patch_select_cursors();
             }
             KeyCode::Enter => {
                 if let Some(selected_patch_name) = self.patch_select_selected_patch_name() {
@@ -262,20 +296,13 @@ impl DawApp {
                 self.patch_select_focus = DawPatchSelectPane::Patches;
                 self.patch_query_before_input = self.patch_query.clone();
                 self.patch_select_filter_active = true;
+                self.patch_query_textarea =
+                    crate::text_input::new_single_line_textarea(&self.patch_query);
                 self.sync_patch_select_cursors();
-            }
-            KeyCode::Backspace if self.patch_select_filter_active => {
-                if self.patch_query.pop().is_some() {
-                    self.update_patch_filter();
-                }
             }
             KeyCode::Char('?') => self.enter_help(),
             KeyCode::Char(' ') if !self.patch_select_filter_active => {
                 self.preview_selected_patch();
-            }
-            KeyCode::Char(c) if self.patch_select_filter_active => {
-                self.patch_query.push(c);
-                self.update_patch_filter();
             }
             _ => {}
         }

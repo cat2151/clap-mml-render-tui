@@ -89,7 +89,8 @@ pub struct TuiApp<'a> {
     patch_load_state: Arc<Mutex<PatchLoadState>>,
     /// PatchSelect 起動時にスナップショットした (表示名, 小文字化済み) ペアのリスト
     pub(super) patch_all: Vec<(String, String)>,
-    pub(super) patch_query: String,         // 検索クエリ
+    pub(super) patch_query: String, // 検索クエリ
+    pub(super) patch_query_textarea: TextArea<'a>,
     pub(super) patch_filtered: Vec<String>, // フィルタ結果（表示名のみ）
     pub(super) patch_cursor: usize,         // フィルタ結果内のカーソル位置
     pub(super) patch_list_state: ListState, // 音色選択リスト描画用
@@ -109,6 +110,7 @@ pub struct TuiApp<'a> {
     pub(super) notepad_favorites_state: ListState,
     pub(super) notepad_focus: PatchPhrasePane,
     pub(super) notepad_query: String,
+    pub(super) notepad_query_textarea: TextArea<'a>,
     pub(super) notepad_filter_active: bool,
     pub(super) notepad_pending_delete: bool,
     pub(super) normal_pending_delete: bool,
@@ -120,6 +122,7 @@ pub struct TuiApp<'a> {
     pub(super) patch_phrase_favorites_state: ListState,
     pub(super) patch_phrase_focus: PatchPhrasePane,
     pub(super) patch_phrase_query: String,
+    pub(super) patch_phrase_query_textarea: TextArea<'a>,
     pub(super) patch_phrase_filter_active: bool,
     pub(super) patch_phrase_store_dirty: bool,
     /// バックグラウンドのアップデートチェックがtrueにセットしたらアップデートを実行

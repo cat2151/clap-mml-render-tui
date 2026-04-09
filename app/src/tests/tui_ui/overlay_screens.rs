@@ -202,7 +202,7 @@ fn patch_select_screen_shows_filter_confirm_title_when_filter_active() {
     let normalized = render_lines(&mut app, 100, 16).join("\n").replace(' ', "");
 
     assert!(normalized.contains("ENTERで絞り込みを決定-patchselect-"));
-    assert!(normalized.contains("/pad"));
+    assert!(normalized.contains("pad"));
 }
 
 #[test]
@@ -307,7 +307,43 @@ fn patch_phrase_screen_shows_filter_confirm_title_when_filter_active() {
     let normalized = render_lines(&mut app, 100, 16).join("\n").replace(' ', "");
 
     assert!(normalized.contains("ENTERで絞り込みを決定-patchphrasehistory-"));
-    assert!(normalized.contains("/l8"));
+    assert!(
+        normalized.match_indices("l8").count() >= 2,
+        "expected the active filter query to be rendered in addition to the history entry: {normalized}"
+    );
+}
+
+#[test]
+fn patch_select_filter_cursor_uses_bright_blinking_background() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_all = vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
+    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
+    app.patch_list_state.select(Some(0));
+    app.mode = Mode::PatchSelect;
+    app.patch_select_filter_active = true;
+    app.patch_query = "pad".to_string();
+
+    let buffer = render_buffer(&mut app, 100, 16);
+    let overlay_area = crate::ui_utils::centered_rect(82, 70, buffer.area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(overlay_area);
+
+    assert!((chunks[0].y..chunks[0].y + chunks[0].height).any(|y| {
+        (chunks[0].x..chunks[0].x + chunks[0].width).any(|x| {
+            let cell = buffer.cell((x, y)).unwrap();
+            cell.bg == MONOKAI_YELLOW
+                && cell
+                    .modifier
+                    .contains(ratatui::style::Modifier::RAPID_BLINK)
+        })
+    }));
 }
 
 #[test]
