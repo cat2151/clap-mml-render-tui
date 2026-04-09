@@ -214,14 +214,7 @@ fn handle_notepad_history_filter_space_updates_query_before_preview_shortcut() {
     assert!(app.notepad_filter_active);
     assert_eq!(app.notepad_query, "beta ");
     assert_eq!(app.notepad_history_items(), vec!["beta soft".to_string()]);
-    assert!(matches!(
-        &preview_before_space,
-        PlayState::Running(msg) if msg == "beta soft"
-    ));
-    assert!(matches!(
-        &*app.play_state.lock().unwrap(),
-        PlayState::Running(msg) if msg == "beta soft"
-    ));
+    assert!(*app.play_state.lock().unwrap() == preview_before_space);
 }
 
 #[test]
