@@ -236,15 +236,20 @@ impl DawApp {
                 }
                 KeyCode::Char('?') => self.enter_help(),
                 _ => {
+                    let previous_query = self.history_overlay_query.clone();
                     if crate::text_input::apply_key_code_to_textarea(
                         &mut self.history_overlay_query_textarea,
                         key,
                     ) {
-                        self.history_overlay_query =
+                        let next_query =
                             crate::text_input::textarea_value(&self.history_overlay_query_textarea);
+                        if next_query == previous_query {
+                            return;
+                        }
+                        self.history_overlay_query = next_query;
                         self.sync_history_overlay_cursors();
                         self.preview_selected_history_overlay_item();
-                        if self.history_overlay_query.is_empty() {
+                        if !previous_query.is_empty() && self.history_overlay_query.is_empty() {
                             self.history_overlay_filter_active = false;
                         }
                     }

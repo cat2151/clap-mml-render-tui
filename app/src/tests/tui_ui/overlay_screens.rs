@@ -307,7 +307,10 @@ fn patch_phrase_screen_shows_filter_confirm_title_when_filter_active() {
     let normalized = render_lines(&mut app, 100, 16).join("\n").replace(' ', "");
 
     assert!(normalized.contains("ENTERで絞り込みを決定-patchphrasehistory-"));
-    assert!(normalized.contains("l8"));
+    assert!(
+        normalized.match_indices("l8").count() >= 2,
+        "expected the active filter query to be rendered in addition to the history entry: {normalized}"
+    );
 }
 
 #[test]

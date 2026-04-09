@@ -213,12 +213,17 @@ impl DawApp {
                 }
                 KeyCode::Char('?') => self.enter_help(),
                 _ => {
+                    let previous_query = self.patch_query.clone();
                     if crate::text_input::apply_key_code_to_textarea(
                         &mut self.patch_query_textarea,
                         key,
                     ) {
-                        self.patch_query =
+                        let next_query =
                             crate::text_input::textarea_value(&self.patch_query_textarea);
+                        if next_query == previous_query {
+                            return;
+                        }
+                        self.patch_query = next_query;
                         self.update_patch_filter();
                     }
                 }

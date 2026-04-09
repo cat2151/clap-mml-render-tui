@@ -223,18 +223,23 @@ impl<'a> TuiApp<'a> {
                 }
                 KeyCode::Char('?') => self.enter_help(),
                 _ => {
+                    let previous_query = self.patch_phrase_query.clone();
                     if crate::text_input::apply_key_code_to_textarea(
                         &mut self.patch_phrase_query_textarea,
                         key,
                     ) {
-                        self.patch_phrase_query =
+                        let next_query =
                             crate::text_input::textarea_value(&self.patch_phrase_query_textarea);
+                        if next_query == previous_query {
+                            return;
+                        }
+                        self.patch_phrase_query = next_query;
                         self.sync_patch_phrase_states();
                         if let Some(mml) = self.patch_phrase_preview_mml() {
                             self.record_notepad_history(&mml);
                             self.play_mml(mml);
                         }
-                        if self.patch_phrase_query.is_empty() {
+                        if !previous_query.is_empty() && self.patch_phrase_query.is_empty() {
                             self.patch_phrase_filter_active = false;
                         }
                     }

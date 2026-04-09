@@ -327,11 +327,16 @@ impl<'a> TuiApp<'a> {
                 }
                 KeyCode::Char('?') => self.enter_help(),
                 _ => {
+                    let previous_query = self.patch_query.clone();
                     if self.patch_query_textarea.input(key_event) {
-                        self.patch_query =
+                        let next_query =
                             crate::text_input::textarea_value(&self.patch_query_textarea);
+                        if next_query == previous_query {
+                            return;
+                        }
+                        self.patch_query = next_query;
                         self.update_patch_filter();
-                        if self.patch_query.is_empty() {
+                        if !previous_query.is_empty() && self.patch_query.is_empty() {
                             self.patch_select_filter_active = false;
                         }
                     }

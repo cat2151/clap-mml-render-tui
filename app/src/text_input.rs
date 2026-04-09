@@ -72,7 +72,16 @@ pub(crate) fn build_query_textarea_widget<'a>(
 }
 
 pub(crate) fn apply_key_code_to_textarea(textarea: &mut TextArea<'_>, key: KeyCode) -> bool {
-    key_code_to_input(key).is_some_and(|input| textarea.input(input))
+    let Some(input) = key_code_to_input(key) else {
+        return false;
+    };
+
+    let before = textarea_value(textarea);
+    if !textarea.input(input) {
+        return false;
+    }
+
+    textarea_value(textarea) != before
 }
 
 fn key_code_to_input(key: KeyCode) -> Option<Input> {
@@ -97,4 +106,28 @@ fn key_code_to_input(key: KeyCode) -> Option<Input> {
         alt: false,
         shift: false,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn apply_key_code_to_textarea_returns_false_for_cursor_only_input() {
+        let mut textarea = new_single_line_textarea("pad");
+
+        assert!(!apply_key_code_to_textarea(&mut textarea, KeyCode::Left));
+        assert_eq!(textarea_value(&textarea), "pad");
+    }
+
+    #[test]
+    fn apply_key_code_to_textarea_returns_true_when_text_changes() {
+        let mut textarea = new_single_line_textarea("pa");
+
+        assert!(apply_key_code_to_textarea(
+            &mut textarea,
+            KeyCode::Char('d')
+        ));
+        assert_eq!(textarea_value(&textarea), "pad");
+    }
 }

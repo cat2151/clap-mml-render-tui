@@ -169,15 +169,20 @@ impl<'a> TuiApp<'a> {
                 }
                 KeyCode::Char('?') => self.enter_help(),
                 _ => {
+                    let previous_query = self.notepad_query.clone();
                     if crate::text_input::apply_key_code_to_textarea(
                         &mut self.notepad_query_textarea,
                         key,
                     ) {
-                        self.notepad_query =
+                        let next_query =
                             crate::text_input::textarea_value(&self.notepad_query_textarea);
+                        if next_query == previous_query {
+                            return;
+                        }
+                        self.notepad_query = next_query;
                         self.sync_notepad_history_states();
                         self.preview_selected_notepad_item();
-                        if self.notepad_query.is_empty() {
+                        if !previous_query.is_empty() && self.notepad_query.is_empty() {
                             self.notepad_filter_active = false;
                         }
                     }
