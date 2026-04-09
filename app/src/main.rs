@@ -1,11 +1,11 @@
 use anyhow::Result;
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use clap_mml_render_tui::{config, server, tui, updater};
 use cmrt_core::{load_entry, mml_to_play, CoreConfig};
 
 #[derive(Debug, PartialEq, Eq)]
 enum CliAction {
-    Help,
+    Help(String),
     Tui,
     CliMml(String),
     Server(u16),
@@ -18,32 +18,29 @@ enum CliAction {
     name = "cmrt",
     about = "CLAP MML Render TUI",
     args_conflicts_with_subcommands = true,
-    disable_help_subcommand = true,
-    after_help = "サーバーモードでは HTTP POST でMMLを受け取りWAVデータを返します。\n  例: curl -X POST http://127.0.0.1:62151/ --data 'cde'"
+    disable_help_subcommand = true
 )]
 struct Cli {
     #[arg(
         long,
         num_args = 0..=1,
-        default_missing_value = "62151",
         value_name = "PORT",
         conflicts_with = "shutdown",
         help = "サーバーモードで起動する"
     )]
-    server: Option<u16>,
+    server: Option<Option<u16>>,
 
     #[arg(
         long,
         num_args = 0..=1,
-        default_missing_value = "62151",
         value_name = "PORT",
         conflicts_with = "server",
         help = "起動中のサーバーを停止する"
     )]
-    shutdown: Option<u16>,
+    shutdown: Option<Option<u16>>,
 
-    #[arg(long = "mml", hide = true, value_name = "MML")]
-    deprecated_mml: Option<String>,
+    #[arg(long = "mml", hide = true, num_args = 0..=1, value_name = "MML")]
+    deprecated_mml: Option<Option<String>>,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -58,15 +55,24 @@ enum Commands {
     Update,
 }
 
+fn cli_command() -> clap::Command {
+    Cli::command().after_help(format!(
+        "サーバーモードでは HTTP POST でMMLを受け取りWAVデータを返します。\n  例: curl -X POST http://127.0.0.1:{}/ --data 'cde'",
+        server::DEFAULT_PORT
+    ))
+}
+
 fn parse_cli_from<I, T>(args: I) -> Result<CliAction>
 where
     I: IntoIterator<Item = T>,
     T: Into<std::ffi::OsString> + Clone,
 {
-    let cli = match Cli::try_parse_from(args) {
-        Ok(cli) => cli,
+    let cli = match cli_command().try_get_matches_from_mut(args) {
+        Ok(matches) => {
+            Cli::from_arg_matches(&matches).map_err(|err| anyhow::anyhow!(err.to_string()))?
+        }
         Err(err) if err.kind() == clap::error::ErrorKind::DisplayHelp => {
-            return Ok(CliAction::Help);
+            return Ok(CliAction::Help(err.to_string()));
         }
         Err(err) => return Err(anyhow::anyhow!(err.to_string())),
     };
@@ -78,10 +84,12 @@ where
     }
 
     if let Some(port) = cli.shutdown {
+        let port = port.unwrap_or(server::DEFAULT_PORT);
         return Ok(CliAction::Shutdown(port));
     }
 
     if let Some(port) = cli.server {
+        let port = port.unwrap_or(server::DEFAULT_PORT);
         return Ok(CliAction::Server(port));
     }
 
@@ -96,23 +104,24 @@ where
     Ok(CliAction::Tui)
 }
 
-fn print_help() -> Result<()> {
-    let mut command = Cli::command();
-    command.print_help()?;
-    println!();
+fn print_help(help: &str) {
+    print!("{}", help);
+    if !help.ends_with('\n') {
+        println!();
+    }
     println!();
     match config::config_file_path() {
         Some(p) => println!("設定ファイル: {}", p.display()),
         None => println!("設定ファイル: (システムの設定ディレクトリが見つかりません)"),
     }
-    Ok(())
 }
 
 fn main() -> Result<()> {
     let action = parse_cli_from(std::env::args_os())?;
 
-    if matches!(&action, CliAction::Help) {
-        return print_help();
+    if let CliAction::Help(help) = &action {
+        print_help(help);
+        return Ok(());
     }
 
     if let CliAction::Shutdown(port) = &action {
@@ -162,7 +171,7 @@ fn main() -> Result<()> {
             return Ok(());
         }
         CliAction::Tui => {}
-        CliAction::Help | CliAction::Shutdown(_) | CliAction::Update => unreachable!(),
+        CliAction::Help(_) | CliAction::Shutdown(_) | CliAction::Update => unreachable!(),
     }
 
     // TUI モード

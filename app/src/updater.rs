@@ -17,6 +17,10 @@ const APP_BIN_NAMES: &[&str] = &["cmrt"];
 /// ビルド時に埋め込まれたgit commit hash
 const LOCAL_HASH: &str = env!("GIT_COMMIT_HASH");
 
+fn is_valid_sha1(s: &str) -> bool {
+    s.len() == 40 && s.chars().all(|c| c.is_ascii_hexdigit())
+}
+
 /// バックグラウンドでアップデートチェックを実行する。
 /// 更新が必要な場合は `update_available` を true にセットする。
 pub fn spawn_update_check(update_available: Arc<AtomicBool>) {
@@ -33,7 +37,12 @@ fn check_for_update(update_available: Arc<AtomicBool>) -> Result<()> {
         return Ok(());
     }
 
-    if check_remote_commit(REPO_OWNER, REPO_NAME, MAIN_BRANCH, LOCAL_HASH.trim())
+    let local_hash = LOCAL_HASH.trim();
+    if !is_valid_sha1(local_hash) {
+        return Ok(());
+    }
+
+    if check_remote_commit(REPO_OWNER, REPO_NAME, MAIN_BRANCH, local_hash)
         .map_err(|e| anyhow::anyhow!("アップデート確認に失敗しました: {}", e))?
         .is_up_to_date()
     {
@@ -84,5 +93,15 @@ mod tests {
     #[test]
     fn test_update_check_target_branch_is_main() {
         assert_eq!(MAIN_BRANCH, "main");
+    }
+
+    #[test]
+    fn test_is_valid_sha1_accepts_40_hex_chars() {
+        assert!(is_valid_sha1("0123456789abcdef0123456789abcdef01234567"));
+    }
+
+    #[test]
+    fn test_is_valid_sha1_rejects_unknown() {
+        assert!(!is_valid_sha1("unknown"));
     }
 }
