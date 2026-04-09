@@ -137,14 +137,16 @@ fn handle_notepad_history_space_previews_selected_item() {
     let mut app = TuiApp::new_for_test(test_config());
     app.patch_phrase_store.notepad.history = vec!["alpha".to_string(), "beta".to_string()];
     app.start_notepad_history();
-    app.handle_notepad_history(KeyCode::Char('j'));
+
+    assert_eq!(app.notepad_history_cursor, 0);
+    assert!(matches!(&*app.play_state.lock().unwrap(), PlayState::Idle));
 
     app.handle_notepad_history(KeyCode::Char(' '));
 
-    assert_eq!(app.notepad_history_cursor, 1);
+    assert_eq!(app.notepad_history_cursor, 0);
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
-        PlayState::Running(msg) if msg == "beta"
+        PlayState::Running(msg) if msg == "alpha"
     ));
 }
 
