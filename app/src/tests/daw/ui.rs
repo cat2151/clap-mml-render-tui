@@ -8,6 +8,7 @@ pub(super) use tui_textarea::TextArea;
 
 pub(super) use crate::config::Config;
 pub(super) use crate::test_utils::{find_text_ignoring_spaces, help_overlay_bounds};
+pub(super) use crate::ui_theme::cursor_highlight_bg;
 
 pub(super) use super::{
     super::{
@@ -15,7 +16,7 @@ pub(super) use super::{
         DawPlayState, PlayPosition, MEASURES,
     },
     cache_indicator, cache_indicator_color, cache_text_color, draw, loop_measure_summary_label,
-    loop_status_label, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_PINK, MONOKAI_YELLOW,
+    loop_status_label, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_PINK,
 };
 
 fn build_test_app() -> DawApp {

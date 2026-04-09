@@ -133,7 +133,7 @@ fn draw_patch_select_shows_filter_input_keybinds_when_filter_active() {
 }
 
 #[test]
-fn draw_patch_select_uses_bright_blinking_cursor_for_filter_input() {
+fn draw_patch_select_uses_contrast_blinking_cursor_for_filter_input() {
     let mut app = build_test_app();
     app.mode = DawMode::PatchSelect;
     app.patch_all = vec![("Bass/Bass 1.fxp".to_string(), "bass/bass 1.fxp".to_string())];
@@ -145,9 +145,33 @@ fn draw_patch_select_uses_bright_blinking_cursor_for_filter_input() {
     let (_, y) = find_text_ignoring_spaces(&buffer, "bass");
     assert!((0..buffer.area.width).any(|x| {
         let cell = buffer.cell((x, y)).unwrap();
-        cell.bg == MONOKAI_YELLOW
+        cell.bg == cursor_highlight_bg(cell.fg)
             && cell
                 .modifier
                 .contains(ratatui::style::Modifier::RAPID_BLINK)
     }));
+}
+
+#[test]
+fn draw_history_overlay_uses_contrast_blinking_background_for_selected_entry() {
+    let mut app = build_test_app();
+    app.mode = DawMode::History;
+    app.history_overlay_patch_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["l8cdef".to_string()],
+            favorites: vec!["o5g".to_string()],
+        },
+    );
+
+    let buffer = render_buffer(&app, 160, 30);
+    let (x, y) = find_text_ignoring_spaces(&buffer, "l8cdef");
+    let cell = buffer.cell((x, y)).unwrap();
+
+    assert_eq!(cell.fg, MONOKAI_FG);
+    assert_eq!(cell.bg, cursor_highlight_bg(MONOKAI_FG));
+    assert!(cell
+        .modifier
+        .contains(ratatui::style::Modifier::RAPID_BLINK));
 }

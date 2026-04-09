@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn normal_screen_uses_monokai_background_and_cursor_color() {
+fn normal_screen_uses_monokai_background_and_border_color() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["abc".to_string()];
 
@@ -11,6 +11,22 @@ fn normal_screen_uses_monokai_background_and_cursor_color() {
     assert_eq!(buffer.cell((0, 0)).unwrap().bg, MONOKAI_BG);
     assert_eq!(buffer.cell((4, 6)).unwrap().fg, MONOKAI_CYAN);
     assert_eq!(buffer.cell((4, 6)).unwrap().bg, MONOKAI_BG);
+}
+
+#[test]
+fn normal_screen_cursor_uses_contrast_blinking_background() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["abc".to_string()];
+
+    let buffer = render_buffer(&mut app, 80, 8);
+    let (x, y) = find_text(&buffer, "abc");
+    let cell = buffer.cell((x, y)).unwrap();
+
+    assert_eq!(cell.fg, MONOKAI_FG);
+    assert_eq!(cell.bg, cursor_highlight_bg(MONOKAI_FG));
+    assert!(cell
+        .modifier
+        .contains(ratatui::style::Modifier::RAPID_BLINK));
 }
 
 #[test]

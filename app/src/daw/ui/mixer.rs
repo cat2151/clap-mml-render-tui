@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
@@ -10,6 +10,7 @@ use super::{
     super::{DawApp, FIRST_PLAYABLE_TRACK, MIXER_MAX_DB, MIXER_MIN_DB},
     MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_YELLOW,
 };
+use crate::ui_theme::blinking_cursor_style;
 
 const TRACK_COLUMN_WIDTH: u16 = 8;
 const TRACK_HEADER_WIDTH: usize = TRACK_COLUMN_WIDTH as usize;
@@ -79,9 +80,7 @@ pub(super) fn draw_mixer(f: &mut Frame, app: &DawApp, area: Rect) {
     for track in track_range.clone() {
         let is_selected = track == app.mixer_cursor_track;
         let style = if is_selected {
-            Style::default()
-                .fg(MONOKAI_CYAN)
-                .add_modifier(Modifier::BOLD)
+            blinking_cursor_style(Style::default().fg(MONOKAI_FG))
         } else {
             Style::default().fg(MONOKAI_YELLOW)
         };
@@ -105,9 +104,12 @@ pub(super) fn draw_mixer(f: &mut Frame, app: &DawApp, area: Rect) {
             let is_active = app.track_volume_db(track) >= level_db;
             let meter = if is_active { "[##]    " } else { "[  ]    " };
             let style = if is_selected {
-                Style::default()
-                    .fg(MONOKAI_CYAN)
-                    .add_modifier(Modifier::BOLD)
+                let base = if is_active {
+                    Style::default().fg(MONOKAI_FG)
+                } else {
+                    Style::default().fg(MONOKAI_GRAY)
+                };
+                blinking_cursor_style(base)
             } else if is_active {
                 Style::default().fg(MONOKAI_FG)
             } else {
@@ -123,9 +125,7 @@ pub(super) fn draw_mixer(f: &mut Frame, app: &DawApp, area: Rect) {
     for track in track_range.clone() {
         let is_selected = track == app.mixer_cursor_track;
         let style = if is_selected {
-            Style::default()
-                .fg(MONOKAI_CYAN)
-                .add_modifier(Modifier::BOLD)
+            blinking_cursor_style(Style::default().fg(MONOKAI_FG))
         } else {
             Style::default().fg(MONOKAI_FG)
         };

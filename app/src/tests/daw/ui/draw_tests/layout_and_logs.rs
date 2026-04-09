@@ -57,6 +57,22 @@ fn draw_renders_pending_indicator_in_visible_color() {
 }
 
 #[test]
+fn draw_uses_contrast_blinking_background_for_selected_grid_cell() {
+    let mut app = build_test_app();
+    app.data[0][0] = "t120".to_string();
+
+    let buffer = render_buffer(&app, 40, 14);
+    let (x, y) = find_text_ignoring_spaces(&buffer, "t120");
+    let cell = buffer.cell((x, y)).unwrap();
+
+    assert_eq!(cell.fg, MONOKAI_GRAY);
+    assert_eq!(cell.bg, cursor_highlight_bg(MONOKAI_GRAY));
+    assert!(cell
+        .modifier
+        .contains(ratatui::style::Modifier::RAPID_BLINK));
+}
+
+#[test]
 fn draw_places_playback_status_and_loop_summary_above_footer() {
     let app = build_test_app();
     {
