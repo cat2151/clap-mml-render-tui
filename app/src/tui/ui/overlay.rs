@@ -1,13 +1,13 @@
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout},
-    style::{Color, Modifier},
+    style::Color,
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
     Frame,
 };
 
 use crate::tui::{PatchPhrasePane, PatchSelectPane};
-use crate::ui_theme::{MONOKAI_CYAN, MONOKAI_YELLOW};
+use crate::ui_theme::{blinking_cursor_style, MONOKAI_CYAN, MONOKAI_YELLOW};
 
 use super::{
     status::{base_style, keybind_text, visible_list_page_size},
@@ -90,7 +90,7 @@ pub(super) fn draw_patch_select(
         .map(|(i, p)| {
             let style =
                 if app.patch_select_focus == PatchSelectPane::Patches && i == app.patch_cursor {
-                    base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD)
+                    blinking_cursor_style(base_style())
                 } else {
                     base_style()
                 };
@@ -108,7 +108,7 @@ pub(super) fn draw_patch_select(
                     let style = if app.patch_select_focus == PatchSelectPane::Favorites
                         && i == app.patch_favorites_cursor
                     {
-                        base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD)
+                        blinking_cursor_style(base_style())
                     } else {
                         base_style()
                     };
@@ -131,6 +131,7 @@ pub(super) fn draw_patch_select(
     f.render_stateful_widget(
         List::new(patch_items)
             .style(base_style())
+            .highlight_style(blinking_cursor_style(base_style()))
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -145,6 +146,7 @@ pub(super) fn draw_patch_select(
     f.render_stateful_widget(
         List::new(favorite_items)
             .style(base_style())
+            .highlight_style(blinking_cursor_style(base_style()))
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -212,7 +214,7 @@ pub(super) fn draw_patch_phrase(
             let is_selected = app.patch_phrase_focus == PatchPhrasePane::History
                 && i == app.patch_phrase_history_cursor;
             let style = if is_selected {
-                base_style().fg(MONOKAI_CYAN).add_modifier(Modifier::BOLD)
+                blinking_cursor_style(base_style())
             } else {
                 base_style()
             };
@@ -227,7 +229,7 @@ pub(super) fn draw_patch_phrase(
             let is_selected = app.patch_phrase_focus == PatchPhrasePane::Favorites
                 && i == app.patch_phrase_favorites_cursor;
             let style = if is_selected {
-                base_style().fg(MONOKAI_CYAN).add_modifier(Modifier::BOLD)
+                blinking_cursor_style(base_style())
             } else {
                 base_style()
             };
@@ -249,6 +251,7 @@ pub(super) fn draw_patch_phrase(
     f.render_stateful_widget(
         List::new(history_items)
             .style(base_style())
+            .highlight_style(blinking_cursor_style(base_style()))
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -263,6 +266,7 @@ pub(super) fn draw_patch_phrase(
     f.render_stateful_widget(
         List::new(favorite_items)
             .style(base_style())
+            .highlight_style(blinking_cursor_style(base_style()))
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -330,7 +334,7 @@ pub(super) fn draw_notepad_history(
             let is_selected =
                 app.notepad_focus == PatchPhrasePane::History && i == app.notepad_history_cursor;
             let style = if is_selected {
-                base_style().fg(MONOKAI_CYAN).add_modifier(Modifier::BOLD)
+                blinking_cursor_style(base_style())
             } else {
                 base_style()
             };
@@ -345,7 +349,7 @@ pub(super) fn draw_notepad_history(
             let is_selected = app.notepad_focus == PatchPhrasePane::Favorites
                 && i == app.notepad_favorites_cursor;
             let style = if is_selected {
-                base_style().fg(MONOKAI_CYAN).add_modifier(Modifier::BOLD)
+                blinking_cursor_style(base_style())
             } else {
                 base_style()
             };
@@ -373,6 +377,7 @@ pub(super) fn draw_notepad_history(
     f.render_stateful_widget(
         List::new(history_items)
             .style(base_style())
+            .highlight_style(blinking_cursor_style(base_style()))
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -387,6 +392,7 @@ pub(super) fn draw_notepad_history(
     f.render_stateful_widget(
         List::new(favorite_items)
             .style(base_style())
+            .highlight_style(blinking_cursor_style(base_style()))
             .block(
                 Block::default()
                     .borders(Borders::ALL)

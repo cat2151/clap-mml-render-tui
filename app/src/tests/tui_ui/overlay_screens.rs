@@ -347,6 +347,30 @@ fn patch_select_filter_cursor_uses_bright_blinking_background() {
 }
 
 #[test]
+fn patch_phrase_selected_entry_uses_bright_blinking_background() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::PatchPhrase;
+    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        PatchPhraseState {
+            history: vec!["l8cdef".to_string()],
+            favorites: vec!["o5g".to_string()],
+        },
+    );
+
+    let buffer = render_buffer(&mut app, 100, 16);
+    let (x, y) = find_text(&buffer, "l8cdef");
+    let cell = buffer.cell((x, y)).unwrap();
+
+    assert_eq!(cell.fg, MONOKAI_FG);
+    assert_eq!(cell.bg, MONOKAI_YELLOW);
+    assert!(cell
+        .modifier
+        .contains(ratatui::style::Modifier::RAPID_BLINK));
+}
+
+#[test]
 fn notepad_history_overlay_is_centered_like_daw_overlay() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["before".to_string()];

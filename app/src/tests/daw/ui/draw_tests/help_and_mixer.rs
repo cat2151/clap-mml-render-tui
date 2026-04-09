@@ -440,22 +440,25 @@ fn draw_shows_mixer_overlay_with_track_labels_and_db_values() {
 }
 
 #[test]
-fn draw_highlights_selected_mixer_track_in_cyan() {
+fn draw_highlights_selected_mixer_track_with_bright_blinking_background() {
     let mut app = build_test_app();
     app.mode = DawMode::Mixer;
     app.mixer_cursor_track = 1;
 
     let buffer = render_buffer(&app, 100, 30);
-    let cyan_positions: Vec<(u16, u16)> = (0..100)
+    let blinking_positions: Vec<(u16, u16)> = (0..100)
         .flat_map(|x| (0..30).map(move |y| (x, y)))
         .filter(|(x, y)| {
             let cell = buffer.cell((*x, *y)).unwrap();
-            cell.symbol() == "t" && cell.fg == MONOKAI_CYAN
+            cell.bg == MONOKAI_YELLOW
+                && cell
+                    .modifier
+                    .contains(ratatui::style::Modifier::RAPID_BLINK)
         })
         .collect();
 
     assert!(
-        !cyan_positions.is_empty(),
-        "selected mixer track label should be cyan"
+        !blinking_positions.is_empty(),
+        "selected mixer track should use a bright blinking background"
     );
 }

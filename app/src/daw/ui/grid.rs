@@ -9,9 +9,9 @@ use ratatui::{
 use super::{
     super::{CacheState, DawApp, DawMode},
     cache_indicator, cache_indicator_color, cache_text_color, ANIM_FRAME_COUNT, ANIM_FRAME_MS,
-    MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_PURPLE,
-    MONOKAI_YELLOW,
+    MONOKAI_BG, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_PURPLE, MONOKAI_YELLOW,
 };
+use crate::ui_theme::blinking_cursor_style;
 
 pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
     // キャッシュ状態をスナップショットしてからロックを解放する。
@@ -102,13 +102,7 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
 
         let is_cursor_track = t == app.cursor_track;
         let is_muted_track = solo_mode_active && !app.track_is_audible(t);
-        let label_fg = if is_muted_track {
-            MONOKAI_GRAY
-        } else if is_cursor_track {
-            MONOKAI_CYAN
-        } else {
-            MONOKAI_GRAY
-        };
+        let label_fg = MONOKAI_GRAY;
 
         // 行 1: track ラベル + セル内容 (4 chars each)
         let track_label = if t == 0 {
@@ -116,16 +110,12 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
         } else {
             format!("T{:<2}  ", t)
         };
-        let mut row1: Vec<Span> = vec![Span::styled(
-            track_label,
-            Style::default()
-                .fg(label_fg)
-                .add_modifier(if is_cursor_track {
-                    Modifier::BOLD
-                } else {
-                    Modifier::empty()
-                }),
-        )];
+        let label_style = if is_cursor_track {
+            blinking_cursor_style(Style::default().fg(label_fg))
+        } else {
+            Style::default().fg(label_fg)
+        };
+        let mut row1: Vec<Span> = vec![Span::styled(track_label, label_style)];
 
         // INSERTモード時はカーソルtrackのインジケータ行（行2）が不要なので生成をスキップする。
         let show_indicators = !(is_cursor_track && app.mode == DawMode::Insert);
@@ -151,18 +141,18 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
                 format!("{:<4}", s)
             };
 
-            let (fg, bg) = if is_cursor {
-                (MONOKAI_BG, MONOKAI_CYAN)
-            } else if is_muted_track {
-                (MONOKAI_GRAY, MONOKAI_BG)
+            let fg = if is_muted_track {
+                MONOKAI_GRAY
             } else {
-                (cache_text_color(cs), MONOKAI_BG)
+                cache_text_color(cs)
+            };
+            let style = if is_cursor {
+                blinking_cursor_style(Style::default().fg(fg))
+            } else {
+                Style::default().fg(fg).bg(MONOKAI_BG)
             };
 
-            row1.push(Span::styled(
-                format!("{} ", display),
-                Style::default().fg(fg).bg(bg),
-            ));
+            row1.push(Span::styled(format!("{} ", display), style));
 
             // 状態インジケータ (4 chars + 1 space): INSERTモードのカーソルtrackはスキップ
             if show_indicators {
@@ -175,9 +165,7 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
                 } else {
                     cache_indicator(cs, anim_frame)
                 };
-                let ind_fg = if is_cursor {
-                    MONOKAI_CYAN
-                } else if solo_mode_active && m == 0 && t > 0 {
+                let ind_fg = if solo_mode_active && m == 0 && t > 0 {
                     if app.track_is_soloed(t) {
                         MONOKAI_FG
                     } else {
@@ -188,7 +176,12 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
                 } else {
                     cache_indicator_color(cs)
                 };
-                row2.push(Span::styled(indicator, Style::default().fg(ind_fg)));
+                let style = if is_cursor {
+                    blinking_cursor_style(Style::default().fg(ind_fg))
+                } else {
+                    Style::default().fg(ind_fg)
+                };
+                row2.push(Span::styled(indicator, style));
             }
         }
 
