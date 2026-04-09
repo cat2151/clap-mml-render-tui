@@ -333,6 +333,7 @@ dependencies = [
  "arboard",
  "cat-self-update-lib",
  "clack-host",
+ "clap",
  "cmrt-core 0.1.0",
  "crossterm",
  "dirs",

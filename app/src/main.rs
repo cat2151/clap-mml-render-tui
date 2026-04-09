@@ -1,69 +1,122 @@
 use anyhow::Result;
+use clap::{CommandFactory, Parser, Subcommand};
 use clap_mml_render_tui::{config, server, tui, updater};
 use cmrt_core::{load_entry, mml_to_play, CoreConfig};
 
-fn is_update_subcommand(args: &[String]) -> bool {
-    matches!(args.get(1).map(String::as_str), Some("update"))
+#[derive(Debug, PartialEq, Eq)]
+enum CliAction {
+    Help,
+    Tui,
+    CliMml(String),
+    Server(u16),
+    Shutdown(u16),
+    Update,
 }
 
-fn cli_mml_arg(args: &[String]) -> Option<&str> {
-    match args {
-        [_, arg] if !arg.starts_with('-') && arg != "update" => Some(arg.as_str()),
-        _ => None,
+#[derive(Debug, Parser)]
+#[command(
+    name = "cmrt",
+    about = "CLAP MML Render TUI",
+    args_conflicts_with_subcommands = true,
+    disable_help_subcommand = true,
+    after_help = "サーバーモードでは HTTP POST でMMLを受け取りWAVデータを返します。\n  例: curl -X POST http://127.0.0.1:62151/ --data 'cde'"
+)]
+struct Cli {
+    #[arg(
+        long,
+        num_args = 0..=1,
+        default_missing_value = "62151",
+        value_name = "PORT",
+        conflicts_with = "shutdown",
+        help = "サーバーモードで起動する"
+    )]
+    server: Option<u16>,
+
+    #[arg(
+        long,
+        num_args = 0..=1,
+        default_missing_value = "62151",
+        value_name = "PORT",
+        conflicts_with = "server",
+        help = "起動中のサーバーを停止する"
+    )]
+    shutdown: Option<u16>,
+
+    #[arg(long = "mml", hide = true, value_name = "MML")]
+    deprecated_mml: Option<String>,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
+
+    #[arg(value_name = "MML", help = "CLI モードで再生する MML（テスト用）")]
+    mml: Option<String>,
+}
+
+#[derive(Debug, Subcommand)]
+enum Commands {
+    /// アップデートを実行
+    Update,
+}
+
+fn parse_cli_from<I, T>(args: I) -> Result<CliAction>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString> + Clone,
+{
+    let cli = match Cli::try_parse_from(args) {
+        Ok(cli) => cli,
+        Err(err) if err.kind() == clap::error::ErrorKind::DisplayHelp => {
+            return Ok(CliAction::Help);
+        }
+        Err(err) => return Err(anyhow::anyhow!(err.to_string())),
+    };
+
+    if cli.deprecated_mml.is_some() {
+        anyhow::bail!(
+            "`--mml` オプションは廃止されました。`cmrt <mml>` の形式で指定してください。\n例: cmrt cde"
+        );
     }
+
+    if let Some(port) = cli.shutdown {
+        return Ok(CliAction::Shutdown(port));
+    }
+
+    if let Some(port) = cli.server {
+        return Ok(CliAction::Server(port));
+    }
+
+    if matches!(cli.command, Some(Commands::Update)) {
+        return Ok(CliAction::Update);
+    }
+
+    if let Some(mml) = cli.mml {
+        return Ok(CliAction::CliMml(mml));
+    }
+
+    Ok(CliAction::Tui)
+}
+
+fn print_help() -> Result<()> {
+    let mut command = Cli::command();
+    command.print_help()?;
+    println!();
+    println!();
+    match config::config_file_path() {
+        Some(p) => println!("設定ファイル: {}", p.display()),
+        None => println!("設定ファイル: (システムの設定ディレクトリが見つかりません)"),
+    }
+    Ok(())
 }
 
 fn main() -> Result<()> {
-    // 引数なし → TUI モード
-    // --help / -h → ヘルプ表示（config パスを含む）
-    // <mml> → CLI パイプラインモード（テスト用）
-    // --server [port] → サーバーモード（デフォルト port 62151）
-    let args: Vec<String> = std::env::args().collect();
+    let action = parse_cli_from(std::env::args_os())?;
 
-    if args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("cmrt - CLAP MML Render TUI");
-        println!();
-        println!("使い方:");
-        println!("  cmrt                    TUI モードで起動");
-        println!("  cmrt <mml>              CLI モード（テスト用）");
-        println!("  cmrt update             アップデートを実行");
-        println!(
-            "  cmrt --server           サーバーモード（port {}）",
-            server::DEFAULT_PORT
-        );
-        println!("  cmrt --server <port>    サーバーモード（指定port）");
-        println!(
-            "  cmrt --shutdown         サーバーを停止（port {}）",
-            server::DEFAULT_PORT
-        );
-        println!("  cmrt --shutdown <port>  サーバーを停止（指定port）");
-        println!("  cmrt --help             このヘルプを表示");
-        println!();
-        println!("サーバーモードでは HTTP POST でMMLを受け取りWAVデータを返します。");
-        println!(
-            "  例: curl -X POST http://127.0.0.1:{}/  --data 'cde'",
-            server::DEFAULT_PORT
-        );
-        println!();
-        match config::config_file_path() {
-            Some(p) => println!("設定ファイル: {}", p.display()),
-            None => println!("設定ファイル: (システムの設定ディレクトリが見つかりません)"),
-        }
-        return Ok(());
+    if matches!(&action, CliAction::Help) {
+        return print_help();
     }
 
-    if let Some(pos) = args.iter().position(|a| a == "--shutdown") {
-        let port = match args.get(pos + 1) {
-            Some(s) => match s.parse::<u16>() {
-                Ok(p) => p,
-                Err(_) => {
-                    eprintln!("ポート番号が不正です: {}", s);
-                    std::process::exit(1);
-                }
-            },
-            None => server::DEFAULT_PORT,
-        };
-        server::shutdown_server(port)?;
+    if let CliAction::Shutdown(port) = &action {
+        server::shutdown_server(*port)?;
         println!(
             "サーバー（port {}）にシャットダウン要求を送りました。",
             port
@@ -71,10 +124,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    if is_update_subcommand(&args) {
-        if args.len() > 2 {
-            anyhow::bail!("`update` サブコマンドは追加引数を取りません。");
-        }
+    if matches!(&action, CliAction::Update) {
         if let Err(e) = server::shutdown_server(server::DEFAULT_PORT) {
             eprintln!(
                 "サーバー停止要求の送信に失敗しました（port {}）: {}",
@@ -102,27 +152,17 @@ fn main() -> Result<()> {
     // CLAP プラグインエントリをロード（TUI/CLI/サーバー 共通）
     let entry = load_entry(&cfg.plugin_path)?;
 
-    // --mml は廃止済み。旧来の使い方をしたユーザーに新しい使い方を案内する
-    if args.iter().any(|a| a == "--mml") {
-        anyhow::bail!("`--mml` オプションは廃止されました。`cmrt <mml>` の形式で指定してください。\n例: cmrt cde");
-    }
-
-    if let Some(pos) = args.iter().position(|a| a == "--server") {
-        // --server [port] の次の引数をポート番号として解釈する（省略時はデフォルト）
-        let port = args
-            .get(pos + 1)
-            .and_then(|s| s.parse::<u16>().ok())
-            .unwrap_or(server::DEFAULT_PORT);
-        return server::run_server(&cfg, &entry, port);
-    }
-
-    // 引数が1つかつフラグでなければ CLI モード
-    if let Some(mml) = cli_mml_arg(&args) {
-        println!("CLI モード: MML = {}", mml);
-        let core_cfg = CoreConfig::from(&cfg);
-        let patch = mml_to_play(mml, &core_cfg, &entry)?;
-        println!("patch: {}", patch);
-        return Ok(());
+    match action {
+        CliAction::Server(port) => return server::run_server(&cfg, &entry, port),
+        CliAction::CliMml(mml) => {
+            println!("CLI モード: MML = {}", mml);
+            let core_cfg = CoreConfig::from(&cfg);
+            let patch = mml_to_play(&mml, &core_cfg, &entry)?;
+            println!("patch: {}", patch);
+            return Ok(());
+        }
+        CliAction::Tui => {}
+        CliAction::Help | CliAction::Shutdown(_) | CliAction::Update => unreachable!(),
     }
 
     // TUI モード
@@ -139,7 +179,13 @@ fn main() -> Result<()> {
         .load(std::sync::atomic::Ordering::Relaxed)
     {
         // サーバーが起動していればシャットダウンしてからアップデートする（未起動の場合は無視）
-        let _ = server::shutdown_server(server::DEFAULT_PORT);
+        if let Err(e) = server::shutdown_server(server::DEFAULT_PORT) {
+            eprintln!(
+                "アップデート前のサーバー停止要求の送信に失敗しました（port {}）: {}",
+                server::DEFAULT_PORT,
+                e
+            );
+        }
         if let Err(e) = updater::run_foreground_update() {
             eprintln!("アップデートに失敗しました: {}", e);
         }
