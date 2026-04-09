@@ -16,10 +16,10 @@ const MONOKAI_CURSOR_BG_ALT: Color = Color::Rgb(96, 96, 96);
 fn color_distance_sq(lhs: Color, rhs: Color) -> Option<u32> {
     match (lhs, rhs) {
         (Color::Rgb(lr, lg, lb), Color::Rgb(rr, rg, rb)) => {
-            let dr = lr as i32 - rr as i32;
-            let dg = lg as i32 - rg as i32;
-            let db = lb as i32 - rb as i32;
-            Some((dr * dr + dg * dg + db * db) as u32)
+            let dr = lr.abs_diff(rr) as u32;
+            let dg = lg.abs_diff(rg) as u32;
+            let db = lb.abs_diff(rb) as u32;
+            Some(dr * dr + dg * dg + db * db)
         }
         _ => None,
     }
@@ -28,17 +28,10 @@ fn color_distance_sq(lhs: Color, rhs: Color) -> Option<u32> {
 pub(crate) fn cursor_highlight_bg(fg: Color) -> Color {
     let primary = MONOKAI_CURSOR_BG;
     let fallback = MONOKAI_CURSOR_BG_ALT;
-    match (
-        color_distance_sq(fg, primary),
-        color_distance_sq(fg, fallback),
-    ) {
-        (Some(primary_distance), Some(fallback_distance))
-            if fallback_distance > primary_distance =>
-        {
-            fallback
-        }
-        _ => primary,
-    }
+    [primary, fallback]
+        .into_iter()
+        .max_by_key(|bg| color_distance_sq(fg, *bg).unwrap_or(0))
+        .unwrap_or(primary)
 }
 
 pub(crate) fn blinking_cursor_style(style: Style) -> Style {
