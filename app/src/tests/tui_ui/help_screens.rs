@@ -10,7 +10,7 @@ fn patch_phrase_screen_shows_search_prompt() {
 
     let lines = render_lines(&mut app, 120, 12).join("\n");
 
-    assert!(lines.contains("/ jk"));
+    assert!(lines.contains("jk"));
 }
 
 #[test]

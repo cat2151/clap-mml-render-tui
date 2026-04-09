@@ -73,23 +73,14 @@ pub(super) fn draw_patch_select(
     } else {
         " ENTERで音色を選択 - patch select - "
     };
-    let search_body = if app.patch_select_filter_active {
-        format!("/ {}", app.patch_query)
-    } else if app.patch_query.is_empty() {
-        "/ を押して絞り込み".to_string()
-    } else {
-        format!("/ {}", app.patch_query)
-    };
-    f.render_widget(
-        Paragraph::new(search_body).style(base_style()).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(search_title)
-                .style(base_style())
-                .border_style(base_style().fg(MONOKAI_YELLOW)),
-        ),
-        chunks[0],
+    crate::text_input::sync_single_line_textarea(&mut app.patch_query_textarea, &app.patch_query);
+    let patch_query_widget = crate::text_input::build_query_textarea_widget(
+        &app.patch_query_textarea,
+        search_title,
+        "/ を押して絞り込み",
+        MONOKAI_YELLOW,
     );
+    f.render_widget(&patch_query_widget, chunks[0]);
 
     let patch_select_title = " 音色選択 ";
     let patch_items: Vec<ListItem> = app
@@ -205,21 +196,17 @@ pub(super) fn draw_patch_phrase(
     } else {
         " ENTERでフレーズを選択 - patch phrase history - "
     };
-    let search_body = if !app.patch_phrase_query.is_empty() || app.patch_phrase_filter_active {
-        format!("/ {}", app.patch_phrase_query)
-    } else {
-        "/ を押して絞り込み (space=AND)".to_string()
-    };
-    f.render_widget(
-        Paragraph::new(search_body).style(base_style()).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(search_title)
-                .style(base_style())
-                .border_style(base_style().fg(MONOKAI_YELLOW)),
-        ),
-        chunks[0],
+    crate::text_input::sync_single_line_textarea(
+        &mut app.patch_phrase_query_textarea,
+        &app.patch_phrase_query,
     );
+    let patch_phrase_query_widget = crate::text_input::build_query_textarea_widget(
+        &app.patch_phrase_query_textarea,
+        search_title,
+        "/ を押して絞り込み (space=AND)",
+        MONOKAI_YELLOW,
+    );
+    f.render_widget(&patch_phrase_query_widget, chunks[0]);
     let history_items: Vec<ListItem> = app
         .patch_phrase_history_items()
         .into_iter()
@@ -330,21 +317,17 @@ pub(super) fn draw_notepad_history(
     } else {
         " ENTERで音色とフレーズを選択 - notepad history - "
     };
-    let search_body = if !app.notepad_query.is_empty() || app.notepad_filter_active {
-        format!("/ {}", app.notepad_query)
-    } else {
-        "/ を押して絞り込み (space=AND)".to_string()
-    };
-    f.render_widget(
-        Paragraph::new(search_body).style(base_style()).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(search_title)
-                .style(base_style())
-                .border_style(base_style().fg(MONOKAI_YELLOW)),
-        ),
-        chunks[0],
+    crate::text_input::sync_single_line_textarea(
+        &mut app.notepad_query_textarea,
+        &app.notepad_query,
     );
+    let notepad_query_widget = crate::text_input::build_query_textarea_widget(
+        &app.notepad_query_textarea,
+        search_title,
+        "/ を押して絞り込み (space=AND)",
+        MONOKAI_YELLOW,
+    );
+    f.render_widget(&notepad_query_widget, chunks[0]);
     let history_items: Vec<ListItem> = app
         .notepad_history_items()
         .into_iter()

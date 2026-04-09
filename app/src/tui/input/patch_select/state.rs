@@ -58,6 +58,7 @@ impl<'a> TuiApp<'a> {
             self.patch_phrase_store_dirty = true;
         }
         self.patch_query = String::new();
+        self.patch_query_textarea = crate::text_input::new_single_line_textarea("");
         self.patch_filtered = self
             .patch_all
             .iter()

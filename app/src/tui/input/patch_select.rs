@@ -309,6 +309,37 @@ impl<'a> TuiApp<'a> {
             return;
         }
 
+        if self.patch_select_filter_active {
+            crate::text_input::sync_single_line_textarea(
+                &mut self.patch_query_textarea,
+                &self.patch_query,
+            );
+            match key_event.code {
+                KeyCode::Esc => {
+                    self.mode = Mode::Normal;
+                }
+                KeyCode::Enter => {
+                    self.patch_select_filter_active = false;
+                    self.sync_patch_select_states();
+                }
+                KeyCode::Backspace if self.patch_query.is_empty() => {
+                    self.patch_select_filter_active = false;
+                }
+                KeyCode::Char('?') => self.enter_help(),
+                _ => {
+                    if self.patch_query_textarea.input(key_event) {
+                        self.patch_query =
+                            crate::text_input::textarea_value(&self.patch_query_textarea);
+                        self.update_patch_filter();
+                        if self.patch_query.is_empty() {
+                            self.patch_select_filter_active = false;
+                        }
+                    }
+                }
+            }
+            return;
+        }
+
         match key_event.code {
             KeyCode::Esc => {
                 self.mode = Mode::Normal;
@@ -385,21 +416,11 @@ impl<'a> TuiApp<'a> {
             KeyCode::Char('/') => {
                 self.patch_select_focus = PatchSelectPane::Patches;
                 self.patch_select_filter_active = true;
+                self.patch_query_textarea =
+                    crate::text_input::new_single_line_textarea(&self.patch_query);
                 self.sync_patch_select_states();
             }
-            KeyCode::Backspace if self.patch_select_filter_active => {
-                if self.patch_query.pop().is_some() {
-                    self.update_patch_filter();
-                }
-                if self.patch_query.is_empty() {
-                    self.patch_select_filter_active = false;
-                }
-            }
             KeyCode::Char('?') => self.enter_help(),
-            KeyCode::Char(c) if self.patch_select_filter_active => {
-                self.patch_query.push(c);
-                self.update_patch_filter();
-            }
             _ => {}
         }
     }

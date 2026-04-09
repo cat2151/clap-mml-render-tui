@@ -196,6 +196,7 @@ impl<'a> TuiApp<'a> {
         self.patch_phrase_history_cursor = 0;
         self.patch_phrase_favorites_cursor = 0;
         self.patch_phrase_query.clear();
+        self.patch_phrase_query_textarea = crate::text_input::new_single_line_textarea("");
         self.patch_phrase_filter_active = false;
         self.sync_patch_phrase_states();
         self.mode = Mode::PatchPhrase;
@@ -203,6 +204,10 @@ impl<'a> TuiApp<'a> {
 
     pub(super) fn handle_patch_phrase(&mut self, key: KeyCode) {
         if self.patch_phrase_filter_active {
+            crate::text_input::sync_single_line_textarea(
+                &mut self.patch_phrase_query_textarea,
+                &self.patch_phrase_query,
+            );
             match key {
                 KeyCode::Esc => {
                     self.patch_phrase_filter_active = false;
@@ -213,27 +218,27 @@ impl<'a> TuiApp<'a> {
                     self.patch_phrase_filter_active = false;
                     self.sync_patch_phrase_states();
                 }
-                KeyCode::Backspace => {
-                    self.patch_phrase_query.pop();
-                    self.sync_patch_phrase_states();
-                    if let Some(mml) = self.patch_phrase_preview_mml() {
-                        self.record_notepad_history(&mml);
-                        self.play_mml(mml);
-                    }
-                    if self.patch_phrase_query.is_empty() {
-                        self.patch_phrase_filter_active = false;
-                    }
+                KeyCode::Backspace if self.patch_phrase_query.is_empty() => {
+                    self.patch_phrase_filter_active = false;
                 }
                 KeyCode::Char('?') => self.enter_help(),
-                KeyCode::Char(c) => {
-                    self.patch_phrase_query.push(c);
-                    self.sync_patch_phrase_states();
-                    if let Some(mml) = self.patch_phrase_preview_mml() {
-                        self.record_notepad_history(&mml);
-                        self.play_mml(mml);
+                _ => {
+                    if crate::text_input::apply_key_code_to_textarea(
+                        &mut self.patch_phrase_query_textarea,
+                        key,
+                    ) {
+                        self.patch_phrase_query =
+                            crate::text_input::textarea_value(&self.patch_phrase_query_textarea);
+                        self.sync_patch_phrase_states();
+                        if let Some(mml) = self.patch_phrase_preview_mml() {
+                            self.record_notepad_history(&mml);
+                            self.play_mml(mml);
+                        }
+                        if self.patch_phrase_query.is_empty() {
+                            self.patch_phrase_filter_active = false;
+                        }
                     }
                 }
-                _ => {}
             }
             return;
         }
@@ -320,6 +325,8 @@ impl<'a> TuiApp<'a> {
             }
             KeyCode::Char('/') => {
                 self.patch_phrase_filter_active = true;
+                self.patch_phrase_query_textarea =
+                    crate::text_input::new_single_line_textarea(&self.patch_phrase_query);
                 self.sync_patch_phrase_states();
             }
             KeyCode::Enter => {

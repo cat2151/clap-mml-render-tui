@@ -8,6 +8,7 @@ pub(crate) mod patches;
 pub mod server;
 #[cfg(test)]
 pub(crate) mod test_utils;
+pub(crate) mod text_input;
 pub mod tui;
 pub(crate) mod ui_theme;
 pub mod ui_utils;

@@ -28,6 +28,7 @@ impl DawApp {
                 .unwrap_or_else(|| self.normalize_patch_phrase_store_key(patch_name))
         });
         self.history_overlay_query.clear();
+        self.history_overlay_query_textarea = crate::text_input::new_single_line_textarea("");
         self.history_overlay_focus = DawHistoryPane::History;
         self.history_overlay_history_cursor = 0;
         self.history_overlay_favorites_cursor = 0;
@@ -217,6 +218,10 @@ impl DawApp {
 
     pub(in crate::daw) fn handle_history_overlay(&mut self, key: KeyCode) {
         if self.history_overlay_filter_active {
+            crate::text_input::sync_single_line_textarea(
+                &mut self.history_overlay_query_textarea,
+                &self.history_overlay_query,
+            );
             match key {
                 KeyCode::Esc => {
                     self.history_overlay_filter_active = false;
@@ -226,21 +231,24 @@ impl DawApp {
                     self.history_overlay_filter_active = false;
                     self.sync_history_overlay_cursors();
                 }
-                KeyCode::Backspace => {
-                    self.history_overlay_query.pop();
-                    self.sync_history_overlay_cursors();
-                    self.preview_selected_history_overlay_item();
-                    if self.history_overlay_query.is_empty() {
-                        self.history_overlay_filter_active = false;
-                    }
+                KeyCode::Backspace if self.history_overlay_query.is_empty() => {
+                    self.history_overlay_filter_active = false;
                 }
                 KeyCode::Char('?') => self.enter_help(),
-                KeyCode::Char(c) => {
-                    self.history_overlay_query.push(c);
-                    self.sync_history_overlay_cursors();
-                    self.preview_selected_history_overlay_item();
+                _ => {
+                    if crate::text_input::apply_key_code_to_textarea(
+                        &mut self.history_overlay_query_textarea,
+                        key,
+                    ) {
+                        self.history_overlay_query =
+                            crate::text_input::textarea_value(&self.history_overlay_query_textarea);
+                        self.sync_history_overlay_cursors();
+                        self.preview_selected_history_overlay_item();
+                        if self.history_overlay_query.is_empty() {
+                            self.history_overlay_filter_active = false;
+                        }
+                    }
                 }
-                _ => {}
             }
             return;
         }
@@ -319,6 +327,8 @@ impl DawApp {
             }
             KeyCode::Char('/') => {
                 self.history_overlay_filter_active = true;
+                self.history_overlay_query_textarea =
+                    crate::text_input::new_single_line_textarea(&self.history_overlay_query);
                 self.sync_history_overlay_cursors();
             }
             KeyCode::Char('?') => self.enter_help(),

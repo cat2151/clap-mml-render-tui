@@ -140,6 +140,7 @@ impl<'a> TuiApp<'a> {
         self.notepad_history_cursor = 0;
         self.notepad_favorites_cursor = 0;
         self.notepad_query.clear();
+        self.notepad_query_textarea = crate::text_input::new_single_line_textarea("");
         self.notepad_filter_active = false;
         self.notepad_pending_delete = false;
         self.sync_notepad_history_states();
@@ -148,6 +149,10 @@ impl<'a> TuiApp<'a> {
 
     pub(super) fn handle_notepad_history(&mut self, key: KeyCode) {
         if self.notepad_filter_active {
+            crate::text_input::sync_single_line_textarea(
+                &mut self.notepad_query_textarea,
+                &self.notepad_query,
+            );
             match key {
                 KeyCode::Esc => {
                     self.notepad_pending_delete = false;
@@ -159,21 +164,24 @@ impl<'a> TuiApp<'a> {
                     self.notepad_filter_active = false;
                     self.sync_notepad_history_states();
                 }
-                KeyCode::Backspace => {
-                    self.notepad_query.pop();
-                    self.sync_notepad_history_states();
-                    self.preview_selected_notepad_item();
-                    if self.notepad_query.is_empty() {
-                        self.notepad_filter_active = false;
-                    }
+                KeyCode::Backspace if self.notepad_query.is_empty() => {
+                    self.notepad_filter_active = false;
                 }
                 KeyCode::Char('?') => self.enter_help(),
-                KeyCode::Char(c) => {
-                    self.notepad_query.push(c);
-                    self.sync_notepad_history_states();
-                    self.preview_selected_notepad_item();
+                _ => {
+                    if crate::text_input::apply_key_code_to_textarea(
+                        &mut self.notepad_query_textarea,
+                        key,
+                    ) {
+                        self.notepad_query =
+                            crate::text_input::textarea_value(&self.notepad_query_textarea);
+                        self.sync_notepad_history_states();
+                        self.preview_selected_notepad_item();
+                        if self.notepad_query.is_empty() {
+                            self.notepad_filter_active = false;
+                        }
+                    }
                 }
-                _ => {}
             }
             return;
         }
@@ -262,6 +270,8 @@ impl<'a> TuiApp<'a> {
             KeyCode::Char('/') => {
                 self.notepad_filter_active = true;
                 self.notepad_pending_delete = false;
+                self.notepad_query_textarea =
+                    crate::text_input::new_single_line_textarea(&self.notepad_query);
                 self.sync_notepad_history_states();
             }
             KeyCode::Enter => {

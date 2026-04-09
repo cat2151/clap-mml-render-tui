@@ -131,3 +131,23 @@ fn draw_patch_select_shows_filter_input_keybinds_when_filter_active() {
         normalized_lines
     );
 }
+
+#[test]
+fn draw_patch_select_uses_bright_blinking_cursor_for_filter_input() {
+    let mut app = build_test_app();
+    app.mode = DawMode::PatchSelect;
+    app.patch_all = vec![("Bass/Bass 1.fxp".to_string(), "bass/bass 1.fxp".to_string())];
+    app.patch_filtered = vec!["Bass/Bass 1.fxp".to_string()];
+    app.patch_query = "bass".to_string();
+    app.patch_select_filter_active = true;
+
+    let buffer = render_buffer(&app, 140, 30);
+    let (_, y) = find_text_ignoring_spaces(&buffer, "bass");
+    assert!((0..buffer.area.width).any(|x| {
+        let cell = buffer.cell((x, y)).unwrap();
+        cell.bg == MONOKAI_YELLOW
+            && cell
+                .modifier
+                .contains(ratatui::style::Modifier::RAPID_BLINK)
+    }));
+}
