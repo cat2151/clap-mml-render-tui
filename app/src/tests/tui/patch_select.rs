@@ -117,11 +117,16 @@ fn handle_patch_select_ctrl_p_moves_cursor_up() {
 }
 
 #[test]
-fn start_patch_select_builds_favorite_items_once_in_patch_order_then_extra_sorted() {
+fn start_patch_select_builds_favorite_items_in_registered_order() {
     let mut app = TuiApp::new_for_test(test_config());
     app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
         "Pad B", "Pad A",
     ]))));
+    app.patch_phrase_store.favorite_patches = vec![
+        "Pad 2".to_string(),
+        "Pad A".to_string(),
+        "Pad 11".to_string(),
+    ];
     app.patch_phrase_store.patches.insert(
         "Pad A".to_string(),
         crate::history::PatchPhraseState {
@@ -130,10 +135,17 @@ fn start_patch_select_builds_favorite_items_once_in_patch_order_then_extra_sorte
         },
     );
     app.patch_phrase_store.patches.insert(
-        "Pad C".to_string(),
+        "Pad 11".to_string(),
         crate::history::PatchPhraseState {
             history: vec![],
             favorites: vec!["o5g".to_string()],
+        },
+    );
+    app.patch_phrase_store.patches.insert(
+        "Pad 2".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec![],
+            favorites: vec!["o4c".to_string()],
         },
     );
 
@@ -141,7 +153,11 @@ fn start_patch_select_builds_favorite_items_once_in_patch_order_then_extra_sorte
 
     assert_eq!(
         app.patch_favorite_items,
-        vec!["Pad A".to_string(), "Pad C".to_string()]
+        vec![
+            "Pad 2".to_string(),
+            "Pad A".to_string(),
+            "Pad 11".to_string()
+        ]
     );
 }
 
@@ -271,6 +287,32 @@ fn handle_patch_select_f_adds_selected_patch_and_phrase_to_favorites() {
         &*app.play_state.lock().unwrap(),
         PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Leads/Lead 1.fxp"} l8cdef"#
     ));
+}
+
+#[test]
+fn handle_patch_select_f_moves_newly_added_patch_to_favorites_top() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
+    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()];
+    app.patch_phrase_store.favorite_patches = vec!["Pads/Pad 1.fxp".to_string()];
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec![],
+            favorites: vec!["o5g".to_string()],
+        },
+    );
+    app.patch_cursor = 1;
+    app.patch_list_state.select(Some(1));
+    app.mode = Mode::PatchSelect;
+
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE));
+
+    assert_eq!(
+        app.patch_favorite_items,
+        vec!["Leads/Lead 1.fxp".to_string(), "Pads/Pad 1.fxp".to_string()]
+    );
 }
 
 #[test]

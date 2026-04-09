@@ -156,9 +156,10 @@ impl<'a> TuiApp<'a> {
         let state = self
             .patch_phrase_store
             .patches
-            .entry(patch_name)
+            .entry(patch_name.clone())
             .or_default();
         Self::push_front_dedup(&mut state.favorites, phrase);
+        crate::history::touch_patch_favorite(&mut self.patch_phrase_store, &patch_name);
         self.patch_phrase_store_dirty = true;
     }
 

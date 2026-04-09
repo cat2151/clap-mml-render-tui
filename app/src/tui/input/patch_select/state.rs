@@ -98,7 +98,7 @@ impl<'a> TuiApp<'a> {
         let mut favorites = Vec::new();
         let mut seen = std::collections::HashSet::new();
 
-        for (patch_name, _) in &self.patch_all {
+        for patch_name in &self.patch_phrase_store.favorite_patches {
             let is_favorite = self
                 .patch_phrase_store
                 .patches
@@ -109,22 +109,18 @@ impl<'a> TuiApp<'a> {
             }
         }
 
-        let mut extra_favorites = self
-            .patch_phrase_store
-            .patches
-            .iter()
-            .filter_map(|(patch_name, state)| {
-                (!state.favorites.is_empty() && seen.insert(patch_name.clone()))
-                    .then_some(patch_name.clone())
-            })
-            .collect::<Vec<_>>();
-        extra_favorites.sort();
-        favorites.extend(extra_favorites);
-
         favorites
     }
 
     pub(super) fn refresh_patch_select_favorites(&mut self) {
+        let patch_order = self
+            .patch_all
+            .iter()
+            .map(|(patch_name, _)| patch_name.clone())
+            .collect::<Vec<_>>();
+        if crate::history::sync_patch_favorite_order(&mut self.patch_phrase_store, &patch_order) {
+            self.patch_phrase_store_dirty = true;
+        }
         self.patch_favorite_items = self.rebuild_patch_select_favorite_items();
     }
 

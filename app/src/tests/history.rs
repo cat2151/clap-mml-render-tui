@@ -313,6 +313,7 @@ fn patch_phrase_store_serialize_deserialize_roundtrip() {
             history: vec!["cde".to_string()],
             favorites: vec!["gab".to_string()],
         },
+        favorite_patches: vec!["Pads/Soft Pad.fxp".to_string()],
         ..Default::default()
     };
     store.patches.insert(
@@ -340,6 +341,7 @@ fn save_and_load_patch_phrase_store_roundtrip() {
             history: vec!["abc".to_string()],
             favorites: vec!["xyz".to_string()],
         },
+        favorite_patches: vec!["Leads/Lead 1.fxp".to_string()],
         ..Default::default()
     };
     store.patches.insert(
@@ -460,6 +462,7 @@ fn load_patch_phrase_store_migrates_from_legacy_patch_history_json() {
         store.patches.get("Pads/Soft Pad.fxp").unwrap().history,
         vec!["l8cdef".to_string()]
     );
+    assert!(store.favorite_patches.is_empty());
 
     let new_path = super::patch_phrase_store_path().unwrap();
     assert!(

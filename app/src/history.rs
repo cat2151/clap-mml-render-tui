@@ -74,6 +74,8 @@ pub struct PatchPhraseStore {
     pub notepad: PatchPhraseState,
     #[serde(default)]
     pub patches: HashMap<String, PatchPhraseState>,
+    #[serde(default)]
+    pub favorite_patches: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -344,9 +346,29 @@ pub(crate) fn rename_patch_phrase_store_key(
     let Some(source) = store.patches.remove(from) else {
         return false;
     };
-    let dest = store.patches.entry(to.to_string()).or_default();
-    merge_patch_phrase_items(&mut dest.history, source.history);
-    merge_patch_phrase_items(&mut dest.favorites, source.favorites);
+    let has_favorites = {
+        let dest = store.patches.entry(to.to_string()).or_default();
+        merge_patch_phrase_items(&mut dest.history, source.history);
+        merge_patch_phrase_items(&mut dest.favorites, source.favorites);
+        !dest.favorites.is_empty()
+    };
+
+    if !has_favorites {
+        store
+            .favorite_patches
+            .retain(|patch_name| patch_name != from && patch_name != to);
+    } else if let Some(position) = store
+        .favorite_patches
+        .iter()
+        .enumerate()
+        .find_map(|(index, patch_name)| (patch_name == from || patch_name == to).then_some(index))
+    {
+        store
+            .favorite_patches
+            .retain(|patch_name| patch_name != from && patch_name != to);
+        store.favorite_patches.insert(position, to.to_string());
+    }
+
     true
 }
 
@@ -363,6 +385,73 @@ pub(crate) fn normalize_patch_phrase_store_for_available_patches(
         changed |= rename_patch_phrase_store_key(store, &patch_name, &resolved);
     }
     changed
+}
+
+pub(crate) fn touch_patch_favorite(store: &mut PatchPhraseStore, patch_name: &str) {
+    if let Some(index) = store
+        .favorite_patches
+        .iter()
+        .position(|existing| existing == patch_name)
+    {
+        if index == 0 {
+            return;
+        }
+        store.favorite_patches.remove(index);
+    }
+    store.favorite_patches.insert(0, patch_name.to_string());
+}
+
+pub(crate) fn sync_patch_favorite_order(
+    store: &mut PatchPhraseStore,
+    patch_order: &[String],
+) -> bool {
+    let mut ordered = Vec::new();
+    let mut seen = HashSet::new();
+    let mut changed = false;
+
+    for patch_name in &store.favorite_patches {
+        let is_favorite = store
+            .patches
+            .get(patch_name)
+            .is_some_and(|state| !state.favorites.is_empty());
+        if is_favorite && seen.insert(patch_name.clone()) {
+            ordered.push(patch_name.clone());
+            changed |= store.favorite_patches.get(ordered.len() - 1) != Some(patch_name);
+        }
+    }
+
+    for patch_name in patch_order {
+        let is_favorite = store
+            .patches
+            .get(patch_name)
+            .is_some_and(|state| !state.favorites.is_empty());
+        if is_favorite && seen.insert(patch_name.clone()) {
+            ordered.push(patch_name.clone());
+            changed |= store.favorite_patches.get(ordered.len() - 1) != Some(patch_name);
+        }
+    }
+
+    let mut extras = store
+        .patches
+        .iter()
+        .filter_map(|(patch_name, state)| {
+            (!state.favorites.is_empty() && seen.insert(patch_name.clone()))
+                .then_some(patch_name.clone())
+        })
+        .collect::<Vec<_>>();
+    extras.sort_by(|left, right| crate::patches::compare_patch_names_natural(left, right));
+    for patch_name in extras {
+        changed |= store.favorite_patches.get(ordered.len()) != Some(&patch_name);
+        ordered.push(patch_name);
+    }
+    changed |= store.favorite_patches.len() != ordered.len();
+
+    if !changed {
+        return false;
+    }
+
+    store.favorite_patches = ordered;
+    true
 }
 
 #[cfg(test)]

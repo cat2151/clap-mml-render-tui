@@ -28,33 +28,27 @@ impl DawApp {
     }
 
     fn refresh_patch_select_favorites(&mut self) {
-        let mut favorites = Vec::new();
-        let mut seen = std::collections::HashSet::new();
-
-        for (patch_name, _) in &self.patch_all {
-            let is_favorite = self
-                .patch_phrase_store
-                .patches
-                .get(patch_name)
-                .is_some_and(|state| !state.favorites.is_empty());
-            if is_favorite && seen.insert(patch_name.clone()) {
-                favorites.push(patch_name.clone());
-            }
+        let patch_order = self
+            .patch_all
+            .iter()
+            .map(|(patch_name, _)| patch_name.clone())
+            .collect::<Vec<_>>();
+        if crate::history::sync_patch_favorite_order(&mut self.patch_phrase_store, &patch_order) {
+            self.mark_patch_phrase_store_dirty();
         }
 
-        let mut extra_favorites = self
+        self.patch_favorite_items = self
             .patch_phrase_store
-            .patches
+            .favorite_patches
             .iter()
-            .filter_map(|(patch_name, state)| {
-                (!state.favorites.is_empty() && seen.insert(patch_name.clone()))
+            .filter_map(|patch_name| {
+                self.patch_phrase_store
+                    .patches
+                    .get(patch_name)
+                    .is_some_and(|state| !state.favorites.is_empty())
                     .then_some(patch_name.clone())
             })
             .collect::<Vec<_>>();
-        extra_favorites.sort();
-        favorites.extend(extra_favorites);
-
-        self.patch_favorite_items = favorites;
     }
 
     fn sync_patch_select_cursors(&mut self) {
