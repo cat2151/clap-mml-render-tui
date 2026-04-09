@@ -57,7 +57,7 @@ fn draw_renders_pending_indicator_in_visible_color() {
 }
 
 #[test]
-fn draw_uses_bright_blinking_background_for_selected_grid_cell() {
+fn draw_uses_contrast_blinking_background_for_selected_grid_cell() {
     let mut app = build_test_app();
     app.data[0][0] = "t120".to_string();
 
@@ -66,7 +66,7 @@ fn draw_uses_bright_blinking_background_for_selected_grid_cell() {
     let cell = buffer.cell((x, y)).unwrap();
 
     assert_eq!(cell.fg, MONOKAI_GRAY);
-    assert_eq!(cell.bg, MONOKAI_YELLOW);
+    assert_eq!(cell.bg, cursor_highlight_bg(MONOKAI_GRAY));
     assert!(cell
         .modifier
         .contains(ratatui::style::Modifier::RAPID_BLINK));

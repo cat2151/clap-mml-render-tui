@@ -314,7 +314,7 @@ fn patch_phrase_screen_shows_filter_confirm_title_when_filter_active() {
 }
 
 #[test]
-fn patch_select_filter_cursor_uses_bright_blinking_background() {
+fn patch_select_filter_cursor_uses_contrast_blinking_background() {
     let mut app = TuiApp::new_for_test(test_config());
     app.patch_all = vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
     app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
@@ -338,7 +338,7 @@ fn patch_select_filter_cursor_uses_bright_blinking_background() {
     assert!((chunks[0].y..chunks[0].y + chunks[0].height).any(|y| {
         (chunks[0].x..chunks[0].x + chunks[0].width).any(|x| {
             let cell = buffer.cell((x, y)).unwrap();
-            cell.bg == MONOKAI_YELLOW
+            cell.bg == cursor_highlight_bg(cell.fg)
                 && cell
                     .modifier
                     .contains(ratatui::style::Modifier::RAPID_BLINK)
@@ -347,7 +347,7 @@ fn patch_select_filter_cursor_uses_bright_blinking_background() {
 }
 
 #[test]
-fn patch_phrase_selected_entry_uses_bright_blinking_background() {
+fn patch_phrase_selected_entry_uses_contrast_blinking_background() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::PatchPhrase;
     app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
@@ -364,7 +364,7 @@ fn patch_phrase_selected_entry_uses_bright_blinking_background() {
     let cell = buffer.cell((x, y)).unwrap();
 
     assert_eq!(cell.fg, MONOKAI_FG);
-    assert_eq!(cell.bg, MONOKAI_YELLOW);
+    assert_eq!(cell.bg, cursor_highlight_bg(MONOKAI_FG));
     assert!(cell
         .modifier
         .contains(ratatui::style::Modifier::RAPID_BLINK));

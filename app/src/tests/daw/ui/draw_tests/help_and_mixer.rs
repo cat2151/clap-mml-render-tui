@@ -440,7 +440,7 @@ fn draw_shows_mixer_overlay_with_track_labels_and_db_values() {
 }
 
 #[test]
-fn draw_highlights_selected_mixer_track_with_bright_blinking_background() {
+fn draw_highlights_selected_mixer_track_with_contrast_blinking_background() {
     let mut app = build_test_app();
     app.mode = DawMode::Mixer;
     app.mixer_cursor_track = 1;
@@ -450,7 +450,7 @@ fn draw_highlights_selected_mixer_track_with_bright_blinking_background() {
         .flat_map(|x| (0..30).map(move |y| (x, y)))
         .filter(|(x, y)| {
             let cell = buffer.cell((*x, *y)).unwrap();
-            cell.bg == MONOKAI_YELLOW
+            cell.bg == cursor_highlight_bg(cell.fg)
                 && cell
                     .modifier
                     .contains(ratatui::style::Modifier::RAPID_BLINK)
@@ -459,11 +459,11 @@ fn draw_highlights_selected_mixer_track_with_bright_blinking_background() {
 
     assert!(
         !blinking_positions.is_empty(),
-        "selected mixer track should use a bright blinking background"
+        "selected mixer track should use a contrast blinking background"
     );
 
     let (x, y) = find_text_ignoring_spaces(&buffer, "track1");
     let cell = buffer.cell((x, y)).unwrap();
     assert_eq!(cell.fg, MONOKAI_FG);
-    assert_eq!(cell.bg, MONOKAI_YELLOW);
+    assert_eq!(cell.bg, cursor_highlight_bg(MONOKAI_FG));
 }

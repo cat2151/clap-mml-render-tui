@@ -14,7 +14,7 @@ fn normal_screen_uses_monokai_background_and_border_color() {
 }
 
 #[test]
-fn normal_screen_cursor_uses_bright_blinking_background() {
+fn normal_screen_cursor_uses_contrast_blinking_background() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["abc".to_string()];
 
@@ -23,7 +23,7 @@ fn normal_screen_cursor_uses_bright_blinking_background() {
     let cell = buffer.cell((x, y)).unwrap();
 
     assert_eq!(cell.fg, MONOKAI_FG);
-    assert_eq!(cell.bg, MONOKAI_YELLOW);
+    assert_eq!(cell.bg, cursor_highlight_bg(MONOKAI_FG));
     assert!(cell
         .modifier
         .contains(ratatui::style::Modifier::RAPID_BLINK));
