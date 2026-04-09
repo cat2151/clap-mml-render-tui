@@ -70,6 +70,48 @@ fn start_patch_select_overlay_migrates_prefixed_favorites_from_legacy_patch_name
 }
 
 #[test]
+fn start_patch_select_overlay_keeps_favorites_in_registered_order() {
+    let tmp = TempDirGuard::new("cmrt_test_daw_patch_select_favorite_order");
+    std::fs::create_dir_all(tmp.path()).unwrap();
+    for path in ["Pad B.fxp", "Pad A.fxp", "Pad 2.fxp", "Pad 11.fxp"] {
+        std::fs::write(tmp.path().join(path), b"dummy").unwrap();
+    }
+
+    let (mut app, _cache_rx) = build_test_app();
+    app.cfg = Arc::new(Config {
+        patches_dirs: Some(vec![tmp.path().to_string_lossy().into_owned()]),
+        ..(*app.cfg).clone()
+    });
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    app.patch_phrase_store.favorite_patches = vec![
+        "Pad 2.fxp".to_string(),
+        "Pad A.fxp".to_string(),
+        "Pad 11.fxp".to_string(),
+    ];
+    for patch_name in ["Pad A.fxp", "Pad 2.fxp", "Pad 11.fxp"] {
+        app.patch_phrase_store.patches.insert(
+            patch_name.to_string(),
+            crate::history::PatchPhraseState {
+                history: vec![],
+                favorites: vec!["fav".to_string()],
+            },
+        );
+    }
+
+    app.start_patch_select_overlay(None);
+
+    assert_eq!(
+        app.patch_favorite_items,
+        vec![
+            "Pad 2.fxp".to_string(),
+            "Pad A.fxp".to_string(),
+            "Pad 11.fxp".to_string(),
+        ]
+    );
+}
+
+#[test]
 fn handle_patch_select_enter_saves_filter_query_in_track_init_json() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_track = 1;
