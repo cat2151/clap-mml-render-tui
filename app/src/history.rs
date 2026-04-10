@@ -5,17 +5,29 @@
 
 #[cfg(test)]
 use std::cell::RefCell;
-use std::{
-    collections::hash_map::DefaultHasher,
-    collections::{HashMap, HashSet},
-    hash::{Hash, Hasher},
-    path::PathBuf,
-};
+use std::path::PathBuf;
 
-use anyhow::Result;
-use serde_json::{Map, Value};
-
+mod daw;
 mod helpers;
+mod patch_phrase_store;
+mod paths;
+mod session_state;
+
+pub(crate) use daw::daw_cache_mml_hash;
+pub use daw::{load_daw_session_state, save_daw_session_state, DawCachedMeasure, DawSessionState};
+pub use patch_phrase_store::{
+    load_patch_phrase_store, save_patch_phrase_store, PatchPhraseState, PatchPhraseStore,
+};
+pub(crate) use patch_phrase_store::{
+    normalize_patch_phrase_store_for_available_patches, rename_patch_phrase_store_key,
+    sync_patch_favorite_order, touch_patch_favorite,
+};
+pub(crate) use paths::daw_file_load_path;
+pub use paths::daw_file_path;
+pub use session_state::{load_session_state, save_session_state, SessionState};
+
+#[cfg(test)]
+use paths::{daw_session_state_path, history_dir, patch_phrase_store_path, session_state_path};
 
 const APP_DIR_NAME: &str = "clap-mml-render-tui";
 const HISTORY_DIR_NAME: &str = "history";
@@ -26,12 +38,12 @@ thread_local! {
 }
 
 #[cfg(test)]
-fn test_history_app_dir() -> Option<PathBuf> {
+pub(super) fn test_history_app_dir() -> Option<PathBuf> {
     TEST_HISTORY_APP_DIR.with(|dir| dir.borrow().clone())
 }
 
 #[cfg(not(test))]
-fn test_history_app_dir() -> Option<PathBuf> {
+pub(super) fn test_history_app_dir() -> Option<PathBuf> {
     None
 }
 
@@ -57,433 +69,6 @@ pub(crate) fn set_test_history_app_dir_for_current_thread(_: Option<PathBuf>) ->
 #[allow(dead_code)]
 pub(crate) fn test_history_app_dir_for_current_thread() -> Option<PathBuf> {
     None
-}
-
-/// 起動・終了で保存・復元するセッション状態。
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct SessionState {
-    /// 現在行番号（0始まり）。
-    #[serde(default)]
-    pub cursor: usize,
-    /// 編集行リスト。
-    #[serde(default = "helpers::default_lines")]
-    pub lines: Vec<String>,
-    /// 終了時に DAW モードだったかどうか。起動時に復元する。
-    #[serde(default)]
-    pub is_daw_mode: bool,
-}
-
-/// DAW 専用の履歴情報。
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct DawSessionState {
-    /// DAW カーソルの track 位置。
-    #[serde(default)]
-    pub cursor_track: usize,
-    /// DAW カーソルの measure 位置。
-    #[serde(default)]
-    pub cursor_measure: usize,
-    /// 既存 WAV キャッシュと対応付けるためのレンダリング用 MML ハッシュ。
-    #[serde(default)]
-    pub cached_measures: Vec<DawCachedMeasure>,
-}
-
-/// 既存 WAV キャッシュと一致確認するための track / measure ごとの MML ハッシュ。
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct DawCachedMeasure {
-    pub track: usize,
-    pub measure: usize,
-    #[serde(default)]
-    pub mml_hash: u64,
-    #[serde(default, skip_serializing, alias = "mml")]
-    pub(crate) legacy_mml: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct PatchPhraseStore {
-    #[serde(default)]
-    pub notepad: PatchPhraseState,
-    #[serde(default)]
-    pub patches: HashMap<String, PatchPhraseState>,
-    #[serde(default)]
-    pub favorite_patches: Vec<String>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct PatchPhraseState {
-    #[serde(default)]
-    pub history: Vec<String>,
-    #[serde(default)]
-    pub favorites: Vec<String>,
-}
-
-impl DawCachedMeasure {
-    fn normalize(&mut self) {
-        if self.mml_hash == 0 {
-            if let Some(mml) = self.legacy_mml.as_deref() {
-                self.mml_hash = daw_cache_mml_hash(mml);
-            }
-        }
-        self.legacy_mml = None;
-    }
-}
-
-pub(crate) fn daw_cache_mml_hash(mml: &str) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    mml.hash(&mut hasher);
-    hasher.finish()
-}
-
-impl Default for SessionState {
-    fn default() -> Self {
-        Self {
-            cursor: 0,
-            lines: helpers::default_lines(),
-            is_daw_mode: false,
-        }
-    }
-}
-
-/// OS ごとの設定ディレクトリ配下の `clap-mml-render-tui/history` サブディレクトリを返す。
-/// Windows では `%LOCALAPPDATA%/clap-mml-render-tui/history/` 配下に保存される。
-/// `dirs::config_local_dir()` が利用できない環境では `None` を返し、保存・復元をスキップする。
-fn history_dir() -> Option<PathBuf> {
-    test_history_app_dir()
-        .map(|d| d.join(HISTORY_DIR_NAME))
-        .or_else(|| dirs::config_local_dir().map(|d| d.join(APP_DIR_NAME).join(HISTORY_DIR_NAME)))
-}
-
-fn legacy_history_dir() -> Option<PathBuf> {
-    test_history_app_dir().or_else(|| dirs::data_local_dir().map(|d| d.join(APP_DIR_NAME)))
-}
-
-fn history_file_path(file_name: &str) -> Option<PathBuf> {
-    history_dir().map(|d| d.join(file_name))
-}
-
-fn legacy_history_file_path(file_name: &str) -> Option<PathBuf> {
-    legacy_history_dir().map(|d| d.join(file_name))
-}
-
-fn migrate_legacy_history_file(file_name: &str) -> Option<PathBuf> {
-    let path = history_file_path(file_name)?;
-    if path.exists() {
-        return Some(path);
-    }
-    let legacy_path = legacy_history_file_path(file_name)?;
-    if !legacy_path.exists() {
-        return Some(path);
-    }
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).ok()?;
-    }
-    if std::fs::rename(&legacy_path, &path).is_err() {
-        std::fs::copy(&legacy_path, &path).ok()?;
-        std::fs::remove_file(&legacy_path).ok();
-    }
-    Some(path)
-}
-
-fn resolved_history_file_path(file_name: &str) -> Option<PathBuf> {
-    let path = history_file_path(file_name)?;
-    if path.exists() {
-        return Some(path);
-    }
-    let legacy_path = legacy_history_file_path(file_name)?;
-    if !legacy_path.exists() {
-        return Some(path);
-    }
-    match migrate_legacy_history_file(file_name) {
-        Some(migrated) if migrated.exists() => Some(migrated),
-        _ => Some(legacy_path),
-    }
-}
-
-fn session_state_path() -> Option<PathBuf> {
-    history_file_path("history.json")
-}
-
-fn daw_session_state_path() -> Option<PathBuf> {
-    history_file_path("history_daw.json")
-}
-
-fn patch_phrase_store_path() -> Option<PathBuf> {
-    history_file_path("patch_history.json")
-}
-
-/// DAW データファイル (`daw.json`) のパスを返す。
-/// `history.json` と同じディレクトリに配置することでユーザーデータの場所を統一する。
-/// `dirs::config_local_dir()` が利用できない環境では `None` を返す。
-pub fn daw_file_path() -> Option<PathBuf> {
-    history_file_path("daw.json")
-}
-
-pub(crate) fn daw_file_load_path() -> Option<PathBuf> {
-    resolved_history_file_path("daw.json")
-}
-
-fn extract_daw_session_state(raw: &mut Map<String, Value>) -> Option<DawSessionState> {
-    if let Some(daw) = raw.remove("daw") {
-        return serde_json::from_value(daw).ok();
-    }
-
-    let mut daw = Map::new();
-    let mut found = false;
-    for (src, dst) in [
-        ("daw_cursor_track", "cursor_track"),
-        ("daw_cursor_measure", "cursor_measure"),
-        ("daw_cached_measures", "cached_measures"),
-    ] {
-        if let Some(value) = raw.remove(src) {
-            daw.insert(dst.to_string(), value);
-            found = true;
-        }
-    }
-
-    found
-        .then(|| serde_json::from_value(Value::Object(daw)).ok())
-        .flatten()
-}
-
-fn migrate_daw_session_state_from_history_json() -> Option<DawSessionState> {
-    let path = resolved_history_file_path("history.json")?;
-    if !path.exists() {
-        return None;
-    }
-
-    let content = std::fs::read_to_string(&path).ok()?;
-    let mut value = serde_json::from_str::<Value>(&content).ok()?;
-    let raw = value.as_object_mut()?;
-    let mut daw_state = extract_daw_session_state(raw)?;
-    for measure in &mut daw_state.cached_measures {
-        measure.normalize();
-    }
-
-    save_daw_session_state(&daw_state).ok()?;
-
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).ok()?;
-    }
-    let rewritten = serde_json::to_string_pretty(&value).ok()?;
-    std::fs::write(&path, rewritten).ok()?;
-    Some(daw_state)
-}
-
-/// セッション状態（現在行番号）を history.json に保存する。
-/// データディレクトリが利用できない場合はベストエフォートでスキップする。
-pub fn save_session_state(state: &SessionState) -> Result<()> {
-    let _ = migrate_legacy_history_file("history.json");
-    let Some(path) = session_state_path() else {
-        return Ok(());
-    };
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    let json = serde_json::to_string_pretty(state)?;
-    std::fs::write(&path, json)?;
-    Ok(())
-}
-
-/// DAW 専用履歴を history_daw.json に保存する。
-pub fn save_daw_session_state(state: &DawSessionState) -> Result<()> {
-    let _ = migrate_legacy_history_file("history_daw.json");
-    let Some(path) = daw_session_state_path() else {
-        return Ok(());
-    };
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    let json = serde_json::to_string_pretty(state)?;
-    std::fs::write(&path, json)?;
-    Ok(())
-}
-
-/// notepad / patch ごとの phrase history / favorites を patch_history.json に保存する。
-pub fn save_patch_phrase_store(store: &PatchPhraseStore) -> Result<()> {
-    let _ = migrate_legacy_history_file("patch_history.json");
-    let Some(path) = patch_phrase_store_path() else {
-        return Ok(());
-    };
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    let json = serde_json::to_string_pretty(store)?;
-    std::fs::write(&path, json)?;
-    Ok(())
-}
-
-/// history.json からセッション状態を読み込む。
-/// ファイルが存在しない場合・データディレクトリが利用できない場合・読み込みに失敗した場合は
-/// デフォルト値を返す。
-/// `lines` が空の場合（`"lines": []` のような入力）はデフォルト値で補填し、
-/// `lines` が常に1行以上という不変条件を保証する。
-pub fn load_session_state() -> SessionState {
-    let Some(path) = resolved_history_file_path("history.json") else {
-        return SessionState::default();
-    };
-    if !path.exists() {
-        return SessionState::default();
-    }
-    let mut state: SessionState = std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default();
-    if state.lines.is_empty() {
-        state.lines = helpers::default_lines();
-    }
-    state
-}
-
-/// DAW 専用履歴を history_daw.json から読み込む。
-/// ファイルが存在しない場合は、旧 history.json に埋め込まれていた DAW 情報を
-/// 見つけたときのみ移行して返す。
-pub fn load_daw_session_state() -> DawSessionState {
-    let Some(path) = resolved_history_file_path("history_daw.json") else {
-        return DawSessionState::default();
-    };
-    if path.exists() {
-        let mut state: DawSessionState = std::fs::read_to_string(&path)
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default();
-        for measure in &mut state.cached_measures {
-            measure.normalize();
-        }
-        return state;
-    }
-    migrate_daw_session_state_from_history_json().unwrap_or_default()
-}
-
-/// notepad / patch ごとの phrase history / favorites を patch_history.json から読み込む。
-pub fn load_patch_phrase_store() -> PatchPhraseStore {
-    let Some(path) = resolved_history_file_path("patch_history.json") else {
-        return PatchPhraseStore::default();
-    };
-    if !path.exists() {
-        return PatchPhraseStore::default();
-    }
-    std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
-}
-
-pub(crate) fn rename_patch_phrase_store_key(
-    store: &mut PatchPhraseStore,
-    from: &str,
-    to: &str,
-) -> bool {
-    if from == to {
-        return false;
-    }
-    let Some(source) = store.patches.remove(from) else {
-        return false;
-    };
-    let has_favorites = {
-        let dest = store.patches.entry(to.to_string()).or_default();
-        helpers::merge_patch_phrase_items(&mut dest.history, source.history);
-        helpers::merge_patch_phrase_items(&mut dest.favorites, source.favorites);
-        !dest.favorites.is_empty()
-    };
-
-    if !has_favorites {
-        store
-            .favorite_patches
-            .retain(|patch_name| patch_name != from && patch_name != to);
-    } else if let Some(position) = store
-        .favorite_patches
-        .iter()
-        .enumerate()
-        .find_map(|(index, patch_name)| (patch_name == from || patch_name == to).then_some(index))
-    {
-        store
-            .favorite_patches
-            .retain(|patch_name| patch_name != from && patch_name != to);
-        store.favorite_patches.insert(position, to.to_string());
-    }
-
-    true
-}
-
-pub(crate) fn normalize_patch_phrase_store_for_available_patches(
-    store: &mut PatchPhraseStore,
-    pairs: &[(String, String)],
-) -> bool {
-    let patch_names = store.patches.keys().cloned().collect::<Vec<_>>();
-    let mut changed = false;
-    for patch_name in patch_names {
-        let Some(resolved) = crate::patches::resolve_display_patch_name(pairs, &patch_name) else {
-            continue;
-        };
-        changed |= rename_patch_phrase_store_key(store, &patch_name, &resolved);
-    }
-    changed
-}
-
-pub(crate) fn touch_patch_favorite(store: &mut PatchPhraseStore, patch_name: &str) {
-    if let Some(index) = store
-        .favorite_patches
-        .iter()
-        .position(|existing| existing == patch_name)
-    {
-        if index == 0 {
-            return;
-        }
-        store.favorite_patches.remove(index);
-    }
-    store.favorite_patches.insert(0, patch_name.to_string());
-}
-
-pub(crate) fn sync_patch_favorite_order(
-    store: &mut PatchPhraseStore,
-    patch_order: &[String],
-) -> bool {
-    let mut ordered = Vec::new();
-    let mut seen = HashSet::new();
-    let mut changed = false;
-
-    for patch_name in &store.favorite_patches {
-        let is_favorite = store
-            .patches
-            .get(patch_name)
-            .is_some_and(|state| !state.favorites.is_empty());
-        if is_favorite && seen.insert(patch_name.clone()) {
-            ordered.push(patch_name.clone());
-            changed |= store.favorite_patches.get(ordered.len() - 1) != Some(patch_name);
-        }
-    }
-
-    for patch_name in patch_order {
-        let is_favorite = store
-            .patches
-            .get(patch_name)
-            .is_some_and(|state| !state.favorites.is_empty());
-        if is_favorite && seen.insert(patch_name.clone()) {
-            ordered.push(patch_name.clone());
-            changed |= store.favorite_patches.get(ordered.len() - 1) != Some(patch_name);
-        }
-    }
-
-    let mut extras = store
-        .patches
-        .iter()
-        .filter_map(|(patch_name, state)| {
-            (!state.favorites.is_empty() && seen.insert(patch_name.clone()))
-                .then_some(patch_name.clone())
-        })
-        .collect::<Vec<_>>();
-    extras.sort_by(|left, right| crate::patches::compare_patch_names_natural(left, right));
-    for patch_name in extras {
-        changed |= store.favorite_patches.get(ordered.len()) != Some(&patch_name);
-        ordered.push(patch_name);
-    }
-    changed |= store.favorite_patches.len() != ordered.len();
-
-    if !changed {
-        return false;
-    }
-
-    store.favorite_patches = ordered;
-    true
 }
 
 #[cfg(test)]
