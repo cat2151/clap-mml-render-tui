@@ -1,5 +1,6 @@
 use crossterm::event::KeyCode;
 use ratatui::{
+    layout::{Position, Rect},
     style::{Color, Style},
     widgets::{Block, Borders},
 };
@@ -63,6 +64,39 @@ pub(crate) fn build_query_textarea_widget<'a>(
     widget
 }
 
+pub(crate) fn single_line_textarea_cursor_position(
+    area: Rect,
+    textarea: &TextArea<'_>,
+) -> Position {
+    if area.width < 2 || area.height < 2 {
+        return Position::new(area.x, area.y);
+    }
+
+    let inner = Rect {
+        x: area.x.saturating_add(1),
+        y: area.y.saturating_add(1),
+        width: area.width.saturating_sub(2),
+        height: area.height.saturating_sub(2),
+    };
+    let (row, col) = textarea.cursor();
+    let area_max_x = area.x.saturating_add(area.width.saturating_sub(1));
+    let area_max_y = area.y.saturating_add(area.height.saturating_sub(1));
+    let max_x = inner.x.saturating_add(inner.width.saturating_sub(1));
+    let max_y = inner.y.saturating_add(inner.height.saturating_sub(1));
+    Position::new(
+        inner
+            .x
+            .saturating_add(col as u16)
+            .min(max_x)
+            .clamp(area.x, area_max_x),
+        inner
+            .y
+            .saturating_add(row as u16)
+            .min(max_y)
+            .clamp(area.y, area_max_y),
+    )
+}
+
 pub(crate) fn apply_key_code_to_textarea(textarea: &mut TextArea<'_>, key: KeyCode) -> bool {
     let Some(input) = key_code_to_input(key) else {
         return false;
@@ -121,5 +155,29 @@ mod tests {
             KeyCode::Char('d')
         ));
         assert_eq!(textarea_value(&textarea), "pad");
+    }
+
+    #[test]
+    fn single_line_textarea_cursor_position_falls_back_to_area_origin_for_tiny_area() {
+        let textarea = new_single_line_textarea("pad");
+
+        assert_eq!(
+            single_line_textarea_cursor_position(Rect::new(5, 7, 1, 1), &textarea),
+            Position::new(5, 7)
+        );
+        assert_eq!(
+            single_line_textarea_cursor_position(Rect::new(11, 13, 0, 0), &textarea),
+            Position::new(11, 13)
+        );
+    }
+
+    #[test]
+    fn single_line_textarea_cursor_position_stays_within_area_for_small_border_only_rect() {
+        let textarea = new_single_line_textarea("pad");
+
+        assert_eq!(
+            single_line_textarea_cursor_position(Rect::new(5, 7, 2, 2), &textarea),
+            Position::new(6, 8)
+        );
     }
 }

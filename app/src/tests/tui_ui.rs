@@ -1,4 +1,4 @@
-use ratatui::layout::{Constraint, Direction, Layout};
+use ratatui::layout::{Constraint, Direction, Layout, Position};
 use ratatui::{backend::TestBackend, buffer::Buffer, style::Color, Terminal};
 
 pub(super) use crate::test_utils::{find_text_ignoring_spaces, help_overlay_bounds};
@@ -43,6 +43,13 @@ fn render_buffer(app: &mut TuiApp<'static>, width: u16, height: u16) -> Buffer {
     let mut terminal = Terminal::new(backend).unwrap();
     terminal.draw(|f| draw(app, f)).unwrap();
     terminal.backend().buffer().clone()
+}
+
+fn render_cursor_position(app: &mut TuiApp<'static>, width: u16, height: u16) -> Position {
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal.draw(|f| draw(app, f)).unwrap();
+    terminal.get_cursor_position().unwrap()
 }
 
 fn find_text(buffer: &Buffer, text: &str) -> (u16, u16) {

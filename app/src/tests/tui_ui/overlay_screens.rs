@@ -314,7 +314,7 @@ fn patch_phrase_screen_shows_filter_confirm_title_when_filter_active() {
 }
 
 #[test]
-fn patch_select_filter_cursor_uses_contrast_background_without_blink() {
+fn patch_select_filter_uses_query_cursor_only() {
     let mut app = TuiApp::new_for_test(test_config());
     app.patch_all = vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
     app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
@@ -324,6 +324,7 @@ fn patch_select_filter_cursor_uses_contrast_background_without_blink() {
     app.patch_query = "pad".to_string();
 
     let buffer = render_buffer(&mut app, 100, 16);
+    let cursor = render_cursor_position(&mut app, 100, 16);
     let overlay_area = crate::ui_utils::centered_rect(82, 70, buffer.area);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -334,14 +335,26 @@ fn patch_select_filter_cursor_uses_contrast_background_without_blink() {
             Constraint::Length(1),
         ])
         .split(overlay_area);
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[1]);
+    let query_inner = ratatui::widgets::Block::default()
+        .borders(ratatui::widgets::Borders::ALL)
+        .inner(chunks[0]);
 
-    assert!((chunks[0].y..chunks[0].y + chunks[0].height).any(|y| {
-        (chunks[0].x..chunks[0].x + chunks[0].width).any(|x| {
+    assert_eq!(cursor.y, query_inner.y);
+    assert!((query_inner.x..query_inner.x + query_inner.width).contains(&cursor.x));
+    assert!(!(panes[0].y..panes[0].y + panes[0].height).any(|y| {
+        (panes[0].x..panes[0].x + panes[0].width).any(|x| {
             let cell = buffer.cell((x, y)).unwrap();
             cell.bg == cursor_highlight_bg(cell.fg)
-                && !cell
-                    .modifier
-                    .contains(ratatui::style::Modifier::RAPID_BLINK)
+        })
+    }));
+    assert!(!(panes[1].y..panes[1].y + panes[1].height).any(|y| {
+        (panes[1].x..panes[1].x + panes[1].width).any(|x| {
+            let cell = buffer.cell((x, y)).unwrap();
+            cell.bg == cursor_highlight_bg(cell.fg)
         })
     }));
 }

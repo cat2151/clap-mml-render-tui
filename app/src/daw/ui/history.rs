@@ -16,7 +16,8 @@ fn history_items(app: &DawApp) -> Vec<ListItem<'static>> {
         .into_iter()
         .enumerate()
         .map(|(i, item)| {
-            let is_selected = app.history_overlay_focus == DawHistoryPane::History
+            let is_selected = !app.history_overlay_filter_active
+                && app.history_overlay_focus == DawHistoryPane::History
                 && i == app.history_overlay_history_cursor;
             let prefix = if is_selected { "▶ " } else { "  " };
             let style = if is_selected {
@@ -34,7 +35,8 @@ fn favorite_items(app: &DawApp) -> Vec<ListItem<'static>> {
         .into_iter()
         .enumerate()
         .map(|(i, item)| {
-            let is_selected = app.history_overlay_focus == DawHistoryPane::Favorites
+            let is_selected = !app.history_overlay_filter_active
+                && app.history_overlay_focus == DawHistoryPane::Favorites
                 && i == app.history_overlay_favorites_cursor;
             let prefix = if is_selected { "▶ " } else { "  " };
             let style = if is_selected {
@@ -90,6 +92,12 @@ pub(super) fn draw_history(f: &mut Frame, app: &DawApp, area: Rect) {
         MONOKAI_CYAN,
     );
     f.render_widget(&history_query_widget, chunks[0]);
+    if app.history_overlay_filter_active {
+        f.set_cursor_position(crate::text_input::single_line_textarea_cursor_position(
+            chunks[0],
+            &history_query_widget,
+        ));
+    }
 
     let history_border = if app.history_overlay_focus == DawHistoryPane::History {
         Style::default().fg(MONOKAI_CYAN)
