@@ -142,6 +142,33 @@ pub(super) enum PatchSelectPane {
 }
 
 impl<'a> TuiApp<'a> {
+    fn sync_overlay_list_offset(
+        state: &mut ListState,
+        cursor: usize,
+        item_count: usize,
+        page_size: usize,
+    ) {
+        if item_count == 0 {
+            *state.offset_mut() = 0;
+            return;
+        }
+
+        let visible_count = page_size.max(1).min(item_count);
+        let margin = visible_count.div_ceil(3);
+        let max_offset = item_count.saturating_sub(visible_count);
+        let current_offset = state.offset().min(max_offset);
+        let top_threshold = current_offset.saturating_add(margin);
+        let bottom_anchor = visible_count.saturating_sub(margin + 1);
+        let desired_offset = if cursor < top_threshold {
+            cursor.saturating_sub(margin)
+        } else if cursor > current_offset.saturating_add(bottom_anchor) {
+            cursor.saturating_sub(bottom_anchor)
+        } else {
+            current_offset
+        };
+        *state.offset_mut() = desired_offset.min(max_offset);
+    }
+
     fn kick_play(&self, mml: String) {
         let cfg = Arc::clone(&self.cfg);
         let state = Arc::clone(&self.play_state);

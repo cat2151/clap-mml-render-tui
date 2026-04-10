@@ -259,6 +259,31 @@ fn handle_patch_select_page_down_and_page_up_move_by_visible_page() {
 }
 
 #[test]
+fn handle_patch_select_starts_scrolling_before_cursor_reaches_view_edge() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Pad 0"} l8cdef"#.to_string()];
+    app.patch_all = make_patches(&[
+        "Pad 0", "Pad 1", "Pad 2", "Pad 3", "Pad 4", "Pad 5", "Pad 6", "Pad 7",
+    ]);
+    app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
+    app.patch_select_page_size = 6;
+    app.patch_list_state.select(Some(0));
+    app.mode = Mode::PatchSelect;
+
+    for _ in 0..4 {
+        app.handle_patch_select(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
+    }
+    assert_eq!(app.patch_cursor, 4);
+    assert_eq!(app.patch_list_state.offset(), 1);
+
+    for _ in 0..2 {
+        app.handle_patch_select(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
+    }
+    assert_eq!(app.patch_cursor, 2);
+    assert_eq!(app.patch_list_state.offset(), 0);
+}
+
+#[test]
 fn handle_patch_select_f_adds_selected_patch_and_phrase_to_favorites() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];

@@ -61,6 +61,12 @@ impl<'a> TuiApp<'a> {
             self.notepad_history_cursor = self.notepad_history_cursor.min(history_len - 1);
             self.notepad_history_state
                 .select(Some(self.notepad_history_cursor));
+            Self::sync_overlay_list_offset(
+                &mut self.notepad_history_state,
+                self.notepad_history_cursor,
+                history_len,
+                self.notepad_history_page_size,
+            );
         }
 
         let favorites_len = self.notepad_favorite_items().len();
@@ -71,6 +77,12 @@ impl<'a> TuiApp<'a> {
             self.notepad_favorites_cursor = self.notepad_favorites_cursor.min(favorites_len - 1);
             self.notepad_favorites_state
                 .select(Some(self.notepad_favorites_cursor));
+            Self::sync_overlay_list_offset(
+                &mut self.notepad_favorites_state,
+                self.notepad_favorites_cursor,
+                favorites_len,
+                self.notepad_history_page_size,
+            );
         }
     }
 

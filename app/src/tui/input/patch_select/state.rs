@@ -15,6 +15,12 @@ impl<'a> TuiApp<'a> {
         if next_cursor != self.patch_cursor {
             self.patch_cursor = next_cursor;
             self.patch_list_state.select(Some(self.patch_cursor));
+            Self::sync_overlay_list_offset(
+                &mut self.patch_list_state,
+                self.patch_cursor,
+                self.patch_filtered.len(),
+                self.patch_select_page_size,
+            );
             self.preview_selected_patch();
         }
     }
@@ -30,6 +36,12 @@ impl<'a> TuiApp<'a> {
             self.patch_favorites_cursor = next_cursor;
             self.patch_favorites_state
                 .select(Some(self.patch_favorites_cursor));
+            Self::sync_overlay_list_offset(
+                &mut self.patch_favorites_state,
+                self.patch_favorites_cursor,
+                self.patch_favorite_items.len(),
+                self.patch_select_page_size,
+            );
             self.preview_selected_patch();
         }
     }
@@ -136,6 +148,12 @@ impl<'a> TuiApp<'a> {
         } else {
             self.patch_cursor = self.patch_cursor.min(self.patch_filtered.len() - 1);
             self.patch_list_state.select(Some(self.patch_cursor));
+            Self::sync_overlay_list_offset(
+                &mut self.patch_list_state,
+                self.patch_cursor,
+                self.patch_filtered.len(),
+                self.patch_select_page_size,
+            );
         }
 
         let favorites_len = self.patch_favorite_items.len();
@@ -146,6 +164,12 @@ impl<'a> TuiApp<'a> {
             self.patch_favorites_cursor = self.patch_favorites_cursor.min(favorites_len - 1);
             self.patch_favorites_state
                 .select(Some(self.patch_favorites_cursor));
+            Self::sync_overlay_list_offset(
+                &mut self.patch_favorites_state,
+                self.patch_favorites_cursor,
+                favorites_len,
+                self.patch_select_page_size,
+            );
         }
     }
 
