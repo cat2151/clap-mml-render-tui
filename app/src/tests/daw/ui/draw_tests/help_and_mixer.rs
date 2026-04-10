@@ -440,26 +440,26 @@ fn draw_shows_mixer_overlay_with_track_labels_and_db_values() {
 }
 
 #[test]
-fn draw_highlights_selected_mixer_track_with_contrast_blinking_background() {
+fn draw_highlights_selected_mixer_track_with_contrast_background_without_blink() {
     let mut app = build_test_app();
     app.mode = DawMode::Mixer;
     app.mixer_cursor_track = 1;
 
     let buffer = render_buffer(&app, 100, 30);
-    let blinking_positions: Vec<(u16, u16)> = (0..100)
+    let highlighted_positions: Vec<(u16, u16)> = (0..100)
         .flat_map(|x| (0..30).map(move |y| (x, y)))
         .filter(|(x, y)| {
             let cell = buffer.cell((*x, *y)).unwrap();
             cell.bg == cursor_highlight_bg(cell.fg)
-                && cell
+                && !cell
                     .modifier
                     .contains(ratatui::style::Modifier::RAPID_BLINK)
         })
         .collect();
 
     assert!(
-        !blinking_positions.is_empty(),
-        "selected mixer track should use a contrast blinking background"
+        !highlighted_positions.is_empty(),
+        "selected mixer track should use a contrast background"
     );
 
     let (x, y) = find_text_ignoring_spaces(&buffer, "track1");

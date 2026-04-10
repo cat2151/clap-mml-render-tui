@@ -1,6 +1,5 @@
 use clack_host::prelude::PluginEntry;
 use ratatui::widgets::ListState;
-use tui_textarea::TextArea;
 
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
@@ -84,7 +83,7 @@ impl<'a> TuiApp<'a> {
             lines,
             cursor,
             list_state,
-            textarea: TextArea::default(),
+            textarea: crate::text_input::new_single_line_textarea(""),
             cfg: Arc::clone(&cfg_arc),
             entry_ptr: entry as *const PluginEntry as usize,
             play_state: Arc::new(Mutex::new(PlayState::Idle)),

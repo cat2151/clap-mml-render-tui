@@ -10,7 +10,7 @@ use super::{
     super::{DawApp, FIRST_PLAYABLE_TRACK, MIXER_MAX_DB, MIXER_MIN_DB},
     MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_YELLOW,
 };
-use crate::ui_theme::blinking_cursor_style;
+use crate::ui_theme::cursor_highlight_style;
 
 const TRACK_COLUMN_WIDTH: u16 = 8;
 const TRACK_HEADER_WIDTH: usize = TRACK_COLUMN_WIDTH as usize;
@@ -80,7 +80,7 @@ pub(super) fn draw_mixer(f: &mut Frame, app: &DawApp, area: Rect) {
     for track in track_range.clone() {
         let is_selected = track == app.mixer_cursor_track;
         let style = if is_selected {
-            blinking_cursor_style(Style::default().fg(MONOKAI_FG))
+            cursor_highlight_style(Style::default().fg(MONOKAI_FG))
         } else {
             Style::default().fg(MONOKAI_YELLOW)
         };
@@ -109,7 +109,7 @@ pub(super) fn draw_mixer(f: &mut Frame, app: &DawApp, area: Rect) {
                 } else {
                     Style::default().fg(MONOKAI_GRAY)
                 };
-                blinking_cursor_style(base)
+                cursor_highlight_style(base)
             } else if is_active {
                 Style::default().fg(MONOKAI_FG)
             } else {
@@ -125,7 +125,7 @@ pub(super) fn draw_mixer(f: &mut Frame, app: &DawApp, area: Rect) {
     for track in track_range.clone() {
         let is_selected = track == app.mixer_cursor_track;
         let style = if is_selected {
-            blinking_cursor_style(Style::default().fg(MONOKAI_FG))
+            cursor_highlight_style(Style::default().fg(MONOKAI_FG))
         } else {
             Style::default().fg(MONOKAI_FG)
         };

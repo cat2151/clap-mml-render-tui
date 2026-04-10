@@ -16,11 +16,9 @@ impl DawApp {
     }
 
     pub(in crate::daw) fn start_insert(&mut self) {
-        let mut ta = tui_textarea::TextArea::default();
-        for ch in self.data[self.cursor_track][self.cursor_measure].chars() {
-            ta.insert_char(ch);
-        }
-        self.textarea = ta;
+        self.textarea = crate::text_input::new_single_line_textarea(
+            &self.data[self.cursor_track][self.cursor_measure],
+        );
         self.mode = DawMode::Insert;
     }
 

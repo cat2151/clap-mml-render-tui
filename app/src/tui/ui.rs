@@ -13,7 +13,7 @@ use ratatui::{
 };
 
 use super::{Mode, PlayState, TuiApp};
-use crate::ui_theme::{blinking_cursor_style, MONOKAI_CYAN};
+use crate::ui_theme::{cursor_highlight_style, MONOKAI_CYAN};
 use status::notepad_mode_title;
 use status::{base_style, keybind_text, normal_status_text, status_text, visible_list_page_size};
 
@@ -98,7 +98,7 @@ fn draw_normal(
         .enumerate()
         .map(|(i, line)| {
             let style = if i == cursor {
-                blinking_cursor_style(base_style())
+                cursor_highlight_style(base_style())
             } else {
                 base_style()
             };
@@ -116,7 +116,7 @@ fn draw_normal(
     f.render_stateful_widget(
         List::new(items)
             .style(base_style())
-            .highlight_style(blinking_cursor_style(base_style()))
+            .highlight_style(cursor_highlight_style(base_style()))
             .block(
                 Block::default()
                     .borders(Borders::ALL)

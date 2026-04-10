@@ -5,13 +5,17 @@ use ratatui::{
 };
 use tui_textarea::{Input, Key, TextArea};
 
-use crate::ui_theme::{blinking_cursor_style, MONOKAI_BG, MONOKAI_FG, MONOKAI_GRAY};
+use crate::ui_theme::{cursor_highlight_style, MONOKAI_BG, MONOKAI_FG, MONOKAI_GRAY};
+
+fn apply_single_line_textarea_theme(textarea: &mut TextArea<'_>) {
+    textarea.set_cursor_line_style(Style::default());
+    textarea.set_style(Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG));
+    textarea.set_cursor_style(cursor_highlight_style(Style::default().fg(MONOKAI_FG)));
+}
 
 pub(crate) fn new_single_line_textarea<'a>(text: &str) -> TextArea<'a> {
     let mut textarea = TextArea::default();
-    textarea.set_cursor_line_style(Style::default());
-    textarea.set_style(Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG));
-    textarea.set_cursor_style(blinking_cursor_style(Style::default().fg(MONOKAI_FG)));
+    apply_single_line_textarea_theme(&mut textarea);
     for ch in text.chars() {
         textarea.insert_char(ch);
     }
@@ -46,9 +50,7 @@ pub(crate) fn build_query_textarea_widget<'a>(
 ) -> TextArea<'a> {
     let mut widget = textarea.clone();
     sync_single_line_textarea(&mut widget, text);
-    widget.set_style(Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG));
-    widget.set_cursor_line_style(Style::default());
-    widget.set_cursor_style(blinking_cursor_style(Style::default().fg(MONOKAI_FG)));
+    apply_single_line_textarea_theme(&mut widget);
     widget.set_placeholder_text(placeholder);
     widget.set_placeholder_style(Style::default().fg(MONOKAI_GRAY).bg(MONOKAI_BG));
     widget.set_block(

@@ -4,8 +4,6 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use mmlabc_to_smf::mml_preprocessor;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tui_textarea::TextArea;
-
 use crate::tui::{filter_patches, PatchLoadState, PatchSelectPane, PATCH_JSON_KEY};
 
 use super::{Mode, PlayState, TuiApp};
@@ -163,11 +161,7 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(in crate::tui) fn start_insert(&mut self) {
-        self.textarea = TextArea::default();
-        let current = self.lines[self.cursor].clone();
-        for ch in current.chars() {
-            self.textarea.insert_char(ch);
-        }
+        self.textarea = crate::text_input::new_single_line_textarea(&self.lines[self.cursor]);
         self.mode = Mode::Insert;
     }
 

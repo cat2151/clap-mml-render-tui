@@ -34,9 +34,9 @@ pub(crate) fn cursor_highlight_bg(fg: Color) -> Color {
         .unwrap_or(primary)
 }
 
-pub(crate) fn blinking_cursor_style(style: Style) -> Style {
+pub(crate) fn cursor_highlight_style(style: Style) -> Style {
     let fg = style.fg.unwrap_or(MONOKAI_FG);
     style
         .bg(cursor_highlight_bg(fg))
-        .add_modifier(Modifier::BOLD | Modifier::RAPID_BLINK)
+        .add_modifier(Modifier::BOLD)
 }
