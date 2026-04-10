@@ -1,12 +1,25 @@
 //! DAW モードのメインループ
 
 use anyhow::Result;
-use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use crossterm::{
+    cursor::SetCursorStyle,
+    event::{self, Event, KeyCode, KeyModifiers},
+    execute,
+};
 use ratatui::{backend::CrosstermBackend, Terminal};
 
 use super::{DawApp, DawExitReason, DawMode, DawNormalAction};
 
 impl DawApp {
+    pub(crate) fn uses_textarea_cursor(&self) -> bool {
+        match self.mode {
+            DawMode::Insert => true,
+            DawMode::History => self.history_overlay_filter_active,
+            DawMode::PatchSelect => self.patch_select_filter_active,
+            DawMode::Normal | DawMode::Help | DawMode::Mixer => false,
+        }
+    }
+
     /// TuiApp と同じ terminal を受け取って DAW モードを実行する。
     /// 終了時は `DawExitReason` を返す:
     ///   - `ReturnToTui` : n キーで notepad へ切り替える
@@ -16,8 +29,29 @@ impl DawApp {
         terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     ) -> Result<DawExitReason> {
         self.kick_all_pending();
+        let mut uses_textarea_cursor = self.uses_textarea_cursor();
+        execute!(
+            std::io::stdout(),
+            if uses_textarea_cursor {
+                SetCursorStyle::BlinkingBar
+            } else {
+                SetCursorStyle::DefaultUserShape
+            }
+        )?;
 
         loop {
+            let next_uses_textarea_cursor = self.uses_textarea_cursor();
+            if next_uses_textarea_cursor != uses_textarea_cursor {
+                execute!(
+                    std::io::stdout(),
+                    if next_uses_textarea_cursor {
+                        SetCursorStyle::BlinkingBar
+                    } else {
+                        SetCursorStyle::DefaultUserShape
+                    }
+                )?;
+                uses_textarea_cursor = next_uses_textarea_cursor;
+            }
             terminal.draw(|f| self.draw(f))?;
 
             if event::poll(std::time::Duration::from_millis(50))? {

@@ -4,7 +4,6 @@ mod patch_select;
 
 use super::{Mode, NormalAction, PlayState, TuiApp};
 use crossterm::event::{KeyCode, KeyModifiers};
-use tui_textarea::TextArea;
 
 impl<'a> TuiApp<'a> {
     pub(super) fn enter_help(&mut self) {
@@ -178,7 +177,7 @@ impl<'a> TuiApp<'a> {
                 self.lines.insert(self.cursor + 1, String::new());
                 self.cursor += 1;
                 self.list_state.select(Some(self.cursor));
-                self.textarea = TextArea::default();
+                self.textarea = crate::text_input::new_single_line_textarea("");
             }
             _ => {
                 self.textarea.input(key_event);

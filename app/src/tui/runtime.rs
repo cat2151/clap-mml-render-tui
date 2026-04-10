@@ -1,5 +1,6 @@
 use anyhow::Result;
 use crossterm::{
+    cursor::SetCursorStyle,
     event::{self, Event, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -17,6 +18,7 @@ struct TerminalCleanup {
 
 impl Drop for TerminalCleanup {
     fn drop(&mut self) {
+        let _ = execute!(std::io::stdout(), SetCursorStyle::DefaultUserShape);
         if self.alternate_screen_enabled {
             let _ = execute!(std::io::stdout(), LeaveAlternateScreen);
         }
@@ -27,6 +29,16 @@ impl Drop for TerminalCleanup {
 }
 
 impl<'a> TuiApp<'a> {
+    pub(crate) fn uses_textarea_cursor(&self) -> bool {
+        match self.mode {
+            Mode::Insert => true,
+            Mode::PatchSelect => self.patch_select_filter_active,
+            Mode::NotepadHistory => self.notepad_filter_active,
+            Mode::PatchPhrase => self.patch_phrase_filter_active,
+            Mode::Normal | Mode::NotepadHistoryGuide | Mode::Help => false,
+        }
+    }
+
     pub fn run(&mut self) -> Result<()> {
         enable_raw_mode()?;
         let mut cleanup = TerminalCleanup {
@@ -38,6 +50,15 @@ impl<'a> TuiApp<'a> {
         cleanup.alternate_screen_enabled = true;
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
+        let mut uses_textarea_cursor = self.uses_textarea_cursor();
+        execute!(
+            std::io::stdout(),
+            if uses_textarea_cursor {
+                SetCursorStyle::BlinkingBar
+            } else {
+                SetCursorStyle::DefaultUserShape
+            }
+        )?;
 
         // 前回 DAW モードで終了していた場合は直接 DAW モードで起動する
         let mut quit_from_startup_daw = false;
@@ -56,6 +77,18 @@ impl<'a> TuiApp<'a> {
         loop {
             if quit_from_startup_daw {
                 break;
+            }
+            let next_uses_textarea_cursor = self.uses_textarea_cursor();
+            if next_uses_textarea_cursor != uses_textarea_cursor {
+                execute!(
+                    std::io::stdout(),
+                    if next_uses_textarea_cursor {
+                        SetCursorStyle::BlinkingBar
+                    } else {
+                        SetCursorStyle::DefaultUserShape
+                    }
+                )?;
+                uses_textarea_cursor = next_uses_textarea_cursor;
             }
             terminal.draw(|f| self.draw(f))?;
 

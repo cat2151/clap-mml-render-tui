@@ -133,7 +133,7 @@ fn draw_patch_select_shows_filter_input_keybinds_when_filter_active() {
 }
 
 #[test]
-fn draw_patch_select_uses_contrast_blinking_cursor_for_filter_input() {
+fn draw_patch_select_uses_contrast_cursor_for_filter_input_without_blink() {
     let mut app = build_test_app();
     app.mode = DawMode::PatchSelect;
     app.patch_all = vec![("Bass/Bass 1.fxp".to_string(), "bass/bass 1.fxp".to_string())];
@@ -146,14 +146,14 @@ fn draw_patch_select_uses_contrast_blinking_cursor_for_filter_input() {
     assert!((0..buffer.area.width).any(|x| {
         let cell = buffer.cell((x, y)).unwrap();
         cell.bg == cursor_highlight_bg(cell.fg)
-            && cell
+            && !cell
                 .modifier
                 .contains(ratatui::style::Modifier::RAPID_BLINK)
     }));
 }
 
 #[test]
-fn draw_history_overlay_uses_contrast_blinking_background_for_selected_entry() {
+fn draw_history_overlay_uses_contrast_background_for_selected_entry_without_blink() {
     let mut app = build_test_app();
     app.mode = DawMode::History;
     app.history_overlay_patch_name = Some("Pads/Pad 1.fxp".to_string());
@@ -171,7 +171,26 @@ fn draw_history_overlay_uses_contrast_blinking_background_for_selected_entry() {
 
     assert_eq!(cell.fg, MONOKAI_FG);
     assert_eq!(cell.bg, cursor_highlight_bg(MONOKAI_FG));
-    assert!(cell
+    assert!(!cell
         .modifier
         .contains(ratatui::style::Modifier::RAPID_BLINK));
+}
+
+#[test]
+fn insert_and_filter_modes_use_terminal_bar_cursor() {
+    let mut app = build_test_app();
+
+    assert!(!app.uses_textarea_cursor());
+
+    app.mode = DawMode::Insert;
+    assert!(app.uses_textarea_cursor());
+
+    app.mode = DawMode::History;
+    app.history_overlay_filter_active = true;
+    assert!(app.uses_textarea_cursor());
+
+    app.history_overlay_filter_active = false;
+    app.mode = DawMode::PatchSelect;
+    app.patch_select_filter_active = true;
+    assert!(app.uses_textarea_cursor());
 }
