@@ -172,8 +172,7 @@ pub(super) fn draw_patch_select(
     if app.patch_select_filter_active {
         f.set_cursor_position(crate::text_input::single_line_textarea_cursor_position(
             chunks[0],
-            &app.patch_query_textarea,
-            &app.patch_query,
+            &patch_query_widget,
         ));
     }
 
@@ -309,8 +308,7 @@ pub(super) fn draw_patch_phrase(
     if app.patch_phrase_filter_active {
         f.set_cursor_position(crate::text_input::single_line_textarea_cursor_position(
             chunks[0],
-            &app.patch_phrase_query_textarea,
-            &app.patch_phrase_query,
+            &patch_phrase_query_widget,
         ));
     }
 
@@ -452,8 +450,7 @@ pub(super) fn draw_notepad_history(
     if app.notepad_filter_active {
         f.set_cursor_position(crate::text_input::single_line_textarea_cursor_position(
             chunks[0],
-            &app.notepad_query_textarea,
-            &app.notepad_query,
+            &notepad_query_widget,
         ));
     }
 

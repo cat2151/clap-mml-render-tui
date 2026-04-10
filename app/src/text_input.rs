@@ -67,10 +67,7 @@ pub(crate) fn build_query_textarea_widget<'a>(
 pub(crate) fn single_line_textarea_cursor_position(
     area: Rect,
     textarea: &TextArea<'_>,
-    text: &str,
 ) -> Position {
-    let mut textarea = textarea.clone();
-    sync_single_line_textarea(&mut textarea, text);
     let inner = Rect {
         x: area.x.saturating_add(1),
         y: area.y.saturating_add(1),

@@ -91,8 +91,7 @@ pub(super) fn draw_patch_select(f: &mut Frame, app: &DawApp, area: Rect) {
     if app.patch_select_filter_active {
         f.set_cursor_position(crate::text_input::single_line_textarea_cursor_position(
             chunks[0],
-            &app.patch_query_textarea,
-            &app.patch_query,
+            &patch_query_widget,
         ));
     }
 

@@ -95,8 +95,7 @@ pub(super) fn draw_history(f: &mut Frame, app: &DawApp, area: Rect) {
     if app.history_overlay_filter_active {
         f.set_cursor_position(crate::text_input::single_line_textarea_cursor_position(
             chunks[0],
-            &app.history_overlay_query_textarea,
-            &app.history_overlay_query,
+            &history_query_widget,
         ));
     }
 
