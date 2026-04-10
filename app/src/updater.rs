@@ -1,10 +1,4 @@
-//! 自動アップデート機能。
-//! `cat-self-update-lib` を利用して更新確認と self update を行う。
-
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
+//! `cat-self-update-lib` を利用した self update 関連機能。
 
 use anyhow::Result;
 use cat_self_update_lib::check_remote_commit;
@@ -21,42 +15,18 @@ fn is_valid_sha1(s: &str) -> bool {
     s.len() == 40 && s.chars().all(|c| c.is_ascii_hexdigit())
 }
 
-/// バックグラウンドでアップデートチェックを実行する。
-/// 更新が必要な場合は `update_available` を true にセットする。
-pub fn spawn_update_check(update_available: Arc<AtomicBool>) {
-    std::thread::spawn(move || {
-        if let Err(_e) = check_for_update(update_available) {
-            // TUI動作中のためeprintlnは使わない（表示崩れ防止）
-        }
-    });
+fn validate_check_hash(local_hash: &'static str) -> Result<&'static str> {
+    if local_hash == "unknown" || !is_valid_sha1(local_hash) {
+        anyhow::bail!(
+            "このビルドでは commit hash を取得できないため `cmrt check` を実行できません。git clone した作業ツリーからビルドし直してください。"
+        );
+    }
+
+    Ok(local_hash)
 }
 
-fn check_for_update(update_available: Arc<AtomicBool>) -> Result<()> {
-    // デバッグビルド時は自動アップデートをスキップ（開発中の誤更新を防止）
-    if cfg!(debug_assertions) {
-        return Ok(());
-    }
-
-    let local_hash = LOCAL_HASH.trim();
-    if !is_valid_sha1(local_hash) {
-        return Ok(());
-    }
-
-    if check_remote_commit(REPO_OWNER, REPO_NAME, MAIN_BRANCH, local_hash)
-        .map_err(|e| anyhow::anyhow!("アップデート確認に失敗しました: {}", e))?
-        .is_up_to_date()
-    {
-        return Ok(());
-    }
-
-    // アップデートが利用可能: フラグをセット
-    update_available.store(true, Ordering::Relaxed);
-
-    Ok(())
-}
-
-/// フォアグラウンドでアップデートを実行する。
-/// TUIを終了してから呼び出すこと。
+/// `cmrt update` などの CLI サブコマンドから self update を開始する。
+/// 必要に応じて、事前にサーバーや関連プロセスを停止した状態で呼び出すこと。
 pub fn run_foreground_update() -> Result<()> {
     let (owner, repo, bins) = update_target();
 
@@ -68,8 +38,22 @@ pub fn run_foreground_update() -> Result<()> {
     Ok(())
 }
 
+/// ビルド時のコミットハッシュと remote main の先頭コミットを比較して表示する。
+pub fn run_check() -> Result<()> {
+    let (owner, repo, branch, local_hash) = check_target();
+    let local_hash = validate_check_hash(local_hash)?;
+    let result = check_remote_commit(owner, repo, branch, local_hash)
+        .map_err(|e| anyhow::anyhow!("アップデート確認に失敗しました: {}", e))?;
+    println!("{result}");
+    Ok(())
+}
+
 fn update_target() -> (&'static str, &'static str, &'static [&'static str]) {
     (REPO_OWNER, REPO_NAME, APP_BIN_NAMES)
+}
+
+fn check_target() -> (&'static str, &'static str, &'static str, &'static str) {
+    (REPO_OWNER, REPO_NAME, MAIN_BRANCH, LOCAL_HASH.trim())
 }
 
 #[cfg(test)]
@@ -101,7 +85,41 @@ mod tests {
     }
 
     #[test]
-    fn test_is_valid_sha1_rejects_unknown() {
+    fn test_is_valid_sha1_rejects_non_hex_or_wrong_length() {
         assert!(!is_valid_sha1("unknown"));
+        assert!(!is_valid_sha1("0123456789abcdef0123456789abcdef0123456z"));
+        assert!(!is_valid_sha1("0123456789abcdef"));
+    }
+
+    #[test]
+    fn test_validate_check_hash_rejects_unknown() {
+        let err = validate_check_hash("unknown").unwrap_err();
+        assert!(err.to_string().contains(
+            "このビルドでは commit hash を取得できないため `cmrt check` を実行できません。"
+        ));
+    }
+
+    #[test]
+    fn test_validate_check_hash_rejects_invalid_hash() {
+        let err = validate_check_hash("not-a-sha1").unwrap_err();
+        assert!(err.to_string().contains(
+            "このビルドでは commit hash を取得できないため `cmrt check` を実行できません。"
+        ));
+    }
+
+    #[test]
+    fn test_validate_check_hash_accepts_valid_hash() {
+        let hash = "0123456789abcdef0123456789abcdef01234567";
+        assert_eq!(validate_check_hash(hash).unwrap(), hash);
+    }
+
+    #[test]
+    fn test_check_target_returns_expected_values() {
+        let (owner, repo, branch, local_hash) = check_target();
+
+        assert_eq!(owner, "cat2151");
+        assert_eq!(repo, "clap-mml-render-tui");
+        assert_eq!(branch, "main");
+        assert!(!local_hash.is_empty());
     }
 }

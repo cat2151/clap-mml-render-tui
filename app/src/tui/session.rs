@@ -3,7 +3,7 @@ use ratatui::widgets::ListState;
 use tui_textarea::TextArea;
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 
 use super::{Mode, PatchPhrasePane, PatchSelectPane, PlayState, TuiApp};
@@ -129,7 +129,6 @@ impl<'a> TuiApp<'a> {
             patch_phrase_query_textarea: crate::text_input::new_single_line_textarea(""),
             patch_phrase_filter_active: false,
             patch_phrase_store_dirty: false,
-            update_available: Arc::new(AtomicBool::new(false)),
             is_daw_mode,
         }
     }
