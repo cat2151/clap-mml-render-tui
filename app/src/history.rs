@@ -15,6 +15,8 @@ use std::{
 use anyhow::Result;
 use serde_json::{Map, Value};
 
+mod helpers;
+
 const APP_DIR_NAME: &str = "clap-mml-render-tui";
 const HISTORY_DIR_NAME: &str = "history";
 
@@ -57,19 +59,6 @@ pub(crate) fn test_history_app_dir_for_current_thread() -> Option<PathBuf> {
     None
 }
 
-fn default_lines() -> Vec<String> {
-    vec!["cde".to_string()]
-}
-
-fn merge_patch_phrase_items(dest: &mut Vec<String>, src: Vec<String>) {
-    let mut seen = dest.iter().cloned().collect::<HashSet<_>>();
-    for item in src {
-        if seen.insert(item.clone()) {
-            dest.push(item);
-        }
-    }
-}
-
 /// 起動・終了で保存・復元するセッション状態。
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SessionState {
@@ -77,7 +66,7 @@ pub struct SessionState {
     #[serde(default)]
     pub cursor: usize,
     /// 編集行リスト。
-    #[serde(default = "default_lines")]
+    #[serde(default = "helpers::default_lines")]
     pub lines: Vec<String>,
     /// 終了時に DAW モードだったかどうか。起動時に復元する。
     #[serde(default)]
@@ -148,7 +137,7 @@ impl Default for SessionState {
     fn default() -> Self {
         Self {
             cursor: 0,
-            lines: default_lines(),
+            lines: helpers::default_lines(),
             is_daw_mode: false,
         }
     }
@@ -339,7 +328,7 @@ pub fn load_session_state() -> SessionState {
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default();
     if state.lines.is_empty() {
-        state.lines = default_lines();
+        state.lines = helpers::default_lines();
     }
     state
 }
@@ -391,8 +380,8 @@ pub(crate) fn rename_patch_phrase_store_key(
     };
     let has_favorites = {
         let dest = store.patches.entry(to.to_string()).or_default();
-        merge_patch_phrase_items(&mut dest.history, source.history);
-        merge_patch_phrase_items(&mut dest.favorites, source.favorites);
+        helpers::merge_patch_phrase_items(&mut dest.history, source.history);
+        helpers::merge_patch_phrase_items(&mut dest.favorites, source.favorites);
         !dest.favorites.is_empty()
     };
 
