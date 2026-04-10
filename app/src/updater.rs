@@ -26,7 +26,8 @@ pub fn run_foreground_update() -> Result<()> {
 
 /// ビルド時のコミットハッシュと remote main の先頭コミットを比較して表示する。
 pub fn run_check() -> Result<()> {
-    let result = check_remote_commit(REPO_OWNER, REPO_NAME, MAIN_BRANCH, LOCAL_HASH.trim())
+    let (owner, repo, branch, local_hash) = check_target();
+    let result = check_remote_commit(owner, repo, branch, local_hash)
         .map_err(|e| anyhow::anyhow!("アップデート確認に失敗しました: {}", e))?;
     println!("{result}");
     Ok(())
@@ -34,6 +35,10 @@ pub fn run_check() -> Result<()> {
 
 fn update_target() -> (&'static str, &'static str, &'static [&'static str]) {
     (REPO_OWNER, REPO_NAME, APP_BIN_NAMES)
+}
+
+fn check_target() -> (&'static str, &'static str, &'static str, &'static str) {
+    (REPO_OWNER, REPO_NAME, MAIN_BRANCH, LOCAL_HASH.trim())
 }
 
 #[cfg(test)]
@@ -60,7 +65,12 @@ mod tests {
     }
 
     #[test]
-    fn test_local_hash_is_not_empty() {
-        assert!(!LOCAL_HASH.trim().is_empty());
+    fn test_check_target_returns_expected_values() {
+        let (owner, repo, branch, local_hash) = check_target();
+
+        assert_eq!(owner, "cat2151");
+        assert_eq!(repo, "clap-mml-render-tui");
+        assert_eq!(branch, "main");
+        assert!(!local_hash.is_empty());
     }
 }
