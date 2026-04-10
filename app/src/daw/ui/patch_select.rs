@@ -16,8 +16,9 @@ fn patch_items(app: &DawApp) -> Vec<ListItem<'static>> {
         .iter()
         .enumerate()
         .map(|(i, item)| {
-            let is_selected =
-                app.patch_select_focus == DawPatchSelectPane::Patches && i == app.patch_cursor;
+            let is_selected = !app.patch_select_filter_active
+                && app.patch_select_focus == DawPatchSelectPane::Patches
+                && i == app.patch_cursor;
             let prefix = if is_selected { "▶ " } else { "  " };
             let style = if is_selected {
                 cursor_highlight_style(Style::default().fg(MONOKAI_FG))
@@ -34,7 +35,8 @@ fn favorite_items(app: &DawApp) -> Vec<ListItem<'static>> {
         .iter()
         .enumerate()
         .map(|(i, item)| {
-            let is_selected = app.patch_select_focus == DawPatchSelectPane::Favorites
+            let is_selected = !app.patch_select_filter_active
+                && app.patch_select_focus == DawPatchSelectPane::Favorites
                 && i == app.patch_favorites_cursor;
             let prefix = if is_selected { "▶ " } else { "  " };
             let style = if is_selected {
@@ -86,6 +88,13 @@ pub(super) fn draw_patch_select(f: &mut Frame, app: &DawApp, area: Rect) {
         MONOKAI_CYAN,
     );
     f.render_widget(&patch_query_widget, chunks[0]);
+    if app.patch_select_filter_active {
+        f.set_cursor_position(crate::text_input::single_line_textarea_cursor_position(
+            chunks[0],
+            &app.patch_query_textarea,
+            &app.patch_query,
+        ));
+    }
 
     let patch_border = if app.patch_select_focus == DawPatchSelectPane::Patches {
         Style::default().fg(MONOKAI_CYAN)

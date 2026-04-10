@@ -88,12 +88,14 @@ pub(super) fn draw_patch_select(
         .iter()
         .enumerate()
         .map(|(i, p)| {
-            let style =
-                if app.patch_select_focus == PatchSelectPane::Patches && i == app.patch_cursor {
-                    cursor_highlight_style(base_style())
-                } else {
-                    base_style()
-                };
+            let style = if !app.patch_select_filter_active
+                && app.patch_select_focus == PatchSelectPane::Patches
+                && i == app.patch_cursor
+            {
+                cursor_highlight_style(base_style())
+            } else {
+                base_style()
+            };
             ListItem::new(Span::styled(p.clone(), style))
         })
         .collect();
@@ -105,7 +107,8 @@ pub(super) fn draw_patch_select(
                 .iter()
                 .enumerate()
                 .map(|(i, p)| {
-                    let style = if app.patch_select_focus == PatchSelectPane::Favorites
+                    let style = if !app.patch_select_filter_active
+                        && app.patch_select_focus == PatchSelectPane::Favorites
                         && i == app.patch_favorites_cursor
                     {
                         cursor_highlight_style(base_style())
@@ -131,7 +134,11 @@ pub(super) fn draw_patch_select(
     f.render_stateful_widget(
         List::new(patch_items)
             .style(base_style())
-            .highlight_style(cursor_highlight_style(base_style()))
+            .highlight_style(if app.patch_select_filter_active {
+                base_style()
+            } else {
+                cursor_highlight_style(base_style())
+            })
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -146,7 +153,11 @@ pub(super) fn draw_patch_select(
     f.render_stateful_widget(
         List::new(favorite_items)
             .style(base_style())
-            .highlight_style(cursor_highlight_style(base_style()))
+            .highlight_style(if app.patch_select_filter_active {
+                base_style()
+            } else {
+                cursor_highlight_style(base_style())
+            })
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -158,6 +169,13 @@ pub(super) fn draw_patch_select(
         panes[1],
         &mut app.patch_favorites_state,
     );
+    if app.patch_select_filter_active {
+        f.set_cursor_position(crate::text_input::single_line_textarea_cursor_position(
+            chunks[0],
+            &app.patch_query_textarea,
+            &app.patch_query,
+        ));
+    }
 
     f.render_widget(
         Paragraph::new(status.to_string()).style(base_style().fg(status_color)),
@@ -211,7 +229,8 @@ pub(super) fn draw_patch_phrase(
         .into_iter()
         .enumerate()
         .map(|(i, phrase)| {
-            let is_selected = app.patch_phrase_focus == PatchPhrasePane::History
+            let is_selected = !app.patch_phrase_filter_active
+                && app.patch_phrase_focus == PatchPhrasePane::History
                 && i == app.patch_phrase_history_cursor;
             let style = if is_selected {
                 cursor_highlight_style(base_style())
@@ -226,7 +245,8 @@ pub(super) fn draw_patch_phrase(
         .into_iter()
         .enumerate()
         .map(|(i, phrase)| {
-            let is_selected = app.patch_phrase_focus == PatchPhrasePane::Favorites
+            let is_selected = !app.patch_phrase_filter_active
+                && app.patch_phrase_focus == PatchPhrasePane::Favorites
                 && i == app.patch_phrase_favorites_cursor;
             let style = if is_selected {
                 cursor_highlight_style(base_style())
@@ -251,7 +271,11 @@ pub(super) fn draw_patch_phrase(
     f.render_stateful_widget(
         List::new(history_items)
             .style(base_style())
-            .highlight_style(cursor_highlight_style(base_style()))
+            .highlight_style(if app.patch_phrase_filter_active {
+                base_style()
+            } else {
+                cursor_highlight_style(base_style())
+            })
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -266,7 +290,11 @@ pub(super) fn draw_patch_phrase(
     f.render_stateful_widget(
         List::new(favorite_items)
             .style(base_style())
-            .highlight_style(cursor_highlight_style(base_style()))
+            .highlight_style(if app.patch_phrase_filter_active {
+                base_style()
+            } else {
+                cursor_highlight_style(base_style())
+            })
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -278,6 +306,13 @@ pub(super) fn draw_patch_phrase(
         panes[1],
         &mut app.patch_phrase_favorites_state,
     );
+    if app.patch_phrase_filter_active {
+        f.set_cursor_position(crate::text_input::single_line_textarea_cursor_position(
+            chunks[0],
+            &app.patch_phrase_query_textarea,
+            &app.patch_phrase_query,
+        ));
+    }
 
     f.render_widget(
         Paragraph::new(status.to_string()).style(base_style().fg(status_color)),
@@ -331,8 +366,9 @@ pub(super) fn draw_notepad_history(
         .into_iter()
         .enumerate()
         .map(|(i, mml)| {
-            let is_selected =
-                app.notepad_focus == PatchPhrasePane::History && i == app.notepad_history_cursor;
+            let is_selected = !app.notepad_filter_active
+                && app.notepad_focus == PatchPhrasePane::History
+                && i == app.notepad_history_cursor;
             let style = if is_selected {
                 cursor_highlight_style(base_style())
             } else {
@@ -346,7 +382,8 @@ pub(super) fn draw_notepad_history(
         .into_iter()
         .enumerate()
         .map(|(i, mml)| {
-            let is_selected = app.notepad_focus == PatchPhrasePane::Favorites
+            let is_selected = !app.notepad_filter_active
+                && app.notepad_focus == PatchPhrasePane::Favorites
                 && i == app.notepad_favorites_cursor;
             let style = if is_selected {
                 cursor_highlight_style(base_style())
@@ -377,7 +414,11 @@ pub(super) fn draw_notepad_history(
     f.render_stateful_widget(
         List::new(history_items)
             .style(base_style())
-            .highlight_style(cursor_highlight_style(base_style()))
+            .highlight_style(if app.notepad_filter_active {
+                base_style()
+            } else {
+                cursor_highlight_style(base_style())
+            })
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -392,7 +433,11 @@ pub(super) fn draw_notepad_history(
     f.render_stateful_widget(
         List::new(favorite_items)
             .style(base_style())
-            .highlight_style(cursor_highlight_style(base_style()))
+            .highlight_style(if app.notepad_filter_active {
+                base_style()
+            } else {
+                cursor_highlight_style(base_style())
+            })
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -404,6 +449,13 @@ pub(super) fn draw_notepad_history(
         panes[1],
         &mut app.notepad_favorites_state,
     );
+    if app.notepad_filter_active {
+        f.set_cursor_position(crate::text_input::single_line_textarea_cursor_position(
+            chunks[0],
+            &app.notepad_query_textarea,
+            &app.notepad_query,
+        ));
+    }
 
     f.render_widget(
         Paragraph::new(status.to_string()).style(base_style().fg(status_color)),

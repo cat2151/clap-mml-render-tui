@@ -133,7 +133,7 @@ fn draw_patch_select_shows_filter_input_keybinds_when_filter_active() {
 }
 
 #[test]
-fn draw_patch_select_uses_contrast_cursor_for_filter_input_without_blink() {
+fn draw_patch_select_uses_query_cursor_only() {
     let mut app = build_test_app();
     app.mode = DawMode::PatchSelect;
     app.patch_all = vec![("Bass/Bass 1.fxp".to_string(), "bass/bass 1.fxp".to_string())];
@@ -142,13 +142,97 @@ fn draw_patch_select_uses_contrast_cursor_for_filter_input_without_blink() {
     app.patch_select_filter_active = true;
 
     let buffer = render_buffer(&app, 140, 30);
-    let (_, y) = find_text_ignoring_spaces(&buffer, "bass");
-    assert!((0..buffer.area.width).any(|x| {
-        let cell = buffer.cell((x, y)).unwrap();
-        cell.bg == cursor_highlight_bg(cell.fg)
-            && !cell
-                .modifier
-                .contains(ratatui::style::Modifier::RAPID_BLINK)
+    let cursor = render_cursor_position(&app, 140, 30);
+    let popup = crate::ui_utils::centered_rect(88, 76, buffer.area);
+    let inner = ratatui::widgets::Block::default()
+        .borders(ratatui::widgets::Borders::ALL)
+        .inner(popup);
+    let chunks = ratatui::layout::Layout::default()
+        .direction(ratatui::layout::Direction::Vertical)
+        .constraints([
+            ratatui::layout::Constraint::Length(3),
+            ratatui::layout::Constraint::Min(3),
+            ratatui::layout::Constraint::Length(1),
+            ratatui::layout::Constraint::Length(1),
+        ])
+        .split(inner);
+    let panes = ratatui::layout::Layout::default()
+        .direction(ratatui::layout::Direction::Horizontal)
+        .constraints([
+            ratatui::layout::Constraint::Percentage(50),
+            ratatui::layout::Constraint::Percentage(50),
+        ])
+        .split(chunks[1]);
+    let query_inner = ratatui::widgets::Block::default()
+        .borders(ratatui::widgets::Borders::ALL)
+        .inner(chunks[0]);
+
+    assert_eq!(cursor.y, query_inner.y);
+    assert!((query_inner.x..query_inner.x + query_inner.width).contains(&cursor.x));
+    assert!(!(panes[0].y..panes[0].y + panes[0].height).any(|y| {
+        (panes[0].x..panes[0].x + panes[0].width).any(|x| {
+            let cell = buffer.cell((x, y)).unwrap();
+            cell.bg == cursor_highlight_bg(cell.fg)
+        })
+    }));
+    assert!(!(panes[1].y..panes[1].y + panes[1].height).any(|y| {
+        (panes[1].x..panes[1].x + panes[1].width).any(|x| {
+            let cell = buffer.cell((x, y)).unwrap();
+            cell.bg == cursor_highlight_bg(cell.fg)
+        })
+    }));
+}
+
+#[test]
+fn draw_history_overlay_uses_query_cursor_only_while_filtering() {
+    let mut app = build_test_app();
+    app.mode = DawMode::History;
+    app.history_overlay_query = "l8".to_string();
+    app.history_overlay_filter_active = true;
+    app.patch_phrase_store.notepad = crate::history::PatchPhraseState {
+        history: vec!["l8cdef".to_string()],
+        favorites: vec!["l8efga".to_string()],
+    };
+
+    let buffer = render_buffer(&app, 160, 30);
+    let cursor = render_cursor_position(&app, 160, 30);
+    let popup = crate::ui_utils::centered_rect(88, 76, buffer.area);
+    let inner = ratatui::widgets::Block::default()
+        .borders(ratatui::widgets::Borders::ALL)
+        .inner(popup);
+    let chunks = ratatui::layout::Layout::default()
+        .direction(ratatui::layout::Direction::Vertical)
+        .constraints([
+            ratatui::layout::Constraint::Length(3),
+            ratatui::layout::Constraint::Min(3),
+            ratatui::layout::Constraint::Length(1),
+            ratatui::layout::Constraint::Length(1),
+        ])
+        .split(inner);
+    let panes = ratatui::layout::Layout::default()
+        .direction(ratatui::layout::Direction::Horizontal)
+        .constraints([
+            ratatui::layout::Constraint::Percentage(50),
+            ratatui::layout::Constraint::Percentage(50),
+        ])
+        .split(chunks[1]);
+    let query_inner = ratatui::widgets::Block::default()
+        .borders(ratatui::widgets::Borders::ALL)
+        .inner(chunks[0]);
+
+    assert_eq!(cursor.y, query_inner.y);
+    assert!((query_inner.x..query_inner.x + query_inner.width).contains(&cursor.x));
+    assert!(!(panes[0].y..panes[0].y + panes[0].height).any(|y| {
+        (panes[0].x..panes[0].x + panes[0].width).any(|x| {
+            let cell = buffer.cell((x, y)).unwrap();
+            cell.bg == cursor_highlight_bg(cell.fg)
+        })
+    }));
+    assert!(!(panes[1].y..panes[1].y + panes[1].height).any(|y| {
+        (panes[1].x..panes[1].x + panes[1].width).any(|x| {
+            let cell = buffer.cell((x, y)).unwrap();
+            cell.bg == cursor_highlight_bg(cell.fg)
+        })
     }));
 }
 

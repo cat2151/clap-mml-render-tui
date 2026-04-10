@@ -1,5 +1,6 @@
 use crossterm::event::KeyCode;
 use ratatui::{
+    layout::{Position, Rect},
     style::{Color, Style},
     widgets::{Block, Borders},
 };
@@ -61,6 +62,28 @@ pub(crate) fn build_query_textarea_widget<'a>(
             .border_style(Style::default().fg(border_color)),
     );
     widget
+}
+
+pub(crate) fn single_line_textarea_cursor_position(
+    area: Rect,
+    textarea: &TextArea<'_>,
+    text: &str,
+) -> Position {
+    let mut textarea = textarea.clone();
+    sync_single_line_textarea(&mut textarea, text);
+    let inner = Rect {
+        x: area.x.saturating_add(1),
+        y: area.y.saturating_add(1),
+        width: area.width.saturating_sub(2),
+        height: area.height.saturating_sub(2),
+    };
+    let (row, col) = textarea.cursor();
+    let max_x = inner.x.saturating_add(inner.width.saturating_sub(1));
+    let max_y = inner.y.saturating_add(inner.height.saturating_sub(1));
+    Position::new(
+        inner.x.saturating_add(col as u16).min(max_x),
+        inner.y.saturating_add(row as u16).min(max_y),
+    )
 }
 
 pub(crate) fn apply_key_code_to_textarea(textarea: &mut TextArea<'_>, key: KeyCode) -> bool {

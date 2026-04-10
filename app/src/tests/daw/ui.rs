@@ -3,7 +3,9 @@ pub(super) use std::{
     sync::{Arc, Mutex},
 };
 
-pub(super) use ratatui::{backend::TestBackend, buffer::Buffer, style::Color, Terminal};
+pub(super) use ratatui::{
+    backend::TestBackend, buffer::Buffer, layout::Position, style::Color, Terminal,
+};
 pub(super) use tui_textarea::TextArea;
 
 pub(super) use crate::config::Config;
@@ -107,6 +109,13 @@ fn render_buffer(app: &DawApp, width: u16, height: u16) -> Buffer {
     let mut terminal = Terminal::new(backend).unwrap();
     terminal.draw(|f| draw(app, f)).unwrap();
     terminal.backend().buffer().clone()
+}
+
+fn render_cursor_position(app: &DawApp, width: u16, height: u16) -> Position {
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal.draw(|f| draw(app, f)).unwrap();
+    terminal.get_cursor_position().unwrap()
 }
 
 #[path = "ui/draw_tests.rs"]
