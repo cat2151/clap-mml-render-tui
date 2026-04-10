@@ -111,6 +111,12 @@ impl<'a> TuiApp<'a> {
                 self.patch_phrase_history_cursor.min(history_len - 1);
             self.patch_phrase_history_state
                 .select(Some(self.patch_phrase_history_cursor));
+            Self::sync_overlay_list_offset(
+                &mut self.patch_phrase_history_state,
+                self.patch_phrase_history_cursor,
+                history_len,
+                self.patch_phrase_page_size,
+            );
         }
 
         let favorites_len = self.patch_phrase_favorite_items().len();
@@ -122,6 +128,12 @@ impl<'a> TuiApp<'a> {
                 self.patch_phrase_favorites_cursor.min(favorites_len - 1);
             self.patch_phrase_favorites_state
                 .select(Some(self.patch_phrase_favorites_cursor));
+            Self::sync_overlay_list_offset(
+                &mut self.patch_phrase_favorites_state,
+                self.patch_phrase_favorites_cursor,
+                favorites_len,
+                self.patch_phrase_page_size,
+            );
         }
     }
 

@@ -179,6 +179,42 @@ fn handle_patch_phrase_page_down_and_page_up_move_by_visible_page() {
 }
 
 #[test]
+fn handle_patch_phrase_starts_scrolling_before_cursor_reaches_view_edge() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["before".to_string()];
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec![
+                "zero".to_string(),
+                "one".to_string(),
+                "two".to_string(),
+                "three".to_string(),
+                "four".to_string(),
+                "five".to_string(),
+                "six".to_string(),
+                "seven".to_string(),
+            ],
+            favorites: vec![],
+        },
+    );
+    app.patch_phrase_page_size = 6;
+    app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
+
+    for _ in 0..4 {
+        app.handle_patch_phrase(KeyCode::Char('j'));
+    }
+    assert_eq!(app.patch_phrase_history_cursor, 4);
+    assert_eq!(app.patch_phrase_history_state.offset(), 1);
+
+    for _ in 0..2 {
+        app.handle_patch_phrase(KeyCode::Char('k'));
+    }
+    assert_eq!(app.patch_phrase_history_cursor, 2);
+    assert_eq!(app.patch_phrase_history_state.offset(), 0);
+}
+
+#[test]
 fn handle_patch_phrase_slash_then_enter_keeps_filtered_results_for_j_navigation() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["before".to_string()];
