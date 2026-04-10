@@ -123,7 +123,7 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
         let cache = app.cache.lock().unwrap();
         assert!(matches!(cache[1][0].state, CacheState::Empty));
         assert!(matches!(cache[1][1].state, CacheState::Rendering));
-        assert!(matches!(cache[1][2].state, CacheState::Pending));
+        assert!(matches!(cache[1][2].state, CacheState::Rendering));
         let expected_generations = [cache[1][1].generation, cache[1][2].generation];
         drop(cache);
 
@@ -134,9 +134,16 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
             (job1.measure, job1.generation),
             (1, expected_generations[0])
         );
+        let job2 = cache_rx
+            .try_recv()
+            .expect("second measure should also be reserved when slots are available");
+        assert_eq!(
+            (job2.measure, job2.generation),
+            (2, expected_generations[1])
+        );
         assert!(
             cache_rx.try_recv().is_err(),
-            "only one measure should be reserved at a time"
+            "all initial worker slots should already be filled"
         );
 
         let logs = app
@@ -155,6 +162,12 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
         assert!(
             logs.iter()
                 .any(|line| line == "cache: rerender reserve track1 meas1 (meas1 -> meas2)"),
+            "logs: {:?}",
+            logs
+        );
+        assert!(
+            logs.iter()
+                .any(|line| line == "cache: rerender reserve track1 meas2 (meas2)"),
             "logs: {:?}",
             logs
         );
@@ -256,9 +269,13 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
             .try_recv()
             .expect("next playing measure should be reserved first");
         assert_eq!(reserved_job.measure, 2);
+        let second_reserved_job = cache_rx
+            .try_recv()
+            .expect("second worker slot should reserve the remaining measure");
+        assert_eq!(second_reserved_job.measure, 1);
         assert!(
             cache_rx.try_recv().is_err(),
-            "rerender should stay one-at-a-time even during playback"
+            "rerender should fill at most two worker slots during playback"
         );
 
         let logs = app
@@ -271,6 +288,12 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
         assert!(
             logs.iter()
                 .any(|line| line == "cache: rerender reserve track1 meas2 (meas2 -> meas1)"),
+            "logs: {:?}",
+            logs
+        );
+        assert!(
+            logs.iter()
+                .any(|line| line == "cache: rerender reserve track1 meas1 (meas1)"),
             "logs: {:?}",
             logs
         );

@@ -9,8 +9,10 @@ pub use clap_mml_play_server_core::{host, load_entry, midi, patch_list, render, 
 use anyhow::Result;
 use clack_host::prelude::PluginEntry;
 use mmlabc_to_smf::mml_preprocessor;
+use std::sync::{Mutex, OnceLock};
 
 const PATCH_DIR_PREFIXES: [&str; 2] = ["patches_factory", "patches_3rdparty"];
+static CACHE_RENDER_PREPARE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 /// DAW モードのプレビューキャッシュ構築専用の MML → レンダリング。
 /// - `patch_history.txt` への追記は行わない
@@ -25,7 +27,13 @@ const PATCH_DIR_PREFIXES: [&str; 2] = ["patches_factory", "patches_3rdparty"];
 /// # Returns
 /// インターリーブされたステレオ PCM サンプル列を `Vec<f32>` で返す。
 pub fn mml_render_for_cache(mml: &str, cfg: &CoreConfig, entry: &PluginEntry) -> Result<Vec<f32>> {
-    let (patched_cfg, events, total_samples) = prepare_cache_render(mml, cfg)?;
+    let (patched_cfg, events, total_samples) = {
+        let _guard = CACHE_RENDER_PREPARE_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap();
+        prepare_cache_render(mml, cfg)?
+    };
     render::render_to_memory(&patched_cfg, entry, events, total_samples)
 }
 
@@ -63,23 +71,30 @@ fn extract_patch_from_json(json_str: Option<&str>, cfg: &CoreConfig) -> Option<S
     let json_str = json_str?;
     let value: serde_json::Value = serde_json::from_str(json_str).ok()?;
     let rel = value.get("Surge XT patch")?.as_str()?;
+    let rel_path = normalize_patch_path(rel);
 
     if let Some(ref base) = cfg.patches_dir {
         let base = std::path::Path::new(base);
-        let abs = resolve_patch_path_from_base(base, rel);
+        let abs = resolve_patch_path_from_base(base, &rel_path);
         Some(abs.to_string_lossy().into_owned())
     } else {
-        Some(rel.to_string())
+        Some(rel_path.to_string_lossy().into_owned())
     }
 }
 
-fn resolve_patch_path_from_base(base: &std::path::Path, rel: &str) -> std::path::PathBuf {
-    let abs = base.join(std::path::Path::new(rel));
+fn normalize_patch_path(rel: &str) -> std::path::PathBuf {
+    std::path::Path::new(rel).components().collect()
+}
+
+fn resolve_patch_path_from_base(
+    base: &std::path::Path,
+    rel_path: &std::path::Path,
+) -> std::path::PathBuf {
+    let abs = base.join(rel_path);
     if abs.exists() {
         return abs;
     }
 
-    let rel_path = std::path::Path::new(rel);
     if rel_path.components().next().is_none() {
         return abs;
     }

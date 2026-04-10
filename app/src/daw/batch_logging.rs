@@ -8,7 +8,7 @@ use super::{playback, playback_util, CacheJob, CacheState, DawApp, PlayPosition}
 #[derive(Clone)]
 pub(super) struct TrackRerenderBatch {
     pub(super) pending: BTreeMap<usize, CacheJob>,
-    pub(super) active_measure: Option<usize>,
+    pub(super) active_measures: BTreeSet<usize>,
     pub(super) completion_log: String,
 }
 
@@ -107,6 +107,38 @@ fn take_next_batch_job(
     Some((first_measure, first_job, format_measure_order(&valid_order)))
 }
 
+fn fill_batch_slots(
+    batch: &mut TrackRerenderBatch,
+    track: usize,
+    cache: &Arc<Mutex<Vec<Vec<super::CellCache>>>>,
+    play_position: Option<PlayPosition>,
+    ab_repeat: &Arc<Mutex<super::AbRepeatState>>,
+    play_measure_mmls: &[String],
+) -> Vec<(CacheJob, String)> {
+    let mut queued = Vec::new();
+    while batch.active_measures.len() < super::CACHE_RENDER_WORKERS {
+        let Some((next_measure, next_job, priority_order_label)) = take_next_batch_job(
+            &mut batch.pending,
+            track,
+            cache,
+            play_position.clone(),
+            ab_repeat,
+            play_measure_mmls,
+        ) else {
+            break;
+        };
+        batch.active_measures.insert(next_measure);
+        queued.push((
+            next_job,
+            format!(
+                "cache: rerender reserve track{} meas{} ({})",
+                track, next_measure, priority_order_label
+            ),
+        ));
+    }
+    queued
+}
+
 impl DawApp {
     pub(super) fn start_track_rerender_batch(
         &self,
@@ -134,36 +166,38 @@ impl DawApp {
             .unwrap_or_else(|| "none".to_string());
         let play_position = self.play_position.lock().unwrap().clone();
         let play_measure_mmls = self.play_measure_mmls.lock().unwrap().clone();
-        let mut remaining = pending;
-        let Some((first_measure, first_job, priority_order_label)) = take_next_batch_job(
-            &mut remaining,
+        let mut batch = TrackRerenderBatch {
+            pending,
+            active_measures: BTreeSet::new(),
+            completion_log: format!(
+                "cache: rerender done track{} {} ({reason})",
+                track, measure_range
+            ),
+        };
+        let queued = fill_batch_slots(
+            &mut batch,
             track,
             &self.cache,
             play_position,
             &self.ab_repeat,
             &play_measure_mmls,
-        ) else {
+        );
+        if queued.is_empty() {
             self.track_rerender_batches.lock().unwrap()[track] = None;
             return;
-        };
+        }
         self.append_log_line(format!(
             "cache: rerender start track{} {} ({reason})",
             track, measure_range
         ));
-        self.append_log_line(format!(
-            "cache: rerender reserve track{} meas{} ({})",
-            track, first_measure, priority_order_label
-        ));
-        self.track_rerender_batches.lock().unwrap()[track] = Some(TrackRerenderBatch {
-            pending: remaining,
-            active_measure: Some(first_measure),
-            completion_log: format!(
-                "cache: rerender done track{} {} ({reason})",
-                track, measure_range
-            ),
-        });
-        self.mark_cache_rendering(track, first_measure);
-        let _ = self.cache_tx.send(first_job);
+        for (_, reserve_log) in &queued {
+            self.append_log_line(reserve_log.clone());
+        }
+        self.track_rerender_batches.lock().unwrap()[track] = Some(batch);
+        for (job, _) in queued {
+            self.mark_cache_rendering(job.track, job.measure);
+            let _ = self.cache_tx.send(job);
+        }
     }
 
     pub(super) fn complete_track_rerender_batch_measure(
@@ -176,48 +210,34 @@ impl DawApp {
         }
         let play_position = ctx.play_position.lock().unwrap().clone();
         let play_measure_mmls = ctx.play_measure_mmls.lock().unwrap().clone();
-        let (next_job, queued_log, completion_log) = {
+        let (queued, completion_log) = {
             let mut batches = ctx.batches.lock().unwrap();
             let Some(batch) = batches.get_mut(track).and_then(Option::as_mut) else {
                 return;
             };
-            if batch.active_measure != Some(measure) {
+            if !batch.active_measures.remove(&measure) {
                 return;
             }
-            batch.active_measure = None;
-            if batch.pending.is_empty() {
+            let queued = fill_batch_slots(
+                batch,
+                track,
+                &ctx.cache,
+                play_position,
+                &ctx.ab_repeat,
+                &play_measure_mmls,
+            );
+            if batch.pending.is_empty() && batch.active_measures.is_empty() {
                 let completion_log = batch.completion_log.clone();
                 batches[track] = None;
-                (None, None, Some(completion_log))
+                (queued, Some(completion_log))
             } else {
-                if let Some((next_measure, next_job, priority_order_label)) = take_next_batch_job(
-                    &mut batch.pending,
-                    track,
-                    &ctx.cache,
-                    play_position,
-                    &ctx.ab_repeat,
-                    &play_measure_mmls,
-                ) {
-                    batch.active_measure = Some(next_measure);
-                    (
-                        Some(next_job),
-                        Some(format!(
-                            "cache: rerender reserve track{} meas{} ({})",
-                            track, next_measure, priority_order_label
-                        )),
-                        None,
-                    )
-                } else {
-                    let completion_log = batch.completion_log.clone();
-                    batches[track] = None;
-                    (None, None, Some(completion_log))
-                }
+                (queued, None)
             }
         };
-        if let Some(queued_log) = queued_log {
-            crate::logging::append_log_line(&ctx.log_lines, queued_log);
+        for (_, queued_log) in &queued {
+            crate::logging::append_log_line(&ctx.log_lines, queued_log.clone());
         }
-        if let Some(next_job) = next_job {
+        for (next_job, _) in queued {
             Self::mark_cache_rendering_in(&ctx.cache, next_job.track, next_job.measure);
             let _ = ctx.cache_tx.send(next_job);
         }

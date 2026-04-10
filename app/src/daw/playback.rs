@@ -88,7 +88,6 @@ impl DawApp {
         let play_measure_track_mmls = Arc::clone(&self.play_measure_track_mmls);
         let play_measure_samples = Arc::clone(&self.play_measure_samples);
         let play_track_gains = Arc::clone(&self.play_track_gains);
-        let render_lock = Arc::clone(&self.render_lock);
         let cache = Arc::clone(&self.cache);
         let cfg = Arc::clone(&self.cfg);
         let log_lines = Arc::clone(&self.log_lines);
@@ -177,7 +176,6 @@ impl DawApp {
                         },
                         &log_lines,
                         |_track, mml| {
-                            let _guard = render_lock.lock().unwrap();
                             let core_cfg = CoreConfig::from(&daw_cfg);
                             mml_render_for_cache(mml, &core_cfg, entry_ref)
                         },
@@ -254,7 +252,6 @@ impl DawApp {
                     },
                     &log_lines,
                     |_track, mml| {
-                        let _guard = render_lock.lock().unwrap();
                         let core_cfg = CoreConfig::from(&daw_cfg);
                         mml_render_for_cache(mml, &core_cfg, entry_ref)
                     },

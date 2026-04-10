@@ -47,7 +47,6 @@ fn build_test_app() -> DawApp {
             tracks
         ])),
         cache_tx,
-        render_lock: Arc::new(Mutex::new(())),
         play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
         play_transition_lock: Arc::new(Mutex::new(())),
         preview_session: Arc::new(std::sync::atomic::AtomicU64::new(0)),

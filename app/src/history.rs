@@ -3,6 +3,8 @@
 //! voicevox-playground-tui に倣い、終了時に現在行番号と編集行を保存し、
 //! 起動時に復元する。
 
+#[cfg(test)]
+use std::cell::RefCell;
 use std::{
     collections::hash_map::DefaultHasher,
     collections::{HashMap, HashSet},
@@ -15,6 +17,45 @@ use serde_json::{Map, Value};
 
 const APP_DIR_NAME: &str = "clap-mml-render-tui";
 const HISTORY_DIR_NAME: &str = "history";
+
+#[cfg(test)]
+thread_local! {
+    static TEST_HISTORY_APP_DIR: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+}
+
+#[cfg(test)]
+fn test_history_app_dir() -> Option<PathBuf> {
+    TEST_HISTORY_APP_DIR.with(|dir| dir.borrow().clone())
+}
+
+#[cfg(not(test))]
+fn test_history_app_dir() -> Option<PathBuf> {
+    None
+}
+
+#[cfg(test)]
+pub(crate) fn set_test_history_app_dir_for_current_thread(
+    path: Option<PathBuf>,
+) -> Option<PathBuf> {
+    TEST_HISTORY_APP_DIR.with(|dir| dir.replace(path))
+}
+
+#[cfg(test)]
+pub(crate) fn test_history_app_dir_for_current_thread() -> Option<PathBuf> {
+    test_history_app_dir()
+}
+
+#[cfg(not(test))]
+#[allow(dead_code)]
+pub(crate) fn set_test_history_app_dir_for_current_thread(_: Option<PathBuf>) -> Option<PathBuf> {
+    None
+}
+
+#[cfg(not(test))]
+#[allow(dead_code)]
+pub(crate) fn test_history_app_dir_for_current_thread() -> Option<PathBuf> {
+    None
+}
 
 fn default_lines() -> Vec<String> {
     vec!["cde".to_string()]
@@ -117,11 +158,13 @@ impl Default for SessionState {
 /// Windows では `%LOCALAPPDATA%/clap-mml-render-tui/history/` 配下に保存される。
 /// `dirs::config_local_dir()` が利用できない環境では `None` を返し、保存・復元をスキップする。
 fn history_dir() -> Option<PathBuf> {
-    dirs::config_local_dir().map(|d| d.join(APP_DIR_NAME).join(HISTORY_DIR_NAME))
+    test_history_app_dir()
+        .map(|d| d.join(HISTORY_DIR_NAME))
+        .or_else(|| dirs::config_local_dir().map(|d| d.join(APP_DIR_NAME).join(HISTORY_DIR_NAME)))
 }
 
 fn legacy_history_dir() -> Option<PathBuf> {
-    dirs::data_local_dir().map(|d| d.join(APP_DIR_NAME))
+    test_history_app_dir().or_else(|| dirs::data_local_dir().map(|d| d.join(APP_DIR_NAME)))
 }
 
 fn history_file_path(file_name: &str) -> Option<PathBuf> {

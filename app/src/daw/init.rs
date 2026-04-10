@@ -116,15 +116,10 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
 
     let cache = Arc::new(Mutex::new(cache));
 
-    // シリアルなキャッシュワーカースレッドを起動する。
-    // チャネルが送信側（cache_tx）を介してジョブを受け取り順次レンダリングすることで
-    // ファイル書き込み（clap-mml-render-tui/pass1_tokens.json 等）の競合と過剰スレッド生成を防ぐ。
+    // 固定数のキャッシュワーカースレッドを起動する。
+    // MML -> SMF の前処理排他は core-lib 側で行い、ここでは render 本体の並列度だけを増やす。
     let (cache_tx, cache_rx) = std::sync::mpsc::channel::<CacheJob>();
-
-    // `mml_render_for_cache` はキャッシュワーカーと再生スレッドの両方から呼ばれるため、
-    // `mml_str_to_smf_bytes` が書き出す共有デバッグファイル
-    // （`pass1_tokens.json` など）への同時書き込みを防ぐ排他ロックを共有する。
-    let render_lock: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
+    let cache_rx = Arc::new(Mutex::new(cache_rx));
     let log_lines = Arc::new(Mutex::new(crate::logging::load_log_lines()));
     let track_rerender_batches = Arc::new(Mutex::new(track_rerender_batches));
     let play_position = Arc::new(Mutex::new(None));
@@ -133,10 +128,10 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
     let play_measure_track_mmls = Arc::new(Mutex::new(play_measure_track_mmls));
     let play_track_gains = Arc::new(Mutex::new(play_track_gains));
 
-    {
+    for _ in 0..CACHE_RENDER_WORKERS {
         let cache_worker = Arc::clone(&cache);
+        let cache_rx_worker = Arc::clone(&cache_rx);
         let cfg_worker = Arc::clone(&cfg);
-        let render_lock_worker = Arc::clone(&render_lock);
         let log_lines_worker = Arc::clone(&log_lines);
         let track_rerender_batches_worker = Arc::clone(&track_rerender_batches);
         let play_position_worker = Arc::clone(&play_position);
@@ -157,7 +152,14 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
                 cache_tx: cache_tx_worker.clone(),
             };
 
-            for job in cache_rx {
+            loop {
+                let job = {
+                    let rx = cache_rx_worker.lock().unwrap();
+                    match rx.recv() {
+                        Ok(job) => job,
+                        Err(_) => break,
+                    }
+                };
                 let track = job.track;
                 let measure = job.measure;
                 let mut skipped_stale_job = false;
@@ -179,7 +181,6 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
                     );
                     continue;
                 }
-                let _guard = render_lock_worker.lock().unwrap();
                 let core_cfg = cmrt_core::CoreConfig::from(&daw_cfg);
                 match mml_render_for_cache(&job.mml, &core_cfg, entry_ref) {
                     Ok(samples) => {
@@ -277,7 +278,6 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
         measures,
         cache,
         cache_tx,
-        render_lock,
         play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
         play_transition_lock: Arc::new(Mutex::new(())),
         preview_session: Arc::new(AtomicU64::new(0)),

@@ -11,8 +11,9 @@ pub(crate) fn env_lock() -> &'static Mutex<()> {
 }
 
 pub(crate) struct TestEnvGuard {
-    _lock: MutexGuard<'static, ()>,
+    _lock: Option<MutexGuard<'static, ()>>,
     vars: Vec<(&'static str, Option<String>)>,
+    previous_history_app_dir: Option<Option<PathBuf>>,
 }
 
 impl TestEnvGuard {
@@ -21,8 +22,9 @@ impl TestEnvGuard {
             .lock()
             .expect("test environment lock should not be poisoned");
         Self {
-            _lock: lock,
+            _lock: Some(lock),
             vars: set_env_vars([(key, value)]),
+            previous_history_app_dir: None,
         }
     }
 }
@@ -35,52 +37,23 @@ impl Drop for TestEnvGuard {
                 None => std::env::remove_var(key),
             }
         }
+        if let Some(previous_history_app_dir) = self.previous_history_app_dir.take() {
+            crate::history::set_test_history_app_dir_for_current_thread(previous_history_app_dir);
+        }
     }
 }
 
-/// Redirects OS-specific data/config directory environment variables to a test-only path.
+/// Redirects history/session persistence to a test-only path for the current test thread.
 pub(crate) fn set_local_dir_envs(base: &Path) -> TestEnvGuard {
-    let lock = env_lock()
-        .lock()
-        .expect("test environment lock should not be poisoned");
-    #[cfg(unix)]
-    {
-        let xdg_data_home = base.join("xdg-data");
-        let xdg_config_home = base.join("xdg-config");
-        let home = base.join("home");
-        std::fs::create_dir_all(&xdg_data_home).ok();
-        std::fs::create_dir_all(&xdg_config_home).ok();
-        std::fs::create_dir_all(&home).ok();
-        TestEnvGuard {
-            _lock: lock,
-            vars: set_env_vars([
-                ("XDG_DATA_HOME", &xdg_data_home),
-                ("XDG_CONFIG_HOME", &xdg_config_home),
-                ("HOME", &home),
-            ]),
-        }
-    }
-    #[cfg(windows)]
-    {
-        let local_app_data = base.join("LocalAppData");
-        let app_data = base.join("AppData");
-        let user_profile = base.join("UserProfile");
-        std::fs::create_dir_all(&local_app_data).ok();
-        std::fs::create_dir_all(&app_data).ok();
-        std::fs::create_dir_all(&user_profile).ok();
-        TestEnvGuard {
-            _lock: lock,
-            vars: set_env_vars([
-                ("LOCALAPPDATA", &local_app_data),
-                ("APPDATA", &app_data),
-                ("USERPROFILE", &user_profile),
-            ]),
-        }
-    }
-    #[cfg(not(any(unix, windows)))]
-    {
-        let vars = Vec::new();
-        TestEnvGuard { _lock: lock, vars }
+    let app_dir = base.join("clap-mml-render-tui");
+    let history_dir = app_dir.join("history");
+    std::fs::create_dir_all(&history_dir).ok();
+    let previous_history_app_dir =
+        crate::history::set_test_history_app_dir_for_current_thread(Some(app_dir));
+    TestEnvGuard {
+        _lock: None,
+        vars: Vec::new(),
+        previous_history_app_dir: Some(previous_history_app_dir),
     }
 }
 
@@ -92,27 +65,57 @@ pub(crate) fn set_data_local_dir_envs(base: &Path) -> TestEnvGuard {
 
 /// Builds the expected history.json path using the same production resolver as history.rs.
 pub(crate) fn session_state_path_for_test() -> Option<PathBuf> {
-    dirs::config_local_dir().map(|d| {
-        d.join("clap-mml-render-tui")
-            .join("history")
-            .join("history.json")
-    })
+    crate::history::test_history_app_dir_for_current_thread()
+        .map(|d| d.join("history").join("history.json"))
+        .or_else(|| {
+            dirs::config_local_dir().map(|d| {
+                d.join("clap-mml-render-tui")
+                    .join("history")
+                    .join("history.json")
+            })
+        })
 }
 
 pub(crate) fn legacy_session_state_path_for_test() -> Option<PathBuf> {
-    dirs::data_local_dir().map(|d| d.join("clap-mml-render-tui").join("history.json"))
+    crate::history::test_history_app_dir_for_current_thread()
+        .map(|d| d.join("history.json"))
+        .or_else(|| {
+            dirs::data_local_dir().map(|d| d.join("clap-mml-render-tui").join("history.json"))
+        })
 }
 
 pub(crate) fn legacy_daw_session_state_path_for_test() -> Option<PathBuf> {
-    dirs::data_local_dir().map(|d| d.join("clap-mml-render-tui").join("history_daw.json"))
+    crate::history::test_history_app_dir_for_current_thread()
+        .map(|d| d.join("history_daw.json"))
+        .or_else(|| {
+            dirs::data_local_dir().map(|d| d.join("clap-mml-render-tui").join("history_daw.json"))
+        })
 }
 
 pub(crate) fn legacy_patch_phrase_store_path_for_test() -> Option<PathBuf> {
-    dirs::data_local_dir().map(|d| d.join("clap-mml-render-tui").join("patch_history.json"))
+    crate::history::test_history_app_dir_for_current_thread()
+        .map(|d| d.join("patch_history.json"))
+        .or_else(|| {
+            dirs::data_local_dir().map(|d| d.join("clap-mml-render-tui").join("patch_history.json"))
+        })
 }
 
 pub(crate) fn legacy_daw_file_path_for_test() -> Option<PathBuf> {
-    dirs::data_local_dir().map(|d| d.join("clap-mml-render-tui").join("daw.json"))
+    crate::history::test_history_app_dir_for_current_thread()
+        .map(|d| d.join("daw.json"))
+        .or_else(|| dirs::data_local_dir().map(|d| d.join("clap-mml-render-tui").join("daw.json")))
+}
+
+pub(crate) fn patch_phrase_store_path_for_test() -> Option<PathBuf> {
+    crate::history::test_history_app_dir_for_current_thread()
+        .map(|d| d.join("history").join("patch_history.json"))
+        .or_else(|| {
+            dirs::config_local_dir().map(|d| {
+                d.join("clap-mml-render-tui")
+                    .join("history")
+                    .join("patch_history.json")
+            })
+        })
 }
 
 fn set_env_vars<'a, I, V>(vars: I) -> Vec<(&'static str, Option<String>)>

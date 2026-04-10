@@ -61,7 +61,6 @@ impl DawApp {
         let preview_session = Arc::clone(&self.preview_session);
         let preview_sink = Arc::clone(&self.preview_sink);
         let play_position = Arc::clone(&self.play_position);
-        let render_lock = Arc::clone(&self.render_lock);
         let cache = Arc::clone(&self.cache);
         let cfg = Arc::clone(&self.cfg);
         let log_lines = Arc::clone(&self.log_lines);
@@ -124,7 +123,6 @@ impl DawApp {
                         .map(String::as_str)
                         .unwrap_or_default();
                     let result = {
-                        let _guard = render_lock.lock().unwrap();
                         let core_cfg = CoreConfig::from(&daw_cfg);
                         mml_render_for_cache(mml, &core_cfg, entry_ref)
                     };

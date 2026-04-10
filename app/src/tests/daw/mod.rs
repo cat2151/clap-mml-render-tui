@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     sync::{Arc, Mutex},
 };
 
@@ -72,7 +72,7 @@ fn complete_track_rerender_batch_logs_only_after_last_measure_finishes() {
                 mml: "d".to_string(),
             },
         )]),
-        active_measure: Some(1),
+        active_measures: BTreeSet::from([1]),
         completion_log: "cache: rerender done track1 meas 1〜2 (random patch update)".to_string(),
     });
 
@@ -86,6 +86,11 @@ fn complete_track_rerender_batch_logs_only_after_last_measure_finishes() {
         "next reservation log should be emitted before completion"
     );
     assert_eq!(cache_rx.try_recv().unwrap().measure, 2);
+    assert!(!log_lines
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|line| line == "cache: rerender done track1 meas 1〜2 (random patch update)"));
 
     DawApp::complete_track_rerender_batch_measure(&completion_ctx, 1, 2);
 
@@ -96,6 +101,48 @@ fn complete_track_rerender_batch_logs_only_after_last_measure_finishes() {
     assert!(
         batches.lock().unwrap()[1].is_none(),
         "completed batch should be cleared"
+    );
+}
+
+#[test]
+fn complete_track_rerender_batch_waits_for_last_active_measure_before_logging_done() {
+    let log_lines = Arc::new(Mutex::new(VecDeque::new()));
+    let batches = Arc::new(Mutex::new(vec![None, None]));
+    let completion_log = "cache: rerender done track1 meas 1〜2 (random patch update)";
+    let (cache_tx, _cache_rx) = std::sync::mpsc::channel();
+    let completion_ctx = TrackRerenderBatchCompletionContext {
+        batches: Arc::clone(&batches),
+        log_lines: Arc::clone(&log_lines),
+        cache: Arc::new(Mutex::new(vec![vec![super::CellCache::empty(); 3]; 2])),
+        play_position: Arc::new(Mutex::new(None)),
+        ab_repeat: Arc::new(Mutex::new(super::AbRepeatState::Off)),
+        play_measure_mmls: Arc::new(Mutex::new(vec!["c".to_string(), "d".to_string()])),
+        cache_tx,
+    };
+    batches.lock().unwrap()[1] = Some(TrackRerenderBatch {
+        pending: BTreeMap::new(),
+        active_measures: BTreeSet::from([1, 2]),
+        completion_log: completion_log.to_string(),
+    });
+
+    DawApp::complete_track_rerender_batch_measure(&completion_ctx, 1, 1);
+
+    assert!(
+        batches.lock().unwrap()[1].is_some(),
+        "batch should remain active while another measure is still rendering"
+    );
+    assert!(!log_lines
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|line| line == completion_log));
+
+    DawApp::complete_track_rerender_batch_measure(&completion_ctx, 1, 2);
+
+    assert!(batches.lock().unwrap()[1].is_none());
+    assert_eq!(
+        log_lines.lock().unwrap().back().map(String::as_str),
+        Some(completion_log)
     );
 }
 
@@ -152,7 +199,7 @@ fn complete_track_rerender_batch_skips_stale_pending_job_and_reserves_next_measu
                 },
             ),
         ]),
-        active_measure: Some(1),
+        active_measures: BTreeSet::from([1]),
         completion_log: "cache: rerender done track1 meas 1〜3 (random patch update)".to_string(),
     });
 
@@ -171,7 +218,7 @@ fn complete_track_rerender_batch_skips_stale_pending_job_and_reserves_next_measu
     );
     let batch = batches.lock().unwrap();
     let current_batch = batch[1].as_ref().expect("batch should continue");
-    assert_eq!(current_batch.active_measure, Some(3));
+    assert_eq!(current_batch.active_measures, BTreeSet::from([3]));
     assert!(
         !current_batch.pending.contains_key(&2),
         "stale pending measure should be dropped"
@@ -189,7 +236,7 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
 
     let tracks = 3;
     let measures = 4;
-    let (cache_tx, _cache_rx) = std::sync::mpsc::channel();
+    let (cache_tx, cache_rx) = std::sync::mpsc::channel();
     let mut app = DawApp {
         data: vec![vec![String::new(); measures + 1]; tracks],
         cursor_track: 0,
@@ -223,7 +270,6 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
             tracks
         ])),
         cache_tx,
-        render_lock: Arc::new(Mutex::new(())),
         play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
         play_transition_lock: Arc::new(Mutex::new(())),
         preview_session: Arc::new(std::sync::atomic::AtomicU64::new(0)),
@@ -282,4 +328,10 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
     assert!(logs
         .iter()
         .any(|line| line == "cache: rerender reserve track1 meas1 (meas1 -> meas3 -> meas4)"));
+    assert!(logs
+        .iter()
+        .any(|line| line == "cache: rerender reserve track1 meas3 (meas3 -> meas4)"));
+    assert_eq!(cache_rx.try_recv().unwrap().measure, 1);
+    assert_eq!(cache_rx.try_recv().unwrap().measure, 3);
+    assert!(cache_rx.try_recv().is_err());
 }

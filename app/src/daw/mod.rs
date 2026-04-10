@@ -122,6 +122,7 @@ pub(super) const DEFAULT_TRACK0_MML: &str = r#"{"beat": "4/4"}t120"#;
 /// 再生時にフォールバックレンダリングする。
 /// ≈ 2_000_000 × 4 bytes ≈ 8 MB / cell。
 pub(super) const MAX_CACHED_SAMPLES: usize = 2_000_000;
+pub(super) const CACHE_RENDER_WORKERS: usize = 2;
 
 #[derive(Clone)]
 pub(super) struct CacheJob {
@@ -158,14 +159,8 @@ pub struct DawApp {
     pub(super) cache: Arc<Mutex<Vec<Vec<CellCache>>>>,
 
     /// キャッシュワーカースレッドへのジョブチャネル
-    /// シリアルな単一ワーカーで処理することでファイル書き込みの競合を防ぐ
+    /// 固定数ワーカーで処理し、prepare 段階の排他は core-lib 側で行う
     cache_tx: std::sync::mpsc::Sender<CacheJob>,
-
-    /// `mml_render_for_cache` の排他実行ロック。
-    /// `mml_str_to_smf_bytes` が書き出す共有デバッグファイル
-    /// （`pass1_tokens.json` など）を同時に書き込まないよう、
-    /// `mml_render_for_cache` 呼び出し前に必ずこのロックを取得すること。
-    render_lock: Arc<Mutex<()>>,
 
     pub(super) play_state: Arc<Mutex<DawPlayState>>,
 
