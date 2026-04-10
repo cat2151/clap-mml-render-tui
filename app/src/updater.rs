@@ -1,10 +1,4 @@
-//! 自動アップデート機能。
-//! `cat-self-update-lib` を利用して更新確認と self update を行う。
-
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
+//! `cat-self-update-lib` を利用した self update 関連機能。
 
 use anyhow::Result;
 use cat_self_update_lib::check_remote_commit;
@@ -17,44 +11,6 @@ const APP_BIN_NAMES: &[&str] = &["cmrt"];
 /// ビルド時に埋め込まれたgit commit hash
 const LOCAL_HASH: &str = env!("GIT_COMMIT_HASH");
 
-fn is_valid_sha1(s: &str) -> bool {
-    s.len() == 40 && s.chars().all(|c| c.is_ascii_hexdigit())
-}
-
-/// バックグラウンドでアップデートチェックを実行する。
-/// 更新が必要な場合は `update_available` を true にセットする。
-pub fn spawn_update_check(update_available: Arc<AtomicBool>) {
-    std::thread::spawn(move || {
-        if let Err(_e) = check_for_update(update_available) {
-            // TUI動作中のためeprintlnは使わない（表示崩れ防止）
-        }
-    });
-}
-
-fn check_for_update(update_available: Arc<AtomicBool>) -> Result<()> {
-    // デバッグビルド時は自動アップデートをスキップ（開発中の誤更新を防止）
-    if cfg!(debug_assertions) {
-        return Ok(());
-    }
-
-    let local_hash = LOCAL_HASH.trim();
-    if !is_valid_sha1(local_hash) {
-        return Ok(());
-    }
-
-    if check_remote_commit(REPO_OWNER, REPO_NAME, MAIN_BRANCH, local_hash)
-        .map_err(|e| anyhow::anyhow!("アップデート確認に失敗しました: {}", e))?
-        .is_up_to_date()
-    {
-        return Ok(());
-    }
-
-    // アップデートが利用可能: フラグをセット
-    update_available.store(true, Ordering::Relaxed);
-
-    Ok(())
-}
-
 /// フォアグラウンドでアップデートを実行する。
 /// TUIを終了してから呼び出すこと。
 pub fn run_foreground_update() -> Result<()> {
@@ -65,6 +21,14 @@ pub fn run_foreground_update() -> Result<()> {
         .map_err(|e| anyhow::anyhow!("アップデート開始に失敗しました: {}", e))?;
     println!("アップデートをバックグラウンドで開始しました。完了後に cmrt を再起動します。");
 
+    Ok(())
+}
+
+/// ビルド時のコミットハッシュと remote main の先頭コミットを比較して表示する。
+pub fn run_check() -> Result<()> {
+    let result = check_remote_commit(REPO_OWNER, REPO_NAME, MAIN_BRANCH, LOCAL_HASH.trim())
+        .map_err(|e| anyhow::anyhow!("アップデート確認に失敗しました: {}", e))?;
+    println!("{result}");
     Ok(())
 }
 
@@ -96,12 +60,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_valid_sha1_accepts_40_hex_chars() {
-        assert!(is_valid_sha1("0123456789abcdef0123456789abcdef01234567"));
-    }
-
-    #[test]
-    fn test_is_valid_sha1_rejects_unknown() {
-        assert!(!is_valid_sha1("unknown"));
+    fn test_local_hash_is_not_empty() {
+        assert!(!LOCAL_HASH.trim().is_empty());
     }
 }

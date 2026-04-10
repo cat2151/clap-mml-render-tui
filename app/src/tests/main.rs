@@ -17,6 +17,19 @@ fn update_subcommand_takes_precedence_over_cli_mml_mode() {
 }
 
 #[test]
+fn check_subcommand_is_recognized() {
+    assert_eq!(parse_cli_from(["cmrt", "check"]).unwrap(), CliAction::Check);
+}
+
+#[test]
+fn check_subcommand_takes_precedence_over_cli_mml_mode() {
+    assert_ne!(
+        parse_cli_from(["cmrt", "check"]).unwrap(),
+        CliAction::CliMml("check".to_string())
+    );
+}
+
+#[test]
 fn cli_mml_mode_still_accepts_regular_positional_argument() {
     assert_eq!(
         parse_cli_from(["cmrt", "cde"]).unwrap(),
@@ -75,6 +88,17 @@ fn subcommand_help_is_preserved() {
         CliAction::Help(help) => {
             assert!(help.contains("Usage: cmrt update"));
             assert!(help.contains("アップデートを実行"));
+        }
+        other => panic!("expected help action, got {other:?}"),
+    }
+}
+
+#[test]
+fn check_subcommand_help_is_preserved() {
+    match parse_cli_from(["cmrt", "check", "--help"]).unwrap() {
+        CliAction::Help(help) => {
+            assert!(help.contains("Usage: cmrt check"));
+            assert!(help.contains("ビルド時コミットと remote main を比較"));
         }
         other => panic!("expected help action, got {other:?}"),
     }

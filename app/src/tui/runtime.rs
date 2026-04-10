@@ -6,7 +6,6 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use super::{Mode, NormalAction, TuiApp};
@@ -59,11 +58,6 @@ impl<'a> TuiApp<'a> {
                 break;
             }
             terminal.draw(|f| self.draw(f))?;
-
-            // アップデートが利用可能になったら自動的にループを抜けてアップデートを実行する
-            if self.update_available.load(Ordering::Relaxed) && self.mode == Mode::Normal {
-                break;
-            }
 
             if event::poll(std::time::Duration::from_millis(50))? {
                 if let Event::Key(key) = event::read()? {

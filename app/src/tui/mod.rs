@@ -30,7 +30,7 @@ use ratatui::{widgets::ListState, Frame};
 use tui_textarea::TextArea;
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 
 /// audio_cache の最大エントリ数。超過時はキャッシュ全体をクリアしてから挿入する。
@@ -125,8 +125,6 @@ pub struct TuiApp<'a> {
     pub(super) patch_phrase_query_textarea: TextArea<'a>,
     pub(super) patch_phrase_filter_active: bool,
     pub(super) patch_phrase_store_dirty: bool,
-    /// バックグラウンドのアップデートチェックがtrueにセットしたらアップデートを実行
-    pub update_available: Arc<AtomicBool>,
     /// 終了時 DAW モードだったかどうか（history.json に保存・復元する）
     pub(super) is_daw_mode: bool,
 }

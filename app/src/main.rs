@@ -11,6 +11,7 @@ enum CliAction {
     Server(u16),
     Shutdown(u16),
     Update,
+    Check,
 }
 
 #[derive(Debug, Parser)]
@@ -53,6 +54,8 @@ struct Cli {
 enum Commands {
     /// アップデートを実行
     Update,
+    /// ビルド時コミットと remote main を比較
+    Check,
 }
 
 fn cli_command() -> clap::Command {
@@ -95,6 +98,10 @@ where
 
     if matches!(cli.command, Some(Commands::Update)) {
         return Ok(CliAction::Update);
+    }
+
+    if matches!(cli.command, Some(Commands::Check)) {
+        return Ok(CliAction::Check);
     }
 
     if let Some(mml) = cli.mml {
@@ -144,6 +151,10 @@ fn main() -> Result<()> {
         return updater::run_foreground_update();
     }
 
+    if matches!(&action, CliAction::Check) {
+        return updater::run_check();
+    }
+
     let cfg = config::Config::load()?;
 
     // plugin_path が未設定の場合は設定ファイルを編集するよう案内する
@@ -171,34 +182,15 @@ fn main() -> Result<()> {
             return Ok(());
         }
         CliAction::Tui => {}
-        CliAction::Help(_) | CliAction::Shutdown(_) | CliAction::Update => unreachable!(),
+        CliAction::Help(_) | CliAction::Shutdown(_) | CliAction::Update | CliAction::Check => {
+            unreachable!()
+        }
     }
 
     // TUI モード
     let mut app = tui::TuiApp::new(&cfg, &entry);
 
-    // バックグラウンドで自動アップデートチェックを開始する
-    updater::spawn_update_check(std::sync::Arc::clone(&app.update_available));
-
     app.run()?;
-
-    // アップデートが利用可能な場合、問答無用でアップデートを実行する
-    if app
-        .update_available
-        .load(std::sync::atomic::Ordering::Relaxed)
-    {
-        // サーバーが起動していればシャットダウンしてからアップデートする（未起動の場合は無視）
-        if let Err(e) = server::shutdown_server(server::DEFAULT_PORT) {
-            eprintln!(
-                "アップデート前のサーバー停止要求の送信に失敗しました（port {}）: {}",
-                server::DEFAULT_PORT,
-                e
-            );
-        }
-        if let Err(e) = updater::run_foreground_update() {
-            eprintln!("アップデートに失敗しました: {}", e);
-        }
-    }
 
     Ok(())
 }
