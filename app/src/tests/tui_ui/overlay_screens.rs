@@ -1,4 +1,14 @@
 use super::*;
+use crate::tui::{PatchPhrasePane, PatchSelectPane};
+
+fn pane_contains_cursor_highlight(buffer: &Buffer, pane: ratatui::layout::Rect) -> bool {
+    (pane.y..pane.y + pane.height).any(|y| {
+        (pane.x..pane.x + pane.width).any(|x| {
+            let cell = buffer.cell((x, y)).unwrap();
+            cell.bg == cursor_highlight_bg(cell.fg)
+        })
+    })
+}
 
 #[test]
 fn patch_phrase_screen_renders_history_and_favorites_lists() {
@@ -384,6 +394,42 @@ fn patch_phrase_selected_entry_uses_contrast_background_without_blink() {
 }
 
 #[test]
+fn patch_phrase_only_highlights_the_focused_pane() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::PatchPhrase;
+    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        PatchPhraseState {
+            history: vec!["l8cdef".to_string()],
+            favorites: vec!["o5g".to_string()],
+        },
+    );
+    app.patch_phrase_history_state.select(Some(0));
+    app.patch_phrase_favorites_state.select(Some(0));
+    app.patch_phrase_focus = PatchPhrasePane::History;
+
+    let buffer = render_buffer(&mut app, 100, 16);
+    let overlay_area = crate::ui_utils::centered_rect(88, 84, buffer.area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(3),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(overlay_area);
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[1]);
+
+    assert!(pane_contains_cursor_highlight(&buffer, panes[0]));
+    assert!(!pane_contains_cursor_highlight(&buffer, panes[1]));
+}
+
+#[test]
 fn notepad_history_overlay_is_centered_like_daw_overlay() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["before".to_string()];
@@ -435,6 +481,38 @@ fn notepad_history_overlay_shows_left_right_pane_keybinds() {
 }
 
 #[test]
+fn notepad_history_only_highlights_the_focused_pane() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_phrase_store.notepad = PatchPhraseState {
+        history: vec!["l8cdef".to_string()],
+        favorites: vec!["o5g".to_string()],
+    };
+    app.start_notepad_history();
+    app.notepad_history_state.select(Some(0));
+    app.notepad_favorites_state.select(Some(0));
+    app.notepad_focus = PatchPhrasePane::History;
+
+    let buffer = render_buffer(&mut app, 100, 16);
+    let overlay_area = crate::ui_utils::centered_rect(88, 76, buffer.area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(3),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(overlay_area);
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[1]);
+
+    assert!(pane_contains_cursor_highlight(&buffer, panes[0]));
+    assert!(!pane_contains_cursor_highlight(&buffer, panes[1]));
+}
+
+#[test]
 fn notepad_history_guide_overlay_renders_centered_message() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["plain phrase".to_string()];
@@ -481,4 +559,38 @@ fn patch_phrase_screen_uses_c_as_fallback_for_empty_lists() {
     let lines = render_lines(&mut app, 80, 10).join("\n");
 
     assert!(lines.contains("▶ c"));
+}
+
+#[test]
+fn patch_select_only_highlights_the_focused_pane() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_all = vec![
+        ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
+        ("Bass/Bass 1.fxp".to_string(), "bass/bass 1.fxp".to_string()),
+    ];
+    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string(), "Bass/Bass 1.fxp".to_string()];
+    app.patch_favorite_items = vec!["Bass/Bass 1.fxp".to_string()];
+    app.patch_list_state.select(Some(0));
+    app.patch_favorites_state.select(Some(0));
+    app.patch_select_focus = PatchSelectPane::Patches;
+    app.mode = Mode::PatchSelect;
+
+    let buffer = render_buffer(&mut app, 100, 16);
+    let overlay_area = crate::ui_utils::centered_rect(82, 70, buffer.area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(overlay_area);
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[1]);
+
+    assert!(pane_contains_cursor_highlight(&buffer, panes[0]));
+    assert!(!pane_contains_cursor_highlight(&buffer, panes[1]));
 }
