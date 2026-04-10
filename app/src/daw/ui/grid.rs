@@ -11,7 +11,7 @@ use super::{
     cache_indicator, cache_indicator_color, cache_text_color, ANIM_FRAME_COUNT, ANIM_FRAME_MS,
     MONOKAI_BG, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_PURPLE, MONOKAI_YELLOW,
 };
-use crate::ui_theme::blinking_cursor_style;
+use crate::ui_theme::cursor_highlight_style;
 
 pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
     // キャッシュ状態をスナップショットしてからロックを解放する。
@@ -111,7 +111,7 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
             format!("T{:<2}  ", t)
         };
         let label_style = if is_cursor_track {
-            blinking_cursor_style(Style::default().fg(label_fg))
+            cursor_highlight_style(Style::default().fg(label_fg))
         } else {
             Style::default().fg(label_fg)
         };
@@ -147,7 +147,7 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
                 cache_text_color(cs)
             };
             let style = if is_cursor {
-                blinking_cursor_style(Style::default().fg(fg))
+                cursor_highlight_style(Style::default().fg(fg))
             } else {
                 Style::default().fg(fg).bg(MONOKAI_BG)
             };
@@ -177,7 +177,7 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
                     cache_indicator_color(cs)
                 };
                 let style = if is_cursor {
-                    blinking_cursor_style(Style::default().fg(ind_fg))
+                    cursor_highlight_style(Style::default().fg(ind_fg))
                 } else {
                     Style::default().fg(ind_fg)
                 };

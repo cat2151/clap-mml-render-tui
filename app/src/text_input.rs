@@ -5,12 +5,12 @@ use ratatui::{
 };
 use tui_textarea::{Input, Key, TextArea};
 
-use crate::ui_theme::{blinking_cursor_style, MONOKAI_BG, MONOKAI_FG, MONOKAI_GRAY};
+use crate::ui_theme::{cursor_highlight_style, MONOKAI_BG, MONOKAI_FG, MONOKAI_GRAY};
 
 fn apply_single_line_textarea_theme(textarea: &mut TextArea<'_>) {
     textarea.set_cursor_line_style(Style::default());
     textarea.set_style(Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG));
-    textarea.set_cursor_style(blinking_cursor_style(Style::default().fg(MONOKAI_FG)));
+    textarea.set_cursor_style(cursor_highlight_style(Style::default().fg(MONOKAI_FG)));
 }
 
 pub(crate) fn new_single_line_textarea<'a>(text: &str) -> TextArea<'a> {

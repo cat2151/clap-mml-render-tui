@@ -9,7 +9,7 @@ use super::{
     super::{DawApp, DawHistoryPane},
     MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG,
 };
-use crate::ui_theme::blinking_cursor_style;
+use crate::ui_theme::cursor_highlight_style;
 
 fn history_items(app: &DawApp) -> Vec<ListItem<'static>> {
     app.history_overlay_history_items()
@@ -20,7 +20,7 @@ fn history_items(app: &DawApp) -> Vec<ListItem<'static>> {
                 && i == app.history_overlay_history_cursor;
             let prefix = if is_selected { "▶ " } else { "  " };
             let style = if is_selected {
-                blinking_cursor_style(Style::default().fg(MONOKAI_FG))
+                cursor_highlight_style(Style::default().fg(MONOKAI_FG))
             } else {
                 Style::default().fg(MONOKAI_FG)
             };
@@ -38,7 +38,7 @@ fn favorite_items(app: &DawApp) -> Vec<ListItem<'static>> {
                 && i == app.history_overlay_favorites_cursor;
             let prefix = if is_selected { "▶ " } else { "  " };
             let style = if is_selected {
-                blinking_cursor_style(Style::default().fg(MONOKAI_FG))
+                cursor_highlight_style(Style::default().fg(MONOKAI_FG))
             } else {
                 Style::default().fg(MONOKAI_FG)
             };
