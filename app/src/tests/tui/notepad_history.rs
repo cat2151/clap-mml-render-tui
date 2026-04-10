@@ -133,6 +133,24 @@ fn handle_notepad_history_j_previews_without_reordering_history() {
 }
 
 #[test]
+fn handle_notepad_history_space_previews_selected_item() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_phrase_store.notepad.history = vec!["alpha".to_string(), "beta".to_string()];
+    app.start_notepad_history();
+
+    assert_eq!(app.notepad_history_cursor, 0);
+    assert!(matches!(&*app.play_state.lock().unwrap(), PlayState::Idle));
+
+    app.handle_notepad_history(KeyCode::Char(' '));
+
+    assert_eq!(app.notepad_history_cursor, 0);
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg) if msg == "alpha"
+    ));
+}
+
+#[test]
 fn handle_notepad_history_slash_then_enter_keeps_filtered_results_for_j_navigation() {
     let mut app = TuiApp::new_for_test(test_config());
     app.patch_phrase_store.notepad.history = vec![
@@ -178,6 +196,27 @@ fn handle_notepad_history_allows_slash_character_in_filter_query() {
     assert!(app.notepad_filter_active);
     assert_eq!(app.notepad_query, "/n");
     assert_eq!(app.notepad_history_items(), vec!["dir/name".to_string()]);
+}
+
+#[test]
+fn handle_notepad_history_filter_space_updates_query_before_preview_shortcut() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_phrase_store.notepad.history = vec!["alpha".to_string(), "beta soft".to_string()];
+    app.start_notepad_history();
+
+    app.handle_notepad_history(KeyCode::Char('/'));
+    app.handle_notepad_history(KeyCode::Char('b'));
+    app.handle_notepad_history(KeyCode::Char('e'));
+    app.handle_notepad_history(KeyCode::Char('t'));
+    app.handle_notepad_history(KeyCode::Char('a'));
+    let preview_before_space = app.play_state.lock().unwrap().clone();
+
+    app.handle_notepad_history(KeyCode::Char(' '));
+
+    assert!(app.notepad_filter_active);
+    assert_eq!(app.notepad_query, "beta ");
+    assert_eq!(app.notepad_history_items(), vec!["beta soft".to_string()]);
+    assert!(*app.play_state.lock().unwrap() == preview_before_space);
 }
 
 #[test]
