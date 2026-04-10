@@ -424,17 +424,23 @@ pub(super) fn draw_notepad_history(
         } else {
             " Favorites "
         };
+    let history_highlight_style =
+        if app.notepad_filter_active || app.notepad_focus != PatchPhrasePane::History {
+            base_style()
+        } else {
+            cursor_highlight_style(base_style())
+        };
+    let favorites_highlight_style =
+        if app.notepad_filter_active || app.notepad_focus != PatchPhrasePane::Favorites {
+            base_style()
+        } else {
+            cursor_highlight_style(base_style())
+        };
 
     f.render_stateful_widget(
         List::new(history_items)
             .style(base_style())
-            .highlight_style(
-                if app.notepad_filter_active || app.notepad_focus != PatchPhrasePane::History {
-                    base_style()
-                } else {
-                    cursor_highlight_style(base_style())
-                },
-            )
+            .highlight_style(history_highlight_style)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -449,13 +455,7 @@ pub(super) fn draw_notepad_history(
     f.render_stateful_widget(
         List::new(favorite_items)
             .style(base_style())
-            .highlight_style(
-                if app.notepad_filter_active || app.notepad_focus != PatchPhrasePane::Favorites {
-                    base_style()
-                } else {
-                    cursor_highlight_style(base_style())
-                },
-            )
+            .highlight_style(favorites_highlight_style)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
