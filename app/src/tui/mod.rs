@@ -109,6 +109,7 @@ pub struct TuiApp<'a> {
     patch_load_state: Arc<Mutex<PatchLoadState>>,
     /// PatchSelect 起動時にスナップショットした (表示名, 小文字化済み) ペアのリスト
     pub(super) patch_all: Vec<(String, String)>,
+    pub(super) patch_all_source_order: Vec<(String, String)>,
     pub(super) patch_query: String, // 検索クエリ
     pub(super) patch_query_textarea: TextArea<'a>,
     pub(super) patch_filtered: Vec<String>, // フィルタ結果（表示名のみ）

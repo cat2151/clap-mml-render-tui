@@ -20,6 +20,7 @@ impl TuiApp<'static> {
             audio_cache: Arc::new(Mutex::new(HashMap::new())),
             patch_load_state: Arc::new(Mutex::new(PatchLoadState::Ready(Vec::new()))),
             patch_all: Vec::new(),
+            patch_all_source_order: Vec::new(),
             patch_query: String::new(),
             patch_query_textarea: crate::text_input::new_single_line_textarea(""),
             patch_filtered: Vec::new(),

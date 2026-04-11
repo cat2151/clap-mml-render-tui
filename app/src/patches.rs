@@ -133,8 +133,7 @@ pub(crate) fn compare_patch_names_natural(left: &str, right: &str) -> Ordering {
 }
 
 fn split_first_path_segment(path: &str) -> (&str, &str) {
-    path.split_once('/')
-        .map_or((path, ""), |(head, tail)| (head, tail))
+    path.split_once('/').unwrap_or((path, ""))
 }
 
 fn patch_category_sort_parts(path: &str) -> (&str, u8, &str, &str) {

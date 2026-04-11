@@ -10,6 +10,12 @@ impl<'a> TuiApp<'a> {
         crate::patches::sort_patch_pairs(&mut self.patch_all, self.patch_select_sort_order);
     }
 
+    fn ensure_patch_select_source_order(&mut self) {
+        if self.patch_all_source_order.is_empty() {
+            self.patch_all_source_order = self.patch_all.clone();
+        }
+    }
+
     fn move_patch_cursor_by(&mut self, delta: isize) {
         if self.patch_filtered.is_empty() {
             return;
@@ -64,10 +70,13 @@ impl<'a> TuiApp<'a> {
         {
             let state = self.patch_load_state.lock().unwrap();
             if let PatchLoadState::Ready(pairs) = &*state {
-                self.patch_all = pairs.clone();
+                self.patch_all_source_order = pairs.clone();
             }
         }
-        self.sort_patch_select_pairs();
+        self.patch_all = self.patch_all_source_order.clone();
+        if self.patch_select_sort_order == crate::patches::PatchSortOrder::Category {
+            self.sort_patch_select_pairs();
+        }
         if crate::history::normalize_patch_phrase_store_for_available_patches(
             &mut self.patch_phrase_store,
             &self.patch_all,
@@ -143,6 +152,7 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn toggle_patch_select_sort_order(&mut self) {
+        self.ensure_patch_select_source_order();
         let selected_patch = self.patch_filtered.get(self.patch_cursor).cloned();
         let selected_favorite = self
             .patch_favorite_items
@@ -150,7 +160,10 @@ impl<'a> TuiApp<'a> {
             .cloned();
 
         self.patch_select_sort_order = self.patch_select_sort_order.toggle();
-        self.sort_patch_select_pairs();
+        self.patch_all = self.patch_all_source_order.clone();
+        if self.patch_select_sort_order == crate::patches::PatchSortOrder::Category {
+            self.sort_patch_select_pairs();
+        }
         self.patch_filtered = crate::tui::filter_patches(&self.patch_all, &self.patch_query);
         self.refresh_patch_select_favorites();
 
