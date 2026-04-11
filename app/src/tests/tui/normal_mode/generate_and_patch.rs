@@ -1,4 +1,11 @@
 use super::*;
+use mmlabc_to_smf::mml_preprocessor;
+use serde_json::Value;
+
+fn extract_line_patch_json(line: &str) -> Value {
+    let preprocessed = mml_preprocessor::extract_embedded_json(line);
+    serde_json::from_str(preprocessed.embedded_json.as_deref().unwrap()).unwrap()
+}
 
 #[test]
 fn handle_normal_g_inserts_generated_line_above_current_line_and_plays_it() {
@@ -93,6 +100,83 @@ fn handle_normal_r_replaces_existing_patch_at_start_of_current_line() {
         &*app.play_state.lock().unwrap(),
         PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Leads/Lead 1.fxp"} cde"#
     ));
+}
+
+#[test]
+fn handle_normal_r_uses_current_patch_category_when_filter_is_missing() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} cde"#.to_string()];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "Pads/Pad 1.fxp",
+        "Pads/Pad 2.fxp",
+        "Leads/Lead 1.fxp",
+    ]))));
+
+    app.handle_normal(KeyCode::Char('r'));
+
+    let patch_json = extract_line_patch_json(&app.lines[0]);
+    let selected_patch = patch_json["Surge XT patch"].as_str().unwrap();
+    assert!(
+        matches!(selected_patch, "Pads/Pad 1.fxp" | "Pads/Pad 2.fxp"),
+        "selected patch should stay in current category: {selected_patch}"
+    );
+    assert_eq!(patch_json["Surge XT patch filter"], "pads");
+    assert!(matches!(
+        &*app.play_state.lock().unwrap(),
+        PlayState::Running(msg)
+            if matches!(
+                extract_line_patch_json(msg)["Surge XT patch"].as_str(),
+                Some("Pads/Pad 1.fxp" | "Pads/Pad 2.fxp")
+            )
+    ));
+}
+
+#[test]
+fn handle_normal_r_prioritizes_saved_patch_filter_over_current_patch_category() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![
+        r#"{"Surge XT patch":"Leads/Lead 1.fxp","Surge XT patch filter":"pads"} cde"#.to_string(),
+    ];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "Pads/Pad 1.fxp",
+        "Pads/Pad 2.fxp",
+        "Leads/Lead 1.fxp",
+    ]))));
+
+    app.handle_normal(KeyCode::Char('r'));
+
+    let patch_json = extract_line_patch_json(&app.lines[0]);
+    let selected_patch = patch_json["Surge XT patch"].as_str().unwrap();
+    assert!(
+        matches!(selected_patch, "Pads/Pad 1.fxp" | "Pads/Pad 2.fxp"),
+        "selected patch should respect saved filter: {selected_patch}"
+    );
+    assert_eq!(patch_json["Surge XT patch filter"], "pads");
+    assert!(app.lines[0].ends_with(" cde"));
+}
+
+#[test]
+fn handle_normal_r_drops_saved_filter_when_it_matches_no_patch() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![
+        r#"{"Surge XT patch":"Lead 1.fxp","Surge XT patch filter":"missing"} cde"#.to_string(),
+    ];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "Pads/Pad 1.fxp",
+        "Lead 1.fxp",
+    ]))));
+
+    app.handle_normal(KeyCode::Char('r'));
+
+    let patch_json = extract_line_patch_json(&app.lines[0]);
+    assert!(matches!(
+        patch_json["Surge XT patch"].as_str(),
+        Some("Pads/Pad 1.fxp" | "Lead 1.fxp")
+    ));
+    assert!(
+        patch_json.get("Surge XT patch filter").is_none(),
+        "invalid saved filter should be dropped: {patch_json}"
+    );
 }
 
 #[test]
@@ -198,6 +282,26 @@ fn handle_normal_enter_rewrites_legacy_patch_json_with_prefixed_patch_name() {
         PlayState::Running(msg)
             if msg == r#"{"Surge XT patch": "patches_factory/Pads/Pad 1.fxp"} l8cdef"#
     ));
+}
+
+#[test]
+fn handle_normal_enter_keeps_saved_patch_filter_when_normalizing_patch_name() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![
+        r#"{"Surge XT patch":"Pads/Pad 1.fxp","Surge XT patch filter":"pads"} l8cdef"#.to_string(),
+    ];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "patches_factory/Pads/Pad 1.fxp",
+    ]))));
+
+    app.handle_normal(KeyCode::Enter);
+
+    assert_eq!(
+        app.lines,
+        vec![
+            r#"{"Surge XT patch": "patches_factory/Pads/Pad 1.fxp", "Surge XT patch filter": "pads"} l8cdef"#.to_string()
+        ]
+    );
 }
 
 #[test]

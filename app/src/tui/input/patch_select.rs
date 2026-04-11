@@ -2,9 +2,12 @@ mod state;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 use mmlabc_to_smf::mml_preprocessor;
+use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::tui::{filter_patches, PatchLoadState, PatchSelectPane, PATCH_JSON_KEY};
+use crate::tui::{
+    filter_patches, PatchLoadState, PatchSelectPane, PATCH_FILTER_QUERY_JSON_KEY, PATCH_JSON_KEY,
+};
 
 use super::{Mode, PlayState, TuiApp};
 
@@ -70,14 +73,85 @@ impl<'a> TuiApp<'a> {
     }
 
     fn build_patch_json(patch_name: &str) -> String {
-        format!(
-            "{{\"{PATCH_JSON_KEY}\": {}}}",
-            serde_json::to_string(patch_name).unwrap_or_else(|_| format!("\"{}\"", patch_name))
-        )
+        Self::build_patch_json_with_filter_query(patch_name, None)
+    }
+
+    fn build_patch_json_with_filter_query(patch_name: &str, filter_query: Option<&str>) -> String {
+        let patch_name =
+            serde_json::to_string(patch_name).unwrap_or_else(|_| format!("\"{}\"", patch_name));
+        match filter_query
+            .map(str::trim)
+            .filter(|query| !query.is_empty())
+        {
+            Some(filter_query) => {
+                let filter_query = serde_json::to_string(filter_query)
+                    .unwrap_or_else(|_| format!("\"{}\"", filter_query));
+                format!(
+                    r#"{{"{PATCH_JSON_KEY}": {patch_name}, "{PATCH_FILTER_QUERY_JSON_KEY}": {filter_query}}}"#
+                )
+            }
+            None => format!(r#"{{"{PATCH_JSON_KEY}": {patch_name}}}"#),
+        }
+    }
+
+    fn extract_patch_json_value(mml: &str) -> Option<Value> {
+        let preprocessed = mml_preprocessor::extract_embedded_json(mml);
+        preprocessed
+            .embedded_json
+            .as_deref()
+            .and_then(|json| serde_json::from_str::<Value>(json).ok())
+    }
+
+    fn patch_category_filter_query(patch_name: &str) -> Option<String> {
+        let (parent, _) = patch_name.rsplit_once('/')?;
+        let category = parent.rsplit('/').next()?.trim();
+        if category.is_empty() {
+            None
+        } else {
+            Some(category.to_lowercase())
+        }
+    }
+
+    fn current_line_patch_filter_query(&self) -> Option<String> {
+        self.lines.get(self.cursor).and_then(|line| {
+            Self::extract_patch_json_value(line).and_then(|value| {
+                value
+                    .get(PATCH_FILTER_QUERY_JSON_KEY)
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+        })
+    }
+
+    fn has_matching_patches_for_query(&self, query: &str) -> bool {
+        let state = self.patch_load_state.lock().unwrap();
+        match &*state {
+            PatchLoadState::Ready(pairs) => !filter_patches(pairs, query).is_empty(),
+            PatchLoadState::Loading | PatchLoadState::Err(_) => false,
+        }
+    }
+
+    fn current_line_random_patch_filter_query(&self) -> Option<String> {
+        self.current_line_patch_filter_query()
+            .and_then(|query| self.has_matching_patches_for_query(&query).then_some(query))
+            .or_else(|| {
+                self.current_line_patch_name()
+                    .and_then(|patch_name| Self::patch_category_filter_query(&patch_name))
+                    .filter(|query| self.has_matching_patches_for_query(query))
+            })
     }
 
     pub(super) fn replace_current_line_patch(&mut self, patch_name: &str) {
-        let json = Self::build_patch_json(patch_name);
+        let filter_query = self.current_line_patch_filter_query();
+        self.replace_current_line_patch_with_filter(patch_name, filter_query.as_deref());
+    }
+
+    pub(super) fn replace_current_line_patch_with_filter(
+        &mut self,
+        patch_name: &str,
+        filter_query: Option<&str>,
+    ) {
+        let json = Self::build_patch_json_with_filter_query(patch_name, filter_query);
         let current = self.lines[self.cursor].clone();
         let replaced_parts = current
             .split(';')
@@ -158,6 +232,49 @@ impl<'a> TuiApp<'a> {
                 Ok(pairs[index].0.clone())
             }
         }
+    }
+
+    fn pick_random_patch_name_with_query(
+        &self,
+        query: Option<&str>,
+    ) -> Result<Option<String>, String> {
+        if !crate::patches::has_configured_patch_dirs(&self.cfg) {
+            return Err("patches_dirs が設定されていません".to_string());
+        }
+        let state = self.patch_load_state.lock().unwrap();
+        match &*state {
+            PatchLoadState::Loading => Err("パッチを読み込み中です...".to_string()),
+            PatchLoadState::Err(e) => Err(format!("パッチの読み込みに失敗: {}", e)),
+            PatchLoadState::Ready(pairs) if pairs.is_empty() => {
+                Err("patches_dirs にパッチが見つかりません".to_string())
+            }
+            PatchLoadState::Ready(pairs) => {
+                let filtered = match query {
+                    Some(query) => {
+                        let matching_patches = filter_patches(pairs, query);
+                        if matching_patches.is_empty() {
+                            return Ok(None);
+                        }
+                        matching_patches
+                    }
+                    None => pairs.iter().map(|(orig, _)| orig.clone()).collect(),
+                };
+                let ns = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|duration| duration.as_nanos())
+                    .unwrap_or(0);
+                let index = (ns % filtered.len() as u128) as usize;
+                Ok(Some(filtered[index].clone()))
+            }
+        }
+    }
+
+    pub(super) fn pick_random_patch_for_current_line(
+        &self,
+    ) -> Result<Option<(String, Option<String>)>, String> {
+        let filter_query = self.current_line_random_patch_filter_query();
+        self.pick_random_patch_name_with_query(filter_query.as_deref())
+            .map(|patch_name| patch_name.map(|patch_name| (patch_name, filter_query)))
     }
 
     pub(in crate::tui) fn start_insert(&mut self) {

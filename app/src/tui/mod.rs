@@ -36,6 +36,7 @@ use std::sync::{Arc, Mutex};
 /// audio_cache の最大エントリ数。超過時はキャッシュ全体をクリアしてから挿入する。
 const AUDIO_CACHE_MAX_ENTRIES: usize = 64;
 pub(super) const PATCH_JSON_KEY: &str = "Surge XT patch";
+pub(super) const PATCH_FILTER_QUERY_JSON_KEY: &str = "Surge XT patch filter";
 
 pub(crate) use self::cache::filter_items;
 pub(in crate::tui) use self::cache::filter_patches;
