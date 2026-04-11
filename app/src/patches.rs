@@ -30,6 +30,8 @@ impl PatchSortOrder {
 }
 
 const PATCH_DIR_PREFIXES: [&str; 2] = ["patches_factory", "patches_3rdparty"];
+const FACTORY_SORT_PRIORITY: u8 = 0;
+const THIRD_PARTY_SORT_PRIORITY: u8 = 1;
 
 pub(crate) fn configured_patch_dirs(cfg: &Config) -> Vec<String> {
     cfg.patches_dirs
@@ -141,40 +143,42 @@ fn patch_category_sort_parts(path: &str) -> (&str, u8, &str, &str) {
 
     if let Some(rest) = path.strip_prefix("patches_factory/") {
         let (category, rest) = split_first_path_segment(rest);
-        return (category, 0, "", rest);
+        return (category, FACTORY_SORT_PRIORITY, "", rest);
     }
 
     if let Some(rest) = path.strip_prefix("patches_3rdparty/") {
         let (first, rest) = split_first_path_segment(rest);
 
+        // patches_3rdparty/<category>
         if rest.is_empty() {
-            return (first, 1, "", "");
+            return (first, THIRD_PARTY_SORT_PRIORITY, "", "");
         }
 
+        // patches_3rdparty/<category>/<patch>
         if !rest.contains('/') {
-            return (first, 1, "", rest);
+            return (first, THIRD_PARTY_SORT_PRIORITY, "", rest);
         }
 
         let (category, rest) = split_first_path_segment(rest);
-        return (category, 1, first, rest);
+        return (category, THIRD_PARTY_SORT_PRIORITY, first, rest);
     }
 
     let (category, rest) = split_first_path_segment(path);
-    (category, 0, "", rest)
+    (category, FACTORY_SORT_PRIORITY, "", rest)
 }
 
 fn patch_path_sort_parts(path: &str) -> (u8, &str) {
     let path = path.trim_matches('/');
 
     if let Some(rest) = path.strip_prefix("patches_factory/") {
-        return (0, rest);
+        return (FACTORY_SORT_PRIORITY, rest);
     }
 
     if let Some(rest) = path.strip_prefix("patches_3rdparty/") {
-        return (1, rest);
+        return (THIRD_PARTY_SORT_PRIORITY, rest);
     }
 
-    (0, path)
+    (FACTORY_SORT_PRIORITY, path)
 }
 
 fn compare_patch_pairs_with_order(
