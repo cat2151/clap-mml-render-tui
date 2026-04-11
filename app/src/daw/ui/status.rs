@@ -1,8 +1,14 @@
-use ratatui::{layout::Rect, style::Style, widgets::Paragraph, Frame};
+use ratatui::{
+    layout::Rect,
+    style::{Color, Style},
+    widgets::Paragraph,
+    Frame,
+};
 
 use super::{
     super::{DawApp, DawMode, DawPlayState},
-    loop_measure_summary_label, loop_status_label, MONOKAI_CYAN, MONOKAI_PURPLE, MONOKAI_YELLOW,
+    loop_measure_summary_label, loop_status_label, MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_PURPLE,
+    MONOKAI_YELLOW,
 };
 
 pub(super) fn daw_mode_title(mode: &DawMode) -> &'static str {
@@ -21,7 +27,9 @@ pub(super) fn draw_status(
     f: &mut Frame,
     play_area: Rect,
     info_area: Rect,
+    render_area: Rect,
     footer_area: Rect,
+    active_render_count: usize,
 ) {
     // play_state と play_position を一度だけロックしてスナップショットを取る。
     let play_state = *app.play_state.lock().unwrap();
@@ -86,6 +94,11 @@ pub(super) fn draw_status(
         DawPlayState::Playing => MONOKAI_YELLOW,
         DawPlayState::Preview => MONOKAI_PURPLE,
     };
+    let render_color: Color = if active_render_count == 0 {
+        MONOKAI_GREEN
+    } else {
+        MONOKAI_PURPLE
+    };
 
     f.render_widget(
         Paragraph::new(play_text).style(Style::default().fg(play_color)),
@@ -94,6 +107,11 @@ pub(super) fn draw_status(
     f.render_widget(
         Paragraph::new(loop_summary.unwrap_or_default()).style(Style::default().fg(MONOKAI_YELLOW)),
         info_area,
+    );
+    f.render_widget(
+        Paragraph::new(format!("並列render中: {active_render_count}"))
+            .style(Style::default().fg(render_color)),
+        render_area,
     );
     f.render_widget(
         Paragraph::new(footer_text).style(Style::default().fg(MONOKAI_CYAN)),

@@ -135,6 +135,7 @@ fn patch_phrase_overlay_is_centered_like_other_overlays() {
 fn patch_phrase_screen_keeps_status_below_overlay_panes() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::PatchPhrase;
+    app.test_set_active_parallel_render_count(2);
     app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
@@ -154,9 +155,14 @@ fn patch_phrase_screen_keeps_status_below_overlay_panes() {
         .iter()
         .rposition(|line| line.contains(&normalized_status))
         .unwrap() as u16;
+    let render_row = normalized_lines
+        .iter()
+        .rposition(|line| line.contains("並列render中:2"))
+        .unwrap() as u16;
 
     assert!(status_row > history_row);
     assert!(status_row > favorites_row);
+    assert_eq!(render_row, status_row + 1);
 }
 
 #[test]
@@ -221,6 +227,7 @@ fn patch_select_screen_shows_filter_confirm_title_when_filter_active() {
 fn patch_select_screen_splits_status_and_keybinds() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["abc".to_string()];
+    app.test_set_active_parallel_render_count(2);
     app.patch_all = vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
     app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
     app.patch_list_state.select(Some(0));
@@ -233,12 +240,17 @@ fn patch_select_screen_splits_status_and_keybinds() {
         .iter()
         .position(|line| line.contains("Enter:検索確定/決定ESC:キャンセル"))
         .unwrap();
-    let status_row = keybind_row
+    let render_row = keybind_row
         .checked_sub(1)
-        .expect("keybind_row must be > 0 so there is a status row above the keybinds");
+        .expect("keybind_row must be > 0 so there is a render row above the keybinds");
+    let status_row = render_row
+        .checked_sub(1)
+        .expect("render_row must be > 0 so there is a status row above the render row");
 
     assert!(!normalized_lines[status_row].contains("Enter:決定"));
-    assert_eq!(keybind_row, status_row + 1);
+    assert_eq!(render_row, status_row + 1);
+    assert_eq!(keybind_row, render_row + 1);
+    assert!(normalized_lines[render_row].contains("並列render中:2"));
     assert!(normalized_lines[keybind_row].contains("/:検索入力"));
     assert!(normalized_lines[keybind_row].contains("n/p/t:overlay切替"));
     assert!(normalized_lines[keybind_row].contains("f:お気に入り"));

@@ -15,6 +15,7 @@ impl TuiApp<'static> {
             entry_ptr: 0,
             play_state: Arc::new(Mutex::new(PlayState::Idle)),
             playback_session: Arc::new(AtomicU64::new(0)),
+            active_offline_render_count: Arc::new(AtomicUsize::new(0)),
             active_sink: Arc::new(Mutex::new(None)),
             audio_cache: Arc::new(Mutex::new(HashMap::new())),
             patch_load_state: Arc::new(Mutex::new(PatchLoadState::Ready(Vec::new()))),
@@ -61,5 +62,10 @@ impl TuiApp<'static> {
 
     pub(super) fn test_is_current_playback_session(&self, session: u64) -> bool {
         Self::playback_session_is_current(&self.playback_session, session)
+    }
+
+    pub(super) fn test_set_active_parallel_render_count(&self, count: usize) {
+        self.active_offline_render_count
+            .store(count, Ordering::Relaxed);
     }
 }

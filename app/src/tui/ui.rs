@@ -15,7 +15,10 @@ use ratatui::{
 use super::{Mode, PlayState, TuiApp};
 use crate::ui_theme::{cursor_highlight_style, MONOKAI_CYAN};
 use status::notepad_mode_title;
-use status::{base_style, keybind_text, normal_status_text, status_text, visible_list_page_size};
+use status::{
+    base_style, keybind_text, normal_status_text, parallel_render_status_color,
+    parallel_render_status_text, status_text, visible_list_page_size,
+};
 
 const LIST_HIGHLIGHT_SYMBOL: &str = "▶ ";
 const LIST_HIGHLIGHT_WIDTH: u16 = 2;
@@ -80,12 +83,16 @@ fn draw_normal(
     let is_insert = mode == Mode::Insert;
     let cursor = app.cursor;
     let status = normal_status_text(&mode, play_state);
+    let active_parallel_render_count = app.active_parallel_render_count();
+    let parallel_render_status = parallel_render_status_text(active_parallel_render_count);
+    let parallel_render_status_color = parallel_render_status_color(active_parallel_render_count);
     let keybinds = keybind_text(&mode);
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(3),
+            Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
         ])
@@ -156,7 +163,11 @@ fn draw_normal(
         Paragraph::new(status).style(base_style().fg(status_color)),
         chunks[1],
     );
-    f.render_widget(Paragraph::new(keybinds).style(base_style()), chunks[2]);
+    f.render_widget(
+        Paragraph::new(parallel_render_status).style(base_style().fg(parallel_render_status_color)),
+        chunks[2],
+    );
+    f.render_widget(Paragraph::new(keybinds).style(base_style()), chunks[3]);
 }
 
 #[cfg(test)]

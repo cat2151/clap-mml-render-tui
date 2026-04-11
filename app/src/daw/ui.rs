@@ -27,6 +27,11 @@ pub(super) use crate::ui_theme::{
     MONOKAI_PURPLE, MONOKAI_YELLOW,
 };
 
+pub(super) struct CacheRenderSnapshot {
+    pub(super) states: Vec<Vec<CacheState>>,
+    pub(super) active_render_count: usize,
+}
+
 fn cache_text_color(cs: &CacheState) -> Color {
     match cs {
         CacheState::Empty => MONOKAI_GRAY,
@@ -87,6 +92,28 @@ fn loop_measure_summary_label(mmls: &[String], ab_repeat_state: AbRepeatState) -
     super::playback::loop_measure_summary_label(mmls, ab_repeat_state)
 }
 
+fn cache_render_snapshot(app: &DawApp) -> CacheRenderSnapshot {
+    let cache = app.cache.lock().unwrap();
+    let mut active_render_count = 0;
+    let states = (0..app.tracks)
+        .map(|t| {
+            (0..=app.measures)
+                .map(|m| {
+                    let state = cache[t][m].state.clone();
+                    if state == CacheState::Rendering {
+                        active_render_count += 1;
+                    }
+                    state
+                })
+                .collect()
+        })
+        .collect();
+    CacheRenderSnapshot {
+        states,
+        active_render_count,
+    }
+}
+
 pub(super) fn draw(app: &DawApp, f: &mut Frame) {
     let area = f.area();
     let block = Block::default()
@@ -105,6 +132,7 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
+            Constraint::Length(1),
         ])
         .split(inner);
 
@@ -113,9 +141,19 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[0]);
 
-    grid::draw_grid(app, f, body_chunks[0]);
+    let cache_render_snapshot = cache_render_snapshot(app);
+
+    grid::draw_grid(app, f, body_chunks[0], &cache_render_snapshot.states);
     logs::draw_logs(app, f, body_chunks[1]);
-    status::draw_status(app, f, chunks[1], chunks[2], chunks[3]);
+    status::draw_status(
+        app,
+        f,
+        chunks[1],
+        chunks[2],
+        chunks[3],
+        chunks[4],
+        cache_render_snapshot.active_render_count,
+    );
 
     if app.mode == DawMode::Help {
         match app.help_origin {

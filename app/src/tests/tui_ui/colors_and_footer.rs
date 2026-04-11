@@ -9,8 +9,8 @@ fn normal_screen_uses_monokai_background_and_border_color() {
 
     assert_eq!(buffer.cell((0, 0)).unwrap().fg, MONOKAI_CYAN);
     assert_eq!(buffer.cell((0, 0)).unwrap().bg, MONOKAI_BG);
-    assert_eq!(buffer.cell((4, 6)).unwrap().fg, MONOKAI_CYAN);
-    assert_eq!(buffer.cell((4, 6)).unwrap().bg, MONOKAI_BG);
+    assert_eq!(buffer.cell((4, 4)).unwrap().fg, MONOKAI_CYAN);
+    assert_eq!(buffer.cell((4, 4)).unwrap().bg, MONOKAI_BG);
 }
 
 #[test]
@@ -88,19 +88,45 @@ fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["abc".to_string()];
 
-    let lines = render_lines(&mut app, 220, 8);
+    let lines = render_lines(&mut app, 220, 9);
     let screen = lines.join("\n");
+    let normalized_lines: Vec<String> = lines.iter().map(|line| line.replace(' ', "")).collect();
+    let status_row = lines
+        .iter()
+        .position(|line| line.trim_start() == "NORMAL")
+        .unwrap();
+    let render_row = normalized_lines
+        .iter()
+        .position(|line| line.contains("並列render中:0"))
+        .unwrap();
+    let keybind_row = lines
+        .iter()
+        .position(|line| line.contains("q ?:help i:insert"))
+        .unwrap();
 
     assert!(screen.contains("[NORMAL] notepad mode"));
     assert!(screen.contains("▶ abc"));
     assert!(!screen.contains("MML Lines"));
     assert!(!screen.contains("▶   1 abc"));
-    assert_eq!(lines[6].trim_start(), "NORMAL");
+    assert_eq!(render_row, status_row + 1);
+    assert_eq!(keybind_row, render_row + 1);
+    assert!(normalized_lines[render_row].contains("並列render中:0"));
     assert!(screen.contains("q ?:help i:insert"));
     assert!(screen.contains("dd/Del:cut"));
     assert!(screen.contains("g:generate"));
     assert!(screen.contains("Shift+H:patch history"));
     assert!(screen.contains("w:DAW"));
+}
+
+#[test]
+fn normal_screen_shows_active_parallel_render_count_in_purple() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.test_set_active_parallel_render_count(2);
+
+    let buffer = render_buffer(&mut app, 120, 9);
+    let (x, y) = find_text(&buffer, "並");
+
+    assert_eq!(buffer.cell((x, y)).unwrap().fg, MONOKAI_PURPLE);
 }
 
 #[test]

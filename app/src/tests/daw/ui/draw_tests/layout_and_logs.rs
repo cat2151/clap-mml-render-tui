@@ -9,7 +9,7 @@ fn draw_shows_mml_and_uncached_dot_before_cache_is_ready() {
         cache[1][1].state = CacheState::Pending;
     }
 
-    let lines = render_lines(&app, 40, 14);
+    let lines = render_lines(&app, 40, 15);
 
     assert!(
         lines.iter().any(|line| line.contains("cdef")),
@@ -44,16 +44,25 @@ fn draw_shows_insert_mode_title_in_top_border() {
 
 #[test]
 fn draw_renders_pending_indicator_in_visible_color() {
-    let app = build_test_app();
+    let mut app = build_test_app();
+    app.data[1][1] = "cdef".to_string();
     {
         let mut cache = app.cache.lock().unwrap();
         cache[1][1].state = CacheState::Pending;
     }
 
-    let buffer = render_buffer(&app, 40, 14);
+    let buffer = render_buffer(&app, 40, 15);
+    let pending_indicator = (0..buffer.area.height)
+        .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
+        .find(|&(x, y)| {
+            let cell = buffer.cell((x, y)).unwrap();
+            cell.symbol() == "." && cell.fg == MONOKAI_FG
+        });
 
-    assert_eq!(buffer.cell((11, 5)).unwrap().symbol(), ".");
-    assert_eq!(buffer.cell((11, 5)).unwrap().fg, MONOKAI_FG);
+    assert!(
+        pending_indicator.is_some(),
+        "buffer should contain a visible pending indicator"
+    );
 }
 
 #[test]
@@ -92,9 +101,11 @@ fn draw_places_playback_status_and_loop_summary_above_footer() {
     }
 
     let lines = render_lines(&app, 120, 10);
+    let normalized_lines: Vec<String> = lines.iter().map(|line| line.replace(' ', "")).collect();
 
-    let play_row = lines.len() - 4;
-    let info_row = lines.len() - 3;
+    let play_row = lines.len() - 5;
+    let info_row = lines.len() - 4;
+    let render_row = lines.len() - 3;
     let footer_row = lines.len() - 2;
 
     assert!(
@@ -111,6 +122,11 @@ fn draw_places_playback_status_and_loop_summary_above_footer() {
     );
     assert!(
         lines[info_row].contains("empty meas :"),
+        "lines: {:?}",
+        lines
+    );
+    assert!(
+        normalized_lines[render_row].contains("並列render中:0"),
         "lines: {:?}",
         lines
     );
@@ -154,14 +170,43 @@ fn draw_keeps_footer_on_last_row_when_idle() {
     let app = build_test_app();
 
     let lines = render_lines(&app, 120, 10);
+    let normalized_lines: Vec<String> = lines.iter().map(|line| line.replace(' ', "")).collect();
 
-    let play_row = lines.len() - 4;
-    let info_row = lines.len() - 3;
+    let play_row = lines.len() - 5;
+    let info_row = lines.len() - 4;
+    let render_row = lines.len() - 3;
     let footer_row = lines.len() - 2;
 
     assert!(!lines[play_row].contains('▶'), "lines: {:?}", lines);
     assert!(
         !lines[info_row].contains("loop meas :"),
+        "lines: {:?}",
+        lines
+    );
+    assert!(
+        normalized_lines[render_row].contains("並列render中:0"),
+        "lines: {:?}",
+        lines
+    );
+    assert!(lines[footer_row].contains("DAW"), "lines: {:?}", lines);
+}
+
+#[test]
+fn draw_shows_active_parallel_render_count_above_footer() {
+    let app = build_test_app();
+    {
+        let mut cache = app.cache.lock().unwrap();
+        cache[1][1].state = CacheState::Rendering;
+        cache[2][1].state = CacheState::Rendering;
+    }
+
+    let lines = render_lines(&app, 120, 10);
+    let normalized_lines: Vec<String> = lines.iter().map(|line| line.replace(' ', "")).collect();
+    let render_row = lines.len() - 3;
+    let footer_row = lines.len() - 2;
+
+    assert!(
+        normalized_lines[render_row].contains("並列render中:2"),
         "lines: {:?}",
         lines
     );
@@ -257,9 +302,10 @@ fn draw_highlights_future_append_in_monokai_pink() {
     }
 
     let buffer = render_buffer(&app, 80, 12);
+    let (x, y) = find_text_ignoring_spaces(&buffer, "play:queuemeas2appendlead=48ms");
 
     assert_eq!(
-        buffer.cell((2, 6)).unwrap().fg,
+        buffer.cell((x, y)).unwrap().fg,
         MONOKAI_PINK,
         "future append log should use Monokai pink"
     );
@@ -274,9 +320,10 @@ fn draw_highlights_failed_logs_in_red() {
     }
 
     let buffer = render_buffer(&app, 80, 12);
+    let (x, y) = find_text_ignoring_spaces(&buffer, "play:audioinitfailed");
 
     assert_eq!(
-        buffer.cell((2, 6)).unwrap().fg,
+        buffer.cell((x, y)).unwrap().fg,
         Color::Red,
         "failed logs should use error red"
     );
