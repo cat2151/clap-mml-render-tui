@@ -113,6 +113,16 @@ pub(in crate::tui::ui) fn draw_notepad_history(
         } else {
             cursor_highlight_style(base_style())
         };
+    let selection_status = match app.notepad_focus {
+        PatchPhrasePane::History => super::selection_status_text(
+            app.notepad_history_cursor,
+            app.notepad_history_items().len(),
+        ),
+        PatchPhrasePane::Favorites => super::selection_status_text(
+            app.notepad_favorites_cursor,
+            app.notepad_favorite_items().len(),
+        ),
+    };
 
     f.render_stateful_widget(
         List::new(history_items)
@@ -152,7 +162,8 @@ pub(in crate::tui::ui) fn draw_notepad_history(
     }
 
     f.render_widget(
-        Paragraph::new(status.to_string()).style(base_style().fg(status_color)),
+        Paragraph::new(format!("{status}  {selection_status}"))
+            .style(base_style().fg(status_color)),
         chunks[2],
     );
     f.render_widget(

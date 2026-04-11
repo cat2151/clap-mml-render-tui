@@ -110,11 +110,7 @@ pub(super) fn draw_patch_select(f: &mut Frame, app: &DawApp, area: Rect) {
         List::new(patch_items(app)).block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(format!(
-                    " Patches ({}/{}) ",
-                    app.patch_filtered.len(),
-                    app.patch_all.len()
-                ))
+                .title(" Patches ")
                 .border_style(patch_border),
         ),
         panes[0],
