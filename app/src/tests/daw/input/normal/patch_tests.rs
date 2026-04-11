@@ -306,6 +306,19 @@ fn handle_normal_r_preserves_init_json_formatting_and_whitespace() {
 }
 
 #[test]
+fn replace_patch_name_in_mml_preserves_escaped_json_strings() {
+    let current =
+        r#"{ "memo" : "quote \" and slash \\ keep" , "Surge XT patch" : "Old/Lead 1.fxp" }  l1"#;
+
+    let replaced = DawApp::replace_patch_name_in_mml(current, r#"Pad/"A"\B.fxp"#, None);
+
+    assert_eq!(
+        replaced,
+        r#"{ "memo" : "quote \" and slash \\ keep" , "Surge XT patch" : "Pad/\"A\"\\B.fxp" }  l1"#
+    );
+}
+
+#[test]
 fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
     let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_prioritizes_next_measure");
     std::fs::remove_dir_all(&tmp).ok();
