@@ -162,8 +162,9 @@ pub(in crate::tui::ui) fn draw_patch_phrase(
             &patch_phrase_query_widget,
         ));
     }
-    let parallel_render_status = parallel_render_status_text(app.active_parallel_render_count());
-    let parallel_render_color = parallel_render_status_color(app.active_parallel_render_count());
+    let active_parallel_render_count = app.active_parallel_render_count();
+    let parallel_render_status = parallel_render_status_text(active_parallel_render_count);
+    let parallel_render_color = parallel_render_status_color(active_parallel_render_count);
 
     f.render_widget(
         Paragraph::new(format!("{status}  {selection_status}"))

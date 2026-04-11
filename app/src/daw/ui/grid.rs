@@ -13,20 +13,7 @@ use super::{
 };
 use crate::ui_theme::cursor_highlight_style;
 
-pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect) {
-    // キャッシュ状態をスナップショットしてからロックを解放する。
-    // これによりキャッシュワーカースレッドとの競合を最小化する。
-    let cache_states: Vec<Vec<CacheState>> = {
-        let cache = app.cache.lock().unwrap();
-        (0..app.tracks)
-            .map(|t| {
-                (0..=app.measures)
-                    .map(|m| cache[t][m].state.clone())
-                    .collect()
-            })
-            .collect()
-    };
-
+pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &[Vec<CacheState>]) {
     let solo_mode_active = app.solo_mode_active();
     let ab_repeat_markers = app.ab_repeat_state().marker_indices();
 

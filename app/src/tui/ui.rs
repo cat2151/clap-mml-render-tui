@@ -83,9 +83,9 @@ fn draw_normal(
     let is_insert = mode == Mode::Insert;
     let cursor = app.cursor;
     let status = normal_status_text(&mode, play_state);
-    let parallel_render_status = parallel_render_status_text(app.active_parallel_render_count());
-    let parallel_render_status_color =
-        parallel_render_status_color(app.active_parallel_render_count());
+    let active_parallel_render_count = app.active_parallel_render_count();
+    let parallel_render_status = parallel_render_status_text(active_parallel_render_count);
+    let parallel_render_status_color = parallel_render_status_color(active_parallel_render_count);
     let keybinds = keybind_text(&mode);
 
     let chunks = Layout::default()

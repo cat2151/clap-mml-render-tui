@@ -164,8 +164,9 @@ pub(in crate::tui::ui) fn draw_notepad_history(
             &notepad_query_widget,
         ));
     }
-    let parallel_render_status = parallel_render_status_text(app.active_parallel_render_count());
-    let parallel_render_color = parallel_render_status_color(app.active_parallel_render_count());
+    let parallel_render_count = app.active_parallel_render_count();
+    let parallel_render_status = parallel_render_status_text(parallel_render_count);
+    let parallel_render_color = parallel_render_status_color(parallel_render_count);
 
     f.render_widget(
         Paragraph::new(format!("{status}  {selection_status}"))
