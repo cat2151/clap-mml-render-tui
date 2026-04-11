@@ -81,11 +81,15 @@ impl<'a> TuiApp<'a> {
                         Ok(()) => {}
                         Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
                     },
-                    KeyCode::Char('r') => match self.pick_random_patch_name() {
-                        Ok(patch_name) => {
-                            self.replace_current_line_patch(&patch_name);
+                    KeyCode::Char('r') => match self.pick_random_patch_for_current_line() {
+                        Ok(Some((patch_name, filter_query))) => {
+                            self.replace_current_line_patch_with_filter(
+                                &patch_name,
+                                filter_query.as_deref(),
+                            );
                             self.play_current_line();
                         }
+                        Ok(None) => {}
                         Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
                     },
                     KeyCode::Char('t') => {
