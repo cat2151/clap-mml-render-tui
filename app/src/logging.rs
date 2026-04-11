@@ -23,7 +23,15 @@ fn trim_log_lines(lines: &mut VecDeque<String>) {
 fn format_utc_timestamp(now: SystemTime) -> String {
     let unix_seconds = match now.duration_since(UNIX_EPOCH) {
         Ok(duration) => duration.as_secs() as i64,
-        Err(err) => -(err.duration().as_secs() as i64),
+        Err(err) => {
+            let duration = err.duration();
+            let seconds = duration.as_secs() as i64;
+            if duration.subsec_nanos() == 0 {
+                -seconds
+            } else {
+                -seconds - 1
+            }
+        }
     };
     let days = unix_seconds.div_euclid(86_400);
     let seconds_of_day = unix_seconds.rem_euclid(86_400);
@@ -51,6 +59,34 @@ fn civil_from_days(days_since_unix_epoch: i64) -> (i32, u32, u32) {
 
 fn format_log_file_line_at(line: &str, now: SystemTime) -> String {
     format!("[{}] {line}", format_utc_timestamp(now))
+}
+
+fn strip_log_file_timestamp_prefix(line: &str) -> &str {
+    let bytes = line.as_bytes();
+    if bytes.len() < 26
+        || bytes[0] != b'['
+        || bytes[5] != b'-'
+        || bytes[8] != b'-'
+        || bytes[11] != b' '
+        || bytes[14] != b':'
+        || bytes[17] != b':'
+        || bytes[20] != b' '
+        || bytes[21] != b'U'
+        || bytes[22] != b'T'
+        || bytes[23] != b'C'
+        || bytes[24] != b']'
+        || bytes[25] != b' '
+    {
+        return line;
+    }
+
+    for idx in [1usize, 2, 3, 4, 6, 7, 9, 10, 12, 13, 15, 16, 18, 19] {
+        if !bytes[idx].is_ascii_digit() {
+            return line;
+        }
+    }
+
+    &line[26..]
 }
 
 fn append_log_line_to_path(path: &Path, line: &str) -> std::io::Result<()> {
@@ -107,7 +143,7 @@ pub(crate) fn load_log_lines() -> VecDeque<String> {
         if lines.len() == MAX_LOG_LINES {
             lines.pop_front();
         }
-        lines.push_back(line);
+        lines.push_back(strip_log_file_timestamp_prefix(&line).to_string());
     }
     lines
 }
