@@ -125,6 +125,45 @@ impl DawApp {
         }
     }
 
+    fn format_patch_json_object(patch_json: &serde_json::Map<String, Value>) -> String {
+        let entries = patch_json
+            .iter()
+            .map(|(key, value)| format!("{}: {}", Value::String(key.clone()), value))
+            .collect::<Vec<_>>();
+        format!("{{{}}}", entries.join(", "))
+    }
+
+    fn replace_patch_name_in_mml(
+        current_mml: &str,
+        patch_name: &str,
+        filter_query: Option<&str>,
+    ) -> String {
+        let preprocessed = mml_preprocessor::extract_embedded_json(current_mml);
+        let remaining_mml = preprocessed.remaining_mml.trim();
+        let patch_json = preprocessed
+            .embedded_json
+            .as_deref()
+            .and_then(|json| serde_json::from_str::<Value>(json).ok())
+            .and_then(|value| match value {
+                Value::Object(mut patch_json) => {
+                    patch_json.insert(
+                        PATCH_JSON_KEY.to_string(),
+                        Value::String(patch_name.to_string()),
+                    );
+                    Some(Self::format_patch_json_object(&patch_json))
+                }
+                _ => None,
+            })
+            .unwrap_or_else(|| {
+                Self::build_random_patch_json_with_filter_query(patch_name, filter_query)
+            });
+        if remaining_mml.is_empty() {
+            patch_json
+        } else {
+            format!("{patch_json} {remaining_mml}")
+        }
+    }
+
     fn current_track_patch_name(&self) -> Option<String> {
         if self.cursor_track < FIRST_PLAYABLE_TRACK {
             return None;
@@ -160,18 +199,9 @@ impl DawApp {
             return current_patch_json.clone();
         }
 
-        if let Some((Value::Object(mut patch_json), _)) =
-            Self::extract_patch_json_and_phrase(current_patch_json)
-        {
-            patch_json.insert(
-                PATCH_JSON_KEY.to_string(),
-                Value::String(patch_name.to_string()),
-            );
-            return Value::Object(patch_json).to_string();
-        }
-
         // init セルに patch JSON が無い/壊れている、または object 以外でも preview 自体は継続する。
-        Self::build_patch_json_with_filter_query(
+        Self::replace_patch_name_in_mml(
+            current_patch_json,
             patch_name,
             self.current_track_patch_filter_query().as_deref(),
         )
