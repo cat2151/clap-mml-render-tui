@@ -145,9 +145,7 @@ impl DawApp {
         while let Some(byte) = bytes.get(index) {
             match byte {
                 b'\\' => {
-                    if bytes.get(index + 1).is_none() {
-                        return None;
-                    }
+                    bytes.get(index + 1)?;
                     index += 2;
                 }
                 b'"' => return Some(index + 1),
