@@ -103,10 +103,9 @@ pub(in crate::tui::ui) fn draw_patch_select(
         PatchSelectPane::Patches => {
             super::selection_status_text(app.patch_cursor, app.patch_filtered.len())
         }
-        PatchSelectPane::Favorites => super::selection_status_text(
-            app.patch_favorites_cursor,
-            app.patch_select_favorite_items().len(),
-        ),
+        PatchSelectPane::Favorites => {
+            super::selection_status_text(app.patch_favorites_cursor, favorite_count)
+        }
     };
 
     f.render_stateful_widget(

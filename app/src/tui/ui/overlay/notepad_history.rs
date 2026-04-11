@@ -52,8 +52,9 @@ pub(in crate::tui::ui) fn draw_notepad_history(
     );
     f.render_widget(&notepad_query_widget, chunks[0]);
 
-    let history_items: Vec<ListItem> = app
-        .notepad_history_items()
+    let history_entries = app.notepad_history_items();
+    let history_count = history_entries.len();
+    let history_items: Vec<ListItem> = history_entries
         .into_iter()
         .enumerate()
         .map(|(i, mml)| {
@@ -68,8 +69,9 @@ pub(in crate::tui::ui) fn draw_notepad_history(
             ListItem::new(Span::styled(mml, style))
         })
         .collect();
-    let favorite_items: Vec<ListItem> = app
-        .notepad_favorite_items()
+    let favorite_entries = app.notepad_favorite_items();
+    let favorite_count = favorite_entries.len();
+    let favorite_items: Vec<ListItem> = favorite_entries
         .into_iter()
         .enumerate()
         .map(|(i, mml)| {
@@ -114,14 +116,12 @@ pub(in crate::tui::ui) fn draw_notepad_history(
             cursor_highlight_style(base_style())
         };
     let selection_status = match app.notepad_focus {
-        PatchPhrasePane::History => super::selection_status_text(
-            app.notepad_history_cursor,
-            app.notepad_history_items().len(),
-        ),
-        PatchPhrasePane::Favorites => super::selection_status_text(
-            app.notepad_favorites_cursor,
-            app.notepad_favorite_items().len(),
-        ),
+        PatchPhrasePane::History => {
+            super::selection_status_text(app.notepad_history_cursor, history_count)
+        }
+        PatchPhrasePane::Favorites => {
+            super::selection_status_text(app.notepad_favorites_cursor, favorite_count)
+        }
     };
 
     f.render_stateful_widget(
