@@ -321,6 +321,22 @@ fn handle_history_overlay_j_prefetches_predicted_preview_cache() {
 }
 
 #[test]
+fn prefetch_preview_snapshot_skips_overlay_cache_for_large_measure_buffers() {
+    let (app, _cache_rx) = build_test_app();
+    let mut app = app;
+    app.data[0][0] = r#"{"beat":"4/4"}t1"#.to_string();
+    app.data[1][1] = "c".to_string();
+
+    app.prefetch_preview_snapshot(
+        0,
+        app.build_measure_track_mmls_for_measure(1),
+        vec![0.0, 1.0, 0.0],
+    );
+
+    assert!(app.overlay_preview_cache.lock().unwrap().is_empty());
+}
+
+#[test]
 fn handle_history_overlay_j_k_preview_falls_back_when_track_init_json_is_not_object() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_track = 1;

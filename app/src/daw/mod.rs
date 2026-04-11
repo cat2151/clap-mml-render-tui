@@ -179,7 +179,7 @@ pub struct DawApp {
     /// 再生中の小節・ビート位置（UI 描画に使用）
     pub(super) play_position: Arc<Mutex<Option<PlayPosition>>>,
     pub(super) ab_repeat: Arc<Mutex<AbRepeatState>>,
-    overlay_preview_cache: Arc<Mutex<HashMap<u64, Vec<f32>>>>,
+    overlay_preview_cache: Arc<Mutex<HashMap<u64, Arc<Vec<f32>>>>>,
 
     /// 再生スレッドと共有する各小節の MML ベクター（measures 要素, index i → meas i+1）。
     /// セル編集・ランダム音色変更のたびに更新されることで、

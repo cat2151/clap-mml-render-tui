@@ -199,12 +199,14 @@ impl<'a> TuiApp<'a> {
     }
 
     fn prefetch_audio_cache(&self, mmls: Vec<String>) {
-        let targets = mmls
-            .into_iter()
-            .map(|mml| mml.trim().to_string())
-            .filter(|mml| !mml.is_empty())
-            .filter(|mml| !self.audio_cache.lock().unwrap().contains_key(mml))
-            .collect::<Vec<_>>();
+        let targets = {
+            let cache = self.audio_cache.lock().unwrap();
+            mmls.into_iter()
+                .map(|mml| mml.trim().to_string())
+                .filter(|mml| !mml.is_empty())
+                .filter(|mml| !cache.contains_key(mml))
+                .collect::<Vec<_>>()
+        };
         if targets.is_empty() {
             return;
         }

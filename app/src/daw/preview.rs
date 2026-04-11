@@ -10,7 +10,8 @@ use cmrt_core::{mml_render_for_cache, CoreConfig};
 
 use super::playback::{pad_playback_measure_samples, try_get_cached_samples};
 use super::{
-    DawApp, DawPlayState, PlayPosition, FIRST_PLAYABLE_TRACK, OVERLAY_PREVIEW_CACHE_MAX_ENTRIES,
+    DawApp, DawPlayState, PlayPosition, FIRST_PLAYABLE_TRACK, MAX_CACHED_SAMPLES,
+    OVERLAY_PREVIEW_CACHE_MAX_ENTRIES,
 };
 
 fn begin_preview_output<F>(
@@ -62,7 +63,14 @@ fn overlay_preview_cache_key(
 ///
 /// エントリ上限を超えて新規キーを入れるときは、古い preview 条件を一括破棄してから
 /// 新しい結果を入れる単純な eviction 戦略にしている。
-fn insert_overlay_preview_cache(cache: &mut HashMap<u64, Vec<f32>>, key: u64, samples: Vec<f32>) {
+fn insert_overlay_preview_cache(
+    cache: &mut HashMap<u64, Arc<Vec<f32>>>,
+    key: u64,
+    samples: Arc<Vec<f32>>,
+) {
+    if samples.len() > MAX_CACHED_SAMPLES {
+        return;
+    }
     if cache.len() >= OVERLAY_PREVIEW_CACHE_MAX_ENTRIES && !cache.contains_key(&key) {
         cache.clear();
     }
@@ -134,17 +142,20 @@ impl DawApp {
             return;
         }
 
+        let measure_samples = self.measure_duration_samples();
+        if measure_samples > MAX_CACHED_SAMPLES {
+            return;
+        }
+
         #[cfg(test)]
         if self.entry_ptr == 0 {
             insert_overlay_preview_cache(
                 &mut self.overlay_preview_cache.lock().unwrap(),
                 cache_key,
-                Vec::new(),
+                Arc::new(Vec::new()),
             );
             return;
         }
-
-        let measure_samples = self.measure_duration_samples();
         let cfg = Arc::clone(&self.cfg);
         let overlay_preview_cache = Arc::clone(&self.overlay_preview_cache);
         let entry_ptr = self.entry_ptr;
@@ -166,7 +177,7 @@ impl DawApp {
             insert_overlay_preview_cache(
                 &mut overlay_preview_cache.lock().unwrap(),
                 cache_key,
-                samples,
+                Arc::new(samples),
             );
         });
     }
@@ -261,7 +272,7 @@ impl DawApp {
                     &log_lines,
                     format!("meas{}: overlay cache hit", measure_index + 1),
                 );
-                Some(samples)
+                Some((samples, true))
             } else if let Some(cached) = try_get_cached_samples(
                 &cache,
                 measure_index + 1,
@@ -282,6 +293,7 @@ impl DawApp {
                         &track_mmls,
                         &track_gains,
                     )
+                    .map(|samples| (Arc::new(samples), false))
                 } else {
                     crate::logging::append_log_line(
                         &log_lines,
@@ -300,7 +312,7 @@ impl DawApp {
                             }
                         ),
                     );
-                    Some(cached.samples)
+                    Some((Arc::new(cached.samples), false))
                 }
             } else {
                 crate::logging::append_log_line(
@@ -315,14 +327,17 @@ impl DawApp {
                     &track_mmls,
                     &track_gains,
                 )
+                .map(|samples| (Arc::new(samples), false))
             };
 
-            if let Some(samples) = samples_opt {
-                insert_overlay_preview_cache(
-                    &mut overlay_preview_cache.lock().unwrap(),
-                    overlay_cache_key,
-                    samples.clone(),
-                );
+            if let Some((samples, cache_hit)) = samples_opt {
+                if !cache_hit {
+                    insert_overlay_preview_cache(
+                        &mut overlay_preview_cache.lock().unwrap(),
+                        overlay_cache_key,
+                        Arc::clone(&samples),
+                    );
+                }
                 let preview_active = begin_preview_output(
                     &play_transition_lock,
                     &play_state,
@@ -331,7 +346,11 @@ impl DawApp {
                     session,
                     measure_index,
                     || {
-                        let source = rodio::buffer::SamplesBuffer::new(2, sample_rate, samples);
+                        let source = rodio::buffer::SamplesBuffer::new(
+                            2,
+                            sample_rate,
+                            samples.as_ref().clone(),
+                        );
                         *preview_sink.lock().unwrap() = Some(Arc::clone(&shared_sink));
                         shared_sink.append(source);
                     },
