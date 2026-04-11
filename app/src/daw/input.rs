@@ -199,9 +199,18 @@ impl DawApp {
             return current_patch_json.clone();
         }
 
+        if let Some((Value::Object(mut patch_json), _)) =
+            Self::extract_patch_json_and_phrase(current_patch_json)
+        {
+            patch_json.insert(
+                PATCH_JSON_KEY.to_string(),
+                Value::String(patch_name.to_string()),
+            );
+            return Value::Object(patch_json).to_string();
+        }
+
         // init セルに patch JSON が無い/壊れている、または object 以外でも preview 自体は継続する。
-        Self::replace_patch_name_in_mml(
-            current_patch_json,
+        Self::build_patch_json_with_filter_query(
             patch_name,
             self.current_track_patch_filter_query().as_deref(),
         )
