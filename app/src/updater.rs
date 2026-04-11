@@ -6,7 +6,7 @@ use cat_self_update_lib::check_remote_commit;
 const REPO_OWNER: &str = "cat2151";
 const REPO_NAME: &str = "clap-mml-render-tui";
 const MAIN_BRANCH: &str = "main";
-const APP_BIN_NAMES: &[&str] = &["cmrt"];
+const UPDATE_CRATES: &[&str] = &[];
 
 /// ビルド時に埋め込まれたgit commit hash
 const LOCAL_HASH: &str = env!("GIT_COMMIT_HASH");
@@ -28,12 +28,14 @@ fn validate_check_hash(local_hash: &'static str) -> Result<&'static str> {
 /// `cmrt update` などの CLI サブコマンドから self update を開始する。
 /// 必要に応じて、事前にサーバーや関連プロセスを停止した状態で呼び出すこと。
 pub fn run_foreground_update() -> Result<()> {
-    let (owner, repo, bins) = update_target();
+    let (owner, repo, crates) = update_target();
 
     println!("アップデートを開始します...");
-    cat_self_update_lib::self_update(owner, repo, bins)
+    cat_self_update_lib::self_update(owner, repo, crates)
         .map_err(|e| anyhow::anyhow!("アップデート開始に失敗しました: {}", e))?;
-    println!("アップデートをバックグラウンドで開始しました。完了後に cmrt を再起動します。");
+    println!(
+        "アップデートをバックグラウンドで開始しました。完了後は必要に応じて cmrt を手動で再起動してください。"
+    );
 
     Ok(())
 }
@@ -49,7 +51,7 @@ pub fn run_check() -> Result<()> {
 }
 
 fn update_target() -> (&'static str, &'static str, &'static [&'static str]) {
-    (REPO_OWNER, REPO_NAME, APP_BIN_NAMES)
+    (REPO_OWNER, REPO_NAME, UPDATE_CRATES)
 }
 
 fn check_target() -> (&'static str, &'static str, &'static str, &'static str) {
@@ -62,15 +64,14 @@ mod tests {
 
     #[test]
     fn test_update_target_returns_correct_values() {
-        let (owner, repo, bins) = update_target();
+        let (owner, repo, crates) = update_target();
 
         assert!(!owner.is_empty());
         assert!(!repo.is_empty());
-        assert!(!bins.is_empty());
-        assert!(bins.iter().all(|bin| !bin.is_empty()));
+        assert!(crates.is_empty());
         assert_eq!(
-            (owner, repo, bins),
-            ("cat2151", "clap-mml-render-tui", &["cmrt"] as &[&str])
+            (owner, repo, crates),
+            ("cat2151", "clap-mml-render-tui", &[] as &[&str])
         );
     }
 

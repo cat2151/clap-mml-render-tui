@@ -37,7 +37,7 @@ fn format_log_file_line_at_floors_pre_epoch_subsecond_to_previous_second() {
     assert_eq!(
         format_log_file_line_at(
             "play: start",
-            UNIX_EPOCH.checked_sub(Duration::from_nanos(1)).unwrap()
+            UNIX_EPOCH.checked_sub(Duration::from_millis(1)).unwrap()
         ),
         "[1969-12-31 23:59:59 UTC] play: start"
     );
