@@ -1,6 +1,75 @@
-use std::{collections::HashSet, sync::Arc, thread};
+use std::{
+    collections::HashSet,
+    sync::Arc,
+    thread,
+    time::{Duration, UNIX_EPOCH},
+};
 
-use super::append_log_line_to_path;
+use super::{append_log_line_to_path, format_log_file_line_at, strip_log_file_timestamp_prefix};
+
+fn split_log_file_line(line: &str) -> (&str, &str) {
+    let (timestamp, message) = line.split_once("] ").expect("timestamp prefix");
+    let timestamp = timestamp
+        .strip_prefix('[')
+        .expect("opening bracket in timestamp prefix");
+    assert!(timestamp.ends_with(" UTC"));
+    assert_eq!(timestamp.len(), 23);
+    let bytes = timestamp.as_bytes();
+    assert_eq!(bytes[4], b'-');
+    assert_eq!(bytes[7], b'-');
+    assert_eq!(bytes[10], b' ');
+    assert_eq!(bytes[13], b':');
+    assert_eq!(bytes[16], b':');
+    assert_eq!(bytes[19], b' ');
+    (timestamp, message)
+}
+
+#[test]
+fn format_log_file_line_at_prefixes_human_readable_utc_timestamp() {
+    assert_eq!(
+        format_log_file_line_at("play: start", UNIX_EPOCH + Duration::from_secs(0)),
+        "[1970-01-01 00:00:00 UTC] play: start"
+    );
+}
+
+#[test]
+fn format_log_file_line_at_floors_pre_epoch_subsecond_to_previous_second() {
+    assert_eq!(
+        format_log_file_line_at(
+            "play: start",
+            UNIX_EPOCH.checked_sub(Duration::from_nanos(1)).unwrap()
+        ),
+        "[1969-12-31 23:59:59 UTC] play: start"
+    );
+}
+
+#[test]
+fn format_log_file_line_at_handles_date_boundaries() {
+    let cases = [
+        (951_827_696, "2000-02-29 12:34:56 UTC"),
+        (983_404_800, "2001-03-01 00:00:00 UTC"),
+        (4_107_542_400, "2100-03-01 00:00:00 UTC"),
+    ];
+
+    for (seconds, expected_timestamp) in cases {
+        assert_eq!(
+            format_log_file_line_at("play: start", UNIX_EPOCH + Duration::from_secs(seconds)),
+            format!("[{expected_timestamp}] play: start")
+        );
+    }
+}
+
+#[test]
+fn strip_log_file_timestamp_prefix_returns_original_message() {
+    assert_eq!(
+        strip_log_file_timestamp_prefix("[2000-02-29 12:34:56 UTC] play: start"),
+        "play: start"
+    );
+    assert_eq!(
+        strip_log_file_timestamp_prefix("play: start"),
+        "play: start"
+    );
+}
 
 #[test]
 fn append_log_line_to_path_keeps_concurrent_lines_intact() {
@@ -52,8 +121,12 @@ fn append_log_line_to_path_keeps_concurrent_lines_intact() {
         .lines()
         .map(ToOwned::to_owned)
         .collect();
+    let actual_messages: Vec<String> = actual_lines
+        .iter()
+        .map(|line| split_log_file_line(line).1.to_owned())
+        .collect();
     let expected_set: HashSet<String> = expected_lines.iter().cloned().collect();
-    let actual_set: HashSet<String> = actual_lines.iter().cloned().collect();
+    let actual_set: HashSet<String> = actual_messages.iter().cloned().collect();
 
     assert_eq!(actual_lines.len(), thread_count * lines_per_thread);
     assert_eq!(actual_set, expected_set);
