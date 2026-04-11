@@ -154,6 +154,8 @@ impl DawApp {
         }
 
         let current_patch_json = &self.data[self.cursor_track][0];
+        // 同じ patch の preview では元の init JSON をそのまま使い、
+        // filter などの付随メタデータや既存表現を崩さない。
         if self.current_track_patch_name().as_deref() == Some(patch_name) {
             return current_patch_json.clone();
         }
@@ -163,6 +165,7 @@ impl DawApp {
             return value.to_string();
         }
 
+        // init セルに patch JSON が無い/壊れている場合でも preview 自体は継続する。
         Self::build_patch_json_with_filter_query(
             patch_name,
             self.current_track_patch_filter_query().as_deref(),
