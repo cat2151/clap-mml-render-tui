@@ -394,6 +394,48 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
 }
 
 #[test]
+fn handle_normal_r_restores_default_tempo_init_when_empty() {
+    let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_default_tempo_init");
+    std::fs::remove_dir_all(&tmp).ok();
+    std::fs::create_dir_all(&tmp).unwrap();
+
+    {
+        let _guard = crate::test_utils::set_local_dir_envs(&tmp);
+
+        let (mut app, cache_rx) = build_test_app();
+        app.cursor_track = 0;
+        app.cursor_measure = 0;
+        app.data[0][0] = "  ".to_string();
+        app.data[1][1] = "cdef".to_string();
+        app.play_measure_mmls.lock().unwrap()[0] = "stale".to_string();
+
+        let result = app.handle_normal(crossterm::event::KeyCode::Char('r'));
+
+        assert!(matches!(result, super::super::DawNormalAction::Continue));
+        assert_eq!(app.data[0][0], crate::daw::DEFAULT_TRACK0_MML);
+        assert_eq!(app.play_measure_mmls.lock().unwrap()[0], "t120cdef");
+        assert_eq!(*app.play_measure_samples.lock().unwrap(), 176_400);
+
+        let cache = app.cache.lock().unwrap();
+        assert!(matches!(cache[0][0].state, CacheState::Empty));
+        assert!(matches!(cache[1][1].state, CacheState::Rendering));
+        drop(cache);
+
+        let job = cache_rx
+            .try_recv()
+            .expect("tempo init restore should rerender affected playable measures");
+        assert_eq!((job.track, job.measure), (1, 1));
+        assert_eq!(job.mml, "t120cdef");
+        assert!(
+            cache_rx.try_recv().is_err(),
+            "only non-empty playable measures should be queued"
+        );
+    }
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
 fn handle_normal_r_ignores_non_playable_track_and_keeps_header_unchanged() {
     let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_ignores_non_playable_track");
     std::fs::remove_dir_all(&tmp).ok();

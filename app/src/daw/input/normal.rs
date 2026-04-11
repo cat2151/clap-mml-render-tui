@@ -2,9 +2,10 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::super::{
     playback_util::effective_measure_count, AbRepeatState, DawApp, DawMode, DawNormalAction,
-    DawPlayState, FIRST_PLAYABLE_TRACK,
+    DawPlayState, DEFAULT_TRACK0_MML, FIRST_PLAYABLE_TRACK,
 };
 
+const TEMPO_TRACK: usize = 0;
 const INIT_MEASURE: usize = 0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -135,6 +136,21 @@ impl DawApp {
         let previous = self.data[self.cursor_track][self.cursor_measure].clone();
         self.record_current_measure_to_patch_history(&previous);
         if self.commit_insert_cell(self.cursor_track, self.cursor_measure, &yanked) {
+            self.save();
+            self.sync_playback_mml_state();
+        }
+        true
+    }
+
+    fn restore_default_tempo_init_if_empty(&mut self) -> bool {
+        if self.cursor_track != TEMPO_TRACK
+            || self.cursor_measure != INIT_MEASURE
+            || !self.data[TEMPO_TRACK][INIT_MEASURE].trim().is_empty()
+        {
+            return false;
+        }
+
+        if self.commit_insert_cell(TEMPO_TRACK, INIT_MEASURE, DEFAULT_TRACK0_MML) {
             self.save();
             self.sync_playback_mml_state();
         }
@@ -357,6 +373,9 @@ impl DawApp {
 
             KeyCode::Char('g') => self.apply_generate_to_current_measure(),
             KeyCode::Char('r') => {
+                if self.restore_default_tempo_init_if_empty() {
+                    return DawNormalAction::Continue;
+                }
                 if self.cursor_track < FIRST_PLAYABLE_TRACK {
                     self.append_log_line(
                         "ランダム音色は演奏トラックでのみ使用できます".to_string(),
