@@ -186,8 +186,8 @@ impl<'a> TuiApp<'a> {
             page_size.max(1) as isize,
             -(page_size.max(1) as isize),
         ] {
-            let next = (current as isize + delta).clamp(0, item_count.saturating_sub(1) as isize)
-                as usize;
+            let next =
+                (current as isize + delta).clamp(0, item_count.saturating_sub(1) as isize) as usize;
             if next != current && !predicted.contains(&next) {
                 predicted.push(next);
             }
@@ -236,13 +236,13 @@ impl<'a> TuiApp<'a> {
         current: usize,
         item_count: usize,
         page_size: usize,
-        mut mml_for_index: F,
+        mml_for_index: F,
     ) where
         F: FnMut(usize) -> Option<String>,
     {
         let targets = Self::predicted_navigation_indices(current, item_count, page_size)
             .into_iter()
-            .filter_map(|index| mml_for_index(index))
+            .filter_map(mml_for_index)
             .collect();
         self.prefetch_audio_cache(targets);
     }

@@ -53,11 +53,7 @@ fn overlay_preview_cache_key(
     hasher.finish()
 }
 
-fn insert_overlay_preview_cache(
-    cache: &mut HashMap<u64, Vec<f32>>,
-    key: u64,
-    samples: Vec<f32>,
-) {
+fn insert_overlay_preview_cache(cache: &mut HashMap<u64, Vec<f32>>, key: u64, samples: Vec<f32>) {
     if cache.len() >= OVERLAY_PREVIEW_CACHE_MAX_ENTRIES && !cache.contains_key(&key) {
         cache.clear();
     }

@@ -122,9 +122,7 @@ impl DawApp {
         cursor: usize,
     ) -> Option<(usize, Vec<String>)> {
         let target_measure = self.history_overlay_target_measure();
-        let Some(measure_index) = target_measure.checked_sub(1) else {
-            return None;
-        };
+        let measure_index = target_measure.checked_sub(1)?;
         let selected = match focus {
             DawHistoryPane::History => self.history_overlay_history_items().get(cursor).cloned(),
             DawHistoryPane::Favorites => self.history_overlay_favorite_items().get(cursor).cloned(),
@@ -137,9 +135,7 @@ impl DawApp {
                 preview_data[1][target_measure] = selected;
             }
             None => {
-                let Some((patch_name, phrase)) = Self::extract_patch_phrase(&selected) else {
-                    return None;
-                };
+                let (patch_name, phrase) = Self::extract_patch_phrase(&selected)?;
                 preview_data[1][0] = Self::build_patch_json(&patch_name);
                 preview_data[1][target_measure] = phrase;
             }
@@ -201,7 +197,8 @@ impl DawApp {
 
         self.prefetch_history_overlay_navigation_cache();
 
-        if self.try_start_preview_with_track_mmls_for_test(measure_index, Some(track_mmls.clone())) {
+        if self.try_start_preview_with_track_mmls_for_test(measure_index, Some(track_mmls.clone()))
+        {
             return;
         }
 
