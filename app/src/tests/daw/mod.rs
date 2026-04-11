@@ -331,7 +331,11 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
     assert!(logs
         .iter()
         .any(|line| line == "cache: rerender reserve track1 meas3 (meas3 -> meas4)"));
+    assert!(logs
+        .iter()
+        .any(|line| line == "cache: rerender reserve track1 meas4 (meas4)"));
     assert_eq!(cache_rx.try_recv().unwrap().measure, 1);
     assert_eq!(cache_rx.try_recv().unwrap().measure, 3);
+    assert_eq!(cache_rx.try_recv().unwrap().measure, 4);
     assert!(cache_rx.try_recv().is_err());
 }

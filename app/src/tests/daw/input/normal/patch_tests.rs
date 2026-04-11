@@ -143,7 +143,7 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
         );
         assert!(
             cache_rx.try_recv().is_err(),
-            "all initial worker slots should already be filled"
+            "all pending measures should already be queued"
         );
 
         let logs = app
@@ -271,11 +271,11 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
         assert_eq!(reserved_job.measure, 2);
         let second_reserved_job = cache_rx
             .try_recv()
-            .expect("second worker slot should reserve the remaining measure");
+            .expect("remaining measure should also be reserved");
         assert_eq!(second_reserved_job.measure, 1);
         assert!(
             cache_rx.try_recv().is_err(),
-            "rerender should fill at most two worker slots during playback"
+            "rerender should queue only pending measures during playback"
         );
 
         let logs = app

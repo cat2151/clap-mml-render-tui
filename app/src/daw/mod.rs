@@ -122,7 +122,7 @@ pub(super) const DEFAULT_TRACK0_MML: &str = r#"{"beat": "4/4"}t120"#;
 /// 再生時にフォールバックレンダリングする。
 /// ≈ 2_000_000 × 4 bytes ≈ 8 MB / cell。
 pub(super) const MAX_CACHED_SAMPLES: usize = 2_000_000;
-pub(super) const CACHE_RENDER_WORKERS: usize = 2;
+pub(super) const CACHE_RENDER_WORKERS: usize = 4;
 
 #[derive(Clone)]
 pub(super) struct CacheJob {
