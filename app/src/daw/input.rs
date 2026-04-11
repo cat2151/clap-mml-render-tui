@@ -148,6 +148,27 @@ impl DawApp {
         )
     }
 
+    fn preview_patch_json_for_patch_name(&self, patch_name: &str) -> String {
+        if self.cursor_track < FIRST_PLAYABLE_TRACK {
+            return Self::build_patch_json(patch_name);
+        }
+
+        let current_patch_json = &self.data[self.cursor_track][0];
+        if self.current_track_patch_name().as_deref() == Some(patch_name) {
+            return current_patch_json.clone();
+        }
+
+        if let Some((mut value, _)) = Self::extract_patch_json_and_phrase(current_patch_json) {
+            value[PATCH_JSON_KEY] = Value::String(patch_name.to_string());
+            return value.to_string();
+        }
+
+        Self::build_patch_json_with_filter_query(
+            patch_name,
+            self.current_track_patch_filter_query().as_deref(),
+        )
+    }
+
     fn mark_patch_phrase_store_dirty(&mut self) {
         self.patch_phrase_store_dirty = true;
     }

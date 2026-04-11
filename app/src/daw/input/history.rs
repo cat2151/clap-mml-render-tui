@@ -132,7 +132,7 @@ impl DawApp {
         let mut preview_data = vec![self.data[0].clone(), self.data[self.cursor_track].clone()];
         match self.history_overlay_patch_name.as_deref() {
             Some(patch_name) => {
-                preview_data[1][0] = Self::build_patch_json(patch_name);
+                preview_data[1][0] = self.preview_patch_json_for_patch_name(patch_name);
                 preview_data[1][target_measure] = selected;
             }
             None => {

@@ -264,7 +264,8 @@ fn handle_history_overlay_j_k_preview_uses_overlay_patch_name() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_track = 1;
     app.cursor_measure = 1;
-    app.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.data[1][0] =
+        r#"{"Surge XT patch":"Pads/Pad 1.fxp","Surge XT patch filter":"pads"}"#.to_string();
     app.patch_phrase_store.patches.insert(
         "Bass/Bass 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -283,7 +284,7 @@ fn handle_history_overlay_j_k_preview_uses_overlay_patch_name() {
     ));
     assert_eq!(
         app.play_measure_track_mmls.lock().unwrap()[0][1],
-        r#"{"Surge XT patch":"Bass/Bass 1.fxp"}bass second"#
+        r#"{"Surge XT patch":"Bass/Bass 1.fxp","Surge XT patch filter":"pads"}bass second"#
     );
 
     app.handle_history_overlay(KeyCode::Char('k'));
@@ -291,7 +292,7 @@ fn handle_history_overlay_j_k_preview_uses_overlay_patch_name() {
     assert_eq!(app.history_overlay_history_cursor, 0);
     assert_eq!(
         app.play_measure_track_mmls.lock().unwrap()[0][1],
-        r#"{"Surge XT patch":"Bass/Bass 1.fxp"}bass first"#
+        r#"{"Surge XT patch":"Bass/Bass 1.fxp","Surge XT patch filter":"pads"}bass first"#
     );
 }
 
