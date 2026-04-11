@@ -7,7 +7,31 @@ use anyhow::Result;
 
 use crate::config::Config;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PatchSortOrder {
+    Path,
+    Category,
+}
+
+impl PatchSortOrder {
+    pub(crate) fn toggle(self) -> Self {
+        match self {
+            Self::Path => Self::Category,
+            Self::Category => Self::Path,
+        }
+    }
+
+    pub(crate) fn status_label(self) -> &'static str {
+        match self {
+            Self::Path => "path",
+            Self::Category => "category",
+        }
+    }
+}
+
 const PATCH_DIR_PREFIXES: [&str; 2] = ["patches_factory", "patches_3rdparty"];
+const FACTORY_SORT_PRIORITY: u8 = 0;
+const THIRD_PARTY_SORT_PRIORITY: u8 = 1;
 
 pub(crate) fn configured_patch_dirs(cfg: &Config) -> Vec<String> {
     cfg.patches_dirs
@@ -110,6 +134,93 @@ pub(crate) fn compare_patch_names_natural(left: &str, right: &str) -> Ordering {
         .then_with(|| left.cmp(right))
 }
 
+fn split_first_path_segment(path: &str) -> (&str, &str) {
+    path.split_once('/').unwrap_or((path, ""))
+}
+
+fn patch_category_sort_parts(path: &str) -> (&str, u8, &str, &str) {
+    let path = path.trim_matches('/');
+
+    if let Some(rest) = path.strip_prefix("patches_factory/") {
+        let (category, rest) = split_first_path_segment(rest);
+        return (category, FACTORY_SORT_PRIORITY, "", rest);
+    }
+
+    if let Some(rest) = path.strip_prefix("patches_3rdparty/") {
+        let (first, rest) = split_first_path_segment(rest);
+
+        // patches_3rdparty/<category>
+        if rest.is_empty() {
+            return (first, THIRD_PARTY_SORT_PRIORITY, "", "");
+        }
+
+        // patches_3rdparty/<category>/<patch>
+        if !rest.contains('/') {
+            return (first, THIRD_PARTY_SORT_PRIORITY, "", rest);
+        }
+
+        let (category, rest) = split_first_path_segment(rest);
+        return (category, THIRD_PARTY_SORT_PRIORITY, first, rest);
+    }
+
+    let (category, rest) = split_first_path_segment(path);
+    (category, FACTORY_SORT_PRIORITY, "", rest)
+}
+
+fn patch_path_sort_parts(path: &str) -> (u8, &str) {
+    let path = path.trim_matches('/');
+
+    if let Some(rest) = path.strip_prefix("patches_factory/") {
+        return (FACTORY_SORT_PRIORITY, rest);
+    }
+
+    if let Some(rest) = path.strip_prefix("patches_3rdparty/") {
+        return (THIRD_PARTY_SORT_PRIORITY, rest);
+    }
+
+    (FACTORY_SORT_PRIORITY, path)
+}
+
+fn compare_patch_pairs_with_order(
+    left_display: &str,
+    left_lower: &str,
+    right_display: &str,
+    right_lower: &str,
+    order: PatchSortOrder,
+) -> Ordering {
+    match order {
+        PatchSortOrder::Path => {
+            let (left_source_rank, left_rest) = patch_path_sort_parts(left_lower);
+            let (right_source_rank, right_rest) = patch_path_sort_parts(right_lower);
+
+            left_source_rank
+                .cmp(&right_source_rank)
+                .then_with(|| compare_normalized_patch_names_natural(left_rest, right_rest))
+                .then_with(|| compare_normalized_patch_names_natural(left_lower, right_lower))
+                .then_with(|| left_display.cmp(right_display))
+        }
+        PatchSortOrder::Category => {
+            let (left_category, left_source_rank, left_vendor, left_rest) =
+                patch_category_sort_parts(left_lower);
+            let (right_category, right_source_rank, right_vendor, right_rest) =
+                patch_category_sort_parts(right_lower);
+
+            compare_normalized_patch_names_natural(left_category, right_category)
+                .then_with(|| left_source_rank.cmp(&right_source_rank))
+                .then_with(|| compare_normalized_patch_names_natural(left_vendor, right_vendor))
+                .then_with(|| compare_normalized_patch_names_natural(left_rest, right_rest))
+                .then_with(|| compare_normalized_patch_names_natural(left_lower, right_lower))
+                .then_with(|| left_display.cmp(right_display))
+        }
+    }
+}
+
+pub(crate) fn sort_patch_pairs(pairs: &mut [(String, String)], order: PatchSortOrder) {
+    pairs.sort_by(|(left_display, left_lower), (right_display, right_lower)| {
+        compare_patch_pairs_with_order(left_display, left_lower, right_display, right_lower, order)
+    });
+}
+
 pub(crate) fn resolve_display_patch_name(
     pairs: &[(String, String)],
     patch_name: &str,
@@ -163,10 +274,7 @@ fn collect_patch_pairs_with_optional_base(
             (display, lower)
         }));
     }
-    pairs.sort_by(|(left_display, left_lower), (right_display, right_lower)| {
-        compare_normalized_patch_names_natural(left_lower, right_lower)
-            .then_with(|| left_display.cmp(right_display))
-    });
+    sort_patch_pairs(&mut pairs, PatchSortOrder::Path);
     Ok(pairs)
 }
 
@@ -377,6 +485,117 @@ mod tests {
         assert_eq!(
             resolved.as_deref(),
             Some("patches_3rdparty/Leads/Third Lead.fxp")
+        );
+    }
+
+    #[test]
+    fn sort_patch_pairs_can_group_by_category_before_path() {
+        let mut pairs = vec![
+            (
+                "patches_factory/pad/Super Pad.fxp".to_string(),
+                "patches_factory/pad/super pad.fxp".to_string(),
+            ),
+            (
+                "patches_3rdparty/john/lead/Great Lead.fxp".to_string(),
+                "patches_3rdparty/john/lead/great lead.fxp".to_string(),
+            ),
+            (
+                "patches_3rdparty/john/pad/Great Pad.fxp".to_string(),
+                "patches_3rdparty/john/pad/great pad.fxp".to_string(),
+            ),
+            (
+                "patches_factory/lead/Super Lead.fxp".to_string(),
+                "patches_factory/lead/super lead.fxp".to_string(),
+            ),
+        ];
+
+        sort_patch_pairs(&mut pairs, PatchSortOrder::Category);
+
+        assert_eq!(
+            pairs
+                .into_iter()
+                .map(|(display, _)| display)
+                .collect::<Vec<_>>(),
+            vec![
+                "patches_factory/lead/Super Lead.fxp".to_string(),
+                "patches_3rdparty/john/lead/Great Lead.fxp".to_string(),
+                "patches_factory/pad/Super Pad.fxp".to_string(),
+                "patches_3rdparty/john/pad/Great Pad.fxp".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn sort_patch_pairs_path_order_keeps_factory_before_thirdparty() {
+        let mut pairs = vec![
+            (
+                "patches_3rdparty/john/lead/Great Lead.fxp".to_string(),
+                "patches_3rdparty/john/lead/great lead.fxp".to_string(),
+            ),
+            (
+                "patches_factory/pad/Super Pad.fxp".to_string(),
+                "patches_factory/pad/super pad.fxp".to_string(),
+            ),
+            (
+                "patches_3rdparty/john/pad/Great Pad.fxp".to_string(),
+                "patches_3rdparty/john/pad/great pad.fxp".to_string(),
+            ),
+            (
+                "patches_factory/lead/Super Lead.fxp".to_string(),
+                "patches_factory/lead/super lead.fxp".to_string(),
+            ),
+        ];
+
+        sort_patch_pairs(&mut pairs, PatchSortOrder::Path);
+
+        assert_eq!(
+            pairs
+                .into_iter()
+                .map(|(display, _)| display)
+                .collect::<Vec<_>>(),
+            vec![
+                "patches_factory/lead/Super Lead.fxp".to_string(),
+                "patches_factory/pad/Super Pad.fxp".to_string(),
+                "patches_3rdparty/john/lead/Great Lead.fxp".to_string(),
+                "patches_3rdparty/john/pad/Great Pad.fxp".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn sort_patch_pairs_category_order_handles_vendorless_thirdparty_paths() {
+        let mut pairs = vec![
+            (
+                "patches_3rdparty/lead/Great Lead.fxp".to_string(),
+                "patches_3rdparty/lead/great lead.fxp".to_string(),
+            ),
+            (
+                "patches_factory/pad/Super Pad.fxp".to_string(),
+                "patches_factory/pad/super pad.fxp".to_string(),
+            ),
+            (
+                "patches_3rdparty/pad/Great Pad.fxp".to_string(),
+                "patches_3rdparty/pad/great pad.fxp".to_string(),
+            ),
+            (
+                "patches_factory/lead/Super Lead.fxp".to_string(),
+                "patches_factory/lead/super lead.fxp".to_string(),
+            ),
+        ];
+
+        sort_patch_pairs(&mut pairs, PatchSortOrder::Category);
+
+        assert_eq!(
+            pairs
+                .into_iter()
+                .map(|(display, _)| display)
+                .collect::<Vec<_>>(),
+            vec![
+                "patches_factory/lead/Super Lead.fxp".to_string(),
+                "patches_3rdparty/lead/Great Lead.fxp".to_string(),
+                "patches_factory/pad/Super Pad.fxp".to_string(),
+                "patches_3rdparty/pad/Great Pad.fxp".to_string(),
+            ]
         );
     }
 }

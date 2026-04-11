@@ -76,7 +76,7 @@ pub(super) fn keybind_text(mode: &Mode) -> &'static str {
         }
         Mode::Insert => "ESC:確定→NORMAL  Enter:確定→次行",
         Mode::PatchSelect => {
-            "/:検索入力  Enter:検索確定/決定  ESC:キャンセル  n/p/t:overlay切替  f:お気に入り  h/l・←/→:ペイン移動  j/k・↑↓・PgUp/PgDn:移動して再生"
+            "/:検索入力  Enter:検索確定/決定  ESC:キャンセル  Ctrl+S:sort順切替  n/p/t:overlay切替  f:お気に入り  h/l・←/→:ペイン移動  j/k・↑↓・PgUp/PgDn:移動して再生"
         }
         Mode::NotepadHistory => {
             "/:検索入力  Enter:検索確定/確定  ESC:閉じる  n/p/t:overlay切替  h/l・←/→:ペイン移動  j/k・↑↓:移動して再生  PgUp/PgDn:1画面移動  f:お気に入り  dd:削除"

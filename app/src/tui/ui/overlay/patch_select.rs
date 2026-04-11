@@ -169,8 +169,11 @@ pub(in crate::tui::ui) fn draw_patch_select(
     let parallel_render_color = parallel_render_status_color(active_parallel_render_count);
 
     f.render_widget(
-        Paragraph::new(format!("{status}  {selection_status}"))
-            .style(base_style().fg(status_color)),
+        Paragraph::new(format!(
+            "{status}  {selection_status}  sort:{}",
+            app.patch_select_sort_order.status_label()
+        ))
+        .style(base_style().fg(status_color)),
         chunks[2],
     );
     f.render_widget(

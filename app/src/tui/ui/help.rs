@@ -23,6 +23,7 @@ pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
             Line::from("  j / k ・ ↑ / ↓    : 上下移動して再生"),
             Line::from("  PageUp / PageDown : 1画面移動して再生"),
             Line::from("  h / l ・ ← / →    : ペイン切替して再生"),
+            Line::from("  Ctrl+S      : sort 順切替 (path / category)"),
             Line::from("  Enter       : 音色決定"),
             Line::from("  f           : 現在音色とMMLをFavorites追加"),
             escape_hint(),
