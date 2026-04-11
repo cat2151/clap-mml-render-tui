@@ -170,6 +170,9 @@ impl<'a> TuiApp<'a> {
         *state.offset_mut() = desired_offset.min(max_offset);
     }
 
+    /// 現在位置から `j` / `k` / `PageDown` / `PageUp` が次に押されると仮定し、
+    /// その移動先 index を最大 4 件返す。
+    /// 現在位置そのものや重複した候補は除外する。
     fn predicted_navigation_indices(
         current: usize,
         item_count: usize,

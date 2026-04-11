@@ -39,6 +39,11 @@ where
     true
 }
 
+/// Preview snapshot cache 用のキーを作る。
+///
+/// `measure_index`、各 track の MML スナップショット、各 track gain をまとめてハッシュし、
+/// 同じ preview 条件のときだけ同一キーになるようにする。
+/// gain は `f32` の数値比較ではなく `to_bits()` を使ってビット列ごと区別する。
 fn overlay_preview_cache_key(
     measure_index: usize,
     track_mmls: &[String],
@@ -53,6 +58,10 @@ fn overlay_preview_cache_key(
     hasher.finish()
 }
 
+/// Preview snapshot cache へサンプルを挿入する。
+///
+/// エントリ上限を超えて新規キーを入れるときは、古い preview 条件を一括破棄してから
+/// 新しい結果を入れる単純な eviction 戦略にしている。
 fn insert_overlay_preview_cache(cache: &mut HashMap<u64, Vec<f32>>, key: u64, samples: Vec<f32>) {
     if cache.len() >= OVERLAY_PREVIEW_CACHE_MAX_ENTRIES && !cache.contains_key(&key) {
         cache.clear();
@@ -60,6 +69,9 @@ fn insert_overlay_preview_cache(cache: &mut HashMap<u64, Vec<f32>>, key: u64, sa
     cache.insert(key, samples);
 }
 
+/// 指定された preview 用 track MML 群をオフラインレンダリングし、track ごとの gain を掛けて
+/// 1 本のステレオバッファへ合成して返す。
+/// 各 track のレンダリング結果は `measure_samples` 未満なら末尾を埋めて長さを揃える。
 fn render_mixed_preview_tracks(
     entry_ref: &PluginEntry,
     daw_cfg: &crate::config::Config,
