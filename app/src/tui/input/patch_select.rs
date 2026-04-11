@@ -251,11 +251,11 @@ impl<'a> TuiApp<'a> {
             PatchLoadState::Ready(pairs) => {
                 let filtered = match query {
                     Some(query) => {
-                        let filtered = filter_patches(pairs, query);
-                        if filtered.is_empty() {
+                        let matching_patches = filter_patches(pairs, query);
+                        if matching_patches.is_empty() {
                             return Ok(None);
                         }
-                        filtered
+                        matching_patches
                     }
                     None => pairs.iter().map(|(orig, _)| orig.clone()).collect(),
                 };
