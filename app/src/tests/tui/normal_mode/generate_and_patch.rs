@@ -156,6 +156,30 @@ fn handle_normal_r_prioritizes_saved_patch_filter_over_current_patch_category() 
 }
 
 #[test]
+fn handle_normal_r_drops_saved_filter_when_it_matches_no_patch() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![
+        r#"{"Surge XT patch":"Lead 1.fxp","Surge XT patch filter":"missing"} cde"#.to_string(),
+    ];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "Pads/Pad 1.fxp",
+        "Lead 1.fxp",
+    ]))));
+
+    app.handle_normal(KeyCode::Char('r'));
+
+    let patch_json = extract_line_patch_json(&app.lines[0]);
+    assert!(matches!(
+        patch_json["Surge XT patch"].as_str(),
+        Some("Pads/Pad 1.fxp" | "Lead 1.fxp")
+    ));
+    assert!(
+        patch_json.get("Surge XT patch filter").is_none(),
+        "invalid saved filter should be dropped: {patch_json}"
+    );
+}
+
+#[test]
 fn handle_normal_r_reapplies_same_patch_to_each_semicolon_branch() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![r#"{"Surge XT patch":"Old/Pad.fxp"} c;f"#.to_string()];
@@ -258,6 +282,26 @@ fn handle_normal_enter_rewrites_legacy_patch_json_with_prefixed_patch_name() {
         PlayState::Running(msg)
             if msg == r#"{"Surge XT patch": "patches_factory/Pads/Pad 1.fxp"} l8cdef"#
     ));
+}
+
+#[test]
+fn handle_normal_enter_keeps_saved_patch_filter_when_normalizing_patch_name() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![
+        r#"{"Surge XT patch":"Pads/Pad 1.fxp","Surge XT patch filter":"pads"} l8cdef"#.to_string(),
+    ];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "patches_factory/Pads/Pad 1.fxp",
+    ]))));
+
+    app.handle_normal(KeyCode::Enter);
+
+    assert_eq!(
+        app.lines,
+        vec![
+            r#"{"Surge XT patch": "patches_factory/Pads/Pad 1.fxp", "Surge XT patch filter": "pads"} l8cdef"#.to_string()
+        ]
+    );
 }
 
 #[test]

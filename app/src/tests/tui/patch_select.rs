@@ -97,6 +97,29 @@ fn handle_patch_select_enter_exits_filter_input_and_keeps_filtered_results() {
 }
 
 #[test]
+fn handle_patch_select_enter_keeps_saved_patch_filter_on_selected_patch() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![
+        r#"{"Surge XT patch":"Pads/Pad 1.fxp","Surge XT patch filter":"pads"} l8cdef"#.to_string(),
+    ];
+    app.patch_all = make_patches(&["Pads/Pad 1.fxp", "Pads/Pad 2.fxp"]);
+    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string(), "Pads/Pad 2.fxp".to_string()];
+    app.patch_cursor = 1;
+    app.patch_list_state.select(Some(1));
+    app.mode = Mode::PatchSelect;
+
+    app.handle_patch_select(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(
+        app.lines,
+        vec![
+            r#"{"Surge XT patch": "Pads/Pad 2.fxp", "Surge XT patch filter": "pads"} l8cdef"#
+                .to_string()
+        ]
+    );
+}
+
+#[test]
 fn handle_patch_select_ctrl_p_moves_cursor_up() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];

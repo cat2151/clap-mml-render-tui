@@ -132,15 +132,18 @@ impl<'a> TuiApp<'a> {
     }
 
     fn current_line_random_patch_filter_query(&self) -> Option<String> {
-        self.current_line_patch_filter_query().or_else(|| {
-            self.current_line_patch_name()
-                .and_then(|patch_name| Self::patch_category_filter_query(&patch_name))
-                .filter(|query| self.has_matching_patches_for_query(query))
-        })
+        self.current_line_patch_filter_query()
+            .and_then(|query| self.has_matching_patches_for_query(&query).then_some(query))
+            .or_else(|| {
+                self.current_line_patch_name()
+                    .and_then(|patch_name| Self::patch_category_filter_query(&patch_name))
+                    .filter(|query| self.has_matching_patches_for_query(query))
+            })
     }
 
     pub(super) fn replace_current_line_patch(&mut self, patch_name: &str) {
-        self.replace_current_line_patch_with_filter(patch_name, None);
+        let filter_query = self.current_line_patch_filter_query();
+        self.replace_current_line_patch_with_filter(patch_name, filter_query.as_deref());
     }
 
     pub(super) fn replace_current_line_patch_with_filter(
@@ -246,13 +249,15 @@ impl<'a> TuiApp<'a> {
                 Err("patches_dirs にパッチが見つかりません".to_string())
             }
             PatchLoadState::Ready(pairs) => {
-                let filtered = query
-                    .map(|query| filter_patches(pairs, query))
-                    .unwrap_or_else(|| pairs.iter().map(|(orig, _)| orig.clone()).collect());
-                let filtered = if filtered.is_empty() {
-                    pairs.iter().map(|(orig, _)| orig.clone()).collect()
-                } else {
-                    filtered
+                let filtered = match query {
+                    Some(query) => {
+                        let filtered = filter_patches(pairs, query);
+                        if filtered.is_empty() {
+                            return Ok(None);
+                        }
+                        filtered
+                    }
+                    None => pairs.iter().map(|(orig, _)| orig.clone()).collect(),
                 };
                 let ns = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
