@@ -67,14 +67,23 @@ impl DawApp {
         }
     }
 
-    fn patch_select_selected_patch_name(&self) -> Option<String> {
-        match self.patch_select_focus {
-            DawPatchSelectPane::Patches => self.patch_filtered.get(self.patch_cursor).cloned(),
-            DawPatchSelectPane::Favorites => self
-                .patch_favorite_items
-                .get(self.patch_favorites_cursor)
-                .cloned(),
+    fn patch_select_patch_name_for_selection(
+        &self,
+        focus: DawPatchSelectPane,
+        cursor: usize,
+    ) -> Option<String> {
+        match focus {
+            DawPatchSelectPane::Patches => self.patch_filtered.get(cursor).cloned(),
+            DawPatchSelectPane::Favorites => self.patch_favorite_items.get(cursor).cloned(),
         }
+    }
+
+    fn patch_select_selected_patch_name(&self) -> Option<String> {
+        let cursor = match self.patch_select_focus {
+            DawPatchSelectPane::Patches => self.patch_cursor,
+            DawPatchSelectPane::Favorites => self.patch_favorites_cursor,
+        };
+        self.patch_select_patch_name_for_selection(self.patch_select_focus, cursor)
     }
 
     pub(in crate::daw) fn patch_select_favorite_items(&self) -> &[String] {
@@ -92,20 +101,18 @@ impl DawApp {
         }
     }
 
-    fn preview_selected_patch(&mut self) {
-        if *self.play_state.lock().unwrap() == DawPlayState::Playing
-            || self.cursor_track < FIRST_PLAYABLE_TRACK
-        {
-            return;
+    fn patch_select_preview_track_mmls(
+        &self,
+        focus: DawPatchSelectPane,
+        cursor: usize,
+    ) -> Option<(usize, Vec<String>)> {
+        if self.cursor_track < FIRST_PLAYABLE_TRACK {
+            return None;
         }
 
-        let Some(selected_patch_name) = self.patch_select_selected_patch_name() else {
-            return;
-        };
+        let selected_patch_name = self.patch_select_patch_name_for_selection(focus, cursor)?;
         let target_measure = self.patch_select_target_measure();
-        let Some(measure_index) = target_measure.checked_sub(1) else {
-            return;
-        };
+        let measure_index = target_measure.checked_sub(1)?;
 
         let mut preview_data = vec![self.data[0].clone(), self.data[self.cursor_track].clone()];
         preview_data[1][0] = Self::build_patch_json(&selected_patch_name);
@@ -114,6 +121,38 @@ impl DawApp {
         let mut track_mmls = self.build_measure_track_mmls_for_measure(target_measure);
         track_mmls[self.cursor_track] =
             build_cell_mml_from_data(&preview_data, self.measures, 1, target_measure);
+        Some((measure_index, track_mmls))
+    }
+
+    fn prefetch_patch_select_navigation_cache(&self) {
+        let (item_count, cursor) = match self.patch_select_focus {
+            DawPatchSelectPane::Patches => (self.patch_filtered.len(), self.patch_cursor),
+            DawPatchSelectPane::Favorites => {
+                (self.patch_favorite_items.len(), self.patch_favorites_cursor)
+            }
+        };
+        let focus = self.patch_select_focus;
+        self.prefetch_preview_navigation_cache(cursor, item_count, 1, |next_cursor| {
+            self.patch_select_preview_track_mmls(focus, next_cursor)
+        });
+    }
+
+    fn preview_selected_patch(&mut self) {
+        if *self.play_state.lock().unwrap() == DawPlayState::Playing {
+            return;
+        }
+
+        let cursor = match self.patch_select_focus {
+            DawPatchSelectPane::Patches => self.patch_cursor,
+            DawPatchSelectPane::Favorites => self.patch_favorites_cursor,
+        };
+        let Some((measure_index, track_mmls)) =
+            self.patch_select_preview_track_mmls(self.patch_select_focus, cursor)
+        else {
+            return;
+        };
+
+        self.prefetch_patch_select_navigation_cache();
 
         if self.try_start_preview_with_track_mmls_for_test(measure_index, Some(track_mmls.clone()))
         {

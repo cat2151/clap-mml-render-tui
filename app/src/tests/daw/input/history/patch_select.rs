@@ -225,6 +225,29 @@ fn handle_patch_select_j_and_k_move_selection_until_slash_starts_filter_input() 
 }
 
 #[test]
+fn handle_patch_select_j_prefetches_predicted_preview_cache() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
+    app.data[1][1] = "l8cdef".to_string();
+    app.patch_all = vec![
+        ("Pads/Pad 0.fxp".to_string(), "pads/pad 0.fxp".to_string()),
+        ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
+        ("Pads/Pad 2.fxp".to_string(), "pads/pad 2.fxp".to_string()),
+        ("Pads/Pad 3.fxp".to_string(), "pads/pad 3.fxp".to_string()),
+    ];
+    app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
+    app.mode = DawMode::PatchSelect;
+    app.patch_select_focus = DawPatchSelectPane::Patches;
+
+    app.handle_patch_select(KeyCode::Char('j'));
+
+    assert_eq!(app.patch_cursor, 1);
+    assert_eq!(app.overlay_preview_cache.lock().unwrap().len(), 2);
+}
+
+#[test]
 fn handle_patch_select_left_in_filter_query_does_not_repreview() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_track = 1;

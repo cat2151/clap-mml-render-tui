@@ -391,10 +391,27 @@ impl<'a> TuiApp<'a> {
         *self.play_state.lock().unwrap() = PlayState::Err("yank バッファが空です".to_string());
     }
 
+    fn prefetch_patch_select_navigation_audio_cache(&self) {
+        let (item_count, cursor) = match self.patch_select_focus {
+            crate::tui::PatchSelectPane::Patches => (self.patch_filtered.len(), self.patch_cursor),
+            crate::tui::PatchSelectPane::Favorites => {
+                (self.patch_favorite_items.len(), self.patch_favorites_cursor)
+            }
+        };
+        let focus = self.patch_select_focus;
+        self.prefetch_navigation_audio_cache(
+            cursor,
+            item_count,
+            self.patch_select_page_size,
+            |index| self.patch_select_preview_mml_for_selection(focus, index),
+        );
+    }
+
     fn preview_selected_patch(&mut self) {
         if let Some(mml) = self.patch_select_preview_mml() {
             self.record_notepad_history(&mml);
             self.play_mml(mml);
+            self.prefetch_patch_select_navigation_audio_cache();
         }
     }
 

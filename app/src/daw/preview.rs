@@ -113,6 +113,23 @@ fn render_mixed_preview_tracks(
 }
 
 impl DawApp {
+    pub(super) fn prefetch_preview_navigation_cache<F>(
+        &self,
+        current: usize,
+        item_count: usize,
+        page_size: usize,
+        mut preview_for_index: F,
+    ) where
+        F: FnMut(usize) -> Option<(usize, Vec<String>)>,
+    {
+        let track_gains = self.playback_track_gains();
+        for index in crate::ui_utils::predicted_navigation_indices(current, item_count, page_size) {
+            if let Some((measure_index, track_mmls)) = preview_for_index(index) {
+                self.prefetch_preview_snapshot(measure_index, track_mmls, track_gains.clone());
+            }
+        }
+    }
+
     pub(super) fn prefetch_preview_snapshot(
         &self,
         measure_index: usize,

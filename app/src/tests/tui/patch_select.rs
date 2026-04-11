@@ -42,6 +42,29 @@ fn handle_patch_select_j_and_k_move_cursor_and_preview_destination_patch() {
 }
 
 #[test]
+fn handle_patch_select_j_prefetches_predicted_navigation_cache() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.patch_all = make_patches(&[
+        "Pads/Pad 0.fxp",
+        "Pads/Pad 1.fxp",
+        "Pads/Pad 2.fxp",
+        "Pads/Pad 3.fxp",
+    ]);
+    app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
+    app.patch_select_page_size = 2;
+    app.patch_list_state.select(Some(0));
+    app.mode = Mode::PatchSelect;
+
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
+
+    let cache = app.audio_cache.lock().unwrap();
+    assert!(cache.contains_key(r#"{"Surge XT patch": "Pads/Pad 0.fxp"} l8cdef"#));
+    assert!(cache.contains_key(r#"{"Surge XT patch": "Pads/Pad 2.fxp"} l8cdef"#));
+    assert!(cache.contains_key(r#"{"Surge XT patch": "Pads/Pad 3.fxp"} l8cdef"#));
+}
+
+#[test]
 fn handle_patch_select_slash_then_chars_filter_and_preview_first_result() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];

@@ -191,34 +191,6 @@ impl<'a> TuiApp<'a> {
         *state.offset_mut() = desired_offset.min(max_offset);
     }
 
-    /// 現在位置から `j` / `k` / `PageDown` / `PageUp` が次に押されると仮定し、
-    /// その移動先 index を最大 4 件返す。
-    /// 現在位置そのものや重複した候補は除外する。
-    fn predicted_navigation_indices(
-        current: usize,
-        item_count: usize,
-        page_size: usize,
-    ) -> Vec<usize> {
-        if item_count == 0 {
-            return Vec::new();
-        }
-
-        let mut predicted = Vec::new();
-        for delta in [
-            1,
-            -1,
-            page_size.max(1) as isize,
-            -(page_size.max(1) as isize),
-        ] {
-            let next =
-                (current as isize + delta).clamp(0, item_count.saturating_sub(1) as isize) as usize;
-            if next != current && !predicted.contains(&next) {
-                predicted.push(next);
-            }
-        }
-        predicted
-    }
-
     fn prefetch_audio_cache(&self, mmls: Vec<String>) {
         let targets = {
             let cache = self.audio_cache.lock().unwrap();
@@ -270,7 +242,7 @@ impl<'a> TuiApp<'a> {
     ) where
         F: FnMut(usize) -> Option<String>,
     {
-        let targets = Self::predicted_navigation_indices(current, item_count, page_size)
+        let targets = crate::ui_utils::predicted_navigation_indices(current, item_count, page_size)
             .into_iter()
             .filter_map(mml_for_index)
             .collect();

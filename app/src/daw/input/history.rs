@@ -159,25 +159,9 @@ impl DawApp {
             ),
         };
         let focus = self.history_overlay_focus;
-        for delta in [1isize, -1isize] {
-            if item_count == 0 {
-                break;
-            }
-            let next_cursor =
-                (cursor as isize + delta).clamp(0, item_count.saturating_sub(1) as isize) as usize;
-            if next_cursor == cursor {
-                continue;
-            }
-            if let Some((measure_index, track_mmls)) =
-                self.history_overlay_preview_track_mmls(focus, next_cursor)
-            {
-                self.prefetch_preview_snapshot(
-                    measure_index,
-                    track_mmls,
-                    self.playback_track_gains(),
-                );
-            }
-        }
+        self.prefetch_preview_navigation_cache(cursor, item_count, 1, |next_cursor| {
+            self.history_overlay_preview_track_mmls(focus, next_cursor)
+        });
     }
 
     fn preview_selected_history_overlay_item(&mut self) {

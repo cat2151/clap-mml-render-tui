@@ -222,20 +222,41 @@ impl<'a> TuiApp<'a> {
         }
     }
 
-    pub(super) fn patch_select_selected_patch_name(&self) -> Option<String> {
-        match self.patch_select_focus {
-            PatchSelectPane::Patches => self.patch_filtered.get(self.patch_cursor).cloned(),
-            PatchSelectPane::Favorites => self
-                .patch_favorite_items
-                .get(self.patch_favorites_cursor)
-                .cloned(),
+    fn patch_select_patch_name_for_selection(
+        &self,
+        focus: PatchSelectPane,
+        cursor: usize,
+    ) -> Option<String> {
+        match focus {
+            PatchSelectPane::Patches => self.patch_filtered.get(cursor).cloned(),
+            PatchSelectPane::Favorites => self.patch_favorite_items.get(cursor).cloned(),
         }
     }
 
-    pub(super) fn patch_select_preview_mml(&self) -> Option<String> {
-        let patch_name = self.patch_select_selected_patch_name()?;
+    pub(super) fn patch_select_selected_patch_name(&self) -> Option<String> {
+        let cursor = match self.patch_select_focus {
+            PatchSelectPane::Patches => self.patch_cursor,
+            PatchSelectPane::Favorites => self.patch_favorites_cursor,
+        };
+        self.patch_select_patch_name_for_selection(self.patch_select_focus, cursor)
+    }
+
+    pub(super) fn patch_select_preview_mml_for_selection(
+        &self,
+        focus: PatchSelectPane,
+        cursor: usize,
+    ) -> Option<String> {
+        let patch_name = self.patch_select_patch_name_for_selection(focus, cursor)?;
         let phrase = self.patch_select_current_phrase()?;
         let json = Self::build_patch_json(&patch_name);
         Some(format!("{json} {phrase}"))
+    }
+
+    pub(super) fn patch_select_preview_mml(&self) -> Option<String> {
+        let cursor = match self.patch_select_focus {
+            PatchSelectPane::Patches => self.patch_cursor,
+            PatchSelectPane::Favorites => self.patch_favorites_cursor,
+        };
+        self.patch_select_preview_mml_for_selection(self.patch_select_focus, cursor)
     }
 }

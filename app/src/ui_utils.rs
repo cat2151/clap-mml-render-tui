@@ -59,6 +59,35 @@ pub(crate) fn centered_text_block_rect(area: Rect, title: &str, lines: &[Line<'_
     centered_rect_with_size(clamped_width as u16, clamped_height as u16, area)
 }
 
+/// 現在位置から `j` / `k` / `PageDown` / `PageUp` が次に押されると仮定し、
+/// その移動先 index を返す。
+///
+/// 現在位置そのものや重複した候補は除外する。
+pub(crate) fn predicted_navigation_indices(
+    current: usize,
+    item_count: usize,
+    page_size: usize,
+) -> Vec<usize> {
+    if item_count == 0 {
+        return Vec::new();
+    }
+
+    let mut predicted = Vec::new();
+    for delta in [
+        1,
+        -1,
+        page_size.max(1) as isize,
+        -(page_size.max(1) as isize),
+    ] {
+        let next =
+            (current as isize + delta).clamp(0, item_count.saturating_sub(1) as isize) as usize;
+        if next != current && !predicted.contains(&next) {
+            predicted.push(next);
+        }
+    }
+    predicted
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -84,5 +113,16 @@ mod tests {
 
         assert_eq!(rect.width, area.width);
         assert_eq!(rect.height, 3);
+    }
+
+    #[test]
+    fn predicted_navigation_indices_includes_line_and_page_destinations() {
+        assert_eq!(predicted_navigation_indices(2, 8, 3), vec![3, 1, 5, 0]);
+    }
+
+    #[test]
+    fn predicted_navigation_indices_skips_current_and_duplicates() {
+        assert_eq!(predicted_navigation_indices(0, 2, 1), vec![1]);
+        assert!(predicted_navigation_indices(0, 0, 5).is_empty());
     }
 }
