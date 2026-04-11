@@ -133,6 +133,26 @@ fn handle_notepad_history_j_previews_without_reordering_history() {
 }
 
 #[test]
+fn handle_notepad_history_j_prefetches_predicted_navigation_cache() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_phrase_store.notepad.history = vec![
+        "zero".to_string(),
+        "one".to_string(),
+        "two".to_string(),
+        "three".to_string(),
+    ];
+    app.notepad_history_page_size = 2;
+    app.start_notepad_history();
+
+    app.handle_notepad_history(KeyCode::Char('j'));
+
+    let cache = app.audio_cache.lock().unwrap();
+    assert!(cache.contains_key("zero"));
+    assert!(cache.contains_key("two"));
+    assert!(cache.contains_key("three"));
+}
+
+#[test]
 fn handle_notepad_history_space_previews_selected_item() {
     let mut app = TuiApp::new_for_test(test_config());
     app.patch_phrase_store.notepad.history = vec!["alpha".to_string(), "beta".to_string()];

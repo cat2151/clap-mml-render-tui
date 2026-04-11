@@ -175,20 +175,54 @@ impl<'a> TuiApp<'a> {
         self.patch_phrase_store_dirty = true;
     }
 
-    fn patch_phrase_preview_mml(&self) -> Option<String> {
+    fn patch_phrase_preview_mml_for_selection(
+        &self,
+        focus: PatchPhrasePane,
+        cursor: usize,
+    ) -> Option<String> {
         let patch_name = self.patch_phrase_name.as_deref()?;
-        let phrase = match self.patch_phrase_focus {
-            PatchPhrasePane::History => self
-                .patch_phrase_history_items()
-                .get(self.patch_phrase_history_cursor)
-                .cloned(),
-            PatchPhrasePane::Favorites => self
-                .patch_phrase_favorite_items()
-                .get(self.patch_phrase_favorites_cursor)
-                .cloned(),
+        let phrase = match focus {
+            PatchPhrasePane::History => self.patch_phrase_history_items().get(cursor).cloned(),
+            PatchPhrasePane::Favorites => self.patch_phrase_favorite_items().get(cursor).cloned(),
         }?;
         let json = serde_json::json!({ PATCH_JSON_KEY: patch_name }).to_string();
         Some(format!("{json} {phrase}"))
+    }
+
+    fn patch_phrase_preview_mml(&self) -> Option<String> {
+        let cursor = match self.patch_phrase_focus {
+            PatchPhrasePane::History => self.patch_phrase_history_cursor,
+            PatchPhrasePane::Favorites => self.patch_phrase_favorites_cursor,
+        };
+        self.patch_phrase_preview_mml_for_selection(self.patch_phrase_focus, cursor)
+    }
+
+    fn prefetch_patch_phrase_navigation_audio_cache(&self) {
+        let (item_count, cursor) = match self.patch_phrase_focus {
+            PatchPhrasePane::History => (
+                self.patch_phrase_history_items().len(),
+                self.patch_phrase_history_cursor,
+            ),
+            PatchPhrasePane::Favorites => (
+                self.patch_phrase_favorite_items().len(),
+                self.patch_phrase_favorites_cursor,
+            ),
+        };
+        let focus = self.patch_phrase_focus;
+        self.prefetch_navigation_audio_cache(
+            cursor,
+            item_count,
+            self.patch_phrase_page_size,
+            |index| self.patch_phrase_preview_mml_for_selection(focus, index),
+        );
+    }
+
+    fn preview_selected_patch_phrase_item(&mut self) {
+        if let Some(mml) = self.patch_phrase_preview_mml() {
+            self.record_notepad_history(&mml);
+            self.play_mml(mml);
+            self.prefetch_patch_phrase_navigation_audio_cache();
+        }
     }
 
     pub(super) fn start_patch_phrase(&mut self, patch_name: String) {
@@ -247,10 +281,7 @@ impl<'a> TuiApp<'a> {
                         }
                         self.patch_phrase_query = next_query;
                         self.sync_patch_phrase_states();
-                        if let Some(mml) = self.patch_phrase_preview_mml() {
-                            self.record_notepad_history(&mml);
-                            self.play_mml(mml);
-                        }
+                        self.preview_selected_patch_phrase_item();
                         if !previous_query.is_empty() && self.patch_phrase_query.is_empty() {
                             self.patch_phrase_filter_active = false;
                         }
@@ -283,35 +314,23 @@ impl<'a> TuiApp<'a> {
             KeyCode::Char('h') | KeyCode::Left => {
                 self.patch_phrase_focus = PatchPhrasePane::History;
                 self.sync_patch_phrase_states();
-                if let Some(mml) = self.patch_phrase_preview_mml() {
-                    self.record_notepad_history(&mml);
-                    self.play_mml(mml);
-                }
+                self.preview_selected_patch_phrase_item();
             }
             KeyCode::Char('l') | KeyCode::Right => {
                 self.patch_phrase_focus = PatchPhrasePane::Favorites;
                 self.sync_patch_phrase_states();
-                if let Some(mml) = self.patch_phrase_preview_mml() {
-                    self.record_notepad_history(&mml);
-                    self.play_mml(mml);
-                }
+                self.preview_selected_patch_phrase_item();
             }
             KeyCode::Char('j') | KeyCode::Down => {
                 if self.move_patch_phrase_selection_by(1, history_len, favorites_len) {
                     self.sync_patch_phrase_states();
-                    if let Some(mml) = self.patch_phrase_preview_mml() {
-                        self.record_notepad_history(&mml);
-                        self.play_mml(mml);
-                    }
+                    self.preview_selected_patch_phrase_item();
                 }
             }
             KeyCode::Char('k') | KeyCode::Up => {
                 if self.move_patch_phrase_selection_by(-1, history_len, favorites_len) {
                     self.sync_patch_phrase_states();
-                    if let Some(mml) = self.patch_phrase_preview_mml() {
-                        self.record_notepad_history(&mml);
-                        self.play_mml(mml);
-                    }
+                    self.preview_selected_patch_phrase_item();
                 }
             }
             KeyCode::PageDown => {
@@ -321,10 +340,7 @@ impl<'a> TuiApp<'a> {
                     favorites_len,
                 ) {
                     self.sync_patch_phrase_states();
-                    if let Some(mml) = self.patch_phrase_preview_mml() {
-                        self.record_notepad_history(&mml);
-                        self.play_mml(mml);
-                    }
+                    self.preview_selected_patch_phrase_item();
                 }
             }
             KeyCode::PageUp => {
@@ -334,10 +350,7 @@ impl<'a> TuiApp<'a> {
                     favorites_len,
                 ) {
                     self.sync_patch_phrase_states();
-                    if let Some(mml) = self.patch_phrase_preview_mml() {
-                        self.record_notepad_history(&mml);
-                        self.play_mml(mml);
-                    }
+                    self.preview_selected_patch_phrase_item();
                 }
             }
             KeyCode::Char('/') => {
@@ -357,10 +370,7 @@ impl<'a> TuiApp<'a> {
                 }
             }
             KeyCode::Char(' ') => {
-                if let Some(mml) = self.patch_phrase_preview_mml() {
-                    self.record_notepad_history(&mml);
-                    self.play_mml(mml);
-                }
+                self.preview_selected_patch_phrase_item();
             }
             KeyCode::Char('i') if self.patch_phrase_focus == PatchPhrasePane::History => {
                 if let Some(mml) = self.patch_phrase_preview_mml() {

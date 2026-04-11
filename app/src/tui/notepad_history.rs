@@ -121,9 +121,37 @@ impl<'a> TuiApp<'a> {
         }
     }
 
+    fn notepad_item_for_selection(&self, focus: PatchPhrasePane, cursor: usize) -> Option<String> {
+        match focus {
+            PatchPhrasePane::History => self.notepad_history_items().get(cursor).cloned(),
+            PatchPhrasePane::Favorites => self.notepad_favorite_items().get(cursor).cloned(),
+        }
+    }
+
+    fn prefetch_notepad_history_navigation_audio_cache(&self) {
+        let (item_count, cursor) = match self.notepad_focus {
+            PatchPhrasePane::History => (
+                self.notepad_history_items().len(),
+                self.notepad_history_cursor,
+            ),
+            PatchPhrasePane::Favorites => (
+                self.notepad_favorite_items().len(),
+                self.notepad_favorites_cursor,
+            ),
+        };
+        let focus = self.notepad_focus;
+        self.prefetch_navigation_audio_cache(
+            cursor,
+            item_count,
+            self.notepad_history_page_size,
+            |index| self.notepad_item_for_selection(focus, index),
+        );
+    }
+
     fn preview_selected_notepad_item(&mut self) {
         if let Some(mml) = self.selected_notepad_item() {
             self.play_mml(mml);
+            self.prefetch_notepad_history_navigation_audio_cache();
         }
     }
 

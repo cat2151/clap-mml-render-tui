@@ -297,6 +297,30 @@ fn handle_history_overlay_j_k_preview_uses_overlay_patch_name() {
 }
 
 #[test]
+fn handle_history_overlay_j_prefetches_predicted_preview_cache() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
+    app.patch_phrase_store.patches.insert(
+        "Bass/Bass 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec![
+                "bass zero".to_string(),
+                "bass one".to_string(),
+                "bass two".to_string(),
+            ],
+            favorites: vec![],
+        },
+    );
+    app.start_history_overlay_for_patch_name(Some("Bass/Bass 1.fxp".to_string()));
+
+    app.handle_history_overlay(KeyCode::Char('j'));
+
+    assert_eq!(app.overlay_preview_cache.lock().unwrap().len(), 2);
+}
+
+#[test]
 fn handle_history_overlay_j_k_preview_falls_back_when_track_init_json_is_not_object() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_track = 1;

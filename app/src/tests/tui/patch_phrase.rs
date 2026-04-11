@@ -179,6 +179,33 @@ fn handle_patch_phrase_page_down_and_page_up_move_by_visible_page() {
 }
 
 #[test]
+fn handle_patch_phrase_j_prefetches_predicted_navigation_cache() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["before".to_string()];
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec![
+                "zero".to_string(),
+                "one".to_string(),
+                "two".to_string(),
+                "three".to_string(),
+            ],
+            favorites: vec![],
+        },
+    );
+    app.patch_phrase_page_size = 2;
+    app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
+
+    app.handle_patch_phrase(KeyCode::Char('j'));
+
+    let cache = app.audio_cache.lock().unwrap();
+    assert!(cache.contains_key(r#"{"Surge XT patch":"Pads/Pad 1.fxp"} zero"#));
+    assert!(cache.contains_key(r#"{"Surge XT patch":"Pads/Pad 1.fxp"} two"#));
+    assert!(cache.contains_key(r#"{"Surge XT patch":"Pads/Pad 1.fxp"} three"#));
+}
+
+#[test]
 fn handle_patch_phrase_starts_scrolling_before_cursor_reaches_view_edge() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["before".to_string()];

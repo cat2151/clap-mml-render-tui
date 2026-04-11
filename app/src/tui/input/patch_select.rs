@@ -187,6 +187,20 @@ impl<'a> TuiApp<'a> {
         self.kick_play(mml);
     }
 
+    fn prefetch_normal_navigation_audio_cache(&self) {
+        self.prefetch_navigation_audio_cache(
+            self.cursor,
+            self.lines.len(),
+            self.normal_page_size,
+            |index| {
+                self.lines
+                    .get(index)
+                    .map(|line| line.trim().to_string())
+                    .filter(|mml| !mml.is_empty())
+            },
+        );
+    }
+
     pub(super) fn play_current_line(&mut self) {
         self.normalize_current_line_patch_json_if_known();
         let mml = self.lines[self.cursor].trim().to_string();
@@ -194,6 +208,7 @@ impl<'a> TuiApp<'a> {
             self.record_notepad_history(&mml);
             self.record_patch_phrase_history(&mml);
             self.play_mml(mml);
+            self.prefetch_normal_navigation_audio_cache();
         }
     }
 

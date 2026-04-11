@@ -36,6 +36,25 @@ fn handle_normal_page_down_and_page_up_move_by_visible_page() {
 }
 
 #[test]
+fn handle_normal_j_prefetches_predicted_navigation_cache() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![
+        "line 0".to_string(),
+        "line 1".to_string(),
+        "line 2".to_string(),
+        "line 3".to_string(),
+    ];
+    app.normal_page_size = 2;
+
+    app.handle_normal(KeyCode::Char('j'));
+
+    let cache = app.audio_cache.lock().unwrap();
+    assert!(cache.contains_key("line 0"));
+    assert!(cache.contains_key("line 2"));
+    assert!(cache.contains_key("line 3"));
+}
+
+#[test]
 fn handle_normal_f_shows_error_when_current_line_has_no_patch_json() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["cde".to_string()];

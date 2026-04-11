@@ -284,6 +284,7 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
         preview_sink: Arc::new(Mutex::new(None)),
         play_position,
         ab_repeat,
+        overlay_preview_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
         play_measure_mmls,
         play_measure_track_mmls,
         play_measure_samples: Arc::new(Mutex::new(0)),
