@@ -236,6 +236,89 @@ fn handle_normal_r_uses_saved_patch_filter_query_for_random_selection() {
 }
 
 #[test]
+fn handle_normal_r_preserves_trailing_init_mml_when_updating_patch_json() {
+    let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_preserves_trailing_init_mml");
+    std::fs::remove_dir_all(&tmp).ok();
+    std::fs::create_dir_all(tmp.join("Pad")).unwrap();
+    std::fs::write(tmp.join("Pad").join("Pad 1.fxp"), b"dummy").unwrap();
+
+    {
+        let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
+
+        let (mut app, _cache_rx) = build_test_app();
+        app.cursor_track = 1;
+        app.cursor_measure = 0;
+        app.cfg = Arc::new(Config {
+            patches_dirs: Some(vec![tmp.to_string_lossy().into_owned()]),
+            ..(*app.cfg).clone()
+        });
+        app.data[1][0] =
+            r#"{"Surge XT patch":"Old/Lead 1.fxp","Surge XT patch filter":"pad","custom":"keep"}l1"#.to_string();
+        app.data[1][1] = "cdef".to_string();
+
+        app.handle_normal(crossterm::event::KeyCode::Char('r'));
+
+        assert_eq!(
+            app.data[1][0],
+            r#"{"Surge XT patch":"Pad/Pad 1.fxp","Surge XT patch filter":"pad","custom":"keep"}l1"#
+        );
+        let play_measure_track_mmls = app.play_measure_track_mmls.lock().unwrap().clone();
+        assert!(
+            play_measure_track_mmls[0][1].contains("l1cdef"),
+            "updated init MML should keep the trailing phrase in playback state: {:?}",
+            play_measure_track_mmls
+        );
+    }
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn handle_normal_r_preserves_init_json_formatting_and_whitespace() {
+    let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_preserves_init_json_formatting");
+    std::fs::remove_dir_all(&tmp).ok();
+    std::fs::create_dir_all(tmp.join("Pad")).unwrap();
+    std::fs::write(tmp.join("Pad").join("Pad 1.fxp"), b"dummy").unwrap();
+
+    {
+        let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
+
+        let (mut app, _cache_rx) = build_test_app();
+        app.cursor_track = 1;
+        app.cursor_measure = 0;
+        app.cfg = Arc::new(Config {
+            patches_dirs: Some(vec![tmp.to_string_lossy().into_owned()]),
+            ..(*app.cfg).clone()
+        });
+        app.data[1][0] =
+            r#"{ "custom" : "keep" , "Surge XT patch" : "Old/Lead 1.fxp" , "Surge XT patch filter" : "pad" }  l1 "#.to_string();
+        app.data[1][1] = "cdef".to_string();
+
+        app.handle_normal(crossterm::event::KeyCode::Char('r'));
+
+        assert_eq!(
+            app.data[1][0],
+            r#"{ "custom" : "keep" , "Surge XT patch" : "Pad/Pad 1.fxp" , "Surge XT patch filter" : "pad" }  l1 "#
+        );
+    }
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn replace_patch_name_in_mml_preserves_escaped_json_strings() {
+    let current =
+        r#"{ "memo" : "quote \" and slash \\ keep" , "Surge XT patch" : "Old/Lead 1.fxp" }  l1"#;
+
+    let replaced = DawApp::replace_patch_name_in_mml(current, r#"Pad/"A"\B.fxp"#, None);
+
+    assert_eq!(
+        replaced,
+        r#"{ "memo" : "quote \" and slash \\ keep" , "Surge XT patch" : "Pad/\"A\"\\B.fxp" }  l1"#
+    );
+}
+
+#[test]
 fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
     let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_prioritizes_next_measure");
     std::fs::remove_dir_all(&tmp).ok();

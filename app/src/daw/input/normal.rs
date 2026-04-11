@@ -370,11 +370,12 @@ impl DawApp {
                     let affected_measures: Vec<usize> = (1..=self.measures)
                         .filter(|&measure| !self.data[self.cursor_track][measure].trim().is_empty())
                         .collect();
-                    self.data[self.cursor_track][INIT_MEASURE] =
-                        Self::build_random_patch_json_with_filter_query(
-                            &patch,
-                            patch_filter_query.as_deref(),
-                        );
+                    let current_init_mml = self.data[self.cursor_track][INIT_MEASURE].clone();
+                    self.data[self.cursor_track][INIT_MEASURE] = Self::replace_patch_name_in_mml(
+                        &current_init_mml,
+                        &patch,
+                        patch_filter_query.as_deref(),
+                    );
                     self.invalidate_cell(self.cursor_track, INIT_MEASURE);
                     self.invalidate_dependent_cells(self.cursor_track, INIT_MEASURE);
                     self.start_track_rerender_batch(
