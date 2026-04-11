@@ -38,12 +38,12 @@ thread_local! {
 }
 
 #[cfg(test)]
-pub(super) fn test_history_app_dir() -> Option<PathBuf> {
+fn test_history_app_dir() -> Option<PathBuf> {
     TEST_HISTORY_APP_DIR.with(|dir| dir.borrow().clone())
 }
 
 #[cfg(not(test))]
-pub(super) fn test_history_app_dir() -> Option<PathBuf> {
+fn test_history_app_dir() -> Option<PathBuf> {
     None
 }
 
