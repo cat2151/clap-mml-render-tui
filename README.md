@@ -1,15 +1,15 @@
 # clap-mml-render-tui
 
-### Usage
+### Purpose
 
-- For playing sounds using MML.
-- For casual installation. Requires only Rust.
+- For playing with sounds using MML.
+- For casual installation. Only Rust is required.
 
 ### Technology Stack
 - Plugin host library
   - https://github.com/prokopyl/clack
 
-### Prerequisites
+### Setup
 
 Install [Surge XT](https://surge-synthesizer.github.io/).
 
@@ -20,16 +20,16 @@ winget install "Surge XT"
 ### Installation
 
 ``` 
-cargo install --force --git https://github.com/cat2151/clap-mml-render-tui clap-mml-render-tui
+cargo install --force --git https://github.com/cat2151/clap-mml-render-tui
 ```
 
-### Run
+### Running
 
 ```
 cmrt
 ```
 
-You can enter MML in the TUI screen and play.
+You can input MML and play with it on the TUI screen.
 
 ### Update Command
 
@@ -44,14 +44,23 @@ cmrt --server
 ```
 
 - Integrates with the bluesky-text-to-audio Chrome extension.
-  - If an MML is present in a Bluesky post, it can be played using Surge XT.
+  - When MML is found in a Bluesky post, it can be played with Surge XT.
 
 # Breaking Changes
-- Frequent breaking changes will occur daily.
+- Frequent breaking changes are made daily.
 
 # Future Plans
-- Disable automatic updates via `toml`. When automatic updates are off, after quitting, the message "Update available. Update command: ~" will be displayed. Further automation has been determined to be too complex with more disadvantages than advantages, and is thus out of scope.
-- Fetching Surge XT patches via API is the correct approach and will be implemented (currently, it searches for paths specified in `toml`, which is inefficient. Implementation is currently deprioritized in favor of other features).
+- It's logical to obtain Surge XT patches via an API, and this will be implemented (currently, it inefficiently searches for patches specified in a TOML file. Implementation is deferred, prioritizing other tasks).
+
+# Concept Notes
+- アトミック小節 (Atomic Measure)
+    - Inspired by Obsidian's atomic notes.
+    - By making the unit of all processing "offline rendering in single-measure increments,"
+    - in exchange for accepting constraints,
+    - various benefits can be gained.
+    - This is suitable for sketching and rapidly iterating on edits.
+    - For more serious editing, existing feature-rich DAWs would be more suitable.
+    - (Note: If translated as 'atomic measure', it might be confused with a term from physics, so for now, it is kept as 'アトミック小節' without English translation.)
 
 # Out of Scope
-- Effects are likely to require mandatory editing, so they are currently considered out of scope and heavily deprioritized.
+- Effects are deliberately deemed out of scope and a low priority, despite being essential for editing. One reason is that Surge XT patches inherently include effects (effects are essentially extracted from patches).
