@@ -5,9 +5,7 @@ use mmlabc_to_smf::mml_preprocessor;
 use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::tui::{
-    filter_patches, PatchLoadState, PATCH_FILTER_QUERY_JSON_KEY, PATCH_JSON_KEY,
-};
+use crate::tui::{filter_patches, PatchLoadState, PATCH_FILTER_QUERY_JSON_KEY, PATCH_JSON_KEY};
 
 use super::{Mode, PlayState, TuiApp};
 
