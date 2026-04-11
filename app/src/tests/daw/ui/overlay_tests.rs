@@ -133,6 +133,21 @@ fn draw_patch_select_shows_filter_input_keybinds_when_filter_active() {
 }
 
 #[test]
+fn draw_patch_select_does_not_show_total_patch_count_in_title() {
+    let mut app = build_test_app();
+    app.mode = DawMode::PatchSelect;
+    app.patch_all = (0..3000)
+        .map(|i| (format!("Pad {i}"), format!("pad {i}")))
+        .collect();
+    app.patch_filtered = vec!["Pad 0".to_string()];
+
+    let normalized_screen = render_lines(&app, 160, 30).join("\n").replace(' ', "");
+
+    assert!(normalized_screen.contains("Patches"));
+    assert!(!normalized_screen.contains("3000"));
+}
+
+#[test]
 fn draw_patch_select_uses_query_cursor_only() {
     let mut app = build_test_app();
     app.mode = DawMode::PatchSelect;

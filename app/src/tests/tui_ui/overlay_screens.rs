@@ -50,6 +50,7 @@ fn patch_phrase_screen_renders_history_and_favorites_lists() {
     assert!(lines.contains("o5g"));
     assert!(normalized.contains("/を押して絞り込み(space=AND)"));
     assert!(normalized.contains("ENTERでフレーズを選択-patchphrasehistory-"));
+    assert!(normalized.contains("patchphrase現在1行目/全1行(1/1)"));
 }
 
 #[test]
@@ -189,6 +190,7 @@ fn patch_select_screen_renders_as_overlay_on_normal_screen() {
     assert!(normalized.contains("ENTERで音色を選択-patchselect-"));
     assert!(normalized.contains("/を押して絞り込み"));
     assert!(normalized.contains("Favorite音色(1)"));
+    assert!(normalized.contains("音色選択現在1行目/全2行(1/2)"));
     assert!(lines.contains("Pads/Pad 1.fxp"));
     assert!(lines.contains("Leads/Lead 1.fxp"));
 }
@@ -281,6 +283,7 @@ fn notepad_history_overlay_renders_history_and_favorites_lists() {
     assert!(lines.contains("l8cdef"));
     assert!(lines.contains("o5g"));
     assert!(normalized.contains("ENTERで絞り込みを決定-notepadhistory-"));
+    assert!(normalized.contains("notepadhistory現在1行目/全1行(1/1)"));
 }
 
 #[test]

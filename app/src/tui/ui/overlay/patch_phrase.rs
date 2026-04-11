@@ -52,8 +52,9 @@ pub(in crate::tui::ui) fn draw_patch_phrase(
     );
     f.render_widget(&patch_phrase_query_widget, chunks[0]);
 
-    let history_items: Vec<ListItem> = app
-        .patch_phrase_history_items()
+    let history_entries = app.patch_phrase_history_items();
+    let history_count = history_entries.len();
+    let history_items: Vec<ListItem> = history_entries
         .into_iter()
         .enumerate()
         .map(|(i, phrase)| {
@@ -68,8 +69,9 @@ pub(in crate::tui::ui) fn draw_patch_phrase(
             ListItem::new(Span::styled(phrase, style))
         })
         .collect();
-    let favorite_items: Vec<ListItem> = app
-        .patch_phrase_favorite_items()
+    let favorite_entries = app.patch_phrase_favorite_items();
+    let favorite_count = favorite_entries.len();
+    let favorite_items: Vec<ListItem> = favorite_entries
         .into_iter()
         .enumerate()
         .map(|(i, phrase)| {
@@ -94,6 +96,14 @@ pub(in crate::tui::ui) fn draw_patch_phrase(
         base_style().fg(MONOKAI_CYAN)
     } else {
         base_style()
+    };
+    let selection_status = match app.patch_phrase_focus {
+        PatchPhrasePane::History => {
+            super::selection_status_text(app.patch_phrase_history_cursor, history_count)
+        }
+        PatchPhrasePane::Favorites => {
+            super::selection_status_text(app.patch_phrase_favorites_cursor, favorite_count)
+        }
     };
 
     f.render_stateful_widget(
@@ -150,7 +160,8 @@ pub(in crate::tui::ui) fn draw_patch_phrase(
     }
 
     f.render_widget(
-        Paragraph::new(status.to_string()).style(base_style().fg(status_color)),
+        Paragraph::new(format!("{status}  {selection_status}"))
+            .style(base_style().fg(status_color)),
         chunks[2],
     );
     f.render_widget(
