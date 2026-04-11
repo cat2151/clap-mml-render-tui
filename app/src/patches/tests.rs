@@ -59,6 +59,7 @@ fn collect_patch_pairs_combines_factory_and_thirdparty_using_common_base() {
             factory.to_string_lossy().into_owned(),
             thirdparty.to_string_lossy().into_owned(),
         ]),
+        offline_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
     };
 
     let pairs = collect_patch_pairs(&cfg).unwrap();
@@ -97,6 +98,7 @@ fn collect_patch_pairs_sorts_display_names_naturally() {
         sample_rate: 44_100.0,
         buffer_size: 512,
         patches_dirs: Some(vec![factory.to_string_lossy().into_owned()]),
+        offline_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
     };
 
     let pairs = collect_patch_pairs(&cfg).unwrap();

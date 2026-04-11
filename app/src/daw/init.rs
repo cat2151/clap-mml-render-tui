@@ -116,7 +116,9 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
 
     let cache = Arc::new(Mutex::new(cache));
 
-    // 固定数のキャッシュワーカースレッドを起動する。
+    let cache_render_workers = cfg.offline_render_workers;
+
+    // 設定数のキャッシュワーカースレッドを起動する。
     // MML -> SMF の前処理排他は core-lib 側で行い、ここでは render 本体の並列度だけを増やす。
     let (cache_tx, cache_rx) = std::sync::mpsc::channel::<CacheJob>();
     let cache_rx = Arc::new(Mutex::new(cache_rx));
@@ -128,7 +130,7 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
     let play_measure_track_mmls = Arc::new(Mutex::new(play_measure_track_mmls));
     let play_track_gains = Arc::new(Mutex::new(play_track_gains));
 
-    for _ in 0..CACHE_RENDER_WORKERS {
+    for _ in 0..cache_render_workers {
         let cache_worker = Arc::clone(&cache);
         let cache_rx_worker = Arc::clone(&cache_rx);
         let cfg_worker = Arc::clone(&cfg);
@@ -150,6 +152,7 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
                 ab_repeat: Arc::clone(&ab_repeat_worker),
                 play_measure_mmls: Arc::clone(&play_measure_mmls_worker),
                 cache_tx: cache_tx_worker.clone(),
+                cache_render_workers,
             };
 
             loop {
@@ -278,6 +281,7 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
         measures,
         cache,
         cache_tx,
+        cache_render_workers,
         play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
         play_transition_lock: Arc::new(Mutex::new(())),
         preview_session: Arc::new(AtomicU64::new(0)),

@@ -54,6 +54,7 @@ fn complete_track_rerender_batch_logs_only_after_last_measure_finishes() {
         ab_repeat: Arc::new(Mutex::new(super::AbRepeatState::Off)),
         play_measure_mmls: Arc::clone(&play_measure_mmls),
         cache_tx,
+        cache_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
     };
     {
         let mut cache_guard = cache.lock().unwrap();
@@ -118,6 +119,7 @@ fn complete_track_rerender_batch_waits_for_last_active_measure_before_logging_do
         ab_repeat: Arc::new(Mutex::new(super::AbRepeatState::Off)),
         play_measure_mmls: Arc::new(Mutex::new(vec!["c".to_string(), "d".to_string()])),
         cache_tx,
+        cache_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
     };
     batches.lock().unwrap()[1] = Some(TrackRerenderBatch {
         pending: BTreeMap::new(),
@@ -166,6 +168,7 @@ fn complete_track_rerender_batch_skips_stale_pending_job_and_reserves_next_measu
         ab_repeat: Arc::new(Mutex::new(super::AbRepeatState::Off)),
         play_measure_mmls: Arc::clone(&play_measure_mmls),
         cache_tx,
+        cache_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
     };
     {
         let mut cache_guard = cache.lock().unwrap();
@@ -226,6 +229,77 @@ fn complete_track_rerender_batch_skips_stale_pending_job_and_reserves_next_measu
 }
 
 #[test]
+fn complete_track_rerender_batch_respects_cache_render_worker_limit() {
+    let log_lines = Arc::new(Mutex::new(VecDeque::new()));
+    let batches = Arc::new(Mutex::new(vec![None, None]));
+    let play_measure_mmls = Arc::new(Mutex::new(vec![
+        "c".to_string(),
+        "d".to_string(),
+        "e".to_string(),
+        "f".to_string(),
+    ]));
+    let (cache_tx, cache_rx) = std::sync::mpsc::channel();
+    let cache = Arc::new(Mutex::new(vec![vec![super::CellCache::empty(); 5]; 2]));
+    let completion_ctx = TrackRerenderBatchCompletionContext {
+        batches: Arc::clone(&batches),
+        log_lines: Arc::clone(&log_lines),
+        cache: Arc::clone(&cache),
+        play_position: Arc::new(Mutex::new(None)),
+        ab_repeat: Arc::new(Mutex::new(super::AbRepeatState::Off)),
+        play_measure_mmls: Arc::clone(&play_measure_mmls),
+        cache_tx,
+        cache_render_workers: 2,
+    };
+    {
+        let mut cache_guard = cache.lock().unwrap();
+        for measure in 3..=4 {
+            cache_guard[1][measure].state = super::CacheState::Pending;
+            cache_guard[1][measure].generation = 1;
+        }
+    }
+    batches.lock().unwrap()[1] = Some(TrackRerenderBatch {
+        pending: BTreeMap::from([
+            (
+                3,
+                CacheJob {
+                    track: 1,
+                    measure: 3,
+                    measure_samples: 4,
+                    generation: 1,
+                    rendered_mml_hash: 3,
+                    mml: "e".to_string(),
+                },
+            ),
+            (
+                4,
+                CacheJob {
+                    track: 1,
+                    measure: 4,
+                    measure_samples: 4,
+                    generation: 1,
+                    rendered_mml_hash: 4,
+                    mml: "f".to_string(),
+                },
+            ),
+        ]),
+        active_measures: BTreeSet::from([1, 2]),
+        completion_log: "cache: rerender done track1 meas 1〜4 (random patch update)".to_string(),
+    });
+
+    DawApp::complete_track_rerender_batch_measure(&completion_ctx, 1, 1);
+
+    assert_eq!(cache_rx.try_recv().unwrap().measure, 3);
+    assert!(
+        cache_rx.try_recv().is_err(),
+        "worker limit 2 では一度に追加予約する小節は 1 つだけ"
+    );
+    let batch = batches.lock().unwrap();
+    let current_batch = batch[1].as_ref().expect("batch should continue");
+    assert_eq!(current_batch.active_measures, BTreeSet::from([2, 3]));
+    assert!(current_batch.pending.contains_key(&4));
+}
+
+#[test]
 fn start_track_rerender_batch_logs_only_targeted_measures() {
     use crate::config::Config;
     use crate::daw::{
@@ -252,6 +326,7 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
             sample_rate: 44_100.0,
             buffer_size: 512,
             patches_dirs: None,
+            offline_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
         }),
         entry_ptr: 0,
         tracks,
@@ -270,6 +345,7 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
             tracks
         ])),
         cache_tx,
+        cache_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
         play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
         play_transition_lock: Arc::new(Mutex::new(())),
         preview_session: Arc::new(std::sync::atomic::AtomicU64::new(0)),

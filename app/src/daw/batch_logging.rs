@@ -20,6 +20,7 @@ pub(super) struct TrackRerenderBatchCompletionContext {
     pub(super) ab_repeat: Arc<Mutex<super::AbRepeatState>>,
     pub(super) play_measure_mmls: Arc<Mutex<Vec<String>>>,
     pub(super) cache_tx: std::sync::mpsc::Sender<CacheJob>,
+    pub(super) cache_render_workers: usize,
 }
 
 fn format_measure_order(measures: &[usize]) -> String {
@@ -109,6 +110,7 @@ fn take_next_batch_job(
 
 fn fill_batch_slots(
     batch: &mut TrackRerenderBatch,
+    cache_render_workers: usize,
     track: usize,
     cache: &Arc<Mutex<Vec<Vec<super::CellCache>>>>,
     play_position: Option<PlayPosition>,
@@ -116,7 +118,7 @@ fn fill_batch_slots(
     play_measure_mmls: &[String],
 ) -> Vec<(CacheJob, String)> {
     let mut queued = Vec::new();
-    while batch.active_measures.len() < super::CACHE_RENDER_WORKERS {
+    while batch.active_measures.len() < cache_render_workers {
         let Some((next_measure, next_job, priority_order_label)) = take_next_batch_job(
             &mut batch.pending,
             track,
@@ -176,6 +178,7 @@ impl DawApp {
         };
         let queued = fill_batch_slots(
             &mut batch,
+            self.cache_render_workers,
             track,
             &self.cache,
             play_position,
@@ -220,6 +223,7 @@ impl DawApp {
             }
             let queued = fill_batch_slots(
                 batch,
+                ctx.cache_render_workers,
                 track,
                 &ctx.cache,
                 play_position,

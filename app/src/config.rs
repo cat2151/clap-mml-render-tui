@@ -2,6 +2,10 @@ use cmrt_core::CoreConfig;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+pub const DEFAULT_OFFLINE_RENDER_WORKERS: usize = 4;
+const MIN_OFFLINE_RENDER_WORKERS: usize = 1;
+const MAX_OFFLINE_RENDER_WORKERS: usize = 16;
+
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
     pub plugin_path: String,
@@ -13,6 +17,9 @@ pub struct Config {
     pub buffer_size: usize,
     /// パッチ検索対象ディレクトリ一覧
     pub patches_dirs: Option<Vec<String>>,
+    /// DAW のオフラインレンダリング同時実行数
+    #[serde(default = "default_offline_render_workers")]
+    pub offline_render_workers: usize,
 }
 
 #[derive(Serialize)]
@@ -118,6 +125,9 @@ output_wav  = "output.wav"
 sample_rate = 48000
 buffer_size = 512
 
+# 【省略可】DAW のオフラインレンダリング同時実行数（1〜16）
+offline_render_workers = 4
+
 # 【省略可】Surge XT パッチの検索対象ディレクトリ一覧（TUI / DAW の音色選択・ランダム音色で使う）
 # 例 (Windows): patches_dirs = ['C:\ProgramData\Surge XT\patches_factory', 'C:\ProgramData\Surge XT\patches_3rdparty']
 # 例 (Linux):   patches_dirs = ['/home/user/.local/share/surge-data/patches_factory', '/home/user/.local/share/surge-data/patches_3rdparty']
@@ -128,6 +138,10 @@ buffer_size = 512
         plugin_path_line = plugin_path_line,
         patches_dirs_line = patches_dirs_line
     )
+}
+
+fn default_offline_render_workers() -> usize {
+    DEFAULT_OFFLINE_RENDER_WORKERS
 }
 
 /// `patches_dirs = [...]` の 1 行を安全な TOML 文字列として生成する。
@@ -215,8 +229,26 @@ impl Config {
         }
         let text = std::fs::read_to_string(&path)
             .map_err(|e| anyhow::anyhow!("config.toml が読めない ({}): {}", path.display(), e))?;
-        toml::from_str(&text)
-            .map_err(|e| anyhow::anyhow!("config.toml のパースに失敗 ({}): {}", path.display(), e))
+        let cfg: Self = toml::from_str(&text).map_err(|e| {
+            anyhow::anyhow!("config.toml のパースに失敗 ({}): {}", path.display(), e)
+        })?;
+        cfg.validate()
+            .map_err(|e| anyhow::anyhow!("config.toml の検証に失敗 ({}): {}", path.display(), e))?;
+        Ok(cfg)
+    }
+
+    fn validate(&self) -> anyhow::Result<()> {
+        if !(MIN_OFFLINE_RENDER_WORKERS..=MAX_OFFLINE_RENDER_WORKERS)
+            .contains(&self.offline_render_workers)
+        {
+            anyhow::bail!(
+                "offline_render_workers は {}〜{} の範囲で設定してください（現在値: {}）",
+                MIN_OFFLINE_RENDER_WORKERS,
+                MAX_OFFLINE_RENDER_WORKERS,
+                self.offline_render_workers
+            );
+        }
+        Ok(())
     }
 }
 

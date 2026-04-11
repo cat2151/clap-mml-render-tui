@@ -40,6 +40,7 @@ fn build_test_app() -> DawApp {
             sample_rate: 44_100.0,
             buffer_size: 512,
             patches_dirs: None,
+            offline_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
         }),
         entry_ptr: 0,
         tracks,
@@ -49,6 +50,7 @@ fn build_test_app() -> DawApp {
             tracks
         ])),
         cache_tx,
+        cache_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
         play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
         play_transition_lock: Arc::new(Mutex::new(())),
         preview_session: Arc::new(std::sync::atomic::AtomicU64::new(0)),

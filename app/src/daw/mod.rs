@@ -122,7 +122,6 @@ pub(super) const DEFAULT_TRACK0_MML: &str = r#"{"beat": "4/4"}t120"#;
 /// 再生時にフォールバックレンダリングする。
 /// ≈ 2_000_000 × 4 bytes ≈ 8 MB / cell。
 pub(super) const MAX_CACHED_SAMPLES: usize = 2_000_000;
-pub(super) const CACHE_RENDER_WORKERS: usize = 4;
 const OVERLAY_PREVIEW_CACHE_MAX_ENTRIES: usize = 64;
 
 #[derive(Clone)]
@@ -160,8 +159,9 @@ pub struct DawApp {
     pub(super) cache: Arc<Mutex<Vec<Vec<CellCache>>>>,
 
     /// キャッシュワーカースレッドへのジョブチャネル
-    /// 固定数ワーカーで処理し、prepare 段階の排他は core-lib 側で行う
+    /// 設定数ワーカーで処理し、prepare 段階の排他は core-lib 側で行う
     cache_tx: std::sync::mpsc::Sender<CacheJob>,
+    cache_render_workers: usize,
 
     pub(super) play_state: Arc<Mutex<DawPlayState>>,
 

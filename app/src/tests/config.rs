@@ -73,6 +73,7 @@ buffer_size = 512
     assert_eq!(cfg.output_wav, "output.wav");
     assert!((cfg.sample_rate - 44100.0).abs() < f64::EPSILON);
     assert_eq!(cfg.buffer_size, 512);
+    assert_eq!(cfg.offline_render_workers, DEFAULT_OFFLINE_RENDER_WORKERS);
 }
 
 #[test]
@@ -93,6 +94,17 @@ fn default_config_content_uses_patches_dirs_key() {
     assert!(
         content.contains("patches_dirs"),
         "default config は patches_dirs を案内するべき: {}",
+        content
+    );
+}
+
+#[test]
+fn default_config_content_uses_offline_render_workers_key() {
+    let content = default_config_content();
+
+    assert!(
+        content.contains("offline_render_workers = 4"),
+        "default config は offline_render_workers を案内するべき: {}",
         content
     );
 }
@@ -202,6 +214,44 @@ buffer_size = 512
 "#;
     let cfg: Config = toml::from_str(toml_str).unwrap();
     assert!(cfg.patches_dirs.is_none());
+}
+
+#[test]
+fn config_offline_render_workers_parses_explicit_value() {
+    let toml_str = r#"
+plugin_path = "/usr/lib/clap/Surge XT.clap"
+input_midi  = "input.mid"
+output_midi = "output.mid"
+output_wav  = "output.wav"
+sample_rate = 44100
+buffer_size = 512
+offline_render_workers = 8
+"#;
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+    cfg.validate().unwrap();
+    assert_eq!(cfg.offline_render_workers, 8);
+}
+
+#[test]
+fn config_offline_render_workers_validation_rejects_out_of_range_values() {
+    for workers in [0, 17] {
+        let toml_str = format!(
+            r#"
+plugin_path = "/usr/lib/clap/Surge XT.clap"
+input_midi  = "input.mid"
+output_midi = "output.mid"
+output_wav  = "output.wav"
+sample_rate = 44100
+buffer_size = 512
+offline_render_workers = {workers}
+"#
+        );
+        let cfg: Config = toml::from_str(&toml_str).unwrap();
+        assert!(
+            cfg.validate().is_err(),
+            "offline_render_workers={workers} は reject されるべき"
+        );
+    }
 }
 
 #[test]
