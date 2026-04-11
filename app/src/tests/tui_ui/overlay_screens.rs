@@ -250,8 +250,10 @@ fn patch_select_screen_splits_status_and_keybinds() {
     assert!(!normalized_lines[status_row].contains("Enter:決定"));
     assert_eq!(render_row, status_row + 1);
     assert_eq!(keybind_row, render_row + 1);
+    assert!(normalized_lines[status_row].contains("sort:path"));
     assert!(normalized_lines[render_row].contains("並列render中:2"));
     assert!(normalized_lines[keybind_row].contains("/:検索入力"));
+    assert!(normalized_lines[keybind_row].contains("Ctrl+S:sort順切替"));
     assert!(normalized_lines[keybind_row].contains("n/p/t:overlay切替"));
     assert!(normalized_lines[keybind_row].contains("f:お気に入り"));
     assert!(normalized_screen.contains("h/l・←/→:ペイン移動"));

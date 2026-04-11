@@ -30,6 +30,7 @@ impl TuiApp<'static> {
             patch_favorites_state: ListState::default(),
             patch_select_focus: PatchSelectPane::Patches,
             patch_select_filter_active: false,
+            patch_select_sort_order: PatchSortOrder::Path,
             normal_page_size: 1,
             patch_select_page_size: 1,
             notepad_history_page_size: 1,

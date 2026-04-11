@@ -11,6 +11,7 @@
 //!            n/p/t: notepad history / patch history / 音色選択
 //!            j/k・↑↓・PageUp/PageDown:リスト移動（移動ごとにpreview再生）
 //!            h/l・←/→:左右ペイン移動（移動ごとにpreview再生）
+//!            Ctrl+S:sort順切替
 //!            f:現在音色とMMLをFavorites追加
 //!            Enter:現在行の先頭にJSONで挿入（上書き）  ESC:キャンセル
 //!   HELP : K / ? で表示、ESC でキャンセル
@@ -42,7 +43,7 @@ pub(crate) use self::cache::filter_items;
 pub(in crate::tui) use self::cache::filter_patches;
 use self::cache::{resolve_cached_samples, try_insert_cache};
 pub(in crate::tui) use self::session::PatchLoadState;
-use crate::config::Config;
+use crate::{config::Config, patches::PatchSortOrder};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum Mode {
@@ -118,6 +119,7 @@ pub struct TuiApp<'a> {
     pub(super) patch_favorites_state: ListState,
     pub(super) patch_select_focus: PatchSelectPane,
     pub(super) patch_select_filter_active: bool,
+    pub(super) patch_select_sort_order: PatchSortOrder,
     pub(super) normal_page_size: usize,
     pub(super) patch_select_page_size: usize,
     pub(super) notepad_history_page_size: usize,

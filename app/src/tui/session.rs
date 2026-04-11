@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicU64, AtomicUsize};
 use std::sync::{Arc, Mutex};
 
 use super::{Mode, PatchPhrasePane, PatchSelectPane, PlayState, TuiApp};
-use crate::config::Config;
+use crate::{config::Config, patches::PatchSortOrder};
 
 /// バックグラウンドパッチ読み込みの状態
 pub(in crate::tui) enum PatchLoadState {
@@ -103,6 +103,7 @@ impl<'a> TuiApp<'a> {
             patch_favorites_state: ListState::default(),
             patch_select_focus: PatchSelectPane::Patches,
             patch_select_filter_active: false,
+            patch_select_sort_order: PatchSortOrder::Path,
             normal_page_size: 1,
             patch_select_page_size: 1,
             notepad_history_page_size: 1,

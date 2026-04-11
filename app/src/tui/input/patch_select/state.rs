@@ -6,6 +6,10 @@ use crate::tui::{Mode, PatchLoadState, PatchSelectPane, TuiApp};
 use super::PATCH_SELECT_PREVIEW_FALLBACK_PHRASE;
 
 impl<'a> TuiApp<'a> {
+    fn sort_patch_select_pairs(&mut self) {
+        crate::patches::sort_patch_pairs(&mut self.patch_all, self.patch_select_sort_order);
+    }
+
     fn move_patch_cursor_by(&mut self, delta: isize) {
         if self.patch_filtered.is_empty() {
             return;
@@ -63,6 +67,7 @@ impl<'a> TuiApp<'a> {
                 self.patch_all = pairs.clone();
             }
         }
+        self.sort_patch_select_pairs();
         if crate::history::normalize_patch_phrase_store_for_available_patches(
             &mut self.patch_phrase_store,
             &self.patch_all,
@@ -135,6 +140,37 @@ impl<'a> TuiApp<'a> {
             self.patch_phrase_store_dirty = true;
         }
         self.patch_favorite_items = self.rebuild_patch_select_favorite_items();
+    }
+
+    pub(super) fn toggle_patch_select_sort_order(&mut self) {
+        let selected_patch = self.patch_filtered.get(self.patch_cursor).cloned();
+        let selected_favorite = self
+            .patch_favorite_items
+            .get(self.patch_favorites_cursor)
+            .cloned();
+
+        self.patch_select_sort_order = self.patch_select_sort_order.toggle();
+        self.sort_patch_select_pairs();
+        self.patch_filtered = crate::tui::filter_patches(&self.patch_all, &self.patch_query);
+        self.refresh_patch_select_favorites();
+
+        self.patch_cursor = selected_patch
+            .and_then(|patch_name| {
+                self.patch_filtered
+                    .iter()
+                    .position(|patch| patch == &patch_name)
+            })
+            .unwrap_or(0);
+        self.patch_favorites_cursor = selected_favorite
+            .and_then(|patch_name| {
+                self.patch_favorite_items
+                    .iter()
+                    .position(|patch| patch == &patch_name)
+            })
+            .unwrap_or(0);
+
+        self.sync_patch_select_states();
+        self.preview_selected_patch();
     }
 
     pub(in crate::tui) fn patch_select_favorite_items(&self) -> &[String] {

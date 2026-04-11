@@ -429,6 +429,9 @@ impl<'a> TuiApp<'a> {
                     'k' | 'p' => {
                         self.move_patch_select_selection_by(-1);
                     }
+                    's' => {
+                        self.toggle_patch_select_sort_order();
+                    }
                     _ => {}
                 }
             }
