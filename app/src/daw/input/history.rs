@@ -116,18 +116,17 @@ impl DawApp {
         self.cursor_measure.max(1).min(self.measures)
     }
 
-    fn preview_selected_history_overlay_item(&mut self) {
-        if *self.play_state.lock().unwrap() == DawPlayState::Playing {
-            return;
-        }
-
-        let Some(selected) = self.selected_history_overlay_item() else {
-            return;
-        };
+    fn history_overlay_preview_track_mmls(
+        &self,
+        focus: DawHistoryPane,
+        cursor: usize,
+    ) -> Option<(usize, Vec<String>)> {
         let target_measure = self.history_overlay_target_measure();
-        let Some(measure_index) = target_measure.checked_sub(1) else {
-            return;
-        };
+        let measure_index = target_measure.checked_sub(1)?;
+        let selected = match focus {
+            DawHistoryPane::History => self.history_overlay_history_items().get(cursor).cloned(),
+            DawHistoryPane::Favorites => self.history_overlay_favorite_items().get(cursor).cloned(),
+        }?;
 
         let mut preview_data = vec![self.data[0].clone(), self.data[self.cursor_track].clone()];
         match self.history_overlay_patch_name.as_deref() {
@@ -136,9 +135,7 @@ impl DawApp {
                 preview_data[1][target_measure] = selected;
             }
             None => {
-                let Some((patch_name, phrase)) = Self::extract_patch_phrase(&selected) else {
-                    return;
-                };
+                let (patch_name, phrase) = Self::extract_patch_phrase(&selected)?;
                 preview_data[1][0] = Self::build_patch_json(&patch_name);
                 preview_data[1][target_measure] = phrase;
             }
@@ -147,6 +144,58 @@ impl DawApp {
         let mut track_mmls = self.build_measure_track_mmls_for_measure(target_measure);
         track_mmls[self.cursor_track] =
             build_cell_mml_from_data(&preview_data, self.measures, 1, target_measure);
+        Some((measure_index, track_mmls))
+    }
+
+    fn prefetch_history_overlay_navigation_cache(&self) {
+        let (item_count, cursor) = match self.history_overlay_focus {
+            DawHistoryPane::History => (
+                self.history_overlay_history_items().len(),
+                self.history_overlay_history_cursor,
+            ),
+            DawHistoryPane::Favorites => (
+                self.history_overlay_favorite_items().len(),
+                self.history_overlay_favorites_cursor,
+            ),
+        };
+        let focus = self.history_overlay_focus;
+        for delta in [1isize, -1isize] {
+            if item_count == 0 {
+                break;
+            }
+            let next_cursor =
+                (cursor as isize + delta).clamp(0, item_count.saturating_sub(1) as isize) as usize;
+            if next_cursor == cursor {
+                continue;
+            }
+            if let Some((measure_index, track_mmls)) =
+                self.history_overlay_preview_track_mmls(focus, next_cursor)
+            {
+                self.prefetch_preview_snapshot(
+                    measure_index,
+                    track_mmls,
+                    self.playback_track_gains(),
+                );
+            }
+        }
+    }
+
+    fn preview_selected_history_overlay_item(&mut self) {
+        if *self.play_state.lock().unwrap() == DawPlayState::Playing {
+            return;
+        }
+
+        let cursor = match self.history_overlay_focus {
+            DawHistoryPane::History => self.history_overlay_history_cursor,
+            DawHistoryPane::Favorites => self.history_overlay_favorites_cursor,
+        };
+        let Some((measure_index, track_mmls)) =
+            self.history_overlay_preview_track_mmls(self.history_overlay_focus, cursor)
+        else {
+            return;
+        };
+
+        self.prefetch_history_overlay_navigation_cache();
 
         if self.try_start_preview_with_track_mmls_for_test(measure_index, Some(track_mmls.clone()))
         {

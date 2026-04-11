@@ -61,6 +61,7 @@ fn build_test_app() -> DawApp {
         preview_sink: Arc::new(Mutex::new(None)),
         play_position: Arc::new(Mutex::new(None)),
         ab_repeat: Arc::new(Mutex::new(AbRepeatState::Off)),
+        overlay_preview_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
         play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
         play_measure_track_mmls: Arc::new(Mutex::new(vec![vec![String::new(); tracks]; measures])),
         play_measure_samples: Arc::new(Mutex::new(0)),

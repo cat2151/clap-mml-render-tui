@@ -1,5 +1,7 @@
 //! DawApp のプレビュー再生
 
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -7,7 +9,10 @@ use clack_host::prelude::PluginEntry;
 use cmrt_core::{mml_render_for_cache, CoreConfig};
 
 use super::playback::{pad_playback_measure_samples, try_get_cached_samples};
-use super::{DawApp, DawPlayState, PlayPosition, FIRST_PLAYABLE_TRACK};
+use super::{
+    DawApp, DawPlayState, PlayPosition, FIRST_PLAYABLE_TRACK, MAX_CACHED_SAMPLES,
+    OVERLAY_PREVIEW_CACHE_MAX_ENTRIES,
+};
 
 fn begin_preview_output<F>(
     play_transition_lock: &Arc<Mutex<()>>,
@@ -35,7 +40,148 @@ where
     true
 }
 
+/// Preview snapshot cache 用のキーを作る。
+///
+/// `measure_index`、各 track の MML スナップショット、各 track gain をまとめてハッシュし、
+/// 同じ preview 条件のときだけ同一キーになるようにする。
+/// gain は `f32` の数値比較ではなく `to_bits()` を使ってビット列ごと区別する。
+fn overlay_preview_cache_key(
+    measure_index: usize,
+    track_mmls: &[String],
+    track_gains: &[f32],
+) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    measure_index.hash(&mut hasher);
+    track_mmls.hash(&mut hasher);
+    track_gains
+        .iter()
+        .for_each(|gain| gain.to_bits().hash(&mut hasher));
+    hasher.finish()
+}
+
+/// Preview snapshot cache へサンプルを挿入する。
+///
+/// エントリ上限を超えて新規キーを入れるときは、古い preview 条件を一括破棄してから
+/// 新しい結果を入れる単純な eviction 戦略にしている。
+fn insert_overlay_preview_cache(
+    cache: &mut HashMap<u64, Arc<Vec<f32>>>,
+    key: u64,
+    samples: Arc<Vec<f32>>,
+) {
+    if samples.len() > MAX_CACHED_SAMPLES {
+        return;
+    }
+    if cache.len() >= OVERLAY_PREVIEW_CACHE_MAX_ENTRIES && !cache.contains_key(&key) {
+        cache.clear();
+    }
+    cache.insert(key, samples);
+}
+
+/// 指定された preview 用 track MML 群をオフラインレンダリングし、track ごとの gain を掛けて
+/// 1 本のステレオバッファへ合成して返す。
+/// 各 track のレンダリング結果は `measure_samples` 未満なら末尾を埋めて長さを揃える。
+fn render_mixed_preview_tracks(
+    entry_ref: &PluginEntry,
+    daw_cfg: &crate::config::Config,
+    measure_samples: usize,
+    active_tracks: &[usize],
+    track_mmls: &[String],
+    track_gains: &[f32],
+) -> Option<Vec<f32>> {
+    let mut mixed = vec![0.0f32; measure_samples];
+    for track in active_tracks {
+        let gain = track_gains.get(*track).copied().unwrap_or(1.0);
+        let mml = track_mmls
+            .get(*track)
+            .map(String::as_str)
+            .unwrap_or_default();
+        let result = {
+            let core_cfg = CoreConfig::from(daw_cfg);
+            mml_render_for_cache(mml, &core_cfg, entry_ref)
+        };
+        let samples = result
+            .ok()
+            .map(|samples| pad_playback_measure_samples(samples, measure_samples))?;
+        if mixed.len() < samples.len() {
+            mixed.resize(samples.len(), 0.0);
+        }
+        for (index, sample) in samples.iter().enumerate() {
+            mixed[index] += *sample * gain;
+        }
+    }
+    Some(mixed)
+}
+
 impl DawApp {
+    pub(super) fn prefetch_preview_snapshot(
+        &self,
+        measure_index: usize,
+        track_mmls: Vec<String>,
+        track_gains: Vec<f32>,
+    ) {
+        let active_tracks: Vec<usize> = (FIRST_PLAYABLE_TRACK..self.tracks)
+            .filter(|&track| {
+                track_gains.get(track).copied().unwrap_or(1.0) > 0.0
+                    && track_mmls
+                        .get(track)
+                        .map(|mml| !mml.trim().is_empty())
+                        .unwrap_or(false)
+            })
+            .collect();
+        if active_tracks.is_empty() {
+            return;
+        }
+
+        let cache_key = overlay_preview_cache_key(measure_index, &track_mmls, &track_gains);
+        if self
+            .overlay_preview_cache
+            .lock()
+            .unwrap()
+            .contains_key(&cache_key)
+        {
+            return;
+        }
+
+        let measure_samples = self.measure_duration_samples();
+        if measure_samples > MAX_CACHED_SAMPLES {
+            return;
+        }
+
+        #[cfg(test)]
+        if self.entry_ptr == 0 {
+            insert_overlay_preview_cache(
+                &mut self.overlay_preview_cache.lock().unwrap(),
+                cache_key,
+                Arc::new(Vec::new()),
+            );
+            return;
+        }
+        let cfg = Arc::clone(&self.cfg);
+        let overlay_preview_cache = Arc::clone(&self.overlay_preview_cache);
+        let entry_ptr = self.entry_ptr;
+        std::thread::spawn(move || {
+            // SAFETY: `entry_ptr` は `main` から渡された `PluginEntry` を指し、
+            // アプリ終了まで生存する契約で `DawApp` に保持されている。
+            let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
+            let daw_cfg = (*cfg).clone();
+            let Some(samples) = render_mixed_preview_tracks(
+                entry_ref,
+                &daw_cfg,
+                measure_samples,
+                &active_tracks,
+                &track_mmls,
+                &track_gains,
+            ) else {
+                return;
+            };
+            insert_overlay_preview_cache(
+                &mut overlay_preview_cache.lock().unwrap(),
+                cache_key,
+                Arc::new(samples),
+            );
+        });
+    }
+
     pub(super) fn start_preview_with_snapshot(
         &self,
         measure_index: usize,
@@ -62,10 +208,12 @@ impl DawApp {
         let preview_sink = Arc::clone(&self.preview_sink);
         let play_position = Arc::clone(&self.play_position);
         let cache = Arc::clone(&self.cache);
+        let overlay_preview_cache = Arc::clone(&self.overlay_preview_cache);
         let cfg = Arc::clone(&self.cfg);
         let log_lines = Arc::clone(&self.log_lines);
         let entry_ptr = self.entry_ptr;
         let tracks = self.tracks;
+        let overlay_cache_key = overlay_preview_cache_key(measure_index, &track_mmls, &track_gains);
 
         let session = {
             let _transition_guard = play_transition_lock.lock().unwrap();
@@ -114,32 +262,18 @@ impl DawApp {
             };
             let shared_sink = Arc::new(sink);
 
-            let render_mixed_tracks = || -> Option<Vec<f32>> {
-                let mut mixed = vec![0.0f32; measure_samples];
-                for track in &active_tracks {
-                    let gain = track_gains.get(*track).copied().unwrap_or(1.0);
-                    let mml = track_mmls
-                        .get(*track)
-                        .map(String::as_str)
-                        .unwrap_or_default();
-                    let result = {
-                        let core_cfg = CoreConfig::from(&daw_cfg);
-                        mml_render_for_cache(mml, &core_cfg, entry_ref)
-                    };
-                    let samples = result
-                        .ok()
-                        .map(|samples| pad_playback_measure_samples(samples, measure_samples))?;
-                    if mixed.len() < samples.len() {
-                        mixed.resize(samples.len(), 0.0);
-                    }
-                    for (index, sample) in samples.iter().enumerate() {
-                        mixed[index] += *sample * gain;
-                    }
-                }
-                Some(mixed)
-            };
-
-            let samples_opt = if let Some(cached) = try_get_cached_samples(
+            let samples_opt = if let Some(samples) = overlay_preview_cache
+                .lock()
+                .unwrap()
+                .get(&overlay_cache_key)
+                .cloned()
+            {
+                crate::logging::append_log_line(
+                    &log_lines,
+                    format!("meas{}: overlay cache hit", measure_index + 1),
+                );
+                Some((samples, true))
+            } else if let Some(cached) = try_get_cached_samples(
                 &cache,
                 measure_index + 1,
                 measure_samples,
@@ -151,7 +285,15 @@ impl DawApp {
                         &log_lines,
                         format!("meas{}: render", measure_index + 1),
                     );
-                    render_mixed_tracks()
+                    render_mixed_preview_tracks(
+                        entry_ref,
+                        &daw_cfg,
+                        measure_samples,
+                        &active_tracks,
+                        &track_mmls,
+                        &track_gains,
+                    )
+                    .map(|samples| (Arc::new(samples), false))
                 } else {
                     crate::logging::append_log_line(
                         &log_lines,
@@ -170,17 +312,32 @@ impl DawApp {
                             }
                         ),
                     );
-                    Some(cached.samples)
+                    Some((Arc::new(cached.samples), false))
                 }
             } else {
                 crate::logging::append_log_line(
                     &log_lines,
                     format!("meas{}: render", measure_index + 1),
                 );
-                render_mixed_tracks()
+                render_mixed_preview_tracks(
+                    entry_ref,
+                    &daw_cfg,
+                    measure_samples,
+                    &active_tracks,
+                    &track_mmls,
+                    &track_gains,
+                )
+                .map(|samples| (Arc::new(samples), false))
             };
 
-            if let Some(samples) = samples_opt {
+            if let Some((samples, cache_hit)) = samples_opt {
+                if !cache_hit {
+                    insert_overlay_preview_cache(
+                        &mut overlay_preview_cache.lock().unwrap(),
+                        overlay_cache_key,
+                        Arc::clone(&samples),
+                    );
+                }
                 let preview_active = begin_preview_output(
                     &play_transition_lock,
                     &play_state,
@@ -189,7 +346,11 @@ impl DawApp {
                     session,
                     measure_index,
                     || {
-                        let source = rodio::buffer::SamplesBuffer::new(2, sample_rate, samples);
+                        let source = rodio::buffer::SamplesBuffer::new(
+                            2,
+                            sample_rate,
+                            samples.as_ref().clone(),
+                        );
                         *preview_sink.lock().unwrap() = Some(Arc::clone(&shared_sink));
                         shared_sink.append(source);
                     },

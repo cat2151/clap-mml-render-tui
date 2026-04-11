@@ -170,6 +170,88 @@ impl<'a> TuiApp<'a> {
         *state.offset_mut() = desired_offset.min(max_offset);
     }
 
+    /// 現在位置から `j` / `k` / `PageDown` / `PageUp` が次に押されると仮定し、
+    /// その移動先 index を最大 4 件返す。
+    /// 現在位置そのものや重複した候補は除外する。
+    fn predicted_navigation_indices(
+        current: usize,
+        item_count: usize,
+        page_size: usize,
+    ) -> Vec<usize> {
+        if item_count == 0 {
+            return Vec::new();
+        }
+
+        let mut predicted = Vec::new();
+        for delta in [
+            1,
+            -1,
+            page_size.max(1) as isize,
+            -(page_size.max(1) as isize),
+        ] {
+            let next =
+                (current as isize + delta).clamp(0, item_count.saturating_sub(1) as isize) as usize;
+            if next != current && !predicted.contains(&next) {
+                predicted.push(next);
+            }
+        }
+        predicted
+    }
+
+    fn prefetch_audio_cache(&self, mmls: Vec<String>) {
+        let targets = {
+            let cache = self.audio_cache.lock().unwrap();
+            mmls.into_iter()
+                .map(|mml| mml.trim().to_string())
+                .filter(|mml| !mml.is_empty())
+                .filter(|mml| !cache.contains_key(mml))
+                .collect::<Vec<_>>()
+        };
+        if targets.is_empty() {
+            return;
+        }
+
+        #[cfg(test)]
+        if self.entry_ptr == 0 {
+            let mut cache = self.audio_cache.lock().unwrap();
+            for mml in targets {
+                try_insert_cache(&mut cache, mml, Vec::new(), false);
+            }
+            return;
+        }
+
+        let cfg = Arc::clone(&self.cfg);
+        let cache = Arc::clone(&self.audio_cache);
+        let entry_ptr = self.entry_ptr;
+        std::thread::spawn(move || {
+            // SAFETY: entry は main() のスタックに生存している
+            let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
+            let core_cfg = CoreConfig::from(cfg.as_ref());
+            for mml in targets {
+                let Ok((samples, _)) = mml_render(&mml, &core_cfg, entry_ref) else {
+                    continue;
+                };
+                try_insert_cache(&mut cache.lock().unwrap(), mml, samples, false);
+            }
+        });
+    }
+
+    fn prefetch_navigation_audio_cache<F>(
+        &self,
+        current: usize,
+        item_count: usize,
+        page_size: usize,
+        mml_for_index: F,
+    ) where
+        F: FnMut(usize) -> Option<String>,
+    {
+        let targets = Self::predicted_navigation_indices(current, item_count, page_size)
+            .into_iter()
+            .filter_map(mml_for_index)
+            .collect();
+        self.prefetch_audio_cache(targets);
+    }
+
     fn kick_play(&self, mml: String) {
         let cfg = Arc::clone(&self.cfg);
         let state = Arc::clone(&self.play_state);

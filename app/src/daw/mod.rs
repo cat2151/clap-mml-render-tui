@@ -85,7 +85,7 @@ use cmrt_core::{ensure_daw_dir, mml_render_for_cache, write_wav};
 use ratatui::Frame;
 use tui_textarea::TextArea;
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 
@@ -123,6 +123,7 @@ pub(super) const DEFAULT_TRACK0_MML: &str = r#"{"beat": "4/4"}t120"#;
 /// ≈ 2_000_000 × 4 bytes ≈ 8 MB / cell。
 pub(super) const MAX_CACHED_SAMPLES: usize = 2_000_000;
 pub(super) const CACHE_RENDER_WORKERS: usize = 4;
+const OVERLAY_PREVIEW_CACHE_MAX_ENTRIES: usize = 64;
 
 #[derive(Clone)]
 pub(super) struct CacheJob {
@@ -178,6 +179,7 @@ pub struct DawApp {
     /// 再生中の小節・ビート位置（UI 描画に使用）
     pub(super) play_position: Arc<Mutex<Option<PlayPosition>>>,
     pub(super) ab_repeat: Arc<Mutex<AbRepeatState>>,
+    overlay_preview_cache: Arc<Mutex<HashMap<u64, Arc<Vec<f32>>>>>,
 
     /// 再生スレッドと共有する各小節の MML ベクター（measures 要素, index i → meas i+1）。
     /// セル編集・ランダム音色変更のたびに更新されることで、
