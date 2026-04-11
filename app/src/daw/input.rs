@@ -128,7 +128,14 @@ impl DawApp {
     fn format_patch_json_object(patch_json: &serde_json::Map<String, Value>) -> String {
         let entries = patch_json
             .iter()
-            .map(|(key, value)| format!("{}: {}", Value::String(key.clone()), value))
+            .map(|(key, value)| {
+                format!(
+                    "{}: {}",
+                    serde_json::to_string(key)
+                        .expect("serializing JSON object key should not fail"),
+                    value
+                )
+            })
             .collect::<Vec<_>>();
         format!("{{{}}}", entries.join(", "))
     }

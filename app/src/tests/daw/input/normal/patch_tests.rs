@@ -237,7 +237,7 @@ fn handle_normal_r_uses_saved_patch_filter_query_for_random_selection() {
 
 #[test]
 fn handle_normal_r_preserves_trailing_init_mml_when_updating_patch_json() {
-    let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_preserves_init_tail_mml");
+    let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_preserves_trailing_init_mml");
     std::fs::remove_dir_all(&tmp).ok();
     std::fs::create_dir_all(tmp.join("Pad")).unwrap();
     std::fs::write(tmp.join("Pad").join("Pad 1.fxp"), b"dummy").unwrap();
