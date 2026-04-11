@@ -62,6 +62,23 @@ enum NormalAction {
     LaunchDaw,
 }
 
+struct ActiveRenderGuard {
+    counter: Arc<AtomicUsize>,
+}
+
+impl ActiveRenderGuard {
+    fn new(counter: Arc<AtomicUsize>) -> Self {
+        counter.fetch_add(1, Ordering::Relaxed);
+        Self { counter }
+    }
+}
+
+impl Drop for ActiveRenderGuard {
+    fn drop(&mut self) {
+        self.counter.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
 #[derive(Clone, PartialEq)]
 pub(super) enum PlayState {
     Idle,
@@ -230,9 +247,9 @@ impl<'a> TuiApp<'a> {
             let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
             let core_cfg = CoreConfig::from(cfg.as_ref());
             for mml in targets {
-                active_offline_render_count.fetch_add(1, Ordering::Relaxed);
+                let _active_render_guard =
+                    ActiveRenderGuard::new(Arc::clone(&active_offline_render_count));
                 let render_result = mml_render(&mml, &core_cfg, entry_ref);
-                active_offline_render_count.fetch_sub(1, Ordering::Relaxed);
                 let Ok((samples, _)) = render_result else {
                     continue;
                 };
@@ -297,9 +314,9 @@ impl<'a> TuiApp<'a> {
 
                 // レンダリング
                 let core_cfg = CoreConfig::from(cfg.as_ref());
-                active_offline_render_count.fetch_add(1, Ordering::Relaxed);
+                let _active_render_guard =
+                    ActiveRenderGuard::new(Arc::clone(&active_offline_render_count));
                 let render_result = mml_render(&mml, &core_cfg, entry_ref);
-                active_offline_render_count.fetch_sub(1, Ordering::Relaxed);
 
                 match render_result {
                     Err(e) => {
