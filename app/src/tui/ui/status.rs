@@ -26,6 +26,18 @@ pub(super) fn status_color(play_state: &PlayState) -> Color {
     }
 }
 
+pub(super) fn parallel_render_status_color(active_render_count: usize) -> Color {
+    if active_render_count == 0 {
+        MONOKAI_GREEN
+    } else {
+        MONOKAI_PURPLE
+    }
+}
+
+pub(super) fn parallel_render_status_text(active_render_count: usize) -> String {
+    format!("並列render中: {active_render_count}")
+}
+
 fn play_status_suffix(play_state: &PlayState) -> String {
     match play_state {
         PlayState::Idle => "".to_string(),

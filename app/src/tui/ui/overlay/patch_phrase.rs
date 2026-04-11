@@ -10,7 +10,10 @@ use crate::tui::PatchPhrasePane;
 use crate::ui_theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_YELLOW};
 
 use super::super::{
-    status::{base_style, keybind_text, visible_list_page_size},
+    status::{
+        base_style, keybind_text, parallel_render_status_color, parallel_render_status_text,
+        visible_list_page_size,
+    },
     Mode, TuiApp, LIST_HIGHLIGHT_SYMBOL,
 };
 
@@ -28,6 +31,7 @@ pub(in crate::tui::ui) fn draw_patch_phrase(
         .constraints([
             Constraint::Length(3),
             Constraint::Min(3),
+            Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
         ])
@@ -158,6 +162,8 @@ pub(in crate::tui::ui) fn draw_patch_phrase(
             &patch_phrase_query_widget,
         ));
     }
+    let parallel_render_status = parallel_render_status_text(app.active_parallel_render_count());
+    let parallel_render_color = parallel_render_status_color(app.active_parallel_render_count());
 
     f.render_widget(
         Paragraph::new(format!("{status}  {selection_status}"))
@@ -165,7 +171,11 @@ pub(in crate::tui::ui) fn draw_patch_phrase(
         chunks[2],
     );
     f.render_widget(
-        Paragraph::new(keybind_text(&mode)).style(base_style()),
+        Paragraph::new(parallel_render_status).style(base_style().fg(parallel_render_color)),
         chunks[3],
+    );
+    f.render_widget(
+        Paragraph::new(keybind_text(&mode)).style(base_style()),
+        chunks[4],
     );
 }

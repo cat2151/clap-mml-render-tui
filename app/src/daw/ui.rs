@@ -105,6 +105,7 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
+            Constraint::Length(1),
         ])
         .split(inner);
 
@@ -115,7 +116,7 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
 
     grid::draw_grid(app, f, body_chunks[0]);
     logs::draw_logs(app, f, body_chunks[1]);
-    status::draw_status(app, f, chunks[1], chunks[2], chunks[3]);
+    status::draw_status(app, f, chunks[1], chunks[2], chunks[3], chunks[4]);
 
     if app.mode == DawMode::Help {
         match app.help_origin {

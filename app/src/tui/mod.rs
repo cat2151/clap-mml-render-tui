@@ -30,7 +30,7 @@ use ratatui::{widgets::ListState, Frame};
 use tui_textarea::TextArea;
 
 use std::collections::HashMap;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// audio_cache の最大エントリ数。超過時はキャッシュ全体をクリアしてから挿入する。
@@ -82,6 +82,7 @@ pub struct TuiApp<'a> {
     entry_ptr: usize, // *const PluginEntry as usize (main() に生存保証)
     pub(super) play_state: Arc<Mutex<PlayState>>,
     playback_session: Arc<AtomicU64>,
+    pub(super) active_offline_render_count: Arc<AtomicUsize>,
     active_sink: Arc<Mutex<Option<Arc<rodio::Sink>>>>,
     /// MML文字列 → レンダリング済みサンプルのキャッシュ
     pub(super) audio_cache: Arc<Mutex<HashMap<String, Vec<f32>>>>,
@@ -222,13 +223,17 @@ impl<'a> TuiApp<'a> {
 
         let cfg = Arc::clone(&self.cfg);
         let cache = Arc::clone(&self.audio_cache);
+        let active_offline_render_count = Arc::clone(&self.active_offline_render_count);
         let entry_ptr = self.entry_ptr;
         std::thread::spawn(move || {
             // SAFETY: entry は main() のスタックに生存している
             let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
             let core_cfg = CoreConfig::from(cfg.as_ref());
             for mml in targets {
-                let Ok((samples, _)) = mml_render(&mml, &core_cfg, entry_ref) else {
+                active_offline_render_count.fetch_add(1, Ordering::Relaxed);
+                let render_result = mml_render(&mml, &core_cfg, entry_ref);
+                active_offline_render_count.fetch_sub(1, Ordering::Relaxed);
+                let Ok((samples, _)) = render_result else {
                     continue;
                 };
                 try_insert_cache(&mut cache.lock().unwrap(), mml, samples, false);
@@ -258,6 +263,7 @@ impl<'a> TuiApp<'a> {
         let playback_session = Arc::clone(&self.playback_session);
         let active_sink = Arc::clone(&self.active_sink);
         let cache = Arc::clone(&self.audio_cache);
+        let active_offline_render_count = Arc::clone(&self.active_offline_render_count);
         let entry_ptr = self.entry_ptr;
         let session = self.begin_playback_session();
 
@@ -291,7 +297,9 @@ impl<'a> TuiApp<'a> {
 
                 // レンダリング
                 let core_cfg = CoreConfig::from(cfg.as_ref());
+                active_offline_render_count.fetch_add(1, Ordering::Relaxed);
                 let render_result = mml_render(&mml, &core_cfg, entry_ref);
+                active_offline_render_count.fetch_sub(1, Ordering::Relaxed);
 
                 match render_result {
                     Err(e) => {
@@ -334,6 +342,10 @@ impl<'a> TuiApp<'a> {
                 }
             });
         }
+    }
+
+    pub(super) fn active_parallel_render_count(&self) -> usize {
+        self.active_offline_render_count.load(Ordering::Relaxed)
     }
 
     fn draw(&mut self, f: &mut Frame) {
