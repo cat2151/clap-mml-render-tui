@@ -107,7 +107,7 @@ pub struct TuiApp<'a> {
     // 音色選択モード用
     /// バックグラウンドスレッドが収集したパッチリストの状態
     patch_load_state: Arc<Mutex<PatchLoadState>>,
-    /// PatchSelect 起動時にスナップショットした (表示名, 小文字化済み) ペアのリスト
+    /// ソート切替に応じて並びが変わる (表示名, 小文字化済み) ペアのリスト
     pub(super) patch_all: Vec<(String, String)>,
     pub(super) patch_all_source_order: Vec<(String, String)>,
     pub(super) patch_query: String, // 検索クエリ

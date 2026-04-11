@@ -145,9 +145,18 @@ fn patch_category_sort_parts(path: &str) -> (&str, u8, &str, &str) {
     }
 
     if let Some(rest) = path.strip_prefix("patches_3rdparty/") {
-        let (vendor, rest) = split_first_path_segment(rest);
+        let (first, rest) = split_first_path_segment(rest);
+
+        if rest.is_empty() {
+            return (first, 1, "", "");
+        }
+
+        if !rest.contains('/') {
+            return (first, 1, "", rest);
+        }
+
         let (category, rest) = split_first_path_segment(rest);
-        return (category, 1, vendor, rest);
+        return (category, 1, first, rest);
     }
 
     let (category, rest) = split_first_path_segment(path);
@@ -545,6 +554,43 @@ mod tests {
                 "patches_factory/pad/Super Pad.fxp".to_string(),
                 "patches_3rdparty/john/lead/Great Lead.fxp".to_string(),
                 "patches_3rdparty/john/pad/Great Pad.fxp".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn sort_patch_pairs_category_order_handles_vendorless_thirdparty_paths() {
+        let mut pairs = vec![
+            (
+                "patches_3rdparty/lead/Great Lead.fxp".to_string(),
+                "patches_3rdparty/lead/great lead.fxp".to_string(),
+            ),
+            (
+                "patches_factory/pad/Super Pad.fxp".to_string(),
+                "patches_factory/pad/super pad.fxp".to_string(),
+            ),
+            (
+                "patches_3rdparty/pad/Great Pad.fxp".to_string(),
+                "patches_3rdparty/pad/great pad.fxp".to_string(),
+            ),
+            (
+                "patches_factory/lead/Super Lead.fxp".to_string(),
+                "patches_factory/lead/super lead.fxp".to_string(),
+            ),
+        ];
+
+        sort_patch_pairs(&mut pairs, PatchSortOrder::Category);
+
+        assert_eq!(
+            pairs
+                .into_iter()
+                .map(|(display, _)| display)
+                .collect::<Vec<_>>(),
+            vec![
+                "patches_factory/lead/Super Lead.fxp".to_string(),
+                "patches_3rdparty/lead/Great Lead.fxp".to_string(),
+                "patches_factory/pad/Super Pad.fxp".to_string(),
+                "patches_3rdparty/pad/Great Pad.fxp".to_string(),
             ]
         );
     }
