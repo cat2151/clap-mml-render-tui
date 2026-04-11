@@ -160,12 +160,17 @@ impl DawApp {
             return current_patch_json.clone();
         }
 
-        if let Some((mut value, _)) = Self::extract_patch_json_and_phrase(current_patch_json) {
-            value[PATCH_JSON_KEY] = Value::String(patch_name.to_string());
-            return value.to_string();
+        if let Some((Value::Object(mut patch_json), _)) =
+            Self::extract_patch_json_and_phrase(current_patch_json)
+        {
+            patch_json.insert(
+                PATCH_JSON_KEY.to_string(),
+                Value::String(patch_name.to_string()),
+            );
+            return Value::Object(patch_json).to_string();
         }
 
-        // init セルに patch JSON が無い/壊れている場合でも preview 自体は継続する。
+        // init セルに patch JSON が無い/壊れている、または object 以外でも preview 自体は継続する。
         Self::build_patch_json_with_filter_query(
             patch_name,
             self.current_track_patch_filter_query().as_deref(),
