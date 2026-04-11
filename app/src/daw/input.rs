@@ -125,19 +125,80 @@ impl DawApp {
         }
     }
 
-    fn format_patch_json_object(patch_json: &serde_json::Map<String, Value>) -> String {
-        let entries = patch_json
-            .iter()
-            .map(|(key, value)| {
-                format!(
-                    "{}: {}",
-                    serde_json::to_string(key)
-                        .expect("serializing JSON object key should not fail"),
-                    value
-                )
-            })
-            .collect::<Vec<_>>();
-        format!("{{{}}}", entries.join(", "))
+    fn skip_json_whitespace(raw_json: &str, mut index: usize) -> usize {
+        while raw_json
+            .as_bytes()
+            .get(index)
+            .is_some_and(u8::is_ascii_whitespace)
+        {
+            index += 1;
+        }
+        index
+    }
+
+    fn scan_json_string_end(raw_json: &str, start: usize) -> Option<usize> {
+        let bytes = raw_json.as_bytes();
+        if bytes.get(start) != Some(&b'"') {
+            return None;
+        }
+        let mut index = start + 1;
+        while let Some(byte) = bytes.get(index) {
+            match byte {
+                b'\\' => index += 2,
+                b'"' => return Some(index + 1),
+                _ => index += 1,
+            }
+        }
+        None
+    }
+
+    fn replace_patch_name_in_embedded_json(raw_json: &str, patch_name: &str) -> Option<String> {
+        let bytes = raw_json.as_bytes();
+        let mut index = Self::skip_json_whitespace(raw_json, 0);
+        if bytes.get(index) != Some(&b'{') {
+            return None;
+        }
+        index += 1;
+        loop {
+            index = Self::skip_json_whitespace(raw_json, index);
+            match bytes.get(index) {
+                Some(b'}') => return None,
+                Some(b'"') => {}
+                _ => return None,
+            }
+
+            let key_start = index;
+            let key_end = Self::scan_json_string_end(raw_json, key_start)?;
+            let key = serde_json::from_str::<String>(&raw_json[key_start..key_end]).ok()?;
+            index = Self::skip_json_whitespace(raw_json, key_end);
+            if bytes.get(index) != Some(&b':') {
+                return None;
+            }
+
+            index += 1;
+            let value_start = Self::skip_json_whitespace(raw_json, index);
+            let mut value_stream =
+                serde_json::Deserializer::from_str(&raw_json[value_start..]).into_iter::<Value>();
+            value_stream.next()?.ok()?;
+            let value_end = value_start + value_stream.byte_offset();
+
+            if key == PATCH_JSON_KEY {
+                let new_patch_name = serde_json::to_string(patch_name).ok()?;
+                return Some(format!(
+                    "{}{}{}",
+                    &raw_json[..value_start],
+                    new_patch_name,
+                    &raw_json[value_end..]
+                ));
+            }
+
+            index = Self::skip_json_whitespace(raw_json, value_end);
+            match bytes.get(index) {
+                Some(b',') => index += 1,
+                Some(b'}') => return None,
+                _ => return None,
+            }
+        }
     }
 
     fn replace_patch_name_in_mml(
@@ -146,29 +207,25 @@ impl DawApp {
         filter_query: Option<&str>,
     ) -> String {
         let preprocessed = mml_preprocessor::extract_embedded_json(current_mml);
-        let remaining_mml = preprocessed.remaining_mml.trim();
-        let patch_json = preprocessed
-            .embedded_json
-            .as_deref()
-            .and_then(|json| serde_json::from_str::<Value>(json).ok())
-            .and_then(|value| match value {
-                Value::Object(mut patch_json) => {
-                    patch_json.insert(
-                        PATCH_JSON_KEY.to_string(),
-                        Value::String(patch_name.to_string()),
-                    );
-                    Some(Self::format_patch_json_object(&patch_json))
-                }
-                _ => None,
-            })
+        let Some(raw_json) = preprocessed.embedded_json.as_deref() else {
+            return Self::build_random_patch_json_with_filter_query(patch_name, filter_query);
+        };
+        let Some(json_start) = current_mml.find(raw_json) else {
+            let patch_json =
+                Self::build_random_patch_json_with_filter_query(patch_name, filter_query);
+            return format!("{patch_json}{}", preprocessed.remaining_mml);
+        };
+        let patch_json = Self::replace_patch_name_in_embedded_json(raw_json, patch_name)
             .unwrap_or_else(|| {
                 Self::build_random_patch_json_with_filter_query(patch_name, filter_query)
             });
-        if remaining_mml.is_empty() {
-            patch_json
-        } else {
-            format!("{patch_json} {remaining_mml}")
-        }
+        let json_end = json_start + raw_json.len();
+        format!(
+            "{}{}{}",
+            &current_mml[..json_start],
+            patch_json,
+            &current_mml[json_end..]
+        )
     }
 
     fn current_track_patch_name(&self) -> Option<String> {
