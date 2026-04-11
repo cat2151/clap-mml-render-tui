@@ -110,6 +110,14 @@ impl<'a> TuiApp<'a> {
         self.patch_favorites_state = ListState::default();
         self.sync_patch_select_states();
         self.mode = Mode::PatchSelect;
+        Self::log_notepad_event(format!(
+            "tone-select open patches={} favorites={} focus={:?} cursor={} selected={:?}",
+            self.patch_filtered.len(),
+            self.patch_favorite_items.len(),
+            self.patch_select_focus,
+            self.patch_cursor,
+            self.patch_select_selected_patch_name()
+        ));
     }
 
     pub(super) fn patch_select_current_phrase(&self) -> Option<String> {

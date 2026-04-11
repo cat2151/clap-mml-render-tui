@@ -80,6 +80,18 @@ impl Drop for ActiveRenderGuard {
     }
 }
 
+fn truncate_for_log(value: &str, max_chars: usize) -> String {
+    let mut out = String::new();
+    for (index, ch) in value.chars().enumerate() {
+        if index == max_chars {
+            out.push_str("...");
+            return out;
+        }
+        out.push(ch);
+    }
+    out
+}
+
 #[derive(Clone, PartialEq)]
 pub(super) enum PlayState {
     Idle,
@@ -164,6 +176,13 @@ pub(super) enum PatchSelectPane {
 }
 
 impl<'a> TuiApp<'a> {
+    fn log_notepad_event(message: impl Into<String>) {
+        #[cfg(not(test))]
+        crate::logging::append_global_log_line(format!("notepad: {}", message.into()));
+        #[cfg(test)]
+        let _ = message.into();
+    }
+
     fn sync_overlay_list_offset(
         state: &mut ListState,
         cursor: usize,
@@ -203,6 +222,8 @@ impl<'a> TuiApp<'a> {
         if targets.is_empty() {
             return;
         }
+        let target_count = targets.len();
+        Self::log_notepad_event(format!("cache prefetch request count={target_count}"));
 
         #[cfg(test)]
         if self.entry_ptr == 0 {
@@ -224,11 +245,21 @@ impl<'a> TuiApp<'a> {
             for mml in targets {
                 let _active_render_guard =
                     ActiveRenderGuard::new(Arc::clone(&active_offline_render_count));
+                Self::log_notepad_event(format!(
+                    "cache prefetch render start active={} mml=\"{}\"",
+                    active_offline_render_count.load(Ordering::Relaxed),
+                    truncate_for_log(&mml, 80)
+                ));
                 let render_result = mml_render(&mml, &core_cfg, entry_ref);
                 let Ok((samples, _)) = render_result else {
+                    Self::log_notepad_event(format!(
+                        "cache prefetch render error mml=\"{}\"",
+                        truncate_for_log(&mml, 80)
+                    ));
                     continue;
                 };
                 try_insert_cache(&mut cache.lock().unwrap(), mml, samples, false);
+                Self::log_notepad_event("cache prefetch render ok");
             }
         });
     }
@@ -258,6 +289,7 @@ impl<'a> TuiApp<'a> {
         let active_offline_render_count = Arc::clone(&self.active_offline_render_count);
         let entry_ptr = self.entry_ptr;
         let session = self.begin_playback_session();
+        let mml_log = truncate_for_log(&mml, 120);
 
         let cache_guard = cache.lock().unwrap();
         let cached_samples = resolve_cached_samples(Some(&cache_guard), &mml);
@@ -266,6 +298,9 @@ impl<'a> TuiApp<'a> {
         if let Some(samples) = cached_samples {
             // キャッシュヒット: レンダリングをスキップして即時再生
             let msg = format!("(cached) | {}", mml);
+            Self::log_notepad_event(format!(
+                "play request session={session} cache=hit mml=\"{mml_log}\""
+            ));
             self.set_play_state_if_current(session, PlayState::Playing(msg.clone()));
 
             std::thread::spawn(move || {
@@ -281,20 +316,39 @@ impl<'a> TuiApp<'a> {
             });
         } else {
             // キャッシュミス: レンダリングが必要
+            Self::log_notepad_event(format!(
+                "play request session={session} cache=miss mml=\"{mml_log}\""
+            ));
             self.set_play_state_if_current(session, PlayState::Running(mml.clone()));
 
             std::thread::spawn(move || {
                 // SAFETY: entry は main() のスタックに生存している
                 let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
 
+                if !Self::playback_session_is_current(&playback_session, session) {
+                    Self::log_notepad_event(format!(
+                        "play render stale skip before-render session={session}"
+                    ));
+                    return;
+                }
+
                 // レンダリング
                 let core_cfg = CoreConfig::from(cfg.as_ref());
                 let _active_render_guard =
                     ActiveRenderGuard::new(Arc::clone(&active_offline_render_count));
+                Self::log_notepad_event(format!(
+                    "play render start session={session} active={} mml=\"{}\"",
+                    active_offline_render_count.load(Ordering::Relaxed),
+                    truncate_for_log(&mml, 120)
+                ));
                 let render_result = mml_render(&mml, &core_cfg, entry_ref);
 
                 match render_result {
                     Err(e) => {
+                        Self::log_notepad_event(format!(
+                            "play render error session={session} err=\"{}\"",
+                            truncate_for_log(&e.to_string(), 160)
+                        ));
                         Self::set_play_state_for_session(
                             &state,
                             &playback_session,
@@ -304,6 +358,9 @@ impl<'a> TuiApp<'a> {
                     }
                     Ok((samples, patch_name)) => {
                         if !Self::playback_session_is_current(&playback_session, session) {
+                            Self::log_notepad_event(format!(
+                                "play render stale skip after-render session={session}"
+                            ));
                             return;
                         }
                         try_insert_cache(
@@ -315,6 +372,10 @@ impl<'a> TuiApp<'a> {
 
                         let msg = format!("{} | {}", patch_name, mml);
                         // 演奏中に切り替え
+                        Self::log_notepad_event(format!(
+                            "play render ok session={session} patch=\"{}\"",
+                            truncate_for_log(&patch_name, 120)
+                        ));
                         Self::set_play_state_for_session(
                             &state,
                             &playback_session,

@@ -409,6 +409,11 @@ impl<'a> TuiApp<'a> {
 
     fn preview_selected_patch(&mut self) {
         if let Some(mml) = self.patch_select_preview_mml() {
+            Self::log_notepad_event(format!(
+                "tone-select preview focus={:?} patch={:?}",
+                self.patch_select_focus,
+                self.patch_select_selected_patch_name()
+            ));
             self.record_notepad_history(&mml);
             self.play_mml(mml);
             self.prefetch_patch_select_navigation_audio_cache();

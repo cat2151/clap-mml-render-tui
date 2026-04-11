@@ -54,6 +54,11 @@ pub(crate) fn append_log_line(log_lines: &Arc<Mutex<VecDeque<String>>>, line: im
     push_log_line(log_lines, line);
 }
 
+#[cfg(not(test))]
+pub(crate) fn append_global_log_line(line: impl AsRef<str>) {
+    let _ = append_log_line_to_file(line.as_ref());
+}
+
 pub(crate) fn load_log_lines() -> VecDeque<String> {
     let Some(path) = crate::config::log_file_path() else {
         return VecDeque::new();
