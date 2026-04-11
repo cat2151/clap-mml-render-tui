@@ -148,6 +148,35 @@ impl DawApp {
         )
     }
 
+    fn preview_patch_json_for_patch_name(&self, patch_name: &str) -> String {
+        if self.cursor_track < FIRST_PLAYABLE_TRACK {
+            return Self::build_patch_json(patch_name);
+        }
+
+        let current_patch_json = &self.data[self.cursor_track][0];
+        // 同じ patch の preview では元の init JSON をそのまま使い、
+        // filter などの付随メタデータや既存表現を崩さない。
+        if self.current_track_patch_name().as_deref() == Some(patch_name) {
+            return current_patch_json.clone();
+        }
+
+        if let Some((Value::Object(mut patch_json), _)) =
+            Self::extract_patch_json_and_phrase(current_patch_json)
+        {
+            patch_json.insert(
+                PATCH_JSON_KEY.to_string(),
+                Value::String(patch_name.to_string()),
+            );
+            return Value::Object(patch_json).to_string();
+        }
+
+        // init セルに patch JSON が無い/壊れている、または object 以外でも preview 自体は継続する。
+        Self::build_patch_json_with_filter_query(
+            patch_name,
+            self.current_track_patch_filter_query().as_deref(),
+        )
+    }
+
     fn mark_patch_phrase_store_dirty(&mut self) {
         self.patch_phrase_store_dirty = true;
     }
