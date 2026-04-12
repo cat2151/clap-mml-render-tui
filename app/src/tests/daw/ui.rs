@@ -69,6 +69,7 @@ fn build_test_app() -> DawApp {
         play_track_gains: Arc::new(Mutex::new(vec![0.0; tracks])),
         yank_buffer: None,
         normal_pending_delete: false,
+        normal_paste_undo: None,
         patch_phrase_store: crate::history::PatchPhraseStore::default(),
         patch_phrase_store_dirty: false,
         history_overlay_patch_name: None,

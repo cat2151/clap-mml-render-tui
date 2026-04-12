@@ -82,6 +82,7 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect, mode: super::super::DawMode) 
             Line::from("  m      : mixer overlay"),
             Line::from("  dd     : 現在セルを yank して空にする（patch history 保存）"),
             Line::from("  p      : yank 内容で現在セルを上書き（上書き前は patch history 保存）"),
+            Line::from("  u      : 直前の p を 1 回だけ取り消す"),
             Line::from("  g      : 現在 track/meas に generate を反映して preview"),
             Line::from("  Enter/Space : 非play時、現在trackの現在measを再生"),
             Line::from("  Shift+Enter : 非play時、現在measの全trackを再生"),

@@ -224,6 +224,31 @@ fn handle_normal_p_logs_when_yank_buffer_is_empty() {
 }
 
 #[test]
+fn handle_normal_u_restores_previous_init_measure_after_paste() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 0;
+    app.data[1][0] = r#"{"Surge XT patch": "Init.fxp"}"#.to_string();
+    app.yank_buffer = Some(r#"{"Surge XT patch": "Pasted.fxp"}"#.to_string());
+
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert_eq!(app.data[1][0], r#"{"Surge XT patch": "Pasted.fxp"}"#);
+    assert!(app.normal_paste_undo.is_some());
+
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::NONE));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert_eq!(app.data[1][0], r#"{"Surge XT patch": "Init.fxp"}"#);
+    assert_eq!(
+        app.yank_buffer.as_deref(),
+        Some(r#"{"Surge XT patch": "Pasted.fxp"}"#)
+    );
+    assert!(app.normal_paste_undo.is_none());
+}
+
+#[test]
 fn handle_normal_enter_stops_current_preview() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_track = 1;

@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::super::{
     playback_util::effective_measure_count, AbRepeatState, DawApp, DawMode, DawNormalAction,
-    DawPlayState, DEFAULT_TRACK0_MML, FIRST_PLAYABLE_TRACK,
+    DawPlayState, NormalPasteUndo, DEFAULT_TRACK0_MML, FIRST_PLAYABLE_TRACK,
 };
 
 const TEMPO_TRACK: usize = 0;
@@ -136,6 +136,26 @@ impl DawApp {
         let previous = self.data[self.cursor_track][self.cursor_measure].clone();
         self.record_current_measure_to_patch_history(&previous);
         if self.commit_insert_cell(self.cursor_track, self.cursor_measure, &yanked) {
+            self.normal_paste_undo = Some(NormalPasteUndo {
+                track: self.cursor_track,
+                measure: self.cursor_measure,
+                previous,
+                pasted: yanked.clone(),
+            });
+            self.save();
+            self.sync_playback_mml_state();
+        }
+        true
+    }
+
+    fn undo_last_paste(&mut self) -> bool {
+        let Some(undo) = self.normal_paste_undo.take() else {
+            return false;
+        };
+        if self.data[undo.track][undo.measure] != undo.pasted {
+            return false;
+        }
+        if self.commit_insert_cell(undo.track, undo.measure, &undo.previous) {
             self.save();
             self.sync_playback_mml_state();
         }
@@ -355,6 +375,9 @@ impl DawApp {
                 if !self.paste_yanked_measure() {
                     self.append_log_line("ヤンクバッファが空です".to_string());
                 }
+            }
+            KeyCode::Char('u') => {
+                self.undo_last_paste();
             }
 
             KeyCode::Char('a') => self.cycle_ab_repeat(),

@@ -314,6 +314,7 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
         play_track_gains,
         yank_buffer: None,
         normal_pending_delete: false,
+        normal_paste_undo: None,
         patch_phrase_store: crate::history::load_patch_phrase_store(),
         patch_phrase_store_dirty: false,
         history_overlay_patch_name: None,

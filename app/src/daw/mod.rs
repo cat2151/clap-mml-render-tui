@@ -19,6 +19,7 @@
 //!   m      : mixer overlay を開く
 //!   dd     : 現在セルを yank して空にする
 //!   p      : yank 内容で現在セルを上書き
+//!   u      : 直前の paste を 1 回だけ取り消す
 //!   Enter / Space       : 非play時、現在 track の現在 meas を一発再生
 //!   Shift+Enter         : 非play時、現在 meas の全 track を一発再生
 //!   Shift+P             : 演奏 / 停止 toggle
@@ -134,6 +135,14 @@ pub(super) struct CacheJob {
     mml: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct NormalPasteUndo {
+    track: usize,
+    measure: usize,
+    previous: String,
+    pasted: String,
+}
+
 // ─── DawApp ───────────────────────────────────────────────────
 
 pub struct DawApp {
@@ -209,6 +218,7 @@ pub struct DawApp {
     play_track_gains: Arc<Mutex<Vec<f32>>>,
     pub(super) yank_buffer: Option<String>,
     pub(super) normal_pending_delete: bool,
+    pub(super) normal_paste_undo: Option<NormalPasteUndo>,
     pub(super) patch_phrase_store: crate::history::PatchPhraseStore,
     pub(super) patch_phrase_store_dirty: bool,
     pub(super) history_overlay_patch_name: Option<String>,
