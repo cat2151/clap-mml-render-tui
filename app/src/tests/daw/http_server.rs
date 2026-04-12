@@ -117,7 +117,7 @@ fn apply_pending_http_commands_updates_mml_and_expands_grid() {
     *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
     let response_rx = enqueue_command(
         &state,
-        DawHttpCommandKind::SetMml {
+        DawHttpCommandKind::Mml {
             track: 3,
             measure: 4,
             mml: "l8cde".to_string(),
@@ -148,7 +148,7 @@ fn apply_pending_http_commands_updates_mixer_gain() {
         pending_commands: VecDeque::new(),
     }));
     *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
-    let response_rx = enqueue_command(&state, DawHttpCommandKind::SetMixer { track: 1, db: -6.0 });
+    let response_rx = enqueue_command(&state, DawHttpCommandKind::Mixer { track: 1, db: -6.0 });
 
     let mut app = build_test_app(cfg);
     app.apply_pending_http_commands();
@@ -181,7 +181,7 @@ fn apply_pending_http_commands_updates_patch_init_cell() {
     *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
     let response_rx = enqueue_command(
         &state,
-        DawHttpCommandKind::SetPatch {
+        DawHttpCommandKind::Patch {
             track: 1,
             patch: "Pads/Factory Pad.fxp".to_string(),
         },

@@ -29,16 +29,16 @@ struct DawHttpCommand {
 }
 
 enum DawHttpCommandKind {
-    SetMml {
+    Mml {
         track: usize,
         measure: usize,
         mml: String,
     },
-    SetMixer {
+    Mixer {
         track: usize,
         db: f64,
     },
-    SetPatch {
+    Patch {
         track: usize,
         patch: String,
     },
@@ -145,7 +145,7 @@ pub(crate) fn handle_post_mml(mut request: Request, state: &Arc<Mutex<DawHttpSta
         Ok(body) => respond_command(
             request,
             state,
-            DawHttpCommandKind::SetMml {
+            DawHttpCommandKind::Mml {
                 track: body.track,
                 measure: body.measure,
                 mml: body.mml,
@@ -162,7 +162,7 @@ pub(crate) fn handle_post_mixer(mut request: Request, state: &Arc<Mutex<DawHttpS
         Ok(body) => respond_command(
             request,
             state,
-            DawHttpCommandKind::SetMixer {
+            DawHttpCommandKind::Mixer {
                 track: body.track,
                 db: body.db,
             },
@@ -178,7 +178,7 @@ pub(crate) fn handle_post_patch(mut request: Request, state: &Arc<Mutex<DawHttpS
         Ok(body) => respond_command(
             request,
             state,
-            DawHttpCommandKind::SetPatch {
+            DawHttpCommandKind::Patch {
                 track: body.track,
                 patch: body.patch,
             },
@@ -284,15 +284,13 @@ impl DawApp {
     pub(super) fn apply_pending_http_commands(&mut self) {
         for command in take_pending_http_commands() {
             let result = match command.kind {
-                DawHttpCommandKind::SetMml {
+                DawHttpCommandKind::Mml {
                     track,
                     measure,
                     mml,
                 } => self.apply_http_mml(track, measure, &mml),
-                DawHttpCommandKind::SetMixer { track, db } => self.apply_http_mixer(track, db),
-                DawHttpCommandKind::SetPatch { track, patch } => {
-                    self.apply_http_patch(track, &patch)
-                }
+                DawHttpCommandKind::Mixer { track, db } => self.apply_http_mixer(track, db),
+                DawHttpCommandKind::Patch { track, patch } => self.apply_http_patch(track, &patch),
             };
             let _ = command.response_tx.send(result);
         }
