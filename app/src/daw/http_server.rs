@@ -1,11 +1,15 @@
 use std::{
+    collections::hash_map::RandomState,
     collections::VecDeque,
+    hash::{BuildHasher, Hasher},
     io::Read,
     sync::{
+        atomic::{AtomicBool, Ordering},
         mpsc::{self, Sender},
-        Arc, Mutex, Once, OnceLock,
+        Arc, Mutex, OnceLock,
     },
     time::Duration,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use serde::{Deserialize, Serialize};
@@ -16,10 +20,12 @@ use crate::{config::Config, server::DEFAULT_PORT};
 
 const MAX_JSON_BODY_BYTES: u64 = 64 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
+const AUTH_HEADER_NAME: &str = "X-CMRT-DAW-Token";
 
 #[derive(Default)]
 pub(crate) struct DawHttpState {
     cfg: Option<Arc<Config>>,
+    auth_token: String,
     pending_commands: VecDeque<DawHttpCommand>,
 }
 
@@ -68,13 +74,33 @@ struct JsonStatusResponse<'a> {
     status: &'a str,
 }
 
+struct DawHttpServerThreadGuard;
+
 fn active_state_slot() -> &'static Mutex<Option<Arc<Mutex<DawHttpState>>>> {
     static ACTIVE_STATE: OnceLock<Mutex<Option<Arc<Mutex<DawHttpState>>>>> = OnceLock::new();
     ACTIVE_STATE.get_or_init(|| Mutex::new(None))
 }
 
+fn server_thread_running() -> &'static AtomicBool {
+    static SERVER_THREAD_RUNNING: AtomicBool = AtomicBool::new(false);
+    &SERVER_THREAD_RUNNING
+}
+
 fn current_state() -> Option<Arc<Mutex<DawHttpState>>> {
     active_state_slot().lock().unwrap().clone()
+}
+
+fn claim_http_server_thread_slot() -> Option<DawHttpServerThreadGuard> {
+    server_thread_running()
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .ok()
+        .map(|_| DawHttpServerThreadGuard)
+}
+
+impl Drop for DawHttpServerThreadGuard {
+    fn drop(&mut self) {
+        server_thread_running().store(false, Ordering::Release);
+    }
 }
 
 pub(crate) fn spawn_daw_http_server(state: Arc<Mutex<DawHttpState>>) {
@@ -83,23 +109,32 @@ pub(crate) fn spawn_daw_http_server(state: Arc<Mutex<DawHttpState>>) {
     }
     *active_state_slot().lock().unwrap() = Some(state);
 
-    static START_SERVER: Once = Once::new();
-    START_SERVER.call_once(|| {
-        std::thread::spawn(run_daw_http_server);
+    let Some(server_thread_guard) = claim_http_server_thread_slot() else {
+        return;
+    };
+    std::thread::spawn(move || {
+        let _server_thread_guard = server_thread_guard;
+        run_daw_http_server();
     });
 }
 
-pub(crate) fn set_active_http_state_cfg(cfg: Arc<Config>) {
-    let state = current_state().unwrap_or_else(|| Arc::new(Mutex::new(DawHttpState::default())));
-    {
-        let mut shared_state = state.lock().unwrap();
-        shared_state.cfg = Some(cfg);
-    }
+pub(crate) fn set_active_http_state_cfg(cfg: Arc<Config>) -> String {
+    let auth_token = generate_http_auth_token();
+    let state = Arc::new(Mutex::new(DawHttpState {
+        cfg: Some(cfg),
+        auth_token: auth_token.clone(),
+        pending_commands: VecDeque::new(),
+    }));
     spawn_daw_http_server(state);
+    auth_token
 }
 
 pub(crate) fn deactivate_daw_http_server() {
     *active_state_slot().lock().unwrap() = None;
+}
+
+pub(crate) const fn auth_header_name() -> &'static str {
+    AUTH_HEADER_NAME
 }
 
 fn take_pending_http_commands() -> Vec<DawHttpCommand> {
@@ -141,6 +176,10 @@ fn run_daw_http_server() {
 }
 
 fn handle_post_mml(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
+    if let Err(response) = ensure_request_authorized(&request, state) {
+        let _ = request.respond(response);
+        return;
+    }
     match read_json_body::<PostMmlRequest>(&mut request) {
         Ok(body) => respond_command(
             request,
@@ -158,6 +197,10 @@ fn handle_post_mml(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
 }
 
 fn handle_post_mixer(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
+    if let Err(response) = ensure_request_authorized(&request, state) {
+        let _ = request.respond(response);
+        return;
+    }
     match read_json_body::<PostMixerRequest>(&mut request) {
         Ok(body) => respond_command(
             request,
@@ -174,6 +217,10 @@ fn handle_post_mixer(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
 }
 
 fn handle_post_patch(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
+    if let Err(response) = ensure_request_authorized(&request, state) {
+        let _ = request.respond(response);
+        return;
+    }
     match read_json_body::<PostPatchRequest>(&mut request) {
         Ok(body) => respond_command(
             request,
@@ -190,6 +237,10 @@ fn handle_post_patch(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
 }
 
 fn handle_get_patches(request: Request, state: &Arc<Mutex<DawHttpState>>) {
+    if let Err(response) = ensure_request_authorized(&request, state) {
+        let _ = request.respond(response);
+        return;
+    }
     let cfg = {
         let state = state.lock().unwrap();
         state.cfg.clone()
@@ -250,6 +301,45 @@ fn respond_command(request: Request, state: &Arc<Mutex<DawHttpState>>, kind: Daw
     }
 }
 
+fn ensure_request_authorized(
+    request: &Request,
+    state: &Arc<Mutex<DawHttpState>>,
+) -> Result<(), Response<std::io::Cursor<Vec<u8>>>> {
+    let auth_token = state.lock().unwrap().auth_token.clone();
+    if request_has_valid_auth_token(request.headers(), &auth_token) {
+        return Ok(());
+    }
+    Err(text_response(
+        401,
+        format!("認証トークンが必要です。ヘッダ {AUTH_HEADER_NAME} を指定してください\n"),
+    ))
+}
+
+fn request_has_valid_auth_token(headers: &[Header], expected_token: &str) -> bool {
+    headers
+        .iter()
+        .find(|header| header.field.equiv(AUTH_HEADER_NAME))
+        .is_some_and(|header| header.value.as_str() == expected_token)
+}
+
+fn generate_http_auth_token() -> String {
+    let now_nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    let mut first = RandomState::new().build_hasher();
+    first.write_u128(now_nanos);
+    first.write_u32(std::process::id());
+    let first_half = first.finish();
+
+    let mut second = RandomState::new().build_hasher();
+    second.write_u128(now_nanos.rotate_left(17));
+    second.write_usize(&first_half as *const u64 as usize);
+    let second_half = second.finish();
+
+    format!("{first_half:016x}{second_half:016x}")
+}
+
 fn read_json_body<T: for<'de> Deserialize<'de>>(request: &mut Request) -> Result<T, (u16, String)> {
     let mut body = String::new();
     let reader = request.as_reader().take(MAX_JSON_BODY_BYTES + 1);
@@ -301,20 +391,28 @@ impl DawApp {
             .checked_add(1)
             .ok_or_else(|| "track index が大きすぎます".to_string())?;
         let required_measures = self.measures.max(measure);
+        let current_columns = self
+            .measures
+            .checked_add(1)
+            .ok_or_else(|| "現在の measure 数が大きすぎます".to_string())?;
+        let required_columns = required_measures
+            .checked_add(1)
+            .ok_or_else(|| "measure index が大きすぎます".to_string())?;
         if required_tracks <= self.tracks && required_measures <= self.measures {
             return Ok(());
         }
 
         if required_tracks > self.tracks {
-            let columns = self.measures + 1;
             self.data.resize_with(required_tracks, || {
                 let mut row = Vec::new();
-                row.resize_with(columns, String::new);
+                row.resize_with(current_columns, String::new);
                 row
             });
             {
                 let mut cache = self.cache.lock().unwrap();
-                cache.resize_with(required_tracks, || vec![super::CellCache::empty(); columns]);
+                cache.resize_with(required_tracks, || {
+                    vec![super::CellCache::empty(); current_columns]
+                });
             }
             self.solo_tracks.resize(required_tracks, false);
             self.track_volumes_db.resize(required_tracks, 0);
@@ -330,14 +428,13 @@ impl DawApp {
         }
 
         if required_measures > self.measures {
-            let additional = required_measures - self.measures;
             for row in &mut self.data {
-                row.resize_with(required_measures + 1, String::new);
+                row.resize_with(required_columns, String::new);
             }
             {
                 let mut cache = self.cache.lock().unwrap();
                 for row in cache.iter_mut() {
-                    row.resize_with(required_measures + 1, super::CellCache::empty);
+                    row.resize_with(required_columns, super::CellCache::empty);
                 }
             }
             self.play_measure_mmls
@@ -348,9 +445,7 @@ impl DawApp {
                 .lock()
                 .unwrap()
                 .resize_with(required_measures, || vec![String::new(); self.tracks]);
-            if additional > 0 {
-                self.measures = required_measures;
-            }
+            self.measures = required_measures;
         }
 
         for measure_track_mmls in self.play_measure_track_mmls.lock().unwrap().iter_mut() {

@@ -6,7 +6,9 @@ use std::{
 use tui_textarea::TextArea;
 
 use super::{
-    active_state_slot, deactivate_daw_http_server, DawHttpCommand, DawHttpCommandKind, DawHttpState,
+    active_state_slot, claim_http_server_thread_slot, deactivate_daw_http_server,
+    generate_http_auth_token, request_has_valid_auth_token, DawHttpCommand, DawHttpCommandKind,
+    DawHttpState,
 };
 use crate::{
     config::Config,
@@ -103,6 +105,14 @@ fn enqueue_command(
     response_rx
 }
 
+fn build_http_state(cfg: Config) -> Arc<Mutex<DawHttpState>> {
+    Arc::new(Mutex::new(DawHttpState {
+        cfg: Some(Arc::new(cfg)),
+        auth_token: "test-token".to_string(),
+        pending_commands: VecDeque::new(),
+    }))
+}
+
 #[test]
 fn apply_pending_http_commands_updates_mml_and_expands_grid() {
     let tmp = std::env::temp_dir().join("cmrt_test_http_server_updates_mml");
@@ -110,10 +120,7 @@ fn apply_pending_http_commands_updates_mml_and_expands_grid() {
     let _guard = crate::test_utils::set_local_dir_envs(&tmp);
 
     let cfg = default_config();
-    let state = Arc::new(Mutex::new(DawHttpState {
-        cfg: Some(Arc::new(cfg.clone())),
-        pending_commands: VecDeque::new(),
-    }));
+    let state = build_http_state(cfg.clone());
     *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
     let response_rx = enqueue_command(
         &state,
@@ -143,10 +150,7 @@ fn apply_pending_http_commands_updates_mixer_gain() {
     let _guard = crate::test_utils::set_local_dir_envs(&tmp);
 
     let cfg = default_config();
-    let state = Arc::new(Mutex::new(DawHttpState {
-        cfg: Some(Arc::new(cfg.clone())),
-        pending_commands: VecDeque::new(),
-    }));
+    let state = build_http_state(cfg.clone());
     *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
     let response_rx = enqueue_command(&state, DawHttpCommandKind::Mixer { track: 1, db: -6.0 });
 
@@ -174,10 +178,7 @@ fn apply_pending_http_commands_updates_patch_init_cell() {
 
     let mut cfg = default_config();
     cfg.patches_dirs = Some(vec![tmp.to_string_lossy().into_owned()]);
-    let state = Arc::new(Mutex::new(DawHttpState {
-        cfg: Some(Arc::new(cfg.clone())),
-        pending_commands: VecDeque::new(),
-    }));
+    let state = build_http_state(cfg.clone());
     *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
     let response_rx = enqueue_command(
         &state,
@@ -198,4 +199,50 @@ fn apply_pending_http_commands_updates_patch_init_cell() {
 
     deactivate_daw_http_server();
     std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn request_has_valid_auth_token_requires_matching_header() {
+    let valid_header =
+        tiny_http::Header::from_bytes(super::auth_header_name(), "test-token").unwrap();
+    let wrong_header =
+        tiny_http::Header::from_bytes(super::auth_header_name(), "wrong-token").unwrap();
+
+    assert!(request_has_valid_auth_token(&[valid_header], "test-token"));
+    assert!(!request_has_valid_auth_token(&[wrong_header], "test-token"));
+    assert!(!request_has_valid_auth_token(&[], "test-token"));
+}
+
+#[test]
+fn claim_http_server_thread_slot_is_reusable_after_drop() {
+    let first_guard = claim_http_server_thread_slot().expect("first claim should succeed");
+    assert!(
+        claim_http_server_thread_slot().is_none(),
+        "second concurrent claim should fail"
+    );
+    drop(first_guard);
+    assert!(
+        claim_http_server_thread_slot().is_some(),
+        "slot should be reusable after guard drop"
+    );
+}
+
+#[test]
+fn generate_http_auth_token_returns_non_empty_unique_tokens() {
+    let first = generate_http_auth_token();
+    let second = generate_http_auth_token();
+
+    assert!(!first.is_empty());
+    assert!(!second.is_empty());
+    assert_ne!(first, second);
+}
+
+#[test]
+fn apply_http_mml_rejects_measure_index_overflow() {
+    let cfg = default_config();
+    let mut app = build_test_app(cfg);
+
+    let result = app.apply_http_mml(1, usize::MAX, "c");
+
+    assert_eq!(result, Err("measure index が大きすぎます".to_string()));
 }
