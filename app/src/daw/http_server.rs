@@ -140,7 +140,7 @@ fn run_daw_http_server() {
     }
 }
 
-pub(crate) fn handle_post_mml(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
+fn handle_post_mml(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
     match read_json_body::<PostMmlRequest>(&mut request) {
         Ok(body) => respond_command(
             request,
@@ -157,7 +157,7 @@ pub(crate) fn handle_post_mml(mut request: Request, state: &Arc<Mutex<DawHttpSta
     }
 }
 
-pub(crate) fn handle_post_mixer(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
+fn handle_post_mixer(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
     match read_json_body::<PostMixerRequest>(&mut request) {
         Ok(body) => respond_command(
             request,
@@ -173,7 +173,7 @@ pub(crate) fn handle_post_mixer(mut request: Request, state: &Arc<Mutex<DawHttpS
     }
 }
 
-pub(crate) fn handle_post_patch(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
+fn handle_post_patch(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
     match read_json_body::<PostPatchRequest>(&mut request) {
         Ok(body) => respond_command(
             request,
@@ -189,7 +189,7 @@ pub(crate) fn handle_post_patch(mut request: Request, state: &Arc<Mutex<DawHttpS
     }
 }
 
-pub(crate) fn handle_get_patches(request: Request, state: &Arc<Mutex<DawHttpState>>) {
+fn handle_get_patches(request: Request, state: &Arc<Mutex<DawHttpState>>) {
     let cfg = {
         let state = state.lock().unwrap();
         state.cfg.clone()
