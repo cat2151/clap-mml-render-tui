@@ -99,16 +99,17 @@ impl DawClient {
             .post(&self.endpoint_url(path))
             .send_json(body)
             .map_err(Error::from_ureq)?;
+        let http_status = response.status();
         let status: StatusResponse = response
             .into_json()
             .map_err(|error| Error::InvalidResponse(error.to_string()))?;
         if status.status == "ok" {
             Ok(())
         } else {
-            Err(Error::Http {
-                status: 200,
-                body: format!("unexpected status response: {}", status.status),
-            })
+            Err(Error::InvalidResponse(format!(
+                "unexpected status response (http {}): {}",
+                http_status, status.status
+            )))
         }
     }
 
@@ -155,14 +156,17 @@ fn normalize_base_url(base_url: &str) -> Result<String, Error> {
 #[cfg(test)]
 mod tests {
     use std::{
+        io::ErrorKind,
         io::{Read, Write},
         net::TcpListener,
         sync::mpsc,
         thread,
-        time::Duration,
+        time::{Duration, Instant},
     };
 
     use super::{DawClient, Error, DEFAULT_BASE_URL};
+    const TEST_READ_TIMEOUT: Duration = Duration::from_secs(2);
+    const TEST_READ_DEADLINE: Duration = Duration::from_secs(5);
 
     fn spawn_single_request_server(response_body: &str) -> (String, mpsc::Receiver<String>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -176,9 +180,7 @@ mod tests {
 
         thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
-            stream
-                .set_read_timeout(Some(Duration::from_secs(2)))
-                .unwrap();
+            stream.set_read_timeout(Some(TEST_READ_TIMEOUT)).unwrap();
             let request = read_http_request(&mut stream);
             request_tx.send(request).unwrap();
             stream.write_all(response.as_bytes()).unwrap();
@@ -190,8 +192,9 @@ mod tests {
     fn read_http_request(stream: &mut std::net::TcpStream) -> String {
         let mut bytes = Vec::new();
         let mut buffer = [0; 4096];
+        let deadline = Instant::now() + TEST_READ_DEADLINE;
         let header_end = loop {
-            let read = stream.read(&mut buffer).unwrap();
+            let read = read_with_deadline(stream, &mut buffer, deadline);
             assert!(read > 0, "request closed before headers were complete");
             bytes.extend_from_slice(&buffer[..read]);
             if let Some(index) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
@@ -213,12 +216,38 @@ mod tests {
             .unwrap_or(0);
 
         while bytes.len() < header_end + content_length {
-            let read = stream.read(&mut buffer).unwrap();
+            let read = read_with_deadline(stream, &mut buffer, deadline);
             assert!(read > 0, "request closed before body was complete");
             bytes.extend_from_slice(&buffer[..read]);
         }
 
         String::from_utf8(bytes).unwrap()
+    }
+
+    fn read_with_deadline(
+        stream: &mut std::net::TcpStream,
+        buffer: &mut [u8],
+        deadline: Instant,
+    ) -> usize {
+        loop {
+            match stream.read(buffer) {
+                Ok(read) => return read,
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        ErrorKind::WouldBlock | ErrorKind::TimedOut | ErrorKind::Interrupted
+                    ) && Instant::now() < deadline =>
+                {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(error)
+                    if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
+                {
+                    panic!("timed out while reading HTTP request: {error}");
+                }
+                Err(error) => panic!("failed to read HTTP request: {error}"),
+            }
+        }
     }
 
     fn request_body(request: &str) -> &str {
@@ -305,5 +334,19 @@ mod tests {
                 "Lead/Bright.fxp".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn post_mml_rejects_unexpected_status_response_body() {
+        let (base_url, _request_rx) = spawn_single_request_server(r#"{"status":"pending"}"#);
+        let client = DawClient::new(&base_url).unwrap();
+
+        let error = client.post_mml(2, 3, "l8cde").unwrap_err();
+
+        assert!(matches!(
+            error,
+            Error::InvalidResponse(message)
+                if message == "unexpected status response (http 200): pending"
+        ));
     }
 }
