@@ -17,6 +17,7 @@ use crate::{config::Config, server::DEFAULT_PORT};
 
 const MAX_JSON_BODY_BYTES: u64 = 64 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
+const PREFLIGHT_MAX_AGE_SECONDS: &str = "600";
 const ALLOWED_CORS_ORIGINS: [&str; 2] = ["https://cat2151.github.io", "http://localhost:5173"];
 
 #[derive(Default)]
@@ -367,7 +368,7 @@ fn with_preflight_cors_headers(
                 .expect("valid access-control-allow-headers header"),
         )
         .with_header(
-            Header::from_bytes("Access-Control-Max-Age", "600")
+            Header::from_bytes("Access-Control-Max-Age", PREFLIGHT_MAX_AGE_SECONDS)
                 .expect("valid access-control-max-age header"),
         )
 }
