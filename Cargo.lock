@@ -429,6 +429,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmrt-daw-client"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "ureq",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
