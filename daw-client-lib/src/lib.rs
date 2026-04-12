@@ -154,7 +154,76 @@ fn normalize_base_url(base_url: &str) -> Result<String, Error> {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        sync::mpsc,
+        thread,
+        time::Duration,
+    };
+
     use super::{DawClient, Error, DEFAULT_BASE_URL};
+
+    fn spawn_single_request_server(response_body: &str) -> (String, mpsc::Receiver<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = format!("http://{}", listener.local_addr().unwrap());
+        let (request_tx, request_rx) = mpsc::channel();
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            response_body.len(),
+            response_body
+        );
+
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let request = read_http_request(&mut stream);
+            request_tx.send(request).unwrap();
+            stream.write_all(response.as_bytes()).unwrap();
+        });
+
+        (address, request_rx)
+    }
+
+    fn read_http_request(stream: &mut std::net::TcpStream) -> String {
+        let mut bytes = Vec::new();
+        let mut buffer = [0; 4096];
+        let header_end = loop {
+            let read = stream.read(&mut buffer).unwrap();
+            assert!(read > 0, "request closed before headers were complete");
+            bytes.extend_from_slice(&buffer[..read]);
+            if let Some(index) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
+                break index + 4;
+            }
+        };
+
+        let headers = String::from_utf8_lossy(&bytes[..header_end]);
+        let content_length = headers
+            .lines()
+            .find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                if name.eq_ignore_ascii_case("Content-Length") {
+                    Some(value.trim().parse::<usize>().unwrap())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(0);
+
+        while bytes.len() < header_end + content_length {
+            let read = stream.read(&mut buffer).unwrap();
+            assert!(read > 0, "request closed before body was complete");
+            bytes.extend_from_slice(&buffer[..read]);
+        }
+
+        String::from_utf8(bytes).unwrap()
+    }
+
+    fn request_body(request: &str) -> &str {
+        request.split_once("\r\n\r\n").unwrap().1
+    }
 
     #[test]
     fn local_default_uses_known_base_url() {
@@ -175,5 +244,66 @@ mod tests {
         let error = DawClient::new("   ").unwrap_err();
 
         assert!(matches!(error, Error::EmptyBaseUrl));
+    }
+
+    #[test]
+    fn post_mml_sends_expected_request() {
+        let (base_url, request_rx) = spawn_single_request_server(r#"{"status":"ok"}"#);
+        let client = DawClient::new(&base_url).unwrap();
+
+        client.post_mml(2, 3, "l8cde").unwrap();
+
+        let request = request_rx.recv().unwrap();
+        assert!(request.starts_with("POST /mml HTTP/1.1\r\n"));
+        assert_eq!(
+            request_body(&request),
+            r#"{"track":2,"measure":3,"mml":"l8cde"}"#
+        );
+    }
+
+    #[test]
+    fn post_mixer_sends_expected_request() {
+        let (base_url, request_rx) = spawn_single_request_server(r#"{"status":"ok"}"#);
+        let client = DawClient::new(&base_url).unwrap();
+
+        client.post_mixer(4, -6.5).unwrap();
+
+        let request = request_rx.recv().unwrap();
+        assert!(request.starts_with("POST /mixer HTTP/1.1\r\n"));
+        assert_eq!(request_body(&request), r#"{"track":4,"db":-6.5}"#);
+    }
+
+    #[test]
+    fn post_patch_sends_expected_request() {
+        let (base_url, request_rx) = spawn_single_request_server(r#"{"status":"ok"}"#);
+        let client = DawClient::new(&base_url).unwrap();
+
+        client.post_patch(1, "Pads/Factory Pad.fxp").unwrap();
+
+        let request = request_rx.recv().unwrap();
+        assert!(request.starts_with("POST /patch HTTP/1.1\r\n"));
+        assert_eq!(
+            request_body(&request),
+            r#"{"track":1,"patch":"Pads/Factory Pad.fxp"}"#
+        );
+    }
+
+    #[test]
+    fn get_patches_reads_json_response() {
+        let (base_url, request_rx) =
+            spawn_single_request_server(r#"["Pads/Factory Pad.fxp","Lead/Bright.fxp"]"#);
+        let client = DawClient::new(&base_url).unwrap();
+
+        let patches = client.get_patches().unwrap();
+
+        let request = request_rx.recv().unwrap();
+        assert!(request.starts_with("GET /patches HTTP/1.1\r\n"));
+        assert_eq!(
+            patches,
+            vec![
+                "Pads/Factory Pad.fxp".to_string(),
+                "Lead/Bright.fxp".to_string()
+            ]
+        );
     }
 }
