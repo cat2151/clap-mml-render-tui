@@ -28,6 +28,15 @@ impl DawApp {
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     ) -> Result<DawExitReason> {
+        struct DeactivateDawHttpServerGuard;
+
+        impl Drop for DeactivateDawHttpServerGuard {
+            fn drop(&mut self) {
+                super::http_server::deactivate_daw_http_server();
+            }
+        }
+
+        let _deactivate_daw_http_server_guard = DeactivateDawHttpServerGuard;
         self.kick_all_pending();
         let mut uses_textarea_cursor = self.uses_textarea_cursor();
         execute!(
@@ -40,6 +49,7 @@ impl DawApp {
         )?;
 
         loop {
+            self.apply_pending_http_commands();
             let next_uses_textarea_cursor = self.uses_textarea_cursor();
             if next_uses_textarea_cursor != uses_textarea_cursor {
                 execute!(

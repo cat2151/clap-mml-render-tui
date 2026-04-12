@@ -91,7 +91,7 @@ impl DawApp {
         Some((patch_name, phrase))
     }
 
-    fn build_patch_json(patch_name: &str) -> String {
+    pub(in crate::daw) fn build_patch_json(patch_name: &str) -> String {
         Self::build_patch_json_with_filter_query(patch_name, None)
     }
 
@@ -353,7 +353,7 @@ impl DawApp {
         }
     }
 
-    fn sync_playback_mml_state(&self) {
+    pub(in crate::daw) fn sync_playback_mml_state(&self) {
         let new_mmls = self.build_measure_mmls();
         let new_track_mmls = self.build_measure_track_mmls();
         let new_samples = self.measure_duration_samples();
