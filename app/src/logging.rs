@@ -8,6 +8,7 @@ use std::{
 };
 
 const MAX_LOG_LINES: usize = 256;
+const JST_OFFSET_SECONDS: i64 = 9 * 60 * 60;
 
 fn log_file_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -20,8 +21,8 @@ fn trim_log_lines(lines: &mut VecDeque<String>) {
     }
 }
 
-fn format_utc_timestamp(now: SystemTime) -> String {
-    let unix_seconds = match now.duration_since(UNIX_EPOCH) {
+fn unix_seconds_floor(now: SystemTime) -> i64 {
+    match now.duration_since(UNIX_EPOCH) {
         Ok(duration) => duration.as_secs() as i64,
         Err(err) => {
             let duration = err.duration();
@@ -32,14 +33,18 @@ fn format_utc_timestamp(now: SystemTime) -> String {
                 -seconds - 1
             }
         }
-    };
+    }
+}
+
+fn format_jst_timestamp(now: SystemTime) -> String {
+    let unix_seconds = unix_seconds_floor(now).saturating_add(JST_OFFSET_SECONDS);
     let days = unix_seconds.div_euclid(86_400);
     let seconds_of_day = unix_seconds.rem_euclid(86_400);
     let hour = seconds_of_day / 3_600;
     let minute = (seconds_of_day % 3_600) / 60;
     let second = seconds_of_day % 60;
     let (year, month, day) = civil_from_days(days);
-    format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02} UTC")
+    format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02} JST")
 }
 
 fn civil_from_days(days_since_unix_epoch: i64) -> (i32, u32, u32) {
@@ -58,7 +63,7 @@ fn civil_from_days(days_since_unix_epoch: i64) -> (i32, u32, u32) {
 }
 
 fn format_log_file_line_at(line: &str, now: SystemTime) -> String {
-    format!("[{}] {line}", format_utc_timestamp(now))
+    format!("[{}] {line}", format_jst_timestamp(now))
 }
 
 fn strip_log_file_timestamp_prefix(line: &str) -> &str {
@@ -71,12 +76,14 @@ fn strip_log_file_timestamp_prefix(line: &str) -> &str {
         || bytes[14] != b':'
         || bytes[17] != b':'
         || bytes[20] != b' '
-        || bytes[21] != b'U'
-        || bytes[22] != b'T'
-        || bytes[23] != b'C'
         || bytes[24] != b']'
         || bytes[25] != b' '
     {
+        return line;
+    }
+
+    let timezone = &bytes[21..24];
+    if timezone != b"UTC" && timezone != b"JST" {
         return line;
     }
 

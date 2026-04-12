@@ -17,7 +17,7 @@ fn split_log_file_line(line: &str) -> (&str, &str) {
     let timestamp = timestamp
         .strip_prefix('[')
         .expect("opening bracket in timestamp prefix");
-    assert!(timestamp.ends_with(" UTC"));
+    assert!(timestamp.ends_with(" JST"));
     assert_eq!(timestamp.len(), 23);
     let bytes = timestamp.as_bytes();
     assert_eq!(bytes[4], b'-');
@@ -30,10 +30,10 @@ fn split_log_file_line(line: &str) -> (&str, &str) {
 }
 
 #[test]
-fn format_log_file_line_at_prefixes_human_readable_utc_timestamp() {
+fn format_log_file_line_at_prefixes_human_readable_jst_timestamp() {
     assert_eq!(
         format_log_file_line_at("play: start", UNIX_EPOCH + Duration::from_secs(0)),
-        "[1970-01-01 00:00:00 UTC] play: start"
+        "[1970-01-01 09:00:00 JST] play: start"
     );
 }
 
@@ -44,16 +44,17 @@ fn format_log_file_line_at_floors_pre_epoch_subsecond_to_previous_second() {
             "play: start",
             UNIX_EPOCH.checked_sub(Duration::from_millis(1)).unwrap()
         ),
-        "[1969-12-31 23:59:59 UTC] play: start"
+        "[1970-01-01 08:59:59 JST] play: start"
     );
 }
 
 #[test]
 fn format_log_file_line_at_handles_date_boundaries() {
     let cases = [
-        (951_827_696, "2000-02-29 12:34:56 UTC"),
-        (983_404_800, "2001-03-01 00:00:00 UTC"),
-        (4_107_542_400, "2100-03-01 00:00:00 UTC"),
+        (86_399, "1970-01-02 08:59:59 JST"),
+        (951_827_696, "2000-02-29 21:34:56 JST"),
+        (983_404_800, "2001-03-01 09:00:00 JST"),
+        (4_107_542_400, "2100-03-01 09:00:00 JST"),
     ];
 
     for (seconds, expected_timestamp) in cases {
@@ -66,6 +67,10 @@ fn format_log_file_line_at_handles_date_boundaries() {
 
 #[test]
 fn strip_log_file_timestamp_prefix_returns_original_message() {
+    assert_eq!(
+        strip_log_file_timestamp_prefix("[2000-02-29 12:34:56 JST] play: start"),
+        "play: start"
+    );
     assert_eq!(
         strip_log_file_timestamp_prefix("[2000-02-29 12:34:56 UTC] play: start"),
         "play: start"
