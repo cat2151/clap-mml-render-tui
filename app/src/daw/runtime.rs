@@ -40,6 +40,7 @@ impl DawApp {
         )?;
 
         loop {
+            self.apply_pending_http_commands();
             let next_uses_textarea_cursor = self.uses_textarea_cursor();
             if next_uses_textarea_cursor != uses_textarea_cursor {
                 execute!(
@@ -74,11 +75,13 @@ impl DawApp {
                             DawNormalAction::ReturnToTui => {
                                 self.stop_play();
                                 self.save_history_state();
+                                super::http_server::deactivate_daw_http_server();
                                 return Ok(DawExitReason::ReturnToTui);
                             }
                             DawNormalAction::QuitApp => {
                                 self.stop_play();
                                 self.save_history_state();
+                                super::http_server::deactivate_daw_http_server();
                                 return Ok(DawExitReason::QuitApp);
                             }
                             DawNormalAction::Continue => {}

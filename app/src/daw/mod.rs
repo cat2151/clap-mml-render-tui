@@ -67,6 +67,7 @@
 
 mod batch_logging;
 mod cache;
+mod http_server;
 mod init;
 mod input;
 mod mixer;

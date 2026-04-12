@@ -102,6 +102,8 @@ fn build_grid_buffers_or_default(saved_grid_dimensions: Option<(usize, usize)>) 
 }
 
 pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
+    super::http_server::set_active_http_state_cfg(Arc::clone(&cfg));
+
     let DawGridBuffers {
         tracks,
         measures,
