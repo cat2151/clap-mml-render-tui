@@ -102,7 +102,7 @@ fn build_grid_buffers_or_default(saved_grid_dimensions: Option<(usize, usize)>) 
 }
 
 pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
-    let http_auth_token = super::http_server::set_active_http_state_cfg(Arc::clone(&cfg));
+    super::http_server::set_active_http_state_cfg(Arc::clone(&cfg));
     let DawGridBuffers {
         tracks,
         measures,
@@ -338,12 +338,6 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
     };
 
     app.load();
-    app.append_log_line(format!(
-        "http: listen 127.0.0.1:{} header {}={}",
-        crate::server::DEFAULT_PORT,
-        super::http_server::auth_header_name(),
-        http_auth_token
-    ));
     app.append_log_line("=== DAW mode ready ===");
     app
 }

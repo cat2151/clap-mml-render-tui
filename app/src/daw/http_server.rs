@@ -1,7 +1,5 @@
 use std::{
-    collections::hash_map::RandomState,
     collections::VecDeque,
-    hash::{BuildHasher, Hasher},
     io::Read,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -9,7 +7,6 @@ use std::{
         Arc, Mutex, OnceLock,
     },
     time::Duration,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use serde::{Deserialize, Serialize};
@@ -20,12 +17,11 @@ use crate::{config::Config, server::DEFAULT_PORT};
 
 const MAX_JSON_BODY_BYTES: u64 = 64 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
-const AUTH_HEADER_NAME: &str = "X-CMRT-DAW-Token";
+const ALLOWED_CORS_ORIGINS: [&str; 2] = ["https://cat2151.github.io", "http://localhost:5173"];
 
 #[derive(Default)]
 pub(crate) struct DawHttpState {
     cfg: Option<Arc<Config>>,
-    auth_token: String,
     pending_commands: VecDeque<DawHttpCommand>,
 }
 
@@ -118,23 +114,16 @@ pub(crate) fn spawn_daw_http_server(state: Arc<Mutex<DawHttpState>>) {
     });
 }
 
-pub(crate) fn set_active_http_state_cfg(cfg: Arc<Config>) -> String {
-    let auth_token = generate_http_auth_token();
+pub(crate) fn set_active_http_state_cfg(cfg: Arc<Config>) {
     let state = Arc::new(Mutex::new(DawHttpState {
         cfg: Some(cfg),
-        auth_token: auth_token.clone(),
         pending_commands: VecDeque::new(),
     }));
     spawn_daw_http_server(state);
-    auth_token
 }
 
 pub(crate) fn deactivate_daw_http_server() {
     *active_state_slot().lock().unwrap() = None;
-}
-
-pub(crate) const fn auth_header_name() -> &'static str {
-    AUTH_HEADER_NAME
 }
 
 fn take_pending_http_commands() -> Vec<DawHttpCommand> {
@@ -164,6 +153,10 @@ fn run_daw_http_server() {
         };
 
         match (method, url.as_str()) {
+            (Method::Options, "/mml")
+            | (Method::Options, "/mixer")
+            | (Method::Options, "/patch")
+            | (Method::Options, "/patches") => handle_options(request),
             (Method::Post, "/mml") => handle_post_mml(request, &state),
             (Method::Post, "/mixer") => handle_post_mixer(request, &state),
             (Method::Post, "/patch") => handle_post_patch(request, &state),
@@ -176,10 +169,13 @@ fn run_daw_http_server() {
 }
 
 fn handle_post_mml(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
-    if let Err(response) = ensure_request_authorized(&request, state) {
-        let _ = request.respond(response);
-        return;
-    }
+    let cors_origin = match validate_cors_request(&request) {
+        Ok(cors_origin) => cors_origin,
+        Err(response) => {
+            let _ = request.respond(response);
+            return;
+        }
+    };
     match read_json_body::<PostMmlRequest>(&mut request) {
         Ok(body) => respond_command(
             request,
@@ -189,18 +185,25 @@ fn handle_post_mml(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
                 measure: body.measure,
                 mml: body.mml,
             },
+            cors_origin.as_deref(),
         ),
         Err((status, message)) => {
-            let _ = request.respond(text_response(status, message));
+            let _ = request.respond(with_cors_headers(
+                text_response(status, message),
+                cors_origin.as_deref(),
+            ));
         }
     }
 }
 
 fn handle_post_mixer(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
-    if let Err(response) = ensure_request_authorized(&request, state) {
-        let _ = request.respond(response);
-        return;
-    }
+    let cors_origin = match validate_cors_request(&request) {
+        Ok(cors_origin) => cors_origin,
+        Err(response) => {
+            let _ = request.respond(response);
+            return;
+        }
+    };
     match read_json_body::<PostMixerRequest>(&mut request) {
         Ok(body) => respond_command(
             request,
@@ -209,18 +212,25 @@ fn handle_post_mixer(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
                 track: body.track,
                 db: body.db,
             },
+            cors_origin.as_deref(),
         ),
         Err((status, message)) => {
-            let _ = request.respond(text_response(status, message));
+            let _ = request.respond(with_cors_headers(
+                text_response(status, message),
+                cors_origin.as_deref(),
+            ));
         }
     }
 }
 
 fn handle_post_patch(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
-    if let Err(response) = ensure_request_authorized(&request, state) {
-        let _ = request.respond(response);
-        return;
-    }
+    let cors_origin = match validate_cors_request(&request) {
+        Ok(cors_origin) => cors_origin,
+        Err(response) => {
+            let _ = request.respond(response);
+            return;
+        }
+    };
     match read_json_body::<PostPatchRequest>(&mut request) {
         Ok(body) => respond_command(
             request,
@@ -229,33 +239,43 @@ fn handle_post_patch(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
                 track: body.track,
                 patch: body.patch,
             },
+            cors_origin.as_deref(),
         ),
         Err((status, message)) => {
-            let _ = request.respond(text_response(status, message));
+            let _ = request.respond(with_cors_headers(
+                text_response(status, message),
+                cors_origin.as_deref(),
+            ));
         }
     }
 }
 
 fn handle_get_patches(request: Request, state: &Arc<Mutex<DawHttpState>>) {
-    if let Err(response) = ensure_request_authorized(&request, state) {
-        let _ = request.respond(response);
-        return;
-    }
+    let cors_origin = match validate_cors_request(&request) {
+        Ok(cors_origin) => cors_origin,
+        Err(response) => {
+            let _ = request.respond(response);
+            return;
+        }
+    };
     let cfg = {
         let state = state.lock().unwrap();
         state.cfg.clone()
     };
     let Some(cfg) = cfg else {
-        let _ = request.respond(text_response(
-            503,
-            "DAW モードがアクティブではありません\n".to_string(),
+        let _ = request.respond(with_cors_headers(
+            text_response(503, "DAW モードがアクティブではありません\n".to_string()),
+            cors_origin.as_deref(),
         ));
         return;
     };
 
     if !crate::patches::has_configured_patch_dirs(cfg.as_ref()) {
         let empty = Vec::<String>::new();
-        let _ = request.respond(json_response(200, &empty));
+        let _ = request.respond(with_cors_headers(
+            json_response(200, &empty),
+            cors_origin.as_deref(),
+        ));
         return;
     }
 
@@ -265,18 +285,99 @@ fn handle_get_patches(request: Request, state: &Arc<Mutex<DawHttpState>>) {
                 .into_iter()
                 .map(|(patch_name, _)| patch_name)
                 .collect::<Vec<_>>();
-            let _ = request.respond(json_response(200, &patches));
+            let _ = request.respond(with_cors_headers(
+                json_response(200, &patches),
+                cors_origin.as_deref(),
+            ));
         }
         Err(error) => {
-            let _ = request.respond(text_response(
-                500,
-                format!("patch 一覧の取得に失敗しました: {error}\n"),
+            let _ = request.respond(with_cors_headers(
+                text_response(500, format!("patch 一覧の取得に失敗しました: {error}\n")),
+                cors_origin.as_deref(),
             ));
         }
     }
 }
 
-fn respond_command(request: Request, state: &Arc<Mutex<DawHttpState>>, kind: DawHttpCommandKind) {
+fn handle_options(request: Request) {
+    let cors_origin = match validate_cors_request(&request) {
+        Ok(cors_origin) => cors_origin,
+        Err(response) => {
+            let _ = request.respond(response);
+            return;
+        }
+    };
+    let response =
+        with_preflight_cors_headers(text_response(204, String::new()), cors_origin.as_deref());
+    let _ = request.respond(response);
+}
+
+fn request_origin(headers: &[Header]) -> Option<String> {
+    headers
+        .iter()
+        .find(|header| header.field.equiv("Origin"))
+        .map(|header| header.value.as_str().to_string())
+}
+
+fn is_allowed_cors_origin(origin: &str) -> bool {
+    ALLOWED_CORS_ORIGINS.contains(&origin)
+}
+
+fn validate_cors_request(
+    request: &Request,
+) -> Result<Option<String>, Response<std::io::Cursor<Vec<u8>>>> {
+    let Some(origin) = request_origin(request.headers()) else {
+        return Ok(None);
+    };
+    if is_allowed_cors_origin(&origin) {
+        return Ok(Some(origin));
+    }
+    Err(text_response(
+        403,
+        format!("Origin が許可されていません: {origin}\n"),
+    ))
+}
+
+fn with_cors_headers(
+    response: Response<std::io::Cursor<Vec<u8>>>,
+    cors_origin: Option<&str>,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    let Some(origin) = cors_origin else {
+        return response;
+    };
+    response
+        .with_header(
+            Header::from_bytes("Access-Control-Allow-Origin", origin)
+                .expect("valid access-control-allow-origin header"),
+        )
+        .with_header(Header::from_bytes("Vary", "Origin").expect("valid vary header"))
+}
+
+fn with_preflight_cors_headers(
+    response: Response<std::io::Cursor<Vec<u8>>>,
+    cors_origin: Option<&str>,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    with_cors_headers(response, cors_origin)
+        .with_header(
+            Header::from_bytes("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                .expect("valid access-control-allow-methods header"),
+        )
+        .with_header(
+            Header::from_bytes("Access-Control-Allow-Headers", "Content-Type")
+                .expect("valid access-control-allow-headers header"),
+        )
+        .with_header(
+            Header::from_bytes("Access-Control-Max-Age", "600")
+                .expect("valid access-control-max-age header"),
+        )
+}
+
+fn respond_command(
+    request: Request,
+    state: &Arc<Mutex<DawHttpState>>,
+    kind: DawHttpCommandKind,
+    cors_origin: Option<&str>,
+) {
     let (response_tx, response_rx) = mpsc::channel();
     {
         let mut state = state.lock().unwrap();
@@ -287,57 +388,24 @@ fn respond_command(request: Request, state: &Arc<Mutex<DawHttpState>>, kind: Daw
 
     match response_rx.recv_timeout(COMMAND_TIMEOUT) {
         Ok(Ok(())) => {
-            let _ = request.respond(json_response(200, &JsonStatusResponse { status: "ok" }));
+            let _ = request.respond(with_cors_headers(
+                json_response(200, &JsonStatusResponse { status: "ok" }),
+                cors_origin,
+            ));
         }
         Ok(Err(message)) => {
-            let _ = request.respond(text_response(400, format!("{message}\n")));
+            let _ = request.respond(with_cors_headers(
+                text_response(400, format!("{message}\n")),
+                cors_origin,
+            ));
         }
         Err(_) => {
-            let _ = request.respond(text_response(
-                504,
-                "DAW 反映待ちがタイムアウトしました\n".to_string(),
+            let _ = request.respond(with_cors_headers(
+                text_response(504, "DAW 反映待ちがタイムアウトしました\n".to_string()),
+                cors_origin,
             ));
         }
     }
-}
-
-fn ensure_request_authorized(
-    request: &Request,
-    state: &Arc<Mutex<DawHttpState>>,
-) -> Result<(), Response<std::io::Cursor<Vec<u8>>>> {
-    let auth_token = state.lock().unwrap().auth_token.clone();
-    if request_has_valid_auth_token(request.headers(), &auth_token) {
-        return Ok(());
-    }
-    Err(text_response(
-        401,
-        format!("認証トークンが必要です。ヘッダ {AUTH_HEADER_NAME} を指定してください\n"),
-    ))
-}
-
-fn request_has_valid_auth_token(headers: &[Header], expected_token: &str) -> bool {
-    headers
-        .iter()
-        .find(|header| header.field.equiv(AUTH_HEADER_NAME))
-        .is_some_and(|header| header.value.as_str() == expected_token)
-}
-
-fn generate_http_auth_token() -> String {
-    let now_nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or_default();
-    let mut first = RandomState::new().build_hasher();
-    first.write_u128(now_nanos);
-    first.write_u32(std::process::id());
-    let first_half = first.finish();
-
-    let mut second = RandomState::new().build_hasher();
-    second.write_u128(now_nanos.rotate_left(17));
-    second.write_usize(&first_half as *const u64 as usize);
-    let second_half = second.finish();
-
-    format!("{first_half:016x}{second_half:016x}")
 }
 
 fn read_json_body<T: for<'de> Deserialize<'de>>(request: &mut Request) -> Result<T, (u16, String)> {

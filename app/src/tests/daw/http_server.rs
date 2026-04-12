@@ -7,8 +7,8 @@ use tui_textarea::TextArea;
 
 use super::{
     active_state_slot, claim_http_server_thread_slot, deactivate_daw_http_server,
-    generate_http_auth_token, request_has_valid_auth_token, DawHttpCommand, DawHttpCommandKind,
-    DawHttpState,
+    is_allowed_cors_origin, request_origin, with_cors_headers, with_preflight_cors_headers,
+    DawHttpCommand, DawHttpCommandKind, DawHttpState,
 };
 use crate::{
     config::Config,
@@ -108,7 +108,6 @@ fn enqueue_command(
 fn build_http_state(cfg: Config) -> Arc<Mutex<DawHttpState>> {
     Arc::new(Mutex::new(DawHttpState {
         cfg: Some(Arc::new(cfg)),
-        auth_token: "test-token".to_string(),
         pending_commands: VecDeque::new(),
     }))
 }
@@ -202,15 +201,60 @@ fn apply_pending_http_commands_updates_patch_init_cell() {
 }
 
 #[test]
-fn request_has_valid_auth_token_requires_matching_header() {
-    let valid_header =
-        tiny_http::Header::from_bytes(super::auth_header_name(), "test-token").unwrap();
-    let wrong_header =
-        tiny_http::Header::from_bytes(super::auth_header_name(), "wrong-token").unwrap();
+fn request_origin_extracts_origin_header() {
+    let header = tiny_http::Header::from_bytes("Origin", "https://cat2151.github.io").unwrap();
 
-    assert!(request_has_valid_auth_token(&[valid_header], "test-token"));
-    assert!(!request_has_valid_auth_token(&[wrong_header], "test-token"));
-    assert!(!request_has_valid_auth_token(&[], "test-token"));
+    assert_eq!(
+        request_origin(&[header]),
+        Some("https://cat2151.github.io".to_string())
+    );
+    assert_eq!(request_origin(&[]), None);
+}
+
+#[test]
+fn is_allowed_cors_origin_accepts_known_origins() {
+    assert!(is_allowed_cors_origin("https://cat2151.github.io"));
+    assert!(is_allowed_cors_origin("http://localhost:5173"));
+    assert!(!is_allowed_cors_origin("https://example.com"));
+}
+
+#[test]
+fn with_cors_headers_adds_origin_and_vary_headers() {
+    let response = with_cors_headers(
+        tiny_http::Response::from_string("ok"),
+        Some("https://cat2151.github.io"),
+    );
+
+    assert!(response
+        .headers()
+        .iter()
+        .any(|header| header.field.equiv("Access-Control-Allow-Origin")
+            && header.value.as_str() == "https://cat2151.github.io"));
+    assert!(response
+        .headers()
+        .iter()
+        .any(|header| header.field.equiv("Vary") && header.value.as_str() == "Origin"));
+}
+
+#[test]
+fn with_preflight_cors_headers_adds_preflight_headers() {
+    let response = with_preflight_cors_headers(
+        tiny_http::Response::from_string(""),
+        Some("http://localhost:5173"),
+    );
+
+    assert!(response
+        .headers()
+        .iter()
+        .any(|header| header.field.equiv("Access-Control-Allow-Methods")));
+    assert!(response
+        .headers()
+        .iter()
+        .any(|header| header.field.equiv("Access-Control-Allow-Headers")));
+    assert!(response
+        .headers()
+        .iter()
+        .any(|header| header.field.equiv("Access-Control-Max-Age")));
 }
 
 #[test]
@@ -225,16 +269,6 @@ fn claim_http_server_thread_slot_is_reusable_after_drop() {
         claim_http_server_thread_slot().is_some(),
         "slot should be reusable after guard drop"
     );
-}
-
-#[test]
-fn generate_http_auth_token_returns_non_empty_unique_tokens() {
-    let first = generate_http_auth_token();
-    let second = generate_http_auth_token();
-
-    assert!(!first.is_empty());
-    assert!(!second.is_empty());
-    assert_ne!(first, second);
 }
 
 #[test]
