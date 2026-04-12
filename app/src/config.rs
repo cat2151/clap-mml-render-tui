@@ -170,6 +170,16 @@ pub fn log_file_path() -> Option<PathBuf> {
     dirs::config_local_dir().map(|d| d.join("clap-mml-render-tui").join("log").join("log.txt"))
 }
 
+/// native render probe 専用ログのパスを返す。
+/// 既存の DAW デバッグログとは分離し、同じ log ディレクトリへ配置する。
+pub fn native_probe_log_file_path() -> Option<PathBuf> {
+    dirs::config_local_dir().map(|d| {
+        d.join("clap-mml-render-tui")
+            .join("log")
+            .join("native_probe.log")
+    })
+}
+
 impl Config {
     pub fn load() -> anyhow::Result<Self> {
         let path = config_file_path().ok_or_else(|| {

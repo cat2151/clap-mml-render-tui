@@ -5,7 +5,12 @@ use std::{
     time::{Duration, UNIX_EPOCH},
 };
 
-use super::{append_log_line_to_path, format_log_file_line_at, strip_log_file_timestamp_prefix};
+use std::collections::VecDeque;
+
+use super::{
+    append_log_line_to_path, format_log_file_line_at, load_log_lines_from_path,
+    strip_log_file_timestamp_prefix,
+};
 
 fn split_log_file_line(line: &str) -> (&str, &str) {
     let (timestamp, message) = line.split_once("] ").expect("timestamp prefix");
@@ -130,6 +135,34 @@ fn append_log_line_to_path_keeps_concurrent_lines_intact() {
 
     assert_eq!(actual_lines.len(), thread_count * lines_per_thread);
     assert_eq!(actual_set, expected_set);
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn load_log_lines_from_path_keeps_probe_file_out_of_main_log_buffer() {
+    let tmp = std::env::temp_dir().join(format!(
+        "cmrt_test_native_probe_logging_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let main_log_path = tmp.join("log").join("log.txt");
+    let probe_log_path = tmp.join("log").join("native_probe.log");
+
+    append_log_line_to_path(&main_log_path, "play: start").unwrap();
+    append_log_line_to_path(&probe_log_path, "native-probe before probe_id=7").unwrap();
+
+    let lines = load_log_lines_from_path(&main_log_path);
+
+    assert_eq!(lines, VecDeque::from(["play: start".to_string()]));
+    assert!(
+        lines.iter().all(|line| !line.contains("native-probe")),
+        "probe log should stay out of the UI/main log buffer: {:?}",
+        lines
+    );
 
     std::fs::remove_dir_all(&tmp).ok();
 }

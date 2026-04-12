@@ -26,7 +26,7 @@ mod session;
 mod ui;
 
 use clack_host::prelude::PluginEntry;
-use cmrt_core::{mml_render, CoreConfig};
+use cmrt_core::{mml_render_with_probe, CoreConfig, NativeRenderProbeContext};
 use ratatui::{widgets::ListState, Frame};
 use tui_textarea::TextArea;
 
@@ -43,7 +43,7 @@ pub(crate) use self::cache::filter_items;
 pub(in crate::tui) use self::cache::filter_patches;
 use self::cache::{resolve_cached_samples, try_insert_cache};
 pub(in crate::tui) use self::session::PatchLoadState;
-use crate::{config::Config, patches::PatchSortOrder};
+use crate::{config::Config, history::daw_cache_mml_hash, patches::PatchSortOrder};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum Mode {
@@ -245,12 +245,19 @@ impl<'a> TuiApp<'a> {
             for mml in targets {
                 let _active_render_guard =
                     ActiveRenderGuard::new(Arc::clone(&active_offline_render_count));
+                let active_render_count = active_offline_render_count.load(Ordering::Relaxed);
                 Self::log_notepad_event(format!(
                     "cache prefetch render start active={} mml=\"{}\"",
-                    active_offline_render_count.load(Ordering::Relaxed),
+                    active_render_count,
                     truncate_for_log(&mml, 80)
                 ));
-                let render_result = mml_render(&mml, &core_cfg, entry_ref);
+                let probe_context = NativeRenderProbeContext::tui_prefetch(
+                    active_render_count,
+                    daw_cache_mml_hash(&mml),
+                    cfg.offline_render_workers,
+                );
+                let render_result =
+                    mml_render_with_probe(&mml, &core_cfg, entry_ref, Some(&probe_context));
                 let Ok((samples, _)) = render_result else {
                     Self::log_notepad_event(format!(
                         "cache prefetch render error mml=\"{}\"",
@@ -336,12 +343,20 @@ impl<'a> TuiApp<'a> {
                 let core_cfg = CoreConfig::from(cfg.as_ref());
                 let _active_render_guard =
                     ActiveRenderGuard::new(Arc::clone(&active_offline_render_count));
+                let active_render_count = active_offline_render_count.load(Ordering::Relaxed);
                 Self::log_notepad_event(format!(
                     "play render start session={session} active={} mml=\"{}\"",
-                    active_offline_render_count.load(Ordering::Relaxed),
+                    active_render_count,
                     truncate_for_log(&mml, 120)
                 ));
-                let render_result = mml_render(&mml, &core_cfg, entry_ref);
+                let probe_context = NativeRenderProbeContext::tui_playback(
+                    session,
+                    active_render_count,
+                    daw_cache_mml_hash(&mml),
+                    cfg.offline_render_workers,
+                );
+                let render_result =
+                    mml_render_with_probe(&mml, &core_cfg, entry_ref, Some(&probe_context));
 
                 match render_result {
                     Err(e) => {

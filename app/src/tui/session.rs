@@ -69,6 +69,7 @@ fn spawn_patch_loader(cfg: &Config) -> Arc<Mutex<PatchLoadState>> {
 
 impl<'a> TuiApp<'a> {
     pub fn new(cfg: &'a Config, entry: &'a PluginEntry) -> Self {
+        crate::logging::install_native_probe_logger();
         let cfg_arc = Arc::new(cfg.clone());
         let LoadedSessionState {
             cursor,

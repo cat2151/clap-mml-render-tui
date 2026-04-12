@@ -6,13 +6,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use clack_host::prelude::PluginEntry;
-use cmrt_core::{mml_render_for_cache, CoreConfig};
+use cmrt_core::{mml_render_for_cache_with_probe, CoreConfig, NativeRenderProbeContext};
 
 use super::playback::{pad_playback_measure_samples, try_get_cached_samples};
 use super::{
     DawApp, DawPlayState, PlayPosition, FIRST_PLAYABLE_TRACK, MAX_CACHED_SAMPLES,
     OVERLAY_PREVIEW_CACHE_MAX_ENTRIES,
 };
+use crate::history::daw_cache_mml_hash;
 
 fn begin_preview_output<F>(
     play_transition_lock: &Arc<Mutex<()>>,
@@ -80,14 +81,18 @@ fn insert_overlay_preview_cache(
 /// 指定された preview 用 track MML 群をオフラインレンダリングし、track ごとの gain を掛けて
 /// 1 本のステレオバッファへ合成して返す。
 /// 各 track のレンダリング結果は `measure_samples` 未満なら末尾を埋めて長さを揃える。
-fn render_mixed_preview_tracks(
+fn render_mixed_preview_tracks<F>(
     entry_ref: &PluginEntry,
     daw_cfg: &crate::config::Config,
     measure_samples: usize,
     active_tracks: &[usize],
     track_mmls: &[String],
     track_gains: &[f32],
-) -> Option<Vec<f32>> {
+    mut build_probe_context: F,
+) -> Option<Vec<f32>>
+where
+    F: FnMut(usize, &str) -> NativeRenderProbeContext,
+{
     let mut mixed = vec![0.0f32; measure_samples];
     for track in active_tracks {
         let gain = track_gains.get(*track).copied().unwrap_or(1.0);
@@ -95,9 +100,10 @@ fn render_mixed_preview_tracks(
             .get(*track)
             .map(String::as_str)
             .unwrap_or_default();
+        let probe_context = build_probe_context(*track, mml);
         let result = {
             let core_cfg = CoreConfig::from(daw_cfg);
-            mml_render_for_cache(mml, &core_cfg, entry_ref)
+            mml_render_for_cache_with_probe(mml, &core_cfg, entry_ref, Some(&probe_context))
         };
         let samples = result
             .ok()
@@ -176,6 +182,7 @@ impl DawApp {
         let cfg = Arc::clone(&self.cfg);
         let overlay_preview_cache = Arc::clone(&self.overlay_preview_cache);
         let entry_ptr = self.entry_ptr;
+        let active_track_count = active_tracks.len();
         std::thread::spawn(move || {
             // SAFETY: `entry_ptr` は `main` から渡された `PluginEntry` を指し、
             // アプリ終了まで生存する契約で `DawApp` に保持されている。
@@ -188,6 +195,15 @@ impl DawApp {
                 &active_tracks,
                 &track_mmls,
                 &track_gains,
+                |track, mml| {
+                    NativeRenderProbeContext::preview_prefetch(
+                        track,
+                        measure_index,
+                        active_track_count,
+                        daw_cache_mml_hash(mml),
+                        daw_cfg.offline_render_workers,
+                    )
+                },
             ) else {
                 return;
             };
@@ -231,6 +247,7 @@ impl DawApp {
         let entry_ptr = self.entry_ptr;
         let tracks = self.tracks;
         let overlay_cache_key = overlay_preview_cache_key(measure_index, &track_mmls, &track_gains);
+        let active_track_count = active_tracks.len();
 
         let session = {
             let _transition_guard = play_transition_lock.lock().unwrap();
@@ -309,6 +326,15 @@ impl DawApp {
                         &active_tracks,
                         &track_mmls,
                         &track_gains,
+                        |track, mml| {
+                            NativeRenderProbeContext::preview(
+                                track,
+                                measure_index,
+                                active_track_count,
+                                daw_cache_mml_hash(mml),
+                                daw_cfg.offline_render_workers,
+                            )
+                        },
                     )
                     .map(|samples| (Arc::new(samples), false))
                 } else {
@@ -343,6 +369,15 @@ impl DawApp {
                     &active_tracks,
                     &track_mmls,
                     &track_gains,
+                    |track, mml| {
+                        NativeRenderProbeContext::preview(
+                            track,
+                            measure_index,
+                            active_track_count,
+                            daw_cache_mml_hash(mml),
+                            daw_cfg.offline_render_workers,
+                        )
+                    },
                 )
                 .map(|samples| (Arc::new(samples), false))
             };

@@ -2,7 +2,7 @@ use std::{
     collections::VecDeque,
     fs::{File, OpenOptions},
     io::{BufRead, BufReader, Write},
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -104,11 +104,19 @@ fn append_log_line_to_path(path: &Path, line: &str) -> std::io::Result<()> {
     file.flush()
 }
 
-fn append_log_line_to_file(line: &str) -> std::io::Result<()> {
-    let Some(path) = crate::config::log_file_path() else {
+fn append_log_line_to_optional_path(path: Option<PathBuf>, line: &str) -> std::io::Result<()> {
+    let Some(path) = path else {
         return Ok(());
     };
     append_log_line_to_path(&path, line)
+}
+
+fn append_log_line_to_file(line: &str) -> std::io::Result<()> {
+    append_log_line_to_optional_path(crate::config::log_file_path(), line)
+}
+
+fn append_native_probe_log_line_to_file(line: &str) -> std::io::Result<()> {
+    append_log_line_to_optional_path(crate::config::native_probe_log_file_path(), line)
 }
 
 fn push_log_line(log_lines: &Arc<Mutex<VecDeque<String>>>, line: String) {
@@ -125,15 +133,22 @@ pub(crate) fn append_log_line(log_lines: &Arc<Mutex<VecDeque<String>>>, line: im
     push_log_line(log_lines, line);
 }
 
+pub(crate) fn append_native_probe_log_line(line: impl AsRef<str>) {
+    let _ = append_native_probe_log_line_to_file(line.as_ref());
+}
+
+pub(crate) fn install_native_probe_logger() {
+    let logger: cmrt_core::NativeProbeLogger =
+        Arc::new(|line: &str| append_native_probe_log_line(line));
+    cmrt_core::set_native_probe_logger(Some(logger));
+}
+
 #[cfg(not(test))]
 pub(crate) fn append_global_log_line(line: impl AsRef<str>) {
     let _ = append_log_line_to_file(line.as_ref());
 }
 
-pub(crate) fn load_log_lines() -> VecDeque<String> {
-    let Some(path) = crate::config::log_file_path() else {
-        return VecDeque::new();
-    };
+fn load_log_lines_from_path(path: &Path) -> VecDeque<String> {
     let Ok(file) = File::open(path) else {
         return VecDeque::new();
     };
@@ -146,6 +161,13 @@ pub(crate) fn load_log_lines() -> VecDeque<String> {
         lines.push_back(strip_log_file_timestamp_prefix(&line).to_string());
     }
     lines
+}
+
+pub(crate) fn load_log_lines() -> VecDeque<String> {
+    let Some(path) = crate::config::log_file_path() else {
+        return VecDeque::new();
+    };
+    load_log_lines_from_path(&path)
 }
 
 #[cfg(test)]

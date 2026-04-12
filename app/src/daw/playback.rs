@@ -7,7 +7,9 @@ use std::{
 };
 
 use clack_host::prelude::PluginEntry;
-use cmrt_core::{mml_render_for_cache, CoreConfig};
+use cmrt_core::{mml_render_for_cache_with_probe, CoreConfig, NativeRenderProbeContext};
+
+use crate::history::daw_cache_mml_hash;
 
 mod cache_mixer;
 mod measure_math;
@@ -15,7 +17,7 @@ mod measure_mixer;
 
 use super::playback_util::play_start_log_lines;
 pub(super) use super::playback_util::{effective_measure_count, loop_measure_summary_label};
-use super::{DawApp, DawPlayState, PlayPosition};
+use super::{DawApp, DawPlayState, PlayPosition, FIRST_PLAYABLE_TRACK};
 use cache_mixer::{build_playback_measure_samples, PlaybackMeasureRequest};
 pub(super) use cache_mixer::{pad_playback_measure_samples, try_get_cached_samples};
 pub(super) use measure_math::{current_play_measure_index, following_measure_index};
@@ -38,6 +40,18 @@ fn measure_duration(sample_count: usize, sample_rate: u32) -> std::time::Duratio
     // そのため実時間は frames (= sample_count / 2) / sample_rate となり、
     // sample_count / (sample_rate * 2) と等価になる。
     std::time::Duration::from_secs_f64(sample_count as f64 / (sample_rate as f64 * 2.0))
+}
+
+fn active_track_count(track_mmls: &[String], track_gains: &[f32], tracks: usize) -> usize {
+    (FIRST_PLAYABLE_TRACK..tracks)
+        .filter(|&track| {
+            track_gains.get(track).copied().unwrap_or(1.0) > 0.0
+                && track_mmls
+                    .get(track)
+                    .map(|mml| !mml.trim().is_empty())
+                    .unwrap_or(false)
+        })
+        .count()
 }
 
 const FUTURE_CHUNK_APPEND_MARGIN: Duration = Duration::from_millis(50);
@@ -165,6 +179,8 @@ impl DawApp {
                         ),
                     );
                     let track_mmls = &measure_track_mmls[current_measure_index];
+                    let current_active_track_count =
+                        active_track_count(track_mmls, &track_gains, tracks);
                     let playback_audio = match build_playback_measure_samples(
                         &cache,
                         PlaybackMeasureRequest {
@@ -175,9 +191,21 @@ impl DawApp {
                             track_gains: &track_gains,
                         },
                         &log_lines,
-                        |_track, mml| {
+                        |track, mml| {
                             let core_cfg = CoreConfig::from(&daw_cfg);
-                            mml_render_for_cache(mml, &core_cfg, entry_ref)
+                            let probe_context = NativeRenderProbeContext::playback_current(
+                                track,
+                                current_measure_index,
+                                current_active_track_count,
+                                daw_cache_mml_hash(mml),
+                                daw_cfg.offline_render_workers,
+                            );
+                            mml_render_for_cache_with_probe(
+                                mml,
+                                &core_cfg,
+                                entry_ref,
+                                Some(&probe_context),
+                            )
                         },
                     ) {
                         Ok(playback_audio) => playback_audio,
@@ -241,6 +269,8 @@ impl DawApp {
                     ab_repeat_range,
                 );
                 let next_track_mmls = &measure_track_mmls[lookahead_measure_index];
+                let lookahead_active_track_count =
+                    active_track_count(next_track_mmls, &track_gains, tracks);
                 let next_playback_audio = match build_playback_measure_samples(
                     &cache,
                     PlaybackMeasureRequest {
@@ -251,9 +281,21 @@ impl DawApp {
                         track_gains: &track_gains,
                     },
                     &log_lines,
-                    |_track, mml| {
+                    |track, mml| {
                         let core_cfg = CoreConfig::from(&daw_cfg);
-                        mml_render_for_cache(mml, &core_cfg, entry_ref)
+                        let probe_context = NativeRenderProbeContext::playback_lookahead(
+                            track,
+                            lookahead_measure_index,
+                            lookahead_active_track_count,
+                            daw_cache_mml_hash(mml),
+                            daw_cfg.offline_render_workers,
+                        );
+                        mml_render_for_cache_with_probe(
+                            mml,
+                            &core_cfg,
+                            entry_ref,
+                            Some(&probe_context),
+                        )
                     },
                 ) {
                     Ok(playback_audio) => playback_audio,

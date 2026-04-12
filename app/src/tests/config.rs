@@ -40,6 +40,19 @@ fn log_file_path_ends_with_cmrt_log_txt() {
 }
 
 #[test]
+fn native_probe_log_file_path_ends_with_cmrt_native_probe_log() {
+    if let Some(path) = native_probe_log_file_path() {
+        let path_str = path.to_string_lossy();
+        assert!(
+            path_str.ends_with("clap-mml-render-tui/log/native_probe.log")
+                || path_str.ends_with(r"clap-mml-render-tui\log\native_probe.log"),
+            "native_probe_log_file_path が clap-mml-render-tui/log/native_probe.log で終わっていない: {}",
+            path_str
+        );
+    }
+}
+
+#[test]
 #[cfg(target_os = "windows")]
 fn config_file_path_uses_local_not_roaming_on_windows() {
     if let Some(path) = config_file_path() {

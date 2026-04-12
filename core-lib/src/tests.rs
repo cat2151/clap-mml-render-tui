@@ -1,6 +1,9 @@
 use super::*;
-use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    path::Path,
+    sync::{Arc, Barrier, Mutex, OnceLock},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 #[test]
 fn reexports_core_config() {
@@ -133,4 +136,182 @@ fn cache_render_extracts_patch_from_embedded_json_with_factory_prefix_fallback()
         Some(factory_patch.to_string_lossy().as_ref())
     );
     std::fs::remove_dir_all(root).ok();
+}
+
+fn native_probe_test_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+struct NativeProbeTestGuard;
+
+impl Drop for NativeProbeTestGuard {
+    fn drop(&mut self) {
+        set_native_probe_logger(None);
+        clear_native_render_probe_state_for_tests();
+    }
+}
+
+fn with_captured_native_probe_logs<F>(test: F)
+where
+    F: FnOnce(Arc<Mutex<Vec<String>>>),
+{
+    let _lock = native_probe_test_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    clear_native_render_probe_state_for_tests();
+    let captured = Arc::new(Mutex::new(Vec::new()));
+    let logger: NativeProbeLogger = {
+        let captured = Arc::clone(&captured);
+        Arc::new(move |line: &str| {
+            captured.lock().unwrap().push(line.to_string());
+        })
+    };
+    set_native_probe_logger(Some(logger));
+    let _guard = NativeProbeTestGuard;
+    test(captured);
+}
+
+fn probe_test_core_config() -> CoreConfig {
+    CoreConfig {
+        output_midi: "out.mid".into(),
+        output_wav: "out.wav".into(),
+        sample_rate: 44_100.0,
+        buffer_size: 512,
+        patch_path: Some("/patches/Pad 1.fxp".into()),
+        patches_dir: Some("/patches".into()),
+        random_patch: false,
+    }
+}
+
+#[test]
+fn native_render_probe_skips_logs_when_no_overlap_is_detected() {
+    with_captured_native_probe_logs(|captured| {
+        let config = probe_test_core_config();
+        let context = NativeRenderProbeContext::cache_worker(1, 2, 3, 0x1234, 4);
+
+        with_native_render_probe(Some(&context), &config, 8, 1_024, || Ok(()))
+            .expect("probe wrapper should return inner result");
+
+        assert!(
+            captured.lock().unwrap().is_empty(),
+            "probe logs should stay silent without overlapping native renders"
+        );
+    });
+}
+
+#[test]
+fn native_render_probe_emits_before_and_after_for_overlapping_render() {
+    with_captured_native_probe_logs(|captured| {
+        let config = probe_test_core_config();
+        let entered_render = Arc::new(Barrier::new(2));
+        let release_render = Arc::new(Barrier::new(2));
+        let first_context = NativeRenderProbeContext::cache_worker(1, 2, 7, 0xaaaa, 4);
+        let first_config = config.clone();
+        let entered_render_worker = Arc::clone(&entered_render);
+        let release_render_worker = Arc::clone(&release_render);
+
+        let handle = std::thread::spawn(move || {
+            with_native_render_probe(Some(&first_context), &first_config, 12, 2_048, || {
+                entered_render_worker.wait();
+                release_render_worker.wait();
+                Ok(())
+            })
+            .expect("first render should complete");
+        });
+
+        entered_render.wait();
+
+        let second_context = NativeRenderProbeContext::playback_current(2, 0, 2, 0xbbbb, 4);
+        with_native_render_probe(Some(&second_context), &config, 6, 512, || Ok(()))
+            .expect("second render should complete");
+
+        release_render.wait();
+        handle.join().unwrap();
+
+        let logs = captured.lock().unwrap().clone();
+        assert_eq!(logs.len(), 2, "expected a paired before/after probe log");
+        assert!(
+            logs[0].contains("native-probe before"),
+            "before log missing: {:?}",
+            logs
+        );
+        assert!(
+            logs[1].contains("native-probe after"),
+            "after log missing: {:?}",
+            logs
+        );
+        assert!(
+            logs.iter()
+                .all(|line| line.contains("caller=playback_current")),
+            "paired logs should describe the overlapping render: {:?}",
+            logs
+        );
+        assert!(
+            logs.iter().all(|line| line.contains("overlap_count=1")),
+            "paired logs should record the detected overlap count: {:?}",
+            logs
+        );
+        assert!(
+            logs.iter()
+                .all(|line| line.contains("overlap_callers=cache_worker")),
+            "paired logs should record the in-flight caller kind: {:?}",
+            logs
+        );
+    });
+}
+
+#[test]
+fn requested_native_render_probe_emits_paired_logs_for_tui_overlap() {
+    with_captured_native_probe_logs(|captured| {
+        let first_context = NativeRenderProbeContext::tui_prefetch(1, 0x1111, 4);
+        let second_context = NativeRenderProbeContext::tui_playback(23, 2, 0x2222, 4);
+        let entered_render = Arc::new(Barrier::new(2));
+        let release_render = Arc::new(Barrier::new(2));
+        let entered_render_worker = Arc::clone(&entered_render);
+        let release_render_worker = Arc::clone(&release_render);
+
+        let handle = std::thread::spawn(move || {
+            with_requested_native_render_probe(
+                Some(&first_context),
+                Some("patches_factory/Pads/Pad 1.fxp"),
+                || {
+                    entered_render_worker.wait();
+                    release_render_worker.wait();
+                    Ok(())
+                },
+            )
+            .expect("first requested render should complete");
+        });
+
+        entered_render.wait();
+        with_requested_native_render_probe(
+            Some(&second_context),
+            Some("patches_factory/Pads/Pad 2.fxp"),
+            || Ok(()),
+        )
+        .expect("second requested render should complete");
+
+        release_render.wait();
+        handle.join().unwrap();
+
+        let logs = captured.lock().unwrap().clone();
+        assert_eq!(logs.len(), 2, "expected paired TUI probe logs");
+        assert!(
+            logs.iter().all(|line| line.contains("caller=tui_playback")),
+            "TUI logs should describe the overlapping playback render: {:?}",
+            logs
+        );
+        assert!(
+            logs.iter()
+                .any(|line| line.contains("requested_patch_path")),
+            "requested render logs should include the requested patch path: {:?}",
+            logs
+        );
+        assert!(
+            logs.iter().all(|line| line.contains("active_renders=2")),
+            "TUI logs should retain the active render count: {:?}",
+            logs
+        );
+    });
 }

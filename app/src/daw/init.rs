@@ -1,5 +1,6 @@
 use super::save::load_saved_grid_size;
 use super::*;
+use cmrt_core::{mml_render_for_cache_with_probe, NativeRenderProbeContext};
 
 struct DawGridBuffers {
     tracks: usize,
@@ -117,6 +118,7 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
     let cache = Arc::new(Mutex::new(cache));
 
     let cache_render_workers = cfg.offline_render_workers;
+    crate::logging::install_native_probe_logger();
 
     // 設定数のキャッシュワーカースレッドを起動する。
     // MML -> SMF の前処理排他は core-lib 側で行い、ここでは render 本体の並列度だけを増やす。
@@ -185,7 +187,19 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
                     continue;
                 }
                 let core_cfg = cmrt_core::CoreConfig::from(&daw_cfg);
-                match mml_render_for_cache(&job.mml, &core_cfg, entry_ref) {
+                let probe_context = NativeRenderProbeContext::cache_worker(
+                    track,
+                    measure,
+                    job.generation,
+                    job.rendered_mml_hash,
+                    cache_render_workers,
+                );
+                match mml_render_for_cache_with_probe(
+                    &job.mml,
+                    &core_cfg,
+                    entry_ref,
+                    Some(&probe_context),
+                ) {
                     Ok(samples) => {
                         let mut should_complete_batch = false;
                         {

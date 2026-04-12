@@ -81,7 +81,7 @@ mod ui;
 mod wav_io;
 
 use clack_host::prelude::PluginEntry;
-use cmrt_core::{ensure_daw_dir, mml_render_for_cache, write_wav};
+use cmrt_core::{ensure_daw_dir, write_wav};
 use ratatui::Frame;
 use tui_textarea::TextArea;
 
