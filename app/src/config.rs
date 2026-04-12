@@ -160,24 +160,29 @@ fn serialize_patches_dirs_line(patches_dirs: &[String]) -> String {
 /// - macOS:   ~/Library/Application Support/clap-mml-render-tui/config.toml
 ///
 /// システムの設定ディレクトリが取得できない場合は `None` を返す。
+fn config_app_dir() -> Option<PathBuf> {
+    #[cfg(test)]
+    if let Some(app_dir) = crate::test_utils::test_app_dir_for_current_thread_or_default() {
+        return Some(app_dir);
+    }
+
+    dirs::config_local_dir().map(|d| d.join("clap-mml-render-tui"))
+}
+
 pub fn config_file_path() -> Option<PathBuf> {
-    dirs::config_local_dir().map(|d| d.join("clap-mml-render-tui").join("config.toml"))
+    config_app_dir().map(|d| d.join("config.toml"))
 }
 
 /// DAW デバッグログ (`log/log.txt`) のパスを返す。
 /// `config.toml` と同じ config_local_dir 配下に配置する。
 pub fn log_file_path() -> Option<PathBuf> {
-    dirs::config_local_dir().map(|d| d.join("clap-mml-render-tui").join("log").join("log.txt"))
+    config_app_dir().map(|d| d.join("log").join("log.txt"))
 }
 
 /// native render probe 専用ログのパスを返す。
 /// 既存の DAW デバッグログとは分離し、同じ log ディレクトリへ配置する。
 pub fn native_probe_log_file_path() -> Option<PathBuf> {
-    dirs::config_local_dir().map(|d| {
-        d.join("clap-mml-render-tui")
-            .join("log")
-            .join("native_probe.log")
-    })
+    config_app_dir().map(|d| d.join("log").join("native_probe.log"))
 }
 
 impl Config {

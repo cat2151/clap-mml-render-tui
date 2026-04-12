@@ -10,23 +10,48 @@ pub(crate) fn env_lock() -> &'static Mutex<()> {
     LOCK.get_or_init(|| Mutex::new(()))
 }
 
+#[cfg(test)]
+fn default_test_app_dir_path() -> &'static PathBuf {
+    static PATH: OnceLock<PathBuf> = OnceLock::new();
+    PATH.get_or_init(|| {
+        let unique = format!(
+            "cmrt_test_process_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock should be after unix epoch in tests")
+                .as_nanos()
+        );
+        let app_dir = std::env::temp_dir()
+            .join(unique)
+            .join("clap-mml-render-tui");
+        std::fs::create_dir_all(app_dir.join("history")).ok();
+        let _guard = env_lock()
+            .lock()
+            .expect("test environment lock should not be poisoned");
+        std::env::set_var("CMRT_BASE_DIR", &app_dir);
+        app_dir
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn default_test_app_dir() -> Option<PathBuf> {
+    Some(default_test_app_dir_path().clone())
+}
+
+#[cfg(not(test))]
+pub(crate) fn default_test_app_dir() -> Option<PathBuf> {
+    None
+}
+
+pub(crate) fn test_app_dir_for_current_thread_or_default() -> Option<PathBuf> {
+    crate::history::test_history_app_dir_for_current_thread().or_else(default_test_app_dir)
+}
+
 pub(crate) struct TestEnvGuard {
     _lock: Option<MutexGuard<'static, ()>>,
     vars: Vec<(&'static str, Option<String>)>,
     previous_history_app_dir: Option<Option<PathBuf>>,
-}
-
-impl TestEnvGuard {
-    pub(crate) fn set(key: &'static str, value: impl AsRef<OsStr>) -> Self {
-        let lock = env_lock()
-            .lock()
-            .expect("test environment lock should not be poisoned");
-        Self {
-            _lock: Some(lock),
-            vars: set_env_vars([(key, value)]),
-            previous_history_app_dir: None,
-        }
-    }
 }
 
 impl Drop for TestEnvGuard {
@@ -43,16 +68,20 @@ impl Drop for TestEnvGuard {
     }
 }
 
-/// Redirects history/session persistence to a test-only path for the current test thread.
+/// Redirects test persistence to a dedicated app dir for the current thread.
+/// This isolates history/config/log paths and the core-lib output base together.
 pub(crate) fn set_local_dir_envs(base: &Path) -> TestEnvGuard {
     let app_dir = base.join("clap-mml-render-tui");
     let history_dir = app_dir.join("history");
+    let lock = env_lock()
+        .lock()
+        .expect("test environment lock should not be poisoned");
     std::fs::create_dir_all(&history_dir).ok();
     let previous_history_app_dir =
-        crate::history::set_test_history_app_dir_for_current_thread(Some(app_dir));
+        crate::history::set_test_history_app_dir_for_current_thread(Some(app_dir.clone()));
     TestEnvGuard {
-        _lock: None,
-        vars: Vec::new(),
+        _lock: Some(lock),
+        vars: set_env_vars([("CMRT_BASE_DIR", &app_dir)]),
         previous_history_app_dir: Some(previous_history_app_dir),
     }
 }
@@ -65,7 +94,7 @@ pub(crate) fn set_data_local_dir_envs(base: &Path) -> TestEnvGuard {
 
 /// Builds the expected history.json path using the same production resolver as history.rs.
 pub(crate) fn session_state_path_for_test() -> Option<PathBuf> {
-    crate::history::test_history_app_dir_for_current_thread()
+    test_app_dir_for_current_thread_or_default()
         .map(|d| d.join("history").join("history.json"))
         .or_else(|| {
             dirs::config_local_dir().map(|d| {
@@ -77,7 +106,7 @@ pub(crate) fn session_state_path_for_test() -> Option<PathBuf> {
 }
 
 pub(crate) fn legacy_session_state_path_for_test() -> Option<PathBuf> {
-    crate::history::test_history_app_dir_for_current_thread()
+    test_app_dir_for_current_thread_or_default()
         .map(|d| d.join("history.json"))
         .or_else(|| {
             dirs::data_local_dir().map(|d| d.join("clap-mml-render-tui").join("history.json"))
@@ -85,7 +114,7 @@ pub(crate) fn legacy_session_state_path_for_test() -> Option<PathBuf> {
 }
 
 pub(crate) fn legacy_daw_session_state_path_for_test() -> Option<PathBuf> {
-    crate::history::test_history_app_dir_for_current_thread()
+    test_app_dir_for_current_thread_or_default()
         .map(|d| d.join("history_daw.json"))
         .or_else(|| {
             dirs::data_local_dir().map(|d| d.join("clap-mml-render-tui").join("history_daw.json"))
@@ -93,7 +122,7 @@ pub(crate) fn legacy_daw_session_state_path_for_test() -> Option<PathBuf> {
 }
 
 pub(crate) fn legacy_patch_phrase_store_path_for_test() -> Option<PathBuf> {
-    crate::history::test_history_app_dir_for_current_thread()
+    test_app_dir_for_current_thread_or_default()
         .map(|d| d.join("patch_history.json"))
         .or_else(|| {
             dirs::data_local_dir().map(|d| d.join("clap-mml-render-tui").join("patch_history.json"))
@@ -101,13 +130,13 @@ pub(crate) fn legacy_patch_phrase_store_path_for_test() -> Option<PathBuf> {
 }
 
 pub(crate) fn legacy_daw_file_path_for_test() -> Option<PathBuf> {
-    crate::history::test_history_app_dir_for_current_thread()
+    test_app_dir_for_current_thread_or_default()
         .map(|d| d.join("daw.json"))
         .or_else(|| dirs::data_local_dir().map(|d| d.join("clap-mml-render-tui").join("daw.json")))
 }
 
 pub(crate) fn patch_phrase_store_path_for_test() -> Option<PathBuf> {
-    crate::history::test_history_app_dir_for_current_thread()
+    test_app_dir_for_current_thread_or_default()
         .map(|d| d.join("history").join("patch_history.json"))
         .or_else(|| {
             dirs::config_local_dir().map(|d| {

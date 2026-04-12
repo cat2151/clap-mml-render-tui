@@ -6,7 +6,7 @@ fn commit_insert_skips_cache_refresh_when_text_is_unchanged() {
     std::fs::remove_dir_all(&tmp).ok();
 
     {
-        let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
+        let _guard = crate::test_utils::set_local_dir_envs(&tmp);
 
         let (mut app, cache_rx) = build_test_app();
         app.data[1][1] = "cdef".to_string();
@@ -58,7 +58,7 @@ fn commit_insert_triggers_cache_refresh_when_text_changes() {
     std::fs::remove_dir_all(&tmp).ok();
 
     {
-        let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
+        let _guard = crate::test_utils::set_local_dir_envs(&tmp);
 
         let (mut app, cache_rx) = build_test_app();
         app.data[1][1] = "cdef".to_string();
@@ -97,7 +97,7 @@ fn commit_insert_keeps_semicolon_text_in_same_measure() {
     std::fs::remove_dir_all(&tmp).ok();
 
     {
-        let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
+        let _guard = crate::test_utils::set_local_dir_envs(&tmp);
 
         let (mut app, cache_rx) = build_test_app();
         app.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();

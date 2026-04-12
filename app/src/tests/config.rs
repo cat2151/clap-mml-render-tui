@@ -53,21 +53,13 @@ fn native_probe_log_file_path_ends_with_cmrt_native_probe_log() {
 }
 
 #[test]
-#[cfg(target_os = "windows")]
-fn config_file_path_uses_local_not_roaming_on_windows() {
-    if let Some(path) = config_file_path() {
-        let path_str = path.to_string_lossy().to_lowercase();
-        assert!(
-            !path_str.contains("roaming"),
-            "config_file_path が Roaming を使っている（Local を使うべき）: {}",
-            path.display()
-        );
-        assert!(
-            path_str.contains("local"),
-            "config_file_path が Local を含んでいない: {}",
-            path.display()
-        );
-    }
+fn config_file_path_uses_test_temp_dir_under_tests() {
+    let path = config_file_path().expect("test config path should be available");
+    assert!(
+        path.starts_with(std::env::temp_dir()),
+        "config_file_path should stay under a test-only temp dir: {}",
+        path.display()
+    );
 }
 
 #[test]

@@ -227,6 +227,49 @@ fn save_and_load_session_state_roundtrip_daw_mode() {
 }
 
 #[test]
+fn history_files_use_test_temp_dir_under_tests() {
+    let session_path = super::session_state_path().expect("session_state_path should be available");
+    let daw_path = super::daw_file_path().expect("daw_file_path should be available");
+
+    assert!(
+        session_path.starts_with(std::env::temp_dir()),
+        "session_state_path should stay under a test-only temp dir: {}",
+        session_path.display()
+    );
+    assert!(
+        daw_path.starts_with(std::env::temp_dir()),
+        "daw_file_path should stay under a test-only temp dir: {}",
+        daw_path.display()
+    );
+}
+
+#[test]
+fn set_local_dir_envs_redirects_config_history_and_cmrt_base_dir() {
+    let tmp = std::env::temp_dir().join("cmrt_test_local_dir_redirects_all_paths");
+    std::fs::remove_dir_all(&tmp).ok();
+
+    {
+        let _guard = crate::test_utils::set_local_dir_envs(&tmp);
+        let app_dir = tmp.join("clap-mml-render-tui");
+
+        assert_eq!(
+            std::env::var_os("CMRT_BASE_DIR").map(std::path::PathBuf::from),
+            Some(app_dir.clone())
+        );
+        assert_eq!(
+            crate::config::config_file_path().as_deref(),
+            Some(app_dir.join("config.toml").as_path())
+        );
+        assert_eq!(
+            super::daw_file_path().as_deref(),
+            Some(app_dir.join("history").join("daw.json").as_path())
+        );
+    }
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
 fn load_daw_session_state_reads_history_daw_json() {
     let tmp = std::env::temp_dir().join("cmrt_test_history_daw_load");
     std::fs::remove_dir_all(&tmp).ok();

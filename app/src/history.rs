@@ -39,7 +39,9 @@ thread_local! {
 
 #[cfg(test)]
 fn test_history_app_dir() -> Option<PathBuf> {
-    TEST_HISTORY_APP_DIR.with(|dir| dir.borrow().clone())
+    TEST_HISTORY_APP_DIR
+        .with(|dir| dir.borrow().clone())
+        .or_else(crate::test_utils::default_test_app_dir)
 }
 
 #[cfg(not(test))]
@@ -56,7 +58,7 @@ pub(crate) fn set_test_history_app_dir_for_current_thread(
 
 #[cfg(test)]
 pub(crate) fn test_history_app_dir_for_current_thread() -> Option<PathBuf> {
-    test_history_app_dir()
+    TEST_HISTORY_APP_DIR.with(|dir| dir.borrow().clone())
 }
 
 #[cfg(not(test))]

@@ -22,7 +22,7 @@ fn handle_mixer_adjusts_volume_in_3db_steps() {
     std::fs::remove_dir_all(&tmp).ok();
 
     {
-        let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
+        let _guard = crate::test_utils::set_local_dir_envs(&tmp);
         let (mut app, _cache_rx) = build_test_app();
         app.mode = DawMode::Mixer;
         app.mixer_cursor_track = 1;

@@ -9,7 +9,7 @@ fn handle_normal_g_sets_random_patch_and_generated_phrase_then_previews() {
     std::fs::write(&patch_path, b"dummy").unwrap();
 
     {
-        let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
+        let _guard = crate::test_utils::set_local_dir_envs(&tmp);
 
         let (mut app, _cache_rx) = build_test_app();
         app.cfg = Arc::new(Config {
@@ -94,7 +94,7 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
     std::fs::write(&patch_path, b"dummy").unwrap();
 
     {
-        let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
+        let _guard = crate::test_utils::set_local_dir_envs(&tmp);
 
         let (mut app, cache_rx) = build_test_app();
         app.cursor_track = 1;
@@ -207,7 +207,7 @@ fn handle_normal_r_uses_saved_patch_filter_query_for_random_selection() {
     std::fs::write(tmp.join("Lead").join("Lead 1.fxp"), b"dummy").unwrap();
 
     {
-        let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
+        let _guard = crate::test_utils::set_local_dir_envs(&tmp);
 
         let (mut app, _cache_rx) = build_test_app();
         app.cursor_track = 1;
@@ -243,7 +243,7 @@ fn handle_normal_r_preserves_trailing_init_mml_when_updating_patch_json() {
     std::fs::write(tmp.join("Pad").join("Pad 1.fxp"), b"dummy").unwrap();
 
     {
-        let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
+        let _guard = crate::test_utils::set_local_dir_envs(&tmp);
 
         let (mut app, _cache_rx) = build_test_app();
         app.cursor_track = 1;
@@ -281,7 +281,7 @@ fn handle_normal_r_preserves_init_json_formatting_and_whitespace() {
     std::fs::write(tmp.join("Pad").join("Pad 1.fxp"), b"dummy").unwrap();
 
     {
-        let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
+        let _guard = crate::test_utils::set_local_dir_envs(&tmp);
 
         let (mut app, _cache_rx) = build_test_app();
         app.cursor_track = 1;
@@ -327,7 +327,7 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
     std::fs::write(&patch_path, b"dummy").unwrap();
 
     {
-        let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
+        let _guard = crate::test_utils::set_local_dir_envs(&tmp);
 
         let (mut app, cache_rx) = build_test_app();
         app.cursor_track = 1;
@@ -444,7 +444,7 @@ fn handle_normal_r_ignores_non_playable_track_and_keeps_header_unchanged() {
     std::fs::write(&patch_path, b"dummy").unwrap();
 
     {
-        let _guard = crate::test_utils::TestEnvGuard::set("CMRT_BASE_DIR", &tmp);
+        let _guard = crate::test_utils::set_local_dir_envs(&tmp);
 
         let (mut app, cache_rx) = build_test_app();
         app.cursor_track = 0;
