@@ -5,7 +5,10 @@ use mmlabc_to_smf::mml_preprocessor;
 use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::tui::{filter_patches, PatchLoadState, PATCH_FILTER_QUERY_JSON_KEY, PATCH_JSON_KEY};
+use crate::tui::{
+    filter_patches, PatchLoadState, RandomPatchPickDebug, PATCH_FILTER_QUERY_JSON_KEY,
+    PATCH_JSON_KEY,
+};
 
 use super::{Mode, PlayState, TuiApp};
 
@@ -247,10 +250,10 @@ impl<'a> TuiApp<'a> {
         }
     }
 
-    fn pick_random_patch_name_with_query(
+    fn pick_random_patch_debug_with_query(
         &self,
         query: Option<&str>,
-    ) -> Result<Option<String>, String> {
+    ) -> Result<Option<RandomPatchPickDebug>, String> {
         if !crate::patches::has_configured_patch_dirs(&self.cfg) {
             return Err("patches_dirs が設定されていません".to_string());
         }
@@ -262,7 +265,11 @@ impl<'a> TuiApp<'a> {
                 Err("patches_dirs にパッチが見つかりません".to_string())
             }
             PatchLoadState::Ready(pairs) => {
-                let filtered = match query {
+                let filter_query = query
+                    .map(str::trim)
+                    .filter(|query| !query.is_empty())
+                    .map(str::to_string);
+                let candidates = match filter_query.as_deref() {
                     Some(query) => {
                         let matching_patches = filter_patches(pairs, query);
                         if matching_patches.is_empty() {
@@ -276,18 +283,22 @@ impl<'a> TuiApp<'a> {
                     .duration_since(UNIX_EPOCH)
                     .map(|duration| duration.as_nanos())
                     .unwrap_or(0);
-                let index = (ns % filtered.len() as u128) as usize;
-                Ok(Some(filtered[index].clone()))
+                let selected_index = (ns % candidates.len() as u128) as usize;
+                Ok(Some(RandomPatchPickDebug {
+                    filter_query,
+                    selected_index,
+                    selected_patch_name: candidates[selected_index].clone(),
+                    candidates,
+                }))
             }
         }
     }
 
-    pub(super) fn pick_random_patch_for_current_line(
+    pub(super) fn pick_random_patch_for_current_line_debug(
         &self,
-    ) -> Result<Option<(String, Option<String>)>, String> {
+    ) -> Result<Option<RandomPatchPickDebug>, String> {
         let filter_query = self.current_line_random_patch_filter_query();
-        self.pick_random_patch_name_with_query(filter_query.as_deref())
-            .map(|patch_name| patch_name.map(|patch_name| (patch_name, filter_query)))
+        self.pick_random_patch_debug_with_query(filter_query.as_deref())
     }
 
     pub(in crate::tui) fn start_insert(&mut self) {

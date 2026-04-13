@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, AtomicUsize};
 use std::sync::{Arc, Mutex};
 
-use super::{Mode, PatchPhrasePane, PatchSelectPane, PlayState, TuiApp};
+use super::{Mode, NotepadRandomLogState, PatchPhrasePane, PatchSelectPane, PlayState, TuiApp};
 use crate::{config::Config, patches::PatchSortOrder};
 
 /// バックグラウンドパッチ読み込みの状態
@@ -132,6 +132,7 @@ impl<'a> TuiApp<'a> {
             patch_phrase_query_textarea: crate::text_input::new_single_line_textarea(""),
             patch_phrase_filter_active: false,
             patch_phrase_store_dirty: false,
+            notepad_random_log: NotepadRandomLogState::default(),
             is_daw_mode,
         }
     }

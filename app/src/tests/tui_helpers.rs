@@ -58,6 +58,7 @@ impl TuiApp<'static> {
             patch_phrase_query_textarea: crate::text_input::new_single_line_textarea(""),
             patch_phrase_filter_active: false,
             patch_phrase_store_dirty: false,
+            notepad_random_log: NotepadRandomLogState::default(),
             is_daw_mode: false,
         }
     }

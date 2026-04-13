@@ -126,7 +126,7 @@ fn handle_normal_p_and_p_paste_yanked_line_below_or_above_cursor() {
 }
 
 #[test]
-fn handle_normal_home_and_l_move_to_edges_and_play_destination_line() {
+fn handle_normal_home_moves_to_first_line_and_plays_destination_line() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![
         "line 0".to_string(),
@@ -134,16 +134,8 @@ fn handle_normal_home_and_l_move_to_edges_and_play_destination_line() {
         "line 2".to_string(),
         "line 3".to_string(),
     ];
-    app.cursor = 1;
-    app.list_state.select(Some(1));
-
-    app.handle_normal(KeyCode::Char('L'));
-
-    assert_eq!(app.cursor, 3);
-    assert!(matches!(
-        &*app.play_state.lock().unwrap(),
-        PlayState::Running(msg) if msg == "line 3"
-    ));
+    app.cursor = 3;
+    app.list_state.select(Some(3));
 
     app.handle_normal(KeyCode::Home);
 
@@ -152,4 +144,49 @@ fn handle_normal_home_and_l_move_to_edges_and_play_destination_line() {
         &*app.play_state.lock().unwrap(),
         PlayState::Running(msg) if msg == "line 0"
     ));
+}
+
+#[test]
+fn handle_normal_upper_l_no_longer_moves_to_last_line() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![
+        "line 0".to_string(),
+        "line 1".to_string(),
+        "line 2".to_string(),
+    ];
+    app.cursor = 1;
+    app.list_state.select(Some(1));
+
+    let result = app.handle_normal(KeyCode::Char('L'));
+
+    assert!(matches!(result, NormalAction::Continue));
+    assert_eq!(app.cursor, 1);
+    assert_eq!(app.list_state.selected(), Some(1));
+    assert!(matches!(&*app.play_state.lock().unwrap(), PlayState::Idle));
+}
+
+#[test]
+fn handle_normal_shift_l_toggles_random_log_pane_without_moving_cursor() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![
+        "line 0".to_string(),
+        "line 1".to_string(),
+        "line 2".to_string(),
+    ];
+    app.cursor = 1;
+    app.list_state.select(Some(1));
+
+    let result =
+        app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('L'), KeyModifiers::SHIFT));
+
+    assert!(matches!(result, NormalAction::Continue));
+    assert!(app.notepad_random_log.visible);
+    assert_eq!(app.cursor, 1);
+    assert_eq!(app.list_state.selected(), Some(1));
+    assert!(matches!(&*app.play_state.lock().unwrap(), PlayState::Idle));
+
+    app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('L'), KeyModifiers::SHIFT));
+
+    assert!(!app.notepad_random_log.visible);
+    assert_eq!(app.cursor, 1);
 }
