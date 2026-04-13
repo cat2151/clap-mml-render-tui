@@ -150,6 +150,7 @@ fn normal_screen_shows_notepad_random_log_pane_when_enabled() {
     assert!(screen.contains("notepad r log"));
     assert!(screen.contains("selected list"));
     assert!(normalized.contains("rpressedfilter=drum"));
+    // 選択中 index=1 が可視範囲に残ることだけを確認し、先頭候補の表示有無には依存しない。
     assert!(normalized.contains("1:Drum/Snare1.fxp"));
     assert!(screen.contains("Shift+L:log"));
 }

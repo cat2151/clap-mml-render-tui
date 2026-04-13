@@ -206,13 +206,18 @@ fn draw_normal(
         let visible_capacity = usize::from(log_chunks[1].height.saturating_sub(2).max(1));
         let total_candidates = log_state.selected_candidates.len();
         let selected_index = log_state.selected_index.unwrap_or(0);
-        let window_size = visible_capacity.min(total_candidates.max(1));
-        let half_window = window_size / 2;
-        let max_start = total_candidates.saturating_sub(window_size);
-        let visible_start = selected_index.saturating_sub(half_window).min(max_start);
-        let visible_end = visible_start
-            .saturating_add(window_size)
-            .min(total_candidates);
+        let (visible_start, visible_end) = if total_candidates == 0 {
+            (0, 0)
+        } else {
+            let window_size = visible_capacity.min(total_candidates);
+            let half_window = window_size / 2;
+            let max_start = total_candidates.saturating_sub(window_size);
+            let visible_start = selected_index.saturating_sub(half_window).min(max_start);
+            let visible_end = visible_start
+                .saturating_add(window_size)
+                .min(total_candidates);
+            (visible_start, visible_end)
+        };
         let log_items: Vec<ListItem> = log_state.selected_candidates[visible_start..visible_end]
             .iter()
             .enumerate()
