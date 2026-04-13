@@ -93,6 +93,7 @@ fn truncate_for_log(value: &str, max_chars: usize) -> String {
 }
 
 const NOTEPAD_RANDOM_LOG_HISTORY_MAX: usize = 20;
+const NOTEPAD_RANDOM_LOG_GLOBAL_CANDIDATE_LOG_MAX: usize = 32;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct NotepadRandomLogState {
@@ -246,7 +247,7 @@ impl<'a> TuiApp<'a> {
         state.filter_query = filter_query.clone();
         state.selected_index = Some(selected_index);
         state.selected_patch_name = Some(selected_patch_name.clone());
-        state.selected_candidates = candidates.clone();
+        state.selected_candidates = candidates;
         state.recent_random_indexes.push_back(selected_index);
         while state.recent_random_indexes.len() > NOTEPAD_RANDOM_LOG_HISTORY_MAX {
             state.recent_random_indexes.pop_front();
@@ -256,7 +257,7 @@ impl<'a> TuiApp<'a> {
         Self::log_notepad_event(format!("r pressed filter={filter_label}"));
         Self::log_notepad_event(format!(
             "r selected count={} index={} patch={}",
-            candidates.len(),
+            state.selected_candidates.len(),
             selected_index,
             selected_patch_name
         ));
@@ -269,8 +270,21 @@ impl<'a> TuiApp<'a> {
                 .collect::<Vec<_>>()
                 .join(", ")
         ));
-        for candidate in candidates {
-            Self::log_notepad_event(format!("r candidate {candidate}"));
+        if state.visible {
+            for candidate in state
+                .selected_candidates
+                .iter()
+                .take(NOTEPAD_RANDOM_LOG_GLOBAL_CANDIDATE_LOG_MAX)
+            {
+                Self::log_notepad_event(format!("r candidate {candidate}"));
+            }
+            let omitted = state
+                .selected_candidates
+                .len()
+                .saturating_sub(NOTEPAD_RANDOM_LOG_GLOBAL_CANDIDATE_LOG_MAX);
+            if omitted > 0 {
+                Self::log_notepad_event(format!("r candidate ... ({omitted} more)"));
+            }
         }
     }
 

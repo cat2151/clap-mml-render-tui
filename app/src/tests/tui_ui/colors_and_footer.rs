@@ -150,8 +150,28 @@ fn normal_screen_shows_notepad_random_log_pane_when_enabled() {
     assert!(screen.contains("notepad r log"));
     assert!(screen.contains("selected list"));
     assert!(normalized.contains("rpressedfilter=drum"));
-    assert!(normalized.contains("0:Drum/Kick1.fxp"));
+    assert!(normalized.contains("1:Drum/Snare1.fxp"));
     assert!(screen.contains("Shift+L:log"));
+}
+
+#[test]
+fn normal_screen_limits_notepad_random_log_candidates_to_visible_window() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["abc".to_string()];
+    app.notepad_random_log.visible = true;
+    app.notepad_random_log.selected_candidates = (0..40)
+        .map(|index| format!("Drum/{index:02}.fxp"))
+        .collect();
+    app.notepad_random_log.selected_index = Some(30);
+    app.notepad_random_log.selected_patch_name = Some("Drum/30.fxp".to_string());
+
+    let screen = render_lines(&mut app, 120, 16).join("\n");
+    let normalized = screen.replace(' ', "");
+
+    assert!(normalized.contains("selectedlist"));
+    assert!(normalized.contains("/40"));
+    assert!(normalized.contains("30:Drum/30.fxp"));
+    assert!(!normalized.contains("0:Drum/00.fxp"));
 }
 
 #[test]

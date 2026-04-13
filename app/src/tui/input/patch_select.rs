@@ -229,11 +229,25 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn pick_random_patch_name(&self) -> Result<String, String> {
-        self.pick_random_patch_debug_with_query(None)
-            .map(|debug| debug.map(|debug| debug.selected_patch_name))
-            .map(|patch_name| {
-                patch_name.expect("random patch selection should exist without query")
-            })
+        if !crate::patches::has_configured_patch_dirs(&self.cfg) {
+            return Err("patches_dirs が設定されていません".to_string());
+        }
+        let state = self.patch_load_state.lock().unwrap();
+        match &*state {
+            PatchLoadState::Loading => Err("パッチを読み込み中です...".to_string()),
+            PatchLoadState::Err(e) => Err(format!("パッチの読み込みに失敗: {}", e)),
+            PatchLoadState::Ready(pairs) if pairs.is_empty() => {
+                Err("patches_dirs にパッチが見つかりません".to_string())
+            }
+            PatchLoadState::Ready(pairs) => {
+                let ns = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|duration| duration.as_nanos())
+                    .unwrap_or(0);
+                let index = (ns % pairs.len() as u128) as usize;
+                Ok(pairs[index].0.clone())
+            }
+        }
     }
 
     fn pick_random_patch_debug_with_query(

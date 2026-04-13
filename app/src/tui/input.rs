@@ -137,9 +137,6 @@ impl<'a> TuiApp<'a> {
                     KeyCode::Char('M') => {
                         self.set_normal_cursor(self.lines.len() / 2);
                     }
-                    KeyCode::Char('L') => {
-                        self.set_normal_cursor(self.lines.len().saturating_sub(1));
-                    }
                     KeyCode::Char('K') | KeyCode::Char('?') => self.enter_help(),
                     KeyCode::Enter | KeyCode::Char(' ') => self.play_current_line(),
                     _ => {}

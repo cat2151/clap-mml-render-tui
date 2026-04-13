@@ -172,6 +172,10 @@ fn draw_normal(
 
     if app.notepad_random_log.visible {
         let log_state = &app.notepad_random_log;
+        let log_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(4), Constraint::Min(3)])
+            .split(main_chunks[1]);
         let filter_label = log_state.filter_query.as_deref().unwrap_or("(none)");
         let selected_label = match (
             log_state.selected_index,
@@ -199,11 +203,21 @@ fn draw_normal(
             )),
             Line::from(selected_label),
         ];
-        let log_items: Vec<ListItem> = log_state
-            .selected_candidates
+        let visible_capacity = usize::from(log_chunks[1].height.saturating_sub(2).max(1));
+        let total_candidates = log_state.selected_candidates.len();
+        let selected_index = log_state.selected_index.unwrap_or(0);
+        let window_size = visible_capacity.min(total_candidates.max(1));
+        let half_window = window_size / 2;
+        let max_start = total_candidates.saturating_sub(window_size);
+        let visible_start = selected_index.saturating_sub(half_window).min(max_start);
+        let visible_end = visible_start
+            .saturating_add(window_size)
+            .min(total_candidates);
+        let log_items: Vec<ListItem> = log_state.selected_candidates[visible_start..visible_end]
             .iter()
             .enumerate()
-            .map(|(index, patch_name)| {
+            .map(|(offset, patch_name)| {
+                let index = visible_start + offset;
                 let style = if Some(index) == log_state.selected_index {
                     cursor_highlight_style(base_style())
                 } else {
@@ -215,10 +229,16 @@ fn draw_normal(
                 )))
             })
             .collect();
-        let log_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(4), Constraint::Min(3)])
-            .split(main_chunks[1]);
+        let selected_list_title = if total_candidates == 0 {
+            " selected list ".to_string()
+        } else {
+            format!(
+                " selected list {}-{} / {} ",
+                visible_start + 1,
+                visible_end,
+                total_candidates
+            )
+        };
         f.render_widget(
             Paragraph::new(log_summary).block(
                 Block::default()
@@ -233,7 +253,7 @@ fn draw_normal(
             List::new(log_items).block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" selected list ")
+                    .title(selected_list_title)
                     .style(base_style())
                     .border_style(base_style().fg(MONOKAI_CYAN)),
             ),
