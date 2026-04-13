@@ -1,5 +1,45 @@
 use super::*;
 
+const PATCH_SELECT_OVERLAY_WIDTH_PERCENT: u16 = 88;
+const PATCH_SELECT_OVERLAY_HEIGHT_PERCENT: u16 = 76;
+
+fn patch_select_overlay_layout(
+    area: ratatui::layout::Rect,
+) -> (
+    ratatui::layout::Rect,
+    [ratatui::layout::Rect; 5],
+    [ratatui::layout::Rect; 2],
+) {
+    let overlay_area = crate::ui_utils::centered_rect(
+        PATCH_SELECT_OVERLAY_WIDTH_PERCENT,
+        PATCH_SELECT_OVERLAY_HEIGHT_PERCENT,
+        area,
+    );
+    let inner = ratatui::widgets::Block::default()
+        .borders(ratatui::widgets::Borders::ALL)
+        .inner(overlay_area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(inner);
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[1]);
+
+    (
+        overlay_area,
+        [chunks[0], chunks[1], chunks[2], chunks[3], chunks[4]],
+        [panes[0], panes[1]],
+    )
+}
+
 #[test]
 fn patch_select_screen_renders_as_overlay_on_normal_screen() {
     let mut app = TuiApp::new_for_test(test_config());
@@ -59,6 +99,87 @@ fn patch_select_screen_shows_filter_confirm_title_when_filter_active() {
 }
 
 #[test]
+fn patch_select_screen_shows_prefilled_query_when_filter_is_inactive() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_all = vec![
+        ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
+        (
+            "Leads/Lead 1.fxp".to_string(),
+            "leads/lead 1.fxp".to_string(),
+        ),
+    ];
+    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
+    app.patch_query = "pad".to_string();
+    app.patch_query_textarea = crate::text_input::new_single_line_textarea("pad");
+    app.patch_list_state.select(Some(0));
+    app.mode = Mode::PatchSelect;
+
+    let normalized = render_lines(&mut app, 100, 16).join("\n").replace(' ', "");
+
+    assert!(normalized.contains("ENTERで音色を選択-patchselect-"));
+    assert!(normalized.contains("pad"));
+}
+
+#[test]
+fn patch_select_overlay_uses_yellow_outer_border_and_dims_unfocused_sections() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_all = vec![
+        ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
+        ("Bass/Bass 1.fxp".to_string(), "bass/bass 1.fxp".to_string()),
+    ];
+    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string(), "Bass/Bass 1.fxp".to_string()];
+    app.patch_favorite_items = vec!["Bass/Bass 1.fxp".to_string()];
+    app.patch_list_state.select(Some(0));
+    app.patch_favorites_state.select(Some(0));
+    app.patch_select_focus = PatchSelectPane::Patches;
+    app.mode = Mode::PatchSelect;
+
+    let buffer = render_buffer(&mut app, 100, 16);
+    let (overlay_area, chunks, panes) = patch_select_overlay_layout(buffer.area);
+    let outer_border = buffer.cell((overlay_area.x, overlay_area.y)).unwrap();
+    let query_border = buffer.cell((chunks[0].x, chunks[0].y + 1)).unwrap();
+    let patch_border = buffer.cell((panes[0].x, panes[0].y + 1)).unwrap();
+    let favorite_border = buffer.cell((panes[1].x, panes[1].y + 1)).unwrap();
+
+    assert_eq!(outer_border.symbol(), "┌");
+    assert_eq!(outer_border.fg, MONOKAI_YELLOW);
+    assert_eq!(query_border.symbol(), "│");
+    assert_eq!(query_border.fg, MONOKAI_GRAY);
+    assert_eq!(patch_border.symbol(), "│");
+    assert_eq!(patch_border.fg, MONOKAI_YELLOW);
+    assert_eq!(favorite_border.symbol(), "│");
+    assert_eq!(favorite_border.fg, MONOKAI_GRAY);
+}
+
+#[test]
+fn patch_select_filter_focus_highlights_query_border_and_dims_both_panes() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_all = vec![
+        ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
+        ("Bass/Bass 1.fxp".to_string(), "bass/bass 1.fxp".to_string()),
+    ];
+    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string(), "Bass/Bass 1.fxp".to_string()];
+    app.patch_favorite_items = vec!["Bass/Bass 1.fxp".to_string()];
+    app.patch_select_filter_active = true;
+    app.patch_query = "pad".to_string();
+    app.patch_select_focus = PatchSelectPane::Favorites;
+    app.mode = Mode::PatchSelect;
+
+    let buffer = render_buffer(&mut app, 100, 16);
+    let (_, chunks, panes) = patch_select_overlay_layout(buffer.area);
+    let query_border = buffer.cell((chunks[0].x, chunks[0].y + 1)).unwrap();
+    let patch_border = buffer.cell((panes[0].x, panes[0].y + 1)).unwrap();
+    let favorite_border = buffer.cell((panes[1].x, panes[1].y + 1)).unwrap();
+
+    assert_eq!(query_border.symbol(), "│");
+    assert_eq!(query_border.fg, MONOKAI_YELLOW);
+    assert_eq!(patch_border.symbol(), "│");
+    assert_eq!(patch_border.fg, MONOKAI_GRAY);
+    assert_eq!(favorite_border.symbol(), "│");
+    assert_eq!(favorite_border.fg, MONOKAI_GRAY);
+}
+
+#[test]
 fn patch_select_screen_splits_status_and_keybinds() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["abc".to_string()];
@@ -107,20 +228,7 @@ fn patch_select_filter_uses_query_cursor_only() {
 
     let buffer = render_buffer(&mut app, 100, 16);
     let cursor = render_cursor_position(&mut app, 100, 16);
-    let overlay_area = crate::ui_utils::centered_rect(82, 70, buffer.area);
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(1),
-            Constraint::Length(1),
-            Constraint::Length(1),
-        ])
-        .split(overlay_area);
-    let panes = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(chunks[1]);
+    let (_, chunks, panes) = patch_select_overlay_layout(buffer.area);
     let query_inner = ratatui::widgets::Block::default()
         .borders(ratatui::widgets::Borders::ALL)
         .inner(chunks[0]);
@@ -156,20 +264,7 @@ fn patch_select_only_highlights_the_focused_pane() {
     app.mode = Mode::PatchSelect;
 
     let buffer = render_buffer(&mut app, 100, 16);
-    let overlay_area = crate::ui_utils::centered_rect(82, 70, buffer.area);
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(1),
-            Constraint::Length(1),
-            Constraint::Length(1),
-        ])
-        .split(overlay_area);
-    let panes = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(chunks[1]);
+    let (_, _, panes) = patch_select_overlay_layout(buffer.area);
 
     assert!(pane_contains_cursor_highlight(&buffer, panes[0]));
     assert!(!pane_contains_cursor_highlight(&buffer, panes[1]));

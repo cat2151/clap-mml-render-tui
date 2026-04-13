@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::tui::PatchSelectPane;
-use crate::ui_theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_YELLOW};
+use crate::ui_theme::{cursor_highlight_style, MONOKAI_GRAY, MONOKAI_YELLOW};
 
 use super::super::{
     status::{
@@ -24,8 +24,14 @@ pub(in crate::tui::ui) fn draw_patch_select(
     status_color: Color,
     mode: Mode,
 ) {
-    let area = crate::ui_utils::centered_rect(82, 70, f.area());
+    let area = crate::ui_utils::centered_rect(88, 76, f.area());
     f.render_widget(Clear, area);
+    let overlay_block = Block::default()
+        .borders(Borders::ALL)
+        .style(base_style())
+        .border_style(base_style().fg(MONOKAI_YELLOW));
+    let inner = overlay_block.inner(area);
+    f.render_widget(overlay_block, area);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -35,7 +41,7 @@ pub(in crate::tui::ui) fn draw_patch_select(
             Constraint::Length(1),
             Constraint::Length(1),
         ])
-        .split(area);
+        .split(inner);
     let panes = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
@@ -47,12 +53,43 @@ pub(in crate::tui::ui) fn draw_patch_select(
     } else {
         " ENTERで音色を選択 - patch select - "
     };
-    let patch_query_widget = crate::text_input::build_query_textarea_widget(
+    let active_frame_color = MONOKAI_YELLOW;
+    let inactive_frame_color = MONOKAI_GRAY;
+    let query_frame_color = if app.patch_select_filter_active {
+        active_frame_color
+    } else {
+        inactive_frame_color
+    };
+    let patch_frame_color =
+        if !app.patch_select_filter_active && app.patch_select_focus == PatchSelectPane::Patches {
+            active_frame_color
+        } else {
+            inactive_frame_color
+        };
+    let favorite_frame_color = if !app.patch_select_filter_active
+        && app.patch_select_focus == PatchSelectPane::Favorites
+    {
+        active_frame_color
+    } else {
+        inactive_frame_color
+    };
+    let query_border = base_style().fg(query_frame_color);
+    let patch_border = base_style().fg(patch_frame_color);
+    let favorite_border = base_style().fg(favorite_frame_color);
+
+    let mut patch_query_widget = crate::text_input::build_query_textarea_widget(
         &app.patch_query_textarea,
         &app.patch_query,
         search_title,
         "/ を押して絞り込み",
-        MONOKAI_YELLOW,
+        query_frame_color,
+    );
+    patch_query_widget.set_block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(Span::styled(search_title, query_border))
+            .style(base_style())
+            .border_style(query_border),
     );
     f.render_widget(&patch_query_widget, chunks[0]);
 
@@ -93,16 +130,6 @@ pub(in crate::tui::ui) fn draw_patch_select(
                 .collect(),
         )
     };
-    let patch_border = if app.patch_select_focus == PatchSelectPane::Patches {
-        base_style().fg(MONOKAI_CYAN)
-    } else {
-        base_style()
-    };
-    let favorite_border = if app.patch_select_focus == PatchSelectPane::Favorites {
-        base_style().fg(MONOKAI_CYAN)
-    } else {
-        base_style()
-    };
     let selection_status = match app.patch_select_focus {
         PatchSelectPane::Patches => {
             super::selection_status_text(app.patch_cursor, app.patch_filtered.len())
@@ -127,7 +154,7 @@ pub(in crate::tui::ui) fn draw_patch_select(
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" 音色選択 ")
+                    .title(Span::styled(" 音色選択 ", patch_border))
                     .style(base_style())
                     .border_style(patch_border),
             )
@@ -150,7 +177,10 @@ pub(in crate::tui::ui) fn draw_patch_select(
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(format!(" Favorite音色 ({favorite_count}) "))
+                    .title(Span::styled(
+                        format!(" Favorite音色 ({favorite_count}) "),
+                        favorite_border,
+                    ))
                     .style(base_style())
                     .border_style(favorite_border),
             )

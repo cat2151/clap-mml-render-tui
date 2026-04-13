@@ -168,3 +168,32 @@ fn handle_patch_select_n_p_t_switch_to_corresponding_overlays() {
     assert!(matches!(app.mode, Mode::PatchSelect));
     assert_eq!(app.patch_filtered[app.patch_cursor], "Leads/Lead 1.fxp");
 }
+
+#[test]
+fn open_patch_select_overlay_prefills_saved_patch_filter_from_current_line() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![
+        r#"{"Surge XT patch":"Pads/Pad 2.fxp","Surge XT patch filter":"pads"} l8cdef"#.to_string(),
+    ];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "Pads/Pad 1.fxp",
+        "Pads/Pad 2.fxp",
+        "Leads/Lead 1.fxp",
+    ]))));
+
+    app.open_patch_select_overlay(None);
+
+    assert!(matches!(app.mode, Mode::PatchSelect));
+    assert_eq!(app.patch_query, "pads");
+    assert_eq!(
+        crate::text_input::textarea_value(&app.patch_query_textarea),
+        "pads"
+    );
+    assert!(!app.patch_select_filter_active);
+    assert_eq!(
+        app.patch_filtered,
+        vec!["Pads/Pad 1.fxp".to_string(), "Pads/Pad 2.fxp".to_string()]
+    );
+    assert_eq!(app.patch_cursor, 1);
+    assert_eq!(app.patch_list_state.selected(), Some(1));
+}

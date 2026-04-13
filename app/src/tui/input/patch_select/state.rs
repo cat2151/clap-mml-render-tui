@@ -83,13 +83,9 @@ impl<'a> TuiApp<'a> {
         ) {
             self.patch_phrase_store_dirty = true;
         }
-        self.patch_query = String::new();
-        self.patch_query_textarea = crate::text_input::new_single_line_textarea("");
-        self.patch_filtered = self
-            .patch_all
-            .iter()
-            .map(|(orig, _)| orig.clone())
-            .collect();
+        self.patch_query = self.current_line_patch_filter_query().unwrap_or_default();
+        self.patch_query_textarea = crate::text_input::new_single_line_textarea(&self.patch_query);
+        self.patch_filtered = crate::tui::filter_patches(&self.patch_all, &self.patch_query);
         self.patch_select_focus = PatchSelectPane::Patches;
         self.patch_select_filter_active = false;
         self.patch_cursor = initial_patch_name
