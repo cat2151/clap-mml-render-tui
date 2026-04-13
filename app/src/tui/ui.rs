@@ -97,7 +97,19 @@ fn draw_normal(
             Constraint::Length(1),
         ])
         .split(f.area());
-    app.normal_page_size = visible_list_page_size(chunks[0]);
+    let main_chunks = if app.notepad_random_log.visible {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(46), Constraint::Percentage(54)])
+            .split(chunks[0])
+    } else {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(3), Constraint::Length(0)])
+            .split(chunks[0])
+    };
+    let list_area = main_chunks[0];
+    app.normal_page_size = visible_list_page_size(list_area);
 
     let items: Vec<ListItem> = app
         .lines
@@ -132,14 +144,13 @@ fn draw_normal(
                     .border_style(base_style().fg(MONOKAI_CYAN)),
             )
             .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
-        chunks[0],
+        list_area,
         &mut app.list_state,
     );
 
     // INSERTモード時は、カーソル行にインラインで textarea を描画する。
     // List ウィジェットは Borders::ALL を持つため、内側の開始は +1 ずつオフセットする。
     if is_insert {
-        let list_area = chunks[0];
         let offset = app.list_state.offset();
         if cursor >= offset {
             let row_in_visible = (cursor - offset) as u16;
@@ -157,6 +168,77 @@ fn draw_normal(
                 f.render_widget(&app.textarea, textarea_area);
             }
         }
+    }
+
+    if app.notepad_random_log.visible {
+        let log_state = &app.notepad_random_log;
+        let filter_label = log_state.filter_query.as_deref().unwrap_or("(none)");
+        let selected_label = match (
+            log_state.selected_index,
+            log_state.selected_patch_name.as_deref(),
+        ) {
+            (Some(index), Some(patch_name)) => format!(
+                "count={} index={index} patch={patch_name}",
+                log_state.selected_candidates.len()
+            ),
+            _ => format!("count={} index=-", log_state.selected_candidates.len()),
+        };
+        let recent_indexes = if log_state.recent_random_indexes.is_empty() {
+            "(empty)".to_string()
+        } else {
+            log_state
+                .recent_random_indexes
+                .iter()
+                .map(|index| index.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let log_summary = vec![
+            Line::from(format!(
+                "r pressed filter={filter_label}  recent20=[{recent_indexes}]"
+            )),
+            Line::from(selected_label),
+        ];
+        let log_items: Vec<ListItem> = log_state
+            .selected_candidates
+            .iter()
+            .enumerate()
+            .map(|(index, patch_name)| {
+                let style = if Some(index) == log_state.selected_index {
+                    cursor_highlight_style(base_style())
+                } else {
+                    base_style()
+                };
+                ListItem::new(Line::from(Span::styled(
+                    format!("{index}: {patch_name}"),
+                    style,
+                )))
+            })
+            .collect();
+        let log_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(4), Constraint::Min(3)])
+            .split(main_chunks[1]);
+        f.render_widget(
+            Paragraph::new(log_summary).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" notepad r log ")
+                    .style(base_style())
+                    .border_style(base_style().fg(MONOKAI_CYAN)),
+            ),
+            log_chunks[0],
+        );
+        f.render_widget(
+            List::new(log_items).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" selected list ")
+                    .style(base_style())
+                    .border_style(base_style().fg(MONOKAI_CYAN)),
+            ),
+            log_chunks[1],
+        );
     }
 
     f.render_widget(

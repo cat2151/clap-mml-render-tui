@@ -156,6 +156,64 @@ fn handle_normal_r_prioritizes_saved_patch_filter_over_current_patch_category() 
 }
 
 #[test]
+fn handle_normal_r_records_notepad_random_log_details() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![
+        r#"{"Surge XT patch":"Leads/Lead 1.fxp","Surge XT patch filter":"drum"} cde"#.to_string(),
+    ];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "Drum/Kick 1.fxp",
+        "Drum/Snare 1.fxp",
+        "Drum/Hat 1.fxp",
+        "Leads/Lead 1.fxp",
+    ]))));
+
+    app.handle_normal(KeyCode::Char('r'));
+
+    assert_eq!(app.notepad_random_log.filter_query.as_deref(), Some("drum"));
+    assert_eq!(
+        app.notepad_random_log.selected_candidates,
+        vec![
+            "Drum/Kick 1.fxp".to_string(),
+            "Drum/Snare 1.fxp".to_string(),
+            "Drum/Hat 1.fxp".to_string(),
+        ]
+    );
+    assert_eq!(app.notepad_random_log.recent_random_indexes.len(), 1);
+    let selected_index = app
+        .notepad_random_log
+        .selected_index
+        .expect("selected index should be recorded");
+    assert!(selected_index < app.notepad_random_log.selected_candidates.len());
+    assert_eq!(
+        app.notepad_random_log.selected_patch_name.as_deref(),
+        app.notepad_random_log
+            .selected_candidates
+            .get(selected_index)
+            .map(String::as_str)
+    );
+}
+
+#[test]
+fn handle_normal_r_keeps_only_recent_20_random_indexes() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![
+        r#"{"Surge XT patch":"Leads/Lead 1.fxp","Surge XT patch filter":"drum"} cde"#.to_string(),
+    ];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "Drum/Kick 1.fxp",
+        "Drum/Snare 1.fxp",
+        "Drum/Hat 1.fxp",
+    ]))));
+
+    for _ in 0..25 {
+        app.handle_normal(KeyCode::Char('r'));
+    }
+
+    assert_eq!(app.notepad_random_log.recent_random_indexes.len(), 20);
+}
+
+#[test]
 fn handle_normal_r_drops_saved_filter_when_it_matches_no_patch() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![

@@ -130,6 +130,31 @@ fn normal_screen_shows_active_parallel_render_count_in_purple() {
 }
 
 #[test]
+fn normal_screen_shows_notepad_random_log_pane_when_enabled() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["abc".to_string()];
+    app.notepad_random_log.visible = true;
+    app.notepad_random_log.filter_query = Some("drum".to_string());
+    app.notepad_random_log.selected_index = Some(1);
+    app.notepad_random_log.selected_patch_name = Some("Drum/Snare 1.fxp".to_string());
+    app.notepad_random_log.selected_candidates = vec![
+        "Drum/Kick 1.fxp".to_string(),
+        "Drum/Snare 1.fxp".to_string(),
+        "Drum/Hat 1.fxp".to_string(),
+    ];
+    app.notepad_random_log.recent_random_indexes = [0usize, 1, 1, 2].into_iter().collect();
+
+    let screen = render_lines(&mut app, 160, 16).join("\n");
+    let normalized = screen.replace(' ', "");
+
+    assert!(screen.contains("notepad r log"));
+    assert!(screen.contains("selected list"));
+    assert!(normalized.contains("rpressedfilter=drum"));
+    assert!(normalized.contains("0:Drum/Kick1.fxp"));
+    assert!(screen.contains("Shift+L:log"));
+}
+
+#[test]
 fn insert_screen_shows_insert_title_without_duplicate_line_text() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["abc".to_string()];

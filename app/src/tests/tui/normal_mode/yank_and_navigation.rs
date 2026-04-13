@@ -153,3 +153,29 @@ fn handle_normal_home_and_l_move_to_edges_and_play_destination_line() {
         PlayState::Running(msg) if msg == "line 0"
     ));
 }
+
+#[test]
+fn handle_normal_shift_l_toggles_random_log_pane_without_moving_cursor() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![
+        "line 0".to_string(),
+        "line 1".to_string(),
+        "line 2".to_string(),
+    ];
+    app.cursor = 1;
+    app.list_state.select(Some(1));
+
+    let result =
+        app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('L'), KeyModifiers::SHIFT));
+
+    assert!(matches!(result, NormalAction::Continue));
+    assert!(app.notepad_random_log.visible);
+    assert_eq!(app.cursor, 1);
+    assert_eq!(app.list_state.selected(), Some(1));
+    assert!(matches!(&*app.play_state.lock().unwrap(), PlayState::Idle));
+
+    app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('L'), KeyModifiers::SHIFT));
+
+    assert!(!app.notepad_random_log.visible);
+    assert_eq!(app.cursor, 1);
+}
