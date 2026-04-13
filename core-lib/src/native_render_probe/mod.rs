@@ -128,7 +128,7 @@ fn begin_native_render_probe(context: &NativeRenderProbeContext) -> NativeRender
     } else {
         overlapping
             .iter()
-            .map(|other| other.caller_kind.as_str())
+            .map(NativeRenderProbeContext::caller_kind_as_str)
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect::<Vec<_>>()
@@ -136,10 +136,10 @@ fn begin_native_render_probe(context: &NativeRenderProbeContext) -> NativeRender
     };
     let same_snapshot_overlap = overlapping
         .iter()
-        .any(|other| other.snapshot_key() == context.snapshot_key());
+        .any(|other| other.has_same_snapshot_as(context));
     let mixed_callers_overlap = overlapping
         .iter()
-        .any(|other| other.caller_kind != context.caller_kind);
+        .any(|other| !other.has_same_caller_kind_as(context));
     state.in_flight.insert(probe_id, context.clone());
     NativeRenderProbeDecision {
         probe_id,

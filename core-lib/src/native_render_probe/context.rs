@@ -1,5 +1,5 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum NativeRenderCallerKind {
+enum NativeRenderCallerKind {
     CacheWorker,
     PlaybackCurrent,
     PlaybackLookahead,
@@ -10,7 +10,7 @@ pub(super) enum NativeRenderCallerKind {
 }
 
 impl NativeRenderCallerKind {
-    pub(super) fn as_str(self) -> &'static str {
+    fn as_str(self) -> &'static str {
         match self {
             Self::CacheWorker => "cache_worker",
             Self::PlaybackCurrent => "playback_current",
@@ -45,7 +45,7 @@ enum NativeRenderProbeDetails {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) enum NativeRenderSnapshotKey {
+enum NativeRenderSnapshotKey {
     CacheWorker {
         track: usize,
         measure: usize,
@@ -64,7 +64,7 @@ pub(super) enum NativeRenderSnapshotKey {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NativeRenderProbeContext {
-    pub(super) caller_kind: NativeRenderCallerKind,
+    caller_kind: NativeRenderCallerKind,
     offline_render_workers: usize,
     details: NativeRenderProbeDetails,
 }
@@ -198,7 +198,7 @@ impl NativeRenderProbeContext {
         }
     }
 
-    pub(super) fn snapshot_key(&self) -> NativeRenderSnapshotKey {
+    fn snapshot_key(&self) -> NativeRenderSnapshotKey {
         match &self.details {
             NativeRenderProbeDetails::CacheWorker {
                 track,
@@ -282,6 +282,18 @@ impl NativeRenderProbeContext {
                 ),
             },
         }
+    }
+
+    pub(super) fn caller_kind_as_str(&self) -> &'static str {
+        self.caller_kind.as_str()
+    }
+
+    pub(super) fn has_same_caller_kind_as(&self, other: &Self) -> bool {
+        self.caller_kind == other.caller_kind
+    }
+
+    pub(super) fn has_same_snapshot_as(&self, other: &Self) -> bool {
+        self.snapshot_key() == other.snapshot_key()
     }
 }
 
