@@ -117,12 +117,18 @@ fn next_native_probe_id(state: &mut NativeRenderProbeState) -> u64 {
 }
 
 fn begin_native_render_probe(context: &NativeRenderProbeContext) -> NativeRenderProbeDecision {
-    let mut state = native_render_probe_state()
-        .lock()
-        .expect("native render probe state lock should not be poisoned");
-    let overlapping: Vec<NativeRenderProbeContext> = state.in_flight.values().cloned().collect();
-    let probe_id = next_native_probe_id(&mut state);
+    let (probe_id, overlapping) = {
+        let mut state = native_render_probe_state()
+            .lock()
+            .expect("native render probe state lock should not be poisoned");
+        let overlapping: Vec<NativeRenderProbeContext> =
+            state.in_flight.values().cloned().collect();
+        let probe_id = next_native_probe_id(&mut state);
+        state.in_flight.insert(probe_id, context.clone());
+        (probe_id, overlapping)
+    };
     let should_probe = !overlapping.is_empty();
+    let overlap_count = overlapping.len();
     let overlap_callers = if overlapping.is_empty() {
         "none".to_string()
     } else {
@@ -140,11 +146,10 @@ fn begin_native_render_probe(context: &NativeRenderProbeContext) -> NativeRender
     let mixed_callers_overlap = overlapping
         .iter()
         .any(|other| !other.has_same_caller_kind_as(context));
-    state.in_flight.insert(probe_id, context.clone());
     NativeRenderProbeDecision {
         probe_id,
         should_probe,
-        overlap_count: overlapping.len(),
+        overlap_count,
         overlap_callers,
         same_snapshot_overlap,
         mixed_callers_overlap,
