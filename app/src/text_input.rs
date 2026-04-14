@@ -1,10 +1,10 @@
-use crossterm::event::KeyCode;
+use crossterm::event::KeyEvent;
 use ratatui::{
     layout::{Position, Rect},
     style::{Color, Style},
     widgets::{Block, Borders},
 };
-use tui_textarea::{Input, Key, TextArea};
+use tui_textarea::TextArea;
 
 use crate::ui_theme::{cursor_highlight_style, MONOKAI_BG, MONOKAI_FG, MONOKAI_GRAY};
 
@@ -97,64 +97,55 @@ pub(crate) fn single_line_textarea_cursor_position(
     )
 }
 
-pub(crate) fn apply_key_code_to_textarea(textarea: &mut TextArea<'_>, key: KeyCode) -> bool {
-    let Some(input) = key_code_to_input(key) else {
-        return false;
-    };
-
+pub(crate) fn apply_key_event_to_textarea(
+    textarea: &mut TextArea<'_>,
+    key_event: KeyEvent,
+) -> bool {
     let before = textarea_value(textarea);
-    if !textarea.input(input) {
+    if !textarea.input(key_event) {
         return false;
     }
 
     textarea_value(textarea) != before
 }
 
-fn key_code_to_input(key: KeyCode) -> Option<Input> {
-    let key = match key {
-        KeyCode::Backspace => Key::Backspace,
-        KeyCode::Delete => Key::Delete,
-        KeyCode::Left => Key::Left,
-        KeyCode::Right => Key::Right,
-        KeyCode::Up => Key::Up,
-        KeyCode::Down => Key::Down,
-        KeyCode::Home => Key::Home,
-        KeyCode::End => Key::End,
-        KeyCode::PageUp => Key::PageUp,
-        KeyCode::PageDown => Key::PageDown,
-        KeyCode::Tab => Key::Tab,
-        KeyCode::Char(c) => Key::Char(c),
-        _ => return None,
-    };
-    Some(Input {
-        key,
-        ctrl: false,
-        alt: false,
-        shift: false,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     #[test]
-    fn apply_key_code_to_textarea_returns_false_for_cursor_only_input() {
+    fn apply_key_event_to_textarea_returns_false_for_cursor_only_input() {
         let mut textarea = new_single_line_textarea("pad");
 
-        assert!(!apply_key_code_to_textarea(&mut textarea, KeyCode::Left));
+        assert!(!apply_key_event_to_textarea(
+            &mut textarea,
+            KeyEvent::new(KeyCode::Left, KeyModifiers::NONE)
+        ));
         assert_eq!(textarea_value(&textarea), "pad");
     }
 
     #[test]
-    fn apply_key_code_to_textarea_returns_true_when_text_changes() {
+    fn apply_key_event_to_textarea_returns_true_when_text_changes() {
         let mut textarea = new_single_line_textarea("pa");
 
-        assert!(apply_key_code_to_textarea(
+        assert!(apply_key_event_to_textarea(
             &mut textarea,
-            KeyCode::Char('d')
+            KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE)
         ));
         assert_eq!(textarea_value(&textarea), "pad");
+    }
+
+    #[test]
+    fn apply_key_event_to_textarea_moves_cursor_with_ctrl_a() {
+        let mut textarea = new_single_line_textarea("pad");
+
+        assert_eq!(textarea.cursor(), (0, 3));
+        assert!(!apply_key_event_to_textarea(
+            &mut textarea,
+            KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL)
+        ));
+        assert_eq!(textarea.cursor(), (0, 0));
     }
 
     #[test]

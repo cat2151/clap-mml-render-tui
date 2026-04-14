@@ -127,6 +127,25 @@ fn handle_patch_select_backspace_to_empty_keeps_filter_input_active() {
 }
 
 #[test]
+fn handle_patch_select_filter_ctrl_a_uses_tui_textarea_default_binding() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
+    app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
+    app.mode = Mode::PatchSelect;
+
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE));
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('X'), KeyModifiers::NONE));
+
+    assert!(app.patch_select_filter_active);
+    assert_eq!(app.patch_query, "Xpad");
+}
+
+#[test]
 fn handle_patch_select_question_mark_enters_help_and_esc_returns_to_patch_select() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::PatchSelect;

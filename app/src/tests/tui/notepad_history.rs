@@ -240,6 +240,22 @@ fn handle_notepad_history_filter_space_updates_query_before_preview_shortcut() {
 }
 
 #[test]
+fn handle_notepad_history_filter_ctrl_a_uses_tui_textarea_default_binding() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.start_notepad_history();
+
+    app.handle_notepad_history(KeyCode::Char('/'));
+    app.handle_notepad_history(KeyCode::Char('p'));
+    app.handle_notepad_history(KeyCode::Char('a'));
+    app.handle_notepad_history(KeyCode::Char('d'));
+    app.handle_notepad_history_key_event(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+    app.handle_notepad_history(KeyCode::Char('X'));
+
+    assert!(app.notepad_filter_active);
+    assert_eq!(app.notepad_query, "Xpad");
+}
+
+#[test]
 fn handle_notepad_history_n_p_t_switch_to_corresponding_overlays() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![r#"{"Surge XT patch":"Line Patch"} line phrase"#.to_string()];

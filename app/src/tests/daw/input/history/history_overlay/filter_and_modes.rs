@@ -74,6 +74,25 @@ fn handle_history_overlay_allows_slash_character_in_filter_query() {
 }
 
 #[test]
+fn handle_history_overlay_filter_ctrl_a_uses_tui_textarea_default_binding() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    app.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.start_history_overlay();
+
+    app.handle_history_overlay(KeyCode::Char('/'));
+    app.handle_history_overlay(KeyCode::Char('p'));
+    app.handle_history_overlay(KeyCode::Char('a'));
+    app.handle_history_overlay(KeyCode::Char('d'));
+    app.handle_history_overlay_key_event(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+    app.handle_history_overlay(KeyCode::Char('X'));
+
+    assert!(app.history_overlay_filter_active);
+    assert_eq!(app.history_overlay_query, "Xpad");
+}
+
+#[test]
 fn handle_history_overlay_question_mark_opens_help_and_esc_returns_to_history_overlay() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_track = 1;

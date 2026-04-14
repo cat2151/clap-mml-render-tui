@@ -330,6 +330,30 @@ fn handle_patch_phrase_left_in_filter_query_does_not_repreview() {
 }
 
 #[test]
+fn handle_patch_phrase_filter_ctrl_a_uses_tui_textarea_default_binding() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["before".to_string()];
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: vec!["alpha".to_string()],
+            favorites: vec![],
+        },
+    );
+    app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
+
+    app.handle_patch_phrase(KeyCode::Char('/'));
+    app.handle_patch_phrase(KeyCode::Char('p'));
+    app.handle_patch_phrase(KeyCode::Char('a'));
+    app.handle_patch_phrase(KeyCode::Char('d'));
+    app.handle_patch_phrase_key_event(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+    app.handle_patch_phrase(KeyCode::Char('X'));
+
+    assert!(app.patch_phrase_filter_active);
+    assert_eq!(app.patch_phrase_query, "Xpad");
+}
+
+#[test]
 fn handle_patch_phrase_n_p_t_switch_to_corresponding_overlays() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];

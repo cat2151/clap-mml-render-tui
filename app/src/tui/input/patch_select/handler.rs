@@ -66,13 +66,13 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(in crate::tui) fn handle_patch_select(&mut self, key_event: KeyEvent) {
-        if key_event.modifiers.contains(KeyModifiers::CONTROL) {
-            self.handle_patch_select_with_ctrl(key_event);
+        if self.patch_select_filter_active {
+            self.handle_patch_select_filter_input(key_event);
             return;
         }
 
-        if self.patch_select_filter_active {
-            self.handle_patch_select_filter_input(key_event);
+        if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+            self.handle_patch_select_with_ctrl(key_event);
             return;
         }
 

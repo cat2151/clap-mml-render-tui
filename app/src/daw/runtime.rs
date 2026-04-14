@@ -73,8 +73,15 @@ impl DawApp {
                     if key.modifiers.contains(KeyModifiers::CONTROL)
                         && key.code == KeyCode::Char('c')
                     {
-                        if self.mode == DawMode::Insert {
-                            self.handle_insert(key);
+                        match self.mode {
+                            DawMode::Insert => self.handle_insert(key),
+                            DawMode::History if self.history_overlay_filter_active => {
+                                self.handle_history_overlay_key_event(key)
+                            }
+                            DawMode::PatchSelect if self.patch_select_filter_active => {
+                                self.handle_patch_select_key_event(key)
+                            }
+                            _ => {}
                         }
                         continue;
                     }
@@ -96,8 +103,8 @@ impl DawApp {
                         DawMode::Insert => self.handle_insert(key),
                         DawMode::Help => self.handle_help(key.code),
                         DawMode::Mixer => self.handle_mixer(key.code),
-                        DawMode::History => self.handle_history_overlay(key.code),
-                        DawMode::PatchSelect => self.handle_patch_select(key.code),
+                        DawMode::History => self.handle_history_overlay_key_event(key),
+                        DawMode::PatchSelect => self.handle_patch_select_key_event(key),
                     }
                 }
             }

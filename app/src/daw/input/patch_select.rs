@@ -1,4 +1,4 @@
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::super::{
     mml::build_cell_mml_from_data, DawApp, DawMode, DawPatchSelectPane, DawPlayState,
@@ -236,13 +236,18 @@ impl DawApp {
         self.preview_selected_patch();
     }
 
+    #[cfg(test)]
     pub(in crate::daw) fn handle_patch_select(&mut self, key: KeyCode) {
+        self.handle_patch_select_key_event(KeyEvent::new(key, KeyModifiers::NONE));
+    }
+
+    pub(crate) fn handle_patch_select_key_event(&mut self, key_event: KeyEvent) {
         if self.patch_select_filter_active {
             crate::text_input::sync_single_line_textarea(
                 &mut self.patch_query_textarea,
                 &self.patch_query,
             );
-            match key {
+            match key_event.code {
                 KeyCode::Esc => {
                     self.cancel_patch_filter_input();
                 }
@@ -256,9 +261,9 @@ impl DawApp {
                 KeyCode::Char('?') => self.enter_help(),
                 _ => {
                     let previous_query = self.patch_query.clone();
-                    if crate::text_input::apply_key_code_to_textarea(
+                    if crate::text_input::apply_key_event_to_textarea(
                         &mut self.patch_query_textarea,
-                        key,
+                        key_event,
                     ) {
                         let next_query =
                             crate::text_input::textarea_value(&self.patch_query_textarea);
@@ -272,6 +277,14 @@ impl DawApp {
             }
             return;
         }
+
+        if key_event
+            .modifiers
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+        {
+            return;
+        }
+        let key = key_event.code;
 
         match key {
             KeyCode::Esc => {

@@ -1,4 +1,4 @@
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::{filter_items, Mode, PatchPhrasePane, TuiApp};
 
@@ -187,13 +187,18 @@ impl<'a> TuiApp<'a> {
         self.mode = Mode::NotepadHistory;
     }
 
+    #[cfg(test)]
     pub(super) fn handle_notepad_history(&mut self, key: KeyCode) {
+        self.handle_notepad_history_key_event(KeyEvent::new(key, KeyModifiers::NONE));
+    }
+
+    pub(crate) fn handle_notepad_history_key_event(&mut self, key_event: KeyEvent) {
         if self.notepad_filter_active {
             crate::text_input::sync_single_line_textarea(
                 &mut self.notepad_query_textarea,
                 &self.notepad_query,
             );
-            match key {
+            match key_event.code {
                 KeyCode::Esc => {
                     self.notepad_pending_delete = false;
                     self.notepad_filter_active = false;
@@ -210,9 +215,9 @@ impl<'a> TuiApp<'a> {
                 KeyCode::Char('?') => self.enter_help(),
                 _ => {
                     let previous_query = self.notepad_query.clone();
-                    if crate::text_input::apply_key_code_to_textarea(
+                    if crate::text_input::apply_key_event_to_textarea(
                         &mut self.notepad_query_textarea,
-                        key,
+                        key_event,
                     ) {
                         let next_query =
                             crate::text_input::textarea_value(&self.notepad_query_textarea);
@@ -230,6 +235,14 @@ impl<'a> TuiApp<'a> {
             }
             return;
         }
+
+        if key_event
+            .modifiers
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+        {
+            return;
+        }
+        let key = key_event.code;
 
         let was_pending_delete = self.notepad_pending_delete;
         if !(matches!(key, KeyCode::Char('d')) && self.notepad_focus == PatchPhrasePane::Favorites)

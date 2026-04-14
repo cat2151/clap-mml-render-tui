@@ -276,6 +276,31 @@ fn handle_patch_select_left_in_filter_query_does_not_repreview() {
 }
 
 #[test]
+fn handle_patch_select_filter_ctrl_a_uses_tui_textarea_default_binding() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
+    app.data[1][1] = "l8cdef".to_string();
+    app.patch_all = vec![
+        ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
+        ("Bass Soft 1.fxp".to_string(), "bass soft 1.fxp".to_string()),
+    ];
+    app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
+    app.mode = DawMode::PatchSelect;
+
+    app.handle_patch_select(KeyCode::Char('/'));
+    app.handle_patch_select(KeyCode::Char('p'));
+    app.handle_patch_select(KeyCode::Char('a'));
+    app.handle_patch_select(KeyCode::Char('d'));
+    app.handle_patch_select_key_event(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+    app.handle_patch_select(KeyCode::Char('X'));
+
+    assert!(app.patch_select_filter_active);
+    assert_eq!(app.patch_query, "Xpad");
+}
+
+#[test]
 fn handle_patch_select_arrow_keys_move_selection_in_left_pane() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_track = 1;

@@ -1,4 +1,4 @@
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::super::DawHistoryPane;
 use super::super::{
@@ -250,13 +250,18 @@ impl DawApp {
         self.mode = DawMode::Normal;
     }
 
+    #[cfg(test)]
     pub(in crate::daw) fn handle_history_overlay(&mut self, key: KeyCode) {
+        self.handle_history_overlay_key_event(KeyEvent::new(key, KeyModifiers::NONE));
+    }
+
+    pub(crate) fn handle_history_overlay_key_event(&mut self, key_event: KeyEvent) {
         if self.history_overlay_filter_active {
             crate::text_input::sync_single_line_textarea(
                 &mut self.history_overlay_query_textarea,
                 &self.history_overlay_query,
             );
-            match key {
+            match key_event.code {
                 KeyCode::Esc => {
                     self.history_overlay_filter_active = false;
                     self.mode = DawMode::Normal;
@@ -271,9 +276,9 @@ impl DawApp {
                 KeyCode::Char('?') => self.enter_help(),
                 _ => {
                     let previous_query = self.history_overlay_query.clone();
-                    if crate::text_input::apply_key_code_to_textarea(
+                    if crate::text_input::apply_key_event_to_textarea(
                         &mut self.history_overlay_query_textarea,
-                        key,
+                        key_event,
                     ) {
                         let next_query =
                             crate::text_input::textarea_value(&self.history_overlay_query_textarea);
@@ -291,6 +296,14 @@ impl DawApp {
             }
             return;
         }
+
+        if key_event
+            .modifiers
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+        {
+            return;
+        }
+        let key = key_event.code;
 
         let history_len = self.history_overlay_history_items().len();
         let favorites_len = self.history_overlay_favorite_items().len();

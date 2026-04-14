@@ -1,6 +1,6 @@
 //! Patch phrase モードの状態遷移と履歴管理
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use mmlabc_to_smf::mml_preprocessor;
 use serde_json::Value;
 
@@ -248,13 +248,18 @@ impl<'a> TuiApp<'a> {
         self.mode = Mode::PatchPhrase;
     }
 
+    #[cfg(test)]
     pub(super) fn handle_patch_phrase(&mut self, key: KeyCode) {
+        self.handle_patch_phrase_key_event(KeyEvent::new(key, KeyModifiers::NONE));
+    }
+
+    pub(crate) fn handle_patch_phrase_key_event(&mut self, key_event: KeyEvent) {
         if self.patch_phrase_filter_active {
             crate::text_input::sync_single_line_textarea(
                 &mut self.patch_phrase_query_textarea,
                 &self.patch_phrase_query,
             );
-            match key {
+            match key_event.code {
                 KeyCode::Esc => {
                     self.patch_phrase_filter_active = false;
                     self.flush_patch_phrase_store_if_dirty();
@@ -270,9 +275,9 @@ impl<'a> TuiApp<'a> {
                 KeyCode::Char('?') => self.enter_help(),
                 _ => {
                     let previous_query = self.patch_phrase_query.clone();
-                    if crate::text_input::apply_key_code_to_textarea(
+                    if crate::text_input::apply_key_event_to_textarea(
                         &mut self.patch_phrase_query_textarea,
-                        key,
+                        key_event,
                     ) {
                         let next_query =
                             crate::text_input::textarea_value(&self.patch_phrase_query_textarea);
@@ -290,6 +295,14 @@ impl<'a> TuiApp<'a> {
             }
             return;
         }
+
+        if key_event
+            .modifiers
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+        {
+            return;
+        }
+        let key = key_event.code;
 
         let history_len = self.patch_phrase_history_items().len();
         let favorites_len = self.patch_phrase_favorite_items().len();

@@ -102,8 +102,18 @@ impl<'a> TuiApp<'a> {
                     if key.modifiers.contains(KeyModifiers::CONTROL)
                         && key.code == KeyCode::Char('c')
                     {
-                        if self.mode == Mode::Insert {
-                            self.handle_insert(key);
+                        match self.mode {
+                            Mode::Insert => self.handle_insert(key),
+                            Mode::PatchSelect if self.patch_select_filter_active => {
+                                self.handle_patch_select(key)
+                            }
+                            Mode::NotepadHistory if self.notepad_filter_active => {
+                                self.handle_notepad_history_key_event(key)
+                            }
+                            Mode::PatchPhrase if self.patch_phrase_filter_active => {
+                                self.handle_patch_phrase_key_event(key)
+                            }
+                            _ => {}
                         }
                         continue;
                     }
@@ -129,8 +139,8 @@ impl<'a> TuiApp<'a> {
                         },
                         Mode::Insert => self.handle_insert(key),
                         Mode::PatchSelect => self.handle_patch_select(key),
-                        Mode::NotepadHistory => self.handle_notepad_history(key.code),
-                        Mode::PatchPhrase => self.handle_patch_phrase(key.code),
+                        Mode::NotepadHistory => self.handle_notepad_history_key_event(key),
+                        Mode::PatchPhrase => self.handle_patch_phrase_key_event(key),
                         Mode::NotepadHistoryGuide => self.handle_notepad_history_guide(key.code),
                         Mode::Help => self.handle_help(key.code),
                     }
