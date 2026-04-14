@@ -301,6 +301,10 @@ fn parse_get_mml_query_rejects_missing_or_invalid_values() {
         Err((400, "track と measure を指定してください\n".to_string()))
     );
     assert_eq!(
+        parse_get_mml_query("/mml?track=&measure=0"),
+        Err((400, "track を指定してください\n".to_string()))
+    );
+    assert_eq!(
         parse_get_mml_query("/mml?track=abc&measure=0"),
         Err((400, "track は 0 以上の整数を指定してください\n".to_string()))
     );

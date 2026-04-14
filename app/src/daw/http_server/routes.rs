@@ -237,6 +237,9 @@ pub(super) fn parse_get_mml_query(url: &str) -> Result<(usize, usize), (u16, Str
 }
 
 fn parse_query_usize(name: &str, value: &str) -> Result<usize, (u16, String)> {
+    if value.is_empty() {
+        return Err((400, format!("{name} を指定してください\n")));
+    }
     value
         .parse::<usize>()
         .map_err(|_| (400, format!("{name} は 0 以上の整数を指定してください\n")))

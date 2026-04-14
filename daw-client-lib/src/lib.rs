@@ -365,6 +365,16 @@ mod tests {
     }
 
     #[test]
+    fn get_mml_rejects_invalid_response_body() {
+        let (base_url, _request_rx) = spawn_single_request_server(r#"{"track":2,"measure":0}"#);
+        let client = DawClient::new(&base_url).unwrap();
+
+        let error = client.get_mml(2, 0).unwrap_err();
+
+        assert!(matches!(error, Error::InvalidResponse(_)));
+    }
+
+    #[test]
     fn post_mml_rejects_unexpected_status_response_body() {
         let (base_url, _request_rx) = spawn_single_request_server(r#"{"status":"pending"}"#);
         let client = DawClient::new(&base_url).unwrap();
