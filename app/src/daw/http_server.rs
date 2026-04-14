@@ -158,7 +158,8 @@ impl DawApp {
         let Some(state) = current_state() else {
             return;
         };
-        state.lock().unwrap().grid_snapshot = self.data.clone();
+        let grid_snapshot = self.data.clone();
+        state.lock().unwrap().grid_snapshot = grid_snapshot;
     }
 
     pub(super) fn apply_pending_http_commands(&mut self) {
@@ -172,12 +173,11 @@ impl DawApp {
                 DawHttpCommandKind::Mixer { track, db } => self.apply_http_mixer(track, db),
                 DawHttpCommandKind::Patch { track, patch } => self.apply_http_patch(track, &patch),
             };
-            self.sync_http_grid_snapshot();
             let _ = command.response_tx.send(result);
         }
     }
 
-    fn ensure_http_grid_size(&mut self, track: usize, measure: usize) -> Result<(), String> {
+    fn ensure_http_grid_size(&mut self, track: usize, measure: usize) -> Result<bool, String> {
         let required_tracks = track
             .checked_add(1)
             .ok_or_else(|| "track index が大きすぎます".to_string())?;
@@ -190,10 +190,12 @@ impl DawApp {
             .checked_add(1)
             .ok_or_else(|| "measure index が大きすぎます".to_string())?;
         if required_tracks <= self.tracks && required_measures <= self.measures {
-            return Ok(());
+            return Ok(false);
         }
+        let mut resized = false;
 
         if required_tracks > self.tracks {
+            resized = true;
             self.data.resize_with(required_tracks, || {
                 let mut row = Vec::new();
                 row.resize_with(current_columns, String::new);
@@ -219,6 +221,7 @@ impl DawApp {
         }
 
         if required_measures > self.measures {
+            resized = true;
             for row in &mut self.data {
                 row.resize_with(required_columns, String::new);
             }
@@ -243,7 +246,7 @@ impl DawApp {
             measure_track_mmls.resize_with(self.tracks, String::new);
         }
 
-        Ok(())
+        Ok(resized)
     }
 
     fn apply_http_mml(&mut self, track: usize, measure: usize, mml: &str) -> Result<(), String> {
@@ -265,7 +268,10 @@ impl DawApp {
         if track < FIRST_PLAYABLE_TRACK {
             return Err("mixer は演奏トラックでのみ使用できます".to_string());
         }
-        self.ensure_http_grid_size(track, self.measures.max(1))?;
+        let grid_resized = self.ensure_http_grid_size(track, self.measures.max(1))?;
+        if grid_resized {
+            self.sync_http_grid_snapshot();
+        }
 
         let rounded_db = db.round() as i32;
         let clamped_db = rounded_db.clamp(MIXER_MIN_DB, MIXER_MAX_DB);

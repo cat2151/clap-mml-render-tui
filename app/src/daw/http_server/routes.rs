@@ -137,26 +137,27 @@ pub(super) fn handle_get_mml(request: Request, state: &Arc<Mutex<DawHttpState>>)
     };
     match parse_get_mml_query(request.url()) {
         Ok((track, measure)) => {
-            let mml = {
+            let mml_result = {
                 let state = state.lock().unwrap();
-                state
-                    .grid_snapshot
-                    .get(track)
-                    .and_then(|row| row.get(measure))
-                    .cloned()
-                    .unwrap_or_default()
+                get_snapshot_mml(&state, track, measure)
             };
-            let _ = request.respond(with_cors_headers(
-                json_response(
-                    200,
-                    &GetMmlResponse {
-                        track,
-                        measure,
-                        mml,
-                    },
+            let response = match mml_result {
+                Ok(mml) => with_cors_headers(
+                    json_response(
+                        200,
+                        &GetMmlResponse {
+                            track,
+                            measure,
+                            mml,
+                        },
+                    ),
+                    cors_origin.as_deref(),
                 ),
-                cors_origin.as_deref(),
-            ));
+                Err((status, message)) => {
+                    with_cors_headers(text_response(status, message), cors_origin.as_deref())
+                }
+            };
+            let _ = request.respond(response);
         }
         Err((status, message)) => {
             let _ = request.respond(with_cors_headers(
@@ -214,6 +215,29 @@ pub(super) fn handle_get_patches(request: Request, state: &Arc<Mutex<DawHttpStat
             ));
         }
     }
+}
+
+pub(super) fn get_snapshot_mml(
+    state: &DawHttpState,
+    track: usize,
+    measure: usize,
+) -> Result<String, (u16, String)> {
+    if state.grid_snapshot.is_empty() {
+        return Err((503, "DAW データの準備中です\n".to_string()));
+    }
+    state
+        .grid_snapshot
+        .get(track)
+        .and_then(|row| row.get(measure))
+        .cloned()
+        .ok_or_else(|| {
+            (
+                404,
+                format!(
+                    "指定された track/measure は範囲外です: track={track}, measure={measure}\n"
+                ),
+            )
+        })
 }
 
 pub(super) fn parse_get_mml_query(url: &str) -> Result<(usize, usize), (u16, String)> {
