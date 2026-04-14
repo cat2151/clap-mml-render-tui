@@ -12,8 +12,8 @@ use tiny_http::Method;
 use super::{DawApp, FIRST_PLAYABLE_TRACK, MIXER_MAX_DB, MIXER_MIN_DB};
 use crate::{config::Config, server::DEFAULT_PORT};
 use routes::{
-    handle_get_patches, handle_options, handle_post_mixer, handle_post_mml, handle_post_patch,
-    text_response,
+    handle_get_mml, handle_get_patches, handle_options, handle_post_mixer, handle_post_mml,
+    handle_post_patch, text_response,
 };
 #[cfg(test)]
 use routes::{
@@ -27,6 +27,7 @@ mod routes;
 pub(crate) struct DawHttpState {
     cfg: Option<Arc<Config>>,
     pending_commands: VecDeque<DawHttpCommand>,
+    grid_snapshot: Vec<Vec<String>>,
 }
 
 struct DawHttpCommand {
@@ -98,6 +99,7 @@ pub(crate) fn set_active_http_state_cfg(cfg: Arc<Config>) {
     let state = Arc::new(Mutex::new(DawHttpState {
         cfg: Some(cfg),
         pending_commands: VecDeque::new(),
+        grid_snapshot: Vec::new(),
     }));
     spawn_daw_http_server(state);
 }
@@ -132,7 +134,9 @@ fn run_daw_http_server() {
             continue;
         };
 
-        match (method, url.as_str()) {
+        let path = url.split_once('?').map_or(url.as_str(), |(path, _)| path);
+
+        match (method, path) {
             (Method::Options, "/mml")
             | (Method::Options, "/mixer")
             | (Method::Options, "/patch")
@@ -140,6 +144,7 @@ fn run_daw_http_server() {
             (Method::Post, "/mml") => handle_post_mml(request, &state),
             (Method::Post, "/mixer") => handle_post_mixer(request, &state),
             (Method::Post, "/patch") => handle_post_patch(request, &state),
+            (Method::Get, "/mml") => handle_get_mml(request, &state),
             (Method::Get, "/patches") => handle_get_patches(request, &state),
             _ => {
                 let _ = request.respond(text_response(404, "Not Found\n".to_string()));
@@ -149,6 +154,13 @@ fn run_daw_http_server() {
 }
 
 impl DawApp {
+    pub(super) fn sync_http_grid_snapshot(&self) {
+        let Some(state) = current_state() else {
+            return;
+        };
+        state.lock().unwrap().grid_snapshot = self.data.clone();
+    }
+
     pub(super) fn apply_pending_http_commands(&mut self) {
         for command in take_pending_http_commands() {
             let result = match command.kind {
@@ -160,6 +172,7 @@ impl DawApp {
                 DawHttpCommandKind::Mixer { track, db } => self.apply_http_mixer(track, db),
                 DawHttpCommandKind::Patch { track, patch } => self.apply_http_patch(track, &patch),
             };
+            self.sync_http_grid_snapshot();
             let _ = command.response_tx.send(result);
         }
     }

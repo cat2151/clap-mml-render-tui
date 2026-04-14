@@ -5,6 +5,7 @@ use std::{
 
 use tui_textarea::TextArea;
 
+use super::routes::parse_get_mml_query;
 use super::{
     active_state_slot, claim_http_server_thread_slot, deactivate_daw_http_server,
     is_allowed_cors_origin, request_origin, with_cors_headers, with_preflight_cors_headers,
@@ -110,6 +111,7 @@ fn build_http_state(cfg: Config) -> Arc<Mutex<DawHttpState>> {
     Arc::new(Mutex::new(DawHttpState {
         cfg: Some(Arc::new(cfg)),
         pending_commands: VecDeque::new(),
+        grid_snapshot: Vec::new(),
     }))
 }
 
@@ -202,6 +204,23 @@ fn apply_pending_http_commands_updates_patch_init_cell() {
 }
 
 #[test]
+fn sync_http_grid_snapshot_includes_init_measure_zero() {
+    let cfg = default_config();
+    let state = build_http_state(cfg.clone());
+    *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
+
+    let mut app = build_test_app(cfg);
+    app.commit_insert_cell(2, 0, r#"{"patch":"Pad"}"#);
+    app.commit_insert_cell(2, 1, "l8cde");
+
+    let snapshot = state.lock().unwrap().grid_snapshot.clone();
+    assert_eq!(snapshot[2][0], r#"{"patch":"Pad"}"#);
+    assert_eq!(snapshot[2][1], "l8cde");
+
+    deactivate_daw_http_server();
+}
+
+#[test]
 fn request_origin_extracts_origin_header() {
     let header = tiny_http::Header::from_bytes("Origin", "https://cat2151.github.io").unwrap();
 
@@ -280,4 +299,22 @@ fn apply_http_mml_rejects_measure_index_overflow() {
     let result = app.apply_http_mml(1, usize::MAX, "c");
 
     assert_eq!(result, Err("measure index が大きすぎます".to_string()));
+}
+
+#[test]
+fn parse_get_mml_query_accepts_measure_alias_and_zero() {
+    assert_eq!(parse_get_mml_query("/mml?track=2&measure=0"), Ok((2, 0)));
+    assert_eq!(parse_get_mml_query("/mml?track=2&meas=0"), Ok((2, 0)));
+}
+
+#[test]
+fn parse_get_mml_query_rejects_missing_or_invalid_values() {
+    assert_eq!(
+        parse_get_mml_query("/mml?track=2"),
+        Err((400, "track と measure を指定してください\n".to_string()))
+    );
+    assert_eq!(
+        parse_get_mml_query("/mml?track=abc&measure=0"),
+        Err((400, "track は 0 以上の整数を指定してください\n".to_string()))
+    );
 }
