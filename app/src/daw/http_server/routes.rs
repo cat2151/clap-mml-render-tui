@@ -38,6 +38,13 @@ struct JsonStatusResponse<'a> {
     status: &'a str,
 }
 
+#[derive(Serialize)]
+struct GetMmlResponse {
+    track: usize,
+    measure: usize,
+    mml: String,
+}
+
 pub(super) fn handle_post_mml(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
     let cors_origin = match validate_cors_request(&request) {
         Ok(cors_origin) => cors_origin,
@@ -120,6 +127,47 @@ pub(super) fn handle_post_patch(mut request: Request, state: &Arc<Mutex<DawHttpS
     }
 }
 
+pub(super) fn handle_get_mml(request: Request, state: &Arc<Mutex<DawHttpState>>) {
+    let cors_origin = match validate_cors_request(&request) {
+        Ok(cors_origin) => cors_origin,
+        Err(response) => {
+            let _ = request.respond(response);
+            return;
+        }
+    };
+    match parse_get_mml_query(request.url()) {
+        Ok((track, measure)) => {
+            let mml_result = {
+                let state = state.lock().unwrap();
+                get_snapshot_mml(&state, track, measure)
+            };
+            let response = match mml_result {
+                Ok(mml) => with_cors_headers(
+                    json_response(
+                        200,
+                        &GetMmlResponse {
+                            track,
+                            measure,
+                            mml,
+                        },
+                    ),
+                    cors_origin.as_deref(),
+                ),
+                Err((status, message)) => {
+                    with_cors_headers(text_response(status, message), cors_origin.as_deref())
+                }
+            };
+            let _ = request.respond(response);
+        }
+        Err((status, message)) => {
+            let _ = request.respond(with_cors_headers(
+                text_response(status, message),
+                cors_origin.as_deref(),
+            ));
+        }
+    }
+}
+
 pub(super) fn handle_get_patches(request: Request, state: &Arc<Mutex<DawHttpState>>) {
     let cors_origin = match validate_cors_request(&request) {
         Ok(cors_origin) => cors_origin,
@@ -167,6 +215,58 @@ pub(super) fn handle_get_patches(request: Request, state: &Arc<Mutex<DawHttpStat
             ));
         }
     }
+}
+
+pub(super) fn get_snapshot_mml(
+    state: &DawHttpState,
+    track: usize,
+    measure: usize,
+) -> Result<String, (u16, String)> {
+    if state.grid_snapshot.is_empty() {
+        return Err((503, "DAW データの準備中です\n".to_string()));
+    }
+    state
+        .grid_snapshot
+        .get(track)
+        .and_then(|row| row.get(measure))
+        .cloned()
+        .ok_or_else(|| {
+            (
+                404,
+                format!(
+                    "指定された track/measure は範囲外です: track={track}, measure={measure}\n"
+                ),
+            )
+        })
+}
+
+pub(super) fn parse_get_mml_query(url: &str) -> Result<(usize, usize), (u16, String)> {
+    let Some((_, query)) = url.split_once('?') else {
+        return Err((400, "track と measure を指定してください\n".to_string()));
+    };
+    let mut track = None;
+    let mut measure = None;
+    for pair in query.split('&') {
+        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+        match key {
+            "track" => track = Some(parse_query_usize("track", value)?),
+            "measure" | "meas" => measure = Some(parse_query_usize("measure", value)?),
+            _ => {}
+        }
+    }
+    match (track, measure) {
+        (Some(track), Some(measure)) => Ok((track, measure)),
+        _ => Err((400, "track と measure を指定してください\n".to_string())),
+    }
+}
+
+fn parse_query_usize(name: &str, value: &str) -> Result<usize, (u16, String)> {
+    if value.is_empty() {
+        return Err((400, format!("{name} を指定してください\n")));
+    }
+    value
+        .parse::<usize>()
+        .map_err(|_| (400, format!("{name} は 0 以上の整数を指定してください\n")))
 }
 
 pub(super) fn handle_options(request: Request) {

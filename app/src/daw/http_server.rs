@@ -12,8 +12,8 @@ use tiny_http::Method;
 use super::{DawApp, FIRST_PLAYABLE_TRACK, MIXER_MAX_DB, MIXER_MIN_DB};
 use crate::{config::Config, server::DEFAULT_PORT};
 use routes::{
-    handle_get_patches, handle_options, handle_post_mixer, handle_post_mml, handle_post_patch,
-    text_response,
+    handle_get_mml, handle_get_patches, handle_options, handle_post_mixer, handle_post_mml,
+    handle_post_patch, text_response,
 };
 #[cfg(test)]
 use routes::{
@@ -27,6 +27,7 @@ mod routes;
 pub(crate) struct DawHttpState {
     cfg: Option<Arc<Config>>,
     pending_commands: VecDeque<DawHttpCommand>,
+    grid_snapshot: Vec<Vec<String>>,
 }
 
 struct DawHttpCommand {
@@ -98,6 +99,7 @@ pub(crate) fn set_active_http_state_cfg(cfg: Arc<Config>) {
     let state = Arc::new(Mutex::new(DawHttpState {
         cfg: Some(cfg),
         pending_commands: VecDeque::new(),
+        grid_snapshot: Vec::new(),
     }));
     spawn_daw_http_server(state);
 }
@@ -132,7 +134,9 @@ fn run_daw_http_server() {
             continue;
         };
 
-        match (method, url.as_str()) {
+        let path = url.split_once('?').map_or(url.as_str(), |(path, _)| path);
+
+        match (method, path) {
             (Method::Options, "/mml")
             | (Method::Options, "/mixer")
             | (Method::Options, "/patch")
@@ -140,6 +144,7 @@ fn run_daw_http_server() {
             (Method::Post, "/mml") => handle_post_mml(request, &state),
             (Method::Post, "/mixer") => handle_post_mixer(request, &state),
             (Method::Post, "/patch") => handle_post_patch(request, &state),
+            (Method::Get, "/mml") => handle_get_mml(request, &state),
             (Method::Get, "/patches") => handle_get_patches(request, &state),
             _ => {
                 let _ = request.respond(text_response(404, "Not Found\n".to_string()));
@@ -149,6 +154,14 @@ fn run_daw_http_server() {
 }
 
 impl DawApp {
+    pub(super) fn sync_http_grid_snapshot(&self) {
+        let Some(state) = current_state() else {
+            return;
+        };
+        let grid_snapshot = self.data.clone();
+        state.lock().unwrap().grid_snapshot = grid_snapshot;
+    }
+
     pub(super) fn apply_pending_http_commands(&mut self) {
         for command in take_pending_http_commands() {
             let result = match command.kind {
@@ -164,7 +177,7 @@ impl DawApp {
         }
     }
 
-    fn ensure_http_grid_size(&mut self, track: usize, measure: usize) -> Result<(), String> {
+    fn ensure_http_grid_size(&mut self, track: usize, measure: usize) -> Result<bool, String> {
         let required_tracks = track
             .checked_add(1)
             .ok_or_else(|| "track index が大きすぎます".to_string())?;
@@ -177,10 +190,12 @@ impl DawApp {
             .checked_add(1)
             .ok_or_else(|| "measure index が大きすぎます".to_string())?;
         if required_tracks <= self.tracks && required_measures <= self.measures {
-            return Ok(());
+            return Ok(false);
         }
+        let mut resized = false;
 
         if required_tracks > self.tracks {
+            resized = true;
             self.data.resize_with(required_tracks, || {
                 let mut row = Vec::new();
                 row.resize_with(current_columns, String::new);
@@ -206,6 +221,7 @@ impl DawApp {
         }
 
         if required_measures > self.measures {
+            resized = true;
             for row in &mut self.data {
                 row.resize_with(required_columns, String::new);
             }
@@ -230,7 +246,7 @@ impl DawApp {
             measure_track_mmls.resize_with(self.tracks, String::new);
         }
 
-        Ok(())
+        Ok(resized)
     }
 
     fn apply_http_mml(&mut self, track: usize, measure: usize, mml: &str) -> Result<(), String> {
@@ -252,7 +268,10 @@ impl DawApp {
         if track < FIRST_PLAYABLE_TRACK {
             return Err("mixer は演奏トラックでのみ使用できます".to_string());
         }
-        self.ensure_http_grid_size(track, self.measures.max(1))?;
+        let grid_resized = self.ensure_http_grid_size(track, self.measures.max(1))?;
+        if grid_resized {
+            self.sync_http_grid_snapshot();
+        }
 
         let rounded_db = db.round() as i32;
         let clamped_db = rounded_db.clamp(MIXER_MIN_DB, MIXER_MAX_DB);

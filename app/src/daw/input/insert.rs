@@ -13,6 +13,7 @@ impl DawApp {
             return false;
         }
         self.data[track][measure] = text.to_string();
+        self.sync_http_grid_snapshot();
         self.invalidate_cell(track, measure);
         self.kick_cache(track, measure);
         // track0 または音色セル変更時は依存セルも再キャッシュする

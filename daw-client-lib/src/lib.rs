@@ -25,6 +25,11 @@ struct StatusResponse {
     status: String,
 }
 
+#[derive(Deserialize)]
+struct GetMmlResponse {
+    mml: String,
+}
+
 #[derive(Serialize)]
 struct PostMmlRequest<'a> {
     track: usize,
@@ -83,9 +88,19 @@ impl DawClient {
     }
 
     pub fn get_patches(&self) -> Result<Vec<String>, Error> {
+        self.get_json("/patches")
+    }
+
+    pub fn get_mml(&self, track: usize, measure: usize) -> Result<String, Error> {
+        let response: GetMmlResponse =
+            self.get_json(&format!("/mml?track={track}&measure={measure}"))?;
+        Ok(response.mml)
+    }
+
+    fn get_json<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T, Error> {
         let response = self
             .agent
-            .get(&self.endpoint_url("/patches"))
+            .get(&self.endpoint_url(path))
             .call()
             .map_err(Error::from_ureq)?;
         response
@@ -334,6 +349,29 @@ mod tests {
                 "Lead/Bright.fxp".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn get_mml_reads_json_response_and_supports_init_measure_zero() {
+        let (base_url, request_rx) =
+            spawn_single_request_server(r#"{"track":2,"measure":0,"mml":"@1 l8cde"}"#);
+        let client = DawClient::new(&base_url).unwrap();
+
+        let mml = client.get_mml(2, 0).unwrap();
+
+        let request = request_rx.recv().unwrap();
+        assert!(request.starts_with("GET /mml?track=2&measure=0 HTTP/1.1\r\n"));
+        assert_eq!(mml, "@1 l8cde");
+    }
+
+    #[test]
+    fn get_mml_rejects_invalid_response_body() {
+        let (base_url, _request_rx) = spawn_single_request_server(r#"{"track":2,"measure":0}"#);
+        let client = DawClient::new(&base_url).unwrap();
+
+        let error = client.get_mml(2, 0).unwrap_err();
+
+        assert!(matches!(error, Error::InvalidResponse(_)));
     }
 
     #[test]

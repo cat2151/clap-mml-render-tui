@@ -5,6 +5,7 @@ use std::{
 
 use tui_textarea::TextArea;
 
+use super::routes::{get_snapshot_mml, parse_get_mml_query};
 use super::{
     active_state_slot, claim_http_server_thread_slot, deactivate_daw_http_server,
     is_allowed_cors_origin, request_origin, with_cors_headers, with_preflight_cors_headers,
@@ -110,6 +111,7 @@ fn build_http_state(cfg: Config) -> Arc<Mutex<DawHttpState>> {
     Arc::new(Mutex::new(DawHttpState {
         cfg: Some(Arc::new(cfg)),
         pending_commands: VecDeque::new(),
+        grid_snapshot: Vec::new(),
     }))
 }
 
@@ -137,6 +139,7 @@ fn apply_pending_http_commands_updates_mml_and_expands_grid() {
     assert_eq!(app.tracks, 4);
     assert_eq!(app.measures, 4);
     assert_eq!(app.data[3][4], "l8cde");
+    assert_eq!(state.lock().unwrap().grid_snapshot[3][4], "l8cde");
     assert_eq!(response_rx.try_recv().unwrap(), Ok(()));
 
     deactivate_daw_http_server();
@@ -152,16 +155,17 @@ fn apply_pending_http_commands_updates_mixer_gain() {
     let cfg = default_config();
     let state = build_http_state(cfg.clone());
     *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
-    let response_rx = enqueue_command(&state, DawHttpCommandKind::Mixer { track: 1, db: -6.0 });
+    let response_rx = enqueue_command(&state, DawHttpCommandKind::Mixer { track: 4, db: -6.0 });
 
     let mut app = build_test_app(cfg);
     app.apply_pending_http_commands();
 
-    assert_eq!(app.track_volume_db(1), -6);
+    assert_eq!(app.track_volume_db(4), -6);
     assert_eq!(
-        app.play_track_gains.lock().unwrap()[1],
+        app.play_track_gains.lock().unwrap()[4],
         10.0f32.powf(-6.0 / 20.0)
     );
+    assert_eq!(state.lock().unwrap().grid_snapshot.len(), 5);
     assert_eq!(response_rx.try_recv().unwrap(), Ok(()));
 
     deactivate_daw_http_server();
@@ -193,6 +197,10 @@ fn apply_pending_http_commands_updates_patch_init_cell() {
 
     assert_eq!(
         app.data[1][0],
+        DawApp::build_patch_json("Pads/Factory Pad.fxp")
+    );
+    assert_eq!(
+        state.lock().unwrap().grid_snapshot[1][0],
         DawApp::build_patch_json("Pads/Factory Pad.fxp")
     );
     assert_eq!(response_rx.try_recv().unwrap(), Ok(()));
@@ -280,4 +288,67 @@ fn apply_http_mml_rejects_measure_index_overflow() {
     let result = app.apply_http_mml(1, usize::MAX, "c");
 
     assert_eq!(result, Err("measure index が大きすぎます".to_string()));
+}
+
+#[test]
+fn parse_get_mml_query_accepts_measure_alias_and_zero() {
+    assert_eq!(parse_get_mml_query("/mml?track=2&measure=0"), Ok((2, 0)));
+    assert_eq!(parse_get_mml_query("/mml?track=2&meas=0"), Ok((2, 0)));
+}
+
+#[test]
+fn parse_get_mml_query_rejects_missing_or_invalid_values() {
+    assert_eq!(
+        parse_get_mml_query("/mml?track=2"),
+        Err((400, "track と measure を指定してください\n".to_string()))
+    );
+    assert_eq!(
+        parse_get_mml_query("/mml?track=&measure=0"),
+        Err((400, "track を指定してください\n".to_string()))
+    );
+    assert_eq!(
+        parse_get_mml_query("/mml?track=2&measure="),
+        Err((400, "measure を指定してください\n".to_string()))
+    );
+    assert_eq!(
+        parse_get_mml_query("/mml?track=abc&measure=0"),
+        Err((400, "track は 0 以上の整数を指定してください\n".to_string()))
+    );
+    assert_eq!(
+        parse_get_mml_query("/mml?track=2&measure=abc"),
+        Err((
+            400,
+            "measure は 0 以上の整数を指定してください\n".to_string()
+        ))
+    );
+    assert_eq!(
+        parse_get_mml_query("/mml?track=2&meas=abc"),
+        Err((
+            400,
+            "measure は 0 以上の整数を指定してください\n".to_string()
+        ))
+    );
+}
+
+#[test]
+fn get_snapshot_mml_rejects_unready_and_out_of_range_requests() {
+    let state = DawHttpState::default();
+    assert_eq!(
+        get_snapshot_mml(&state, 0, 0),
+        Err((503, "DAW データの準備中です\n".to_string()))
+    );
+
+    let state = DawHttpState {
+        cfg: None,
+        pending_commands: VecDeque::new(),
+        grid_snapshot: vec![vec!["t120".to_string()]],
+    };
+    assert_eq!(
+        get_snapshot_mml(&state, 1, 0),
+        Err((
+            404,
+            "指定された track/measure は範囲外です: track=1, measure=0\n".to_string()
+        ))
+    );
+    assert_eq!(get_snapshot_mml(&state, 0, 0), Ok("t120".to_string()));
 }
