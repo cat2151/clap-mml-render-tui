@@ -197,27 +197,14 @@ fn apply_pending_http_commands_updates_patch_init_cell() {
         app.data[1][0],
         DawApp::build_patch_json("Pads/Factory Pad.fxp")
     );
+    assert_eq!(
+        state.lock().unwrap().grid_snapshot[1][0],
+        DawApp::build_patch_json("Pads/Factory Pad.fxp")
+    );
     assert_eq!(response_rx.try_recv().unwrap(), Ok(()));
 
     deactivate_daw_http_server();
     std::fs::remove_dir_all(&tmp).ok();
-}
-
-#[test]
-fn sync_http_grid_snapshot_includes_init_measure_zero() {
-    let cfg = default_config();
-    let state = build_http_state(cfg.clone());
-    *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
-
-    let mut app = build_test_app(cfg);
-    app.commit_insert_cell(2, 0, r#"{"patch":"Pad"}"#);
-    app.commit_insert_cell(2, 1, "l8cde");
-
-    let snapshot = state.lock().unwrap().grid_snapshot.clone();
-    assert_eq!(snapshot[2][0], r#"{"patch":"Pad"}"#);
-    assert_eq!(snapshot[2][1], "l8cde");
-
-    deactivate_daw_http_server();
 }
 
 #[test]
