@@ -5,6 +5,7 @@ pub(crate) mod generate;
 pub mod history;
 pub mod logging;
 pub(crate) mod patches;
+pub(crate) mod random;
 pub mod server;
 #[cfg(test)]
 pub(crate) mod test_utils;

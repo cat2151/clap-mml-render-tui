@@ -94,6 +94,7 @@ fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob
             patch_favorites_cursor: 0,
             patch_select_focus: DawPatchSelectPane::Patches,
             patch_select_filter_active: false,
+            random_patch_decks: crate::random::RandomIndexDecks::default(),
         },
         cache_rx,
     )

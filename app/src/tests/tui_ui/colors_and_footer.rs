@@ -115,6 +115,9 @@ fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
     assert!(screen.contains("dd/Del:cut"));
     assert!(screen.contains("g:generate"));
     assert!(screen.contains("Shift+H:patch history"));
+    assert!(!screen.contains("Shift+L:log"));
+    assert!(!screen.contains("notepad r log"));
+    assert!(!screen.contains("selected list"));
     assert!(screen.contains("w:DAW"));
 }
 
@@ -127,52 +130,6 @@ fn normal_screen_shows_active_parallel_render_count_in_purple() {
     let (x, y) = find_text(&buffer, "並");
 
     assert_eq!(buffer.cell((x, y)).unwrap().fg, MONOKAI_PURPLE);
-}
-
-#[test]
-fn normal_screen_shows_notepad_random_log_pane_when_enabled() {
-    let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["abc".to_string()];
-    app.notepad_random_log.visible = true;
-    app.notepad_random_log.filter_query = Some("drum".to_string());
-    app.notepad_random_log.selected_index = Some(1);
-    app.notepad_random_log.selected_patch_name = Some("Drum/Snare 1.fxp".to_string());
-    app.notepad_random_log.selected_candidates = vec![
-        "Drum/Kick 1.fxp".to_string(),
-        "Drum/Snare 1.fxp".to_string(),
-        "Drum/Hat 1.fxp".to_string(),
-    ];
-    app.notepad_random_log.recent_random_indexes = [0usize, 1, 1, 2].into_iter().collect();
-
-    let screen = render_lines(&mut app, 160, 16).join("\n");
-    let normalized = screen.replace(' ', "");
-
-    assert!(screen.contains("notepad r log"));
-    assert!(screen.contains("selected list"));
-    assert!(normalized.contains("rpressedfilter=drum"));
-    // 選択中 index=1 が可視範囲に残ることだけを確認し、先頭候補の表示有無には依存しない。
-    assert!(normalized.contains("1:Drum/Snare1.fxp"));
-    assert!(screen.contains("Shift+L:log"));
-}
-
-#[test]
-fn normal_screen_limits_notepad_random_log_candidates_to_visible_window() {
-    let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["abc".to_string()];
-    app.notepad_random_log.visible = true;
-    app.notepad_random_log.selected_candidates = (0..40)
-        .map(|index| format!("Drum/{index:02}.fxp"))
-        .collect();
-    app.notepad_random_log.selected_index = Some(30);
-    app.notepad_random_log.selected_patch_name = Some("Drum/30.fxp".to_string());
-
-    let screen = render_lines(&mut app, 120, 16).join("\n");
-    let normalized = screen.replace(' ', "");
-
-    assert!(normalized.contains("selectedlist"));
-    assert!(normalized.contains("/40"));
-    assert!(normalized.contains("30:Drum/30.fxp"));
-    assert!(!normalized.contains("0:Drum/00.fxp"));
 }
 
 #[test]

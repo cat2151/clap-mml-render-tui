@@ -1,7 +1,7 @@
 //! vim 風 TUI
 //!
 //! モード:
-//!   NORMAL : j/k で行移動、PageUp/PageDown で1画面移動、Home/M で先頭/中央行へ移動、i/o で INSERT、dd / Delete で現在行をヤンク削除、g で generate を現在行の上へ挿入して再生、r で現在行の先頭にランダム音色を挿入/置換、t で音色選択、Shift+H で patch history（patch name が無い場合は notepad history 案内）、Shift+L で r調査用log pane切替、f で patch history、w で DAW、Enter/Space で再生、q で終了
+//!   NORMAL : j/k で行移動、PageUp/PageDown で1画面移動、Home/M で先頭/中央行へ移動、i/o で INSERT、dd / Delete で現在行をヤンク削除、g で generate を現在行の上へ挿入して再生、r で現在行の先頭にランダム音色を挿入/置換、t で音色選択、Shift+H で patch history（patch name が無い場合は notepad history 案内）、f で patch history、w で DAW、Enter/Space で再生、q で終了
 //!   INSERT : tui-textarea で編集
 //!            ESC   → 確定 → NORMAL（再生開始）
 //!            Enter → 確定 → 次行に新規行挿入 → INSERT 継続
@@ -30,7 +30,7 @@ use cmrt_core::{mml_render_with_probe, CoreConfig, NativeRenderProbeContext};
 use ratatui::{widgets::ListState, Frame};
 use tui_textarea::TextArea;
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -92,27 +92,6 @@ fn truncate_for_log(value: &str, max_chars: usize) -> String {
     out
 }
 
-const NOTEPAD_RANDOM_LOG_HISTORY_MAX: usize = 20;
-const NOTEPAD_RANDOM_LOG_GLOBAL_CANDIDATE_LOG_MAX: usize = 32;
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(super) struct NotepadRandomLogState {
-    pub(super) visible: bool,
-    pub(super) filter_query: Option<String>,
-    pub(super) selected_index: Option<usize>,
-    pub(super) selected_patch_name: Option<String>,
-    pub(super) selected_candidates: Vec<String>,
-    pub(super) recent_random_indexes: VecDeque<usize>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct RandomPatchPickDebug {
-    pub(super) filter_query: Option<String>,
-    pub(super) selected_index: usize,
-    pub(super) selected_patch_name: String,
-    pub(super) candidates: Vec<String>,
-}
-
 #[derive(Clone, PartialEq)]
 pub(super) enum PlayState {
     Idle,
@@ -140,6 +119,7 @@ pub struct TuiApp<'a> {
     // 音色選択モード用
     /// バックグラウンドスレッドが収集したパッチリストの状態
     patch_load_state: Arc<Mutex<PatchLoadState>>,
+    pub(super) random_patch_decks: crate::random::RandomIndexDecks,
     /// ソート切替に応じて並びが変わる (表示名, 小文字化済み) ペアのリスト
     pub(super) patch_all: Vec<(String, String)>,
     pub(super) patch_all_source_order: Vec<(String, String)>,
@@ -180,7 +160,6 @@ pub struct TuiApp<'a> {
     pub(super) patch_phrase_query_textarea: TextArea<'a>,
     pub(super) patch_phrase_filter_active: bool,
     pub(super) patch_phrase_store_dirty: bool,
-    pub(super) notepad_random_log: NotepadRandomLogState,
     /// 終了時 DAW モードだったかどうか（history.json に保存・復元する）
     pub(super) is_daw_mode: bool,
 }
@@ -230,62 +209,6 @@ impl<'a> TuiApp<'a> {
             current_offset
         };
         *state.offset_mut() = desired_offset.min(max_offset);
-    }
-
-    fn toggle_notepad_random_log(&mut self) {
-        self.notepad_random_log.visible = !self.notepad_random_log.visible;
-    }
-
-    fn record_notepad_random_pick_debug(&mut self, debug: RandomPatchPickDebug) {
-        let RandomPatchPickDebug {
-            filter_query,
-            selected_index,
-            selected_patch_name,
-            candidates,
-        } = debug;
-        let state = &mut self.notepad_random_log;
-        state.filter_query = filter_query.clone();
-        state.selected_index = Some(selected_index);
-        state.selected_patch_name = Some(selected_patch_name.clone());
-        state.selected_candidates = candidates;
-        state.recent_random_indexes.push_back(selected_index);
-        while state.recent_random_indexes.len() > NOTEPAD_RANDOM_LOG_HISTORY_MAX {
-            state.recent_random_indexes.pop_front();
-        }
-
-        let filter_label = filter_query.as_deref().unwrap_or("(none)");
-        Self::log_notepad_event(format!("r pressed filter={filter_label}"));
-        Self::log_notepad_event(format!(
-            "r selected count={} index={} patch={}",
-            state.selected_candidates.len(),
-            selected_index,
-            selected_patch_name
-        ));
-        Self::log_notepad_event(format!(
-            "r recent indexes=[{}]",
-            state
-                .recent_random_indexes
-                .iter()
-                .map(|index| index.to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        ));
-        if state.visible {
-            for candidate in state
-                .selected_candidates
-                .iter()
-                .take(NOTEPAD_RANDOM_LOG_GLOBAL_CANDIDATE_LOG_MAX)
-            {
-                Self::log_notepad_event(format!("r candidate {candidate}"));
-            }
-            let omitted = state
-                .selected_candidates
-                .len()
-                .saturating_sub(NOTEPAD_RANDOM_LOG_GLOBAL_CANDIDATE_LOG_MAX);
-            if omitted > 0 {
-                Self::log_notepad_event(format!("r candidate ... ({omitted} more)"));
-            }
-        }
     }
 
     fn prefetch_audio_cache(&self, mmls: Vec<String>) {

@@ -46,13 +46,6 @@ impl<'a> TuiApp<'a> {
             return NormalAction::Continue;
         }
 
-        if key_event.modifiers.contains(KeyModifiers::SHIFT) && key_event.code == KeyCode::Char('L')
-        {
-            self.normal_pending_delete = false;
-            self.toggle_notepad_random_log();
-            return NormalAction::Continue;
-        }
-
         self.handle_normal(key_event.code)
     }
 
@@ -88,20 +81,20 @@ impl<'a> TuiApp<'a> {
                         Ok(()) => {}
                         Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
                     },
-                    KeyCode::Char('r') => match self.pick_random_patch_for_current_line_debug() {
-                        Ok(Some(debug)) => {
-                            let patch_name = debug.selected_patch_name.clone();
-                            let filter_query = debug.filter_query.clone();
-                            self.record_notepad_random_pick_debug(debug);
-                            self.replace_current_line_patch_with_filter(
-                                &patch_name,
-                                filter_query.as_deref(),
-                            );
-                            self.play_current_line();
+                    KeyCode::Char('r') => {
+                        let filter_query = self.current_line_random_patch_filter_query();
+                        match self.pick_random_patch_name_with_query(filter_query.as_deref()) {
+                            Ok(Some(patch_name)) => {
+                                self.replace_current_line_patch_with_filter(
+                                    &patch_name,
+                                    filter_query.as_deref(),
+                                );
+                                self.play_current_line();
+                            }
+                            Ok(None) => {}
+                            Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
                         }
-                        Ok(None) => {}
-                        Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
-                    },
+                    }
                     KeyCode::Char('t') => {
                         self.open_patch_select_overlay(None);
                     }

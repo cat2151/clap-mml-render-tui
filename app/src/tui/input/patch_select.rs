@@ -1,14 +1,9 @@
 mod handler;
 mod state;
 
+use crate::tui::{filter_patches, PatchLoadState, PATCH_FILTER_QUERY_JSON_KEY, PATCH_JSON_KEY};
 use mmlabc_to_smf::mml_preprocessor;
 use serde_json::Value;
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use crate::tui::{
-    filter_patches, PatchLoadState, RandomPatchPickDebug, PATCH_FILTER_QUERY_JSON_KEY,
-    PATCH_JSON_KEY,
-};
 
 use super::{Mode, PlayState, TuiApp};
 
@@ -132,7 +127,7 @@ impl<'a> TuiApp<'a> {
         }
     }
 
-    fn current_line_random_patch_filter_query(&self) -> Option<String> {
+    pub(super) fn current_line_random_patch_filter_query(&self) -> Option<String> {
         self.current_line_patch_filter_query()
             .and_then(|query| self.has_matching_patches_for_query(&query).then_some(query))
             .or_else(|| {
@@ -228,77 +223,40 @@ impl<'a> TuiApp<'a> {
         Ok(())
     }
 
-    pub(super) fn pick_random_patch_name(&self) -> Result<String, String> {
-        if !crate::patches::has_configured_patch_dirs(&self.cfg) {
-            return Err("patches_dirs が設定されていません".to_string());
-        }
-        let state = self.patch_load_state.lock().unwrap();
-        match &*state {
-            PatchLoadState::Loading => Err("パッチを読み込み中です...".to_string()),
-            PatchLoadState::Err(e) => Err(format!("パッチの読み込みに失敗: {}", e)),
-            PatchLoadState::Ready(pairs) if pairs.is_empty() => {
-                Err("patches_dirs にパッチが見つかりません".to_string())
-            }
-            PatchLoadState::Ready(pairs) => {
-                let ns = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map(|duration| duration.as_nanos())
-                    .unwrap_or(0);
-                let index = (ns % pairs.len() as u128) as usize;
-                Ok(pairs[index].0.clone())
-            }
-        }
+    pub(super) fn pick_random_patch_name(&mut self) -> Result<String, String> {
+        self.pick_random_patch_name_with_query(None)?
+            .ok_or_else(|| "patches_dirs にパッチが見つかりません".to_string())
     }
 
-    fn pick_random_patch_debug_with_query(
-        &self,
+    pub(super) fn pick_random_patch_name_with_query(
+        &mut self,
         query: Option<&str>,
-    ) -> Result<Option<RandomPatchPickDebug>, String> {
+    ) -> Result<Option<String>, String> {
         if !crate::patches::has_configured_patch_dirs(&self.cfg) {
             return Err("patches_dirs が設定されていません".to_string());
         }
-        let state = self.patch_load_state.lock().unwrap();
-        match &*state {
-            PatchLoadState::Loading => Err("パッチを読み込み中です...".to_string()),
-            PatchLoadState::Err(e) => Err(format!("パッチの読み込みに失敗: {}", e)),
-            PatchLoadState::Ready(pairs) if pairs.is_empty() => {
-                Err("patches_dirs にパッチが見つかりません".to_string())
+        let selection_query = query.map(str::trim).filter(|query| !query.is_empty());
+        let candidates = {
+            let state = self.patch_load_state.lock().unwrap();
+            match &*state {
+                PatchLoadState::Loading => return Err("パッチを読み込み中です...".to_string()),
+                PatchLoadState::Err(e) => return Err(format!("パッチの読み込みに失敗: {}", e)),
+                PatchLoadState::Ready(pairs) if pairs.is_empty() => {
+                    return Err("patches_dirs にパッチが見つかりません".to_string());
+                }
+                PatchLoadState::Ready(pairs) => match selection_query {
+                    Some(query) => filter_patches(pairs, query),
+                    None => pairs.iter().map(|(display, _)| display.clone()).collect(),
+                },
             }
-            PatchLoadState::Ready(pairs) => {
-                let filter_query = query
-                    .map(str::trim)
-                    .filter(|query| !query.is_empty())
-                    .map(str::to_string);
-                let candidates = match filter_query.as_deref() {
-                    Some(query) => {
-                        let matching_patches = filter_patches(pairs, query);
-                        if matching_patches.is_empty() {
-                            return Ok(None);
-                        }
-                        matching_patches
-                    }
-                    None => pairs.iter().map(|(orig, _)| orig.clone()).collect(),
-                };
-                let ns = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map(|duration| duration.as_nanos())
-                    .unwrap_or(0);
-                let selected_index = (ns % candidates.len() as u128) as usize;
-                Ok(Some(RandomPatchPickDebug {
-                    filter_query,
-                    selected_index,
-                    selected_patch_name: candidates[selected_index].clone(),
-                    candidates,
-                }))
-            }
-        }
-    }
-
-    pub(super) fn pick_random_patch_for_current_line_debug(
-        &self,
-    ) -> Result<Option<RandomPatchPickDebug>, String> {
-        let filter_query = self.current_line_random_patch_filter_query();
-        self.pick_random_patch_debug_with_query(filter_query.as_deref())
+        };
+        let Some(index) = self
+            .random_patch_decks
+            .next_index(selection_query, candidates.len())
+        else {
+            return Ok(None);
+        };
+        Ok(Some(candidates[index].clone()))
     }
 
     pub(in crate::tui) fn start_insert(&mut self) {

@@ -384,6 +384,7 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
         patch_favorites_cursor: 0,
         patch_select_focus: DawPatchSelectPane::Patches,
         patch_select_filter_active: false,
+        random_patch_decks: crate::random::RandomIndexDecks::default(),
     };
     app.data[1][1] = "c".to_string();
     app.data[1][3] = "e".to_string();

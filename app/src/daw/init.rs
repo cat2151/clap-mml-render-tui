@@ -335,6 +335,7 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
         patch_favorites_cursor: 0,
         patch_select_focus: DawPatchSelectPane::Patches,
         patch_select_filter_active: false,
+        random_patch_decks: crate::random::RandomIndexDecks::default(),
     };
 
     app.load();

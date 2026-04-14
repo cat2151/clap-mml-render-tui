@@ -239,6 +239,7 @@ pub struct DawApp {
     pub(super) patch_favorites_cursor: usize,
     pub(super) patch_select_focus: DawPatchSelectPane,
     pub(super) patch_select_filter_active: bool,
+    pub(super) random_patch_decks: crate::random::RandomIndexDecks,
 }
 
 impl DawApp {
@@ -293,23 +294,23 @@ impl DawApp {
             .collect()
     }
 
-    fn pick_random_patch_name(&self) -> Option<String> {
+    fn pick_random_patch_name(&mut self) -> Option<String> {
         self.pick_random_patch_name_with_query(None)
     }
 
-    fn pick_random_patch_name_with_query(&self, query: Option<&str>) -> Option<String> {
+    fn pick_random_patch_name_with_query(&mut self, query: Option<&str>) -> Option<String> {
         let patches = crate::patches::collect_patch_pairs(&self.cfg).ok()?;
-        let patches = Self::filter_patch_pairs_by_query(patches, query);
-        if patches.is_empty() {
+        let candidates = Self::filter_patch_pairs_by_query(patches, query)
+            .into_iter()
+            .map(|(orig, _)| orig)
+            .collect::<Vec<_>>();
+        if candidates.is_empty() {
             return None;
         }
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let ns = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.subsec_nanos())
-            .unwrap_or(0) as usize;
-        let idx = ns % patches.len();
-        Some(patches[idx].0.clone())
+        let idx = self
+            .random_patch_decks
+            .next_index(query, candidates.len())?;
+        Some(candidates[idx].clone())
     }
 
     // ─── 描画 ─────────────────────────────────────────────────

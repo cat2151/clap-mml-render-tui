@@ -19,6 +19,7 @@ impl TuiApp<'static> {
             active_sink: Arc::new(Mutex::new(None)),
             audio_cache: Arc::new(Mutex::new(HashMap::new())),
             patch_load_state: Arc::new(Mutex::new(PatchLoadState::Ready(Vec::new()))),
+            random_patch_decks: crate::random::RandomIndexDecks::default(),
             patch_all: Vec::new(),
             patch_all_source_order: Vec::new(),
             patch_query: String::new(),
@@ -58,7 +59,6 @@ impl TuiApp<'static> {
             patch_phrase_query_textarea: crate::text_input::new_single_line_textarea(""),
             patch_phrase_filter_active: false,
             patch_phrase_store_dirty: false,
-            notepad_random_log: NotepadRandomLogState::default(),
             is_daw_mode: false,
         }
     }

@@ -166,7 +166,7 @@ fn handle_normal_upper_l_no_longer_moves_to_last_line() {
 }
 
 #[test]
-fn handle_normal_shift_l_toggles_random_log_pane_without_moving_cursor() {
+fn handle_normal_shift_l_has_no_effect() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![
         "line 0".to_string(),
@@ -180,13 +180,14 @@ fn handle_normal_shift_l_toggles_random_log_pane_without_moving_cursor() {
         app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('L'), KeyModifiers::SHIFT));
 
     assert!(matches!(result, NormalAction::Continue));
-    assert!(app.notepad_random_log.visible);
     assert_eq!(app.cursor, 1);
     assert_eq!(app.list_state.selected(), Some(1));
     assert!(matches!(&*app.play_state.lock().unwrap(), PlayState::Idle));
 
-    app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('L'), KeyModifiers::SHIFT));
+    let result =
+        app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('L'), KeyModifiers::SHIFT));
 
-    assert!(!app.notepad_random_log.visible);
+    assert!(matches!(result, NormalAction::Continue));
     assert_eq!(app.cursor, 1);
+    assert_eq!(app.list_state.selected(), Some(1));
 }
