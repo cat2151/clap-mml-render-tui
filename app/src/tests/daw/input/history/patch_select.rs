@@ -399,6 +399,40 @@ fn handle_patch_select_backspace_with_empty_query_exits_filter_input() {
 }
 
 #[test]
+fn handle_patch_select_backspace_to_empty_keeps_filter_input_active() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.patch_all = vec![
+        ("Keys/Keys 1.fxp".to_string(), "keys/keys 1.fxp".to_string()),
+        ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
+    ];
+    app.patch_filtered = vec!["Keys/Keys 1.fxp".to_string()];
+    app.patch_query = "k".to_string();
+    app.patch_query_textarea = crate::text_input::new_single_line_textarea("k");
+    app.patch_select_filter_active = true;
+    app.mode = DawMode::PatchSelect;
+
+    app.handle_patch_select(KeyCode::Backspace);
+
+    assert!(matches!(app.mode, DawMode::PatchSelect));
+    assert!(app.patch_select_filter_active);
+    assert_eq!(app.patch_query, "");
+    assert_eq!(
+        app.patch_filtered,
+        vec!["Keys/Keys 1.fxp".to_string(), "Pads/Pad 1.fxp".to_string()]
+    );
+
+    app.handle_patch_select(KeyCode::Char('p'));
+
+    assert!(matches!(app.mode, DawMode::PatchSelect));
+    assert!(app.patch_select_filter_active);
+    assert_eq!(app.patch_query, "p");
+    assert_eq!(
+        app.patch_filtered,
+        vec!["Keys/Keys 1.fxp".to_string(), "Pads/Pad 1.fxp".to_string()]
+    );
+}
+
+#[test]
 fn handle_patch_select_allows_slash_character_in_filter_query_without_resetting_restore_point() {
     let (mut app, _cache_rx) = build_test_app();
     app.patch_all = vec![

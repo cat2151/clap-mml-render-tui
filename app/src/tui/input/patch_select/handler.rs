@@ -54,9 +54,6 @@ impl<'a> TuiApp<'a> {
                     }
                     self.patch_query = next_query;
                     self.update_patch_filter();
-                    if !previous_query.is_empty() && self.patch_query.is_empty() {
-                        self.patch_select_filter_active = false;
-                    }
                 }
             }
         }

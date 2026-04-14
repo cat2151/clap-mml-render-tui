@@ -90,7 +90,7 @@ fn handle_patch_select_char_filters_and_previews_first_result_after_slash() {
 }
 
 #[test]
-fn handle_patch_select_backspace_refilters_and_previews_first_result() {
+fn handle_patch_select_backspace_to_empty_keeps_filter_input_active() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
@@ -107,13 +107,23 @@ fn handle_patch_select_backspace_refilters_and_previews_first_result() {
         app.patch_filtered,
         vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()]
     );
-    assert!(!app.patch_select_filter_active);
+    assert!(app.patch_select_filter_active);
     assert_eq!(app.patch_cursor, 0);
     assert_eq!(app.patch_list_state.selected(), Some(0));
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
         PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Pads/Pad 1.fxp"} l8cdef"#
     ));
+
+    app.handle_patch_select(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
+
+    assert!(matches!(app.mode, Mode::PatchSelect));
+    assert!(app.patch_select_filter_active);
+    assert_eq!(app.patch_query, "p");
+    assert_eq!(
+        app.patch_filtered,
+        vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()]
+    );
 }
 
 #[test]
