@@ -283,11 +283,25 @@ fn claim_http_server_thread_slot_is_reusable_after_drop() {
 
 #[test]
 fn daw_mode_switch_request_is_consumed_once() {
+    deactivate_daw_http_server();
     assert!(!take_daw_mode_switch_request());
 
     request_daw_mode_switch();
 
     assert!(take_daw_mode_switch_request());
+    assert!(!take_daw_mode_switch_request());
+}
+
+#[test]
+fn daw_mode_switch_request_is_ignored_while_daw_is_active() {
+    deactivate_daw_http_server();
+    assert!(!take_daw_mode_switch_request());
+    *active_state_slot().lock().unwrap() = Some(build_http_state(default_config()));
+
+    request_daw_mode_switch();
+
+    assert!(!take_daw_mode_switch_request());
+    deactivate_daw_http_server();
     assert!(!take_daw_mode_switch_request());
 }
 

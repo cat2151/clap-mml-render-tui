@@ -121,7 +121,9 @@ pub(crate) fn deactivate_daw_http_server() {
 }
 
 pub(crate) fn request_daw_mode_switch() {
-    daw_mode_switch_requested().store(true, Ordering::Release);
+    if current_state().is_none() {
+        daw_mode_switch_requested().store(true, Ordering::Release);
+    }
 }
 
 pub(crate) fn take_daw_mode_switch_request() -> bool {
