@@ -116,6 +116,10 @@ fn build_http_state(cfg: Config) -> Arc<Mutex<DawHttpState>> {
     }))
 }
 
+fn activate_http_state(state: Arc<Mutex<DawHttpState>>) {
+    *active_state_slot().lock().unwrap() = Some(state);
+}
+
 #[test]
 fn apply_pending_http_commands_updates_mml_and_expands_grid() {
     let tmp = std::env::temp_dir().join("cmrt_test_http_server_updates_mml");
@@ -296,7 +300,7 @@ fn daw_mode_switch_request_is_consumed_once() {
 fn daw_mode_switch_request_is_ignored_while_daw_is_active() {
     deactivate_daw_http_server();
     assert!(!take_daw_mode_switch_request());
-    *active_state_slot().lock().unwrap() = Some(build_http_state(default_config()));
+    activate_http_state(build_http_state(default_config()));
 
     request_daw_mode_switch();
 
