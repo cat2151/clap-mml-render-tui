@@ -87,6 +87,10 @@ impl DawClient {
         self.post_status("/patch", PostPatchRequest { track, patch })
     }
 
+    pub fn post_daw_mode(&self) -> Result<(), Error> {
+        self.post_empty_status("/mode/daw")
+    }
+
     pub fn get_patches(&self) -> Result<Vec<String>, Error> {
         self.get_json("/patches")
     }
@@ -114,6 +118,19 @@ impl DawClient {
             .post(&self.endpoint_url(path))
             .send_json(body)
             .map_err(Error::from_ureq)?;
+        self.read_status_response(response)
+    }
+
+    fn post_empty_status(&self, path: &str) -> Result<(), Error> {
+        let response = self
+            .agent
+            .post(&self.endpoint_url(path))
+            .call()
+            .map_err(Error::from_ureq)?;
+        self.read_status_response(response)
+    }
+
+    fn read_status_response(&self, response: ureq::Response) -> Result<(), Error> {
         let http_status = response.status();
         let status: StatusResponse = response
             .into_json()
@@ -330,6 +347,18 @@ mod tests {
             request_body(&request),
             r#"{"track":1,"patch":"Pads/Factory Pad.fxp"}"#
         );
+    }
+
+    #[test]
+    fn post_daw_mode_sends_expected_request() {
+        let (base_url, request_rx) = spawn_single_request_server(r#"{"status":"ok"}"#);
+        let client = DawClient::new(&base_url).unwrap();
+
+        client.post_daw_mode().unwrap();
+
+        let request = request_rx.recv().unwrap();
+        assert!(request.starts_with("POST /mode/daw HTTP/1.1\r\n"));
+        assert_eq!(request_body(&request), "");
     }
 
     #[test]

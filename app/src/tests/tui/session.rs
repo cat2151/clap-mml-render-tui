@@ -71,3 +71,13 @@ fn save_history_state_persists_tui_cursor_lines_and_mode_flag() {
 
     std::fs::remove_dir_all(&tmp).ok();
 }
+
+#[test]
+fn daw_mode_switch_request_can_be_consumed_from_tui_runtime() {
+    assert!(!crate::daw::take_http_mode_switch_request());
+
+    crate::daw::request_http_mode_switch();
+
+    assert!(crate::daw::take_http_mode_switch_request());
+    assert!(!crate::daw::take_http_mode_switch_request());
+}

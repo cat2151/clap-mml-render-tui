@@ -127,6 +127,21 @@ pub(super) fn handle_post_patch(mut request: Request, state: &Arc<Mutex<DawHttpS
     }
 }
 
+pub(super) fn handle_post_mode_daw(request: Request) {
+    let cors_origin = match validate_cors_request(&request) {
+        Ok(cors_origin) => cors_origin,
+        Err(response) => {
+            let _ = request.respond(response);
+            return;
+        }
+    };
+    super::request_daw_mode_switch();
+    let _ = request.respond(with_cors_headers(
+        json_response(200, &JsonStatusResponse { status: "ok" }),
+        cors_origin.as_deref(),
+    ));
+}
+
 pub(super) fn handle_get_mml(request: Request, state: &Arc<Mutex<DawHttpState>>) {
     let cors_origin = match validate_cors_request(&request) {
         Ok(cors_origin) => cors_origin,

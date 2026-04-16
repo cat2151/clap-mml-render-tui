@@ -40,6 +40,7 @@ impl<'a> TuiApp<'a> {
     }
 
     pub fn run(&mut self) -> Result<()> {
+        crate::daw::ensure_http_server_for_mode_switch();
         enable_raw_mode()?;
         let mut cleanup = TerminalCleanup {
             raw_mode_enabled: true,
@@ -77,6 +78,21 @@ impl<'a> TuiApp<'a> {
         loop {
             if quit_from_startup_daw {
                 break;
+            }
+            if crate::daw::take_http_mode_switch_request() {
+                self.flush_patch_phrase_store_if_dirty();
+                self.save_history_state();
+                let mut daw = crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
+                match daw.run_with_terminal(&mut terminal)? {
+                    crate::daw::DawExitReason::ReturnToTui => {
+                        self.is_daw_mode = false;
+                    }
+                    crate::daw::DawExitReason::QuitApp => {
+                        self.is_daw_mode = true;
+                        break;
+                    }
+                }
+                continue;
             }
             let next_uses_textarea_cursor = self.uses_textarea_cursor();
             if next_uses_textarea_cursor != uses_textarea_cursor {

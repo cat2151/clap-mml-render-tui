@@ -324,6 +324,19 @@ impl DawApp {
     }
 }
 
+pub(crate) fn ensure_http_server_for_mode_switch() {
+    http_server::ensure_daw_http_server_thread();
+}
+
+#[cfg(test)]
+pub(crate) fn request_http_mode_switch() {
+    http_server::request_daw_mode_switch();
+}
+
+pub(crate) fn take_http_mode_switch_request() -> bool {
+    http_server::take_daw_mode_switch_request()
+}
+
 #[cfg(test)]
 #[path = "../tests/daw/mod.rs"]
 mod tests;
