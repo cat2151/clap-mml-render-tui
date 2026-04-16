@@ -13,7 +13,7 @@ use super::{DawApp, FIRST_PLAYABLE_TRACK, MIXER_MAX_DB, MIXER_MIN_DB};
 use crate::{config::Config, server::DEFAULT_PORT};
 use routes::{
     handle_get_mml, handle_get_patches, handle_options, handle_post_mixer, handle_post_mml,
-    handle_post_patch, text_response,
+    handle_post_mode_daw, handle_post_patch, text_response,
 };
 #[cfg(test)]
 use routes::{
@@ -63,6 +63,11 @@ fn server_thread_running() -> &'static AtomicBool {
     &SERVER_THREAD_RUNNING
 }
 
+fn daw_mode_switch_requested() -> &'static AtomicBool {
+    static DAW_MODE_SWITCH_REQUESTED: AtomicBool = AtomicBool::new(false);
+    &DAW_MODE_SWITCH_REQUESTED
+}
+
 fn current_state() -> Option<Arc<Mutex<DawHttpState>>> {
     active_state_slot().lock().unwrap().clone()
 }
@@ -80,19 +85,26 @@ impl Drop for DawHttpServerThreadGuard {
     }
 }
 
+fn spawn_http_server_thread(server_thread_guard: DawHttpServerThreadGuard) {
+    std::thread::spawn(move || {
+        let _server_thread_guard = server_thread_guard;
+        run_daw_http_server();
+    });
+}
+
+pub(crate) fn ensure_daw_http_server_thread() {
+    let Some(server_thread_guard) = claim_http_server_thread_slot() else {
+        return;
+    };
+    spawn_http_server_thread(server_thread_guard);
+}
+
 pub(crate) fn spawn_daw_http_server(state: Arc<Mutex<DawHttpState>>) {
     if state.lock().unwrap().cfg.is_none() {
         return;
     }
     *active_state_slot().lock().unwrap() = Some(state);
-
-    let Some(server_thread_guard) = claim_http_server_thread_slot() else {
-        return;
-    };
-    std::thread::spawn(move || {
-        let _server_thread_guard = server_thread_guard;
-        run_daw_http_server();
-    });
+    ensure_daw_http_server_thread();
 }
 
 pub(crate) fn set_active_http_state_cfg(cfg: Arc<Config>) {
@@ -106,6 +118,14 @@ pub(crate) fn set_active_http_state_cfg(cfg: Arc<Config>) {
 
 pub(crate) fn deactivate_daw_http_server() {
     *active_state_slot().lock().unwrap() = None;
+}
+
+pub(crate) fn request_daw_mode_switch() {
+    daw_mode_switch_requested().store(true, Ordering::Release);
+}
+
+pub(crate) fn take_daw_mode_switch_request() -> bool {
+    daw_mode_switch_requested().swap(false, Ordering::AcqRel)
 }
 
 fn take_pending_http_commands() -> Vec<DawHttpCommand> {
@@ -126,6 +146,17 @@ fn run_daw_http_server() {
     for request in server.incoming_requests() {
         let method = request.method().clone();
         let url = request.url().to_string();
+        let path = url.split_once('?').map_or(url.as_str(), |(path, _)| path);
+
+        if method == Method::Options && path == "/mode/daw" {
+            handle_options(request);
+            continue;
+        }
+        if method == Method::Post && path == "/mode/daw" {
+            handle_post_mode_daw(request);
+            continue;
+        }
+
         let Some(state) = current_state() else {
             let _ = request.respond(text_response(
                 503,
@@ -133,8 +164,6 @@ fn run_daw_http_server() {
             ));
             continue;
         };
-
-        let path = url.split_once('?').map_or(url.as_str(), |(path, _)| path);
 
         match (method, path) {
             (Method::Options, "/mml")

@@ -8,8 +8,9 @@ use tui_textarea::TextArea;
 use super::routes::{get_snapshot_mml, parse_get_mml_query};
 use super::{
     active_state_slot, claim_http_server_thread_slot, deactivate_daw_http_server,
-    is_allowed_cors_origin, request_origin, with_cors_headers, with_preflight_cors_headers,
-    DawHttpCommand, DawHttpCommandKind, DawHttpState,
+    is_allowed_cors_origin, request_daw_mode_switch, request_origin, take_daw_mode_switch_request,
+    with_cors_headers, with_preflight_cors_headers, DawHttpCommand, DawHttpCommandKind,
+    DawHttpState,
 };
 use crate::{
     config::Config,
@@ -278,6 +279,16 @@ fn claim_http_server_thread_slot_is_reusable_after_drop() {
         claim_http_server_thread_slot().is_some(),
         "slot should be reusable after guard drop"
     );
+}
+
+#[test]
+fn daw_mode_switch_request_is_consumed_once() {
+    assert!(!take_daw_mode_switch_request());
+
+    request_daw_mode_switch();
+
+    assert!(take_daw_mode_switch_request());
+    assert!(!take_daw_mode_switch_request());
 }
 
 #[test]
