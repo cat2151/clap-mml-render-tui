@@ -12,8 +12,8 @@ use tiny_http::Method;
 use super::{DawApp, FIRST_PLAYABLE_TRACK, MIXER_MAX_DB, MIXER_MIN_DB};
 use crate::{config::Config, server::DEFAULT_PORT};
 use routes::{
-    handle_get_mml, handle_get_patches, handle_options, handle_post_mixer, handle_post_mml,
-    handle_post_mode_daw, handle_post_patch, text_response,
+    handle_get_mml, handle_get_patches, handle_options, handle_post_ab_repeat, handle_post_mixer,
+    handle_post_mml, handle_post_mode_daw, handle_post_patch, text_response,
 };
 #[cfg(test)]
 use routes::{
@@ -48,6 +48,10 @@ enum DawHttpCommandKind {
     Patch {
         track: usize,
         patch: String,
+    },
+    AbRepeat {
+        start_measure: usize,
+        end_measure: usize,
     },
 }
 
@@ -171,10 +175,12 @@ fn run_daw_http_server() {
             (Method::Options, "/mml")
             | (Method::Options, "/mixer")
             | (Method::Options, "/patch")
+            | (Method::Options, "/ab-repeat")
             | (Method::Options, "/patches") => handle_options(request),
             (Method::Post, "/mml") => handle_post_mml(request, &state),
             (Method::Post, "/mixer") => handle_post_mixer(request, &state),
             (Method::Post, "/patch") => handle_post_patch(request, &state),
+            (Method::Post, "/ab-repeat") => handle_post_ab_repeat(request, &state),
             (Method::Get, "/mml") => handle_get_mml(request, &state),
             (Method::Get, "/patches") => handle_get_patches(request, &state),
             _ => {
@@ -203,6 +209,10 @@ impl DawApp {
                 } => self.apply_http_mml(track, measure, &mml),
                 DawHttpCommandKind::Mixer { track, db } => self.apply_http_mixer(track, db),
                 DawHttpCommandKind::Patch { track, patch } => self.apply_http_patch(track, &patch),
+                DawHttpCommandKind::AbRepeat {
+                    start_measure,
+                    end_measure,
+                } => self.apply_http_ab_repeat(start_measure, end_measure),
             };
             let _ = command.response_tx.send(result);
         }
@@ -333,6 +343,31 @@ impl DawApp {
         self.sync_playback_mml_state();
         self.append_log_line(format!(
             "http: patch track={track} patch={display_patch_name}"
+        ));
+        Ok(())
+    }
+
+    fn apply_http_ab_repeat(
+        &mut self,
+        start_measure: usize,
+        end_measure: usize,
+    ) -> Result<(), String> {
+        if start_measure == 0 || end_measure == 0 {
+            return Err("measA と measB は 1 以上を指定してください".to_string());
+        }
+        if start_measure > self.measures || end_measure > self.measures {
+            return Err(format!(
+                "measA と measB は 1..={} の範囲で指定してください",
+                self.measures
+            ));
+        }
+
+        *self.ab_repeat.lock().unwrap() = super::AbRepeatState::FixEnd {
+            start_measure_index: start_measure - 1,
+            end_measure_index: end_measure - 1,
+        };
+        self.append_log_line(format!(
+            "http: ab-repeat measA={start_measure} measB={end_measure}"
         ));
         Ok(())
     }
