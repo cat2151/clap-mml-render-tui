@@ -271,6 +271,32 @@ fn apply_pending_http_commands_start_while_playing_is_noop() {
 }
 
 #[test]
+fn apply_pending_http_commands_start_without_playable_data_returns_error() {
+    let cfg = default_config();
+    let state = build_http_state(cfg.clone());
+    *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
+    let response_rx = enqueue_command(&state, DawHttpCommandKind::PlayStart);
+
+    let mut app = build_test_app(cfg);
+    app.apply_pending_http_commands();
+
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Idle
+    ));
+    assert_eq!(
+        response_rx.try_recv().unwrap(),
+        Err("再生可能なデータがありません".to_string())
+    );
+    assert_eq!(
+        app.log_lines.lock().unwrap().back().map(String::as_str),
+        Some("http: play start (no playable data)")
+    );
+
+    deactivate_daw_http_server();
+}
+
+#[test]
 fn apply_pending_http_commands_stops_play() {
     let cfg = default_config();
     let state = build_http_state(cfg.clone());

@@ -366,8 +366,13 @@ impl DawApp {
             self.stop_play();
         }
         self.start_play();
-        self.append_log_line("http: play start");
-        Ok(())
+        if *self.play_state.lock().unwrap() == super::DawPlayState::Playing {
+            self.append_log_line("http: play start");
+            Ok(())
+        } else {
+            self.append_log_line("http: play start (no playable data)");
+            Err("再生可能なデータがありません".to_string())
+        }
     }
 
     fn apply_http_play_stop(&mut self) -> Result<(), String> {
