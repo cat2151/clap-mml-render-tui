@@ -334,37 +334,37 @@ impl<'a> TuiApp<'a> {
                 self.sync_patch_phrase_states();
                 self.preview_selected_patch_phrase_item();
             }
-            KeyCode::Char('j') | KeyCode::Down => {
-                if self.move_patch_phrase_selection_by(1, history_len, favorites_len) {
-                    self.sync_patch_phrase_states();
-                    self.preview_selected_patch_phrase_item();
-                }
+            KeyCode::Char('j') | KeyCode::Down
+                if self.move_patch_phrase_selection_by(1, history_len, favorites_len) =>
+            {
+                self.sync_patch_phrase_states();
+                self.preview_selected_patch_phrase_item();
             }
-            KeyCode::Char('k') | KeyCode::Up => {
-                if self.move_patch_phrase_selection_by(-1, history_len, favorites_len) {
-                    self.sync_patch_phrase_states();
-                    self.preview_selected_patch_phrase_item();
-                }
+            KeyCode::Char('k') | KeyCode::Up
+                if self.move_patch_phrase_selection_by(-1, history_len, favorites_len) =>
+            {
+                self.sync_patch_phrase_states();
+                self.preview_selected_patch_phrase_item();
             }
-            KeyCode::PageDown => {
+            KeyCode::PageDown
                 if self.move_patch_phrase_selection_by(
                     self.patch_phrase_page_size as isize,
                     history_len,
                     favorites_len,
-                ) {
-                    self.sync_patch_phrase_states();
-                    self.preview_selected_patch_phrase_item();
-                }
+                ) =>
+            {
+                self.sync_patch_phrase_states();
+                self.preview_selected_patch_phrase_item();
             }
-            KeyCode::PageUp => {
+            KeyCode::PageUp
                 if self.move_patch_phrase_selection_by(
                     -(self.patch_phrase_page_size as isize),
                     history_len,
                     favorites_len,
-                ) {
-                    self.sync_patch_phrase_states();
-                    self.preview_selected_patch_phrase_item();
-                }
+                ) =>
+            {
+                self.sync_patch_phrase_states();
+                self.preview_selected_patch_phrase_item();
             }
             KeyCode::Char('/') => {
                 self.patch_phrase_filter_active = true;

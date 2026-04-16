@@ -293,37 +293,37 @@ impl<'a> TuiApp<'a> {
                 self.sync_notepad_history_states();
                 self.preview_selected_notepad_item();
             }
-            KeyCode::Char('j') | KeyCode::Down => {
-                if self.move_notepad_selection_by(1, history_len, favorites_len) {
-                    self.sync_notepad_history_states();
-                    self.preview_selected_notepad_item();
-                }
+            KeyCode::Char('j') | KeyCode::Down
+                if self.move_notepad_selection_by(1, history_len, favorites_len) =>
+            {
+                self.sync_notepad_history_states();
+                self.preview_selected_notepad_item();
             }
-            KeyCode::Char('k') | KeyCode::Up => {
-                if self.move_notepad_selection_by(-1, history_len, favorites_len) {
-                    self.sync_notepad_history_states();
-                    self.preview_selected_notepad_item();
-                }
+            KeyCode::Char('k') | KeyCode::Up
+                if self.move_notepad_selection_by(-1, history_len, favorites_len) =>
+            {
+                self.sync_notepad_history_states();
+                self.preview_selected_notepad_item();
             }
-            KeyCode::PageDown => {
+            KeyCode::PageDown
                 if self.move_notepad_selection_by(
                     self.notepad_history_page_size as isize,
                     history_len,
                     favorites_len,
-                ) {
-                    self.sync_notepad_history_states();
-                    self.preview_selected_notepad_item();
-                }
+                ) =>
+            {
+                self.sync_notepad_history_states();
+                self.preview_selected_notepad_item();
             }
-            KeyCode::PageUp => {
+            KeyCode::PageUp
                 if self.move_notepad_selection_by(
                     -(self.notepad_history_page_size as isize),
                     history_len,
                     favorites_len,
-                ) {
-                    self.sync_notepad_history_states();
-                    self.preview_selected_notepad_item();
-                }
+                ) =>
+            {
+                self.sync_notepad_history_states();
+                self.preview_selected_notepad_item();
             }
             KeyCode::Char('/') => {
                 self.notepad_filter_active = true;

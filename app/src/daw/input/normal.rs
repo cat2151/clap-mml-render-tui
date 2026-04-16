@@ -325,34 +325,26 @@ impl DawApp {
             KeyCode::Char('q') => return DawNormalAction::QuitApp,
             KeyCode::Char('n') => return DawNormalAction::ReturnToTui,
 
-            KeyCode::Char('h') | KeyCode::Left => {
-                if self.cursor_measure > 0 {
-                    self.cursor_measure -= 1;
-                    self.update_ab_repeat_follow_end_with_cursor();
-                    self.preview_current_target_if_stopped();
-                }
+            KeyCode::Char('h') | KeyCode::Left if self.cursor_measure > 0 => {
+                self.cursor_measure -= 1;
+                self.update_ab_repeat_follow_end_with_cursor();
+                self.preview_current_target_if_stopped();
             }
             KeyCode::Char('H') => {
                 self.start_history_overlay();
             }
-            KeyCode::Char('l') | KeyCode::Right => {
-                if self.cursor_measure < self.measures {
-                    self.cursor_measure += 1;
-                    self.update_ab_repeat_follow_end_with_cursor();
-                    self.preview_current_target_if_stopped();
-                }
+            KeyCode::Char('l') | KeyCode::Right if self.cursor_measure < self.measures => {
+                self.cursor_measure += 1;
+                self.update_ab_repeat_follow_end_with_cursor();
+                self.preview_current_target_if_stopped();
             }
-            KeyCode::Char('j') | KeyCode::Down => {
-                if self.cursor_track + 1 < self.tracks {
-                    self.cursor_track += 1;
-                    self.preview_current_target_if_stopped();
-                }
+            KeyCode::Char('j') | KeyCode::Down if self.cursor_track + 1 < self.tracks => {
+                self.cursor_track += 1;
+                self.preview_current_target_if_stopped();
             }
-            KeyCode::Char('k') | KeyCode::Up => {
-                if self.cursor_track > 0 {
-                    self.cursor_track -= 1;
-                    self.preview_current_target_if_stopped();
-                }
+            KeyCode::Char('k') | KeyCode::Up if self.cursor_track > 0 => {
+                self.cursor_track -= 1;
+                self.preview_current_target_if_stopped();
             }
             KeyCode::Char('M') => {
                 self.cursor_track = self.tracks / 2;
@@ -371,10 +363,8 @@ impl DawApp {
 
             KeyCode::Char('K') | KeyCode::Char('?') => self.enter_help(),
 
-            KeyCode::Char('p') => {
-                if !self.paste_yanked_measure() {
-                    self.append_log_line("ヤンクバッファが空です".to_string());
-                }
+            KeyCode::Char('p') if !self.paste_yanked_measure() => {
+                self.append_log_line("ヤンクバッファが空です".to_string());
             }
             KeyCode::Char('u') => {
                 self.undo_last_paste();
@@ -382,16 +372,14 @@ impl DawApp {
 
             KeyCode::Char('a') => self.cycle_ab_repeat(),
 
-            KeyCode::Char('s') => {
-                if self.cursor_track >= FIRST_PLAYABLE_TRACK {
-                    if !self.solo_mode_active() {
-                        self.solo_tracks.fill(false);
-                        self.solo_tracks[self.cursor_track] = true;
-                    } else if let Some(is_solo) = self.solo_tracks.get_mut(self.cursor_track) {
-                        *is_solo = !*is_solo;
-                    }
-                    self.sync_playback_mml_state();
+            KeyCode::Char('s') if self.cursor_track >= FIRST_PLAYABLE_TRACK => {
+                if !self.solo_mode_active() {
+                    self.solo_tracks.fill(false);
+                    self.solo_tracks[self.cursor_track] = true;
+                } else if let Some(is_solo) = self.solo_tracks.get_mut(self.cursor_track) {
+                    *is_solo = !*is_solo;
                 }
+                self.sync_playback_mml_state();
             }
 
             KeyCode::Char('g') => self.apply_generate_to_current_measure(),
