@@ -33,6 +33,14 @@ struct PostPatchRequest {
     patch: String,
 }
 
+#[derive(Deserialize)]
+struct PostAbRepeatRequest {
+    #[serde(rename = "measA", alias = "measureA")]
+    start_measure: usize,
+    #[serde(rename = "measB", alias = "measureB")]
+    end_measure: usize,
+}
+
 #[derive(Serialize)]
 struct JsonStatusResponse<'a> {
     status: &'a str,
@@ -140,6 +148,33 @@ pub(super) fn handle_post_mode_daw(request: Request) {
         json_response(200, &JsonStatusResponse { status: "ok" }),
         cors_origin.as_deref(),
     ));
+}
+
+pub(super) fn handle_post_ab_repeat(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
+    let cors_origin = match validate_cors_request(&request) {
+        Ok(cors_origin) => cors_origin,
+        Err(response) => {
+            let _ = request.respond(response);
+            return;
+        }
+    };
+    match read_json_body::<PostAbRepeatRequest>(&mut request) {
+        Ok(body) => respond_command(
+            request,
+            state,
+            DawHttpCommandKind::AbRepeat {
+                start_measure: body.start_measure,
+                end_measure: body.end_measure,
+            },
+            cors_origin.as_deref(),
+        ),
+        Err((status, message)) => {
+            let _ = request.respond(with_cors_headers(
+                text_response(status, message),
+                cors_origin.as_deref(),
+            ));
+        }
+    }
 }
 
 pub(super) fn handle_get_mml(request: Request, state: &Arc<Mutex<DawHttpState>>) {
@@ -421,4 +456,29 @@ fn json_response<T: Serialize>(status: u16, body: &T) -> Response<std::io::Curso
     Response::from_string(serde_json::to_string(body).expect("json response serialization"))
         .with_status_code(StatusCode(status))
         .with_header(header)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PostAbRepeatRequest;
+
+    #[test]
+    fn post_ab_repeat_request_deserializes_measure_aliases() {
+        let request: PostAbRepeatRequest =
+            serde_json::from_str(r#"{"measureA":3,"measureB":7}"#).unwrap();
+
+        assert_eq!(request.start_measure, 3);
+        assert_eq!(request.end_measure, 7);
+    }
+
+    #[test]
+    fn post_ab_repeat_request_measure_aliases_match_canonical_names() {
+        let canonical: PostAbRepeatRequest =
+            serde_json::from_str(r#"{"measA":5,"measB":9}"#).unwrap();
+        let alias: PostAbRepeatRequest =
+            serde_json::from_str(r#"{"measureA":5,"measureB":9}"#).unwrap();
+
+        assert_eq!(alias.start_measure, canonical.start_measure);
+        assert_eq!(alias.end_measure, canonical.end_measure);
+    }
 }

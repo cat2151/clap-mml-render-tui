@@ -215,6 +215,34 @@ fn apply_pending_http_commands_updates_patch_init_cell() {
 }
 
 #[test]
+fn apply_pending_http_commands_updates_ab_repeat_range() {
+    let cfg = default_config();
+    let state = build_http_state(cfg.clone());
+    *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
+    let response_rx = enqueue_command(
+        &state,
+        DawHttpCommandKind::AbRepeat {
+            start_measure: 1,
+            end_measure: 2,
+        },
+    );
+
+    let mut app = build_test_app(cfg);
+    app.apply_pending_http_commands();
+
+    assert_eq!(
+        app.ab_repeat_state(),
+        AbRepeatState::FixEnd {
+            start_measure_index: 0,
+            end_measure_index: 1,
+        }
+    );
+    assert_eq!(response_rx.try_recv().unwrap(), Ok(()));
+
+    deactivate_daw_http_server();
+}
+
+#[test]
 fn request_origin_extracts_origin_header() {
     let header = tiny_http::Header::from_bytes("Origin", "https://cat2151.github.io").unwrap();
 
@@ -317,6 +345,21 @@ fn apply_http_mml_rejects_measure_index_overflow() {
     let result = app.apply_http_mml(1, usize::MAX, "c");
 
     assert_eq!(result, Err("measure index が大きすぎます".to_string()));
+}
+
+#[test]
+fn apply_http_ab_repeat_rejects_init_column_and_out_of_range_measure() {
+    let cfg = default_config();
+    let mut app = build_test_app(cfg);
+
+    assert_eq!(
+        app.apply_http_ab_repeat(0, 1),
+        Err("measA と measB は 1 以上を指定してください".to_string())
+    );
+    assert_eq!(
+        app.apply_http_ab_repeat(1, 3),
+        Err("measA と measB は 1..=2 の範囲で指定してください".to_string())
+    );
 }
 
 #[test]

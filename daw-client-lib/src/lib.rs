@@ -49,6 +49,14 @@ struct PostPatchRequest<'a> {
     patch: &'a str,
 }
 
+#[derive(Serialize)]
+struct PostAbRepeatRequest {
+    #[serde(rename = "measA")]
+    start_measure: usize,
+    #[serde(rename = "measB")]
+    end_measure: usize,
+}
+
 impl DawClient {
     pub fn new(base_url: impl AsRef<str>) -> Result<Self, Error> {
         let base_url = normalize_base_url(base_url.as_ref())?;
@@ -89,6 +97,16 @@ impl DawClient {
 
     pub fn post_daw_mode(&self) -> Result<(), Error> {
         self.post_empty_status("/mode/daw")
+    }
+
+    pub fn post_ab_repeat(&self, start_measure: usize, end_measure: usize) -> Result<(), Error> {
+        self.post_status(
+            "/ab-repeat",
+            PostAbRepeatRequest {
+                start_measure,
+                end_measure,
+            },
+        )
     }
 
     pub fn get_patches(&self) -> Result<Vec<String>, Error> {
@@ -359,6 +377,18 @@ mod tests {
         let request = request_rx.recv().unwrap();
         assert!(request.starts_with("POST /mode/daw HTTP/1.1\r\n"));
         assert_eq!(request_body(&request), "");
+    }
+
+    #[test]
+    fn post_ab_repeat_sends_expected_request() {
+        let (base_url, request_rx) = spawn_single_request_server(r#"{"status":"ok"}"#);
+        let client = DawClient::new(&base_url).unwrap();
+
+        client.post_ab_repeat(2, 5).unwrap();
+
+        let request = request_rx.recv().unwrap();
+        assert!(request.starts_with("POST /ab-repeat HTTP/1.1\r\n"));
+        assert_eq!(request_body(&request), r#"{"measA":2,"measB":5}"#);
     }
 
     #[test]
