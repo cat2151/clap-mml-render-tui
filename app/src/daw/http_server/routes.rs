@@ -457,3 +457,28 @@ fn json_response<T: Serialize>(status: u16, body: &T) -> Response<std::io::Curso
         .with_status_code(StatusCode(status))
         .with_header(header)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::PostAbRepeatRequest;
+
+    #[test]
+    fn post_ab_repeat_request_deserializes_measure_aliases() {
+        let request: PostAbRepeatRequest =
+            serde_json::from_str(r#"{"measureA":3,"measureB":7}"#).unwrap();
+
+        assert_eq!(request.start_measure, 3);
+        assert_eq!(request.end_measure, 7);
+    }
+
+    #[test]
+    fn post_ab_repeat_request_measure_aliases_match_canonical_names() {
+        let canonical: PostAbRepeatRequest =
+            serde_json::from_str(r#"{"measA":5,"measB":9}"#).unwrap();
+        let alias: PostAbRepeatRequest =
+            serde_json::from_str(r#"{"measureA":5,"measureB":9}"#).unwrap();
+
+        assert_eq!(alias.start_measure, canonical.start_measure);
+        assert_eq!(alias.end_measure, canonical.end_measure);
+    }
+}
