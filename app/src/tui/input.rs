@@ -98,15 +98,11 @@ impl<'a> TuiApp<'a> {
                     KeyCode::Char('t') => {
                         self.open_patch_select_overlay(None);
                     }
-                    KeyCode::Char('p') => {
-                        if !self.paste_yanked_line(false) {
-                            self.set_empty_yank_error();
-                        }
+                    KeyCode::Char('p') if !self.paste_yanked_line(false) => {
+                        self.set_empty_yank_error();
                     }
-                    KeyCode::Char('P') => {
-                        if !self.paste_yanked_line(true) {
-                            self.set_empty_yank_error();
-                        }
+                    KeyCode::Char('P') if !self.paste_yanked_line(true) => {
+                        self.set_empty_yank_error();
                     }
                     KeyCode::Char('f') => self.start_patch_phrase_for_current_line(),
                     KeyCode::Char('o') => {
