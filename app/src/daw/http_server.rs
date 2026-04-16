@@ -359,7 +359,7 @@ impl DawApp {
     fn apply_http_play_start(&mut self) -> Result<(), String> {
         let play_state = *self.play_state.lock().unwrap();
         if play_state == super::DawPlayState::Playing {
-            self.append_log_line("http: play start");
+            self.append_log_line("http: play start (already playing)");
             return Ok(());
         }
         if play_state == super::DawPlayState::Preview {

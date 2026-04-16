@@ -247,6 +247,30 @@ fn apply_pending_http_commands_starts_play() {
 }
 
 #[test]
+fn apply_pending_http_commands_start_while_playing_is_noop() {
+    let cfg = default_config();
+    let state = build_http_state(cfg.clone());
+    *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
+    let response_rx = enqueue_command(&state, DawHttpCommandKind::PlayStart);
+
+    let mut app = build_test_app(cfg);
+    *app.play_state.lock().unwrap() = DawPlayState::Playing;
+    app.apply_pending_http_commands();
+
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Playing
+    ));
+    assert_eq!(response_rx.try_recv().unwrap(), Ok(()));
+    assert_eq!(
+        app.log_lines.lock().unwrap().back().map(String::as_str),
+        Some("http: play start (already playing)")
+    );
+
+    deactivate_daw_http_server();
+}
+
+#[test]
 fn apply_pending_http_commands_stops_play() {
     let cfg = default_config();
     let state = build_http_state(cfg.clone());
