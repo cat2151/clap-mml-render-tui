@@ -95,6 +95,14 @@ impl DawClient {
         self.post_status("/patch", PostPatchRequest { track, patch })
     }
 
+    pub fn post_play_start(&self) -> Result<(), Error> {
+        self.post_empty_status("/play/start")
+    }
+
+    pub fn post_play_stop(&self) -> Result<(), Error> {
+        self.post_empty_status("/play/stop")
+    }
+
     pub fn post_daw_mode(&self) -> Result<(), Error> {
         self.post_empty_status("/mode/daw")
     }
@@ -365,6 +373,30 @@ mod tests {
             request_body(&request),
             r#"{"track":1,"patch":"Pads/Factory Pad.fxp"}"#
         );
+    }
+
+    #[test]
+    fn post_play_start_sends_expected_request() {
+        let (base_url, request_rx) = spawn_single_request_server(r#"{"status":"ok"}"#);
+        let client = DawClient::new(&base_url).unwrap();
+
+        client.post_play_start().unwrap();
+
+        let request = request_rx.recv().unwrap();
+        assert!(request.starts_with("POST /play/start HTTP/1.1\r\n"));
+        assert_eq!(request_body(&request), "");
+    }
+
+    #[test]
+    fn post_play_stop_sends_expected_request() {
+        let (base_url, request_rx) = spawn_single_request_server(r#"{"status":"ok"}"#);
+        let client = DawClient::new(&base_url).unwrap();
+
+        client.post_play_stop().unwrap();
+
+        let request = request_rx.recv().unwrap();
+        assert!(request.starts_with("POST /play/stop HTTP/1.1\r\n"));
+        assert_eq!(request_body(&request), "");
     }
 
     #[test]

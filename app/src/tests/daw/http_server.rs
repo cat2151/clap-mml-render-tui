@@ -215,6 +215,70 @@ fn apply_pending_http_commands_updates_patch_init_cell() {
 }
 
 #[test]
+fn apply_pending_http_commands_starts_play() {
+    let cfg = default_config();
+    let state = build_http_state(cfg.clone());
+    *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
+    let response_rx = enqueue_command(&state, DawHttpCommandKind::PlayStart);
+
+    let mut app = build_test_app(cfg);
+    app.data[1][1] = "l8c".to_string();
+    app.apply_pending_http_commands();
+
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Playing
+    ));
+    assert_eq!(response_rx.try_recv().unwrap(), Ok(()));
+    assert!(app
+        .log_lines
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|line| line == "play: start"));
+    assert!(app
+        .log_lines
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|line| line == "http: play start"));
+
+    deactivate_daw_http_server();
+}
+
+#[test]
+fn apply_pending_http_commands_stops_play() {
+    let cfg = default_config();
+    let state = build_http_state(cfg.clone());
+    *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
+    let response_rx = enqueue_command(&state, DawHttpCommandKind::PlayStop);
+
+    let mut app = build_test_app(cfg);
+    *app.play_state.lock().unwrap() = DawPlayState::Playing;
+    app.apply_pending_http_commands();
+
+    assert!(matches!(
+        *app.play_state.lock().unwrap(),
+        DawPlayState::Idle
+    ));
+    assert_eq!(response_rx.try_recv().unwrap(), Ok(()));
+    assert!(app
+        .log_lines
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|line| line == "play: stop"));
+    assert!(app
+        .log_lines
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|line| line == "http: play stop"));
+
+    deactivate_daw_http_server();
+}
+
+#[test]
 fn apply_pending_http_commands_updates_ab_repeat_range() {
     let cfg = default_config();
     let state = build_http_state(cfg.clone());

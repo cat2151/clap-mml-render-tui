@@ -117,6 +117,11 @@ impl DawApp {
             crate::logging::append_log_line(&log_lines, line);
         }
 
+        #[cfg(test)]
+        if entry_ptr == 0 {
+            return;
+        }
+
         std::thread::spawn(move || {
             // SAFETY: entry は main() のスタックに生存している
             let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
