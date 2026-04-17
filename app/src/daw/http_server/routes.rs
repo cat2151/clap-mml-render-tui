@@ -60,6 +60,12 @@ struct GetMmlsResponse {
     tracks: Vec<Vec<String>>,
 }
 
+#[derive(Clone, Copy)]
+pub(super) enum RequestHeaderName {
+    Origin,
+    IfNoneMatch,
+}
+
 pub(super) fn handle_post_mml(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
     let cors_origin = match validate_cors_request(&request) {
         Ok(cors_origin) => cors_origin,
@@ -265,30 +271,31 @@ pub(super) fn handle_get_mmls(request: Request, state: &Arc<Mutex<DawHttpState>>
             return;
         }
     };
-    let if_none_match = request_header_value(request.headers(), "If-None-Match");
-    let response = {
+    let if_none_match = request_header_value(request.headers(), RequestHeaderName::IfNoneMatch);
+    let snapshot_result = {
         let state = state.lock().unwrap();
-        match get_snapshot_mmls(&state) {
-            Ok(tracks) => {
-                let etag = snapshot_mmls_etag(&tracks);
-                if if_none_match
-                    .as_deref()
-                    .is_some_and(|header| if_none_match_matches(header, &etag))
-                {
-                    with_cors_headers(
-                        with_etag_header(empty_response(304), &etag),
-                        cors_origin.as_deref(),
-                    )
-                } else {
-                    with_cors_headers(
-                        with_etag_header(json_response(200, &GetMmlsResponse { tracks }), &etag),
-                        cors_origin.as_deref(),
-                    )
-                }
+        get_snapshot_mmls(&state)
+    };
+    let response = match snapshot_result {
+        Ok(tracks) => {
+            let etag = snapshot_mmls_etag(&tracks);
+            if if_none_match
+                .as_deref()
+                .is_some_and(|header| if_none_match_matches(header, &etag))
+            {
+                with_cors_headers(
+                    with_etag_header(empty_response(304), &etag),
+                    cors_origin.as_deref(),
+                )
+            } else {
+                with_cors_headers(
+                    with_etag_header(json_response(200, &GetMmlsResponse { tracks }), &etag),
+                    cors_origin.as_deref(),
+                )
             }
-            Err((status, message)) => {
-                with_cors_headers(text_response(status, message), cors_origin.as_deref())
-            }
+        }
+        Err((status, message)) => {
+            with_cors_headers(text_response(status, message), cors_origin.as_deref())
         }
     };
     let _ = request.respond(response);
@@ -402,10 +409,13 @@ fn parse_query_usize(name: &str, value: &str) -> Result<usize, (u16, String)> {
         .map_err(|_| (400, format!("{name} は 0 以上の整数を指定してください\n")))
 }
 
-pub(super) fn request_header_value(headers: &[Header], name: &str) -> Option<String> {
+pub(super) fn request_header_value(headers: &[Header], name: RequestHeaderName) -> Option<String> {
     headers
         .iter()
-        .find(|header| header.field.to_string().eq_ignore_ascii_case(name))
+        .find(|header| match name {
+            RequestHeaderName::Origin => header.field.equiv("Origin"),
+            RequestHeaderName::IfNoneMatch => header.field.equiv("If-None-Match"),
+        })
         .map(|header| header.value.as_str().to_string())
 }
 
@@ -451,7 +461,7 @@ pub(super) fn handle_options(request: Request) {
 }
 
 pub(super) fn request_origin(headers: &[Header]) -> Option<String> {
-    request_header_value(headers, "Origin")
+    request_header_value(headers, RequestHeaderName::Origin)
 }
 
 pub(super) fn is_allowed_cors_origin(origin: &str) -> bool {
@@ -485,6 +495,10 @@ pub(super) fn with_cors_headers(
             Header::from_bytes("Access-Control-Allow-Origin", origin)
                 .expect("valid access-control-allow-origin header"),
         )
+        .with_header(
+            Header::from_bytes("Access-Control-Expose-Headers", "ETag")
+                .expect("valid access-control-expose-headers header"),
+        )
         .with_header(Header::from_bytes("Vary", "Origin").expect("valid vary header"))
 }
 
@@ -498,8 +512,11 @@ pub(super) fn with_preflight_cors_headers(
                 .expect("valid access-control-allow-methods header"),
         )
         .with_header(
-            Header::from_bytes("Access-Control-Allow-Headers", "Content-Type")
-                .expect("valid access-control-allow-headers header"),
+            Header::from_bytes(
+                "Access-Control-Allow-Headers",
+                "Content-Type, If-None-Match",
+            )
+            .expect("valid access-control-allow-headers header"),
         )
         .with_header(
             Header::from_bytes("Access-Control-Max-Age", PREFLIGHT_MAX_AGE_SECONDS)

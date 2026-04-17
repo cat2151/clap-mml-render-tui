@@ -7,7 +7,7 @@ use tui_textarea::TextArea;
 
 use super::routes::{
     get_snapshot_mml, get_snapshot_mmls, if_none_match_matches, parse_get_mml_query,
-    request_header_value, snapshot_mmls_etag,
+    request_header_value, snapshot_mmls_etag, RequestHeaderName,
 };
 use super::{
     active_state_slot, claim_http_server_thread_slot, deactivate_daw_http_server,
@@ -398,7 +398,7 @@ fn request_header_value_extracts_case_insensitive_header() {
     let header = tiny_http::Header::from_bytes("If-None-Match", "\"abc123\"").unwrap();
 
     assert_eq!(
-        request_header_value(&[header], "if-none-match"),
+        request_header_value(&[header], RequestHeaderName::IfNoneMatch),
         Some("\"abc123\"".to_string())
     );
 }
@@ -425,6 +425,11 @@ fn with_cors_headers_adds_origin_and_vary_headers() {
     assert!(response
         .headers()
         .iter()
+        .any(|header| header.field.equiv("Access-Control-Expose-Headers")
+            && header.value.as_str() == "ETag"));
+    assert!(response
+        .headers()
+        .iter()
         .any(|header| header.field.equiv("Vary") && header.value.as_str() == "Origin"));
 }
 
@@ -442,7 +447,8 @@ fn with_preflight_cors_headers_adds_preflight_headers() {
     assert!(response
         .headers()
         .iter()
-        .any(|header| header.field.equiv("Access-Control-Allow-Headers")));
+        .any(|header| header.field.equiv("Access-Control-Allow-Headers")
+            && header.value.as_str().contains("If-None-Match")));
     assert!(response
         .headers()
         .iter()
