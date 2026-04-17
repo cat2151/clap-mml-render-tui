@@ -123,6 +123,10 @@ fn activate_http_state(state: Arc<Mutex<DawHttpState>>) {
     *active_state_slot().lock().unwrap() = Some(state);
 }
 
+/// Serializes tests that touch DAW HTTP server globals such as
+/// `active_state_slot`, the server thread slot, and the mode-switch flag.
+/// Without this, parallel test execution can race and make unrelated
+/// assertions flaky.
 fn http_server_test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))

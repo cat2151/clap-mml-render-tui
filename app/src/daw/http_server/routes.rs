@@ -409,6 +409,12 @@ pub(super) fn request_header_value(headers: &[Header], name: &str) -> Option<Str
         .map(|header| header.value.as_str().to_string())
 }
 
+/// Builds an opaque ETag for the current DAW snapshot body.
+///
+/// This uses `DefaultHasher`, so the exact value is only intended for
+/// same-process conditional GETs and may change across Rust versions or
+/// server restarts. That is acceptable here because clients only need a
+/// best-effort validator for `If-None-Match` on `/mmls`.
 pub(super) fn snapshot_mmls_etag(tracks: &[Vec<String>]) -> String {
     let mut hasher = DefaultHasher::new();
     tracks.hash(&mut hasher);
@@ -423,11 +429,12 @@ pub(super) fn if_none_match_matches(header_value: &str, etag: &str) -> bool {
 }
 
 fn normalize_etag(tag: &str) -> &str {
-    let tag = tag.trim();
-    let tag = tag.strip_prefix("W/").unwrap_or(tag).trim();
-    tag.strip_prefix('"')
+    let trimmed = tag.trim();
+    let without_weak_prefix = trimmed.strip_prefix("W/").unwrap_or(trimmed).trim();
+    without_weak_prefix
+        .strip_prefix('"')
         .and_then(|stripped| stripped.strip_suffix('"'))
-        .unwrap_or(tag)
+        .unwrap_or(without_weak_prefix)
 }
 
 pub(super) fn handle_options(request: Request) {
