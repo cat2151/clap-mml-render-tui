@@ -13,7 +13,8 @@ use super::{DawApp, FIRST_PLAYABLE_TRACK, MIXER_MAX_DB, MIXER_MIN_DB};
 use crate::{config::Config, server::DEFAULT_PORT};
 use routes::{
     handle_get_mml, handle_get_patches, handle_options, handle_post_ab_repeat, handle_post_mixer,
-    handle_post_mml, handle_post_mode_daw, handle_post_patch, text_response,
+    handle_post_mml, handle_post_mode_daw, handle_post_patch, handle_post_play_start,
+    handle_post_play_stop, text_response,
 };
 #[cfg(test)]
 use routes::{
@@ -49,6 +50,8 @@ enum DawHttpCommandKind {
         track: usize,
         patch: String,
     },
+    PlayStart,
+    PlayStop,
     AbRepeat {
         start_measure: usize,
         end_measure: usize,
@@ -175,11 +178,15 @@ fn run_daw_http_server() {
             (Method::Options, "/mml")
             | (Method::Options, "/mixer")
             | (Method::Options, "/patch")
+            | (Method::Options, "/play/start")
+            | (Method::Options, "/play/stop")
             | (Method::Options, "/ab-repeat")
             | (Method::Options, "/patches") => handle_options(request),
             (Method::Post, "/mml") => handle_post_mml(request, &state),
             (Method::Post, "/mixer") => handle_post_mixer(request, &state),
             (Method::Post, "/patch") => handle_post_patch(request, &state),
+            (Method::Post, "/play/start") => handle_post_play_start(request, &state),
+            (Method::Post, "/play/stop") => handle_post_play_stop(request, &state),
             (Method::Post, "/ab-repeat") => handle_post_ab_repeat(request, &state),
             (Method::Get, "/mml") => handle_get_mml(request, &state),
             (Method::Get, "/patches") => handle_get_patches(request, &state),
@@ -209,6 +216,8 @@ impl DawApp {
                 } => self.apply_http_mml(track, measure, &mml),
                 DawHttpCommandKind::Mixer { track, db } => self.apply_http_mixer(track, db),
                 DawHttpCommandKind::Patch { track, patch } => self.apply_http_patch(track, &patch),
+                DawHttpCommandKind::PlayStart => self.apply_http_play_start(),
+                DawHttpCommandKind::PlayStop => self.apply_http_play_stop(),
                 DawHttpCommandKind::AbRepeat {
                     start_measure,
                     end_measure,
@@ -344,6 +353,31 @@ impl DawApp {
         self.append_log_line(format!(
             "http: patch track={track} patch={display_patch_name}"
         ));
+        Ok(())
+    }
+
+    fn apply_http_play_start(&mut self) -> Result<(), String> {
+        let play_state = *self.play_state.lock().unwrap();
+        if play_state == super::DawPlayState::Playing {
+            self.append_log_line("http: play start (already playing)");
+            return Ok(());
+        }
+        if play_state == super::DawPlayState::Preview {
+            self.stop_play();
+        }
+        self.start_play();
+        if *self.play_state.lock().unwrap() == super::DawPlayState::Playing {
+            self.append_log_line("http: play start");
+            Ok(())
+        } else {
+            self.append_log_line("http: play start (no playable data)");
+            Err("再生可能なデータがありません".to_string())
+        }
+    }
+
+    fn apply_http_play_stop(&mut self) -> Result<(), String> {
+        self.stop_play();
+        self.append_log_line("http: play stop");
         Ok(())
     }
 
