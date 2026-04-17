@@ -1,20 +1,33 @@
 use std::{
-    collections::hash_map::DefaultHasher,
-    hash::{Hash, Hasher},
     io::Read,
     sync::{mpsc, Arc, Mutex},
     time::Duration,
 };
 
 use serde::{Deserialize, Serialize};
-use tiny_http::{Header, Request, Response, StatusCode};
+use tiny_http::Request;
 
 use super::{DawHttpCommand, DawHttpCommandKind, DawHttpState};
 
 const MAX_JSON_BODY_BYTES: u64 = 64 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
-const PREFLIGHT_MAX_AGE_SECONDS: &str = "600";
-const ALLOWED_CORS_ORIGINS: [&str; 2] = ["https://cat2151.github.io", "http://localhost:5173"];
+
+#[path = "routes/response.rs"]
+mod response;
+#[path = "routes/snapshot.rs"]
+mod snapshot;
+
+use response::{empty_response, json_response, with_etag_header};
+#[cfg(test)]
+pub(super) use response::{is_allowed_cors_origin, request_origin};
+pub(super) use response::{
+    request_header_value, text_response, validate_cors_request, with_cors_headers,
+    with_preflight_cors_headers, RequestHeaderName,
+};
+pub(super) use snapshot::{
+    get_snapshot_mml, get_snapshot_mmls, if_none_match_matches, parse_get_mml_query,
+    snapshot_mmls_etag,
+};
 
 #[derive(Deserialize)]
 struct PostMmlRequest {
@@ -58,12 +71,6 @@ struct GetMmlResponse {
 #[derive(Serialize)]
 struct GetMmlsResponse {
     tracks: Vec<Vec<String>>,
-}
-
-#[derive(Clone, Copy)]
-pub(super) enum RequestHeaderName {
-    Origin,
-    IfNoneMatch,
 }
 
 pub(super) fn handle_post_mml(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
@@ -350,103 +357,6 @@ pub(super) fn handle_get_patches(request: Request, state: &Arc<Mutex<DawHttpStat
     }
 }
 
-pub(super) fn get_snapshot_mml(
-    state: &DawHttpState,
-    track: usize,
-    measure: usize,
-) -> Result<String, (u16, String)> {
-    if state.grid_snapshot.is_empty() {
-        return Err((503, "DAW データの準備中です\n".to_string()));
-    }
-    state
-        .grid_snapshot
-        .get(track)
-        .and_then(|row| row.get(measure))
-        .cloned()
-        .ok_or_else(|| {
-            (
-                404,
-                format!(
-                    "指定された track/measure は範囲外です: track={track}, measure={measure}\n"
-                ),
-            )
-        })
-}
-
-pub(super) fn get_snapshot_mmls(state: &DawHttpState) -> Result<Vec<Vec<String>>, (u16, String)> {
-    if state.grid_snapshot.is_empty() {
-        return Err((503, "DAW データの準備中です\n".to_string()));
-    }
-    Ok(state.grid_snapshot.clone())
-}
-
-pub(super) fn parse_get_mml_query(url: &str) -> Result<(usize, usize), (u16, String)> {
-    let Some((_, query)) = url.split_once('?') else {
-        return Err((400, "track と measure を指定してください\n".to_string()));
-    };
-    let mut track = None;
-    let mut measure = None;
-    for pair in query.split('&') {
-        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
-        match key {
-            "track" => track = Some(parse_query_usize("track", value)?),
-            "measure" | "meas" => measure = Some(parse_query_usize("measure", value)?),
-            _ => {}
-        }
-    }
-    match (track, measure) {
-        (Some(track), Some(measure)) => Ok((track, measure)),
-        _ => Err((400, "track と measure を指定してください\n".to_string())),
-    }
-}
-
-fn parse_query_usize(name: &str, value: &str) -> Result<usize, (u16, String)> {
-    if value.is_empty() {
-        return Err((400, format!("{name} を指定してください\n")));
-    }
-    value
-        .parse::<usize>()
-        .map_err(|_| (400, format!("{name} は 0 以上の整数を指定してください\n")))
-}
-
-pub(super) fn request_header_value(headers: &[Header], name: RequestHeaderName) -> Option<String> {
-    headers
-        .iter()
-        .find(|header| match name {
-            RequestHeaderName::Origin => header.field.equiv("Origin"),
-            RequestHeaderName::IfNoneMatch => header.field.equiv("If-None-Match"),
-        })
-        .map(|header| header.value.as_str().to_string())
-}
-
-/// Builds an opaque ETag for the current DAW snapshot body.
-///
-/// This uses `DefaultHasher`, so the exact value is only intended for
-/// same-process conditional GETs and may change across Rust versions or
-/// server restarts. That is acceptable here because clients only need a
-/// best-effort validator for `If-None-Match` on `/mmls`.
-pub(super) fn snapshot_mmls_etag(tracks: &[Vec<String>]) -> String {
-    let mut hasher = DefaultHasher::new();
-    tracks.hash(&mut hasher);
-    format!("\"{:016x}\"", hasher.finish())
-}
-
-pub(super) fn if_none_match_matches(header_value: &str, etag: &str) -> bool {
-    header_value
-        .split(',')
-        .map(str::trim)
-        .any(|candidate| candidate == "*" || normalize_etag(candidate) == normalize_etag(etag))
-}
-
-fn normalize_etag(tag: &str) -> &str {
-    let trimmed = tag.trim();
-    let without_weak_prefix = trimmed.strip_prefix("W/").unwrap_or(trimmed).trim();
-    without_weak_prefix
-        .strip_prefix('"')
-        .and_then(|stripped| stripped.strip_suffix('"'))
-        .unwrap_or(without_weak_prefix)
-}
-
 pub(super) fn handle_options(request: Request) {
     let cors_origin = match validate_cors_request(&request) {
         Ok(cors_origin) => cors_origin,
@@ -458,77 +368,6 @@ pub(super) fn handle_options(request: Request) {
     let response =
         with_preflight_cors_headers(text_response(204, String::new()), cors_origin.as_deref());
     let _ = request.respond(response);
-}
-
-pub(super) fn request_origin(headers: &[Header]) -> Option<String> {
-    request_header_value(headers, RequestHeaderName::Origin)
-}
-
-pub(super) fn is_allowed_cors_origin(origin: &str) -> bool {
-    ALLOWED_CORS_ORIGINS.contains(&origin)
-}
-
-fn validate_cors_request(
-    request: &Request,
-) -> Result<Option<String>, Response<std::io::Cursor<Vec<u8>>>> {
-    let Some(origin) = request_origin(request.headers()) else {
-        return Ok(None);
-    };
-    if is_allowed_cors_origin(&origin) {
-        return Ok(Some(origin));
-    }
-    Err(text_response(
-        403,
-        format!("Origin が許可されていません: {origin}\n"),
-    ))
-}
-
-pub(super) fn with_cors_headers(
-    response: Response<std::io::Cursor<Vec<u8>>>,
-    cors_origin: Option<&str>,
-) -> Response<std::io::Cursor<Vec<u8>>> {
-    let Some(origin) = cors_origin else {
-        return response;
-    };
-    response
-        .with_header(
-            Header::from_bytes("Access-Control-Allow-Origin", origin)
-                .expect("valid access-control-allow-origin header"),
-        )
-        .with_header(
-            Header::from_bytes("Access-Control-Expose-Headers", "ETag")
-                .expect("valid access-control-expose-headers header"),
-        )
-        .with_header(Header::from_bytes("Vary", "Origin").expect("valid vary header"))
-}
-
-pub(super) fn with_preflight_cors_headers(
-    response: Response<std::io::Cursor<Vec<u8>>>,
-    cors_origin: Option<&str>,
-) -> Response<std::io::Cursor<Vec<u8>>> {
-    with_cors_headers(response, cors_origin)
-        .with_header(
-            Header::from_bytes("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-                .expect("valid access-control-allow-methods header"),
-        )
-        .with_header(
-            Header::from_bytes(
-                "Access-Control-Allow-Headers",
-                "Content-Type, If-None-Match",
-            )
-            .expect("valid access-control-allow-headers header"),
-        )
-        .with_header(
-            Header::from_bytes("Access-Control-Max-Age", PREFLIGHT_MAX_AGE_SECONDS)
-                .expect("valid access-control-max-age header"),
-        )
-}
-
-fn with_etag_header(
-    response: Response<std::io::Cursor<Vec<u8>>>,
-    etag: &str,
-) -> Response<std::io::Cursor<Vec<u8>>> {
-    response.with_header(Header::from_bytes("ETag", etag).expect("valid etag header"))
 }
 
 fn respond_command(
@@ -579,26 +418,6 @@ fn read_json_body<T: for<'de> Deserialize<'de>>(request: &mut Request) -> Result
     }
     serde_json::from_str(&body)
         .map_err(|error| (400, format!("JSON のパースに失敗しました: {error}")))
-}
-
-pub(super) fn text_response(status: u16, body: String) -> Response<std::io::Cursor<Vec<u8>>> {
-    let header = Header::from_bytes("Content-Type", "text/plain; charset=utf-8")
-        .expect("valid text response header");
-    Response::from_string(body)
-        .with_status_code(StatusCode(status))
-        .with_header(header)
-}
-
-fn empty_response(status: u16) -> Response<std::io::Cursor<Vec<u8>>> {
-    Response::from_data(Vec::new()).with_status_code(StatusCode(status))
-}
-
-fn json_response<T: Serialize>(status: u16, body: &T) -> Response<std::io::Cursor<Vec<u8>>> {
-    let header =
-        Header::from_bytes("Content-Type", "application/json").expect("valid json response header");
-    Response::from_string(serde_json::to_string(body).expect("json response serialization"))
-        .with_status_code(StatusCode(status))
-        .with_header(header)
 }
 
 #[cfg(test)]
