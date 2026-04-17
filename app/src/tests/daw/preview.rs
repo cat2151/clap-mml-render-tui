@@ -4,7 +4,8 @@ use std::sync::{
     Arc, Mutex,
 };
 
-use super::{begin_preview_output, DawPlayState, PlayPosition};
+use super::{begin_preview_output, DawPlayState};
+use crate::daw::PlayPosition;
 
 #[test]
 fn begin_preview_output_skips_enqueue_when_preview_stopped() {
