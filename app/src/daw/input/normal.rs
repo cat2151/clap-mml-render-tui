@@ -29,6 +29,13 @@ impl DawApp {
         if track < FIRST_PLAYABLE_TRACK {
             return Err("ランダム音色は演奏トラックでのみ使用できます".to_string());
         }
+        if track >= self.tracks {
+            return Err(format!(
+                "track は {}..={} の範囲で指定してください",
+                FIRST_PLAYABLE_TRACK,
+                self.tracks.saturating_sub(1)
+            ));
+        }
         let patch_filter_query = self.track_patch_filter_query(track);
         let Some(patch) = self.pick_random_patch_name_with_query(patch_filter_query.as_deref())
         else {

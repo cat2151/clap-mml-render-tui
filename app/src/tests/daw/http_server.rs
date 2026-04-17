@@ -278,6 +278,19 @@ fn apply_pending_http_commands_updates_random_patch_init_cell() {
 }
 
 #[test]
+fn apply_random_patch_to_track_rejects_out_of_range_track() {
+    let cfg = default_config();
+    let mut app = build_test_app(cfg);
+
+    let result = app.apply_random_patch_to_track(usize::MAX);
+
+    assert_eq!(
+        result,
+        Err("track は 1..=2 の範囲で指定してください".to_string())
+    );
+}
+
+#[test]
 fn apply_pending_http_commands_starts_play() {
     let _test_guard = lock_http_server_test_state();
     let cfg = default_config();
