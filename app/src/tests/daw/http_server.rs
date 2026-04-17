@@ -1,6 +1,6 @@
 use std::{
     collections::VecDeque,
-    sync::{mpsc, Arc, Mutex},
+    sync::{mpsc, Arc, Mutex, OnceLock},
 };
 
 use tui_textarea::TextArea;
@@ -123,8 +123,20 @@ fn activate_http_state(state: Arc<Mutex<DawHttpState>>) {
     *active_state_slot().lock().unwrap() = Some(state);
 }
 
+fn http_server_test_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+fn lock_http_server_test_state() -> std::sync::MutexGuard<'static, ()> {
+    http_server_test_lock()
+        .lock()
+        .expect("http server test lock should not be poisoned")
+}
+
 #[test]
 fn apply_pending_http_commands_updates_mml_and_expands_grid() {
+    let _test_guard = lock_http_server_test_state();
     let tmp = std::env::temp_dir().join("cmrt_test_http_server_updates_mml");
     std::fs::remove_dir_all(&tmp).ok();
     let _guard = crate::test_utils::set_local_dir_envs(&tmp);
@@ -156,6 +168,7 @@ fn apply_pending_http_commands_updates_mml_and_expands_grid() {
 
 #[test]
 fn apply_pending_http_commands_updates_mixer_gain() {
+    let _test_guard = lock_http_server_test_state();
     let tmp = std::env::temp_dir().join("cmrt_test_http_server_updates_mixer");
     std::fs::remove_dir_all(&tmp).ok();
     let _guard = crate::test_utils::set_local_dir_envs(&tmp);
@@ -182,6 +195,7 @@ fn apply_pending_http_commands_updates_mixer_gain() {
 
 #[test]
 fn apply_pending_http_commands_updates_patch_init_cell() {
+    let _test_guard = lock_http_server_test_state();
     let tmp = std::env::temp_dir().join("cmrt_test_http_server_updates_patch");
     std::fs::remove_dir_all(&tmp).ok();
     std::fs::create_dir_all(tmp.join("Pads")).unwrap();
@@ -219,6 +233,7 @@ fn apply_pending_http_commands_updates_patch_init_cell() {
 
 #[test]
 fn apply_pending_http_commands_starts_play() {
+    let _test_guard = lock_http_server_test_state();
     let cfg = default_config();
     let state = build_http_state(cfg.clone());
     *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
@@ -251,6 +266,7 @@ fn apply_pending_http_commands_starts_play() {
 
 #[test]
 fn apply_pending_http_commands_start_while_playing_is_noop() {
+    let _test_guard = lock_http_server_test_state();
     let cfg = default_config();
     let state = build_http_state(cfg.clone());
     *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
@@ -275,6 +291,7 @@ fn apply_pending_http_commands_start_while_playing_is_noop() {
 
 #[test]
 fn apply_pending_http_commands_start_without_playable_data_returns_error() {
+    let _test_guard = lock_http_server_test_state();
     let cfg = default_config();
     let state = build_http_state(cfg.clone());
     *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
@@ -301,6 +318,7 @@ fn apply_pending_http_commands_start_without_playable_data_returns_error() {
 
 #[test]
 fn apply_pending_http_commands_stops_play() {
+    let _test_guard = lock_http_server_test_state();
     let cfg = default_config();
     let state = build_http_state(cfg.clone());
     *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
@@ -333,6 +351,7 @@ fn apply_pending_http_commands_stops_play() {
 
 #[test]
 fn apply_pending_http_commands_updates_ab_repeat_range() {
+    let _test_guard = lock_http_server_test_state();
     let cfg = default_config();
     let state = build_http_state(cfg.clone());
     *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
@@ -428,6 +447,7 @@ fn with_preflight_cors_headers_adds_preflight_headers() {
 
 #[test]
 fn claim_http_server_thread_slot_is_reusable_after_drop() {
+    let _test_guard = lock_http_server_test_state();
     let first_guard = claim_http_server_thread_slot().expect("first claim should succeed");
     assert!(
         claim_http_server_thread_slot().is_none(),
@@ -442,6 +462,7 @@ fn claim_http_server_thread_slot_is_reusable_after_drop() {
 
 #[test]
 fn daw_mode_switch_request_is_consumed_once() {
+    let _test_guard = lock_http_server_test_state();
     deactivate_daw_http_server();
     assert!(!take_daw_mode_switch_request());
 
@@ -453,6 +474,7 @@ fn daw_mode_switch_request_is_consumed_once() {
 
 #[test]
 fn daw_mode_switch_request_is_ignored_while_daw_is_active() {
+    let _test_guard = lock_http_server_test_state();
     deactivate_daw_http_server();
     assert!(!take_daw_mode_switch_request());
     activate_http_state(build_http_state(default_config()));
