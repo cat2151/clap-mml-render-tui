@@ -17,6 +17,20 @@ fn handle_mixer_supports_track_navigation_and_escape() {
 }
 
 #[test]
+fn handle_mixer_keeps_cursor_within_playable_track_range() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.mode = DawMode::Mixer;
+    app.mixer_cursor_track = 1;
+
+    app.handle_mixer(crossterm::event::KeyCode::Left);
+    assert_eq!(app.mixer_cursor_track, 1);
+
+    app.mixer_cursor_track = app.tracks - 1;
+    app.handle_mixer(crossterm::event::KeyCode::Right);
+    assert_eq!(app.mixer_cursor_track, app.tracks - 1);
+}
+
+#[test]
 fn handle_mixer_adjusts_volume_in_3db_steps() {
     let tmp = std::env::temp_dir().join("cmrt_test_handle_mixer_adjusts_volume");
     std::fs::remove_dir_all(&tmp).ok();
