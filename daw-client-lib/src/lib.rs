@@ -61,6 +61,11 @@ struct PostPatchRequest<'a> {
 }
 
 #[derive(Serialize)]
+struct PostRandomPatchRequest {
+    track: usize,
+}
+
+#[derive(Serialize)]
 struct PostAbRepeatRequest {
     #[serde(rename = "measA")]
     start_measure: usize,
@@ -104,6 +109,10 @@ impl DawClient {
 
     pub fn post_patch(&self, track: usize, patch: &str) -> Result<(), Error> {
         self.post_status("/patch", PostPatchRequest { track, patch })
+    }
+
+    pub fn post_random_patch(&self, track: usize) -> Result<(), Error> {
+        self.post_status("/patch/random", PostRandomPatchRequest { track })
     }
 
     pub fn post_play_start(&self) -> Result<(), Error> {

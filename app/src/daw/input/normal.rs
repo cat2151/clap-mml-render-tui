@@ -17,6 +17,59 @@ pub(super) use playback::{
 };
 
 impl DawApp {
+    pub(in crate::daw) fn apply_random_patch_to_track(
+        &mut self,
+        track: usize,
+    ) -> Result<bool, String> {
+        if track < FIRST_PLAYABLE_TRACK {
+            return Err("ランダム音色は演奏トラックでのみ使用できます".to_string());
+        }
+        let patch_filter_query = self.track_patch_filter_query(track);
+        let Some(patch) = self.pick_random_patch_name_with_query(patch_filter_query.as_deref())
+        else {
+            return Ok(false);
+        };
+        let affected_measures: Vec<usize> = (1..=self.measures)
+            .filter(|&measure| !self.data[track][measure].trim().is_empty())
+            .collect();
+        let current_init_mml = self.data[track][INIT_MEASURE].clone();
+        self.data[track][INIT_MEASURE] = Self::replace_patch_name_in_mml(
+            &current_init_mml,
+            &patch,
+            patch_filter_query.as_deref(),
+        );
+        self.invalidate_cell(track, INIT_MEASURE);
+        self.invalidate_dependent_cells(track, INIT_MEASURE);
+        self.start_track_rerender_batch(track, &affected_measures, "random patch update");
+        self.save();
+
+        let new_mmls = self.build_measure_mmls();
+        let new_samples = self.measure_duration_samples();
+        let old_effective_count = {
+            let old_mmls = self.play_measure_mmls.lock().unwrap();
+            effective_measure_count(&old_mmls)
+        };
+        let new_effective_count = effective_measure_count(&new_mmls);
+        let old_samples = *self.play_measure_samples.lock().unwrap();
+        let displayed_measure_index = self
+            .play_position
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|position| position.measure_index);
+        self.append_log_line(format_random_patch_hot_reload_log(
+            track,
+            displayed_measure_index,
+            old_effective_count,
+            new_effective_count,
+            old_samples,
+            new_samples,
+        ));
+        self.sync_playback_mml_state();
+
+        Ok(true)
+    }
+
     fn apply_generate_to_current_measure(&mut self) {
         if self.cursor_track < FIRST_PLAYABLE_TRACK {
             self.append_log_line("generate は演奏トラックでのみ使用できます");
@@ -334,57 +387,8 @@ impl DawApp {
                 if self.restore_default_tempo_init_if_empty() {
                     return DawNormalAction::Continue;
                 }
-                if self.cursor_track < FIRST_PLAYABLE_TRACK {
-                    self.append_log_line(
-                        "ランダム音色は演奏トラックでのみ使用できます".to_string(),
-                    );
-                    return DawNormalAction::Continue;
-                }
-                let patch_filter_query = self.current_track_patch_filter_query();
-                if let Some(patch) =
-                    self.pick_random_patch_name_with_query(patch_filter_query.as_deref())
-                {
-                    let affected_measures: Vec<usize> = (1..=self.measures)
-                        .filter(|&measure| !self.data[self.cursor_track][measure].trim().is_empty())
-                        .collect();
-                    let current_init_mml = self.data[self.cursor_track][INIT_MEASURE].clone();
-                    self.data[self.cursor_track][INIT_MEASURE] = Self::replace_patch_name_in_mml(
-                        &current_init_mml,
-                        &patch,
-                        patch_filter_query.as_deref(),
-                    );
-                    self.invalidate_cell(self.cursor_track, INIT_MEASURE);
-                    self.invalidate_dependent_cells(self.cursor_track, INIT_MEASURE);
-                    self.start_track_rerender_batch(
-                        self.cursor_track,
-                        &affected_measures,
-                        "random patch update",
-                    );
-                    self.save();
-
-                    let new_mmls = self.build_measure_mmls();
-                    let new_samples = self.measure_duration_samples();
-                    let old_effective_count = {
-                        let old_mmls = self.play_measure_mmls.lock().unwrap();
-                        effective_measure_count(&old_mmls)
-                    };
-                    let new_effective_count = effective_measure_count(&new_mmls);
-                    let old_samples = *self.play_measure_samples.lock().unwrap();
-                    let displayed_measure_index = self
-                        .play_position
-                        .lock()
-                        .unwrap()
-                        .as_ref()
-                        .map(|position| position.measure_index);
-                    self.append_log_line(format_random_patch_hot_reload_log(
-                        self.cursor_track,
-                        displayed_measure_index,
-                        old_effective_count,
-                        new_effective_count,
-                        old_samples,
-                        new_samples,
-                    ));
-                    self.sync_playback_mml_state();
+                if let Err(message) = self.apply_random_patch_to_track(self.cursor_track) {
+                    self.append_log_line(message);
                 }
             }
 

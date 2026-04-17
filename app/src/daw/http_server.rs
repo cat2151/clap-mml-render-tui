@@ -14,7 +14,7 @@ use crate::{config::Config, server::DEFAULT_PORT};
 use routes::{
     handle_get_mml, handle_get_mmls, handle_get_patches, handle_options, handle_post_ab_repeat,
     handle_post_mixer, handle_post_mml, handle_post_mode_daw, handle_post_patch,
-    handle_post_play_start, handle_post_play_stop, text_response,
+    handle_post_patch_random, handle_post_play_start, handle_post_play_stop, text_response,
 };
 #[cfg(test)]
 use routes::{
@@ -49,6 +49,9 @@ enum DawHttpCommandKind {
     Patch {
         track: usize,
         patch: String,
+    },
+    RandomPatch {
+        track: usize,
     },
     PlayStart,
     PlayStop,
@@ -178,6 +181,7 @@ fn run_daw_http_server() {
             (Method::Options, "/mml")
             | (Method::Options, "/mixer")
             | (Method::Options, "/patch")
+            | (Method::Options, "/patch/random")
             | (Method::Options, "/play/start")
             | (Method::Options, "/play/stop")
             | (Method::Options, "/ab-repeat")
@@ -186,6 +190,7 @@ fn run_daw_http_server() {
             (Method::Post, "/mml") => handle_post_mml(request, &state),
             (Method::Post, "/mixer") => handle_post_mixer(request, &state),
             (Method::Post, "/patch") => handle_post_patch(request, &state),
+            (Method::Post, "/patch/random") => handle_post_patch_random(request, &state),
             (Method::Post, "/play/start") => handle_post_play_start(request, &state),
             (Method::Post, "/play/stop") => handle_post_play_stop(request, &state),
             (Method::Post, "/ab-repeat") => handle_post_ab_repeat(request, &state),
@@ -218,6 +223,7 @@ impl DawApp {
                 } => self.apply_http_mml(track, measure, &mml),
                 DawHttpCommandKind::Mixer { track, db } => self.apply_http_mixer(track, db),
                 DawHttpCommandKind::Patch { track, patch } => self.apply_http_patch(track, &patch),
+                DawHttpCommandKind::RandomPatch { track } => self.apply_http_random_patch(track),
                 DawHttpCommandKind::PlayStart => self.apply_http_play_start(),
                 DawHttpCommandKind::PlayStop => self.apply_http_play_stop(),
                 DawHttpCommandKind::AbRepeat {
@@ -355,6 +361,14 @@ impl DawApp {
         self.append_log_line(format!(
             "http: patch track={track} patch={display_patch_name}"
         ));
+        Ok(())
+    }
+
+    fn apply_http_random_patch(&mut self, track: usize) -> Result<(), String> {
+        self.ensure_http_grid_size(track, self.measures.max(1))?;
+        self.apply_random_patch_to_track(track)?;
+        self.sync_http_grid_snapshot();
+        self.append_log_line(format!("http: patch/random track={track}"));
         Ok(())
     }
 

@@ -49,6 +49,11 @@ struct PostPatchRequest {
 }
 
 #[derive(Deserialize)]
+struct PostRandomPatchRequest {
+    track: usize,
+}
+
+#[derive(Deserialize)]
 struct PostAbRepeatRequest {
     #[serde(rename = "measA", alias = "measureA")]
     start_measure: usize,
@@ -144,6 +149,30 @@ pub(super) fn handle_post_patch(mut request: Request, state: &Arc<Mutex<DawHttpS
                 track: body.track,
                 patch: body.patch,
             },
+            cors_origin.as_deref(),
+        ),
+        Err((status, message)) => {
+            let _ = request.respond(with_cors_headers(
+                text_response(status, message),
+                cors_origin.as_deref(),
+            ));
+        }
+    }
+}
+
+pub(super) fn handle_post_patch_random(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
+    let cors_origin = match validate_cors_request(&request) {
+        Ok(cors_origin) => cors_origin,
+        Err(response) => {
+            let _ = request.respond(response);
+            return;
+        }
+    };
+    match read_json_body::<PostRandomPatchRequest>(&mut request) {
+        Ok(body) => respond_command(
+            request,
+            state,
+            DawHttpCommandKind::RandomPatch { track: body.track },
             cors_origin.as_deref(),
         ),
         Err((status, message)) => {
