@@ -241,17 +241,19 @@ impl DawApp {
     }
 
     fn current_track_patch_filter_query(&self) -> Option<String> {
-        if self.cursor_track < FIRST_PLAYABLE_TRACK {
+        self.track_patch_filter_query(self.cursor_track)
+    }
+
+    fn track_patch_filter_query(&self, track: usize) -> Option<String> {
+        if track < FIRST_PLAYABLE_TRACK || track >= self.tracks {
             return None;
         }
-        Self::extract_patch_json_and_phrase(&self.data[self.cursor_track][0]).and_then(
-            |(value, _)| {
-                value
-                    .get(PATCH_FILTER_QUERY_JSON_KEY)
-                    .and_then(Value::as_str)
-                    .map(str::to_string)
-            },
-        )
+        Self::extract_patch_json_and_phrase(&self.data[track][0]).and_then(|(value, _)| {
+            value
+                .get(PATCH_FILTER_QUERY_JSON_KEY)
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
     }
 
     fn preview_patch_json_for_patch_name(&self, patch_name: &str) -> String {
