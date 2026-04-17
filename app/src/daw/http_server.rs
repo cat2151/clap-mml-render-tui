@@ -12,9 +12,9 @@ use tiny_http::Method;
 use super::{DawApp, FIRST_PLAYABLE_TRACK, MIXER_MAX_DB, MIXER_MIN_DB};
 use crate::{config::Config, server::DEFAULT_PORT};
 use routes::{
-    handle_get_mml, handle_get_patches, handle_options, handle_post_ab_repeat, handle_post_mixer,
-    handle_post_mml, handle_post_mode_daw, handle_post_patch, handle_post_play_start,
-    handle_post_play_stop, text_response,
+    handle_get_mml, handle_get_mmls, handle_get_patches, handle_options, handle_post_ab_repeat,
+    handle_post_mixer, handle_post_mml, handle_post_mode_daw, handle_post_patch,
+    handle_post_play_start, handle_post_play_stop, text_response,
 };
 #[cfg(test)]
 use routes::{
@@ -181,6 +181,7 @@ fn run_daw_http_server() {
             | (Method::Options, "/play/start")
             | (Method::Options, "/play/stop")
             | (Method::Options, "/ab-repeat")
+            | (Method::Options, "/mmls")
             | (Method::Options, "/patches") => handle_options(request),
             (Method::Post, "/mml") => handle_post_mml(request, &state),
             (Method::Post, "/mixer") => handle_post_mixer(request, &state),
@@ -189,6 +190,7 @@ fn run_daw_http_server() {
             (Method::Post, "/play/stop") => handle_post_play_stop(request, &state),
             (Method::Post, "/ab-repeat") => handle_post_ab_repeat(request, &state),
             (Method::Get, "/mml") => handle_get_mml(request, &state),
+            (Method::Get, "/mmls") => handle_get_mmls(request, &state),
             (Method::Get, "/patches") => handle_get_patches(request, &state),
             _ => {
                 let _ = request.respond(text_response(404, "Not Found\n".to_string()));

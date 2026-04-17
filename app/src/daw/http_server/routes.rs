@@ -1,4 +1,6 @@
 use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
     io::Read,
     sync::{mpsc, Arc, Mutex},
     time::Duration,
@@ -51,6 +53,11 @@ struct GetMmlResponse {
     track: usize,
     measure: usize,
     mml: String,
+}
+
+#[derive(Serialize)]
+struct GetMmlsResponse {
+    tracks: Vec<Vec<String>>,
 }
 
 pub(super) fn handle_post_mml(mut request: Request, state: &Arc<Mutex<DawHttpState>>) {
@@ -250,6 +257,43 @@ pub(super) fn handle_get_mml(request: Request, state: &Arc<Mutex<DawHttpState>>)
     }
 }
 
+pub(super) fn handle_get_mmls(request: Request, state: &Arc<Mutex<DawHttpState>>) {
+    let cors_origin = match validate_cors_request(&request) {
+        Ok(cors_origin) => cors_origin,
+        Err(response) => {
+            let _ = request.respond(response);
+            return;
+        }
+    };
+    let if_none_match = request_header_value(request.headers(), "If-None-Match");
+    let response = {
+        let state = state.lock().unwrap();
+        match get_snapshot_mmls(&state) {
+            Ok(tracks) => {
+                let etag = snapshot_mmls_etag(&tracks);
+                if if_none_match
+                    .as_deref()
+                    .is_some_and(|header| if_none_match_matches(header, &etag))
+                {
+                    with_cors_headers(
+                        with_etag_header(empty_response(304), &etag),
+                        cors_origin.as_deref(),
+                    )
+                } else {
+                    with_cors_headers(
+                        with_etag_header(json_response(200, &GetMmlsResponse { tracks }), &etag),
+                        cors_origin.as_deref(),
+                    )
+                }
+            }
+            Err((status, message)) => {
+                with_cors_headers(text_response(status, message), cors_origin.as_deref())
+            }
+        }
+    };
+    let _ = request.respond(response);
+}
+
 pub(super) fn handle_get_patches(request: Request, state: &Arc<Mutex<DawHttpState>>) {
     let cors_origin = match validate_cors_request(&request) {
         Ok(cors_origin) => cors_origin,
@@ -322,6 +366,13 @@ pub(super) fn get_snapshot_mml(
         })
 }
 
+pub(super) fn get_snapshot_mmls(state: &DawHttpState) -> Result<Vec<Vec<String>>, (u16, String)> {
+    if state.grid_snapshot.is_empty() {
+        return Err((503, "DAW データの準備中です\n".to_string()));
+    }
+    Ok(state.grid_snapshot.clone())
+}
+
 pub(super) fn parse_get_mml_query(url: &str) -> Result<(usize, usize), (u16, String)> {
     let Some((_, query)) = url.split_once('?') else {
         return Err((400, "track と measure を指定してください\n".to_string()));
@@ -351,6 +402,34 @@ fn parse_query_usize(name: &str, value: &str) -> Result<usize, (u16, String)> {
         .map_err(|_| (400, format!("{name} は 0 以上の整数を指定してください\n")))
 }
 
+pub(super) fn request_header_value(headers: &[Header], name: &str) -> Option<String> {
+    headers
+        .iter()
+        .find(|header| header.field.to_string().eq_ignore_ascii_case(name))
+        .map(|header| header.value.as_str().to_string())
+}
+
+pub(super) fn snapshot_mmls_etag(tracks: &[Vec<String>]) -> String {
+    let mut hasher = DefaultHasher::new();
+    tracks.hash(&mut hasher);
+    format!("\"{:016x}\"", hasher.finish())
+}
+
+pub(super) fn if_none_match_matches(header_value: &str, etag: &str) -> bool {
+    header_value
+        .split(',')
+        .map(str::trim)
+        .any(|candidate| candidate == "*" || normalize_etag(candidate) == normalize_etag(etag))
+}
+
+fn normalize_etag(tag: &str) -> &str {
+    let tag = tag.trim();
+    let tag = tag.strip_prefix("W/").unwrap_or(tag).trim();
+    tag.strip_prefix('"')
+        .and_then(|stripped| stripped.strip_suffix('"'))
+        .unwrap_or(tag)
+}
+
 pub(super) fn handle_options(request: Request) {
     let cors_origin = match validate_cors_request(&request) {
         Ok(cors_origin) => cors_origin,
@@ -365,10 +444,7 @@ pub(super) fn handle_options(request: Request) {
 }
 
 pub(super) fn request_origin(headers: &[Header]) -> Option<String> {
-    headers
-        .iter()
-        .find(|header| header.field.equiv("Origin"))
-        .map(|header| header.value.as_str().to_string())
+    request_header_value(headers, "Origin")
 }
 
 pub(super) fn is_allowed_cors_origin(origin: &str) -> bool {
@@ -422,6 +498,13 @@ pub(super) fn with_preflight_cors_headers(
             Header::from_bytes("Access-Control-Max-Age", PREFLIGHT_MAX_AGE_SECONDS)
                 .expect("valid access-control-max-age header"),
         )
+}
+
+fn with_etag_header(
+    response: Response<std::io::Cursor<Vec<u8>>>,
+    etag: &str,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    response.with_header(Header::from_bytes("ETag", etag).expect("valid etag header"))
 }
 
 fn respond_command(
@@ -480,6 +563,10 @@ pub(super) fn text_response(status: u16, body: String) -> Response<std::io::Curs
     Response::from_string(body)
         .with_status_code(StatusCode(status))
         .with_header(header)
+}
+
+fn empty_response(status: u16) -> Response<std::io::Cursor<Vec<u8>>> {
+    Response::from_data(Vec::new()).with_status_code(StatusCode(status))
 }
 
 fn json_response<T: Serialize>(status: u16, body: &T) -> Response<std::io::Cursor<Vec<u8>>> {

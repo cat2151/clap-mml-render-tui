@@ -5,7 +5,10 @@ use std::{
 
 use tui_textarea::TextArea;
 
-use super::routes::{get_snapshot_mml, parse_get_mml_query};
+use super::routes::{
+    get_snapshot_mml, get_snapshot_mmls, if_none_match_matches, parse_get_mml_query,
+    request_header_value, snapshot_mmls_etag,
+};
 use super::{
     active_state_slot, claim_http_server_thread_slot, deactivate_daw_http_server,
     is_allowed_cors_origin, request_daw_mode_switch, request_origin, take_daw_mode_switch_request,
@@ -368,6 +371,16 @@ fn request_origin_extracts_origin_header() {
 }
 
 #[test]
+fn request_header_value_extracts_case_insensitive_header() {
+    let header = tiny_http::Header::from_bytes("If-None-Match", "\"abc123\"").unwrap();
+
+    assert_eq!(
+        request_header_value(&[header], "if-none-match"),
+        Some("\"abc123\"".to_string())
+    );
+}
+
+#[test]
 fn is_allowed_cors_origin_accepts_known_origins() {
     assert!(is_allowed_cors_origin("https://cat2151.github.io"));
     assert!(is_allowed_cors_origin("http://localhost:5173"));
@@ -537,4 +550,61 @@ fn get_snapshot_mml_rejects_unready_and_out_of_range_requests() {
         ))
     );
     assert_eq!(get_snapshot_mml(&state, 0, 0), Ok("t120".to_string()));
+}
+
+#[test]
+fn get_snapshot_mmls_rejects_unready_state_and_returns_all_tracks_measures() {
+    let state = DawHttpState::default();
+    assert_eq!(
+        get_snapshot_mmls(&state),
+        Err((503, "DAW データの準備中です\n".to_string()))
+    );
+
+    let state = DawHttpState {
+        cfg: None,
+        pending_commands: VecDeque::new(),
+        grid_snapshot: vec![
+            vec!["t120".to_string(), String::new()],
+            vec!["@1".to_string(), "l8cde".to_string()],
+        ],
+    };
+    assert_eq!(
+        get_snapshot_mmls(&state),
+        Ok(vec![
+            vec!["t120".to_string(), String::new()],
+            vec!["@1".to_string(), "l8cde".to_string()],
+        ])
+    );
+}
+
+#[test]
+fn snapshot_mmls_etag_is_content_based() {
+    let tracks = vec![
+        vec!["t120".to_string(), String::new()],
+        vec!["@1".to_string(), "l8cde".to_string()],
+    ];
+    let same_tracks = tracks.clone();
+    let different_tracks = vec![
+        vec!["t120".to_string(), String::new()],
+        vec!["@1".to_string(), "l8cdef".to_string()],
+    ];
+
+    assert_eq!(
+        snapshot_mmls_etag(&tracks),
+        snapshot_mmls_etag(&same_tracks)
+    );
+    assert_ne!(
+        snapshot_mmls_etag(&tracks),
+        snapshot_mmls_etag(&different_tracks)
+    );
+}
+
+#[test]
+fn if_none_match_matches_exact_weak_and_wildcard_etags() {
+    let etag = snapshot_mmls_etag(&[vec!["l8cde".to_string()]]);
+
+    assert!(if_none_match_matches(&etag, &etag));
+    assert!(if_none_match_matches(&format!("W/{etag}"), &etag));
+    assert!(if_none_match_matches("*", &etag));
+    assert!(!if_none_match_matches("\"different\"", &etag));
 }

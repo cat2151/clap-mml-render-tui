@@ -30,6 +30,17 @@ struct GetMmlResponse {
     mml: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GetMmlsResponse {
+    pub etag: String,
+    pub tracks: Vec<Vec<String>>,
+}
+
+#[derive(Deserialize)]
+struct GetMmlsBody {
+    tracks: Vec<Vec<String>>,
+}
+
 #[derive(Serialize)]
 struct PostMmlRequest<'a> {
     track: usize,
@@ -127,6 +138,30 @@ impl DawClient {
         Ok(response.mml)
     }
 
+    pub fn get_mmls(&self, if_none_match: Option<&str>) -> Result<Option<GetMmlsResponse>, Error> {
+        let mut request = self.agent.get(&self.endpoint_url("/mmls"));
+        if let Some(etag) = if_none_match {
+            request = request.set("If-None-Match", etag);
+        }
+        match request.call() {
+            Ok(response) if response.status() == 304 => Ok(None),
+            Ok(response) => {
+                let etag = response
+                    .header("ETag")
+                    .ok_or_else(|| Error::InvalidResponse("missing ETag header".to_string()))?
+                    .to_string();
+                let body: GetMmlsBody = response
+                    .into_json()
+                    .map_err(|error| Error::InvalidResponse(error.to_string()))?;
+                Ok(Some(GetMmlsResponse {
+                    etag,
+                    tracks: body.tracks,
+                }))
+            }
+            Err(error) => Err(Error::from_ureq(error)),
+        }
+    }
+
     fn get_json<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T, Error> {
         let response = self
             .agent
@@ -222,16 +257,32 @@ mod tests {
         time::{Duration, Instant},
     };
 
-    use super::{DawClient, Error, DEFAULT_BASE_URL};
+    use super::{DawClient, Error, GetMmlsResponse, DEFAULT_BASE_URL};
     const TEST_READ_TIMEOUT: Duration = Duration::from_secs(2);
     const TEST_READ_DEADLINE: Duration = Duration::from_secs(5);
 
     fn spawn_single_request_server(response_body: &str) -> (String, mpsc::Receiver<String>) {
+        spawn_single_request_server_with_response(
+            "200 OK",
+            &["Content-Type: application/json"],
+            response_body,
+        )
+    }
+
+    fn spawn_single_request_server_with_response(
+        status_line: &str,
+        headers: &[&str],
+        response_body: &str,
+    ) -> (String, mpsc::Receiver<String>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = format!("http://{}", listener.local_addr().unwrap());
         let (request_tx, request_rx) = mpsc::channel();
+        let header_block = headers
+            .iter()
+            .map(|header| format!("{header}\r\n"))
+            .collect::<String>();
         let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            "HTTP/1.1 {status_line}\r\n{header_block}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
             response_body.len(),
             response_body
         );
@@ -463,6 +514,67 @@ mod tests {
         let error = client.get_mml(2, 0).unwrap_err();
 
         assert!(matches!(error, Error::InvalidResponse(_)));
+    }
+
+    #[test]
+    fn get_mmls_reads_json_response_and_etag() {
+        let (base_url, request_rx) = spawn_single_request_server_with_response(
+            "200 OK",
+            &["Content-Type: application/json", "ETag: \"etag-1\""],
+            r#"{"tracks":[["t120",""],["@1","l8cde"]]}"#,
+        );
+        let client = DawClient::new(&base_url).unwrap();
+
+        let response = client.get_mmls(None).unwrap().unwrap();
+
+        let request = request_rx.recv().unwrap();
+        assert!(request.starts_with("GET /mmls HTTP/1.1\r\n"));
+        assert_eq!(
+            response,
+            GetMmlsResponse {
+                etag: "\"etag-1\"".to_string(),
+                tracks: vec![
+                    vec!["t120".to_string(), String::new()],
+                    vec!["@1".to_string(), "l8cde".to_string()],
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn get_mmls_sends_if_none_match_and_returns_none_for_304() {
+        let (base_url, request_rx) = spawn_single_request_server_with_response(
+            "304 Not Modified",
+            &["ETag: \"etag-1\""],
+            "",
+        );
+        let client = DawClient::new(&base_url).unwrap();
+
+        let response = client.get_mmls(Some("\"etag-1\"")).unwrap();
+
+        let request = request_rx.recv().unwrap();
+        assert!(request.starts_with("GET /mmls HTTP/1.1\r\n"));
+        assert!(request
+            .to_ascii_lowercase()
+            .contains("\r\nif-none-match: \"etag-1\"\r\n"));
+        assert_eq!(response, None);
+    }
+
+    #[test]
+    fn get_mmls_rejects_missing_etag_header() {
+        let (base_url, _request_rx) = spawn_single_request_server_with_response(
+            "200 OK",
+            &["Content-Type: application/json"],
+            r#"{"tracks":[]}"#,
+        );
+        let client = DawClient::new(&base_url).unwrap();
+
+        let error = client.get_mmls(None).unwrap_err();
+
+        assert!(matches!(
+            error,
+            Error::InvalidResponse(message) if message == "missing ETag header"
+        ));
     }
 
     #[test]
