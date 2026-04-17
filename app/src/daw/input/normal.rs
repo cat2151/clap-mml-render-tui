@@ -17,6 +17,11 @@ pub(super) use playback::{
 };
 
 impl DawApp {
+    /// Applies the same random-patch update as pressing `r` on the target track.
+    ///
+    /// `Ok(false)` means no candidate patch was available, so the operation is a
+    /// no-op. This matches the existing `r` key behavior, and HTTP callers also
+    /// currently treat that case as a successful no-op.
     pub(in crate::daw) fn apply_random_patch_to_track(
         &mut self,
         track: usize,
