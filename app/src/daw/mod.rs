@@ -75,6 +75,7 @@ mod mml;
 mod playback;
 mod playback_util;
 mod preview;
+mod render_queue;
 mod runtime;
 mod save;
 mod timing;
@@ -82,7 +83,6 @@ mod types;
 mod ui;
 mod wav_io;
 
-use clack_host::prelude::PluginEntry;
 use cmrt_core::{ensure_daw_dir, write_wav};
 use ratatui::Frame;
 use tui_textarea::TextArea;
@@ -96,6 +96,7 @@ use crate::config::Config;
 // ─── 再エクスポート ───────────────────────────────────────────
 
 use batch_logging::{TrackRerenderBatch, TrackRerenderBatchCompletionContext};
+use render_queue::RenderQueue;
 pub use types::DawExitReason;
 pub(super) use types::{
     AbRepeatState, CacheState, CellCache, DawHistoryPane, DawMode, DawNormalAction,
@@ -172,6 +173,7 @@ pub struct DawApp {
     /// 設定数ワーカーで処理し、prepare 段階の排他は core-lib 側で行う
     cache_tx: std::sync::mpsc::Sender<CacheJob>,
     cache_render_workers: usize,
+    render_queue: RenderQueue,
 
     pub(super) play_state: Arc<Mutex<DawPlayState>>,
 

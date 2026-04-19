@@ -3,10 +3,10 @@
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use clack_host::prelude::PluginEntry;
 use cmrt_core::NativeRenderProbeContext;
 
 use super::playback::try_get_cached_samples;
+use super::render_queue::RenderPriority;
 use super::{DawApp, DawPlayState, FIRST_PLAYABLE_TRACK, MAX_CACHED_SAMPLES};
 use crate::history::daw_cache_mml_hash;
 
@@ -80,17 +80,14 @@ impl DawApp {
             return;
         }
         let cfg = Arc::clone(&self.cfg);
+        let render_queue = self.render_queue.clone();
         let overlay_preview_cache = Arc::clone(&self.overlay_preview_cache);
-        let entry_ptr = self.entry_ptr;
         let active_track_count = active_tracks.len();
         std::thread::spawn(move || {
-            // SAFETY: `entry_ptr` は `main` から渡された `PluginEntry` を指し、
-            // アプリ終了まで生存する契約で `DawApp` に保持されている。
-            let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
             let daw_cfg = (*cfg).clone();
             let Some(samples) = render_mixed_preview_tracks(
-                entry_ref,
-                &daw_cfg,
+                &render_queue,
+                RenderPriority::Low,
                 measure_samples,
                 &active_tracks,
                 &track_mmls,
@@ -144,7 +141,7 @@ impl DawApp {
         let overlay_preview_cache = Arc::clone(&self.overlay_preview_cache);
         let cfg = Arc::clone(&self.cfg);
         let log_lines = Arc::clone(&self.log_lines);
-        let entry_ptr = self.entry_ptr;
+        let render_queue = self.render_queue.clone();
         let tracks = self.tracks;
         let overlay_cache_key = overlay_preview_cache_key(measure_index, &track_mmls, &track_gains);
         let active_track_count = active_tracks.len();
@@ -162,9 +159,6 @@ impl DawApp {
         crate::logging::append_log_line(&log_lines, format!("preview: meas{}", measure_index + 1));
 
         std::thread::spawn(move || {
-            // SAFETY: `entry_ptr` は `main` から渡された `PluginEntry` を指し、
-            // アプリ終了まで生存する契約で `DawApp` に保持されている。
-            let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
             let daw_cfg = (*cfg).clone();
             let sample_rate = daw_cfg.sample_rate as u32;
 
@@ -220,8 +214,8 @@ impl DawApp {
                         format!("meas{}: render", measure_index + 1),
                     );
                     render_mixed_preview_tracks(
-                        entry_ref,
-                        &daw_cfg,
+                        &render_queue,
+                        RenderPriority::High,
                         measure_samples,
                         &active_tracks,
                         &track_mmls,
@@ -263,8 +257,8 @@ impl DawApp {
                     format!("meas{}: render", measure_index + 1),
                 );
                 render_mixed_preview_tracks(
-                    entry_ref,
-                    &daw_cfg,
+                    &render_queue,
+                    RenderPriority::High,
                     measure_samples,
                     &active_tracks,
                     &track_mmls,

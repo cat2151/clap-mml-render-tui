@@ -9,10 +9,10 @@ pub use clap_mml_play_server_core::{host, load_entry, midi, patch_list, render, 
 use anyhow::Result;
 use clack_host::prelude::PluginEntry;
 use mmlabc_to_smf::mml_preprocessor;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{mpsc, OnceLock};
 
 const PATCH_DIR_PREFIXES: [&str; 2] = ["patches_factory", "patches_3rdparty"];
-static CACHE_RENDER_PREPARE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+static CACHE_RENDER_PREPARE_QUEUE: OnceLock<CacheRenderPrepareQueue> = OnceLock::new();
 
 mod native_render_probe;
 
@@ -22,6 +22,58 @@ pub use native_render_probe::{
     set_native_probe_logger, NativeProbeLogger, NativeRenderProbeContext,
 };
 use native_render_probe::{with_native_render_probe, with_requested_native_render_probe};
+
+pub struct CacheRenderInputs {
+    patched_cfg: CoreConfig,
+    events: Vec<midi::TimedMidiEvent>,
+    total_samples: u64,
+}
+
+struct CacheRenderPrepareRequest {
+    mml: String,
+    cfg: CoreConfig,
+    response_tx: mpsc::Sender<Result<CacheRenderInputs>>,
+}
+
+struct CacheRenderPrepareQueue {
+    tx: mpsc::Sender<CacheRenderPrepareRequest>,
+}
+
+impl CacheRenderPrepareQueue {
+    fn start() -> Self {
+        let (tx, rx) = mpsc::channel::<CacheRenderPrepareRequest>();
+        std::thread::spawn(move || {
+            while let Ok(request) = rx.recv() {
+                let result = prepare_cache_render(&request.mml, &request.cfg);
+                let _ = request.response_tx.send(result);
+            }
+        });
+        Self { tx }
+    }
+
+    fn prepare(&self, mml: &str, cfg: &CoreConfig) -> Result<CacheRenderInputs> {
+        let (response_tx, response_rx) = mpsc::channel();
+        let request = CacheRenderPrepareRequest {
+            mml: mml.to_string(),
+            cfg: cfg.clone(),
+            response_tx,
+        };
+        if self.tx.send(request).is_err() {
+            return prepare_cache_render(mml, cfg);
+        }
+        response_rx
+            .recv()
+            .unwrap_or_else(|_| prepare_cache_render(mml, cfg))
+    }
+}
+
+fn cache_render_prepare_queue() -> &'static CacheRenderPrepareQueue {
+    CACHE_RENDER_PREPARE_QUEUE.get_or_init(CacheRenderPrepareQueue::start)
+}
+
+fn prepare_cache_render_via_queue(mml: &str, cfg: &CoreConfig) -> Result<CacheRenderInputs> {
+    cache_render_prepare_queue().prepare(mml, cfg)
+}
 
 /// DAW モードのプレビューキャッシュ構築専用の MML → レンダリング。
 /// - `patch_history.txt` への追記は行わない
@@ -57,13 +109,26 @@ pub fn mml_render_for_cache_with_probe(
     entry: &PluginEntry,
     probe_context: Option<&NativeRenderProbeContext>,
 ) -> Result<Vec<f32>> {
-    let (patched_cfg, events, total_samples) = {
-        let _guard = CACHE_RENDER_PREPARE_LOCK
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .unwrap();
-        prepare_cache_render(mml, cfg)?
-    };
+    // MML -> SMF の前処理は単一キューへ流し、render worker 数とは独立して
+    // MML 1 本ずつ処理する。
+    let prepared = prepare_cache_render_via_queue(mml, cfg)?;
+    render_prepared_cache_with_probe(prepared, entry, probe_context)
+}
+
+pub fn prepare_cache_render_inputs(mml: &str, cfg: &CoreConfig) -> Result<CacheRenderInputs> {
+    prepare_cache_render(mml, cfg)
+}
+
+pub fn render_prepared_cache_with_probe(
+    prepared: CacheRenderInputs,
+    entry: &PluginEntry,
+    probe_context: Option<&NativeRenderProbeContext>,
+) -> Result<Vec<f32>> {
+    let CacheRenderInputs {
+        patched_cfg,
+        events,
+        total_samples,
+    } = prepared;
     with_native_render_probe(
         probe_context,
         &patched_cfg,
@@ -78,10 +143,7 @@ pub fn mml_render_for_cache_with_probe(
 /// 戻り値は `(patched_cfg, events, total_samples)` で、
 /// それぞれ「JSON/既定パッチ適用後の設定」「SMF から展開した MIDI イベント列」
 /// 「レンダリングすべき総サンプル数」を表す。
-fn prepare_cache_render(
-    mml: &str,
-    cfg: &CoreConfig,
-) -> Result<(CoreConfig, Vec<midi::TimedMidiEvent>, u64)> {
+fn prepare_cache_render(mml: &str, cfg: &CoreConfig) -> Result<CacheRenderInputs> {
     let preprocessed = mml_preprocessor::extract_embedded_json(mml);
     // 通常レンダリングと同様に、先頭 JSON のパッチ指定を最優先し、
     // 指定がない場合だけ config の既定パッチにフォールバックする。
@@ -96,7 +158,11 @@ fn prepare_cache_render(
         ..cfg.clone()
     };
 
-    Ok((patched_cfg, events, total_samples))
+    Ok(CacheRenderInputs {
+        patched_cfg,
+        events,
+        total_samples,
+    })
 }
 
 fn requested_patch_path_for_render(mml: &str, cfg: &CoreConfig) -> Option<String> {

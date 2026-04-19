@@ -57,6 +57,7 @@ fn build_test_app() -> DawApp {
         ])),
         cache_tx,
         cache_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
+        render_queue: crate::daw::render_queue::RenderQueue::disabled_for_tests(),
         play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
         play_transition_lock: Arc::new(Mutex::new(())),
         preview_session: Arc::new(std::sync::atomic::AtomicU64::new(0)),

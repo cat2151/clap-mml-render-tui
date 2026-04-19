@@ -3,10 +3,10 @@ use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use clack_host::prelude::PluginEntry;
-use cmrt_core::{mml_render_for_cache_with_probe, CoreConfig, NativeRenderProbeContext};
+use cmrt_core::NativeRenderProbeContext;
 
 use super::super::playback::pad_playback_measure_samples;
+use super::super::render_queue::{RenderPriority, RenderQueue};
 use super::super::{
     DawPlayState, PlayPosition, MAX_CACHED_SAMPLES, OVERLAY_PREVIEW_CACHE_MAX_ENTRIES,
 };
@@ -78,8 +78,8 @@ pub(super) fn insert_overlay_preview_cache(
 /// 1 本のステレオバッファへ合成して返す。
 /// 各 track のレンダリング結果は `measure_samples` 未満なら末尾を埋めて長さを揃える。
 pub(super) fn render_mixed_preview_tracks<F>(
-    entry_ref: &PluginEntry,
-    daw_cfg: &crate::config::Config,
+    render_queue: &RenderQueue,
+    priority: RenderPriority,
     measure_samples: usize,
     active_tracks: &[usize],
     track_mmls: &[String],
@@ -97,10 +97,7 @@ where
             .map(String::as_str)
             .unwrap_or_default();
         let probe_context = build_probe_context(*track, mml);
-        let result = {
-            let core_cfg = CoreConfig::from(daw_cfg);
-            mml_render_for_cache_with_probe(mml, &core_cfg, entry_ref, Some(&probe_context))
-        };
+        let result = render_queue.render_blocking(priority, mml, probe_context);
         let samples = result
             .ok()
             .map(|samples| pad_playback_measure_samples(samples, measure_samples))?;

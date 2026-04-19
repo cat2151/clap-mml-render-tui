@@ -83,12 +83,11 @@ fn cache_render_prepares_memory_only_render_inputs() {
         random_patch: true,
     };
 
-    let (patched_cfg, events, total_samples) =
-        prepare_cache_render(r#"{"Surge XT patch":"Pads/Pad 1.fxp"}t120o4c"#, &config)
-            .expect("cache render inputs should be prepared");
+    let prepared = prepare_cache_render(r#"{"Surge XT patch":"Pads/Pad 1.fxp"}t120o4c"#, &config)
+        .expect("cache render inputs should be prepared");
 
     assert_eq!(
-        patched_cfg.patch_path.as_deref(),
+        prepared.patched_cfg.patch_path.as_deref(),
         Some(
             patches_dir
                 .join("Pads")
@@ -98,13 +97,49 @@ fn cache_render_prepares_memory_only_render_inputs() {
         )
     );
     assert!(
-        !patched_cfg.random_patch,
+        !prepared.patched_cfg.random_patch,
         "random patch selection should be disabled for cache renders"
     );
-    assert!(!events.is_empty(), "valid MML should produce MIDI events");
     assert!(
-        total_samples > 0,
+        !prepared.events.is_empty(),
+        "valid MML should produce MIDI events"
+    );
+    assert!(
+        prepared.total_samples > 0,
         "valid MML should produce a positive sample length"
+    );
+}
+
+#[test]
+fn cache_render_prepare_queue_prepares_memory_only_render_inputs() {
+    let config = CoreConfig {
+        output_midi: "out.mid".into(),
+        output_wav: "out.wav".into(),
+        sample_rate: 44_100.0,
+        buffer_size: 512,
+        patch_path: Some("/patches/Default.fxp".into()),
+        patches_dir: Some("/patches".into()),
+        random_patch: true,
+    };
+
+    let prepared = prepare_cache_render_via_queue("t120o4c", &config)
+        .expect("queued cache render inputs should be prepared");
+
+    assert_eq!(
+        prepared.patched_cfg.patch_path.as_deref(),
+        Some("/patches/Default.fxp")
+    );
+    assert!(
+        !prepared.patched_cfg.random_patch,
+        "random patch selection should be disabled for queued cache renders"
+    );
+    assert!(
+        !prepared.events.is_empty(),
+        "queued valid MML should produce MIDI events"
+    );
+    assert!(
+        prepared.total_samples > 0,
+        "queued valid MML should produce a positive sample length"
     );
 }
 

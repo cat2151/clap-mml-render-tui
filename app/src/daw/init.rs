@@ -1,6 +1,8 @@
+use super::render_queue;
 use super::save::load_saved_grid_size;
 use super::*;
-use cmrt_core::{mml_render_for_cache_with_probe, NativeRenderProbeContext};
+use cmrt_core::NativeRenderProbeContext;
+use std::collections::HashMap;
 
 struct DawGridBuffers {
     tracks: usize,
@@ -101,6 +103,75 @@ fn build_grid_buffers_or_default(saved_grid_dimensions: Option<(usize, usize)>) 
         .expect("default DAW grid should be allocatable in supported environments")
 }
 
+fn reserve_cache_job_for_render(cache: &Arc<Mutex<Vec<Vec<CellCache>>>>, job: &CacheJob) -> bool {
+    let mut cache = cache.lock().unwrap();
+    let cell = &mut cache[job.track][job.measure];
+    if cell.state == CacheState::Empty || cell.generation != job.generation {
+        return false;
+    }
+    cell.state = CacheState::Rendering;
+    cell.rendered_mml_hash = None;
+    true
+}
+
+fn mark_cache_job_error(cache: &Arc<Mutex<Vec<Vec<CellCache>>>>, job: &CacheJob) {
+    let mut cache = cache.lock().unwrap();
+    if cache[job.track][job.measure].generation != job.generation {
+        return;
+    }
+    cache[job.track][job.measure].state = CacheState::Error;
+    cache[job.track][job.measure].samples = None;
+    cache[job.track][job.measure].rendered_measure_samples = None;
+    cache[job.track][job.measure].rendered_mml_hash = None;
+}
+
+fn store_cache_job_samples(
+    cache: &Arc<Mutex<Vec<Vec<CellCache>>>>,
+    job: &CacheJob,
+    daw_cfg: &crate::config::Config,
+    samples: Vec<f32>,
+) -> bool {
+    let mut cache = cache.lock().unwrap();
+    if cache[job.track][job.measure].generation != job.generation {
+        return false;
+    }
+
+    // 開発用: track/measure ごとに WAV ファイルを出力する。
+    // measure 0 は音色/ヘッダセルであり演奏内容ではないためスキップ。
+    let wav_ok = if job.measure > 0 {
+        if let Ok(daw_dir) = ensure_daw_dir() {
+            let wav_path = daw_dir.join(format!("track{}_meas{}.wav", job.track, job.measure));
+            write_wav(&samples, daw_cfg.sample_rate as u32, &wav_path).is_ok()
+        } else {
+            false
+        }
+    } else {
+        true
+    };
+
+    let cell = &mut cache[job.track][job.measure];
+    cell.state = if wav_ok {
+        CacheState::Ready
+    } else {
+        CacheState::Error
+    };
+    cell.rendered_mml_hash = if wav_ok {
+        Some(job.rendered_mml_hash)
+    } else {
+        None
+    };
+    // Ready かつサイズ上限以内のときのみサンプルをメモリに保持する。
+    // 上限超過（低 BPM 等）や WAV 失敗時はサンプルを保持しない。
+    if wav_ok && samples.len() <= MAX_CACHED_SAMPLES {
+        cell.samples = Some(Arc::new(samples));
+        cell.rendered_measure_samples = Some(job.measure_samples);
+    } else {
+        cell.samples = None;
+        cell.rendered_measure_samples = None;
+    }
+    true
+}
+
 pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
     super::http_server::set_active_http_state_cfg(Arc::clone(&cfg));
     let DawGridBuffers {
@@ -119,12 +190,16 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
     let cache = Arc::new(Mutex::new(cache));
 
     let cache_render_workers = cfg.offline_render_workers;
+    let render_queue = RenderQueue::new(Arc::clone(&cfg), entry_ptr, cache_render_workers);
     crate::logging::install_native_probe_logger();
 
-    // 設定数のキャッシュワーカースレッドを起動する。
-    // MML -> SMF の前処理排他は core-lib 側で行い、ここでは render 本体の並列度だけを増やす。
+    // CacheJob は共通 RenderQueue に入り、MML -> SMF 前処理を 1 MML ずつ行う。
+    // 準備済みジョブだけを render worker pool に流し、cache / preview / playback で
+    // 同じ scheduler と render 並列度を共有する。
     let (cache_tx, cache_rx) = std::sync::mpsc::channel::<CacheJob>();
-    let cache_rx = Arc::new(Mutex::new(cache_rx));
+    let (cache_result_tx, cache_result_rx) =
+        std::sync::mpsc::channel::<render_queue::RenderResult>();
+    let pending_cache_jobs = Arc::new(Mutex::new(HashMap::<u64, CacheJob>::new()));
     let log_lines = Arc::new(Mutex::new(crate::logging::load_log_lines()));
     let track_rerender_batches = Arc::new(Mutex::new(track_rerender_batches));
     let play_position = Arc::new(Mutex::new(None));
@@ -133,150 +208,123 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
     let play_measure_track_mmls = Arc::new(Mutex::new(play_measure_track_mmls));
     let play_track_gains = Arc::new(Mutex::new(play_track_gains));
 
-    for _ in 0..cache_render_workers {
-        let cache_worker = Arc::clone(&cache);
-        let cache_rx_worker = Arc::clone(&cache_rx);
-        let cfg_worker = Arc::clone(&cfg);
-        let log_lines_worker = Arc::clone(&log_lines);
-        let track_rerender_batches_worker = Arc::clone(&track_rerender_batches);
-        let play_position_worker = Arc::clone(&play_position);
-        let ab_repeat_worker = Arc::clone(&ab_repeat);
-        let play_measure_mmls_worker = Arc::clone(&play_measure_mmls);
-        let cache_tx_worker = cache_tx.clone();
+    {
+        let cache_dispatch = Arc::clone(&cache);
+        let render_queue = render_queue.clone();
+        let cache_result_tx = cache_result_tx.clone();
+        let pending_cache_jobs = Arc::clone(&pending_cache_jobs);
+        let log_lines_dispatch = Arc::clone(&log_lines);
+        let track_rerender_batches_dispatch = Arc::clone(&track_rerender_batches);
+        let play_position_dispatch = Arc::clone(&play_position);
+        let ab_repeat_dispatch = Arc::clone(&ab_repeat);
+        let play_measure_mmls_dispatch = Arc::clone(&play_measure_mmls);
+        let cache_tx_dispatch = cache_tx.clone();
         std::thread::spawn(move || {
-            // SAFETY: entry は main() のスタックに生存している
-            let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
-            let daw_cfg = (*cfg_worker).clone();
             let rerender_completion_ctx = TrackRerenderBatchCompletionContext {
-                batches: Arc::clone(&track_rerender_batches_worker),
-                log_lines: Arc::clone(&log_lines_worker),
-                cache: Arc::clone(&cache_worker),
-                play_position: Arc::clone(&play_position_worker),
-                ab_repeat: Arc::clone(&ab_repeat_worker),
-                play_measure_mmls: Arc::clone(&play_measure_mmls_worker),
-                cache_tx: cache_tx_worker.clone(),
+                batches: Arc::clone(&track_rerender_batches_dispatch),
+                log_lines: Arc::clone(&log_lines_dispatch),
+                cache: Arc::clone(&cache_dispatch),
+                play_position: Arc::clone(&play_position_dispatch),
+                ab_repeat: Arc::clone(&ab_repeat_dispatch),
+                play_measure_mmls: Arc::clone(&play_measure_mmls_dispatch),
+                cache_tx: cache_tx_dispatch.clone(),
                 cache_render_workers,
             };
 
-            loop {
-                let job = {
-                    let rx = cache_rx_worker.lock().unwrap();
-                    match rx.recv() {
-                        Ok(job) => job,
-                        Err(_) => break,
-                    }
-                };
-                let track = job.track;
-                let measure = job.measure;
-                let mut skipped_stale_job = false;
-                {
-                    let mut cache = cache_worker.lock().unwrap();
-                    let cell = &mut cache[track][measure];
-                    if cell.state == CacheState::Empty || cell.generation != job.generation {
-                        skipped_stale_job = true;
-                    } else {
-                        cell.state = CacheState::Rendering;
-                        cell.rendered_mml_hash = None;
-                    }
-                }
-                if skipped_stale_job {
+            while let Ok(job) = cache_rx.recv() {
+                if !reserve_cache_job_for_render(&cache_dispatch, &job) {
                     DawApp::complete_track_rerender_batch_measure(
                         &rerender_completion_ctx,
-                        track,
-                        measure,
+                        job.track,
+                        job.measure,
                     );
                     continue;
                 }
-                let core_cfg = cmrt_core::CoreConfig::from(&daw_cfg);
+
+                let request_id = render_queue.reserve_request_id();
+                pending_cache_jobs
+                    .lock()
+                    .unwrap()
+                    .insert(request_id, job.clone());
                 let probe_context = NativeRenderProbeContext::cache_worker(
-                    track,
-                    measure,
+                    job.track,
+                    job.measure,
                     job.generation,
                     job.rendered_mml_hash,
                     cache_render_workers,
                 );
-                match mml_render_for_cache_with_probe(
-                    &job.mml,
-                    &core_cfg,
-                    entry_ref,
-                    Some(&probe_context),
-                ) {
+                if render_queue
+                    .submit_with_id(
+                        request_id,
+                        render_queue::RenderPriority::Normal,
+                        job.mml.clone(),
+                        probe_context,
+                        cache_result_tx.clone(),
+                    )
+                    .is_err()
+                {
+                    pending_cache_jobs.lock().unwrap().remove(&request_id);
+                    mark_cache_job_error(&cache_dispatch, &job);
+                    DawApp::complete_track_rerender_batch_measure(
+                        &rerender_completion_ctx,
+                        job.track,
+                        job.measure,
+                    );
+                }
+            }
+        });
+    }
+
+    {
+        let cache_result = Arc::clone(&cache);
+        let cfg_result = Arc::clone(&cfg);
+        let log_lines_result = Arc::clone(&log_lines);
+        let track_rerender_batches_result = Arc::clone(&track_rerender_batches);
+        let play_position_result = Arc::clone(&play_position);
+        let ab_repeat_result = Arc::clone(&ab_repeat);
+        let play_measure_mmls_result = Arc::clone(&play_measure_mmls);
+        let cache_tx_result = cache_tx.clone();
+        let pending_cache_jobs = Arc::clone(&pending_cache_jobs);
+        std::thread::spawn(move || {
+            let daw_cfg = (*cfg_result).clone();
+            let rerender_completion_ctx = TrackRerenderBatchCompletionContext {
+                batches: Arc::clone(&track_rerender_batches_result),
+                log_lines: Arc::clone(&log_lines_result),
+                cache: Arc::clone(&cache_result),
+                play_position: Arc::clone(&play_position_result),
+                ab_repeat: Arc::clone(&ab_repeat_result),
+                play_measure_mmls: Arc::clone(&play_measure_mmls_result),
+                cache_tx: cache_tx_result.clone(),
+                cache_render_workers,
+            };
+
+            while let Ok(rendered) = cache_result_rx.recv() {
+                let Some(job) = pending_cache_jobs
+                    .lock()
+                    .unwrap()
+                    .remove(&rendered.request_id)
+                else {
+                    continue;
+                };
+                let track = job.track;
+                let measure = job.measure;
+                match rendered.result {
                     Ok(samples) => {
-                        let mut should_complete_batch = false;
-                        {
-                            let mut cache = cache_worker.lock().unwrap();
-                            if cache[track][measure].generation != job.generation {
-                                skipped_stale_job = true;
-                            } else {
-                                // 開発用: track/measure ごとに WAV ファイルを出力する
-                                // measure 0 は音色/ヘッダセルであり演奏内容ではないためスキップ
-                                let wav_ok = if measure > 0 {
-                                    if let Ok(daw_dir) = ensure_daw_dir() {
-                                        let wav_path = daw_dir
-                                            .join(format!("track{}_meas{}.wav", track, measure));
-                                        write_wav(&samples, daw_cfg.sample_rate as u32, &wav_path)
-                                            .is_ok()
-                                    } else {
-                                        false
-                                    }
-                                } else {
-                                    true
-                                };
-                                // WAV 書き出し失敗はデバッグ出力の問題であり、レンダリング自体は成功している。
-                                // そのため WAV 失敗時は Error としてユーザーに通知する。
-                                cache[track][measure].state = if wav_ok {
-                                    CacheState::Ready
-                                } else {
-                                    CacheState::Error
-                                };
-                                cache[track][measure].rendered_mml_hash = if wav_ok {
-                                    Some(job.rendered_mml_hash)
-                                } else {
-                                    None
-                                };
-                                // Ready かつサイズ上限以内のときのみサンプルをメモリに保持する。
-                                // 上限超過（低 BPM 等）や WAV 失敗時はサンプルを保持しない。
-                                if wav_ok && samples.len() <= MAX_CACHED_SAMPLES {
-                                    cache[track][measure].samples = Some(Arc::new(samples));
-                                    cache[track][measure].rendered_measure_samples =
-                                        Some(job.measure_samples);
-                                } else {
-                                    cache[track][measure].samples = None;
-                                    cache[track][measure].rendered_measure_samples = None;
-                                }
-                                should_complete_batch = true;
-                            }
-                        }
-                        if skipped_stale_job || should_complete_batch {
-                            DawApp::complete_track_rerender_batch_measure(
-                                &rerender_completion_ctx,
-                                track,
-                                measure,
-                            );
-                        }
+                        let _stored =
+                            store_cache_job_samples(&cache_result, &job, &daw_cfg, samples);
+                        DawApp::complete_track_rerender_batch_measure(
+                            &rerender_completion_ctx,
+                            track,
+                            measure,
+                        );
                     }
                     Err(_) => {
-                        let mut should_complete_batch = false;
-                        {
-                            let mut cache = cache_worker.lock().unwrap();
-                            if cache[track][measure].generation != job.generation {
-                                skipped_stale_job = true;
-                            } else {
-                                cache[track][measure].state = CacheState::Error;
-                                // エラー時は古いサンプルを保持しない（ステールデータの排除）
-                                cache[track][measure].samples = None;
-                                cache[track][measure].rendered_measure_samples = None;
-                                cache[track][measure].rendered_mml_hash = None;
-                                should_complete_batch = true;
-                            }
-                        }
-                        if skipped_stale_job || should_complete_batch {
-                            DawApp::complete_track_rerender_batch_measure(
-                                &rerender_completion_ctx,
-                                track,
-                                measure,
-                            );
-                        }
+                        mark_cache_job_error(&cache_result, &job);
+                        DawApp::complete_track_rerender_batch_measure(
+                            &rerender_completion_ctx,
+                            track,
+                            measure,
+                        );
                     }
                 }
             }
@@ -297,6 +345,7 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
         cache,
         cache_tx,
         cache_render_workers,
+        render_queue,
         play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
         play_transition_lock: Arc::new(Mutex::new(())),
         preview_session: Arc::new(AtomicU64::new(0)),

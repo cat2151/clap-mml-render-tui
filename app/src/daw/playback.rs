@@ -6,8 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use clack_host::prelude::PluginEntry;
-use cmrt_core::{mml_render_for_cache_with_probe, CoreConfig, NativeRenderProbeContext};
+use cmrt_core::NativeRenderProbeContext;
 
 use crate::history::daw_cache_mml_hash;
 
@@ -17,6 +16,7 @@ mod measure_mixer;
 
 use super::playback_util::play_start_log_lines;
 pub(super) use super::playback_util::{effective_measure_count, loop_measure_summary_label};
+use super::render_queue::RenderPriority;
 use super::{DawApp, DawPlayState, PlayPosition, FIRST_PLAYABLE_TRACK};
 use cache_mixer::{build_playback_measure_samples, PlaybackMeasureRequest};
 pub(super) use cache_mixer::{pad_playback_measure_samples, try_get_cached_samples};
@@ -105,7 +105,7 @@ impl DawApp {
         let cache = Arc::clone(&self.cache);
         let cfg = Arc::clone(&self.cfg);
         let log_lines = Arc::clone(&self.log_lines);
-        let entry_ptr = self.entry_ptr;
+        let render_queue = self.render_queue.clone();
         let tracks = self.tracks;
 
         *play_state.lock().unwrap() = DawPlayState::Playing;
@@ -118,13 +118,11 @@ impl DawApp {
         }
 
         #[cfg(test)]
-        if entry_ptr == 0 {
+        if self.entry_ptr == 0 {
             return;
         }
 
         std::thread::spawn(move || {
-            // SAFETY: entry は main() のスタックに生存している
-            let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
             let daw_cfg = (*cfg).clone();
             let sample_rate = daw_cfg.sample_rate as u32;
 
@@ -197,7 +195,6 @@ impl DawApp {
                         },
                         &log_lines,
                         |track, mml| {
-                            let core_cfg = CoreConfig::from(&daw_cfg);
                             let probe_context = NativeRenderProbeContext::playback_current(
                                 track,
                                 current_measure_index,
@@ -205,12 +202,7 @@ impl DawApp {
                                 daw_cache_mml_hash(mml),
                                 daw_cfg.offline_render_workers,
                             );
-                            mml_render_for_cache_with_probe(
-                                mml,
-                                &core_cfg,
-                                entry_ref,
-                                Some(&probe_context),
-                            )
+                            render_queue.render_blocking(RenderPriority::High, mml, probe_context)
                         },
                     ) {
                         Ok(playback_audio) => playback_audio,
@@ -287,7 +279,6 @@ impl DawApp {
                     },
                     &log_lines,
                     |track, mml| {
-                        let core_cfg = CoreConfig::from(&daw_cfg);
                         let probe_context = NativeRenderProbeContext::playback_lookahead(
                             track,
                             lookahead_measure_index,
@@ -295,12 +286,7 @@ impl DawApp {
                             daw_cache_mml_hash(mml),
                             daw_cfg.offline_render_workers,
                         );
-                        mml_render_for_cache_with_probe(
-                            mml,
-                            &core_cfg,
-                            entry_ref,
-                            Some(&probe_context),
-                        )
+                        render_queue.render_blocking(RenderPriority::High, mml, probe_context)
                     },
                 ) {
                     Ok(playback_audio) => playback_audio,
