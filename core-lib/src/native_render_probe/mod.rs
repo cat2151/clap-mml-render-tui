@@ -4,6 +4,7 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
 };
 
+#[cfg(test)]
 use crate::CoreConfig;
 
 mod context;
@@ -49,6 +50,7 @@ impl NativeRenderProbeGuard {
         }
     }
 
+    #[cfg(test)]
     fn enter_prepared(
         context: &NativeRenderProbeContext,
         patched_cfg: &CoreConfig,
@@ -179,6 +181,7 @@ fn format_native_probe_common_fields(
     )
 }
 
+#[cfg(test)]
 fn format_native_probe_before_line(
     context: &NativeRenderProbeContext,
     decision: &NativeRenderProbeDecision,
@@ -227,6 +230,7 @@ fn emit_native_probe_log(line: String) {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn with_native_render_probe<T, F>(
     probe_context: Option<&NativeRenderProbeContext>,
     patched_cfg: &CoreConfig,

@@ -416,7 +416,7 @@ dependencies = [
 [[package]]
 name = "cmrt-core"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#cfd335fd2aaf760000c6a22c108102f1948f9dfa"
+source = "git+https://github.com/cat2151/clap-mml-play-server#aa5291eabf72a09a16b19721f8236cee9403188e"
 dependencies = [
  "anyhow",
  "clack-extensions",

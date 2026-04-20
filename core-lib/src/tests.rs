@@ -1,4 +1,5 @@
 use super::*;
+use mmlabc_to_smf::mml_preprocessor;
 use std::{
     path::Path,
     sync::{Arc, Barrier, Mutex, OnceLock},
@@ -71,7 +72,7 @@ fn cache_render_returns_none_when_json_patch_is_missing() {
 }
 
 #[test]
-fn cache_render_prepares_memory_only_render_inputs() {
+fn cache_render_prepares_inputs_with_resolved_embedded_patch() {
     let patches_dir = std::path::PathBuf::from("patches");
     let config = CoreConfig {
         output_midi: "out.mid".into(),
@@ -85,9 +86,10 @@ fn cache_render_prepares_memory_only_render_inputs() {
 
     let prepared = prepare_cache_render(r#"{"Surge XT patch":"Pads/Pad 1.fxp"}t120o4c"#, &config)
         .expect("cache render inputs should be prepared");
+    let preprocessed = mml_preprocessor::extract_embedded_json(&prepared.mml);
 
     assert_eq!(
-        prepared.patched_cfg.patch_path.as_deref(),
+        extract_patch_from_json(preprocessed.embedded_json.as_deref(), &config).as_deref(),
         Some(
             patches_dir
                 .join("Pads")
@@ -96,22 +98,12 @@ fn cache_render_prepares_memory_only_render_inputs() {
                 .as_ref()
         )
     );
-    assert!(
-        !prepared.patched_cfg.random_patch,
-        "random patch selection should be disabled for cache renders"
-    );
-    assert!(
-        !prepared.events.is_empty(),
-        "valid MML should produce MIDI events"
-    );
-    assert!(
-        prepared.total_samples > 0,
-        "valid MML should produce a positive sample length"
-    );
+    assert_eq!(prepared.cfg.random_patch, config.random_patch);
+    assert_eq!(preprocessed.remaining_mml, "t120o4c");
 }
 
 #[test]
-fn cache_render_prepare_queue_prepares_memory_only_render_inputs() {
+fn cache_render_prepare_queue_prepares_deferred_render_inputs() {
     let config = CoreConfig {
         output_midi: "out.mid".into(),
         output_wav: "out.wav".into(),
@@ -125,46 +117,19 @@ fn cache_render_prepare_queue_prepares_memory_only_render_inputs() {
     let prepared = prepare_cache_render_via_queue("t120o4c", &config)
         .expect("queued cache render inputs should be prepared");
 
+    assert_eq!(prepared.mml, "t120o4c");
     assert_eq!(
-        prepared.patched_cfg.patch_path.as_deref(),
+        prepared.cfg.patch_path.as_deref(),
         Some("/patches/Default.fxp")
     );
-    assert!(
-        !prepared.patched_cfg.random_patch,
-        "random patch selection should be disabled for queued cache renders"
-    );
-    assert!(
-        !prepared.events.is_empty(),
-        "queued valid MML should produce MIDI events"
-    );
-    assert!(
-        prepared.total_samples > 0,
-        "queued valid MML should produce a positive sample length"
-    );
+    assert_eq!(prepared.cfg.random_patch, config.random_patch);
 }
 
 #[test]
-fn apply_render_preroll_shifts_events_and_total_samples() {
-    let events = vec![midi::TimedMidiEvent {
-        sample_pos: 12,
-        message: midi::MidiEvent::NoteOn {
-            channel: 0,
-            key: 60,
-            velocity: 100,
-        },
-    }];
+fn render_options_request_core_preroll_100ms() {
+    let options = render_options();
 
-    let (events, total_samples) = apply_render_preroll(events, 34, 100);
-
-    assert_eq!(events[0].sample_pos, 112);
-    assert_eq!(total_samples, 134);
-}
-
-#[test]
-fn trim_render_preroll_drops_leading_stereo_samples() {
-    let trimmed = trim_render_preroll(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 1);
-
-    assert_eq!(trimmed, vec![3.0, 4.0, 5.0, 6.0]);
+    assert_eq!(options.preroll(), RenderPreroll::from_millis(100));
 }
 
 #[test]
@@ -194,6 +159,47 @@ fn cache_render_extracts_patch_from_embedded_json_with_factory_prefix_fallback()
         patch.as_deref(),
         Some(factory_patch.to_string_lossy().as_ref())
     );
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn mml_with_resolved_embedded_patch_keeps_core_patch_value_relative_to_base() {
+    let suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    let root = std::env::temp_dir().join(format!("cmrt_core_patch_rewrite_{suffix}"));
+    let factory_patch = root.join("patches_factory").join("Pads").join("Pad 1.fxp");
+    std::fs::create_dir_all(factory_patch.parent().unwrap()).unwrap();
+    std::fs::write(&factory_patch, b"dummy").unwrap();
+    let config = CoreConfig {
+        output_midi: "out.mid".into(),
+        output_wav: "out.wav".into(),
+        sample_rate: 44_100.0,
+        buffer_size: 512,
+        patch_path: Some("/patches/Default.fxp".into()),
+        patches_dir: Some(root.to_string_lossy().into_owned()),
+        random_patch: false,
+    };
+
+    let rewritten = mml_with_resolved_embedded_patch(
+        r#"{"Surge XT patch":"Pads/Pad 1.fxp"}t120o4c"#,
+        &config,
+    );
+    let preprocessed = mml_preprocessor::extract_embedded_json(rewritten.as_ref());
+    let value: serde_json::Value =
+        serde_json::from_str(preprocessed.embedded_json.as_deref().unwrap()).unwrap();
+    let expected_patch = std::path::Path::new("patches_factory")
+        .join("Pads")
+        .join("Pad 1.fxp")
+        .to_string_lossy()
+        .into_owned();
+
+    assert_eq!(
+        value.get("Surge XT patch").and_then(|patch| patch.as_str()),
+        Some(expected_patch.as_str())
+    );
+    assert_eq!(preprocessed.remaining_mml, "t120o4c");
     std::fs::remove_dir_all(root).ok();
 }
 
