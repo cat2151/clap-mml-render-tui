@@ -1,4 +1,5 @@
-# Agent setup
+# Agent setup for Linux Runner
+※Windows上では実行しないこと
 
 Before running Rust checks in this repository, from the repository root prepare the test environment:
 
