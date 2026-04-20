@@ -1,11 +1,12 @@
-# Agent setup for Linux Runner
-※Windows上では実行しないこと
+# test
 
 Before running Rust checks in this repository, from the repository root prepare the test environment:
 
 ```bash
 ./scripts/setup-cargo-test-env.sh
 ```
+
+※Windows上では setup-cargo-test-env.sh は実行しないこと
 
 After setup, validate from the repository root with:
 
