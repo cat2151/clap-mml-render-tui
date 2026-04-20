@@ -93,6 +93,7 @@ fn draw_places_playback_status_and_loop_summary_above_footer() {
         *play_position = Some(PlayPosition {
             measure_index: 1,
             measure_start: std::time::Instant::now(),
+            measure_duration: std::time::Duration::from_secs(1),
         });
     }
     {

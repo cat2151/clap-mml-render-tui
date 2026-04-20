@@ -97,6 +97,8 @@ struct GetStatusPlayResponse {
     current_measure: Option<usize>,
     current_measure_index: Option<usize>,
     current_beat: Option<u32>,
+    measure_elapsed_ms: Option<u64>,
+    measure_duration_ms: Option<u64>,
     #[serde(rename = "loop")]
     loop_status: GetStatusLoopResponse,
 }
@@ -483,6 +485,8 @@ impl From<DawStatusSnapshot> for GetStatusResponse {
         let current_measure_index = current_measure_index(&snapshot);
         let current_measure = current_measure_index.map(|measure_index| measure_index + 1);
         let current_beat = current_beat(&snapshot);
+        let measure_elapsed_ms = current_measure_elapsed_ms(&snapshot);
+        let measure_duration_ms = current_measure_duration_ms(&snapshot);
         let loop_range = snapshot.ab_repeat.marker_indices().map(|(start, end)| {
             (
                 start.min(end).saturating_add(1),
@@ -520,6 +524,8 @@ impl From<DawStatusSnapshot> for GetStatusResponse {
                 current_measure,
                 current_measure_index,
                 current_beat,
+                measure_elapsed_ms,
+                measure_duration_ms,
                 loop_status: GetStatusLoopResponse {
                     enabled: loop_enabled,
                     start_measure: loop_start,
@@ -566,6 +572,26 @@ fn current_beat(snapshot: &DawStatusSnapshot) -> Option<u32> {
     let raw_beat =
         (position.measure_start.elapsed().as_secs_f64() / snapshot.beat_duration_secs) as u32;
     Some((raw_beat % snapshot.beat_count) + 1)
+}
+
+fn current_measure_elapsed_ms(snapshot: &DawStatusSnapshot) -> Option<u64> {
+    if matches!(snapshot.play_state, DawPlayState::Idle) {
+        return None;
+    }
+    let position = snapshot.play_position.as_ref()?;
+    Some(duration_millis_u64(position.measure_start.elapsed()))
+}
+
+fn current_measure_duration_ms(snapshot: &DawStatusSnapshot) -> Option<u64> {
+    if matches!(snapshot.play_state, DawPlayState::Idle) {
+        return None;
+    }
+    let position = snapshot.play_position.as_ref()?;
+    Some(duration_millis_u64(position.measure_duration))
+}
+
+fn duration_millis_u64(duration: Duration) -> u64 {
+    duration.as_millis().min(u64::MAX as u128) as u64
 }
 
 fn play_state_label(play_state: DawPlayState) -> &'static str {
@@ -670,6 +696,7 @@ mod tests {
                 measure_start: std::time::Instant::now()
                     .checked_sub(std::time::Duration::from_millis(100))
                     .unwrap(),
+                measure_duration: std::time::Duration::from_millis(4_000),
             }),
             beat_count: 4,
             beat_duration_secs: 1.0,
@@ -702,6 +729,8 @@ mod tests {
         assert_eq!(body["play"]["currentMeasure"], 3);
         assert_eq!(body["play"]["currentMeasureIndex"], 2);
         assert_eq!(body["play"]["currentBeat"], 1);
+        assert!(body["play"]["measureElapsedMs"].as_u64().unwrap() >= 100);
+        assert_eq!(body["play"]["measureDurationMs"], 4_000);
         assert_eq!(body["play"]["loop"]["enabled"], true);
         assert_eq!(body["play"]["loop"]["startMeasure"], 1);
         assert_eq!(body["play"]["loop"]["endMeasure"], 3);

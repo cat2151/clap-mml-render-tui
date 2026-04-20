@@ -54,6 +54,8 @@ pub struct DawStatusPlay {
     pub current_measure: Option<usize>,
     pub current_measure_index: Option<usize>,
     pub current_beat: Option<u32>,
+    pub measure_elapsed_ms: Option<u64>,
+    pub measure_duration_ms: Option<u64>,
     #[serde(rename = "loop")]
     pub loop_status: DawStatusLoop,
 }

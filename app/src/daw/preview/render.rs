@@ -18,6 +18,7 @@ pub(in crate::daw) fn begin_preview_output<F>(
     preview_session: &AtomicU64,
     session: u64,
     measure_index: usize,
+    measure_duration: std::time::Duration,
     enqueue_audio: F,
 ) -> bool
 where
@@ -32,6 +33,7 @@ where
     *play_position.lock().unwrap() = Some(PlayPosition {
         measure_index,
         measure_start: std::time::Instant::now(),
+        measure_duration,
     });
     enqueue_audio();
     true

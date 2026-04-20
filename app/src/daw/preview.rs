@@ -284,6 +284,9 @@ impl DawApp {
                         Arc::clone(&samples),
                     );
                 }
+                let measure_duration = std::time::Duration::from_secs_f64(
+                    measure_samples as f64 / (sample_rate as f64 * 2.0),
+                );
                 let preview_active = begin_preview_output(
                     &play_transition_lock,
                     &play_state,
@@ -291,6 +294,7 @@ impl DawApp {
                     &preview_session,
                     session,
                     measure_index,
+                    measure_duration,
                     || {
                         let source = rodio::buffer::SamplesBuffer::new(
                             2,

@@ -144,6 +144,7 @@ fn sync_http_status_snapshot_captures_play_grid_and_cache_counts() {
     *app.play_position.lock().unwrap() = Some(crate::daw::PlayPosition {
         measure_index: 1,
         measure_start: std::time::Instant::now(),
+        measure_duration: std::time::Duration::from_secs(2),
     });
     *app.ab_repeat.lock().unwrap() = AbRepeatState::FixEnd {
         start_measure_index: 0,
@@ -166,6 +167,13 @@ fn sync_http_status_snapshot_captures_play_grid_and_cache_counts() {
             .as_ref()
             .map(|position| position.measure_index),
         Some(1)
+    );
+    assert_eq!(
+        snapshot
+            .play_position
+            .as_ref()
+            .map(|position| position.measure_duration),
+        Some(std::time::Duration::from_secs(2))
     );
     assert_eq!(
         snapshot.ab_repeat,

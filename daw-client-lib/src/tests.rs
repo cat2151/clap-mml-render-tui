@@ -259,7 +259,7 @@ fn get_patches_reads_json_response() {
 
 #[test]
 fn get_status_reads_json_response() {
-    let body = r#"{"mode":"daw","play":{"state":"playing","isPlaying":true,"isPreview":false,"currentMeasure":2,"currentMeasureIndex":1,"currentBeat":3,"loop":{"enabled":true,"startMeasure":1,"endMeasure":4}},"cache":{"activeRenderCount":1,"pendingCount":2,"renderingCount":1,"readyCount":5,"errorCount":0,"isUpdating":true,"isComplete":false,"cells":[[{"state":"empty"},{"state":"ready"}],[{"state":"pending"},{"state":"rendering"}]]},"grid":{"tracks":2,"measures":1}}"#;
+    let body = r#"{"mode":"daw","play":{"state":"playing","isPlaying":true,"isPreview":false,"currentMeasure":2,"currentMeasureIndex":1,"currentBeat":3,"measureElapsedMs":840,"measureDurationMs":2000,"loop":{"enabled":true,"startMeasure":1,"endMeasure":4}},"cache":{"activeRenderCount":1,"pendingCount":2,"renderingCount":1,"readyCount":5,"errorCount":0,"isUpdating":true,"isComplete":false,"cells":[[{"state":"empty"},{"state":"ready"}],[{"state":"pending"},{"state":"rendering"}]]},"grid":{"tracks":2,"measures":1}}"#;
     let (base_url, request_rx) = spawn_single_request_server(body);
     let client = DawClient::new(&base_url).unwrap();
 
@@ -278,6 +278,8 @@ fn get_status_reads_json_response() {
                 current_measure: Some(2),
                 current_measure_index: Some(1),
                 current_beat: Some(3),
+                measure_elapsed_ms: Some(840),
+                measure_duration_ms: Some(2000),
                 loop_status: DawStatusLoop {
                     enabled: true,
                     start_measure: Some(1),

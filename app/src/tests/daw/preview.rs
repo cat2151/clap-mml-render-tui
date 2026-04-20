@@ -22,6 +22,7 @@ fn begin_preview_output_skips_enqueue_when_preview_stopped() {
         &preview_session,
         1,
         2,
+        std::time::Duration::from_secs(1),
         || {
             enqueue_calls.fetch_add(1, Ordering::SeqCst);
         },
@@ -47,6 +48,7 @@ fn begin_preview_output_updates_position_before_enqueue() {
         &preview_session,
         4,
         3,
+        std::time::Duration::from_secs(1),
         {
             let play_position = Arc::clone(&play_position);
             let observed_measure = Arc::clone(&observed_measure);
@@ -70,6 +72,14 @@ fn begin_preview_output_updates_position_before_enqueue() {
             .map(|position| position.measure_index),
         Some(3)
     );
+    assert_eq!(
+        play_position
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|position| position.measure_duration),
+        Some(std::time::Duration::from_secs(1))
+    );
 }
 
 #[test]
@@ -87,6 +97,7 @@ fn begin_preview_output_skips_enqueue_for_stale_preview_session() {
         &preview_session,
         1,
         2,
+        std::time::Duration::from_secs(1),
         || {
             enqueue_calls.fetch_add(1, Ordering::SeqCst);
         },

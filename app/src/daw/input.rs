@@ -392,6 +392,9 @@ impl DawApp {
         *self.play_position.lock().unwrap() = Some(super::PlayPosition {
             measure_index,
             measure_start: Instant::now(),
+            measure_duration: std::time::Duration::from_secs_f64(
+                self.measure_duration_samples() as f64 / (self.cfg.sample_rate * 2.0),
+            ),
         });
         self.append_log_line(format!("preview: meas{}", measure_index + 1));
         true

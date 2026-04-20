@@ -222,6 +222,7 @@ impl DawApp {
                     *play_position.lock().unwrap() = Some(PlayPosition {
                         measure_index: current_measure_index,
                         measure_start,
+                        measure_duration,
                     });
                     crate::logging::append_log_line(
                         &log_lines,
@@ -335,6 +336,7 @@ impl DawApp {
                 *play_position.lock().unwrap() = Some(PlayPosition {
                     measure_index: lookahead_measure_index,
                     measure_start: next_measure_start,
+                    measure_duration: next_measure_duration,
                 });
                 crate::logging::append_log_line(
                     &log_lines,

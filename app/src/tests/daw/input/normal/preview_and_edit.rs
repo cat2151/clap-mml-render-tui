@@ -9,6 +9,7 @@ fn handle_normal_cursor_move_restarts_preview_on_new_target() {
     *app.play_position.lock().unwrap() = Some(PlayPosition {
         measure_index: 1,
         measure_start: std::time::Instant::now(),
+        measure_duration: std::time::Duration::from_secs(1),
     });
 
     let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));
@@ -78,6 +79,7 @@ fn handle_normal_stops_preview_when_cursor_moves_to_init_column() {
     *app.play_position.lock().unwrap() = Some(PlayPosition {
         measure_index: 0,
         measure_start: std::time::Instant::now(),
+        measure_duration: std::time::Duration::from_secs(1),
     });
 
     let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));
@@ -104,6 +106,7 @@ fn handle_normal_stops_preview_when_cursor_moves_to_non_playable_track() {
     *app.play_position.lock().unwrap() = Some(PlayPosition {
         measure_index: 0,
         measure_start: std::time::Instant::now(),
+        measure_duration: std::time::Duration::from_secs(1),
     });
 
     let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
@@ -257,6 +260,7 @@ fn handle_normal_enter_stops_current_preview() {
     *app.play_position.lock().unwrap() = Some(PlayPosition {
         measure_index: 0,
         measure_start: std::time::Instant::now(),
+        measure_duration: std::time::Duration::from_secs(1),
     });
 
     let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
@@ -282,6 +286,7 @@ fn handle_normal_enter_stops_current_play() {
     *app.play_position.lock().unwrap() = Some(PlayPosition {
         measure_index: 0,
         measure_start: std::time::Instant::now(),
+        measure_duration: std::time::Duration::from_secs(1),
     });
 
     let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));

@@ -137,6 +137,7 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
         *app.play_position.lock().unwrap() = Some(PlayPosition {
             measure_index: 0,
             measure_start: std::time::Instant::now(),
+            measure_duration: std::time::Duration::from_secs(1),
         });
         *app.play_measure_mmls.lock().unwrap() = vec!["cdef".to_string(), "gabc".to_string()];
 

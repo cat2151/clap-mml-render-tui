@@ -139,6 +139,8 @@ pub struct PlayPosition {
     pub measure_index: usize,
     /// この小節の再生開始時刻
     pub measure_start: std::time::Instant,
+    /// この小節の再生時間
+    pub measure_duration: std::time::Duration,
 }
 
 // ─── 内部モード ───────────────────────────────────────────────

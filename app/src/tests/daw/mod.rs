@@ -318,6 +318,7 @@ fn complete_track_rerender_batch_limits_refill_to_one_while_playing() {
         play_position: Arc::new(Mutex::new(Some(super::PlayPosition {
             measure_index: 0,
             measure_start: std::time::Instant::now(),
+            measure_duration: std::time::Duration::from_secs(1),
         }))),
         ab_repeat: Arc::new(Mutex::new(super::AbRepeatState::Off)),
         play_measure_mmls: Arc::clone(&play_measure_mmls),
