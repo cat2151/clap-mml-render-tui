@@ -52,6 +52,7 @@ fn get_snapshot_mml_rejects_unready_and_out_of_range_requests() {
         cfg: None,
         pending_commands: VecDeque::new(),
         grid_snapshot: vec![vec!["t120".to_string()]],
+        status_snapshot: None,
     };
     assert_eq!(
         get_snapshot_mml(&state, 1, 0),
@@ -78,6 +79,7 @@ fn get_snapshot_mmls_rejects_unready_state_and_returns_all_tracks_measures() {
             vec!["t120".to_string(), String::new()],
             vec!["@1".to_string(), "l8cde".to_string()],
         ],
+        status_snapshot: None,
     };
     assert_eq!(
         get_snapshot_mmls(&state),
@@ -118,4 +120,66 @@ fn if_none_match_matches_exact_weak_and_wildcard_etags() {
     assert!(if_none_match_matches(&format!("W/{etag}"), &etag));
     assert!(if_none_match_matches("*", &etag));
     assert!(!if_none_match_matches("\"different\"", &etag));
+}
+
+#[test]
+fn get_status_snapshot_rejects_unready_state() {
+    let state = DawHttpState::default();
+
+    assert_eq!(
+        get_status_snapshot(&state).map(|_| ()),
+        Err((503, "DAW status の準備中です\n".to_string()))
+    );
+}
+
+#[test]
+fn sync_http_status_snapshot_captures_play_grid_and_cache_counts() {
+    let _test_guard = lock_http_server_test_state();
+    let cfg = default_config();
+    let state = build_http_state(cfg.clone());
+    activate_http_state(Arc::clone(&state));
+    let app = build_test_app(cfg);
+
+    *app.play_state.lock().unwrap() = DawPlayState::Playing;
+    *app.play_position.lock().unwrap() = Some(crate::daw::PlayPosition {
+        measure_index: 1,
+        measure_start: std::time::Instant::now(),
+    });
+    *app.ab_repeat.lock().unwrap() = AbRepeatState::FixEnd {
+        start_measure_index: 0,
+        end_measure_index: 1,
+    };
+    {
+        let mut cache = app.cache.lock().unwrap();
+        cache[0][0].state = CacheState::Ready;
+        cache[1][1].state = CacheState::Pending;
+        cache[2][2].state = CacheState::Rendering;
+    }
+
+    app.sync_http_status_snapshot();
+
+    let snapshot = get_status_snapshot(&state.lock().unwrap()).unwrap();
+    assert!(matches!(snapshot.play_state, DawPlayState::Playing));
+    assert_eq!(
+        snapshot
+            .play_position
+            .as_ref()
+            .map(|position| position.measure_index),
+        Some(1)
+    );
+    assert_eq!(
+        snapshot.ab_repeat,
+        AbRepeatState::FixEnd {
+            start_measure_index: 0,
+            end_measure_index: 1,
+        }
+    );
+    assert_eq!(snapshot.cache.pending_count, 1);
+    assert_eq!(snapshot.cache.rendering_count, 1);
+    assert_eq!(snapshot.cache.ready_count, 1);
+    assert_eq!(snapshot.cache.error_count, 0);
+    assert_eq!(snapshot.grid.tracks, 3);
+    assert_eq!(snapshot.grid.measures, 2);
+
+    deactivate_daw_http_server();
 }

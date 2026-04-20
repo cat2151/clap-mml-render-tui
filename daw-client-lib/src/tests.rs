@@ -7,7 +7,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use super::{DawClient, Error, GetMmlsResponse, DEFAULT_BASE_URL};
+use super::{
+    DawClient, DawStatusCache, DawStatusCacheCell, DawStatusGrid, DawStatusLoop, DawStatusPlay,
+    DawStatusResponse, Error, GetMmlsResponse, DEFAULT_BASE_URL,
+};
 
 const TEST_READ_TIMEOUT: Duration = Duration::from_secs(2);
 const TEST_READ_DEADLINE: Duration = Duration::from_secs(5);
@@ -251,6 +254,68 @@ fn get_patches_reads_json_response() {
             "Pads/Factory Pad.fxp".to_string(),
             "Lead/Bright.fxp".to_string()
         ]
+    );
+}
+
+#[test]
+fn get_status_reads_json_response() {
+    let body = r#"{"mode":"daw","play":{"state":"playing","isPlaying":true,"isPreview":false,"currentMeasure":2,"currentMeasureIndex":1,"currentBeat":3,"loop":{"enabled":true,"startMeasure":1,"endMeasure":4}},"cache":{"activeRenderCount":1,"pendingCount":2,"renderingCount":1,"readyCount":5,"errorCount":0,"isUpdating":true,"isComplete":false,"cells":[[{"state":"empty"},{"state":"ready"}],[{"state":"pending"},{"state":"rendering"}]]},"grid":{"tracks":2,"measures":1}}"#;
+    let (base_url, request_rx) = spawn_single_request_server(body);
+    let client = DawClient::new(&base_url).unwrap();
+
+    let status = client.get_status().unwrap();
+
+    let request = request_rx.recv().unwrap();
+    assert!(request.starts_with("GET /status HTTP/1.1\r\n"));
+    assert_eq!(
+        status,
+        DawStatusResponse {
+            mode: "daw".to_string(),
+            play: DawStatusPlay {
+                state: "playing".to_string(),
+                is_playing: true,
+                is_preview: false,
+                current_measure: Some(2),
+                current_measure_index: Some(1),
+                current_beat: Some(3),
+                loop_status: DawStatusLoop {
+                    enabled: true,
+                    start_measure: Some(1),
+                    end_measure: Some(4),
+                },
+            },
+            cache: DawStatusCache {
+                active_render_count: 1,
+                pending_count: 2,
+                rendering_count: 1,
+                ready_count: 5,
+                error_count: 0,
+                is_updating: true,
+                is_complete: false,
+                cells: vec![
+                    vec![
+                        DawStatusCacheCell {
+                            state: "empty".to_string()
+                        },
+                        DawStatusCacheCell {
+                            state: "ready".to_string()
+                        }
+                    ],
+                    vec![
+                        DawStatusCacheCell {
+                            state: "pending".to_string()
+                        },
+                        DawStatusCacheCell {
+                            state: "rendering".to_string()
+                        }
+                    ],
+                ],
+            },
+            grid: DawStatusGrid {
+                tracks: 2,
+                measures: 1,
+            },
+        }
     );
 }
 

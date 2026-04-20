@@ -1,7 +1,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use super::DawHttpState;
+use super::{DawHttpState, DawStatusSnapshot};
 
 pub(in crate::daw::http_server) fn get_snapshot_mml(
     state: &DawHttpState,
@@ -33,6 +33,15 @@ pub(in crate::daw::http_server) fn get_snapshot_mmls(
         return Err((503, "DAW データの準備中です\n".to_string()));
     }
     Ok(state.grid_snapshot.clone())
+}
+
+pub(in crate::daw::http_server) fn get_status_snapshot(
+    state: &DawHttpState,
+) -> Result<DawStatusSnapshot, (u16, String)> {
+    state
+        .status_snapshot
+        .clone()
+        .ok_or_else(|| (503, "DAW status の準備中です\n".to_string()))
 }
 
 pub(in crate::daw::http_server) fn parse_get_mml_query(

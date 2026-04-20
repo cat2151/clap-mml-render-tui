@@ -6,8 +6,8 @@ use std::{
 use tui_textarea::TextArea;
 
 use super::routes::{
-    get_snapshot_mml, get_snapshot_mmls, if_none_match_matches, parse_get_mml_query,
-    request_header_value, snapshot_mmls_etag, RequestHeaderName,
+    get_snapshot_mml, get_snapshot_mmls, get_status_snapshot, if_none_match_matches,
+    parse_get_mml_query, request_header_value, snapshot_mmls_etag, RequestHeaderName,
 };
 use super::{
     claim_http_server_thread_slot, deactivate_daw_http_server, is_allowed_cors_origin,
@@ -18,7 +18,8 @@ use super::{
 use crate::{
     config::Config,
     daw::{
-        AbRepeatState, CellCache, DawApp, DawHistoryPane, DawMode, DawPatchSelectPane, DawPlayState,
+        AbRepeatState, CacheState, CellCache, DawApp, DawHistoryPane, DawMode, DawPatchSelectPane,
+        DawPlayState,
     },
 };
 
@@ -117,6 +118,7 @@ fn build_http_state(cfg: Config) -> Arc<Mutex<DawHttpState>> {
         cfg: Some(Arc::new(cfg)),
         pending_commands: VecDeque::new(),
         grid_snapshot: Vec::new(),
+        status_snapshot: None,
     }))
 }
 

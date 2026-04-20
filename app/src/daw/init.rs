@@ -389,6 +389,7 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
 
     app.load();
     app.sync_http_grid_snapshot();
+    app.sync_http_status_snapshot();
     app.append_log_line("=== DAW mode ready ===");
     app
 }

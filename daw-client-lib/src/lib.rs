@@ -36,6 +36,60 @@ pub struct GetMmlsResponse {
     pub tracks: Vec<Vec<String>>,
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DawStatusResponse {
+    pub mode: String,
+    pub play: DawStatusPlay,
+    pub cache: DawStatusCache,
+    pub grid: DawStatusGrid,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DawStatusPlay {
+    pub state: String,
+    pub is_playing: bool,
+    pub is_preview: bool,
+    pub current_measure: Option<usize>,
+    pub current_measure_index: Option<usize>,
+    pub current_beat: Option<u32>,
+    #[serde(rename = "loop")]
+    pub loop_status: DawStatusLoop,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DawStatusLoop {
+    pub enabled: bool,
+    pub start_measure: Option<usize>,
+    pub end_measure: Option<usize>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DawStatusCache {
+    pub active_render_count: usize,
+    pub pending_count: usize,
+    pub rendering_count: usize,
+    pub ready_count: usize,
+    pub error_count: usize,
+    pub is_updating: bool,
+    pub is_complete: bool,
+    pub cells: Vec<Vec<DawStatusCacheCell>>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct DawStatusCacheCell {
+    pub state: String,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct DawStatusGrid {
+    pub tracks: usize,
+    pub measures: usize,
+}
+
 #[derive(Deserialize)]
 struct GetMmlsBody {
     tracks: Vec<Vec<String>>,
@@ -139,6 +193,10 @@ impl DawClient {
 
     pub fn get_patches(&self) -> Result<Vec<String>, Error> {
         self.get_json("/patches")
+    }
+
+    pub fn get_status(&self) -> Result<DawStatusResponse, Error> {
+        self.get_json("/status")
     }
 
     pub fn get_mml(&self, track: usize, measure: usize) -> Result<String, Error> {

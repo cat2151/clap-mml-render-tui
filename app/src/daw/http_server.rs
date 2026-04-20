@@ -12,12 +12,16 @@ use std::cell::{Cell, RefCell};
 
 use tiny_http::Method;
 
-use super::{DawApp, FIRST_PLAYABLE_TRACK, MIXER_MAX_DB, MIXER_MIN_DB};
+use super::{
+    AbRepeatState, CacheState, DawApp, DawPlayState, PlayPosition, FIRST_PLAYABLE_TRACK,
+    MIXER_MAX_DB, MIXER_MIN_DB,
+};
 use crate::{config::Config, server::DEFAULT_PORT};
 use routes::{
-    handle_get_mml, handle_get_mmls, handle_get_patches, handle_options, handle_post_ab_repeat,
-    handle_post_mixer, handle_post_mml, handle_post_mode_daw, handle_post_patch,
-    handle_post_patch_random, handle_post_play_start, handle_post_play_stop, text_response,
+    handle_get_mml, handle_get_mmls, handle_get_patches, handle_get_status, handle_options,
+    handle_post_ab_repeat, handle_post_mixer, handle_post_mml, handle_post_mode_daw,
+    handle_post_patch, handle_post_patch_random, handle_post_play_start, handle_post_play_stop,
+    text_response,
 };
 #[cfg(test)]
 use routes::{
@@ -32,6 +36,33 @@ pub(crate) struct DawHttpState {
     cfg: Option<Arc<Config>>,
     pending_commands: VecDeque<DawHttpCommand>,
     grid_snapshot: Vec<Vec<String>>,
+    status_snapshot: Option<DawStatusSnapshot>,
+}
+
+#[derive(Clone)]
+struct DawStatusSnapshot {
+    play_state: DawPlayState,
+    play_position: Option<PlayPosition>,
+    beat_count: u32,
+    beat_duration_secs: f64,
+    ab_repeat: AbRepeatState,
+    cache: DawStatusCacheSnapshot,
+    grid: DawStatusGridSnapshot,
+}
+
+#[derive(Clone)]
+struct DawStatusCacheSnapshot {
+    cells: Vec<Vec<CacheState>>,
+    pending_count: usize,
+    rendering_count: usize,
+    ready_count: usize,
+    error_count: usize,
+}
+
+#[derive(Clone, Copy)]
+struct DawStatusGridSnapshot {
+    tracks: usize,
+    measures: usize,
 }
 
 struct DawHttpCommand {
@@ -150,6 +181,7 @@ pub(crate) fn set_active_http_state_cfg(cfg: Arc<Config>) {
         cfg: Some(cfg),
         pending_commands: VecDeque::new(),
         grid_snapshot: Vec::new(),
+        status_snapshot: None,
     }));
     spawn_daw_http_server(state);
 }
@@ -226,7 +258,8 @@ fn run_daw_http_server() {
             | (Method::Options, "/play/stop")
             | (Method::Options, "/ab-repeat")
             | (Method::Options, "/mmls")
-            | (Method::Options, "/patches") => handle_options(request),
+            | (Method::Options, "/patches")
+            | (Method::Options, "/status") => handle_options(request),
             (Method::Post, "/mml") => handle_post_mml(request, &state),
             (Method::Post, "/mixer") => handle_post_mixer(request, &state),
             (Method::Post, "/patch") => handle_post_patch(request, &state),
@@ -237,6 +270,7 @@ fn run_daw_http_server() {
             (Method::Get, "/mml") => handle_get_mml(request, &state),
             (Method::Get, "/mmls") => handle_get_mmls(request, &state),
             (Method::Get, "/patches") => handle_get_patches(request, &state),
+            (Method::Get, "/status") => handle_get_status(request, &state),
             _ => {
                 let _ = request.respond(text_response(404, "Not Found\n".to_string()));
             }
@@ -251,6 +285,59 @@ impl DawApp {
         };
         let grid_snapshot = self.data.clone();
         state.lock().unwrap().grid_snapshot = grid_snapshot;
+    }
+
+    pub(super) fn sync_http_status_snapshot(&self) {
+        let Some(state) = current_state() else {
+            return;
+        };
+        let play_state = *self.play_state.lock().unwrap();
+        let play_position = self.play_position.lock().unwrap().clone();
+        let ab_repeat = *self.ab_repeat.lock().unwrap();
+        let beat_count = self.beat_numerator();
+        let beat_duration_secs = 60.0 / self.tempo_bpm();
+        let cache = self.cache.lock().unwrap();
+        let mut pending_count = 0;
+        let mut rendering_count = 0;
+        let mut ready_count = 0;
+        let mut error_count = 0;
+        let cells = (0..self.tracks)
+            .map(|track| {
+                (0..=self.measures)
+                    .map(|measure| {
+                        let cache_state = cache[track][measure].state.clone();
+                        match cache_state {
+                            CacheState::Empty => {}
+                            CacheState::Pending => pending_count += 1,
+                            CacheState::Rendering => rendering_count += 1,
+                            CacheState::Ready => ready_count += 1,
+                            CacheState::Error => error_count += 1,
+                        }
+                        cache_state
+                    })
+                    .collect()
+            })
+            .collect();
+        drop(cache);
+
+        state.lock().unwrap().status_snapshot = Some(DawStatusSnapshot {
+            play_state,
+            play_position,
+            beat_count,
+            beat_duration_secs,
+            ab_repeat,
+            cache: DawStatusCacheSnapshot {
+                cells,
+                pending_count,
+                rendering_count,
+                ready_count,
+                error_count,
+            },
+            grid: DawStatusGridSnapshot {
+                tracks: self.tracks,
+                measures: self.measures,
+            },
+        });
     }
 
     pub(super) fn apply_pending_http_commands(&mut self) {
@@ -271,6 +358,7 @@ impl DawApp {
                     end_measure,
                 } => self.apply_http_ab_repeat(start_measure, end_measure),
             };
+            self.sync_http_status_snapshot();
             let _ = command.response_tx.send(result);
         }
     }

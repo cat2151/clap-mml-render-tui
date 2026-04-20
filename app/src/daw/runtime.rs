@@ -50,6 +50,7 @@ impl DawApp {
 
         loop {
             self.apply_pending_http_commands();
+            self.sync_http_status_snapshot();
             let next_uses_textarea_cursor = self.uses_textarea_cursor();
             if next_uses_textarea_cursor != uses_textarea_cursor {
                 execute!(
