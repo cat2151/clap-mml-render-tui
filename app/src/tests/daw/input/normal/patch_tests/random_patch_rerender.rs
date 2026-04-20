@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::BTreeSet;
 
 #[test]
 fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() {
@@ -145,14 +146,18 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
             .try_recv()
             .expect("next playing measure should be reserved first");
         assert_eq!(reserved_job.measure, 2);
-        let second_reserved_job = cache_rx
-            .try_recv()
-            .expect("remaining measure should also be reserved");
-        assert_eq!(second_reserved_job.measure, 1);
         assert!(
             cache_rx.try_recv().is_err(),
-            "rerender should queue only pending measures during playback"
+            "playback 中は cache rerender の予約を 1 小節に抑える"
         );
+
+        let batches = app.track_rerender_batches.lock().unwrap();
+        let batch = batches[1]
+            .as_ref()
+            .expect("remaining measure should stay pending in the batch");
+        assert_eq!(batch.active_measures, BTreeSet::from([2]));
+        assert!(batch.pending.contains_key(&1));
+        drop(batches);
 
         let logs = app
             .log_lines
@@ -168,7 +173,8 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
             logs
         );
         assert!(
-            logs.iter()
+            !logs
+                .iter()
                 .any(|line| line == "cache: rerender reserve track1 meas1 (meas1)"),
             "logs: {:?}",
             logs

@@ -300,6 +300,92 @@ fn complete_track_rerender_batch_respects_cache_render_worker_limit() {
 }
 
 #[test]
+fn complete_track_rerender_batch_limits_refill_to_one_while_playing() {
+    let log_lines = Arc::new(Mutex::new(VecDeque::new()));
+    let batches = Arc::new(Mutex::new(vec![None, None]));
+    let play_measure_mmls = Arc::new(Mutex::new(vec![
+        "c".to_string(),
+        "d".to_string(),
+        "e".to_string(),
+        "f".to_string(),
+    ]));
+    let (cache_tx, cache_rx) = std::sync::mpsc::channel();
+    let cache = Arc::new(Mutex::new(vec![vec![super::CellCache::empty(); 5]; 2]));
+    let completion_ctx = TrackRerenderBatchCompletionContext {
+        batches: Arc::clone(&batches),
+        log_lines: Arc::clone(&log_lines),
+        cache: Arc::clone(&cache),
+        play_position: Arc::new(Mutex::new(Some(super::PlayPosition {
+            measure_index: 0,
+            measure_start: std::time::Instant::now(),
+        }))),
+        ab_repeat: Arc::new(Mutex::new(super::AbRepeatState::Off)),
+        play_measure_mmls: Arc::clone(&play_measure_mmls),
+        cache_tx,
+        cache_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
+    };
+    {
+        let mut cache_guard = cache.lock().unwrap();
+        for measure in 2..=4 {
+            cache_guard[1][measure].state = super::CacheState::Pending;
+            cache_guard[1][measure].generation = 1;
+        }
+    }
+    batches.lock().unwrap()[1] = Some(TrackRerenderBatch {
+        pending: BTreeMap::from([
+            (
+                2,
+                CacheJob {
+                    track: 1,
+                    measure: 2,
+                    measure_samples: 4,
+                    generation: 1,
+                    rendered_mml_hash: 2,
+                    mml: "d".to_string(),
+                },
+            ),
+            (
+                3,
+                CacheJob {
+                    track: 1,
+                    measure: 3,
+                    measure_samples: 4,
+                    generation: 1,
+                    rendered_mml_hash: 3,
+                    mml: "e".to_string(),
+                },
+            ),
+            (
+                4,
+                CacheJob {
+                    track: 1,
+                    measure: 4,
+                    measure_samples: 4,
+                    generation: 1,
+                    rendered_mml_hash: 4,
+                    mml: "f".to_string(),
+                },
+            ),
+        ]),
+        active_measures: BTreeSet::from([1]),
+        completion_log: "cache: rerender done track1 meas 1〜4 (random patch update)".to_string(),
+    });
+
+    DawApp::complete_track_rerender_batch_measure(&completion_ctx, 1, 1);
+
+    assert_eq!(cache_rx.try_recv().unwrap().measure, 2);
+    assert!(
+        cache_rx.try_recv().is_err(),
+        "playback 中は cache rerender の追加予約を 1 小節だけに抑える"
+    );
+    let batch = batches.lock().unwrap();
+    let current_batch = batch[1].as_ref().expect("batch should continue");
+    assert_eq!(current_batch.active_measures, BTreeSet::from([2]));
+    assert!(current_batch.pending.contains_key(&3));
+    assert!(current_batch.pending.contains_key(&4));
+}
+
+#[test]
 fn start_track_rerender_batch_logs_only_targeted_measures() {
     use crate::config::Config;
     use crate::daw::{

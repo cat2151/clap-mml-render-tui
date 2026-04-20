@@ -108,6 +108,18 @@ fn take_next_batch_job(
     Some((first_measure, first_job, format_measure_order(&valid_order)))
 }
 
+fn cache_rerender_slot_limit(
+    cache_render_workers: usize,
+    play_position: Option<&PlayPosition>,
+) -> usize {
+    // play / preview の音声出力中は hot reload の cache render を一気に並列投入しない。
+    if play_position.is_some() {
+        1
+    } else {
+        cache_render_workers
+    }
+}
+
 fn fill_batch_slots(
     batch: &mut TrackRerenderBatch,
     cache_render_workers: usize,
@@ -118,7 +130,8 @@ fn fill_batch_slots(
     play_measure_mmls: &[String],
 ) -> Vec<(CacheJob, String)> {
     let mut queued = Vec::new();
-    while batch.active_measures.len() < cache_render_workers {
+    let slot_limit = cache_rerender_slot_limit(cache_render_workers, play_position.as_ref());
+    while batch.active_measures.len() < slot_limit {
         let Some((next_measure, next_job, priority_order_label)) = take_next_batch_job(
             &mut batch.pending,
             track,
