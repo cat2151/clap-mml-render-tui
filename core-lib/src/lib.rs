@@ -1,17 +1,22 @@
 pub use clap_mml_play_server_core::patch_list::{collect_patches, to_relative};
 pub use clap_mml_play_server_core::pipeline;
 pub use clap_mml_play_server_core::pipeline::{
-    ensure_cmrt_dir, ensure_daw_dir, ensure_phrase_dir, mml_render, mml_str_to_smf_bytes,
-    mml_to_play, mml_to_smf_bytes, play_samples, write_wav,
+    ensure_cmrt_dir, ensure_daw_dir, ensure_phrase_dir, mml_str_to_smf_bytes, mml_to_smf_bytes,
+    play_samples, write_wav,
 };
 pub use clap_mml_play_server_core::{host, load_entry, midi, patch_list, render, CoreConfig};
 
 use anyhow::Result;
 use clack_host::prelude::PluginEntry;
 use mmlabc_to_smf::mml_preprocessor;
-use std::sync::{mpsc, OnceLock};
+use std::{
+    sync::{mpsc, OnceLock},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 const PATCH_DIR_PREFIXES: [&str; 2] = ["patches_factory", "patches_3rdparty"];
+const RENDER_PREROLL_MS: u64 = 100;
+const RENDER_CHANNELS: usize = 2;
 static CACHE_RENDER_PREPARE_QUEUE: OnceLock<CacheRenderPrepareQueue> = OnceLock::new();
 
 mod native_render_probe;
@@ -91,15 +96,66 @@ pub fn mml_render_for_cache(mml: &str, cfg: &CoreConfig, entry: &PluginEntry) ->
     mml_render_for_cache_with_probe(mml, cfg, entry, None)
 }
 
+pub fn mml_render(mml: &str, cfg: &CoreConfig, entry: &PluginEntry) -> Result<(Vec<f32>, String)> {
+    mml_render_with_probe(mml, cfg, entry, None)
+}
+
+pub fn mml_to_play(mml: &str, cfg: &CoreConfig, entry: &PluginEntry) -> Result<String> {
+    let (samples, patch_display) = mml_render(mml, cfg, entry)?;
+    play_samples(samples, cfg.sample_rate as u32)?;
+    Ok(patch_display)
+}
+
+// Temporary thin fork of upstream `pipeline::mml_render` so this workspace can
+// apply a uniform 100ms preroll workaround to every render path. Remove this
+// once `clap-mml-play-server-core` exposes a shared preroll hook/config and
+// switch back to re-exporting upstream `mml_render` / `mml_to_play`.
 pub fn mml_render_with_probe(
     mml: &str,
     cfg: &CoreConfig,
     entry: &PluginEntry,
     probe_context: Option<&NativeRenderProbeContext>,
 ) -> Result<(Vec<f32>, String)> {
+    let preprocessed = mml_preprocessor::extract_embedded_json(mml);
+    let effective_patch =
+        resolve_effective_patch_for_full_render(preprocessed.embedded_json.as_deref(), cfg)?;
+    append_history(mml, &effective_patch, cfg)?;
+
+    let phrase_dir = ensure_phrase_dir()?;
+    let output_midi = phrase_dir.join("output.mid");
+    let output_wav = phrase_dir.join("output.wav");
+    let output_midi_str = utf8_path_string(&output_midi, "出力MIDIパス")?;
+    let output_wav_str = utf8_path_string(&output_wav, "出力WAVパス")?;
+    let smf_bytes = mml_str_to_smf_bytes(&preprocessed.remaining_mml)?;
+    std::fs::write(&output_midi, &smf_bytes).map_err(|e| {
+        anyhow::anyhow!(
+            "MIDIファイル書き出し失敗 ({}): {}",
+            output_midi.display(),
+            e
+        )
+    })?;
+    let (events, total_samples) = parse_events_with_preroll(&smf_bytes, cfg.sample_rate)?;
+    let patched_cfg = CoreConfig {
+        output_midi: output_midi_str,
+        output_wav: output_wav_str.clone(),
+        patch_path: effective_patch.clone(),
+        ..cfg.clone()
+    };
     let requested_patch_path = requested_patch_path_for_render(mml, cfg);
     with_requested_native_render_probe(probe_context, requested_patch_path.as_deref(), || {
-        mml_render(mml, cfg, entry)
+        let samples = with_native_render_probe(
+            probe_context,
+            &patched_cfg,
+            events.len(),
+            total_samples,
+            || render::render_to_memory(&patched_cfg, entry, events.clone(), total_samples),
+        )?;
+        let samples = trim_render_preroll(samples, preroll_samples(cfg.sample_rate));
+        write_wav(&samples, cfg.sample_rate as u32, &output_wav)?;
+        Ok((
+            samples,
+            patch_display_for_render(effective_patch.as_deref(), cfg),
+        ))
     })
 }
 
@@ -136,6 +192,7 @@ pub fn render_prepared_cache_with_probe(
         total_samples,
         || render::render_to_memory(&patched_cfg, entry, events, total_samples),
     )
+    .map(|samples| trim_render_preroll(samples, preroll_samples(patched_cfg.sample_rate)))
 }
 
 /// キャッシュレンダリング前処理を行い、メモリレンダリングに必要な入力を組み立てる。
@@ -151,7 +208,7 @@ fn prepare_cache_render(mml: &str, cfg: &CoreConfig) -> Result<CacheRenderInputs
         .or_else(|| cfg.patch_path.clone());
 
     let smf_bytes = mml_str_to_smf_bytes(&preprocessed.remaining_mml)?;
-    let (events, total_samples) = midi::parse_smf_bytes(&smf_bytes, cfg.sample_rate)?;
+    let (events, total_samples) = parse_events_with_preroll(&smf_bytes, cfg.sample_rate)?;
     let patched_cfg = CoreConfig {
         patch_path: effective_patch,
         random_patch: false,
@@ -163,6 +220,123 @@ fn prepare_cache_render(mml: &str, cfg: &CoreConfig) -> Result<CacheRenderInputs
         events,
         total_samples,
     })
+}
+
+fn parse_events_with_preroll(
+    smf_bytes: &[u8],
+    sample_rate: f64,
+) -> Result<(Vec<midi::TimedMidiEvent>, u64)> {
+    let (events, total_samples) = midi::parse_smf_bytes(smf_bytes, sample_rate)?;
+    Ok(apply_render_preroll(
+        events,
+        total_samples,
+        preroll_samples(sample_rate),
+    ))
+}
+
+fn preroll_samples(sample_rate: f64) -> u64 {
+    ((sample_rate * RENDER_PREROLL_MS as f64) / 1000.0).ceil() as u64
+}
+
+fn apply_render_preroll(
+    events: Vec<midi::TimedMidiEvent>,
+    total_samples: u64,
+    preroll_samples: u64,
+) -> (Vec<midi::TimedMidiEvent>, u64) {
+    if preroll_samples == 0 {
+        return (events, total_samples);
+    }
+    let events = events
+        .into_iter()
+        .map(|event| midi::TimedMidiEvent {
+            sample_pos: event.sample_pos.saturating_add(preroll_samples),
+            message: event.message,
+        })
+        .collect();
+    (events, total_samples.saturating_add(preroll_samples))
+}
+
+fn trim_render_preroll(samples: Vec<f32>, preroll_samples: u64) -> Vec<f32> {
+    let trim_len = preroll_samples as usize * RENDER_CHANNELS;
+    samples.into_iter().skip(trim_len).collect()
+}
+
+fn resolve_effective_patch_for_full_render(
+    embedded_json: Option<&str>,
+    cfg: &CoreConfig,
+) -> Result<Option<String>> {
+    if let Some(patch) = extract_patch_from_json(embedded_json, cfg) {
+        return Ok(Some(patch));
+    }
+    if cfg.random_patch {
+        return pick_random_patch(cfg);
+    }
+    Ok(cfg.patch_path.clone())
+}
+
+fn patch_display_for_render(effective_patch: Option<&str>, cfg: &CoreConfig) -> String {
+    match effective_patch {
+        Some(abs) => {
+            if let Some(ref base) = cfg.patches_dir {
+                to_relative(base, std::path::Path::new(abs))
+            } else {
+                abs.to_string()
+            }
+        }
+        None => "(Init Saw)".to_string(),
+    }
+}
+
+fn pick_random_patch(cfg: &CoreConfig) -> Result<Option<String>> {
+    let Some(dir) = &cfg.patches_dir else {
+        return Ok(None);
+    };
+    let patches = collect_patches(dir)?;
+    if patches.is_empty() {
+        return Ok(None);
+    }
+    let idx = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.subsec_nanos())
+        .unwrap_or(0) as usize
+        % patches.len();
+    Ok(Some(patches[idx].to_string_lossy().into_owned()))
+}
+
+fn append_history(mml: &str, patch: &Option<String>, cfg: &CoreConfig) -> Result<()> {
+    let patch_rel = match patch {
+        Some(abs) => patch_display_for_render(Some(abs), cfg),
+        None => "(none)".to_string(),
+    };
+    let preprocessed = mml_preprocessor::extract_embedded_json(mml);
+    let mml_body = preprocessed.remaining_mml.trim();
+    let line = format!(
+        "{{\"Surge XT patch\": \"{}\"}} {}\n",
+        patch_rel.replace('\\', "/"),
+        mml_body
+    );
+    let phrase_dir = ensure_phrase_dir()?;
+    let Some(base_dir) = phrase_dir.parent() else {
+        return Ok(());
+    };
+    let history_path = base_dir.join("patch_history.txt");
+    std::fs::create_dir_all(base_dir)
+        .map_err(|e| anyhow::anyhow!("patch_history.txt のディレクトリ作成失敗: {}", e))?;
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&history_path)
+        .map_err(|e| anyhow::anyhow!("patch_history.txt を開けない: {}", e))?;
+    file.write_all(line.as_bytes())
+        .map_err(|e| anyhow::anyhow!("patch_history.txt への書き込み失敗: {}", e))?;
+    Ok(())
+}
+
+fn utf8_path_string(path: &std::path::Path, label: &str) -> Result<String> {
+    path.to_str()
+        .map(str::to_string)
+        .ok_or_else(|| anyhow::anyhow!("{label}が非UTF-8です: {}", path.display()))
 }
 
 fn requested_patch_path_for_render(mml: &str, cfg: &CoreConfig) -> Option<String> {

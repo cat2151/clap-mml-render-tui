@@ -67,7 +67,7 @@ fn patch_select_screen_renders_as_overlay_on_normal_screen() {
     let normalized = lines.replace(' ', "");
 
     assert!(lines.contains("[PATCH SELECT] notepad mode"));
-    assert!(lines.contains("▶ {\"Surge XT patch\":\"Pads/Pad 1.fxp\"} abc"));
+    assert!(lines.contains("▶   {\"Surge XT patch\":\"Pads/Pad 1.fxp\"} abc"));
     assert!(normalized.contains("ENTERで音色を選択-patchselect-"));
     assert!(normalized.contains("/を押して絞り込み"));
     assert!(normalized.contains("Favorite音色(1)"));
@@ -118,6 +118,39 @@ fn patch_select_screen_shows_prefilled_query_when_filter_is_inactive() {
 
     assert!(normalized.contains("ENTERで音色を選択-patchselect-"));
     assert!(normalized.contains("pad"));
+}
+
+#[test]
+fn patch_select_screen_applies_initial_margin_on_first_render() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_filtered = (0..12).map(|i| format!("Pad {i}")).collect();
+    app.patch_cursor = 8;
+    app.patch_list_state.select(Some(8));
+    app.mode = Mode::PatchSelect;
+
+    let _ = render_lines(&mut app, 100, 24);
+
+    assert!(app.patch_select_page_size > 1);
+    assert!(app.patch_list_state.offset() > 0);
+    assert!(app.patch_list_state.offset() < app.patch_cursor);
+}
+
+#[test]
+fn patch_select_screen_marks_memory_cached_preview_items() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":"Pads/Current.fxp"} l8cdef"#.to_string()];
+    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string(), "Bass/Bass 1.fxp".to_string()];
+    app.patch_list_state.select(Some(0));
+    app.mode = Mode::PatchSelect;
+    app.audio_cache.lock().unwrap().insert(
+        r#"{"Surge XT patch": "Pads/Pad 1.fxp"} l8cdef"#.to_string(),
+        vec![0.1, 0.2],
+    );
+
+    let screen = render_lines(&mut app, 100, 16).join("\n");
+
+    assert!(screen.contains("♪ Pads/Pad 1.fxp"));
+    assert!(screen.contains("  Bass/Bass 1.fxp"));
 }
 
 #[test]
@@ -194,7 +227,7 @@ fn patch_select_screen_splits_status_and_keybinds() {
     let normalized_screen = lines.join("\n").replace([' ', '\n'], "");
     let keybind_row = normalized_lines
         .iter()
-        .position(|line| line.contains("Enter:検索確定/決定ESC:キャンセル"))
+        .position(|line| line.contains("/:検索入力"))
         .unwrap();
     let render_row = keybind_row
         .checked_sub(1)
@@ -207,13 +240,13 @@ fn patch_select_screen_splits_status_and_keybinds() {
     assert_eq!(render_row, status_row + 1);
     assert_eq!(keybind_row, render_row + 1);
     assert!(normalized_lines[status_row].contains("sort:path"));
-    assert!(normalized_lines[render_row].contains("並列render中:2"));
+    assert!(normalized_lines[render_row].contains("render:実行2/2予約0"));
     assert!(normalized_lines[keybind_row].contains("/:検索入力"));
     assert!(normalized_lines[keybind_row].contains("Ctrl+S:sort順切替"));
     assert!(normalized_lines[keybind_row].contains("n/p/t:overlay切替"));
     assert!(normalized_lines[keybind_row].contains("f:お気に入り"));
     assert!(normalized_screen.contains("h/l・←/→:ペイン移動"));
-    assert!(normalized_screen.contains("j/k・↑↓・PgUp/PgDn:移動して再生"));
+    assert!(normalized_screen.contains("Space:再生"));
 }
 
 #[test]

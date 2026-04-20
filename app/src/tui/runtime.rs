@@ -107,6 +107,10 @@ impl<'a> TuiApp<'a> {
                 uses_textarea_cursor = next_uses_textarea_cursor;
             }
             terminal.draw(|f| self.draw(f))?;
+            if !self.startup_normal_cache_primed && self.mode == Mode::Normal {
+                self.prime_normal_mode_startup_cache();
+                self.startup_normal_cache_primed = true;
+            }
 
             if event::poll(std::time::Duration::from_millis(50))? {
                 if let Event::Key(key) = event::read()? {

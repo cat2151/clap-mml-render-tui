@@ -28,7 +28,7 @@ fn default_test_app_dir_path() -> &'static PathBuf {
         std::fs::create_dir_all(app_dir.join("history")).ok();
         let _guard = env_lock()
             .lock()
-            .expect("test environment lock should not be poisoned");
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         std::env::set_var("CMRT_BASE_DIR", &app_dir);
         app_dir
     })
@@ -75,7 +75,7 @@ pub(crate) fn set_local_dir_envs(base: &Path) -> TestEnvGuard {
     let history_dir = app_dir.join("history");
     let lock = env_lock()
         .lock()
-        .expect("test environment lock should not be poisoned");
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     std::fs::create_dir_all(&history_dir).ok();
     let previous_history_app_dir =
         crate::history::set_test_history_app_dir_for_current_thread(Some(app_dir.clone()));

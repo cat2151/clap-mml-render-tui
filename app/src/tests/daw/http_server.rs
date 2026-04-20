@@ -10,10 +10,10 @@ use super::routes::{
     request_header_value, snapshot_mmls_etag, RequestHeaderName,
 };
 use super::{
-    active_state_slot, claim_http_server_thread_slot, deactivate_daw_http_server,
-    is_allowed_cors_origin, request_daw_mode_switch, request_origin, take_daw_mode_switch_request,
-    with_cors_headers, with_preflight_cors_headers, DawHttpCommand, DawHttpCommandKind,
-    DawHttpState,
+    claim_http_server_thread_slot, deactivate_daw_http_server, is_allowed_cors_origin,
+    request_daw_mode_switch, request_origin, set_test_active_http_state_for_current_thread,
+    take_daw_mode_switch_request, with_cors_headers, with_preflight_cors_headers, DawHttpCommand,
+    DawHttpCommandKind, DawHttpState,
 };
 use crate::{
     config::Config,
@@ -121,7 +121,7 @@ fn build_http_state(cfg: Config) -> Arc<Mutex<DawHttpState>> {
 }
 
 fn activate_http_state(state: Arc<Mutex<DawHttpState>>) {
-    *active_state_slot().lock().unwrap() = Some(state);
+    let _ = set_test_active_http_state_for_current_thread(Some(state));
 }
 
 /// Serializes tests that touch DAW HTTP server globals such as
@@ -136,7 +136,7 @@ fn http_server_test_lock() -> &'static Mutex<()> {
 fn lock_http_server_test_state() -> std::sync::MutexGuard<'static, ()> {
     http_server_test_lock()
         .lock()
-        .expect("http server test lock should not be poisoned")
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 #[path = "http_server/apply_pending_commands.rs"]

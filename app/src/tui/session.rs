@@ -1,11 +1,11 @@
 use clack_host::prelude::PluginEntry;
 use ratatui::widgets::ListState;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, AtomicUsize};
 use std::sync::{Arc, Mutex};
 
-use super::{Mode, PatchPhrasePane, PatchSelectPane, PlayState, TuiApp};
+use super::{Mode, PatchPhrasePane, PatchSelectPane, PlayState, TuiApp, TuiRenderQueue};
 use crate::{config::Config, patches::PatchSortOrder};
 
 /// バックグラウンドパッチ読み込みの状態
@@ -77,6 +77,13 @@ impl<'a> TuiApp<'a> {
             list_state,
             is_daw_mode,
         } = load_initial_session_state();
+        let entry_ptr = entry as *const PluginEntry as usize;
+        let active_offline_render_count = Arc::new(AtomicUsize::new(0));
+        let render_queue = TuiRenderQueue::new(
+            Arc::clone(&cfg_arc),
+            entry_ptr,
+            Arc::clone(&active_offline_render_count),
+        );
 
         Self {
             mode: Mode::Normal,
@@ -86,12 +93,14 @@ impl<'a> TuiApp<'a> {
             list_state,
             textarea: crate::text_input::new_single_line_textarea(""),
             cfg: Arc::clone(&cfg_arc),
-            entry_ptr: entry as *const PluginEntry as usize,
+            entry_ptr,
             play_state: Arc::new(Mutex::new(PlayState::Idle)),
             playback_session: Arc::new(AtomicU64::new(0)),
-            active_offline_render_count: Arc::new(AtomicUsize::new(0)),
+            active_offline_render_count,
+            render_queue,
             active_sink: Arc::new(Mutex::new(None)),
             audio_cache: Arc::new(Mutex::new(HashMap::new())),
+            audio_cache_order: Arc::new(Mutex::new(VecDeque::new())),
             patch_load_state: spawn_patch_loader(cfg),
             random_patch_decks: crate::random::RandomIndexDecks::default(),
             patch_all: Vec::new(),
@@ -134,6 +143,7 @@ impl<'a> TuiApp<'a> {
             patch_phrase_filter_active: false,
             patch_phrase_store_dirty: false,
             is_daw_mode,
+            startup_normal_cache_primed: false,
         }
     }
 

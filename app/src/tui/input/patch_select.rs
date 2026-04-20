@@ -188,6 +188,7 @@ impl<'a> TuiApp<'a> {
             self.cursor,
             self.lines.len(),
             self.normal_page_size,
+            None,
             |index| {
                 self.lines
                     .get(index)
@@ -195,6 +196,31 @@ impl<'a> TuiApp<'a> {
                     .filter(|mml| !mml.is_empty())
             },
         );
+    }
+
+    pub(in crate::tui) fn prime_normal_mode_startup_cache(&self) {
+        let Some(current_mml) = self
+            .lines
+            .get(self.cursor)
+            .map(|line| line.trim().to_string())
+            .filter(|mml| !mml.is_empty())
+        else {
+            return;
+        };
+        let navigation_targets = crate::ui_utils::predicted_navigation_indices(
+            self.cursor,
+            self.lines.len(),
+            self.normal_page_size,
+        )
+        .into_iter()
+        .filter_map(|index| {
+            self.lines
+                .get(index)
+                .map(|line| line.trim().to_string())
+                .filter(|mml| !mml.is_empty())
+        })
+        .collect::<Vec<_>>();
+        self.prefetch_audio_cache_with_idle_fill(vec![current_mml], navigation_targets);
     }
 
     pub(super) fn play_current_line(&mut self) {
@@ -360,7 +386,7 @@ impl<'a> TuiApp<'a> {
         *self.play_state.lock().unwrap() = PlayState::Err("yank バッファが空です".to_string());
     }
 
-    fn prefetch_patch_select_navigation_audio_cache(&self) {
+    fn prefetch_patch_select_navigation_audio_cache(&self, preferred_delta: Option<isize>) {
         let (item_count, cursor) = match self.patch_select_focus {
             crate::tui::PatchSelectPane::Patches => (self.patch_filtered.len(), self.patch_cursor),
             crate::tui::PatchSelectPane::Favorites => {
@@ -372,11 +398,19 @@ impl<'a> TuiApp<'a> {
             cursor,
             item_count,
             self.patch_select_page_size,
+            preferred_delta,
             |index| self.patch_select_preview_mml_for_selection(focus, index),
         );
     }
 
     fn preview_selected_patch(&mut self) {
+        self.preview_selected_patch_with_navigation_hint(None);
+    }
+
+    pub(in crate::tui) fn preview_selected_patch_with_navigation_hint(
+        &mut self,
+        preferred_delta: Option<isize>,
+    ) {
         if let Some(mml) = self.patch_select_preview_mml() {
             Self::log_notepad_event(format!(
                 "tone-select preview focus={:?} patch={:?}",
@@ -385,7 +419,7 @@ impl<'a> TuiApp<'a> {
             ));
             self.record_notepad_history(&mml);
             self.play_mml(mml);
-            self.prefetch_patch_select_navigation_audio_cache();
+            self.prefetch_patch_select_navigation_audio_cache(preferred_delta);
         }
     }
 

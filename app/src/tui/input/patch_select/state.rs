@@ -31,7 +31,7 @@ impl<'a> TuiApp<'a> {
                 self.patch_filtered.len(),
                 self.patch_select_page_size,
             );
-            self.preview_selected_patch();
+            self.preview_selected_patch_with_navigation_hint(Some(delta));
         }
     }
 
@@ -52,7 +52,7 @@ impl<'a> TuiApp<'a> {
                 self.patch_favorite_items.len(),
                 self.patch_select_page_size,
             );
-            self.preview_selected_patch();
+            self.preview_selected_patch_with_navigation_hint(Some(delta));
         }
     }
 
@@ -114,6 +114,7 @@ impl<'a> TuiApp<'a> {
             self.patch_cursor,
             self.patch_select_selected_patch_name()
         ));
+        self.preview_selected_patch();
     }
 
     pub(super) fn patch_select_current_phrase(&self) -> Option<String> {
@@ -194,7 +195,7 @@ impl<'a> TuiApp<'a> {
         &self.patch_favorite_items
     }
 
-    pub(super) fn sync_patch_select_states(&mut self) {
+    pub(in crate::tui) fn sync_patch_select_states(&mut self) {
         if self.patch_filtered.is_empty() {
             self.patch_cursor = 0;
             self.patch_list_state.select(None);
@@ -251,8 +252,15 @@ impl<'a> TuiApp<'a> {
         cursor: usize,
     ) -> Option<String> {
         let patch_name = self.patch_select_patch_name_for_selection(focus, cursor)?;
+        self.patch_select_preview_mml_for_patch_name(&patch_name)
+    }
+
+    pub(in crate::tui) fn patch_select_preview_mml_for_patch_name(
+        &self,
+        patch_name: &str,
+    ) -> Option<String> {
         let phrase = self.patch_select_current_phrase()?;
-        let json = Self::build_patch_json(&patch_name);
+        let json = Self::build_patch_json(patch_name);
         Some(format!("{json} {phrase}"))
     }
 

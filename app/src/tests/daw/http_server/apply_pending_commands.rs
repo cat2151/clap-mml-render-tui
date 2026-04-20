@@ -9,7 +9,7 @@ fn apply_pending_http_commands_updates_mml_and_expands_grid() {
 
     let cfg = default_config();
     let state = build_http_state(cfg.clone());
-    *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
+    activate_http_state(Arc::clone(&state));
     let response_rx = enqueue_command(
         &state,
         DawHttpCommandKind::Mml {
@@ -41,7 +41,7 @@ fn apply_pending_http_commands_updates_mixer_gain() {
 
     let cfg = default_config();
     let state = build_http_state(cfg.clone());
-    *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
+    activate_http_state(Arc::clone(&state));
     let response_rx = enqueue_command(&state, DawHttpCommandKind::Mixer { track: 4, db: -6.0 });
 
     let mut app = build_test_app(cfg);
@@ -71,7 +71,7 @@ fn apply_pending_http_commands_updates_patch_init_cell() {
     let mut cfg = default_config();
     cfg.patches_dirs = Some(vec![tmp.to_string_lossy().into_owned()]);
     let state = build_http_state(cfg.clone());
-    *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
+    activate_http_state(Arc::clone(&state));
     let response_rx = enqueue_command(
         &state,
         DawHttpCommandKind::Patch {
@@ -109,7 +109,7 @@ fn apply_pending_http_commands_updates_random_patch_init_cell() {
     let mut cfg = default_config();
     cfg.patches_dirs = Some(vec![tmp.to_string_lossy().into_owned()]);
     let state = build_http_state(cfg.clone());
-    *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
+    activate_http_state(Arc::clone(&state));
     let response_rx = enqueue_command(&state, DawHttpCommandKind::RandomPatch { track: 1 });
 
     let mut app = build_test_app(cfg);
@@ -157,7 +157,7 @@ fn apply_pending_http_commands_starts_play() {
     let _test_guard = lock_http_server_test_state();
     let cfg = default_config();
     let state = build_http_state(cfg.clone());
-    *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
+    activate_http_state(Arc::clone(&state));
     let response_rx = enqueue_command(&state, DawHttpCommandKind::PlayStart);
 
     let mut app = build_test_app(cfg);
@@ -190,7 +190,7 @@ fn apply_pending_http_commands_start_while_playing_is_noop() {
     let _test_guard = lock_http_server_test_state();
     let cfg = default_config();
     let state = build_http_state(cfg.clone());
-    *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
+    activate_http_state(Arc::clone(&state));
     let response_rx = enqueue_command(&state, DawHttpCommandKind::PlayStart);
 
     let mut app = build_test_app(cfg);
@@ -215,7 +215,7 @@ fn apply_pending_http_commands_start_without_playable_data_returns_error() {
     let _test_guard = lock_http_server_test_state();
     let cfg = default_config();
     let state = build_http_state(cfg.clone());
-    *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
+    activate_http_state(Arc::clone(&state));
     let response_rx = enqueue_command(&state, DawHttpCommandKind::PlayStart);
 
     let mut app = build_test_app(cfg);
@@ -242,7 +242,7 @@ fn apply_pending_http_commands_stops_play() {
     let _test_guard = lock_http_server_test_state();
     let cfg = default_config();
     let state = build_http_state(cfg.clone());
-    *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
+    activate_http_state(Arc::clone(&state));
     let response_rx = enqueue_command(&state, DawHttpCommandKind::PlayStop);
 
     let mut app = build_test_app(cfg);
@@ -275,7 +275,7 @@ fn apply_pending_http_commands_updates_ab_repeat_range() {
     let _test_guard = lock_http_server_test_state();
     let cfg = default_config();
     let state = build_http_state(cfg.clone());
-    *active_state_slot().lock().unwrap() = Some(Arc::clone(&state));
+    activate_http_state(Arc::clone(&state));
     let response_rx = enqueue_command(
         &state,
         DawHttpCommandKind::AbRepeat {

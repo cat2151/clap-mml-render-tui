@@ -57,6 +57,26 @@ fn notepad_history_overlay_shows_selection_title_when_filter_inactive() {
 }
 
 #[test]
+fn notepad_history_overlay_marks_cached_items_with_music_note() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["before".to_string()];
+    app.patch_phrase_store.notepad = PatchPhraseState {
+        history: vec!["l8cdef".to_string()],
+        favorites: vec!["o5g".to_string()],
+    };
+    app.audio_cache
+        .lock()
+        .unwrap()
+        .insert("l8cdef".to_string(), vec![0.1, 0.2]);
+    app.start_notepad_history();
+
+    let screen = render_lines(&mut app, 100, 16).join("\n");
+
+    assert!(screen.contains("♪ l8cdef"));
+    assert!(screen.contains("  o5g"));
+}
+
+#[test]
 fn notepad_history_overlay_is_centered_like_daw_overlay() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["before".to_string()];

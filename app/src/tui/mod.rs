@@ -21,29 +21,29 @@ mod input;
 mod notepad_history;
 mod patch_phrase;
 mod playback_session;
+mod render_queue;
 mod runtime;
 mod session;
 mod ui;
 
-use clack_host::prelude::PluginEntry;
-use cmrt_core::{mml_render_with_probe, CoreConfig, NativeRenderProbeContext};
 use ratatui::{widgets::ListState, Frame};
 use tui_textarea::TextArea;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-/// audio_cache の最大エントリ数。超過時はキャッシュ全体をクリアしてから挿入する。
+/// audio_cache の最大エントリ数。超過時は古いエントリから1件ずつ退避する。
 const AUDIO_CACHE_MAX_ENTRIES: usize = 64;
 pub(super) const PATCH_JSON_KEY: &str = "Surge XT patch";
 pub(super) const PATCH_FILTER_QUERY_JSON_KEY: &str = "Surge XT patch filter";
 
 pub(crate) use self::cache::filter_items;
 pub(in crate::tui) use self::cache::filter_patches;
-use self::cache::{resolve_cached_samples, try_insert_cache};
+use self::cache::{mark_cache_entry_recent, resolve_cached_samples, try_insert_cache};
+use self::render_queue::{TuiRenderCompletion, TuiRenderJobStatus, TuiRenderQueue};
 pub(in crate::tui) use self::session::PatchLoadState;
-use crate::{config::Config, history::daw_cache_mml_hash, patches::PatchSortOrder};
+use crate::{config::Config, patches::PatchSortOrder};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum Mode {
@@ -101,6 +101,14 @@ pub(super) enum PlayState {
     Err(String),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct TuiRenderStatus {
+    pub(super) active: usize,
+    pub(super) workers: usize,
+    pub(super) pending: usize,
+    pub(super) pending_playback: usize,
+}
+
 pub struct TuiApp<'a> {
     pub(super) mode: Mode,
     pub(super) help_origin: Mode,
@@ -113,9 +121,11 @@ pub struct TuiApp<'a> {
     pub(super) play_state: Arc<Mutex<PlayState>>,
     playback_session: Arc<AtomicU64>,
     pub(super) active_offline_render_count: Arc<AtomicUsize>,
+    render_queue: TuiRenderQueue,
     active_sink: Arc<Mutex<Option<Arc<rodio::Sink>>>>,
     /// MML文字列 → レンダリング済みサンプルのキャッシュ
     pub(super) audio_cache: Arc<Mutex<HashMap<String, Vec<f32>>>>,
+    audio_cache_order: Arc<Mutex<VecDeque<String>>>,
     // 音色選択モード用
     /// バックグラウンドスレッドが収集したパッチリストの状態
     patch_load_state: Arc<Mutex<PatchLoadState>>,
@@ -162,6 +172,7 @@ pub struct TuiApp<'a> {
     pub(super) patch_phrase_store_dirty: bool,
     /// 終了時 DAW モードだったかどうか（history.json に保存・復元する）
     pub(super) is_daw_mode: bool,
+    startup_normal_cache_primed: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -211,63 +222,152 @@ impl<'a> TuiApp<'a> {
         *state.offset_mut() = desired_offset.min(max_offset);
     }
 
-    fn prefetch_audio_cache(&self, mmls: Vec<String>) {
-        let targets = {
-            let cache = self.audio_cache.lock().unwrap();
-            mmls.into_iter()
-                .map(|mml| mml.trim().to_string())
-                .filter(|mml| !mml.is_empty())
-                .filter(|mml| !cache.contains_key(mml))
-                .collect::<Vec<_>>()
+    fn filtered_prefetch_targets(&self, mmls: Vec<String>) -> Vec<String> {
+        let cache = self.audio_cache.lock().unwrap();
+        let mut targets = Vec::new();
+        for mml in mmls.into_iter().map(|mml| mml.trim().to_string()) {
+            if mml.is_empty() || cache.contains_key(&mml) || targets.contains(&mml) {
+                continue;
+            }
+            targets.push(mml);
+        }
+        targets
+    }
+
+    #[cfg(test)]
+    fn insert_prefetch_targets_for_tests(&self, targets: Vec<String>) {
+        let mut cache = self.audio_cache.lock().unwrap();
+        let mut cache_order = self.audio_cache_order.lock().unwrap();
+        for mml in targets {
+            try_insert_cache(&mut cache, &mut cache_order, mml, Vec::new(), false);
+        }
+    }
+
+    fn queue_prefetch_targets(
+        cache: &Arc<Mutex<HashMap<String, Vec<f32>>>>,
+        render_queue: &TuiRenderQueue,
+        targets: Vec<String>,
+    ) -> Vec<std::sync::mpsc::Receiver<self::render_queue::TuiRenderResponse>> {
+        let prefetch_generation = render_queue.reserve_prefetch_generation();
+        targets
+            .into_iter()
+            .filter_map(|mml| {
+                if cache.lock().unwrap().contains_key(&mml) {
+                    return None;
+                }
+                match render_queue.submit_prefetch(mml.clone(), prefetch_generation) {
+                    Ok(response_rx) => Some(response_rx),
+                    Err(error) => {
+                        Self::log_notepad_event(format!(
+                            "cache prefetch queue error err=\"{}\" mml=\"{}\"",
+                            truncate_for_log(&error.to_string(), 160),
+                            truncate_for_log(&mml, 80)
+                        ));
+                        None
+                    }
+                }
+            })
+            .collect()
+    }
+
+    fn consume_prefetch_response(
+        cache: &Arc<Mutex<HashMap<String, Vec<f32>>>>,
+        cache_order: &Arc<Mutex<VecDeque<String>>>,
+        response_rx: std::sync::mpsc::Receiver<self::render_queue::TuiRenderResponse>,
+    ) {
+        let Ok(response) = response_rx.recv() else {
+            Self::log_notepad_event("cache prefetch render response dropped");
+            return;
         };
-        if targets.is_empty() {
+        match response.completion {
+            TuiRenderCompletion::Rendered { samples, .. } => {
+                let mut cache = cache.lock().unwrap();
+                let mut cache_order = cache_order.lock().unwrap();
+                try_insert_cache(&mut cache, &mut cache_order, response.mml, samples, false);
+                Self::log_notepad_event("cache prefetch render ok");
+            }
+            TuiRenderCompletion::RenderError(error) => {
+                Self::log_notepad_event(format!(
+                    "cache prefetch render error mml=\"{}\" err=\"{}\"",
+                    truncate_for_log(&response.mml, 80),
+                    truncate_for_log(&error, 160)
+                ));
+            }
+            TuiRenderCompletion::SkippedStalePlayback => {}
+        }
+    }
+
+    fn render_queue_is_relaxed(
+        render_queue: &TuiRenderQueue,
+        active_offline_render_count: &AtomicUsize,
+    ) -> bool {
+        let stats = render_queue.stats();
+        active_offline_render_count.load(Ordering::Relaxed) + stats.pending_jobs <= 1
+    }
+
+    fn prefetch_audio_cache_with_idle_fill(
+        &self,
+        immediate_mmls: Vec<String>,
+        idle_mmls: Vec<String>,
+    ) {
+        let immediate_targets = self.filtered_prefetch_targets(immediate_mmls);
+        let idle_targets = self.filtered_prefetch_targets(idle_mmls);
+        if immediate_targets.is_empty() && idle_targets.is_empty() {
             return;
         }
-        let target_count = targets.len();
+        let target_count = immediate_targets.len() + idle_targets.len();
         Self::log_notepad_event(format!("cache prefetch request count={target_count}"));
 
         #[cfg(test)]
         if self.entry_ptr == 0 {
-            let mut cache = self.audio_cache.lock().unwrap();
-            for mml in targets {
-                try_insert_cache(&mut cache, mml, Vec::new(), false);
+            self.insert_prefetch_targets_for_tests(immediate_targets);
+            if self.render_queue.stats().pending_jobs == 0 {
+                self.insert_prefetch_targets_for_tests(idle_targets);
             }
             return;
         }
 
-        let cfg = Arc::clone(&self.cfg);
         let cache = Arc::clone(&self.audio_cache);
+        let cache_order = Arc::clone(&self.audio_cache_order);
+        let render_queue = self.render_queue.clone();
         let active_offline_render_count = Arc::clone(&self.active_offline_render_count);
-        let entry_ptr = self.entry_ptr;
+        let immediate_response_rxs =
+            Self::queue_prefetch_targets(&cache, &render_queue, immediate_targets);
+
+        if immediate_response_rxs.is_empty() && idle_targets.is_empty() {
+            return;
+        }
+
         std::thread::spawn(move || {
-            // SAFETY: entry は main() のスタックに生存している
-            let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
-            let core_cfg = CoreConfig::from(cfg.as_ref());
-            for mml in targets {
-                let _active_render_guard =
-                    ActiveRenderGuard::new(Arc::clone(&active_offline_render_count));
-                let active_render_count = active_offline_render_count.load(Ordering::Relaxed);
-                Self::log_notepad_event(format!(
-                    "cache prefetch render start active={} mml=\"{}\"",
-                    active_render_count,
-                    truncate_for_log(&mml, 80)
-                ));
-                let probe_context = NativeRenderProbeContext::tui_prefetch(
-                    active_render_count,
-                    daw_cache_mml_hash(&mml),
-                    cfg.offline_render_workers,
-                );
-                let render_result =
-                    mml_render_with_probe(&mml, &core_cfg, entry_ref, Some(&probe_context));
-                let Ok((samples, _)) = render_result else {
-                    Self::log_notepad_event(format!(
-                        "cache prefetch render error mml=\"{}\"",
-                        truncate_for_log(&mml, 80)
+            let mut idle_targets = VecDeque::from(idle_targets);
+            let mut response_rxs = VecDeque::from(immediate_response_rxs);
+
+            if response_rxs.is_empty()
+                && !idle_targets.is_empty()
+                && Self::render_queue_is_relaxed(&render_queue, &active_offline_render_count)
+            {
+                if let Some(next_idle) = idle_targets.pop_front() {
+                    response_rxs.extend(Self::queue_prefetch_targets(
+                        &cache,
+                        &render_queue,
+                        vec![next_idle],
                     ));
-                    continue;
-                };
-                try_insert_cache(&mut cache.lock().unwrap(), mml, samples, false);
-                Self::log_notepad_event("cache prefetch render ok");
+                }
+            }
+
+            while let Some(response_rx) = response_rxs.pop_front() {
+                Self::consume_prefetch_response(&cache, &cache_order, response_rx);
+                if !idle_targets.is_empty()
+                    && Self::render_queue_is_relaxed(&render_queue, &active_offline_render_count)
+                {
+                    if let Some(next_idle) = idle_targets.pop_front() {
+                        response_rxs.extend(Self::queue_prefetch_targets(
+                            &cache,
+                            &render_queue,
+                            vec![next_idle],
+                        ));
+                    }
+                }
             }
         });
     }
@@ -277,15 +377,33 @@ impl<'a> TuiApp<'a> {
         current: usize,
         item_count: usize,
         page_size: usize,
+        preferred_delta: Option<isize>,
         mml_for_index: F,
     ) where
         F: FnMut(usize) -> Option<String>,
     {
-        let targets = crate::ui_utils::predicted_navigation_indices(current, item_count, page_size)
+        let immediate_indices = match preferred_delta {
+            Some(delta) => crate::ui_utils::predicted_navigation_indices_in_direction(
+                current, item_count, delta, 2,
+            ),
+            None => crate::ui_utils::predicted_navigation_indices(current, item_count, page_size),
+        };
+        let idle_indices = preferred_delta
+            .map(|_| crate::ui_utils::predicted_navigation_indices(current, item_count, page_size))
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|index| !immediate_indices.contains(index))
+            .collect::<Vec<_>>();
+        let mut mml_for_index = mml_for_index;
+        let immediate_targets = immediate_indices
+            .into_iter()
+            .filter_map(&mut mml_for_index)
+            .collect::<Vec<_>>();
+        let idle_targets = idle_indices
             .into_iter()
             .filter_map(mml_for_index)
-            .collect();
-        self.prefetch_audio_cache(targets);
+            .collect::<Vec<_>>();
+        self.prefetch_audio_cache_with_idle_fill(immediate_targets, idle_targets);
     }
 
     fn kick_play(&self, mml: String) {
@@ -294,13 +412,17 @@ impl<'a> TuiApp<'a> {
         let playback_session = Arc::clone(&self.playback_session);
         let active_sink = Arc::clone(&self.active_sink);
         let cache = Arc::clone(&self.audio_cache);
-        let active_offline_render_count = Arc::clone(&self.active_offline_render_count);
-        let entry_ptr = self.entry_ptr;
+        let cache_order = Arc::clone(&self.audio_cache_order);
+        let render_queue = self.render_queue.clone();
         let session = self.begin_playback_session();
         let mml_log = truncate_for_log(&mml, 120);
 
         let cache_guard = cache.lock().unwrap();
         let cached_samples = resolve_cached_samples(Some(&cache_guard), &mml);
+        if cached_samples.is_some() {
+            let mut cache_order = cache_order.lock().unwrap();
+            mark_cache_entry_recent(&cache_guard, &mut cache_order, &mml);
+        }
         drop(cache_guard);
 
         if let Some(samples) = cached_samples {
@@ -329,62 +451,77 @@ impl<'a> TuiApp<'a> {
             ));
             self.set_play_state_if_current(session, PlayState::Running(mml.clone()));
 
-            std::thread::spawn(move || {
-                // SAFETY: entry は main() のスタックに生存している
-                let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
-
-                if !Self::playback_session_is_current(&playback_session, session) {
+            let response_rx = match render_queue.submit_playback(
+                mml.clone(),
+                session,
+                Arc::clone(&playback_session),
+            ) {
+                Ok(response_rx) => response_rx,
+                Err(error) => {
                     Self::log_notepad_event(format!(
-                        "play render stale skip before-render session={session}"
+                        "play render queue error session={session} err=\"{}\"",
+                        truncate_for_log(&error.to_string(), 160)
                     ));
+                    self.set_play_state_if_current(
+                        session,
+                        PlayState::Err(format!("エラー: {}", error)),
+                    );
                     return;
                 }
+            };
 
-                // レンダリング
-                let core_cfg = CoreConfig::from(cfg.as_ref());
-                let _active_render_guard =
-                    ActiveRenderGuard::new(Arc::clone(&active_offline_render_count));
-                let active_render_count = active_offline_render_count.load(Ordering::Relaxed);
-                Self::log_notepad_event(format!(
-                    "play render start session={session} active={} mml=\"{}\"",
-                    active_render_count,
-                    truncate_for_log(&mml, 120)
-                ));
-                let probe_context = NativeRenderProbeContext::tui_playback(
-                    session,
-                    active_render_count,
-                    daw_cache_mml_hash(&mml),
-                    cfg.offline_render_workers,
-                );
-                let render_result =
-                    mml_render_with_probe(&mml, &core_cfg, entry_ref, Some(&probe_context));
-
-                match render_result {
-                    Err(e) => {
+            std::thread::spawn(move || {
+                let response = match response_rx.recv() {
+                    Ok(response) => response,
+                    Err(_) => {
                         Self::log_notepad_event(format!(
-                            "play render error session={session} err=\"{}\"",
-                            truncate_for_log(&e.to_string(), 160)
+                            "play render response dropped session={session}"
                         ));
                         Self::set_play_state_for_session(
                             &state,
                             &playback_session,
                             session,
-                            PlayState::Err(format!("エラー: {}", e)),
+                            PlayState::Err("エラー: render queue response dropped".to_string()),
+                        );
+                        return;
+                    }
+                };
+
+                match response.completion {
+                    TuiRenderCompletion::SkippedStalePlayback => {}
+                    TuiRenderCompletion::RenderError(error) => {
+                        Self::log_notepad_event(format!(
+                            "play render error session={session} err=\"{}\"",
+                            truncate_for_log(&error, 160)
+                        ));
+                        Self::set_play_state_for_session(
+                            &state,
+                            &playback_session,
+                            session,
+                            PlayState::Err(format!("エラー: {}", error)),
                         );
                     }
-                    Ok((samples, patch_name)) => {
+                    TuiRenderCompletion::Rendered {
+                        samples,
+                        patch_name,
+                    } => {
                         if !Self::playback_session_is_current(&playback_session, session) {
                             Self::log_notepad_event(format!(
                                 "play render stale skip after-render session={session}"
                             ));
                             return;
                         }
-                        try_insert_cache(
-                            &mut cache.lock().unwrap(),
-                            mml.clone(),
-                            samples.clone(),
-                            false,
-                        );
+                        {
+                            let mut cache = cache.lock().unwrap();
+                            let mut cache_order = cache_order.lock().unwrap();
+                            try_insert_cache(
+                                &mut cache,
+                                &mut cache_order,
+                                mml.clone(),
+                                samples.clone(),
+                                false,
+                            );
+                        }
 
                         let msg = format!("{} | {}", patch_name, mml);
                         // 演奏中に切り替え
@@ -415,6 +552,27 @@ impl<'a> TuiApp<'a> {
 
     pub(super) fn active_parallel_render_count(&self) -> usize {
         self.active_offline_render_count.load(Ordering::Relaxed)
+    }
+
+    pub(super) fn render_status_snapshot(&self) -> TuiRenderStatus {
+        let queue_stats = self.render_queue.stats();
+        TuiRenderStatus {
+            active: self.active_parallel_render_count(),
+            workers: queue_stats.workers,
+            pending: queue_stats.pending_jobs,
+            pending_playback: queue_stats.pending_playback_jobs,
+        }
+    }
+
+    pub(in crate::tui) fn render_job_status_for_mml(
+        &self,
+        mml: &str,
+    ) -> Option<TuiRenderJobStatus> {
+        let mml = mml.trim();
+        if mml.is_empty() {
+            return None;
+        }
+        self.render_queue.job_status(mml)
     }
 
     fn draw(&mut self, f: &mut Frame) {

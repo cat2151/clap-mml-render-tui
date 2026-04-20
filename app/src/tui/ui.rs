@@ -11,17 +11,55 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
     Frame,
 };
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::{Mode, PlayState, TuiApp};
+use super::render_queue::TuiRenderJobStatus;
+use super::{Mode, PlayState, TuiApp, TuiRenderStatus};
 use crate::ui_theme::{cursor_highlight_style, MONOKAI_CYAN};
 use status::notepad_mode_title;
 use status::{
-    base_style, keybind_text, normal_status_text, parallel_render_status_color,
-    parallel_render_status_text, status_text, visible_list_page_size,
+    base_style, keybind_text, normal_status_text, render_status_color, render_status_text,
+    status_text, visible_list_page_size,
 };
 
 const LIST_HIGHLIGHT_SYMBOL: &str = "▶ ";
 const LIST_HIGHLIGHT_WIDTH: u16 = 2;
+const TUI_RENDER_ANIM_FRAME_MS: u128 = 250;
+const TUI_RENDER_ANIM_FRAME_COUNT: u128 = 2;
+
+fn render_anim_frame() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        / TUI_RENDER_ANIM_FRAME_MS
+        % TUI_RENDER_ANIM_FRAME_COUNT
+}
+
+pub(in crate::tui::ui) fn cache_marker(
+    cached: bool,
+    render_status: Option<TuiRenderJobStatus>,
+) -> &'static str {
+    if cached {
+        return "♪ ";
+    }
+    match render_status {
+        Some(TuiRenderJobStatus::Pending) => ". ",
+        Some(TuiRenderJobStatus::Running) => match render_anim_frame() {
+            0 => ". ",
+            _ => "..",
+        },
+        None => "  ",
+    }
+}
+
+pub(in crate::tui::ui) fn mml_cache_hit(
+    cache: &std::collections::HashMap<String, Vec<f32>>,
+    mml: &str,
+) -> bool {
+    let mml = mml.trim();
+    !mml.is_empty() && cache.contains_key(mml)
+}
 
 pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     // play_state を一度だけロックしてスナップショットを取り、
@@ -83,9 +121,9 @@ fn draw_normal(
     let is_insert = mode == Mode::Insert;
     let cursor = app.cursor;
     let status = normal_status_text(&mode, play_state);
-    let active_parallel_render_count = app.active_parallel_render_count();
-    let parallel_render_status = parallel_render_status_text(active_parallel_render_count);
-    let parallel_render_status_color = parallel_render_status_color(active_parallel_render_count);
+    let render_status_snapshot = app.render_status_snapshot();
+    let render_status = render_status_text(render_status_snapshot);
+    let render_status_color = render_status_color(render_status_snapshot);
     let keybinds = keybind_text(&mode);
 
     let chunks = Layout::default()
@@ -99,6 +137,7 @@ fn draw_normal(
         .split(f.area());
     let list_area = chunks[0];
     app.normal_page_size = visible_list_page_size(list_area);
+    let cache = app.audio_cache.lock().unwrap();
 
     let items: Vec<ListItem> = app
         .lines
@@ -110,6 +149,10 @@ fn draw_normal(
             } else {
                 base_style()
             };
+            let cached = mml_cache_hit(&cache, line);
+            let render_status = (!cached)
+                .then(|| app.render_job_status_for_mml(line))
+                .flatten();
             // INSERT 時のカーソル行は textarea で別描画するため、
             // List 側は空文字にして重なり表示を防ぐ。
             let content = if is_insert && i == cursor {
@@ -117,7 +160,10 @@ fn draw_normal(
             } else {
                 line.clone()
             };
-            ListItem::new(Line::from(Span::styled(content, style)))
+            ListItem::new(Line::from(vec![
+                Span::styled(cache_marker(cached, render_status), style),
+                Span::styled(content, style),
+            ]))
         })
         .collect();
 
@@ -164,7 +210,7 @@ fn draw_normal(
         chunks[1],
     );
     f.render_widget(
-        Paragraph::new(parallel_render_status).style(base_style().fg(parallel_render_status_color)),
+        Paragraph::new(render_status).style(base_style().fg(render_status_color)),
         chunks[2],
     );
     f.render_widget(Paragraph::new(keybinds).style(base_style()), chunks[3]);

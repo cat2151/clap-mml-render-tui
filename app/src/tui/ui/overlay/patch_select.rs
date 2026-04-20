@@ -1,7 +1,7 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::Color,
-    text::Span,
+    text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
     Frame,
 };
@@ -10,12 +10,21 @@ use crate::tui::PatchSelectPane;
 use crate::ui_theme::{cursor_highlight_style, MONOKAI_GRAY, MONOKAI_YELLOW};
 
 use super::super::{
+    cache_marker,
     status::{
-        base_style, keybind_text, parallel_render_status_color, parallel_render_status_text,
-        visible_list_page_size,
+        base_style, keybind_text, render_status_color, render_status_text, visible_list_page_size,
     },
     Mode, TuiApp, LIST_HIGHLIGHT_SYMBOL,
 };
+
+fn patch_cache_hit(
+    app: &TuiApp<'_>,
+    cache: &std::collections::HashMap<String, Vec<f32>>,
+    patch_name: &str,
+) -> bool {
+    app.patch_select_preview_mml_for_patch_name(patch_name)
+        .is_some_and(|mml| cache.contains_key(&mml))
+}
 
 pub(in crate::tui::ui) fn draw_patch_select(
     app: &mut TuiApp<'_>,
@@ -46,7 +55,11 @@ pub(in crate::tui::ui) fn draw_patch_select(
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[1]);
-    app.patch_select_page_size = visible_list_page_size(panes[0]);
+    let patch_select_page_size = visible_list_page_size(panes[0]);
+    if app.patch_select_page_size != patch_select_page_size {
+        app.patch_select_page_size = patch_select_page_size;
+        app.sync_patch_select_states();
+    }
 
     let search_title = if app.patch_select_filter_active {
         " ENTERで絞り込みを決定 - patch select - "
@@ -93,30 +106,44 @@ pub(in crate::tui::ui) fn draw_patch_select(
     );
     f.render_widget(&patch_query_widget, chunks[0]);
 
-    let patch_items: Vec<ListItem> = app
-        .patch_filtered
-        .iter()
-        .enumerate()
-        .map(|(i, patch_name)| {
-            let style = if !app.patch_select_filter_active
-                && app.patch_select_focus == PatchSelectPane::Patches
-                && i == app.patch_cursor
-            {
-                cursor_highlight_style(base_style())
-            } else {
-                base_style()
-            };
-            ListItem::new(Span::styled(patch_name.clone(), style))
-        })
-        .collect();
-    let (favorite_count, favorite_items): (usize, Vec<ListItem>) = {
+    let (patch_items, favorite_count, favorite_items): (Vec<ListItem>, usize, Vec<ListItem>) = {
+        let cache = app.audio_cache.lock().unwrap();
+        let patch_items = app
+            .patch_filtered
+            .iter()
+            .enumerate()
+            .map(|(i, patch_name)| {
+                let cached = patch_cache_hit(app, &cache, patch_name);
+                let style = if !app.patch_select_filter_active
+                    && app.patch_select_focus == PatchSelectPane::Patches
+                    && i == app.patch_cursor
+                {
+                    cursor_highlight_style(base_style())
+                } else {
+                    base_style()
+                };
+                let render_status = (!cached)
+                    .then(|| {
+                        app.patch_select_preview_mml_for_patch_name(patch_name)
+                            .as_deref()
+                            .and_then(|mml| app.render_job_status_for_mml(mml))
+                    })
+                    .flatten();
+                ListItem::new(Line::from(vec![
+                    Span::styled(cache_marker(cached, render_status), style),
+                    Span::styled(patch_name.clone(), style),
+                ]))
+            })
+            .collect();
         let favorites = app.patch_select_favorite_items();
         (
+            patch_items,
             favorites.len(),
             favorites
                 .iter()
                 .enumerate()
                 .map(|(i, patch_name)| {
+                    let cached = patch_cache_hit(app, &cache, patch_name);
                     let style = if !app.patch_select_filter_active
                         && app.patch_select_focus == PatchSelectPane::Favorites
                         && i == app.patch_favorites_cursor
@@ -125,7 +152,17 @@ pub(in crate::tui::ui) fn draw_patch_select(
                     } else {
                         base_style()
                     };
-                    ListItem::new(Span::styled(patch_name.clone(), style))
+                    let render_status = (!cached)
+                        .then(|| {
+                            app.patch_select_preview_mml_for_patch_name(patch_name)
+                                .as_deref()
+                                .and_then(|mml| app.render_job_status_for_mml(mml))
+                        })
+                        .flatten();
+                    ListItem::new(Line::from(vec![
+                        Span::styled(cache_marker(cached, render_status), style),
+                        Span::styled(patch_name.clone(), style),
+                    ]))
                 })
                 .collect(),
         )
@@ -194,9 +231,9 @@ pub(in crate::tui::ui) fn draw_patch_select(
             &patch_query_widget,
         ));
     }
-    let active_parallel_render_count = app.active_parallel_render_count();
-    let parallel_render_status = parallel_render_status_text(active_parallel_render_count);
-    let parallel_render_color = parallel_render_status_color(active_parallel_render_count);
+    let render_status_snapshot = app.render_status_snapshot();
+    let render_status = render_status_text(render_status_snapshot);
+    let render_color = render_status_color(render_status_snapshot);
 
     f.render_widget(
         Paragraph::new(format!(
@@ -207,7 +244,7 @@ pub(in crate::tui::ui) fn draw_patch_select(
         chunks[2],
     );
     f.render_widget(
-        Paragraph::new(parallel_render_status).style(base_style().fg(parallel_render_color)),
+        Paragraph::new(render_status).style(base_style().fg(render_color)),
         chunks[3],
     );
     f.render_widget(

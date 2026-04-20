@@ -144,6 +144,30 @@ fn cache_render_prepare_queue_prepares_memory_only_render_inputs() {
 }
 
 #[test]
+fn apply_render_preroll_shifts_events_and_total_samples() {
+    let events = vec![midi::TimedMidiEvent {
+        sample_pos: 12,
+        message: midi::MidiEvent::NoteOn {
+            channel: 0,
+            key: 60,
+            velocity: 100,
+        },
+    }];
+
+    let (events, total_samples) = apply_render_preroll(events, 34, 100);
+
+    assert_eq!(events[0].sample_pos, 112);
+    assert_eq!(total_samples, 134);
+}
+
+#[test]
+fn trim_render_preroll_drops_leading_stereo_samples() {
+    let trimmed = trim_render_preroll(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 1);
+
+    assert_eq!(trimmed, vec![3.0, 4.0, 5.0, 6.0]);
+}
+
+#[test]
 fn cache_render_extracts_patch_from_embedded_json_with_factory_prefix_fallback() {
     let suffix = SystemTime::now()
         .duration_since(UNIX_EPOCH)

@@ -175,7 +175,7 @@ impl<'a> TuiApp<'a> {
         self.patch_phrase_store_dirty = true;
     }
 
-    fn patch_phrase_preview_mml_for_selection(
+    pub(in crate::tui) fn patch_phrase_preview_mml_for_selection(
         &self,
         focus: PatchPhrasePane,
         cursor: usize,
@@ -213,6 +213,7 @@ impl<'a> TuiApp<'a> {
             cursor,
             item_count,
             self.patch_phrase_page_size,
+            None,
             |index| self.patch_phrase_preview_mml_for_selection(focus, index),
         );
     }

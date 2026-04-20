@@ -97,7 +97,7 @@ fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
         .unwrap();
     let render_row = normalized_lines
         .iter()
-        .position(|line| line.contains("並列render中:0"))
+        .position(|line| line.contains("render:実行0/2予約0"))
         .unwrap();
     let keybind_row = lines
         .iter()
@@ -105,12 +105,12 @@ fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
         .unwrap();
 
     assert!(screen.contains("[NORMAL] notepad mode"));
-    assert!(screen.contains("▶ abc"));
+    assert!(screen.contains("▶   abc"));
     assert!(!screen.contains("MML Lines"));
     assert!(!screen.contains("▶   1 abc"));
     assert_eq!(render_row, status_row + 1);
     assert_eq!(keybind_row, render_row + 1);
-    assert!(normalized_lines[render_row].contains("並列render中:0"));
+    assert!(normalized_lines[render_row].contains("render:実行0/2予約0"));
     assert!(screen.contains("q ?:help i:insert"));
     assert!(screen.contains("dd/Del:cut"));
     assert!(screen.contains("g:generate"));
@@ -127,9 +127,60 @@ fn normal_screen_shows_active_parallel_render_count_in_purple() {
     app.test_set_active_parallel_render_count(2);
 
     let buffer = render_buffer(&mut app, 120, 9);
-    let (x, y) = find_text(&buffer, "並");
+    let (x, y) = find_text(&buffer, "render:");
 
     assert_eq!(buffer.cell((x, y)).unwrap().fg, MONOKAI_PURPLE);
+}
+
+#[test]
+fn normal_screen_marks_cached_lines_with_music_note() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["abc".to_string(), "def".to_string()];
+    app.audio_cache
+        .lock()
+        .unwrap()
+        .insert("abc".to_string(), vec![0.1, 0.2]);
+
+    let screen = render_lines(&mut app, 80, 8).join("\n");
+
+    assert!(screen.contains("▶ ♪ abc"));
+    assert!(screen.contains("  def"));
+}
+
+#[test]
+fn normal_mode_startup_prime_caches_current_line_and_navigation_targets() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![
+        "m0".to_string(),
+        "m1".to_string(),
+        "m2".to_string(),
+        "m3".to_string(),
+    ];
+    app.cursor = 1;
+    app.list_state.select(Some(1));
+    app.normal_page_size = 2;
+
+    app.prime_normal_mode_startup_cache();
+
+    let cache = app.audio_cache.lock().unwrap();
+    assert!(cache.contains_key("m1"));
+    assert!(cache.contains_key("m2"));
+    assert!(cache.contains_key("m0"));
+    assert!(cache.contains_key("m3"));
+}
+
+#[test]
+fn normal_screen_marks_rendering_lines_with_dots_before_music_note() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["abc".to_string()];
+    app.test_set_render_job_status(
+        "abc",
+        Some(crate::tui::render_queue::TuiRenderJobStatus::Pending),
+    );
+
+    let screen = render_lines(&mut app, 80, 8).join("\n");
+
+    assert!(screen.contains("▶ . abc"));
 }
 
 #[test]

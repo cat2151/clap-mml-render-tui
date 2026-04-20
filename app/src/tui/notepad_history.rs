@@ -144,6 +144,7 @@ impl<'a> TuiApp<'a> {
             cursor,
             item_count,
             self.notepad_history_page_size,
+            None,
             |index| self.notepad_item_for_selection(focus, index),
         );
     }

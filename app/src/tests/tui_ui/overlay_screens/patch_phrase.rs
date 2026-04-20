@@ -147,7 +147,7 @@ fn patch_phrase_screen_keeps_status_below_overlay_panes() {
         .unwrap() as u16;
     let render_row = normalized_lines
         .iter()
-        .rposition(|line| line.contains("並列render中:2"))
+        .rposition(|line| line.contains("render:実行2/2予約0"))
         .unwrap() as u16;
 
     assert!(status_row > history_row);
@@ -177,6 +177,29 @@ fn patch_phrase_screen_shows_filter_confirm_title_when_filter_active() {
         normalized.match_indices("l8").count() >= 2,
         "expected the active filter query to be rendered in addition to the history entry: {normalized}"
     );
+}
+
+#[test]
+fn patch_phrase_overlay_marks_cached_preview_items_with_music_note() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::PatchPhrase;
+    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        PatchPhraseState {
+            history: vec!["l8cdef".to_string()],
+            favorites: vec!["o5g".to_string()],
+        },
+    );
+    app.audio_cache.lock().unwrap().insert(
+        r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string(),
+        vec![0.1, 0.2],
+    );
+
+    let screen = render_lines(&mut app, 100, 16).join("\n");
+
+    assert!(screen.contains("♪ l8cdef"));
+    assert!(screen.contains("  o5g"));
 }
 
 #[test]
@@ -249,5 +272,5 @@ fn patch_phrase_screen_uses_c_as_fallback_for_empty_lists() {
 
     let lines = render_lines(&mut app, 80, 10).join("\n");
 
-    assert!(lines.contains("▶ c"));
+    assert!(lines.contains("▶   c"));
 }

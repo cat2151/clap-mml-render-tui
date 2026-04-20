@@ -3,7 +3,7 @@ use ratatui::{
     style::{Color, Style},
 };
 
-use super::{Mode, PlayState};
+use super::{Mode, PlayState, TuiRenderStatus};
 use crate::ui_theme::{
     MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GREEN, MONOKAI_PURPLE, MONOKAI_YELLOW,
 };
@@ -26,16 +26,30 @@ pub(super) fn status_color(play_state: &PlayState) -> Color {
     }
 }
 
-pub(super) fn parallel_render_status_color(active_render_count: usize) -> Color {
-    if active_render_count == 0 {
+pub(super) fn render_status_color(render_status: TuiRenderStatus) -> Color {
+    if render_status.active == 0 && render_status.pending == 0 {
         MONOKAI_GREEN
     } else {
         MONOKAI_PURPLE
     }
 }
 
-pub(super) fn parallel_render_status_text(active_render_count: usize) -> String {
-    format!("並列render中: {active_render_count}")
+pub(super) fn render_status_text(render_status: TuiRenderStatus) -> String {
+    let mut text = if render_status.workers == 0 {
+        format!(
+            "render: 実行 {} 予約 {}",
+            render_status.active, render_status.pending
+        )
+    } else {
+        format!(
+            "render: 実行 {}/{} 予約 {}",
+            render_status.active, render_status.workers, render_status.pending
+        )
+    };
+    if render_status.pending_playback > 0 {
+        text.push_str(&format!(" preview待ち {}", render_status.pending_playback));
+    }
+    text
 }
 
 fn play_status_suffix(play_state: &PlayState) -> String {
@@ -76,7 +90,7 @@ pub(super) fn keybind_text(mode: &Mode) -> &'static str {
         }
         Mode::Insert => "ESC:確定→NORMAL  Enter:確定→次行",
         Mode::PatchSelect => {
-            "/:検索入力  Enter:検索確定/決定  ESC:キャンセル  Ctrl+S:sort順切替  n/p/t:overlay切替  f:お気に入り  h/l・←/→:ペイン移動  j/k・↑↓・PgUp/PgDn:移動して再生"
+            "/:検索入力  Enter:検索確定/決定  Space:再生  ESC:キャンセル  Ctrl+S:sort順切替  n/p/t:overlay切替  f:お気に入り  h/l・←/→:ペイン移動  j/k・↑↓・PgUp/PgDn:移動して再生"
         }
         Mode::NotepadHistory => {
             "/:検索入力  Enter:検索確定/確定  ESC:閉じる  n/p/t:overlay切替  h/l・←/→:ペイン移動  j/k・↑↓:移動して再生  PgUp/PgDn:1画面移動  f:お気に入り  dd:削除"

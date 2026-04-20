@@ -97,6 +97,7 @@ impl<'a> TuiApp<'a> {
                     self.record_notepad_history(&line);
                 }
                 self.mode = Mode::Normal;
+                self.prime_normal_mode_startup_cache();
             }
             KeyCode::Left | KeyCode::Char('h') => {
                 self.set_patch_select_focus(PatchSelectPane::Patches);
@@ -112,6 +113,7 @@ impl<'a> TuiApp<'a> {
             KeyCode::PageUp => {
                 self.move_patch_select_selection_by(-(self.patch_select_page_size as isize))
             }
+            KeyCode::Char(' ') => self.preview_selected_patch(),
             KeyCode::Char('f') => self.add_selected_patch_phrase_favorite(),
             KeyCode::Char('/') => {
                 self.patch_select_focus = PatchSelectPane::Patches;

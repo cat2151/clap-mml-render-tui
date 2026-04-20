@@ -1,7 +1,7 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::Color,
-    text::Span,
+    text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
     Frame,
 };
@@ -10,9 +10,9 @@ use crate::tui::PatchPhrasePane;
 use crate::ui_theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_YELLOW};
 
 use super::super::{
+    cache_marker, mml_cache_hit,
     status::{
-        base_style, keybind_text, parallel_render_status_color, parallel_render_status_text,
-        visible_list_page_size,
+        base_style, keybind_text, render_status_color, render_status_text, visible_list_page_size,
     },
     Mode, TuiApp, LIST_HIGHLIGHT_SYMBOL,
 };
@@ -58,6 +58,7 @@ pub(in crate::tui::ui) fn draw_notepad_history(
 
     let history_entries = app.notepad_history_items();
     let history_count = history_entries.len();
+    let cache = app.audio_cache.lock().unwrap();
     let history_items: Vec<ListItem> = history_entries
         .into_iter()
         .enumerate()
@@ -70,7 +71,14 @@ pub(in crate::tui::ui) fn draw_notepad_history(
             } else {
                 base_style()
             };
-            ListItem::new(Span::styled(mml, style))
+            let cached = mml_cache_hit(&cache, &mml);
+            let render_status = (!cached)
+                .then(|| app.render_job_status_for_mml(&mml))
+                .flatten();
+            ListItem::new(Line::from(vec![
+                Span::styled(cache_marker(cached, render_status), style),
+                Span::styled(mml, style),
+            ]))
         })
         .collect();
     let favorite_entries = app.notepad_favorite_items();
@@ -87,7 +95,14 @@ pub(in crate::tui::ui) fn draw_notepad_history(
             } else {
                 base_style()
             };
-            ListItem::new(Span::styled(mml, style))
+            let cached = mml_cache_hit(&cache, &mml);
+            let render_status = (!cached)
+                .then(|| app.render_job_status_for_mml(&mml))
+                .flatten();
+            ListItem::new(Line::from(vec![
+                Span::styled(cache_marker(cached, render_status), style),
+                Span::styled(mml, style),
+            ]))
         })
         .collect();
 
@@ -164,9 +179,9 @@ pub(in crate::tui::ui) fn draw_notepad_history(
             &notepad_query_widget,
         ));
     }
-    let parallel_render_count = app.active_parallel_render_count();
-    let parallel_render_status = parallel_render_status_text(parallel_render_count);
-    let parallel_render_color = parallel_render_status_color(parallel_render_count);
+    let render_status_snapshot = app.render_status_snapshot();
+    let render_status = render_status_text(render_status_snapshot);
+    let render_color = render_status_color(render_status_snapshot);
 
     f.render_widget(
         Paragraph::new(format!("{status}  {selection_status}"))
@@ -174,7 +189,7 @@ pub(in crate::tui::ui) fn draw_notepad_history(
         chunks[2],
     );
     f.render_widget(
-        Paragraph::new(parallel_render_status).style(base_style().fg(parallel_render_color)),
+        Paragraph::new(render_status).style(base_style().fg(render_color)),
         chunks[3],
     );
     f.render_widget(

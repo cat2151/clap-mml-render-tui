@@ -73,14 +73,40 @@ pub(crate) fn predicted_navigation_indices(
     }
 
     let mut predicted = Vec::new();
+    let mut push_delta = |delta: isize| {
+        let next =
+            (current as isize + delta).clamp(0, item_count.saturating_sub(1) as isize) as usize;
+        if next != current && !predicted.contains(&next) {
+            predicted.push(next);
+        }
+    };
+
     for delta in [
         1,
         -1,
         page_size.max(1) as isize,
         -(page_size.max(1) as isize),
     ] {
-        let next =
-            (current as isize + delta).clamp(0, item_count.saturating_sub(1) as isize) as usize;
+        push_delta(delta);
+    }
+    predicted
+}
+
+pub(crate) fn predicted_navigation_indices_in_direction(
+    current: usize,
+    item_count: usize,
+    delta: isize,
+    steps: usize,
+) -> Vec<usize> {
+    if item_count == 0 || delta == 0 || steps == 0 {
+        return Vec::new();
+    }
+
+    let mut predicted = Vec::new();
+    for step in 1..=steps {
+        let step_delta = delta.saturating_mul(step as isize);
+        let next = (current as isize + step_delta).clamp(0, item_count.saturating_sub(1) as isize)
+            as usize;
         if next != current && !predicted.contains(&next) {
             predicted.push(next);
         }
@@ -118,6 +144,18 @@ mod tests {
     #[test]
     fn predicted_navigation_indices_includes_line_and_page_destinations() {
         assert_eq!(predicted_navigation_indices(2, 8, 3), vec![3, 1, 5, 0]);
+    }
+
+    #[test]
+    fn predicted_navigation_indices_in_direction_returns_two_steps() {
+        assert_eq!(
+            predicted_navigation_indices_in_direction(2, 10, 3, 2),
+            vec![5, 8]
+        );
+        assert_eq!(
+            predicted_navigation_indices_in_direction(2, 10, -1, 2),
+            vec![1, 0]
+        );
     }
 
     #[test]

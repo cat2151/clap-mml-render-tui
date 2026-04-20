@@ -1,5 +1,7 @@
 use super::*;
 
+use std::collections::VecDeque;
+
 #[test]
 fn filter_patches_empty_query_returns_all() {
     let all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
@@ -79,6 +81,22 @@ fn resolve_cached_samples_returns_samples_on_cache_hit() {
 }
 
 #[test]
+fn mark_cache_entry_recent_moves_hit_key_to_back() {
+    let mut cache = HashMap::new();
+    cache.insert("old".to_string(), vec![]);
+    cache.insert("hit".to_string(), vec![0.5f32]);
+    cache.insert("new".to_string(), vec![]);
+    let mut order = VecDeque::from(["old".to_string(), "hit".to_string(), "new".to_string()]);
+
+    mark_cache_entry_recent(&cache, &mut order, "hit");
+
+    assert_eq!(
+        order,
+        VecDeque::from(["old".to_string(), "new".to_string(), "hit".to_string()])
+    );
+}
+
+#[test]
 fn resolve_cached_samples_returns_none_on_cache_miss() {
     let cache: HashMap<String, Vec<f32>> = HashMap::new();
     let result = resolve_cached_samples(Some(&cache), "cde");
@@ -96,45 +114,81 @@ fn resolve_cached_samples_returns_none_without_cache_reference() {
 #[test]
 fn try_insert_cache_does_nothing_when_random_patch_true() {
     let mut cache = HashMap::new();
-    try_insert_cache(&mut cache, "cde".to_string(), vec![1.0f32], true);
+    let mut order = VecDeque::new();
+    try_insert_cache(
+        &mut cache,
+        &mut order,
+        "cde".to_string(),
+        vec![1.0f32],
+        true,
+    );
     assert!(cache.is_empty());
+    assert!(order.is_empty());
 }
 
 #[test]
 fn try_insert_cache_inserts_when_random_patch_false() {
     let mut cache = HashMap::new();
-    try_insert_cache(&mut cache, "cde".to_string(), vec![1.0f32], false);
+    let mut order = VecDeque::new();
+    try_insert_cache(
+        &mut cache,
+        &mut order,
+        "cde".to_string(),
+        vec![1.0f32],
+        false,
+    );
     assert!(cache.contains_key("cde"));
+    assert_eq!(order, VecDeque::from(["cde".to_string()]));
 }
 
 #[test]
-fn try_insert_cache_clears_and_inserts_when_full() {
+fn try_insert_cache_evicts_single_oldest_entry_when_full() {
     let mut cache = HashMap::new();
+    let mut order = VecDeque::new();
     // AUDIO_CACHE_MAX_ENTRIES まで埋める
     for i in 0..AUDIO_CACHE_MAX_ENTRIES {
-        cache.insert(format!("mml_{}", i), vec![]);
+        let key = format!("mml_{}", i);
+        cache.insert(key.clone(), vec![]);
+        order.push_back(key);
     }
     assert_eq!(cache.len(), AUDIO_CACHE_MAX_ENTRIES);
 
-    // 新しいキーの挿入でクリアが起きる
-    try_insert_cache(&mut cache, "new_mml".to_string(), vec![0.1f32], false);
-    // クリア後に1エントリだけ残る
-    assert_eq!(cache.len(), 1);
+    try_insert_cache(
+        &mut cache,
+        &mut order,
+        "new_mml".to_string(),
+        vec![0.1f32],
+        false,
+    );
+
+    assert_eq!(cache.len(), AUDIO_CACHE_MAX_ENTRIES);
+    assert!(!cache.contains_key("mml_0"));
     assert!(cache.contains_key("new_mml"));
+    assert_eq!(order.len(), AUDIO_CACHE_MAX_ENTRIES);
 }
 
 #[test]
 fn try_insert_cache_updates_existing_key_when_full() {
     let mut cache = HashMap::new();
+    let mut order = VecDeque::new();
     // "cde" を含めてちょうど AUDIO_CACHE_MAX_ENTRIES 件になるよう埋める
     for i in 0..(AUDIO_CACHE_MAX_ENTRIES - 1) {
-        cache.insert(format!("mml_{}", i), vec![]);
+        let key = format!("mml_{}", i);
+        cache.insert(key.clone(), vec![]);
+        order.push_back(key);
     }
     cache.insert("cde".to_string(), vec![]);
+    order.push_back("cde".to_string());
     assert_eq!(cache.len(), AUDIO_CACHE_MAX_ENTRIES);
 
-    // 上限ちょうどの状態で既存キーを更新してもクリアは発生しない
-    try_insert_cache(&mut cache, "cde".to_string(), vec![0.9f32], false);
+    try_insert_cache(
+        &mut cache,
+        &mut order,
+        "cde".to_string(),
+        vec![0.9f32],
+        false,
+    );
     assert_eq!(cache.len(), AUDIO_CACHE_MAX_ENTRIES);
     assert_eq!(cache["cde"], vec![0.9f32]);
+    assert_eq!(order.back(), Some(&"cde".to_string()));
 }

@@ -7,6 +7,9 @@ use std::{
     },
 };
 
+#[cfg(test)]
+use std::cell::{Cell, RefCell};
+
 use tiny_http::Method;
 
 use super::{DawApp, FIRST_PLAYABLE_TRACK, MIXER_MAX_DB, MIXER_MIN_DB};
@@ -68,18 +71,41 @@ fn active_state_slot() -> &'static Mutex<Option<Arc<Mutex<DawHttpState>>>> {
     ACTIVE_STATE.get_or_init(|| Mutex::new(None))
 }
 
+#[cfg(test)]
+thread_local! {
+    static TEST_ACTIVE_STATE: RefCell<Option<Arc<Mutex<DawHttpState>>>> = const { RefCell::new(None) };
+    static TEST_DAW_MODE_SWITCH_REQUESTED: Cell<bool> = const { Cell::new(false) };
+}
+
 fn server_thread_running() -> &'static AtomicBool {
     static SERVER_THREAD_RUNNING: AtomicBool = AtomicBool::new(false);
     &SERVER_THREAD_RUNNING
 }
 
+#[cfg(not(test))]
 fn daw_mode_switch_requested() -> &'static AtomicBool {
     static DAW_MODE_SWITCH_REQUESTED: AtomicBool = AtomicBool::new(false);
     &DAW_MODE_SWITCH_REQUESTED
 }
 
 fn current_state() -> Option<Arc<Mutex<DawHttpState>>> {
+    #[cfg(test)]
+    if let Some(state) = test_active_http_state_for_current_thread() {
+        return Some(state);
+    }
     active_state_slot().lock().unwrap().clone()
+}
+
+#[cfg(test)]
+pub(crate) fn set_test_active_http_state_for_current_thread(
+    state: Option<Arc<Mutex<DawHttpState>>>,
+) -> Option<Arc<Mutex<DawHttpState>>> {
+    TEST_ACTIVE_STATE.with(|slot| slot.replace(state))
+}
+
+#[cfg(test)]
+fn test_active_http_state_for_current_thread() -> Option<Arc<Mutex<DawHttpState>>> {
+    TEST_ACTIVE_STATE.with(|slot| slot.borrow().clone())
 }
 
 fn claim_http_server_thread_slot() -> Option<DawHttpServerThreadGuard> {
@@ -113,6 +139,8 @@ pub(crate) fn spawn_daw_http_server(state: Arc<Mutex<DawHttpState>>) {
     if state.lock().unwrap().cfg.is_none() {
         return;
     }
+    #[cfg(test)]
+    let _ = set_test_active_http_state_for_current_thread(Some(Arc::clone(&state)));
     *active_state_slot().lock().unwrap() = Some(state);
     ensure_daw_http_server_thread();
 }
@@ -127,17 +155,29 @@ pub(crate) fn set_active_http_state_cfg(cfg: Arc<Config>) {
 }
 
 pub(crate) fn deactivate_daw_http_server() {
+    #[cfg(test)]
+    let _ = set_test_active_http_state_for_current_thread(None);
     *active_state_slot().lock().unwrap() = None;
 }
 
 pub(crate) fn request_daw_mode_switch() {
     if current_state().is_none() {
+        #[cfg(test)]
+        TEST_DAW_MODE_SWITCH_REQUESTED.with(|requested| requested.set(true));
+        #[cfg(not(test))]
         daw_mode_switch_requested().store(true, Ordering::Release);
     }
 }
 
 pub(crate) fn take_daw_mode_switch_request() -> bool {
-    daw_mode_switch_requested().swap(false, Ordering::AcqRel)
+    #[cfg(test)]
+    {
+        TEST_DAW_MODE_SWITCH_REQUESTED.with(|requested| requested.replace(false))
+    }
+    #[cfg(not(test))]
+    {
+        daw_mode_switch_requested().swap(false, Ordering::AcqRel)
+    }
 }
 
 fn take_pending_http_commands() -> Vec<DawHttpCommand> {

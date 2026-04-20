@@ -1,7 +1,10 @@
+use std::collections::VecDeque;
+
 use super::*;
 
 impl TuiApp<'static> {
     pub(super) fn new_for_test(cfg: Config) -> Self {
+        let render_queue = TuiRenderQueue::disabled_for_tests(cfg.offline_render_workers);
         let mut list_state = ListState::default();
         list_state.select(Some(0));
         Self {
@@ -16,8 +19,10 @@ impl TuiApp<'static> {
             play_state: Arc::new(Mutex::new(PlayState::Idle)),
             playback_session: Arc::new(AtomicU64::new(0)),
             active_offline_render_count: Arc::new(AtomicUsize::new(0)),
+            render_queue,
             active_sink: Arc::new(Mutex::new(None)),
             audio_cache: Arc::new(Mutex::new(HashMap::new())),
+            audio_cache_order: Arc::new(Mutex::new(VecDeque::new())),
             patch_load_state: Arc::new(Mutex::new(PatchLoadState::Ready(Vec::new()))),
             random_patch_decks: crate::random::RandomIndexDecks::default(),
             patch_all: Vec::new(),
@@ -60,6 +65,7 @@ impl TuiApp<'static> {
             patch_phrase_filter_active: false,
             patch_phrase_store_dirty: false,
             is_daw_mode: false,
+            startup_normal_cache_primed: false,
         }
     }
 
@@ -70,5 +76,13 @@ impl TuiApp<'static> {
     pub(super) fn test_set_active_parallel_render_count(&self, count: usize) {
         self.active_offline_render_count
             .store(count, Ordering::Relaxed);
+    }
+
+    pub(super) fn test_set_render_job_status(
+        &self,
+        mml: impl Into<String>,
+        status: Option<crate::tui::render_queue::TuiRenderJobStatus>,
+    ) {
+        self.render_queue.set_test_job_status(mml, status);
     }
 }
