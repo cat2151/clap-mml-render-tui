@@ -15,6 +15,9 @@ use crate::{config::Config, history::daw_cache_mml_hash};
 
 const MAX_TUI_RENDER_WORKERS: usize = 2;
 
+#[path = "render_queue/worker.rs"]
+mod worker;
+
 #[derive(Clone)]
 pub(super) struct TuiRenderQueue {
     inner: Option<Arc<TuiRenderQueueInner>>,
@@ -336,7 +339,7 @@ impl TuiRenderQueue {
         });
         for _ in 0..render_workers {
             let worker_inner = Arc::clone(&inner);
-            std::thread::spawn(move || render_worker(worker_inner));
+            std::thread::spawn(move || worker::render_worker(worker_inner));
         }
         Self {
             inner: Some(inner),
@@ -453,213 +456,6 @@ fn log_notepad_event(message: impl Into<String>) {
     let _ = message.into();
 }
 
-fn render_worker(inner: Arc<TuiRenderQueueInner>) {
-    loop {
-        let start = inner.pop_next_render();
-        send_stale_skips(start.stale_waiters);
-        let Some(work) = start.work else {
-            continue;
-        };
-        let completion = render_work(&inner, &work);
-        let waiters = inner.finish_render(&work.mml);
-        send_completion(&work.mml, waiters, completion);
-    }
-}
-
-fn render_work(inner: &TuiRenderQueueInner, work: &TuiRenderWork) -> TuiRenderCompletion {
-    // SAFETY: entry は main() のスタックに生存している。
-    let entry_ref: &PluginEntry = unsafe { &*(inner.entry_ptr as *const PluginEntry) };
-    let core_cfg = CoreConfig::from(inner.cfg.as_ref());
-    let _active_render_guard =
-        ActiveRenderGuard::new(Arc::clone(&inner.active_offline_render_count));
-    let active_render_count = inner.active_offline_render_count.load(Ordering::Relaxed);
-    let probe_context = match work.caller {
-        TuiRenderCaller::Playback { session } => {
-            log_notepad_event(format!(
-                "play render start session={session} active={} mml=\"{}\"",
-                active_render_count,
-                truncate_for_log(&work.mml, 120)
-            ));
-            NativeRenderProbeContext::tui_playback(
-                session,
-                active_render_count,
-                daw_cache_mml_hash(&work.mml),
-                inner.cfg.offline_render_workers,
-            )
-        }
-        TuiRenderCaller::Prefetch => {
-            log_notepad_event(format!(
-                "cache prefetch render start active={} mml=\"{}\"",
-                active_render_count,
-                truncate_for_log(&work.mml, 80)
-            ));
-            NativeRenderProbeContext::tui_prefetch(
-                active_render_count,
-                daw_cache_mml_hash(&work.mml),
-                inner.cfg.offline_render_workers,
-            )
-        }
-    };
-
-    match mml_render_with_probe(&work.mml, &core_cfg, entry_ref, Some(&probe_context)) {
-        Ok((samples, patch_name)) => TuiRenderCompletion::Rendered {
-            samples,
-            patch_name,
-        },
-        Err(error) => TuiRenderCompletion::RenderError(error.to_string()),
-    }
-}
-
-fn send_stale_skips(stale_waiters: Vec<StaleTuiRenderWaiter>) {
-    for stale in stale_waiters {
-        if let TuiRenderWaiterKind::Playback { session, .. } = stale.waiter.kind {
-            log_notepad_event(format!(
-                "play render stale skip before-render session={session}"
-            ));
-        }
-        let _ = stale.waiter.response_tx.send(TuiRenderResponse {
-            mml: stale.mml,
-            completion: TuiRenderCompletion::SkippedStalePlayback,
-        });
-    }
-}
-
-fn send_completion(mml: &str, waiters: Vec<TuiRenderWaiter>, completion: TuiRenderCompletion) {
-    for waiter in waiters {
-        let _ = waiter.response_tx.send(TuiRenderResponse {
-            mml: mml.to_string(),
-            completion: completion.clone(),
-        });
-    }
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn prefetch_waiter(sequence: u64) -> TuiRenderWaiter {
-        prefetch_waiter_with_generation(sequence, 1)
-    }
-
-    fn prefetch_waiter_with_generation(sequence: u64, generation: u64) -> TuiRenderWaiter {
-        let (response_tx, _response_rx) = mpsc::channel();
-        TuiRenderWaiter {
-            sequence,
-            kind: TuiRenderWaiterKind::Prefetch { generation },
-            response_tx,
-        }
-    }
-
-    fn playback_waiter(
-        sequence: u64,
-        session: u64,
-        playback_session: Arc<AtomicU64>,
-    ) -> TuiRenderWaiter {
-        let (response_tx, _response_rx) = mpsc::channel();
-        TuiRenderWaiter {
-            sequence,
-            kind: TuiRenderWaiterKind::Playback {
-                session,
-                playback_session,
-            },
-            response_tx,
-        }
-    }
-
-    #[test]
-    fn queue_stats_count_pending_unique_jobs_and_pending_playback_jobs() {
-        let playback_session = Arc::new(AtomicU64::new(1));
-        let mut state = TuiRenderQueueState::default();
-
-        state.push_waiter("prefetch".to_string(), prefetch_waiter(1));
-        state.push_waiter(
-            "playback".to_string(),
-            playback_waiter(2, 1, Arc::clone(&playback_session)),
-        );
-        state.push_waiter(
-            "playback".to_string(),
-            playback_waiter(3, 1, Arc::clone(&playback_session)),
-        );
-
-        assert_eq!(
-            state.stats(2),
-            TuiRenderQueueStats {
-                workers: 2,
-                pending_jobs: 2,
-                pending_playback_jobs: 1,
-            }
-        );
-    }
-
-    #[test]
-    fn render_worker_count_caps_tui_workers_at_two() {
-        assert_eq!(render_worker_count(0), 1);
-        assert_eq!(render_worker_count(1), 1);
-        assert_eq!(render_worker_count(2), 2);
-        assert_eq!(render_worker_count(3), 2);
-        assert_eq!(render_worker_count(4), 2);
-    }
-
-    #[test]
-    fn pending_queue_prefers_playback_before_prefetch() {
-        let playback_session = Arc::new(AtomicU64::new(1));
-        let mut state = TuiRenderQueueState::default();
-
-        state.push_waiter("prefetch".to_string(), prefetch_waiter(1));
-        state.push_waiter(
-            "playback".to_string(),
-            playback_waiter(2, 1, Arc::clone(&playback_session)),
-        );
-
-        assert!(state.drain_stale_pending_playback_waiters().is_empty());
-        assert_eq!(state.next_pending_key().as_deref(), Some("playback"));
-    }
-
-    #[test]
-    fn pending_queue_deduplicates_same_mml_and_elevates_to_playback() {
-        let playback_session = Arc::new(AtomicU64::new(1));
-        let mut state = TuiRenderQueueState::default();
-
-        state.push_waiter("same".to_string(), prefetch_waiter(1));
-        state.push_waiter(
-            "same".to_string(),
-            playback_waiter(3, 1, Arc::clone(&playback_session)),
-        );
-
-        assert_eq!(state.jobs.len(), 1);
-        let job = state.jobs.get("same").unwrap();
-        assert_eq!(job.waiters.len(), 2);
-        assert_eq!(
-            job.effective_priority_sequence(),
-            Some((TuiRenderPriority::Playback, 3))
-        );
-    }
-
-    #[test]
-    fn newer_prefetch_generation_runs_before_older_prefetch() {
-        let mut state = TuiRenderQueueState::default();
-
-        state.push_waiter("old".to_string(), prefetch_waiter_with_generation(1, 1));
-        state.push_waiter("new".to_string(), prefetch_waiter_with_generation(2, 2));
-
-        assert_eq!(state.next_pending_key().as_deref(), Some("new"));
-    }
-
-    #[test]
-    fn stale_playback_waiters_are_dropped_before_render_selection() {
-        let playback_session = Arc::new(AtomicU64::new(2));
-        let mut state = TuiRenderQueueState::default();
-
-        state.push_waiter(
-            "old".to_string(),
-            playback_waiter(1, 1, Arc::clone(&playback_session)),
-        );
-        state.push_waiter("prefetch".to_string(), prefetch_waiter(2));
-
-        let stale = state.drain_stale_pending_playback_waiters();
-
-        assert_eq!(stale.len(), 1);
-        assert!(!state.jobs.contains_key("old"));
-        assert_eq!(state.next_pending_key().as_deref(), Some("prefetch"));
-    }
-}
+#[path = "render_queue/tests.rs"]
+mod tests;
