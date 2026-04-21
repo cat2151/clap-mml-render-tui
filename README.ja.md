@@ -31,6 +31,78 @@ cmrt
 
 TUI画面でMML入力して遊べます
 
+### 設定
+
+初回起動時に `config.toml` が自動作成されます。場所はOS標準の設定ディレクトリ配下です。
+
+- Windows: `%LOCALAPPDATA%\clap-mml-render-tui\config.toml`
+- Linux: `~/.config/clap-mml-render-tui/config.toml`
+- macOS: `~/Library/Application Support/clap-mml-render-tui/config.toml`
+
+現在の設定例です。
+
+```toml
+# 【必須】使用する CLAP プラグイン
+plugin_path = 'C:\Program Files\Common Files\CLAP\Surge Synth Team\Surge XT.clap'
+
+input_midi  = "input.mid"
+
+# output_midi, output_wav は自動的に設定ディレクトリ配下の
+# clap-mml-render-tui/phrase/ または clap-mml-render-tui/daw/ に保存されます。
+# 以下の値は内部的に使用されます。
+output_midi = "output.mid"
+output_wav  = "output.wav"
+
+sample_rate = 48000
+buffer_size = 512
+
+# DAW のオフラインレンダリング同時実行数（1〜16）
+offline_render_workers = 4
+
+# オフラインレンダリング backend
+# in_process: cmrt 本体プロセス内でレンダリングします。
+# render_server: render-server 子プロセスへ POST /render してレンダリングします。
+offline_render_backend = "in_process"
+offline_render_server_port = 62153
+offline_render_server_command = ""
+
+# Surge XT パッチの検索対象ディレクトリ一覧
+patches_dirs = [
+  'C:\ProgramData\Surge XT\patches_factory',
+  'C:\ProgramData\Surge XT\patches_3rdparty',
+]
+```
+
+設定項目は次のとおりです。
+
+| 項目 | 既定値 | 説明 |
+| --- | --- | --- |
+| `plugin_path` | OSごとの Surge XT CLAP 標準パス | 使用する CLAP プラグインのパスです。空の場合は起動時にエラーになります。 |
+| `input_midi` | `input.mid` | 内部処理用の入力MIDIファイル名です。 |
+| `output_midi` | `output.mid` | 内部処理用の出力MIDIファイル名です。実際の保存先は設定ディレクトリ配下の `phrase/` または `daw/` です。 |
+| `output_wav` | `output.wav` | 内部処理用の出力WAVファイル名です。実際の保存先は設定ディレクトリ配下の `phrase/` または `daw/` です。 |
+| `sample_rate` | `48000` | レンダリング時のサンプルレートです。 |
+| `buffer_size` | `512` | レンダリング時のバッファサイズです。 |
+| `offline_render_workers` | `4` | DAW のオフラインレンダリング同時実行数です。`1`〜`16` の範囲で設定します。 |
+| `offline_render_backend` | `in_process` | オフラインレンダリングの実行先です。`in_process` または `render_server` を指定します。 |
+| `offline_render_server_port` | `62153` | `offline_render_backend = "render_server"` のときに使う `127.0.0.1` のポート番号です。`1`〜`65535` の範囲で設定します。 |
+| `offline_render_server_command` | 空文字 | `render_server` backend の子プロセス起動コマンドです。空文字の場合は `cmrt` と同じディレクトリの `clap-mml-render-server` / `clap-mml-render-server.exe`、または `PATH` 上の同名コマンドを探します。 |
+| `patches_dirs` | OSごとの Surge XT patches 標準ディレクトリ | TUI / DAW の音色選択・ランダム音色で検索するディレクトリ一覧です。未設定または空の場合、音色選択・ランダム音色は使えません。 |
+
+OS別の `plugin_path` 既定値は次のとおりです。
+
+- Windows: `C:\Program Files\Common Files\CLAP\Surge Synth Team\Surge XT.clap`
+- Linux: `/usr/lib/clap/Surge XT.clap`
+- macOS: `/Library/Audio/Plug-Ins/CLAP/Surge XT.clap`
+
+OS別の `patches_dirs` 既定値は次のとおりです。
+
+- Windows: `C:\ProgramData\Surge XT\patches_factory`, `C:\ProgramData\Surge XT\patches_3rdparty`
+- Linux: `$XDG_DATA_HOME/surge-data/patches_factory`, `$XDG_DATA_HOME/surge-data/patches_3rdparty`（`XDG_DATA_HOME` 未設定時は `~/.local/share`）
+- macOS: `/Library/Application Support/Surge XT/patches_factory`, `/Library/Application Support/Surge XT/patches_3rdparty`
+
+`offline_render_backend = "render_server"` にすると、TUI側はCLAPプラグインを直接ロードせず、`127.0.0.1:<offline_render_server_port>/render` にMMLを送ってWAVを受け取ります。render-serverへの接続に失敗した場合、cmrtは子プロセスを起動し、通信エラー時は一度だけ再起動して再試行します。
+
 ### updateコマンド
 
 ```
