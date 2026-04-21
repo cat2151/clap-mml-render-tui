@@ -26,7 +26,7 @@ impl<'a> TuiApp<'a> {
         cache: &Arc<Mutex<HashMap<String, Vec<f32>>>>,
         render_queue: &TuiRenderQueue,
         targets: Vec<String>,
-    ) -> Vec<std::sync::mpsc::Receiver<self::render_queue::TuiRenderResponse>> {
+    ) -> Vec<std::sync::mpsc::Receiver<super::render_queue::TuiRenderResponse>> {
         let prefetch_generation = render_queue.reserve_prefetch_generation();
         targets
             .into_iter()
@@ -52,7 +52,7 @@ impl<'a> TuiApp<'a> {
     fn consume_prefetch_response(
         cache: &Arc<Mutex<HashMap<String, Vec<f32>>>>,
         cache_order: &Arc<Mutex<VecDeque<String>>>,
-        response_rx: std::sync::mpsc::Receiver<self::render_queue::TuiRenderResponse>,
+        response_rx: std::sync::mpsc::Receiver<super::render_queue::TuiRenderResponse>,
     ) {
         let Ok(response) = response_rx.recv() else {
             Self::log_notepad_event("cache prefetch render response dropped");

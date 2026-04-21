@@ -14,6 +14,8 @@ pub(super) fn render_worker(inner: Arc<TuiRenderQueueInner>) {
 }
 
 fn render_work(inner: &TuiRenderQueueInner, work: &TuiRenderWork) -> TuiRenderCompletion {
+    // SAFETY: entry_ptr は main() で生存が保証される PluginEntry へのポインタを usize 化して保持したもの。
+    // ワーカーはその参照先を書き換えず読み取り専用で扱い、TuiApp の実行中のみ使われる。
     let entry_ref: &PluginEntry = unsafe { &*(inner.entry_ptr as *const PluginEntry) };
     let core_cfg = CoreConfig::from(inner.cfg.as_ref());
     let _active_render_guard =
