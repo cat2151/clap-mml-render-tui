@@ -1,9 +1,7 @@
-use std::{
-    cmp::Ordering,
-    path::{Path, PathBuf},
-};
+use std::cmp::Ordering;
 
 use anyhow::Result;
+use cmrt_runtime::{configured_patch_dirs, shared_patch_root_dir};
 
 use crate::config::Config;
 
@@ -33,21 +31,8 @@ const PATCH_DIR_PREFIXES: [&str; 2] = ["patches_factory", "patches_3rdparty"];
 const FACTORY_SORT_PRIORITY: u8 = 0;
 const THIRD_PARTY_SORT_PRIORITY: u8 = 1;
 
-pub(crate) fn configured_patch_dirs(cfg: &Config) -> Vec<String> {
-    cfg.patches_dirs
-        .clone()
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|dir| !dir.trim().is_empty())
-        .collect()
-}
-
 pub(crate) fn has_configured_patch_dirs(cfg: &Config) -> bool {
     !configured_patch_dirs(cfg).is_empty()
-}
-
-pub(crate) fn core_config_patch_root_dir(cfg: &Config) -> Option<String> {
-    shared_patch_root_dir(&configured_patch_dirs(cfg))
 }
 
 fn normalize_patch_lookup_key(patch_name: &str) -> String {
@@ -276,22 +261,6 @@ fn collect_patch_pairs_with_optional_base(
     }
     sort_patch_pairs(&mut pairs, PatchSortOrder::Path);
     Ok(pairs)
-}
-
-fn shared_patch_root_dir(dirs: &[String]) -> Option<String> {
-    let mut dir_paths = dirs.iter().map(PathBuf::from);
-    let mut common = dir_paths.next()?;
-    for dir in dir_paths {
-        while !Path::new(&dir).starts_with(&common) {
-            if !common.pop() {
-                return None;
-            }
-        }
-    }
-    if common.as_os_str().is_empty() {
-        return None;
-    }
-    Some(common.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]

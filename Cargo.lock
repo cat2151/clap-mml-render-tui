@@ -335,6 +335,7 @@ dependencies = [
  "clack-host",
  "clap",
  "cmrt-core 0.1.0",
+ "cmrt-runtime",
  "crossterm",
  "dirs",
  "hound",
@@ -435,6 +436,17 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "ureq",
+]
+
+[[package]]
+name = "cmrt-runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cmrt-core 0.1.0",
+ "dirs",
+ "serde",
+ "toml",
 ]
 
 [[package]]

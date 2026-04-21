@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 cmrt-core = { path = "../core-lib" }
+cmrt-runtime = { path = "../cmrt-runtime" }
 rand = "0.8"
 
 # TUI
