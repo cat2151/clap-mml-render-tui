@@ -207,7 +207,7 @@ patch_path = "/tmp/Pad 1.fxp"
 random_patch = true
 "#;
     let cfg: Config = toml::from_str(toml_str).unwrap();
-    let core_cfg = cmrt_core::CoreConfig::from(&cfg);
+    let core_cfg = core_config_from_config(&cfg);
 
     assert_eq!(cfg.plugin_path, "/usr/lib/clap/Surge XT.clap");
     assert!(core_cfg.patch_path.is_none());
@@ -226,7 +226,7 @@ buffer_size = 512
 patches_dirs = ["/tmp/surge-data/patches_factory", "/tmp/surge-data/patches_3rdparty"]
 "#;
     let cfg: Config = toml::from_str(toml_str).unwrap();
-    let core_cfg = cmrt_core::CoreConfig::from(&cfg);
+    let core_cfg = core_config_from_config(&cfg);
     assert!(
         !core_cfg.random_patch,
         "Config から生成した CoreConfig は常に random_patch=false にする"

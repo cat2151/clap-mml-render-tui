@@ -4,11 +4,11 @@ use anyhow::{anyhow, Result};
 use clack_host::prelude::PluginEntry;
 use cmrt_core::{
     mml_render_with_probe, prepare_cache_render_inputs, render_prepared_cache_with_probe,
-    CacheRenderInputs, CoreConfig, NativeRenderProbeContext,
+    CacheRenderInputs, NativeRenderProbeContext,
 };
 use hound::SampleFormat;
 
-use crate::config::{Config, OfflineRenderBackend};
+use crate::config::{core_config_from_config, Config, OfflineRenderBackend};
 use render_server::RenderServerSupervisor;
 
 #[path = "offline_render/render_server.rs"]
@@ -61,7 +61,7 @@ impl OfflineRenderer {
         match self.backend.as_ref() {
             OfflineRendererBackend::InProcess { cfg, entry_ptr } => {
                 let entry = plugin_entry(*entry_ptr)?;
-                let core_cfg = CoreConfig::from(cfg.as_ref());
+                let core_cfg = core_config_from_config(cfg.as_ref());
                 let (samples, patch_name) =
                     mml_render_with_probe(mml, &core_cfg, entry, probe_context)?;
                 Ok(OfflineRenderOutput {
@@ -76,7 +76,7 @@ impl OfflineRenderer {
     pub(crate) fn prepare_cache_render(&self, mml: &str) -> Result<PreparedOfflineRender> {
         match self.backend.as_ref() {
             OfflineRendererBackend::InProcess { cfg, .. } => {
-                let core_cfg = CoreConfig::from(cfg.as_ref());
+                let core_cfg = core_config_from_config(cfg.as_ref());
                 prepare_cache_render_inputs(mml, &core_cfg).map(PreparedOfflineRender::InProcess)
             }
             OfflineRendererBackend::RenderServer { .. } => {

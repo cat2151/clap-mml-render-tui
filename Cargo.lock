@@ -443,7 +443,6 @@ name = "cmrt-runtime"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "cmrt-core 0.1.0",
  "dirs",
  "serde",
  "toml",

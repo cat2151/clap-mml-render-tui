@@ -1,4 +1,3 @@
-use cmrt_core::CoreConfig;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -326,20 +325,6 @@ pub fn shared_patch_root_dir(dirs: &[String]) -> Option<String> {
     Some(common.to_string_lossy().into_owned())
 }
 
-impl From<&Config> for CoreConfig {
-    fn from(value: &Config) -> Self {
-        Self {
-            output_midi: value.output_midi.clone(),
-            output_wav: value.output_wav.clone(),
-            sample_rate: value.sample_rate,
-            buffer_size: value.buffer_size,
-            patch_path: None,
-            patches_dir: core_config_patch_root_dir(value),
-            random_patch: false,
-        }
-    }
-}
-
 #[cfg(test)]
 fn test_config_app_dir() -> Option<PathBuf> {
     std::env::var_os("CMRT_BASE_DIR")
@@ -415,7 +400,7 @@ buffer_size = 512
     }
 
     #[test]
-    fn core_config_from_config_uses_shared_patch_root() {
+    fn core_config_patch_root_dir_uses_shared_patch_root() {
         let toml_str = r#"
 plugin_path = "/usr/lib/clap/Surge XT.clap"
 input_midi  = "input.mid"
@@ -427,10 +412,10 @@ patches_dirs = ["/tmp/surge-data/patches_factory", "/tmp/surge-data/patches_3rdp
 "#;
 
         let cfg: Config = toml::from_str(toml_str).unwrap();
-        let core_cfg = CoreConfig::from(&cfg);
 
-        assert_eq!(core_cfg.patches_dir.as_deref(), Some("/tmp/surge-data"));
-        assert!(core_cfg.patch_path.is_none());
-        assert!(!core_cfg.random_patch);
+        assert_eq!(
+            core_config_patch_root_dir(&cfg).as_deref(),
+            Some("/tmp/surge-data")
+        );
     }
 }

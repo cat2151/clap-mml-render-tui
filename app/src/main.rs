@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use clap_mml_render_tui::{config, server, tui, updater};
-use cmrt_core::{load_entry, mml_to_play, CoreConfig};
+use cmrt_core::{load_entry, mml_to_play};
 
 #[derive(Debug, PartialEq, Eq)]
 enum CliAction {
@@ -194,7 +194,7 @@ fn main() -> Result<()> {
         }
         CliAction::CliMml(mml) => {
             println!("CLI モード: MML = {}", mml);
-            let core_cfg = CoreConfig::from(&cfg);
+            let core_cfg = config::core_config_from_config(&cfg);
             let patch = mml_to_play(
                 &mml,
                 &core_cfg,
