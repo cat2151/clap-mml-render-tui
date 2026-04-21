@@ -1,98 +1,13 @@
 use super::super::{
-    AbRepeatState, CacheState, CellCache, DawApp, DawPlayState, FIRST_PLAYABLE_TRACK, MIXER_MAX_DB,
-    MIXER_MIN_DB,
-};
-use super::{
-    current_state, take_pending_http_commands, DawHttpCommandKind, DawStatusCacheSnapshot,
-    DawStatusGridSnapshot, DawStatusSnapshot,
+    CellCache, DawApp, DawPlayState, FIRST_PLAYABLE_TRACK, MIXER_MAX_DB, MIXER_MIN_DB,
 };
 
 impl DawApp {
-    pub(in super::super) fn sync_http_grid_snapshot(&self) {
-        let Some(state) = current_state() else {
-            return;
-        };
-        let grid_snapshot = self.data.clone();
-        state.lock().unwrap().grid_snapshot = grid_snapshot;
-    }
-
-    pub(in super::super) fn sync_http_status_snapshot(&self) {
-        let Some(state) = current_state() else {
-            return;
-        };
-        let play_state = *self.play_state.lock().unwrap();
-        let play_position = self.play_position.lock().unwrap().clone();
-        let ab_repeat = *self.ab_repeat.lock().unwrap();
-        let beat_count = self.beat_numerator();
-        let beat_duration_secs = 60.0 / self.tempo_bpm();
-        let cache = self.cache.lock().unwrap();
-        let mut pending_count = 0;
-        let mut rendering_count = 0;
-        let mut ready_count = 0;
-        let mut error_count = 0;
-        let cells = (0..self.tracks)
-            .map(|track| {
-                (0..=self.measures)
-                    .map(|measure| {
-                        let cache_state = cache[track][measure].state.clone();
-                        match cache_state {
-                            CacheState::Empty => {}
-                            CacheState::Pending => pending_count += 1,
-                            CacheState::Rendering => rendering_count += 1,
-                            CacheState::Ready => ready_count += 1,
-                            CacheState::Error => error_count += 1,
-                        }
-                        cache_state
-                    })
-                    .collect()
-            })
-            .collect();
-        drop(cache);
-
-        state.lock().unwrap().status_snapshot = Some(DawStatusSnapshot {
-            play_state,
-            play_position,
-            beat_count,
-            beat_duration_secs,
-            ab_repeat,
-            cache: DawStatusCacheSnapshot {
-                cells,
-                pending_count,
-                rendering_count,
-                ready_count,
-                error_count,
-            },
-            grid: DawStatusGridSnapshot {
-                tracks: self.tracks,
-                measures: self.measures,
-            },
-        });
-    }
-
-    pub(in super::super) fn apply_pending_http_commands(&mut self) {
-        for command in take_pending_http_commands() {
-            let result = match command.kind {
-                DawHttpCommandKind::Mml {
-                    track,
-                    measure,
-                    mml,
-                } => self.apply_http_mml(track, measure, &mml),
-                DawHttpCommandKind::Mixer { track, db } => self.apply_http_mixer(track, db),
-                DawHttpCommandKind::Patch { track, patch } => self.apply_http_patch(track, &patch),
-                DawHttpCommandKind::RandomPatch { track } => self.apply_http_random_patch(track),
-                DawHttpCommandKind::PlayStart => self.apply_http_play_start(),
-                DawHttpCommandKind::PlayStop => self.apply_http_play_stop(),
-                DawHttpCommandKind::AbRepeat {
-                    start_measure,
-                    end_measure,
-                } => self.apply_http_ab_repeat(start_measure, end_measure),
-            };
-            self.sync_http_status_snapshot();
-            let _ = command.response_tx.send(result);
-        }
-    }
-
-    fn ensure_http_grid_size(&mut self, track: usize, measure: usize) -> Result<bool, String> {
+    pub(super) fn ensure_http_grid_size(
+        &mut self,
+        track: usize,
+        measure: usize,
+    ) -> Result<bool, String> {
         let required_tracks = track
             .checked_add(1)
             .ok_or_else(|| "track index が大きすぎます".to_string())?;
@@ -164,24 +79,7 @@ impl DawApp {
         Ok(resized)
     }
 
-    pub(in super::super) fn apply_http_mml(
-        &mut self,
-        track: usize,
-        measure: usize,
-        mml: &str,
-    ) -> Result<(), String> {
-        if measure == 0 {
-            return Err("measure は 1 以上を指定してください".to_string());
-        }
-        self.ensure_http_grid_size(track, measure)?;
-        self.commit_insert_cell(track, measure, mml);
-        self.save();
-        self.sync_playback_mml_state();
-        self.append_log_line(format!("http: mml track={track} meas={measure}"));
-        Ok(())
-    }
-
-    fn apply_http_mixer(&mut self, track: usize, db: f64) -> Result<(), String> {
+    pub(super) fn apply_http_mixer(&mut self, track: usize, db: f64) -> Result<(), String> {
         if !db.is_finite() {
             return Err("db は有限な数値を指定してください".to_string());
         }
@@ -205,7 +103,11 @@ impl DawApp {
         Ok(())
     }
 
-    fn apply_http_patch(&mut self, track: usize, patch_name: &str) -> Result<(), String> {
+    pub(super) fn apply_http_patch(
+        &mut self,
+        track: usize,
+        patch_name: &str,
+    ) -> Result<(), String> {
         if track < FIRST_PLAYABLE_TRACK {
             return Err("patch は演奏トラックでのみ使用できます".to_string());
         }
@@ -226,7 +128,7 @@ impl DawApp {
         Ok(())
     }
 
-    fn apply_http_random_patch(&mut self, track: usize) -> Result<(), String> {
+    pub(super) fn apply_http_random_patch(&mut self, track: usize) -> Result<(), String> {
         self.ensure_http_grid_size(track, self.measures.max(1))?;
         self.apply_random_patch_to_track(track)?;
         self.sync_http_grid_snapshot();
@@ -234,7 +136,7 @@ impl DawApp {
         Ok(())
     }
 
-    fn apply_http_play_start(&mut self) -> Result<(), String> {
+    pub(super) fn apply_http_play_start(&mut self) -> Result<(), String> {
         let play_state = *self.play_state.lock().unwrap();
         if play_state == DawPlayState::Playing {
             self.append_log_line("http: play start (already playing)");
@@ -253,34 +155,9 @@ impl DawApp {
         }
     }
 
-    fn apply_http_play_stop(&mut self) -> Result<(), String> {
+    pub(super) fn apply_http_play_stop(&mut self) -> Result<(), String> {
         self.stop_play();
         self.append_log_line("http: play stop");
-        Ok(())
-    }
-
-    pub(in super::super) fn apply_http_ab_repeat(
-        &mut self,
-        start_measure: usize,
-        end_measure: usize,
-    ) -> Result<(), String> {
-        if start_measure == 0 || end_measure == 0 {
-            return Err("measA と measB は 1 以上を指定してください".to_string());
-        }
-        if start_measure > self.measures || end_measure > self.measures {
-            return Err(format!(
-                "measA と measB は 1..={} の範囲で指定してください",
-                self.measures
-            ));
-        }
-
-        *self.ab_repeat.lock().unwrap() = AbRepeatState::FixEnd {
-            start_measure_index: start_measure - 1,
-            end_measure_index: end_measure - 1,
-        };
-        self.append_log_line(format!(
-            "http: ab-repeat measA={start_measure} measB={end_measure}"
-        ));
         Ok(())
     }
 }
