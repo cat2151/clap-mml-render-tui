@@ -5,11 +5,11 @@ use std::{
 
 use tui_textarea::TextArea;
 
-use super::super::{
-    AbRepeatState, CacheState, CellCache, DawHistoryPane, DawMode, DawPatchSelectPane, DawPlayState,
-};
 use super::*;
 use crate::config::Config;
+use crate::daw::{
+    AbRepeatState, CacheState, CellCache, DawHistoryPane, DawMode, DawPatchSelectPane, DawPlayState,
+};
 
 #[test]
 fn start_track_rerender_batch_logs_only_targeted_measures() {
