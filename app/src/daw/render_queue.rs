@@ -8,11 +8,9 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use clack_host::prelude::PluginEntry;
-use cmrt_core::{
-    prepare_cache_render_inputs, render_prepared_cache_with_probe, CacheRenderInputs,
-    NativeRenderProbeContext,
-};
+use cmrt_core::NativeRenderProbeContext;
+
+use crate::offline_render::{OfflineRenderer, PreparedOfflineRender};
 
 #[derive(Clone)]
 pub(super) struct RenderQueue {
@@ -43,7 +41,7 @@ struct RenderRequest {
 
 struct PreparedRenderRequest {
     request: RenderRequest,
-    prepared: CacheRenderInputs,
+    prepared: PreparedOfflineRender,
 }
 
 struct QueuedRenderRequest(RenderRequest);
@@ -147,13 +145,12 @@ impl RenderQueue {
     ) -> Self {
         let (request_tx, request_rx) = mpsc::channel::<RenderRequest>();
         let prepared_queue = Arc::new(PreparedRenderQueue::default());
+        let renderer = OfflineRenderer::new(Arc::clone(&cfg), entry_ptr);
 
         {
-            let cfg = Arc::clone(&cfg);
             let prepared_queue = Arc::clone(&prepared_queue);
+            let renderer = renderer.clone();
             std::thread::spawn(move || {
-                let daw_cfg = (*cfg).clone();
-                let core_cfg = cmrt_core::CoreConfig::from(&daw_cfg);
                 let mut pending = BinaryHeap::<QueuedRenderRequest>::new();
                 loop {
                     if pending.is_empty() {
@@ -169,7 +166,7 @@ impl RenderQueue {
                     let Some(QueuedRenderRequest(request)) = pending.pop() else {
                         continue;
                     };
-                    match prepare_cache_render_inputs(&request.mml, &core_cfg) {
+                    match renderer.prepare_cache_render(&request.mml) {
                         Ok(prepared) => {
                             prepared_queue.push(PreparedRenderRequest { request, prepared });
                         }
@@ -186,23 +183,19 @@ impl RenderQueue {
 
         for _ in 0..render_workers {
             let prepared_queue = Arc::clone(&prepared_queue);
-            std::thread::spawn(move || {
-                // SAFETY: entry は main() のスタックに生存している。
-                let entry_ref: &PluginEntry = unsafe { &*(entry_ptr as *const PluginEntry) };
-                loop {
-                    let Some(prepared) = prepared_queue.pop() else {
-                        break;
-                    };
-                    let result = render_prepared_cache_with_probe(
-                        prepared.prepared,
-                        entry_ref,
-                        Some(&prepared.request.probe_context),
-                    );
-                    let _ = prepared.request.response_tx.send(RenderResult {
-                        request_id: prepared.request.request_id,
-                        result,
-                    });
-                }
+            let renderer = renderer.clone();
+            std::thread::spawn(move || loop {
+                let Some(prepared) = prepared_queue.pop() else {
+                    break;
+                };
+                let result = renderer.render_prepared_cache(
+                    prepared.prepared,
+                    Some(&prepared.request.probe_context),
+                );
+                let _ = prepared.request.response_tx.send(RenderResult {
+                    request_id: prepared.request.request_id,
+                    result,
+                });
             });
         }
 

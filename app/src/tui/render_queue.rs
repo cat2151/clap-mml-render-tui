@@ -7,11 +7,10 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use clack_host::prelude::PluginEntry;
-use cmrt_core::{mml_render_with_probe, CoreConfig, NativeRenderProbeContext};
+use cmrt_core::NativeRenderProbeContext;
 
 use super::{truncate_for_log, ActiveRenderGuard};
-use crate::{config::Config, history::daw_cache_mml_hash};
+use crate::{config::Config, history::daw_cache_mml_hash, offline_render::OfflineRenderer};
 
 const MAX_TUI_RENDER_WORKERS: usize = 2;
 
@@ -54,8 +53,8 @@ pub(super) enum TuiRenderCompletion {
 
 struct TuiRenderQueueInner {
     cfg: Arc<Config>,
+    renderer: OfflineRenderer,
     render_workers: usize,
-    entry_ptr: usize,
     active_offline_render_count: Arc<std::sync::atomic::AtomicUsize>,
     state: Mutex<TuiRenderQueueState>,
     available: Condvar,
@@ -323,13 +322,14 @@ impl TuiRenderQueue {
     ) -> Self {
         let configured_workers = cfg.offline_render_workers;
         let render_workers = render_worker_count(configured_workers);
+        let renderer = OfflineRenderer::new(Arc::clone(&cfg), entry_ptr);
         log_notepad_event(format!(
             "render queue workers={render_workers} configured_workers={configured_workers}"
         ));
         let inner = Arc::new(TuiRenderQueueInner {
             cfg,
+            renderer,
             render_workers,
-            entry_ptr,
             active_offline_render_count,
             state: Mutex::new(TuiRenderQueueState::default()),
             available: Condvar::new(),
@@ -467,9 +467,6 @@ fn render_worker(inner: Arc<TuiRenderQueueInner>) {
 }
 
 fn render_work(inner: &TuiRenderQueueInner, work: &TuiRenderWork) -> TuiRenderCompletion {
-    // SAFETY: entry は main() のスタックに生存している。
-    let entry_ref: &PluginEntry = unsafe { &*(inner.entry_ptr as *const PluginEntry) };
-    let core_cfg = CoreConfig::from(inner.cfg.as_ref());
     let _active_render_guard =
         ActiveRenderGuard::new(Arc::clone(&inner.active_offline_render_count));
     let active_render_count = inner.active_offline_render_count.load(Ordering::Relaxed);
@@ -501,10 +498,13 @@ fn render_work(inner: &TuiRenderQueueInner, work: &TuiRenderWork) -> TuiRenderCo
         }
     };
 
-    match mml_render_with_probe(&work.mml, &core_cfg, entry_ref, Some(&probe_context)) {
-        Ok((samples, patch_name)) => TuiRenderCompletion::Rendered {
-            samples,
-            patch_name,
+    match inner
+        .renderer
+        .render_phrase(&work.mml, Some(&probe_context))
+    {
+        Ok(rendered) => TuiRenderCompletion::Rendered {
+            samples: rendered.samples,
+            patch_name: rendered.patch_name,
         },
         Err(error) => TuiRenderCompletion::RenderError(error.to_string()),
     }

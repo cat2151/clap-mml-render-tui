@@ -169,15 +169,39 @@ fn main() -> Result<()> {
         );
     }
 
-    // CLAP プラグインエントリをロード（TUI/CLI/サーバー 共通）
-    let entry = load_entry(&cfg.plugin_path)?;
+    let needs_plugin_entry = match action {
+        CliAction::Server(_) | CliAction::CliMml(_) => true,
+        CliAction::Tui => cfg.offline_render_backend == config::OfflineRenderBackend::InProcess,
+        CliAction::Help(_) | CliAction::Shutdown(_) | CliAction::Update | CliAction::Check => {
+            unreachable!()
+        }
+    };
+    let entry = if needs_plugin_entry {
+        Some(load_entry(&cfg.plugin_path)?)
+    } else {
+        None
+    };
 
     match action {
-        CliAction::Server(port) => return server::run_server(&cfg, &entry, port),
+        CliAction::Server(port) => {
+            return server::run_server(
+                &cfg,
+                entry
+                    .as_ref()
+                    .expect("server mode must load a CLAP PluginEntry"),
+                port,
+            );
+        }
         CliAction::CliMml(mml) => {
             println!("CLI モード: MML = {}", mml);
             let core_cfg = CoreConfig::from(&cfg);
-            let patch = mml_to_play(&mml, &core_cfg, &entry)?;
+            let patch = mml_to_play(
+                &mml,
+                &core_cfg,
+                entry
+                    .as_ref()
+                    .expect("CLI mode must load a CLAP PluginEntry"),
+            )?;
             println!("patch: {}", patch);
             return Ok(());
         }
@@ -188,7 +212,7 @@ fn main() -> Result<()> {
     }
 
     // TUI モード
-    let mut app = tui::TuiApp::new(&cfg, &entry);
+    let mut app = tui::TuiApp::new(&cfg, entry.as_ref());
 
     app.run()?;
 

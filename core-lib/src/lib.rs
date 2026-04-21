@@ -24,10 +24,10 @@ mod native_render_probe;
 use native_render_probe::clear_native_render_probe_state_for_tests;
 #[cfg(test)]
 use native_render_probe::with_native_render_probe;
+use native_render_probe::with_requested_native_render_probe;
 pub use native_render_probe::{
     set_native_probe_logger, NativeProbeLogger, NativeRenderProbeContext,
 };
-use native_render_probe::with_requested_native_render_probe;
 
 pub struct CacheRenderInputs {
     mml: String,

@@ -182,10 +182,8 @@ fn mml_with_resolved_embedded_patch_keeps_core_patch_value_relative_to_base() {
         random_patch: false,
     };
 
-    let rewritten = mml_with_resolved_embedded_patch(
-        r#"{"Surge XT patch":"Pads/Pad 1.fxp"}t120o4c"#,
-        &config,
-    );
+    let rewritten =
+        mml_with_resolved_embedded_patch(r#"{"Surge XT patch":"Pads/Pad 1.fxp"}t120o4c"#, &config);
     let preprocessed = mml_preprocessor::extract_embedded_json(rewritten.as_ref());
     let value: serde_json::Value =
         serde_json::from_str(preprocessed.embedded_json.as_deref().unwrap()).unwrap();

@@ -68,7 +68,7 @@ fn spawn_patch_loader(cfg: &Config) -> Arc<Mutex<PatchLoadState>> {
 }
 
 impl<'a> TuiApp<'a> {
-    pub fn new(cfg: &'a Config, entry: &'a PluginEntry) -> Self {
+    pub fn new(cfg: &'a Config, entry: Option<&'a PluginEntry>) -> Self {
         crate::logging::install_native_probe_logger();
         let cfg_arc = Arc::new(cfg.clone());
         let LoadedSessionState {
@@ -77,7 +77,9 @@ impl<'a> TuiApp<'a> {
             list_state,
             is_daw_mode,
         } = load_initial_session_state();
-        let entry_ptr = entry as *const PluginEntry as usize;
+        let entry_ptr = entry
+            .map(|entry| entry as *const PluginEntry as usize)
+            .unwrap_or(0);
         let active_offline_render_count = Arc::new(AtomicUsize::new(0));
         let render_queue = TuiRenderQueue::new(
             Arc::clone(&cfg_arc),

@@ -4,6 +4,7 @@ pub mod daw;
 pub(crate) mod generate;
 pub mod history;
 pub mod logging;
+pub(crate) mod offline_render;
 pub(crate) mod patches;
 pub(crate) mod random;
 pub mod server;

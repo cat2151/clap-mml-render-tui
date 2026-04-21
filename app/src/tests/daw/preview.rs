@@ -4,7 +4,7 @@ use std::sync::{
     Arc, Mutex,
 };
 
-use super::{begin_preview_output, DawPlayState};
+use super::{begin_preview_output, DawPlayState, PreviewOutputRequest, PreviewOutputState};
 use crate::daw::PlayPosition;
 
 #[test]
@@ -16,13 +16,17 @@ fn begin_preview_output_skips_enqueue_when_preview_stopped() {
     let enqueue_calls = Arc::new(AtomicUsize::new(0));
 
     let started = begin_preview_output(
-        &play_transition_lock,
-        &play_state,
-        &play_position,
-        &preview_session,
-        1,
-        2,
-        std::time::Duration::from_secs(1),
+        PreviewOutputState {
+            play_transition_lock: &play_transition_lock,
+            play_state: &play_state,
+            play_position: &play_position,
+            preview_session: &preview_session,
+        },
+        PreviewOutputRequest {
+            session: 1,
+            measure_index: 2,
+            measure_duration: std::time::Duration::from_secs(1),
+        },
         || {
             enqueue_calls.fetch_add(1, Ordering::SeqCst);
         },
@@ -42,13 +46,17 @@ fn begin_preview_output_updates_position_before_enqueue() {
     let observed_measure = Arc::new(Mutex::new(None));
 
     let started = begin_preview_output(
-        &play_transition_lock,
-        &play_state,
-        &play_position,
-        &preview_session,
-        4,
-        3,
-        std::time::Duration::from_secs(1),
+        PreviewOutputState {
+            play_transition_lock: &play_transition_lock,
+            play_state: &play_state,
+            play_position: &play_position,
+            preview_session: &preview_session,
+        },
+        PreviewOutputRequest {
+            session: 4,
+            measure_index: 3,
+            measure_duration: std::time::Duration::from_secs(1),
+        },
         {
             let play_position = Arc::clone(&play_position);
             let observed_measure = Arc::clone(&observed_measure);
@@ -91,13 +99,17 @@ fn begin_preview_output_skips_enqueue_for_stale_preview_session() {
     let enqueue_calls = Arc::new(AtomicUsize::new(0));
 
     let started = begin_preview_output(
-        &play_transition_lock,
-        &play_state,
-        &play_position,
-        &preview_session,
-        1,
-        2,
-        std::time::Duration::from_secs(1),
+        PreviewOutputState {
+            play_transition_lock: &play_transition_lock,
+            play_state: &play_state,
+            play_position: &play_position,
+            preview_session: &preview_session,
+        },
+        PreviewOutputRequest {
+            session: 1,
+            measure_index: 2,
+            measure_duration: std::time::Duration::from_secs(1),
+        },
         || {
             enqueue_calls.fetch_add(1, Ordering::SeqCst);
         },

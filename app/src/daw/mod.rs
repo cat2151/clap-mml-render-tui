@@ -159,7 +159,7 @@ pub struct DawApp {
     pub(super) textarea: TextArea<'static>,
 
     cfg: Arc<Config>,
-    entry_ptr: usize, // *const PluginEntry as usize (main() に生存保証)
+    entry_ptr: usize, // *const PluginEntry as usize。render_server backend では 0。
 
     /// 現在のトラック数（track 0 = ヘッダ/テンポ、track 1.. = 演奏トラック）
     pub(super) tracks: usize,
@@ -247,6 +247,11 @@ pub struct DawApp {
 impl DawApp {
     pub fn new(cfg: Arc<Config>, entry_ptr: usize) -> Self {
         init::new(cfg, entry_ptr)
+    }
+
+    fn offline_render_available(&self) -> bool {
+        self.entry_ptr != 0
+            || self.cfg.offline_render_backend == crate::config::OfflineRenderBackend::RenderServer
     }
 
     pub(super) fn ab_repeat_state(&self) -> AbRepeatState {

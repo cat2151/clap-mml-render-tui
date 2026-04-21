@@ -60,6 +60,9 @@ fn collect_patch_pairs_combines_factory_and_thirdparty_using_common_base() {
             thirdparty.to_string_lossy().into_owned(),
         ]),
         offline_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
+        offline_render_backend: crate::config::OfflineRenderBackend::InProcess,
+        offline_render_server_port: crate::config::DEFAULT_OFFLINE_RENDER_SERVER_PORT,
+        offline_render_server_command: String::new(),
     };
 
     let pairs = collect_patch_pairs(&cfg).unwrap();
@@ -99,6 +102,9 @@ fn collect_patch_pairs_sorts_display_names_naturally() {
         buffer_size: 512,
         patches_dirs: Some(vec![factory.to_string_lossy().into_owned()]),
         offline_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
+        offline_render_backend: crate::config::OfflineRenderBackend::InProcess,
+        offline_render_server_port: crate::config::DEFAULT_OFFLINE_RENDER_SERVER_PORT,
+        offline_render_server_command: String::new(),
     };
 
     let pairs = collect_patch_pairs(&cfg).unwrap();

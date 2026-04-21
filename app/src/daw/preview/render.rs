@@ -11,29 +11,37 @@ use super::super::{
     DawPlayState, PlayPosition, MAX_CACHED_SAMPLES, OVERLAY_PREVIEW_CACHE_MAX_ENTRIES,
 };
 
+pub(in crate::daw) struct PreviewOutputState<'a> {
+    pub(in crate::daw) play_transition_lock: &'a Arc<Mutex<()>>,
+    pub(in crate::daw) play_state: &'a Arc<Mutex<DawPlayState>>,
+    pub(in crate::daw) play_position: &'a Arc<Mutex<Option<PlayPosition>>>,
+    pub(in crate::daw) preview_session: &'a AtomicU64,
+}
+
+pub(in crate::daw) struct PreviewOutputRequest {
+    pub(in crate::daw) session: u64,
+    pub(in crate::daw) measure_index: usize,
+    pub(in crate::daw) measure_duration: std::time::Duration,
+}
+
 pub(in crate::daw) fn begin_preview_output<F>(
-    play_transition_lock: &Arc<Mutex<()>>,
-    play_state: &Arc<Mutex<DawPlayState>>,
-    play_position: &Arc<Mutex<Option<PlayPosition>>>,
-    preview_session: &AtomicU64,
-    session: u64,
-    measure_index: usize,
-    measure_duration: std::time::Duration,
+    state: PreviewOutputState<'_>,
+    request: PreviewOutputRequest,
     enqueue_audio: F,
 ) -> bool
 where
     F: FnOnce(),
 {
-    let _transition_guard = play_transition_lock.lock().unwrap();
-    if *play_state.lock().unwrap() != DawPlayState::Preview
-        || preview_session.load(Ordering::Acquire) != session
+    let _transition_guard = state.play_transition_lock.lock().unwrap();
+    if *state.play_state.lock().unwrap() != DawPlayState::Preview
+        || state.preview_session.load(Ordering::Acquire) != request.session
     {
         return false;
     }
-    *play_position.lock().unwrap() = Some(PlayPosition {
-        measure_index,
+    *state.play_position.lock().unwrap() = Some(PlayPosition {
+        measure_index: request.measure_index,
         measure_start: std::time::Instant::now(),
-        measure_duration,
+        measure_duration: request.measure_duration,
     });
     enqueue_audio();
     true

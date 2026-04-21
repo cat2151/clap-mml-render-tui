@@ -13,7 +13,7 @@ use crate::history::daw_cache_mml_hash;
 #[path = "preview/render.rs"]
 mod render;
 
-pub(super) use render::begin_preview_output;
+pub(super) use render::{begin_preview_output, PreviewOutputRequest, PreviewOutputState};
 use render::{
     insert_overlay_preview_cache, overlay_preview_cache_key, render_mixed_preview_tracks,
 };
@@ -288,13 +288,17 @@ impl DawApp {
                     measure_samples as f64 / (sample_rate as f64 * 2.0),
                 );
                 let preview_active = begin_preview_output(
-                    &play_transition_lock,
-                    &play_state,
-                    &play_position,
-                    &preview_session,
-                    session,
-                    measure_index,
-                    measure_duration,
+                    PreviewOutputState {
+                        play_transition_lock: &play_transition_lock,
+                        play_state: &play_state,
+                        play_position: &play_position,
+                        preview_session: &preview_session,
+                    },
+                    PreviewOutputRequest {
+                        session,
+                        measure_index,
+                        measure_duration,
+                    },
                     || {
                         let source = rodio::buffer::SamplesBuffer::new(
                             2,

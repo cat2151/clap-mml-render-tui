@@ -317,7 +317,7 @@ impl DawApp {
                         self.sync_playback_mml_state();
                         if *self.play_state.lock().unwrap() == DawPlayState::Idle
                             && self.patch_select_target_measure() > 0
-                            && self.entry_ptr != 0
+                            && self.offline_render_available()
                         {
                             self.start_preview(self.patch_select_target_measure() - 1);
                         }

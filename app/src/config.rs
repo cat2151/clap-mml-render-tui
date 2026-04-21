@@ -3,8 +3,17 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 pub const DEFAULT_OFFLINE_RENDER_WORKERS: usize = 4;
+pub const DEFAULT_OFFLINE_RENDER_SERVER_PORT: u16 = 62153;
 const MIN_OFFLINE_RENDER_WORKERS: usize = 1;
 const MAX_OFFLINE_RENDER_WORKERS: usize = 16;
+
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum OfflineRenderBackend {
+    #[default]
+    InProcess,
+    RenderServer,
+}
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
@@ -20,6 +29,15 @@ pub struct Config {
     /// DAW のオフラインレンダリング同時実行数
     #[serde(default = "default_offline_render_workers")]
     pub offline_render_workers: usize,
+    /// オフラインレンダリング backend
+    #[serde(default)]
+    pub offline_render_backend: OfflineRenderBackend,
+    /// render-server backend が使う localhost port
+    #[serde(default = "default_offline_render_server_port")]
+    pub offline_render_server_port: u16,
+    /// render-server backend 起動コマンド。空なら sibling executable / PATH を探す。
+    #[serde(default)]
+    pub offline_render_server_command: String,
 }
 
 #[derive(Serialize)]
@@ -128,6 +146,13 @@ buffer_size = 512
 # 【省略可】DAW のオフラインレンダリング同時実行数（1〜16）
 offline_render_workers = 4
 
+# 【省略可】オフラインレンダリング backend
+# in_process: 従来どおり cmrt 本体プロセス内でレンダリングします。
+# render_server: 127.0.0.1 の render-server 子プロセスへ POST /render します。
+offline_render_backend = "in_process"
+offline_render_server_port = 62153
+offline_render_server_command = ""
+
 # 【省略可】Surge XT パッチの検索対象ディレクトリ一覧（TUI / DAW の音色選択・ランダム音色で使う）
 # 例 (Windows): patches_dirs = ['C:\ProgramData\Surge XT\patches_factory', 'C:\ProgramData\Surge XT\patches_3rdparty']
 # 例 (Linux):   patches_dirs = ['/home/user/.local/share/surge-data/patches_factory', '/home/user/.local/share/surge-data/patches_3rdparty']
@@ -142,6 +167,10 @@ offline_render_workers = 4
 
 fn default_offline_render_workers() -> usize {
     DEFAULT_OFFLINE_RENDER_WORKERS
+}
+
+fn default_offline_render_server_port() -> u16 {
+    DEFAULT_OFFLINE_RENDER_SERVER_PORT
 }
 
 /// `patches_dirs = [...]` の 1 行を安全な TOML 文字列として生成する。
@@ -262,6 +291,9 @@ impl Config {
                 MAX_OFFLINE_RENDER_WORKERS,
                 self.offline_render_workers
             );
+        }
+        if self.offline_render_server_port == 0 {
+            anyhow::bail!("offline_render_server_port は 1〜65535 の範囲で設定してください");
         }
         Ok(())
     }

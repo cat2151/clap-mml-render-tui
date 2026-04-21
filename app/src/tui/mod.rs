@@ -117,7 +117,7 @@ pub struct TuiApp<'a> {
     pub(super) list_state: ListState,
     pub(super) textarea: TextArea<'a>,
     cfg: Arc<Config>,
-    entry_ptr: usize, // *const PluginEntry as usize (main() に生存保証)
+    entry_ptr: usize, // *const PluginEntry as usize。render_server backend では 0。
     pub(super) play_state: Arc<Mutex<PlayState>>,
     playback_session: Arc<AtomicU64>,
     pub(super) active_offline_render_count: Arc<AtomicUsize>,

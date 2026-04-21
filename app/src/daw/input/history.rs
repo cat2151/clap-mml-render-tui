@@ -243,7 +243,7 @@ impl DawApp {
         self.mark_patch_phrase_store_dirty();
         if *self.play_state.lock().unwrap() == DawPlayState::Idle
             && target_measure > 0
-            && self.entry_ptr != 0
+            && self.offline_render_available()
         {
             self.start_preview(target_measure - 1);
         }
