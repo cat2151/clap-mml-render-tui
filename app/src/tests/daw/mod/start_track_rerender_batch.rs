@@ -1,8 +1,3 @@
-use std::{
-    collections::VecDeque,
-    sync::{Arc, Mutex},
-};
-
 use tui_textarea::TextArea;
 
 use super::*;
