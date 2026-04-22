@@ -85,6 +85,7 @@ impl DawApp {
         let active_track_count = active_tracks.len();
         std::thread::spawn(move || {
             let daw_cfg = (*cfg).clone();
+            let offline_render_workers = daw_cfg.effective_offline_render_workers();
             let Some(samples) = render_mixed_preview_tracks(
                 &render_queue,
                 RenderPriority::Low,
@@ -98,7 +99,7 @@ impl DawApp {
                         measure_index,
                         active_track_count,
                         daw_cache_mml_hash(mml),
-                        daw_cfg.offline_render_workers,
+                        offline_render_workers,
                     )
                 },
             ) else {
@@ -161,6 +162,7 @@ impl DawApp {
         std::thread::spawn(move || {
             let daw_cfg = (*cfg).clone();
             let sample_rate = daw_cfg.sample_rate as u32;
+            let offline_render_workers = daw_cfg.effective_offline_render_workers();
 
             let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else {
                 crate::logging::append_log_line(&log_lines, "preview: audio init failed");
@@ -226,7 +228,7 @@ impl DawApp {
                                 measure_index,
                                 active_track_count,
                                 daw_cache_mml_hash(mml),
-                                daw_cfg.offline_render_workers,
+                                offline_render_workers,
                             )
                         },
                     )
@@ -269,7 +271,7 @@ impl DawApp {
                             measure_index,
                             active_track_count,
                             daw_cache_mml_hash(mml),
-                            daw_cfg.offline_render_workers,
+                            offline_render_workers,
                         )
                     },
                 )

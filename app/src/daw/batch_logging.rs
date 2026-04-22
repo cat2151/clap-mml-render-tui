@@ -108,30 +108,52 @@ fn take_next_batch_job(
     Some((first_measure, first_job, format_measure_order(&valid_order)))
 }
 
-fn cache_rerender_slot_limit(
-    cache_render_workers: usize,
-    play_position: Option<&PlayPosition>,
-) -> usize {
-    // play / preview の音声出力中は hot reload の cache render を一気に並列投入しない。
-    if play_position.is_some() {
-        1
-    } else {
-        cache_render_workers
-    }
+fn active_batch_measure_count(batches: &[Option<TrackRerenderBatch>]) -> usize {
+    batches
+        .iter()
+        .flatten()
+        .map(|batch| batch.active_measures.len())
+        .sum()
 }
 
-fn fill_batch_slots(
-    batch: &mut TrackRerenderBatch,
+fn cache_rerender_available_slots(
+    batches: &[Option<TrackRerenderBatch>],
     cache_render_workers: usize,
-    track: usize,
+) -> usize {
+    cache_render_workers.saturating_sub(active_batch_measure_count(batches))
+}
+
+fn next_refill_track(batches: &[Option<TrackRerenderBatch>]) -> Option<usize> {
+    batches
+        .iter()
+        .enumerate()
+        .filter_map(|(track, batch)| {
+            let batch = batch.as_ref()?;
+            if batch.pending.is_empty() {
+                return None;
+            }
+            Some((track, batch.active_measures.len()))
+        })
+        .min_by_key(|(track, active_measures)| (*active_measures, *track))
+        .map(|(track, _)| track)
+}
+
+fn fill_all_batch_slots(
+    batches: &mut [Option<TrackRerenderBatch>],
+    cache_render_workers: usize,
     cache: &Arc<Mutex<Vec<Vec<super::CellCache>>>>,
     play_position: Option<PlayPosition>,
     ab_repeat: &Arc<Mutex<super::AbRepeatState>>,
     play_measure_mmls: &[String],
 ) -> Vec<(CacheJob, String)> {
     let mut queued = Vec::new();
-    let slot_limit = cache_rerender_slot_limit(cache_render_workers, play_position.as_ref());
-    while batch.active_measures.len() < slot_limit {
+    while cache_rerender_available_slots(batches, cache_render_workers) > 0 {
+        let Some(track) = next_refill_track(batches) else {
+            break;
+        };
+        let Some(batch) = batches.get_mut(track).and_then(Option::as_mut) else {
+            break;
+        };
         let Some((next_measure, next_job, priority_order_label)) = take_next_batch_job(
             &mut batch.pending,
             track,
@@ -140,7 +162,7 @@ fn fill_batch_slots(
             ab_repeat,
             play_measure_mmls,
         ) else {
-            break;
+            continue;
         };
         batch.active_measures.insert(next_measure);
         queued.push((
@@ -152,6 +174,20 @@ fn fill_batch_slots(
         ));
     }
     queued
+}
+
+fn take_completed_batch_logs(batches: &mut [Option<TrackRerenderBatch>]) -> Vec<String> {
+    let mut logs = Vec::new();
+    for batch in batches {
+        let Some(current) = batch.as_ref() else {
+            continue;
+        };
+        if current.pending.is_empty() && current.active_measures.is_empty() {
+            logs.push(current.completion_log.clone());
+            *batch = None;
+        }
+    }
+    logs
 }
 
 impl DawApp {
@@ -181,7 +217,7 @@ impl DawApp {
             .unwrap_or_else(|| "none".to_string());
         let play_position = self.play_position.lock().unwrap().clone();
         let play_measure_mmls = self.play_measure_mmls.lock().unwrap().clone();
-        let mut batch = TrackRerenderBatch {
+        let batch = TrackRerenderBatch {
             pending,
             active_measures: BTreeSet::new(),
             completion_log: format!(
@@ -189,17 +225,23 @@ impl DawApp {
                 track, measure_range
             ),
         };
-        let queued = fill_batch_slots(
-            &mut batch,
-            self.cache_render_workers,
-            track,
-            &self.cache,
-            play_position,
-            &self.ab_repeat,
-            &play_measure_mmls,
-        );
-        if queued.is_empty() {
-            self.track_rerender_batches.lock().unwrap()[track] = None;
+        let (queued, completion_logs, batch_started) = {
+            let mut batches = self.track_rerender_batches.lock().unwrap();
+            batches[track] = Some(batch);
+            let queued = fill_all_batch_slots(
+                &mut batches,
+                self.cache_render_workers,
+                &self.cache,
+                play_position,
+                &self.ab_repeat,
+                &play_measure_mmls,
+            );
+            let completion_logs = take_completed_batch_logs(&mut batches);
+            let batch_started =
+                batches[track].is_some() || queued.iter().any(|(job, _)| job.track == track);
+            (queued, completion_logs, batch_started)
+        };
+        if !batch_started {
             return;
         }
         self.append_log_line(format!(
@@ -209,10 +251,12 @@ impl DawApp {
         for (_, reserve_log) in &queued {
             self.append_log_line(reserve_log.clone());
         }
-        self.track_rerender_batches.lock().unwrap()[track] = Some(batch);
         for (job, _) in queued {
             self.mark_cache_rendering(job.track, job.measure);
             let _ = self.cache_tx.send(job);
+        }
+        for completion_log in completion_logs {
+            self.append_log_line(completion_log);
         }
     }
 
@@ -226,7 +270,7 @@ impl DawApp {
         }
         let play_position = ctx.play_position.lock().unwrap().clone();
         let play_measure_mmls = ctx.play_measure_mmls.lock().unwrap().clone();
-        let (queued, completion_log) = {
+        let (queued, completion_logs) = {
             let mut batches = ctx.batches.lock().unwrap();
             let Some(batch) = batches.get_mut(track).and_then(Option::as_mut) else {
                 return;
@@ -234,22 +278,16 @@ impl DawApp {
             if !batch.active_measures.remove(&measure) {
                 return;
             }
-            let queued = fill_batch_slots(
-                batch,
+            let queued = fill_all_batch_slots(
+                &mut batches,
                 ctx.cache_render_workers,
-                track,
                 &ctx.cache,
                 play_position,
                 &ctx.ab_repeat,
                 &play_measure_mmls,
             );
-            if batch.pending.is_empty() && batch.active_measures.is_empty() {
-                let completion_log = batch.completion_log.clone();
-                batches[track] = None;
-                (queued, Some(completion_log))
-            } else {
-                (queued, None)
-            }
+            let completion_logs = take_completed_batch_logs(&mut batches);
+            (queued, completion_logs)
         };
         for (_, queued_log) in &queued {
             crate::logging::append_log_line(&ctx.log_lines, queued_log.clone());
@@ -258,7 +296,7 @@ impl DawApp {
             Self::mark_cache_rendering_in(&ctx.cache, next_job.track, next_job.measure);
             let _ = ctx.cache_tx.send(next_job);
         }
-        if let Some(completion_log) = completion_log {
+        for completion_log in completion_logs {
             crate::logging::append_log_line(&ctx.log_lines, completion_log);
         }
     }

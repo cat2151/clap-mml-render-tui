@@ -172,6 +172,14 @@ fn store_cache_job_samples(
     true
 }
 
+fn offline_render_startup_log_line(cfg: &crate::config::Config, render_workers: usize) -> String {
+    format!(
+        "offline render: backend={} workers={}",
+        cfg.offline_render_backend.as_str(),
+        render_workers
+    )
+}
+
 pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
     super::http_server::set_active_http_state_cfg(Arc::clone(&cfg));
     let DawGridBuffers {
@@ -189,7 +197,7 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
 
     let cache = Arc::new(Mutex::new(cache));
 
-    let cache_render_workers = cfg.offline_render_workers;
+    let cache_render_workers = cfg.effective_offline_render_workers();
     let render_queue = RenderQueue::new(Arc::clone(&cfg), entry_ptr, cache_render_workers);
     crate::logging::install_native_probe_logger();
 
@@ -390,6 +398,10 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
     app.load();
     app.sync_http_grid_snapshot();
     app.sync_http_status_snapshot();
+    app.append_log_line(offline_render_startup_log_line(
+        &app.cfg,
+        app.cache_render_workers,
+    ));
     app.append_log_line("=== DAW mode ready ===");
     app
 }
@@ -411,5 +423,27 @@ mod tests {
         assert_eq!(buffers.measures, MEASURES);
         assert_eq!(buffers.data.len(), TRACKS);
         assert_eq!(buffers.data[0].len(), MEASURES + 1);
+    }
+
+    #[test]
+    fn offline_render_startup_log_line_shows_backend_and_workers() {
+        let cfg: crate::config::Config = toml::from_str(
+            r#"
+plugin_path = "/usr/lib/clap/Surge XT.clap"
+input_midi = "input.mid"
+output_midi = "output.mid"
+output_wav = "output.wav"
+sample_rate = 44100
+buffer_size = 512
+offline_render_backend = "render_server"
+offline_render_server_workers = 4
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            offline_render_startup_log_line(&cfg, cfg.effective_offline_render_workers()),
+            "offline render: backend=render_server workers=4"
+        );
     }
 }

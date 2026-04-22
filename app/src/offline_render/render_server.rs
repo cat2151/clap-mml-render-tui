@@ -24,11 +24,14 @@ pub(super) struct RenderServerSupervisor {
     agent: ureq::Agent,
     state: Mutex<RenderServerState>,
     next_request_id: AtomicU64,
+    #[cfg(test)]
+    spawn_count: AtomicU64,
 }
 
 #[derive(Default)]
 struct RenderServerState {
     child: Option<Child>,
+    generation: u64,
 }
 
 enum RenderRequestError {
@@ -49,6 +52,8 @@ impl RenderServerSupervisor {
             agent,
             state: Mutex::new(RenderServerState::default()),
             next_request_id: AtomicU64::new(1),
+            #[cfg(test)]
+            spawn_count: AtomicU64::new(0),
         }
     }
 
@@ -59,51 +64,107 @@ impl RenderServerSupervisor {
             crate::history::daw_cache_mml_hash(mml)
         ));
 
-        self.ensure_started()?;
-        match self.send_once(mml) {
-            Ok(samples) => Ok(OfflineRenderOutput {
-                samples,
-                patch_name: RENDER_SERVER_PATCH_NAME.to_string(),
-            }),
-            Err(RenderRequestError::Server(message)) => Err(anyhow!(message)),
-            Err(RenderRequestError::Transport(message)) => {
-                log_offline_render_event(format!(
-                    "backend=render_server request_id={request_id} retry=1 restart_reason=\"{}\"",
-                    truncate_for_log(&message, 160)
-                ));
-                self.restart()?;
-                match self.send_once(mml) {
-                    Ok(samples) => Ok(OfflineRenderOutput {
+        let mut retry = 0;
+        loop {
+            let server_generation = self.ensure_started()?;
+            match self.send_once(mml) {
+                Ok(samples) => {
+                    return Ok(OfflineRenderOutput {
                         samples,
                         patch_name: RENDER_SERVER_PATCH_NAME.to_string(),
-                    }),
-                    Err(RenderRequestError::Server(message)) => Err(anyhow!(message)),
-                    Err(RenderRequestError::Transport(message)) => Err(anyhow!(
-                        "render-server request failed after retry: {}",
-                        message
-                    )),
+                    });
+                }
+                Err(RenderRequestError::Server(message)) => return Err(anyhow!(message)),
+                Err(RenderRequestError::Transport(message)) => {
+                    retry += 1;
+                    log_offline_render_event(format!(
+                        "backend=render_server request_id={request_id} retry={retry} transport_error=\"{}\"",
+                        truncate_for_log(&message, 160)
+                    ));
+                    self.recover_after_transport_failure(server_generation)?;
                 }
             }
         }
     }
 
-    fn ensure_started(&self) -> Result<()> {
+    fn ensure_started(&self) -> Result<u64> {
         let mut state = self.state.lock().unwrap();
         self.drop_exited_child_locked(&mut state)?;
         if self.port_accepts_connections() {
-            return Ok(());
+            return Ok(state.generation);
         }
         if state.child.is_none() {
-            state.child = Some(self.spawn_child()?);
+            self.spawn_child_locked(&mut state)?;
         }
         self.wait_for_port_locked(&mut state)
     }
 
-    fn restart(&self) -> Result<()> {
+    fn recover_after_transport_failure(&self, failed_generation: u64) -> Result<u64> {
         let mut state = self.state.lock().unwrap();
-        stop_child(state.child.take());
-        state.child = Some(self.spawn_child()?);
+        self.drop_exited_child_locked(&mut state)?;
+
+        if state.generation == failed_generation {
+            self.restart_locked(&mut state)?;
+        } else if state.child.is_none() && !self.port_accepts_connections() {
+            self.spawn_child_locked(&mut state)?;
+        }
+
         self.wait_for_port_locked(&mut state)
+    }
+
+    fn restart_locked(&self, state: &mut RenderServerState) -> Result<()> {
+        stop_child(state.child.take());
+        self.bump_generation_locked(state);
+        self.spawn_child_locked(state)
+    }
+
+    fn spawn_child_locked(&self, state: &mut RenderServerState) -> Result<()> {
+        state.child = Some(self.spawn_child()?);
+        self.bump_generation_locked(state);
+        Ok(())
+    }
+
+    fn bump_generation_locked(&self, state: &mut RenderServerState) {
+        state.generation = state.generation.wrapping_add(1);
+        if state.generation == 0 {
+            state.generation = 1;
+        }
+    }
+
+    fn wait_for_port_locked(&self, state: &mut RenderServerState) -> Result<u64> {
+        let deadline = Instant::now() + RENDER_SERVER_START_TIMEOUT;
+        loop {
+            self.drop_exited_child_locked(state)?;
+            if self.port_accepts_connections() {
+                return Ok(state.generation);
+            }
+            if state.child.is_none() {
+                self.spawn_child_locked(state)?;
+            }
+            if Instant::now() >= deadline {
+                anyhow::bail!(
+                    "render-server did not start listening on 127.0.0.1:{} within {:?}",
+                    self.port,
+                    RENDER_SERVER_START_TIMEOUT
+                );
+            }
+            std::thread::sleep(RENDER_SERVER_START_POLL_INTERVAL);
+        }
+    }
+
+    fn drop_exited_child_locked(&self, state: &mut RenderServerState) -> Result<()> {
+        let Some(child) = state.child.as_mut() else {
+            return Ok(());
+        };
+        if child
+            .try_wait()
+            .with_context(|| "render-server child status check failed")?
+            .is_some()
+        {
+            state.child = None;
+            self.bump_generation_locked(state);
+        }
+        Ok(())
     }
 
     fn send_once(&self, mml: &str) -> std::result::Result<Vec<f32>, RenderRequestError> {
@@ -155,38 +216,6 @@ impl RenderServerSupervisor {
             .map_err(|error| RenderRequestError::Server(error.to_string()))
     }
 
-    fn wait_for_port_locked(&self, state: &mut RenderServerState) -> Result<()> {
-        let deadline = Instant::now() + RENDER_SERVER_START_TIMEOUT;
-        loop {
-            self.drop_exited_child_locked(state)?;
-            if self.port_accepts_connections() {
-                return Ok(());
-            }
-            if Instant::now() >= deadline {
-                anyhow::bail!(
-                    "render-server did not start listening on 127.0.0.1:{} within {:?}",
-                    self.port,
-                    RENDER_SERVER_START_TIMEOUT
-                );
-            }
-            std::thread::sleep(RENDER_SERVER_START_POLL_INTERVAL);
-        }
-    }
-
-    fn drop_exited_child_locked(&self, state: &mut RenderServerState) -> Result<()> {
-        let Some(child) = state.child.as_mut() else {
-            return Ok(());
-        };
-        if child
-            .try_wait()
-            .with_context(|| "render-server child status check failed")?
-            .is_some()
-        {
-            state.child = None;
-        }
-        Ok(())
-    }
-
     fn port_accepts_connections(&self) -> bool {
         TcpStream::connect_timeout(&self.socket_addr(), RENDER_SERVER_CONNECT_TIMEOUT).is_ok()
     }
@@ -196,6 +225,9 @@ impl RenderServerSupervisor {
     }
 
     fn spawn_child(&self) -> Result<Child> {
+        #[cfg(test)]
+        self.spawn_count.fetch_add(1, Ordering::Relaxed);
+
         let mut command = self.build_command();
         command
             .stdin(Stdio::null())
@@ -229,6 +261,16 @@ impl RenderServerSupervisor {
         } else {
             trimmed.to_string()
         }
+    }
+
+    #[cfg(test)]
+    fn set_generation_for_test(&self, generation: u64) {
+        self.state.lock().unwrap().generation = generation;
+    }
+
+    #[cfg(test)]
+    fn spawn_count_for_test(&self) -> u64 {
+        self.spawn_count.load(Ordering::Relaxed)
     }
 }
 
@@ -278,4 +320,54 @@ fn shell_command(command: &str) -> Command {
     let mut cmd = Command::new("sh");
     cmd.arg("-c").arg(command);
     cmd
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::TcpListener;
+
+    use super::*;
+
+    fn supervisor_for_listening_port(listener: &TcpListener) -> RenderServerSupervisor {
+        let port = listener.local_addr().unwrap().port();
+        let cfg: Config = toml::from_str(&format!(
+            r#"
+plugin_path = "dummy.clap"
+input_midi = "input.mid"
+output_midi = "output.mid"
+output_wav = "output.wav"
+sample_rate = 48000
+buffer_size = 512
+offline_render_backend = "render_server"
+offline_render_server_port = {port}
+offline_render_server_command = "exit 0"
+"#
+        ))
+        .unwrap();
+        RenderServerSupervisor::new(&cfg)
+    }
+
+    #[test]
+    fn stale_transport_failure_reuses_newer_generation_without_restart() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let supervisor = supervisor_for_listening_port(&listener);
+        supervisor.set_generation_for_test(2);
+
+        let generation = supervisor.recover_after_transport_failure(1).unwrap();
+
+        assert_eq!(generation, 2);
+        assert_eq!(supervisor.spawn_count_for_test(), 0);
+    }
+
+    #[test]
+    fn current_generation_transport_failure_restarts_server() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let supervisor = supervisor_for_listening_port(&listener);
+        supervisor.set_generation_for_test(7);
+
+        let generation = supervisor.recover_after_transport_failure(7).unwrap();
+
+        assert!(generation > 7);
+        assert_eq!(supervisor.spawn_count_for_test(), 1);
+    }
 }

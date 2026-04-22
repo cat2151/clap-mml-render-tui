@@ -13,9 +13,13 @@ use anyhow::{anyhow, Result};
 use cmrt_core::NativeRenderProbeContext;
 
 use super::{truncate_for_log, ActiveRenderGuard};
-use crate::{config::Config, history::daw_cache_mml_hash, offline_render::OfflineRenderer};
+use crate::{
+    config::{Config, OfflineRenderBackend},
+    history::daw_cache_mml_hash,
+    offline_render::OfflineRenderer,
+};
 
-const MAX_TUI_RENDER_WORKERS: usize = 2;
+const MAX_TUI_IN_PROCESS_RENDER_WORKERS: usize = 2;
 
 #[derive(Clone)]
 pub(super) struct TuiRenderQueue {
@@ -55,7 +59,6 @@ pub(super) enum TuiRenderCompletion {
 }
 
 struct TuiRenderQueueInner {
-    cfg: Arc<Config>,
     renderer: OfflineRenderer,
     render_workers: usize,
     active_offline_render_count: Arc<std::sync::atomic::AtomicUsize>,
@@ -76,14 +79,14 @@ impl TuiRenderQueue {
         entry_ptr: usize,
         active_offline_render_count: Arc<std::sync::atomic::AtomicUsize>,
     ) -> Self {
-        let configured_workers = cfg.offline_render_workers;
-        let render_workers = render_worker_count(configured_workers);
+        let configured_workers = cfg.effective_offline_render_workers();
+        let render_workers = render_worker_count(cfg.offline_render_backend, configured_workers);
         let renderer = OfflineRenderer::new(Arc::clone(&cfg), entry_ptr);
         log_notepad_event(format!(
-            "render queue workers={render_workers} configured_workers={configured_workers}"
+            "render queue backend={} workers={render_workers} configured_workers={configured_workers}",
+            cfg.offline_render_backend.as_str()
         ));
         let inner = Arc::new(TuiRenderQueueInner {
-            cfg,
             renderer,
             render_workers,
             active_offline_render_count,
@@ -104,11 +107,14 @@ impl TuiRenderQueue {
     }
 
     #[cfg(test)]
-    pub(super) fn disabled_for_tests(configured_workers: usize) -> Self {
+    pub(super) fn disabled_for_tests(
+        backend: OfflineRenderBackend,
+        configured_workers: usize,
+    ) -> Self {
         Self {
             inner: None,
             disabled_stats: TuiRenderQueueStats {
-                workers: render_worker_count(configured_workers),
+                workers: render_worker_count(backend, configured_workers),
                 pending_jobs: 0,
                 pending_playback_jobs: 0,
             },
@@ -198,8 +204,13 @@ impl TuiRenderQueue {
     }
 }
 
-fn render_worker_count(configured_workers: usize) -> usize {
-    configured_workers.clamp(1, MAX_TUI_RENDER_WORKERS)
+fn render_worker_count(backend: OfflineRenderBackend, configured_workers: usize) -> usize {
+    match backend {
+        OfflineRenderBackend::InProcess => {
+            configured_workers.clamp(1, MAX_TUI_IN_PROCESS_RENDER_WORKERS)
+        }
+        OfflineRenderBackend::RenderServer => configured_workers,
+    }
 }
 
 fn log_notepad_event(message: impl Into<String>) {
@@ -237,7 +248,7 @@ fn render_work(inner: &TuiRenderQueueInner, work: &TuiRenderWork) -> TuiRenderCo
                 session,
                 active_render_count,
                 daw_cache_mml_hash(&work.mml),
-                inner.cfg.offline_render_workers,
+                inner.render_workers,
             )
         }
         TuiRenderCaller::Prefetch => {
@@ -249,7 +260,7 @@ fn render_work(inner: &TuiRenderQueueInner, work: &TuiRenderWork) -> TuiRenderCo
             NativeRenderProbeContext::tui_prefetch(
                 active_render_count,
                 daw_cache_mml_hash(&work.mml),
-                inner.cfg.offline_render_workers,
+                inner.render_workers,
             )
         }
     };
@@ -349,11 +360,23 @@ mod tests {
 
     #[test]
     fn render_worker_count_caps_tui_workers_at_two() {
-        assert_eq!(render_worker_count(0), 1);
-        assert_eq!(render_worker_count(1), 1);
-        assert_eq!(render_worker_count(2), 2);
-        assert_eq!(render_worker_count(3), 2);
-        assert_eq!(render_worker_count(4), 2);
+        assert_eq!(render_worker_count(OfflineRenderBackend::InProcess, 0), 1);
+        assert_eq!(render_worker_count(OfflineRenderBackend::InProcess, 1), 1);
+        assert_eq!(render_worker_count(OfflineRenderBackend::InProcess, 2), 2);
+        assert_eq!(render_worker_count(OfflineRenderBackend::InProcess, 3), 2);
+        assert_eq!(render_worker_count(OfflineRenderBackend::InProcess, 4), 2);
+    }
+
+    #[test]
+    fn render_server_worker_count_uses_configured_workers() {
+        assert_eq!(
+            render_worker_count(OfflineRenderBackend::RenderServer, 4),
+            4
+        );
+        assert_eq!(
+            render_worker_count(OfflineRenderBackend::RenderServer, 8),
+            8
+        );
     }
 
     #[test]

@@ -125,6 +125,7 @@ impl DawApp {
         std::thread::spawn(move || {
             let daw_cfg = (*cfg).clone();
             let sample_rate = daw_cfg.sample_rate as u32;
+            let offline_render_workers = daw_cfg.effective_offline_render_workers();
 
             // OutputStream と Sink をスレッドに 1 つだけ作成し、小節をまたいで再利用する。
             // これにより小節ごとのオーディオ初期化オーバーヘッドとグリッチを防ぐ。
@@ -200,7 +201,7 @@ impl DawApp {
                                 current_measure_index,
                                 current_active_track_count,
                                 daw_cache_mml_hash(mml),
-                                daw_cfg.offline_render_workers,
+                                offline_render_workers,
                             );
                             render_queue.render_blocking(RenderPriority::High, mml, probe_context)
                         },
@@ -285,7 +286,7 @@ impl DawApp {
                             lookahead_measure_index,
                             lookahead_active_track_count,
                             daw_cache_mml_hash(mml),
-                            daw_cfg.offline_render_workers,
+                            offline_render_workers,
                         );
                         render_queue.render_blocking(RenderPriority::High, mml, probe_context)
                     },

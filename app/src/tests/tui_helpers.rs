@@ -4,7 +4,10 @@ use super::*;
 
 impl TuiApp<'static> {
     pub(super) fn new_for_test(cfg: Config) -> Self {
-        let render_queue = TuiRenderQueue::disabled_for_tests(cfg.offline_render_workers);
+        let render_queue = TuiRenderQueue::disabled_for_tests(
+            cfg.offline_render_backend,
+            cfg.effective_offline_render_workers(),
+        );
         let mut list_state = ListState::default();
         list_state.select(Some(0));
         Self {

@@ -10,6 +10,7 @@ use crate::daw::{
 fn start_track_rerender_batch_logs_only_targeted_measures() {
     let tracks = 3;
     let measures = 4;
+    let cache_render_workers = 4;
     let (cache_tx, cache_rx) = std::sync::mpsc::channel();
     let mut app = DawApp {
         data: vec![vec![String::new(); measures + 1]; tracks],
@@ -26,7 +27,8 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
             sample_rate: 44_100.0,
             buffer_size: 512,
             patches_dirs: None,
-            offline_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
+            offline_render_workers: cache_render_workers,
+            offline_render_server_workers: crate::config::DEFAULT_OFFLINE_RENDER_SERVER_WORKERS,
             offline_render_backend: crate::config::OfflineRenderBackend::InProcess,
             offline_render_server_port: crate::config::DEFAULT_OFFLINE_RENDER_SERVER_PORT,
             offline_render_server_command: String::new(),
@@ -48,7 +50,7 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
             tracks
         ])),
         cache_tx,
-        cache_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
+        cache_render_workers,
         render_queue: crate::daw::render_queue::RenderQueue::disabled_for_tests(),
         play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
         play_transition_lock: Arc::new(Mutex::new(())),

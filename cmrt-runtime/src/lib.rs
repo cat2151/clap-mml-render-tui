@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub const DEFAULT_OFFLINE_RENDER_WORKERS: usize = 4;
+pub const DEFAULT_OFFLINE_RENDER_WORKERS: usize = 2;
+pub const DEFAULT_OFFLINE_RENDER_SERVER_WORKERS: usize = 4;
 pub const DEFAULT_OFFLINE_RENDER_SERVER_PORT: u16 = 62153;
 const MIN_OFFLINE_RENDER_WORKERS: usize = 1;
 const MAX_OFFLINE_RENDER_WORKERS: usize = 16;
@@ -28,6 +29,9 @@ pub struct Config {
     /// DAW のオフラインレンダリング同時実行数
     #[serde(default = "default_offline_render_workers")]
     pub offline_render_workers: usize,
+    /// render-server backend のオフラインレンダリング同時実行数
+    #[serde(default = "default_offline_render_server_workers")]
+    pub offline_render_server_workers: usize,
     /// オフラインレンダリング backend
     #[serde(default)]
     pub offline_render_backend: OfflineRenderBackend,
@@ -142,13 +146,15 @@ output_wav  = "output.wav"
 sample_rate = 48000
 buffer_size = 512
 
-# 【省略可】DAW のオフラインレンダリング同時実行数（1〜16）
-offline_render_workers = 4
+# 【省略可】オフラインレンダリング同時実行数（1〜16）
+# offline_render_backend = "in_process" のときに使います。
+offline_render_workers = 2
 
 # 【省略可】オフラインレンダリング backend
 # in_process: 従来どおり cmrt 本体プロセス内でレンダリングします。
 # render_server: 127.0.0.1 の render-server 子プロセスへ POST /render します。
 offline_render_backend = "in_process"
+offline_render_server_workers = 4
 offline_render_server_port = 62153
 offline_render_server_command = ""
 
@@ -164,6 +170,10 @@ offline_render_server_command = ""
 
 fn default_offline_render_workers() -> usize {
     DEFAULT_OFFLINE_RENDER_WORKERS
+}
+
+fn default_offline_render_server_workers() -> usize {
+    DEFAULT_OFFLINE_RENDER_SERVER_WORKERS
 }
 
 fn default_offline_render_server_port() -> u16 {
@@ -279,21 +289,45 @@ impl Config {
     }
 
     pub fn validate(&self) -> anyhow::Result<()> {
-        if !(MIN_OFFLINE_RENDER_WORKERS..=MAX_OFFLINE_RENDER_WORKERS)
-            .contains(&self.offline_render_workers)
-        {
-            anyhow::bail!(
-                "offline_render_workers は {}〜{} の範囲で設定してください（現在値: {}）",
-                MIN_OFFLINE_RENDER_WORKERS,
-                MAX_OFFLINE_RENDER_WORKERS,
-                self.offline_render_workers
-            );
-        }
+        validate_offline_render_workers("offline_render_workers", self.offline_render_workers)?;
+        validate_offline_render_workers(
+            "offline_render_server_workers",
+            self.offline_render_server_workers,
+        )?;
         if self.offline_render_server_port == 0 {
             anyhow::bail!("offline_render_server_port は 1〜65535 の範囲で設定してください");
         }
         Ok(())
     }
+
+    pub fn effective_offline_render_workers(&self) -> usize {
+        match self.offline_render_backend {
+            OfflineRenderBackend::InProcess => self.offline_render_workers,
+            OfflineRenderBackend::RenderServer => self.offline_render_server_workers,
+        }
+    }
+}
+
+impl OfflineRenderBackend {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            OfflineRenderBackend::InProcess => "in_process",
+            OfflineRenderBackend::RenderServer => "render_server",
+        }
+    }
+}
+
+fn validate_offline_render_workers(name: &str, workers: usize) -> anyhow::Result<()> {
+    if !(MIN_OFFLINE_RENDER_WORKERS..=MAX_OFFLINE_RENDER_WORKERS).contains(&workers) {
+        anyhow::bail!(
+            "{} は {}〜{} の範囲で設定してください（現在値: {}）",
+            name,
+            MIN_OFFLINE_RENDER_WORKERS,
+            MAX_OFFLINE_RENDER_WORKERS,
+            workers
+        );
+    }
+    Ok(())
 }
 
 pub fn configured_patch_dirs(cfg: &Config) -> Vec<String> {
@@ -370,6 +404,10 @@ buffer_size = 512
         let cfg: Config = toml::from_str(toml_str).unwrap();
 
         assert_eq!(cfg.offline_render_workers, DEFAULT_OFFLINE_RENDER_WORKERS);
+        assert_eq!(
+            cfg.offline_render_server_workers,
+            DEFAULT_OFFLINE_RENDER_SERVER_WORKERS
+        );
         assert_eq!(cfg.offline_render_backend, OfflineRenderBackend::InProcess);
         assert_eq!(
             cfg.offline_render_server_port,
@@ -382,7 +420,9 @@ buffer_size = 512
     fn default_config_content_contains_render_server_keys() {
         let content = default_config_content();
 
+        assert!(content.contains("offline_render_workers = 2"));
         assert!(content.contains("offline_render_backend = \"in_process\""));
+        assert!(content.contains("offline_render_server_workers = 4"));
         assert!(content.contains("offline_render_server_port = 62153"));
         assert!(content.contains("offline_render_server_command = \"\""));
     }

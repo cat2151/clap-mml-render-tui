@@ -147,17 +147,18 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
             .try_recv()
             .expect("next playing measure should be reserved first");
         assert_eq!(reserved_job.measure, 2);
-        assert!(
-            cache_rx.try_recv().is_err(),
-            "playback 中は cache rerender の予約を 1 小節に抑える"
-        );
+        let second_job = cache_rx
+            .try_recv()
+            .expect("available worker slots should continue refilling during playback");
+        assert_eq!(second_job.measure, 1);
+        assert!(cache_rx.try_recv().is_err());
 
         let batches = app.track_rerender_batches.lock().unwrap();
         let batch = batches[1]
             .as_ref()
-            .expect("remaining measure should stay pending in the batch");
-        assert_eq!(batch.active_measures, BTreeSet::from([2]));
-        assert!(batch.pending.contains_key(&1));
+            .expect("active measures should stay in the batch");
+        assert_eq!(batch.active_measures, BTreeSet::from([1, 2]));
+        assert!(batch.pending.is_empty());
         drop(batches);
 
         let logs = app
@@ -174,8 +175,7 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
             logs
         );
         assert!(
-            !logs
-                .iter()
+            logs.iter()
                 .any(|line| line == "cache: rerender reserve track1 meas1 (meas1)"),
             "logs: {:?}",
             logs

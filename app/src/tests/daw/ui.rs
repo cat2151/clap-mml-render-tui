@@ -41,6 +41,7 @@ fn build_test_app() -> DawApp {
             buffer_size: 512,
             patches_dirs: None,
             offline_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
+            offline_render_server_workers: crate::config::DEFAULT_OFFLINE_RENDER_SERVER_WORKERS,
             offline_render_backend: crate::config::OfflineRenderBackend::InProcess,
             offline_render_server_port: crate::config::DEFAULT_OFFLINE_RENDER_SERVER_PORT,
             offline_render_server_command: String::new(),
