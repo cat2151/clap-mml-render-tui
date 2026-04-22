@@ -206,6 +206,43 @@ fn handle_patch_phrase_j_prefetches_predicted_navigation_cache() {
 }
 
 #[test]
+fn handle_patch_phrase_j_prefetches_direction_first_then_fills_remaining_navigation_targets() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["before".to_string()];
+    app.patch_phrase_store.patches.insert(
+        "Pads/Pad 1.fxp".to_string(),
+        crate::history::PatchPhraseState {
+            history: (0..12).map(|i| format!("phrase {i}")).collect(),
+            favorites: vec![],
+        },
+    );
+    app.patch_phrase_page_size = 5;
+    app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase_history_cursor = 4;
+    app.patch_phrase_history_state.select(Some(4));
+
+    app.handle_patch_phrase(KeyCode::Char('j'));
+
+    assert_eq!(
+        app.audio_cache_order
+            .lock()
+            .unwrap()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        vec![
+            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} phrase 6"#,
+            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} phrase 7"#,
+            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} phrase 4"#,
+            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} phrase 10"#,
+            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} phrase 0"#,
+            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} phrase 8"#,
+            r#"{"Surge XT patch":"Pads/Pad 1.fxp"} phrase 9"#,
+        ]
+    );
+}
+
+#[test]
 fn handle_patch_phrase_starts_scrolling_before_cursor_reaches_view_edge() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["before".to_string()];

@@ -197,7 +197,7 @@ impl<'a> TuiApp<'a> {
         self.patch_phrase_preview_mml_for_selection(self.patch_phrase_focus, cursor)
     }
 
-    fn prefetch_patch_phrase_navigation_audio_cache(&self) {
+    fn prefetch_patch_phrase_navigation_audio_cache(&self, preferred_delta: Option<isize>) {
         let (item_count, cursor) = match self.patch_phrase_focus {
             PatchPhrasePane::History => (
                 self.patch_phrase_history_items().len(),
@@ -213,16 +213,23 @@ impl<'a> TuiApp<'a> {
             cursor,
             item_count,
             self.patch_phrase_page_size,
-            None,
+            preferred_delta,
             |index| self.patch_phrase_preview_mml_for_selection(focus, index),
         );
     }
 
     fn preview_selected_patch_phrase_item(&mut self) {
+        self.preview_selected_patch_phrase_item_with_navigation_hint(None);
+    }
+
+    fn preview_selected_patch_phrase_item_with_navigation_hint(
+        &mut self,
+        preferred_delta: Option<isize>,
+    ) {
         if let Some(mml) = self.patch_phrase_preview_mml() {
             self.record_notepad_history(&mml);
             self.play_mml(mml);
-            self.prefetch_patch_phrase_navigation_audio_cache();
+            self.prefetch_patch_phrase_navigation_audio_cache(preferred_delta);
         }
     }
 
@@ -339,13 +346,13 @@ impl<'a> TuiApp<'a> {
                 if self.move_patch_phrase_selection_by(1, history_len, favorites_len) =>
             {
                 self.sync_patch_phrase_states();
-                self.preview_selected_patch_phrase_item();
+                self.preview_selected_patch_phrase_item_with_navigation_hint(Some(1));
             }
             KeyCode::Char('k') | KeyCode::Up
                 if self.move_patch_phrase_selection_by(-1, history_len, favorites_len) =>
             {
                 self.sync_patch_phrase_states();
-                self.preview_selected_patch_phrase_item();
+                self.preview_selected_patch_phrase_item_with_navigation_hint(Some(-1));
             }
             KeyCode::PageDown
                 if self.move_patch_phrase_selection_by(
@@ -355,7 +362,9 @@ impl<'a> TuiApp<'a> {
                 ) =>
             {
                 self.sync_patch_phrase_states();
-                self.preview_selected_patch_phrase_item();
+                self.preview_selected_patch_phrase_item_with_navigation_hint(Some(
+                    self.patch_phrase_page_size as isize,
+                ));
             }
             KeyCode::PageUp
                 if self.move_patch_phrase_selection_by(
@@ -365,7 +374,9 @@ impl<'a> TuiApp<'a> {
                 ) =>
             {
                 self.sync_patch_phrase_states();
-                self.preview_selected_patch_phrase_item();
+                self.preview_selected_patch_phrase_item_with_navigation_hint(Some(
+                    -(self.patch_phrase_page_size as isize),
+                ));
             }
             KeyCode::Char('/') => {
                 self.patch_phrase_filter_active = true;

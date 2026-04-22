@@ -8,9 +8,12 @@ use std::{
 
 use super::{
     cache::try_insert_cache,
-    render_queue::{TuiRenderCompletion, TuiRenderQueue, TuiRenderResponse},
+    render_queue::{TuiRenderCompletion, TuiRenderQueue, TuiRenderQueueStats, TuiRenderResponse},
     truncate_for_log, TuiApp,
 };
+
+const IMMEDIATE_DIRECTION_PREFETCH_STEPS: usize = 2;
+const TOTAL_DIRECTION_PREFETCH_STEPS: usize = 4;
 
 impl<'a> TuiApp<'a> {
     pub(super) fn sync_overlay_list_offset(
@@ -65,8 +68,8 @@ impl<'a> TuiApp<'a> {
         cache: &Arc<Mutex<HashMap<String, Vec<f32>>>>,
         render_queue: &TuiRenderQueue,
         targets: Vec<String>,
+        prefetch_generation: u64,
     ) -> Vec<std::sync::mpsc::Receiver<TuiRenderResponse>> {
-        let prefetch_generation = render_queue.reserve_prefetch_generation();
         targets
             .into_iter()
             .filter_map(|mml| {
@@ -86,6 +89,28 @@ impl<'a> TuiApp<'a> {
                 }
             })
             .collect()
+    }
+
+    fn queue_idle_prefetch_targets(
+        cache: &Arc<Mutex<HashMap<String, Vec<f32>>>>,
+        render_queue: &TuiRenderQueue,
+        idle_targets: &mut VecDeque<String>,
+        prefetch_generation: u64,
+        available_slots: usize,
+    ) -> Vec<std::sync::mpsc::Receiver<TuiRenderResponse>> {
+        let mut response_rxs = Vec::new();
+        while response_rxs.len() < available_slots {
+            let Some(next_idle) = idle_targets.pop_front() else {
+                break;
+            };
+            response_rxs.extend(Self::queue_prefetch_targets(
+                cache,
+                render_queue,
+                vec![next_idle],
+                prefetch_generation,
+            ));
+        }
+        response_rxs
     }
 
     fn consume_prefetch_response(
@@ -115,12 +140,64 @@ impl<'a> TuiApp<'a> {
         }
     }
 
-    fn render_queue_is_relaxed(
+    fn idle_prefetch_available_slots_for_stats(
+        stats: TuiRenderQueueStats,
+        active_render_count: usize,
+        fill_to_worker_count: bool,
+    ) -> usize {
+        let outstanding_jobs = active_render_count.saturating_add(stats.pending_jobs);
+        if fill_to_worker_count {
+            stats.workers.saturating_sub(outstanding_jobs)
+        } else if outstanding_jobs <= 1 {
+            1
+        } else {
+            0
+        }
+    }
+
+    fn idle_prefetch_available_slots(
         render_queue: &TuiRenderQueue,
         active_offline_render_count: &AtomicUsize,
-    ) -> bool {
+        fill_to_worker_count: bool,
+    ) -> usize {
         let stats = render_queue.stats();
-        active_offline_render_count.load(Ordering::Relaxed) + stats.pending_jobs <= 1
+        Self::idle_prefetch_available_slots_for_stats(
+            stats,
+            active_offline_render_count.load(Ordering::Relaxed),
+            fill_to_worker_count,
+        )
+    }
+
+    fn initial_idle_prefetch_available_slots_for_stats(
+        stats: TuiRenderQueueStats,
+        active_render_count: usize,
+        has_immediate_responses: bool,
+        fill_to_worker_count: bool,
+    ) -> usize {
+        if fill_to_worker_count || !has_immediate_responses {
+            Self::idle_prefetch_available_slots_for_stats(
+                stats,
+                active_render_count,
+                fill_to_worker_count,
+            )
+        } else {
+            0
+        }
+    }
+
+    fn initial_idle_prefetch_available_slots(
+        render_queue: &TuiRenderQueue,
+        active_offline_render_count: &AtomicUsize,
+        has_immediate_responses: bool,
+        fill_to_worker_count: bool,
+    ) -> usize {
+        let stats = render_queue.stats();
+        Self::initial_idle_prefetch_available_slots_for_stats(
+            stats,
+            active_offline_render_count.load(Ordering::Relaxed),
+            has_immediate_responses,
+            fill_to_worker_count,
+        )
     }
 
     pub(super) fn prefetch_audio_cache_with_idle_fill(
@@ -149,8 +226,15 @@ impl<'a> TuiApp<'a> {
         let cache_order = Arc::clone(&self.audio_cache_order);
         let render_queue = self.render_queue.clone();
         let active_offline_render_count = Arc::clone(&self.active_offline_render_count);
-        let immediate_response_rxs =
-            Self::queue_prefetch_targets(&cache, &render_queue, immediate_targets);
+        let prefetch_generation = render_queue.reserve_prefetch_generation();
+        let fill_to_worker_count =
+            self.cfg.offline_render_backend == crate::config::OfflineRenderBackend::RenderServer;
+        let immediate_response_rxs = Self::queue_prefetch_targets(
+            &cache,
+            &render_queue,
+            immediate_targets,
+            prefetch_generation,
+        );
 
         if immediate_response_rxs.is_empty() && idle_targets.is_empty() {
             return;
@@ -160,31 +244,37 @@ impl<'a> TuiApp<'a> {
             let mut idle_targets = VecDeque::from(idle_targets);
             let mut response_rxs = VecDeque::from(immediate_response_rxs);
 
-            if response_rxs.is_empty()
-                && !idle_targets.is_empty()
-                && Self::render_queue_is_relaxed(&render_queue, &active_offline_render_count)
-            {
-                if let Some(next_idle) = idle_targets.pop_front() {
-                    response_rxs.extend(Self::queue_prefetch_targets(
-                        &cache,
-                        &render_queue,
-                        vec![next_idle],
-                    ));
-                }
+            let available_slots = Self::initial_idle_prefetch_available_slots(
+                &render_queue,
+                &active_offline_render_count,
+                !response_rxs.is_empty(),
+                fill_to_worker_count,
+            );
+            if !idle_targets.is_empty() && available_slots > 0 {
+                response_rxs.extend(Self::queue_idle_prefetch_targets(
+                    &cache,
+                    &render_queue,
+                    &mut idle_targets,
+                    prefetch_generation,
+                    available_slots,
+                ));
             }
 
             while let Some(response_rx) = response_rxs.pop_front() {
                 Self::consume_prefetch_response(&cache, &cache_order, response_rx);
-                if !idle_targets.is_empty()
-                    && Self::render_queue_is_relaxed(&render_queue, &active_offline_render_count)
-                {
-                    if let Some(next_idle) = idle_targets.pop_front() {
-                        response_rxs.extend(Self::queue_prefetch_targets(
-                            &cache,
-                            &render_queue,
-                            vec![next_idle],
-                        ));
-                    }
+                let available_slots = Self::idle_prefetch_available_slots(
+                    &render_queue,
+                    &active_offline_render_count,
+                    fill_to_worker_count,
+                );
+                if !idle_targets.is_empty() && available_slots > 0 {
+                    response_rxs.extend(Self::queue_idle_prefetch_targets(
+                        &cache,
+                        &render_queue,
+                        &mut idle_targets,
+                        prefetch_generation,
+                        available_slots,
+                    ));
                 }
             }
         });
@@ -200,18 +290,47 @@ impl<'a> TuiApp<'a> {
     ) where
         F: FnMut(usize) -> Option<String>,
     {
-        let immediate_indices = match preferred_delta {
-            Some(delta) => crate::ui_utils::predicted_navigation_indices_in_direction(
-                current, item_count, delta, 2,
+        let (immediate_indices, idle_indices) = match preferred_delta {
+            Some(delta) if delta == 1 || delta == -1 => {
+                let immediate_indices = crate::ui_utils::predicted_navigation_indices_in_direction(
+                    current,
+                    item_count,
+                    delta,
+                    IMMEDIATE_DIRECTION_PREFETCH_STEPS,
+                );
+                let idle_indices =
+                    crate::ui_utils::predicted_navigation_indices_with_direction_bias(
+                        current,
+                        item_count,
+                        page_size,
+                        delta,
+                        IMMEDIATE_DIRECTION_PREFETCH_STEPS,
+                        TOTAL_DIRECTION_PREFETCH_STEPS,
+                    )
+                    .into_iter()
+                    .filter(|index| !immediate_indices.contains(index))
+                    .collect::<Vec<_>>();
+                (immediate_indices, idle_indices)
+            }
+            Some(delta) => {
+                let immediate_indices = crate::ui_utils::predicted_navigation_indices_in_direction(
+                    current,
+                    item_count,
+                    delta,
+                    IMMEDIATE_DIRECTION_PREFETCH_STEPS,
+                );
+                let idle_indices =
+                    crate::ui_utils::predicted_navigation_indices(current, item_count, page_size)
+                        .into_iter()
+                        .filter(|index| !immediate_indices.contains(index))
+                        .collect::<Vec<_>>();
+                (immediate_indices, idle_indices)
+            }
+            None => (
+                crate::ui_utils::predicted_navigation_indices(current, item_count, page_size),
+                Vec::new(),
             ),
-            None => crate::ui_utils::predicted_navigation_indices(current, item_count, page_size),
         };
-        let idle_indices = preferred_delta
-            .map(|_| crate::ui_utils::predicted_navigation_indices(current, item_count, page_size))
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|index| !immediate_indices.contains(index))
-            .collect::<Vec<_>>();
         let mut mml_for_index = mml_for_index;
         let immediate_targets = immediate_indices
             .into_iter()
@@ -222,5 +341,70 @@ impl<'a> TuiApp<'a> {
             .filter_map(mml_for_index)
             .collect::<Vec<_>>();
         self.prefetch_audio_cache_with_idle_fill(immediate_targets, idle_targets);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stats(workers: usize, pending_jobs: usize) -> TuiRenderQueueStats {
+        TuiRenderQueueStats {
+            workers,
+            pending_jobs,
+            pending_playback_jobs: 0,
+        }
+    }
+
+    #[test]
+    fn in_process_idle_prefetch_keeps_existing_relaxed_single_slot_policy() {
+        assert_eq!(
+            TuiApp::idle_prefetch_available_slots_for_stats(stats(2, 0), 0, false),
+            1
+        );
+        assert_eq!(
+            TuiApp::idle_prefetch_available_slots_for_stats(stats(2, 0), 1, false),
+            1
+        );
+        assert_eq!(
+            TuiApp::idle_prefetch_available_slots_for_stats(stats(2, 1), 1, false),
+            0
+        );
+    }
+
+    #[test]
+    fn in_process_initial_idle_prefetch_waits_while_immediate_jobs_are_active() {
+        assert_eq!(
+            TuiApp::initial_idle_prefetch_available_slots_for_stats(stats(2, 0), 0, true, false),
+            0
+        );
+        assert_eq!(
+            TuiApp::initial_idle_prefetch_available_slots_for_stats(stats(2, 0), 0, false, false),
+            1
+        );
+    }
+
+    #[test]
+    fn render_server_idle_prefetch_fills_to_worker_count() {
+        assert_eq!(
+            TuiApp::idle_prefetch_available_slots_for_stats(stats(4, 2), 0, true),
+            2
+        );
+        assert_eq!(
+            TuiApp::idle_prefetch_available_slots_for_stats(stats(4, 0), 2, true),
+            2
+        );
+        assert_eq!(
+            TuiApp::idle_prefetch_available_slots_for_stats(stats(4, 3), 1, true),
+            0
+        );
+    }
+
+    #[test]
+    fn render_server_initial_idle_prefetch_fills_even_after_immediate_jobs() {
+        assert_eq!(
+            TuiApp::initial_idle_prefetch_available_slots_for_stats(stats(4, 2), 0, true, true),
+            2
+        );
     }
 }

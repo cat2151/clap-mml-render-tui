@@ -236,6 +236,9 @@ fn handle_patch_select_j_prefetches_predicted_preview_cache() {
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         ("Pads/Pad 2.fxp".to_string(), "pads/pad 2.fxp".to_string()),
         ("Pads/Pad 3.fxp".to_string(), "pads/pad 3.fxp".to_string()),
+        ("Pads/Pad 4.fxp".to_string(), "pads/pad 4.fxp".to_string()),
+        ("Pads/Pad 5.fxp".to_string(), "pads/pad 5.fxp".to_string()),
+        ("Pads/Pad 6.fxp".to_string(), "pads/pad 6.fxp".to_string()),
     ];
     app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
     app.mode = DawMode::PatchSelect;
@@ -244,7 +247,7 @@ fn handle_patch_select_j_prefetches_predicted_preview_cache() {
     app.handle_patch_select(KeyCode::Char('j'));
 
     assert_eq!(app.patch_cursor, 1);
-    assert_eq!(app.overlay_preview_cache.lock().unwrap().len(), 2);
+    assert_eq!(app.overlay_preview_cache.lock().unwrap().len(), 5);
 }
 
 #[test]

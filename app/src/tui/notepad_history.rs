@@ -128,7 +128,7 @@ impl<'a> TuiApp<'a> {
         }
     }
 
-    fn prefetch_notepad_history_navigation_audio_cache(&self) {
+    fn prefetch_notepad_history_navigation_audio_cache(&self, preferred_delta: Option<isize>) {
         let (item_count, cursor) = match self.notepad_focus {
             PatchPhrasePane::History => (
                 self.notepad_history_items().len(),
@@ -144,15 +144,22 @@ impl<'a> TuiApp<'a> {
             cursor,
             item_count,
             self.notepad_history_page_size,
-            None,
+            preferred_delta,
             |index| self.notepad_item_for_selection(focus, index),
         );
     }
 
     fn preview_selected_notepad_item(&mut self) {
+        self.preview_selected_notepad_item_with_navigation_hint(None);
+    }
+
+    fn preview_selected_notepad_item_with_navigation_hint(
+        &mut self,
+        preferred_delta: Option<isize>,
+    ) {
         if let Some(mml) = self.selected_notepad_item() {
             self.play_mml(mml);
-            self.prefetch_notepad_history_navigation_audio_cache();
+            self.prefetch_notepad_history_navigation_audio_cache(preferred_delta);
         }
     }
 
@@ -298,13 +305,13 @@ impl<'a> TuiApp<'a> {
                 if self.move_notepad_selection_by(1, history_len, favorites_len) =>
             {
                 self.sync_notepad_history_states();
-                self.preview_selected_notepad_item();
+                self.preview_selected_notepad_item_with_navigation_hint(Some(1));
             }
             KeyCode::Char('k') | KeyCode::Up
                 if self.move_notepad_selection_by(-1, history_len, favorites_len) =>
             {
                 self.sync_notepad_history_states();
-                self.preview_selected_notepad_item();
+                self.preview_selected_notepad_item_with_navigation_hint(Some(-1));
             }
             KeyCode::PageDown
                 if self.move_notepad_selection_by(
@@ -314,7 +321,9 @@ impl<'a> TuiApp<'a> {
                 ) =>
             {
                 self.sync_notepad_history_states();
-                self.preview_selected_notepad_item();
+                self.preview_selected_notepad_item_with_navigation_hint(Some(
+                    self.notepad_history_page_size as isize,
+                ));
             }
             KeyCode::PageUp
                 if self.move_notepad_selection_by(
@@ -324,7 +333,9 @@ impl<'a> TuiApp<'a> {
                 ) =>
             {
                 self.sync_notepad_history_states();
-                self.preview_selected_notepad_item();
+                self.preview_selected_notepad_item_with_navigation_hint(Some(
+                    -(self.notepad_history_page_size as isize),
+                ));
             }
             KeyCode::Char('/') => {
                 self.notepad_filter_active = true;

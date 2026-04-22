@@ -24,12 +24,21 @@ impl DawApp {
         current: usize,
         item_count: usize,
         page_size: usize,
+        preferred_delta: Option<isize>,
         mut preview_for_index: F,
     ) where
         F: FnMut(usize) -> Option<(usize, Vec<String>)>,
     {
         let track_gains = self.playback_track_gains();
-        for index in crate::ui_utils::predicted_navigation_indices(current, item_count, page_size) {
+        let predicted_indices = match preferred_delta {
+            Some(delta) if delta == 1 || delta == -1 => {
+                crate::ui_utils::predicted_navigation_indices_with_direction_bias(
+                    current, item_count, page_size, delta, 2, 4,
+                )
+            }
+            _ => crate::ui_utils::predicted_navigation_indices(current, item_count, page_size),
+        };
+        for index in predicted_indices {
             if let Some((measure_index, track_mmls)) = preview_for_index(index) {
                 self.prefetch_preview_snapshot(measure_index, track_mmls, track_gains.clone());
             }

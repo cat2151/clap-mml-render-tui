@@ -23,7 +23,7 @@ impl DawApp {
         let next_cursor = (*cursor as isize + delta).clamp(0, max_cursor) as usize;
         if next_cursor != *cursor {
             *cursor = next_cursor;
-            self.preview_selected_patch();
+            self.preview_selected_patch_with_navigation_hint(Some(delta));
         }
     }
 
@@ -124,7 +124,7 @@ impl DawApp {
         Some((measure_index, track_mmls))
     }
 
-    fn prefetch_patch_select_navigation_cache(&self) {
+    fn prefetch_patch_select_navigation_cache(&self, preferred_delta: Option<isize>) {
         let (item_count, cursor) = match self.patch_select_focus {
             DawPatchSelectPane::Patches => (self.patch_filtered.len(), self.patch_cursor),
             DawPatchSelectPane::Favorites => {
@@ -132,12 +132,20 @@ impl DawApp {
             }
         };
         let focus = self.patch_select_focus;
-        self.prefetch_preview_navigation_cache(cursor, item_count, 1, |next_cursor| {
-            self.patch_select_preview_track_mmls(focus, next_cursor)
-        });
+        self.prefetch_preview_navigation_cache(
+            cursor,
+            item_count,
+            1,
+            preferred_delta,
+            |next_cursor| self.patch_select_preview_track_mmls(focus, next_cursor),
+        );
     }
 
     fn preview_selected_patch(&mut self) {
+        self.preview_selected_patch_with_navigation_hint(None);
+    }
+
+    fn preview_selected_patch_with_navigation_hint(&mut self, preferred_delta: Option<isize>) {
         if *self.play_state.lock().unwrap() == DawPlayState::Playing {
             return;
         }
@@ -152,7 +160,7 @@ impl DawApp {
             return;
         };
 
-        self.prefetch_patch_select_navigation_cache();
+        self.prefetch_patch_select_navigation_cache(preferred_delta);
 
         if self.try_start_preview_with_track_mmls_for_test(measure_index, Some(track_mmls.clone()))
         {

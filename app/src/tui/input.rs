@@ -12,17 +12,25 @@ impl<'a> TuiApp<'a> {
     }
 
     fn set_normal_cursor(&mut self, next_cursor: usize) {
+        self.set_normal_cursor_with_navigation_hint(next_cursor, None);
+    }
+
+    fn set_normal_cursor_with_navigation_hint(
+        &mut self,
+        next_cursor: usize,
+        preferred_delta: Option<isize>,
+    ) {
         if next_cursor != self.cursor {
             self.cursor = next_cursor;
             self.list_state.select(Some(self.cursor));
-            self.play_current_line();
+            self.play_current_line_with_navigation_hint(preferred_delta);
         }
     }
 
     fn move_normal_cursor_by(&mut self, delta: isize) {
         let max_cursor = self.lines.len().saturating_sub(1) as isize;
         let next_cursor = (self.cursor as isize + delta).clamp(0, max_cursor) as usize;
-        self.set_normal_cursor(next_cursor);
+        self.set_normal_cursor_with_navigation_hint(next_cursor, Some(delta));
     }
 
     pub(super) fn handle_help(&mut self, key: KeyCode) {

@@ -55,6 +55,27 @@ fn handle_normal_j_prefetches_predicted_navigation_cache() {
 }
 
 #[test]
+fn handle_normal_j_prefetches_direction_first_then_fills_remaining_navigation_targets() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = (0..12).map(|i| format!("line {i}")).collect();
+    app.cursor = 4;
+    app.normal_page_size = 5;
+    app.list_state.select(Some(4));
+
+    app.handle_normal(KeyCode::Char('j'));
+
+    assert_eq!(
+        app.audio_cache_order
+            .lock()
+            .unwrap()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        vec!["line 6", "line 7", "line 4", "line 10", "line 0", "line 8", "line 9",]
+    );
+}
+
+#[test]
 fn handle_normal_f_shows_error_when_current_line_has_no_patch_json() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["cde".to_string()];

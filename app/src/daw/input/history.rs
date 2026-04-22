@@ -159,7 +159,7 @@ impl DawApp {
             ),
         };
         let focus = self.history_overlay_focus;
-        self.prefetch_preview_navigation_cache(cursor, item_count, 1, |next_cursor| {
+        self.prefetch_preview_navigation_cache(cursor, item_count, 1, None, |next_cursor| {
             self.history_overlay_preview_track_mmls(focus, next_cursor)
         });
     }
