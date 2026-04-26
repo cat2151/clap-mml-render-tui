@@ -89,12 +89,17 @@ pub(in crate::tui::ui) fn draw_patch_select(
     let query_border = base_style().fg(query_frame_color);
     let patch_border = base_style().fg(patch_frame_color);
     let favorite_border = base_style().fg(favorite_frame_color);
+    let query_placeholder = if app.patch_select_filter_active {
+        "音色名を入力して絞り込み"
+    } else {
+        "/ を押して絞り込み"
+    };
 
     let mut patch_query_widget = crate::text_input::build_query_textarea_widget(
         &app.patch_query_textarea,
         &app.patch_query,
         search_title,
-        "/ を押して絞り込み",
+        query_placeholder,
         query_frame_color,
     );
     patch_query_widget.set_block(

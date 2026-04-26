@@ -80,11 +80,16 @@ pub(super) fn draw_patch_select(f: &mut Frame, app: &DawApp, area: Rect) {
     } else {
         " patch select - / で patch name 検索 "
     };
+    let query_placeholder = if app.patch_select_filter_active {
+        "patch name を入力して絞り込み"
+    } else {
+        "/ を押して絞り込み"
+    };
     let patch_query_widget = crate::text_input::build_query_textarea_widget(
         &app.patch_query_textarea,
         &app.patch_query,
         search_title,
-        "/ を押して絞り込み",
+        query_placeholder,
         MONOKAI_CYAN,
     );
     f.render_widget(&patch_query_widget, chunks[0]);

@@ -411,7 +411,7 @@ fn handle_patch_select_esc_cancels_filter_input_without_closing_overlay() {
 }
 
 #[test]
-fn handle_patch_select_backspace_with_empty_query_exits_filter_input() {
+fn handle_patch_select_backspace_with_empty_query_keeps_filter_input_active() {
     let (mut app, _cache_rx) = build_test_app();
     app.patch_all = vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
     app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
@@ -421,7 +421,7 @@ fn handle_patch_select_backspace_with_empty_query_exits_filter_input() {
     app.handle_patch_select(KeyCode::Backspace);
 
     assert!(matches!(app.mode, DawMode::PatchSelect));
-    assert!(!app.patch_select_filter_active);
+    assert!(app.patch_select_filter_active);
     assert_eq!(app.patch_query, "");
     assert_eq!(app.patch_filtered, vec!["Pads/Pad 1.fxp".to_string()]);
 }
@@ -448,6 +448,12 @@ fn handle_patch_select_backspace_to_empty_keeps_filter_input_active() {
         app.patch_filtered,
         vec!["Keys/Keys 1.fxp".to_string(), "Pads/Pad 1.fxp".to_string()]
     );
+
+    app.handle_patch_select(KeyCode::Backspace);
+
+    assert!(matches!(app.mode, DawMode::PatchSelect));
+    assert!(app.patch_select_filter_active);
+    assert_eq!(app.patch_query, "");
 
     app.handle_patch_select(KeyCode::Char('p'));
 

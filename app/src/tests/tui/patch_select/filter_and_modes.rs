@@ -56,14 +56,15 @@ fn handle_patch_select_enter_exits_filter_input_and_keeps_filtered_results() {
 }
 
 #[test]
-fn handle_patch_select_backspace_with_empty_query_exits_filter_input() {
+fn handle_patch_select_backspace_with_empty_query_keeps_filter_input_active() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::PatchSelect;
     app.patch_select_filter_active = true;
 
     app.handle_patch_select(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
 
-    assert!(!app.patch_select_filter_active);
+    assert!(app.patch_select_filter_active);
+    assert_eq!(app.patch_query, "");
 }
 
 #[test]
@@ -114,6 +115,11 @@ fn handle_patch_select_backspace_to_empty_keeps_filter_input_active() {
         &*app.play_state.lock().unwrap(),
         PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Pads/Pad 1.fxp"} l8cdef"#
     ));
+
+    app.handle_patch_select(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+
+    assert!(app.patch_select_filter_active);
+    assert_eq!(app.patch_query, "");
 
     app.handle_patch_select(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
 

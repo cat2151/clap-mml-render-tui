@@ -133,6 +133,23 @@ fn draw_patch_select_shows_filter_input_keybinds_when_filter_active() {
 }
 
 #[test]
+fn draw_patch_select_shows_filter_input_placeholder_when_active_and_empty() {
+    let mut app = build_test_app();
+    app.mode = DawMode::PatchSelect;
+    app.patch_all = vec![
+        ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
+        ("Bass/Bass 1.fxp".to_string(), "bass/bass 1.fxp".to_string()),
+    ];
+    app.patch_filtered = app.patch_all.iter().map(|(orig, _)| orig.clone()).collect();
+    app.patch_select_filter_active = true;
+
+    let normalized_screen = render_lines(&app, 140, 30).join("\n").replace(' ', "");
+
+    assert!(normalized_screen.contains("patchnameを入力して絞り込み"));
+    assert!(!normalized_screen.contains("/を押して絞り込み"));
+}
+
+#[test]
 fn draw_patch_select_does_not_show_total_patch_count_in_title() {
     let mut app = build_test_app();
     app.mode = DawMode::PatchSelect;

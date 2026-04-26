@@ -99,6 +99,27 @@ fn patch_select_screen_shows_filter_confirm_title_when_filter_active() {
 }
 
 #[test]
+fn patch_select_screen_shows_filter_input_placeholder_when_active_and_empty() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_all = vec![
+        ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
+        (
+            "Leads/Lead 1.fxp".to_string(),
+            "leads/lead 1.fxp".to_string(),
+        ),
+    ];
+    app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
+    app.patch_list_state.select(Some(0));
+    app.mode = Mode::PatchSelect;
+    app.patch_select_filter_active = true;
+
+    let normalized = render_lines(&mut app, 100, 16).join("\n").replace(' ', "");
+
+    assert!(normalized.contains("音色名を入力して絞り込み"));
+    assert!(!normalized.contains("/を押して絞り込み"));
+}
+
+#[test]
 fn patch_select_screen_shows_prefilled_query_when_filter_is_inactive() {
     let mut app = TuiApp::new_for_test(test_config());
     app.patch_all = vec![
