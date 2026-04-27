@@ -180,6 +180,13 @@ fn offline_render_startup_log_line(cfg: &crate::config::Config, render_workers: 
     )
 }
 
+fn realtime_audio_startup_log_line(cfg: &crate::config::Config) -> String {
+    format!(
+        "realtime audio: backend={}",
+        cfg.realtime_audio_backend.as_str()
+    )
+}
+
 pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
     super::http_server::set_active_http_state_cfg(Arc::clone(&cfg));
     let DawGridBuffers {
@@ -215,6 +222,14 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
     let play_measure_mmls = Arc::new(Mutex::new(play_measure_mmls));
     let play_measure_track_mmls = Arc::new(Mutex::new(play_measure_track_mmls));
     let play_track_gains = Arc::new(Mutex::new(play_track_gains));
+    let realtime_play_server =
+        if cfg.realtime_audio_backend == crate::config::RealtimeAudioBackend::PlayServer {
+            Some(Arc::new(
+                crate::realtime_play::RealtimePlayServerSupervisor::new(cfg.as_ref()),
+            ))
+        } else {
+            None
+        };
 
     {
         let cache_dispatch = Arc::clone(&cache);
@@ -358,6 +373,7 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
         play_transition_lock: Arc::new(Mutex::new(())),
         preview_session: Arc::new(AtomicU64::new(0)),
         preview_sink: Arc::new(Mutex::new(None)),
+        realtime_play_server,
         play_position,
         ab_repeat,
         overlay_preview_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
@@ -402,6 +418,7 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
         &app.cfg,
         app.cache_render_workers,
     ));
+    app.append_log_line(realtime_audio_startup_log_line(&app.cfg));
     app.append_log_line("=== DAW mode ready ===");
     app
 }
@@ -444,6 +461,27 @@ offline_render_server_workers = 4
         assert_eq!(
             offline_render_startup_log_line(&cfg, cfg.effective_offline_render_workers()),
             "offline render: backend=render_server workers=4"
+        );
+    }
+
+    #[test]
+    fn realtime_audio_startup_log_line_shows_backend() {
+        let cfg: crate::config::Config = toml::from_str(
+            r#"
+plugin_path = "/usr/lib/clap/Surge XT.clap"
+input_midi = "input.mid"
+output_midi = "output.mid"
+output_wav = "output.wav"
+sample_rate = 44100
+buffer_size = 512
+realtime_audio_backend = "play_server"
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            realtime_audio_startup_log_line(&cfg),
+            "realtime audio: backend=play_server"
         );
     }
 }

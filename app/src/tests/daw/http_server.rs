@@ -49,6 +49,7 @@ fn build_test_app(cfg: Config) -> DawApp {
         play_transition_lock: Arc::new(Mutex::new(())),
         preview_session: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         preview_sink: Arc::new(Mutex::new(None)),
+        realtime_play_server: None,
         play_position: Arc::new(Mutex::new(None)),
         ab_repeat: Arc::new(Mutex::new(AbRepeatState::Off)),
         overlay_preview_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
@@ -101,6 +102,9 @@ fn default_config() -> Config {
         offline_render_backend: crate::config::OfflineRenderBackend::InProcess,
         offline_render_server_port: crate::config::DEFAULT_OFFLINE_RENDER_SERVER_PORT,
         offline_render_server_command: String::new(),
+        realtime_audio_backend: crate::config::RealtimeAudioBackend::InProcess,
+        realtime_play_server_port: crate::config::DEFAULT_REALTIME_PLAY_SERVER_PORT,
+        realtime_play_server_command: String::new(),
     }
 }
 

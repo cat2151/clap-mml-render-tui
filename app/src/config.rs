@@ -5,8 +5,9 @@ use cmrt_core::CoreConfig;
 pub use cmrt_runtime::{
     configured_patch_dirs, core_config_patch_root_dir, default_config_content,
     default_patches_dirs, default_plugin_path, serialize_patches_dirs_line, shared_patch_root_dir,
-    Config, OfflineRenderBackend, DEFAULT_OFFLINE_RENDER_SERVER_PORT,
+    Config, OfflineRenderBackend, RealtimeAudioBackend, DEFAULT_OFFLINE_RENDER_SERVER_PORT,
     DEFAULT_OFFLINE_RENDER_SERVER_WORKERS, DEFAULT_OFFLINE_RENDER_WORKERS,
+    DEFAULT_REALTIME_PLAY_SERVER_PORT,
 };
 
 pub fn config_app_dir() -> Option<PathBuf> {

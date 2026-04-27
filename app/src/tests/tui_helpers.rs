@@ -21,6 +21,7 @@ impl TuiApp<'static> {
             entry_ptr: 0,
             play_state: Arc::new(Mutex::new(PlayState::Idle)),
             playback_session: Arc::new(AtomicU64::new(0)),
+            realtime_play_server: None,
             active_offline_render_count: Arc::new(AtomicUsize::new(0)),
             render_queue,
             active_sink: Arc::new(Mutex::new(None)),

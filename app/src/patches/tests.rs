@@ -64,6 +64,9 @@ fn collect_patch_pairs_combines_factory_and_thirdparty_using_common_base() {
         offline_render_backend: crate::config::OfflineRenderBackend::InProcess,
         offline_render_server_port: crate::config::DEFAULT_OFFLINE_RENDER_SERVER_PORT,
         offline_render_server_command: String::new(),
+        realtime_audio_backend: crate::config::RealtimeAudioBackend::InProcess,
+        realtime_play_server_port: crate::config::DEFAULT_REALTIME_PLAY_SERVER_PORT,
+        realtime_play_server_command: String::new(),
     };
 
     let pairs = collect_patch_pairs(&cfg).unwrap();
@@ -107,6 +110,9 @@ fn collect_patch_pairs_sorts_display_names_naturally() {
         offline_render_backend: crate::config::OfflineRenderBackend::InProcess,
         offline_render_server_port: crate::config::DEFAULT_OFFLINE_RENDER_SERVER_PORT,
         offline_render_server_command: String::new(),
+        realtime_audio_backend: crate::config::RealtimeAudioBackend::InProcess,
+        realtime_play_server_port: crate::config::DEFAULT_REALTIME_PLAY_SERVER_PORT,
+        realtime_play_server_command: String::new(),
     };
 
     let pairs = collect_patch_pairs(&cfg).unwrap();

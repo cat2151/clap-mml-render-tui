@@ -91,7 +91,7 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 
-use crate::config::Config;
+use crate::{config::Config, realtime_play::RealtimePlayServerSupervisor};
 
 // ─── 再エクスポート ───────────────────────────────────────────
 
@@ -187,6 +187,7 @@ pub struct DawApp {
     /// 現在アクティブな preview sink。
     /// preview restart 時に既存音声を即時停止するために保持する。
     preview_sink: Arc<Mutex<Option<Arc<rodio::Sink>>>>,
+    realtime_play_server: Option<Arc<RealtimePlayServerSupervisor>>,
 
     /// 再生中の小節・ビート位置（UI 描画に使用）
     pub(super) play_position: Arc<Mutex<Option<PlayPosition>>>,

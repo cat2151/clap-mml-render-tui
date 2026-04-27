@@ -8,7 +8,7 @@ use cmrt_core::NativeRenderProbeContext;
 use super::playback::try_get_cached_samples;
 use super::render_queue::RenderPriority;
 use super::{DawApp, DawPlayState, FIRST_PLAYABLE_TRACK, MAX_CACHED_SAMPLES};
-use crate::history::daw_cache_mml_hash;
+use crate::{config::RealtimeAudioBackend, history::daw_cache_mml_hash};
 
 #[path = "preview/render.rs"]
 mod render;
@@ -17,6 +17,27 @@ pub(super) use render::{begin_preview_output, PreviewOutputRequest, PreviewOutpu
 use render::{
     insert_overlay_preview_cache, overlay_preview_cache_key, render_mixed_preview_tracks,
 };
+
+fn wait_preview_duration(
+    play_state: &Arc<std::sync::Mutex<DawPlayState>>,
+    preview_session: &std::sync::atomic::AtomicU64,
+    session: u64,
+    duration: std::time::Duration,
+) {
+    let deadline = std::time::Instant::now() + duration;
+    loop {
+        if *play_state.lock().unwrap() != DawPlayState::Preview
+            || preview_session.load(Ordering::Acquire) != session
+        {
+            return;
+        }
+        let now = std::time::Instant::now();
+        if now >= deadline {
+            return;
+        }
+        std::thread::sleep((deadline - now).min(std::time::Duration::from_millis(10)));
+    }
+}
 
 impl DawApp {
     pub(super) fn prefetch_preview_navigation_cache<F>(
@@ -138,6 +159,15 @@ impl DawApp {
             })
             .collect();
         if active_tracks.is_empty() {
+            return;
+        }
+
+        if self.cfg.realtime_audio_backend == RealtimeAudioBackend::PlayServer {
+            self.start_preview_with_snapshot_via_play_server(
+                measure_index,
+                track_mmls,
+                active_tracks,
+            );
             return;
         }
 
@@ -336,6 +366,89 @@ impl DawApp {
                 *state = DawPlayState::Idle;
                 drop(state);
                 preview_sink.lock().unwrap().take();
+                *play_position.lock().unwrap() = None;
+                crate::logging::append_log_line(&log_lines, "preview: finished");
+            }
+        });
+    }
+
+    fn start_preview_with_snapshot_via_play_server(
+        &self,
+        measure_index: usize,
+        track_mmls: Vec<String>,
+        active_tracks: Vec<usize>,
+    ) {
+        let Some(play_server) = self.realtime_play_server.as_ref().cloned() else {
+            self.append_log_line("preview: realtime play server is not initialized");
+            return;
+        };
+
+        let measure_samples = self.measure_duration_samples();
+        let play_state = Arc::clone(&self.play_state);
+        let play_transition_lock = Arc::clone(&self.play_transition_lock);
+        let preview_session = Arc::clone(&self.preview_session);
+        let preview_sink = Arc::clone(&self.preview_sink);
+        let play_position = Arc::clone(&self.play_position);
+        let log_lines = Arc::clone(&self.log_lines);
+        let sample_rate = self.cfg.sample_rate as u32;
+
+        let session = {
+            let _transition_guard = play_transition_lock.lock().unwrap();
+            if let Some(sink) = preview_sink.lock().unwrap().take() {
+                sink.stop();
+            }
+            let _ = play_server.stop();
+            *play_position.lock().unwrap() = None;
+            let session = preview_session.fetch_add(1, Ordering::AcqRel) + 1;
+            *play_state.lock().unwrap() = DawPlayState::Preview;
+            session
+        };
+        crate::logging::append_log_line(&log_lines, format!("preview: meas{}", measure_index + 1));
+
+        std::thread::spawn(move || {
+            let mml = active_tracks
+                .iter()
+                .filter_map(|track| track_mmls.get(*track))
+                .map(String::as_str)
+                .filter(|mml| !mml.trim().is_empty())
+                .collect::<Vec<_>>()
+                .join(";");
+            let result =
+                cmrt_core::mml_to_smf_bytes(&mml).and_then(|smf| play_server.play_smf(smf));
+            if let Err(error) = result {
+                crate::logging::append_log_line(
+                    &log_lines,
+                    format!("meas{}: play-server error: {}", measure_index + 1, error),
+                );
+            } else {
+                let measure_duration = std::time::Duration::from_secs_f64(
+                    measure_samples as f64 / (sample_rate as f64 * 2.0),
+                );
+                let preview_active = begin_preview_output(
+                    PreviewOutputState {
+                        play_transition_lock: &play_transition_lock,
+                        play_state: &play_state,
+                        play_position: &play_position,
+                        preview_session: &preview_session,
+                    },
+                    PreviewOutputRequest {
+                        session,
+                        measure_index,
+                        measure_duration,
+                    },
+                    || {},
+                );
+                if preview_active {
+                    wait_preview_duration(&play_state, &preview_session, session, measure_duration);
+                }
+            }
+
+            let mut state = play_state.lock().unwrap();
+            if *state == DawPlayState::Preview && preview_session.load(Ordering::Acquire) == session
+            {
+                let _ = play_server.stop();
+                *state = DawPlayState::Idle;
+                drop(state);
                 *play_position.lock().unwrap() = None;
                 crate::logging::append_log_line(&log_lines, "preview: finished");
             }

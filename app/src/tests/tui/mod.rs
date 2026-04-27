@@ -37,5 +37,8 @@ fn test_config() -> crate::config::Config {
         offline_render_backend: crate::config::OfflineRenderBackend::InProcess,
         offline_render_server_port: crate::config::DEFAULT_OFFLINE_RENDER_SERVER_PORT,
         offline_render_server_command: String::new(),
+        realtime_audio_backend: crate::config::RealtimeAudioBackend::InProcess,
+        realtime_play_server_port: crate::config::DEFAULT_REALTIME_PLAY_SERVER_PORT,
+        realtime_play_server_command: String::new(),
     }
 }

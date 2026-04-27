@@ -44,7 +44,11 @@ pub(in crate::tui) use self::cache::filter_patches;
 use self::cache::{mark_cache_entry_recent, resolve_cached_samples, try_insert_cache};
 use self::render_queue::{TuiRenderCompletion, TuiRenderJobStatus, TuiRenderQueue};
 pub(in crate::tui) use self::session::PatchLoadState;
-use crate::{config::Config, patches::PatchSortOrder};
+use crate::{
+    config::{Config, RealtimeAudioBackend},
+    patches::PatchSortOrder,
+    realtime_play::RealtimePlayServerSupervisor,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum Mode {
@@ -93,6 +97,31 @@ fn truncate_for_log(value: &str, max_chars: usize) -> String {
     out
 }
 
+fn smf_playback_duration(
+    smf_bytes: &[u8],
+    sample_rate: f64,
+) -> anyhow::Result<std::time::Duration> {
+    let (_, total_samples) = cmrt_core::midi::parse_smf_bytes(smf_bytes, sample_rate)?;
+    Ok(std::time::Duration::from_secs_f64(
+        total_samples as f64 / sample_rate,
+    ))
+}
+
+fn sleep_for_playback_session(
+    playback_session: &AtomicU64,
+    session: u64,
+    duration: std::time::Duration,
+) {
+    let deadline = std::time::Instant::now() + duration;
+    while playback_session.load(Ordering::Acquire) == session {
+        let now = std::time::Instant::now();
+        if now >= deadline {
+            return;
+        }
+        std::thread::sleep((deadline - now).min(std::time::Duration::from_millis(10)));
+    }
+}
+
 #[derive(Clone, PartialEq)]
 pub(super) enum PlayState {
     Idle,
@@ -121,6 +150,7 @@ pub struct TuiApp<'a> {
     entry_ptr: usize, // *const PluginEntry as usize。render_server backend では 0。
     pub(super) play_state: Arc<Mutex<PlayState>>,
     playback_session: Arc<AtomicU64>,
+    realtime_play_server: Option<Arc<RealtimePlayServerSupervisor>>,
     pub(super) active_offline_render_count: Arc<AtomicUsize>,
     render_queue: TuiRenderQueue,
     active_sink: Arc<Mutex<Option<Arc<rodio::Sink>>>>,
@@ -197,6 +227,11 @@ impl<'a> TuiApp<'a> {
     }
 
     fn kick_play(&self, mml: String) {
+        if self.cfg.realtime_audio_backend == RealtimeAudioBackend::PlayServer {
+            self.kick_play_via_play_server(mml);
+            return;
+        }
+
         let cfg = Arc::clone(&self.cfg);
         let state = Arc::clone(&self.play_state);
         let playback_session = Arc::clone(&self.playback_session);
@@ -338,6 +373,83 @@ impl<'a> TuiApp<'a> {
                 }
             });
         }
+    }
+
+    fn kick_play_via_play_server(&self, mml: String) {
+        let Some(play_server) = self.realtime_play_server.as_ref().cloned() else {
+            let session = self.begin_playback_session();
+            self.set_play_state_if_current(
+                session,
+                PlayState::Err("エラー: realtime play server backend is not initialized".into()),
+            );
+            return;
+        };
+
+        let cfg = Arc::clone(&self.cfg);
+        let state = Arc::clone(&self.play_state);
+        let playback_session = Arc::clone(&self.playback_session);
+        let session = self.begin_playback_session();
+        let mml_log = truncate_for_log(&mml, 120);
+        let msg = format!("play-server | {}", mml);
+        Self::log_notepad_event(format!(
+            "play-server request session={session} mml=\"{mml_log}\""
+        ));
+        self.set_play_state_if_current(session, PlayState::Running(mml.clone()));
+
+        std::thread::spawn(move || {
+            let smf_bytes = match cmrt_core::mml_to_smf_bytes(&mml) {
+                Ok(smf_bytes) => smf_bytes,
+                Err(error) => {
+                    Self::set_play_state_for_session(
+                        &state,
+                        &playback_session,
+                        session,
+                        PlayState::Err(format!("エラー: SMF conversion failed: {error}")),
+                    );
+                    return;
+                }
+            };
+            let duration = match smf_playback_duration(&smf_bytes, cfg.sample_rate) {
+                Ok(duration) => duration,
+                Err(error) => {
+                    Self::set_play_state_for_session(
+                        &state,
+                        &playback_session,
+                        session,
+                        PlayState::Err(format!("エラー: SMF parse failed: {error}")),
+                    );
+                    return;
+                }
+            };
+            if !Self::playback_session_is_current(&playback_session, session) {
+                return;
+            }
+            match play_server.play_smf(smf_bytes) {
+                Ok(()) => {
+                    Self::set_play_state_for_session(
+                        &state,
+                        &playback_session,
+                        session,
+                        PlayState::Playing(msg.clone()),
+                    );
+                    sleep_for_playback_session(&playback_session, session, duration);
+                    Self::set_play_state_for_session(
+                        &state,
+                        &playback_session,
+                        session,
+                        PlayState::Done(msg),
+                    );
+                }
+                Err(error) => {
+                    Self::set_play_state_for_session(
+                        &state,
+                        &playback_session,
+                        session,
+                        PlayState::Err(format!("エラー: {}", error)),
+                    );
+                }
+            }
+        });
     }
 
     pub(super) fn active_parallel_render_count(&self) -> usize {

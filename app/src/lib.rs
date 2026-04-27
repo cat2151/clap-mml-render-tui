@@ -7,6 +7,7 @@ pub mod logging;
 pub(crate) mod offline_render;
 pub(crate) mod patches;
 pub(crate) mod random;
+pub(crate) mod realtime_play;
 pub mod server;
 #[cfg(test)]
 pub(crate) mod test_utils;

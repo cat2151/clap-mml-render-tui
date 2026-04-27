@@ -86,6 +86,14 @@ impl<'a> TuiApp<'a> {
             entry_ptr,
             Arc::clone(&active_offline_render_count),
         );
+        let realtime_play_server =
+            if cfg_arc.realtime_audio_backend == crate::config::RealtimeAudioBackend::PlayServer {
+                Some(Arc::new(
+                    crate::realtime_play::RealtimePlayServerSupervisor::new(cfg_arc.as_ref()),
+                ))
+            } else {
+                None
+            };
 
         Self {
             mode: Mode::Normal,
@@ -98,6 +106,7 @@ impl<'a> TuiApp<'a> {
             entry_ptr,
             play_state: Arc::new(Mutex::new(PlayState::Idle)),
             playback_session: Arc::new(AtomicU64::new(0)),
+            realtime_play_server,
             active_offline_render_count,
             render_queue,
             active_sink: Arc::new(Mutex::new(None)),

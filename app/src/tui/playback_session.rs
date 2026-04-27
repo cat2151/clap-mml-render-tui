@@ -94,6 +94,9 @@ impl<'a> TuiApp<'a> {
         if let Some(sink) = self.active_sink.lock().unwrap().take() {
             sink.stop();
         }
+        if let Some(play_server) = &self.realtime_play_server {
+            let _ = play_server.stop();
+        }
         session
     }
 

@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 pub const DEFAULT_OFFLINE_RENDER_WORKERS: usize = 2;
 pub const DEFAULT_OFFLINE_RENDER_SERVER_WORKERS: usize = 4;
 pub const DEFAULT_OFFLINE_RENDER_SERVER_PORT: u16 = 62153;
+pub const DEFAULT_REALTIME_PLAY_SERVER_PORT: u16 = 62154;
 const MIN_OFFLINE_RENDER_WORKERS: usize = 1;
 const MAX_OFFLINE_RENDER_WORKERS: usize = 16;
 const APP_DIR_NAME: &str = "clap-mml-render-tui";
@@ -14,6 +15,14 @@ pub enum OfflineRenderBackend {
     #[default]
     InProcess,
     RenderServer,
+}
+
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RealtimeAudioBackend {
+    #[default]
+    InProcess,
+    PlayServer,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -41,6 +50,15 @@ pub struct Config {
     /// render-server backend 起動コマンド。空なら sibling executable / PATH を探す。
     #[serde(default)]
     pub offline_render_server_command: String,
+    /// リアルタイム audio backend
+    #[serde(default)]
+    pub realtime_audio_backend: RealtimeAudioBackend,
+    /// realtime play server backend が使う localhost port
+    #[serde(default = "default_realtime_play_server_port")]
+    pub realtime_play_server_port: u16,
+    /// realtime play server backend 起動コマンド。空なら sibling executable / PATH を探す。
+    #[serde(default)]
+    pub realtime_play_server_command: String,
 }
 
 #[derive(Serialize)]
@@ -158,6 +176,13 @@ offline_render_server_workers = 4
 offline_render_server_port = 62153
 offline_render_server_command = ""
 
+# 【省略可】リアルタイム再生 backend
+# in_process: 従来どおり cmrt 本体プロセス内で再生します。
+# play_server: 127.0.0.1 の realtime play server 子プロセスへ POST /play します。
+realtime_audio_backend = "in_process"
+realtime_play_server_port = 62154
+realtime_play_server_command = ""
+
 # 【省略可】Surge XT パッチの検索対象ディレクトリ一覧（TUI / DAW の音色選択・ランダム音色で使う）
 # 例 (Windows): patches_dirs = ['C:\ProgramData\Surge XT\patches_factory', 'C:\ProgramData\Surge XT\patches_3rdparty']
 # 例 (Linux):   patches_dirs = ['/home/user/.local/share/surge-data/patches_factory', '/home/user/.local/share/surge-data/patches_3rdparty']
@@ -178,6 +203,10 @@ fn default_offline_render_server_workers() -> usize {
 
 fn default_offline_render_server_port() -> u16 {
     DEFAULT_OFFLINE_RENDER_SERVER_PORT
+}
+
+fn default_realtime_play_server_port() -> u16 {
+    DEFAULT_REALTIME_PLAY_SERVER_PORT
 }
 
 /// `patches_dirs = [...]` の 1 行を安全な TOML 文字列として生成する。
@@ -297,6 +326,9 @@ impl Config {
         if self.offline_render_server_port == 0 {
             anyhow::bail!("offline_render_server_port は 1〜65535 の範囲で設定してください");
         }
+        if self.realtime_play_server_port == 0 {
+            anyhow::bail!("realtime_play_server_port は 1〜65535 の範囲で設定してください");
+        }
         Ok(())
     }
 
@@ -313,6 +345,15 @@ impl OfflineRenderBackend {
         match self {
             OfflineRenderBackend::InProcess => "in_process",
             OfflineRenderBackend::RenderServer => "render_server",
+        }
+    }
+}
+
+impl RealtimeAudioBackend {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RealtimeAudioBackend::InProcess => "in_process",
+            RealtimeAudioBackend::PlayServer => "play_server",
         }
     }
 }
@@ -414,6 +455,12 @@ buffer_size = 512
             DEFAULT_OFFLINE_RENDER_SERVER_PORT
         );
         assert!(cfg.offline_render_server_command.is_empty());
+        assert_eq!(cfg.realtime_audio_backend, RealtimeAudioBackend::InProcess);
+        assert_eq!(
+            cfg.realtime_play_server_port,
+            DEFAULT_REALTIME_PLAY_SERVER_PORT
+        );
+        assert!(cfg.realtime_play_server_command.is_empty());
     }
 
     #[test]
@@ -425,6 +472,49 @@ buffer_size = 512
         assert!(content.contains("offline_render_server_workers = 4"));
         assert!(content.contains("offline_render_server_port = 62153"));
         assert!(content.contains("offline_render_server_command = \"\""));
+        assert!(content.contains("realtime_audio_backend = \"in_process\""));
+        assert!(content.contains("realtime_play_server_port = 62154"));
+        assert!(content.contains("realtime_play_server_command = \"\""));
+    }
+
+    #[test]
+    fn config_realtime_audio_backend_parses_play_server() {
+        let toml_str = r#"
+plugin_path = "/usr/lib/clap/Surge XT.clap"
+input_midi  = "input.mid"
+output_midi = "output.mid"
+output_wav  = "output.wav"
+sample_rate = 48000
+buffer_size = 512
+realtime_audio_backend = "play_server"
+realtime_play_server_port = 62154
+realtime_play_server_command = "clap-mml-realtime-play-server"
+"#;
+
+        let cfg: Config = toml::from_str(toml_str).unwrap();
+
+        assert_eq!(cfg.realtime_audio_backend, RealtimeAudioBackend::PlayServer);
+        assert_eq!(cfg.realtime_play_server_port, 62154);
+        assert_eq!(
+            cfg.realtime_play_server_command,
+            "clap-mml-realtime-play-server"
+        );
+    }
+
+    #[test]
+    fn config_realtime_play_server_port_validation_rejects_zero() {
+        let toml_str = r#"
+plugin_path = "/usr/lib/clap/Surge XT.clap"
+input_midi  = "input.mid"
+output_midi = "output.mid"
+output_wav  = "output.wav"
+sample_rate = 48000
+buffer_size = 512
+realtime_play_server_port = 0
+"#;
+        let cfg: Config = toml::from_str(toml_str).unwrap();
+
+        assert!(cfg.validate().is_err());
     }
 
     #[test]
