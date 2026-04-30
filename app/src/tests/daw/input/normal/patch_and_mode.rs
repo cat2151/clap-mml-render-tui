@@ -22,6 +22,16 @@ fn handle_normal_n_returns_to_tui() {
 }
 
 #[test]
+fn handle_normal_e_requests_config_edit() {
+    let (mut app, _cache_rx) = build_test_app();
+
+    let result = app.handle_normal(crossterm::event::KeyCode::Char('e'));
+
+    assert!(matches!(result, super::super::DawNormalAction::EditConfig));
+    assert!(matches!(app.mode, DawMode::Normal));
+}
+
+#[test]
 fn handle_normal_esc_has_no_effect() {
     let (mut app, _cache_rx) = build_test_app();
     app.cursor_track = 2;

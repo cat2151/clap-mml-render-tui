@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use clap_mml_render_tui::{config, server, tui, updater};
 use cmrt_core::{load_entry, mml_to_play};
@@ -155,7 +155,7 @@ fn main() -> Result<()> {
         return updater::run_check();
     }
 
-    let cfg = config::Config::load()?;
+    let cfg = config::load()?;
 
     // plugin_path が未設定の場合は設定ファイルを編集するよう案内する
     if cfg.plugin_path.is_empty() {
@@ -214,9 +214,31 @@ fn main() -> Result<()> {
     // TUI モード
     let mut app = tui::TuiApp::new(&cfg, entry.as_ref());
 
-    app.run()?;
+    match app.run()? {
+        tui::TuiExitReason::Quit => Ok(()),
+        tui::TuiExitReason::RestartApp => restart_current_process(),
+    }
+}
 
-    Ok(())
+fn restart_current_process() -> Result<()> {
+    let exe = std::env::current_exe().context("現在の実行ファイルパスを取得できませんでした")?;
+    let args = std::env::args_os().skip(1).collect::<Vec<_>>();
+    let status = std::process::Command::new(&exe)
+        .args(args)
+        .status()
+        .with_context(|| format!("アプリの再起動に失敗しました: {}", exe.display()))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        anyhow::bail!(
+            "再起動したアプリが終了コード {} で終了しました",
+            status
+                .code()
+                .map(|code| code.to_string())
+                .unwrap_or_else(|| "不明".to_string())
+        );
+    }
 }
 
 #[cfg(test)]

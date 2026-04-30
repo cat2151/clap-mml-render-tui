@@ -8,6 +8,7 @@ name = "cmrt"
 path = "src/main.rs"
 
 [dependencies]
+cmrt-config-editor = { path = "../config-editor-lib" }
 cmrt-core = { path = "../core-lib" }
 cmrt-runtime = { path = "../cmrt-runtime" }
 rand = "0.8"

@@ -101,7 +101,7 @@ fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
         .unwrap();
     let keybind_row = lines
         .iter()
-        .position(|line| line.contains("q ?:help i:insert"))
+        .position(|line| line.contains("q ?:help e:config i:insert"))
         .unwrap();
 
     assert!(screen.contains("[NORMAL] notepad mode"));
@@ -111,7 +111,7 @@ fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
     assert_eq!(render_row, status_row + 1);
     assert_eq!(keybind_row, render_row + 1);
     assert!(normalized_lines[render_row].contains("render:実行0/2予約0"));
-    assert!(screen.contains("q ?:help i:insert"));
+    assert!(screen.contains("q ?:help e:config i:insert"));
     assert!(screen.contains("dd/Del:cut"));
     assert!(screen.contains("g:generate"));
     assert!(screen.contains("Shift+H:patch history"));

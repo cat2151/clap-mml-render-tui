@@ -158,3 +158,13 @@ fn handle_normal_w_launches_daw() {
     assert!(matches!(result, NormalAction::LaunchDaw));
     assert!(matches!(app.mode, Mode::Normal));
 }
+
+#[test]
+fn handle_normal_e_requests_config_edit() {
+    let mut app = TuiApp::new_for_test(test_config());
+
+    let result = app.handle_normal(KeyCode::Char('e'));
+
+    assert!(matches!(result, NormalAction::EditConfig));
+    assert!(matches!(app.mode, Mode::Normal));
+}

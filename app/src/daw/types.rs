@@ -172,6 +172,7 @@ pub enum DawNormalAction {
     Continue,
     ReturnToTui,
     QuitApp,
+    EditConfig,
 }
 
 /// DAW モード終了後の画面切替/終了通知
@@ -180,4 +181,6 @@ pub enum DawExitReason {
     ReturnToTui,
     /// q キーでアプリを終了する
     QuitApp,
+    /// config.toml 編集後にアプリを再起動する
+    RestartApp,
 }

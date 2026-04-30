@@ -1,5 +1,6 @@
 pub(crate) mod clipboard;
 pub mod config;
+pub(crate) mod config_editor;
 pub mod daw;
 pub(crate) mod generate;
 pub mod history;

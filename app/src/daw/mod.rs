@@ -26,6 +26,7 @@
 //!   Shift+Space         : 非play時、現在 meas から演奏開始して継続
 //!   s      : 現在 track の solo toggle
 //!   r      : measure 0 にランダム音色を設定
+//!   e      : config.toml を editor で開く
 //!   K / ?  : ヘルプ表示
 //!   q      : アプリ終了
 //!   n      : notepad へ切替

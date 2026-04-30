@@ -9,7 +9,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 
 use std::sync::Arc;
 
-use super::{Mode, NormalAction, TuiApp};
+use super::{Mode, NormalAction, PlayState, TuiApp, TuiExitReason};
 
 struct TerminalCleanup {
     raw_mode_enabled: bool,
@@ -39,7 +39,7 @@ impl<'a> TuiApp<'a> {
         }
     }
 
-    pub fn run(&mut self) -> Result<()> {
+    pub fn run(&mut self) -> Result<TuiExitReason> {
         crate::daw::ensure_http_server_for_mode_switch();
         enable_raw_mode()?;
         let mut cleanup = TerminalCleanup {
@@ -63,6 +63,7 @@ impl<'a> TuiApp<'a> {
 
         // 前回 DAW モードで終了していた場合は直接 DAW モードで起動する
         let mut quit_from_startup_daw = false;
+        let mut restart_from_startup_daw = false;
         if self.is_daw_mode {
             let mut daw = crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
             match daw.run_with_terminal(&mut terminal)? {
@@ -72,12 +73,20 @@ impl<'a> TuiApp<'a> {
                 crate::daw::DawExitReason::QuitApp => {
                     quit_from_startup_daw = true;
                 }
+                crate::daw::DawExitReason::RestartApp => {
+                    restart_from_startup_daw = true;
+                }
             }
         }
 
         loop {
             if quit_from_startup_daw {
                 break;
+            }
+            if restart_from_startup_daw {
+                self.flush_patch_phrase_store_if_dirty();
+                self.save_history_state();
+                return Ok(TuiExitReason::RestartApp);
             }
             if crate::daw::take_http_mode_switch_request() {
                 self.flush_patch_phrase_store_if_dirty();
@@ -90,6 +99,12 @@ impl<'a> TuiApp<'a> {
                     crate::daw::DawExitReason::QuitApp => {
                         self.is_daw_mode = true;
                         break;
+                    }
+                    crate::daw::DawExitReason::RestartApp => {
+                        self.is_daw_mode = true;
+                        self.flush_patch_phrase_store_if_dirty();
+                        self.save_history_state();
+                        return Ok(TuiExitReason::RestartApp);
                     }
                 }
                 continue;
@@ -153,6 +168,28 @@ impl<'a> TuiApp<'a> {
                                         self.is_daw_mode = true;
                                         break;
                                     }
+                                    crate::daw::DawExitReason::RestartApp => {
+                                        self.is_daw_mode = true;
+                                        self.flush_patch_phrase_store_if_dirty();
+                                        self.save_history_state();
+                                        return Ok(TuiExitReason::RestartApp);
+                                    }
+                                }
+                            }
+                            NormalAction::EditConfig => {
+                                let session = self.begin_playback_session();
+                                self.set_play_state_if_current(session, PlayState::Idle);
+                                match crate::config_editor::edit_config_toml(&mut terminal) {
+                                    Ok(()) => {
+                                        self.flush_patch_phrase_store_if_dirty();
+                                        self.save_history_state();
+                                        return Ok(TuiExitReason::RestartApp);
+                                    }
+                                    Err(error) => {
+                                        *self.play_state.lock().unwrap() = PlayState::Err(format!(
+                                            "config 編集に失敗しました: {error}"
+                                        ));
+                                    }
                                 }
                             }
                             NormalAction::Continue => {}
@@ -172,6 +209,6 @@ impl<'a> TuiApp<'a> {
         // 保存失敗はベストエフォートとして無視する（終了処理のため通知手段がない）。
         self.flush_patch_phrase_store_if_dirty();
         self.save_history_state();
-        Ok(())
+        Ok(TuiExitReason::Quit)
     }
 }

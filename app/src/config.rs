@@ -3,12 +3,22 @@ use std::path::PathBuf;
 use cmrt_core::CoreConfig;
 
 pub use cmrt_runtime::{
-    configured_patch_dirs, core_config_patch_root_dir, default_config_content,
-    default_patches_dirs, default_plugin_path, serialize_patches_dirs_line, shared_patch_root_dir,
-    Config, OfflineRenderBackend, RealtimeAudioBackend, DEFAULT_OFFLINE_RENDER_SERVER_PORT,
+    configured_patch_dirs, core_config_patch_root_dir, default_patches_dirs, default_plugin_path,
+    serialize_patches_dirs_line, shared_patch_root_dir, Config, OfflineRenderBackend,
+    RealtimeAudioBackend, DEFAULT_OFFLINE_RENDER_SERVER_PORT,
     DEFAULT_OFFLINE_RENDER_SERVER_WORKERS, DEFAULT_OFFLINE_RENDER_WORKERS,
     DEFAULT_REALTIME_PLAY_SERVER_PORT,
 };
+
+pub fn load() -> anyhow::Result<Config> {
+    Config::load_with_default_content(default_config_content())
+}
+
+pub fn default_config_content() -> String {
+    cmrt_runtime::default_config_content_with_app_settings(
+        &crate::config_editor::default_config_editor_block(),
+    )
+}
 
 pub fn config_app_dir() -> Option<PathBuf> {
     #[cfg(test)]

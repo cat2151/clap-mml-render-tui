@@ -131,6 +131,11 @@ pub fn default_patches_dirs() -> Vec<String> {
 
 /// OS に応じたデフォルトの config.toml 内容を生成する。
 pub fn default_config_content() -> String {
+    default_config_content_with_app_settings("")
+}
+
+/// app 側の追加設定を含めたデフォルトの config.toml 内容を生成する。
+pub fn default_config_content_with_app_settings(app_settings: &str) -> String {
     let plugin_path = default_plugin_path();
     let plugin_path_line = if plugin_path.is_empty() {
         // 未知の OS: ユーザーに設定を促すためコメントアウト状態で出力する
@@ -147,6 +152,11 @@ pub fn default_config_content() -> String {
     } else {
         serialize_patches_dirs_line(&patches_dirs)
     };
+    let app_settings = if app_settings.trim().is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", app_settings.trim_end())
+    };
     format!(
         r#"# clap-mml-render-tui config
 #
@@ -156,6 +166,7 @@ pub fn default_config_content() -> String {
 # 例 (macOS):   plugin_path = '/Library/Audio/Plug-Ins/CLAP/Surge XT.clap'
 {plugin_path_line}
 
+{app_settings}
 input_midi  = "input.mid"
 # output_midi, output_wav は自動的にシステム設定ディレクトリの clap-mml-render-tui/phrase/ または clap-mml-render-tui/daw/ に保存されます。
 # 以下の値は内部的に使用されますが、実際の出力先は上記ディレクトリになります。
@@ -252,6 +263,10 @@ pub fn native_probe_log_file_path() -> Option<PathBuf> {
 
 impl Config {
     pub fn load() -> anyhow::Result<Self> {
+        Self::load_with_default_content(default_config_content())
+    }
+
+    pub fn load_with_default_content(default_content: impl Into<String>) -> anyhow::Result<Self> {
         let path = config_file_path().ok_or_else(|| {
             anyhow::anyhow!(
                 "システムの設定ディレクトリが取得できません。HOME 環境変数などを確認してください。"
@@ -260,7 +275,7 @@ impl Config {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let content = default_config_content();
+        let content = default_content.into();
         // create_new で排他的に作成することでレースコンディションを回避する。
         // AlreadyExists は既にファイルがある正常ケースなので無視する。
         match std::fs::OpenOptions::new()

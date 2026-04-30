@@ -1,0 +1,13 @@
+[package]
+name = "cmrt-config-editor"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "cmrt_config_editor"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+thiserror = "1"
+toml = "0.8"

@@ -165,6 +165,13 @@ fn help_does_not_show_old_semicolon_guidance() {
         normalized_lines
     );
     assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("e:config.toml編集→再起動")),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
         !normalized_lines
             .iter()
             .any(|line| line.contains("スペース区切りでAND条件(例:basssoft)")),

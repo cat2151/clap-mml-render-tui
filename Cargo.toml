@@ -1,3 +1,9 @@
 [workspace]
-members = ["app", "cmrt-runtime", "core-lib", "daw-client-lib"]
+members = [
+    "app",
+    "cmrt-runtime",
+    "config-editor-lib",
+    "core-lib",
+    "daw-client-lib",
+]
 resolver = "2"

@@ -39,11 +39,16 @@ TUI画面でMML入力して遊べます
 - Linux: `~/.config/clap-mml-render-tui/config.toml`
 - macOS: `~/Library/Application Support/clap-mml-render-tui/config.toml`
 
+TUI / DAW の NORMAL モードで `e` を押すと `config.toml` を editor で開きます。editor を閉じた後はアプリを再起動します。
+
 現在の設定例です。
 
 ```toml
 # 【必須】使用する CLAP プラグイン
 plugin_path = 'C:\Program Files\Common Files\CLAP\Surge Synth Team\Surge XT.clap'
+
+# config.toml を開く editor 候補（左から順に試す）
+editors = ["fresh", "zed", "code", "edit", "nano", "vim"]
 
 input_midi  = "input.mid"
 
@@ -57,14 +62,20 @@ sample_rate = 48000
 buffer_size = 512
 
 # DAW のオフラインレンダリング同時実行数（1〜16）
-offline_render_workers = 4
+offline_render_workers = 2
 
 # オフラインレンダリング backend
 # in_process: cmrt 本体プロセス内でレンダリングします。
 # render_server: render-server 子プロセスへ POST /render してレンダリングします。
 offline_render_backend = "in_process"
+offline_render_server_workers = 4
 offline_render_server_port = 62153
 offline_render_server_command = ""
+
+# リアルタイム再生 backend
+realtime_audio_backend = "in_process"
+realtime_play_server_port = 62154
+realtime_play_server_command = ""
 
 # Surge XT パッチの検索対象ディレクトリ一覧
 patches_dirs = [
@@ -77,17 +88,22 @@ patches_dirs = [
 
 | 項目 | 既定値 | 説明 |
 | --- | --- | --- |
-| `plugin_path` | OSごとの Surge XT CLAP 標準パス | 使用する CLAP プラグインのパスです。空の場合は起動時にエラーになります。 |
+| `plugin_path` | OSごとの Surge XT CLAP 標準パス | 使用する CLAP プラグインのパスです。 |
+| `editors` | `["fresh", "zed", "code", "edit", "nano", "vim"]` | 左から順に試す editor 候補です。 |
 | `input_midi` | `input.mid` | 内部処理用の入力MIDIファイル名です。 |
-| `output_midi` | `output.mid` | 内部処理用の出力MIDIファイル名です。実際の保存先は設定ディレクトリ配下の `phrase/` または `daw/` です。 |
-| `output_wav` | `output.wav` | 内部処理用の出力WAVファイル名です。実際の保存先は設定ディレクトリ配下の `phrase/` または `daw/` です。 |
+| `output_midi` | `output.mid` | 内部処理用の出力MIDIファイル名です。 |
+| `output_wav` | `output.wav` | 内部処理用の出力WAVファイル名です。 |
 | `sample_rate` | `48000` | レンダリング時のサンプルレートです。 |
 | `buffer_size` | `512` | レンダリング時のバッファサイズです。 |
-| `offline_render_workers` | `4` | DAW のオフラインレンダリング同時実行数です。`1`〜`16` の範囲で設定します。 |
-| `offline_render_backend` | `in_process` | オフラインレンダリングの実行先です。`in_process` または `render_server` を指定します。 |
-| `offline_render_server_port` | `62153` | `offline_render_backend = "render_server"` のときに使う `127.0.0.1` のポート番号です。`1`〜`65535` の範囲で設定します。 |
-| `offline_render_server_command` | 空文字 | `render_server` backend の子プロセス起動コマンドです。空文字の場合は `cmrt` と同じディレクトリの `clap-mml-render-server` / `clap-mml-render-server.exe`、または `PATH` 上の同名コマンドを探します。 |
-| `patches_dirs` | OSごとの Surge XT patches 標準ディレクトリ | TUI / DAW の音色選択・ランダム音色で検索するディレクトリ一覧です。未設定または空の場合、音色選択・ランダム音色は使えません。 |
+| `offline_render_workers` | `2` | in_process のレンダリング同時実行数です。 |
+| `offline_render_backend` | `in_process` | オフラインレンダリングの実行先です。 |
+| `offline_render_server_workers` | `4` | render_server の同時実行数です。 |
+| `offline_render_server_port` | `62153` | render_server の localhost port です。 |
+| `offline_render_server_command` | 空文字 | render_server の起動コマンドです。 |
+| `realtime_audio_backend` | `in_process` | リアルタイム再生の実行先です。 |
+| `realtime_play_server_port` | `62154` | play_server の localhost port です。 |
+| `realtime_play_server_command` | 空文字 | play_server の起動コマンドです。 |
+| `patches_dirs` | OSごとの Surge XT patches 標準ディレクトリ | 音色選択で検索するディレクトリ一覧です。 |
 
 OS別の `plugin_path` 既定値は次のとおりです。
 

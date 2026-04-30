@@ -48,6 +48,9 @@ fn normal_help_screen_mentions_ctrl_clipboard_shortcuts_without_overlay_keybinds
     assert!(normalized_lines
         .iter()
         .any(|line| line.contains("w:DAWモード")));
+    assert!(normalized_lines
+        .iter()
+        .any(|line| line.contains("e:config.toml編集→再起動")));
     assert!(!normalized_lines
         .iter()
         .any(|line| line.contains("Ctrl+F:現在音色とMMLをFavorites追加")));

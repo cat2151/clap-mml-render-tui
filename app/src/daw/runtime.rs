@@ -99,6 +99,16 @@ impl DawApp {
                                 self.save_history_state();
                                 return Ok(DawExitReason::QuitApp);
                             }
+                            DawNormalAction::EditConfig => {
+                                self.stop_play();
+                                self.save_history_state();
+                                match crate::config_editor::edit_config_toml(terminal) {
+                                    Ok(()) => return Ok(DawExitReason::RestartApp),
+                                    Err(error) => self.append_log_line(format!(
+                                        "config 編集に失敗しました: {error}"
+                                    )),
+                                }
+                            }
                             DawNormalAction::Continue => {}
                         },
                         DawMode::Insert => self.handle_insert(key),

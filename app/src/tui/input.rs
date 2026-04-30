@@ -84,6 +84,7 @@ impl<'a> TuiApp<'a> {
                 match key {
                     KeyCode::Char('q') => return NormalAction::Quit,
                     KeyCode::Char('w') => return NormalAction::LaunchDaw,
+                    KeyCode::Char('e') => return NormalAction::EditConfig,
                     KeyCode::Char('i') => self.start_insert(),
                     KeyCode::Char('g') => match self.insert_generated_line_above() {
                         Ok(()) => {}

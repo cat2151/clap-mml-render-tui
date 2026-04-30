@@ -1,7 +1,7 @@
 //! vim 風 TUI
 //!
 //! モード:
-//!   NORMAL : j/k で行移動、PageUp/PageDown で1画面移動、Home/M で先頭/中央行へ移動、i/o で INSERT、dd / Delete で現在行をヤンク削除、g で generate を現在行の上へ挿入して再生、r で現在行の先頭にランダム音色を挿入/置換、t で音色選択、Shift+H で patch history（patch name が無い場合は notepad history 案内）、f で patch history、w で DAW、Enter/Space で再生、q で終了
+//!   NORMAL : j/k で行移動、PageUp/PageDown で1画面移動、Home/M で先頭/中央行へ移動、i/o で INSERT、dd / Delete で現在行をヤンク削除、g で generate を現在行の上へ挿入して再生、r で現在行の先頭にランダム音色を挿入/置換、t で音色選択、Shift+H で patch history（patch name が無い場合は notepad history 案内）、f で patch history、e で config.toml 編集、w で DAW、Enter/Space で再生、q で終了
 //!   INSERT : tui-textarea で編集
 //!            ESC   → 確定 → NORMAL（再生開始）
 //!            Enter → 確定 → 次行に新規行挿入 → INSERT 継続
@@ -66,6 +66,13 @@ enum NormalAction {
     Continue,
     Quit,
     LaunchDaw,
+    EditConfig,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TuiExitReason {
+    Quit,
+    RestartApp,
 }
 
 struct ActiveRenderGuard {

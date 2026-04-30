@@ -78,6 +78,7 @@ pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
             Line::from("  t           : 音色選択"),
             Line::from("  Shift+H     : patch history"),
             Line::from("  f           : patch phrase 画面"),
+            Line::from("  e           : config.toml 編集 → 再起動"),
             Line::from("  w           : DAW モード"),
             Line::from("  K / ?       : ヘルプ (このページ)"),
             Line::from("  q           : 終了"),

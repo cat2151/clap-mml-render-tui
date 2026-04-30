@@ -120,6 +120,55 @@ fn default_config_content_uses_patches_dirs_key() {
 }
 
 #[test]
+fn default_config_content_uses_config_editor_key() {
+    let content = default_config_content();
+
+    assert!(
+        content.contains(r#"editors = ["fresh", "zed", "code", "edit", "nano", "vim"]"#),
+        "default config は editors を案内するべき: {}",
+        content
+    );
+}
+
+#[test]
+fn configured_editors_uses_app_default_when_unset() {
+    let path = std::env::temp_dir().join(format!(
+        "cmrt-app-config-editors-{}-unset.toml",
+        std::process::id()
+    ));
+    std::fs::write(&path, "sample_rate = 48000\n").unwrap();
+
+    let editors = crate::config_editor::configured_editors(&path).unwrap();
+
+    assert_eq!(
+        editors,
+        vec![
+            "fresh".to_string(),
+            "zed".to_string(),
+            "code".to_string(),
+            "edit".to_string(),
+            "nano".to_string(),
+            "vim".to_string()
+        ]
+    );
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn configured_editors_uses_toml_value_when_set() {
+    let path = std::env::temp_dir().join(format!(
+        "cmrt-app-config-editors-{}-set.toml",
+        std::process::id()
+    ));
+    std::fs::write(&path, r#"editors = ["code", "vim"]"#).unwrap();
+
+    let editors = crate::config_editor::configured_editors(&path).unwrap();
+
+    assert_eq!(editors, vec!["code".to_string(), "vim".to_string()]);
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn default_config_content_uses_offline_render_workers_key() {
     let content = default_config_content();
 
