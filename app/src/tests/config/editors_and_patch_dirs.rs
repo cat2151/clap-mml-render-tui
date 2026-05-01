@@ -5,7 +5,9 @@ struct TempFileGuard(std::path::PathBuf);
 impl TempFileGuard {
     fn new(name: &str) -> Self {
         let path = std::env::temp_dir().join(name);
-        let _ = std::fs::remove_file(&path);
+        if path.exists() {
+            std::fs::remove_file(&path).unwrap();
+        }
         Self(path)
     }
 
@@ -16,7 +18,14 @@ impl TempFileGuard {
 
 impl Drop for TempFileGuard {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
+        if let Err(err) = std::fs::remove_file(&self.0) {
+            if err.kind() != std::io::ErrorKind::NotFound {
+                eprintln!(
+                    "failed to remove temp config test file {}: {err}",
+                    self.0.display()
+                );
+            }
+        }
     }
 }
 
