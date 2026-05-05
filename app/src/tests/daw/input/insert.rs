@@ -1,4 +1,6 @@
 use super::*;
+use mmlabc_to_smf::mml_preprocessor;
+use serde_json::Value;
 
 #[test]
 fn commit_insert_skips_cache_refresh_when_text_is_unchanged() {
@@ -119,14 +121,28 @@ fn commit_insert_keeps_semicolon_text_in_same_measure() {
             .expect("semicolon insert did not queue a cache job");
         assert_eq!(job.track, 1);
         assert_eq!(job.measure, 1);
+        let preprocessed = mml_preprocessor::extract_embedded_json(&job.mml);
+        let json: Value =
+            serde_json::from_str(preprocessed.embedded_json.as_deref().unwrap()).unwrap();
         assert_eq!(
-            job.mml.matches(r#"{"Surge XT patch": "piano"}"#).count(),
-            2,
-            "semicolon-separated phrases should each receive the track timbre: {}",
+            json.get("Surge XT patch").and_then(Value::as_str),
+            Some("piano"),
+            "track timbre should be merged into the leading JSON: {}",
             job.mml
         );
         assert_eq!(
-            job.mml.matches("t120").count(),
+            json.get("beat").and_then(Value::as_str),
+            Some("4/4"),
+            "conductor JSON should be merged into the leading JSON: {}",
+            job.mml
+        );
+        assert!(
+            !preprocessed.remaining_mml.contains('{'),
+            "non-leading JSON should not remain in semicolon branches: {}",
+            job.mml
+        );
+        assert_eq!(
+            preprocessed.remaining_mml.matches("t120").count(),
             2,
             "semicolon-separated phrases should each receive the track0/header content (t120): {}",
             job.mml

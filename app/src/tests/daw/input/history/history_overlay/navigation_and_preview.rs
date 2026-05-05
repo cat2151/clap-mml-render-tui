@@ -208,7 +208,7 @@ fn handle_history_overlay_arrow_and_space_preview_selected_mml() {
     ));
     assert_eq!(
         app.play_measure_track_mmls.lock().unwrap()[0][1],
-        r#"{"Surge XT patch": "Pads/Pad 1.fxp"}favorite"#
+        r#"{"Surge XT patch":"Pads/Pad 1.fxp"}favorite"#
     );
 
     app.handle_history_overlay(KeyCode::Char(' '));
@@ -219,7 +219,7 @@ fn handle_history_overlay_arrow_and_space_preview_selected_mml() {
     ));
     assert_eq!(
         app.play_measure_track_mmls.lock().unwrap()[0][1],
-        r#"{"Surge XT patch": "Pads/Pad 1.fxp"}favorite"#
+        r#"{"Surge XT patch":"Pads/Pad 1.fxp"}favorite"#
     );
 
     app.handle_history_overlay(KeyCode::Left);
@@ -227,7 +227,7 @@ fn handle_history_overlay_arrow_and_space_preview_selected_mml() {
     assert!(matches!(app.history_overlay_focus, DawHistoryPane::History));
     assert_eq!(
         app.play_measure_track_mmls.lock().unwrap()[0][1],
-        r#"{"Surge XT patch": "Pads/Pad 1.fxp"}history"#
+        r#"{"Surge XT patch":"Pads/Pad 1.fxp"}history"#
     );
 }
 
@@ -255,7 +255,7 @@ fn handle_history_overlay_down_previews_next_history_item() {
     ));
     assert_eq!(
         app.play_measure_track_mmls.lock().unwrap()[0][1],
-        r#"{"Surge XT patch": "Pads/Pad 1.fxp"}second"#
+        r#"{"Surge XT patch":"Pads/Pad 1.fxp"}second"#
     );
 }
 

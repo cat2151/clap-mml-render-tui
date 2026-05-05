@@ -97,7 +97,7 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
         );
         let play_measure_track_mmls = app.play_measure_track_mmls.lock().unwrap().clone();
         assert!(
-            play_measure_track_mmls[0][1].contains(r#"{"Surge XT patch": "Pad 1.fxp"}"#),
+            play_measure_track_mmls[0][1].contains(r#""Surge XT patch":"Pad 1.fxp""#),
             "hot reload should refresh per-track playback MMLs: {:?}",
             play_measure_track_mmls
         );
@@ -213,7 +213,10 @@ fn handle_normal_r_restores_default_tempo_init_when_empty() {
 
         assert!(matches!(result, super::super::DawNormalAction::Continue));
         assert_eq!(app.data[0][0], crate::daw::DEFAULT_TRACK0_MML);
-        assert_eq!(app.play_measure_mmls.lock().unwrap()[0], "t120cdef");
+        assert_eq!(
+            app.play_measure_mmls.lock().unwrap()[0],
+            r#"{"beat":"4/4"}t120cdef"#
+        );
         assert_eq!(*app.play_measure_samples.lock().unwrap(), 176_400);
 
         let cache = app.cache.lock().unwrap();
@@ -225,7 +228,7 @@ fn handle_normal_r_restores_default_tempo_init_when_empty() {
             .try_recv()
             .expect("tempo init restore should rerender affected playable measures");
         assert_eq!((job.track, job.measure), (1, 1));
-        assert_eq!(job.mml, "t120cdef");
+        assert_eq!(job.mml, r#"{"beat":"4/4"}t120cdef"#);
         assert!(
             cache_rx.try_recv().is_err(),
             "only non-empty playable measures should be queued"

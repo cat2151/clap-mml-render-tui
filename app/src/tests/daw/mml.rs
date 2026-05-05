@@ -1,5 +1,7 @@
 use super::super::{DEFAULT_TRACK0_MML, MEASURES, TRACKS};
 use super::{build_cell_mml_from_data, build_measure_mml_from_data};
+use mmlabc_to_smf::mml_preprocessor;
+use serde_json::Value;
 
 /// テスト用ヘルパー: TRACKS×(MEASURES+1) の空 data を作成する
 fn empty_data(tracks: usize, measures: usize) -> Vec<Vec<String>> {
@@ -8,6 +10,21 @@ fn empty_data(tracks: usize, measures: usize) -> Vec<Vec<String>> {
 
 fn no_solo_tracks(tracks: usize) -> Vec<bool> {
     vec![false; tracks]
+}
+
+fn split_final_mml(mml: &str) -> (Option<Value>, String) {
+    let preprocessed = mml_preprocessor::extract_embedded_json(mml);
+    let json = preprocessed
+        .embedded_json
+        .as_deref()
+        .map(|json| serde_json::from_str::<Value>(json).unwrap());
+    (json, preprocessed.remaining_mml)
+}
+
+fn final_json(mml: &str) -> Value {
+    split_final_mml(mml)
+        .0
+        .expect("final MML should start with JSON")
 }
 
 // ─── build_cell_mml_from_data ─────────────────────────────────
@@ -21,12 +38,42 @@ fn build_cell_mml_includes_timbre_in_measure() {
     data[1][1] = "cde".to_string();
 
     let mml = build_cell_mml_from_data(&data, MEASURES, 1, 1);
-    assert!(
-        mml.contains(r#"{"Surge XT patch": "piano"}"#),
+    let json = final_json(&mml);
+    assert_eq!(
+        json.get("Surge XT patch").and_then(Value::as_str),
+        Some("piano"),
         "音色 JSON が MML に含まれていない: {}",
         mml
     );
+    assert!(
+        mml.starts_with('{'),
+        "JSON は最終 MML の先頭にあるべき: {}",
+        mml
+    );
     assert!(mml.contains("cde"), "音符が MML に含まれていない: {}", mml);
+}
+
+#[test]
+fn build_cell_mml_merges_json_prefix_and_orders_non_json_as_conductor_init_measure() {
+    let mut data = empty_data(TRACKS, MEASURES);
+    data[0][0] = r#"{"scope":"conductor","nested":{"a":1}}t120"#.to_string();
+    data[0][1] = r#"{"swing":55}k0"#.to_string();
+    data[1][0] = r#"{"Surge XT patch":"piano","scope":"init","nested":{"b":2}}@1"#.to_string();
+    data[1][1] = r#"{"velocity":80,"scope":"measure"}cde"#.to_string();
+
+    let mml = build_cell_mml_from_data(&data, MEASURES, 1, 1);
+    let (json, remaining) = split_final_mml(&mml);
+    let json = json.expect("merged JSON should be present");
+
+    assert_eq!(json.get("scope").and_then(Value::as_str), Some("measure"));
+    assert_eq!(json.get("swing").and_then(Value::as_i64), Some(55));
+    assert_eq!(
+        json.get("Surge XT patch").and_then(Value::as_str),
+        Some("piano")
+    );
+    assert_eq!(json.pointer("/nested/a").and_then(Value::as_i64), Some(1));
+    assert_eq!(json.pointer("/nested/b").and_then(Value::as_i64), Some(2));
+    assert_eq!(remaining, "t120k0@1cde");
 }
 
 #[test]
@@ -156,15 +203,22 @@ fn build_measure_mml_reapplies_timbre_to_semicolon_branches_in_same_track() {
     data[1][1] = "cde;gab".to_string();
 
     let mml = build_measure_mml_from_data(&data, MEASURES, TRACKS, 1, &no_solo_tracks(TRACKS));
+    let (json, remaining) = split_final_mml(&mml);
+    let json = json.expect("merged JSON should be present");
 
     assert_eq!(
-        mml.matches(r#"{"Surge XT patch": "piano"}"#).count(),
-        2,
-        "each semicolon branch should receive timbre JSON: {}",
+        json.get("Surge XT patch").and_then(Value::as_str),
+        Some("piano"),
+        "timbre JSON should be merged into the final leading JSON: {}",
+        mml
+    );
+    assert!(
+        !remaining.contains('{'),
+        "non-leading JSON should not remain in semicolon branches: {}",
         mml
     );
     assert_eq!(
-        mml.matches("t120").count(),
+        remaining.matches("t120").count(),
         2,
         "each semicolon branch should receive the track0 tempo token: {}",
         mml
@@ -218,8 +272,10 @@ fn build_cell_mml_track8_is_accessible() {
     data[last_track][1] = "c4d4e4f4".to_string();
 
     let mml = build_cell_mml_from_data(&data, MEASURES, last_track, 1);
-    assert!(
-        mml.contains(r#"{"Surge XT patch": "bass"}"#),
+    let json = final_json(&mml);
+    assert_eq!(
+        json.get("Surge XT patch").and_then(Value::as_str),
+        Some("bass"),
         "track8 の音色 JSON が MML に含まれていない: {}",
         mml
     );
