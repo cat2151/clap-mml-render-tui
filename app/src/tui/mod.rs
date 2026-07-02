@@ -17,6 +17,7 @@
 //!   HELP : K / ? で表示、ESC でキャンセル
 
 mod cache;
+mod disk_cache;
 mod input;
 mod notepad_history;
 mod patch_phrase;
@@ -486,6 +487,14 @@ impl<'a> TuiApp<'a> {
 
     fn draw(&mut self, f: &mut Frame) {
         ui::draw(self, f);
+    }
+
+    /// `audio_cache` の内容をディスクキャッシュへ書き出す。次回起動時の
+    /// オフラインレンダリング待ちを省略できるようにするための処理で、
+    /// `save_history_state()` と対になる終了処理として各終了パスで呼ぶ。
+    pub(super) fn flush_notepad_disk_cache(&self) {
+        let cache = self.audio_cache.lock().unwrap();
+        disk_cache::flush_audio_cache_to_disk(&cache, self.cfg.sample_rate as u32);
     }
 }
 

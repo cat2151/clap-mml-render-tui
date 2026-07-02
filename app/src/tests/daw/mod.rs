@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use super::wav_io::load_wav_samples;
+use crate::wav_io::load_wav_samples;
 use super::{
     batch_logging::{TrackRerenderBatch, TrackRerenderBatchCompletionContext},
     CacheJob, DawApp,

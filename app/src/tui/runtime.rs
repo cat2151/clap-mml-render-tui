@@ -61,12 +61,16 @@ impl<'a> TuiApp<'a> {
             }
         )?;
 
+        // 真の cold start（プロセス起動直後）かどうか。DAW⇔notepad のモード切替では
+        // 自動再生を再発火させたくないため、この判定は一度だけ行う。
+        let started_in_notepad_mode = !self.is_daw_mode;
+
         // 前回 DAW モードで終了していた場合は直接 DAW モードで起動する
         let mut quit_from_startup_daw = false;
         let mut restart_from_startup_daw = false;
         if self.is_daw_mode {
             let mut daw = crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
-            match daw.run_with_terminal(&mut terminal)? {
+            match daw.run_with_terminal(&mut terminal, self.cfg.autoplay_on_startup)? {
                 crate::daw::DawExitReason::ReturnToTui => {
                     self.is_daw_mode = false;
                 }
@@ -86,13 +90,15 @@ impl<'a> TuiApp<'a> {
             if restart_from_startup_daw {
                 self.flush_patch_phrase_store_if_dirty();
                 self.save_history_state();
+                self.flush_notepad_disk_cache();
                 return Ok(TuiExitReason::RestartApp);
             }
             if crate::daw::take_http_mode_switch_request() {
                 self.flush_patch_phrase_store_if_dirty();
                 self.save_history_state();
+                self.flush_notepad_disk_cache();
                 let mut daw = crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
-                match daw.run_with_terminal(&mut terminal)? {
+                match daw.run_with_terminal(&mut terminal, false)? {
                     crate::daw::DawExitReason::ReturnToTui => {
                         self.is_daw_mode = false;
                     }
@@ -104,6 +110,7 @@ impl<'a> TuiApp<'a> {
                         self.is_daw_mode = true;
                         self.flush_patch_phrase_store_if_dirty();
                         self.save_history_state();
+                        self.flush_notepad_disk_cache();
                         return Ok(TuiExitReason::RestartApp);
                     }
                 }
@@ -124,6 +131,16 @@ impl<'a> TuiApp<'a> {
             terminal.draw(|f| self.draw(f))?;
             if !self.startup_normal_cache_primed && self.mode == Mode::Normal {
                 self.prime_normal_mode_startup_cache();
+                if started_in_notepad_mode && self.cfg.autoplay_on_startup {
+                    if let Some(mml) = self
+                        .lines
+                        .get(self.cursor)
+                        .map(|line| line.trim().to_string())
+                        .filter(|mml| !mml.is_empty())
+                    {
+                        self.kick_play(mml);
+                    }
+                }
                 self.startup_normal_cache_primed = true;
             }
 
@@ -158,9 +175,10 @@ impl<'a> TuiApp<'a> {
                             NormalAction::LaunchDaw => {
                                 self.flush_patch_phrase_store_if_dirty();
                                 self.save_history_state();
+                                self.flush_notepad_disk_cache();
                                 let mut daw =
                                     crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
-                                match daw.run_with_terminal(&mut terminal)? {
+                                match daw.run_with_terminal(&mut terminal, false)? {
                                     crate::daw::DawExitReason::ReturnToTui => {
                                         self.is_daw_mode = false;
                                     }
@@ -172,6 +190,7 @@ impl<'a> TuiApp<'a> {
                                         self.is_daw_mode = true;
                                         self.flush_patch_phrase_store_if_dirty();
                                         self.save_history_state();
+                                        self.flush_notepad_disk_cache();
                                         return Ok(TuiExitReason::RestartApp);
                                     }
                                 }
@@ -183,6 +202,7 @@ impl<'a> TuiApp<'a> {
                                     Ok(()) => {
                                         self.flush_patch_phrase_store_if_dirty();
                                         self.save_history_state();
+                                        self.flush_notepad_disk_cache();
                                         return Ok(TuiExitReason::RestartApp);
                                     }
                                     Err(error) => {
@@ -209,6 +229,7 @@ impl<'a> TuiApp<'a> {
         // 保存失敗はベストエフォートとして無視する（終了処理のため通知手段がない）。
         self.flush_patch_phrase_store_if_dirty();
         self.save_history_state();
+        self.flush_notepad_disk_cache();
         Ok(TuiExitReason::Quit)
     }
 }

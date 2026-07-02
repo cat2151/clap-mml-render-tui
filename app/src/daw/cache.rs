@@ -189,7 +189,7 @@ impl DawApp {
                 let Some(path) = cache_wav_path(t, m) else {
                     continue;
                 };
-                match super::wav_io::read_wav_cache_info(&path) {
+                match crate::wav_io::read_wav_cache_info(&path) {
                     Ok(info)
                         if info.spec.sample_rate == self.cfg.sample_rate as u32
                             && info.spec.channels == 2 =>
@@ -197,7 +197,7 @@ impl DawApp {
                         cache[t][m].state = CacheState::Ready;
                         cache[t][m].rendered_mml_hash = Some(saved.mml_hash);
                         if info.interleaved_sample_count <= super::MAX_CACHED_SAMPLES {
-                            match super::wav_io::load_wav_samples(&path) {
+                            match crate::wav_io::load_wav_samples(&path) {
                                 Ok(samples) => {
                                     cache[t][m].samples = Some(std::sync::Arc::new(samples));
                                     cache[t][m].rendered_measure_samples =

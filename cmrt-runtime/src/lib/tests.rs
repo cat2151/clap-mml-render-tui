@@ -30,6 +30,24 @@ buffer_size = 512
         DEFAULT_REALTIME_PLAY_SERVER_PORT
     );
     assert!(cfg.realtime_play_server_command.is_empty());
+    assert!(cfg.autoplay_on_startup);
+}
+
+#[test]
+fn config_autoplay_on_startup_parses_explicit_false() {
+    let toml_str = r#"
+plugin_path = "/usr/lib/clap/Surge XT.clap"
+input_midi  = "input.mid"
+output_midi = "output.mid"
+output_wav  = "output.wav"
+sample_rate = 48000
+buffer_size = 512
+autoplay_on_startup = false
+"#;
+
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+
+    assert!(!cfg.autoplay_on_startup);
 }
 
 #[test]
@@ -44,6 +62,7 @@ fn default_config_content_contains_render_server_keys() {
     assert!(content.contains("realtime_audio_backend = \"in_process\""));
     assert!(content.contains("realtime_play_server_port = 62154"));
     assert!(content.contains("realtime_play_server_command = \"\""));
+    assert!(content.contains("autoplay_on_startup = true"));
 }
 
 #[test]

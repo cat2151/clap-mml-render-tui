@@ -24,9 +24,15 @@ impl DawApp {
     /// 終了時は `DawExitReason` を返す:
     ///   - `ReturnToTui` : n キーで notepad へ切り替える
     ///   - `QuitApp`     : q キーでアプリを終了する
+    ///
+    /// `autoplay_on_entry` が true の場合、`kick_all_pending()` の直後に
+    /// 曲先頭（measure 0）から自動再生を開始する（Shift+P 相当）。
+    /// notepad からの `w` 切替や HTTP モード切替では再発火させたくないため、
+    /// 真の cold start 呼び出し元のみ true を渡すこと。
     pub fn run_with_terminal(
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
+        autoplay_on_entry: bool,
     ) -> Result<DawExitReason> {
         struct DeactivateDawHttpServerGuard;
 
@@ -38,6 +44,9 @@ impl DawApp {
 
         let _deactivate_daw_http_server_guard = DeactivateDawHttpServerGuard;
         self.kick_all_pending();
+        if autoplay_on_entry {
+            self.start_play();
+        }
         let mut uses_textarea_cursor = self.uses_textarea_cursor();
         execute!(
             std::io::stdout(),

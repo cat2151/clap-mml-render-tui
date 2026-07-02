@@ -17,3 +17,4 @@ pub mod tui;
 pub(crate) mod ui_theme;
 pub mod ui_utils;
 pub mod updater;
+pub(crate) mod wav_io;

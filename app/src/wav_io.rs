@@ -1,13 +1,13 @@
-//! DAW キャッシュ用 WAV 入出力
+//! WAV キャッシュ入出力（DAW / notepad 共通）
 
 use std::path::Path;
 
-pub(super) struct WavCacheInfo {
-    pub(super) spec: hound::WavSpec,
-    pub(super) interleaved_sample_count: usize,
+pub(crate) struct WavCacheInfo {
+    pub(crate) spec: hound::WavSpec,
+    pub(crate) interleaved_sample_count: usize,
 }
 
-pub(super) fn read_wav_cache_info(path: &Path) -> anyhow::Result<WavCacheInfo> {
+pub(crate) fn read_wav_cache_info(path: &Path) -> anyhow::Result<WavCacheInfo> {
     let reader = hound::WavReader::open(path)?;
     let spec = reader.spec();
     let interleaved_sample_count = reader.duration() as usize * spec.channels as usize;
@@ -17,7 +17,7 @@ pub(super) fn read_wav_cache_info(path: &Path) -> anyhow::Result<WavCacheInfo> {
     })
 }
 
-pub(super) fn load_wav_samples(path: &Path) -> anyhow::Result<Vec<f32>> {
+pub(crate) fn load_wav_samples(path: &Path) -> anyhow::Result<Vec<f32>> {
     let mut reader = hound::WavReader::open(path)?;
     let spec = reader.spec();
     match spec.sample_format {

@@ -105,6 +105,7 @@ fn default_config() -> Config {
         realtime_audio_backend: crate::config::RealtimeAudioBackend::InProcess,
         realtime_play_server_port: crate::config::DEFAULT_REALTIME_PLAY_SERVER_PORT,
         realtime_play_server_command: String::new(),
+        autoplay_on_startup: true,
     }
 }
 

@@ -77,6 +77,10 @@ realtime_audio_backend = "in_process"
 realtime_play_server_port = 62154
 realtime_play_server_command = ""
 
+# 起動時に自動再生するかどうか
+# notepad モード: 現在行を即座に再生します。DAW モード: 曲先頭（measure 0）から演奏開始します。
+autoplay_on_startup = true
+
 # Surge XT パッチの検索対象ディレクトリ一覧
 patches_dirs = [
   'C:\ProgramData\Surge XT\patches_factory',
@@ -103,6 +107,7 @@ patches_dirs = [
 | `realtime_audio_backend` | `in_process` | リアルタイム再生の実行先です。 |
 | `realtime_play_server_port` | `62154` | play_server の localhost port です。 |
 | `realtime_play_server_command` | 空文字 | play_server の起動コマンドです。 |
+| `autoplay_on_startup` | `true` | 起動直後に自動再生するかどうかです。 |
 | `patches_dirs` | OSごとの Surge XT patches 標準ディレクトリ | 音色選択で検索するディレクトリ一覧です。 |
 
 OS別の `plugin_path` 既定値は次のとおりです。

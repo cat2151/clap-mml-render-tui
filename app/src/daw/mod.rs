@@ -82,7 +82,6 @@ mod save;
 mod timing;
 mod types;
 mod ui;
-mod wav_io;
 
 use cmrt_core::{ensure_daw_dir, write_wav};
 use ratatui::Frame;

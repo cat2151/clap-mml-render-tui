@@ -59,6 +59,9 @@ pub struct Config {
     /// realtime play server backend 起動コマンド。空なら sibling executable / PATH を探す。
     #[serde(default)]
     pub realtime_play_server_command: String,
+    /// 起動時に自動再生するかどうか（notepad: 現在行 / DAW: 曲先頭から演奏開始）
+    #[serde(default = "default_autoplay_on_startup")]
+    pub autoplay_on_startup: bool,
 }
 
 #[derive(Serialize)]
@@ -194,6 +197,12 @@ realtime_audio_backend = "in_process"
 realtime_play_server_port = 62154
 realtime_play_server_command = ""
 
+# 【省略可】起動時に自動再生するかどうか
+# notepad モード: 現在行を即座に再生します。DAW モード: 曲先頭（measure 0）から演奏開始します。
+# false にすると、起動直後は再生されず、Enter/Space（notepad）・Shift+P（DAW）などの
+# キー操作で再生します。
+autoplay_on_startup = true
+
 # 【省略可】Surge XT パッチの検索対象ディレクトリ一覧（TUI / DAW の音色選択・ランダム音色で使う）
 # 例 (Windows): patches_dirs = ['C:\ProgramData\Surge XT\patches_factory', 'C:\ProgramData\Surge XT\patches_3rdparty']
 # 例 (Linux):   patches_dirs = ['/home/user/.local/share/surge-data/patches_factory', '/home/user/.local/share/surge-data/patches_3rdparty']
@@ -218,6 +227,10 @@ fn default_offline_render_server_port() -> u16 {
 
 fn default_realtime_play_server_port() -> u16 {
     DEFAULT_REALTIME_PLAY_SERVER_PORT
+}
+
+fn default_autoplay_on_startup() -> bool {
+    true
 }
 
 /// `patches_dirs = [...]` の 1 行を安全な TOML 文字列として生成する。

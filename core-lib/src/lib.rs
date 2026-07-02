@@ -158,6 +158,14 @@ fn render_options() -> RenderOptions {
     RenderOptions::new().with_preroll_ms(RENDER_PREROLL_MS)
 }
 
+/// notepad (非DAW) モードの行単位オーディオキャッシュ用ディレクトリを確保する。
+/// `ensure_daw_dir` / `ensure_phrase_dir` と同じ `ensure_cmrt_dir` 配下に置く。
+pub fn ensure_notepad_cache_dir() -> Result<std::path::PathBuf> {
+    let dir = ensure_cmrt_dir()?.join("notepad_cache");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
+}
+
 fn requested_patch_path_for_render(mml: &str, cfg: &CoreConfig) -> Option<String> {
     let preprocessed = mml_preprocessor::extract_embedded_json(mml);
     extract_patch_from_json(preprocessed.embedded_json.as_deref(), cfg)

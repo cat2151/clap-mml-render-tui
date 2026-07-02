@@ -35,6 +35,7 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
             realtime_audio_backend: crate::config::RealtimeAudioBackend::InProcess,
             realtime_play_server_port: crate::config::DEFAULT_REALTIME_PLAY_SERVER_PORT,
             realtime_play_server_command: String::new(),
+            autoplay_on_startup: true,
         }),
         entry_ptr: 0,
         tracks,

@@ -207,6 +207,7 @@ impl<'a> TuiApp<'a> {
         else {
             return;
         };
+        self.load_disk_cached_audio_into_memory_if_present(&current_mml);
         let navigation_targets = crate::ui_utils::predicted_navigation_indices(
             self.cursor,
             self.lines.len(),
@@ -221,6 +222,29 @@ impl<'a> TuiApp<'a> {
         })
         .collect::<Vec<_>>();
         self.prefetch_audio_cache_with_idle_fill(vec![current_mml], navigation_targets);
+    }
+
+    /// ディスクキャッシュに `mml` の妥当な WAV があれば `audio_cache` へ読み込む。
+    /// 起動直後のオフラインレンダリング待ちを、前回セッションで書き出したキャッシュで
+    /// スキップできるかを確認するための処理。
+    fn load_disk_cached_audio_into_memory_if_present(&self, mml: &str) {
+        if self.audio_cache.lock().unwrap().contains_key(mml) {
+            return;
+        }
+        let Some(samples) =
+            crate::tui::disk_cache::load_valid_cached_wav(mml, self.cfg.sample_rate as u32)
+        else {
+            return;
+        };
+        let mut cache = self.audio_cache.lock().unwrap();
+        let mut cache_order = self.audio_cache_order.lock().unwrap();
+        crate::tui::cache::try_insert_cache(
+            &mut cache,
+            &mut cache_order,
+            mml.to_string(),
+            samples,
+            false,
+        );
     }
 
     pub(super) fn play_current_line(&mut self) {
