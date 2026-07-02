@@ -2,14 +2,14 @@
 
 ### Usage
 
-- For playing around with MML (Music Macro Language) sounds.
-- For casual installation. Only Rust is required.
+- For playing around with sound using MML.
+- For casual installation. Requires only Rust.
 
-### Tech Stack
+### Technology Stack
 - Plugin host library
   - https://github.com/prokopyl/clack
 
-### Prerequisites
+### Setup
 
 Please install [Surge XT](https://surge-synthesizer.github.io/).
 
@@ -17,51 +17,51 @@ Please install [Surge XT](https://surge-synthesizer.github.io/).
 winget install "Surge XT"
 ```
 
-### Install
+### Installation
 
-```
+``` 
 cargo install --force --git https://github.com/cat2151/clap-mml-render-tui
 ```
 
-### Run
+### Running
 
 ```
 cmrt
 ```
 
-You can input MML in the TUI screen and play around.
+You can play around by entering MML in the TUI screen.
 
 ### Configuration
 
-`config.toml` is automatically created on first launch. It's located in the OS standard configuration directory.
+`config.toml` is automatically created on the first launch. It is located under the OS standard configuration directory.
 
 - Windows: `%LOCALAPPDATA%\clap-mml-render-tui\config.toml`
 - Linux: `~/.config/clap-mml-render-tui/config.toml`
 - macOS: `~/Library/Application Support/clap-mml-render-tui/config.toml`
 
-In TUI / DAW NORMAL mode, pressing `e` opens `config.toml` in an editor. After closing the editor, restart the application.
+In NORMAL mode of TUI / DAW, pressing `e` opens `config.toml` in your editor. After closing the editor, restart the application.
 
-Here's an example of the current configuration.
+Here is an example configuration.
 
 ```toml
-# [REQUIRED] CLAP plugin to use
+# [Required] CLAP plugin to use
 plugin_path = 'C:\Program Files\Common Files\CLAP\Surge Synth Team\Surge XT.clap'
 
-# Editor candidates for opening config.toml (tried in order from left)
+# Editor candidates to open config.toml (tried in order from left)
 editors = ["fresh", "zed", "code", "edit", "nano", "vim"]
 
 input_midi  = "input.mid"
 
-# output_midi and output_wav are automatically saved under the
-# clap-mml-render-tui/phrase/ or clap-mml-render-tui/daw/ subdirectories
-# of the configuration directory. The following values are used internally.
+# output_midi, output_wav are automatically saved under
+# clap-mml-render-tui/phrase/ or clap-mml-render-tui/daw/ in the configuration directory.
+# The following values are used internally.
 output_midi = "output.mid"
 output_wav  = "output.wav"
 
 sample_rate = 48000
 buffer_size = 512
 
-# Number of concurrent offline renders for DAW (1-16)
+# Number of concurrent offline rendering processes for DAW (1-16)
 offline_render_workers = 2
 
 # Offline rendering backend
@@ -77,6 +77,10 @@ realtime_audio_backend = "in_process"
 realtime_play_server_port = 62154
 realtime_play_server_command = ""
 
+# Whether to autoplay on startup
+# Notepad mode: Immediately plays the current line. DAW mode: Starts playback from the beginning of the song (measure 0).
+autoplay_on_startup = true
+
 # List of directories to search for Surge XT patches
 patches_dirs = [
   'C:\ProgramData\Surge XT\patches_factory',
@@ -88,36 +92,37 @@ The configuration items are as follows:
 
 | Item | Default Value | Description |
 | --- | --- | --- |
-| `plugin_path` | OS-specific default Surge XT CLAP path | Path to the CLAP plugin to use. |
+| `plugin_path` | OS-specific Surge XT CLAP standard path | Path to the CLAP plugin to use. |
 | `editors` | `["fresh", "zed", "code", "edit", "nano", "vim"]` | Editor candidates, tried in order from left to right. |
-| `input_midi` | `input.mid` | Input MIDI filename for internal processing. |
-| `output_midi` | `output.mid` | Output MIDI filename for internal processing. |
-| `output_wav` | `output.wav` | Output WAV filename for internal processing. |
+| `input_midi` | `input.mid` | Input MIDI file name for internal processing. |
+| `output_midi` | `output.mid` | Output MIDI file name for internal processing. |
+| `output_wav` | `output.wav` | Output WAV file name for internal processing. |
 | `sample_rate` | `48000` | Sample rate for rendering. |
 | `buffer_size` | `512` | Buffer size for rendering. |
-| `offline_render_workers` | `2` | Number of concurrent renders for the `in_process` backend. |
-| `offline_render_backend` | `in_process` | Destination for offline rendering. |
-| `offline_render_server_workers` | `4` | Number of concurrent workers for `render_server`. |
-| `offline_render_server_port` | `62153` | Localhost port for `render_server`. |
-| `offline_render_server_command` | Empty string | Command to launch `render_server`. |
-| `realtime_audio_backend` | `in_process` | Destination for real-time playback. |
-| `realtime_play_server_port` | `62154` | Localhost port for `play_server`. |
-| `realtime_play_server_command` | Empty string | Command to launch `play_server`. |
-| `patches_dirs` | OS-specific default Surge XT patches directories | List of directories to search for patches when selecting sounds. |
+| `offline_render_workers` | `2` | Number of concurrent in-process renders. |
+| `offline_render_backend` | `in_process` | Target for offline rendering. |
+| `offline_render_server_workers` | `4` | Number of concurrent render_server processes. |
+| `offline_render_server_port` | `62153` | Localhost port for render_server. |
+| `offline_render_server_command` | Empty string | Command to launch render_server. |
+| `realtime_audio_backend` | `in_process` | Target for real-time playback. |
+| `realtime_play_server_port` | `62154` | Localhost port for play_server. |
+| `realtime_play_server_command` | Empty string | Command to launch play_server. |
+| `autoplay_on_startup` | `true` | Whether to autoplay immediately after startup. |
+| `patches_dirs` | OS-specific Surge XT patches standard directory | List of directories to search for when selecting patches. |
 
-The default `plugin_path` values per OS are as follows:
+The default `plugin_path` for each OS is as follows:
 
 - Windows: `C:\Program Files\Common Files\CLAP\Surge Synth Team\Surge XT.clap`
 - Linux: `/usr/lib/clap/Surge XT.clap`
 - macOS: `/Library/Audio/Plug-Ins/CLAP/Surge XT.clap`
 
-The default `patches_dirs` values per OS are as follows:
+The default `patches_dirs` for each OS is as follows:
 
 - Windows: `C:\ProgramData\Surge XT\patches_factory`, `C:\ProgramData\Surge XT\patches_3rdparty`
-- Linux: `$XDG_DATA_HOME/surge-data/patches_factory`, `$XDG_DATA_HOME/surge-data/patches_3rdparty` (if `XDG_DATA_HOME` is not set, defaults to `~/.local/share`)
+- Linux: `$XDG_DATA_HOME/surge-data/patches_factory`, `$XDG_DATA_HOME/surge-data/patches_3rdparty` (~/.local/share if `XDG_DATA_HOME` is not set)
 - macOS: `/Library/Application Support/Surge XT/patches_factory`, `/Library/Application Support/Surge XT/patches_3rdparty`
 
-If `offline_render_backend = "render_server"`, the TUI does not directly load the CLAP plugin. Instead, it sends MML to `127.0.0.1:<offline_render_server_port>/render` and receives WAV data. If the connection to the render-server fails, `cmrt` launches a child process and, in case of a communication error, retries after restarting once.
+If `offline_render_backend` is set to `"render_server"`, the TUI will not directly load the CLAP plugin. Instead, it sends MML to `127.0.0.1:<offline_render_server_port>/render` and receives WAV data. If the connection to the render-server fails, `cmrt` will launch a child process and retry, restarting once in case of a communication error.
 
 ### Update Command
 
@@ -131,24 +136,24 @@ cmrt update
 cmrt --server
 ```
 
-- Works with the bluesky-text-to-audio Chrome extension.
-- When MML is found in a Bluesky post, it can be played with Surge XT.
+- Interacts with the bluesky-text-to-audio Chrome extension.
+  - When an MML snippet is found in a Bluesky post, it can be played with Surge XT.
 
 # Breaking Changes
-- Frequent breaking changes are made daily.
+- Expect frequent breaking changes daily.
 
 # Future Plans
-- It's more appropriate to obtain Surge XT patches via API, so that will be implemented (currently, searching specified toml directories is inefficient. Implementation timing is deferred, prioritizing other features).
+- It is more appropriate to obtain Surge XT patches via API, so this will be implemented (currently, they are searched from toml-specified directories, which is inefficient. Implementation timing is deferred, as other priorities exist).
 
 # Concept Notes
-- Atomic Measure (アトミック小節)
+- Atomic Measure
     - Inspired by Obsidian's atomic notes.
-    - By making the unit of all processing "offline rendering in one-measure increments,"
-    - while imposing constraints,
+    - By making the unit of all processing "offline rendering per measure,"
+    - while accepting constraints,
     - various benefits can be gained.
-    - This is suitable for sketching and rapidly iterating on edits.
-    - For more serious editing, existing feature-rich DAWs would be more appropriate.
-    - *Note: Since 'atomic measure' tends to refer to a term in physics, for now, I will keep it as 'アトミック小節' without direct English translation.
+    - This is suitable for sketching and rapid editing cycles.
+    - For more serious editing, existing feature-rich DAWs would be more suitable.
+    - *Note: 'atomic measure' might be confused with a term from physics, so for now, the term 'アトミック小節' (Atomic Measure) is kept without direct English translation in this context.*
 
 # Out of Scope
-- Effects require editing, so they are intentionally designated as out of scope and pushed far back in priority. One reason for this is that in Surge XT, patches inherently include effects (effects are derived from patches).
+- Since effects require editing, they are deliberately considered out of scope and postponed to much later. One reason for this is that in Surge XT, patches already encapsulate effects (effects are derived from patches).
