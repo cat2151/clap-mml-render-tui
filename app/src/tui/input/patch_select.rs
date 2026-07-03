@@ -224,6 +224,19 @@ impl<'a> TuiApp<'a> {
         self.prefetch_audio_cache_with_idle_fill(vec![current_mml], navigation_targets);
     }
 
+    /// 現在バッファの全行について、有効なディスクキャッシュ WAV があれば `audio_cache` へロードする。
+    /// プロセス起動直後に一度だけ呼ぶことを想定しており、パッチ選択確定時などに何度も呼ばれる
+    /// `prime_normal_mode_startup_cache` からは呼ばない（呼ぶとディスク読み込みが繰り返されてしまう）。
+    pub(in crate::tui) fn hydrate_all_lines_from_disk_cache_at_startup(&self) {
+        for line in &self.lines {
+            let mml = line.trim();
+            if mml.is_empty() {
+                continue;
+            }
+            self.load_disk_cached_audio_into_memory_if_present(mml);
+        }
+    }
+
     /// ディスクキャッシュに `mml` の妥当な WAV があれば `audio_cache` へ読み込む。
     /// 起動直後のオフラインレンダリング待ちを、前回セッションで書き出したキャッシュで
     /// スキップできるかを確認するための処理。

@@ -1,6 +1,21 @@
 use super::*;
 
 use std::collections::VecDeque;
+use std::path::Path;
+
+fn write_test_wav(path: &Path, sample_rate: u32, channels: u16, samples: &[f32]) {
+    let spec = hound::WavSpec {
+        channels,
+        sample_rate,
+        bits_per_sample: 32,
+        sample_format: hound::SampleFormat::Float,
+    };
+    let mut writer = hound::WavWriter::create(path, spec).unwrap();
+    for sample in samples {
+        writer.write_sample(*sample).unwrap();
+    }
+    writer.finalize().unwrap();
+}
 
 #[test]
 fn filter_patches_empty_query_returns_all() {
@@ -191,4 +206,48 @@ fn try_insert_cache_updates_existing_key_when_full() {
     assert_eq!(cache.len(), AUDIO_CACHE_MAX_ENTRIES);
     assert_eq!(cache["cde"], vec![0.9f32]);
     assert_eq!(order.back(), Some(&"cde".to_string()));
+}
+
+// --- startup disk-cache hydration (notepad_cache) ---
+
+#[test]
+fn hydrate_all_lines_from_disk_cache_at_startup_loads_every_cached_line_but_not_uncached_ones() {
+    let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
+    let tmp = std::env::temp_dir().join(format!(
+        "cmrt_test_tui_hydrate_all_lines_{}_{}",
+        std::process::id(),
+        unique
+    ));
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guard = crate::test_utils::set_local_dir_envs(&tmp);
+
+    let sample_rate = 44_100u32;
+    let cached_line_a = "cached line a";
+    let cached_line_b = "cached line b";
+    let uncached_line = "uncached line";
+    let samples_a = vec![0.1_f32, -0.1, 0.2, -0.2];
+    let samples_b = vec![0.3_f32, -0.3];
+
+    let cache_dir = cmrt_core::ensure_notepad_cache_dir().unwrap();
+    for (mml, samples) in [(cached_line_a, &samples_a), (cached_line_b, &samples_b)] {
+        let path = cache_dir.join(format!(
+            "{:016x}.wav",
+            crate::history::daw_cache_mml_hash(mml)
+        ));
+        write_test_wav(&path, sample_rate, 2, samples);
+    }
+
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![
+        cached_line_a.to_string(),
+        uncached_line.to_string(),
+        cached_line_b.to_string(),
+    ];
+
+    app.hydrate_all_lines_from_disk_cache_at_startup();
+
+    let audio_cache = app.audio_cache.lock().unwrap();
+    assert_eq!(audio_cache.get(cached_line_a), Some(&samples_a));
+    assert_eq!(audio_cache.get(cached_line_b), Some(&samples_b));
+    assert!(!audio_cache.contains_key(uncached_line));
 }
