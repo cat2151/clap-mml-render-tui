@@ -3,11 +3,11 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::wav_io::load_wav_samples;
 use super::{
     batch_logging::{TrackRerenderBatch, TrackRerenderBatchCompletionContext},
     CacheJob, DawApp,
 };
+use crate::wav_io::load_wav_samples;
 
 #[test]
 fn load_wav_samples_reads_back_float_wav_cache() {

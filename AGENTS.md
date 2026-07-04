@@ -18,7 +18,7 @@ The setup script installs the Linux packages needed for this workspace's `rodio`
 
 # その他
 - プルリクエストは日本語で書くこと
-- cargoのformatとlinterを使うこと
+- cargoのclippyとfmtを使うこと
 - デバウンス禁止
 - cat2151のライブラリはrevision固定を禁止
 - issue-notes/は更新を禁止

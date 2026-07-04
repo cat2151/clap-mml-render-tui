@@ -292,7 +292,10 @@ mod tests {
             load_valid_cached_wav("cde", 48_000).unwrap(),
             vec![0.0, 0.0, 0.1, 0.1]
         );
-        assert_eq!(load_valid_cached_wav("efg", 48_000).unwrap(), vec![0.2, 0.2]);
+        assert_eq!(
+            load_valid_cached_wav("efg", 48_000).unwrap(),
+            vec![0.2, 0.2]
+        );
     }
 
     #[test]
