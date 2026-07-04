@@ -7,7 +7,7 @@
 //!            Enter → 確定 → 次行に新規行挿入 → INSERT 継続
 //!            Ctrl+C / Ctrl+X / Ctrl+V → コピー / カット / ペースト
 //!   PATCHSELECT : 音色を選択
-//!            / の後に文字入力: patch name フィルタ（space=AND条件）
+//!            / の後に文字入力: 現在paneの patch name フィルタ（space=AND条件）
 //!            n/p/t: notepad history / patch history / 音色選択
 //!            j/k・↑↓・PageUp/PageDown:リスト移動（移動ごとにpreview再生）
 //!            h/l・←/→:左右ペイン移動（移動ごとにpreview再生）
@@ -182,6 +182,8 @@ pub struct TuiApp<'a> {
     pub(super) patch_cursor: usize,         // フィルタ結果内のカーソル位置
     pub(super) patch_list_state: ListState, // 音色選択リスト描画用
     pub(super) patch_favorite_items: Vec<String>,
+    pub(super) patch_favorites_query: String,
+    pub(super) patch_favorites_query_textarea: TextArea<'a>,
     pub(super) patch_favorites_cursor: usize,
     pub(super) patch_favorites_state: ListState,
     pub(super) patch_select_focus: PatchSelectPane,
@@ -282,8 +284,7 @@ impl<'a> TuiApp<'a> {
         // ディスクI/Oは発生しない。
         let mut cache_source = "hit";
         if cached_samples.is_none() {
-            if let Some(samples) =
-                self.resolve_disk_fallback_samples(&mml, cfg.sample_rate as u32)
+            if let Some(samples) = self.resolve_disk_fallback_samples(&mml, cfg.sample_rate as u32)
             {
                 let mut cache_guard = cache.lock().unwrap();
                 let mut cache_order_guard = cache_order.lock().unwrap();

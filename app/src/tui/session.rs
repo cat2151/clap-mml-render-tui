@@ -123,6 +123,8 @@ impl<'a> TuiApp<'a> {
             patch_cursor: 0,
             patch_list_state: ListState::default(),
             patch_favorite_items: Vec::new(),
+            patch_favorites_query: String::new(),
+            patch_favorites_query_textarea: crate::text_input::new_single_line_textarea(""),
             patch_favorites_cursor: 0,
             patch_favorites_state: ListState::default(),
             patch_select_focus: PatchSelectPane::Patches,

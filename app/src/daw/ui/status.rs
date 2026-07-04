@@ -85,7 +85,7 @@ pub(super) fn draw_status(
             "HISTORY  ?:help  Enter:確定  Space:preview  ESC:閉じる  n/p/t:overlay切替  h/l・←/→:ペイン移動してpreview  j/k・↑/↓:移動してpreview"
         }
         DawMode::PatchSelect => {
-            "PATCH SELECT  ?:help  Enter:確定  Space:preview  ESC:閉じる  n/p/t:overlay切替  h/l・←/→:ペイン移動してpreview  j/k・↑/↓:移動してpreview"
+            "PATCH SELECT  ?:help  /:現在pane検索  Enter:確定  Space:preview  ESC:閉じる  n/p/t:overlay切替  h/l・←/→:ペイン移動してpreview  j/k・↑/↓:移動してpreview"
         }
     };
 

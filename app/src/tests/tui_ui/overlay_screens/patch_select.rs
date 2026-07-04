@@ -9,6 +9,7 @@ fn patch_select_overlay_layout(
     ratatui::layout::Rect,
     [ratatui::layout::Rect; 5],
     [ratatui::layout::Rect; 2],
+    [ratatui::layout::Rect; 2],
 ) {
     let overlay_area = crate::ui_utils::centered_rect(
         PATCH_SELECT_OVERLAY_WIDTH_PERCENT,
@@ -32,10 +33,15 @@ fn patch_select_overlay_layout(
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[1]);
+    let query_panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[0]);
 
     (
         overlay_area,
         [chunks[0], chunks[1], chunks[2], chunks[3], chunks[4]],
+        [query_panes[0], query_panes[1]],
         [panes[0], panes[1]],
     )
 }
@@ -68,8 +74,10 @@ fn patch_select_screen_renders_as_overlay_on_normal_screen() {
 
     assert!(lines.contains("[PATCH SELECT] notepad mode"));
     assert!(lines.contains("▶   {\"Surge XT patch\":\"Pads/Pad 1.fxp\"} abc"));
-    assert!(normalized.contains("ENTERで音色を選択-patchselect-"));
-    assert!(normalized.contains("/を押して絞り込み"));
+    assert!(normalized.contains("Patchesquery"));
+    assert!(normalized.contains("Favoritesquery"));
+    assert!(normalized.contains("/でPatches絞り込み"));
+    assert!(normalized.contains("/でFavorite絞り込み"));
     assert!(normalized.contains("Favorite音色(1)"));
     assert!(normalized.contains("音色選択現在1行目/全2行(1/2)"));
     assert!(lines.contains("Pads/Pad 1.fxp"));
@@ -94,7 +102,7 @@ fn patch_select_screen_shows_filter_confirm_title_when_filter_active() {
 
     let normalized = render_lines(&mut app, 100, 16).join("\n").replace(' ', "");
 
-    assert!(normalized.contains("ENTERで絞り込みを決定-patchselect-"));
+    assert!(normalized.contains("Patchesquery(Enter=決定)"));
     assert!(normalized.contains("pad"));
 }
 
@@ -115,8 +123,9 @@ fn patch_select_screen_shows_filter_input_placeholder_when_active_and_empty() {
 
     let normalized = render_lines(&mut app, 100, 16).join("\n").replace(' ', "");
 
-    assert!(normalized.contains("音色名を入力して絞り込み"));
-    assert!(!normalized.contains("/を押して絞り込み"));
+    assert!(normalized.contains("Patchesを絞り込み"));
+    assert!(normalized.contains("/でFavorite絞り込み"));
+    assert!(!normalized.contains("/でPatches絞り込み"));
 }
 
 #[test]
@@ -137,7 +146,8 @@ fn patch_select_screen_shows_prefilled_query_when_filter_is_inactive() {
 
     let normalized = render_lines(&mut app, 100, 16).join("\n").replace(' ', "");
 
-    assert!(normalized.contains("ENTERで音色を選択-patchselect-"));
+    assert!(normalized.contains("Patchesquery"));
+    assert!(normalized.contains("Favoritesquery"));
     assert!(normalized.contains("pad"));
 }
 
@@ -189,16 +199,23 @@ fn patch_select_overlay_uses_yellow_outer_border_and_dims_unfocused_sections() {
     app.mode = Mode::PatchSelect;
 
     let buffer = render_buffer(&mut app, 100, 16);
-    let (overlay_area, chunks, panes) = patch_select_overlay_layout(buffer.area);
+    let (overlay_area, _chunks, query_panes, panes) = patch_select_overlay_layout(buffer.area);
     let outer_border = buffer.cell((overlay_area.x, overlay_area.y)).unwrap();
-    let query_border = buffer.cell((chunks[0].x, chunks[0].y + 1)).unwrap();
+    let patch_query_border = buffer
+        .cell((query_panes[0].x, query_panes[0].y + 1))
+        .unwrap();
+    let favorite_query_border = buffer
+        .cell((query_panes[1].x, query_panes[1].y + 1))
+        .unwrap();
     let patch_border = buffer.cell((panes[0].x, panes[0].y + 1)).unwrap();
     let favorite_border = buffer.cell((panes[1].x, panes[1].y + 1)).unwrap();
 
     assert_eq!(outer_border.symbol(), "┌");
     assert_eq!(outer_border.fg, MONOKAI_YELLOW);
-    assert_eq!(query_border.symbol(), "│");
-    assert_eq!(query_border.fg, MONOKAI_GRAY);
+    assert_eq!(patch_query_border.symbol(), "│");
+    assert_eq!(patch_query_border.fg, MONOKAI_GRAY);
+    assert_eq!(favorite_query_border.symbol(), "│");
+    assert_eq!(favorite_query_border.fg, MONOKAI_GRAY);
     assert_eq!(patch_border.symbol(), "│");
     assert_eq!(patch_border.fg, MONOKAI_YELLOW);
     assert_eq!(favorite_border.symbol(), "│");
@@ -220,13 +237,20 @@ fn patch_select_filter_focus_highlights_query_border_and_dims_both_panes() {
     app.mode = Mode::PatchSelect;
 
     let buffer = render_buffer(&mut app, 100, 16);
-    let (_, chunks, panes) = patch_select_overlay_layout(buffer.area);
-    let query_border = buffer.cell((chunks[0].x, chunks[0].y + 1)).unwrap();
+    let (_, _chunks, query_panes, panes) = patch_select_overlay_layout(buffer.area);
+    let patch_query_border = buffer
+        .cell((query_panes[0].x, query_panes[0].y + 1))
+        .unwrap();
+    let favorite_query_border = buffer
+        .cell((query_panes[1].x, query_panes[1].y + 1))
+        .unwrap();
     let patch_border = buffer.cell((panes[0].x, panes[0].y + 1)).unwrap();
     let favorite_border = buffer.cell((panes[1].x, panes[1].y + 1)).unwrap();
 
-    assert_eq!(query_border.symbol(), "│");
-    assert_eq!(query_border.fg, MONOKAI_YELLOW);
+    assert_eq!(patch_query_border.symbol(), "│");
+    assert_eq!(patch_query_border.fg, MONOKAI_GRAY);
+    assert_eq!(favorite_query_border.symbol(), "│");
+    assert_eq!(favorite_query_border.fg, MONOKAI_YELLOW);
     assert_eq!(patch_border.symbol(), "│");
     assert_eq!(patch_border.fg, MONOKAI_GRAY);
     assert_eq!(favorite_border.symbol(), "│");
@@ -248,7 +272,7 @@ fn patch_select_screen_splits_status_and_keybinds() {
     let normalized_screen = lines.join("\n").replace([' ', '\n'], "");
     let keybind_row = normalized_lines
         .iter()
-        .position(|line| line.contains("/:検索入力"))
+        .position(|line| line.contains("/:現在pane検索"))
         .unwrap();
     let render_row = keybind_row
         .checked_sub(1)
@@ -262,7 +286,7 @@ fn patch_select_screen_splits_status_and_keybinds() {
     assert_eq!(keybind_row, render_row + 1);
     assert!(normalized_lines[status_row].contains("sort:path"));
     assert!(normalized_lines[render_row].contains("render:実行2/2予約0"));
-    assert!(normalized_lines[keybind_row].contains("/:検索入力"));
+    assert!(normalized_lines[keybind_row].contains("/:現在pane検索"));
     assert!(normalized_lines[keybind_row].contains("Ctrl+S:sort順切替"));
     assert!(normalized_lines[keybind_row].contains("n/p/t:overlay切替"));
     assert!(normalized_lines[keybind_row].contains("f:お気に入り"));
@@ -282,10 +306,10 @@ fn patch_select_filter_uses_query_cursor_only() {
 
     let buffer = render_buffer(&mut app, 100, 16);
     let cursor = render_cursor_position(&mut app, 100, 16);
-    let (_, chunks, panes) = patch_select_overlay_layout(buffer.area);
+    let (_, _chunks, query_panes, panes) = patch_select_overlay_layout(buffer.area);
     let query_inner = ratatui::widgets::Block::default()
         .borders(ratatui::widgets::Borders::ALL)
-        .inner(chunks[0]);
+        .inner(query_panes[0]);
 
     assert_eq!(cursor.y, query_inner.y);
     assert!((query_inner.x..query_inner.x + query_inner.width).contains(&cursor.x));
@@ -318,7 +342,7 @@ fn patch_select_only_highlights_the_focused_pane() {
     app.mode = Mode::PatchSelect;
 
     let buffer = render_buffer(&mut app, 100, 16);
-    let (_, _, panes) = patch_select_overlay_layout(buffer.area);
+    let (_, _, _, panes) = patch_select_overlay_layout(buffer.area);
 
     assert!(pane_contains_cursor_highlight(&buffer, panes[0]));
     assert!(!pane_contains_cursor_highlight(&buffer, panes[1]));

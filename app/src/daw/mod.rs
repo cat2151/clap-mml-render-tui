@@ -50,7 +50,7 @@
 //!   n        : global history へ切り替え
 //!   p        : current / selected patch history へ切り替え
 //!   t        : 現在選択 patch で開き直す
-//!   /        : 絞り込み条件入力モード開始
+//!   /        : 現在paneの絞り込み条件入力モード開始
 //!   h/l・←/→ : (通常) Patches/Favorites ペイン切り替えして preview / (検索入力中) 無効
 //!   j/k      : (通常) 行移動して preview / (検索入力中) 文字入力
 //!   Space    : (通常) preview / (検索入力中) AND 条件
@@ -239,6 +239,9 @@ pub struct DawApp {
     pub(super) patch_filtered: Vec<String>,
     pub(super) patch_cursor: usize,
     pub(super) patch_favorite_items: Vec<String>,
+    pub(super) patch_favorites_query: String,
+    pub(super) patch_favorites_query_textarea: TextArea<'static>,
+    pub(super) patch_favorites_query_before_input: String,
     pub(super) patch_favorites_cursor: usize,
     pub(super) patch_select_focus: DawPatchSelectPane,
     pub(super) patch_select_filter_active: bool,

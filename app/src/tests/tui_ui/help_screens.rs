@@ -76,7 +76,7 @@ fn patch_select_help_screen_shows_patch_select_shortcuts() {
     let normalized_screen = lines.join("\n").replace([' ', '\n'], "");
 
     assert!(normalized_screen.contains("音色選択モード"));
-    assert!(normalized_screen.contains("/:patchname絞り込み開始"));
+    assert!(normalized_screen.contains("/:現在paneのpatchname絞り込み開始"));
     assert!(normalized_screen.contains("n/p/t:notepadhistory/patchhistory/音色選択"));
     assert!(normalized_screen.contains("Ctrl+S:sort順切替(path/category)"));
     assert!(normalized_screen.contains("f:現在音色とMMLをFavorites追加"));

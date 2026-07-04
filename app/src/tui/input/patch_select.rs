@@ -433,9 +433,10 @@ impl<'a> TuiApp<'a> {
     fn prefetch_patch_select_navigation_audio_cache(&self, preferred_delta: Option<isize>) {
         let (item_count, cursor) = match self.patch_select_focus {
             crate::tui::PatchSelectPane::Patches => (self.patch_filtered.len(), self.patch_cursor),
-            crate::tui::PatchSelectPane::Favorites => {
-                (self.patch_favorite_items.len(), self.patch_favorites_cursor)
-            }
+            crate::tui::PatchSelectPane::Favorites => (
+                self.patch_select_favorite_items().len(),
+                self.patch_favorites_cursor,
+            ),
         };
         let focus = self.patch_select_focus;
         self.prefetch_navigation_audio_cache(

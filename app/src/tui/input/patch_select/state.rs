@@ -36,10 +36,11 @@ impl<'a> TuiApp<'a> {
     }
 
     fn move_patch_favorites_cursor_by(&mut self, delta: isize) {
-        if self.patch_favorite_items.is_empty() {
+        let favorites = self.patch_select_favorite_items();
+        if favorites.is_empty() {
             return;
         }
-        let max_cursor = self.patch_favorite_items.len().saturating_sub(1) as isize;
+        let max_cursor = favorites.len().saturating_sub(1) as isize;
         let next_cursor =
             (self.patch_favorites_cursor as isize + delta).clamp(0, max_cursor) as usize;
         if next_cursor != self.patch_favorites_cursor {
@@ -49,7 +50,7 @@ impl<'a> TuiApp<'a> {
             Self::sync_overlay_list_offset(
                 &mut self.patch_favorites_state,
                 self.patch_favorites_cursor,
-                self.patch_favorite_items.len(),
+                favorites.len(),
                 self.patch_select_page_size,
             );
             self.preview_selected_patch_with_navigation_hint(Some(delta));
@@ -86,6 +87,8 @@ impl<'a> TuiApp<'a> {
         self.patch_query = self.current_line_patch_filter_query().unwrap_or_default();
         self.patch_query_textarea = crate::text_input::new_single_line_textarea(&self.patch_query);
         self.patch_filtered = crate::tui::filter_patches(&self.patch_all, &self.patch_query);
+        self.patch_favorites_query.clear();
+        self.patch_favorites_query_textarea = crate::text_input::new_single_line_textarea("");
         self.patch_select_focus = PatchSelectPane::Patches;
         self.patch_select_filter_active = false;
         self.patch_cursor = initial_patch_name
@@ -159,10 +162,8 @@ impl<'a> TuiApp<'a> {
     pub(super) fn toggle_patch_select_sort_order(&mut self) {
         self.ensure_patch_select_source_order();
         let selected_patch = self.patch_filtered.get(self.patch_cursor).cloned();
-        let selected_favorite = self
-            .patch_favorite_items
-            .get(self.patch_favorites_cursor)
-            .cloned();
+        let favorite_items = self.patch_select_favorite_items();
+        let selected_favorite = favorite_items.get(self.patch_favorites_cursor).cloned();
 
         self.patch_select_sort_order = self.patch_select_sort_order.toggle();
         self.patch_all = self.patch_all_source_order.clone();
@@ -179,20 +180,23 @@ impl<'a> TuiApp<'a> {
                     .position(|patch| patch == &patch_name)
             })
             .unwrap_or(0);
+        let favorite_items = self.patch_select_favorite_items();
         self.patch_favorites_cursor = selected_favorite
-            .and_then(|patch_name| {
-                self.patch_favorite_items
-                    .iter()
-                    .position(|patch| patch == &patch_name)
-            })
+            .and_then(|patch_name| favorite_items.iter().position(|patch| patch == &patch_name))
             .unwrap_or(0);
 
         self.sync_patch_select_states();
         self.preview_selected_patch();
     }
 
-    pub(in crate::tui) fn patch_select_favorite_items(&self) -> &[String] {
-        &self.patch_favorite_items
+    pub(in crate::tui) fn patch_select_favorite_items(&self) -> Vec<String> {
+        crate::tui::filter_items(&self.patch_favorite_items, &self.patch_favorites_query)
+    }
+
+    pub(super) fn update_patch_favorites_filter(&mut self) {
+        self.patch_favorites_cursor = 0;
+        self.sync_patch_select_states();
+        self.preview_selected_patch();
     }
 
     pub(in crate::tui) fn sync_patch_select_states(&mut self) {
@@ -210,7 +214,7 @@ impl<'a> TuiApp<'a> {
             );
         }
 
-        let favorites_len = self.patch_favorite_items.len();
+        let favorites_len = self.patch_select_favorite_items().len();
         if favorites_len == 0 {
             self.patch_favorites_cursor = 0;
             self.patch_favorites_state.select(None);
@@ -234,7 +238,7 @@ impl<'a> TuiApp<'a> {
     ) -> Option<String> {
         match focus {
             PatchSelectPane::Patches => self.patch_filtered.get(cursor).cloned(),
-            PatchSelectPane::Favorites => self.patch_favorite_items.get(cursor).cloned(),
+            PatchSelectPane::Favorites => self.patch_select_favorite_items().get(cursor).cloned(),
         }
     }
 

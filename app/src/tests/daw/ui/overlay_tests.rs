@@ -83,7 +83,12 @@ fn draw_shows_patch_select_overlay_title_and_items() {
         normalized_lines
     );
     assert!(
-        normalized_screen.contains("/を押して絞り込み"),
+        normalized_screen.contains("/でpatches絞り込み"),
+        "lines: {:?}",
+        normalized_lines
+    );
+    assert!(
+        normalized_screen.contains("/でfavorite絞り込み"),
         "lines: {:?}",
         normalized_lines
     );
@@ -119,7 +124,7 @@ fn draw_patch_select_shows_filter_input_keybinds_when_filter_active() {
     assert!(
         normalized_lines
             .iter()
-            .any(|line| line.contains("検索入力(Enter=確定/ESC=中断)")),
+            .any(|line| line.contains("Patchesquery(Enter=確定/ESC=中断)")),
         "lines: {:?}",
         normalized_lines
     );
@@ -145,8 +150,9 @@ fn draw_patch_select_shows_filter_input_placeholder_when_active_and_empty() {
 
     let normalized_screen = render_lines(&app, 140, 30).join("\n").replace(' ', "");
 
-    assert!(normalized_screen.contains("patchnameを入力して絞り込み"));
-    assert!(!normalized_screen.contains("/を押して絞り込み"));
+    assert!(normalized_screen.contains("Patchesを絞り込み"));
+    assert!(normalized_screen.contains("/でFavorite絞り込み"));
+    assert!(!normalized_screen.contains("/でPatches絞り込み"));
 }
 
 #[test]

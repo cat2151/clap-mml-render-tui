@@ -16,7 +16,7 @@ pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
         Mode::PatchSelect => vec![
             section_title("音色選択モード"),
             Line::from("  ?           : ヘルプ (このページ)"),
-            Line::from("  /           : patch name 絞り込み開始"),
+            Line::from("  /           : 現在paneの patch name 絞り込み開始"),
             Line::from("  / の後に文字入力 : フィルタ (Space=AND条件)"),
             Line::from("  Enter       : 絞り込み入力を確定して操作に戻る"),
             Line::from("  n / p / t   : notepad history / patch history / 音色選択"),

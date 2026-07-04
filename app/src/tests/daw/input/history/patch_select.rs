@@ -491,3 +491,44 @@ fn handle_patch_select_allows_slash_character_in_filter_query_without_resetting_
         vec!["Bass/Soft 1.fxp".to_string(), "Bass Soft 1.fxp".to_string()]
     );
 }
+
+#[test]
+fn handle_patch_select_slash_on_favorites_filters_favorites_query_independently() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.cursor_measure = 1;
+    app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
+    app.data[1][1] = "l8cdef".to_string();
+    app.patch_all = vec![
+        ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
+        (
+            "Leads/Lead 1.fxp".to_string(),
+            "leads/lead 1.fxp".to_string(),
+        ),
+    ];
+    app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
+    app.patch_favorite_items = vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()];
+    app.patch_select_focus = DawPatchSelectPane::Favorites;
+    app.mode = DawMode::PatchSelect;
+
+    app.handle_patch_select(KeyCode::Char('/'));
+    app.handle_patch_select(KeyCode::Char('l'));
+    app.handle_patch_select(KeyCode::Char('e'));
+
+    assert!(app.patch_select_filter_active);
+    assert!(matches!(
+        app.patch_select_focus,
+        DawPatchSelectPane::Favorites
+    ));
+    assert_eq!(app.patch_query, "");
+    assert_eq!(app.patch_favorites_query, "le");
+    assert_eq!(
+        app.patch_select_favorite_items(),
+        vec!["Leads/Lead 1.fxp".to_string()]
+    );
+    assert_eq!(app.patch_favorites_cursor, 0);
+    assert_eq!(
+        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        r#"{"Surge XT patch":"Leads/Lead 1.fxp"}l8cdef"#,
+    );
+}

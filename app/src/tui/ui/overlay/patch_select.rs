@@ -30,6 +30,17 @@ fn patch_cache_hit(
         })
 }
 
+fn favorite_title(app: &TuiApp<'_>, favorite_count: usize) -> String {
+    if app.patch_favorites_query.trim().is_empty() {
+        format!(" Favorite音色 ({favorite_count}) ")
+    } else {
+        format!(
+            " Favorite音色 ({favorite_count}/{}) ",
+            app.patch_favorite_items.len()
+        )
+    }
+}
+
 pub(in crate::tui::ui) fn draw_patch_select(
     app: &mut TuiApp<'_>,
     f: &mut Frame,
@@ -59,20 +70,28 @@ pub(in crate::tui::ui) fn draw_patch_select(
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[1]);
+    let query_panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[0]);
     let patch_select_page_size = visible_list_page_size(panes[0]);
     if app.patch_select_page_size != patch_select_page_size {
         app.patch_select_page_size = patch_select_page_size;
         app.sync_patch_select_states();
     }
 
-    let search_title = if app.patch_select_filter_active {
-        " ENTERで絞り込みを決定 - patch select - "
-    } else {
-        " ENTERで音色を選択 - patch select - "
-    };
     let active_frame_color = MONOKAI_YELLOW;
     let inactive_frame_color = MONOKAI_GRAY;
-    let query_frame_color = if app.patch_select_filter_active {
+    let patches_query_active =
+        app.patch_select_filter_active && app.patch_select_focus == PatchSelectPane::Patches;
+    let favorites_query_active =
+        app.patch_select_filter_active && app.patch_select_focus == PatchSelectPane::Favorites;
+    let patches_query_frame_color = if patches_query_active {
+        active_frame_color
+    } else {
+        inactive_frame_color
+    };
+    let favorites_query_frame_color = if favorites_query_active {
         active_frame_color
     } else {
         inactive_frame_color
@@ -90,30 +109,61 @@ pub(in crate::tui::ui) fn draw_patch_select(
     } else {
         inactive_frame_color
     };
-    let query_border = base_style().fg(query_frame_color);
+    let patches_query_border = base_style().fg(patches_query_frame_color);
+    let favorites_query_border = base_style().fg(favorites_query_frame_color);
     let patch_border = base_style().fg(patch_frame_color);
     let favorite_border = base_style().fg(favorite_frame_color);
-    let query_placeholder = if app.patch_select_filter_active {
-        "音色名を入力して絞り込み"
+    let patches_query_title = if patches_query_active {
+        " Patches query (Enter=決定) "
     } else {
-        "/ を押して絞り込み"
+        " Patches query "
+    };
+    let favorites_query_title = if favorites_query_active {
+        " Favorites query (Enter=決定) "
+    } else {
+        " Favorites query "
+    };
+    let patches_query_placeholder = if patches_query_active {
+        "Patches を絞り込み"
+    } else {
+        "/ で Patches 絞り込み"
+    };
+    let favorites_query_placeholder = if favorites_query_active {
+        "Favorite音色を絞り込み"
+    } else {
+        "/ で Favorite 絞り込み"
     };
 
     let mut patch_query_widget = crate::text_input::build_query_textarea_widget(
         &app.patch_query_textarea,
         &app.patch_query,
-        search_title,
-        query_placeholder,
-        query_frame_color,
+        patches_query_title,
+        patches_query_placeholder,
+        patches_query_frame_color,
     );
     patch_query_widget.set_block(
         Block::default()
             .borders(Borders::ALL)
-            .title(Span::styled(search_title, query_border))
+            .title(Span::styled(patches_query_title, patches_query_border))
             .style(base_style())
-            .border_style(query_border),
+            .border_style(patches_query_border),
     );
-    f.render_widget(&patch_query_widget, chunks[0]);
+    let mut favorites_query_widget = crate::text_input::build_query_textarea_widget(
+        &app.patch_favorites_query_textarea,
+        &app.patch_favorites_query,
+        favorites_query_title,
+        favorites_query_placeholder,
+        favorites_query_frame_color,
+    );
+    favorites_query_widget.set_block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(Span::styled(favorites_query_title, favorites_query_border))
+            .style(base_style())
+            .border_style(favorites_query_border),
+    );
+    f.render_widget(&patch_query_widget, query_panes[0]);
+    f.render_widget(&favorites_query_widget, query_panes[1]);
 
     let (patch_items, favorite_count, favorite_items): (Vec<ListItem>, usize, Vec<ListItem>) = {
         let cache = app.audio_cache.lock().unwrap();
@@ -225,7 +275,7 @@ pub(in crate::tui::ui) fn draw_patch_select(
                 Block::default()
                     .borders(Borders::ALL)
                     .title(Span::styled(
-                        format!(" Favorite音色 ({favorite_count}) "),
+                        favorite_title(app, favorite_count),
                         favorite_border,
                     ))
                     .style(base_style())
@@ -236,9 +286,12 @@ pub(in crate::tui::ui) fn draw_patch_select(
         &mut app.patch_favorites_state,
     );
     if app.patch_select_filter_active {
+        let (area, widget) = match app.patch_select_focus {
+            PatchSelectPane::Patches => (query_panes[0], &patch_query_widget),
+            PatchSelectPane::Favorites => (query_panes[1], &favorites_query_widget),
+        };
         f.set_cursor_position(crate::text_input::single_line_textarea_cursor_position(
-            chunks[0],
-            &patch_query_widget,
+            area, widget,
         ));
     }
     let render_status_snapshot = app.render_status_snapshot();
