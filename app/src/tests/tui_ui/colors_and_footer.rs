@@ -148,6 +148,23 @@ fn normal_screen_marks_cached_lines_with_music_note() {
 }
 
 #[test]
+fn normal_screen_marks_disk_only_cached_lines_with_music_note() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec!["abc".to_string(), "def".to_string()];
+    // "abc" だけディスクキャッシュのハッシュ集合に入っている状態を模擬する。
+    // audio_cache（オンメモリ）には積まない ＝ LRUから追い出された後の状態に相当する。
+    app.known_disk_cache_hashes
+        .lock()
+        .unwrap()
+        .insert(crate::history::daw_cache_mml_hash("abc"));
+
+    let screen = render_lines(&mut app, 80, 8).join("\n");
+
+    assert!(screen.contains("▶ ♪ abc"));
+    assert!(screen.contains("  def"));
+}
+
+#[test]
 fn normal_mode_startup_prime_caches_current_line_and_navigation_targets() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![

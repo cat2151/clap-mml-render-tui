@@ -22,7 +22,7 @@ fn handle_patch_select_slash_then_chars_filter_and_preview_first_result() {
     assert_eq!(app.patch_filtered, vec!["JK Brass/Bass 1.fxp".to_string()]);
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "JK Brass/Bass 1.fxp"} l8cdef"#
+        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "JK Brass/Bass 1.fxp", "Surge XT patch filter": "jk"} l8cdef"#
     ));
 }
 
@@ -51,7 +51,7 @@ fn handle_patch_select_enter_exits_filter_input_and_keeps_filtered_results() {
     assert_eq!(app.patch_list_state.selected(), Some(1));
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "JK Lead.fxp"} l8cdef"#
+        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "JK Lead.fxp", "Surge XT patch filter": "jk"} l8cdef"#
     ));
 }
 
@@ -86,7 +86,7 @@ fn handle_patch_select_char_filters_and_previews_first_result_after_slash() {
     assert_eq!(app.patch_list_state.selected(), Some(0));
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Leads/Lead 1.fxp"} l8cdef"#
+        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Leads/Lead 1.fxp", "Surge XT patch filter": "L"} l8cdef"#
     ));
 }
 

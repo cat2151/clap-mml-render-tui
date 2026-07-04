@@ -55,10 +55,13 @@ pub(in crate::tui::ui) fn cache_marker(
 
 pub(in crate::tui::ui) fn mml_cache_hit(
     cache: &std::collections::HashMap<String, Vec<f32>>,
+    disk_hashes: &std::collections::HashSet<u64>,
     mml: &str,
 ) -> bool {
     let mml = mml.trim();
-    !mml.is_empty() && cache.contains_key(mml)
+    !mml.is_empty()
+        && (cache.contains_key(mml)
+            || disk_hashes.contains(&crate::history::daw_cache_mml_hash(mml)))
 }
 
 pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
@@ -138,6 +141,7 @@ fn draw_normal(
     let list_area = chunks[0];
     app.normal_page_size = visible_list_page_size(list_area);
     let cache = app.audio_cache.lock().unwrap();
+    let disk_hashes = app.known_disk_cache_hashes.lock().unwrap();
 
     let items: Vec<ListItem> = app
         .lines
@@ -149,7 +153,7 @@ fn draw_normal(
             } else {
                 base_style()
             };
-            let cached = mml_cache_hit(&cache, line);
+            let cached = mml_cache_hit(&cache, &disk_hashes, line);
             let render_status = (!cached)
                 .then(|| app.render_job_status_for_mml(line))
                 .flatten();

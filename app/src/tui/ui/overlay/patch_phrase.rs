@@ -59,6 +59,7 @@ pub(in crate::tui::ui) fn draw_patch_phrase(
     let history_entries = app.patch_phrase_history_items();
     let history_count = history_entries.len();
     let cache = app.audio_cache.lock().unwrap();
+    let disk_hashes = app.known_disk_cache_hashes.lock().unwrap();
     let history_items: Vec<ListItem> = history_entries
         .into_iter()
         .enumerate()
@@ -75,7 +76,7 @@ pub(in crate::tui::ui) fn draw_patch_phrase(
                 app.patch_phrase_preview_mml_for_selection(PatchPhrasePane::History, i);
             let cached = preview_mml
                 .as_deref()
-                .is_some_and(|mml| mml_cache_hit(&cache, mml));
+                .is_some_and(|mml| mml_cache_hit(&cache, &disk_hashes, mml));
             let render_status = (!cached)
                 .then(|| {
                     preview_mml
@@ -107,7 +108,7 @@ pub(in crate::tui::ui) fn draw_patch_phrase(
                 app.patch_phrase_preview_mml_for_selection(PatchPhrasePane::Favorites, i);
             let cached = preview_mml
                 .as_deref()
-                .is_some_and(|mml| mml_cache_hit(&cache, mml));
+                .is_some_and(|mml| mml_cache_hit(&cache, &disk_hashes, mml));
             let render_status = (!cached)
                 .then(|| {
                     preview_mml

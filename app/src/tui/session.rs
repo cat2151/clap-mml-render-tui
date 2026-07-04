@@ -1,7 +1,7 @@
 use clack_host::prelude::PluginEntry;
 use ratatui::widgets::ListState;
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, AtomicUsize};
 use std::sync::{Arc, Mutex};
 
@@ -112,6 +112,7 @@ impl<'a> TuiApp<'a> {
             active_sink: Arc::new(Mutex::new(None)),
             audio_cache: Arc::new(Mutex::new(HashMap::new())),
             audio_cache_order: Arc::new(Mutex::new(VecDeque::new())),
+            known_disk_cache_hashes: Arc::new(Mutex::new(HashSet::new())),
             patch_load_state: spawn_patch_loader(cfg),
             random_patch_decks: crate::random::RandomIndexDecks::default(),
             patch_all: Vec::new(),

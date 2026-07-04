@@ -260,7 +260,10 @@ impl<'a> TuiApp<'a> {
         patch_name: &str,
     ) -> Option<String> {
         let phrase = self.patch_select_current_phrase()?;
-        let json = Self::build_patch_json(patch_name);
+        // 検索窓の filter クエリ（現在行から引き継いだものも含む）をプレビューMMLにも
+        // 反映する。ここで省略すると、現在行と全く同じパッチ・フレーズの組み合わせでも
+        // JSON文字列が一致せずキャッシュミス扱いになってしまう。
+        let json = Self::build_patch_json_with_filter_query(patch_name, Some(&self.patch_query));
         Some(format!("{json} {phrase}"))
     }
 

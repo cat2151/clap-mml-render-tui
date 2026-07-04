@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 
 use super::*;
 
@@ -27,6 +27,7 @@ impl TuiApp<'static> {
             active_sink: Arc::new(Mutex::new(None)),
             audio_cache: Arc::new(Mutex::new(HashMap::new())),
             audio_cache_order: Arc::new(Mutex::new(VecDeque::new())),
+            known_disk_cache_hashes: Arc::new(Mutex::new(HashSet::new())),
             patch_load_state: Arc::new(Mutex::new(PatchLoadState::Ready(Vec::new()))),
             random_patch_decks: crate::random::RandomIndexDecks::default(),
             patch_all: Vec::new(),

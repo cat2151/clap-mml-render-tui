@@ -59,6 +59,7 @@ pub(in crate::tui::ui) fn draw_notepad_history(
     let history_entries = app.notepad_history_items();
     let history_count = history_entries.len();
     let cache = app.audio_cache.lock().unwrap();
+    let disk_hashes = app.known_disk_cache_hashes.lock().unwrap();
     let history_items: Vec<ListItem> = history_entries
         .into_iter()
         .enumerate()
@@ -71,7 +72,7 @@ pub(in crate::tui::ui) fn draw_notepad_history(
             } else {
                 base_style()
             };
-            let cached = mml_cache_hit(&cache, &mml);
+            let cached = mml_cache_hit(&cache, &disk_hashes, &mml);
             let render_status = (!cached)
                 .then(|| app.render_job_status_for_mml(&mml))
                 .flatten();
@@ -95,7 +96,7 @@ pub(in crate::tui::ui) fn draw_notepad_history(
             } else {
                 base_style()
             };
-            let cached = mml_cache_hit(&cache, &mml);
+            let cached = mml_cache_hit(&cache, &disk_hashes, &mml);
             let render_status = (!cached)
                 .then(|| app.render_job_status_for_mml(&mml))
                 .flatten();

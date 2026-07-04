@@ -7,7 +7,7 @@
 //! 対応するため、DAW の `DawSessionState.cached_measures` のような
 //! 別建てのハッシュ索引ファイルは不要（ファイルの存在自体が妥当性の証拠になる）。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// ディスクキャッシュに保持する WAV ファイルの上限件数。
@@ -40,6 +40,44 @@ pub(super) fn load_valid_cached_wav(mml: &str, expected_sample_rate: u32) -> Opt
         let _ = file.set_modified(std::time::SystemTime::now());
     }
     Some(samples)
+}
+
+/// notepad ディスクキャッシュディレクトリに現在存在する、有効な（sample_rate/channels が
+/// 現在の設定と一致する）`.wav` ファイルの MML ハッシュ集合を返す。
+///
+/// ファイル名自体が `{hash:016x}.wav` という content-addressable 形式なので、ファイルを
+/// 開かずにハッシュを復元できる。WAV ヘッダのみを読んで検証するため、ディスクキャッシュの
+/// 上限件数（`NOTEPAD_DISK_CACHE_MAX_FILES`）分を走査してもコストは小さい。
+///
+/// この集合は「オンメモリの `audio_cache`（LRU）から追い出された後のディスクフォールバック
+/// 判定」と「一覧UIでの即再生可能マーク表示」の両方で使う、軽量な存在確認用の索引である。
+pub(super) fn scan_valid_cache_hashes(sample_rate: u32) -> HashSet<u64> {
+    let mut hashes = HashSet::new();
+    let Ok(dir) = cmrt_core::ensure_notepad_cache_dir() else {
+        return hashes;
+    };
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return hashes;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("wav") {
+            continue;
+        }
+        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        let Ok(hash) = u64::from_str_radix(stem, 16) else {
+            continue;
+        };
+        let Ok(info) = crate::wav_io::read_wav_cache_info(&path) else {
+            continue;
+        };
+        if info.spec.sample_rate == sample_rate && info.spec.channels == 2 {
+            hashes.insert(hash);
+        }
+    }
+    hashes
 }
 
 /// `audio_cache` の全エントリをディスクへ書き出す。既に同一ハッシュのファイルが
@@ -185,6 +223,32 @@ mod tests {
 
         let new_mtime = std::fs::metadata(&path).unwrap().modified().unwrap();
         assert!(new_mtime > old_mtime);
+    }
+
+    #[test]
+    fn scan_valid_cache_hashes_includes_only_valid_matching_files() {
+        let (_base, _guard) = isolated_cmrt_base_dir_env("scan_valid");
+        let valid_mml = "valid line";
+        let stale_rate_mml = "stale rate line";
+        let valid_path = notepad_cache_wav_path(valid_mml).unwrap();
+        let stale_rate_path = notepad_cache_wav_path(stale_rate_mml).unwrap();
+        write_test_wav(&valid_path, 48_000, 2, &[0.0, 0.0]);
+        write_test_wav(&stale_rate_path, 44_100, 2, &[0.0, 0.0]);
+        let dir = valid_path.parent().unwrap();
+        std::fs::write(dir.join("not-a-wav.txt"), b"ignore me").unwrap();
+        std::fs::write(dir.join("0000000000000bad.wav"), b"corrupt").unwrap();
+
+        let hashes = scan_valid_cache_hashes(48_000);
+
+        assert_eq!(hashes.len(), 1);
+        assert!(hashes.contains(&crate::history::daw_cache_mml_hash(valid_mml)));
+        assert!(!hashes.contains(&crate::history::daw_cache_mml_hash(stale_rate_mml)));
+    }
+
+    #[test]
+    fn scan_valid_cache_hashes_returns_empty_set_when_dir_has_no_files() {
+        let (_base, _guard) = isolated_cmrt_base_dir_env("scan_empty");
+        assert!(scan_valid_cache_hashes(48_000).is_empty());
     }
 
     #[test]

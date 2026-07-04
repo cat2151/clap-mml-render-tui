@@ -31,7 +31,7 @@ mod ui;
 use ratatui::{widgets::ListState, Frame};
 use tui_textarea::TextArea;
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -165,6 +165,10 @@ pub struct TuiApp<'a> {
     /// MML文字列 → レンダリング済みサンプルのキャッシュ
     pub(super) audio_cache: Arc<Mutex<HashMap<String, Vec<f32>>>>,
     audio_cache_order: Arc<Mutex<VecDeque<String>>>,
+    /// notepad ディスクキャッシュディレクトリに現在存在する、有効な wav の MML ハッシュ集合。
+    /// `audio_cache` から追い出された行のディスクフォールバック判定と、一覧UIでの
+    /// 即再生可能マーク表示に使う。起動時と `flush_notepad_disk_cache` 実行後に更新する。
+    pub(super) known_disk_cache_hashes: Arc<Mutex<HashSet<u64>>>,
     // 音色選択モード用
     /// バックグラウンドスレッドが収集したパッチリストの状態
     patch_load_state: Arc<Mutex<PatchLoadState>>,
@@ -234,6 +238,20 @@ impl<'a> TuiApp<'a> {
         let _ = message.into();
     }
 
+    /// `mml` が `known_disk_cache_hashes` に含まれる場合のみ、ディスクキャッシュから
+    /// サンプルを読み込んで返す。含まれない場合はディスクへ一切アクセスしない。
+    pub(in crate::tui) fn resolve_disk_fallback_samples(
+        &self,
+        mml: &str,
+        sample_rate: u32,
+    ) -> Option<Vec<f32>> {
+        let hash = crate::history::daw_cache_mml_hash(mml);
+        if !self.known_disk_cache_hashes.lock().unwrap().contains(&hash) {
+            return None;
+        }
+        disk_cache::load_valid_cached_wav(mml, sample_rate)
+    }
+
     fn kick_play(&self, mml: String) {
         if self.cfg.realtime_audio_backend == RealtimeAudioBackend::PlayServer {
             self.kick_play_via_play_server(mml);
@@ -251,18 +269,41 @@ impl<'a> TuiApp<'a> {
         let mml_log = truncate_for_log(&mml, 120);
 
         let cache_guard = cache.lock().unwrap();
-        let cached_samples = resolve_cached_samples(Some(&cache_guard), &mml);
+        let mut cached_samples = resolve_cached_samples(Some(&cache_guard), &mml);
         if cached_samples.is_some() {
             let mut cache_order = cache_order.lock().unwrap();
             mark_cache_entry_recent(&cache_guard, &mut cache_order, &mml);
         }
         drop(cache_guard);
 
+        // オンメモリキャッシュがミスした場合でも、起動時またはflush時に走査した
+        // ディスクキャッシュのハッシュ集合に含まれる行だけはディスクへフォールバックする。
+        // 未知の行（新規に書いた行など）はこの集合に含まれないため、ここで無駄な
+        // ディスクI/Oは発生しない。
+        let mut cache_source = "hit";
+        if cached_samples.is_none() {
+            if let Some(samples) =
+                self.resolve_disk_fallback_samples(&mml, cfg.sample_rate as u32)
+            {
+                let mut cache_guard = cache.lock().unwrap();
+                let mut cache_order_guard = cache_order.lock().unwrap();
+                try_insert_cache(
+                    &mut cache_guard,
+                    &mut cache_order_guard,
+                    mml.clone(),
+                    samples.clone(),
+                    false,
+                );
+                cached_samples = Some(samples);
+                cache_source = "disk-hit";
+            }
+        }
+
         if let Some(samples) = cached_samples {
             // キャッシュヒット: レンダリングをスキップして即時再生
             let msg = format!("(cached) | {}", mml);
             Self::log_notepad_event(format!(
-                "play request session={session} cache=hit mml=\"{mml_log}\""
+                "play request session={session} cache={cache_source} mml=\"{mml_log}\""
             ));
             self.set_play_state_if_current(session, PlayState::Playing(msg.clone()));
 
@@ -493,8 +534,21 @@ impl<'a> TuiApp<'a> {
     /// オフラインレンダリング待ちを省略できるようにするための処理で、
     /// `save_history_state()` と対になる終了処理として各終了パスで呼ぶ。
     pub(super) fn flush_notepad_disk_cache(&self) {
+        // notepad画面の実際のバッファ行に対応するエントリだけを永続ディスクキャッシュへ
+        // 書き出す。patch select 等のプレビュー試聴で生成された、バッファに存在しない
+        // 組み合わせ（パッチ名を変えただけの仮MMLなど）はここで除外し、上限
+        // NOTEPAD_DISK_CACHE_MAX_FILES 件の永続キャッシュ枠を試聴で消費させない。
         let cache = self.audio_cache.lock().unwrap();
-        disk_cache::flush_audio_cache_to_disk(&cache, self.cfg.sample_rate as u32);
+        let line_keys: HashSet<&str> = self.lines.iter().map(|line| line.trim()).collect();
+        let notepad_only: HashMap<String, Vec<f32>> = cache
+            .iter()
+            .filter(|(mml, _)| line_keys.contains(mml.as_str()))
+            .map(|(mml, samples)| (mml.clone(), samples.clone()))
+            .collect();
+        drop(cache);
+        disk_cache::flush_audio_cache_to_disk(&notepad_only, self.cfg.sample_rate as u32);
+        *self.known_disk_cache_hashes.lock().unwrap() =
+            disk_cache::scan_valid_cache_hashes(self.cfg.sample_rate as u32);
     }
 }
 

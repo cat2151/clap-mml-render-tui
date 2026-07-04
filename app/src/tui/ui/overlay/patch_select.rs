@@ -20,10 +20,14 @@ use super::super::{
 fn patch_cache_hit(
     app: &TuiApp<'_>,
     cache: &std::collections::HashMap<String, Vec<f32>>,
+    disk_hashes: &std::collections::HashSet<u64>,
     patch_name: &str,
 ) -> bool {
     app.patch_select_preview_mml_for_patch_name(patch_name)
-        .is_some_and(|mml| cache.contains_key(&mml))
+        .is_some_and(|mml| {
+            cache.contains_key(&mml)
+                || disk_hashes.contains(&crate::history::daw_cache_mml_hash(&mml))
+        })
 }
 
 pub(in crate::tui::ui) fn draw_patch_select(
@@ -113,12 +117,13 @@ pub(in crate::tui::ui) fn draw_patch_select(
 
     let (patch_items, favorite_count, favorite_items): (Vec<ListItem>, usize, Vec<ListItem>) = {
         let cache = app.audio_cache.lock().unwrap();
+        let disk_hashes = app.known_disk_cache_hashes.lock().unwrap();
         let patch_items = app
             .patch_filtered
             .iter()
             .enumerate()
             .map(|(i, patch_name)| {
-                let cached = patch_cache_hit(app, &cache, patch_name);
+                let cached = patch_cache_hit(app, &cache, &disk_hashes, patch_name);
                 let style = if !app.patch_select_filter_active
                     && app.patch_select_focus == PatchSelectPane::Patches
                     && i == app.patch_cursor
@@ -148,7 +153,7 @@ pub(in crate::tui::ui) fn draw_patch_select(
                 .iter()
                 .enumerate()
                 .map(|(i, patch_name)| {
-                    let cached = patch_cache_hit(app, &cache, patch_name);
+                    let cached = patch_cache_hit(app, &cache, &disk_hashes, patch_name);
                     let style = if !app.patch_select_filter_active
                         && app.patch_select_focus == PatchSelectPane::Favorites
                         && i == app.patch_favorites_cursor

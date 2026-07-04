@@ -251,3 +251,115 @@ fn hydrate_all_lines_from_disk_cache_at_startup_loads_every_cached_line_but_not_
     assert_eq!(audio_cache.get(cached_line_b), Some(&samples_b));
     assert!(!audio_cache.contains_key(uncached_line));
 }
+
+// --- ディスクフォールバック（LRU退避後の再生時サンプル復元） ---
+
+#[test]
+fn resolve_disk_fallback_samples_recovers_evicted_line_when_hash_is_known() {
+    let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
+    let tmp = std::env::temp_dir().join(format!(
+        "cmrt_test_tui_disk_fallback_known_{}_{}",
+        std::process::id(),
+        unique
+    ));
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guard = crate::test_utils::set_local_dir_envs(&tmp);
+
+    let sample_rate = 44_100u32;
+    let mml = "evicted but on disk";
+    let samples = vec![0.4_f32, -0.4, 0.5, -0.5];
+    let cache_dir = cmrt_core::ensure_notepad_cache_dir().unwrap();
+    let path = cache_dir.join(format!(
+        "{:016x}.wav",
+        crate::history::daw_cache_mml_hash(mml)
+    ));
+    write_test_wav(&path, sample_rate, 2, &samples);
+
+    let app = TuiApp::new_for_test(test_config());
+    // 起動時 or flush 時の走査で得られる想定のハッシュ集合を模擬する。
+    app.known_disk_cache_hashes
+        .lock()
+        .unwrap()
+        .insert(crate::history::daw_cache_mml_hash(mml));
+
+    let resolved = app.resolve_disk_fallback_samples(mml, sample_rate);
+    assert_eq!(resolved, Some(samples));
+}
+
+#[test]
+fn resolve_disk_fallback_samples_ignores_disk_file_when_hash_is_unknown() {
+    let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
+    let tmp = std::env::temp_dir().join(format!(
+        "cmrt_test_tui_disk_fallback_unknown_{}_{}",
+        std::process::id(),
+        unique
+    ));
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guard = crate::test_utils::set_local_dir_envs(&tmp);
+
+    let sample_rate = 44_100u32;
+    let mml = "new line never registered";
+    let samples = vec![0.6_f32, -0.6];
+    let cache_dir = cmrt_core::ensure_notepad_cache_dir().unwrap();
+    let path = cache_dir.join(format!(
+        "{:016x}.wav",
+        crate::history::daw_cache_mml_hash(mml)
+    ));
+    write_test_wav(&path, sample_rate, 2, &samples);
+
+    // known_disk_cache_hashes には何も登録しない ＝ 未知の行として扱われるべき。
+    let app = TuiApp::new_for_test(test_config());
+
+    assert_eq!(app.resolve_disk_fallback_samples(mml, sample_rate), None);
+}
+
+// --- flush_notepad_disk_cache のスコープ（patch selectプレビュー等の永続化除外） ---
+
+#[test]
+fn flush_notepad_disk_cache_persists_only_current_buffer_lines() {
+    let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
+    let tmp = std::env::temp_dir().join(format!(
+        "cmrt_test_tui_flush_scope_{}_{}",
+        std::process::id(),
+        unique
+    ));
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guard = crate::test_utils::set_local_dir_envs(&tmp);
+
+    let buffer_line = "buffer line actually in notepad";
+    let preview_only = r#"{"Surge XT patch": "some other patch.fxp"} l8cdef"#;
+
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![buffer_line.to_string()];
+    {
+        let mut cache = app.audio_cache.lock().unwrap();
+        // 実際のnotepadバッファ行と、patch select等のプレビュー試聴で生成された
+        // バッファに存在しない仮MMLの両方がaudio_cache（オンメモリ）には積まれている状態を模擬する。
+        cache.insert(buffer_line.to_string(), vec![0.1_f32, -0.1]);
+        cache.insert(preview_only.to_string(), vec![0.2_f32, -0.2]);
+    }
+
+    app.flush_notepad_disk_cache();
+
+    let cache_dir = cmrt_core::ensure_notepad_cache_dir().unwrap();
+    let buffer_line_path = cache_dir.join(format!(
+        "{:016x}.wav",
+        crate::history::daw_cache_mml_hash(buffer_line)
+    ));
+    let preview_only_path = cache_dir.join(format!(
+        "{:016x}.wav",
+        crate::history::daw_cache_mml_hash(preview_only)
+    ));
+    assert!(
+        buffer_line_path.exists(),
+        "notepadバッファ行はディスクへ永続化されるべき"
+    );
+    assert!(
+        !preview_only_path.exists(),
+        "プレビュー専用の仮MMLはディスクへ永続化されるべきではない"
+    );
+
+    let known_hashes = app.known_disk_cache_hashes.lock().unwrap();
+    assert!(known_hashes.contains(&crate::history::daw_cache_mml_hash(buffer_line)));
+    assert!(!known_hashes.contains(&crate::history::daw_cache_mml_hash(preview_only)));
+}

@@ -130,6 +130,8 @@ impl<'a> TuiApp<'a> {
             }
             terminal.draw(|f| self.draw(f))?;
             if !self.startup_normal_cache_primed && self.mode == Mode::Normal {
+                *self.known_disk_cache_hashes.lock().unwrap() =
+                    crate::tui::disk_cache::scan_valid_cache_hashes(self.cfg.sample_rate as u32);
                 self.hydrate_all_lines_from_disk_cache_at_startup();
                 self.prime_normal_mode_startup_cache();
                 if started_in_notepad_mode && self.cfg.autoplay_on_startup {
