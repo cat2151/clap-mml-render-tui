@@ -139,6 +139,20 @@ cmrt --server
 - bluesky-text-to-audio chrome拡張 と連動します
   - Blueskyの投稿にMMLがあったとき、それをSurge XTで鳴らせるようになります
 
+### CLIモード
+
+```
+cmrt cde
+```
+
+- cdeと書けばドレミが鳴ります
+
+```
+cmrt CM7
+```
+
+- CM7と書けばCメジャーセブンスが鳴ります
+
 # 破壊的変更
 - 毎日頻繁に破壊的変更します
 
