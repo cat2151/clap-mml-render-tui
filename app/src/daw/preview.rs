@@ -7,9 +7,13 @@ use cmrt_core::NativeRenderProbeContext;
 
 use super::playback::try_get_cached_samples;
 use super::render_queue::RenderPriority;
-use super::{DawApp, DawPlayState, FIRST_PLAYABLE_TRACK, MAX_CACHED_SAMPLES};
+use super::{DawApp, DawPlayState, FIRST_PLAYABLE_TRACK};
 use crate::{config::RealtimeAudioBackend, history::daw_cache_mml_hash};
 
+#[path = "preview/play_server.rs"]
+mod play_server;
+#[path = "preview/prefetch.rs"]
+mod prefetch;
 #[path = "preview/render.rs"]
 mod render;
 
@@ -40,109 +44,6 @@ fn wait_preview_duration(
 }
 
 impl DawApp {
-    pub(super) fn prefetch_preview_navigation_cache<F>(
-        &self,
-        current: usize,
-        item_count: usize,
-        page_size: usize,
-        preferred_delta: Option<isize>,
-        mut preview_for_index: F,
-    ) where
-        F: FnMut(usize) -> Option<(usize, Vec<String>)>,
-    {
-        let track_gains = self.playback_track_gains();
-        let predicted_indices = match preferred_delta {
-            Some(delta) if delta == 1 || delta == -1 => {
-                crate::ui_utils::predicted_navigation_indices_with_direction_bias(
-                    current, item_count, page_size, delta, 2, 4,
-                )
-            }
-            _ => crate::ui_utils::predicted_navigation_indices(current, item_count, page_size),
-        };
-        for index in predicted_indices {
-            if let Some((measure_index, track_mmls)) = preview_for_index(index) {
-                self.prefetch_preview_snapshot(measure_index, track_mmls, track_gains.clone());
-            }
-        }
-    }
-
-    pub(super) fn prefetch_preview_snapshot(
-        &self,
-        measure_index: usize,
-        track_mmls: Vec<String>,
-        track_gains: Vec<f32>,
-    ) {
-        let active_tracks: Vec<usize> = (FIRST_PLAYABLE_TRACK..self.tracks)
-            .filter(|&track| {
-                track_gains.get(track).copied().unwrap_or(1.0) > 0.0
-                    && track_mmls
-                        .get(track)
-                        .map(|mml| !mml.trim().is_empty())
-                        .unwrap_or(false)
-            })
-            .collect();
-        if active_tracks.is_empty() {
-            return;
-        }
-
-        let cache_key = overlay_preview_cache_key(measure_index, &track_mmls, &track_gains);
-        if self
-            .overlay_preview_cache
-            .lock()
-            .unwrap()
-            .contains_key(&cache_key)
-        {
-            return;
-        }
-
-        let measure_samples = self.measure_duration_samples();
-        if measure_samples > MAX_CACHED_SAMPLES {
-            return;
-        }
-
-        #[cfg(test)]
-        if self.entry_ptr == 0 {
-            insert_overlay_preview_cache(
-                &mut self.overlay_preview_cache.lock().unwrap(),
-                cache_key,
-                Arc::new(Vec::new()),
-            );
-            return;
-        }
-        let cfg = Arc::clone(&self.cfg);
-        let render_queue = self.render_queue.clone();
-        let overlay_preview_cache = Arc::clone(&self.overlay_preview_cache);
-        let active_track_count = active_tracks.len();
-        std::thread::spawn(move || {
-            let daw_cfg = (*cfg).clone();
-            let offline_render_workers = daw_cfg.effective_offline_render_workers();
-            let Some(samples) = render_mixed_preview_tracks(
-                &render_queue,
-                RenderPriority::Low,
-                measure_samples,
-                &active_tracks,
-                &track_mmls,
-                &track_gains,
-                |track, mml| {
-                    NativeRenderProbeContext::preview_prefetch(
-                        track,
-                        measure_index,
-                        active_track_count,
-                        daw_cache_mml_hash(mml),
-                        offline_render_workers,
-                    )
-                },
-            ) else {
-                return;
-            };
-            insert_overlay_preview_cache(
-                &mut overlay_preview_cache.lock().unwrap(),
-                cache_key,
-                Arc::new(samples),
-            );
-        });
-    }
-
     pub(super) fn start_preview_with_snapshot(
         &self,
         measure_index: usize,
@@ -366,89 +267,6 @@ impl DawApp {
                 *state = DawPlayState::Idle;
                 drop(state);
                 preview_sink.lock().unwrap().take();
-                *play_position.lock().unwrap() = None;
-                crate::logging::append_log_line(&log_lines, "preview: finished");
-            }
-        });
-    }
-
-    fn start_preview_with_snapshot_via_play_server(
-        &self,
-        measure_index: usize,
-        track_mmls: Vec<String>,
-        active_tracks: Vec<usize>,
-    ) {
-        let Some(play_server) = self.realtime_play_server.as_ref().cloned() else {
-            self.append_log_line("preview: realtime play server is not initialized");
-            return;
-        };
-
-        let measure_samples = self.measure_duration_samples();
-        let play_state = Arc::clone(&self.play_state);
-        let play_transition_lock = Arc::clone(&self.play_transition_lock);
-        let preview_session = Arc::clone(&self.preview_session);
-        let preview_sink = Arc::clone(&self.preview_sink);
-        let play_position = Arc::clone(&self.play_position);
-        let log_lines = Arc::clone(&self.log_lines);
-        let sample_rate = self.cfg.sample_rate as u32;
-
-        let session = {
-            let _transition_guard = play_transition_lock.lock().unwrap();
-            if let Some(sink) = preview_sink.lock().unwrap().take() {
-                sink.stop();
-            }
-            let _ = play_server.stop();
-            *play_position.lock().unwrap() = None;
-            let session = preview_session.fetch_add(1, Ordering::AcqRel) + 1;
-            *play_state.lock().unwrap() = DawPlayState::Preview;
-            session
-        };
-        crate::logging::append_log_line(&log_lines, format!("preview: meas{}", measure_index + 1));
-
-        std::thread::spawn(move || {
-            let mml = active_tracks
-                .iter()
-                .filter_map(|track| track_mmls.get(*track))
-                .map(String::as_str)
-                .filter(|mml| !mml.trim().is_empty())
-                .collect::<Vec<_>>()
-                .join(";");
-            let result =
-                cmrt_core::mml_to_smf_bytes(&mml).and_then(|smf| play_server.play_smf(smf));
-            if let Err(error) = result {
-                crate::logging::append_log_line(
-                    &log_lines,
-                    format!("meas{}: play-server error: {}", measure_index + 1, error),
-                );
-            } else {
-                let measure_duration = std::time::Duration::from_secs_f64(
-                    measure_samples as f64 / (sample_rate as f64 * 2.0),
-                );
-                let preview_active = begin_preview_output(
-                    PreviewOutputState {
-                        play_transition_lock: &play_transition_lock,
-                        play_state: &play_state,
-                        play_position: &play_position,
-                        preview_session: &preview_session,
-                    },
-                    PreviewOutputRequest {
-                        session,
-                        measure_index,
-                        measure_duration,
-                    },
-                    || {},
-                );
-                if preview_active {
-                    wait_preview_duration(&play_state, &preview_session, session, measure_duration);
-                }
-            }
-
-            let mut state = play_state.lock().unwrap();
-            if *state == DawPlayState::Preview && preview_session.load(Ordering::Acquire) == session
-            {
-                let _ = play_server.stop();
-                *state = DawPlayState::Idle;
-                drop(state);
                 *play_position.lock().unwrap() = None;
                 crate::logging::append_log_line(&log_lines, "preview: finished");
             }

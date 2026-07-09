@@ -83,7 +83,6 @@ mod timing;
 mod types;
 mod ui;
 
-use cmrt_core::{ensure_daw_dir, write_wav};
 use ratatui::Frame;
 use tui_textarea::TextArea;
 
