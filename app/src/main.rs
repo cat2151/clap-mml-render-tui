@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use chord2mml_core::convert as chord_to_mml;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use clap_mml_render_tui::{config, server, tui, updater};
 use cmrt_core::{load_entry, mml_to_play};
@@ -12,6 +13,20 @@ enum CliAction {
     Shutdown(u16),
     Update,
     Check,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum CliPlaybackMml {
+    Chord { chord: String, mml: String },
+    Mml(String),
+}
+
+impl CliPlaybackMml {
+    fn mml(&self) -> &str {
+        match self {
+            Self::Chord { mml, .. } | Self::Mml(mml) => mml,
+        }
+    }
 }
 
 #[derive(Debug, Parser)]
@@ -123,6 +138,16 @@ fn print_help(help: &str) {
     }
 }
 
+fn cli_playback_mml(input: &str) -> CliPlaybackMml {
+    match chord_to_mml(input) {
+        Ok(mml) => CliPlaybackMml::Chord {
+            chord: input.to_string(),
+            mml,
+        },
+        Err(_) => CliPlaybackMml::Mml(input.to_string()),
+    }
+}
+
 fn main() -> Result<()> {
     let action = parse_cli_from(std::env::args_os())?;
 
@@ -193,10 +218,18 @@ fn main() -> Result<()> {
             );
         }
         CliAction::CliMml(mml) => {
-            println!("CLI モード: MML = {}", mml);
+            let playback_mml = cli_playback_mml(&mml);
+            match &playback_mml {
+                CliPlaybackMml::Chord { chord, mml } => {
+                    println!("CLI モード: chord = {chord} / MML = {mml}");
+                }
+                CliPlaybackMml::Mml(mml) => {
+                    println!("CLI モード: MML = {mml}");
+                }
+            }
             let core_cfg = config::core_config_from_config(&cfg);
             let patch = mml_to_play(
-                &mml,
+                playback_mml.mml(),
                 &core_cfg,
                 entry
                     .as_ref()
