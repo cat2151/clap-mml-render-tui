@@ -1,0 +1,218 @@
+name: Update cat2151 Rust Git Dependencies
+
+on:
+  schedule:
+    # JST 01:00 (UTC 16:00 previous day)
+    - cron: '0 16 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-cat2151-rust-deps-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  update-cat2151-rust-deps:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Collect cat2151 Git dependencies
+        id: collect
+        run: |
+          set -euo pipefail
+
+          cargo metadata --format-version 1 --locked > /tmp/cargo-metadata-before.json
+
+          python - <<'PY' > /tmp/cat2151-git-packages.tsv
+          import json
+          import sys
+          from urllib.parse import urlparse
+
+          with open("/tmp/cargo-metadata-before.json", encoding="utf-8") as f:
+              metadata = json.load(f)
+
+          def git_repo_url(source):
+              if not source.startswith("git+"):
+                  return None
+              return source[len("git+"):].split("#", 1)[0]
+
+          def is_cat2151_github_repo(repo_url):
+              parsed = urlparse(repo_url)
+              host = parsed.netloc.lower()
+              if "@" in host:
+                  host = host.rsplit("@", 1)[1]
+              path = parsed.path.lstrip("/").lower()
+              return host == "github.com" and path.startswith("cat2151/")
+
+          packages_by_source = {}
+          fixed_sources = []
+          for package in metadata.get("packages", []):
+              source = package.get("source") or ""
+              repo_url = git_repo_url(source)
+              if repo_url is None or not is_cat2151_github_repo(repo_url):
+                  continue
+
+              query = urlparse(repo_url).query
+              query_keys = {part.split("=", 1)[0] for part in query.split("&") if part}
+              if "rev" in query_keys or "tag" in query_keys:
+                  fixed_sources.append(source)
+                  continue
+
+              packages_by_source.setdefault(repo_url, package)
+
+          if fixed_sources:
+              print("cat2151 Git dependency uses rev/tag pinning, which is prohibited:", file=sys.stderr)
+              for source in fixed_sources:
+                  print(f"- {source}", file=sys.stderr)
+              sys.exit(1)
+
+          for repo_url, package in sorted(packages_by_source.items()):
+              print(f"{package['id']}\t{package['name']}\t{package['source']}")
+          PY
+
+          count=$(wc -l < /tmp/cat2151-git-packages.tsv | tr -d '[:space:]')
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+
+          if [ "${count}" = "0" ]; then
+            echo "No cat2151 Git dependencies found"
+          else
+            echo "Found ${count} cat2151 Git dependency source(s):"
+            cut -f2-3 /tmp/cat2151-git-packages.tsv
+          fi
+
+      - name: Update cat2151 Git dependencies
+        if: steps.collect.outputs.count != '0'
+        run: |
+          set -euo pipefail
+
+          while IFS=$'\t' read -r package_id package_name package_source; do
+            echo "Updating ${package_name} from ${package_source}"
+            cargo update -p "${package_id}"
+          done < /tmp/cat2151-git-packages.tsv
+
+      - name: Build update summary
+        if: steps.collect.outputs.count != '0'
+        run: |
+          set -euo pipefail
+
+          cargo metadata --format-version 1 --locked > /tmp/cargo-metadata-after.json
+
+          python - <<'PY' > /tmp/cat2151-update-summary.md
+          import json
+          from urllib.parse import urlparse
+
+          def load(path):
+              with open(path, encoding="utf-8") as f:
+                  return json.load(f)
+
+          def git_repo_url(source):
+              if not source.startswith("git+"):
+                  return None
+              return source[len("git+"):].split("#", 1)[0]
+
+          def is_cat2151_github_repo(repo_url):
+              parsed = urlparse(repo_url)
+              host = parsed.netloc.lower()
+              if "@" in host:
+                  host = host.rsplit("@", 1)[1]
+              path = parsed.path.lstrip("/").lower()
+              return host == "github.com" and path.startswith("cat2151/")
+
+          def precise(source):
+              return source.split("#", 1)[1] if "#" in source else ""
+
+          def collect(metadata):
+              packages = {}
+              for package in metadata.get("packages", []):
+                  source = package.get("source") or ""
+                  repo_url = git_repo_url(source)
+                  if repo_url is None or not is_cat2151_github_repo(repo_url):
+                      continue
+                  key = (package["name"], package["version"], repo_url)
+                  packages[key] = source
+              return packages
+
+          before = collect(load("/tmp/cargo-metadata-before.json"))
+          after = collect(load("/tmp/cargo-metadata-after.json"))
+
+          lines = []
+          for name, version, repo_url in sorted(set(before) | set(after)):
+              old_source = before.get((name, version, repo_url))
+              new_source = after.get((name, version, repo_url))
+              if old_source == new_source:
+                  continue
+              old = precise(old_source) if old_source else "missing"
+              new = precise(new_source) if new_source else "missing"
+              lines.append(f"- {name}@{version}: {old} -> {new}")
+
+          if lines:
+              print("Updated cat2151 Rust Git dependencies:")
+              print()
+              print("\n".join(lines))
+          else:
+              print("No cat2151 Rust Git dependency source revisions changed.")
+          PY
+
+          cat /tmp/cat2151-update-summary.md
+
+      - name: Check for Cargo.lock changes
+        id: changes
+        run: |
+          if git diff --quiet -- Cargo.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No Cargo.lock changes"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff -- Cargo.lock
+          fi
+
+      - name: Prepare Linux test environment
+        if: steps.changes.outputs.changed == 'true'
+        run: ./scripts/setup-cargo-test-env.sh
+
+      - name: Check formatting
+        if: steps.changes.outputs.changed == 'true'
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        if: steps.changes.outputs.changed == 'true'
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run tests
+        if: steps.changes.outputs.changed == 'true'
+        run: cargo test
+
+      - name: Commit and push changes
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+
+          {
+            echo "chore: update cat2151 Rust git dependencies [auto]"
+            echo
+            cat /tmp/cat2151-update-summary.md
+          } > /tmp/cat2151-commit-message.txt
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -F /tmp/cat2151-commit-message.txt
+            git push
+          fi

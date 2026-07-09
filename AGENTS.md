@@ -20,6 +20,6 @@ The setup script installs the Linux packages needed for this workspace's `rodio`
 - プルリクエストは日本語で書くこと
 - cargoのclippyとfmtを使うこと
 - デバウンス禁止
-- cat2151のライブラリはrevision固定を禁止
+- cat2151のライブラリは、「revision固定を禁止。さらに、古い lock を放置せず最新 HEAD へ追従すること」
 - issue-notes/は更新を禁止
 - README.mdは更新禁止。README.ja.mdから生成されるので。
