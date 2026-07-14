@@ -1,5 +1,8 @@
 # clap-mml-render-tui
 
+### 概要
+MML TUI DAW（のようなもの）。Surge XTのリッチな音をMMLで手軽に楽しめます。Rustで書かれています。
+
 ### 用途
 
 - MMLで音を鳴らして遊ぶ用
