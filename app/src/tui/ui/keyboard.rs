@@ -1,52 +1,37 @@
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Color,
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 
-use super::status::base_style;
-use crate::tui::keyboard::{KeyboardConnectionPhase, KEYBOARD_NOTES};
+use super::{status::base_style, status::visible_list_page_size, LIST_HIGHLIGHT_SYMBOL};
+use crate::tui::keyboard::{KeyboardConnectionPhase, KeyboardPatchCatalogStatus, KEYBOARD_NOTES};
 use crate::tui::TuiApp;
-use crate::ui_theme::{MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_PURPLE};
+use crate::ui_theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_PURPLE};
 
-pub(super) fn draw(app: &TuiApp<'_>, f: &mut Frame) {
+pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
+    app.sync_keyboard_patch_catalog();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(5),
             Constraint::Length(1),
-            Constraint::Length(1),
+            Constraint::Length(2),
         ])
         .split(f.area());
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(45),
+            Constraint::Percentage(20),
+            Constraint::Percentage(35),
+        ])
+        .split(chunks[0]);
 
-    let mut lines = vec![
-        Line::from(""),
-        Line::from(Span::styled(
-            "PC key:  c   d   e   f   g   a   b",
-            base_style(),
-        )),
-        Line::from(Span::styled(
-            "Note:    C4  D4  E4  F4  G4  A4  B4",
-            base_style(),
-        )),
-        Line::from(""),
-    ];
-    let active = active_notes_text(&app.keyboard_state);
-    lines.push(Line::from(Span::styled(active, base_style())));
-    debug_assert_eq!(KEYBOARD_NOTES.len(), 7);
-
-    f.render_widget(
-        Paragraph::new(lines).style(base_style()).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" [KEYBOARD] keyboard mode ")
-                .style(base_style())
-                .border_style(base_style().fg(MONOKAI_CYAN)),
-        ),
-        chunks[0],
-    );
+    draw_keyboard(app, f, panes[0]);
+    draw_patch_catalog(app, f, panes[1], panes[2]);
 
     let connection = app.keyboard_connection_status();
     let (state, color) = match &connection.phase {
@@ -72,21 +57,165 @@ pub(super) fn draw(app: &TuiApp<'_>, f: &mut Frame) {
         chunks[1],
     );
     f.render_widget(
-        Paragraph::new("c d e f g a b:note  h:transport  Shift+H:buffer  n:notepad  w:DAW  q:quit")
-            .style(base_style()),
+        Paragraph::new(vec![
+            Line::from("Up/Down:patch -/+1  PgUp/PgDn:patch -/+10  Home/End:category -/+1"),
+            Line::from("c d e f g a b:note  h:transport  Shift+H:buffer  n:notepad  w:DAW  q:quit"),
+        ])
+        .style(base_style()),
         chunks[2],
     );
-    draw_connection_overlay(&connection.phase, f);
+    draw_connection_overlay(&connection.phase, f, panes[0]);
 }
 
-fn draw_connection_overlay(phase: &KeyboardConnectionPhase, f: &mut Frame<'_>) {
+fn draw_keyboard(app: &TuiApp<'_>, f: &mut Frame<'_>, area: Rect) {
+    let mut lines = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "PC key:  c   d   e   f   g   a   b",
+            base_style(),
+        )),
+        Line::from(Span::styled(
+            "Note:    C4  D4  E4  F4  G4  A4  B4",
+            base_style(),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            active_notes_text(&app.keyboard_state),
+            base_style(),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "Patch: {}",
+                app.keyboard_state.patch().unwrap_or("init saw")
+            ),
+            base_style(),
+        )),
+    ];
+    if area.height < 8 {
+        lines.remove(0);
+        lines.remove(2);
+    }
+    debug_assert_eq!(KEYBOARD_NOTES.len(), 7);
+
+    f.render_widget(
+        Paragraph::new(lines).style(base_style()).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" [KEYBOARD] keyboard mode ")
+                .style(base_style())
+                .border_style(base_style().fg(MONOKAI_CYAN)),
+        ),
+        area,
+    );
+}
+
+fn draw_patch_catalog(
+    app: &mut TuiApp<'_>,
+    f: &mut Frame<'_>,
+    category_area: Rect,
+    patch_area: Rect,
+) {
+    let catalog = &mut app.keyboard_state.patch_catalog;
+    let status = catalog.status().clone();
+    let categories = catalog.categories().to_vec();
+    let selected_category_index = catalog.selected_category_index();
+    let selected_patch_index = catalog.selected_patch_index();
+    let patches = catalog
+        .selected_category()
+        .map(|category| category.patches.clone())
+        .unwrap_or_default();
+
+    let category_items = if categories.is_empty() {
+        vec![ListItem::new(catalog_message(&status))]
+    } else {
+        categories
+            .iter()
+            .map(|category| {
+                ListItem::new(format!("{} ({})", category.name, category.patches.len()))
+            })
+            .collect()
+    };
+    let patch_items = if patches.is_empty() {
+        vec![ListItem::new(if categories.is_empty() {
+            catalog_message(&status)
+        } else {
+            "カテゴリー未選択".to_string()
+        })]
+    } else {
+        patches.iter().cloned().map(ListItem::new).collect()
+    };
+
+    catalog.sync_list_states(
+        visible_list_page_size(category_area),
+        visible_list_page_size(patch_area),
+    );
+    let category_title = format!(
+        " Categories ({}/{}) ",
+        selected_category_index.map(|index| index + 1).unwrap_or(0),
+        categories.len()
+    );
+    let patch_title = format!(
+        " Patches ({}/{}) ",
+        selected_patch_index.map(|index| index + 1).unwrap_or(0),
+        patches.len()
+    );
+    let highlight = cursor_highlight_style(base_style());
+
+    f.render_stateful_widget(
+        List::new(category_items)
+            .style(base_style())
+            .highlight_style(highlight)
+            .highlight_symbol(LIST_HIGHLIGHT_SYMBOL)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(category_title)
+                    .style(base_style())
+                    .border_style(base_style().fg(MONOKAI_CYAN)),
+            ),
+        category_area,
+        catalog.category_list_state_mut(),
+    );
+    f.render_stateful_widget(
+        List::new(patch_items)
+            .style(base_style())
+            .highlight_style(highlight)
+            .highlight_symbol(LIST_HIGHLIGHT_SYMBOL)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(patch_title)
+                    .style(base_style())
+                    .border_style(base_style().fg(MONOKAI_CYAN)),
+            ),
+        patch_area,
+        catalog.patch_list_state_mut(),
+    );
+}
+
+fn catalog_message(status: &KeyboardPatchCatalogStatus) -> String {
+    match status {
+        KeyboardPatchCatalogStatus::Loading => "パッチを読み込み中...".to_string(),
+        KeyboardPatchCatalogStatus::NotConfigured => {
+            "patches_dirs が設定されていません".to_string()
+        }
+        KeyboardPatchCatalogStatus::Ready => "パッチが見つかりません".to_string(),
+        KeyboardPatchCatalogStatus::Error(error) => format!("読み込み失敗: {error}"),
+    }
+}
+
+fn draw_connection_overlay(
+    phase: &KeyboardConnectionPhase,
+    f: &mut Frame<'_>,
+    keyboard_area: Rect,
+) {
     let (title, lines, border_color, height) = match phase {
         KeyboardConnectionPhase::Ready => return,
         KeyboardConnectionPhase::Idle | KeyboardConnectionPhase::Connecting => (
             " server connection ",
             vec![
                 Line::from("connecting..."),
-                Line::from("c d e f g a b are unavailable until ready"),
+                Line::from("notes unavailable until ready"),
             ],
             MONOKAI_PURPLE,
             5,
@@ -95,7 +224,7 @@ fn draw_connection_overlay(phase: &KeyboardConnectionPhase, f: &mut Frame<'_>) {
             " patch setting ",
             vec![
                 Line::from("patch setting..."),
-                Line::from("c d e f g a b are unavailable until ready"),
+                Line::from("notes unavailable until ready"),
             ],
             MONOKAI_PURPLE,
             5,
@@ -110,8 +239,9 @@ fn draw_connection_overlay(phase: &KeyboardConnectionPhase, f: &mut Frame<'_>) {
             7,
         ),
     };
-    let width = f.area().width.saturating_sub(4).min(72);
-    let area = crate::ui_utils::centered_rect_with_size(width, height, f.area());
+    let width = keyboard_area.width.saturating_sub(2).min(72);
+    let height = height.min(keyboard_area.height);
+    let area = crate::ui_utils::centered_rect_with_size(width, height, keyboard_area);
     f.render_widget(Clear, area);
     f.render_widget(
         Paragraph::new(lines)
@@ -161,7 +291,7 @@ mod tests {
         let backend = TestBackend::new(80, 12);
         let mut terminal = Terminal::new(backend).unwrap();
         terminal
-            .draw(|f| draw_connection_overlay(&phase, f))
+            .draw(|f| draw_connection_overlay(&phase, f, f.area()))
             .unwrap();
         let buffer = terminal.backend().buffer();
         (0..buffer.area.height)
@@ -206,7 +336,7 @@ mod tests {
         let screen = render_overlay(KeyboardConnectionPhase::Connecting);
 
         assert!(screen.contains("connecting..."));
-        assert!(screen.contains("c d e f g a b are unavailable until ready"));
+        assert!(screen.contains("notes unavailable until ready"));
     }
 
     #[test]
@@ -222,7 +352,7 @@ mod tests {
         let screen = render_overlay(KeyboardConnectionPhase::PatchSetting);
 
         assert!(screen.contains("patch setting..."));
-        assert!(screen.contains("c d e f g a b are unavailable until ready"));
+        assert!(screen.contains("notes unavailable until ready"));
     }
 
     #[test]

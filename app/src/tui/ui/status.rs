@@ -102,7 +102,7 @@ pub(super) fn keybind_text(mode: &Mode) -> &'static str {
         }
         Mode::Help => "ESC:キャンセル",
         Mode::Keyboard => {
-            "c d e f g a b:note  h:transport  Shift+H:buffer  n:notepad  w:DAW  q:quit"
+            "↑↓:patch±1  PgUp/PgDn:patch±10  Home/End:category±1  c d e f g a b:note  h:transport  Shift+H:buffer  n:notepad  w:DAW  q:quit"
         }
     }
 }

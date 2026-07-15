@@ -35,3 +35,20 @@ fn begin_connecting_updates_initialization_status_synchronously() {
     assert_eq!(status.last_send, None);
     assert_eq!(status.buffer_multiplier, 8);
 }
+
+#[test]
+fn begin_patch_setting_preserves_transport_and_buffer() {
+    let mut status = KeyboardConnectionStatus {
+        transport: KeyboardTransport::Http,
+        buffer_multiplier: 8,
+        phase: KeyboardConnectionPhase::Ready,
+        last_send: Some(Duration::from_millis(12)),
+    };
+
+    status.begin_patch_setting();
+
+    assert_eq!(status.transport, KeyboardTransport::Http);
+    assert_eq!(status.buffer_multiplier, 8);
+    assert_eq!(status.phase, KeyboardConnectionPhase::PatchSetting);
+    assert_eq!(status.last_send, Some(Duration::from_millis(12)));
+}

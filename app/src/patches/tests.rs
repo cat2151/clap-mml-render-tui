@@ -318,3 +318,71 @@ fn sort_patch_pairs_category_order_handles_vendorless_thirdparty_paths() {
         ]
     );
 }
+
+#[test]
+fn group_patch_pairs_merges_factory_and_thirdparty_categories() {
+    let pairs = vec![
+        (
+            "patches_3rdparty/john/Pad/Pad 2.fxp".to_string(),
+            "patches_3rdparty/john/pad/pad 2.fxp".to_string(),
+        ),
+        (
+            "patches_factory/Lead/Lead 1.fxp".to_string(),
+            "patches_factory/lead/lead 1.fxp".to_string(),
+        ),
+        (
+            "patches_factory/Pad/Pad 11.fxp".to_string(),
+            "patches_factory/pad/pad 11.fxp".to_string(),
+        ),
+        (
+            "patches_factory/Pad/Pad 1.fxp".to_string(),
+            "patches_factory/pad/pad 1.fxp".to_string(),
+        ),
+    ];
+
+    let categories = group_patch_pairs_by_category(&pairs);
+
+    assert_eq!(
+        categories,
+        vec![
+            PatchCategory {
+                name: "Lead".to_string(),
+                patches: vec!["patches_factory/Lead/Lead 1.fxp".to_string()],
+            },
+            PatchCategory {
+                name: "Pad".to_string(),
+                patches: vec![
+                    "patches_factory/Pad/Pad 1.fxp".to_string(),
+                    "patches_factory/Pad/Pad 11.fxp".to_string(),
+                    "patches_3rdparty/john/Pad/Pad 2.fxp".to_string(),
+                ],
+            },
+        ]
+    );
+}
+
+#[test]
+fn group_patch_pairs_handles_vendorless_thirdparty_categories() {
+    let pairs = vec![
+        (
+            "patches_3rdparty/Pad/Third Pad.fxp".to_string(),
+            "patches_3rdparty/pad/third pad.fxp".to_string(),
+        ),
+        (
+            "patches_factory/Pad/Factory Pad.fxp".to_string(),
+            "patches_factory/pad/factory pad.fxp".to_string(),
+        ),
+    ];
+
+    let categories = group_patch_pairs_by_category(&pairs);
+
+    assert_eq!(categories.len(), 1);
+    assert_eq!(categories[0].name, "Pad");
+    assert_eq!(
+        categories[0].patches,
+        vec![
+            "patches_factory/Pad/Factory Pad.fxp".to_string(),
+            "patches_3rdparty/Pad/Third Pad.fxp".to_string(),
+        ]
+    );
+}

@@ -4,16 +4,16 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::Result;
-
 use crate::{
     fast_midi_ipc::FastMidiClient, history::KeyboardTransport,
     realtime_play::RealtimePlayServerSupervisor,
 };
 
 mod connection;
+mod worker;
 
 use connection::{connect_fast_client, set_result};
+use worker::{prepare_connection, send_midi, set_buffer_multiplier, stop, WorkerState};
 
 impl KeyboardTransport {
     pub(in crate::tui) fn label(self) -> &'static str {
@@ -70,6 +70,10 @@ impl KeyboardConnectionStatus {
         self.last_send = None;
         self.buffer_multiplier = buffer_multiplier;
     }
+
+    fn begin_patch_setting(&mut self) {
+        self.phase = KeyboardConnectionPhase::PatchSetting;
+    }
 }
 
 enum KeyboardMidiCommand {
@@ -84,6 +88,11 @@ enum KeyboardMidiCommand {
         patch: Option<String>,
     },
     SetBufferMultiplier(u8),
+    SetPatch {
+        note_offs: Vec<[u8; 3]>,
+        previous_patch: Option<String>,
+        patch: Option<String>,
+    },
     Switch {
         transport: KeyboardTransport,
         note_offs: Vec<[u8; 3]>,
@@ -174,6 +183,20 @@ impl KeyboardMidiSender {
             .send(KeyboardMidiCommand::SetBufferMultiplier(multiplier));
     }
 
+    pub(in crate::tui) fn set_patch(
+        &self,
+        note_offs: Vec<[u8; 3]>,
+        previous_patch: Option<&str>,
+        patch: Option<&str>,
+    ) {
+        self.status.lock().unwrap().begin_patch_setting();
+        let _ = self.tx.send(KeyboardMidiCommand::SetPatch {
+            note_offs,
+            previous_patch: previous_patch.map(str::to_string),
+            patch: patch.map(str::to_string),
+        });
+    }
+
     pub(in crate::tui) fn status(&self) -> KeyboardConnectionStatus {
         self.status.lock().unwrap().clone()
     }
@@ -185,28 +208,6 @@ impl Drop for KeyboardMidiSender {
         let _ = self.tx.send(KeyboardMidiCommand::Shutdown);
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
-        }
-    }
-}
-
-struct WorkerState {
-    transport: KeyboardTransport,
-    fast_client: Option<FastMidiClient>,
-    buffer_multiplier: u8,
-}
-
-impl Default for WorkerState {
-    fn default() -> Self {
-        Self::new(KeyboardTransport::SharedMemory, 4)
-    }
-}
-
-impl WorkerState {
-    fn new(transport: KeyboardTransport, buffer_multiplier: u8) -> Self {
-        Self {
-            transport,
-            fast_client: None,
-            buffer_multiplier,
         }
     }
 }
@@ -284,6 +285,33 @@ fn run_midi_sender(
                     false,
                 );
             }
+            KeyboardMidiCommand::SetPatch {
+                note_offs,
+                previous_patch,
+                patch,
+            } => {
+                let started = Instant::now();
+                let note_off_result = if note_offs.is_empty() {
+                    Ok(())
+                } else {
+                    send_midi(
+                        &mut worker,
+                        supervisor.as_ref(),
+                        &note_offs,
+                        previous_patch.as_deref(),
+                    )
+                };
+                let patch_result =
+                    prepare_connection(&mut worker, supervisor.as_ref(), &status, patch.as_deref());
+                set_result(
+                    &status,
+                    worker.transport,
+                    worker.buffer_multiplier,
+                    note_off_result.and(patch_result),
+                    Some(started.elapsed()),
+                    false,
+                );
+            }
             KeyboardMidiCommand::Switch {
                 transport,
                 note_offs,
@@ -331,91 +359,6 @@ fn switch_transport(
         Some(started.elapsed()),
         false,
     );
-}
-
-fn prepare_connection(
-    worker: &mut WorkerState,
-    supervisor: &RealtimePlayServerSupervisor,
-    status: &Mutex<KeyboardConnectionStatus>,
-    patch: Option<&str>,
-) -> Result<()> {
-    match worker.transport {
-        KeyboardTransport::Http => supervisor.set_live_buffer_multiplier(worker.buffer_multiplier),
-        KeyboardTransport::SharedMemory => ensure_fast_client(worker, supervisor),
-    }?;
-    status.lock().unwrap().phase = KeyboardConnectionPhase::PatchSetting;
-    supervisor.prepare_live_patch(patch)
-}
-
-fn send_midi(
-    worker: &mut WorkerState,
-    supervisor: &RealtimePlayServerSupervisor,
-    messages: &[[u8; 3]],
-    patch: Option<&str>,
-) -> Result<()> {
-    match worker.transport {
-        KeyboardTransport::Http => supervisor.send_midi(messages, patch),
-        KeyboardTransport::SharedMemory => {
-            ensure_fast_client(worker, supervisor)?;
-            let result = worker
-                .fast_client
-                .as_mut()
-                .expect("fast client was initialized")
-                .send_midi(messages, patch);
-            if result.is_err() {
-                worker.fast_client = None;
-            }
-            result
-        }
-    }
-}
-
-fn stop(worker: &mut WorkerState, supervisor: &RealtimePlayServerSupervisor) -> Result<()> {
-    match worker.transport {
-        KeyboardTransport::Http => supervisor.stop(),
-        KeyboardTransport::SharedMemory => match worker.fast_client.as_mut() {
-            Some(client) => client.stop(),
-            None => Ok(()),
-        },
-    }
-}
-
-fn set_buffer_multiplier(
-    worker: &mut WorkerState,
-    supervisor: &RealtimePlayServerSupervisor,
-) -> Result<()> {
-    match worker.transport {
-        KeyboardTransport::Http => supervisor.set_live_buffer_multiplier(worker.buffer_multiplier),
-        KeyboardTransport::SharedMemory => {
-            supervisor.remember_live_buffer_multiplier(worker.buffer_multiplier)?;
-            if worker.fast_client.is_none() {
-                return ensure_fast_client(worker, supervisor);
-            }
-            ensure_fast_client(worker, supervisor)?;
-            let result = worker
-                .fast_client
-                .as_mut()
-                .expect("fast client was initialized")
-                .set_buffer_multiplier(worker.buffer_multiplier);
-            if result.is_err() {
-                worker.fast_client = None;
-            }
-            result
-        }
-    }
-}
-
-fn ensure_fast_client(
-    worker: &mut WorkerState,
-    supervisor: &RealtimePlayServerSupervisor,
-) -> Result<()> {
-    if worker.fast_client.is_none() {
-        supervisor.ensure_started_for_fast_midi()?;
-        let mut client = connect_fast_client(supervisor.port())?;
-        client.set_buffer_multiplier(worker.buffer_multiplier)?;
-        worker.fast_client = Some(client);
-    }
-    Ok(())
 }
 
 #[cfg(test)]

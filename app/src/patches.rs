@@ -31,6 +31,12 @@ const PATCH_DIR_PREFIXES: [&str; 2] = ["patches_factory", "patches_3rdparty"];
 const FACTORY_SORT_PRIORITY: u8 = 0;
 const THIRD_PARTY_SORT_PRIORITY: u8 = 1;
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PatchCategory {
+    pub(crate) name: String,
+    pub(crate) patches: Vec<String>,
+}
+
 pub(crate) fn has_configured_patch_dirs(cfg: &Config) -> bool {
     !configured_patch_dirs(cfg).is_empty()
 }
@@ -150,6 +156,36 @@ fn patch_category_sort_parts(path: &str) -> (&str, u8, &str, &str) {
 
     let (category, rest) = split_first_path_segment(path);
     (category, FACTORY_SORT_PRIORITY, "", rest)
+}
+
+pub(crate) fn group_patch_pairs_by_category(pairs: &[(String, String)]) -> Vec<PatchCategory> {
+    let mut sorted = pairs.to_vec();
+    sort_patch_pairs(&mut sorted, PatchSortOrder::Category);
+
+    let mut categories: Vec<(String, PatchCategory)> = Vec::new();
+    for (display, lower) in sorted {
+        let category_key = patch_category_sort_parts(&lower).0.to_string();
+        if let Some((last_key, category)) = categories.last_mut() {
+            if *last_key == category_key {
+                category.patches.push(display);
+                continue;
+            }
+        }
+
+        let category_name = patch_category_sort_parts(&display).0.to_string();
+        categories.push((
+            category_key,
+            PatchCategory {
+                name: category_name,
+                patches: vec![display],
+            },
+        ));
+    }
+
+    categories
+        .into_iter()
+        .map(|(_, category)| category)
+        .collect()
 }
 
 fn patch_path_sort_parts(path: &str) -> (u8, &str) {

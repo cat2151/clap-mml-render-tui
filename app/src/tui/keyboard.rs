@@ -2,9 +2,11 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use super::{Mode, PlayState, TuiApp};
 
+mod catalog;
 mod sender;
 
 use crate::history::{KeyboardSessionState, KeyboardTransport};
+pub(super) use catalog::{KeyboardPatchCatalog, KeyboardPatchCatalogStatus};
 pub(super) use sender::{KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardMidiSender};
 
 impl KeyboardConnectionPhase {
@@ -49,6 +51,7 @@ pub(crate) struct KeyboardState {
     patch: Option<String>,
     transport: KeyboardTransport,
     buffer_multiplier: u8,
+    pub(super) patch_catalog: KeyboardPatchCatalog,
 }
 
 impl Default for KeyboardState {
@@ -73,6 +76,7 @@ impl KeyboardState {
                 .and_then(|patch| (!patch.trim().is_empty()).then_some(patch)),
             transport: session.transport,
             buffer_multiplier: session.buffer_multiplier,
+            patch_catalog: KeyboardPatchCatalog::default(),
         }
     }
 
@@ -208,6 +212,30 @@ impl<'a> TuiApp<'a> {
         }
         if key.kind == KeyEventKind::Press && key.modifiers == KeyModifiers::NONE {
             match key.code {
+                KeyCode::Down => {
+                    self.move_keyboard_patch_by(1);
+                    return KeyboardAction::Continue;
+                }
+                KeyCode::Up => {
+                    self.move_keyboard_patch_by(-1);
+                    return KeyboardAction::Continue;
+                }
+                KeyCode::PageDown => {
+                    self.move_keyboard_patch_by(10);
+                    return KeyboardAction::Continue;
+                }
+                KeyCode::PageUp => {
+                    self.move_keyboard_patch_by(-10);
+                    return KeyboardAction::Continue;
+                }
+                KeyCode::End => {
+                    self.move_keyboard_patch_category_by(1);
+                    return KeyboardAction::Continue;
+                }
+                KeyCode::Home => {
+                    self.move_keyboard_patch_category_by(-1);
+                    return KeyboardAction::Continue;
+                }
                 KeyCode::Char('h') => {
                     let transport = self.keyboard_state.toggle_transport();
                     let patch = self.keyboard_state.patch().map(str::to_string);

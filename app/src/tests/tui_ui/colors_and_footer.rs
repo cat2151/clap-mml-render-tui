@@ -135,11 +135,62 @@ fn keyboard_screen_shows_connecting_status_and_navigation() {
     assert!(screen.contains("server: idle"));
     assert!(screen.contains("last send: -"));
     assert!(screen.contains("connecting..."));
-    assert!(screen.contains("c d e f g a b are unavailable until ready"));
+    assert!(screen.contains("notes unavailable until ready"));
     assert!(screen.contains("h:transport"));
     assert!(screen.contains("Shift+H:buffer"));
     assert!(screen.contains("n:notepad"));
     assert!(screen.contains("w:DAW"));
+}
+
+#[test]
+fn keyboard_screen_shows_category_and_patch_panes_while_connecting() {
+    let mut app = TuiApp::new_for_test(test_config());
+    let patches = [
+        "patches_factory/Lead/Factory Lead.fxp",
+        "patches_factory/Pad/Factory Pad.fxp",
+        "patches_3rdparty/vendor/Pad/Third Pad.fxp",
+    ]
+    .into_iter()
+    .map(|patch| (patch.to_string(), patch.to_lowercase()))
+    .collect();
+    app.patch_load_state = std::sync::Arc::new(std::sync::Mutex::new(
+        crate::tui::PatchLoadState::Ready(patches),
+    ));
+    app.start_keyboard(Some("patches_factory/Pad/Factory Pad.fxp".to_string()));
+
+    let screen = render_lines(&mut app, 140, 12).join("\n");
+
+    assert!(screen.contains("Categories (2/2)"));
+    assert!(screen.contains("Lead (1)"));
+    assert!(screen.contains("Pad (2)"));
+    assert!(screen.contains("Patches (1/2)"));
+    assert!(screen.contains("patches_factory/Pad/Factory Pad.fxp"));
+    assert!(screen.contains("connecting..."));
+    assert!(screen.contains("PgUp/PgDn:patch -/+10"));
+    assert!(screen.contains("Home/End:category -/+1"));
+}
+
+#[test]
+fn keyboard_patch_panes_show_loading_error_and_empty_states() {
+    let mut loading = TuiApp::new_for_test(test_config());
+    loading.patch_load_state =
+        std::sync::Arc::new(std::sync::Mutex::new(crate::tui::PatchLoadState::Loading));
+    loading.mode = Mode::Keyboard;
+    let screen = render_lines(&mut loading, 140, 12).join("\n");
+    assert!(screen.replace(' ', "").contains("パッチを読み込み中..."));
+
+    let mut error = TuiApp::new_for_test(test_config());
+    error.patch_load_state = std::sync::Arc::new(std::sync::Mutex::new(
+        crate::tui::PatchLoadState::Err("boom".to_string()),
+    ));
+    error.mode = Mode::Keyboard;
+    let screen = render_lines(&mut error, 140, 12).join("\n");
+    assert!(screen.replace(' ', "").contains("読み込み失敗:boom"));
+
+    let mut empty = TuiApp::new_for_test(test_config());
+    empty.mode = Mode::Keyboard;
+    let screen = render_lines(&mut empty, 140, 12).join("\n");
+    assert!(screen.replace(' ', "").contains("パッチが見つかりません"));
 }
 
 #[test]
