@@ -22,6 +22,43 @@ fn handle_normal_n_returns_to_tui() {
 }
 
 #[test]
+fn handle_normal_v_launches_keyboard() {
+    let (mut app, _cache_rx) = build_test_app();
+
+    let result = app.handle_normal(KeyCode::Char('v'));
+
+    assert!(matches!(
+        result,
+        super::super::DawNormalAction::LaunchKeyboard
+    ));
+}
+
+#[test]
+fn current_track_patch_name_uses_current_track_init_measure() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.data[1][0] = r#"{"Surge XT patch":"Pads/Other.fxp"}"#.to_string();
+    app.data[2][0] = r#"{"Surge XT patch":"Keys/Current.fxp"}"#.to_string();
+    app.cursor_track = 2;
+
+    assert_eq!(
+        app.current_track_patch_name().as_deref(),
+        Some("Keys/Current.fxp")
+    );
+}
+
+#[test]
+fn current_track_patch_name_uses_init_saw_without_valid_patch() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.cursor_track = 1;
+    app.data[1][0] = r#"{"Surge XT patch":""}"#.to_string();
+
+    assert_eq!(app.current_track_patch_name(), None);
+
+    app.data[1][0] = "{invalid".to_string();
+    assert_eq!(app.current_track_patch_name(), None);
+}
+
+#[test]
 fn handle_normal_e_requests_config_edit() {
     let (mut app, _cache_rx) = build_test_app();
 

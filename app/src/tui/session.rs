@@ -20,6 +20,7 @@ struct LoadedSessionState {
     lines: Vec<String>,
     list_state: ListState,
     is_daw_mode: bool,
+    keyboard: Option<crate::history::KeyboardSessionState>,
 }
 
 /// 復元したセッションのカーソルを現在の行数に収まる範囲へ丸める。
@@ -37,6 +38,7 @@ fn load_initial_session_state() -> LoadedSessionState {
         cursor,
         lines,
         is_daw_mode,
+        keyboard,
     } = crate::history::load_session_state();
     let initial_cursor = clamp_session_cursor(cursor, lines.len());
     let mut list_state = ListState::default();
@@ -46,6 +48,7 @@ fn load_initial_session_state() -> LoadedSessionState {
         lines,
         list_state,
         is_daw_mode,
+        keyboard,
     }
 }
 
@@ -76,6 +79,7 @@ impl<'a> TuiApp<'a> {
             lines,
             list_state,
             is_daw_mode,
+            keyboard,
         } = load_initial_session_state();
         let entry_ptr = entry
             .map(|entry| entry as *const PluginEntry as usize)
@@ -86,17 +90,32 @@ impl<'a> TuiApp<'a> {
             entry_ptr,
             Arc::clone(&active_offline_render_count),
         );
+        let play_server = Arc::new(crate::realtime_play::RealtimePlayServerSupervisor::new(
+            cfg_arc.as_ref(),
+        ));
         let realtime_play_server =
             if cfg_arc.realtime_audio_backend == crate::config::RealtimeAudioBackend::PlayServer {
-                Some(Arc::new(
-                    crate::realtime_play::RealtimePlayServerSupervisor::new(cfg_arc.as_ref()),
-                ))
+                Some(Arc::clone(&play_server))
             } else {
                 None
             };
+        let keyboard_state = keyboard
+            .clone()
+            .map(super::keyboard::KeyboardState::from_session)
+            .unwrap_or_default();
+        let keyboard_midi_sender = Some(super::keyboard::KeyboardMidiSender::new(
+            play_server,
+            keyboard_state.transport(),
+            keyboard_state.buffer_multiplier(),
+        ));
+        let restore_keyboard = keyboard.is_some();
 
         Self {
-            mode: Mode::Normal,
+            mode: if restore_keyboard {
+                Mode::Keyboard
+            } else {
+                Mode::Normal
+            },
             help_origin: Mode::Normal,
             lines,
             cursor,
@@ -107,6 +126,9 @@ impl<'a> TuiApp<'a> {
             play_state: Arc::new(Mutex::new(PlayState::Idle)),
             playback_session: Arc::new(AtomicU64::new(0)),
             realtime_play_server,
+            keyboard_midi_sender,
+            keyboard_state,
+            persist_keyboard_on_exit: false,
             active_offline_render_count,
             render_queue,
             active_sink: Arc::new(Mutex::new(None)),
@@ -156,7 +178,7 @@ impl<'a> TuiApp<'a> {
             patch_phrase_query_textarea: crate::text_input::new_single_line_textarea(""),
             patch_phrase_filter_active: false,
             patch_phrase_store_dirty: false,
-            is_daw_mode,
+            is_daw_mode: is_daw_mode && !restore_keyboard,
             startup_normal_cache_primed: false,
         }
     }
@@ -166,6 +188,9 @@ impl<'a> TuiApp<'a> {
             cursor: self.cursor,
             lines: self.lines.clone(),
             is_daw_mode: self.is_daw_mode,
+            keyboard: self
+                .persist_keyboard_on_exit
+                .then(|| self.keyboard_state.session_state()),
         });
     }
 }

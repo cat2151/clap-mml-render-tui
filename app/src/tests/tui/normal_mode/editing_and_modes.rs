@@ -160,6 +160,102 @@ fn handle_normal_w_launches_daw() {
 }
 
 #[test]
+fn handle_normal_v_launches_keyboard() {
+    let mut app = TuiApp::new_for_test(test_config());
+
+    let result = app.handle_normal(KeyCode::Char('v'));
+
+    assert!(matches!(result, NormalAction::LaunchKeyboard));
+}
+
+#[test]
+fn start_keyboard_from_notepad_uses_current_cursor_line_patch() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![
+        r#"{"Surge XT patch":"Pads/First.fxp"} c"#.to_string(),
+        r#"{"Surge XT patch":"Keys/Current.fxp"} d"#.to_string(),
+        r#"{"Surge XT patch":"Leads/Last.fxp"} e"#.to_string(),
+    ];
+    app.cursor = 1;
+
+    app.start_keyboard_from_notepad();
+
+    assert!(matches!(app.mode, Mode::Keyboard));
+    assert_eq!(app.keyboard_state.patch(), Some("Keys/Current.fxp"));
+}
+
+#[test]
+fn start_keyboard_from_notepad_uses_init_saw_without_valid_patch() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.lines = vec![r#"{"Surge XT patch":""} c"#.to_string()];
+
+    app.start_keyboard_from_notepad();
+
+    assert!(matches!(app.mode, Mode::Keyboard));
+    assert_eq!(app.keyboard_state.patch(), None);
+}
+
+#[test]
+fn keyboard_ignores_note_input_until_connection_is_ready() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::Keyboard;
+
+    let result = app.handle_keyboard_key_event(crossterm::event::KeyEvent::new(
+        KeyCode::Char('c'),
+        crossterm::event::KeyModifiers::NONE,
+    ));
+
+    assert!(matches!(
+        result,
+        crate::tui::keyboard::KeyboardAction::Continue
+    ));
+    assert!(app.keyboard_state.held().is_empty());
+}
+
+#[test]
+fn keyboard_h_clears_held_notes_before_transport_switch() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::Keyboard;
+    assert!(app
+        .keyboard_state
+        .press(crate::tui::keyboard::KEYBOARD_NOTES[0])
+        .is_some());
+
+    let result = app.handle_keyboard_key_event(crossterm::event::KeyEvent::new(
+        KeyCode::Char('h'),
+        crossterm::event::KeyModifiers::NONE,
+    ));
+
+    assert!(matches!(
+        result,
+        crate::tui::keyboard::KeyboardAction::Continue
+    ));
+    assert!(app.keyboard_state.held().is_empty());
+}
+
+#[test]
+fn keyboard_shift_h_cycles_buffer_without_releasing_held_notes() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::Keyboard;
+    assert!(app
+        .keyboard_state
+        .press(crate::tui::keyboard::KEYBOARD_NOTES[0])
+        .is_some());
+
+    let result = app.handle_keyboard_key_event(crossterm::event::KeyEvent::new(
+        KeyCode::Char('H'),
+        crossterm::event::KeyModifiers::SHIFT,
+    ));
+
+    assert!(matches!(
+        result,
+        crate::tui::keyboard::KeyboardAction::Continue
+    ));
+    assert_eq!(app.keyboard_state.buffer_multiplier(), 8);
+    assert_eq!(app.keyboard_state.held().len(), 1);
+}
+
+#[test]
 fn handle_normal_e_requests_config_edit() {
     let mut app = TuiApp::new_for_test(test_config());
 

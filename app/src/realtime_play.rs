@@ -13,11 +13,22 @@ use anyhow::{anyhow, Context as _, Result};
 
 use crate::config::Config;
 
+mod live_buffer;
+mod live_patch;
+mod process;
+
+use process::{
+    default_realtime_play_server_executable_name, shell_command, sibling_realtime_play_server_path,
+    stop_child,
+};
+
 const PLAY_SERVER_PLAY_PATH: &str = "/play";
 const PLAY_SERVER_PLAY_MML_PATH: &str = "/play-mml";
+const PLAY_SERVER_MIDI_PATH: &str = "/midi";
 const PLAY_SERVER_STOP_PATH: &str = "/stop";
 const PLAY_CONTENT_TYPE_MIDI: &str = "audio/midi";
 const PLAY_CONTENT_TYPE_MML: &str = "text/plain; charset=utf-8";
+const PLAY_CONTENT_TYPE_JSON: &str = "application/json";
 const PLAY_SERVER_CONNECT_TIMEOUT: Duration = Duration::from_millis(150);
 const PLAY_SERVER_START_TIMEOUT: Duration = Duration::from_secs(30);
 const PLAY_SERVER_START_POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -27,6 +38,7 @@ pub(crate) struct RealtimePlayServerSupervisor {
     command: String,
     agent: ureq::Agent,
     state: Mutex<PlayServerState>,
+    live_buffer: Mutex<live_buffer::LiveBufferState>,
     next_request_id: AtomicU64,
     #[cfg(test)]
     spawn_count: AtomicU64,
@@ -54,6 +66,7 @@ impl RealtimePlayServerSupervisor {
             command: cfg.realtime_play_server_command.clone(),
             agent,
             state: Mutex::new(PlayServerState::default()),
+            live_buffer: Mutex::new(live_buffer::LiveBufferState::default()),
             next_request_id: AtomicU64::new(1),
             #[cfg(test)]
             spawn_count: AtomicU64::new(0),
@@ -77,6 +90,38 @@ impl RealtimePlayServerSupervisor {
                     retry += 1;
                     log_realtime_play_event(format!(
                         "request_id={request_id} action=play retry={retry} transport_error=\"{}\"",
+                        truncate_for_log(&message, 160)
+                    ));
+                    self.recover_after_transport_failure(server_generation)?;
+                }
+            }
+        }
+    }
+
+    pub(crate) fn send_midi(&self, messages: &[[u8; 3]], patch: Option<&str>) -> Result<()> {
+        let mut body = serde_json::json!({ "messages": messages });
+        if let Some(patch) = patch {
+            body["patch"] = serde_json::Value::String(patch.to_string());
+        }
+        let body = serde_json::to_vec(&body)?;
+        let mut retry = 0;
+        loop {
+            let server_generation = self.ensure_started()?;
+            let result = self
+                .apply_live_buffer_once(server_generation)
+                .and_then(|()| {
+                    self.send_post_bytes(
+                        PLAY_SERVER_MIDI_PATH,
+                        Some((PLAY_CONTENT_TYPE_JSON, &body)),
+                    )
+                });
+            match result {
+                Ok(()) => return Ok(()),
+                Err(PlayRequestError::Server { message, .. }) => return Err(anyhow!(message)),
+                Err(PlayRequestError::Transport(message)) => {
+                    retry += 1;
+                    log_realtime_play_event(format!(
+                        "action=midi retry={retry} transport_error=\"{}\"",
                         truncate_for_log(&message, 160)
                     ));
                     self.recover_after_transport_failure(server_generation)?;
@@ -166,6 +211,14 @@ impl RealtimePlayServerSupervisor {
             self.spawn_child_locked(&mut state)?;
         }
         self.wait_for_port_locked(&mut state)
+    }
+
+    pub(crate) fn ensure_started_for_fast_midi(&self) -> Result<()> {
+        self.ensure_started().map(|_| ())
+    }
+
+    pub(crate) fn port(&self) -> u16 {
+        self.port
     }
 
     fn recover_after_transport_failure(&self, failed_generation: u64) -> Result<u64> {
@@ -354,46 +407,6 @@ fn response_body(response: ureq::Response) -> String {
     let mut body = String::new();
     let _ = response.into_reader().read_to_string(&mut body);
     body
-}
-
-fn stop_child(child: Option<Child>) {
-    let Some(mut child) = child else {
-        return;
-    };
-    if child.try_wait().ok().flatten().is_none() {
-        let _ = child.kill();
-    }
-    let _ = child.wait();
-}
-
-fn sibling_realtime_play_server_path() -> Option<std::path::PathBuf> {
-    let current_exe = std::env::current_exe().ok()?;
-    let sibling = current_exe
-        .parent()?
-        .join(default_realtime_play_server_executable_name());
-    sibling.is_file().then_some(sibling)
-}
-
-fn default_realtime_play_server_executable_name() -> &'static str {
-    if cfg!(windows) {
-        "clap-mml-realtime-play-server.exe"
-    } else {
-        "clap-mml-realtime-play-server"
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn shell_command(command: &str) -> Command {
-    let mut cmd = Command::new("cmd");
-    cmd.arg("/C").arg(command);
-    cmd
-}
-
-#[cfg(not(target_os = "windows"))]
-fn shell_command(command: &str) -> Command {
-    let mut cmd = Command::new("sh");
-    cmd.arg("-c").arg(command);
-    cmd
 }
 
 fn truncate_for_log(value: &str, max_chars: usize) -> String {

@@ -103,6 +103,13 @@ impl DawApp {
                                 self.save_history_state();
                                 return Ok(DawExitReason::ReturnToTui);
                             }
+                            DawNormalAction::LaunchKeyboard => {
+                                self.stop_play();
+                                self.save_history_state();
+                                return Ok(DawExitReason::LaunchKeyboard {
+                                    patch: self.current_track_patch_name(),
+                                });
+                            }
                             DawNormalAction::QuitApp => {
                                 self.stop_play();
                                 self.save_history_state();

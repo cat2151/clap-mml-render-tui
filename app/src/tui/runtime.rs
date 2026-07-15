@@ -1,7 +1,10 @@
 use anyhow::Result;
 use crossterm::{
     cursor::SetCursorStyle,
-    event::{self, Event, KeyCode, KeyModifiers},
+    event::{
+        self, Event, KeyCode, KeyModifiers, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
+        PushKeyboardEnhancementFlags,
+    },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -9,16 +12,21 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 
 use std::sync::Arc;
 
+use super::keyboard::KeyboardAction;
 use super::{Mode, NormalAction, PlayState, TuiApp, TuiExitReason};
 
 struct TerminalCleanup {
     raw_mode_enabled: bool,
     alternate_screen_enabled: bool,
+    keyboard_enhancement_enabled: bool,
 }
 
 impl Drop for TerminalCleanup {
     fn drop(&mut self) {
         let _ = execute!(std::io::stdout(), SetCursorStyle::DefaultUserShape);
+        if self.keyboard_enhancement_enabled {
+            let _ = execute!(std::io::stdout(), PopKeyboardEnhancementFlags);
+        }
         if self.alternate_screen_enabled {
             let _ = execute!(std::io::stdout(), LeaveAlternateScreen);
         }
@@ -35,7 +43,7 @@ impl<'a> TuiApp<'a> {
             Mode::PatchSelect => self.patch_select_filter_active,
             Mode::NotepadHistory => self.notepad_filter_active,
             Mode::PatchPhrase => self.patch_phrase_filter_active,
-            Mode::Normal | Mode::NotepadHistoryGuide | Mode::Help => false,
+            Mode::Normal | Mode::NotepadHistoryGuide | Mode::Help | Mode::Keyboard => false,
         }
     }
 
@@ -45,8 +53,19 @@ impl<'a> TuiApp<'a> {
         let mut cleanup = TerminalCleanup {
             raw_mode_enabled: true,
             alternate_screen_enabled: false,
+            keyboard_enhancement_enabled: false,
         };
         let mut stdout = std::io::stdout();
+        if matches!(
+            crossterm::terminal::supports_keyboard_enhancement(),
+            Ok(true)
+        ) {
+            execute!(
+                stdout,
+                PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::REPORT_EVENT_TYPES)
+            )?;
+            cleanup.keyboard_enhancement_enabled = true;
+        }
         execute!(stdout, EnterAlternateScreen)?;
         cleanup.alternate_screen_enabled = true;
         let backend = CrosstermBackend::new(stdout);
@@ -63,7 +82,7 @@ impl<'a> TuiApp<'a> {
 
         // 真の cold start（プロセス起動直後）かどうか。DAW⇔notepad のモード切替では
         // 自動再生を再発火させたくないため、この判定は一度だけ行う。
-        let started_in_notepad_mode = !self.is_daw_mode;
+        let started_in_notepad_mode = !self.is_daw_mode && self.mode == Mode::Normal;
 
         // 前回 DAW モードで終了していた場合は直接 DAW モードで起動する
         let mut quit_from_startup_daw = false;
@@ -74,6 +93,7 @@ impl<'a> TuiApp<'a> {
                 crate::daw::DawExitReason::ReturnToTui => {
                     self.is_daw_mode = false;
                 }
+                crate::daw::DawExitReason::LaunchKeyboard { patch } => self.start_keyboard(patch),
                 crate::daw::DawExitReason::QuitApp => {
                     quit_from_startup_daw = true;
                 }
@@ -82,6 +102,7 @@ impl<'a> TuiApp<'a> {
                 }
             }
         }
+        self.prepare_restored_keyboard_connection();
 
         loop {
             if quit_from_startup_daw {
@@ -94,6 +115,9 @@ impl<'a> TuiApp<'a> {
                 return Ok(TuiExitReason::RestartApp);
             }
             if crate::daw::take_http_mode_switch_request() {
+                if self.mode == Mode::Keyboard {
+                    self.finish_keyboard();
+                }
                 self.flush_patch_phrase_store_if_dirty();
                 self.save_history_state();
                 self.flush_notepad_disk_cache();
@@ -101,6 +125,9 @@ impl<'a> TuiApp<'a> {
                 match daw.run_with_terminal(&mut terminal, false)? {
                     crate::daw::DawExitReason::ReturnToTui => {
                         self.is_daw_mode = false;
+                    }
+                    crate::daw::DawExitReason::LaunchKeyboard { patch } => {
+                        self.start_keyboard(patch)
                     }
                     crate::daw::DawExitReason::QuitApp => {
                         self.is_daw_mode = true;
@@ -149,8 +176,42 @@ impl<'a> TuiApp<'a> {
 
             if event::poll(std::time::Duration::from_millis(50))? {
                 if let Event::Key(key) = event::read()? {
-                    // Press のみ処理。Release/Repeat は無視（二重発火防止）
                     use crossterm::event::KeyEventKind;
+                    if self.mode == Mode::Keyboard {
+                        match self.handle_keyboard_key_event(key) {
+                            KeyboardAction::Continue | KeyboardAction::ReturnToNotepad => {}
+                            KeyboardAction::Quit => break,
+                            KeyboardAction::LaunchDaw => {
+                                self.flush_patch_phrase_store_if_dirty();
+                                self.save_history_state();
+                                self.flush_notepad_disk_cache();
+                                let mut daw =
+                                    crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
+                                match daw.run_with_terminal(&mut terminal, false)? {
+                                    crate::daw::DawExitReason::ReturnToTui => {
+                                        self.mode = Mode::Normal;
+                                        self.is_daw_mode = false;
+                                    }
+                                    crate::daw::DawExitReason::LaunchKeyboard { patch } => {
+                                        self.start_keyboard(patch);
+                                    }
+                                    crate::daw::DawExitReason::QuitApp => {
+                                        self.is_daw_mode = true;
+                                        break;
+                                    }
+                                    crate::daw::DawExitReason::RestartApp => {
+                                        self.is_daw_mode = true;
+                                        self.flush_patch_phrase_store_if_dirty();
+                                        self.save_history_state();
+                                        self.flush_notepad_disk_cache();
+                                        return Ok(TuiExitReason::RestartApp);
+                                    }
+                                }
+                            }
+                        }
+                        continue;
+                    }
+                    // keyboard以外はPressのみ処理。Release/Repeatは無視（二重発火防止）。
                     if key.kind != KeyEventKind::Press {
                         continue;
                     }
@@ -183,7 +244,11 @@ impl<'a> TuiApp<'a> {
                                     crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
                                 match daw.run_with_terminal(&mut terminal, false)? {
                                     crate::daw::DawExitReason::ReturnToTui => {
+                                        self.mode = Mode::Normal;
                                         self.is_daw_mode = false;
+                                    }
+                                    crate::daw::DawExitReason::LaunchKeyboard { patch } => {
+                                        self.start_keyboard(patch);
                                     }
                                     crate::daw::DawExitReason::QuitApp => {
                                         self.is_daw_mode = true;
@@ -198,6 +263,7 @@ impl<'a> TuiApp<'a> {
                                     }
                                 }
                             }
+                            NormalAction::LaunchKeyboard => self.start_keyboard_from_notepad(),
                             NormalAction::EditConfig => {
                                 let session = self.begin_playback_session();
                                 self.set_play_state_if_current(session, PlayState::Idle);
@@ -223,6 +289,7 @@ impl<'a> TuiApp<'a> {
                         Mode::PatchPhrase => self.handle_patch_phrase_key_event(key),
                         Mode::NotepadHistoryGuide => self.handle_notepad_history_guide(key.code),
                         Mode::Help => self.handle_help(key.code),
+                        Mode::Keyboard => unreachable!("keyboard input is handled above"),
                     }
                 }
             }

@@ -52,11 +52,25 @@ fn session_state_default_is_daw_mode_is_false() {
 }
 
 #[test]
+fn session_state_default_has_no_keyboard_restore() {
+    assert_eq!(SessionState::default().keyboard, None);
+}
+
+#[test]
+fn keyboard_session_defaults_to_shared_memory_x4() {
+    let keyboard = KeyboardSessionState::default();
+    assert_eq!(keyboard.patch, None);
+    assert_eq!(keyboard.transport, KeyboardTransport::SharedMemory);
+    assert_eq!(keyboard.buffer_multiplier, 4);
+}
+
+#[test]
 fn session_state_serialize_deserialize() {
     let state = SessionState {
         cursor: 42,
         lines: vec!["abc".to_string(), "def".to_string()],
         is_daw_mode: false,
+        keyboard: None,
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
@@ -71,6 +85,7 @@ fn session_state_serialize_deserialize_zero() {
         cursor: 0,
         lines: vec!["cde".to_string()],
         is_daw_mode: false,
+        keyboard: None,
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
@@ -85,6 +100,7 @@ fn session_state_serialize_deserialize_is_daw_mode_true() {
         cursor: 1,
         lines: vec!["cde".to_string()],
         is_daw_mode: true,
+        keyboard: None,
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
@@ -127,6 +143,12 @@ fn session_state_json_missing_is_daw_mode_defaults_to_false() {
 }
 
 #[test]
+fn session_state_json_missing_keyboard_defaults_to_none() {
+    let result: SessionState = serde_json::from_str(r#"{"cursor": 3, "lines": ["cde"]}"#).unwrap();
+    assert_eq!(result.keyboard, None);
+}
+
+#[test]
 fn session_state_json_empty_lines_passes_through_serde() {
     // serde は "lines": [] を空配列のままデシリアライズする（serde デフォルトは適用されない）。
     // load_session_state() がこれを検知して default_lines() で補填する。
@@ -144,6 +166,7 @@ fn save_and_load_session_state_roundtrip() {
         cursor: 7,
         lines: vec!["cde".to_string(), "fga".to_string()],
         is_daw_mode: false,
+        keyboard: None,
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     std::fs::write(&tmp_path, &json).unwrap();
@@ -218,6 +241,7 @@ fn save_and_load_session_state_roundtrip_daw_mode() {
         cursor: 0,
         lines: vec!["cde".to_string()],
         is_daw_mode: true,
+        keyboard: None,
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     std::fs::write(&tmp_path, &json).unwrap();

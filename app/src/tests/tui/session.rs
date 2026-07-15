@@ -73,6 +73,68 @@ fn save_history_state_persists_tui_cursor_lines_and_mode_flag() {
 }
 
 #[test]
+fn keyboard_q_persists_and_restores_patch_transport_and_buffer() {
+    let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
+    let tmp = std::env::temp_dir().join(format!(
+        "cmrt_test_keyboard_session_restore_{}_{}",
+        std::process::id(),
+        unique
+    ));
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
+
+    let mut app = TuiApp::new_for_test(test_config());
+    app.start_keyboard(Some("patches_factory/Keys/Piano.fxp".to_string()));
+    app.handle_keyboard_key_event(crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::Char('h'),
+        crossterm::event::KeyModifiers::NONE,
+    ));
+    app.handle_keyboard_key_event(crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::Char('H'),
+        crossterm::event::KeyModifiers::SHIFT,
+    ));
+    let action = app.handle_keyboard_key_event(crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::Char('q'),
+        crossterm::event::KeyModifiers::NONE,
+    ));
+    assert!(matches!(action, crate::tui::keyboard::KeyboardAction::Quit));
+    app.save_history_state();
+
+    let saved = crate::history::load_session_state();
+    assert!(!saved.is_daw_mode);
+    assert_eq!(
+        saved.keyboard,
+        Some(crate::history::KeyboardSessionState {
+            patch: Some("patches_factory/Keys/Piano.fxp".to_string()),
+            transport: crate::history::KeyboardTransport::Http,
+            buffer_multiplier: 8,
+        })
+    );
+
+    let cfg = test_config();
+    let mut restored = TuiApp::new(&cfg, None);
+    assert!(matches!(restored.mode, Mode::Keyboard));
+    assert_eq!(
+        restored.keyboard_state.patch(),
+        Some("patches_factory/Keys/Piano.fxp")
+    );
+    assert_eq!(
+        restored.keyboard_state.transport(),
+        crate::history::KeyboardTransport::Http
+    );
+    assert_eq!(restored.keyboard_state.buffer_multiplier(), 8);
+
+    restored.handle_keyboard_key_event(crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::Char('n'),
+        crossterm::event::KeyModifiers::NONE,
+    ));
+    restored.save_history_state();
+    assert_eq!(crate::history::load_session_state().keyboard, None);
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
 fn daw_mode_switch_request_can_be_consumed_from_tui_runtime() {
     assert!(!crate::daw::take_http_mode_switch_request());
 

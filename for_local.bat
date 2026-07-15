@@ -1,3 +1,3 @@
 git pull
-path=./target/debug;%path%
+path=./target/debug;../clap-mml-play-server/target/debug;%path%;
 pwsh

@@ -1,6 +1,7 @@
 //! TUI 描画
 
 mod help;
+mod keyboard;
 mod overlay;
 mod status;
 
@@ -65,6 +66,10 @@ pub(in crate::tui::ui) fn mml_cache_hit(
 }
 
 pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
+    if app.mode == Mode::Keyboard {
+        keyboard::draw(app, f);
+        return;
+    }
     // play_state を一度だけロックしてスナップショットを取り、
     // status_text と status_color を同じ状態から導出する（二重ロック・状態不整合を防ぐ）。
     let play_state = app.play_state.lock().unwrap().clone();

@@ -19,6 +19,7 @@
 mod cache;
 mod disk_cache;
 mod input;
+mod keyboard;
 mod notepad_history;
 mod patch_phrase;
 mod playback;
@@ -43,6 +44,7 @@ pub(super) const PATCH_FILTER_QUERY_JSON_KEY: &str = "Surge XT patch filter";
 
 pub(crate) use self::cache::filter_items;
 pub(in crate::tui) use self::cache::filter_patches;
+use self::keyboard::{KeyboardMidiSender, KeyboardState};
 use self::render_queue::{TuiRenderJobStatus, TuiRenderQueue};
 pub(in crate::tui) use self::session::PatchLoadState;
 use crate::{config::Config, patches::PatchSortOrder, realtime_play::RealtimePlayServerSupervisor};
@@ -59,6 +61,7 @@ pub(super) enum Mode {
     NotepadHistoryGuide,
     PatchPhrase,
     Help,
+    Keyboard,
 }
 
 /// handle_normal の戻り値
@@ -66,6 +69,7 @@ enum NormalAction {
     Continue,
     Quit,
     LaunchDaw,
+    LaunchKeyboard,
     EditConfig,
 }
 
@@ -133,6 +137,9 @@ pub struct TuiApp<'a> {
     pub(super) play_state: Arc<Mutex<PlayState>>,
     playback_session: Arc<AtomicU64>,
     realtime_play_server: Option<Arc<RealtimePlayServerSupervisor>>,
+    keyboard_midi_sender: Option<KeyboardMidiSender>,
+    pub(super) keyboard_state: KeyboardState,
+    pub(super) persist_keyboard_on_exit: bool,
     pub(super) active_offline_render_count: Arc<AtomicUsize>,
     render_queue: TuiRenderQueue,
     active_sink: Arc<Mutex<Option<Arc<rodio::Sink>>>>,

@@ -166,6 +166,121 @@ fn play_mml_posts_text_body_to_play_mml_endpoint() {
 }
 
 #[test]
+fn send_midi_posts_ordered_json_batch() {
+    let (port, rx) = spawn_sequential_response_server(vec![
+        ("HTTP/1.1 202 Accepted", "accepted"),
+        ("HTTP/1.1 202 Accepted", "accepted"),
+    ]);
+    let supervisor = RealtimePlayServerSupervisor::new(&cfg_for_port(port));
+
+    supervisor
+        .send_midi(&[[0x80, 60, 0], [0x90, 62, 100]], None)
+        .unwrap();
+
+    let buffer_request = rx.recv().unwrap();
+    assert_eq!(buffer_request.path, "/live-buffer");
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&buffer_request.body).unwrap(),
+        serde_json::json!({"multiplier": 4})
+    );
+    let request = rx.recv().unwrap();
+    assert_eq!(request.method, "POST");
+    assert_eq!(request.path, PLAY_SERVER_MIDI_PATH);
+    assert_eq!(
+        request.content_type.as_deref(),
+        Some(PLAY_CONTENT_TYPE_JSON)
+    );
+    let body: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
+    assert_eq!(
+        body,
+        serde_json::json!({"messages": [[128, 60, 0], [144, 62, 100]]})
+    );
+    assert_eq!(supervisor.spawn_count_for_test(), 0);
+}
+
+#[test]
+fn send_midi_includes_selected_patch() {
+    let (port, rx) = spawn_sequential_response_server(vec![
+        ("HTTP/1.1 202 Accepted", "accepted"),
+        ("HTTP/1.1 202 Accepted", "accepted"),
+    ]);
+    let supervisor = RealtimePlayServerSupervisor::new(&cfg_for_port(port));
+    supervisor.remember_live_buffer_multiplier(4).unwrap();
+
+    supervisor
+        .send_midi(&[[0x90, 60, 100]], Some("patches_factory/Keys/Piano.fxp"))
+        .unwrap();
+
+    let buffer_request = rx.recv().unwrap();
+    assert_eq!(buffer_request.path, "/live-buffer");
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&buffer_request.body).unwrap(),
+        serde_json::json!({"multiplier": 4})
+    );
+    let request = rx.recv().unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
+    assert_eq!(
+        body,
+        serde_json::json!({
+            "messages": [[144, 60, 100]],
+            "patch": "patches_factory/Keys/Piano.fxp"
+        })
+    );
+}
+
+#[test]
+fn set_live_buffer_multiplier_posts_selected_depth() {
+    let (port, rx) = spawn_one_request_server("HTTP/1.1 202 Accepted", "accepted");
+    let supervisor = RealtimePlayServerSupervisor::new(&cfg_for_port(port));
+
+    supervisor.set_live_buffer_multiplier(8).unwrap();
+
+    let request = rx.recv().unwrap();
+    assert_eq!(request.path, "/live-buffer");
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&request.body).unwrap(),
+        serde_json::json!({"multiplier": 8})
+    );
+}
+
+#[test]
+fn prepare_live_patch_posts_selected_patch_and_waits_for_response() {
+    let (port, rx) = spawn_one_request_server("HTTP/1.1 204 No Content", "");
+    let supervisor = RealtimePlayServerSupervisor::new(&cfg_for_port(port));
+
+    supervisor
+        .prepare_live_patch(Some("patches_factory/Keys/Piano.fxp"))
+        .unwrap();
+
+    let request = rx.recv().unwrap();
+    assert_eq!(request.method, "POST");
+    assert_eq!(request.path, "/live-patch");
+    assert_eq!(
+        request.content_type.as_deref(),
+        Some(PLAY_CONTENT_TYPE_JSON)
+    );
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&request.body).unwrap(),
+        serde_json::json!({"patch": "patches_factory/Keys/Piano.fxp"})
+    );
+}
+
+#[test]
+fn prepare_live_patch_posts_null_for_init_saw() {
+    let (port, rx) = spawn_one_request_server("HTTP/1.1 204 No Content", "");
+    let supervisor = RealtimePlayServerSupervisor::new(&cfg_for_port(port));
+
+    supervisor.prepare_live_patch(None).unwrap();
+
+    let request = rx.recv().unwrap();
+    assert_eq!(request.path, "/live-patch");
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&request.body).unwrap(),
+        serde_json::json!({"patch": null})
+    );
+}
+
+#[test]
 fn play_mml_falls_back_to_play_when_server_lacks_play_mml() {
     // 旧サーバー（/play-mml 未対応 → 404）を模す。フォールバックで /play に SMF が届くこと。
     let (port, rx) = spawn_sequential_response_server(vec![

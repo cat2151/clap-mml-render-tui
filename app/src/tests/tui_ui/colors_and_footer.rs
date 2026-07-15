@@ -119,6 +119,27 @@ fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
     assert!(!screen.contains("notepad r log"));
     assert!(!screen.contains("selected list"));
     assert!(screen.contains("w:DAW"));
+    assert!(screen.contains("v:keyboard"));
+}
+
+#[test]
+fn keyboard_screen_shows_connecting_status_and_navigation() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::Keyboard;
+
+    let screen = render_lines(&mut app, 90, 10).join("\n");
+
+    assert!(screen.contains("[KEYBOARD] keyboard mode"));
+    assert!(screen.contains("transport: SHM"));
+    assert!(screen.contains("buffer: x4"));
+    assert!(screen.contains("server: idle"));
+    assert!(screen.contains("last send: -"));
+    assert!(screen.contains("connecting..."));
+    assert!(screen.contains("c d e f g a b are unavailable until ready"));
+    assert!(screen.contains("h:transport"));
+    assert!(screen.contains("Shift+H:buffer"));
+    assert!(screen.contains("n:notepad"));
+    assert!(screen.contains("w:DAW"));
 }
 
 #[test]

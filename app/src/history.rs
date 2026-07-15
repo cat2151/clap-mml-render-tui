@@ -24,7 +24,9 @@ pub(crate) use patch_phrase_store::{
 };
 pub(crate) use paths::daw_file_load_path;
 pub use paths::daw_file_path;
-pub use session_state::{load_session_state, save_session_state, SessionState};
+pub use session_state::{
+    load_session_state, save_session_state, KeyboardSessionState, KeyboardTransport, SessionState,
+};
 
 #[cfg(test)]
 use paths::{daw_session_state_path, history_dir, patch_phrase_store_path, session_state_path};

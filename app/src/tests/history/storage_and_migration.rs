@@ -170,6 +170,43 @@ fn load_session_state_migrates_from_legacy_data_local_history_json() {
 }
 
 #[test]
+fn load_session_state_normalizes_keyboard_restore_values() {
+    let tmp = std::env::temp_dir().join("cmrt_test_keyboard_history_normalize");
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
+
+    let path = super::session_state_path().unwrap();
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(
+        &path,
+        r#"{
+  "cursor": 1,
+  "lines": ["cde"],
+  "is_daw_mode": true,
+  "keyboard": {
+    "patch": "  ",
+    "transport": "http",
+    "buffer_multiplier": 3
+  }
+}"#,
+    )
+    .unwrap();
+
+    let state = load_session_state();
+    assert!(!state.is_daw_mode);
+    assert_eq!(
+        state.keyboard,
+        Some(KeyboardSessionState {
+            patch: None,
+            transport: KeyboardTransport::Http,
+            buffer_multiplier: 4,
+        })
+    );
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
 fn load_daw_session_state_migrates_from_legacy_history_daw_json() {
     let tmp = std::env::temp_dir().join("cmrt_test_legacy_history_daw_json_migrate");
     std::fs::remove_dir_all(&tmp).ok();

@@ -231,13 +231,14 @@ impl DawApp {
         )
     }
 
-    fn current_track_patch_name(&self) -> Option<String> {
+    pub(in crate::daw) fn current_track_patch_name(&self) -> Option<String> {
         if self.cursor_track < FIRST_PLAYABLE_TRACK {
             return None;
         }
         Self::extract_patch_phrase(&self.data[self.cursor_track][0])
             .map(|(patch_name, _)| patch_name)
             .map(|patch_name| self.resolve_patch_name(&patch_name).unwrap_or(patch_name))
+            .filter(|patch_name| !patch_name.trim().is_empty())
     }
 
     fn current_track_patch_filter_query(&self) -> Option<String> {

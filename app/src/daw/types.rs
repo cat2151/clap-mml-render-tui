@@ -171,6 +171,7 @@ pub enum DawPatchSelectPane {
 pub enum DawNormalAction {
     Continue,
     ReturnToTui,
+    LaunchKeyboard,
     QuitApp,
     EditConfig,
 }
@@ -179,6 +180,8 @@ pub enum DawNormalAction {
 pub enum DawExitReason {
     /// n キーで notepad へ切り替える
     ReturnToTui,
+    /// v キーでkeyboardへ切り替える
+    LaunchKeyboard { patch: Option<String> },
     /// q キーでアプリを終了する
     QuitApp,
     /// config.toml 編集後にアプリを再起動する
