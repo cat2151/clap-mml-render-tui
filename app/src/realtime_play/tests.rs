@@ -61,6 +61,39 @@ fn spawn_one_request_server(
     (port, rx)
 }
 
+/// 応答を順番に返すテストサーバー。応答を返し切ったら終了する。
+/// keep-alive による接続再利用を避けるため Connection: close を返す。
+fn spawn_sequential_response_server(
+    responses: Vec<(&'static str, &'static str)>,
+) -> (u16, mpsc::Receiver<CapturedRequest>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut responses = responses.into_iter();
+        for stream in listener.incoming() {
+            let mut stream = stream.unwrap();
+            let Some(request) = read_request(&mut stream) else {
+                continue;
+            };
+            let Some((status_line, body)) = responses.next() else {
+                break;
+            };
+            write!(
+                stream,
+                "{status_line}\r\nContent-Length: {}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+            tx.send(request).unwrap();
+            if responses.len() == 0 {
+                break;
+            }
+        }
+    });
+    (port, rx)
+}
+
 fn read_request(stream: &mut TcpStream) -> Option<CapturedRequest> {
     let mut reader = BufReader::new(stream);
     let mut first_line = String::new();
@@ -114,6 +147,54 @@ fn play_smf_posts_binary_body_to_play_endpoint() {
     assert_eq!(request.content_type.as_deref(), Some("audio/midi"));
     assert_eq!(request.body, vec![0, 1, 2, 255]);
     assert_eq!(supervisor.spawn_count_for_test(), 0);
+}
+
+#[test]
+fn play_mml_posts_text_body_to_play_mml_endpoint() {
+    let (port, rx) = spawn_one_request_server("HTTP/1.1 202 Accepted", "accepted");
+    let supervisor = RealtimePlayServerSupervisor::new(&cfg_for_port(port));
+
+    let mml = "{\"Surge XT patch\": \"Keys/DX EP.fxp\"}cde";
+    supervisor.play_mml(mml, vec![0, 1, 2]).unwrap();
+
+    let request = rx.recv().unwrap();
+    assert_eq!(request.method, "POST");
+    assert_eq!(request.path, PLAY_SERVER_PLAY_MML_PATH);
+    assert_eq!(request.content_type.as_deref(), Some(PLAY_CONTENT_TYPE_MML));
+    assert_eq!(request.body, mml.as_bytes());
+    assert_eq!(supervisor.spawn_count_for_test(), 0);
+}
+
+#[test]
+fn play_mml_falls_back_to_play_when_server_lacks_play_mml() {
+    // 旧サーバー（/play-mml 未対応 → 404）を模す。フォールバックで /play に SMF が届くこと。
+    let (port, rx) = spawn_sequential_response_server(vec![
+        ("HTTP/1.1 404 Not Found", "not found"),
+        ("HTTP/1.1 202 Accepted", "accepted"),
+    ]);
+    let supervisor = RealtimePlayServerSupervisor::new(&cfg_for_port(port));
+
+    supervisor.play_mml("cde", vec![9, 8, 7]).unwrap();
+
+    let first = rx.recv().unwrap();
+    assert_eq!(first.path, PLAY_SERVER_PLAY_MML_PATH);
+    let second = rx.recv().unwrap();
+    assert_eq!(second.path, PLAY_SERVER_PLAY_PATH);
+    assert_eq!(second.content_type.as_deref(), Some(PLAY_CONTENT_TYPE_MIDI));
+    assert_eq!(second.body, vec![9, 8, 7]);
+    assert_eq!(supervisor.spawn_count_for_test(), 0);
+}
+
+#[test]
+fn play_mml_returns_server_error_without_fallback() {
+    let (port, _rx) = spawn_one_request_server("HTTP/1.1 500 Internal Server Error", "boom");
+    let supervisor = RealtimePlayServerSupervisor::new(&cfg_for_port(port));
+
+    let error = supervisor.play_mml("cde", vec![0]).unwrap_err();
+
+    assert!(error
+        .to_string()
+        .contains("realtime play server returned HTTP 500: boom"));
 }
 
 #[test]

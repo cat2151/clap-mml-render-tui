@@ -172,7 +172,10 @@ fn requested_patch_path_for_render(mml: &str, cfg: &CoreConfig) -> Option<String
         .or_else(|| cfg.patch_path.clone())
 }
 
-fn mml_with_resolved_embedded_patch<'a>(mml: &'a str, cfg: &CoreConfig) -> Cow<'a, str> {
+/// MML 先頭 JSON の `"Surge XT patch"` を解決済みのパス
+/// （`patches_factory` 等のプレフィックス補完込み）に書き換えた MML を返す。
+/// play server など JSON 込み MML を受け取る外部プロセスへ渡す前の正規化に使う。
+pub fn mml_with_resolved_embedded_patch<'a>(mml: &'a str, cfg: &CoreConfig) -> Cow<'a, str> {
     let preprocessed = mml_preprocessor::extract_embedded_json(mml);
     let Some(resolved_patch) = extract_patch_from_json(preprocessed.embedded_json.as_deref(), cfg)
     else {

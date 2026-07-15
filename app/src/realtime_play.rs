@@ -14,7 +14,10 @@ use anyhow::{anyhow, Context as _, Result};
 use crate::config::Config;
 
 const PLAY_SERVER_PLAY_PATH: &str = "/play";
+const PLAY_SERVER_PLAY_MML_PATH: &str = "/play-mml";
 const PLAY_SERVER_STOP_PATH: &str = "/stop";
+const PLAY_CONTENT_TYPE_MIDI: &str = "audio/midi";
+const PLAY_CONTENT_TYPE_MML: &str = "text/plain; charset=utf-8";
 const PLAY_SERVER_CONNECT_TIMEOUT: Duration = Duration::from_millis(150);
 const PLAY_SERVER_START_TIMEOUT: Duration = Duration::from_secs(30);
 const PLAY_SERVER_START_POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -36,7 +39,7 @@ struct PlayServerState {
 }
 
 enum PlayRequestError {
-    Server(String),
+    Server { status: u16, message: String },
     Transport(String),
 }
 
@@ -69,11 +72,48 @@ impl RealtimePlayServerSupervisor {
             let server_generation = self.ensure_started()?;
             match self.send_play_once(&smf_bytes) {
                 Ok(()) => return Ok(()),
-                Err(PlayRequestError::Server(message)) => return Err(anyhow!(message)),
+                Err(PlayRequestError::Server { message, .. }) => return Err(anyhow!(message)),
                 Err(PlayRequestError::Transport(message)) => {
                     retry += 1;
                     log_realtime_play_event(format!(
                         "request_id={request_id} action=play retry={retry} transport_error=\"{}\"",
+                        truncate_for_log(&message, 160)
+                    ));
+                    self.recover_after_transport_failure(server_generation)?;
+                }
+            }
+        }
+    }
+
+    /// MML（行頭の音色 JSON 込み）を /play-mml へ送る。
+    /// 旧サーバー（/play-mml 未対応）の場合は /play へ SMF でフォールバックする
+    /// （音色は反映されないが従来どおり再生される）。
+    pub(crate) fn play_mml(&self, mml: &str, fallback_smf: Vec<u8>) -> Result<()> {
+        let request_id = self.next_request_id.fetch_add(1, Ordering::Relaxed);
+        log_realtime_play_event(format!(
+            "request_id={request_id} action=play-mml retry=0 chars={}",
+            mml.chars().count()
+        ));
+
+        let mut retry = 0;
+        loop {
+            let server_generation = self.ensure_started()?;
+            match self.send_play_mml_once(mml) {
+                Ok(()) => return Ok(()),
+                Err(PlayRequestError::Server {
+                    status: 404 | 405, ..
+                }) => {
+                    log_realtime_play_event(format!(
+                        "request_id={request_id} action=play-mml fallback=play \
+                         reason=\"play server does not support /play-mml (update the server)\""
+                    ));
+                    return self.play_smf(fallback_smf);
+                }
+                Err(PlayRequestError::Server { message, .. }) => return Err(anyhow!(message)),
+                Err(PlayRequestError::Transport(message)) => {
+                    retry += 1;
+                    log_realtime_play_event(format!(
+                        "request_id={request_id} action=play-mml retry={retry} transport_error=\"{}\"",
                         truncate_for_log(&message, 160)
                     ));
                     self.recover_after_transport_failure(server_generation)?;
@@ -93,7 +133,7 @@ impl RealtimePlayServerSupervisor {
 
         match self.send_stop_once() {
             Ok(()) => Ok(()),
-            Err(PlayRequestError::Server(message)) => Err(anyhow!(message)),
+            Err(PlayRequestError::Server { message, .. }) => Err(anyhow!(message)),
             Err(PlayRequestError::Transport(message)) => {
                 log_realtime_play_event(format!(
                     "request_id={request_id} action=stop transport_error=\"{}\"",
@@ -197,7 +237,17 @@ impl RealtimePlayServerSupervisor {
     }
 
     fn send_play_once(&self, smf_bytes: &[u8]) -> std::result::Result<(), PlayRequestError> {
-        self.send_post_bytes(PLAY_SERVER_PLAY_PATH, Some(smf_bytes))
+        self.send_post_bytes(
+            PLAY_SERVER_PLAY_PATH,
+            Some((PLAY_CONTENT_TYPE_MIDI, smf_bytes)),
+        )
+    }
+
+    fn send_play_mml_once(&self, mml: &str) -> std::result::Result<(), PlayRequestError> {
+        self.send_post_bytes(
+            PLAY_SERVER_PLAY_MML_PATH,
+            Some((PLAY_CONTENT_TYPE_MML, mml.as_bytes())),
+        )
     }
 
     fn send_stop_once(&self) -> std::result::Result<(), PlayRequestError> {
@@ -207,20 +257,22 @@ impl RealtimePlayServerSupervisor {
     fn send_post_bytes(
         &self,
         path: &str,
-        body: Option<&[u8]>,
+        body: Option<(&str, &[u8])>,
     ) -> std::result::Result<(), PlayRequestError> {
         let url = format!("http://127.0.0.1:{}{}", self.port, path);
         let request = self.agent.post(&url);
         let response = match body {
-            Some(body) => request.set("Content-Type", "audio/midi").send_bytes(body),
+            Some((content_type, body)) => {
+                request.set("Content-Type", content_type).send_bytes(body)
+            }
             None => request.send_bytes(&[]),
         };
         match response {
             Ok(response) if (200..300).contains(&response.status()) => Ok(()),
-            Ok(response) => Err(PlayRequestError::Server(format!(
-                "realtime play server returned HTTP {}",
-                response.status()
-            ))),
+            Ok(response) => Err(PlayRequestError::Server {
+                status: response.status(),
+                message: format!("realtime play server returned HTTP {}", response.status()),
+            }),
             Err(ureq::Error::Status(status, response)) => {
                 let body = response_body(response);
                 let body = body.trim();
@@ -229,7 +281,7 @@ impl RealtimePlayServerSupervisor {
                 } else {
                     format!("realtime play server returned HTTP {status}: {body}")
                 };
-                Err(PlayRequestError::Server(message))
+                Err(PlayRequestError::Server { status, message })
             }
             Err(ureq::Error::Transport(error)) => {
                 Err(PlayRequestError::Transport(error.to_string()))
