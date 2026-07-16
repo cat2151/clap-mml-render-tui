@@ -7,7 +7,10 @@ use ratatui::{
 };
 
 use super::{status::base_style, status::visible_list_page_size, LIST_HIGHLIGHT_SYMBOL};
-use crate::tui::keyboard::{KeyboardConnectionPhase, KeyboardPatchCatalogStatus, KEYBOARD_NOTES};
+use crate::tui::keyboard::{
+    KeyboardConnectionPhase, KeyboardPatchCatalogStatus, NumericInput, NumericInputTarget,
+    KEYBOARD_NOTES,
+};
 use crate::tui::TuiApp;
 use crate::ui_theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_PURPLE};
 
@@ -18,7 +21,7 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
         .constraints([
             Constraint::Min(5),
             Constraint::Length(1),
-            Constraint::Length(2),
+            Constraint::Length(3),
         ])
         .split(f.area());
     let panes = Layout::default()
@@ -60,11 +63,18 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
         Paragraph::new(vec![
             Line::from("Up/Down:patch -/+1  PgUp/PgDn:patch -/+10  Home/End:category -/+1"),
             Line::from("c d e f g a b:note  h:transport  Shift+H:buffer  n:notepad  w:DAW  q:quit"),
+            Line::from("v:velocity 100/127  m:mod(CC1) on/off  x:CC#  z:CC value"),
         ])
         .style(base_style()),
         chunks[2],
     );
     draw_connection_overlay(&connection.phase, f, panes[0]);
+    draw_numeric_input_overlay(
+        app.keyboard_state.numeric_input(),
+        app.keyboard_state.cc_number(),
+        f,
+        panes[0],
+    );
 }
 
 fn draw_keyboard(app: &TuiApp<'_>, f: &mut Frame<'_>, area: Rect) {
@@ -87,6 +97,19 @@ fn draw_keyboard(app: &TuiApp<'_>, f: &mut Frame<'_>, area: Rect) {
             format!(
                 "Patch: {}",
                 app.keyboard_state.patch().unwrap_or("init saw")
+            ),
+            base_style(),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "Vel: {}  Mod: {}  CC#: {}",
+                app.keyboard_state.velocity(),
+                if app.keyboard_state.modulation_on() {
+                    "ON"
+                } else {
+                    "OFF"
+                },
+                app.keyboard_state.cc_number()
             ),
             base_style(),
         )),
@@ -259,6 +282,45 @@ fn draw_connection_overlay(
     );
 }
 
+fn draw_numeric_input_overlay(
+    input: Option<&NumericInput>,
+    cc_number: u8,
+    f: &mut Frame<'_>,
+    keyboard_area: Rect,
+) {
+    let Some(input) = input else {
+        return;
+    };
+    let (title, label) = match input.target() {
+        NumericInputTarget::CcNumber => (" CC number ", "CC番号を入力".to_string()),
+        NumericInputTarget::CcValue => {
+            (" CC value ", format!("CC値を入力 (CC#{cc_number} へ送信)"))
+        }
+    };
+    let lines = vec![
+        Line::from(format!("{label}: {}_", input.buffer())),
+        Line::from("Enter:確定  Esc:cancel"),
+    ];
+    let width = keyboard_area.width.saturating_sub(2).min(48);
+    let height = 4.min(keyboard_area.height);
+    let area = crate::ui_utils::centered_rect_with_size(width, height, keyboard_area);
+    f.render_widget(Clear, area);
+    f.render_widget(
+        Paragraph::new(lines)
+            .alignment(Alignment::Center)
+            .wrap(Wrap { trim: true })
+            .style(base_style())
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(title)
+                    .style(base_style())
+                    .border_style(base_style().fg(MONOKAI_GREEN)),
+            ),
+        area,
+    );
+}
+
 fn format_send_duration(duration: std::time::Duration) -> String {
     let micros = duration.as_secs_f64() * 1_000_000.0;
     if micros < 1_000.0 {
@@ -282,83 +344,5 @@ fn active_notes_text(state: &crate::tui::keyboard::KeyboardState) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::tui::keyboard::KeyboardState;
-    use ratatui::{backend::TestBackend, Terminal};
-
-    fn render_overlay(phase: KeyboardConnectionPhase) -> String {
-        let backend = TestBackend::new(80, 12);
-        let mut terminal = Terminal::new(backend).unwrap();
-        terminal
-            .draw(|f| draw_connection_overlay(&phase, f, f.area()))
-            .unwrap();
-        let buffer = terminal.backend().buffer();
-        (0..buffer.area.height)
-            .map(|y| {
-                (0..buffer.area.width)
-                    .map(|x| buffer.cell((x, y)).unwrap().symbol())
-                    .collect::<String>()
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-
-    #[test]
-    fn active_notes_text_lists_every_held_note_in_press_order() {
-        let mut state = KeyboardState::default();
-        assert!(state.press(KEYBOARD_NOTES[0]).is_some());
-        assert!(state.press(KEYBOARD_NOTES[2]).is_some());
-        assert!(state.press(KEYBOARD_NOTES[4]).is_some());
-
-        assert_eq!(active_notes_text(&state), "Active: C4 E4 G4");
-    }
-
-    #[test]
-    fn active_notes_text_shows_dash_when_no_notes_are_held() {
-        assert_eq!(active_notes_text(&KeyboardState::default()), "Active: -");
-    }
-
-    #[test]
-    fn send_duration_uses_microseconds_then_milliseconds() {
-        assert_eq!(
-            format_send_duration(std::time::Duration::from_micros(42)),
-            "42 us"
-        );
-        assert_eq!(
-            format_send_duration(std::time::Duration::from_micros(12_345)),
-            "12.3 ms"
-        );
-    }
-
-    #[test]
-    fn connecting_overlay_explains_that_notes_are_unavailable() {
-        let screen = render_overlay(KeyboardConnectionPhase::Connecting);
-
-        assert!(screen.contains("connecting..."));
-        assert!(screen.contains("notes unavailable until ready"));
-    }
-
-    #[test]
-    fn error_overlay_shows_retry_navigation() {
-        let screen = render_overlay(KeyboardConnectionPhase::Error("server failed".to_string()));
-
-        assert!(screen.contains("server error: server failed"));
-        assert!(screen.contains("r:retry"));
-    }
-
-    #[test]
-    fn patch_setting_overlay_remains_until_patch_is_ready() {
-        let screen = render_overlay(KeyboardConnectionPhase::PatchSetting);
-
-        assert!(screen.contains("patch setting..."));
-        assert!(screen.contains("notes unavailable until ready"));
-    }
-
-    #[test]
-    fn ready_connection_does_not_draw_an_overlay() {
-        assert!(render_overlay(KeyboardConnectionPhase::Ready)
-            .chars()
-            .all(char::is_whitespace));
-    }
-}
+#[path = "keyboard_tests.rs"]
+mod tests;

@@ -270,7 +270,7 @@ impl<'a> TuiApp<'a> {
         if previous_patch.as_deref() == Some(patch.as_str()) {
             return;
         }
-        let note_offs = self.keyboard_state.take_note_offs();
+        let note_offs = self.keyboard_state.take_reset_messages();
         self.keyboard_state.patch = Some(patch.clone());
         if let Some(sender) = &self.keyboard_midi_sender {
             sender.set_patch(note_offs, previous_patch.as_deref(), Some(&patch));

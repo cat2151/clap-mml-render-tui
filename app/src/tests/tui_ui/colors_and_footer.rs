@@ -127,7 +127,7 @@ fn keyboard_screen_shows_connecting_status_and_navigation() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::Keyboard;
 
-    let screen = render_lines(&mut app, 90, 10).join("\n");
+    let screen = render_lines(&mut app, 90, 14).join("\n");
 
     assert!(screen.contains("[KEYBOARD] keyboard mode"));
     assert!(screen.contains("transport: SHM"));
@@ -140,6 +140,13 @@ fn keyboard_screen_shows_connecting_status_and_navigation() {
     assert!(screen.contains("Shift+H:buffer"));
     assert!(screen.contains("n:notepad"));
     assert!(screen.contains("w:DAW"));
+    assert!(screen.contains("v:velocity 100/127"));
+    assert!(screen.contains("m:mod(CC1) on/off"));
+    assert!(screen.contains("x:CC#"));
+    assert!(screen.contains("z:CC value"));
+    assert!(screen.contains("Vel: 100"));
+    assert!(screen.contains("Mod: OFF"));
+    assert!(screen.contains("CC#: 1"));
 }
 
 #[test]
