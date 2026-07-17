@@ -48,6 +48,68 @@ fn active_notes_text_shows_dash_when_no_notes_are_held() {
 }
 
 #[test]
+fn controller_status_text_shows_defaults() {
+    assert_eq!(
+        controller_status_text(&KeyboardState::default()),
+        "Vel: 100  Mod: OFF  PB: -  CC#: 1"
+    );
+}
+
+#[test]
+fn controller_status_text_shows_periodic_modes() {
+    let mut state = KeyboardState::default();
+    let now = std::time::Instant::now();
+    state.cycle_velocity(now);
+    state.cycle_velocity(now); // Periodic(velocity=100)
+    state.cycle_modulation(now);
+    state.cycle_modulation(now); // Periodic
+    for _ in 0..5 {
+        state.cycle_pitch_bend(now); // Periodicまで進める
+    }
+    state.toggle_cc_periodic(now);
+
+    assert_eq!(
+        controller_status_text(&state),
+        "Vel: cyc(100)  Mod: CYC  PB: CYC  CC#: 1 cyc"
+    );
+}
+
+#[test]
+fn controller_status_text_shows_fixed_pitch_bend_values() {
+    let mut state = KeyboardState::default();
+    let now = std::time::Instant::now();
+    state.cycle_pitch_bend(now);
+    assert!(controller_status_text(&state).contains("PB: +8191"));
+    state.cycle_pitch_bend(now);
+    assert!(controller_status_text(&state).contains("PB: 0"));
+    state.cycle_pitch_bend(now);
+    assert!(controller_status_text(&state).contains("PB: -8192"));
+    state.cycle_pitch_bend(now);
+    assert!(controller_status_text(&state).contains("PB: 0"));
+    state.cycle_pitch_bend(now);
+    assert!(controller_status_text(&state).contains("PB: CYC"));
+    state.cycle_pitch_bend(now);
+    assert!(controller_status_text(&state).contains("PB: 0"));
+    state.cycle_pitch_bend(now);
+    assert!(controller_status_text(&state).contains("PB: +8191"));
+}
+
+#[test]
+fn repeat_status_text_shows_dash_when_off_and_chord_when_on() {
+    let mut state = KeyboardState::default();
+    assert_eq!(repeat_status_text(&state), "Repeat: -");
+
+    assert!(state.press(KEYBOARD_NOTES[0]).is_some());
+    assert!(state.press(KEYBOARD_NOTES[2]).is_some());
+    assert!(state.press(KEYBOARD_NOTES[4]).is_some());
+    let _ = state.toggle_note_repeat(std::time::Instant::now());
+    assert_eq!(repeat_status_text(&state), "Repeat: C4 E4 G4");
+
+    let _ = state.toggle_note_repeat(std::time::Instant::now());
+    assert_eq!(repeat_status_text(&state), "Repeat: -");
+}
+
+#[test]
 fn send_duration_uses_microseconds_then_milliseconds() {
     assert_eq!(
         format_send_duration(std::time::Duration::from_micros(42)),

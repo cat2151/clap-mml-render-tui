@@ -155,6 +155,9 @@ impl<'a> TuiApp<'a> {
                 )?;
                 uses_textarea_cursor = next_uses_textarea_cursor;
             }
+            if self.mode == Mode::Keyboard {
+                self.pump_keyboard_periodic();
+            }
             terminal.draw(|f| self.draw(f))?;
             if !self.startup_normal_cache_primed && self.mode == Mode::Normal {
                 *self.known_disk_cache_hashes.lock().unwrap() =

@@ -8,8 +8,8 @@ use ratatui::{
 
 use super::{status::base_style, status::visible_list_page_size, LIST_HIGHLIGHT_SYMBOL};
 use crate::tui::keyboard::{
-    KeyboardConnectionPhase, KeyboardPatchCatalogStatus, NumericInput, NumericInputTarget,
-    KEYBOARD_NOTES,
+    KeyboardConnectionPhase, KeyboardPatchCatalogStatus, KeyboardState, ModulationMode,
+    NumericInput, NumericInputTarget, PitchBendMode, VelocityMode, KEYBOARD_NOTES,
 };
 use crate::tui::TuiApp;
 use crate::ui_theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_PURPLE};
@@ -63,7 +63,9 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
         Paragraph::new(vec![
             Line::from("Up/Down:patch -/+1  PgUp/PgDn:patch -/+10  Home/End:category -/+1"),
             Line::from("c d e f g a b:note  h:transport  Shift+H:buffer  n:notepad  w:DAW  q:quit"),
-            Line::from("v:velocity 100/127  m:mod(CC1) on/off  x:CC#  z:CC value"),
+            Line::from(
+                "v:velocity  m:mod(CC1)  p:pitch bend  t:repeat  x:CC#  z:CC value  Shift+Z:CC cycle",
+            ),
         ])
         .style(base_style()),
         chunks[2],
@@ -101,16 +103,11 @@ fn draw_keyboard(app: &TuiApp<'_>, f: &mut Frame<'_>, area: Rect) {
             base_style(),
         )),
         Line::from(Span::styled(
-            format!(
-                "Vel: {}  Mod: {}  CC#: {}",
-                app.keyboard_state.velocity(),
-                if app.keyboard_state.modulation_on() {
-                    "ON"
-                } else {
-                    "OFF"
-                },
-                app.keyboard_state.cc_number()
-            ),
+            controller_status_text(&app.keyboard_state),
+            base_style(),
+        )),
+        Line::from(Span::styled(
+            repeat_status_text(&app.keyboard_state),
             base_style(),
         )),
     ];
@@ -328,6 +325,46 @@ fn format_send_duration(duration: std::time::Duration) -> String {
     } else {
         format!("{:.1} ms", micros / 1_000.0)
     }
+}
+
+fn controller_status_text(state: &KeyboardState) -> String {
+    let velocity = match state.velocity_mode() {
+        VelocityMode::Periodic => format!("cyc({})", state.velocity()),
+        VelocityMode::Normal | VelocityMode::Accent => state.velocity().to_string(),
+    };
+    let modulation = match state.modulation_mode() {
+        ModulationMode::Off => "OFF",
+        ModulationMode::On => "ON",
+        ModulationMode::Periodic => "CYC",
+    };
+    let pitch_bend = match state.pitch_bend_mode() {
+        PitchBendMode::Idle => "-",
+        PitchBendMode::Max => "+8191",
+        PitchBendMode::Min => "-8192",
+        PitchBendMode::CenterAfterMax
+        | PitchBendMode::CenterAfterMin
+        | PitchBendMode::CenterAfterCycle => "0",
+        PitchBendMode::Periodic => "CYC",
+    };
+    let cc = if state.cc_periodic_on() {
+        format!("{} cyc", state.cc_number())
+    } else {
+        state.cc_number().to_string()
+    };
+    format!("Vel: {velocity}  Mod: {modulation}  PB: {pitch_bend}  CC#: {cc}")
+}
+
+fn repeat_status_text(state: &KeyboardState) -> String {
+    if !state.note_repeat_on() {
+        return "Repeat: -".to_string();
+    }
+    let names = state
+        .repeat_chord()
+        .iter()
+        .map(|note| note.name)
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!("Repeat: {names}")
 }
 
 fn active_notes_text(state: &crate::tui::keyboard::KeyboardState) -> String {

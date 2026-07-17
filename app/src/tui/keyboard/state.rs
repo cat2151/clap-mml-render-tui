@@ -1,0 +1,359 @@
+use std::time::{Duration, Instant};
+
+use crossterm::event::KeyCode;
+
+use super::{KeyboardPatchCatalog, NumericInput, NumericInputTarget};
+use crate::history::{KeyboardSessionState, KeyboardTransport};
+
+mod periodic;
+
+pub(in crate::tui) const KEYBOARD_NOTES: [KeyboardNote; 7] = [
+    KeyboardNote::new('c', "C4", 60),
+    KeyboardNote::new('d', "D4", 62),
+    KeyboardNote::new('e', "E4", 64),
+    KeyboardNote::new('f', "F4", 65),
+    KeyboardNote::new('g', "G4", 67),
+    KeyboardNote::new('a', "A4", 69),
+    KeyboardNote::new('b', "B4", 71),
+];
+
+const NOTE_ON: u8 = 0x90;
+const NOTE_OFF: u8 = 0x80;
+const CONTROL_CHANGE: u8 = 0xB0;
+const MODULATION_CC: u8 = 1;
+const DEFAULT_VELOCITY: u8 = 100;
+const ACCENT_VELOCITY: u8 = 127;
+const DEFAULT_CC_NUMBER: u8 = MODULATION_CC;
+const MODULATION_MAX: u8 = 127;
+const CC_MAX: u8 = 127;
+const PITCH_BEND: u8 = 0xE0;
+// 14bit値: center=8192, +8191=16383, -8192=0
+const PITCH_BEND_CENTER: u16 = 8192;
+const PITCH_BEND_MAX: u16 = 16383;
+const PITCH_BEND_MIN: u16 = 0;
+// pitch bend周期mode(4値循環)の送信順
+const PITCH_BEND_CYCLE: [u16; 4] = [
+    PITCH_BEND_MAX,
+    PITCH_BEND_CENTER,
+    PITCH_BEND_MIN,
+    PITCH_BEND_CENTER,
+];
+const PERIODIC_INTERVAL: Duration = Duration::from_secs(1);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub(in crate::tui) enum VelocityMode {
+    #[default]
+    Normal,
+    Accent,
+    Periodic,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub(in crate::tui) enum ModulationMode {
+    #[default]
+    Off,
+    On,
+    Periodic,
+}
+
+// Idleは「一度もpを押していない」初期状態。
+// サイクルはIdle→Max→CenterAfterMax→Min→CenterAfterMin→Periodic→CenterAfterCycle→Max→…
+// (+8191, 0, -8192, 0, 4値循環, 0 の6段。Idleには戻らない)
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub(in crate::tui) enum PitchBendMode {
+    #[default]
+    Idle,
+    Max,
+    CenterAfterMax,
+    Min,
+    CenterAfterMin,
+    Periodic,
+    CenterAfterCycle,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::tui) struct KeyboardNote {
+    pub(in crate::tui) key: char,
+    pub(in crate::tui) name: &'static str,
+    pub(in crate::tui) midi_note: u8,
+}
+
+impl KeyboardNote {
+    const fn new(key: char, name: &'static str, midi_note: u8) -> Self {
+        Self {
+            key,
+            name,
+            midi_note,
+        }
+    }
+}
+
+pub(crate) struct KeyboardState {
+    held: Vec<KeyboardNote>,
+    pub(super) patch: Option<String>,
+    transport: KeyboardTransport,
+    buffer_multiplier: u8,
+    velocity: u8,
+    velocity_mode: VelocityMode,
+    velocity_next_at: Option<Instant>,
+    modulation_mode: ModulationMode,
+    // 周期mode中に「次に送る値」が127かどうか
+    modulation_phase_high: bool,
+    modulation_next_at: Option<Instant>,
+    pitch_bend_mode: PitchBendMode,
+    // 周期mode中に「次に送る値」のPITCH_BEND_CYCLE index
+    pitch_bend_phase: usize,
+    pitch_bend_next_at: Option<Instant>,
+    cc_number: u8,
+    cc_periodic_on: bool,
+    cc_phase_high: bool,
+    cc_next_at: Option<Instant>,
+    note_repeat_on: bool,
+    // 最後に押した和音(同時押しの集合)。releaseしても保持する
+    repeat_chord: Vec<KeyboardNote>,
+    // note repeatで現在発音中のノート
+    repeat_sounding: Vec<KeyboardNote>,
+    note_repeat_next_at: Option<Instant>,
+    // patch切替完了(Ready復帰)時にコントローラ現在値を再送するフラグ
+    refresh_pending: bool,
+    numeric_input: Option<NumericInput>,
+    pub(in crate::tui) patch_catalog: KeyboardPatchCatalog,
+}
+
+impl Default for KeyboardState {
+    fn default() -> Self {
+        Self::new(None)
+    }
+}
+
+impl KeyboardState {
+    pub(super) fn new(patch: Option<String>) -> Self {
+        Self::from_session(KeyboardSessionState {
+            patch,
+            ..KeyboardSessionState::default()
+        })
+    }
+
+    pub(in crate::tui) fn from_session(session: KeyboardSessionState) -> Self {
+        Self {
+            held: Vec::new(),
+            patch: session
+                .patch
+                .and_then(|patch| (!patch.trim().is_empty()).then_some(patch)),
+            transport: session.transport,
+            buffer_multiplier: session.buffer_multiplier,
+            velocity: DEFAULT_VELOCITY,
+            velocity_mode: VelocityMode::default(),
+            velocity_next_at: None,
+            modulation_mode: ModulationMode::default(),
+            modulation_phase_high: false,
+            modulation_next_at: None,
+            pitch_bend_mode: PitchBendMode::default(),
+            pitch_bend_phase: 0,
+            pitch_bend_next_at: None,
+            cc_number: DEFAULT_CC_NUMBER,
+            cc_periodic_on: false,
+            cc_phase_high: false,
+            cc_next_at: None,
+            note_repeat_on: false,
+            repeat_chord: Vec::new(),
+            repeat_sounding: Vec::new(),
+            note_repeat_next_at: None,
+            refresh_pending: false,
+            numeric_input: None,
+            patch_catalog: KeyboardPatchCatalog::default(),
+        }
+    }
+
+    pub(in crate::tui) fn session_state(&self) -> KeyboardSessionState {
+        KeyboardSessionState {
+            patch: self.patch.clone(),
+            transport: self.transport,
+            buffer_multiplier: self.buffer_multiplier,
+        }
+    }
+
+    pub(in crate::tui) fn held(&self) -> &[KeyboardNote] {
+        &self.held
+    }
+
+    pub(in crate::tui) fn patch(&self) -> Option<&str> {
+        self.patch.as_deref()
+    }
+
+    pub(in crate::tui) fn buffer_multiplier(&self) -> u8 {
+        self.buffer_multiplier
+    }
+
+    pub(in crate::tui) fn transport(&self) -> KeyboardTransport {
+        self.transport
+    }
+
+    pub(in crate::tui) fn velocity(&self) -> u8 {
+        self.velocity
+    }
+
+    pub(in crate::tui) fn velocity_mode(&self) -> VelocityMode {
+        self.velocity_mode
+    }
+
+    pub(in crate::tui) fn modulation_mode(&self) -> ModulationMode {
+        self.modulation_mode
+    }
+
+    pub(in crate::tui) fn pitch_bend_mode(&self) -> PitchBendMode {
+        self.pitch_bend_mode
+    }
+
+    pub(in crate::tui) fn cc_periodic_on(&self) -> bool {
+        self.cc_periodic_on
+    }
+
+    pub(in crate::tui) fn note_repeat_on(&self) -> bool {
+        self.note_repeat_on
+    }
+
+    pub(in crate::tui) fn repeat_chord(&self) -> &[KeyboardNote] {
+        &self.repeat_chord
+    }
+
+    pub(in crate::tui) fn cc_number(&self) -> u8 {
+        self.cc_number
+    }
+
+    pub(in crate::tui) fn numeric_input(&self) -> Option<&NumericInput> {
+        self.numeric_input.as_ref()
+    }
+
+    pub(in crate::tui) fn begin_numeric_input(&mut self, target: NumericInputTarget) {
+        self.numeric_input = Some(NumericInput::new(target));
+    }
+
+    pub(in crate::tui) fn numeric_input_push(&mut self, digit: char) {
+        if let Some(input) = &mut self.numeric_input {
+            input.push(digit);
+        }
+    }
+
+    pub(super) fn numeric_input_backspace(&mut self) {
+        if let Some(input) = &mut self.numeric_input {
+            input.backspace();
+        }
+    }
+
+    pub(super) fn cancel_numeric_input(&mut self) {
+        self.numeric_input = None;
+    }
+
+    pub(super) fn confirm_numeric_input(&mut self) -> Option<[u8; 3]> {
+        let input = self.numeric_input.take()?;
+        let value = input.confirmed_value()?;
+        match input.target() {
+            NumericInputTarget::CcNumber => {
+                self.cc_number = value;
+                None
+            }
+            NumericInputTarget::CcValue => Some([CONTROL_CHANGE, self.cc_number, value]),
+        }
+    }
+
+    pub(super) fn toggle_transport(&mut self) -> KeyboardTransport {
+        self.transport = self.transport.toggled();
+        self.transport
+    }
+
+    pub(super) fn cycle_buffer_multiplier(&mut self) -> u8 {
+        self.buffer_multiplier = match self.buffer_multiplier {
+            1 => 2,
+            2 => 4,
+            4 => 8,
+            _ => 1,
+        };
+        self.buffer_multiplier
+    }
+
+    pub(in crate::tui) fn press(&mut self, note: KeyboardNote) -> Option<Vec<[u8; 3]>> {
+        if self.held.iter().any(|held| held.key == note.key) {
+            return None;
+        }
+        // 単独押しなら新しい和音の開始、他ノート押下中なら和音へ追加
+        if self.held.is_empty() {
+            self.repeat_chord.clear();
+        }
+        if !self.repeat_chord.iter().any(|held| held.key == note.key) {
+            self.repeat_chord.push(note);
+        }
+        self.held.push(note);
+        Some(vec![note_on(note, self.velocity)])
+    }
+
+    pub(super) fn release(&mut self, note: KeyboardNote) -> Option<Vec<[u8; 3]>> {
+        let index = self.held.iter().position(|held| held.key == note.key)?;
+        self.held.remove(index);
+        Some(vec![note_off(note)])
+    }
+
+    // patch切替用: 発音中ノートのoffのみ送出し、自動送信系のmodeは維持する。
+    // Ready復帰時にtake_pending_refresh_messagesがコントローラ現在値を再送する。
+    pub(super) fn take_note_off_messages(&mut self) -> Vec<[u8; 3]> {
+        let mut messages: Vec<[u8; 3]> = self.held.drain(..).map(note_off).collect();
+        messages.extend(self.repeat_sounding.drain(..).map(note_off));
+        self.refresh_pending = true;
+        messages
+    }
+
+    pub(in crate::tui) fn take_reset_messages(&mut self) -> Vec<[u8; 3]> {
+        let mut messages: Vec<[u8; 3]> = self.held.drain(..).map(note_off).collect();
+        self.note_repeat_on = false;
+        self.note_repeat_next_at = None;
+        messages.extend(self.repeat_sounding.drain(..).map(note_off));
+        if self.velocity_mode == VelocityMode::Periodic {
+            // 周期を止め、現在値に対応する固定modeへ降格(velocityは送信対象外)
+            self.velocity_mode = if self.velocity == ACCENT_VELOCITY {
+                VelocityMode::Accent
+            } else {
+                VelocityMode::Normal
+            };
+        }
+        self.velocity_next_at = None;
+        if self.modulation_mode != ModulationMode::Off {
+            self.modulation_mode = ModulationMode::Off;
+            messages.push([CONTROL_CHANGE, MODULATION_CC, 0]);
+        }
+        self.modulation_next_at = None;
+        if self.pitch_bend_mode != PitchBendMode::Idle {
+            self.pitch_bend_mode = PitchBendMode::Idle;
+            messages.push(pitch_bend(PITCH_BEND_CENTER));
+        }
+        self.pitch_bend_next_at = None;
+        if std::mem::take(&mut self.cc_periodic_on) {
+            messages.push([CONTROL_CHANGE, self.cc_number, 0]);
+        }
+        self.cc_next_at = None;
+        self.refresh_pending = false;
+        messages
+    }
+}
+
+pub(super) fn note_for_key(code: KeyCode) -> Option<KeyboardNote> {
+    let KeyCode::Char(key) = code else {
+        return None;
+    };
+    KEYBOARD_NOTES.iter().find(|note| note.key == key).copied()
+}
+
+fn note_on(note: KeyboardNote, velocity: u8) -> [u8; 3] {
+    [NOTE_ON, note.midi_note, velocity]
+}
+
+fn note_off(note: KeyboardNote) -> [u8; 3] {
+    [NOTE_OFF, note.midi_note, 0]
+}
+
+fn pitch_bend(value: u16) -> [u8; 3] {
+    [PITCH_BEND, (value & 0x7F) as u8, ((value >> 7) & 0x7F) as u8]
+}
+
+#[cfg(test)]
+#[path = "tests.rs"]
+mod tests;

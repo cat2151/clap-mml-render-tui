@@ -270,7 +270,9 @@ impl<'a> TuiApp<'a> {
         if previous_patch.as_deref() == Some(patch.as_str()) {
             return;
         }
-        let note_offs = self.keyboard_state.take_reset_messages();
+        // 自動送信系(周期modeやON状態)はpatch変更をまたいで維持する。
+        // note offのみ送り、Ready復帰後にrefreshで現在値を新patchへ再送する。
+        let note_offs = self.keyboard_state.take_note_off_messages();
         self.keyboard_state.patch = Some(patch.clone());
         if let Some(sender) = &self.keyboard_midi_sender {
             sender.set_patch(note_offs, previous_patch.as_deref(), Some(&patch));

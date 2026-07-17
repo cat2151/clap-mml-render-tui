@@ -140,12 +140,17 @@ fn keyboard_screen_shows_connecting_status_and_navigation() {
     assert!(screen.contains("Shift+H:buffer"));
     assert!(screen.contains("n:notepad"));
     assert!(screen.contains("w:DAW"));
-    assert!(screen.contains("v:velocity 100/127"));
-    assert!(screen.contains("m:mod(CC1) on/off"));
+    assert!(screen.contains("v:velocity"));
+    assert!(screen.contains("m:mod(CC1)"));
+    assert!(screen.contains("p:pitch bend"));
+    assert!(screen.contains("t:repeat"));
+    assert!(screen.contains("Repeat: -"));
     assert!(screen.contains("x:CC#"));
     assert!(screen.contains("z:CC value"));
+    assert!(screen.contains("Shift+Z:CC cycle"));
     assert!(screen.contains("Vel: 100"));
     assert!(screen.contains("Mod: OFF"));
+    assert!(screen.contains("PB: -"));
     assert!(screen.contains("CC#: 1"));
 }
 
