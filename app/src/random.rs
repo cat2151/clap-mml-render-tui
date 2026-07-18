@@ -11,22 +11,34 @@ pub(crate) fn random_index(len: usize) -> Option<usize> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct RandomIndexDeck {
+pub(crate) struct RandomIndexDeck {
     len: usize,
     remaining: Vec<usize>,
 }
 
 impl RandomIndexDeck {
-    fn new(len: usize) -> Self {
+    pub(crate) fn new(len: usize) -> Self {
         let mut remaining = (0..len).collect::<Vec<_>>();
         remaining.shuffle(&mut rand::thread_rng());
         Self { len, remaining }
     }
 
-    fn next_index(&mut self) -> usize {
+    pub(crate) fn next_index(&mut self) -> usize {
         self.remaining
             .pop()
             .expect("random index deck should contain at least one element")
+    }
+
+    pub(crate) fn total(&self) -> usize {
+        self.len
+    }
+
+    pub(crate) fn drawn_count(&self) -> usize {
+        self.len - self.remaining.len()
+    }
+
+    pub(crate) fn is_exhausted(&self) -> bool {
+        self.remaining.is_empty()
     }
 }
 

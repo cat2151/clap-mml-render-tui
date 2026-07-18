@@ -68,10 +68,24 @@ fn controller_status_text_shows_periodic_modes() {
     }
     state.toggle_cc_periodic(now);
 
+    // vel2 × mod2 × PB4 × CC2 = 32通り。tick前なので消化数は0
     assert_eq!(
         controller_status_text(&state),
-        "Vel: cyc(100)  Mod: CYC  PB: CYC  CC#: 1 cyc"
+        "Vel: cyc(100)  Mod: CYC  PB: CYC  CC#: 1 cyc  Combo: 0/32"
     );
+}
+
+#[test]
+fn controller_status_text_shows_combo_progress_only_with_periodic_digits() {
+    let mut state = KeyboardState::default();
+    let now = std::time::Instant::now();
+    assert!(!controller_status_text(&state).contains("Combo:"));
+    state.cycle_modulation(now);
+    state.cycle_modulation(now); // Periodic
+    state.toggle_cc_periodic(now);
+    assert!(controller_status_text(&state).contains("Combo: 0/4"));
+    let _ = state.poll_periodic(now + std::time::Duration::from_secs(1));
+    assert!(controller_status_text(&state).contains("Combo: 1/4"));
 }
 
 #[test]

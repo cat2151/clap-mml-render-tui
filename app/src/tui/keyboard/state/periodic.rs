@@ -1,25 +1,33 @@
 use super::*;
 
+// 周期modeがONの系統ごとの桁値index。current_comboの混合基数分解で決まる
+#[derive(Clone, Copy, Default)]
+struct ComboDigits {
+    velocity: usize,
+    modulation: usize,
+    pitch_bend: usize,
+    cc: usize,
+}
+
 impl KeyboardState {
     pub(in crate::tui) fn cycle_velocity(&mut self, now: Instant) -> VelocityMode {
-        self.velocity_mode = match self.velocity_mode {
+        match self.velocity_mode {
             VelocityMode::Normal => {
                 self.velocity = ACCENT_VELOCITY;
-                self.velocity_next_at = None;
-                VelocityMode::Accent
+                self.velocity_mode = VelocityMode::Accent;
             }
             VelocityMode::Accent => {
-                // 周期突入で即反転(127→100)し、以降1秒ごとにpoll_periodicが反転する
+                // 周期突入で即反転(127→100=VELOCITY_SEQ先頭)し、以降は毎tickのbag値になる
                 self.velocity = DEFAULT_VELOCITY;
-                self.velocity_next_at = Some(now + PERIODIC_INTERVAL);
-                VelocityMode::Periodic
+                self.velocity_mode = VelocityMode::Periodic;
+                self.reset_combo_clock(now);
             }
             VelocityMode::Periodic => {
                 self.velocity = DEFAULT_VELOCITY;
-                self.velocity_next_at = None;
-                VelocityMode::Normal
+                self.velocity_mode = VelocityMode::Normal;
+                self.reset_combo_clock(now);
             }
-        };
+        }
         self.velocity_mode
     }
 
@@ -30,15 +38,14 @@ impl KeyboardState {
                 MODULATION_MAX
             }
             ModulationMode::On => {
-                // 直前がON=127なので周期の初回は0から
+                // 直前がON=127なので周期の初回は0(MODULATION_SEQ先頭)から
                 self.modulation_mode = ModulationMode::Periodic;
-                self.modulation_phase_high = true;
-                self.modulation_next_at = Some(now + PERIODIC_INTERVAL);
+                self.reset_combo_clock(now);
                 0
             }
             ModulationMode::Periodic => {
                 self.modulation_mode = ModulationMode::Off;
-                self.modulation_next_at = None;
+                self.reset_combo_clock(now);
                 0
             }
         };
@@ -64,15 +71,14 @@ impl KeyboardState {
                 PITCH_BEND_CENTER
             }
             PitchBendMode::CenterAfterMin => {
-                // 周期の初回は+8191を即送信し、以降0→-8192→0→+8191…の4値循環
+                // 周期の初回は+8191(PITCH_BEND_CYCLE先頭)を即送信し、以降は毎tickのbag値
                 self.pitch_bend_mode = PitchBendMode::Periodic;
-                self.pitch_bend_phase = 1;
-                self.pitch_bend_next_at = Some(now + PERIODIC_INTERVAL);
+                self.reset_combo_clock(now);
                 PITCH_BEND_MAX
             }
             PitchBendMode::Periodic => {
                 self.pitch_bend_mode = PitchBendMode::CenterAfterCycle;
-                self.pitch_bend_next_at = None;
+                self.reset_combo_clock(now);
                 PITCH_BEND_CENTER
             }
         };
@@ -81,15 +87,9 @@ impl KeyboardState {
 
     pub(in crate::tui) fn toggle_cc_periodic(&mut self, now: Instant) -> [u8; 3] {
         self.cc_periodic_on = !self.cc_periodic_on;
-        let value = if self.cc_periodic_on {
-            // OFF状態は実質0なので周期の初回は127から
-            self.cc_phase_high = false;
-            self.cc_next_at = Some(now + PERIODIC_INTERVAL);
-            CC_MAX
-        } else {
-            self.cc_next_at = None;
-            0
-        };
+        // OFF状態は実質0なので周期の初回は127(CC_SEQ先頭)から
+        let value = if self.cc_periodic_on { CC_MAX } else { 0 };
+        self.reset_combo_clock(now);
         [CONTROL_CHANGE, self.cc_number, value]
     }
 
@@ -97,14 +97,19 @@ impl KeyboardState {
     pub(in crate::tui) fn toggle_note_repeat(&mut self, now: Instant) -> Vec<[u8; 3]> {
         if self.note_repeat_on {
             self.note_repeat_on = false;
-            self.note_repeat_next_at = None;
+            if !self.periodic_active() {
+                self.periodic_next_at = None;
+            }
             self.repeat_sounding.drain(..).map(note_off).collect()
         } else {
             if self.repeat_chord.is_empty() {
                 return Vec::new();
             }
             self.note_repeat_on = true;
-            self.note_repeat_next_at = Some(now + PERIODIC_INTERVAL);
+            // note repeatは桁ではない。既にマスタークロックが走っていれば途中参加する
+            if self.periodic_next_at.is_none() {
+                self.periodic_next_at = Some(now + PERIODIC_INTERVAL);
+            }
             self.attack_repeat_chord()
         }
     }
@@ -119,35 +124,31 @@ impl KeyboardState {
     }
 
     pub(in crate::tui) fn poll_periodic(&mut self, now: Instant) -> Vec<[u8; 3]> {
+        if !deadline_elapsed(&mut self.periodic_next_at, now) {
+            return Vec::new();
+        }
+        self.draw_next_combo();
+        let digits = self.combo_digits();
         let mut messages = Vec::new();
-        if deadline_elapsed(&mut self.velocity_next_at, now) {
-            self.velocity = if self.velocity == ACCENT_VELOCITY {
-                DEFAULT_VELOCITY
-            } else {
-                ACCENT_VELOCITY
-            };
+        if self.velocity_mode == VelocityMode::Periodic {
+            // velocityはメッセージを持たず、直後のnote onに反映される
+            self.velocity = VELOCITY_SEQ[digits.velocity];
         }
-        if deadline_elapsed(&mut self.modulation_next_at, now) {
-            let value = if self.modulation_phase_high {
-                MODULATION_MAX
-            } else {
-                0
-            };
-            self.modulation_phase_high = !self.modulation_phase_high;
-            messages.push([CONTROL_CHANGE, MODULATION_CC, value]);
+        if self.modulation_mode == ModulationMode::Periodic {
+            messages.push([
+                CONTROL_CHANGE,
+                MODULATION_CC,
+                MODULATION_SEQ[digits.modulation],
+            ]);
         }
-        if deadline_elapsed(&mut self.pitch_bend_next_at, now) {
-            let value = PITCH_BEND_CYCLE[self.pitch_bend_phase];
-            self.pitch_bend_phase = (self.pitch_bend_phase + 1) % PITCH_BEND_CYCLE.len();
-            messages.push(pitch_bend(value));
+        if self.pitch_bend_mode == PitchBendMode::Periodic {
+            messages.push(pitch_bend(PITCH_BEND_CYCLE[digits.pitch_bend]));
         }
-        if deadline_elapsed(&mut self.cc_next_at, now) {
-            let value = if self.cc_phase_high { CC_MAX } else { 0 };
-            self.cc_phase_high = !self.cc_phase_high;
-            messages.push([CONTROL_CHANGE, self.cc_number, value]);
+        if self.cc_periodic_on {
+            messages.push([CONTROL_CHANGE, self.cc_number, CC_SEQ[digits.cc]]);
         }
-        if deadline_elapsed(&mut self.note_repeat_next_at, now) {
-            // 毎秒リトリガー: 直前に鳴らしたノートのoffと現在の和音のonを同時に送る
+        if self.note_repeat_on {
+            // リトリガーは値変更の後: 直前に鳴らしたノートのoffと現在の和音のonを送る
             let offs: Vec<[u8; 3]> = self.repeat_sounding.drain(..).map(note_off).collect();
             messages.extend(offs);
             messages.extend(self.attack_repeat_chord());
@@ -160,19 +161,15 @@ impl KeyboardState {
         if !std::mem::take(&mut self.refresh_pending) {
             return Vec::new();
         }
+        let digits = self.combo_digits();
         let mut messages = Vec::new();
         match self.modulation_mode {
             ModulationMode::Off => {}
             ModulationMode::On => messages.push([CONTROL_CHANGE, MODULATION_CC, MODULATION_MAX]),
-            // 周期中の現在値=「次に送る値」の逆
             ModulationMode::Periodic => messages.push([
                 CONTROL_CHANGE,
                 MODULATION_CC,
-                if self.modulation_phase_high {
-                    0
-                } else {
-                    MODULATION_MAX
-                },
+                MODULATION_SEQ[digits.modulation],
             ]),
         }
         let pitch_bend_value = match self.pitch_bend_mode {
@@ -182,26 +179,111 @@ impl KeyboardState {
             PitchBendMode::CenterAfterMax
             | PitchBendMode::CenterAfterMin
             | PitchBendMode::CenterAfterCycle => Some(PITCH_BEND_CENTER),
-            PitchBendMode::Periodic => Some(
-                PITCH_BEND_CYCLE
-                    [(self.pitch_bend_phase + PITCH_BEND_CYCLE.len() - 1) % PITCH_BEND_CYCLE.len()],
-            ),
+            PitchBendMode::Periodic => Some(PITCH_BEND_CYCLE[digits.pitch_bend]),
         };
         if let Some(value) = pitch_bend_value {
             messages.push(pitch_bend(value));
         }
         if self.cc_periodic_on {
-            messages.push([
-                CONTROL_CHANGE,
-                self.cc_number,
-                if self.cc_phase_high { 0 } else { CC_MAX },
-            ]);
+            messages.push([CONTROL_CHANGE, self.cc_number, CC_SEQ[digits.cc]]);
         }
         if self.note_repeat_on {
             let attack = self.attack_repeat_chord();
             messages.extend(attack);
         }
         messages
+    }
+
+    // 周期桁が1つ以上ONのとき(bag消化数, 組み合わせ総数)を返す(UI表示用)
+    pub(in crate::tui) fn combo_progress(&self) -> Option<(usize, usize)> {
+        if !self.periodic_digits_active() {
+            return None;
+        }
+        let drawn = self
+            .combo_bag
+            .as_ref()
+            .map_or(0, RandomIndexDeck::drawn_count);
+        Some((drawn, self.combo_total()))
+    }
+
+    fn periodic_digits_active(&self) -> bool {
+        self.velocity_mode == VelocityMode::Periodic
+            || self.modulation_mode == ModulationMode::Periodic
+            || self.pitch_bend_mode == PitchBendMode::Periodic
+            || self.cc_periodic_on
+    }
+
+    fn periodic_active(&self) -> bool {
+        self.periodic_digits_active() || self.note_repeat_on
+    }
+
+    // 桁構成が変わるトグルで呼ぶ。bagを破棄して組み合わせ先頭へ戻し、クロックを再スタートする
+    fn reset_combo_clock(&mut self, now: Instant) {
+        self.combo_bag = None;
+        self.current_combo = 0;
+        if self.velocity_mode == VelocityMode::Periodic {
+            self.velocity = VELOCITY_SEQ[0];
+        }
+        self.periodic_next_at = self.periodic_active().then(|| now + PERIODIC_INTERVAL);
+    }
+
+    // tick毎に山札から次の組み合わせIDを引く。山札が空/桁構成変更後は再シャッフルして作り直す
+    fn draw_next_combo(&mut self) {
+        let total = self.combo_total();
+        if total <= 1 {
+            self.combo_bag = None;
+            self.current_combo = 0;
+            return;
+        }
+        let needs_rebuild = self
+            .combo_bag
+            .as_ref()
+            .is_none_or(|bag| bag.total() != total || bag.is_exhausted());
+        if needs_rebuild {
+            self.combo_bag = Some(RandomIndexDeck::new(total));
+        }
+        if let Some(bag) = &mut self.combo_bag {
+            self.current_combo = bag.next_index();
+        }
+    }
+
+    fn combo_total(&self) -> usize {
+        let mut total = 1;
+        if self.pitch_bend_mode == PitchBendMode::Periodic {
+            total *= PITCH_BEND_CYCLE.len();
+        }
+        if self.modulation_mode == ModulationMode::Periodic {
+            total *= MODULATION_SEQ.len();
+        }
+        if self.cc_periodic_on {
+            total *= CC_SEQ.len();
+        }
+        if self.velocity_mode == VelocityMode::Periodic {
+            total *= VELOCITY_SEQ.len();
+        }
+        total
+    }
+
+    // current_comboを最下位桁から分解する。桁順はPB→mod→CC→velocityで固定
+    fn combo_digits(&self) -> ComboDigits {
+        let mut rest = self.current_combo;
+        let mut digits = ComboDigits::default();
+        if self.pitch_bend_mode == PitchBendMode::Periodic {
+            digits.pitch_bend = rest % PITCH_BEND_CYCLE.len();
+            rest /= PITCH_BEND_CYCLE.len();
+        }
+        if self.modulation_mode == ModulationMode::Periodic {
+            digits.modulation = rest % MODULATION_SEQ.len();
+            rest /= MODULATION_SEQ.len();
+        }
+        if self.cc_periodic_on {
+            digits.cc = rest % CC_SEQ.len();
+            rest /= CC_SEQ.len();
+        }
+        if self.velocity_mode == VelocityMode::Periodic {
+            digits.velocity = rest % VELOCITY_SEQ.len();
+        }
+        digits
     }
 }
 

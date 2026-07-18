@@ -351,7 +351,11 @@ fn controller_status_text(state: &KeyboardState) -> String {
     } else {
         state.cc_number().to_string()
     };
-    format!("Vel: {velocity}  Mod: {modulation}  PB: {pitch_bend}  CC#: {cc}")
+    let mut text = format!("Vel: {velocity}  Mod: {modulation}  PB: {pitch_bend}  CC#: {cc}");
+    if let Some((drawn, total)) = state.combo_progress() {
+        text.push_str(&format!("  Combo: {drawn}/{total}"));
+    }
+    text
 }
 
 fn repeat_status_text(state: &KeyboardState) -> String {

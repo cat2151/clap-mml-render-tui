@@ -4,6 +4,7 @@ use crossterm::event::KeyCode;
 
 use super::{KeyboardPatchCatalog, NumericInput, NumericInputTarget};
 use crate::history::{KeyboardSessionState, KeyboardTransport};
+use crate::random::RandomIndexDeck;
 
 mod periodic;
 
@@ -39,6 +40,11 @@ const PITCH_BEND_CYCLE: [u16; 4] = [
     PITCH_BEND_CENTER,
 ];
 const PERIODIC_INTERVAL: Duration = Duration::from_secs(1);
+// 周期mode中の桁値シーケンス。index 0は周期突入時の初回即送信値と一致させる
+// (pitch bendはPITCH_BEND_CYCLEをそのまま桁値列として使う)
+const VELOCITY_SEQ: [u8; 2] = [DEFAULT_VELOCITY, ACCENT_VELOCITY];
+const MODULATION_SEQ: [u8; 2] = [0, MODULATION_MAX];
+const CC_SEQ: [u8; 2] = [CC_MAX, 0];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub(in crate::tui) enum VelocityMode {
@@ -95,25 +101,21 @@ pub(crate) struct KeyboardState {
     buffer_multiplier: u8,
     velocity: u8,
     velocity_mode: VelocityMode,
-    velocity_next_at: Option<Instant>,
     modulation_mode: ModulationMode,
-    // 周期mode中に「次に送る値」が127かどうか
-    modulation_phase_high: bool,
-    modulation_next_at: Option<Instant>,
     pitch_bend_mode: PitchBendMode,
-    // 周期mode中に「次に送る値」のPITCH_BEND_CYCLE index
-    pitch_bend_phase: usize,
-    pitch_bend_next_at: Option<Instant>,
     cc_number: u8,
     cc_periodic_on: bool,
-    cc_phase_high: bool,
-    cc_next_at: Option<Instant>,
     note_repeat_on: bool,
     // 最後に押した和音(同時押しの集合)。releaseしても保持する
     repeat_chord: Vec<KeyboardNote>,
     // note repeatで現在発音中のノート
     repeat_sounding: Vec<KeyboardNote>,
-    note_repeat_next_at: Option<Instant>,
+    // 全周期系統(桁とnote repeat)が共有する単一マスタークロック
+    periodic_next_at: Option<Instant>,
+    // 周期modeがONの系統を桁とみなした組み合わせIDの山札(bag)。桁構成変更で作り直す
+    combo_bag: Option<RandomIndexDeck>,
+    // 山札から引いた現在の組み合わせID(混合基数値)。各系統の現在値はここから桁分解で導出する
+    current_combo: usize,
     // patch切替完了(Ready復帰)時にコントローラ現在値を再送するフラグ
     refresh_pending: bool,
     numeric_input: Option<NumericInput>,
@@ -144,21 +146,16 @@ impl KeyboardState {
             buffer_multiplier: session.buffer_multiplier,
             velocity: DEFAULT_VELOCITY,
             velocity_mode: VelocityMode::default(),
-            velocity_next_at: None,
             modulation_mode: ModulationMode::default(),
-            modulation_phase_high: false,
-            modulation_next_at: None,
             pitch_bend_mode: PitchBendMode::default(),
-            pitch_bend_phase: 0,
-            pitch_bend_next_at: None,
             cc_number: DEFAULT_CC_NUMBER,
             cc_periodic_on: false,
-            cc_phase_high: false,
-            cc_next_at: None,
             note_repeat_on: false,
             repeat_chord: Vec::new(),
             repeat_sounding: Vec::new(),
-            note_repeat_next_at: None,
+            periodic_next_at: None,
+            combo_bag: None,
+            current_combo: 0,
             refresh_pending: false,
             numeric_input: None,
             patch_catalog: KeyboardPatchCatalog::default(),
@@ -305,7 +302,6 @@ impl KeyboardState {
     pub(in crate::tui) fn take_reset_messages(&mut self) -> Vec<[u8; 3]> {
         let mut messages: Vec<[u8; 3]> = self.held.drain(..).map(note_off).collect();
         self.note_repeat_on = false;
-        self.note_repeat_next_at = None;
         messages.extend(self.repeat_sounding.drain(..).map(note_off));
         if self.velocity_mode == VelocityMode::Periodic {
             // 周期を止め、現在値に対応する固定modeへ降格(velocityは送信対象外)
@@ -315,21 +311,20 @@ impl KeyboardState {
                 VelocityMode::Normal
             };
         }
-        self.velocity_next_at = None;
         if self.modulation_mode != ModulationMode::Off {
             self.modulation_mode = ModulationMode::Off;
             messages.push([CONTROL_CHANGE, MODULATION_CC, 0]);
         }
-        self.modulation_next_at = None;
         if self.pitch_bend_mode != PitchBendMode::Idle {
             self.pitch_bend_mode = PitchBendMode::Idle;
             messages.push(pitch_bend(PITCH_BEND_CENTER));
         }
-        self.pitch_bend_next_at = None;
         if std::mem::take(&mut self.cc_periodic_on) {
             messages.push([CONTROL_CHANGE, self.cc_number, 0]);
         }
-        self.cc_next_at = None;
+        self.periodic_next_at = None;
+        self.combo_bag = None;
+        self.current_combo = 0;
         self.refresh_pending = false;
         messages
     }
@@ -351,7 +346,11 @@ fn note_off(note: KeyboardNote) -> [u8; 3] {
 }
 
 fn pitch_bend(value: u16) -> [u8; 3] {
-    [PITCH_BEND, (value & 0x7F) as u8, ((value >> 7) & 0x7F) as u8]
+    [
+        PITCH_BEND,
+        (value & 0x7F) as u8,
+        ((value >> 7) & 0x7F) as u8,
+    ]
 }
 
 #[cfg(test)]
