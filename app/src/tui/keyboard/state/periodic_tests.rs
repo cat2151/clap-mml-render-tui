@@ -9,6 +9,10 @@ fn set_cc_number_74(state: &mut KeyboardState) {
     assert_eq!(state.confirm_numeric_input(), None);
 }
 
+fn at_tick(now: Instant, tick: u64) -> Instant {
+    now + Duration::from_millis(250 * tick)
+}
+
 #[test]
 fn velocity_cycles_normal_accent_periodic_and_applies_to_note_on() {
     let mut state = KeyboardState::default();
@@ -20,14 +24,12 @@ fn velocity_cycles_normal_accent_periodic_and_applies_to_note_on() {
     assert_eq!(state.cycle_velocity(now), VelocityMode::Periodic);
     assert_eq!(state.velocity(), 100);
     assert!(state
-        .poll_periodic(now + Duration::from_millis(500))
+        .poll_periodic(now + Duration::from_millis(249))
         .is_empty());
     // 2-bag: 2tickで100と127の両方が1回ずつ現れる
     let mut seen = HashSet::new();
     for tick in 1..=2 {
-        assert!(state
-            .poll_periodic(now + Duration::from_secs(tick))
-            .is_empty());
+        assert!(state.poll_periodic(at_tick(now, tick)).is_empty());
         seen.insert(state.velocity());
     }
     assert_eq!(seen, HashSet::from([100, 127]));
@@ -61,13 +63,13 @@ fn modulation_periodic_covers_both_values_in_each_bag() {
     state.cycle_modulation(now);
     assert_eq!(state.cycle_modulation(now), [0xB0, 1, 0]);
     assert!(state
-        .poll_periodic(now + Duration::from_millis(999))
+        .poll_periodic(now + Duration::from_millis(249))
         .is_empty());
     // 2-bag: 2tickごとに0と127が1回ずつ現れる
     for bag in 0..2u64 {
         let mut values = Vec::new();
         for tick in 1..=2 {
-            let messages = state.poll_periodic(now + Duration::from_secs(bag * 2 + tick));
+            let messages = state.poll_periodic(at_tick(now, bag * 2 + tick));
             assert_eq!(messages.len(), 1);
             assert_eq!(&messages[0][..2], &[0xB0, 1]);
             values.push(messages[0][2]);
@@ -113,7 +115,7 @@ fn pitch_bend_periodic_covers_cycle_values_in_each_bag() {
     // 4-bag: 4tickでPITCH_BEND_CYCLEの4値(0は2回)が1回ずつ現れる
     let mut values = Vec::new();
     for tick in 1..=4 {
-        let messages = state.poll_periodic(now + Duration::from_secs(tick));
+        let messages = state.poll_periodic(at_tick(now, tick));
         assert_eq!(messages.len(), 1);
         values.push(messages[0]);
     }
@@ -140,7 +142,7 @@ fn cc_periodic_toggle_sends_to_configured_cc_number() {
     // 2-bag: 2tickで0と127が1回ずつ現れる
     let mut values = Vec::new();
     for tick in 1..=2 {
-        let messages = state.poll_periodic(now + Duration::from_secs(tick));
+        let messages = state.poll_periodic(at_tick(now, tick));
         assert_eq!(messages.len(), 1);
         assert_eq!(&messages[0][..2], &[0xB0, 74]);
         values.push(messages[0][2]);
@@ -155,7 +157,7 @@ fn cc_periodic_toggle_sends_to_configured_cc_number() {
 }
 
 #[test]
-fn note_repeat_retriggers_last_chord_every_second() {
+fn note_repeat_retriggers_last_chord_every_250ms() {
     let mut state = KeyboardState::default();
     let now = Instant::now();
     // c e g を同時押し→全release。和音は保持される
@@ -168,13 +170,13 @@ fn note_repeat_retriggers_last_chord_every_second() {
 
     // ON: 即座に和音を発音
     assert_eq!(
-        state.toggle_note_repeat(now),
+        state.cycle_note_playback(now),
         vec![[0x90, 60, 100], [0x90, 64, 100], [0x90, 67, 100]]
     );
-    assert!(state.note_repeat_on());
-    // 毎秒リトリガー: off+onを同時送信
+    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Repeat);
+    // 250msごとにリトリガー: off+onを同時送信
     assert_eq!(
-        state.poll_periodic(now + Duration::from_secs(1)),
+        state.poll_periodic(at_tick(now, 1)),
         vec![
             [0x80, 60, 0],
             [0x80, 64, 0],
@@ -184,12 +186,14 @@ fn note_repeat_retriggers_last_chord_every_second() {
             [0x90, 67, 100],
         ]
     );
-    // OFF: 発音中ノートを止める
+    // arpへ移るとrepeatの和音を止め、arp先頭音を鳴らす
     assert_eq!(
-        state.toggle_note_repeat(now),
-        vec![[0x80, 60, 0], [0x80, 64, 0], [0x80, 67, 0]]
+        state.cycle_note_playback(now),
+        vec![[0x80, 60, 0], [0x80, 64, 0], [0x80, 67, 0], [0x90, 60, 100],]
     );
-    assert!(!state.note_repeat_on());
+    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Arp);
+    assert_eq!(state.cycle_note_playback(now), vec![[0x80, 60, 0]]);
+    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Off);
     assert!(state
         .poll_periodic(now + Duration::from_secs(10))
         .is_empty());
@@ -198,8 +202,8 @@ fn note_repeat_retriggers_last_chord_every_second() {
 #[test]
 fn note_repeat_does_nothing_without_chord() {
     let mut state = KeyboardState::default();
-    assert!(state.toggle_note_repeat(Instant::now()).is_empty());
-    assert!(!state.note_repeat_on());
+    assert!(state.cycle_note_playback(Instant::now()).is_empty());
+    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Off);
 }
 
 #[test]
@@ -209,9 +213,9 @@ fn note_repeat_uses_current_velocity_on_each_retrigger() {
     assert!(state.press(KEYBOARD_NOTES[0]).is_some());
     assert!(state.release(KEYBOARD_NOTES[0]).is_some());
     state.cycle_velocity(now); // Accent(127)
-    assert_eq!(state.toggle_note_repeat(now), vec![[0x90, 60, 127]]);
+    assert_eq!(state.cycle_note_playback(now), vec![[0x90, 60, 127]]);
     assert_eq!(
-        state.poll_periodic(now + Duration::from_secs(1)),
+        state.poll_periodic(at_tick(now, 1)),
         vec![[0x80, 60, 0], [0x90, 60, 127]]
     );
 }
@@ -237,7 +241,7 @@ fn poll_periodic_combines_channels_in_fixed_order() {
     }
     state.toggle_cc_periodic(now);
 
-    let messages = state.poll_periodic(now + Duration::from_secs(1));
+    let messages = state.poll_periodic(at_tick(now, 1));
     assert_eq!(messages.len(), 3);
     assert_eq!(&messages[0][..2], &[0xB0, 1]); // modulation
     assert_eq!(messages[1][0], 0xE0); // pitch bend
@@ -259,7 +263,7 @@ fn bag_covers_all_combinations_without_repeat() {
     for bag in 0..2u64 {
         let mut seen = HashSet::new();
         for tick in 1..=8 {
-            let messages = state.poll_periodic(now + Duration::from_secs(bag * 8 + tick));
+            let messages = state.poll_periodic(at_tick(now, bag * 8 + tick));
             assert_eq!(messages.len(), 2);
             assert_eq!(&messages[0][..2], &[0xB0, 1]); // modulation
             assert_eq!(&messages[1][..2], &[0xB0, 74]); // 汎用CC
@@ -274,29 +278,34 @@ fn master_clock_restarts_from_latest_digit_toggle() {
     let mut state = KeyboardState::default();
     let now = Instant::now();
     state.cycle_modulation(now);
-    state.cycle_modulation(now); // Periodic(クロックはnow+1s)
-                                 // 300ms後にCC周期をON→クロックはそこから1秒後へ再スタート
+    state.cycle_modulation(now); // Periodic(クロックはnow+250ms)
+                                 // 300ms後にCC周期をON→クロックはそこから250ms後へ再スタート
     state.toggle_cc_periodic(now + Duration::from_millis(300));
 
-    assert!(state.poll_periodic(now + Duration::from_secs(1)).is_empty());
-    let messages = state.poll_periodic(now + Duration::from_millis(1_300));
+    assert!(state
+        .poll_periodic(now + Duration::from_millis(549))
+        .is_empty());
+    let messages = state.poll_periodic(now + Duration::from_millis(550));
     // 両系統が同一tickにまとまって送出される
     assert_eq!(messages.len(), 2);
     assert_eq!(&messages[0][..2], &[0xB0, 1]);
 }
 
 #[test]
-fn note_repeat_joins_running_clock_and_retriggers_after_value_changes() {
+fn note_repeat_resyncs_master_clock_and_retriggers_after_value_changes() {
     let mut state = KeyboardState::default();
     let now = Instant::now();
     assert!(state.press(KEYBOARD_NOTES[0]).is_some());
     assert!(state.release(KEYBOARD_NOTES[0]).is_some());
     state.cycle_modulation(now);
-    state.cycle_modulation(now); // Periodic(クロックはnow+1s)
-                                 // 途中参加: クロックは再スタートせず、次tickは変わらずnow+1s
-    let _ = state.toggle_note_repeat(now + Duration::from_millis(500));
+    state.cycle_modulation(now); // Periodic(クロックはnow+250ms)
+                                 // note mode開始時に全系統を共通の250ms境界へ再同期する
+    let _ = state.cycle_note_playback(now + Duration::from_millis(100));
 
-    let messages = state.poll_periodic(now + Duration::from_secs(1));
+    assert!(state
+        .poll_periodic(now + Duration::from_millis(349))
+        .is_empty());
+    let messages = state.poll_periodic(now + Duration::from_millis(350));
     // 値変更→note off→note onの順で同一tickにまとまる
     assert_eq!(messages.len(), 3);
     assert_eq!(&messages[0][..2], &[0xB0, 1]);
@@ -312,20 +321,18 @@ fn digit_toggle_resets_bag_and_clock() {
         state.cycle_pitch_bend(now); // Periodic(4-bag)
     }
     assert_eq!(state.combo_progress(), Some((0, 4)));
-    assert!(!state.poll_periodic(now + Duration::from_secs(1)).is_empty());
-    assert!(!state.poll_periodic(now + Duration::from_secs(2)).is_empty());
+    assert!(!state.poll_periodic(at_tick(now, 1)).is_empty());
+    assert!(!state.poll_periodic(at_tick(now, 2)).is_empty());
     assert_eq!(state.combo_progress(), Some((2, 4)));
 
     // 桁追加でbagとクロックを先頭から作り直す
-    state.toggle_cc_periodic(now + Duration::from_millis(2_500));
+    state.toggle_cc_periodic(now + Duration::from_millis(700));
     assert_eq!(state.combo_progress(), Some((0, 8)));
     assert!(state
-        .poll_periodic(now + Duration::from_millis(3_400))
+        .poll_periodic(now + Duration::from_millis(949))
         .is_empty());
     assert_eq!(
-        state
-            .poll_periodic(now + Duration::from_millis(3_500))
-            .len(),
+        state.poll_periodic(now + Duration::from_millis(950)).len(),
         2
     );
     assert_eq!(state.combo_progress(), Some((1, 8)));
@@ -340,11 +347,11 @@ fn combo_progress_wraps_after_bag_is_exhausted() {
         state.cycle_pitch_bend(now); // Periodic(4-bag)
     }
     for tick in 1..=4u64 {
-        let _ = state.poll_periodic(now + Duration::from_secs(tick));
+        let _ = state.poll_periodic(at_tick(now, tick));
         assert_eq!(state.combo_progress(), Some((tick as usize, 4)));
     }
     // 一巡したら再シャッフルして先頭から
-    let _ = state.poll_periodic(now + Duration::from_secs(5));
+    let _ = state.poll_periodic(at_tick(now, 5));
     assert_eq!(state.combo_progress(), Some((1, 4)));
 }
 
@@ -354,8 +361,8 @@ fn combo_progress_is_none_with_note_repeat_only() {
     let now = Instant::now();
     assert!(state.press(KEYBOARD_NOTES[0]).is_some());
     assert!(state.release(KEYBOARD_NOTES[0]).is_some());
-    let _ = state.toggle_note_repeat(now);
-    assert!(!state.poll_periodic(now + Duration::from_secs(1)).is_empty());
+    let _ = state.cycle_note_playback(now);
+    assert!(!state.poll_periodic(at_tick(now, 1)).is_empty());
     assert_eq!(state.combo_progress(), None);
 }
 
@@ -366,12 +373,17 @@ fn poll_periodic_skips_missed_cycles_after_long_stall() {
     state.cycle_modulation(now);
     state.cycle_modulation(now);
 
-    // 大幅遅延時は1発のみ送出し、次回はnow基準の1秒後へスナップ
+    // 大幅遅延時は1発のみ送出し、次回はnow基準の250ms後へスナップ
     assert_eq!(state.poll_periodic(now + Duration::from_secs(10)).len(), 1);
     assert!(state
-        .poll_periodic(now + Duration::from_millis(10_500))
+        .poll_periodic(now + Duration::from_millis(10_249))
         .is_empty());
-    assert_eq!(state.poll_periodic(now + Duration::from_secs(11)).len(), 1);
+    assert_eq!(
+        state
+            .poll_periodic(now + Duration::from_millis(10_250))
+            .len(),
+        1
+    );
 }
 
 #[test]
@@ -384,7 +396,7 @@ fn take_note_off_messages_keeps_auto_send_modes_and_schedules_refresh() {
     state.cycle_pitch_bend(now); // Max
     state.toggle_cc_periodic(now); // 127送信済み(bag先頭=127)
     assert!(state.press(KEYBOARD_NOTES[0]).is_some());
-    let _ = state.toggle_note_repeat(now);
+    let _ = state.cycle_note_playback(now);
 
     // patch変更: note offのみ送出し、modeは維持される
     assert_eq!(
@@ -394,11 +406,11 @@ fn take_note_off_messages_keeps_auto_send_modes_and_schedules_refresh() {
     assert_eq!(state.modulation_mode(), ModulationMode::On);
     assert_eq!(state.pitch_bend_mode(), PitchBendMode::Max);
     assert!(state.cc_periodic_on());
-    assert!(state.note_repeat_on());
+    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Repeat);
 
     // Ready復帰時に現在値+リトリガー和音を再送
     assert_eq!(
-        state.take_pending_refresh_messages(),
+        state.take_pending_refresh_messages(now),
         vec![
             [0xB0, 1, 127],     // modulation ON
             [0xE0, 0x7F, 0x7F], // pitch bend +8191
@@ -406,7 +418,7 @@ fn take_note_off_messages_keeps_auto_send_modes_and_schedules_refresh() {
             [0x90, 60, 100],    // note repeat和音の再発音
         ]
     );
-    assert!(state.take_pending_refresh_messages().is_empty());
+    assert!(state.take_pending_refresh_messages(now).is_empty());
 }
 
 #[test]
@@ -415,12 +427,12 @@ fn refresh_resends_current_periodic_values() {
     let now = Instant::now();
     state.cycle_modulation(now);
     state.cycle_modulation(now); // Periodic(0送信済み)
-    let messages = state.poll_periodic(now + Duration::from_secs(1));
+    let messages = state.poll_periodic(at_tick(now, 1));
     assert_eq!(messages.len(), 1);
 
     let _ = state.take_note_off_messages();
     // 周期中の現在値(最後のtickで送った値)を再送する
-    assert_eq!(state.take_pending_refresh_messages(), messages);
+    assert_eq!(state.take_pending_refresh_messages(now), messages);
 }
 
 #[test]
@@ -430,5 +442,5 @@ fn take_reset_messages_clears_pending_refresh() {
     state.cycle_modulation(now); // On
     let _ = state.take_note_off_messages();
     let _ = state.take_reset_messages();
-    assert!(state.take_pending_refresh_messages().is_empty());
+    assert!(state.take_pending_refresh_messages(now).is_empty());
 }

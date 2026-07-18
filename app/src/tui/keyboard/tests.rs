@@ -119,7 +119,7 @@ fn take_reset_messages_resets_pitch_bend_periodic_cc_and_note_repeat() {
     state.cycle_pitch_bend(now); // Min
     state.toggle_cc_periodic(now);
     assert!(state.press(KEYBOARD_NOTES[0]).is_some());
-    let _ = state.toggle_note_repeat(now); // 和音cをリトリガー中にする
+    let _ = state.cycle_note_playback(now); // 和音cをリトリガー中にする
 
     assert_eq!(
         state.take_reset_messages(),
@@ -136,7 +136,7 @@ fn take_reset_messages_resets_pitch_bend_periodic_cc_and_note_repeat() {
     assert_eq!(state.modulation_mode(), ModulationMode::Off);
     assert_eq!(state.pitch_bend_mode(), PitchBendMode::Idle);
     assert!(!state.cc_periodic_on());
-    assert!(!state.note_repeat_on());
+    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Off);
     assert!(state.take_reset_messages().is_empty());
     assert!(state
         .poll_periodic(now + Duration::from_secs(60))

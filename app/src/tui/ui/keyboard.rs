@@ -9,7 +9,8 @@ use ratatui::{
 use super::{status::base_style, status::visible_list_page_size, LIST_HIGHLIGHT_SYMBOL};
 use crate::tui::keyboard::{
     KeyboardConnectionPhase, KeyboardPatchCatalogStatus, KeyboardState, ModulationMode,
-    NumericInput, NumericInputTarget, PitchBendMode, VelocityMode, KEYBOARD_NOTES,
+    NotePlaybackMode, NumericInput, NumericInputTarget, PitchBendMode, VelocityMode,
+    KEYBOARD_NOTES,
 };
 use crate::tui::TuiApp;
 use crate::ui_theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_PURPLE};
@@ -64,7 +65,7 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
             Line::from("Up/Down:patch -/+1  PgUp/PgDn:patch -/+10  Home/End:category -/+1"),
             Line::from("c d e f g a b:note  h:transport  Shift+H:buffer  n:notepad  w:DAW  q:quit"),
             Line::from(
-                "v:velocity  m:mod(CC1)  p:pitch bend  t:repeat  x:CC#  z:CC value  Shift+Z:CC cycle",
+                "v:velocity  m:mod(CC1)  p:pitch bend  t:repeat/arp  x:CC#  z:CC value  Shift+Z:CC cycle",
             ),
         ])
         .style(base_style()),
@@ -107,7 +108,7 @@ fn draw_keyboard(app: &TuiApp<'_>, f: &mut Frame<'_>, area: Rect) {
             base_style(),
         )),
         Line::from(Span::styled(
-            repeat_status_text(&app.keyboard_state),
+            note_playback_status_text(&app.keyboard_state),
             base_style(),
         )),
     ];
@@ -358,17 +359,22 @@ fn controller_status_text(state: &KeyboardState) -> String {
     text
 }
 
-fn repeat_status_text(state: &KeyboardState) -> String {
-    if !state.note_repeat_on() {
-        return "Repeat: -".to_string();
+fn note_playback_status_text(state: &KeyboardState) -> String {
+    let mode = match state.note_playback_mode() {
+        NotePlaybackMode::Off => return "Note mode: off".to_string(),
+        NotePlaybackMode::Repeat => "repeat",
+        NotePlaybackMode::Arp => "arp",
+    };
+    let mut notes = state.repeat_chord().to_vec();
+    if state.note_playback_mode() == NotePlaybackMode::Arp {
+        notes.sort_unstable_by_key(|note| note.midi_note);
     }
-    let names = state
-        .repeat_chord()
+    let names = notes
         .iter()
         .map(|note| note.name)
         .collect::<Vec<_>>()
         .join(" ");
-    format!("Repeat: {names}")
+    format!("Note mode: {mode} {names}")
 }
 
 fn active_notes_text(state: &crate::tui::keyboard::KeyboardState) -> String {

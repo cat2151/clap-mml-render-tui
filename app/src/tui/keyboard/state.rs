@@ -6,6 +6,7 @@ use super::{KeyboardPatchCatalog, NumericInput, NumericInputTarget};
 use crate::history::{KeyboardSessionState, KeyboardTransport};
 use crate::random::RandomIndexDeck;
 
+mod arp;
 mod periodic;
 
 pub(in crate::tui) const KEYBOARD_NOTES: [KeyboardNote; 7] = [
@@ -39,7 +40,7 @@ const PITCH_BEND_CYCLE: [u16; 4] = [
     PITCH_BEND_MIN,
     PITCH_BEND_CENTER,
 ];
-const PERIODIC_INTERVAL: Duration = Duration::from_secs(1);
+const PERIODIC_INTERVAL: Duration = Duration::from_millis(250);
 // 周期mode中の桁値シーケンス。index 0は周期突入時の初回即送信値と一致させる
 // (pitch bendはPITCH_BEND_CYCLEをそのまま桁値列として使う)
 const VELOCITY_SEQ: [u8; 2] = [DEFAULT_VELOCITY, ACCENT_VELOCITY];
@@ -77,6 +78,14 @@ pub(in crate::tui) enum PitchBendMode {
     CenterAfterCycle,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub(in crate::tui) enum NotePlaybackMode {
+    #[default]
+    Off,
+    Repeat,
+    Arp,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::tui) struct KeyboardNote {
     pub(in crate::tui) key: char,
@@ -105,12 +114,15 @@ pub(crate) struct KeyboardState {
     pitch_bend_mode: PitchBendMode,
     cc_number: u8,
     cc_periodic_on: bool,
-    note_repeat_on: bool,
+    note_playback_mode: NotePlaybackMode,
     // 最後に押した和音(同時押しの集合)。releaseしても保持する
     repeat_chord: Vec<KeyboardNote>,
     // note repeatで現在発音中のノート
     repeat_sounding: Vec<KeyboardNote>,
-    // 全周期系統(桁とnote repeat)が共有する単一マスタークロック
+    // arpで現在発音中のノートと、次に発音するシーケンス位置
+    arp_sounding: Option<KeyboardNote>,
+    arp_next_index: usize,
+    // 全周期系統(桁、repeat、arp)が共有する250msマスタークロック
     periodic_next_at: Option<Instant>,
     // 周期modeがONの系統を桁とみなした組み合わせIDの山札(bag)。桁構成変更で作り直す
     combo_bag: Option<RandomIndexDeck>,
@@ -150,9 +162,11 @@ impl KeyboardState {
             pitch_bend_mode: PitchBendMode::default(),
             cc_number: DEFAULT_CC_NUMBER,
             cc_periodic_on: false,
-            note_repeat_on: false,
+            note_playback_mode: NotePlaybackMode::Off,
             repeat_chord: Vec::new(),
             repeat_sounding: Vec::new(),
+            arp_sounding: None,
+            arp_next_index: 0,
             periodic_next_at: None,
             combo_bag: None,
             current_combo: 0,
@@ -206,8 +220,8 @@ impl KeyboardState {
         self.cc_periodic_on
     }
 
-    pub(in crate::tui) fn note_repeat_on(&self) -> bool {
-        self.note_repeat_on
+    pub(in crate::tui) fn note_playback_mode(&self) -> NotePlaybackMode {
+        self.note_playback_mode
     }
 
     pub(in crate::tui) fn repeat_chord(&self) -> &[KeyboardNote] {
@@ -279,6 +293,8 @@ impl KeyboardState {
         }
         if !self.repeat_chord.iter().any(|held| held.key == note.key) {
             self.repeat_chord.push(note);
+            // arp中の和音追加も、次tickでは完成時点の和音の最低音から始める
+            self.arp_next_index = 0;
         }
         self.held.push(note);
         Some(vec![note_on(note, self.velocity)])
@@ -295,14 +311,17 @@ impl KeyboardState {
     pub(super) fn take_note_off_messages(&mut self) -> Vec<[u8; 3]> {
         let mut messages: Vec<[u8; 3]> = self.held.drain(..).map(note_off).collect();
         messages.extend(self.repeat_sounding.drain(..).map(note_off));
+        messages.extend(self.arp_sounding.take().map(note_off));
         self.refresh_pending = true;
         messages
     }
 
     pub(in crate::tui) fn take_reset_messages(&mut self) -> Vec<[u8; 3]> {
         let mut messages: Vec<[u8; 3]> = self.held.drain(..).map(note_off).collect();
-        self.note_repeat_on = false;
+        self.note_playback_mode = NotePlaybackMode::Off;
         messages.extend(self.repeat_sounding.drain(..).map(note_off));
+        messages.extend(self.arp_sounding.take().map(note_off));
+        self.arp_next_index = 0;
         if self.velocity_mode == VelocityMode::Periodic {
             // 周期を止め、現在値に対応する固定modeへ降格(velocityは送信対象外)
             self.velocity_mode = if self.velocity == ACCENT_VELOCITY {

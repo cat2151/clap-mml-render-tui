@@ -84,7 +84,7 @@ fn controller_status_text_shows_combo_progress_only_with_periodic_digits() {
     state.cycle_modulation(now); // Periodic
     state.toggle_cc_periodic(now);
     assert!(controller_status_text(&state).contains("Combo: 0/4"));
-    let _ = state.poll_periodic(now + std::time::Duration::from_secs(1));
+    let _ = state.poll_periodic(now + std::time::Duration::from_millis(250));
     assert!(controller_status_text(&state).contains("Combo: 1/4"));
 }
 
@@ -109,18 +109,24 @@ fn controller_status_text_shows_fixed_pitch_bend_values() {
 }
 
 #[test]
-fn repeat_status_text_shows_dash_when_off_and_chord_when_on() {
+fn note_playback_status_text_shows_off_repeat_and_sorted_arp() {
     let mut state = KeyboardState::default();
-    assert_eq!(repeat_status_text(&state), "Repeat: -");
+    assert_eq!(note_playback_status_text(&state), "Note mode: off");
 
+    assert!(state.press(KEYBOARD_NOTES[4]).is_some());
     assert!(state.press(KEYBOARD_NOTES[0]).is_some());
     assert!(state.press(KEYBOARD_NOTES[2]).is_some());
-    assert!(state.press(KEYBOARD_NOTES[4]).is_some());
-    let _ = state.toggle_note_repeat(std::time::Instant::now());
-    assert_eq!(repeat_status_text(&state), "Repeat: C4 E4 G4");
+    let now = std::time::Instant::now();
+    let _ = state.cycle_note_playback(now);
+    assert_eq!(
+        note_playback_status_text(&state),
+        "Note mode: repeat G4 C4 E4"
+    );
 
-    let _ = state.toggle_note_repeat(std::time::Instant::now());
-    assert_eq!(repeat_status_text(&state), "Repeat: -");
+    let _ = state.cycle_note_playback(now);
+    assert_eq!(note_playback_status_text(&state), "Note mode: arp C4 E4 G4");
+    let _ = state.cycle_note_playback(now);
+    assert_eq!(note_playback_status_text(&state), "Note mode: off");
 }
 
 #[test]

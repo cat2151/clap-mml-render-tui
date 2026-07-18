@@ -93,28 +93,7 @@ impl KeyboardState {
         [CONTROL_CHANGE, self.cc_number, value]
     }
 
-    // 最後に押した和音の1秒周期リトリガーをトグルする。和音が未確定ならOFFのまま。
-    pub(in crate::tui) fn toggle_note_repeat(&mut self, now: Instant) -> Vec<[u8; 3]> {
-        if self.note_repeat_on {
-            self.note_repeat_on = false;
-            if !self.periodic_active() {
-                self.periodic_next_at = None;
-            }
-            self.repeat_sounding.drain(..).map(note_off).collect()
-        } else {
-            if self.repeat_chord.is_empty() {
-                return Vec::new();
-            }
-            self.note_repeat_on = true;
-            // note repeatは桁ではない。既にマスタークロックが走っていれば途中参加する
-            if self.periodic_next_at.is_none() {
-                self.periodic_next_at = Some(now + PERIODIC_INTERVAL);
-            }
-            self.attack_repeat_chord()
-        }
-    }
-
-    fn attack_repeat_chord(&mut self) -> Vec<[u8; 3]> {
+    pub(super) fn attack_repeat_chord(&mut self) -> Vec<[u8; 3]> {
         self.repeat_sounding = self.repeat_chord.clone();
         let velocity = self.velocity;
         self.repeat_chord
@@ -147,17 +126,20 @@ impl KeyboardState {
         if self.cc_periodic_on {
             messages.push([CONTROL_CHANGE, self.cc_number, CC_SEQ[digits.cc]]);
         }
-        if self.note_repeat_on {
-            // リトリガーは値変更の後: 直前に鳴らしたノートのoffと現在の和音のonを送る
-            let offs: Vec<[u8; 3]> = self.repeat_sounding.drain(..).map(note_off).collect();
-            messages.extend(offs);
-            messages.extend(self.attack_repeat_chord());
+        match self.note_playback_mode {
+            NotePlaybackMode::Off => {}
+            NotePlaybackMode::Repeat => {
+                // リトリガーは値変更の後: 直前のoffと現在の和音のonを送る
+                messages.extend(self.repeat_sounding.drain(..).map(note_off));
+                messages.extend(self.attack_repeat_chord());
+            }
+            NotePlaybackMode::Arp => messages.extend(self.advance_arp()),
         }
         messages
     }
 
     // patch切替完了(Ready復帰)後に、自動送信系の現在値を新patchへ再送する
-    pub(in crate::tui) fn take_pending_refresh_messages(&mut self) -> Vec<[u8; 3]> {
+    pub(in crate::tui) fn take_pending_refresh_messages(&mut self, now: Instant) -> Vec<[u8; 3]> {
         if !std::mem::take(&mut self.refresh_pending) {
             return Vec::new();
         }
@@ -187,9 +169,13 @@ impl KeyboardState {
         if self.cc_periodic_on {
             messages.push([CONTROL_CHANGE, self.cc_number, CC_SEQ[digits.cc]]);
         }
-        if self.note_repeat_on {
-            let attack = self.attack_repeat_chord();
-            messages.extend(attack);
+        match self.note_playback_mode {
+            NotePlaybackMode::Off => {}
+            NotePlaybackMode::Repeat => {
+                self.periodic_next_at = Some(now + PERIODIC_INTERVAL);
+                messages.extend(self.attack_repeat_chord());
+            }
+            NotePlaybackMode::Arp => messages.extend(self.restart_arp(now)),
         }
         messages
     }
@@ -206,7 +192,7 @@ impl KeyboardState {
         Some((drawn, self.combo_total()))
     }
 
-    fn periodic_digits_active(&self) -> bool {
+    pub(super) fn periodic_digits_active(&self) -> bool {
         self.velocity_mode == VelocityMode::Periodic
             || self.modulation_mode == ModulationMode::Periodic
             || self.pitch_bend_mode == PitchBendMode::Periodic
@@ -214,7 +200,7 @@ impl KeyboardState {
     }
 
     fn periodic_active(&self) -> bool {
-        self.periodic_digits_active() || self.note_repeat_on
+        self.periodic_digits_active() || self.note_playback_mode != NotePlaybackMode::Off
     }
 
     // 桁構成が変わるトグルで呼ぶ。bagを破棄して組み合わせ先頭へ戻し、クロックを再スタートする

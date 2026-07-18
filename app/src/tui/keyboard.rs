@@ -13,7 +13,9 @@ pub(super) use catalog::{KeyboardPatchCatalog, KeyboardPatchCatalogStatus};
 pub(super) use numeric_input::{NumericInput, NumericInputTarget};
 pub(super) use sender::{KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardMidiSender};
 pub(crate) use state::KeyboardState;
-pub(super) use state::{ModulationMode, PitchBendMode, VelocityMode, KEYBOARD_NOTES};
+pub(super) use state::{
+    ModulationMode, NotePlaybackMode, PitchBendMode, VelocityMode, KEYBOARD_NOTES,
+};
 
 use state::note_for_key;
 
@@ -169,7 +171,7 @@ impl<'a> TuiApp<'a> {
                 }
                 KeyCode::Char('t') => {
                     if self.keyboard_connection_status().phase.accepts_notes() {
-                        let messages = self.keyboard_state.toggle_note_repeat(Instant::now());
+                        let messages = self.keyboard_state.cycle_note_playback(Instant::now());
                         if !messages.is_empty() {
                             if let Some(sender) = &self.keyboard_midi_sender {
                                 sender.send(messages, self.keyboard_state.patch());
@@ -253,8 +255,9 @@ impl<'a> TuiApp<'a> {
             return;
         }
         // patch切替後の現在値再送(refresh) → 周期送信、の順で1回のsendにまとめる
-        let mut messages = self.keyboard_state.take_pending_refresh_messages();
-        messages.extend(self.keyboard_state.poll_periodic(Instant::now()));
+        let now = Instant::now();
+        let mut messages = self.keyboard_state.take_pending_refresh_messages(now);
+        messages.extend(self.keyboard_state.poll_periodic(now));
         if !messages.is_empty() {
             if let Some(sender) = &self.keyboard_midi_sender {
                 sender.send(messages, self.keyboard_state.patch());
