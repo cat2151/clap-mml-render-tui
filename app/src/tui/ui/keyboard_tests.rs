@@ -32,6 +32,15 @@ fn render_numeric_overlay(state: &KeyboardState) -> String {
     buffer_to_string(&terminal)
 }
 
+fn render_mml_overlay(input: &crate::tui::keyboard::KeyboardMmlInput<'_>) -> String {
+    let backend = TestBackend::new(80, 12);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal
+        .draw(|f| draw_mml_input_overlay(input, f, f.area()))
+        .unwrap();
+    buffer_to_string(&terminal)
+}
+
 #[test]
 fn active_notes_text_lists_every_held_note_in_press_order() {
     let mut state = KeyboardState::default();
@@ -111,7 +120,10 @@ fn controller_status_text_shows_fixed_pitch_bend_values() {
 #[test]
 fn note_playback_status_text_shows_all_four_modes() {
     let mut state = KeyboardState::default();
-    assert_eq!(note_playback_status_text(&state), "Note mode: off");
+    assert_eq!(
+        note_playback_status_text(&state),
+        "Note mode: off | Target: -"
+    );
 
     assert!(state.press(KEYBOARD_NOTES[4]).is_some());
     assert!(state.press(KEYBOARD_NOTES[0]).is_some());
@@ -131,7 +143,21 @@ fn note_playback_status_text_shows_all_four_modes() {
         "Note mode: auto→repeat G4 C4 E4"
     );
     let _ = state.cycle_note_playback(now);
-    assert_eq!(note_playback_status_text(&state), "Note mode: off");
+    assert_eq!(
+        note_playback_status_text(&state),
+        "Note mode: off | Target: G4 C4 E4"
+    );
+}
+
+#[test]
+fn note_playback_status_formats_arbitrary_midi_notes() {
+    let mut state = KeyboardState::default();
+    state.replace_repeat_chord(vec![0, 61, 127], std::time::Instant::now(), false);
+
+    assert_eq!(
+        note_playback_status_text(&state),
+        "Note mode: off | Target: C-1 C#4 G9"
+    );
 }
 
 #[test]
@@ -240,6 +266,39 @@ fn no_numeric_input_draws_no_overlay() {
     assert!(render_numeric_overlay(&KeyboardState::default())
         .chars()
         .all(char::is_whitespace));
+}
+
+#[test]
+fn mml_input_overlay_shows_text_and_key_help() {
+    let mut input = crate::tui::keyboard::KeyboardMmlInput::default();
+    input.open();
+    for ch in "o4ceg".chars() {
+        input.input(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char(ch),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+    }
+
+    let screen = render_mml_overlay(&input);
+    assert!(screen.contains("MML notes"));
+    assert!(screen.contains("o4ceg"));
+    assert!(screen.replace(' ', "").contains("Enter:確定"));
+}
+
+#[test]
+fn mml_input_overlay_shows_conversion_error() {
+    let mut input = crate::tui::keyboard::KeyboardMmlInput::default();
+    input.open();
+    input.input(crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::Char('r'),
+        crossterm::event::KeyModifiers::NONE,
+    ));
+    assert!(input.confirm().is_none());
+
+    let screen = render_mml_overlay(&input);
+    assert!(screen
+        .replace(' ', "")
+        .contains("MMLに発音ノートがありません"));
 }
 
 #[test]

@@ -5,6 +5,7 @@ pub(super) use tui_textarea::{CursorMove, TextArea};
 
 mod filter_cache;
 mod insert_mode;
+mod keyboard_mml;
 mod normal_mode;
 mod notepad_history;
 mod notepad_history_persistence;

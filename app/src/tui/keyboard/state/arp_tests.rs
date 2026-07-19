@@ -97,6 +97,106 @@ fn note_playback_stays_off_without_a_chord() {
 }
 
 #[test]
+fn replacing_target_while_off_only_updates_the_stored_notes() {
+    let mut state = KeyboardState::default();
+
+    assert!(state
+        .replace_repeat_chord(vec![67, 60, 67], Instant::now(), true)
+        .is_empty());
+    assert_eq!(
+        state
+            .repeat_chord()
+            .iter()
+            .map(|note| note.midi_note)
+            .collect::<Vec<_>>(),
+        vec![67, 60]
+    );
+    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Off);
+}
+
+#[test]
+fn replacing_target_restarts_repeat_immediately() {
+    let mut state = KeyboardState::default();
+    let now = Instant::now();
+    press_and_release(&mut state, &[KEYBOARD_NOTES[0], KEYBOARD_NOTES[2]]);
+    let _ = state.cycle_note_playback(now);
+
+    assert_eq!(
+        state.replace_repeat_chord(vec![67, 71], now, true),
+        vec![
+            [0x80, 60, 0],
+            [0x80, 64, 0],
+            [0x90, 67, 100],
+            [0x90, 71, 100],
+        ]
+    );
+    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Repeat);
+}
+
+#[test]
+fn replacing_target_restarts_arp_from_the_new_lowest_note() {
+    let mut state = KeyboardState::default();
+    let now = Instant::now();
+    press_and_release(&mut state, &[KEYBOARD_NOTES[0], KEYBOARD_NOTES[2]]);
+    let _ = enter_arp(&mut state, now);
+
+    assert_eq!(
+        state.replace_repeat_chord(vec![71, 65], now, true),
+        vec![[0x80, 60, 0], [0x90, 65, 100]]
+    );
+    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Arp);
+}
+
+#[test]
+fn replacing_target_restarts_auto_using_the_detected_voicing() {
+    let now = Instant::now();
+    let mut mono = KeyboardState::default();
+    mono.set_detected_voicing(crate::realtime_play::PatchVoicing::Mono);
+    press_and_release(&mut mono, &[KEYBOARD_NOTES[0], KEYBOARD_NOTES[2]]);
+    let _ = enter_arp(&mut mono, now);
+    assert!(mono.cycle_note_playback(now).is_empty());
+    assert_eq!(
+        mono.replace_repeat_chord(vec![71, 65], now, true),
+        vec![[0x80, 60, 0], [0x90, 65, 100]]
+    );
+
+    let mut poly = KeyboardState::default();
+    poly.set_detected_voicing(crate::realtime_play::PatchVoicing::Poly);
+    press_and_release(&mut poly, &[KEYBOARD_NOTES[0], KEYBOARD_NOTES[2]]);
+    let _ = enter_arp(&mut poly, now);
+    let _ = poly.cycle_note_playback(now);
+    assert_eq!(
+        poly.replace_repeat_chord(vec![71, 65], now, true),
+        vec![
+            [0x80, 60, 0],
+            [0x80, 64, 0],
+            [0x90, 71, 100],
+            [0x90, 65, 100],
+        ]
+    );
+}
+
+#[test]
+fn replacing_target_while_unready_is_used_by_the_ready_refresh() {
+    let mut state = KeyboardState::default();
+    let now = Instant::now();
+    press_and_release(&mut state, &[KEYBOARD_NOTES[0], KEYBOARD_NOTES[2]]);
+    let _ = state.cycle_note_playback(now);
+    assert_eq!(
+        state.take_note_off_messages(),
+        vec![[0x80, 60, 0], [0x80, 64, 0]]
+    );
+
+    assert!(state
+        .replace_repeat_chord(vec![67, 71], now, false)
+        .is_empty());
+    assert_eq!(
+        state.take_pending_refresh_messages(now),
+        vec![[0x90, 67, 100], [0x90, 71, 100]]
+    );
+}
+
+#[test]
 fn arp_sorts_notes_and_plays_two_octaves_every_250ms() {
     let mut state = KeyboardState::default();
     let now = Instant::now();

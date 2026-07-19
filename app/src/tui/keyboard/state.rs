@@ -96,6 +96,19 @@ pub(in crate::tui) struct KeyboardNote {
     pub(in crate::tui) midi_note: u8,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::tui) struct PlaybackNote {
+    pub(in crate::tui) midi_note: u8,
+}
+
+impl From<KeyboardNote> for PlaybackNote {
+    fn from(note: KeyboardNote) -> Self {
+        Self {
+            midi_note: note.midi_note,
+        }
+    }
+}
+
 impl KeyboardNote {
     const fn new(key: char, name: &'static str, midi_note: u8) -> Self {
         Self {
@@ -120,11 +133,11 @@ pub(crate) struct KeyboardState {
     note_playback_mode: NotePlaybackMode,
     detected_voicing: PatchVoicing,
     // 最後に押した和音(同時押しの集合)。releaseしても保持する
-    repeat_chord: Vec<KeyboardNote>,
+    repeat_chord: Vec<PlaybackNote>,
     // note repeatで現在発音中のノート
-    repeat_sounding: Vec<KeyboardNote>,
+    repeat_sounding: Vec<PlaybackNote>,
     // arpで現在発音中のノートと、次に発音するシーケンス位置
-    arp_sounding: Option<KeyboardNote>,
+    arp_sounding: Option<PlaybackNote>,
     arp_next_index: usize,
     // 全周期系統(桁、repeat、arp)が共有する250msマスタークロック
     periodic_next_at: Option<Instant>,
@@ -242,7 +255,7 @@ impl KeyboardState {
                 && self.detected_voicing == PatchVoicing::Mono)
     }
 
-    pub(in crate::tui) fn repeat_chord(&self) -> &[KeyboardNote] {
+    pub(in crate::tui) fn repeat_chord(&self) -> &[PlaybackNote] {
         &self.repeat_chord
     }
 
@@ -309,36 +322,64 @@ impl KeyboardState {
         if self.held.is_empty() {
             self.repeat_chord.clear();
         }
-        if !self.repeat_chord.iter().any(|held| held.key == note.key) {
-            self.repeat_chord.push(note);
+        if !self
+            .repeat_chord
+            .iter()
+            .any(|held| held.midi_note == note.midi_note)
+        {
+            self.repeat_chord.push(note.into());
             // arp中の和音追加も、次tickでは完成時点の和音の最低音から始める
             self.arp_next_index = 0;
         }
         self.held.push(note);
-        Some(vec![note_on(note, self.velocity)])
+        Some(vec![note_on(note.midi_note, self.velocity)])
     }
 
     pub(super) fn release(&mut self, note: KeyboardNote) -> Option<Vec<[u8; 3]>> {
         let index = self.held.iter().position(|held| held.key == note.key)?;
         self.held.remove(index);
-        Some(vec![note_off(note)])
+        Some(vec![note_off(note.midi_note)])
     }
 
     // patch切替用: 発音中ノートのoffのみ送出し、自動送信系のmodeは維持する。
     // Ready復帰時にtake_pending_refresh_messagesがコントローラ現在値を再送する。
     pub(super) fn take_note_off_messages(&mut self) -> Vec<[u8; 3]> {
-        let mut messages: Vec<[u8; 3]> = self.held.drain(..).map(note_off).collect();
-        messages.extend(self.repeat_sounding.drain(..).map(note_off));
-        messages.extend(self.arp_sounding.take().map(note_off));
+        let mut messages: Vec<[u8; 3]> = self
+            .held
+            .drain(..)
+            .map(|note| note_off(note.midi_note))
+            .collect();
+        messages.extend(
+            self.repeat_sounding
+                .drain(..)
+                .map(|note| note_off(note.midi_note)),
+        );
+        messages.extend(
+            self.arp_sounding
+                .take()
+                .map(|note| note_off(note.midi_note)),
+        );
         self.refresh_pending = true;
         messages
     }
 
     pub(in crate::tui) fn take_reset_messages(&mut self) -> Vec<[u8; 3]> {
-        let mut messages: Vec<[u8; 3]> = self.held.drain(..).map(note_off).collect();
+        let mut messages: Vec<[u8; 3]> = self
+            .held
+            .drain(..)
+            .map(|note| note_off(note.midi_note))
+            .collect();
         self.note_playback_mode = NotePlaybackMode::Off;
-        messages.extend(self.repeat_sounding.drain(..).map(note_off));
-        messages.extend(self.arp_sounding.take().map(note_off));
+        messages.extend(
+            self.repeat_sounding
+                .drain(..)
+                .map(|note| note_off(note.midi_note)),
+        );
+        messages.extend(
+            self.arp_sounding
+                .take()
+                .map(|note| note_off(note.midi_note)),
+        );
         self.arp_next_index = 0;
         if self.velocity_mode == VelocityMode::Periodic {
             // 周期を止め、現在値に対応する固定modeへ降格(velocityは送信対象外)
@@ -375,12 +416,12 @@ pub(super) fn note_for_key(code: KeyCode) -> Option<KeyboardNote> {
     KEYBOARD_NOTES.iter().find(|note| note.key == key).copied()
 }
 
-fn note_on(note: KeyboardNote, velocity: u8) -> [u8; 3] {
-    [NOTE_ON, note.midi_note, velocity]
+fn note_on(midi_note: u8, velocity: u8) -> [u8; 3] {
+    [NOTE_ON, midi_note, velocity]
 }
 
-fn note_off(note: KeyboardNote) -> [u8; 3] {
-    [NOTE_OFF, note.midi_note, 0]
+fn note_off(midi_note: u8) -> [u8; 3] {
+    [NOTE_OFF, midi_note, 0]
 }
 
 fn pitch_bend(value: u16) -> [u8; 3] {

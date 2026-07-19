@@ -41,6 +41,7 @@ ureq = { version = "2", features = ["json"] }
 # Audio output for server WAV conversion
 hound = "3.5"
 rodio = "0.19"
+midly = "0.5"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

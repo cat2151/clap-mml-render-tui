@@ -15,6 +15,12 @@ use crate::tui::keyboard::{
 use crate::tui::TuiApp;
 use crate::ui_theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_PURPLE};
 
+mod mml_overlay;
+mod note;
+
+use mml_overlay::draw_mml_input_overlay;
+use note::midi_note_name;
+
 pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     app.sync_keyboard_patch_catalog();
     app.sync_keyboard_voicing_detection();
@@ -65,13 +71,13 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     f.render_widget(
         Paragraph::new(vec![
             Line::from(
-                "Up/Down:patch -/+1  PgUp/PgDn:patch -/+10  Home/End:category -/+1  r:random",
+                "Up/Down:patch -/+1  PgUp/PgDn:patch -/+10  Home/End:category -/+1  r:random  n:notepad",
             ),
             Line::from(
-                "c d e f g a b:note  h:transport  Shift+H:buffer  t:off/repeat/arp/auto  n:notepad  w:DAW  q:quit",
+                "c d e f g a b:note  h:transport  Shift+H:buffer  t:off/repeat/arp/auto  i:MML notes",
             ),
             Line::from(
-                "v:velocity  m:mod(CC1)  p:pitch bend  x:CC#  z:CC value  Shift+Z:CC cycle",
+                "v:velocity  m:mod(CC1)  p:pitch bend  x:CC#  z:CC value  Shift+Z:CC cycle  w:DAW  q:quit",
             ),
         ])
         .style(base_style()),
@@ -84,6 +90,7 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
         f,
         panes[0],
     );
+    draw_mml_input_overlay(&app.keyboard_mml_input, f, panes[0]);
 }
 
 fn draw_keyboard(app: &TuiApp<'_>, f: &mut Frame<'_>, area: Rect) {
@@ -367,7 +374,7 @@ fn controller_status_text(state: &KeyboardState) -> String {
 
 fn note_playback_status_text(state: &KeyboardState) -> String {
     let mode = match state.note_playback_mode() {
-        NotePlaybackMode::Off => return "Note mode: off".to_string(),
+        NotePlaybackMode::Off => "off",
         NotePlaybackMode::Repeat => "repeat",
         NotePlaybackMode::Arp => "arp",
         NotePlaybackMode::Auto if state.note_playback_uses_arp() => "auto→arp",
@@ -379,9 +386,15 @@ fn note_playback_status_text(state: &KeyboardState) -> String {
     }
     let names = notes
         .iter()
-        .map(|note| note.name)
+        .map(|note| midi_note_name(note.midi_note))
         .collect::<Vec<_>>()
         .join(" ");
+    if state.note_playback_mode() == NotePlaybackMode::Off {
+        return format!(
+            "Note mode: off | Target: {}",
+            if names.is_empty() { "-" } else { &names }
+        );
+    }
     format!("Note mode: {mode} {names}")
 }
 

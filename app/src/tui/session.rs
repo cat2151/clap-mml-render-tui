@@ -134,6 +134,7 @@ impl<'a> TuiApp<'a> {
             realtime_play_server,
             keyboard_midi_sender,
             keyboard_state,
+            keyboard_mml_input: super::keyboard::KeyboardMmlInput::default(),
             voicing_cache: crate::history::load_voicing_cache(),
             voicing_layers,
             voicing_source_refresh,

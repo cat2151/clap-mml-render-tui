@@ -5,11 +5,13 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use super::{Mode, PlayState, TuiApp};
 
 mod catalog;
+mod mml_input;
 mod numeric_input;
 mod sender;
 mod state;
 
 pub(super) use catalog::{KeyboardPatchCatalog, KeyboardPatchCatalogStatus};
+pub(crate) use mml_input::KeyboardMmlInput;
 pub(super) use numeric_input::{NumericInput, NumericInputTarget};
 pub(super) use sender::{
     KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardMidiSender, KeyboardVoicingStatus,
@@ -47,6 +49,7 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn start_keyboard(&mut self, patch: Option<String>) {
+        self.keyboard_mml_input.cancel();
         self.voicing_layers = self.voicing_source_refresh.load_for_keyboard();
         let session = self.begin_playback_session();
         self.set_play_state_if_current(session, PlayState::Idle);
@@ -90,6 +93,9 @@ impl<'a> TuiApp<'a> {
 
     pub(super) fn handle_keyboard_key_event(&mut self, key: KeyEvent) -> KeyboardAction {
         self.sync_keyboard_voicing_detection();
+        if self.keyboard_mml_input.is_active() {
+            return self.handle_keyboard_mml_input_key_event(key);
+        }
         if key.kind == KeyEventKind::Repeat {
             return KeyboardAction::Continue;
         }
@@ -201,6 +207,10 @@ impl<'a> TuiApp<'a> {
                     }
                     return KeyboardAction::Continue;
                 }
+                KeyCode::Char('i') => {
+                    self.keyboard_mml_input.open();
+                    return KeyboardAction::Continue;
+                }
                 KeyCode::Char('x') => {
                     self.keyboard_state
                         .begin_numeric_input(NumericInputTarget::CcNumber);
@@ -272,6 +282,47 @@ impl<'a> TuiApp<'a> {
         };
         if let (Some(messages), Some(sender)) = (messages, &self.keyboard_midi_sender) {
             sender.send(messages, self.keyboard_state.patch());
+        }
+        KeyboardAction::Continue
+    }
+
+    fn handle_keyboard_mml_input_key_event(&mut self, key: KeyEvent) -> KeyboardAction {
+        if key.kind == KeyEventKind::Release {
+            if key.modifiers != KeyModifiers::NONE {
+                return KeyboardAction::Continue;
+            }
+            let Some(note) = note_for_key(key.code) else {
+                return KeyboardAction::Continue;
+            };
+            if !self.keyboard_connection_status().phase.accepts_notes() {
+                self.keyboard_state.take_reset_messages();
+                return KeyboardAction::Continue;
+            }
+            if let (Some(messages), Some(sender)) = (
+                self.keyboard_state.release(note),
+                &self.keyboard_midi_sender,
+            ) {
+                sender.send(messages, self.keyboard_state.patch());
+            }
+            return KeyboardAction::Continue;
+        }
+
+        match key.code {
+            KeyCode::Esc => self.keyboard_mml_input.cancel(),
+            KeyCode::Enter => {
+                if let Some(notes) = self.keyboard_mml_input.confirm() {
+                    let ready = self.keyboard_connection_status().phase.accepts_notes();
+                    let messages =
+                        self.keyboard_state
+                            .replace_repeat_chord(notes, Instant::now(), ready);
+                    if ready && !messages.is_empty() {
+                        if let Some(sender) = &self.keyboard_midi_sender {
+                            sender.send(messages, self.keyboard_state.patch());
+                        }
+                    }
+                }
+            }
+            _ => self.keyboard_mml_input.input(key),
         }
         KeyboardAction::Continue
     }

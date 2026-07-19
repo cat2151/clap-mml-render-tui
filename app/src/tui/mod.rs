@@ -44,7 +44,7 @@ pub(super) const PATCH_FILTER_QUERY_JSON_KEY: &str = "Surge XT patch filter";
 
 pub(crate) use self::cache::filter_items;
 pub(in crate::tui) use self::cache::filter_patches;
-use self::keyboard::{KeyboardMidiSender, KeyboardState};
+use self::keyboard::{KeyboardMidiSender, KeyboardMmlInput, KeyboardState};
 use self::render_queue::{TuiRenderJobStatus, TuiRenderQueue};
 pub(in crate::tui) use self::session::PatchLoadState;
 use crate::{config::Config, patches::PatchSortOrder, realtime_play::RealtimePlayServerSupervisor};
@@ -139,6 +139,7 @@ pub struct TuiApp<'a> {
     realtime_play_server: Option<Arc<RealtimePlayServerSupervisor>>,
     keyboard_midi_sender: Option<KeyboardMidiSender>,
     pub(super) keyboard_state: KeyboardState,
+    pub(super) keyboard_mml_input: KeyboardMmlInput<'a>,
     /// patch ごとの mono/poly 判定結果のキャッシュ。起動時に読み込み、
     /// 新しく probe した patch を検出したら書き戻す。
     pub(super) voicing_cache: crate::history::VoicingCache,

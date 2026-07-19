@@ -24,6 +24,7 @@ impl TuiApp<'static> {
             realtime_play_server: None,
             keyboard_midi_sender: None,
             keyboard_state: KeyboardState::default(),
+            keyboard_mml_input: KeyboardMmlInput::default(),
             voicing_cache: crate::history::VoicingCache::default(),
             voicing_layers: crate::voicing_sources::VoicingLayers::default(),
             voicing_source_refresh: crate::voicing_sources::VoicingSourceRefresh::disabled(),

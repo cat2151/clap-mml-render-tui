@@ -51,9 +51,9 @@ fn press_tracks_last_chord_and_restarts_after_full_release() {
         state
             .repeat_chord()
             .iter()
-            .map(|note| note.key)
+            .map(|note| note.midi_note)
             .collect::<Vec<_>>(),
-        vec!['c', 'e', 'g']
+        vec![60, 64, 67]
     );
     // 全release後も和音は保持される
     assert!(state.release(KEYBOARD_NOTES[0]).is_some());
@@ -66,9 +66,9 @@ fn press_tracks_last_chord_and_restarts_after_full_release() {
         state
             .repeat_chord()
             .iter()
-            .map(|note| note.key)
+            .map(|note| note.midi_note)
             .collect::<Vec<_>>(),
-        vec!['d']
+        vec![62]
     );
 }
 

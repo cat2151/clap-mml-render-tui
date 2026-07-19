@@ -98,7 +98,7 @@ impl KeyboardState {
         let velocity = self.velocity;
         self.repeat_chord
             .iter()
-            .map(|note| note_on(*note, velocity))
+            .map(|note| note_on(note.midi_note, velocity))
             .collect()
     }
 
@@ -140,7 +140,11 @@ impl KeyboardState {
             NotePlaybackMode::Repeat | NotePlaybackMode::Auto if !self.note_playback_uses_arp() => {
                 // repeatは250msマスタークロックを8分周する。リトリガーは値変更の後。
                 if self.repeat_duration_elapsed() {
-                    messages.extend(self.repeat_sounding.drain(..).map(note_off));
+                    messages.extend(
+                        self.repeat_sounding
+                            .drain(..)
+                            .map(|note| note_off(note.midi_note)),
+                    );
                     messages.extend(self.attack_repeat_chord());
                 }
             }

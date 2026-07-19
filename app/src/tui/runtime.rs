@@ -43,7 +43,8 @@ impl<'a> TuiApp<'a> {
             Mode::PatchSelect => self.patch_select_filter_active,
             Mode::NotepadHistory => self.notepad_filter_active,
             Mode::PatchPhrase => self.patch_phrase_filter_active,
-            Mode::Normal | Mode::NotepadHistoryGuide | Mode::Help | Mode::Keyboard => false,
+            Mode::Keyboard => self.keyboard_mml_input.is_active(),
+            Mode::Normal | Mode::NotepadHistoryGuide | Mode::Help => false,
         }
     }
 
