@@ -231,6 +231,10 @@ impl<'a> TuiApp<'a> {
                     self.prepare_keyboard_connection();
                     return KeyboardAction::Continue;
                 }
+                KeyCode::Char('r') => {
+                    self.select_random_keyboard_patch();
+                    return KeyboardAction::Continue;
+                }
                 KeyCode::Char('n') => {
                     self.finish_keyboard();
                     self.persist_keyboard_on_exit = false;

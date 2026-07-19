@@ -307,6 +307,34 @@ fn keyboard_patch_keys_navigate_categories_and_apply_the_selected_patch() {
 }
 
 #[test]
+fn keyboard_r_selects_each_other_patch_once_and_releases_held_notes() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "patches_factory/Lead/Lead 1.fxp",
+        "patches_factory/Lead/Lead 2.fxp",
+        "patches_factory/Pad/Pad 1.fxp",
+    ]))));
+    app.start_keyboard(Some("patches_factory/Lead/Lead 1.fxp".to_string()));
+    assert!(app
+        .keyboard_state
+        .press(crate::tui::keyboard::KEYBOARD_NOTES[0])
+        .is_some());
+
+    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE));
+    let first = app.keyboard_state.patch().unwrap().to_string();
+    assert_ne!(first, "patches_factory/Lead/Lead 1.fxp");
+    assert!(app.keyboard_state.held().is_empty());
+
+    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE));
+    let second = app.keyboard_state.patch().unwrap().to_string();
+    assert_ne!(second, "patches_factory/Lead/Lead 1.fxp");
+    assert_ne!(second, first);
+
+    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE));
+    assert_ne!(app.keyboard_state.patch(), Some(second.as_str()));
+}
+
+#[test]
 fn keyboard_keeps_an_unknown_patch_until_the_first_navigation_key() {
     let mut app = TuiApp::new_for_test(test_config());
     app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[

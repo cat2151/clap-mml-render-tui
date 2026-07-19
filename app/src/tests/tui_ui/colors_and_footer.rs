@@ -148,6 +148,7 @@ fn keyboard_screen_shows_connecting_status_and_navigation() {
     assert!(screen.contains("x:CC#"));
     assert!(screen.contains("z:CC value"));
     assert!(screen.contains("Shift+Z:CC cycle"));
+    assert!(screen.contains("r:random"));
     assert!(screen.contains("Vel: 100"));
     assert!(screen.contains("Mod: OFF"));
     assert!(screen.contains("PB: -"));
@@ -180,6 +181,7 @@ fn keyboard_screen_shows_category_and_patch_panes_while_connecting() {
     assert!(screen.contains("connecting..."));
     assert!(screen.contains("PgUp/PgDn:patch -/+10"));
     assert!(screen.contains("Home/End:category -/+1"));
+    assert!(screen.contains("r:random"));
 }
 
 #[test]

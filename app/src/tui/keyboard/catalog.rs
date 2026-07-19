@@ -1,3 +1,4 @@
+use rand::seq::SliceRandom;
 use ratatui::widgets::ListState;
 
 use crate::patches::PatchCategory;
@@ -17,6 +18,7 @@ pub(in crate::tui) struct KeyboardPatchCatalog {
     categories: Vec<PatchCategory>,
     category_cursor: Option<usize>,
     patch_cursor: Option<usize>,
+    random_remaining: Vec<(usize, usize)>,
     category_list_state: ListState,
     patch_list_state: ListState,
 }
@@ -28,6 +30,7 @@ impl Default for KeyboardPatchCatalog {
             categories: Vec::new(),
             category_cursor: None,
             patch_cursor: None,
+            random_remaining: Vec::new(),
             category_list_state: ListState::default(),
             patch_list_state: ListState::default(),
         }
@@ -60,6 +63,7 @@ impl KeyboardPatchCatalog {
         self.categories.clear();
         self.category_cursor = None;
         self.patch_cursor = None;
+        self.random_remaining.clear();
         self.category_list_state.select(None);
         self.patch_list_state.select(None);
     }
@@ -81,6 +85,7 @@ impl KeyboardPatchCatalog {
         });
         self.category_cursor = selection.map(|(category, _)| category);
         self.patch_cursor = selection.map(|(_, patch)| patch);
+        self.random_remaining.clear();
         self.sync_list_states(1, 1);
     }
 
@@ -136,6 +141,32 @@ impl KeyboardPatchCatalog {
             return None;
         }
         self.select(next, 0)
+    }
+
+    pub(super) fn select_random_patch(&mut self) -> Option<String> {
+        if self.categories.is_empty() {
+            return None;
+        }
+
+        let current = self.category_cursor.zip(self.patch_cursor);
+        self.random_remaining
+            .retain(|coordinates| Some(*coordinates) != current);
+        if self.random_remaining.is_empty() {
+            self.random_remaining = self
+                .categories
+                .iter()
+                .enumerate()
+                .flat_map(|(category_index, category)| {
+                    (0..category.patches.len())
+                        .map(move |patch_index| (category_index, patch_index))
+                })
+                .filter(|coordinates| Some(*coordinates) != current)
+                .collect();
+            self.random_remaining.shuffle(&mut rand::thread_rng());
+        }
+
+        let (category_index, patch_index) = self.random_remaining.pop()?;
+        self.select(category_index, patch_index)
     }
 
     fn select(&mut self, category_index: usize, patch_index: usize) -> Option<String> {
@@ -262,6 +293,12 @@ impl<'a> TuiApp<'a> {
         self.apply_keyboard_patch_selection(selected);
     }
 
+    pub(super) fn select_random_keyboard_patch(&mut self) {
+        self.sync_keyboard_patch_catalog();
+        let selected = self.keyboard_state.patch_catalog.select_random_patch();
+        self.apply_keyboard_patch_selection(selected);
+    }
+
     fn apply_keyboard_patch_selection(&mut self, selected: Option<String>) {
         let Some(patch) = selected else {
             return;
@@ -288,6 +325,8 @@ impl<'a> TuiApp<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
 
     fn categories() -> Vec<PatchCategory> {
@@ -345,5 +384,63 @@ mod tests {
         assert_eq!(catalog.move_patch_by(-1).as_deref(), Some("Lead 1"));
         assert_eq!(catalog.selected_category_index(), Some(0));
         assert_eq!(catalog.selected_patch_index(), Some(0));
+    }
+
+    #[test]
+    fn random_selection_visits_every_other_patch_without_duplicates() {
+        let mut catalog = KeyboardPatchCatalog::default();
+        catalog.load(categories(), Some("Lead 1"));
+        let mut seen = HashSet::new();
+
+        for _ in 0..13 {
+            let patch = catalog
+                .select_random_patch()
+                .expect("another patch should be available");
+            assert_ne!(patch, "Lead 1");
+            assert!(seen.insert(patch), "random cycle returned a duplicate");
+        }
+
+        assert_eq!(seen.len(), 13);
+        let previous = catalog
+            .selected_category()
+            .and_then(|category| {
+                catalog
+                    .selected_patch_index()
+                    .and_then(|index| category.patches.get(index))
+            })
+            .cloned();
+        assert_ne!(catalog.select_random_patch(), previous);
+
+        catalog.select(1, 0);
+        assert_ne!(catalog.select_random_patch().as_deref(), Some("Pad 0"));
+    }
+
+    #[test]
+    fn random_selection_updates_both_cursors_from_an_unknown_patch() {
+        let mut catalog = KeyboardPatchCatalog::default();
+        catalog.load(categories(), Some("Unknown"));
+
+        let patch = catalog.select_random_patch().unwrap();
+        let category = catalog.selected_category().unwrap();
+        let patch_index = catalog.selected_patch_index().unwrap();
+
+        assert_eq!(category.patches[patch_index], patch);
+    }
+
+    #[test]
+    fn random_selection_with_only_the_current_patch_does_nothing() {
+        let mut catalog = KeyboardPatchCatalog::default();
+        catalog.load(
+            vec![PatchCategory {
+                name: "Lead".to_string(),
+                patches: vec!["Lead 1".to_string()],
+            }],
+            Some("Lead 1"),
+        );
+
+        assert_eq!(catalog.select_random_patch(), None);
+
+        catalog.load(catalog.categories.clone(), Some("Unknown"));
+        assert_eq!(catalog.select_random_patch().as_deref(), Some("Lead 1"));
     }
 }
