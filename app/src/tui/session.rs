@@ -109,6 +109,12 @@ impl<'a> TuiApp<'a> {
             keyboard_state.buffer_multiplier(),
         ));
         let restore_keyboard = keyboard.is_some();
+        let voicing_source_refresh = crate::voicing_sources::VoicingSourceRefresh::spawn(cfg);
+        let voicing_layers = if restore_keyboard {
+            voicing_source_refresh.load_for_keyboard()
+        } else {
+            crate::voicing_sources::VoicingLayers::default()
+        };
 
         Self {
             mode: if restore_keyboard {
@@ -129,6 +135,8 @@ impl<'a> TuiApp<'a> {
             keyboard_midi_sender,
             keyboard_state,
             voicing_cache: crate::history::load_voicing_cache(),
+            voicing_layers,
+            voicing_source_refresh,
             persist_keyboard_on_exit: false,
             active_offline_render_count,
             render_queue,

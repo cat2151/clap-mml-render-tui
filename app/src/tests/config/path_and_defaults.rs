@@ -85,6 +85,18 @@ fn default_config_content_uses_patches_dirs_key() {
 }
 
 #[test]
+fn default_config_content_uses_voicing_source_urls() {
+    let content = default_config_content();
+
+    assert!(content.contains(&format!(
+        "voicing_shared_source = \"{DEFAULT_VOICING_SHARED_SOURCE}\""
+    )));
+    assert!(content.contains(&format!(
+        "voicing_override_source = \"{DEFAULT_VOICING_OVERRIDE_SOURCE}\""
+    )));
+}
+
+#[test]
 fn default_config_content_uses_config_editor_key() {
     let content = default_config_content();
 

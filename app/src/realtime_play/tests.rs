@@ -32,6 +32,8 @@ fn cfg_for_port(port: u16) -> Config {
         realtime_play_server_port: port,
         realtime_play_server_command: "exit 0".to_string(),
         autoplay_on_startup: true,
+        voicing_shared_source: String::new(),
+        voicing_override_source: String::new(),
     }
 }
 

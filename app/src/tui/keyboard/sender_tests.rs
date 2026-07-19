@@ -1,4 +1,7 @@
+use std::time::Duration;
+
 use super::*;
+use crate::realtime_play::VoicingReport;
 
 use std::{
     io::{BufRead as _, BufReader, Read as _, Write as _},
@@ -23,6 +26,8 @@ fn cfg_for_port(port: u16) -> crate::config::Config {
         realtime_play_server_port: port,
         realtime_play_server_command: "exit 0".to_string(),
         autoplay_on_startup: true,
+        voicing_shared_source: String::new(),
+        voicing_override_source: String::new(),
     }
 }
 

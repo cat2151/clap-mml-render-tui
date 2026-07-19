@@ -42,6 +42,26 @@ impl VoicingCache {
         self.entries.insert(key, voicing);
         true
     }
+
+    pub(crate) fn from_shared_json(text: &str) -> Result<Self> {
+        let parsed: Self = serde_json::from_str(text)?;
+        let mut normalized = Self::default();
+        for (patch, voicing) in parsed.entries {
+            if voicing == PatchVoicing::Unknown {
+                anyhow::bail!("共有voicing判定にunknownは指定できません: {patch}");
+            }
+            let key = crate::patches::normalize_patch_lookup_key(&patch);
+            if key.is_empty() {
+                anyhow::bail!("共有voicing判定に空のpatch keyがあります");
+            }
+            if let Some(previous) = normalized.entries.insert(key.clone(), voicing) {
+                if previous != voicing {
+                    anyhow::bail!("共有voicing判定の正規化後keyが重複しています: {key}");
+                }
+            }
+        }
+        Ok(normalized)
+    }
 }
 
 pub(crate) fn save_voicing_cache(cache: &VoicingCache) -> Result<()> {

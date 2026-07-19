@@ -5,7 +5,8 @@ use std::{
 
 use anyhow::Result;
 
-use super::{KeyboardTransport, PatchVoicing, VoicingReport};
+use super::{KeyboardTransport, PatchVoicing};
+use crate::realtime_play::VoicingReport;
 
 static NEXT_PROBE_ID: AtomicU64 = AtomicU64::new(1);
 

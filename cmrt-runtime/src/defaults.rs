@@ -3,6 +3,7 @@ use serde::Serialize;
 use crate::{
     DEFAULT_OFFLINE_RENDER_SERVER_PORT, DEFAULT_OFFLINE_RENDER_SERVER_WORKERS,
     DEFAULT_OFFLINE_RENDER_WORKERS, DEFAULT_REALTIME_PLAY_SERVER_PORT,
+    DEFAULT_VOICING_OVERRIDE_SOURCE, DEFAULT_VOICING_SHARED_SOURCE,
 };
 
 #[derive(Serialize)]
@@ -143,6 +144,11 @@ realtime_play_server_command = ""
 # false にすると、起動直後は再生されず、Enter/Space（notepad）・Shift+P（DAW）などの
 # キー操作で再生します。
 autoplay_on_startup = true
+
+# 【省略可】keyboard の patch mono/poly 判定データ
+# HTTP(S) URL、絶対path、またはこのconfig.tomlからの相対pathを指定できます。空文字で無効化します。
+voicing_shared_source = "{DEFAULT_VOICING_SHARED_SOURCE}"
+voicing_override_source = "{DEFAULT_VOICING_OVERRIDE_SOURCE}"
 
 # 【省略可】Surge XT パッチの検索対象ディレクトリ一覧（TUI / DAW の音色選択・ランダム音色で使う）
 # 例 (Windows): patches_dirs = ['C:\ProgramData\Surge XT\patches_factory', 'C:\ProgramData\Surge XT\patches_3rdparty']

@@ -47,6 +47,7 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn start_keyboard(&mut self, patch: Option<String>) {
+        self.voicing_layers = self.voicing_source_refresh.load_for_keyboard();
         let session = self.begin_playback_session();
         self.set_play_state_if_current(session, PlayState::Idle);
         self.keyboard_state = KeyboardState::new(patch);
@@ -84,7 +85,7 @@ impl<'a> TuiApp<'a> {
         &self,
         patch: Option<&str>,
     ) -> Option<crate::realtime_play::PatchVoicing> {
-        self.voicing_cache.get(patch?)
+        self.voicing_layers.resolve(&self.voicing_cache, patch?)
     }
 
     pub(super) fn handle_keyboard_key_event(&mut self, key: KeyEvent) -> KeyboardAction {

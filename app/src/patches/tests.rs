@@ -68,6 +68,8 @@ fn collect_patch_pairs_combines_factory_and_thirdparty_using_common_base() {
         realtime_play_server_port: crate::config::DEFAULT_REALTIME_PLAY_SERVER_PORT,
         realtime_play_server_command: String::new(),
         autoplay_on_startup: true,
+        voicing_shared_source: String::new(),
+        voicing_override_source: String::new(),
     };
 
     let pairs = collect_patch_pairs(&cfg).unwrap();
@@ -115,6 +117,8 @@ fn collect_patch_pairs_sorts_display_names_naturally() {
         realtime_play_server_port: crate::config::DEFAULT_REALTIME_PLAY_SERVER_PORT,
         realtime_play_server_command: String::new(),
         autoplay_on_startup: true,
+        voicing_shared_source: String::new(),
+        voicing_override_source: String::new(),
     };
 
     let pairs = collect_patch_pairs(&cfg).unwrap();

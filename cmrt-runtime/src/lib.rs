@@ -14,6 +14,9 @@ pub const DEFAULT_OFFLINE_RENDER_WORKERS: usize = 2;
 pub const DEFAULT_OFFLINE_RENDER_SERVER_WORKERS: usize = 4;
 pub const DEFAULT_OFFLINE_RENDER_SERVER_PORT: u16 = 62153;
 pub const DEFAULT_REALTIME_PLAY_SERVER_PORT: u16 = 62154;
+pub const DEFAULT_VOICING_SHARED_SOURCE: &str =
+    "https://raw.githubusercontent.com/cat2151/cat-music-patterns/main/surge-xt-patch-voicing.json";
+pub const DEFAULT_VOICING_OVERRIDE_SOURCE: &str = "https://raw.githubusercontent.com/cat2151/cat-music-patterns/main/surge-xt-patch-voicing-overrides.json";
 const MIN_OFFLINE_RENDER_WORKERS: usize = 1;
 const MAX_OFFLINE_RENDER_WORKERS: usize = 16;
 
@@ -70,6 +73,12 @@ pub struct Config {
     /// 起動時に自動再生するかどうか（notepad: 現在行 / DAW: 曲先頭から演奏開始）
     #[serde(default = "default_autoplay_on_startup")]
     pub autoplay_on_startup: bool,
+    /// keyboard の共有 mono/poly 判定JSON。HTTP(S) URLまたはconfig.toml基準のpath。
+    #[serde(default = "default_voicing_shared_source")]
+    pub voicing_shared_source: String,
+    /// keyboard の mono/poly 判定override JSON。HTTP(S) URLまたはconfig.toml基準のpath。
+    #[serde(default = "default_voicing_override_source")]
+    pub voicing_override_source: String,
 }
 
 fn default_offline_render_workers() -> usize {
@@ -90,6 +99,14 @@ fn default_realtime_play_server_port() -> u16 {
 
 fn default_autoplay_on_startup() -> bool {
     true
+}
+
+fn default_voicing_shared_source() -> String {
+    DEFAULT_VOICING_SHARED_SOURCE.to_string()
+}
+
+fn default_voicing_override_source() -> String {
+    DEFAULT_VOICING_OVERRIDE_SOURCE.to_string()
 }
 
 impl Config {

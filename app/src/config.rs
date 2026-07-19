@@ -7,7 +7,8 @@ pub use cmrt_runtime::{
     serialize_patches_dirs_line, shared_patch_root_dir, Config, OfflineRenderBackend,
     RealtimeAudioBackend, DEFAULT_OFFLINE_RENDER_SERVER_PORT,
     DEFAULT_OFFLINE_RENDER_SERVER_WORKERS, DEFAULT_OFFLINE_RENDER_WORKERS,
-    DEFAULT_REALTIME_PLAY_SERVER_PORT,
+    DEFAULT_REALTIME_PLAY_SERVER_PORT, DEFAULT_VOICING_OVERRIDE_SOURCE,
+    DEFAULT_VOICING_SHARED_SOURCE,
 };
 
 pub fn load() -> anyhow::Result<Config> {

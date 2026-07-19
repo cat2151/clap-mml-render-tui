@@ -19,4 +19,5 @@ pub(crate) mod ui_theme;
 pub mod ui_utils;
 pub mod updater;
 pub mod voicing_cache_builder;
+pub(crate) mod voicing_sources;
 pub(crate) mod wav_io;

@@ -33,6 +33,26 @@ buffer_size = 512
         DEFAULT_REALTIME_PLAY_SERVER_PORT
     );
     assert!(cfg.realtime_play_server_command.is_empty());
+    assert_eq!(cfg.voicing_shared_source, DEFAULT_VOICING_SHARED_SOURCE);
+    assert_eq!(cfg.voicing_override_source, DEFAULT_VOICING_OVERRIDE_SOURCE);
+}
+
+#[test]
+fn config_parses_explicit_voicing_sources_and_allows_empty_values() {
+    let toml_str = r#"
+plugin_path = "/usr/lib/clap/Surge XT.clap"
+input_midi  = "input.mid"
+output_midi = "output.mid"
+output_wav  = "output.wav"
+sample_rate = 44100
+buffer_size = 512
+voicing_shared_source = "data/shared.json"
+voicing_override_source = ""
+"#;
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+
+    assert_eq!(cfg.voicing_shared_source, "data/shared.json");
+    assert!(cfg.voicing_override_source.is_empty());
 }
 
 #[test]
