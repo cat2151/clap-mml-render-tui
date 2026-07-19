@@ -310,11 +310,13 @@ impl<'a> TuiApp<'a> {
         match key.code {
             KeyCode::Esc => self.keyboard_mml_input.cancel(),
             KeyCode::Enter => {
-                if let Some(notes) = self.keyboard_mml_input.confirm() {
+                if let Some(progression) = self.keyboard_mml_input.confirm() {
                     let ready = self.keyboard_connection_status().phase.accepts_notes();
-                    let messages =
-                        self.keyboard_state
-                            .replace_repeat_chord(notes, Instant::now(), ready);
+                    let messages = self.keyboard_state.replace_repeat_chords(
+                        progression,
+                        Instant::now(),
+                        ready,
+                    );
                     if ready && !messages.is_empty() {
                         if let Some(sender) = &self.keyboard_midi_sender {
                             sender.send(messages, self.keyboard_state.patch());

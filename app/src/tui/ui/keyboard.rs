@@ -9,8 +9,7 @@ use ratatui::{
 use super::{status::base_style, status::visible_list_page_size, LIST_HIGHLIGHT_SYMBOL};
 use crate::tui::keyboard::{
     KeyboardConnectionPhase, KeyboardPatchCatalogStatus, KeyboardState, KeyboardVoicingStatus,
-    ModulationMode, NotePlaybackMode, NumericInput, NumericInputTarget, PitchBendMode,
-    VelocityMode, KEYBOARD_NOTES,
+    ModulationMode, NumericInput, NumericInputTarget, PitchBendMode, VelocityMode, KEYBOARD_NOTES,
 };
 use crate::tui::TuiApp;
 use crate::ui_theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_PURPLE};
@@ -19,7 +18,7 @@ mod mml_overlay;
 mod note;
 
 use mml_overlay::draw_mml_input_overlay;
-use note::midi_note_name;
+use note::note_playback_status_text;
 
 pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     app.sync_keyboard_patch_catalog();
@@ -370,32 +369,6 @@ fn controller_status_text(state: &KeyboardState) -> String {
         text.push_str(&format!("  Combo: {drawn}/{total}"));
     }
     text
-}
-
-fn note_playback_status_text(state: &KeyboardState) -> String {
-    let mode = match state.note_playback_mode() {
-        NotePlaybackMode::Off => "off",
-        NotePlaybackMode::Repeat => "repeat",
-        NotePlaybackMode::Arp => "arp",
-        NotePlaybackMode::Auto if state.note_playback_uses_arp() => "auto→arp",
-        NotePlaybackMode::Auto => "auto→repeat",
-    };
-    let mut notes = state.repeat_chord().to_vec();
-    if state.note_playback_uses_arp() {
-        notes.sort_unstable_by_key(|note| note.midi_note);
-    }
-    let names = notes
-        .iter()
-        .map(|note| midi_note_name(note.midi_note))
-        .collect::<Vec<_>>()
-        .join(" ");
-    if state.note_playback_mode() == NotePlaybackMode::Off {
-        return format!(
-            "Note mode: off | Target: {}",
-            if names.is_empty() { "-" } else { &names }
-        );
-    }
-    format!("Note mode: {mode} {names}")
 }
 
 fn voicing_status_text(status: &KeyboardVoicingStatus) -> String {

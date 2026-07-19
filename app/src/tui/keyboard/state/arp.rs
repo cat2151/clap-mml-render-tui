@@ -3,23 +3,29 @@ use super::*;
 const OCTAVE: u8 = 12;
 
 impl KeyboardState {
-    pub(in crate::tui) fn replace_repeat_chord(
+    pub(in crate::tui) fn replace_repeat_chords(
         &mut self,
-        midi_notes: Vec<u8>,
+        progression: Vec<Vec<u8>>,
         now: Instant,
         restart_now: bool,
     ) -> Vec<[u8; 3]> {
-        let mut seen = [false; 128];
-        self.repeat_chord = midi_notes
+        self.repeat_chords = progression
             .into_iter()
-            .filter(|&note| {
-                let is_new = !seen[usize::from(note)];
-                seen[usize::from(note)] = true;
-                is_new
+            .filter_map(|midi_notes| {
+                let mut seen = [false; 128];
+                let chord = midi_notes
+                    .into_iter()
+                    .filter(|&note| {
+                        let is_new = !seen[usize::from(note)];
+                        seen[usize::from(note)] = true;
+                        is_new
+                    })
+                    .map(|midi_note| PlaybackNote { midi_note })
+                    .collect::<Vec<_>>();
+                (!chord.is_empty()).then_some(chord)
             })
-            .map(|midi_note| PlaybackNote { midi_note })
             .collect();
-        self.arp_next_index = 0;
+        self.reset_progression_position();
         self.repeat_elapsed_ticks = 0;
 
         let mut messages: Vec<[u8; 3]> = self
@@ -53,10 +59,11 @@ impl KeyboardState {
     pub(in crate::tui) fn cycle_note_playback(&mut self, now: Instant) -> Vec<[u8; 3]> {
         match self.note_playback_mode {
             NotePlaybackMode::Off => {
-                if self.repeat_chord.is_empty() {
+                if self.repeat_chords.is_empty() {
                     return Vec::new();
                 }
                 self.note_playback_mode = NotePlaybackMode::Repeat;
+                self.reset_progression_position();
                 self.repeat_elapsed_ticks = 0;
                 self.periodic_next_at = Some(now + PERIODIC_INTERVAL);
                 self.attack_repeat_chord()
@@ -91,7 +98,7 @@ impl KeyboardState {
             }
             NotePlaybackMode::Auto => {
                 self.note_playback_mode = NotePlaybackMode::Off;
-                self.arp_next_index = 0;
+                self.reset_progression_position();
                 self.repeat_elapsed_ticks = 0;
                 self.periodic_next_at = self
                     .periodic_digits_active()
@@ -113,7 +120,7 @@ impl KeyboardState {
 
     // patch切替後は先頭音から再開し、最初の音にも完全な250msを与える。
     pub(super) fn restart_arp(&mut self, now: Instant) -> Vec<[u8; 3]> {
-        self.arp_next_index = 0;
+        self.reset_progression_position();
         self.repeat_elapsed_ticks = 0;
         self.periodic_next_at = Some(now + PERIODIC_INTERVAL);
         self.attack_next_arp().into_iter().collect()
@@ -136,19 +143,23 @@ impl KeyboardState {
     }
 
     fn attack_next_arp(&mut self) -> Option<[u8; 3]> {
-        let sequence = self.arp_sequence();
+        let mut sequence = self.arp_sequence();
         if sequence.is_empty() {
             return None;
         }
-        let index = self.arp_next_index % sequence.len();
-        let note = sequence[index];
-        self.arp_next_index = (index + 1) % sequence.len();
+        if self.arp_next_index >= sequence.len() {
+            self.advance_repeat_chord();
+            self.arp_next_index = 0;
+            sequence = self.arp_sequence();
+        }
+        let note = sequence[self.arp_next_index];
+        self.arp_next_index += 1;
         self.arp_sounding = Some(note);
         Some(note_on(note.midi_note, self.velocity))
     }
 
     fn arp_sequence(&self) -> Vec<PlaybackNote> {
-        let mut base = self.repeat_chord.clone();
+        let mut base = self.current_repeat_chord().to_vec();
         base.sort_unstable_by_key(|note| note.midi_note);
         let mut sequence = Vec::with_capacity(base.len() * 2);
         sequence.extend(base.iter().copied());
@@ -158,6 +169,24 @@ impl KeyboardState {
                 .map(|midi_note| PlaybackNote { midi_note })
         }));
         sequence
+    }
+
+    pub(super) fn current_repeat_chord(&self) -> &[PlaybackNote] {
+        self.repeat_chords
+            .get(self.repeat_chord_index)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+
+    pub(super) fn advance_repeat_chord(&mut self) {
+        if !self.repeat_chords.is_empty() {
+            self.repeat_chord_index = (self.repeat_chord_index + 1) % self.repeat_chords.len();
+        }
+    }
+
+    pub(super) fn reset_progression_position(&mut self) {
+        self.repeat_chord_index = 0;
+        self.arp_next_index = 0;
     }
 }
 

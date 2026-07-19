@@ -152,11 +152,29 @@ fn note_playback_status_text_shows_all_four_modes() {
 #[test]
 fn note_playback_status_formats_arbitrary_midi_notes() {
     let mut state = KeyboardState::default();
-    state.replace_repeat_chord(vec![0, 61, 127], std::time::Instant::now(), false);
+    state.replace_repeat_chords(
+        vec![vec![0, 61], vec![127]],
+        std::time::Instant::now(),
+        false,
+    );
 
     assert_eq!(
         note_playback_status_text(&state),
-        "Note mode: off | Target: C-1 C#4 G9"
+        "Note mode: off | Target: C-1 C#4 | G9"
+    );
+}
+
+#[test]
+fn note_playback_status_sorts_each_arp_chord_without_reordering_the_progression() {
+    let mut state = KeyboardState::default();
+    let now = std::time::Instant::now();
+    state.replace_repeat_chords(vec![vec![67, 60], vec![69, 65]], now, false);
+    let _ = state.cycle_note_playback(now);
+    let _ = state.cycle_note_playback(now);
+
+    assert_eq!(
+        note_playback_status_text(&state),
+        "Note mode: arp C4 G4 | F4 A4"
     );
 }
 

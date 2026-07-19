@@ -6,7 +6,7 @@ fn press(app: &mut TuiApp<'_>, code: KeyCode) {
 }
 
 #[test]
-fn keyboard_mml_overlay_confirms_notes_and_reopens_with_the_previous_value() {
+fn keyboard_mml_overlay_confirms_progression_and_reopens_with_the_previous_value() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::Keyboard;
 
@@ -20,11 +20,11 @@ fn keyboard_mml_overlay_confirms_notes_and_reopens_with_the_previous_value() {
     assert!(!app.keyboard_mml_input.is_active());
     assert_eq!(
         app.keyboard_state
-            .repeat_chord()
+            .repeat_chords()
             .iter()
-            .map(|note| note.midi_note)
+            .map(|chord| chord.iter().map(|note| note.midi_note).collect::<Vec<_>>())
             .collect::<Vec<_>>(),
-        vec![60, 64]
+        vec![vec![60], vec![64], vec![60]]
     );
 
     press(&mut app, KeyCode::Char('i'));
@@ -36,7 +36,7 @@ fn keyboard_mml_error_keeps_the_overlay_and_previous_target() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::Keyboard;
     app.keyboard_state
-        .replace_repeat_chord(vec![60, 64], std::time::Instant::now(), false);
+        .replace_repeat_chords(vec![vec![60, 64]], std::time::Instant::now(), false);
 
     press(&mut app, KeyCode::Char('i'));
     press(&mut app, KeyCode::Char('r'));
@@ -49,11 +49,11 @@ fn keyboard_mml_error_keeps_the_overlay_and_previous_target() {
     );
     assert_eq!(
         app.keyboard_state
-            .repeat_chord()
+            .repeat_chords()
             .iter()
-            .map(|note| note.midi_note)
+            .map(|chord| chord.iter().map(|note| note.midi_note).collect::<Vec<_>>())
             .collect::<Vec<_>>(),
-        vec![60, 64]
+        vec![vec![60, 64]]
     );
 
     press(&mut app, KeyCode::Esc);

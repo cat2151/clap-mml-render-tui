@@ -48,8 +48,7 @@ fn press_tracks_last_chord_and_restarts_after_full_release() {
     assert!(state.press(KEYBOARD_NOTES[2]).is_some());
     assert!(state.press(KEYBOARD_NOTES[4]).is_some());
     assert_eq!(
-        state
-            .repeat_chord()
+        state.repeat_chords()[0]
             .iter()
             .map(|note| note.midi_note)
             .collect::<Vec<_>>(),
@@ -59,12 +58,11 @@ fn press_tracks_last_chord_and_restarts_after_full_release() {
     assert!(state.release(KEYBOARD_NOTES[0]).is_some());
     assert!(state.release(KEYBOARD_NOTES[2]).is_some());
     assert!(state.release(KEYBOARD_NOTES[4]).is_some());
-    assert_eq!(state.repeat_chord().len(), 3);
+    assert_eq!(state.repeat_chords()[0].len(), 3);
     // 新しい単独押しで和音が置き換わる
     assert!(state.press(KEYBOARD_NOTES[1]).is_some());
     assert_eq!(
-        state
-            .repeat_chord()
+        state.repeat_chords()[0]
             .iter()
             .map(|note| note.midi_note)
             .collect::<Vec<_>>(),

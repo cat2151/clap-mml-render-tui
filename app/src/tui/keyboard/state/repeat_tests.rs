@@ -55,6 +55,46 @@ fn note_repeat_retriggers_last_chord_every_eight_master_ticks() {
 }
 
 #[test]
+fn note_repeat_advances_through_the_chord_progression_every_eight_ticks() {
+    let mut state = KeyboardState::default();
+    let now = Instant::now();
+    state.replace_repeat_chords(vec![vec![60, 64, 67], vec![62, 65, 69]], now, false);
+
+    assert_eq!(
+        state.cycle_note_playback(now),
+        vec![[0x90, 60, 100], [0x90, 64, 100], [0x90, 67, 100]]
+    );
+    for tick in 1..8 {
+        assert!(state.poll_periodic(at_tick(now, tick)).is_empty());
+    }
+    assert_eq!(
+        state.poll_periodic(at_tick(now, 8)),
+        vec![
+            [0x80, 60, 0],
+            [0x80, 64, 0],
+            [0x80, 67, 0],
+            [0x90, 62, 100],
+            [0x90, 65, 100],
+            [0x90, 69, 100],
+        ]
+    );
+    for tick in 9..16 {
+        assert!(state.poll_periodic(at_tick(now, tick)).is_empty());
+    }
+    assert_eq!(
+        state.poll_periodic(at_tick(now, 16)),
+        vec![
+            [0x80, 62, 0],
+            [0x80, 65, 0],
+            [0x80, 69, 0],
+            [0x90, 60, 100],
+            [0x90, 64, 100],
+            [0x90, 67, 100],
+        ]
+    );
+}
+
+#[test]
 fn note_repeat_does_nothing_without_chord() {
     let mut state = KeyboardState::default();
     assert!(state.cycle_note_playback(Instant::now()).is_empty());

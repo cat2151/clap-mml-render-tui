@@ -94,9 +94,9 @@ impl KeyboardState {
     }
 
     pub(super) fn attack_repeat_chord(&mut self) -> Vec<[u8; 3]> {
-        self.repeat_sounding = self.repeat_chord.clone();
+        self.repeat_sounding = self.current_repeat_chord().to_vec();
         let velocity = self.velocity;
-        self.repeat_chord
+        self.repeat_sounding
             .iter()
             .map(|note| note_on(note.midi_note, velocity))
             .collect()
@@ -145,6 +145,7 @@ impl KeyboardState {
                             .drain(..)
                             .map(|note| note_off(note.midi_note)),
                     );
+                    self.advance_repeat_chord();
                     messages.extend(self.attack_repeat_chord());
                 }
             }
@@ -190,6 +191,7 @@ impl KeyboardState {
             NotePlaybackMode::Repeat | NotePlaybackMode::Auto if !self.note_playback_uses_arp() => {
                 self.periodic_next_at = Some(now + PERIODIC_INTERVAL);
                 self.repeat_elapsed_ticks = 0;
+                self.reset_progression_position();
                 messages.extend(self.attack_repeat_chord());
             }
             NotePlaybackMode::Arp | NotePlaybackMode::Auto => {

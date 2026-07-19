@@ -132,8 +132,10 @@ pub(crate) struct KeyboardState {
     cc_periodic_on: bool,
     note_playback_mode: NotePlaybackMode,
     detected_voicing: PatchVoicing,
-    // 最後に押した和音(同時押しの集合)。releaseしても保持する
-    repeat_chord: Vec<PlaybackNote>,
+    // repeat/arp対象のコード進行。手鍵盤では最後に押した和音を1要素として保持する
+    repeat_chords: Vec<Vec<PlaybackNote>>,
+    // repeat/arpで現在再生しているコード進行上の位置
+    repeat_chord_index: usize,
     // note repeatで現在発音中のノート
     repeat_sounding: Vec<PlaybackNote>,
     // arpで現在発音中のノートと、次に発音するシーケンス位置
@@ -183,7 +185,8 @@ impl KeyboardState {
             cc_periodic_on: false,
             note_playback_mode: NotePlaybackMode::Off,
             detected_voicing: PatchVoicing::Unknown,
-            repeat_chord: Vec::new(),
+            repeat_chords: Vec::new(),
+            repeat_chord_index: 0,
             repeat_sounding: Vec::new(),
             arp_sounding: None,
             arp_next_index: 0,
@@ -255,8 +258,8 @@ impl KeyboardState {
                 && self.detected_voicing == PatchVoicing::Mono)
     }
 
-    pub(in crate::tui) fn repeat_chord(&self) -> &[PlaybackNote] {
-        &self.repeat_chord
+    pub(in crate::tui) fn repeat_chords(&self) -> &[Vec<PlaybackNote>] {
+        &self.repeat_chords
     }
 
     pub(in crate::tui) fn cc_number(&self) -> u8 {
@@ -320,14 +323,16 @@ impl KeyboardState {
         }
         // 単独押しなら新しい和音の開始、他ノート押下中なら和音へ追加
         if self.held.is_empty() {
-            self.repeat_chord.clear();
+            self.repeat_chords.clear();
+            self.repeat_chords.push(Vec::new());
+            self.repeat_chord_index = 0;
         }
-        if !self
-            .repeat_chord
-            .iter()
-            .any(|held| held.midi_note == note.midi_note)
-        {
-            self.repeat_chord.push(note.into());
+        let chord = self
+            .repeat_chords
+            .last_mut()
+            .expect("a manual chord is created on its first key press");
+        if !chord.iter().any(|held| held.midi_note == note.midi_note) {
+            chord.push(note.into());
             // arp中の和音追加も、次tickでは完成時点の和音の最低音から始める
             self.arp_next_index = 0;
         }
@@ -380,7 +385,7 @@ impl KeyboardState {
                 .take()
                 .map(|note| note_off(note.midi_note)),
         );
-        self.arp_next_index = 0;
+        self.reset_progression_position();
         if self.velocity_mode == VelocityMode::Periodic {
             // 周期を止め、現在値に対応する固定modeへ降格(velocityは送信対象外)
             self.velocity_mode = if self.velocity == ACCENT_VELOCITY {

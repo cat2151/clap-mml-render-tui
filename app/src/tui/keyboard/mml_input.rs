@@ -53,14 +53,14 @@ impl<'a> KeyboardMmlInput<'a> {
         self.textarea.input(key);
     }
 
-    pub(in crate::tui) fn confirm(&mut self) -> Option<Vec<u8>> {
+    pub(in crate::tui) fn confirm(&mut self) -> Option<Vec<Vec<u8>>> {
         let mml = self.value();
-        match extract_note_numbers(&mml) {
-            Ok(notes) => {
+        match extract_note_progression(&mml) {
+            Ok(progression) => {
                 self.last_confirmed = mml;
                 self.error = None;
                 self.active = false;
-                Some(notes)
+                Some(progression)
             }
             Err(error) => {
                 self.error = Some(error);
@@ -70,17 +70,17 @@ impl<'a> KeyboardMmlInput<'a> {
     }
 }
 
-fn extract_note_numbers(mml: &str) -> Result<Vec<u8>, String> {
+fn extract_note_progression(mml: &str) -> Result<Vec<Vec<u8>>, String> {
     if mml.trim().is_empty() {
         return Err("MMLを入力してください".to_string());
     }
     let preprocessed = chord2mml_core::convert(mml).unwrap_or_else(|_| mml.to_string());
     let bytes = mmlabc_to_smf::mml_to_smf_bytes(&preprocessed)
         .map_err(|error| format!("MML変換に失敗しました: {error}"))?;
-    extract_note_numbers_from_smf(&bytes)
+    extract_note_progression_from_smf(&bytes)
 }
 
-fn extract_note_numbers_from_smf(bytes: &[u8]) -> Result<Vec<u8>, String> {
+fn extract_note_progression_from_smf(bytes: &[u8]) -> Result<Vec<Vec<u8>>, String> {
     let smf = Smf::parse(bytes).map_err(|error| format!("SMF解析に失敗しました: {error}"))?;
     let mut note_ons = Vec::new();
     for (track_index, track) in smf.tracks.iter().enumerate() {
@@ -100,18 +100,27 @@ fn extract_note_numbers_from_smf(bytes: &[u8]) -> Result<Vec<u8>, String> {
     }
     note_ons.sort_unstable_by_key(|&(time, track, event, _)| (time, track, event));
 
+    let mut progression = Vec::new();
+    let mut chord_time = None;
     let mut seen = [false; 128];
-    let mut notes = Vec::new();
-    for (_, _, _, note) in note_ons {
+    for (time, _, _, note) in note_ons {
+        if chord_time != Some(time) {
+            progression.push(Vec::new());
+            chord_time = Some(time);
+            seen = [false; 128];
+        }
         if !seen[usize::from(note)] {
             seen[usize::from(note)] = true;
-            notes.push(note);
+            progression
+                .last_mut()
+                .expect("a chord exists for every note-on")
+                .push(note);
         }
     }
-    if notes.is_empty() {
+    if progression.is_empty() {
         return Err("MMLに発音ノートがありません".to_string());
     }
-    Ok(notes)
+    Ok(progression)
 }
 
 #[cfg(test)]
@@ -120,39 +129,49 @@ mod tests {
     use midly::{Format, Header, Timing, TrackEvent, TrackEventKind};
 
     #[test]
-    fn mml_notes_are_extracted_in_order_and_deduplicated() {
-        assert_eq!(extract_note_numbers("cec").unwrap(), vec![60, 64]);
+    fn sequential_mml_notes_become_single_note_chords_in_order() {
+        assert_eq!(
+            extract_note_progression("cec").unwrap(),
+            vec![vec![60], vec![64], vec![60]]
+        );
     }
 
     #[test]
     fn chord_notation_is_preprocessed_before_mml_parsing() {
-        assert_eq!(extract_note_numbers("C").unwrap(), vec![60, 64, 67]);
+        assert_eq!(
+            extract_note_progression("C").unwrap(),
+            vec![vec![60, 64, 67]]
+        );
     }
 
     #[test]
     fn regular_mml_passes_through_when_chord_conversion_fails() {
-        assert_eq!(extract_note_numbers("ceg").unwrap(), vec![60, 64, 67]);
+        assert_eq!(
+            extract_note_progression("ceg").unwrap(),
+            vec![vec![60], vec![64], vec![67]]
+        );
     }
 
     #[test]
     fn empty_and_rest_only_mml_are_rejected() {
         assert_eq!(
-            extract_note_numbers(" ").unwrap_err(),
+            extract_note_progression(" ").unwrap_err(),
             "MMLを入力してください"
         );
         assert_eq!(
-            extract_note_numbers("r").unwrap_err(),
+            extract_note_progression("r").unwrap_err(),
             "MMLに発音ノートがありません"
         );
     }
 
     #[test]
-    fn smf_tracks_are_merged_by_absolute_time_and_zero_velocity_is_ignored() {
+    fn smf_tracks_are_merged_into_chords_and_zero_velocity_is_ignored() {
         let header = Header::new(Format::Parallel, Timing::Metrical(480.into()));
         let tracks = vec![
             vec![
-                note_on(20, 67, 100),
+                note_on(10, 67, 100),
                 note_on(0, 69, 0),
+                note_on(20, 67, 100),
                 TrackEvent {
                     delta: 0.into(),
                     kind: TrackEventKind::Meta(midly::MetaMessage::EndOfTrack),
@@ -160,7 +179,8 @@ mod tests {
             ],
             vec![
                 note_on(10, 60, 100),
-                note_on(20, 67, 100),
+                note_on(0, 60, 100),
+                note_on(20, 64, 100),
                 TrackEvent {
                     delta: 0.into(),
                     kind: TrackEventKind::Meta(midly::MetaMessage::EndOfTrack),
@@ -170,7 +190,10 @@ mod tests {
         let mut bytes = Vec::new();
         Smf { header, tracks }.write_std(&mut bytes).unwrap();
 
-        assert_eq!(extract_note_numbers_from_smf(&bytes).unwrap(), vec![60, 67]);
+        assert_eq!(
+            extract_note_progression_from_smf(&bytes).unwrap(),
+            vec![vec![67, 60], vec![67, 64]]
+        );
     }
 
     fn note_on(delta: u32, key: u8, velocity: u8) -> TrackEvent<'static> {
