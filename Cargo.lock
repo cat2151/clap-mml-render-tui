@@ -270,13 +270,13 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 [[package]]
 name = "chord2mml-core"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/chord2mml-rust#dcfd06c7746d971f2894b1d32292319e7ad18994"
+source = "git+https://github.com/cat2151/chord2mml-rust#2030aae999fe4bda630c6dd40cf91935d72839ed"
 dependencies = [
  "anyhow",
  "serde",
  "serde_json",
  "thiserror",
- "tree-sitter 0.20.10",
+ "tree-sitter",
  "tree-sitter-chord",
 ]
 
@@ -1264,7 +1264,7 @@ dependencies = [
 [[package]]
 name = "mmlabc-to-smf"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/mmlabc-to-smf-rust.git#306db1570aca14f092879108bca7510fbc99a406"
+source = "git+https://github.com/cat2151/mmlabc-to-smf-rust.git#50abb9945e18f100521bf6f05bd07a03a85b624b"
 dependencies = [
  "anyhow",
  "cc",
@@ -1274,7 +1274,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "toml",
- "tree-sitter 0.22.6",
+ "tree-sitter",
 ]
 
 [[package]]
@@ -1894,6 +1894,7 @@ version = "1.0.149"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "83fc039473c5595ace860d8c4fafa220ff474b3fc6bfdb4293327f1a37e94d86"
 dependencies = [
+ "indexmap",
  "itoa",
  "memchr",
  "serde",
@@ -1976,6 +1977,12 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "streaming-iterator"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b2231b7c3057d5e4ad0156fb3dc807d900806020c5ffa3ee6ff2c8c76fb8520"
 
 [[package]]
 name = "strsim"
@@ -2226,32 +2233,32 @@ checksum = "5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801"
 
 [[package]]
 name = "tree-sitter"
-version = "0.20.10"
+version = "0.26.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e747b1f9b7b931ed39a548c1fae149101497de3c1fc8d9e18c62c1a66c683d3d"
+checksum = "af1c71c1c4cc0920b20d6b0f6572e7682cd07a6a2faec71067a31fa394c586df"
 dependencies = [
  "cc",
  "regex",
-]
-
-[[package]]
-name = "tree-sitter"
-version = "0.22.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df7cc499ceadd4dcdf7ec6d4cbc34ece92c3fa07821e287aedecd4416c516dca"
-dependencies = [
- "cc",
- "regex",
+ "regex-syntax",
+ "serde_json",
+ "streaming-iterator",
+ "tree-sitter-language",
 ]
 
 [[package]]
 name = "tree-sitter-chord"
 version = "0.0.1"
-source = "git+https://github.com/cat2151/chord2mml-rust#dcfd06c7746d971f2894b1d32292319e7ad18994"
+source = "git+https://github.com/cat2151/chord2mml-rust#2030aae999fe4bda630c6dd40cf91935d72839ed"
 dependencies = [
  "cc",
- "tree-sitter 0.20.10",
+ "tree-sitter",
 ]
+
+[[package]]
+name = "tree-sitter-language"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "009994f150cc0cd50ff54917d5bc8bffe8cad10ca10d81c34da2ec421ae61782"
 
 [[package]]
 name = "tui-textarea"

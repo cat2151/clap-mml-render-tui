@@ -74,7 +74,8 @@ fn extract_note_numbers(mml: &str) -> Result<Vec<u8>, String> {
     if mml.trim().is_empty() {
         return Err("MMLを入力してください".to_string());
     }
-    let bytes = mmlabc_to_smf::mml_to_smf_bytes(mml)
+    let preprocessed = chord2mml_core::convert(mml).unwrap_or_else(|_| mml.to_string());
+    let bytes = mmlabc_to_smf::mml_to_smf_bytes(&preprocessed)
         .map_err(|error| format!("MML変換に失敗しました: {error}"))?;
     extract_note_numbers_from_smf(&bytes)
 }
@@ -121,6 +122,16 @@ mod tests {
     #[test]
     fn mml_notes_are_extracted_in_order_and_deduplicated() {
         assert_eq!(extract_note_numbers("cec").unwrap(), vec![60, 64]);
+    }
+
+    #[test]
+    fn chord_notation_is_preprocessed_before_mml_parsing() {
+        assert_eq!(extract_note_numbers("C").unwrap(), vec![60, 64, 67]);
+    }
+
+    #[test]
+    fn regular_mml_passes_through_when_chord_conversion_fails() {
+        assert_eq!(extract_note_numbers("ceg").unwrap(), vec![60, 64, 67]);
     }
 
     #[test]
