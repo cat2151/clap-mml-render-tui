@@ -66,6 +66,10 @@ pub(super) fn patch_phrase_store_path() -> Option<PathBuf> {
     history_file_path("patch_history.json")
 }
 
+pub(super) fn voicing_cache_path() -> Option<PathBuf> {
+    history_file_path("voicing_cache.json")
+}
+
 /// DAW データファイル (`daw.json`) のパスを返す。
 /// `history.json` と同じディレクトリに配置することでユーザーデータの場所を統一する。
 /// `dirs::config_local_dir()` が利用できない環境では `None` を返す。

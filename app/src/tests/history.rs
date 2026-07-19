@@ -3,6 +3,8 @@ use std::path::Path;
 
 #[path = "history/storage_and_migration.rs"]
 mod storage_and_migration;
+#[path = "history/voicing_cache.rs"]
+mod voicing_cache_tests;
 
 fn assert_history_file_path(path: &Path, file_name: &str) {
     assert_eq!(

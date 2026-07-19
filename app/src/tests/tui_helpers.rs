@@ -24,6 +24,7 @@ impl TuiApp<'static> {
             realtime_play_server: None,
             keyboard_midi_sender: None,
             keyboard_state: KeyboardState::default(),
+            voicing_cache: crate::history::VoicingCache::default(),
             persist_keyboard_on_exit: false,
             active_offline_render_count: Arc::new(AtomicUsize::new(0)),
             render_queue,

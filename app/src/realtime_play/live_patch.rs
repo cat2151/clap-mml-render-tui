@@ -1,14 +1,14 @@
 use std::{io::Read as _, time::Instant};
 
 use anyhow::{anyhow, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::{PlayRequestError, RealtimePlayServerSupervisor, PLAY_CONTENT_TYPE_JSON};
 
 const PLAY_SERVER_LIVE_PATCH_PATH: &str = "/live-patch";
 const PLAY_SERVER_LIVE_PATCH_PROBE_PATH: &str = "/live-patch-probe";
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum PatchVoicing {
     Mono,
@@ -66,7 +66,6 @@ impl RealtimePlayServerSupervisor {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn prepare_live_patch_with_voicing(
         &self,
         patch: Option<&str>,

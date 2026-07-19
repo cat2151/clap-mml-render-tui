@@ -48,8 +48,12 @@ pub(in crate::tui) enum KeyboardConnectionPhase {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(in crate::tui) enum KeyboardVoicingStatus {
     Unavailable,
-    Detecting { previous: Option<VoicingReport> },
+    Detecting {
+        previous: Option<VoicingReport>,
+    },
     Detected(VoicingReport),
+    /// file cache から復元した判定結果。probe を行っていない。
+    Cached(PatchVoicing),
 }
 
 impl KeyboardVoicingStatus {
@@ -59,6 +63,7 @@ impl KeyboardVoicingStatus {
             | Self::Detecting {
                 previous: Some(report),
             } => report.decision,
+            Self::Cached(voicing) => *voicing,
             Self::Unavailable | Self::Detecting { previous: None } => PatchVoicing::Unknown,
         }
     }
@@ -71,6 +76,9 @@ pub(in crate::tui) struct KeyboardConnectionStatus {
     pub(in crate::tui) last_send: Option<Duration>,
     pub(in crate::tui) buffer_multiplier: u8,
     pub(in crate::tui) voicing: KeyboardVoicingStatus,
+    /// `voicing` がどの patch に対する結果なのか。file cache への書き戻し時に、
+    /// 連続切替で別 patch の結果を紐づけないための対応付けに使う。
+    pub(in crate::tui) voicing_patch: Option<String>,
 }
 
 impl Default for KeyboardConnectionStatus {
@@ -87,31 +95,52 @@ impl KeyboardConnectionStatus {
             last_send: None,
             buffer_multiplier,
             voicing: KeyboardVoicingStatus::Unavailable,
+            voicing_patch: None,
         }
     }
 
-    fn begin_connecting(&mut self, transport: KeyboardTransport, buffer_multiplier: u8) {
+    fn begin_connecting(
+        &mut self,
+        transport: KeyboardTransport,
+        buffer_multiplier: u8,
+        patch: Option<&str>,
+        known_voicing: Option<PatchVoicing>,
+    ) {
         self.transport = transport;
         self.phase = KeyboardConnectionPhase::Connecting;
         self.last_send = None;
         self.buffer_multiplier = buffer_multiplier;
-        self.begin_voicing_probe();
+        self.begin_voicing(patch, known_voicing);
     }
 
-    fn begin_patch_setting(&mut self) {
+    fn begin_patch_setting(&mut self, patch: Option<&str>, known_voicing: Option<PatchVoicing>) {
         self.phase = KeyboardConnectionPhase::PatchSetting;
-        self.begin_voicing_probe();
+        self.begin_voicing(patch, known_voicing);
     }
 
-    fn begin_voicing_probe(&mut self) {
+    /// cache ヒット時は probe を待たずに判定結果を確定させる。
+    fn begin_voicing(&mut self, patch: Option<&str>, known_voicing: Option<PatchVoicing>) {
+        self.voicing_patch = patch.map(str::to_string);
+        if let Some(voicing) = known_voicing {
+            self.voicing = KeyboardVoicingStatus::Cached(voicing);
+            return;
+        }
         let previous =
             match std::mem::replace(&mut self.voicing, KeyboardVoicingStatus::Unavailable) {
                 KeyboardVoicingStatus::Detected(report) => Some(report),
                 KeyboardVoicingStatus::Detecting { previous } => previous,
-                KeyboardVoicingStatus::Unavailable => None,
+                KeyboardVoicingStatus::Cached(_) | KeyboardVoicingStatus::Unavailable => None,
             };
         self.voicing = KeyboardVoicingStatus::Detecting { previous };
     }
+}
+
+/// 適用する patch と、その patch について file cache から分かっている判定結果。
+/// cache ヒット時は probe を省くので、この 2 つは常に組で受け渡す。
+#[derive(Clone, Copy, Debug)]
+pub(super) struct PatchRequest<'a> {
+    pub(super) patch: Option<&'a str>,
+    pub(super) known_voicing: Option<PatchVoicing>,
 }
 
 enum KeyboardMidiCommand {
@@ -125,6 +154,7 @@ enum KeyboardMidiCommand {
         transport: KeyboardTransport,
         buffer_multiplier: u8,
         patch: Option<String>,
+        known_voicing: Option<PatchVoicing>,
     },
     SetBufferMultiplier(u8),
     SetPatch {
@@ -132,12 +162,14 @@ enum KeyboardMidiCommand {
         note_offs: Vec<[u8; 3]>,
         previous_patch: Option<String>,
         patch: Option<String>,
+        known_voicing: Option<PatchVoicing>,
     },
     Switch {
         trace: VoicingTrace,
         transport: KeyboardTransport,
         note_offs: Vec<[u8; 3]>,
         patch: Option<String>,
+        known_voicing: Option<PatchVoicing>,
     },
     Shutdown,
 }
@@ -189,17 +221,21 @@ impl KeyboardMidiSender {
         transport: KeyboardTransport,
         buffer_multiplier: u8,
         patch: Option<&str>,
+        known_voicing: Option<PatchVoicing>,
     ) {
         let trace = VoicingTrace::queued("prepare", transport, buffer_multiplier, None, patch);
-        self.status
-            .lock()
-            .unwrap()
-            .begin_connecting(transport, buffer_multiplier);
+        self.status.lock().unwrap().begin_connecting(
+            transport,
+            buffer_multiplier,
+            patch,
+            known_voicing,
+        );
         let _ = self.tx.send(KeyboardMidiCommand::Prepare {
             trace,
             transport,
             buffer_multiplier,
             patch: patch.map(str::to_string),
+            known_voicing,
         });
     }
 
@@ -208,10 +244,11 @@ impl KeyboardMidiSender {
         transport: KeyboardTransport,
         note_offs: Vec<[u8; 3]>,
         patch: Option<&str>,
+        known_voicing: Option<PatchVoicing>,
     ) {
         let mut status = self.status.lock().unwrap();
         let buffer_multiplier = status.buffer_multiplier;
-        status.begin_connecting(transport, buffer_multiplier);
+        status.begin_connecting(transport, buffer_multiplier, patch, known_voicing);
         drop(status);
         let trace = VoicingTrace::queued("switch", transport, buffer_multiplier, patch, patch);
         let _ = self.tx.send(KeyboardMidiCommand::Switch {
@@ -219,6 +256,7 @@ impl KeyboardMidiSender {
             transport,
             note_offs,
             patch: patch.map(str::to_string),
+            known_voicing,
         });
     }
 
@@ -233,6 +271,7 @@ impl KeyboardMidiSender {
         note_offs: Vec<[u8; 3]>,
         previous_patch: Option<&str>,
         patch: Option<&str>,
+        known_voicing: Option<PatchVoicing>,
     ) {
         let status = self.status.lock().unwrap();
         let transport = status.transport;
@@ -245,12 +284,16 @@ impl KeyboardMidiSender {
             previous_patch,
             patch,
         );
-        self.status.lock().unwrap().begin_patch_setting();
+        self.status
+            .lock()
+            .unwrap()
+            .begin_patch_setting(patch, known_voicing);
         let _ = self.tx.send(KeyboardMidiCommand::SetPatch {
             trace,
             note_offs,
             previous_patch: previous_patch.map(str::to_string),
             patch: patch.map(str::to_string),
+            known_voicing,
         });
     }
 
@@ -314,6 +357,7 @@ fn run_midi_sender(
                 transport,
                 buffer_multiplier,
                 patch,
+                known_voicing,
             } => {
                 trace.worker_started(transport, buffer_multiplier, patch.as_deref());
                 let started = Instant::now();
@@ -321,17 +365,22 @@ fn run_midi_sender(
                 worker.fast_client = None;
                 worker.transport = transport;
                 worker.buffer_multiplier = buffer_multiplier;
+                let request = PatchRequest {
+                    patch: patch.as_deref(),
+                    known_voicing,
+                };
                 let result = prepare_connection(
                     &mut worker,
                     supervisor.as_ref(),
                     &status,
-                    patch.as_deref(),
+                    request,
                     trace.id(),
                 );
                 trace.status_apply(
                     worker.transport,
                     patch.as_deref(),
                     &result,
+                    known_voicing,
                     started.elapsed().as_millis(),
                 );
                 set_prepare_result(
@@ -339,6 +388,7 @@ fn run_midi_sender(
                     worker.transport,
                     worker.buffer_multiplier,
                     result,
+                    request,
                     None,
                 );
             }
@@ -360,6 +410,7 @@ fn run_midi_sender(
                 note_offs,
                 previous_patch,
                 patch,
+                known_voicing,
             } => {
                 trace.worker_started(worker.transport, worker.buffer_multiplier, patch.as_deref());
                 let started = Instant::now();
@@ -373,11 +424,15 @@ fn run_midi_sender(
                         previous_patch.as_deref(),
                     )
                 };
+                let request = PatchRequest {
+                    patch: patch.as_deref(),
+                    known_voicing,
+                };
                 let patch_result = prepare_connection(
                     &mut worker,
                     supervisor.as_ref(),
                     &status,
-                    patch.as_deref(),
+                    request,
                     trace.id(),
                 );
                 let result = note_off_result.and(patch_result);
@@ -385,6 +440,7 @@ fn run_midi_sender(
                     worker.transport,
                     patch.as_deref(),
                     &result,
+                    known_voicing,
                     started.elapsed().as_millis(),
                 );
                 set_prepare_result(
@@ -392,6 +448,7 @@ fn run_midi_sender(
                     worker.transport,
                     worker.buffer_multiplier,
                     result,
+                    request,
                     Some(started.elapsed()),
                 );
             }
@@ -400,6 +457,7 @@ fn run_midi_sender(
                 transport,
                 note_offs,
                 patch,
+                known_voicing,
             } => {
                 switch_transport(
                     &mut worker,
@@ -407,7 +465,10 @@ fn run_midi_sender(
                     &status,
                     transport,
                     &note_offs,
-                    patch.as_deref(),
+                    PatchRequest {
+                        patch: patch.as_deref(),
+                        known_voicing,
+                    },
                     trace,
                 );
             }

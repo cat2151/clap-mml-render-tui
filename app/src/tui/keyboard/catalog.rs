@@ -274,8 +274,14 @@ impl<'a> TuiApp<'a> {
         // note offのみ送り、Ready復帰後にrefreshで現在値を新patchへ再送する。
         let note_offs = self.keyboard_state.take_note_off_messages();
         self.keyboard_state.patch = Some(patch.clone());
+        let known_voicing = self.cached_voicing(Some(&patch));
         if let Some(sender) = &self.keyboard_midi_sender {
-            sender.set_patch(note_offs, previous_patch.as_deref(), Some(&patch));
+            sender.set_patch(
+                note_offs,
+                previous_patch.as_deref(),
+                Some(&patch),
+                known_voicing,
+            );
         }
     }
 }

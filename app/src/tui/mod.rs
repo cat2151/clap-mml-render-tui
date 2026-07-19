@@ -139,6 +139,9 @@ pub struct TuiApp<'a> {
     realtime_play_server: Option<Arc<RealtimePlayServerSupervisor>>,
     keyboard_midi_sender: Option<KeyboardMidiSender>,
     pub(super) keyboard_state: KeyboardState,
+    /// patch ごとの mono/poly 判定結果のキャッシュ。起動時に読み込み、
+    /// 新しく probe した patch を検出したら書き戻す。
+    pub(super) voicing_cache: crate::history::VoicingCache,
     pub(super) persist_keyboard_on_exit: bool,
     pub(super) active_offline_render_count: Arc<AtomicUsize>,
     render_queue: TuiRenderQueue,

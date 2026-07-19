@@ -12,6 +12,7 @@ mod helpers;
 mod patch_phrase_store;
 mod paths;
 mod session_state;
+mod voicing_cache;
 
 pub(crate) use daw::daw_cache_mml_hash;
 pub use daw::{load_daw_session_state, save_daw_session_state, DawCachedMeasure, DawSessionState};
@@ -27,9 +28,13 @@ pub use paths::daw_file_path;
 pub use session_state::{
     load_session_state, save_session_state, KeyboardSessionState, KeyboardTransport, SessionState,
 };
+pub(crate) use voicing_cache::{load_voicing_cache, save_voicing_cache, VoicingCache};
 
 #[cfg(test)]
-use paths::{daw_session_state_path, history_dir, patch_phrase_store_path, session_state_path};
+use paths::{
+    daw_session_state_path, history_dir, patch_phrase_store_path, session_state_path,
+    voicing_cache_path,
+};
 
 const APP_DIR_NAME: &str = "clap-mml-render-tui";
 const HISTORY_DIR_NAME: &str = "history";

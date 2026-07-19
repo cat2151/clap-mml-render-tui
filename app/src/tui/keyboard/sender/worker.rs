@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use super::{
     connect_fast_client, set_prepare_result, voicing_trace::VoicingTrace, FastMidiClient,
-    KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardTransport,
+    KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardTransport, PatchRequest,
     RealtimePlayServerSupervisor,
 };
 use crate::realtime_play::VoicingReport;
@@ -29,7 +29,7 @@ pub(super) fn prepare_connection(
     worker: &mut WorkerState,
     supervisor: &RealtimePlayServerSupervisor,
     status: &Mutex<KeyboardConnectionStatus>,
-    patch: Option<&str>,
+    request: PatchRequest<'_>,
     probe_id: u64,
 ) -> Result<Option<VoicingReport>> {
     match worker.transport {
@@ -37,7 +37,11 @@ pub(super) fn prepare_connection(
         KeyboardTransport::SharedMemory => ensure_fast_client(worker, supervisor),
     }?;
     status.lock().unwrap().phase = KeyboardConnectionPhase::PatchSetting;
-    supervisor.prepare_live_patch_with_voicing_traced(patch, probe_id)
+    // cache に判定結果がある patch は probe を省き、patch 適用だけを行う。
+    if request.known_voicing.is_some() {
+        return supervisor.prepare_live_patch(request.patch).map(|()| None);
+    }
+    supervisor.prepare_live_patch_with_voicing_traced(request.patch, probe_id)
 }
 
 pub(super) fn send_midi(
@@ -82,26 +86,27 @@ pub(super) fn switch_transport(
     status: &Mutex<KeyboardConnectionStatus>,
     transport: KeyboardTransport,
     note_offs: &[[u8; 3]],
-    patch: Option<&str>,
+    request: PatchRequest<'_>,
     trace: VoicingTrace,
 ) {
-    trace.worker_started(transport, worker.buffer_multiplier, patch);
+    trace.worker_started(transport, worker.buffer_multiplier, request.patch);
     let started = Instant::now();
     let old_result = if note_offs.is_empty() {
         Ok(())
     } else {
-        send_midi(worker, supervisor, note_offs, patch)
+        send_midi(worker, supervisor, note_offs, request.patch)
     }
     .and_then(|()| stop(worker, supervisor));
 
     worker.transport = transport;
     worker.fast_client = None;
-    let connect_result = prepare_connection(worker, supervisor, status, patch, trace.id());
+    let connect_result = prepare_connection(worker, supervisor, status, request, trace.id());
     let result = old_result.and(connect_result);
     trace.status_apply(
         worker.transport,
-        patch,
+        request.patch,
         &result,
+        request.known_voicing,
         started.elapsed().as_millis(),
     );
     set_prepare_result(
@@ -109,6 +114,7 @@ pub(super) fn switch_transport(
         worker.transport,
         worker.buffer_multiplier,
         result,
+        request,
         Some(started.elapsed()),
     );
 }

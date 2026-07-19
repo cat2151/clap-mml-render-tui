@@ -176,6 +176,16 @@ fn voicing_status_keeps_probe_and_surge_disagreement_visible() {
 }
 
 #[test]
+fn cached_voicing_is_labeled_as_cached() {
+    assert_eq!(
+        voicing_status_text(&KeyboardVoicingStatus::Cached(
+            crate::realtime_play::PatchVoicing::Mono
+        )),
+        "detect: mono (cached)"
+    );
+}
+
+#[test]
 fn connecting_overlay_explains_that_notes_are_unavailable() {
     let screen = render_overlay(KeyboardConnectionPhase::Connecting);
 

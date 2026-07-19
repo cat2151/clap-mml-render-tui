@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::Result;
 
-use super::{KeyboardTransport, VoicingReport};
+use super::{KeyboardTransport, PatchVoicing, VoicingReport};
 
 static NEXT_PROBE_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -59,12 +59,16 @@ impl VoicingTrace {
         transport: KeyboardTransport,
         patch: Option<&str>,
         result: &Result<Option<VoicingReport>>,
+        known_voicing: Option<PatchVoicing>,
         elapsed_ms: u128,
     ) {
-        let outcome = match result {
-            Ok(Some(report)) => format!("report={report:?}"),
-            Ok(None) => "report=unavailable fallback=legacy-server".to_string(),
-            Err(error) => format!("error={error:?}"),
+        let outcome = match (result, known_voicing) {
+            (Ok(Some(report)), _) => format!("report={report:?}"),
+            // probe を省いた場合も `Ok(None)` になるので、cache ヒットと
+            // 旧サーバーへのフォールバックをログ上で区別する。
+            (Ok(None), Some(voicing)) => format!("report={voicing:?} source=cache probe=skipped"),
+            (Ok(None), None) => "report=unavailable fallback=legacy-server".to_string(),
+            (Err(error), _) => format!("error={error:?}"),
         };
         self.write(format!(
             "event=status-apply elapsed_ms={elapsed_ms} transport={} patch={patch:?} {outcome}",

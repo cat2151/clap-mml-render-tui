@@ -21,6 +21,13 @@ pub(super) use state::{
 
 use state::note_for_key;
 
+fn log_voicing_cache_event(message: impl Into<String>) {
+    #[cfg(not(test))]
+    crate::logging::append_global_log_line(format!("voicing-cache: {}", message.into()));
+    #[cfg(test)]
+    let _ = message.into();
+}
+
 impl KeyboardConnectionPhase {
     fn accepts_notes(&self) -> bool {
         matches!(self, Self::Ready)
@@ -62,12 +69,22 @@ impl<'a> TuiApp<'a> {
 
     fn prepare_keyboard_connection(&self) {
         if let Some(sender) = &self.keyboard_midi_sender {
+            let patch = self.keyboard_state.patch();
             sender.prepare(
                 self.keyboard_state.transport(),
                 self.keyboard_state.buffer_multiplier(),
-                self.keyboard_state.patch(),
+                patch,
+                self.cached_voicing(patch),
             );
         }
+    }
+
+    /// file cache に判定済みの mono/poly があれば返す。あれば probe を省略できる。
+    pub(in crate::tui) fn cached_voicing(
+        &self,
+        patch: Option<&str>,
+    ) -> Option<crate::realtime_play::PatchVoicing> {
+        self.voicing_cache.get(patch?)
     }
 
     pub(super) fn handle_keyboard_key_event(&mut self, key: KeyEvent) -> KeyboardAction {
@@ -197,8 +214,9 @@ impl<'a> TuiApp<'a> {
                     let transport = self.keyboard_state.toggle_transport();
                     let patch = self.keyboard_state.patch().map(str::to_string);
                     let note_offs = self.keyboard_state.take_reset_messages();
+                    let known_voicing = self.cached_voicing(patch.as_deref());
                     if let Some(sender) = &self.keyboard_midi_sender {
-                        sender.switch(transport, note_offs, patch.as_deref());
+                        sender.switch(transport, note_offs, patch.as_deref(), known_voicing);
                     }
                     return KeyboardAction::Continue;
                 }
@@ -287,10 +305,26 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(in crate::tui) fn sync_keyboard_voicing_detection(&mut self) {
-        let voicing = self
-            .keyboard_connection_status()
-            .voicing
-            .effective_decision();
-        self.keyboard_state.set_detected_voicing(voicing);
+        let status = self.keyboard_connection_status();
+        self.keyboard_state
+            .set_detected_voicing(status.voicing.effective_decision());
+        self.store_probed_voicing(&status);
+    }
+
+    /// probe で新しく判定できた結果を file cache へ書き戻す。
+    /// worker スレッドではなく UI スレッドで書くことで排他を不要にしている。
+    fn store_probed_voicing(&mut self, status: &KeyboardConnectionStatus) {
+        let KeyboardVoicingStatus::Detected(report) = &status.voicing else {
+            return;
+        };
+        let Some(patch) = status.voicing_patch.as_deref() else {
+            return;
+        };
+        if !self.voicing_cache.insert(patch, report.decision) {
+            return;
+        }
+        if let Err(error) = crate::history::save_voicing_cache(&self.voicing_cache) {
+            log_voicing_cache_event(format!("event=save-failed patch={patch:?} error={error}"));
+        }
     }
 }

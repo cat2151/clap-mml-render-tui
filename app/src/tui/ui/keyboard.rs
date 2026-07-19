@@ -391,6 +391,9 @@ fn voicing_status_text(status: &KeyboardVoicingStatus) -> String {
             previous: Some(report),
         } => format!("{} (probing new patch)", voicing_report_text(report)),
         KeyboardVoicingStatus::Detected(report) => voicing_report_text(report),
+        KeyboardVoicingStatus::Cached(voicing) => {
+            format!("detect: {} (cached)", voicing_label(*voicing))
+        }
     }
 }
 

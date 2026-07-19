@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use chord2mml_core::convert as chord_to_mml;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
-use clap_mml_render_tui::{config, server, tui, updater};
+use clap_mml_render_tui::{config, server, tui, updater, voicing_cache_builder};
 use cmrt_core::{load_entry, mml_to_play};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -13,6 +13,7 @@ enum CliAction {
     Shutdown(u16),
     Update,
     Check,
+    BuildVoicingCache { force: bool },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -71,6 +72,12 @@ enum Commands {
     Update,
     /// ビルド時コミットと remote main を比較
     Check,
+    /// 全 patch の mono/poly を判定してキャッシュを作成する
+    BuildVoicingCache {
+        /// 判定済みの patch も含めて全件を再判定する
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 fn cli_command() -> clap::Command {
@@ -117,6 +124,10 @@ where
 
     if matches!(cli.command, Some(Commands::Check)) {
         return Ok(CliAction::Check);
+    }
+
+    if let Some(Commands::BuildVoicingCache { force }) = cli.command {
+        return Ok(CliAction::BuildVoicingCache { force });
     }
 
     if let Some(mml) = cli.mml {
@@ -196,6 +207,8 @@ fn main() -> Result<()> {
 
     let needs_plugin_entry = match action {
         CliAction::Server(_) | CliAction::CliMml(_) => true,
+        // 判定は play-server 側プロセスがプラグインをロードして行う。
+        CliAction::BuildVoicingCache { .. } => false,
         CliAction::Tui => cfg.offline_render_backend == config::OfflineRenderBackend::InProcess,
         CliAction::Help(_) | CliAction::Shutdown(_) | CliAction::Update | CliAction::Check => {
             unreachable!()
@@ -237,6 +250,9 @@ fn main() -> Result<()> {
             )?;
             println!("patch: {}", patch);
             return Ok(());
+        }
+        CliAction::BuildVoicingCache { force } => {
+            return voicing_cache_builder::run_build_voicing_cache(&cfg, force);
         }
         CliAction::Tui => {}
         CliAction::Help(_) | CliAction::Shutdown(_) | CliAction::Update | CliAction::Check => {

@@ -128,6 +128,7 @@ impl<'a> TuiApp<'a> {
             realtime_play_server,
             keyboard_midi_sender,
             keyboard_state,
+            voicing_cache: crate::history::load_voicing_cache(),
             persist_keyboard_on_exit: false,
             active_offline_render_count,
             render_queue,

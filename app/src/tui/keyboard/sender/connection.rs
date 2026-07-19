@@ -2,7 +2,9 @@ use std::{sync::Mutex, time::Duration};
 
 use anyhow::Result;
 
-use super::{KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardVoicingStatus};
+use super::{
+    KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardVoicingStatus, PatchRequest,
+};
 use crate::realtime_play::VoicingReport;
 use crate::{fast_midi_ipc::FastMidiClient, history::KeyboardTransport};
 
@@ -30,20 +32,26 @@ pub(super) fn set_prepare_result(
     transport: KeyboardTransport,
     buffer_multiplier: u8,
     result: Result<Option<VoicingReport>>,
+    request: PatchRequest<'_>,
     elapsed: Option<Duration>,
 ) {
     let mut status = status.lock().unwrap();
     status.transport = transport;
     status.buffer_multiplier = buffer_multiplier;
     status.last_send = elapsed;
+    status.voicing_patch = request.patch.map(str::to_string);
     match result {
         Ok(Some(report)) => {
             status.phase = KeyboardConnectionPhase::Ready;
             status.voicing = KeyboardVoicingStatus::Detected(report);
         }
+        // probe を省いた場合は cache の判定結果をそのまま維持する。
         Ok(None) => {
             status.phase = KeyboardConnectionPhase::Ready;
-            status.voicing = KeyboardVoicingStatus::Unavailable;
+            status.voicing = match request.known_voicing {
+                Some(voicing) => KeyboardVoicingStatus::Cached(voicing),
+                None => KeyboardVoicingStatus::Unavailable,
+            };
         }
         Err(error) => {
             status.phase = KeyboardConnectionPhase::Error(error.to_string());

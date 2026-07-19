@@ -22,6 +22,18 @@ fn check_subcommand_is_recognized() {
 }
 
 #[test]
+fn build_voicing_cache_subcommand_is_recognized() {
+    assert_eq!(
+        parse_cli_from(["cmrt", "build-voicing-cache"]).unwrap(),
+        CliAction::BuildVoicingCache { force: false }
+    );
+    assert_eq!(
+        parse_cli_from(["cmrt", "build-voicing-cache", "--force"]).unwrap(),
+        CliAction::BuildVoicingCache { force: true }
+    );
+}
+
+#[test]
 fn check_subcommand_takes_precedence_over_cli_mml_mode() {
     assert_ne!(
         parse_cli_from(["cmrt", "check"]).unwrap(),

@@ -41,7 +41,7 @@ pub(crate) fn has_configured_patch_dirs(cfg: &Config) -> bool {
     !configured_patch_dirs(cfg).is_empty()
 }
 
-fn normalize_patch_lookup_key(patch_name: &str) -> String {
+pub(crate) fn normalize_patch_lookup_key(patch_name: &str) -> String {
     patch_name
         .trim()
         .replace('\\', "/")

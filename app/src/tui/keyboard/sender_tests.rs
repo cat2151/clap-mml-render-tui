@@ -1,5 +1,109 @@
 use super::*;
 
+use std::{
+    io::{BufRead as _, BufReader, Read as _, Write as _},
+    net::TcpListener,
+};
+
+fn cfg_for_port(port: u16) -> crate::config::Config {
+    crate::config::Config {
+        plugin_path: String::new(),
+        input_midi: String::new(),
+        output_midi: String::new(),
+        output_wav: String::new(),
+        sample_rate: 48_000.0,
+        buffer_size: 512,
+        patches_dirs: None,
+        offline_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
+        offline_render_server_workers: crate::config::DEFAULT_OFFLINE_RENDER_SERVER_WORKERS,
+        offline_render_backend: crate::config::OfflineRenderBackend::InProcess,
+        offline_render_server_port: crate::config::DEFAULT_OFFLINE_RENDER_SERVER_PORT,
+        offline_render_server_command: String::new(),
+        realtime_audio_backend: crate::config::RealtimeAudioBackend::PlayServer,
+        realtime_play_server_port: port,
+        realtime_play_server_command: "exit 0".to_string(),
+        autoplay_on_startup: true,
+    }
+}
+
+/// 受け取ったリクエストのパスを記録し、すべて 204 を返すテストサーバー。
+/// 起動確認の TCP 接続もそのまま受けるため、リクエスト数では止めずに動かし続ける。
+fn spawn_path_recording_server() -> (u16, mpsc::Receiver<String>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let mut stream = stream.unwrap();
+            let mut reader = BufReader::new(&mut stream);
+            let mut first_line = String::new();
+            if reader.read_line(&mut first_line).unwrap() == 0 {
+                continue;
+            }
+            let path = first_line.split_whitespace().nth(1).unwrap().to_string();
+            let mut content_length = 0usize;
+            loop {
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                let line = line.trim_end_matches(['\r', '\n']);
+                if line.is_empty() {
+                    break;
+                }
+                if let Some((name, value)) = line.split_once(':') {
+                    if name.eq_ignore_ascii_case("Content-Length") {
+                        content_length = value.trim().parse().unwrap();
+                    }
+                }
+            }
+            let mut body = vec![0; content_length];
+            reader.read_exact(&mut body).unwrap();
+            write!(
+                stream,
+                "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            )
+            .unwrap();
+            if tx.send(path).is_err() {
+                break;
+            }
+        }
+    });
+    (port, rx)
+}
+
+/// cache に判定結果がある patch では probe エンドポイントを叩かないことを確認する。
+/// probe を省けるかどうかがこの機能の目的そのものなので、UI 表示ではなく
+/// 実際に送るリクエスト先で検証する。
+#[test]
+fn prepare_connection_with_cached_voicing_skips_the_probe_endpoint() {
+    let (port, rx) = spawn_path_recording_server();
+    let supervisor = RealtimePlayServerSupervisor::new(&cfg_for_port(port));
+    let mut worker = WorkerState::new(KeyboardTransport::Http, 4);
+    let status = Mutex::new(KeyboardConnectionStatus::default());
+
+    let result = prepare_connection(
+        &mut worker,
+        &supervisor,
+        &status,
+        PatchRequest {
+            patch: Some("Leads/Mono.fxp"),
+            known_voicing: Some(PatchVoicing::Mono),
+        },
+        1,
+    )
+    .unwrap();
+
+    assert!(result.is_none(), "probe を行っていないのでレポートはない");
+    let paths = rx.try_iter().collect::<Vec<_>>();
+    assert!(
+        paths.contains(&"/live-patch".to_string()),
+        "patch 適用は行う: {paths:?}"
+    );
+    assert!(
+        !paths.contains(&"/live-patch-probe".to_string()),
+        "probe は行わない: {paths:?}"
+    );
+}
+
 #[test]
 fn transport_toggle_is_symmetric() {
     assert_eq!(
@@ -29,7 +133,7 @@ fn begin_connecting_updates_initialization_status_synchronously() {
         ..KeyboardConnectionStatus::default()
     };
 
-    status.begin_connecting(KeyboardTransport::Http, 8);
+    status.begin_connecting(KeyboardTransport::Http, 8, Some("Leads/Mono.fxp"), None);
 
     assert_eq!(status.transport, KeyboardTransport::Http);
     assert_eq!(status.phase, KeyboardConnectionPhase::Connecting);
@@ -49,9 +153,10 @@ fn begin_patch_setting_preserves_transport_and_buffer() {
         phase: KeyboardConnectionPhase::Ready,
         last_send: Some(Duration::from_millis(12)),
         voicing: KeyboardVoicingStatus::Unavailable,
+        voicing_patch: None,
     };
 
-    status.begin_patch_setting();
+    status.begin_patch_setting(Some("Leads/Mono.fxp"), None);
 
     assert_eq!(status.transport, KeyboardTransport::Http);
     assert_eq!(status.buffer_multiplier, 8);
@@ -78,7 +183,7 @@ fn begin_patch_setting_keeps_the_previous_detection_visible() {
         ..KeyboardConnectionStatus::default()
     };
 
-    status.begin_patch_setting();
+    status.begin_patch_setting(Some("Leads/Mono.fxp"), None);
 
     assert_eq!(
         status.voicing,
@@ -87,4 +192,18 @@ fn begin_patch_setting_keeps_the_previous_detection_visible() {
         }
     );
     assert_eq!(status.voicing.effective_decision(), report.decision);
+}
+
+#[test]
+fn begin_patch_setting_with_cached_voicing_skips_probing() {
+    let mut status = KeyboardConnectionStatus::default();
+
+    status.begin_patch_setting(Some("Leads/Mono.fxp"), Some(PatchVoicing::Mono));
+
+    assert_eq!(
+        status.voicing,
+        KeyboardVoicingStatus::Cached(PatchVoicing::Mono)
+    );
+    assert_eq!(status.voicing.effective_decision(), PatchVoicing::Mono);
+    assert_eq!(status.voicing_patch.as_deref(), Some("Leads/Mono.fxp"));
 }
