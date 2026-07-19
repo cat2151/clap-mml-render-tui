@@ -11,11 +11,13 @@ impl KeyboardState {
                     return Vec::new();
                 }
                 self.note_playback_mode = NotePlaybackMode::Repeat;
+                self.repeat_elapsed_ticks = 0;
                 self.periodic_next_at = Some(now + PERIODIC_INTERVAL);
                 self.attack_repeat_chord()
             }
             NotePlaybackMode::Repeat => {
                 self.note_playback_mode = NotePlaybackMode::Arp;
+                self.repeat_elapsed_ticks = 0;
                 let mut messages: Vec<[u8; 3]> =
                     self.repeat_sounding.drain(..).map(note_off).collect();
                 messages.extend(self.restart_arp(now));
@@ -24,8 +26,10 @@ impl KeyboardState {
             NotePlaybackMode::Arp => {
                 self.note_playback_mode = NotePlaybackMode::Auto;
                 if self.note_playback_uses_arp() {
+                    self.repeat_elapsed_ticks = 0;
                     Vec::new()
                 } else {
+                    self.repeat_elapsed_ticks = 0;
                     let mut messages: Vec<[u8; 3]> =
                         self.arp_sounding.take().map(note_off).into_iter().collect();
                     messages.extend(self.attack_repeat_chord());
@@ -35,6 +39,7 @@ impl KeyboardState {
             NotePlaybackMode::Auto => {
                 self.note_playback_mode = NotePlaybackMode::Off;
                 self.arp_next_index = 0;
+                self.repeat_elapsed_ticks = 0;
                 self.periodic_next_at = self
                     .periodic_digits_active()
                     .then(|| now + PERIODIC_INTERVAL);
@@ -49,6 +54,7 @@ impl KeyboardState {
     // patch切替後は先頭音から再開し、最初の音にも完全な250msを与える。
     pub(super) fn restart_arp(&mut self, now: Instant) -> Vec<[u8; 3]> {
         self.arp_next_index = 0;
+        self.repeat_elapsed_ticks = 0;
         self.periodic_next_at = Some(now + PERIODIC_INTERVAL);
         self.attack_next_arp().into_iter().collect()
     }
@@ -60,6 +66,7 @@ impl KeyboardState {
             messages.push(attack);
         } else {
             self.note_playback_mode = NotePlaybackMode::Off;
+            self.repeat_elapsed_ticks = 0;
         }
         messages
     }

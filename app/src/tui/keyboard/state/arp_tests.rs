@@ -73,6 +73,20 @@ fn auto_uses_repeat_for_a_poly_detection() {
         vec![[0x80, 60, 0], [0x90, 60, 100], [0x90, 64, 100]]
     );
     assert!(!state.note_playback_uses_arp());
+    for tick in 1..8 {
+        assert!(state
+            .poll_periodic(now + PERIODIC_INTERVAL * tick)
+            .is_empty());
+    }
+    assert_eq!(
+        state.poll_periodic(now + PERIODIC_INTERVAL * 8),
+        vec![
+            [0x80, 60, 0],
+            [0x80, 64, 0],
+            [0x90, 60, 100],
+            [0x90, 64, 100],
+        ]
+    );
 }
 
 #[test]

@@ -42,6 +42,7 @@ const PITCH_BEND_CYCLE: [u16; 4] = [
     PITCH_BEND_CENTER,
 ];
 const PERIODIC_INTERVAL: Duration = Duration::from_millis(250);
+const REPEAT_TICKS: u8 = 8;
 // 周期mode中の桁値シーケンス。index 0は周期突入時の初回即送信値と一致させる
 // (pitch bendはPITCH_BEND_CYCLEをそのまま桁値列として使う)
 const VELOCITY_SEQ: [u8; 2] = [DEFAULT_VELOCITY, ACCENT_VELOCITY];
@@ -127,6 +128,8 @@ pub(crate) struct KeyboardState {
     arp_next_index: usize,
     // 全周期系統(桁、repeat、arp)が共有する250msマスタークロック
     periodic_next_at: Option<Instant>,
+    // repeatが現在の和音を鳴らしてから経過したマスタークロックのtick数
+    repeat_elapsed_ticks: u8,
     // 周期modeがONの系統を桁とみなした組み合わせIDの山札(bag)。桁構成変更で作り直す
     combo_bag: Option<RandomIndexDeck>,
     // 山札から引いた現在の組み合わせID(混合基数値)。各系統の現在値はここから桁分解で導出する
@@ -172,6 +175,7 @@ impl KeyboardState {
             arp_sounding: None,
             arp_next_index: 0,
             periodic_next_at: None,
+            repeat_elapsed_ticks: 0,
             combo_bag: None,
             current_combo: 0,
             refresh_pending: false,
@@ -356,6 +360,7 @@ impl KeyboardState {
             messages.push([CONTROL_CHANGE, self.cc_number, 0]);
         }
         self.periodic_next_at = None;
+        self.repeat_elapsed_ticks = 0;
         self.combo_bag = None;
         self.current_combo = 0;
         self.refresh_pending = false;

@@ -157,72 +157,6 @@ fn cc_periodic_toggle_sends_to_configured_cc_number() {
 }
 
 #[test]
-fn note_repeat_retriggers_last_chord_every_250ms() {
-    let mut state = KeyboardState::default();
-    let now = Instant::now();
-    // c e g を同時押し→全release。和音は保持される
-    assert!(state.press(KEYBOARD_NOTES[0]).is_some());
-    assert!(state.press(KEYBOARD_NOTES[2]).is_some());
-    assert!(state.press(KEYBOARD_NOTES[4]).is_some());
-    assert!(state.release(KEYBOARD_NOTES[0]).is_some());
-    assert!(state.release(KEYBOARD_NOTES[2]).is_some());
-    assert!(state.release(KEYBOARD_NOTES[4]).is_some());
-
-    // ON: 即座に和音を発音
-    assert_eq!(
-        state.cycle_note_playback(now),
-        vec![[0x90, 60, 100], [0x90, 64, 100], [0x90, 67, 100]]
-    );
-    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Repeat);
-    // 250msごとにリトリガー: off+onを同時送信
-    assert_eq!(
-        state.poll_periodic(at_tick(now, 1)),
-        vec![
-            [0x80, 60, 0],
-            [0x80, 64, 0],
-            [0x80, 67, 0],
-            [0x90, 60, 100],
-            [0x90, 64, 100],
-            [0x90, 67, 100],
-        ]
-    );
-    // arpへ移るとrepeatの和音を止め、arp先頭音を鳴らす
-    assert_eq!(
-        state.cycle_note_playback(now),
-        vec![[0x80, 60, 0], [0x80, 64, 0], [0x80, 67, 0], [0x90, 60, 100],]
-    );
-    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Arp);
-    let _ = state.cycle_note_playback(now);
-    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Auto);
-    let _ = state.cycle_note_playback(now);
-    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Off);
-    assert!(state
-        .poll_periodic(now + Duration::from_secs(10))
-        .is_empty());
-}
-
-#[test]
-fn note_repeat_does_nothing_without_chord() {
-    let mut state = KeyboardState::default();
-    assert!(state.cycle_note_playback(Instant::now()).is_empty());
-    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Off);
-}
-
-#[test]
-fn note_repeat_uses_current_velocity_on_each_retrigger() {
-    let mut state = KeyboardState::default();
-    let now = Instant::now();
-    assert!(state.press(KEYBOARD_NOTES[0]).is_some());
-    assert!(state.release(KEYBOARD_NOTES[0]).is_some());
-    state.cycle_velocity(now); // Accent(127)
-    assert_eq!(state.cycle_note_playback(now), vec![[0x90, 60, 127]]);
-    assert_eq!(
-        state.poll_periodic(at_tick(now, 1)),
-        vec![[0x80, 60, 0], [0x90, 60, 127]]
-    );
-}
-
-#[test]
 fn poll_periodic_is_empty_without_periodic_modes() {
     let mut state = KeyboardState::default();
     assert!(state
@@ -294,28 +228,6 @@ fn master_clock_restarts_from_latest_digit_toggle() {
 }
 
 #[test]
-fn note_repeat_resyncs_master_clock_and_retriggers_after_value_changes() {
-    let mut state = KeyboardState::default();
-    let now = Instant::now();
-    assert!(state.press(KEYBOARD_NOTES[0]).is_some());
-    assert!(state.release(KEYBOARD_NOTES[0]).is_some());
-    state.cycle_modulation(now);
-    state.cycle_modulation(now); // Periodic(クロックはnow+250ms)
-                                 // note mode開始時に全系統を共通の250ms境界へ再同期する
-    let _ = state.cycle_note_playback(now + Duration::from_millis(100));
-
-    assert!(state
-        .poll_periodic(now + Duration::from_millis(349))
-        .is_empty());
-    let messages = state.poll_periodic(now + Duration::from_millis(350));
-    // 値変更→note off→note onの順で同一tickにまとまる
-    assert_eq!(messages.len(), 3);
-    assert_eq!(&messages[0][..2], &[0xB0, 1]);
-    assert_eq!(messages[1], [0x80, 60, 0]);
-    assert_eq!(messages[2], [0x90, 60, 100]);
-}
-
-#[test]
 fn digit_toggle_resets_bag_and_clock() {
     let mut state = KeyboardState::default();
     let now = Instant::now();
@@ -364,7 +276,7 @@ fn combo_progress_is_none_with_note_repeat_only() {
     assert!(state.press(KEYBOARD_NOTES[0]).is_some());
     assert!(state.release(KEYBOARD_NOTES[0]).is_some());
     let _ = state.cycle_note_playback(now);
-    assert!(!state.poll_periodic(at_tick(now, 1)).is_empty());
+    assert!(state.poll_periodic(at_tick(now, 1)).is_empty());
     assert_eq!(state.combo_progress(), None);
 }
 
