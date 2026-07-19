@@ -15,7 +15,7 @@ fn enter_arp(state: &mut KeyboardState, now: Instant) -> Vec<[u8; 3]> {
 }
 
 #[test]
-fn note_playback_cycles_off_repeat_arp_off() {
+fn note_playback_cycles_off_repeat_arp_auto_off_with_unknown_fallback() {
     let mut state = KeyboardState::default();
     let now = Instant::now();
     press_and_release(&mut state, &[KEYBOARD_NOTES[0], KEYBOARD_NOTES[2]]);
@@ -31,8 +31,48 @@ fn note_playback_cycles_off_repeat_arp_off() {
         vec![[0x80, 60, 0], [0x80, 64, 0], [0x90, 60, 100]]
     );
     assert_eq!(state.note_playback_mode(), NotePlaybackMode::Arp);
-    assert_eq!(state.cycle_note_playback(now), vec![[0x80, 60, 0]]);
+    assert_eq!(
+        state.cycle_note_playback(now),
+        vec![[0x80, 60, 0], [0x90, 60, 100], [0x90, 64, 100]]
+    );
+    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Auto);
+    assert_eq!(
+        state.cycle_note_playback(now),
+        vec![[0x80, 60, 0], [0x80, 64, 0]]
+    );
     assert_eq!(state.note_playback_mode(), NotePlaybackMode::Off);
+}
+
+#[test]
+fn auto_uses_arp_for_a_mono_detection() {
+    let mut state = KeyboardState::default();
+    let now = Instant::now();
+    state.set_detected_voicing(crate::realtime_play::PatchVoicing::Mono);
+    press_and_release(&mut state, &[KEYBOARD_NOTES[0], KEYBOARD_NOTES[2]]);
+    let _ = enter_arp(&mut state, now);
+
+    assert!(state.cycle_note_playback(now).is_empty());
+    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Auto);
+    assert!(state.note_playback_uses_arp());
+    assert_eq!(
+        state.poll_periodic(now + Duration::from_millis(250)),
+        vec![[0x80, 60, 0], [0x90, 64, 100]]
+    );
+}
+
+#[test]
+fn auto_uses_repeat_for_a_poly_detection() {
+    let mut state = KeyboardState::default();
+    let now = Instant::now();
+    state.set_detected_voicing(crate::realtime_play::PatchVoicing::Poly);
+    press_and_release(&mut state, &[KEYBOARD_NOTES[0], KEYBOARD_NOTES[2]]);
+    let _ = enter_arp(&mut state, now);
+
+    assert_eq!(
+        state.cycle_note_playback(now),
+        vec![[0x80, 60, 0], [0x90, 60, 100], [0x90, 64, 100]]
+    );
+    assert!(!state.note_playback_uses_arp());
 }
 
 #[test]

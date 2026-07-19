@@ -2,7 +2,8 @@ use std::{sync::Mutex, time::Duration};
 
 use anyhow::Result;
 
-use super::{KeyboardConnectionPhase, KeyboardConnectionStatus};
+use super::{KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardVoicingStatus};
+use crate::realtime_play::VoicingReport;
 use crate::{fast_midi_ipc::FastMidiClient, history::KeyboardTransport};
 
 pub(super) fn set_result(
@@ -13,16 +14,42 @@ pub(super) fn set_result(
     elapsed: Option<Duration>,
     idle_on_success: bool,
 ) {
-    *status.lock().unwrap() = KeyboardConnectionStatus {
-        transport,
-        buffer_multiplier,
-        phase: match result {
-            Ok(()) if idle_on_success => KeyboardConnectionPhase::Idle,
-            Ok(()) => KeyboardConnectionPhase::Ready,
-            Err(error) => KeyboardConnectionPhase::Error(error.to_string()),
-        },
-        last_send: elapsed,
+    let mut status = status.lock().unwrap();
+    status.transport = transport;
+    status.buffer_multiplier = buffer_multiplier;
+    status.phase = match result {
+        Ok(()) if idle_on_success => KeyboardConnectionPhase::Idle,
+        Ok(()) => KeyboardConnectionPhase::Ready,
+        Err(error) => KeyboardConnectionPhase::Error(error.to_string()),
     };
+    status.last_send = elapsed;
+}
+
+pub(super) fn set_prepare_result(
+    status: &Mutex<KeyboardConnectionStatus>,
+    transport: KeyboardTransport,
+    buffer_multiplier: u8,
+    result: Result<Option<VoicingReport>>,
+    elapsed: Option<Duration>,
+) {
+    let mut status = status.lock().unwrap();
+    status.transport = transport;
+    status.buffer_multiplier = buffer_multiplier;
+    status.last_send = elapsed;
+    match result {
+        Ok(Some(report)) => {
+            status.phase = KeyboardConnectionPhase::Ready;
+            status.voicing = KeyboardVoicingStatus::Detected(report);
+        }
+        Ok(None) => {
+            status.phase = KeyboardConnectionPhase::Ready;
+            status.voicing = KeyboardVoicingStatus::Unavailable;
+        }
+        Err(error) => {
+            status.phase = KeyboardConnectionPhase::Error(error.to_string());
+            status.voicing = KeyboardVoicingStatus::Unavailable;
+        }
+    }
 }
 
 #[cfg(windows)]

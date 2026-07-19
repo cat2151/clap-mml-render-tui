@@ -281,6 +281,44 @@ fn prepare_live_patch_posts_null_for_init_saw() {
 }
 
 #[test]
+fn prepare_live_patch_with_voicing_reads_probe_report() {
+    let report_json = r#"{"decision":"mono","probe":{"result":"mono","ended_note_ids":[1],"blocks":1},"voice_info":{"voice_count":128,"voice_capacity":128,"supports_overlapping_notes":true},"surge":null,"disagreement":false}"#;
+    let (port, rx) = spawn_one_request_server("HTTP/1.1 200 OK", report_json);
+    let supervisor = RealtimePlayServerSupervisor::new(&cfg_for_port(port));
+
+    let report = supervisor
+        .prepare_live_patch_with_voicing(Some("Leads/Mono.fxp"))
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(report.decision, PatchVoicing::Mono);
+    assert_eq!(report.probe.ended_note_ids, vec![1]);
+    let request = rx.recv().unwrap();
+    assert_eq!(request.path, "/live-patch-probe");
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&request.body).unwrap(),
+        serde_json::json!({"patch": "Leads/Mono.fxp"})
+    );
+}
+
+#[test]
+fn voicing_probe_falls_back_to_legacy_patch_endpoint() {
+    let (port, rx) = spawn_sequential_response_server(vec![
+        ("HTTP/1.1 404 Not Found", "not found"),
+        ("HTTP/1.1 204 No Content", ""),
+    ]);
+    let supervisor = RealtimePlayServerSupervisor::new(&cfg_for_port(port));
+
+    let report = supervisor
+        .prepare_live_patch_with_voicing(Some("Leads/Mono.fxp"))
+        .unwrap();
+
+    assert_eq!(report, None);
+    assert_eq!(rx.recv().unwrap().path, "/live-patch-probe");
+    assert_eq!(rx.recv().unwrap().path, "/live-patch");
+}
+
+#[test]
 fn play_mml_falls_back_to_play_when_server_lacks_play_mml() {
     // 旧サーバー（/play-mml 未対応 → 404）を模す。フォールバックで /play に SMF が届くこと。
     let (port, rx) = spawn_sequential_response_server(vec![

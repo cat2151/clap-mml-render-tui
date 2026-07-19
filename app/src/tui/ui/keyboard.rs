@@ -8,15 +8,16 @@ use ratatui::{
 
 use super::{status::base_style, status::visible_list_page_size, LIST_HIGHLIGHT_SYMBOL};
 use crate::tui::keyboard::{
-    KeyboardConnectionPhase, KeyboardPatchCatalogStatus, KeyboardState, ModulationMode,
-    NotePlaybackMode, NumericInput, NumericInputTarget, PitchBendMode, VelocityMode,
-    KEYBOARD_NOTES,
+    KeyboardConnectionPhase, KeyboardPatchCatalogStatus, KeyboardState, KeyboardVoicingStatus,
+    ModulationMode, NotePlaybackMode, NumericInput, NumericInputTarget, PitchBendMode,
+    VelocityMode, KEYBOARD_NOTES,
 };
 use crate::tui::TuiApp;
 use crate::ui_theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_PURPLE};
 
 pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     app.sync_keyboard_patch_catalog();
+    app.sync_keyboard_voicing_detection();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -52,9 +53,10 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
         .map(format_send_duration)
         .unwrap_or_else(|| "-".to_string());
     let status = format!(
-        "transport: {} | buffer: x{} | {state} | last send: {last_send}",
+        "transport: {} | buffer: x{} | {state} | {} | last send: {last_send}",
         connection.transport.label(),
-        connection.buffer_multiplier
+        connection.buffer_multiplier,
+        voicing_status_text(&connection.voicing)
     );
     f.render_widget(
         Paragraph::new(status).style(base_style().fg(color)),
@@ -63,9 +65,11 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     f.render_widget(
         Paragraph::new(vec![
             Line::from("Up/Down:patch -/+1  PgUp/PgDn:patch -/+10  Home/End:category -/+1"),
-            Line::from("c d e f g a b:note  h:transport  Shift+H:buffer  n:notepad  w:DAW  q:quit"),
             Line::from(
-                "v:velocity  m:mod(CC1)  p:pitch bend  t:repeat/arp  x:CC#  z:CC value  Shift+Z:CC cycle",
+                "c d e f g a b:note  h:transport  Shift+H:buffer  t:off/repeat/arp/auto  n:notepad  w:DAW  q:quit",
+            ),
+            Line::from(
+                "v:velocity  m:mod(CC1)  p:pitch bend  x:CC#  z:CC value  Shift+Z:CC cycle",
             ),
         ])
         .style(base_style()),
@@ -364,9 +368,11 @@ fn note_playback_status_text(state: &KeyboardState) -> String {
         NotePlaybackMode::Off => return "Note mode: off".to_string(),
         NotePlaybackMode::Repeat => "repeat",
         NotePlaybackMode::Arp => "arp",
+        NotePlaybackMode::Auto if state.note_playback_uses_arp() => "auto→arp",
+        NotePlaybackMode::Auto => "auto→repeat",
     };
     let mut notes = state.repeat_chord().to_vec();
-    if state.note_playback_mode() == NotePlaybackMode::Arp {
+    if state.note_playback_uses_arp() {
         notes.sort_unstable_by_key(|note| note.midi_note);
     }
     let names = notes
@@ -375,6 +381,37 @@ fn note_playback_status_text(state: &KeyboardState) -> String {
         .collect::<Vec<_>>()
         .join(" ");
     format!("Note mode: {mode} {names}")
+}
+
+fn voicing_status_text(status: &KeyboardVoicingStatus) -> String {
+    match status {
+        KeyboardVoicingStatus::Unavailable => "detect: unavailable".to_string(),
+        KeyboardVoicingStatus::Detecting { previous: None } => "detect: probing".to_string(),
+        KeyboardVoicingStatus::Detecting {
+            previous: Some(report),
+        } => format!("{} (probing new patch)", voicing_report_text(report)),
+        KeyboardVoicingStatus::Detected(report) => voicing_report_text(report),
+    }
+}
+
+fn voicing_report_text(report: &crate::realtime_play::VoicingReport) -> String {
+    let decision = voicing_label(report.decision);
+    let probe = voicing_label(report.probe.result);
+    let surge = report
+        .surge
+        .as_ref()
+        .map(|surge| format!(" Surge:{}", surge.result))
+        .unwrap_or_default();
+    let conflict = if report.disagreement { " !" } else { "" };
+    format!("detect: {decision} [probe:{probe}{surge}{conflict}]")
+}
+
+fn voicing_label(voicing: crate::realtime_play::PatchVoicing) -> &'static str {
+    match voicing {
+        crate::realtime_play::PatchVoicing::Mono => "mono",
+        crate::realtime_play::PatchVoicing::Poly => "poly",
+        crate::realtime_play::PatchVoicing::Unknown => "unknown",
+    }
 }
 
 fn active_notes_text(state: &crate::tui::keyboard::KeyboardState) -> String {

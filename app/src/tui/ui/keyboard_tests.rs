@@ -109,7 +109,7 @@ fn controller_status_text_shows_fixed_pitch_bend_values() {
 }
 
 #[test]
-fn note_playback_status_text_shows_off_repeat_and_sorted_arp() {
+fn note_playback_status_text_shows_all_four_modes() {
     let mut state = KeyboardState::default();
     assert_eq!(note_playback_status_text(&state), "Note mode: off");
 
@@ -126,6 +126,11 @@ fn note_playback_status_text_shows_off_repeat_and_sorted_arp() {
     let _ = state.cycle_note_playback(now);
     assert_eq!(note_playback_status_text(&state), "Note mode: arp C4 E4 G4");
     let _ = state.cycle_note_playback(now);
+    assert_eq!(
+        note_playback_status_text(&state),
+        "Note mode: auto→repeat G4 C4 E4"
+    );
+    let _ = state.cycle_note_playback(now);
     assert_eq!(note_playback_status_text(&state), "Note mode: off");
 }
 
@@ -138,6 +143,35 @@ fn send_duration_uses_microseconds_then_milliseconds() {
     assert_eq!(
         format_send_duration(std::time::Duration::from_micros(12_345)),
         "12.3 ms"
+    );
+}
+
+#[test]
+fn voicing_status_keeps_probe_and_surge_disagreement_visible() {
+    let report: crate::realtime_play::VoicingReport = serde_json::from_value(serde_json::json!({
+        "decision": "poly",
+        "probe": {"result": "mono", "ended_note_ids": [1], "blocks": 1},
+        "voice_info": null,
+        "surge": {
+            "scene_mode": "Dual",
+            "active_scene": "A",
+            "scene_a_play_mode": "Mono",
+            "scene_b_play_mode": "Poly",
+            "result": "mixed"
+        },
+        "disagreement": true
+    }))
+    .unwrap();
+
+    assert_eq!(
+        voicing_status_text(&KeyboardVoicingStatus::Detected(report.clone())),
+        "detect: poly [probe:mono Surge:mixed !]"
+    );
+    assert_eq!(
+        voicing_status_text(&KeyboardVoicingStatus::Detecting {
+            previous: Some(report)
+        }),
+        "detect: poly [probe:mono Surge:mixed !] (probing new patch)"
     );
 }
 

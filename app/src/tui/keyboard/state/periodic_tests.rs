@@ -192,7 +192,9 @@ fn note_repeat_retriggers_last_chord_every_250ms() {
         vec![[0x80, 60, 0], [0x80, 64, 0], [0x80, 67, 0], [0x90, 60, 100],]
     );
     assert_eq!(state.note_playback_mode(), NotePlaybackMode::Arp);
-    assert_eq!(state.cycle_note_playback(now), vec![[0x80, 60, 0]]);
+    let _ = state.cycle_note_playback(now);
+    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Auto);
+    let _ = state.cycle_note_playback(now);
     assert_eq!(state.note_playback_mode(), NotePlaybackMode::Off);
     assert!(state
         .poll_periodic(now + Duration::from_secs(10))

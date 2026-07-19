@@ -143,7 +143,7 @@ fn keyboard_screen_shows_connecting_status_and_navigation() {
     assert!(screen.contains("v:velocity"));
     assert!(screen.contains("m:mod(CC1)"));
     assert!(screen.contains("p:pitch bend"));
-    assert!(screen.contains("t:repeat/arp"));
+    assert!(screen.contains("t:off/repeat/arp/auto"));
     assert!(screen.contains("Note mode: off"));
     assert!(screen.contains("x:CC#"));
     assert!(screen.contains("z:CC value"));

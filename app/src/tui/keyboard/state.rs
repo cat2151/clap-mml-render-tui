@@ -5,6 +5,7 @@ use crossterm::event::KeyCode;
 use super::{KeyboardPatchCatalog, NumericInput, NumericInputTarget};
 use crate::history::{KeyboardSessionState, KeyboardTransport};
 use crate::random::RandomIndexDeck;
+use crate::realtime_play::PatchVoicing;
 
 mod arp;
 mod periodic;
@@ -84,6 +85,7 @@ pub(in crate::tui) enum NotePlaybackMode {
     Off,
     Repeat,
     Arp,
+    Auto,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -115,6 +117,7 @@ pub(crate) struct KeyboardState {
     cc_number: u8,
     cc_periodic_on: bool,
     note_playback_mode: NotePlaybackMode,
+    detected_voicing: PatchVoicing,
     // 最後に押した和音(同時押しの集合)。releaseしても保持する
     repeat_chord: Vec<KeyboardNote>,
     // note repeatで現在発音中のノート
@@ -163,6 +166,7 @@ impl KeyboardState {
             cc_number: DEFAULT_CC_NUMBER,
             cc_periodic_on: false,
             note_playback_mode: NotePlaybackMode::Off,
+            detected_voicing: PatchVoicing::Unknown,
             repeat_chord: Vec::new(),
             repeat_sounding: Vec::new(),
             arp_sounding: None,
@@ -222,6 +226,16 @@ impl KeyboardState {
 
     pub(in crate::tui) fn note_playback_mode(&self) -> NotePlaybackMode {
         self.note_playback_mode
+    }
+
+    pub(in crate::tui) fn set_detected_voicing(&mut self, voicing: PatchVoicing) {
+        self.detected_voicing = voicing;
+    }
+
+    pub(in crate::tui) fn note_playback_uses_arp(&self) -> bool {
+        self.note_playback_mode == NotePlaybackMode::Arp
+            || (self.note_playback_mode == NotePlaybackMode::Auto
+                && self.detected_voicing == PatchVoicing::Mono)
     }
 
     pub(in crate::tui) fn repeat_chord(&self) -> &[KeyboardNote] {

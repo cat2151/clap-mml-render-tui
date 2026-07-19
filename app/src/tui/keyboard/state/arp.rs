@@ -3,7 +3,7 @@ use super::*;
 const OCTAVE: u8 = 12;
 
 impl KeyboardState {
-    // tキーで off → repeat → arp → off を循環する。和音未確定時はoffを維持する。
+    // tキーで off → repeat → arp → auto → off を循環する。和音未確定時はoffを維持する。
     pub(in crate::tui) fn cycle_note_playback(&mut self, now: Instant) -> Vec<[u8; 3]> {
         match self.note_playback_mode {
             NotePlaybackMode::Off => {
@@ -22,12 +22,26 @@ impl KeyboardState {
                 messages
             }
             NotePlaybackMode::Arp => {
+                self.note_playback_mode = NotePlaybackMode::Auto;
+                if self.note_playback_uses_arp() {
+                    Vec::new()
+                } else {
+                    let mut messages: Vec<[u8; 3]> =
+                        self.arp_sounding.take().map(note_off).into_iter().collect();
+                    messages.extend(self.attack_repeat_chord());
+                    messages
+                }
+            }
+            NotePlaybackMode::Auto => {
                 self.note_playback_mode = NotePlaybackMode::Off;
                 self.arp_next_index = 0;
                 self.periodic_next_at = self
                     .periodic_digits_active()
                     .then(|| now + PERIODIC_INTERVAL);
-                self.arp_sounding.take().map(note_off).into_iter().collect()
+                let mut messages: Vec<[u8; 3]> =
+                    self.repeat_sounding.drain(..).map(note_off).collect();
+                messages.extend(self.arp_sounding.take().map(note_off));
+                messages
             }
         }
     }

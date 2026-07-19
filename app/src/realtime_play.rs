@@ -17,6 +17,8 @@ mod live_buffer;
 mod live_patch;
 mod process;
 
+pub(crate) use live_patch::{PatchVoicing, VoicingReport};
+
 use process::{
     default_realtime_play_server_executable_name, shell_command, sibling_realtime_play_server_path,
     stop_child,

@@ -128,12 +128,13 @@ impl KeyboardState {
         }
         match self.note_playback_mode {
             NotePlaybackMode::Off => {}
-            NotePlaybackMode::Repeat => {
+            NotePlaybackMode::Repeat | NotePlaybackMode::Auto if !self.note_playback_uses_arp() => {
                 // リトリガーは値変更の後: 直前のoffと現在の和音のonを送る
                 messages.extend(self.repeat_sounding.drain(..).map(note_off));
                 messages.extend(self.attack_repeat_chord());
             }
-            NotePlaybackMode::Arp => messages.extend(self.advance_arp()),
+            NotePlaybackMode::Arp | NotePlaybackMode::Auto => messages.extend(self.advance_arp()),
+            NotePlaybackMode::Repeat => unreachable!(),
         }
         messages
     }
@@ -171,11 +172,14 @@ impl KeyboardState {
         }
         match self.note_playback_mode {
             NotePlaybackMode::Off => {}
-            NotePlaybackMode::Repeat => {
+            NotePlaybackMode::Repeat | NotePlaybackMode::Auto if !self.note_playback_uses_arp() => {
                 self.periodic_next_at = Some(now + PERIODIC_INTERVAL);
                 messages.extend(self.attack_repeat_chord());
             }
-            NotePlaybackMode::Arp => messages.extend(self.restart_arp(now)),
+            NotePlaybackMode::Arp | NotePlaybackMode::Auto => {
+                messages.extend(self.restart_arp(now))
+            }
+            NotePlaybackMode::Repeat => unreachable!(),
         }
         messages
     }

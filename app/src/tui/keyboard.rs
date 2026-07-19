@@ -11,7 +11,9 @@ mod state;
 
 pub(super) use catalog::{KeyboardPatchCatalog, KeyboardPatchCatalogStatus};
 pub(super) use numeric_input::{NumericInput, NumericInputTarget};
-pub(super) use sender::{KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardMidiSender};
+pub(super) use sender::{
+    KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardMidiSender, KeyboardVoicingStatus,
+};
 pub(crate) use state::KeyboardState;
 pub(super) use state::{
     ModulationMode, NotePlaybackMode, PitchBendMode, VelocityMode, KEYBOARD_NOTES,
@@ -69,6 +71,7 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn handle_keyboard_key_event(&mut self, key: KeyEvent) -> KeyboardAction {
+        self.sync_keyboard_voicing_detection();
         if key.kind == KeyEventKind::Repeat {
             return KeyboardAction::Continue;
         }
@@ -251,6 +254,7 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn pump_keyboard_periodic(&mut self) {
+        self.sync_keyboard_voicing_detection();
         if !self.keyboard_connection_status().phase.accepts_notes() {
             return;
         }
@@ -280,5 +284,13 @@ impl<'a> TuiApp<'a> {
             .as_ref()
             .map(KeyboardMidiSender::status)
             .unwrap_or_default()
+    }
+
+    pub(in crate::tui) fn sync_keyboard_voicing_detection(&mut self) {
+        let voicing = self
+            .keyboard_connection_status()
+            .voicing
+            .effective_decision();
+        self.keyboard_state.set_detected_voicing(voicing);
     }
 }
