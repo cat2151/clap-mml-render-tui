@@ -3,9 +3,9 @@ use std::path::PathBuf;
 use cmrt_core::CoreConfig;
 
 pub use cmrt_runtime::{
-    configured_patch_dirs, core_config_patch_root_dir, default_patches_dirs, default_plugin_path,
-    serialize_patches_dirs_line, shared_patch_root_dir, Config, OfflineRenderBackend,
-    RealtimeAudioBackend, DEFAULT_OFFLINE_RENDER_SERVER_PORT,
+    configured_patch_dirs, core_config_patch_root_dir, default_loop_categories,
+    default_patches_dirs, default_plugin_path, serialize_patches_dirs_line, shared_patch_root_dir,
+    Config, OfflineRenderBackend, RealtimeAudioBackend, DEFAULT_OFFLINE_RENDER_SERVER_PORT,
     DEFAULT_OFFLINE_RENDER_SERVER_WORKERS, DEFAULT_OFFLINE_RENDER_WORKERS,
     DEFAULT_REALTIME_PLAY_SERVER_PORT, DEFAULT_VOICING_OVERRIDE_SOURCE,
     DEFAULT_VOICING_SHARED_SOURCE,

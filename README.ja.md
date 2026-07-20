@@ -95,6 +95,12 @@ patches_dirs = [
   'C:\ProgramData\Surge XT\patches_factory',
   'C:\ProgramData\Surge XT\patches_3rdparty',
 ]
+
+# WAV ループブラウザーの検索対象ディレクトリ一覧
+loop_dirs = []
+
+# WAV ループディレクトリへ付与できるカテゴリ一覧
+loop_categories = ["guitar", "drum", "bass", "spoken", "sequence"]
 ```
 
 設定項目は次のとおりです。
@@ -118,6 +124,8 @@ patches_dirs = [
 | `realtime_play_server_command` | 空文字 | play_server の起動コマンドです。 |
 | `autoplay_on_startup` | `true` | 起動直後に自動再生するかどうかです。 |
 | `patches_dirs` | OSごとの Surge XT patches 標準ディレクトリ | 音色選択で検索するディレクトリ一覧です。 |
+| `loop_dirs` | `[]` | WAV ループブラウザーで検索するディレクトリ一覧です。変更後は `cmrt scan-loops` を実行します。 |
+| `loop_categories` | `["guitar", "drum", "bass", "spoken", "sequence"]` | loop dirへ割り当てるカテゴリ一覧です。カテゴリoverlayのキーはカテゴリ名中の未使用英字から決まります。 |
 
 OS別の `plugin_path` 既定値は次のとおりです。
 

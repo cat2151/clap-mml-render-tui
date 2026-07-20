@@ -93,6 +93,14 @@ fn default_config_content_uses_empty_loop_dirs() {
 }
 
 #[test]
+fn default_config_content_uses_loop_categories() {
+    let content = default_config_content();
+
+    assert!(content
+        .contains("loop_categories = [\"guitar\", \"drum\", \"bass\", \"spoken\", \"sequence\"]"));
+}
+
+#[test]
 fn default_config_content_uses_voicing_source_urls() {
     let content = default_config_content();
 

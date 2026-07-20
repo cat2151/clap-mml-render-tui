@@ -160,6 +160,9 @@ voicing_override_source = "{DEFAULT_VOICING_OVERRIDE_SOURCE}"
 # 設定後に `cmrt scan-loops` を実行してインデックスを作成してください。
 loop_dirs = []
 
+# 【省略可】WAV ループディレクトリへ付与できるカテゴリ一覧
+loop_categories = ["guitar", "drum", "bass", "spoken", "sequence"]
+
 "#,
     )
 }

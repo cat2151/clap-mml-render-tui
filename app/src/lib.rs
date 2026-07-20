@@ -6,6 +6,7 @@ pub(crate) mod fast_midi_ipc;
 pub(crate) mod generate;
 pub mod history;
 pub mod logging;
+pub(crate) mod loop_browser_metadata;
 pub mod loop_library;
 pub(crate) mod offline_render;
 pub(crate) mod patches;

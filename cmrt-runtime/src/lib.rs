@@ -8,6 +8,7 @@ pub use defaults::{
 pub use paths::{config_app_dir, config_file_path, log_file_path, native_probe_log_file_path};
 
 use serde::Deserialize;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 pub const DEFAULT_OFFLINE_RENDER_WORKERS: usize = 2;
@@ -17,6 +18,7 @@ pub const DEFAULT_REALTIME_PLAY_SERVER_PORT: u16 = 62154;
 pub const DEFAULT_VOICING_SHARED_SOURCE: &str =
     "https://raw.githubusercontent.com/cat2151/cat-music-patterns/main/surge-xt-patch-voicing.json";
 pub const DEFAULT_VOICING_OVERRIDE_SOURCE: &str = "https://raw.githubusercontent.com/cat2151/cat-music-patterns/main/surge-xt-patch-voicing-overrides.json";
+pub const DEFAULT_LOOP_CATEGORY_NAMES: [&str; 5] = ["guitar", "drum", "bass", "spoken", "sequence"];
 const MIN_OFFLINE_RENDER_WORKERS: usize = 1;
 const MAX_OFFLINE_RENDER_WORKERS: usize = 16;
 
@@ -49,6 +51,9 @@ pub struct Config {
     /// WAV ループブラウザーの検索対象ディレクトリ一覧
     #[serde(default)]
     pub loop_dirs: Vec<String>,
+    /// WAV ループディレクトリへ付与できるカテゴリ一覧
+    #[serde(default = "default_loop_categories")]
+    pub loop_categories: Vec<String>,
     /// DAW のオフラインレンダリング同時実行数
     #[serde(default = "default_offline_render_workers")]
     pub offline_render_workers: usize,
@@ -102,6 +107,13 @@ fn default_realtime_play_server_port() -> u16 {
 
 fn default_autoplay_on_startup() -> bool {
     true
+}
+
+pub fn default_loop_categories() -> Vec<String> {
+    DEFAULT_LOOP_CATEGORY_NAMES
+        .iter()
+        .map(|name| (*name).to_string())
+        .collect()
 }
 
 fn default_voicing_shared_source() -> String {
@@ -186,6 +198,24 @@ impl Config {
     pub fn validate(&self) -> anyhow::Result<()> {
         if self.loop_dirs.iter().any(|dir| dir.trim().is_empty()) {
             anyhow::bail!("loop_dirs に空のディレクトリは指定できません");
+        }
+        if self.loop_categories.len() > 26 {
+            anyhow::bail!("loop_categories は26件以下で指定してください");
+        }
+        if self
+            .loop_categories
+            .iter()
+            .any(|category| category.trim().is_empty())
+        {
+            anyhow::bail!("loop_categories に空のカテゴリは指定できません");
+        }
+        let mut categories = HashSet::new();
+        if self
+            .loop_categories
+            .iter()
+            .any(|category| !categories.insert(category))
+        {
+            anyhow::bail!("loop_categories に重複したカテゴリは指定できません");
         }
         validate_offline_render_workers("offline_render_workers", self.offline_render_workers)?;
         validate_offline_render_workers(

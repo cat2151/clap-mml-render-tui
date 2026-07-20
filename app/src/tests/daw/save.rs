@@ -38,6 +38,7 @@ fn build_test_app(tracks: usize, measures: usize) -> DawApp {
             buffer_size: 512,
             patches_dirs: None,
             loop_dirs: Vec::new(),
+            loop_categories: crate::config::default_loop_categories(),
             offline_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
             offline_render_server_workers: crate::config::DEFAULT_OFFLINE_RENDER_SERVER_WORKERS,
             offline_render_backend: crate::config::OfflineRenderBackend::InProcess,

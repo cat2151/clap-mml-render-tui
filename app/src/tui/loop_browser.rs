@@ -2,14 +2,20 @@ use crossterm::event::KeyCode;
 use ratatui::widgets::ListState;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::time::{Duration, Instant};
 
-use super::{Mode, PlayState, TuiApp};
+use crate::loop_browser_metadata::{category_keys, metadata_path, LoopBrowserMetadata, LoopDirId};
+
+mod input;
+mod playback;
+
+const FAVORITE_REMOVED_NOTICE_DURATION: Duration = Duration::from_millis(1_500);
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct NodeKey {
     root: usize,
     components: Vec<String>,
+    anchor: Option<usize>,
 }
 
 #[derive(Clone, Debug)]
@@ -28,6 +34,13 @@ pub(super) struct VisibleLoopNode {
     pub(super) is_wav: bool,
     pub(super) expanded: bool,
     pub(super) path: PathBuf,
+    pub(super) favorite: bool,
+    pub(super) category: Option<String>,
+}
+
+pub(super) struct LoopBrowserNotice {
+    pub(super) text: String,
+    expires_at: Instant,
 }
 
 pub(crate) struct LoopBrowser {
@@ -38,6 +51,14 @@ pub(crate) struct LoopBrowser {
     pub(super) list_state: ListState,
     pub(super) page_size: usize,
     pub(super) error: Option<String>,
+    pub(super) metadata_error: Option<String>,
+    metadata: LoopBrowserMetadata,
+    metadata_path: Option<PathBuf>,
+    metadata_writable: bool,
+    pub(super) favorites_only: bool,
+    pub(super) category_overlay: Option<LoopDirId>,
+    pub(super) category_keys: Vec<(char, String)>,
+    pub(super) notice: Option<LoopBrowserNotice>,
 }
 
 pub(super) enum LoopBrowserAction {
@@ -57,22 +78,66 @@ impl Default for LoopBrowser {
             list_state: ListState::default(),
             page_size: 1,
             error: None,
+            metadata_error: None,
+            metadata: LoopBrowserMetadata::default(),
+            metadata_path: None,
+            metadata_writable: true,
+            favorites_only: false,
+            category_overlay: None,
+            category_keys: Vec::new(),
+            notice: None,
         }
     }
 }
 
 impl LoopBrowser {
     pub(super) fn reload(&mut self, cfg: &crate::config::Config) {
+        let (metadata, metadata_path, metadata_writable, metadata_error) = match metadata_path() {
+            Ok(path) => match LoopBrowserMetadata::load_from(&path) {
+                Ok(metadata) => (metadata, Some(path), true, None),
+                Err(error) => (
+                    LoopBrowserMetadata::default(),
+                    Some(path),
+                    false,
+                    Some(error.to_string()),
+                ),
+            },
+            Err(error) => (
+                LoopBrowserMetadata::default(),
+                None,
+                false,
+                Some(error.to_string()),
+            ),
+        };
         *self = match crate::loop_library::load_index(cfg) {
-            Ok(index) => Self::from_index(index),
+            Ok(index) => Self::from_index(
+                index,
+                &cfg.loop_categories,
+                metadata,
+                metadata_path,
+                metadata_writable,
+                metadata_error,
+            ),
             Err(error) => Self {
                 error: Some(format!("{error}\ncmrt scan-loops を実行してください")),
+                category_keys: category_keys(&cfg.loop_categories),
+                metadata,
+                metadata_path,
+                metadata_writable,
+                metadata_error,
                 ..Self::default()
             },
         };
     }
 
-    fn from_index(index: crate::loop_library::LoopIndex) -> Self {
+    pub(in crate::tui) fn from_index(
+        index: crate::loop_library::LoopIndex,
+        categories: &[String],
+        metadata: LoopBrowserMetadata,
+        metadata_path: Option<PathBuf>,
+        metadata_writable: bool,
+        metadata_error: Option<String>,
+    ) -> Self {
         let mut roots = Vec::with_capacity(index.roots.len());
         let mut expanded = HashSet::new();
         for (root_index, indexed_root) in index.roots.into_iter().enumerate() {
@@ -90,48 +155,22 @@ impl LoopBrowser {
             expanded.insert(NodeKey {
                 root: root_index,
                 components: Vec::new(),
+                anchor: None,
             });
             roots.push((root_path, root));
         }
         let mut browser = Self {
             roots,
             expanded,
+            category_keys: category_keys(categories),
+            metadata,
+            metadata_path,
+            metadata_writable,
+            metadata_error,
             ..Self::default()
         };
         browser.rebuild_visible(None);
         browser
-    }
-
-    pub(super) fn handle_key(&mut self, key: KeyCode) -> LoopBrowserAction {
-        match key {
-            KeyCode::Esc => LoopBrowserAction::Return,
-            KeyCode::Char('q') => LoopBrowserAction::Quit,
-            KeyCode::Char('j') | KeyCode::Down => self.move_cursor(1),
-            KeyCode::Char('k') | KeyCode::Up => self.move_cursor(-1),
-            KeyCode::PageDown => self.move_cursor(self.page_size as isize),
-            KeyCode::PageUp => self.move_cursor(-(self.page_size as isize)),
-            KeyCode::Char('l') | KeyCode::Right => self.expand_or_play(),
-            KeyCode::Char('h') | KeyCode::Left => {
-                self.collapse_or_select_parent();
-                LoopBrowserAction::Continue
-            }
-            KeyCode::Enter | KeyCode::Char(' ') => self.selected_play_action(),
-            _ => LoopBrowserAction::Continue,
-        }
-    }
-
-    fn move_cursor(&mut self, delta: isize) -> LoopBrowserAction {
-        if self.visible.is_empty() {
-            return LoopBrowserAction::Continue;
-        }
-        let max = self.visible.len().saturating_sub(1) as isize;
-        let next = (self.cursor as isize + delta).clamp(0, max) as usize;
-        if next == self.cursor {
-            return LoopBrowserAction::Continue;
-        }
-        self.cursor = next;
-        self.list_state.select(Some(next));
-        self.selected_play_action()
     }
 
     fn selected_play_action(&self) -> LoopBrowserAction {
@@ -142,47 +181,44 @@ impl LoopBrowser {
             .unwrap_or(LoopBrowserAction::Continue)
     }
 
-    fn expand_or_play(&mut self) -> LoopBrowserAction {
-        let Some(node) = self.visible.get(self.cursor).cloned() else {
-            return LoopBrowserAction::Continue;
-        };
-        if node.is_wav {
-            return LoopBrowserAction::Play(node.path);
-        }
-        if self.expanded.insert(node.key.clone()) {
-            self.rebuild_visible(Some(&node.key));
-        }
-        LoopBrowserAction::Continue
-    }
-
-    fn collapse_or_select_parent(&mut self) {
-        let Some(node) = self.visible.get(self.cursor).cloned() else {
-            return;
-        };
-        if !node.is_wav && self.expanded.remove(&node.key) {
-            self.rebuild_visible(Some(&node.key));
-            return;
-        }
-        if node.key.components.is_empty() {
-            return;
-        }
-        let mut parent = node.key;
-        parent.components.pop();
-        self.rebuild_visible(Some(&parent));
-    }
-
     fn rebuild_visible(&mut self, selected: Option<&NodeKey>) {
         let mut visible = Vec::new();
-        for (root_index, (root_path, root)) in self.roots.iter().enumerate() {
-            collect_visible(
-                root_index,
-                root_path,
-                root,
-                &self.expanded,
-                Vec::new(),
-                0,
-                &mut visible,
-            );
+        if self.favorites_only {
+            for (anchor, favorite) in self.metadata.favorite_dirs.iter().enumerate() {
+                if let Some((root_index, root_path, node, components)) =
+                    find_favorite_node(&self.roots, favorite)
+                {
+                    collect_visible(
+                        root_index,
+                        root_path,
+                        node,
+                        &self.expanded,
+                        &self.metadata,
+                        &self.category_keys,
+                        components,
+                        Some(anchor),
+                        0,
+                        Some(node_path(root_path, node).to_string_lossy().into_owned()),
+                        &mut visible,
+                    );
+                }
+            }
+        } else {
+            for (root_index, (root_path, root)) in self.roots.iter().enumerate() {
+                collect_visible(
+                    root_index,
+                    root_path,
+                    root,
+                    &self.expanded,
+                    &self.metadata,
+                    &self.category_keys,
+                    Vec::new(),
+                    None,
+                    0,
+                    None,
+                    &mut visible,
+                );
+            }
         }
         self.visible = visible;
         self.cursor = selected
@@ -190,6 +226,33 @@ impl LoopBrowser {
             .unwrap_or_else(|| self.cursor.min(self.visible.len().saturating_sub(1)));
         self.list_state
             .select((!self.visible.is_empty()).then_some(self.cursor));
+    }
+
+    fn rebuild_visible_for_path(&mut self, selected: Option<&Path>) {
+        self.rebuild_visible(None);
+        if let Some(path) = selected {
+            if let Some(index) = self.visible.iter().position(|node| node.path == path) {
+                self.cursor = index;
+                self.list_state.select(Some(index));
+            }
+        }
+    }
+
+    pub(super) fn active_notice(&mut self) -> Option<&LoopBrowserNotice> {
+        if self
+            .notice
+            .as_ref()
+            .is_some_and(|notice| Instant::now() >= notice.expires_at)
+        {
+            self.notice = None;
+        }
+        self.notice.as_ref()
+    }
+
+    pub(super) fn category_overlay_current(&self) -> Option<&str> {
+        self.category_overlay
+            .as_ref()
+            .and_then(|dir| self.metadata.category_for(dir))
     }
 }
 
@@ -246,22 +309,39 @@ fn collect_visible(
     root_path: &Path,
     node: &TreeNode,
     expanded: &HashSet<NodeKey>,
+    metadata: &LoopBrowserMetadata,
+    category_keys: &[(char, String)],
     components: Vec<String>,
+    anchor: Option<usize>,
     depth: usize,
+    display_name: Option<String>,
     output: &mut Vec<VisibleLoopNode>,
 ) {
     let key = NodeKey {
         root: root_index,
         components: components.clone(),
+        anchor,
     };
     let is_expanded = expanded.contains(&key);
+    let dir_id = (!node.is_wav).then(|| LoopDirId::new(root_path, &node.relative_path));
+    let favorite = dir_id.as_ref().is_some_and(|dir| metadata.is_favorite(dir));
+    let category = dir_id.as_ref().and_then(|dir| {
+        metadata.category_for(dir).and_then(|category| {
+            category_keys
+                .iter()
+                .any(|(_, configured)| configured == category)
+                .then(|| category.to_string())
+        })
+    });
     output.push(VisibleLoopNode {
         key: key.clone(),
         depth,
-        name: node.name.clone(),
+        name: display_name.unwrap_or_else(|| node.name.clone()),
         is_wav: node.is_wav,
         expanded: is_expanded,
-        path: root_path.join(&node.relative_path),
+        path: node_path(root_path, node),
+        favorite,
+        category,
     });
     if !node.is_wav && is_expanded {
         for child in &node.children {
@@ -272,127 +352,55 @@ fn collect_visible(
                 root_path,
                 child,
                 expanded,
+                metadata,
+                category_keys,
                 child_components,
+                anchor,
                 depth + 1,
+                None,
                 output,
             );
         }
     }
 }
 
-impl<'a> TuiApp<'a> {
-    pub(super) fn start_loop_browser(&mut self) {
-        let session = self.begin_playback_session();
-        self.set_play_state_if_current(session, PlayState::Idle);
-        self.loop_browser.reload(&self.cfg);
-        self.mode = Mode::LoopBrowser;
-    }
-
-    pub(super) fn finish_loop_browser(&mut self) {
-        let session = self.begin_playback_session();
-        self.set_play_state_if_current(session, PlayState::Idle);
-        self.mode = Mode::Normal;
-    }
-
-    pub(super) fn play_loop_file(&self, path: PathBuf) {
-        let session = self.begin_playback_session();
-        let display = path.to_string_lossy().into_owned();
-        self.set_play_state_if_current(session, PlayState::Playing(display.clone()));
-        let state = Arc::clone(&self.play_state);
-        let playback_session = Arc::clone(&self.playback_session);
-        let active_sink = Arc::clone(&self.active_sink);
-        std::thread::spawn(move || {
-            let result = play_file_for_session(&path, session, &playback_session, &active_sink);
-            if let Err(error) = result {
-                TuiApp::clear_active_sink_for_session(&active_sink, &playback_session, session);
-                TuiApp::set_play_state_for_session(
-                    &state,
-                    &playback_session,
-                    session,
-                    PlayState::Err(format!("WAV再生に失敗: {error}")),
-                );
-            } else {
-                TuiApp::clear_active_sink_for_session(&active_sink, &playback_session, session);
-                TuiApp::set_play_state_for_session(
-                    &state,
-                    &playback_session,
-                    session,
-                    PlayState::Done(display),
-                );
-            }
-        });
-    }
+fn node_path(root_path: &Path, node: &TreeNode) -> PathBuf {
+    root_path.join(&node.relative_path)
 }
 
-fn play_file_for_session(
-    path: &Path,
-    session: u64,
-    playback_session: &std::sync::atomic::AtomicU64,
-    active_sink: &std::sync::Mutex<Option<Arc<rodio::Sink>>>,
-) -> anyhow::Result<()> {
-    let file = std::fs::File::open(path)?;
-    let source = rodio::Decoder::new(std::io::BufReader::new(file))?;
-    let (_stream, stream_handle) = rodio::OutputStream::try_default()?;
-    let sink = Arc::new(rodio::Sink::try_new(&stream_handle)?);
-    if !TuiApp::playback_session_is_current(playback_session, session) {
-        return Ok(());
-    }
-    {
-        let mut guard = active_sink.lock().unwrap();
-        if !TuiApp::playback_session_is_current(playback_session, session) {
-            return Ok(());
+fn find_favorite_node<'a>(
+    roots: &'a [(PathBuf, TreeNode)],
+    favorite: &LoopDirId,
+) -> Option<(usize, &'a Path, &'a TreeNode, Vec<String>)> {
+    for (root_index, (root_path, root)) in roots.iter().enumerate() {
+        if let Some((node, components)) = find_node(root_path, root, favorite, Vec::new()) {
+            return Some((root_index, root_path.as_path(), node, components));
         }
-        *guard = Some(Arc::clone(&sink));
     }
-    sink.append(source);
-    sink.sleep_until_end();
-    Ok(())
+    None
+}
+
+fn find_node<'a>(
+    root_path: &Path,
+    node: &'a TreeNode,
+    target: &LoopDirId,
+    components: Vec<String>,
+) -> Option<(&'a TreeNode, Vec<String>)> {
+    if !node.is_wav && LoopDirId::new(root_path, &node.relative_path).matches(target) {
+        return Some((node, components));
+    }
+    for child in &node.children {
+        if child.is_wav {
+            continue;
+        }
+        let mut child_components = components.clone();
+        child_components.push(child.name.clone());
+        if let Some(found) = find_node(root_path, child, target, child_components) {
+            return Some(found);
+        }
+    }
+    None
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::loop_library::{LoopIndex, LoopRootIndex};
-
-    fn browser() -> LoopBrowser {
-        LoopBrowser::from_index(LoopIndex {
-            version: 1,
-            roots: vec![LoopRootIndex {
-                path: "/loops".to_string(),
-                wav_files: vec![
-                    "Pack/Bass/B.wav".to_string(),
-                    "Pack/Bass/a.wav".to_string(),
-                    "Pack/Drums/Kick.wav".to_string(),
-                ],
-            }],
-        })
-    }
-
-    #[test]
-    fn root_is_expanded_and_directories_sort_before_wavs() {
-        let browser = browser();
-        assert_eq!(browser.visible.len(), 2);
-        assert_eq!(browser.visible[0].name, "/loops");
-        assert_eq!(browser.visible[1].name, "Pack");
-    }
-
-    #[test]
-    fn hjkl_expand_navigate_play_and_select_parent() {
-        let mut browser = browser();
-        assert!(matches!(
-            browser.handle_key(KeyCode::Char('j')),
-            LoopBrowserAction::Continue
-        ));
-        browser.handle_key(KeyCode::Char('l'));
-        assert_eq!(browser.visible.len(), 4);
-        browser.handle_key(KeyCode::Char('j'));
-        browser.handle_key(KeyCode::Char('l'));
-        assert_eq!(browser.visible[3].name, "a.wav");
-        assert!(matches!(
-            browser.handle_key(KeyCode::Char('j')),
-            LoopBrowserAction::Play(path) if path.ends_with("a.wav")
-        ));
-        browser.handle_key(KeyCode::Char('h'));
-        assert_eq!(browser.visible[browser.cursor].name, "Bass");
-    }
-}
+mod tests;

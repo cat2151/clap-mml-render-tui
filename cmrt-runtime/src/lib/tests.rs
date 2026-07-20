@@ -32,6 +32,7 @@ buffer_size = 512
     assert!(cfg.realtime_play_server_command.is_empty());
     assert!(cfg.autoplay_on_startup);
     assert!(cfg.loop_dirs.is_empty());
+    assert_eq!(cfg.loop_categories, default_loop_categories());
 }
 
 #[test]
@@ -65,6 +66,8 @@ fn default_config_content_contains_render_server_keys() {
     assert!(content.contains("realtime_play_server_command = \"\""));
     assert!(content.contains("autoplay_on_startup = true"));
     assert!(content.contains("loop_dirs = []"));
+    assert!(content
+        .contains("loop_categories = [\"guitar\", \"drum\", \"bass\", \"spoken\", \"sequence\"]"));
 }
 
 #[test]
@@ -98,6 +101,52 @@ loop_dirs = [""]
 
     let cfg: Config = toml::from_str(toml_str).unwrap();
     assert!(cfg.validate().is_err());
+}
+
+#[test]
+fn config_loop_categories_parse_and_validate() {
+    let toml_str = r#"
+plugin_path = "/usr/lib/clap/Surge XT.clap"
+input_midi  = "input.mid"
+output_midi = "output.mid"
+output_wav  = "output.wav"
+sample_rate = 48000
+buffer_size = 512
+loop_categories = ["guitar", "drum", "bass"]
+"#;
+
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+    cfg.validate().unwrap();
+    assert_eq!(cfg.loop_categories, ["guitar", "drum", "bass"]);
+}
+
+#[test]
+fn config_loop_categories_reject_invalid_entries() {
+    for categories in [
+        "[\"\"]".to_string(),
+        "[\"bass\", \"bass\"]".to_string(),
+        format!(
+            "[{}]",
+            (0..27)
+                .map(|index| format!("\"category-{index}\""))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    ] {
+        let toml_str = format!(
+            r#"
+plugin_path = "/usr/lib/clap/Surge XT.clap"
+input_midi  = "input.mid"
+output_midi = "output.mid"
+output_wav  = "output.wav"
+sample_rate = 48000
+buffer_size = 512
+loop_categories = {categories}
+"#
+        );
+        let cfg: Config = toml::from_str(&toml_str).unwrap();
+        assert!(cfg.validate().is_err(), "accepted {categories}");
+    }
 }
 
 #[test]

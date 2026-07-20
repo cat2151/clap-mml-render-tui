@@ -106,7 +106,7 @@ pub(super) fn keybind_text(mode: &Mode) -> &'static str {
             "k/j・↑↓:patch±1  Ctrl+u/d・PgUp/PgDn:patch±10  h/l・Home/End:category±1  r:random  c d e f g a b:note  s:transport  Shift+H:buffer  n:notepad  w:DAW  q:quit"
         }
         Mode::LoopBrowser => {
-            "j/k・↑↓:移動して再生 h/l・←/→:折り畳み/展開 Enter/Space:再生 Esc:戻る q:終了"
+            "j/k・↑↓:移動して再生 h/l・←/→:折り畳み/展開 Enter/Space:再生 f:dirお気に入り F:お気に入り限定 c:dirカテゴリ Esc:戻る q:終了"
         }
     }
 }
