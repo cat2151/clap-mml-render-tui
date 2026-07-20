@@ -136,7 +136,8 @@ fn keyboard_screen_shows_connecting_status_and_navigation() {
     assert!(screen.contains("last send: -"));
     assert!(screen.contains("connecting..."));
     assert!(screen.contains("notes unavailable until ready"));
-    assert!(screen.contains("h:transport"));
+    assert!(screen.contains("s:transport"));
+    assert!(!screen.contains("h:transport"));
     assert!(screen.contains("Shift+H:buffer"));
     assert!(screen.contains("n:notepad"));
     assert!(screen.contains("w:DAW"));
@@ -179,8 +180,9 @@ fn keyboard_screen_shows_category_and_patch_panes_while_connecting() {
     assert!(screen.contains("Patches (1/2)"));
     assert!(screen.contains("patches_factory/Pad/Factory Pad.fxp"));
     assert!(screen.contains("connecting..."));
-    assert!(screen.contains("PgUp/PgDn:patch -/+10"));
-    assert!(screen.contains("Home/End:category -/+1"));
+    assert!(screen.contains("k/j/Up/Down:patch -/+1"));
+    assert!(screen.contains("Ctrl+u/d/PgUp/PgDn:patch -/+10"));
+    assert!(screen.contains("h/l/Home/End:cat -/+1"));
     assert!(screen.contains("r:random"));
 }
 

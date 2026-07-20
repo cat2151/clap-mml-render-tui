@@ -213,7 +213,7 @@ fn keyboard_ignores_note_input_until_connection_is_ready() {
 }
 
 #[test]
-fn keyboard_h_clears_held_notes_before_transport_switch() {
+fn keyboard_s_clears_held_notes_before_transport_switch() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::Keyboard;
     assert!(app
@@ -222,7 +222,7 @@ fn keyboard_h_clears_held_notes_before_transport_switch() {
         .is_some());
 
     let result = app.handle_keyboard_key_event(crossterm::event::KeyEvent::new(
-        KeyCode::Char('h'),
+        KeyCode::Char('s'),
         crossterm::event::KeyModifiers::NONE,
     ));
 
@@ -300,6 +300,63 @@ fn keyboard_patch_keys_navigate_categories_and_apply_the_selected_patch() {
     );
 
     app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+    assert_eq!(
+        app.keyboard_state.patch(),
+        Some("patches_factory/Lead/Lead 1.fxp")
+    );
+}
+
+#[test]
+fn keyboard_vim_keys_and_ctrl_page_keys_navigate_patches() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+        "patches_factory/Lead/Lead 1.fxp",
+        "patches_factory/Lead/Lead 2.fxp",
+        "patches_factory/Pad/Pad 0.fxp",
+        "patches_factory/Pad/Pad 1.fxp",
+        "patches_factory/Pad/Pad 2.fxp",
+        "patches_factory/Pad/Pad 3.fxp",
+        "patches_factory/Pad/Pad 4.fxp",
+        "patches_factory/Pad/Pad 5.fxp",
+        "patches_factory/Pad/Pad 6.fxp",
+        "patches_factory/Pad/Pad 7.fxp",
+        "patches_factory/Pad/Pad 8.fxp",
+        "patches_factory/Pad/Pad 9.fxp",
+        "patches_factory/Pad/Pad 10.fxp",
+    ]))));
+    app.start_keyboard(Some("patches_factory/Lead/Lead 1.fxp".to_string()));
+
+    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
+    assert_eq!(
+        app.keyboard_state.patch(),
+        Some("patches_factory/Lead/Lead 2.fxp")
+    );
+
+    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
+    assert_eq!(
+        app.keyboard_state.patch(),
+        Some("patches_factory/Lead/Lead 1.fxp")
+    );
+
+    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE));
+    assert_eq!(
+        app.keyboard_state.patch(),
+        Some("patches_factory/Pad/Pad 0.fxp")
+    );
+
+    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL));
+    assert_eq!(
+        app.keyboard_state.patch(),
+        Some("patches_factory/Pad/Pad 10.fxp")
+    );
+
+    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
+    assert_eq!(
+        app.keyboard_state.patch(),
+        Some("patches_factory/Pad/Pad 0.fxp")
+    );
+
+    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));
     assert_eq!(
         app.keyboard_state.patch(),
         Some("patches_factory/Lead/Lead 1.fxp")

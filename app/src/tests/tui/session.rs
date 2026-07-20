@@ -86,7 +86,7 @@ fn keyboard_q_persists_and_restores_patch_transport_and_buffer() {
     let mut app = TuiApp::new_for_test(test_config());
     app.start_keyboard(Some("patches_factory/Keys/Piano.fxp".to_string()));
     app.handle_keyboard_key_event(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Char('h'),
+        crossterm::event::KeyCode::Char('s'),
         crossterm::event::KeyModifiers::NONE,
     ));
     app.handle_keyboard_key_event(crossterm::event::KeyEvent::new(

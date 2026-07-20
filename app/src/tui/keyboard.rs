@@ -148,13 +148,26 @@ impl<'a> TuiApp<'a> {
             }
             return KeyboardAction::Continue;
         }
+        if key.kind == KeyEventKind::Press && key.modifiers == KeyModifiers::CONTROL {
+            match key.code {
+                KeyCode::Char('d') => {
+                    self.move_keyboard_patch_by(10);
+                    return KeyboardAction::Continue;
+                }
+                KeyCode::Char('u') => {
+                    self.move_keyboard_patch_by(-10);
+                    return KeyboardAction::Continue;
+                }
+                _ => {}
+            }
+        }
         if key.kind == KeyEventKind::Press && key.modifiers == KeyModifiers::NONE {
             match key.code {
-                KeyCode::Down => {
+                KeyCode::Down | KeyCode::Char('j') => {
                     self.move_keyboard_patch_by(1);
                     return KeyboardAction::Continue;
                 }
-                KeyCode::Up => {
+                KeyCode::Up | KeyCode::Char('k') => {
                     self.move_keyboard_patch_by(-1);
                     return KeyboardAction::Continue;
                 }
@@ -166,11 +179,11 @@ impl<'a> TuiApp<'a> {
                     self.move_keyboard_patch_by(-10);
                     return KeyboardAction::Continue;
                 }
-                KeyCode::End => {
+                KeyCode::End | KeyCode::Char('l') => {
                     self.move_keyboard_patch_category_by(1);
                     return KeyboardAction::Continue;
                 }
-                KeyCode::Home => {
+                KeyCode::Home | KeyCode::Char('h') => {
                     self.move_keyboard_patch_category_by(-1);
                     return KeyboardAction::Continue;
                 }
@@ -221,7 +234,7 @@ impl<'a> TuiApp<'a> {
                         .begin_numeric_input(NumericInputTarget::CcValue);
                     return KeyboardAction::Continue;
                 }
-                KeyCode::Char('h') => {
+                KeyCode::Char('s') => {
                     let transport = self.keyboard_state.toggle_transport();
                     let patch = self.keyboard_state.patch().map(str::to_string);
                     let note_offs = self.keyboard_state.take_reset_messages();

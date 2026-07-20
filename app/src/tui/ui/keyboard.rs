@@ -70,13 +70,13 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     f.render_widget(
         Paragraph::new(vec![
             Line::from(
-                "Up/Down:patch -/+1  PgUp/PgDn:patch -/+10  Home/End:category -/+1  r:random  n:notepad",
+                "k/j/Up/Down:patch -/+1  Ctrl+u/d/PgUp/PgDn:patch -/+10  h/l/Home/End:cat -/+1 r:random",
             ),
             Line::from(
-                "c d e f g a b:note  h:transport  Shift+H:buffer  t:off/repeat/arp/auto  i:MML notes",
+                "cdefgab:notes  s:transport  Shift+H:buffer  t:off/repeat/arp/auto  n:notepad  w:DAW q:quit",
             ),
             Line::from(
-                "v:velocity  m:mod(CC1)  p:pitch bend  x:CC#  z:CC value  Shift+Z:CC cycle  w:DAW  q:quit",
+                "i:MML notes  v:velocity  m:mod(CC1)  p:pitch bend  x:CC#  z:CC value  Shift+Z:CC cycle",
             ),
         ])
         .style(base_style()),
