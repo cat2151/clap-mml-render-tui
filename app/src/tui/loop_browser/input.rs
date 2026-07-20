@@ -8,7 +8,20 @@ impl LoopBrowser {
 
     pub(in crate::tui) fn handle_key_event(&mut self, key: KeyEvent) -> LoopBrowserAction {
         if self.category_overlay.is_some() {
+            self.navigation_count.clear();
             return self.handle_category_overlay_key(key.code);
+        }
+        if key.modifiers == KeyModifiers::NONE {
+            if let KeyCode::Char(digit @ '0'..='9') = key.code {
+                if self.navigation_count.push_digit(digit) {
+                    return LoopBrowserAction::Continue;
+                }
+            }
+        }
+        if key.modifiers != KeyModifiers::NONE
+            || !matches!(key.code, KeyCode::Char('h' | 'j' | 'k' | 'l'))
+        {
+            self.navigation_count.clear();
         }
         if key.code == KeyCode::Tab {
             self.focus = match self.focus {
@@ -36,7 +49,7 @@ impl LoopBrowser {
             if let KeyCode::Char(pad @ ('c' | 'd' | 'e' | 'f' | 'g' | 'a' | 'b')) = key.code {
                 return self
                     .pad_path(pad)
-                    .map(LoopBrowserAction::Trigger)
+                    .map(|path| LoopBrowserAction::Trigger { pad, path })
                     .unwrap_or(LoopBrowserAction::Continue);
             }
         }
@@ -55,12 +68,33 @@ impl LoopBrowser {
                 self.open_category_overlay();
                 LoopBrowserAction::Continue
             }
-            KeyCode::Char('j') | KeyCode::Down => self.move_cursor(1),
-            KeyCode::Char('k') | KeyCode::Up => self.move_cursor(-1),
-            KeyCode::PageDown => self.move_cursor(self.page_size as isize),
-            KeyCode::PageUp => self.move_cursor(-(self.page_size as isize)),
-            KeyCode::Char('l') | KeyCode::Right => self.expand_or_play(),
-            KeyCode::Char('h') | KeyCode::Left => {
+            KeyCode::Char('j') => {
+                let delta = self.navigation_count.take_delta(1);
+                self.move_cursor(delta)
+            }
+            KeyCode::Char('k') => {
+                let delta = self.navigation_count.take_delta(-1);
+                self.move_cursor(delta)
+            }
+            KeyCode::Down => self.move_cursor(1),
+            KeyCode::Up => self.move_cursor(-1),
+            KeyCode::PageDown => self.move_cursor(10),
+            KeyCode::PageUp => self.move_cursor(-10),
+            KeyCode::Char('l') => {
+                self.navigation_count.take_delta(1);
+                self.expand_or_play()
+            }
+            KeyCode::Right => self.expand_or_play(),
+            KeyCode::Char('h') => {
+                let count = self.navigation_count.take_delta(1) as usize;
+                for _ in 0..count {
+                    if !self.collapse_or_select_parent() {
+                        break;
+                    }
+                }
+                LoopBrowserAction::Continue
+            }
+            KeyCode::Left => {
                 self.collapse_or_select_parent();
                 LoopBrowserAction::Continue
             }
@@ -78,20 +112,40 @@ impl LoopBrowser {
         match key.code {
             KeyCode::Esc => LoopBrowserAction::Return,
             KeyCode::Char('q') => LoopBrowserAction::Quit,
-            KeyCode::Char('h') | KeyCode::Left => {
+            KeyCode::Char('h') => {
+                let count = self.navigation_count.take_delta(1) as usize;
+                self.measure_cursor = self.measure_cursor.saturating_sub(count);
+                LoopBrowserAction::Continue
+            }
+            KeyCode::Left => {
                 self.measure_cursor = self.measure_cursor.saturating_sub(1);
                 LoopBrowserAction::Continue
             }
-            KeyCode::Char('k') | KeyCode::Up => {
+            KeyCode::Char('k') => {
+                let count = self.navigation_count.take_delta(1) as usize;
+                self.track_cursor = self.track_cursor.saturating_sub(count);
+                LoopBrowserAction::Continue
+            }
+            KeyCode::Up => {
                 self.track_cursor = self.track_cursor.saturating_sub(1);
                 LoopBrowserAction::Continue
             }
-            KeyCode::Char('l') | KeyCode::Right => {
-                self.move_track_cursor_right();
+            KeyCode::Char('l') => {
+                let count = self.navigation_count.take_delta(1) as usize;
+                self.move_track_cursor_right(count);
                 LoopBrowserAction::Continue
             }
-            KeyCode::Char('j') | KeyCode::Down => {
-                self.move_track_cursor_down();
+            KeyCode::Right => {
+                self.move_track_cursor_right(1);
+                LoopBrowserAction::Continue
+            }
+            KeyCode::Char('j') => {
+                let count = self.navigation_count.take_delta(1) as usize;
+                self.move_track_cursor_down(count);
+                LoopBrowserAction::Continue
+            }
+            KeyCode::Down => {
+                self.move_track_cursor_down(1);
                 LoopBrowserAction::Continue
             }
             _ => LoopBrowserAction::Continue,
@@ -122,7 +176,7 @@ impl LoopBrowser {
             return LoopBrowserAction::Continue;
         }
         let max = self.visible.len().saturating_sub(1) as isize;
-        let next = (self.cursor as isize + delta).clamp(0, max) as usize;
+        let next = (self.cursor as isize).saturating_add(delta).clamp(0, max) as usize;
         if next == self.cursor {
             return LoopBrowserAction::Continue;
         }
@@ -144,20 +198,21 @@ impl LoopBrowser {
         LoopBrowserAction::Continue
     }
 
-    fn collapse_or_select_parent(&mut self) {
+    fn collapse_or_select_parent(&mut self) -> bool {
         let Some(node) = self.visible.get(self.cursor).cloned() else {
-            return;
+            return false;
         };
         if !node.is_wav && self.expanded.remove(&node.key) {
             self.rebuild_visible(Some(&node.key));
-            return;
+            return true;
         }
         if node.depth == 0 || node.key.components.is_empty() {
-            return;
+            return false;
         }
         let mut parent = node.key;
         parent.components.pop();
         self.rebuild_visible(Some(&parent));
+        true
     }
 
     fn selected_target_dir(&self) -> Option<LoopDirId> {
@@ -270,6 +325,8 @@ impl LoopBrowser {
                 text: format!("WAV pad {} を解除しました", pad.to_ascii_uppercase()),
                 expires_at: Instant::now() + REMOVED_NOTICE_DURATION,
             });
+        } else {
+            self.notice = None;
         }
         LoopBrowserAction::Continue
     }
@@ -280,7 +337,10 @@ impl LoopBrowser {
         };
         let audition = wav.path();
         if !self.track_grid_writable {
-            return LoopBrowserAction::Trigger(audition);
+            return LoopBrowserAction::Trigger {
+                pad,
+                path: audition,
+            };
         }
         let previous = self.track_grid.clone();
         let cell = &mut self.track_grid[self.track_cursor][self.measure_cursor];
@@ -292,54 +352,90 @@ impl LoopBrowser {
         if let Err(error) = self.save_track_grid() {
             self.track_grid = previous;
             self.track_grid_error = Some(format!("track listを保存できません: {error}"));
-            return LoopBrowserAction::Trigger(audition);
+            return LoopBrowserAction::Trigger {
+                pad,
+                path: audition,
+            };
         }
         self.track_grid_error = None;
         LoopBrowserAction::GridChanged {
+            pad,
             audition,
             grid: self.playback_grid(),
         }
     }
 
-    fn move_track_cursor_right(&mut self) {
+    fn move_track_cursor_right(&mut self, count: usize) {
+        if count == 0 {
+            return;
+        }
         let measures = self.track_grid[0].len();
-        if self.measure_cursor + 1 < measures {
-            self.measure_cursor += 1;
+        let next = self.measure_cursor.saturating_add(count);
+        if next < measures {
+            self.measure_cursor = next;
             return;
         }
         if !self.track_grid_writable {
+            self.measure_cursor = measures.saturating_sub(1);
             return;
         }
-        let previous = self.track_grid.clone();
-        for track in &mut self.track_grid {
-            track.push(None);
+        let Some(required) = next.checked_add(1) else {
+            self.track_grid_error =
+                Some("track listが大きすぎるためmeasureを追加できません".to_string());
+            return;
+        };
+        let mut updated = self.track_grid.clone();
+        for track in &mut updated {
+            if track.try_reserve_exact(required - track.len()).is_err() {
+                self.track_grid_error =
+                    Some("track listが大きすぎるためmeasureを追加できません".to_string());
+                return;
+            }
+            track.resize(required, None);
         }
+        let previous = std::mem::replace(&mut self.track_grid, updated);
         if let Err(error) = self.save_track_grid() {
             self.track_grid = previous;
             self.track_grid_error = Some(format!("measure追加を保存できません: {error}"));
             return;
         }
         self.track_grid_error = None;
-        self.measure_cursor += 1;
+        self.measure_cursor = next;
     }
 
-    fn move_track_cursor_down(&mut self) {
-        if self.track_cursor + 1 < self.track_grid.len() {
-            self.track_cursor += 1;
+    fn move_track_cursor_down(&mut self, count: usize) {
+        if count == 0 {
+            return;
+        }
+        let next = self.track_cursor.saturating_add(count);
+        if next < self.track_grid.len() {
+            self.track_cursor = next;
             return;
         }
         if !self.track_grid_writable {
+            self.track_cursor = self.track_grid.len().saturating_sub(1);
             return;
         }
-        let previous = self.track_grid.clone();
+        let Some(required) = next.checked_add(1) else {
+            self.track_grid_error =
+                Some("track listが大きすぎるためtrackを追加できません".to_string());
+            return;
+        };
+        let mut updated = self.track_grid.clone();
+        if updated.try_reserve_exact(required - updated.len()).is_err() {
+            self.track_grid_error =
+                Some("track listが大きすぎるためtrackを追加できません".to_string());
+            return;
+        }
         let measures = self.track_grid[0].len();
-        self.track_grid.push(vec![None; measures]);
+        updated.resize_with(required, || vec![None; measures]);
+        let previous = std::mem::replace(&mut self.track_grid, updated);
         if let Err(error) = self.save_track_grid() {
             self.track_grid = previous;
             self.track_grid_error = Some(format!("track追加を保存できません: {error}"));
             return;
         }
         self.track_grid_error = None;
-        self.track_cursor += 1;
+        self.track_cursor = next;
     }
 }

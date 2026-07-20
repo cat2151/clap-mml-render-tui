@@ -78,4 +78,5 @@ fn draws_wav_pads_track_grid_and_pane_specific_footer() {
     assert!(screen.contains("[TRACK LIST]"));
     assert!(screen.contains("C:Kick.wav"));
     assert!(screen.contains("Tab:loop tree"));
+    assert!(screen.contains("1-9:hjkl prefix"));
 }

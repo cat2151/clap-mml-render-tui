@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
@@ -13,7 +14,7 @@ use crate::tui::{Mode, PlayState, TuiApp};
 
 enum LoopPlaybackCommand {
     Preview(PathBuf),
-    Trigger(PathBuf),
+    Trigger { pad: char, path: PathBuf },
     SetGrid(LoopPlaybackGrid),
     Stop,
 }
@@ -44,8 +45,8 @@ impl LoopPlaybackController {
         let _ = self.sender.send(LoopPlaybackCommand::Preview(path));
     }
 
-    pub(super) fn trigger(&self, path: PathBuf) {
-        let _ = self.sender.send(LoopPlaybackCommand::Trigger(path));
+    pub(super) fn trigger(&self, pad: char, path: PathBuf) {
+        let _ = self.sender.send(LoopPlaybackCommand::Trigger { pad, path });
     }
 
     pub(super) fn set_grid(&self, grid: LoopPlaybackGrid) {
@@ -95,9 +96,9 @@ impl<'a> TuiApp<'a> {
         }
     }
 
-    pub(in crate::tui) fn trigger_loop_pad(&self, path: PathBuf) {
+    pub(in crate::tui) fn trigger_loop_pad(&self, pad: char, path: PathBuf) {
         if let Some(playback) = &self.loop_playback {
-            playback.trigger(path);
+            playback.trigger(pad, path);
         }
     }
 
@@ -116,14 +117,14 @@ fn playback_worker(
     let (_stream, handle) =
         rodio::OutputStream::try_default().context("audio output deviceを開けません")?;
     let mut preview_sink: Option<Arc<rodio::Sink>> = None;
-    let mut one_shot_sinks = Vec::<Arc<rodio::Sink>>::new();
+    let mut pad_sinks = HashMap::<char, Arc<rodio::Sink>>::new();
     let mut measure_sinks = Vec::<Arc<rodio::Sink>>::new();
     let mut current_measure = None;
     let mut measure_deadline = None;
     let mut playback_suspended = false;
 
     loop {
-        one_shot_sinks.retain(|sink| !sink.empty());
+        pad_sinks.retain(|_, sink| !sink.empty());
         if measure_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
             measure_sinks.clear();
             measure_deadline = None;
@@ -170,19 +171,29 @@ fn playback_worker(
                     }
                 }
             }
-            Ok(LoopPlaybackCommand::Trigger(path)) => match play_path(&handle, &path) {
-                Ok(sink) => one_shot_sinks.push(sink),
-                Err(error) => {
-                    set_play_state(state, PlayState::Err(format!("WAV pad再生に失敗: {error}")))
+            Ok(LoopPlaybackCommand::Trigger { pad, path }) => {
+                if let Some(sink) = preview_sink.take() {
+                    sink.stop();
                 }
-            },
+                if let Some(sink) = take_pad_voice(&mut pad_sinks, pad) {
+                    sink.stop();
+                }
+                match play_path(&handle, &path) {
+                    Ok(sink) => {
+                        pad_sinks.insert(pad, sink);
+                    }
+                    Err(error) => {
+                        set_play_state(state, PlayState::Err(format!("WAV pad再生に失敗: {error}")))
+                    }
+                }
+            }
             Ok(LoopPlaybackCommand::SetGrid(next_grid)) => {
                 grid = next_grid;
                 playback_suspended = false;
             }
             Ok(LoopPlaybackCommand::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => {
                 stop_sinks(&mut measure_sinks);
-                stop_sinks(&mut one_shot_sinks);
+                stop_pad_sinks(&mut pad_sinks);
                 if let Some(sink) = preview_sink.take() {
                     sink.stop();
                 }
@@ -258,6 +269,16 @@ fn stop_sinks(sinks: &mut Vec<Arc<rodio::Sink>>) {
     }
 }
 
+fn stop_pad_sinks(sinks: &mut HashMap<char, Arc<rodio::Sink>>) {
+    for (_, sink) in sinks.drain() {
+        sink.stop();
+    }
+}
+
+fn take_pad_voice<T>(voices: &mut HashMap<char, T>, pad: char) -> Option<T> {
+    voices.remove(&pad)
+}
+
 fn set_play_state(state: &Arc<Mutex<PlayState>>, next: PlayState) {
     *state.lock().unwrap() = next;
 }
@@ -314,5 +335,15 @@ mod tests {
             next_measure(&after, Some(0)),
             Some((1, vec![PathBuf::from("new.wav")]))
         );
+    }
+
+    #[test]
+    fn pad_voices_replace_only_the_same_pad() {
+        let mut voices = HashMap::from([('c', "first-c"), ('d', "first-d")]);
+
+        assert_eq!(take_pad_voice(&mut voices, 'c'), Some("first-c"));
+        voices.insert('c', "second-c");
+        assert_eq!(voices.get(&'c'), Some(&"second-c"));
+        assert_eq!(voices.get(&'d'), Some(&"first-d"));
     }
 }

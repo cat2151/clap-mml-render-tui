@@ -22,6 +22,23 @@ fn browser() -> LoopBrowser {
     )
 }
 
+fn browser_with_direct_wavs(count: usize) -> LoopBrowser {
+    LoopBrowser::from_index(
+        LoopIndex {
+            version: 1,
+            roots: vec![LoopRootIndex {
+                path: "/loops".to_string(),
+                wav_files: (0..count).map(|index| format!("{index:02}.wav")).collect(),
+            }],
+        },
+        &crate::config::default_loop_categories(),
+        LoopBrowserMetadata::default(),
+        None,
+        true,
+        None,
+    )
+}
+
 fn select_bass_wav(browser: &mut LoopBrowser) {
     browser.handle_key(KeyCode::Char('j'));
     browser.handle_key(KeyCode::Char('l'));
@@ -56,6 +73,56 @@ fn hjkl_expand_navigate_play_and_select_parent() {
     ));
     browser.handle_key(KeyCode::Char('h'));
     assert_eq!(browser.visible[browser.cursor].name, "Bass");
+}
+
+#[test]
+fn page_keys_move_ten_rows_and_preview_only_the_destination() {
+    let mut browser = browser_with_direct_wavs(15);
+
+    assert!(matches!(
+        browser.handle_key(KeyCode::PageDown),
+        LoopBrowserAction::Preview(_)
+    ));
+    assert_eq!(browser.cursor, 10);
+    assert!(matches!(
+        browser.handle_key(KeyCode::PageUp),
+        LoopBrowserAction::Continue
+    ));
+    assert_eq!(browser.cursor, 0);
+}
+
+#[test]
+fn tree_hjkl_accepts_vim_style_numeric_prefixes() {
+    let mut browser = browser_with_direct_wavs(15);
+
+    browser.handle_key(KeyCode::Char('1'));
+    browser.handle_key(KeyCode::Char('0'));
+    assert!(matches!(
+        browser.handle_key(KeyCode::Char('j')),
+        LoopBrowserAction::Preview(_)
+    ));
+    assert_eq!(browser.cursor, 10);
+
+    browser.handle_key(KeyCode::Char('2'));
+    browser.handle_key(KeyCode::Char('k'));
+    assert_eq!(browser.cursor, 8);
+
+    browser.handle_key(KeyCode::Char('3'));
+    browser.handle_key(KeyCode::Down);
+    assert_eq!(browser.cursor, 9);
+    assert_eq!(browser.navigation_count.value(), None);
+}
+
+#[test]
+fn prefixed_tree_h_repeats_parent_and_collapse_operations() {
+    let mut browser = browser();
+    select_bass_wav(&mut browser);
+
+    browser.handle_key(KeyCode::Char('2'));
+    browser.handle_key(KeyCode::Char('h'));
+
+    assert_eq!(browser.visible[browser.cursor].name, "Bass");
+    assert!(!browser.visible.iter().any(|node| node.name == "a.wav"));
 }
 
 #[test]
@@ -188,7 +255,7 @@ fn shift_note_assigns_and_removes_pad_while_lowercase_triggers_it() {
         .is_some_and(|wav| wav.path().ends_with("a.wav")));
     assert!(matches!(
         browser.handle_key(KeyCode::Char('c')),
-        LoopBrowserAction::Trigger(path) if path.ends_with("a.wav")
+        LoopBrowserAction::Trigger { pad: 'c', path } if path.ends_with("a.wav")
     ));
 
     browser.handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
@@ -247,7 +314,7 @@ fn track_pane_toggles_one_wav_per_cell_and_auto_extends_right_and_down() {
 
     assert!(matches!(
         browser.handle_key(KeyCode::Char('c')),
-        LoopBrowserAction::GridChanged { audition, grid }
+        LoopBrowserAction::GridChanged { pad: 'c', audition, grid }
             if audition.ends_with("a.wav") && grid[0][0].as_ref().is_some_and(|path| path.ends_with("a.wav"))
     ));
     browser.handle_key(KeyCode::Char('l'));
@@ -266,6 +333,28 @@ fn track_pane_toggles_one_wav_per_cell_and_auto_extends_right_and_down() {
 }
 
 #[test]
+fn track_hjkl_prefix_moves_and_extends_by_the_requested_count() {
+    let mut browser = browser();
+    browser.focus = LoopBrowserPane::Tracks;
+
+    browser.handle_key(KeyCode::Char('3'));
+    browser.handle_key(KeyCode::Char('l'));
+    assert_eq!(browser.measure_cursor, 3);
+    assert!(browser.track_grid.iter().all(|track| track.len() == 4));
+
+    browser.handle_key(KeyCode::Char('2'));
+    browser.handle_key(KeyCode::Char('j'));
+    assert_eq!(browser.track_cursor, 2);
+    assert_eq!(browser.track_grid.len(), 3);
+
+    browser.handle_key(KeyCode::Char('2'));
+    browser.handle_key(KeyCode::Char('h'));
+    browser.handle_key(KeyCode::Char('2'));
+    browser.handle_key(KeyCode::Char('k'));
+    assert_eq!((browser.track_cursor, browser.measure_cursor), (0, 1));
+}
+
+#[test]
 fn replacing_pad_does_not_change_existing_track_cell() {
     let mut browser = browser();
     select_bass_wav(&mut browser);
@@ -273,9 +362,14 @@ fn replacing_pad_does_not_change_existing_track_cell() {
     browser.handle_key(KeyCode::Tab);
     browser.handle_key(KeyCode::Char('c'));
     browser.handle_key(KeyCode::Tab);
+    browser.handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
+    assert!(browser.notice.is_some());
+    browser.handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
+    assert!(browser.notice.is_none());
     browser.handle_key(KeyCode::Char('j'));
     browser.handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
 
+    assert!(browser.notice.is_none());
     assert!(browser
         .metadata
         .pad('c')

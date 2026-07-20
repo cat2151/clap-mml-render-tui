@@ -115,10 +115,10 @@ pub(super) fn keybind_text(mode: &Mode) -> &'static str {
 pub(super) fn loop_browser_keybind_text(pane: LoopBrowserPane) -> &'static str {
     match pane {
         LoopBrowserPane::Tree => {
-            "Tab:track list Shift+C/D/E/F/G/A/B:pad登録/解除 c/d/e/f/g/a/b:pad演奏 t:dirカテゴリ v:dirお気に入り V:お気に入り限定 hjkl・矢印:移動/展開 Enter/Space:再生 Esc:戻る q:終了"
+            "Tab:track list Shift+C/D/E/F/G/A/B:pad登録/解除 c/d/e/f/g/a/b:pad演奏 1-9:hjkl prefix PgUp/PgDn:±10 t:dirカテゴリ v:dirお気に入り V:お気に入り限定 hjkl・矢印:移動/展開 Enter/Space:再生 Esc:戻る q:終了"
         }
         LoopBrowserPane::Tracks => {
-            "Tab:loop tree c/d/e/f/g/a/b:pad演奏+セルtoggle h/l・←/→:measure移動 j/k・↓/↑:track移動（右/下端で自動追加） Esc:戻る q:終了"
+            "Tab:loop tree c/d/e/f/g/a/b:pad演奏+セルtoggle 1-9:hjkl prefix h/l・←/→:measure移動 j/k・↓/↑:track移動（右/下端で自動追加） Esc:戻る q:終了"
         }
     }
 }

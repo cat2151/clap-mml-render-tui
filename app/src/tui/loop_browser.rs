@@ -10,6 +10,7 @@ use crate::loop_browser_metadata::{
 use crate::loop_browser_track_grid::{
     default_track_grid, load_from as load_track_grid, track_grid_path, LoopTrackGrid,
 };
+use crate::tui::keyboard::NavigationCount;
 
 mod input;
 pub(super) mod playback;
@@ -65,7 +66,6 @@ pub(crate) struct LoopBrowser {
     pub(super) visible: Vec<VisibleLoopNode>,
     pub(super) cursor: usize,
     pub(super) list_state: ListState,
-    pub(super) page_size: usize,
     pub(super) error: Option<String>,
     pub(super) metadata_error: Option<String>,
     pub(super) track_grid_error: Option<String>,
@@ -84,6 +84,7 @@ pub(crate) struct LoopBrowser {
     pub(super) measure_cursor: usize,
     pub(super) track_scroll: usize,
     pub(super) measure_scroll: usize,
+    pub(super) navigation_count: NavigationCount,
 }
 
 pub(super) type LoopPlaybackGrid = Vec<Vec<Option<PathBuf>>>;
@@ -91,8 +92,12 @@ pub(super) type LoopPlaybackGrid = Vec<Vec<Option<PathBuf>>>;
 pub(super) enum LoopBrowserAction {
     Continue,
     Preview(PathBuf),
-    Trigger(PathBuf),
+    Trigger {
+        pad: char,
+        path: PathBuf,
+    },
     GridChanged {
+        pad: char,
         audition: PathBuf,
         grid: LoopPlaybackGrid,
     },
@@ -108,7 +113,6 @@ impl Default for LoopBrowser {
             visible: Vec::new(),
             cursor: 0,
             list_state: ListState::default(),
-            page_size: 1,
             error: None,
             metadata_error: None,
             track_grid_error: None,
@@ -127,6 +131,7 @@ impl Default for LoopBrowser {
             measure_cursor: 0,
             track_scroll: 0,
             measure_scroll: 0,
+            navigation_count: NavigationCount::default(),
         }
     }
 }

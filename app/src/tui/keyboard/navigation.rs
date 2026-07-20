@@ -4,7 +4,7 @@ pub(in crate::tui) struct NavigationCount {
 }
 
 impl NavigationCount {
-    pub(super) fn push_digit(&mut self, digit: char) -> bool {
+    pub(in crate::tui) fn push_digit(&mut self, digit: char) -> bool {
         let Some(digit) = digit.to_digit(10).map(|digit| digit as usize) else {
             return false;
         };
@@ -24,13 +24,13 @@ impl NavigationCount {
         self.value
     }
 
-    pub(super) fn take_delta(&mut self, unit: isize) -> isize {
+    pub(in crate::tui) fn take_delta(&mut self, unit: isize) -> isize {
         let count = self.value.take().unwrap_or(1);
         let count = isize::try_from(count).unwrap_or(isize::MAX);
         unit.saturating_mul(count)
     }
 
-    pub(super) fn clear(&mut self) {
+    pub(in crate::tui) fn clear(&mut self) {
         self.value = None;
     }
 }

@@ -6,9 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use super::status::{
-    base_style, loop_browser_keybind_text, status_color, status_text, visible_list_page_size,
-};
+use super::status::{base_style, loop_browser_keybind_text, status_color, status_text};
 use crate::tui::loop_browser::{LoopBrowserPane, PAD_KEYS};
 use crate::tui::{Mode, TuiApp};
 use crate::ui_theme::{
@@ -73,7 +71,6 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame) {
 }
 
 fn draw_tree(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {
-    app.loop_browser.page_size = visible_list_page_size(area);
     let focused = app.loop_browser.focus == LoopBrowserPane::Tree;
     let border = focus_border_style(focused);
     let title = if app.loop_browser.favorites_only {

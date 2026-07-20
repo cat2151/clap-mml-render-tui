@@ -305,9 +305,15 @@ impl<'a> TuiApp<'a> {
                         Mode::LoopBrowser => match self.loop_browser.handle_key_event(key) {
                             LoopBrowserAction::Continue => {}
                             LoopBrowserAction::Preview(path) => self.preview_loop_file(path),
-                            LoopBrowserAction::Trigger(path) => self.trigger_loop_pad(path),
-                            LoopBrowserAction::GridChanged { audition, grid } => {
-                                self.trigger_loop_pad(audition);
+                            LoopBrowserAction::Trigger { pad, path } => {
+                                self.trigger_loop_pad(pad, path)
+                            }
+                            LoopBrowserAction::GridChanged {
+                                pad,
+                                audition,
+                                grid,
+                            } => {
+                                self.trigger_loop_pad(pad, audition);
                                 self.update_loop_grid(grid);
                             }
                             LoopBrowserAction::Return => self.finish_loop_browser(),
