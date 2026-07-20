@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier},
+    style::Color,
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
     Frame,
@@ -12,13 +12,13 @@ use crate::tui::keyboard::{
     ModulationMode, NumericInput, NumericInputTarget, PitchBendMode, VelocityMode, KEYBOARD_NOTES,
 };
 use crate::tui::TuiApp;
-use crate::ui_theme::{
-    cursor_highlight_style, MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_PURPLE, MONOKAI_YELLOW,
-};
+use crate::ui_theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_PURPLE};
 
+mod guide;
 mod mml_overlay;
 mod note;
 
+use guide::{draw_note_guide_overlay, keyboard_help_lines};
 use mml_overlay::draw_mml_input_overlay;
 use note::note_playback_status_text;
 
@@ -69,39 +69,10 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
         Paragraph::new(status).style(base_style().fg(color)),
         chunks[1],
     );
-    let keyboard_help = match app.keyboard_state.navigation_count.value() {
-        Some(count) => vec![
-            Line::from(vec![
-                Span::styled(
-                    format!("Count: {count}_"),
-                    base_style()
-                        .fg(MONOKAI_YELLOW)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::raw("  "),
-                Span::styled(
-                    "0-9 または h/j/k/l/Ctrl+u/Ctrl+d を押してください",
-                    base_style()
-                        .fg(MONOKAI_CYAN)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]),
-            Line::default(),
-            Line::default(),
-        ],
-        None => vec![
-            Line::from(concat!(
-                "k/j/Up/Down:patch -/+1  Ctrl+u/d/PgUp/PgDn:patch -/+10  ",
-                "h/l/Home/End:cat -/+1 r:random"
-            )),
-            Line::from(
-                "cdefgab:notes  s:transport  Shift+H:buffer  t:off/repeat/arp/auto  n:notepad  w:DAW q:quit",
-            ),
-            Line::from(
-                "i:MML notes  v:velocity  m:mod(CC1)  p:pitch bend  x:CC#  z:CC value  Shift+Z:CC cycle",
-            ),
-        ],
-    };
+    let keyboard_help = keyboard_help_lines(
+        app.keyboard_note_guide.presentation(),
+        app.keyboard_state.navigation_count.value(),
+    );
     f.render_widget(Paragraph::new(keyboard_help).style(base_style()), chunks[2]);
     draw_connection_overlay(&connection.phase, f, panes[0]);
     draw_numeric_input_overlay(
@@ -111,6 +82,7 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
         panes[0],
     );
     draw_mml_input_overlay(&app.keyboard_mml_input, f, panes[0]);
+    draw_note_guide_overlay(app.keyboard_note_guide.presentation(), f, f.area());
 }
 
 fn draw_keyboard(app: &TuiApp<'_>, f: &mut Frame<'_>, area: Rect) {

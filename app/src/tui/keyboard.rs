@@ -5,6 +5,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use super::{Mode, PlayState, TuiApp};
 
 mod catalog;
+pub(in crate::tui) mod guide;
 mod mml_input;
 mod navigation;
 mod numeric_input;
@@ -12,6 +13,7 @@ mod sender;
 mod state;
 
 pub(super) use catalog::{KeyboardPatchCatalog, KeyboardPatchCatalogStatus};
+pub(crate) use guide::KeyboardNoteGuide;
 pub(crate) use mml_input::KeyboardMmlInput;
 pub(in crate::tui) use navigation::NavigationCount;
 pub(super) use numeric_input::{NumericInput, NumericInputTarget};
@@ -52,6 +54,7 @@ impl<'a> TuiApp<'a> {
 
     pub(super) fn start_keyboard(&mut self, patch: Option<String>) {
         self.keyboard_mml_input.cancel();
+        self.keyboard_note_guide.reset_for_screen();
         self.voicing_layers = self.voicing_source_refresh.load_for_keyboard();
         let session = self.begin_playback_session();
         self.set_play_state_if_current(session, PlayState::Idle);
@@ -331,6 +334,9 @@ impl<'a> TuiApp<'a> {
         };
         if let (Some(messages), Some(sender)) = (messages, &self.keyboard_midi_sender) {
             sender.send(messages, self.keyboard_state.patch());
+            if key.kind == KeyEventKind::Press {
+                self.keyboard_note_guide.complete_note_check();
+            }
         }
         KeyboardAction::Continue
     }
@@ -380,11 +386,18 @@ impl<'a> TuiApp<'a> {
 
     pub(super) fn pump_keyboard_periodic(&mut self) {
         self.sync_keyboard_voicing_detection();
-        if !self.keyboard_connection_status().phase.accepts_notes() {
+        let ready = self.keyboard_connection_status().phase.accepts_notes();
+        let now = Instant::now();
+        let first_overlay_today =
+            self.keyboard_note_guide
+                .tick(now, ready, &guide::local_date_string());
+        if first_overlay_today {
+            self.save_keyboard_note_guide_overlay_date();
+        }
+        if !ready {
             return;
         }
         // patch切替後の現在値再送(refresh) → 周期送信、の順で1回のsendにまとめる
-        let now = Instant::now();
         let mut messages = self.keyboard_state.take_pending_refresh_messages(now);
         messages.extend(self.keyboard_state.poll_periodic(now));
         if !messages.is_empty() {

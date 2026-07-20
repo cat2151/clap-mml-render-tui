@@ -21,6 +21,7 @@ struct LoadedSessionState {
     list_state: ListState,
     is_daw_mode: bool,
     keyboard: Option<crate::history::KeyboardSessionState>,
+    keyboard_note_guide_overlay_date: Option<String>,
 }
 
 /// 復元したセッションのカーソルを現在の行数に収まる範囲へ丸める。
@@ -39,6 +40,7 @@ fn load_initial_session_state() -> LoadedSessionState {
         lines,
         is_daw_mode,
         keyboard,
+        keyboard_note_guide_overlay_date,
     } = crate::history::load_session_state();
     let initial_cursor = clamp_session_cursor(cursor, lines.len());
     let mut list_state = ListState::default();
@@ -49,6 +51,7 @@ fn load_initial_session_state() -> LoadedSessionState {
         list_state,
         is_daw_mode,
         keyboard,
+        keyboard_note_guide_overlay_date,
     }
 }
 
@@ -80,6 +83,7 @@ impl<'a> TuiApp<'a> {
             list_state,
             is_daw_mode,
             keyboard,
+            keyboard_note_guide_overlay_date,
         } = load_initial_session_state();
         let entry_ptr = entry
             .map(|entry| entry as *const PluginEntry as usize)
@@ -135,6 +139,9 @@ impl<'a> TuiApp<'a> {
             keyboard_midi_sender,
             keyboard_state,
             keyboard_mml_input: super::keyboard::KeyboardMmlInput::default(),
+            keyboard_note_guide: super::keyboard::KeyboardNoteGuide::new(
+                keyboard_note_guide_overlay_date,
+            ),
             voicing_cache: crate::history::load_voicing_cache(),
             voicing_layers,
             voicing_source_refresh,
@@ -201,6 +208,16 @@ impl<'a> TuiApp<'a> {
             keyboard: self
                 .persist_keyboard_on_exit
                 .then(|| self.keyboard_state.session_state()),
+            keyboard_note_guide_overlay_date: self
+                .keyboard_note_guide
+                .last_overlay_date()
+                .map(str::to_owned),
         });
+    }
+
+    pub(super) fn save_keyboard_note_guide_overlay_date(&self) {
+        if let Some(local_date) = self.keyboard_note_guide.last_overlay_date() {
+            let _ = crate::history::save_keyboard_note_guide_overlay_date(local_date);
+        }
     }
 }

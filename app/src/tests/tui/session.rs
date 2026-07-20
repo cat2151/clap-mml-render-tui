@@ -56,6 +56,7 @@ fn save_history_state_persists_tui_cursor_lines_and_mode_flag() {
     app.is_daw_mode = true;
 
     app.save_history_state();
+    crate::history::save_keyboard_note_guide_overlay_date("2026-07-20").unwrap();
 
     let history_path = crate::test_utils::session_state_path_for_test()
         .expect("config local dir should resolve in isolated TUI history test");
@@ -68,6 +69,10 @@ fn save_history_state_persists_tui_cursor_lines_and_mode_flag() {
     assert_eq!(saved.cursor, 2);
     assert_eq!(saved.lines, app.lines);
     assert!(saved.is_daw_mode);
+    assert_eq!(
+        saved.keyboard_note_guide_overlay_date.as_deref(),
+        Some("2026-07-20")
+    );
 
     std::fs::remove_dir_all(&tmp).ok();
 }

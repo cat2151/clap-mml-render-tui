@@ -25,6 +25,7 @@ pub(crate) use patch_phrase_store::{
 };
 pub(crate) use paths::daw_file_load_path;
 pub use paths::daw_file_path;
+pub(crate) use session_state::save_keyboard_note_guide_overlay_date;
 pub use session_state::{
     load_session_state, save_session_state, KeyboardSessionState, KeyboardTransport, SessionState,
 };

@@ -61,6 +61,9 @@ pub struct SessionState {
     /// keyboard 画面で終了した場合に、次回復帰する状態。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keyboard: Option<KeyboardSessionState>,
+    /// keyboard の音出し確認 overlay を最後に表示したローカル日付（YYYY-MM-DD）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keyboard_note_guide_overlay_date: Option<String>,
 }
 
 impl Default for SessionState {
@@ -70,6 +73,7 @@ impl Default for SessionState {
             lines: super::helpers::default_lines(),
             is_daw_mode: false,
             keyboard: None,
+            keyboard_note_guide_overlay_date: None,
         }
     }
 }
@@ -87,6 +91,16 @@ pub fn save_session_state(state: &SessionState) -> Result<()> {
     let json = serde_json::to_string_pretty(state)?;
     std::fs::write(&path, json)?;
     Ok(())
+}
+
+/// keyboard の音出し確認 overlay の表示日だけを即時保存する。
+///
+/// 実行中の未保存編集や、復元用 keyboard 状態を意図せず上書きしないよう、
+/// ディスク上のセッション状態へ日付だけをマージする。
+pub(crate) fn save_keyboard_note_guide_overlay_date(local_date: &str) -> Result<()> {
+    let mut state = load_session_state();
+    state.keyboard_note_guide_overlay_date = Some(local_date.to_owned());
+    save_session_state(&state)
 }
 
 /// history.json からセッション状態を読み込む。

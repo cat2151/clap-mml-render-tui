@@ -59,6 +59,14 @@ fn session_state_default_has_no_keyboard_restore() {
 }
 
 #[test]
+fn session_state_default_has_no_keyboard_note_guide_date() {
+    assert_eq!(
+        SessionState::default().keyboard_note_guide_overlay_date,
+        None
+    );
+}
+
+#[test]
 fn keyboard_session_defaults_to_shared_memory_x4() {
     let keyboard = KeyboardSessionState::default();
     assert_eq!(keyboard.patch, None);
@@ -73,12 +81,17 @@ fn session_state_serialize_deserialize() {
         lines: vec!["abc".to_string(), "def".to_string()],
         is_daw_mode: false,
         keyboard: None,
+        keyboard_note_guide_overlay_date: Some("2026-07-20".to_string()),
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
     assert_eq!(loaded.cursor, 42);
     assert_eq!(loaded.lines, vec!["abc".to_string(), "def".to_string()]);
     assert!(!loaded.is_daw_mode);
+    assert_eq!(
+        loaded.keyboard_note_guide_overlay_date.as_deref(),
+        Some("2026-07-20")
+    );
 }
 
 #[test]
@@ -88,6 +101,7 @@ fn session_state_serialize_deserialize_zero() {
         lines: vec!["cde".to_string()],
         is_daw_mode: false,
         keyboard: None,
+        keyboard_note_guide_overlay_date: None,
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
@@ -103,6 +117,7 @@ fn session_state_serialize_deserialize_is_daw_mode_true() {
         lines: vec!["cde".to_string()],
         is_daw_mode: true,
         keyboard: None,
+        keyboard_note_guide_overlay_date: None,
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
@@ -148,6 +163,7 @@ fn session_state_json_missing_is_daw_mode_defaults_to_false() {
 fn session_state_json_missing_keyboard_defaults_to_none() {
     let result: SessionState = serde_json::from_str(r#"{"cursor": 3, "lines": ["cde"]}"#).unwrap();
     assert_eq!(result.keyboard, None);
+    assert_eq!(result.keyboard_note_guide_overlay_date, None);
 }
 
 #[test]
@@ -169,6 +185,7 @@ fn save_and_load_session_state_roundtrip() {
         lines: vec!["cde".to_string(), "fga".to_string()],
         is_daw_mode: false,
         keyboard: None,
+        keyboard_note_guide_overlay_date: None,
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     std::fs::write(&tmp_path, &json).unwrap();
@@ -244,6 +261,7 @@ fn save_and_load_session_state_roundtrip_daw_mode() {
         lines: vec!["cde".to_string()],
         is_daw_mode: true,
         keyboard: None,
+        keyboard_note_guide_overlay_date: None,
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     std::fs::write(&tmp_path, &json).unwrap();

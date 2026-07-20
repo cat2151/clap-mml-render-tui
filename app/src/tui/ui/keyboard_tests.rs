@@ -1,6 +1,10 @@
 use super::*;
-use crate::tui::keyboard::KeyboardState;
-use ratatui::{backend::TestBackend, Terminal};
+use crate::tui::keyboard::{
+    guide::{KeyboardNoteGuidePresentation, KEYBOARD_NOTE_GUIDE_MESSAGE},
+    KeyboardState,
+};
+use crate::ui_theme::MONOKAI_YELLOW;
+use ratatui::{backend::TestBackend, style::Modifier, Terminal};
 
 fn buffer_to_string(terminal: &Terminal<TestBackend>) -> String {
     let buffer = terminal.backend().buffer();
@@ -39,6 +43,41 @@ fn render_mml_overlay(input: &crate::tui::keyboard::KeyboardMmlInput<'_>) -> Str
         .draw(|f| draw_mml_input_overlay(input, f, f.area()))
         .unwrap();
     buffer_to_string(&terminal)
+}
+
+fn render_note_guide(presentation: KeyboardNoteGuidePresentation) -> Terminal<TestBackend> {
+    let backend = TestBackend::new(80, 12);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal
+        .draw(|f| draw_note_guide_overlay(presentation, f, f.area()))
+        .unwrap();
+    terminal
+}
+
+fn render_keyboard_help(presentation: KeyboardNoteGuidePresentation) -> Terminal<TestBackend> {
+    let backend = TestBackend::new(100, 3);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal
+        .draw(|f| {
+            f.render_widget(
+                Paragraph::new(keyboard_help_lines(presentation, None)).style(base_style()),
+                f.area(),
+            );
+        })
+        .unwrap();
+    terminal
+}
+
+fn has_colored_message_start(terminal: &Terminal<TestBackend>) -> bool {
+    let buffer = terminal.backend().buffer();
+    (0..buffer.area.height).any(|y| {
+        (0..buffer.area.width).any(|x| {
+            let cell = buffer.cell((x, y)).unwrap();
+            cell.symbol() == "c"
+                && cell.fg == MONOKAI_YELLOW
+                && cell.modifier.contains(Modifier::BOLD)
+        })
+    })
 }
 
 #[test]
@@ -324,4 +363,41 @@ fn ready_connection_does_not_draw_an_overlay() {
     assert!(render_overlay(KeyboardConnectionPhase::Ready)
         .chars()
         .all(char::is_whitespace));
+}
+
+#[test]
+fn daily_note_guide_overlay_is_centered_and_colored() {
+    let terminal = render_note_guide(KeyboardNoteGuidePresentation::Overlay);
+    let screen = buffer_to_string(&terminal);
+
+    assert!(screen.replace(' ', "").contains("音出し確認"));
+    assert!(screen
+        .replace(' ', "")
+        .contains(KEYBOARD_NOTE_GUIDE_MESSAGE));
+    assert!(has_colored_message_start(&terminal));
+}
+
+#[test]
+fn hidden_and_footer_presentations_do_not_draw_note_guide_overlay() {
+    for presentation in [
+        KeyboardNoteGuidePresentation::Hidden,
+        KeyboardNoteGuidePresentation::Footer,
+    ] {
+        assert!(buffer_to_string(&render_note_guide(presentation))
+            .chars()
+            .all(char::is_whitespace));
+    }
+}
+
+#[test]
+fn same_day_footer_replaces_normal_key_guide_with_colored_message() {
+    let terminal = render_keyboard_help(KeyboardNoteGuidePresentation::Footer);
+    let screen = buffer_to_string(&terminal);
+
+    assert!(screen
+        .replace(' ', "")
+        .contains(KEYBOARD_NOTE_GUIDE_MESSAGE));
+    assert!(!screen.contains("cdefgab:notes"));
+    assert!(!screen.contains("patch -/+1"));
+    assert!(has_colored_message_start(&terminal));
 }
