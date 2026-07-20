@@ -380,6 +380,7 @@ dependencies = [
  "rand",
  "ratatui",
  "rodio",
+ "rubberband-ffi",
  "serde",
  "serde_json",
  "thiserror",
@@ -1815,6 +1816,14 @@ dependencies = [
  "hound",
  "lewton",
  "symphonia",
+ "thiserror",
+]
+
+[[package]]
+name = "rubberband-ffi"
+version = "0.1.0"
+dependencies = [
+ "cc",
  "thiserror",
 ]
 

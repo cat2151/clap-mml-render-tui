@@ -135,6 +135,25 @@ impl LoopBrowserMetadata {
             .map(|assignment| assignment.category.as_str())
     }
 
+    pub(crate) fn category_for_wav<'a>(&'a self, wav: &LoopWavId) -> Option<&'a str> {
+        let root = normalize_path_text(&wav.root);
+        let parent = Path::new(&normalize_path_text(&wav.relative))
+            .parent()
+            .unwrap_or_else(|| Path::new(""))
+            .to_path_buf();
+        self.category_assignments
+            .iter()
+            .filter(|assignment| normalize_path_text(&assignment.root) == root)
+            .filter_map(|assignment| {
+                let relative = PathBuf::from(normalize_path_text(&assignment.relative));
+                parent
+                    .starts_with(&relative)
+                    .then_some((relative.components().count(), assignment.category.as_str()))
+            })
+            .max_by_key(|(depth, _)| *depth)
+            .map(|(_, category)| category)
+    }
+
     pub(crate) fn toggle_category(&mut self, dir: &LoopDirId, category: &str) -> Option<String> {
         if let Some(index) = self
             .category_assignments

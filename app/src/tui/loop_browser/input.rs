@@ -163,7 +163,9 @@ impl LoopBrowser {
                     .find(|(candidate, _)| *candidate == key)
                     .map(|(_, category)| category.clone())
                 {
-                    self.assign_selected_category(category);
+                    if self.assign_selected_category(category) {
+                        return LoopBrowserAction::GridRefresh(self.playback_grid());
+                    }
                 }
             }
             _ => {}
@@ -265,9 +267,9 @@ impl LoopBrowser {
         self.category_overlay = self.selected_target_dir();
     }
 
-    fn assign_selected_category(&mut self, category: String) {
+    fn assign_selected_category(&mut self, category: String) -> bool {
         let Some(dir) = self.category_overlay.take() else {
-            return;
+            return false;
         };
         let selected_path = self.visible.get(self.cursor).map(|node| node.path.clone());
         let previous = self.metadata.clone();
@@ -275,10 +277,11 @@ impl LoopBrowser {
         if let Err(error) = self.save_metadata() {
             self.metadata = previous;
             self.metadata_error = Some(format!("カテゴリを保存できません: {error}"));
-            return;
+            return false;
         }
         self.metadata_error = None;
         self.rebuild_visible_for_path(selected_path.as_deref());
+        true
     }
 
     fn save_metadata(&self) -> anyhow::Result<()> {

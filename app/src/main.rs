@@ -7,6 +7,7 @@ use cmrt_core::{load_entry, mml_to_play};
 #[derive(Debug, PartialEq, Eq)]
 enum CliAction {
     Help(String),
+    Version(String),
     Tui,
     CliMml(String),
     Server(u16),
@@ -84,10 +85,22 @@ enum Commands {
 }
 
 fn cli_command() -> clap::Command {
-    Cli::command().after_help(format!(
-        "サーバーモードでは HTTP POST でMMLを受け取りWAVデータを返します。\n  例: curl -X POST http://127.0.0.1:{}/ --data 'cde'",
-        server::DEFAULT_PORT
-    ))
+    Cli::command()
+        .version(version_text())
+        .after_help(format!(
+            "サーバーモードでは HTTP POST でMMLを受け取りWAVデータを返します。\n  例: curl -X POST http://127.0.0.1:{}/ --data 'cde'",
+            server::DEFAULT_PORT
+        ))
+}
+
+fn version_text() -> String {
+    format!(
+        "{} (git {}, Rubber Band C API {} @ {})",
+        env!("CARGO_PKG_VERSION"),
+        env!("GIT_COMMIT_HASH"),
+        rubberband_ffi::C_API_MAJOR_VERSION,
+        rubberband_ffi::GIT_REVISION
+    )
 }
 
 fn parse_cli_from<I, T>(args: I) -> Result<CliAction>
@@ -101,6 +114,9 @@ where
         }
         Err(err) if err.kind() == clap::error::ErrorKind::DisplayHelp => {
             return Ok(CliAction::Help(err.to_string()));
+        }
+        Err(err) if err.kind() == clap::error::ErrorKind::DisplayVersion => {
+            return Ok(CliAction::Version(err.to_string()));
         }
         Err(err) => return Err(anyhow::anyhow!(err.to_string())),
     };
@@ -233,6 +249,11 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    if let CliAction::Version(version) = &action {
+        print!("{version}");
+        return Ok(());
+    }
+
     if let CliAction::Shutdown(port) = &action {
         server::shutdown_server(*port)?;
         println!(
@@ -281,6 +302,7 @@ fn main() -> Result<()> {
         CliAction::BuildVoicingCache { .. } => false,
         CliAction::Tui => cfg.offline_render_backend == config::OfflineRenderBackend::InProcess,
         CliAction::Help(_)
+        | CliAction::Version(_)
         | CliAction::Shutdown(_)
         | CliAction::Update
         | CliAction::Check
@@ -330,6 +352,7 @@ fn main() -> Result<()> {
         }
         CliAction::Tui => {}
         CliAction::Help(_)
+        | CliAction::Version(_)
         | CliAction::Shutdown(_)
         | CliAction::Update
         | CliAction::Check

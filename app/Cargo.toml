@@ -11,6 +11,7 @@ path = "src/main.rs"
 cmrt-config-editor = { path = "../config-editor-lib" }
 cmrt-core = { path = "../core-lib" }
 cmrt-runtime = { path = "../cmrt-runtime" }
+rubberband-ffi = { path = "../rubberband-ffi" }
 chord2mml-core = { git = "https://github.com/cat2151/chord2mml-rust", package = "chord2mml-core", features = ["tree-sitter"] }
 rand = "0.8"
 
@@ -30,7 +31,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # Error handling
 anyhow = "1"
 thiserror = "1"
-clap = { version = "4.6.0", features = ["derive"] }
+clap = { version = "4.6.0", features = ["derive", "string"] }
 cat-self-update-lib = { git = "https://github.com/cat2151/cat-self-update", package = "cat-self-update-lib" }
 
 # HTTP server (for --server mode)

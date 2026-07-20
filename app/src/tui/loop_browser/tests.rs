@@ -258,7 +258,10 @@ fn category_overlay_assigns_and_toggles_category_for_wav_parent() {
         .category_overlay
         .as_ref()
         .is_some_and(|target| target.matches(&expected)));
-    browser.handle_key(KeyCode::Char('b'));
+    assert!(matches!(
+        browser.handle_key(KeyCode::Char('b')),
+        LoopBrowserAction::GridRefresh(_)
+    ));
     assert_eq!(browser.metadata.category_for(&expected), Some("bass"));
     assert!(browser
         .visible
@@ -266,7 +269,10 @@ fn category_overlay_assigns_and_toggles_category_for_wav_parent() {
         .any(|node| node.name == "Bass" && node.category.as_deref() == Some("bass")));
 
     browser.handle_key(KeyCode::Char('t'));
-    browser.handle_key(KeyCode::Char('b'));
+    assert!(matches!(
+        browser.handle_key(KeyCode::Char('b')),
+        LoopBrowserAction::GridRefresh(_)
+    ));
     assert_eq!(browser.metadata.category_for(&expected), None);
 }
 

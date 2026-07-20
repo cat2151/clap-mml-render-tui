@@ -22,6 +22,26 @@ fn category_keys_use_name_characters_then_unused_alphabet() {
 }
 
 #[test]
+fn wav_inherits_the_closest_parent_category() {
+    let mut metadata = LoopBrowserMetadata::default();
+    metadata.toggle_category(
+        &LoopDirId::new(Path::new("/loops"), Path::new("Pack")),
+        "drum",
+    );
+    metadata.toggle_category(
+        &LoopDirId::new(Path::new("/loops"), Path::new("Pack/Soft")),
+        "spoken",
+    );
+
+    let kick = LoopWavId::new(Path::new("/loops"), Path::new("Pack/Hard/Kick.wav"));
+    let voice = LoopWavId::new(Path::new("/loops"), Path::new("Pack/Soft/Voice.wav"));
+    let outside = LoopWavId::new(Path::new("/other"), Path::new("Pack/Kick.wav"));
+    assert_eq!(metadata.category_for_wav(&kick), Some("drum"));
+    assert_eq!(metadata.category_for_wav(&voice), Some("spoken"));
+    assert_eq!(metadata.category_for_wav(&outside), None);
+}
+
+#[test]
 fn metadata_round_trip_and_rejects_bad_data() {
     let dir = temp_dir("cmrt-loop-browser-metadata");
     let path = dir.join("loop_browser.toml");

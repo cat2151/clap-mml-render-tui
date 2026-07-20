@@ -152,7 +152,7 @@ fn draw_tracks(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {
     let focused = app.loop_browser.focus == LoopBrowserPane::Tracks;
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(" [TRACK LIST] ")
+        .title(" [TRACK LIST BPM120 AUTO-STRETCH] ")
         .border_style(focus_border_style(focused));
     let inner = block.inner(area);
     frame.render_widget(block, area);

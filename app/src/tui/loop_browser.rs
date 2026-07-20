@@ -99,6 +99,7 @@ pub(super) struct LoopPlaybackClip {
     pub(super) path: PathBuf,
     pub(super) span_measures: usize,
     pub(super) bpm: f64,
+    pub(super) category: Option<String>,
     pub(super) meter_numerator: u16,
     pub(super) meter_denominator: u16,
 }
@@ -117,6 +118,7 @@ pub(super) enum LoopBrowserAction {
         audition: PathBuf,
         grid: LoopPlaybackGrid,
     },
+    GridRefresh(LoopPlaybackGrid),
     Return,
     Quit,
 }
@@ -415,6 +417,10 @@ impl LoopBrowser {
                                 path: clip.wav.path(),
                                 span_measures: clip.span_measures,
                                 bpm: analysis.map_or(120.0, |analysis| analysis.bpm),
+                                category: self
+                                    .metadata
+                                    .category_for_wav(&clip.wav)
+                                    .map(str::to_string),
                                 meter_numerator: analysis
                                     .map_or(4, |analysis| analysis.meter_numerator),
                                 meter_denominator: analysis

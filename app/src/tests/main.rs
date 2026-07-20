@@ -1,6 +1,15 @@
 use super::*;
 
 #[test]
+fn version_reports_rubber_band_api_and_revision() {
+    let CliAction::Version(version) = parse_cli_from(["cmrt", "--version"]).unwrap() else {
+        panic!("--version should return version text");
+    };
+    assert!(version.contains("Rubber Band C API 3"));
+    assert!(version.contains(rubberband_ffi::GIT_REVISION));
+}
+
+#[test]
 fn update_subcommand_is_recognized() {
     assert_eq!(
         parse_cli_from(["cmrt", "update"]).unwrap(),

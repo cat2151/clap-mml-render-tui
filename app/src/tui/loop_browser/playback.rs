@@ -7,8 +7,13 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use super::{LoopPlaybackClip, LoopPlaybackGrid};
+use crate::loop_time_stretch::TARGET_BPM;
 use crate::tui::{Mode, PlayState, TuiApp};
 use anyhow::{Context, Result};
+
+mod preparation;
+
+use preparation::{profile_label, PreparationWorker, PreparedSet};
 
 enum LoopPlaybackCommand {
     Preview(PathBuf),
@@ -109,7 +114,7 @@ impl<'a> TuiApp<'a> {
 
 fn playback_worker(
     receiver: mpsc::Receiver<LoopPlaybackCommand>,
-    mut grid: LoopPlaybackGrid,
+    grid: LoopPlaybackGrid,
     state: &Arc<Mutex<PlayState>>,
 ) -> Result<()> {
     let (_stream, handle) =
@@ -119,44 +124,85 @@ fn playback_worker(
     let mut measure_sinks = Vec::<Arc<rodio::Sink>>::new();
     let mut current_measure = None;
     let mut measure_deadline = None;
-    let mut playback_suspended = false;
+    let mut preparation = PreparationWorker::spawn();
+    let mut pending_generation = Some(preparation.submit(grid));
+    let mut active: Option<PreparedSet> = None;
+    set_play_state(
+        state,
+        PlayState::Running(format!("BPM{TARGET_BPM:.0}変換中")),
+    );
 
     loop {
+        while let Some(result) = preparation.try_result() {
+            if pending_generation != Some(result.generation) {
+                continue;
+            }
+            pending_generation = None;
+            active = Some(result.prepared);
+            let prepared = active.as_ref().expect("just assigned");
+            if let Some(warning) = &prepared.warning {
+                set_play_state(state, PlayState::Err(warning.clone()));
+            } else if prepared.grid.iter().flatten().any(Option::is_some) {
+                set_play_state(
+                    state,
+                    PlayState::Playing(format!("BPM{TARGET_BPM:.0} 準備完了")),
+                );
+            } else {
+                set_play_state(state, PlayState::Idle);
+            }
+        }
         pad_sinks.retain(|_, sink| !sink.empty());
         measure_sinks.retain(|sink| !sink.empty());
         if measure_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
             measure_deadline = None;
         }
-        if measure_deadline.is_none() && !playback_suspended {
-            if let Some(measure) = next_measure(&grid, current_measure) {
-                match start_measure(&handle, starting_paths(&grid, measure)) {
-                    Ok(sinks) => {
-                        current_measure = Some(measure);
-                        measure_sinks.extend(sinks);
-                        measure_deadline = Some(Instant::now() + measure_duration(&grid));
-                        set_play_state(
-                            state,
-                            PlayState::Playing(format!("loop measure {}", measure + 1)),
-                        );
+        if measure_deadline.is_none() {
+            if let Some(prepared) = active.as_ref() {
+                if let Some(measure) = next_measure(&prepared.grid, current_measure) {
+                    match start_measure(&handle, prepared, measure) {
+                        Ok(sinks) => {
+                            current_measure = Some(measure);
+                            measure_sinks.extend(sinks);
+                            measure_deadline =
+                                Some(Instant::now() + measure_duration(&prepared.grid));
+                            if pending_generation.is_none() && prepared.warning.is_none() {
+                                let profile = starting_clips(&prepared.grid, measure)
+                                    .first()
+                                    .map_or("-", |clip| profile_label(clip));
+                                set_play_state(
+                                    state,
+                                    PlayState::Playing(format!(
+                                        "BPM{TARGET_BPM:.0} loop measure {} {profile}",
+                                        measure + 1
+                                    )),
+                                );
+                            }
+                        }
+                        Err(error) => {
+                            set_play_state(
+                                state,
+                                PlayState::Err(format!("WAV loop再生に失敗: {error}")),
+                            );
+                            current_measure = Some(measure);
+                            measure_deadline =
+                                Some(Instant::now() + measure_duration(&prepared.grid));
+                        }
                     }
-                    Err(error) => {
-                        set_play_state(
-                            state,
-                            PlayState::Err(format!("WAV loop再生に失敗: {error}")),
-                        );
-                        current_measure = Some(measure);
-                        playback_suspended = true;
+                } else {
+                    current_measure = None;
+                    if pending_generation.is_none() && prepared.warning.is_none() {
+                        set_play_state(state, PlayState::Idle);
                     }
                 }
-            } else {
-                current_measure = None;
-                set_play_state(state, PlayState::Idle);
             }
         }
 
-        let timeout = measure_deadline
+        let mut timeout = measure_deadline
             .map(|deadline| deadline.saturating_duration_since(Instant::now()))
             .unwrap_or(Duration::from_secs(60));
+        if pending_generation.is_some() {
+            timeout = timeout.min(Duration::from_millis(20));
+        }
         match receiver.recv_timeout(timeout) {
             Ok(LoopPlaybackCommand::Preview(path)) => {
                 if let Some(sink) = preview_sink.take() {
@@ -186,10 +232,14 @@ fn playback_worker(
                 }
             }
             Ok(LoopPlaybackCommand::SetGrid(next_grid)) => {
-                grid = next_grid;
-                playback_suspended = false;
+                pending_generation = Some(preparation.submit(next_grid));
+                set_play_state(
+                    state,
+                    PlayState::Running(format!("BPM{TARGET_BPM:.0}変換中")),
+                );
             }
             Ok(LoopPlaybackCommand::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                preparation.cancel();
                 stop_sinks(&mut measure_sinks);
                 stop_pad_sinks(&mut pad_sinks);
                 if let Some(sink) = preview_sink.take() {
@@ -230,14 +280,9 @@ fn measure_is_occupied(grid: &LoopPlaybackGrid, measure: usize) -> bool {
     })
 }
 
-fn starting_paths(grid: &LoopPlaybackGrid, measure: usize) -> Vec<PathBuf> {
+fn starting_clips(grid: &LoopPlaybackGrid, measure: usize) -> Vec<&LoopPlaybackClip> {
     grid.iter()
-        .filter_map(|track| {
-            track
-                .get(measure)
-                .and_then(Option::as_ref)
-                .map(|clip| clip.path.clone())
-        })
+        .filter_map(|track| track.get(measure).and_then(Option::as_ref))
         .collect()
 }
 
@@ -257,8 +302,8 @@ fn measure_duration(grid: &LoopPlaybackGrid) -> Duration {
     let Some(clip) = grid_tempo_clip(grid) else {
         return Duration::from_millis(1);
     };
-    let seconds =
-        60.0 / clip.bpm * f64::from(clip.meter_numerator) * 4.0 / f64::from(clip.meter_denominator);
+    let seconds = 60.0 / TARGET_BPM * f64::from(clip.meter_numerator) * 4.0
+        / f64::from(clip.meter_denominator);
     if seconds.is_finite() && seconds > 0.0 {
         Duration::from_secs_f64(seconds).max(Duration::from_millis(1))
     } else {
@@ -268,16 +313,17 @@ fn measure_duration(grid: &LoopPlaybackGrid) -> Duration {
 
 fn start_measure(
     handle: &rodio::OutputStreamHandle,
-    paths: Vec<PathBuf>,
+    prepared: &PreparedSet,
+    measure: usize,
 ) -> Result<Vec<Arc<rodio::Sink>>> {
-    let mut sinks = Vec::with_capacity(paths.len());
-    for path in paths {
-        let file =
-            File::open(&path).with_context(|| format!("WAVを開けません: {}", path.display()))?;
-        let source = rodio::Decoder::new(BufReader::new(file))
-            .with_context(|| format!("WAVをdecodeできません: {}", path.display()))?;
+    let clips = starting_clips(&prepared.grid, measure);
+    let mut sinks = Vec::with_capacity(clips.len());
+    for clip in clips {
+        let Some(Ok(audio)) = prepared.audio_for(clip) else {
+            continue;
+        };
         let sink = Arc::new(rodio::Sink::try_new(handle)?);
-        sink.append(source);
+        sink.append(audio.source());
         sinks.push(sink);
     }
     Ok(sinks)
@@ -313,83 +359,5 @@ fn set_play_state(state: &Arc<Mutex<PlayState>>, next: PlayState) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn clip(name: &str, span_measures: usize, bpm: f64) -> Option<LoopPlaybackClip> {
-        Some(LoopPlaybackClip {
-            path: PathBuf::from(name),
-            span_measures,
-            bpm,
-            meter_numerator: 4,
-            meter_denominator: 4,
-        })
-    }
-
-    #[test]
-    fn next_measure_skips_empty_columns_and_wraps() {
-        let grid = vec![
-            vec![clip("a.wav", 1, 120.0), None, clip("c.wav", 1, 120.0)],
-            vec![clip("b.wav", 1, 90.0), None, None],
-        ];
-        assert_eq!(next_measure(&grid, None), Some(0));
-        assert_eq!(next_measure(&grid, Some(0)), Some(2));
-        assert_eq!(next_measure(&grid, Some(2)), Some(0));
-        assert_eq!(
-            starting_paths(&grid, 0),
-            vec![PathBuf::from("a.wav"), PathBuf::from("b.wav")]
-        );
-    }
-
-    #[test]
-    fn next_measure_returns_none_for_empty_grid() {
-        assert_eq!(next_measure(&vec![vec![None, None]], None), None);
-    }
-
-    #[test]
-    fn tempo_uses_the_leftmost_then_topmost_clip() {
-        let grid = vec![
-            vec![None, clip("top.wav", 1, 120.0)],
-            vec![clip("first.wav", 2, 100.0), None],
-        ];
-        assert_eq!(measure_duration(&grid), Duration::from_millis(2_400));
-    }
-
-    #[test]
-    fn continuation_measure_waits_and_can_start_another_track() {
-        let grid = vec![
-            vec![clip("long.wav", 2, 120.0), None],
-            vec![None, clip("next.wav", 1, 120.0)],
-        ];
-        assert_eq!(next_measure(&grid, None), Some(0));
-        assert_eq!(next_measure(&grid, Some(0)), Some(1));
-        assert_eq!(starting_paths(&grid, 1), vec![PathBuf::from("next.wav")]);
-    }
-
-    #[test]
-    fn updated_grid_is_used_when_the_next_measure_is_selected() {
-        let before = vec![vec![
-            clip("current.wav", 1, 120.0),
-            None,
-            clip("old.wav", 1, 120.0),
-        ]];
-        assert_eq!(next_measure(&before, Some(0)), Some(2));
-
-        let after = vec![vec![
-            clip("current.wav", 1, 120.0),
-            clip("new.wav", 1, 120.0),
-            None,
-        ]];
-        assert_eq!(next_measure(&after, Some(0)), Some(1));
-    }
-
-    #[test]
-    fn pad_voices_replace_only_the_same_pad() {
-        let mut voices = HashMap::from([('c', "first-c"), ('d', "first-d")]);
-
-        assert_eq!(take_pad_voice(&mut voices, 'c'), Some("first-c"));
-        voices.insert('c', "second-c");
-        assert_eq!(voices.get(&'c'), Some(&"second-c"));
-        assert_eq!(voices.get(&'d'), Some(&"first-d"));
-    }
-}
+#[path = "playback/tests.rs"]
+mod tests;

@@ -87,7 +87,7 @@ fn draws_wav_pads_track_grid_and_pane_specific_footer() {
     let screen = render_lines(&mut app, 180, 14).join("\n");
 
     assert!(screen.contains("[WAV PADS]"));
-    assert!(screen.contains("[TRACK LIST]"));
+    assert!(screen.contains("[TRACK LIST BPM120 AUTO-STRETCH]"));
     assert!(screen.contains("C:Kick.wav"));
     assert!(screen.contains("[BPM120 beat8 2meas]"));
     assert!(screen.contains("↳ 2/2"));

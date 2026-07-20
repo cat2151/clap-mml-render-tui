@@ -316,6 +316,7 @@ impl<'a> TuiApp<'a> {
                                 self.trigger_loop_pad(pad, audition);
                                 self.update_loop_grid(grid);
                             }
+                            LoopBrowserAction::GridRefresh(grid) => self.update_loop_grid(grid),
                             LoopBrowserAction::Return => self.finish_loop_browser(),
                             LoopBrowserAction::Quit => {
                                 self.finish_loop_browser();
