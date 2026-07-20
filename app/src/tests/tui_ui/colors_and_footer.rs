@@ -1,4 +1,6 @@
 use super::*;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::style::Modifier;
 
 #[test]
 fn normal_screen_uses_monokai_background_and_border_color() {
@@ -154,6 +156,45 @@ fn keyboard_screen_shows_connecting_status_and_navigation() {
     assert!(screen.contains("Mod: OFF"));
     assert!(screen.contains("PB: -"));
     assert!(screen.contains("CC#: 1"));
+}
+
+#[test]
+fn keyboard_screen_shows_count_input_guide_until_navigation() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::Keyboard;
+    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE));
+    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE));
+
+    let buffer = render_buffer(&mut app, 140, 14);
+    let (count_x, count_y) = find_text(&buffer, "Count: 11_");
+    let (guide_x, guide_y) = find_text(&buffer, "0-9");
+    assert_eq!(buffer.cell((count_x, count_y)).unwrap().fg, MONOKAI_YELLOW);
+    assert!(buffer
+        .cell((count_x, count_y))
+        .unwrap()
+        .modifier
+        .contains(Modifier::BOLD));
+    assert_eq!(buffer.cell((guide_x, guide_y)).unwrap().fg, MONOKAI_CYAN);
+    assert!(buffer
+        .cell((guide_x, guide_y))
+        .unwrap()
+        .modifier
+        .contains(Modifier::BOLD));
+
+    let screen = render_lines(&mut app, 140, 14).join("\n");
+    assert!(screen.contains("Count: 11_"));
+    assert!(screen
+        .replace(' ', "")
+        .contains("0-9またはh/j/k/l/Ctrl+u/Ctrl+dを押してください"));
+    assert!(screen.contains("1-9:count"));
+    assert!(!screen.contains("k/j/Up/Down:patch"));
+    assert!(!screen.contains("s:transport"));
+    assert!(!screen.contains("i:MML notes"));
+
+    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
+    let screen = render_lines(&mut app, 140, 14).join("\n");
+    assert!(screen.contains("1-9:count"));
+    assert!(!screen.contains("Count: 11_"));
 }
 
 #[test]

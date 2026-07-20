@@ -120,8 +120,9 @@ impl KeyboardPatchCatalog {
         let Some(patch_index) = self.patch_cursor else {
             return self.select(category_index, 0);
         };
-        let next = (patch_index as isize + delta).clamp(0, patches_len.saturating_sub(1) as isize)
-            as usize;
+        let next = (patch_index as isize)
+            .saturating_add(delta)
+            .clamp(0, patches_len.saturating_sub(1) as isize) as usize;
         if next == patch_index {
             return None;
         }
@@ -135,7 +136,8 @@ impl KeyboardPatchCatalog {
         let Some(category_index) = self.category_cursor else {
             return self.select(0, 0);
         };
-        let next = (category_index as isize + delta)
+        let next = (category_index as isize)
+            .saturating_add(delta)
             .clamp(0, self.categories.len().saturating_sub(1) as isize) as usize;
         if next == category_index {
             return None;

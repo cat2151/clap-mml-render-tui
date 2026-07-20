@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use crossterm::event::KeyCode;
 
-use super::{KeyboardPatchCatalog, NumericInput, NumericInputTarget};
+use super::{KeyboardPatchCatalog, NavigationCount, NumericInput, NumericInputTarget};
 use crate::history::{KeyboardSessionState, KeyboardTransport};
 use crate::random::RandomIndexDeck;
 use crate::realtime_play::PatchVoicing;
@@ -152,6 +152,7 @@ pub(crate) struct KeyboardState {
     // patch切替完了(Ready復帰)時にコントローラ現在値を再送するフラグ
     refresh_pending: bool,
     numeric_input: Option<NumericInput>,
+    pub(in crate::tui) navigation_count: NavigationCount,
     pub(in crate::tui) patch_catalog: KeyboardPatchCatalog,
 }
 
@@ -196,6 +197,7 @@ impl KeyboardState {
             current_combo: 0,
             refresh_pending: false,
             numeric_input: None,
+            navigation_count: NavigationCount::default(),
             patch_catalog: KeyboardPatchCatalog::default(),
         }
     }

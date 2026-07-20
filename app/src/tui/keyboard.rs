@@ -6,12 +6,14 @@ use super::{Mode, PlayState, TuiApp};
 
 mod catalog;
 mod mml_input;
+mod navigation;
 mod numeric_input;
 mod sender;
 mod state;
 
 pub(super) use catalog::{KeyboardPatchCatalog, KeyboardPatchCatalogStatus};
 pub(crate) use mml_input::KeyboardMmlInput;
+pub(in crate::tui) use navigation::NavigationCount;
 pub(super) use numeric_input::{NumericInput, NumericInputTarget};
 pub(super) use sender::{
     KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardMidiSender, KeyboardVoicingStatus,
@@ -126,6 +128,53 @@ impl<'a> TuiApp<'a> {
             }
             return KeyboardAction::Continue;
         }
+        if key.kind == KeyEventKind::Press {
+            if key.modifiers == KeyModifiers::NONE {
+                if let KeyCode::Char(digit @ '0'..='9') = key.code {
+                    if self.keyboard_state.navigation_count.push_digit(digit) {
+                        return KeyboardAction::Continue;
+                    }
+                }
+                match key.code {
+                    KeyCode::Char('j') => {
+                        let delta = self.keyboard_state.navigation_count.take_delta(1);
+                        self.move_keyboard_patch_by(delta);
+                        return KeyboardAction::Continue;
+                    }
+                    KeyCode::Char('k') => {
+                        let delta = self.keyboard_state.navigation_count.take_delta(-1);
+                        self.move_keyboard_patch_by(delta);
+                        return KeyboardAction::Continue;
+                    }
+                    KeyCode::Char('l') => {
+                        let delta = self.keyboard_state.navigation_count.take_delta(1);
+                        self.move_keyboard_patch_category_by(delta);
+                        return KeyboardAction::Continue;
+                    }
+                    KeyCode::Char('h') => {
+                        let delta = self.keyboard_state.navigation_count.take_delta(-1);
+                        self.move_keyboard_patch_category_by(delta);
+                        return KeyboardAction::Continue;
+                    }
+                    _ => {}
+                }
+            } else if key.modifiers == KeyModifiers::CONTROL {
+                match key.code {
+                    KeyCode::Char('d') => {
+                        let delta = self.keyboard_state.navigation_count.take_delta(10);
+                        self.move_keyboard_patch_by(delta);
+                        return KeyboardAction::Continue;
+                    }
+                    KeyCode::Char('u') => {
+                        let delta = self.keyboard_state.navigation_count.take_delta(-10);
+                        self.move_keyboard_patch_by(delta);
+                        return KeyboardAction::Continue;
+                    }
+                    _ => {}
+                }
+            }
+            self.keyboard_state.navigation_count.clear();
+        }
         if key.kind == KeyEventKind::Press
             && key.modifiers == KeyModifiers::SHIFT
             && matches!(key.code, KeyCode::Char('h' | 'H'))
@@ -148,26 +197,13 @@ impl<'a> TuiApp<'a> {
             }
             return KeyboardAction::Continue;
         }
-        if key.kind == KeyEventKind::Press && key.modifiers == KeyModifiers::CONTROL {
-            match key.code {
-                KeyCode::Char('d') => {
-                    self.move_keyboard_patch_by(10);
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::Char('u') => {
-                    self.move_keyboard_patch_by(-10);
-                    return KeyboardAction::Continue;
-                }
-                _ => {}
-            }
-        }
         if key.kind == KeyEventKind::Press && key.modifiers == KeyModifiers::NONE {
             match key.code {
-                KeyCode::Down | KeyCode::Char('j') => {
+                KeyCode::Down => {
                     self.move_keyboard_patch_by(1);
                     return KeyboardAction::Continue;
                 }
-                KeyCode::Up | KeyCode::Char('k') => {
+                KeyCode::Up => {
                     self.move_keyboard_patch_by(-1);
                     return KeyboardAction::Continue;
                 }
@@ -179,11 +215,11 @@ impl<'a> TuiApp<'a> {
                     self.move_keyboard_patch_by(-10);
                     return KeyboardAction::Continue;
                 }
-                KeyCode::End | KeyCode::Char('l') => {
+                KeyCode::End => {
                     self.move_keyboard_patch_category_by(1);
                     return KeyboardAction::Continue;
                 }
-                KeyCode::Home | KeyCode::Char('h') => {
+                KeyCode::Home => {
                     self.move_keyboard_patch_category_by(-1);
                     return KeyboardAction::Continue;
                 }
