@@ -43,6 +43,30 @@ fn persisted_analysis_drives_browser_without_opening_the_wav() {
 }
 
 #[test]
+fn target_bpm_tracks_all_placed_wavs_and_returns_to_120_after_removal() {
+    let mut browser = browser_with_direct_wavs(2);
+    browser.wav_analyses[0].1.bpm = 160.0;
+    browser.wav_analyses[1].1.bpm = 120.0;
+    let fast = browser.wav_analyses[0].0.clone();
+    let normal = browser.wav_analyses[1].0.clone();
+    browser.track_grid[0] = vec![
+        Some(LoopTrackClip {
+            wav: fast,
+            span_measures: 1,
+        }),
+        Some(LoopTrackClip {
+            wav: normal,
+            span_measures: 1,
+        }),
+    ];
+
+    assert_eq!(browser.target_bpm().bpm, 128.0);
+
+    browser.track_grid[0][0] = None;
+    assert_eq!(browser.target_bpm().bpm, 120.0);
+}
+
+#[test]
 fn track_pane_toggles_one_wav_per_cell_and_auto_extends_right_and_down() {
     let mut browser = browser();
     select_bass_wav(&mut browser);

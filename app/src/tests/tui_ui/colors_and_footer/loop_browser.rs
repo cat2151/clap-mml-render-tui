@@ -5,6 +5,10 @@ use crate::loop_wav_analysis::{LoopAnalysisSource, LoopWavAnalysis};
 use crate::tui::loop_browser::LoopBrowser;
 
 fn browser() -> LoopBrowser {
+    browser_at_bpm(120.0)
+}
+
+fn browser_at_bpm(bpm: f64) -> LoopBrowser {
     LoopBrowser::from_index(
         LoopIndex {
             version: 2,
@@ -14,7 +18,7 @@ fn browser() -> LoopBrowser {
                     relative: "Pack/Kick.wav".to_string(),
                     analysis: LoopWavAnalysis {
                         duration_seconds: 4.0,
-                        bpm: 120.0,
+                        bpm,
                         beats: 8,
                         meter_numerator: 4,
                         meter_denominator: 4,
@@ -96,6 +100,24 @@ fn draws_wav_pads_track_grid_and_pane_specific_footer() {
     assert!(screen.contains("m:mix level"));
     assert!(screen.replace(' ', "").contains("r:ランダムWAV"));
     assert!(screen.contains("1-9:hjkl prefix"));
+}
+
+#[test]
+fn track_title_shows_the_automatically_adjusted_bpm() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::LoopBrowser;
+    app.loop_browser = browser_at_bpm(160.0);
+    app.loop_browser.handle_key(KeyCode::Char('j'));
+    app.loop_browser.handle_key(KeyCode::Char('l'));
+    app.loop_browser.handle_key(KeyCode::Char('j'));
+    app.loop_browser
+        .handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
+    app.loop_browser.handle_key(KeyCode::Tab);
+    app.loop_browser.handle_key(KeyCode::Char('c'));
+
+    let screen = render_lines(&mut app, 180, 14).join("\n");
+
+    assert!(screen.contains("[TRACK LIST BPM128 AUTO-STRETCH]"));
 }
 
 #[test]

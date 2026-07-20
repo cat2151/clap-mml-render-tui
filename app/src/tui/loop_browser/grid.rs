@@ -54,4 +54,19 @@ impl LoopBrowser {
             })
             .collect()
     }
+
+    pub(in crate::tui) fn target_bpm(&self) -> crate::loop_time_stretch::TargetBpm {
+        crate::loop_time_stretch::select_target_bpm(
+            self.track_grid
+                .iter()
+                .flatten()
+                .filter_map(Option::as_ref)
+                .map(|clip| {
+                    self.analysis_for_wav(&clip.wav)
+                        .map_or(crate::loop_time_stretch::TARGET_BPM, |analysis| {
+                            analysis.bpm
+                        })
+                }),
+        )
+    }
 }

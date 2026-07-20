@@ -174,9 +174,14 @@ fn draw_tree(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {
 
 fn draw_tracks(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {
     let focused = app.loop_browser.focus == LoopBrowserPane::Tracks;
+    let target_bpm = app.loop_browser.target_bpm();
+    let title = format!(
+        " [TRACK LIST BPM{} AUTO-STRETCH] ",
+        crate::loop_time_stretch::format_bpm(target_bpm.bpm)
+    );
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(" [TRACK LIST BPM120 AUTO-STRETCH] ")
+        .title(title)
         .border_style(focus_border_style(focused));
     let inner = block.inner(area);
     frame.render_widget(block, area);

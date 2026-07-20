@@ -8,21 +8,27 @@ use std::time::UNIX_EPOCH;
 
 use rubberband_ffi::StretchProfile;
 
-use crate::loop_time_stretch::{prepare_path, profile_for_category, PreparedAudio, TARGET_BPM};
+use crate::loop_time_stretch::{
+    format_bpm, prepare_path, profile_for_category, PreparedAudio, TargetBpm,
+};
 use crate::tui::loop_browser::{LoopPlaybackClip, LoopPlaybackGrid};
+
+use super::tempo::grid_target_bpm;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(super) struct AudioKey {
     path: PathBuf,
     bpm_bits: u64,
+    target_bpm_bits: u64,
     profile: StretchProfile,
 }
 
 impl AudioKey {
-    fn new(clip: &LoopPlaybackClip) -> Self {
+    fn new(clip: &LoopPlaybackClip, target_bpm: f64) -> Self {
         Self {
             path: clip.path.clone(),
             bpm_bits: clip.bpm.to_bits(),
+            target_bpm_bits: target_bpm.to_bits(),
             profile: profile_for_category(clip.category.as_deref()),
         }
     }
@@ -32,13 +38,14 @@ pub(super) type PreparedEntry = Result<Arc<PreparedAudio>, Arc<str>>;
 
 pub(super) struct PreparedSet {
     pub(super) grid: LoopPlaybackGrid,
+    pub(super) target_bpm: TargetBpm,
     audio: HashMap<AudioKey, PreparedEntry>,
     pub(super) warning: Option<String>,
 }
 
 impl PreparedSet {
     pub(super) fn audio_for(&self, clip: &LoopPlaybackClip) -> Option<&PreparedEntry> {
-        self.audio.get(&AudioKey::new(clip))
+        self.audio.get(&AudioKey::new(clip, self.target_bpm.bpm))
     }
 }
 
@@ -138,13 +145,14 @@ fn prepare_grid(
     latest_generation: &AtomicU64,
     cache: &mut HashMap<CacheKey, Arc<PreparedAudio>>,
 ) -> Option<PreparedSet> {
+    let target_bpm = grid_target_bpm(&job.grid);
     let mut audio = HashMap::<AudioKey, PreparedEntry>::new();
     let mut errors = Vec::new();
     for clip in job.grid.iter().flatten().filter_map(Option::as_ref) {
         if latest_generation.load(Ordering::Acquire) != job.generation {
             return None;
         }
-        let audio_key = AudioKey::new(clip);
+        let audio_key = AudioKey::new(clip, target_bpm.bpm);
         if audio.contains_key(&audio_key) {
             continue;
         }
@@ -153,9 +161,13 @@ fn prepare_grid(
         let prepared = if let Some(cached) = cache.get(&cache_key) {
             Ok(Arc::clone(cached))
         } else {
-            let result = prepare_path(&clip.path, clip.bpm, clip.category.as_deref(), || {
-                latest_generation.load(Ordering::Acquire) != job.generation
-            })
+            let result = prepare_path(
+                &clip.path,
+                clip.bpm,
+                target_bpm.bpm,
+                clip.category.as_deref(),
+                || latest_generation.load(Ordering::Acquire) != job.generation,
+            )
             .map(Arc::new)
             .map_err(|error| Arc::<str>::from(error.to_string()));
             if let Ok(value) = &result {
@@ -171,20 +183,25 @@ fn prepare_grid(
     if latest_generation.load(Ordering::Acquire) != job.generation {
         return None;
     }
-    let warning = (!errors.is_empty()).then(|| {
+    let warning = (!target_bpm.has_common_range || !errors.is_empty()).then(|| {
         let omitted = errors.len().saturating_sub(2);
-        let mut message = format!(
-            "BPM{TARGET_BPM:.0}: {}",
-            errors[..errors.len().min(2)].join(" / ")
-        );
+        let mut details = Vec::new();
+        if !target_bpm.has_common_range {
+            details.push("配置clipに共通BPMなし（BPM120を維持）".to_string());
+        }
+        details.extend(errors.iter().take(2).cloned());
+        let mut message = format!("BPM{}: {}", format_bpm(target_bpm.bpm), details.join(" / "));
         if omitted > 0 {
             message.push_str(&format!(" / 他{omitted}件"));
         }
-        message.push_str("（対象clipは無音、他clipは再生継続）");
+        if !errors.is_empty() {
+            message.push_str("（対象clipは無音、他clipは再生継続）");
+        }
         message
     });
     Some(PreparedSet {
         grid: job.grid.clone(),
+        target_bpm,
         audio,
         warning,
     })
@@ -235,14 +252,18 @@ mod tests {
     #[test]
     fn audio_key_includes_profile_and_bpm() {
         assert_ne!(
-            AudioKey::new(&clip(Some("drum"))),
-            AudioKey::new(&clip(None))
+            AudioKey::new(&clip(Some("drum")), 120.0),
+            AudioKey::new(&clip(None), 120.0)
         );
         let mut other_bpm = clip(Some("drum"));
         other_bpm.bpm = 100.0;
         assert_ne!(
-            AudioKey::new(&clip(Some("drum"))),
-            AudioKey::new(&other_bpm)
+            AudioKey::new(&clip(Some("drum")), 120.0),
+            AudioKey::new(&other_bpm, 120.0)
+        );
+        assert_ne!(
+            AudioKey::new(&clip(Some("drum")), 120.0),
+            AudioKey::new(&clip(Some("drum")), 118.75)
         );
     }
 
@@ -250,6 +271,31 @@ mod tests {
     fn profile_label_exposes_selected_algorithm() {
         assert_eq!(profile_label(&clip(Some("drum"))), "drum/R2");
         assert_eq!(profile_label(&clip(Some("bass"))), "general/R3");
+    }
+
+    #[test]
+    fn incompatible_grid_warns_that_bpm_120_is_kept() {
+        let mut slow = clip(None);
+        slow.path = PathBuf::from("slow.wav");
+        slow.bpm = 60.0;
+        let mut fast = clip(None);
+        fast.path = PathBuf::from("fast.wav");
+        fast.bpm = 200.0;
+        let job = PrepareJob {
+            generation: 1,
+            grid: vec![vec![Some(slow), Some(fast)]],
+        };
+        let latest_generation = AtomicU64::new(1);
+        let mut cache = HashMap::new();
+
+        let prepared = prepare_grid(&job, &latest_generation, &mut cache).unwrap();
+
+        assert_eq!(prepared.target_bpm.bpm, 120.0);
+        assert!(!prepared.target_bpm.has_common_range);
+        assert!(prepared
+            .warning
+            .as_deref()
+            .is_some_and(|warning| warning.contains("共通BPMなし（BPM120を維持）")));
     }
 
     #[test]

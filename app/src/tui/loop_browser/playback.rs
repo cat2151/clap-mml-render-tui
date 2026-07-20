@@ -5,15 +5,17 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use super::{LoopPlaybackClip, LoopPlaybackGrid};
-use crate::loop_time_stretch::TARGET_BPM;
+use crate::loop_time_stretch::format_bpm;
 use crate::tui::{Mode, PlayState, TuiApp};
 use anyhow::{Context, Result};
 
 mod preparation;
 mod sinks;
+mod tempo;
 
 use preparation::{profile_label, PreparationWorker, PreparedSet};
 use sinks::{play_path, stop_pad_sinks, stop_sinks, take_pad_voice, TrackSink};
+use tempo::{grid_target_bpm, measure_duration};
 
 enum LoopPlaybackCommand {
     Preview(PathBuf),
@@ -171,12 +173,13 @@ fn playback_worker(
     let mut current_measure = None;
     let mut measure_deadline = None;
     let mut preparation = PreparationWorker::spawn();
+    let initial_target = grid_target_bpm(&grid);
     let mut pending_generation = Some(preparation.submit(grid));
     let mut active: Option<PreparedSet> = None;
     let mut restart_measure = None;
     set_play_state(
         state,
-        PlayState::Running(format!("BPM{TARGET_BPM:.0}変換中")),
+        PlayState::Running(format!("BPM{}変換中", format_bpm(initial_target.bpm))),
     );
 
     loop {
@@ -192,7 +195,10 @@ fn playback_worker(
             } else if prepared.grid.iter().flatten().any(Option::is_some) {
                 set_play_state(
                     state,
-                    PlayState::Playing(format!("BPM{TARGET_BPM:.0} 準備完了")),
+                    PlayState::Playing(format!(
+                        "BPM{} 準備完了",
+                        format_bpm(prepared.target_bpm.bpm)
+                    )),
                 );
             } else {
                 set_play_state(state, PlayState::Idle);
@@ -214,8 +220,10 @@ fn playback_worker(
                         Ok(sinks) => {
                             current_measure = Some(measure);
                             measure_sinks.extend(sinks);
-                            measure_deadline =
-                                Some(Instant::now() + measure_duration(&prepared.grid));
+                            measure_deadline = Some(
+                                Instant::now()
+                                    + measure_duration(&prepared.grid, prepared.target_bpm.bpm),
+                            );
                             if pending_generation.is_none() && prepared.warning.is_none() {
                                 let profile = starting_clips(&prepared.grid, measure)
                                     .first()
@@ -223,7 +231,8 @@ fn playback_worker(
                                 set_play_state(
                                     state,
                                     PlayState::Playing(format!(
-                                        "BPM{TARGET_BPM:.0} loop measure {} {profile}",
+                                        "BPM{} loop measure {} {profile}",
+                                        format_bpm(prepared.target_bpm.bpm),
                                         measure + 1
                                     )),
                                 );
@@ -235,8 +244,10 @@ fn playback_worker(
                                 PlayState::Err(format!("WAV loop再生に失敗: {error}")),
                             );
                             current_measure = Some(measure);
-                            measure_deadline =
-                                Some(Instant::now() + measure_duration(&prepared.grid));
+                            measure_deadline = Some(
+                                Instant::now()
+                                    + measure_duration(&prepared.grid, prepared.target_bpm.bpm),
+                            );
                         }
                     }
                 } else {
@@ -283,10 +294,11 @@ fn playback_worker(
                 }
             }
             Ok(LoopPlaybackCommand::SetGrid(next_grid)) => {
+                let target_bpm = grid_target_bpm(&next_grid);
                 pending_generation = Some(preparation.submit(next_grid));
                 set_play_state(
                     state,
-                    PlayState::Running(format!("BPM{TARGET_BPM:.0}変換中")),
+                    PlayState::Running(format!("BPM{}変換中", format_bpm(target_bpm.bpm))),
                 );
             }
             Ok(LoopPlaybackCommand::RestartGridAt {
@@ -302,10 +314,11 @@ fn playback_worker(
                 measure_deadline = None;
                 active = None;
                 restart_measure = Some(start_measure);
+                let target_bpm = grid_target_bpm(&grid);
                 pending_generation = Some(preparation.submit(grid));
                 set_play_state(
                     state,
-                    PlayState::Running(format!("BPM{TARGET_BPM:.0}変換中")),
+                    PlayState::Running(format!("BPM{}変換中", format_bpm(target_bpm.bpm))),
                 );
             }
             Ok(LoopPlaybackCommand::SetTrackVolume { track, volume_db }) => {
@@ -385,31 +398,6 @@ fn starting_clips(grid: &LoopPlaybackGrid, measure: usize) -> Vec<(usize, &LoopP
                 .map(|clip| (track, clip))
         })
         .collect()
-}
-
-fn grid_tempo_clip(grid: &LoopPlaybackGrid) -> Option<&LoopPlaybackClip> {
-    let measures = grid.iter().map(Vec::len).max().unwrap_or(0);
-    for measure in 0..measures {
-        for track in grid {
-            if let Some(clip) = track.get(measure).and_then(Option::as_ref) {
-                return Some(clip);
-            }
-        }
-    }
-    None
-}
-
-fn measure_duration(grid: &LoopPlaybackGrid) -> Duration {
-    let Some(clip) = grid_tempo_clip(grid) else {
-        return Duration::from_millis(1);
-    };
-    let seconds = 60.0 / TARGET_BPM * f64::from(clip.meter_numerator) * 4.0
-        / f64::from(clip.meter_denominator);
-    if seconds.is_finite() && seconds > 0.0 {
-        Duration::from_secs_f64(seconds).max(Duration::from_millis(1))
-    } else {
-        Duration::from_secs(2)
-    }
 }
 
 fn start_measure(
