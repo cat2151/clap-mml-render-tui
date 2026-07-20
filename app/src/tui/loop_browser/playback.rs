@@ -6,11 +6,9 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
-use rodio::Source;
-
-use super::LoopPlaybackGrid;
+use super::{LoopPlaybackClip, LoopPlaybackGrid};
 use crate::tui::{Mode, PlayState, TuiApp};
+use anyhow::{Context, Result};
 
 enum LoopPlaybackCommand {
     Preview(PathBuf),
@@ -125,17 +123,17 @@ fn playback_worker(
 
     loop {
         pad_sinks.retain(|_, sink| !sink.empty());
+        measure_sinks.retain(|sink| !sink.empty());
         if measure_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-            measure_sinks.clear();
             measure_deadline = None;
         }
         if measure_deadline.is_none() && !playback_suspended {
-            if let Some((measure, paths)) = next_measure(&grid, current_measure) {
-                match start_measure(&handle, &paths) {
-                    Ok((sinks, duration)) => {
+            if let Some(measure) = next_measure(&grid, current_measure) {
+                match start_measure(&handle, starting_paths(&grid, measure)) {
+                    Ok(sinks) => {
                         current_measure = Some(measure);
-                        measure_sinks = sinks;
-                        measure_deadline = Some(Instant::now() + duration);
+                        measure_sinks.extend(sinks);
+                        measure_deadline = Some(Instant::now() + measure_duration(&grid));
                         set_play_state(
                             state,
                             PlayState::Playing(format!("loop measure {}", measure + 1)),
@@ -204,7 +202,7 @@ fn playback_worker(
     }
 }
 
-fn next_measure(grid: &LoopPlaybackGrid, current: Option<usize>) -> Option<(usize, Vec<PathBuf>)> {
+fn next_measure(grid: &LoopPlaybackGrid, current: Option<usize>) -> Option<usize> {
     let measures = grid.iter().map(Vec::len).max().unwrap_or(0);
     if measures == 0 {
         return None;
@@ -212,46 +210,77 @@ fn next_measure(grid: &LoopPlaybackGrid, current: Option<usize>) -> Option<(usiz
     let start = current.map_or(0, |measure| (measure + 1) % measures);
     for offset in 0..measures {
         let measure = (start + offset) % measures;
-        let paths = grid
-            .iter()
-            .filter_map(|track| track.get(measure).and_then(Option::as_ref).cloned())
-            .collect::<Vec<_>>();
-        if !paths.is_empty() {
-            return Some((measure, paths));
+        if measure_is_occupied(grid, measure) {
+            return Some(measure);
         }
     }
     None
 }
 
+fn measure_is_occupied(grid: &LoopPlaybackGrid, measure: usize) -> bool {
+    grid.iter().any(|track| {
+        track
+            .iter()
+            .take(measure.saturating_add(1))
+            .enumerate()
+            .any(|(start, clip)| {
+                clip.as_ref()
+                    .is_some_and(|clip| start.saturating_add(clip.span_measures) > measure)
+            })
+    })
+}
+
+fn starting_paths(grid: &LoopPlaybackGrid, measure: usize) -> Vec<PathBuf> {
+    grid.iter()
+        .filter_map(|track| {
+            track
+                .get(measure)
+                .and_then(Option::as_ref)
+                .map(|clip| clip.path.clone())
+        })
+        .collect()
+}
+
+fn grid_tempo_clip(grid: &LoopPlaybackGrid) -> Option<&LoopPlaybackClip> {
+    let measures = grid.iter().map(Vec::len).max().unwrap_or(0);
+    for measure in 0..measures {
+        for track in grid {
+            if let Some(clip) = track.get(measure).and_then(Option::as_ref) {
+                return Some(clip);
+            }
+        }
+    }
+    None
+}
+
+fn measure_duration(grid: &LoopPlaybackGrid) -> Duration {
+    let Some(clip) = grid_tempo_clip(grid) else {
+        return Duration::from_millis(1);
+    };
+    let seconds =
+        60.0 / clip.bpm * f64::from(clip.meter_numerator) * 4.0 / f64::from(clip.meter_denominator);
+    if seconds.is_finite() && seconds > 0.0 {
+        Duration::from_secs_f64(seconds).max(Duration::from_millis(1))
+    } else {
+        Duration::from_secs(2)
+    }
+}
+
 fn start_measure(
     handle: &rodio::OutputStreamHandle,
-    paths: &[PathBuf],
-) -> Result<(Vec<Arc<rodio::Sink>>, Duration)> {
+    paths: Vec<PathBuf>,
+) -> Result<Vec<Arc<rodio::Sink>>> {
     let mut sinks = Vec::with_capacity(paths.len());
-    let mut source_durations = Vec::with_capacity(paths.len());
     for path in paths {
         let file =
-            File::open(path).with_context(|| format!("WAVを開けません: {}", path.display()))?;
+            File::open(&path).with_context(|| format!("WAVを開けません: {}", path.display()))?;
         let source = rodio::Decoder::new(BufReader::new(file))
             .with_context(|| format!("WAVをdecodeできません: {}", path.display()))?;
-        let source_duration = source
-            .total_duration()
-            .ok_or_else(|| anyhow::anyhow!("WAVの長さを取得できません: {}", path.display()))?;
         let sink = Arc::new(rodio::Sink::try_new(handle)?);
         sink.append(source);
         sinks.push(sink);
-        source_durations.push(source_duration);
     }
-    Ok((sinks, longest_duration(&source_durations)))
-}
-
-fn longest_duration(durations: &[Duration]) -> Duration {
-    durations
-        .iter()
-        .copied()
-        .max()
-        .unwrap_or(Duration::ZERO)
-        .max(Duration::from_millis(1))
+    Ok(sinks)
 }
 
 fn play_path(handle: &rodio::OutputStreamHandle, path: &Path) -> Result<Arc<rodio::Sink>> {
@@ -287,25 +316,29 @@ fn set_play_state(state: &Arc<Mutex<PlayState>>, next: PlayState) {
 mod tests {
     use super::*;
 
-    fn path(name: &str) -> Option<PathBuf> {
-        Some(PathBuf::from(name))
+    fn clip(name: &str, span_measures: usize, bpm: f64) -> Option<LoopPlaybackClip> {
+        Some(LoopPlaybackClip {
+            path: PathBuf::from(name),
+            span_measures,
+            bpm,
+            meter_numerator: 4,
+            meter_denominator: 4,
+        })
     }
 
     #[test]
     fn next_measure_skips_empty_columns_and_wraps() {
         let grid = vec![
-            vec![path("a.wav"), None, path("c.wav")],
-            vec![path("b.wav"), None, None],
+            vec![clip("a.wav", 1, 120.0), None, clip("c.wav", 1, 120.0)],
+            vec![clip("b.wav", 1, 90.0), None, None],
         ];
+        assert_eq!(next_measure(&grid, None), Some(0));
+        assert_eq!(next_measure(&grid, Some(0)), Some(2));
+        assert_eq!(next_measure(&grid, Some(2)), Some(0));
         assert_eq!(
-            next_measure(&grid, None),
-            Some((0, vec![PathBuf::from("a.wav"), PathBuf::from("b.wav")]))
+            starting_paths(&grid, 0),
+            vec![PathBuf::from("a.wav"), PathBuf::from("b.wav")]
         );
-        assert_eq!(
-            next_measure(&grid, Some(0)),
-            Some((2, vec![PathBuf::from("c.wav")]))
-        );
-        assert_eq!(next_measure(&grid, Some(2)).unwrap().0, 0);
     }
 
     #[test]
@@ -314,27 +347,40 @@ mod tests {
     }
 
     #[test]
-    fn measure_duration_uses_the_longest_wav() {
-        assert_eq!(
-            longest_duration(&[
-                Duration::from_millis(250),
-                Duration::from_millis(900),
-                Duration::from_millis(500),
-            ]),
-            Duration::from_millis(900)
-        );
+    fn tempo_uses_the_leftmost_then_topmost_clip() {
+        let grid = vec![
+            vec![None, clip("top.wav", 1, 120.0)],
+            vec![clip("first.wav", 2, 100.0), None],
+        ];
+        assert_eq!(measure_duration(&grid), Duration::from_millis(2_400));
+    }
+
+    #[test]
+    fn continuation_measure_waits_and_can_start_another_track() {
+        let grid = vec![
+            vec![clip("long.wav", 2, 120.0), None],
+            vec![None, clip("next.wav", 1, 120.0)],
+        ];
+        assert_eq!(next_measure(&grid, None), Some(0));
+        assert_eq!(next_measure(&grid, Some(0)), Some(1));
+        assert_eq!(starting_paths(&grid, 1), vec![PathBuf::from("next.wav")]);
     }
 
     #[test]
     fn updated_grid_is_used_when_the_next_measure_is_selected() {
-        let before = vec![vec![path("current.wav"), None, path("old.wav")]];
-        assert_eq!(next_measure(&before, Some(0)).unwrap().0, 2);
+        let before = vec![vec![
+            clip("current.wav", 1, 120.0),
+            None,
+            clip("old.wav", 1, 120.0),
+        ]];
+        assert_eq!(next_measure(&before, Some(0)), Some(2));
 
-        let after = vec![vec![path("current.wav"), path("new.wav"), None]];
-        assert_eq!(
-            next_measure(&after, Some(0)),
-            Some((1, vec![PathBuf::from("new.wav")]))
-        );
+        let after = vec![vec![
+            clip("current.wav", 1, 120.0),
+            clip("new.wav", 1, 120.0),
+            None,
+        ]];
+        assert_eq!(next_measure(&after, Some(0)), Some(1));
     }
 
     #[test]

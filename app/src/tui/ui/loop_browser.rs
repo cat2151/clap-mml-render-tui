@@ -7,6 +7,7 @@ use ratatui::{
 };
 
 use super::status::{base_style, loop_browser_keybind_text, status_color, status_text};
+use crate::loop_wav_analysis::format_analysis;
 use crate::tui::loop_browser::{LoopBrowserPane, PAD_KEYS};
 use crate::tui::{Mode, TuiApp};
 use crate::ui_theme::{
@@ -121,6 +122,12 @@ fn draw_tree(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {
                 Span::raw(marker),
                 Span::styled(favorite, base_style().fg(MONOKAI_YELLOW)),
                 Span::raw(node.name.clone()),
+                Span::styled(
+                    node.analysis
+                        .map(|analysis| format!(" {}", format_analysis(analysis)))
+                        .unwrap_or_default(),
+                    base_style().fg(MONOKAI_CYAN),
+                ),
                 Span::styled(category, base_style().fg(MONOKAI_GREEN)),
             ]))
         })
@@ -198,9 +205,15 @@ fn draw_tracks(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {
         for measure in browser.measure_scroll
             ..(browser.measure_scroll + visible_measures).min(browser.track_grid()[track].len())
         {
-            let label = browser.track_grid()[track][measure]
-                .as_ref()
-                .map(|wav| browser.cell_label(wav))
+            let label = browser
+                .clip_at(track, measure)
+                .map(|(start, clip)| {
+                    if start == measure {
+                        browser.cell_label(&clip.wav)
+                    } else {
+                        format!("↳ {}/{}", measure - start + 1, clip.span_measures)
+                    }
+                })
                 .unwrap_or_else(|| "·".to_string());
             let style =
                 if focused && track == browser.track_cursor && measure == browser.measure_cursor {

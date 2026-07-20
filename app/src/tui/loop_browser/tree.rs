@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn insert_relative_path(root: &mut TreeNode, path: &Path) {
+pub(super) fn insert_relative_path(root: &mut TreeNode, path: &Path, analysis: LoopWavAnalysis) {
     let components = path
         .components()
         .filter_map(|component| match component {
@@ -8,10 +8,15 @@ pub(super) fn insert_relative_path(root: &mut TreeNode, path: &Path) {
             _ => None,
         })
         .collect::<Vec<_>>();
-    insert_components(root, &components, Path::new(""));
+    insert_components(root, &components, Path::new(""), analysis);
 }
 
-fn insert_components(node: &mut TreeNode, components: &[String], parent: &Path) {
+fn insert_components(
+    node: &mut TreeNode,
+    components: &[String],
+    parent: &Path,
+    analysis: LoopWavAnalysis,
+) {
     let Some((name, rest)) = components.split_first() else {
         return;
     };
@@ -27,11 +32,17 @@ fn insert_components(node: &mut TreeNode, components: &[String], parent: &Path) 
                 relative_path: relative_path.clone(),
                 children: Vec::new(),
                 is_wav,
+                analysis: is_wav.then_some(analysis),
             });
             node.children.len() - 1
         });
     if !rest.is_empty() {
-        insert_components(&mut node.children[child_index], rest, &relative_path);
+        insert_components(
+            &mut node.children[child_index],
+            rest,
+            &relative_path,
+            analysis,
+        );
     }
 }
 
@@ -86,6 +97,7 @@ pub(super) fn collect_visible(
         path: node_path(root_path, node),
         favorite,
         category,
+        analysis: node.analysis,
     });
     if !node.is_wav && is_expanded {
         for child in &node.children {

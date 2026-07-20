@@ -1,16 +1,53 @@
 use super::*;
-use crate::loop_library::{LoopIndex, LoopRootIndex};
+use crate::loop_library::{LoopIndex, LoopRootIndex, LoopWavIndex};
+use crate::loop_wav_analysis::{LoopAnalysisSource, LoopWavAnalysis};
+
+fn indexed(relative: impl Into<String>) -> LoopWavIndex {
+    indexed_with_measures(relative, 1)
+}
+
+fn indexed_with_measures(relative: impl Into<String>, measures: usize) -> LoopWavIndex {
+    LoopWavIndex {
+        relative: relative.into(),
+        analysis: LoopWavAnalysis {
+            duration_seconds: 2.0 * measures as f64,
+            bpm: 120.0,
+            beats: 4 * measures as u32,
+            meter_numerator: 4,
+            meter_denominator: 4,
+            measures,
+            source: LoopAnalysisSource::Acid,
+        },
+    }
+}
+
+fn browser_with_spanning_wavs() -> LoopBrowser {
+    LoopBrowser::from_index(
+        LoopIndex {
+            version: 2,
+            roots: vec![LoopRootIndex {
+                path: "/loops".to_string(),
+                wav_files: vec![indexed_with_measures("long.wav", 2), indexed("short.wav")],
+            }],
+        },
+        &crate::config::default_loop_categories(),
+        LoopBrowserMetadata::default(),
+        None,
+        true,
+        None,
+    )
+}
 
 fn browser() -> LoopBrowser {
     LoopBrowser::from_index(
         LoopIndex {
-            version: 1,
+            version: 2,
             roots: vec![LoopRootIndex {
                 path: "/loops".to_string(),
                 wav_files: vec![
-                    "Pack/Bass/B.wav".to_string(),
-                    "Pack/Bass/a.wav".to_string(),
-                    "Pack/Drums/Kick.wav".to_string(),
+                    indexed("Pack/Bass/B.wav"),
+                    indexed("Pack/Bass/a.wav"),
+                    indexed("Pack/Drums/Kick.wav"),
                 ],
             }],
         },
@@ -25,10 +62,12 @@ fn browser() -> LoopBrowser {
 fn browser_with_direct_wavs(count: usize) -> LoopBrowser {
     LoopBrowser::from_index(
         LoopIndex {
-            version: 1,
+            version: 2,
             roots: vec![LoopRootIndex {
                 path: "/loops".to_string(),
-                wav_files: (0..count).map(|index| format!("{index:02}.wav")).collect(),
+                wav_files: (0..count)
+                    .map(|index| indexed(format!("{index:02}.wav")))
+                    .collect(),
             }],
         },
         &crate::config::default_loop_categories(),
@@ -304,77 +343,4 @@ fn favorites_only_shift_a_saves_only_pad_metadata() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-#[test]
-fn track_pane_toggles_one_wav_per_cell_and_auto_extends_right_and_down() {
-    let mut browser = browser();
-    select_bass_wav(&mut browser);
-    browser.handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
-    browser.handle_key(KeyCode::Tab);
-    assert_eq!(browser.focus, LoopBrowserPane::Tracks);
-
-    assert!(matches!(
-        browser.handle_key(KeyCode::Char('c')),
-        LoopBrowserAction::GridChanged { pad: 'c', audition, grid }
-            if audition.ends_with("a.wav") && grid[0][0].as_ref().is_some_and(|path| path.ends_with("a.wav"))
-    ));
-    browser.handle_key(KeyCode::Char('l'));
-    browser.handle_key(KeyCode::Char('j'));
-    assert_eq!((browser.track_cursor, browser.measure_cursor), (1, 1));
-    assert_eq!(browser.track_grid.len(), 2);
-    assert!(browser.track_grid.iter().all(|track| track.len() == 2));
-
-    browser.handle_key(KeyCode::Char('h'));
-    browser.handle_key(KeyCode::Char('k'));
-    assert_eq!((browser.track_cursor, browser.measure_cursor), (0, 0));
-    assert!(matches!(
-        browser.handle_key(KeyCode::Char('c')),
-        LoopBrowserAction::GridChanged { grid, .. } if grid[0][0].is_none()
-    ));
-}
-
-#[test]
-fn track_hjkl_prefix_moves_and_extends_by_the_requested_count() {
-    let mut browser = browser();
-    browser.focus = LoopBrowserPane::Tracks;
-
-    browser.handle_key(KeyCode::Char('3'));
-    browser.handle_key(KeyCode::Char('l'));
-    assert_eq!(browser.measure_cursor, 3);
-    assert!(browser.track_grid.iter().all(|track| track.len() == 4));
-
-    browser.handle_key(KeyCode::Char('2'));
-    browser.handle_key(KeyCode::Char('j'));
-    assert_eq!(browser.track_cursor, 2);
-    assert_eq!(browser.track_grid.len(), 3);
-
-    browser.handle_key(KeyCode::Char('2'));
-    browser.handle_key(KeyCode::Char('h'));
-    browser.handle_key(KeyCode::Char('2'));
-    browser.handle_key(KeyCode::Char('k'));
-    assert_eq!((browser.track_cursor, browser.measure_cursor), (0, 1));
-}
-
-#[test]
-fn replacing_pad_does_not_change_existing_track_cell() {
-    let mut browser = browser();
-    select_bass_wav(&mut browser);
-    browser.handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
-    browser.handle_key(KeyCode::Tab);
-    browser.handle_key(KeyCode::Char('c'));
-    browser.handle_key(KeyCode::Tab);
-    browser.handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
-    assert!(browser.notice.is_some());
-    browser.handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
-    assert!(browser.notice.is_none());
-    browser.handle_key(KeyCode::Char('j'));
-    browser.handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
-
-    assert!(browser.notice.is_none());
-    assert!(browser
-        .metadata
-        .pad('c')
-        .is_some_and(|wav| wav.path().ends_with("B.wav")));
-    assert!(browser.track_grid[0][0]
-        .as_ref()
-        .is_some_and(|wav| wav.path().ends_with("a.wav")));
-}
+mod grid;

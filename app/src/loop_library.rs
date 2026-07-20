@@ -5,36 +5,77 @@ use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::path::{Component, Path, PathBuf};
 
-const LOOP_INDEX_VERSION: u32 = 1;
+use crate::loop_wav_analysis::{analyze_file, LoopWavAnalysis};
+
+const LOOP_INDEX_VERSION: u32 = 2;
 const LOOP_INDEX_FILE_NAME: &str = "loop_index.json";
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(crate) struct LoopIndex {
     pub(crate) version: u32,
     pub(crate) roots: Vec<LoopRootIndex>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(crate) struct LoopRootIndex {
     pub(crate) path: String,
-    pub(crate) wav_files: Vec<String>,
+    pub(crate) wav_files: Vec<LoopWavIndex>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub(crate) struct LoopWavIndex {
+    pub(crate) relative: String,
+    pub(crate) analysis: LoopWavAnalysis,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LoopScanSummary {
     pub roots: usize,
     pub wav_files: usize,
+    pub skipped_wav_files: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LoopScanProgress {
+    Started {
+        roots: usize,
+    },
+    Analyzing {
+        current: usize,
+        total: usize,
+        path: PathBuf,
+    },
+    Skipped {
+        path: PathBuf,
+        error: String,
+    },
 }
 
 pub fn scan_and_save(cfg: &crate::config::Config) -> Result<LoopScanSummary> {
-    scan_dirs_and_save(&cfg.loop_dirs)
+    scan_and_save_with_progress(cfg, |_| {})
 }
 
+pub fn scan_and_save_with_progress(
+    cfg: &crate::config::Config,
+    progress: impl FnMut(LoopScanProgress),
+) -> Result<LoopScanSummary> {
+    scan_dirs_and_save_with_progress(&cfg.loop_dirs, progress)
+}
+
+#[cfg(test)]
 fn scan_dirs_and_save(loop_dirs: &[String]) -> Result<LoopScanSummary> {
-    let index = build_index(loop_dirs)?;
+    scan_dirs_and_save_with_progress(loop_dirs, |_| {})
+}
+
+fn scan_dirs_and_save_with_progress(
+    loop_dirs: &[String],
+    mut progress: impl FnMut(LoopScanProgress),
+) -> Result<LoopScanSummary> {
+    let (index, skipped_wav_files) = build_index(loop_dirs, &mut progress)?;
     let summary = LoopScanSummary {
         roots: index.roots.len(),
         wav_files: index.roots.iter().map(|root| root.wav_files.len()).sum(),
+        skipped_wav_files,
     };
     save_index(&index)?;
     Ok(summary)
@@ -59,14 +100,27 @@ pub(crate) fn loop_index_path() -> Result<PathBuf> {
         .ok_or_else(|| anyhow::anyhow!("システムの設定ディレクトリが取得できません"))
 }
 
-fn build_index(loop_dirs: &[String]) -> Result<LoopIndex> {
+struct PendingRoot {
+    configured_root: String,
+    root: PathBuf,
+    wav_paths: Vec<String>,
+}
+
+fn build_index(
+    loop_dirs: &[String],
+    progress: &mut impl FnMut(LoopScanProgress),
+) -> Result<(LoopIndex, usize)> {
     if loop_dirs.is_empty() {
         anyhow::bail!("loop_dirs が空です。config.toml にルートを設定してください");
     }
 
-    let mut roots = Vec::with_capacity(loop_dirs.len());
+    progress(LoopScanProgress::Started {
+        roots: loop_dirs.len(),
+    });
+
+    let mut pending_roots = Vec::with_capacity(loop_dirs.len());
     for configured_root in loop_dirs {
-        let root = Path::new(configured_root);
+        let root = PathBuf::from(configured_root);
         if !root.is_dir() {
             anyhow::bail!(
                 "loop_dirs のパスがディレクトリではありません: {}",
@@ -74,22 +128,57 @@ fn build_index(loop_dirs: &[String]) -> Result<LoopIndex> {
             );
         }
         let mut wav_paths = Vec::new();
-        collect_wav_paths(root, root, &mut wav_paths)?;
+        collect_wav_paths(&root, &root, &mut wav_paths)?;
         wav_paths.sort_by(|left, right| {
             left.to_lowercase()
                 .cmp(&right.to_lowercase())
                 .then_with(|| left.cmp(right))
         });
-        roots.push(LoopRootIndex {
-            path: configured_root.clone(),
-            wav_files: wav_paths,
+        pending_roots.push(PendingRoot {
+            configured_root: configured_root.clone(),
+            root,
+            wav_paths,
         });
     }
 
-    Ok(LoopIndex {
-        version: LOOP_INDEX_VERSION,
-        roots,
-    })
+    let total = pending_roots.iter().map(|root| root.wav_paths.len()).sum();
+    let mut roots = Vec::with_capacity(pending_roots.len());
+    let mut current = 0;
+    let mut skipped_wav_files = 0;
+    for pending in pending_roots {
+        let mut wav_files = Vec::with_capacity(pending.wav_paths.len());
+        for relative in pending.wav_paths {
+            current += 1;
+            let path = pending.root.join(&relative);
+            progress(LoopScanProgress::Analyzing {
+                current,
+                total,
+                path: path.clone(),
+            });
+            match analyze_file(&path) {
+                Ok(analysis) => wav_files.push(LoopWavIndex { relative, analysis }),
+                Err(error) => {
+                    skipped_wav_files += 1;
+                    progress(LoopScanProgress::Skipped {
+                        path,
+                        error: format!("{error:#}"),
+                    });
+                }
+            }
+        }
+        roots.push(LoopRootIndex {
+            path: pending.configured_root,
+            wav_files,
+        });
+    }
+
+    Ok((
+        LoopIndex {
+            version: LOOP_INDEX_VERSION,
+            roots,
+        },
+        skipped_wav_files,
+    ))
 }
 
 fn collect_wav_paths(root: &Path, dir: &Path, output: &mut Vec<String>) -> Result<()> {
@@ -144,9 +233,25 @@ fn validate_index(index: &LoopIndex, configured_roots: &[String]) -> Result<()> 
         anyhow::bail!("loop_dirs とループキャッシュが一致しません");
     }
     for root in &index.roots {
-        for relative in &root.wav_files {
-            validate_relative_wav_path(relative)?;
+        for wav in &root.wav_files {
+            validate_relative_wav_path(&wav.relative)?;
+            validate_analysis(wav.analysis)?;
         }
+    }
+    Ok(())
+}
+
+fn validate_analysis(analysis: LoopWavAnalysis) -> Result<()> {
+    if !analysis.duration_seconds.is_finite()
+        || analysis.duration_seconds <= 0.0
+        || !analysis.bpm.is_finite()
+        || analysis.bpm <= 0.0
+        || analysis.beats == 0
+        || analysis.meter_numerator == 0
+        || analysis.meter_denominator == 0
+        || analysis.measures == 0
+    {
+        anyhow::bail!("ループキャッシュに不正なWAV解析結果があります");
     }
     Ok(())
 }
@@ -255,93 +360,5 @@ fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn create_file(path: &Path) {
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(path, b"test").unwrap();
-    }
-
-    #[test]
-    fn build_index_collects_only_wav_files_and_sorts_them() {
-        let temp = tempfile_dir("collect");
-        create_file(&temp.join("Pack/Bass/z.WAV"));
-        create_file(&temp.join("Pack/Bass/A.wav"));
-        create_file(&temp.join("Pack/Bass/readme.txt"));
-
-        let index = build_index(&[temp.to_string_lossy().into_owned()]).unwrap();
-
-        assert_eq!(index.roots.len(), 1);
-        assert_eq!(
-            index.roots[0].wav_files,
-            [
-                PathBuf::from("Pack")
-                    .join("Bass")
-                    .join("A.wav")
-                    .to_string_lossy(),
-                PathBuf::from("Pack")
-                    .join("Bass")
-                    .join("z.WAV")
-                    .to_string_lossy(),
-            ]
-        );
-    }
-
-    #[test]
-    fn scan_replaces_cache_and_failure_preserves_previous_cache() {
-        let temp = tempfile_dir("save");
-        let _guard = crate::test_utils::set_local_dir_envs(&temp);
-        let first_root = temp.join("first");
-        create_file(&first_root.join("One.wav"));
-        let first_dirs = vec![first_root.to_string_lossy().into_owned()];
-        let first_summary = scan_dirs_and_save(&first_dirs).unwrap();
-        assert_eq!(first_summary.wav_files, 1);
-        let cache_path = loop_index_path().unwrap();
-        let first_cache = std::fs::read(&cache_path).unwrap();
-
-        create_file(&first_root.join("Two.wav"));
-        let second_summary = scan_dirs_and_save(&first_dirs).unwrap();
-        assert_eq!(second_summary.wav_files, 2);
-        let second_cache = std::fs::read(&cache_path).unwrap();
-        assert_ne!(first_cache, second_cache);
-
-        let missing_dirs = vec![temp.join("missing").to_string_lossy().into_owned()];
-        assert!(scan_dirs_and_save(&missing_dirs).is_err());
-        assert_eq!(std::fs::read(cache_path).unwrap(), second_cache);
-    }
-
-    #[test]
-    fn validate_index_rejects_version_roots_and_parent_paths() {
-        let valid = LoopIndex {
-            version: LOOP_INDEX_VERSION,
-            roots: vec![LoopRootIndex {
-                path: "/loops".to_string(),
-                wav_files: vec!["pack/kick.wav".to_string()],
-            }],
-        };
-        validate_index(&valid, &["/loops".to_string()]).unwrap();
-
-        let mut wrong_version = valid.clone();
-        wrong_version.version += 1;
-        assert!(validate_index(&wrong_version, &["/loops".to_string()]).is_err());
-        assert!(validate_index(&valid, &["/other".to_string()]).is_err());
-
-        let mut unsafe_path = valid;
-        unsafe_path.roots[0].wav_files = vec!["../outside.wav".to_string()];
-        assert!(validate_index(&unsafe_path, &["/loops".to_string()]).is_err());
-    }
-
-    fn tempfile_dir(label: &str) -> PathBuf {
-        let path = std::env::temp_dir().join(format!(
-            "cmrt_loop_library_{label}_{}_{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&path).unwrap();
-        path
-    }
-}
+#[path = "tests/loop_library.rs"]
+mod tests;

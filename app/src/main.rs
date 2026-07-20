@@ -166,6 +166,65 @@ fn cli_playback_mml(input: &str) -> CliPlaybackMml {
     }
 }
 
+fn write_scan_progress(
+    event: loop_library::LoopScanProgress,
+    stdout: &mut dyn std::io::Write,
+    stderr: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    match event {
+        loop_library::LoopScanProgress::Started { roots } => {
+            writeln!(stdout, "WAVループ走査を開始します: {roots} roots")?;
+            stdout.flush()
+        }
+        loop_library::LoopScanProgress::Analyzing {
+            current,
+            total,
+            path,
+        } => {
+            writeln!(stdout, "[{current}/{total}] WAVを解析: {}", path.display())?;
+            stdout.flush()
+        }
+        loop_library::LoopScanProgress::Skipped { path, error } => {
+            writeln!(
+                stderr,
+                "警告: WAVをスキップしました: {}\n  {error}",
+                path.display()
+            )?;
+            stderr.flush()
+        }
+    }
+}
+
+fn write_scan_summary(
+    summary: loop_library::LoopScanSummary,
+    stdout: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    writeln!(
+        stdout,
+        "ループキャッシュを更新しました: {} roots / {} indexed WAV / {} skipped WAV",
+        summary.roots, summary.wav_files, summary.skipped_wav_files
+    )?;
+    stdout.flush()
+}
+
+fn run_scan_loops(cfg: &config::Config) -> Result<()> {
+    let stdout = std::io::stdout();
+    let stderr = std::io::stderr();
+    let mut stdout = stdout.lock();
+    let mut stderr = stderr.lock();
+    let mut output_error = None;
+    let summary = loop_library::scan_and_save_with_progress(cfg, |event| {
+        if output_error.is_none() {
+            output_error = write_scan_progress(event, &mut stdout, &mut stderr).err();
+        }
+    })?;
+    if let Some(error) = output_error {
+        return Err(error).context("scan-loopsの進捗を出力できません");
+    }
+    write_scan_summary(summary, &mut stdout).context("scan-loopsの完了結果を出力できません")?;
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let action = parse_cli_from(std::env::args_os())?;
 
@@ -201,12 +260,7 @@ fn main() -> Result<()> {
     let cfg = config::load()?;
 
     if matches!(&action, CliAction::ScanLoops) {
-        let summary = loop_library::scan_and_save(&cfg)?;
-        println!(
-            "ループキャッシュを更新しました: {} roots / {} WAV files",
-            summary.roots, summary.wav_files
-        );
-        return Ok(());
+        return run_scan_loops(&cfg);
     }
 
     // plugin_path が未設定の場合は設定ファイルを編集するよう案内する

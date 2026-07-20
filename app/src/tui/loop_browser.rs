@@ -8,12 +8,16 @@ use crate::loop_browser_metadata::{
     category_keys, metadata_path, LoopBrowserMetadata, LoopDirId, LoopWavId,
 };
 use crate::loop_browser_track_grid::{
-    default_track_grid, load_from as load_track_grid, track_grid_path, LoopTrackGrid,
+    default_track_grid, load_from as load_track_grid, reflow_with_spans, track_grid_path,
+    LoadedTrackGrid, LoopTrackClip, LoopTrackGrid,
 };
+use crate::loop_wav_analysis::LoopWavAnalysis;
 use crate::tui::keyboard::NavigationCount;
 
+mod grid;
 mod input;
 pub(super) mod playback;
+mod track_input;
 mod tree;
 
 use tree::{collect_visible, find_favorite_node, insert_relative_path, node_path, sort_tree};
@@ -34,6 +38,7 @@ struct TreeNode {
     relative_path: PathBuf,
     children: Vec<TreeNode>,
     is_wav: bool,
+    analysis: Option<LoopWavAnalysis>,
 }
 
 #[derive(Clone, Debug)]
@@ -46,6 +51,7 @@ pub(super) struct VisibleLoopNode {
     pub(super) path: PathBuf,
     pub(super) favorite: bool,
     pub(super) category: Option<String>,
+    pub(super) analysis: Option<LoopWavAnalysis>,
 }
 
 pub(super) struct LoopBrowserNotice {
@@ -71,6 +77,7 @@ pub(crate) struct LoopBrowser {
     pub(super) track_grid_error: Option<String>,
     metadata: LoopBrowserMetadata,
     track_grid: LoopTrackGrid,
+    wav_analyses: Vec<(LoopWavId, LoopWavAnalysis)>,
     metadata_path: Option<PathBuf>,
     track_grid_path: Option<PathBuf>,
     metadata_writable: bool,
@@ -87,7 +94,16 @@ pub(crate) struct LoopBrowser {
     pub(super) navigation_count: NavigationCount,
 }
 
-pub(super) type LoopPlaybackGrid = Vec<Vec<Option<PathBuf>>>;
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct LoopPlaybackClip {
+    pub(super) path: PathBuf,
+    pub(super) span_measures: usize,
+    pub(super) bpm: f64,
+    pub(super) meter_numerator: u16,
+    pub(super) meter_denominator: u16,
+}
+
+pub(super) type LoopPlaybackGrid = Vec<Vec<Option<LoopPlaybackClip>>>;
 
 pub(super) enum LoopBrowserAction {
     Continue,
@@ -118,6 +134,7 @@ impl Default for LoopBrowser {
             track_grid_error: None,
             metadata: LoopBrowserMetadata::default(),
             track_grid: default_track_grid(),
+            wav_analyses: Vec::new(),
             metadata_path: None,
             track_grid_path: None,
             metadata_writable: true,
@@ -155,18 +172,29 @@ impl LoopBrowser {
                 Some(error.to_string()),
             ),
         };
-        let (track_grid, track_grid_path, track_grid_writable, track_grid_error) =
+        let (loaded_grid, track_grid_path, track_grid_writable, mut track_grid_error) =
             match track_grid_path() {
                 Ok(path) => match load_track_grid(&path) {
-                    Ok(track_grid) => (track_grid, Some(path), true, None),
+                    Ok(loaded) => (loaded, Some(path), true, None),
                     Err(error) => (
-                        default_track_grid(),
+                        LoadedTrackGrid {
+                            grid: default_track_grid(),
+                            needs_migration: false,
+                        },
                         Some(path),
                         false,
                         Some(error.to_string()),
                     ),
                 },
-                Err(error) => (default_track_grid(), None, false, Some(error.to_string())),
+                Err(error) => (
+                    LoadedTrackGrid {
+                        grid: default_track_grid(),
+                        needs_migration: false,
+                    },
+                    None,
+                    false,
+                    Some(error.to_string()),
+                ),
             };
         let mut browser = match crate::loop_library::load_index(cfg) {
             Ok(index) => Self::from_index(
@@ -187,6 +215,19 @@ impl LoopBrowser {
                 ..Self::default()
             },
         };
+        let (track_grid, reflowed) = reflow_with_spans(&loaded_grid.grid, |wav| {
+            browser
+                .analysis_for_wav(wav)
+                .map(|analysis| analysis.measures)
+        });
+        if track_grid_writable && (loaded_grid.needs_migration || reflowed) {
+            if let Some(path) = track_grid_path.as_ref() {
+                if let Err(error) = crate::loop_browser_track_grid::save_to(path, &track_grid) {
+                    track_grid_error =
+                        Some(format!("track grid migrationを保存できません: {error}"));
+                }
+            }
+        }
         browser.track_grid = track_grid;
         browser.track_grid_path = track_grid_path;
         browser.track_grid_writable = track_grid_writable;
@@ -203,6 +244,7 @@ impl LoopBrowser {
         metadata_error: Option<String>,
     ) -> Self {
         let mut roots = Vec::with_capacity(index.roots.len());
+        let mut wav_analyses = Vec::new();
         let mut expanded = HashSet::new();
         for (root_index, indexed_root) in index.roots.into_iter().enumerate() {
             let root_path = PathBuf::from(&indexed_root.path);
@@ -211,9 +253,16 @@ impl LoopBrowser {
                 relative_path: PathBuf::new(),
                 children: Vec::new(),
                 is_wav: false,
+                analysis: None,
             };
-            for relative in indexed_root.wav_files {
-                insert_relative_path(&mut root, Path::new(&relative));
+            for indexed_wav in indexed_root.wav_files {
+                let wav = LoopWavId::new(&root_path, Path::new(&indexed_wav.relative));
+                wav_analyses.push((wav, indexed_wav.analysis));
+                insert_relative_path(
+                    &mut root,
+                    Path::new(&indexed_wav.relative),
+                    indexed_wav.analysis,
+                );
             }
             sort_tree(&mut root);
             expanded.insert(NodeKey {
@@ -231,6 +280,7 @@ impl LoopBrowser {
             metadata_path,
             metadata_writable,
             metadata_error,
+            wav_analyses,
             ..Self::default()
         };
         browser.rebuild_visible(None);
@@ -330,7 +380,7 @@ impl LoopBrowser {
         })
     }
 
-    pub(super) fn track_grid(&self) -> &[Vec<Option<LoopWavId>>] {
+    pub(super) fn track_grid(&self) -> &[Vec<Option<LoopTrackClip>>] {
         &self.track_grid
     }
 
@@ -358,7 +408,20 @@ impl LoopBrowser {
             .map(|track| {
                 track
                     .iter()
-                    .map(|cell| cell.as_ref().map(LoopWavId::path))
+                    .map(|cell| {
+                        cell.as_ref().map(|clip| {
+                            let analysis = self.analysis_for_wav(&clip.wav);
+                            LoopPlaybackClip {
+                                path: clip.wav.path(),
+                                span_measures: clip.span_measures,
+                                bpm: analysis.map_or(120.0, |analysis| analysis.bpm),
+                                meter_numerator: analysis
+                                    .map_or(4, |analysis| analysis.meter_numerator),
+                                meter_denominator: analysis
+                                    .map_or(4, |analysis| analysis.meter_denominator),
+                            }
+                        })
+                    })
                     .collect()
             })
             .collect()

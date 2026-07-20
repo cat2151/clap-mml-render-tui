@@ -288,13 +288,6 @@ impl LoopBrowser {
         }
     }
 
-    fn save_track_grid(&self) -> anyhow::Result<()> {
-        match &self.track_grid_path {
-            Some(path) => crate::loop_browser_track_grid::save_to(path, &self.track_grid),
-            None => Ok(()),
-        }
-    }
-
     fn selected_wav_id(&self) -> Option<LoopWavId> {
         let node = self.visible.get(self.cursor)?;
         if !node.is_wav {
@@ -329,113 +322,5 @@ impl LoopBrowser {
             self.notice = None;
         }
         LoopBrowserAction::Continue
-    }
-
-    fn toggle_current_cell(&mut self, pad: char) -> LoopBrowserAction {
-        let Some(wav) = self.metadata.pad(pad).cloned() else {
-            return LoopBrowserAction::Continue;
-        };
-        let audition = wav.path();
-        if !self.track_grid_writable {
-            return LoopBrowserAction::Trigger {
-                pad,
-                path: audition,
-            };
-        }
-        let previous = self.track_grid.clone();
-        let cell = &mut self.track_grid[self.track_cursor][self.measure_cursor];
-        if cell.as_ref().is_some_and(|current| current.matches(&wav)) {
-            *cell = None;
-        } else {
-            *cell = Some(wav);
-        }
-        if let Err(error) = self.save_track_grid() {
-            self.track_grid = previous;
-            self.track_grid_error = Some(format!("track listを保存できません: {error}"));
-            return LoopBrowserAction::Trigger {
-                pad,
-                path: audition,
-            };
-        }
-        self.track_grid_error = None;
-        LoopBrowserAction::GridChanged {
-            pad,
-            audition,
-            grid: self.playback_grid(),
-        }
-    }
-
-    fn move_track_cursor_right(&mut self, count: usize) {
-        if count == 0 {
-            return;
-        }
-        let measures = self.track_grid[0].len();
-        let next = self.measure_cursor.saturating_add(count);
-        if next < measures {
-            self.measure_cursor = next;
-            return;
-        }
-        if !self.track_grid_writable {
-            self.measure_cursor = measures.saturating_sub(1);
-            return;
-        }
-        let Some(required) = next.checked_add(1) else {
-            self.track_grid_error =
-                Some("track listが大きすぎるためmeasureを追加できません".to_string());
-            return;
-        };
-        let mut updated = self.track_grid.clone();
-        for track in &mut updated {
-            if track.try_reserve_exact(required - track.len()).is_err() {
-                self.track_grid_error =
-                    Some("track listが大きすぎるためmeasureを追加できません".to_string());
-                return;
-            }
-            track.resize(required, None);
-        }
-        let previous = std::mem::replace(&mut self.track_grid, updated);
-        if let Err(error) = self.save_track_grid() {
-            self.track_grid = previous;
-            self.track_grid_error = Some(format!("measure追加を保存できません: {error}"));
-            return;
-        }
-        self.track_grid_error = None;
-        self.measure_cursor = next;
-    }
-
-    fn move_track_cursor_down(&mut self, count: usize) {
-        if count == 0 {
-            return;
-        }
-        let next = self.track_cursor.saturating_add(count);
-        if next < self.track_grid.len() {
-            self.track_cursor = next;
-            return;
-        }
-        if !self.track_grid_writable {
-            self.track_cursor = self.track_grid.len().saturating_sub(1);
-            return;
-        }
-        let Some(required) = next.checked_add(1) else {
-            self.track_grid_error =
-                Some("track listが大きすぎるためtrackを追加できません".to_string());
-            return;
-        };
-        let mut updated = self.track_grid.clone();
-        if updated.try_reserve_exact(required - updated.len()).is_err() {
-            self.track_grid_error =
-                Some("track listが大きすぎるためtrackを追加できません".to_string());
-            return;
-        }
-        let measures = self.track_grid[0].len();
-        updated.resize_with(required, || vec![None; measures]);
-        let previous = std::mem::replace(&mut self.track_grid, updated);
-        if let Err(error) = self.save_track_grid() {
-            self.track_grid = previous;
-            self.track_grid_error = Some(format!("track追加を保存できません: {error}"));
-            return;
-        }
-        self.track_grid_error = None;
-        self.track_cursor = next;
     }
 }

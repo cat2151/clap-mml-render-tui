@@ -9,6 +9,7 @@ pub mod logging;
 pub(crate) mod loop_browser_metadata;
 pub(crate) mod loop_browser_track_grid;
 pub mod loop_library;
+pub(crate) mod loop_wav_analysis;
 pub(crate) mod offline_render;
 pub(crate) mod patches;
 pub(crate) mod random;

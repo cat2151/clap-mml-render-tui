@@ -4,11 +4,22 @@ use std::path::{Path, PathBuf};
 
 use crate::loop_browser_metadata::{validate_wav_id, LoopWavId};
 
-const TRACK_GRID_VERSION: u32 = 1;
+const TRACK_GRID_VERSION: u32 = 2;
 const TRACK_GRID_DIRECTORY: &str = "loop_browser";
 const TRACK_GRID_FILE_NAME: &str = "track_grid.toml";
 
-pub(crate) type LoopTrackGrid = Vec<Vec<Option<LoopWavId>>>;
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct LoopTrackClip {
+    pub(crate) wav: LoopWavId,
+    pub(crate) span_measures: usize,
+}
+
+pub(crate) type LoopTrackGrid = Vec<Vec<Option<LoopTrackClip>>>;
+
+pub(crate) struct LoadedTrackGrid {
+    pub(crate) grid: LoopTrackGrid,
+    pub(crate) needs_migration: bool,
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 struct StoredTrackGrid {
@@ -23,8 +34,14 @@ struct StoredTrackGrid {
 struct StoredTrackCell {
     track: usize,
     measure: usize,
+    #[serde(default = "default_span")]
+    span_measures: usize,
     #[serde(flatten)]
     wav: LoopWavId,
+}
+
+const fn default_span() -> usize {
+    1
 }
 
 pub(crate) fn default_track_grid() -> LoopTrackGrid {
@@ -37,15 +54,23 @@ pub(crate) fn track_grid_path() -> Result<PathBuf> {
         .ok_or_else(|| anyhow::anyhow!("システムの設定ディレクトリが取得できません"))
 }
 
-pub(crate) fn load_from(path: &Path) -> Result<LoopTrackGrid> {
+pub(crate) fn load_from(path: &Path) -> Result<LoadedTrackGrid> {
     if !path.exists() {
-        return Ok(default_track_grid());
+        return Ok(LoadedTrackGrid {
+            grid: default_track_grid(),
+            needs_migration: false,
+        });
     }
     let text = std::fs::read_to_string(path)
         .with_context(|| format!("track gridを読めません: {}", path.display()))?;
     let stored: StoredTrackGrid = toml::from_str(&text)
         .with_context(|| format!("track gridが壊れています: {}", path.display()))?;
-    stored.into_grid()
+    let needs_migration = stored.version == 1;
+    let grid = stored.into_grid()?;
+    Ok(LoadedTrackGrid {
+        grid,
+        needs_migration,
+    })
 }
 
 pub(crate) fn save_to(path: &Path, grid: &LoopTrackGrid) -> Result<()> {
@@ -92,15 +117,26 @@ impl StoredTrackGrid {
         }
         let mut cells = Vec::new();
         for (track, measures) in grid.iter().enumerate() {
-            for (measure, wav) in measures.iter().enumerate() {
-                let Some(wav) = wav else {
+            let mut occupied_until = 0;
+            for (measure, clip) in measures.iter().enumerate() {
+                let Some(clip) = clip else {
                     continue;
                 };
-                validate_wav_id(wav)?;
+                validate_wav_id(&clip.wav)?;
+                if clip.span_measures == 0 || measure < occupied_until {
+                    anyhow::bail!("track gridに不正または重複したclip spanがあります");
+                }
+                occupied_until = measure
+                    .checked_add(clip.span_measures)
+                    .ok_or_else(|| anyhow::anyhow!("track gridのclip spanが大きすぎます"))?;
+                if occupied_until > measure_count {
+                    anyhow::bail!("track gridのclipがmeasure範囲外です");
+                }
                 cells.push(StoredTrackCell {
                     track,
                     measure,
-                    wav: wav.clone(),
+                    span_measures: clip.span_measures,
+                    wav: clip.wav.clone(),
                 });
             }
         }
@@ -113,7 +149,7 @@ impl StoredTrackGrid {
     }
 
     fn into_grid(self) -> Result<LoopTrackGrid> {
-        if self.version != TRACK_GRID_VERSION {
+        if !matches!(self.version, 1 | TRACK_GRID_VERSION) {
             anyhow::bail!(
                 "track gridのversionが一致しません（file: {}, expected: {}）",
                 self.version,
@@ -133,6 +169,9 @@ impl StoredTrackGrid {
                 );
             }
             validate_wav_id(&cell.wav)?;
+            if cell.span_measures == 0 {
+                anyhow::bail!("track gridのclip spanは1以上である必要があります");
+            }
             let destination = &mut grid[cell.track][cell.measure];
             if destination.is_some() {
                 anyhow::bail!(
@@ -141,10 +180,56 @@ impl StoredTrackGrid {
                     cell.measure
                 );
             }
-            *destination = Some(cell.wav);
+            *destination = Some(LoopTrackClip {
+                wav: cell.wav,
+                span_measures: cell.span_measures,
+            });
         }
         Ok(grid)
     }
+}
+
+pub(crate) fn reflow_with_spans(
+    grid: &LoopTrackGrid,
+    mut span_for: impl FnMut(&LoopWavId) -> Option<usize>,
+) -> (LoopTrackGrid, bool) {
+    let original_width = grid.first().map_or(1, Vec::len).max(1);
+    let mut tracks = Vec::with_capacity(grid.len().max(1));
+    let mut width = original_width;
+    let mut changed = false;
+    for track in grid {
+        let mut updated = vec![None; original_width];
+        let mut occupied_until = 0;
+        for (old_measure, clip) in track
+            .iter()
+            .enumerate()
+            .filter_map(|(measure, clip)| clip.as_ref().map(|clip| (measure, clip)))
+        {
+            let span = span_for(&clip.wav).unwrap_or(clip.span_measures).max(1);
+            let measure = old_measure.max(occupied_until);
+            let end = measure.saturating_add(span);
+            if end > updated.len() {
+                updated.resize(end, None);
+            }
+            updated[measure] = Some(LoopTrackClip {
+                wav: clip.wav.clone(),
+                span_measures: span,
+            });
+            occupied_until = end;
+            width = width.max(end);
+            changed |= measure != old_measure || span != clip.span_measures;
+        }
+        tracks.push(updated);
+    }
+    if tracks.is_empty() {
+        tracks.push(vec![None; width]);
+        changed = true;
+    }
+    for track in &mut tracks {
+        track.resize(width, None);
+    }
+    changed |= grid.iter().any(|track| track.len() != width);
+    (tracks, changed)
 }
 
 fn unique_temp_path(path: &Path) -> PathBuf {

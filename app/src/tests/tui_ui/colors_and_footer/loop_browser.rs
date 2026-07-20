@@ -1,15 +1,27 @@
 use super::*;
 use crate::loop_browser_metadata::LoopBrowserMetadata;
-use crate::loop_library::{LoopIndex, LoopRootIndex};
+use crate::loop_library::{LoopIndex, LoopRootIndex, LoopWavIndex};
+use crate::loop_wav_analysis::{LoopAnalysisSource, LoopWavAnalysis};
 use crate::tui::loop_browser::LoopBrowser;
 
 fn browser() -> LoopBrowser {
     LoopBrowser::from_index(
         LoopIndex {
-            version: 1,
+            version: 2,
             roots: vec![LoopRootIndex {
                 path: "/loops".to_string(),
-                wav_files: vec!["Pack/Kick.wav".to_string()],
+                wav_files: vec![LoopWavIndex {
+                    relative: "Pack/Kick.wav".to_string(),
+                    analysis: LoopWavAnalysis {
+                        duration_seconds: 4.0,
+                        bpm: 120.0,
+                        beats: 8,
+                        meter_numerator: 4,
+                        meter_denominator: 4,
+                        measures: 2,
+                        source: LoopAnalysisSource::Acid,
+                    },
+                }],
             }],
         },
         &crate::config::default_loop_categories(),
@@ -77,6 +89,8 @@ fn draws_wav_pads_track_grid_and_pane_specific_footer() {
     assert!(screen.contains("[WAV PADS]"));
     assert!(screen.contains("[TRACK LIST]"));
     assert!(screen.contains("C:Kick.wav"));
+    assert!(screen.contains("[BPM120 beat8 2meas]"));
+    assert!(screen.contains("↳ 2/2"));
     assert!(screen.contains("Tab:loop tree"));
     assert!(screen.contains("1-9:hjkl prefix"));
 }
