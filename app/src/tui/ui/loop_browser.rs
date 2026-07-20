@@ -11,7 +11,7 @@ use crate::loop_wav_analysis::format_analysis;
 use crate::tui::loop_browser::{LoopBrowserPane, PAD_KEYS};
 use crate::tui::{Mode, TuiApp};
 use crate::ui_theme::{
-    cursor_highlight_style, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GREEN, MONOKAI_YELLOW,
+    cursor_highlight_style, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_YELLOW,
 };
 
 const TRACK_LABEL_WIDTH: usize = 6;
@@ -193,6 +193,7 @@ fn draw_tracks(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {
     let visible_measures =
         ((usize::from(inner.width).saturating_sub(TRACK_LABEL_WIDTH)) / CELL_WIDTH).max(1);
     let browser = &mut app.loop_browser;
+    let displayed_measure_count = browser.displayed_measure_count();
     keep_visible(
         browser.track_cursor,
         visible_tracks,
@@ -210,7 +211,7 @@ fn draw_tracks(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {
         base_style().fg(MONOKAI_CYAN),
     )];
     for measure in browser.measure_scroll
-        ..(browser.measure_scroll + visible_measures).min(browser.track_grid()[0].len())
+        ..(browser.measure_scroll + visible_measures).min(displayed_measure_count)
     {
         let style = if focused && measure == browser.measure_cursor {
             base_style().fg(MONOKAI_YELLOW)
@@ -232,10 +233,14 @@ fn draw_tracks(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {
             base_style().fg(MONOKAI_CYAN),
         )];
         for measure in browser.measure_scroll
-            ..(browser.measure_scroll + visible_measures).min(browser.track_grid()[track].len())
+            ..(browser.measure_scroll + visible_measures).min(displayed_measure_count)
         {
-            let label = browser
-                .clip_at(track, measure)
+            let explicit = browser.clip_at(track, measure);
+            let repeat = explicit
+                .is_none()
+                .then(|| browser.previous_measure_repeat_clip(track, measure))
+                .flatten();
+            let label = explicit
                 .map(|(start, clip)| {
                     if start == measure {
                         browser.cell_label(&clip.wav)
@@ -243,12 +248,23 @@ fn draw_tracks(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {
                         format!("↳ {}/{}", measure - start + 1, clip.span_measures)
                     }
                 })
+                .or_else(|| repeat.map(|_| "↻ prev meas".to_string()))
                 .unwrap_or_else(|| "·".to_string());
+            let clip = explicit.map(|(_, clip)| clip).or(repeat);
+            let style = if clip
+                .is_some_and(|clip| browser.clip_exceeds_time_ratio_limits(clip, target_bpm.bpm))
+            {
+                base_style().fg(Color::Red)
+            } else if repeat.is_some() {
+                base_style().fg(MONOKAI_GRAY)
+            } else {
+                base_style()
+            };
             let style =
                 if focused && track == browser.track_cursor && measure == browser.measure_cursor {
-                    cursor_highlight_style(base_style())
+                    cursor_highlight_style(style)
                 } else {
-                    base_style()
+                    style
                 };
             spans.push(Span::styled(fit(&label, CELL_WIDTH), style));
         }

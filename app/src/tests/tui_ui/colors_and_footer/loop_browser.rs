@@ -36,6 +36,39 @@ fn browser_at_bpm(bpm: f64) -> LoopBrowser {
     )
 }
 
+fn browser_with_repeat_and_rejected_cells() -> LoopBrowser {
+    let wav = |relative: &str, bpm: f64, measures: usize| LoopWavIndex {
+        relative: relative.to_string(),
+        analysis: LoopWavAnalysis {
+            duration_seconds: 2.0 * measures as f64,
+            bpm,
+            beats: 4 * measures as u32,
+            meter_numerator: 4,
+            meter_denominator: 4,
+            measures,
+            source: LoopAnalysisSource::Acid,
+        },
+    };
+    LoopBrowser::from_index(
+        LoopIndex {
+            version: 2,
+            roots: vec![LoopRootIndex {
+                path: "/loops".to_string(),
+                wav_files: vec![
+                    wav("A-good.wav", 100.0, 1),
+                    wav("B-bad-long.wav", 200.0, 2),
+                    wav("C-bad-short.wav", 200.0, 1),
+                ],
+            }],
+        },
+        &crate::config::default_loop_categories(),
+        LoopBrowserMetadata::default(),
+        None,
+        true,
+        None,
+    )
+}
+
 #[test]
 fn error_screen_shows_scan_guidance() {
     let mut app = TuiApp::new_for_test(test_config());
@@ -118,6 +151,61 @@ fn track_title_shows_the_automatically_adjusted_bpm() {
     let screen = render_lines(&mut app, 180, 14).join("\n");
 
     assert!(screen.contains("[TRACK LIST BPM128 AUTO-STRETCH]"));
+}
+
+#[test]
+fn trailing_repeats_are_gray_and_bpm_rejected_cells_are_red() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::LoopBrowser;
+    app.loop_browser = browser_with_repeat_and_rejected_cells();
+
+    app.loop_browser.handle_key(KeyCode::Char('j'));
+    app.loop_browser
+        .handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
+    app.loop_browser.handle_key(KeyCode::Char('j'));
+    app.loop_browser
+        .handle_key_event(KeyEvent::new(KeyCode::Char('D'), KeyModifiers::SHIFT));
+    app.loop_browser.handle_key(KeyCode::Char('j'));
+    app.loop_browser
+        .handle_key_event(KeyEvent::new(KeyCode::Char('E'), KeyModifiers::SHIFT));
+    app.loop_browser.handle_key(KeyCode::Tab);
+    app.loop_browser.handle_key(KeyCode::Char('c'));
+    app.loop_browser.handle_key(KeyCode::Char('j'));
+    app.loop_browser.handle_key(KeyCode::Char('d'));
+    app.loop_browser.handle_key(KeyCode::Char('j'));
+    app.loop_browser.handle_key(KeyCode::Char('e'));
+    app.loop_browser.handle_key(KeyCode::Char('l'));
+
+    let buffer = render_buffer(&mut app, 180, 16);
+    let symbols = |symbol: &str| {
+        (0..buffer.area.height)
+            .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
+            .filter(|position| buffer.cell(*position).unwrap().symbol() == symbol)
+            .collect::<Vec<_>>()
+    };
+    let repeats = symbols("↻");
+    let continuations = symbols("↳");
+
+    assert_eq!(repeats.len(), 2);
+    assert_eq!(continuations.len(), 1);
+    assert_eq!(buffer.cell(repeats[0]).unwrap().fg, MONOKAI_GRAY);
+    assert_eq!(buffer.cell(repeats[1]).unwrap().fg, Color::Red);
+    assert_eq!(
+        buffer.cell(repeats[1]).unwrap().bg,
+        cursor_highlight_bg(Color::Red)
+    );
+    let (continuation_x, continuation_y) = continuations[0];
+    assert_eq!(
+        buffer.cell((continuation_x, continuation_y)).unwrap().fg,
+        Color::Red
+    );
+    assert_eq!(
+        buffer
+            .cell((continuation_x - 14, continuation_y))
+            .unwrap()
+            .fg,
+        Color::Red
+    );
 }
 
 #[test]

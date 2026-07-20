@@ -109,11 +109,18 @@ fn track_random_uses_deepest_favorite_for_a_continuation_cell() {
         .clone();
     browser.track_grid[0] = vec![
         Some(LoopTrackClip {
-            wav: bass_wav,
+            wav: bass_wav.clone(),
             span_measures: 2,
         }),
         None,
     ];
+    browser.track_grid.push(vec![
+        Some(LoopTrackClip {
+            wav: bass_wav,
+            span_measures: 2,
+        }),
+        None,
+    ]);
     browser.focus = LoopBrowserPane::Tracks;
     browser.measure_cursor = 1;
 
@@ -123,6 +130,9 @@ fn track_random_uses_deepest_favorite_for_a_continuation_cell() {
         action,
         LoopBrowserAction::GridReplaced { start_measure: 0, grid }
             if grid[0][0].as_ref().is_some_and(|clip| clip.path.ends_with("Pack/Bass/B.wav"))
+                && grid[0][1]
+                    .as_ref()
+                    .is_some_and(|clip| clip.path.ends_with("Pack/Bass/B.wav"))
     ));
     assert!(browser.track_grid[0][0].as_ref().is_some_and(|clip| clip
         .wav

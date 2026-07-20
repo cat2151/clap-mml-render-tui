@@ -67,6 +67,29 @@ fn target_bpm_tracks_all_placed_wavs_and_returns_to_120_after_removal() {
 }
 
 #[test]
+fn stretch_limit_display_check_uses_the_selected_target_bpm() {
+    let mut browser = browser_with_direct_wavs(2);
+    browser.wav_analyses[0].1.bpm = 100.0;
+    browser.wav_analyses[1].1.bpm = 200.0;
+    let compatible = LoopTrackClip {
+        wav: browser.wav_analyses[0].0.clone(),
+        span_measures: 1,
+    };
+    let rejected = LoopTrackClip {
+        wav: browser.wav_analyses[1].0.clone(),
+        span_measures: 1,
+    };
+    browser.track_grid = vec![vec![Some(compatible.clone()), Some(rejected.clone())]];
+
+    let target = browser.target_bpm();
+
+    assert_eq!(target.bpm, 120.0);
+    assert!(!target.has_common_range);
+    assert!(!browser.clip_exceeds_time_ratio_limits(&compatible, target.bpm));
+    assert!(browser.clip_exceeds_time_ratio_limits(&rejected, target.bpm));
+}
+
+#[test]
 fn track_pane_toggles_one_wav_per_cell_and_auto_extends_right_and_down() {
     let mut browser = browser();
     select_bass_wav(&mut browser);
@@ -136,9 +159,85 @@ fn every_pad_key_replacement_uses_the_clip_start_without_audition() {
             } if grid[0][0]
                 .as_ref()
                 .is_some_and(|clip| clip.path.ends_with("short.wav"))
-                && grid[0][1].is_none()
+                && grid[0].len() == 1
         ));
     }
+}
+
+#[test]
+fn playback_grid_uses_content_end_and_repeats_one_measure_clips_across_gaps() {
+    let mut browser = browser_with_spanning_wavs();
+    let long = browser.wav_analyses[0].0.clone();
+    let short = browser.wav_analyses[1].0.clone();
+    browser.track_grid = vec![
+        vec![
+            Some(LoopTrackClip {
+                wav: short.clone(),
+                span_measures: 1,
+            }),
+            None,
+            None,
+            None,
+        ],
+        vec![
+            Some(LoopTrackClip {
+                wav: long,
+                span_measures: 4,
+            }),
+            None,
+            None,
+            None,
+        ],
+        vec![
+            Some(LoopTrackClip {
+                wav: short.clone(),
+                span_measures: 1,
+            }),
+            None,
+            Some(LoopTrackClip {
+                wav: short,
+                span_measures: 1,
+            }),
+            None,
+        ],
+    ];
+
+    let grid = browser.playback_grid();
+
+    assert!(grid[0].iter().all(Option::is_some));
+    assert!(grid[1][0].is_some());
+    assert!(grid[1][1..].iter().all(Option::is_none));
+    assert!(grid[2].iter().all(Option::is_some));
+    assert!(grid[2][3].is_some());
+    assert!(browser.previous_measure_repeat_clip(0, 1).is_some());
+    assert!(browser.previous_measure_repeat_clip(1, 2).is_none());
+    assert!(browser.previous_measure_repeat_clip(2, 1).is_some());
+    assert!(browser.previous_measure_repeat_clip(2, 3).is_some());
+}
+
+#[test]
+fn allocated_empty_columns_do_not_extend_playback_or_normal_display() {
+    let mut browser = browser_with_direct_wavs(1);
+    let wav = browser.wav_analyses[0].0.clone();
+    browser.track_grid[0] = vec![
+        Some(LoopTrackClip {
+            wav,
+            span_measures: 1,
+        }),
+        None,
+        None,
+        None,
+        None,
+        None,
+    ];
+
+    assert_eq!(browser.playback_grid()[0].len(), 1);
+    assert_eq!(browser.displayed_measure_count(), 1);
+    assert!(browser.previous_measure_repeat_clip(0, 1).is_none());
+
+    browser.measure_cursor = 5;
+    assert_eq!(browser.displayed_measure_count(), 6);
+    assert!(browser.previous_measure_repeat_clip(0, 5).is_none());
 }
 
 #[test]

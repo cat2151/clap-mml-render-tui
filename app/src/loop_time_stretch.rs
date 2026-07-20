@@ -153,6 +153,14 @@ pub(crate) fn time_ratio(source_bpm: f64, target_bpm: f64) -> Result<f64> {
     Ok(ratio)
 }
 
+pub(crate) fn exceeds_time_ratio_limits(source_bpm: f64, target_bpm: f64) -> bool {
+    if !source_bpm.is_finite() || source_bpm <= 0.0 || !target_bpm.is_finite() || target_bpm <= 0.0
+    {
+        return false;
+    }
+    !(MIN_TIME_RATIO..=MAX_TIME_RATIO).contains(&(source_bpm / target_bpm))
+}
+
 pub(crate) fn prepare_path<F>(
     path: &Path,
     source_bpm: f64,
@@ -231,6 +239,16 @@ mod tests {
         let invalid = select_target_bpm([f64::NAN]);
         assert_eq!(invalid.bpm, 120.0);
         assert!(!invalid.has_common_range);
+    }
+
+    #[test]
+    fn time_ratio_limit_check_only_reports_finite_positive_outliers() {
+        assert!(!exceeds_time_ratio_limits(96.0, 120.0));
+        assert!(!exceeds_time_ratio_limits(150.0, 120.0));
+        assert!(exceeds_time_ratio_limits(95.0, 120.0));
+        assert!(exceeds_time_ratio_limits(151.0, 120.0));
+        assert!(!exceeds_time_ratio_limits(f64::NAN, 120.0));
+        assert!(!exceeds_time_ratio_limits(120.0, 0.0));
     }
 
     #[test]
