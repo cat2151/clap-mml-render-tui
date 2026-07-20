@@ -72,6 +72,7 @@ impl LoopBrowser {
                 self.open_category_overlay();
                 LoopBrowserAction::Continue
             }
+            KeyCode::Char('r') if key.modifiers == KeyModifiers::NONE => self.select_random_wav(),
             KeyCode::Char('j') => {
                 let delta = self.navigation_count.take_delta(1);
                 self.move_cursor(delta)
@@ -123,6 +124,7 @@ impl LoopBrowser {
                 self.mixer_overlay_open = true;
                 LoopBrowserAction::Continue
             }
+            KeyCode::Char('r') if key.modifiers == KeyModifiers::NONE => self.select_random_wav(),
             KeyCode::Char('h') => {
                 let count = self.navigation_count.take_delta(1) as usize;
                 self.measure_cursor = self.measure_cursor.saturating_sub(count);

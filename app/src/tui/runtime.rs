@@ -308,13 +308,11 @@ impl<'a> TuiApp<'a> {
                             LoopBrowserAction::Trigger { pad, path } => {
                                 self.trigger_loop_pad(pad, path)
                             }
-                            LoopBrowserAction::GridChanged {
-                                pad,
-                                audition,
+                            LoopBrowserAction::GridReplaced {
+                                start_measure,
                                 grid,
                             } => {
-                                self.trigger_loop_pad(pad, audition);
-                                self.update_loop_grid(grid);
+                                self.restart_loop_grid_at(grid, start_measure);
                             }
                             LoopBrowserAction::GridRefresh(grid) => self.update_loop_grid(grid),
                             LoopBrowserAction::TrackVolumeChanged { track, volume_db } => {

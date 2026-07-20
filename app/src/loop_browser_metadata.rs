@@ -29,6 +29,21 @@ impl LoopDirId {
     pub(crate) fn matches(&self, other: &Self) -> bool {
         self.lookup_key() == other.lookup_key()
     }
+
+    pub(crate) fn contains_wav(&self, wav: &LoopWavId) -> bool {
+        if normalize_path_text(&self.root) != normalize_path_text(&wav.root) {
+            return false;
+        }
+        let parent = Path::new(&normalize_path_text(&wav.relative))
+            .parent()
+            .unwrap_or_else(|| Path::new(""))
+            .to_path_buf();
+        parent.starts_with(PathBuf::from(normalize_path_text(&self.relative)))
+    }
+
+    pub(crate) fn depth(&self) -> usize {
+        Path::new(&self.relative).components().count()
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -126,6 +141,14 @@ impl LoopBrowserMetadata {
             self.favorite_dirs.push(dir.clone());
             true
         }
+    }
+
+    pub(crate) fn deepest_favorite_for_wav(&self, wav: &LoopWavId) -> Option<(usize, &LoopDirId)> {
+        self.favorite_dirs
+            .iter()
+            .enumerate()
+            .filter(|(_, favorite)| favorite.contains_wav(wav))
+            .max_by_key(|(_, favorite)| favorite.depth())
     }
 
     pub(crate) fn category_for<'a>(&'a self, dir: &LoopDirId) -> Option<&'a str> {
@@ -302,7 +325,7 @@ pub(crate) fn validate_wav_id(wav: &LoopWavId) -> Result<()> {
     Ok(())
 }
 
-fn validate_dir_id(dir: &LoopDirId) -> Result<()> {
+pub(crate) fn validate_dir_id(dir: &LoopDirId) -> Result<()> {
     if dir.root.trim().is_empty() {
         anyhow::bail!("loop browser metadataに空のrootがあります");
     }

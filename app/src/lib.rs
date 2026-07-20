@@ -7,6 +7,7 @@ pub(crate) mod generate;
 pub mod history;
 pub mod logging;
 pub(crate) mod loop_browser_metadata;
+pub(crate) mod loop_browser_random;
 pub(crate) mod loop_browser_track_grid;
 pub mod loop_library;
 pub(crate) mod loop_time_stretch;

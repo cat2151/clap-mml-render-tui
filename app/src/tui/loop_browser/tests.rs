@@ -350,3 +350,4 @@ fn favorites_only_shift_a_saves_only_pad_metadata() {
 }
 
 mod grid;
+mod random;

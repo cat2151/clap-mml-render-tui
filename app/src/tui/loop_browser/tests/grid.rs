@@ -52,8 +52,8 @@ fn track_pane_toggles_one_wav_per_cell_and_auto_extends_right_and_down() {
 
     assert!(matches!(
         browser.handle_key(KeyCode::Char('c')),
-        LoopBrowserAction::GridChanged { pad: 'c', audition, grid }
-            if audition.ends_with("a.wav") && grid[0][0].as_ref().is_some_and(|clip| clip.path.ends_with("a.wav"))
+        LoopBrowserAction::GridRefresh(grid)
+            if grid[0][0].as_ref().is_some_and(|clip| clip.path.ends_with("a.wav"))
     ));
     browser.handle_key(KeyCode::Char('l'));
     browser.handle_key(KeyCode::Char('j'));
@@ -66,8 +66,102 @@ fn track_pane_toggles_one_wav_per_cell_and_auto_extends_right_and_down() {
     assert_eq!((browser.track_cursor, browser.measure_cursor), (0, 0));
     assert!(matches!(
         browser.handle_key(KeyCode::Char('c')),
-        LoopBrowserAction::GridChanged { grid, .. } if grid[0][0].is_none()
+        LoopBrowserAction::GridRefresh(grid) if grid[0][0].is_none()
     ));
+}
+
+#[test]
+fn every_pad_key_places_and_removes_without_audition() {
+    for pad in PAD_KEYS {
+        let mut browser = browser_with_direct_wavs(1);
+        let wav = browser.wav_analyses[0].0.clone();
+        browser.metadata.toggle_pad(pad, &wav);
+        browser.focus = LoopBrowserPane::Tracks;
+
+        assert!(matches!(
+            browser.handle_key(KeyCode::Char(pad)),
+            LoopBrowserAction::GridRefresh(grid) if grid[0][0].is_some()
+        ));
+        assert!(matches!(
+            browser.handle_key(KeyCode::Char(pad)),
+            LoopBrowserAction::GridRefresh(grid) if grid[0][0].is_none()
+        ));
+    }
+}
+
+#[test]
+fn every_pad_key_replacement_uses_the_clip_start_without_audition() {
+    for pad in PAD_KEYS {
+        let mut browser = browser_with_spanning_wavs();
+        let original = browser.wav_analyses[0].0.clone();
+        let replacement = browser.wav_analyses[1].0.clone();
+        browser.track_grid[0].resize(2, None);
+        browser.track_grid[0][0] = Some(LoopTrackClip {
+            wav: original,
+            span_measures: 2,
+        });
+        browser.metadata.toggle_pad(pad, &replacement);
+        browser.focus = LoopBrowserPane::Tracks;
+        browser.measure_cursor = 1;
+
+        assert!(matches!(
+            browser.handle_key(KeyCode::Char(pad)),
+            LoopBrowserAction::GridReplaced {
+                start_measure: 0,
+                grid,
+            } if grid[0][0]
+                .as_ref()
+                .is_some_and(|clip| clip.path.ends_with("short.wav"))
+                && grid[0][1].is_none()
+        ));
+    }
+}
+
+#[test]
+fn track_pad_write_failures_do_not_audition_or_change_the_grid() {
+    let mut browser = browser_with_direct_wavs(2);
+    let original = browser.wav_analyses[0].0.clone();
+    let replacement = browser.wav_analyses[1].0.clone();
+    browser.track_grid[0][0] = Some(LoopTrackClip {
+        wav: original.clone(),
+        span_measures: 1,
+    });
+    browser.metadata.toggle_pad('c', &replacement);
+    browser.focus = LoopBrowserPane::Tracks;
+
+    browser.track_grid_writable = false;
+    assert!(matches!(
+        browser.handle_key(KeyCode::Char('c')),
+        LoopBrowserAction::Continue
+    ));
+    assert!(browser.track_grid[0][0]
+        .as_ref()
+        .is_some_and(|clip| clip.wav.matches(&original)));
+
+    browser.track_grid_writable = true;
+    let blocked = std::env::temp_dir().join(format!(
+        "cmrt-loop-pad-blocked-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&blocked).unwrap();
+    browser.track_grid_path = Some(blocked.clone());
+
+    assert!(matches!(
+        browser.handle_key(KeyCode::Char('c')),
+        LoopBrowserAction::Continue
+    ));
+    assert!(browser.track_grid[0][0]
+        .as_ref()
+        .is_some_and(|clip| clip.wav.matches(&original)));
+    assert!(browser
+        .track_grid_error
+        .as_deref()
+        .is_some_and(|error| error.contains("track listを保存できません")));
+    let _ = std::fs::remove_dir_all(blocked);
 }
 
 #[test]
@@ -213,11 +307,11 @@ fn spanning_clip_occupies_continuations_and_overlap_replaces_whole_clip() {
 
     browser.handle_key(KeyCode::Char('l'));
     browser.handle_key(KeyCode::Char('d'));
-    assert!(browser.track_grid[0][0].is_none());
     assert_eq!(
-        browser.track_grid[0][1].as_ref().unwrap().wav.relative,
+        browser.track_grid[0][0].as_ref().unwrap().wav.relative,
         "short.wav"
     );
+    assert!(browser.track_grid[0][1].is_none());
 
     browser.handle_key(KeyCode::Char('h'));
     browser.handle_key(KeyCode::Char('c'));

@@ -78,6 +78,29 @@ fn updated_grid_is_used_when_the_next_measure_is_selected() {
 }
 
 #[test]
+fn restart_measure_is_selected_immediately_instead_of_the_following_measure() {
+    let grid = vec![vec![
+        clip("first.wav", 1, 120.0),
+        clip("replaced.wav", 1, 120.0),
+        clip("following.wav", 1, 120.0),
+    ]];
+
+    assert_eq!(measure_at_or_after(&grid, 1), Some(1));
+    assert_eq!(next_measure(&grid, Some(1)), Some(2));
+}
+
+#[test]
+fn restart_measure_skips_forward_over_an_empty_requested_column() {
+    let grid = vec![vec![
+        clip("first.wav", 1, 120.0),
+        None,
+        clip("next.wav", 1, 120.0),
+    ]];
+
+    assert_eq!(measure_at_or_after(&grid, 1), Some(2));
+}
+
+#[test]
 fn pad_voices_replace_only_the_same_pad() {
     let mut voices = HashMap::from([('c', "first-c"), ('d', "first-d")]);
 

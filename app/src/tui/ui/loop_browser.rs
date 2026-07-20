@@ -41,7 +41,8 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame) {
         .loop_browser
         .metadata_error
         .as_ref()
-        .or(app.loop_browser.track_grid_error.as_ref());
+        .or(app.loop_browser.track_grid_error.as_ref())
+        .or(app.loop_browser.random_decks_error.as_ref());
     let (status, color) = if let Some(error) = persistence_error {
         (error.clone(), Color::Red)
     } else {

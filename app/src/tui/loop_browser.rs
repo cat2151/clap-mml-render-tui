@@ -4,19 +4,17 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use crate::loop_browser_metadata::{
-    category_keys, metadata_path, LoopBrowserMetadata, LoopDirId, LoopWavId,
-};
-use crate::loop_browser_track_grid::{
-    default_track_grid, load_from as load_track_grid, reflow_with_spans, track_grid_path,
-    LoadedTrackGrid, LoopTrackClip, LoopTrackGrid,
-};
+use crate::loop_browser_metadata::{category_keys, LoopBrowserMetadata, LoopDirId, LoopWavId};
+use crate::loop_browser_random::LoopRandomDeckState;
+use crate::loop_browser_track_grid::{default_track_grid, LoopTrackClip, LoopTrackGrid};
 use crate::loop_wav_analysis::LoopWavAnalysis;
 use crate::tui::keyboard::NavigationCount;
 
 mod grid;
 mod input;
 pub(super) mod playback;
+mod random_navigation;
+mod reload;
 mod track_input;
 mod tree;
 
@@ -75,12 +73,15 @@ pub(crate) struct LoopBrowser {
     pub(super) error: Option<String>,
     pub(super) metadata_error: Option<String>,
     pub(super) track_grid_error: Option<String>,
+    pub(super) random_decks_error: Option<String>,
     metadata: LoopBrowserMetadata,
     track_grid: LoopTrackGrid,
     track_volumes_db: Vec<i32>,
     wav_analyses: Vec<(LoopWavId, LoopWavAnalysis)>,
     metadata_path: Option<PathBuf>,
     track_grid_path: Option<PathBuf>,
+    random_decks: LoopRandomDeckState,
+    random_decks_path: Option<PathBuf>,
     metadata_writable: bool,
     track_grid_writable: bool,
     pub(super) favorites_only: bool,
@@ -116,9 +117,8 @@ pub(super) enum LoopBrowserAction {
         pad: char,
         path: PathBuf,
     },
-    GridChanged {
-        pad: char,
-        audition: PathBuf,
+    GridReplaced {
+        start_measure: usize,
         grid: LoopPlaybackGrid,
     },
     GridRefresh(LoopPlaybackGrid),
@@ -141,12 +141,15 @@ impl Default for LoopBrowser {
             error: None,
             metadata_error: None,
             track_grid_error: None,
+            random_decks_error: None,
             metadata: LoopBrowserMetadata::default(),
             track_grid: default_track_grid(),
             track_volumes_db: vec![0],
             wav_analyses: Vec::new(),
             metadata_path: None,
             track_grid_path: None,
+            random_decks: LoopRandomDeckState::default(),
+            random_decks_path: None,
             metadata_writable: true,
             track_grid_writable: true,
             favorites_only: false,
@@ -166,94 +169,6 @@ impl Default for LoopBrowser {
 }
 
 impl LoopBrowser {
-    pub(super) fn reload(&mut self, cfg: &crate::config::Config) {
-        let (metadata, metadata_path, metadata_writable, metadata_error) = match metadata_path() {
-            Ok(path) => match LoopBrowserMetadata::load_from(&path) {
-                Ok(metadata) => (metadata, Some(path), true, None),
-                Err(error) => (
-                    LoopBrowserMetadata::default(),
-                    Some(path),
-                    false,
-                    Some(error.to_string()),
-                ),
-            },
-            Err(error) => (
-                LoopBrowserMetadata::default(),
-                None,
-                false,
-                Some(error.to_string()),
-            ),
-        };
-        let (loaded_grid, track_grid_path, track_grid_writable, mut track_grid_error) =
-            match track_grid_path() {
-                Ok(path) => match load_track_grid(&path) {
-                    Ok(loaded) => (loaded, Some(path), true, None),
-                    Err(error) => (
-                        LoadedTrackGrid {
-                            grid: default_track_grid(),
-                            track_volumes_db: vec![0],
-                            needs_migration: false,
-                        },
-                        Some(path),
-                        false,
-                        Some(error.to_string()),
-                    ),
-                },
-                Err(error) => (
-                    LoadedTrackGrid {
-                        grid: default_track_grid(),
-                        track_volumes_db: vec![0],
-                        needs_migration: false,
-                    },
-                    None,
-                    false,
-                    Some(error.to_string()),
-                ),
-            };
-        let mut browser = match crate::loop_library::load_index(cfg) {
-            Ok(index) => Self::from_index(
-                index,
-                &cfg.loop_categories,
-                metadata,
-                metadata_path,
-                metadata_writable,
-                metadata_error,
-            ),
-            Err(error) => Self {
-                error: Some(format!("{error}\ncmrt scan-loops を実行してください")),
-                category_keys: category_keys(&cfg.loop_categories),
-                metadata,
-                metadata_path,
-                metadata_writable,
-                metadata_error,
-                ..Self::default()
-            },
-        };
-        let (track_grid, reflowed) = reflow_with_spans(&loaded_grid.grid, |wav| {
-            browser
-                .analysis_for_wav(wav)
-                .map(|analysis| analysis.measures)
-        });
-        if track_grid_writable && (loaded_grid.needs_migration || reflowed) {
-            if let Some(path) = track_grid_path.as_ref() {
-                if let Err(error) = crate::loop_browser_track_grid::save_to(
-                    path,
-                    &track_grid,
-                    &loaded_grid.track_volumes_db,
-                ) {
-                    track_grid_error =
-                        Some(format!("track grid migrationを保存できません: {error}"));
-                }
-            }
-        }
-        browser.track_grid = track_grid;
-        browser.track_volumes_db = loaded_grid.track_volumes_db;
-        browser.track_grid_path = track_grid_path;
-        browser.track_grid_writable = track_grid_writable;
-        browser.track_grid_error = track_grid_error;
-        *self = browser;
-    }
-
     pub(in crate::tui) fn from_index(
         index: crate::loop_library::LoopIndex,
         categories: &[String],

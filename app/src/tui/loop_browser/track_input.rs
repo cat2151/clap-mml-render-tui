@@ -41,17 +41,25 @@ impl LoopBrowser {
         let Some(wav) = self.metadata.pad(pad).cloned() else {
             return LoopBrowserAction::Continue;
         };
-        let audition = wav.path();
         if !self.track_grid_writable {
-            return LoopBrowserAction::Trigger {
-                pad,
-                path: audition,
-            };
+            return LoopBrowserAction::Continue;
         }
-        let previous = self.track_grid.clone();
         let occupied = self
             .clip_at(self.track_cursor, self.measure_cursor)
             .map(|(start, clip)| (start, clip.wav.clone()));
+        if occupied
+            .as_ref()
+            .is_some_and(|(_, current)| !current.matches(&wav))
+        {
+            return match self.replace_current_clip(wav) {
+                Some(start_measure) => LoopBrowserAction::GridReplaced {
+                    start_measure,
+                    grid: self.playback_grid(),
+                },
+                None => LoopBrowserAction::Continue,
+            };
+        }
+        let previous = self.track_grid.clone();
         if let Some((start, _)) = occupied.filter(|(_, current)| current.matches(&wav)) {
             self.track_grid[self.track_cursor][start] = None;
         } else {
@@ -63,10 +71,7 @@ impl LoopBrowser {
             let Some(end) = self.measure_cursor.checked_add(span_measures) else {
                 self.track_grid_error =
                     Some("track listが大きすぎるためclipを配置できません".to_string());
-                return LoopBrowserAction::Trigger {
-                    pad,
-                    path: audition,
-                };
+                return LoopBrowserAction::Continue;
             };
             if end > self.track_grid[0].len() {
                 for track in &mut self.track_grid {
@@ -90,17 +95,53 @@ impl LoopBrowser {
         if let Err(error) = self.save_track_grid() {
             self.track_grid = previous;
             self.track_grid_error = Some(format!("track listを保存できません: {error}"));
-            return LoopBrowserAction::Trigger {
-                pad,
-                path: audition,
-            };
+            return LoopBrowserAction::Continue;
         }
         self.track_grid_error = None;
-        LoopBrowserAction::GridChanged {
-            pad,
-            audition,
-            grid: self.playback_grid(),
+        LoopBrowserAction::GridRefresh(self.playback_grid())
+    }
+
+    pub(super) fn replace_current_clip(&mut self, wav: LoopWavId) -> Option<usize> {
+        if !self.track_grid_writable {
+            return None;
         }
+        let start = self
+            .clip_at(self.track_cursor, self.measure_cursor)
+            .map(|(start, _)| start)?;
+        let span_measures = self
+            .analysis_for_wav(&wav)
+            .map(|analysis| analysis.measures)
+            .unwrap_or(1)
+            .max(1);
+        let Some(end) = start.checked_add(span_measures) else {
+            self.track_grid_error =
+                Some("track listが大きすぎるためclipを差し替えできません".to_string());
+            return None;
+        };
+        let previous = self.track_grid.clone();
+        if end > self.track_grid[0].len() {
+            for track in &mut self.track_grid {
+                track.resize(end, None);
+            }
+        }
+        for measure in 0..self.track_grid[self.track_cursor].len() {
+            let overlaps = self.track_grid[self.track_cursor][measure]
+                .as_ref()
+                .is_some_and(|clip| {
+                    measure < end && measure.saturating_add(clip.span_measures) > start
+                });
+            if overlaps {
+                self.track_grid[self.track_cursor][measure] = None;
+            }
+        }
+        self.track_grid[self.track_cursor][start] = Some(LoopTrackClip { wav, span_measures });
+        if let Err(error) = self.save_track_grid() {
+            self.track_grid = previous;
+            self.track_grid_error = Some(format!("track listを保存できません: {error}"));
+            return None;
+        }
+        self.track_grid_error = None;
+        Some(start)
     }
 
     pub(super) fn move_track_cursor_right(&mut self, count: usize) {

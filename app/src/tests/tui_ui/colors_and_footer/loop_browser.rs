@@ -42,6 +42,7 @@ fn error_screen_shows_scan_guidance() {
     assert!(screen.contains("[LOOP TREE] WAV loops"));
     assert!(screen.contains("cmrt scan-loops"));
     assert!(screen.contains("loop browser"));
+    assert!(screen.replace(' ', "").contains("r:ランダムWAV"));
 }
 
 #[test]
@@ -93,6 +94,7 @@ fn draws_wav_pads_track_grid_and_pane_specific_footer() {
     assert!(screen.contains("↳ 2/2"));
     assert!(screen.contains("Tab:loop tree"));
     assert!(screen.contains("m:mix level"));
+    assert!(screen.replace(' ', "").contains("r:ランダムWAV"));
     assert!(screen.contains("1-9:hjkl prefix"));
 }
 
