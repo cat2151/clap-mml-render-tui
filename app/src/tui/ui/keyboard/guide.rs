@@ -1,8 +1,7 @@
 use ratatui::{
-    layout::{Alignment, Rect},
+    layout::Rect,
     style::Modifier,
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
 
@@ -68,26 +67,5 @@ pub(super) fn draw_note_guide_overlay(
     if presentation != KeyboardNoteGuidePresentation::Overlay {
         return;
     }
-
-    let width = screen_area.width.saturating_sub(2).min(72);
-    let height = 5.min(screen_area.height);
-    let area = crate::ui_utils::centered_rect_with_size(width, height, screen_area);
-    f.render_widget(Clear, area);
-    f.render_widget(
-        Paragraph::new(Line::from(Span::styled(
-            KEYBOARD_NOTE_GUIDE_MESSAGE,
-            base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD),
-        )))
-        .alignment(Alignment::Center)
-        .wrap(Wrap { trim: true })
-        .style(base_style())
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" 音出し確認 ")
-                .style(base_style())
-                .border_style(base_style().fg(MONOKAI_CYAN)),
-        ),
-        area,
-    );
+    crate::ui_utils::draw_sound_check_guide_overlay(f, screen_area, KEYBOARD_NOTE_GUIDE_MESSAGE);
 }

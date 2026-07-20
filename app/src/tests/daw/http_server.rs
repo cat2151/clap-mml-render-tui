@@ -33,6 +33,7 @@ fn build_test_app(cfg: Config) -> DawApp {
         cursor_measure: 1,
         mode: DawMode::Normal,
         help_origin: DawMode::Normal,
+        sound_check_guide: crate::sound_check_guide::SoundCheckGuide::new(None),
         textarea: TextArea::default(),
         cfg: Arc::new(cfg),
         entry_ptr: 0,

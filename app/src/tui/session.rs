@@ -22,6 +22,7 @@ struct LoadedSessionState {
     is_daw_mode: bool,
     keyboard: Option<crate::history::KeyboardSessionState>,
     keyboard_note_guide_overlay_date: Option<String>,
+    notepad_sound_check_guide_overlay_date: Option<String>,
 }
 
 /// 復元したセッションのカーソルを現在の行数に収まる範囲へ丸める。
@@ -41,6 +42,7 @@ fn load_initial_session_state() -> LoadedSessionState {
         is_daw_mode,
         keyboard,
         keyboard_note_guide_overlay_date,
+        notepad_sound_check_guide_overlay_date,
     } = crate::history::load_session_state();
     let initial_cursor = clamp_session_cursor(cursor, lines.len());
     let mut list_state = ListState::default();
@@ -52,6 +54,7 @@ fn load_initial_session_state() -> LoadedSessionState {
         is_daw_mode,
         keyboard,
         keyboard_note_guide_overlay_date,
+        notepad_sound_check_guide_overlay_date,
     }
 }
 
@@ -84,6 +87,7 @@ impl<'a> TuiApp<'a> {
             is_daw_mode,
             keyboard,
             keyboard_note_guide_overlay_date,
+            notepad_sound_check_guide_overlay_date,
         } = load_initial_session_state();
         let entry_ptr = entry
             .map(|entry| entry as *const PluginEntry as usize)
@@ -141,6 +145,9 @@ impl<'a> TuiApp<'a> {
             keyboard_mml_input: super::keyboard::KeyboardMmlInput::default(),
             keyboard_note_guide: super::keyboard::KeyboardNoteGuide::new(
                 keyboard_note_guide_overlay_date,
+            ),
+            notepad_sound_check_guide: crate::sound_check_guide::SoundCheckGuide::new(
+                notepad_sound_check_guide_overlay_date,
             ),
             voicing_cache: crate::history::load_voicing_cache(),
             voicing_layers,
@@ -212,6 +219,10 @@ impl<'a> TuiApp<'a> {
                 .keyboard_note_guide
                 .last_overlay_date()
                 .map(str::to_owned),
+            notepad_sound_check_guide_overlay_date: self
+                .notepad_sound_check_guide
+                .last_overlay_date()
+                .map(str::to_owned),
         });
     }
 
@@ -219,5 +230,22 @@ impl<'a> TuiApp<'a> {
         if let Some(local_date) = self.keyboard_note_guide.last_overlay_date() {
             let _ = crate::history::save_keyboard_note_guide_overlay_date(local_date);
         }
+    }
+
+    pub(super) fn pump_notepad_sound_check_guide(&mut self) {
+        let first_overlay_today = self.notepad_sound_check_guide.tick(
+            std::time::Instant::now(),
+            self.mode == Mode::Normal,
+            &crate::sound_check_guide::local_date_string(),
+        );
+        if first_overlay_today {
+            if let Some(local_date) = self.notepad_sound_check_guide.last_overlay_date() {
+                let _ = crate::history::save_notepad_sound_check_guide_overlay_date(local_date);
+            }
+        }
+    }
+
+    pub(super) fn reset_notepad_sound_check_guide(&mut self) {
+        self.notepad_sound_check_guide.reset_for_screen();
     }
 }

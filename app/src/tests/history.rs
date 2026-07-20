@@ -82,6 +82,7 @@ fn session_state_serialize_deserialize() {
         is_daw_mode: false,
         keyboard: None,
         keyboard_note_guide_overlay_date: Some("2026-07-20".to_string()),
+        notepad_sound_check_guide_overlay_date: Some("2026-07-19".to_string()),
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
@@ -91,6 +92,10 @@ fn session_state_serialize_deserialize() {
     assert_eq!(
         loaded.keyboard_note_guide_overlay_date.as_deref(),
         Some("2026-07-20")
+    );
+    assert_eq!(
+        loaded.notepad_sound_check_guide_overlay_date.as_deref(),
+        Some("2026-07-19")
     );
 }
 
@@ -102,6 +107,7 @@ fn session_state_serialize_deserialize_zero() {
         is_daw_mode: false,
         keyboard: None,
         keyboard_note_guide_overlay_date: None,
+        notepad_sound_check_guide_overlay_date: None,
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
@@ -118,6 +124,7 @@ fn session_state_serialize_deserialize_is_daw_mode_true() {
         is_daw_mode: true,
         keyboard: None,
         keyboard_note_guide_overlay_date: None,
+        notepad_sound_check_guide_overlay_date: None,
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
@@ -186,6 +193,7 @@ fn save_and_load_session_state_roundtrip() {
         is_daw_mode: false,
         keyboard: None,
         keyboard_note_guide_overlay_date: None,
+        notepad_sound_check_guide_overlay_date: None,
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     std::fs::write(&tmp_path, &json).unwrap();
@@ -262,6 +270,7 @@ fn save_and_load_session_state_roundtrip_daw_mode() {
         is_daw_mode: true,
         keyboard: None,
         keyboard_note_guide_overlay_date: None,
+        notepad_sound_check_guide_overlay_date: None,
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     std::fs::write(&tmp_path, &json).unwrap();

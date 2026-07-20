@@ -64,6 +64,9 @@ pub struct SessionState {
     /// keyboard の音出し確認 overlay を最後に表示したローカル日付（YYYY-MM-DD）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keyboard_note_guide_overlay_date: Option<String>,
+    /// notepad の音出し確認 overlay を最後に表示したローカル日付（YYYY-MM-DD）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notepad_sound_check_guide_overlay_date: Option<String>,
 }
 
 impl Default for SessionState {
@@ -74,6 +77,7 @@ impl Default for SessionState {
             is_daw_mode: false,
             keyboard: None,
             keyboard_note_guide_overlay_date: None,
+            notepad_sound_check_guide_overlay_date: None,
         }
     }
 }
@@ -100,6 +104,13 @@ pub fn save_session_state(state: &SessionState) -> Result<()> {
 pub(crate) fn save_keyboard_note_guide_overlay_date(local_date: &str) -> Result<()> {
     let mut state = load_session_state();
     state.keyboard_note_guide_overlay_date = Some(local_date.to_owned());
+    save_session_state(&state)
+}
+
+/// notepad の音出し確認 overlay の表示日だけを即時保存する。
+pub(crate) fn save_notepad_sound_check_guide_overlay_date(local_date: &str) -> Result<()> {
+    let mut state = load_session_state();
+    state.notepad_sound_check_guide_overlay_date = Some(local_date.to_owned());
     save_session_state(&state)
 }
 

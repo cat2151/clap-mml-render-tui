@@ -26,6 +26,7 @@ impl TuiApp<'static> {
             keyboard_state: KeyboardState::default(),
             keyboard_mml_input: KeyboardMmlInput::default(),
             keyboard_note_guide: KeyboardNoteGuide::new(None),
+            notepad_sound_check_guide: crate::sound_check_guide::SoundCheckGuide::new(None),
             voicing_cache: crate::history::VoicingCache::default(),
             voicing_layers: crate::voicing_sources::VoicingLayers::default(),
             voicing_source_refresh: crate::voicing_sources::VoicingSourceRefresh::disabled(),

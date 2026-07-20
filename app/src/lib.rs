@@ -11,6 +11,7 @@ pub(crate) mod patches;
 pub(crate) mod random;
 pub(crate) mod realtime_play;
 pub mod server;
+pub(crate) mod sound_check_guide;
 #[cfg(test)]
 pub(crate) mod test_utils;
 pub(crate) mod text_input;

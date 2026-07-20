@@ -1,9 +1,14 @@
 //! UI ユーティリティ（TUI / DAW 共通）
 
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
-    text::Line,
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
+    Frame,
 };
+
+use crate::ui_theme::{MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_YELLOW};
 
 const BLOCK_BORDER_SIZE: usize = 2;
 
@@ -57,6 +62,31 @@ pub(crate) fn centered_text_block_rect(area: Rect, title: &str, lines: &[Line<'_
     let clamped_height = raw_height.min(area.height as usize);
 
     centered_rect_with_size(clamped_width as u16, clamped_height as u16, area)
+}
+
+pub(crate) fn draw_sound_check_guide_overlay(f: &mut Frame<'_>, area: Rect, message: &str) {
+    let base_style = Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG);
+    let width = area.width.saturating_sub(2).min(72);
+    let height = 5.min(area.height);
+    let overlay_area = centered_rect_with_size(width, height, area);
+    f.render_widget(Clear, overlay_area);
+    f.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            message.to_owned(),
+            base_style.fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD),
+        )))
+        .alignment(Alignment::Center)
+        .wrap(Wrap { trim: true })
+        .style(base_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" 音出し確認 ")
+                .style(base_style)
+                .border_style(base_style.fg(MONOKAI_CYAN)),
+        ),
+        overlay_area,
+    );
 }
 
 /// 現在位置から `j` / `k` / `PageDown` / `PageUp` が次に押されると仮定し、

@@ -166,6 +166,9 @@ impl DawApp {
         self.sync_cache_states();
         *self.play_track_gains.lock().unwrap() = self.playback_track_gains();
         let daw_state = crate::history::load_daw_session_state();
+        self.sound_check_guide = crate::sound_check_guide::SoundCheckGuide::new(
+            daw_state.daw_sound_check_guide_overlay_date.clone(),
+        );
         self.cursor_track = daw_state.cursor_track.min(self.tracks - 1);
         self.cursor_measure = daw_state.cursor_measure.min(self.measures);
         self.restore_cache_from_history(&daw_state);
@@ -195,6 +198,10 @@ impl DawApp {
             cursor_track: self.cursor_track,
             cursor_measure: self.cursor_measure,
             cached_measures: self.cached_measures_for_history(),
+            daw_sound_check_guide_overlay_date: self
+                .sound_check_guide
+                .last_overlay_date()
+                .map(str::to_owned),
         });
     }
 }

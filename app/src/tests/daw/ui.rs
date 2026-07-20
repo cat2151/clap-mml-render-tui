@@ -31,6 +31,7 @@ fn build_test_app() -> DawApp {
         cursor_measure: 0,
         mode: DawMode::Normal,
         help_origin: DawMode::Normal,
+        sound_check_guide: crate::sound_check_guide::SoundCheckGuide::new(None),
         textarea: TextArea::default(),
         cfg: Arc::new(Config {
             plugin_path: String::new(),
@@ -144,3 +145,5 @@ mod draw_tests;
 mod helpers;
 #[path = "ui/overlay_tests.rs"]
 mod overlay_tests;
+#[path = "ui/sound_check_guide.rs"]
+mod sound_check_guide;

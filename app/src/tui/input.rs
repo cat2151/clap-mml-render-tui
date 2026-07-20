@@ -44,6 +44,11 @@ impl<'a> TuiApp<'a> {
         &mut self,
         key_event: crossterm::event::KeyEvent,
     ) -> NormalAction {
+        if key_event.modifiers == KeyModifiers::NONE
+            && matches!(key_event.code, KeyCode::Char('j' | 'k'))
+        {
+            self.notepad_sound_check_guide.complete();
+        }
         if key_event.modifiers.contains(KeyModifiers::SHIFT) && key_event.code == KeyCode::Char('H')
         {
             self.normal_pending_delete = false;

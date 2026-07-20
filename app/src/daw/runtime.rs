@@ -72,6 +72,7 @@ impl DawApp {
                 )?;
                 uses_textarea_cursor = next_uses_textarea_cursor;
             }
+            self.pump_sound_check_guide();
             terminal.draw(|f| self.draw(f))?;
 
             if event::poll(std::time::Duration::from_millis(50))? {

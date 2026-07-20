@@ -198,6 +198,7 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
         cursor_measure: 0,
         mode: DawMode::Normal,
         help_origin: DawMode::Normal,
+        sound_check_guide: crate::sound_check_guide::SoundCheckGuide::new(None),
         textarea: crate::text_input::new_single_line_textarea(""),
         cfg,
         entry_ptr,

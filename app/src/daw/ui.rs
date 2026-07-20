@@ -17,6 +17,7 @@ use ratatui::{
 use status::daw_mode_title;
 
 use super::{AbRepeatState, CacheState, DawApp, DawMode};
+use crate::sound_check_guide::SoundCheckGuidePresentation;
 
 /// Pending インジケータのアニメーション 1 フレームの長さ（ミリ秒）
 const ANIM_FRAME_MS: u128 = 250;
@@ -169,6 +170,16 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
         history::draw_history(f, app, inner);
     } else if app.mode == DawMode::PatchSelect {
         patch_select::draw_patch_select(f, app, inner);
+    }
+
+    if app.mode == DawMode::Normal
+        && app.sound_check_guide.presentation() == SoundCheckGuidePresentation::Overlay
+    {
+        crate::ui_utils::draw_sound_check_guide_overlay(
+            f,
+            area,
+            super::DAW_SOUND_CHECK_GUIDE_MESSAGE,
+        );
     }
 }
 

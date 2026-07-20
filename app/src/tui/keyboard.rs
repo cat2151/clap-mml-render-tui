@@ -9,6 +9,7 @@ pub(in crate::tui) mod guide;
 mod mml_input;
 mod navigation;
 mod numeric_input;
+mod screen_runtime;
 mod sender;
 mod state;
 
@@ -301,6 +302,7 @@ impl<'a> TuiApp<'a> {
                     self.finish_keyboard();
                     self.persist_keyboard_on_exit = false;
                     self.mode = Mode::Normal;
+                    self.reset_notepad_sound_check_guide();
                     return KeyboardAction::ReturnToNotepad;
                 }
                 KeyCode::Char('w') => {
@@ -335,7 +337,7 @@ impl<'a> TuiApp<'a> {
         if let (Some(messages), Some(sender)) = (messages, &self.keyboard_midi_sender) {
             sender.send(messages, self.keyboard_state.patch());
             if key.kind == KeyEventKind::Press {
-                self.keyboard_note_guide.complete_note_check();
+                self.keyboard_note_guide.complete();
             }
         }
         KeyboardAction::Continue
@@ -382,29 +384,6 @@ impl<'a> TuiApp<'a> {
             _ => self.keyboard_mml_input.input(key),
         }
         KeyboardAction::Continue
-    }
-
-    pub(super) fn pump_keyboard_periodic(&mut self) {
-        self.sync_keyboard_voicing_detection();
-        let ready = self.keyboard_connection_status().phase.accepts_notes();
-        let now = Instant::now();
-        let first_overlay_today =
-            self.keyboard_note_guide
-                .tick(now, ready, &guide::local_date_string());
-        if first_overlay_today {
-            self.save_keyboard_note_guide_overlay_date();
-        }
-        if !ready {
-            return;
-        }
-        // patch切替後の現在値再送(refresh) → 周期送信、の順で1回のsendにまとめる
-        let mut messages = self.keyboard_state.take_pending_refresh_messages(now);
-        messages.extend(self.keyboard_state.poll_periodic(now));
-        if !messages.is_empty() {
-            if let Some(sender) = &self.keyboard_midi_sender {
-                sender.send(messages, self.keyboard_state.patch());
-            }
-        }
     }
 
     pub(super) fn finish_keyboard(&mut self) {

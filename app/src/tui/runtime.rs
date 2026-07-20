@@ -93,6 +93,7 @@ impl<'a> TuiApp<'a> {
             match daw.run_with_terminal(&mut terminal, self.cfg.autoplay_on_startup)? {
                 crate::daw::DawExitReason::ReturnToTui => {
                     self.is_daw_mode = false;
+                    self.reset_notepad_sound_check_guide();
                 }
                 crate::daw::DawExitReason::LaunchKeyboard { patch } => self.start_keyboard(patch),
                 crate::daw::DawExitReason::QuitApp => {
@@ -126,6 +127,7 @@ impl<'a> TuiApp<'a> {
                 match daw.run_with_terminal(&mut terminal, false)? {
                     crate::daw::DawExitReason::ReturnToTui => {
                         self.is_daw_mode = false;
+                        self.reset_notepad_sound_check_guide();
                     }
                     crate::daw::DawExitReason::LaunchKeyboard { patch } => {
                         self.start_keyboard(patch)
@@ -159,6 +161,7 @@ impl<'a> TuiApp<'a> {
             if self.mode == Mode::Keyboard {
                 self.pump_keyboard_periodic();
             }
+            self.pump_notepad_sound_check_guide();
             terminal.draw(|f| self.draw(f))?;
             if !self.startup_normal_cache_primed && self.mode == Mode::Normal {
                 *self.known_disk_cache_hashes.lock().unwrap() =
@@ -195,6 +198,7 @@ impl<'a> TuiApp<'a> {
                                     crate::daw::DawExitReason::ReturnToTui => {
                                         self.mode = Mode::Normal;
                                         self.is_daw_mode = false;
+                                        self.reset_notepad_sound_check_guide();
                                     }
                                     crate::daw::DawExitReason::LaunchKeyboard { patch } => {
                                         self.start_keyboard(patch);
@@ -250,6 +254,7 @@ impl<'a> TuiApp<'a> {
                                     crate::daw::DawExitReason::ReturnToTui => {
                                         self.mode = Mode::Normal;
                                         self.is_daw_mode = false;
+                                        self.reset_notepad_sound_check_guide();
                                     }
                                     crate::daw::DawExitReason::LaunchKeyboard { patch } => {
                                         self.start_keyboard(patch);

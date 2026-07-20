@@ -14,7 +14,7 @@ mod paths;
 mod session_state;
 mod voicing_cache;
 
-pub(crate) use daw::daw_cache_mml_hash;
+pub(crate) use daw::{daw_cache_mml_hash, save_daw_sound_check_guide_overlay_date};
 pub use daw::{load_daw_session_state, save_daw_session_state, DawCachedMeasure, DawSessionState};
 pub use patch_phrase_store::{
     load_patch_phrase_store, save_patch_phrase_store, PatchPhraseState, PatchPhraseStore,
@@ -25,9 +25,11 @@ pub(crate) use patch_phrase_store::{
 };
 pub(crate) use paths::daw_file_load_path;
 pub use paths::daw_file_path;
-pub(crate) use session_state::save_keyboard_note_guide_overlay_date;
 pub use session_state::{
     load_session_state, save_session_state, KeyboardSessionState, KeyboardTransport, SessionState,
+};
+pub(crate) use session_state::{
+    save_keyboard_note_guide_overlay_date, save_notepad_sound_check_guide_overlay_date,
 };
 pub(crate) use voicing_cache::{load_voicing_cache, save_voicing_cache, VoicingCache};
 

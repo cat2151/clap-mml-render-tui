@@ -69,6 +69,7 @@
 
 mod batch_logging;
 mod cache;
+mod guide;
 mod http_server;
 mod init;
 mod input;
@@ -126,6 +127,8 @@ pub(super) const DEFAULT_TRACK0_MML: &str = r#"{"beat": "4/4"}t120"#;
 /// ≈ 2_000_000 × 4 bytes ≈ 8 MB / cell。
 pub(super) const MAX_CACHED_SAMPLES: usize = 2_000_000;
 const OVERLAY_PREVIEW_CACHE_MAX_ENTRIES: usize = 64;
+pub(in crate::daw) const DAW_SOUND_CHECK_GUIDE_MESSAGE: &str =
+    "h,j,k,lキーを押して音が鳴ることを確認してください";
 
 #[derive(Clone)]
 pub(super) struct CacheJob {
@@ -156,6 +159,7 @@ pub struct DawApp {
 
     pub(super) mode: DawMode,
     pub(super) help_origin: DawMode,
+    pub(super) sound_check_guide: crate::sound_check_guide::SoundCheckGuide,
     pub(super) textarea: TextArea<'static>,
 
     cfg: Arc<Config>,

@@ -49,6 +49,9 @@ use self::render_queue::{TuiRenderJobStatus, TuiRenderQueue};
 pub(in crate::tui) use self::session::PatchLoadState;
 use crate::{config::Config, patches::PatchSortOrder, realtime_play::RealtimePlayServerSupervisor};
 
+pub(in crate::tui) const NOTEPAD_SOUND_CHECK_GUIDE_MESSAGE: &str =
+    "j,kキーを押して音が鳴ることを確認してください";
+
 #[cfg(test)]
 use self::cache::{mark_cache_entry_recent, resolve_cached_samples, try_insert_cache};
 
@@ -141,6 +144,7 @@ pub struct TuiApp<'a> {
     pub(super) keyboard_state: KeyboardState,
     pub(super) keyboard_mml_input: KeyboardMmlInput<'a>,
     pub(super) keyboard_note_guide: KeyboardNoteGuide,
+    pub(super) notepad_sound_check_guide: crate::sound_check_guide::SoundCheckGuide,
     /// patch ごとの mono/poly 判定結果のキャッシュ。起動時に読み込み、
     /// 新しく probe した patch を検出したら書き戻す。
     pub(super) voicing_cache: crate::history::VoicingCache,

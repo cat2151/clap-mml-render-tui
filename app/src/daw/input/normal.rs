@@ -291,6 +291,11 @@ impl DawApp {
         &mut self,
         key_event: KeyEvent,
     ) -> DawNormalAction {
+        if key_event.modifiers == KeyModifiers::NONE
+            && matches!(key_event.code, KeyCode::Char('h' | 'j' | 'k' | 'l'))
+        {
+            self.sound_check_guide.complete();
+        }
         let is_plain_d_key =
             key_event.code == KeyCode::Char('d') && key_event.modifiers == KeyModifiers::NONE;
         if is_plain_d_key {

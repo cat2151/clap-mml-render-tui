@@ -7,7 +7,7 @@ mod status;
 
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::Color,
+    style::{Color, Modifier},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
     Frame,
@@ -16,7 +16,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::render_queue::TuiRenderJobStatus;
 use super::{Mode, PlayState, TuiApp, TuiRenderStatus};
-use crate::ui_theme::{cursor_highlight_style, MONOKAI_CYAN};
+use crate::sound_check_guide::SoundCheckGuidePresentation;
+use crate::ui_theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_YELLOW};
 use status::notepad_mode_title;
 use status::{
     base_style, keybind_text, normal_status_text, render_status_color, render_status_text,
@@ -112,6 +113,15 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
         overlay::draw_patch_phrase(app, f, &status, status_color, mode);
     } else {
         draw_normal(app, f, &play_state, status_color, mode);
+        if mode == Mode::Normal
+            && app.notepad_sound_check_guide.presentation() == SoundCheckGuidePresentation::Overlay
+        {
+            crate::ui_utils::draw_sound_check_guide_overlay(
+                f,
+                f.area(),
+                super::NOTEPAD_SOUND_CHECK_GUIDE_MESSAGE,
+            );
+        }
     }
 }
 
@@ -222,7 +232,20 @@ fn draw_normal(
         Paragraph::new(render_status).style(base_style().fg(render_status_color)),
         chunks[2],
     );
-    f.render_widget(Paragraph::new(keybinds).style(base_style()), chunks[3]);
+    if mode == Mode::Normal
+        && app.notepad_sound_check_guide.presentation() == SoundCheckGuidePresentation::Footer
+    {
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                super::NOTEPAD_SOUND_CHECK_GUIDE_MESSAGE,
+                base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD),
+            ))
+            .style(base_style()),
+            chunks[3],
+        );
+    } else {
+        f.render_widget(Paragraph::new(keybinds).style(base_style()), chunks[3]);
+    }
 }
 
 #[cfg(test)]

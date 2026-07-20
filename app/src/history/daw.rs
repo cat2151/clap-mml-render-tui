@@ -16,6 +16,9 @@ pub struct DawSessionState {
     /// 既存 WAV キャッシュと対応付けるためのレンダリング用 MML ハッシュ。
     #[serde(default)]
     pub cached_measures: Vec<DawCachedMeasure>,
+    /// DAW の音出し確認 overlay を最後に表示したローカル日付（YYYY-MM-DD）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub daw_sound_check_guide_overlay_date: Option<String>,
 }
 
 /// 既存 WAV キャッシュと一致確認するための track / measure ごとの MML ハッシュ。
@@ -105,6 +108,13 @@ pub fn save_daw_session_state(state: &DawSessionState) -> Result<()> {
     let json = serde_json::to_string_pretty(state)?;
     std::fs::write(&path, json)?;
     Ok(())
+}
+
+/// DAW の音出し確認 overlay の表示日だけを即時保存する。
+pub(crate) fn save_daw_sound_check_guide_overlay_date(local_date: &str) -> Result<()> {
+    let mut state = load_daw_session_state();
+    state.daw_sound_check_guide_overlay_date = Some(local_date.to_owned());
+    save_daw_session_state(&state)
 }
 
 /// DAW 専用履歴を history_daw.json から読み込む。

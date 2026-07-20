@@ -1,6 +1,8 @@
+use crate::sound_check_guide::SoundCheckGuidePresentation;
 use ratatui::{
     layout::Rect,
-    style::{Color, Style},
+    style::{Color, Modifier, Style},
+    text::Span,
     widgets::Paragraph,
     Frame,
 };
@@ -113,8 +115,22 @@ pub(super) fn draw_status(
             .style(Style::default().fg(render_color)),
         render_area,
     );
-    f.render_widget(
-        Paragraph::new(footer_text).style(Style::default().fg(MONOKAI_CYAN)),
-        footer_area,
-    );
+    if app.mode == DawMode::Normal
+        && app.sound_check_guide.presentation() == SoundCheckGuidePresentation::Footer
+    {
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                super::super::DAW_SOUND_CHECK_GUIDE_MESSAGE,
+                Style::default()
+                    .fg(MONOKAI_YELLOW)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            footer_area,
+        );
+    } else {
+        f.render_widget(
+            Paragraph::new(footer_text).style(Style::default().fg(MONOKAI_CYAN)),
+            footer_area,
+        );
+    }
 }

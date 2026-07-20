@@ -81,3 +81,5 @@ mod colors_and_footer;
 mod help_screens;
 #[path = "tui_ui/overlay_screens.rs"]
 mod overlay_screens;
+#[path = "tui_ui/sound_check_guide.rs"]
+mod sound_check_guide;
