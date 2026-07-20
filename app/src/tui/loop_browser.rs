@@ -77,6 +77,7 @@ pub(crate) struct LoopBrowser {
     pub(super) track_grid_error: Option<String>,
     metadata: LoopBrowserMetadata,
     track_grid: LoopTrackGrid,
+    track_volumes_db: Vec<i32>,
     wav_analyses: Vec<(LoopWavId, LoopWavAnalysis)>,
     metadata_path: Option<PathBuf>,
     track_grid_path: Option<PathBuf>,
@@ -84,6 +85,8 @@ pub(crate) struct LoopBrowser {
     track_grid_writable: bool,
     pub(super) favorites_only: bool,
     pub(super) category_overlay: Option<LoopDirId>,
+    pub(super) mixer_overlay_open: bool,
+    pub(super) mixer_cursor_track: usize,
     pub(super) category_keys: Vec<(char, String)>,
     pub(super) notice: Option<LoopBrowserNotice>,
     pub(super) focus: LoopBrowserPane,
@@ -119,6 +122,10 @@ pub(super) enum LoopBrowserAction {
         grid: LoopPlaybackGrid,
     },
     GridRefresh(LoopPlaybackGrid),
+    TrackVolumeChanged {
+        track: usize,
+        volume_db: i32,
+    },
     Return,
     Quit,
 }
@@ -136,6 +143,7 @@ impl Default for LoopBrowser {
             track_grid_error: None,
             metadata: LoopBrowserMetadata::default(),
             track_grid: default_track_grid(),
+            track_volumes_db: vec![0],
             wav_analyses: Vec::new(),
             metadata_path: None,
             track_grid_path: None,
@@ -143,6 +151,8 @@ impl Default for LoopBrowser {
             track_grid_writable: true,
             favorites_only: false,
             category_overlay: None,
+            mixer_overlay_open: false,
+            mixer_cursor_track: 0,
             category_keys: Vec::new(),
             notice: None,
             focus: LoopBrowserPane::Tree,
@@ -181,6 +191,7 @@ impl LoopBrowser {
                     Err(error) => (
                         LoadedTrackGrid {
                             grid: default_track_grid(),
+                            track_volumes_db: vec![0],
                             needs_migration: false,
                         },
                         Some(path),
@@ -191,6 +202,7 @@ impl LoopBrowser {
                 Err(error) => (
                     LoadedTrackGrid {
                         grid: default_track_grid(),
+                        track_volumes_db: vec![0],
                         needs_migration: false,
                     },
                     None,
@@ -224,13 +236,18 @@ impl LoopBrowser {
         });
         if track_grid_writable && (loaded_grid.needs_migration || reflowed) {
             if let Some(path) = track_grid_path.as_ref() {
-                if let Err(error) = crate::loop_browser_track_grid::save_to(path, &track_grid) {
+                if let Err(error) = crate::loop_browser_track_grid::save_to(
+                    path,
+                    &track_grid,
+                    &loaded_grid.track_volumes_db,
+                ) {
                     track_grid_error =
                         Some(format!("track grid migrationを保存できません: {error}"));
                 }
             }
         }
         browser.track_grid = track_grid;
+        browser.track_volumes_db = loaded_grid.track_volumes_db;
         browser.track_grid_path = track_grid_path;
         browser.track_grid_writable = track_grid_writable;
         browser.track_grid_error = track_grid_error;
@@ -386,6 +403,14 @@ impl LoopBrowser {
         &self.track_grid
     }
 
+    pub(super) fn track_volumes_db(&self) -> &[i32] {
+        &self.track_volumes_db
+    }
+
+    pub(super) fn track_volume_db(&self, track: usize) -> i32 {
+        self.track_volumes_db.get(track).copied().unwrap_or(0)
+    }
+
     pub(super) fn cell_label(&self, wav: &LoopWavId) -> String {
         let pad = self
             .metadata
@@ -402,35 +427,6 @@ impl LoopBrowser {
             Some(pad) => format!("{pad}:{file_name}"),
             None => file_name,
         }
-    }
-
-    pub(super) fn playback_grid(&self) -> LoopPlaybackGrid {
-        self.track_grid
-            .iter()
-            .map(|track| {
-                track
-                    .iter()
-                    .map(|cell| {
-                        cell.as_ref().map(|clip| {
-                            let analysis = self.analysis_for_wav(&clip.wav);
-                            LoopPlaybackClip {
-                                path: clip.wav.path(),
-                                span_measures: clip.span_measures,
-                                bpm: analysis.map_or(120.0, |analysis| analysis.bpm),
-                                category: self
-                                    .metadata
-                                    .category_for_wav(&clip.wav)
-                                    .map(str::to_string),
-                                meter_numerator: analysis
-                                    .map_or(4, |analysis| analysis.meter_numerator),
-                                meter_denominator: analysis
-                                    .map_or(4, |analysis| analysis.meter_denominator),
-                            }
-                        })
-                    })
-                    .collect()
-            })
-            .collect()
     }
 }
 

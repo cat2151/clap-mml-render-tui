@@ -11,6 +11,7 @@ pub(crate) mod loop_browser_track_grid;
 pub mod loop_library;
 pub(crate) mod loop_time_stretch;
 pub(crate) mod loop_wav_analysis;
+pub(crate) mod mixer_overlay;
 pub(crate) mod offline_render;
 pub(crate) mod patches;
 pub(crate) mod random;

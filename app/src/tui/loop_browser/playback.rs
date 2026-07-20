@@ -19,7 +19,13 @@ enum LoopPlaybackCommand {
     Preview(PathBuf),
     Trigger { pad: char, path: PathBuf },
     SetGrid(LoopPlaybackGrid),
+    SetTrackVolume { track: usize, volume_db: i32 },
     Stop,
+}
+
+struct TrackSink {
+    track: usize,
+    sink: Arc<rodio::Sink>,
 }
 
 pub(in crate::tui) struct LoopPlaybackController {
@@ -28,10 +34,14 @@ pub(in crate::tui) struct LoopPlaybackController {
 }
 
 impl LoopPlaybackController {
-    fn spawn(grid: LoopPlaybackGrid, state: Arc<Mutex<PlayState>>) -> Self {
+    fn spawn(
+        grid: LoopPlaybackGrid,
+        track_volumes_db: Vec<i32>,
+        state: Arc<Mutex<PlayState>>,
+    ) -> Self {
         let (sender, receiver) = mpsc::channel();
         let worker = std::thread::spawn(move || {
-            if let Err(error) = playback_worker(receiver, grid, &state) {
+            if let Err(error) = playback_worker(receiver, grid, track_volumes_db, &state) {
                 set_play_state(
                     &state,
                     PlayState::Err(format!("WAV loop再生に失敗: {error}")),
@@ -54,6 +64,12 @@ impl LoopPlaybackController {
 
     pub(super) fn set_grid(&self, grid: LoopPlaybackGrid) {
         let _ = self.sender.send(LoopPlaybackCommand::SetGrid(grid));
+    }
+
+    pub(super) fn set_track_volume(&self, track: usize, volume_db: i32) {
+        let _ = self
+            .sender
+            .send(LoopPlaybackCommand::SetTrackVolume { track, volume_db });
     }
 
     fn stop(&mut self) {
@@ -79,6 +95,7 @@ impl<'a> TuiApp<'a> {
         if !cfg!(test) {
             self.loop_playback = Some(LoopPlaybackController::spawn(
                 self.loop_browser.playback_grid(),
+                self.loop_browser.track_volumes_db().to_vec(),
                 Arc::clone(&self.play_state),
             ));
         }
@@ -110,18 +127,25 @@ impl<'a> TuiApp<'a> {
             playback.set_grid(grid);
         }
     }
+
+    pub(in crate::tui) fn update_loop_track_volume(&self, track: usize, volume_db: i32) {
+        if let Some(playback) = &self.loop_playback {
+            playback.set_track_volume(track, volume_db);
+        }
+    }
 }
 
 fn playback_worker(
     receiver: mpsc::Receiver<LoopPlaybackCommand>,
     grid: LoopPlaybackGrid,
+    mut track_volumes_db: Vec<i32>,
     state: &Arc<Mutex<PlayState>>,
 ) -> Result<()> {
     let (_stream, handle) =
         rodio::OutputStream::try_default().context("audio output deviceを開けません")?;
     let mut preview_sink: Option<Arc<rodio::Sink>> = None;
     let mut pad_sinks = HashMap::<char, Arc<rodio::Sink>>::new();
-    let mut measure_sinks = Vec::<Arc<rodio::Sink>>::new();
+    let mut measure_sinks = Vec::<TrackSink>::new();
     let mut current_measure = None;
     let mut measure_deadline = None;
     let mut preparation = PreparationWorker::spawn();
@@ -152,14 +176,14 @@ fn playback_worker(
             }
         }
         pad_sinks.retain(|_, sink| !sink.empty());
-        measure_sinks.retain(|sink| !sink.empty());
+        measure_sinks.retain(|voice| !voice.sink.empty());
         if measure_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
             measure_deadline = None;
         }
         if measure_deadline.is_none() {
             if let Some(prepared) = active.as_ref() {
                 if let Some(measure) = next_measure(&prepared.grid, current_measure) {
-                    match start_measure(&handle, prepared, measure) {
+                    match start_measure(&handle, prepared, measure, &track_volumes_db) {
                         Ok(sinks) => {
                             current_measure = Some(measure);
                             measure_sinks.extend(sinks);
@@ -168,7 +192,7 @@ fn playback_worker(
                             if pending_generation.is_none() && prepared.warning.is_none() {
                                 let profile = starting_clips(&prepared.grid, measure)
                                     .first()
-                                    .map_or("-", |clip| profile_label(clip));
+                                    .map_or("-", |(_, clip)| profile_label(clip));
                                 set_play_state(
                                     state,
                                     PlayState::Playing(format!(
@@ -238,6 +262,16 @@ fn playback_worker(
                     PlayState::Running(format!("BPM{TARGET_BPM:.0}変換中")),
                 );
             }
+            Ok(LoopPlaybackCommand::SetTrackVolume { track, volume_db }) => {
+                if track >= track_volumes_db.len() {
+                    track_volumes_db.resize(track + 1, 0);
+                }
+                track_volumes_db[track] = volume_db;
+                let gain = crate::mixer_overlay::volume_db_to_gain(volume_db);
+                for voice in measure_sinks.iter().filter(|voice| voice.track == track) {
+                    voice.sink.set_volume(gain);
+                }
+            }
             Ok(LoopPlaybackCommand::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => {
                 preparation.cancel();
                 stop_sinks(&mut measure_sinks);
@@ -280,9 +314,15 @@ fn measure_is_occupied(grid: &LoopPlaybackGrid, measure: usize) -> bool {
     })
 }
 
-fn starting_clips(grid: &LoopPlaybackGrid, measure: usize) -> Vec<&LoopPlaybackClip> {
+fn starting_clips(grid: &LoopPlaybackGrid, measure: usize) -> Vec<(usize, &LoopPlaybackClip)> {
     grid.iter()
-        .filter_map(|track| track.get(measure).and_then(Option::as_ref))
+        .enumerate()
+        .filter_map(|(track, cells)| {
+            cells
+                .get(measure)
+                .and_then(Option::as_ref)
+                .map(|clip| (track, clip))
+        })
         .collect()
 }
 
@@ -315,16 +355,20 @@ fn start_measure(
     handle: &rodio::OutputStreamHandle,
     prepared: &PreparedSet,
     measure: usize,
-) -> Result<Vec<Arc<rodio::Sink>>> {
+    track_volumes_db: &[i32],
+) -> Result<Vec<TrackSink>> {
     let clips = starting_clips(&prepared.grid, measure);
     let mut sinks = Vec::with_capacity(clips.len());
-    for clip in clips {
+    for (track, clip) in clips {
         let Some(Ok(audio)) = prepared.audio_for(clip) else {
             continue;
         };
         let sink = Arc::new(rodio::Sink::try_new(handle)?);
+        sink.set_volume(crate::mixer_overlay::volume_db_to_gain(
+            track_volumes_db.get(track).copied().unwrap_or(0),
+        ));
         sink.append(audio.source());
-        sinks.push(sink);
+        sinks.push(TrackSink { track, sink });
     }
     Ok(sinks)
 }
@@ -338,9 +382,9 @@ fn play_path(handle: &rodio::OutputStreamHandle, path: &Path) -> Result<Arc<rodi
     Ok(sink)
 }
 
-fn stop_sinks(sinks: &mut Vec<Arc<rodio::Sink>>) {
-    for sink in sinks.drain(..) {
-        sink.stop();
+fn stop_sinks(sinks: &mut Vec<TrackSink>) {
+    for voice in sinks.drain(..) {
+        voice.sink.stop();
     }
 }
 

@@ -112,8 +112,7 @@ pub const TRACKS: usize = 9;
 pub const MEASURES: usize = 8;
 /// track 0 はグローバルヘッダ（テンポ等）専用。演奏 track は 1 から始まる。
 pub(super) const FIRST_PLAYABLE_TRACK: usize = 1;
-pub(super) const MIXER_MIN_DB: i32 = -36;
-pub(super) const MIXER_MAX_DB: i32 = 6;
+pub(super) use crate::mixer_overlay::{MIXER_MAX_DB, MIXER_MIN_DB};
 /// track 0 / measure 0 のデフォルト内容（拍子指定 JSON + テンポ設定）。
 /// セーブファイルが存在しない初回起動時に使用される。
 pub(super) const DEFAULT_TRACK0_MML: &str = r#"{"beat": "4/4"}t120"#;

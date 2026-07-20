@@ -92,5 +92,23 @@ fn draws_wav_pads_track_grid_and_pane_specific_footer() {
     assert!(screen.contains("[BPM120 beat8 2meas]"));
     assert!(screen.contains("↳ 2/2"));
     assert!(screen.contains("Tab:loop tree"));
+    assert!(screen.contains("m:mix level"));
     assert!(screen.contains("1-9:hjkl prefix"));
+}
+
+#[test]
+fn draws_shared_mixer_overlay_for_loop_tracks() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.mode = Mode::LoopBrowser;
+    app.loop_browser = browser();
+    app.loop_browser.handle_key(KeyCode::Tab);
+    app.loop_browser.handle_key(KeyCode::Char('m'));
+    app.loop_browser.handle_key(KeyCode::Char('k'));
+
+    let screen = render_lines(&mut app, 100, 30).join("\n");
+
+    assert!(screen.contains("mixer"));
+    assert!(screen.contains("track1"));
+    assert!(screen.contains("+3dB"));
+    assert!(screen.contains("j/k: -/+3dB"));
 }

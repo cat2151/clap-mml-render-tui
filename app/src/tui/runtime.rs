@@ -317,6 +317,9 @@ impl<'a> TuiApp<'a> {
                                 self.update_loop_grid(grid);
                             }
                             LoopBrowserAction::GridRefresh(grid) => self.update_loop_grid(grid),
+                            LoopBrowserAction::TrackVolumeChanged { track, volume_db } => {
+                                self.update_loop_track_volume(track, volume_db)
+                            }
                             LoopBrowserAction::Return => self.finish_loop_browser(),
                             LoopBrowserAction::Quit => {
                                 self.finish_loop_browser();

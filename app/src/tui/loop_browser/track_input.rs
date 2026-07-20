@@ -3,8 +3,37 @@ use super::*;
 impl LoopBrowser {
     fn save_track_grid(&self) -> anyhow::Result<()> {
         match &self.track_grid_path {
-            Some(path) => crate::loop_browser_track_grid::save_to(path, &self.track_grid),
+            Some(path) => crate::loop_browser_track_grid::save_to(
+                path,
+                &self.track_grid,
+                &self.track_volumes_db,
+            ),
             None => Ok(()),
+        }
+    }
+
+    pub(super) fn adjust_mixer_volume(&mut self, delta_db: i32) -> LoopBrowserAction {
+        if !self.track_grid_writable {
+            return LoopBrowserAction::Continue;
+        }
+        let track = self.mixer_cursor_track;
+        let Some(volume_db) = self.track_volumes_db.get_mut(track) else {
+            return LoopBrowserAction::Continue;
+        };
+        let previous = *volume_db;
+        if !crate::mixer_overlay::adjust_volume_db(volume_db, delta_db) {
+            return LoopBrowserAction::Continue;
+        }
+        let next = *volume_db;
+        if let Err(error) = self.save_track_grid() {
+            self.track_volumes_db[track] = previous;
+            self.track_grid_error = Some(format!("mix levelを保存できません: {error}"));
+            return LoopBrowserAction::Continue;
+        }
+        self.track_grid_error = None;
+        LoopBrowserAction::TrackVolumeChanged {
+            track,
+            volume_db: next,
         }
     }
 
@@ -139,8 +168,11 @@ impl LoopBrowser {
         let measures = self.track_grid[0].len();
         updated.resize_with(required, || vec![None; measures]);
         let previous = std::mem::replace(&mut self.track_grid, updated);
+        let previous_volumes = self.track_volumes_db.clone();
+        self.track_volumes_db.resize(required, 0);
         if let Err(error) = self.save_track_grid() {
             self.track_grid = previous;
+            self.track_volumes_db = previous_volumes;
             self.track_grid_error = Some(format!("track追加を保存できません: {error}"));
             return;
         }

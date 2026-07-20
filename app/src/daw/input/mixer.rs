@@ -23,13 +23,19 @@ impl DawApp {
                 self.mixer_cursor_track += 1;
             }
             KeyCode::Char('j') | KeyCode::Down
-                if self.adjust_track_volume_db(self.mixer_cursor_track, -3) =>
+                if self.adjust_track_volume_db(
+                    self.mixer_cursor_track,
+                    -crate::mixer_overlay::MIXER_STEP_DB,
+                ) =>
             {
                 self.save();
                 self.sync_playback_mml_state();
             }
             KeyCode::Char('k') | KeyCode::Up
-                if self.adjust_track_volume_db(self.mixer_cursor_track, 3) =>
+                if self.adjust_track_volume_db(
+                    self.mixer_cursor_track,
+                    crate::mixer_overlay::MIXER_STEP_DB,
+                ) =>
             {
                 self.save();
                 self.sync_playback_mml_state();

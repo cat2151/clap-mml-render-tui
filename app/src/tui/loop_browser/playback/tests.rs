@@ -23,7 +23,7 @@ fn next_measure_skips_empty_columns_and_wraps() {
     assert_eq!(
         starting_clips(&grid, 0)
             .into_iter()
-            .map(|clip| clip.path.clone())
+            .map(|(_, clip)| clip.path.clone())
             .collect::<Vec<_>>(),
         vec![PathBuf::from("a.wav"), PathBuf::from("b.wav")]
     );
@@ -54,7 +54,7 @@ fn continuation_measure_waits_and_can_start_another_track() {
     assert_eq!(
         starting_clips(&grid, 1)
             .into_iter()
-            .map(|clip| clip.path.clone())
+            .map(|(_, clip)| clip.path.clone())
             .collect::<Vec<_>>(),
         vec![PathBuf::from("next.wav")]
     );

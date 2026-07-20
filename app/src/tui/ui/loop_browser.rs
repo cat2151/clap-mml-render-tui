@@ -62,6 +62,9 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame) {
     if app.loop_browser.category_overlay.is_some() {
         draw_category_overlay(app, frame);
     }
+    if app.loop_browser.mixer_overlay_open {
+        draw_mixer_overlay(app, frame);
+    }
     if let Some(notice) = app
         .loop_browser
         .active_notice()
@@ -69,6 +72,26 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame) {
     {
         draw_notice(frame, &notice);
     }
+}
+
+fn draw_mixer_overlay(app: &TuiApp<'_>, frame: &mut Frame<'_>) {
+    let area = frame.area();
+    let tracks = app
+        .loop_browser
+        .track_grid()
+        .iter()
+        .enumerate()
+        .map(|(track, _)| crate::mixer_overlay::MixerOverlayTrack {
+            label: format!("track{}", track + 1),
+            volume_db: app.loop_browser.track_volume_db(track),
+        })
+        .collect::<Vec<_>>();
+    crate::mixer_overlay::draw_mixer_overlay(
+        frame,
+        area,
+        &tracks,
+        app.loop_browser.mixer_cursor_track,
+    );
 }
 
 fn draw_tree(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {

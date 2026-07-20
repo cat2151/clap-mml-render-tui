@@ -28,12 +28,15 @@ fn empty_and_occupied_cells_round_trip_in_sparse_format() {
         vec![None, None, None],
     ];
 
-    save_to(&path, &grid).unwrap();
+    save_to(&path, &grid, &[-3, 6]).unwrap();
 
-    assert_eq!(load_from(&path).unwrap().grid, grid);
+    let loaded = load_from(&path).unwrap();
+    assert_eq!(loaded.grid, grid);
+    assert_eq!(loaded.track_volumes_db, vec![-3, 6]);
     let text = std::fs::read_to_string(&path).unwrap();
     assert!(text.contains("track_count = 2"));
     assert!(text.contains("measure_count = 3"));
+    assert!(text.contains("track_volumes_db = ["));
     assert!(text.contains("span_measures = 2"));
     assert_eq!(text.matches("[[cells]]").count(), 1);
     let _ = std::fs::remove_dir_all(dir);
@@ -44,6 +47,7 @@ fn missing_file_loads_one_empty_cell() {
     let path = temp_dir("cmrt-loop-track-grid-missing").join("track_grid.toml");
 
     assert_eq!(load_from(&path).unwrap().grid, default_track_grid());
+    assert_eq!(load_from(&path).unwrap().track_volumes_db, vec![0]);
 }
 
 #[test]
@@ -55,6 +59,7 @@ fn version_one_loads_for_migration_and_reflows_overlaps_to_the_right() {
     let loaded = LoadedTrackGrid {
         needs_migration: stored.version == 1,
         grid: stored.into_grid().unwrap(),
+        track_volumes_db: vec![0],
     };
     assert!(loaded.needs_migration);
 
@@ -63,6 +68,20 @@ fn version_one_loads_for_migration_and_reflows_overlaps_to_the_right() {
     assert_eq!(grid[0].len(), 4);
     assert_eq!(grid[0][0].as_ref().unwrap().wav.relative, "a.wav");
     assert_eq!(grid[0][2].as_ref().unwrap().wav.relative, "b.wav");
+}
+
+#[test]
+fn version_two_loads_with_zero_db_and_is_marked_for_migration() {
+    let dir = temp_dir("cmrt-loop-track-grid-v2");
+    let path = dir.join("track_grid.toml");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(&path, "version = 2\ntrack_count = 2\nmeasure_count = 1\n").unwrap();
+
+    let loaded = load_from(&path).unwrap();
+
+    assert!(loaded.needs_migration);
+    assert_eq!(loaded.track_volumes_db, vec![0, 0]);
+    let _ = std::fs::remove_dir_all(dir);
 }
 
 #[test]

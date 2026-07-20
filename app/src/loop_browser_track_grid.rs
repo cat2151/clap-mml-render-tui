@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::loop_browser_metadata::{validate_wav_id, LoopWavId};
 
-const TRACK_GRID_VERSION: u32 = 2;
+const TRACK_GRID_VERSION: u32 = 3;
 const TRACK_GRID_DIRECTORY: &str = "loop_browser";
 const TRACK_GRID_FILE_NAME: &str = "track_grid.toml";
 
@@ -18,6 +18,7 @@ pub(crate) type LoopTrackGrid = Vec<Vec<Option<LoopTrackClip>>>;
 
 pub(crate) struct LoadedTrackGrid {
     pub(crate) grid: LoopTrackGrid,
+    pub(crate) track_volumes_db: Vec<i32>,
     pub(crate) needs_migration: bool,
 }
 
@@ -26,6 +27,8 @@ struct StoredTrackGrid {
     version: u32,
     track_count: usize,
     measure_count: usize,
+    #[serde(default)]
+    track_volumes_db: Vec<i32>,
     #[serde(default)]
     cells: Vec<StoredTrackCell>,
 }
@@ -58,6 +61,7 @@ pub(crate) fn load_from(path: &Path) -> Result<LoadedTrackGrid> {
     if !path.exists() {
         return Ok(LoadedTrackGrid {
             grid: default_track_grid(),
+            track_volumes_db: vec![0],
             needs_migration: false,
         });
     }
@@ -65,16 +69,26 @@ pub(crate) fn load_from(path: &Path) -> Result<LoadedTrackGrid> {
         .with_context(|| format!("track gridを読めません: {}", path.display()))?;
     let stored: StoredTrackGrid = toml::from_str(&text)
         .with_context(|| format!("track gridが壊れています: {}", path.display()))?;
-    let needs_migration = stored.version == 1;
+    let mut track_volumes_db = stored.track_volumes_db.clone();
+    let mut needs_migration =
+        stored.version < TRACK_GRID_VERSION || track_volumes_db.len() != stored.track_count;
+    track_volumes_db.resize(stored.track_count, 0);
+    track_volumes_db.truncate(stored.track_count);
+    for volume_db in &mut track_volumes_db {
+        let normalized = normalize_volume_db(*volume_db);
+        needs_migration |= normalized != *volume_db;
+        *volume_db = normalized;
+    }
     let grid = stored.into_grid()?;
     Ok(LoadedTrackGrid {
         grid,
+        track_volumes_db,
         needs_migration,
     })
 }
 
-pub(crate) fn save_to(path: &Path, grid: &LoopTrackGrid) -> Result<()> {
-    let stored = StoredTrackGrid::from_grid(grid)?;
+pub(crate) fn save_to(path: &Path, grid: &LoopTrackGrid, track_volumes_db: &[i32]) -> Result<()> {
+    let stored = StoredTrackGrid::from_grid(grid, track_volumes_db)?;
     let text = toml::to_string_pretty(&stored)?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
@@ -104,7 +118,7 @@ pub(crate) fn save_to(path: &Path, grid: &LoopTrackGrid) -> Result<()> {
 }
 
 impl StoredTrackGrid {
-    fn from_grid(grid: &LoopTrackGrid) -> Result<Self> {
+    fn from_grid(grid: &LoopTrackGrid, track_volumes_db: &[i32]) -> Result<Self> {
         let Some(first_track) = grid.first() else {
             anyhow::bail!("track gridにtrackがありません");
         };
@@ -114,6 +128,15 @@ impl StoredTrackGrid {
         }
         if grid.iter().any(|track| track.len() != measure_count) {
             anyhow::bail!("track gridのmeasure数が揃っていません");
+        }
+        if track_volumes_db.len() != grid.len() {
+            anyhow::bail!("track gridのtrack数とmix level数が一致しません");
+        }
+        if track_volumes_db
+            .iter()
+            .any(|volume_db| normalize_volume_db(*volume_db) != *volume_db)
+        {
+            anyhow::bail!("track gridのmix levelが3dB単位または範囲内ではありません");
         }
         let mut cells = Vec::new();
         for (track, measures) in grid.iter().enumerate() {
@@ -144,12 +167,13 @@ impl StoredTrackGrid {
             version: TRACK_GRID_VERSION,
             track_count: grid.len(),
             measure_count,
+            track_volumes_db: track_volumes_db.to_vec(),
             cells,
         })
     }
 
     fn into_grid(self) -> Result<LoopTrackGrid> {
-        if !matches!(self.version, 1 | TRACK_GRID_VERSION) {
+        if !matches!(self.version, 1 | 2 | TRACK_GRID_VERSION) {
             anyhow::bail!(
                 "track gridのversionが一致しません（file: {}, expected: {}）",
                 self.version,
@@ -187,6 +211,19 @@ impl StoredTrackGrid {
         }
         Ok(grid)
     }
+}
+
+fn normalize_volume_db(volume_db: i32) -> i32 {
+    let clamped = volume_db.clamp(
+        crate::mixer_overlay::MIXER_MIN_DB,
+        crate::mixer_overlay::MIXER_MAX_DB,
+    );
+    ((clamped as f32 / crate::mixer_overlay::MIXER_STEP_DB as f32).round() as i32
+        * crate::mixer_overlay::MIXER_STEP_DB)
+        .clamp(
+            crate::mixer_overlay::MIXER_MIN_DB,
+            crate::mixer_overlay::MIXER_MAX_DB,
+        )
 }
 
 pub(crate) fn reflow_with_spans(

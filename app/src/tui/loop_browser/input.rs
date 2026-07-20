@@ -7,6 +7,10 @@ impl LoopBrowser {
     }
 
     pub(in crate::tui) fn handle_key_event(&mut self, key: KeyEvent) -> LoopBrowserAction {
+        if self.mixer_overlay_open {
+            self.navigation_count.clear();
+            return self.handle_mixer_overlay_key(key.code);
+        }
         if self.category_overlay.is_some() {
             self.navigation_count.clear();
             return self.handle_category_overlay_key(key.code);
@@ -112,6 +116,13 @@ impl LoopBrowser {
         match key.code {
             KeyCode::Esc => LoopBrowserAction::Return,
             KeyCode::Char('q') => LoopBrowserAction::Quit,
+            KeyCode::Char('m') if key.modifiers == KeyModifiers::NONE => {
+                self.mixer_cursor_track = self
+                    .track_cursor
+                    .min(self.track_grid.len().saturating_sub(1));
+                self.mixer_overlay_open = true;
+                LoopBrowserAction::Continue
+            }
             KeyCode::Char('h') => {
                 let count = self.navigation_count.take_delta(1) as usize;
                 self.measure_cursor = self.measure_cursor.saturating_sub(count);
@@ -147,6 +158,32 @@ impl LoopBrowser {
             KeyCode::Down => {
                 self.move_track_cursor_down(1);
                 LoopBrowserAction::Continue
+            }
+            _ => LoopBrowserAction::Continue,
+        }
+    }
+
+    fn handle_mixer_overlay_key(&mut self, key: KeyCode) -> LoopBrowserAction {
+        match key {
+            KeyCode::Esc => {
+                self.mixer_overlay_open = false;
+                LoopBrowserAction::Continue
+            }
+            KeyCode::Char('h') | KeyCode::Left if self.mixer_cursor_track > 0 => {
+                self.mixer_cursor_track -= 1;
+                LoopBrowserAction::Continue
+            }
+            KeyCode::Char('l') | KeyCode::Right
+                if self.mixer_cursor_track + 1 < self.track_grid.len() =>
+            {
+                self.mixer_cursor_track += 1;
+                LoopBrowserAction::Continue
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                self.adjust_mixer_volume(-crate::mixer_overlay::MIXER_STEP_DB)
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.adjust_mixer_volume(crate::mixer_overlay::MIXER_STEP_DB)
             }
             _ => LoopBrowserAction::Continue,
         }

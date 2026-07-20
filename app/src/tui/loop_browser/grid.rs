@@ -25,4 +25,33 @@ impl LoopBrowser {
                     .map(|clip| (start, clip))
             })
     }
+
+    pub(super) fn playback_grid(&self) -> LoopPlaybackGrid {
+        self.track_grid
+            .iter()
+            .map(|track| {
+                track
+                    .iter()
+                    .map(|cell| {
+                        cell.as_ref().map(|clip| {
+                            let analysis = self.analysis_for_wav(&clip.wav);
+                            LoopPlaybackClip {
+                                path: clip.wav.path(),
+                                span_measures: clip.span_measures,
+                                bpm: analysis.map_or(120.0, |analysis| analysis.bpm),
+                                category: self
+                                    .metadata
+                                    .category_for_wav(&clip.wav)
+                                    .map(str::to_string),
+                                meter_numerator: analysis
+                                    .map_or(4, |analysis| analysis.meter_numerator),
+                                meter_denominator: analysis
+                                    .map_or(4, |analysis| analysis.meter_denominator),
+                            }
+                        })
+                    })
+                    .collect()
+            })
+            .collect()
+    }
 }

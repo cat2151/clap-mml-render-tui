@@ -1,4 +1,4 @@
-use super::{DawApp, FIRST_PLAYABLE_TRACK, MIXER_MAX_DB, MIXER_MIN_DB};
+use super::{DawApp, FIRST_PLAYABLE_TRACK};
 
 impl DawApp {
     pub(super) fn solo_mode_active(&self) -> bool {
@@ -28,12 +28,7 @@ impl DawApp {
         let Some(volume_db) = self.track_volumes_db.get_mut(track) else {
             return false;
         };
-        let next = (*volume_db + delta_db).clamp(MIXER_MIN_DB, MIXER_MAX_DB);
-        if next == *volume_db {
-            return false;
-        }
-        *volume_db = next;
-        true
+        crate::mixer_overlay::adjust_volume_db(volume_db, delta_db)
     }
 
     pub(super) fn playback_track_gains(&self) -> Vec<f32> {
@@ -42,7 +37,7 @@ impl DawApp {
                 if track < FIRST_PLAYABLE_TRACK || !self.track_is_audible(track) {
                     0.0
                 } else {
-                    10.0f32.powf(self.track_volume_db(track) as f32 / 20.0)
+                    crate::mixer_overlay::volume_db_to_gain(self.track_volume_db(track))
                 }
             })
             .collect()
