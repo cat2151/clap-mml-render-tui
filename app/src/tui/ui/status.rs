@@ -4,6 +4,7 @@ use ratatui::{
 };
 
 use super::{Mode, PlayState, TuiRenderStatus};
+use crate::tui::loop_browser::LoopBrowserPane;
 use crate::ui_theme::{
     MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GREEN, MONOKAI_PURPLE, MONOKAI_YELLOW,
 };
@@ -106,7 +107,18 @@ pub(super) fn keybind_text(mode: &Mode) -> &'static str {
             "k/j・↑↓:patch±1  Ctrl+u/d・PgUp/PgDn:patch±10  h/l・Home/End:category±1  r:random  c d e f g a b:note  s:transport  Shift+H:buffer  n:notepad  w:DAW  q:quit"
         }
         Mode::LoopBrowser => {
-            "j/k・↑↓:移動して再生 h/l・←/→:折り畳み/展開 Enter/Space:再生 f:dirお気に入り F:お気に入り限定 c:dirカテゴリ Esc:戻る q:終了"
+            loop_browser_keybind_text(LoopBrowserPane::Tree)
+        }
+    }
+}
+
+pub(super) fn loop_browser_keybind_text(pane: LoopBrowserPane) -> &'static str {
+    match pane {
+        LoopBrowserPane::Tree => {
+            "Tab:track list Shift+C/D/E/F/G/A/B:pad登録/解除 c/d/e/f/g/a/b:pad演奏 t:dirカテゴリ v:dirお気に入り V:お気に入り限定 hjkl・矢印:移動/展開 Enter/Space:再生 Esc:戻る q:終了"
+        }
+        LoopBrowserPane::Tracks => {
+            "Tab:loop tree c/d/e/f/g/a/b:pad演奏+セルtoggle h/l・←/→:measure移動 j/k・↓/↑:track移動（右/下端で自動追加） Esc:戻る q:終了"
         }
     }
 }

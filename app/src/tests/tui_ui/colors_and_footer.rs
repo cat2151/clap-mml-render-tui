@@ -159,61 +159,8 @@ fn keyboard_screen_shows_connecting_status_and_navigation() {
     assert!(screen.contains("CC#: 1"));
 }
 
-#[test]
-fn loop_browser_error_screen_shows_scan_guidance() {
-    let mut app = TuiApp::new_for_test(test_config());
-    app.handle_normal(KeyCode::Char('b'));
-
-    let screen = render_lines(&mut app, 180, 10).join("\n");
-
-    assert!(screen.contains("[LOOP BROWSER] WAV loops"));
-    assert!(screen.contains("cmrt scan-loops"));
-    assert!(screen.contains("loop browser"));
-}
-
-#[test]
-fn loop_browser_draws_favorites_category_overlay_and_removal_notice() {
-    use crate::loop_browser_metadata::LoopBrowserMetadata;
-    use crate::loop_library::{LoopIndex, LoopRootIndex};
-    use crate::tui::loop_browser::LoopBrowser;
-
-    let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::LoopBrowser;
-    app.loop_browser = LoopBrowser::from_index(
-        LoopIndex {
-            version: 1,
-            roots: vec![LoopRootIndex {
-                path: "/loops".to_string(),
-                wav_files: vec!["Pack/Kick.wav".to_string()],
-            }],
-        },
-        &crate::config::default_loop_categories(),
-        LoopBrowserMetadata::default(),
-        None,
-        true,
-        None,
-    );
-    app.loop_browser.cursor = 1;
-
-    app.loop_browser.handle_key(KeyCode::Char('f'));
-    let favorite_screen = render_lines(&mut app, 180, 12).join("\n");
-    assert!(favorite_screen.contains("★"));
-
-    app.loop_browser.handle_key(KeyCode::Char('F'));
-    let favorites_only_screen = render_lines(&mut app, 180, 12).join("\n");
-    assert!(favorites_only_screen.contains("Favorite dirs"));
-    app.loop_browser.handle_key(KeyCode::Char('F'));
-
-    app.loop_browser.handle_key(KeyCode::Char('c'));
-    let category_screen = render_lines(&mut app, 180, 12).join("\n");
-    assert!(category_screen.contains("g: guitar"));
-    assert!(category_screen.contains("e: sequence"));
-    app.loop_browser.handle_key(KeyCode::Esc);
-
-    app.loop_browser.handle_key(KeyCode::Char('f'));
-    let notice_buffer = render_buffer(&mut app, 180, 12);
-    find_text_ignoring_spaces(&notice_buffer, "お気に入りdirを解除しました");
-}
+#[path = "colors_and_footer/loop_browser.rs"]
+mod loop_browser;
 
 #[test]
 fn keyboard_screen_shows_count_input_guide_until_navigation() {

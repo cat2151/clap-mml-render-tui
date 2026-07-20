@@ -83,6 +83,7 @@ impl TuiApp<'static> {
             is_daw_mode: false,
             startup_normal_cache_primed: false,
             loop_browser: loop_browser::LoopBrowser::default(),
+            loop_playback: None,
         }
     }
 

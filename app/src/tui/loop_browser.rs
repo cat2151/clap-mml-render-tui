@@ -1,15 +1,24 @@
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::widgets::ListState;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use crate::loop_browser_metadata::{category_keys, metadata_path, LoopBrowserMetadata, LoopDirId};
+use crate::loop_browser_metadata::{
+    category_keys, metadata_path, LoopBrowserMetadata, LoopDirId, LoopWavId,
+};
+use crate::loop_browser_track_grid::{
+    default_track_grid, load_from as load_track_grid, track_grid_path, LoopTrackGrid,
+};
 
 mod input;
-mod playback;
+pub(super) mod playback;
+mod tree;
 
-const FAVORITE_REMOVED_NOTICE_DURATION: Duration = Duration::from_millis(1_500);
+use tree::{collect_visible, find_favorite_node, insert_relative_path, node_path, sort_tree};
+
+const REMOVED_NOTICE_DURATION: Duration = Duration::from_millis(1_500);
+pub(super) const PAD_KEYS: [char; 7] = ['c', 'd', 'e', 'f', 'g', 'a', 'b'];
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct NodeKey {
@@ -43,6 +52,13 @@ pub(super) struct LoopBrowserNotice {
     expires_at: Instant,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) enum LoopBrowserPane {
+    #[default]
+    Tree,
+    Tracks,
+}
+
 pub(crate) struct LoopBrowser {
     roots: Vec<(PathBuf, TreeNode)>,
     expanded: HashSet<NodeKey>,
@@ -52,18 +68,34 @@ pub(crate) struct LoopBrowser {
     pub(super) page_size: usize,
     pub(super) error: Option<String>,
     pub(super) metadata_error: Option<String>,
+    pub(super) track_grid_error: Option<String>,
     metadata: LoopBrowserMetadata,
+    track_grid: LoopTrackGrid,
     metadata_path: Option<PathBuf>,
+    track_grid_path: Option<PathBuf>,
     metadata_writable: bool,
+    track_grid_writable: bool,
     pub(super) favorites_only: bool,
     pub(super) category_overlay: Option<LoopDirId>,
     pub(super) category_keys: Vec<(char, String)>,
     pub(super) notice: Option<LoopBrowserNotice>,
+    pub(super) focus: LoopBrowserPane,
+    pub(super) track_cursor: usize,
+    pub(super) measure_cursor: usize,
+    pub(super) track_scroll: usize,
+    pub(super) measure_scroll: usize,
 }
+
+pub(super) type LoopPlaybackGrid = Vec<Vec<Option<PathBuf>>>;
 
 pub(super) enum LoopBrowserAction {
     Continue,
-    Play(PathBuf),
+    Preview(PathBuf),
+    Trigger(PathBuf),
+    GridChanged {
+        audition: PathBuf,
+        grid: LoopPlaybackGrid,
+    },
     Return,
     Quit,
 }
@@ -79,13 +111,22 @@ impl Default for LoopBrowser {
             page_size: 1,
             error: None,
             metadata_error: None,
+            track_grid_error: None,
             metadata: LoopBrowserMetadata::default(),
+            track_grid: default_track_grid(),
             metadata_path: None,
+            track_grid_path: None,
             metadata_writable: true,
+            track_grid_writable: true,
             favorites_only: false,
             category_overlay: None,
             category_keys: Vec::new(),
             notice: None,
+            focus: LoopBrowserPane::Tree,
+            track_cursor: 0,
+            measure_cursor: 0,
+            track_scroll: 0,
+            measure_scroll: 0,
         }
     }
 }
@@ -109,7 +150,20 @@ impl LoopBrowser {
                 Some(error.to_string()),
             ),
         };
-        *self = match crate::loop_library::load_index(cfg) {
+        let (track_grid, track_grid_path, track_grid_writable, track_grid_error) =
+            match track_grid_path() {
+                Ok(path) => match load_track_grid(&path) {
+                    Ok(track_grid) => (track_grid, Some(path), true, None),
+                    Err(error) => (
+                        default_track_grid(),
+                        Some(path),
+                        false,
+                        Some(error.to_string()),
+                    ),
+                },
+                Err(error) => (default_track_grid(), None, false, Some(error.to_string())),
+            };
+        let mut browser = match crate::loop_library::load_index(cfg) {
             Ok(index) => Self::from_index(
                 index,
                 &cfg.loop_categories,
@@ -128,6 +182,11 @@ impl LoopBrowser {
                 ..Self::default()
             },
         };
+        browser.track_grid = track_grid;
+        browser.track_grid_path = track_grid_path;
+        browser.track_grid_writable = track_grid_writable;
+        browser.track_grid_error = track_grid_error;
+        *self = browser;
     }
 
     pub(in crate::tui) fn from_index(
@@ -177,7 +236,7 @@ impl LoopBrowser {
         self.visible
             .get(self.cursor)
             .filter(|node| node.is_wav)
-            .map(|node| LoopBrowserAction::Play(node.path.clone()))
+            .map(|node| LoopBrowserAction::Preview(node.path.clone()))
             .unwrap_or(LoopBrowserAction::Continue)
     }
 
@@ -254,152 +313,51 @@ impl LoopBrowser {
             .as_ref()
             .and_then(|dir| self.metadata.category_for(dir))
     }
-}
 
-fn insert_relative_path(root: &mut TreeNode, path: &Path) {
-    let components = path
-        .components()
-        .filter_map(|component| match component {
-            std::path::Component::Normal(name) => Some(name.to_string_lossy().into_owned()),
-            _ => None,
+    pub(super) fn pad_path(&self, pad: char) -> Option<PathBuf> {
+        self.metadata.pad(pad).map(LoopWavId::path)
+    }
+
+    pub(super) fn pad_file_name(&self, pad: char) -> Option<String> {
+        self.pad_path(pad).and_then(|path| {
+            path.file_name()
+                .map(|name| name.to_string_lossy().into_owned())
         })
-        .collect::<Vec<_>>();
-    insert_components(root, &components, Path::new(""));
-}
-
-fn insert_components(node: &mut TreeNode, components: &[String], parent: &Path) {
-    let Some((name, rest)) = components.split_first() else {
-        return;
-    };
-    let relative_path = parent.join(name);
-    let is_wav = rest.is_empty();
-    let child_index = node
-        .children
-        .iter()
-        .position(|child| child.name == *name)
-        .unwrap_or_else(|| {
-            node.children.push(TreeNode {
-                name: name.clone(),
-                relative_path: relative_path.clone(),
-                children: Vec::new(),
-                is_wav,
-            });
-            node.children.len() - 1
-        });
-    if !rest.is_empty() {
-        insert_components(&mut node.children[child_index], rest, &relative_path);
     }
-}
 
-fn sort_tree(node: &mut TreeNode) {
-    node.children.sort_by(|left, right| {
-        left.is_wav
-            .cmp(&right.is_wav)
-            .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
-            .then_with(|| left.name.cmp(&right.name))
-    });
-    for child in &mut node.children {
-        sort_tree(child);
+    pub(super) fn track_grid(&self) -> &[Vec<Option<LoopWavId>>] {
+        &self.track_grid
     }
-}
 
-#[allow(clippy::too_many_arguments)]
-fn collect_visible(
-    root_index: usize,
-    root_path: &Path,
-    node: &TreeNode,
-    expanded: &HashSet<NodeKey>,
-    metadata: &LoopBrowserMetadata,
-    category_keys: &[(char, String)],
-    components: Vec<String>,
-    anchor: Option<usize>,
-    depth: usize,
-    display_name: Option<String>,
-    output: &mut Vec<VisibleLoopNode>,
-) {
-    let key = NodeKey {
-        root: root_index,
-        components: components.clone(),
-        anchor,
-    };
-    let is_expanded = expanded.contains(&key);
-    let dir_id = (!node.is_wav).then(|| LoopDirId::new(root_path, &node.relative_path));
-    let favorite = dir_id.as_ref().is_some_and(|dir| metadata.is_favorite(dir));
-    let category = dir_id.as_ref().and_then(|dir| {
-        metadata.category_for(dir).and_then(|category| {
-            category_keys
-                .iter()
-                .any(|(_, configured)| configured == category)
-                .then(|| category.to_string())
-        })
-    });
-    output.push(VisibleLoopNode {
-        key: key.clone(),
-        depth,
-        name: display_name.unwrap_or_else(|| node.name.clone()),
-        is_wav: node.is_wav,
-        expanded: is_expanded,
-        path: node_path(root_path, node),
-        favorite,
-        category,
-    });
-    if !node.is_wav && is_expanded {
-        for child in &node.children {
-            let mut child_components = components.clone();
-            child_components.push(child.name.clone());
-            collect_visible(
-                root_index,
-                root_path,
-                child,
-                expanded,
-                metadata,
-                category_keys,
-                child_components,
-                anchor,
-                depth + 1,
-                None,
-                output,
-            );
+    pub(super) fn cell_label(&self, wav: &LoopWavId) -> String {
+        let pad = self
+            .metadata
+            .pad_assignments
+            .iter()
+            .find(|assignment| assignment.wav.matches(wav))
+            .map(|assignment| assignment.pad.to_ascii_uppercase());
+        let file_name = wav
+            .path()
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| wav.relative.clone());
+        match pad {
+            Some(pad) => format!("{pad}:{file_name}"),
+            None => file_name,
         }
     }
-}
 
-fn node_path(root_path: &Path, node: &TreeNode) -> PathBuf {
-    root_path.join(&node.relative_path)
-}
-
-fn find_favorite_node<'a>(
-    roots: &'a [(PathBuf, TreeNode)],
-    favorite: &LoopDirId,
-) -> Option<(usize, &'a Path, &'a TreeNode, Vec<String>)> {
-    for (root_index, (root_path, root)) in roots.iter().enumerate() {
-        if let Some((node, components)) = find_node(root_path, root, favorite, Vec::new()) {
-            return Some((root_index, root_path.as_path(), node, components));
-        }
+    pub(super) fn playback_grid(&self) -> LoopPlaybackGrid {
+        self.track_grid
+            .iter()
+            .map(|track| {
+                track
+                    .iter()
+                    .map(|cell| cell.as_ref().map(LoopWavId::path))
+                    .collect()
+            })
+            .collect()
     }
-    None
-}
-
-fn find_node<'a>(
-    root_path: &Path,
-    node: &'a TreeNode,
-    target: &LoopDirId,
-    components: Vec<String>,
-) -> Option<(&'a TreeNode, Vec<String>)> {
-    if !node.is_wav && LoopDirId::new(root_path, &node.relative_path).matches(target) {
-        return Some((node, components));
-    }
-    for child in &node.children {
-        if child.is_wav {
-            continue;
-        }
-        let mut child_components = components.clone();
-        child_components.push(child.name.clone());
-        if let Some(found) = find_node(root_path, child, target, child_components) {
-            return Some(found);
-        }
-    }
-    None
 }
 
 #[cfg(test)]

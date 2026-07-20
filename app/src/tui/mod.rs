@@ -213,6 +213,7 @@ pub struct TuiApp<'a> {
     pub(super) is_daw_mode: bool,
     startup_normal_cache_primed: bool,
     pub(super) loop_browser: loop_browser::LoopBrowser,
+    loop_playback: Option<loop_browser::playback::LoopPlaybackController>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

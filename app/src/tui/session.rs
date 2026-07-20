@@ -205,6 +205,7 @@ impl<'a> TuiApp<'a> {
             is_daw_mode: is_daw_mode && !restore_keyboard,
             startup_normal_cache_primed: false,
             loop_browser: super::loop_browser::LoopBrowser::default(),
+            loop_playback: None,
         }
     }
 

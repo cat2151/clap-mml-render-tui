@@ -121,6 +121,9 @@ impl<'a> TuiApp<'a> {
                 if self.mode == Mode::Keyboard {
                     self.finish_keyboard();
                 }
+                if self.mode == Mode::LoopBrowser {
+                    self.finish_loop_browser();
+                }
                 self.flush_patch_phrase_store_if_dirty();
                 self.save_history_state();
                 self.flush_notepad_disk_cache();
@@ -299,9 +302,14 @@ impl<'a> TuiApp<'a> {
                         Mode::PatchPhrase => self.handle_patch_phrase_key_event(key),
                         Mode::NotepadHistoryGuide => self.handle_notepad_history_guide(key.code),
                         Mode::Help => self.handle_help(key.code),
-                        Mode::LoopBrowser => match self.loop_browser.handle_key(key.code) {
+                        Mode::LoopBrowser => match self.loop_browser.handle_key_event(key) {
                             LoopBrowserAction::Continue => {}
-                            LoopBrowserAction::Play(path) => self.play_loop_file(path),
+                            LoopBrowserAction::Preview(path) => self.preview_loop_file(path),
+                            LoopBrowserAction::Trigger(path) => self.trigger_loop_pad(path),
+                            LoopBrowserAction::GridChanged { audition, grid } => {
+                                self.trigger_loop_pad(audition);
+                                self.update_loop_grid(grid);
+                            }
                             LoopBrowserAction::Return => self.finish_loop_browser(),
                             LoopBrowserAction::Quit => {
                                 self.finish_loop_browser();

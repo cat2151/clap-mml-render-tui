@@ -38,6 +38,42 @@ pub(crate) struct LoopCategoryAssignment {
     pub(crate) category: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct LoopWavId {
+    pub(crate) root: String,
+    pub(crate) relative: String,
+}
+
+impl LoopWavId {
+    pub(crate) fn new(root: &Path, relative: &Path) -> Self {
+        Self {
+            root: root.to_string_lossy().into_owned(),
+            relative: relative.to_string_lossy().into_owned(),
+        }
+    }
+
+    pub(crate) fn path(&self) -> PathBuf {
+        Path::new(&self.root).join(&self.relative)
+    }
+
+    fn lookup_key(&self) -> (String, String) {
+        (
+            normalize_path_text(&self.root),
+            normalize_path_text(&self.relative),
+        )
+    }
+
+    pub(crate) fn matches(&self, other: &Self) -> bool {
+        self.lookup_key() == other.lookup_key()
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct LoopPadAssignment {
+    pub(crate) pad: char,
+    pub(crate) wav: LoopWavId,
+}
+
 impl LoopCategoryAssignment {
     fn dir_id(&self) -> LoopDirId {
         LoopDirId {
@@ -54,6 +90,8 @@ pub(crate) struct LoopBrowserMetadata {
     pub(crate) favorite_dirs: Vec<LoopDirId>,
     #[serde(default)]
     pub(crate) category_assignments: Vec<LoopCategoryAssignment>,
+    #[serde(default)]
+    pub(crate) pad_assignments: Vec<LoopPadAssignment>,
 }
 
 impl Default for LoopBrowserMetadata {
@@ -62,6 +100,7 @@ impl Default for LoopBrowserMetadata {
             version: METADATA_VERSION,
             favorite_dirs: Vec::new(),
             category_assignments: Vec::new(),
+            pad_assignments: Vec::new(),
         }
     }
 }
@@ -115,6 +154,34 @@ impl LoopBrowserMetadata {
             category: category.to_string(),
         });
         Some(category.to_string())
+    }
+
+    pub(crate) fn pad(&self, pad: char) -> Option<&LoopWavId> {
+        self.pad_assignments
+            .iter()
+            .find(|assignment| assignment.pad == pad)
+            .map(|assignment| &assignment.wav)
+    }
+
+    /// Returns true when the pad is assigned after the operation.
+    pub(crate) fn toggle_pad(&mut self, pad: char, wav: &LoopWavId) -> bool {
+        if let Some(index) = self
+            .pad_assignments
+            .iter()
+            .position(|assignment| assignment.pad == pad)
+        {
+            if self.pad_assignments[index].wav.matches(wav) {
+                self.pad_assignments.remove(index);
+                return false;
+            }
+            self.pad_assignments[index].wav = wav.clone();
+            return true;
+        }
+        self.pad_assignments.push(LoopPadAssignment {
+            pad,
+            wav: wav.clone(),
+        });
+        true
     }
 }
 
@@ -175,6 +242,43 @@ fn validate_metadata(metadata: &LoopBrowserMetadata) -> Result<()> {
         if assignment.category.trim().is_empty() {
             anyhow::bail!("loop browser metadataに空のカテゴリ割当があります");
         }
+    }
+    let mut pads = std::collections::HashSet::new();
+    for assignment in &metadata.pad_assignments {
+        if !matches!(assignment.pad, 'c' | 'd' | 'e' | 'f' | 'g' | 'a' | 'b') {
+            anyhow::bail!(
+                "loop browser metadataに不正なWAV padがあります: {}",
+                assignment.pad
+            );
+        }
+        if !pads.insert(assignment.pad) {
+            anyhow::bail!(
+                "loop browser metadataに重複したWAV padがあります: {}",
+                assignment.pad
+            );
+        }
+        validate_wav_id(&assignment.wav)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_wav_id(wav: &LoopWavId) -> Result<()> {
+    if wav.root.trim().is_empty() {
+        anyhow::bail!("loop browser metadataに空のWAV rootがあります");
+    }
+    let relative = Path::new(&wav.relative);
+    if relative.is_absolute()
+        || relative
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+        || !relative
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("wav"))
+    {
+        anyhow::bail!(
+            "loop browser metadataに不正な相対WAV pathがあります: {}",
+            wav.relative
+        );
     }
     Ok(())
 }
@@ -288,39 +392,5 @@ fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn category_keys_use_name_characters_then_unused_alphabet() {
-        let categories = ["Guitar", "glock", "lead", "123", "gale"].map(str::to_string);
-        let keys = category_keys(&categories)
-            .into_iter()
-            .map(|(key, _)| key)
-            .collect::<Vec<_>>();
-        assert_eq!(keys, ['g', 'l', 'e', 'a', 'b']);
-    }
-
-    #[test]
-    fn metadata_round_trip_and_rejects_bad_data() {
-        let dir = std::env::temp_dir().join(format!(
-            "cmrt-loop-browser-metadata-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let path = dir.join("loop_browser.toml");
-        let mut metadata = LoopBrowserMetadata::default();
-        let id = LoopDirId::new(Path::new("/loops"), Path::new("Pack/Bass"));
-        assert!(metadata.toggle_favorite(&id));
-        metadata.toggle_category(&id, "bass");
-        save_to_path(&path, &metadata).unwrap();
-        assert_eq!(load_from_path(&path).unwrap(), metadata);
-
-        std::fs::write(&path, "version = 99").unwrap();
-        assert!(load_from_path(&path).is_err());
-        let _ = std::fs::remove_dir_all(dir);
-    }
-}
+#[path = "tests/loop_browser_metadata.rs"]
+mod tests;
