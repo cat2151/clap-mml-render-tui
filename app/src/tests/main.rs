@@ -22,6 +22,14 @@ fn check_subcommand_is_recognized() {
 }
 
 #[test]
+fn scan_loops_subcommand_is_recognized() {
+    assert_eq!(
+        parse_cli_from(["cmrt", "scan-loops"]).unwrap(),
+        CliAction::ScanLoops
+    );
+}
+
+#[test]
 fn build_voicing_cache_subcommand_is_recognized() {
     assert_eq!(
         parse_cli_from(["cmrt", "build-voicing-cache"]).unwrap(),

@@ -85,6 +85,14 @@ fn default_config_content_uses_patches_dirs_key() {
 }
 
 #[test]
+fn default_config_content_uses_empty_loop_dirs() {
+    let content = default_config_content();
+
+    assert!(content.contains("loop_dirs = []"));
+    assert!(!content.contains(r"N:\app4HDD\MAGIX"));
+}
+
+#[test]
 fn default_config_content_uses_voicing_source_urls() {
     let content = default_config_content();
 

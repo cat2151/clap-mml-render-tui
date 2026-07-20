@@ -103,7 +103,7 @@ fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
         .unwrap();
     let keybind_row = lines
         .iter()
-        .position(|line| line.contains("q ?:help e:config i:insert"))
+        .position(|line| line.contains("q ?:help e:config b:loops"))
         .unwrap();
 
     assert!(screen.contains("[NORMAL] notepad mode"));
@@ -113,7 +113,8 @@ fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
     assert_eq!(render_row, status_row + 1);
     assert_eq!(keybind_row, render_row + 1);
     assert!(normalized_lines[render_row].contains("render:実行0/2予約0"));
-    assert!(screen.contains("q ?:help e:config i:insert"));
+    assert!(screen.contains("q ?:help e:config b:loops"));
+    assert!(screen.contains("b:loops"));
     assert!(screen.contains("dd/Del:cut"));
     assert!(screen.contains("g:generate"));
     assert!(screen.contains("Shift+H:patch history"));
@@ -156,6 +157,18 @@ fn keyboard_screen_shows_connecting_status_and_navigation() {
     assert!(screen.contains("Mod: OFF"));
     assert!(screen.contains("PB: -"));
     assert!(screen.contains("CC#: 1"));
+}
+
+#[test]
+fn loop_browser_error_screen_shows_scan_guidance() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.handle_normal(KeyCode::Char('b'));
+
+    let screen = render_lines(&mut app, 180, 10).join("\n");
+
+    assert!(screen.contains("[LOOP BROWSER] WAV loops"));
+    assert!(screen.contains("cmrt scan-loops"));
+    assert!(screen.contains("loop browser"));
 }
 
 #[test]

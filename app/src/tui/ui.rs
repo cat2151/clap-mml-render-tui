@@ -2,6 +2,7 @@
 
 mod help;
 mod keyboard;
+mod loop_browser;
 mod overlay;
 mod status;
 
@@ -69,6 +70,10 @@ pub(in crate::tui::ui) fn mml_cache_hit(
 pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     if app.mode == Mode::Keyboard {
         keyboard::draw(app, f);
+        return;
+    }
+    if app.mode == Mode::LoopBrowser {
+        loop_browser::draw(app, f);
         return;
     }
     // play_state を一度だけロックしてスナップショットを取り、

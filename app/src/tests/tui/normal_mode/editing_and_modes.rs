@@ -169,6 +169,21 @@ fn handle_normal_v_launches_keyboard() {
 }
 
 #[test]
+fn handle_normal_b_enters_loop_browser_with_scan_guidance_without_cache() {
+    let mut app = TuiApp::new_for_test(test_config());
+
+    let result = app.handle_normal(KeyCode::Char('b'));
+
+    assert!(matches!(result, NormalAction::Continue));
+    assert!(matches!(app.mode, Mode::LoopBrowser));
+    assert!(app
+        .loop_browser
+        .error
+        .as_deref()
+        .is_some_and(|error| error.contains("cmrt scan-loops")));
+}
+
+#[test]
 fn start_keyboard_from_notepad_uses_current_cursor_line_patch() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![

@@ -156,6 +156,10 @@ voicing_override_source = "{DEFAULT_VOICING_OVERRIDE_SOURCE}"
 # 例 (macOS):   patches_dirs = ['/Library/Application Support/Surge XT/patches_factory', '/Library/Application Support/Surge XT/patches_3rdparty']
 {patches_dirs_line}
 
+# 【省略可】WAV ループブラウザーの検索対象ディレクトリ一覧
+# 設定後に `cmrt scan-loops` を実行してインデックスを作成してください。
+loop_dirs = []
+
 "#,
     )
 }

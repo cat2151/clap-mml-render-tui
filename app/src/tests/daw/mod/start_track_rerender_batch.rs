@@ -28,6 +28,7 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
             sample_rate: 44_100.0,
             buffer_size: 512,
             patches_dirs: None,
+            loop_dirs: Vec::new(),
             offline_render_workers: cache_render_workers,
             offline_render_server_workers: crate::config::DEFAULT_OFFLINE_RENDER_SERVER_WORKERS,
             offline_render_backend: crate::config::OfflineRenderBackend::InProcess,

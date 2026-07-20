@@ -46,6 +46,9 @@ pub struct Config {
     pub buffer_size: usize,
     /// パッチ検索対象ディレクトリ一覧
     pub patches_dirs: Option<Vec<String>>,
+    /// WAV ループブラウザーの検索対象ディレクトリ一覧
+    #[serde(default)]
+    pub loop_dirs: Vec<String>,
     /// DAW のオフラインレンダリング同時実行数
     #[serde(default = "default_offline_render_workers")]
     pub offline_render_workers: usize,
@@ -181,6 +184,9 @@ impl Config {
     }
 
     pub fn validate(&self) -> anyhow::Result<()> {
+        if self.loop_dirs.iter().any(|dir| dir.trim().is_empty()) {
+            anyhow::bail!("loop_dirs に空のディレクトリは指定できません");
+        }
         validate_offline_render_workers("offline_render_workers", self.offline_render_workers)?;
         validate_offline_render_workers(
             "offline_render_server_workers",

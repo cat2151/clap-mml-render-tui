@@ -81,13 +81,14 @@ pub(super) fn notepad_mode_title(mode: &Mode) -> &'static str {
         Mode::PatchPhrase => " [PATCH PHRASE] notepad mode ",
         Mode::Help => " [HELP] notepad mode ",
         Mode::Keyboard => " [KEYBOARD] keyboard mode ",
+        Mode::LoopBrowser => " [LOOP BROWSER] WAV loops ",
     }
 }
 
 pub(super) fn keybind_text(mode: &Mode) -> &'static str {
     match mode {
         Mode::Normal => {
-            "q ?:help e:config i:insert o/O:挿入 dd/Del:cut p/P:貼付 f:phrase g:generate r:ランダム音色 t:音色 Shift+H:patch history j/k・↑↓・PgUp/PgDn・Home/M:再生移動 Enter/Space w:DAW v:keyboard"
+            "q ?:help e:config b:loops i:insert o/O:挿入 dd/Del:cut p/P:貼付 f:phrase g:generate r:ランダム音色 t:音色 Shift+H:patch history j/k・↑↓・PgUp/PgDn・Home/M:再生移動 Enter/Space w:DAW v:keyboard"
         }
         Mode::Insert => "ESC:確定→NORMAL  Enter:確定→次行",
         Mode::PatchSelect => {
@@ -104,6 +105,9 @@ pub(super) fn keybind_text(mode: &Mode) -> &'static str {
         Mode::Keyboard => {
             "k/j・↑↓:patch±1  Ctrl+u/d・PgUp/PgDn:patch±10  h/l・Home/End:category±1  r:random  c d e f g a b:note  s:transport  Shift+H:buffer  n:notepad  w:DAW  q:quit"
         }
+        Mode::LoopBrowser => {
+            "j/k・↑↓:移動して再生 h/l・←/→:折り畳み/展開 Enter/Space:再生 Esc:戻る q:終了"
+        }
     }
 }
 
@@ -117,5 +121,6 @@ pub(super) fn status_text(mode: &Mode, play_state: &PlayState) -> String {
         Mode::NotepadHistory => format!("notepad history{}", play_str),
         Mode::PatchPhrase => format!("patch phrase{}", play_str),
         Mode::Keyboard => "keyboard".to_string(),
+        Mode::LoopBrowser => format!("loop browser{}", play_str),
     }
 }

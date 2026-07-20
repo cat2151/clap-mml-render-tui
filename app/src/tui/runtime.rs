@@ -13,6 +13,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use std::sync::Arc;
 
 use super::keyboard::KeyboardAction;
+use super::loop_browser::LoopBrowserAction;
 use super::{Mode, NormalAction, PlayState, TuiApp, TuiExitReason};
 
 struct TerminalCleanup {
@@ -44,7 +45,7 @@ impl<'a> TuiApp<'a> {
             Mode::NotepadHistory => self.notepad_filter_active,
             Mode::PatchPhrase => self.patch_phrase_filter_active,
             Mode::Keyboard => self.keyboard_mml_input.is_active(),
-            Mode::Normal | Mode::NotepadHistoryGuide | Mode::Help => false,
+            Mode::Normal | Mode::NotepadHistoryGuide | Mode::Help | Mode::LoopBrowser => false,
         }
     }
 
@@ -298,6 +299,15 @@ impl<'a> TuiApp<'a> {
                         Mode::PatchPhrase => self.handle_patch_phrase_key_event(key),
                         Mode::NotepadHistoryGuide => self.handle_notepad_history_guide(key.code),
                         Mode::Help => self.handle_help(key.code),
+                        Mode::LoopBrowser => match self.loop_browser.handle_key(key.code) {
+                            LoopBrowserAction::Continue => {}
+                            LoopBrowserAction::Play(path) => self.play_loop_file(path),
+                            LoopBrowserAction::Return => self.finish_loop_browser(),
+                            LoopBrowserAction::Quit => {
+                                self.finish_loop_browser();
+                                break;
+                            }
+                        },
                         Mode::Keyboard => unreachable!("keyboard input is handled above"),
                     }
                 }

@@ -31,6 +31,7 @@ buffer_size = 512
     );
     assert!(cfg.realtime_play_server_command.is_empty());
     assert!(cfg.autoplay_on_startup);
+    assert!(cfg.loop_dirs.is_empty());
 }
 
 #[test]
@@ -63,6 +64,40 @@ fn default_config_content_contains_render_server_keys() {
     assert!(content.contains("realtime_play_server_port = 62154"));
     assert!(content.contains("realtime_play_server_command = \"\""));
     assert!(content.contains("autoplay_on_startup = true"));
+    assert!(content.contains("loop_dirs = []"));
+}
+
+#[test]
+fn config_loop_dirs_parse_and_validate() {
+    let toml_str = r#"
+plugin_path = "/usr/lib/clap/Surge XT.clap"
+input_midi  = "input.mid"
+output_midi = "output.mid"
+output_wav  = "output.wav"
+sample_rate = 48000
+buffer_size = 512
+loop_dirs = ["/loops/one", "/loops/two"]
+"#;
+
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+    cfg.validate().unwrap();
+    assert_eq!(cfg.loop_dirs, ["/loops/one", "/loops/two"]);
+}
+
+#[test]
+fn config_loop_dirs_reject_empty_entry() {
+    let toml_str = r#"
+plugin_path = "/usr/lib/clap/Surge XT.clap"
+input_midi  = "input.mid"
+output_midi = "output.mid"
+output_wav  = "output.wav"
+sample_rate = 48000
+buffer_size = 512
+loop_dirs = [""]
+"#;
+
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+    assert!(cfg.validate().is_err());
 }
 
 #[test]

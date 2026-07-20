@@ -33,6 +33,7 @@ fn test_config() -> crate::config::Config {
         sample_rate: 44_100.0,
         buffer_size: 512,
         patches_dirs: Some(vec!["/tmp/patches".to_string()]),
+        loop_dirs: Vec::new(),
         offline_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
         offline_render_server_workers: crate::config::DEFAULT_OFFLINE_RENDER_SERVER_WORKERS,
         offline_render_backend: crate::config::OfflineRenderBackend::InProcess,

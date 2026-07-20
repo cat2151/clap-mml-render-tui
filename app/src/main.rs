@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use chord2mml_core::convert as chord_to_mml;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
-use clap_mml_render_tui::{config, server, tui, updater, voicing_cache_builder};
+use clap_mml_render_tui::{config, loop_library, server, tui, updater, voicing_cache_builder};
 use cmrt_core::{load_entry, mml_to_play};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -13,6 +13,7 @@ enum CliAction {
     Shutdown(u16),
     Update,
     Check,
+    ScanLoops,
     BuildVoicingCache { force: bool },
 }
 
@@ -78,6 +79,8 @@ enum Commands {
         #[arg(long)]
         force: bool,
     },
+    /// loop_dirs を走査して WAV ループキャッシュを再構築する
+    ScanLoops,
 }
 
 fn cli_command() -> clap::Command {
@@ -124,6 +127,10 @@ where
 
     if matches!(cli.command, Some(Commands::Check)) {
         return Ok(CliAction::Check);
+    }
+
+    if matches!(cli.command, Some(Commands::ScanLoops)) {
+        return Ok(CliAction::ScanLoops);
     }
 
     if let Some(Commands::BuildVoicingCache { force }) = cli.command {
@@ -193,6 +200,15 @@ fn main() -> Result<()> {
 
     let cfg = config::load()?;
 
+    if matches!(&action, CliAction::ScanLoops) {
+        let summary = loop_library::scan_and_save(&cfg)?;
+        println!(
+            "ループキャッシュを更新しました: {} roots / {} WAV files",
+            summary.roots, summary.wav_files
+        );
+        return Ok(());
+    }
+
     // plugin_path が未設定の場合は設定ファイルを編集するよう案内する
     if cfg.plugin_path.is_empty() {
         let path_hint = match config::config_file_path() {
@@ -210,7 +226,11 @@ fn main() -> Result<()> {
         // 判定は play-server 側プロセスがプラグインをロードして行う。
         CliAction::BuildVoicingCache { .. } => false,
         CliAction::Tui => cfg.offline_render_backend == config::OfflineRenderBackend::InProcess,
-        CliAction::Help(_) | CliAction::Shutdown(_) | CliAction::Update | CliAction::Check => {
+        CliAction::Help(_)
+        | CliAction::Shutdown(_)
+        | CliAction::Update
+        | CliAction::Check
+        | CliAction::ScanLoops => {
             unreachable!()
         }
     };
@@ -255,7 +275,11 @@ fn main() -> Result<()> {
             return voicing_cache_builder::run_build_voicing_cache(&cfg, force);
         }
         CliAction::Tui => {}
-        CliAction::Help(_) | CliAction::Shutdown(_) | CliAction::Update | CliAction::Check => {
+        CliAction::Help(_)
+        | CliAction::Shutdown(_)
+        | CliAction::Update
+        | CliAction::Check
+        | CliAction::ScanLoops => {
             unreachable!()
         }
     }
