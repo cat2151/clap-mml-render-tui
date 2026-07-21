@@ -19,7 +19,7 @@ impl LoopDirId {
         }
     }
 
-    fn lookup_key(&self) -> (String, String) {
+    pub(crate) fn lookup_key(&self) -> (String, String) {
         (
             normalize_path_text(&self.root),
             normalize_path_text(&self.relative),
@@ -71,7 +71,7 @@ impl LoopWavId {
         Path::new(&self.root).join(&self.relative)
     }
 
-    fn lookup_key(&self) -> (String, String) {
+    pub(crate) fn lookup_key(&self) -> (String, String) {
         (
             normalize_path_text(&self.root),
             normalize_path_text(&self.relative),

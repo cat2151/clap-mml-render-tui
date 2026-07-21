@@ -1,5 +1,6 @@
 use super::*;
 use crate::loop_browser_random::{save_to as save_random_decks, LoopRandomScope};
+use std::collections::HashSet;
 use std::path::Component;
 
 impl LoopBrowser {
@@ -47,19 +48,16 @@ impl LoopBrowser {
         }
     }
 
-    fn random_candidates(&self, scope: &LoopRandomScope) -> Vec<LoopWavId> {
+    pub(in crate::tui) fn random_candidates(&self, scope: &LoopRandomScope) -> Vec<LoopWavId> {
         let mut candidates = Vec::new();
+        let mut keys = HashSet::new();
         for (wav, _) in &self.wav_analyses {
             let included = match scope {
                 LoopRandomScope::All => true,
                 LoopRandomScope::Favorites => self.metadata.deepest_favorite_for_wav(wav).is_some(),
                 LoopRandomScope::FavoriteDir { dir } => dir.contains_wav(wav),
             };
-            if included
-                && !candidates
-                    .iter()
-                    .any(|candidate: &LoopWavId| candidate.matches(wav))
-            {
+            if included && keys.insert(wav.lookup_key()) {
                 candidates.push(wav.clone());
             }
         }

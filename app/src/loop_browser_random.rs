@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::loop_browser_metadata::{validate_dir_id, validate_wav_id, LoopDirId, LoopWavId};
@@ -27,6 +28,24 @@ impl LoopRandomScope {
             _ => false,
         }
     }
+
+    fn lookup_key(&self) -> LoopRandomScopeKey {
+        match self {
+            Self::All => LoopRandomScopeKey::All,
+            Self::Favorites => LoopRandomScopeKey::Favorites,
+            Self::FavoriteDir { dir } => {
+                let (root, relative) = dir.lookup_key();
+                LoopRandomScopeKey::FavoriteDir { root, relative }
+            }
+        }
+    }
+}
+
+#[derive(Eq, Hash, PartialEq)]
+enum LoopRandomScopeKey {
+    All,
+    Favorites,
+    FavoriteDir { root: String, relative: String },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -131,10 +150,19 @@ fn avoid_next(deck: &mut StoredRandomDeck, candidates: &[LoopWavId], avoid: &Loo
 }
 
 fn same_candidate_set(left: &[LoopWavId], right: &[LoopWavId]) -> bool {
-    left.len() == right.len()
-        && left
-            .iter()
-            .all(|candidate| right.iter().any(|other| candidate.matches(other)))
+    if left.len() != right.len() {
+        return false;
+    }
+    let item_count = left.len();
+    let left = left
+        .iter()
+        .map(LoopWavId::lookup_key)
+        .collect::<HashSet<_>>();
+    let right = right
+        .iter()
+        .map(LoopWavId::lookup_key)
+        .collect::<HashSet<_>>();
+    left.len() == item_count && right.len() == item_count && left == right
 }
 
 pub(crate) fn random_deck_path() -> Result<PathBuf> {
@@ -183,11 +211,9 @@ fn validate_stored(stored: &StoredRandomDeckState) -> Result<()> {
     if let Some(wav) = &stored.last_selected {
         validate_wav_id(wav)?;
     }
-    for (index, deck) in stored.decks.iter().enumerate() {
-        if stored.decks[..index]
-            .iter()
-            .any(|other| other.scope.matches(&deck.scope))
-        {
+    let mut scope_keys = HashSet::with_capacity(stored.decks.len());
+    for deck in &stored.decks {
+        if !scope_keys.insert(deck.scope.lookup_key()) {
             anyhow::bail!("random deckに重複したscopeがあります");
         }
         if let LoopRandomScope::FavoriteDir { dir } = &deck.scope {
@@ -196,12 +222,10 @@ fn validate_stored(stored: &StoredRandomDeckState) -> Result<()> {
         if deck.next > deck.order.len() {
             anyhow::bail!("random deckの次位置が範囲外です");
         }
-        for (wav_index, wav) in deck.order.iter().enumerate() {
+        let mut wav_keys = HashSet::with_capacity(deck.order.len());
+        for wav in &deck.order {
             validate_wav_id(wav)?;
-            if deck.order[..wav_index]
-                .iter()
-                .any(|other| other.matches(wav))
-            {
+            if !wav_keys.insert(wav.lookup_key()) {
                 anyhow::bail!("random deckに重複したWAVがあります");
             }
         }

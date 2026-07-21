@@ -1,6 +1,7 @@
 use super::*;
-use crate::loop_browser_random::load_from as load_random_decks;
+use crate::loop_browser_random::{load_from as load_random_decks, LoopRandomScope};
 use std::collections::HashSet;
+use std::time::{Duration, Instant};
 
 fn temp_path(name: &str) -> PathBuf {
     std::env::temp_dir()
@@ -288,4 +289,32 @@ fn save_failure_rolls_back_deck_and_does_not_move_or_preview() {
         .as_deref()
         .is_some_and(|error| error.contains("random deckを保存できません")));
     let _ = std::fs::remove_dir_all(blocked.parent().unwrap().parent().unwrap());
+}
+
+#[test]
+fn all_scope_builds_realistic_candidate_list_without_quadratic_delay() {
+    const WAV_COUNT: usize = 6_914;
+    let mut browser = LoopBrowser::default();
+    let analysis = indexed("unused.wav").analysis;
+    browser.wav_analyses = (0..WAV_COUNT)
+        .map(|index| {
+            (
+                LoopWavId::new(
+                    Path::new("/loops"),
+                    Path::new(&format!("library/{index:05}.wav")),
+                ),
+                analysis,
+            )
+        })
+        .collect();
+
+    let started_at = Instant::now();
+    let candidates = browser.random_candidates(&LoopRandomScope::All);
+
+    assert_eq!(candidates.len(), WAV_COUNT);
+    assert!(
+        started_at.elapsed() < Duration::from_secs(5),
+        "6,914件の候補生成が線形時間の予算を超えました: {:?}",
+        started_at.elapsed()
+    );
 }

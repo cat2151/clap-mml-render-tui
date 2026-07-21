@@ -1,5 +1,6 @@
 use super::*;
 use std::collections::HashSet;
+use std::time::{Duration, Instant};
 
 fn wav(relative: &str) -> LoopWavId {
     LoopWavId::new(Path::new("/loops"), Path::new(relative))
@@ -146,4 +147,53 @@ relative = "a.wav"
         .to_string()
         .contains("重複したWAV"));
     let _ = std::fs::remove_dir_all(path.parent().unwrap().parent().unwrap());
+}
+
+#[test]
+fn persisted_all_deck_with_realistic_library_size_loads_without_quadratic_delay() {
+    const WAV_COUNT: usize = 6_914;
+    let stored = StoredRandomDeckState {
+        version: RANDOM_DECK_VERSION,
+        last_selected: None,
+        decks: vec![StoredRandomDeck {
+            scope: LoopRandomScope::All,
+            order: (0..WAV_COUNT)
+                .map(|index| wav(&format!("library/{index:05}.wav")))
+                .collect(),
+            next: WAV_COUNT / 2,
+        }],
+    };
+    let text = toml::to_string_pretty(&stored).unwrap();
+
+    let started_at = Instant::now();
+    let parsed: StoredRandomDeckState = toml::from_str(&text).unwrap();
+    validate_stored(&parsed).unwrap();
+
+    assert_eq!(parsed.decks[0].order.len(), WAV_COUNT);
+    assert!(
+        started_at.elapsed() < Duration::from_secs(5),
+        "6,914件のrandom deckロードが線形時間の予算を超えました: {:?}",
+        started_at.elapsed()
+    );
+}
+
+#[test]
+fn large_candidate_sets_compare_by_normalized_hash_keys() {
+    const WAV_COUNT: usize = 6_914;
+    let left = (0..WAV_COUNT)
+        .map(|index| wav(&format!("library/{index:05}.wav")))
+        .collect::<Vec<_>>();
+    let mut right = left.clone();
+    right.reverse();
+
+    let started_at = Instant::now();
+    assert!(same_candidate_set(&left, &right));
+    assert!(
+        started_at.elapsed() < Duration::from_secs(5),
+        "6,914件の候補集合比較が線形時間の予算を超えました: {:?}",
+        started_at.elapsed()
+    );
+
+    right[0] = wav("library/replacement.wav");
+    assert!(!same_candidate_set(&left, &right));
 }
