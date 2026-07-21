@@ -14,8 +14,8 @@ impl DawApp {
     pub(crate) fn uses_textarea_cursor(&self) -> bool {
         match self.mode {
             DawMode::Insert => true,
-            DawMode::History => self.history_overlay_filter_active,
-            DawMode::PatchSelect => self.patch_select_filter_active,
+            DawMode::History => self.overlays.history.filter_active,
+            DawMode::PatchSelect => self.overlays.patch_select.filter_active,
             DawMode::Normal | DawMode::Help | DawMode::Mixer => false,
         }
     }
@@ -86,10 +86,10 @@ impl DawApp {
                     {
                         match self.mode {
                             DawMode::Insert => self.handle_insert(key),
-                            DawMode::History if self.history_overlay_filter_active => {
+                            DawMode::History if self.overlays.history.filter_active => {
                                 self.handle_history_overlay_key_event(key)
                             }
-                            DawMode::PatchSelect if self.patch_select_filter_active => {
+                            DawMode::PatchSelect if self.overlays.patch_select.filter_active => {
                                 self.handle_patch_select_key_event(key)
                             }
                             _ => {}

@@ -20,12 +20,15 @@ fn handle_normal_shift_h_opens_patch_history_overlay_for_track_patch() {
     assert!(matches!(app.mode, DawMode::History));
     assert_eq!(app.cursor_track, 1);
     assert_eq!(
-        app.history_overlay_patch_name.as_deref(),
+        app.overlays.history.patch_name.as_deref(),
         Some("Pads/Pad 1.fxp")
     );
-    assert!(matches!(app.history_overlay_focus, DawHistoryPane::History));
-    assert_eq!(app.history_overlay_history_cursor, 0);
-    assert_eq!(app.history_overlay_favorites_cursor, 0);
+    assert!(matches!(
+        app.overlays.history.focus,
+        DawHistoryPane::History
+    ));
+    assert_eq!(app.overlays.history.history_cursor, 0);
+    assert_eq!(app.overlays.history.favorites_cursor, 0);
 }
 
 #[test]
@@ -58,7 +61,7 @@ fn handle_normal_shift_h_migrates_legacy_patch_name_to_factory_prefixed_patch_na
     app.handle_normal(KeyCode::Char('H'));
 
     assert_eq!(
-        app.history_overlay_patch_name.as_deref(),
+        app.overlays.history.patch_name.as_deref(),
         Some("patches_factory/Pads/Pad 1.fxp")
     );
     assert!(app
@@ -128,7 +131,7 @@ fn handle_normal_shift_h_without_track_patch_opens_filtered_history_overlay() {
     app.handle_normal(KeyCode::Char('H'));
 
     assert!(matches!(app.mode, DawMode::History));
-    assert_eq!(app.history_overlay_patch_name, None);
+    assert_eq!(app.overlays.history.patch_name, None);
     assert_eq!(
         app.history_overlay_history_items(),
         vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()]
@@ -199,7 +202,7 @@ fn handle_history_overlay_arrow_and_space_preview_selected_mml() {
     app.handle_history_overlay(KeyCode::Right);
 
     assert!(matches!(
-        app.history_overlay_focus,
+        app.overlays.history.focus,
         DawHistoryPane::Favorites
     ));
     assert!(matches!(
@@ -224,7 +227,10 @@ fn handle_history_overlay_arrow_and_space_preview_selected_mml() {
 
     app.handle_history_overlay(KeyCode::Left);
 
-    assert!(matches!(app.history_overlay_focus, DawHistoryPane::History));
+    assert!(matches!(
+        app.overlays.history.focus,
+        DawHistoryPane::History
+    ));
     assert_eq!(
         app.play_measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"Pads/Pad 1.fxp"}history"#
@@ -248,7 +254,7 @@ fn handle_history_overlay_down_previews_next_history_item() {
 
     app.handle_history_overlay(KeyCode::Down);
 
-    assert_eq!(app.history_overlay_history_cursor, 1);
+    assert_eq!(app.overlays.history.history_cursor, 1);
     assert!(matches!(
         *app.play_state.lock().unwrap(),
         DawPlayState::Preview
@@ -277,7 +283,7 @@ fn handle_history_overlay_j_k_preview_uses_overlay_patch_name() {
 
     app.handle_history_overlay(KeyCode::Char('j'));
 
-    assert_eq!(app.history_overlay_history_cursor, 1);
+    assert_eq!(app.overlays.history.history_cursor, 1);
     assert!(matches!(
         *app.play_state.lock().unwrap(),
         DawPlayState::Preview
@@ -289,7 +295,7 @@ fn handle_history_overlay_j_k_preview_uses_overlay_patch_name() {
 
     app.handle_history_overlay(KeyCode::Char('k'));
 
-    assert_eq!(app.history_overlay_history_cursor, 0);
+    assert_eq!(app.overlays.history.history_cursor, 0);
     assert_eq!(
         app.play_measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"Bass/Bass 1.fxp","Surge XT patch filter":"pads"}bass first"#
@@ -353,7 +359,7 @@ fn handle_history_overlay_j_k_preview_falls_back_when_track_init_json_is_not_obj
 
     app.handle_history_overlay(KeyCode::Char('j'));
 
-    assert_eq!(app.history_overlay_history_cursor, 1);
+    assert_eq!(app.overlays.history.history_cursor, 1);
     assert!(matches!(
         *app.play_state.lock().unwrap(),
         DawPlayState::Preview

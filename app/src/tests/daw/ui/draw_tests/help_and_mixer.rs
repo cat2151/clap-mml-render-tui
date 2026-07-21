@@ -213,7 +213,7 @@ fn history_help_draws_on_top_of_history_overlay() {
     let mut app = build_test_app();
     app.mode = DawMode::Help;
     app.help_origin = DawMode::History;
-    app.history_overlay_patch_name = Some("Pads/Pad 1.fxp".to_string());
+    app.overlays.history.patch_name = Some("Pads/Pad 1.fxp".to_string());
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -307,8 +307,9 @@ fn help_overlay_size_follows_daw_help_content() {
     let mut patch_select = build_test_app();
     patch_select.mode = DawMode::Help;
     patch_select.help_origin = DawMode::PatchSelect;
-    patch_select.patch_all = vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
-    patch_select.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
+    patch_select.overlays.patch_select.all =
+        vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
+    patch_select.overlays.patch_select.filtered = vec!["Pads/Pad 1.fxp".to_string()];
 
     let normal_buffer = render_buffer(&normal, 200, 60);
     let patch_select_buffer = render_buffer(&patch_select, 200, 60);

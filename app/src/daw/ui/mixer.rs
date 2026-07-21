@@ -14,6 +14,9 @@ pub(super) fn draw_mixer(frame: &mut Frame<'_>, app: &DawApp, area: Rect) {
         frame,
         area,
         &tracks,
-        app.mixer_cursor_track.saturating_sub(FIRST_PLAYABLE_TRACK),
+        app.overlays
+            .mixer
+            .cursor_track
+            .saturating_sub(FIRST_PLAYABLE_TRACK),
     );
 }

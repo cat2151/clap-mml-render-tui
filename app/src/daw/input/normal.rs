@@ -374,7 +374,7 @@ impl DawApp {
 
             KeyCode::Char('i') => self.start_insert(),
             KeyCode::Char('m') => {
-                self.mixer_cursor_track = self
+                self.overlays.mixer.cursor_track = self
                     .cursor_track
                     .clamp(FIRST_PLAYABLE_TRACK, self.tracks - 1);
                 self.mode = DawMode::Mixer;

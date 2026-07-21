@@ -56,7 +56,7 @@ fn start_patch_select_overlay_migrates_prefixed_favorites_from_legacy_patch_name
     app.start_patch_select_overlay(None);
 
     assert_eq!(
-        app.patch_favorite_items,
+        app.overlays.patch_select.favorite_items,
         vec!["patches_factory/Pads/Pad 1.fxp".to_string()]
     );
     assert!(app
@@ -102,7 +102,7 @@ fn start_patch_select_overlay_keeps_favorites_in_registered_order() {
     app.start_patch_select_overlay(None);
 
     assert_eq!(
-        app.patch_favorite_items,
+        app.overlays.patch_select.favorite_items,
         vec![
             "Pad 2.fxp".to_string(),
             "Pad A.fxp".to_string(),
@@ -118,12 +118,18 @@ fn handle_patch_select_enter_saves_filter_query_in_track_init_json() {
     app.cursor_measure = 1;
     app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
     app.data[1][1] = "l8cdef".to_string();
-    app.patch_all = vec![
+    app.overlays.patch_select.all = vec![
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         ("Bass Soft 1.fxp".to_string(), "bass soft 1.fxp".to_string()),
         ("Lead 1.fxp".to_string(), "lead 1.fxp".to_string()),
     ];
-    app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
+    app.overlays.patch_select.filtered = app
+        .overlays
+        .patch_select
+        .all
+        .iter()
+        .map(|(name, _)| name.clone())
+        .collect();
     app.mode = DawMode::PatchSelect;
 
     app.handle_patch_select(KeyCode::Char('/'));
@@ -146,12 +152,18 @@ fn handle_patch_select_filter_space_adds_and_term_instead_of_previewing() {
     app.cursor_measure = 1;
     app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
     app.data[1][1] = "l8cdef".to_string();
-    app.patch_all = vec![
+    app.overlays.patch_select.all = vec![
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         ("Bass Soft 1.fxp".to_string(), "bass soft 1.fxp".to_string()),
         ("Bass Hard 1.fxp".to_string(), "bass hard 1.fxp".to_string()),
     ];
-    app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
+    app.overlays.patch_select.filtered = app
+        .overlays
+        .patch_select
+        .all
+        .iter()
+        .map(|(name, _)| name.clone())
+        .collect();
     app.mode = DawMode::PatchSelect;
 
     app.handle_patch_select(KeyCode::Char('/'));
@@ -162,7 +174,7 @@ fn handle_patch_select_filter_space_adds_and_term_instead_of_previewing() {
     let preview_before_space = app.play_measure_track_mmls.lock().unwrap()[0][1].clone();
 
     app.handle_patch_select(KeyCode::Char(' '));
-    assert_eq!(app.patch_query, "bass ");
+    assert_eq!(app.overlays.patch_select.query, "bass ");
     assert_eq!(
         app.play_measure_track_mmls.lock().unwrap()[0][1],
         preview_before_space
@@ -172,9 +184,12 @@ fn handle_patch_select_filter_space_adds_and_term_instead_of_previewing() {
     app.handle_patch_select(KeyCode::Char('f'));
     app.handle_patch_select(KeyCode::Char('t'));
 
-    assert!(app.patch_select_filter_active);
-    assert_eq!(app.patch_query, "bass soft");
-    assert_eq!(app.patch_filtered, vec!["Bass Soft 1.fxp".to_string()]);
+    assert!(app.overlays.patch_select.filter_active);
+    assert_eq!(app.overlays.patch_select.query, "bass soft");
+    assert_eq!(
+        app.overlays.patch_select.filtered,
+        vec!["Bass Soft 1.fxp".to_string()]
+    );
     assert_eq!(
         app.play_measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"Bass Soft 1.fxp"}l8cdef"#,
@@ -188,7 +203,7 @@ fn handle_patch_select_j_and_k_move_selection_until_slash_starts_filter_input() 
     app.cursor_measure = 1;
     app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
     app.data[1][1] = "l8cdef".to_string();
-    app.patch_all = vec![
+    app.overlays.patch_select.all = vec![
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         (
             "JK Brass/Bass 1.fxp".to_string(),
@@ -196,16 +211,22 @@ fn handle_patch_select_j_and_k_move_selection_until_slash_starts_filter_input() 
         ),
         ("JK Lead.fxp".to_string(), "jk lead.fxp".to_string()),
     ];
-    app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
-    app.patch_cursor = 1;
+    app.overlays.patch_select.filtered = app
+        .overlays
+        .patch_select
+        .all
+        .iter()
+        .map(|(name, _)| name.clone())
+        .collect();
+    app.overlays.patch_select.cursor = 1;
     app.mode = DawMode::PatchSelect;
 
     app.handle_patch_select(KeyCode::Char('j'));
     app.handle_patch_select(KeyCode::Char('k'));
 
-    assert_eq!(app.patch_query, "");
-    assert!(!app.patch_select_filter_active);
-    assert_eq!(app.patch_cursor, 1);
+    assert_eq!(app.overlays.patch_select.query, "");
+    assert!(!app.overlays.patch_select.filter_active);
+    assert_eq!(app.overlays.patch_select.cursor, 1);
     assert_eq!(
         app.play_measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"JK Brass/Bass 1.fxp"}l8cdef"#,
@@ -215,13 +236,13 @@ fn handle_patch_select_j_and_k_move_selection_until_slash_starts_filter_input() 
     app.handle_patch_select(KeyCode::Char('j'));
     app.handle_patch_select(KeyCode::Char('k'));
 
-    assert!(app.patch_select_filter_active);
-    assert_eq!(app.patch_query, "jk");
+    assert!(app.overlays.patch_select.filter_active);
+    assert_eq!(app.overlays.patch_select.query, "jk");
     assert_eq!(
-        app.patch_filtered,
+        app.overlays.patch_select.filtered,
         vec!["JK Brass/Bass 1.fxp".to_string(), "JK Lead.fxp".to_string()]
     );
-    assert_eq!(app.patch_cursor, 0);
+    assert_eq!(app.overlays.patch_select.cursor, 0);
 }
 
 #[test]
@@ -231,7 +252,7 @@ fn handle_patch_select_j_prefetches_predicted_preview_cache() {
     app.cursor_measure = 1;
     app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
     app.data[1][1] = "l8cdef".to_string();
-    app.patch_all = vec![
+    app.overlays.patch_select.all = vec![
         ("Pads/Pad 0.fxp".to_string(), "pads/pad 0.fxp".to_string()),
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         ("Pads/Pad 2.fxp".to_string(), "pads/pad 2.fxp".to_string()),
@@ -240,13 +261,19 @@ fn handle_patch_select_j_prefetches_predicted_preview_cache() {
         ("Pads/Pad 5.fxp".to_string(), "pads/pad 5.fxp".to_string()),
         ("Pads/Pad 6.fxp".to_string(), "pads/pad 6.fxp".to_string()),
     ];
-    app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
+    app.overlays.patch_select.filtered = app
+        .overlays
+        .patch_select
+        .all
+        .iter()
+        .map(|(name, _)| name.clone())
+        .collect();
     app.mode = DawMode::PatchSelect;
-    app.patch_select_focus = DawPatchSelectPane::Patches;
+    app.overlays.patch_select.focus = DawPatchSelectPane::Patches;
 
     app.handle_patch_select(KeyCode::Char('j'));
 
-    assert_eq!(app.patch_cursor, 1);
+    assert_eq!(app.overlays.patch_select.cursor, 1);
     assert_eq!(app.overlay_preview_cache.lock().unwrap().len(), 5);
 }
 
@@ -257,11 +284,17 @@ fn handle_patch_select_left_in_filter_query_does_not_repreview() {
     app.cursor_measure = 1;
     app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
     app.data[1][1] = "l8cdef".to_string();
-    app.patch_all = vec![
+    app.overlays.patch_select.all = vec![
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         ("Bass Soft 1.fxp".to_string(), "bass soft 1.fxp".to_string()),
     ];
-    app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
+    app.overlays.patch_select.filtered = app
+        .overlays
+        .patch_select
+        .all
+        .iter()
+        .map(|(name, _)| name.clone())
+        .collect();
     app.mode = DawMode::PatchSelect;
 
     app.handle_patch_select(KeyCode::Char('/'));
@@ -270,8 +303,8 @@ fn handle_patch_select_left_in_filter_query_does_not_repreview() {
 
     app.handle_patch_select(KeyCode::Left);
 
-    assert!(app.patch_select_filter_active);
-    assert_eq!(app.patch_query, "b");
+    assert!(app.overlays.patch_select.filter_active);
+    assert_eq!(app.overlays.patch_select.query, "b");
     assert_eq!(
         app.play_measure_track_mmls.lock().unwrap()[0][1],
         preview_before

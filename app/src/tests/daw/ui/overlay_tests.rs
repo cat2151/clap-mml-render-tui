@@ -4,7 +4,7 @@ use super::*;
 fn draw_shows_history_overlay_title_and_items() {
     let mut app = build_test_app();
     app.mode = DawMode::History;
-    app.history_overlay_patch_name = Some("Pads/Pad 1.fxp".to_string());
+    app.overlays.history.patch_name = Some("Pads/Pad 1.fxp".to_string());
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -48,12 +48,18 @@ fn draw_shows_history_overlay_title_and_items() {
 fn draw_shows_patch_select_overlay_title_and_items() {
     let mut app = build_test_app();
     app.mode = DawMode::PatchSelect;
-    app.patch_all = vec![
+    app.overlays.patch_select.all = vec![
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         ("Bass/Bass 1.fxp".to_string(), "bass/bass 1.fxp".to_string()),
     ];
-    app.patch_filtered = app.patch_all.iter().map(|(orig, _)| orig.clone()).collect();
-    app.patch_favorite_items = vec!["Pads/Pad 1.fxp".to_string()];
+    app.overlays.patch_select.filtered = app
+        .overlays
+        .patch_select
+        .all
+        .iter()
+        .map(|(orig, _)| orig.clone())
+        .collect();
+    app.overlays.patch_select.favorite_items = vec!["Pads/Pad 1.fxp".to_string()];
 
     let normalized_lines: Vec<String> = render_lines(&app, 160, 30)
         .into_iter()
@@ -108,13 +114,13 @@ fn draw_shows_patch_select_overlay_title_and_items() {
 fn draw_patch_select_shows_filter_input_keybinds_when_filter_active() {
     let mut app = build_test_app();
     app.mode = DawMode::PatchSelect;
-    app.patch_all = vec![
+    app.overlays.patch_select.all = vec![
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         ("Bass/Bass 1.fxp".to_string(), "bass/bass 1.fxp".to_string()),
     ];
-    app.patch_filtered = vec!["Bass/Bass 1.fxp".to_string()];
-    app.patch_query = "bass".to_string();
-    app.patch_select_filter_active = true;
+    app.overlays.patch_select.filtered = vec!["Bass/Bass 1.fxp".to_string()];
+    app.overlays.patch_select.query = "bass".to_string();
+    app.overlays.patch_select.filter_active = true;
 
     let normalized_lines: Vec<String> = render_lines(&app, 140, 30)
         .into_iter()
@@ -141,12 +147,18 @@ fn draw_patch_select_shows_filter_input_keybinds_when_filter_active() {
 fn draw_patch_select_shows_filter_input_placeholder_when_active_and_empty() {
     let mut app = build_test_app();
     app.mode = DawMode::PatchSelect;
-    app.patch_all = vec![
+    app.overlays.patch_select.all = vec![
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         ("Bass/Bass 1.fxp".to_string(), "bass/bass 1.fxp".to_string()),
     ];
-    app.patch_filtered = app.patch_all.iter().map(|(orig, _)| orig.clone()).collect();
-    app.patch_select_filter_active = true;
+    app.overlays.patch_select.filtered = app
+        .overlays
+        .patch_select
+        .all
+        .iter()
+        .map(|(orig, _)| orig.clone())
+        .collect();
+    app.overlays.patch_select.filter_active = true;
 
     let normalized_screen = render_lines(&app, 140, 30).join("\n").replace(' ', "");
 
@@ -159,10 +171,10 @@ fn draw_patch_select_shows_filter_input_placeholder_when_active_and_empty() {
 fn draw_patch_select_does_not_show_total_patch_count_in_title() {
     let mut app = build_test_app();
     app.mode = DawMode::PatchSelect;
-    app.patch_all = (0..3000)
+    app.overlays.patch_select.all = (0..3000)
         .map(|i| (format!("Pad {i}"), format!("pad {i}")))
         .collect();
-    app.patch_filtered = vec!["Pad 0".to_string()];
+    app.overlays.patch_select.filtered = vec!["Pad 0".to_string()];
 
     let normalized_screen = render_lines(&app, 160, 30).join("\n").replace(' ', "");
 
@@ -174,10 +186,11 @@ fn draw_patch_select_does_not_show_total_patch_count_in_title() {
 fn draw_patch_select_uses_query_cursor_only() {
     let mut app = build_test_app();
     app.mode = DawMode::PatchSelect;
-    app.patch_all = vec![("Bass/Bass 1.fxp".to_string(), "bass/bass 1.fxp".to_string())];
-    app.patch_filtered = vec!["Bass/Bass 1.fxp".to_string()];
-    app.patch_query = "bass".to_string();
-    app.patch_select_filter_active = true;
+    app.overlays.patch_select.all =
+        vec![("Bass/Bass 1.fxp".to_string(), "bass/bass 1.fxp".to_string())];
+    app.overlays.patch_select.filtered = vec!["Bass/Bass 1.fxp".to_string()];
+    app.overlays.patch_select.query = "bass".to_string();
+    app.overlays.patch_select.filter_active = true;
 
     let buffer = render_buffer(&app, 140, 30);
     let cursor = render_cursor_position(&app, 140, 30);
@@ -225,8 +238,8 @@ fn draw_patch_select_uses_query_cursor_only() {
 fn draw_history_overlay_uses_query_cursor_only_while_filtering() {
     let mut app = build_test_app();
     app.mode = DawMode::History;
-    app.history_overlay_query = "l8".to_string();
-    app.history_overlay_filter_active = true;
+    app.overlays.history.query = "l8".to_string();
+    app.overlays.history.filter_active = true;
     app.patch_phrase_store.notepad = crate::history::PatchPhraseState {
         history: vec!["l8cdef".to_string()],
         favorites: vec!["l8efga".to_string()],
@@ -278,7 +291,7 @@ fn draw_history_overlay_uses_query_cursor_only_while_filtering() {
 fn draw_history_overlay_uses_contrast_background_for_selected_entry_without_blink() {
     let mut app = build_test_app();
     app.mode = DawMode::History;
-    app.history_overlay_patch_name = Some("Pads/Pad 1.fxp".to_string());
+    app.overlays.history.patch_name = Some("Pads/Pad 1.fxp".to_string());
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -308,11 +321,11 @@ fn insert_and_filter_modes_use_terminal_bar_cursor() {
     assert!(app.uses_textarea_cursor());
 
     app.mode = DawMode::History;
-    app.history_overlay_filter_active = true;
+    app.overlays.history.filter_active = true;
     assert!(app.uses_textarea_cursor());
 
-    app.history_overlay_filter_active = false;
+    app.overlays.history.filter_active = false;
     app.mode = DawMode::PatchSelect;
-    app.patch_select_filter_active = true;
+    app.overlays.patch_select.filter_active = true;
     assert!(app.uses_textarea_cursor());
 }

@@ -15,16 +15,18 @@ impl DawApp {
                 self.mode = DawMode::Normal;
             }
             KeyCode::Char('h') | KeyCode::Left
-                if self.mixer_cursor_track > FIRST_PLAYABLE_TRACK =>
+                if self.overlays.mixer.cursor_track > FIRST_PLAYABLE_TRACK =>
             {
-                self.mixer_cursor_track -= 1;
+                self.overlays.mixer.cursor_track -= 1;
             }
-            KeyCode::Char('l') | KeyCode::Right if self.mixer_cursor_track + 1 < self.tracks => {
-                self.mixer_cursor_track += 1;
+            KeyCode::Char('l') | KeyCode::Right
+                if self.overlays.mixer.cursor_track + 1 < self.tracks =>
+            {
+                self.overlays.mixer.cursor_track += 1;
             }
             KeyCode::Char('j') | KeyCode::Down
                 if self.adjust_track_volume_db(
-                    self.mixer_cursor_track,
+                    self.overlays.mixer.cursor_track,
                     -crate::mixer_overlay::MIXER_STEP_DB,
                 ) =>
             {
@@ -33,7 +35,7 @@ impl DawApp {
             }
             KeyCode::Char('k') | KeyCode::Up
                 if self.adjust_track_volume_db(
-                    self.mixer_cursor_track,
+                    self.overlays.mixer.cursor_track,
                     crate::mixer_overlay::MIXER_STEP_DB,
                 ) =>
             {

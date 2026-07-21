@@ -9,10 +9,7 @@ pub(super) use tui_textarea::TextArea;
 pub(super) use crate::config::Config;
 
 pub(super) use super::{
-    super::{
-        AbRepeatState, CacheState, CellCache, DawApp, DawHistoryPane, DawMode, DawPatchSelectPane,
-        DawPlayState,
-    },
+    super::{AbRepeatState, CacheState, CellCache, DawApp, DawMode, DawPlayState},
     cache_mixer::{
         build_playback_measure_samples, pad_playback_measure_samples, try_get_cached_samples,
         PlaybackMeasureRequest,
@@ -86,33 +83,14 @@ fn build_test_app() -> DawApp {
         track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
         solo_tracks: vec![false; tracks],
         track_volumes_db: vec![0; tracks],
-        mixer_cursor_track: 1,
+        overlays: crate::daw::overlays::DawOverlays::new(1),
         play_track_gains: Arc::new(Mutex::new(vec![0.0; tracks])),
         yank_buffer: None,
         normal_pending_delete: false,
         normal_paste_undo: None,
         patch_phrase_store: crate::history::PatchPhraseStore::default(),
         patch_phrase_store_dirty: false,
-        history_overlay_patch_name: None,
-        history_overlay_query: String::new(),
-        history_overlay_query_textarea: crate::text_input::new_single_line_textarea(""),
-        history_overlay_history_cursor: 0,
-        history_overlay_favorites_cursor: 0,
-        history_overlay_focus: DawHistoryPane::History,
-        history_overlay_filter_active: false,
-        patch_all: Vec::new(),
-        patch_query: String::new(),
-        patch_query_textarea: crate::text_input::new_single_line_textarea(""),
-        patch_query_before_input: String::new(),
-        patch_filtered: Vec::new(),
-        patch_cursor: 0,
-        patch_favorite_items: Vec::new(),
-        patch_favorites_query: String::new(),
-        patch_favorites_query_textarea: crate::text_input::new_single_line_textarea(""),
-        patch_favorites_query_before_input: String::new(),
-        patch_favorites_cursor: 0,
-        patch_select_focus: DawPatchSelectPane::Patches,
-        patch_select_filter_active: false,
+
         random_patch_decks: crate::random::RandomIndexDecks::default(),
     }
 }

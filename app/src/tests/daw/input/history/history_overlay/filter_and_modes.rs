@@ -25,13 +25,13 @@ fn handle_history_overlay_slash_then_enter_keeps_filtered_results_for_j_navigati
     app.handle_history_overlay(KeyCode::Enter);
     app.handle_history_overlay(KeyCode::Char('j'));
 
-    assert!(!app.history_overlay_filter_active);
-    assert_eq!(app.history_overlay_query, "jk");
+    assert!(!app.overlays.history.filter_active);
+    assert_eq!(app.overlays.history.query, "jk");
     assert_eq!(
         app.history_overlay_history_items(),
         vec!["beta jk".to_string(), "gamma jk".to_string()]
     );
-    assert_eq!(app.history_overlay_history_cursor, 1);
+    assert_eq!(app.overlays.history.history_cursor, 1);
     assert!(matches!(
         *app.play_state.lock().unwrap(),
         DawPlayState::Preview
@@ -65,8 +65,8 @@ fn handle_history_overlay_allows_slash_character_in_filter_query() {
     app.handle_history_overlay(KeyCode::Char('/'));
     app.handle_history_overlay(KeyCode::Char('n'));
 
-    assert!(app.history_overlay_filter_active);
-    assert_eq!(app.history_overlay_query, "/n");
+    assert!(app.overlays.history.filter_active);
+    assert_eq!(app.overlays.history.query, "/n");
     assert_eq!(
         app.history_overlay_history_items(),
         vec!["dir/name".to_string()]
@@ -88,8 +88,8 @@ fn handle_history_overlay_filter_ctrl_a_uses_tui_textarea_default_binding() {
     app.handle_history_overlay_key_event(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
     app.handle_history_overlay(KeyCode::Char('X'));
 
-    assert!(app.history_overlay_filter_active);
-    assert_eq!(app.history_overlay_query, "Xpad");
+    assert!(app.overlays.history.filter_active);
+    assert_eq!(app.overlays.history.query, "Xpad");
 }
 
 #[test]
@@ -148,17 +148,20 @@ fn handle_history_overlay_n_p_t_switch_to_corresponding_overlays() {
 
     app.handle_history_overlay(KeyCode::Char('n'));
     assert!(matches!(app.mode, DawMode::History));
-    assert_eq!(app.history_overlay_patch_name, None);
-    assert_eq!(app.history_overlay_history_cursor, 0);
+    assert_eq!(app.overlays.history.patch_name, None);
+    assert_eq!(app.overlays.history.history_cursor, 0);
 
     app.handle_history_overlay(KeyCode::Char('p'));
     assert!(matches!(app.mode, DawMode::History));
     assert_eq!(
-        app.history_overlay_patch_name.as_deref(),
+        app.overlays.history.patch_name.as_deref(),
         Some("Pads/Pad 1.fxp")
     );
 
     app.handle_history_overlay(KeyCode::Char('t'));
     assert!(matches!(app.mode, DawMode::PatchSelect));
-    assert_eq!(app.patch_filtered[app.patch_cursor], "Pads/Pad 1.fxp");
+    assert_eq!(
+        app.overlays.patch_select.filtered[app.overlays.patch_select.cursor],
+        "Pads/Pad 1.fxp"
+    );
 }

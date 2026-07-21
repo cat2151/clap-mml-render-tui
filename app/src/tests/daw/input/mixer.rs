@@ -4,13 +4,13 @@ use super::*;
 fn handle_mixer_supports_track_navigation_and_escape() {
     let (mut app, _cache_rx) = build_test_app();
     app.mode = DawMode::Mixer;
-    app.mixer_cursor_track = 1;
+    app.overlays.mixer.cursor_track = 1;
 
     app.handle_mixer(crossterm::event::KeyCode::Char('l'));
-    assert_eq!(app.mixer_cursor_track, 2);
+    assert_eq!(app.overlays.mixer.cursor_track, 2);
 
     app.handle_mixer(crossterm::event::KeyCode::Char('h'));
-    assert_eq!(app.mixer_cursor_track, 1);
+    assert_eq!(app.overlays.mixer.cursor_track, 1);
 
     app.handle_mixer(crossterm::event::KeyCode::Esc);
     assert!(matches!(app.mode, DawMode::Normal));
@@ -20,14 +20,14 @@ fn handle_mixer_supports_track_navigation_and_escape() {
 fn handle_mixer_keeps_cursor_within_playable_track_range() {
     let (mut app, _cache_rx) = build_test_app();
     app.mode = DawMode::Mixer;
-    app.mixer_cursor_track = 1;
+    app.overlays.mixer.cursor_track = 1;
 
     app.handle_mixer(crossterm::event::KeyCode::Left);
-    assert_eq!(app.mixer_cursor_track, 1);
+    assert_eq!(app.overlays.mixer.cursor_track, 1);
 
-    app.mixer_cursor_track = app.tracks - 1;
+    app.overlays.mixer.cursor_track = app.tracks - 1;
     app.handle_mixer(crossterm::event::KeyCode::Right);
-    assert_eq!(app.mixer_cursor_track, app.tracks - 1);
+    assert_eq!(app.overlays.mixer.cursor_track, app.tracks - 1);
 }
 
 #[test]
@@ -39,7 +39,7 @@ fn handle_mixer_adjusts_volume_in_3db_steps() {
         let _guard = crate::test_utils::set_local_dir_envs(&tmp);
         let (mut app, _cache_rx) = build_test_app();
         app.mode = DawMode::Mixer;
-        app.mixer_cursor_track = 1;
+        app.overlays.mixer.cursor_track = 1;
 
         app.handle_mixer(crossterm::event::KeyCode::Char('j'));
         app.handle_mixer(crossterm::event::KeyCode::Char('k'));

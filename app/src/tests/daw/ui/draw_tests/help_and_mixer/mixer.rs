@@ -4,7 +4,7 @@ use super::*;
 fn draw_shows_mixer_overlay_with_track_labels_and_db_values() {
     let mut app = build_test_app();
     app.mode = DawMode::Mixer;
-    app.mixer_cursor_track = 1;
+    app.overlays.mixer.cursor_track = 1;
     app.track_volumes_db[1] = -3;
     app.track_volumes_db[2] = 6;
 
@@ -38,7 +38,7 @@ fn draw_shows_mixer_overlay_with_track_labels_and_db_values() {
 fn draw_highlights_selected_mixer_track_with_contrast_background_without_blink() {
     let mut app = build_test_app();
     app.mode = DawMode::Mixer;
-    app.mixer_cursor_track = 1;
+    app.overlays.mixer.cursor_track = 1;
 
     let buffer = render_buffer(&app, 100, 30);
     let highlighted_positions: Vec<(u16, u16)> = (0..100)

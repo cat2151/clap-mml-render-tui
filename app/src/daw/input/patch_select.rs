@@ -9,16 +9,16 @@ const PATCH_SELECT_PREVIEW_FALLBACK_PHRASE: &str = "c";
 
 impl DawApp {
     fn move_patch_select_selection_by(&mut self, delta: isize) {
-        let items_len = match self.patch_select_focus {
-            DawPatchSelectPane::Patches => self.patch_filtered.len(),
+        let items_len = match self.overlays.patch_select.focus {
+            DawPatchSelectPane::Patches => self.overlays.patch_select.filtered.len(),
             DawPatchSelectPane::Favorites => self.patch_select_favorite_items().len(),
         };
         if items_len == 0 {
             return;
         }
-        let cursor = match self.patch_select_focus {
-            DawPatchSelectPane::Patches => &mut self.patch_cursor,
-            DawPatchSelectPane::Favorites => &mut self.patch_favorites_cursor,
+        let cursor = match self.overlays.patch_select.focus {
+            DawPatchSelectPane::Patches => &mut self.overlays.patch_select.cursor,
+            DawPatchSelectPane::Favorites => &mut self.overlays.patch_select.favorites_cursor,
         };
         let max_cursor = items_len.saturating_sub(1) as isize;
         let next_cursor = (*cursor as isize + delta).clamp(0, max_cursor) as usize;
@@ -30,7 +30,9 @@ impl DawApp {
 
     fn refresh_patch_select_favorites(&mut self) {
         let patch_order = self
-            .patch_all
+            .overlays
+            .patch_select
+            .all
             .iter()
             .map(|(patch_name, _)| patch_name.clone())
             .collect::<Vec<_>>();
@@ -38,7 +40,7 @@ impl DawApp {
             self.mark_patch_phrase_store_dirty();
         }
 
-        self.patch_favorite_items = self
+        self.overlays.patch_select.favorite_items = self
             .patch_phrase_store
             .favorite_patches
             .iter()
@@ -53,17 +55,25 @@ impl DawApp {
     }
 
     fn sync_patch_select_cursors(&mut self) {
-        if self.patch_filtered.is_empty() {
-            self.patch_cursor = 0;
+        if self.overlays.patch_select.filtered.is_empty() {
+            self.overlays.patch_select.cursor = 0;
         } else {
-            self.patch_cursor = self.patch_cursor.min(self.patch_filtered.len() - 1);
+            self.overlays.patch_select.cursor = self
+                .overlays
+                .patch_select
+                .cursor
+                .min(self.overlays.patch_select.filtered.len() - 1);
         }
 
         let favorite_items = self.patch_select_favorite_items();
         if favorite_items.is_empty() {
-            self.patch_favorites_cursor = 0;
+            self.overlays.patch_select.favorites_cursor = 0;
         } else {
-            self.patch_favorites_cursor = self.patch_favorites_cursor.min(favorite_items.len() - 1);
+            self.overlays.patch_select.favorites_cursor = self
+                .overlays
+                .patch_select
+                .favorites_cursor
+                .min(favorite_items.len() - 1);
         }
     }
 
@@ -73,7 +83,7 @@ impl DawApp {
         cursor: usize,
     ) -> Option<String> {
         match focus {
-            DawPatchSelectPane::Patches => self.patch_filtered.get(cursor).cloned(),
+            DawPatchSelectPane::Patches => self.overlays.patch_select.filtered.get(cursor).cloned(),
             DawPatchSelectPane::Favorites => {
                 self.patch_select_favorite_items().get(cursor).cloned()
             }
@@ -81,15 +91,18 @@ impl DawApp {
     }
 
     fn patch_select_selected_patch_name(&self) -> Option<String> {
-        let cursor = match self.patch_select_focus {
-            DawPatchSelectPane::Patches => self.patch_cursor,
-            DawPatchSelectPane::Favorites => self.patch_favorites_cursor,
+        let cursor = match self.overlays.patch_select.focus {
+            DawPatchSelectPane::Patches => self.overlays.patch_select.cursor,
+            DawPatchSelectPane::Favorites => self.overlays.patch_select.favorites_cursor,
         };
-        self.patch_select_patch_name_for_selection(self.patch_select_focus, cursor)
+        self.patch_select_patch_name_for_selection(self.overlays.patch_select.focus, cursor)
     }
 
     pub(in crate::daw) fn patch_select_favorite_items(&self) -> Vec<String> {
-        crate::tui::filter_items(&self.patch_favorite_items, &self.patch_favorites_query)
+        crate::tui::filter_items(
+            &self.overlays.patch_select.favorite_items,
+            &self.overlays.patch_select.favorites_query,
+        )
     }
 
     fn patch_select_target_measure(&self) -> usize {
@@ -127,14 +140,17 @@ impl DawApp {
     }
 
     fn prefetch_patch_select_navigation_cache(&self, preferred_delta: Option<isize>) {
-        let (item_count, cursor) = match self.patch_select_focus {
-            DawPatchSelectPane::Patches => (self.patch_filtered.len(), self.patch_cursor),
+        let (item_count, cursor) = match self.overlays.patch_select.focus {
+            DawPatchSelectPane::Patches => (
+                self.overlays.patch_select.filtered.len(),
+                self.overlays.patch_select.cursor,
+            ),
             DawPatchSelectPane::Favorites => (
                 self.patch_select_favorite_items().len(),
-                self.patch_favorites_cursor,
+                self.overlays.patch_select.favorites_cursor,
             ),
         };
-        let focus = self.patch_select_focus;
+        let focus = self.overlays.patch_select.focus;
         self.prefetch_preview_navigation_cache(
             cursor,
             item_count,
@@ -153,12 +169,12 @@ impl DawApp {
             return;
         }
 
-        let cursor = match self.patch_select_focus {
-            DawPatchSelectPane::Patches => self.patch_cursor,
-            DawPatchSelectPane::Favorites => self.patch_favorites_cursor,
+        let cursor = match self.overlays.patch_select.focus {
+            DawPatchSelectPane::Patches => self.overlays.patch_select.cursor,
+            DawPatchSelectPane::Favorites => self.overlays.patch_select.favorites_cursor,
         };
         let Some((measure_index, track_mmls)) =
-            self.patch_select_preview_track_mmls(self.patch_select_focus, cursor)
+            self.patch_select_preview_track_mmls(self.overlays.patch_select.focus, cursor)
         else {
             return;
         };
@@ -174,41 +190,54 @@ impl DawApp {
     }
 
     fn update_patch_filter(&mut self) {
-        self.patch_filtered = Self::filter_patch_names_by_query(&self.patch_all, &self.patch_query);
-        self.patch_cursor = 0;
+        self.overlays.patch_select.filtered = Self::filter_patch_names_by_query(
+            &self.overlays.patch_select.all,
+            &self.overlays.patch_select.query,
+        );
+        self.overlays.patch_select.cursor = 0;
         self.sync_patch_select_cursors();
         self.preview_selected_patch();
     }
 
     fn update_patch_favorites_filter(&mut self) {
-        self.patch_favorites_cursor = 0;
+        self.overlays.patch_select.favorites_cursor = 0;
         self.sync_patch_select_cursors();
         self.preview_selected_patch();
     }
 
     fn cancel_patch_filter_input(&mut self) {
-        self.patch_select_filter_active = false;
-        match self.patch_select_focus {
+        self.overlays.patch_select.filter_active = false;
+        match self.overlays.patch_select.focus {
             DawPatchSelectPane::Patches => {
-                if self.patch_query == self.patch_query_before_input {
+                if self.overlays.patch_select.query == self.overlays.patch_select.query_before_input
+                {
                     self.sync_patch_select_cursors();
                     return;
                 }
 
-                self.patch_query = self.patch_query_before_input.clone();
-                self.patch_query_textarea =
-                    crate::text_input::new_single_line_textarea(&self.patch_query);
+                self.overlays.patch_select.query =
+                    self.overlays.patch_select.query_before_input.clone();
+                self.overlays.patch_select.query_textarea =
+                    crate::text_input::new_single_line_textarea(&self.overlays.patch_select.query);
                 self.update_patch_filter();
             }
             DawPatchSelectPane::Favorites => {
-                if self.patch_favorites_query == self.patch_favorites_query_before_input {
+                if self.overlays.patch_select.favorites_query
+                    == self.overlays.patch_select.favorites_query_before_input
+                {
                     self.sync_patch_select_cursors();
                     return;
                 }
 
-                self.patch_favorites_query = self.patch_favorites_query_before_input.clone();
-                self.patch_favorites_query_textarea =
-                    crate::text_input::new_single_line_textarea(&self.patch_favorites_query);
+                self.overlays.patch_select.favorites_query = self
+                    .overlays
+                    .patch_select
+                    .favorites_query_before_input
+                    .clone();
+                self.overlays.patch_select.favorites_query_textarea =
+                    crate::text_input::new_single_line_textarea(
+                        &self.overlays.patch_select.favorites_query,
+                    );
                 self.update_patch_favorites_filter();
             }
         }
@@ -239,34 +268,45 @@ impl DawApp {
         ) {
             self.mark_patch_phrase_store_dirty();
         }
-        self.patch_all = patches;
-        self.patch_query.clear();
-        self.patch_query_textarea = crate::text_input::new_single_line_textarea("");
-        self.patch_query_before_input.clear();
-        self.patch_favorites_query.clear();
-        self.patch_favorites_query_textarea = crate::text_input::new_single_line_textarea("");
-        self.patch_favorites_query_before_input.clear();
-        self.patch_filtered = self
-            .patch_all
+        self.overlays.patch_select.all = patches;
+        self.overlays.patch_select.query.clear();
+        self.overlays.patch_select.query_textarea = crate::text_input::new_single_line_textarea("");
+        self.overlays.patch_select.query_before_input.clear();
+        self.overlays.patch_select.favorites_query.clear();
+        self.overlays.patch_select.favorites_query_textarea =
+            crate::text_input::new_single_line_textarea("");
+        self.overlays
+            .patch_select
+            .favorites_query_before_input
+            .clear();
+        self.overlays.patch_select.filtered = self
+            .overlays
+            .patch_select
+            .all
             .iter()
             .map(|(orig, _)| orig.clone())
             .collect();
-        self.patch_cursor = initial_patch_name
+        self.overlays.patch_select.cursor = initial_patch_name
             .map(|patch_name| {
-                crate::patches::resolve_display_patch_name(&self.patch_all, patch_name)
-                    .unwrap_or_else(|| patch_name.to_string())
+                crate::patches::resolve_display_patch_name(
+                    &self.overlays.patch_select.all,
+                    patch_name,
+                )
+                .unwrap_or_else(|| patch_name.to_string())
             })
             .or_else(|| self.current_track_patch_name())
             .and_then(|patch_name| {
-                self.patch_filtered
+                self.overlays
+                    .patch_select
+                    .filtered
                     .iter()
                     .position(|patch| patch == &patch_name)
             })
             .unwrap_or(0);
         self.refresh_patch_select_favorites();
-        self.patch_favorites_cursor = 0;
-        self.patch_select_focus = DawPatchSelectPane::Patches;
-        self.patch_select_filter_active = false;
+        self.overlays.patch_select.favorites_cursor = 0;
+        self.overlays.patch_select.focus = DawPatchSelectPane::Patches;
+        self.overlays.patch_select.filter_active = false;
         self.sync_patch_select_cursors();
         self.mode = DawMode::PatchSelect;
         self.preview_selected_patch();
@@ -278,15 +318,15 @@ impl DawApp {
     }
 
     pub(crate) fn handle_patch_select_key_event(&mut self, key_event: KeyEvent) {
-        if self.patch_select_filter_active {
-            match self.patch_select_focus {
+        if self.overlays.patch_select.filter_active {
+            match self.overlays.patch_select.focus {
                 DawPatchSelectPane::Patches => crate::text_input::sync_single_line_textarea(
-                    &mut self.patch_query_textarea,
-                    &self.patch_query,
+                    &mut self.overlays.patch_select.query_textarea,
+                    &self.overlays.patch_select.query,
                 ),
                 DawPatchSelectPane::Favorites => crate::text_input::sync_single_line_textarea(
-                    &mut self.patch_favorites_query_textarea,
-                    &self.patch_favorites_query,
+                    &mut self.overlays.patch_select.favorites_query_textarea,
+                    &self.overlays.patch_select.favorites_query,
                 ),
             }
             match key_event.code {
@@ -294,29 +334,31 @@ impl DawApp {
                     self.cancel_patch_filter_input();
                 }
                 KeyCode::Enter => {
-                    self.patch_select_filter_active = false;
+                    self.overlays.patch_select.filter_active = false;
                     self.sync_patch_select_cursors();
                 }
                 KeyCode::Char('?') => self.enter_help(),
-                _ => match self.patch_select_focus {
+                _ => match self.overlays.patch_select.focus {
                     DawPatchSelectPane::Patches => {
                         if crate::text_input::apply_key_event_to_textarea(
-                            &mut self.patch_query_textarea,
+                            &mut self.overlays.patch_select.query_textarea,
                             key_event,
                         ) {
-                            self.patch_query =
-                                crate::text_input::textarea_value(&self.patch_query_textarea);
+                            self.overlays.patch_select.query = crate::text_input::textarea_value(
+                                &self.overlays.patch_select.query_textarea,
+                            );
                             self.update_patch_filter();
                         }
                     }
                     DawPatchSelectPane::Favorites => {
                         if crate::text_input::apply_key_event_to_textarea(
-                            &mut self.patch_favorites_query_textarea,
+                            &mut self.overlays.patch_select.favorites_query_textarea,
                             key_event,
                         ) {
-                            self.patch_favorites_query = crate::text_input::textarea_value(
-                                &self.patch_favorites_query_textarea,
-                            );
+                            self.overlays.patch_select.favorites_query =
+                                crate::text_input::textarea_value(
+                                    &self.overlays.patch_select.favorites_query_textarea,
+                                );
                             self.update_patch_favorites_filter();
                         }
                     }
@@ -337,10 +379,10 @@ impl DawApp {
             KeyCode::Esc => {
                 self.mode = DawMode::Normal;
             }
-            KeyCode::Char('n') if !self.patch_select_filter_active => {
+            KeyCode::Char('n') if !self.overlays.patch_select.filter_active => {
                 self.start_history_overlay_for_patch_name(None);
             }
-            KeyCode::Char('p') if !self.patch_select_filter_active => {
+            KeyCode::Char('p') if !self.overlays.patch_select.filter_active => {
                 let selected_patch_name = self.patch_select_selected_patch_name();
                 let current_patch_name = self.current_track_patch_name();
                 if let Some(patch_name) = selected_patch_name.or(current_patch_name) {
@@ -349,7 +391,7 @@ impl DawApp {
                     self.append_log_line("patch name JSON が見つかりません".to_string());
                 }
             }
-            KeyCode::Char('t') if !self.patch_select_filter_active => {
+            KeyCode::Char('t') if !self.overlays.patch_select.filter_active => {
                 let selected_patch_name = self.patch_select_selected_patch_name();
                 self.start_patch_select_overlay(selected_patch_name.as_deref());
             }
@@ -357,7 +399,7 @@ impl DawApp {
                 if let Some(selected_patch_name) = self.patch_select_selected_patch_name() {
                     let patch_json = Self::build_patch_json_with_filter_query(
                         &selected_patch_name,
-                        Some(&self.patch_query),
+                        Some(&self.overlays.patch_select.query),
                     );
                     if self.commit_insert_cell(self.cursor_track, 0, &patch_json) {
                         self.save();
@@ -372,43 +414,46 @@ impl DawApp {
                 }
                 self.mode = DawMode::Normal;
             }
-            KeyCode::Char('h') | KeyCode::Left if !self.patch_select_filter_active => {
-                self.patch_select_focus = DawPatchSelectPane::Patches;
+            KeyCode::Char('h') | KeyCode::Left if !self.overlays.patch_select.filter_active => {
+                self.overlays.patch_select.focus = DawPatchSelectPane::Patches;
                 self.sync_patch_select_cursors();
                 self.preview_selected_patch();
             }
-            KeyCode::Char('l') | KeyCode::Right if !self.patch_select_filter_active => {
-                self.patch_select_focus = DawPatchSelectPane::Favorites;
+            KeyCode::Char('l') | KeyCode::Right if !self.overlays.patch_select.filter_active => {
+                self.overlays.patch_select.focus = DawPatchSelectPane::Favorites;
                 self.sync_patch_select_cursors();
                 self.preview_selected_patch();
             }
-            KeyCode::Char('j') | KeyCode::Down if !self.patch_select_filter_active => {
+            KeyCode::Char('j') | KeyCode::Down if !self.overlays.patch_select.filter_active => {
                 self.move_patch_select_selection_by(1)
             }
-            KeyCode::Char('k') | KeyCode::Up if !self.patch_select_filter_active => {
+            KeyCode::Char('k') | KeyCode::Up if !self.overlays.patch_select.filter_active => {
                 self.move_patch_select_selection_by(-1)
             }
-            KeyCode::Char('/') if !self.patch_select_filter_active => {
-                match self.patch_select_focus {
+            KeyCode::Char('/') if !self.overlays.patch_select.filter_active => {
+                match self.overlays.patch_select.focus {
                     DawPatchSelectPane::Patches => {
-                        self.patch_query_before_input = self.patch_query.clone();
-                        self.patch_query_textarea =
-                            crate::text_input::new_single_line_textarea(&self.patch_query);
+                        self.overlays.patch_select.query_before_input =
+                            self.overlays.patch_select.query.clone();
+                        self.overlays.patch_select.query_textarea =
+                            crate::text_input::new_single_line_textarea(
+                                &self.overlays.patch_select.query,
+                            );
                     }
                     DawPatchSelectPane::Favorites => {
-                        self.patch_favorites_query_before_input =
-                            self.patch_favorites_query.clone();
-                        self.patch_favorites_query_textarea =
+                        self.overlays.patch_select.favorites_query_before_input =
+                            self.overlays.patch_select.favorites_query.clone();
+                        self.overlays.patch_select.favorites_query_textarea =
                             crate::text_input::new_single_line_textarea(
-                                &self.patch_favorites_query,
+                                &self.overlays.patch_select.favorites_query,
                             );
                     }
                 }
-                self.patch_select_filter_active = true;
+                self.overlays.patch_select.filter_active = true;
                 self.sync_patch_select_cursors();
             }
             KeyCode::Char('?') => self.enter_help(),
-            KeyCode::Char(' ') if !self.patch_select_filter_active => {
+            KeyCode::Char(' ') if !self.overlays.patch_select.filter_active => {
                 self.preview_selected_patch();
             }
             _ => {}

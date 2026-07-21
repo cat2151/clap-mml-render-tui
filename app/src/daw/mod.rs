@@ -75,6 +75,7 @@ mod init;
 mod input;
 mod mixer;
 mod mml;
+mod overlays;
 mod playback;
 mod playback_util;
 mod preview;
@@ -97,6 +98,7 @@ use crate::{config::Config, realtime_play::RealtimePlayServerSupervisor};
 // ─── 再エクスポート ───────────────────────────────────────────
 
 use batch_logging::{TrackRerenderBatch, TrackRerenderBatchCompletionContext};
+use overlays::DawOverlays;
 use render_queue::RenderQueue;
 pub use types::DawExitReason;
 pub(super) use types::{
@@ -219,8 +221,7 @@ pub struct DawApp {
     pub(super) solo_tracks: Vec<bool>,
     /// playable track ごとの音量(dB)。
     pub(super) track_volumes_db: Vec<i32>,
-    /// mixer overlay で選択中の track。
-    pub(super) mixer_cursor_track: usize,
+    pub(in crate::daw) overlays: DawOverlays,
     /// 再生スレッドと共有する track ごとの gain。
     play_track_gains: Arc<Mutex<Vec<f32>>>,
     pub(super) yank_buffer: Option<String>,
@@ -228,26 +229,6 @@ pub struct DawApp {
     pub(super) normal_paste_undo: Option<NormalPasteUndo>,
     pub(super) patch_phrase_store: crate::history::PatchPhraseStore,
     pub(super) patch_phrase_store_dirty: bool,
-    pub(super) history_overlay_patch_name: Option<String>,
-    pub(super) history_overlay_query: String,
-    pub(super) history_overlay_query_textarea: TextArea<'static>,
-    pub(super) history_overlay_history_cursor: usize,
-    pub(super) history_overlay_favorites_cursor: usize,
-    pub(super) history_overlay_focus: DawHistoryPane,
-    pub(super) history_overlay_filter_active: bool,
-    pub(super) patch_all: Vec<(String, String)>,
-    pub(super) patch_query: String,
-    pub(super) patch_query_textarea: TextArea<'static>,
-    pub(super) patch_query_before_input: String,
-    pub(super) patch_filtered: Vec<String>,
-    pub(super) patch_cursor: usize,
-    pub(super) patch_favorite_items: Vec<String>,
-    pub(super) patch_favorites_query: String,
-    pub(super) patch_favorites_query_textarea: TextArea<'static>,
-    pub(super) patch_favorites_query_before_input: String,
-    pub(super) patch_favorites_cursor: usize,
-    pub(super) patch_select_focus: DawPatchSelectPane,
-    pub(super) patch_select_filter_active: bool,
     pub(super) random_patch_decks: crate::random::RandomIndexDecks,
 }
 

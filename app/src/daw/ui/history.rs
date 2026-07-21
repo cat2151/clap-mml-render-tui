@@ -16,9 +16,9 @@ fn history_items(app: &DawApp) -> Vec<ListItem<'static>> {
         .into_iter()
         .enumerate()
         .map(|(i, item)| {
-            let is_selected = !app.history_overlay_filter_active
-                && app.history_overlay_focus == DawHistoryPane::History
-                && i == app.history_overlay_history_cursor;
+            let is_selected = !app.overlays.history.filter_active
+                && app.overlays.history.focus == DawHistoryPane::History
+                && i == app.overlays.history.history_cursor;
             let prefix = if is_selected { "▶ " } else { "  " };
             let style = if is_selected {
                 cursor_highlight_style(Style::default().fg(MONOKAI_FG))
@@ -35,9 +35,9 @@ fn favorite_items(app: &DawApp) -> Vec<ListItem<'static>> {
         .into_iter()
         .enumerate()
         .map(|(i, item)| {
-            let is_selected = !app.history_overlay_filter_active
-                && app.history_overlay_focus == DawHistoryPane::Favorites
-                && i == app.history_overlay_favorites_cursor;
+            let is_selected = !app.overlays.history.filter_active
+                && app.overlays.history.focus == DawHistoryPane::Favorites
+                && i == app.overlays.history.favorites_cursor;
             let prefix = if is_selected { "▶ " } else { "  " };
             let style = if is_selected {
                 cursor_highlight_style(Style::default().fg(MONOKAI_FG))
@@ -53,7 +53,7 @@ pub(super) fn draw_history(f: &mut Frame, app: &DawApp, area: Rect) {
     let popup = crate::ui_utils::centered_rect(88, 76, area);
     f.render_widget(Clear, popup);
 
-    let title = match app.history_overlay_patch_name.as_deref() {
+    let title = match app.overlays.history.patch_name.as_deref() {
         Some(patch_name) => format!(" patch history - {patch_name} "),
         None => " history ".to_string(),
     };
@@ -79,32 +79,32 @@ pub(super) fn draw_history(f: &mut Frame, app: &DawApp, area: Rect) {
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[1]);
 
-    let search_title = if app.history_overlay_filter_active {
+    let search_title = if app.overlays.history.filter_active {
         " history overlay - MML 検索 (space=AND) "
     } else {
         " history overlay - / で MML 検索 (space=AND) "
     };
     let history_query_widget = crate::text_input::build_query_textarea_widget(
-        &app.history_overlay_query_textarea,
-        &app.history_overlay_query,
+        &app.overlays.history.query_textarea,
+        &app.overlays.history.query,
         search_title,
         "/ を押して絞り込み (space=AND)",
         MONOKAI_CYAN,
     );
     f.render_widget(&history_query_widget, chunks[0]);
-    if app.history_overlay_filter_active {
+    if app.overlays.history.filter_active {
         f.set_cursor_position(crate::text_input::single_line_textarea_cursor_position(
             chunks[0],
             &history_query_widget,
         ));
     }
 
-    let history_border = if app.history_overlay_focus == DawHistoryPane::History {
+    let history_border = if app.overlays.history.focus == DawHistoryPane::History {
         Style::default().fg(MONOKAI_CYAN)
     } else {
         Style::default().fg(MONOKAI_FG)
     };
-    let favorites_border = if app.history_overlay_focus == DawHistoryPane::Favorites {
+    let favorites_border = if app.overlays.history.focus == DawHistoryPane::Favorites {
         Style::default().fg(MONOKAI_CYAN)
     } else {
         Style::default().fg(MONOKAI_FG)
@@ -136,7 +136,7 @@ pub(super) fn draw_history(f: &mut Frame, app: &DawApp, area: Rect) {
         chunks[2],
     );
     f.render_widget(
-        Paragraph::new(match app.history_overlay_patch_name.as_deref() {
+        Paragraph::new(match app.overlays.history.patch_name.as_deref() {
             Some(_) => "現在 track の patch phrase を現在 meas に反映".to_string(),
             None => "選択行の patch を init に、phrase を現在 meas に反映".to_string(),
         })
