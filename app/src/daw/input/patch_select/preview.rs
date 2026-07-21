@@ -92,7 +92,7 @@ impl DawApp {
         &mut self,
         preferred_delta: Option<isize>,
     ) {
-        if *self.play_state.lock().unwrap() == DawPlayState::Playing {
+        if *self.playback.play_state.lock().unwrap() == DawPlayState::Playing {
             return;
         }
 

@@ -299,7 +299,7 @@ impl DawApp {
                     if self.commit_insert_cell(self.editor.cursor_track, 0, &patch_json) {
                         self.save();
                         self.sync_playback_mml_state();
-                        if *self.play_state.lock().unwrap() == DawPlayState::Idle
+                        if *self.playback.play_state.lock().unwrap() == DawPlayState::Idle
                             && self.patch_select_target_measure() > 0
                             && self.offline_render_available()
                         {

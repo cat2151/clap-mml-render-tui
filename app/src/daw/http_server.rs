@@ -290,9 +290,9 @@ impl DawApp {
         let Some(state) = current_state() else {
             return;
         };
-        let play_state = *self.play_state.lock().unwrap();
-        let play_position = self.play_position.lock().unwrap().clone();
-        let ab_repeat = *self.ab_repeat.lock().unwrap();
+        let play_state = *self.playback.play_state.lock().unwrap();
+        let play_position = self.playback.position.lock().unwrap().clone();
+        let ab_repeat = *self.playback.ab_repeat.lock().unwrap();
         let beat_count = self.beat_numerator();
         let beat_duration_secs = 60.0 / self.tempo_bpm();
         let cache = self.cache.lock().unwrap();
@@ -389,7 +389,7 @@ impl DawApp {
             ));
         }
 
-        *self.ab_repeat.lock().unwrap() = AbRepeatState::FixEnd {
+        *self.playback.ab_repeat.lock().unwrap() = AbRepeatState::FixEnd {
             start_measure_index: start_measure - 1,
             end_measure_index: end_measure - 1,
         };

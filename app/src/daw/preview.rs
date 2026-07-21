@@ -73,13 +73,13 @@ impl DawApp {
         }
 
         let measure_samples = self.measure_duration_samples();
-        let play_state = Arc::clone(&self.play_state);
-        let play_transition_lock = Arc::clone(&self.play_transition_lock);
-        let preview_session = Arc::clone(&self.preview_session);
-        let preview_sink = Arc::clone(&self.preview_sink);
-        let play_position = Arc::clone(&self.play_position);
+        let play_state = Arc::clone(&self.playback.play_state);
+        let play_transition_lock = Arc::clone(&self.playback.transition_lock);
+        let preview_session = Arc::clone(&self.playback.preview_session);
+        let preview_sink = Arc::clone(&self.playback.preview_sink);
+        let play_position = Arc::clone(&self.playback.position);
         let cache = Arc::clone(&self.cache);
-        let overlay_preview_cache = Arc::clone(&self.overlay_preview_cache);
+        let overlay_preview_cache = Arc::clone(&self.playback.overlay_preview_cache);
         let cfg = Arc::clone(&self.cfg);
         let log_lines = Arc::clone(&self.log_lines);
         let render_queue = self.render_queue.clone();

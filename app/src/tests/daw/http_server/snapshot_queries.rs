@@ -140,13 +140,13 @@ fn sync_http_status_snapshot_captures_play_grid_and_cache_counts() {
     activate_http_state(Arc::clone(&state));
     let app = build_test_app(cfg);
 
-    *app.play_state.lock().unwrap() = DawPlayState::Playing;
-    *app.play_position.lock().unwrap() = Some(crate::daw::PlayPosition {
+    *app.playback.play_state.lock().unwrap() = DawPlayState::Playing;
+    *app.playback.position.lock().unwrap() = Some(crate::daw::PlayPosition {
         measure_index: 1,
         measure_start: std::time::Instant::now(),
         measure_duration: std::time::Duration::from_secs(2),
     });
-    *app.ab_repeat.lock().unwrap() = AbRepeatState::FixEnd {
+    *app.playback.ab_repeat.lock().unwrap() = AbRepeatState::FixEnd {
         start_measure_index: 0,
         end_measure_index: 1,
     };

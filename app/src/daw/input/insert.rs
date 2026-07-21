@@ -69,7 +69,9 @@ impl DawApp {
             KeyCode::Esc => {
                 let confirmed_measure = self.editor.cursor_measure;
                 self.commit_insert();
-                if *self.play_state.lock().unwrap() == DawPlayState::Idle && confirmed_measure > 0 {
+                if *self.playback.play_state.lock().unwrap() == DawPlayState::Idle
+                    && confirmed_measure > 0
+                {
                     self.start_preview(confirmed_measure - 1);
                 }
                 self.mode = DawMode::Normal;
@@ -77,7 +79,9 @@ impl DawApp {
             KeyCode::Enter => {
                 let confirmed_measure = self.editor.cursor_measure;
                 self.commit_insert();
-                if *self.play_state.lock().unwrap() == DawPlayState::Idle && confirmed_measure > 0 {
+                if *self.playback.play_state.lock().unwrap() == DawPlayState::Idle
+                    && confirmed_measure > 0
+                {
                     self.start_preview(confirmed_measure - 1);
                 }
                 if self.editor.cursor_measure < self.editor.measures {

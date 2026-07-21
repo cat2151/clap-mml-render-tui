@@ -41,8 +41,8 @@ fn handle_normal_cursor_move_restarts_preview_on_new_target() {
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 1;
     app.editor.cursor_measure = 2;
-    *app.play_state.lock().unwrap() = DawPlayState::Preview;
-    *app.play_position.lock().unwrap() = Some(PlayPosition {
+    *app.playback.play_state.lock().unwrap() = DawPlayState::Preview;
+    *app.playback.position.lock().unwrap() = Some(PlayPosition {
         measure_index: 1,
         measure_start: std::time::Instant::now(),
         measure_duration: std::time::Duration::from_secs(1),
@@ -53,11 +53,12 @@ fn handle_normal_cursor_move_restarts_preview_on_new_target() {
     assert!(matches!(result, super::super::DawNormalAction::Continue));
     assert_eq!(app.editor.cursor_measure, 1);
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Preview
     ));
     assert_eq!(
-        app.play_position
+        app.playback
+            .position
             .lock()
             .unwrap()
             .as_ref()
@@ -83,27 +84,27 @@ fn handle_normal_l_and_k_do_not_start_preview_while_playing() {
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
-    *app.play_state.lock().unwrap() = DawPlayState::Playing;
+    *app.playback.play_state.lock().unwrap() = DawPlayState::Playing;
 
     let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE));
 
     assert!(matches!(result, super::super::DawNormalAction::Continue));
     assert_eq!(app.editor.cursor_measure, 2);
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Playing
     ));
-    assert!(app.play_position.lock().unwrap().is_none());
+    assert!(app.playback.position.lock().unwrap().is_none());
 
     let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
 
     assert!(matches!(result, super::super::DawNormalAction::Continue));
     assert_eq!(app.editor.cursor_track, 1);
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Playing
     ));
-    assert!(app.play_position.lock().unwrap().is_none());
+    assert!(app.playback.position.lock().unwrap().is_none());
 }
 
 #[test]
@@ -111,8 +112,8 @@ fn handle_normal_stops_preview_when_cursor_moves_to_init_column() {
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 1;
     app.editor.cursor_measure = 1;
-    *app.play_state.lock().unwrap() = DawPlayState::Preview;
-    *app.play_position.lock().unwrap() = Some(PlayPosition {
+    *app.playback.play_state.lock().unwrap() = DawPlayState::Preview;
+    *app.playback.position.lock().unwrap() = Some(PlayPosition {
         measure_index: 0,
         measure_start: std::time::Instant::now(),
         measure_duration: std::time::Duration::from_secs(1),
@@ -123,10 +124,10 @@ fn handle_normal_stops_preview_when_cursor_moves_to_init_column() {
     assert!(matches!(result, super::super::DawNormalAction::Continue));
     assert_eq!(app.editor.cursor_measure, 0);
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Idle
     ));
-    assert!(app.play_position.lock().unwrap().is_none());
+    assert!(app.playback.position.lock().unwrap().is_none());
     assert_eq!(
         app.log_lines.lock().unwrap().back().map(String::as_str),
         Some("preview: stop")
@@ -138,8 +139,8 @@ fn handle_normal_stops_preview_when_cursor_moves_to_non_playable_track() {
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 1;
     app.editor.cursor_measure = 1;
-    *app.play_state.lock().unwrap() = DawPlayState::Preview;
-    *app.play_position.lock().unwrap() = Some(PlayPosition {
+    *app.playback.play_state.lock().unwrap() = DawPlayState::Preview;
+    *app.playback.position.lock().unwrap() = Some(PlayPosition {
         measure_index: 0,
         measure_start: std::time::Instant::now(),
         measure_duration: std::time::Duration::from_secs(1),
@@ -150,10 +151,10 @@ fn handle_normal_stops_preview_when_cursor_moves_to_non_playable_track() {
     assert!(matches!(result, super::super::DawNormalAction::Continue));
     assert_eq!(app.editor.cursor_track, 0);
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Idle
     ));
-    assert!(app.play_position.lock().unwrap().is_none());
+    assert!(app.playback.position.lock().unwrap().is_none());
     assert_eq!(
         app.log_lines.lock().unwrap().back().map(String::as_str),
         Some("preview: stop")
@@ -195,7 +196,7 @@ fn handle_normal_dd_yanks_current_measure_clears_it_and_records_patch_history() 
     app.editor.cursor_measure = 1;
     app.editor.data[1][0] = r#"{"Surge XT patch": "Pad 1.fxp"}"#.to_string();
     app.editor.data[1][1] = "cdef".to_string();
-    app.play_measure_mmls.lock().unwrap()[0] = "stale".to_string();
+    app.playback.measure_mmls.lock().unwrap()[0] = "stale".to_string();
 
     let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
 
@@ -218,7 +219,7 @@ fn handle_normal_dd_yanks_current_measure_clears_it_and_records_patch_history() 
         Some(vec!["cdef".to_string()])
     );
     assert!(app.patch_phrase_store_dirty);
-    assert_eq!(app.play_measure_mmls.lock().unwrap()[0], "");
+    assert_eq!(app.playback.measure_mmls.lock().unwrap()[0], "");
 }
 
 #[test]
@@ -292,8 +293,8 @@ fn handle_normal_enter_stops_current_preview() {
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 1;
     app.editor.cursor_measure = 1;
-    *app.play_state.lock().unwrap() = DawPlayState::Preview;
-    *app.play_position.lock().unwrap() = Some(PlayPosition {
+    *app.playback.play_state.lock().unwrap() = DawPlayState::Preview;
+    *app.playback.position.lock().unwrap() = Some(PlayPosition {
         measure_index: 0,
         measure_start: std::time::Instant::now(),
         measure_duration: std::time::Duration::from_secs(1),
@@ -303,10 +304,10 @@ fn handle_normal_enter_stops_current_preview() {
 
     assert!(matches!(result, super::super::DawNormalAction::Continue));
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Idle
     ));
-    assert!(app.play_position.lock().unwrap().is_none());
+    assert!(app.playback.position.lock().unwrap().is_none());
     assert_eq!(
         app.log_lines.lock().unwrap().back().map(String::as_str),
         Some("preview: stop")
@@ -318,8 +319,8 @@ fn handle_normal_enter_stops_current_play() {
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 1;
     app.editor.cursor_measure = 1;
-    *app.play_state.lock().unwrap() = DawPlayState::Playing;
-    *app.play_position.lock().unwrap() = Some(PlayPosition {
+    *app.playback.play_state.lock().unwrap() = DawPlayState::Playing;
+    *app.playback.position.lock().unwrap() = Some(PlayPosition {
         measure_index: 0,
         measure_start: std::time::Instant::now(),
         measure_duration: std::time::Duration::from_secs(1),
@@ -329,10 +330,10 @@ fn handle_normal_enter_stops_current_play() {
 
     assert!(matches!(result, super::super::DawNormalAction::Continue));
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Idle
     ));
-    assert!(app.play_position.lock().unwrap().is_none());
+    assert!(app.playback.position.lock().unwrap().is_none());
     assert_eq!(
         app.log_lines.lock().unwrap().back().map(String::as_str),
         Some("play: stop")
@@ -349,11 +350,12 @@ fn handle_normal_enter_uses_test_preview_path_when_entry_ptr_is_unavailable() {
 
     assert!(matches!(result, super::super::DawNormalAction::Continue));
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Preview
     ));
     assert_eq!(
-        app.play_position
+        app.playback
+            .position
             .lock()
             .unwrap()
             .as_ref()

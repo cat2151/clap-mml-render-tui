@@ -40,7 +40,8 @@ impl DawApp {
             }
             self.solo_tracks.resize(required_tracks, false);
             self.track_volumes_db.resize(required_tracks, 0);
-            self.play_track_gains
+            self.playback
+                .track_gains
                 .lock()
                 .unwrap()
                 .resize(required_tracks, 0.0);
@@ -62,11 +63,13 @@ impl DawApp {
                     row.resize_with(required_columns, CellCache::empty);
                 }
             }
-            self.play_measure_mmls
+            self.playback
+                .measure_mmls
                 .lock()
                 .unwrap()
                 .resize_with(required_measures, String::new);
-            self.play_measure_track_mmls
+            self.playback
+                .measure_track_mmls
                 .lock()
                 .unwrap()
                 .resize_with(required_measures, || {
@@ -75,7 +78,7 @@ impl DawApp {
             self.editor.measures = required_measures;
         }
 
-        for measure_track_mmls in self.play_measure_track_mmls.lock().unwrap().iter_mut() {
+        for measure_track_mmls in self.playback.measure_track_mmls.lock().unwrap().iter_mut() {
             measure_track_mmls.resize_with(self.editor.tracks, String::new);
         }
 
@@ -140,7 +143,7 @@ impl DawApp {
     }
 
     pub(super) fn apply_http_play_start(&mut self) -> Result<(), String> {
-        let play_state = *self.play_state.lock().unwrap();
+        let play_state = *self.playback.play_state.lock().unwrap();
         if play_state == DawPlayState::Playing {
             self.append_log_line("http: play start (already playing)");
             return Ok(());
@@ -149,7 +152,7 @@ impl DawApp {
             self.stop_play();
         }
         self.start_play();
-        if *self.play_state.lock().unwrap() == DawPlayState::Playing {
+        if *self.playback.play_state.lock().unwrap() == DawPlayState::Playing {
             self.append_log_line("http: play start");
             Ok(())
         } else {

@@ -25,9 +25,9 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
         app.track_volumes_db[1] = -6;
         // 共有 playback 状態を意図的に古い空データにしておき、
         // random patch 更新が hot reload 時に全共有 state を同期することを検証する。
-        *app.play_measure_track_mmls.lock().unwrap() =
+        *app.playback.measure_track_mmls.lock().unwrap() =
             vec![vec![String::new(); app.editor.tracks]; app.editor.measures];
-        *app.play_track_gains.lock().unwrap() = vec![0.0; app.editor.tracks];
+        *app.playback.track_gains.lock().unwrap() = vec![0.0; app.editor.tracks];
 
         app.handle_normal(crossterm::event::KeyCode::Char('r'));
 
@@ -95,13 +95,13 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
             "logs: {:?}",
             logs
         );
-        let play_measure_track_mmls = app.play_measure_track_mmls.lock().unwrap().clone();
+        let play_measure_track_mmls = app.playback.measure_track_mmls.lock().unwrap().clone();
         assert!(
             play_measure_track_mmls[0][1].contains(r#""Surge XT patch":"Pad 1.fxp""#),
             "hot reload should refresh per-track playback MMLs: {:?}",
             play_measure_track_mmls
         );
-        let play_track_gains = app.play_track_gains.lock().unwrap().clone();
+        let play_track_gains = app.playback.track_gains.lock().unwrap().clone();
         assert!(
             (play_track_gains[1] - track1_minus_6_db_gain()).abs() < f32::EPSILON,
             "hot reload should refresh playback gains: {:?}",
@@ -133,13 +133,13 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
         app.editor.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
         app.editor.data[1][1] = "cdef".to_string();
         app.editor.data[1][2] = "gabc".to_string();
-        *app.play_state.lock().unwrap() = DawPlayState::Playing;
-        *app.play_position.lock().unwrap() = Some(PlayPosition {
+        *app.playback.play_state.lock().unwrap() = DawPlayState::Playing;
+        *app.playback.position.lock().unwrap() = Some(PlayPosition {
             measure_index: 0,
             measure_start: std::time::Instant::now(),
             measure_duration: std::time::Duration::from_secs(1),
         });
-        *app.play_measure_mmls.lock().unwrap() = vec!["cdef".to_string(), "gabc".to_string()];
+        *app.playback.measure_mmls.lock().unwrap() = vec!["cdef".to_string(), "gabc".to_string()];
 
         app.handle_normal(crossterm::event::KeyCode::Char('r'));
 
@@ -207,17 +207,17 @@ fn handle_normal_r_restores_default_tempo_init_when_empty() {
         app.editor.cursor_measure = 0;
         app.editor.data[0][0] = "  ".to_string();
         app.editor.data[1][1] = "cdef".to_string();
-        app.play_measure_mmls.lock().unwrap()[0] = "stale".to_string();
+        app.playback.measure_mmls.lock().unwrap()[0] = "stale".to_string();
 
         let result = app.handle_normal(crossterm::event::KeyCode::Char('r'));
 
         assert!(matches!(result, super::super::DawNormalAction::Continue));
         assert_eq!(app.editor.data[0][0], crate::daw::DEFAULT_TRACK0_MML);
         assert_eq!(
-            app.play_measure_mmls.lock().unwrap()[0],
+            app.playback.measure_mmls.lock().unwrap()[0],
             r#"{"beat":"4/4"}t120cdef"#
         );
-        assert_eq!(*app.play_measure_samples.lock().unwrap(), 176_400);
+        assert_eq!(*app.playback.measure_samples.lock().unwrap(), 176_400);
 
         let cache = app.cache.lock().unwrap();
         assert!(matches!(cache[0][0].state, CacheState::Empty));

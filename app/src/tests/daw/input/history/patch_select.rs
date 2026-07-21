@@ -174,12 +174,12 @@ fn handle_patch_select_filter_space_adds_and_term_instead_of_previewing() {
     app.handle_patch_select(KeyCode::Char('a'));
     app.handle_patch_select(KeyCode::Char('s'));
     app.handle_patch_select(KeyCode::Char('s'));
-    let preview_before_space = app.play_measure_track_mmls.lock().unwrap()[0][1].clone();
+    let preview_before_space = app.playback.measure_track_mmls.lock().unwrap()[0][1].clone();
 
     app.handle_patch_select(KeyCode::Char(' '));
     assert_eq!(app.overlays.patch_select.query, "bass ");
     assert_eq!(
-        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        app.playback.measure_track_mmls.lock().unwrap()[0][1],
         preview_before_space
     );
     app.handle_patch_select(KeyCode::Char('s'));
@@ -194,7 +194,7 @@ fn handle_patch_select_filter_space_adds_and_term_instead_of_previewing() {
         vec!["Bass Soft 1.fxp".to_string()]
     );
     assert_eq!(
-        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        app.playback.measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"Bass Soft 1.fxp"}l8cdef"#,
     );
 }
@@ -231,7 +231,7 @@ fn handle_patch_select_j_and_k_move_selection_until_slash_starts_filter_input() 
     assert!(!app.overlays.patch_select.filter_active);
     assert_eq!(app.overlays.patch_select.cursor, 1);
     assert_eq!(
-        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        app.playback.measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"JK Brass/Bass 1.fxp"}l8cdef"#,
     );
 
@@ -277,7 +277,7 @@ fn handle_patch_select_j_prefetches_predicted_preview_cache() {
     app.handle_patch_select(KeyCode::Char('j'));
 
     assert_eq!(app.overlays.patch_select.cursor, 1);
-    assert_eq!(app.overlay_preview_cache.lock().unwrap().len(), 5);
+    assert_eq!(app.playback.overlay_preview_cache.lock().unwrap().len(), 5);
 }
 
 #[test]
@@ -302,14 +302,14 @@ fn handle_patch_select_left_in_filter_query_does_not_repreview() {
 
     app.handle_patch_select(KeyCode::Char('/'));
     app.handle_patch_select(KeyCode::Char('b'));
-    let preview_before = app.play_measure_track_mmls.lock().unwrap()[0][1].clone();
+    let preview_before = app.playback.measure_track_mmls.lock().unwrap()[0][1].clone();
 
     app.handle_patch_select(KeyCode::Left);
 
     assert!(app.overlays.patch_select.filter_active);
     assert_eq!(app.overlays.patch_select.query, "b");
     assert_eq!(
-        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        app.playback.measure_track_mmls.lock().unwrap()[0][1],
         preview_before
     );
 }

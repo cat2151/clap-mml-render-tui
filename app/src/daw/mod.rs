@@ -78,6 +78,7 @@ mod mixer;
 mod mml;
 mod overlays;
 mod playback;
+mod playback_runtime;
 mod playback_util;
 mod preview;
 mod render_queue;
@@ -90,17 +91,17 @@ mod ui;
 use ratatui::Frame;
 use tui_textarea::TextArea;
 
-use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::AtomicU64;
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
-use crate::{config::Config, realtime_play::RealtimePlayServerSupervisor};
+use crate::config::Config;
 
 // ─── 再エクスポート ───────────────────────────────────────────
 
 use batch_logging::{TrackRerenderBatch, TrackRerenderBatchCompletionContext};
 use editor::DawEditorState;
 use overlays::DawOverlays;
+use playback_runtime::DawPlaybackRuntime;
 use render_queue::RenderQueue;
 pub use types::DawExitReason;
 pub(super) use types::{
@@ -173,36 +174,7 @@ pub struct DawApp {
     cache_render_workers: usize,
     render_queue: RenderQueue,
 
-    pub(super) play_state: Arc<Mutex<DawPlayState>>,
-
-    /// プレビュー開始と停止の遷移を直列化するロック。
-    /// `stop_play()` と `start_preview()` の間で状態確認と音声キュー投入が
-    /// 交錯しないようにする。
-    play_transition_lock: Arc<Mutex<()>>,
-    /// 現在の preview セッション ID。
-    /// restart 時に古い preview スレッドが新しい状態を上書きしないようにする。
-    preview_session: Arc<AtomicU64>,
-    /// 現在アクティブな preview sink。
-    /// preview restart 時に既存音声を即時停止するために保持する。
-    preview_sink: Arc<Mutex<Option<Arc<rodio::Sink>>>>,
-    realtime_play_server: Option<Arc<RealtimePlayServerSupervisor>>,
-
-    /// 再生中の小節・ビート位置（UI 描画に使用）
-    pub(super) play_position: Arc<Mutex<Option<PlayPosition>>>,
-    pub(super) ab_repeat: Arc<Mutex<AbRepeatState>>,
-    overlay_preview_cache: Arc<Mutex<HashMap<u64, Arc<Vec<f32>>>>>,
-
-    /// 再生スレッドと共有する各小節の MML ベクター（measures 要素, index i → meas i+1）。
-    /// セル編集・ランダム音色変更のたびに更新されることで、
-    /// play 中でも次ループ冒頭から新しい MML が反映される（hot reload）。
-    play_measure_mmls: Arc<Mutex<Vec<String>>>,
-    /// 再生スレッドと共有する各小節・各 track の MML。
-    /// index i → meas i+1, inner index t → track t.
-    play_measure_track_mmls: Arc<Mutex<Vec<Vec<String>>>>,
-
-    /// 再生スレッドと共有する 1 小節のステレオサンプル数。
-    /// セル編集・ランダム音色変更のたびに `play_measure_mmls` と一緒に更新される。
-    play_measure_samples: Arc<Mutex<usize>>,
+    pub(in crate::daw) playback: DawPlaybackRuntime,
 
     /// DAW モード下部に表示するデバッグログ。
     pub(super) log_lines: Arc<Mutex<VecDeque<String>>>,
@@ -215,8 +187,6 @@ pub struct DawApp {
     /// playable track ごとの音量(dB)。
     pub(super) track_volumes_db: Vec<i32>,
     pub(in crate::daw) overlays: DawOverlays,
-    /// 再生スレッドと共有する track ごとの gain。
-    play_track_gains: Arc<Mutex<Vec<f32>>>,
     pub(super) patch_phrase_store: crate::history::PatchPhraseStore,
     pub(super) patch_phrase_store_dirty: bool,
     pub(super) random_patch_decks: crate::random::RandomIndexDecks,
@@ -233,7 +203,7 @@ impl DawApp {
     }
 
     pub(super) fn ab_repeat_state(&self) -> AbRepeatState {
-        *self.ab_repeat.lock().unwrap()
+        *self.playback.ab_repeat.lock().unwrap()
     }
 
     // ─── ランダム音色 ─────────────────────────────────────────

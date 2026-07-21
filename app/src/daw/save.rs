@@ -173,7 +173,7 @@ impl DawApp {
             }
         }
         self.sync_cache_states();
-        *self.play_track_gains.lock().unwrap() = self.playback_track_gains();
+        *self.playback.track_gains.lock().unwrap() = self.playback_track_gains();
         let daw_state = crate::history::load_daw_session_state();
         self.sound_check_guide = crate::sound_check_guide::SoundCheckGuide::new(
             daw_state.daw_sound_check_guide_overlay_date.clone(),

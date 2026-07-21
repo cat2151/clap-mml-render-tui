@@ -343,7 +343,7 @@ impl DawApp {
         let Some(end_measure_index) = self.cursor_play_measure_index() else {
             return;
         };
-        let mut ab_repeat = self.ab_repeat.lock().unwrap();
+        let mut ab_repeat = self.playback.ab_repeat.lock().unwrap();
         if let AbRepeatState::FixStart {
             start_measure_index,
             ..
@@ -361,10 +361,10 @@ impl DawApp {
         let new_track_mmls = self.build_measure_track_mmls();
         let new_samples = self.measure_duration_samples();
         let new_track_gains = self.playback_track_gains();
-        *self.play_measure_mmls.lock().unwrap() = new_mmls;
-        *self.play_measure_track_mmls.lock().unwrap() = new_track_mmls;
-        *self.play_measure_samples.lock().unwrap() = new_samples;
-        *self.play_track_gains.lock().unwrap() = new_track_gains;
+        *self.playback.measure_mmls.lock().unwrap() = new_mmls;
+        *self.playback.measure_track_mmls.lock().unwrap() = new_track_mmls;
+        *self.playback.measure_samples.lock().unwrap() = new_samples;
+        *self.playback.track_gains.lock().unwrap() = new_track_gains;
     }
 
     #[cfg(test)]
@@ -376,12 +376,13 @@ impl DawApp {
         if self.entry_ptr != 0 {
             return false;
         }
-        if *self.play_state.lock().unwrap() == super::DawPlayState::Preview {
+        if *self.playback.play_state.lock().unwrap() == super::DawPlayState::Preview {
             self.stop_play();
         }
         if let Some(track_mmls) = track_mmls {
             if let Some(measure_track_mmls) = self
-                .play_measure_track_mmls
+                .playback
+                .measure_track_mmls
                 .lock()
                 .unwrap()
                 .get_mut(measure_index)
@@ -389,8 +390,8 @@ impl DawApp {
                 *measure_track_mmls = track_mmls;
             }
         }
-        *self.play_state.lock().unwrap() = super::DawPlayState::Preview;
-        *self.play_position.lock().unwrap() = Some(super::PlayPosition {
+        *self.playback.play_state.lock().unwrap() = super::DawPlayState::Preview;
+        *self.playback.position.lock().unwrap() = Some(super::PlayPosition {
             measure_index,
             measure_start: Instant::now(),
             measure_duration: std::time::Duration::from_secs_f64(

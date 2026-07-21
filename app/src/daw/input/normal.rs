@@ -58,13 +58,14 @@ impl DawApp {
         let new_mmls = self.build_measure_mmls();
         let new_samples = self.measure_duration_samples();
         let old_effective_count = {
-            let old_mmls = self.play_measure_mmls.lock().unwrap();
+            let old_mmls = self.playback.measure_mmls.lock().unwrap();
             effective_measure_count(&old_mmls)
         };
         let new_effective_count = effective_measure_count(&new_mmls);
-        let old_samples = *self.play_measure_samples.lock().unwrap();
+        let old_samples = *self.playback.measure_samples.lock().unwrap();
         let displayed_measure_index = self
-            .play_position
+            .playback
+            .position
             .lock()
             .unwrap()
             .as_ref()
@@ -205,7 +206,7 @@ impl DawApp {
 
     fn cycle_ab_repeat(&self) {
         let cursor_measure_index = self.cursor_play_measure_index();
-        let mut ab_repeat = self.ab_repeat.lock().unwrap();
+        let mut ab_repeat = self.playback.ab_repeat.lock().unwrap();
         *ab_repeat = match *ab_repeat {
             AbRepeatState::Off => cursor_measure_index
                 .map(|cursor_measure_index| AbRepeatState::FixStart {
@@ -225,7 +226,7 @@ impl DawApp {
     }
 
     fn start_preview_for_target_tracks(&mut self, preview_all_tracks: bool) {
-        let play_state = *self.play_state.lock().unwrap();
+        let play_state = *self.playback.play_state.lock().unwrap();
         match play_state {
             DawPlayState::Idle => {}
             // カーソル移動に追従する preview は、現在の preview を止めて
@@ -250,7 +251,7 @@ impl DawApp {
     }
 
     fn toggle_preview_for_target_tracks(&mut self, preview_all_tracks: bool) {
-        let play_state = *self.play_state.lock().unwrap();
+        let play_state = *self.playback.play_state.lock().unwrap();
         match play_state {
             DawPlayState::Idle => self.start_preview_for_target_tracks(preview_all_tracks),
             DawPlayState::Preview | DawPlayState::Playing => self.stop_play(),
@@ -258,7 +259,7 @@ impl DawApp {
     }
 
     fn preview_current_target_if_stopped(&mut self) {
-        let play_state = *self.play_state.lock().unwrap();
+        let play_state = *self.playback.play_state.lock().unwrap();
         if play_state == DawPlayState::Playing {
             return;
         }
@@ -291,7 +292,7 @@ impl DawApp {
     }
 
     fn start_play_from_cursor_measure(&self) {
-        if *self.play_state.lock().unwrap() != DawPlayState::Idle {
+        if *self.playback.play_state.lock().unwrap() != DawPlayState::Idle {
             return;
         }
         let Some(measure_index) = resolve_playback_start_measure_index(
@@ -335,7 +336,7 @@ impl DawApp {
                 return DawNormalAction::Continue;
             }
             Some(NormalPlaybackShortcut::PlayFromCursor) => {
-                let play_state = *self.play_state.lock().unwrap();
+                let play_state = *self.playback.play_state.lock().unwrap();
                 match play_state {
                     DawPlayState::Idle => self.start_play_from_cursor_measure(),
                     DawPlayState::Preview | DawPlayState::Playing => self.stop_play(),
@@ -343,7 +344,7 @@ impl DawApp {
                 return DawNormalAction::Continue;
             }
             Some(NormalPlaybackShortcut::TogglePlay) => {
-                let state = *self.play_state.lock().unwrap();
+                let state = *self.playback.play_state.lock().unwrap();
                 if state == DawPlayState::Playing || state == DawPlayState::Preview {
                     self.stop_play();
                 } else {

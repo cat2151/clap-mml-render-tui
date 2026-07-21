@@ -3,19 +3,21 @@ use super::*;
 #[test]
 fn stop_play_logs_preview_stop_for_preview_state() {
     let app = build_test_app();
-    *app.play_state.lock().unwrap() = DawPlayState::Preview;
+    *app.playback.play_state.lock().unwrap() = DawPlayState::Preview;
     let initial_session = app
+        .playback
         .preview_session
         .load(std::sync::atomic::Ordering::Acquire);
 
     app.stop_play();
 
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Idle
     ));
     assert_eq!(
-        app.preview_session
+        app.playback
+            .preview_session
             .load(std::sync::atomic::Ordering::Acquire),
         initial_session + 1
     );
@@ -28,12 +30,12 @@ fn stop_play_logs_preview_stop_for_preview_state() {
 #[test]
 fn stop_play_logs_play_stop_for_playing_state() {
     let app = build_test_app();
-    *app.play_state.lock().unwrap() = DawPlayState::Playing;
+    *app.playback.play_state.lock().unwrap() = DawPlayState::Playing;
 
     app.stop_play();
 
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Idle
     ));
     assert_eq!(

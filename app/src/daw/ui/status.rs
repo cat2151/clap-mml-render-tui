@@ -34,11 +34,11 @@ pub(super) fn draw_status(
     active_render_count: usize,
 ) {
     // play_state と play_position を一度だけロックしてスナップショットを取る。
-    let play_state = *app.play_state.lock().unwrap();
-    let play_position = app.play_position.lock().unwrap().clone();
+    let play_state = *app.playback.play_state.lock().unwrap();
+    let play_position = app.playback.position.lock().unwrap().clone();
     let ab_repeat_state = app.ab_repeat_state();
     let (loop_label, loop_summary) = if play_state == DawPlayState::Playing {
-        let play_measure_mmls = app.play_measure_mmls.lock().unwrap();
+        let play_measure_mmls = app.playback.measure_mmls.lock().unwrap();
         (
             loop_status_label(&play_measure_mmls, ab_repeat_state),
             loop_measure_summary_label(&play_measure_mmls, ab_repeat_state),

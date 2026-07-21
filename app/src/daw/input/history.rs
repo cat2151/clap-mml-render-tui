@@ -171,7 +171,7 @@ impl DawApp {
     }
 
     fn preview_selected_history_overlay_item(&mut self) {
-        if *self.play_state.lock().unwrap() == DawPlayState::Playing {
+        if *self.playback.play_state.lock().unwrap() == DawPlayState::Playing {
             return;
         }
 
@@ -248,7 +248,7 @@ impl DawApp {
         }
 
         self.mark_patch_phrase_store_dirty();
-        if *self.play_state.lock().unwrap() == DawPlayState::Idle
+        if *self.playback.play_state.lock().unwrap() == DawPlayState::Idle
             && target_measure > 0
             && self.offline_render_available()
         {

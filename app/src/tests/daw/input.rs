@@ -69,26 +69,12 @@ fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob
             cache_tx,
             cache_render_workers: crate::config::DEFAULT_OFFLINE_RENDER_WORKERS,
             render_queue: crate::daw::render_queue::RenderQueue::disabled_for_tests(),
-            play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
-            play_transition_lock: Arc::new(Mutex::new(())),
-            preview_session: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            preview_sink: Arc::new(Mutex::new(None)),
-            realtime_play_server: None,
-            play_position: Arc::new(Mutex::new(None)),
-            ab_repeat: Arc::new(Mutex::new(AbRepeatState::Off)),
-            overlay_preview_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
-            play_measure_mmls: Arc::new(Mutex::new(vec![String::new(); measures])),
-            play_measure_track_mmls: Arc::new(Mutex::new(vec![
-                vec![String::new(); tracks];
-                measures
-            ])),
-            play_measure_samples: Arc::new(Mutex::new(0)),
+            playback: crate::daw::playback_runtime::DawPlaybackRuntime::for_test(tracks, measures),
             log_lines: Arc::new(Mutex::new(VecDeque::new())),
             track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
             solo_tracks: vec![false; tracks],
             track_volumes_db: vec![0; tracks],
             overlays: crate::daw::overlays::DawOverlays::new(1),
-            play_track_gains: Arc::new(Mutex::new(vec![0.0; tracks])),
             patch_phrase_store: crate::history::PatchPhraseStore::default(),
             patch_phrase_store_dirty: false,
 

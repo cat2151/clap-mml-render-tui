@@ -154,8 +154,8 @@ fn handle_normal_s_enables_solo_for_current_track() {
 
     assert_eq!(app.solo_tracks, vec![false, true, false]);
     assert!(app.solo_mode_active());
-    assert!(app.play_measure_mmls.lock().unwrap()[0].contains("cde"));
-    assert!(!app.play_measure_mmls.lock().unwrap()[0].contains("gab"));
+    assert!(app.playback.measure_mmls.lock().unwrap()[0].contains("cde"));
+    assert!(!app.playback.measure_mmls.lock().unwrap()[0].contains("gab"));
 }
 
 #[test]
@@ -206,11 +206,12 @@ fn handle_normal_h_and_j_preview_new_target_when_not_playing() {
     assert!(matches!(result, super::super::DawNormalAction::Continue));
     assert_eq!(app.editor.cursor_measure, 1);
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Preview
     ));
     assert_eq!(
-        app.play_position
+        app.playback
+            .position
             .lock()
             .unwrap()
             .as_ref()
@@ -223,7 +224,7 @@ fn handle_normal_h_and_j_preview_new_target_when_not_playing() {
     assert!(matches!(result, super::super::DawNormalAction::Continue));
     assert_eq!(app.editor.cursor_track, 2);
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Preview
     ));
     assert_eq!(

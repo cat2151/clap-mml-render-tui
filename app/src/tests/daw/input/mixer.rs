@@ -47,7 +47,7 @@ fn handle_mixer_adjusts_volume_in_3db_steps() {
 
         assert_eq!(app.track_volume_db(1), 3);
         assert_eq!(
-            app.play_track_gains.lock().unwrap()[1],
+            app.playback.track_gains.lock().unwrap()[1],
             10.0f32.powf(3.0 / 20.0)
         );
     }

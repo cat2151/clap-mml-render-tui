@@ -92,18 +92,18 @@ impl DawApp {
         }
 
         // play 状態を最新の値で更新してからスレッドに共有する
-        *self.play_measure_mmls.lock().unwrap() = measure_mmls;
-        *self.play_measure_track_mmls.lock().unwrap() = measure_track_mmls;
-        *self.play_measure_samples.lock().unwrap() = self.measure_duration_samples();
-        *self.play_track_gains.lock().unwrap() = track_gains;
+        *self.playback.measure_mmls.lock().unwrap() = measure_mmls;
+        *self.playback.measure_track_mmls.lock().unwrap() = measure_track_mmls;
+        *self.playback.measure_samples.lock().unwrap() = self.measure_duration_samples();
+        *self.playback.track_gains.lock().unwrap() = track_gains;
 
-        let play_state = Arc::clone(&self.play_state);
-        let play_position = Arc::clone(&self.play_position);
-        let ab_repeat = Arc::clone(&self.ab_repeat);
-        let play_measure_mmls = Arc::clone(&self.play_measure_mmls);
-        let play_measure_track_mmls = Arc::clone(&self.play_measure_track_mmls);
-        let play_measure_samples = Arc::clone(&self.play_measure_samples);
-        let play_track_gains = Arc::clone(&self.play_track_gains);
+        let play_state = Arc::clone(&self.playback.play_state);
+        let play_position = Arc::clone(&self.playback.position);
+        let ab_repeat = Arc::clone(&self.playback.ab_repeat);
+        let play_measure_mmls = Arc::clone(&self.playback.measure_mmls);
+        let play_measure_track_mmls = Arc::clone(&self.playback.measure_track_mmls);
+        let play_measure_samples = Arc::clone(&self.playback.measure_samples);
+        let play_track_gains = Arc::clone(&self.playback.track_gains);
         let cache = Arc::clone(&self.cache);
         let cfg = Arc::clone(&self.cfg);
         let log_lines = Arc::clone(&self.log_lines);
@@ -113,7 +113,7 @@ impl DawApp {
         *play_state.lock().unwrap() = DawPlayState::Playing;
         crate::logging::append_log_line(&log_lines, "play: start");
         for line in play_start_log_lines(
-            &self.play_measure_mmls.lock().unwrap(),
+            &self.playback.measure_mmls.lock().unwrap(),
             self.ab_repeat_state(),
         ) {
             crate::logging::append_log_line(&log_lines, line);
@@ -379,9 +379,9 @@ impl DawApp {
     }
 
     pub(super) fn stop_play(&self) {
-        let _transition_guard = self.play_transition_lock.lock().unwrap();
+        let _transition_guard = self.playback.transition_lock.lock().unwrap();
         let prev_state = {
-            let mut play_state = self.play_state.lock().unwrap();
+            let mut play_state = self.playback.play_state.lock().unwrap();
             let prev_state = *play_state;
             *play_state = DawPlayState::Idle;
             prev_state
@@ -389,23 +389,23 @@ impl DawApp {
         match prev_state {
             DawPlayState::Idle => {}
             DawPlayState::Preview => {
-                self.preview_session.fetch_add(1, Ordering::AcqRel);
-                if let Some(sink) = self.preview_sink.lock().unwrap().take() {
+                self.playback.preview_session.fetch_add(1, Ordering::AcqRel);
+                if let Some(sink) = self.playback.preview_sink.lock().unwrap().take() {
                     sink.stop();
                 }
-                if let Some(play_server) = &self.realtime_play_server {
+                if let Some(play_server) = &self.playback.realtime_play_server {
                     let _ = play_server.stop();
                 }
                 self.append_log_line("preview: stop");
             }
             DawPlayState::Playing => {
-                if let Some(play_server) = &self.realtime_play_server {
+                if let Some(play_server) = &self.playback.realtime_play_server {
                     let _ = play_server.stop();
                 }
                 self.append_log_line("play: stop");
             }
         }
-        *self.play_position.lock().unwrap() = None;
+        *self.playback.position.lock().unwrap() = None;
     }
 }
 

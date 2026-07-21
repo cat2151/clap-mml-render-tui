@@ -49,7 +49,7 @@ fn apply_pending_http_commands_updates_mixer_gain() {
 
     assert_eq!(app.track_volume_db(4), -6);
     assert_eq!(
-        app.play_track_gains.lock().unwrap()[4],
+        app.playback.track_gains.lock().unwrap()[4],
         10.0f32.powf(-6.0 / 20.0)
     );
     assert_eq!(state.lock().unwrap().grid_snapshot.len(), 5);
@@ -165,7 +165,7 @@ fn apply_pending_http_commands_starts_play() {
     app.apply_pending_http_commands();
 
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Playing
     ));
     assert_eq!(response_rx.try_recv().unwrap(), Ok(()));
@@ -194,11 +194,11 @@ fn apply_pending_http_commands_start_while_playing_is_noop() {
     let response_rx = enqueue_command(&state, DawHttpCommandKind::PlayStart);
 
     let mut app = build_test_app(cfg);
-    *app.play_state.lock().unwrap() = DawPlayState::Playing;
+    *app.playback.play_state.lock().unwrap() = DawPlayState::Playing;
     app.apply_pending_http_commands();
 
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Playing
     ));
     assert_eq!(response_rx.try_recv().unwrap(), Ok(()));
@@ -222,7 +222,7 @@ fn apply_pending_http_commands_start_without_playable_data_returns_error() {
     app.apply_pending_http_commands();
 
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Idle
     ));
     assert_eq!(
@@ -246,11 +246,11 @@ fn apply_pending_http_commands_stops_play() {
     let response_rx = enqueue_command(&state, DawHttpCommandKind::PlayStop);
 
     let mut app = build_test_app(cfg);
-    *app.play_state.lock().unwrap() = DawPlayState::Playing;
+    *app.playback.play_state.lock().unwrap() = DawPlayState::Playing;
     app.apply_pending_http_commands();
 
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Idle
     ));
     assert_eq!(response_rx.try_recv().unwrap(), Ok(()));

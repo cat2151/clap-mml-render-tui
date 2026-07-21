@@ -215,8 +215,8 @@ impl DawApp {
         let measure_range = super::playback_util::format_measure_list(measures)
             .map(|label| label.replace('～', "〜"))
             .unwrap_or_else(|| "none".to_string());
-        let play_position = self.play_position.lock().unwrap().clone();
-        let play_measure_mmls = self.play_measure_mmls.lock().unwrap().clone();
+        let play_position = self.playback.position.lock().unwrap().clone();
+        let play_measure_mmls = self.playback.measure_mmls.lock().unwrap().clone();
         let batch = TrackRerenderBatch {
             pending,
             active_measures: BTreeSet::new(),
@@ -233,7 +233,7 @@ impl DawApp {
                 self.cache_render_workers,
                 &self.cache,
                 play_position,
-                &self.ab_repeat,
+                &self.playback.ab_repeat,
                 &play_measure_mmls,
             );
             let completion_logs = take_completed_batch_logs(&mut batches);

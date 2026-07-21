@@ -57,14 +57,14 @@ fn handle_patch_select_arrow_keys_move_selection_in_left_pane() {
     app.handle_patch_select(KeyCode::Down);
     assert_eq!(app.overlays.patch_select.cursor, 2);
     assert_eq!(
-        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        app.playback.measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"Lead/Lead 1.fxp"}l8cdef"#,
     );
 
     app.handle_patch_select(KeyCode::Up);
     assert_eq!(app.overlays.patch_select.cursor, 1);
     assert_eq!(
-        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        app.playback.measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"Bass/Bass 1.fxp"}l8cdef"#,
     );
 }
@@ -98,21 +98,21 @@ fn handle_patch_select_j_k_preview_after_favorites_switch() {
         DawPatchSelectPane::Patches
     ));
     assert_eq!(
-        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        app.playback.measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"Pads/Pad 1.fxp"}l8cdef"#,
     );
 
     app.handle_patch_select(KeyCode::Char('j'));
     assert_eq!(app.overlays.patch_select.cursor, 1);
     assert_eq!(
-        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        app.playback.measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"Bass/Bass 1.fxp"}l8cdef"#,
     );
 
     app.handle_patch_select(KeyCode::Char('k'));
     assert_eq!(app.overlays.patch_select.cursor, 0);
     assert_eq!(
-        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        app.playback.measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"Pads/Pad 1.fxp"}l8cdef"#,
     );
 }
@@ -292,7 +292,7 @@ fn handle_patch_select_slash_on_favorites_filters_favorites_query_independently(
     );
     assert_eq!(app.overlays.patch_select.favorites_cursor, 0);
     assert_eq!(
-        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        app.playback.measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"Leads/Lead 1.fxp"}l8cdef"#,
     );
 }

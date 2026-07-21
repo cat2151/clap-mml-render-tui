@@ -209,22 +209,22 @@ fn handle_history_overlay_arrow_and_space_preview_selected_mml() {
         DawHistoryPane::Favorites
     ));
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Preview
     ));
     assert_eq!(
-        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        app.playback.measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"Pads/Pad 1.fxp"}favorite"#
     );
 
     app.handle_history_overlay(KeyCode::Char(' '));
 
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Preview
     ));
     assert_eq!(
-        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        app.playback.measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"Pads/Pad 1.fxp"}favorite"#
     );
 
@@ -235,7 +235,7 @@ fn handle_history_overlay_arrow_and_space_preview_selected_mml() {
         DawHistoryPane::History
     ));
     assert_eq!(
-        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        app.playback.measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"Pads/Pad 1.fxp"}history"#
     );
 }
@@ -259,11 +259,11 @@ fn handle_history_overlay_down_previews_next_history_item() {
 
     assert_eq!(app.overlays.history.history_cursor, 1);
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Preview
     ));
     assert_eq!(
-        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        app.playback.measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"Pads/Pad 1.fxp"}second"#
     );
 }
@@ -288,11 +288,11 @@ fn handle_history_overlay_j_k_preview_uses_overlay_patch_name() {
 
     assert_eq!(app.overlays.history.history_cursor, 1);
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Preview
     ));
     assert_eq!(
-        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        app.playback.measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"Bass/Bass 1.fxp","Surge XT patch filter":"pads"}bass second"#
     );
 
@@ -300,7 +300,7 @@ fn handle_history_overlay_j_k_preview_uses_overlay_patch_name() {
 
     assert_eq!(app.overlays.history.history_cursor, 0);
     assert_eq!(
-        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        app.playback.measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"Bass/Bass 1.fxp","Surge XT patch filter":"pads"}bass first"#
     );
 }
@@ -326,7 +326,7 @@ fn handle_history_overlay_j_prefetches_predicted_preview_cache() {
 
     app.handle_history_overlay(KeyCode::Char('j'));
 
-    assert_eq!(app.overlay_preview_cache.lock().unwrap().len(), 2);
+    assert_eq!(app.playback.overlay_preview_cache.lock().unwrap().len(), 2);
 }
 
 #[test]
@@ -342,7 +342,12 @@ fn prefetch_preview_snapshot_skips_overlay_cache_for_large_measure_buffers() {
         vec![0.0, 1.0, 0.0],
     );
 
-    assert!(app.overlay_preview_cache.lock().unwrap().is_empty());
+    assert!(app
+        .playback
+        .overlay_preview_cache
+        .lock()
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -364,11 +369,11 @@ fn handle_history_overlay_j_k_preview_falls_back_when_track_init_json_is_not_obj
 
     assert_eq!(app.overlays.history.history_cursor, 1);
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Preview
     ));
     assert_eq!(
-        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        app.playback.measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"Bass/Bass 1.fxp"}bass second"#
     );
 }

@@ -55,6 +55,7 @@ impl DawApp {
 
         let cache_key = overlay_preview_cache_key(measure_index, &track_mmls, &track_gains);
         if self
+            .playback
             .overlay_preview_cache
             .lock()
             .unwrap()
@@ -71,7 +72,7 @@ impl DawApp {
         #[cfg(test)]
         if self.entry_ptr == 0 {
             insert_overlay_preview_cache(
-                &mut self.overlay_preview_cache.lock().unwrap(),
+                &mut self.playback.overlay_preview_cache.lock().unwrap(),
                 cache_key,
                 Arc::new(Vec::new()),
             );
@@ -79,7 +80,7 @@ impl DawApp {
         }
         let cfg = Arc::clone(&self.cfg);
         let render_queue = self.render_queue.clone();
-        let overlay_preview_cache = Arc::clone(&self.overlay_preview_cache);
+        let overlay_preview_cache = Arc::clone(&self.playback.overlay_preview_cache);
         let active_track_count = active_tracks.len();
         std::thread::spawn(move || {
             let daw_cfg = (*cfg).clone();

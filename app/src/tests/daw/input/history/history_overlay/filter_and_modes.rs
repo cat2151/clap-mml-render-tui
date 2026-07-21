@@ -33,11 +33,11 @@ fn handle_history_overlay_slash_then_enter_keeps_filtered_results_for_j_navigati
     );
     assert_eq!(app.overlays.history.history_cursor, 1);
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Preview
     ));
     assert_eq!(
-        app.play_measure_track_mmls.lock().unwrap()[0][1],
+        app.playback.measure_track_mmls.lock().unwrap()[0][1],
         r#"{"Surge XT patch":"Pads/Pad 1.fxp"}gamma jk"#
     );
 }

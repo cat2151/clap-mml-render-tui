@@ -85,11 +85,11 @@ fn draw_uses_contrast_background_for_selected_grid_cell_without_blink() {
 fn draw_places_playback_status_and_loop_summary_above_footer() {
     let app = build_test_app();
     {
-        let mut play_state = app.play_state.lock().unwrap();
+        let mut play_state = app.playback.play_state.lock().unwrap();
         *play_state = DawPlayState::Playing;
     }
     {
-        let mut play_position = app.play_position.lock().unwrap();
+        let mut play_position = app.playback.position.lock().unwrap();
         *play_position = Some(PlayPosition {
             measure_index: 1,
             measure_start: std::time::Instant::now(),
@@ -97,7 +97,7 @@ fn draw_places_playback_status_and_loop_summary_above_footer() {
         });
     }
     {
-        let mut play_measure_mmls = app.play_measure_mmls.lock().unwrap();
+        let mut play_measure_mmls = app.playback.measure_mmls.lock().unwrap();
         play_measure_mmls[0] = "c".to_string();
     }
 
@@ -139,7 +139,7 @@ fn draw_places_playback_status_and_loop_summary_above_footer() {
 fn draw_shows_ab_repeat_markers_and_footer_shortcut() {
     let app = build_test_app();
     {
-        let mut ab_repeat = app.ab_repeat.lock().unwrap();
+        let mut ab_repeat = app.playback.ab_repeat.lock().unwrap();
         *ab_repeat = AbRepeatState::FixEnd {
             start_measure_index: 0,
             end_measure_index: 1,
@@ -223,7 +223,7 @@ fn draw_keeps_footer_color_cyan_across_play_states() {
     ] {
         let app = build_test_app();
         {
-            let mut state = app.play_state.lock().unwrap();
+            let mut state = app.playback.play_state.lock().unwrap();
             *state = play_state;
         }
 

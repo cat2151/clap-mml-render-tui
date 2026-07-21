@@ -38,7 +38,7 @@ fn handle_normal_g_sets_random_patch_and_generated_phrase_then_previews() {
             Some(vec!["old phrase".to_string()])
         );
         assert!(matches!(
-            *app.play_state.lock().unwrap(),
+            *app.playback.play_state.lock().unwrap(),
             DawPlayState::Preview
         ));
         assert_eq!(
@@ -80,7 +80,7 @@ fn skips_history_when_generate_is_noop() {
     assert!(app.patch_phrase_store.patches.is_empty());
     assert!(!app.patch_phrase_store_dirty);
     assert!(matches!(
-        *app.play_state.lock().unwrap(),
+        *app.playback.play_state.lock().unwrap(),
         DawPlayState::Idle
     ));
 }

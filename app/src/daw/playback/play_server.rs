@@ -8,17 +8,17 @@ use super::{
 
 impl DawApp {
     pub(super) fn start_play_from_measure_via_play_server(&self, start_measure_index: usize) {
-        let Some(play_server) = self.realtime_play_server.as_ref().cloned() else {
+        let Some(play_server) = self.playback.realtime_play_server.as_ref().cloned() else {
             self.append_log_line("play: realtime play server is not initialized");
-            *self.play_state.lock().unwrap() = DawPlayState::Idle;
+            *self.playback.play_state.lock().unwrap() = DawPlayState::Idle;
             return;
         };
 
-        let play_state = Arc::clone(&self.play_state);
-        let play_position = Arc::clone(&self.play_position);
-        let ab_repeat = Arc::clone(&self.ab_repeat);
-        let play_measure_mmls = Arc::clone(&self.play_measure_mmls);
-        let play_measure_samples = Arc::clone(&self.play_measure_samples);
+        let play_state = Arc::clone(&self.playback.play_state);
+        let play_position = Arc::clone(&self.playback.position);
+        let ab_repeat = Arc::clone(&self.playback.ab_repeat);
+        let play_measure_mmls = Arc::clone(&self.playback.measure_mmls);
+        let play_measure_samples = Arc::clone(&self.playback.measure_samples);
         let log_lines = Arc::clone(&self.log_lines);
         let sample_rate = self.cfg.sample_rate as u32;
 

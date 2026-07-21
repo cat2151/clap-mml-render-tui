@@ -164,7 +164,7 @@ fn handle_normal_r_preserves_trailing_init_mml_when_updating_patch_json() {
             app.editor.data[1][0],
             r#"{"Surge XT patch":"Pad/Pad 1.fxp","Surge XT patch filter":"pad","custom":"keep"}l1"#
         );
-        let play_measure_track_mmls = app.play_measure_track_mmls.lock().unwrap().clone();
+        let play_measure_track_mmls = app.playback.measure_track_mmls.lock().unwrap().clone();
         assert!(
             play_measure_track_mmls[0][1].contains("l1cdef"),
             "updated init MML should keep the trailing phrase in playback state: {:?}",
