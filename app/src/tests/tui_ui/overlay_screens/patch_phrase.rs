@@ -46,7 +46,7 @@ fn patch_phrase_screen_renders_history_and_favorites_lists() {
 #[test]
 fn patch_phrase_screen_renders_as_overlay_on_notepad_screen() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
     app.mode = Mode::PatchPhrase;
     app.patch_phrase.patch_name = Some("Pads/Pad 1.fxp".to_string());
     app.patch_phrase_store.patches.insert(
@@ -85,7 +85,7 @@ fn patch_phrase_screen_renders_as_overlay_on_notepad_screen() {
 #[test]
 fn patch_phrase_overlay_is_centered_like_other_overlays() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
     app.mode = Mode::PatchPhrase;
     app.patch_phrase.patch_name = Some("Pads/Pad 1.fxp".to_string());
     app.patch_phrase_store.patches.insert(

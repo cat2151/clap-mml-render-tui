@@ -185,8 +185,9 @@ impl<'a> TuiApp<'a> {
                 self.prime_normal_mode_startup_cache();
                 if started_in_notepad_mode && self.cfg.autoplay_on_startup {
                     if let Some(mml) = self
+                        .editor
                         .lines
-                        .get(self.cursor)
+                        .get(self.editor.cursor)
                         .map(|line| line.trim().to_string())
                         .filter(|mml| !mml.is_empty())
                     {

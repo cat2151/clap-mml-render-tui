@@ -29,12 +29,12 @@ fn keyboard_app(categories: &[(&str, usize)], patch: &str) -> TuiApp<'static> {
 #[test]
 fn start_keyboard_from_notepad_uses_current_cursor_line_patch() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![
+    app.editor.lines = vec![
         r#"{"Surge XT patch":"Pads/First.fxp"} c"#.to_string(),
         r#"{"Surge XT patch":"Keys/Current.fxp"} d"#.to_string(),
         r#"{"Surge XT patch":"Leads/Last.fxp"} e"#.to_string(),
     ];
-    app.cursor = 1;
+    app.editor.cursor = 1;
 
     app.start_keyboard_from_notepad();
 
@@ -45,7 +45,7 @@ fn start_keyboard_from_notepad_uses_current_cursor_line_patch() {
 #[test]
 fn start_keyboard_from_notepad_uses_init_saw_without_valid_patch() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":""} c"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":""} c"#.to_string()];
 
     app.start_keyboard_from_notepad();
 

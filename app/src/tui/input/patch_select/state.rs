@@ -134,7 +134,7 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn patch_select_current_phrase(&self) -> Option<String> {
-        let line = self.lines.get(self.cursor)?;
+        let line = self.editor.lines.get(self.editor.cursor)?;
         let preprocessed = mml_preprocessor::extract_embedded_json(line);
         Some(match preprocessed.remaining_mml.trim() {
             "" => PATCH_SELECT_PREVIEW_FALLBACK_PHRASE.to_string(),

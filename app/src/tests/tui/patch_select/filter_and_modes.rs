@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn handle_patch_select_slash_then_chars_filter_and_preview_first_result() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_select.patch_all = make_patches(&["Pads/Pad 1.fxp", "JK Brass/Bass 1.fxp"]);
     app.patch_select.patch_filtered = vec![
         "Pads/Pad 1.fxp".to_string(),
@@ -32,7 +32,7 @@ fn handle_patch_select_slash_then_chars_filter_and_preview_first_result() {
 #[test]
 fn handle_patch_select_enter_exits_filter_input_and_keeps_filtered_results() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_select.patch_all =
         make_patches(&["Pads/Pad 1.fxp", "JK Brass/Bass 1.fxp", "JK Lead.fxp"]);
     app.patch_select.patch_filtered = app
@@ -79,7 +79,7 @@ fn handle_patch_select_backspace_with_empty_query_keeps_filter_input_active() {
 #[test]
 fn handle_patch_select_char_filters_and_previews_first_result_after_slash() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_select.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
     app.patch_select.patch_filtered =
         vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()];
@@ -106,7 +106,7 @@ fn handle_patch_select_char_filters_and_previews_first_result_after_slash() {
 #[test]
 fn handle_patch_select_backspace_to_empty_keeps_filter_input_active() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_select.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
     app.patch_select.patch_filtered = vec!["Leads/Lead 1.fxp".to_string()];
     app.patch_select.patch_query = "L".to_string();
@@ -148,7 +148,7 @@ fn handle_patch_select_backspace_to_empty_keeps_filter_input_active() {
 #[test]
 fn handle_patch_select_filter_ctrl_a_uses_tui_textarea_default_binding() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_select.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
     app.patch_select.patch_filtered = app
         .patch_select
@@ -187,7 +187,7 @@ fn handle_patch_select_question_mark_enters_help_and_esc_returns_to_patch_select
 #[test]
 fn handle_patch_select_n_p_t_switch_to_corresponding_overlays() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
         "Pads/Pad 1.fxp",
         "Leads/Lead 1.fxp",
@@ -231,7 +231,7 @@ fn handle_patch_select_n_p_t_switch_to_corresponding_overlays() {
 #[test]
 fn open_patch_select_overlay_prefills_saved_patch_filter_from_current_line() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![
+    app.editor.lines = vec![
         r#"{"Surge XT patch":"Pads/Pad 2.fxp","Surge XT patch filter":"pads"} l8cdef"#.to_string(),
     ];
     app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
@@ -260,7 +260,7 @@ fn open_patch_select_overlay_prefills_saved_patch_filter_from_current_line() {
 #[test]
 fn handle_patch_select_slash_on_favorites_filters_favorites_query_independently() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_select.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
     app.patch_select.patch_filtered = app
         .patch_select

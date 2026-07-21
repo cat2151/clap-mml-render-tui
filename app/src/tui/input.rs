@@ -20,16 +20,16 @@ impl<'a> TuiApp<'a> {
         next_cursor: usize,
         preferred_delta: Option<isize>,
     ) {
-        if next_cursor != self.cursor {
-            self.cursor = next_cursor;
-            self.list_state.select(Some(self.cursor));
+        if next_cursor != self.editor.cursor {
+            self.editor.cursor = next_cursor;
+            self.editor.list_state.select(Some(self.editor.cursor));
             self.play_current_line_with_navigation_hint(preferred_delta);
         }
     }
 
     fn move_normal_cursor_by(&mut self, delta: isize) {
-        let max_cursor = self.lines.len().saturating_sub(1) as isize;
-        let next_cursor = (self.cursor as isize + delta).clamp(0, max_cursor) as usize;
+        let max_cursor = self.editor.lines.len().saturating_sub(1) as isize;
+        let next_cursor = (self.editor.cursor as isize + delta).clamp(0, max_cursor) as usize;
         self.set_normal_cursor_with_navigation_hint(next_cursor, Some(delta));
     }
 
@@ -51,7 +51,7 @@ impl<'a> TuiApp<'a> {
         }
         if key_event.modifiers.contains(KeyModifiers::SHIFT) && key_event.code == KeyCode::Char('H')
         {
-            self.normal_pending_delete = false;
+            self.editor.pending_delete = false;
             match self.current_line_patch_name() {
                 Some(patch_name) => self.start_patch_phrase_for_patch_name(Some(patch_name)),
                 None => self.start_notepad_history_guide(),
@@ -77,15 +77,15 @@ impl<'a> TuiApp<'a> {
     pub(super) fn handle_normal(&mut self, key: KeyCode) -> NormalAction {
         match key {
             KeyCode::Char('d') => {
-                if self.normal_pending_delete {
-                    self.normal_pending_delete = false;
+                if self.editor.pending_delete {
+                    self.editor.pending_delete = false;
                     self.delete_current_line();
                 } else {
-                    self.normal_pending_delete = true;
+                    self.editor.pending_delete = true;
                 }
             }
             _ => {
-                self.normal_pending_delete = false;
+                self.editor.pending_delete = false;
                 match key {
                     KeyCode::Char('q') => return NormalAction::Quit,
                     KeyCode::Char('w') => return NormalAction::LaunchDaw,
@@ -122,25 +122,25 @@ impl<'a> TuiApp<'a> {
                     }
                     KeyCode::Char('f') => self.start_patch_phrase_for_current_line(),
                     KeyCode::Char('o') => {
-                        self.insert_empty_line_and_start_insert(self.cursor + 1);
+                        self.insert_empty_line_and_start_insert(self.editor.cursor + 1);
                     }
                     KeyCode::Char('O') => {
-                        self.insert_empty_line_and_start_insert(self.cursor);
+                        self.insert_empty_line_and_start_insert(self.editor.cursor);
                     }
                     KeyCode::Delete => {
                         self.delete_current_line();
                     }
                     KeyCode::Char('j') | KeyCode::Down => self.move_normal_cursor_by(1),
                     KeyCode::Char('k') | KeyCode::Up => self.move_normal_cursor_by(-1),
-                    KeyCode::PageDown => self.move_normal_cursor_by(self.normal_page_size as isize),
+                    KeyCode::PageDown => self.move_normal_cursor_by(self.editor.page_size as isize),
                     KeyCode::PageUp => {
-                        self.move_normal_cursor_by(-(self.normal_page_size as isize))
+                        self.move_normal_cursor_by(-(self.editor.page_size as isize))
                     }
                     KeyCode::Home => {
                         self.set_normal_cursor(0);
                     }
                     KeyCode::Char('M') => {
-                        self.set_normal_cursor(self.lines.len() / 2);
+                        self.set_normal_cursor(self.editor.lines.len() / 2);
                     }
                     KeyCode::Char('K') | KeyCode::Char('?') => self.enter_help(),
                     KeyCode::Enter | KeyCode::Char(' ') => self.play_current_line(),
@@ -155,16 +155,16 @@ impl<'a> TuiApp<'a> {
         if key_event.modifiers.contains(KeyModifiers::CONTROL) {
             match key_event.code {
                 KeyCode::Char('c') => {
-                    self.textarea.copy();
-                    crate::clipboard::set_text(self.textarea.yank_text().to_string());
+                    self.editor.textarea.copy();
+                    crate::clipboard::set_text(self.editor.textarea.yank_text().to_string());
                     return;
                 }
                 KeyCode::Char('x') => {
-                    self.textarea.cut();
+                    self.editor.textarea.cut();
                     return;
                 }
                 KeyCode::Char('v') => {
-                    self.textarea.paste();
+                    self.editor.textarea.paste();
                     return;
                 }
                 _ => {}
@@ -172,8 +172,8 @@ impl<'a> TuiApp<'a> {
         }
         match key_event.code {
             KeyCode::Esc => {
-                let text = self.textarea.lines().join("");
-                self.lines[self.cursor] = text.clone();
+                let text = self.editor.textarea.lines().join("");
+                self.editor.lines[self.editor.cursor] = text.clone();
                 self.mode = Mode::Normal;
                 if !text.trim().is_empty() {
                     self.record_notepad_history(text.trim());
@@ -183,20 +183,22 @@ impl<'a> TuiApp<'a> {
             }
             KeyCode::Enter => {
                 // 確定 → 非同期再生 → 次行挿入 → INSERT 継続
-                let text = self.textarea.lines().join("");
-                self.lines[self.cursor] = text.clone();
+                let text = self.editor.textarea.lines().join("");
+                self.editor.lines[self.editor.cursor] = text.clone();
                 if !text.trim().is_empty() {
                     self.record_notepad_history(text.trim());
                     self.record_patch_phrase_history(text.trim());
                     self.play_mml(text.trim().to_string());
                 }
-                self.lines.insert(self.cursor + 1, String::new());
-                self.cursor += 1;
-                self.list_state.select(Some(self.cursor));
-                self.textarea = crate::text_input::new_single_line_textarea("");
+                self.editor
+                    .lines
+                    .insert(self.editor.cursor + 1, String::new());
+                self.editor.cursor += 1;
+                self.editor.list_state.select(Some(self.editor.cursor));
+                self.editor.textarea = crate::text_input::new_single_line_textarea("");
             }
             _ => {
-                self.textarea.input(key_event);
+                self.editor.textarea.input(key_event);
             }
         }
     }

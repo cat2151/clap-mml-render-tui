@@ -142,7 +142,7 @@ fn draw_normal(
     mode: Mode,
 ) {
     let is_insert = mode == Mode::Insert;
-    let cursor = app.cursor;
+    let cursor = app.editor.cursor;
     let status = normal_status_text(&mode, play_state);
     let render_status_snapshot = app.render_status_snapshot();
     let render_status = render_status_text(render_status_snapshot);
@@ -159,11 +159,12 @@ fn draw_normal(
         ])
         .split(f.area());
     let list_area = chunks[0];
-    app.normal_page_size = visible_list_page_size(list_area);
+    app.editor.page_size = visible_list_page_size(list_area);
     let cache = app.audio_cache.lock().unwrap();
     let disk_hashes = app.known_disk_cache_hashes.lock().unwrap();
 
     let items: Vec<ListItem> = app
+        .editor
         .lines
         .iter()
         .enumerate()
@@ -204,13 +205,13 @@ fn draw_normal(
             )
             .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
         list_area,
-        &mut app.list_state,
+        &mut app.editor.list_state,
     );
 
     // INSERTモード時は、カーソル行にインラインで textarea を描画する。
     // List ウィジェットは Borders::ALL を持つため、内側の開始は +1 ずつオフセットする。
     if is_insert {
-        let offset = app.list_state.offset();
+        let offset = app.editor.list_state.offset();
         if cursor >= offset {
             let row_in_visible = (cursor - offset) as u16;
             let inner_top = list_area.y + 1; // 上ボーダーの内側（1行分）
@@ -224,7 +225,7 @@ fn draw_normal(
                     height: 1,
                 };
                 f.render_widget(Clear, textarea_area);
-                f.render_widget(&app.textarea, textarea_area);
+                f.render_widget(&app.editor.textarea, textarea_area);
             }
         }
     }

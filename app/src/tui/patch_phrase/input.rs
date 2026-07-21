@@ -390,8 +390,8 @@ impl<'a> TuiApp<'a> {
             }
             KeyCode::Enter => {
                 if let Some(mml) = self.patch_phrase_preview_mml() {
-                    self.lines.insert(self.cursor, mml.clone());
-                    self.list_state.select(Some(self.cursor));
+                    self.editor.lines.insert(self.editor.cursor, mml.clone());
+                    self.editor.list_state.select(Some(self.editor.cursor));
                     self.record_notepad_history(&mml);
                     self.play_mml(mml);
                     self.flush_patch_phrase_store_if_dirty();
@@ -403,7 +403,7 @@ impl<'a> TuiApp<'a> {
             }
             KeyCode::Char('i') if self.patch_phrase.focus == PatchPhrasePane::History => {
                 if let Some(mml) = self.patch_phrase_preview_mml() {
-                    self.lines[self.cursor] = mml;
+                    self.editor.lines[self.editor.cursor] = mml;
                     self.start_insert();
                 }
             }

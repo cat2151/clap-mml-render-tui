@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn notepad_history_overlay_renders_history_and_favorites_lists() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["before".to_string()];
+    app.editor.lines = vec!["before".to_string()];
     app.patch_phrase_store.notepad = PatchPhraseState {
         history: vec!["l8cdef".to_string()],
         favorites: vec!["o5g".to_string()],
@@ -43,7 +43,7 @@ fn notepad_history_overlay_renders_history_and_favorites_lists() {
 #[test]
 fn notepad_history_overlay_shows_selection_title_when_filter_inactive() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["before".to_string()];
+    app.editor.lines = vec!["before".to_string()];
     app.patch_phrase_store.notepad = PatchPhraseState {
         history: vec!["l8cdef".to_string()],
         favorites: vec!["o5g".to_string()],
@@ -59,7 +59,7 @@ fn notepad_history_overlay_shows_selection_title_when_filter_inactive() {
 #[test]
 fn notepad_history_overlay_marks_cached_items_with_music_note() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["before".to_string()];
+    app.editor.lines = vec!["before".to_string()];
     app.patch_phrase_store.notepad = PatchPhraseState {
         history: vec!["l8cdef".to_string()],
         favorites: vec!["o5g".to_string()],
@@ -79,7 +79,7 @@ fn notepad_history_overlay_marks_cached_items_with_music_note() {
 #[test]
 fn notepad_history_overlay_is_centered_like_daw_overlay() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["before".to_string()];
+    app.editor.lines = vec!["before".to_string()];
     app.patch_phrase_store.notepad = PatchPhraseState {
         history: vec!["l8cdef".to_string()],
         favorites: vec!["o5g".to_string()],
@@ -162,7 +162,7 @@ fn notepad_history_only_highlights_the_focused_pane() {
 #[test]
 fn notepad_history_guide_overlay_renders_centered_message() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["plain phrase".to_string()];
+    app.editor.lines = vec!["plain phrase".to_string()];
     app.mode = Mode::NotepadHistoryGuide;
 
     let buffer = render_buffer(&mut app, 100, 16);
@@ -183,7 +183,7 @@ fn notepad_history_guide_overlay_renders_centered_message() {
 #[test]
 fn notepad_history_guide_overlay_shows_guide_footer_keybinds() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["plain phrase".to_string()];
+    app.editor.lines = vec!["plain phrase".to_string()];
     app.mode = Mode::NotepadHistoryGuide;
 
     let normalized = render_lines(&mut app, 180, 16)

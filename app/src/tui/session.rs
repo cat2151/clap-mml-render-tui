@@ -134,10 +134,12 @@ impl<'a> TuiApp<'a> {
                 Mode::Normal
             },
             help_origin: Mode::Normal,
-            lines,
-            cursor,
-            list_state,
-            textarea: crate::text_input::new_single_line_textarea(""),
+            editor: super::NotepadEditorState::new(
+                lines,
+                cursor,
+                list_state,
+                crate::text_input::new_single_line_textarea(""),
+            ),
             cfg: Arc::clone(&cfg_arc),
             entry_ptr,
             play_state: Arc::new(Mutex::new(PlayState::Idle)),
@@ -164,12 +166,9 @@ impl<'a> TuiApp<'a> {
             patch_load_state: spawn_patch_loader(cfg),
             random_patch_decks: crate::random::RandomIndexDecks::default(),
             patch_select: PatchSelectState::new(),
-            normal_page_size: 1,
             notepad_history: NotepadHistoryState::new(),
             patch_phrase: PatchPhraseState::new(),
             patch_phrase_store: crate::history::load_patch_phrase_store(),
-            normal_pending_delete: false,
-            yank_buffer: None,
             patch_phrase_store_dirty: false,
             is_daw_mode: is_daw_mode && !restore_keyboard,
             startup_normal_cache_primed: false,
@@ -179,8 +178,8 @@ impl<'a> TuiApp<'a> {
 
     pub(super) fn save_history_state(&self) {
         let _ = crate::history::save_session_state(&crate::history::SessionState {
-            cursor: self.cursor,
-            lines: self.lines.clone(),
+            cursor: self.editor.cursor,
+            lines: self.editor.lines.clone(),
             is_daw_mode: self.is_daw_mode,
             keyboard: self
                 .keyboard

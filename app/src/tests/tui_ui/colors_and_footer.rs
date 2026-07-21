@@ -5,7 +5,7 @@ use ratatui::style::Modifier;
 #[test]
 fn normal_screen_uses_monokai_background_and_border_color() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["abc".to_string()];
+    app.editor.lines = vec!["abc".to_string()];
 
     let buffer = render_buffer(&mut app, 80, 8);
 
@@ -18,7 +18,7 @@ fn normal_screen_uses_monokai_background_and_border_color() {
 #[test]
 fn normal_screen_cursor_uses_contrast_background_without_blink() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["abc".to_string()];
+    app.editor.lines = vec!["abc".to_string()];
 
     let buffer = render_buffer(&mut app, 80, 8);
     let (x, y) = find_text(&buffer, "abc");
@@ -88,7 +88,7 @@ fn status_color_uses_monokai_palette() {
 #[test]
 fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["abc".to_string()];
+    app.editor.lines = vec!["abc".to_string()];
 
     let lines = render_lines(&mut app, 220, 9);
     let screen = lines.join("\n");
@@ -271,7 +271,7 @@ fn normal_screen_shows_active_parallel_render_count_in_purple() {
 #[test]
 fn normal_screen_marks_cached_lines_with_music_note() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["abc".to_string(), "def".to_string()];
+    app.editor.lines = vec!["abc".to_string(), "def".to_string()];
     app.audio_cache
         .lock()
         .unwrap()
@@ -286,7 +286,7 @@ fn normal_screen_marks_cached_lines_with_music_note() {
 #[test]
 fn normal_screen_marks_disk_only_cached_lines_with_music_note() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["abc".to_string(), "def".to_string()];
+    app.editor.lines = vec!["abc".to_string(), "def".to_string()];
     // "abc" だけディスクキャッシュのハッシュ集合に入っている状態を模擬する。
     // audio_cache（オンメモリ）には積まない ＝ LRUから追い出された後の状態に相当する。
     app.known_disk_cache_hashes
@@ -303,15 +303,15 @@ fn normal_screen_marks_disk_only_cached_lines_with_music_note() {
 #[test]
 fn normal_mode_startup_prime_caches_current_line_and_navigation_targets() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![
+    app.editor.lines = vec![
         "m0".to_string(),
         "m1".to_string(),
         "m2".to_string(),
         "m3".to_string(),
     ];
-    app.cursor = 1;
-    app.list_state.select(Some(1));
-    app.normal_page_size = 2;
+    app.editor.cursor = 1;
+    app.editor.list_state.select(Some(1));
+    app.editor.page_size = 2;
 
     app.prime_normal_mode_startup_cache();
 
@@ -325,7 +325,7 @@ fn normal_mode_startup_prime_caches_current_line_and_navigation_targets() {
 #[test]
 fn normal_screen_marks_rendering_lines_with_dots_before_music_note() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["abc".to_string()];
+    app.editor.lines = vec!["abc".to_string()];
     app.test_set_render_job_status(
         "abc",
         Some(crate::tui::render_queue::TuiRenderJobStatus::Pending),
@@ -339,7 +339,7 @@ fn normal_screen_marks_rendering_lines_with_dots_before_music_note() {
 #[test]
 fn insert_screen_shows_insert_title_without_duplicate_line_text() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["abc".to_string()];
+    app.editor.lines = vec!["abc".to_string()];
     app.start_insert();
 
     let lines = render_lines(&mut app, 80, 8);

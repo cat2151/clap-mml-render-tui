@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn handle_patch_select_enter_keeps_saved_patch_filter_on_selected_patch() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![
+    app.editor.lines = vec![
         r#"{"Surge XT patch":"Pads/Pad 1.fxp","Surge XT patch filter":"pads"} l8cdef"#.to_string(),
     ];
     app.patch_select.patch_all = make_patches(&["Pads/Pad 1.fxp", "Pads/Pad 2.fxp"]);
@@ -16,7 +16,7 @@ fn handle_patch_select_enter_keeps_saved_patch_filter_on_selected_patch() {
     app.handle_patch_select(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     assert_eq!(
-        app.lines,
+        app.editor.lines,
         vec![
             r#"{"Surge XT patch": "Pads/Pad 2.fxp", "Surge XT patch filter": "pads"} l8cdef"#
                 .to_string()
@@ -27,7 +27,7 @@ fn handle_patch_select_enter_keeps_saved_patch_filter_on_selected_patch() {
 #[test]
 fn handle_patch_select_enter_primes_returned_normal_line_into_cache() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_select.patch_all =
         make_patches(&["Pads/Pad 1.fxp", "Pads/Pad 2.fxp", "Pads/Pad 3.fxp"]);
     app.patch_select.patch_filtered = app
@@ -126,7 +126,7 @@ fn start_patch_select_migrates_prefixed_favorites_from_legacy_patch_name() {
 #[test]
 fn open_patch_select_overlay_selects_requested_initial_patch() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
         "Pads/Pad 1.fxp",
         "Leads/Lead 1.fxp",
@@ -162,7 +162,7 @@ fn open_patch_select_overlay_selects_requested_initial_patch() {
 #[test]
 fn handle_patch_select_ctrl_s_toggles_sort_order_and_keeps_selected_patch() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines =
+    app.editor.lines =
         vec![r#"{"Surge XT patch":"patches_factory/pad/Super Pad.fxp"} l8cdef"#.to_string()];
     app.patch_select.patch_all = vec![
         (
@@ -246,7 +246,7 @@ fn handle_patch_select_ctrl_s_toggles_sort_order_and_keeps_selected_patch() {
 #[test]
 fn handle_patch_select_l_moves_focus_to_favorites_and_previews_selected_patch() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_select.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
     app.patch_select.patch_filtered =
         vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()];
@@ -278,7 +278,7 @@ fn handle_patch_select_l_moves_focus_to_favorites_and_previews_selected_patch() 
 #[test]
 fn handle_patch_select_page_down_moves_favorites_when_favorites_pane_is_focused() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Fav 0"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Fav 0"} l8cdef"#.to_string()];
     app.patch_select.patch_all = make_patches(&["Fav 0", "Fav 1", "Fav 2", "Fav 3"]);
     app.patch_select.patch_filtered = app
         .patch_select

@@ -110,7 +110,7 @@ impl<'a> TuiApp<'a> {
             KeyCode::Enter => {
                 if let Some(selected) = self.patch_select_selected_patch_name() {
                     self.replace_current_line_patch(&selected);
-                    let line = self.lines[self.cursor].clone();
+                    let line = self.editor.lines[self.editor.cursor].clone();
                     self.record_notepad_history(&line);
                 }
                 self.mode = Mode::Normal;

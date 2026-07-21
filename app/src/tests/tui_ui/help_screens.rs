@@ -109,7 +109,7 @@ fn normal_help_screen_mentions_ctrl_clipboard_shortcuts_without_overlay_keybinds
 #[test]
 fn patch_select_help_screen_shows_patch_select_shortcuts() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["abc".to_string()];
+    app.editor.lines = vec!["abc".to_string()];
     app.patch_select.patch_all = vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
     app.patch_select.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
     app.patch_select.patch_list_state.select(Some(0));
@@ -131,7 +131,7 @@ fn patch_select_help_screen_shows_patch_select_shortcuts() {
 #[test]
 fn patch_select_help_screen_keeps_patch_select_base_title_and_keybinds() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["abc".to_string()];
+    app.editor.lines = vec!["abc".to_string()];
     app.patch_select.patch_all = vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
     app.patch_select.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
     app.patch_select.patch_list_state.select(Some(0));
@@ -220,7 +220,7 @@ fn help_overlay_size_follows_tui_help_content() {
     normal.help_origin = Mode::Normal;
 
     let mut patch_select = TuiApp::new_for_test(test_config());
-    patch_select.lines = vec!["abc".to_string()];
+    patch_select.editor.lines = vec!["abc".to_string()];
     patch_select.patch_select.patch_all =
         vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
     patch_select.patch_select.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];

@@ -384,7 +384,7 @@ impl<'a> TuiApp<'a> {
             }
             KeyCode::Enter => {
                 if let Some(mml) = self.selected_notepad_item() {
-                    self.lines[self.cursor] = mml.clone();
+                    self.editor.lines[self.editor.cursor] = mml.clone();
                     self.record_notepad_history(&mml);
                     self.play_mml(mml);
                     self.flush_patch_phrase_store_if_dirty();

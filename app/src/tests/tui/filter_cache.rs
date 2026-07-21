@@ -238,7 +238,7 @@ fn hydrate_all_lines_from_disk_cache_at_startup_loads_every_cached_line_but_not_
     }
 
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![
+    app.editor.lines = vec![
         cached_line_a.to_string(),
         uncached_line.to_string(),
         cached_line_b.to_string(),
@@ -330,7 +330,7 @@ fn flush_notepad_disk_cache_persists_only_current_buffer_lines() {
     let preview_only = r#"{"Surge XT patch": "some other patch.fxp"} l8cdef"#;
 
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![buffer_line.to_string()];
+    app.editor.lines = vec![buffer_line.to_string()];
     {
         let mut cache = app.audio_cache.lock().unwrap();
         // 実際のnotepadバッファ行と、patch select等のプレビュー試聴で生成された

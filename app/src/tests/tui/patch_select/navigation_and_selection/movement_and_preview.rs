@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn handle_patch_select_ctrl_j_moves_cursor_and_previews_destination_patch() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_select.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
     app.patch_select.patch_filtered =
         vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()];
@@ -23,7 +23,7 @@ fn handle_patch_select_ctrl_j_moves_cursor_and_previews_destination_patch() {
 #[test]
 fn handle_patch_select_j_and_k_move_cursor_and_preview_destination_patch() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_select.patch_all =
         make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp", "Bass/Bass 1.fxp"]);
     app.patch_select.patch_filtered = app
@@ -51,7 +51,7 @@ fn handle_patch_select_j_and_k_move_cursor_and_preview_destination_patch() {
 #[test]
 fn handle_patch_select_j_prefetches_direction_first_then_fills_remaining_navigation_targets() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_select.patch_all = make_patches(&[
         "Pads/Pad 0.fxp",
         "Pads/Pad 1.fxp",
@@ -101,7 +101,7 @@ fn handle_patch_select_j_prefetches_direction_first_then_fills_remaining_navigat
 #[test]
 fn handle_patch_select_k_prefetches_page_up_before_page_down_then_far_direction_targets() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_select.patch_all = make_patches(&[
         "Pads/Pad 0.fxp",
         "Pads/Pad 1.fxp",
@@ -151,7 +151,7 @@ fn handle_patch_select_k_prefetches_page_up_before_page_down_then_far_direction_
 #[test]
 fn handle_patch_select_ctrl_p_moves_cursor_up() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_select.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
     app.patch_select.patch_filtered =
         vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()];
@@ -172,7 +172,7 @@ fn handle_patch_select_ctrl_p_moves_cursor_up() {
 #[test]
 fn handle_patch_select_space_previews_current_selection_without_moving() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_select.patch_all =
         make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp", "Bass/Bass 1.fxp"]);
     app.patch_select.patch_filtered = app
@@ -202,7 +202,7 @@ fn handle_patch_select_space_previews_current_selection_without_moving() {
 #[test]
 fn handle_patch_select_ctrl_n_and_ctrl_k_move_cursor() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pad 1"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pad 1"} l8cdef"#.to_string()];
     app.patch_select.patch_all = make_patches(&["Pad 0", "Pad 1", "Pad 2"]);
     app.patch_select.patch_filtered = app
         .patch_select
@@ -226,7 +226,7 @@ fn handle_patch_select_ctrl_n_and_ctrl_k_move_cursor() {
 #[test]
 fn handle_patch_select_page_down_and_page_up_move_by_visible_page() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pad 0"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pad 0"} l8cdef"#.to_string()];
     app.patch_select.patch_all = make_patches(&[
         "Pad 0", "Pad 1", "Pad 2", "Pad 3", "Pad 4", "Pad 5", "Pad 6",
     ]);
@@ -253,7 +253,7 @@ fn handle_patch_select_page_down_and_page_up_move_by_visible_page() {
 #[test]
 fn handle_patch_select_starts_scrolling_before_cursor_reaches_view_edge() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pad 0"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pad 0"} l8cdef"#.to_string()];
     app.patch_select.patch_all = make_patches(&[
         "Pad 0", "Pad 1", "Pad 2", "Pad 3", "Pad 4", "Pad 5", "Pad 6", "Pad 7",
     ]);

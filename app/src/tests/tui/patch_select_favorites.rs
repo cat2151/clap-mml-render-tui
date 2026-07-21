@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn handle_patch_select_f_adds_selected_patch_and_phrase_to_favorites() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_select.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
     app.patch_select.patch_filtered =
         vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()];
@@ -35,7 +35,7 @@ fn handle_patch_select_f_adds_selected_patch_and_phrase_to_favorites() {
 #[test]
 fn handle_patch_select_f_moves_newly_added_patch_to_favorites_top() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.patch_select.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
     app.patch_select.patch_filtered =
         vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()];

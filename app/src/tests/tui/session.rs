@@ -51,8 +51,8 @@ fn save_history_state_persists_tui_cursor_lines_and_mode_flag() {
     let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
 
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["abc".to_string(), "def".to_string(), "ghi".to_string()];
-    app.cursor = 2;
+    app.editor.lines = vec!["abc".to_string(), "def".to_string(), "ghi".to_string()];
+    app.editor.cursor = 2;
     app.is_daw_mode = true;
 
     app.save_history_state();
@@ -68,7 +68,7 @@ fn save_history_state_persists_tui_cursor_lines_and_mode_flag() {
     );
     let saved = crate::history::load_session_state();
     assert_eq!(saved.cursor, 2);
-    assert_eq!(saved.lines, app.lines);
+    assert_eq!(saved.lines, app.editor.lines);
     assert!(saved.is_daw_mode);
     assert_eq!(
         saved.keyboard_note_guide_overlay_date.as_deref(),

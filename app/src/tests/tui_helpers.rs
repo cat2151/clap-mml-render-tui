@@ -1,5 +1,8 @@
 use std::collections::{HashSet, VecDeque};
 
+use ratatui::widgets::ListState;
+use tui_textarea::TextArea;
+
 use super::*;
 
 impl TuiApp<'static> {
@@ -13,10 +16,12 @@ impl TuiApp<'static> {
         Self {
             mode: Mode::Normal,
             help_origin: Mode::Normal,
-            lines: vec![String::new()],
-            cursor: 0,
-            list_state,
-            textarea: TextArea::default(),
+            editor: notepad_editor::NotepadEditorState::new(
+                vec![String::new()],
+                0,
+                list_state,
+                TextArea::default(),
+            ),
             cfg: Arc::new(cfg),
             entry_ptr: 0,
             play_state: Arc::new(Mutex::new(PlayState::Idle)),
@@ -41,12 +46,9 @@ impl TuiApp<'static> {
             patch_load_state: Arc::new(Mutex::new(PatchLoadState::Ready(Vec::new()))),
             random_patch_decks: crate::random::RandomIndexDecks::default(),
             patch_select: PatchSelectState::new(),
-            normal_page_size: 1,
             notepad_history: NotepadHistoryState::new(),
             patch_phrase: PatchPhraseState::new(),
             patch_phrase_store: crate::history::PatchPhraseStore::default(),
-            normal_pending_delete: false,
-            yank_buffer: None,
             patch_phrase_store_dirty: false,
             is_daw_mode: false,
             startup_normal_cache_primed: false,

@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn handle_patch_phrase_slash_then_enter_keeps_filtered_results_for_j_navigation() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["before".to_string()];
+    app.editor.lines = vec!["before".to_string()];
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -39,7 +39,7 @@ fn handle_patch_phrase_slash_then_enter_keeps_filtered_results_for_j_navigation(
 #[test]
 fn handle_patch_phrase_allows_slash_character_in_filter_query() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["before".to_string()];
+    app.editor.lines = vec!["before".to_string()];
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -68,7 +68,7 @@ fn handle_patch_phrase_allows_slash_character_in_filter_query() {
 #[test]
 fn handle_patch_phrase_left_in_filter_query_does_not_repreview() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["before".to_string()];
+    app.editor.lines = vec!["before".to_string()];
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -91,7 +91,7 @@ fn handle_patch_phrase_left_in_filter_query_does_not_repreview() {
 #[test]
 fn handle_patch_phrase_filter_ctrl_a_uses_tui_textarea_default_binding() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["before".to_string()];
+    app.editor.lines = vec!["before".to_string()];
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -115,7 +115,7 @@ fn handle_patch_phrase_filter_ctrl_a_uses_tui_textarea_default_binding() {
 #[test]
 fn handle_patch_phrase_n_p_t_switch_to_corresponding_overlays() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
     app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
         "Pads/Pad 1.fxp",
         "Leads/Lead 1.fxp",
@@ -153,7 +153,7 @@ fn handle_patch_phrase_n_p_t_switch_to_corresponding_overlays() {
 #[test]
 fn handle_patch_phrase_page_up_at_top_does_not_repreview() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["before".to_string()];
+    app.editor.lines = vec!["before".to_string()];
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {

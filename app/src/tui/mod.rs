@@ -21,6 +21,7 @@ mod disk_cache;
 mod input;
 mod keyboard;
 mod loop_browser;
+mod notepad_editor;
 mod notepad_history;
 mod patch_phrase;
 mod patch_select;
@@ -32,8 +33,7 @@ mod runtime;
 mod session;
 mod ui;
 
-use ratatui::{widgets::ListState, Frame};
-use tui_textarea::TextArea;
+use ratatui::Frame;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -48,6 +48,7 @@ pub(crate) use self::cache::filter_items;
 pub(in crate::tui) use self::cache::filter_patches;
 use self::keyboard::KeyboardScreen;
 use self::loop_browser::LoopBrowserScreen;
+use self::notepad_editor::NotepadEditorState;
 use self::notepad_history::NotepadHistoryState;
 use self::patch_phrase::PatchPhraseState;
 use self::patch_select::PatchSelectState;
@@ -139,10 +140,7 @@ pub(super) struct TuiRenderStatus {
 pub struct TuiApp<'a> {
     pub(super) mode: Mode,
     pub(super) help_origin: Mode,
-    pub(super) lines: Vec<String>,
-    pub(super) cursor: usize,
-    pub(super) list_state: ListState,
-    pub(super) textarea: TextArea<'a>,
+    pub(in crate::tui) editor: NotepadEditorState<'a>,
     cfg: Arc<Config>,
     entry_ptr: usize, // *const PluginEntry as usize。render_server backend では 0。
     pub(super) play_state: Arc<Mutex<PlayState>>,
@@ -171,12 +169,9 @@ pub struct TuiApp<'a> {
     pub(super) random_patch_decks: crate::random::RandomIndexDecks,
     /// ソート切替に応じて並びが変わる (表示名, 小文字化済み) ペアのリスト
     pub(in crate::tui) patch_select: PatchSelectState<'a>,
-    pub(super) normal_page_size: usize,
     pub(in crate::tui) notepad_history: NotepadHistoryState<'a>,
     pub(in crate::tui) patch_phrase: PatchPhraseState<'a>,
     pub(super) patch_phrase_store: crate::history::PatchPhraseStore,
-    pub(super) normal_pending_delete: bool,
-    pub(super) yank_buffer: Option<String>,
     pub(super) patch_phrase_store_dirty: bool,
     /// 終了時 DAW モードだったかどうか（history.json に保存・復元する）
     pub(super) is_daw_mode: bool,
@@ -242,7 +237,7 @@ impl<'a> TuiApp<'a> {
         // 組み合わせ（パッチ名を変えただけの仮MMLなど）はここで除外し、上限
         // NOTEPAD_DISK_CACHE_MAX_FILES 件の永続キャッシュ枠を試聴で消費させない。
         let cache = self.audio_cache.lock().unwrap();
-        let line_keys: HashSet<&str> = self.lines.iter().map(|line| line.trim()).collect();
+        let line_keys: HashSet<&str> = self.editor.lines.iter().map(|line| line.trim()).collect();
         let notepad_only: HashMap<String, Vec<f32>> = cache
             .iter()
             .filter(|(mml, _)| line_keys.contains(mml.as_str()))

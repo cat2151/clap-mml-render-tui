@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn handle_normal_shift_h_enters_patch_phrase_overlay() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -29,7 +29,7 @@ fn handle_normal_shift_h_enters_patch_phrase_overlay() {
 #[test]
 fn handle_normal_shift_h_without_patch_name_shows_notepad_history_guide() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["plain phrase".to_string()];
+    app.editor.lines = vec!["plain phrase".to_string()];
     app.patch_phrase_store.notepad.history = vec!["history phrase".to_string()];
 
     let result =
@@ -67,7 +67,7 @@ fn handle_normal_h_no_longer_enters_notepad_history_overlay() {
 #[test]
 fn handle_normal_enter_records_notepad_history() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["l8cdef".to_string()];
+    app.editor.lines = vec!["l8cdef".to_string()];
 
     app.handle_normal(KeyCode::Enter);
 
@@ -80,13 +80,13 @@ fn handle_normal_enter_records_notepad_history() {
 #[test]
 fn handle_patch_select_enter_records_notepad_history() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["cde".to_string()];
+    app.editor.lines = vec!["cde".to_string()];
     app.patch_select.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
 
     app.handle_patch_select(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     assert_eq!(
-        app.lines,
+        app.editor.lines,
         vec![r#"{"Surge XT patch": "Pads/Pad 1.fxp"} cde"#.to_string()]
     );
     assert_eq!(
@@ -98,7 +98,7 @@ fn handle_patch_select_enter_records_notepad_history() {
 #[test]
 fn handle_patch_phrase_enter_records_notepad_history() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -119,14 +119,14 @@ fn handle_patch_phrase_enter_records_notepad_history() {
 #[test]
 fn handle_notepad_history_enter_overwrites_current_line_and_closes() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["before".to_string()];
+    app.editor.lines = vec!["before".to_string()];
     app.patch_phrase_store.notepad.history = vec!["after".to_string()];
     app.start_notepad_history();
 
     app.handle_notepad_history(KeyCode::Enter);
 
     assert!(matches!(app.mode, Mode::Normal));
-    assert_eq!(app.lines, vec!["after".to_string()]);
+    assert_eq!(app.editor.lines, vec!["after".to_string()]);
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
         PlayState::Running(msg) if msg == "after"

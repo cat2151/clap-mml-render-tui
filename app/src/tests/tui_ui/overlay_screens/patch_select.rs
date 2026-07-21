@@ -49,7 +49,7 @@ fn patch_select_overlay_layout(
 #[test]
 fn patch_select_screen_renders_as_overlay_on_normal_screen() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} abc"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} abc"#.to_string()];
     app.patch_select.patch_all = vec![
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         (
@@ -175,7 +175,7 @@ fn patch_select_screen_applies_initial_margin_on_first_render() {
 #[test]
 fn patch_select_screen_marks_memory_cached_preview_items() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Current.fxp"} l8cdef"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Current.fxp"} l8cdef"#.to_string()];
     app.patch_select.patch_filtered =
         vec!["Pads/Pad 1.fxp".to_string(), "Bass/Bass 1.fxp".to_string()];
     app.patch_select.patch_list_state.select(Some(0));
@@ -269,7 +269,7 @@ fn patch_select_filter_focus_highlights_query_border_and_dims_both_panes() {
 #[test]
 fn patch_select_screen_splits_status_and_keybinds() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["abc".to_string()];
+    app.editor.lines = vec!["abc".to_string()];
     app.test_set_active_parallel_render_count(2);
     app.patch_select.patch_all = vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
     app.patch_select.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];

@@ -12,12 +12,12 @@ fn extract_patch_phrase_reads_patch_name_and_phrase() {
 #[test]
 fn handle_patch_phrase_enter_inserts_preview_above_current_line_and_closes() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![
+    app.editor.lines = vec![
         "top".to_string(),
         r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string(),
     ];
-    app.cursor = 1;
-    app.list_state.select(Some(1));
+    app.editor.cursor = 1;
+    app.editor.list_state.select(Some(1));
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -31,14 +31,14 @@ fn handle_patch_phrase_enter_inserts_preview_above_current_line_and_closes() {
 
     assert!(matches!(app.mode, Mode::Normal));
     assert_eq!(
-        app.lines,
+        app.editor.lines,
         vec![
             "top".to_string(),
             r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string(),
             r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()
         ]
     );
-    assert_eq!(app.cursor, 1);
+    assert_eq!(app.editor.cursor, 1);
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
         PlayState::Running(msg) if msg == r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#
@@ -48,7 +48,7 @@ fn handle_patch_phrase_enter_inserts_preview_above_current_line_and_closes() {
 #[test]
 fn handle_patch_phrase_space_replays_current_preview() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
+    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -69,7 +69,7 @@ fn handle_patch_phrase_space_replays_current_preview() {
 #[test]
 fn handle_patch_phrase_i_from_history_enters_insert_with_preview_mml() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["before".to_string()];
+    app.editor.lines = vec!["before".to_string()];
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -83,11 +83,11 @@ fn handle_patch_phrase_i_from_history_enters_insert_with_preview_mml() {
 
     assert!(matches!(app.mode, Mode::Insert));
     assert_eq!(
-        app.lines,
+        app.editor.lines,
         vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()]
     );
     assert_eq!(
-        app.textarea.lines().join(""),
+        app.editor.textarea.lines().join(""),
         r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#
     );
 }
@@ -95,7 +95,7 @@ fn handle_patch_phrase_i_from_history_enters_insert_with_preview_mml() {
 #[test]
 fn handle_patch_phrase_i_from_favorites_stays_in_patch_phrase() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["before".to_string()];
+    app.editor.lines = vec!["before".to_string()];
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -109,13 +109,13 @@ fn handle_patch_phrase_i_from_favorites_stays_in_patch_phrase() {
     app.handle_patch_phrase(KeyCode::Char('i'));
 
     assert!(matches!(app.mode, Mode::PatchPhrase));
-    assert_eq!(app.lines, vec!["before".to_string()]);
+    assert_eq!(app.editor.lines, vec!["before".to_string()]);
 }
 
 #[test]
 fn handle_patch_phrase_arrow_keys_switch_focus_and_preview() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["before".to_string()];
+    app.editor.lines = vec!["before".to_string()];
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -145,7 +145,7 @@ fn handle_patch_phrase_arrow_keys_switch_focus_and_preview() {
 #[test]
 fn handle_patch_phrase_page_down_and_page_up_move_by_visible_page() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["before".to_string()];
+    app.editor.lines = vec!["before".to_string()];
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -181,7 +181,7 @@ fn handle_patch_phrase_page_down_and_page_up_move_by_visible_page() {
 #[test]
 fn handle_patch_phrase_j_prefetches_predicted_navigation_cache() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["before".to_string()];
+    app.editor.lines = vec!["before".to_string()];
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -208,7 +208,7 @@ fn handle_patch_phrase_j_prefetches_predicted_navigation_cache() {
 #[test]
 fn handle_patch_phrase_j_prefetches_direction_first_then_fills_remaining_navigation_targets() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["before".to_string()];
+    app.editor.lines = vec!["before".to_string()];
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -245,7 +245,7 @@ fn handle_patch_phrase_j_prefetches_direction_first_then_fills_remaining_navigat
 #[test]
 fn handle_patch_phrase_starts_scrolling_before_cursor_reaches_view_edge() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["before".to_string()];
+    app.editor.lines = vec!["before".to_string()];
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {

@@ -93,7 +93,7 @@ impl<'a> TuiApp<'a> {
     }
 
     fn current_line_patch_filter_query(&self) -> Option<String> {
-        self.lines.get(self.cursor).and_then(|line| {
+        self.editor.lines.get(self.editor.cursor).and_then(|line| {
             Self::extract_patch_json_value(line).and_then(|value| {
                 value
                     .get(PATCH_FILTER_QUERY_JSON_KEY)
@@ -132,7 +132,7 @@ impl<'a> TuiApp<'a> {
         filter_query: Option<&str>,
     ) {
         let json = Self::build_patch_json_with_filter_query(patch_name, filter_query);
-        let current = self.lines[self.cursor].clone();
+        let current = self.editor.lines[self.editor.cursor].clone();
         let replaced_parts = current
             .split(';')
             .map(|part| {
@@ -148,7 +148,7 @@ impl<'a> TuiApp<'a> {
             .collect::<Vec<_>>();
         let replaced = replaced_parts.join(";");
         let has_content = replaced_parts.iter().any(|part| !part.trim().is_empty());
-        self.lines[self.cursor] = if has_content {
+        self.editor.lines[self.editor.cursor] = if has_content {
             replaced
         } else {
             format!("{json} c")

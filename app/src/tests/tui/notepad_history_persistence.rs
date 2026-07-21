@@ -12,7 +12,7 @@ fn handle_notepad_history_enter_flushes_store() {
     let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
 
     let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec!["before".to_string()];
+    app.editor.lines = vec!["before".to_string()];
     app.patch_phrase_store.notepad.history = vec!["after".to_string()];
     app.patch_phrase_store_dirty = true;
     app.start_notepad_history();

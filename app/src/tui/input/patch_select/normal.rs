@@ -6,8 +6,9 @@ impl<'a> TuiApp<'a> {
             return;
         };
         let Some(raw_patch_name) = self
+            .editor
             .lines
-            .get(self.cursor)
+            .get(self.editor.cursor)
             .and_then(|line| Self::extract_patch_phrase(line))
             .map(|(patch_name, _)| patch_name)
         else {
@@ -32,12 +33,13 @@ impl<'a> TuiApp<'a> {
 
     fn prefetch_normal_navigation_audio_cache(&self, preferred_delta: Option<isize>) {
         self.prefetch_navigation_audio_cache(
-            self.cursor,
-            self.lines.len(),
-            self.normal_page_size,
+            self.editor.cursor,
+            self.editor.lines.len(),
+            self.editor.page_size,
             preferred_delta,
             |index| {
-                self.lines
+                self.editor
+                    .lines
                     .get(index)
                     .map(|line| line.trim().to_string())
                     .filter(|mml| !mml.is_empty())
@@ -47,8 +49,9 @@ impl<'a> TuiApp<'a> {
 
     pub(in crate::tui) fn prime_normal_mode_startup_cache(&self) {
         let Some(current_mml) = self
+            .editor
             .lines
-            .get(self.cursor)
+            .get(self.editor.cursor)
             .map(|line| line.trim().to_string())
             .filter(|mml| !mml.is_empty())
         else {
@@ -56,13 +59,14 @@ impl<'a> TuiApp<'a> {
         };
         self.load_disk_cached_audio_into_memory_if_present(&current_mml);
         let navigation_targets = crate::ui_utils::predicted_navigation_indices(
-            self.cursor,
-            self.lines.len(),
-            self.normal_page_size,
+            self.editor.cursor,
+            self.editor.lines.len(),
+            self.editor.page_size,
         )
         .into_iter()
         .filter_map(|index| {
-            self.lines
+            self.editor
+                .lines
                 .get(index)
                 .map(|line| line.trim().to_string())
                 .filter(|mml| !mml.is_empty())
@@ -75,7 +79,7 @@ impl<'a> TuiApp<'a> {
     /// プロセス起動直後に一度だけ呼ぶことを想定しており、パッチ選択確定時などに何度も呼ばれる
     /// `prime_normal_mode_startup_cache` からは呼ばない（呼ぶとディスク読み込みが繰り返されてしまう）。
     pub(in crate::tui) fn hydrate_all_lines_from_disk_cache_at_startup(&self) {
-        for line in &self.lines {
+        for line in &self.editor.lines {
             let mml = line.trim();
             if mml.is_empty() {
                 continue;
@@ -116,7 +120,7 @@ impl<'a> TuiApp<'a> {
         preferred_delta: Option<isize>,
     ) {
         self.normalize_current_line_patch_json_if_known();
-        let mml = self.lines[self.cursor].trim().to_string();
+        let mml = self.editor.lines[self.editor.cursor].trim().to_string();
         if !mml.is_empty() {
             self.record_notepad_history(&mml);
             self.record_patch_phrase_history(&mml);
@@ -132,8 +136,8 @@ impl<'a> TuiApp<'a> {
             Self::build_patch_json(&patch_name),
             crate::generate::pick_default_generate_phrase()
         );
-        self.lines.insert(self.cursor, mml.clone());
-        self.list_state.select(Some(self.cursor));
+        self.editor.lines.insert(self.editor.cursor, mml.clone());
+        self.editor.list_state.select(Some(self.editor.cursor));
         self.record_notepad_history(&mml);
         self.record_patch_phrase_history(&mml);
         self.play_mml(mml);
@@ -177,40 +181,41 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(in crate::tui) fn start_insert(&mut self) {
-        self.textarea = crate::text_input::new_single_line_textarea(&self.lines[self.cursor]);
+        self.editor.textarea =
+            crate::text_input::new_single_line_textarea(&self.editor.lines[self.editor.cursor]);
         self.mode = Mode::Insert;
     }
 
     pub(in crate::tui::input) fn insert_empty_line_and_start_insert(&mut self, index: usize) {
-        self.lines.insert(index, String::new());
-        self.cursor = index;
-        self.list_state.select(Some(self.cursor));
+        self.editor.lines.insert(index, String::new());
+        self.editor.cursor = index;
+        self.editor.list_state.select(Some(self.editor.cursor));
         self.start_insert();
     }
 
     pub(in crate::tui::input) fn delete_current_line(&mut self) {
-        self.yank_buffer = Some(self.lines.remove(self.cursor));
-        if self.lines.is_empty() {
-            self.lines.push(String::new());
-            self.cursor = 0;
-        } else if self.cursor >= self.lines.len() {
-            self.cursor = self.lines.len().saturating_sub(1);
+        self.editor.yank_buffer = Some(self.editor.lines.remove(self.editor.cursor));
+        if self.editor.lines.is_empty() {
+            self.editor.lines.push(String::new());
+            self.editor.cursor = 0;
+        } else if self.editor.cursor >= self.editor.lines.len() {
+            self.editor.cursor = self.editor.lines.len().saturating_sub(1);
         }
-        self.list_state.select(Some(self.cursor));
+        self.editor.list_state.select(Some(self.editor.cursor));
     }
 
     pub(in crate::tui::input) fn paste_yanked_line(&mut self, insert_above: bool) -> bool {
-        let Some(yanked) = self.yank_buffer.as_ref() else {
+        let Some(yanked) = self.editor.yank_buffer.as_ref() else {
             return false;
         };
         let insert_at = if insert_above {
-            self.cursor
+            self.editor.cursor
         } else {
-            self.cursor + 1
+            self.editor.cursor + 1
         };
-        self.lines.insert(insert_at, yanked.clone());
-        self.cursor = insert_at;
-        self.list_state.select(Some(self.cursor));
+        self.editor.lines.insert(insert_at, yanked.clone());
+        self.editor.cursor = insert_at;
+        self.editor.list_state.select(Some(self.editor.cursor));
         true
     }
 
@@ -219,8 +224,9 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(in crate::tui) fn current_line_patch_name(&self) -> Option<String> {
-        self.lines
-            .get(self.cursor)
+        self.editor
+            .lines
+            .get(self.editor.cursor)
             .and_then(|line| Self::extract_patch_phrase(line))
             .map(|(patch_name, _)| patch_name)
             .map(|patch_name| {
