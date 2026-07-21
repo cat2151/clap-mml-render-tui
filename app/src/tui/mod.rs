@@ -47,6 +47,7 @@ pub(super) const PATCH_FILTER_QUERY_JSON_KEY: &str = "Surge XT patch filter";
 pub(crate) use self::cache::filter_items;
 pub(in crate::tui) use self::cache::filter_patches;
 use self::keyboard::KeyboardScreen;
+use self::loop_browser::LoopBrowserScreen;
 use self::notepad_history::NotepadHistoryState;
 use self::patch_phrase::PatchPhraseState;
 use self::patch_select::PatchSelectState;
@@ -180,8 +181,7 @@ pub struct TuiApp<'a> {
     /// 終了時 DAW モードだったかどうか（history.json に保存・復元する）
     pub(super) is_daw_mode: bool,
     startup_normal_cache_primed: bool,
-    pub(super) loop_browser: loop_browser::LoopBrowser,
-    loop_playback: Option<loop_browser::playback::LoopPlaybackController>,
+    pub(in crate::tui) loop_browser: LoopBrowserScreen,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

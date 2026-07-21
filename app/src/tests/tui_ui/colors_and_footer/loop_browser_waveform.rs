@@ -52,18 +52,19 @@ fn browser_with_waveform(measures: usize) -> LoopBrowser {
 }
 
 fn place_selected_wav(app: &mut TuiApp<'_>) {
-    app.loop_browser.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
     app.loop_browser
+        .state
         .handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
-    app.loop_browser.handle_key(KeyCode::Tab);
-    app.loop_browser.handle_key(KeyCode::Char('c'));
+    app.loop_browser.state.handle_key(KeyCode::Tab);
+    app.loop_browser.state.handle_key(KeyCode::Char('c'));
 }
 
 #[test]
 fn draws_continuous_eight_measure_waveform_across_scrolled_cells() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::LoopBrowser;
-    app.loop_browser = browser_with_waveform(8);
+    app.loop_browser.state = browser_with_waveform(8);
     place_selected_wav(&mut app);
 
     let first = render_lines(&mut app, 180, 20).join("\n");
@@ -73,8 +74,8 @@ fn draws_continuous_eight_measure_waveform_across_scrolled_cells() {
         assert!(first.contains(&glyph.to_string().repeat(16)), "{first}");
     }
 
-    app.loop_browser.handle_key(KeyCode::Char('7'));
-    app.loop_browser.handle_key(KeyCode::Char('l'));
+    app.loop_browser.state.handle_key(KeyCode::Char('7'));
+    app.loop_browser.state.handle_key(KeyCode::Char('l'));
     let last = render_lines(&mut app, 180, 20).join("\n");
     for glyph in ['▅', '▆', '▇', '█'] {
         assert!(last.contains(&glyph.to_string().repeat(16)), "{last}");
@@ -85,21 +86,21 @@ fn draws_continuous_eight_measure_waveform_across_scrolled_cells() {
 fn offscreen_playback_keeps_edit_scroll_and_reports_measure_and_beat_in_title() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::LoopBrowser;
-    app.loop_browser = browser_with_waveform(8);
+    app.loop_browser.state = browser_with_waveform(8);
     place_selected_wav(&mut app);
-    app.loop_browser.set_playback_beat_for_test(7, 2, 4);
+    app.loop_browser.state.set_playback_beat_for_test(7, 2, 4);
 
     let screen = render_lines(&mut app, 100, 20).join("\n");
 
     assert!(screen.contains("PLAY M8 B3"));
-    assert_eq!(app.loop_browser.measure_scroll, 0);
+    assert_eq!(app.loop_browser.state.measure_scroll, 0);
 }
 
 #[test]
 fn compact_height_hides_stretch_but_keeps_one_waveform_track() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::LoopBrowser;
-    app.loop_browser = browser_with_waveform(2);
+    app.loop_browser.state = browser_with_waveform(2);
     place_selected_wav(&mut app);
 
     let compact = render_lines(&mut app, 180, 14).join("\n");
@@ -118,7 +119,7 @@ fn compact_height_hides_stretch_but_keeps_one_waveform_track() {
 fn waveform_keeps_green_theme_foreground_under_cursor_highlight() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::LoopBrowser;
-    app.loop_browser = browser_with_waveform(2);
+    app.loop_browser.state = browser_with_waveform(2);
     place_selected_wav(&mut app);
 
     let buffer = render_buffer(&mut app, 180, 20);

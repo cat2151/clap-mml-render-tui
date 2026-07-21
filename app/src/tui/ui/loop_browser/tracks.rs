@@ -44,8 +44,8 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(area)
     };
-    let focused = app.loop_browser.focus == LoopBrowserPane::Tracks;
-    let target_bpm = app.loop_browser.target_bpm();
+    let focused = app.loop_browser.state.focus == LoopBrowserPane::Tracks;
+    let target_bpm = app.loop_browser.state.target_bpm();
     let track_block = Block::default()
         .borders(Borders::ALL)
         .title(format!(
@@ -58,11 +58,11 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {
         .title(" [USED WAV / ANALYSIS / CATEGORY / STRETCH SOURCE→TARGET / OUTPUT] ")
         .border_style(focus_border_style(focused));
     let playback_beat = crate::tui::loop_browser::playback::position::current_beat(
-        &app.loop_browser.playback_position,
+        &app.loop_browser.state.playback_position,
         std::time::Instant::now(),
     );
     let beats_per_measure = playback_beat.map_or_else(
-        || app.loop_browser.beats_per_measure(),
+        || app.loop_browser.state.beats_per_measure(),
         |position| position.beats_per_measure,
     );
     let playback_marker = PlaybackMarker {
@@ -100,8 +100,14 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {
     let visible_tracks = usize::from(height.saturating_sub(1)).max(1);
     let visible_measures =
         ((usize::from(width).saturating_sub(TRACK_LABEL_WIDTH)) / CELL_WIDTH).max(1);
-    let diagnostics = app.loop_browser.stretch_diagnostics.lock().unwrap().clone();
-    let browser = &mut app.loop_browser;
+    let diagnostics = app
+        .loop_browser
+        .state
+        .stretch_diagnostics
+        .lock()
+        .unwrap()
+        .clone();
+    let browser = &mut app.loop_browser.state;
     keep_visible(
         browser.track_cursor,
         visible_tracks,

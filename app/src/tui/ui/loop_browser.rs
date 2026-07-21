@@ -18,7 +18,7 @@ mod waveforms;
 
 pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame) {
     let draw_started = std::time::Instant::now();
-    let trace_id = app.loop_browser.pending_render_trace.take();
+    let trace_id = app.loop_browser.state.pending_render_trace.take();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -46,10 +46,11 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame) {
     let play_state = app.play_state.lock().unwrap().clone();
     let persistence_error = app
         .loop_browser
+        .state
         .metadata_error
         .as_ref()
-        .or(app.loop_browser.track_grid_error.as_ref())
-        .or(app.loop_browser.random_decks_error.as_ref());
+        .or(app.loop_browser.state.track_grid_error.as_ref())
+        .or(app.loop_browser.state.random_decks_error.as_ref());
     let (status, color) = if let Some(error) = persistence_error {
         (error.clone(), Color::Red)
     } else if matches!(play_state, crate::tui::PlayState::Err(_)) {
@@ -57,7 +58,7 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame) {
             status_text(&Mode::LoopBrowser, &play_state),
             status_color(&play_state),
         )
-    } else if app.loop_browser.playback_paused {
+    } else if app.loop_browser.state.playback_paused {
         ("loop browser  ⏸ 停止中".to_string(), MONOKAI_CYAN)
     } else {
         (
@@ -70,30 +71,31 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame) {
         chunks[2],
     );
     frame.render_widget(
-        Paragraph::new(loop_browser_keybind_text(app.loop_browser.focus)).style(base_style()),
+        Paragraph::new(loop_browser_keybind_text(app.loop_browser.state.focus)).style(base_style()),
         chunks[3],
     );
 
-    if app.loop_browser.category_overlay.is_some() {
+    if app.loop_browser.state.category_overlay.is_some() {
         draw_category_overlay(app, frame);
     }
-    if app.loop_browser.mixer_overlay_open {
+    if app.loop_browser.state.mixer_overlay_open {
         draw_mixer_overlay(app, frame);
     }
     if let Some(notice) = app
         .loop_browser
+        .state
         .active_notice()
         .map(|notice| notice.text.clone())
     {
         draw_notice(frame, &notice);
     }
-    if let Some(pane) = app.loop_browser.help_overlay {
+    if let Some(pane) = app.loop_browser.state.help_overlay {
         help::draw(frame, pane);
     }
-    if app.loop_browser.starting {
+    if app.loop_browser.state.starting {
         draw_startup_overlay(frame);
     }
-    app.loop_browser.last_render_metrics =
+    app.loop_browser.state.last_render_metrics =
         Some(crate::tui::loop_browser::performance::RenderMetrics {
             trace_id,
             tree: tree_elapsed,
@@ -101,7 +103,7 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame) {
             pads: pads_elapsed,
             draw: draw_started.elapsed(),
             rendered_tree_nodes,
-            total_tree_nodes: app.loop_browser.visible.len(),
+            total_tree_nodes: app.loop_browser.state.visible.len(),
         });
 }
 
@@ -127,19 +129,20 @@ fn draw_mixer_overlay(app: &TuiApp<'_>, frame: &mut Frame<'_>) {
     let area = frame.area();
     let tracks = app
         .loop_browser
+        .state
         .track_grid()
         .iter()
         .enumerate()
         .map(|(track, _)| crate::mixer_overlay::MixerOverlayTrack {
             label: format!("track{}", track + 1),
-            volume_db: app.loop_browser.track_volume_db(track),
+            volume_db: app.loop_browser.state.track_volume_db(track),
         })
         .collect::<Vec<_>>();
     crate::mixer_overlay::draw_mixer_overlay(
         frame,
         area,
         &tracks,
-        app.loop_browser.mixer_cursor_track,
+        app.loop_browser.state.mixer_cursor_track,
     );
 }
 
@@ -149,6 +152,7 @@ fn draw_pads(app: &TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {
         .flat_map(|pad| {
             let name = app
                 .loop_browser
+                .state
                 .pad_file_name(*pad)
                 .unwrap_or_else(|| "-".to_string());
             [
@@ -182,9 +186,10 @@ fn focus_border_style(focused: bool) -> Style {
 }
 
 fn draw_category_overlay(app: &TuiApp<'_>, frame: &mut Frame<'_>) {
-    let current = app.loop_browser.category_overlay_current();
+    let current = app.loop_browser.state.category_overlay_current();
     let lines = app
         .loop_browser
+        .state
         .category_keys
         .iter()
         .map(|(key, category)| {

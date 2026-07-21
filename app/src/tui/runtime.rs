@@ -170,11 +170,11 @@ impl<'a> TuiApp<'a> {
             terminal.draw(|f| self.draw(f))?;
             let terminal_draw_elapsed = terminal_draw_started.elapsed();
             if self.mode == Mode::LoopBrowser {
-                if let Some(metrics) = self.loop_browser.last_render_metrics.take() {
+                if let Some(metrics) = self.loop_browser.state.last_render_metrics.take() {
                     super::loop_browser::performance::log_render(metrics, terminal_draw_elapsed);
                 }
             }
-            if self.loop_browser.starting {
+            if self.loop_browser.state.starting {
                 self.complete_loop_browser_startup();
                 continue;
             }
@@ -314,11 +314,11 @@ impl<'a> TuiApp<'a> {
                         Mode::PatchPhrase => self.handle_patch_phrase_key_event(key),
                         Mode::NotepadHistoryGuide => self.handle_notepad_history_guide(key.code),
                         Mode::Help => self.handle_help(key.code),
-                        Mode::LoopBrowser => match self.loop_browser.handle_key_event(key) {
+                        Mode::LoopBrowser => match self.loop_browser.state.handle_key_event(key) {
                             LoopBrowserAction::Continue => {}
                             LoopBrowserAction::Preview(path) => {
                                 let trace_id =
-                                    self.loop_browser.take_preview_trace().unwrap_or_else(
+                                    self.loop_browser.state.take_preview_trace().unwrap_or_else(
                                         super::loop_browser::performance::next_trace_id,
                                     );
                                 self.preview_loop_file(path, trace_id);

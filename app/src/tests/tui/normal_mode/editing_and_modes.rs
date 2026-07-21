@@ -179,16 +179,17 @@ fn handle_normal_b_requests_loop_browser_without_running_startup_inline() {
 
     assert!(matches!(result, NormalAction::LaunchLoopBrowser));
     assert!(matches!(app.mode, Mode::Normal));
-    assert!(!app.loop_browser.starting);
+    assert!(!app.loop_browser.state.starting);
 
     app.begin_loop_browser_startup();
     assert!(matches!(app.mode, Mode::LoopBrowser));
-    assert!(app.loop_browser.starting);
+    assert!(app.loop_browser.state.starting);
 
     app.complete_loop_browser_startup();
-    assert!(!app.loop_browser.starting);
+    assert!(!app.loop_browser.state.starting);
     assert!(app
         .loop_browser
+        .state
         .error
         .as_deref()
         .is_some_and(|error| error.contains("cmrt scan-loops")));

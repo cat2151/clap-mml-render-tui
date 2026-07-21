@@ -169,31 +169,31 @@ impl Drop for LoopPlaybackController {
 impl<'a> TuiApp<'a> {
     pub(in crate::tui) fn begin_loop_browser_startup(&mut self) {
         self.mode = Mode::LoopBrowser;
-        self.loop_browser.starting = true;
+        self.loop_browser.state.starting = true;
     }
 
     pub(in crate::tui) fn complete_loop_browser_startup(&mut self) {
-        if !self.loop_browser.starting {
+        if !self.loop_browser.state.starting {
             return;
         }
         let session = self.begin_playback_session();
         self.set_play_state_if_current(session, PlayState::Idle);
-        self.loop_browser.reload(&self.cfg);
+        self.loop_browser.state.reload(&self.cfg);
         if !cfg!(test) {
-            self.loop_playback = Some(LoopPlaybackController::spawn(
-                self.loop_browser.playback_grid(),
-                self.loop_browser.track_volumes_db().to_vec(),
-                self.loop_browser.solo_tracks().to_vec(),
+            self.loop_browser.playback = Some(LoopPlaybackController::spawn(
+                self.loop_browser.state.playback_grid(),
+                self.loop_browser.state.track_volumes_db().to_vec(),
+                self.loop_browser.state.solo_tracks().to_vec(),
                 Arc::clone(&self.play_state),
-                Arc::clone(&self.loop_browser.stretch_diagnostics),
-                Arc::clone(&self.loop_browser.playback_position),
+                Arc::clone(&self.loop_browser.state.stretch_diagnostics),
+                Arc::clone(&self.loop_browser.state.playback_position),
             ));
         }
     }
 
     pub(in crate::tui) fn finish_loop_browser(&mut self) {
-        self.loop_browser.starting = false;
-        if let Some(mut playback) = self.loop_playback.take() {
+        self.loop_browser.state.starting = false;
+        if let Some(mut playback) = self.loop_browser.playback.take() {
             playback.stop();
         }
         let session = self.begin_playback_session();
@@ -202,19 +202,19 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(in crate::tui) fn preview_loop_file(&self, path: PathBuf, trace_id: u64) {
-        if let Some(playback) = &self.loop_playback {
+        if let Some(playback) = &self.loop_browser.playback {
             playback.preview(path, trace_id);
         }
     }
 
     pub(in crate::tui) fn trigger_loop_pad(&self, pad: char, path: PathBuf) {
-        if let Some(playback) = &self.loop_playback {
+        if let Some(playback) = &self.loop_browser.playback {
             playback.trigger(pad, path);
         }
     }
 
     pub(in crate::tui) fn update_loop_grid(&self, grid: LoopPlaybackGrid, reason: LoopGridChange) {
-        if let Some(playback) = &self.loop_playback {
+        if let Some(playback) = &self.loop_browser.playback {
             playback.set_grid(grid, reason);
         }
     }
@@ -225,25 +225,25 @@ impl<'a> TuiApp<'a> {
         start_measure: usize,
         reason: LoopGridChange,
     ) {
-        if let Some(playback) = &self.loop_playback {
+        if let Some(playback) = &self.loop_browser.playback {
             playback.restart_grid_at(grid, start_measure, reason);
         }
     }
 
     pub(in crate::tui) fn update_loop_track_volume(&self, track: usize, volume_db: i32) {
-        if let Some(playback) = &self.loop_playback {
+        if let Some(playback) = &self.loop_browser.playback {
             playback.set_track_volume(track, volume_db);
         }
     }
 
     pub(in crate::tui) fn update_loop_track_solo(&self, solo_tracks: Vec<bool>) {
-        if let Some(playback) = &self.loop_playback {
+        if let Some(playback) = &self.loop_browser.playback {
             playback.set_track_solo(solo_tracks);
         }
     }
 
     pub(in crate::tui) fn set_loop_playback_paused(&self, paused: bool, start_measure: usize) {
-        if let Some(playback) = &self.loop_playback {
+        if let Some(playback) = &self.loop_browser.playback {
             playback.set_paused(paused, start_measure);
         }
         if paused {

@@ -154,25 +154,25 @@ fn error_screen_shows_scan_guidance() {
 fn draws_favorites_category_overlay_and_removal_notice() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::LoopBrowser;
-    app.loop_browser = browser();
-    app.loop_browser.cursor = 1;
+    app.loop_browser.state = browser();
+    app.loop_browser.state.cursor = 1;
 
-    app.loop_browser.handle_key(KeyCode::Char('v'));
+    app.loop_browser.state.handle_key(KeyCode::Char('v'));
     let favorite_screen = render_lines(&mut app, 180, 12).join("\n");
     assert!(favorite_screen.contains("★"));
 
-    app.loop_browser.handle_key(KeyCode::Char('V'));
+    app.loop_browser.state.handle_key(KeyCode::Char('V'));
     let favorites_only_screen = render_lines(&mut app, 180, 12).join("\n");
     assert!(favorites_only_screen.contains("Favorite dirs"));
-    app.loop_browser.handle_key(KeyCode::Char('V'));
+    app.loop_browser.state.handle_key(KeyCode::Char('V'));
 
-    app.loop_browser.handle_key(KeyCode::Char('t'));
+    app.loop_browser.state.handle_key(KeyCode::Char('t'));
     let category_screen = render_lines(&mut app, 180, 12).join("\n");
     assert!(category_screen.contains("g: guitar"));
     assert!(category_screen.contains("e: sequence"));
-    app.loop_browser.handle_key(KeyCode::Esc);
+    app.loop_browser.state.handle_key(KeyCode::Esc);
 
-    app.loop_browser.handle_key(KeyCode::Char('v'));
+    app.loop_browser.state.handle_key(KeyCode::Char('v'));
     let notice_buffer = render_buffer(&mut app, 180, 12);
     find_text_ignoring_spaces(&notice_buffer, "お気に入りdirを解除しました");
 }
@@ -181,14 +181,15 @@ fn draws_favorites_category_overlay_and_removal_notice() {
 fn draws_wav_pads_track_grid_and_pane_specific_footer() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::LoopBrowser;
-    app.loop_browser = browser();
-    app.loop_browser.handle_key(KeyCode::Char('j'));
-    app.loop_browser.handle_key(KeyCode::Char('l'));
-    app.loop_browser.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state = browser();
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state.handle_key(KeyCode::Char('l'));
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
     app.loop_browser
+        .state
         .handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
-    app.loop_browser.handle_key(KeyCode::Tab);
-    app.loop_browser.handle_key(KeyCode::Char('c'));
+    app.loop_browser.state.handle_key(KeyCode::Tab);
+    app.loop_browser.state.handle_key(KeyCode::Char('c'));
 
     let screen = render_lines(&mut app, 180, 20).join("\n");
 
@@ -211,19 +212,20 @@ fn draws_wav_pads_track_grid_and_pane_specific_footer() {
 fn tree_draws_only_viewport_rows_and_keeps_a_quarter_margin() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::LoopBrowser;
-    app.loop_browser = browser_with_many_direct_wavs(7_000);
-    app.loop_browser.cursor = 3_500;
+    app.loop_browser.state = browser_with_many_direct_wavs(7_000);
+    app.loop_browser.state.cursor = 3_500;
     app.loop_browser
+        .state
         .handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
-    app.loop_browser.handle_key(KeyCode::Tab);
-    app.loop_browser.handle_key(KeyCode::Char('c'));
+    app.loop_browser.state.handle_key(KeyCode::Tab);
+    app.loop_browser.state.handle_key(KeyCode::Char('c'));
 
     let _ = render_lines(&mut app, 120, 20);
 
-    let metrics = app.loop_browser.last_render_metrics.unwrap();
+    let metrics = app.loop_browser.state.last_render_metrics.unwrap();
     assert_eq!(metrics.total_tree_nodes, 7_001);
     assert_eq!(metrics.rendered_tree_nodes, 12);
-    assert_eq!(app.loop_browser.tree_scroll, 3_492);
+    assert_eq!(app.loop_browser.state.tree_scroll, 3_492);
     assert!(
         metrics.tracks < std::time::Duration::from_millis(100),
         "track pane render exceeded budget: {:?}",
@@ -235,10 +237,10 @@ fn tree_draws_only_viewport_rows_and_keeps_a_quarter_margin() {
 fn breadcrumb_shows_selected_wavs_parent_directory() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::LoopBrowser;
-    app.loop_browser = browser();
-    app.loop_browser.handle_key(KeyCode::Char('j'));
-    app.loop_browser.handle_key(KeyCode::Char('l'));
-    app.loop_browser.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state = browser();
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state.handle_key(KeyCode::Char('l'));
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
 
     let screen = render_lines(&mut app, 120, 14).join("\n");
 
@@ -255,10 +257,10 @@ fn breadcrumb_shows_the_selected_wavs_parent_direct_category() {
     );
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::LoopBrowser;
-    app.loop_browser = browser_at_bpm_with_metadata(120.0, metadata);
-    app.loop_browser.handle_key(KeyCode::Char('j'));
-    app.loop_browser.handle_key(KeyCode::Char('l'));
-    app.loop_browser.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state = browser_at_bpm_with_metadata(120.0, metadata);
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state.handle_key(KeyCode::Char('l'));
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
 
     let screen = render_lines(&mut app, 120, 14).join("\n");
 
@@ -269,10 +271,10 @@ fn breadcrumb_shows_the_selected_wavs_parent_direct_category() {
 fn track_pane_shows_solo_and_mute_labels_and_shortcut() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::LoopBrowser;
-    app.loop_browser = browser();
-    app.loop_browser.handle_key(KeyCode::Tab);
-    app.loop_browser.handle_key(KeyCode::Char('j'));
-    app.loop_browser.handle_key(KeyCode::Char('s'));
+    app.loop_browser.state = browser();
+    app.loop_browser.state.handle_key(KeyCode::Tab);
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state.handle_key(KeyCode::Char('s'));
 
     let screen = render_lines(&mut app, 180, 20).join("\n");
 
@@ -298,8 +300,8 @@ fn track_pane_shows_solo_and_mute_labels_and_shortcut() {
 fn paused_loop_browser_has_an_explicit_status() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::LoopBrowser;
-    app.loop_browser = browser();
-    app.loop_browser.handle_key(KeyCode::Char('p'));
+    app.loop_browser.state = browser();
+    app.loop_browser.state.handle_key(KeyCode::Char('p'));
 
     let screen = render_lines(&mut app, 180, 14).join("\n");
 
@@ -310,14 +312,15 @@ fn paused_loop_browser_has_an_explicit_status() {
 fn track_title_shows_the_automatically_adjusted_bpm() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::LoopBrowser;
-    app.loop_browser = browser_at_bpm(160.0);
-    app.loop_browser.handle_key(KeyCode::Char('j'));
-    app.loop_browser.handle_key(KeyCode::Char('l'));
-    app.loop_browser.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state = browser_at_bpm(160.0);
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state.handle_key(KeyCode::Char('l'));
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
     app.loop_browser
+        .state
         .handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
-    app.loop_browser.handle_key(KeyCode::Tab);
-    app.loop_browser.handle_key(KeyCode::Char('c'));
+    app.loop_browser.state.handle_key(KeyCode::Tab);
+    app.loop_browser.state.handle_key(KeyCode::Char('c'));
 
     let screen = render_lines(&mut app, 180, 14).join("\n");
 
@@ -328,24 +331,27 @@ fn track_title_shows_the_automatically_adjusted_bpm() {
 fn trailing_repeats_are_gray_and_bpm_rejected_cells_are_red() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::LoopBrowser;
-    app.loop_browser = browser_with_repeat_and_rejected_cells();
+    app.loop_browser.state = browser_with_repeat_and_rejected_cells();
 
-    app.loop_browser.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
     app.loop_browser
+        .state
         .handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
-    app.loop_browser.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
     app.loop_browser
+        .state
         .handle_key_event(KeyEvent::new(KeyCode::Char('D'), KeyModifiers::SHIFT));
-    app.loop_browser.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
     app.loop_browser
+        .state
         .handle_key_event(KeyEvent::new(KeyCode::Char('E'), KeyModifiers::SHIFT));
-    app.loop_browser.handle_key(KeyCode::Tab);
-    app.loop_browser.handle_key(KeyCode::Char('c'));
-    app.loop_browser.handle_key(KeyCode::Char('j'));
-    app.loop_browser.handle_key(KeyCode::Char('d'));
-    app.loop_browser.handle_key(KeyCode::Char('j'));
-    app.loop_browser.handle_key(KeyCode::Char('e'));
-    app.loop_browser.handle_key(KeyCode::Char('l'));
+    app.loop_browser.state.handle_key(KeyCode::Tab);
+    app.loop_browser.state.handle_key(KeyCode::Char('c'));
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state.handle_key(KeyCode::Char('d'));
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state.handle_key(KeyCode::Char('e'));
+    app.loop_browser.state.handle_key(KeyCode::Char('l'));
 
     let buffer = render_buffer(&mut app, 180, 24);
     let symbols = |symbol: &str| {
@@ -383,10 +389,10 @@ fn trailing_repeats_are_gray_and_bpm_rejected_cells_are_red() {
 fn draws_shared_mixer_overlay_for_loop_tracks() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::LoopBrowser;
-    app.loop_browser = browser();
-    app.loop_browser.handle_key(KeyCode::Tab);
-    app.loop_browser.handle_key(KeyCode::Char('m'));
-    app.loop_browser.handle_key(KeyCode::Char('k'));
+    app.loop_browser.state = browser();
+    app.loop_browser.state.handle_key(KeyCode::Tab);
+    app.loop_browser.state.handle_key(KeyCode::Char('m'));
+    app.loop_browser.state.handle_key(KeyCode::Char('k'));
 
     let screen = render_lines(&mut app, 100, 30).join("\n");
 

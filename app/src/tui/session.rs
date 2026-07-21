@@ -173,8 +173,7 @@ impl<'a> TuiApp<'a> {
             patch_phrase_store_dirty: false,
             is_daw_mode: is_daw_mode && !restore_keyboard,
             startup_normal_cache_primed: false,
-            loop_browser: super::loop_browser::LoopBrowser::default(),
-            loop_playback: None,
+            loop_browser: super::loop_browser::LoopBrowserScreen::default(),
         }
     }
 

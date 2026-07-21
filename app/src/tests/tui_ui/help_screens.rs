@@ -18,7 +18,7 @@ fn patch_phrase_screen_shows_search_prompt() {
 fn loop_browser_draws_centered_help_for_the_focused_pane() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::LoopBrowser;
-    app.loop_browser.handle_key(KeyCode::Char('?'));
+    app.loop_browser.state.handle_key(KeyCode::Char('?'));
 
     let tree_screen = render_lines(&mut app, 160, 40).join("\n");
     let tree_buffer = render_buffer(&mut app, 160, 40);
@@ -29,9 +29,9 @@ fn loop_browser_draws_centered_help_for_the_focused_pane() {
     assert!(!tree_screen.contains("mix level overlay"));
     assert_help_is_centered(&tree_buffer);
 
-    app.loop_browser.handle_key(KeyCode::Char('?'));
-    app.loop_browser.handle_key(KeyCode::Tab);
-    app.loop_browser.handle_key(KeyCode::Char('?'));
+    app.loop_browser.state.handle_key(KeyCode::Char('?'));
+    app.loop_browser.state.handle_key(KeyCode::Tab);
+    app.loop_browser.state.handle_key(KeyCode::Char('?'));
 
     let tracks_screen = render_lines(&mut app, 160, 40).join("\n");
     let normalized_tracks = tracks_screen.replace(' ', "");

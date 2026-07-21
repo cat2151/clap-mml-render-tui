@@ -18,10 +18,13 @@ pub(super) mod performance;
 pub(super) mod playback;
 mod random_navigation;
 mod reload;
+mod screen;
 mod track_input;
 mod tree;
 
 use tree::{collect_visible, find_favorite_node, insert_relative_path, node_path, sort_tree};
+
+pub(in crate::tui) use screen::LoopBrowserScreen;
 
 const REMOVED_NOTICE_DURATION: Duration = Duration::from_millis(1_500);
 pub(super) const PAD_KEYS: [char; 7] = ['c', 'd', 'e', 'f', 'g', 'a', 'b'];

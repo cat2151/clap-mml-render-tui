@@ -7,18 +7,19 @@ fn stretch_result_pane_shows_prepared_output_duration() {
 
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::LoopBrowser;
-    app.loop_browser = browser_at_bpm(100.0);
-    app.loop_browser.handle_key(KeyCode::Char('j'));
-    app.loop_browser.handle_key(KeyCode::Char('l'));
-    app.loop_browser.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state = browser_at_bpm(100.0);
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state.handle_key(KeyCode::Char('l'));
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
     app.loop_browser
+        .state
         .handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
-    app.loop_browser.handle_key(KeyCode::Tab);
-    app.loop_browser.handle_key(KeyCode::Char('c'));
-    let grid = app.loop_browser.playback_grid();
+    app.loop_browser.state.handle_key(KeyCode::Tab);
+    app.loop_browser.state.handle_key(KeyCode::Char('c'));
+    let grid = app.loop_browser.state.playback_grid();
     let clip = grid[0][0].as_ref().unwrap().clone();
-    let target = app.loop_browser.target_bpm();
-    let diagnostics = Arc::clone(&app.loop_browser.stretch_diagnostics);
+    let target = app.loop_browser.state.target_bpm();
+    let diagnostics = Arc::clone(&app.loop_browser.state.stretch_diagnostics);
     let mut diagnostics = diagnostics.lock().unwrap();
     diagnostics.begin(7, LoopGridChange::Pad('c'), &grid, target);
     diagnostics.set_status(
@@ -55,14 +56,15 @@ fn used_wav_pane_lists_a_spanning_wav_once_with_its_category() {
     );
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::LoopBrowser;
-    app.loop_browser = browser_at_bpm_with_metadata(120.0, metadata);
-    app.loop_browser.handle_key(KeyCode::Char('j'));
-    app.loop_browser.handle_key(KeyCode::Char('l'));
-    app.loop_browser.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state = browser_at_bpm_with_metadata(120.0, metadata);
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state.handle_key(KeyCode::Char('l'));
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
     app.loop_browser
+        .state
         .handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
-    app.loop_browser.handle_key(KeyCode::Tab);
-    app.loop_browser.handle_key(KeyCode::Char('c'));
+    app.loop_browser.state.handle_key(KeyCode::Tab);
+    app.loop_browser.state.handle_key(KeyCode::Char('c'));
 
     let screen = render_lines(&mut app, 180, 20).join("\n");
 
@@ -80,21 +82,23 @@ fn used_wav_pane_lists_a_spanning_wav_once_with_its_category() {
 fn used_wav_pane_groups_by_wav_and_adds_measures_for_multiple_wavs() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::LoopBrowser;
-    app.loop_browser = browser_with_repeat_and_rejected_cells();
+    app.loop_browser.state = browser_with_repeat_and_rejected_cells();
 
-    app.loop_browser.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
     app.loop_browser
+        .state
         .handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
-    app.loop_browser.handle_key(KeyCode::Char('j'));
-    app.loop_browser.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
+    app.loop_browser.state.handle_key(KeyCode::Char('j'));
     app.loop_browser
+        .state
         .handle_key_event(KeyEvent::new(KeyCode::Char('D'), KeyModifiers::SHIFT));
-    app.loop_browser.handle_key(KeyCode::Tab);
-    app.loop_browser.handle_key(KeyCode::Char('c'));
-    app.loop_browser.handle_key(KeyCode::Char('l'));
-    app.loop_browser.handle_key(KeyCode::Char('d'));
-    app.loop_browser.handle_key(KeyCode::Char('9'));
-    app.loop_browser.handle_key(KeyCode::Char('l'));
+    app.loop_browser.state.handle_key(KeyCode::Tab);
+    app.loop_browser.state.handle_key(KeyCode::Char('c'));
+    app.loop_browser.state.handle_key(KeyCode::Char('l'));
+    app.loop_browser.state.handle_key(KeyCode::Char('d'));
+    app.loop_browser.state.handle_key(KeyCode::Char('9'));
+    app.loop_browser.state.handle_key(KeyCode::Char('l'));
 
     let screen = render_lines(&mut app, 180, 20).join("\n");
     let used_rows = screen
@@ -108,5 +112,5 @@ fn used_wav_pane_groups_by_wav_and_adds_measures_for_multiple_wavs() {
     assert!(used_rows
         .iter()
         .any(|line| line.contains("C-bad-short.wav")));
-    assert!(app.loop_browser.measure_scroll > 0);
+    assert!(app.loop_browser.state.measure_scroll > 0);
 }
