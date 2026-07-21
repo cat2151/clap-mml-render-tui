@@ -217,12 +217,12 @@ impl DawApp {
     // ─── MML 構築 ─────────────────────────────────────────────
 
     pub(super) fn build_measure_track_mmls_for_measure(&self, measure: usize) -> Vec<String> {
-        (0..self.tracks)
+        (0..self.editor.tracks)
             .map(|track| {
                 if track < FIRST_PLAYABLE_TRACK || !self.track_is_audible(track) {
                     String::new()
                 } else {
-                    let notes = self.data[track][measure].trim();
+                    let notes = self.editor.data[track][measure].trim();
                     if notes.is_empty() {
                         String::new()
                     } else {
@@ -237,7 +237,7 @@ impl DawApp {
     /// = merged JSON + track0 全体 + track[t][0] (音色/init) + track[t][m] (音符)
     /// 各セル先頭の JSON は最終 MML 先頭の 1 つの JSON にマージする。
     pub(super) fn build_cell_mml(&self, track: usize, measure: usize) -> String {
-        build_cell_mml_from_data(&self.data, self.measures, track, measure)
+        build_cell_mml_from_data(&self.editor.data, self.editor.measures, track, measure)
     }
 
     /// 指定小節の全 track を結合した MML を構築する（1小節分の演奏用）
@@ -246,9 +246,9 @@ impl DawApp {
     /// 各セル先頭の JSON は最終 MML 先頭の 1 つの JSON にマージする。
     pub(super) fn build_measure_mml(&self, measure: usize) -> String {
         build_measure_mml_from_data(
-            &self.data,
-            self.measures,
-            self.tracks,
+            &self.editor.data,
+            self.editor.measures,
+            self.editor.tracks,
             measure,
             &self.solo_tracks,
         )
@@ -257,7 +257,7 @@ impl DawApp {
     /// 全小節の per-measure MML ベクターを構築する（演奏用; hot reload に使用）
     /// index i → meas i+1 の MML（空小節は空文字列）
     pub(super) fn build_measure_mmls(&self) -> Vec<String> {
-        (1..=self.measures)
+        (1..=self.editor.measures)
             .map(|m| self.build_measure_mml(m))
             .collect()
     }
@@ -265,7 +265,7 @@ impl DawApp {
     /// 全小節の per-track MML ベクターを構築する（演奏用）。
     /// index i → meas i+1, inner index t → track t の MML（再生しない track は空文字列）。
     pub(super) fn build_measure_track_mmls(&self) -> Vec<Vec<String>> {
-        (1..=self.measures)
+        (1..=self.editor.measures)
             .map(|measure| self.build_measure_track_mmls_for_measure(measure))
             .collect()
     }
@@ -276,7 +276,7 @@ impl DawApp {
     /// `{"beat": "4/4"}` → 4。解析できない場合は 4 (4/4デフォルト) を返す。
     /// 現バージョンでは 4/4 のみサポート。JSON は将来の拍子変更に備えた仮置き。
     pub(super) fn beat_numerator(&self) -> u32 {
-        let conductor = conductor_fragments(&self.data, self.measures);
+        let conductor = conductor_fragments(&self.editor.data, self.editor.measures);
         let mut json_values = Vec::new();
         append_fragment_json_values(&mut json_values, &conductor);
         let merged_json = merged_json_prefix(json_values);
@@ -286,7 +286,7 @@ impl DawApp {
     /// track0 MML から tempo (BPM) を解析する。
     /// `t120` → 120.0。解析できない場合は 120.0 (デフォルト)。[1.0, 960.0] にクランプ。
     pub(super) fn tempo_bpm(&self) -> f64 {
-        let conductor = conductor_fragments(&self.data, self.measures);
+        let conductor = conductor_fragments(&self.editor.data, self.editor.measures);
         parse_tempo_bpm(&conductor_body(&conductor))
             .unwrap_or(120.0)
             .clamp(1.0, 960.0)

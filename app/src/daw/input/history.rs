@@ -10,7 +10,7 @@ impl DawApp {
         &mut self,
         patch_name: Option<String>,
     ) {
-        if self.cursor_track < FIRST_PLAYABLE_TRACK {
+        if self.editor.cursor_track < FIRST_PLAYABLE_TRACK {
             return;
         }
         let available_patches = if crate::patches::has_configured_patch_dirs(&self.cfg) {
@@ -116,7 +116,7 @@ impl DawApp {
     }
 
     fn history_overlay_target_measure(&self) -> usize {
-        self.cursor_measure.max(1).min(self.measures)
+        self.editor.cursor_measure.max(1).min(self.editor.measures)
     }
 
     fn history_overlay_preview_track_mmls(
@@ -131,7 +131,10 @@ impl DawApp {
             DawHistoryPane::Favorites => self.history_overlay_favorite_items().get(cursor).cloned(),
         }?;
 
-        let mut preview_data = vec![self.data[0].clone(), self.data[self.cursor_track].clone()];
+        let mut preview_data = vec![
+            self.editor.data[0].clone(),
+            self.editor.data[self.editor.cursor_track].clone(),
+        ];
         match self.overlays.history.patch_name.as_deref() {
             Some(patch_name) => {
                 preview_data[1][0] = self.preview_patch_json_for_patch_name(patch_name);
@@ -145,8 +148,8 @@ impl DawApp {
         }
 
         let mut track_mmls = self.build_measure_track_mmls_for_measure(target_measure);
-        track_mmls[self.cursor_track] =
-            build_cell_mml_from_data(&preview_data, self.measures, 1, target_measure);
+        track_mmls[self.editor.cursor_track] =
+            build_cell_mml_from_data(&preview_data, self.editor.measures, 1, target_measure);
         Some((measure_index, track_mmls))
     }
 
@@ -194,14 +197,14 @@ impl DawApp {
 
     fn apply_history_overlay_selection(&mut self, selected: String) {
         let target_measure = self.history_overlay_target_measure();
-        if self.cursor_measure == 0 {
-            self.cursor_measure = target_measure;
+        if self.editor.cursor_measure == 0 {
+            self.editor.cursor_measure = target_measure;
             self.update_ab_repeat_follow_end_with_cursor();
         }
 
         match self.overlays.history.patch_name.clone() {
             Some(patch_name) => {
-                let previous = self.data[self.cursor_track][target_measure]
+                let previous = self.editor.data[self.editor.cursor_track][target_measure]
                     .trim()
                     .to_string();
                 if !previous.is_empty() {
@@ -213,7 +216,7 @@ impl DawApp {
                     Self::push_front_dedup(&mut state.history, previous);
                 }
 
-                if self.commit_insert_cell(self.cursor_track, target_measure, &selected) {
+                if self.commit_insert_cell(self.editor.cursor_track, target_measure, &selected) {
                     self.save();
                     self.sync_playback_mml_state();
                 }
@@ -223,7 +226,7 @@ impl DawApp {
                     return;
                 };
                 let patch_json = Self::build_patch_json(&patch_name);
-                let previous = self.data[self.cursor_track][target_measure]
+                let previous = self.editor.data[self.editor.cursor_track][target_measure]
                     .trim()
                     .to_string();
                 if !previous.is_empty() {
@@ -233,9 +236,10 @@ impl DawApp {
                     );
                 }
 
-                let init_changed = self.commit_insert_cell(self.cursor_track, 0, &patch_json);
+                let init_changed =
+                    self.commit_insert_cell(self.editor.cursor_track, 0, &patch_json);
                 let phrase_changed =
-                    self.commit_insert_cell(self.cursor_track, target_measure, &phrase);
+                    self.commit_insert_cell(self.editor.cursor_track, target_measure, &phrase);
                 if init_changed || phrase_changed {
                     self.save();
                     self.sync_playback_mml_state();

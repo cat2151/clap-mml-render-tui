@@ -20,9 +20,13 @@ fn empty_track_volumes(tracks: usize) -> Vec<i32> {
 fn build_test_app(tracks: usize, measures: usize) -> DawApp {
     let (cache_tx, _cache_rx) = std::sync::mpsc::channel();
     DawApp {
-        data: vec![vec![String::new(); measures + 1]; tracks],
-        cursor_track: 1.min(tracks - 1),
-        cursor_measure: 1.min(measures),
+        editor: crate::daw::editor::DawEditorState::new(
+            vec![vec![String::new(); measures + 1]; tracks],
+            1.min(tracks - 1),
+            1.min(measures),
+            tracks,
+            measures,
+        ),
         mode: DawMode::Normal,
         help_origin: DawMode::Normal,
         sound_check_guide: crate::sound_check_guide::SoundCheckGuide::new(None),
@@ -50,8 +54,6 @@ fn build_test_app(tracks: usize, measures: usize) -> DawApp {
             voicing_override_source: String::new(),
         }),
         entry_ptr: 0,
-        tracks,
-        measures,
         cache: Arc::new(Mutex::new(vec![
             vec![CellCache::empty(); measures + 1];
             tracks
@@ -76,9 +78,6 @@ fn build_test_app(tracks: usize, measures: usize) -> DawApp {
         track_volumes_db: vec![0; tracks],
         overlays: crate::daw::overlays::DawOverlays::new(1.min(tracks - 1)),
         play_track_gains: Arc::new(Mutex::new(vec![0.0; tracks])),
-        yank_buffer: None,
-        normal_pending_delete: false,
-        normal_paste_undo: None,
         patch_phrase_store: crate::history::PatchPhraseStore::default(),
         patch_phrase_store_dirty: false,
 

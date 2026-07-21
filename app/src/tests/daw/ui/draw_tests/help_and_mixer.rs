@@ -53,7 +53,7 @@ fn draw_shows_solo_and_mute_below_init_meas_during_solo_mode() {
 #[test]
 fn draw_grays_out_muted_tracks_during_solo_mode() {
     let mut app = build_test_app();
-    app.data[2][1] = "gabc".to_string();
+    app.editor.data[2][1] = "gabc".to_string();
     app.solo_tracks[1] = true;
 
     let buffer = render_buffer(&app, 60, 20);

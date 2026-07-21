@@ -9,10 +9,10 @@ impl DawApp {
         measure: usize,
         text: &str,
     ) -> bool {
-        if self.data[track][measure] == text {
+        if self.editor.data[track][measure] == text {
             return false;
         }
-        self.data[track][measure] = text.to_string();
+        self.editor.data[track][measure] = text.to_string();
         self.sync_http_grid_snapshot();
         self.invalidate_cell(track, measure);
         self.kick_cache(track, measure);
@@ -23,7 +23,7 @@ impl DawApp {
 
     pub(in crate::daw) fn start_insert(&mut self) {
         self.textarea = crate::text_input::new_single_line_textarea(
-            &self.data[self.cursor_track][self.cursor_measure],
+            &self.editor.data[self.editor.cursor_track][self.editor.cursor_measure],
         );
         self.mode = DawMode::Insert;
     }
@@ -31,7 +31,8 @@ impl DawApp {
     /// 編集内容を確定してキャッシュ更新・保存を行う
     pub(in crate::daw) fn commit_insert(&mut self) {
         let text = self.textarea.lines().join("");
-        let changed = self.commit_insert_cell(self.cursor_track, self.cursor_measure, &text);
+        let changed =
+            self.commit_insert_cell(self.editor.cursor_track, self.editor.cursor_measure, &text);
 
         if !changed {
             return;
@@ -66,7 +67,7 @@ impl DawApp {
         }
         match key_event.code {
             KeyCode::Esc => {
-                let confirmed_measure = self.cursor_measure;
+                let confirmed_measure = self.editor.cursor_measure;
                 self.commit_insert();
                 if *self.play_state.lock().unwrap() == DawPlayState::Idle && confirmed_measure > 0 {
                     self.start_preview(confirmed_measure - 1);
@@ -74,13 +75,13 @@ impl DawApp {
                 self.mode = DawMode::Normal;
             }
             KeyCode::Enter => {
-                let confirmed_measure = self.cursor_measure;
+                let confirmed_measure = self.editor.cursor_measure;
                 self.commit_insert();
                 if *self.play_state.lock().unwrap() == DawPlayState::Idle && confirmed_measure > 0 {
                     self.start_preview(confirmed_measure - 1);
                 }
-                if self.cursor_measure < self.measures {
-                    self.cursor_measure += 1;
+                if self.editor.cursor_measure < self.editor.measures {
+                    self.editor.cursor_measure += 1;
                     self.update_ab_repeat_follow_end_with_cursor();
                 }
                 self.start_insert();

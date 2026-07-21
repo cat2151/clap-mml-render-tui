@@ -108,7 +108,7 @@ impl DawApp {
         let cfg = Arc::clone(&self.cfg);
         let log_lines = Arc::clone(&self.log_lines);
         let render_queue = self.render_queue.clone();
-        let tracks = self.tracks;
+        let tracks = self.editor.tracks;
 
         *play_state.lock().unwrap() = DawPlayState::Playing;
         crate::logging::append_log_line(&log_lines, "play: start");

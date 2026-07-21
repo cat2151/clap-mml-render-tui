@@ -96,9 +96,9 @@ fn loop_measure_summary_label(mmls: &[String], ab_repeat_state: AbRepeatState) -
 fn cache_render_snapshot(app: &DawApp) -> CacheRenderSnapshot {
     let cache = app.cache.lock().unwrap();
     let mut active_render_count = 0;
-    let states = (0..app.tracks)
+    let states = (0..app.editor.tracks)
         .map(|t| {
-            (0..=app.measures)
+            (0..=app.editor.measures)
                 .map(|m| {
                     let state = cache[t][m].state.clone();
                     if state == CacheState::Rendering {

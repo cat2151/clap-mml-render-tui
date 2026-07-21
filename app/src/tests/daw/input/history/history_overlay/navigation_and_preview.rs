@@ -3,9 +3,9 @@ use super::*;
 #[test]
 fn handle_normal_shift_h_opens_patch_history_overlay_for_track_patch() {
     let (mut app, _cache_rx) = build_test_app();
-    app.cursor_track = 1;
-    app.cursor_measure = 2;
-    app.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 2;
+    app.editor.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -18,7 +18,7 @@ fn handle_normal_shift_h_opens_patch_history_overlay_for_track_patch() {
 
     assert!(matches!(result, super::super::DawNormalAction::Continue));
     assert!(matches!(app.mode, DawMode::History));
-    assert_eq!(app.cursor_track, 1);
+    assert_eq!(app.editor.cursor_track, 1);
     assert_eq!(
         app.overlays.history.patch_name.as_deref(),
         Some("Pads/Pad 1.fxp")
@@ -47,9 +47,9 @@ fn handle_normal_shift_h_migrates_legacy_patch_name_to_factory_prefixed_patch_na
         patches_dirs: Some(vec![tmp.path().to_string_lossy().into_owned()]),
         ..(*app.cfg).clone()
     });
-    app.cursor_track = 1;
-    app.cursor_measure = 2;
-    app.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 2;
+    app.editor.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -77,23 +77,23 @@ fn handle_normal_shift_h_migrates_legacy_patch_name_to_factory_prefixed_patch_na
 #[test]
 fn handle_normal_h_moves_measure_cursor_left() {
     let (mut app, _cache_rx) = build_test_app();
-    app.cursor_measure = 2;
-    let cursor_track = app.cursor_track;
+    app.editor.cursor_measure = 2;
+    let cursor_track = app.editor.cursor_track;
 
     app.handle_normal(KeyCode::Char('h'));
 
-    assert_eq!(app.cursor_measure, 1);
-    assert_eq!(app.cursor_track, cursor_track);
+    assert_eq!(app.editor.cursor_measure, 1);
+    assert_eq!(app.editor.cursor_track, cursor_track);
     assert!(matches!(app.mode, DawMode::Normal));
 }
 
 #[test]
 fn handle_history_overlay_enter_overwrites_measure_and_backs_up_old_phrase() {
     let (mut app, _cache_rx) = build_test_app();
-    app.cursor_track = 1;
-    app.cursor_measure = 2;
-    app.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
-    app.data[1][2] = "before".to_string();
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 2;
+    app.editor.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.data[1][2] = "before".to_string();
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -106,7 +106,7 @@ fn handle_history_overlay_enter_overwrites_measure_and_backs_up_old_phrase() {
     app.handle_history_overlay(KeyCode::Enter);
 
     assert!(matches!(app.mode, DawMode::Normal));
-    assert_eq!(app.data[1][2], "after");
+    assert_eq!(app.editor.data[1][2], "after");
     assert_eq!(
         app.patch_phrase_store
             .patches
@@ -121,8 +121,8 @@ fn handle_history_overlay_enter_overwrites_measure_and_backs_up_old_phrase() {
 #[test]
 fn handle_normal_shift_h_without_track_patch_opens_filtered_history_overlay() {
     let (mut app, _cache_rx) = build_test_app();
-    app.cursor_track = 1;
-    app.cursor_measure = 1;
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 1;
     app.patch_phrase_store.notepad.history = vec![
         "plain phrase".to_string(),
         r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string(),
@@ -141,9 +141,9 @@ fn handle_normal_shift_h_without_track_patch_opens_filtered_history_overlay() {
 #[test]
 fn handle_history_overlay_enter_without_track_patch_sets_patch_and_backs_up_old_phrase() {
     let (mut app, _cache_rx) = build_test_app();
-    app.cursor_track = 1;
-    app.cursor_measure = 2;
-    app.data[1][2] = "before".to_string();
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 2;
+    app.editor.data[1][2] = "before".to_string();
     app.patch_phrase_store.notepad.history =
         vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.start_history_overlay();
@@ -151,8 +151,11 @@ fn handle_history_overlay_enter_without_track_patch_sets_patch_and_backs_up_old_
     app.handle_history_overlay(KeyCode::Enter);
 
     assert!(matches!(app.mode, DawMode::Normal));
-    assert_eq!(app.data[1][0], r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#);
-    assert_eq!(app.data[1][2], "l8cdef");
+    assert_eq!(
+        app.editor.data[1][0],
+        r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#
+    );
+    assert_eq!(app.editor.data[1][2], "l8cdef");
     assert_eq!(
         app.patch_phrase_store.notepad.history,
         vec![
@@ -166,9 +169,9 @@ fn handle_history_overlay_enter_without_track_patch_sets_patch_and_backs_up_old_
 #[test]
 fn handle_history_overlay_enter_from_favorites_uses_selected_favorite() {
     let (mut app, _cache_rx) = build_test_app();
-    app.cursor_track = 1;
-    app.cursor_measure = 1;
-    app.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 1;
+    app.editor.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -181,15 +184,15 @@ fn handle_history_overlay_enter_from_favorites_uses_selected_favorite() {
 
     app.handle_history_overlay(KeyCode::Enter);
 
-    assert_eq!(app.data[1][1], "favorite");
+    assert_eq!(app.editor.data[1][1], "favorite");
 }
 
 #[test]
 fn handle_history_overlay_arrow_and_space_preview_selected_mml() {
     let (mut app, _cache_rx) = build_test_app();
-    app.cursor_track = 1;
-    app.cursor_measure = 1;
-    app.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 1;
+    app.editor.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -240,9 +243,9 @@ fn handle_history_overlay_arrow_and_space_preview_selected_mml() {
 #[test]
 fn handle_history_overlay_down_previews_next_history_item() {
     let (mut app, _cache_rx) = build_test_app();
-    app.cursor_track = 1;
-    app.cursor_measure = 1;
-    app.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 1;
+    app.editor.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -268,9 +271,9 @@ fn handle_history_overlay_down_previews_next_history_item() {
 #[test]
 fn handle_history_overlay_j_k_preview_uses_overlay_patch_name() {
     let (mut app, _cache_rx) = build_test_app();
-    app.cursor_track = 1;
-    app.cursor_measure = 1;
-    app.data[1][0] =
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 1;
+    app.editor.data[1][0] =
         r#"{"Surge XT patch":"Pads/Pad 1.fxp","Surge XT patch filter":"pads"}"#.to_string();
     app.patch_phrase_store.patches.insert(
         "Bass/Bass 1.fxp".to_string(),
@@ -305,9 +308,9 @@ fn handle_history_overlay_j_k_preview_uses_overlay_patch_name() {
 #[test]
 fn handle_history_overlay_j_prefetches_predicted_preview_cache() {
     let (mut app, _cache_rx) = build_test_app();
-    app.cursor_track = 1;
-    app.cursor_measure = 1;
-    app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 1;
+    app.editor.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
     app.patch_phrase_store.patches.insert(
         "Bass/Bass 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -330,8 +333,8 @@ fn handle_history_overlay_j_prefetches_predicted_preview_cache() {
 fn prefetch_preview_snapshot_skips_overlay_cache_for_large_measure_buffers() {
     let (app, _cache_rx) = build_test_app();
     let mut app = app;
-    app.data[0][0] = r#"{"beat":"4/4"}t1"#.to_string();
-    app.data[1][1] = "c".to_string();
+    app.editor.data[0][0] = r#"{"beat":"4/4"}t1"#.to_string();
+    app.editor.data[1][1] = "c".to_string();
 
     app.prefetch_preview_snapshot(
         0,
@@ -345,9 +348,9 @@ fn prefetch_preview_snapshot_skips_overlay_cache_for_large_measure_buffers() {
 #[test]
 fn handle_history_overlay_j_k_preview_falls_back_when_track_init_json_is_not_object() {
     let (mut app, _cache_rx) = build_test_app();
-    app.cursor_track = 1;
-    app.cursor_measure = 1;
-    app.data[1][0] = "[]".to_string();
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 1;
+    app.editor.data[1][0] = "[]".to_string();
     app.patch_phrase_store.patches.insert(
         "Bass/Bass 1.fxp".to_string(),
         crate::history::PatchPhraseState {

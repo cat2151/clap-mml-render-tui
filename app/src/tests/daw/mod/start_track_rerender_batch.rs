@@ -11,9 +11,13 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
     let cache_render_workers = 4;
     let (cache_tx, cache_rx) = std::sync::mpsc::channel();
     let mut app = DawApp {
-        data: vec![vec![String::new(); measures + 1]; tracks],
-        cursor_track: 0,
-        cursor_measure: 0,
+        editor: crate::daw::editor::DawEditorState::new(
+            vec![vec![String::new(); measures + 1]; tracks],
+            0,
+            0,
+            tracks,
+            measures,
+        ),
         mode: DawMode::Normal,
         help_origin: DawMode::Normal,
         sound_check_guide: crate::sound_check_guide::SoundCheckGuide::new(None),
@@ -41,8 +45,6 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
             voicing_override_source: String::new(),
         }),
         entry_ptr: 0,
-        tracks,
-        measures,
         cache: Arc::new(Mutex::new(vec![
             vec![
                 CellCache {
@@ -76,17 +78,14 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
         track_volumes_db: vec![0; tracks],
         overlays: crate::daw::overlays::DawOverlays::new(1),
         play_track_gains: Arc::new(Mutex::new(vec![0.0; tracks])),
-        yank_buffer: None,
-        normal_pending_delete: false,
-        normal_paste_undo: None,
         patch_phrase_store: crate::history::PatchPhraseStore::default(),
         patch_phrase_store_dirty: false,
 
         random_patch_decks: crate::random::RandomIndexDecks::default(),
     };
-    app.data[1][1] = "c".to_string();
-    app.data[1][3] = "e".to_string();
-    app.data[1][4] = "g".to_string();
+    app.editor.data[1][1] = "c".to_string();
+    app.editor.data[1][3] = "e".to_string();
+    app.editor.data[1][4] = "g".to_string();
     {
         let mut cache = app.cache.lock().unwrap();
         cache[1][1].state = CacheState::Pending;

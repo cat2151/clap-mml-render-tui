@@ -69,6 +69,7 @@
 
 mod batch_logging;
 mod cache;
+mod editor;
 mod guide;
 mod http_server;
 mod init;
@@ -98,6 +99,7 @@ use crate::{config::Config, realtime_play::RealtimePlayServerSupervisor};
 // ─── 再エクスポート ───────────────────────────────────────────
 
 use batch_logging::{TrackRerenderBatch, TrackRerenderBatchCompletionContext};
+use editor::DawEditorState;
 use overlays::DawOverlays;
 use render_queue::RenderQueue;
 pub use types::DawExitReason;
@@ -152,11 +154,7 @@ pub(super) struct NormalPasteUndo {
 // ─── DawApp ───────────────────────────────────────────────────
 
 pub struct DawApp {
-    /// data[track][measure]: track 0..tracks, measure 0..=measures
-    pub(super) data: Vec<Vec<String>>,
-
-    pub(super) cursor_track: usize,   // 0..tracks-1
-    pub(super) cursor_measure: usize, // 0..=measures  (0 = 音色列)
+    pub(in crate::daw) editor: DawEditorState,
 
     pub(super) mode: DawMode,
     pub(super) help_origin: DawMode,
@@ -165,11 +163,6 @@ pub struct DawApp {
 
     cfg: Arc<Config>,
     entry_ptr: usize, // *const PluginEntry as usize。render_server backend では 0。
-
-    /// 現在のトラック数（track 0 = ヘッダ/テンポ、track 1.. = 演奏トラック）
-    pub(super) tracks: usize,
-    /// 現在の小節数（measure 0 = 音色列、measure 1.. = 通常小節）
-    pub(super) measures: usize,
 
     /// セルごとのキャッシュ [track][measure]
     pub(super) cache: Arc<Mutex<Vec<Vec<CellCache>>>>,
@@ -224,9 +217,6 @@ pub struct DawApp {
     pub(in crate::daw) overlays: DawOverlays,
     /// 再生スレッドと共有する track ごとの gain。
     play_track_gains: Arc<Mutex<Vec<f32>>>,
-    pub(super) yank_buffer: Option<String>,
-    pub(super) normal_pending_delete: bool,
-    pub(super) normal_paste_undo: Option<NormalPasteUndo>,
     pub(super) patch_phrase_store: crate::history::PatchPhraseStore,
     pub(super) patch_phrase_store_dirty: bool,
     pub(super) random_patch_decks: crate::random::RandomIndexDecks,

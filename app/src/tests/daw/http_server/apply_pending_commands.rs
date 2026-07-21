@@ -22,9 +22,9 @@ fn apply_pending_http_commands_updates_mml_and_expands_grid() {
     let mut app = build_test_app(cfg);
     app.apply_pending_http_commands();
 
-    assert_eq!(app.tracks, 4);
-    assert_eq!(app.measures, 4);
-    assert_eq!(app.data[3][4], "l8cde");
+    assert_eq!(app.editor.tracks, 4);
+    assert_eq!(app.editor.measures, 4);
+    assert_eq!(app.editor.data[3][4], "l8cde");
     assert_eq!(state.lock().unwrap().grid_snapshot[3][4], "l8cde");
     assert_eq!(response_rx.try_recv().unwrap(), Ok(()));
 
@@ -84,7 +84,7 @@ fn apply_pending_http_commands_updates_patch_init_cell() {
     app.apply_pending_http_commands();
 
     assert_eq!(
-        app.data[1][0],
+        app.editor.data[1][0],
         DawApp::build_patch_json("Pads/Factory Pad.fxp")
     );
     assert_eq!(
@@ -113,14 +113,14 @@ fn apply_pending_http_commands_updates_random_patch_init_cell() {
     let response_rx = enqueue_command(&state, DawHttpCommandKind::RandomPatch { track: 1 });
 
     let mut app = build_test_app(cfg);
-    app.data[1][0] =
+    app.editor.data[1][0] =
         r#"{"Surge XT patch":"Old/Lead 1.fxp","Surge XT patch filter":"pad","custom":"keep"}l1"#
             .to_string();
-    app.data[1][1] = "l8cde".to_string();
+    app.editor.data[1][1] = "l8cde".to_string();
     app.apply_pending_http_commands();
 
     assert_eq!(
-        app.data[1][0],
+        app.editor.data[1][0],
         r#"{"Surge XT patch":"Pad/Pad 1.fxp","Surge XT patch filter":"pad","custom":"keep"}l1"#
     );
     assert_eq!(
@@ -161,7 +161,7 @@ fn apply_pending_http_commands_starts_play() {
     let response_rx = enqueue_command(&state, DawHttpCommandKind::PlayStart);
 
     let mut app = build_test_app(cfg);
-    app.data[1][1] = "l8c".to_string();
+    app.editor.data[1][1] = "l8c".to_string();
     app.apply_pending_http_commands();
 
     assert!(matches!(

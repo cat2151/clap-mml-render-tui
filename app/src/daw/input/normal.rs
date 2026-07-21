@@ -29,11 +29,11 @@ impl DawApp {
         if track < FIRST_PLAYABLE_TRACK {
             return Err("ランダム音色は演奏トラックでのみ使用できます".to_string());
         }
-        if track >= self.tracks {
+        if track >= self.editor.tracks {
             return Err(format!(
                 "track は {}..={} の範囲で指定してください",
                 FIRST_PLAYABLE_TRACK,
-                self.tracks.saturating_sub(1)
+                self.editor.tracks.saturating_sub(1)
             ));
         }
         let patch_filter_query = self.track_patch_filter_query(track);
@@ -41,11 +41,11 @@ impl DawApp {
         else {
             return Ok(false);
         };
-        let affected_measures: Vec<usize> = (1..=self.measures)
-            .filter(|&measure| !self.data[track][measure].trim().is_empty())
+        let affected_measures: Vec<usize> = (1..=self.editor.measures)
+            .filter(|&measure| !self.editor.data[track][measure].trim().is_empty())
             .collect();
-        let current_init_mml = self.data[track][INIT_MEASURE].clone();
-        self.data[track][INIT_MEASURE] = Self::replace_patch_name_in_mml(
+        let current_init_mml = self.editor.data[track][INIT_MEASURE].clone();
+        self.editor.data[track][INIT_MEASURE] = Self::replace_patch_name_in_mml(
             &current_init_mml,
             &patch,
             patch_filter_query.as_deref(),
@@ -83,7 +83,7 @@ impl DawApp {
     }
 
     fn apply_generate_to_current_measure(&mut self) {
-        if self.cursor_track < FIRST_PLAYABLE_TRACK {
+        if self.editor.cursor_track < FIRST_PLAYABLE_TRACK {
             self.append_log_line("generate は演奏トラックでのみ使用できます");
             return;
         }
@@ -105,9 +105,11 @@ impl DawApp {
         generated_phrase: &str,
         measure_index: usize,
     ) {
-        let current = self.data[self.cursor_track][self.cursor_measure].clone();
+        let current =
+            self.editor.data[self.editor.cursor_track][self.editor.cursor_measure].clone();
         let next_patch_json = Self::build_patch_json(&patch_name);
-        let init_changed = self.data[self.cursor_track][INIT_MEASURE] != next_patch_json;
+        let init_changed =
+            self.editor.data[self.editor.cursor_track][INIT_MEASURE] != next_patch_json;
         let measure_changed = current != generated_phrase;
         if !(init_changed || measure_changed) {
             return;
@@ -115,10 +117,14 @@ impl DawApp {
 
         self.record_current_measure_to_patch_history(&current);
         if init_changed {
-            self.commit_insert_cell(self.cursor_track, INIT_MEASURE, &next_patch_json);
+            self.commit_insert_cell(self.editor.cursor_track, INIT_MEASURE, &next_patch_json);
         }
         if measure_changed {
-            self.commit_insert_cell(self.cursor_track, self.cursor_measure, generated_phrase);
+            self.commit_insert_cell(
+                self.editor.cursor_track,
+                self.editor.cursor_measure,
+                generated_phrase,
+            );
         }
 
         self.save();
@@ -131,26 +137,32 @@ impl DawApp {
     }
 
     fn cut_current_measure(&mut self) {
-        let current = self.data[self.cursor_track][self.cursor_measure].clone();
+        let current =
+            self.editor.data[self.editor.cursor_track][self.editor.cursor_measure].clone();
         self.record_current_measure_to_patch_history(&current);
-        self.yank_buffer = Some(current);
-        if self.commit_insert_cell(self.cursor_track, self.cursor_measure, "") {
+        self.editor.yank_buffer = Some(current);
+        if self.commit_insert_cell(self.editor.cursor_track, self.editor.cursor_measure, "") {
             self.save();
             self.sync_playback_mml_state();
         }
     }
 
     fn paste_yanked_measure(&mut self) -> bool {
-        let Some(yanked) = self.yank_buffer.as_deref() else {
+        let Some(yanked) = self.editor.yank_buffer.as_deref() else {
             return false;
         };
         let yanked = yanked.to_string();
-        let previous = self.data[self.cursor_track][self.cursor_measure].clone();
+        let previous =
+            self.editor.data[self.editor.cursor_track][self.editor.cursor_measure].clone();
         self.record_current_measure_to_patch_history(&previous);
-        if self.commit_insert_cell(self.cursor_track, self.cursor_measure, &yanked) {
-            self.normal_paste_undo = Some(NormalPasteUndo {
-                track: self.cursor_track,
-                measure: self.cursor_measure,
+        if self.commit_insert_cell(
+            self.editor.cursor_track,
+            self.editor.cursor_measure,
+            &yanked,
+        ) {
+            self.editor.paste_undo = Some(NormalPasteUndo {
+                track: self.editor.cursor_track,
+                measure: self.editor.cursor_measure,
                 previous,
                 pasted: yanked.clone(),
             });
@@ -161,10 +173,10 @@ impl DawApp {
     }
 
     fn undo_last_paste(&mut self) -> bool {
-        let Some(undo) = self.normal_paste_undo.take() else {
+        let Some(undo) = self.editor.paste_undo.take() else {
             return false;
         };
-        if self.data[undo.track][undo.measure] != undo.pasted {
+        if self.editor.data[undo.track][undo.measure] != undo.pasted {
             return false;
         }
         if self.commit_insert_cell(undo.track, undo.measure, &undo.previous) {
@@ -175,9 +187,11 @@ impl DawApp {
     }
 
     fn restore_default_tempo_init_if_empty(&mut self) -> bool {
-        if self.cursor_track != TEMPO_TRACK
-            || self.cursor_measure != INIT_MEASURE
-            || !self.data[TEMPO_TRACK][INIT_MEASURE].trim().is_empty()
+        if self.editor.cursor_track != TEMPO_TRACK
+            || self.editor.cursor_measure != INIT_MEASURE
+            || !self.editor.data[TEMPO_TRACK][INIT_MEASURE]
+                .trim()
+                .is_empty()
         {
             return false;
         }
@@ -222,9 +236,11 @@ impl DawApp {
         let Some(measure_index) = self.cursor_play_measure_index() else {
             return;
         };
-        let Some(target_tracks) =
-            preview_target_tracks(self.tracks, self.cursor_track, preview_all_tracks)
-        else {
+        let Some(target_tracks) = preview_target_tracks(
+            self.editor.tracks,
+            self.editor.cursor_track,
+            preview_all_tracks,
+        ) else {
             return;
         };
         if self.try_start_preview_for_test() {
@@ -247,8 +263,8 @@ impl DawApp {
             return;
         }
         let is_previewable = self.cursor_play_measure_index().is_some()
-            && self.cursor_track >= FIRST_PLAYABLE_TRACK
-            && self.cursor_track < self.tracks;
+            && self.editor.cursor_track >= FIRST_PLAYABLE_TRACK
+            && self.editor.cursor_track < self.editor.tracks;
         if !is_previewable {
             if play_state == DawPlayState::Preview {
                 self.stop_play();
@@ -299,15 +315,15 @@ impl DawApp {
         let is_plain_d_key =
             key_event.code == KeyCode::Char('d') && key_event.modifiers == KeyModifiers::NONE;
         if is_plain_d_key {
-            if self.normal_pending_delete {
-                self.normal_pending_delete = false;
+            if self.editor.pending_delete {
+                self.editor.pending_delete = false;
                 self.cut_current_measure();
             } else {
-                self.normal_pending_delete = true;
+                self.editor.pending_delete = true;
             }
             return DawNormalAction::Continue;
         }
-        self.normal_pending_delete = false;
+        self.editor.pending_delete = false;
 
         match normal_playback_shortcut(key_event) {
             Some(NormalPlaybackShortcut::PreviewCurrentTrack) => {
@@ -344,39 +360,44 @@ impl DawApp {
             KeyCode::Char('v') => return DawNormalAction::LaunchKeyboard,
             KeyCode::Char('e') => return DawNormalAction::EditConfig,
 
-            KeyCode::Char('h') | KeyCode::Left if self.cursor_measure > 0 => {
-                self.cursor_measure -= 1;
+            KeyCode::Char('h') | KeyCode::Left if self.editor.cursor_measure > 0 => {
+                self.editor.cursor_measure -= 1;
                 self.update_ab_repeat_follow_end_with_cursor();
                 self.preview_current_target_if_stopped();
             }
             KeyCode::Char('H') => {
                 self.start_history_overlay();
             }
-            KeyCode::Char('l') | KeyCode::Right if self.cursor_measure < self.measures => {
-                self.cursor_measure += 1;
+            KeyCode::Char('l') | KeyCode::Right
+                if self.editor.cursor_measure < self.editor.measures =>
+            {
+                self.editor.cursor_measure += 1;
                 self.update_ab_repeat_follow_end_with_cursor();
                 self.preview_current_target_if_stopped();
             }
-            KeyCode::Char('j') | KeyCode::Down if self.cursor_track + 1 < self.tracks => {
-                self.cursor_track += 1;
+            KeyCode::Char('j') | KeyCode::Down
+                if self.editor.cursor_track + 1 < self.editor.tracks =>
+            {
+                self.editor.cursor_track += 1;
                 self.preview_current_target_if_stopped();
             }
-            KeyCode::Char('k') | KeyCode::Up if self.cursor_track > 0 => {
-                self.cursor_track -= 1;
+            KeyCode::Char('k') | KeyCode::Up if self.editor.cursor_track > 0 => {
+                self.editor.cursor_track -= 1;
                 self.preview_current_target_if_stopped();
             }
             KeyCode::Char('M') => {
-                self.cursor_track = self.tracks / 2;
+                self.editor.cursor_track = self.editor.tracks / 2;
             }
             KeyCode::Char('L') => {
-                self.cursor_track = self.tracks - 1;
+                self.editor.cursor_track = self.editor.tracks - 1;
             }
 
             KeyCode::Char('i') => self.start_insert(),
             KeyCode::Char('m') => {
                 self.overlays.mixer.cursor_track = self
+                    .editor
                     .cursor_track
-                    .clamp(FIRST_PLAYABLE_TRACK, self.tracks - 1);
+                    .clamp(FIRST_PLAYABLE_TRACK, self.editor.tracks - 1);
                 self.mode = DawMode::Mixer;
             }
 
@@ -391,11 +412,11 @@ impl DawApp {
 
             KeyCode::Char('a') => self.cycle_ab_repeat(),
 
-            KeyCode::Char('s') if self.cursor_track >= FIRST_PLAYABLE_TRACK => {
+            KeyCode::Char('s') if self.editor.cursor_track >= FIRST_PLAYABLE_TRACK => {
                 if !self.solo_mode_active() {
                     self.solo_tracks.fill(false);
-                    self.solo_tracks[self.cursor_track] = true;
-                } else if let Some(is_solo) = self.solo_tracks.get_mut(self.cursor_track) {
+                    self.solo_tracks[self.editor.cursor_track] = true;
+                } else if let Some(is_solo) = self.solo_tracks.get_mut(self.editor.cursor_track) {
                     *is_solo = !*is_solo;
                 }
                 self.sync_playback_mml_state();
@@ -406,7 +427,7 @@ impl DawApp {
                 if self.restore_default_tempo_init_if_empty() {
                     return DawNormalAction::Continue;
                 }
-                if let Err(message) = self.apply_random_patch_to_track(self.cursor_track) {
+                if let Err(message) = self.apply_random_patch_to_track(self.editor.cursor_track) {
                     self.append_log_line(message);
                 }
             }

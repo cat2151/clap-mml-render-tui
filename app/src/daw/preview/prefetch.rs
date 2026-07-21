@@ -40,7 +40,7 @@ impl DawApp {
         track_mmls: Vec<String>,
         track_gains: Vec<f32>,
     ) {
-        let active_tracks: Vec<usize> = (FIRST_PLAYABLE_TRACK..self.tracks)
+        let active_tracks: Vec<usize> = (FIRST_PLAYABLE_TRACK..self.editor.tracks)
             .filter(|&track| {
                 track_gains.get(track).copied().unwrap_or(1.0) > 0.0
                     && track_mmls

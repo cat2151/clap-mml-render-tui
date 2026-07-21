@@ -21,9 +21,9 @@ impl DawApp {
     /// data の内容に合わせてキャッシュ状態を同期する（data 変更後に呼ぶ）
     pub(super) fn sync_cache_states(&self) {
         let mut cache = self.cache.lock().unwrap();
-        for t in 0..self.tracks {
-            for m in 0..=self.measures {
-                if m == 0 || self.data[t][m].trim().is_empty() {
+        for t in 0..self.editor.tracks {
+            for m in 0..=self.editor.measures {
+                if m == 0 || self.editor.data[t][m].trim().is_empty() {
                     cache[t][m] = CellCache::empty();
                 } else if cache[t][m].state == CacheState::Empty {
                     cache[t][m].set_pending();
@@ -38,7 +38,7 @@ impl DawApp {
             let _ = std::fs::remove_file(path);
         }
         let mut cache = self.cache.lock().unwrap();
-        if measure == 0 || self.data[track][measure].trim().is_empty() {
+        if measure == 0 || self.editor.data[track][measure].trim().is_empty() {
             cache[track][measure] = CellCache::empty();
         } else {
             cache[track][measure].set_pending();
@@ -59,7 +59,7 @@ impl DawApp {
             return None;
         }
         // セル自身の内容が空なら投入しない（track0 含む結合 MML で判定しない）
-        if self.data[track][measure].trim().is_empty() {
+        if self.editor.data[track][measure].trim().is_empty() {
             return None;
         }
         let mml = self.build_cell_mml(track, measure);
@@ -108,9 +108,9 @@ impl DawApp {
         if track == 0 {
             // track0 セル変更: 全演奏トラックの全小節が影響を受ける
             let mut cache = self.cache.lock().unwrap();
-            for t in 1..self.tracks {
-                for m in 1..=self.measures {
-                    if self.data[t][m].trim().is_empty() {
+            for t in 1..self.editor.tracks {
+                for m in 1..=self.editor.measures {
+                    if self.editor.data[t][m].trim().is_empty() {
                         cache[t][m] = CellCache::empty();
                     } else {
                         if let Some(path) = cache_wav_path(t, m) {
@@ -124,8 +124,8 @@ impl DawApp {
         } else if measure == 0 {
             // 音色セル（data[track][0]）変更: 同トラックの全小節が影響を受ける（issue #67 参照）
             let mut cache = self.cache.lock().unwrap();
-            for m in 1..=self.measures {
-                if self.data[track][m].trim().is_empty() {
+            for m in 1..=self.editor.measures {
+                if self.editor.data[track][m].trim().is_empty() {
                     cache[track][m] = CellCache::empty();
                 } else {
                     if let Some(path) = cache_wav_path(track, m) {
@@ -158,8 +158,8 @@ impl DawApp {
     pub(super) fn kick_all_pending(&self) {
         let pending: Vec<(usize, usize)> = {
             let cache = self.cache.lock().unwrap();
-            (0..self.tracks)
-                .flat_map(|t| (0..=self.measures).map(move |m| (t, m)))
+            (0..self.editor.tracks)
+                .flat_map(|t| (0..=self.editor.measures).map(move |m| (t, m)))
                 .filter(|&(t, m)| cache[t][m].state == CacheState::Pending)
                 .collect()
         };
@@ -170,8 +170,8 @@ impl DawApp {
 
     pub(super) fn restore_cache_from_history(&self, history: &DawSessionState) {
         let mut cache = self.cache.lock().unwrap();
-        for t in 0..self.tracks {
-            for m in 1..=self.measures {
+        for t in 0..self.editor.tracks {
+            for m in 1..=self.editor.measures {
                 let Some(saved) = history
                     .cached_measures
                     .iter()
@@ -179,7 +179,7 @@ impl DawApp {
                 else {
                     continue;
                 };
-                if self.data[t][m].trim().is_empty() {
+                if self.editor.data[t][m].trim().is_empty() {
                     continue;
                 }
                 let current_mml_hash = daw_cache_mml_hash(&self.build_cell_mml(t, m));
@@ -229,12 +229,12 @@ impl DawApp {
     pub(super) fn cached_measures_for_history(&self) -> Vec<DawCachedMeasure> {
         let cache = self.cache.lock().unwrap();
         let mut cached_measures = Vec::new();
-        for t in 0..self.tracks {
-            for m in 1..=self.measures {
+        for t in 0..self.editor.tracks {
+            for m in 1..=self.editor.measures {
                 let current_mml_hash = daw_cache_mml_hash(&self.build_cell_mml(t, m));
                 if cache[t][m].state == CacheState::Ready
                     && cache[t][m].rendered_mml_hash == Some(current_mml_hash)
-                    && !self.data[t][m].trim().is_empty()
+                    && !self.editor.data[t][m].trim().is_empty()
                 {
                     cached_measures.push(DawCachedMeasure {
                         track: t,

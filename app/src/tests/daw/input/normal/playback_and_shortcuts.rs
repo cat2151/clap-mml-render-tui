@@ -3,8 +3,8 @@ use super::*;
 #[test]
 fn handle_normal_shift_space_stops_current_preview() {
     let (mut app, _cache_rx) = build_test_app();
-    app.cursor_track = 1;
-    app.cursor_measure = 1;
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 1;
     *app.play_state.lock().unwrap() = DawPlayState::Preview;
     *app.play_position.lock().unwrap() = Some(PlayPosition {
         measure_index: 0,
@@ -30,8 +30,8 @@ fn handle_normal_shift_space_stops_current_preview() {
 #[test]
 fn handle_normal_shift_space_stops_current_play() {
     let (mut app, _cache_rx) = build_test_app();
-    app.cursor_track = 1;
-    app.cursor_measure = 1;
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 1;
     *app.play_state.lock().unwrap() = DawPlayState::Playing;
     *app.play_position.lock().unwrap() = Some(PlayPosition {
         measure_index: 0,
@@ -57,8 +57,8 @@ fn handle_normal_shift_space_stops_current_play() {
 #[test]
 fn handle_normal_shift_enter_stops_current_play() {
     let (mut app, _cache_rx) = build_test_app();
-    app.cursor_track = 1;
-    app.cursor_measure = 1;
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 1;
     *app.play_state.lock().unwrap() = DawPlayState::Playing;
     *app.play_position.lock().unwrap() = Some(PlayPosition {
         measure_index: 0,

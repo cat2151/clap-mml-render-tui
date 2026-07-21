@@ -25,9 +25,9 @@ fn handle_mixer_keeps_cursor_within_playable_track_range() {
     app.handle_mixer(crossterm::event::KeyCode::Left);
     assert_eq!(app.overlays.mixer.cursor_track, 1);
 
-    app.overlays.mixer.cursor_track = app.tracks - 1;
+    app.overlays.mixer.cursor_track = app.editor.tracks - 1;
     app.handle_mixer(crossterm::event::KeyCode::Right);
-    assert_eq!(app.overlays.mixer.cursor_track, app.tracks - 1);
+    assert_eq!(app.overlays.mixer.cursor_track, app.editor.tracks - 1);
 }
 
 #[test]

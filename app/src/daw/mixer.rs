@@ -32,7 +32,7 @@ impl DawApp {
     }
 
     pub(super) fn playback_track_gains(&self) -> Vec<f32> {
-        (0..self.tracks)
+        (0..self.editor.tracks)
             .map(|track| {
                 if track < FIRST_PLAYABLE_TRACK || !self.track_is_audible(track) {
                     0.0

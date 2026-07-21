@@ -19,7 +19,7 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &
 
     // ヘッダ行（列ラベル）
     let mut header_spans = vec![Span::styled("     ", Style::default())];
-    for m in 0..=app.measures {
+    for m in 0..=app.editor.measures {
         let (label, style) = if m == 0 {
             (" Init".to_string(), Style::default().fg(MONOKAI_GRAY))
         } else {
@@ -76,18 +76,19 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &
 
     // track 行（2 行ずつ）
     for (t, (data_row, cache_row)) in app
+        .editor
         .data
         .iter()
         .zip(cache_states.iter())
         .enumerate()
-        .take(app.tracks)
+        .take(app.editor.tracks)
     {
         let row_y = area.y + 1 + (t as u16) * 2;
         if row_y + 1 >= area.y + area.height {
             break;
         }
 
-        let is_cursor_track = t == app.cursor_track;
+        let is_cursor_track = t == app.editor.cursor_track;
         let is_muted_track = solo_mode_active && !app.track_is_audible(t);
         let label_fg = MONOKAI_GRAY;
 
@@ -116,9 +117,9 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &
             .iter()
             .zip(cache_row.iter())
             .enumerate()
-            .take(app.measures + 1)
+            .take(app.editor.measures + 1)
         {
-            let is_cursor = is_cursor_track && m == app.cursor_measure;
+            let is_cursor = is_cursor_track && m == app.editor.cursor_measure;
 
             // セル表示 (4 chars)
             let display: String = if mml.is_empty() {

@@ -50,7 +50,7 @@ impl DawApp {
         track_mmls: Vec<String>,
         track_gains: Vec<f32>,
     ) {
-        let active_tracks: Vec<usize> = (FIRST_PLAYABLE_TRACK..self.tracks)
+        let active_tracks: Vec<usize> = (FIRST_PLAYABLE_TRACK..self.editor.tracks)
             .filter(|&track| {
                 track_gains.get(track).copied().unwrap_or(1.0) > 0.0
                     && track_mmls
@@ -83,7 +83,7 @@ impl DawApp {
         let cfg = Arc::clone(&self.cfg);
         let log_lines = Arc::clone(&self.log_lines);
         let render_queue = self.render_queue.clone();
-        let tracks = self.tracks;
+        let tracks = self.editor.tracks;
         let overlay_cache_key = overlay_preview_cache_key(measure_index, &track_mmls, &track_gains);
         let active_track_count = active_tracks.len();
 
@@ -279,20 +279,21 @@ impl DawApp {
         let track_mmls = measure_track_mmls
             .get(measure_index)
             .cloned()
-            .unwrap_or_else(|| vec![String::new(); self.tracks]);
+            .unwrap_or_else(|| vec![String::new(); self.editor.tracks]);
         let track_gains = self.playback_track_gains();
         self.start_preview_with_snapshot(measure_index, track_mmls, track_gains);
     }
 
     pub(super) fn start_preview_on_tracks(&self, measure_index: usize, selected_tracks: &[usize]) {
-        let mut track_mmls = vec![String::new(); self.tracks];
-        let mut track_gains = vec![0.0; self.tracks];
+        let mut track_mmls = vec![String::new(); self.editor.tracks];
+        let mut track_gains = vec![0.0; self.editor.tracks];
         let displayed_measure = measure_index + 1;
         for &track in selected_tracks {
-            if track < FIRST_PLAYABLE_TRACK || track >= self.tracks {
+            if track < FIRST_PLAYABLE_TRACK || track >= self.editor.tracks {
                 continue;
             }
             let notes = self
+                .editor
                 .data
                 .get(track)
                 .and_then(|row| row.get(displayed_measure))

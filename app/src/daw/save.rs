@@ -153,14 +153,23 @@ impl DawApp {
                 // JSON が正常にパースできた場合は、ファイルが正式な保存データであるとみなす。
                 // new() で設定したデフォルト値を残さないよう全セルをクリアしてから JSON の内容を適用する。
                 // （空セルは JSON に含まれないため、クリアしないとデフォルト値が復活する）
-                for row in &mut self.data {
+                for row in &mut self.editor.data {
                     for cell in row.iter_mut() {
                         cell.clear();
                     }
                 }
                 self.track_volumes_db.fill(0);
-                apply_save_file_to_data(&file, &mut self.data, self.tracks, self.measures);
-                apply_save_file_to_track_volumes(&file, &mut self.track_volumes_db, self.tracks);
+                apply_save_file_to_data(
+                    &file,
+                    &mut self.editor.data,
+                    self.editor.tracks,
+                    self.editor.measures,
+                );
+                apply_save_file_to_track_volumes(
+                    &file,
+                    &mut self.track_volumes_db,
+                    self.editor.tracks,
+                );
             }
         }
         self.sync_cache_states();
@@ -169,8 +178,8 @@ impl DawApp {
         self.sound_check_guide = crate::sound_check_guide::SoundCheckGuide::new(
             daw_state.daw_sound_check_guide_overlay_date.clone(),
         );
-        self.cursor_track = daw_state.cursor_track.min(self.tracks - 1);
-        self.cursor_measure = daw_state.cursor_measure.min(self.measures);
+        self.editor.cursor_track = daw_state.cursor_track.min(self.editor.tracks - 1);
+        self.editor.cursor_measure = daw_state.cursor_measure.min(self.editor.measures);
         self.restore_cache_from_history(&daw_state);
     }
 
@@ -182,10 +191,10 @@ impl DawApp {
             let _ = std::fs::create_dir_all(dir);
         }
         let file = data_to_save_file(
-            &self.data,
+            &self.editor.data,
             &self.track_volumes_db,
-            self.tracks,
-            self.measures,
+            self.editor.tracks,
+            self.editor.measures,
         );
         if let Ok(json) = serde_json::to_string_pretty(&file) {
             let _ = std::fs::write(&path, json);
@@ -195,8 +204,8 @@ impl DawApp {
     pub(super) fn save_history_state(&mut self) {
         self.flush_patch_phrase_store_if_dirty();
         let _ = crate::history::save_daw_session_state(&crate::history::DawSessionState {
-            cursor_track: self.cursor_track,
-            cursor_measure: self.cursor_measure,
+            cursor_track: self.editor.cursor_track,
+            cursor_measure: self.editor.cursor_measure,
             cached_measures: self.cached_measures_for_history(),
             daw_sound_check_guide_overlay_date: self
                 .sound_check_guide

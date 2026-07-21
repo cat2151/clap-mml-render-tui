@@ -13,17 +13,20 @@ fn handle_patch_select_enter_overwrites_current_track_init_patch() {
         patches_dirs: Some(vec![tmp.path().to_string_lossy().into_owned()]),
         ..(*app.cfg).clone()
     });
-    app.cursor_track = 1;
-    app.cursor_measure = 2;
-    app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
-    app.data[1][2] = "l8cdef".to_string();
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 2;
+    app.editor.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.data[1][2] = "l8cdef".to_string();
 
     app.start_patch_select_overlay(Some("Bass/Bass 1.fxp"));
     app.handle_patch_select(KeyCode::Enter);
 
     assert!(matches!(app.mode, DawMode::Normal));
-    assert_eq!(app.data[1][0], r#"{"Surge XT patch":"Bass/Bass 1.fxp"}"#);
-    assert_eq!(app.data[1][2], "l8cdef");
+    assert_eq!(
+        app.editor.data[1][0],
+        r#"{"Surge XT patch":"Bass/Bass 1.fxp"}"#
+    );
+    assert_eq!(app.editor.data[1][2], "l8cdef");
 }
 
 #[test]
@@ -42,9 +45,9 @@ fn start_patch_select_overlay_migrates_prefixed_favorites_from_legacy_patch_name
         patches_dirs: Some(vec![tmp.path().to_string_lossy().into_owned()]),
         ..(*app.cfg).clone()
     });
-    app.cursor_track = 1;
-    app.cursor_measure = 1;
-    app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 1;
+    app.editor.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         crate::history::PatchPhraseState {
@@ -82,8 +85,8 @@ fn start_patch_select_overlay_keeps_favorites_in_registered_order() {
         patches_dirs: Some(vec![tmp.path().to_string_lossy().into_owned()]),
         ..(*app.cfg).clone()
     });
-    app.cursor_track = 1;
-    app.cursor_measure = 1;
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 1;
     app.patch_phrase_store.favorite_patches = vec![
         "Pad 2.fxp".to_string(),
         "Pad A.fxp".to_string(),
@@ -114,10 +117,10 @@ fn start_patch_select_overlay_keeps_favorites_in_registered_order() {
 #[test]
 fn handle_patch_select_enter_saves_filter_query_in_track_init_json() {
     let (mut app, _cache_rx) = build_test_app();
-    app.cursor_track = 1;
-    app.cursor_measure = 1;
-    app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
-    app.data[1][1] = "l8cdef".to_string();
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 1;
+    app.editor.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.data[1][1] = "l8cdef".to_string();
     app.overlays.patch_select.all = vec![
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         ("Bass Soft 1.fxp".to_string(), "bass soft 1.fxp".to_string()),
@@ -139,7 +142,7 @@ fn handle_patch_select_enter_saves_filter_query_in_track_init_json() {
     app.handle_patch_select(KeyCode::Enter);
     app.handle_patch_select(KeyCode::Enter);
 
-    let init_json: serde_json::Value = serde_json::from_str(&app.data[1][0]).unwrap();
+    let init_json: serde_json::Value = serde_json::from_str(&app.editor.data[1][0]).unwrap();
     assert!(matches!(app.mode, DawMode::Normal));
     assert_eq!(init_json["Surge XT patch"], "Bass Soft 1.fxp");
     assert_eq!(init_json["Surge XT patch filter"], "bass");
@@ -148,10 +151,10 @@ fn handle_patch_select_enter_saves_filter_query_in_track_init_json() {
 #[test]
 fn handle_patch_select_filter_space_adds_and_term_instead_of_previewing() {
     let (mut app, _cache_rx) = build_test_app();
-    app.cursor_track = 1;
-    app.cursor_measure = 1;
-    app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
-    app.data[1][1] = "l8cdef".to_string();
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 1;
+    app.editor.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.data[1][1] = "l8cdef".to_string();
     app.overlays.patch_select.all = vec![
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         ("Bass Soft 1.fxp".to_string(), "bass soft 1.fxp".to_string()),
@@ -199,10 +202,10 @@ fn handle_patch_select_filter_space_adds_and_term_instead_of_previewing() {
 #[test]
 fn handle_patch_select_j_and_k_move_selection_until_slash_starts_filter_input() {
     let (mut app, _cache_rx) = build_test_app();
-    app.cursor_track = 1;
-    app.cursor_measure = 1;
-    app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
-    app.data[1][1] = "l8cdef".to_string();
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 1;
+    app.editor.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.data[1][1] = "l8cdef".to_string();
     app.overlays.patch_select.all = vec![
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         (
@@ -248,10 +251,10 @@ fn handle_patch_select_j_and_k_move_selection_until_slash_starts_filter_input() 
 #[test]
 fn handle_patch_select_j_prefetches_predicted_preview_cache() {
     let (mut app, _cache_rx) = build_test_app();
-    app.cursor_track = 1;
-    app.cursor_measure = 1;
-    app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
-    app.data[1][1] = "l8cdef".to_string();
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 1;
+    app.editor.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.data[1][1] = "l8cdef".to_string();
     app.overlays.patch_select.all = vec![
         ("Pads/Pad 0.fxp".to_string(), "pads/pad 0.fxp".to_string()),
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
@@ -280,10 +283,10 @@ fn handle_patch_select_j_prefetches_predicted_preview_cache() {
 #[test]
 fn handle_patch_select_left_in_filter_query_does_not_repreview() {
     let (mut app, _cache_rx) = build_test_app();
-    app.cursor_track = 1;
-    app.cursor_measure = 1;
-    app.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
-    app.data[1][1] = "l8cdef".to_string();
+    app.editor.cursor_track = 1;
+    app.editor.cursor_measure = 1;
+    app.editor.data[1][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.data[1][1] = "l8cdef".to_string();
     app.overlays.patch_select.all = vec![
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         ("Bass Soft 1.fxp".to_string(), "bass soft 1.fxp".to_string()),

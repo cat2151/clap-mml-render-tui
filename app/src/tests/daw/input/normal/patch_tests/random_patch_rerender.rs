@@ -13,26 +13,26 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
         let _guard = crate::test_utils::set_local_dir_envs(&tmp);
 
         let (mut app, cache_rx) = build_test_app();
-        app.cursor_track = 1;
-        app.cursor_measure = 0;
+        app.editor.cursor_track = 1;
+        app.editor.cursor_measure = 0;
         app.cfg = Arc::new(Config {
             patches_dirs: Some(vec![tmp.to_string_lossy().into_owned()]),
             ..(*app.cfg).clone()
         });
-        app.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
-        app.data[1][1] = "cdef".to_string();
-        app.data[1][2] = "gabc".to_string();
+        app.editor.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
+        app.editor.data[1][1] = "cdef".to_string();
+        app.editor.data[1][2] = "gabc".to_string();
         app.track_volumes_db[1] = -6;
         // 共有 playback 状態を意図的に古い空データにしておき、
         // random patch 更新が hot reload 時に全共有 state を同期することを検証する。
         *app.play_measure_track_mmls.lock().unwrap() =
-            vec![vec![String::new(); app.tracks]; app.measures];
-        *app.play_track_gains.lock().unwrap() = vec![0.0; app.tracks];
+            vec![vec![String::new(); app.editor.tracks]; app.editor.measures];
+        *app.play_track_gains.lock().unwrap() = vec![0.0; app.editor.tracks];
 
         app.handle_normal(crossterm::event::KeyCode::Char('r'));
 
         assert_eq!(
-            app.data[1][0], r#"{"Surge XT patch": "Pad 1.fxp"}"#,
+            app.editor.data[1][0], r#"{"Surge XT patch": "Pad 1.fxp"}"#,
             "random patch should update the timbre cell"
         );
 
@@ -124,15 +124,15 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
         let _guard = crate::test_utils::set_local_dir_envs(&tmp);
 
         let (mut app, cache_rx) = build_test_app();
-        app.cursor_track = 1;
-        app.cursor_measure = 0;
+        app.editor.cursor_track = 1;
+        app.editor.cursor_measure = 0;
         app.cfg = Arc::new(Config {
             patches_dirs: Some(vec![tmp.to_string_lossy().into_owned()]),
             ..(*app.cfg).clone()
         });
-        app.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
-        app.data[1][1] = "cdef".to_string();
-        app.data[1][2] = "gabc".to_string();
+        app.editor.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
+        app.editor.data[1][1] = "cdef".to_string();
+        app.editor.data[1][2] = "gabc".to_string();
         *app.play_state.lock().unwrap() = DawPlayState::Playing;
         *app.play_position.lock().unwrap() = Some(PlayPosition {
             measure_index: 0,
@@ -203,16 +203,16 @@ fn handle_normal_r_restores_default_tempo_init_when_empty() {
         let _guard = crate::test_utils::set_local_dir_envs(&tmp);
 
         let (mut app, cache_rx) = build_test_app();
-        app.cursor_track = 0;
-        app.cursor_measure = 0;
-        app.data[0][0] = "  ".to_string();
-        app.data[1][1] = "cdef".to_string();
+        app.editor.cursor_track = 0;
+        app.editor.cursor_measure = 0;
+        app.editor.data[0][0] = "  ".to_string();
+        app.editor.data[1][1] = "cdef".to_string();
         app.play_measure_mmls.lock().unwrap()[0] = "stale".to_string();
 
         let result = app.handle_normal(crossterm::event::KeyCode::Char('r'));
 
         assert!(matches!(result, super::super::DawNormalAction::Continue));
-        assert_eq!(app.data[0][0], crate::daw::DEFAULT_TRACK0_MML);
+        assert_eq!(app.editor.data[0][0], crate::daw::DEFAULT_TRACK0_MML);
         assert_eq!(
             app.play_measure_mmls.lock().unwrap()[0],
             r#"{"beat":"4/4"}t120cdef"#
@@ -250,18 +250,18 @@ fn handle_normal_r_ignores_non_playable_track_and_keeps_header_unchanged() {
         let _guard = crate::test_utils::set_local_dir_envs(&tmp);
 
         let (mut app, cache_rx) = build_test_app();
-        app.cursor_track = 0;
-        app.cursor_measure = 0;
+        app.editor.cursor_track = 0;
+        app.editor.cursor_measure = 0;
         app.cfg = Arc::new(Config {
             patches_dirs: Some(vec![tmp.to_string_lossy().into_owned()]),
             ..(*app.cfg).clone()
         });
-        app.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
+        app.editor.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
 
         let result = app.handle_normal(crossterm::event::KeyCode::Char('r'));
 
         assert!(matches!(result, super::super::DawNormalAction::Continue));
-        assert_eq!(app.data[0][0], r#"{"beat": "4/4"}t120"#);
+        assert_eq!(app.editor.data[0][0], r#"{"beat": "4/4"}t120"#);
         assert!(cache_rx.try_recv().is_err());
         assert_eq!(
             app.log_lines.lock().unwrap().back().map(String::as_str),

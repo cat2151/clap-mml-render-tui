@@ -11,22 +11,23 @@ impl DawApp {
         let required_tracks = track
             .checked_add(1)
             .ok_or_else(|| "track index が大きすぎます".to_string())?;
-        let required_measures = self.measures.max(measure);
+        let required_measures = self.editor.measures.max(measure);
         let current_columns = self
+            .editor
             .measures
             .checked_add(1)
             .ok_or_else(|| "現在の measure 数が大きすぎます".to_string())?;
         let required_columns = required_measures
             .checked_add(1)
             .ok_or_else(|| "measure index が大きすぎます".to_string())?;
-        if required_tracks <= self.tracks && required_measures <= self.measures {
+        if required_tracks <= self.editor.tracks && required_measures <= self.editor.measures {
             return Ok(false);
         }
         let mut resized = false;
 
-        if required_tracks > self.tracks {
+        if required_tracks > self.editor.tracks {
             resized = true;
-            self.data.resize_with(required_tracks, || {
+            self.editor.data.resize_with(required_tracks, || {
                 let mut row = Vec::new();
                 row.resize_with(current_columns, String::new);
                 row
@@ -47,12 +48,12 @@ impl DawApp {
                 .lock()
                 .unwrap()
                 .resize(required_tracks, None);
-            self.tracks = required_tracks;
+            self.editor.tracks = required_tracks;
         }
 
-        if required_measures > self.measures {
+        if required_measures > self.editor.measures {
             resized = true;
-            for row in &mut self.data {
+            for row in &mut self.editor.data {
                 row.resize_with(required_columns, String::new);
             }
             {
@@ -68,12 +69,14 @@ impl DawApp {
             self.play_measure_track_mmls
                 .lock()
                 .unwrap()
-                .resize_with(required_measures, || vec![String::new(); self.tracks]);
-            self.measures = required_measures;
+                .resize_with(required_measures, || {
+                    vec![String::new(); self.editor.tracks]
+                });
+            self.editor.measures = required_measures;
         }
 
         for measure_track_mmls in self.play_measure_track_mmls.lock().unwrap().iter_mut() {
-            measure_track_mmls.resize_with(self.tracks, String::new);
+            measure_track_mmls.resize_with(self.editor.tracks, String::new);
         }
 
         Ok(resized)
@@ -86,7 +89,7 @@ impl DawApp {
         if track < FIRST_PLAYABLE_TRACK {
             return Err("mixer は演奏トラックでのみ使用できます".to_string());
         }
-        let grid_resized = self.ensure_http_grid_size(track, self.measures.max(1))?;
+        let grid_resized = self.ensure_http_grid_size(track, self.editor.measures.max(1))?;
         if grid_resized {
             self.sync_http_grid_snapshot();
         }
@@ -111,7 +114,7 @@ impl DawApp {
         if track < FIRST_PLAYABLE_TRACK {
             return Err("patch は演奏トラックでのみ使用できます".to_string());
         }
-        self.ensure_http_grid_size(track, self.measures.max(1))?;
+        self.ensure_http_grid_size(track, self.editor.measures.max(1))?;
 
         let patch_pairs = crate::patches::collect_patch_pairs(self.cfg.as_ref())
             .map_err(|error| format!("patch 一覧の取得に失敗しました: {error}"))?;
@@ -129,7 +132,7 @@ impl DawApp {
     }
 
     pub(super) fn apply_http_random_patch(&mut self, track: usize) -> Result<(), String> {
-        self.ensure_http_grid_size(track, self.measures.max(1))?;
+        self.ensure_http_grid_size(track, self.editor.measures.max(1))?;
         self.apply_random_patch_to_track(track)?;
         self.sync_http_grid_snapshot();
         self.append_log_line(format!("http: patch/random track={track}"));

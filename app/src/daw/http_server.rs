@@ -282,7 +282,7 @@ impl DawApp {
         let Some(state) = current_state() else {
             return;
         };
-        let grid_snapshot = self.data.clone();
+        let grid_snapshot = self.editor.data.clone();
         state.lock().unwrap().grid_snapshot = grid_snapshot;
     }
 
@@ -300,9 +300,9 @@ impl DawApp {
         let mut rendering_count = 0;
         let mut ready_count = 0;
         let mut error_count = 0;
-        let cells = (0..self.tracks)
+        let cells = (0..self.editor.tracks)
             .map(|track| {
-                (0..=self.measures)
+                (0..=self.editor.measures)
                     .map(|measure| {
                         let cache_state = cache[track][measure].state.clone();
                         match cache_state {
@@ -333,8 +333,8 @@ impl DawApp {
                 error_count,
             },
             grid: DawStatusGridSnapshot {
-                tracks: self.tracks,
-                measures: self.measures,
+                tracks: self.editor.tracks,
+                measures: self.editor.measures,
             },
         });
     }
@@ -382,10 +382,10 @@ impl DawApp {
         if start_measure == 0 || end_measure == 0 {
             return Err("measA と measB は 1 以上を指定してください".to_string());
         }
-        if start_measure > self.measures || end_measure > self.measures {
+        if start_measure > self.editor.measures || end_measure > self.editor.measures {
             return Err(format!(
                 "measA と measB は 1..={} の範囲で指定してください",
-                self.measures
+                self.editor.measures
             ));
         }
 

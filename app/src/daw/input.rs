@@ -232,24 +232,24 @@ impl DawApp {
     }
 
     pub(in crate::daw) fn current_track_patch_name(&self) -> Option<String> {
-        if self.cursor_track < FIRST_PLAYABLE_TRACK {
+        if self.editor.cursor_track < FIRST_PLAYABLE_TRACK {
             return None;
         }
-        Self::extract_patch_phrase(&self.data[self.cursor_track][0])
+        Self::extract_patch_phrase(&self.editor.data[self.editor.cursor_track][0])
             .map(|(patch_name, _)| patch_name)
             .map(|patch_name| self.resolve_patch_name(&patch_name).unwrap_or(patch_name))
             .filter(|patch_name| !patch_name.trim().is_empty())
     }
 
     fn current_track_patch_filter_query(&self) -> Option<String> {
-        self.track_patch_filter_query(self.cursor_track)
+        self.track_patch_filter_query(self.editor.cursor_track)
     }
 
     fn track_patch_filter_query(&self, track: usize) -> Option<String> {
-        if track < FIRST_PLAYABLE_TRACK || track >= self.tracks {
+        if track < FIRST_PLAYABLE_TRACK || track >= self.editor.tracks {
             return None;
         }
-        Self::extract_patch_json_and_phrase(&self.data[track][0]).and_then(|(value, _)| {
+        Self::extract_patch_json_and_phrase(&self.editor.data[track][0]).and_then(|(value, _)| {
             value
                 .get(PATCH_FILTER_QUERY_JSON_KEY)
                 .and_then(Value::as_str)
@@ -258,11 +258,11 @@ impl DawApp {
     }
 
     fn preview_patch_json_for_patch_name(&self, patch_name: &str) -> String {
-        if self.cursor_track < FIRST_PLAYABLE_TRACK {
+        if self.editor.cursor_track < FIRST_PLAYABLE_TRACK {
             return Self::build_patch_json(patch_name);
         }
 
-        let current_patch_json = &self.data[self.cursor_track][0];
+        let current_patch_json = &self.editor.data[self.editor.cursor_track][0];
         // 同じ patch の preview では元の init JSON をそのまま使い、
         // filter などの付随メタデータや既存表現を崩さない。
         if self.current_track_patch_name().as_deref() == Some(patch_name) {
@@ -304,7 +304,7 @@ impl DawApp {
             return;
         }
 
-        if self.cursor_measure > 0 {
+        if self.editor.cursor_measure > 0 {
             if let Some(patch_name) = self.current_track_patch_name() {
                 let state = self
                     .patch_phrase_store
@@ -336,7 +336,7 @@ impl DawApp {
     fn cursor_play_measure_index(&self) -> Option<usize> {
         // cursor_measure の 0 は Init 列なので対象外。
         // A-B リピートは通常 meas のみを扱うため、1-based の小節番号を 0-based index に変換する。
-        self.cursor_measure.checked_sub(1)
+        self.editor.cursor_measure.checked_sub(1)
     }
 
     fn update_ab_repeat_follow_end_with_cursor(&self) {

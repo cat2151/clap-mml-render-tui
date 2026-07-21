@@ -20,7 +20,7 @@ impl DawApp {
                 self.overlays.mixer.cursor_track -= 1;
             }
             KeyCode::Char('l') | KeyCode::Right
-                if self.overlays.mixer.cursor_track + 1 < self.tracks =>
+                if self.overlays.mixer.cursor_track + 1 < self.editor.tracks =>
             {
                 self.overlays.mixer.cursor_track += 1;
             }

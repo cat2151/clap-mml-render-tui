@@ -193,17 +193,13 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
     }
 
     let mut app = DawApp {
-        data,
-        cursor_track: 0,
-        cursor_measure: 0,
+        editor: super::DawEditorState::new(data, 0, 0, tracks, measures),
         mode: DawMode::Normal,
         help_origin: DawMode::Normal,
         sound_check_guide: crate::sound_check_guide::SoundCheckGuide::new(None),
         textarea: crate::text_input::new_single_line_textarea(""),
         cfg,
         entry_ptr,
-        tracks,
-        measures,
         cache,
         cache_tx,
         cache_render_workers,
@@ -225,9 +221,6 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
         track_volumes_db,
         overlays: DawOverlays::new(FIRST_PLAYABLE_TRACK.min(tracks - 1)),
         play_track_gains,
-        yank_buffer: None,
-        normal_pending_delete: false,
-        normal_paste_undo: None,
         patch_phrase_store: crate::history::load_patch_phrase_store(),
         patch_phrase_store_dirty: false,
         random_patch_decks: crate::random::RandomIndexDecks::default(),

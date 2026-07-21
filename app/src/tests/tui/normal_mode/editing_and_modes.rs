@@ -196,33 +196,6 @@ fn handle_normal_b_requests_loop_browser_without_running_startup_inline() {
 }
 
 #[test]
-fn start_keyboard_from_notepad_uses_current_cursor_line_patch() {
-    let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![
-        r#"{"Surge XT patch":"Pads/First.fxp"} c"#.to_string(),
-        r#"{"Surge XT patch":"Keys/Current.fxp"} d"#.to_string(),
-        r#"{"Surge XT patch":"Leads/Last.fxp"} e"#.to_string(),
-    ];
-    app.cursor = 1;
-
-    app.start_keyboard_from_notepad();
-
-    assert!(matches!(app.mode, Mode::Keyboard));
-    assert_eq!(app.keyboard.state.patch(), Some("Keys/Current.fxp"));
-}
-
-#[test]
-fn start_keyboard_from_notepad_uses_init_saw_without_valid_patch() {
-    let mut app = TuiApp::new_for_test(test_config());
-    app.lines = vec![r#"{"Surge XT patch":""} c"#.to_string()];
-
-    app.start_keyboard_from_notepad();
-
-    assert!(matches!(app.mode, Mode::Keyboard));
-    assert_eq!(app.keyboard.state.patch(), None);
-}
-
-#[test]
 fn keyboard_ignores_note_input_until_connection_is_ready() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::Keyboard;

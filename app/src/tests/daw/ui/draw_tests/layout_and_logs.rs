@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn draw_shows_mml_and_uncached_dot_before_cache_is_ready() {
     let mut app = build_test_app();
-    app.data[1][1] = "cdef".to_string();
+    app.editor.data[1][1] = "cdef".to_string();
     {
         let mut cache = app.cache.lock().unwrap();
         cache[1][1].state = CacheState::Pending;
@@ -45,7 +45,7 @@ fn draw_shows_insert_mode_title_in_top_border() {
 #[test]
 fn draw_renders_pending_indicator_in_visible_color() {
     let mut app = build_test_app();
-    app.data[1][1] = "cdef".to_string();
+    app.editor.data[1][1] = "cdef".to_string();
     {
         let mut cache = app.cache.lock().unwrap();
         cache[1][1].state = CacheState::Pending;
@@ -68,7 +68,7 @@ fn draw_renders_pending_indicator_in_visible_color() {
 #[test]
 fn draw_uses_contrast_background_for_selected_grid_cell_without_blink() {
     let mut app = build_test_app();
-    app.data[0][0] = "t120".to_string();
+    app.editor.data[0][0] = "t120".to_string();
 
     let buffer = render_buffer(&app, 40, 14);
     let (x, y) = find_text_ignoring_spaces(&buffer, "t120");
