@@ -153,9 +153,9 @@ fn notepad_history_help_screen_shows_history_shortcuts() {
     };
     app.mode = Mode::Help;
     app.help_origin = Mode::NotepadHistory;
-    app.notepad_focus = crate::tui::PatchPhrasePane::History;
-    app.notepad_history_state.select(Some(0));
-    app.notepad_favorites_state.select(Some(0));
+    app.notepad_history.focus = crate::tui::PatchPhrasePane::History;
+    app.notepad_history.history_state.select(Some(0));
+    app.notepad_history.favorites_state.select(Some(0));
 
     let lines = render_lines(&mut app, 120, 32);
     let normalized_screen = lines.join("\n").replace([' ', '\n'], "");
@@ -177,9 +177,9 @@ fn notepad_history_help_screen_keeps_history_base_title_and_keybinds() {
     };
     app.mode = Mode::Help;
     app.help_origin = Mode::NotepadHistory;
-    app.notepad_focus = crate::tui::PatchPhrasePane::History;
-    app.notepad_history_state.select(Some(0));
-    app.notepad_favorites_state.select(Some(0));
+    app.notepad_history.focus = crate::tui::PatchPhrasePane::History;
+    app.notepad_history.history_state.select(Some(0));
+    app.notepad_history.favorites_state.select(Some(0));
 
     let screen = render_lines(&mut app, 120, 32).join("\n");
 

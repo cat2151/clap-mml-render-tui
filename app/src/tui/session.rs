@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, AtomicUsize};
 use std::sync::{Arc, Mutex};
 
+use super::notepad_history::NotepadHistoryState;
 use super::patch_select::PatchSelectState;
 use super::{Mode, PatchPhrasePane, PlayState, TuiApp, TuiRenderQueue};
 use crate::config::Config;
@@ -164,18 +165,9 @@ impl<'a> TuiApp<'a> {
             random_patch_decks: crate::random::RandomIndexDecks::default(),
             patch_select: PatchSelectState::new(),
             normal_page_size: 1,
-            notepad_history_page_size: 1,
+            notepad_history: NotepadHistoryState::new(),
             patch_phrase_page_size: 1,
             patch_phrase_store: crate::history::load_patch_phrase_store(),
-            notepad_history_cursor: 0,
-            notepad_favorites_cursor: 0,
-            notepad_history_state: ListState::default(),
-            notepad_favorites_state: ListState::default(),
-            notepad_focus: PatchPhrasePane::History,
-            notepad_query: String::new(),
-            notepad_query_textarea: crate::text_input::new_single_line_textarea(""),
-            notepad_filter_active: false,
-            notepad_pending_delete: false,
             normal_pending_delete: false,
             yank_buffer: None,
             patch_phrase_name: None,

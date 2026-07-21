@@ -1,6 +1,39 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::widgets::ListState;
+use tui_textarea::TextArea;
 
 use super::{filter_items, Mode, PatchPhrasePane, TuiApp};
+
+/// Notepad history overlay が所有する表示・入力状態。
+pub(super) struct NotepadHistoryState<'a> {
+    pub(super) history_cursor: usize,
+    pub(super) favorites_cursor: usize,
+    pub(super) history_state: ListState,
+    pub(super) favorites_state: ListState,
+    pub(super) focus: PatchPhrasePane,
+    pub(super) query: String,
+    pub(super) query_textarea: TextArea<'a>,
+    pub(super) filter_active: bool,
+    pub(super) pending_delete: bool,
+    pub(super) page_size: usize,
+}
+
+impl NotepadHistoryState<'_> {
+    pub(super) fn new() -> Self {
+        Self {
+            history_cursor: 0,
+            favorites_cursor: 0,
+            history_state: ListState::default(),
+            favorites_state: ListState::default(),
+            focus: PatchPhrasePane::History,
+            query: String::new(),
+            query_textarea: crate::text_input::new_single_line_textarea(""),
+            filter_active: false,
+            pending_delete: false,
+            page_size: 1,
+        }
+    }
+}
 
 impl<'a> TuiApp<'a> {
     fn move_notepad_selection_by(
@@ -9,30 +42,30 @@ impl<'a> TuiApp<'a> {
         history_len: usize,
         favorites_len: usize,
     ) -> bool {
-        match self.notepad_focus {
+        match self.notepad_history.focus {
             PatchPhrasePane::History => {
                 if history_len == 0 {
                     return false;
                 }
                 let max_cursor = history_len.saturating_sub(1) as isize;
-                let next_cursor =
-                    (self.notepad_history_cursor as isize + delta).clamp(0, max_cursor) as usize;
-                if next_cursor == self.notepad_history_cursor {
+                let next_cursor = (self.notepad_history.history_cursor as isize + delta)
+                    .clamp(0, max_cursor) as usize;
+                if next_cursor == self.notepad_history.history_cursor {
                     return false;
                 }
-                self.notepad_history_cursor = next_cursor;
+                self.notepad_history.history_cursor = next_cursor;
             }
             PatchPhrasePane::Favorites => {
                 if favorites_len == 0 {
                     return false;
                 }
                 let max_cursor = favorites_len.saturating_sub(1) as isize;
-                let next_cursor =
-                    (self.notepad_favorites_cursor as isize + delta).clamp(0, max_cursor) as usize;
-                if next_cursor == self.notepad_favorites_cursor {
+                let next_cursor = (self.notepad_history.favorites_cursor as isize + delta)
+                    .clamp(0, max_cursor) as usize;
+                if next_cursor == self.notepad_history.favorites_cursor {
                     return false;
                 }
-                self.notepad_favorites_cursor = next_cursor;
+                self.notepad_history.favorites_cursor = next_cursor;
             }
         }
         true
@@ -41,47 +74,51 @@ impl<'a> TuiApp<'a> {
     pub(super) fn notepad_history_items(&self) -> Vec<String> {
         filter_items(
             &self.patch_phrase_store.notepad.history,
-            &self.notepad_query,
+            &self.notepad_history.query,
         )
     }
 
     pub(super) fn notepad_favorite_items(&self) -> Vec<String> {
         filter_items(
             &self.patch_phrase_store.notepad.favorites,
-            &self.notepad_query,
+            &self.notepad_history.query,
         )
     }
 
     fn sync_notepad_history_states(&mut self) {
         let history_len = self.notepad_history_items().len();
         if history_len == 0 {
-            self.notepad_history_state.select(None);
-            self.notepad_history_cursor = 0;
+            self.notepad_history.history_state.select(None);
+            self.notepad_history.history_cursor = 0;
         } else {
-            self.notepad_history_cursor = self.notepad_history_cursor.min(history_len - 1);
-            self.notepad_history_state
-                .select(Some(self.notepad_history_cursor));
+            self.notepad_history.history_cursor =
+                self.notepad_history.history_cursor.min(history_len - 1);
+            self.notepad_history
+                .history_state
+                .select(Some(self.notepad_history.history_cursor));
             Self::sync_overlay_list_offset(
-                &mut self.notepad_history_state,
-                self.notepad_history_cursor,
+                &mut self.notepad_history.history_state,
+                self.notepad_history.history_cursor,
                 history_len,
-                self.notepad_history_page_size,
+                self.notepad_history.page_size,
             );
         }
 
         let favorites_len = self.notepad_favorite_items().len();
         if favorites_len == 0 {
-            self.notepad_favorites_state.select(None);
-            self.notepad_favorites_cursor = 0;
+            self.notepad_history.favorites_state.select(None);
+            self.notepad_history.favorites_cursor = 0;
         } else {
-            self.notepad_favorites_cursor = self.notepad_favorites_cursor.min(favorites_len - 1);
-            self.notepad_favorites_state
-                .select(Some(self.notepad_favorites_cursor));
+            self.notepad_history.favorites_cursor =
+                self.notepad_history.favorites_cursor.min(favorites_len - 1);
+            self.notepad_history
+                .favorites_state
+                .select(Some(self.notepad_history.favorites_cursor));
             Self::sync_overlay_list_offset(
-                &mut self.notepad_favorites_state,
-                self.notepad_favorites_cursor,
+                &mut self.notepad_history.favorites_state,
+                self.notepad_history.favorites_cursor,
                 favorites_len,
-                self.notepad_history_page_size,
+                self.notepad_history.page_size,
             );
         }
     }
@@ -109,14 +146,14 @@ impl<'a> TuiApp<'a> {
     }
 
     fn selected_notepad_item(&self) -> Option<String> {
-        match self.notepad_focus {
+        match self.notepad_history.focus {
             PatchPhrasePane::History => self
                 .notepad_history_items()
-                .get(self.notepad_history_cursor)
+                .get(self.notepad_history.history_cursor)
                 .cloned(),
             PatchPhrasePane::Favorites => self
                 .notepad_favorite_items()
-                .get(self.notepad_favorites_cursor)
+                .get(self.notepad_history.favorites_cursor)
                 .cloned(),
         }
     }
@@ -129,21 +166,21 @@ impl<'a> TuiApp<'a> {
     }
 
     fn prefetch_notepad_history_navigation_audio_cache(&self, preferred_delta: Option<isize>) {
-        let (item_count, cursor) = match self.notepad_focus {
+        let (item_count, cursor) = match self.notepad_history.focus {
             PatchPhrasePane::History => (
                 self.notepad_history_items().len(),
-                self.notepad_history_cursor,
+                self.notepad_history.history_cursor,
             ),
             PatchPhrasePane::Favorites => (
                 self.notepad_favorite_items().len(),
-                self.notepad_favorites_cursor,
+                self.notepad_history.favorites_cursor,
             ),
         };
-        let focus = self.notepad_focus;
+        let focus = self.notepad_history.focus;
         self.prefetch_navigation_audio_cache(
             cursor,
             item_count,
-            self.notepad_history_page_size,
+            self.notepad_history.page_size,
             preferred_delta,
             |index| self.notepad_item_for_selection(focus, index),
         );
@@ -165,13 +202,13 @@ impl<'a> TuiApp<'a> {
 
     fn delete_notepad_favorite(&mut self) {
         let Some(selected) = self.selected_notepad_item() else {
-            self.notepad_pending_delete = false;
+            self.notepad_history.pending_delete = false;
             self.sync_notepad_history_states();
             return;
         };
         let favorites = &mut self.patch_phrase_store.notepad.favorites;
         let Some(index) = favorites.iter().position(|item| item == &selected) else {
-            self.notepad_pending_delete = false;
+            self.notepad_history.pending_delete = false;
             self.sync_notepad_history_states();
             return;
         };
@@ -179,18 +216,18 @@ impl<'a> TuiApp<'a> {
         let mml = favorites.remove(index);
         Self::push_front_dedup(&mut self.patch_phrase_store.notepad.history, mml);
         self.patch_phrase_store_dirty = true;
-        self.notepad_pending_delete = false;
+        self.notepad_history.pending_delete = false;
         self.sync_notepad_history_states();
     }
 
     pub(super) fn start_notepad_history(&mut self) {
-        self.notepad_focus = PatchPhrasePane::History;
-        self.notepad_history_cursor = 0;
-        self.notepad_favorites_cursor = 0;
-        self.notepad_query.clear();
-        self.notepad_query_textarea = crate::text_input::new_single_line_textarea("");
-        self.notepad_filter_active = false;
-        self.notepad_pending_delete = false;
+        self.notepad_history.focus = PatchPhrasePane::History;
+        self.notepad_history.history_cursor = 0;
+        self.notepad_history.favorites_cursor = 0;
+        self.notepad_history.query.clear();
+        self.notepad_history.query_textarea = crate::text_input::new_single_line_textarea("");
+        self.notepad_history.filter_active = false;
+        self.notepad_history.pending_delete = false;
         self.sync_notepad_history_states();
         self.mode = Mode::NotepadHistory;
     }
@@ -201,42 +238,42 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(crate) fn handle_notepad_history_key_event(&mut self, key_event: KeyEvent) {
-        if self.notepad_filter_active {
+        if self.notepad_history.filter_active {
             crate::text_input::sync_single_line_textarea(
-                &mut self.notepad_query_textarea,
-                &self.notepad_query,
+                &mut self.notepad_history.query_textarea,
+                &self.notepad_history.query,
             );
             match key_event.code {
                 KeyCode::Esc => {
-                    self.notepad_pending_delete = false;
-                    self.notepad_filter_active = false;
+                    self.notepad_history.pending_delete = false;
+                    self.notepad_history.filter_active = false;
                     self.flush_patch_phrase_store_if_dirty();
                     self.mode = Mode::Normal;
                 }
                 KeyCode::Enter => {
-                    self.notepad_filter_active = false;
+                    self.notepad_history.filter_active = false;
                     self.sync_notepad_history_states();
                 }
-                KeyCode::Backspace if self.notepad_query.is_empty() => {
-                    self.notepad_filter_active = false;
+                KeyCode::Backspace if self.notepad_history.query.is_empty() => {
+                    self.notepad_history.filter_active = false;
                 }
                 KeyCode::Char('?') => self.enter_help(),
                 _ => {
-                    let previous_query = self.notepad_query.clone();
+                    let previous_query = self.notepad_history.query.clone();
                     if crate::text_input::apply_key_event_to_textarea(
-                        &mut self.notepad_query_textarea,
+                        &mut self.notepad_history.query_textarea,
                         key_event,
                     ) {
                         let next_query =
-                            crate::text_input::textarea_value(&self.notepad_query_textarea);
+                            crate::text_input::textarea_value(&self.notepad_history.query_textarea);
                         if next_query == previous_query {
                             return;
                         }
-                        self.notepad_query = next_query;
+                        self.notepad_history.query = next_query;
                         self.sync_notepad_history_states();
                         self.preview_selected_notepad_item();
-                        if !previous_query.is_empty() && self.notepad_query.is_empty() {
-                            self.notepad_filter_active = false;
+                        if !previous_query.is_empty() && self.notepad_history.query.is_empty() {
+                            self.notepad_history.filter_active = false;
                         }
                     }
                 }
@@ -252,10 +289,11 @@ impl<'a> TuiApp<'a> {
         }
         let key = key_event.code;
 
-        let was_pending_delete = self.notepad_pending_delete;
-        if !(matches!(key, KeyCode::Char('d')) && self.notepad_focus == PatchPhrasePane::Favorites)
+        let was_pending_delete = self.notepad_history.pending_delete;
+        if !(matches!(key, KeyCode::Char('d'))
+            && self.notepad_history.focus == PatchPhrasePane::Favorites)
         {
-            self.notepad_pending_delete = false;
+            self.notepad_history.pending_delete = false;
         }
 
         let history_len = self.notepad_history_items().len();
@@ -263,7 +301,7 @@ impl<'a> TuiApp<'a> {
 
         match key {
             KeyCode::Esc => {
-                self.notepad_pending_delete = false;
+                self.notepad_history.pending_delete = false;
                 self.flush_patch_phrase_store_if_dirty();
                 self.mode = Mode::Normal;
             }
@@ -292,12 +330,12 @@ impl<'a> TuiApp<'a> {
                 );
             }
             KeyCode::Char('h') | KeyCode::Left => {
-                self.notepad_focus = PatchPhrasePane::History;
+                self.notepad_history.focus = PatchPhrasePane::History;
                 self.sync_notepad_history_states();
                 self.preview_selected_notepad_item();
             }
             KeyCode::Char('l') | KeyCode::Right => {
-                self.notepad_focus = PatchPhrasePane::Favorites;
+                self.notepad_history.focus = PatchPhrasePane::Favorites;
                 self.sync_notepad_history_states();
                 self.preview_selected_notepad_item();
             }
@@ -315,33 +353,33 @@ impl<'a> TuiApp<'a> {
             }
             KeyCode::PageDown
                 if self.move_notepad_selection_by(
-                    self.notepad_history_page_size as isize,
+                    self.notepad_history.page_size as isize,
                     history_len,
                     favorites_len,
                 ) =>
             {
                 self.sync_notepad_history_states();
                 self.preview_selected_notepad_item_with_navigation_hint(Some(
-                    self.notepad_history_page_size as isize,
+                    self.notepad_history.page_size as isize,
                 ));
             }
             KeyCode::PageUp
                 if self.move_notepad_selection_by(
-                    -(self.notepad_history_page_size as isize),
+                    -(self.notepad_history.page_size as isize),
                     history_len,
                     favorites_len,
                 ) =>
             {
                 self.sync_notepad_history_states();
                 self.preview_selected_notepad_item_with_navigation_hint(Some(
-                    -(self.notepad_history_page_size as isize),
+                    -(self.notepad_history.page_size as isize),
                 ));
             }
             KeyCode::Char('/') => {
-                self.notepad_filter_active = true;
-                self.notepad_pending_delete = false;
-                self.notepad_query_textarea =
-                    crate::text_input::new_single_line_textarea(&self.notepad_query);
+                self.notepad_history.filter_active = true;
+                self.notepad_history.pending_delete = false;
+                self.notepad_history.query_textarea =
+                    crate::text_input::new_single_line_textarea(&self.notepad_history.query);
                 self.sync_notepad_history_states();
             }
             KeyCode::Enter => {
@@ -356,17 +394,17 @@ impl<'a> TuiApp<'a> {
             KeyCode::Char(' ') => {
                 self.preview_selected_notepad_item();
             }
-            KeyCode::Char('f') if self.notepad_focus == PatchPhrasePane::History => {
+            KeyCode::Char('f') if self.notepad_history.focus == PatchPhrasePane::History => {
                 if let Some(mml) = self.selected_notepad_item() {
                     self.add_notepad_favorite(mml);
                     self.sync_notepad_history_states();
                 }
             }
-            KeyCode::Char('d') if self.notepad_focus == PatchPhrasePane::Favorites => {
+            KeyCode::Char('d') if self.notepad_history.focus == PatchPhrasePane::Favorites => {
                 if was_pending_delete {
                     self.delete_notepad_favorite();
                 } else if self.selected_notepad_item().is_some() {
-                    self.notepad_pending_delete = true;
+                    self.notepad_history.pending_delete = true;
                 }
             }
             KeyCode::Char('?') => self.enter_help(),

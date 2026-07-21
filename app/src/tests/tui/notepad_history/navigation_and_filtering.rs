@@ -8,7 +8,7 @@ fn handle_notepad_history_j_previews_without_reordering_history() {
 
     app.handle_notepad_history(KeyCode::Char('j'));
 
-    assert_eq!(app.notepad_history_cursor, 1);
+    assert_eq!(app.notepad_history.history_cursor, 1);
     assert_eq!(
         app.patch_phrase_store.notepad.history,
         vec!["alpha".to_string(), "beta".to_string()]
@@ -28,7 +28,7 @@ fn handle_notepad_history_j_prefetches_predicted_navigation_cache() {
         "two".to_string(),
         "three".to_string(),
     ];
-    app.notepad_history_page_size = 2;
+    app.notepad_history.page_size = 2;
     app.start_notepad_history();
 
     app.handle_notepad_history(KeyCode::Char('j'));
@@ -43,10 +43,10 @@ fn handle_notepad_history_j_prefetches_predicted_navigation_cache() {
 fn handle_notepad_history_j_prefetches_direction_first_then_fills_remaining_navigation_targets() {
     let mut app = TuiApp::new_for_test(test_config());
     app.patch_phrase_store.notepad.history = (0..12).map(|i| format!("history {i}")).collect();
-    app.notepad_history_page_size = 5;
+    app.notepad_history.page_size = 5;
     app.start_notepad_history();
-    app.notepad_history_cursor = 4;
-    app.notepad_history_state.select(Some(4));
+    app.notepad_history.history_cursor = 4;
+    app.notepad_history.history_state.select(Some(4));
 
     app.handle_notepad_history(KeyCode::Char('j'));
 
@@ -73,10 +73,10 @@ fn handle_notepad_history_j_prefetches_direction_first_then_fills_remaining_navi
 fn handle_notepad_history_k_prefetches_page_up_before_page_down_then_far_direction_targets() {
     let mut app = TuiApp::new_for_test(test_config());
     app.patch_phrase_store.notepad.history = (0..12).map(|i| format!("history {i}")).collect();
-    app.notepad_history_page_size = 5;
+    app.notepad_history.page_size = 5;
     app.start_notepad_history();
-    app.notepad_history_cursor = 6;
-    app.notepad_history_state.select(Some(6));
+    app.notepad_history.history_cursor = 6;
+    app.notepad_history.history_state.select(Some(6));
 
     app.handle_notepad_history(KeyCode::Char('k'));
 
@@ -105,12 +105,12 @@ fn handle_notepad_history_space_previews_selected_item() {
     app.patch_phrase_store.notepad.history = vec!["alpha".to_string(), "beta".to_string()];
     app.start_notepad_history();
 
-    assert_eq!(app.notepad_history_cursor, 0);
+    assert_eq!(app.notepad_history.history_cursor, 0);
     assert!(matches!(&*app.play_state.lock().unwrap(), PlayState::Idle));
 
     app.handle_notepad_history(KeyCode::Char(' '));
 
-    assert_eq!(app.notepad_history_cursor, 0);
+    assert_eq!(app.notepad_history.history_cursor, 0);
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
         PlayState::Running(msg) if msg == "alpha"
@@ -133,13 +133,13 @@ fn handle_notepad_history_slash_then_enter_keeps_filtered_results_for_j_navigati
     app.handle_notepad_history(KeyCode::Enter);
     app.handle_notepad_history(KeyCode::Char('j'));
 
-    assert!(!app.notepad_filter_active);
-    assert_eq!(app.notepad_query, "jk");
+    assert!(!app.notepad_history.filter_active);
+    assert_eq!(app.notepad_history.query, "jk");
     assert_eq!(
         app.notepad_history_items(),
         vec!["beta jk".to_string(), "gamma jk".to_string()]
     );
-    assert_eq!(app.notepad_history_cursor, 1);
+    assert_eq!(app.notepad_history.history_cursor, 1);
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
         PlayState::Running(msg) if msg == "gamma jk"
@@ -160,8 +160,8 @@ fn handle_notepad_history_allows_slash_character_in_filter_query() {
     app.handle_notepad_history(KeyCode::Char('/'));
     app.handle_notepad_history(KeyCode::Char('n'));
 
-    assert!(app.notepad_filter_active);
-    assert_eq!(app.notepad_query, "/n");
+    assert!(app.notepad_history.filter_active);
+    assert_eq!(app.notepad_history.query, "/n");
     assert_eq!(app.notepad_history_items(), vec!["dir/name".to_string()]);
 }
 
@@ -180,8 +180,8 @@ fn handle_notepad_history_filter_space_updates_query_before_preview_shortcut() {
 
     app.handle_notepad_history(KeyCode::Char(' '));
 
-    assert!(app.notepad_filter_active);
-    assert_eq!(app.notepad_query, "beta ");
+    assert!(app.notepad_history.filter_active);
+    assert_eq!(app.notepad_history.query, "beta ");
     assert_eq!(app.notepad_history_items(), vec!["beta soft".to_string()]);
     assert!(*app.play_state.lock().unwrap() == preview_before_space);
 }
@@ -198,8 +198,8 @@ fn handle_notepad_history_filter_ctrl_a_uses_tui_textarea_default_binding() {
     app.handle_notepad_history_key_event(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
     app.handle_notepad_history(KeyCode::Char('X'));
 
-    assert!(app.notepad_filter_active);
-    assert_eq!(app.notepad_query, "Xpad");
+    assert!(app.notepad_history.filter_active);
+    assert_eq!(app.notepad_history.query, "Xpad");
 }
 
 #[test]
@@ -227,7 +227,7 @@ fn handle_notepad_history_n_p_t_switch_to_corresponding_overlays() {
     // overlay 切替キーを統一するため、notepad history 中でも n で先頭選択の初期状態に戻せるようにする。
     app.handle_notepad_history(KeyCode::Char('n'));
     assert!(matches!(app.mode, Mode::NotepadHistory));
-    assert_eq!(app.notepad_history_cursor, 0);
+    assert_eq!(app.notepad_history.history_cursor, 0);
 
     app.start_notepad_history();
     app.handle_notepad_history(KeyCode::Char('p'));
@@ -254,19 +254,19 @@ fn handle_notepad_history_page_down_and_page_up_move_by_visible_page() {
         "four".to_string(),
         "five".to_string(),
     ];
-    app.notepad_history_page_size = 2;
+    app.notepad_history.page_size = 2;
     app.start_notepad_history();
     app.handle_notepad_history(KeyCode::Char('j'));
 
     app.handle_notepad_history(KeyCode::PageDown);
-    assert_eq!(app.notepad_history_cursor, 3);
+    assert_eq!(app.notepad_history.history_cursor, 3);
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
         PlayState::Running(msg) if msg == "three"
     ));
 
     app.handle_notepad_history(KeyCode::PageUp);
-    assert_eq!(app.notepad_history_cursor, 1);
+    assert_eq!(app.notepad_history.history_cursor, 1);
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
         PlayState::Running(msg) if msg == "one"
@@ -286,31 +286,31 @@ fn handle_notepad_history_starts_scrolling_before_cursor_reaches_view_edge() {
         "six".to_string(),
         "seven".to_string(),
     ];
-    app.notepad_history_page_size = 6;
+    app.notepad_history.page_size = 6;
     app.start_notepad_history();
 
     for _ in 0..4 {
         app.handle_notepad_history(KeyCode::Char('j'));
     }
-    assert_eq!(app.notepad_history_cursor, 4);
-    assert_eq!(app.notepad_history_state.offset(), 1);
+    assert_eq!(app.notepad_history.history_cursor, 4);
+    assert_eq!(app.notepad_history.history_state.offset(), 1);
 
     for _ in 0..2 {
         app.handle_notepad_history(KeyCode::Char('k'));
     }
-    assert_eq!(app.notepad_history_cursor, 2);
-    assert_eq!(app.notepad_history_state.offset(), 0);
+    assert_eq!(app.notepad_history.history_cursor, 2);
+    assert_eq!(app.notepad_history.history_state.offset(), 0);
 }
 
 #[test]
 fn handle_notepad_history_page_up_at_top_does_not_repreview() {
     let mut app = TuiApp::new_for_test(test_config());
     app.patch_phrase_store.notepad.history = vec!["alpha".to_string(), "beta".to_string()];
-    app.notepad_history_page_size = 2;
+    app.notepad_history.page_size = 2;
     app.start_notepad_history();
 
     app.handle_notepad_history(KeyCode::PageUp);
 
-    assert_eq!(app.notepad_history_cursor, 0);
+    assert_eq!(app.notepad_history.history_cursor, 0);
     assert!(matches!(&*app.play_state.lock().unwrap(), PlayState::Idle));
 }

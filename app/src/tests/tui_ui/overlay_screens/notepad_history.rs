@@ -9,7 +9,7 @@ fn notepad_history_overlay_renders_history_and_favorites_lists() {
         favorites: vec!["o5g".to_string()],
     };
     app.start_notepad_history();
-    app.notepad_filter_active = true;
+    app.notepad_history.filter_active = true;
 
     let buffer = render_buffer(&mut app, 100, 16);
     let lines = render_lines(&mut app, 100, 16).join("\n");
@@ -135,9 +135,9 @@ fn notepad_history_only_highlights_the_focused_pane() {
         favorites: vec!["o5g".to_string()],
     };
     app.start_notepad_history();
-    app.notepad_history_state.select(Some(0));
-    app.notepad_favorites_state.select(Some(0));
-    app.notepad_focus = PatchPhrasePane::History;
+    app.notepad_history.history_state.select(Some(0));
+    app.notepad_history.favorites_state.select(Some(0));
+    app.notepad_history.focus = PatchPhrasePane::History;
 
     let buffer = render_buffer(&mut app, 100, 16);
     let overlay_area = crate::ui_utils::centered_rect(88, 76, buffer.area);

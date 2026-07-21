@@ -47,6 +47,7 @@ pub(super) const PATCH_FILTER_QUERY_JSON_KEY: &str = "Surge XT patch filter";
 pub(crate) use self::cache::filter_items;
 pub(in crate::tui) use self::cache::filter_patches;
 use self::keyboard::{KeyboardMidiSender, KeyboardMmlInput, KeyboardNoteGuide, KeyboardState};
+use self::notepad_history::NotepadHistoryState;
 use self::patch_select::PatchSelectState;
 use self::render_queue::{TuiRenderJobStatus, TuiRenderQueue};
 pub(in crate::tui) use self::session::PatchLoadState;
@@ -173,18 +174,9 @@ pub struct TuiApp<'a> {
     /// ソート切替に応じて並びが変わる (表示名, 小文字化済み) ペアのリスト
     pub(in crate::tui) patch_select: PatchSelectState<'a>,
     pub(super) normal_page_size: usize,
-    pub(super) notepad_history_page_size: usize,
+    pub(in crate::tui) notepad_history: NotepadHistoryState<'a>,
     pub(super) patch_phrase_page_size: usize,
     pub(super) patch_phrase_store: crate::history::PatchPhraseStore,
-    pub(super) notepad_history_cursor: usize,
-    pub(super) notepad_favorites_cursor: usize,
-    pub(super) notepad_history_state: ListState,
-    pub(super) notepad_favorites_state: ListState,
-    pub(super) notepad_focus: PatchPhrasePane,
-    pub(super) notepad_query: String,
-    pub(super) notepad_query_textarea: TextArea<'a>,
-    pub(super) notepad_filter_active: bool,
-    pub(super) notepad_pending_delete: bool,
     pub(super) normal_pending_delete: bool,
     pub(super) yank_buffer: Option<String>,
     pub(super) patch_phrase_name: Option<String>,

@@ -46,8 +46,8 @@ fn handle_notepad_history_guide_enter_opens_notepad_history_overlay() {
     app.handle_notepad_history_guide(KeyCode::Enter);
 
     assert!(matches!(app.mode, Mode::NotepadHistory));
-    assert_eq!(app.notepad_history_cursor, 0);
-    assert_eq!(app.notepad_history_state.selected(), Some(0));
+    assert_eq!(app.notepad_history.history_cursor, 0);
+    assert_eq!(app.notepad_history.history_state.selected(), Some(0));
 }
 
 #[test]

@@ -24,9 +24,12 @@ fn handle_notepad_history_right_switches_focus_to_favorites() {
 
     app.handle_notepad_history(KeyCode::Right);
 
-    assert!(matches!(app.notepad_focus, PatchPhrasePane::Favorites));
-    assert_eq!(app.notepad_history_state.selected(), Some(0));
-    assert_eq!(app.notepad_favorites_state.selected(), Some(0));
+    assert!(matches!(
+        app.notepad_history.focus,
+        PatchPhrasePane::Favorites
+    ));
+    assert_eq!(app.notepad_history.history_state.selected(), Some(0));
+    assert_eq!(app.notepad_history.favorites_state.selected(), Some(0));
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
         PlayState::Running(msg) if msg == "beta"
@@ -43,9 +46,12 @@ fn handle_notepad_history_left_switches_focus_to_history() {
 
     app.handle_notepad_history(KeyCode::Left);
 
-    assert!(matches!(app.notepad_focus, PatchPhrasePane::History));
-    assert_eq!(app.notepad_history_state.selected(), Some(0));
-    assert_eq!(app.notepad_favorites_state.selected(), Some(0));
+    assert!(matches!(
+        app.notepad_history.focus,
+        PatchPhrasePane::History
+    ));
+    assert_eq!(app.notepad_history.history_state.selected(), Some(0));
+    assert_eq!(app.notepad_history.favorites_state.selected(), Some(0));
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
         PlayState::Running(msg) if msg == "alpha"
@@ -61,10 +67,10 @@ fn handle_notepad_history_dd_removes_favorite_and_moves_it_to_history_top() {
     app.handle_notepad_history(KeyCode::Char('l'));
 
     app.handle_notepad_history(KeyCode::Char('d'));
-    assert!(app.notepad_pending_delete);
+    assert!(app.notepad_history.pending_delete);
     app.handle_notepad_history(KeyCode::Char('d'));
 
-    assert!(!app.notepad_pending_delete);
+    assert!(!app.notepad_history.pending_delete);
     assert!(app.patch_phrase_store.notepad.favorites.is_empty());
     assert_eq!(
         app.patch_phrase_store.notepad.history,
@@ -81,8 +87,8 @@ fn handle_notepad_history_d_does_not_arm_delete_when_favorites_empty() {
 
     app.handle_notepad_history(KeyCode::Char('d'));
 
-    assert!(!app.notepad_pending_delete);
-    assert_eq!(app.notepad_favorites_state.selected(), None);
+    assert!(!app.notepad_history.pending_delete);
+    assert_eq!(app.notepad_history.favorites_state.selected(), None);
 }
 
 #[test]

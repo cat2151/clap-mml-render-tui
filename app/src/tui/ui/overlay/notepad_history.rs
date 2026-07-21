@@ -40,16 +40,16 @@ pub(in crate::tui::ui) fn draw_notepad_history(
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[1]);
-    app.notepad_history_page_size = visible_list_page_size(panes[0]);
+    app.notepad_history.page_size = visible_list_page_size(panes[0]);
 
-    let search_title = if app.notepad_filter_active {
+    let search_title = if app.notepad_history.filter_active {
         " ENTERで絞り込みを決定 - notepad history - "
     } else {
         " ENTERで音色とフレーズを選択 - notepad history - "
     };
     let notepad_query_widget = crate::text_input::build_query_textarea_widget(
-        &app.notepad_query_textarea,
-        &app.notepad_query,
+        &app.notepad_history.query_textarea,
+        &app.notepad_history.query,
         search_title,
         "/ を押して絞り込み (space=AND)",
         MONOKAI_YELLOW,
@@ -64,9 +64,9 @@ pub(in crate::tui::ui) fn draw_notepad_history(
         .into_iter()
         .enumerate()
         .map(|(i, mml)| {
-            let is_selected = !app.notepad_filter_active
-                && app.notepad_focus == PatchPhrasePane::History
-                && i == app.notepad_history_cursor;
+            let is_selected = !app.notepad_history.filter_active
+                && app.notepad_history.focus == PatchPhrasePane::History
+                && i == app.notepad_history.history_cursor;
             let style = if is_selected {
                 cursor_highlight_style(base_style())
             } else {
@@ -88,9 +88,9 @@ pub(in crate::tui::ui) fn draw_notepad_history(
         .into_iter()
         .enumerate()
         .map(|(i, mml)| {
-            let is_selected = !app.notepad_filter_active
-                && app.notepad_focus == PatchPhrasePane::Favorites
-                && i == app.notepad_favorites_cursor;
+            let is_selected = !app.notepad_history.filter_active
+                && app.notepad_history.focus == PatchPhrasePane::Favorites
+                && i == app.notepad_history.favorites_cursor;
             let style = if is_selected {
                 cursor_highlight_style(base_style())
             } else {
@@ -107,40 +107,43 @@ pub(in crate::tui::ui) fn draw_notepad_history(
         })
         .collect();
 
-    let history_border = if app.notepad_focus == PatchPhrasePane::History {
+    let history_border = if app.notepad_history.focus == PatchPhrasePane::History {
         base_style().fg(MONOKAI_CYAN)
     } else {
         base_style()
     };
-    let favorites_border = if app.notepad_focus == PatchPhrasePane::Favorites {
+    let favorites_border = if app.notepad_history.focus == PatchPhrasePane::Favorites {
         base_style().fg(MONOKAI_CYAN)
     } else {
         base_style()
     };
-    let favorites_title =
-        if app.notepad_focus == PatchPhrasePane::Favorites && app.notepad_pending_delete {
-            " Favorites (dd:削除) "
-        } else {
-            " Favorites "
-        };
-    let history_highlight_style =
-        if app.notepad_filter_active || app.notepad_focus != PatchPhrasePane::History {
-            base_style()
-        } else {
-            cursor_highlight_style(base_style())
-        };
-    let favorites_highlight_style =
-        if app.notepad_filter_active || app.notepad_focus != PatchPhrasePane::Favorites {
-            base_style()
-        } else {
-            cursor_highlight_style(base_style())
-        };
-    let selection_status = match app.notepad_focus {
+    let favorites_title = if app.notepad_history.focus == PatchPhrasePane::Favorites
+        && app.notepad_history.pending_delete
+    {
+        " Favorites (dd:削除) "
+    } else {
+        " Favorites "
+    };
+    let history_highlight_style = if app.notepad_history.filter_active
+        || app.notepad_history.focus != PatchPhrasePane::History
+    {
+        base_style()
+    } else {
+        cursor_highlight_style(base_style())
+    };
+    let favorites_highlight_style = if app.notepad_history.filter_active
+        || app.notepad_history.focus != PatchPhrasePane::Favorites
+    {
+        base_style()
+    } else {
+        cursor_highlight_style(base_style())
+    };
+    let selection_status = match app.notepad_history.focus {
         PatchPhrasePane::History => {
-            super::selection_status_text(app.notepad_history_cursor, history_count)
+            super::selection_status_text(app.notepad_history.history_cursor, history_count)
         }
         PatchPhrasePane::Favorites => {
-            super::selection_status_text(app.notepad_favorites_cursor, favorite_count)
+            super::selection_status_text(app.notepad_history.favorites_cursor, favorite_count)
         }
     };
 
@@ -157,7 +160,7 @@ pub(in crate::tui::ui) fn draw_notepad_history(
             )
             .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
         panes[0],
-        &mut app.notepad_history_state,
+        &mut app.notepad_history.history_state,
     );
     f.render_stateful_widget(
         List::new(favorite_items)
@@ -172,9 +175,9 @@ pub(in crate::tui::ui) fn draw_notepad_history(
             )
             .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
         panes[1],
-        &mut app.notepad_favorites_state,
+        &mut app.notepad_history.favorites_state,
     );
-    if app.notepad_filter_active {
+    if app.notepad_history.filter_active {
         f.set_cursor_position(crate::text_input::single_line_textarea_cursor_position(
             chunks[0],
             &notepad_query_widget,
