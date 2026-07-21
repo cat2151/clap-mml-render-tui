@@ -13,45 +13,45 @@ const ACID_FLAG_ONE_SHOT: u32 = 1;
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum LoopAnalysisSource {
+pub enum LoopAnalysisSource {
     Acid,
     DurationEstimate,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum LoopWavKind {
+pub enum LoopWavKind {
     #[default]
     Loop,
     OneShot,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
-pub(crate) struct LoopTempoAnalysis {
+pub struct LoopTempoAnalysis {
     /// WAV の実長・beat 数・拍子から算出した、再生に使用する実効 BPM。
-    pub(crate) bpm: f64,
+    pub bpm: f64,
     /// ACID chunk に宣言されていた BPM。実効 BPM との不整合調査用に保持する。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) declared_bpm: Option<f64>,
-    pub(crate) beats: u32,
-    pub(crate) meter_numerator: u16,
-    pub(crate) meter_denominator: u16,
-    pub(crate) source: LoopAnalysisSource,
+    pub declared_bpm: Option<f64>,
+    pub beats: u32,
+    pub meter_numerator: u16,
+    pub meter_denominator: u16,
+    pub source: LoopAnalysisSource,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
-pub(crate) struct LoopWavAnalysis {
-    pub(crate) duration_seconds: f64,
+pub struct LoopWavAnalysis {
+    pub duration_seconds: f64,
     #[serde(default)]
-    pub(crate) kind: LoopWavKind,
+    pub kind: LoopWavKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) tempo: Option<LoopTempoAnalysis>,
+    pub tempo: Option<LoopTempoAnalysis>,
     /// grid・波形表示で占有する小節数。one-shot は常に1。
-    pub(crate) measures: usize,
+    pub measures: usize,
 }
 
 impl LoopWavAnalysis {
-    pub(crate) fn into_one_shot(self) -> Self {
+    pub fn into_one_shot(self) -> Self {
         Self {
             duration_seconds: self.duration_seconds,
             kind: LoopWavKind::OneShot,
@@ -77,7 +77,7 @@ struct AcidMetadata {
     tempo: f32,
 }
 
-pub(crate) fn analyze_file(path: &Path) -> Result<LoopWavAnalysis> {
+pub fn analyze_file(path: &Path) -> Result<LoopWavAnalysis> {
     let mut file =
         File::open(path).with_context(|| format!("WAVを開けません: {}", path.display()))?;
     analyze_reader(&mut file).with_context(|| format!("WAVを解析できません: {}", path.display()))
@@ -246,7 +246,7 @@ fn choose_duration_candidate(duration_seconds: f64) -> TempoCandidate {
     }
 }
 
-pub(crate) fn format_analysis(analysis: LoopWavAnalysis) -> String {
+pub fn format_analysis(analysis: LoopWavAnalysis) -> String {
     if analysis.kind == LoopWavKind::OneShot {
         return format!("[one-shot {}]", format_duration(analysis.duration_seconds));
     }

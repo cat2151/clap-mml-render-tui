@@ -11,7 +11,7 @@ fn analyze_file(path: &Path, measures: usize) -> Result<LoopWaveform> {
     analyze_file_with_progress(path, measures, |_, _| {})
 }
 
-pub(crate) fn analyze_file_with_progress(
+pub fn analyze_file_with_progress(
     path: &Path,
     measures: usize,
     mut progress: impl FnMut(usize, usize),

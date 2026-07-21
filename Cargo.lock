@@ -371,6 +371,7 @@ dependencies = [
  "clap",
  "cmrt-config-editor",
  "cmrt-core 0.1.0",
+ "cmrt-loop-domain",
  "cmrt-runtime",
  "crossterm",
  "dirs",
@@ -487,6 +488,16 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "ureq",
+]
+
+[[package]]
+name = "cmrt-loop-domain"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "hound",
+ "rustfft",
+ "serde",
 ]
 
 [[package]]

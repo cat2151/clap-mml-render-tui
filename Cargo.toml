@@ -5,6 +5,7 @@ members = [
     "config-editor-lib",
     "core-lib",
     "daw-client-lib",
+    "loop-domain",
     "rubberband-ffi",
 ]
 resolver = "2"

@@ -4,26 +4,25 @@ use serde::{Deserialize, Serialize};
 
 mod analysis;
 
-pub(crate) use analysis::analyze_file_with_progress;
+pub use analysis::analyze_file_with_progress;
 
-pub(crate) const WAVEFORM_BINS_PER_MEASURE: usize = 32;
-pub(crate) const SILENCE_DB_TENTHS: i16 = -960;
+pub const WAVEFORM_BINS_PER_MEASURE: usize = 32;
+pub const SILENCE_DB_TENTHS: i16 = -960;
 const FLUX_QUANTIZATION: f32 = 10_000.0;
 const MOTION_QUANTIZATION: f32 = 1_000.0;
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-pub(crate) struct LoopWaveform {
+pub struct LoopWaveform {
     /// RMS in tenths of a dBFS, clamped to -96..+24 dBFS.
-    pub(crate) rms_db_tenths: Vec<i16>,
+    pub rms_db_tenths: Vec<i16>,
     /// L2 distance between adjacent normalized 48-band spectra, times 10,000.
-    pub(crate) spectral_flux: Vec<u16>,
+    pub spectral_flux: Vec<u16>,
     /// Standard deviation of log2 spectral centroid, in thousandths of an octave.
-    pub(crate) centroid_motion_millioctaves: u16,
+    pub centroid_motion_millioctaves: u16,
 }
 
 impl LoopWaveform {
-    #[cfg(test)]
-    pub(crate) fn silent(measures: usize) -> Self {
+    pub fn silent(measures: usize) -> Self {
         let bins = measures.saturating_mul(WAVEFORM_BINS_PER_MEASURE);
         Self {
             rms_db_tenths: vec![SILENCE_DB_TENTHS; bins],
@@ -32,20 +31,20 @@ impl LoopWaveform {
         }
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.rms_db_tenths.len()
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.rms_db_tenths.is_empty()
     }
 
-    pub(crate) fn centroid_motion_octaves(&self) -> f32 {
+    pub fn centroid_motion_octaves(&self) -> f32 {
         f32::from(self.centroid_motion_millioctaves) / MOTION_QUANTIZATION
     }
 }
 
-pub(crate) fn quantize_db(amplitude: f32) -> i16 {
+pub fn quantize_db(amplitude: f32) -> i16 {
     if amplitude <= 0.0 {
         return SILENCE_DB_TENTHS;
     }
@@ -54,20 +53,20 @@ pub(crate) fn quantize_db(amplitude: f32) -> i16 {
         .clamp(f32::from(SILENCE_DB_TENTHS), 240.0) as i16
 }
 
-pub(crate) fn quantize_flux(flux: f32) -> u16 {
+pub fn quantize_flux(flux: f32) -> u16 {
     (flux * FLUX_QUANTIZATION)
         .round()
         .clamp(0.0, f32::from(u16::MAX)) as u16
 }
 
-pub(crate) fn quantize_motion(motion_octaves: f32) -> u16 {
+pub fn quantize_motion(motion_octaves: f32) -> u16 {
     (motion_octaves * MOTION_QUANTIZATION)
         .round()
         .clamp(0.0, f32::from(u16::MAX)) as u16
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct WaveformDisplayScale {
+pub struct WaveformDisplayScale {
     rms_low: i16,
     rms_high: i16,
     flux_low: u16,
@@ -86,7 +85,7 @@ impl Default for WaveformDisplayScale {
 }
 
 impl WaveformDisplayScale {
-    pub(crate) fn from_waveforms(waveforms: &[LoopWaveform]) -> Self {
+    pub fn from_waveforms(waveforms: &[LoopWaveform]) -> Self {
         let mut rms = Vec::new();
         let mut flux = Vec::new();
         for waveform in waveforms {
@@ -107,11 +106,11 @@ impl WaveformDisplayScale {
         }
     }
 
-    pub(crate) fn rms_rank(self, value: i16) -> f32 {
+    pub fn rms_rank(self, value: i16) -> f32 {
         normalized_rank(value, self.rms_low, self.rms_high)
     }
 
-    pub(crate) fn flux_rank(self, value: u16) -> f32 {
+    pub fn flux_rank(self, value: u16) -> f32 {
         normalized_rank(value, self.flux_low, self.flux_high)
     }
 }
