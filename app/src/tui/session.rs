@@ -143,11 +143,11 @@ impl<'a> TuiApp<'a> {
             play_state: Arc::new(Mutex::new(PlayState::Idle)),
             playback_session: Arc::new(AtomicU64::new(0)),
             realtime_play_server,
-            keyboard_midi_sender,
-            keyboard_state,
-            keyboard_mml_input: super::keyboard::KeyboardMmlInput::default(),
-            keyboard_note_guide: super::keyboard::KeyboardNoteGuide::new(
-                keyboard_note_guide_overlay_date,
+            keyboard: super::keyboard::KeyboardScreen::new(
+                keyboard_midi_sender,
+                keyboard_state,
+                super::keyboard::KeyboardMmlInput::default(),
+                super::keyboard::KeyboardNoteGuide::new(keyboard_note_guide_overlay_date),
             ),
             notepad_sound_check_guide: crate::sound_check_guide::SoundCheckGuide::new(
                 notepad_sound_check_guide_overlay_date,
@@ -155,7 +155,6 @@ impl<'a> TuiApp<'a> {
             voicing_cache: crate::history::load_voicing_cache(),
             voicing_layers,
             voicing_source_refresh,
-            persist_keyboard_on_exit: false,
             active_offline_render_count,
             render_queue,
             active_sink: Arc::new(Mutex::new(None)),
@@ -185,10 +184,12 @@ impl<'a> TuiApp<'a> {
             lines: self.lines.clone(),
             is_daw_mode: self.is_daw_mode,
             keyboard: self
-                .persist_keyboard_on_exit
-                .then(|| self.keyboard_state.session_state()),
+                .keyboard
+                .persist_on_exit
+                .then(|| self.keyboard.state.session_state()),
             keyboard_note_guide_overlay_date: self
-                .keyboard_note_guide
+                .keyboard
+                .note_guide
                 .last_overlay_date()
                 .map(str::to_owned),
             notepad_sound_check_guide_overlay_date: self
@@ -199,7 +200,7 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn save_keyboard_note_guide_overlay_date(&self) {
-        if let Some(local_date) = self.keyboard_note_guide.last_overlay_date() {
+        if let Some(local_date) = self.keyboard.note_guide.last_overlay_date() {
             let _ = crate::history::save_keyboard_note_guide_overlay_date(local_date);
         }
     }

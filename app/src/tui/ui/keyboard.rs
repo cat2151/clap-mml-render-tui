@@ -70,19 +70,19 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
         chunks[1],
     );
     let keyboard_help = keyboard_help_lines(
-        app.keyboard_note_guide.presentation(),
-        app.keyboard_state.navigation_count.value(),
+        app.keyboard.note_guide.presentation(),
+        app.keyboard.state.navigation_count.value(),
     );
     f.render_widget(Paragraph::new(keyboard_help).style(base_style()), chunks[2]);
     draw_connection_overlay(&connection.phase, f, panes[0]);
     draw_numeric_input_overlay(
-        app.keyboard_state.numeric_input(),
-        app.keyboard_state.cc_number(),
+        app.keyboard.state.numeric_input(),
+        app.keyboard.state.cc_number(),
         f,
         panes[0],
     );
-    draw_mml_input_overlay(&app.keyboard_mml_input, f, panes[0]);
-    draw_note_guide_overlay(app.keyboard_note_guide.presentation(), f, f.area());
+    draw_mml_input_overlay(&app.keyboard.mml_input, f, panes[0]);
+    draw_note_guide_overlay(app.keyboard.note_guide.presentation(), f, f.area());
 }
 
 fn draw_keyboard(app: &TuiApp<'_>, f: &mut Frame<'_>, area: Rect) {
@@ -98,22 +98,22 @@ fn draw_keyboard(app: &TuiApp<'_>, f: &mut Frame<'_>, area: Rect) {
         )),
         Line::from(""),
         Line::from(Span::styled(
-            active_notes_text(&app.keyboard_state),
+            active_notes_text(&app.keyboard.state),
             base_style(),
         )),
         Line::from(Span::styled(
             format!(
                 "Patch: {}",
-                app.keyboard_state.patch().unwrap_or("init saw")
+                app.keyboard.state.patch().unwrap_or("init saw")
             ),
             base_style(),
         )),
         Line::from(Span::styled(
-            controller_status_text(&app.keyboard_state),
+            controller_status_text(&app.keyboard.state),
             base_style(),
         )),
         Line::from(Span::styled(
-            note_playback_status_text(&app.keyboard_state),
+            note_playback_status_text(&app.keyboard.state),
             base_style(),
         )),
     ];
@@ -141,7 +141,7 @@ fn draw_patch_catalog(
     category_area: Rect,
     patch_area: Rect,
 ) {
-    let catalog = &mut app.keyboard_state.patch_catalog;
+    let catalog = &mut app.keyboard.state.patch_catalog;
     let status = catalog.status().clone();
     let categories = catalog.categories().to_vec();
     let selected_category_index = catalog.selected_category_index();

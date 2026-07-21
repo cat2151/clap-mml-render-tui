@@ -34,17 +34,17 @@ fn keyboard_counted_j_and_k_accept_multi_digit_prefixes() {
     press(&mut app, KeyCode::Char('1'), KeyModifiers::NONE);
     press(&mut app, KeyCode::Char('j'), KeyModifiers::NONE);
     assert_eq!(
-        app.keyboard_state.patch(),
+        app.keyboard.state.patch(),
         Some("patches_factory/Lead/Lead 11.fxp")
     );
 
     press(&mut app, KeyCode::Char('2'), KeyModifiers::NONE);
     press(&mut app, KeyCode::Char('k'), KeyModifiers::NONE);
     assert_eq!(
-        app.keyboard_state.patch(),
+        app.keyboard.state.patch(),
         Some("patches_factory/Lead/Lead 9.fxp")
     );
-    assert_eq!(app.keyboard_state.navigation_count.value(), None);
+    assert_eq!(app.keyboard.state.navigation_count.value(), None);
 }
 
 #[test]
@@ -57,14 +57,14 @@ fn keyboard_counted_h_and_l_move_categories() {
     press(&mut app, KeyCode::Char('2'), KeyModifiers::NONE);
     press(&mut app, KeyCode::Char('l'), KeyModifiers::NONE);
     assert_eq!(
-        app.keyboard_state.patch(),
+        app.keyboard.state.patch(),
         Some("patches_factory/Strings/Strings 0.fxp")
     );
 
     press(&mut app, KeyCode::Char('2'), KeyModifiers::NONE);
     press(&mut app, KeyCode::Char('h'), KeyModifiers::NONE);
     assert_eq!(
-        app.keyboard_state.patch(),
+        app.keyboard.state.patch(),
         Some("patches_factory/Lead/Lead 0.fxp")
     );
 }
@@ -76,14 +76,14 @@ fn keyboard_count_multiplies_ctrl_page_movement() {
     press(&mut app, KeyCode::Char('2'), KeyModifiers::NONE);
     press(&mut app, KeyCode::Char('d'), KeyModifiers::CONTROL);
     assert_eq!(
-        app.keyboard_state.patch(),
+        app.keyboard.state.patch(),
         Some("patches_factory/Pad/Pad 20.fxp")
     );
 
     press(&mut app, KeyCode::Char('2'), KeyModifiers::NONE);
     press(&mut app, KeyCode::Char('u'), KeyModifiers::CONTROL);
     assert_eq!(
-        app.keyboard_state.patch(),
+        app.keyboard.state.patch(),
         Some("patches_factory/Pad/Pad 0.fxp")
     );
 }
@@ -95,18 +95,18 @@ fn keyboard_non_vim_keys_clear_count_and_keep_their_normal_behavior() {
     press(&mut app, KeyCode::Char('3'), KeyModifiers::NONE);
     press(&mut app, KeyCode::Down, KeyModifiers::NONE);
     assert_eq!(
-        app.keyboard_state.patch(),
+        app.keyboard.state.patch(),
         Some("patches_factory/Lead/Lead 1.fxp")
     );
 
     press(&mut app, KeyCode::Char('2'), KeyModifiers::NONE);
     press(&mut app, KeyCode::Char('v'), KeyModifiers::NONE);
-    assert_eq!(app.keyboard_state.velocity(), 127);
-    assert_eq!(app.keyboard_state.navigation_count.value(), None);
+    assert_eq!(app.keyboard.state.velocity(), 127);
+    assert_eq!(app.keyboard.state.navigation_count.value(), None);
 
     press(&mut app, KeyCode::Char('j'), KeyModifiers::NONE);
     assert_eq!(
-        app.keyboard_state.patch(),
+        app.keyboard.state.patch(),
         Some("patches_factory/Lead/Lead 2.fxp")
     );
 }
@@ -117,9 +117,9 @@ fn keyboard_bare_zero_is_not_a_count() {
 
     press(&mut app, KeyCode::Char('0'), KeyModifiers::NONE);
 
-    assert_eq!(app.keyboard_state.navigation_count.value(), None);
+    assert_eq!(app.keyboard.state.navigation_count.value(), None);
     assert_eq!(
-        app.keyboard_state.patch(),
+        app.keyboard.state.patch(),
         Some("patches_factory/Lead/Lead 0.fxp")
     );
 }
@@ -133,7 +133,7 @@ fn keyboard_huge_count_clamps_without_overflowing() {
     }
     press(&mut app, KeyCode::Char('j'), KeyModifiers::NONE);
     assert_eq!(
-        app.keyboard_state.patch(),
+        app.keyboard.state.patch(),
         Some("patches_factory/Lead/Lead 2.fxp")
     );
 
@@ -142,7 +142,7 @@ fn keyboard_huge_count_clamps_without_overflowing() {
     }
     press(&mut app, KeyCode::Char('k'), KeyModifiers::NONE);
     assert_eq!(
-        app.keyboard_state.patch(),
+        app.keyboard.state.patch(),
         Some("patches_factory/Lead/Lead 0.fxp")
     );
 }

@@ -46,7 +46,7 @@ pub(super) const PATCH_FILTER_QUERY_JSON_KEY: &str = "Surge XT patch filter";
 
 pub(crate) use self::cache::filter_items;
 pub(in crate::tui) use self::cache::filter_patches;
-use self::keyboard::{KeyboardMidiSender, KeyboardMmlInput, KeyboardNoteGuide, KeyboardState};
+use self::keyboard::KeyboardScreen;
 use self::notepad_history::NotepadHistoryState;
 use self::patch_phrase::PatchPhraseState;
 use self::patch_select::PatchSelectState;
@@ -147,17 +147,13 @@ pub struct TuiApp<'a> {
     pub(super) play_state: Arc<Mutex<PlayState>>,
     playback_session: Arc<AtomicU64>,
     realtime_play_server: Option<Arc<RealtimePlayServerSupervisor>>,
-    keyboard_midi_sender: Option<KeyboardMidiSender>,
-    pub(super) keyboard_state: KeyboardState,
-    pub(super) keyboard_mml_input: KeyboardMmlInput<'a>,
-    pub(super) keyboard_note_guide: KeyboardNoteGuide,
+    pub(in crate::tui) keyboard: KeyboardScreen<'a>,
     pub(super) notepad_sound_check_guide: crate::sound_check_guide::SoundCheckGuide,
     /// patch ごとの mono/poly 判定結果のキャッシュ。起動時に読み込み、
     /// 新しく probe した patch を検出したら書き戻す。
     pub(super) voicing_cache: crate::history::VoicingCache,
     pub(super) voicing_layers: crate::voicing_sources::VoicingLayers,
     pub(super) voicing_source_refresh: crate::voicing_sources::VoicingSourceRefresh,
-    pub(super) persist_keyboard_on_exit: bool,
     pub(super) active_offline_render_count: Arc<AtomicUsize>,
     render_queue: TuiRenderQueue,
     active_sink: Arc<Mutex<Option<Arc<rodio::Sink>>>>,

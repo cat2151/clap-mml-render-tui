@@ -246,10 +246,10 @@ fn sync_list_offset(
 impl<'a> TuiApp<'a> {
     pub(in crate::tui) fn sync_keyboard_patch_catalog(&mut self) {
         if !crate::patches::has_configured_patch_dirs(&self.cfg) {
-            self.keyboard_state.patch_catalog.set_not_configured();
+            self.keyboard.state.patch_catalog.set_not_configured();
             return;
         }
-        if self.keyboard_state.patch_catalog.is_ready() {
+        if self.keyboard.state.patch_catalog.is_ready() {
             return;
         }
 
@@ -268,15 +268,16 @@ impl<'a> TuiApp<'a> {
         };
 
         match loaded {
-            LoadedCatalog::Loading => self.keyboard_state.patch_catalog.set_loading(),
-            LoadedCatalog::Error(error) => self.keyboard_state.patch_catalog.set_error(error),
+            LoadedCatalog::Loading => self.keyboard.state.patch_catalog.set_loading(),
+            LoadedCatalog::Error(error) => self.keyboard.state.patch_catalog.set_error(error),
             LoadedCatalog::Ready(pairs) => {
-                let current_patch = self
-                    .keyboard_state
-                    .patch()
-                    .and_then(|patch| crate::patches::resolve_display_patch_name(&pairs, patch));
+                let current_patch =
+                    self.keyboard.state.patch().and_then(|patch| {
+                        crate::patches::resolve_display_patch_name(&pairs, patch)
+                    });
                 let categories = crate::patches::group_patch_pairs_by_category(&pairs);
-                self.keyboard_state
+                self.keyboard
+                    .state
                     .patch_catalog
                     .load(categories, current_patch.as_deref());
             }
@@ -285,19 +286,19 @@ impl<'a> TuiApp<'a> {
 
     pub(super) fn move_keyboard_patch_by(&mut self, delta: isize) {
         self.sync_keyboard_patch_catalog();
-        let selected = self.keyboard_state.patch_catalog.move_patch_by(delta);
+        let selected = self.keyboard.state.patch_catalog.move_patch_by(delta);
         self.apply_keyboard_patch_selection(selected);
     }
 
     pub(super) fn move_keyboard_patch_category_by(&mut self, delta: isize) {
         self.sync_keyboard_patch_catalog();
-        let selected = self.keyboard_state.patch_catalog.move_category_by(delta);
+        let selected = self.keyboard.state.patch_catalog.move_category_by(delta);
         self.apply_keyboard_patch_selection(selected);
     }
 
     pub(super) fn select_random_keyboard_patch(&mut self) {
         self.sync_keyboard_patch_catalog();
-        let selected = self.keyboard_state.patch_catalog.select_random_patch();
+        let selected = self.keyboard.state.patch_catalog.select_random_patch();
         self.apply_keyboard_patch_selection(selected);
     }
 
@@ -305,16 +306,16 @@ impl<'a> TuiApp<'a> {
         let Some(patch) = selected else {
             return;
         };
-        let previous_patch = self.keyboard_state.patch().map(str::to_string);
+        let previous_patch = self.keyboard.state.patch().map(str::to_string);
         if previous_patch.as_deref() == Some(patch.as_str()) {
             return;
         }
         // 自動送信系(周期modeやON状態)はpatch変更をまたいで維持する。
         // note offのみ送り、Ready復帰後にrefreshで現在値を新patchへ再送する。
-        let note_offs = self.keyboard_state.take_note_off_messages();
-        self.keyboard_state.patch = Some(patch.clone());
+        let note_offs = self.keyboard.state.take_note_off_messages();
+        self.keyboard.state.patch = Some(patch.clone());
         let known_voicing = self.cached_voicing(Some(&patch));
-        if let Some(sender) = &self.keyboard_midi_sender {
+        if let Some(sender) = &self.keyboard.midi_sender {
             sender.set_patch(
                 note_offs,
                 previous_patch.as_deref(),

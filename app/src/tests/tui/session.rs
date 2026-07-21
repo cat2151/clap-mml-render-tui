@@ -125,14 +125,14 @@ fn keyboard_q_persists_and_restores_patch_transport_and_buffer() {
     let mut restored = TuiApp::new(&cfg, None);
     assert!(matches!(restored.mode, Mode::Keyboard));
     assert_eq!(
-        restored.keyboard_state.patch(),
+        restored.keyboard.state.patch(),
         Some("patches_factory/Keys/Piano.fxp")
     );
     assert_eq!(
-        restored.keyboard_state.transport(),
+        restored.keyboard.state.transport(),
         crate::history::KeyboardTransport::Http
     );
-    assert_eq!(restored.keyboard_state.buffer_multiplier(), 8);
+    assert_eq!(restored.keyboard.state.buffer_multiplier(), 8);
 
     restored.handle_keyboard_key_event(crossterm::event::KeyEvent::new(
         crossterm::event::KeyCode::Char('n'),
