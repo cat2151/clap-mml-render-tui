@@ -5,9 +5,10 @@ use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::path::{Component, Path, PathBuf};
 
-use crate::loop_wav_analysis::{analyze_file, LoopWavAnalysis};
+use crate::loop_wav_analysis::{analyze_file, LoopWavAnalysis, LoopWavKind};
+use crate::loop_waveform::{LoopWaveform, WAVEFORM_BINS_PER_MEASURE};
 
-const LOOP_INDEX_VERSION: u32 = 2;
+pub(crate) const LOOP_INDEX_VERSION: u32 = 6;
 const LOOP_INDEX_FILE_NAME: &str = "loop_index.json";
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -26,6 +27,7 @@ pub(crate) struct LoopRootIndex {
 pub(crate) struct LoopWavIndex {
     pub(crate) relative: String,
     pub(crate) analysis: LoopWavAnalysis,
+    pub(crate) waveform: LoopWaveform,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -44,6 +46,10 @@ pub enum LoopScanProgress {
         current: usize,
         total: usize,
         path: PathBuf,
+    },
+    Visualizing {
+        bin: usize,
+        bins: usize,
     },
     Skipped {
         path: PathBuf,
@@ -155,8 +161,26 @@ fn build_index(
                 total,
                 path: path.clone(),
             });
-            match analyze_file(&path) {
-                Ok(analysis) => wav_files.push(LoopWavIndex { relative, analysis }),
+            match analyze_file(&path).and_then(|analysis| {
+                let analysis = if is_one_shot_relative_path(&relative) {
+                    analysis.into_one_shot()
+                } else {
+                    analysis
+                };
+                let waveform = crate::loop_waveform::analyze_file_with_progress(
+                    &path,
+                    analysis.measures,
+                    |bin, bins| {
+                        progress(LoopScanProgress::Visualizing { bin, bins });
+                    },
+                )?;
+                Ok((analysis, waveform))
+            }) {
+                Ok((analysis, waveform)) => wav_files.push(LoopWavIndex {
+                    relative,
+                    analysis,
+                    waveform,
+                }),
                 Err(error) => {
                     skipped_wav_files += 1;
                     progress(LoopScanProgress::Skipped {
@@ -212,6 +236,12 @@ fn is_wav_path(path: &Path) -> bool {
         .is_some_and(|extension| extension.eq_ignore_ascii_case("wav"))
 }
 
+fn is_one_shot_relative_path(relative: &str) -> bool {
+    Path::new(relative).components().any(|component| {
+        matches!(component, Component::Normal(name) if name.to_string_lossy().eq_ignore_ascii_case("One Shots"))
+    })
+}
+
 fn validate_index(index: &LoopIndex, configured_roots: &[String]) -> Result<()> {
     if index.version != LOOP_INDEX_VERSION {
         anyhow::bail!(
@@ -236,22 +266,50 @@ fn validate_index(index: &LoopIndex, configured_roots: &[String]) -> Result<()> 
         for wav in &root.wav_files {
             validate_relative_wav_path(&wav.relative)?;
             validate_analysis(wav.analysis)?;
+            validate_waveform(&wav.waveform, wav.analysis.measures)?;
         }
     }
     Ok(())
 }
 
 fn validate_analysis(analysis: LoopWavAnalysis) -> Result<()> {
-    if !analysis.duration_seconds.is_finite()
-        || analysis.duration_seconds <= 0.0
-        || !analysis.bpm.is_finite()
-        || analysis.bpm <= 0.0
-        || analysis.beats == 0
-        || analysis.meter_numerator == 0
-        || analysis.meter_denominator == 0
-        || analysis.measures == 0
-    {
+    if !analysis.duration_seconds.is_finite() || analysis.duration_seconds <= 0.0 {
         anyhow::bail!("ループキャッシュに不正なWAV解析結果があります");
+    }
+    match (analysis.kind, analysis.tempo) {
+        (LoopWavKind::OneShot, None) if analysis.measures == 1 => {}
+        (LoopWavKind::Loop, Some(tempo))
+            if tempo.bpm.is_finite()
+                && tempo.bpm > 0.0
+                && tempo
+                    .declared_bpm
+                    .is_none_or(|bpm| bpm.is_finite() && bpm > 0.0)
+                && tempo.beats > 0
+                && tempo.meter_numerator > 0
+                && tempo.meter_denominator > 0
+                && analysis.measures > 0 => {}
+        _ => anyhow::bail!("ループキャッシュに不正なWAV解析結果があります"),
+    }
+    Ok(())
+}
+
+fn validate_waveform(waveform: &LoopWaveform, measures: usize) -> Result<()> {
+    let expected = measures
+        .checked_mul(WAVEFORM_BINS_PER_MEASURE)
+        .ok_or_else(|| anyhow::anyhow!("ループキャッシュの波形要素数が大きすぎます"))?;
+    if waveform.rms_db_tenths.len() != expected || waveform.spectral_flux.len() != expected {
+        anyhow::bail!(
+            "ループキャッシュの波形要素数が不正です: rms={}, flux={}, expected={expected}",
+            waveform.rms_db_tenths.len(),
+            waveform.spectral_flux.len()
+        );
+    }
+    if waveform
+        .rms_db_tenths
+        .iter()
+        .any(|value| !(-960..=240).contains(value))
+    {
+        anyhow::bail!("ループキャッシュのRMS値が不正です");
     }
     Ok(())
 }

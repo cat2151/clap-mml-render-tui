@@ -45,13 +45,13 @@ fn scan_loops_progress_and_summary_are_printed() {
     let path = std::path::PathBuf::from("loops").join("Kick.wav");
 
     write_scan_progress(
-        loop_library::LoopScanProgress::Started { roots: 2 },
+        &loop_library::LoopScanProgress::Started { roots: 2 },
         &mut stdout,
         &mut stderr,
     )
     .unwrap();
     write_scan_progress(
-        loop_library::LoopScanProgress::Analyzing {
+        &loop_library::LoopScanProgress::Analyzing {
             current: 3,
             total: 7,
             path: path.clone(),
@@ -61,7 +61,7 @@ fn scan_loops_progress_and_summary_are_printed() {
     )
     .unwrap();
     write_scan_progress(
-        loop_library::LoopScanProgress::Skipped {
+        &loop_library::LoopScanProgress::Skipped {
             path,
             error: "RIFF/WAVE形式ではありません".to_string(),
         },

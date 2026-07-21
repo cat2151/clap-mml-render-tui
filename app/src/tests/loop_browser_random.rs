@@ -86,6 +86,50 @@ fn state_round_trips_and_continues_the_saved_deck() {
 }
 
 #[test]
+fn category_and_legacy_favorite_dir_scopes_round_trip() {
+    let path = temp_path("scope-round-trip");
+    let candidates = vec![wav("a.wav"), wav("b.wav")];
+    let mut state = LoopRandomDeckState::default();
+    state.draw(
+        LoopRandomScope::Category {
+            category: "drum".to_string(),
+        },
+        &candidates,
+        None,
+    );
+    state.draw(
+        LoopRandomScope::FavoriteDir {
+            dir: LoopDirId::new(Path::new("/loops"), Path::new("legacy")),
+        },
+        &candidates,
+        None,
+    );
+
+    save_to(&path, &state).unwrap();
+
+    assert_eq!(load_from(&path).unwrap(), state);
+    let _ = std::fs::remove_dir_all(path.parent().unwrap().parent().unwrap());
+}
+
+#[test]
+fn category_decks_keep_independent_progress() {
+    let candidates = vec![wav("a.wav"), wav("b.wav")];
+    let mut state = LoopRandomDeckState::default();
+    let drum = LoopRandomScope::Category {
+        category: "drum".to_string(),
+    };
+    let bass = LoopRandomScope::Category {
+        category: "bass".to_string(),
+    };
+
+    let drum_first = state.draw(drum.clone(), &candidates, None).unwrap();
+    state.draw(bass, &candidates, None).unwrap();
+    let drum_second = state.draw(drum, &candidates, Some(&drum_first)).unwrap();
+
+    assert!(!drum_second.matches(&drum_first));
+}
+
+#[test]
 fn corrupt_or_unsupported_state_is_rejected_and_can_be_replaced() {
     let path = temp_path("corrupt");
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();

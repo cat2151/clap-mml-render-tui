@@ -1,37 +1,58 @@
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use super::{LoopPlaybackClip, LoopPlaybackGrid};
-use crate::loop_time_stretch::format_bpm;
+#[cfg(test)]
+use super::LoopPlaybackClip;
+use super::{LoopGridChange, LoopPlaybackGrid};
 use crate::tui::{Mode, PlayState, TuiApp};
-use anyhow::{Context, Result};
 
+pub(in crate::tui) mod diagnostics;
+mod gain;
+pub(in crate::tui) mod position;
 mod preparation;
+mod scheduling;
 mod sinks;
 mod tempo;
+mod worker;
 
-use preparation::{profile_label, PreparationWorker, PreparedSet};
-use sinks::{play_path, stop_pad_sinks, stop_sinks, take_pad_voice, TrackSink};
-use tempo::{grid_target_bpm, measure_duration};
+#[cfg(test)]
+use sinks::take_pad_voice;
+#[cfg(test)]
+use tempo::{grid_target_bpm, measure_duration, measure_timing};
+use worker::playback_worker;
+#[cfg(test)]
+use worker::{measure_at_or_after, next_measure, starting_clips, TransportState};
 
 enum LoopPlaybackCommand {
-    Preview(PathBuf),
+    Preview {
+        path: PathBuf,
+        trace_id: u64,
+        queued_at: Instant,
+    },
     Trigger {
         pad: char,
         path: PathBuf,
     },
-    SetGrid(LoopPlaybackGrid),
+    SetGrid {
+        grid: LoopPlaybackGrid,
+        reason: LoopGridChange,
+    },
     RestartGridAt {
         grid: LoopPlaybackGrid,
         start_measure: usize,
+        reason: LoopGridChange,
     },
     SetTrackVolume {
         track: usize,
         volume_db: i32,
     },
+    SetTrackSolo {
+        solo_tracks: Vec<bool>,
+    },
+    Pause,
+    ResumeAt(usize),
     Stop,
 }
 
@@ -44,11 +65,22 @@ impl LoopPlaybackController {
     fn spawn(
         grid: LoopPlaybackGrid,
         track_volumes_db: Vec<i32>,
+        solo_tracks: Vec<bool>,
         state: Arc<Mutex<PlayState>>,
+        diagnostics: diagnostics::SharedLoopStretchDiagnostics,
+        playback_position: position::SharedPlaybackPosition,
     ) -> Self {
         let (sender, receiver) = mpsc::channel();
         let worker = std::thread::spawn(move || {
-            if let Err(error) = playback_worker(receiver, grid, track_volumes_db, &state) {
+            if let Err(error) = playback_worker(
+                receiver,
+                grid,
+                track_volumes_db,
+                solo_tracks,
+                &state,
+                diagnostics,
+                playback_position,
+            ) {
                 set_play_state(
                     &state,
                     PlayState::Err(format!("WAV loop再生に失敗: {error}")),
@@ -61,22 +93,41 @@ impl LoopPlaybackController {
         }
     }
 
-    pub(super) fn preview(&self, path: PathBuf) {
-        let _ = self.sender.send(LoopPlaybackCommand::Preview(path));
+    pub(super) fn preview(&self, path: PathBuf, trace_id: u64) {
+        let started_at = Instant::now();
+        let command = LoopPlaybackCommand::Preview {
+            path: path.clone(),
+            trace_id,
+            queued_at: Instant::now(),
+        };
+        let outcome = if self.sender.send(command).is_ok() {
+            "queued"
+        } else {
+            "worker-stopped"
+        };
+        super::performance::log_preview_enqueued(trace_id, started_at.elapsed(), &path, outcome);
     }
 
     pub(super) fn trigger(&self, pad: char, path: PathBuf) {
         let _ = self.sender.send(LoopPlaybackCommand::Trigger { pad, path });
     }
 
-    pub(super) fn set_grid(&self, grid: LoopPlaybackGrid) {
-        let _ = self.sender.send(LoopPlaybackCommand::SetGrid(grid));
+    pub(super) fn set_grid(&self, grid: LoopPlaybackGrid, reason: LoopGridChange) {
+        let _ = self
+            .sender
+            .send(LoopPlaybackCommand::SetGrid { grid, reason });
     }
 
-    pub(super) fn restart_grid_at(&self, grid: LoopPlaybackGrid, start_measure: usize) {
+    pub(super) fn restart_grid_at(
+        &self,
+        grid: LoopPlaybackGrid,
+        start_measure: usize,
+        reason: LoopGridChange,
+    ) {
         let _ = self.sender.send(LoopPlaybackCommand::RestartGridAt {
             grid,
             start_measure,
+            reason,
         });
     }
 
@@ -84,6 +135,21 @@ impl LoopPlaybackController {
         let _ = self
             .sender
             .send(LoopPlaybackCommand::SetTrackVolume { track, volume_db });
+    }
+
+    pub(super) fn set_track_solo(&self, solo_tracks: Vec<bool>) {
+        let _ = self
+            .sender
+            .send(LoopPlaybackCommand::SetTrackSolo { solo_tracks });
+    }
+
+    pub(super) fn set_paused(&self, paused: bool, start_measure: usize) {
+        let command = if paused {
+            LoopPlaybackCommand::Pause
+        } else {
+            LoopPlaybackCommand::ResumeAt(start_measure)
+        };
+        let _ = self.sender.send(command);
     }
 
     fn stop(&mut self) {
@@ -101,21 +167,32 @@ impl Drop for LoopPlaybackController {
 }
 
 impl<'a> TuiApp<'a> {
-    pub(in crate::tui) fn start_loop_browser(&mut self) {
+    pub(in crate::tui) fn begin_loop_browser_startup(&mut self) {
+        self.mode = Mode::LoopBrowser;
+        self.loop_browser.starting = true;
+    }
+
+    pub(in crate::tui) fn complete_loop_browser_startup(&mut self) {
+        if !self.loop_browser.starting {
+            return;
+        }
         let session = self.begin_playback_session();
         self.set_play_state_if_current(session, PlayState::Idle);
         self.loop_browser.reload(&self.cfg);
-        self.mode = Mode::LoopBrowser;
         if !cfg!(test) {
             self.loop_playback = Some(LoopPlaybackController::spawn(
                 self.loop_browser.playback_grid(),
                 self.loop_browser.track_volumes_db().to_vec(),
+                self.loop_browser.solo_tracks().to_vec(),
                 Arc::clone(&self.play_state),
+                Arc::clone(&self.loop_browser.stretch_diagnostics),
+                Arc::clone(&self.loop_browser.playback_position),
             ));
         }
     }
 
     pub(in crate::tui) fn finish_loop_browser(&mut self) {
+        self.loop_browser.starting = false;
         if let Some(mut playback) = self.loop_playback.take() {
             playback.stop();
         }
@@ -124,9 +201,9 @@ impl<'a> TuiApp<'a> {
         self.mode = Mode::Normal;
     }
 
-    pub(in crate::tui) fn preview_loop_file(&self, path: PathBuf) {
+    pub(in crate::tui) fn preview_loop_file(&self, path: PathBuf, trace_id: u64) {
         if let Some(playback) = &self.loop_playback {
-            playback.preview(path);
+            playback.preview(path, trace_id);
         }
     }
 
@@ -136,9 +213,9 @@ impl<'a> TuiApp<'a> {
         }
     }
 
-    pub(in crate::tui) fn update_loop_grid(&self, grid: LoopPlaybackGrid) {
+    pub(in crate::tui) fn update_loop_grid(&self, grid: LoopPlaybackGrid, reason: LoopGridChange) {
         if let Some(playback) = &self.loop_playback {
-            playback.set_grid(grid);
+            playback.set_grid(grid, reason);
         }
     }
 
@@ -146,9 +223,10 @@ impl<'a> TuiApp<'a> {
         &self,
         grid: LoopPlaybackGrid,
         start_measure: usize,
+        reason: LoopGridChange,
     ) {
         if let Some(playback) = &self.loop_playback {
-            playback.restart_grid_at(grid, start_measure);
+            playback.restart_grid_at(grid, start_measure, reason);
         }
     }
 
@@ -157,269 +235,21 @@ impl<'a> TuiApp<'a> {
             playback.set_track_volume(track, volume_db);
         }
     }
-}
 
-fn playback_worker(
-    receiver: mpsc::Receiver<LoopPlaybackCommand>,
-    grid: LoopPlaybackGrid,
-    mut track_volumes_db: Vec<i32>,
-    state: &Arc<Mutex<PlayState>>,
-) -> Result<()> {
-    let (_stream, handle) =
-        rodio::OutputStream::try_default().context("audio output deviceを開けません")?;
-    let mut preview_sink: Option<Arc<rodio::Sink>> = None;
-    let mut pad_sinks = HashMap::<char, Arc<rodio::Sink>>::new();
-    let mut measure_sinks = Vec::<TrackSink>::new();
-    let mut current_measure = None;
-    let mut measure_deadline = None;
-    let mut preparation = PreparationWorker::spawn();
-    let initial_target = grid_target_bpm(&grid);
-    let mut pending_generation = Some(preparation.submit(grid));
-    let mut active: Option<PreparedSet> = None;
-    let mut restart_measure = None;
-    set_play_state(
-        state,
-        PlayState::Running(format!("BPM{}変換中", format_bpm(initial_target.bpm))),
-    );
-
-    loop {
-        while let Some(result) = preparation.try_result() {
-            if pending_generation != Some(result.generation) {
-                continue;
-            }
-            pending_generation = None;
-            active = Some(result.prepared);
-            let prepared = active.as_ref().expect("just assigned");
-            if let Some(warning) = &prepared.warning {
-                set_play_state(state, PlayState::Err(warning.clone()));
-            } else if prepared.grid.iter().flatten().any(Option::is_some) {
-                set_play_state(
-                    state,
-                    PlayState::Playing(format!(
-                        "BPM{} 準備完了",
-                        format_bpm(prepared.target_bpm.bpm)
-                    )),
-                );
-            } else {
-                set_play_state(state, PlayState::Idle);
-            }
-        }
-        pad_sinks.retain(|_, sink| !sink.empty());
-        measure_sinks.retain(|voice| !voice.sink.empty());
-        if measure_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-            measure_deadline = None;
-        }
-        if measure_deadline.is_none() {
-            if let Some(prepared) = active.as_ref() {
-                let next = restart_measure
-                    .take()
-                    .and_then(|measure| measure_at_or_after(&prepared.grid, measure))
-                    .or_else(|| next_measure(&prepared.grid, current_measure));
-                if let Some(measure) = next {
-                    match start_measure(&handle, prepared, measure, &track_volumes_db) {
-                        Ok(sinks) => {
-                            current_measure = Some(measure);
-                            measure_sinks.extend(sinks);
-                            measure_deadline = Some(
-                                Instant::now()
-                                    + measure_duration(&prepared.grid, prepared.target_bpm.bpm),
-                            );
-                            if pending_generation.is_none() && prepared.warning.is_none() {
-                                let profile = starting_clips(&prepared.grid, measure)
-                                    .first()
-                                    .map_or("-", |(_, clip)| profile_label(clip));
-                                set_play_state(
-                                    state,
-                                    PlayState::Playing(format!(
-                                        "BPM{} loop measure {} {profile}",
-                                        format_bpm(prepared.target_bpm.bpm),
-                                        measure + 1
-                                    )),
-                                );
-                            }
-                        }
-                        Err(error) => {
-                            set_play_state(
-                                state,
-                                PlayState::Err(format!("WAV loop再生に失敗: {error}")),
-                            );
-                            current_measure = Some(measure);
-                            measure_deadline = Some(
-                                Instant::now()
-                                    + measure_duration(&prepared.grid, prepared.target_bpm.bpm),
-                            );
-                        }
-                    }
-                } else {
-                    current_measure = None;
-                    if pending_generation.is_none() && prepared.warning.is_none() {
-                        set_play_state(state, PlayState::Idle);
-                    }
-                }
-            }
-        }
-
-        let mut timeout = measure_deadline
-            .map(|deadline| deadline.saturating_duration_since(Instant::now()))
-            .unwrap_or(Duration::from_secs(60));
-        if pending_generation.is_some() {
-            timeout = timeout.min(Duration::from_millis(20));
-        }
-        match receiver.recv_timeout(timeout) {
-            Ok(LoopPlaybackCommand::Preview(path)) => {
-                if let Some(sink) = preview_sink.take() {
-                    sink.stop();
-                }
-                match play_path(&handle, &path) {
-                    Ok(sink) => preview_sink = Some(sink),
-                    Err(error) => {
-                        set_play_state(state, PlayState::Err(format!("WAV再生に失敗: {error}")))
-                    }
-                }
-            }
-            Ok(LoopPlaybackCommand::Trigger { pad, path }) => {
-                if let Some(sink) = preview_sink.take() {
-                    sink.stop();
-                }
-                if let Some(sink) = take_pad_voice(&mut pad_sinks, pad) {
-                    sink.stop();
-                }
-                match play_path(&handle, &path) {
-                    Ok(sink) => {
-                        pad_sinks.insert(pad, sink);
-                    }
-                    Err(error) => {
-                        set_play_state(state, PlayState::Err(format!("WAV pad再生に失敗: {error}")))
-                    }
-                }
-            }
-            Ok(LoopPlaybackCommand::SetGrid(next_grid)) => {
-                let target_bpm = grid_target_bpm(&next_grid);
-                pending_generation = Some(preparation.submit(next_grid));
-                set_play_state(
-                    state,
-                    PlayState::Running(format!("BPM{}変換中", format_bpm(target_bpm.bpm))),
-                );
-            }
-            Ok(LoopPlaybackCommand::RestartGridAt {
-                grid,
-                start_measure,
-            }) => {
-                stop_sinks(&mut measure_sinks);
-                stop_pad_sinks(&mut pad_sinks);
-                if let Some(sink) = preview_sink.take() {
-                    sink.stop();
-                }
-                current_measure = None;
-                measure_deadline = None;
-                active = None;
-                restart_measure = Some(start_measure);
-                let target_bpm = grid_target_bpm(&grid);
-                pending_generation = Some(preparation.submit(grid));
-                set_play_state(
-                    state,
-                    PlayState::Running(format!("BPM{}変換中", format_bpm(target_bpm.bpm))),
-                );
-            }
-            Ok(LoopPlaybackCommand::SetTrackVolume { track, volume_db }) => {
-                if track >= track_volumes_db.len() {
-                    track_volumes_db.resize(track + 1, 0);
-                }
-                track_volumes_db[track] = volume_db;
-                let gain = crate::mixer_overlay::volume_db_to_gain(volume_db);
-                for voice in measure_sinks.iter().filter(|voice| voice.track == track) {
-                    voice.sink.set_volume(gain);
-                }
-            }
-            Ok(LoopPlaybackCommand::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => {
-                preparation.cancel();
-                stop_sinks(&mut measure_sinks);
-                stop_pad_sinks(&mut pad_sinks);
-                if let Some(sink) = preview_sink.take() {
-                    sink.stop();
-                }
-                return Ok(());
-            }
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
+    pub(in crate::tui) fn update_loop_track_solo(&self, solo_tracks: Vec<bool>) {
+        if let Some(playback) = &self.loop_playback {
+            playback.set_track_solo(solo_tracks);
         }
     }
-}
 
-fn next_measure(grid: &LoopPlaybackGrid, current: Option<usize>) -> Option<usize> {
-    let measures = grid.iter().map(Vec::len).max().unwrap_or(0);
-    if measures == 0 {
-        return None;
-    }
-    let start = current.map_or(0, |measure| (measure + 1) % measures);
-    for offset in 0..measures {
-        let measure = (start + offset) % measures;
-        if measure_is_occupied(grid, measure) {
-            return Some(measure);
+    pub(in crate::tui) fn set_loop_playback_paused(&self, paused: bool, start_measure: usize) {
+        if let Some(playback) = &self.loop_playback {
+            playback.set_paused(paused, start_measure);
+        }
+        if paused {
+            *self.play_state.lock().unwrap() = PlayState::Idle;
         }
     }
-    None
-}
-
-fn measure_at_or_after(grid: &LoopPlaybackGrid, start: usize) -> Option<usize> {
-    let measures = grid.iter().map(Vec::len).max().unwrap_or(0);
-    if measures == 0 {
-        return None;
-    }
-    let start = start % measures;
-    for offset in 0..measures {
-        let measure = (start + offset) % measures;
-        if measure_is_occupied(grid, measure) {
-            return Some(measure);
-        }
-    }
-    None
-}
-
-fn measure_is_occupied(grid: &LoopPlaybackGrid, measure: usize) -> bool {
-    grid.iter().any(|track| {
-        track
-            .iter()
-            .take(measure.saturating_add(1))
-            .enumerate()
-            .any(|(start, clip)| {
-                clip.as_ref()
-                    .is_some_and(|clip| start.saturating_add(clip.span_measures) > measure)
-            })
-    })
-}
-
-fn starting_clips(grid: &LoopPlaybackGrid, measure: usize) -> Vec<(usize, &LoopPlaybackClip)> {
-    grid.iter()
-        .enumerate()
-        .filter_map(|(track, cells)| {
-            cells
-                .get(measure)
-                .and_then(Option::as_ref)
-                .map(|clip| (track, clip))
-        })
-        .collect()
-}
-
-fn start_measure(
-    handle: &rodio::OutputStreamHandle,
-    prepared: &PreparedSet,
-    measure: usize,
-    track_volumes_db: &[i32],
-) -> Result<Vec<TrackSink>> {
-    let clips = starting_clips(&prepared.grid, measure);
-    let mut sinks = Vec::with_capacity(clips.len());
-    for (track, clip) in clips {
-        let Some(Ok(audio)) = prepared.audio_for(clip) else {
-            continue;
-        };
-        let sink = Arc::new(rodio::Sink::try_new(handle)?);
-        sink.set_volume(crate::mixer_overlay::volume_db_to_gain(
-            track_volumes_db.get(track).copied().unwrap_or(0),
-        ));
-        sink.append(audio.source());
-        sinks.push(TrackSink { track, sink });
-    }
-    Ok(sinks)
 }
 
 fn set_play_state(state: &Arc<Mutex<PlayState>>, next: PlayState) {

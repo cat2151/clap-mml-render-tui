@@ -162,6 +162,9 @@ fn keyboard_screen_shows_connecting_status_and_navigation() {
 #[path = "colors_and_footer/loop_browser.rs"]
 mod loop_browser;
 
+#[path = "colors_and_footer/loop_browser_waveform.rs"]
+mod loop_browser_waveform;
+
 #[test]
 fn keyboard_screen_shows_count_input_guide_until_navigation() {
     let mut app = TuiApp::new_for_test(test_config());

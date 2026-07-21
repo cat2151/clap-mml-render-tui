@@ -166,7 +166,18 @@ impl<'a> TuiApp<'a> {
                 self.pump_keyboard_periodic();
             }
             self.pump_notepad_sound_check_guide();
+            let terminal_draw_started = std::time::Instant::now();
             terminal.draw(|f| self.draw(f))?;
+            let terminal_draw_elapsed = terminal_draw_started.elapsed();
+            if self.mode == Mode::LoopBrowser {
+                if let Some(metrics) = self.loop_browser.last_render_metrics.take() {
+                    super::loop_browser::performance::log_render(metrics, terminal_draw_elapsed);
+                }
+            }
+            if self.loop_browser.starting {
+                self.complete_loop_browser_startup();
+                continue;
+            }
             if !self.startup_normal_cache_primed && self.mode == Mode::Normal {
                 *self.known_disk_cache_hashes.lock().unwrap() =
                     crate::tui::disk_cache::scan_valid_cache_hashes(self.cfg.sample_rate as u32);
@@ -277,6 +288,7 @@ impl<'a> TuiApp<'a> {
                                 }
                             }
                             NormalAction::LaunchKeyboard => self.start_keyboard_from_notepad(),
+                            NormalAction::LaunchLoopBrowser => self.begin_loop_browser_startup(),
                             NormalAction::EditConfig => {
                                 let session = self.begin_playback_session();
                                 self.set_play_state_if_current(session, PlayState::Idle);
@@ -304,20 +316,36 @@ impl<'a> TuiApp<'a> {
                         Mode::Help => self.handle_help(key.code),
                         Mode::LoopBrowser => match self.loop_browser.handle_key_event(key) {
                             LoopBrowserAction::Continue => {}
-                            LoopBrowserAction::Preview(path) => self.preview_loop_file(path),
+                            LoopBrowserAction::Preview(path) => {
+                                let trace_id =
+                                    self.loop_browser.take_preview_trace().unwrap_or_else(
+                                        super::loop_browser::performance::next_trace_id,
+                                    );
+                                self.preview_loop_file(path, trace_id);
+                            }
                             LoopBrowserAction::Trigger { pad, path } => {
                                 self.trigger_loop_pad(pad, path)
                             }
                             LoopBrowserAction::GridReplaced {
                                 start_measure,
                                 grid,
+                                reason,
                             } => {
-                                self.restart_loop_grid_at(grid, start_measure);
+                                self.restart_loop_grid_at(grid, start_measure, reason);
                             }
-                            LoopBrowserAction::GridRefresh(grid) => self.update_loop_grid(grid),
+                            LoopBrowserAction::GridRefresh { grid, reason } => {
+                                self.update_loop_grid(grid, reason)
+                            }
                             LoopBrowserAction::TrackVolumeChanged { track, volume_db } => {
                                 self.update_loop_track_volume(track, volume_db)
                             }
+                            LoopBrowserAction::TrackSoloChanged { solo_tracks } => {
+                                self.update_loop_track_solo(solo_tracks)
+                            }
+                            LoopBrowserAction::SetPlaybackPaused {
+                                paused,
+                                start_measure,
+                            } => self.set_loop_playback_paused(paused, start_measure),
                             LoopBrowserAction::Return => self.finish_loop_browser(),
                             LoopBrowserAction::Quit => {
                                 self.finish_loop_browser();

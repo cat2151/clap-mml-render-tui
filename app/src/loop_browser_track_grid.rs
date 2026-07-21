@@ -1,10 +1,15 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::loop_browser_metadata::{validate_wav_id, LoopWavId};
 
-const TRACK_GRID_VERSION: u32 = 3;
+mod normalize;
+
+pub(crate) use normalize::{normalize_previous_markers, reflow_with_spans};
+
+const TRACK_GRID_VERSION: u32 = 4;
 const TRACK_GRID_DIRECTORY: &str = "loop_browser";
 const TRACK_GRID_FILE_NAME: &str = "track_grid.toml";
 
@@ -12,6 +17,21 @@ const TRACK_GRID_FILE_NAME: &str = "track_grid.toml";
 pub(crate) struct LoopTrackClip {
     pub(crate) wav: LoopWavId,
     pub(crate) span_measures: usize,
+    pub(crate) previous_source_measure: Option<usize>,
+}
+
+impl LoopTrackClip {
+    pub(crate) fn explicit(wav: LoopWavId, span_measures: usize) -> Self {
+        Self {
+            wav,
+            span_measures,
+            previous_source_measure: None,
+        }
+    }
+
+    pub(crate) fn is_previous(&self) -> bool {
+        self.previous_source_measure.is_some()
+    }
 }
 
 pub(crate) type LoopTrackGrid = Vec<Vec<Option<LoopTrackClip>>>;
@@ -39,8 +59,28 @@ struct StoredTrackCell {
     measure: usize,
     #[serde(default = "default_span")]
     span_measures: usize,
-    #[serde(flatten)]
-    wav: LoopWavId,
+    #[serde(default, skip_serializing_if = "StoredTrackCellKind::is_clip")]
+    kind: StoredTrackCellKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source_measure: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    relative: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum StoredTrackCellKind {
+    #[default]
+    Clip,
+    Prev,
+}
+
+impl StoredTrackCellKind {
+    fn is_clip(&self) -> bool {
+        *self == Self::Clip
+    }
 }
 
 const fn default_span() -> usize {
@@ -155,11 +195,40 @@ impl StoredTrackGrid {
                 if occupied_until > measure_count {
                     anyhow::bail!("track gridのclipがmeasure範囲外です");
                 }
+                let (kind, source_measure, root, relative) = if let Some(source_measure) =
+                    clip.previous_source_measure
+                {
+                    let source = measures
+                            .get(source_measure)
+                            .and_then(Option::as_ref)
+                            .filter(|source| !source.is_previous())
+                            .ok_or_else(|| {
+                                anyhow::anyhow!(
+                                    "prev markerの参照先が通常clipではありません: track={track}, measure={measure}, source_measure={source_measure}"
+                                )
+                            })?;
+                    if !source.wav.matches(&clip.wav) {
+                        anyhow::bail!(
+                                "prev markerのWAVが参照先と一致しません: track={track}, measure={measure}"
+                            );
+                    }
+                    (StoredTrackCellKind::Prev, Some(source_measure), None, None)
+                } else {
+                    (
+                        StoredTrackCellKind::Clip,
+                        None,
+                        Some(clip.wav.root.clone()),
+                        Some(clip.wav.relative.clone()),
+                    )
+                };
                 cells.push(StoredTrackCell {
                     track,
                     measure,
                     span_measures: clip.span_measures,
-                    wav: clip.wav.clone(),
+                    kind,
+                    source_measure,
+                    root,
+                    relative,
                 });
             }
         }
@@ -173,7 +242,7 @@ impl StoredTrackGrid {
     }
 
     fn into_grid(self) -> Result<LoopTrackGrid> {
-        if !matches!(self.version, 1 | 2 | TRACK_GRID_VERSION) {
+        if !matches!(self.version, 1 | 2 | 3 | TRACK_GRID_VERSION) {
             anyhow::bail!(
                 "track gridのversionが一致しません（file: {}, expected: {}）",
                 self.version,
@@ -184,6 +253,8 @@ impl StoredTrackGrid {
             anyhow::bail!("track gridのtrack数とmeasure数は1以上である必要があります");
         }
         let mut grid = vec![vec![None; self.measure_count]; self.track_count];
+        let mut previous_cells = Vec::new();
+        let mut positions = HashSet::new();
         for cell in self.cells {
             if cell.track >= self.track_count || cell.measure >= self.measure_count {
                 anyhow::bail!(
@@ -192,25 +263,88 @@ impl StoredTrackGrid {
                     cell.measure
                 );
             }
-            validate_wav_id(&cell.wav)?;
             if cell.span_measures == 0 {
                 anyhow::bail!("track gridのclip spanは1以上である必要があります");
             }
-            let destination = &mut grid[cell.track][cell.measure];
-            if destination.is_some() {
+            if !positions.insert((cell.track, cell.measure)) {
                 anyhow::bail!(
                     "track gridに重複したcellがあります: track={}, measure={}",
                     cell.track,
                     cell.measure
                 );
             }
-            *destination = Some(LoopTrackClip {
-                wav: cell.wav,
-                span_measures: cell.span_measures,
+            let destination = &mut grid[cell.track][cell.measure];
+            match cell.kind {
+                StoredTrackCellKind::Clip => {
+                    let wav = LoopWavId {
+                        root: cell
+                            .root
+                            .ok_or_else(|| anyhow::anyhow!("通常clipにrootがありません"))?,
+                        relative: cell
+                            .relative
+                            .ok_or_else(|| anyhow::anyhow!("通常clipにrelativeがありません"))?,
+                    };
+                    validate_wav_id(&wav)?;
+                    *destination = Some(LoopTrackClip::explicit(wav, cell.span_measures));
+                }
+                StoredTrackCellKind::Prev => {
+                    if cell.root.is_some() || cell.relative.is_some() {
+                        anyhow::bail!("prev markerにWAV pathは保存できません");
+                    }
+                    let source_measure = cell.source_measure.ok_or_else(|| {
+                        anyhow::anyhow!("prev markerにsource_measureがありません")
+                    })?;
+                    previous_cells.push((
+                        cell.track,
+                        cell.measure,
+                        cell.span_measures,
+                        source_measure,
+                    ));
+                }
+            }
+        }
+        for (track, measure, span_measures, source_measure) in previous_cells {
+            let source_wav = grid
+                .get(track)
+                .and_then(|cells| cells.get(source_measure))
+                .and_then(Option::as_ref)
+                .filter(|source| !source.is_previous())
+                .map(|source| source.wav.clone())
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "prev markerの参照先が通常clipではありません: track={track}, measure={measure}, source_measure={source_measure}"
+                    )
+                })?;
+            grid[track][measure] = Some(LoopTrackClip {
+                wav: source_wav,
+                span_measures,
+                previous_source_measure: Some(source_measure),
             });
         }
+        validate_no_overlaps(&grid)?;
         Ok(grid)
     }
+}
+
+fn validate_no_overlaps(grid: &LoopTrackGrid) -> Result<()> {
+    for measures in grid {
+        let mut occupied_until = 0;
+        for (measure, clip) in measures.iter().enumerate() {
+            let Some(clip) = clip else {
+                continue;
+            };
+            if measure < occupied_until {
+                anyhow::bail!("track gridに重複したclip spanがあります");
+            }
+            occupied_until = measure
+                .checked_add(clip.span_measures)
+                .ok_or_else(|| anyhow::anyhow!("track gridのclip spanが大きすぎます"))?;
+            if occupied_until > measures.len() {
+                anyhow::bail!("track gridのclipがmeasure範囲外です");
+            }
+        }
+    }
+    Ok(())
 }
 
 fn normalize_volume_db(volume_db: i32) -> i32 {
@@ -224,49 +358,6 @@ fn normalize_volume_db(volume_db: i32) -> i32 {
             crate::mixer_overlay::MIXER_MIN_DB,
             crate::mixer_overlay::MIXER_MAX_DB,
         )
-}
-
-pub(crate) fn reflow_with_spans(
-    grid: &LoopTrackGrid,
-    mut span_for: impl FnMut(&LoopWavId) -> Option<usize>,
-) -> (LoopTrackGrid, bool) {
-    let original_width = grid.first().map_or(1, Vec::len).max(1);
-    let mut tracks = Vec::with_capacity(grid.len().max(1));
-    let mut width = original_width;
-    let mut changed = false;
-    for track in grid {
-        let mut updated = vec![None; original_width];
-        let mut occupied_until = 0;
-        for (old_measure, clip) in track
-            .iter()
-            .enumerate()
-            .filter_map(|(measure, clip)| clip.as_ref().map(|clip| (measure, clip)))
-        {
-            let span = span_for(&clip.wav).unwrap_or(clip.span_measures).max(1);
-            let measure = old_measure.max(occupied_until);
-            let end = measure.saturating_add(span);
-            if end > updated.len() {
-                updated.resize(end, None);
-            }
-            updated[measure] = Some(LoopTrackClip {
-                wav: clip.wav.clone(),
-                span_measures: span,
-            });
-            occupied_until = end;
-            width = width.max(end);
-            changed |= measure != old_measure || span != clip.span_measures;
-        }
-        tracks.push(updated);
-    }
-    if tracks.is_empty() {
-        tracks.push(vec![None; width]);
-        changed = true;
-    }
-    for track in &mut tracks {
-        track.resize(width, None);
-    }
-    changed |= grid.iter().any(|track| track.len() != width);
-    (tracks, changed)
 }
 
 fn unique_temp_path(path: &Path) -> PathBuf {

@@ -7,7 +7,11 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use std::sync::mpsc;
+
 const MAX_LOG_LINES: usize = 256;
+#[cfg(not(test))]
+const ASYNC_LOG_CAPACITY: usize = 1_024;
 const JST_OFFSET_SECONDS: i64 = 9 * 60 * 60;
 
 fn log_file_lock() -> &'static Mutex<()> {
@@ -153,6 +157,35 @@ pub(crate) fn install_native_probe_logger() {
 #[cfg(not(test))]
 pub(crate) fn append_global_log_line(line: impl AsRef<str>) {
     let _ = append_log_line_to_file(line.as_ref());
+}
+
+#[cfg(not(test))]
+pub(crate) fn append_global_log_line_nonblocking(line: impl Into<String>) {
+    static SENDER: OnceLock<Option<mpsc::SyncSender<String>>> = OnceLock::new();
+    let sender = SENDER.get_or_init(|| {
+        let (sender, receiver) = mpsc::sync_channel::<String>(ASYNC_LOG_CAPACITY);
+        std::thread::Builder::new()
+            .name("cmrt-performance-log".to_string())
+            .spawn(move || {
+                while let Ok(line) = receiver.recv() {
+                    let _ = append_log_line_to_file(&line);
+                }
+            })
+            .ok()
+            .map(|_| sender)
+    });
+    if let Some(sender) = sender {
+        try_send_log_line(sender, line.into());
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn append_global_log_line_nonblocking(line: impl Into<String>) {
+    let _ = line.into();
+}
+
+fn try_send_log_line(sender: &mpsc::SyncSender<String>, line: String) {
+    let _ = sender.try_send(line);
 }
 
 fn load_log_lines_from_path(path: &Path) -> VecDeque<String> {

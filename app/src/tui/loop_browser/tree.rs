@@ -1,5 +1,45 @@
 use super::*;
 
+impl LoopBrowser {
+    pub(in crate::tui) fn selected_breadcrumb(&self) -> Vec<String> {
+        let Some(node) = self.visible.get(self.cursor) else {
+            return Vec::new();
+        };
+        let Some((root_path, _)) = self.roots.get(node.key.root) else {
+            return Vec::new();
+        };
+        let mut segments = vec![root_path.file_name().map_or_else(
+            || root_path.to_string_lossy().into_owned(),
+            |name| name.to_string_lossy().into_owned(),
+        )];
+        let component_count = node
+            .key
+            .components
+            .len()
+            .saturating_sub(usize::from(node.is_wav));
+        segments.extend(node.key.components.iter().take(component_count).cloned());
+        segments
+    }
+
+    pub(in crate::tui) fn selected_direct_category(&self) -> Option<&str> {
+        let node = self.visible.get(self.cursor)?;
+        let (root_path, _) = self.roots.get(node.key.root)?;
+        let component_count = node
+            .key
+            .components
+            .len()
+            .saturating_sub(usize::from(node.is_wav));
+        let relative = node
+            .key
+            .components
+            .iter()
+            .take(component_count)
+            .collect::<PathBuf>();
+        self.metadata
+            .category_for(&LoopDirId::new(root_path, &relative))
+    }
+}
+
 pub(super) fn insert_relative_path(root: &mut TreeNode, path: &Path, analysis: LoopWavAnalysis) {
     let components = path
         .components()

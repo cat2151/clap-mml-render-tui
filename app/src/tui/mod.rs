@@ -75,6 +75,7 @@ enum NormalAction {
     Quit,
     LaunchDaw,
     LaunchKeyboard,
+    LaunchLoopBrowser,
     EditConfig,
 }
 

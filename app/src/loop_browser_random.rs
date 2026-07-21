@@ -16,6 +16,7 @@ pub(crate) enum LoopRandomScope {
     All,
     Favorites,
     FavoriteDir { dir: LoopDirId },
+    Category { category: String },
 }
 
 impl LoopRandomScope {
@@ -24,6 +25,9 @@ impl LoopRandomScope {
             (Self::All, Self::All) | (Self::Favorites, Self::Favorites) => true,
             (Self::FavoriteDir { dir: left }, Self::FavoriteDir { dir: right }) => {
                 left.matches(right)
+            }
+            (Self::Category { category: left }, Self::Category { category: right }) => {
+                left == right
             }
             _ => false,
         }
@@ -37,6 +41,9 @@ impl LoopRandomScope {
                 let (root, relative) = dir.lookup_key();
                 LoopRandomScopeKey::FavoriteDir { root, relative }
             }
+            Self::Category { category } => LoopRandomScopeKey::Category {
+                category: category.clone(),
+            },
         }
     }
 }
@@ -46,6 +53,7 @@ enum LoopRandomScopeKey {
     All,
     Favorites,
     FavoriteDir { root: String, relative: String },
+    Category { category: String },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -218,6 +226,11 @@ fn validate_stored(stored: &StoredRandomDeckState) -> Result<()> {
         }
         if let LoopRandomScope::FavoriteDir { dir } = &deck.scope {
             validate_dir_id(dir)?;
+        }
+        if let LoopRandomScope::Category { category } = &deck.scope {
+            if category.trim().is_empty() {
+                anyhow::bail!("random deckに空のカテゴリscopeがあります");
+            }
         }
         if deck.next > deck.order.len() {
             anyhow::bail!("random deckの次位置が範囲外です");

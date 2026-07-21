@@ -7,6 +7,16 @@ impl LoopBrowser {
     }
 
     pub(in crate::tui) fn handle_key_event(&mut self, key: KeyEvent) -> LoopBrowserAction {
+        if self.help_overlay.is_some() {
+            self.navigation_count.clear();
+            if matches!(
+                key.code,
+                KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?')
+            ) {
+                self.help_overlay = None;
+            }
+            return LoopBrowserAction::Continue;
+        }
         if self.mixer_overlay_open {
             self.navigation_count.clear();
             return self.handle_mixer_overlay_key(key.code);
@@ -14,6 +24,19 @@ impl LoopBrowser {
         if self.category_overlay.is_some() {
             self.navigation_count.clear();
             return self.handle_category_overlay_key(key.code);
+        }
+        if key.code == KeyCode::Char('?') {
+            self.navigation_count.clear();
+            self.help_overlay = Some(self.focus);
+            return LoopBrowserAction::Continue;
+        }
+        if key.modifiers == KeyModifiers::NONE && key.code == KeyCode::Char('p') {
+            self.navigation_count.clear();
+            self.playback_paused = !self.playback_paused;
+            return LoopBrowserAction::SetPlaybackPaused {
+                paused: self.playback_paused,
+                start_measure: self.measure_cursor,
+            };
         }
         if key.modifiers == KeyModifiers::NONE {
             if let KeyCode::Char(digit @ '0'..='9') = key.code {
@@ -32,6 +55,9 @@ impl LoopBrowser {
                 LoopBrowserPane::Tree => LoopBrowserPane::Tracks,
                 LoopBrowserPane::Tracks => LoopBrowserPane::Tree,
             };
+            if self.focus == LoopBrowserPane::Tracks {
+                self.sync_tree_to_current_cell();
+            }
             return LoopBrowserAction::Continue;
         }
         match self.focus {
@@ -124,41 +150,52 @@ impl LoopBrowser {
                 self.mixer_overlay_open = true;
                 LoopBrowserAction::Continue
             }
+            KeyCode::Char('s') if key.modifiers == KeyModifiers::NONE => {
+                self.toggle_current_track_solo()
+            }
             KeyCode::Char('r') if key.modifiers == KeyModifiers::NONE => self.select_random_wav(),
             KeyCode::Char('h') => {
                 let count = self.navigation_count.take_delta(1) as usize;
                 self.measure_cursor = self.measure_cursor.saturating_sub(count);
+                self.sync_tree_to_current_cell();
                 LoopBrowserAction::Continue
             }
             KeyCode::Left => {
                 self.measure_cursor = self.measure_cursor.saturating_sub(1);
+                self.sync_tree_to_current_cell();
                 LoopBrowserAction::Continue
             }
             KeyCode::Char('k') => {
                 let count = self.navigation_count.take_delta(1) as usize;
                 self.track_cursor = self.track_cursor.saturating_sub(count);
+                self.sync_tree_to_current_cell();
                 LoopBrowserAction::Continue
             }
             KeyCode::Up => {
                 self.track_cursor = self.track_cursor.saturating_sub(1);
+                self.sync_tree_to_current_cell();
                 LoopBrowserAction::Continue
             }
             KeyCode::Char('l') => {
                 let count = self.navigation_count.take_delta(1) as usize;
                 self.move_track_cursor_right(count);
+                self.sync_tree_to_current_cell();
                 LoopBrowserAction::Continue
             }
             KeyCode::Right => {
                 self.move_track_cursor_right(1);
+                self.sync_tree_to_current_cell();
                 LoopBrowserAction::Continue
             }
             KeyCode::Char('j') => {
                 let count = self.navigation_count.take_delta(1) as usize;
                 self.move_track_cursor_down(count);
+                self.sync_tree_to_current_cell();
                 LoopBrowserAction::Continue
             }
             KeyCode::Down => {
                 self.move_track_cursor_down(1);
+                self.sync_tree_to_current_cell();
                 LoopBrowserAction::Continue
             }
             _ => LoopBrowserAction::Continue,
@@ -203,7 +240,10 @@ impl LoopBrowser {
                     .map(|(_, category)| category.clone())
                 {
                     if self.assign_selected_category(category) {
-                        return LoopBrowserAction::GridRefresh(self.playback_grid());
+                        return LoopBrowserAction::GridRefresh {
+                            grid: self.playback_grid(),
+                            reason: LoopGridChange::Category,
+                        };
                     }
                 }
             }
@@ -213,17 +253,31 @@ impl LoopBrowser {
     }
 
     fn move_cursor(&mut self, delta: isize) -> LoopBrowserAction {
+        let started_at = Instant::now();
         if self.visible.is_empty() {
             return LoopBrowserAction::Continue;
         }
+        let previous = self.cursor;
         let max = self.visible.len().saturating_sub(1) as isize;
         let next = (self.cursor as isize).saturating_add(delta).clamp(0, max) as usize;
         if next == self.cursor {
             return LoopBrowserAction::Continue;
         }
         self.cursor = next;
-        self.list_state.select(Some(next));
-        self.selected_play_action()
+        let trace_id = super::performance::next_trace_id();
+        self.pending_render_trace = Some(trace_id);
+        let selected_is_wav = self.visible[next].is_wav;
+        let action = self.selected_play_action_with_trace(trace_id);
+        super::performance::log_cursor_move(
+            trace_id,
+            started_at.elapsed(),
+            previous,
+            next,
+            self.visible.len(),
+            if selected_is_wav { "wav" } else { "directory" },
+            selected_is_wav,
+        );
+        action
     }
 
     fn expand_or_play(&mut self) -> LoopBrowserAction {
@@ -231,6 +285,8 @@ impl LoopBrowser {
             return LoopBrowserAction::Continue;
         };
         if node.is_wav {
+            let trace_id = super::performance::next_trace_id();
+            self.pending_preview_trace = Some(trace_id);
             return LoopBrowserAction::Preview(node.path);
         }
         if self.expanded.insert(node.key.clone()) {
@@ -283,6 +339,7 @@ impl LoopBrowser {
             return;
         }
         self.metadata_error = None;
+        self.rebuild_favorite_wav_keys();
         if !added {
             self.notice = Some(LoopBrowserNotice {
                 text: "お気に入りdirを解除しました".to_string(),
@@ -319,6 +376,7 @@ impl LoopBrowser {
             return false;
         }
         self.metadata_error = None;
+        self.rebuild_wav_categories();
         self.rebuild_visible_for_path(selected_path.as_deref());
         true
     }

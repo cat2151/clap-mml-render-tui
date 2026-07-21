@@ -69,6 +69,18 @@ pub(crate) struct PreparedAudio {
     samples: Arc<[f32]>,
     channels: u16,
     sample_rate: u32,
+    info: PreparedAudioInfo,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct PreparedAudioInfo {
+    pub(crate) input_frames: usize,
+    pub(crate) rubberband_output_frames: usize,
+    pub(crate) output_frames: usize,
+    pub(crate) channels: u16,
+    pub(crate) sample_rate: u32,
+    pub(crate) time_ratio: f64,
+    pub(crate) profile: StretchProfile,
 }
 
 impl PreparedAudio {
@@ -77,6 +89,10 @@ impl PreparedAudio {
             audio: self.clone(),
             position: 0,
         }
+    }
+
+    pub(crate) fn info(&self) -> PreparedAudioInfo {
+        self.info
     }
 
     #[cfg(test)]
@@ -163,7 +179,7 @@ pub(crate) fn exceeds_time_ratio_limits(source_bpm: f64, target_bpm: f64) -> boo
 
 pub(crate) fn prepare_path<F>(
     path: &Path,
-    source_bpm: f64,
+    source_bpm: Option<f64>,
     target_bpm: f64,
     category: Option<&str>,
     cancelled: F,
@@ -171,9 +187,12 @@ pub(crate) fn prepare_path<F>(
 where
     F: Fn() -> bool,
 {
-    let ratio = time_ratio(source_bpm, target_bpm)?;
+    let ratio = source_bpm
+        .map(|source_bpm| time_ratio(source_bpm, target_bpm))
+        .transpose()?
+        .unwrap_or(1.0);
     if cancelled() {
-        anyhow::bail!("BPM{}変換をキャンセルしました", format_bpm(target_bpm));
+        anyhow::bail!("音声準備をキャンセルしました");
     }
     let file = File::open(path).with_context(|| format!("WAVを開けません: {}", path.display()))?;
     let source = rodio::Decoder::new(BufReader::new(file))
@@ -185,6 +204,7 @@ where
         anyhow::bail!("WAVにsampleがありません: {}", path.display());
     }
     let input_frames = input.len() / usize::from(channels);
+    let profile = profile_for_category(category);
     let mut samples = if (ratio - 1.0).abs() < f64::EPSILON {
         input
     } else {
@@ -193,7 +213,7 @@ where
             sample_rate,
             channels,
             ratio,
-            profile_for_category(category),
+            profile,
             cancelled,
         )
         .with_context(|| {
@@ -204,6 +224,7 @@ where
             )
         })?
     };
+    let rubberband_output_frames = samples.len() / usize::from(channels);
     let expected_frames = (input_frames as f64 * ratio).round() as usize;
     let expected_samples = expected_frames
         .checked_mul(usize::from(channels))
@@ -214,6 +235,15 @@ where
         samples: samples.into(),
         channels,
         sample_rate,
+        info: PreparedAudioInfo {
+            input_frames,
+            rubberband_output_frames,
+            output_frames: expected_frames,
+            channels,
+            sample_rate,
+            time_ratio: ratio,
+            profile,
+        },
     })
 }
 
@@ -297,18 +327,37 @@ mod tests {
         }
         writer.finalize().unwrap();
 
-        let audio = prepare_path(&path, 99.0, 120.0, Some("drum"), || false).unwrap();
+        let audio = prepare_path(&path, Some(99.0), 120.0, Some("drum"), || false).unwrap();
         assert_eq!(audio.channels, 2);
         assert_eq!(audio.sample_rate, 48_000);
         assert_eq!(audio.frames(), 3_960);
+        assert_eq!(audio.info().input_frames, 4_800);
+        assert!(audio.info().rubberband_output_frames > 0);
+        assert_eq!(audio.info().output_frames, 3_960);
+        assert_eq!(audio.info().channels, 2);
+        assert_eq!(audio.info().sample_rate, 48_000);
+        assert_eq!(audio.info().profile, StretchProfile::Drum);
+        assert!((audio.info().time_ratio - 0.825).abs() < f64::EPSILON);
         assert!(audio.samples.iter().all(|sample| sample.is_finite()));
+
+        let bypassed = prepare_path(&path, Some(120.0), 120.0, None, || false).unwrap();
+        assert_eq!(bypassed.info().input_frames, 4_800);
+        assert_eq!(bypassed.info().rubberband_output_frames, 4_800);
+        assert_eq!(bypassed.info().output_frames, 4_800);
+        assert_eq!(bypassed.info().time_ratio, 1.0);
+
+        let one_shot = prepare_path(&path, None, 37.0, None, || false).unwrap();
+        assert_eq!(one_shot.info().input_frames, 4_800);
+        assert_eq!(one_shot.info().rubberband_output_frames, 4_800);
+        assert_eq!(one_shot.info().output_frames, 4_800);
+        assert_eq!(one_shot.info().time_ratio, 1.0);
         std::fs::remove_file(path).unwrap();
     }
 
     #[test]
     fn cancellation_is_checked_before_opening_the_wav() {
         let error =
-            prepare_path(Path::new("missing.wav"), 120.0, 120.0, None, || true).unwrap_err();
+            prepare_path(Path::new("missing.wav"), Some(120.0), 120.0, None, || true).unwrap_err();
         assert!(error.to_string().contains("キャンセル"));
     }
 }

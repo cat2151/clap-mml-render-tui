@@ -1,11 +1,50 @@
 use super::*;
 
+impl LoopPlaybackClip {
+    pub(in crate::tui) fn is_one_shot(&self) -> bool {
+        self.kind == crate::loop_wav_analysis::LoopWavKind::OneShot
+    }
+
+    pub(in crate::tui) fn source_bpm(&self) -> Option<f64> {
+        if self.is_one_shot() {
+            None
+        } else {
+            self.bpm
+        }
+    }
+}
+
 impl LoopBrowser {
-    pub(super) fn analysis_for_wav(&self, wav: &LoopWavId) -> Option<LoopWavAnalysis> {
-        self.wav_analyses
-            .iter()
-            .find(|(candidate, _)| candidate.matches(wav))
+    pub(in crate::tui) fn analysis_for_wav(&self, wav: &LoopWavId) -> Option<LoopWavAnalysis> {
+        self.wav_analysis_indices
+            .get(&wav.lookup_key())
+            .and_then(|index| self.wav_analyses.get(*index))
             .map(|(_, analysis)| *analysis)
+    }
+
+    pub(in crate::tui) fn waveform_for_wav(
+        &self,
+        wav: &LoopWavId,
+    ) -> Option<&crate::loop_waveform::LoopWaveform> {
+        self.wav_analysis_indices
+            .get(&wav.lookup_key())
+            .and_then(|index| self.wav_waveforms.get(*index))
+    }
+
+    pub(in crate::tui) fn waveform_display_scale(
+        &self,
+    ) -> crate::loop_waveform::WaveformDisplayScale {
+        self.waveform_display_scale
+    }
+
+    #[cfg(test)]
+    pub(super) fn rebuild_wav_analysis_indices(&mut self) {
+        self.wav_analysis_indices.clear();
+        for (index, (wav, _)) in self.wav_analyses.iter().enumerate() {
+            self.wav_analysis_indices
+                .entry(wav.lookup_key())
+                .or_insert(index);
+        }
     }
 
     pub(in crate::tui) fn clip_at(
@@ -26,7 +65,7 @@ impl LoopBrowser {
             })
     }
 
-    pub(super) fn playback_grid(&self) -> LoopPlaybackGrid {
+    pub(in crate::tui) fn playback_grid(&self) -> LoopPlaybackGrid {
         let measure_count = self.effective_measure_count();
         self.track_grid
             .iter()
@@ -36,22 +75,31 @@ impl LoopBrowser {
                         track
                             .get(measure)
                             .and_then(Option::as_ref)
-                            .or_else(|| previous_measure_repeat_clip(track, measure, measure_count))
-                            .map(|clip| {
+                            .and_then(|clip| {
                                 let analysis = self.analysis_for_wav(&clip.wav);
-                                LoopPlaybackClip {
+                                if clip.is_previous()
+                                    && analysis.is_some_and(|analysis| {
+                                        analysis.kind
+                                            == crate::loop_wav_analysis::LoopWavKind::OneShot
+                                    })
+                                {
+                                    return None;
+                                }
+                                let tempo = analysis.and_then(|analysis| analysis.tempo);
+                                Some(LoopPlaybackClip {
                                     path: clip.wav.path(),
                                     span_measures: clip.span_measures,
-                                    bpm: analysis.map_or(120.0, |analysis| analysis.bpm),
-                                    category: self
-                                        .metadata
-                                        .category_for_wav(&clip.wav)
-                                        .map(str::to_string),
-                                    meter_numerator: analysis
-                                        .map_or(4, |analysis| analysis.meter_numerator),
-                                    meter_denominator: analysis
-                                        .map_or(4, |analysis| analysis.meter_denominator),
-                                }
+                                    kind: analysis.map_or(
+                                        crate::loop_wav_analysis::LoopWavKind::Loop,
+                                        |analysis| analysis.kind,
+                                    ),
+                                    bpm: analysis
+                                        .map_or(Some(120.0), |_| tempo.map(|tempo| tempo.bpm)),
+                                    category: self.category_for_wav(&clip.wav).map(str::to_string),
+                                    meter_numerator: tempo.map_or(4, |tempo| tempo.meter_numerator),
+                                    meter_denominator: tempo
+                                        .map_or(4, |tempo| tempo.meter_denominator),
+                                })
                             })
                     })
                     .collect()
@@ -59,13 +107,44 @@ impl LoopBrowser {
             .collect()
     }
 
-    pub(in crate::tui) fn previous_measure_repeat_clip(
+    pub(in crate::tui) fn displayed_clip_at(
         &self,
         track: usize,
         measure: usize,
     ) -> Option<&LoopTrackClip> {
-        let cells = self.track_grid.get(track)?;
-        previous_measure_repeat_clip(cells, measure, self.effective_measure_count())
+        self.clip_at(track, measure).map(|(_, clip)| clip)
+    }
+
+    pub(super) fn sync_tree_to_current_cell(&mut self) {
+        let wav = self
+            .displayed_clip_at(self.track_cursor, self.measure_cursor)
+            .map(|clip| clip.wav.clone());
+        if let Some(wav) = wav {
+            self.reveal_wav(&wav);
+        }
+    }
+
+    pub(in crate::tui) fn playback_clip(&self, clip: &LoopTrackClip) -> LoopPlaybackClip {
+        let key = clip.wav.lookup_key();
+        let analysis = self
+            .wav_analysis_indices
+            .get(&key)
+            .and_then(|index| self.wav_analyses.get(*index))
+            .map(|(_, analysis)| *analysis);
+        let tempo = analysis.and_then(|analysis| analysis.tempo);
+        LoopPlaybackClip {
+            path: clip.wav.path(),
+            span_measures: clip.span_measures,
+            kind: analysis.map_or(crate::loop_wav_analysis::LoopWavKind::Loop, |value| {
+                value.kind
+            }),
+            bpm: analysis.map_or(Some(crate::loop_time_stretch::TARGET_BPM), |_| {
+                tempo.map(|value| value.bpm)
+            }),
+            category: self.wav_categories.get(&key).cloned(),
+            meter_numerator: tempo.map_or(4, |value| value.meter_numerator),
+            meter_denominator: tempo.map_or(4, |value| value.meter_denominator),
+        }
     }
 
     pub(in crate::tui) fn displayed_measure_count(&self) -> usize {
@@ -74,6 +153,7 @@ impl LoopBrowser {
             .min(self.track_grid.first().map_or(1, Vec::len))
     }
 
+    #[cfg(test)]
     pub(in crate::tui) fn clip_exceeds_time_ratio_limits(
         &self,
         clip: &LoopTrackClip,
@@ -81,10 +161,11 @@ impl LoopBrowser {
     ) -> bool {
         let source_bpm = self
             .analysis_for_wav(&clip.wav)
-            .map_or(crate::loop_time_stretch::TARGET_BPM, |analysis| {
-                analysis.bpm
-            });
-        crate::loop_time_stretch::exceeds_time_ratio_limits(source_bpm, target_bpm)
+            .and_then(|analysis| analysis.tempo)
+            .map(|tempo| tempo.bpm);
+        source_bpm.is_some_and(|source_bpm| {
+            crate::loop_time_stretch::exceeds_time_ratio_limits(source_bpm, target_bpm)
+        })
     }
 
     pub(in crate::tui) fn target_bpm(&self) -> crate::loop_time_stretch::TargetBpm {
@@ -93,13 +174,29 @@ impl LoopBrowser {
                 .iter()
                 .flatten()
                 .filter_map(Option::as_ref)
-                .map(|clip| {
+                .filter_map(|clip| {
                     self.analysis_for_wav(&clip.wav)
-                        .map_or(crate::loop_time_stretch::TARGET_BPM, |analysis| {
-                            analysis.bpm
-                        })
+                        .and_then(|analysis| analysis.tempo)
+                        .map(|tempo| tempo.bpm)
                 }),
         )
+    }
+
+    pub(in crate::tui) fn beats_per_measure(&self) -> usize {
+        let measure_count = self.effective_measure_count();
+        for measure in 0..measure_count {
+            for track in &self.track_grid {
+                if let Some(clip) = track.get(measure).and_then(Option::as_ref) {
+                    if let Some(tempo) = self
+                        .analysis_for_wav(&clip.wav)
+                        .and_then(|analysis| analysis.tempo)
+                    {
+                        return usize::from(tempo.meter_numerator).max(1);
+                    }
+                }
+            }
+        }
+        4
     }
 
     fn effective_measure_count(&self) -> usize {
@@ -108,6 +205,7 @@ impl LoopBrowser {
             .flat_map(|track| {
                 track.iter().enumerate().filter_map(|(measure, clip)| {
                     clip.as_ref()
+                        .filter(|clip| !clip.is_previous())
                         .map(|clip| measure.saturating_add(clip.span_measures))
                 })
             })
@@ -115,21 +213,4 @@ impl LoopBrowser {
             .unwrap_or(1)
             .max(1)
     }
-}
-
-fn previous_measure_repeat_clip(
-    track: &[Option<LoopTrackClip>],
-    measure: usize,
-    measure_count: usize,
-) -> Option<&LoopTrackClip> {
-    if measure >= measure_count || track.get(measure).is_some_and(Option::is_some) {
-        return None;
-    }
-    let (start, clip) = track
-        .iter()
-        .take(measure)
-        .enumerate()
-        .rev()
-        .find_map(|(start, clip)| clip.as_ref().map(|clip| (start, clip)))?;
-    (clip.span_measures == 1 && start.saturating_add(clip.span_measures) <= measure).then_some(clip)
 }

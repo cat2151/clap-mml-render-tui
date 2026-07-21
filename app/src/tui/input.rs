@@ -91,7 +91,7 @@ impl<'a> TuiApp<'a> {
                     KeyCode::Char('w') => return NormalAction::LaunchDaw,
                     KeyCode::Char('v') => return NormalAction::LaunchKeyboard,
                     KeyCode::Char('e') => return NormalAction::EditConfig,
-                    KeyCode::Char('b') => self.start_loop_browser(),
+                    KeyCode::Char('b') => return NormalAction::LaunchLoopBrowser,
                     KeyCode::Char('i') => self.start_insert(),
                     KeyCode::Char('g') => match self.insert_generated_line_above() {
                         Ok(()) => {}

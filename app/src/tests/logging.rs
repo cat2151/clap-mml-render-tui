@@ -9,8 +9,19 @@ use std::collections::VecDeque;
 
 use super::{
     append_log_line_to_path, format_log_file_line_at, load_log_lines_from_path,
-    strip_log_file_timestamp_prefix,
+    strip_log_file_timestamp_prefix, try_send_log_line,
 };
+
+#[test]
+fn full_async_log_queue_never_waits_for_capacity() {
+    let (sender, _receiver) = std::sync::mpsc::sync_channel(1);
+    sender.try_send("first".to_string()).unwrap();
+    let started_at = std::time::Instant::now();
+
+    try_send_log_line(&sender, "dropped".to_string());
+
+    assert!(started_at.elapsed() < Duration::from_millis(50));
+}
 
 fn split_log_file_line(line: &str) -> (&str, &str) {
     let (timestamp, message) = line.split_once("] ").expect("timestamp prefix");

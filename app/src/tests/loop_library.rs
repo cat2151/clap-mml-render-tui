@@ -1,5 +1,6 @@
 use super::*;
-use crate::loop_wav_analysis::LoopAnalysisSource;
+use crate::loop_wav_analysis::{LoopAnalysisSource, LoopTempoAnalysis, LoopWavKind};
+use crate::loop_waveform::{LoopWaveform, WAVEFORM_BINS_PER_MEASURE};
 
 fn create_wav(path: &Path) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -21,13 +22,18 @@ fn indexed(relative: &str) -> LoopWavIndex {
         relative: relative.to_string(),
         analysis: LoopWavAnalysis {
             duration_seconds: 4.0,
-            bpm: 120.0,
-            beats: 8,
-            meter_numerator: 4,
-            meter_denominator: 4,
+            kind: LoopWavKind::Loop,
+            tempo: Some(LoopTempoAnalysis {
+                bpm: 120.0,
+                declared_bpm: None,
+                beats: 8,
+                meter_numerator: 4,
+                meter_denominator: 4,
+                source: LoopAnalysisSource::DurationEstimate,
+            }),
             measures: 2,
-            source: LoopAnalysisSource::DurationEstimate,
         },
+        waveform: LoopWaveform::silent(2),
     }
 }
 
@@ -66,16 +72,44 @@ fn build_index_collects_only_wav_files_and_sorts_them() {
         ]
     );
     assert_eq!(events[0], LoopScanProgress::Started { roots: 1 });
+    let analyzing = events
+        .iter()
+        .filter(|event| matches!(event, LoopScanProgress::Analyzing { .. }))
+        .collect::<Vec<_>>();
     assert!(matches!(
-        &events[1],
+        analyzing[0],
         LoopScanProgress::Analyzing { current: 1, total: 2, path }
             if path.ends_with("A.wav")
     ));
     assert!(matches!(
-        &events[2],
+        analyzing[1],
         LoopScanProgress::Analyzing { current: 2, total: 2, path }
             if path.ends_with("z.WAV")
     ));
+}
+
+#[test]
+fn one_shots_path_component_forces_one_shot_without_acid_metadata() {
+    let temp = tempfile_dir("one-shots");
+    create_wav(&temp.join("Pack/ONE SHOTS/Kick.wav"));
+
+    let (index, skipped) =
+        build_index(&[temp.to_string_lossy().into_owned()], &mut |_| {}).unwrap();
+    let wav = &index.roots[0].wav_files[0];
+
+    assert_eq!(skipped, 0);
+    assert_eq!(wav.analysis.kind, LoopWavKind::OneShot);
+    assert_eq!(wav.analysis.tempo, None);
+    assert_eq!(wav.analysis.measures, 1);
+    assert_eq!(wav.waveform.rms_db_tenths.len(), WAVEFORM_BINS_PER_MEASURE);
+}
+
+#[test]
+fn one_shots_path_matching_requires_a_complete_component() {
+    assert!(is_one_shot_relative_path("Pack/One Shots/Kick.wav"));
+    assert!(is_one_shot_relative_path("one shots/Kick.wav"));
+    assert!(!is_one_shot_relative_path("Pack/One Shot Samples/Kick.wav"));
+    assert!(!is_one_shot_relative_path("Pack/My One Shots/Kick.wav"));
 }
 
 #[test]
@@ -108,7 +142,11 @@ fn scan_skips_invalid_wav_and_persists_successful_analysis() {
     assert_eq!(index.roots[0].wav_files.len(), 1);
     assert_eq!(index.roots[0].wav_files[0].relative, "Good.wav");
     assert_eq!(index.roots[0].wav_files[0].analysis.duration_seconds, 4.0);
-    assert_eq!(index.roots[0].wav_files[0].analysis.bpm, 120.0);
+    assert_eq!(
+        index.roots[0].wav_files[0].analysis.tempo.unwrap().bpm,
+        120.0
+    );
+    assert_eq!(index.roots[0].wav_files[0].waveform.rms_db_tenths.len(), 64);
 }
 
 #[test]
@@ -165,11 +203,48 @@ fn validate_index_rejects_version_roots_and_parent_paths() {
     let mut wrong_version = valid.clone();
     wrong_version.version += 1;
     assert!(validate_index(&wrong_version, &["/loops".to_string()]).is_err());
+    let mut old_version = valid.clone();
+    old_version.version = 3;
+    assert!(validate_index(&old_version, &["/loops".to_string()]).is_err());
     assert!(validate_index(&valid, &["/other".to_string()]).is_err());
 
-    let mut unsafe_path = valid;
+    let mut unsafe_path = valid.clone();
     unsafe_path.roots[0].wav_files = vec![indexed("../outside.wav")];
     assert!(validate_index(&unsafe_path, &["/loops".to_string()]).is_err());
+
+    let mut invalid_waveform = valid;
+    invalid_waveform.roots[0].wav_files[0]
+        .waveform
+        .rms_db_tenths
+        .pop();
+    assert!(validate_index(&invalid_waveform, &["/loops".to_string()]).is_err());
+}
+
+#[test]
+fn legacy_index_deserializes_far_enough_to_report_the_version_mismatch() {
+    let legacy = serde_json::json!({
+        "version": LOOP_INDEX_VERSION - 1,
+        "roots": [{
+            "path": "/loops",
+            "wav_files": [{
+                "relative": "kick.wav",
+                "analysis": {
+                    "duration_seconds": 2.0,
+                    "bpm": 120.0,
+                    "beats": 4,
+                    "meter_numerator": 4,
+                    "meter_denominator": 4,
+                    "measures": 1,
+                    "source": "duration_estimate"
+                },
+                "waveform": LoopWaveform::silent(1)
+            }]
+        }]
+    });
+    let index: LoopIndex = serde_json::from_value(legacy).unwrap();
+    let error = validate_index(&index, &["/loops".to_string()]).unwrap_err();
+
+    assert!(error.to_string().contains("versionが一致しません"));
 }
 
 fn tempfile_dir(label: &str) -> PathBuf {

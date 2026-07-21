@@ -42,6 +42,10 @@ pub fn native_probe_log_file_path() -> Option<PathBuf> {
     config_app_dir().map(|d| d.join("log").join("native_probe.log"))
 }
 
+pub fn scan_loops_log_file_path() -> Option<PathBuf> {
+    config_app_dir().map(|d| d.join("log").join("scan-loops.log"))
+}
+
 pub fn core_config_from_config(cfg: &Config) -> CoreConfig {
     CoreConfig {
         output_midi: cfg.output_midi.clone(),

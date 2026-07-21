@@ -18,15 +18,47 @@ pub(crate) enum LoopAnalysisSource {
     DurationEstimate,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum LoopWavKind {
+    #[default]
+    Loop,
+    OneShot,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
-pub(crate) struct LoopWavAnalysis {
-    pub(crate) duration_seconds: f64,
+pub(crate) struct LoopTempoAnalysis {
+    /// WAV の実長・beat 数・拍子から算出した、再生に使用する実効 BPM。
     pub(crate) bpm: f64,
+    /// ACID chunk に宣言されていた BPM。実効 BPM との不整合調査用に保持する。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) declared_bpm: Option<f64>,
     pub(crate) beats: u32,
     pub(crate) meter_numerator: u16,
     pub(crate) meter_denominator: u16,
-    pub(crate) measures: usize,
     pub(crate) source: LoopAnalysisSource,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+pub(crate) struct LoopWavAnalysis {
+    pub(crate) duration_seconds: f64,
+    #[serde(default)]
+    pub(crate) kind: LoopWavKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) tempo: Option<LoopTempoAnalysis>,
+    /// grid・波形表示で占有する小節数。one-shot は常に1。
+    pub(crate) measures: usize,
+}
+
+impl LoopWavAnalysis {
+    pub(crate) fn into_one_shot(self) -> Self {
+        Self {
+            duration_seconds: self.duration_seconds,
+            kind: LoopWavKind::OneShot,
+            tempo: None,
+            measures: 1,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -129,36 +161,61 @@ fn analyze_reader(reader: &mut (impl Read + Seek)) -> Result<LoopWavAnalysis> {
         anyhow::bail!("WAVの再生時間が不正です");
     }
 
-    if let Some(acid) = acid.filter(valid_acid) {
+    if acid.is_some_and(|acid| acid.flags & ACID_FLAG_ONE_SHOT != 0) {
+        return Ok(LoopWavAnalysis {
+            duration_seconds,
+            kind: LoopWavKind::OneShot,
+            tempo: None,
+            measures: 1,
+        });
+    }
+
+    if let Some(acid) = acid.filter(valid_acid_loop) {
         let measures = (acid.beats as usize)
             .div_ceil(usize::from(acid.meter_numerator))
             .max(1);
+        let bpm = effective_bpm(acid.beats, acid.meter_denominator, duration_seconds)?;
         return Ok(LoopWavAnalysis {
             duration_seconds,
-            bpm: f64::from(acid.tempo),
-            beats: acid.beats,
-            meter_numerator: acid.meter_numerator,
-            meter_denominator: acid.meter_denominator,
+            kind: LoopWavKind::Loop,
+            tempo: Some(LoopTempoAnalysis {
+                bpm,
+                declared_bpm: Some(f64::from(acid.tempo)),
+                beats: acid.beats,
+                meter_numerator: acid.meter_numerator,
+                meter_denominator: acid.meter_denominator,
+                source: LoopAnalysisSource::Acid,
+            }),
             measures,
-            source: LoopAnalysisSource::Acid,
         });
     }
 
     let candidate = choose_duration_candidate(duration_seconds);
     Ok(LoopWavAnalysis {
         duration_seconds,
-        bpm: candidate.bpm,
-        beats: candidate.beats,
-        meter_numerator: 4,
-        meter_denominator: 4,
+        kind: LoopWavKind::Loop,
+        tempo: Some(LoopTempoAnalysis {
+            bpm: candidate.bpm,
+            declared_bpm: None,
+            beats: candidate.beats,
+            meter_numerator: 4,
+            meter_denominator: 4,
+            source: LoopAnalysisSource::DurationEstimate,
+        }),
         measures: candidate.measures,
-        source: LoopAnalysisSource::DurationEstimate,
     })
 }
 
-fn valid_acid(acid: &AcidMetadata) -> bool {
-    acid.flags & ACID_FLAG_ONE_SHOT == 0
-        && acid.beats > 0
+fn effective_bpm(beats: u32, meter_denominator: u16, duration_seconds: f64) -> Result<f64> {
+    let bpm = f64::from(beats) * 60.0 * 4.0 / f64::from(meter_denominator) / duration_seconds;
+    if !bpm.is_finite() || bpm <= 0.0 {
+        anyhow::bail!("ACID beat数とWAV実長からBPMを算出できません");
+    }
+    Ok(bpm)
+}
+
+fn valid_acid_loop(acid: &AcidMetadata) -> bool {
+    acid.beats > 0
         && acid.meter_numerator > 0
         && acid.meter_denominator > 0
         && acid.tempo.is_finite()
@@ -190,19 +247,47 @@ fn choose_duration_candidate(duration_seconds: f64) -> TempoCandidate {
 }
 
 pub(crate) fn format_analysis(analysis: LoopWavAnalysis) -> String {
-    let estimate = matches!(analysis.source, LoopAnalysisSource::DurationEstimate)
+    if analysis.kind == LoopWavKind::OneShot {
+        return format!("[one-shot {}]", format_duration(analysis.duration_seconds));
+    }
+    let Some(tempo) = analysis.tempo else {
+        return "[loop metadata missing]".to_string();
+    };
+    let estimate = matches!(tempo.source, LoopAnalysisSource::DurationEstimate)
         .then_some("~")
         .unwrap_or("");
-    let rounded = analysis.bpm.round();
-    let bpm = if (analysis.bpm - rounded).abs() < 0.005 {
+    let rounded = tempo.bpm.round();
+    let bpm = if (tempo.bpm - rounded).abs() < 0.005 {
         format!("{rounded:.0}")
     } else {
-        format!("{:.2}", analysis.bpm)
+        format!("{:.2}", tempo.bpm)
     };
+    let declared = tempo
+        .declared_bpm
+        .filter(|declared| (declared - tempo.bpm).abs() >= 0.5)
+        .map(|declared| format!(" (ACID{})", format_bpm_value(declared)))
+        .unwrap_or_default();
     format!(
-        "[{estimate}BPM{bpm} beat{} {}meas]",
-        analysis.beats, analysis.measures
+        "[{estimate}BPM{bpm}{declared} beat{} {}meas]",
+        tempo.beats, analysis.measures
     )
+}
+
+fn format_duration(seconds: f64) -> String {
+    if seconds < 10.0 {
+        format!("{seconds:.2}s")
+    } else {
+        format!("{seconds:.1}s")
+    }
+}
+
+fn format_bpm_value(bpm: f64) -> String {
+    let rounded = bpm.round();
+    if (bpm - rounded).abs() < 0.005 {
+        format!("{rounded:.0}")
+    } else {
+        format!("{bpm:.2}")
+    }
 }
 
 #[cfg(test)]
@@ -257,7 +342,7 @@ mod tests {
     }
 
     #[test]
-    fn reads_acid_after_data_and_honors_all_beat_counts() {
+    fn reads_acid_after_data_and_uses_duration_for_effective_bpm() {
         for (beats, measures) in [(2, 1), (4, 1), (8, 2), (16, 4)] {
             let bytes = wave(&[
                 fmt_chunk(176_400),
@@ -266,11 +351,29 @@ mod tests {
                 acid_chunk(0, beats, 4, 4, 99.353_23),
             ]);
             let analysis = analyze_reader(&mut Cursor::new(bytes)).unwrap();
-            assert_eq!(analysis.source, LoopAnalysisSource::Acid);
-            assert_eq!(analysis.beats, beats);
+            let tempo = analysis.tempo.unwrap();
+            assert_eq!(analysis.kind, LoopWavKind::Loop);
+            assert_eq!(tempo.source, LoopAnalysisSource::Acid);
+            assert_eq!(tempo.beats, beats);
             assert_eq!(analysis.measures, measures);
-            assert!((analysis.bpm - 99.353_23).abs() < 0.001);
+            assert_eq!(tempo.bpm, f64::from(beats) * 60.0);
+            assert_eq!(tempo.declared_bpm, Some(99.353_23_f32 as f64));
         }
+    }
+
+    #[test]
+    fn acid_effective_bpm_accounts_for_meter_denominator() {
+        let bytes = wave(&[
+            fmt_chunk(100),
+            chunk(b"data", &vec![0; 400]),
+            acid_chunk(0, 8, 4, 8, 120.0),
+        ]);
+
+        let analysis = analyze_reader(&mut Cursor::new(bytes)).unwrap();
+
+        assert_eq!(analysis.tempo.unwrap().bpm, 60.0);
+        assert_eq!(analysis.tempo.unwrap().declared_bpm, Some(120.0));
+        assert_eq!(format_analysis(analysis), "[BPM60 (ACID120) beat8 2meas]");
     }
 
     #[test]
@@ -282,21 +385,26 @@ mod tests {
 
         let bytes = wave(&[fmt_chunk(100), chunk(b"data", &vec![0; 400])]);
         let analysis = analyze_reader(&mut Cursor::new(bytes)).unwrap();
-        assert_eq!(analysis.source, LoopAnalysisSource::DurationEstimate);
-        assert_eq!(analysis.bpm, 120.0);
-        assert_eq!(analysis.beats, 8);
+        let tempo = analysis.tempo.unwrap();
+        assert_eq!(tempo.source, LoopAnalysisSource::DurationEstimate);
+        assert_eq!(tempo.bpm, 120.0);
+        assert_eq!(tempo.declared_bpm, None);
+        assert_eq!(tempo.beats, 8);
         assert_eq!(format_analysis(analysis), "[~BPM120 beat8 2meas]");
     }
 
     #[test]
-    fn ignores_one_shot_acid_and_rejects_out_of_bounds_chunks() {
+    fn acid_one_shot_after_data_has_no_tempo_and_rejects_out_of_bounds_chunks() {
         let bytes = wave(&[
             fmt_chunk(100),
             chunk(b"data", &vec![0; 400]),
             acid_chunk(ACID_FLAG_ONE_SHOT, 16, 4, 4, 200.0),
         ]);
         let analysis = analyze_reader(&mut Cursor::new(bytes)).unwrap();
-        assert_eq!(analysis.source, LoopAnalysisSource::DurationEstimate);
+        assert_eq!(analysis.kind, LoopWavKind::OneShot);
+        assert_eq!(analysis.tempo, None);
+        assert_eq!(analysis.measures, 1);
+        assert_eq!(format_analysis(analysis), "[one-shot 4.00s]");
 
         let mut corrupt = wave(&[fmt_chunk(100), chunk(b"data", &vec![0; 400])]);
         corrupt[40..44].copy_from_slice(&u32::MAX.to_le_bytes());

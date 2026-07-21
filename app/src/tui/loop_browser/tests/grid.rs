@@ -4,21 +4,26 @@ use super::*;
 fn persisted_analysis_drives_browser_without_opening_the_wav() {
     let analysis = LoopWavAnalysis {
         duration_seconds: 5.25,
-        bpm: 137.5,
-        beats: 9,
-        meter_numerator: 3,
-        meter_denominator: 4,
+        kind: LoopWavKind::Loop,
+        tempo: Some(LoopTempoAnalysis {
+            bpm: 137.5,
+            declared_bpm: Some(137.5),
+            beats: 9,
+            meter_numerator: 3,
+            meter_denominator: 4,
+            source: LoopAnalysisSource::Acid,
+        }),
         measures: 3,
-        source: LoopAnalysisSource::Acid,
     };
     let mut browser = LoopBrowser::from_index(
         LoopIndex {
-            version: 2,
+            version: crate::loop_library::LOOP_INDEX_VERSION,
             roots: vec![LoopRootIndex {
                 path: "/path/that/does/not/exist".to_string(),
                 wav_files: vec![LoopWavIndex {
                     relative: "cached.wav".to_string(),
                     analysis,
+                    waveform: crate::loop_waveform::LoopWaveform::silent(analysis.measures),
                 }],
             }],
         },
@@ -37,7 +42,7 @@ fn persisted_analysis_drives_browser_without_opening_the_wav() {
     let clip = grid[0][0].as_ref().unwrap();
 
     assert_eq!(browser.track_grid[0][0].as_ref().unwrap().span_measures, 3);
-    assert_eq!(clip.bpm, 137.5);
+    assert_eq!(clip.bpm, Some(137.5));
     assert_eq!(clip.meter_numerator, 3);
     assert_eq!(clip.meter_denominator, 4);
 }
@@ -45,19 +50,13 @@ fn persisted_analysis_drives_browser_without_opening_the_wav() {
 #[test]
 fn target_bpm_tracks_all_placed_wavs_and_returns_to_120_after_removal() {
     let mut browser = browser_with_direct_wavs(2);
-    browser.wav_analyses[0].1.bpm = 160.0;
-    browser.wav_analyses[1].1.bpm = 120.0;
+    browser.wav_analyses[0].1.tempo.as_mut().unwrap().bpm = 160.0;
+    browser.wav_analyses[1].1.tempo.as_mut().unwrap().bpm = 120.0;
     let fast = browser.wav_analyses[0].0.clone();
     let normal = browser.wav_analyses[1].0.clone();
     browser.track_grid[0] = vec![
-        Some(LoopTrackClip {
-            wav: fast,
-            span_measures: 1,
-        }),
-        Some(LoopTrackClip {
-            wav: normal,
-            span_measures: 1,
-        }),
+        Some(LoopTrackClip::explicit(fast, 1)),
+        Some(LoopTrackClip::explicit(normal, 1)),
     ];
 
     assert_eq!(browser.target_bpm().bpm, 128.0);
@@ -67,18 +66,26 @@ fn target_bpm_tracks_all_placed_wavs_and_returns_to_120_after_removal() {
 }
 
 #[test]
+fn one_shot_analysis_is_excluded_from_target_and_stretch_limit_checks() {
+    let mut browser = browser_with_direct_wavs(2);
+    browser.wav_analyses[0].1 = browser.wav_analyses[0].1.into_one_shot();
+    browser.wav_analyses[1].1.tempo.as_mut().unwrap().bpm = 160.0;
+    let hit = LoopTrackClip::explicit(browser.wav_analyses[0].0.clone(), 1);
+    let loop_clip = LoopTrackClip::explicit(browser.wav_analyses[1].0.clone(), 1);
+    browser.track_grid[0] = vec![Some(hit.clone()), Some(loop_clip)];
+
+    assert_eq!(browser.target_bpm().bpm, 128.0);
+    assert_eq!(browser.playback_clip(&hit).bpm, None);
+    assert!(!browser.clip_exceeds_time_ratio_limits(&hit, 37.0));
+}
+
+#[test]
 fn stretch_limit_display_check_uses_the_selected_target_bpm() {
     let mut browser = browser_with_direct_wavs(2);
-    browser.wav_analyses[0].1.bpm = 100.0;
-    browser.wav_analyses[1].1.bpm = 200.0;
-    let compatible = LoopTrackClip {
-        wav: browser.wav_analyses[0].0.clone(),
-        span_measures: 1,
-    };
-    let rejected = LoopTrackClip {
-        wav: browser.wav_analyses[1].0.clone(),
-        span_measures: 1,
-    };
+    browser.wav_analyses[0].1.tempo.as_mut().unwrap().bpm = 100.0;
+    browser.wav_analyses[1].1.tempo.as_mut().unwrap().bpm = 200.0;
+    let compatible = LoopTrackClip::explicit(browser.wav_analyses[0].0.clone(), 1);
+    let rejected = LoopTrackClip::explicit(browser.wav_analyses[1].0.clone(), 1);
     browser.track_grid = vec![vec![Some(compatible.clone()), Some(rejected.clone())]];
 
     let target = browser.target_bpm();
@@ -99,7 +106,7 @@ fn track_pane_toggles_one_wav_per_cell_and_auto_extends_right_and_down() {
 
     assert!(matches!(
         browser.handle_key(KeyCode::Char('c')),
-        LoopBrowserAction::GridRefresh(grid)
+        LoopBrowserAction::GridRefresh { grid, .. }
             if grid[0][0].as_ref().is_some_and(|clip| clip.path.ends_with("a.wav"))
     ));
     browser.handle_key(KeyCode::Char('l'));
@@ -113,7 +120,7 @@ fn track_pane_toggles_one_wav_per_cell_and_auto_extends_right_and_down() {
     assert_eq!((browser.track_cursor, browser.measure_cursor), (0, 0));
     assert!(matches!(
         browser.handle_key(KeyCode::Char('c')),
-        LoopBrowserAction::GridRefresh(grid) if grid[0][0].is_none()
+        LoopBrowserAction::GridRefresh { grid, .. } if grid[0][0].is_none()
     ));
 }
 
@@ -127,11 +134,11 @@ fn every_pad_key_places_and_removes_without_audition() {
 
         assert!(matches!(
             browser.handle_key(KeyCode::Char(pad)),
-            LoopBrowserAction::GridRefresh(grid) if grid[0][0].is_some()
+            LoopBrowserAction::GridRefresh { grid, .. } if grid[0][0].is_some()
         ));
         assert!(matches!(
             browser.handle_key(KeyCode::Char(pad)),
-            LoopBrowserAction::GridRefresh(grid) if grid[0][0].is_none()
+            LoopBrowserAction::GridRefresh { grid, .. } if grid[0][0].is_none()
         ));
     }
 }
@@ -143,10 +150,7 @@ fn every_pad_key_replacement_uses_the_clip_start_without_audition() {
         let original = browser.wav_analyses[0].0.clone();
         let replacement = browser.wav_analyses[1].0.clone();
         browser.track_grid[0].resize(2, None);
-        browser.track_grid[0][0] = Some(LoopTrackClip {
-            wav: original,
-            span_measures: 2,
-        });
+        browser.track_grid[0][0] = Some(LoopTrackClip::explicit(original, 2));
         browser.metadata.toggle_pad(pad, &replacement);
         browser.focus = LoopBrowserPane::Tracks;
         browser.measure_cursor = 1;
@@ -156,6 +160,7 @@ fn every_pad_key_replacement_uses_the_clip_start_without_audition() {
             LoopBrowserAction::GridReplaced {
                 start_measure: 0,
                 grid,
+                ..
             } if grid[0][0]
                 .as_ref()
                 .is_some_and(|clip| clip.path.ends_with("short.wav"))
@@ -165,42 +170,26 @@ fn every_pad_key_replacement_uses_the_clip_start_without_audition() {
 }
 
 #[test]
-fn playback_grid_uses_content_end_and_repeats_one_measure_clips_across_gaps() {
+fn playback_grid_uses_longest_content_end_and_persisted_prev_markers_across_gaps() {
     let mut browser = browser_with_spanning_wavs();
     let long = browser.wav_analyses[0].0.clone();
     let short = browser.wav_analyses[1].0.clone();
     browser.track_grid = vec![
         vec![
-            Some(LoopTrackClip {
-                wav: short.clone(),
-                span_measures: 1,
-            }),
+            Some(LoopTrackClip::explicit(short.clone(), 1)),
             None,
             None,
             None,
         ],
+        vec![Some(LoopTrackClip::explicit(long, 4)), None, None, None],
         vec![
-            Some(LoopTrackClip {
-                wav: long,
-                span_measures: 4,
-            }),
+            Some(LoopTrackClip::explicit(short.clone(), 1)),
             None,
-            None,
-            None,
-        ],
-        vec![
-            Some(LoopTrackClip {
-                wav: short.clone(),
-                span_measures: 1,
-            }),
-            None,
-            Some(LoopTrackClip {
-                wav: short,
-                span_measures: 1,
-            }),
+            Some(LoopTrackClip::explicit(short, 1)),
             None,
         ],
     ];
+    browser.normalize_track_grid();
 
     let grid = browser.playback_grid();
 
@@ -209,10 +198,46 @@ fn playback_grid_uses_content_end_and_repeats_one_measure_clips_across_gaps() {
     assert!(grid[1][1..].iter().all(Option::is_none));
     assert!(grid[2].iter().all(Option::is_some));
     assert!(grid[2][3].is_some());
-    assert!(browser.previous_measure_repeat_clip(0, 1).is_some());
-    assert!(browser.previous_measure_repeat_clip(1, 2).is_none());
-    assert!(browser.previous_measure_repeat_clip(2, 1).is_some());
-    assert!(browser.previous_measure_repeat_clip(2, 3).is_some());
+    assert!(browser
+        .clip_at(0, 1)
+        .is_some_and(|(_, clip)| clip.is_previous()));
+    assert!(browser
+        .clip_at(1, 2)
+        .is_some_and(|(_, clip)| !clip.is_previous()));
+    assert!(browser
+        .clip_at(2, 1)
+        .is_some_and(|(_, clip)| clip.is_previous()));
+    assert!(browser
+        .clip_at(2, 3)
+        .is_some_and(|(_, clip)| clip.is_previous()));
+}
+
+#[test]
+fn playback_grid_does_not_retrigger_one_shot_previous_markers() {
+    let mut browser = browser_with_spanning_wavs();
+    browser.wav_analyses[1].1 = browser.wav_analyses[1].1.into_one_shot();
+    let long_loop = browser.wav_analyses[0].0.clone();
+    let one_shot = browser.wav_analyses[1].0.clone();
+    browser.track_grid = vec![
+        vec![Some(LoopTrackClip::explicit(one_shot, 1)), None, None, None],
+        vec![
+            Some(LoopTrackClip::explicit(long_loop, 4)),
+            None,
+            None,
+            None,
+        ],
+    ];
+    browser.normalize_track_grid();
+
+    assert!(browser.track_grid[0][1..]
+        .iter()
+        .all(|cell| cell.as_ref().is_some_and(LoopTrackClip::is_previous)));
+    let playback = browser.playback_grid();
+    assert!(playback[0][0]
+        .as_ref()
+        .is_some_and(LoopPlaybackClip::is_one_shot));
+    assert!(playback[0][1..].iter().all(Option::is_none));
+    assert!(playback[1][0].is_some());
 }
 
 #[test]
@@ -220,10 +245,7 @@ fn allocated_empty_columns_do_not_extend_playback_or_normal_display() {
     let mut browser = browser_with_direct_wavs(1);
     let wav = browser.wav_analyses[0].0.clone();
     browser.track_grid[0] = vec![
-        Some(LoopTrackClip {
-            wav,
-            span_measures: 1,
-        }),
+        Some(LoopTrackClip::explicit(wav, 1)),
         None,
         None,
         None,
@@ -233,11 +255,11 @@ fn allocated_empty_columns_do_not_extend_playback_or_normal_display() {
 
     assert_eq!(browser.playback_grid()[0].len(), 1);
     assert_eq!(browser.displayed_measure_count(), 1);
-    assert!(browser.previous_measure_repeat_clip(0, 1).is_none());
+    assert!(browser.clip_at(0, 1).is_none());
 
     browser.measure_cursor = 5;
     assert_eq!(browser.displayed_measure_count(), 6);
-    assert!(browser.previous_measure_repeat_clip(0, 5).is_none());
+    assert!(browser.clip_at(0, 5).is_none());
 }
 
 #[test]
@@ -245,10 +267,7 @@ fn track_pad_write_failures_do_not_audition_or_change_the_grid() {
     let mut browser = browser_with_direct_wavs(2);
     let original = browser.wav_analyses[0].0.clone();
     let replacement = browser.wav_analyses[1].0.clone();
-    browser.track_grid[0][0] = Some(LoopTrackClip {
-        wav: original.clone(),
-        span_measures: 1,
-    });
+    browser.track_grid[0][0] = Some(LoopTrackClip::explicit(original.clone(), 1));
     browser.metadata.toggle_pad('c', &replacement);
     browser.focus = LoopBrowserPane::Tracks;
 
@@ -307,86 +326,6 @@ fn track_hjkl_prefix_moves_and_extends_by_the_requested_count() {
     browser.handle_key(KeyCode::Char('2'));
     browser.handle_key(KeyCode::Char('k'));
     assert_eq!((browser.track_cursor, browser.measure_cursor), (0, 1));
-}
-
-#[test]
-fn track_mixer_opens_on_selected_track_and_adjusts_in_three_db_steps() {
-    let mut browser = browser();
-    browser.focus = LoopBrowserPane::Tracks;
-    browser.handle_key(KeyCode::Char('j'));
-    assert_eq!(browser.track_cursor, 1);
-
-    assert!(matches!(
-        browser.handle_key(KeyCode::Char('m')),
-        LoopBrowserAction::Continue
-    ));
-    assert!(browser.mixer_overlay_open);
-    assert_eq!(browser.mixer_cursor_track, 1);
-
-    assert!(matches!(
-        browser.handle_key(KeyCode::Char('k')),
-        LoopBrowserAction::TrackVolumeChanged {
-            track: 1,
-            volume_db: 3
-        }
-    ));
-    assert_eq!(browser.track_volume_db(1), 3);
-
-    browser.handle_key(KeyCode::Char('h'));
-    assert_eq!(browser.mixer_cursor_track, 0);
-    browser.handle_key(KeyCode::Left);
-    assert_eq!(browser.mixer_cursor_track, 0);
-    browser.handle_key(KeyCode::Esc);
-    assert!(!browser.mixer_overlay_open);
-    assert_eq!(browser.track_cursor, 1);
-}
-
-#[test]
-fn track_mixer_clamps_volume_to_shared_bounds() {
-    let mut browser = browser();
-    browser.focus = LoopBrowserPane::Tracks;
-    browser.handle_key(KeyCode::Char('m'));
-
-    for _ in 0..20 {
-        browser.handle_key(KeyCode::Char('j'));
-    }
-    assert_eq!(
-        browser.track_volume_db(0),
-        crate::mixer_overlay::MIXER_MIN_DB
-    );
-    assert!(matches!(
-        browser.handle_key(KeyCode::Char('j')),
-        LoopBrowserAction::Continue
-    ));
-}
-
-#[test]
-fn track_mixer_rolls_back_when_persistence_fails() {
-    let mut browser = browser();
-    browser.focus = LoopBrowserPane::Tracks;
-    let dir = std::env::temp_dir().join(format!(
-        "cmrt-loop-mixer-blocked-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
-    browser.track_grid_path = Some(dir.clone());
-
-    browser.handle_key(KeyCode::Char('m'));
-    assert!(matches!(
-        browser.handle_key(KeyCode::Char('k')),
-        LoopBrowserAction::Continue
-    ));
-
-    assert_eq!(browser.track_volume_db(0), 0);
-    assert!(browser
-        .track_grid_error
-        .as_deref()
-        .is_some_and(|error| error.contains("mix levelを保存できません")));
-    let _ = std::fs::remove_dir_all(dir);
 }
 
 #[test]

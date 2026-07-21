@@ -44,6 +44,7 @@ ureq = { version = "2", features = ["json"] }
 hound = "3.5"
 rodio = "0.19"
 midly = "0.5"
+rustfft = "6.4.1"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

@@ -1,6 +1,25 @@
 use super::*;
+
+impl LoopBrowser {
+    pub(crate) fn set_playback_beat_for_test(
+        &self,
+        measure: usize,
+        beat: usize,
+        beats_per_measure: usize,
+    ) {
+        playback::position::set_beat_for_test(
+            &self.playback_position,
+            measure,
+            beat,
+            beats_per_measure,
+        );
+    }
+}
 use crate::loop_library::{LoopIndex, LoopRootIndex, LoopWavIndex};
-use crate::loop_wav_analysis::{LoopAnalysisSource, LoopWavAnalysis};
+use crate::loop_wav_analysis::{
+    LoopAnalysisSource, LoopTempoAnalysis, LoopWavAnalysis, LoopWavKind,
+};
+use crate::loop_waveform::LoopWaveform;
 
 fn indexed(relative: impl Into<String>) -> LoopWavIndex {
     indexed_with_measures(relative, 1)
@@ -11,20 +30,25 @@ fn indexed_with_measures(relative: impl Into<String>, measures: usize) -> LoopWa
         relative: relative.into(),
         analysis: LoopWavAnalysis {
             duration_seconds: 2.0 * measures as f64,
-            bpm: 120.0,
-            beats: 4 * measures as u32,
-            meter_numerator: 4,
-            meter_denominator: 4,
+            kind: LoopWavKind::Loop,
+            tempo: Some(LoopTempoAnalysis {
+                bpm: 120.0,
+                declared_bpm: Some(120.0),
+                beats: 4 * measures as u32,
+                meter_numerator: 4,
+                meter_denominator: 4,
+                source: LoopAnalysisSource::Acid,
+            }),
             measures,
-            source: LoopAnalysisSource::Acid,
         },
+        waveform: LoopWaveform::silent(measures),
     }
 }
 
 fn browser_with_spanning_wavs() -> LoopBrowser {
     LoopBrowser::from_index(
         LoopIndex {
-            version: 2,
+            version: crate::loop_library::LOOP_INDEX_VERSION,
             roots: vec![LoopRootIndex {
                 path: "/loops".to_string(),
                 wav_files: vec![indexed_with_measures("long.wav", 2), indexed("short.wav")],
@@ -92,6 +116,22 @@ fn root_is_expanded_and_directories_sort_before_wavs() {
     assert_eq!(browser.visible.len(), 2);
     assert_eq!(browser.visible[0].name, "/loops");
     assert_eq!(browser.visible[1].name, "Pack");
+}
+
+#[test]
+fn selected_direct_category_does_not_inherit_from_an_ancestor() {
+    let mut browser = browser();
+    browser.metadata.toggle_category(
+        &LoopDirId::new(Path::new("/loops"), Path::new("Pack")),
+        "drum",
+    );
+    browser.cursor = 1;
+    assert_eq!(browser.selected_direct_category(), Some("drum"));
+
+    browser.handle_key(KeyCode::Char('l'));
+    browser.handle_key(KeyCode::Char('j'));
+    assert_eq!(browser.visible[browser.cursor].name, "Bass");
+    assert_eq!(browser.selected_direct_category(), None);
 }
 
 #[test]
@@ -219,7 +259,7 @@ fn favorites_only_handles_an_empty_favorite_set() {
 
     assert!(browser.favorites_only);
     assert!(browser.visible.is_empty());
-    assert_eq!(browser.list_state.selected(), None);
+    assert_eq!(browser.cursor, 0);
 }
 
 #[test]
@@ -260,7 +300,7 @@ fn category_overlay_assigns_and_toggles_category_for_wav_parent() {
         .is_some_and(|target| target.matches(&expected)));
     assert!(matches!(
         browser.handle_key(KeyCode::Char('b')),
-        LoopBrowserAction::GridRefresh(_)
+        LoopBrowserAction::GridRefresh { .. }
     ));
     assert_eq!(browser.metadata.category_for(&expected), Some("bass"));
     assert!(browser
@@ -271,7 +311,7 @@ fn category_overlay_assigns_and_toggles_category_for_wav_parent() {
     browser.handle_key(KeyCode::Char('t'));
     assert!(matches!(
         browser.handle_key(KeyCode::Char('b')),
-        LoopBrowserAction::GridRefresh(_)
+        LoopBrowserAction::GridRefresh { .. }
     ));
     assert_eq!(browser.metadata.category_for(&expected), None);
 }
@@ -350,4 +390,9 @@ fn favorites_only_shift_a_saves_only_pad_metadata() {
 }
 
 mod grid;
+mod help;
+mod mixer;
+mod navigation;
+mod performance;
 mod random;
+mod transport;

@@ -4,6 +4,8 @@ use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use clap_mml_render_tui::{config, loop_library, server, tui, updater, voicing_cache_builder};
 use cmrt_core::{load_entry, mml_to_play};
 
+mod scan_progress_log;
+
 #[derive(Debug, PartialEq, Eq)]
 enum CliAction {
     Help(String),
@@ -183,7 +185,7 @@ fn cli_playback_mml(input: &str) -> CliPlaybackMml {
 }
 
 fn write_scan_progress(
-    event: loop_library::LoopScanProgress,
+    event: &loop_library::LoopScanProgress,
     stdout: &mut dyn std::io::Write,
     stderr: &mut dyn std::io::Write,
 ) -> std::io::Result<()> {
@@ -200,6 +202,7 @@ fn write_scan_progress(
             writeln!(stdout, "[{current}/{total}] WAVを解析: {}", path.display())?;
             stdout.flush()
         }
+        loop_library::LoopScanProgress::Visualizing { .. } => Ok(()),
         loop_library::LoopScanProgress::Skipped { path, error } => {
             writeln!(
                 stderr,
@@ -229,15 +232,35 @@ fn run_scan_loops(cfg: &config::Config) -> Result<()> {
     let mut stdout = stdout.lock();
     let mut stderr = stderr.lock();
     let mut output_error = None;
-    let summary = loop_library::scan_and_save_with_progress(cfg, |event| {
+    let log_path = config::scan_loops_log_file_path()
+        .ok_or_else(|| anyhow::anyhow!("scan-loops logの保存先を取得できません"))?;
+    let mut progress_log =
+        scan_progress_log::ScanProgressLog::start(&log_path, std::time::Duration::from_secs(1))
+            .with_context(|| format!("scan-loops logを開始できません: {}", log_path.display()))?;
+    let scan_result = loop_library::scan_and_save_with_progress(cfg, |event| {
+        progress_log.observe(&event);
         if output_error.is_none() {
-            output_error = write_scan_progress(event, &mut stdout, &mut stderr).err();
+            output_error = write_scan_progress(&event, &mut stdout, &mut stderr).err();
         }
-    })?;
+    });
+    let summary = match scan_result {
+        Ok(summary) => summary,
+        Err(error) => {
+            let _ = progress_log.fail(&error);
+            return Err(error);
+        }
+    };
     if let Some(error) = output_error {
+        let _ = progress_log.fail(&error);
         return Err(error).context("scan-loopsの進捗を出力できません");
     }
-    write_scan_summary(summary, &mut stdout).context("scan-loopsの完了結果を出力できません")?;
+    if let Err(error) = write_scan_summary(summary, &mut stdout) {
+        let _ = progress_log.fail(&error);
+        return Err(error).context("scan-loopsの完了結果を出力できません");
+    }
+    progress_log
+        .finish(summary)
+        .context("scan-loops logを完了できません")?;
     Ok(())
 }
 

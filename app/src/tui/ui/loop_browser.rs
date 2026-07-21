@@ -2,22 +2,23 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
 
 use super::status::{base_style, loop_browser_keybind_text, status_color, status_text};
-use crate::loop_wav_analysis::format_analysis;
-use crate::tui::loop_browser::{LoopBrowserPane, PAD_KEYS};
+use crate::tui::loop_browser::PAD_KEYS;
 use crate::tui::{Mode, TuiApp};
-use crate::ui_theme::{
-    cursor_highlight_style, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_YELLOW,
-};
+use crate::ui_theme::{MONOKAI_CYAN, MONOKAI_FG, MONOKAI_YELLOW};
 
-const TRACK_LABEL_WIDTH: usize = 6;
-const CELL_WIDTH: usize = 14;
+mod help;
+mod tracks;
+mod tree;
+mod waveforms;
 
 pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame) {
+    let draw_started = std::time::Instant::now();
+    let trace_id = app.loop_browser.pending_render_trace.take();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -32,9 +33,15 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame) {
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[0]);
 
-    draw_tree(app, frame, panes[0]);
-    draw_tracks(app, frame, panes[1]);
+    let tree_started = std::time::Instant::now();
+    let rendered_tree_nodes = tree::draw(app, frame, panes[0]);
+    let tree_elapsed = tree_started.elapsed();
+    let tracks_started = std::time::Instant::now();
+    tracks::draw(app, frame, panes[1]);
+    let tracks_elapsed = tracks_started.elapsed();
+    let pads_started = std::time::Instant::now();
     draw_pads(app, frame, chunks[1]);
+    let pads_elapsed = pads_started.elapsed();
 
     let play_state = app.play_state.lock().unwrap().clone();
     let persistence_error = app
@@ -45,6 +52,13 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame) {
         .or(app.loop_browser.random_decks_error.as_ref());
     let (status, color) = if let Some(error) = persistence_error {
         (error.clone(), Color::Red)
+    } else if matches!(play_state, crate::tui::PlayState::Err(_)) {
+        (
+            status_text(&Mode::LoopBrowser, &play_state),
+            status_color(&play_state),
+        )
+    } else if app.loop_browser.playback_paused {
+        ("loop browser  ⏸ 停止中".to_string(), MONOKAI_CYAN)
     } else {
         (
             status_text(&Mode::LoopBrowser, &play_state),
@@ -73,6 +87,40 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame) {
     {
         draw_notice(frame, &notice);
     }
+    if let Some(pane) = app.loop_browser.help_overlay {
+        help::draw(frame, pane);
+    }
+    if app.loop_browser.starting {
+        draw_startup_overlay(frame);
+    }
+    app.loop_browser.last_render_metrics =
+        Some(crate::tui::loop_browser::performance::RenderMetrics {
+            trace_id,
+            tree: tree_elapsed,
+            tracks: tracks_elapsed,
+            pads: pads_elapsed,
+            draw: draw_started.elapsed(),
+            rendered_tree_nodes,
+            total_tree_nodes: app.loop_browser.visible.len(),
+        });
+}
+
+fn draw_startup_overlay(frame: &mut Frame<'_>) {
+    let lines = vec![Line::from("Loop Browser 起動中…")];
+    let area = crate::ui_utils::centered_text_block_rect(frame.area(), " Loop Browser ", &lines);
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(lines)
+            .alignment(Alignment::Center)
+            .style(base_style())
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Loop Browser ")
+                    .border_style(base_style().fg(MONOKAI_CYAN)),
+            ),
+        area,
+    );
 }
 
 fn draw_mixer_overlay(app: &TuiApp<'_>, frame: &mut Frame<'_>) {
@@ -93,184 +141,6 @@ fn draw_mixer_overlay(app: &TuiApp<'_>, frame: &mut Frame<'_>) {
         &tracks,
         app.loop_browser.mixer_cursor_track,
     );
-}
-
-fn draw_tree(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {
-    let focused = app.loop_browser.focus == LoopBrowserPane::Tree;
-    let border = focus_border_style(focused);
-    let title = if app.loop_browser.favorites_only {
-        " [LOOP TREE] Favorite dirs "
-    } else {
-        " [LOOP TREE] WAV loops "
-    };
-    if let Some(error) = &app.loop_browser.error {
-        frame.render_widget(
-            Paragraph::new(error.as_str())
-                .wrap(Wrap { trim: false })
-                .style(base_style().fg(Color::Red))
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .title(title)
-                        .border_style(border),
-                ),
-            area,
-        );
-        return;
-    }
-
-    let items = app
-        .loop_browser
-        .visible
-        .iter()
-        .map(|node| {
-            let marker = if node.is_wav {
-                "♪ "
-            } else if node.expanded {
-                "▾ "
-            } else {
-                "▸ "
-            };
-            let favorite = if !node.is_wav && node.favorite {
-                "★ "
-            } else {
-                ""
-            };
-            let category = node
-                .category
-                .as_ref()
-                .map(|category| format!(" [{category}]"))
-                .unwrap_or_default();
-            ListItem::new(Line::from(vec![
-                Span::raw("  ".repeat(node.depth)),
-                Span::raw(marker),
-                Span::styled(favorite, base_style().fg(MONOKAI_YELLOW)),
-                Span::raw(node.name.clone()),
-                Span::styled(
-                    node.analysis
-                        .map(|analysis| format!(" {}", format_analysis(analysis)))
-                        .unwrap_or_default(),
-                    base_style().fg(MONOKAI_CYAN),
-                ),
-                Span::styled(category, base_style().fg(MONOKAI_GREEN)),
-            ]))
-        })
-        .collect::<Vec<_>>();
-    frame.render_stateful_widget(
-        List::new(items)
-            .style(base_style())
-            .highlight_style(cursor_highlight_style(base_style()))
-            .highlight_symbol("▶ ")
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(title)
-                    .border_style(border),
-            ),
-        area,
-        &mut app.loop_browser.list_state,
-    );
-}
-
-fn draw_tracks(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {
-    let focused = app.loop_browser.focus == LoopBrowserPane::Tracks;
-    let target_bpm = app.loop_browser.target_bpm();
-    let title = format!(
-        " [TRACK LIST BPM{} AUTO-STRETCH] ",
-        crate::loop_time_stretch::format_bpm(target_bpm.bpm)
-    );
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(title)
-        .border_style(focus_border_style(focused));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-    if inner.width == 0 || inner.height == 0 {
-        return;
-    }
-
-    let visible_tracks = usize::from(inner.height.saturating_sub(1)).max(1);
-    let visible_measures =
-        ((usize::from(inner.width).saturating_sub(TRACK_LABEL_WIDTH)) / CELL_WIDTH).max(1);
-    let browser = &mut app.loop_browser;
-    let displayed_measure_count = browser.displayed_measure_count();
-    keep_visible(
-        browser.track_cursor,
-        visible_tracks,
-        &mut browser.track_scroll,
-    );
-    keep_visible(
-        browser.measure_cursor,
-        visible_measures,
-        &mut browser.measure_scroll,
-    );
-
-    let mut lines = Vec::with_capacity(visible_tracks + 1);
-    let mut header = vec![Span::styled(
-        fit("track", TRACK_LABEL_WIDTH),
-        base_style().fg(MONOKAI_CYAN),
-    )];
-    for measure in browser.measure_scroll
-        ..(browser.measure_scroll + visible_measures).min(displayed_measure_count)
-    {
-        let style = if focused && measure == browser.measure_cursor {
-            base_style().fg(MONOKAI_YELLOW)
-        } else {
-            base_style().fg(MONOKAI_CYAN)
-        };
-        header.push(Span::styled(
-            fit(&format!("measure {}", measure + 1), CELL_WIDTH),
-            style,
-        ));
-    }
-    lines.push(Line::from(header));
-
-    for track in browser.track_scroll
-        ..(browser.track_scroll + visible_tracks).min(browser.track_grid().len())
-    {
-        let mut spans = vec![Span::styled(
-            fit(&format!("T{}", track + 1), TRACK_LABEL_WIDTH),
-            base_style().fg(MONOKAI_CYAN),
-        )];
-        for measure in browser.measure_scroll
-            ..(browser.measure_scroll + visible_measures).min(displayed_measure_count)
-        {
-            let explicit = browser.clip_at(track, measure);
-            let repeat = explicit
-                .is_none()
-                .then(|| browser.previous_measure_repeat_clip(track, measure))
-                .flatten();
-            let label = explicit
-                .map(|(start, clip)| {
-                    if start == measure {
-                        browser.cell_label(&clip.wav)
-                    } else {
-                        format!("↳ {}/{}", measure - start + 1, clip.span_measures)
-                    }
-                })
-                .or_else(|| repeat.map(|_| "↻ prev meas".to_string()))
-                .unwrap_or_else(|| "·".to_string());
-            let clip = explicit.map(|(_, clip)| clip).or(repeat);
-            let style = if clip
-                .is_some_and(|clip| browser.clip_exceeds_time_ratio_limits(clip, target_bpm.bpm))
-            {
-                base_style().fg(Color::Red)
-            } else if repeat.is_some() {
-                base_style().fg(MONOKAI_GRAY)
-            } else {
-                base_style()
-            };
-            let style =
-                if focused && track == browser.track_cursor && measure == browser.measure_cursor {
-                    cursor_highlight_style(style)
-                } else {
-                    style
-                };
-            spans.push(Span::styled(fit(&label, CELL_WIDTH), style));
-        }
-        lines.push(Line::from(spans));
-    }
-    frame.render_widget(Paragraph::new(lines).style(base_style()), inner);
 }
 
 fn draw_pads(app: &TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {
@@ -309,21 +179,6 @@ fn focus_border_style(focused: bool) -> Style {
     } else {
         base_style().fg(MONOKAI_FG)
     }
-}
-
-fn keep_visible(cursor: usize, visible: usize, scroll: &mut usize) {
-    if cursor < *scroll {
-        *scroll = cursor;
-    } else if cursor >= *scroll + visible {
-        *scroll = cursor + 1 - visible;
-    }
-}
-
-fn fit(text: &str, width: usize) -> String {
-    let mut output = text.chars().take(width).collect::<String>();
-    let count = output.chars().count();
-    output.extend(std::iter::repeat_n(' ', width.saturating_sub(count)));
-    output
 }
 
 fn draw_category_overlay(app: &TuiApp<'_>, frame: &mut Frame<'_>) {

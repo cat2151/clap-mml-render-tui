@@ -1,6 +1,11 @@
 use super::*;
 
 impl LoopBrowser {
+    pub(super) fn normalize_track_grid(&mut self) {
+        self.track_grid =
+            crate::loop_browser_track_grid::normalize_previous_markers(&self.track_grid).0;
+    }
+
     fn save_track_grid(&self) -> anyhow::Result<()> {
         match &self.track_grid_path {
             Some(path) => crate::loop_browser_track_grid::save_to(
@@ -41,64 +46,113 @@ impl LoopBrowser {
         let Some(wav) = self.metadata.pad(pad).cloned() else {
             return LoopBrowserAction::Continue;
         };
+        self.log_pad_wav_context(pad, &wav);
         if !self.track_grid_writable {
             return LoopBrowserAction::Continue;
         }
         let occupied = self
             .clip_at(self.track_cursor, self.measure_cursor)
-            .map(|(start, clip)| (start, clip.wav.clone()));
+            .map(|(start, clip)| (start, clip.wav.clone(), clip.is_previous()));
         if occupied
             .as_ref()
-            .is_some_and(|(_, current)| !current.matches(&wav))
+            .is_some_and(|(_, _, is_previous)| *is_previous)
         {
             return match self.replace_current_clip(wav) {
-                Some(start_measure) => LoopBrowserAction::GridReplaced {
-                    start_measure,
-                    grid: self.playback_grid(),
-                },
+                Some(start_measure) => {
+                    self.sync_tree_to_current_cell();
+                    LoopBrowserAction::GridReplaced {
+                        start_measure,
+                        grid: self.playback_grid(),
+                        reason: LoopGridChange::Pad(pad),
+                    }
+                }
+                None => LoopBrowserAction::Continue,
+            };
+        }
+        if occupied
+            .as_ref()
+            .is_some_and(|(_, current, _)| !current.matches(&wav))
+        {
+            return match self.replace_current_clip(wav) {
+                Some(start_measure) => {
+                    self.sync_tree_to_current_cell();
+                    LoopBrowserAction::GridReplaced {
+                        start_measure,
+                        grid: self.playback_grid(),
+                        reason: LoopGridChange::Pad(pad),
+                    }
+                }
+                None => LoopBrowserAction::Continue,
+            };
+        }
+        if occupied.is_none() {
+            return match self.insert_current_clip(wav) {
+                Some(_) => {
+                    self.sync_tree_to_current_cell();
+                    LoopBrowserAction::GridRefresh {
+                        grid: self.playback_grid(),
+                        reason: LoopGridChange::Pad(pad),
+                    }
+                }
                 None => LoopBrowserAction::Continue,
             };
         }
         let previous = self.track_grid.clone();
-        if let Some((start, _)) = occupied.filter(|(_, current)| current.matches(&wav)) {
+        if let Some((start, _, _)) = occupied {
             self.track_grid[self.track_cursor][start] = None;
-        } else {
-            let span_measures = self
-                .analysis_for_wav(&wav)
-                .map(|analysis| analysis.measures)
-                .unwrap_or(1)
-                .max(1);
-            let Some(end) = self.measure_cursor.checked_add(span_measures) else {
-                self.track_grid_error =
-                    Some("track listが大きすぎるためclipを配置できません".to_string());
-                return LoopBrowserAction::Continue;
-            };
-            if end > self.track_grid[0].len() {
-                for track in &mut self.track_grid {
-                    track.resize(end, None);
-                }
-            }
-            for measure in 0..self.track_grid[self.track_cursor].len() {
-                let overlaps = self.track_grid[self.track_cursor][measure]
-                    .as_ref()
-                    .is_some_and(|clip| {
-                        measure < end
-                            && measure.saturating_add(clip.span_measures) > self.measure_cursor
-                    });
-                if overlaps {
-                    self.track_grid[self.track_cursor][measure] = None;
-                }
-            }
-            self.track_grid[self.track_cursor][self.measure_cursor] =
-                Some(LoopTrackClip { wav, span_measures });
         }
+        self.normalize_track_grid();
         if let Err(error) = self.save_track_grid() {
             self.track_grid = previous;
             self.track_grid_error = Some(format!("track listを保存できません: {error}"));
             return LoopBrowserAction::Continue;
         }
         self.track_grid_error = None;
-        LoopBrowserAction::GridRefresh(self.playback_grid())
+        self.sync_tree_to_current_cell();
+        LoopBrowserAction::GridRefresh {
+            grid: self.playback_grid(),
+            reason: LoopGridChange::Pad(pad),
+        }
+    }
+
+    fn log_pad_wav_context(&self, pad: char, wav: &LoopWavId) {
+        let analysis = self.analysis_for_wav(wav);
+        let declared_bpm = analysis
+            .and_then(|value| value.tempo)
+            .and_then(|tempo| tempo.declared_bpm)
+            .map(crate::loop_time_stretch::format_bpm)
+            .unwrap_or_else(|| "none".to_string());
+        let effective_bpm = analysis
+            .and_then(|value| value.tempo)
+            .map(|tempo| crate::loop_time_stretch::format_bpm(tempo.bpm))
+            .unwrap_or_else(|| "none".to_string());
+        let favorite = self
+            .metadata
+            .deepest_favorite_for_wav(wav)
+            .map_or("none", |(_, dir)| dir.relative.as_str());
+        let category = self.category_for_wav(wav).unwrap_or("none");
+        super::playback::diagnostics::log_event(format!(
+            "event=pad-selected pad={} track={} measure={} path=\"{}\" favorite=\"{}\" category={} declared_bpm={} effective_bpm={}",
+            pad,
+            self.track_cursor + 1,
+            self.measure_cursor + 1,
+            super::playback::diagnostics::path_label(&wav.path()),
+            favorite.replace('"', "\\\""),
+            category,
+            declared_bpm,
+            effective_bpm,
+        ));
+    }
+
+    pub(super) fn insert_current_clip(&mut self, wav: LoopWavId) -> Option<usize> {
+        if !self.track_grid_writable
+            || self
+                .clip_at(self.track_cursor, self.measure_cursor)
+                .is_some()
+        {
+            return None;
+        }
+        self.write_clip_at(self.measure_cursor, wav, "配置")
     }
 
     pub(super) fn replace_current_clip(&mut self, wav: LoopWavId) -> Option<usize> {
@@ -108,14 +162,19 @@ impl LoopBrowser {
         let start = self
             .clip_at(self.track_cursor, self.measure_cursor)
             .map(|(start, _)| start)?;
+        self.write_clip_at(start, wav, "差し替え")
+    }
+
+    fn write_clip_at(&mut self, start: usize, wav: LoopWavId, operation: &str) -> Option<usize> {
         let span_measures = self
             .analysis_for_wav(&wav)
             .map(|analysis| analysis.measures)
             .unwrap_or(1)
             .max(1);
         let Some(end) = start.checked_add(span_measures) else {
-            self.track_grid_error =
-                Some("track listが大きすぎるためclipを差し替えできません".to_string());
+            self.track_grid_error = Some(format!(
+                "track listが大きすぎるためclipを{operation}できません"
+            ));
             return None;
         };
         let previous = self.track_grid.clone();
@@ -134,7 +193,9 @@ impl LoopBrowser {
                 self.track_grid[self.track_cursor][measure] = None;
             }
         }
-        self.track_grid[self.track_cursor][start] = Some(LoopTrackClip { wav, span_measures });
+        self.track_grid[self.track_cursor][start] =
+            Some(LoopTrackClip::explicit(wav, span_measures));
+        self.normalize_track_grid();
         if let Err(error) = self.save_track_grid() {
             self.track_grid = previous;
             self.track_grid_error = Some(format!("track listを保存できません: {error}"));
@@ -217,6 +278,7 @@ impl LoopBrowser {
             self.track_grid_error = Some(format!("track追加を保存できません: {error}"));
             return;
         }
+        self.solo_tracks.resize(required, false);
         self.track_grid_error = None;
         self.track_cursor = next;
     }

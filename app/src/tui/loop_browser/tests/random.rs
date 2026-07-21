@@ -76,6 +76,7 @@ fn favorites_only_random_draws_only_favorite_wavs_without_nested_duplicates() {
     browser
         .metadata
         .toggle_favorite(&LoopDirId::new(Path::new("/loops"), Path::new("Pack/Bass")));
+    browser.rebuild_favorite_wav_keys();
     browser.rebuild_visible(None);
     browser.handle_key(KeyCode::Char('V'));
     let mut selected = HashSet::new();
@@ -92,15 +93,14 @@ fn favorites_only_random_draws_only_favorite_wavs_without_nested_duplicates() {
 }
 
 #[test]
-fn track_random_uses_deepest_favorite_for_a_continuation_cell() {
+fn track_random_uses_category_for_a_continuation_cell() {
     let mut browser = browser();
-    let path = enable_random_persistence(&mut browser, "track-favorite");
-    browser
-        .metadata
-        .toggle_favorite(&LoopDirId::new(Path::new("/loops"), Path::new("Pack")));
-    browser
-        .metadata
-        .toggle_favorite(&LoopDirId::new(Path::new("/loops"), Path::new("Pack/Bass")));
+    let path = enable_random_persistence(&mut browser, "track-category-continuation");
+    browser.metadata.toggle_category(
+        &LoopDirId::new(Path::new("/loops"), Path::new("Pack/Bass")),
+        "bass",
+    );
+    browser.rebuild_wav_categories();
     let bass_wav = browser
         .wav_analyses
         .iter()
@@ -108,20 +108,10 @@ fn track_random_uses_deepest_favorite_for_a_continuation_cell() {
         .unwrap()
         .0
         .clone();
-    browser.track_grid[0] = vec![
-        Some(LoopTrackClip {
-            wav: bass_wav.clone(),
-            span_measures: 2,
-        }),
-        None,
-    ];
-    browser.track_grid.push(vec![
-        Some(LoopTrackClip {
-            wav: bass_wav,
-            span_measures: 2,
-        }),
-        None,
-    ]);
+    browser.track_grid[0] = vec![Some(LoopTrackClip::explicit(bass_wav.clone(), 2)), None];
+    browser
+        .track_grid
+        .push(vec![Some(LoopTrackClip::explicit(bass_wav, 2)), None]);
     browser.focus = LoopBrowserPane::Tracks;
     browser.measure_cursor = 1;
 
@@ -129,7 +119,7 @@ fn track_random_uses_deepest_favorite_for_a_continuation_cell() {
 
     assert!(matches!(
         action,
-        LoopBrowserAction::GridReplaced { start_measure: 0, grid }
+        LoopBrowserAction::GridReplaced { start_measure: 0, grid, .. }
             if grid[0][0].as_ref().is_some_and(|clip| clip.path.ends_with("Pack/Bass/B.wav"))
                 && grid[0][1]
                     .as_ref()
@@ -140,26 +130,143 @@ fn track_random_uses_deepest_favorite_for_a_continuation_cell() {
         .relative
         .ends_with("Pack/Bass/B.wav")
         && clip.span_measures == 1));
-    assert!(browser.clip_at(0, 1).is_none());
+    assert!(browser
+        .clip_at(0, 1)
+        .is_some_and(|(_, clip)| clip.is_previous()));
     let _ = std::fs::remove_dir_all(path.parent().unwrap().parent().unwrap());
 }
 
 #[test]
-fn empty_track_cell_uses_all_wavs_and_unfilters_a_nonfavorite_target() {
+fn track_random_draws_from_the_same_category_across_favorite_boundaries() {
+    let mut browser = browser();
+    let path = enable_random_persistence(&mut browser, "track-category-global");
+    let bass_dir = LoopDirId::new(Path::new("/loops"), Path::new("Pack/Bass"));
+    let drums_dir = LoopDirId::new(Path::new("/loops"), Path::new("Pack/Drums"));
+    let spoken_dir = LoopDirId::new(Path::new("/loops"), Path::new("Spoken"));
+    let spoken_wav = LoopWavId::new(Path::new("/loops"), Path::new("Spoken/Voice.wav"));
+    let analysis = browser.wav_analyses[0].1;
+    browser.wav_analyses.push((spoken_wav.clone(), analysis));
+    browser.metadata.toggle_favorite(&bass_dir);
+    browser.metadata.toggle_category(&bass_dir, "drum");
+    browser.metadata.toggle_category(&drums_dir, "drum");
+    browser.metadata.toggle_category(&spoken_dir, "spoken");
+    browser.rebuild_favorite_wav_keys();
+    browser.rebuild_wav_categories();
+    let current = browser
+        .wav_analyses
+        .iter()
+        .find(|(wav, _)| wav.relative.ends_with("Bass/a.wav"))
+        .unwrap()
+        .0
+        .clone();
+    browser.track_grid[0][0] = Some(LoopTrackClip::explicit(current, 1));
+    browser.focus = LoopBrowserPane::Tracks;
+    let mut selected = HashSet::new();
+
+    for _ in 0..3 {
+        assert!(matches!(
+            browser.handle_key(KeyCode::Char('r')),
+            LoopBrowserAction::GridReplaced { .. }
+        ));
+        selected.insert(
+            browser.track_grid[0][0]
+                .as_ref()
+                .unwrap()
+                .wav
+                .relative
+                .clone(),
+        );
+    }
+
+    assert_eq!(selected.len(), 3);
+    assert!(selected
+        .iter()
+        .all(|wav| wav.starts_with("Pack/Bass/") || wav == "Pack/Drums/Kick.wav"));
+    assert!(selected.contains("Pack/Drums/Kick.wav"));
+    assert!(!selected.contains(&spoken_wav.relative));
+    let _ = std::fs::remove_dir_all(path.parent().unwrap().parent().unwrap());
+}
+
+#[test]
+fn empty_track_cell_assigns_an_all_scope_wav_and_refreshes_without_preview() {
     let mut browser = browser();
     let path = enable_random_persistence(&mut browser, "empty-track");
     browser.favorites_only = true;
     browser.rebuild_visible(None);
     browser.focus = LoopBrowserPane::Tracks;
-    let grid = browser.track_grid.clone();
 
-    let selected = preview_path(browser.handle_key(KeyCode::Char('r')));
+    let action = browser.handle_key(KeyCode::Char('r'));
+    let selected = browser.track_grid[0][0]
+        .as_ref()
+        .expect("random WAV should be assigned to the empty cell")
+        .wav
+        .path();
 
-    assert_eq!(browser.track_grid, grid);
+    assert!(matches!(
+        action,
+        LoopBrowserAction::GridRefresh { grid, .. } if grid[0][0]
+            .as_ref()
+            .is_some_and(|clip| clip.path == selected)
+    ));
     assert!(!browser.favorites_only);
     assert_eq!(browser.visible[browser.cursor].path, selected);
     assert!(browser.visible[browser.cursor].is_wav);
     let _ = std::fs::remove_dir_all(path.parent().unwrap().parent().unwrap());
+}
+
+#[test]
+fn empty_track_random_and_pad_assignment_use_the_same_playback_grid_path() {
+    let mut random_browser = browser_with_direct_wavs(1);
+    random_browser.wav_analyses[0].1.tempo.as_mut().unwrap().bpm = 160.0;
+    let random_path = enable_random_persistence(&mut random_browser, "empty-track-parity");
+    random_browser.focus = LoopBrowserPane::Tracks;
+
+    let mut pad_browser = browser_with_direct_wavs(1);
+    pad_browser.wav_analyses[0].1.tempo.as_mut().unwrap().bpm = 160.0;
+    let wav = pad_browser.wav_analyses[0].0.clone();
+    pad_browser.metadata.toggle_pad('c', &wav);
+    pad_browser.focus = LoopBrowserPane::Tracks;
+
+    let random_grid = match random_browser.handle_key(KeyCode::Char('r')) {
+        LoopBrowserAction::GridRefresh {
+            grid,
+            reason: LoopGridChange::Random,
+        } => grid,
+        _ => panic!("empty-cell random assignment should refresh the grid"),
+    };
+    let pad_grid = match pad_browser.handle_key(KeyCode::Char('c')) {
+        LoopBrowserAction::GridRefresh {
+            grid,
+            reason: LoopGridChange::Pad('c'),
+        } => grid,
+        _ => panic!("empty-cell pad assignment should refresh the grid"),
+    };
+
+    assert_eq!(random_grid, pad_grid);
+    assert_eq!(random_grid[0][0].as_ref().unwrap().bpm, Some(160.0));
+    let _ = std::fs::remove_dir_all(random_path.parent().unwrap().parent().unwrap());
+}
+
+#[test]
+fn empty_track_cell_save_failure_does_not_fall_back_to_preview() {
+    let mut browser = browser_with_direct_wavs(2);
+    let random_path = enable_random_persistence(&mut browser, "empty-grid-failure-random");
+    let blocked = temp_path("empty-grid-failure-grid");
+    std::fs::create_dir_all(&blocked).unwrap();
+    browser.track_grid_path = Some(blocked.clone());
+    browser.focus = LoopBrowserPane::Tracks;
+    let original = browser.track_grid.clone();
+
+    let action = browser.handle_key(KeyCode::Char('r'));
+
+    assert!(matches!(action, LoopBrowserAction::Continue));
+    assert_eq!(browser.track_grid, original);
+    assert!(browser
+        .track_grid_error
+        .as_deref()
+        .is_some_and(|error| error.contains("track listを保存できません")));
+    let _ = std::fs::remove_dir_all(random_path.parent().unwrap().parent().unwrap());
+    let _ = std::fs::remove_dir_all(blocked.parent().unwrap().parent().unwrap());
 }
 
 #[test]
@@ -169,6 +276,7 @@ fn nonfavorite_track_cell_uses_the_all_wav_deck() {
     browser
         .metadata
         .toggle_favorite(&LoopDirId::new(Path::new("/loops"), Path::new("Pack/Bass")));
+    browser.rebuild_favorite_wav_keys();
     let kick = browser
         .wav_analyses
         .iter()
@@ -176,10 +284,7 @@ fn nonfavorite_track_cell_uses_the_all_wav_deck() {
         .unwrap()
         .0
         .clone();
-    browser.track_grid[0][0] = Some(LoopTrackClip {
-        wav: kick,
-        span_measures: 1,
-    });
+    browser.track_grid[0][0] = Some(LoopTrackClip::explicit(kick, 1));
     browser.focus = LoopBrowserPane::Tracks;
 
     let action = browser.handle_key(KeyCode::Char('r'));
@@ -205,18 +310,26 @@ fn track_random_replacement_grows_span_and_removes_overlapping_clip() {
     let long = browser.wav_analyses[0].0.clone();
     let short = browser.wav_analyses[1].0.clone();
     browser.track_grid[0] = vec![
-        Some(LoopTrackClip {
-            wav: short.clone(),
-            span_measures: 1,
-        }),
-        Some(LoopTrackClip {
-            wav: short,
-            span_measures: 1,
-        }),
+        Some(LoopTrackClip::explicit(short.clone(), 1)),
+        Some(LoopTrackClip::explicit(short, 1)),
     ];
     browser.focus = LoopBrowserPane::Tracks;
 
     assert_eq!(browser.replace_current_clip(long), Some(0));
+
+    assert_eq!(browser.track_grid[0][0].as_ref().unwrap().span_measures, 2);
+    assert!(browser.track_grid[0][1].is_none());
+}
+
+#[test]
+fn empty_track_insertion_grows_span_and_removes_overlapping_clip() {
+    let mut browser = browser_with_spanning_wavs();
+    let long = browser.wav_analyses[0].0.clone();
+    let short = browser.wav_analyses[1].0.clone();
+    browser.track_grid[0] = vec![None, Some(LoopTrackClip::explicit(short, 1))];
+    browser.focus = LoopBrowserPane::Tracks;
+
+    assert_eq!(browser.insert_current_clip(long), Some(0));
 
     assert_eq!(browser.track_grid[0][0].as_ref().unwrap().span_measures, 2);
     assert!(browser.track_grid[0][1].is_none());
@@ -230,10 +343,7 @@ fn track_grid_save_failure_keeps_the_old_clip_and_only_previews() {
     std::fs::create_dir_all(&blocked).unwrap();
     browser.track_grid_path = Some(blocked.clone());
     let original = browser.wav_analyses[0].0.clone();
-    browser.track_grid[0][0] = Some(LoopTrackClip {
-        wav: original.clone(),
-        span_measures: 1,
-    });
+    browser.track_grid[0][0] = Some(LoopTrackClip::explicit(original.clone(), 1));
     browser.focus = LoopBrowserPane::Tracks;
 
     let action = browser.handle_key(KeyCode::Char('r'));
@@ -307,6 +417,7 @@ fn all_scope_builds_realistic_candidate_list_without_quadratic_delay() {
             )
         })
         .collect();
+    browser.rebuild_wav_analysis_indices();
 
     let started_at = Instant::now();
     let candidates = browser.random_candidates(&LoopRandomScope::All);

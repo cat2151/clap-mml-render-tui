@@ -2,7 +2,8 @@ use super::*;
 use crate::loop_browser_metadata::metadata_path;
 use crate::loop_browser_random::{load_from as load_random_decks, random_deck_path};
 use crate::loop_browser_track_grid::{
-    load_from as load_track_grid, reflow_with_spans, track_grid_path, LoadedTrackGrid,
+    load_from as load_track_grid, normalize_previous_markers, reflow_with_spans, track_grid_path,
+    LoadedTrackGrid,
 };
 
 impl LoopBrowser {
@@ -46,12 +47,14 @@ impl LoopBrowser {
                 ..Self::default()
             },
         };
-        let (track_grid, reflowed) = reflow_with_spans(&loaded_grid.grid, |wav| {
+        let (reflowed_grid, _) = reflow_with_spans(&loaded_grid.grid, |wav| {
             browser
                 .analysis_for_wav(wav)
                 .map(|analysis| analysis.measures)
         });
-        if track_grid_writable && (loaded_grid.needs_migration || reflowed) {
+        let (track_grid, _) = normalize_previous_markers(&reflowed_grid);
+        let grid_changed = track_grid != loaded_grid.grid;
+        if track_grid_writable && (loaded_grid.needs_migration || grid_changed) {
             if let Some(path) = track_grid_path.as_ref() {
                 if let Err(error) = crate::loop_browser_track_grid::save_to(
                     path,
@@ -65,6 +68,7 @@ impl LoopBrowser {
         }
         browser.track_grid = track_grid;
         browser.track_volumes_db = loaded_grid.track_volumes_db;
+        browser.solo_tracks.resize(browser.track_grid.len(), false);
         browser.track_grid_path = track_grid_path;
         browser.track_grid_writable = track_grid_writable;
         browser.track_grid_error = track_grid_error;

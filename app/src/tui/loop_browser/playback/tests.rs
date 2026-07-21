@@ -1,10 +1,25 @@
 use super::*;
+use std::collections::HashMap;
+use std::time::Duration;
 
 fn clip(name: &str, span_measures: usize, bpm: f64) -> Option<LoopPlaybackClip> {
     Some(LoopPlaybackClip {
         path: PathBuf::from(name),
         span_measures,
-        bpm,
+        kind: crate::loop_wav_analysis::LoopWavKind::Loop,
+        bpm: Some(bpm),
+        category: None,
+        meter_numerator: 4,
+        meter_denominator: 4,
+    })
+}
+
+fn one_shot(name: &str) -> Option<LoopPlaybackClip> {
+    Some(LoopPlaybackClip {
+        path: PathBuf::from(name),
+        span_measures: 1,
+        kind: crate::loop_wav_analysis::LoopWavKind::OneShot,
+        bpm: None,
         category: None,
         meter_numerator: 4,
         meter_denominator: 4,
@@ -61,6 +76,41 @@ fn measure_duration_uses_the_automatically_adjusted_bpm() {
 }
 
 #[test]
+fn one_shots_do_not_affect_target_bpm_or_meter_selection() {
+    let mut three_four = clip("loop.wav", 1, 160.0).unwrap();
+    three_four.meter_numerator = 3;
+    let grid = vec![
+        vec![one_shot("hit.wav"), None],
+        vec![None, Some(three_four)],
+    ];
+    let target = grid_target_bpm(&grid);
+    let timing = measure_timing(&grid, target.bpm);
+
+    assert_eq!(target.bpm, 128.0);
+    assert_eq!(timing.beats_per_measure, 3);
+}
+
+#[test]
+fn all_one_shots_use_default_tempo_without_a_stretch_constraint() {
+    let grid = vec![vec![one_shot("hit.wav")]];
+    let target = grid_target_bpm(&grid);
+
+    assert_eq!(target.bpm, 120.0);
+    assert!(target.has_common_range);
+    assert_eq!(measure_duration(&grid, target.bpm), Duration::from_secs(2));
+}
+
+#[test]
+fn measure_timing_exposes_the_meter_numerator_as_beat_count() {
+    let mut three_four = clip("three-four.wav", 1, 120.0).unwrap();
+    three_four.meter_numerator = 3;
+    let timing = measure_timing(&vec![vec![Some(three_four)]], 120.0);
+
+    assert_eq!(timing.duration, Duration::from_millis(1_500));
+    assert_eq!(timing.beats_per_measure, 3);
+}
+
+#[test]
 fn incompatible_clips_fall_back_to_120() {
     let grid = vec![vec![clip("slow.wav", 1, 60.0), clip("fast.wav", 1, 200.0)]];
     let target = grid_target_bpm(&grid);
@@ -83,6 +133,30 @@ fn continuation_measure_waits_and_can_start_another_track() {
             .map(|(_, clip)| clip.path.clone())
             .collect::<Vec<_>>(),
         vec![PathBuf::from("next.wav")]
+    );
+}
+
+#[test]
+fn scheduled_output_is_cropped_to_the_prev_markers_effective_span() {
+    let one_measure = Duration::from_secs(2);
+
+    assert_eq!(
+        scheduling::scheduled_output_frames(176_400, 44_100, one_measure),
+        88_200
+    );
+    assert_eq!(
+        scheduling::scheduled_output_frames(88_200, 44_100, one_measure),
+        88_200
+    );
+}
+
+#[test]
+fn one_shot_output_is_not_cropped_to_the_measure_duration() {
+    let hit = one_shot("hit.wav").unwrap();
+
+    assert_eq!(
+        scheduling::scheduled_clip_output_frames(&hit, 398_224, 44_100, Duration::from_secs(2)),
+        398_224
     );
 }
 
@@ -134,4 +208,47 @@ fn pad_voices_replace_only_the_same_pad() {
     voices.insert('c', "second-c");
     assert_eq!(voices.get(&'c'), Some(&"second-c"));
     assert_eq!(voices.get(&'d'), Some(&"first-d"));
+}
+
+#[test]
+fn paused_transport_stays_stopped_across_grid_updates_and_resumes_at_selection() {
+    let first_grid = vec![vec![
+        clip("first.wav", 1, 120.0),
+        clip("second.wav", 1, 120.0),
+    ]];
+    let updated_grid = vec![vec![
+        clip("new-first.wav", 1, 120.0),
+        None,
+        clip("new-third.wav", 1, 120.0),
+    ]];
+    let mut transport = TransportState::default();
+
+    assert_eq!(transport.next_measure_to_start(&first_grid), Some(0));
+    transport.pause();
+    assert!(transport.is_paused());
+    assert_eq!(transport.next_measure_to_start(&updated_grid), None);
+
+    transport.resume_at(1);
+    assert!(!transport.is_paused());
+    assert_eq!(transport.next_measure_to_start(&updated_grid), Some(2));
+}
+
+#[test]
+fn effective_gain_combines_solo_state_with_saved_track_volume() {
+    let volumes = [3, -6, 0];
+    let expected_solo_gain = crate::mixer_overlay::volume_db_to_gain(-6);
+
+    assert_eq!(
+        gain::effective_track_gain(0, &volumes, &[false, false, false]),
+        crate::mixer_overlay::volume_db_to_gain(3)
+    );
+    assert_eq!(
+        gain::effective_track_gain(0, &volumes, &[false, true, false]),
+        0.0
+    );
+    assert_eq!(
+        gain::effective_track_gain(1, &volumes, &[false, true, false]),
+        expected_solo_gain
+    );
+    assert_eq!(gain::effective_track_gain(2, &volumes, &[false, true]), 0.0);
 }
