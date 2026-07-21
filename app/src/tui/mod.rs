@@ -48,6 +48,7 @@ pub(crate) use self::cache::filter_items;
 pub(in crate::tui) use self::cache::filter_patches;
 use self::keyboard::{KeyboardMidiSender, KeyboardMmlInput, KeyboardNoteGuide, KeyboardState};
 use self::notepad_history::NotepadHistoryState;
+use self::patch_phrase::PatchPhraseState;
 use self::patch_select::PatchSelectState;
 use self::render_queue::{TuiRenderJobStatus, TuiRenderQueue};
 pub(in crate::tui) use self::session::PatchLoadState;
@@ -175,19 +176,10 @@ pub struct TuiApp<'a> {
     pub(in crate::tui) patch_select: PatchSelectState<'a>,
     pub(super) normal_page_size: usize,
     pub(in crate::tui) notepad_history: NotepadHistoryState<'a>,
-    pub(super) patch_phrase_page_size: usize,
+    pub(in crate::tui) patch_phrase: PatchPhraseState<'a>,
     pub(super) patch_phrase_store: crate::history::PatchPhraseStore,
     pub(super) normal_pending_delete: bool,
     pub(super) yank_buffer: Option<String>,
-    pub(super) patch_phrase_name: Option<String>,
-    pub(super) patch_phrase_history_cursor: usize,
-    pub(super) patch_phrase_favorites_cursor: usize,
-    pub(super) patch_phrase_history_state: ListState,
-    pub(super) patch_phrase_favorites_state: ListState,
-    pub(super) patch_phrase_focus: PatchPhrasePane,
-    pub(super) patch_phrase_query: String,
-    pub(super) patch_phrase_query_textarea: TextArea<'a>,
-    pub(super) patch_phrase_filter_active: bool,
     pub(super) patch_phrase_store_dirty: bool,
     /// 終了時 DAW モードだったかどうか（history.json に保存・復元する）
     pub(super) is_daw_mode: bool,

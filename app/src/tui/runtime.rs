@@ -43,7 +43,7 @@ impl<'a> TuiApp<'a> {
             Mode::Insert => true,
             Mode::PatchSelect => self.patch_select.patch_select_filter_active,
             Mode::NotepadHistory => self.notepad_history.filter_active,
-            Mode::PatchPhrase => self.patch_phrase_filter_active,
+            Mode::PatchPhrase => self.patch_phrase.filter_active,
             Mode::Keyboard => self.keyboard_mml_input.is_active(),
             Mode::Normal | Mode::NotepadHistoryGuide | Mode::Help | Mode::LoopBrowser => false,
         }
@@ -249,7 +249,7 @@ impl<'a> TuiApp<'a> {
                             Mode::NotepadHistory if self.notepad_history.filter_active => {
                                 self.handle_notepad_history_key_event(key)
                             }
-                            Mode::PatchPhrase if self.patch_phrase_filter_active => {
+                            Mode::PatchPhrase if self.patch_phrase.filter_active => {
                                 self.handle_patch_phrase_key_event(key)
                             }
                             _ => {}

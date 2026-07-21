@@ -232,7 +232,10 @@ fn handle_notepad_history_n_p_t_switch_to_corresponding_overlays() {
     app.start_notepad_history();
     app.handle_notepad_history(KeyCode::Char('p'));
     assert!(matches!(app.mode, Mode::PatchPhrase));
-    assert_eq!(app.patch_phrase_name.as_deref(), Some("Pads/Pad 1.fxp"));
+    assert_eq!(
+        app.patch_phrase.patch_name.as_deref(),
+        Some("Pads/Pad 1.fxp")
+    );
 
     app.start_notepad_history();
     app.handle_notepad_history(KeyCode::Char('t'));

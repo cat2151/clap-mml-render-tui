@@ -127,7 +127,7 @@ fn handle_patch_phrase_arrow_keys_switch_focus_and_preview() {
 
     app.handle_patch_phrase(KeyCode::Right);
 
-    assert!(matches!(app.patch_phrase_focus, PatchPhrasePane::Favorites));
+    assert!(matches!(app.patch_phrase.focus, PatchPhrasePane::Favorites));
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
         PlayState::Running(msg) if msg == r#"{"Surge XT patch":"Pads/Pad 1.fxp"} o5g"#
@@ -135,7 +135,7 @@ fn handle_patch_phrase_arrow_keys_switch_focus_and_preview() {
 
     app.handle_patch_phrase(KeyCode::Left);
 
-    assert!(matches!(app.patch_phrase_focus, PatchPhrasePane::History));
+    assert!(matches!(app.patch_phrase.focus, PatchPhrasePane::History));
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
         PlayState::Running(msg) if msg == r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#
@@ -159,19 +159,19 @@ fn handle_patch_phrase_page_down_and_page_up_move_by_visible_page() {
             favorites: vec!["fav".to_string()],
         },
     );
-    app.patch_phrase_page_size = 2;
+    app.patch_phrase.page_size = 2;
     app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
     app.handle_patch_phrase(KeyCode::Char('j'));
 
     app.handle_patch_phrase(KeyCode::PageDown);
-    assert_eq!(app.patch_phrase_history_cursor, 3);
+    assert_eq!(app.patch_phrase.history_cursor, 3);
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
         PlayState::Running(msg) if msg == r#"{"Surge XT patch":"Pads/Pad 1.fxp"} three"#
     ));
 
     app.handle_patch_phrase(KeyCode::PageUp);
-    assert_eq!(app.patch_phrase_history_cursor, 1);
+    assert_eq!(app.patch_phrase.history_cursor, 1);
     assert!(matches!(
         &*app.play_state.lock().unwrap(),
         PlayState::Running(msg) if msg == r#"{"Surge XT patch":"Pads/Pad 1.fxp"} one"#
@@ -194,7 +194,7 @@ fn handle_patch_phrase_j_prefetches_predicted_navigation_cache() {
             favorites: vec![],
         },
     );
-    app.patch_phrase_page_size = 2;
+    app.patch_phrase.page_size = 2;
     app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
 
     app.handle_patch_phrase(KeyCode::Char('j'));
@@ -216,10 +216,10 @@ fn handle_patch_phrase_j_prefetches_direction_first_then_fills_remaining_navigat
             favorites: vec![],
         },
     );
-    app.patch_phrase_page_size = 5;
+    app.patch_phrase.page_size = 5;
     app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
-    app.patch_phrase_history_cursor = 4;
-    app.patch_phrase_history_state.select(Some(4));
+    app.patch_phrase.history_cursor = 4;
+    app.patch_phrase.history_state.select(Some(4));
 
     app.handle_patch_phrase(KeyCode::Char('j'));
 
@@ -262,20 +262,20 @@ fn handle_patch_phrase_starts_scrolling_before_cursor_reaches_view_edge() {
             favorites: vec![],
         },
     );
-    app.patch_phrase_page_size = 6;
+    app.patch_phrase.page_size = 6;
     app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
 
     for _ in 0..4 {
         app.handle_patch_phrase(KeyCode::Char('j'));
     }
-    assert_eq!(app.patch_phrase_history_cursor, 4);
-    assert_eq!(app.patch_phrase_history_state.offset(), 1);
+    assert_eq!(app.patch_phrase.history_cursor, 4);
+    assert_eq!(app.patch_phrase.history_state.offset(), 1);
 
     for _ in 0..2 {
         app.handle_patch_phrase(KeyCode::Char('k'));
     }
-    assert_eq!(app.patch_phrase_history_cursor, 2);
-    assert_eq!(app.patch_phrase_history_state.offset(), 0);
+    assert_eq!(app.patch_phrase.history_cursor, 2);
+    assert_eq!(app.patch_phrase.history_state.offset(), 0);
 }
 
 #[path = "patch_phrase/filter_and_switching.rs"]

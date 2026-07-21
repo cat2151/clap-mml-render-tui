@@ -111,7 +111,10 @@ fn handle_normal_f_enters_patch_phrase_for_current_patch() {
     app.handle_normal(KeyCode::Char('f'));
 
     assert!(matches!(app.mode, Mode::PatchPhrase));
-    assert_eq!(app.patch_phrase_name.as_deref(), Some("Pads/Pad 1.fxp"));
+    assert_eq!(
+        app.patch_phrase.patch_name.as_deref(),
+        Some("Pads/Pad 1.fxp")
+    );
     assert_eq!(app.patch_phrase_history_items(), vec!["c".to_string()]);
     assert_eq!(app.patch_phrase_favorite_items(), vec!["c".to_string()]);
 }

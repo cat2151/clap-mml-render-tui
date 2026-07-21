@@ -80,7 +80,7 @@ fn start_patch_phrase_migrates_existing_history_and_favorites_to_prefixed_patch_
     app.start_patch_phrase("Pads/Pad 1.fxp".to_string());
 
     assert_eq!(
-        app.patch_phrase_name.as_deref(),
+        app.patch_phrase.patch_name.as_deref(),
         Some("patches_factory/Pads/Pad 1.fxp")
     );
     let stored = app

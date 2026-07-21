@@ -4,7 +4,7 @@ use super::*;
 fn patch_phrase_screen_renders_history_and_favorites_lists() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::PatchPhrase;
-    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase.patch_name = Some("Pads/Pad 1.fxp".to_string());
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         PatchPhraseState {
@@ -12,8 +12,8 @@ fn patch_phrase_screen_renders_history_and_favorites_lists() {
             favorites: vec!["o5g".to_string()],
         },
     );
-    app.patch_phrase_history_state.select(Some(0));
-    app.patch_phrase_favorites_state.select(Some(0));
+    app.patch_phrase.history_state.select(Some(0));
+    app.patch_phrase.favorites_state.select(Some(0));
 
     let buffer = render_buffer(&mut app, 80, 10);
     let lines = render_lines(&mut app, 80, 10).join("\n");
@@ -48,7 +48,7 @@ fn patch_phrase_screen_renders_as_overlay_on_notepad_screen() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
     app.mode = Mode::PatchPhrase;
-    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase.patch_name = Some("Pads/Pad 1.fxp".to_string());
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         PatchPhraseState {
@@ -56,8 +56,8 @@ fn patch_phrase_screen_renders_as_overlay_on_notepad_screen() {
             favorites: vec!["o5g".to_string()],
         },
     );
-    app.patch_phrase_history_state.select(Some(0));
-    app.patch_phrase_favorites_state.select(Some(0));
+    app.patch_phrase.history_state.select(Some(0));
+    app.patch_phrase.favorites_state.select(Some(0));
 
     let buffer = render_buffer(&mut app, 100, 16);
     let lines = render_lines(&mut app, 100, 16).join("\n");
@@ -87,7 +87,7 @@ fn patch_phrase_overlay_is_centered_like_other_overlays() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} old"#.to_string()];
     app.mode = Mode::PatchPhrase;
-    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase.patch_name = Some("Pads/Pad 1.fxp".to_string());
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         PatchPhraseState {
@@ -95,8 +95,8 @@ fn patch_phrase_overlay_is_centered_like_other_overlays() {
             favorites: vec!["o5g".to_string()],
         },
     );
-    app.patch_phrase_history_state.select(Some(0));
-    app.patch_phrase_favorites_state.select(Some(0));
+    app.patch_phrase.history_state.select(Some(0));
+    app.patch_phrase.favorites_state.select(Some(0));
 
     let buffer = render_buffer(&mut app, 100, 20);
     let overlay_area = crate::ui_utils::centered_rect(88, 84, buffer.area);
@@ -126,7 +126,7 @@ fn patch_phrase_screen_keeps_status_below_overlay_panes() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::PatchPhrase;
     app.test_set_active_parallel_render_count(2);
-    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase.patch_name = Some("Pads/Pad 1.fxp".to_string());
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         PatchPhraseState {
@@ -159,7 +159,7 @@ fn patch_phrase_screen_keeps_status_below_overlay_panes() {
 fn patch_phrase_screen_shows_filter_confirm_title_when_filter_active() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::PatchPhrase;
-    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase.patch_name = Some("Pads/Pad 1.fxp".to_string());
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         PatchPhraseState {
@@ -167,8 +167,8 @@ fn patch_phrase_screen_shows_filter_confirm_title_when_filter_active() {
             favorites: vec!["o5g".to_string()],
         },
     );
-    app.patch_phrase_filter_active = true;
-    app.patch_phrase_query = "l8".to_string();
+    app.patch_phrase.filter_active = true;
+    app.patch_phrase.query = "l8".to_string();
 
     let normalized = render_lines(&mut app, 100, 16).join("\n").replace(' ', "");
 
@@ -183,7 +183,7 @@ fn patch_phrase_screen_shows_filter_confirm_title_when_filter_active() {
 fn patch_phrase_overlay_marks_cached_preview_items_with_music_note() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::PatchPhrase;
-    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase.patch_name = Some("Pads/Pad 1.fxp".to_string());
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         PatchPhraseState {
@@ -206,7 +206,7 @@ fn patch_phrase_overlay_marks_cached_preview_items_with_music_note() {
 fn patch_phrase_selected_entry_uses_contrast_background_without_blink() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::PatchPhrase;
-    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase.patch_name = Some("Pads/Pad 1.fxp".to_string());
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         PatchPhraseState {
@@ -230,7 +230,7 @@ fn patch_phrase_selected_entry_uses_contrast_background_without_blink() {
 fn patch_phrase_only_highlights_the_focused_pane() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::PatchPhrase;
-    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase.patch_name = Some("Pads/Pad 1.fxp".to_string());
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         PatchPhraseState {
@@ -238,9 +238,9 @@ fn patch_phrase_only_highlights_the_focused_pane() {
             favorites: vec!["o5g".to_string()],
         },
     );
-    app.patch_phrase_history_state.select(Some(0));
-    app.patch_phrase_favorites_state.select(Some(0));
-    app.patch_phrase_focus = PatchPhrasePane::History;
+    app.patch_phrase.history_state.select(Some(0));
+    app.patch_phrase.favorites_state.select(Some(0));
+    app.patch_phrase.focus = PatchPhrasePane::History;
 
     let buffer = render_buffer(&mut app, 100, 16);
     let overlay_area = crate::ui_utils::centered_rect(88, 84, buffer.area);
@@ -266,9 +266,9 @@ fn patch_phrase_only_highlights_the_focused_pane() {
 fn patch_phrase_screen_uses_c_as_fallback_for_empty_lists() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::PatchPhrase;
-    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
-    app.patch_phrase_history_state.select(Some(0));
-    app.patch_phrase_favorites_state.select(Some(0));
+    app.patch_phrase.patch_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase.history_state.select(Some(0));
+    app.patch_phrase.favorites_state.select(Some(0));
 
     let lines = render_lines(&mut app, 80, 10).join("\n");
 

@@ -51,7 +51,7 @@ fn insert_and_filter_modes_use_terminal_bar_cursor() {
 
     app.notepad_history.filter_active = false;
     app.mode = Mode::PatchPhrase;
-    app.patch_phrase_filter_active = true;
+    app.patch_phrase.filter_active = true;
     assert!(app.uses_textarea_cursor());
 }
 
@@ -354,7 +354,7 @@ fn insert_screen_shows_insert_title_without_duplicate_line_text() {
 fn patch_phrase_screen_uses_monokai_foreground_for_unfocused_list() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::PatchPhrase;
-    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase.patch_name = Some("Pads/Pad 1.fxp".to_string());
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         PatchPhraseState {

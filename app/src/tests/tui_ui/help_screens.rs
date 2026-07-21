@@ -5,9 +5,9 @@ use crossterm::event::KeyCode;
 fn patch_phrase_screen_shows_search_prompt() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mode = Mode::PatchPhrase;
-    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
-    app.patch_phrase_query = "jk".to_string();
-    app.patch_phrase_filter_active = true;
+    app.patch_phrase.patch_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase.query = "jk".to_string();
+    app.patch_phrase.filter_active = true;
 
     let lines = render_lines(&mut app, 120, 12).join("\n");
 
@@ -190,7 +190,7 @@ fn notepad_history_help_screen_keeps_history_base_title_and_keybinds() {
 #[test]
 fn patch_phrase_help_screen_shows_patch_phrase_shortcuts() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.patch_phrase_name = Some("Pads/Pad 1.fxp".to_string());
+    app.patch_phrase.patch_name = Some("Pads/Pad 1.fxp".to_string());
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         PatchPhraseState {

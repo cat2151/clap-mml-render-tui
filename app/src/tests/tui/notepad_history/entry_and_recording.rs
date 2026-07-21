@@ -17,10 +17,13 @@ fn handle_normal_shift_h_enters_patch_phrase_overlay() {
 
     assert!(matches!(result, NormalAction::Continue));
     assert!(matches!(app.mode, Mode::PatchPhrase));
-    assert_eq!(app.patch_phrase_name.as_deref(), Some("Pads/Pad 1.fxp"));
-    assert!(matches!(app.patch_phrase_focus, PatchPhrasePane::History));
-    assert_eq!(app.patch_phrase_history_state.selected(), Some(0));
-    assert_eq!(app.patch_phrase_favorites_state.selected(), Some(0));
+    assert_eq!(
+        app.patch_phrase.patch_name.as_deref(),
+        Some("Pads/Pad 1.fxp")
+    );
+    assert!(matches!(app.patch_phrase.focus, PatchPhrasePane::History));
+    assert_eq!(app.patch_phrase.history_state.selected(), Some(0));
+    assert_eq!(app.patch_phrase.favorites_state.selected(), Some(0));
 }
 
 #[test]

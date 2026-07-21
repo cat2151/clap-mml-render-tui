@@ -4,17 +4,17 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use mmlabc_to_smf::mml_preprocessor;
 use serde_json::Value;
 
-use super::{filter_items, Mode, PatchPhrasePane, TuiApp, PATCH_JSON_KEY};
+use super::super::{filter_items, Mode, PatchPhrasePane, TuiApp, PATCH_JSON_KEY};
 
 const PATCH_PHRASE_LIST_MAX_LEN: usize = 100;
 
 impl<'a> TuiApp<'a> {
     fn filtered_patch_phrase_items(&self, items: Option<&[String]>) -> Vec<String> {
         match items.filter(|items| !items.is_empty()) {
-            Some(items) => filter_items(items, &self.patch_phrase_query),
+            Some(items) => filter_items(items, &self.patch_phrase.query),
             None => {
                 let fallback = [String::from("c")];
-                filter_items(&fallback, &self.patch_phrase_query)
+                filter_items(&fallback, &self.patch_phrase.query)
             }
         }
     }
@@ -25,36 +25,36 @@ impl<'a> TuiApp<'a> {
         history_len: usize,
         favorites_len: usize,
     ) -> bool {
-        match self.patch_phrase_focus {
+        match self.patch_phrase.focus {
             PatchPhrasePane::History => {
                 if history_len == 0 {
                     return false;
                 }
                 let max_cursor = history_len.saturating_sub(1) as isize;
-                let next_cursor = (self.patch_phrase_history_cursor as isize + delta)
+                let next_cursor = (self.patch_phrase.history_cursor as isize + delta)
                     .clamp(0, max_cursor) as usize;
-                if next_cursor == self.patch_phrase_history_cursor {
+                if next_cursor == self.patch_phrase.history_cursor {
                     return false;
                 }
-                self.patch_phrase_history_cursor = next_cursor;
+                self.patch_phrase.history_cursor = next_cursor;
             }
             PatchPhrasePane::Favorites => {
                 if favorites_len == 0 {
                     return false;
                 }
                 let max_cursor = favorites_len.saturating_sub(1) as isize;
-                let next_cursor = (self.patch_phrase_favorites_cursor as isize + delta)
+                let next_cursor = (self.patch_phrase.favorites_cursor as isize + delta)
                     .clamp(0, max_cursor) as usize;
-                if next_cursor == self.patch_phrase_favorites_cursor {
+                if next_cursor == self.patch_phrase.favorites_cursor {
                     return false;
                 }
-                self.patch_phrase_favorites_cursor = next_cursor;
+                self.patch_phrase.favorites_cursor = next_cursor;
             }
         }
         true
     }
 
-    pub(super) fn push_front_dedup(items: &mut Vec<String>, item: String) {
+    pub(in crate::tui) fn push_front_dedup(items: &mut Vec<String>, item: String) {
         if let Some(index) = items.iter().position(|existing| existing == &item) {
             if index == 0 {
                 return;
@@ -67,7 +67,7 @@ impl<'a> TuiApp<'a> {
         }
     }
 
-    pub(super) fn extract_patch_phrase(mml: &str) -> Option<(String, String)> {
+    pub(in crate::tui) fn extract_patch_phrase(mml: &str) -> Option<(String, String)> {
         let preprocessed = mml_preprocessor::extract_embedded_json(mml);
         let patch_name = preprocessed
             .embedded_json
@@ -83,18 +83,20 @@ impl<'a> TuiApp<'a> {
         Some((patch_name, phrase))
     }
 
-    pub(super) fn patch_phrase_history_items(&self) -> Vec<String> {
+    pub(in crate::tui) fn patch_phrase_history_items(&self) -> Vec<String> {
         self.filtered_patch_phrase_items(
-            self.patch_phrase_name
+            self.patch_phrase
+                .patch_name
                 .as_deref()
                 .and_then(|patch| self.patch_phrase_store.patches.get(patch))
                 .map(|state| state.history.as_slice()),
         )
     }
 
-    pub(super) fn patch_phrase_favorite_items(&self) -> Vec<String> {
+    pub(in crate::tui) fn patch_phrase_favorite_items(&self) -> Vec<String> {
         self.filtered_patch_phrase_items(
-            self.patch_phrase_name
+            self.patch_phrase
+                .patch_name
                 .as_deref()
                 .and_then(|patch| self.patch_phrase_store.patches.get(patch))
                 .map(|state| state.favorites.as_slice()),
@@ -104,40 +106,42 @@ impl<'a> TuiApp<'a> {
     fn sync_patch_phrase_states(&mut self) {
         let history_len = self.patch_phrase_history_items().len();
         if history_len == 0 {
-            self.patch_phrase_history_cursor = 0;
-            self.patch_phrase_history_state.select(None);
+            self.patch_phrase.history_cursor = 0;
+            self.patch_phrase.history_state.select(None);
         } else {
-            self.patch_phrase_history_cursor =
-                self.patch_phrase_history_cursor.min(history_len - 1);
-            self.patch_phrase_history_state
-                .select(Some(self.patch_phrase_history_cursor));
+            self.patch_phrase.history_cursor =
+                self.patch_phrase.history_cursor.min(history_len - 1);
+            self.patch_phrase
+                .history_state
+                .select(Some(self.patch_phrase.history_cursor));
             Self::sync_overlay_list_offset(
-                &mut self.patch_phrase_history_state,
-                self.patch_phrase_history_cursor,
+                &mut self.patch_phrase.history_state,
+                self.patch_phrase.history_cursor,
                 history_len,
-                self.patch_phrase_page_size,
+                self.patch_phrase.page_size,
             );
         }
 
         let favorites_len = self.patch_phrase_favorite_items().len();
         if favorites_len == 0 {
-            self.patch_phrase_favorites_cursor = 0;
-            self.patch_phrase_favorites_state.select(None);
+            self.patch_phrase.favorites_cursor = 0;
+            self.patch_phrase.favorites_state.select(None);
         } else {
-            self.patch_phrase_favorites_cursor =
-                self.patch_phrase_favorites_cursor.min(favorites_len - 1);
-            self.patch_phrase_favorites_state
-                .select(Some(self.patch_phrase_favorites_cursor));
+            self.patch_phrase.favorites_cursor =
+                self.patch_phrase.favorites_cursor.min(favorites_len - 1);
+            self.patch_phrase
+                .favorites_state
+                .select(Some(self.patch_phrase.favorites_cursor));
             Self::sync_overlay_list_offset(
-                &mut self.patch_phrase_favorites_state,
-                self.patch_phrase_favorites_cursor,
+                &mut self.patch_phrase.favorites_state,
+                self.patch_phrase.favorites_cursor,
                 favorites_len,
-                self.patch_phrase_page_size,
+                self.patch_phrase.page_size,
             );
         }
     }
 
-    pub(super) fn flush_patch_phrase_store_if_dirty(&mut self) {
+    pub(in crate::tui) fn flush_patch_phrase_store_if_dirty(&mut self) {
         if !self.patch_phrase_store_dirty {
             return;
         }
@@ -145,7 +149,7 @@ impl<'a> TuiApp<'a> {
         self.patch_phrase_store_dirty = false;
     }
 
-    pub(super) fn record_patch_phrase_history(&mut self, mml: &str) {
+    pub(in crate::tui) fn record_patch_phrase_history(&mut self, mml: &str) {
         let Some((patch_name, phrase)) = Self::extract_patch_phrase(mml) else {
             return;
         };
@@ -163,7 +167,7 @@ impl<'a> TuiApp<'a> {
         self.patch_phrase_store_dirty = true;
     }
 
-    pub(super) fn add_patch_phrase_favorite(&mut self, patch_name: String, phrase: String) {
+    pub(in crate::tui) fn add_patch_phrase_favorite(&mut self, patch_name: String, phrase: String) {
         let patch_name = self.normalize_patch_phrase_store_key(patch_name);
         let state = self
             .patch_phrase_store
@@ -180,7 +184,7 @@ impl<'a> TuiApp<'a> {
         focus: PatchPhrasePane,
         cursor: usize,
     ) -> Option<String> {
-        let patch_name = self.patch_phrase_name.as_deref()?;
+        let patch_name = self.patch_phrase.patch_name.as_deref()?;
         let phrase = match focus {
             PatchPhrasePane::History => self.patch_phrase_history_items().get(cursor).cloned(),
             PatchPhrasePane::Favorites => self.patch_phrase_favorite_items().get(cursor).cloned(),
@@ -190,29 +194,29 @@ impl<'a> TuiApp<'a> {
     }
 
     fn patch_phrase_preview_mml(&self) -> Option<String> {
-        let cursor = match self.patch_phrase_focus {
-            PatchPhrasePane::History => self.patch_phrase_history_cursor,
-            PatchPhrasePane::Favorites => self.patch_phrase_favorites_cursor,
+        let cursor = match self.patch_phrase.focus {
+            PatchPhrasePane::History => self.patch_phrase.history_cursor,
+            PatchPhrasePane::Favorites => self.patch_phrase.favorites_cursor,
         };
-        self.patch_phrase_preview_mml_for_selection(self.patch_phrase_focus, cursor)
+        self.patch_phrase_preview_mml_for_selection(self.patch_phrase.focus, cursor)
     }
 
     fn prefetch_patch_phrase_navigation_audio_cache(&self, preferred_delta: Option<isize>) {
-        let (item_count, cursor) = match self.patch_phrase_focus {
+        let (item_count, cursor) = match self.patch_phrase.focus {
             PatchPhrasePane::History => (
                 self.patch_phrase_history_items().len(),
-                self.patch_phrase_history_cursor,
+                self.patch_phrase.history_cursor,
             ),
             PatchPhrasePane::Favorites => (
                 self.patch_phrase_favorite_items().len(),
-                self.patch_phrase_favorites_cursor,
+                self.patch_phrase.favorites_cursor,
             ),
         };
-        let focus = self.patch_phrase_focus;
+        let focus = self.patch_phrase.focus;
         self.prefetch_navigation_audio_cache(
             cursor,
             item_count,
-            self.patch_phrase_page_size,
+            self.patch_phrase.page_size,
             preferred_delta,
             |index| self.patch_phrase_preview_mml_for_selection(focus, index),
         );
@@ -233,7 +237,7 @@ impl<'a> TuiApp<'a> {
         }
     }
 
-    pub(super) fn start_patch_phrase(&mut self, patch_name: String) {
+    pub(in crate::tui) fn start_patch_phrase(&mut self, patch_name: String) {
         let ready_pairs = {
             let state = self.patch_load_state.lock().unwrap();
             match &*state {
@@ -245,58 +249,58 @@ impl<'a> TuiApp<'a> {
             self.normalize_patch_phrase_store_for_available_patches(pairs);
         }
         let patch_name = self.normalize_patch_phrase_store_key(patch_name);
-        self.patch_phrase_name = Some(patch_name);
-        self.patch_phrase_focus = PatchPhrasePane::History;
-        self.patch_phrase_history_cursor = 0;
-        self.patch_phrase_favorites_cursor = 0;
-        self.patch_phrase_query.clear();
-        self.patch_phrase_query_textarea = crate::text_input::new_single_line_textarea("");
-        self.patch_phrase_filter_active = false;
+        self.patch_phrase.patch_name = Some(patch_name);
+        self.patch_phrase.focus = PatchPhrasePane::History;
+        self.patch_phrase.history_cursor = 0;
+        self.patch_phrase.favorites_cursor = 0;
+        self.patch_phrase.query.clear();
+        self.patch_phrase.query_textarea = crate::text_input::new_single_line_textarea("");
+        self.patch_phrase.filter_active = false;
         self.sync_patch_phrase_states();
         self.mode = Mode::PatchPhrase;
     }
 
     #[cfg(test)]
-    pub(super) fn handle_patch_phrase(&mut self, key: KeyCode) {
+    pub(in crate::tui) fn handle_patch_phrase(&mut self, key: KeyCode) {
         self.handle_patch_phrase_key_event(KeyEvent::new(key, KeyModifiers::NONE));
     }
 
     pub(crate) fn handle_patch_phrase_key_event(&mut self, key_event: KeyEvent) {
-        if self.patch_phrase_filter_active {
+        if self.patch_phrase.filter_active {
             crate::text_input::sync_single_line_textarea(
-                &mut self.patch_phrase_query_textarea,
-                &self.patch_phrase_query,
+                &mut self.patch_phrase.query_textarea,
+                &self.patch_phrase.query,
             );
             match key_event.code {
                 KeyCode::Esc => {
-                    self.patch_phrase_filter_active = false;
+                    self.patch_phrase.filter_active = false;
                     self.flush_patch_phrase_store_if_dirty();
                     self.mode = Mode::Normal;
                 }
                 KeyCode::Enter => {
-                    self.patch_phrase_filter_active = false;
+                    self.patch_phrase.filter_active = false;
                     self.sync_patch_phrase_states();
                 }
-                KeyCode::Backspace if self.patch_phrase_query.is_empty() => {
-                    self.patch_phrase_filter_active = false;
+                KeyCode::Backspace if self.patch_phrase.query.is_empty() => {
+                    self.patch_phrase.filter_active = false;
                 }
                 KeyCode::Char('?') => self.enter_help(),
                 _ => {
-                    let previous_query = self.patch_phrase_query.clone();
+                    let previous_query = self.patch_phrase.query.clone();
                     if crate::text_input::apply_key_event_to_textarea(
-                        &mut self.patch_phrase_query_textarea,
+                        &mut self.patch_phrase.query_textarea,
                         key_event,
                     ) {
                         let next_query =
-                            crate::text_input::textarea_value(&self.patch_phrase_query_textarea);
+                            crate::text_input::textarea_value(&self.patch_phrase.query_textarea);
                         if next_query == previous_query {
                             return;
                         }
-                        self.patch_phrase_query = next_query;
+                        self.patch_phrase.query = next_query;
                         self.sync_patch_phrase_states();
                         self.preview_selected_patch_phrase_item();
-                        if !previous_query.is_empty() && self.patch_phrase_query.is_empty() {
-                            self.patch_phrase_filter_active = false;
+                        if !previous_query.is_empty() && self.patch_phrase.query.is_empty() {
+                            self.patch_phrase.filter_active = false;
                         }
                     }
                 }
@@ -326,19 +330,19 @@ impl<'a> TuiApp<'a> {
             KeyCode::Char('p') => {
                 // overlay 切替キーを統一するため、patch history 中でも p で
                 // 現在 patch の History 先頭・検索解除の初期状態へ戻せるようにする。
-                self.start_patch_phrase_for_patch_name(self.patch_phrase_name.clone());
+                self.start_patch_phrase_for_patch_name(self.patch_phrase.patch_name.clone());
             }
             KeyCode::Char('t') => {
-                let patch_name = self.patch_phrase_name.clone();
+                let patch_name = self.patch_phrase.patch_name.clone();
                 self.open_patch_select_overlay(patch_name.as_deref());
             }
             KeyCode::Char('h') | KeyCode::Left => {
-                self.patch_phrase_focus = PatchPhrasePane::History;
+                self.patch_phrase.focus = PatchPhrasePane::History;
                 self.sync_patch_phrase_states();
                 self.preview_selected_patch_phrase_item();
             }
             KeyCode::Char('l') | KeyCode::Right => {
-                self.patch_phrase_focus = PatchPhrasePane::Favorites;
+                self.patch_phrase.focus = PatchPhrasePane::Favorites;
                 self.sync_patch_phrase_states();
                 self.preview_selected_patch_phrase_item();
             }
@@ -356,32 +360,32 @@ impl<'a> TuiApp<'a> {
             }
             KeyCode::PageDown
                 if self.move_patch_phrase_selection_by(
-                    self.patch_phrase_page_size as isize,
+                    self.patch_phrase.page_size as isize,
                     history_len,
                     favorites_len,
                 ) =>
             {
                 self.sync_patch_phrase_states();
                 self.preview_selected_patch_phrase_item_with_navigation_hint(Some(
-                    self.patch_phrase_page_size as isize,
+                    self.patch_phrase.page_size as isize,
                 ));
             }
             KeyCode::PageUp
                 if self.move_patch_phrase_selection_by(
-                    -(self.patch_phrase_page_size as isize),
+                    -(self.patch_phrase.page_size as isize),
                     history_len,
                     favorites_len,
                 ) =>
             {
                 self.sync_patch_phrase_states();
                 self.preview_selected_patch_phrase_item_with_navigation_hint(Some(
-                    -(self.patch_phrase_page_size as isize),
+                    -(self.patch_phrase.page_size as isize),
                 ));
             }
             KeyCode::Char('/') => {
-                self.patch_phrase_filter_active = true;
-                self.patch_phrase_query_textarea =
-                    crate::text_input::new_single_line_textarea(&self.patch_phrase_query);
+                self.patch_phrase.filter_active = true;
+                self.patch_phrase.query_textarea =
+                    crate::text_input::new_single_line_textarea(&self.patch_phrase.query);
                 self.sync_patch_phrase_states();
             }
             KeyCode::Enter => {
@@ -397,32 +401,32 @@ impl<'a> TuiApp<'a> {
             KeyCode::Char(' ') => {
                 self.preview_selected_patch_phrase_item();
             }
-            KeyCode::Char('i') if self.patch_phrase_focus == PatchPhrasePane::History => {
+            KeyCode::Char('i') if self.patch_phrase.focus == PatchPhrasePane::History => {
                 if let Some(mml) = self.patch_phrase_preview_mml() {
                     self.lines[self.cursor] = mml;
                     self.start_insert();
                 }
             }
             KeyCode::Char('f') => {
-                let Some(patch_name) = self.patch_phrase_name.clone() else {
+                let Some(patch_name) = self.patch_phrase.patch_name.clone() else {
                     return;
                 };
-                let phrase = match self.patch_phrase_focus {
+                let phrase = match self.patch_phrase.focus {
                     PatchPhrasePane::History => self
                         .patch_phrase_history_items()
-                        .get(self.patch_phrase_history_cursor)
+                        .get(self.patch_phrase.history_cursor)
                         .cloned(),
                     PatchPhrasePane::Favorites => self
                         .patch_phrase_favorite_items()
-                        .get(self.patch_phrase_favorites_cursor)
+                        .get(self.patch_phrase.favorites_cursor)
                         .cloned(),
                 };
                 let Some(phrase) = phrase else {
                     return;
                 };
                 self.add_patch_phrase_favorite(patch_name, phrase);
-                self.patch_phrase_focus = PatchPhrasePane::Favorites;
-                self.patch_phrase_favorites_cursor = 0;
+                self.patch_phrase.focus = PatchPhrasePane::Favorites;
+                self.patch_phrase.favorites_cursor = 0;
                 self.sync_patch_phrase_states();
                 if let Some(mml) = self.patch_phrase_preview_mml() {
                     self.record_notepad_history(&mml);

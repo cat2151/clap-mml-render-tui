@@ -6,8 +6,9 @@ use std::sync::atomic::{AtomicU64, AtomicUsize};
 use std::sync::{Arc, Mutex};
 
 use super::notepad_history::NotepadHistoryState;
+use super::patch_phrase::PatchPhraseState;
 use super::patch_select::PatchSelectState;
-use super::{Mode, PatchPhrasePane, PlayState, TuiApp, TuiRenderQueue};
+use super::{Mode, PlayState, TuiApp, TuiRenderQueue};
 use crate::config::Config;
 
 /// バックグラウンドパッチ読み込みの状態
@@ -166,19 +167,10 @@ impl<'a> TuiApp<'a> {
             patch_select: PatchSelectState::new(),
             normal_page_size: 1,
             notepad_history: NotepadHistoryState::new(),
-            patch_phrase_page_size: 1,
+            patch_phrase: PatchPhraseState::new(),
             patch_phrase_store: crate::history::load_patch_phrase_store(),
             normal_pending_delete: false,
             yank_buffer: None,
-            patch_phrase_name: None,
-            patch_phrase_history_cursor: 0,
-            patch_phrase_favorites_cursor: 0,
-            patch_phrase_history_state: ListState::default(),
-            patch_phrase_favorites_state: ListState::default(),
-            patch_phrase_focus: PatchPhrasePane::History,
-            patch_phrase_query: String::new(),
-            patch_phrase_query_textarea: crate::text_input::new_single_line_textarea(""),
-            patch_phrase_filter_active: false,
             patch_phrase_store_dirty: false,
             is_daw_mode: is_daw_mode && !restore_keyboard,
             startup_normal_cache_primed: false,

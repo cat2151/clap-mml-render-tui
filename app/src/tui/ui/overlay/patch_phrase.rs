@@ -40,16 +40,16 @@ pub(in crate::tui::ui) fn draw_patch_phrase(
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[1]);
-    app.patch_phrase_page_size = visible_list_page_size(panes[0]);
+    app.patch_phrase.page_size = visible_list_page_size(panes[0]);
 
-    let search_title = if app.patch_phrase_filter_active {
+    let search_title = if app.patch_phrase.filter_active {
         " ENTERで絞り込みを決定 - patch phrase history - "
     } else {
         " ENTERでフレーズを選択 - patch phrase history - "
     };
     let patch_phrase_query_widget = crate::text_input::build_query_textarea_widget(
-        &app.patch_phrase_query_textarea,
-        &app.patch_phrase_query,
+        &app.patch_phrase.query_textarea,
+        &app.patch_phrase.query,
         search_title,
         "/ を押して絞り込み (space=AND)",
         MONOKAI_YELLOW,
@@ -64,9 +64,9 @@ pub(in crate::tui::ui) fn draw_patch_phrase(
         .into_iter()
         .enumerate()
         .map(|(i, phrase)| {
-            let is_selected = !app.patch_phrase_filter_active
-                && app.patch_phrase_focus == PatchPhrasePane::History
-                && i == app.patch_phrase_history_cursor;
+            let is_selected = !app.patch_phrase.filter_active
+                && app.patch_phrase.focus == PatchPhrasePane::History
+                && i == app.patch_phrase.history_cursor;
             let style = if is_selected {
                 cursor_highlight_style(base_style())
             } else {
@@ -96,9 +96,9 @@ pub(in crate::tui::ui) fn draw_patch_phrase(
         .into_iter()
         .enumerate()
         .map(|(i, phrase)| {
-            let is_selected = !app.patch_phrase_filter_active
-                && app.patch_phrase_focus == PatchPhrasePane::Favorites
-                && i == app.patch_phrase_favorites_cursor;
+            let is_selected = !app.patch_phrase.filter_active
+                && app.patch_phrase.focus == PatchPhrasePane::Favorites
+                && i == app.patch_phrase.favorites_cursor;
             let style = if is_selected {
                 cursor_highlight_style(base_style())
             } else {
@@ -123,22 +123,22 @@ pub(in crate::tui::ui) fn draw_patch_phrase(
         })
         .collect();
 
-    let history_border = if app.patch_phrase_focus == PatchPhrasePane::History {
+    let history_border = if app.patch_phrase.focus == PatchPhrasePane::History {
         base_style().fg(MONOKAI_CYAN)
     } else {
         base_style()
     };
-    let favorites_border = if app.patch_phrase_focus == PatchPhrasePane::Favorites {
+    let favorites_border = if app.patch_phrase.focus == PatchPhrasePane::Favorites {
         base_style().fg(MONOKAI_CYAN)
     } else {
         base_style()
     };
-    let selection_status = match app.patch_phrase_focus {
+    let selection_status = match app.patch_phrase.focus {
         PatchPhrasePane::History => {
-            super::selection_status_text(app.patch_phrase_history_cursor, history_count)
+            super::selection_status_text(app.patch_phrase.history_cursor, history_count)
         }
         PatchPhrasePane::Favorites => {
-            super::selection_status_text(app.patch_phrase_favorites_cursor, favorite_count)
+            super::selection_status_text(app.patch_phrase.favorites_cursor, favorite_count)
         }
     };
 
@@ -146,8 +146,8 @@ pub(in crate::tui::ui) fn draw_patch_phrase(
         List::new(history_items)
             .style(base_style())
             .highlight_style(
-                if app.patch_phrase_filter_active
-                    || app.patch_phrase_focus != PatchPhrasePane::History
+                if app.patch_phrase.filter_active
+                    || app.patch_phrase.focus != PatchPhrasePane::History
                 {
                     base_style()
                 } else {
@@ -163,14 +163,14 @@ pub(in crate::tui::ui) fn draw_patch_phrase(
             )
             .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
         panes[0],
-        &mut app.patch_phrase_history_state,
+        &mut app.patch_phrase.history_state,
     );
     f.render_stateful_widget(
         List::new(favorite_items)
             .style(base_style())
             .highlight_style(
-                if app.patch_phrase_filter_active
-                    || app.patch_phrase_focus != PatchPhrasePane::Favorites
+                if app.patch_phrase.filter_active
+                    || app.patch_phrase.focus != PatchPhrasePane::Favorites
                 {
                     base_style()
                 } else {
@@ -186,9 +186,9 @@ pub(in crate::tui::ui) fn draw_patch_phrase(
             )
             .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
         panes[1],
-        &mut app.patch_phrase_favorites_state,
+        &mut app.patch_phrase.favorites_state,
     );
-    if app.patch_phrase_filter_active {
+    if app.patch_phrase.filter_active {
         f.set_cursor_position(crate::text_input::single_line_textarea_cursor_position(
             chunks[0],
             &patch_phrase_query_widget,

@@ -212,7 +212,10 @@ fn handle_patch_select_n_p_t_switch_to_corresponding_overlays() {
     app.patch_select.patch_list_state.select(Some(1));
     app.handle_patch_select(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
     assert!(matches!(app.mode, Mode::PatchPhrase));
-    assert_eq!(app.patch_phrase_name.as_deref(), Some("Leads/Lead 1.fxp"));
+    assert_eq!(
+        app.patch_phrase.patch_name.as_deref(),
+        Some("Leads/Lead 1.fxp")
+    );
 
     app.open_patch_select_overlay(None);
     app.patch_select.patch_cursor = 1;
