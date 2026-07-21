@@ -237,7 +237,10 @@ fn handle_notepad_history_n_p_t_switch_to_corresponding_overlays() {
     app.start_notepad_history();
     app.handle_notepad_history(KeyCode::Char('t'));
     assert!(matches!(app.mode, Mode::PatchSelect));
-    assert_eq!(app.patch_filtered[app.patch_cursor], "Pads/Pad 1.fxp");
+    assert_eq!(
+        app.patch_select.patch_filtered[app.patch_select.patch_cursor],
+        "Pads/Pad 1.fxp"
+    );
 }
 
 #[test]

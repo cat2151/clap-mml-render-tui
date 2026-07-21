@@ -41,10 +41,10 @@ fn insert_and_filter_modes_use_terminal_bar_cursor() {
     assert!(app.uses_textarea_cursor());
 
     app.mode = Mode::PatchSelect;
-    app.patch_select_filter_active = true;
+    app.patch_select.patch_select_filter_active = true;
     assert!(app.uses_textarea_cursor());
 
-    app.patch_select_filter_active = false;
+    app.patch_select.patch_select_filter_active = false;
     app.mode = Mode::NotepadHistory;
     app.notepad_filter_active = true;
     assert!(app.uses_textarea_cursor());

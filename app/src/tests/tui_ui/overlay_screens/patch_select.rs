@@ -50,14 +50,15 @@ fn patch_select_overlay_layout(
 fn patch_select_screen_renders_as_overlay_on_normal_screen() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} abc"#.to_string()];
-    app.patch_all = vec![
+    app.patch_select.patch_all = vec![
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         (
             "Leads/Lead 1.fxp".to_string(),
             "leads/lead 1.fxp".to_string(),
         ),
     ];
-    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()];
+    app.patch_select.patch_filtered =
+        vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()];
     app.patch_phrase_store.patches.insert(
         "Leads/Lead 1.fxp".to_string(),
         PatchPhraseState {
@@ -65,8 +66,8 @@ fn patch_select_screen_renders_as_overlay_on_normal_screen() {
             favorites: vec!["abc".to_string()],
         },
     );
-    app.patch_favorite_items = vec!["Leads/Lead 1.fxp".to_string()];
-    app.patch_list_state.select(Some(0));
+    app.patch_select.patch_favorite_items = vec!["Leads/Lead 1.fxp".to_string()];
+    app.patch_select.patch_list_state.select(Some(0));
     app.mode = Mode::PatchSelect;
 
     let lines = render_lines(&mut app, 80, 16).join("\n");
@@ -87,18 +88,18 @@ fn patch_select_screen_renders_as_overlay_on_normal_screen() {
 #[test]
 fn patch_select_screen_shows_filter_confirm_title_when_filter_active() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.patch_all = vec![
+    app.patch_select.patch_all = vec![
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         (
             "Leads/Lead 1.fxp".to_string(),
             "leads/lead 1.fxp".to_string(),
         ),
     ];
-    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
-    app.patch_list_state.select(Some(0));
+    app.patch_select.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
+    app.patch_select.patch_list_state.select(Some(0));
     app.mode = Mode::PatchSelect;
-    app.patch_select_filter_active = true;
-    app.patch_query = "pad".to_string();
+    app.patch_select.patch_select_filter_active = true;
+    app.patch_select.patch_query = "pad".to_string();
 
     let normalized = render_lines(&mut app, 100, 16).join("\n").replace(' ', "");
 
@@ -109,17 +110,22 @@ fn patch_select_screen_shows_filter_confirm_title_when_filter_active() {
 #[test]
 fn patch_select_screen_shows_filter_input_placeholder_when_active_and_empty() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.patch_all = vec![
+    app.patch_select.patch_all = vec![
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         (
             "Leads/Lead 1.fxp".to_string(),
             "leads/lead 1.fxp".to_string(),
         ),
     ];
-    app.patch_filtered = app.patch_all.iter().map(|(name, _)| name.clone()).collect();
-    app.patch_list_state.select(Some(0));
+    app.patch_select.patch_filtered = app
+        .patch_select
+        .patch_all
+        .iter()
+        .map(|(name, _)| name.clone())
+        .collect();
+    app.patch_select.patch_list_state.select(Some(0));
     app.mode = Mode::PatchSelect;
-    app.patch_select_filter_active = true;
+    app.patch_select.patch_select_filter_active = true;
 
     let normalized = render_lines(&mut app, 100, 16).join("\n").replace(' ', "");
 
@@ -131,17 +137,17 @@ fn patch_select_screen_shows_filter_input_placeholder_when_active_and_empty() {
 #[test]
 fn patch_select_screen_shows_prefilled_query_when_filter_is_inactive() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.patch_all = vec![
+    app.patch_select.patch_all = vec![
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         (
             "Leads/Lead 1.fxp".to_string(),
             "leads/lead 1.fxp".to_string(),
         ),
     ];
-    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
-    app.patch_query = "pad".to_string();
-    app.patch_query_textarea = crate::text_input::new_single_line_textarea("pad");
-    app.patch_list_state.select(Some(0));
+    app.patch_select.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
+    app.patch_select.patch_query = "pad".to_string();
+    app.patch_select.patch_query_textarea = crate::text_input::new_single_line_textarea("pad");
+    app.patch_select.patch_list_state.select(Some(0));
     app.mode = Mode::PatchSelect;
 
     let normalized = render_lines(&mut app, 100, 16).join("\n").replace(' ', "");
@@ -154,24 +160,25 @@ fn patch_select_screen_shows_prefilled_query_when_filter_is_inactive() {
 #[test]
 fn patch_select_screen_applies_initial_margin_on_first_render() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.patch_filtered = (0..12).map(|i| format!("Pad {i}")).collect();
-    app.patch_cursor = 8;
-    app.patch_list_state.select(Some(8));
+    app.patch_select.patch_filtered = (0..12).map(|i| format!("Pad {i}")).collect();
+    app.patch_select.patch_cursor = 8;
+    app.patch_select.patch_list_state.select(Some(8));
     app.mode = Mode::PatchSelect;
 
     let _ = render_lines(&mut app, 100, 24);
 
-    assert!(app.patch_select_page_size > 1);
-    assert!(app.patch_list_state.offset() > 0);
-    assert!(app.patch_list_state.offset() < app.patch_cursor);
+    assert!(app.patch_select.patch_select_page_size > 1);
+    assert!(app.patch_select.patch_list_state.offset() > 0);
+    assert!(app.patch_select.patch_list_state.offset() < app.patch_select.patch_cursor);
 }
 
 #[test]
 fn patch_select_screen_marks_memory_cached_preview_items() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec![r#"{"Surge XT patch":"Pads/Current.fxp"} l8cdef"#.to_string()];
-    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string(), "Bass/Bass 1.fxp".to_string()];
-    app.patch_list_state.select(Some(0));
+    app.patch_select.patch_filtered =
+        vec!["Pads/Pad 1.fxp".to_string(), "Bass/Bass 1.fxp".to_string()];
+    app.patch_select.patch_list_state.select(Some(0));
     app.mode = Mode::PatchSelect;
     app.audio_cache.lock().unwrap().insert(
         r#"{"Surge XT patch": "Pads/Pad 1.fxp"} l8cdef"#.to_string(),
@@ -187,15 +194,16 @@ fn patch_select_screen_marks_memory_cached_preview_items() {
 #[test]
 fn patch_select_overlay_uses_yellow_outer_border_and_dims_unfocused_sections() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.patch_all = vec![
+    app.patch_select.patch_all = vec![
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         ("Bass/Bass 1.fxp".to_string(), "bass/bass 1.fxp".to_string()),
     ];
-    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string(), "Bass/Bass 1.fxp".to_string()];
-    app.patch_favorite_items = vec!["Bass/Bass 1.fxp".to_string()];
-    app.patch_list_state.select(Some(0));
-    app.patch_favorites_state.select(Some(0));
-    app.patch_select_focus = PatchSelectPane::Patches;
+    app.patch_select.patch_filtered =
+        vec!["Pads/Pad 1.fxp".to_string(), "Bass/Bass 1.fxp".to_string()];
+    app.patch_select.patch_favorite_items = vec!["Bass/Bass 1.fxp".to_string()];
+    app.patch_select.patch_list_state.select(Some(0));
+    app.patch_select.patch_favorites_state.select(Some(0));
+    app.patch_select.patch_select_focus = PatchSelectPane::Patches;
     app.mode = Mode::PatchSelect;
 
     let buffer = render_buffer(&mut app, 100, 16);
@@ -225,15 +233,16 @@ fn patch_select_overlay_uses_yellow_outer_border_and_dims_unfocused_sections() {
 #[test]
 fn patch_select_filter_focus_highlights_query_border_and_dims_both_panes() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.patch_all = vec![
+    app.patch_select.patch_all = vec![
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         ("Bass/Bass 1.fxp".to_string(), "bass/bass 1.fxp".to_string()),
     ];
-    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string(), "Bass/Bass 1.fxp".to_string()];
-    app.patch_favorite_items = vec!["Bass/Bass 1.fxp".to_string()];
-    app.patch_select_filter_active = true;
-    app.patch_query = "pad".to_string();
-    app.patch_select_focus = PatchSelectPane::Favorites;
+    app.patch_select.patch_filtered =
+        vec!["Pads/Pad 1.fxp".to_string(), "Bass/Bass 1.fxp".to_string()];
+    app.patch_select.patch_favorite_items = vec!["Bass/Bass 1.fxp".to_string()];
+    app.patch_select.patch_select_filter_active = true;
+    app.patch_select.patch_query = "pad".to_string();
+    app.patch_select.patch_select_focus = PatchSelectPane::Favorites;
     app.mode = Mode::PatchSelect;
 
     let buffer = render_buffer(&mut app, 100, 16);
@@ -262,9 +271,9 @@ fn patch_select_screen_splits_status_and_keybinds() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["abc".to_string()];
     app.test_set_active_parallel_render_count(2);
-    app.patch_all = vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
-    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
-    app.patch_list_state.select(Some(0));
+    app.patch_select.patch_all = vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
+    app.patch_select.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
+    app.patch_select.patch_list_state.select(Some(0));
     app.mode = Mode::PatchSelect;
 
     let lines = render_lines(&mut app, 160, 16);
@@ -297,12 +306,12 @@ fn patch_select_screen_splits_status_and_keybinds() {
 #[test]
 fn patch_select_filter_uses_query_cursor_only() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.patch_all = vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
-    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
-    app.patch_list_state.select(Some(0));
+    app.patch_select.patch_all = vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
+    app.patch_select.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
+    app.patch_select.patch_list_state.select(Some(0));
     app.mode = Mode::PatchSelect;
-    app.patch_select_filter_active = true;
-    app.patch_query = "pad".to_string();
+    app.patch_select.patch_select_filter_active = true;
+    app.patch_select.patch_query = "pad".to_string();
 
     let buffer = render_buffer(&mut app, 100, 16);
     let cursor = render_cursor_position(&mut app, 100, 16);
@@ -330,15 +339,16 @@ fn patch_select_filter_uses_query_cursor_only() {
 #[test]
 fn patch_select_only_highlights_the_focused_pane() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.patch_all = vec![
+    app.patch_select.patch_all = vec![
         ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
         ("Bass/Bass 1.fxp".to_string(), "bass/bass 1.fxp".to_string()),
     ];
-    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string(), "Bass/Bass 1.fxp".to_string()];
-    app.patch_favorite_items = vec!["Bass/Bass 1.fxp".to_string()];
-    app.patch_list_state.select(Some(0));
-    app.patch_favorites_state.select(Some(0));
-    app.patch_select_focus = PatchSelectPane::Patches;
+    app.patch_select.patch_filtered =
+        vec!["Pads/Pad 1.fxp".to_string(), "Bass/Bass 1.fxp".to_string()];
+    app.patch_select.patch_favorite_items = vec!["Bass/Bass 1.fxp".to_string()];
+    app.patch_select.patch_list_state.select(Some(0));
+    app.patch_select.patch_favorites_state.select(Some(0));
+    app.patch_select.patch_select_focus = PatchSelectPane::Patches;
     app.mode = Mode::PatchSelect;
 
     let buffer = render_buffer(&mut app, 100, 16);

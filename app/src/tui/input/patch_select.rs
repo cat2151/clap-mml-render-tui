@@ -156,18 +156,21 @@ impl<'a> TuiApp<'a> {
     }
 
     fn prefetch_patch_select_navigation_audio_cache(&self, preferred_delta: Option<isize>) {
-        let (item_count, cursor) = match self.patch_select_focus {
-            crate::tui::PatchSelectPane::Patches => (self.patch_filtered.len(), self.patch_cursor),
+        let (item_count, cursor) = match self.patch_select.patch_select_focus {
+            crate::tui::PatchSelectPane::Patches => (
+                self.patch_select.patch_filtered.len(),
+                self.patch_select.patch_cursor,
+            ),
             crate::tui::PatchSelectPane::Favorites => (
                 self.patch_select_favorite_items().len(),
-                self.patch_favorites_cursor,
+                self.patch_select.patch_favorites_cursor,
             ),
         };
-        let focus = self.patch_select_focus;
+        let focus = self.patch_select.patch_select_focus;
         self.prefetch_navigation_audio_cache(
             cursor,
             item_count,
-            self.patch_select_page_size,
+            self.patch_select.patch_select_page_size,
             preferred_delta,
             |index| self.patch_select_preview_mml_for_selection(focus, index),
         );
@@ -184,7 +187,7 @@ impl<'a> TuiApp<'a> {
         if let Some(mml) = self.patch_select_preview_mml() {
             Self::log_notepad_event(format!(
                 "tone-select preview focus={:?} patch={:?}",
-                self.patch_select_focus,
+                self.patch_select.patch_select_focus,
                 self.patch_select_selected_patch_name()
             ));
             self.record_notepad_history(&mml);
@@ -194,8 +197,9 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn update_patch_filter(&mut self) {
-        self.patch_filtered = filter_patches(&self.patch_all, &self.patch_query);
-        self.patch_cursor = 0;
+        self.patch_select.patch_filtered =
+            filter_patches(&self.patch_select.patch_all, &self.patch_select.patch_query);
+        self.patch_select.patch_cursor = 0;
         self.sync_patch_select_states();
         self.preview_selected_patch();
     }

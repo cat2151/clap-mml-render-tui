@@ -31,12 +31,12 @@ fn patch_cache_hit(
 }
 
 fn favorite_title(app: &TuiApp<'_>, favorite_count: usize) -> String {
-    if app.patch_favorites_query.trim().is_empty() {
+    if app.patch_select.patch_favorites_query.trim().is_empty() {
         format!(" Favorite音色 ({favorite_count}) ")
     } else {
         format!(
             " Favorite音色 ({favorite_count}/{}) ",
-            app.patch_favorite_items.len()
+            app.patch_select.patch_favorite_items.len()
         )
     }
 }
@@ -75,17 +75,17 @@ pub(in crate::tui::ui) fn draw_patch_select(
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[0]);
     let patch_select_page_size = visible_list_page_size(panes[0]);
-    if app.patch_select_page_size != patch_select_page_size {
-        app.patch_select_page_size = patch_select_page_size;
+    if app.patch_select.patch_select_page_size != patch_select_page_size {
+        app.patch_select.patch_select_page_size = patch_select_page_size;
         app.sync_patch_select_states();
     }
 
     let active_frame_color = MONOKAI_YELLOW;
     let inactive_frame_color = MONOKAI_GRAY;
-    let patches_query_active =
-        app.patch_select_filter_active && app.patch_select_focus == PatchSelectPane::Patches;
-    let favorites_query_active =
-        app.patch_select_filter_active && app.patch_select_focus == PatchSelectPane::Favorites;
+    let patches_query_active = app.patch_select.patch_select_filter_active
+        && app.patch_select.patch_select_focus == PatchSelectPane::Patches;
+    let favorites_query_active = app.patch_select.patch_select_filter_active
+        && app.patch_select.patch_select_focus == PatchSelectPane::Favorites;
     let patches_query_frame_color = if patches_query_active {
         active_frame_color
     } else {
@@ -96,14 +96,15 @@ pub(in crate::tui::ui) fn draw_patch_select(
     } else {
         inactive_frame_color
     };
-    let patch_frame_color =
-        if !app.patch_select_filter_active && app.patch_select_focus == PatchSelectPane::Patches {
-            active_frame_color
-        } else {
-            inactive_frame_color
-        };
-    let favorite_frame_color = if !app.patch_select_filter_active
-        && app.patch_select_focus == PatchSelectPane::Favorites
+    let patch_frame_color = if !app.patch_select.patch_select_filter_active
+        && app.patch_select.patch_select_focus == PatchSelectPane::Patches
+    {
+        active_frame_color
+    } else {
+        inactive_frame_color
+    };
+    let favorite_frame_color = if !app.patch_select.patch_select_filter_active
+        && app.patch_select.patch_select_focus == PatchSelectPane::Favorites
     {
         active_frame_color
     } else {
@@ -135,8 +136,8 @@ pub(in crate::tui::ui) fn draw_patch_select(
     };
 
     let mut patch_query_widget = crate::text_input::build_query_textarea_widget(
-        &app.patch_query_textarea,
-        &app.patch_query,
+        &app.patch_select.patch_query_textarea,
+        &app.patch_select.patch_query,
         patches_query_title,
         patches_query_placeholder,
         patches_query_frame_color,
@@ -149,8 +150,8 @@ pub(in crate::tui::ui) fn draw_patch_select(
             .border_style(patches_query_border),
     );
     let mut favorites_query_widget = crate::text_input::build_query_textarea_widget(
-        &app.patch_favorites_query_textarea,
-        &app.patch_favorites_query,
+        &app.patch_select.patch_favorites_query_textarea,
+        &app.patch_select.patch_favorites_query,
         favorites_query_title,
         favorites_query_placeholder,
         favorites_query_frame_color,
@@ -169,14 +170,15 @@ pub(in crate::tui::ui) fn draw_patch_select(
         let cache = app.audio_cache.lock().unwrap();
         let disk_hashes = app.known_disk_cache_hashes.lock().unwrap();
         let patch_items = app
+            .patch_select
             .patch_filtered
             .iter()
             .enumerate()
             .map(|(i, patch_name)| {
                 let cached = patch_cache_hit(app, &cache, &disk_hashes, patch_name);
-                let style = if !app.patch_select_filter_active
-                    && app.patch_select_focus == PatchSelectPane::Patches
-                    && i == app.patch_cursor
+                let style = if !app.patch_select.patch_select_filter_active
+                    && app.patch_select.patch_select_focus == PatchSelectPane::Patches
+                    && i == app.patch_select.patch_cursor
                 {
                     cursor_highlight_style(base_style())
                 } else {
@@ -204,9 +206,9 @@ pub(in crate::tui::ui) fn draw_patch_select(
                 .enumerate()
                 .map(|(i, patch_name)| {
                     let cached = patch_cache_hit(app, &cache, &disk_hashes, patch_name);
-                    let style = if !app.patch_select_filter_active
-                        && app.patch_select_focus == PatchSelectPane::Favorites
-                        && i == app.patch_favorites_cursor
+                    let style = if !app.patch_select.patch_select_filter_active
+                        && app.patch_select.patch_select_focus == PatchSelectPane::Favorites
+                        && i == app.patch_select.patch_favorites_cursor
                     {
                         cursor_highlight_style(base_style())
                     } else {
@@ -227,12 +229,13 @@ pub(in crate::tui::ui) fn draw_patch_select(
                 .collect(),
         )
     };
-    let selection_status = match app.patch_select_focus {
-        PatchSelectPane::Patches => {
-            super::selection_status_text(app.patch_cursor, app.patch_filtered.len())
-        }
+    let selection_status = match app.patch_select.patch_select_focus {
+        PatchSelectPane::Patches => super::selection_status_text(
+            app.patch_select.patch_cursor,
+            app.patch_select.patch_filtered.len(),
+        ),
         PatchSelectPane::Favorites => {
-            super::selection_status_text(app.patch_favorites_cursor, favorite_count)
+            super::selection_status_text(app.patch_select.patch_favorites_cursor, favorite_count)
         }
     };
 
@@ -240,8 +243,8 @@ pub(in crate::tui::ui) fn draw_patch_select(
         List::new(patch_items)
             .style(base_style())
             .highlight_style(
-                if app.patch_select_filter_active
-                    || app.patch_select_focus != PatchSelectPane::Patches
+                if app.patch_select.patch_select_filter_active
+                    || app.patch_select.patch_select_focus != PatchSelectPane::Patches
                 {
                     base_style()
                 } else {
@@ -257,14 +260,14 @@ pub(in crate::tui::ui) fn draw_patch_select(
             )
             .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
         panes[0],
-        &mut app.patch_list_state,
+        &mut app.patch_select.patch_list_state,
     );
     f.render_stateful_widget(
         List::new(favorite_items)
             .style(base_style())
             .highlight_style(
-                if app.patch_select_filter_active
-                    || app.patch_select_focus != PatchSelectPane::Favorites
+                if app.patch_select.patch_select_filter_active
+                    || app.patch_select.patch_select_focus != PatchSelectPane::Favorites
                 {
                     base_style()
                 } else {
@@ -283,10 +286,10 @@ pub(in crate::tui::ui) fn draw_patch_select(
             )
             .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
         panes[1],
-        &mut app.patch_favorites_state,
+        &mut app.patch_select.patch_favorites_state,
     );
-    if app.patch_select_filter_active {
-        let (area, widget) = match app.patch_select_focus {
+    if app.patch_select.patch_select_filter_active {
+        let (area, widget) = match app.patch_select.patch_select_focus {
             PatchSelectPane::Patches => (query_panes[0], &patch_query_widget),
             PatchSelectPane::Favorites => (query_panes[1], &favorites_query_widget),
         };
@@ -301,7 +304,7 @@ pub(in crate::tui::ui) fn draw_patch_select(
     f.render_widget(
         Paragraph::new(format!(
             "{status}  {selection_status}  sort:{}",
-            app.patch_select_sort_order.status_label()
+            app.patch_select.patch_select_sort_order.status_label()
         ))
         .style(base_style().fg(status_color)),
         chunks[2],

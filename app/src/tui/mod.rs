@@ -23,6 +23,7 @@ mod keyboard;
 mod loop_browser;
 mod notepad_history;
 mod patch_phrase;
+mod patch_select;
 mod playback;
 mod playback_session;
 mod prefetch;
@@ -46,9 +47,10 @@ pub(super) const PATCH_FILTER_QUERY_JSON_KEY: &str = "Surge XT patch filter";
 pub(crate) use self::cache::filter_items;
 pub(in crate::tui) use self::cache::filter_patches;
 use self::keyboard::{KeyboardMidiSender, KeyboardMmlInput, KeyboardNoteGuide, KeyboardState};
+use self::patch_select::PatchSelectState;
 use self::render_queue::{TuiRenderJobStatus, TuiRenderQueue};
 pub(in crate::tui) use self::session::PatchLoadState;
-use crate::{config::Config, patches::PatchSortOrder, realtime_play::RealtimePlayServerSupervisor};
+use crate::{config::Config, realtime_play::RealtimePlayServerSupervisor};
 
 pub(in crate::tui) const NOTEPAD_SOUND_CHECK_GUIDE_MESSAGE: &str =
     "j,kキーを押して音が鳴ることを確認してください";
@@ -169,23 +171,8 @@ pub struct TuiApp<'a> {
     patch_load_state: Arc<Mutex<PatchLoadState>>,
     pub(super) random_patch_decks: crate::random::RandomIndexDecks,
     /// ソート切替に応じて並びが変わる (表示名, 小文字化済み) ペアのリスト
-    pub(super) patch_all: Vec<(String, String)>,
-    pub(super) patch_all_source_order: Vec<(String, String)>,
-    pub(super) patch_query: String, // 検索クエリ
-    pub(super) patch_query_textarea: TextArea<'a>,
-    pub(super) patch_filtered: Vec<String>, // フィルタ結果（表示名のみ）
-    pub(super) patch_cursor: usize,         // フィルタ結果内のカーソル位置
-    pub(super) patch_list_state: ListState, // 音色選択リスト描画用
-    pub(super) patch_favorite_items: Vec<String>,
-    pub(super) patch_favorites_query: String,
-    pub(super) patch_favorites_query_textarea: TextArea<'a>,
-    pub(super) patch_favorites_cursor: usize,
-    pub(super) patch_favorites_state: ListState,
-    pub(super) patch_select_focus: PatchSelectPane,
-    pub(super) patch_select_filter_active: bool,
-    pub(super) patch_select_sort_order: PatchSortOrder,
+    pub(in crate::tui) patch_select: PatchSelectState<'a>,
     pub(super) normal_page_size: usize,
-    pub(super) patch_select_page_size: usize,
     pub(super) notepad_history_page_size: usize,
     pub(super) patch_phrase_page_size: usize,
     pub(super) patch_phrase_store: crate::history::PatchPhraseStore,

@@ -29,14 +29,14 @@ impl<'a> TuiApp<'a> {
     }
 
     fn handle_patch_select_filter_input(&mut self, key_event: KeyEvent) {
-        match self.patch_select_focus {
+        match self.patch_select.patch_select_focus {
             PatchSelectPane::Patches => crate::text_input::sync_single_line_textarea(
-                &mut self.patch_query_textarea,
-                &self.patch_query,
+                &mut self.patch_select.patch_query_textarea,
+                &self.patch_select.patch_query,
             ),
             PatchSelectPane::Favorites => crate::text_input::sync_single_line_textarea(
-                &mut self.patch_favorites_query_textarea,
-                &self.patch_favorites_query,
+                &mut self.patch_select.patch_favorites_query_textarea,
+                &self.patch_select.patch_favorites_query,
             ),
         }
 
@@ -45,28 +45,30 @@ impl<'a> TuiApp<'a> {
                 self.mode = Mode::Normal;
             }
             KeyCode::Enter => {
-                self.patch_select_filter_active = false;
+                self.patch_select.patch_select_filter_active = false;
                 self.sync_patch_select_states();
             }
             KeyCode::Char('?') => self.enter_help(),
-            _ => match self.patch_select_focus {
+            _ => match self.patch_select.patch_select_focus {
                 PatchSelectPane::Patches => {
                     if crate::text_input::apply_key_event_to_textarea(
-                        &mut self.patch_query_textarea,
+                        &mut self.patch_select.patch_query_textarea,
                         key_event,
                     ) {
-                        self.patch_query =
-                            crate::text_input::textarea_value(&self.patch_query_textarea);
+                        self.patch_select.patch_query = crate::text_input::textarea_value(
+                            &self.patch_select.patch_query_textarea,
+                        );
                         self.update_patch_filter();
                     }
                 }
                 PatchSelectPane::Favorites => {
                     if crate::text_input::apply_key_event_to_textarea(
-                        &mut self.patch_favorites_query_textarea,
+                        &mut self.patch_select.patch_favorites_query_textarea,
                         key_event,
                     ) {
-                        self.patch_favorites_query =
-                            crate::text_input::textarea_value(&self.patch_favorites_query_textarea);
+                        self.patch_select.patch_favorites_query = crate::text_input::textarea_value(
+                            &self.patch_select.patch_favorites_query_textarea,
+                        );
                         self.update_patch_favorites_filter();
                     }
                 }
@@ -75,13 +77,13 @@ impl<'a> TuiApp<'a> {
     }
 
     fn set_patch_select_focus(&mut self, focus: PatchSelectPane) {
-        self.patch_select_focus = focus;
+        self.patch_select.patch_select_focus = focus;
         self.sync_patch_select_states();
         self.preview_selected_patch();
     }
 
     pub(in crate::tui) fn handle_patch_select(&mut self, key_event: KeyEvent) {
-        if self.patch_select_filter_active {
+        if self.patch_select.patch_select_filter_active {
             self.handle_patch_select_filter_input(key_event);
             return;
         }
@@ -122,25 +124,26 @@ impl<'a> TuiApp<'a> {
             }
             KeyCode::Char('j') | KeyCode::Down => self.move_patch_select_selection_by(1),
             KeyCode::Char('k') | KeyCode::Up => self.move_patch_select_selection_by(-1),
-            KeyCode::PageDown => {
-                self.move_patch_select_selection_by(self.patch_select_page_size as isize)
-            }
-            KeyCode::PageUp => {
-                self.move_patch_select_selection_by(-(self.patch_select_page_size as isize))
-            }
+            KeyCode::PageDown => self
+                .move_patch_select_selection_by(self.patch_select.patch_select_page_size as isize),
+            KeyCode::PageUp => self.move_patch_select_selection_by(
+                -(self.patch_select.patch_select_page_size as isize),
+            ),
             KeyCode::Char(' ') => self.preview_selected_patch(),
             KeyCode::Char('f') => self.add_selected_patch_phrase_favorite(),
             KeyCode::Char('/') => {
-                self.patch_select_filter_active = true;
-                match self.patch_select_focus {
+                self.patch_select.patch_select_filter_active = true;
+                match self.patch_select.patch_select_focus {
                     PatchSelectPane::Patches => {
-                        self.patch_query_textarea =
-                            crate::text_input::new_single_line_textarea(&self.patch_query);
+                        self.patch_select.patch_query_textarea =
+                            crate::text_input::new_single_line_textarea(
+                                &self.patch_select.patch_query,
+                            );
                     }
                     PatchSelectPane::Favorites => {
-                        self.patch_favorites_query_textarea =
+                        self.patch_select.patch_favorites_query_textarea =
                             crate::text_input::new_single_line_textarea(
-                                &self.patch_favorites_query,
+                                &self.patch_select.patch_favorites_query,
                             );
                     }
                 }

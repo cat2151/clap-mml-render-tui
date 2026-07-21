@@ -78,7 +78,7 @@ fn handle_normal_enter_records_notepad_history() {
 fn handle_patch_select_enter_records_notepad_history() {
     let mut app = TuiApp::new_for_test(test_config());
     app.lines = vec!["cde".to_string()];
-    app.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
+    app.patch_select.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
 
     app.handle_patch_select(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 

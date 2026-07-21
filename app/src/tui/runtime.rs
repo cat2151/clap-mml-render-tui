@@ -41,7 +41,7 @@ impl<'a> TuiApp<'a> {
     pub(crate) fn uses_textarea_cursor(&self) -> bool {
         match self.mode {
             Mode::Insert => true,
-            Mode::PatchSelect => self.patch_select_filter_active,
+            Mode::PatchSelect => self.patch_select.patch_select_filter_active,
             Mode::NotepadHistory => self.notepad_filter_active,
             Mode::PatchPhrase => self.patch_phrase_filter_active,
             Mode::Keyboard => self.keyboard_mml_input.is_active(),
@@ -243,7 +243,7 @@ impl<'a> TuiApp<'a> {
                     {
                         match self.mode {
                             Mode::Insert => self.handle_insert(key),
-                            Mode::PatchSelect if self.patch_select_filter_active => {
+                            Mode::PatchSelect if self.patch_select.patch_select_filter_active => {
                                 self.handle_patch_select(key)
                             }
                             Mode::NotepadHistory if self.notepad_filter_active => {
