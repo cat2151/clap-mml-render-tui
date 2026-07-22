@@ -95,7 +95,7 @@ impl<'a> TuiApp<'a> {
                     KeyCode::Char('i') => self.start_insert(),
                     KeyCode::Char('g') => match self.insert_generated_line_above() {
                         Ok(()) => {}
-                        Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
+                        Err(msg) => *self.playback.play_state.lock().unwrap() = PlayState::Err(msg),
                     },
                     KeyCode::Char('r') => {
                         let filter_query = self.current_line_random_patch_filter_query();
@@ -108,7 +108,9 @@ impl<'a> TuiApp<'a> {
                                 self.play_current_line();
                             }
                             Ok(None) => {}
-                            Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
+                            Err(msg) => {
+                                *self.playback.play_state.lock().unwrap() = PlayState::Err(msg)
+                            }
                         }
                     }
                     KeyCode::Char('t') => {

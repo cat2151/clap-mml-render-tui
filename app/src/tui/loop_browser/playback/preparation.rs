@@ -9,7 +9,7 @@ use std::time::UNIX_EPOCH;
 
 use rubberband_ffi::StretchProfile;
 
-use crate::loop_time_stretch::{
+use crate::loop_browser::time_stretch::{
     format_bpm, prepare_path, profile_for_category, PreparedAudio, TargetBpm,
 };
 use crate::tui::loop_browser::{LoopGridChange, LoopPlaybackClip, LoopPlaybackGrid};
@@ -408,5 +408,4 @@ fn requested_time_ratio(clip: &LoopPlaybackClip, target_bpm: f64) -> f64 {
 }
 
 #[cfg(test)]
-#[path = "preparation/tests.rs"]
 mod tests;

@@ -10,11 +10,8 @@ use super::render_queue::RenderPriority;
 use super::{DawApp, DawPlayState, FIRST_PLAYABLE_TRACK};
 use crate::{config::RealtimeAudioBackend, history::daw_cache_mml_hash};
 
-#[path = "preview/play_server.rs"]
 mod play_server;
-#[path = "preview/prefetch.rs"]
 mod prefetch;
-#[path = "preview/render.rs"]
 mod render;
 
 pub(super) use render::{begin_preview_output, PreviewOutputRequest, PreviewOutputState};
@@ -310,5 +307,4 @@ impl DawApp {
 }
 
 #[cfg(test)]
-#[path = "../tests/daw/preview.rs"]
 mod tests;

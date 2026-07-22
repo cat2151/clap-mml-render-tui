@@ -3,12 +3,12 @@ use super::*;
 impl LoopBrowser {
     pub(super) fn normalize_track_grid(&mut self) {
         self.track_grid =
-            crate::loop_browser_track_grid::normalize_previous_markers(&self.track_grid).0;
+            crate::loop_browser::track_grid::normalize_previous_markers(&self.track_grid).0;
     }
 
     fn save_track_grid(&self) -> anyhow::Result<()> {
         match &self.track_grid_path {
-            Some(path) => crate::loop_browser_track_grid::save_to(
+            Some(path) => crate::loop_browser::track_grid::save_to(
                 path,
                 &self.track_grid,
                 &self.track_volumes_db,
@@ -43,7 +43,7 @@ impl LoopBrowser {
     }
 
     pub(super) fn toggle_current_cell(&mut self, pad: char) -> LoopBrowserAction {
-        let Some(wav) = self.metadata.pad(pad).cloned() else {
+        let Some(wav) = self.metadata.value.pad(pad).cloned() else {
             return LoopBrowserAction::Continue;
         };
         self.log_pad_wav_context(pad, &wav);
@@ -120,14 +120,15 @@ impl LoopBrowser {
         let declared_bpm = analysis
             .and_then(|value| value.tempo)
             .and_then(|tempo| tempo.declared_bpm)
-            .map(crate::loop_time_stretch::format_bpm)
+            .map(crate::loop_browser::time_stretch::format_bpm)
             .unwrap_or_else(|| "none".to_string());
         let effective_bpm = analysis
             .and_then(|value| value.tempo)
-            .map(|tempo| crate::loop_time_stretch::format_bpm(tempo.bpm))
+            .map(|tempo| crate::loop_browser::time_stretch::format_bpm(tempo.bpm))
             .unwrap_or_else(|| "none".to_string());
         let favorite = self
             .metadata
+            .value
             .deepest_favorite_for_wav(wav)
             .map_or("none", |(_, dir)| dir.relative.as_str());
         let category = self.category_for_wav(wav).unwrap_or("none");

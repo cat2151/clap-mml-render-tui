@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::loop_time_stretch::{select_target_bpm, TargetBpm};
+use crate::loop_browser::time_stretch::{select_target_bpm, TargetBpm};
 use crate::tui::loop_browser::{LoopPlaybackClip, LoopPlaybackGrid};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

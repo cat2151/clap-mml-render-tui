@@ -316,5 +316,4 @@ fn normalize_base_url(base_url: &str) -> Result<String, Error> {
 }
 
 #[cfg(test)]
-#[path = "tests.rs"]
 mod tests;

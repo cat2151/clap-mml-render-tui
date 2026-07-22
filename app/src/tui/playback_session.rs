@@ -90,11 +90,15 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(super) fn begin_playback_session(&self) -> u64 {
-        let session = self.playback_session.fetch_add(1, Ordering::AcqRel) + 1;
-        if let Some(sink) = self.active_sink.lock().unwrap().take() {
+        let session = self
+            .playback
+            .playback_session
+            .fetch_add(1, Ordering::AcqRel)
+            + 1;
+        if let Some(sink) = self.playback.active_sink.lock().unwrap().take() {
             sink.stop();
         }
-        if let Some(play_server) = &self.realtime_play_server {
+        if let Some(play_server) = &self.playback.realtime_play_server {
             let _ = play_server.stop();
         }
         session
@@ -102,8 +106,8 @@ impl<'a> TuiApp<'a> {
 
     pub(super) fn set_play_state_if_current(&self, session: u64, next_state: PlayState) {
         Self::set_play_state_for_session(
-            &self.play_state,
-            &self.playback_session,
+            &self.playback.play_state,
+            &self.playback.playback_session,
             session,
             next_state,
         );

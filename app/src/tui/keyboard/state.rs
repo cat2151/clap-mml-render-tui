@@ -440,5 +440,4 @@ fn pitch_bend(value: u16) -> [u8; 3] {
 }
 
 #[cfg(test)]
-#[path = "tests.rs"]
 mod tests;

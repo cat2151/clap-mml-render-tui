@@ -11,7 +11,6 @@ use hound::SampleFormat;
 use crate::config::{core_config_from_config, Config, OfflineRenderBackend};
 use render_server::RenderServerSupervisor;
 
-#[path = "offline_render/render_server.rs"]
 mod render_server;
 
 const RENDER_SERVER_PATH: &str = "/render";

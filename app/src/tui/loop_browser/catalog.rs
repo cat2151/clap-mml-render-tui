@@ -7,6 +7,7 @@ impl LoopBrowser {
             .iter()
             .filter_map(|(wav, _)| {
                 self.metadata
+                    .value
                     .category_for_wav(wav)
                     .map(|category| (wav.lookup_key(), category.to_string()))
             })

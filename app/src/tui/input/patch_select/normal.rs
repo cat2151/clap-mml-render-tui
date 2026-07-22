@@ -24,7 +24,7 @@ impl<'a> TuiApp<'a> {
         if self.entry_ptr == 0 {
             // new_for_test() では PluginEntry を持たないため、
             // テスト中は再生スレッドを起動せず play_state 更新だけを検証する。
-            *self.play_state.lock().unwrap() = PlayState::Running(mml);
+            *self.playback.play_state.lock().unwrap() = PlayState::Running(mml);
             return;
         }
 
@@ -92,7 +92,7 @@ impl<'a> TuiApp<'a> {
     /// 起動直後のオフラインレンダリング待ちを、前回セッションで書き出したキャッシュで
     /// スキップできるかを確認するための処理。
     fn load_disk_cached_audio_into_memory_if_present(&self, mml: &str) {
-        if self.audio_cache.lock().unwrap().contains_key(mml) {
+        if self.audio.cache.lock().unwrap().contains_key(mml) {
             return;
         }
         let Some(samples) =
@@ -100,8 +100,8 @@ impl<'a> TuiApp<'a> {
         else {
             return;
         };
-        let mut cache = self.audio_cache.lock().unwrap();
-        let mut cache_order = self.audio_cache_order.lock().unwrap();
+        let mut cache = self.audio.cache.lock().unwrap();
+        let mut cache_order = self.audio.order.lock().unwrap();
         crate::tui::cache::try_insert_cache(
             &mut cache,
             &mut cache_order,
@@ -239,7 +239,7 @@ impl<'a> TuiApp<'a> {
         match patch_name {
             Some(patch_name) => self.start_patch_phrase(patch_name),
             None => {
-                *self.play_state.lock().unwrap() =
+                *self.playback.play_state.lock().unwrap() =
                     PlayState::Err("patch name JSON が見つかりません".to_string());
             }
         }
@@ -251,7 +251,7 @@ impl<'a> TuiApp<'a> {
 
     pub(in crate::tui) fn open_patch_select_overlay(&mut self, initial_patch_name: Option<&str>) {
         if !crate::patches::has_configured_patch_dirs(&self.cfg) {
-            *self.play_state.lock().unwrap() =
+            *self.playback.play_state.lock().unwrap() =
                 PlayState::Err("patches_dirs が設定されていません".to_string());
             return;
         }
@@ -269,7 +269,7 @@ impl<'a> TuiApp<'a> {
         };
 
         match action {
-            Err(msg) => *self.play_state.lock().unwrap() = PlayState::Err(msg),
+            Err(msg) => *self.playback.play_state.lock().unwrap() = PlayState::Err(msg),
             Ok(()) => match initial_patch_name {
                 Some(patch_name) => {
                     self.start_patch_select_with_initial_patch_name(Some(patch_name))
@@ -280,6 +280,7 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(in crate::tui::input) fn set_empty_yank_error(&mut self) {
-        *self.play_state.lock().unwrap() = PlayState::Err("yank バッファが空です".to_string());
+        *self.playback.play_state.lock().unwrap() =
+            PlayState::Err("yank バッファが空です".to_string());
     }
 }

@@ -304,5 +304,4 @@ impl DawApp {
 }
 
 #[cfg(test)]
-#[path = "../tests/daw/mml.rs"]
 mod tests;

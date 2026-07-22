@@ -216,5 +216,4 @@ impl DawApp {
 }
 
 #[cfg(test)]
-#[path = "../tests/daw/save.rs"]
 mod tests;

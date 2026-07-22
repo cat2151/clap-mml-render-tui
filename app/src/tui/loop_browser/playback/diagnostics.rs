@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use rubberband_ffi::{StretchProfile, GIT_REVISION};
 
-use crate::loop_time_stretch::{profile_for_category, PreparedAudioInfo, TargetBpm};
+use crate::loop_browser::time_stretch::{profile_for_category, PreparedAudioInfo, TargetBpm};
 use crate::tui::loop_browser::{LoopGridChange, LoopPlaybackClip, LoopPlaybackGrid};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -56,7 +56,7 @@ impl Default for LoopStretchDiagnostics {
         Self {
             generation: 0,
             target_bpm: TargetBpm {
-                bpm: crate::loop_time_stretch::TARGET_BPM,
+                bpm: crate::loop_browser::time_stretch::TARGET_BPM,
                 has_common_range: true,
             },
             reason: LoopGridChange::Initial,

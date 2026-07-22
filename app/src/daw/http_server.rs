@@ -25,9 +25,7 @@ use routes::{
     is_allowed_cors_origin, request_origin, with_cors_headers, with_preflight_cors_headers,
 };
 
-#[path = "http_server/app.rs"]
 mod app;
-#[path = "http_server/routes.rs"]
 mod routes;
 
 #[derive(Default)]
@@ -401,5 +399,4 @@ impl DawApp {
 }
 
 #[cfg(test)]
-#[path = "../tests/daw/http_server.rs"]
 mod tests;

@@ -342,5 +342,4 @@ fn log_event(message: String) {
 }
 
 #[cfg(test)]
-#[path = "tests/voicing_sources.rs"]
 mod tests;

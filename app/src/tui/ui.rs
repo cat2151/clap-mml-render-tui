@@ -78,7 +78,7 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     }
     // play_state を一度だけロックしてスナップショットを取り、
     // status_text と status_color を同じ状態から導出する（二重ロック・状態不整合を防ぐ）。
-    let play_state = app.play_state.lock().unwrap().clone();
+    let play_state = app.playback.play_state.lock().unwrap().clone();
     let mode = app.mode;
     let help_origin = app.help_origin;
     let status = status_text(&mode, &play_state);
@@ -160,8 +160,8 @@ fn draw_normal(
         .split(f.area());
     let list_area = chunks[0];
     app.editor.page_size = visible_list_page_size(list_area);
-    let cache = app.audio_cache.lock().unwrap();
-    let disk_hashes = app.known_disk_cache_hashes.lock().unwrap();
+    let cache = app.audio.cache.lock().unwrap();
+    let disk_hashes = app.audio.known_disk_hashes.lock().unwrap();
 
     let items: Vec<ListItem> = app
         .editor
@@ -255,5 +255,4 @@ fn draw_normal(
 }
 
 #[cfg(test)]
-#[path = "../tests/tui_ui.rs"]
 mod tests;

@@ -300,5 +300,4 @@ pub fn shared_patch_root_dir(dirs: &[String]) -> Option<String> {
 }
 
 #[cfg(test)]
-#[path = "lib/tests.rs"]
 mod tests;

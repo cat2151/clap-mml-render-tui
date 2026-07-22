@@ -42,5 +42,4 @@ pub(super) fn compute_measure_samples(beat: u32, bpm: f64, sample_rate: f64) -> 
 }
 
 #[cfg(test)]
-#[path = "../tests/daw/timing.rs"]
 mod tests;

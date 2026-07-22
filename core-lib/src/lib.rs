@@ -269,5 +269,4 @@ fn resolve_patch_path_from_base(
 }
 
 #[cfg(test)]
-#[path = "tests.rs"]
 mod tests;

@@ -300,5 +300,4 @@ fn collect_patch_pairs_with_optional_base(
 }
 
 #[cfg(test)]
-#[path = "patches/tests.rs"]
 mod tests;

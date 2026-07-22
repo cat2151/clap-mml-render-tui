@@ -9,8 +9,8 @@ use ratatui::{
 };
 
 use super::{cell_style, keep_visible, stretch_label};
-use crate::loop_browser_metadata::LoopWavId;
-use crate::loop_browser_track_grid::LoopTrackClip;
+use crate::loop_browser::metadata::LoopWavId;
+use crate::loop_browser::track_grid::LoopTrackClip;
 use crate::tui::loop_browser::playback::diagnostics::LoopStretchDiagnostics;
 use crate::tui::loop_browser::{LoopBrowser, LoopPlaybackClip};
 use crate::tui::ui::status::base_style;
@@ -219,7 +219,7 @@ fn display_rows(
                 .unwrap_or_else(|| "none".to_string());
             let stretch_status = diagnostics.status_for(&row.playback_clip, target_bpm);
             let exceeds_limits = row.playback_clip.source_bpm().is_some_and(|source_bpm| {
-                crate::loop_time_stretch::exceeds_time_ratio_limits(source_bpm, target_bpm)
+                crate::loop_browser::time_stretch::exceeds_time_ratio_limits(source_bpm, target_bpm)
             });
             let style = if !browser.track_is_audible(row.track) {
                 base_style().fg(MONOKAI_GRAY)

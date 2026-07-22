@@ -413,5 +413,4 @@ impl DawApp {
 }
 
 #[cfg(test)]
-#[path = "../tests/daw/input.rs"]
 mod tests;

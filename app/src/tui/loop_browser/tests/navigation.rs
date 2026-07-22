@@ -56,7 +56,7 @@ fn random_replacement_keeps_every_tracks_following_repeat_populated() {
         ))
         .join("loop_browser")
         .join("random_decks.toml");
-    browser.random_decks_path = Some(path.clone());
+    browser.random_decks.path = Some(path.clone());
     browser.focus = LoopBrowserPane::Tracks;
 
     for track in 0..3 {

@@ -118,5 +118,4 @@ pub(super) fn play_start_log_lines(mmls: &[String], ab_repeat_state: AbRepeatSta
 }
 
 #[cfg(test)]
-#[path = "../tests/daw/playback_util.rs"]
 mod tests;

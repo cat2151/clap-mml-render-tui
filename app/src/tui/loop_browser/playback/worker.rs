@@ -11,7 +11,7 @@ use super::sinks::{
 };
 use super::tempo::{grid_target_bpm, measure_duration, measure_timing};
 use super::{LoopPlaybackCommand, LoopPlaybackGrid};
-use crate::loop_time_stretch::format_bpm;
+use crate::loop_browser::time_stretch::format_bpm;
 use crate::tui::loop_browser::LoopGridChange;
 use crate::tui::loop_browser::LoopPlaybackClip;
 use crate::tui::PlayState;

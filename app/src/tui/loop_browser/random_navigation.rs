@@ -1,5 +1,5 @@
 use super::*;
-use crate::loop_browser_random::{save_to as save_random_decks, LoopRandomScope};
+use crate::loop_browser::random::{save_to as save_random_decks, LoopRandomScope};
 use std::collections::HashSet;
 use std::path::Component;
 
@@ -11,23 +11,25 @@ impl LoopBrowser {
             return LoopBrowserAction::Continue;
         }
         let current = self.selected_random_wav();
-        let previous = self.random_decks.clone();
-        let Some(selected) = self
-            .random_decks
-            .draw(scope.clone(), &candidates, current.as_ref())
+        let previous = self.random_decks.value.clone();
+        let Some(selected) =
+            self.random_decks
+                .value
+                .draw(scope.clone(), &candidates, current.as_ref())
         else {
             return LoopBrowserAction::Continue;
         };
         if let Err(error) = self.save_random_decks() {
-            self.random_decks = previous;
-            self.random_decks_error = Some(format!("random deckを保存できません: {error}"));
+            self.random_decks.value = previous;
+            self.random_decks.error = Some(format!("random deckを保存できません: {error}"));
             return LoopBrowserAction::Continue;
         }
-        self.random_decks_error = None;
+        self.random_decks.error = None;
         let analysis = self.analysis_for_wav(&selected);
         let category = self.category_for_wav(&selected).unwrap_or("none");
         let favorite = self
             .metadata
+            .value
             .deepest_favorite_for_wav(&selected)
             .map_or("none", |(_, dir)| dir.relative.as_str());
         let (effective_bpm, declared_bpm, source) = analysis.map_or_else(
@@ -37,10 +39,10 @@ impl LoopBrowser {
                     return ("none".to_string(), "none".to_string(), "one-shot");
                 };
                 (
-                    crate::loop_time_stretch::format_bpm(tempo.bpm),
+                    crate::loop_browser::time_stretch::format_bpm(tempo.bpm),
                     tempo
                         .declared_bpm
-                        .map(crate::loop_time_stretch::format_bpm)
+                        .map(crate::loop_browser::time_stretch::format_bpm)
                         .unwrap_or_else(|| "none".to_string()),
                     match tempo.source {
                         crate::loop_wav_analysis::LoopAnalysisSource::Acid => "acid",
@@ -141,6 +143,7 @@ impl LoopBrowser {
     pub(super) fn rebuild_favorite_wav_keys(&mut self) {
         let favorite_dirs = self
             .metadata
+            .value
             .favorite_dirs
             .iter()
             .map(LoopDirId::lookup_key)
@@ -178,15 +181,17 @@ impl LoopBrowser {
 
     fn save_random_decks(&self) -> anyhow::Result<()> {
         let path = self
-            .random_decks_path
+            .random_decks
+            .path
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("random deckの保存先を取得できません"))?;
-        save_random_decks(path, &self.random_decks)
+        save_random_decks(path, &self.random_decks.value)
     }
 
     pub(super) fn reveal_wav(&mut self, wav: &LoopWavId) {
         let favorite = self
             .metadata
+            .value
             .deepest_favorite_for_wav(wav)
             .map(|(index, dir)| (index, dir.depth()));
         if self.favorites_only && favorite.is_none() {

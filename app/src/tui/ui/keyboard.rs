@@ -412,5 +412,4 @@ fn active_notes_text(state: &crate::tui::keyboard::KeyboardState) -> String {
 }
 
 #[cfg(test)]
-#[path = "keyboard_tests.rs"]
 mod tests;

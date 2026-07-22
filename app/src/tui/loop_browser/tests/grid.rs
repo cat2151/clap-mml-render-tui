@@ -17,7 +17,7 @@ fn persisted_analysis_drives_browser_without_opening_the_wav() {
     };
     let mut browser = LoopBrowser::from_index(
         LoopIndex {
-            version: crate::loop_library::LOOP_INDEX_VERSION,
+            version: crate::loop_browser::library::LOOP_INDEX_VERSION,
             roots: vec![LoopRootIndex {
                 path: "/path/that/does/not/exist".to_string(),
                 wav_files: vec![LoopWavIndex {
@@ -28,13 +28,10 @@ fn persisted_analysis_drives_browser_without_opening_the_wav() {
             }],
         },
         &crate::config::default_loop_categories(),
-        LoopBrowserMetadata::default(),
-        None,
-        true,
-        None,
+        crate::loop_browser::persisted::PersistedDoc::in_memory(LoopBrowserMetadata::default()),
     );
     let wav = browser.wav_analyses[0].0.clone();
-    browser.metadata.toggle_pad('c', &wav);
+    browser.metadata.value.toggle_pad('c', &wav);
     browser.focus = LoopBrowserPane::Tracks;
 
     browser.handle_key(KeyCode::Char('c'));
@@ -129,7 +126,7 @@ fn every_pad_key_places_and_removes_without_audition() {
     for pad in PAD_KEYS {
         let mut browser = browser_with_direct_wavs(1);
         let wav = browser.wav_analyses[0].0.clone();
-        browser.metadata.toggle_pad(pad, &wav);
+        browser.metadata.value.toggle_pad(pad, &wav);
         browser.focus = LoopBrowserPane::Tracks;
 
         assert!(matches!(
@@ -151,7 +148,7 @@ fn every_pad_key_replacement_uses_the_clip_start_without_audition() {
         let replacement = browser.wav_analyses[1].0.clone();
         browser.track_grid[0].resize(2, None);
         browser.track_grid[0][0] = Some(LoopTrackClip::explicit(original, 2));
-        browser.metadata.toggle_pad(pad, &replacement);
+        browser.metadata.value.toggle_pad(pad, &replacement);
         browser.focus = LoopBrowserPane::Tracks;
         browser.measure_cursor = 1;
 
@@ -268,7 +265,7 @@ fn track_pad_write_failures_do_not_audition_or_change_the_grid() {
     let original = browser.wav_analyses[0].0.clone();
     let replacement = browser.wav_analyses[1].0.clone();
     browser.track_grid[0][0] = Some(LoopTrackClip::explicit(original.clone(), 1));
-    browser.metadata.toggle_pad('c', &replacement);
+    browser.metadata.value.toggle_pad('c', &replacement);
     browser.focus = LoopBrowserPane::Tracks;
 
     browser.track_grid_writable = false;
@@ -346,6 +343,7 @@ fn replacing_pad_does_not_change_existing_track_cell() {
     assert!(browser.notice.is_none());
     assert!(browser
         .metadata
+        .value
         .pad('c')
         .is_some_and(|wav| wav.path().ends_with("B.wav")));
     assert!(browser.track_grid[0][0]
@@ -358,8 +356,8 @@ fn spanning_clip_occupies_continuations_and_overlap_replaces_whole_clip() {
     let mut browser = browser_with_spanning_wavs();
     let long = browser.wav_analyses[0].0.clone();
     let short = browser.wav_analyses[1].0.clone();
-    browser.metadata.toggle_pad('c', &long);
-    browser.metadata.toggle_pad('d', &short);
+    browser.metadata.value.toggle_pad('c', &long);
+    browser.metadata.value.toggle_pad('d', &short);
     browser.focus = LoopBrowserPane::Tracks;
 
     browser.handle_key(KeyCode::Char('c'));

@@ -167,8 +167,8 @@ pub(in crate::tui::ui) fn draw_patch_select(
     f.render_widget(&favorites_query_widget, query_panes[1]);
 
     let (patch_items, favorite_count, favorite_items): (Vec<ListItem>, usize, Vec<ListItem>) = {
-        let cache = app.audio_cache.lock().unwrap();
-        let disk_hashes = app.known_disk_cache_hashes.lock().unwrap();
+        let cache = app.audio.cache.lock().unwrap();
+        let disk_hashes = app.audio.known_disk_hashes.lock().unwrap();
         let patch_items = app
             .patch_select
             .patch_filtered

@@ -235,5 +235,4 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
 }
 
 #[cfg(test)]
-#[path = "init/tests.rs"]
 mod tests;

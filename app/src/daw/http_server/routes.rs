@@ -13,11 +13,8 @@ use crate::daw::{CacheState, DawPlayState};
 const MAX_JSON_BODY_BYTES: u64 = 64 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 
-#[path = "routes/handlers.rs"]
 mod handlers;
-#[path = "routes/response.rs"]
 mod response;
-#[path = "routes/snapshot.rs"]
 mod snapshot;
 
 pub(super) use handlers::{

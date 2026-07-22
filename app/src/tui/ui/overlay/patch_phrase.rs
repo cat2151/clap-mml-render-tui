@@ -58,8 +58,8 @@ pub(in crate::tui::ui) fn draw_patch_phrase(
 
     let history_entries = app.patch_phrase_history_items();
     let history_count = history_entries.len();
-    let cache = app.audio_cache.lock().unwrap();
-    let disk_hashes = app.known_disk_cache_hashes.lock().unwrap();
+    let cache = app.audio.cache.lock().unwrap();
+    let disk_hashes = app.audio.known_disk_hashes.lock().unwrap();
     let history_items: Vec<ListItem> = history_entries
         .into_iter()
         .enumerate()

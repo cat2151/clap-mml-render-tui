@@ -1,14 +1,13 @@
 use clack_host::prelude::PluginEntry;
 use ratatui::widgets::ListState;
 
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::atomic::{AtomicU64, AtomicUsize};
+use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, Mutex};
 
 use super::notepad_history::NotepadHistoryState;
 use super::patch_phrase::PatchPhraseState;
 use super::patch_select::PatchSelectState;
-use super::{Mode, PlayState, TuiApp, TuiRenderQueue};
+use super::{Mode, TuiApp, TuiRenderQueue};
 use crate::config::Config;
 
 /// バックグラウンドパッチ読み込みの状態
@@ -142,9 +141,11 @@ impl<'a> TuiApp<'a> {
             ),
             cfg: Arc::clone(&cfg_arc),
             entry_ptr,
-            play_state: Arc::new(Mutex::new(PlayState::Idle)),
-            playback_session: Arc::new(AtomicU64::new(0)),
-            realtime_play_server,
+            playback: super::playback_runtime::TuiPlaybackRuntime::new(
+                realtime_play_server,
+                render_queue,
+                active_offline_render_count,
+            ),
             keyboard: super::keyboard::KeyboardScreen::new(
                 keyboard_midi_sender,
                 keyboard_state,
@@ -154,15 +155,12 @@ impl<'a> TuiApp<'a> {
             notepad_sound_check_guide: crate::sound_check_guide::SoundCheckGuide::new(
                 notepad_sound_check_guide_overlay_date,
             ),
-            voicing_cache: crate::history::load_voicing_cache(),
-            voicing_layers,
-            voicing_source_refresh,
-            active_offline_render_count,
-            render_queue,
-            active_sink: Arc::new(Mutex::new(None)),
-            audio_cache: Arc::new(Mutex::new(HashMap::new())),
-            audio_cache_order: Arc::new(Mutex::new(VecDeque::new())),
-            known_disk_cache_hashes: Arc::new(Mutex::new(HashSet::new())),
+            voicing: super::voicing::VoicingState::new(
+                crate::history::load_voicing_cache(),
+                voicing_layers,
+                voicing_source_refresh,
+            ),
+            audio: super::audio_cache::NotepadAudioCache::new(),
             patch_load_state: spawn_patch_loader(cfg),
             random_patch_decks: crate::random::RandomIndexDecks::default(),
             patch_select: PatchSelectState::new(),

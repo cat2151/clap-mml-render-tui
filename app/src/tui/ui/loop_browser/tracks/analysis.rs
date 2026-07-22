@@ -24,8 +24,8 @@ pub(super) fn stretch_label(
         };
     }
     let source_bpm = source_bpm.unwrap();
-    let source = crate::loop_time_stretch::format_bpm(source_bpm);
-    let target = crate::loop_time_stretch::format_bpm(target_bpm);
+    let source = crate::loop_browser::time_stretch::format_bpm(source_bpm);
+    let target = crate::loop_browser::time_stretch::format_bpm(target_bpm);
     let Some(view) = stretch_status else {
         return if exceeds_limits {
             format!("NG r{:.2} {source}→{target}", source_bpm / target_bpm)
@@ -34,8 +34,8 @@ pub(super) fn stretch_label(
         };
     };
     let source_bpm = view.source_bpm.unwrap_or(source_bpm);
-    let source = crate::loop_time_stretch::format_bpm(source_bpm);
-    let target = crate::loop_time_stretch::format_bpm(view.target_bpm);
+    let source = crate::loop_browser::time_stretch::format_bpm(source_bpm);
+    let target = crate::loop_browser::time_stretch::format_bpm(view.target_bpm);
     match view.status {
         StretchStatus::Pending => format!("… {source}→{target}"),
         StretchStatus::Ready { info, .. } => {
@@ -56,8 +56,8 @@ pub(super) fn stretch_label(
         }
         StretchStatus::Error(_) => {
             let ratio = source_bpm / view.target_bpm;
-            if !(crate::loop_time_stretch::MIN_TIME_RATIO
-                ..=crate::loop_time_stretch::MAX_TIME_RATIO)
+            if !(crate::loop_browser::time_stretch::MIN_TIME_RATIO
+                ..=crate::loop_browser::time_stretch::MAX_TIME_RATIO)
                 .contains(&ratio)
             {
                 format!("NG r{ratio:.2} {source}→{target}")

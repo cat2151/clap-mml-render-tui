@@ -1,5 +1,5 @@
 use super::*;
-use crate::loop_browser_random::{load_from as load_random_decks, LoopRandomScope};
+use crate::loop_browser::random::{load_from as load_random_decks, LoopRandomScope};
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
@@ -19,7 +19,7 @@ fn temp_path(name: &str) -> PathBuf {
 
 fn enable_random_persistence(browser: &mut LoopBrowser, name: &str) -> PathBuf {
     let path = temp_path(name);
-    browser.random_decks_path = Some(path.clone());
+    browser.random_decks.path = Some(path.clone());
     path
 }
 
@@ -72,9 +72,11 @@ fn favorites_only_random_draws_only_favorite_wavs_without_nested_duplicates() {
     let path = enable_random_persistence(&mut browser, "favorites");
     browser
         .metadata
+        .value
         .toggle_favorite(&LoopDirId::new(Path::new("/loops"), Path::new("Pack")));
     browser
         .metadata
+        .value
         .toggle_favorite(&LoopDirId::new(Path::new("/loops"), Path::new("Pack/Bass")));
     browser.rebuild_favorite_wav_keys();
     browser.rebuild_visible(None);
@@ -96,7 +98,7 @@ fn favorites_only_random_draws_only_favorite_wavs_without_nested_duplicates() {
 fn track_random_uses_category_for_a_continuation_cell() {
     let mut browser = browser();
     let path = enable_random_persistence(&mut browser, "track-category-continuation");
-    browser.metadata.toggle_category(
+    browser.metadata.value.toggle_category(
         &LoopDirId::new(Path::new("/loops"), Path::new("Pack/Bass")),
         "bass",
     );
@@ -146,10 +148,13 @@ fn track_random_draws_from_the_same_category_across_favorite_boundaries() {
     let spoken_wav = LoopWavId::new(Path::new("/loops"), Path::new("Spoken/Voice.wav"));
     let analysis = browser.wav_analyses[0].1;
     browser.wav_analyses.push((spoken_wav.clone(), analysis));
-    browser.metadata.toggle_favorite(&bass_dir);
-    browser.metadata.toggle_category(&bass_dir, "drum");
-    browser.metadata.toggle_category(&drums_dir, "drum");
-    browser.metadata.toggle_category(&spoken_dir, "spoken");
+    browser.metadata.value.toggle_favorite(&bass_dir);
+    browser.metadata.value.toggle_category(&bass_dir, "drum");
+    browser.metadata.value.toggle_category(&drums_dir, "drum");
+    browser
+        .metadata
+        .value
+        .toggle_category(&spoken_dir, "spoken");
     browser.rebuild_favorite_wav_keys();
     browser.rebuild_wav_categories();
     let current = browser
@@ -224,7 +229,7 @@ fn empty_track_random_and_pad_assignment_use_the_same_playback_grid_path() {
     let mut pad_browser = browser_with_direct_wavs(1);
     pad_browser.wav_analyses[0].1.tempo.as_mut().unwrap().bpm = 160.0;
     let wav = pad_browser.wav_analyses[0].0.clone();
-    pad_browser.metadata.toggle_pad('c', &wav);
+    pad_browser.metadata.value.toggle_pad('c', &wav);
     pad_browser.focus = LoopBrowserPane::Tracks;
 
     let random_grid = match random_browser.handle_key(KeyCode::Char('r')) {
@@ -275,6 +280,7 @@ fn nonfavorite_track_cell_uses_the_all_wav_deck() {
     let path = enable_random_persistence(&mut browser, "nonfavorite-track");
     browser
         .metadata
+        .value
         .toggle_favorite(&LoopDirId::new(Path::new("/loops"), Path::new("Pack/Bass")));
     browser.rebuild_favorite_wav_keys();
     let kick = browser
@@ -366,12 +372,12 @@ fn track_grid_save_failure_keeps_the_old_clip_and_only_previews() {
 fn saved_browser_deck_continues_after_reconstruction() {
     let path = temp_path("restart");
     let mut first_browser = browser();
-    first_browser.random_decks_path = Some(path.clone());
+    first_browser.random_decks.path = Some(path.clone());
     let first = preview_path(first_browser.handle_key(KeyCode::Char('r')));
 
     let mut second_browser = browser();
-    second_browser.random_decks = load_random_decks(&path).unwrap();
-    second_browser.random_decks_path = Some(path.clone());
+    second_browser.random_decks.value = load_random_decks(&path).unwrap();
+    second_browser.random_decks.path = Some(path.clone());
     let second = preview_path(second_browser.handle_key(KeyCode::Char('r')));
 
     assert_ne!(first, second);
@@ -383,9 +389,9 @@ fn save_failure_rolls_back_deck_and_does_not_move_or_preview() {
     let mut browser = browser();
     let blocked = temp_path("blocked");
     std::fs::create_dir_all(&blocked).unwrap();
-    browser.random_decks_path = Some(blocked.clone());
+    browser.random_decks.path = Some(blocked.clone());
     let cursor = browser.cursor;
-    let state = browser.random_decks.clone();
+    let state = browser.random_decks.value.clone();
 
     assert!(matches!(
         browser.handle_key(KeyCode::Char('r')),
@@ -393,9 +399,10 @@ fn save_failure_rolls_back_deck_and_does_not_move_or_preview() {
     ));
 
     assert_eq!(browser.cursor, cursor);
-    assert_eq!(browser.random_decks, state);
+    assert_eq!(browser.random_decks.value, state);
     assert!(browser
-        .random_decks_error
+        .random_decks
+        .error
         .as_deref()
         .is_some_and(|error| error.contains("random deckを保存できません")));
     let _ = std::fs::remove_dir_all(blocked.parent().unwrap().parent().unwrap());

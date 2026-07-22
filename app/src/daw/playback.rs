@@ -13,7 +13,6 @@ use crate::{config::RealtimeAudioBackend, history::daw_cache_mml_hash};
 mod cache_mixer;
 mod measure_math;
 mod measure_mixer;
-#[path = "playback/play_server.rs"]
 mod play_server;
 
 use super::playback_util::play_start_log_lines;
@@ -410,5 +409,4 @@ impl DawApp {
 }
 
 #[cfg(test)]
-#[path = "../tests/daw/playback.rs"]
 mod tests;

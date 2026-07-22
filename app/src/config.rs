@@ -59,5 +59,4 @@ pub fn core_config_from_config(cfg: &Config) -> CoreConfig {
 }
 
 #[cfg(test)]
-#[path = "tests/config.rs"]
 mod tests;

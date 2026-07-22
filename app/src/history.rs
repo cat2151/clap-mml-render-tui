@@ -84,5 +84,4 @@ pub(crate) fn test_history_app_dir_for_current_thread() -> Option<PathBuf> {
 }
 
 #[cfg(test)]
-#[path = "tests/history.rs"]
 mod tests;

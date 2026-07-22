@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use rodio::Source as _;
 
-use crate::loop_time_stretch::PreparedAudio;
+use crate::loop_browser::time_stretch::PreparedAudio;
 use crate::tui::loop_browser::LoopPlaybackClip;
 
 pub(super) fn append_clip_source(

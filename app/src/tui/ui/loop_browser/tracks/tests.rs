@@ -1,5 +1,5 @@
 use super::*;
-use crate::loop_time_stretch::PreparedAudioInfo;
+use crate::loop_browser::time_stretch::PreparedAudioInfo;
 use crate::tui::loop_browser::playback::diagnostics::{StretchStatus, StretchStatusView};
 
 #[test]

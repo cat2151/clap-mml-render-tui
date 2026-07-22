@@ -138,7 +138,7 @@ impl LoopBrowser {
             kind: analysis.map_or(crate::loop_wav_analysis::LoopWavKind::Loop, |value| {
                 value.kind
             }),
-            bpm: analysis.map_or(Some(crate::loop_time_stretch::TARGET_BPM), |_| {
+            bpm: analysis.map_or(Some(crate::loop_browser::time_stretch::TARGET_BPM), |_| {
                 tempo.map(|value| value.bpm)
             }),
             category: self.wav_categories.get(&key).cloned(),
@@ -164,12 +164,12 @@ impl LoopBrowser {
             .and_then(|analysis| analysis.tempo)
             .map(|tempo| tempo.bpm);
         source_bpm.is_some_and(|source_bpm| {
-            crate::loop_time_stretch::exceeds_time_ratio_limits(source_bpm, target_bpm)
+            crate::loop_browser::time_stretch::exceeds_time_ratio_limits(source_bpm, target_bpm)
         })
     }
 
-    pub(in crate::tui) fn target_bpm(&self) -> crate::loop_time_stretch::TargetBpm {
-        crate::loop_time_stretch::select_target_bpm(
+    pub(in crate::tui) fn target_bpm(&self) -> crate::loop_browser::time_stretch::TargetBpm {
+        crate::loop_browser::time_stretch::select_target_bpm(
             self.track_grid
                 .iter()
                 .flatten()

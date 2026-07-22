@@ -58,7 +58,7 @@ impl<'a> TuiApp<'a> {
     pub(super) fn start_keyboard(&mut self, patch: Option<String>) {
         self.keyboard.mml_input.cancel();
         self.keyboard.note_guide.reset_for_screen();
-        self.voicing_layers = self.voicing_source_refresh.load_for_keyboard();
+        self.voicing.layers = self.voicing.source_refresh.load_for_keyboard();
         let session = self.begin_playback_session();
         self.set_play_state_if_current(session, PlayState::Idle);
         self.keyboard.state = KeyboardState::new(patch);
@@ -96,7 +96,7 @@ impl<'a> TuiApp<'a> {
         &self,
         patch: Option<&str>,
     ) -> Option<crate::realtime_play::PatchVoicing> {
-        self.voicing_layers.resolve(&self.voicing_cache, patch?)
+        self.voicing.layers.resolve(&self.voicing.cache, patch?)
     }
 
     pub(super) fn handle_keyboard_key_event(&mut self, key: KeyEvent) -> KeyboardAction {
@@ -425,10 +425,10 @@ impl<'a> TuiApp<'a> {
         let Some(patch) = status.voicing_patch.as_deref() else {
             return;
         };
-        if !self.voicing_cache.insert(patch, report.decision) {
+        if !self.voicing.cache.insert(patch, report.decision) {
             return;
         }
-        if let Err(error) = crate::history::save_voicing_cache(&self.voicing_cache) {
+        if let Err(error) = crate::history::save_voicing_cache(&self.voicing.cache) {
             log_voicing_cache_event(format!("event=save-failed patch={patch:?} error={error}"));
         }
     }

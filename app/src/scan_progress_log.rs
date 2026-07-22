@@ -1,4 +1,4 @@
-use clap_mml_render_tui::loop_library::{LoopScanProgress, LoopScanSummary};
+use clap_mml_render_tui::loop_browser::library::{LoopScanProgress, LoopScanSummary};
 use std::{
     fs::{File, OpenOptions},
     io::{BufWriter, Write},

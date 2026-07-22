@@ -211,5 +211,4 @@ pub(crate) fn load_log_lines() -> VecDeque<String> {
 }
 
 #[cfg(test)]
-#[path = "tests/logging.rs"]
 mod tests;

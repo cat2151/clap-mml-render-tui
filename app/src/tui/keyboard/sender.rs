@@ -367,5 +367,4 @@ fn run_midi_sender(
 }
 
 #[cfg(test)]
-#[path = "sender_tests.rs"]
 mod tests;

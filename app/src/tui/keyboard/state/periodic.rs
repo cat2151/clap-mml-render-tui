@@ -314,9 +314,4 @@ fn deadline_elapsed(next_at: &mut Option<Instant>, now: Instant) -> bool {
 }
 
 #[cfg(test)]
-#[path = "periodic_tests.rs"]
 mod tests;
-
-#[cfg(test)]
-#[path = "repeat_tests.rs"]
-mod repeat_tests;

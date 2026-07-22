@@ -8,7 +8,6 @@ use super::super::{
 const TEMPO_TRACK: usize = 0;
 const INIT_MEASURE: usize = 0;
 
-#[path = "normal/playback.rs"]
 mod playback;
 
 pub(super) use playback::{

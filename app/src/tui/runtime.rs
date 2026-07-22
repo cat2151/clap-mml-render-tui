@@ -179,7 +179,7 @@ impl<'a> TuiApp<'a> {
                 continue;
             }
             if !self.startup_normal_cache_primed && self.mode == Mode::Normal {
-                *self.known_disk_cache_hashes.lock().unwrap() =
+                *self.audio.known_disk_hashes.lock().unwrap() =
                     crate::tui::disk_cache::scan_valid_cache_hashes(self.cfg.sample_rate as u32);
                 self.hydrate_all_lines_from_disk_cache_at_startup();
                 self.prime_normal_mode_startup_cache();
@@ -301,9 +301,9 @@ impl<'a> TuiApp<'a> {
                                         return Ok(TuiExitReason::RestartApp);
                                     }
                                     Err(error) => {
-                                        *self.play_state.lock().unwrap() = PlayState::Err(format!(
-                                            "config 編集に失敗しました: {error}"
-                                        ));
+                                        *self.playback.play_state.lock().unwrap() = PlayState::Err(
+                                            format!("config 編集に失敗しました: {error}"),
+                                        );
                                     }
                                 }
                             }

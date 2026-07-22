@@ -50,7 +50,7 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {
         .borders(Borders::ALL)
         .title(format!(
             " [TRACK LIST BPM{} AUTO-STRETCH] ",
-            crate::loop_time_stretch::format_bpm(target_bpm.bpm)
+            crate::loop_browser::time_stretch::format_bpm(target_bpm.bpm)
         ))
         .border_style(focus_border_style(focused));
     let used_wavs_block = Block::default()
@@ -332,7 +332,7 @@ fn render_cell(
     let playback_clip = browser.playback_clip(clip);
     let stretch_status = diagnostics.status_for(&playback_clip, target_bpm);
     let exceeds_limits = playback_clip.source_bpm().is_some_and(|source_bpm| {
-        crate::loop_time_stretch::exceeds_time_ratio_limits(source_bpm, target_bpm)
+        crate::loop_browser::time_stretch::exceeds_time_ratio_limits(source_bpm, target_bpm)
     });
     RenderedCell {
         wav_label,
@@ -385,5 +385,4 @@ fn cell_style(
 }
 
 #[cfg(test)]
-#[path = "tracks/tests.rs"]
 mod tests;

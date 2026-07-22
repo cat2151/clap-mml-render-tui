@@ -6,7 +6,6 @@ use std::{
     },
 };
 
-#[path = "render_queue/state.rs"]
 mod state;
 
 use anyhow::{anyhow, Result};

@@ -431,5 +431,4 @@ fn log_realtime_play_event(message: impl Into<String>) {
 }
 
 #[cfg(test)]
-#[path = "realtime_play/tests.rs"]
 mod tests;

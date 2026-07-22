@@ -327,18 +327,17 @@ impl LoopBrowser {
         let Some(dir) = self.selected_target_dir() else {
             return;
         };
-        if !self.metadata_writable {
+        if !self.metadata.writable {
             return;
         }
         let selected_path = self.visible.get(self.cursor).map(|node| node.path.clone());
-        let previous = self.metadata.clone();
-        let added = self.metadata.toggle_favorite(&dir);
-        if let Err(error) = self.save_metadata() {
-            self.metadata = previous;
-            self.metadata_error = Some(format!("お気に入りを保存できません: {error}"));
+        let Some(added) = self.metadata.try_mutate(
+            |metadata| metadata.toggle_favorite(&dir),
+            |path, metadata| metadata.save_to(path),
+            "お気に入りを保存できません",
+        ) else {
             return;
-        }
-        self.metadata_error = None;
+        };
         self.rebuild_favorite_wav_keys();
         if !added {
             self.notice = Some(LoopBrowserNotice {
@@ -357,7 +356,7 @@ impl LoopBrowser {
     }
 
     fn open_category_overlay(&mut self) {
-        if self.category_keys.is_empty() || !self.metadata_writable {
+        if self.category_keys.is_empty() || !self.metadata.writable {
             return;
         }
         self.category_overlay = self.selected_target_dir();
@@ -368,24 +367,20 @@ impl LoopBrowser {
             return false;
         };
         let selected_path = self.visible.get(self.cursor).map(|node| node.path.clone());
-        let previous = self.metadata.clone();
-        self.metadata.toggle_category(&dir, &category);
-        if let Err(error) = self.save_metadata() {
-            self.metadata = previous;
-            self.metadata_error = Some(format!("カテゴリを保存できません: {error}"));
+        if self
+            .metadata
+            .try_mutate(
+                |metadata| metadata.toggle_category(&dir, &category),
+                |path, metadata| metadata.save_to(path),
+                "カテゴリを保存できません",
+            )
+            .is_none()
+        {
             return false;
         }
-        self.metadata_error = None;
         self.rebuild_wav_categories();
         self.rebuild_visible_for_path(selected_path.as_deref());
         true
-    }
-
-    fn save_metadata(&self) -> anyhow::Result<()> {
-        match &self.metadata_path {
-            Some(path) => self.metadata.save_to(path),
-            None => Ok(()),
-        }
     }
 
     fn selected_wav_id(&self) -> Option<LoopWavId> {
@@ -402,17 +397,16 @@ impl LoopBrowser {
         let Some(wav) = self.selected_wav_id() else {
             return LoopBrowserAction::Continue;
         };
-        if !self.metadata_writable {
+        if !self.metadata.writable {
             return LoopBrowserAction::Continue;
         }
-        let previous = self.metadata.clone();
-        let assigned = self.metadata.toggle_pad(pad, &wav);
-        if let Err(error) = self.save_metadata() {
-            self.metadata = previous;
-            self.metadata_error = Some(format!("WAV padを保存できません: {error}"));
+        let Some(assigned) = self.metadata.try_mutate(
+            |metadata| metadata.toggle_pad(pad, &wav),
+            |path, metadata| metadata.save_to(path),
+            "WAV padを保存できません",
+        ) else {
             return LoopBrowserAction::Continue;
-        }
-        self.metadata_error = None;
+        };
         if !assigned {
             self.notice = Some(LoopBrowserNotice {
                 text: format!("WAV pad {} を解除しました", pad.to_ascii_uppercase()),

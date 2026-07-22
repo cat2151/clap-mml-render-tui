@@ -44,7 +44,7 @@ impl<'a> TuiApp<'a> {
     }
 
     fn filtered_prefetch_targets(&self, mmls: Vec<String>) -> Vec<String> {
-        let cache = self.audio_cache.lock().unwrap();
+        let cache = self.audio.cache.lock().unwrap();
         let mut targets = Vec::new();
         for mml in mmls.into_iter().map(|mml| mml.trim().to_string()) {
             if mml.is_empty() || cache.contains_key(&mml) || targets.contains(&mml) {
@@ -57,8 +57,8 @@ impl<'a> TuiApp<'a> {
 
     #[cfg(test)]
     fn insert_prefetch_targets_for_tests(&self, targets: Vec<String>) {
-        let mut cache = self.audio_cache.lock().unwrap();
-        let mut cache_order = self.audio_cache_order.lock().unwrap();
+        let mut cache = self.audio.cache.lock().unwrap();
+        let mut cache_order = self.audio.order.lock().unwrap();
         for mml in targets {
             try_insert_cache(&mut cache, &mut cache_order, mml, Vec::new(), false);
         }
@@ -216,16 +216,16 @@ impl<'a> TuiApp<'a> {
         #[cfg(test)]
         if self.entry_ptr == 0 {
             self.insert_prefetch_targets_for_tests(immediate_targets);
-            if self.render_queue.stats().pending_jobs == 0 {
+            if self.playback.render_queue.stats().pending_jobs == 0 {
                 self.insert_prefetch_targets_for_tests(idle_targets);
             }
             return;
         }
 
-        let cache = Arc::clone(&self.audio_cache);
-        let cache_order = Arc::clone(&self.audio_cache_order);
-        let render_queue = self.render_queue.clone();
-        let active_offline_render_count = Arc::clone(&self.active_offline_render_count);
+        let cache = Arc::clone(&self.audio.cache);
+        let cache_order = Arc::clone(&self.audio.order);
+        let render_queue = self.playback.render_queue.clone();
+        let active_offline_render_count = Arc::clone(&self.playback.active_offline_render_count);
         let prefetch_generation = render_queue.reserve_prefetch_generation();
         let fill_to_worker_count =
             self.cfg.offline_render_backend == crate::config::OfflineRenderBackend::RenderServer;

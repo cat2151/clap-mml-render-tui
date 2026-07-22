@@ -3,9 +3,10 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use crate::loop_browser_metadata::{category_keys, LoopBrowserMetadata, LoopDirId, LoopWavId};
-use crate::loop_browser_random::LoopRandomDeckState;
-use crate::loop_browser_track_grid::{default_track_grid, LoopTrackClip, LoopTrackGrid};
+use crate::loop_browser::metadata::{category_keys, LoopBrowserMetadata, LoopDirId, LoopWavId};
+use crate::loop_browser::persisted::PersistedDoc;
+use crate::loop_browser::random::LoopRandomDeckState;
+use crate::loop_browser::track_grid::{default_track_grid, LoopTrackClip, LoopTrackGrid};
 use crate::loop_wav_analysis::LoopWavAnalysis;
 use crate::loop_waveform::{LoopWaveform, WaveformDisplayScale};
 use crate::tui::keyboard::NavigationCount;
@@ -97,10 +98,8 @@ pub(crate) struct LoopBrowser {
     pub(super) cursor: usize,
     pub(super) tree_scroll: usize,
     pub(super) error: Option<String>,
-    pub(super) metadata_error: Option<String>,
     pub(super) track_grid_error: Option<String>,
-    pub(super) random_decks_error: Option<String>,
-    metadata: LoopBrowserMetadata,
+    metadata: PersistedDoc<LoopBrowserMetadata>,
     track_grid: LoopTrackGrid,
     track_volumes_db: Vec<i32>,
     solo_tracks: Vec<bool>,
@@ -110,11 +109,8 @@ pub(crate) struct LoopBrowser {
     wav_analysis_indices: HashMap<(String, String), usize>,
     wav_categories: HashMap<(String, String), String>,
     favorite_wav_keys: HashSet<(String, String)>,
-    metadata_path: Option<PathBuf>,
     track_grid_path: Option<PathBuf>,
-    random_decks: LoopRandomDeckState,
-    random_decks_path: Option<PathBuf>,
-    metadata_writable: bool,
+    random_decks: PersistedDoc<LoopRandomDeckState>,
     track_grid_writable: bool,
     pub(super) favorites_only: bool,
     pub(super) category_overlay: Option<LoopDirId>,
@@ -192,10 +188,8 @@ impl Default for LoopBrowser {
             cursor: 0,
             tree_scroll: 0,
             error: None,
-            metadata_error: None,
             track_grid_error: None,
-            random_decks_error: None,
-            metadata: LoopBrowserMetadata::default(),
+            metadata: PersistedDoc::in_memory(LoopBrowserMetadata::default()),
             track_grid: default_track_grid(),
             track_volumes_db: vec![0],
             solo_tracks: vec![false],
@@ -205,11 +199,8 @@ impl Default for LoopBrowser {
             wav_analysis_indices: HashMap::new(),
             wav_categories: HashMap::new(),
             favorite_wav_keys: HashSet::new(),
-            metadata_path: None,
             track_grid_path: None,
-            random_decks: LoopRandomDeckState::default(),
-            random_decks_path: None,
-            metadata_writable: true,
+            random_decks: PersistedDoc::in_memory(LoopRandomDeckState::default()),
             track_grid_writable: true,
             favorites_only: false,
             category_overlay: None,
@@ -238,12 +229,9 @@ impl Default for LoopBrowser {
 
 impl LoopBrowser {
     pub(in crate::tui) fn from_index(
-        index: crate::loop_library::LoopIndex,
+        index: crate::loop_browser::library::LoopIndex,
         categories: &[String],
-        metadata: LoopBrowserMetadata,
-        metadata_path: Option<PathBuf>,
-        metadata_writable: bool,
-        metadata_error: Option<String>,
+        metadata: PersistedDoc<LoopBrowserMetadata>,
     ) -> Self {
         let mut roots = Vec::with_capacity(index.roots.len());
         let mut wav_analyses = Vec::new();
@@ -287,9 +275,6 @@ impl LoopBrowser {
             expanded,
             category_keys: category_keys(categories),
             metadata,
-            metadata_path,
-            metadata_writable,
-            metadata_error,
             wav_analyses,
             wav_waveforms,
             waveform_display_scale,
@@ -324,7 +309,7 @@ impl LoopBrowser {
     fn rebuild_visible(&mut self, selected: Option<&NodeKey>) {
         let mut visible = Vec::new();
         if self.favorites_only {
-            for (anchor, favorite) in self.metadata.favorite_dirs.iter().enumerate() {
+            for (anchor, favorite) in self.metadata.value.favorite_dirs.iter().enumerate() {
                 if let Some((root_index, root_path, node, components)) =
                     find_favorite_node(&self.roots, favorite)
                 {
@@ -333,7 +318,7 @@ impl LoopBrowser {
                         root_path,
                         node,
                         &self.expanded,
-                        &self.metadata,
+                        &self.metadata.value,
                         &self.category_keys,
                         components,
                         Some(anchor),
@@ -350,7 +335,7 @@ impl LoopBrowser {
                     root_path,
                     root,
                     &self.expanded,
-                    &self.metadata,
+                    &self.metadata.value,
                     &self.category_keys,
                     Vec::new(),
                     None,
@@ -394,11 +379,21 @@ impl LoopBrowser {
     pub(super) fn category_overlay_current(&self) -> Option<&str> {
         self.category_overlay
             .as_ref()
-            .and_then(|dir| self.metadata.category_for(dir))
+            .and_then(|dir| self.metadata.value.category_for(dir))
     }
 
     pub(super) fn pad_path(&self, pad: char) -> Option<PathBuf> {
-        self.metadata.pad(pad).map(LoopWavId::path)
+        self.metadata.value.pad(pad).map(LoopWavId::path)
+    }
+
+    /// 永続化サブシステム（metadata / track grid / random deck）で直近に発生した
+    /// エラー文言を優先順位順に 1 つ返す。
+    pub(in crate::tui) fn persistence_error(&self) -> Option<&String> {
+        self.metadata
+            .error
+            .as_ref()
+            .or(self.track_grid_error.as_ref())
+            .or(self.random_decks.error.as_ref())
     }
 
     pub(super) fn pad_file_name(&self, pad: char) -> Option<String> {
@@ -427,6 +422,7 @@ impl LoopBrowser {
     pub(super) fn cell_label(&self, wav: &LoopWavId) -> String {
         let pad = self
             .metadata
+            .value
             .pad_assignments
             .iter()
             .find(|assignment| assignment.wav.matches(wav))

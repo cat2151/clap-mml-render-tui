@@ -41,7 +41,7 @@ impl<'a> TuiApp<'a> {
         sample_rate: u32,
     ) -> Option<Vec<f32>> {
         let hash = crate::history::daw_cache_mml_hash(mml);
-        if !self.known_disk_cache_hashes.lock().unwrap().contains(&hash) {
+        if !self.audio.known_disk_hashes.lock().unwrap().contains(&hash) {
             return None;
         }
         disk_cache::load_valid_cached_wav(mml, sample_rate)
@@ -54,12 +54,12 @@ impl<'a> TuiApp<'a> {
         }
 
         let cfg = Arc::clone(&self.cfg);
-        let state = Arc::clone(&self.play_state);
-        let playback_session = Arc::clone(&self.playback_session);
-        let active_sink = Arc::clone(&self.active_sink);
-        let cache = Arc::clone(&self.audio_cache);
-        let cache_order = Arc::clone(&self.audio_cache_order);
-        let render_queue = self.render_queue.clone();
+        let state = Arc::clone(&self.playback.play_state);
+        let playback_session = Arc::clone(&self.playback.playback_session);
+        let active_sink = Arc::clone(&self.playback.active_sink);
+        let cache = Arc::clone(&self.audio.cache);
+        let cache_order = Arc::clone(&self.audio.order);
+        let render_queue = self.playback.render_queue.clone();
         let session = self.begin_playback_session();
         let mml_log = truncate_for_log(&mml, 120);
 
@@ -216,7 +216,7 @@ impl<'a> TuiApp<'a> {
     }
 
     fn kick_play_via_play_server(&self, mml: String) {
-        let Some(play_server) = self.realtime_play_server.as_ref().cloned() else {
+        let Some(play_server) = self.playback.realtime_play_server.as_ref().cloned() else {
             let session = self.begin_playback_session();
             self.set_play_state_if_current(
                 session,
@@ -226,8 +226,8 @@ impl<'a> TuiApp<'a> {
         };
 
         let cfg = Arc::clone(&self.cfg);
-        let state = Arc::clone(&self.play_state);
-        let playback_session = Arc::clone(&self.playback_session);
+        let state = Arc::clone(&self.playback.play_state);
+        let playback_session = Arc::clone(&self.playback.playback_session);
         let session = self.begin_playback_session();
         let mml_log = truncate_for_log(&mml, 120);
         let msg = format!("play-server | {}", mml);

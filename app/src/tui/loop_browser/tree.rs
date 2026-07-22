@@ -36,6 +36,7 @@ impl LoopBrowser {
             .take(component_count)
             .collect::<PathBuf>();
         self.metadata
+            .value
             .category_for(&LoopDirId::new(root_path, &relative))
     }
 }

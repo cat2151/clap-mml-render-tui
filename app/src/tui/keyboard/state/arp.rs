@@ -191,5 +191,4 @@ impl KeyboardState {
 }
 
 #[cfg(test)]
-#[path = "arp_tests.rs"]
 mod tests;

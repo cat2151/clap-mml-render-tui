@@ -184,5 +184,4 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
 }
 
 #[cfg(test)]
-#[path = "../tests/daw/ui.rs"]
 mod tests;

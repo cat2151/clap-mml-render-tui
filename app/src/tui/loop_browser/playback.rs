@@ -184,7 +184,7 @@ impl<'a> TuiApp<'a> {
                 self.loop_browser.state.playback_grid(),
                 self.loop_browser.state.track_volumes_db().to_vec(),
                 self.loop_browser.state.solo_tracks().to_vec(),
-                Arc::clone(&self.play_state),
+                Arc::clone(&self.playback.play_state),
                 Arc::clone(&self.loop_browser.state.stretch_diagnostics),
                 Arc::clone(&self.loop_browser.state.playback_position),
             ));
@@ -247,7 +247,7 @@ impl<'a> TuiApp<'a> {
             playback.set_paused(paused, start_measure);
         }
         if paused {
-            *self.play_state.lock().unwrap() = PlayState::Idle;
+            *self.playback.play_state.lock().unwrap() = PlayState::Idle;
         }
     }
 }
@@ -257,5 +257,4 @@ fn set_play_state(state: &Arc<Mutex<PlayState>>, next: PlayState) {
 }
 
 #[cfg(test)]
-#[path = "playback/tests.rs"]
 mod tests;

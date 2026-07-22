@@ -43,14 +43,8 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame) {
     draw_pads(app, frame, chunks[1]);
     let pads_elapsed = pads_started.elapsed();
 
-    let play_state = app.play_state.lock().unwrap().clone();
-    let persistence_error = app
-        .loop_browser
-        .state
-        .metadata_error
-        .as_ref()
-        .or(app.loop_browser.state.track_grid_error.as_ref())
-        .or(app.loop_browser.state.random_decks_error.as_ref());
+    let play_state = app.playback.play_state.lock().unwrap().clone();
+    let persistence_error = app.loop_browser.state.persistence_error();
     let (status, color) = if let Some(error) = persistence_error {
         (error.clone(), Color::Red)
     } else if matches!(play_state, crate::tui::PlayState::Err(_)) {
