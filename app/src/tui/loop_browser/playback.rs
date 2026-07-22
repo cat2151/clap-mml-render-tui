@@ -44,6 +44,12 @@ enum LoopPlaybackCommand {
         start_measure: usize,
         reason: LoopGridChange,
     },
+    ReplaceTrackLayout {
+        grid: LoopPlaybackGrid,
+        start_measure: usize,
+        track_volumes_db: Vec<i32>,
+        solo_tracks: Vec<bool>,
+    },
     SetTrackVolume {
         track: usize,
         volume_db: i32,
@@ -128,6 +134,21 @@ impl LoopPlaybackController {
             grid,
             start_measure,
             reason,
+        });
+    }
+
+    pub(super) fn replace_track_layout(
+        &self,
+        grid: LoopPlaybackGrid,
+        start_measure: usize,
+        track_volumes_db: Vec<i32>,
+        solo_tracks: Vec<bool>,
+    ) {
+        let _ = self.sender.send(LoopPlaybackCommand::ReplaceTrackLayout {
+            grid,
+            start_measure,
+            track_volumes_db,
+            solo_tracks,
         });
     }
 
@@ -227,6 +248,18 @@ impl<'a> TuiApp<'a> {
     ) {
         if let Some(playback) = &self.loop_browser.playback {
             playback.restart_grid_at(grid, start_measure, reason);
+        }
+    }
+
+    pub(in crate::tui) fn replace_loop_track_layout(
+        &self,
+        grid: LoopPlaybackGrid,
+        start_measure: usize,
+        track_volumes_db: Vec<i32>,
+        solo_tracks: Vec<bool>,
+    ) {
+        if let Some(playback) = &self.loop_browser.playback {
+            playback.replace_track_layout(grid, start_measure, track_volumes_db, solo_tracks);
         }
     }
 

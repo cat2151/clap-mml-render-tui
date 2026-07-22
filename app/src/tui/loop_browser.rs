@@ -11,6 +11,8 @@ use crate::loop_wav_analysis::LoopWavAnalysis;
 use crate::loop_waveform::{LoopWaveform, WaveformDisplayScale};
 use crate::tui::keyboard::NavigationCount;
 
+mod action;
+mod batch_random;
 mod catalog;
 mod grid;
 mod input;
@@ -21,8 +23,12 @@ mod random_navigation;
 mod reload;
 mod screen;
 mod track_input;
+mod track_order;
 mod tree;
 
+pub(in crate::tui) use action::{
+    LoopBrowserAction, LoopGridChange, LoopPlaybackClip, LoopPlaybackGrid,
+};
 use tree::{collect_visible, find_favorite_node, insert_relative_path, node_path, sort_tree};
 
 pub(in crate::tui) use screen::LoopBrowserScreen;
@@ -71,26 +77,6 @@ pub(super) enum LoopBrowserPane {
     Tracks,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(super) enum LoopGridChange {
-    #[default]
-    Initial,
-    Random,
-    Pad(char),
-    Category,
-}
-
-impl LoopGridChange {
-    pub(super) fn label(self) -> String {
-        match self {
-            Self::Initial => "initial".to_string(),
-            Self::Random => "random".to_string(),
-            Self::Pad(pad) => format!("pad-{pad}"),
-            Self::Category => "category".to_string(),
-        }
-    }
-}
-
 pub(crate) struct LoopBrowser {
     roots: Vec<(PathBuf, TreeNode)>,
     expanded: HashSet<NodeKey>,
@@ -133,50 +119,6 @@ pub(crate) struct LoopBrowser {
     pending_preview_trace: Option<u64>,
     pub(super) pending_render_trace: Option<u64>,
     pub(super) last_render_metrics: Option<performance::RenderMetrics>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(super) struct LoopPlaybackClip {
-    pub(super) path: PathBuf,
-    pub(super) span_measures: usize,
-    pub(super) kind: crate::loop_wav_analysis::LoopWavKind,
-    pub(super) bpm: Option<f64>,
-    pub(super) category: Option<String>,
-    pub(super) meter_numerator: u16,
-    pub(super) meter_denominator: u16,
-}
-
-pub(super) type LoopPlaybackGrid = Vec<Vec<Option<LoopPlaybackClip>>>;
-
-pub(super) enum LoopBrowserAction {
-    Continue,
-    Preview(PathBuf),
-    Trigger {
-        pad: char,
-        path: PathBuf,
-    },
-    GridReplaced {
-        start_measure: usize,
-        grid: LoopPlaybackGrid,
-        reason: LoopGridChange,
-    },
-    GridRefresh {
-        grid: LoopPlaybackGrid,
-        reason: LoopGridChange,
-    },
-    TrackVolumeChanged {
-        track: usize,
-        volume_db: i32,
-    },
-    TrackSoloChanged {
-        solo_tracks: Vec<bool>,
-    },
-    SetPlaybackPaused {
-        paused: bool,
-        start_measure: usize,
-    },
-    Return,
-    Quit,
 }
 
 impl Default for LoopBrowser {

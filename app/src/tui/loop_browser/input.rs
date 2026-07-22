@@ -135,6 +135,22 @@ impl LoopBrowser {
     }
 
     fn handle_track_key(&mut self, key: KeyEvent) -> LoopBrowserAction {
+        if key.modifiers == KeyModifiers::ALT {
+            return match key.code {
+                KeyCode::Up => self.move_current_track(-1),
+                KeyCode::Down => self.move_current_track(1),
+                _ => LoopBrowserAction::Continue,
+            };
+        }
+        if key.modifiers == KeyModifiers::SHIFT {
+            if let KeyCode::Char(character) = key.code {
+                return match character.to_ascii_lowercase() {
+                    'r' => self.randomize_current_measure(),
+                    'm' => self.randomize_track_solos(),
+                    _ => LoopBrowserAction::Continue,
+                };
+            }
+        }
         if key.modifiers == KeyModifiers::NONE {
             if let KeyCode::Char(pad @ ('c' | 'd' | 'e' | 'f' | 'g' | 'a' | 'b')) = key.code {
                 return self.toggle_current_cell(pad);

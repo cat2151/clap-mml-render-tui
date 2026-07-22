@@ -38,6 +38,9 @@ fn loop_browser_draws_centered_help_for_the_focused_pane() {
 
     assert!(normalized_tracks.contains("ヘルプ(Keybinds):Tracks"));
     assert!(tracks_screen.contains("mix level overlay"));
+    assert!(normalized_tracks.contains("Shift+R"));
+    assert!(normalized_tracks.contains("Shift+M"));
+    assert!(normalized_tracks.contains("Alt+↓/↑"));
     assert!(!normalized_tracks.contains("dirカテゴリ設定"));
     assert!(normalized_tracks.contains("[Esc/q/?]でヘルプを閉じる"));
 }

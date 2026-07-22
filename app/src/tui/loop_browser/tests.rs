@@ -383,10 +383,12 @@ fn favorites_only_shift_a_saves_only_pad_metadata() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+mod batch_random;
 mod grid;
 mod help;
 mod mixer;
 mod navigation;
 mod performance;
 mod random;
+mod track_order;
 mod transport;

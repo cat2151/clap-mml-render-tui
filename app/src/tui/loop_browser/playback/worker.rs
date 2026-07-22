@@ -17,53 +17,11 @@ use crate::tui::loop_browser::LoopPlaybackClip;
 use crate::tui::PlayState;
 use anyhow::{Context, Result};
 
-#[derive(Default)]
-pub(super) struct TransportState {
-    paused: bool,
-    current_measure: Option<usize>,
-    restart_measure: Option<usize>,
-}
+mod transport;
 
-impl TransportState {
-    pub(super) fn pause(&mut self) {
-        self.paused = true;
-        self.current_measure = None;
-        self.restart_measure = None;
-    }
-
-    pub(super) fn resume_at(&mut self, measure: usize) {
-        self.paused = false;
-        self.current_measure = None;
-        self.restart_measure = Some(measure);
-    }
-
-    fn restart_at(&mut self, measure: usize) {
-        self.current_measure = None;
-        self.restart_measure = Some(measure);
-    }
-
-    fn started(&mut self, measure: usize) {
-        self.current_measure = Some(measure);
-    }
-
-    fn clear_current(&mut self) {
-        self.current_measure = None;
-    }
-
-    pub(super) fn next_measure_to_start(&mut self, grid: &LoopPlaybackGrid) -> Option<usize> {
-        if self.paused {
-            return None;
-        }
-        self.restart_measure
-            .take()
-            .and_then(|measure| measure_at_or_after(grid, measure))
-            .or_else(|| next_measure(grid, self.current_measure))
-    }
-
-    pub(super) fn is_paused(&self) -> bool {
-        self.paused
-    }
-}
+pub(super) use transport::TransportState;
+#[cfg(test)]
+pub(super) use transport::{measure_at_or_after, next_measure};
 
 pub(super) fn playback_worker(
     receiver: mpsc::Receiver<LoopPlaybackCommand>,
@@ -258,6 +216,27 @@ pub(super) fn playback_worker(
                 pending_generation = Some(preparation.submit(grid, reason));
                 set_preparation_state(state, transport.is_paused(), target_bpm.bpm);
             }
+            Ok(LoopPlaybackCommand::ReplaceTrackLayout {
+                grid,
+                start_measure,
+                track_volumes_db: next_track_volumes_db,
+                solo_tracks: next_solo_tracks,
+            }) => {
+                stop_sinks(&mut measure_sinks);
+                stop_pad_sinks(&mut pad_sinks);
+                if let Some(sink) = preview_sink.take() {
+                    sink.stop();
+                }
+                measure_deadline = None;
+                position::clear(&playback_position);
+                active = None;
+                track_volumes_db = next_track_volumes_db;
+                solo_tracks = next_solo_tracks;
+                transport.restart_at(start_measure);
+                let target_bpm = grid_target_bpm(&grid);
+                pending_generation = Some(preparation.submit(grid, LoopGridChange::TrackOrder));
+                set_preparation_state(state, transport.is_paused(), target_bpm.bpm);
+            }
             Ok(LoopPlaybackCommand::SetTrackVolume { track, volume_db }) => {
                 if track >= track_volumes_db.len() {
                     track_volumes_db.resize(track + 1, 0);
@@ -322,49 +301,6 @@ fn set_preparation_state(state: &Arc<Mutex<PlayState>>, paused: bool, bpm: f64) 
             PlayState::Running(format!("BPM{}変換中", format_bpm(bpm))),
         );
     }
-}
-
-pub(super) fn next_measure(grid: &LoopPlaybackGrid, current: Option<usize>) -> Option<usize> {
-    let measures = grid.iter().map(Vec::len).max().unwrap_or(0);
-    if measures == 0 {
-        return None;
-    }
-    let start = current.map_or(0, |measure| (measure + 1) % measures);
-    for offset in 0..measures {
-        let measure = (start + offset) % measures;
-        if measure_is_occupied(grid, measure) {
-            return Some(measure);
-        }
-    }
-    None
-}
-
-pub(super) fn measure_at_or_after(grid: &LoopPlaybackGrid, start: usize) -> Option<usize> {
-    let measures = grid.iter().map(Vec::len).max().unwrap_or(0);
-    if measures == 0 {
-        return None;
-    }
-    let start = start % measures;
-    for offset in 0..measures {
-        let measure = (start + offset) % measures;
-        if measure_is_occupied(grid, measure) {
-            return Some(measure);
-        }
-    }
-    None
-}
-
-fn measure_is_occupied(grid: &LoopPlaybackGrid, measure: usize) -> bool {
-    grid.iter().any(|track| {
-        track
-            .iter()
-            .take(measure.saturating_add(1))
-            .enumerate()
-            .any(|(start, clip)| {
-                clip.as_ref()
-                    .is_some_and(|clip| start.saturating_add(clip.span_measures) > measure)
-            })
-    })
 }
 
 pub(super) fn starting_clips(

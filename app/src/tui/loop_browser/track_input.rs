@@ -6,7 +6,7 @@ impl LoopBrowser {
             crate::loop_browser::track_grid::normalize_previous_markers(&self.track_grid).0;
     }
 
-    fn save_track_grid(&self) -> anyhow::Result<()> {
+    pub(super) fn save_track_grid(&self) -> anyhow::Result<()> {
         match &self.track_grid_path {
             Some(path) => crate::loop_browser::track_grid::save_to(
                 path,

@@ -190,6 +190,9 @@ fn draws_wav_pads_track_grid_and_pane_specific_footer() {
     assert!(screen.contains("↳ 2/2"));
     assert!(screen.contains("Tab:loop tree"));
     assert!(screen.contains("m:mix level"));
+    assert!(screen.contains("Shift+M:2track random solo"));
+    assert!(screen.replace(' ', "").contains("Shift+R:全trackrandom"));
+    assert!(screen.replace(' ', "").contains("Alt+↓/↑:track並び替え"));
     assert!(screen.replace(' ', "").contains("p:演奏停止/再開"));
     assert!(screen.replace(' ', "").contains("r:ランダムWAV"));
     assert!(screen.contains("1-9:hjkl prefix"));

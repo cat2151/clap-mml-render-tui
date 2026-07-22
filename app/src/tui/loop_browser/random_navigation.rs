@@ -179,7 +179,7 @@ impl LoopBrowser {
         }
     }
 
-    fn save_random_decks(&self) -> anyhow::Result<()> {
+    pub(super) fn save_random_decks(&self) -> anyhow::Result<()> {
         let path = self
             .random_decks
             .path

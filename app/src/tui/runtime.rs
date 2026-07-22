@@ -337,6 +337,17 @@ impl<'a> TuiApp<'a> {
                             LoopBrowserAction::GridRefresh { grid, reason } => {
                                 self.update_loop_grid(grid, reason)
                             }
+                            LoopBrowserAction::TrackLayoutChanged {
+                                start_measure,
+                                grid,
+                                track_volumes_db,
+                                solo_tracks,
+                            } => self.replace_loop_track_layout(
+                                grid,
+                                start_measure,
+                                track_volumes_db,
+                                solo_tracks,
+                            ),
                             LoopBrowserAction::TrackVolumeChanged { track, volume_db } => {
                                 self.update_loop_track_volume(track, volume_db)
                             }

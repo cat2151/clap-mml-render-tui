@@ -118,7 +118,7 @@ pub(super) fn loop_browser_keybind_text(pane: LoopBrowserPane) -> &'static str {
             "Tab:track list p:演奏停止/再開 r:ランダムWAV Shift+C/D/E/F/G/A/B:pad登録/解除 c/d/e/f/g/a/b:pad演奏 1-9:hjkl prefix PgUp/PgDn:±10 t:dirカテゴリ v:dirお気に入り V:お気に入り限定 hjkl・矢印:移動/展開 Enter/Space:再生 Esc:戻る q:終了"
         }
         LoopBrowserPane::Tracks => {
-            "Tab:loop tree p:演奏停止/再開 s:solo toggle r:ランダムWAV m:mix level c/d/e/f/g/a/b:pad演奏+セルtoggle 1-9:hjkl prefix h/l・←/→:measure移動 j/k・↓/↑:track移動（右/下端で自動追加） Esc:戻る q:終了"
+            "Tab:loop tree p:演奏停止/再開 r:ランダムWAV m:mix level Shift+R:全track random Shift+M:2track random solo Alt+↓/↑:track並び替え 1-9:hjkl prefix s:solo toggle c..b:pad h/l・←/→:measure j/k・↓/↑:track（右/下端で追加） Esc/q:戻る/終了"
         }
     }
 }
