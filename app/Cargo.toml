@@ -10,8 +10,10 @@ path = "src/main.rs"
 [dependencies]
 cmrt-config-editor = { path = "../config-editor-lib" }
 cmrt-core = { path = "../core-lib" }
+cmrt-loop-browser-domain = { path = "../loop-browser-domain" }
 cmrt-loop-domain = { path = "../loop-domain" }
 cmrt-runtime = { path = "../cmrt-runtime" }
+cmrt-tui-core = { path = "../tui-core" }
 rubberband-ffi = { path = "../rubberband-ffi" }
 chord2mml-core = { git = "https://github.com/cat2151/chord2mml-rust", package = "chord2mml-core", features = ["tree-sitter"] }
 rand = "0.8"

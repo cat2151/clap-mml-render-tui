@@ -6,7 +6,7 @@ pub(crate) mod fast_midi_ipc;
 pub(crate) mod generate;
 pub mod history;
 pub mod logging;
-pub mod loop_browser;
+pub use cmrt_loop_browser_domain as loop_browser;
 pub(crate) use cmrt_loop_domain::{loop_wav_analysis, loop_waveform};
 pub(crate) mod mixer_overlay;
 pub(crate) mod offline_render;

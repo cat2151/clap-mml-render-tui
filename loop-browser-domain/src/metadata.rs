@@ -6,31 +6,31 @@ const METADATA_VERSION: u32 = 1;
 const METADATA_FILE_NAME: &str = "loop_browser.toml";
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(crate) struct LoopDirId {
-    pub(crate) root: String,
-    pub(crate) relative: String,
+pub struct LoopDirId {
+    pub root: String,
+    pub relative: String,
 }
 
 impl LoopDirId {
-    pub(crate) fn new(root: &Path, relative: &Path) -> Self {
+    pub fn new(root: &Path, relative: &Path) -> Self {
         Self {
             root: root.to_string_lossy().into_owned(),
             relative: relative.to_string_lossy().into_owned(),
         }
     }
 
-    pub(crate) fn lookup_key(&self) -> (String, String) {
+    pub fn lookup_key(&self) -> (String, String) {
         (
             normalize_path_text(&self.root),
             normalize_path_text(&self.relative),
         )
     }
 
-    pub(crate) fn matches(&self, other: &Self) -> bool {
+    pub fn matches(&self, other: &Self) -> bool {
         self.lookup_key() == other.lookup_key()
     }
 
-    pub(crate) fn contains_wav(&self, wav: &LoopWavId) -> bool {
+    pub fn contains_wav(&self, wav: &LoopWavId) -> bool {
         if normalize_path_text(&self.root) != normalize_path_text(&wav.root) {
             return false;
         }
@@ -41,52 +41,52 @@ impl LoopDirId {
         parent.starts_with(PathBuf::from(normalize_path_text(&self.relative)))
     }
 
-    pub(crate) fn depth(&self) -> usize {
+    pub fn depth(&self) -> usize {
         Path::new(&self.relative).components().count()
     }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(crate) struct LoopCategoryAssignment {
-    pub(crate) root: String,
-    pub(crate) relative: String,
-    pub(crate) category: String,
+pub struct LoopCategoryAssignment {
+    pub root: String,
+    pub relative: String,
+    pub category: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(crate) struct LoopWavId {
-    pub(crate) root: String,
-    pub(crate) relative: String,
+pub struct LoopWavId {
+    pub root: String,
+    pub relative: String,
 }
 
 impl LoopWavId {
-    pub(crate) fn new(root: &Path, relative: &Path) -> Self {
+    pub fn new(root: &Path, relative: &Path) -> Self {
         Self {
             root: root.to_string_lossy().into_owned(),
             relative: relative.to_string_lossy().into_owned(),
         }
     }
 
-    pub(crate) fn path(&self) -> PathBuf {
+    pub fn path(&self) -> PathBuf {
         Path::new(&self.root).join(&self.relative)
     }
 
-    pub(crate) fn lookup_key(&self) -> (String, String) {
+    pub fn lookup_key(&self) -> (String, String) {
         (
             normalize_path_text(&self.root),
             normalize_path_text(&self.relative),
         )
     }
 
-    pub(crate) fn matches(&self, other: &Self) -> bool {
+    pub fn matches(&self, other: &Self) -> bool {
         self.lookup_key() == other.lookup_key()
     }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(crate) struct LoopPadAssignment {
-    pub(crate) pad: char,
-    pub(crate) wav: LoopWavId,
+pub struct LoopPadAssignment {
+    pub pad: char,
+    pub wav: LoopWavId,
 }
 
 impl LoopCategoryAssignment {
@@ -99,14 +99,14 @@ impl LoopCategoryAssignment {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(crate) struct LoopBrowserMetadata {
+pub struct LoopBrowserMetadata {
     version: u32,
     #[serde(default)]
-    pub(crate) favorite_dirs: Vec<LoopDirId>,
+    pub favorite_dirs: Vec<LoopDirId>,
     #[serde(default)]
-    pub(crate) category_assignments: Vec<LoopCategoryAssignment>,
+    pub category_assignments: Vec<LoopCategoryAssignment>,
     #[serde(default)]
-    pub(crate) pad_assignments: Vec<LoopPadAssignment>,
+    pub pad_assignments: Vec<LoopPadAssignment>,
 }
 
 impl Default for LoopBrowserMetadata {
@@ -121,19 +121,19 @@ impl Default for LoopBrowserMetadata {
 }
 
 impl LoopBrowserMetadata {
-    pub(crate) fn load_from(path: &Path) -> Result<Self> {
+    pub fn load_from(path: &Path) -> Result<Self> {
         load_from_path(path)
     }
 
-    pub(crate) fn save_to(&self, path: &Path) -> Result<()> {
+    pub fn save_to(&self, path: &Path) -> Result<()> {
         save_to_path(path, self)
     }
 
-    pub(crate) fn is_favorite(&self, dir: &LoopDirId) -> bool {
+    pub fn is_favorite(&self, dir: &LoopDirId) -> bool {
         self.favorite_dirs.iter().any(|item| item.matches(dir))
     }
 
-    pub(crate) fn toggle_favorite(&mut self, dir: &LoopDirId) -> bool {
+    pub fn toggle_favorite(&mut self, dir: &LoopDirId) -> bool {
         if let Some(index) = self.favorite_dirs.iter().position(|item| item.matches(dir)) {
             self.favorite_dirs.remove(index);
             false
@@ -143,7 +143,7 @@ impl LoopBrowserMetadata {
         }
     }
 
-    pub(crate) fn deepest_favorite_for_wav(&self, wav: &LoopWavId) -> Option<(usize, &LoopDirId)> {
+    pub fn deepest_favorite_for_wav(&self, wav: &LoopWavId) -> Option<(usize, &LoopDirId)> {
         self.favorite_dirs
             .iter()
             .enumerate()
@@ -151,14 +151,14 @@ impl LoopBrowserMetadata {
             .max_by_key(|(_, favorite)| favorite.depth())
     }
 
-    pub(crate) fn category_for<'a>(&'a self, dir: &LoopDirId) -> Option<&'a str> {
+    pub fn category_for<'a>(&'a self, dir: &LoopDirId) -> Option<&'a str> {
         self.category_assignments
             .iter()
             .find(|assignment| assignment.dir_id().matches(dir))
             .map(|assignment| assignment.category.as_str())
     }
 
-    pub(crate) fn category_for_wav<'a>(&'a self, wav: &LoopWavId) -> Option<&'a str> {
+    pub fn category_for_wav<'a>(&'a self, wav: &LoopWavId) -> Option<&'a str> {
         let root = normalize_path_text(&wav.root);
         let parent = Path::new(&normalize_path_text(&wav.relative))
             .parent()
@@ -177,7 +177,7 @@ impl LoopBrowserMetadata {
             .map(|(_, category)| category)
     }
 
-    pub(crate) fn toggle_category(&mut self, dir: &LoopDirId, category: &str) -> Option<String> {
+    pub fn toggle_category(&mut self, dir: &LoopDirId, category: &str) -> Option<String> {
         if let Some(index) = self
             .category_assignments
             .iter()
@@ -198,7 +198,7 @@ impl LoopBrowserMetadata {
         Some(category.to_string())
     }
 
-    pub(crate) fn pad(&self, pad: char) -> Option<&LoopWavId> {
+    pub fn pad(&self, pad: char) -> Option<&LoopWavId> {
         self.pad_assignments
             .iter()
             .find(|assignment| assignment.pad == pad)
@@ -206,7 +206,7 @@ impl LoopBrowserMetadata {
     }
 
     /// Returns true when the pad is assigned after the operation.
-    pub(crate) fn toggle_pad(&mut self, pad: char, wav: &LoopWavId) -> bool {
+    pub fn toggle_pad(&mut self, pad: char, wav: &LoopWavId) -> bool {
         if let Some(index) = self
             .pad_assignments
             .iter()
@@ -227,7 +227,7 @@ impl LoopBrowserMetadata {
     }
 }
 
-pub(crate) fn category_keys(categories: &[String]) -> Vec<(char, String)> {
+pub fn category_keys(categories: &[String]) -> Vec<(char, String)> {
     let mut used = [false; 26];
     categories
         .iter()
@@ -250,8 +250,8 @@ pub(crate) fn category_keys(categories: &[String]) -> Vec<(char, String)> {
         .collect()
 }
 
-pub(crate) fn metadata_path() -> Result<PathBuf> {
-    crate::config::config_app_dir()
+pub fn metadata_path() -> Result<PathBuf> {
+    crate::app_dir()
         .map(|dir| dir.join(METADATA_FILE_NAME))
         .ok_or_else(|| anyhow::anyhow!("システムの設定ディレクトリが取得できません"))
 }
@@ -304,7 +304,7 @@ fn validate_metadata(metadata: &LoopBrowserMetadata) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn validate_wav_id(wav: &LoopWavId) -> Result<()> {
+pub fn validate_wav_id(wav: &LoopWavId) -> Result<()> {
     if wav.root.trim().is_empty() {
         anyhow::bail!("loop browser metadataに空のWAV rootがあります");
     }
@@ -325,7 +325,7 @@ pub(crate) fn validate_wav_id(wav: &LoopWavId) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn validate_dir_id(dir: &LoopDirId) -> Result<()> {
+pub fn validate_dir_id(dir: &LoopDirId) -> Result<()> {
     if dir.root.trim().is_empty() {
         anyhow::bail!("loop browser metadataに空のrootがあります");
     }

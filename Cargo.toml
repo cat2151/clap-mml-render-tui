@@ -5,7 +5,9 @@ members = [
     "config-editor-lib",
     "core-lib",
     "daw-client-lib",
+    "loop-browser-domain",
     "loop-domain",
     "rubberband-ffi",
+    "tui-core",
 ]
 resolver = "2"

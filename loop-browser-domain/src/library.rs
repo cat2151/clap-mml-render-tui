@@ -5,29 +5,29 @@ use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::path::{Component, Path, PathBuf};
 
-use crate::loop_wav_analysis::{analyze_file, LoopWavAnalysis, LoopWavKind};
-use crate::loop_waveform::{LoopWaveform, WAVEFORM_BINS_PER_MEASURE};
+use cmrt_loop_domain::loop_wav_analysis::{analyze_file, LoopWavAnalysis, LoopWavKind};
+use cmrt_loop_domain::loop_waveform::{LoopWaveform, WAVEFORM_BINS_PER_MEASURE};
 
-pub(crate) const LOOP_INDEX_VERSION: u32 = 6;
+pub const LOOP_INDEX_VERSION: u32 = 6;
 const LOOP_INDEX_FILE_NAME: &str = "loop_index.json";
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(crate) struct LoopIndex {
-    pub(crate) version: u32,
-    pub(crate) roots: Vec<LoopRootIndex>,
+pub struct LoopIndex {
+    pub version: u32,
+    pub roots: Vec<LoopRootIndex>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(crate) struct LoopRootIndex {
-    pub(crate) path: String,
-    pub(crate) wav_files: Vec<LoopWavIndex>,
+pub struct LoopRootIndex {
+    pub path: String,
+    pub wav_files: Vec<LoopWavIndex>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(crate) struct LoopWavIndex {
-    pub(crate) relative: String,
-    pub(crate) analysis: LoopWavAnalysis,
-    pub(crate) waveform: LoopWaveform,
+pub struct LoopWavIndex {
+    pub relative: String,
+    pub analysis: LoopWavAnalysis,
+    pub waveform: LoopWaveform,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -57,15 +57,15 @@ pub enum LoopScanProgress {
     },
 }
 
-pub fn scan_and_save(cfg: &crate::config::Config) -> Result<LoopScanSummary> {
-    scan_and_save_with_progress(cfg, |_| {})
+pub fn scan_and_save(loop_dirs: &[String]) -> Result<LoopScanSummary> {
+    scan_and_save_with_progress(loop_dirs, |_| {})
 }
 
 pub fn scan_and_save_with_progress(
-    cfg: &crate::config::Config,
+    loop_dirs: &[String],
     progress: impl FnMut(LoopScanProgress),
 ) -> Result<LoopScanSummary> {
-    scan_dirs_and_save_with_progress(&cfg.loop_dirs, progress)
+    scan_dirs_and_save_with_progress(loop_dirs, progress)
 }
 
 #[cfg(test)]
@@ -87,8 +87,8 @@ fn scan_dirs_and_save_with_progress(
     Ok(summary)
 }
 
-pub(crate) fn load_index(cfg: &crate::config::Config) -> Result<LoopIndex> {
-    if cfg.loop_dirs.is_empty() {
+pub fn load_index(loop_dirs: &[String]) -> Result<LoopIndex> {
+    if loop_dirs.is_empty() {
         anyhow::bail!("loop_dirs が空です。config.toml にルートを設定してください");
     }
     let path = loop_index_path()?;
@@ -96,12 +96,12 @@ pub(crate) fn load_index(cfg: &crate::config::Config) -> Result<LoopIndex> {
         .with_context(|| format!("ループキャッシュを読めません: {}", path.display()))?;
     let index: LoopIndex = serde_json::from_slice(&bytes)
         .with_context(|| format!("ループキャッシュが壊れています: {}", path.display()))?;
-    validate_index(&index, &cfg.loop_dirs)?;
+    validate_index(&index, loop_dirs)?;
     Ok(index)
 }
 
-pub(crate) fn loop_index_path() -> Result<PathBuf> {
-    crate::config::config_app_dir()
+pub fn loop_index_path() -> Result<PathBuf> {
+    crate::app_dir()
         .map(|dir| dir.join("cache").join(LOOP_INDEX_FILE_NAME))
         .ok_or_else(|| anyhow::anyhow!("システムの設定ディレクトリが取得できません"))
 }
@@ -167,7 +167,7 @@ fn build_index(
                 } else {
                     analysis
                 };
-                let waveform = crate::loop_waveform::analyze_file_with_progress(
+                let waveform = cmrt_loop_domain::loop_waveform::analyze_file_with_progress(
                     &path,
                     analysis.measures,
                     |bin, bins| {

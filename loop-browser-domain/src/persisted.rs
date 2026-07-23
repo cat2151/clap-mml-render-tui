@@ -6,20 +6,20 @@
 use std::path::{Path, PathBuf};
 
 /// 永続化される単一ドキュメント。
-pub(crate) struct PersistedDoc<T> {
+pub struct PersistedDoc<T> {
     /// メモリ上の現在値。
-    pub(crate) value: T,
+    pub value: T,
     /// 保存先パス。解決できなかった場合は `None`。
-    pub(crate) path: Option<PathBuf>,
+    pub path: Option<PathBuf>,
     /// 書き込み可能かどうか（読み込みに失敗した場合などは `false`）。
-    pub(crate) writable: bool,
+    pub writable: bool,
     /// 直近の読み書きで発生したエラー文言。
-    pub(crate) error: Option<String>,
+    pub error: Option<String>,
 }
 
 impl<T> PersistedDoc<T> {
     /// まだファイルへ紐付いていない、書き込み可能な初期値を作る（`Default` 相当）。
-    pub(crate) fn in_memory(value: T) -> Self {
+    pub fn in_memory(value: T) -> Self {
         Self {
             value,
             path: None,
@@ -30,7 +30,7 @@ impl<T> PersistedDoc<T> {
 
     /// 保存先を解決し読み込む。解決・読み込みに失敗した場合は `default` 値を保持し、
     /// `writable = false` とエラー文言を残す。
-    pub(crate) fn load(
+    pub fn load(
         resolve: impl FnOnce() -> anyhow::Result<PathBuf>,
         read: impl FnOnce(&Path) -> anyhow::Result<T>,
         default: impl FnOnce() -> T,
@@ -66,7 +66,7 @@ impl<T: Clone> PersistedDoc<T> {
     ///
     /// `save` には現在のパスを渡す（`path` が `None` の場合は保存をスキップし成功扱い）。
     /// 呼び出し側は必要に応じて事前に `writable` を確認すること。
-    pub(crate) fn try_mutate<R>(
+    pub fn try_mutate<R>(
         &mut self,
         mutate: impl FnOnce(&mut T) -> R,
         save: impl FnOnce(&Path, &T) -> anyhow::Result<()>,

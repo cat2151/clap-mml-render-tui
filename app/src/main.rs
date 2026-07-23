@@ -239,7 +239,7 @@ fn run_scan_loops(cfg: &config::Config) -> Result<()> {
     let mut progress_log =
         scan_progress_log::ScanProgressLog::start(&log_path, std::time::Duration::from_secs(1))
             .with_context(|| format!("scan-loops logを開始できません: {}", log_path.display()))?;
-    let scan_result = loop_library::scan_and_save_with_progress(cfg, |event| {
+    let scan_result = loop_library::scan_and_save_with_progress(&cfg.loop_dirs, |event| {
         progress_log.observe(&event);
         if output_error.is_none() {
             output_error = write_scan_progress(&event, &mut stdout, &mut stderr).err();
@@ -267,6 +267,9 @@ fn run_scan_loops(cfg: &config::Config) -> Result<()> {
 }
 
 fn main() -> Result<()> {
+    // loop browser のデータ層（別 crate）に app ディレクトリ解決を注入する。
+    clap_mml_render_tui::loop_browser::set_app_dir_resolver(config::config_app_dir);
+
     let action = parse_cli_from(std::env::args_os())?;
 
     if let CliAction::Help(help) = &action {

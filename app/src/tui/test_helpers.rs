@@ -5,6 +5,8 @@ use super::*;
 
 impl TuiApp<'static> {
     pub(super) fn new_for_test(cfg: Config) -> Self {
+        // loop browser データ層（別 crate）へ、テストでも app ディレクトリ解決を注入する。
+        crate::loop_browser::set_app_dir_resolver(crate::config::config_app_dir);
         let render_queue = TuiRenderQueue::disabled_for_tests(
             cfg.offline_render_backend,
             cfg.effective_offline_render_workers(),

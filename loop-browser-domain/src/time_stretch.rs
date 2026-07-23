@@ -8,17 +8,17 @@ use anyhow::{Context, Result};
 use rodio::Source as _;
 use rubberband_ffi::StretchProfile;
 
-pub(crate) const TARGET_BPM: f64 = 120.0;
-pub(crate) const MIN_TIME_RATIO: f64 = 0.8;
-pub(crate) const MAX_TIME_RATIO: f64 = 1.25;
+pub const TARGET_BPM: f64 = 120.0;
+pub const MIN_TIME_RATIO: f64 = 0.8;
+pub const MAX_TIME_RATIO: f64 = 1.25;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct TargetBpm {
-    pub(crate) bpm: f64,
-    pub(crate) has_common_range: bool,
+pub struct TargetBpm {
+    pub bpm: f64,
+    pub has_common_range: bool,
 }
 
-pub(crate) fn select_target_bpm(source_bpms: impl IntoIterator<Item = f64>) -> TargetBpm {
+pub fn select_target_bpm(source_bpms: impl IntoIterator<Item = f64>) -> TargetBpm {
     let mut minimum = 0.0_f64;
     let mut maximum = f64::INFINITY;
     let mut has_source = false;
@@ -51,7 +51,7 @@ pub(crate) fn select_target_bpm(source_bpms: impl IntoIterator<Item = f64>) -> T
     }
 }
 
-pub(crate) fn format_bpm(bpm: f64) -> String {
+pub fn format_bpm(bpm: f64) -> String {
     let rounded = bpm.round();
     if (bpm - rounded).abs() < 0.000_000_1 {
         format!("{rounded:.0}")
@@ -65,7 +65,7 @@ pub(crate) fn format_bpm(bpm: f64) -> String {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct PreparedAudio {
+pub struct PreparedAudio {
     samples: Arc<[f32]>,
     channels: u16,
     sample_rate: u32,
@@ -73,25 +73,25 @@ pub(crate) struct PreparedAudio {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct PreparedAudioInfo {
-    pub(crate) input_frames: usize,
-    pub(crate) rubberband_output_frames: usize,
-    pub(crate) output_frames: usize,
-    pub(crate) channels: u16,
-    pub(crate) sample_rate: u32,
-    pub(crate) time_ratio: f64,
-    pub(crate) profile: StretchProfile,
+pub struct PreparedAudioInfo {
+    pub input_frames: usize,
+    pub rubberband_output_frames: usize,
+    pub output_frames: usize,
+    pub channels: u16,
+    pub sample_rate: u32,
+    pub time_ratio: f64,
+    pub profile: StretchProfile,
 }
 
 impl PreparedAudio {
-    pub(crate) fn source(&self) -> PreparedAudioSource {
+    pub fn source(&self) -> PreparedAudioSource {
         PreparedAudioSource {
             audio: self.clone(),
             position: 0,
         }
     }
 
-    pub(crate) fn info(&self) -> PreparedAudioInfo {
+    pub fn info(&self) -> PreparedAudioInfo {
         self.info
     }
 
@@ -101,7 +101,7 @@ impl PreparedAudio {
     }
 }
 
-pub(crate) struct PreparedAudioSource {
+pub struct PreparedAudioSource {
     audio: PreparedAudio,
     position: usize,
 }
@@ -144,7 +144,7 @@ impl rodio::Source for PreparedAudioSource {
     }
 }
 
-pub(crate) fn profile_for_category(category: Option<&str>) -> StretchProfile {
+pub fn profile_for_category(category: Option<&str>) -> StretchProfile {
     if category.is_some_and(|category| category.trim().eq_ignore_ascii_case("drum")) {
         StretchProfile::Drum
     } else {
@@ -152,7 +152,7 @@ pub(crate) fn profile_for_category(category: Option<&str>) -> StretchProfile {
     }
 }
 
-pub(crate) fn time_ratio(source_bpm: f64, target_bpm: f64) -> Result<f64> {
+pub fn time_ratio(source_bpm: f64, target_bpm: f64) -> Result<f64> {
     if !source_bpm.is_finite() || source_bpm <= 0.0 {
         anyhow::bail!("解析BPMが不正です: {source_bpm}");
     }
@@ -169,7 +169,7 @@ pub(crate) fn time_ratio(source_bpm: f64, target_bpm: f64) -> Result<f64> {
     Ok(ratio)
 }
 
-pub(crate) fn exceeds_time_ratio_limits(source_bpm: f64, target_bpm: f64) -> bool {
+pub fn exceeds_time_ratio_limits(source_bpm: f64, target_bpm: f64) -> bool {
     if !source_bpm.is_finite() || source_bpm <= 0.0 || !target_bpm.is_finite() || target_bpm <= 0.0
     {
         return false;
@@ -177,7 +177,7 @@ pub(crate) fn exceeds_time_ratio_limits(source_bpm: f64, target_bpm: f64) -> boo
     !(MIN_TIME_RATIO..=MAX_TIME_RATIO).contains(&(source_bpm / target_bpm))
 }
 
-pub(crate) fn prepare_path<F>(
+pub fn prepare_path<F>(
     path: &Path,
     source_bpm: Option<f64>,
     target_bpm: f64,

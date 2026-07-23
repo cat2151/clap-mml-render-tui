@@ -1,6 +1,6 @@
 use super::*;
-use crate::loop_wav_analysis::{LoopAnalysisSource, LoopTempoAnalysis, LoopWavKind};
-use crate::loop_waveform::{LoopWaveform, WAVEFORM_BINS_PER_MEASURE};
+use cmrt_loop_domain::loop_wav_analysis::{LoopAnalysisSource, LoopTempoAnalysis, LoopWavKind};
+use cmrt_loop_domain::loop_waveform::{LoopWaveform, WAVEFORM_BINS_PER_MEASURE};
 
 fn create_wav(path: &Path) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -115,7 +115,7 @@ fn one_shots_path_matching_requires_a_complete_component() {
 #[test]
 fn scan_skips_invalid_wav_and_persists_successful_analysis() {
     let temp = tempfile_dir("skip-invalid");
-    let _guard = crate::test_utils::set_local_dir_envs(&temp);
+    let _guard = crate::test_support::set_app_dir_env(&temp);
     let root = temp.join("loops");
     create_wav(&root.join("Good.wav"));
     std::fs::write(root.join("Broken.wav"), b"not a wave").unwrap();
@@ -152,7 +152,7 @@ fn scan_skips_invalid_wav_and_persists_successful_analysis() {
 #[test]
 fn scan_saves_an_empty_index_when_every_wav_is_invalid() {
     let temp = tempfile_dir("all-invalid");
-    let _guard = crate::test_utils::set_local_dir_envs(&temp);
+    let _guard = crate::test_support::set_app_dir_env(&temp);
     let root = temp.join("loops");
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("Broken.wav"), b"not a wave").unwrap();
@@ -169,7 +169,7 @@ fn scan_saves_an_empty_index_when_every_wav_is_invalid() {
 #[test]
 fn scan_replaces_cache_and_root_failure_preserves_previous_cache() {
     let temp = tempfile_dir("save");
-    let _guard = crate::test_utils::set_local_dir_envs(&temp);
+    let _guard = crate::test_support::set_app_dir_env(&temp);
     let first_root = temp.join("first");
     create_wav(&first_root.join("One.wav"));
     let first_dirs = vec![first_root.to_string_lossy().into_owned()];

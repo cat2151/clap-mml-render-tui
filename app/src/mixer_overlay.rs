@@ -10,9 +10,11 @@ use crate::ui_theme::{
     cursor_highlight_style, MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_YELLOW,
 };
 
-pub(crate) const MIXER_MIN_DB: i32 = -36;
-pub(crate) const MIXER_MAX_DB: i32 = 6;
-pub(crate) const MIXER_STEP_DB: i32 = 3;
+// mixer の音量ドメイン（定数・dB 調整・ゲイン変換）は画面横断で共有するため
+// `cmrt-tui-core` へ切り出した。従来の `crate::mixer_overlay::*` パスは再エクスポートで維持する。
+pub(crate) use cmrt_tui_core::mixer::{
+    adjust_volume_db, volume_db_to_gain, MIXER_MAX_DB, MIXER_MIN_DB, MIXER_STEP_DB,
+};
 
 const TRACK_COLUMN_WIDTH: u16 = 8;
 const TRACK_HEADER_WIDTH: usize = TRACK_COLUMN_WIDTH as usize;
@@ -20,19 +22,6 @@ const TRACK_HEADER_WIDTH: usize = TRACK_COLUMN_WIDTH as usize;
 pub(crate) struct MixerOverlayTrack {
     pub(crate) label: String,
     pub(crate) volume_db: i32,
-}
-
-pub(crate) fn adjust_volume_db(volume_db: &mut i32, delta_db: i32) -> bool {
-    let next = (*volume_db + delta_db).clamp(MIXER_MIN_DB, MIXER_MAX_DB);
-    if next == *volume_db {
-        return false;
-    }
-    *volume_db = next;
-    true
-}
-
-pub(crate) fn volume_db_to_gain(volume_db: i32) -> f32 {
-    10.0f32.powf(volume_db as f32 / 20.0)
 }
 
 fn mixer_levels_db() -> Vec<i32> {
@@ -174,26 +163,4 @@ pub(crate) fn draw_mixer_overlay(
             .style(Style::default().fg(MONOKAI_GRAY)),
         chunks[3],
     );
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn volume_adjustment_uses_three_db_steps_and_shared_bounds() {
-        let mut volume_db = 0;
-        assert!(adjust_volume_db(&mut volume_db, -MIXER_STEP_DB));
-        assert_eq!(volume_db, -3);
-
-        volume_db = MIXER_MIN_DB;
-        assert!(!adjust_volume_db(&mut volume_db, -MIXER_STEP_DB));
-        volume_db = MIXER_MAX_DB;
-        assert!(!adjust_volume_db(&mut volume_db, MIXER_STEP_DB));
-    }
-
-    #[test]
-    fn db_is_converted_to_linear_gain() {
-        assert!((volume_db_to_gain(-6) - 10.0f32.powf(-6.0 / 20.0)).abs() < f32::EPSILON);
-    }
 }

@@ -21,7 +21,7 @@ impl LoopBrowser {
             load_random_decks,
             LoopRandomDeckState::default,
         );
-        let mut browser = match crate::loop_browser::library::load_index(cfg) {
+        let mut browser = match crate::loop_browser::library::load_index(&cfg.loop_dirs) {
             Ok(index) => Self::from_index(index, &cfg.loop_categories, metadata),
             Err(error) => Self {
                 error: Some(format!("{error}\ncmrt scan-loops を実行してください")),

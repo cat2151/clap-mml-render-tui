@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use crate::loop_browser::metadata::{validate_dir_id, validate_wav_id, LoopDirId, LoopWavId};
+use crate::metadata::{validate_dir_id, validate_wav_id, LoopDirId, LoopWavId};
 
 const RANDOM_DECK_VERSION: u32 = 1;
 const LOOP_BROWSER_DIRECTORY: &str = "loop_browser";
@@ -12,7 +12,7 @@ const RANDOM_DECK_FILE_NAME: &str = "random_decks.toml";
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
-pub(crate) enum LoopRandomScope {
+pub enum LoopRandomScope {
     All,
     Favorites,
     FavoriteDir { dir: LoopDirId },
@@ -64,7 +64,7 @@ struct StoredRandomDeck {
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub(crate) struct LoopRandomDeckState {
+pub struct LoopRandomDeckState {
     last_selected: Option<LoopWavId>,
     decks: Vec<StoredRandomDeck>,
 }
@@ -79,7 +79,7 @@ struct StoredRandomDeckState {
 }
 
 impl LoopRandomDeckState {
-    pub(crate) fn draw(
+    pub fn draw(
         &mut self,
         scope: LoopRandomScope,
         candidates: &[LoopWavId],
@@ -173,13 +173,13 @@ fn same_candidate_set(left: &[LoopWavId], right: &[LoopWavId]) -> bool {
     left.len() == item_count && right.len() == item_count && left == right
 }
 
-pub(crate) fn random_deck_path() -> Result<PathBuf> {
-    crate::config::config_app_dir()
+pub fn random_deck_path() -> Result<PathBuf> {
+    crate::app_dir()
         .map(|dir| dir.join(LOOP_BROWSER_DIRECTORY).join(RANDOM_DECK_FILE_NAME))
         .ok_or_else(|| anyhow::anyhow!("システムの設定ディレクトリが取得できません"))
 }
 
-pub(crate) fn load_from(path: &Path) -> Result<LoopRandomDeckState> {
+pub fn load_from(path: &Path) -> Result<LoopRandomDeckState> {
     if !path.exists() {
         return Ok(LoopRandomDeckState::default());
     }
@@ -194,7 +194,7 @@ pub(crate) fn load_from(path: &Path) -> Result<LoopRandomDeckState> {
     })
 }
 
-pub(crate) fn save_to(path: &Path, state: &LoopRandomDeckState) -> Result<()> {
+pub fn save_to(path: &Path, state: &LoopRandomDeckState) -> Result<()> {
     let stored = StoredRandomDeckState {
         version: RANDOM_DECK_VERSION,
         last_selected: state.last_selected.clone(),

@@ -3,25 +3,25 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use crate::loop_browser::metadata::{validate_wav_id, LoopWavId};
+use crate::metadata::{validate_wav_id, LoopWavId};
 
 mod normalize;
 
-pub(crate) use normalize::{normalize_previous_markers, reflow_with_spans};
+pub use normalize::{normalize_previous_markers, reflow_with_spans};
 
 const TRACK_GRID_VERSION: u32 = 4;
 const TRACK_GRID_DIRECTORY: &str = "loop_browser";
 const TRACK_GRID_FILE_NAME: &str = "track_grid.toml";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct LoopTrackClip {
-    pub(crate) wav: LoopWavId,
-    pub(crate) span_measures: usize,
-    pub(crate) previous_source_measure: Option<usize>,
+pub struct LoopTrackClip {
+    pub wav: LoopWavId,
+    pub span_measures: usize,
+    pub previous_source_measure: Option<usize>,
 }
 
 impl LoopTrackClip {
-    pub(crate) fn explicit(wav: LoopWavId, span_measures: usize) -> Self {
+    pub fn explicit(wav: LoopWavId, span_measures: usize) -> Self {
         Self {
             wav,
             span_measures,
@@ -29,17 +29,17 @@ impl LoopTrackClip {
         }
     }
 
-    pub(crate) fn is_previous(&self) -> bool {
+    pub fn is_previous(&self) -> bool {
         self.previous_source_measure.is_some()
     }
 }
 
-pub(crate) type LoopTrackGrid = Vec<Vec<Option<LoopTrackClip>>>;
+pub type LoopTrackGrid = Vec<Vec<Option<LoopTrackClip>>>;
 
-pub(crate) struct LoadedTrackGrid {
-    pub(crate) grid: LoopTrackGrid,
-    pub(crate) track_volumes_db: Vec<i32>,
-    pub(crate) needs_migration: bool,
+pub struct LoadedTrackGrid {
+    pub grid: LoopTrackGrid,
+    pub track_volumes_db: Vec<i32>,
+    pub needs_migration: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -87,17 +87,17 @@ const fn default_span() -> usize {
     1
 }
 
-pub(crate) fn default_track_grid() -> LoopTrackGrid {
+pub fn default_track_grid() -> LoopTrackGrid {
     vec![vec![None]]
 }
 
-pub(crate) fn track_grid_path() -> Result<PathBuf> {
-    crate::config::config_app_dir()
+pub fn track_grid_path() -> Result<PathBuf> {
+    crate::app_dir()
         .map(|dir| dir.join(TRACK_GRID_DIRECTORY).join(TRACK_GRID_FILE_NAME))
         .ok_or_else(|| anyhow::anyhow!("システムの設定ディレクトリが取得できません"))
 }
 
-pub(crate) fn load_from(path: &Path) -> Result<LoadedTrackGrid> {
+pub fn load_from(path: &Path) -> Result<LoadedTrackGrid> {
     if !path.exists() {
         return Ok(LoadedTrackGrid {
             grid: default_track_grid(),
@@ -127,7 +127,7 @@ pub(crate) fn load_from(path: &Path) -> Result<LoadedTrackGrid> {
     })
 }
 
-pub(crate) fn save_to(path: &Path, grid: &LoopTrackGrid, track_volumes_db: &[i32]) -> Result<()> {
+pub fn save_to(path: &Path, grid: &LoopTrackGrid, track_volumes_db: &[i32]) -> Result<()> {
     let stored = StoredTrackGrid::from_grid(grid, track_volumes_db)?;
     let text = toml::to_string_pretty(&stored)?;
     if let Some(parent) = path.parent() {
@@ -349,14 +349,14 @@ fn validate_no_overlaps(grid: &LoopTrackGrid) -> Result<()> {
 
 fn normalize_volume_db(volume_db: i32) -> i32 {
     let clamped = volume_db.clamp(
-        crate::mixer_overlay::MIXER_MIN_DB,
-        crate::mixer_overlay::MIXER_MAX_DB,
+        cmrt_tui_core::mixer::MIXER_MIN_DB,
+        cmrt_tui_core::mixer::MIXER_MAX_DB,
     );
-    ((clamped as f32 / crate::mixer_overlay::MIXER_STEP_DB as f32).round() as i32
-        * crate::mixer_overlay::MIXER_STEP_DB)
+    ((clamped as f32 / cmrt_tui_core::mixer::MIXER_STEP_DB as f32).round() as i32
+        * cmrt_tui_core::mixer::MIXER_STEP_DB)
         .clamp(
-            crate::mixer_overlay::MIXER_MIN_DB,
-            crate::mixer_overlay::MIXER_MAX_DB,
+            cmrt_tui_core::mixer::MIXER_MIN_DB,
+            cmrt_tui_core::mixer::MIXER_MAX_DB,
         )
 }
 

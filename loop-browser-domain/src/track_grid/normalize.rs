@@ -1,6 +1,6 @@
 use super::{LoopTrackClip, LoopTrackGrid, LoopWavId};
 
-pub(crate) fn reflow_with_spans(
+pub fn reflow_with_spans(
     grid: &LoopTrackGrid,
     mut span_for: impl FnMut(&LoopWavId) -> Option<usize>,
 ) -> (LoopTrackGrid, bool) {
@@ -40,7 +40,7 @@ pub(crate) fn reflow_with_spans(
     (tracks, changed)
 }
 
-pub(crate) fn normalize_previous_markers(grid: &LoopTrackGrid) -> (LoopTrackGrid, bool) {
+pub fn normalize_previous_markers(grid: &LoopTrackGrid) -> (LoopTrackGrid, bool) {
     let mut normalized = without_previous_markers(grid);
     let axis = longest_explicit_end(&normalized);
     let width = normalized
