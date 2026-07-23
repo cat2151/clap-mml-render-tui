@@ -371,6 +371,7 @@ dependencies = [
  "clap",
  "cmrt-config-editor",
  "cmrt-core 0.1.0",
+ "cmrt-loop-browser",
  "cmrt-loop-browser-domain",
  "cmrt-loop-domain",
  "cmrt-runtime",
@@ -493,6 +494,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmrt-loop-browser"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cmrt-loop-browser-domain",
+ "cmrt-loop-domain",
+ "cmrt-runtime",
+ "cmrt-tui-core",
+ "crossterm",
+ "rand",
+ "ratatui",
+ "rodio",
+ "rubberband-ffi",
+]
+
+[[package]]
 name = "cmrt-loop-browser-domain"
 version = "0.1.0"
 dependencies = [
@@ -533,6 +550,9 @@ dependencies = [
 [[package]]
 name = "cmrt-tui-core"
 version = "0.1.0"
+dependencies = [
+ "ratatui",
+]
 
 [[package]]
 name = "colorchoice"

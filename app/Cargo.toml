@@ -10,6 +10,7 @@ path = "src/main.rs"
 [dependencies]
 cmrt-config-editor = { path = "../config-editor-lib" }
 cmrt-core = { path = "../core-lib" }
+cmrt-loop-browser = { path = "../loop-browser" }
 cmrt-loop-browser-domain = { path = "../loop-browser-domain" }
 cmrt-loop-domain = { path = "../loop-domain" }
 cmrt-runtime = { path = "../cmrt-runtime" }
@@ -63,3 +64,7 @@ mmlabc-to-smf = { git = "https://github.com/cat2151/mmlabc-to-smf-rust.git", pac
 
 # CLAP host type re-export usage in app signatures
 clack-host = { git = "https://github.com/prokopyl/clack.git", package = "clack-host" }
+
+[dev-dependencies]
+# app のテストから loop browser crate のテスト専用ヘルパを使うためのフラグ。
+cmrt-loop-browser = { path = "../loop-browser", features = ["test-support"] }

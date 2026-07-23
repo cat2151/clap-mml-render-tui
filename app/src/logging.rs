@@ -184,6 +184,19 @@ pub(crate) fn append_global_log_line_nonblocking(line: impl Into<String>) {
     let _ = line.into();
 }
 
+/// `cmrt-loop-browser` crate へ注入する同期ログ sink。
+pub fn loop_browser_log_sink(line: &str) {
+    #[cfg(not(test))]
+    append_global_log_line(line);
+    #[cfg(test)]
+    let _ = line;
+}
+
+/// `cmrt-loop-browser` crate へ注入する非同期ログ sink（レンダースレッドを塞がない）。
+pub fn loop_browser_perf_log_sink(line: &str) {
+    append_global_log_line_nonblocking(line.to_string());
+}
+
 fn try_send_log_line(sender: &mpsc::SyncSender<String>, line: String) {
     let _ = sender.try_send(line);
 }

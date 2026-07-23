@@ -2,7 +2,8 @@
 
 mod help;
 mod keyboard;
-mod loop_browser;
+// loop browser の描画は `cmrt-loop-browser` crate の `ui` モジュールへ切り出した。
+pub(in crate::tui) use cmrt_loop_browser::ui as loop_browser;
 mod overlay;
 mod status;
 

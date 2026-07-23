@@ -1,0 +1,21 @@
+[package]
+name = "cmrt-loop-browser"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+# app 側のテストから crate 内のテスト専用ヘルパ（handle_key / set_playback_beat_for_test 等）を
+# 使えるようにするフラグ。prod ビルドでは無効。
+test-support = []
+
+[dependencies]
+cmrt-loop-browser-domain = { path = "../loop-browser-domain" }
+cmrt-loop-domain = { path = "../loop-domain" }
+cmrt-runtime = { path = "../cmrt-runtime" }
+cmrt-tui-core = { path = "../tui-core" }
+rubberband-ffi = { path = "../rubberband-ffi" }
+anyhow = "1"
+rand = "0.8"
+rodio = "0.19"
+ratatui = "0.28"
+crossterm = "0.28"

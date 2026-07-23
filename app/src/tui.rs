@@ -21,7 +21,10 @@ mod cache;
 mod disk_cache;
 mod input;
 mod keyboard;
-mod loop_browser;
+// loop browser 画面（状態・入力・再生エンジン・描画）は `cmrt-loop-browser` crate へ切り出した。
+// 従来の `crate::tui::loop_browser::*` パスは再エクスポートで維持する。
+pub(crate) use cmrt_loop_browser as loop_browser;
+mod loop_browser_glue;
 mod notepad_editor;
 mod notepad_history;
 mod patch_phrase;

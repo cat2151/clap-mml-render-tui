@@ -5,6 +5,7 @@ members = [
     "config-editor-lib",
     "core-lib",
     "daw-client-lib",
+    "loop-browser",
     "loop-browser-domain",
     "loop-domain",
     "rubberband-ffi",

@@ -1,30 +1,15 @@
-use ratatui::{
-    layout::Rect,
-    style::{Color, Style},
-};
+use ratatui::{layout::Rect, style::Color};
 
 use super::{Mode, PlayState, TuiRenderStatus};
-use crate::tui::loop_browser::LoopBrowserPane;
-use crate::ui_theme::{
-    MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GREEN, MONOKAI_PURPLE, MONOKAI_YELLOW,
-};
+use crate::tui::loop_browser::{loop_browser_keybind_text, LoopBrowserPane};
+use crate::ui_theme::{MONOKAI_GREEN, MONOKAI_PURPLE};
+
+// base_style / status_color / play_status_suffix は画面横断で共有するため
+// `cmrt-tui-core` へ切り出した。従来の `status::*` パスは再エクスポートで維持する。
+pub(super) use cmrt_tui_core::status::{base_style, play_status_suffix, status_color};
 
 pub(super) fn visible_list_page_size(area: Rect) -> usize {
     usize::from(area.height.saturating_sub(2).max(1))
-}
-
-pub(super) fn base_style() -> Style {
-    Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG)
-}
-
-pub(super) fn status_color(play_state: &PlayState) -> Color {
-    match play_state {
-        PlayState::Err(_) => Color::Red,
-        PlayState::Running(_) => MONOKAI_PURPLE,
-        PlayState::Playing(_) => MONOKAI_YELLOW,
-        PlayState::Done(_) => MONOKAI_GREEN,
-        PlayState::Idle => MONOKAI_CYAN,
-    }
 }
 
 pub(super) fn render_status_color(render_status: TuiRenderStatus) -> Color {
@@ -51,16 +36,6 @@ pub(super) fn render_status_text(render_status: TuiRenderStatus) -> String {
         text.push_str(&format!(" preview待ち {}", render_status.pending_playback));
     }
     text
-}
-
-fn play_status_suffix(play_state: &PlayState) -> String {
-    match play_state {
-        PlayState::Idle => "".to_string(),
-        PlayState::Running(mml) => format!("  ⚙ レンダリング中: {}", mml),
-        PlayState::Playing(msg) => format!("  ▶ 演奏中: {}", msg),
-        PlayState::Done(msg) => format!("  ✓ {}", msg),
-        PlayState::Err(msg) => format!("  ✗ {}", msg),
-    }
 }
 
 pub(super) fn normal_status_text(mode: &Mode, play_state: &PlayState) -> String {
@@ -108,17 +83,6 @@ pub(super) fn keybind_text(mode: &Mode) -> &'static str {
         }
         Mode::LoopBrowser => {
             loop_browser_keybind_text(LoopBrowserPane::Tree)
-        }
-    }
-}
-
-pub(super) fn loop_browser_keybind_text(pane: LoopBrowserPane) -> &'static str {
-    match pane {
-        LoopBrowserPane::Tree => {
-            "Ctrl+G:画面切替 Tab:track list p:演奏停止/再開 r:ランダムWAV Shift+C/D/E/F/G/A/B:pad登録/解除 c/d/e/f/g/a/b:pad演奏 1-9:hjkl prefix PgUp/PgDn:±10 t:dirカテゴリ v:dirお気に入り V:お気に入り限定 hjkl・矢印:移動/展開 Enter/Space:再生 q:終了"
-        }
-        LoopBrowserPane::Tracks => {
-            "Ctrl+G:画面切替 Tab:loop tree p:演奏停止/再開 r:ランダムWAV m:mix level Shift+R:全track random Shift+M:2track random solo Alt+↓/↑:track並び替え 1-9:hjkl prefix s:solo toggle c..b:pad h/l・←/→:measure j/k・↓/↑:track（右/下端で追加） q:終了"
         }
     }
 }
