@@ -21,8 +21,8 @@ struct LoadedSessionState {
     cursor: usize,
     lines: Vec<String>,
     list_state: ListState,
-    is_daw_mode: bool,
-    keyboard: Option<crate::history::KeyboardSessionState>,
+    active_screen: crate::screen_switch::PrimaryScreen,
+    keyboard: crate::history::KeyboardSessionState,
     keyboard_note_guide_overlay_date: Option<String>,
     notepad_sound_check_guide_overlay_date: Option<String>,
 }
@@ -41,7 +41,7 @@ fn load_initial_session_state() -> LoadedSessionState {
     let crate::history::SessionState {
         cursor,
         lines,
-        is_daw_mode,
+        active_screen,
         keyboard,
         keyboard_note_guide_overlay_date,
         notepad_sound_check_guide_overlay_date,
@@ -53,7 +53,7 @@ fn load_initial_session_state() -> LoadedSessionState {
         cursor: initial_cursor,
         lines,
         list_state,
-        is_daw_mode,
+        active_screen,
         keyboard,
         keyboard_note_guide_overlay_date,
         notepad_sound_check_guide_overlay_date,
@@ -86,7 +86,7 @@ impl<'a> TuiApp<'a> {
             cursor,
             lines,
             list_state,
-            is_daw_mode,
+            active_screen,
             keyboard,
             keyboard_note_guide_overlay_date,
             notepad_sound_check_guide_overlay_date,
@@ -109,16 +109,13 @@ impl<'a> TuiApp<'a> {
             } else {
                 None
             };
-        let keyboard_state = keyboard
-            .clone()
-            .map(super::keyboard::KeyboardState::from_session)
-            .unwrap_or_default();
+        let keyboard_state = super::keyboard::KeyboardState::from_session(keyboard);
         let keyboard_midi_sender = Some(super::keyboard::KeyboardMidiSender::new(
             play_server,
             keyboard_state.transport(),
             keyboard_state.buffer_multiplier(),
         ));
-        let restore_keyboard = keyboard.is_some();
+        let restore_keyboard = active_screen == crate::screen_switch::PrimaryScreen::Keyboard;
         let voicing_source_refresh = crate::voicing_sources::VoicingSourceRefresh::spawn(cfg);
         let voicing_layers = if restore_keyboard {
             voicing_source_refresh.load_for_keyboard()
@@ -127,12 +124,15 @@ impl<'a> TuiApp<'a> {
         };
 
         Self {
-            mode: if restore_keyboard {
-                Mode::Keyboard
-            } else {
-                Mode::Normal
+            mode: match active_screen {
+                crate::screen_switch::PrimaryScreen::Keyboard => Mode::Keyboard,
+                crate::screen_switch::PrimaryScreen::LoopBrowser => Mode::LoopBrowser,
+                crate::screen_switch::PrimaryScreen::Notepad
+                | crate::screen_switch::PrimaryScreen::Daw => Mode::Normal,
             },
             help_origin: Mode::Normal,
+            active_screen,
+            screen_switch_menu: crate::screen_switch::ScreenSwitchMenu::default(),
             editor: super::NotepadEditorState::new(
                 lines,
                 cursor,
@@ -168,9 +168,13 @@ impl<'a> TuiApp<'a> {
             patch_phrase: PatchPhraseState::new(),
             patch_phrase_store: crate::history::load_patch_phrase_store(),
             patch_phrase_store_dirty: false,
-            is_daw_mode: is_daw_mode && !restore_keyboard,
             startup_normal_cache_primed: false,
-            loop_browser: super::loop_browser::LoopBrowserScreen::default(),
+            loop_browser: {
+                let mut screen = super::loop_browser::LoopBrowserScreen::default();
+                screen.state.starting =
+                    active_screen == crate::screen_switch::PrimaryScreen::LoopBrowser;
+                screen
+            },
         }
     }
 
@@ -178,11 +182,8 @@ impl<'a> TuiApp<'a> {
         let _ = crate::history::save_session_state(&crate::history::SessionState {
             cursor: self.editor.cursor,
             lines: self.editor.lines.clone(),
-            is_daw_mode: self.is_daw_mode,
-            keyboard: self
-                .keyboard
-                .persist_on_exit
-                .then(|| self.keyboard.state.session_state()),
+            active_screen: self.active_screen,
+            keyboard: self.keyboard.state.session_state(),
             keyboard_note_guide_overlay_date: self
                 .keyboard
                 .note_guide

@@ -89,7 +89,7 @@ pub(super) fn notepad_mode_title(mode: &Mode) -> &'static str {
 pub(super) fn keybind_text(mode: &Mode) -> &'static str {
     match mode {
         Mode::Normal => {
-            "q ?:help e:config b:loops i:insert o/O:挿入 dd/Del:cut p/P:貼付 f:phrase g:generate r:ランダム音色 t:音色 Shift+H:patch history j/k・↑↓・PgUp/PgDn・Home/M:再生移動 Enter/Space w:DAW v:keyboard"
+            "q ?:help e:config b:loops i:insert o/O:挿入 dd/Del:cut p/P:貼付 f:phrase g:generate r:ランダム音色 t:音色 Shift+H:patch history j/k・↑↓・PgUp/PgDn・Home/M:再生移動 Enter/Space w:DAW v:keyboard Ctrl+G:screens"
         }
         Mode::Insert => "ESC:確定→NORMAL  Enter:確定→次行",
         Mode::PatchSelect => {
@@ -104,7 +104,7 @@ pub(super) fn keybind_text(mode: &Mode) -> &'static str {
         }
         Mode::Help => "ESC:キャンセル",
         Mode::Keyboard => {
-            "k/j・↑↓:patch±1  Ctrl+u/d・PgUp/PgDn:patch±10  h/l・Home/End:category±1  r:random  c d e f g a b:note  s:transport  Shift+H:buffer  n:notepad  w:DAW  q:quit"
+            "Ctrl+G:画面切替  k/j・↑↓:patch±1  Ctrl+u/d・PgUp/PgDn:patch±10  h/l・Home/End:category±1  r:random  c d e f g a b:note  s:transport  Shift+H:buffer  n:notepad  w:DAW  q:quit"
         }
         Mode::LoopBrowser => {
             loop_browser_keybind_text(LoopBrowserPane::Tree)
@@ -115,10 +115,10 @@ pub(super) fn keybind_text(mode: &Mode) -> &'static str {
 pub(super) fn loop_browser_keybind_text(pane: LoopBrowserPane) -> &'static str {
     match pane {
         LoopBrowserPane::Tree => {
-            "Tab:track list p:演奏停止/再開 r:ランダムWAV Shift+C/D/E/F/G/A/B:pad登録/解除 c/d/e/f/g/a/b:pad演奏 1-9:hjkl prefix PgUp/PgDn:±10 t:dirカテゴリ v:dirお気に入り V:お気に入り限定 hjkl・矢印:移動/展開 Enter/Space:再生 Esc:戻る q:終了"
+            "Ctrl+G:画面切替 Tab:track list p:演奏停止/再開 r:ランダムWAV Shift+C/D/E/F/G/A/B:pad登録/解除 c/d/e/f/g/a/b:pad演奏 1-9:hjkl prefix PgUp/PgDn:±10 t:dirカテゴリ v:dirお気に入り V:お気に入り限定 hjkl・矢印:移動/展開 Enter/Space:再生 q:終了"
         }
         LoopBrowserPane::Tracks => {
-            "Tab:loop tree p:演奏停止/再開 r:ランダムWAV m:mix level Shift+R:全track random Shift+M:2track random solo Alt+↓/↑:track並び替え 1-9:hjkl prefix s:solo toggle c..b:pad h/l・←/→:measure j/k・↓/↑:track（右/下端で追加） Esc/q:戻る/終了"
+            "Ctrl+G:画面切替 Tab:loop tree p:演奏停止/再開 r:ランダムWAV m:mix level Shift+R:全track random Shift+M:2track random solo Alt+↓/↑:track並び替え 1-9:hjkl prefix s:solo toggle c..b:pad h/l・←/→:measure j/k・↓/↑:track（右/下端で追加） q:終了"
         }
     }
 }

@@ -93,6 +93,7 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect, mode: super::super::DawMode) 
             Line::from("  r      : random 音色設定"),
             Line::from("  K / ?  : ヘルプ (このページ)"),
             Line::from("  n      : notepad へ切替"),
+            Line::from("  Ctrl+G : 画面切替"),
             Line::from("  q      : 終了"),
             Line::from(""),
             Line::from(Span::styled(

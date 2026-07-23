@@ -190,6 +190,7 @@ impl Drop for LoopPlaybackController {
 impl<'a> TuiApp<'a> {
     pub(in crate::tui) fn begin_loop_browser_startup(&mut self) {
         self.mode = Mode::LoopBrowser;
+        self.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
         self.loop_browser.state.starting = true;
     }
 
@@ -212,14 +213,13 @@ impl<'a> TuiApp<'a> {
         }
     }
 
-    pub(in crate::tui) fn finish_loop_browser(&mut self) {
+    pub(in crate::tui) fn stop_loop_browser(&mut self) {
         self.loop_browser.state.starting = false;
         if let Some(mut playback) = self.loop_browser.playback.take() {
             playback.stop();
         }
         let session = self.begin_playback_session();
         self.set_play_state_if_current(session, PlayState::Idle);
-        self.mode = Mode::Normal;
     }
 
     pub(in crate::tui) fn preview_loop_file(&self, path: PathBuf, trace_id: u64) {

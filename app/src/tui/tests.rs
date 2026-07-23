@@ -13,6 +13,7 @@ mod patch_phrase;
 mod patch_phrase_history;
 mod patch_select;
 mod patch_select_favorites;
+mod screen_switch;
 mod session;
 
 static NEXT_TEST_ID: AtomicUsize = AtomicUsize::new(0);

@@ -170,18 +170,18 @@ pub enum DawPatchSelectPane {
 /// handle_normal の戻り値
 pub enum DawNormalAction {
     Continue,
-    ReturnToTui,
-    LaunchKeyboard,
+    SwitchTo(crate::screen_switch::PrimaryScreen),
     QuitApp,
     EditConfig,
 }
 
 /// DAW モード終了後の画面切替/終了通知
 pub enum DawExitReason {
-    /// n キーで notepad へ切り替える
-    ReturnToTui,
-    /// v キーでkeyboardへ切り替える
-    LaunchKeyboard { patch: Option<String> },
+    /// 別の主要画面へ直接切り替える。
+    SwitchTo {
+        target: crate::screen_switch::PrimaryScreen,
+        keyboard_patch: Option<String>,
+    },
     /// q キーでアプリを終了する
     QuitApp,
     /// config.toml 編集後にアプリを再起動する

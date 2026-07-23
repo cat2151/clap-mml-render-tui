@@ -135,14 +135,14 @@ fn load_session_state_normalizes_keyboard_restore_values() {
     .unwrap();
 
     let state = load_session_state();
-    assert!(!state.is_daw_mode);
+    assert_eq!(state.active_screen, PrimaryScreen::Keyboard);
     assert_eq!(
         state.keyboard,
-        Some(KeyboardSessionState {
+        KeyboardSessionState {
             patch: None,
             transport: KeyboardTransport::Http,
             buffer_multiplier: 4,
-        })
+        }
     );
 
     std::fs::remove_dir_all(&tmp).ok();

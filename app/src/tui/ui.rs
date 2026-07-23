@@ -70,12 +70,18 @@ pub(in crate::tui::ui) fn mml_cache_hit(
 pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     if app.mode == Mode::Keyboard {
         keyboard::draw(app, f);
-        return;
-    }
-    if app.mode == Mode::LoopBrowser {
+    } else if app.mode == Mode::LoopBrowser {
         loop_browser::draw(app, f);
-        return;
+    } else {
+        draw_notepad(app, f);
     }
+
+    if app.screen_switch_menu.is_open() {
+        crate::screen_switch::draw_screen_switch_menu(f, app.active_screen);
+    }
+}
+
+fn draw_notepad(app: &mut TuiApp<'_>, f: &mut Frame) {
     // play_state を一度だけロックしてスナップショットを取り、
     // status_text と status_color を同じ状態から導出する（二重ロック・状態不整合を防ぐ）。
     let play_state = app.playback.play_state.lock().unwrap().clone();

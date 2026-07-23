@@ -61,6 +61,7 @@ use self::render_queue::{TuiRenderJobStatus, TuiRenderQueue};
 pub(in crate::tui) use self::session::PatchLoadState;
 use self::voicing::VoicingState;
 use crate::config::Config;
+use crate::screen_switch::{PrimaryScreen, ScreenSwitchMenu};
 
 pub(in crate::tui) const NOTEPAD_SOUND_CHECK_GUIDE_MESSAGE: &str =
     "j,kキーを押して音が鳴ることを確認してください";
@@ -146,6 +147,8 @@ pub(super) struct TuiRenderStatus {
 pub struct TuiApp<'a> {
     pub(super) mode: Mode,
     pub(super) help_origin: Mode,
+    pub(super) active_screen: PrimaryScreen,
+    pub(super) screen_switch_menu: ScreenSwitchMenu,
     pub(in crate::tui) editor: NotepadEditorState<'a>,
     cfg: Arc<Config>,
     entry_ptr: usize, // *const PluginEntry as usize。render_server backend では 0。
@@ -166,8 +169,6 @@ pub struct TuiApp<'a> {
     pub(in crate::tui) patch_phrase: PatchPhraseState<'a>,
     pub(super) patch_phrase_store: crate::history::PatchPhraseStore,
     pub(super) patch_phrase_store_dirty: bool,
-    /// 終了時 DAW モードだったかどうか（history.json に保存・復元する）
-    pub(super) is_daw_mode: bool,
     startup_normal_cache_primed: bool,
     pub(in crate::tui) loop_browser: LoopBrowserScreen,
 }

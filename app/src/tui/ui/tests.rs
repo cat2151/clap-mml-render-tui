@@ -88,4 +88,5 @@ mod loop_browser;
 mod loop_browser_used_wavs;
 mod loop_browser_waveform;
 mod overlay_screens;
+mod screen_switch;
 mod sound_check_guide;

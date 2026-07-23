@@ -10,11 +10,13 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 
-use std::sync::Arc;
-
 use super::keyboard::KeyboardAction;
 use super::loop_browser::LoopBrowserAction;
 use super::{Mode, NormalAction, PlayState, TuiApp, TuiExitReason};
+
+mod screen;
+
+use screen::DawRunOutcome;
 
 struct TerminalCleanup {
     raw_mode_enabled: bool,
@@ -84,25 +86,17 @@ impl<'a> TuiApp<'a> {
 
         // 真の cold start（プロセス起動直後）かどうか。DAW⇔notepad のモード切替では
         // 自動再生を再発火させたくないため、この判定は一度だけ行う。
-        let started_in_notepad_mode = !self.is_daw_mode && self.mode == Mode::Normal;
+        let started_in_notepad_mode =
+            self.active_screen == crate::screen_switch::PrimaryScreen::Notepad;
 
         // 前回 DAW モードで終了していた場合は直接 DAW モードで起動する
         let mut quit_from_startup_daw = false;
         let mut restart_from_startup_daw = false;
-        if self.is_daw_mode {
-            let mut daw = crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
-            match daw.run_with_terminal(&mut terminal, self.cfg.autoplay_on_startup)? {
-                crate::daw::DawExitReason::ReturnToTui => {
-                    self.is_daw_mode = false;
-                    self.reset_notepad_sound_check_guide();
-                }
-                crate::daw::DawExitReason::LaunchKeyboard { patch } => self.start_keyboard(patch),
-                crate::daw::DawExitReason::QuitApp => {
-                    quit_from_startup_daw = true;
-                }
-                crate::daw::DawExitReason::RestartApp => {
-                    restart_from_startup_daw = true;
-                }
+        if self.active_screen == crate::screen_switch::PrimaryScreen::Daw {
+            match self.run_daw_screen(&mut terminal, self.cfg.autoplay_on_startup)? {
+                DawRunOutcome::Continue => {}
+                DawRunOutcome::Quit => quit_from_startup_daw = true,
+                DawRunOutcome::Restart => restart_from_startup_daw = true,
             }
         }
         self.prepare_restored_keyboard_connection();
@@ -118,30 +112,10 @@ impl<'a> TuiApp<'a> {
                 return Ok(TuiExitReason::RestartApp);
             }
             if crate::daw::take_http_mode_switch_request() {
-                if self.mode == Mode::Keyboard {
-                    self.finish_keyboard();
-                }
-                if self.mode == Mode::LoopBrowser {
-                    self.finish_loop_browser();
-                }
-                self.flush_patch_phrase_store_if_dirty();
-                self.save_history_state();
-                self.flush_notepad_disk_cache();
-                let mut daw = crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
-                match daw.run_with_terminal(&mut terminal, false)? {
-                    crate::daw::DawExitReason::ReturnToTui => {
-                        self.is_daw_mode = false;
-                        self.reset_notepad_sound_check_guide();
-                    }
-                    crate::daw::DawExitReason::LaunchKeyboard { patch } => {
-                        self.start_keyboard(patch)
-                    }
-                    crate::daw::DawExitReason::QuitApp => {
-                        self.is_daw_mode = true;
-                        break;
-                    }
-                    crate::daw::DawExitReason::RestartApp => {
-                        self.is_daw_mode = true;
+                match self.run_daw_screen(&mut terminal, false)? {
+                    DawRunOutcome::Continue => {}
+                    DawRunOutcome::Quit => break,
+                    DawRunOutcome::Restart => {
                         self.flush_patch_phrase_store_if_dirty();
                         self.save_history_state();
                         self.flush_notepad_disk_cache();
@@ -200,31 +174,41 @@ impl<'a> TuiApp<'a> {
             if event::poll(std::time::Duration::from_millis(50))? {
                 if let Event::Key(key) = event::read()? {
                     use crossterm::event::KeyEventKind;
+                    if self.screen_switch_menu.is_open() {
+                        if self.mode == Mode::Keyboard && key.kind == KeyEventKind::Release {
+                            let _ = self.handle_keyboard_key_event(key);
+                        } else if key.kind == KeyEventKind::Press {
+                            if let Some(target) = self.handle_screen_switch_menu_key(key) {
+                                if target == crate::screen_switch::PrimaryScreen::Daw {
+                                    match self.run_daw_screen(&mut terminal, false)? {
+                                        DawRunOutcome::Continue => {}
+                                        DawRunOutcome::Quit => break,
+                                        DawRunOutcome::Restart => {
+                                            self.flush_patch_phrase_store_if_dirty();
+                                            self.save_history_state();
+                                            self.flush_notepad_disk_cache();
+                                            return Ok(TuiExitReason::RestartApp);
+                                        }
+                                    }
+                                } else {
+                                    self.switch_to_primary_screen(target, None);
+                                }
+                            }
+                        }
+                        continue;
+                    }
+                    if key.kind == KeyEventKind::Press && self.try_open_screen_switch_menu(key) {
+                        continue;
+                    }
                     if self.mode == Mode::Keyboard {
                         match self.handle_keyboard_key_event(key) {
                             KeyboardAction::Continue | KeyboardAction::ReturnToNotepad => {}
                             KeyboardAction::Quit => break,
                             KeyboardAction::LaunchDaw => {
-                                self.flush_patch_phrase_store_if_dirty();
-                                self.save_history_state();
-                                self.flush_notepad_disk_cache();
-                                let mut daw =
-                                    crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
-                                match daw.run_with_terminal(&mut terminal, false)? {
-                                    crate::daw::DawExitReason::ReturnToTui => {
-                                        self.mode = Mode::Normal;
-                                        self.is_daw_mode = false;
-                                        self.reset_notepad_sound_check_guide();
-                                    }
-                                    crate::daw::DawExitReason::LaunchKeyboard { patch } => {
-                                        self.start_keyboard(patch);
-                                    }
-                                    crate::daw::DawExitReason::QuitApp => {
-                                        self.is_daw_mode = true;
-                                        break;
-                                    }
-                                    crate::daw::DawExitReason::RestartApp => {
-                                        self.is_daw_mode = true;
+                                match self.run_daw_screen(&mut terminal, false)? {
+                                    DawRunOutcome::Continue => {}
+                                    DawRunOutcome::Quit => break,
+                                    DawRunOutcome::Restart => {
                                         self.flush_patch_phrase_store_if_dirty();
                                         self.save_history_state();
                                         self.flush_notepad_disk_cache();
@@ -261,26 +245,10 @@ impl<'a> TuiApp<'a> {
                         Mode::Normal => match self.handle_normal_key_event(key) {
                             NormalAction::Quit => break,
                             NormalAction::LaunchDaw => {
-                                self.flush_patch_phrase_store_if_dirty();
-                                self.save_history_state();
-                                self.flush_notepad_disk_cache();
-                                let mut daw =
-                                    crate::daw::DawApp::new(Arc::clone(&self.cfg), self.entry_ptr);
-                                match daw.run_with_terminal(&mut terminal, false)? {
-                                    crate::daw::DawExitReason::ReturnToTui => {
-                                        self.mode = Mode::Normal;
-                                        self.is_daw_mode = false;
-                                        self.reset_notepad_sound_check_guide();
-                                    }
-                                    crate::daw::DawExitReason::LaunchKeyboard { patch } => {
-                                        self.start_keyboard(patch);
-                                    }
-                                    crate::daw::DawExitReason::QuitApp => {
-                                        self.is_daw_mode = true;
-                                        break;
-                                    }
-                                    crate::daw::DawExitReason::RestartApp => {
-                                        self.is_daw_mode = true;
+                                match self.run_daw_screen(&mut terminal, false)? {
+                                    DawRunOutcome::Continue => {}
+                                    DawRunOutcome::Quit => break,
+                                    DawRunOutcome::Restart => {
                                         self.flush_patch_phrase_store_if_dirty();
                                         self.save_history_state();
                                         self.flush_notepad_disk_cache();
@@ -358,9 +326,8 @@ impl<'a> TuiApp<'a> {
                                 paused,
                                 start_measure,
                             } => self.set_loop_playback_paused(paused, start_measure),
-                            LoopBrowserAction::Return => self.finish_loop_browser(),
                             LoopBrowserAction::Quit => {
-                                self.finish_loop_browser();
+                                self.stop_loop_browser();
                                 break;
                             }
                         },

@@ -13,6 +13,7 @@ pub(crate) mod offline_render;
 pub(crate) mod patches;
 pub(crate) mod random;
 pub(crate) mod realtime_play;
+pub(crate) mod screen_switch;
 pub mod server;
 pub(crate) mod sound_check_guide;
 #[cfg(test)]

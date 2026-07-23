@@ -14,6 +14,7 @@ mod paths;
 mod session_state;
 mod voicing_cache;
 
+pub use crate::screen_switch::PrimaryScreen;
 pub(crate) use daw::{daw_cache_mml_hash, save_daw_sound_check_guide_overlay_date};
 pub use daw::{load_daw_session_state, save_daw_session_state, DawCachedMeasure, DawSessionState};
 pub use patch_phrase_store::{

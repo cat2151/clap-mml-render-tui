@@ -181,6 +181,10 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
             super::DAW_SOUND_CHECK_GUIDE_MESSAGE,
         );
     }
+
+    if app.overlays.screen_switch.is_open() {
+        crate::screen_switch::draw_screen_switch_menu(f, crate::screen_switch::PrimaryScreen::Daw);
+    }
 }
 
 #[cfg(test)]

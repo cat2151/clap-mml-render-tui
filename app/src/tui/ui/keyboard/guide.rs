@@ -50,7 +50,7 @@ pub(super) fn keyboard_help_lines(
                 "h/l/Home/End:cat -/+1 r:random"
             )),
             Line::from(
-                "cdefgab:notes  s:transport  Shift+H:buffer  t:off/repeat/arp/auto  n:notepad  w:DAW q:quit",
+                "cdefgab:notes  s:transport  Shift+H:buffer  t:off/repeat/arp/auto  n:notepad  w:DAW q:quit  Ctrl+G:screens",
             ),
             Line::from(
                 "i:MML notes  v:velocity  m:mod(CC1)  p:pitch bend  x:CC#  z:CC value  Shift+Z:CC cycle",

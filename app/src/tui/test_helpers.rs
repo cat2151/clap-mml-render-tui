@@ -14,6 +14,8 @@ impl TuiApp<'static> {
         Self {
             mode: Mode::Normal,
             help_origin: Mode::Normal,
+            active_screen: crate::screen_switch::PrimaryScreen::Notepad,
+            screen_switch_menu: crate::screen_switch::ScreenSwitchMenu::default(),
             editor: notepad_editor::NotepadEditorState::new(
                 vec![String::new()],
                 0,
@@ -47,7 +49,6 @@ impl TuiApp<'static> {
             patch_phrase: PatchPhraseState::new(),
             patch_phrase_store: crate::history::PatchPhraseStore::default(),
             patch_phrase_store_dirty: false,
-            is_daw_mode: false,
             startup_normal_cache_primed: false,
             loop_browser: loop_browser::LoopBrowserScreen::default(),
         }

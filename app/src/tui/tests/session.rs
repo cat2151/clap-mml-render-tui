@@ -46,7 +46,7 @@ fn set_play_state_if_current_ignores_stale_session() {
 }
 
 #[test]
-fn save_history_state_persists_tui_cursor_lines_and_mode_flag() {
+fn save_history_state_persists_tui_cursor_lines_and_active_screen() {
     let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
     let tmp = std::env::temp_dir().join(format!(
         "cmrt_test_tui_save_history_state_{}_{}",
@@ -59,7 +59,7 @@ fn save_history_state_persists_tui_cursor_lines_and_mode_flag() {
     let mut app = TuiApp::new_for_test(test_config());
     app.editor.lines = vec!["abc".to_string(), "def".to_string(), "ghi".to_string()];
     app.editor.cursor = 2;
-    app.is_daw_mode = true;
+    app.active_screen = crate::screen_switch::PrimaryScreen::Daw;
 
     app.save_history_state();
     crate::history::save_keyboard_note_guide_overlay_date("2026-07-20").unwrap();
@@ -75,7 +75,7 @@ fn save_history_state_persists_tui_cursor_lines_and_mode_flag() {
     let saved = crate::history::load_session_state();
     assert_eq!(saved.cursor, 2);
     assert_eq!(saved.lines, app.editor.lines);
-    assert!(saved.is_daw_mode);
+    assert_eq!(saved.active_screen, crate::history::PrimaryScreen::Daw);
     assert_eq!(
         saved.keyboard_note_guide_overlay_date.as_deref(),
         Some("2026-07-20")
@@ -117,14 +117,14 @@ fn keyboard_q_persists_and_restores_patch_transport_and_buffer() {
     app.save_history_state();
 
     let saved = crate::history::load_session_state();
-    assert!(!saved.is_daw_mode);
+    assert_eq!(saved.active_screen, crate::history::PrimaryScreen::Keyboard);
     assert_eq!(
         saved.keyboard,
-        Some(crate::history::KeyboardSessionState {
+        crate::history::KeyboardSessionState {
             patch: Some("patches_factory/Keys/Piano.fxp".to_string()),
             transport: crate::history::KeyboardTransport::Http,
             buffer_multiplier: 8,
-        })
+        }
     );
 
     let cfg = test_config();
@@ -145,7 +145,12 @@ fn keyboard_q_persists_and_restores_patch_transport_and_buffer() {
         crossterm::event::KeyModifiers::NONE,
     ));
     restored.save_history_state();
-    assert_eq!(crate::history::load_session_state().keyboard, None);
+    let saved = crate::history::load_session_state();
+    assert_eq!(saved.active_screen, crate::history::PrimaryScreen::Notepad);
+    assert_eq!(
+        saved.keyboard.patch.as_deref(),
+        Some("patches_factory/Keys/Piano.fxp")
+    );
 
     std::fs::remove_dir_all(&tmp).ok();
 }
@@ -158,4 +163,38 @@ fn daw_mode_switch_request_can_be_consumed_from_tui_runtime() {
 
     assert!(crate::daw::take_http_mode_switch_request());
     assert!(!crate::daw::take_http_mode_switch_request());
+}
+
+#[test]
+fn loop_browser_screen_is_saved_and_restored_as_the_startup_screen() {
+    let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
+    let tmp = std::env::temp_dir().join(format!(
+        "cmrt_test_loop_browser_session_restore_{}_{}",
+        std::process::id(),
+        unique
+    ));
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
+
+    let mut app = TuiApp::new_for_test(test_config());
+    app.begin_loop_browser_startup();
+    app.stop_loop_browser();
+    app.save_history_state();
+
+    let saved = crate::history::load_session_state();
+    assert_eq!(
+        saved.active_screen,
+        crate::history::PrimaryScreen::LoopBrowser
+    );
+
+    let cfg = test_config();
+    let restored = TuiApp::new(&cfg, None);
+    assert_eq!(
+        restored.active_screen,
+        crate::history::PrimaryScreen::LoopBrowser
+    );
+    assert_eq!(restored.mode, Mode::LoopBrowser);
+    assert!(restored.loop_browser.state.starting);
+
+    std::fs::remove_dir_all(&tmp).ok();
 }

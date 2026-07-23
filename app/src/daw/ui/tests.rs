@@ -112,4 +112,5 @@ fn render_cursor_position(app: &DawApp, width: u16, height: u16) -> Position {
 mod draw;
 mod helpers;
 mod overlay;
+mod screen_switch;
 mod sound_check_guide;

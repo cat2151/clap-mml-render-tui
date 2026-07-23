@@ -45,7 +45,8 @@ fn tree_help() -> (&'static str, Vec<Line<'static>>) {
             Line::from("  Enter / Space       : 選択WAVを再生"),
             Line::from("  t                   : dirカテゴリ設定"),
             Line::from("  v / V               : お気に入り切替 / 限定表示"),
-            Line::from("  Esc / q             : 戻る / 終了"),
+            Line::from("  Ctrl+G              : 画面切替"),
+            Line::from("  q                   : 終了"),
             close_hint(),
         ],
     )
@@ -69,7 +70,8 @@ fn tracks_help() -> (&'static str, Vec<Line<'static>>) {
             Line::from("  j/k, ↓/↑            : track移動"),
             Line::from("  Alt+↓/↑             : 選択trackを上下へ移動"),
             Line::from("                      : 右端 / 下端で自動追加"),
-            Line::from("  Esc / q             : 戻る / 終了"),
+            Line::from("  Ctrl+G              : 画面切替"),
+            Line::from("  q                   : 終了"),
             close_hint(),
         ],
     )

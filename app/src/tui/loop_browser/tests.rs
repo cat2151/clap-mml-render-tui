@@ -110,6 +110,20 @@ fn root_is_expanded_and_directories_sort_before_wavs() {
 }
 
 #[test]
+fn escape_does_not_leave_either_main_pane() {
+    let mut browser = browser();
+    assert!(matches!(
+        browser.handle_key(KeyCode::Esc),
+        LoopBrowserAction::Continue
+    ));
+    browser.focus = LoopBrowserPane::Tracks;
+    assert!(matches!(
+        browser.handle_key(KeyCode::Esc),
+        LoopBrowserAction::Continue
+    ));
+}
+
+#[test]
 fn selected_direct_category_does_not_inherit_from_an_ancestor() {
     let mut browser = browser();
     browser.metadata.value.toggle_category(

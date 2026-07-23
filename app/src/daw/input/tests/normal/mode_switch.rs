@@ -17,7 +17,10 @@ fn handle_normal_n_returns_to_tui() {
 
     let result = app.handle_normal(crossterm::event::KeyCode::Char('n'));
 
-    assert!(matches!(result, super::super::DawNormalAction::ReturnToTui));
+    assert!(matches!(
+        result,
+        super::super::DawNormalAction::SwitchTo(crate::screen_switch::PrimaryScreen::Notepad)
+    ));
     assert!(matches!(app.mode, DawMode::Normal));
 }
 
@@ -29,7 +32,7 @@ fn handle_normal_v_launches_keyboard() {
 
     assert!(matches!(
         result,
-        super::super::DawNormalAction::LaunchKeyboard
+        super::super::DawNormalAction::SwitchTo(crate::screen_switch::PrimaryScreen::Keyboard)
     ));
 }
 

@@ -356,8 +356,12 @@ impl DawApp {
 
         match key_event.code {
             KeyCode::Char('q') => return DawNormalAction::QuitApp,
-            KeyCode::Char('n') => return DawNormalAction::ReturnToTui,
-            KeyCode::Char('v') => return DawNormalAction::LaunchKeyboard,
+            KeyCode::Char('n') => {
+                return DawNormalAction::SwitchTo(crate::screen_switch::PrimaryScreen::Notepad)
+            }
+            KeyCode::Char('v') => {
+                return DawNormalAction::SwitchTo(crate::screen_switch::PrimaryScreen::Keyboard)
+            }
             KeyCode::Char('e') => return DawNormalAction::EditConfig,
 
             KeyCode::Char('h') | KeyCode::Left if self.editor.cursor_measure > 0 => {

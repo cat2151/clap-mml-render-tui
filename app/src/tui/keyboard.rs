@@ -63,9 +63,19 @@ impl<'a> TuiApp<'a> {
         self.set_play_state_if_current(session, PlayState::Idle);
         self.keyboard.state = KeyboardState::new(patch);
         self.prepare_keyboard_connection();
-        self.keyboard.persist_on_exit = false;
         self.mode = Mode::Keyboard;
-        self.is_daw_mode = false;
+        self.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
+    }
+
+    pub(super) fn resume_keyboard(&mut self) {
+        self.keyboard.mml_input.cancel();
+        self.keyboard.note_guide.reset_for_screen();
+        self.voicing.layers = self.voicing.source_refresh.load_for_keyboard();
+        let session = self.begin_playback_session();
+        self.set_play_state_if_current(session, PlayState::Idle);
+        self.prepare_keyboard_connection();
+        self.mode = Mode::Keyboard;
+        self.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
     }
 
     pub(super) fn prepare_restored_keyboard_connection(&self) {
@@ -304,20 +314,19 @@ impl<'a> TuiApp<'a> {
                 }
                 KeyCode::Char('n') => {
                     self.finish_keyboard();
-                    self.keyboard.persist_on_exit = false;
                     self.mode = Mode::Normal;
+                    self.active_screen = crate::screen_switch::PrimaryScreen::Notepad;
                     self.reset_notepad_sound_check_guide();
                     return KeyboardAction::ReturnToNotepad;
                 }
                 KeyCode::Char('w') => {
                     self.finish_keyboard();
-                    self.keyboard.persist_on_exit = false;
                     self.mode = Mode::Normal;
+                    self.active_screen = crate::screen_switch::PrimaryScreen::Daw;
                     return KeyboardAction::LaunchDaw;
                 }
                 KeyCode::Char('q') => {
                     self.finish_keyboard();
-                    self.keyboard.persist_on_exit = true;
                     return KeyboardAction::Quit;
                 }
                 _ => {}

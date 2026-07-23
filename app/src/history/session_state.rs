@@ -47,7 +47,7 @@ impl KeyboardSessionState {
 }
 
 /// 起動・終了で保存・復元するセッション状態。
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct SessionState {
     /// 現在行番号（0始まり）。
     #[serde(default)]
@@ -55,12 +55,10 @@ pub struct SessionState {
     /// 編集行リスト。
     #[serde(default = "super::helpers::default_lines")]
     pub lines: Vec<String>,
-    /// 終了時に DAW モードだったかどうか。起動時に復元する。
-    #[serde(default)]
-    pub is_daw_mode: bool,
-    /// keyboard 画面で終了した場合に、次回復帰する状態。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub keyboard: Option<KeyboardSessionState>,
+    /// 終了時に表示していた主要画面。起動時に直接復元する。
+    pub active_screen: crate::screen_switch::PrimaryScreen,
+    /// 最後に使用した keyboard 状態。表示画面とは独立して保持する。
+    pub keyboard: KeyboardSessionState,
     /// keyboard の音出し確認 overlay を最後に表示したローカル日付（YYYY-MM-DD）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keyboard_note_guide_overlay_date: Option<String>,
@@ -74,11 +72,55 @@ impl Default for SessionState {
         Self {
             cursor: 0,
             lines: super::helpers::default_lines(),
-            is_daw_mode: false,
-            keyboard: None,
+            active_screen: crate::screen_switch::PrimaryScreen::Notepad,
+            keyboard: KeyboardSessionState::default(),
             keyboard_note_guide_overlay_date: None,
             notepad_sound_check_guide_overlay_date: None,
         }
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct SessionStateWire {
+    #[serde(default)]
+    cursor: usize,
+    #[serde(default = "super::helpers::default_lines")]
+    lines: Vec<String>,
+    #[serde(default)]
+    active_screen: Option<crate::screen_switch::PrimaryScreen>,
+    #[serde(default)]
+    is_daw_mode: bool,
+    #[serde(default)]
+    keyboard: Option<KeyboardSessionState>,
+    #[serde(default)]
+    keyboard_note_guide_overlay_date: Option<String>,
+    #[serde(default)]
+    notepad_sound_check_guide_overlay_date: Option<String>,
+}
+
+impl<'de> serde::Deserialize<'de> for SessionState {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = SessionStateWire::deserialize(deserializer)?;
+        let active_screen = wire.active_screen.unwrap_or_else(|| {
+            if wire.keyboard.is_some() {
+                crate::screen_switch::PrimaryScreen::Keyboard
+            } else if wire.is_daw_mode {
+                crate::screen_switch::PrimaryScreen::Daw
+            } else {
+                crate::screen_switch::PrimaryScreen::Notepad
+            }
+        });
+        Ok(Self {
+            cursor: wire.cursor,
+            lines: wire.lines,
+            active_screen,
+            keyboard: wire.keyboard.unwrap_or_default(),
+            keyboard_note_guide_overlay_date: wire.keyboard_note_guide_overlay_date,
+            notepad_sound_check_guide_overlay_date: wire.notepad_sound_check_guide_overlay_date,
+        })
     }
 }
 
@@ -133,9 +175,6 @@ pub fn load_session_state() -> SessionState {
     if state.lines.is_empty() {
         state.lines = super::helpers::default_lines();
     }
-    if let Some(keyboard) = &mut state.keyboard {
-        keyboard.normalize();
-        state.is_daw_mode = false;
-    }
+    state.keyboard.normalize();
     state
 }

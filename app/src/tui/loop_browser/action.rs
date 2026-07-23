@@ -70,6 +70,5 @@ pub(in crate::tui) enum LoopBrowserAction {
         paused: bool,
         start_measure: usize,
     },
-    Return,
     Quit,
 }

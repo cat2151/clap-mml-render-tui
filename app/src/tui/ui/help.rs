@@ -80,6 +80,7 @@ pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
             Line::from("  f           : patch phrase 画面"),
             Line::from("  e           : config.toml 編集 → 再起動"),
             Line::from("  w           : DAW モード"),
+            Line::from("  Ctrl+G      : 画面切替"),
             Line::from("  K / ?       : ヘルプ (このページ)"),
             Line::from("  q           : 終了"),
             Line::from(""),

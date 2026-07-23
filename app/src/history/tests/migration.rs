@@ -75,7 +75,7 @@ fn load_session_state_migrates_from_legacy_data_local_history_json() {
     let state = load_session_state();
     assert_eq!(state.cursor, 9);
     assert_eq!(state.lines, vec!["abc".to_string(), "def".to_string()]);
-    assert!(state.is_daw_mode);
+    assert_eq!(state.active_screen, PrimaryScreen::Daw);
 
     let new_path = super::session_state_path().unwrap();
     assert!(
@@ -86,7 +86,7 @@ fn load_session_state_migrates_from_legacy_data_local_history_json() {
         serde_json::from_str(&std::fs::read_to_string(&new_path).unwrap()).unwrap();
     assert_eq!(migrated.cursor, 9);
     assert_eq!(migrated.lines, vec!["abc".to_string(), "def".to_string()]);
-    assert!(migrated.is_daw_mode);
+    assert_eq!(migrated.active_screen, PrimaryScreen::Daw);
 
     std::fs::remove_dir_all(&tmp).ok();
 }

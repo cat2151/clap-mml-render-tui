@@ -6,7 +6,6 @@ pub(in crate::tui) struct KeyboardScreen<'a> {
     pub(in crate::tui) state: KeyboardState,
     pub(in crate::tui) mml_input: KeyboardMmlInput<'a>,
     pub(in crate::tui) note_guide: KeyboardNoteGuide,
-    pub(in crate::tui) persist_on_exit: bool,
 }
 
 impl<'a> KeyboardScreen<'a> {
@@ -21,7 +20,6 @@ impl<'a> KeyboardScreen<'a> {
             state,
             mml_input,
             note_guide,
-            persist_on_exit: false,
         }
     }
 }

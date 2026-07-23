@@ -9,6 +9,7 @@ use crossterm::{
 use ratatui::{backend::CrosstermBackend, Terminal};
 
 use super::{DawApp, DawExitReason, DawMode, DawNormalAction};
+use crate::screen_switch::{is_screen_switch_trigger, PrimaryScreen, ScreenSwitchMenuAction};
 
 impl DawApp {
     pub(crate) fn uses_textarea_cursor(&self) -> bool {
@@ -81,6 +82,27 @@ impl DawApp {
                     if key.kind != KeyEventKind::Press {
                         continue;
                     }
+                    if self.overlays.screen_switch.is_open() {
+                        if let ScreenSwitchMenuAction::SwitchTo(target) =
+                            self.overlays.screen_switch.handle_key(key)
+                        {
+                            if target != PrimaryScreen::Daw {
+                                self.stop_play();
+                                self.save_history_state();
+                                return Ok(DawExitReason::SwitchTo {
+                                    target,
+                                    keyboard_patch: (target == PrimaryScreen::Keyboard)
+                                        .then(|| self.current_track_patch_name())
+                                        .flatten(),
+                                });
+                            }
+                        }
+                        continue;
+                    }
+                    if self.mode == DawMode::Normal && is_screen_switch_trigger(key) {
+                        self.overlays.screen_switch.open();
+                        continue;
+                    }
                     if key.modifiers.contains(KeyModifiers::CONTROL)
                         && key.code == KeyCode::Char('c')
                     {
@@ -99,16 +121,15 @@ impl DawApp {
 
                     match self.mode {
                         DawMode::Normal => match self.handle_normal_key_event(key) {
-                            DawNormalAction::ReturnToTui => {
+                            DawNormalAction::SwitchTo(target) => {
                                 self.stop_play();
                                 self.save_history_state();
-                                return Ok(DawExitReason::ReturnToTui);
-                            }
-                            DawNormalAction::LaunchKeyboard => {
-                                self.stop_play();
-                                self.save_history_state();
-                                return Ok(DawExitReason::LaunchKeyboard {
-                                    patch: self.current_track_patch_name(),
+                                return Ok(DawExitReason::SwitchTo {
+                                    target,
+                                    keyboard_patch: (target
+                                        == crate::screen_switch::PrimaryScreen::Keyboard)
+                                        .then(|| self.current_track_patch_name())
+                                        .flatten(),
                                 });
                             }
                             DawNormalAction::QuitApp => {

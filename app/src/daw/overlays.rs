@@ -10,6 +10,7 @@ pub(in crate::daw) struct DawOverlays {
     pub(in crate::daw) mixer: DawMixerOverlayState,
     pub(in crate::daw) history: DawHistoryOverlayState,
     pub(in crate::daw) patch_select: DawPatchSelectOverlayState,
+    pub(in crate::daw) screen_switch: crate::screen_switch::ScreenSwitchMenu,
 }
 
 impl DawOverlays {
@@ -18,6 +19,7 @@ impl DawOverlays {
             mixer: DawMixerOverlayState::new(mixer_cursor_track),
             history: DawHistoryOverlayState::new(),
             patch_select: DawPatchSelectOverlayState::new(),
+            screen_switch: crate::screen_switch::ScreenSwitchMenu::default(),
         }
     }
 }

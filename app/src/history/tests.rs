@@ -47,14 +47,17 @@ fn session_state_default_lines_is_cde() {
 }
 
 #[test]
-fn session_state_default_is_daw_mode_is_false() {
+fn session_state_default_screen_is_notepad() {
     let state = SessionState::default();
-    assert!(!state.is_daw_mode);
+    assert_eq!(state.active_screen, PrimaryScreen::Notepad);
 }
 
 #[test]
-fn session_state_default_has_no_keyboard_restore() {
-    assert_eq!(SessionState::default().keyboard, None);
+fn session_state_default_has_default_keyboard_state() {
+    assert_eq!(
+        SessionState::default().keyboard,
+        KeyboardSessionState::default()
+    );
 }
 
 #[test]
@@ -78,8 +81,8 @@ fn session_state_serialize_deserialize() {
     let state = SessionState {
         cursor: 42,
         lines: vec!["abc".to_string(), "def".to_string()],
-        is_daw_mode: false,
-        keyboard: None,
+        active_screen: PrimaryScreen::Notepad,
+        keyboard: KeyboardSessionState::default(),
         keyboard_note_guide_overlay_date: Some("2026-07-20".to_string()),
         notepad_sound_check_guide_overlay_date: Some("2026-07-19".to_string()),
     };
@@ -87,7 +90,7 @@ fn session_state_serialize_deserialize() {
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
     assert_eq!(loaded.cursor, 42);
     assert_eq!(loaded.lines, vec!["abc".to_string(), "def".to_string()]);
-    assert!(!loaded.is_daw_mode);
+    assert_eq!(loaded.active_screen, PrimaryScreen::Notepad);
     assert_eq!(
         loaded.keyboard_note_guide_overlay_date.as_deref(),
         Some("2026-07-20")
@@ -103,8 +106,8 @@ fn session_state_serialize_deserialize_zero() {
     let state = SessionState {
         cursor: 0,
         lines: vec!["cde".to_string()],
-        is_daw_mode: false,
-        keyboard: None,
+        active_screen: PrimaryScreen::Notepad,
+        keyboard: KeyboardSessionState::default(),
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
     };
@@ -112,23 +115,23 @@ fn session_state_serialize_deserialize_zero() {
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
     assert_eq!(loaded.cursor, 0);
     assert_eq!(loaded.lines, vec!["cde".to_string()]);
-    assert!(!loaded.is_daw_mode);
+    assert_eq!(loaded.active_screen, PrimaryScreen::Notepad);
 }
 
 #[test]
-fn session_state_serialize_deserialize_is_daw_mode_true() {
+fn session_state_serialize_deserialize_daw_screen() {
     let state = SessionState {
         cursor: 1,
         lines: vec!["cde".to_string()],
-        is_daw_mode: true,
-        keyboard: None,
+        active_screen: PrimaryScreen::Daw,
+        keyboard: KeyboardSessionState::default(),
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
     assert_eq!(loaded.cursor, 1);
-    assert!(loaded.is_daw_mode);
+    assert_eq!(loaded.active_screen, PrimaryScreen::Daw);
 }
 
 #[test]
@@ -137,7 +140,7 @@ fn session_state_json_from_invalid_returns_default() {
     let result: SessionState = serde_json::from_str("not json").unwrap_or_default();
     assert_eq!(result.cursor, 0);
     assert_eq!(result.lines, vec!["cde".to_string()]);
-    assert!(!result.is_daw_mode);
+    assert_eq!(result.active_screen, PrimaryScreen::Notepad);
 }
 
 #[test]
@@ -146,7 +149,7 @@ fn session_state_json_missing_field_returns_default() {
     let result: SessionState = serde_json::from_str("{}").unwrap_or_default();
     assert_eq!(result.cursor, 0);
     assert_eq!(result.lines, vec!["cde".to_string()]);
-    assert!(!result.is_daw_mode);
+    assert_eq!(result.active_screen, PrimaryScreen::Notepad);
 }
 
 #[test]
@@ -158,18 +161,47 @@ fn session_state_json_missing_lines_uses_default() {
 }
 
 #[test]
-fn session_state_json_missing_is_daw_mode_defaults_to_false() {
-    // is_daw_mode フィールドがない場合（旧形式の history.json）はデフォルト値 false を返す
+fn session_state_json_missing_screen_defaults_to_notepad() {
     let result: SessionState = serde_json::from_str(r#"{"cursor": 3, "lines": ["cde"]}"#).unwrap();
     assert_eq!(result.cursor, 3);
-    assert!(!result.is_daw_mode);
+    assert_eq!(result.active_screen, PrimaryScreen::Notepad);
 }
 
 #[test]
-fn session_state_json_missing_keyboard_defaults_to_none() {
+fn session_state_json_missing_keyboard_uses_default() {
     let result: SessionState = serde_json::from_str(r#"{"cursor": 3, "lines": ["cde"]}"#).unwrap();
-    assert_eq!(result.keyboard, None);
+    assert_eq!(result.keyboard, KeyboardSessionState::default());
     assert_eq!(result.keyboard_note_guide_overlay_date, None);
+}
+
+#[test]
+fn new_active_screen_takes_precedence_over_legacy_flags() {
+    let result: SessionState = serde_json::from_str(
+        r#"{
+            "cursor": 3,
+            "lines": ["cde"],
+            "active_screen": "loop_browser",
+            "is_daw_mode": true,
+            "keyboard": {"patch": "Piano"}
+        }"#,
+    )
+    .unwrap();
+    assert_eq!(result.active_screen, PrimaryScreen::LoopBrowser);
+    assert_eq!(result.keyboard.patch.as_deref(), Some("Piano"));
+}
+
+#[test]
+fn legacy_keyboard_takes_precedence_over_legacy_daw_flag() {
+    let result: SessionState = serde_json::from_str(
+        r#"{
+            "cursor": 3,
+            "lines": ["cde"],
+            "is_daw_mode": true,
+            "keyboard": {"patch": "Piano"}
+        }"#,
+    )
+    .unwrap();
+    assert_eq!(result.active_screen, PrimaryScreen::Keyboard);
 }
 
 #[test]
@@ -189,8 +221,8 @@ fn save_and_load_session_state_roundtrip() {
     let state = SessionState {
         cursor: 7,
         lines: vec!["cde".to_string(), "fga".to_string()],
-        is_daw_mode: false,
-        keyboard: None,
+        active_screen: PrimaryScreen::Notepad,
+        keyboard: KeyboardSessionState::default(),
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
     };
@@ -203,7 +235,7 @@ fn save_and_load_session_state_roundtrip() {
 
     assert_eq!(loaded.cursor, 7);
     assert_eq!(loaded.lines, vec!["cde".to_string(), "fga".to_string()]);
-    assert!(!loaded.is_daw_mode);
+    assert_eq!(loaded.active_screen, PrimaryScreen::Notepad);
 }
 
 #[test]
@@ -266,8 +298,8 @@ fn save_and_load_session_state_roundtrip_daw_mode() {
     let state = SessionState {
         cursor: 0,
         lines: vec!["cde".to_string()],
-        is_daw_mode: true,
-        keyboard: None,
+        active_screen: PrimaryScreen::Daw,
+        keyboard: KeyboardSessionState::default(),
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
     };
@@ -278,7 +310,7 @@ fn save_and_load_session_state_roundtrip_daw_mode() {
     let loaded: SessionState = serde_json::from_str(&read_back).unwrap();
     std::fs::remove_file(&tmp_path).ok();
 
-    assert!(loaded.is_daw_mode);
+    assert_eq!(loaded.active_screen, PrimaryScreen::Daw);
 }
 
 #[test]

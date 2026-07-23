@@ -84,7 +84,7 @@ impl LoopBrowser {
             }
         }
         match key.code {
-            KeyCode::Esc => LoopBrowserAction::Return,
+            KeyCode::Esc => LoopBrowserAction::Continue,
             KeyCode::Char('q') => LoopBrowserAction::Quit,
             KeyCode::Char('v') => {
                 self.toggle_selected_favorite();
@@ -157,7 +157,7 @@ impl LoopBrowser {
             }
         }
         match key.code {
-            KeyCode::Esc => LoopBrowserAction::Return,
+            KeyCode::Esc => LoopBrowserAction::Continue,
             KeyCode::Char('q') => LoopBrowserAction::Quit,
             KeyCode::Char('m') if key.modifiers == KeyModifiers::NONE => {
                 self.mixer_cursor_track = self
