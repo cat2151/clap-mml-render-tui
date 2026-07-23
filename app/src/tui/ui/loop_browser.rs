@@ -7,8 +7,8 @@ use ratatui::{
 };
 
 use super::status::{base_style, loop_browser_keybind_text, status_color, status_text};
-use crate::tui::loop_browser::PAD_KEYS;
-use crate::tui::{Mode, TuiApp};
+use crate::tui::loop_browser::{LoopBrowser, PAD_KEYS};
+use crate::tui::{Mode, PlayState};
 use crate::ui_theme::{MONOKAI_CYAN, MONOKAI_FG, MONOKAI_YELLOW};
 
 mod help;
@@ -16,9 +16,9 @@ mod tracks;
 mod tree;
 mod waveforms;
 
-pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame) {
+pub(super) fn draw(state: &mut LoopBrowser, play_state: &PlayState, frame: &mut Frame) {
     let draw_started = std::time::Instant::now();
-    let trace_id = app.loop_browser.state.pending_render_trace.take();
+    let trace_id = state.pending_render_trace.take();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -34,30 +34,29 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame) {
         .split(chunks[0]);
 
     let tree_started = std::time::Instant::now();
-    let rendered_tree_nodes = tree::draw(app, frame, panes[0]);
+    let rendered_tree_nodes = tree::draw(state, frame, panes[0]);
     let tree_elapsed = tree_started.elapsed();
     let tracks_started = std::time::Instant::now();
-    tracks::draw(app, frame, panes[1]);
+    tracks::draw(state, frame, panes[1]);
     let tracks_elapsed = tracks_started.elapsed();
     let pads_started = std::time::Instant::now();
-    draw_pads(app, frame, chunks[1]);
+    draw_pads(state, frame, chunks[1]);
     let pads_elapsed = pads_started.elapsed();
 
-    let play_state = app.playback.play_state.lock().unwrap().clone();
-    let persistence_error = app.loop_browser.state.persistence_error();
+    let persistence_error = state.persistence_error();
     let (status, color) = if let Some(error) = persistence_error {
         (error.clone(), Color::Red)
-    } else if matches!(play_state, crate::tui::PlayState::Err(_)) {
+    } else if matches!(play_state, PlayState::Err(_)) {
         (
-            status_text(&Mode::LoopBrowser, &play_state),
-            status_color(&play_state),
+            status_text(&Mode::LoopBrowser, play_state),
+            status_color(play_state),
         )
-    } else if app.loop_browser.state.playback_paused {
+    } else if state.playback_paused {
         ("loop browser  ⏸ 停止中".to_string(), MONOKAI_CYAN)
     } else {
         (
-            status_text(&Mode::LoopBrowser, &play_state),
-            status_color(&play_state),
+            status_text(&Mode::LoopBrowser, play_state),
+            status_color(play_state),
         )
     };
     frame.render_widget(
@@ -65,40 +64,34 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame) {
         chunks[2],
     );
     frame.render_widget(
-        Paragraph::new(loop_browser_keybind_text(app.loop_browser.state.focus)).style(base_style()),
+        Paragraph::new(loop_browser_keybind_text(state.focus)).style(base_style()),
         chunks[3],
     );
 
-    if app.loop_browser.state.category_overlay.is_some() {
-        draw_category_overlay(app, frame);
+    if state.category_overlay.is_some() {
+        draw_category_overlay(state, frame);
     }
-    if app.loop_browser.state.mixer_overlay_open {
-        draw_mixer_overlay(app, frame);
+    if state.mixer_overlay_open {
+        draw_mixer_overlay(state, frame);
     }
-    if let Some(notice) = app
-        .loop_browser
-        .state
-        .active_notice()
-        .map(|notice| notice.text.clone())
-    {
+    if let Some(notice) = state.active_notice().map(|notice| notice.text.clone()) {
         draw_notice(frame, &notice);
     }
-    if let Some(pane) = app.loop_browser.state.help_overlay {
+    if let Some(pane) = state.help_overlay {
         help::draw(frame, pane);
     }
-    if app.loop_browser.state.starting {
+    if state.starting {
         draw_startup_overlay(frame);
     }
-    app.loop_browser.state.last_render_metrics =
-        Some(crate::tui::loop_browser::performance::RenderMetrics {
-            trace_id,
-            tree: tree_elapsed,
-            tracks: tracks_elapsed,
-            pads: pads_elapsed,
-            draw: draw_started.elapsed(),
-            rendered_tree_nodes,
-            total_tree_nodes: app.loop_browser.state.visible.len(),
-        });
+    state.last_render_metrics = Some(crate::tui::loop_browser::performance::RenderMetrics {
+        trace_id,
+        tree: tree_elapsed,
+        tracks: tracks_elapsed,
+        pads: pads_elapsed,
+        draw: draw_started.elapsed(),
+        rendered_tree_nodes,
+        total_tree_nodes: state.visible.len(),
+    });
 }
 
 fn draw_startup_overlay(frame: &mut Frame<'_>) {
@@ -119,36 +112,25 @@ fn draw_startup_overlay(frame: &mut Frame<'_>) {
     );
 }
 
-fn draw_mixer_overlay(app: &TuiApp<'_>, frame: &mut Frame<'_>) {
+fn draw_mixer_overlay(state: &LoopBrowser, frame: &mut Frame<'_>) {
     let area = frame.area();
-    let tracks = app
-        .loop_browser
-        .state
+    let tracks = state
         .track_grid()
         .iter()
         .enumerate()
         .map(|(track, _)| crate::mixer_overlay::MixerOverlayTrack {
             label: format!("track{}", track + 1),
-            volume_db: app.loop_browser.state.track_volume_db(track),
+            volume_db: state.track_volume_db(track),
         })
         .collect::<Vec<_>>();
-    crate::mixer_overlay::draw_mixer_overlay(
-        frame,
-        area,
-        &tracks,
-        app.loop_browser.state.mixer_cursor_track,
-    );
+    crate::mixer_overlay::draw_mixer_overlay(frame, area, &tracks, state.mixer_cursor_track);
 }
 
-fn draw_pads(app: &TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) {
+fn draw_pads(state: &LoopBrowser, frame: &mut Frame<'_>, area: Rect) {
     let spans = PAD_KEYS
         .iter()
         .flat_map(|pad| {
-            let name = app
-                .loop_browser
-                .state
-                .pad_file_name(*pad)
-                .unwrap_or_else(|| "-".to_string());
+            let name = state.pad_file_name(*pad).unwrap_or_else(|| "-".to_string());
             [
                 Span::styled(
                     format!(" {}:", pad.to_ascii_uppercase()),
@@ -179,11 +161,9 @@ fn focus_border_style(focused: bool) -> Style {
     }
 }
 
-fn draw_category_overlay(app: &TuiApp<'_>, frame: &mut Frame<'_>) {
-    let current = app.loop_browser.state.category_overlay_current();
-    let lines = app
-        .loop_browser
-        .state
+fn draw_category_overlay(state: &LoopBrowser, frame: &mut Frame<'_>) {
+    let current = state.category_overlay_current();
+    let lines = state
         .category_keys
         .iter()
         .map(|(key, category)| {

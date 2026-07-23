@@ -127,14 +127,9 @@ fn truncate_for_log(value: &str, max_chars: usize) -> String {
     out
 }
 
-#[derive(Clone, PartialEq)]
-pub(super) enum PlayState {
-    Idle,
-    Running(String), // レンダリング中
-    Playing(String), // 演奏中
-    Done(String),
-    Err(String),
-}
+// PlayState は画面横断（notepad / loop browser）で共有するため `cmrt-tui-core` へ切り出した。
+// 従来の `crate::tui::PlayState` パスは再エクスポートで維持する。
+pub(crate) use cmrt_tui_core::PlayState;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct TuiRenderStatus {

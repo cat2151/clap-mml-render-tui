@@ -71,7 +71,8 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     if app.mode == Mode::Keyboard {
         keyboard::draw(app, f);
     } else if app.mode == Mode::LoopBrowser {
-        loop_browser::draw(app, f);
+        let play_state = app.playback.play_state.lock().unwrap().clone();
+        loop_browser::draw(&mut app.loop_browser.state, &play_state, f);
     } else {
         draw_notepad(app, f);
     }

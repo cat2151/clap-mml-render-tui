@@ -9,15 +9,14 @@ use ratatui::{
 };
 
 use super::focus_border_style;
-use crate::tui::loop_browser::{LoopBrowserPane, VisibleLoopNode};
+use crate::tui::loop_browser::{LoopBrowser, LoopBrowserPane, VisibleLoopNode};
 use crate::tui::ui::status::base_style;
-use crate::tui::TuiApp;
 use crate::ui_theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_YELLOW};
 
-pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) -> usize {
-    let focused = app.loop_browser.state.focus == LoopBrowserPane::Tree;
+pub(super) fn draw(state: &mut LoopBrowser, frame: &mut Frame<'_>, area: Rect) -> usize {
+    let focused = state.focus == LoopBrowserPane::Tree;
     let border = focus_border_style(focused);
-    let title = if app.loop_browser.state.favorites_only {
+    let title = if state.favorites_only {
         " [LOOP TREE] Favorite dirs "
     } else {
         " [LOOP TREE] WAV loops "
@@ -26,7 +25,7 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) -> u
         .borders(Borders::ALL)
         .title(title)
         .border_style(border);
-    if let Some(error) = &app.loop_browser.state.error {
+    if let Some(error) = &state.error {
         frame.render_widget(
             Paragraph::new(error.as_str())
                 .wrap(Wrap { trim: false })
@@ -46,8 +45,8 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) -> u
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(1), Constraint::Min(0)])
         .split(inner);
-    let breadcrumb_segments = app.loop_browser.state.selected_breadcrumb();
-    let category = app.loop_browser.state.selected_direct_category();
+    let breadcrumb_segments = state.selected_breadcrumb();
+    let category = state.selected_direct_category();
     let (breadcrumb, category) =
         format_breadcrumb_with_category(&breadcrumb_segments, category, rows[0].width);
     frame.render_widget(
@@ -59,28 +58,28 @@ pub(super) fn draw(app: &mut TuiApp<'_>, frame: &mut Frame<'_>, area: Rect) -> u
     );
 
     let viewport_height = usize::from(rows[1].height);
-    if viewport_height == 0 || app.loop_browser.state.visible.is_empty() {
+    if viewport_height == 0 || state.visible.is_empty() {
         return 0;
     }
     let range = visible_range(
-        app.loop_browser.state.cursor,
-        app.loop_browser.state.visible.len(),
+        state.cursor,
+        state.visible.len(),
         viewport_height,
-        &mut app.loop_browser.state.tree_scroll,
+        &mut state.tree_scroll,
     );
-    let items = app.loop_browser.state.visible[range.clone()]
+    let items = state.visible[range.clone()]
         .iter()
         .map(tree_item)
         .collect::<Vec<_>>();
-    let mut state = ListState::default();
-    state.select(Some(app.loop_browser.state.cursor - range.start));
+    let mut list_state = ListState::default();
+    list_state.select(Some(state.cursor - range.start));
     frame.render_stateful_widget(
         List::new(items)
             .style(base_style())
             .highlight_style(cursor_highlight_style(base_style()))
             .highlight_symbol("▶ "),
         rows[1],
-        &mut state,
+        &mut list_state,
     );
     range.len()
 }
