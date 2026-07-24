@@ -1,16 +1,14 @@
-use ratatui::{layout::Rect, style::Color};
+use ratatui::style::Color;
 
 use super::{Mode, PlayState, TuiRenderStatus};
 use crate::tui::loop_browser::{loop_browser_keybind_text, LoopBrowserPane};
 use crate::ui_theme::{MONOKAI_GREEN, MONOKAI_PURPLE};
 
-// base_style / status_color / play_status_suffix は画面横断で共有するため
-// `cmrt-tui-core` へ切り出した。従来の `status::*` パスは再エクスポートで維持する。
-pub(super) use cmrt_tui_core::status::{base_style, play_status_suffix, status_color};
-
-pub(super) fn visible_list_page_size(area: Rect) -> usize {
-    usize::from(area.height.saturating_sub(2).max(1))
-}
+// base_style / status_color / play_status_suffix / visible_list_page_size は画面横断で
+// 共有するため `cmrt-tui-core` へ切り出した。従来の `status::*` パスは再エクスポートで維持する。
+pub(super) use cmrt_tui_core::status::{
+    base_style, play_status_suffix, status_color, visible_list_page_size,
+};
 
 pub(super) fn render_status_color(render_status: TuiRenderStatus) -> Color {
     if render_status.active == 0 && render_status.pending == 0 {

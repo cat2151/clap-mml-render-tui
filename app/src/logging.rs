@@ -184,16 +184,16 @@ pub(crate) fn append_global_log_line_nonblocking(line: impl Into<String>) {
     let _ = line.into();
 }
 
-/// `cmrt-loop-browser` crate へ注入する同期ログ sink。
-pub fn loop_browser_log_sink(line: &str) {
+/// 画面 crate（`cmrt-loop-browser` / `cmrt-realtime-play` 等）へ注入する同期ログ sink。
+pub fn global_log_sink(line: &str) {
     #[cfg(not(test))]
     append_global_log_line(line);
     #[cfg(test)]
     let _ = line;
 }
 
-/// `cmrt-loop-browser` crate へ注入する非同期ログ sink（レンダースレッドを塞がない）。
-pub fn loop_browser_perf_log_sink(line: &str) {
+/// 画面 crate へ注入する非同期ログ sink（レンダースレッドを塞がない）。
+pub fn nonblocking_log_sink(line: &str) {
     append_global_log_line_nonblocking(line.to_string());
 }
 

@@ -1,44 +1,9 @@
 //! UI ユーティリティ（TUI / DAW 共通）
 
-use ratatui::{
-    layout::{Alignment, Rect},
-    style::{Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph, Wrap},
-    Frame,
-};
-
-use crate::ui_theme::{MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_YELLOW};
-
-// 中央配置矩形ヘルパ（centered_rect / centered_rect_with_size / centered_text_block_rect）は
-// 画面横断で共有するため `cmrt-tui-core` へ切り出した。従来の `crate::ui_utils::*` パスは
-// 再エクスポートで維持する。
+// 中央配置矩形ヘルパ（centered_rect / centered_rect_with_size / centered_text_block_rect）と
+// 音出し確認ガイドのオーバーレイは、画面横断で共有するため `cmrt-tui-core` へ切り出した。
+// 従来の `crate::ui_utils::*` パスは再エクスポートで維持する。
 pub(crate) use cmrt_tui_core::ui::*;
-
-pub(crate) fn draw_sound_check_guide_overlay(f: &mut Frame<'_>, area: Rect, message: &str) {
-    let base_style = Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG);
-    let width = area.width.saturating_sub(2).min(72);
-    let height = 5.min(area.height);
-    let overlay_area = centered_rect_with_size(width, height, area);
-    f.render_widget(Clear, overlay_area);
-    f.render_widget(
-        Paragraph::new(Line::from(Span::styled(
-            message.to_owned(),
-            base_style.fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD),
-        )))
-        .alignment(Alignment::Center)
-        .wrap(Wrap { trim: true })
-        .style(base_style)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" 音出し確認 ")
-                .style(base_style)
-                .border_style(base_style.fg(MONOKAI_CYAN)),
-        ),
-        overlay_area,
-    );
-}
 
 /// 現在位置から `j` / `k` / `PageDown` / `PageUp` が次に押されると仮定し、
 /// その移動先 index を返す。
@@ -148,6 +113,8 @@ pub(crate) fn predicted_navigation_indices_with_direction_bias(
 
 #[cfg(test)]
 mod tests {
+    use ratatui::{layout::Rect, text::Line};
+
     use super::*;
 
     #[test]

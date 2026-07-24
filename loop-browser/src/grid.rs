@@ -71,10 +71,12 @@ impl LoopBrowser {
                             .and_then(Option::as_ref)
                             .and_then(|clip| {
                                 let analysis = self.analysis_for_wav(&clip.wav);
-                                if clip.is_previous() && analysis.is_some_and(|analysis| {
-                                    analysis.kind
+                                if clip.is_previous()
+                                    && analysis.is_some_and(|analysis| {
+                                        analysis.kind
                                         == cmrt_loop_domain::loop_wav_analysis::LoopWavKind::OneShot
-                                }) {
+                                    })
+                                {
                                     return None;
                                 }
                                 let tempo = analysis.and_then(|analysis| analysis.tempo);

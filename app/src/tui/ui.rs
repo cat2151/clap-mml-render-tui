@@ -1,7 +1,8 @@
 //! TUI 描画
 
 mod help;
-mod keyboard;
+// keyboard の描画は `cmrt-keyboard` crate の `ui` モジュールへ切り出した。
+use cmrt_keyboard::ui as keyboard;
 // loop browser の描画は `cmrt-loop-browser` crate の `ui` モジュールへ切り出した。
 pub(in crate::tui) use cmrt_loop_browser::ui as loop_browser;
 mod overlay;
@@ -26,7 +27,9 @@ use status::{
     status_text, visible_list_page_size,
 };
 
-const LIST_HIGHLIGHT_SYMBOL: &str = "▶ ";
+// LIST_HIGHLIGHT_SYMBOL は画面横断で共有するため `cmrt-tui-core` へ切り出した。
+use cmrt_tui_core::status::LIST_HIGHLIGHT_SYMBOL;
+
 const LIST_HIGHLIGHT_WIDTH: u16 = 2;
 const TUI_RENDER_ANIM_FRAME_MS: u128 = 250;
 const TUI_RENDER_ANIM_FRAME_COUNT: u128 = 2;
@@ -70,7 +73,10 @@ pub(in crate::tui::ui) fn mml_cache_hit(
 
 pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     if app.mode == Mode::Keyboard {
-        keyboard::draw(app, f);
+        app.sync_keyboard_patch_catalog();
+        app.sync_keyboard_voicing_detection();
+        let connection = app.keyboard_connection_status();
+        keyboard::draw(&mut app.keyboard, &connection, f);
     } else if app.mode == Mode::LoopBrowser {
         let play_state = app.playback.play_state.lock().unwrap().clone();
         loop_browser::draw(&mut app.loop_browser.state, &play_state, f);

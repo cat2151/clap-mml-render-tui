@@ -10,9 +10,11 @@ path = "src/main.rs"
 [dependencies]
 cmrt-config-editor = { path = "../config-editor-lib" }
 cmrt-core = { path = "../core-lib" }
+cmrt-keyboard = { path = "../keyboard" }
 cmrt-loop-browser = { path = "../loop-browser" }
 cmrt-loop-browser-domain = { path = "../loop-browser-domain" }
 cmrt-loop-domain = { path = "../loop-domain" }
+cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-runtime = { path = "../cmrt-runtime" }
 cmrt-tui-core = { path = "../tui-core" }
 rubberband-ffi = { path = "../rubberband-ffi" }

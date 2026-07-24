@@ -130,11 +130,9 @@ pub fn duration_seconds(frames: usize, sample_rate: u32) -> f64 {
     frames as f64 / f64::from(sample_rate)
 }
 
+/// sink 未注入時（テスト実行時を含む）は何も書かない。
 pub fn log_event(message: impl AsRef<str>) {
-    #[cfg(not(test))]
     crate::log_line(&format!("loop-playback: {}", message.as_ref()));
-    #[cfg(test)]
-    let _ = message;
 }
 
 pub fn path_label(path: &Path) -> String {

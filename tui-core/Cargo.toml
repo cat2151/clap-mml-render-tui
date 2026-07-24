@@ -4,4 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+cmrt-core = { path = "../core-lib" }
+cmrt-runtime = { path = "../cmrt-runtime" }
+anyhow = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+crossterm = "0.28"
+rand = "0.8"
 ratatui = "0.28"
+tui-textarea = { version = "0.6", features = ["crossterm"] }

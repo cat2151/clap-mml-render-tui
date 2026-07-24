@@ -271,9 +271,12 @@ fn main() -> Result<()> {
     clap_mml_render_tui::loop_browser::set_app_dir_resolver(config::config_app_dir);
     // loop browser 画面 crate にグローバルログ sink を注入する。
     cmrt_loop_browser::set_log_sinks(
-        clap_mml_render_tui::logging::loop_browser_log_sink,
-        clap_mml_render_tui::logging::loop_browser_perf_log_sink,
+        clap_mml_render_tui::logging::global_log_sink,
+        clap_mml_render_tui::logging::nonblocking_log_sink,
     );
+    // realtime play server crate / keyboard 画面 crate にグローバルログ sink を注入する。
+    cmrt_realtime_play::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
+    cmrt_keyboard::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
 
     let action = parse_cli_from(std::env::args_os())?;
 

@@ -5,9 +5,11 @@ members = [
     "config-editor-lib",
     "core-lib",
     "daw-client-lib",
+    "keyboard",
     "loop-browser",
     "loop-browser-domain",
     "loop-domain",
+    "realtime-play",
     "rubberband-ffi",
     "tui-core",
 ]

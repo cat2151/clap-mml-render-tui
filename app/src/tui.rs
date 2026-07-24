@@ -20,7 +20,10 @@ mod audio_cache;
 mod cache;
 mod disk_cache;
 mod input;
-mod keyboard;
+// keyboard 画面（状態・入力・MIDI 送信・描画）は `cmrt-keyboard` crate へ切り出した。
+// 従来の `crate::tui::keyboard::*` パスは再エクスポートで維持する。
+pub(crate) use cmrt_keyboard as keyboard;
+mod keyboard_glue;
 // loop browser 画面（状態・入力・再生エンジン・描画）は `cmrt-loop-browser` crate へ切り出した。
 // 従来の `crate::tui::loop_browser::*` パスは再エクスポートで維持する。
 pub(crate) use cmrt_loop_browser as loop_browser;

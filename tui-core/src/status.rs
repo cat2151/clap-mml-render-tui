@@ -1,14 +1,25 @@
 //! ステータス表示の共通ヘルパ（画面横断で共有）。
 
-use ratatui::style::{Color, Style};
+use ratatui::{
+    layout::Rect,
+    style::{Color, Style},
+};
 
 use crate::play_state::PlayState;
 use crate::theme::{
     MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GREEN, MONOKAI_PURPLE, MONOKAI_YELLOW,
 };
 
+/// リスト選択行に付与するカーソル記号。
+pub const LIST_HIGHLIGHT_SYMBOL: &str = "▶ ";
+
 pub fn base_style() -> Style {
     Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG)
+}
+
+/// 枠線を除いた、リストが1画面に表示できる行数。
+pub fn visible_list_page_size(area: Rect) -> usize {
+    usize::from(area.height.saturating_sub(2).max(1))
 }
 
 pub fn status_color(play_state: &PlayState) -> Color {
