@@ -11,6 +11,8 @@ use serde::Deserialize;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+/// app の HTTP サーバー（`--server` CLI モード / DAW HTTP サーバー）が listen する localhost port。
+pub const DEFAULT_PORT: u16 = 62151;
 pub const DEFAULT_OFFLINE_RENDER_WORKERS: usize = 2;
 pub const DEFAULT_OFFLINE_RENDER_SERVER_WORKERS: usize = 4;
 pub const DEFAULT_OFFLINE_RENDER_SERVER_PORT: u16 = 62153;

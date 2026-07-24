@@ -4,6 +4,7 @@ members = [
     "cmrt-runtime",
     "config-editor-lib",
     "core-lib",
+    "daw",
     "daw-client-lib",
     "history",
     "keyboard",

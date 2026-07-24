@@ -9,7 +9,7 @@ use std::{io::Stdout, path::Path};
 
 pub(crate) const DEFAULT_CONFIG_EDITORS: &[&str] = &["fresh", "zed", "code", "edit", "nano", "vim"];
 
-pub(crate) type AppTerminal = Terminal<CrosstermBackend<Stdout>>;
+pub type AppTerminal = Terminal<CrosstermBackend<Stdout>>;
 
 #[derive(Serialize)]
 struct EditorsToml<'a> {
@@ -37,7 +37,7 @@ pub(crate) fn configured_editors(config_path: impl AsRef<Path>) -> Result<Vec<St
         .map_err(Into::into)
 }
 
-pub(crate) fn edit_config_toml(terminal: &mut AppTerminal) -> Result<()> {
+pub fn edit_config_toml(terminal: &mut AppTerminal) -> Result<()> {
     let config_path = crate::config::config_file_path().ok_or_else(|| {
         anyhow!("システムの設定ディレクトリが取得できないため config.toml を開けません")
     })?;

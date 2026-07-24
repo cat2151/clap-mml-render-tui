@@ -1,0 +1,419 @@
+//! DAW モードのキー入力処理
+
+use mmlabc_to_smf::mml_preprocessor;
+use serde_json::Value;
+#[cfg(test)]
+use std::time::Instant;
+
+mod history;
+mod insert;
+mod mixer;
+mod normal;
+mod patch_select;
+
+use super::{AbRepeatState, DawApp, FIRST_PLAYABLE_TRACK};
+
+#[cfg(test)]
+use normal::{
+    normal_playback_shortcut, preview_target_tracks, resolve_playback_start_measure_index,
+    NormalPlaybackShortcut,
+};
+
+const PATCH_JSON_KEY: &str = "Surge XT patch";
+const PATCH_FILTER_QUERY_JSON_KEY: &str = "Surge XT patch filter";
+
+impl DawApp {
+    fn resolve_patch_name(&self, patch_name: &str) -> Option<String> {
+        cmrt_tui_core::patches::resolve_display_patch_name(
+            &self.overlays.patch_select.all,
+            patch_name,
+        )
+    }
+
+    fn normalize_patch_phrase_store_key(&mut self, patch_name: String) -> String {
+        let Some(resolved) = self.resolve_patch_name(&patch_name) else {
+            return patch_name;
+        };
+        if resolved != patch_name
+            && cmrt_history::rename_patch_phrase_store_key(
+                &mut self.patch_phrase_store,
+                &patch_name,
+                &resolved,
+            )
+        {
+            self.mark_patch_phrase_store_dirty();
+        }
+        resolved
+    }
+
+    fn normalize_patch_phrase_store_for_available_patches(&mut self, pairs: &[(String, String)]) {
+        if cmrt_history::normalize_patch_phrase_store_for_available_patches(
+            &mut self.patch_phrase_store,
+            pairs,
+        ) {
+            self.mark_patch_phrase_store_dirty();
+        }
+    }
+
+    pub(crate) fn enter_help(&mut self) {
+        self.help_origin = self.mode;
+        self.mode = super::DawMode::Help;
+    }
+
+    fn push_front_dedup(items: &mut Vec<String>, item: String) {
+        if item.trim().is_empty() {
+            return;
+        }
+        if let Some(index) = items.iter().position(|existing| existing == &item) {
+            if index == 0 {
+                return;
+            }
+            items.remove(index);
+        }
+        items.insert(0, item);
+        if items.len() > 100 {
+            items.truncate(100);
+        }
+    }
+
+    fn extract_patch_json_and_phrase(mml: &str) -> Option<(Value, String)> {
+        let preprocessed = mml_preprocessor::extract_embedded_json(mml);
+        let value = preprocessed
+            .embedded_json
+            .as_deref()
+            .and_then(|json| serde_json::from_str::<Value>(json).ok())?;
+        Some((value, preprocessed.remaining_mml.trim().to_string()))
+    }
+
+    fn extract_patch_phrase(mml: &str) -> Option<(String, String)> {
+        let (value, phrase) = Self::extract_patch_json_and_phrase(mml)?;
+        let patch_name = value
+            .get(PATCH_JSON_KEY)
+            .and_then(Value::as_str)
+            .map(str::to_string)?;
+        Some((patch_name, phrase))
+    }
+
+    pub(crate) fn build_patch_json(patch_name: &str) -> String {
+        Self::build_patch_json_with_filter_query(patch_name, None)
+    }
+
+    fn build_patch_json_with_filter_query(patch_name: &str, filter_query: Option<&str>) -> String {
+        let mut patch_json = serde_json::json!({ PATCH_JSON_KEY: patch_name });
+        if let Some(filter_query) = filter_query
+            .map(str::trim)
+            .filter(|query| !query.is_empty())
+        {
+            patch_json[PATCH_FILTER_QUERY_JSON_KEY] = Value::String(filter_query.to_string());
+        }
+        patch_json.to_string()
+    }
+
+    fn build_random_patch_json_with_filter_query(
+        patch_name: &str,
+        filter_query: Option<&str>,
+    ) -> String {
+        let patch_name = Value::String(patch_name.to_string());
+        match filter_query
+            .map(str::trim)
+            .filter(|query| !query.is_empty())
+        {
+            Some(filter_query) => {
+                let filter_query = Value::String(filter_query.to_string());
+                format!(
+                    r#"{{"{PATCH_JSON_KEY}": {patch_name}, "{PATCH_FILTER_QUERY_JSON_KEY}": {filter_query}}}"#
+                )
+            }
+            None => format!(r#"{{"{PATCH_JSON_KEY}": {patch_name}}}"#),
+        }
+    }
+
+    fn skip_json_whitespace(raw_json: &str, mut index: usize) -> usize {
+        while raw_json
+            .as_bytes()
+            .get(index)
+            .is_some_and(u8::is_ascii_whitespace)
+        {
+            index += 1;
+        }
+        index
+    }
+
+    fn scan_json_string_end(raw_json: &str, start: usize) -> Option<usize> {
+        let bytes = raw_json.as_bytes();
+        if bytes.get(start) != Some(&b'"') {
+            return None;
+        }
+        let mut index = start + 1;
+        while let Some(byte) = bytes.get(index) {
+            match byte {
+                b'\\' => {
+                    bytes.get(index + 1)?;
+                    index += 2;
+                }
+                b'"' => return Some(index + 1),
+                _ => index += 1,
+            }
+        }
+        None
+    }
+
+    fn replace_patch_name_in_embedded_json(raw_json: &str, patch_name: &str) -> Option<String> {
+        let bytes = raw_json.as_bytes();
+        let mut index = Self::skip_json_whitespace(raw_json, 0);
+        if bytes.get(index) != Some(&b'{') {
+            return None;
+        }
+        index += 1;
+        loop {
+            index = Self::skip_json_whitespace(raw_json, index);
+            match bytes.get(index) {
+                Some(b'}') => return None,
+                Some(b'"') => {}
+                _ => return None,
+            }
+
+            let key_start = index;
+            let key_end = Self::scan_json_string_end(raw_json, key_start)?;
+            let key = serde_json::from_str::<String>(&raw_json[key_start..key_end]).ok()?;
+            index = Self::skip_json_whitespace(raw_json, key_end);
+            if bytes.get(index) != Some(&b':') {
+                return None;
+            }
+
+            index += 1;
+            let value_start = Self::skip_json_whitespace(raw_json, index);
+            let mut value_stream =
+                serde_json::Deserializer::from_str(&raw_json[value_start..]).into_iter::<Value>();
+            value_stream.next()?.ok()?;
+            let value_end = value_start + value_stream.byte_offset();
+
+            if key == PATCH_JSON_KEY {
+                let new_patch_name = serde_json::to_string(patch_name).ok()?;
+                return Some(format!(
+                    "{}{}{}",
+                    &raw_json[..value_start],
+                    new_patch_name,
+                    &raw_json[value_end..]
+                ));
+            }
+
+            index = Self::skip_json_whitespace(raw_json, value_end);
+            match bytes.get(index) {
+                Some(b',') => index += 1,
+                Some(b'}') => return None,
+                _ => return None,
+            }
+        }
+    }
+
+    fn replace_patch_name_in_mml(
+        current_mml: &str,
+        patch_name: &str,
+        filter_query: Option<&str>,
+    ) -> String {
+        let preprocessed = mml_preprocessor::extract_embedded_json(current_mml);
+        let Some(raw_json) = preprocessed.embedded_json.as_deref() else {
+            return Self::build_random_patch_json_with_filter_query(patch_name, filter_query);
+        };
+        let Some(json_start) = current_mml.find(raw_json) else {
+            let patch_json =
+                Self::build_random_patch_json_with_filter_query(patch_name, filter_query);
+            return format!("{patch_json}{}", preprocessed.remaining_mml);
+        };
+        let patch_json = Self::replace_patch_name_in_embedded_json(raw_json, patch_name)
+            .unwrap_or_else(|| {
+                Self::build_random_patch_json_with_filter_query(patch_name, filter_query)
+            });
+        let json_end = json_start + raw_json.len();
+        format!(
+            "{}{}{}",
+            &current_mml[..json_start],
+            patch_json,
+            &current_mml[json_end..]
+        )
+    }
+
+    pub(crate) fn current_track_patch_name(&self) -> Option<String> {
+        if self.editor.cursor_track < FIRST_PLAYABLE_TRACK {
+            return None;
+        }
+        Self::extract_patch_phrase(&self.editor.data[self.editor.cursor_track][0])
+            .map(|(patch_name, _)| patch_name)
+            .map(|patch_name| self.resolve_patch_name(&patch_name).unwrap_or(patch_name))
+            .filter(|patch_name| !patch_name.trim().is_empty())
+    }
+
+    fn current_track_patch_filter_query(&self) -> Option<String> {
+        self.track_patch_filter_query(self.editor.cursor_track)
+    }
+
+    fn track_patch_filter_query(&self, track: usize) -> Option<String> {
+        if track < FIRST_PLAYABLE_TRACK || track >= self.editor.tracks {
+            return None;
+        }
+        Self::extract_patch_json_and_phrase(&self.editor.data[track][0]).and_then(|(value, _)| {
+            value
+                .get(PATCH_FILTER_QUERY_JSON_KEY)
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+    }
+
+    fn preview_patch_json_for_patch_name(&self, patch_name: &str) -> String {
+        if self.editor.cursor_track < FIRST_PLAYABLE_TRACK {
+            return Self::build_patch_json(patch_name);
+        }
+
+        let current_patch_json = &self.editor.data[self.editor.cursor_track][0];
+        // 同じ patch の preview では元の init JSON をそのまま使い、
+        // filter などの付随メタデータや既存表現を崩さない。
+        if self.current_track_patch_name().as_deref() == Some(patch_name) {
+            return current_patch_json.clone();
+        }
+
+        if let Some((Value::Object(mut patch_json), _)) =
+            Self::extract_patch_json_and_phrase(current_patch_json)
+        {
+            patch_json.insert(
+                PATCH_JSON_KEY.to_string(),
+                Value::String(patch_name.to_string()),
+            );
+            return Value::Object(patch_json).to_string();
+        }
+
+        // init セルに patch JSON が無い/壊れている、または object 以外でも preview 自体は継続する。
+        Self::build_patch_json_with_filter_query(
+            patch_name,
+            self.current_track_patch_filter_query().as_deref(),
+        )
+    }
+
+    fn mark_patch_phrase_store_dirty(&mut self) {
+        self.patch_phrase_store_dirty = true;
+    }
+
+    pub(crate) fn flush_patch_phrase_store_if_dirty(&mut self) {
+        if !self.patch_phrase_store_dirty {
+            return;
+        }
+        let _ = cmrt_history::save_patch_phrase_store(&self.patch_phrase_store);
+        self.patch_phrase_store_dirty = false;
+    }
+
+    fn record_current_measure_to_patch_history(&mut self, mml: &str) {
+        let mml = mml.trim();
+        if mml.is_empty() {
+            return;
+        }
+
+        if self.editor.cursor_measure > 0 {
+            if let Some(patch_name) = self.current_track_patch_name() {
+                let state = self
+                    .patch_phrase_store
+                    .patches
+                    .entry(patch_name)
+                    .or_default();
+                Self::push_front_dedup(&mut state.history, mml.to_string());
+                self.mark_patch_phrase_store_dirty();
+                return;
+            }
+        }
+
+        let Some((patch_name, phrase)) = Self::extract_patch_phrase(mml) else {
+            return;
+        };
+        if phrase.is_empty() {
+            return;
+        }
+        let patch_name = self.normalize_patch_phrase_store_key(patch_name);
+        let state = self
+            .patch_phrase_store
+            .patches
+            .entry(patch_name)
+            .or_default();
+        Self::push_front_dedup(&mut state.history, phrase);
+        self.mark_patch_phrase_store_dirty();
+    }
+
+    fn cursor_play_measure_index(&self) -> Option<usize> {
+        // cursor_measure の 0 は Init 列なので対象外。
+        // A-B リピートは通常 meas のみを扱うため、1-based の小節番号を 0-based index に変換する。
+        self.editor.cursor_measure.checked_sub(1)
+    }
+
+    fn update_ab_repeat_follow_end_with_cursor(&self) {
+        let Some(end_measure_index) = self.cursor_play_measure_index() else {
+            return;
+        };
+        let mut ab_repeat = self.playback.ab_repeat.lock().unwrap();
+        if let AbRepeatState::FixStart {
+            start_measure_index,
+            ..
+        } = *ab_repeat
+        {
+            *ab_repeat = AbRepeatState::FixStart {
+                start_measure_index,
+                end_measure_index,
+            };
+        }
+    }
+
+    pub(crate) fn sync_playback_mml_state(&self) {
+        let new_mmls = self.build_measure_mmls();
+        let new_track_mmls = self.build_measure_track_mmls();
+        let new_samples = self.measure_duration_samples();
+        let new_track_gains = self.playback_track_gains();
+        *self.playback.measure_mmls.lock().unwrap() = new_mmls;
+        *self.playback.measure_track_mmls.lock().unwrap() = new_track_mmls;
+        *self.playback.measure_samples.lock().unwrap() = new_samples;
+        *self.playback.track_gains.lock().unwrap() = new_track_gains;
+    }
+
+    #[cfg(test)]
+    fn try_start_preview_with_track_mmls_for_test(
+        &mut self,
+        measure_index: usize,
+        track_mmls: Option<Vec<String>>,
+    ) -> bool {
+        if self.entry_ptr != 0 {
+            return false;
+        }
+        if *self.playback.play_state.lock().unwrap() == super::DawPlayState::Preview {
+            self.stop_play();
+        }
+        if let Some(track_mmls) = track_mmls {
+            if let Some(measure_track_mmls) = self
+                .playback
+                .measure_track_mmls
+                .lock()
+                .unwrap()
+                .get_mut(measure_index)
+            {
+                *measure_track_mmls = track_mmls;
+            }
+        }
+        *self.playback.play_state.lock().unwrap() = super::DawPlayState::Preview;
+        *self.playback.position.lock().unwrap() = Some(super::PlayPosition {
+            measure_index,
+            measure_start: Instant::now(),
+            measure_duration: std::time::Duration::from_secs_f64(
+                self.measure_duration_samples() as f64 / (self.cfg.sample_rate * 2.0),
+            ),
+        });
+        self.append_log_line(format!("preview: meas{}", measure_index + 1));
+        true
+    }
+
+    #[cfg(not(test))]
+    fn try_start_preview_with_track_mmls_for_test(
+        &mut self,
+        _measure_index: usize,
+        _track_mmls: Option<Vec<String>>,
+    ) -> bool {
+        false
+    }
+}
+
+#[cfg(test)]
+mod tests;

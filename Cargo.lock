@@ -370,6 +370,7 @@ dependencies = [
  "clap",
  "cmrt-config-editor",
  "cmrt-core 0.1.0",
+ "cmrt-daw",
  "cmrt-history",
  "cmrt-keyboard",
  "cmrt-loop-browser",
@@ -487,6 +488,29 @@ dependencies = [
  "rodio",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "cmrt-daw"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cmrt-core 0.1.0",
+ "cmrt-history",
+ "cmrt-offline-render",
+ "cmrt-realtime-play",
+ "cmrt-runtime",
+ "cmrt-tui-core",
+ "crossterm",
+ "hound",
+ "mmlabc-to-smf",
+ "ratatui",
+ "rodio",
+ "serde",
+ "serde_json",
+ "tiny_http",
+ "toml",
+ "tui-textarea",
 ]
 
 [[package]]

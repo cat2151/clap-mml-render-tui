@@ -10,6 +10,7 @@ path = "src/main.rs"
 [dependencies]
 cmrt-config-editor = { path = "../config-editor-lib" }
 cmrt-core = { path = "../core-lib" }
+cmrt-daw = { path = "../daw" }
 cmrt-history = { path = "../history" }
 cmrt-keyboard = { path = "../keyboard" }
 cmrt-loop-browser = { path = "../loop-browser" }
@@ -70,6 +71,8 @@ mmlabc-to-smf = { git = "https://github.com/cat2151/mmlabc-to-smf-rust.git", pac
 clack-host = { git = "https://github.com/prokopyl/clack.git", package = "clack-host" }
 
 [dev-dependencies]
+# app のテストから DAW crate のテスト専用ヘルパ（HTTP モード切替要求の注入）を使うためのフラグ。
+cmrt-daw = { path = "../daw", features = ["test-support"] }
 # app のテストから loop browser crate のテスト専用ヘルパを使うためのフラグ。
 cmrt-loop-browser = { path = "../loop-browser", features = ["test-support"] }
 # app のテストから notepad crate のテスト専用ヘルパを使うためのフラグ。

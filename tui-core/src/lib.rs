@@ -2,9 +2,12 @@
 //!
 //! 特定画面（DAW / loop browser / keyboard 等）に依存しない、値ドメインと
 //! 共通ウィジェットだけを集約する。
+#[cfg(any(test, feature = "test-support"))]
+pub mod buffer_test;
 pub mod clipboard;
 pub mod generate;
 pub mod keyboard_session_state;
+pub mod logging;
 pub mod mixer;
 pub mod mixer_overlay;
 pub mod navigation;

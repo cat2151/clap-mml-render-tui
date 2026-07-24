@@ -7,7 +7,7 @@ use std::io::{Cursor, Read};
 
 use crate::config::{core_config_from_config, Config};
 
-pub const DEFAULT_PORT: u16 = 62151;
+pub use cmrt_runtime::DEFAULT_PORT;
 
 /// POSTボディのサイズ上限（バイト）。これを超えると 413 を返す。
 const MAX_BODY_BYTES: u64 = 1024 * 1024; // 1 MiB

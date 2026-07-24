@@ -1,10 +1,10 @@
 use ratatui::{backend::TestBackend, buffer::Buffer, style::Color, Terminal};
 
 pub(super) use crate::test_utils::{find_text_ignoring_spaces, help_overlay_bounds};
-use crate::ui_theme::{
+use crate::{config::Config, tui::TuiApp};
+use cmrt_tui_core::theme::{
     cursor_highlight_bg, MONOKAI_CYAN, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_YELLOW,
 };
-use crate::{config::Config, tui::TuiApp};
 
 use cmrt_notepad::Mode;
 

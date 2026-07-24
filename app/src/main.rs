@@ -2,7 +2,8 @@ use anyhow::{Context, Result};
 use chord2mml_core::convert as chord_to_mml;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use clap_mml_render_tui::{
-    config, loop_browser::library as loop_library, server, tui, updater, voicing_cache_builder,
+    config, config_editor, loop_browser::library as loop_library, server, tui, updater,
+    voicing_cache_builder,
 };
 use cmrt_core::{load_entry, mml_to_play};
 
@@ -280,6 +281,8 @@ fn main() -> Result<()> {
     // offline render crate / notepad 画面 crate にグローバルログ sink を注入する。
     cmrt_offline_render::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
     cmrt_notepad::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
+    // DAW 画面 crate に config.toml 編集関数を注入する（terminal suspend は app ポリシー）。
+    cmrt_daw::set_config_editor(config_editor::edit_config_toml);
 
     let action = parse_cli_from(std::env::args_os())?;
 

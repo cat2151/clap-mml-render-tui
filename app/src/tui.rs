@@ -37,11 +37,10 @@ use self::notepad::{Mode, NormalAction, NotepadScreen};
 use self::voicing::VoicingState;
 use crate::config::Config;
 use crate::screen_switch::{PrimaryScreen, ScreenSwitchMenu};
-// PatchLoadState（notepad の音色選択と keyboard の patch catalog が共有）と
-// filter_items（notepad と DAW が共有）は `cmrt-tui-core` へ切り出した。
-// 従来の `crate::tui::*` パスは以下の再エクスポートで維持する。
+// PatchLoadState（notepad の音色選択と keyboard の patch catalog が共有）は
+// `cmrt-tui-core` へ切り出した。
+// 従来の `crate::tui::PatchLoadState` パスは再エクスポートで維持する。
 pub(crate) use cmrt_tui_core::patch_load::PatchLoadState;
-pub(crate) use cmrt_tui_core::patches::filter_items;
 // PlayState は画面横断（notepad / loop browser）で共有するため `cmrt-tui-core` にある。
 // 従来の `crate::tui::PlayState` パスは再エクスポートで維持する。
 pub(crate) use cmrt_tui_core::PlayState;
