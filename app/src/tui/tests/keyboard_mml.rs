@@ -8,7 +8,7 @@ fn press(app: &mut TuiApp<'_>, code: KeyCode) {
 #[test]
 fn keyboard_mml_overlay_confirms_progression_and_reopens_with_the_previous_value() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::Keyboard;
+    app.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
 
     press(&mut app, KeyCode::Char('i'));
     assert!(app.keyboard.mml_input.is_active());
@@ -35,7 +35,7 @@ fn keyboard_mml_overlay_confirms_progression_and_reopens_with_the_previous_value
 #[test]
 fn keyboard_mml_error_keeps_the_overlay_and_previous_target() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::Keyboard;
+    app.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
     app.keyboard
         .state
         .replace_repeat_chords(vec![vec![60, 64]], std::time::Instant::now(), false);
@@ -66,7 +66,7 @@ fn keyboard_mml_error_keeps_the_overlay_and_previous_target() {
 #[test]
 fn keyboard_mml_overlay_forwards_physical_note_releases() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::Keyboard;
+    app.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
     assert!(app
         .keyboard
         .state
@@ -87,7 +87,7 @@ fn keyboard_mml_overlay_forwards_physical_note_releases() {
 #[test]
 fn keyboard_mml_overlay_accepts_key_repeat_for_text_editing() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::Keyboard;
+    app.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
     press(&mut app, KeyCode::Char('i'));
 
     app.handle_keyboard_key_event(KeyEvent::new_with_kind(

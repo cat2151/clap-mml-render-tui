@@ -277,6 +277,9 @@ fn main() -> Result<()> {
     // realtime play server crate / keyboard 画面 crate にグローバルログ sink を注入する。
     cmrt_realtime_play::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
     cmrt_keyboard::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
+    // offline render crate / notepad 画面 crate にグローバルログ sink を注入する。
+    cmrt_offline_render::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
+    cmrt_notepad::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
 
     let action = parse_cli_from(std::env::args_os())?;
 

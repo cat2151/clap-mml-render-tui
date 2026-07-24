@@ -1,14 +1,14 @@
-use ratatui::layout::{Constraint, Direction, Layout, Position};
 use ratatui::{backend::TestBackend, buffer::Buffer, style::Color, Terminal};
 
 pub(super) use crate::test_utils::{find_text_ignoring_spaces, help_overlay_bounds};
 use crate::ui_theme::{
-    cursor_highlight_bg, MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_GREEN,
-    MONOKAI_PURPLE, MONOKAI_YELLOW,
+    cursor_highlight_bg, MONOKAI_CYAN, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_YELLOW,
 };
-use crate::{config::Config, history::PatchPhraseState, tui::TuiApp};
+use crate::{config::Config, tui::TuiApp};
 
-use super::{draw, status_color, Mode, PlayState};
+use cmrt_notepad::Mode;
+
+use super::draw;
 
 fn test_config() -> Config {
     Config {
@@ -58,13 +58,6 @@ fn render_buffer(app: &mut TuiApp<'static>, width: u16, height: u16) -> Buffer {
     terminal.backend().buffer().clone()
 }
 
-fn render_cursor_position(app: &mut TuiApp<'static>, width: u16, height: u16) -> Position {
-    let backend = TestBackend::new(width, height);
-    let mut terminal = Terminal::new(backend).unwrap();
-    terminal.draw(|f| draw(app, f)).unwrap();
-    terminal.get_cursor_position().unwrap()
-}
-
 fn find_text(buffer: &Buffer, text: &str) -> (u16, u16) {
     for y in 0..buffer.area.height {
         let line: String = (0..buffer.area.width)
@@ -77,16 +70,10 @@ fn find_text(buffer: &Buffer, text: &str) -> (u16, u16) {
     panic!("text not found in buffer: {text}");
 }
 
-mod cache_indicators;
-mod colors;
 mod cursor_style;
-mod footer;
 mod help_screens;
-mod insert_screen;
 mod keyboard_screen;
 mod loop_browser;
 mod loop_browser_used_wavs;
 mod loop_browser_waveform;
-mod overlay_screens;
 mod screen_switch;
-mod sound_check_guide;

@@ -1,7 +1,6 @@
-pub(crate) const DEFAULT_GENERATE_PHRASES: [&str; 2] = ["c1", "cfg1"];
+//! `g` キーで挿入する既定フレーズ。
+//!
+//! 実体は画面横断で共有するため `cmrt-tui-core` へ切り出した。
+//! 従来の `crate::generate::*` パスは再エクスポートで維持する。
 
-pub(crate) fn pick_default_generate_phrase() -> &'static str {
-    let index = crate::random::random_index(DEFAULT_GENERATE_PHRASES.len())
-        .expect("default generate phrases should never be empty");
-    DEFAULT_GENERATE_PHRASES[index]
-}
+pub(crate) use cmrt_tui_core::generate::*;

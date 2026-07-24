@@ -61,3 +61,24 @@ fn config_file_path_uses_test_temp_dir_under_tests() {
         path.display()
     );
 }
+
+/// `set_local_dir_envs`（`cmrt-history` の test_support）は `CMRT_BASE_DIR` と
+/// スレッドローカルの app ディレクトリを差し替える。app の config パス解決も
+/// それに追従することを確認する（history 側パスの差し替えは cmrt-history のテストが担当）。
+#[test]
+fn set_local_dir_envs_redirects_config_file_path() {
+    let tmp = std::env::temp_dir().join("cmrt_test_local_dir_redirects_config_path");
+    std::fs::remove_dir_all(&tmp).ok();
+
+    {
+        let _guard = crate::test_utils::set_local_dir_envs(&tmp);
+        let app_dir = tmp.join("clap-mml-render-tui");
+
+        assert_eq!(
+            config_file_path().as_deref(),
+            Some(app_dir.join("config.toml").as_path())
+        );
+    }
+
+    std::fs::remove_dir_all(&tmp).ok();
+}

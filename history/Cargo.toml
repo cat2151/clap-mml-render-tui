@@ -1,0 +1,18 @@
+[package]
+name = "cmrt-history"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+# app 側のテストから、history パスをテスト専用ディレクトリへ差し替えるヘルパ
+# （test_support モジュール）を使えるようにするフラグ。prod ビルドでは無効。
+test-support = []
+
+[dependencies]
+cmrt-realtime-play = { path = "../realtime-play" }
+cmrt-runtime = { path = "../cmrt-runtime" }
+cmrt-tui-core = { path = "../tui-core" }
+anyhow = "1"
+dirs = "5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

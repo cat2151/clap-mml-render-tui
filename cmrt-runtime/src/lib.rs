@@ -283,6 +283,20 @@ pub fn core_config_patch_root_dir(cfg: &Config) -> Option<String> {
     shared_patch_root_dir(&configured_patch_dirs(cfg))
 }
 
+/// アプリ設定からレンダリング用の `CoreConfig` を組み立てる。
+/// notepad / DAW / offline render / server の各経路で共有する。
+pub fn core_config_from_config(cfg: &Config) -> cmrt_core::CoreConfig {
+    cmrt_core::CoreConfig {
+        output_midi: cfg.output_midi.clone(),
+        output_wav: cfg.output_wav.clone(),
+        sample_rate: cfg.sample_rate,
+        buffer_size: cfg.buffer_size,
+        patch_path: None,
+        patches_dir: core_config_patch_root_dir(cfg),
+        random_patch: false,
+    }
+}
+
 pub fn shared_patch_root_dir(dirs: &[String]) -> Option<String> {
     let mut dir_paths = dirs.iter().map(PathBuf::from);
     let mut common = dir_paths.next()?;

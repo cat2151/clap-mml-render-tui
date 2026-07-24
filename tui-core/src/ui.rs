@@ -10,6 +10,9 @@ use ratatui::{
 
 use crate::theme::{MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_YELLOW};
 
+#[cfg(test)]
+mod tests;
+
 const BLOCK_BORDER_SIZE: usize = 2;
 
 /// 指定した割合で中央に配置した矩形を返す。ポップアップ表示に利用する。

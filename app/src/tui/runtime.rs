@@ -12,7 +12,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 
 use super::keyboard::KeyboardAction;
 use super::loop_browser::LoopBrowserAction;
-use super::{Mode, NormalAction, PlayState, TuiApp, TuiExitReason};
+use super::{NormalAction, PlayState, PrimaryScreen, TuiApp, TuiExitReason};
 
 mod screen;
 
@@ -41,13 +41,10 @@ impl Drop for TerminalCleanup {
 
 impl<'a> TuiApp<'a> {
     pub(crate) fn uses_textarea_cursor(&self) -> bool {
-        match self.mode {
-            Mode::Insert => true,
-            Mode::PatchSelect => self.patch_select.patch_select_filter_active,
-            Mode::NotepadHistory => self.notepad_history.filter_active,
-            Mode::PatchPhrase => self.patch_phrase.filter_active,
-            Mode::Keyboard => self.keyboard.mml_input.is_active(),
-            Mode::Normal | Mode::NotepadHistoryGuide | Mode::Help | Mode::LoopBrowser => false,
+        match self.active_screen {
+            PrimaryScreen::Keyboard => self.keyboard.mml_input.is_active(),
+            PrimaryScreen::LoopBrowser => false,
+            PrimaryScreen::Notepad | PrimaryScreen::Daw => self.notepad.uses_textarea_cursor(),
         }
     }
 
@@ -106,9 +103,7 @@ impl<'a> TuiApp<'a> {
                 break;
             }
             if restart_from_startup_daw {
-                self.flush_patch_phrase_store_if_dirty();
-                self.save_history_state();
-                self.flush_notepad_disk_cache();
+                self.save_notepad_and_session_state();
                 return Ok(TuiExitReason::RestartApp);
             }
             if crate::daw::take_http_mode_switch_request() {
@@ -116,9 +111,7 @@ impl<'a> TuiApp<'a> {
                     DawRunOutcome::Continue => {}
                     DawRunOutcome::Quit => break,
                     DawRunOutcome::Restart => {
-                        self.flush_patch_phrase_store_if_dirty();
-                        self.save_history_state();
-                        self.flush_notepad_disk_cache();
+                        self.save_notepad_and_session_state();
                         return Ok(TuiExitReason::RestartApp);
                     }
                 }
@@ -136,14 +129,14 @@ impl<'a> TuiApp<'a> {
                 )?;
                 uses_textarea_cursor = next_uses_textarea_cursor;
             }
-            if self.mode == Mode::Keyboard {
+            if self.active_screen == PrimaryScreen::Keyboard {
                 self.pump_keyboard_periodic();
             }
             self.pump_notepad_sound_check_guide();
             let terminal_draw_started = std::time::Instant::now();
             terminal.draw(|f| self.draw(f))?;
             let terminal_draw_elapsed = terminal_draw_started.elapsed();
-            if self.mode == Mode::LoopBrowser {
+            if self.active_screen == PrimaryScreen::LoopBrowser {
                 if let Some(metrics) = self.loop_browser.state.last_render_metrics.take() {
                     super::loop_browser::performance::log_render(metrics, terminal_draw_elapsed);
                 }
@@ -152,30 +145,19 @@ impl<'a> TuiApp<'a> {
                 self.complete_loop_browser_startup();
                 continue;
             }
-            if !self.startup_normal_cache_primed && self.mode == Mode::Normal {
-                *self.audio.known_disk_hashes.lock().unwrap() =
-                    crate::tui::disk_cache::scan_valid_cache_hashes(self.cfg.sample_rate as u32);
-                self.hydrate_all_lines_from_disk_cache_at_startup();
-                self.prime_normal_mode_startup_cache();
-                if started_in_notepad_mode && self.cfg.autoplay_on_startup {
-                    if let Some(mml) = self
-                        .editor
-                        .lines
-                        .get(self.editor.cursor)
-                        .map(|line| line.trim().to_string())
-                        .filter(|mml| !mml.is_empty())
-                    {
-                        self.kick_play(mml);
-                    }
-                }
-                self.startup_normal_cache_primed = true;
-            }
+            // notepad 画面を実際に表示している間だけ起動時キャッシュを温める。
+            // keyboard / loop browser / DAW で起動した場合は、notepad へ切り替わるまで走らせない。
+            self.prime_notepad_startup_cache_if_needed(
+                started_in_notepad_mode && self.cfg.autoplay_on_startup,
+            );
 
             if event::poll(std::time::Duration::from_millis(50))? {
                 if let Event::Key(key) = event::read()? {
                     use crossterm::event::KeyEventKind;
                     if self.screen_switch_menu.is_open() {
-                        if self.mode == Mode::Keyboard && key.kind == KeyEventKind::Release {
+                        if self.active_screen == PrimaryScreen::Keyboard
+                            && key.kind == KeyEventKind::Release
+                        {
                             let _ = self.handle_keyboard_key_event(key);
                         } else if key.kind == KeyEventKind::Press {
                             if let Some(target) = self.handle_screen_switch_menu_key(key) {
@@ -184,9 +166,7 @@ impl<'a> TuiApp<'a> {
                                         DawRunOutcome::Continue => {}
                                         DawRunOutcome::Quit => break,
                                         DawRunOutcome::Restart => {
-                                            self.flush_patch_phrase_store_if_dirty();
-                                            self.save_history_state();
-                                            self.flush_notepad_disk_cache();
+                                            self.save_notepad_and_session_state();
                                             return Ok(TuiExitReason::RestartApp);
                                         }
                                     }
@@ -200,7 +180,7 @@ impl<'a> TuiApp<'a> {
                     if key.kind == KeyEventKind::Press && self.try_open_screen_switch_menu(key) {
                         continue;
                     }
-                    if self.mode == Mode::Keyboard {
+                    if self.active_screen == PrimaryScreen::Keyboard {
                         match self.handle_keyboard_key_event(key) {
                             KeyboardAction::Continue | KeyboardAction::ReturnToNotepad => {}
                             KeyboardAction::Quit => break,
@@ -209,9 +189,7 @@ impl<'a> TuiApp<'a> {
                                     DawRunOutcome::Continue => {}
                                     DawRunOutcome::Quit => break,
                                     DawRunOutcome::Restart => {
-                                        self.flush_patch_phrase_store_if_dirty();
-                                        self.save_history_state();
-                                        self.flush_notepad_disk_cache();
+                                        self.save_notepad_and_session_state();
                                         return Ok(TuiExitReason::RestartApp);
                                     }
                                 }
@@ -226,64 +204,11 @@ impl<'a> TuiApp<'a> {
                     if key.modifiers.contains(KeyModifiers::CONTROL)
                         && key.code == KeyCode::Char('c')
                     {
-                        match self.mode {
-                            Mode::Insert => self.handle_insert(key),
-                            Mode::PatchSelect if self.patch_select.patch_select_filter_active => {
-                                self.handle_patch_select(key)
-                            }
-                            Mode::NotepadHistory if self.notepad_history.filter_active => {
-                                self.handle_notepad_history_key_event(key)
-                            }
-                            Mode::PatchPhrase if self.patch_phrase.filter_active => {
-                                self.handle_patch_phrase_key_event(key)
-                            }
-                            _ => {}
-                        }
+                        self.notepad.handle_ctrl_c(key);
                         continue;
                     }
-                    match self.mode {
-                        Mode::Normal => match self.handle_normal_key_event(key) {
-                            NormalAction::Quit => break,
-                            NormalAction::LaunchDaw => {
-                                match self.run_daw_screen(&mut terminal, false)? {
-                                    DawRunOutcome::Continue => {}
-                                    DawRunOutcome::Quit => break,
-                                    DawRunOutcome::Restart => {
-                                        self.flush_patch_phrase_store_if_dirty();
-                                        self.save_history_state();
-                                        self.flush_notepad_disk_cache();
-                                        return Ok(TuiExitReason::RestartApp);
-                                    }
-                                }
-                            }
-                            NormalAction::LaunchKeyboard => self.start_keyboard_from_notepad(),
-                            NormalAction::LaunchLoopBrowser => self.begin_loop_browser_startup(),
-                            NormalAction::EditConfig => {
-                                let session = self.begin_playback_session();
-                                self.set_play_state_if_current(session, PlayState::Idle);
-                                match crate::config_editor::edit_config_toml(&mut terminal) {
-                                    Ok(()) => {
-                                        self.flush_patch_phrase_store_if_dirty();
-                                        self.save_history_state();
-                                        self.flush_notepad_disk_cache();
-                                        return Ok(TuiExitReason::RestartApp);
-                                    }
-                                    Err(error) => {
-                                        *self.playback.play_state.lock().unwrap() = PlayState::Err(
-                                            format!("config 編集に失敗しました: {error}"),
-                                        );
-                                    }
-                                }
-                            }
-                            NormalAction::Continue => {}
-                        },
-                        Mode::Insert => self.handle_insert(key),
-                        Mode::PatchSelect => self.handle_patch_select(key),
-                        Mode::NotepadHistory => self.handle_notepad_history_key_event(key),
-                        Mode::PatchPhrase => self.handle_patch_phrase_key_event(key),
-                        Mode::NotepadHistoryGuide => self.handle_notepad_history_guide(key.code),
-                        Mode::Help => self.handle_help(key.code),
-                        Mode::LoopBrowser => match self.loop_browser.state.handle_key_event(key) {
+                    if self.active_screen == PrimaryScreen::LoopBrowser {
+                        match self.loop_browser.state.handle_key_event(key) {
                             LoopBrowserAction::Continue => {}
                             LoopBrowserAction::Preview(path) => {
                                 let trace_id =
@@ -330,8 +255,40 @@ impl<'a> TuiApp<'a> {
                                 self.stop_loop_browser();
                                 break;
                             }
-                        },
-                        Mode::Keyboard => unreachable!("keyboard input is handled above"),
+                        }
+                        continue;
+                    }
+                    match self.notepad.handle_key_event(key) {
+                        NormalAction::Continue => {}
+                        NormalAction::Quit => break,
+                        NormalAction::LaunchDaw => {
+                            match self.run_daw_screen(&mut terminal, false)? {
+                                DawRunOutcome::Continue => {}
+                                DawRunOutcome::Quit => break,
+                                DawRunOutcome::Restart => {
+                                    self.save_notepad_and_session_state();
+                                    return Ok(TuiExitReason::RestartApp);
+                                }
+                            }
+                        }
+                        NormalAction::LaunchKeyboard => self.start_keyboard_from_notepad(),
+                        NormalAction::LaunchLoopBrowser => self.begin_loop_browser_startup(),
+                        NormalAction::EditConfig => {
+                            let session = self.playback_session.begin();
+                            self.playback_session
+                                .set_play_state_if_current(session, PlayState::Idle);
+                            match crate::config_editor::edit_config_toml(&mut terminal) {
+                                Ok(()) => {
+                                    self.save_notepad_and_session_state();
+                                    return Ok(TuiExitReason::RestartApp);
+                                }
+                                Err(error) => {
+                                    self.playback_session.set_play_state(PlayState::Err(format!(
+                                        "config 編集に失敗しました: {error}"
+                                    )));
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -339,9 +296,7 @@ impl<'a> TuiApp<'a> {
 
         // 終了前にセッション状態を保存する（端末クリーンアップの成否に関わらず実行）。
         // 保存失敗はベストエフォートとして無視する（終了処理のため通知手段がない）。
-        self.flush_patch_phrase_store_if_dirty();
-        self.save_history_state();
-        self.flush_notepad_disk_cache();
+        self.save_notepad_and_session_state();
         Ok(TuiExitReason::Quit)
     }
 }

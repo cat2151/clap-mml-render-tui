@@ -117,7 +117,7 @@ fn browser_with_many_direct_wavs(count: usize) -> LoopBrowser {
 #[test]
 fn error_screen_shows_scan_guidance() {
     let mut app = TuiApp::new_for_test(test_config());
-    let action = app.handle_normal(KeyCode::Char('b'));
+    let action = app.notepad.handle_normal(KeyCode::Char('b'));
     assert!(matches!(action, NormalAction::LaunchLoopBrowser));
     app.begin_loop_browser_startup();
 
@@ -140,7 +140,7 @@ fn error_screen_shows_scan_guidance() {
 #[test]
 fn draws_favorites_category_overlay_and_removal_notice() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::LoopBrowser;
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
     app.loop_browser.state = browser();
     app.loop_browser.state.cursor = 1;
 
@@ -167,7 +167,7 @@ fn draws_favorites_category_overlay_and_removal_notice() {
 #[test]
 fn draws_wav_pads_track_grid_and_pane_specific_footer() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::LoopBrowser;
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
     app.loop_browser.state = browser();
     app.loop_browser.state.handle_key(KeyCode::Char('j'));
     app.loop_browser.state.handle_key(KeyCode::Char('l'));
@@ -201,7 +201,7 @@ fn draws_wav_pads_track_grid_and_pane_specific_footer() {
 #[test]
 fn tree_draws_only_viewport_rows_and_keeps_a_quarter_margin() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::LoopBrowser;
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
     app.loop_browser.state = browser_with_many_direct_wavs(7_000);
     app.loop_browser.state.cursor = 3_500;
     app.loop_browser
@@ -226,7 +226,7 @@ fn tree_draws_only_viewport_rows_and_keeps_a_quarter_margin() {
 #[test]
 fn breadcrumb_shows_selected_wavs_parent_directory() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::LoopBrowser;
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
     app.loop_browser.state = browser();
     app.loop_browser.state.handle_key(KeyCode::Char('j'));
     app.loop_browser.state.handle_key(KeyCode::Char('l'));
@@ -246,7 +246,7 @@ fn breadcrumb_shows_the_selected_wavs_parent_direct_category() {
         "drum",
     );
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::LoopBrowser;
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
     app.loop_browser.state = browser_at_bpm_with_metadata(120.0, metadata);
     app.loop_browser.state.handle_key(KeyCode::Char('j'));
     app.loop_browser.state.handle_key(KeyCode::Char('l'));
@@ -260,7 +260,7 @@ fn breadcrumb_shows_the_selected_wavs_parent_direct_category() {
 #[test]
 fn track_pane_shows_solo_and_mute_labels_and_shortcut() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::LoopBrowser;
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
     app.loop_browser.state = browser();
     app.loop_browser.state.handle_key(KeyCode::Tab);
     app.loop_browser.state.handle_key(KeyCode::Char('j'));
@@ -289,7 +289,7 @@ fn track_pane_shows_solo_and_mute_labels_and_shortcut() {
 #[test]
 fn paused_loop_browser_has_an_explicit_status() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::LoopBrowser;
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
     app.loop_browser.state = browser();
     app.loop_browser.state.handle_key(KeyCode::Char('p'));
 
@@ -301,7 +301,7 @@ fn paused_loop_browser_has_an_explicit_status() {
 #[test]
 fn track_title_shows_the_automatically_adjusted_bpm() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::LoopBrowser;
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
     app.loop_browser.state = browser_at_bpm(160.0);
     app.loop_browser.state.handle_key(KeyCode::Char('j'));
     app.loop_browser.state.handle_key(KeyCode::Char('l'));
@@ -320,7 +320,7 @@ fn track_title_shows_the_automatically_adjusted_bpm() {
 #[test]
 fn trailing_repeats_are_gray_and_bpm_rejected_cells_are_red() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::LoopBrowser;
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
     app.loop_browser.state = browser_with_repeat_and_rejected_cells();
 
     app.loop_browser.state.handle_key(KeyCode::Char('j'));
@@ -378,7 +378,7 @@ fn trailing_repeats_are_gray_and_bpm_rejected_cells_are_red() {
 #[test]
 fn draws_shared_mixer_overlay_for_loop_tracks() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::LoopBrowser;
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
     app.loop_browser.state = browser();
     app.loop_browser.state.handle_key(KeyCode::Tab);
     app.loop_browser.state.handle_key(KeyCode::Char('m'));

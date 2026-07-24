@@ -60,7 +60,7 @@ fn place_selected_wav(app: &mut TuiApp<'_>) {
 #[test]
 fn draws_continuous_eight_measure_waveform_across_scrolled_cells() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::LoopBrowser;
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
     app.loop_browser.state = browser_with_waveform(8);
     place_selected_wav(&mut app);
 
@@ -82,7 +82,7 @@ fn draws_continuous_eight_measure_waveform_across_scrolled_cells() {
 #[test]
 fn offscreen_playback_keeps_edit_scroll_and_reports_measure_and_beat_in_title() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::LoopBrowser;
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
     app.loop_browser.state = browser_with_waveform(8);
     place_selected_wav(&mut app);
     app.loop_browser.state.set_playback_beat_for_test(7, 2, 4);
@@ -96,7 +96,7 @@ fn offscreen_playback_keeps_edit_scroll_and_reports_measure_and_beat_in_title() 
 #[test]
 fn compact_height_hides_stretch_but_keeps_one_waveform_track() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::LoopBrowser;
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
     app.loop_browser.state = browser_with_waveform(2);
     place_selected_wav(&mut app);
 
@@ -115,7 +115,7 @@ fn compact_height_hides_stretch_but_keeps_one_waveform_track() {
 #[test]
 fn waveform_keeps_green_theme_foreground_under_cursor_highlight() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::LoopBrowser;
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
     app.loop_browser.state = browser_with_waveform(2);
     place_selected_wav(&mut app);
 

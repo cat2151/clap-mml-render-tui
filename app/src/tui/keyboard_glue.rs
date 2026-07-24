@@ -14,7 +14,7 @@ use crate::tui::keyboard::{
     KeyboardPatchLoad, KeyboardVoicingLookup, KeyboardVoicingStatus,
 };
 use crate::tui::voicing::VoicingState;
-use crate::tui::{Mode, PatchLoadState, PlayState, TuiApp};
+use crate::tui::{Mode, PatchLoadState, PlayState, PrimaryScreen, TuiApp};
 
 impl KeyboardVoicingLookup for VoicingState {
     fn cached_voicing(&self, patch: &str) -> Option<PatchVoicing> {
@@ -51,13 +51,14 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(in crate::tui) fn start_keyboard_from_notepad(&mut self) {
-        self.start_keyboard(self.current_line_patch_name());
+        self.start_keyboard(self.notepad.current_line_patch_name());
     }
 
     pub(in crate::tui) fn start_keyboard(&mut self, patch: Option<String>) {
         self.voicing.layers = self.voicing.source_refresh.load_for_keyboard();
-        let session = self.begin_playback_session();
-        self.set_play_state_if_current(session, PlayState::Idle);
+        let session = self.playback_session.begin();
+        self.playback_session
+            .set_play_state_if_current(session, PlayState::Idle);
 
         let patch_dirs_configured = self.patch_dirs_configured();
         let patch_load = self.patch_load_state.lock().unwrap();
@@ -65,14 +66,14 @@ impl<'a> TuiApp<'a> {
         self.keyboard.start(patch, &ctx);
         drop(patch_load);
 
-        self.mode = Mode::Keyboard;
-        self.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
+        self.active_screen = PrimaryScreen::Keyboard;
     }
 
     pub(in crate::tui) fn resume_keyboard(&mut self) {
         self.voicing.layers = self.voicing.source_refresh.load_for_keyboard();
-        let session = self.begin_playback_session();
-        self.set_play_state_if_current(session, PlayState::Idle);
+        let session = self.playback_session.begin();
+        self.playback_session
+            .set_play_state_if_current(session, PlayState::Idle);
 
         let patch_dirs_configured = self.patch_dirs_configured();
         let patch_load = self.patch_load_state.lock().unwrap();
@@ -80,12 +81,11 @@ impl<'a> TuiApp<'a> {
         self.keyboard.resume(&ctx);
         drop(patch_load);
 
-        self.mode = Mode::Keyboard;
-        self.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
+        self.active_screen = PrimaryScreen::Keyboard;
     }
 
     pub(in crate::tui) fn prepare_restored_keyboard_connection(&self) {
-        if self.mode != Mode::Keyboard
+        if self.active_screen != PrimaryScreen::Keyboard
             || !matches!(
                 self.keyboard.connection_status().phase,
                 KeyboardConnectionPhase::Idle
@@ -111,13 +111,13 @@ impl<'a> TuiApp<'a> {
 
         match &action {
             KeyboardAction::ReturnToNotepad => {
-                self.mode = Mode::Normal;
-                self.active_screen = crate::screen_switch::PrimaryScreen::Notepad;
-                self.reset_notepad_sound_check_guide();
+                self.notepad.mode = Mode::Normal;
+                self.active_screen = PrimaryScreen::Notepad;
+                self.notepad.reset_sound_check_guide();
             }
             KeyboardAction::LaunchDaw => {
-                self.mode = Mode::Normal;
-                self.active_screen = crate::screen_switch::PrimaryScreen::Daw;
+                self.notepad.mode = Mode::Normal;
+                self.active_screen = PrimaryScreen::Daw;
             }
             KeyboardAction::Continue | KeyboardAction::Quit => {}
         }

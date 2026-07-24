@@ -8,6 +8,7 @@ name = "cmrt_runtime"
 path = "src/lib.rs"
 
 [dependencies]
+cmrt-core = { path = "../core-lib" }
 anyhow = "1"
 dirs = "5"
 serde = { version = "1", features = ["derive"] }

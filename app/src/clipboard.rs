@@ -1,24 +1,6 @@
-#[cfg(not(test))]
-pub(crate) fn set_text(text: String) {
-    if let Ok(mut clipboard) = arboard::Clipboard::new() {
-        let _ = clipboard.set_text(text);
-    }
-}
+//! OS クリップボードへの書き込み。
+//!
+//! 実体は画面横断で共有するため `cmrt-tui-core` へ切り出した。
+//! 従来の `crate::clipboard::*` パスは再エクスポートで維持する。
 
-#[cfg(test)]
-use std::cell::RefCell;
-
-#[cfg(test)]
-thread_local! {
-    static TEST_CLIPBOARD: RefCell<Option<String>> = const { RefCell::new(None) };
-}
-
-#[cfg(test)]
-pub(crate) fn set_text(text: String) {
-    TEST_CLIPBOARD.with(|clipboard| *clipboard.borrow_mut() = Some(text));
-}
-
-#[cfg(test)]
-pub(crate) fn take_text_for_test() -> Option<String> {
-    TEST_CLIPBOARD.with(|clipboard| clipboard.borrow_mut().take())
-}
+pub(crate) use cmrt_tui_core::clipboard::*;

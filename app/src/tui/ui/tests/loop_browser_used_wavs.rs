@@ -14,7 +14,7 @@ fn stretch_result_pane_shows_prepared_output_duration() {
     use crate::tui::loop_browser::playback::diagnostics::StretchStatus;
 
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::LoopBrowser;
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
     app.loop_browser.state = browser_at_bpm(100.0);
     app.loop_browser.state.handle_key(KeyCode::Char('j'));
     app.loop_browser.state.handle_key(KeyCode::Char('l'));
@@ -63,7 +63,7 @@ fn used_wav_pane_lists_a_spanning_wav_once_with_its_category() {
         "drum",
     );
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::LoopBrowser;
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
     app.loop_browser.state = browser_at_bpm_with_metadata(120.0, metadata);
     app.loop_browser.state.handle_key(KeyCode::Char('j'));
     app.loop_browser.state.handle_key(KeyCode::Char('l'));
@@ -89,7 +89,7 @@ fn used_wav_pane_lists_a_spanning_wav_once_with_its_category() {
 #[test]
 fn used_wav_pane_groups_by_wav_and_adds_measures_for_multiple_wavs() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::LoopBrowser;
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
     app.loop_browser.state = browser_with_repeat_and_rejected_cells();
 
     app.loop_browser.state.handle_key(KeyCode::Char('j'));

@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn keyboard_ignores_note_input_until_connection_is_ready() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::Keyboard;
+    app.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
 
     let result = app.handle_keyboard_key_event(crossterm::event::KeyEvent::new(
         KeyCode::Char('c'),
@@ -20,7 +20,7 @@ fn keyboard_ignores_note_input_until_connection_is_ready() {
 #[test]
 fn keyboard_s_clears_held_notes_before_transport_switch() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::Keyboard;
+    app.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
     assert!(app
         .keyboard
         .state
@@ -42,7 +42,7 @@ fn keyboard_s_clears_held_notes_before_transport_switch() {
 #[test]
 fn keyboard_shift_h_cycles_buffer_without_releasing_held_notes() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::Keyboard;
+    app.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
     assert!(app
         .keyboard
         .state

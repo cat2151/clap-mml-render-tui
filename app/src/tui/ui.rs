@@ -1,270 +1,38 @@
-//! TUI 描画
+//! 画面の振り分け描画。
+//!
+//! 各画面の描画本体は画面ごとの crate（notepad / keyboard / loop browser）にあり、
+//! ここは `active_screen` に応じてどれを呼ぶかを決めるだけの層。
 
-mod help;
+use ratatui::Frame;
+
 // keyboard の描画は `cmrt-keyboard` crate の `ui` モジュールへ切り出した。
 use cmrt_keyboard::ui as keyboard;
 // loop browser の描画は `cmrt-loop-browser` crate の `ui` モジュールへ切り出した。
 pub(in crate::tui) use cmrt_loop_browser::ui as loop_browser;
-mod overlay;
-mod status;
+// notepad の描画は `cmrt-notepad` crate の `ui` モジュールへ切り出した。
+use cmrt_notepad::ui as notepad;
 
-use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier},
-    text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
-    Frame,
-};
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use super::render_queue::TuiRenderJobStatus;
-use super::{Mode, PlayState, TuiApp, TuiRenderStatus};
-use crate::sound_check_guide::SoundCheckGuidePresentation;
-use crate::ui_theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_YELLOW};
-use status::notepad_mode_title;
-use status::{
-    base_style, keybind_text, normal_status_text, render_status_color, render_status_text,
-    status_text, visible_list_page_size,
-};
-
-// LIST_HIGHLIGHT_SYMBOL は画面横断で共有するため `cmrt-tui-core` へ切り出した。
-use cmrt_tui_core::status::LIST_HIGHLIGHT_SYMBOL;
-
-const LIST_HIGHLIGHT_WIDTH: u16 = 2;
-const TUI_RENDER_ANIM_FRAME_MS: u128 = 250;
-const TUI_RENDER_ANIM_FRAME_COUNT: u128 = 2;
-
-fn render_anim_frame() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        / TUI_RENDER_ANIM_FRAME_MS
-        % TUI_RENDER_ANIM_FRAME_COUNT
-}
-
-pub(in crate::tui::ui) fn cache_marker(
-    cached: bool,
-    render_status: Option<TuiRenderJobStatus>,
-) -> &'static str {
-    if cached {
-        return "♪ ";
-    }
-    match render_status {
-        Some(TuiRenderJobStatus::Pending) => ". ",
-        Some(TuiRenderJobStatus::Running) => match render_anim_frame() {
-            0 => ". ",
-            _ => "..",
-        },
-        None => "  ",
-    }
-}
-
-pub(in crate::tui::ui) fn mml_cache_hit(
-    cache: &std::collections::HashMap<String, Vec<f32>>,
-    disk_hashes: &std::collections::HashSet<u64>,
-    mml: &str,
-) -> bool {
-    let mml = mml.trim();
-    !mml.is_empty()
-        && (cache.contains_key(mml)
-            || disk_hashes.contains(&crate::history::daw_cache_mml_hash(mml)))
-}
+use super::{PrimaryScreen, TuiApp};
 
 pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
-    if app.mode == Mode::Keyboard {
-        app.sync_keyboard_patch_catalog();
-        app.sync_keyboard_voicing_detection();
-        let connection = app.keyboard_connection_status();
-        keyboard::draw(&mut app.keyboard, &connection, f);
-    } else if app.mode == Mode::LoopBrowser {
-        let play_state = app.playback.play_state.lock().unwrap().clone();
-        loop_browser::draw(&mut app.loop_browser.state, &play_state, f);
-    } else {
-        draw_notepad(app, f);
+    match app.active_screen {
+        PrimaryScreen::Keyboard => {
+            app.sync_keyboard_patch_catalog();
+            app.sync_keyboard_voicing_detection();
+            let connection = app.keyboard_connection_status();
+            keyboard::draw(&mut app.keyboard, &connection, f);
+        }
+        PrimaryScreen::LoopBrowser => {
+            let play_state = app.playback_session.play_state_snapshot();
+            loop_browser::draw(&mut app.loop_browser.state, &play_state, f);
+        }
+        // DAW 画面は `DawApp` が自前の描画ループを持つ。ここへ来るのは
+        // DAW から戻る途中の一瞬だけなので notepad として描く。
+        PrimaryScreen::Notepad | PrimaryScreen::Daw => notepad::draw(&mut app.notepad, f),
     }
 
     if app.screen_switch_menu.is_open() {
         crate::screen_switch::draw_screen_switch_menu(f, app.active_screen);
-    }
-}
-
-fn draw_notepad(app: &mut TuiApp<'_>, f: &mut Frame) {
-    // play_state を一度だけロックしてスナップショットを取り、
-    // status_text と status_color を同じ状態から導出する（二重ロック・状態不整合を防ぐ）。
-    let play_state = app.playback.play_state.lock().unwrap().clone();
-    let mode = app.mode;
-    let help_origin = app.help_origin;
-    let status = status_text(&mode, &play_state);
-    let status_color = status_color(&play_state);
-
-    if mode == Mode::Help {
-        match help_origin {
-            Mode::PatchSelect => {
-                draw_normal(app, f, &play_state, status_color, help_origin);
-                let overlay_status = status_text(&help_origin, &play_state);
-                overlay::draw_patch_select(app, f, &overlay_status, status_color, help_origin);
-            }
-            Mode::NotepadHistory => {
-                draw_normal(app, f, &play_state, status_color, help_origin);
-                let overlay_status = status_text(&help_origin, &play_state);
-                overlay::draw_notepad_history(app, f, &overlay_status, status_color, help_origin);
-            }
-            Mode::PatchPhrase => {
-                draw_normal(app, f, &play_state, status_color, help_origin);
-                let overlay_status = status_text(&help_origin, &play_state);
-                overlay::draw_patch_phrase(app, f, &overlay_status, status_color, help_origin);
-            }
-            _ => draw_normal(app, f, &play_state, status_color, mode),
-        }
-        help::draw_help(f, help_origin);
-    } else if mode == Mode::PatchSelect {
-        draw_normal(app, f, &play_state, status_color, mode);
-        overlay::draw_patch_select(app, f, &status, status_color, mode);
-    } else if mode == Mode::NotepadHistory {
-        draw_normal(app, f, &play_state, status_color, mode);
-        overlay::draw_notepad_history(app, f, &status, status_color, mode);
-    } else if mode == Mode::NotepadHistoryGuide {
-        draw_normal(app, f, &play_state, status_color, mode);
-        overlay::draw_notepad_history_guide(f);
-    } else if mode == Mode::PatchPhrase {
-        draw_normal(app, f, &play_state, status_color, mode);
-        overlay::draw_patch_phrase(app, f, &status, status_color, mode);
-    } else {
-        draw_normal(app, f, &play_state, status_color, mode);
-        if mode == Mode::Normal
-            && app.notepad_sound_check_guide.presentation() == SoundCheckGuidePresentation::Overlay
-        {
-            crate::ui_utils::draw_sound_check_guide_overlay(
-                f,
-                f.area(),
-                super::NOTEPAD_SOUND_CHECK_GUIDE_MESSAGE,
-            );
-        }
-    }
-}
-
-fn status_color(play_state: &PlayState) -> Color {
-    status::status_color(play_state)
-}
-
-fn draw_normal(
-    app: &mut TuiApp<'_>,
-    f: &mut Frame,
-    play_state: &PlayState,
-    status_color: Color,
-    mode: Mode,
-) {
-    let is_insert = mode == Mode::Insert;
-    let cursor = app.editor.cursor;
-    let status = normal_status_text(&mode, play_state);
-    let render_status_snapshot = app.render_status_snapshot();
-    let render_status = render_status_text(render_status_snapshot);
-    let render_status_color = render_status_color(render_status_snapshot);
-    let keybinds = keybind_text(&mode);
-
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(3),
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Length(1),
-        ])
-        .split(f.area());
-    let list_area = chunks[0];
-    app.editor.page_size = visible_list_page_size(list_area);
-    let cache = app.audio.cache.lock().unwrap();
-    let disk_hashes = app.audio.known_disk_hashes.lock().unwrap();
-
-    let items: Vec<ListItem> = app
-        .editor
-        .lines
-        .iter()
-        .enumerate()
-        .map(|(i, line)| {
-            let style = if i == cursor {
-                cursor_highlight_style(base_style())
-            } else {
-                base_style()
-            };
-            let cached = mml_cache_hit(&cache, &disk_hashes, line);
-            let render_status = (!cached)
-                .then(|| app.render_job_status_for_mml(line))
-                .flatten();
-            // INSERT 時のカーソル行は textarea で別描画するため、
-            // List 側は空文字にして重なり表示を防ぐ。
-            let content = if is_insert && i == cursor {
-                String::new()
-            } else {
-                line.clone()
-            };
-            ListItem::new(Line::from(vec![
-                Span::styled(cache_marker(cached, render_status), style),
-                Span::styled(content, style),
-            ]))
-        })
-        .collect();
-
-    f.render_stateful_widget(
-        List::new(items)
-            .style(base_style())
-            .highlight_style(cursor_highlight_style(base_style()))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(notepad_mode_title(&mode))
-                    .style(base_style())
-                    .border_style(base_style().fg(MONOKAI_CYAN)),
-            )
-            .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
-        list_area,
-        &mut app.editor.list_state,
-    );
-
-    // INSERTモード時は、カーソル行にインラインで textarea を描画する。
-    // List ウィジェットは Borders::ALL を持つため、内側の開始は +1 ずつオフセットする。
-    if is_insert {
-        let offset = app.editor.list_state.offset();
-        if cursor >= offset {
-            let row_in_visible = (cursor - offset) as u16;
-            let inner_top = list_area.y + 1; // 上ボーダーの内側（1行分）
-            let inner_bottom = list_area.y + list_area.height.saturating_sub(1); // 下ボーダーの位置
-            let textarea_y = inner_top + row_in_visible;
-            if textarea_y < inner_bottom {
-                let textarea_area = Rect {
-                    x: list_area.x + 1 + LIST_HIGHLIGHT_WIDTH,
-                    y: textarea_y,
-                    width: list_area.width.saturating_sub(2 + LIST_HIGHLIGHT_WIDTH),
-                    height: 1,
-                };
-                f.render_widget(Clear, textarea_area);
-                f.render_widget(&app.editor.textarea, textarea_area);
-            }
-        }
-    }
-
-    f.render_widget(
-        Paragraph::new(status).style(base_style().fg(status_color)),
-        chunks[1],
-    );
-    f.render_widget(
-        Paragraph::new(render_status).style(base_style().fg(render_status_color)),
-        chunks[2],
-    );
-    if mode == Mode::Normal
-        && app.notepad_sound_check_guide.presentation() == SoundCheckGuidePresentation::Footer
-    {
-        f.render_widget(
-            Paragraph::new(Span::styled(
-                super::NOTEPAD_SOUND_CHECK_GUIDE_MESSAGE,
-                base_style().fg(MONOKAI_YELLOW).add_modifier(Modifier::BOLD),
-            ))
-            .style(base_style()),
-            chunks[3],
-        );
-    } else {
-        f.render_widget(Paragraph::new(keybinds).style(base_style()), chunks[3]);
     }
 }
 

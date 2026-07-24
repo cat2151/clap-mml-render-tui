@@ -363,7 +363,6 @@ name = "clap-mml-render-tui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arboard",
  "cat-self-update-lib",
  "chord2mml-core",
  "chrono",
@@ -371,10 +370,13 @@ dependencies = [
  "clap",
  "cmrt-config-editor",
  "cmrt-core 0.1.0",
+ "cmrt-history",
  "cmrt-keyboard",
  "cmrt-loop-browser",
  "cmrt-loop-browser-domain",
  "cmrt-loop-domain",
+ "cmrt-notepad",
+ "cmrt-offline-render",
  "cmrt-realtime-play",
  "cmrt-runtime",
  "cmrt-tui-core",
@@ -496,6 +498,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmrt-history"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cmrt-realtime-play",
+ "cmrt-runtime",
+ "cmrt-tui-core",
+ "dirs",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "cmrt-keyboard"
 version = "0.1.0"
 dependencies = [
@@ -559,6 +574,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmrt-notepad"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cmrt-core 0.1.0",
+ "cmrt-history",
+ "cmrt-offline-render",
+ "cmrt-realtime-play",
+ "cmrt-runtime",
+ "cmrt-tui-core",
+ "crossterm",
+ "hound",
+ "mmlabc-to-smf",
+ "ratatui",
+ "rodio",
+ "serde_json",
+ "tui-textarea",
+]
+
+[[package]]
+name = "cmrt-offline-render"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clack-host",
+ "cmrt-core 0.1.0",
+ "cmrt-history",
+ "cmrt-runtime",
+ "hound",
+ "toml",
+ "ureq",
+]
+
+[[package]]
 name = "cmrt-realtime-play"
 version = "0.1.0"
 dependencies = [
@@ -575,6 +624,7 @@ name = "cmrt-runtime"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cmrt-core 0.1.0",
  "dirs",
  "serde",
  "toml",
@@ -585,12 +635,17 @@ name = "cmrt-tui-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arboard",
  "chrono",
  "cmrt-core 0.1.0",
+ "cmrt-realtime-play",
  "cmrt-runtime",
  "crossterm",
+ "hound",
  "rand",
  "ratatui",
+ "rodio",
+ "serde",
  "tui-textarea",
 ]
 

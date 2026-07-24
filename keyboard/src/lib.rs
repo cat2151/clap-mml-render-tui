@@ -16,7 +16,10 @@ mod numeric_input;
 mod screen;
 mod screen_runtime;
 mod sender;
-pub mod session_state;
+// keyboard セッション状態の値型は、永続化層（`cmrt-history`）とも共有するため
+// `cmrt-tui-core` が所有する。従来の `cmrt_keyboard::session_state::*` パスは
+// 再エクスポートで維持する。
+pub use cmrt_tui_core::keyboard_session_state as session_state;
 mod state;
 pub mod ui;
 

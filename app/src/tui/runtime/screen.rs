@@ -14,16 +14,14 @@ pub(super) enum DawRunOutcome {
 impl<'a> TuiApp<'a> {
     pub(in crate::tui) fn can_open_screen_switch_menu(&self) -> bool {
         match self.active_screen {
-            PrimaryScreen::Notepad => self.mode == Mode::Normal,
+            PrimaryScreen::Notepad => self.notepad.mode == Mode::Normal,
             PrimaryScreen::Daw => false,
             PrimaryScreen::Keyboard => {
-                self.mode == Mode::Keyboard
-                    && !self.keyboard.mml_input.is_active()
+                !self.keyboard.mml_input.is_active()
                     && self.keyboard.state.numeric_input().is_none()
             }
             PrimaryScreen::LoopBrowser => {
-                self.mode == Mode::LoopBrowser
-                    && self.loop_browser.state.help_overlay.is_none()
+                self.loop_browser.state.help_overlay.is_none()
                     && !self.loop_browser.state.mixer_overlay_open
                     && self.loop_browser.state.category_overlay.is_none()
             }
@@ -54,8 +52,9 @@ impl<'a> TuiApp<'a> {
     }
 
     fn stop_notepad_playback(&self) {
-        let session = self.begin_playback_session();
-        self.set_play_state_if_current(session, PlayState::Idle);
+        let session = self.playback_session.begin();
+        self.playback_session
+            .set_play_state_if_current(session, PlayState::Idle);
     }
 
     fn leave_active_screen(&mut self) {
@@ -81,12 +80,12 @@ impl<'a> TuiApp<'a> {
         self.leave_active_screen();
         match target {
             PrimaryScreen::Notepad => {
-                self.mode = Mode::Normal;
+                self.notepad.mode = Mode::Normal;
                 self.active_screen = PrimaryScreen::Notepad;
-                self.reset_notepad_sound_check_guide();
+                self.notepad.reset_sound_check_guide();
             }
             PrimaryScreen::Daw => {
-                self.mode = Mode::Normal;
+                self.notepad.mode = Mode::Normal;
                 self.active_screen = PrimaryScreen::Daw;
             }
             PrimaryScreen::Keyboard => {
@@ -108,9 +107,7 @@ impl<'a> TuiApp<'a> {
         autoplay_on_entry: bool,
     ) -> Result<DawRunOutcome> {
         self.switch_to_primary_screen(PrimaryScreen::Daw, None);
-        self.flush_patch_phrase_store_if_dirty();
-        self.save_history_state();
-        self.flush_notepad_disk_cache();
+        self.save_notepad_and_session_state();
 
         let mut daw = crate::daw::DawApp::new(std::sync::Arc::clone(&self.cfg), self.entry_ptr);
         match daw.run_with_terminal(terminal, autoplay_on_entry)? {

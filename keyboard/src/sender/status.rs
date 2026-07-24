@@ -4,22 +4,6 @@ use cmrt_realtime_play::{PatchVoicing, VoicingReport};
 
 use crate::session_state::KeyboardTransport;
 
-impl KeyboardTransport {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Http => "HTTP",
-            Self::SharedMemory => "SHM",
-        }
-    }
-
-    pub fn toggled(self) -> Self {
-        match self {
-            Self::Http => Self::SharedMemory,
-            Self::SharedMemory => Self::Http,
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum KeyboardConnectionPhase {
     Idle,

@@ -7,11 +7,10 @@
 use std::sync::Arc;
 
 use crate::tui::loop_browser::{LoopGridChange, LoopPlaybackController, LoopPlaybackGrid};
-use crate::tui::{Mode, PlayState, TuiApp};
+use crate::tui::{PlayState, TuiApp};
 
 impl<'a> TuiApp<'a> {
     pub(in crate::tui) fn begin_loop_browser_startup(&mut self) {
-        self.mode = Mode::LoopBrowser;
         self.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
         self.loop_browser.state.starting = true;
     }
@@ -20,8 +19,9 @@ impl<'a> TuiApp<'a> {
         if !self.loop_browser.state.starting {
             return;
         }
-        let session = self.begin_playback_session();
-        self.set_play_state_if_current(session, PlayState::Idle);
+        let session = self.playback_session.begin();
+        self.playback_session
+            .set_play_state_if_current(session, PlayState::Idle);
         self.loop_browser
             .state
             .reload(&self.cfg.loop_dirs, &self.cfg.loop_categories);
@@ -30,7 +30,7 @@ impl<'a> TuiApp<'a> {
                 self.loop_browser.state.playback_grid(),
                 self.loop_browser.state.track_volumes_db().to_vec(),
                 self.loop_browser.state.solo_tracks().to_vec(),
-                Arc::clone(&self.playback.play_state),
+                Arc::clone(self.playback_session.play_state()),
                 Arc::clone(&self.loop_browser.state.stretch_diagnostics),
                 Arc::clone(&self.loop_browser.state.playback_position),
             ));
@@ -42,8 +42,9 @@ impl<'a> TuiApp<'a> {
         if let Some(mut playback) = self.loop_browser.playback.take() {
             playback.stop();
         }
-        let session = self.begin_playback_session();
-        self.set_play_state_if_current(session, PlayState::Idle);
+        let session = self.playback_session.begin();
+        self.playback_session
+            .set_play_state_if_current(session, PlayState::Idle);
     }
 
     pub(in crate::tui) fn preview_loop_file(&self, path: std::path::PathBuf, trace_id: u64) {
@@ -104,7 +105,7 @@ impl<'a> TuiApp<'a> {
             playback.set_paused(paused, start_measure);
         }
         if paused {
-            *self.playback.play_state.lock().unwrap() = PlayState::Idle;
+            *self.playback_session.play_state().lock().unwrap() = PlayState::Idle;
         }
     }
 }

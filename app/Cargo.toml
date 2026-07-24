@@ -10,10 +10,13 @@ path = "src/main.rs"
 [dependencies]
 cmrt-config-editor = { path = "../config-editor-lib" }
 cmrt-core = { path = "../core-lib" }
+cmrt-history = { path = "../history" }
 cmrt-keyboard = { path = "../keyboard" }
 cmrt-loop-browser = { path = "../loop-browser" }
 cmrt-loop-browser-domain = { path = "../loop-browser-domain" }
 cmrt-loop-domain = { path = "../loop-domain" }
+cmrt-notepad = { path = "../notepad" }
+cmrt-offline-render = { path = "../offline-render" }
 cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-runtime = { path = "../cmrt-runtime" }
 cmrt-tui-core = { path = "../tui-core" }
@@ -25,7 +28,6 @@ rand = "0.8"
 ratatui = "0.28"
 tui-textarea = { version = "0.6", features = ["crossterm"] }
 crossterm = "0.28"
-arboard = "3.6.1"
 
 # Config
 serde = { version = "1", features = ["derive"] }
@@ -70,3 +72,9 @@ clack-host = { git = "https://github.com/prokopyl/clack.git", package = "clack-h
 [dev-dependencies]
 # app のテストから loop browser crate のテスト専用ヘルパを使うためのフラグ。
 cmrt-loop-browser = { path = "../loop-browser", features = ["test-support"] }
+# app のテストから notepad crate のテスト専用ヘルパを使うためのフラグ。
+cmrt-notepad = { path = "../notepad", features = ["test-support"] }
+# app のテストで、実クリップボードに触れないスタブ実装を使うためのフラグ。
+cmrt-tui-core = { path = "../tui-core", features = ["test-support"] }
+# app のテストから history パスをテスト専用ディレクトリへ差し替えるためのフラグ。
+cmrt-history = { path = "../history", features = ["test-support"] }

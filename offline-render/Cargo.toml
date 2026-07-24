@@ -1,0 +1,16 @@
+[package]
+name = "cmrt-offline-render"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cmrt-core = { path = "../core-lib" }
+cmrt-history = { path = "../history" }
+cmrt-runtime = { path = "../cmrt-runtime" }
+anyhow = "1"
+hound = "3.5"
+ureq = { version = "2", features = ["json"] }
+clack-host = { git = "https://github.com/prokopyl/clack.git", package = "clack-host" }
+
+[dev-dependencies]
+toml = "0.8"

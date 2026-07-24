@@ -11,36 +11,39 @@ fn clamp_session_cursor_caps_to_last_available_line() {
 fn begin_playback_session_invalidates_previous_session() {
     let app = TuiApp::new_for_test(test_config());
 
-    let first = app.begin_playback_session();
-    let second = app.begin_playback_session();
+    let first = app.playback_session.begin();
+    let second = app.playback_session.begin();
 
-    assert!(!app.test_is_current_playback_session(first));
-    assert!(app.test_is_current_playback_session(second));
+    assert!(!app.playback_session.is_current(first));
+    assert!(app.playback_session.is_current(second));
 }
 
 #[test]
 fn set_play_state_if_current_ignores_stale_session() {
     let app = TuiApp::new_for_test(test_config());
 
-    let stale = app.begin_playback_session();
-    let current = app.begin_playback_session();
-    let newer = app.begin_playback_session();
+    let stale = app.playback_session.begin();
+    let current = app.playback_session.begin();
+    let newer = app.playback_session.begin();
 
-    app.set_play_state_if_current(stale, PlayState::Done("old".to_string()));
+    app.playback_session
+        .set_play_state_if_current(stale, PlayState::Done("old".to_string()));
     assert!(matches!(
-        &*app.playback.play_state.lock().unwrap(),
+        &*app.playback_session.play_state().lock().unwrap(),
         PlayState::Idle
     ));
 
-    app.set_play_state_if_current(current, PlayState::Running("new".to_string()));
+    app.playback_session
+        .set_play_state_if_current(current, PlayState::Running("new".to_string()));
     assert!(matches!(
-        &*app.playback.play_state.lock().unwrap(),
+        &*app.playback_session.play_state().lock().unwrap(),
         PlayState::Idle
     ));
 
-    app.set_play_state_if_current(newer, PlayState::Running("new".to_string()));
+    app.playback_session
+        .set_play_state_if_current(newer, PlayState::Running("new".to_string()));
     assert!(matches!(
-        &*app.playback.play_state.lock().unwrap(),
+        &*app.playback_session.play_state().lock().unwrap(),
         PlayState::Running(msg) if msg == "new"
     ));
 }
@@ -57,8 +60,12 @@ fn save_history_state_persists_tui_cursor_lines_and_active_screen() {
     let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
 
     let mut app = TuiApp::new_for_test(test_config());
-    app.editor.lines = vec!["abc".to_string(), "def".to_string(), "ghi".to_string()];
-    app.editor.cursor = 2;
+    app.notepad.set_session_lines_for_test(vec![
+        "abc".to_string(),
+        "def".to_string(),
+        "ghi".to_string(),
+    ]);
+    app.notepad.set_session_cursor_for_test(2);
     app.active_screen = crate::screen_switch::PrimaryScreen::Daw;
 
     app.save_history_state();
@@ -74,7 +81,7 @@ fn save_history_state_persists_tui_cursor_lines_and_active_screen() {
     );
     let saved = crate::history::load_session_state();
     assert_eq!(saved.cursor, 2);
-    assert_eq!(saved.lines, app.editor.lines);
+    assert_eq!(saved.lines, app.notepad.session_lines());
     assert_eq!(saved.active_screen, crate::history::PrimaryScreen::Daw);
     assert_eq!(
         saved.keyboard_note_guide_overlay_date.as_deref(),
@@ -129,7 +136,10 @@ fn keyboard_q_persists_and_restores_patch_transport_and_buffer() {
 
     let cfg = test_config();
     let mut restored = TuiApp::new(&cfg, None);
-    assert!(matches!(restored.mode, Mode::Keyboard));
+    assert_eq!(
+        restored.active_screen,
+        crate::screen_switch::PrimaryScreen::Keyboard
+    );
     assert_eq!(
         restored.keyboard.state.patch(),
         Some("patches_factory/Keys/Piano.fxp")
@@ -193,8 +203,36 @@ fn loop_browser_screen_is_saved_and_restored_as_the_startup_screen() {
         restored.active_screen,
         crate::history::PrimaryScreen::LoopBrowser
     );
-    assert_eq!(restored.mode, Mode::LoopBrowser);
+    assert_eq!(
+        restored.active_screen,
+        crate::screen_switch::PrimaryScreen::LoopBrowser
+    );
     assert!(restored.loop_browser.state.starting);
 
     std::fs::remove_dir_all(&tmp).ok();
+}
+
+/// `Mode` から画面種別（Keyboard / LoopBrowser）を外したため、`Mode::Normal` だけでは
+/// 「notepad を表示中」を判定できない。notepad 固有の定期処理が他画面でも走らないよう、
+/// 画面判定を含む述語を固定しておく。
+#[test]
+fn notepad_normal_mode_active_is_false_on_other_screens_and_submodes() {
+    let mut app = TuiApp::new_for_test(test_config());
+    assert!(app.notepad_normal_mode_active());
+
+    app.notepad.mode = Mode::Insert;
+    assert!(!app.notepad_normal_mode_active());
+    app.notepad.mode = Mode::Normal;
+
+    app.start_keyboard(None);
+    assert!(!app.notepad_normal_mode_active());
+
+    app.switch_to_primary_screen(crate::screen_switch::PrimaryScreen::Notepad, None);
+    assert!(app.notepad_normal_mode_active());
+
+    app.begin_loop_browser_startup();
+    assert!(!app.notepad_normal_mode_active());
+
+    app.active_screen = crate::screen_switch::PrimaryScreen::Daw;
+    assert!(!app.notepad_normal_mode_active());
 }

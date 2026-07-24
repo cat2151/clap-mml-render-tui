@@ -3,12 +3,22 @@ name = "cmrt-tui-core"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+# app 側のテストから、実クリップボードに触れないスタブ実装や
+# テスト専用ヘルパを使えるようにするフラグ。prod ビルドでは無効。
+test-support = []
+
 [dependencies]
 cmrt-core = { path = "../core-lib" }
+cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-runtime = { path = "../cmrt-runtime" }
 anyhow = "1"
+arboard = "3.6.1"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 crossterm = "0.28"
+hound = "3.5"
 rand = "0.8"
 ratatui = "0.28"
+rodio = "0.19"
+serde = { version = "1", features = ["derive"] }
 tui-textarea = { version = "0.6", features = ["crossterm"] }

@@ -5,7 +5,7 @@ use ratatui::style::Modifier;
 #[test]
 fn keyboard_screen_shows_connecting_status_and_navigation() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::Keyboard;
+    app.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
 
     let screen = render_lines(&mut app, 90, 14).join("\n");
 
@@ -39,7 +39,7 @@ fn keyboard_screen_shows_connecting_status_and_navigation() {
 #[test]
 fn keyboard_screen_shows_count_input_guide_until_navigation() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::Keyboard;
+    app.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
     app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE));
     app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE));
 
@@ -110,7 +110,7 @@ fn keyboard_patch_panes_show_loading_error_and_empty_states() {
     let mut loading = TuiApp::new_for_test(test_config());
     loading.patch_load_state =
         std::sync::Arc::new(std::sync::Mutex::new(crate::tui::PatchLoadState::Loading));
-    loading.mode = Mode::Keyboard;
+    loading.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
     let screen = render_lines(&mut loading, 140, 12).join("\n");
     assert!(screen.replace(' ', "").contains("パッチを読み込み中..."));
 
@@ -118,12 +118,12 @@ fn keyboard_patch_panes_show_loading_error_and_empty_states() {
     error.patch_load_state = std::sync::Arc::new(std::sync::Mutex::new(
         crate::tui::PatchLoadState::Err("boom".to_string()),
     ));
-    error.mode = Mode::Keyboard;
+    error.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
     let screen = render_lines(&mut error, 140, 12).join("\n");
     assert!(screen.replace(' ', "").contains("読み込み失敗:boom"));
 
     let mut empty = TuiApp::new_for_test(test_config());
-    empty.mode = Mode::Keyboard;
+    empty.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
     let screen = render_lines(&mut empty, 140, 12).join("\n");
     assert!(screen.replace(' ', "").contains("パッチが見つかりません"));
 }

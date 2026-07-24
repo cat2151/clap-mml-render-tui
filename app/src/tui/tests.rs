@@ -1,18 +1,9 @@
 pub(super) use super::*;
 pub(super) use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 pub(super) use std::sync::atomic::{AtomicUsize, Ordering};
-pub(super) use tui_textarea::{CursorMove, TextArea};
 
-mod filter_cache;
-mod insert_mode;
 mod keyboard_mml;
 mod normal_mode;
-mod notepad_history;
-mod notepad_history_persistence;
-mod patch_phrase;
-mod patch_phrase_history;
-mod patch_select;
-mod patch_select_favorites;
 mod screen_switch;
 mod session;
 

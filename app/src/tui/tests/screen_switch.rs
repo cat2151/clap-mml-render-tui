@@ -27,10 +27,10 @@ fn ctrl_g_opens_menu_on_each_tui_primary_screen() {
 #[test]
 fn menu_is_unavailable_in_non_normal_states() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.mode = Mode::Insert;
+    app.notepad.mode = Mode::Insert;
     assert!(!app.try_open_screen_switch_menu(ctrl_g()));
 
-    app.mode = Mode::LoopBrowser;
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
     app.active_screen = PrimaryScreen::LoopBrowser;
     app.loop_browser.state.help_overlay = Some(crate::tui::loop_browser::LoopBrowserPane::Tree);
     assert!(!app.try_open_screen_switch_menu(ctrl_g()));
@@ -41,16 +41,22 @@ fn menu_switches_directly_between_tui_primary_screens() {
     let mut app = TuiApp::new_for_test(test_config());
     app.switch_to_primary_screen(PrimaryScreen::LoopBrowser, None);
     assert_eq!(app.active_screen, PrimaryScreen::LoopBrowser);
-    assert_eq!(app.mode, Mode::LoopBrowser);
+    assert_eq!(
+        app.active_screen,
+        crate::screen_switch::PrimaryScreen::LoopBrowser
+    );
 
     app.loop_browser.state.starting = false;
     app.switch_to_primary_screen(PrimaryScreen::Keyboard, None);
     assert_eq!(app.active_screen, PrimaryScreen::Keyboard);
-    assert_eq!(app.mode, Mode::Keyboard);
+    assert_eq!(
+        app.active_screen,
+        crate::screen_switch::PrimaryScreen::Keyboard
+    );
 
     app.switch_to_primary_screen(PrimaryScreen::Notepad, None);
     assert_eq!(app.active_screen, PrimaryScreen::Notepad);
-    assert_eq!(app.mode, Mode::Normal);
+    assert_eq!(app.notepad.mode, Mode::Normal);
 }
 
 #[test]
