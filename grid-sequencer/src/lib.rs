@@ -204,6 +204,7 @@ impl GridSequencerScreen {
             KeyCode::Char('q') => return GridSequencerAction::Quit,
             KeyCode::Char('?') => self.help_open = true,
             KeyCode::Char('r') => self.randomize(now, ctx),
+            KeyCode::Char('R') => self.randomize_keeping_patches(now),
             _ => {}
         }
         GridSequencerAction::Continue
@@ -217,6 +218,20 @@ impl GridSequencerScreen {
         if let Some(sender) = &self.midi_sender {
             sender.prepare(self.state.patches());
         }
+    }
+
+    /// patch を据え置き、note / 音長 / セルだけを引き直す。
+    ///
+    /// 音色ロード（`sender.prepare()`）を走らせないので再生が途切れない。その代わり
+    /// `prepare_instances()` の `stop_live_all()` による消音も無いため、鳴っていた音の
+    /// note off はここで自分で送る必要がある。
+    fn randomize_keeping_patches(&mut self, now: Instant) {
+        let note_offs = self.state.randomize_keeping_patches(now);
+        log_line(&format!(
+            "grid-sequencer: randomize-keep-patch rows={GRID_ROWS} note_offs={}",
+            note_offs.len()
+        ));
+        self.send_scheduled(&note_offs);
     }
 }
 

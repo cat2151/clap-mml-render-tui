@@ -6,6 +6,11 @@ fn press(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
 }
 
+/// SHIFT 付きの押下。crossterm は Shift+r を `Char('R')` + SHIFT で届ける。
+fn shift_press(code: KeyCode) -> KeyEvent {
+    KeyEvent::new(code, KeyModifiers::SHIFT)
+}
+
 fn one_patch() -> Vec<(String, String)> {
     vec![("Keys/Piano.fxp".to_string(), "keys/piano.fxp".to_string())]
 }
@@ -110,6 +115,35 @@ fn r_keeps_the_patch_empty_while_the_list_is_still_loading() {
     screen.handle_key(press(KeyCode::Char('r')), Instant::now(), &ctx);
 
     assert!(screen.state.rows().iter().all(|row| row.patch.is_none()));
+}
+
+/// SHIFT+R は音色ロード（＝無音時間）を避けるため patch を引き直さない。
+#[test]
+fn shift_r_rerolls_the_grid_without_touching_patches() {
+    let patches = one_patch();
+    let now = Instant::now();
+    let mut screen = silent_screen();
+    screen.start(now, &ready_ctx(&patches));
+    for row in screen.state.rows_mut() {
+        row.patch = Some("Kept/Patch.fxp".to_string());
+        row.cells = [false; GRID_STEPS];
+    }
+
+    screen.handle_key(shift_press(KeyCode::Char('R')), now, &ready_ctx(&patches));
+
+    assert!(screen
+        .state
+        .rows()
+        .iter()
+        .all(|row| row.patch.as_deref() == Some("Kept/Patch.fxp")));
+    assert!(
+        screen
+            .state
+            .rows()
+            .iter()
+            .any(|row| row.cells.iter().any(|cell| *cell)),
+        "patch 以外は引き直すので、セルはどこかが note on になる"
+    );
 }
 
 #[test]

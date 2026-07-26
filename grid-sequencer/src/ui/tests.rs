@@ -211,6 +211,7 @@ fn the_keybind_line_is_always_visible() {
     let rendered = render(&screen);
 
     assert!(rendered.contains("r:randomize"), "{rendered}");
+    assert!(rendered.contains("R:randomize-notes"), "{rendered}");
     assert!(rendered.contains("Ctrl+G:screen"), "{rendered}");
     assert!(rendered.contains("q:quit"), "{rendered}");
 }

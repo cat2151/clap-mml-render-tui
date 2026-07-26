@@ -75,6 +75,51 @@ fn silencing_waits_for_the_notes_already_sent_ahead() {
     assert_eq!(silenced[0].ahead, STEP_INTERVAL * 2 + SCHEDULE_GUARD);
 }
 
+/// 音色ロードを走らせないため、patch だけは引き直さない。
+#[test]
+fn keeping_patches_rerolls_everything_except_the_patch() {
+    let mut state = GridState::default();
+    for row in &mut state.rows {
+        row.patch = Some("kept/Patch.fxp".to_string());
+        row.cells = [false; GRID_STEPS];
+    }
+
+    state.randomize_keeping_patches(Instant::now());
+
+    assert!(state
+        .rows
+        .iter()
+        .all(|row| row.patch.as_deref() == Some("kept/Patch.fxp")));
+    assert!(state
+        .rows
+        .iter()
+        .all(|row| (RANDOM_NOTE_MIN..=RANDOM_NOTE_MAX).contains(&row.note)));
+    assert!(
+        state
+            .rows
+            .iter()
+            .any(|row| row.cells.iter().any(|cell| *cell)),
+        "patch 以外は引き直すので、セルはどこかが note on になる"
+    );
+}
+
+/// `randomize_all` と違って音色切替の `stop_live_all()` が後ろに続かないので、
+/// この note off を送らないと音が鳴りっぱなしになる。
+#[test]
+fn keeping_patches_still_silences_sounding_notes() {
+    let now = Instant::now();
+    let mut state = GridState::default();
+    state.rows[0].note = 64;
+    state.rows[0].cells[0] = true;
+    state.start(now);
+    state.poll_steps(now, Duration::ZERO);
+
+    let silenced = state.randomize_keeping_patches(now);
+
+    assert_eq!(messages_of(&silenced), vec![[0x80, 64, 0]]);
+    assert_eq!(silenced[0].ahead, SCHEDULE_GUARD);
+}
+
 fn messages_of(scheduled: &[GridScheduledMessage]) -> Vec<[u8; 3]> {
     scheduled.iter().map(|item| item.message).collect()
 }

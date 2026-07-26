@@ -37,6 +37,26 @@ impl GridState {
         now: Instant,
         patches: &[(String, String)],
     ) -> Vec<GridScheduledMessage> {
+        self.randomize_rows(patches);
+        self.take_silence_messages(now)
+    }
+
+    /// patch を据え置いたまま、note number / 音長 / セルだけを引き直す。
+    ///
+    /// 音色ロード（16 instance ぶんの patch prepare）が走らないので、呼んでも
+    /// 再生が途切れない。realtime play の連続性を保ったまま鳴る内容だけを
+    /// 変え続けたいとき（ジッタ・note off 漏れ・バッファ追従の検証）に使う。
+    ///
+    /// 返した note off は必ず送ること。`randomize_all` と違って音色切替の
+    /// `stop_live_all()` が後ろに続かないため、送らないと音が鳴りっぱなしになる。
+    pub fn randomize_keeping_patches(&mut self, now: Instant) -> Vec<GridScheduledMessage> {
+        // patch 一覧を空で渡すと patch だけ据え置かれる（`randomize_rows` 参照）。
+        self.randomize_rows(&[]);
+        self.take_silence_messages(now)
+    }
+
+    /// 全行を引き直す。`patches` が空なら patch は据え置く。
+    fn randomize_rows(&mut self, patches: &[(String, String)]) {
         let mut rng = rand::thread_rng();
         for row in &mut self.rows {
             if let Some(index) = random_index(patches.len()) {
@@ -52,6 +72,10 @@ impl GridState {
                 row.cells[step] = rng.gen_bool(CELL_ON_RATIO);
             }
         }
+    }
+
+    /// 鳴っている音を止める note off を、送信済みの先読みぶんより後ろへ置いて返す。
+    fn take_silence_messages(&mut self, now: Instant) -> Vec<GridScheduledMessage> {
         let ahead = self.silence_ahead(now);
         self.silence_sounding()
             .into_iter()
