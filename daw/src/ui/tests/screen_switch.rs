@@ -12,4 +12,5 @@ fn daw_draws_the_shared_screen_switch_overlay() {
     assert!(screen.contains("[D] DAW"));
     assert!(screen.contains("[K] Keyboard"));
     assert!(screen.contains("[L] Loop Browser"));
+    assert!(screen.contains("[G] Grid Sequencer"));
 }

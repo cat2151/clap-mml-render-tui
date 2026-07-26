@@ -371,6 +371,7 @@ dependencies = [
  "cmrt-config-editor",
  "cmrt-core 0.1.0",
  "cmrt-daw",
+ "cmrt-grid-sequencer",
  "cmrt-history",
  "cmrt-keyboard",
  "cmrt-loop-browser",
@@ -519,6 +520,19 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "ureq",
+]
+
+[[package]]
+name = "cmrt-grid-sequencer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cmrt-realtime-play",
+ "cmrt-runtime",
+ "cmrt-tui-core",
+ "crossterm",
+ "rand",
+ "ratatui",
 ]
 
 [[package]]

@@ -20,6 +20,7 @@ impl TuiApp<'static> {
                 keyboard::KeyboardNoteGuide::new(None),
             ),
             loop_browser: loop_browser::LoopBrowserScreen::default(),
+            grid_sequencer: grid_sequencer::GridSequencerScreen::new(None),
             voicing: voicing::VoicingState::new(
                 crate::history::VoicingCache::default(),
                 crate::voicing_sources::VoicingLayers::default(),

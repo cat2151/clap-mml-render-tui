@@ -10,6 +10,7 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 
+use super::grid_sequencer::GridSequencerAction;
 use super::keyboard::KeyboardAction;
 use super::loop_browser::LoopBrowserAction;
 use super::{NormalAction, PlayState, PrimaryScreen, TuiApp, TuiExitReason};
@@ -43,7 +44,7 @@ impl<'a> TuiApp<'a> {
     pub(crate) fn uses_textarea_cursor(&self) -> bool {
         match self.active_screen {
             PrimaryScreen::Keyboard => self.keyboard.mml_input.is_active(),
-            PrimaryScreen::LoopBrowser => false,
+            PrimaryScreen::LoopBrowser | PrimaryScreen::GridSequencer => false,
             PrimaryScreen::Notepad | PrimaryScreen::Daw => self.notepad.uses_textarea_cursor(),
         }
     }
@@ -97,6 +98,7 @@ impl<'a> TuiApp<'a> {
             }
         }
         self.prepare_restored_keyboard_connection();
+        self.enter_restored_grid_sequencer();
 
         loop {
             if quit_from_startup_daw {
@@ -131,6 +133,9 @@ impl<'a> TuiApp<'a> {
             }
             if self.active_screen == PrimaryScreen::Keyboard {
                 self.pump_keyboard_periodic();
+            }
+            if self.active_screen == PrimaryScreen::GridSequencer {
+                self.pump_grid_sequencer_step();
             }
             self.pump_notepad_sound_check_guide();
             let terminal_draw_started = std::time::Instant::now();
@@ -205,6 +210,16 @@ impl<'a> TuiApp<'a> {
                         && key.code == KeyCode::Char('c')
                     {
                         self.notepad.handle_ctrl_c(key);
+                        continue;
+                    }
+                    if self.active_screen == PrimaryScreen::GridSequencer {
+                        match self.handle_grid_sequencer_key_event(key) {
+                            GridSequencerAction::Continue => {}
+                            GridSequencerAction::Quit => {
+                                self.finish_grid_sequencer();
+                                break;
+                            }
+                        }
                         continue;
                     }
                     if self.active_screen == PrimaryScreen::LoopBrowser {

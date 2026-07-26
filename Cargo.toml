@@ -6,6 +6,7 @@ members = [
     "core-lib",
     "daw",
     "daw-client-lib",
+    "grid-sequencer",
     "history",
     "keyboard",
     "loop-browser",

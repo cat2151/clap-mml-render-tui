@@ -1,0 +1,296 @@
+use std::{
+    collections::VecDeque,
+    time::{Duration, Instant},
+};
+
+mod clock;
+mod randomize;
+
+pub use clock::{frames_ahead, step_offset, BPM, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL};
+use clock::{StepClock, SCHEDULE_GUARD};
+
+/// grid の行数（＝パート数）。
+pub const GRID_ROWS: usize = 16;
+/// grid の列数（＝1周のステップ数）。
+pub const GRID_STEPS: usize = 16;
+
+const NOTE_ON: u8 = 0x90;
+const NOTE_OFF: u8 = 0x80;
+const VELOCITY: u8 = 100;
+/// 行の note number の既定値（C4）。
+const DEFAULT_NOTE: u8 = 60;
+
+/// 行の音長。ステップ長（16分音符）の何個ぶん鳴らすかを決める。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum StepDuration {
+    #[default]
+    Sixteenth,
+    Quarter,
+}
+
+impl StepDuration {
+    /// この音長が占めるステップ数。
+    pub fn steps(self) -> u8 {
+        match self {
+            Self::Sixteenth => 1,
+            Self::Quarter => 4,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Sixteenth => "1/16",
+            Self::Quarter => "1/4",
+        }
+    }
+}
+
+/// grid の1行。1行 = 1パート。
+///
+/// `patch` は表示専用。realtime play server は同時に1 patch しか持てないため、
+/// 実際の発音には `GridState::sound_patch()`（行0の patch）だけを使う。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GridRow {
+    pub patch: Option<String>,
+    pub note: u8,
+    pub duration: StepDuration,
+    pub cells: [bool; GRID_STEPS],
+}
+
+impl Default for GridRow {
+    fn default() -> Self {
+        Self {
+            patch: None,
+            note: DEFAULT_NOTE,
+            duration: StepDuration::default(),
+            cells: [false; GRID_STEPS],
+        }
+    }
+}
+
+/// 発音中のノートと、その残りステップ数。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SoundingNote {
+    midi_note: u8,
+    remaining_steps: u8,
+}
+
+/// 先読みで組み立てた、まだ鳴っていない MIDI メッセージ1件。
+///
+/// `ahead` は「`poll_steps()` に渡した `now` から実際に鳴るまで」の時間。送信側が
+/// これをフレーム数へ直して live MIDI の offset に載せる。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GridScheduledMessage {
+    pub ahead: Duration,
+    pub message: [u8; 3],
+}
+
+/// grid sequencer 画面のドメイン状態。
+///
+/// I/O は行わず、進行の結果を MIDI メッセージ列として返すだけ。実際の送信は
+/// `GridSequencerScreen` が `GridMidiSender` 経由で行う。
+#[derive(Debug)]
+pub struct GridState {
+    rows: Vec<GridRow>,
+    /// 表示用の再生位置。先読みで組み立て済みでも、締切が来るまでは進めない。
+    step_index: usize,
+    /// メッセージ組み立て用のカーソル。先読みぶんだけ `step_index` より先を指す。
+    schedule_index: usize,
+    /// 1ステップ目をまだ鳴らしていない間だけ false。`advance_schedule()` が
+    /// step 0 を飛ばさないようにするためのフラグ。
+    started: bool,
+    sounding: Vec<SoundingNote>,
+    /// 組み立て済みで、まだ締切が来ていないステップの (締切, 列)。表示位置を
+    /// 実際に鳴るタイミングへ合わせるために持つ。
+    pending_display: VecDeque<(Instant, usize)>,
+    /// 先読みで既に送ってしまったステップのうち、いちばん新しいものの締切。
+    /// 送信済みの note on より後ろへ note off を置くために見る。
+    last_scheduled: Option<Instant>,
+    clock: StepClock,
+}
+
+impl Default for GridState {
+    fn default() -> Self {
+        Self {
+            rows: vec![GridRow::default(); GRID_ROWS],
+            step_index: 0,
+            schedule_index: 0,
+            started: false,
+            sounding: Vec::new(),
+            pending_display: VecDeque::new(),
+            last_scheduled: None,
+            clock: StepClock::default(),
+        }
+    }
+}
+
+impl GridState {
+    pub fn rows(&self) -> &[GridRow] {
+        &self.rows
+    }
+
+    /// 行を直接書き換える。将来のセル編集 UI と、決め打ちの grid を作るテストで使う。
+    pub fn rows_mut(&mut self) -> &mut [GridRow] {
+        &mut self.rows
+    }
+
+    /// 現在の再生位置（列）。
+    pub fn step_index(&self) -> usize {
+        self.step_index
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.clock.is_running()
+    }
+
+    /// 実際の発音に使う patch。realtime play server は同時に1 patch しか持てないため、
+    /// 行0の patch を画面共通の音色として扱う（他行の patch name は表示のみ）。
+    pub fn sound_patch(&self) -> Option<&str> {
+        self.rows.first()?.patch.as_deref()
+    }
+
+    /// 画面へ入るときの初期化。再生位置を先頭へ戻してクロックを走らせる。
+    pub fn start(&mut self, now: Instant) {
+        self.step_index = 0;
+        self.schedule_index = 0;
+        self.started = false;
+        self.sounding.clear();
+        self.pending_display.clear();
+        self.last_scheduled = None;
+        self.clock.start(now);
+    }
+
+    /// `now + lookahead` までに鳴るステップをまとめて組み立て、送るべき MIDI メッセージを
+    /// 「今から鳴るまでの時間」つきで返す。締切がまだ先なら空を返す。
+    ///
+    /// 先読みして送るので、UI のポーリング間隔ぶんのジッタが発音位置に乗らない。
+    pub fn poll_steps(&mut self, now: Instant, lookahead: Duration) -> Vec<GridScheduledMessage> {
+        let mut scheduled = Vec::new();
+        for deadline in self.clock.take_due(now, lookahead) {
+            let ahead = deadline.saturating_duration_since(now);
+            let mut messages = self.expire_sounding();
+            self.advance_schedule();
+            messages.extend(self.attack_current_step());
+            scheduled.extend(
+                messages
+                    .into_iter()
+                    .map(|message| GridScheduledMessage { ahead, message }),
+            );
+            self.pending_display
+                .push_back((deadline, self.schedule_index));
+            self.last_scheduled = Some(deadline);
+        }
+        self.advance_display(now);
+        scheduled
+    }
+
+    /// 鳴っている音を止める note off を、送信済みの先読みぶんより後ろへ置くための猶予。
+    /// まだ何も送っていなければ即座（0）で良い。
+    pub(crate) fn silence_ahead(&self, now: Instant) -> Duration {
+        match self.last_scheduled {
+            Some(deadline) => (deadline + SCHEDULE_GUARD).saturating_duration_since(now),
+            None => Duration::ZERO,
+        }
+    }
+
+    /// 鳴っている音をすべて止める note off を作り、再生位置とクロックをリセットする。
+    /// 画面を離れるときに呼び、音が鳴りっぱなしになるのを防ぐ。
+    pub fn take_reset_messages(&mut self) -> Vec<[u8; 3]> {
+        self.clock.stop();
+        self.step_index = 0;
+        self.schedule_index = 0;
+        self.started = false;
+        self.pending_display.clear();
+        self.last_scheduled = None;
+        self.silence_sounding()
+    }
+
+    /// 締切を過ぎたステップまで表示位置を進める。先読みぶんが先走って見えるのを防ぐ。
+    fn advance_display(&mut self, now: Instant) {
+        while self
+            .pending_display
+            .front()
+            .is_some_and(|(deadline, _)| *deadline <= now)
+        {
+            let (_, step) = self
+                .pending_display
+                .pop_front()
+                .expect("front was just observed");
+            self.step_index = step;
+        }
+    }
+
+    /// 鳴っている音の残りステップを1減らし、尽きたものの note off を返す。
+    fn expire_sounding(&mut self) -> Vec<[u8; 3]> {
+        let mut messages = Vec::new();
+        self.sounding.retain_mut(|note| {
+            note.remaining_steps = note.remaining_steps.saturating_sub(1);
+            if note.remaining_steps == 0 {
+                messages.push(note_off(note.midi_note));
+                false
+            } else {
+                true
+            }
+        });
+        messages
+    }
+
+    fn advance_schedule(&mut self) {
+        if self.started {
+            self.schedule_index = (self.schedule_index + 1) % GRID_STEPS;
+        } else {
+            self.started = true;
+        }
+    }
+
+    /// 組み立て中の列で note on が立っている行を発音する。
+    fn attack_current_step(&mut self) -> Vec<[u8; 3]> {
+        let step = self.schedule_index;
+        let attacks = self
+            .rows
+            .iter()
+            .filter(|row| row.cells[step])
+            .map(|row| (row.note, row.duration.steps()))
+            .collect::<Vec<_>>();
+        let mut messages = Vec::new();
+        for (midi_note, steps) in attacks {
+            // 同じ note number が既に鳴っていれば note off を挟んでリトリガーする
+            // （ランダム化で行の note number が重複しうるため）。
+            match self
+                .sounding
+                .iter_mut()
+                .find(|note| note.midi_note == midi_note)
+            {
+                Some(sounding) => {
+                    messages.push(note_off(midi_note));
+                    sounding.remaining_steps = steps;
+                }
+                None => self.sounding.push(SoundingNote {
+                    midi_note,
+                    remaining_steps: steps,
+                }),
+            }
+            messages.push(note_on(midi_note, VELOCITY));
+        }
+        messages
+    }
+
+    /// 鳴っている音の note off だけを作り、発音中リストを空にする。
+    fn silence_sounding(&mut self) -> Vec<[u8; 3]> {
+        self.sounding
+            .drain(..)
+            .map(|note| note_off(note.midi_note))
+            .collect()
+    }
+}
+
+fn note_on(midi_note: u8, velocity: u8) -> [u8; 3] {
+    [NOTE_ON, midi_note, velocity]
+}
+
+fn note_off(midi_note: u8) -> [u8; 3] {
+    [NOTE_OFF, midi_note, 0]
+}
+
+#[cfg(test)]
+mod tests;

@@ -24,6 +24,7 @@ fn menu_accepts_all_screen_initials_case_insensitively() {
         ('D', PrimaryScreen::Daw),
         ('k', PrimaryScreen::Keyboard),
         ('L', PrimaryScreen::LoopBrowser),
+        ('g', PrimaryScreen::GridSequencer),
     ] {
         let mut menu = ScreenSwitchMenu::default();
         menu.open();

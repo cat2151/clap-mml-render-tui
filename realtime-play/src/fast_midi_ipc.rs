@@ -25,9 +25,11 @@ mod windows {
     };
 
     const MAGIC: [u8; 8] = *b"CMRTMIDI";
-    const VERSION: u32 = 2;
+    /// v3: `CommandSlot` に `offsets` を追加し、`MAX_MIDI_MESSAGES` を 128 へ拡張。
+    /// clap-mml-play-server 側の `realtime-ipc/src/windows.rs` と1バイトも違わないこと。
+    const VERSION: u32 = 3;
     const SLOT_COUNT: usize = 64;
-    const MAX_MIDI_MESSAGES: usize = 32;
+    pub const MAX_MIDI_MESSAGES: usize = 128;
     const MAX_PATCH_BYTES: usize = 4096;
     const KIND_MIDI: u32 = 1;
     const KIND_STOP: u32 = 2;
@@ -42,6 +44,7 @@ mod windows {
         has_patch: u32,
         buffer_multiplier: u32,
         messages: [[u8; 3]; MAX_MIDI_MESSAGES],
+        offsets: [u32; MAX_MIDI_MESSAGES],
         patch: [u8; MAX_PATCH_BYTES],
     }
 
@@ -59,6 +62,12 @@ mod windows {
     }
 
     unsafe impl Sync for SharedRing {}
+
+    // 共有メモリのレイアウトは2 repo に手書きで二重定義されている。片方だけ変えると
+    // 実行時に ProtocolMismatch で落ちるため、サイズをここで固定してコンパイル時に検出する。
+    // 変更するときは clap-mml-play-server 側の `realtime-ipc/src/windows.rs` も同じ値へ。
+    const _: () = assert!(size_of::<CommandSlot>() == 5012);
+    const _: () = assert!(size_of::<SharedRing>() == 320_832);
 
     struct Mapping {
         handle: HANDLE,
@@ -129,13 +138,28 @@ mod windows {
             })
         }
 
+        /// 全メッセージをオフセット 0（次 chunk 先頭）で送る。
         pub fn send_midi(&mut self, messages: &[[u8; 3]], patch: Option<&str>) -> Result<()> {
-            if messages.is_empty() || messages.len() > MAX_MIDI_MESSAGES {
+            let events = messages
+                .iter()
+                .map(|message| (0, *message))
+                .collect::<Vec<_>>();
+            self.send_midi_with_offsets(&events, patch)
+        }
+
+        /// `(offset_frames, message)` の並びで送る。オフセットはサーバーの現在の live 位置から
+        /// のフレーム数で、サーバー側でサンプル精度のスケジュールに載る。
+        pub fn send_midi_with_offsets(
+            &mut self,
+            events: &[(u32, [u8; 3])],
+            patch: Option<&str>,
+        ) -> Result<()> {
+            if events.is_empty() || events.len() > MAX_MIDI_MESSAGES {
                 return Err(anyhow!(
                     "MIDI batch must contain 1..={MAX_MIDI_MESSAGES} messages"
                 ));
             }
-            if let Some(message) = messages.iter().find(|message| {
+            if let Some((_, message)) = events.iter().find(|(_, message)| {
                 !(0x80..=0xef).contains(&message[0]) || message[1] > 0x7f || message[2] > 0x7f
             }) {
                 return Err(anyhow!(
@@ -154,8 +178,11 @@ mod windows {
             }
             let mut slot = zeroed_slot();
             slot.kind = KIND_MIDI;
-            slot.message_count = messages.len() as u32;
-            slot.messages[..messages.len()].copy_from_slice(messages);
+            slot.message_count = events.len() as u32;
+            for (index, (offset, message)) in events.iter().enumerate() {
+                slot.messages[index] = *message;
+                slot.offsets[index] = *offset;
+            }
             if patch.is_some() {
                 slot.has_patch = 1;
                 slot.patch_len = patch_bytes.len() as u32;
@@ -288,7 +315,12 @@ mod windows {
 }
 
 #[cfg(windows)]
-pub use windows::FastMidiClient;
+pub use windows::{FastMidiClient, MAX_MIDI_MESSAGES};
+
+/// 1回の送信に詰められる MIDI メッセージ数の上限（共有メモリのスロット容量）。
+/// 呼び出し側がバッチを切る目安に使う。
+#[cfg(not(windows))]
+pub const MAX_MIDI_MESSAGES: usize = 128;
 
 #[cfg(not(windows))]
 pub struct FastMidiClient;
@@ -300,6 +332,14 @@ impl FastMidiClient {
     }
 
     pub fn send_midi(&mut self, _messages: &[[u8; 3]], _patch: Option<&str>) -> anyhow::Result<()> {
+        anyhow::bail!("shared-memory MIDI is only supported on Windows")
+    }
+
+    pub fn send_midi_with_offsets(
+        &mut self,
+        _events: &[(u32, [u8; 3])],
+        _patch: Option<&str>,
+    ) -> anyhow::Result<()> {
         anyhow::bail!("shared-memory MIDI is only supported on Windows")
     }
 

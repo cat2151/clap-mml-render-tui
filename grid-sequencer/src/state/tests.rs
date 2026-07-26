@@ -1,0 +1,219 @@
+use std::time::Duration;
+
+use super::*;
+
+/// 先読みなしで1ステップだけ取り出す（従来の「締切が来たら送る」と同じ挙動）。
+fn step_at(state: &mut GridState, now: Instant) -> Vec<[u8; 3]> {
+    state
+        .poll_steps(now, Duration::ZERO)
+        .into_iter()
+        .map(|scheduled| scheduled.message)
+        .collect()
+}
+
+/// `step` ステップ目の絶対位置。`STEP_INTERVAL * step` では丸め誤差が積もってずれる。
+fn at_step(now: Instant, step: u64) -> Instant {
+    now + step_offset(step)
+}
+
+#[test]
+fn the_first_step_sounds_immediately_on_entry() {
+    let now = Instant::now();
+    let mut state = GridState::default();
+    state.rows[0].cells[0] = true;
+    state.start(now);
+
+    assert_eq!(step_at(&mut state, now), vec![[0x90, 60, 100]]);
+    assert_eq!(state.step_index(), 0);
+}
+
+#[test]
+fn a_stopped_state_produces_nothing() {
+    let now = Instant::now();
+    let mut state = GridState::default();
+    state.rows[0].cells[0] = true;
+
+    assert!(!state.is_running());
+    assert!(step_at(&mut state, now).is_empty());
+}
+
+#[test]
+fn a_sixteenth_note_is_released_on_the_next_step() {
+    let now = Instant::now();
+    let mut state = GridState::default();
+    state.rows[0].note = 62;
+    state.rows[0].cells[0] = true;
+    state.start(now);
+
+    assert_eq!(step_at(&mut state, now), vec![[0x90, 62, 100]]);
+    assert_eq!(step_at(&mut state, at_step(now, 1)), vec![[0x80, 62, 0]]);
+    assert!(step_at(&mut state, at_step(now, 2)).is_empty());
+}
+
+#[test]
+fn a_quarter_note_sustains_for_four_steps() {
+    let now = Instant::now();
+    let mut state = GridState::default();
+    state.rows[0].note = 65;
+    state.rows[0].duration = StepDuration::Quarter;
+    state.rows[0].cells[0] = true;
+    state.start(now);
+
+    assert_eq!(step_at(&mut state, now), vec![[0x90, 65, 100]]);
+    for step in 1..=3 {
+        assert!(step_at(&mut state, at_step(now, step)).is_empty());
+    }
+    assert_eq!(step_at(&mut state, at_step(now, 4)), vec![[0x80, 65, 0]]);
+}
+
+#[test]
+fn rows_sharing_a_step_sound_together_in_row_order() {
+    let now = Instant::now();
+    let mut state = GridState::default();
+    state.rows[0].note = 60;
+    state.rows[0].cells[0] = true;
+    state.rows[3].note = 64;
+    state.rows[3].cells[0] = true;
+    state.start(now);
+
+    assert_eq!(
+        step_at(&mut state, now),
+        vec![[0x90, 60, 100], [0x90, 64, 100]]
+    );
+}
+
+/// 同じステップの音は同じ offset で送る。これが揃わないと頭がばらける。
+#[test]
+fn messages_of_one_step_share_the_same_offset() {
+    let now = Instant::now();
+    let mut state = GridState::default();
+    for row in 0..4 {
+        state.rows[row].note = 60 + row as u8;
+        state.rows[row].cells[1] = true;
+    }
+    state.start(now);
+    state.poll_steps(now, Duration::ZERO);
+
+    let scheduled = state.poll_steps(now, STEP_INTERVAL);
+
+    assert_eq!(scheduled.len(), 4);
+    assert!(scheduled
+        .iter()
+        .all(|item| item.ahead == scheduled[0].ahead));
+    assert_eq!(scheduled[0].ahead, STEP_INTERVAL);
+}
+
+#[test]
+fn a_duplicated_note_number_retriggers_with_a_note_off_first() {
+    let now = Instant::now();
+    let mut state = GridState::default();
+    // 行0は4分音符で鳴り続けている最中に、行1が同じ note number を鳴らす。
+    state.rows[0].note = 67;
+    state.rows[0].duration = StepDuration::Quarter;
+    state.rows[0].cells[0] = true;
+    state.rows[1].note = 67;
+    state.rows[1].cells[1] = true;
+    state.start(now);
+
+    assert_eq!(step_at(&mut state, now), vec![[0x90, 67, 100]]);
+    assert_eq!(
+        step_at(&mut state, at_step(now, 1)),
+        vec![[0x80, 67, 0], [0x90, 67, 100]]
+    );
+    // 残りステップは後から鳴らした16分音符ぶんへ上書きされる。
+    assert_eq!(step_at(&mut state, at_step(now, 2)), vec![[0x80, 67, 0]]);
+}
+
+#[test]
+fn the_playhead_wraps_after_sixteen_steps() {
+    let now = Instant::now();
+    let mut state = GridState::default();
+    state.rows[0].cells[0] = true;
+    state.start(now);
+
+    assert_eq!(step_at(&mut state, now), vec![[0x90, 60, 100]]);
+    for step in 1..GRID_STEPS as u64 {
+        step_at(&mut state, at_step(now, step));
+    }
+    assert_eq!(state.step_index(), GRID_STEPS - 1);
+
+    assert_eq!(
+        step_at(&mut state, at_step(now, GRID_STEPS as u64)),
+        vec![[0x90, 60, 100]]
+    );
+    assert_eq!(state.step_index(), 0);
+}
+
+/// 先読みは送信だけ先行させる。表示位置は締切が来るまで進めない。
+#[test]
+fn the_playhead_does_not_run_ahead_of_the_lookahead() {
+    let now = Instant::now();
+    let mut state = GridState::default();
+    state.rows[0].cells[0] = true;
+    state.start(now);
+
+    let scheduled = state.poll_steps(now, STEP_INTERVAL * 3);
+
+    // 0〜3ステップ目まで組み立て済みでも、鳴っているのはまだ0ステップ目。
+    assert!(!scheduled.is_empty());
+    assert_eq!(state.step_index(), 0);
+
+    state.poll_steps(at_step(now, 2), STEP_INTERVAL * 3);
+    assert_eq!(state.step_index(), 2);
+}
+
+#[test]
+fn take_reset_messages_silences_everything_and_stops_the_clock() {
+    let now = Instant::now();
+    let mut state = GridState::default();
+    state.rows[0].note = 60;
+    state.rows[0].duration = StepDuration::Quarter;
+    state.rows[0].cells[0] = true;
+    state.rows[1].note = 72;
+    state.rows[1].duration = StepDuration::Quarter;
+    state.rows[1].cells[0] = true;
+    state.start(now);
+    step_at(&mut state, now);
+
+    assert_eq!(
+        state.take_reset_messages(),
+        vec![[0x80, 60, 0], [0x80, 72, 0]]
+    );
+    assert!(!state.is_running());
+    assert_eq!(state.step_index(), 0);
+    assert!(step_at(&mut state, at_step(now, 1)).is_empty());
+}
+
+#[test]
+fn restarting_replays_from_the_first_step() {
+    let now = Instant::now();
+    let mut state = GridState::default();
+    state.rows[0].cells[0] = true;
+    state.start(now);
+    step_at(&mut state, now);
+    step_at(&mut state, at_step(now, 1));
+    assert_eq!(state.step_index(), 1);
+
+    let restarted = at_step(now, 10);
+    state.start(restarted);
+    assert_eq!(step_at(&mut state, restarted), vec![[0x90, 60, 100]]);
+    assert_eq!(state.step_index(), 0);
+}
+
+#[test]
+fn sound_patch_comes_from_the_first_row() {
+    let mut state = GridState::default();
+    assert_eq!(state.sound_patch(), None);
+
+    state.rows[0].patch = Some("first/Patch.fxp".to_string());
+    state.rows[1].patch = Some("second/Patch.fxp".to_string());
+    assert_eq!(state.sound_patch(), Some("first/Patch.fxp"));
+}
+
+#[test]
+fn step_duration_labels_match_their_step_counts() {
+    assert_eq!(StepDuration::Sixteenth.steps(), 1);
+    assert_eq!(StepDuration::Quarter.steps(), 4);
+    assert_eq!(StepDuration::Sixteenth.label(), "1/16");
+    assert_eq!(StepDuration::Quarter.label(), "1/4");
+}

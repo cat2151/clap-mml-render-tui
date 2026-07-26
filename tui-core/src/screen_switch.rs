@@ -1,4 +1,4 @@
-//! 主要画面（notepad / DAW / keyboard / loop browser）の切替メニュー。
+//! 主要画面（notepad / DAW / keyboard / loop browser / grid sequencer）の切替メニュー。
 //!
 //! 画面横断で共有するため `cmrt-tui-core` に置く。
 
@@ -22,14 +22,16 @@ pub enum PrimaryScreen {
     Daw,
     Keyboard,
     LoopBrowser,
+    GridSequencer,
 }
 
 impl PrimaryScreen {
-    const ALL: [(char, Self, &'static str); 4] = [
+    const ALL: [(char, Self, &'static str); 5] = [
         ('N', Self::Notepad, "Notepad"),
         ('D', Self::Daw, "DAW"),
         ('K', Self::Keyboard, "Keyboard"),
         ('L', Self::LoopBrowser, "Loop Browser"),
+        ('G', Self::GridSequencer, "Grid Sequencer"),
     ];
 
     fn from_menu_key(key: char) -> Option<Self> {

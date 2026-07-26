@@ -197,9 +197,31 @@ fn send_midi_posts_ordered_json_batch() {
     let body: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
     assert_eq!(
         body,
-        serde_json::json!({"messages": [[128, 60, 0], [144, 62, 100]]})
+        serde_json::json!({"messages": [[128, 60, 0], [144, 62, 100]], "offsets": [0, 0]})
     );
     assert_eq!(supervisor.spawn_count_for_test(), 0);
+}
+
+#[test]
+fn send_midi_with_offsets_posts_offsets_alongside_messages() {
+    let (port, rx) = spawn_sequential_response_server(vec![
+        ("HTTP/1.1 202 Accepted", "accepted"),
+        ("HTTP/1.1 202 Accepted", "accepted"),
+    ]);
+    let supervisor = RealtimePlayServerSupervisor::new(&cfg_for_port(port));
+
+    supervisor
+        .send_midi_with_offsets(&[(0, [0x80, 60, 0]), (5538, [0x90, 62, 100])], None)
+        .unwrap();
+
+    let buffer_request = rx.recv().unwrap();
+    assert_eq!(buffer_request.path, "/live-buffer");
+    let request = rx.recv().unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
+    assert_eq!(
+        body,
+        serde_json::json!({"messages": [[128, 60, 0], [144, 62, 100]], "offsets": [0, 5538]})
+    );
 }
 
 #[test]
@@ -227,6 +249,7 @@ fn send_midi_includes_selected_patch() {
         body,
         serde_json::json!({
             "messages": [[144, 60, 100]],
+            "offsets": [0],
             "patch": "patches_factory/Keys/Piano.fxp"
         })
     );

@@ -25,6 +25,7 @@ impl<'a> TuiApp<'a> {
                     && !self.loop_browser.state.mixer_overlay_open
                     && self.loop_browser.state.category_overlay.is_none()
             }
+            PrimaryScreen::GridSequencer => !self.grid_sequencer.help_open,
         }
     }
 
@@ -62,6 +63,7 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::Notepad => self.stop_notepad_playback(),
             PrimaryScreen::Keyboard => self.finish_keyboard(),
             PrimaryScreen::LoopBrowser => self.stop_loop_browser(),
+            PrimaryScreen::GridSequencer => self.finish_grid_sequencer(),
             PrimaryScreen::Daw => {}
         }
     }
@@ -98,6 +100,7 @@ impl<'a> TuiApp<'a> {
                 }
             }
             PrimaryScreen::LoopBrowser => self.begin_loop_browser_startup(),
+            PrimaryScreen::GridSequencer => self.enter_grid_sequencer(),
         }
     }
 

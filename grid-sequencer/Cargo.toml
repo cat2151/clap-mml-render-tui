@@ -1,0 +1,17 @@
+[package]
+name = "cmrt-grid-sequencer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cmrt-realtime-play = { path = "../realtime-play" }
+cmrt-tui-core = { path = "../tui-core" }
+anyhow = "1"
+crossterm = "0.28"
+rand = "0.8"
+ratatui = "0.28"
+
+[dev-dependencies]
+cmrt-runtime = { path = "../cmrt-runtime" }
+# 描画テストで buffer_test（全角文字を含む文字列の探索）を使う。
+cmrt-tui-core = { path = "../tui-core", features = ["test-support"] }

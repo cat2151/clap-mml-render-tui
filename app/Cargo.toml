@@ -11,6 +11,7 @@ path = "src/main.rs"
 cmrt-config-editor = { path = "../config-editor-lib" }
 cmrt-core = { path = "../core-lib" }
 cmrt-daw = { path = "../daw" }
+cmrt-grid-sequencer = { path = "../grid-sequencer" }
 cmrt-history = { path = "../history" }
 cmrt-keyboard = { path = "../keyboard" }
 cmrt-loop-browser = { path = "../loop-browser" }

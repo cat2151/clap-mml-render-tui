@@ -112,8 +112,28 @@ impl RealtimePlayServerSupervisor {
         }
     }
 
+    /// 全メッセージをオフセット 0（次 chunk 先頭）で送る。
     pub fn send_midi(&self, messages: &[[u8; 3]], patch: Option<&str>) -> Result<()> {
-        let mut body = serde_json::json!({ "messages": messages });
+        let events = messages
+            .iter()
+            .map(|message| (0, *message))
+            .collect::<Vec<_>>();
+        self.send_midi_with_offsets(&events, patch)
+    }
+
+    /// `(offset_frames, message)` の並びで送る。オフセットはサーバーの現在の live 位置から
+    /// のフレーム数で、サーバー側でサンプル精度のスケジュールに載る。
+    pub fn send_midi_with_offsets(
+        &self,
+        events: &[(u32, [u8; 3])],
+        patch: Option<&str>,
+    ) -> Result<()> {
+        let messages = events
+            .iter()
+            .map(|(_, message)| *message)
+            .collect::<Vec<_>>();
+        let offsets = events.iter().map(|(offset, _)| *offset).collect::<Vec<_>>();
+        let mut body = serde_json::json!({ "messages": messages, "offsets": offsets });
         if let Some(patch) = patch {
             body["patch"] = serde_json::Value::String(patch.to_string());
         }

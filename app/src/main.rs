@@ -281,6 +281,8 @@ fn main() -> Result<()> {
     // offline render crate / notepad 画面 crate にグローバルログ sink を注入する。
     cmrt_offline_render::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
     cmrt_notepad::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
+    // grid sequencer 画面 crate にグローバルログ sink を注入する。
+    cmrt_grid_sequencer::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
     // DAW 画面 crate に config.toml 編集関数を注入する（terminal suspend は app ポリシー）。
     cmrt_daw::set_config_editor(config_editor::edit_config_toml);
 

@@ -1,4 +1,4 @@
-//! 4画面（notepad / DAW / keyboard / loop browser）をホストする共有ランタイム。
+//! 5画面（notepad / DAW / keyboard / loop browser / grid sequencer）をホストする共有ランタイム。
 //!
 //! 各画面の実装本体は画面ごとの crate に閉じており、ここには
 //! 「どの画面か」「画面をまたいで共有するもの」と、各 crate と接続する glue だけを置く。
@@ -6,6 +6,7 @@
 //! - notepad : `cmrt-notepad` crate（`notepad_glue`）
 //! - keyboard: `cmrt-keyboard` crate（`keyboard_glue`）
 //! - loop browser: `cmrt-loop-browser` crate（`loop_browser_glue`）
+//! - grid sequencer: `cmrt-grid-sequencer` crate（`grid_sequencer_glue`）
 //! - DAW     : `crate::daw`（`runtime::screen` から起動）
 
 // notepad 画面（状態・入力・描画・再生・レンダリングキュー）は `cmrt-notepad` crate へ
@@ -20,6 +21,10 @@ mod keyboard_glue;
 // 従来の `crate::tui::loop_browser::*` パスは再エクスポートで維持する。
 pub(crate) use cmrt_loop_browser as loop_browser;
 mod loop_browser_glue;
+// grid sequencer 画面（状態・入力・ステップ進行・MIDI 送信・描画）は
+// `cmrt-grid-sequencer` crate に閉じている。
+pub(crate) use cmrt_grid_sequencer as grid_sequencer;
+mod grid_sequencer_glue;
 mod runtime;
 mod session;
 mod ui;
@@ -31,6 +36,7 @@ use std::sync::{Arc, Mutex};
 
 use cmrt_tui_core::playback_session::PlaybackSession;
 
+use self::grid_sequencer::GridSequencerScreen;
 use self::keyboard::KeyboardScreen;
 use self::loop_browser::LoopBrowserScreen;
 use self::notepad::{Mode, NormalAction, NotepadScreen};
@@ -51,7 +57,8 @@ pub enum TuiExitReason {
     RestartApp,
 }
 
-/// 4つの主要画面（notepad / DAW / keyboard / loop browser）をホストする共有ランタイム。
+/// 5つの主要画面（notepad / DAW / keyboard / loop browser / grid sequencer）を
+/// ホストする共有ランタイム。
 ///
 /// 各画面の状態は画面ごとの構造体に閉じており、ここが持つのは
 /// 「どの画面か」「画面をまたいで共有するもの」だけ。
@@ -63,6 +70,7 @@ pub struct TuiApp<'a> {
     pub(in crate::tui) notepad: NotepadScreen<'a>,
     pub(in crate::tui) keyboard: KeyboardScreen<'a>,
     pub(in crate::tui) loop_browser: LoopBrowserScreen,
+    pub(in crate::tui) grid_sequencer: GridSequencerScreen,
     /// patch ごとの mono/poly 判定結果のキャッシュ。起動時に読み込み、
     /// 新しく probe した patch を検出したら書き戻す。keyboard 画面専用。
     pub(in crate::tui) voicing: VoicingState,

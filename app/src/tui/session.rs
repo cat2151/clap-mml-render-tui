@@ -90,6 +90,12 @@ impl<'a> TuiApp<'a> {
                 None
             };
         let keyboard_state = super::keyboard::KeyboardState::from_session(keyboard);
+        // grid sequencer も同じ realtime play server プロセスへ送る。transport は
+        // 専用の設定を増やさず keyboard のセッション設定に合わせる。
+        let grid_midi_sender = Some(super::grid_sequencer::GridMidiSender::new(
+            Arc::clone(&play_server),
+            keyboard_state.transport(),
+        ));
         let keyboard_midi_sender = Some(super::keyboard::KeyboardMidiSender::new(
             play_server,
             keyboard_state.transport(),
@@ -133,6 +139,10 @@ impl<'a> TuiApp<'a> {
                     active_screen == crate::screen_switch::PrimaryScreen::LoopBrowser;
                 screen
             },
+            grid_sequencer: super::grid_sequencer::GridSequencerScreen::with_sample_rate(
+                grid_midi_sender,
+                cfg.sample_rate,
+            ),
             voicing: super::voicing::VoicingState::new(
                 crate::history::load_voicing_cache(),
                 voicing_layers,
