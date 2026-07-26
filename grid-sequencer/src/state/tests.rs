@@ -104,10 +104,10 @@ fn messages_of_one_step_share_the_same_offset() {
 }
 
 #[test]
-fn a_duplicated_note_number_retriggers_with_a_note_off_first() {
+fn equal_note_numbers_on_different_rows_are_independent() {
     let now = Instant::now();
     let mut state = GridState::default();
-    // 行0は4分音符で鳴り続けている最中に、行1が同じ note number を鳴らす。
+    // 行0の4分音符が鳴り続けている間に、別instanceの行1で同じnoteを鳴らす。
     state.rows[0].note = 67;
     state.rows[0].duration = StepDuration::Quarter;
     state.rows[0].cells[0] = true;
@@ -115,13 +115,42 @@ fn a_duplicated_note_number_retriggers_with_a_note_off_first() {
     state.rows[1].cells[1] = true;
     state.start(now);
 
-    assert_eq!(step_at(&mut state, now), vec![[0x90, 67, 100]]);
+    let first = state.poll_steps(now, Duration::ZERO);
     assert_eq!(
-        step_at(&mut state, at_step(now, 1)),
-        vec![[0x80, 67, 0], [0x90, 67, 100]]
+        first,
+        vec![GridScheduledMessage {
+            instance_id: 0,
+            ahead: Duration::ZERO,
+            message: [0x90, 67, 100],
+        }]
     );
-    // 残りステップは後から鳴らした16分音符ぶんへ上書きされる。
-    assert_eq!(step_at(&mut state, at_step(now, 2)), vec![[0x80, 67, 0]]);
+
+    let second = state.poll_steps(at_step(now, 1), Duration::ZERO);
+    assert_eq!(
+        second,
+        vec![GridScheduledMessage {
+            instance_id: 1,
+            ahead: Duration::ZERO,
+            message: [0x90, 67, 100],
+        }]
+    );
+    assert_eq!(
+        state.poll_steps(at_step(now, 2), Duration::ZERO),
+        vec![GridScheduledMessage {
+            instance_id: 1,
+            ahead: Duration::ZERO,
+            message: [0x80, 67, 0],
+        }]
+    );
+    assert!(state.poll_steps(at_step(now, 3), Duration::ZERO).is_empty());
+    assert_eq!(
+        state.poll_steps(at_step(now, 4), Duration::ZERO),
+        vec![GridScheduledMessage {
+            instance_id: 0,
+            ahead: Duration::ZERO,
+            message: [0x80, 67, 0],
+        }]
+    );
 }
 
 #[test]
@@ -175,9 +204,17 @@ fn take_reset_messages_silences_everything_and_stops_the_clock() {
     state.start(now);
     step_at(&mut state, now);
 
+    let reset = state.take_reset_messages();
     assert_eq!(
-        state.take_reset_messages(),
+        reset.iter().map(|event| event.message).collect::<Vec<_>>(),
         vec![[0x80, 60, 0], [0x80, 72, 0]]
+    );
+    assert_eq!(
+        reset
+            .iter()
+            .map(|event| event.instance_id)
+            .collect::<Vec<_>>(),
+        vec![0, 1]
     );
     assert!(!state.is_running());
     assert_eq!(state.step_index(), 0);
@@ -201,13 +238,14 @@ fn restarting_replays_from_the_first_step() {
 }
 
 #[test]
-fn sound_patch_comes_from_the_first_row() {
+fn patches_follow_row_order() {
     let mut state = GridState::default();
-    assert_eq!(state.sound_patch(), None);
-
     state.rows[0].patch = Some("first/Patch.fxp".to_string());
     state.rows[1].patch = Some("second/Patch.fxp".to_string());
-    assert_eq!(state.sound_patch(), Some("first/Patch.fxp"));
+    assert_eq!(
+        state.patches().take(2).collect::<Vec<_>>(),
+        vec![Some("first/Patch.fxp"), Some("second/Patch.fxp")]
+    );
 }
 
 #[test]

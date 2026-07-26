@@ -8,6 +8,7 @@ const SAMPLE_RATE: f64 = 48_000.0;
 fn scheduled(ahead: Duration, count: usize) -> Vec<GridScheduledMessage> {
     (0..count)
         .map(|index| GridScheduledMessage {
+            instance_id: index as u8 % 16,
             ahead,
             message: [0x90, 60 + index as u8 % 64, 100],
         })
@@ -24,7 +25,7 @@ fn one_step_becomes_one_batch_with_a_shared_offset() {
     assert_eq!(batches.len(), 1);
     let offsets = batches[0]
         .iter()
-        .map(|(offset, _)| *offset)
+        .map(|event| event.offset_frames)
         .collect::<Vec<_>>();
     // 48000 * 60 / (130*4) = 5538 サンプル。
     assert_eq!(offsets, vec![0, 0, 5538, 5538, 5538]);
@@ -42,8 +43,8 @@ fn a_step_is_never_split_across_batches() {
     assert_eq!(batches.len(), 2);
     assert_eq!(batches[0].len(), MAX_MIDI_MESSAGES - 1);
     assert_eq!(batches[1].len(), 4);
-    assert!(batches[0].iter().all(|(offset, _)| *offset == 0));
-    assert!(batches[1].iter().all(|(offset, _)| *offset == 5538));
+    assert!(batches[0].iter().all(|event| event.offset_frames == 0));
+    assert!(batches[1].iter().all(|event| event.offset_frames == 5538));
 }
 
 #[test]

@@ -309,7 +309,7 @@ checksum = "6e4de3bc4ea267985becf712dc6d9eed8b04c953b3fcfb339ebc87acd9804901"
 [[package]]
 name = "clack-common"
 version = "0.1.0"
-source = "git+https://github.com/prokopyl/clack.git#f874e858ad576c601367b3038af5088a4e671744"
+source = "git+https://github.com/prokopyl/clack.git#b7e4bb7de4c808c6d448747f1f57846672bbd554"
 dependencies = [
  "bitflags 2.13.1",
  "clap-sys",
@@ -318,7 +318,7 @@ dependencies = [
 [[package]]
 name = "clack-extensions"
 version = "0.1.0"
-source = "git+https://github.com/prokopyl/clack.git#f874e858ad576c601367b3038af5088a4e671744"
+source = "git+https://github.com/prokopyl/clack.git#b7e4bb7de4c808c6d448747f1f57846672bbd554"
 dependencies = [
  "bitflags 2.13.1",
  "clack-common",
@@ -329,7 +329,7 @@ dependencies = [
 [[package]]
 name = "clack-host"
 version = "0.1.0"
-source = "git+https://github.com/prokopyl/clack.git#f874e858ad576c601367b3038af5088a4e671744"
+source = "git+https://github.com/prokopyl/clack.git#b7e4bb7de4c808c6d448747f1f57846672bbd554"
 dependencies = [
  "clack-common",
  "clap-sys",
@@ -941,7 +941,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2086,7 +2086,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2801,7 +2801,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

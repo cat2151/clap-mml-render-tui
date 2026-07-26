@@ -5,7 +5,7 @@ use ratatui::{backend::TestBackend, Terminal};
 use cmrt_tui_core::{buffer_test::find_text_ignoring_spaces, theme::cursor_highlight_bg};
 
 use super::*;
-use crate::{GridPatchStatus, StepDuration, GRID_ROWS, STEP_INTERVAL};
+use crate::{GridPatchStatus, GridProgress, StepDuration, GRID_ROWS, STEP_INTERVAL};
 
 /// 情報欄(40桁) + 枠線(1桁) のぶんだけ右にある、grid の先頭セルの列。
 const FIRST_CELL_X: usize = 41;
@@ -40,6 +40,15 @@ fn terminal_for(screen: &GridSequencerScreen) -> Terminal<TestBackend> {
 
 fn render(screen: &GridSequencerScreen) -> String {
     buffer_to_string(&terminal_for(screen))
+}
+
+fn render_with_connection(
+    screen: &GridSequencerScreen,
+    connection: &GridConnectionStatus,
+) -> String {
+    let mut terminal = Terminal::new(TestBackend::new(90, 24)).unwrap();
+    terminal.draw(|f| draw(screen, connection, f)).unwrap();
+    buffer_to_string(&terminal)
 }
 
 /// 1行目だけを鳴らす、決め打ちの grid。
@@ -133,17 +142,66 @@ fn the_step_ruler_marks_every_fourth_step() {
 }
 
 #[test]
-fn the_status_line_shows_the_connection_and_the_sounding_patch() {
+fn the_status_line_shows_instances_and_limiter_reduction() {
     let mut screen = screen_with_first_row(60, StepDuration::Sixteenth, &[]);
     screen.patch_status = GridPatchStatus::Ready(42);
 
     let rendered = render(&screen);
 
     assert!(rendered.contains("SHM idle"), "{rendered}");
-    assert!(rendered.contains("BPM 130 1/16=115.4ms"), "{rendered}");
-    assert!(rendered.contains("step  1/16"), "{rendered}");
-    assert!(rendered.contains("patch Keys/Piano.fxp"), "{rendered}");
-    assert!(rendered.contains("42 patches"), "{rendered}");
+    assert!(rendered.contains("130bpm"), "{rendered}");
+    assert!(rendered.contains("step 1/16"), "{rendered}");
+    assert!(rendered.contains("GR0.0"), "{rendered}");
+    assert!(rendered.contains("p:42"), "{rendered}");
+}
+
+#[test]
+fn the_status_line_shows_adaptive_buffer_and_current_level_underruns() {
+    let screen = screen_with_first_row(60, StepDuration::Sixteenth, &[]);
+    let connection = GridConnectionStatus {
+        buffer_multiplier: 8,
+        underrun_frames: 1_536,
+        ..GridConnectionStatus::default()
+    };
+
+    let rendered = render_with_connection(&screen, &connection);
+
+    assert!(rendered.contains("buffer x8 auto"), "{rendered}");
+    assert!(rendered.contains("underrun 1536 frames"), "{rendered}");
+}
+
+#[test]
+fn the_status_line_shows_instance_startup_progress() {
+    let screen = GridSequencerScreen::new(None);
+    let connection = GridConnectionStatus {
+        phase: GridConnectionPhase::Connecting,
+        server_startup: Some(GridProgress {
+            completed: 6,
+            total: 16,
+        }),
+        ..GridConnectionStatus::default()
+    };
+
+    let rendered = render_with_connection(&screen, &connection);
+
+    assert!(rendered.contains("SHM starting server 6/16"), "{rendered}");
+}
+
+#[test]
+fn the_status_line_shows_patch_setting_progress() {
+    let screen = GridSequencerScreen::new(None);
+    let connection = GridConnectionStatus {
+        phase: GridConnectionPhase::PatchSetting,
+        patch_setting: Some(GridProgress {
+            completed: 11,
+            total: 16,
+        }),
+        ..GridConnectionStatus::default()
+    };
+
+    let rendered = render_with_connection(&screen, &connection);
+
+    assert!(rendered.contains("SHM patches 11/16"), "{rendered}");
 }
 
 #[test]

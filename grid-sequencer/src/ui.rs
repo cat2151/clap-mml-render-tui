@@ -31,7 +31,7 @@ pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: 
         ])
         .split(f.area());
     grid::draw(screen, f, chunks[0]);
-    f.render_widget(status_line(screen, connection), chunks[1]);
+    f.render_widget(status_line(screen, connection, chunks[1].width), chunks[1]);
     f.render_widget(
         Paragraph::new(help::KEYBIND_TEXT).style(base_style().fg(MONOKAI_GRAY)),
         chunks[2],
@@ -44,26 +44,52 @@ pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: 
 fn status_line(
     screen: &GridSequencerScreen,
     connection: &GridConnectionStatus,
+    width: u16,
 ) -> Paragraph<'static> {
     let color = match &connection.phase {
         GridConnectionPhase::Ready => MONOKAI_GREEN,
         GridConnectionPhase::Error(_) => MONOKAI_PINK,
         GridConnectionPhase::Idle
         | GridConnectionPhase::Connecting
+        | GridConnectionPhase::WaitingForPatches
         | GridConnectionPhase::PatchSetting => MONOKAI_YELLOW,
     };
-    let text = format!(
-        " {} {} | BPM {} 1/16={:.1}ms | step {:>2}/{} | patch {} | {} ",
-        connection.transport.label(),
-        connection.phase.label(),
-        BPM,
-        STEP_INTERVAL.as_secs_f64() * 1000.0,
-        screen.state.step_index() + 1,
-        GRID_STEPS,
-        screen.state.sound_patch().unwrap_or("-"),
-        screen.patch_status.label(),
-    );
+    let text = if width >= 160 {
+        format!(
+            " SHM {} | buffer x{} auto | underrun {} frames | 16 instances | BPM {} 1/16={:.1}ms | step {:>2}/{} | GR {:.1} dB | {} ",
+            connection.label(),
+            connection.buffer_multiplier,
+            connection.underrun_frames,
+            BPM,
+            STEP_INTERVAL.as_secs_f64() * 1000.0,
+            screen.state.step_index() + 1,
+            GRID_STEPS,
+            connection.limiter_reduction_db,
+            screen.patch_status.label(),
+        )
+    } else {
+        format!(
+            " SHM {} | buffer x{} auto | underrun {} frames | {}bpm | step {}/{} | GR{:.1} | {} ",
+            connection.label(),
+            connection.buffer_multiplier,
+            connection.underrun_frames,
+            BPM,
+            screen.state.step_index() + 1,
+            GRID_STEPS,
+            connection.limiter_reduction_db,
+            compact_patch_status(screen),
+        )
+    };
     Paragraph::new(text).style(base_style().fg(color))
+}
+
+fn compact_patch_status(screen: &GridSequencerScreen) -> String {
+    match &screen.patch_status {
+        crate::GridPatchStatus::Ready(count) => format!("p:{count}"),
+        crate::GridPatchStatus::Loading => "p:load".to_string(),
+        crate::GridPatchStatus::NotConfigured => "p:none".to_string(),
+        crate::GridPatchStatus::Err(_) => "p:err".to_string(),
+    }
 }
 
 #[cfg(test)]

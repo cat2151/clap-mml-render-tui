@@ -5,12 +5,12 @@
 //! Windows の共有メモリ経由の低レイテンシ MIDI 送信を担う。
 
 use std::{
-    io::Read as _,
+    io::{BufRead as _, BufReader, Read as _},
     net::{SocketAddr, TcpStream},
     process::{Child, Command, Stdio},
     sync::{
         atomic::{AtomicU64, Ordering},
-        Mutex,
+        Arc, Mutex,
     },
     time::{Duration, Instant},
 };
@@ -20,8 +20,7 @@ use anyhow::{anyhow, Context as _, Result};
 use cmrt_runtime::Config;
 
 pub mod fast_midi_ipc;
-mod live_buffer;
-mod live_patch;
+mod live_ipc;
 mod logging;
 mod process;
 
@@ -29,20 +28,19 @@ pub use logging::set_log_sink;
 
 use logging::{log_realtime_play_event, truncate_for_log};
 
-pub use live_patch::{PatchVoicing, VoicingReport};
+pub use fast_midi_ipc::{FastMidiEvent, InstanceId, LimiterMeter, INSTANCE_COUNT};
+pub use live_ipc::{PatchVoicing, VoicingReport};
 
 use process::{
-    default_realtime_play_server_executable_name, shell_command, sibling_realtime_play_server_path,
-    stop_child,
+    default_realtime_play_server_executable_name, parse_server_startup_progress,
+    path_realtime_play_server_path, shell_command, sibling_realtime_play_server_path, stop_child,
 };
 
 const PLAY_SERVER_PLAY_PATH: &str = "/play";
 const PLAY_SERVER_PLAY_MML_PATH: &str = "/play-mml";
-const PLAY_SERVER_MIDI_PATH: &str = "/midi";
 const PLAY_SERVER_STOP_PATH: &str = "/stop";
 const PLAY_CONTENT_TYPE_MIDI: &str = "audio/midi";
 const PLAY_CONTENT_TYPE_MML: &str = "text/plain; charset=utf-8";
-const PLAY_CONTENT_TYPE_JSON: &str = "application/json";
 const PLAY_SERVER_CONNECT_TIMEOUT: Duration = Duration::from_millis(150);
 const PLAY_SERVER_START_TIMEOUT: Duration = Duration::from_secs(30);
 const PLAY_SERVER_START_POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -52,10 +50,16 @@ pub struct RealtimePlayServerSupervisor {
     command: String,
     agent: ureq::Agent,
     state: Mutex<PlayServerState>,
-    live_buffer: Mutex<live_buffer::LiveBufferState>,
+    fast_client: Mutex<Option<fast_midi_ipc::FastMidiClient>>,
+    live_buffer_multiplier: Mutex<u8>,
+    startup_progress: Arc<Mutex<Option<RealtimePlayServerStartupProgress>>>,
     next_request_id: AtomicU64,
-    #[cfg(test)]
-    spawn_count: AtomicU64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RealtimePlayServerStartupProgress {
+    pub initialized_instances: usize,
+    pub total_instances: usize,
 }
 
 #[derive(Default)]
@@ -80,10 +84,10 @@ impl RealtimePlayServerSupervisor {
             command: cfg.realtime_play_server_command.clone(),
             agent,
             state: Mutex::new(PlayServerState::default()),
-            live_buffer: Mutex::new(live_buffer::LiveBufferState::default()),
+            fast_client: Mutex::new(None),
+            live_buffer_multiplier: Mutex::new(4),
+            startup_progress: Arc::new(Mutex::new(None)),
             next_request_id: AtomicU64::new(1),
-            #[cfg(test)]
-            spawn_count: AtomicU64::new(0),
         }
     }
 
@@ -104,58 +108,6 @@ impl RealtimePlayServerSupervisor {
                     retry += 1;
                     log_realtime_play_event(format!(
                         "request_id={request_id} action=play retry={retry} transport_error=\"{}\"",
-                        truncate_for_log(&message, 160)
-                    ));
-                    self.recover_after_transport_failure(server_generation)?;
-                }
-            }
-        }
-    }
-
-    /// 全メッセージをオフセット 0（次 chunk 先頭）で送る。
-    pub fn send_midi(&self, messages: &[[u8; 3]], patch: Option<&str>) -> Result<()> {
-        let events = messages
-            .iter()
-            .map(|message| (0, *message))
-            .collect::<Vec<_>>();
-        self.send_midi_with_offsets(&events, patch)
-    }
-
-    /// `(offset_frames, message)` の並びで送る。オフセットはサーバーの現在の live 位置から
-    /// のフレーム数で、サーバー側でサンプル精度のスケジュールに載る。
-    pub fn send_midi_with_offsets(
-        &self,
-        events: &[(u32, [u8; 3])],
-        patch: Option<&str>,
-    ) -> Result<()> {
-        let messages = events
-            .iter()
-            .map(|(_, message)| *message)
-            .collect::<Vec<_>>();
-        let offsets = events.iter().map(|(offset, _)| *offset).collect::<Vec<_>>();
-        let mut body = serde_json::json!({ "messages": messages, "offsets": offsets });
-        if let Some(patch) = patch {
-            body["patch"] = serde_json::Value::String(patch.to_string());
-        }
-        let body = serde_json::to_vec(&body)?;
-        let mut retry = 0;
-        loop {
-            let server_generation = self.ensure_started()?;
-            let result = self
-                .apply_live_buffer_once(server_generation)
-                .and_then(|()| {
-                    self.send_post_bytes(
-                        PLAY_SERVER_MIDI_PATH,
-                        Some((PLAY_CONTENT_TYPE_JSON, &body)),
-                    )
-                });
-            match result {
-                Ok(()) => return Ok(()),
-                Err(PlayRequestError::Server { message, .. }) => return Err(anyhow!(message)),
-                Err(PlayRequestError::Transport(message)) => {
-                    retry += 1;
-                    log_realtime_play_event(format!(
-                        "action=midi retry={retry} transport_error=\"{}\"",
                         truncate_for_log(&message, 160)
                     ));
                     self.recover_after_transport_failure(server_generation)?;
@@ -253,6 +205,10 @@ impl RealtimePlayServerSupervisor {
 
     pub fn port(&self) -> u16 {
         self.port
+    }
+
+    pub fn startup_progress(&self) -> Option<RealtimePlayServerStartupProgress> {
+        *self.startup_progress.lock().unwrap()
     }
 
     fn recover_after_transport_failure(&self, failed_generation: u64) -> Result<u64> {
@@ -385,47 +341,89 @@ impl RealtimePlayServerSupervisor {
     }
 
     fn spawn_child(&self) -> Result<Child> {
-        #[cfg(test)]
-        self.spawn_count.fetch_add(1, Ordering::Relaxed);
-
-        let mut command = self.build_command();
+        let (mut command, launch_description) = self.build_command();
+        *self.startup_progress.lock().unwrap() = Some(RealtimePlayServerStartupProgress {
+            initialized_instances: 0,
+            total_instances: INSTANCE_COUNT,
+        });
+        log_realtime_play_event(format!(
+            "action=server-spawn port={} {launch_description}",
+            self.port
+        ));
         command
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        command.spawn().map_err(|error| {
-            anyhow!(
-                "realtime play server の起動に失敗しました (command: {}): {}",
-                self.command_description(),
-                error
-            )
-        })
+            .stderr(Stdio::piped());
+        let mut child = command.spawn().map_err(|error| {
+            anyhow!("realtime play server の起動に失敗しました ({launch_description}): {error}")
+        })?;
+        let pid = child.id();
+        if let Some(stderr) = child.stderr.take() {
+            let startup_progress = Arc::clone(&self.startup_progress);
+            let thread_result = std::thread::Builder::new()
+                .name("realtime-play-server-stderr".to_string())
+                .spawn(move || {
+                    for line in BufReader::new(stderr).lines() {
+                        match line {
+                            Ok(line) => {
+                                if let Some((initialized_instances, total_instances)) =
+                                    parse_server_startup_progress(&line)
+                                {
+                                    *startup_progress.lock().unwrap() =
+                                        Some(RealtimePlayServerStartupProgress {
+                                            initialized_instances,
+                                            total_instances,
+                                        });
+                                }
+                                log_realtime_play_event(format!(
+                                    "action=server-stderr pid={pid} line=\"{}\"",
+                                    truncate_for_log(&line, 1_000)
+                                ));
+                            }
+                            Err(error) => {
+                                log_realtime_play_event(format!(
+                                    "action=server-stderr-read-error pid={pid} error={error:?}"
+                                ));
+                                break;
+                            }
+                        }
+                    }
+                });
+            if let Err(error) = thread_result {
+                log_realtime_play_event(format!(
+                    "action=server-stderr-reader-start-error pid={pid} error={error:?}"
+                ));
+            }
+        }
+        log_realtime_play_event(format!(
+            "action=server-spawned port={} pid={} {launch_description}",
+            self.port, pid
+        ));
+        Ok(child)
     }
 
-    fn build_command(&self) -> Command {
+    fn build_command(&self) -> (Command, String) {
         let trimmed = self.command.trim();
         if !trimmed.is_empty() {
-            return shell_command(trimmed);
+            return (
+                shell_command(trimmed),
+                format!("source=config shell_command={trimmed:?}"),
+            );
         }
 
         if let Some(path) = sibling_realtime_play_server_path() {
-            return Command::new(path);
+            let description = format!("source=sibling fullpath=\"{}\"", path.display());
+            return (Command::new(path), description);
         }
-        Command::new(default_realtime_play_server_executable_name())
-    }
-
-    fn command_description(&self) -> String {
-        let trimmed = self.command.trim();
-        if trimmed.is_empty() {
-            default_realtime_play_server_executable_name().to_string()
-        } else {
-            trimmed.to_string()
+        if let Some(path) = path_realtime_play_server_path() {
+            let description = format!("source=PATH fullpath=\"{}\"", path.display());
+            return (Command::new(path), description);
         }
-    }
-
-    #[cfg(test)]
-    fn spawn_count_for_test(&self) -> u64 {
-        self.spawn_count.load(Ordering::Relaxed)
+        let executable = default_realtime_play_server_executable_name();
+        (
+            Command::new(executable),
+            format!("source=unresolved-PATH executable={executable:?}"),
+        )
     }
 }
 

@@ -13,6 +13,20 @@ const RANDOM_NOTE_MAX: u8 = 84;
 const CELL_ON_RATIO: f64 = 0.25;
 
 impl GridState {
+    /// patch 一覧の非同期読み込み後、まだ未設定の row だけへ音色を割り当てる。
+    pub fn fill_missing_patches(&mut self, patches: &[(String, String)]) -> usize {
+        let mut assigned = 0;
+        for row in &mut self.rows {
+            if row.patch.is_none() {
+                if let Some(index) = random_index(patches.len()) {
+                    row.patch = Some(patches[index].0.clone());
+                    assigned += 1;
+                }
+            }
+        }
+        assigned
+    }
+
     /// 全行の patch / note number / 音長と、全セルの note on 有無を引き直す。
     ///
     /// 引き直す前に鳴っていた音の note off を返す（鳴りっぱなしを防ぐ）。
@@ -41,7 +55,11 @@ impl GridState {
         let ahead = self.silence_ahead(now);
         self.silence_sounding()
             .into_iter()
-            .map(|message| GridScheduledMessage { ahead, message })
+            .map(|(instance_id, message)| GridScheduledMessage {
+                instance_id,
+                ahead,
+                message,
+            })
             .collect()
     }
 }

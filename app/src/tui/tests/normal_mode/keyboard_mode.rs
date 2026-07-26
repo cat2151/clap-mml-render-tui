@@ -18,7 +18,7 @@ fn keyboard_ignores_note_input_until_connection_is_ready() {
 }
 
 #[test]
-fn keyboard_s_clears_held_notes_before_transport_switch() {
+fn keyboard_s_has_no_transport_switch_behavior() {
     let mut app = TuiApp::new_for_test(test_config());
     app.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
     assert!(app
@@ -36,7 +36,7 @@ fn keyboard_s_clears_held_notes_before_transport_switch() {
         result,
         crate::tui::keyboard::KeyboardAction::Continue
     ));
-    assert!(app.keyboard.state.held().is_empty());
+    assert_eq!(app.keyboard.state.held().len(), 1);
 }
 
 #[test]

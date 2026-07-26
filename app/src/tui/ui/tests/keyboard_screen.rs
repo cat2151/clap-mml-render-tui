@@ -16,7 +16,7 @@ fn keyboard_screen_shows_connecting_status_and_navigation() {
     assert!(screen.contains("last send: -"));
     assert!(screen.contains("connecting..."));
     assert!(screen.contains("notes unavailable until ready"));
-    assert!(screen.contains("s:transport"));
+    assert!(!screen.contains("s:transport"));
     assert!(!screen.contains("h:transport"));
     assert!(screen.contains("Shift+H:buffer"));
     assert!(screen.contains("n:notepad"));

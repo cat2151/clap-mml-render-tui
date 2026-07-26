@@ -61,8 +61,7 @@ pub fn draw(screen: &mut KeyboardScreen<'_>, connection: &KeyboardConnectionStat
         .map(format_send_duration)
         .unwrap_or_else(|| "-".to_string());
     let status = format!(
-        "transport: {} | buffer: x{} | {state} | {} | last send: {last_send}",
-        connection.transport.label(),
+        "transport: SHM | instance: 0 | buffer: x{} | {state} | last send: {last_send} | {}",
         connection.buffer_multiplier,
         voicing_status_text(&connection.voicing)
     );

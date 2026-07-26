@@ -47,8 +47,8 @@ impl StepDuration {
 
 /// grid の1行。1行 = 1パート。
 ///
-/// `patch` は表示専用。realtime play server は同時に1 patch しか持てないため、
-/// 実際の発音には `GridState::sound_patch()`（行0の patch）だけを使う。
+/// 行番号を realtime play server の instance ID として使い、`patch` と MIDI を
+/// その行専用の CLAP instance へ送る。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GridRow {
     pub patch: Option<String>,
@@ -71,6 +71,7 @@ impl Default for GridRow {
 /// 発音中のノートと、その残りステップ数。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct SoundingNote {
+    instance_id: u8,
     midi_note: u8,
     remaining_steps: u8,
 }
@@ -81,6 +82,7 @@ struct SoundingNote {
 /// これをフレーム数へ直して live MIDI の offset に載せる。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GridScheduledMessage {
+    pub instance_id: u8,
     pub ahead: Duration,
     pub message: [u8; 3],
 }
@@ -143,10 +145,8 @@ impl GridState {
         self.clock.is_running()
     }
 
-    /// 実際の発音に使う patch。realtime play server は同時に1 patch しか持てないため、
-    /// 行0の patch を画面共通の音色として扱う（他行の patch name は表示のみ）。
-    pub fn sound_patch(&self) -> Option<&str> {
-        self.rows.first()?.patch.as_deref()
+    pub fn patches(&self) -> impl Iterator<Item = Option<&str>> {
+        self.rows.iter().map(|row| row.patch.as_deref())
     }
 
     /// 画面へ入るときの初期化。再生位置を先頭へ戻してクロックを走らせる。
@@ -171,11 +171,13 @@ impl GridState {
             let mut messages = self.expire_sounding();
             self.advance_schedule();
             messages.extend(self.attack_current_step());
-            scheduled.extend(
-                messages
-                    .into_iter()
-                    .map(|message| GridScheduledMessage { ahead, message }),
-            );
+            scheduled.extend(messages.into_iter().map(|(instance_id, message)| {
+                GridScheduledMessage {
+                    instance_id,
+                    ahead,
+                    message,
+                }
+            }));
             self.pending_display
                 .push_back((deadline, self.schedule_index));
             self.last_scheduled = Some(deadline);
@@ -195,7 +197,7 @@ impl GridState {
 
     /// 鳴っている音をすべて止める note off を作り、再生位置とクロックをリセットする。
     /// 画面を離れるときに呼び、音が鳴りっぱなしになるのを防ぐ。
-    pub fn take_reset_messages(&mut self) -> Vec<[u8; 3]> {
+    pub fn take_reset_messages(&mut self) -> Vec<GridScheduledMessage> {
         self.clock.stop();
         self.step_index = 0;
         self.schedule_index = 0;
@@ -203,6 +205,13 @@ impl GridState {
         self.pending_display.clear();
         self.last_scheduled = None;
         self.silence_sounding()
+            .into_iter()
+            .map(|(instance_id, message)| GridScheduledMessage {
+                instance_id,
+                ahead: Duration::ZERO,
+                message,
+            })
+            .collect()
     }
 
     /// 締切を過ぎたステップまで表示位置を進める。先読みぶんが先走って見えるのを防ぐ。
@@ -221,12 +230,12 @@ impl GridState {
     }
 
     /// 鳴っている音の残りステップを1減らし、尽きたものの note off を返す。
-    fn expire_sounding(&mut self) -> Vec<[u8; 3]> {
+    fn expire_sounding(&mut self) -> Vec<(u8, [u8; 3])> {
         let mut messages = Vec::new();
         self.sounding.retain_mut(|note| {
             note.remaining_steps = note.remaining_steps.saturating_sub(1);
             if note.remaining_steps == 0 {
-                messages.push(note_off(note.midi_note));
+                messages.push((note.instance_id, note_off(note.midi_note)));
                 false
             } else {
                 true
@@ -244,42 +253,43 @@ impl GridState {
     }
 
     /// 組み立て中の列で note on が立っている行を発音する。
-    fn attack_current_step(&mut self) -> Vec<[u8; 3]> {
+    fn attack_current_step(&mut self) -> Vec<(u8, [u8; 3])> {
         let step = self.schedule_index;
         let attacks = self
             .rows
             .iter()
-            .filter(|row| row.cells[step])
-            .map(|row| (row.note, row.duration.steps()))
+            .enumerate()
+            .filter(|(_, row)| row.cells[step])
+            .map(|(instance_id, row)| (instance_id as u8, row.note, row.duration.steps()))
             .collect::<Vec<_>>();
         let mut messages = Vec::new();
-        for (midi_note, steps) in attacks {
-            // 同じ note number が既に鳴っていれば note off を挟んでリトリガーする
-            // （ランダム化で行の note number が重複しうるため）。
+        for (instance_id, midi_note, steps) in attacks {
             match self
                 .sounding
                 .iter_mut()
-                .find(|note| note.midi_note == midi_note)
+                .find(|note| note.instance_id == instance_id)
             {
                 Some(sounding) => {
-                    messages.push(note_off(midi_note));
+                    messages.push((instance_id, note_off(sounding.midi_note)));
+                    sounding.midi_note = midi_note;
                     sounding.remaining_steps = steps;
                 }
                 None => self.sounding.push(SoundingNote {
+                    instance_id,
                     midi_note,
                     remaining_steps: steps,
                 }),
             }
-            messages.push(note_on(midi_note, VELOCITY));
+            messages.push((instance_id, note_on(midi_note, VELOCITY)));
         }
         messages
     }
 
     /// 鳴っている音の note off だけを作り、発音中リストを空にする。
-    fn silence_sounding(&mut self) -> Vec<[u8; 3]> {
+    fn silence_sounding(&mut self) -> Vec<(u8, [u8; 3])> {
         self.sounding
             .drain(..)
-            .map(|note| note_off(note.midi_note))
+            .map(|note| (note.instance_id, note_off(note.midi_note)))
             .collect()
     }
 }

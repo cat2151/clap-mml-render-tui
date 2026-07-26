@@ -231,11 +231,3 @@ fn buffer_multiplier_defaults_to_x4_and_cycles_x8_x1_x2_x4() {
     assert_eq!(state.cycle_buffer_multiplier(), 2);
     assert_eq!(state.cycle_buffer_multiplier(), 4);
 }
-
-#[test]
-fn keyboard_state_defaults_to_shared_memory() {
-    assert_eq!(
-        KeyboardState::default().transport(),
-        KeyboardTransport::SharedMemory
-    );
-}

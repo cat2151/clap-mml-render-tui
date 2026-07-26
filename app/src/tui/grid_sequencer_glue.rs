@@ -63,6 +63,11 @@ impl TuiApp<'_> {
     }
 
     pub(in crate::tui) fn pump_grid_sequencer_step(&mut self) {
+        let patch_dirs_configured = crate::patches::has_configured_patch_dirs(&self.cfg);
+        let patch_load = self.patch_load_state.lock().unwrap();
+        let ctx = grid_sequencer_context(patch_dirs_configured, &patch_load);
+        self.grid_sequencer.refresh_context(&ctx);
+        drop(patch_load);
         self.grid_sequencer.pump_step(Instant::now());
     }
 

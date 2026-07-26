@@ -4,26 +4,17 @@ use std::{
     time::Instant,
 };
 
-use cmrt_realtime_play::{
-    fast_midi_ipc::FastMidiClient, PatchVoicing, RealtimePlayServerSupervisor,
-};
-
-use crate::session_state::KeyboardTransport;
+use anyhow::Result;
+use cmrt_realtime_play::{PatchVoicing, RealtimePlayServerSupervisor, VoicingReport};
 
 mod connection;
 mod status;
-mod voicing_trace;
-mod worker;
 
-use connection::{connect_fast_client, set_prepare_result, set_result};
+use connection::{set_prepare_result, set_result};
 pub use status::{KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardVoicingStatus};
-use voicing_trace::VoicingTrace;
-use worker::{
-    prepare_connection, send_midi, set_buffer_multiplier, stop, switch_transport, WorkerState,
-};
 
-/// 適用する patch と、その patch について file cache から分かっている判定結果。
-/// cache ヒット時は probe を省くので、この 2 つは常に組で受け渡す。
+const KEYBOARD_INSTANCE: u8 = 0;
+
 #[derive(Clone, Copy, Debug)]
 pub(super) struct PatchRequest<'a> {
     pub(super) patch: Option<&'a str>,
@@ -33,27 +24,15 @@ pub(super) struct PatchRequest<'a> {
 enum KeyboardMidiCommand {
     Send {
         messages: Vec<[u8; 3]>,
-        patch: Option<String>,
     },
     Stop,
     Prepare {
-        trace: VoicingTrace,
-        transport: KeyboardTransport,
         buffer_multiplier: u8,
         patch: Option<String>,
         known_voicing: Option<PatchVoicing>,
     },
     SetBufferMultiplier(u8),
     SetPatch {
-        trace: VoicingTrace,
-        note_offs: Vec<[u8; 3]>,
-        previous_patch: Option<String>,
-        patch: Option<String>,
-        known_voicing: Option<PatchVoicing>,
-    },
-    Switch {
-        trace: VoicingTrace,
-        transport: KeyboardTransport,
         note_offs: Vec<[u8; 3]>,
         patch: Option<String>,
         known_voicing: Option<PatchVoicing>,
@@ -68,22 +47,13 @@ pub struct KeyboardMidiSender {
 }
 
 impl KeyboardMidiSender {
-    pub fn new(
-        supervisor: Arc<RealtimePlayServerSupervisor>,
-        transport: KeyboardTransport,
-        buffer_multiplier: u8,
-    ) -> Self {
+    pub fn new(supervisor: Arc<RealtimePlayServerSupervisor>, buffer_multiplier: u8) -> Self {
         let (tx, rx) = mpsc::channel();
-        let status = Arc::new(Mutex::new(KeyboardConnectionStatus::new(
-            transport,
-            buffer_multiplier,
-        )));
+        let status = Arc::new(Mutex::new(KeyboardConnectionStatus::new(buffer_multiplier)));
         let worker_status = Arc::clone(&status);
         let worker = std::thread::Builder::new()
             .name("keyboard-midi-sender".to_string())
-            .spawn(move || {
-                run_midi_sender(rx, supervisor, worker_status, transport, buffer_multiplier)
-            })
+            .spawn(move || run_midi_sender(rx, supervisor, worker_status, buffer_multiplier))
             .expect("keyboard MIDI sender thread should start");
         Self {
             tx,
@@ -92,11 +62,8 @@ impl KeyboardMidiSender {
         }
     }
 
-    pub fn send(&self, messages: Vec<[u8; 3]>, patch: Option<&str>) {
-        let _ = self.tx.send(KeyboardMidiCommand::Send {
-            messages,
-            patch: patch.map(str::to_string),
-        });
+    pub fn send(&self, messages: Vec<[u8; 3]>, _patch: Option<&str>) {
+        let _ = self.tx.send(KeyboardMidiCommand::Send { messages });
     }
 
     pub fn stop(&self) {
@@ -105,43 +72,16 @@ impl KeyboardMidiSender {
 
     pub fn prepare(
         &self,
-        transport: KeyboardTransport,
         buffer_multiplier: u8,
         patch: Option<&str>,
         known_voicing: Option<PatchVoicing>,
     ) {
-        let trace = VoicingTrace::queued("prepare", transport, buffer_multiplier, None, patch);
-        self.status.lock().unwrap().begin_connecting(
-            transport,
-            buffer_multiplier,
-            patch,
-            known_voicing,
-        );
+        self.status
+            .lock()
+            .unwrap()
+            .begin_connecting(buffer_multiplier, patch, known_voicing);
         let _ = self.tx.send(KeyboardMidiCommand::Prepare {
-            trace,
-            transport,
             buffer_multiplier,
-            patch: patch.map(str::to_string),
-            known_voicing,
-        });
-    }
-
-    pub fn switch(
-        &self,
-        transport: KeyboardTransport,
-        note_offs: Vec<[u8; 3]>,
-        patch: Option<&str>,
-        known_voicing: Option<PatchVoicing>,
-    ) {
-        let mut status = self.status.lock().unwrap();
-        let buffer_multiplier = status.buffer_multiplier;
-        status.begin_connecting(transport, buffer_multiplier, patch, known_voicing);
-        drop(status);
-        let trace = VoicingTrace::queued("switch", transport, buffer_multiplier, patch, patch);
-        let _ = self.tx.send(KeyboardMidiCommand::Switch {
-            trace,
-            transport,
-            note_offs,
             patch: patch.map(str::to_string),
             known_voicing,
         });
@@ -156,29 +96,16 @@ impl KeyboardMidiSender {
     pub fn set_patch(
         &self,
         note_offs: Vec<[u8; 3]>,
-        previous_patch: Option<&str>,
+        _previous_patch: Option<&str>,
         patch: Option<&str>,
         known_voicing: Option<PatchVoicing>,
     ) {
-        let status = self.status.lock().unwrap();
-        let transport = status.transport;
-        let buffer_multiplier = status.buffer_multiplier;
-        drop(status);
-        let trace = VoicingTrace::queued(
-            "set-patch",
-            transport,
-            buffer_multiplier,
-            previous_patch,
-            patch,
-        );
         self.status
             .lock()
             .unwrap()
             .begin_patch_setting(patch, known_voicing);
         let _ = self.tx.send(KeyboardMidiCommand::SetPatch {
-            trace,
             note_offs,
-            previous_patch: previous_patch.map(str::to_string),
             patch: patch.map(str::to_string),
             known_voicing,
         });
@@ -203,25 +130,20 @@ fn run_midi_sender(
     rx: mpsc::Receiver<KeyboardMidiCommand>,
     supervisor: Arc<RealtimePlayServerSupervisor>,
     status: Arc<Mutex<KeyboardConnectionStatus>>,
-    transport: KeyboardTransport,
-    buffer_multiplier: u8,
+    initial_buffer_multiplier: u8,
 ) {
-    let mut worker = WorkerState::new(transport, buffer_multiplier);
+    let mut buffer_multiplier = initial_buffer_multiplier;
     let _ = supervisor.remember_live_buffer_multiplier(buffer_multiplier);
     while let Ok(command) = rx.recv() {
         match command {
-            KeyboardMidiCommand::Send { messages, patch } => {
+            KeyboardMidiCommand::Send { messages } => {
                 let started = Instant::now();
-                let result = send_midi(
-                    &mut worker,
-                    supervisor.as_ref(),
-                    &messages,
-                    patch.as_deref(),
-                );
+                let result = supervisor
+                    .send_midi(KEYBOARD_INSTANCE, &messages)
+                    .map(|_| ());
                 set_result(
                     &status,
-                    worker.transport,
-                    worker.buffer_multiplier,
+                    buffer_multiplier,
                     result,
                     Some(started.elapsed()),
                     false,
@@ -229,138 +151,99 @@ fn run_midi_sender(
             }
             KeyboardMidiCommand::Stop => {
                 let started = Instant::now();
-                let result = stop(&mut worker, supervisor.as_ref());
+                let result = supervisor.stop_live_instance(KEYBOARD_INSTANCE);
                 set_result(
                     &status,
-                    worker.transport,
-                    worker.buffer_multiplier,
+                    buffer_multiplier,
                     result,
                     Some(started.elapsed()),
                     true,
                 );
             }
             KeyboardMidiCommand::Prepare {
-                trace,
-                transport,
-                buffer_multiplier,
+                buffer_multiplier: requested_multiplier,
                 patch,
                 known_voicing,
             } => {
-                trace.worker_started(transport, buffer_multiplier, patch.as_deref());
+                buffer_multiplier = requested_multiplier;
+                status.lock().unwrap().phase = KeyboardConnectionPhase::PatchSetting;
                 let started = Instant::now();
-                let _ = stop(&mut worker, supervisor.as_ref());
-                worker.fast_client = None;
-                worker.transport = transport;
-                worker.buffer_multiplier = buffer_multiplier;
-                let request = PatchRequest {
-                    patch: patch.as_deref(),
-                    known_voicing,
-                };
-                let result = prepare_connection(
-                    &mut worker,
-                    supervisor.as_ref(),
-                    &status,
-                    request,
-                    trace.id(),
-                );
-                trace.status_apply(
-                    worker.transport,
-                    patch.as_deref(),
-                    &result,
-                    known_voicing,
-                    started.elapsed().as_millis(),
-                );
+                let result = supervisor
+                    .set_live_buffer_multiplier(buffer_multiplier)
+                    .and_then(|()| {
+                        prepare_patch(
+                            supervisor.as_ref(),
+                            PatchRequest {
+                                patch: patch.as_deref(),
+                                known_voicing,
+                            },
+                        )
+                    });
                 set_prepare_result(
                     &status,
-                    worker.transport,
-                    worker.buffer_multiplier,
+                    buffer_multiplier,
                     result,
-                    request,
-                    None,
+                    PatchRequest {
+                        patch: patch.as_deref(),
+                        known_voicing,
+                    },
+                    Some(started.elapsed()),
                 );
             }
             KeyboardMidiCommand::SetBufferMultiplier(multiplier) => {
+                buffer_multiplier = multiplier;
                 let started = Instant::now();
-                worker.buffer_multiplier = multiplier;
-                let result = set_buffer_multiplier(&mut worker, supervisor.as_ref());
+                let result = supervisor.set_live_buffer_multiplier(multiplier);
                 set_result(
                     &status,
-                    worker.transport,
-                    worker.buffer_multiplier,
+                    buffer_multiplier,
                     result,
                     Some(started.elapsed()),
                     false,
                 );
             }
             KeyboardMidiCommand::SetPatch {
-                trace,
                 note_offs,
-                previous_patch,
                 patch,
                 known_voicing,
             } => {
-                trace.worker_started(worker.transport, worker.buffer_multiplier, patch.as_deref());
                 let started = Instant::now();
                 let note_off_result = if note_offs.is_empty() {
                     Ok(())
                 } else {
-                    send_midi(
-                        &mut worker,
-                        supervisor.as_ref(),
-                        &note_offs,
-                        previous_patch.as_deref(),
-                    )
+                    supervisor
+                        .send_midi(KEYBOARD_INSTANCE, &note_offs)
+                        .map(|_| ())
                 };
                 let request = PatchRequest {
                     patch: patch.as_deref(),
                     known_voicing,
                 };
-                let patch_result = prepare_connection(
-                    &mut worker,
-                    supervisor.as_ref(),
-                    &status,
-                    request,
-                    trace.id(),
-                );
-                let result = note_off_result.and(patch_result);
-                trace.status_apply(
-                    worker.transport,
-                    patch.as_deref(),
-                    &result,
-                    known_voicing,
-                    started.elapsed().as_millis(),
-                );
+                let result =
+                    note_off_result.and_then(|()| prepare_patch(supervisor.as_ref(), request));
                 set_prepare_result(
                     &status,
-                    worker.transport,
-                    worker.buffer_multiplier,
+                    buffer_multiplier,
                     result,
                     request,
                     Some(started.elapsed()),
                 );
             }
-            KeyboardMidiCommand::Switch {
-                trace,
-                transport,
-                note_offs,
-                patch,
-                known_voicing,
-            } => {
-                switch_transport(
-                    &mut worker,
-                    supervisor.as_ref(),
-                    &status,
-                    transport,
-                    &note_offs,
-                    PatchRequest {
-                        patch: patch.as_deref(),
-                        known_voicing,
-                    },
-                    trace,
-                );
-            }
             KeyboardMidiCommand::Shutdown => break,
         }
+    }
+}
+
+fn prepare_patch(
+    supervisor: &RealtimePlayServerSupervisor,
+    request: PatchRequest<'_>,
+) -> Result<Option<VoicingReport>> {
+    if request.known_voicing.is_some() {
+        supervisor
+            .prepare_live_patch(KEYBOARD_INSTANCE, request.patch)
+            .map(|()| None)
+    } else {
+        supervisor.prepare_live_patch_with_voicing(KEYBOARD_INSTANCE, request.patch)
     }
 }
 

@@ -69,10 +69,9 @@ fn session_state_default_has_no_keyboard_note_guide_date() {
 }
 
 #[test]
-fn keyboard_session_defaults_to_shared_memory_x4() {
+fn keyboard_session_defaults_to_x4() {
     let keyboard = KeyboardSessionState::default();
     assert_eq!(keyboard.patch, None);
-    assert_eq!(keyboard.transport, KeyboardTransport::SharedMemory);
     assert_eq!(keyboard.buffer_multiplier, 4);
 }
 

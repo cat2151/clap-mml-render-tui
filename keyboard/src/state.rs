@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use crossterm::event::KeyCode;
 
 use super::{KeyboardPatchCatalog, NavigationCount, NumericInput, NumericInputTarget};
-use crate::session_state::{KeyboardSessionState, KeyboardTransport};
+use crate::session_state::KeyboardSessionState;
 use cmrt_realtime_play::PatchVoicing;
 use cmrt_tui_core::random::RandomIndexDeck;
 
@@ -122,7 +122,6 @@ impl KeyboardNote {
 pub struct KeyboardState {
     held: Vec<KeyboardNote>,
     pub(super) patch: Option<String>,
-    transport: KeyboardTransport,
     buffer_multiplier: u8,
     velocity: u8,
     velocity_mode: VelocityMode,
@@ -176,7 +175,6 @@ impl KeyboardState {
             patch: session
                 .patch
                 .and_then(|patch| (!patch.trim().is_empty()).then_some(patch)),
-            transport: session.transport,
             buffer_multiplier: session.buffer_multiplier,
             velocity: DEFAULT_VELOCITY,
             velocity_mode: VelocityMode::default(),
@@ -205,7 +203,6 @@ impl KeyboardState {
     pub fn session_state(&self) -> KeyboardSessionState {
         KeyboardSessionState {
             patch: self.patch.clone(),
-            transport: self.transport,
             buffer_multiplier: self.buffer_multiplier,
         }
     }
@@ -220,10 +217,6 @@ impl KeyboardState {
 
     pub fn buffer_multiplier(&self) -> u8 {
         self.buffer_multiplier
-    }
-
-    pub fn transport(&self) -> KeyboardTransport {
-        self.transport
     }
 
     pub fn velocity(&self) -> u8 {
@@ -302,11 +295,6 @@ impl KeyboardState {
             }
             NumericInputTarget::CcValue => Some([CONTROL_CHANGE, self.cc_number, value]),
         }
-    }
-
-    pub(super) fn toggle_transport(&mut self) -> KeyboardTransport {
-        self.transport = self.transport.toggled();
-        self.transport
     }
 
     pub(super) fn cycle_buffer_multiplier(&mut self) -> u8 {

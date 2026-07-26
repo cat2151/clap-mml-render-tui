@@ -38,21 +38,6 @@ pub use state::{ModulationMode, NotePlaybackMode, PitchBendMode, VelocityMode, K
 use cmrt_realtime_play::PatchVoicing;
 use state::note_for_key;
 
-type LogSink = fn(&str);
-static LOG_SINK: std::sync::OnceLock<LogSink> = std::sync::OnceLock::new();
-
-/// app 起動時に、グローバルログ（`log/log.txt`）への書き込み関数を注入する。
-/// 未注入の場合（テスト実行時を含む）、この crate のログは黙って捨てられる。
-pub fn set_log_sink(log: LogSink) {
-    let _ = LOG_SINK.set(log);
-}
-
-pub(crate) fn log_line(message: &str) {
-    if let Some(sink) = LOG_SINK.get() {
-        sink(message);
-    }
-}
-
 impl KeyboardConnectionPhase {
     fn accepts_notes(&self) -> bool {
         matches!(self, Self::Ready)
@@ -114,7 +99,6 @@ impl KeyboardScreen<'_> {
         if let Some(sender) = &self.midi_sender {
             let patch = self.state.patch();
             sender.prepare(
-                self.state.transport(),
                 self.state.buffer_multiplier(),
                 patch,
                 ctx.cached_voicing(patch),
@@ -320,16 +304,6 @@ impl KeyboardScreen<'_> {
                 }
                 KeyCode::Char('z') => {
                     self.state.begin_numeric_input(NumericInputTarget::CcValue);
-                    return KeyboardAction::Continue;
-                }
-                KeyCode::Char('s') => {
-                    let transport = self.state.toggle_transport();
-                    let patch = self.state.patch().map(str::to_string);
-                    let note_offs = self.state.take_reset_messages();
-                    let known_voicing = ctx.cached_voicing(patch.as_deref());
-                    if let Some(sender) = &self.midi_sender {
-                        sender.switch(transport, note_offs, patch.as_deref(), known_voicing);
-                    }
                     return KeyboardAction::Continue;
                 }
                 KeyCode::Char('r')

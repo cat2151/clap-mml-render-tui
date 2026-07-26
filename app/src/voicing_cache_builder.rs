@@ -50,7 +50,7 @@ pub fn run_build_voicing_cache(cfg: &Config, force: bool) -> Result<()> {
     for (index, patch) in targets.into_iter().enumerate() {
         print!("[{}/{}] {patch} -> ", index + 1, total);
         // 1 個の壊れた patch で全体が止まらないよう、失敗は表示して続行する。
-        match supervisor.prepare_live_patch_with_voicing(Some(patch)) {
+        match supervisor.prepare_live_patch_with_voicing(0, Some(patch)) {
             Ok(Some(report)) => {
                 println!("{}", voicing_label(report.decision));
                 if cache.insert(patch, report.decision) {

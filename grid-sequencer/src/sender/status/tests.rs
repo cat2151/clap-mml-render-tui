@@ -1,74 +1,50 @@
 use super::*;
 
 #[test]
-fn default_status_starts_idle_on_shared_memory() {
-    let status = GridConnectionStatus::default();
-    assert_eq!(status.transport, KeyboardTransport::SharedMemory);
-    assert_eq!(status.phase, GridConnectionPhase::Idle);
-    assert_eq!(status.last_send, None);
-    assert_eq!(status.patch, None);
-}
-
-#[test]
-fn only_the_ready_phase_accepts_notes() {
-    assert!(GridConnectionPhase::Ready.accepts_notes());
-    assert!(!GridConnectionPhase::Idle.accepts_notes());
-    assert!(!GridConnectionPhase::Connecting.accepts_notes());
-    assert!(!GridConnectionPhase::PatchSetting.accepts_notes());
-    assert!(!GridConnectionPhase::Error("boom".to_string()).accepts_notes());
-}
-
-#[test]
-fn begin_connecting_clears_the_previous_send_time() {
+fn begin_connecting_clears_meter_and_sets_phase() {
     let mut status = GridConnectionStatus {
         phase: GridConnectionPhase::Ready,
-        last_send: Some(Duration::from_millis(12)),
-        ..GridConnectionStatus::default()
+        last_send: Some(Duration::from_millis(2)),
+        limiter_reduction_db: 4.0,
+        buffer_multiplier: 8,
+        underrun_frames: 512,
+        server_startup: None,
+        patch_setting: None,
     };
-
-    status.begin_connecting(Some("Keys/Piano.fxp"));
-
+    status.begin_connecting();
     assert_eq!(status.phase, GridConnectionPhase::Connecting);
     assert_eq!(status.last_send, None);
-    assert_eq!(status.patch.as_deref(), Some("Keys/Piano.fxp"));
+    assert_eq!(status.limiter_reduction_db, 0.0);
+    assert_eq!(status.buffer_multiplier, 2);
+    assert_eq!(status.underrun_frames, 0);
 }
 
 #[test]
-fn begin_patch_setting_keeps_the_last_send_time() {
-    let mut status = GridConnectionStatus {
-        phase: GridConnectionPhase::Ready,
-        last_send: Some(Duration::from_millis(12)),
-        ..GridConnectionStatus::default()
-    };
-
-    status.begin_patch_setting(Some("Leads/Saw.fxp"));
-
-    assert_eq!(status.phase, GridConnectionPhase::PatchSetting);
-    assert_eq!(status.last_send, Some(Duration::from_millis(12)));
-    assert_eq!(status.patch.as_deref(), Some("Leads/Saw.fxp"));
-}
-
-#[test]
-fn a_successful_send_becomes_ready_and_a_successful_stop_becomes_idle() {
+fn labels_include_server_and_patch_progress() {
     let mut status = GridConnectionStatus::default();
+    status.begin_connecting();
+    status.update_server_startup(6, 16);
+    assert_eq!(status.label(), "starting server 6/16");
 
-    status.apply_result(Ok(()), Some(Duration::from_millis(3)), false);
-    assert_eq!(status.phase, GridConnectionPhase::Ready);
-    assert_eq!(status.last_send, Some(Duration::from_millis(3)));
-
-    status.apply_result(Ok(()), None, true);
-    assert_eq!(status.phase, GridConnectionPhase::Idle);
+    status.begin_patch_setting(16);
+    status.update_patch_setting(11, 16);
+    assert_eq!(status.label(), "patches 11/16");
 }
 
 #[test]
-fn a_failure_surfaces_the_error_message() {
+fn periodic_meter_update_uses_the_larger_reduction() {
     let mut status = GridConnectionStatus::default();
+    status.update_limiter_meter(cmrt_realtime_play::LimiterMeter {
+        current_reduction_db: 1.5,
+        peak_reduction_db: 3.0,
+    });
+    assert_eq!(status.limiter_reduction_db, 3.0);
+}
 
-    status.apply_result(Err(anyhow::anyhow!("connection refused")), None, false);
-
-    assert_eq!(
-        status.phase,
-        GridConnectionPhase::Error("connection refused".to_string())
-    );
-    assert_eq!(status.phase.label(), "connection refused");
+#[test]
+fn adaptive_buffer_status_tracks_the_current_level() {
+    let mut status = GridConnectionStatus::default();
+    status.update_adaptive_buffer(16, 1_024);
+    assert_eq!(status.buffer_multiplier, 16);
+    assert_eq!(status.underrun_frames, 1_024);
 }

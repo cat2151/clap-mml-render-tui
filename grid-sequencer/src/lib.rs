@@ -4,9 +4,7 @@
 //! （app 側の `TuiApp`）からは `GridSequencerContext` で必要な情報を注入してもらう。
 //! app 側との接続は app crate の `tui::grid_sequencer_glue` にある。
 //!
-//! realtime play server は CLAP プラグイン1インスタンス構成で、同時に有効な patch は
-//! 1つだけ。そのため行ごとの patch name は表示専用で、実際の発音には行0の patch を
-//! 画面共通の音色として使う。
+//! grid のrow 0〜15を realtime play server のCLAP instance 0〜15へ対応付ける。
 
 use std::time::Instant;
 
@@ -19,7 +17,7 @@ mod state;
 pub mod ui;
 
 pub use screen::GridSequencerScreen;
-pub use sender::{GridConnectionPhase, GridConnectionStatus, GridMidiSender};
+pub use sender::{GridConnectionPhase, GridConnectionStatus, GridMidiSender, GridProgress};
 pub use state::{
     frames_ahead, step_offset, GridRow, GridScheduledMessage, GridState, StepDuration, BPM,
     GRID_ROWS, GRID_STEPS, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL,
@@ -79,6 +77,10 @@ impl GridSequencerContext<'_> {
             GridPatchLoad::Err(error) => GridPatchStatus::Err((*error).to_string()),
         }
     }
+
+    fn patches_are_loading(&self) -> bool {
+        matches!(self.patch_load, GridPatchLoad::Loading)
+    }
 }
 
 /// ステータス行に出す patch 一覧の状態（直近のランダム化時点のスナップショット）。
@@ -123,11 +125,8 @@ impl GridSequencerScreen {
         let _ = self.state.randomize_all(now, ctx.patches());
         self.grid_ready = true;
         self.state.start(now);
-        log_line(&format!(
-            "grid-sequencer: start patch={}",
-            self.state.sound_patch().unwrap_or("(default)")
-        ));
-        self.prepare_connection();
+        log_line(&format!("grid-sequencer: start instances={GRID_ROWS}"));
+        self.prepare_connection_or_start_server(ctx);
     }
 
     /// 直前の grid を保ったまま画面へ戻るときの初期化。
@@ -140,11 +139,8 @@ impl GridSequencerScreen {
     /// 画面を離れるときの後始末。鳴っている音を止めてから再生を停止する。
     pub fn finish(&mut self) {
         self.help_open = false;
-        let note_offs = self.state.take_reset_messages();
+        let _note_offs = self.state.take_reset_messages();
         if let Some(sender) = &self.midi_sender {
-            if !note_offs.is_empty() {
-                sender.send(note_offs, self.state.sound_patch());
-            }
             sender.stop();
         }
     }
@@ -158,8 +154,32 @@ impl GridSequencerScreen {
 
     fn prepare_connection(&self) {
         if let Some(sender) = &self.midi_sender {
-            sender.prepare(self.state.sound_patch());
+            sender.prepare(self.state.patches());
         }
+    }
+
+    fn prepare_connection_or_start_server(&self, ctx: &GridSequencerContext<'_>) {
+        if self.state.patches().all(|patch| patch.is_some()) {
+            self.prepare_connection();
+        } else if ctx.patches_are_loading() {
+            if let Some(sender) = &self.midi_sender {
+                sender.start_server();
+            }
+        }
+    }
+
+    /// 非同期の patch 一覧が Ready へ遷移したら、未設定 row へ一度だけ割り当てて
+    /// 16 instance の patch prepare を開始する。
+    pub fn refresh_context(&mut self, ctx: &GridSequencerContext<'_>) {
+        self.patch_status = ctx.patch_status();
+        let assigned = self.state.fill_missing_patches(ctx.patches());
+        if assigned == 0 {
+            return;
+        }
+        log_line(&format!(
+            "grid-sequencer: patch-list-ready assigned={assigned} instances={GRID_ROWS}"
+        ));
+        self.prepare_connection();
     }
 
     pub fn handle_key(
@@ -189,33 +209,13 @@ impl GridSequencerScreen {
         GridSequencerAction::Continue
     }
 
-    /// grid を丸ごと引き直す。行0の patch が変わったときは音色も差し替える。
+    /// grid を丸ごと引き直し、16 instanceすべてのpatchを差し替える。
     fn randomize(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
         self.patch_status = ctx.patch_status();
-        let previous_patch = self.state.sound_patch().map(str::to_string);
-        let note_offs = self.state.randomize_all(now, ctx.patches());
-        let patch = self.state.sound_patch();
-        log_line(&format!(
-            "grid-sequencer: randomize patch={} note_offs={}",
-            patch.unwrap_or("(default)"),
-            note_offs.len()
-        ));
-        if patch != previous_patch.as_deref() {
-            // live 再生中の /midi は patch を無視するサーバー仕様のため、音色切替は
-            // note off の送出込みで /live-patch 経路へまとめて渡す。/live-patch は live
-            // session を作り直すので、先読みで送信済みのぶんもそこで破棄される。
-            let Some(sender) = &self.midi_sender else {
-                return;
-            };
-            let messages = note_offs
-                .into_iter()
-                .map(|scheduled| scheduled.message)
-                .collect();
-            sender.set_patch(messages, previous_patch.as_deref(), patch);
-        } else {
-            // 音色据え置きのときは先読み済みのイベントがサーバーに残るため、
-            // note off はそれより後ろへ置く（`GridState::silence_ahead`）。
-            self.send_scheduled(&note_offs);
+        let _note_offs = self.state.randomize_all(now, ctx.patches());
+        log_line(&format!("grid-sequencer: randomize instances={GRID_ROWS}"));
+        if let Some(sender) = &self.midi_sender {
+            sender.prepare(self.state.patches());
         }
     }
 }

@@ -1,8 +1,7 @@
 use anyhow::Result;
 
-// keyboard 画面のセッション状態（KeyboardSessionState / KeyboardTransport）は
-// 値型は `cmrt-tui-core` が所有する。従来の `crate::history::*` パスは再エクスポートで維持する。
-pub use cmrt_tui_core::keyboard_session_state::{KeyboardSessionState, KeyboardTransport};
+// keyboard 画面のセッション状態は `cmrt-tui-core` が所有する。
+pub use cmrt_tui_core::keyboard_session_state::KeyboardSessionState;
 
 /// 起動・終了で保存・復元するセッション状態。
 #[derive(Debug, Clone, serde::Serialize)]

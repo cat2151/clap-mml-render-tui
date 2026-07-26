@@ -96,7 +96,7 @@ fn save_history_state_persists_tui_cursor_lines_and_active_screen() {
 }
 
 #[test]
-fn keyboard_q_persists_and_restores_patch_transport_and_buffer() {
+fn keyboard_q_persists_and_restores_patch_and_buffer() {
     let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
     let tmp = std::env::temp_dir().join(format!(
         "cmrt_test_keyboard_session_restore_{}_{}",
@@ -108,10 +108,6 @@ fn keyboard_q_persists_and_restores_patch_transport_and_buffer() {
 
     let mut app = TuiApp::new_for_test(test_config());
     app.start_keyboard(Some("patches_factory/Keys/Piano.fxp".to_string()));
-    app.handle_keyboard_key_event(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Char('s'),
-        crossterm::event::KeyModifiers::NONE,
-    ));
     app.handle_keyboard_key_event(crossterm::event::KeyEvent::new(
         crossterm::event::KeyCode::Char('H'),
         crossterm::event::KeyModifiers::SHIFT,
@@ -129,7 +125,6 @@ fn keyboard_q_persists_and_restores_patch_transport_and_buffer() {
         saved.keyboard,
         crate::history::KeyboardSessionState {
             patch: Some("patches_factory/Keys/Piano.fxp".to_string()),
-            transport: crate::history::KeyboardTransport::Http,
             buffer_multiplier: 8,
         }
     );
@@ -143,10 +138,6 @@ fn keyboard_q_persists_and_restores_patch_transport_and_buffer() {
     assert_eq!(
         restored.keyboard.state.patch(),
         Some("patches_factory/Keys/Piano.fxp")
-    );
-    assert_eq!(
-        restored.keyboard.state.transport(),
-        crate::history::KeyboardTransport::Http
     );
     assert_eq!(restored.keyboard.state.buffer_multiplier(), 8);
 

@@ -140,7 +140,6 @@ fn load_session_state_normalizes_keyboard_restore_values() {
         state.keyboard,
         KeyboardSessionState {
             patch: None,
-            transport: KeyboardTransport::Http,
             buffer_multiplier: 4,
         }
     );

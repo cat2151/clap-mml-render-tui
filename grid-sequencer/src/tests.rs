@@ -93,7 +93,10 @@ fn r_assigns_a_patch_to_every_row() {
         .rows()
         .iter()
         .all(|row| row.patch.as_deref() == Some("Keys/Piano.fxp")));
-    assert_eq!(screen.state.sound_patch(), Some("Keys/Piano.fxp"));
+    assert!(screen
+        .state
+        .patches()
+        .all(|patch| patch == Some("Keys/Piano.fxp")));
 }
 
 #[test]
@@ -107,6 +110,27 @@ fn r_keeps_the_patch_empty_while_the_list_is_still_loading() {
     screen.handle_key(press(KeyCode::Char('r')), Instant::now(), &ctx);
 
     assert!(screen.state.rows().iter().all(|row| row.patch.is_none()));
+}
+
+#[test]
+fn ready_patch_list_fills_rows_that_started_while_loading() {
+    let mut screen = silent_screen();
+    let loading = GridSequencerContext {
+        patch_dirs_configured: true,
+        patch_load: GridPatchLoad::Loading,
+    };
+    screen.start(Instant::now(), &loading);
+    assert!(screen.state.rows().iter().all(|row| row.patch.is_none()));
+
+    let patches = one_patch();
+    screen.refresh_context(&ready_ctx(&patches));
+
+    assert!(screen
+        .state
+        .rows()
+        .iter()
+        .all(|row| row.patch.as_deref() == Some("Keys/Piano.fxp")));
+    assert_eq!(screen.patch_status, GridPatchStatus::Ready(1));
 }
 
 #[test]
