@@ -17,7 +17,9 @@ mod state;
 pub mod ui;
 
 pub use screen::GridSequencerScreen;
-pub use sender::{GridConnectionPhase, GridConnectionStatus, GridMidiSender, GridProgress};
+pub use sender::{
+    GridConnectionPhase, GridConnectionStatus, GridMidiSender, GridProgress, GridRowReadiness,
+};
 pub use state::{
     frames_ahead, step_offset, GridRow, GridScheduledMessage, GridState, StepDuration, BPM,
     GRID_ROWS, GRID_STEPS, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL,

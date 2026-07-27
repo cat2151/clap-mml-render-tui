@@ -32,6 +32,46 @@ fn labels_include_server_and_patch_progress() {
 }
 
 #[test]
+fn row_readiness_follows_the_two_preparation_stages() {
+    let mut status = GridConnectionStatus::default();
+    // 進捗中ではない Idle は、テストモードと画面離脱後の状態なので通常表示。
+    assert_eq!(status.row_readiness(0), GridRowReadiness::Prepared);
+    assert!(!status.is_preparing());
+
+    status.begin_connecting();
+    assert_eq!(status.row_readiness(0), GridRowReadiness::Pending);
+    status.update_server_startup(3, 16);
+    assert_eq!(status.row_readiness(2), GridRowReadiness::InstanceReady);
+    assert_eq!(status.row_readiness(3), GridRowReadiness::Pending);
+    assert!(status.is_preparing());
+
+    status.wait_for_patches(Duration::from_millis(1));
+    assert_eq!(status.row_readiness(15), GridRowReadiness::InstanceReady);
+
+    status.begin_patch_setting(16);
+    assert_eq!(status.row_readiness(0), GridRowReadiness::InstanceReady);
+    status.update_patch_setting(5, 16);
+    assert_eq!(status.row_readiness(4), GridRowReadiness::Prepared);
+    assert_eq!(status.row_readiness(5), GridRowReadiness::InstanceReady);
+
+    status.phase = GridConnectionPhase::Ready;
+    assert_eq!(status.row_readiness(15), GridRowReadiness::Prepared);
+    assert!(!status.is_preparing());
+}
+
+#[test]
+fn an_error_greys_out_every_row_and_exposes_its_message() {
+    let mut status = GridConnectionStatus::default();
+    status.phase = GridConnectionPhase::Error("patch prepare failed".to_string());
+
+    assert_eq!(status.row_readiness(0), GridRowReadiness::Pending);
+    assert_eq!(status.row_readiness(15), GridRowReadiness::Pending);
+    assert_eq!(status.error_message(), Some("patch prepare failed"));
+    assert!(!status.is_preparing());
+    assert_eq!(GridConnectionStatus::default().error_message(), None);
+}
+
+#[test]
 fn periodic_meter_update_uses_the_larger_reduction() {
     let mut status = GridConnectionStatus::default();
     status.update_limiter_meter(cmrt_realtime_play::LimiterMeter {

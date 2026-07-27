@@ -20,6 +20,7 @@ use crate::{
 
 mod grid;
 mod help;
+mod progress;
 
 pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: &mut Frame<'_>) {
     let chunks = Layout::default()
@@ -30,12 +31,16 @@ pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: 
             Constraint::Length(1),
         ])
         .split(f.area());
-    grid::draw(screen, f, chunks[0]);
+    grid::draw(screen, connection, f, chunks[0]);
     f.render_widget(status_line(screen, connection, chunks[1].width), chunks[1]);
     f.render_widget(
         Paragraph::new(help::KEYBIND_TEXT).style(base_style().fg(MONOKAI_GRAY)),
         chunks[2],
     );
+    // 準備中とエラーは中央 overlay で知らせる。help は常に最前面。
+    if connection.is_preparing() || connection.error_message().is_some() {
+        progress::draw_overlay(f, connection);
+    }
     if screen.help_open {
         help::draw_overlay(f);
     }

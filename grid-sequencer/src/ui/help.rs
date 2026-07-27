@@ -43,6 +43,9 @@ fn help_lines() -> Vec<Line<'static>> {
         "行1〜16は realtime play server の CLAP instance 0〜15 に対応し、",
         "行ごとに別の音色で鳴ります。r は16 instance ぶんの音色ロードを",
         "やり直すため、その間だけ再生が止まります。",
+        "",
+        "準備中の行は色が落ちます。暗いグレー = instance 未構築、",
+        "グレー = instance のみ構築済み、通常色 = 音色ロードまで完了。",
     ]
     .into_iter()
     .map(Line::from)

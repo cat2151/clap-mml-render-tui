@@ -22,6 +22,21 @@ pub struct GridProgress {
     pub total: usize,
 }
 
+/// grid の1行（= CLAP instance 1つ）の準備段階。
+///
+/// 起動時の待ち時間は「サーバー側の instance 初期化」と「patch のロード」の
+/// 2段階からなり、どちらも instance id = 行番号 の順に1つずつ進む。行の色を
+/// この段階で塗り分けることで、待ち時間そのものを進捗表示にする。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GridRowReadiness {
+    /// instance がまだ構築されていない。
+    Pending,
+    /// サーバー側の instance 初期化だけ済み、patch は未ロード。
+    InstanceReady,
+    /// patch のロードまで済み、鳴らせる。
+    Prepared,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct GridConnectionStatus {
     pub phase: GridConnectionPhase,
@@ -64,6 +79,49 @@ impl GridConnectionStatus {
                 .unwrap_or_else(|| "patches".to_string()),
             GridConnectionPhase::Ready => "ready".to_string(),
             GridConnectionPhase::Error(message) => message.clone(),
+        }
+    }
+
+    /// 指定行（= instance id）の準備段階。grid のグレーアウト表示に使う。
+    ///
+    /// `Idle` を `Prepared` にしているのは、MIDI sender を持たないテストモードと
+    /// 画面離脱後がこの phase であり、どちらも「準備中」ではないため。
+    pub fn row_readiness(&self, row: usize) -> GridRowReadiness {
+        match &self.phase {
+            GridConnectionPhase::Idle | GridConnectionPhase::Ready => GridRowReadiness::Prepared,
+            GridConnectionPhase::Connecting => {
+                if row < self.server_startup.map_or(0, |progress| progress.completed) {
+                    GridRowReadiness::InstanceReady
+                } else {
+                    GridRowReadiness::Pending
+                }
+            }
+            GridConnectionPhase::WaitingForPatches => GridRowReadiness::InstanceReady,
+            GridConnectionPhase::PatchSetting => {
+                if row < self.patch_setting.map_or(0, |progress| progress.completed) {
+                    GridRowReadiness::Prepared
+                } else {
+                    GridRowReadiness::InstanceReady
+                }
+            }
+            GridConnectionPhase::Error(_) => GridRowReadiness::Pending,
+        }
+    }
+
+    /// 起動待ちの最中か（中央 overlay を出すかどうかの判定）。
+    pub fn is_preparing(&self) -> bool {
+        matches!(
+            self.phase,
+            GridConnectionPhase::Connecting
+                | GridConnectionPhase::WaitingForPatches
+                | GridConnectionPhase::PatchSetting
+        )
+    }
+
+    pub fn error_message(&self) -> Option<&str> {
+        match &self.phase {
+            GridConnectionPhase::Error(message) => Some(message),
+            _ => None,
         }
     }
 

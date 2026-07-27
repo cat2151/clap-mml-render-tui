@@ -1,5 +1,6 @@
 use ratatui::{
     layout::Rect,
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
@@ -7,10 +8,10 @@ use ratatui::{
 
 use cmrt_tui_core::{
     status::base_style,
-    theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_GRAY, MONOKAI_GREEN},
+    theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_DARK_GRAY, MONOKAI_GRAY, MONOKAI_GREEN},
 };
 
-use crate::{GridRow, GridSequencerScreen, GRID_STEPS};
+use crate::{GridConnectionStatus, GridRow, GridRowReadiness, GridSequencerScreen, GRID_STEPS};
 
 /// patch name 欄の桁数。
 const PATCH_WIDTH: usize = 24;
@@ -18,7 +19,12 @@ const PATCH_WIDTH: usize = 24;
 const NOTE_CELL: &str = "# ";
 const REST_CELL: &str = ". ";
 
-pub(super) fn draw(screen: &GridSequencerScreen, f: &mut Frame<'_>, area: Rect) {
+pub(super) fn draw(
+    screen: &GridSequencerScreen,
+    connection: &GridConnectionStatus,
+    f: &mut Frame<'_>,
+    area: Rect,
+) {
     let playhead = screen.state.step_index();
     let mut lines = vec![header_line()];
     lines.extend(
@@ -27,7 +33,7 @@ pub(super) fn draw(screen: &GridSequencerScreen, f: &mut Frame<'_>, area: Rect) 
             .rows()
             .iter()
             .enumerate()
-            .map(|(index, row)| row_line(index, row, playhead)),
+            .map(|(index, row)| row_line(index, row, playhead, connection.row_readiness(index))),
     );
     f.render_widget(
         Paragraph::new(lines).style(base_style()).block(
@@ -49,7 +55,12 @@ fn header_line() -> Line<'static> {
     ])
 }
 
-fn row_line(index: usize, row: &GridRow, playhead: usize) -> Line<'static> {
+fn row_line(
+    index: usize,
+    row: &GridRow,
+    playhead: usize,
+    readiness: GridRowReadiness,
+) -> Line<'static> {
     let mut spans = vec![Span::styled(
         label_columns(
             &(index + 1).to_string(),
@@ -57,18 +68,37 @@ fn row_line(index: usize, row: &GridRow, playhead: usize) -> Line<'static> {
             &row.note.to_string(),
             row.duration.label(),
         ),
-        base_style(),
+        label_style(readiness),
     )];
     for (step, on) in row.cells.iter().enumerate() {
-        let color = if *on { MONOKAI_GREEN } else { MONOKAI_GRAY };
+        let style = cell_style(readiness, *on);
         let style = if step == playhead {
-            cursor_highlight_style(base_style().fg(color))
+            cursor_highlight_style(style)
         } else {
-            base_style().fg(color)
+            style
         };
         spans.push(Span::styled(if *on { NOTE_CELL } else { REST_CELL }, style));
     }
     Line::from(spans)
+}
+
+/// 準備の済んでいない行は左の情報欄も落として、鳴らせる行と見分けられるようにする。
+fn label_style(readiness: GridRowReadiness) -> Style {
+    match readiness {
+        GridRowReadiness::Prepared => base_style(),
+        GridRowReadiness::InstanceReady => base_style().fg(MONOKAI_GRAY),
+        GridRowReadiness::Pending => base_style().fg(MONOKAI_DARK_GRAY),
+    }
+}
+
+/// 準備中の行は note / 休符を同じ色に落とす。パターン自体は記号（`#` / `.`）で読める。
+fn cell_style(readiness: GridRowReadiness, on: bool) -> Style {
+    let color = match readiness {
+        GridRowReadiness::Prepared if on => MONOKAI_GREEN,
+        GridRowReadiness::Prepared | GridRowReadiness::InstanceReady => MONOKAI_GRAY,
+        GridRowReadiness::Pending => MONOKAI_DARK_GRAY,
+    };
+    base_style().fg(color)
 }
 
 /// grid の左に置く情報欄（行番号 / patch name / note number / 音長）。

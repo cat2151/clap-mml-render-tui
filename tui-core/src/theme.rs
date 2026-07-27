@@ -5,6 +5,8 @@ use ratatui::style::{Color, Modifier, Style};
 pub const MONOKAI_BG: Color = Color::Rgb(39, 40, 34);
 pub const MONOKAI_FG: Color = Color::Rgb(248, 248, 242);
 pub const MONOKAI_GRAY: Color = Color::Rgb(160, 160, 160);
+/// 未準備・無効状態の要素に使う、`MONOKAI_GRAY` より暗いグレー。
+pub const MONOKAI_DARK_GRAY: Color = Color::Rgb(90, 90, 88);
 pub const MONOKAI_PINK: Color = Color::Rgb(249, 38, 114);
 pub const MONOKAI_YELLOW: Color = Color::Rgb(230, 219, 116);
 pub const MONOKAI_GREEN: Color = Color::Rgb(166, 226, 46);

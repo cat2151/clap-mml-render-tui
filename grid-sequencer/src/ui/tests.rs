@@ -1,8 +1,11 @@
 use std::time::{Duration, Instant};
 
-use ratatui::{backend::TestBackend, Terminal};
+use ratatui::{backend::TestBackend, style::Color, Terminal};
 
-use cmrt_tui_core::{buffer_test::find_text_ignoring_spaces, theme::cursor_highlight_bg};
+use cmrt_tui_core::{
+    buffer_test::find_text_ignoring_spaces,
+    theme::{cursor_highlight_bg, MONOKAI_DARK_GRAY, MONOKAI_FG},
+};
 
 use super::*;
 use crate::{GridPatchStatus, GridProgress, StepDuration, GRID_ROWS, STEP_INTERVAL};
@@ -49,6 +52,31 @@ fn render_with_connection(
     let mut terminal = Terminal::new(TestBackend::new(90, 24)).unwrap();
     terminal.draw(|f| draw(screen, connection, f)).unwrap();
     buffer_to_string(&terminal)
+}
+
+fn terminal_with_connection(
+    screen: &GridSequencerScreen,
+    connection: &GridConnectionStatus,
+) -> Terminal<TestBackend> {
+    let mut terminal = Terminal::new(TestBackend::new(90, 24)).unwrap();
+    terminal.draw(|f| draw(screen, connection, f)).unwrap();
+    terminal
+}
+
+/// 指定した grid 行の、左情報欄（行番号の桁）の前景色。
+/// 中央 overlay は画面中央に出るので、左端のこの列とは重ならない。
+fn row_label_fg(terminal: &Terminal<TestBackend>, row: usize) -> Color {
+    terminal
+        .backend()
+        .buffer()
+        .cell((3u16, (FIRST_ROW_Y + row) as u16))
+        .unwrap()
+        .fg
+}
+
+/// 進捗 overlay が出ているか。バーの記号は overlay にしか現れない。
+fn has_progress_overlay(rendered: &str) -> bool {
+    rendered.contains('█') || rendered.contains('░')
 }
 
 /// 1行目だけを鳴らす、決め打ちの grid。
@@ -202,6 +230,122 @@ fn the_status_line_shows_patch_setting_progress() {
     let rendered = render_with_connection(&screen, &connection);
 
     assert!(rendered.contains("SHM patches 11/16"), "{rendered}");
+}
+
+#[test]
+fn the_progress_overlay_shows_both_stages_while_patches_load() {
+    let screen = GridSequencerScreen::new(None);
+    let connection = GridConnectionStatus {
+        phase: GridConnectionPhase::PatchSetting,
+        patch_setting: Some(GridProgress {
+            completed: 5,
+            total: 16,
+        }),
+        ..GridConnectionStatus::default()
+    };
+
+    let terminal = terminal_with_connection(&screen, &connection);
+    let buffer = terminal.backend().buffer();
+
+    // 全角文字はセル2つぶんを占めるため、空白を無視して探す。
+    find_text_ignoring_spaces(buffer, "準備中");
+    find_text_ignoring_spaces(buffer, "サーバー起動");
+    find_text_ignoring_spaces(buffer, "音色ロード");
+    // 段階1は完了、段階2が 5/16 まで進んでいる。
+    find_text_ignoring_spaces(buffer, "16/16");
+    find_text_ignoring_spaces(buffer, "5/16");
+}
+
+#[test]
+fn rows_lose_their_grey_out_one_by_one_as_patches_load() {
+    let screen = GridSequencerScreen::new(None);
+    let connection = GridConnectionStatus {
+        phase: GridConnectionPhase::PatchSetting,
+        patch_setting: Some(GridProgress {
+            completed: 5,
+            total: 16,
+        }),
+        ..GridConnectionStatus::default()
+    };
+
+    let terminal = terminal_with_connection(&screen, &connection);
+
+    for row in 0..5 {
+        assert_eq!(row_label_fg(&terminal, row), MONOKAI_FG, "row {row}");
+    }
+    for row in 5..GRID_ROWS {
+        assert_eq!(row_label_fg(&terminal, row), MONOKAI_GRAY, "row {row}");
+    }
+}
+
+#[test]
+fn rows_stay_dark_until_the_server_has_built_their_instance() {
+    let screen = GridSequencerScreen::new(None);
+    let connection = GridConnectionStatus {
+        phase: GridConnectionPhase::Connecting,
+        server_startup: Some(GridProgress {
+            completed: 3,
+            total: 16,
+        }),
+        ..GridConnectionStatus::default()
+    };
+
+    let terminal = terminal_with_connection(&screen, &connection);
+
+    for row in 0..3 {
+        assert_eq!(row_label_fg(&terminal, row), MONOKAI_GRAY, "row {row}");
+    }
+    for row in 3..GRID_ROWS {
+        assert_eq!(row_label_fg(&terminal, row), MONOKAI_DARK_GRAY, "row {row}");
+    }
+}
+
+#[test]
+fn the_error_overlay_shows_the_reason_and_greys_out_every_row() {
+    let screen = GridSequencerScreen::new(None);
+    let connection = GridConnectionStatus {
+        phase: GridConnectionPhase::Error("grid row 3 patch prepare failed".to_string()),
+        ..GridConnectionStatus::default()
+    };
+
+    let terminal = terminal_with_connection(&screen, &connection);
+    let buffer = terminal.backend().buffer();
+
+    find_text_ignoring_spaces(buffer, "準備エラー");
+    find_text_ignoring_spaces(buffer, "gridrow3patchpreparefailed");
+    for row in 0..GRID_ROWS {
+        assert_eq!(row_label_fg(&terminal, row), MONOKAI_DARK_GRAY, "row {row}");
+    }
+}
+
+#[test]
+fn the_overlay_disappears_and_rows_regain_their_colour_once_ready() {
+    let screen = screen_with_first_row(60, StepDuration::Sixteenth, &[0]);
+    let connection = GridConnectionStatus {
+        phase: GridConnectionPhase::Ready,
+        ..GridConnectionStatus::default()
+    };
+
+    let rendered = render_with_connection(&screen, &connection);
+    let terminal = terminal_with_connection(&screen, &connection);
+
+    assert!(!has_progress_overlay(&rendered), "{rendered}");
+    for row in 0..GRID_ROWS {
+        assert_eq!(row_label_fg(&terminal, row), MONOKAI_FG, "row {row}");
+    }
+}
+
+/// MIDI sender を持たないテストモード（`Idle`）は「準備中」ではないので、
+/// overlay を出さず grid も通常色で描く。
+#[test]
+fn the_idle_test_mode_draws_the_grid_without_any_overlay() {
+    let screen = screen_with_first_row(60, StepDuration::Sixteenth, &[0]);
+
+    let rendered = render(&screen);
+    let terminal = terminal_for(&screen);
+
+    assert!(!has_progress_overlay(&rendered), "{rendered}");
+    assert_eq!(row_label_fg(&terminal, 0), MONOKAI_FG);
 }
 
 #[test]

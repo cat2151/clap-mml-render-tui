@@ -11,7 +11,7 @@ mod adaptive_buffer;
 mod status;
 
 use adaptive_buffer::{AdaptiveBuffer, INITIAL_BUFFER_MULTIPLIER, RESTORE_BUFFER_MULTIPLIER};
-pub use status::{GridConnectionPhase, GridConnectionStatus, GridProgress};
+pub use status::{GridConnectionPhase, GridConnectionStatus, GridProgress, GridRowReadiness};
 
 const METER_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
