@@ -80,6 +80,9 @@ pub struct Config {
     /// realtime play server backend 起動コマンド。空なら sibling executable / PATH を探す。
     #[serde(default)]
     pub realtime_play_server_command: String,
+    /// app 起動直後に realtime play server を先行起動するかどうか。
+    #[serde(default = "default_realtime_play_server_prewarm")]
+    pub realtime_play_server_prewarm: bool,
     /// 起動時に自動再生するかどうか（notepad: 現在行 / DAW: 曲先頭から演奏開始）
     #[serde(default = "default_autoplay_on_startup")]
     pub autoplay_on_startup: bool,
@@ -105,6 +108,10 @@ fn default_offline_render_server_port() -> u16 {
 
 fn default_realtime_play_server_port() -> u16 {
     DEFAULT_REALTIME_PLAY_SERVER_PORT
+}
+
+fn default_realtime_play_server_prewarm() -> bool {
+    true
 }
 
 fn default_autoplay_on_startup() -> bool {

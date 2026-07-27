@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum GridConnectionPhase {
@@ -46,6 +46,12 @@ pub struct GridConnectionStatus {
     pub underrun_frames: u64,
     pub server_startup: Option<GridProgress>,
     pub patch_setting: Option<GridProgress>,
+    /// 進行中の段が始まった時刻。確定値が出るまでの経過時間表示に使う。
+    pub stage_started_at: Option<Instant>,
+    /// サーバー起動（CLAP インスタンス生成）の確定所要時間。
+    pub server_startup_elapsed: Option<Duration>,
+    /// 音色ロード（16 instance 分の patch prepare）の確定所要時間。
+    pub patch_setting_elapsed: Option<Duration>,
 }
 
 impl Default for GridConnectionStatus {
@@ -58,6 +64,9 @@ impl Default for GridConnectionStatus {
             underrun_frames: 0,
             server_startup: None,
             patch_setting: None,
+            stage_started_at: None,
+            server_startup_elapsed: None,
+            patch_setting_elapsed: None,
         }
     }
 }
@@ -125,6 +134,22 @@ impl GridConnectionStatus {
         }
     }
 
+    /// 段1・段2それぞれの経過時間。確定していなければ、進行中の段だけ
+    /// `stage_started_at` からの経過を返す（overlay で数字が動くようにするため）。
+    pub fn stage_elapsed(&self, now: Instant) -> (Option<Duration>, Option<Duration>) {
+        let running = self
+            .stage_started_at
+            .map(|started| now.saturating_duration_since(started));
+        match &self.phase {
+            GridConnectionPhase::Connecting => (self.server_startup_elapsed.or(running), None),
+            GridConnectionPhase::WaitingForPatches | GridConnectionPhase::PatchSetting => (
+                self.server_startup_elapsed,
+                self.patch_setting_elapsed.or(running),
+            ),
+            _ => (self.server_startup_elapsed, self.patch_setting_elapsed),
+        }
+    }
+
     pub(super) fn begin_connecting(&mut self) {
         self.phase = GridConnectionPhase::Connecting;
         self.last_send = None;
@@ -133,6 +158,9 @@ impl GridConnectionStatus {
         self.underrun_frames = 0;
         self.server_startup = None;
         self.patch_setting = None;
+        self.stage_started_at = Some(Instant::now());
+        self.server_startup_elapsed = None;
+        self.patch_setting_elapsed = None;
     }
 
     pub(super) fn update_server_startup(&mut self, completed: usize, total: usize) {
@@ -142,18 +170,30 @@ impl GridConnectionStatus {
     pub(super) fn wait_for_patches(&mut self, elapsed: Duration) {
         self.phase = GridConnectionPhase::WaitingForPatches;
         self.last_send = Some(elapsed);
+        self.server_startup_elapsed = Some(elapsed);
+        self.stage_started_at = Some(Instant::now());
     }
 
-    pub(super) fn begin_patch_setting(&mut self, total: usize) {
+    /// `server_elapsed` は StartServer 経由で既に確定していれば採用しない。
+    /// その経路の Prepare は起動済みサーバーへの再確認なので、ほぼ 0ms になり
+    /// 本来のサーバー起動時間を上書きしてしまうため。
+    pub(super) fn begin_patch_setting(&mut self, total: usize, server_elapsed: Duration) {
         self.phase = GridConnectionPhase::PatchSetting;
         self.patch_setting = Some(GridProgress {
             completed: 0,
             total,
         });
+        self.server_startup_elapsed.get_or_insert(server_elapsed);
+        self.patch_setting_elapsed = None;
+        self.stage_started_at = Some(Instant::now());
     }
 
     pub(super) fn update_patch_setting(&mut self, completed: usize, total: usize) {
         self.patch_setting = Some(GridProgress { completed, total });
+    }
+
+    pub(super) fn finish_patch_setting(&mut self, elapsed: Duration) {
+        self.patch_setting_elapsed = Some(elapsed);
     }
 
     pub(super) fn apply_result(

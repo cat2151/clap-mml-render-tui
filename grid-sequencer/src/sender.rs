@@ -119,9 +119,12 @@ fn run_midi_sender(
             GridMidiCommand::StartServer => {
                 adaptive_buffer = None;
                 let started = Instant::now();
-                match supervisor.ensure_started_for_fast_midi() {
-                    Ok(()) => status.lock().unwrap().wait_for_patches(started.elapsed()),
-                    Err(error) => apply(&status, Err(error), Some(started.elapsed()), false),
+                let result = supervisor.ensure_started_for_fast_midi();
+                let server_elapsed = started.elapsed();
+                log_startup_summary("start-server", server_elapsed, None, 0, result.is_ok());
+                match result {
+                    Ok(()) => status.lock().unwrap().wait_for_patches(server_elapsed),
+                    Err(error) => apply(&status, Err(error), Some(server_elapsed), false),
                 }
             }
             GridMidiCommand::Send { events } => {
@@ -131,9 +134,17 @@ fn run_midi_sender(
             }
             GridMidiCommand::Prepare { patches } => {
                 adaptive_buffer = None;
-                let started = Instant::now();
-                let result = supervisor.ensure_started_for_fast_midi().and_then(|()| {
-                    status.lock().unwrap().begin_patch_setting(patches.len());
+                // サーバー起動（CLAP 16 インスタンス生成）と音色ロードは所要時間の桁が
+                // 違うので、別々に計測してどちらが支配的かを切り分けられるようにする。
+                let server_started = Instant::now();
+                let ensure = supervisor.ensure_started_for_fast_midi();
+                let server_elapsed = server_started.elapsed();
+                let patch_started = Instant::now();
+                let result = ensure.and_then(|()| {
+                    status
+                        .lock()
+                        .unwrap()
+                        .begin_patch_setting(patches.len(), server_elapsed);
                     prepare_instances(supervisor.as_ref(), &patches, |completed, total| {
                         status
                             .lock()
@@ -141,6 +152,15 @@ fn run_midi_sender(
                             .update_patch_setting(completed, total);
                     })
                 });
+                let patch_elapsed = patch_started.elapsed();
+                log_startup_summary(
+                    "prepare",
+                    server_elapsed,
+                    Some(patch_elapsed),
+                    patches.len(),
+                    result.is_ok(),
+                );
+                status.lock().unwrap().finish_patch_setting(patch_elapsed);
                 if result.is_ok() {
                     let now = Instant::now();
                     let buffer = AdaptiveBuffer::new(now, supervisor.underrun_frames());
@@ -153,7 +173,7 @@ fn run_midi_sender(
                 apply(
                     &status,
                     result.map(|()| supervisor.limiter_meter()),
-                    Some(started.elapsed()),
+                    Some(server_elapsed + patch_elapsed),
                     false,
                 );
             }
@@ -175,6 +195,28 @@ fn run_midi_sender(
             GridMidiCommand::Shutdown => break,
         }
     }
+}
+
+/// 起動待ちの内訳を1行にまとめてログへ残す。
+///
+/// 「サーバー起動が支配的か、音色ロードが支配的か」を後から log.txt だけで
+/// 切り分けられるようにするためのもの。サーバー側の内訳は同じログファイルの
+/// `cmrt-server-timing:` 行と突き合わせる。
+fn log_startup_summary(
+    stage: &str,
+    server: Duration,
+    patch: Option<Duration>,
+    instances: usize,
+    succeeded: bool,
+) {
+    let patch_ms = patch.map_or_else(|| "-".to_string(), |patch| patch.as_millis().to_string());
+    let total_ms = (server + patch.unwrap_or_default()).as_millis();
+    crate::log_line(&format!(
+        "grid-sequencer: startup stage={stage} server_ms={} patch_ms={patch_ms} \
+         total_ms={total_ms} instances={instances} result={}",
+        server.as_millis(),
+        if succeeded { "ok" } else { "error" }
+    ));
 }
 
 fn prepare_instances(

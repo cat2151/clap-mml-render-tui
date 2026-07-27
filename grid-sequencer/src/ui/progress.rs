@@ -3,6 +3,8 @@
 //! 画面下部のステータス行だけだと、数秒の待ち時間に「固まったのか進んでいるのか」
 //! が分からないため、視線の先（grid の中央）に2段階の進捗を重ねる。
 
+use std::time::{Duration, Instant};
+
 use ratatui::{
     style::Color,
     text::{Line, Span},
@@ -50,11 +52,12 @@ pub(super) fn draw_overlay(f: &mut Frame<'_>, connection: &GridConnectionStatus)
 
 fn progress_lines(connection: &GridConnectionStatus) -> Vec<Line<'static>> {
     let (startup, patches) = stage_progress(connection);
+    let (startup_elapsed, patches_elapsed) = connection.stage_elapsed(Instant::now());
     let active = active_stage(connection);
     vec![
         Line::from(""),
-        stage_line("1. サーバー起動", startup, active == 1),
-        stage_line("2. 音色ロード  ", patches, active == 2),
+        stage_line("1. サーバー起動", startup, startup_elapsed, active == 1),
+        stage_line("2. 音色ロード  ", patches, patches_elapsed, active == 2),
         Line::from(""),
         Line::from(Span::styled(
             format!("  {}  ", footer_text(connection)),
@@ -103,7 +106,12 @@ fn footer_text(connection: &GridConnectionStatus) -> &'static str {
     }
 }
 
-fn stage_line(label: &str, progress: GridProgress, active: bool) -> Line<'static> {
+fn stage_line(
+    label: &str,
+    progress: GridProgress,
+    elapsed: Option<Duration>,
+    active: bool,
+) -> Line<'static> {
     let style = base_style().fg(stage_color(progress, active));
     Line::from(vec![
         Span::styled(format!("  {label}  "), style),
@@ -112,7 +120,15 @@ fn stage_line(label: &str, progress: GridProgress, active: bool) -> Line<'static
             format!(" {:>2}/{}  ", progress.completed, progress.total),
             style,
         ),
+        Span::styled(format!("{:>6}  ", format_elapsed(elapsed)), style),
     ])
+}
+
+/// 経過時間の表示。まだ始まっていない段は空欄にして、目が滑らないようにする。
+fn format_elapsed(elapsed: Option<Duration>) -> String {
+    elapsed.map_or_else(String::new, |elapsed| {
+        format!("{:.1}s", elapsed.as_secs_f32())
+    })
 }
 
 fn stage_color(progress: GridProgress, active: bool) -> Color {

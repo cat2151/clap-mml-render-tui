@@ -65,6 +65,31 @@ fn spawn_patch_loader(cfg: &Config) -> Arc<Mutex<PatchLoadState>> {
     patch_load_state
 }
 
+/// realtime play server をバックグラウンドで先行起動する。
+///
+/// keyboard / grid sequencer が使うサーバーは CLAP インスタンスを16個作るため
+/// 起動に数秒かかる。画面へ入ってから起動すると、その待ち時間がまるごと
+/// 「音が鳴るまでの時間」になるので、app 起動直後に済ませてしまう。
+/// `ensure_started` は Mutex 下でポート開通を先に確認するため、画面側の起動要求と
+/// 同時に走っても二重に spawn されない。
+fn spawn_play_server_prewarm(
+    play_server: &Arc<crate::realtime_play::RealtimePlayServerSupervisor>,
+) {
+    let play_server = Arc::clone(play_server);
+    std::thread::spawn(move || {
+        let started = std::time::Instant::now();
+        let result = play_server.ensure_started_for_fast_midi();
+        crate::logging::global_log_sink(&format!(
+            "play-server: prewarm ms={} result={}",
+            started.elapsed().as_millis(),
+            match &result {
+                Ok(()) => "ok".to_string(),
+                Err(error) => format!("error \"{error:#}\""),
+            }
+        ));
+    });
+}
+
 impl<'a> TuiApp<'a> {
     pub fn new(cfg: &'a Config, entry: Option<&'a PluginEntry>) -> Self {
         crate::logging::install_native_probe_logger();
@@ -83,6 +108,9 @@ impl<'a> TuiApp<'a> {
         let play_server = Arc::new(crate::realtime_play::RealtimePlayServerSupervisor::new(
             cfg_arc.as_ref(),
         ));
+        if cfg_arc.realtime_play_server_prewarm {
+            spawn_play_server_prewarm(&play_server);
+        }
         let realtime_play_server =
             if cfg_arc.realtime_audio_backend == crate::config::RealtimeAudioBackend::PlayServer {
                 Some(Arc::clone(&play_server))

@@ -49,6 +49,7 @@ fn build_test_app(tracks: usize, measures: usize) -> DawApp {
             realtime_audio_backend: cmrt_runtime::RealtimeAudioBackend::InProcess,
             realtime_play_server_port: cmrt_runtime::DEFAULT_REALTIME_PLAY_SERVER_PORT,
             realtime_play_server_command: String::new(),
+            realtime_play_server_prewarm: false,
             autoplay_on_startup: true,
             voicing_shared_source: String::new(),
             voicing_override_source: String::new(),

@@ -10,6 +10,9 @@ fn begin_connecting_clears_meter_and_sets_phase() {
         underrun_frames: 512,
         server_startup: None,
         patch_setting: None,
+        stage_started_at: None,
+        server_startup_elapsed: Some(Duration::from_secs(8)),
+        patch_setting_elapsed: Some(Duration::from_millis(300)),
     };
     status.begin_connecting();
     assert_eq!(status.phase, GridConnectionPhase::Connecting);
@@ -17,6 +20,9 @@ fn begin_connecting_clears_meter_and_sets_phase() {
     assert_eq!(status.limiter_reduction_db, 0.0);
     assert_eq!(status.buffer_multiplier, 2);
     assert_eq!(status.underrun_frames, 0);
+    assert_eq!(status.server_startup_elapsed, None);
+    assert_eq!(status.patch_setting_elapsed, None);
+    assert!(status.stage_started_at.is_some());
 }
 
 #[test]
@@ -26,7 +32,7 @@ fn labels_include_server_and_patch_progress() {
     status.update_server_startup(6, 16);
     assert_eq!(status.label(), "starting server 6/16");
 
-    status.begin_patch_setting(16);
+    status.begin_patch_setting(16, Duration::from_millis(1));
     status.update_patch_setting(11, 16);
     assert_eq!(status.label(), "patches 11/16");
 }
@@ -48,7 +54,7 @@ fn row_readiness_follows_the_two_preparation_stages() {
     status.wait_for_patches(Duration::from_millis(1));
     assert_eq!(status.row_readiness(15), GridRowReadiness::InstanceReady);
 
-    status.begin_patch_setting(16);
+    status.begin_patch_setting(16, Duration::from_millis(1));
     assert_eq!(status.row_readiness(0), GridRowReadiness::InstanceReady);
     status.update_patch_setting(5, 16);
     assert_eq!(status.row_readiness(4), GridRowReadiness::Prepared);
