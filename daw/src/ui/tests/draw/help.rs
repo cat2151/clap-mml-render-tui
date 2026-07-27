@@ -237,6 +237,20 @@ fn history_help_draws_on_top_of_history_overlay() {
     );
 }
 
+/// メモリ行は overlay の先頭に出す。ヘルプが端末より長いと下が切り落とされるため。
+#[test]
+fn help_shows_the_memory_usage_at_the_top() {
+    let mut app = build_test_app();
+    app.mode = DawMode::Help;
+
+    let buffer = render_buffer(&app, 160, 52);
+    let (_, top, _, _) = help_overlay_bounds(&buffer);
+    let memory_line = render_lines(&app, 160, 52)[usize::from(top) + 1].replace(' ', "");
+
+    assert!(memory_line.contains("実メモリ合計"), "{memory_line}");
+    assert!(memory_line.contains("OS空き"), "{memory_line}");
+}
+
 #[test]
 fn help_overlay_size_follows_daw_help_content() {
     let mut normal = build_test_app();
@@ -277,7 +291,8 @@ fn help_overlay_size_follows_daw_help_content() {
         (patch_left, patch_top, patch_right, patch_bottom)
     );
     assert!(patch_width < 120, "patch={patch_width}");
-    assert!(patch_height < 20, "patch={patch_height}");
+    // 先頭に差し込むメモリ行 + 区切りの空行ぶんだけ、どのヘルプも 2 行高い。
+    assert!(patch_height < 22, "patch={patch_height}");
     assert_ne!(
         normal_width, patch_width,
         "normal={normal_width} patch={patch_width}"

@@ -28,6 +28,7 @@ impl LoopBrowser {
         if key.code == KeyCode::Char('?') {
             self.navigation_count.clear();
             self.help_overlay = Some(self.focus);
+            cmrt_tui_core::memory::request_refresh();
             return LoopBrowserAction::Continue;
         }
         if key.modifiers == KeyModifiers::NONE && key.code == KeyCode::Char('p') {

@@ -45,6 +45,7 @@ impl<'a> NotepadScreen<'a> {
     pub(super) fn enter_help(&mut self) {
         self.help_origin = self.mode;
         self.mode = Mode::Help;
+        cmrt_tui_core::memory::request_refresh();
     }
 
     fn set_normal_cursor(&mut self, next_cursor: usize) {

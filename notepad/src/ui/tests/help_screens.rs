@@ -13,6 +13,21 @@ fn patch_phrase_screen_shows_search_prompt() {
     assert!(lines.contains("jk"));
 }
 
+/// メモリ行は overlay の先頭に出す。ヘルプが端末より長いと下が切り落とされるため。
+#[test]
+fn the_help_screen_shows_the_memory_usage_at_the_top() {
+    let mut app = NotepadScreen::new_for_test(test_config());
+    app.mode = Mode::Help;
+    app.help_origin = Mode::Normal;
+
+    let buffer = render_buffer(&mut app, 120, 60);
+    let (_, top, _, _) = cmrt_tui_core::buffer_test::help_overlay_bounds(&buffer);
+    let memory_line = render_lines(&mut app, 120, 60)[usize::from(top) + 1].replace(' ', "");
+
+    assert!(memory_line.contains("実メモリ合計"), "{memory_line}");
+    assert!(memory_line.contains("OS空き"), "{memory_line}");
+}
+
 #[test]
 fn normal_help_screen_mentions_ctrl_clipboard_shortcuts_without_overlay_keybinds() {
     let mut app = NotepadScreen::new_for_test(test_config());

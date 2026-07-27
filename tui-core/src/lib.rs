@@ -8,6 +8,7 @@ pub mod clipboard;
 pub mod generate;
 pub mod keyboard_session_state;
 pub mod logging;
+pub mod memory;
 pub mod mixer;
 pub mod mixer_overlay;
 pub mod navigation;

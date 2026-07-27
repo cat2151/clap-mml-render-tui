@@ -4,7 +4,9 @@ use ratatui::{
     Frame,
 };
 
-use cmrt_tui_core::{status::base_style, theme::MONOKAI_CYAN, ui::centered_text_block_rect};
+use cmrt_tui_core::{
+    memory, status::base_style, theme::MONOKAI_CYAN, ui::centered_text_block_rect,
+};
 
 const TITLE: &str = " Grid Sequencer ヘルプ(Keybinds)  Esc/q/?:close ";
 
@@ -29,25 +31,28 @@ pub(super) fn draw_overlay(f: &mut Frame<'_>) {
 }
 
 fn help_lines() -> Vec<Line<'static>> {
-    [
-        "16行 x 16ステップ を常時ループ再生します。",
-        "1ステップ = 250ms(16分音符)、16ステップ = 4秒で1周。",
-        "",
-        "  r        grid を丸ごとランダム設定(patch / note / 音長 / セル)",
-        "  R        patch を据え置き、note / 音長 / セルだけランダム設定",
-        "           (音色ロードが無いので再生が途切れない)",
-        "  ?        このヘルプ",
-        "  Ctrl+G   画面切替メニュー",
-        "  q        終了",
-        "",
-        "行1〜16は realtime play server の CLAP instance 0〜15 に対応し、",
-        "行ごとに別の音色で鳴ります。r は16 instance ぶんの音色ロードを",
-        "やり直すため、その間だけ再生が止まります。",
-        "",
-        "準備中の行は色が落ちます。暗いグレー = instance 未構築、",
-        "グレー = instance のみ構築済み、通常色 = 音色ロードまで完了。",
-    ]
-    .into_iter()
-    .map(Line::from)
-    .collect()
+    // メモリ行は先頭に置く。端末が低いと centered_text_block_rect が下を切り落とすため。
+    let mut lines = memory::overlay_lines();
+    lines.extend(
+        [
+            "16行 x 16ステップ を常時ループ再生します。",
+            "1ステップ = 250ms(16分音符)、16ステップ = 4秒で1周。",
+            "",
+            "  r        grid を丸ごとランダム設定(patch / note / 音長 / セル)",
+            "  R        patch を据え置き、note / 音長 / セルだけランダム設定",
+            "           (音色ロードが無いので再生が途切れない)",
+            "  ?        このヘルプ",
+            "  Ctrl+G   画面切替メニュー",
+            "  q        終了",
+            "",
+            "行1〜16は realtime play server の CLAP instance 0〜15 に対応し、",
+            "行ごとに別の音色で鳴ります。r は16 instance ぶんの音色ロードを",
+            "やり直すため、その間だけ再生が止まります。",
+            "",
+            "準備中の行は色が落ちます。暗いグレー = instance 未構築、",
+            "グレー = instance のみ構築済み、通常色 = 音色ロードまで完了。",
+        ]
+        .map(Line::from),
+    );
+    lines
 }

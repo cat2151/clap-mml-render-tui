@@ -22,3 +22,13 @@ ratatui = "0.28"
 rodio = "0.19"
 serde = { version = "1", features = ["derive"] }
 tui-textarea = { version = "0.6", features = ["crossterm"] }
+
+# メモリ計測（memory モジュール）。プロセス一覧の走査と Working Set / 空き物理メモリの取得。
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_ProcessStatus",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+] }

@@ -374,6 +374,26 @@ fn the_help_overlay_lists_the_keybinds() {
     find_text_ignoring_spaces(buffer, "Ctrl+G");
 }
 
+/// メモリ行は overlay の先頭に出す。ヘルプが端末より長いと下が切り落とされるため。
+#[test]
+fn the_help_overlay_shows_the_memory_usage_at_the_top() {
+    let mut screen = GridSequencerScreen::new(None);
+    screen.help_open = true;
+
+    let terminal = terminal_for(&screen);
+    let buffer = terminal.backend().buffer();
+    let (_, top, _, _) = cmrt_tui_core::buffer_test::help_overlay_bounds(buffer);
+
+    let memory_line = buffer_to_string(&terminal)
+        .lines()
+        .nth(usize::from(top) + 1)
+        .unwrap()
+        .replace(' ', "");
+
+    assert!(memory_line.contains("実メモリ合計"), "{memory_line}");
+    assert!(memory_line.contains("OS空き"), "{memory_line}");
+}
+
 /// 情報欄は幅が限られるので先頭を省略するが、ステータス行にはフルパスが残る。
 #[test]
 fn a_long_patch_name_is_truncated_from_the_head_in_the_grid() {

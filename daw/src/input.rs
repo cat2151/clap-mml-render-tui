@@ -58,6 +58,7 @@ impl DawApp {
     pub(crate) fn enter_help(&mut self) {
         self.help_origin = self.mode;
         self.mode = super::DawMode::Help;
+        cmrt_tui_core::memory::request_refresh();
     }
 
     fn push_front_dedup(items: &mut Vec<String>, item: String) {

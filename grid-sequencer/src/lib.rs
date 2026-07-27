@@ -204,7 +204,10 @@ impl GridSequencerScreen {
         }
         match key.code {
             KeyCode::Char('q') => return GridSequencerAction::Quit,
-            KeyCode::Char('?') => self.help_open = true,
+            KeyCode::Char('?') => {
+                self.help_open = true;
+                cmrt_tui_core::memory::request_refresh();
+            }
             KeyCode::Char('r') => self.randomize(now, ctx),
             KeyCode::Char('R') => self.randomize_keeping_patches(now),
             _ => {}

@@ -34,6 +34,21 @@ fn loop_browser_draws_centered_help_for_the_focused_pane() {
     assert!(normalized_tracks.contains("[Esc/q/?]でヘルプを閉じる"));
 }
 
+/// メモリ行は overlay の先頭に出す。ヘルプが端末より長いと下が切り落とされるため。
+#[test]
+fn loop_browser_help_shows_the_memory_usage_at_the_top() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
+    app.loop_browser.state.handle_key(KeyCode::Char('?'));
+
+    let buffer = render_buffer(&mut app, 160, 40);
+    let (_, top, _, _) = help_overlay_bounds(&buffer);
+    let memory_line = render_lines(&mut app, 160, 40)[usize::from(top) + 1].replace(' ', "");
+
+    assert!(memory_line.contains("実メモリ合計"), "{memory_line}");
+    assert!(memory_line.contains("OS空き"), "{memory_line}");
+}
+
 fn assert_help_is_centered(buffer: &ratatui::buffer::Buffer) {
     let (left, top, right, bottom) = help_overlay_bounds(buffer);
     let right_margin = buffer.area.width - right - 1;

@@ -685,6 +685,7 @@ dependencies = [
  "rodio",
  "serde",
  "tui-textarea",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

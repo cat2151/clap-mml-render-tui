@@ -122,6 +122,10 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect, mode: super::super::DawMode) 
         ],
     };
 
+    // メモリ行は先頭に置く。ヘルプが端末より長いと centered_text_block_rect が
+    // 下を切り落とすため、末尾に置くと見えなくなる。
+    let help_lines = [cmrt_tui_core::memory::overlay_lines(), help_lines].concat();
+
     let popup = cmrt_tui_core::ui::centered_text_block_rect(area, HELP_TITLE, &help_lines);
     f.render_widget(Clear, popup);
 
