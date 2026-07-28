@@ -9,7 +9,9 @@ fn request_refresh_returns_immediately_and_overlay_lines_are_always_available() 
 
     let lines = overlay_lines();
 
-    assert_eq!(lines.len(), 2);
+    // 計測が間に合ったかどうかで内訳行の有無が変わるので、行数は固定しない。
+    assert!(lines.len() >= 2, "{lines:?}");
+    assert_eq!(lines[lines.len() - 1].width(), 0);
 }
 
 /// `test-support` 有効時（画面クレートの描画テストがこの構成）は実測せず、

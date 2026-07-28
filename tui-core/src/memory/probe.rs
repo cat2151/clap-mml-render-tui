@@ -90,8 +90,8 @@ mod tests;
 
 pub(super) fn reading() -> MemoryReading {
     let state = lock();
-    match state.last {
-        Some(snapshot) => MemoryReading::Ready(snapshot),
+    match &state.last {
+        Some(snapshot) => MemoryReading::Ready(snapshot.clone()),
         None if state.failed => MemoryReading::Unavailable,
         None => MemoryReading::Measuring,
     }

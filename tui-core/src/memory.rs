@@ -5,6 +5,11 @@
 //! 計測はサーバへの問い合わせではなく OS のプロセス情報から行うので、
 //! サーバ側の IPC プロトコルには一切触れない。
 //!
+//! 合計だけでは「TUI 本体とサーバのどちらが食っているのか」が分からないため、
+//! プロセスごとの Working Set も内訳として並べる。なお 16 CLAP インスタンスは
+//! realtime play server の 1 プロセス内に同居しているので、この内訳から
+//! 「1 インスタンスあたり何 MB か」までは分からない。
+//!
 //! help overlay 自体は待たせずに出したいので、[`request_refresh`] は計測を
 //! バックグラウンドスレッドへ投げるだけで即座に返る。結果は共有状態に書かれ、
 //! 次の描画フレームで [`overlay_lines`] が拾う（メインループは 50ms ごとに
@@ -32,17 +37,28 @@ use windows as platform;
 #[cfg(test)]
 mod tests;
 
+/// 計測対象プロセス 1 つぶん。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProcessMemory {
+    /// プロセス一覧から取った exe 名（例: `cmrt.exe`）。
+    pub name: String,
+    pub pid: u32,
+    pub working_set_bytes: u64,
+}
+
 /// 一度の計測で得られるメモリ情報。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemorySnapshot {
-    /// cmrt 本体と clap-mml-play-server の常駐プロセスの Working Set の合計。
+    /// 内訳。自プロセスが先頭で、以降は常駐サーバ。
+    pub processes: Vec<ProcessMemory>,
+    /// [`Self::processes`] の Working Set 合計。
     pub total_working_set_bytes: u64,
     /// OS の空き物理メモリ。
     pub os_available_bytes: u64,
 }
 
 /// help overlay に出す値の状態。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum MemoryReading {
     /// バックグラウンド計測がまだ完了していない。
     Measuring,
@@ -58,7 +74,10 @@ pub fn request_refresh() {
     probe::request_refresh(platform::measure);
 }
 
-/// help overlay の先頭へ差し込む行（値 1 行 + 区切りの空行）を返す。
+/// help overlay の先頭へ差し込む行（合計 1 行 + 内訳 + 区切りの空行）を返す。
+///
+/// 内訳が出るのは計測が済んだあとだけで、計測中・取得不可のときは
+/// 合計行と空行の 2 行のまま。
 ///
 /// 描画のたびに呼んでよい。ブロックはせず、前回計測から 1 秒以上経っていれば
 /// 次フレーム以降に反映される再計測をバックグラウンドへ投げるだけ。
