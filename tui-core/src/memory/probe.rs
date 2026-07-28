@@ -1,8 +1,16 @@
 //! 計測結果を保持するプロセスグローバルな共有状態と、計測スレッドの起動。
 
 use std::sync::{Mutex, MutexGuard, OnceLock};
+use std::time::{Duration, Instant};
 
 use super::{MemoryReading, MemorySnapshot};
+
+/// 再計測を投げ直す最短間隔。
+///
+/// 計測値はその瞬間の Working Set なので一時的にハズレ値が出る。help 表示中は
+/// 描画のたび（50ms 間隔）に再計測要求が来るため、ここまで間引いたうえで
+/// 値を更新し続け、ハズレ値が出たまま固まってユーザーが誤読するのを防ぐ。
+const MIN_REFRESH_INTERVAL: Duration = Duration::from_secs(1);
 
 #[derive(Default)]
 struct ProbeState {
@@ -12,6 +20,20 @@ struct ProbeState {
     in_flight: bool,
     /// 一度も計測に成功していない状態で失敗したかどうか。
     failed: bool,
+    /// 直近に計測スレッドを起動した時刻。間引き判定に使う。
+    started_at: Option<Instant>,
+}
+
+impl ProbeState {
+    fn should_start(&self, now: Instant) -> bool {
+        if self.in_flight {
+            return false;
+        }
+        match self.started_at {
+            Some(started_at) => now.duration_since(started_at) >= MIN_REFRESH_INTERVAL,
+            None => true,
+        }
+    }
 }
 
 fn state() -> &'static Mutex<ProbeState> {
@@ -35,11 +57,13 @@ pub(super) fn request_refresh(measure: fn() -> Option<MemorySnapshot>) {
     }
 
     {
+        let now = Instant::now();
         let mut state = lock();
-        if state.in_flight {
+        if !state.should_start(now) {
             return;
         }
         state.in_flight = true;
+        state.started_at = Some(now);
     }
 
     let spawned = std::thread::Builder::new()
@@ -60,6 +84,9 @@ pub(super) fn request_refresh(measure: fn() -> Option<MemorySnapshot>) {
         state.failed = true;
     }
 }
+
+#[cfg(test)]
+mod tests;
 
 pub(super) fn reading() -> MemoryReading {
     let state = lock();
