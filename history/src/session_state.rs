@@ -16,6 +16,8 @@ pub struct SessionState {
     pub active_screen: cmrt_tui_core::screen_switch::PrimaryScreen,
     /// 最後に使用した keyboard 状態。表示画面とは独立して保持する。
     pub keyboard: KeyboardSessionState,
+    /// Grid Sequencer が使用する track / CLAP instance 数。
+    pub grid_sequencer_track_count: usize,
     /// keyboard の音出し確認 overlay を最後に表示したローカル日付（YYYY-MM-DD）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keyboard_note_guide_overlay_date: Option<String>,
@@ -31,6 +33,7 @@ impl Default for SessionState {
             lines: super::helpers::default_lines(),
             active_screen: cmrt_tui_core::screen_switch::PrimaryScreen::Notepad,
             keyboard: KeyboardSessionState::default(),
+            grid_sequencer_track_count: cmrt_realtime_play::DEFAULT_LIVE_INSTANCE_COUNT,
             keyboard_note_guide_overlay_date: None,
             notepad_sound_check_guide_overlay_date: None,
         }
@@ -49,6 +52,8 @@ struct SessionStateWire {
     is_daw_mode: bool,
     #[serde(default)]
     keyboard: Option<KeyboardSessionState>,
+    #[serde(default = "default_grid_sequencer_track_count")]
+    grid_sequencer_track_count: usize,
     #[serde(default)]
     keyboard_note_guide_overlay_date: Option<String>,
     #[serde(default)]
@@ -75,10 +80,17 @@ impl<'de> serde::Deserialize<'de> for SessionState {
             lines: wire.lines,
             active_screen,
             keyboard: wire.keyboard.unwrap_or_default(),
+            grid_sequencer_track_count: cmrt_realtime_play::normalize_live_instance_count(
+                wire.grid_sequencer_track_count,
+            ),
             keyboard_note_guide_overlay_date: wire.keyboard_note_guide_overlay_date,
             notepad_sound_check_guide_overlay_date: wire.notepad_sound_check_guide_overlay_date,
         })
     }
+}
+
+fn default_grid_sequencer_track_count() -> usize {
+    cmrt_realtime_play::DEFAULT_LIVE_INSTANCE_COUNT
 }
 
 /// セッション状態（現在行番号）を history.json に保存する。

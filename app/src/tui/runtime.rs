@@ -219,6 +219,11 @@ impl<'a> TuiApp<'a> {
                                 self.finish_grid_sequencer();
                                 break;
                             }
+                            GridSequencerAction::RestartWithTrackCount(track_count) => {
+                                debug_assert_eq!(self.grid_sequencer.track_count(), track_count);
+                                self.save_notepad_and_session_state();
+                                return Ok(TuiExitReason::RestartApp);
+                            }
                         }
                         continue;
                     }

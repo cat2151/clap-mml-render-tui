@@ -1,4 +1,15 @@
-use std::process::{Child, Command};
+use std::{
+    io::{BufRead as _, BufReader},
+    process::{Child, Command, Stdio},
+    sync::{Arc, Mutex},
+};
+
+use anyhow::{anyhow, Result};
+
+use super::{
+    logging::{log_realtime_play_event, truncate_for_log},
+    RealtimePlayServerStartupProgress,
+};
 
 const STARTUP_PROGRESS_PREFIX: &str = "cmrt-server-startup: instances=";
 
@@ -61,6 +72,95 @@ pub(super) fn default_realtime_play_server_executable_name() -> &'static str {
     } else {
         "clap-mml-realtime-play-server"
     }
+}
+
+pub(super) fn build_realtime_play_server_command(configured: &str) -> (Command, String) {
+    let trimmed = configured.trim();
+    if !trimmed.is_empty() {
+        return (
+            shell_command(trimmed),
+            format!("source=config shell_command={trimmed:?}"),
+        );
+    }
+
+    if let Some(path) = sibling_realtime_play_server_path() {
+        let description = format!("source=sibling fullpath=\"{}\"", path.display());
+        return (Command::new(path), description);
+    }
+    if let Some(path) = path_realtime_play_server_path() {
+        let description = format!("source=PATH fullpath=\"{}\"", path.display());
+        return (Command::new(path), description);
+    }
+    let executable = default_realtime_play_server_executable_name();
+    (
+        Command::new(executable),
+        format!("source=unresolved-PATH executable={executable:?}"),
+    )
+}
+
+pub(super) fn spawn_realtime_play_server(
+    mut command: Command,
+    launch_description: &str,
+    port: u16,
+    live_instance_count: usize,
+    startup_progress: Arc<Mutex<Option<RealtimePlayServerStartupProgress>>>,
+) -> Result<Child> {
+    *startup_progress.lock().unwrap() = Some(RealtimePlayServerStartupProgress {
+        initialized_instances: 0,
+        total_instances: live_instance_count,
+    });
+    log_realtime_play_event(format!(
+        "action=server-spawn port={port} {launch_description}"
+    ));
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().map_err(|error| {
+        anyhow!("realtime play server の起動に失敗しました ({launch_description}): {error}")
+    })?;
+    let pid = child.id();
+    if let Some(stderr) = child.stderr.take() {
+        let thread_progress = Arc::clone(&startup_progress);
+        let thread_result = std::thread::Builder::new()
+            .name("realtime-play-server-stderr".to_string())
+            .spawn(move || {
+                for line in BufReader::new(stderr).lines() {
+                    match line {
+                        Ok(line) => {
+                            if let Some((initialized_instances, total_instances)) =
+                                parse_server_startup_progress(&line)
+                            {
+                                *thread_progress.lock().unwrap() =
+                                    Some(RealtimePlayServerStartupProgress {
+                                        initialized_instances,
+                                        total_instances,
+                                    });
+                            }
+                            log_realtime_play_event(format!(
+                                "action=server-stderr pid={pid} line=\"{}\"",
+                                truncate_for_log(&line, 1_000)
+                            ));
+                        }
+                        Err(error) => {
+                            log_realtime_play_event(format!(
+                                "action=server-stderr-read-error pid={pid} error={error:?}"
+                            ));
+                            break;
+                        }
+                    }
+                }
+            });
+        if let Err(error) = thread_result {
+            log_realtime_play_event(format!(
+                "action=server-stderr-reader-start-error pid={pid} error={error:?}"
+            ));
+        }
+    }
+    log_realtime_play_event(format!(
+        "action=server-spawned port={port} pid={pid} {launch_description}"
+    ));
+    Ok(child)
 }
 
 #[cfg(target_os = "windows")]

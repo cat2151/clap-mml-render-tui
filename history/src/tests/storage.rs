@@ -143,6 +143,30 @@ fn load_session_state_normalizes_keyboard_restore_values() {
             buffer_multiplier: 4,
         }
     );
+    assert_eq!(state.grid_sequencer_track_count, 16);
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn load_session_state_normalizes_grid_sequencer_track_count() {
+    let tmp = std::env::temp_dir().join("cmrt_test_grid_track_count_normalize");
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
+
+    let path = super::session_state_path().unwrap();
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(
+        &path,
+        r#"{
+  "lines": ["cde"],
+  "active_screen": "grid_sequencer",
+  "grid_sequencer_track_count": 3
+}"#,
+    )
+    .unwrap();
+
+    assert_eq!(load_session_state().grid_sequencer_track_count, 16);
 
     std::fs::remove_dir_all(&tmp).ok();
 }

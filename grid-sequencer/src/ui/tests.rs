@@ -178,9 +178,23 @@ fn the_status_line_shows_instances_and_limiter_reduction() {
 
     assert!(rendered.contains("SHM idle"), "{rendered}");
     assert!(rendered.contains("130bpm"), "{rendered}");
+    assert!(rendered.contains("16tr"), "{rendered}");
     assert!(rendered.contains("step 1/16"), "{rendered}");
     assert!(rendered.contains("GR0.0"), "{rendered}");
     assert!(rendered.contains("p:42"), "{rendered}");
+}
+
+#[test]
+fn compact_grid_draws_only_the_selected_tracks() {
+    let screen = GridSequencerScreen::with_track_count(None, 2);
+
+    let rendered = render(&screen);
+    let lines = rendered.lines().collect::<Vec<_>>();
+
+    assert_eq!(slice_chars(lines[FIRST_ROW_Y], 1, 4), "  1 ");
+    assert_eq!(slice_chars(lines[FIRST_ROW_Y + 1], 1, 4), "  2 ");
+    assert_ne!(slice_chars(lines[FIRST_ROW_Y + 2], 1, 4), "  3 ");
+    assert!(rendered.contains("2tr"), "{rendered}");
 }
 
 #[test]
@@ -356,6 +370,7 @@ fn the_keybind_line_is_always_visible() {
 
     assert!(rendered.contains("r:randomize"), "{rendered}");
     assert!(rendered.contains("R:randomize-notes"), "{rendered}");
+    assert!(rendered.contains("t:tracks"), "{rendered}");
     assert!(rendered.contains("Ctrl+G:screen"), "{rendered}");
     assert!(rendered.contains("q:quit"), "{rendered}");
 }

@@ -134,7 +134,7 @@ fn run_midi_sender(
             }
             GridMidiCommand::Prepare { patches } => {
                 adaptive_buffer = None;
-                // サーバー起動（CLAP 16 インスタンス生成）と音色ロードは所要時間の桁が
+                // サーバー起動（CLAP インスタンス生成）と音色ロードは所要時間の桁が
                 // 違うので、別々に計測してどちらが支配的かを切り分けられるようにする。
                 let server_started = Instant::now();
                 let ensure = supervisor.ensure_started_for_fast_midi();
@@ -224,12 +224,9 @@ fn prepare_instances(
     patches: &[Option<String>],
     mut report_progress: impl FnMut(usize, usize),
 ) -> anyhow::Result<()> {
-    if patches.len() != cmrt_realtime_play::INSTANCE_COUNT {
-        anyhow::bail!(
-            "grid requires {} patches, got {}",
-            cmrt_realtime_play::INSTANCE_COUNT,
-            patches.len()
-        );
+    let expected = supervisor.live_instance_count();
+    if patches.len() != expected {
+        anyhow::bail!("grid requires {} patches, got {}", expected, patches.len());
     }
     supervisor.stop_live_all()?;
     supervisor.set_live_buffer_multiplier(INITIAL_BUFFER_MULTIPLIER)?;

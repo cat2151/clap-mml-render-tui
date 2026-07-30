@@ -140,7 +140,7 @@ realtime_play_server_port = {DEFAULT_REALTIME_PLAY_SERVER_PORT}
 realtime_play_server_command = ""
 
 # 【省略可】app 起動直後に realtime play server を先行起動するかどうか
-# keyboard / grid sequencer は CLAP インスタンスを16個作るサーバーを使い、その起動に
+# keyboard / grid sequencer は CLAP インスタンスを最大16個作るサーバーを使い、その起動に
 # 数秒かかります。true にすると app 起動直後にバックグラウンドで起動を済ませるため、
 # 画面へ入ったときの待ち時間が音色ロードだけになります。
 # false にすると画面へ入った時点で起動を始めます（メモリとCPUを常時使いたくない場合）。

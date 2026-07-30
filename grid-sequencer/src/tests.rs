@@ -43,6 +43,40 @@ fn q_quits_the_screen() {
 }
 
 #[test]
+fn t_cycles_track_count_and_requests_restart() {
+    let patches = one_patch();
+    let mut screen = GridSequencerScreen::with_track_count(None, 1);
+
+    for expected in [2, 4, 8, 16, 1] {
+        let action = screen.handle_key(
+            press(KeyCode::Char('t')),
+            Instant::now(),
+            &ready_ctx(&patches),
+        );
+        assert!(matches!(
+            action,
+            GridSequencerAction::RestartWithTrackCount(count) if count == expected
+        ));
+        assert_eq!(screen.track_count(), expected);
+        assert_eq!(screen.state.rows().len(), expected);
+    }
+}
+
+#[test]
+fn t_release_does_not_change_track_count() {
+    let patches = one_patch();
+    let mut screen = GridSequencerScreen::with_track_count(None, 4);
+    let mut release = press(KeyCode::Char('t'));
+    release.kind = KeyEventKind::Release;
+
+    assert!(matches!(
+        screen.handle_key(release, Instant::now(), &ready_ctx(&patches)),
+        GridSequencerAction::Continue
+    ));
+    assert_eq!(screen.track_count(), 4);
+}
+
+#[test]
 fn help_opens_with_question_mark_and_closes_without_quitting() {
     let patches = one_patch();
     let mut screen = silent_screen();

@@ -39,10 +39,10 @@ pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: 
     );
     // 準備中とエラーは中央 overlay で知らせる。help は常に最前面。
     if connection.is_preparing() || connection.error_message().is_some() {
-        progress::draw_overlay(f, connection);
+        progress::draw_overlay(f, connection, screen.track_count());
     }
     if screen.help_open {
-        help::draw_overlay(f);
+        help::draw_overlay(f, screen.track_count());
     }
 }
 
@@ -61,10 +61,11 @@ fn status_line(
     };
     let text = if width >= 160 {
         format!(
-            " SHM {} | buffer x{} auto | underrun {} frames | 16 instances | BPM {} 1/16={:.1}ms | step {:>2}/{} | GR {:.1} dB | {} ",
+            " SHM {} | buffer x{} auto | underrun {} frames | {} instances | BPM {} 1/16={:.1}ms | step {:>2}/{} | GR {:.1} dB | {} ",
             connection.label(),
             connection.buffer_multiplier,
             connection.underrun_frames,
+            screen.track_count(),
             BPM,
             STEP_INTERVAL.as_secs_f64() * 1000.0,
             screen.state.step_index() + 1,
@@ -74,10 +75,11 @@ fn status_line(
         )
     } else {
         format!(
-            " SHM {} | buffer x{} auto | underrun {} frames | {}bpm | step {}/{} | GR{:.1} | {} ",
+            " SHM {} | buffer x{} auto | underrun {} frames | {}tr | {}bpm | step {}/{} | GR{:.1} | {} ",
             connection.label(),
             connection.buffer_multiplier,
             connection.underrun_frames,
+            screen.track_count(),
             BPM,
             screen.state.step_index() + 1,
             GRID_STEPS,

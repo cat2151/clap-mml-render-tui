@@ -157,6 +157,39 @@ fn keyboard_q_persists_and_restores_patch_and_buffer() {
 }
 
 #[test]
+fn grid_track_count_is_persisted_and_restored() {
+    let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
+    let tmp = std::env::temp_dir().join(format!(
+        "cmrt_test_grid_track_count_restore_{}_{}",
+        std::process::id(),
+        unique
+    ));
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
+
+    let mut app = TuiApp::new_for_test(test_config());
+    app.active_screen = crate::screen_switch::PrimaryScreen::GridSequencer;
+    let action = app.handle_grid_sequencer_key_event(crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::Char('t'),
+        crossterm::event::KeyModifiers::NONE,
+    ));
+    assert!(matches!(
+        action,
+        crate::tui::grid_sequencer::GridSequencerAction::RestartWithTrackCount(1)
+    ));
+    app.save_history_state();
+
+    let saved = crate::history::load_session_state();
+    assert_eq!(saved.grid_sequencer_track_count, 1);
+
+    let cfg = test_config();
+    let restored = TuiApp::new(&cfg, None);
+    assert_eq!(restored.grid_sequencer.track_count(), 1);
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
 fn daw_mode_switch_request_can_be_consumed_from_tui_runtime() {
     assert!(!crate::daw::take_http_mode_switch_request());
 

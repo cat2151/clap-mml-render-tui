@@ -20,7 +20,7 @@ use cmrt_tui_core::{
     ui::centered_text_block_rect,
 };
 
-use crate::{GridConnectionPhase, GridConnectionStatus, GridProgress, GRID_ROWS};
+use crate::{GridConnectionPhase, GridConnectionStatus, GridProgress};
 
 const PREPARING_TITLE: &str = " Grid Sequencer 準備中 ";
 const ERROR_TITLE: &str = " Grid Sequencer 準備エラー ";
@@ -31,10 +31,18 @@ const BAR_EMPTY: &str = "░";
 const MESSAGE_WIDTH: usize = 60;
 const MAX_MESSAGE_LINES: usize = 4;
 
-pub(super) fn draw_overlay(f: &mut Frame<'_>, connection: &GridConnectionStatus) {
+pub(super) fn draw_overlay(
+    f: &mut Frame<'_>,
+    connection: &GridConnectionStatus,
+    track_count: usize,
+) {
     let (title, border_color, lines) = match connection.error_message() {
         Some(message) => (ERROR_TITLE, MONOKAI_PINK, error_lines(message)),
-        None => (PREPARING_TITLE, MONOKAI_CYAN, progress_lines(connection)),
+        None => (
+            PREPARING_TITLE,
+            MONOKAI_CYAN,
+            progress_lines(connection, track_count),
+        ),
     };
     let area = centered_text_block_rect(f.area(), title, &lines);
     f.render_widget(Clear, area);
@@ -50,8 +58,8 @@ pub(super) fn draw_overlay(f: &mut Frame<'_>, connection: &GridConnectionStatus)
     );
 }
 
-fn progress_lines(connection: &GridConnectionStatus) -> Vec<Line<'static>> {
-    let (startup, patches) = stage_progress(connection);
+fn progress_lines(connection: &GridConnectionStatus, track_count: usize) -> Vec<Line<'static>> {
+    let (startup, patches) = stage_progress(connection, track_count);
     let (startup_elapsed, patches_elapsed) = connection.stage_elapsed(Instant::now());
     let active = active_stage(connection);
     vec![
@@ -71,14 +79,17 @@ fn progress_lines(connection: &GridConnectionStatus) -> Vec<Line<'static>> {
 /// patch ロードまで来ていればサーバー起動は必ず完了しているが、サーバーが既に
 /// 起動済みだと `server_startup` が `None` のまま `PatchSetting` へ入るので、
 /// phase から完了とみなす。
-fn stage_progress(connection: &GridConnectionStatus) -> (GridProgress, GridProgress) {
+fn stage_progress(
+    connection: &GridConnectionStatus,
+    track_count: usize,
+) -> (GridProgress, GridProgress) {
     let done = GridProgress {
-        completed: GRID_ROWS,
-        total: GRID_ROWS,
+        completed: track_count,
+        total: track_count,
     };
     let none = GridProgress {
         completed: 0,
-        total: GRID_ROWS,
+        total: track_count,
     };
     match &connection.phase {
         GridConnectionPhase::Connecting => (connection.server_startup.unwrap_or(none), none),

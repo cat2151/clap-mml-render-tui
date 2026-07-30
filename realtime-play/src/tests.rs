@@ -145,3 +145,30 @@ fn configured_server_command_description_is_explicit() {
 
     assert_eq!(description, "source=config shell_command=\"exit 0\"");
 }
+
+#[test]
+fn live_instance_counts_normalize_and_cycle() {
+    assert_eq!(normalize_live_instance_count(0), 16);
+    assert_eq!(normalize_live_instance_count(3), 16);
+    assert_eq!(normalize_live_instance_count(8), 8);
+    assert_eq!(
+        [1, 2, 4, 8, 16].map(next_live_instance_count),
+        [2, 4, 8, 16, 1]
+    );
+}
+
+#[test]
+fn supervisor_keeps_requested_live_instance_count() {
+    let supervisor =
+        RealtimePlayServerSupervisor::with_live_instance_count(&cfg_for_port(62_154), 4);
+    assert_eq!(supervisor.live_instance_count(), 4);
+    let (command, _) = supervisor.build_command();
+    assert_eq!(
+        command
+            .get_envs()
+            .find(|(name, _)| *name == LIVE_INSTANCE_COUNT_ENV)
+            .and_then(|(_, value)| value)
+            .and_then(std::ffi::OsStr::to_str),
+        Some("4")
+    );
+}

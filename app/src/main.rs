@@ -407,7 +407,9 @@ fn main() -> Result<()> {
     // TUI モード
     let mut app = tui::TuiApp::new(&cfg, entry.as_ref());
 
-    match app.run()? {
+    let exit_reason = app.run()?;
+    drop(app);
+    match exit_reason {
         tui::TuiExitReason::Quit => Ok(()),
         tui::TuiExitReason::RestartApp => restart_current_process(),
     }

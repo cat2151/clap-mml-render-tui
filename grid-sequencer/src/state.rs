@@ -9,7 +9,7 @@ mod randomize;
 pub use clock::{frames_ahead, step_offset, BPM, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL};
 use clock::{StepClock, SCHEDULE_GUARD};
 
-/// grid の行数（＝パート数）。
+/// grid の既定・最大行数（＝パート数）。
 pub const GRID_ROWS: usize = 16;
 /// grid の列数（＝1周のステップ数）。
 pub const GRID_STEPS: usize = 16;
@@ -113,8 +113,15 @@ pub struct GridState {
 
 impl Default for GridState {
     fn default() -> Self {
+        Self::with_row_count(GRID_ROWS)
+    }
+}
+
+impl GridState {
+    pub fn with_row_count(row_count: usize) -> Self {
+        assert!(row_count > 0, "grid row count must be positive");
         Self {
-            rows: vec![GridRow::default(); GRID_ROWS],
+            rows: vec![GridRow::default(); row_count],
             step_index: 0,
             schedule_index: 0,
             started: false,
@@ -124,9 +131,11 @@ impl Default for GridState {
             clock: StepClock::default(),
         }
     }
-}
 
-impl GridState {
+    pub fn row_count(&self) -> usize {
+        self.rows.len()
+    }
+
     pub fn rows(&self) -> &[GridRow] {
         &self.rows
     }

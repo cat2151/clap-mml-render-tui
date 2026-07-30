@@ -82,6 +82,7 @@ fn session_state_serialize_deserialize() {
         lines: vec!["abc".to_string(), "def".to_string()],
         active_screen: PrimaryScreen::Notepad,
         keyboard: KeyboardSessionState::default(),
+        grid_sequencer_track_count: 16,
         keyboard_note_guide_overlay_date: Some("2026-07-20".to_string()),
         notepad_sound_check_guide_overlay_date: Some("2026-07-19".to_string()),
     };
@@ -107,6 +108,7 @@ fn session_state_serialize_deserialize_zero() {
         lines: vec!["cde".to_string()],
         active_screen: PrimaryScreen::Notepad,
         keyboard: KeyboardSessionState::default(),
+        grid_sequencer_track_count: 16,
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
     };
@@ -124,6 +126,7 @@ fn session_state_serialize_deserialize_daw_screen() {
         lines: vec!["cde".to_string()],
         active_screen: PrimaryScreen::Daw,
         keyboard: KeyboardSessionState::default(),
+        grid_sequencer_track_count: 16,
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
     };
@@ -222,6 +225,7 @@ fn save_and_load_session_state_roundtrip() {
         lines: vec!["cde".to_string(), "fga".to_string()],
         active_screen: PrimaryScreen::Notepad,
         keyboard: KeyboardSessionState::default(),
+        grid_sequencer_track_count: 16,
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
     };
@@ -299,6 +303,7 @@ fn save_and_load_session_state_roundtrip_daw_mode() {
         lines: vec!["cde".to_string()],
         active_screen: PrimaryScreen::Daw,
         keyboard: KeyboardSessionState::default(),
+        grid_sequencer_track_count: 16,
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
     };

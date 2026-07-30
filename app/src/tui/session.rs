@@ -13,6 +13,7 @@ struct LoadedSessionState {
     lines: Vec<String>,
     active_screen: crate::screen_switch::PrimaryScreen,
     keyboard: crate::history::KeyboardSessionState,
+    grid_sequencer_track_count: usize,
     keyboard_note_guide_overlay_date: Option<String>,
     notepad_sound_check_guide_overlay_date: Option<String>,
 }
@@ -33,6 +34,7 @@ fn load_initial_session_state() -> LoadedSessionState {
         lines,
         active_screen,
         keyboard,
+        grid_sequencer_track_count,
         keyboard_note_guide_overlay_date,
         notepad_sound_check_guide_overlay_date,
     } = crate::history::load_session_state();
@@ -42,6 +44,7 @@ fn load_initial_session_state() -> LoadedSessionState {
         lines,
         active_screen,
         keyboard,
+        grid_sequencer_track_count,
         keyboard_note_guide_overlay_date,
         notepad_sound_check_guide_overlay_date,
     }
@@ -67,7 +70,7 @@ fn spawn_patch_loader(cfg: &Config) -> Arc<Mutex<PatchLoadState>> {
 
 /// realtime play server をバックグラウンドで先行起動する。
 ///
-/// keyboard / grid sequencer が使うサーバーは CLAP インスタンスを16個作るため
+/// keyboard / grid sequencer が使うサーバーは CLAP インスタンスを最大16個作るため
 /// 起動に数秒かかる。画面へ入ってから起動すると、その待ち時間がまるごと
 /// 「音が鳴るまでの時間」になるので、app 起動直後に済ませてしまう。
 /// `ensure_started` は Mutex 下でポート開通を先に確認するため、画面側の起動要求と
@@ -99,15 +102,19 @@ impl<'a> TuiApp<'a> {
             lines,
             active_screen,
             keyboard,
+            grid_sequencer_track_count,
             keyboard_note_guide_overlay_date,
             notepad_sound_check_guide_overlay_date,
         } = load_initial_session_state();
         let entry_ptr = entry
             .map(|entry| entry as *const PluginEntry as usize)
             .unwrap_or(0);
-        let play_server = Arc::new(crate::realtime_play::RealtimePlayServerSupervisor::new(
-            cfg_arc.as_ref(),
-        ));
+        let play_server = Arc::new(
+            crate::realtime_play::RealtimePlayServerSupervisor::with_live_instance_count(
+                cfg_arc.as_ref(),
+                grid_sequencer_track_count,
+            ),
+        );
         if cfg_arc.realtime_play_server_prewarm {
             spawn_play_server_prewarm(&play_server);
         }
@@ -164,10 +171,12 @@ impl<'a> TuiApp<'a> {
                     active_screen == crate::screen_switch::PrimaryScreen::LoopBrowser;
                 screen
             },
-            grid_sequencer: super::grid_sequencer::GridSequencerScreen::with_sample_rate(
-                grid_midi_sender,
-                cfg.sample_rate,
-            ),
+            grid_sequencer:
+                super::grid_sequencer::GridSequencerScreen::with_sample_rate_and_track_count(
+                    grid_midi_sender,
+                    cfg.sample_rate,
+                    grid_sequencer_track_count,
+                ),
             voicing: super::voicing::VoicingState::new(
                 crate::history::load_voicing_cache(),
                 voicing_layers,
@@ -184,6 +193,7 @@ impl<'a> TuiApp<'a> {
             lines: self.notepad.session_lines().to_vec(),
             active_screen: self.active_screen,
             keyboard: self.keyboard.state.session_state(),
+            grid_sequencer_track_count: self.grid_sequencer.track_count(),
             keyboard_note_guide_overlay_date: self
                 .keyboard
                 .note_guide

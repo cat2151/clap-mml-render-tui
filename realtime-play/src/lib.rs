@@ -5,9 +5,9 @@
 //! Windows の共有メモリ経由の低レイテンシ MIDI 送信を担う。
 
 use std::{
-    io::{BufRead as _, BufReader, Read as _},
+    io::Read as _,
     net::{SocketAddr, TcpStream},
-    process::{Child, Command, Stdio},
+    process::{Child, Command},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc, Mutex,
@@ -31,10 +31,11 @@ use logging::{log_realtime_play_event, truncate_for_log};
 pub use fast_midi_ipc::{FastMidiEvent, InstanceId, LimiterMeter, INSTANCE_COUNT};
 pub use live_ipc::{PatchVoicing, VoicingReport};
 
-use process::{
-    default_realtime_play_server_executable_name, parse_server_startup_progress,
-    path_realtime_play_server_path, shell_command, sibling_realtime_play_server_path, stop_child,
-};
+use process::{build_realtime_play_server_command, spawn_realtime_play_server, stop_child};
+
+pub const DEFAULT_LIVE_INSTANCE_COUNT: usize = INSTANCE_COUNT;
+pub const SUPPORTED_LIVE_INSTANCE_COUNTS: [usize; 5] = [1, 2, 4, 8, 16];
+pub const LIVE_INSTANCE_COUNT_ENV: &str = "CMRT_LIVE_INSTANCE_COUNT";
 
 const PLAY_SERVER_PLAY_PATH: &str = "/play";
 const PLAY_SERVER_PLAY_MML_PATH: &str = "/play-mml";
@@ -48,6 +49,7 @@ const PLAY_SERVER_START_POLL_INTERVAL: Duration = Duration::from_millis(100);
 pub struct RealtimePlayServerSupervisor {
     port: u16,
     command: String,
+    live_instance_count: usize,
     agent: ureq::Agent,
     state: Mutex<PlayServerState>,
     fast_client: Mutex<Option<fast_midi_ipc::FastMidiClient>>,
@@ -75,6 +77,14 @@ enum PlayRequestError {
 
 impl RealtimePlayServerSupervisor {
     pub fn new(cfg: &Config) -> Self {
+        Self::with_live_instance_count(cfg, DEFAULT_LIVE_INSTANCE_COUNT)
+    }
+
+    pub fn with_live_instance_count(cfg: &Config, live_instance_count: usize) -> Self {
+        assert!(
+            SUPPORTED_LIVE_INSTANCE_COUNTS.contains(&live_instance_count),
+            "live instance count must be 1, 2, 4, 8, or 16"
+        );
         let agent = ureq::AgentBuilder::new()
             .timeout_read(Duration::from_secs(30))
             .timeout_write(Duration::from_secs(30))
@@ -82,6 +92,7 @@ impl RealtimePlayServerSupervisor {
         Self {
             port: cfg.realtime_play_server_port,
             command: cfg.realtime_play_server_command.clone(),
+            live_instance_count,
             agent,
             state: Mutex::new(PlayServerState::default()),
             fast_client: Mutex::new(None),
@@ -205,6 +216,10 @@ impl RealtimePlayServerSupervisor {
 
     pub fn port(&self) -> u16 {
         self.port
+    }
+
+    pub fn live_instance_count(&self) -> usize {
+        self.live_instance_count
     }
 
     pub fn startup_progress(&self) -> Option<RealtimePlayServerStartupProgress> {
@@ -341,90 +356,41 @@ impl RealtimePlayServerSupervisor {
     }
 
     fn spawn_child(&self) -> Result<Child> {
-        let (mut command, launch_description) = self.build_command();
-        *self.startup_progress.lock().unwrap() = Some(RealtimePlayServerStartupProgress {
-            initialized_instances: 0,
-            total_instances: INSTANCE_COUNT,
-        });
-        log_realtime_play_event(format!(
-            "action=server-spawn port={} {launch_description}",
-            self.port
-        ));
-        command
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped());
-        let mut child = command.spawn().map_err(|error| {
-            anyhow!("realtime play server の起動に失敗しました ({launch_description}): {error}")
-        })?;
-        let pid = child.id();
-        if let Some(stderr) = child.stderr.take() {
-            let startup_progress = Arc::clone(&self.startup_progress);
-            let thread_result = std::thread::Builder::new()
-                .name("realtime-play-server-stderr".to_string())
-                .spawn(move || {
-                    for line in BufReader::new(stderr).lines() {
-                        match line {
-                            Ok(line) => {
-                                if let Some((initialized_instances, total_instances)) =
-                                    parse_server_startup_progress(&line)
-                                {
-                                    *startup_progress.lock().unwrap() =
-                                        Some(RealtimePlayServerStartupProgress {
-                                            initialized_instances,
-                                            total_instances,
-                                        });
-                                }
-                                log_realtime_play_event(format!(
-                                    "action=server-stderr pid={pid} line=\"{}\"",
-                                    truncate_for_log(&line, 1_000)
-                                ));
-                            }
-                            Err(error) => {
-                                log_realtime_play_event(format!(
-                                    "action=server-stderr-read-error pid={pid} error={error:?}"
-                                ));
-                                break;
-                            }
-                        }
-                    }
-                });
-            if let Err(error) = thread_result {
-                log_realtime_play_event(format!(
-                    "action=server-stderr-reader-start-error pid={pid} error={error:?}"
-                ));
-            }
-        }
-        log_realtime_play_event(format!(
-            "action=server-spawned port={} pid={} {launch_description}",
-            self.port, pid
-        ));
-        Ok(child)
+        let (command, launch_description) = self.build_command();
+        spawn_realtime_play_server(
+            command,
+            &launch_description,
+            self.port,
+            self.live_instance_count,
+            Arc::clone(&self.startup_progress),
+        )
     }
 
     fn build_command(&self) -> (Command, String) {
-        let trimmed = self.command.trim();
-        if !trimmed.is_empty() {
-            return (
-                shell_command(trimmed),
-                format!("source=config shell_command={trimmed:?}"),
-            );
-        }
-
-        if let Some(path) = sibling_realtime_play_server_path() {
-            let description = format!("source=sibling fullpath=\"{}\"", path.display());
-            return (Command::new(path), description);
-        }
-        if let Some(path) = path_realtime_play_server_path() {
-            let description = format!("source=PATH fullpath=\"{}\"", path.display());
-            return (Command::new(path), description);
-        }
-        let executable = default_realtime_play_server_executable_name();
-        (
-            Command::new(executable),
-            format!("source=unresolved-PATH executable={executable:?}"),
-        )
+        let (mut command, description) = build_realtime_play_server_command(&self.command);
+        command.env(
+            LIVE_INSTANCE_COUNT_ENV,
+            self.live_instance_count.to_string(),
+        );
+        (command, description)
     }
+}
+
+pub fn normalize_live_instance_count(count: usize) -> usize {
+    if SUPPORTED_LIVE_INSTANCE_COUNTS.contains(&count) {
+        count
+    } else {
+        DEFAULT_LIVE_INSTANCE_COUNT
+    }
+}
+
+pub fn next_live_instance_count(current: usize) -> usize {
+    let current = normalize_live_instance_count(current);
+    let index = SUPPORTED_LIVE_INSTANCE_COUNTS
+        .iter()
+        .position(|count| *count == current)
+        .expect("normalized live instance count is supported");
+    SUPPORTED_LIVE_INSTANCE_COUNTS[(index + 1) % SUPPORTED_LIVE_INSTANCE_COUNTS.len()]
 }
 
 impl Drop for RealtimePlayServerSupervisor {

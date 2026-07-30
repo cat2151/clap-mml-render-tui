@@ -25,13 +25,30 @@ impl GridSequencerScreen {
     }
 
     pub fn with_sample_rate(midi_sender: Option<GridMidiSender>, sample_rate: f64) -> Self {
+        Self::with_sample_rate_and_track_count(midi_sender, sample_rate, crate::GRID_ROWS)
+    }
+
+    pub fn with_track_count(midi_sender: Option<GridMidiSender>, track_count: usize) -> Self {
+        Self::with_sample_rate_and_track_count(midi_sender, DEFAULT_SAMPLE_RATE, track_count)
+    }
+
+    pub fn with_sample_rate_and_track_count(
+        midi_sender: Option<GridMidiSender>,
+        sample_rate: f64,
+        track_count: usize,
+    ) -> Self {
+        let track_count = cmrt_realtime_play::normalize_live_instance_count(track_count);
         Self {
             midi_sender,
-            state: GridState::default(),
+            state: GridState::with_row_count(track_count),
             sample_rate,
             help_open: false,
             patch_status: GridPatchStatus::default(),
             grid_ready: false,
         }
+    }
+
+    pub fn track_count(&self) -> usize {
+        self.state.row_count()
     }
 }

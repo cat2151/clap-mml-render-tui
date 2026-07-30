@@ -1,10 +1,10 @@
-//! grid sequencer 画面（16行 x 16ステップの grid を常時ループ再生する）。
+//! grid sequencer 画面（1/2/4/8/16行 x 16ステップの grid を常時ループ再生する）。
 //!
 //! 画面の状態・入力・描画・MIDI 送信はこの crate に閉じており、共有ランタイム
 //! （app 側の `TuiApp`）からは `GridSequencerContext` で必要な情報を注入してもらう。
 //! app 側との接続は app crate の `tui::grid_sequencer_glue` にある。
 //!
-//! grid のrow 0〜15を realtime play server のCLAP instance 0〜15へ対応付ける。
+//! grid の各rowを realtime play server の同番号CLAP instanceへ対応付ける。
 
 use std::time::Instant;
 
@@ -44,6 +44,7 @@ pub(crate) fn log_line(message: &str) {
 pub enum GridSequencerAction {
     Continue,
     Quit,
+    RestartWithTrackCount(usize),
 }
 
 /// patch 一覧のバックグラウンド読み込み状態のスナップショット。
@@ -127,7 +128,10 @@ impl GridSequencerScreen {
         let _ = self.state.randomize_all(now, ctx.patches());
         self.grid_ready = true;
         self.state.start(now);
-        log_line(&format!("grid-sequencer: start instances={GRID_ROWS}"));
+        log_line(&format!(
+            "grid-sequencer: start instances={}",
+            self.track_count()
+        ));
         self.prepare_connection_or_start_server(ctx);
     }
 
@@ -171,7 +175,7 @@ impl GridSequencerScreen {
     }
 
     /// 非同期の patch 一覧が Ready へ遷移したら、未設定 row へ一度だけ割り当てて
-    /// 16 instance の patch prepare を開始する。
+    /// 有効な全 instance の patch prepare を開始する。
     pub fn refresh_context(&mut self, ctx: &GridSequencerContext<'_>) {
         self.patch_status = ctx.patch_status();
         let assigned = self.state.fill_missing_patches(ctx.patches());
@@ -179,7 +183,8 @@ impl GridSequencerScreen {
             return;
         }
         log_line(&format!(
-            "grid-sequencer: patch-list-ready assigned={assigned} instances={GRID_ROWS}"
+            "grid-sequencer: patch-list-ready assigned={assigned} instances={}",
+            self.track_count()
         ));
         self.prepare_connection();
     }
@@ -204,6 +209,12 @@ impl GridSequencerScreen {
         }
         match key.code {
             KeyCode::Char('q') => return GridSequencerAction::Quit,
+            KeyCode::Char('t') => {
+                let next = cmrt_realtime_play::next_live_instance_count(self.track_count());
+                self.finish();
+                self.state = GridState::with_row_count(next);
+                return GridSequencerAction::RestartWithTrackCount(next);
+            }
             KeyCode::Char('?') => {
                 self.help_open = true;
                 cmrt_tui_core::memory::request_refresh();
@@ -215,11 +226,14 @@ impl GridSequencerScreen {
         GridSequencerAction::Continue
     }
 
-    /// grid を丸ごと引き直し、16 instanceすべてのpatchを差し替える。
+    /// grid を丸ごと引き直し、全 instance の patch を差し替える。
     fn randomize(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
         self.patch_status = ctx.patch_status();
         let _note_offs = self.state.randomize_all(now, ctx.patches());
-        log_line(&format!("grid-sequencer: randomize instances={GRID_ROWS}"));
+        log_line(&format!(
+            "grid-sequencer: randomize instances={}",
+            self.track_count()
+        ));
         if let Some(sender) = &self.midi_sender {
             sender.prepare(self.state.patches());
         }
@@ -233,8 +247,9 @@ impl GridSequencerScreen {
     fn randomize_keeping_patches(&mut self, now: Instant) {
         let note_offs = self.state.randomize_keeping_patches(now);
         log_line(&format!(
-            "grid-sequencer: randomize-keep-patch rows={GRID_ROWS} note_offs={}",
-            note_offs.len()
+            "grid-sequencer: randomize-keep-patch rows={} note_offs={}",
+            self.track_count(),
+            note_offs.len(),
         ));
         self.send_scheduled(&note_offs);
     }

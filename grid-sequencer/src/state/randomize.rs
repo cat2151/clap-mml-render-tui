@@ -43,7 +43,7 @@ impl GridState {
 
     /// patch を据え置いたまま、note number / 音長 / セルだけを引き直す。
     ///
-    /// 音色ロード（16 instance ぶんの patch prepare）が走らないので、呼んでも
+    /// 音色ロード（全 instance ぶんの patch prepare）が走らないので、呼んでも
     /// 再生が途切れない。realtime play の連続性を保ったまま鳴る内容だけを
     /// 変え続けたいとき（ジッタ・note off 漏れ・バッファ追従の検証）に使う。
     ///
