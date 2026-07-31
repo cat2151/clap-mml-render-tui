@@ -16,6 +16,10 @@ fn at_step(now: Instant, step: u64) -> Instant {
     now + step_offset(step)
 }
 
+fn g_major() -> ChordPlayback {
+    ChordPlayback::new("G", "V".to_string(), vec![vec![67, 71, 74]]).unwrap()
+}
+
 fn c_major_then_f_major() -> ChordPlayback {
     ChordPlayback::new(
         "C",
@@ -83,55 +87,87 @@ fn the_chord_is_held_for_a_whole_note_and_replaced_by_the_next_chord() {
 }
 
 #[test]
-fn completing_the_progression_raises_the_reroll_signal_once() {
+fn entering_the_last_bar_raises_the_preload_signal_once() {
     let now = Instant::now();
     let mut state = GridState::default();
     state.set_chord(Some(c_major_then_f_major()), now);
     state.start(now);
     step_at(&mut state, now);
+    // 1コード目（進行の最後ではない）を鳴らしている間は立たない。
+    assert!(!state.take_preload_due());
 
-    // 1周目の終わり（2コード目へ）ではまだ合図は立たない。
+    // 2コード目 = 最終小節へ入ったところで立つ。
     for step in 1..=GRID_STEPS as u64 {
         step_at(&mut state, at_step(now, step));
     }
-    assert!(!state.take_chord_cycle_completed());
-
-    // 2コード目を鳴らし終えて先頭へ戻ったところで立つ。
-    for step in GRID_STEPS as u64 + 1..=(GRID_STEPS as u64 * 2) {
-        step_at(&mut state, at_step(now, step));
-    }
-    assert!(state.take_chord_cycle_completed());
-    assert!(!state.take_chord_cycle_completed(), "合図は取ったら降ろす");
-    assert_eq!(state.chord().unwrap().index(), 0);
+    assert!(state.take_preload_due());
+    assert!(!state.take_preload_due(), "合図は取ったら降ろす");
+    assert_eq!(state.chord().unwrap().index(), 1);
 }
 
-/// 1周し終えたら、画面側が引き直すまで次の和音を鳴らし始めない
-/// （引き直しは音色ロードを伴い、どのみち演奏が止まるため）。
+/// ダブルバッファの肝。1周し終えた小節の頭で、待機 bank の grid と進行へ丸ごと
+/// 差し替わり、**その場で**新しい和音が鳴る（旧実装のような1小節の無音を挟まない）。
 #[test]
-fn no_chord_is_attacked_while_a_reroll_is_pending() {
+fn completing_the_progression_swaps_the_ready_bank_and_keeps_playing() {
     let now = Instant::now();
     let mut state = GridState::default();
     state.set_chord(Some(c_major_then_f_major()), now);
     state.start(now);
     step_at(&mut state, now);
+    let rows = state.rows().to_vec();
+    state.stage_next_cycle(rows, g_major());
+    state.mark_pending_ready();
 
     // 2コードぶん（= 進行1周）進める。
     let mut wrapped = Vec::new();
     for step in 1..=(GRID_STEPS as u64 * 2) {
-        wrapped = messages(&step_at(&mut state, at_step(now, step)));
+        wrapped = step_at(&mut state, at_step(now, step));
     }
 
-    assert!(state.chord_reroll_pending());
+    assert_eq!(state.bank(), 1, "待機 bank へ移る");
+    assert_eq!(state.chord().unwrap().degrees(), "V");
     assert_eq!(
-        wrapped,
-        vec![[0x80, 65, 0], [0x80, 69, 0], [0x80, 72, 0]],
-        "最後のコードの note off だけが出て、次の和音は鳴らさない"
+        messages(&wrapped),
+        vec![
+            [0x80, 65, 0],
+            [0x80, 69, 0],
+            [0x80, 72, 0],
+            [0x90, 67, 100],
+            [0x90, 71, 100],
+            [0x90, 74, 100],
+        ],
+        "最後のコードを切ってから、間を空けずに新しい和音を鳴らす"
     );
+    // 新しい和音は差し替え後の bank の instance へ出す。
+    let attacks = wrapped
+        .iter()
+        .filter(|item| item.message[0] == 0x90)
+        .collect::<Vec<_>>();
+    assert!(attacks
+        .iter()
+        .all(|item| item.instance_id == state.instance_id(CHORD_ROW)));
+}
 
-    // 引き直すと合図が降り、また鳴り始める。
-    assert!(state.take_chord_cycle_completed());
+/// 先読みが間に合わなかったら差し替えを見送り、今の grid のまま次の周へ入る。
+/// 音を止めないことを最優先する。
+#[test]
+fn an_unfinished_preload_keeps_the_current_bank() {
+    let now = Instant::now();
+    let mut state = GridState::default();
     state.set_chord(Some(c_major_then_f_major()), now);
-    assert!(!state.chord_reroll_pending());
+    state.start(now);
+    step_at(&mut state, now);
+    let rows = state.rows().to_vec();
+    state.stage_next_cycle(rows, g_major());
+    // `mark_pending_ready()` を呼ばない = ロードがまだ終わっていない。
+
+    for step in 1..=(GRID_STEPS as u64 * 2) {
+        step_at(&mut state, at_step(now, step));
+    }
+
+    assert_eq!(state.bank(), 0, "bank は動かさない");
+    assert_eq!(state.chord().unwrap().degrees(), "I-IV");
+    assert!(state.has_pending_cycle(), "差し替え待ちは次の周へ持ち越す");
 }
 
 #[test]

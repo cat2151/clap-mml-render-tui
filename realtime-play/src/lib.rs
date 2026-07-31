@@ -33,9 +33,22 @@ pub use live_ipc::{PatchVoicing, VoicingReport};
 
 use process::{build_realtime_play_server_command, spawn_realtime_play_server, stop_child};
 
-pub const DEFAULT_LIVE_INSTANCE_COUNT: usize = INSTANCE_COUNT;
+/// UI が見せるトラック数の既定値。サーバーが生成する instance 数はこの 2 倍になる。
+pub const DEFAULT_LIVE_INSTANCE_COUNT: usize = INSTANCE_COUNT / BANK_COUNT;
+/// UI が見せるトラック数（grid sequencer の `t` キーが循環する値）。
 pub const SUPPORTED_LIVE_INSTANCE_COUNTS: [usize; 5] = [1, 2, 4, 8, 16];
+/// サーバーへ要求できる instance 数。トラック数それぞれの bank 2 本ぶん。
+pub const SUPPORTED_SERVER_INSTANCE_COUNTS: [usize; 6] = [1, 2, 4, 8, 16, 32];
 pub const LIVE_INSTANCE_COUNT_ENV: &str = "CMRT_LIVE_INSTANCE_COUNT";
+
+/// bank の数。grid sequencer の chord mode は、鳴っている bank の裏でもう一方へ
+/// 次の patch を先読みし、小節境界で入れ替えることで差し替えの無音をなくす。
+pub const BANK_COUNT: usize = 2;
+
+/// トラック数に対して、サーバーが生成すべき instance 数（= bank 2 本ぶん）。
+pub fn server_instance_count(track_count: usize) -> usize {
+    normalize_live_instance_count(track_count) * BANK_COUNT
+}
 
 const PLAY_SERVER_PLAY_PATH: &str = "/play";
 const PLAY_SERVER_PLAY_MML_PATH: &str = "/play-mml";
@@ -77,13 +90,15 @@ enum PlayRequestError {
 
 impl RealtimePlayServerSupervisor {
     pub fn new(cfg: &Config) -> Self {
-        Self::with_live_instance_count(cfg, DEFAULT_LIVE_INSTANCE_COUNT)
+        Self::with_live_instance_count(cfg, server_instance_count(DEFAULT_LIVE_INSTANCE_COUNT))
     }
 
+    /// `live_instance_count` は**サーバーが生成する instance 数**であって、UI が見せる
+    /// トラック数ではない。トラック数から求めるには [`server_instance_count`] を使う。
     pub fn with_live_instance_count(cfg: &Config, live_instance_count: usize) -> Self {
         assert!(
-            SUPPORTED_LIVE_INSTANCE_COUNTS.contains(&live_instance_count),
-            "live instance count must be 1, 2, 4, 8, or 16"
+            SUPPORTED_SERVER_INSTANCE_COUNTS.contains(&live_instance_count),
+            "server instance count must be one of {SUPPORTED_SERVER_INSTANCE_COUNTS:?}"
         );
         let agent = ureq::AgentBuilder::new()
             .timeout_read(Duration::from_secs(30))

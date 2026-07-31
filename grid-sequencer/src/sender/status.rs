@@ -52,6 +52,11 @@ pub struct GridConnectionStatus {
     pub server_startup_elapsed: Option<Duration>,
     /// 音色ロード（16 instance 分の patch prepare）の確定所要時間。
     pub patch_setting_elapsed: Option<Duration>,
+    /// 待機 bank への先読みロードの進捗。`phase` は動かさない（演奏中に走るため）。
+    /// `completed` は成功も失敗も数える。ステータス行の表示にだけ使う。
+    pub preload: GridProgress,
+    /// 先読みロードで1件でも失敗したか。立っていたら bank を差し替えてはいけない。
+    pub preload_failed: bool,
 }
 
 impl Default for GridConnectionStatus {
@@ -67,6 +72,11 @@ impl Default for GridConnectionStatus {
             stage_started_at: None,
             server_startup_elapsed: None,
             patch_setting_elapsed: None,
+            preload: GridProgress {
+                completed: 0,
+                total: 0,
+            },
+            preload_failed: false,
         }
     }
 }
@@ -215,6 +225,28 @@ impl GridConnectionStatus {
 
     pub(super) fn update_limiter_meter(&mut self, meter: cmrt_realtime_play::LimiterMeter) {
         self.limiter_reduction_db = meter.peak_reduction_db.max(meter.current_reduction_db);
+    }
+
+    /// 先読みロードを1件投げた。UI スレッドから、送信の直前に呼ぶ。
+    pub(super) fn begin_preload_step(&mut self) {
+        self.preload.total = self.preload.total.saturating_add(1);
+    }
+
+    /// 先読みロードを1件終えた。送信スレッドから呼ぶ。
+    pub(super) fn record_preload_step(&mut self, succeeded: bool) {
+        self.preload.completed = self.preload.completed.saturating_add(1);
+        if !succeeded {
+            self.preload_failed = true;
+        }
+    }
+
+    /// 先読みの集計を初期化する。新しいサイクルの先読みを始める前に呼ぶ。
+    pub(super) fn reset_preload(&mut self) {
+        self.preload = GridProgress {
+            completed: 0,
+            total: 0,
+        };
+        self.preload_failed = false;
     }
 
     pub(super) fn update_adaptive_buffer(&mut self, multiplier: u8, underrun_frames: u64) {

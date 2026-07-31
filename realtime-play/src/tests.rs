@@ -159,6 +159,19 @@ fn live_instance_counts_normalize_and_cycle() {
     );
 }
 
+/// 各トラックは bank 2 本ぶんの instance を使う。UI が見せるトラック数と、
+/// サーバーが生成する instance 数を取り違えないための番人。
+#[test]
+fn each_track_takes_two_instances_for_double_buffering() {
+    assert_eq!(server_instance_count(1), 2);
+    assert_eq!(server_instance_count(16), 32);
+    // 未対応の値はトラック数の既定へ丸めてから 2 倍する。
+    assert_eq!(server_instance_count(3), 32);
+    for tracks in SUPPORTED_LIVE_INSTANCE_COUNTS {
+        assert!(SUPPORTED_SERVER_INSTANCE_COUNTS.contains(&server_instance_count(tracks)));
+    }
+}
+
 #[test]
 fn supervisor_keeps_requested_live_instance_count() {
     let supervisor =

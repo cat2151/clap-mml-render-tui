@@ -112,7 +112,9 @@ impl<'a> TuiApp<'a> {
         let play_server = Arc::new(
             crate::realtime_play::RealtimePlayServerSupervisor::with_live_instance_count(
                 cfg_arc.as_ref(),
-                grid_sequencer_track_count,
+                // 1 トラックにつき bank 2 本。grid sequencer の chord mode が、
+                // 鳴っている bank の裏でもう一方へ次の patch を先読みするため。
+                crate::realtime_play::server_instance_count(grid_sequencer_track_count),
             ),
         );
         if cfg_arc.realtime_play_server_prewarm {

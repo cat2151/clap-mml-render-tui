@@ -22,6 +22,12 @@ pub struct GridSequencerScreen {
     pub(crate) chord_error: Option<String>,
     /// コード進行データ更新の再起動アナウンスを出し始めた時刻。
     pub(crate) restart_notice: Option<Instant>,
+    /// 待機 bank への先読みロードの進み具合。`None` なら先読みしていない。
+    pub(crate) cycle_swap: Option<crate::cycle_swap::CycleSwap>,
+    /// 音色ロードの完了を待っている。詳細は [`crate::start_wait`]。
+    pub(crate) waiting_for_patches: bool,
+    /// `Ready` へ戻ってから鳴らし始める時刻。待ちに入った時点では未定。
+    pub(crate) resume_at: Option<Instant>,
 }
 
 impl GridSequencerScreen {
@@ -53,6 +59,9 @@ impl GridSequencerScreen {
             grid_ready: false,
             chord_error: None,
             restart_notice: None,
+            cycle_swap: None,
+            waiting_for_patches: false,
+            resume_at: None,
         }
     }
 

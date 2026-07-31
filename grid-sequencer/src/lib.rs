@@ -14,9 +14,11 @@ use cmrt_chord::ChordProgressionCatalog;
 use cmrt_realtime_play::PatchVoicing;
 
 mod chord_mode;
+mod cycle_swap;
 mod screen;
 mod screen_runtime;
 mod sender;
+mod start_wait;
 mod state;
 pub mod ui;
 
@@ -25,9 +27,9 @@ pub use sender::{
     GridConnectionPhase, GridConnectionStatus, GridMidiSender, GridProgress, GridRowReadiness,
 };
 pub use state::{
-    frames_ahead, pick_chord_patch, step_offset, ChordPlayback, GridRow, GridScheduledMessage,
-    GridState, StepDuration, BPM, CHORD_ROW, GRID_ROWS, GRID_STEPS, LOOKAHEAD, STEPS_PER_BEAT,
-    STEP_INTERVAL,
+    frames_ahead, pick_chord_patch, randomize_row_slice, snap_rows_to_chord, step_offset,
+    ChordPlayback, GridRow, GridScheduledMessage, GridState, StepDuration, BPM, CHORD_ROW,
+    GRID_ROWS, GRID_STEPS, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL,
 };
 
 /// patch が mono か poly かの判定を共有ランタイムから引くための窓口。
@@ -64,11 +66,14 @@ pub(crate) fn log_line(message: &str) {
 /// chord mode の和音の行へ与える音量差（dB）。他の行は 0 dB のまま。
 pub const CHORD_GAIN_DB: f32 = 6.0;
 
-/// 行ごとの音量差（dB）。chord mode 中だけ和音の行が持ち上がる。
+/// instance ごとの音量差（dB）。chord mode 中だけ和音の行が持ち上がる。
+///
+/// 返す長さは bank 2 本ぶん（= `row_count * BANK_COUNT`）。差し替え先の bank にも
+/// 同じ音量差を載せておく必要があるので、両方の `CHORD_ROW` を持ち上げる。
 pub fn chord_gains_db(row_count: usize, chord_on: bool) -> Vec<f32> {
-    (0..row_count)
-        .map(|row| {
-            if chord_on && row == CHORD_ROW {
+    (0..row_count * cmrt_realtime_play::BANK_COUNT)
+        .map(|instance| {
+            if chord_on && instance % row_count == CHORD_ROW {
                 CHORD_GAIN_DB
             } else {
                 0.0
@@ -173,6 +178,7 @@ impl GridSequencerScreen {
         // 入場時は何も送っていないので、引き直しで出る note off は捨ててよい。
         let _ = self.state.randomize_all(now, ctx.patches());
         self.grid_ready = true;
+        self.cancel_cycle_swap();
         self.state.start(now);
         log_line(&format!(
             "grid-sequencer: start instances={}",
@@ -184,6 +190,7 @@ impl GridSequencerScreen {
     /// 直前の grid を保ったまま画面へ戻るときの初期化。
     pub fn resume(&mut self, now: Instant) {
         self.help_open = false;
+        self.cancel_cycle_swap();
         self.state.start(now);
         self.prepare_connection();
     }
@@ -191,6 +198,9 @@ impl GridSequencerScreen {
     /// 画面を離れるときの後始末。鳴っている音を止めてから再生を停止する。
     pub fn finish(&mut self) {
         self.help_open = false;
+        self.cancel_cycle_swap();
+        self.waiting_for_patches = false;
+        self.resume_at = None;
         let _note_offs = self.state.take_reset_messages();
         if let Some(sender) = &self.midi_sender {
             sender.stop();
@@ -204,11 +214,16 @@ impl GridSequencerScreen {
             .unwrap_or_default()
     }
 
-    fn prepare_connection(&self) {
+    /// 鳴っている bank の音色を差し替え、ロードが終わるまで鳴らし始めを待たせる。
+    ///
+    /// `stop_live_all()` を伴うのでロード中は無音になる。待機 bank への先読み
+    /// （[`GridSequencerScreen::advance_cycle_swap`]）とは別経路。
+    fn prepare_connection(&mut self) {
         if let Some(sender) = &self.midi_sender {
             sender.prepare(self.state.patches());
         }
         self.apply_chord_gains();
+        self.wait_for_patches();
     }
 
     /// chord mode の和音を他の行より目立たせるための音量差を適用する。
@@ -225,8 +240,8 @@ impl GridSequencerScreen {
         ));
     }
 
-    fn prepare_connection_or_start_server(&self, ctx: &GridSequencerContext<'_>) {
-        if self.state.patches().all(|patch| patch.is_some()) {
+    fn prepare_connection_or_start_server(&mut self, ctx: &GridSequencerContext<'_>) {
+        if self.state.patches().all(|(_, patch)| patch.is_some()) {
             self.prepare_connection();
         } else if ctx.patches_are_loading() {
             if let Some(sender) = &self.midi_sender {
@@ -295,6 +310,8 @@ impl GridSequencerScreen {
     /// grid を丸ごと引き直し、全 instance の patch を差し替える。
     fn randomize(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
         self.patch_status = ctx.patch_status();
+        // 全 instance を差し替えるので、走っている先読みは意味を失う。
+        self.cancel_cycle_swap();
         let _note_offs = self.state.randomize_all(now, ctx.patches());
         // chord mode 中は和音の行だけ poly patch を当て直す（無差別抽選で mono を
         // 引くと和音が潰れるため）。
@@ -303,9 +320,7 @@ impl GridSequencerScreen {
             "grid-sequencer: randomize instances={}",
             self.track_count()
         ));
-        if let Some(sender) = &self.midi_sender {
-            sender.prepare(self.state.patches());
-        }
+        self.prepare_connection();
     }
 
     /// patch を据え置き、note / 音長 / セルだけを引き直す。
@@ -314,6 +329,8 @@ impl GridSequencerScreen {
     /// `prepare_instances()` の `stop_live_all()` による消音も無いため、鳴っていた音の
     /// note off はここで自分で送る必要がある。
     fn randomize_keeping_patches(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
+        // 譜面が変わるので、抽選済みの次サイクルは古くなる。走っている先読みごと捨てる。
+        self.cancel_cycle_swap();
         let note_offs = self.state.randomize_keeping_patches(now);
         log_line(&format!(
             "grid-sequencer: randomize-keep-patch rows={} note_offs={}",

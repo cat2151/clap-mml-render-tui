@@ -15,11 +15,36 @@ pub use status::{GridConnectionPhase, GridConnectionStatus, GridProgress, GridRo
 
 const METER_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
+/// 先読みロード中だけ厚くする出力バッファ。
+///
+/// patch のロードはサーバーのレンダースレッド上で同期実行され、その間リングが
+/// 補充されない。実測で 1 patch あたり平均 27ms（最悪 150ms）かかるのに対し、
+/// リングの余裕は 512 フレーム × multiplier ÷ 48kHz なので、既定の
+/// `INITIAL_BUFFER_MULTIPLIER`（= 2、21ms）では足りない。16 なら 170ms 稼げて、
+/// `LOOKAHEAD`（2ステップ = 230ms）にも収まる。
+const PRELOAD_BUFFER_MULTIPLIER: u8 = 16;
+
 enum GridMidiCommand {
     StartServer,
-    Send { events: Vec<FastMidiEvent> },
-    Prepare { patches: Vec<Option<String>> },
-    SetGains { gains_db: Vec<f32> },
+    Send {
+        events: Vec<FastMidiEvent>,
+    },
+    /// 鳴っている bank の音色を丸ごと差し替える。`stop_live_all()` を伴うので
+    /// ロード中は無音になる。起動時と `r` キー用。
+    Prepare {
+        patches: Vec<(u8, Option<String>)>,
+    },
+    /// 待機 bank への先読みロード1件。**演奏中に走る**ので `stop_live_all()` を
+    /// 呼ばず、phase も動かさない（`accepts_notes()` を落とすと演奏が止まる）。
+    Preload {
+        instance_id: u8,
+        patch: Option<String>,
+    },
+    /// 先読みロードの終了。厚くしていた出力バッファを戻す。
+    PreloadFinished,
+    SetGains {
+        gains_db: Vec<f32>,
+    },
     Stop,
     Shutdown,
 }
@@ -60,12 +85,34 @@ impl GridMidiSender {
         }
     }
 
-    pub fn prepare<'a>(&self, patches: impl Iterator<Item = Option<&'a str>>) {
+    pub fn prepare<'a>(&self, patches: impl Iterator<Item = (u8, Option<&'a str>)>) {
         self.status.lock().unwrap().begin_connecting();
         let patches = patches
-            .map(|patch| patch.map(str::to_string))
+            .map(|(instance_id, patch)| (instance_id, patch.map(str::to_string)))
             .collect::<Vec<_>>();
         let _ = self.tx.send(GridMidiCommand::Prepare { patches });
+    }
+
+    /// 新しいサイクルの先読みを始める。進捗と失敗フラグを初期化する。
+    pub fn begin_preload_cycle(&self) {
+        self.status.lock().unwrap().reset_preload();
+    }
+
+    /// 待機 bank へ patch を1件だけ先読みする。演奏は止めない。
+    ///
+    /// 1ステップにつき1件ずつ呼ぶこと。まとめて投げるとサーバーのレンダースレッドが
+    /// 連続で止まり、出力リングを食い潰して underrun になる。
+    pub fn preload(&self, instance_id: u8, patch: Option<&str>) {
+        self.status.lock().unwrap().begin_preload_step();
+        let _ = self.tx.send(GridMidiCommand::Preload {
+            instance_id,
+            patch: patch.map(str::to_string),
+        });
+    }
+
+    /// 先読みを終える（全件送り終えた、または打ち切った）。バッファ厚を戻す。
+    pub fn finish_preload(&self) {
+        let _ = self.tx.send(GridMidiCommand::PreloadFinished);
     }
 
     /// instance ごとの音量差を dB で設定する（0.0 が等倍）。
@@ -110,6 +157,8 @@ fn run_midi_sender(
     status: Arc<Mutex<GridConnectionStatus>>,
 ) {
     let mut adaptive_buffer = None;
+    // 先読みロード中は出力バッファを厚くしている。戻し忘れを防ぐために持つ。
+    let mut preloading = false;
     loop {
         let command = match rx.recv_timeout(METER_POLL_INTERVAL) {
             Ok(command) => command,
@@ -143,6 +192,7 @@ fn run_midi_sender(
             }
             GridMidiCommand::Prepare { patches } => {
                 adaptive_buffer = None;
+                preloading = false;
                 // サーバー起動（CLAP インスタンス生成）と音色ロードは所要時間の桁が
                 // 違うので、別々に計測してどちらが支配的かを切り分けられるようにする。
                 let server_started = Instant::now();
@@ -186,6 +236,37 @@ fn run_midi_sender(
                     false,
                 );
             }
+            GridMidiCommand::Preload { instance_id, patch } => {
+                // 初回だけ出力バッファを厚くする。ロード中はレンダースレッドが
+                // 止まるので、その間ぶんを先に貯めておかないと underrun になる。
+                if !preloading {
+                    preloading = true;
+                    let _ =
+                        supervisor.set_connected_live_buffer_multiplier(PRELOAD_BUFFER_MULTIPLIER);
+                }
+                let started = Instant::now();
+                let result = supervisor.prepare_live_patch(instance_id, patch.as_deref());
+                match &result {
+                    Ok(()) => crate::log_line(&format!(
+                        "grid-sequencer: preload instance={instance_id} ms={}",
+                        started.elapsed().as_millis()
+                    )),
+                    Err(error) => crate::log_line(&format!(
+                        "grid-sequencer: preload failed instance={instance_id} error=\"{error:#}\""
+                    )),
+                }
+                status.lock().unwrap().record_preload_step(result.is_ok());
+            }
+            GridMidiCommand::PreloadFinished => {
+                if preloading {
+                    preloading = false;
+                    // 適応バッファが持っている厚さへ戻す。まだ無ければ既定へ。
+                    let multiplier = adaptive_buffer
+                        .map(AdaptiveBuffer::multiplier)
+                        .unwrap_or(INITIAL_BUFFER_MULTIPLIER);
+                    let _ = supervisor.set_connected_live_buffer_multiplier(multiplier);
+                }
+            }
             GridMidiCommand::SetGains { gains_db } => {
                 let mut failed = None;
                 for (instance_id, gain_db) in gains_db.iter().enumerate() {
@@ -210,6 +291,7 @@ fn run_midi_sender(
             }
             GridMidiCommand::Stop => {
                 adaptive_buffer = None;
+                preloading = false;
                 let started = Instant::now();
                 let result = supervisor
                     .stop_live_all()
@@ -250,24 +332,30 @@ fn log_startup_summary(
     ));
 }
 
+/// 指定された instance の音色をまとめて差し替える。`stop_live_all()` を伴うので
+/// この間は無音になる。鳴っている bank ぶんだけを渡すこと（待機 bank は
+/// [`GridMidiCommand::Preload`] が演奏中に裏で仕込む）。
 fn prepare_instances(
     supervisor: &RealtimePlayServerSupervisor,
-    patches: &[Option<String>],
+    patches: &[(u8, Option<String>)],
     mut report_progress: impl FnMut(usize, usize),
 ) -> anyhow::Result<()> {
-    let expected = supervisor.live_instance_count();
-    if patches.len() != expected {
-        anyhow::bail!("grid requires {} patches, got {}", expected, patches.len());
+    let available = supervisor.live_instance_count();
+    if let Some((instance_id, _)) = patches
+        .iter()
+        .find(|(instance_id, _)| usize::from(*instance_id) >= available)
+    {
+        anyhow::bail!("instance {instance_id} is outside the server range 0..{available}");
     }
     supervisor.stop_live_all()?;
     supervisor.set_live_buffer_multiplier(INITIAL_BUFFER_MULTIPLIER)?;
     report_progress(0, patches.len());
-    for (instance_id, patch) in patches.iter().enumerate() {
+    for (completed, (instance_id, patch)) in patches.iter().enumerate() {
         if let Err(error) = supervisor
-            .prepare_live_patch(instance_id as u8, patch.as_deref())
+            .prepare_live_patch(*instance_id, patch.as_deref())
             .with_context(|| {
                 format!(
-                    "grid row {instance_id} patch prepare failed (patch={:?})",
+                    "grid instance {instance_id} patch prepare failed (patch={:?})",
                     patch.as_deref()
                 )
             })
@@ -275,7 +363,7 @@ fn prepare_instances(
             let _ = supervisor.stop_live_all();
             return Err(error);
         }
-        report_progress(instance_id + 1, patches.len());
+        report_progress(completed + 1, patches.len());
     }
     Ok(())
 }

@@ -163,7 +163,7 @@ fn r_assigns_a_patch_to_every_row() {
     assert!(screen
         .state
         .patches()
-        .all(|patch| patch == Some("Keys/Piano.fxp")));
+        .all(|(_, patch)| patch == Some("Keys/Piano.fxp")));
 }
 
 #[test]

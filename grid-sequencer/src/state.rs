@@ -5,12 +5,13 @@ use std::{
 
 mod chord;
 mod clock;
+mod cycle;
 mod randomize;
 
-pub use chord::{ChordPlayback, CHORD_ROW};
+pub use chord::{snap_rows_to_chord, ChordPlayback, CHORD_ROW};
 pub use clock::{frames_ahead, step_offset, BPM, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL};
 use clock::{StepClock, SCHEDULE_GUARD};
-pub use randomize::pick_chord_patch;
+pub use randomize::{pick_chord_patch, randomize_row_slice};
 
 /// grid の既定・最大行数（＝パート数）。
 pub const GRID_ROWS: usize = 16;
@@ -123,10 +124,15 @@ pub struct GridState {
     last_scheduled: Option<Instant>,
     /// chord mode の再生状態。`None` なら従来どおりの単音演奏。
     chord: Option<ChordPlayback>,
-    /// コード進行を1周し終えたことを画面側へ伝えるフラグ。進行・Key・音色の抽選は
-    /// カタログと rng を持つ画面側の仕事なので、ここでは合図だけを立てる。
-    /// 立っている間は和音を鳴らし始めない（直後に音色ロードで止まるため）。
-    chord_cycle_completed: bool,
+    /// いま鳴らしている bank（0 か 1）。行 `r` は instance `bank * 行数 + r` へ写る。
+    bank: usize,
+    /// 抽選済みで、先読みロードが終われば差し替える次サイクル。詳細は [`cycle`]。
+    pending: Option<cycle::PendingCycle>,
+    /// 待機 bank の先読みロードが終わったか。立っていないと差し替えない。
+    pending_ready: bool,
+    /// 進行の最終小節へ入ったことを画面側へ伝えるフラグ。抽選はカタログと rng を
+    /// 持つ画面側の仕事なので、ここでは合図だけを立てる。
+    preload_due: bool,
     clock: StepClock,
 }
 
@@ -148,7 +154,10 @@ impl GridState {
             pending_display: VecDeque::new(),
             last_scheduled: None,
             chord: None,
-            chord_cycle_completed: false,
+            bank: 0,
+            pending: None,
+            pending_ready: false,
+            preload_due: false,
             clock: StepClock::default(),
         }
     }
@@ -173,10 +182,6 @@ impl GridState {
 
     pub fn is_running(&self) -> bool {
         self.clock.is_running()
-    }
-
-    pub fn patches(&self) -> impl Iterator<Item = Option<&str>> {
-        self.rows.iter().map(|row| row.patch.as_deref())
     }
 
     /// chord mode の再生状態。`None` なら従来どおりの単音演奏。
@@ -330,12 +335,13 @@ impl GridState {
         let chord = self.chord.as_ref().map(ChordPlayback::current);
         let mut attacks = Vec::new();
         for (index, row) in self.rows.iter().enumerate() {
-            let instance_id = index as u8;
+            let instance_id = self.instance_id(index);
             match chord {
                 // chord mode の行はセルを使わず、grid の先頭ステップだけ全音符で和音を鳴らす。
-                // 進行を1周して引き直し待ちの間は、次の和音を鳴らし始めない。
+                // 音色ロードは待機 bank の裏で済ませてあるので、進行の変わり目でも
+                // 鳴らし始めを遅らせる必要はない。
                 Some(notes) if index == CHORD_ROW => {
-                    if step == 0 && !notes.is_empty() && !self.chord_cycle_completed {
+                    if step == 0 && !notes.is_empty() {
                         attacks.push((instance_id, notes.to_vec(), StepDuration::Whole.steps()));
                     }
                 }

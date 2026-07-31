@@ -283,7 +283,7 @@ fn a_category_with_no_poly_patch_yields_nothing() {
 
 /// 進行を1周したら、進行・Key に加えて全行の音色も引き直す。
 #[test]
-fn completing_the_progression_rerolls_the_patches_too() {
+fn staging_the_next_cycle_rerolls_every_patch() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = categorized_patches();
@@ -296,17 +296,25 @@ fn completing_the_progression_rerolls_the_patches_too() {
         row.patch = Some("Stale/Patch.fxp".to_string());
     }
 
-    screen.reroll_chord_cycle(now, &ctx);
+    assert!(screen.stage_next_cycle(now, &ctx));
 
+    // 鳴っている grid はそのまま。引き直しは差し替え待ちの側にだけ載る。
     assert!(
         screen
             .state
             .rows()
             .iter()
+            .all(|row| row.patch.as_deref() == Some("Stale/Patch.fxp")),
+        "演奏中の grid は触らない"
+    );
+    let staged = screen.state.pending_rows_for_test();
+    assert!(
+        staged
+            .iter()
             .all(|row| row.patch.as_deref() != Some("Stale/Patch.fxp")),
         "全行の音色が引き直される"
     );
-    let chord_patch = screen.state.rows()[CHORD_ROW].patch.clone().unwrap();
+    let chord_patch = staged[CHORD_ROW].patch.clone().unwrap();
     assert!(
         chord_patch.contains("/Keys/") || chord_patch.contains("/Organs/"),
         "和音の行は対象カテゴリのまま: {chord_patch}"
@@ -316,10 +324,22 @@ fn completing_the_progression_rerolls_the_patches_too() {
 
 #[test]
 fn only_the_chord_row_is_boosted_and_only_while_the_chord_mode_is_on() {
-    assert_eq!(crate::chord_gains_db(4, false), vec![0.0, 0.0, 0.0, 0.0]);
+    // 返すのは bank 2 本ぶん。差し替え先の bank にも同じ音量差を載せておかないと、
+    // 切り替わった瞬間に和音だけ音量が落ちる。
+    assert_eq!(crate::chord_gains_db(4, false), vec![0.0; 8]);
     assert_eq!(
         crate::chord_gains_db(4, true),
-        vec![crate::CHORD_GAIN_DB, 0.0, 0.0, 0.0]
+        vec![
+            crate::CHORD_GAIN_DB,
+            0.0,
+            0.0,
+            0.0,
+            crate::CHORD_GAIN_DB,
+            0.0,
+            0.0,
+            0.0
+        ],
+        "どちらの bank でも和音の行だけが持ち上がる"
     );
     assert_eq!(crate::CHORD_GAIN_DB, 6.0);
 }

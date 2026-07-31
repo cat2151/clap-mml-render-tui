@@ -18,14 +18,13 @@ impl GridSequencerScreen {
     /// コード進行データの更新アナウンスを出し終えたら true を返す。共有ランタイムは
     /// これを受けてアプリを再起動する。
     pub fn pump_step(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) -> bool {
-        if self.connection_status().phase.accepts_notes() {
+        let ready = self.connection_status().phase.accepts_notes();
+        if self.poll_start_wait(now, ready) {
             let scheduled = self.state.poll_steps(now, LOOKAHEAD);
             self.send_scheduled(&scheduled);
-            if self.state.take_chord_cycle_completed() {
-                // 進行を1周したので、進行・Key・音色をまとめて引き直す。
-                // 音色ロードの間だけ演奏が止まる。
-                self.reroll_chord_cycle(now, ctx);
-            }
+            // 進行の最終小節へ入っていれば、待機 bank へ次サイクルを先読みする。
+            // 演奏は止まらない（差し替えは次の小節境界で起きる）。
+            self.advance_cycle_swap(now, ctx);
         }
         self.take_restart_request(now)
     }

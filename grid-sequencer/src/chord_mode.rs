@@ -72,27 +72,44 @@ impl GridSequencerScreen {
         true
     }
 
-    /// 進行を1周し終えたときの引き直し。進行・Key に加えて**全行の音色**も引き直す。
+    /// 次サイクルを抽選し、差し替え待ちとして預ける。まだ鳴らさない。
     ///
-    /// 音色ロード（`prepare()`）が `stop_live_all()` を伴うので、この間だけ演奏が
-    /// 止まる。進行の変わり目に音色も変わるので、区切りとしてはむしろ自然。
-    pub(crate) fn reroll_chord_cycle(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
-        if !self.reroll_chord(now, ctx) {
-            return;
-        }
-        let note_offs = self.state.randomize_patches(now, ctx.patches());
-        self.send_scheduled(&note_offs);
+    /// 進行・Key に加えて、**全行の音色・note・音長・セル**を引き直す（`r` キーと同じ範囲）。
+    /// 音色ロードは待機 bank の裏で走らせるので、ここで演奏は止まらない。
+    /// 抽選できたら true を返す。
+    pub(crate) fn stage_next_cycle(
+        &mut self,
+        _now: Instant,
+        ctx: &GridSequencerContext<'_>,
+    ) -> bool {
+        let Some(playback) = pick_chord(ctx.chord_catalog) else {
+            self.chord_error = Some(CATALOG_UNAVAILABLE.to_string());
+            log_line("grid-sequencer: cycle stage failed reason=catalog-empty");
+            return false;
+        };
+        // 鳴っている grid はそのままに、複製の上で引き直す。差し替えは小節境界まで待つ。
+        let mut rows = self.state.rows().to_vec();
+        crate::randomize_row_slice(&mut rows, ctx.patches());
+        crate::snap_rows_to_chord(&mut rows, &playback);
         // 和音の行だけは無差別抽選の結果を捨て、条件に合う patch へ当て直す。
         match self.pick_chord_patch(ctx) {
-            Ok(patch) => self.state.rows_mut()[CHORD_ROW].patch = Some(patch),
+            Ok(patch) => rows[CHORD_ROW].patch = Some(patch),
             // 引けなくても chord mode は続ける（直前に当たっていた patch のまま鳴らす）。
-            Err(error) => self.chord_error = Some(error.to_string()),
+            Err(error) => {
+                self.chord_error = Some(error.to_string());
+                rows[CHORD_ROW].patch = self.state.rows()[CHORD_ROW].patch.clone();
+            }
         }
         log_line(&format!(
-            "grid-sequencer: chord cycle reroll patches instances={}",
-            self.track_count()
+            "grid-sequencer: cycle staged key={} degrees={} chords={} rows={}",
+            playback.key(),
+            playback.degrees(),
+            playback.chord_count(),
+            rows.len(),
         ));
-        self.prepare_connection();
+        self.state.stage_next_cycle(rows, playback);
+        self.chord_error = None;
+        true
     }
 
     /// chord mode 中の `r` / `R` に追随する。進行と Key を引き直し、

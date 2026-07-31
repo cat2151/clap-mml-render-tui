@@ -1,6 +1,14 @@
 use std::fmt;
 
-pub const INSTANCE_COUNT: usize = 16;
+/// 共有メモリプロトコルが表現できる最大 instance 数。
+///
+/// grid sequencer の chord mode は N トラックを 2 つの bank（= 2N instance）へ割り当て、
+/// 鳴っている bank の裏でもう一方へ次の patch を先読みする。16 トラックぶんを
+/// ダブルバッファにすると 32 必要なのでここが上限になる。
+/// `instance_id` は wire format 上 `u32` / `u8` なので、この定数を上げても
+/// 共有メモリのレイアウトは変わらない（`windows/protocol.rs` の `VERSION` は据え置き）。
+/// サーバー側の `cmrt_realtime_ipc::MAX_INSTANCE_COUNT` と必ず揃えること。
+pub const INSTANCE_COUNT: usize = 32;
 pub const MAX_MIDI_MESSAGES: usize = 128;
 pub const MAX_PATCH_BYTES: usize = 4096;
 pub const MAX_RESPONSE_BYTES: usize = 16 * 1024;

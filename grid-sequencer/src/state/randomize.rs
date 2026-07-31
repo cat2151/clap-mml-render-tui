@@ -5,7 +5,7 @@ use rand::Rng;
 use cmrt_realtime_play::PatchVoicing;
 use cmrt_tui_core::{patches::patch_matches_categories, random::random_index};
 
-use super::{GridScheduledMessage, GridState, StepDuration, GRID_STEPS};
+use super::{GridRow, GridScheduledMessage, GridState, StepDuration, GRID_STEPS};
 use crate::GridVoicingLookup;
 
 /// ランダム生成に使う note number の範囲（C2〜C6）。
@@ -35,6 +35,29 @@ pub fn pick_chord_patch(
         .collect::<Vec<_>>();
     let index = random_index(candidates.len())?;
     Some(candidates[index].0.clone())
+}
+
+/// 行の並びを丸ごと引き直す。`patches` が空なら patch だけ据え置く。
+///
+/// `GridState` の外へ出してあるのは、chord mode が「鳴っている grid を触らずに
+/// 次サイクルを抽選する」ために、複製した行の並びへ同じ抽選をかけるため。
+pub fn randomize_row_slice(rows: &mut [GridRow], patches: &[(String, String)]) {
+    let mut rng = rand::thread_rng();
+    for row in rows {
+        if let Some(index) = random_index(patches.len()) {
+            row.patch = Some(patches[index].0.clone());
+        }
+        row.base_note = rng.gen_range(RANDOM_NOTE_MIN..=RANDOM_NOTE_MAX);
+        row.note = row.base_note;
+        row.duration = if rng.gen_bool(0.5) {
+            StepDuration::Sixteenth
+        } else {
+            StepDuration::Quarter
+        };
+        for step in 0..GRID_STEPS {
+            row.cells[step] = rng.gen_bool(CELL_ON_RATIO);
+        }
+    }
 }
 
 impl GridState {
@@ -103,22 +126,7 @@ impl GridState {
     /// chord mode 中は引き直した note を現在のコードへ寄せ直すので、コードから
     /// 外れた音は出ない。
     fn randomize_rows(&mut self, patches: &[(String, String)]) {
-        let mut rng = rand::thread_rng();
-        for row in &mut self.rows {
-            if let Some(index) = random_index(patches.len()) {
-                row.patch = Some(patches[index].0.clone());
-            }
-            row.base_note = rng.gen_range(RANDOM_NOTE_MIN..=RANDOM_NOTE_MAX);
-            row.note = row.base_note;
-            row.duration = if rng.gen_bool(0.5) {
-                StepDuration::Sixteenth
-            } else {
-                StepDuration::Quarter
-            };
-            for step in 0..GRID_STEPS {
-                row.cells[step] = rng.gen_bool(CELL_ON_RATIO);
-            }
-        }
+        randomize_row_slice(&mut self.rows, patches);
         self.apply_chord_to_rows();
     }
 

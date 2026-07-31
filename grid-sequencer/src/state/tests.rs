@@ -238,13 +238,14 @@ fn restarting_replays_from_the_first_step() {
 }
 
 #[test]
-fn patches_follow_row_order() {
+fn patches_carry_the_instance_id_of_the_playing_bank() {
     let mut state = GridState::default();
     state.rows[0].patch = Some("first/Patch.fxp".to_string());
     state.rows[1].patch = Some("second/Patch.fxp".to_string());
     assert_eq!(
         state.patches().take(2).collect::<Vec<_>>(),
-        vec![Some("first/Patch.fxp"), Some("second/Patch.fxp")]
+        vec![(0, Some("first/Patch.fxp")), (1, Some("second/Patch.fxp")),],
+        "行順に、いま鳴っている bank の instance ID が付く"
     );
 }
 

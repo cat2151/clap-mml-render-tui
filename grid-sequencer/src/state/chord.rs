@@ -9,7 +9,7 @@
 
 use std::time::Instant;
 
-use super::{GridScheduledMessage, GridState};
+use super::{GridRow, GridScheduledMessage, GridState};
 
 /// 和音を鳴らす行。UI の行1 = realtime play server の instance 0。
 pub const CHORD_ROW: usize = 0;
@@ -67,8 +67,14 @@ impl ChordPlayback {
         self.index == 0
     }
 
+    /// いま鳴らしているのが進行の最後のコードか（= この小節が最終小節）。
+    /// 待機 bank への先読みロードを始める合図に使う。
+    pub(super) fn is_last(&self) -> bool {
+        self.index + 1 == self.chords.len()
+    }
+
     /// 和音に含まれるピッチクラス（0〜11）の集合。
-    fn pitch_classes(&self) -> [bool; 12] {
+    pub(super) fn pitch_classes(&self) -> [bool; 12] {
         let mut classes = [false; 12];
         for note in self.current() {
             classes[usize::from(note % 12)] = true;
@@ -88,31 +94,26 @@ impl GridState {
         now: Instant,
     ) -> Vec<GridScheduledMessage> {
         self.chord = chord;
-        self.chord_cycle_completed = false;
+        self.discard_pending_cycle();
         self.apply_chord_to_rows();
         self.take_silence_messages(now)
     }
 
-    /// 進行を1周し終えたことを一度だけ報告する。画面側が進行・Key・音色を
-    /// 引き直す合図。
-    pub fn take_chord_cycle_completed(&mut self) -> bool {
-        std::mem::take(&mut self.chord_cycle_completed)
-    }
-
-    /// 引き直し待ちかどうか。この間は和音を鳴らし始めない。
-    pub fn chord_reroll_pending(&self) -> bool {
-        self.chord_cycle_completed
-    }
-
     /// grid を1周したときに次のコードへ進める。
+    ///
+    /// 進行を1周し終えたら、先読みロードが済んでいる次サイクルへ bank ごと差し替える
+    /// （[`super::cycle`]）。差し替えは `attack_current_step()` の直前に起きるので、
+    /// その小節の頭から新しい進行の1コード目がそのまま鳴る。
     pub(super) fn advance_chord(&mut self) {
         let Some(chord) = self.chord.as_mut() else {
             return;
         };
         if chord.advance() {
-            // 進行を1周した。ここから先は画面側が進行と音色を引き直すまで発音しない
-            // （引き直しは音色ロードを伴い、どのみち再生が止まるため）。
-            self.chord_cycle_completed = true;
+            self.commit_pending_cycle();
+        }
+        // 最終小節へ入った。画面側はここから次の抽選と先読みロードを始める。
+        if self.chord.as_ref().is_some_and(ChordPlayback::is_last) {
+            self.preload_due = true;
         }
         self.apply_chord_to_rows();
     }
@@ -124,13 +125,25 @@ impl GridState {
     /// chord mode を解除したときは `base_note` へ戻す。
     pub(super) fn apply_chord_to_rows(&mut self) {
         let classes = self.chord.as_ref().map(ChordPlayback::pitch_classes);
-        for (index, row) in self.rows.iter_mut().enumerate() {
-            match classes {
-                // 和音の行は `note` を使わない（`current()` の全構成音を鳴らす）。
-                Some(_) if index == CHORD_ROW => {}
-                Some(classes) => row.note = snap_to_chord(row.base_note, &classes),
-                None => row.note = row.base_note,
-            }
+        apply_pitch_classes(&mut self.rows, classes);
+    }
+}
+
+/// 行の並びの note number を、与えたコードの構成音へ寄せる。
+///
+/// `GridState` の外へ出してあるのは、chord mode が「鳴っている grid を触らずに
+/// 次サイクルを抽選する」ために、複製した行の並びへ同じ処理をかけるため。
+pub fn snap_rows_to_chord(rows: &mut [GridRow], chord: &ChordPlayback) {
+    apply_pitch_classes(rows, Some(chord.pitch_classes()));
+}
+
+fn apply_pitch_classes(rows: &mut [GridRow], classes: Option<[bool; 12]>) {
+    for (index, row) in rows.iter_mut().enumerate() {
+        match classes {
+            // 和音の行は `note` を使わない（`current()` の全構成音を鳴らす）。
+            Some(_) if index == CHORD_ROW => {}
+            Some(classes) => row.note = snap_to_chord(row.base_note, &classes),
+            None => row.note = row.base_note,
         }
     }
 }

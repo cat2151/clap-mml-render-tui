@@ -37,12 +37,13 @@ fn help_lines(track_count: usize) -> Vec<Line<'static>> {
         Line::from(format!(
             "{track_count}行 x 16ステップ を常時ループ再生します。"
         )),
-        Line::from("1ステップ = 250ms(16分音符)、16ステップ = 4秒で1周。"),
+        Line::from("BPM130、1ステップ = 115ms(16分音符)、16ステップ = 1.85秒で1周。"),
         Line::from(""),
         Line::from("  c        chord mode の on/off"),
         Line::from("           行1がコード進行を全音符の和音で鳴らし(+6dB)、他の行の"),
-        Line::from("           note はその構成音へ寄ります。1周ごとに進行 / Key / 全行の"),
-        Line::from("           音色を引き直し、そのロード中だけ演奏が止まります。"),
+        Line::from("           note はその構成音へ寄ります。進行を1周するごとに"),
+        Line::from("           進行 / Key / 全行の音色と譜面を引き直します。次の音色は"),
+        Line::from("           鳴らしながら裏で読み込むので、演奏は途切れません。"),
         Line::from("           行1の音色は config.toml の chord_patch_categories から。"),
         Line::from("  r        grid を丸ごとランダム設定(patch / note / 音長 / セル)"),
         Line::from("  R        patch を据え置き、note / 音長 / セルだけランダム設定"),
