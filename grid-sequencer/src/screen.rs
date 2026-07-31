@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use super::{GridMidiSender, GridPatchStatus, GridState};
 
 /// サンプルレート未指定時の既定値（config.toml の既定と同じ）。
@@ -16,6 +18,10 @@ pub struct GridSequencerScreen {
     pub patch_status: GridPatchStatus,
     /// 一度でも grid を作ったか。2回目以降の入場で前回の grid を残すために見る。
     pub(crate) grid_ready: bool,
+    /// chord mode を開始／継続できなかった理由。ステータス行に出す。
+    pub(crate) chord_error: Option<String>,
+    /// コード進行データ更新の再起動アナウンスを出し始めた時刻。
+    pub(crate) restart_notice: Option<Instant>,
 }
 
 impl GridSequencerScreen {
@@ -45,7 +51,19 @@ impl GridSequencerScreen {
             help_open: false,
             patch_status: GridPatchStatus::default(),
             grid_ready: false,
+            chord_error: None,
+            restart_notice: None,
         }
+    }
+
+    /// ステータス行に出す chord mode の状態。
+    pub fn chord_error(&self) -> Option<&str> {
+        self.chord_error.as_deref()
+    }
+
+    /// 再起動アナウンスを表示中かどうか。
+    pub fn restart_notice_open(&self) -> bool {
+        self.restart_notice.is_some()
     }
 
     pub fn track_count(&self) -> usize {

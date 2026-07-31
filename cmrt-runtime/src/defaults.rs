@@ -1,6 +1,7 @@
 use serde::Serialize;
 
 use crate::{
+    DEFAULT_CHORD_PATCH_CATEGORY_NAMES, DEFAULT_CHORD_PROGRESSION_SOURCE,
     DEFAULT_OFFLINE_RENDER_SERVER_PORT, DEFAULT_OFFLINE_RENDER_SERVER_WORKERS,
     DEFAULT_OFFLINE_RENDER_WORKERS, DEFAULT_REALTIME_PLAY_SERVER_PORT,
     DEFAULT_VOICING_OVERRIDE_SOURCE, DEFAULT_VOICING_SHARED_SOURCE,
@@ -102,6 +103,15 @@ pub fn default_config_content_with_app_settings(app_settings: &str) -> String {
     } else {
         format!("{}\n", app_settings.trim_end())
     };
+    // 定数と config.toml のひな形がずれないよう、リテラルではなく定数から組み立てる。
+    let chord_patch_categories_line = format!(
+        "[{}]",
+        DEFAULT_CHORD_PATCH_CATEGORY_NAMES
+            .iter()
+            .map(|name| format!("\"{name}\""))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
     format!(
         r#"# clap-mml-render-tui config
 #
@@ -156,6 +166,18 @@ autoplay_on_startup = true
 # HTTP(S) URL、絶対path、またはこのconfig.tomlからの相対pathを指定できます。空文字で無効化します。
 voicing_shared_source = "{DEFAULT_VOICING_SHARED_SOURCE}"
 voicing_override_source = "{DEFAULT_VOICING_OVERRIDE_SOURCE}"
+
+# 【省略可】grid sequencer の chord mode が使うコード進行データ
+# HTTP(S) URL、絶対path、またはこのconfig.tomlからの相対pathを指定できます。空文字で無効化します。
+# 無効化すると chord mode（c キー）は使えません。
+chord_progression_source = "{DEFAULT_CHORD_PROGRESSION_SOURCE}"
+
+# 【省略可】chord mode の和音に使う patch のカテゴリ
+# patch パスのカテゴリ階層（patches_factory/<category>/ または
+# patches_3rdparty/<vendor>/<category>/）と、大文字小文字を無視して照合します。
+# ここに挙げたカテゴリの中から、さらに poly と判明している patch だけを抽選します。
+# 空リストにするとカテゴリで絞らず、poly 判定だけで抽選します。
+chord_patch_categories = {chord_patch_categories_line}
 
 # 【省略可】Surge XT パッチの検索対象ディレクトリ一覧（TUI / DAW の音色選択・ランダム音色で使う）
 # 例 (Windows): patches_dirs = ['C:\ProgramData\Surge XT\patches_factory', 'C:\ProgramData\Surge XT\patches_3rdparty']

@@ -26,6 +26,9 @@ impl TuiApp<'static> {
                 crate::voicing_sources::VoicingLayers::default(),
                 crate::voicing_sources::VoicingSourceRefresh::disabled(),
             ),
+            chord_progression_source:
+                crate::chord_progression_source::ChordProgressionSource::disabled(),
+            chord_catalog: ChordProgressionCatalog::default(),
         }
     }
 }

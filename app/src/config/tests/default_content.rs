@@ -48,6 +48,19 @@ fn default_config_content_uses_voicing_source_urls() {
     assert!(content.contains(&format!(
         "voicing_override_source = \"{DEFAULT_VOICING_OVERRIDE_SOURCE}\""
     )));
+    assert!(content.contains(&format!(
+        "chord_progression_source = \"{DEFAULT_CHORD_PROGRESSION_SOURCE}\""
+    )));
+}
+
+#[test]
+fn default_config_content_lists_the_chord_patch_categories() {
+    let content = default_config_content();
+
+    assert!(
+        content.contains(r#"chord_patch_categories = ["Keys", "Organs", "Pads", "Polysynths"]"#),
+        "{content}"
+    );
 }
 
 #[test]

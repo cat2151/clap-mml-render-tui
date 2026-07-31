@@ -49,6 +49,11 @@ pub struct VoicingReport {
     pub disagreement: bool,
 }
 
+/// dB を振幅倍率へ直す（0 dB = 等倍、+6 dB ≒ 2倍）。
+pub fn amplitude_from_db(gain_db: f32) -> f32 {
+    10.0f32.powf(gain_db / 20.0)
+}
+
 impl RealtimePlayServerSupervisor {
     pub fn send_live_events(&self, events: &[FastMidiEvent]) -> Result<LimiterMeter> {
         self.with_fast_client(|client| {
@@ -136,6 +141,24 @@ impl RealtimePlayServerSupervisor {
         self.with_fast_client(|client| client.set_buffer_multiplier(multiplier))
     }
 
+    /// live mix で instance へ掛けるゲインを dB で設定する（0 dB が等倍）。
+    ///
+    /// サーバー側が保持するので、patch 差し替えで live を作り直しても残る。
+    /// この機能を持たない古いサーバーはコマンドを拒否するが、その場合も
+    /// 「音量差が付かないだけ」で再生は続く。
+    pub fn set_live_instance_gain_db(&self, instance_id: InstanceId, gain_db: f32) -> Result<()> {
+        let gain = amplitude_from_db(gain_db);
+        let result = self.with_fast_client(|client| client.set_instance_gain(instance_id, gain));
+        if let Err(error) = &result {
+            log_realtime_play_event(format!(
+                "action=shm-instance-gain event=error instance={instance_id} \
+                 gain_db={gain_db} error=\"{}\"",
+                super::logging::truncate_for_log(&format!("{error:#}"), 1_000)
+            ));
+        }
+        result
+    }
+
     pub fn set_connected_live_buffer_multiplier(&self, multiplier: u8) -> Result<()> {
         validate_buffer_multiplier(multiplier)?;
         *self.live_buffer_multiplier.lock().unwrap() = multiplier;
@@ -219,4 +242,35 @@ fn connect_fast_client(port: u16) -> Result<FastMidiClient, FastIpcError> {
 #[cfg(not(windows))]
 fn connect_fast_client(port: u16) -> Result<FastMidiClient, FastIpcError> {
     FastMidiClient::connect(port)
+}
+
+#[cfg(test)]
+mod live_gain_tests {
+    use super::amplitude_from_db;
+
+    #[test]
+    fn zero_db_is_unity_gain() {
+        assert!((amplitude_from_db(0.0) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn plus_six_db_roughly_doubles_the_amplitude() {
+        let gain = amplitude_from_db(6.0);
+        assert!((gain - 1.9953).abs() < 1e-3, "gain={gain}");
+    }
+
+    #[test]
+    fn minus_six_db_roughly_halves_the_amplitude() {
+        let gain = amplitude_from_db(-6.0);
+        assert!((gain - 0.5012).abs() < 1e-3, "gain={gain}");
+    }
+
+    /// 千分率へ丸めても dB のずれが無視できること（SHM が u32 milli で運ぶため）。
+    #[test]
+    fn rounding_to_milli_units_keeps_the_db_within_a_hundredth() {
+        let gain = amplitude_from_db(6.0);
+        let rounded = (gain * 1000.0).round() / 1000.0;
+        let db = 20.0 * rounded.log10();
+        assert!((db - 6.0).abs() < 0.01, "db={db}");
+    }
 }

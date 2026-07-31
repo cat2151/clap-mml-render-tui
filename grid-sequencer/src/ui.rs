@@ -21,6 +21,7 @@ use crate::{
 mod grid;
 mod help;
 mod progress;
+mod restart_notice;
 
 pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: &mut Frame<'_>) {
     let chunks = Layout::default()
@@ -40,6 +41,9 @@ pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: 
     // 準備中とエラーは中央 overlay で知らせる。help は常に最前面。
     if connection.is_preparing() || connection.error_message().is_some() {
         progress::draw_overlay(f, connection, screen.track_count());
+    }
+    if screen.restart_notice_open() {
+        restart_notice::draw_overlay(f);
     }
     if screen.help_open {
         help::draw_overlay(f, screen.track_count());
@@ -61,7 +65,7 @@ fn status_line(
     };
     let text = if width >= 160 {
         format!(
-            " SHM {} | buffer x{} auto | underrun {} frames | {} instances | BPM {} 1/16={:.1}ms | step {:>2}/{} | GR {:.1} dB | {} ",
+            " SHM {} | buffer x{} auto | underrun {} frames | {} instances | BPM {} 1/16={:.1}ms | step {:>2}/{} | GR {:.1} dB | {}{} ",
             connection.label(),
             connection.buffer_multiplier,
             connection.underrun_frames,
@@ -72,10 +76,11 @@ fn status_line(
             GRID_STEPS,
             connection.limiter_reduction_db,
             screen.patch_status.label(),
+            chord_status(screen),
         )
     } else {
         format!(
-            " SHM {} | buffer x{} auto | underrun {} frames | {}tr | {}bpm | step {}/{} | GR{:.1} | {} ",
+            " SHM {} | buffer x{} auto | underrun {} frames | {}tr | {}bpm | step {}/{} | GR{:.1} | {}{} ",
             connection.label(),
             connection.buffer_multiplier,
             connection.underrun_frames,
@@ -85,9 +90,27 @@ fn status_line(
             GRID_STEPS,
             connection.limiter_reduction_db,
             compact_patch_status(screen),
+            chord_status(screen),
         )
     };
     Paragraph::new(text).style(base_style().fg(color))
+}
+
+/// chord mode の進行・Key・現在位置。off のときは何も出さない。
+fn chord_status(screen: &GridSequencerScreen) -> String {
+    if let Some(error) = screen.chord_error() {
+        return format!(" | chord: {error}");
+    }
+    match screen.state.chord() {
+        Some(chord) => format!(
+            " | chord Key:{} {} [{}/{}]",
+            chord.key(),
+            chord.degrees(),
+            chord.index() + 1,
+            chord.chord_count()
+        ),
+        None => String::new(),
+    }
 }
 
 fn compact_patch_status(screen: &GridSequencerScreen) -> String {

@@ -155,6 +155,25 @@ impl FastMidiClient {
         self.push(slot)
     }
 
+    /// live mix で instance へ掛ける振幅ゲインを設定する（1.0 が等倍）。
+    pub fn set_instance_gain(
+        &mut self,
+        instance_id: InstanceId,
+        gain: f32,
+    ) -> Result<(), FastIpcError> {
+        validate_instance(instance_id)?;
+        if !gain.is_finite() || !(0.0..=MAX_INSTANCE_GAIN).contains(&gain) {
+            return Err(FastIpcError::InvalidPayload(format!(
+                "instance gain must be between 0.0 and {MAX_INSTANCE_GAIN} (got {gain})"
+            )));
+        }
+        let mut slot = zeroed_slot();
+        slot.kind = KIND_SET_INSTANCE_GAIN;
+        slot.instance_id = u32::from(instance_id);
+        slot.buffer_multiplier = (gain * 1000.0).round() as u32;
+        self.push(slot)
+    }
+
     pub fn limiter_meter(&self) -> LimiterMeter {
         let ring = self.mapping.ring();
         LimiterMeter {

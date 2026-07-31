@@ -79,6 +79,8 @@ fn default_config() -> Config {
         autoplay_on_startup: true,
         voicing_shared_source: String::new(),
         voicing_override_source: String::new(),
+        chord_progression_source: String::new(),
+        chord_patch_categories: Vec::new(),
     }
 }
 

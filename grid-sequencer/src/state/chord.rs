@@ -1,0 +1,162 @@
+//! chord mode の再生状態。
+//!
+//! 抽選したコード進行を grid 1周（16ステップ = 全音符1個）ごとに1コードずつ進め、
+//! [`CHORD_ROW`] の instance で和音として鳴らす。ほかの行はリズムをそのままに、
+//! note number だけを現在のコードの構成音へ寄せる。
+//!
+//! コード進行そのものの抽選（カタログと rng）は画面側の仕事。ここは「与えられた
+//! 進行をどう鳴らすか」だけを持つ。
+
+use std::time::Instant;
+
+use super::{GridScheduledMessage, GridState};
+
+/// 和音を鳴らす行。UI の行1 = realtime play server の instance 0。
+pub const CHORD_ROW: usize = 0;
+
+/// 抽選済みのコード進行と、その再生位置。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChordPlayback {
+    key: &'static str,
+    degrees: String,
+    /// コード1つぶんの note number 群を進行の順に並べたもの。空にはしない。
+    chords: Vec<Vec<u8>>,
+    index: usize,
+}
+
+impl ChordPlayback {
+    /// 空の進行は再生できないので `None` を返す。
+    pub fn new(key: &'static str, degrees: String, chords: Vec<Vec<u8>>) -> Option<Self> {
+        if chords.is_empty() {
+            return None;
+        }
+        Some(Self {
+            key,
+            degrees,
+            chords,
+            index: 0,
+        })
+    }
+
+    pub fn key(&self) -> &str {
+        self.key
+    }
+
+    pub fn degrees(&self) -> &str {
+        &self.degrees
+    }
+
+    /// 進行に含まれるコードの数。1以上であることが構築時に保証されている。
+    pub fn chord_count(&self) -> usize {
+        self.chords.len()
+    }
+
+    /// 進行内の現在位置（0 始まり）。
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
+    /// いま鳴らすべき和音の note number 群。
+    pub fn current(&self) -> &[u8] {
+        &self.chords[self.index]
+    }
+
+    /// 次のコードへ進める。進行を1周して先頭へ戻ったときだけ true。
+    fn advance(&mut self) -> bool {
+        self.index = (self.index + 1) % self.chords.len();
+        self.index == 0
+    }
+
+    /// 和音に含まれるピッチクラス（0〜11）の集合。
+    fn pitch_classes(&self) -> [bool; 12] {
+        let mut classes = [false; 12];
+        for note in self.current() {
+            classes[usize::from(note % 12)] = true;
+        }
+        classes
+    }
+}
+
+impl GridState {
+    /// chord mode を切り替える。`None` で解除。
+    ///
+    /// 鳴っている音を止める note off を返す。呼び出し側は必ず送ること
+    /// （音色ロードを伴わない切替では消音が他に走らないため）。
+    pub fn set_chord(
+        &mut self,
+        chord: Option<ChordPlayback>,
+        now: Instant,
+    ) -> Vec<GridScheduledMessage> {
+        self.chord = chord;
+        self.chord_cycle_completed = false;
+        self.apply_chord_to_rows();
+        self.take_silence_messages(now)
+    }
+
+    /// 進行を1周し終えたことを一度だけ報告する。画面側が進行・Key・音色を
+    /// 引き直す合図。
+    pub fn take_chord_cycle_completed(&mut self) -> bool {
+        std::mem::take(&mut self.chord_cycle_completed)
+    }
+
+    /// 引き直し待ちかどうか。この間は和音を鳴らし始めない。
+    pub fn chord_reroll_pending(&self) -> bool {
+        self.chord_cycle_completed
+    }
+
+    /// grid を1周したときに次のコードへ進める。
+    pub(super) fn advance_chord(&mut self) {
+        let Some(chord) = self.chord.as_mut() else {
+            return;
+        };
+        if chord.advance() {
+            // 進行を1周した。ここから先は画面側が進行と音色を引き直すまで発音しない
+            // （引き直しは音色ロードを伴い、どのみち再生が止まるため）。
+            self.chord_cycle_completed = true;
+        }
+        self.apply_chord_to_rows();
+    }
+
+    /// 和音以外の行の note number を、現在のコードの構成音へ寄せる。
+    ///
+    /// 構成音をそのまま割り当てると全行が和音と同じ狭い音域へ集まってしまうので、
+    /// 抽選した `base_note` の高さを保ったまま、最も近い構成音へスナップする。
+    /// chord mode を解除したときは `base_note` へ戻す。
+    pub(super) fn apply_chord_to_rows(&mut self) {
+        let classes = self.chord.as_ref().map(ChordPlayback::pitch_classes);
+        for (index, row) in self.rows.iter_mut().enumerate() {
+            match classes {
+                // 和音の行は `note` を使わない（`current()` の全構成音を鳴らす）。
+                Some(_) if index == CHORD_ROW => {}
+                Some(classes) => row.note = snap_to_chord(row.base_note, &classes),
+                None => row.note = row.base_note,
+            }
+        }
+    }
+}
+
+/// `base` に最も近い、ピッチクラスが `classes` に含まれる note number を返す。
+///
+/// 同距離なら低いほうを選ぶ（上へ寄って音域が上ずるのを防ぐ）。
+fn snap_to_chord(base: u8, classes: &[bool; 12]) -> u8 {
+    if !classes.iter().any(|on| *on) {
+        return base;
+    }
+    // 3和音以上ならピッチクラスの間隔は最大でも半音6個ぶんなので、距離6まで見れば必ず当たる。
+    for distance in 0..=6 {
+        if let Some(down) = base.checked_sub(distance) {
+            if classes[usize::from(down % 12)] {
+                return down;
+            }
+        }
+        if let Some(up) = base.checked_add(distance) {
+            if up <= 127 && classes[usize::from(up % 12)] {
+                return up;
+            }
+        }
+    }
+    base
+}
+
+#[cfg(test)]
+mod tests;

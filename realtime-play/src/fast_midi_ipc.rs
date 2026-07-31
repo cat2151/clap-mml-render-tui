@@ -102,6 +102,14 @@ impl FastMidiClient {
         Err(FastIpcError::UnsupportedPlatform)
     }
 
+    pub fn set_instance_gain(
+        &mut self,
+        _instance_id: InstanceId,
+        _gain: f32,
+    ) -> Result<(), FastIpcError> {
+        Err(FastIpcError::UnsupportedPlatform)
+    }
+
     pub fn limiter_meter(&self) -> LimiterMeter {
         LimiterMeter::default()
     }

@@ -34,7 +34,10 @@ use ratatui::Frame;
 
 use std::sync::{Arc, Mutex};
 
+use cmrt_chord::ChordProgressionCatalog;
 use cmrt_tui_core::playback_session::PlaybackSession;
+
+use crate::chord_progression_source::ChordProgressionSource;
 
 use self::grid_sequencer::GridSequencerScreen;
 use self::keyboard::KeyboardScreen;
@@ -72,8 +75,14 @@ pub struct TuiApp<'a> {
     pub(in crate::tui) loop_browser: LoopBrowserScreen,
     pub(in crate::tui) grid_sequencer: GridSequencerScreen,
     /// patch ごとの mono/poly 判定結果のキャッシュ。起動時に読み込み、
-    /// 新しく probe した patch を検出したら書き戻す。keyboard 画面専用。
+    /// 新しく probe した patch を検出したら書き戻す。keyboard 画面と
+    /// grid sequencer の chord mode（poly patch 抽選）が読む。
     pub(in crate::tui) voicing: VoicingState,
+    /// コード進行カタログの取得・キャッシュ。grid sequencer の chord mode 専用。
+    pub(in crate::tui) chord_progression_source: ChordProgressionSource,
+    /// 読み込み済みのコード進行カタログ。grid sequencer 画面へ入るときに読む
+    /// （キャッシュがまだ無い初回だけ待たされるため、起動時には読まない）。
+    pub(in crate::tui) chord_catalog: ChordProgressionCatalog,
     /// バックグラウンドスレッドが収集したパッチリストの状態。
     /// notepad（音色選択）と keyboard（patch catalog）が同じ実体を読む。
     patch_load_state: Arc<Mutex<PatchLoadState>>,

@@ -35,6 +35,14 @@ buffer_size = 512
     assert!(cfg.realtime_play_server_command.is_empty());
     assert_eq!(cfg.voicing_shared_source, DEFAULT_VOICING_SHARED_SOURCE);
     assert_eq!(cfg.voicing_override_source, DEFAULT_VOICING_OVERRIDE_SOURCE);
+    assert_eq!(
+        cfg.chord_progression_source,
+        DEFAULT_CHORD_PROGRESSION_SOURCE
+    );
+    assert_eq!(
+        cfg.chord_patch_categories,
+        ["Keys", "Organs", "Pads", "Polysynths"]
+    );
 }
 
 #[test]
@@ -48,11 +56,15 @@ sample_rate = 44100
 buffer_size = 512
 voicing_shared_source = "data/shared.json"
 voicing_override_source = ""
+chord_progression_source = ""
+chord_patch_categories = []
 "#;
     let cfg: Config = toml::from_str(toml_str).unwrap();
 
     assert_eq!(cfg.voicing_shared_source, "data/shared.json");
     assert!(cfg.voicing_override_source.is_empty());
+    assert!(cfg.chord_progression_source.is_empty());
+    assert!(cfg.chord_patch_categories.is_empty());
 }
 
 #[test]

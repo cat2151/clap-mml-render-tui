@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "app",
+    "chord",
     "cmrt-runtime",
     "config-editor-lib",
     "core-lib",

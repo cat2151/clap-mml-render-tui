@@ -73,6 +73,8 @@ fn collect_patch_pairs_combines_factory_and_thirdparty_using_common_base() {
         autoplay_on_startup: true,
         voicing_shared_source: String::new(),
         voicing_override_source: String::new(),
+        chord_progression_source: String::new(),
+        chord_patch_categories: Vec::new(),
     };
 
     let pairs = collect_patch_pairs(&cfg).unwrap();
@@ -125,6 +127,8 @@ fn collect_patch_pairs_sorts_display_names_naturally() {
         autoplay_on_startup: true,
         voicing_shared_source: String::new(),
         voicing_override_source: String::new(),
+        chord_progression_source: String::new(),
+        chord_patch_categories: Vec::new(),
     };
 
     let pairs = collect_patch_pairs(&cfg).unwrap();

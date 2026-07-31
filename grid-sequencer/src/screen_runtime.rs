@@ -1,20 +1,45 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use cmrt_realtime_play::{fast_midi_ipc::MAX_MIDI_MESSAGES, FastMidiEvent};
 
-use super::{frames_ahead, GridScheduledMessage, GridSequencerScreen, LOOKAHEAD};
+use super::{
+    frames_ahead, GridScheduledMessage, GridSequencerContext, GridSequencerScreen, LOOKAHEAD,
+};
+
+/// コード進行データ更新のアナウンスを出しておく時間。読めるだけの長さがあればよい。
+const RESTART_NOTICE_DURATION: Duration = Duration::from_secs(3);
 
 impl GridSequencerScreen {
     /// 先読み分のステップを組み立て、offset つきでまとめて送る。
     ///
     /// 接続前・音色切替中は進めない。クロックの締切はそのまま残り、Ready 復帰時に
     /// now 基準へ張り直す（欠落ぶんをまとめて鳴らさない）。
-    pub fn pump_step(&mut self, now: Instant) {
-        if !self.connection_status().phase.accepts_notes() {
-            return;
+    ///
+    /// コード進行データの更新アナウンスを出し終えたら true を返す。共有ランタイムは
+    /// これを受けてアプリを再起動する。
+    pub fn pump_step(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) -> bool {
+        if self.connection_status().phase.accepts_notes() {
+            let scheduled = self.state.poll_steps(now, LOOKAHEAD);
+            self.send_scheduled(&scheduled);
+            if self.state.take_chord_cycle_completed() {
+                // 進行を1周したので、進行・Key・音色をまとめて引き直す。
+                // 音色ロードの間だけ演奏が止まる。
+                self.reroll_chord_cycle(now, ctx);
+            }
         }
-        let scheduled = self.state.poll_steps(now, LOOKAHEAD);
-        self.send_scheduled(&scheduled);
+        self.take_restart_request(now)
+    }
+
+    /// 再起動アナウンスの表示時間が過ぎていたら、一度だけ true を返す。
+    fn take_restart_request(&mut self, now: Instant) -> bool {
+        let Some(since) = self.restart_notice else {
+            return false;
+        };
+        if now.saturating_duration_since(since) < RESTART_NOTICE_DURATION {
+            return false;
+        }
+        self.restart_notice = None;
+        true
     }
 
     /// 組み立て済みのメッセージを、`ahead` をフレーム数へ直して送る。

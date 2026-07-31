@@ -423,3 +423,5 @@ fn a_long_patch_name_is_truncated_from_the_head_in_the_grid() {
     assert!(first_row.contains("Bright Lead.fxp"), "{first_row}");
     assert!(!first_row.contains("patches_factory"), "{first_row}");
 }
+
+mod chord;

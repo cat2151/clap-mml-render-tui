@@ -15,11 +15,39 @@ fn one_patch() -> Vec<(String, String)> {
     vec![("Keys/Piano.fxp".to_string(), "keys/piano.fxp".to_string())]
 }
 
-fn ready_ctx(patches: &[(String, String)]) -> GridSequencerContext<'_> {
+/// chord mode を使わないテスト用の空カタログ。
+pub(crate) fn empty_catalog() -> &'static cmrt_chord::ChordProgressionCatalog {
+    static CATALOG: std::sync::OnceLock<cmrt_chord::ChordProgressionCatalog> =
+        std::sync::OnceLock::new();
+    CATALOG.get_or_init(cmrt_chord::ChordProgressionCatalog::default)
+}
+
+pub(crate) fn ctx_with<'a>(
+    patch_load: GridPatchLoad<'a>,
+    catalog: &'a cmrt_chord::ChordProgressionCatalog,
+    voicing: &'a dyn GridVoicingLookup,
+) -> GridSequencerContext<'a> {
     GridSequencerContext {
         patch_dirs_configured: true,
-        patch_load: GridPatchLoad::Ready(patches),
+        patch_load,
+        chord_catalog: catalog,
+        voicing,
+        // 既定ではカテゴリで絞らない。カテゴリの検証は chord_mode 側のテストで行う。
+        chord_patch_categories: &[],
+        chord_source_updated: false,
     }
+}
+
+fn ready_ctx(patches: &[(String, String)]) -> GridSequencerContext<'_> {
+    ctx_with(
+        GridPatchLoad::Ready(patches),
+        empty_catalog(),
+        &NoVoicingLookup,
+    )
+}
+
+fn loading_ctx() -> GridSequencerContext<'static> {
+    ctx_with(GridPatchLoad::Loading, empty_catalog(), &NoVoicingLookup)
 }
 
 /// MIDI を送らないテスト用の画面。
@@ -141,12 +169,8 @@ fn r_assigns_a_patch_to_every_row() {
 #[test]
 fn r_keeps_the_patch_empty_while_the_list_is_still_loading() {
     let mut screen = silent_screen();
-    let ctx = GridSequencerContext {
-        patch_dirs_configured: true,
-        patch_load: GridPatchLoad::Loading,
-    };
 
-    screen.handle_key(press(KeyCode::Char('r')), Instant::now(), &ctx);
+    screen.handle_key(press(KeyCode::Char('r')), Instant::now(), &loading_ctx());
 
     assert!(screen.state.rows().iter().all(|row| row.patch.is_none()));
 }
@@ -183,11 +207,7 @@ fn shift_r_rerolls_the_grid_without_touching_patches() {
 #[test]
 fn ready_patch_list_fills_rows_that_started_while_loading() {
     let mut screen = silent_screen();
-    let loading = GridSequencerContext {
-        patch_dirs_configured: true,
-        patch_load: GridPatchLoad::Loading,
-    };
-    screen.start(Instant::now(), &loading);
+    screen.start(Instant::now(), &loading_ctx());
     assert!(screen.state.rows().iter().all(|row| row.patch.is_none()));
 
     let patches = one_patch();
@@ -285,7 +305,7 @@ fn pump_step_does_not_advance_while_the_connection_is_not_ready() {
     screen.start(now, &ready_ctx(&patches));
 
     for step in 0..5u32 {
-        screen.pump_step(now + STEP_INTERVAL * step);
+        screen.pump_step(now + STEP_INTERVAL * step, &ready_ctx(&patches));
     }
 
     assert_eq!(screen.state.step_index(), 0);

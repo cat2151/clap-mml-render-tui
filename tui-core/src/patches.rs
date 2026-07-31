@@ -158,6 +158,24 @@ fn patch_category_sort_parts(path: &str) -> (&str, u8, &str, &str) {
     (category, FACTORY_SORT_PRIORITY, "", rest)
 }
 
+/// patch パスのカテゴリ階層（`patches_factory/<category>/` または
+/// `patches_3rdparty/<vendor>/<category>/`）を返す。
+pub fn patch_category(path: &str) -> &str {
+    patch_category_sort_parts(path).0
+}
+
+/// patch がカテゴリ一覧のいずれかに属するか。大文字小文字は無視する。
+/// カテゴリ一覧が空なら「絞り込まない」とみなして常に true。
+pub fn patch_matches_categories(path: &str, categories: &[String]) -> bool {
+    if categories.is_empty() {
+        return true;
+    }
+    let category = patch_category(path);
+    categories
+        .iter()
+        .any(|allowed| allowed.eq_ignore_ascii_case(category))
+}
+
 pub fn group_patch_pairs_by_category(pairs: &[(String, String)]) -> Vec<PatchCategory> {
     let mut sorted = pairs.to_vec();
     sort_patch_pairs(&mut sorted, PatchSortOrder::Category);

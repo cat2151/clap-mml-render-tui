@@ -10,6 +10,10 @@ use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 
+use cmrt_chord::ChordProgressionCatalog;
+use cmrt_realtime_play::PatchVoicing;
+
+mod chord_mode;
 mod screen;
 mod screen_runtime;
 mod sender;
@@ -21,9 +25,26 @@ pub use sender::{
     GridConnectionPhase, GridConnectionStatus, GridMidiSender, GridProgress, GridRowReadiness,
 };
 pub use state::{
-    frames_ahead, step_offset, GridRow, GridScheduledMessage, GridState, StepDuration, BPM,
-    GRID_ROWS, GRID_STEPS, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL,
+    frames_ahead, pick_chord_patch, step_offset, ChordPlayback, GridRow, GridScheduledMessage,
+    GridState, StepDuration, BPM, CHORD_ROW, GRID_ROWS, GRID_STEPS, LOOKAHEAD, STEPS_PER_BEAT,
+    STEP_INTERVAL,
 };
+
+/// patch が mono か poly かの判定を共有ランタイムから引くための窓口。
+///
+/// chord mode の和音は poly patch でしか成立しないため、抽選の当たり判定に使う。
+pub trait GridVoicingLookup {
+    fn cached_voicing(&self, patch: &str) -> Option<PatchVoicing>;
+}
+
+/// voicing 判定を一切持たない lookup。テストと、判定データ無効時のフォールバック用。
+pub struct NoVoicingLookup;
+
+impl GridVoicingLookup for NoVoicingLookup {
+    fn cached_voicing(&self, _patch: &str) -> Option<PatchVoicing> {
+        None
+    }
+}
 
 type LogSink = fn(&str);
 static LOG_SINK: std::sync::OnceLock<LogSink> = std::sync::OnceLock::new();
@@ -38,6 +59,22 @@ pub(crate) fn log_line(message: &str) {
     if let Some(sink) = LOG_SINK.get() {
         sink(message);
     }
+}
+
+/// chord mode の和音の行へ与える音量差（dB）。他の行は 0 dB のまま。
+pub const CHORD_GAIN_DB: f32 = 6.0;
+
+/// 行ごとの音量差（dB）。chord mode 中だけ和音の行が持ち上がる。
+pub fn chord_gains_db(row_count: usize, chord_on: bool) -> Vec<f32> {
+    (0..row_count)
+        .map(|row| {
+            if chord_on && row == CHORD_ROW {
+                CHORD_GAIN_DB
+            } else {
+                0.0
+            }
+        })
+        .collect()
 }
 
 /// 画面が返す、共有ランタイム側で処理すべき遷移要求。
@@ -59,6 +96,15 @@ pub enum GridPatchLoad<'a> {
 pub struct GridSequencerContext<'a> {
     pub patch_dirs_configured: bool,
     pub patch_load: GridPatchLoad<'a>,
+    /// chord mode が進行を抽選するカタログ。空なら chord mode は開始できない。
+    pub chord_catalog: &'a ChordProgressionCatalog,
+    /// 和音用 patch の当たり判定に使う mono/poly 判定。
+    pub voicing: &'a dyn GridVoicingLookup,
+    /// 和音に使う patch のカテゴリ（config.toml の `chord_patch_categories`）。
+    /// 空ならカテゴリでは絞らない。
+    pub chord_patch_categories: &'a [String],
+    /// コード進行カタログが更新されたか（再起動アナウンスの合図。一度だけ true）。
+    pub chord_source_updated: bool,
 }
 
 impl GridSequencerContext<'_> {
@@ -162,6 +208,21 @@ impl GridSequencerScreen {
         if let Some(sender) = &self.midi_sender {
             sender.prepare(self.state.patches());
         }
+        self.apply_chord_gains();
+    }
+
+    /// chord mode の和音を他の行より目立たせるための音量差を適用する。
+    ///
+    /// ゲインはサーバー側が instance ごとに保持し、音色ロードで live を作り直しても
+    /// 残るため、chord mode の on/off が変わったときだけ送ればよい。
+    pub(crate) fn apply_chord_gains(&self) {
+        let Some(sender) = &self.midi_sender else {
+            return;
+        };
+        sender.set_gains(chord_gains_db(
+            self.state.row_count(),
+            self.state.chord().is_some(),
+        ));
     }
 
     fn prepare_connection_or_start_server(&self, ctx: &GridSequencerContext<'_>) {
@@ -178,6 +239,10 @@ impl GridSequencerScreen {
     /// 有効な全 instance の patch prepare を開始する。
     pub fn refresh_context(&mut self, ctx: &GridSequencerContext<'_>) {
         self.patch_status = ctx.patch_status();
+        if ctx.chord_source_updated && self.restart_notice.is_none() {
+            self.restart_notice = Some(Instant::now());
+            log_line("grid-sequencer: chord-source updated, restarting");
+        }
         let assigned = self.state.fill_missing_patches(ctx.patches());
         if assigned == 0 {
             return;
@@ -219,8 +284,9 @@ impl GridSequencerScreen {
                 self.help_open = true;
                 cmrt_tui_core::memory::request_refresh();
             }
+            KeyCode::Char('c') => self.toggle_chord_mode(now, ctx),
             KeyCode::Char('r') => self.randomize(now, ctx),
-            KeyCode::Char('R') => self.randomize_keeping_patches(now),
+            KeyCode::Char('R') => self.randomize_keeping_patches(now, ctx),
             _ => {}
         }
         GridSequencerAction::Continue
@@ -230,6 +296,9 @@ impl GridSequencerScreen {
     fn randomize(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
         self.patch_status = ctx.patch_status();
         let _note_offs = self.state.randomize_all(now, ctx.patches());
+        // chord mode 中は和音の行だけ poly patch を当て直す（無差別抽選で mono を
+        // 引くと和音が潰れるため）。
+        self.rechord_after_randomize(now, ctx, true);
         log_line(&format!(
             "grid-sequencer: randomize instances={}",
             self.track_count()
@@ -244,7 +313,7 @@ impl GridSequencerScreen {
     /// 音色ロード（`sender.prepare()`）を走らせないので再生が途切れない。その代わり
     /// `prepare_instances()` の `stop_live_all()` による消音も無いため、鳴っていた音の
     /// note off はここで自分で送る必要がある。
-    fn randomize_keeping_patches(&mut self, now: Instant) {
+    fn randomize_keeping_patches(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
         let note_offs = self.state.randomize_keeping_patches(now);
         log_line(&format!(
             "grid-sequencer: randomize-keep-patch rows={} note_offs={}",
@@ -252,6 +321,7 @@ impl GridSequencerScreen {
             note_offs.len(),
         ));
         self.send_scheduled(&note_offs);
+        self.rechord_after_randomize(now, ctx, false);
     }
 }
 

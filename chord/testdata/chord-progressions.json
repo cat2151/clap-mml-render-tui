@@ -1,0 +1,242 @@
+[
+  {
+    "degrees": "I-IV-V-I",
+    "description": "機能和声に基づく複合的な正格終止カデンツ"
+  },
+  {
+    "degrees": "I-V-VIm-IV",
+    "description": "ポップスで最も頻出する「4コード進行」（軸進行）"
+  },
+  {
+    "degrees": "I-VIm-IV-V",
+    "description": "50年代ポップス・ドゥーワップの定番進行"
+  },
+  {
+    "degrees": "I-VIm-IIm-V",
+    "description": "「Heart and Soul」などに用いられるスタンダード進行"
+  },
+  {
+    "degrees": "I-V-VIm-IIIm-IV",
+    "description": "パッヘルベルのカノンに基づくカノン進行"
+  },
+  {
+    "degrees": "VIm-IV-I-V",
+    "description": "軸進行を短調トニックから始めるバリエーション"
+  },
+  {
+    "degrees": "I-V-IV-I",
+    "description": "ロックンロールの基本進行（「Wild Thing」「La Bamba」など）"
+  },
+  {
+    "degrees": "I-IV-V-IV",
+    "description": "ロックやブルースで多用されるループ進行"
+  },
+  {
+    "degrees": "I-IV-I-V",
+    "description": "ブルースの基本的なコード進行"
+  },
+  {
+    "degrees": "I7-IV7-V7-I7",
+    "description": "ドミナントセブンスコードによるブルース基本進行"
+  },
+  {
+    "degrees": "I-bVII-IV-I",
+    "description": "ミクソリディアンモードを活かしたロック進行"
+  },
+  {
+    "degrees": "I-V-bVII-IV",
+    "description": "グランジやオルタナティブロックで頻出する進行"
+  },
+  {
+    "degrees": "I-bVII-bVI-bVII",
+    "description": "ロックやメタルで用いられるフラットVIIを含むループ進行"
+  },
+  {
+    "degrees": "I-bVI-bVII-I",
+    "description": "借用コードを使ったロック・ポップスのパワフルな進行"
+  },
+  {
+    "degrees": "I-bIII-IV-I",
+    "description": "ブルースロックに特徴的な短三度借用コード進行"
+  },
+  {
+    "degrees": "IIm-V-I",
+    "description": "ジャズの基本ターンアラウンド（ツーファイブワン）"
+  },
+  {
+    "degrees": "IIm7-V7-IM7",
+    "description": "ジャズにおける代表的な終止形（m7・dominant7・M7）"
+  },
+  {
+    "degrees": "IIm7-V7-IM7-VI7",
+    "description": "ジャズの一般的なターンアラウンド（ツーファイブワンシックス）"
+  },
+  {
+    "degrees": "I-VIm-IIm-V",
+    "description": "ジャズのリズムチェンジA部に代表される「1625進行」"
+  },
+  {
+    "degrees": "I-VI-II-V",
+    "description": "「1625進行」の変形"
+  },
+  {
+    "degrees": "IM7-VIm7-IIm7-V7",
+    "description": "ジャズバラードで多用されるスタンダードな循環進行"
+  },
+  {
+    "degrees": "IM7-IVM7-IIm7-V7",
+    "description": "ジャズ・ポップスのスムーズな進行（メジャーセブン活用）"
+  },
+  {
+    "degrees": "IIm7-bII7-IM7",
+    "description": "トライトーン・サブスティテューションによるジャズ終止"
+  },
+  {
+    "degrees": "IIm7(b5)-V7-Im",
+    "description": "短調ジャズのツーファイブワン（ハーフディミニッシュ使用）"
+  },
+  {
+    "degrees": "IV-V-I",
+    "description": "サブドミナントからドミナントを経て解決するシンプルな終止形"
+  },
+  {
+    "degrees": "IV-I",
+    "description": "プラガル・カデンツ（アーメン終止）"
+  },
+  {
+    "degrees": "bII-I",
+    "description": "ナポリ和音からトニックへの解決（フラットII進行）"
+  },
+  {
+    "degrees": "I-IV-IIm-V-I",
+    "description": "サブドミナントと平行短調を経由した拡張正格終止"
+  },
+  {
+    "degrees": "I-IIm-IV-V",
+    "description": "スーパートニックを経由したポップスの定番進行"
+  },
+  {
+    "degrees": "I-IIIm-IV-V",
+    "description": "上行感のある明るいポップス・ロック進行"
+  },
+  {
+    "degrees": "I-IIIm-VIm-IV",
+    "description": "メディアントを経由した叙情的なポップス進行"
+  },
+  {
+    "degrees": "I-IV-VIm-V",
+    "description": "ポップスの変形4コード進行"
+  },
+  {
+    "degrees": "VIm-IIm-V-I",
+    "description": "短調トニックから出発してトニックへと戻るジャズ的進行"
+  },
+  {
+    "degrees": "IIIm-VIm-IIm-V",
+    "description": "3度下行の連鎖によるジャズ・ポップスの定番サイクル"
+  },
+  {
+    "degrees": "I-V-I",
+    "description": "最もシンプルな正格終止（トニック→ドミナント→トニック）"
+  },
+  {
+    "degrees": "I-IV-I",
+    "description": "サブドミナントへの往復による不完全プラガル進行"
+  },
+  {
+    "degrees": "Im-VII-VI-VII",
+    "description": "自然短調（エオリアン）によるロックの定番進行"
+  },
+  {
+    "degrees": "Im-VI-III-VII",
+    "description": "短調のポップス進行（マイナーキーの軸進行）"
+  },
+  {
+    "degrees": "Im-IVm-V-Im",
+    "description": "和声短調による短調の正格終止カデンツ"
+  },
+  {
+    "degrees": "Im-IVm-Im-V",
+    "description": "短調におけるハーフカデンツを含む進行"
+  },
+  {
+    "degrees": "Im-bVII-bVI-V",
+    "description": "アンダルシアン・カデンツ（フリジアン感のある下降進行）"
+  },
+  {
+    "degrees": "Im-bVI-bVII-Im",
+    "description": "短調のロックやメタルで用いられる定番ループ進行"
+  },
+  {
+    "degrees": "Im-bIII-bVII-IV",
+    "description": "短調から平行長調へ跨ぐロック・ポップス進行"
+  },
+  {
+    "degrees": "Im7-IVM7-bVIIM7-bIIIM7",
+    "description": "短調ジャズにおけるメジャーセブン連鎖進行"
+  },
+  {
+    "degrees": "Isus4-I-IVsus4-IV",
+    "description": "sus4コードを活用したロック・ポップスの浮遊感ある進行"
+  },
+  {
+    "degrees": "I-Vsus4-V-I",
+    "description": "ドミナントにsus4を経由する古典的な解決進行"
+  },
+  {
+    "degrees": "V7sus4-V7-I",
+    "description": "ドミナントのsus4からナチュラルへ解決する定番パターン"
+  },
+  {
+    "degrees": "Iadd9-IV-V-I",
+    "description": "add9コードで色彩感を加えたポップス進行"
+  },
+  {
+    "degrees": "I-IVadd9-V-I",
+    "description": "サブドミナントにadd9を用いた明るいポップス進行"
+  },
+  {
+    "degrees": "Iaug-IV-V-I",
+    "description": "オーグメントコードで半音上行感を出すドラマチックな進行"
+  },
+  {
+    "degrees": "I-Iaug-IVM7-IVm",
+    "description": "クロマチックな下降低音ラインを持つ「虹の彼方に」型進行"
+  },
+  {
+    "degrees": "I-II-IV-I",
+    "description": "メジャーIIを含むブルース・ゴスペルの定番進行"
+  },
+  {
+    "degrees": "bVII-IV-I",
+    "description": "フラットVIIからサブドミナントを経てトニックへ戻るロックエンディング"
+  },
+  {
+    "degrees": "I-IV-bVII-IV",
+    "description": "借用コードbVIIを組み込んだロックの定番4コード進行"
+  },
+  {
+    "degrees": "Im-bVII-bVI-bVII",
+    "description": "短調でbVII・bVIを往来するヘビーロックのリフ進行"
+  },
+  {
+    "degrees": "I-IIIm-IV-IVm",
+    "description": "短調IVへのクロマチック変化を含む叙情的な進行"
+  },
+  {
+    "degrees": "I-V-VIm-V",
+    "description": "ドミナントを軸に揺れるポップス・バラード進行"
+  },
+  {
+    "degrees": "IV-V-VIm",
+    "description": "偽終止（デセプティブ・カデンツ）によるドラマチックな解決"
+  },
+  {
+    "degrees": "I-VIm7-IIm7-V7sus4-V7",
+    "description": "ジャズ・ポップスのスムーズなターンアラウンド（sus4解決付き）"
+  },
+  {
+    "degrees": "IM7-bVIIM7-IV-I",
+    "description": "借用コードbVIIM7を含むポップス・ロックの開放的な進行"
+  }
+]

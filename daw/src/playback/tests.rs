@@ -62,6 +62,8 @@ fn build_test_app() -> DawApp {
             autoplay_on_startup: true,
             voicing_shared_source: String::new(),
             voicing_override_source: String::new(),
+            chord_progression_source: String::new(),
+            chord_patch_categories: Vec::new(),
         }),
         entry_ptr: 0,
         cache: Arc::new(Mutex::new(vec![

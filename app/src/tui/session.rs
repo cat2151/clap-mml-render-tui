@@ -141,6 +141,10 @@ impl<'a> TuiApp<'a> {
             crate::voicing_sources::VoicingLayers::default()
         };
 
+        // コード進行カタログの取得はここで走らせておき、読むのは grid sequencer 画面へ
+        // 入るとき（キャッシュがまだ無い初回だけ、そこで待たされる）。
+        let chord_progression_source =
+            crate::chord_progression_source::ChordProgressionSource::spawn(cfg);
         let playback_session = PlaybackSession::new(realtime_play_server);
         let patch_load_state = spawn_patch_loader(cfg);
 
@@ -182,6 +186,8 @@ impl<'a> TuiApp<'a> {
                 voicing_layers,
                 voicing_source_refresh,
             ),
+            chord_progression_source,
+            chord_catalog: cmrt_chord::ChordProgressionCatalog::default(),
             patch_load_state,
             playback_session,
         }

@@ -3,11 +3,14 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod chord;
 mod clock;
 mod randomize;
 
+pub use chord::{ChordPlayback, CHORD_ROW};
 pub use clock::{frames_ahead, step_offset, BPM, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL};
 use clock::{StepClock, SCHEDULE_GUARD};
+pub use randomize::pick_chord_patch;
 
 /// grid の既定・最大行数（＝パート数）。
 pub const GRID_ROWS: usize = 16;
@@ -26,6 +29,8 @@ pub enum StepDuration {
     #[default]
     Sixteenth,
     Quarter,
+    /// 全音符。grid 1周（16ステップ）ぶん鳴らし続ける。chord mode の和音で使う。
+    Whole,
 }
 
 impl StepDuration {
@@ -34,6 +39,7 @@ impl StepDuration {
         match self {
             Self::Sixteenth => 1,
             Self::Quarter => 4,
+            Self::Whole => GRID_STEPS as u8,
         }
     }
 
@@ -41,6 +47,7 @@ impl StepDuration {
         match self {
             Self::Sixteenth => "1/16",
             Self::Quarter => "1/4",
+            Self::Whole => "1/1",
         }
     }
 }
@@ -52,7 +59,12 @@ impl StepDuration {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GridRow {
     pub patch: Option<String>,
+    /// 実際に鳴らす note number。chord mode 中は `base_note` をコード構成音へ
+    /// 寄せた値が入る。
     pub note: u8,
+    /// ランダム抽選した素の note number。chord mode を切ったときの復帰点であり、
+    /// コードへ寄せるときの「音域の目安」でもある。
+    pub base_note: u8,
     pub duration: StepDuration,
     pub cells: [bool; GRID_STEPS],
 }
@@ -62,6 +74,7 @@ impl Default for GridRow {
         Self {
             patch: None,
             note: DEFAULT_NOTE,
+            base_note: DEFAULT_NOTE,
             duration: StepDuration::default(),
             cells: [false; GRID_STEPS],
         }
@@ -108,6 +121,12 @@ pub struct GridState {
     /// 先読みで既に送ってしまったステップのうち、いちばん新しいものの締切。
     /// 送信済みの note on より後ろへ note off を置くために見る。
     last_scheduled: Option<Instant>,
+    /// chord mode の再生状態。`None` なら従来どおりの単音演奏。
+    chord: Option<ChordPlayback>,
+    /// コード進行を1周し終えたことを画面側へ伝えるフラグ。進行・Key・音色の抽選は
+    /// カタログと rng を持つ画面側の仕事なので、ここでは合図だけを立てる。
+    /// 立っている間は和音を鳴らし始めない（直後に音色ロードで止まるため）。
+    chord_cycle_completed: bool,
     clock: StepClock,
 }
 
@@ -128,6 +147,8 @@ impl GridState {
             sounding: Vec::new(),
             pending_display: VecDeque::new(),
             last_scheduled: None,
+            chord: None,
+            chord_cycle_completed: false,
             clock: StepClock::default(),
         }
     }
@@ -156,6 +177,11 @@ impl GridState {
 
     pub fn patches(&self) -> impl Iterator<Item = Option<&str>> {
         self.rows.iter().map(|row| row.patch.as_deref())
+    }
+
+    /// chord mode の再生状態。`None` なら従来どおりの単音演奏。
+    pub fn chord(&self) -> Option<&ChordPlayback> {
+        self.chord.as_ref()
     }
 
     /// 画面へ入るときの初期化。再生位置を先頭へ戻してクロックを走らせる。
@@ -256,6 +282,10 @@ impl GridState {
     fn advance_schedule(&mut self) {
         if self.started {
             self.schedule_index = (self.schedule_index + 1) % GRID_STEPS;
+            if self.schedule_index == 0 {
+                // grid を1周したので、chord mode なら次のコードへ進む。
+                self.advance_chord();
+            }
         } else {
             self.started = true;
         }
@@ -263,35 +293,60 @@ impl GridState {
 
     /// 組み立て中の列で note on が立っている行を発音する。
     fn attack_current_step(&mut self) -> Vec<(u8, [u8; 3])> {
-        let step = self.schedule_index;
-        let attacks = self
-            .rows
-            .iter()
-            .enumerate()
-            .filter(|(_, row)| row.cells[step])
-            .map(|(instance_id, row)| (instance_id as u8, row.note, row.duration.steps()))
-            .collect::<Vec<_>>();
+        let attacks = self.collect_attacks();
         let mut messages = Vec::new();
-        for (instance_id, midi_note, steps) in attacks {
-            match self
-                .sounding
-                .iter_mut()
-                .find(|note| note.instance_id == instance_id)
-            {
-                Some(sounding) => {
-                    messages.push((instance_id, note_off(sounding.midi_note)));
-                    sounding.midi_note = midi_note;
-                    sounding.remaining_steps = steps;
+        for (instance_id, notes, steps) in attacks {
+            // 同じ instance で鳴っている音はすべて止めてから鳴らし直す。1音とは
+            // 限らない（chord mode の和音）ので、1件だけ差し替えてはいけない。
+            let mut released = Vec::new();
+            self.sounding.retain(|note| {
+                if note.instance_id == instance_id {
+                    released.push(note.midi_note);
+                    false
+                } else {
+                    true
                 }
-                None => self.sounding.push(SoundingNote {
+            });
+            messages.extend(
+                released
+                    .into_iter()
+                    .map(|midi_note| (instance_id, note_off(midi_note))),
+            );
+            for midi_note in notes {
+                self.sounding.push(SoundingNote {
                     instance_id,
                     midi_note,
                     remaining_steps: steps,
-                }),
+                });
+                messages.push((instance_id, note_on(midi_note, VELOCITY)));
             }
-            messages.push((instance_id, note_on(midi_note, VELOCITY)));
         }
         messages
+    }
+
+    /// この列で鳴らす (instance, note number 群, 持続ステップ数) を行順に集める。
+    fn collect_attacks(&self) -> Vec<(u8, Vec<u8>, u8)> {
+        let step = self.schedule_index;
+        let chord = self.chord.as_ref().map(ChordPlayback::current);
+        let mut attacks = Vec::new();
+        for (index, row) in self.rows.iter().enumerate() {
+            let instance_id = index as u8;
+            match chord {
+                // chord mode の行はセルを使わず、grid の先頭ステップだけ全音符で和音を鳴らす。
+                // 進行を1周して引き直し待ちの間は、次の和音を鳴らし始めない。
+                Some(notes) if index == CHORD_ROW => {
+                    if step == 0 && !notes.is_empty() && !self.chord_cycle_completed {
+                        attacks.push((instance_id, notes.to_vec(), StepDuration::Whole.steps()));
+                    }
+                }
+                _ => {
+                    if row.cells[step] {
+                        attacks.push((instance_id, vec![row.note], row.duration.steps()));
+                    }
+                }
+            }
+        }
+        attacks
     }
 
     /// 鳴っている音の note off だけを作り、発音中リストを空にする。

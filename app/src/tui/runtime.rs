@@ -134,8 +134,12 @@ impl<'a> TuiApp<'a> {
             if self.active_screen == PrimaryScreen::Keyboard {
                 self.pump_keyboard_periodic();
             }
-            if self.active_screen == PrimaryScreen::GridSequencer {
-                self.pump_grid_sequencer_step();
+            if self.active_screen == PrimaryScreen::GridSequencer && self.pump_grid_sequencer_step()
+            {
+                // コード進行データが更新されたので、アナウンス表示のあと再起動する。
+                self.finish_grid_sequencer();
+                self.save_notepad_and_session_state();
+                return Ok(TuiExitReason::RestartApp);
             }
             self.pump_notepad_sound_check_guide();
             let terminal_draw_started = std::time::Instant::now();

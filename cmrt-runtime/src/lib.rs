@@ -20,6 +20,10 @@ pub const DEFAULT_REALTIME_PLAY_SERVER_PORT: u16 = 62154;
 pub const DEFAULT_VOICING_SHARED_SOURCE: &str =
     "https://raw.githubusercontent.com/cat2151/cat-music-patterns/main/surge-xt-patch-voicing.json";
 pub const DEFAULT_VOICING_OVERRIDE_SOURCE: &str = "https://raw.githubusercontent.com/cat2151/cat-music-patterns/main/surge-xt-patch-voicing-overrides.json";
+pub const DEFAULT_CHORD_PROGRESSION_SOURCE: &str =
+    "https://raw.githubusercontent.com/cat2151/cat-music-patterns/main/chord-progressions.json";
+/// chord mode の和音に使う patch のカテゴリ（patch パスのカテゴリ階層と大文字小文字を無視して照合）。
+pub const DEFAULT_CHORD_PATCH_CATEGORY_NAMES: [&str; 4] = ["Keys", "Organs", "Pads", "Polysynths"];
 pub const DEFAULT_LOOP_CATEGORY_NAMES: [&str; 5] = ["guitar", "drum", "bass", "spoken", "sequence"];
 const MIN_OFFLINE_RENDER_WORKERS: usize = 1;
 const MAX_OFFLINE_RENDER_WORKERS: usize = 16;
@@ -92,6 +96,12 @@ pub struct Config {
     /// keyboard の mono/poly 判定override JSON。HTTP(S) URLまたはconfig.toml基準のpath。
     #[serde(default = "default_voicing_override_source")]
     pub voicing_override_source: String,
+    /// grid sequencer の chord mode が使うコード進行JSON。HTTP(S) URLまたはconfig.toml基準のpath。
+    #[serde(default = "default_chord_progression_source")]
+    pub chord_progression_source: String,
+    /// chord mode の和音に使う patch のカテゴリ一覧。空にすると全カテゴリが対象。
+    #[serde(default = "default_chord_patch_categories")]
+    pub chord_patch_categories: Vec<String>,
 }
 
 fn default_offline_render_workers() -> usize {
@@ -131,6 +141,17 @@ fn default_voicing_shared_source() -> String {
 
 fn default_voicing_override_source() -> String {
     DEFAULT_VOICING_OVERRIDE_SOURCE.to_string()
+}
+
+fn default_chord_progression_source() -> String {
+    DEFAULT_CHORD_PROGRESSION_SOURCE.to_string()
+}
+
+pub fn default_chord_patch_categories() -> Vec<String> {
+    DEFAULT_CHORD_PATCH_CATEGORY_NAMES
+        .iter()
+        .map(|name| (*name).to_string())
+        .collect()
 }
 
 impl Config {

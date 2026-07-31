@@ -11,7 +11,10 @@ use cmrt_tui_core::{
     theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_DARK_GRAY, MONOKAI_GRAY, MONOKAI_GREEN},
 };
 
-use crate::{GridConnectionStatus, GridRow, GridRowReadiness, GridSequencerScreen, GRID_STEPS};
+use crate::{
+    ChordPlayback, GridConnectionStatus, GridRow, GridRowReadiness, GridSequencerScreen,
+    StepDuration, CHORD_ROW, GRID_STEPS,
+};
 
 /// patch name 欄の桁数。
 const PATCH_WIDTH: usize = 24;
@@ -26,15 +29,13 @@ pub(super) fn draw(
     area: Rect,
 ) {
     let playhead = screen.state.step_index();
+    let chord = screen.state.chord();
     let mut lines = vec![header_line()];
-    lines.extend(
-        screen
-            .state
-            .rows()
-            .iter()
-            .enumerate()
-            .map(|(index, row)| row_line(index, row, playhead, connection.row_readiness(index))),
-    );
+    lines.extend(screen.state.rows().iter().enumerate().map(|(index, row)| {
+        // 和音の行だけ、セルではなく現在のコードを表示する。
+        let chord = chord.filter(|_| index == CHORD_ROW);
+        row_line(index, row, chord, playhead, connection.row_readiness(index))
+    }));
     f.render_widget(
         Paragraph::new(lines).style(base_style()).block(
             Block::default()
@@ -58,26 +59,40 @@ fn header_line() -> Line<'static> {
 fn row_line(
     index: usize,
     row: &GridRow,
+    chord: Option<&ChordPlayback>,
     playhead: usize,
     readiness: GridRowReadiness,
 ) -> Line<'static> {
+    let (note, duration) = match chord {
+        // chord mode の行はセルも音長も使わず、全音符で和音を鳴らす。
+        Some(chord) => (
+            chord.current().first().copied().unwrap_or(row.note),
+            StepDuration::Whole,
+        ),
+        None => (row.note, row.duration),
+    };
     let mut spans = vec![Span::styled(
         label_columns(
             &(index + 1).to_string(),
             &truncate_patch(row.patch.as_deref(), PATCH_WIDTH),
-            &row.note.to_string(),
-            row.duration.label(),
+            &note.to_string(),
+            duration.label(),
         ),
         label_style(readiness),
     )];
-    for (step, on) in row.cells.iter().enumerate() {
-        let style = cell_style(readiness, *on);
+    for step in 0..GRID_STEPS {
+        // 和音は先頭ステップだけ発音する。セルの設定値ではなくそれを見せる。
+        let on = match chord {
+            Some(_) => step == 0,
+            None => row.cells[step],
+        };
+        let style = cell_style(readiness, on);
         let style = if step == playhead {
             cursor_highlight_style(style)
         } else {
             style
         };
-        spans.push(Span::styled(if *on { NOTE_CELL } else { REST_CELL }, style));
+        spans.push(Span::styled(if on { NOTE_CELL } else { REST_CELL }, style));
     }
     Line::from(spans)
 }

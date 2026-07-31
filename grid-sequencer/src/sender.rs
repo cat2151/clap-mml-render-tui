@@ -19,6 +19,7 @@ enum GridMidiCommand {
     StartServer,
     Send { events: Vec<FastMidiEvent> },
     Prepare { patches: Vec<Option<String>> },
+    SetGains { gains_db: Vec<f32> },
     Stop,
     Shutdown,
 }
@@ -65,6 +66,14 @@ impl GridMidiSender {
             .map(|patch| patch.map(str::to_string))
             .collect::<Vec<_>>();
         let _ = self.tx.send(GridMidiCommand::Prepare { patches });
+    }
+
+    /// instance ごとの音量差を dB で設定する（0.0 が等倍）。
+    ///
+    /// ゲインはサーバー側が保持するので、音色ロードで live を作り直しても残る。
+    /// 変わったときだけ送ればよい。
+    pub fn set_gains(&self, gains_db: Vec<f32>) {
+        let _ = self.tx.send(GridMidiCommand::SetGains { gains_db });
     }
 
     pub fn stop(&self) {
@@ -176,6 +185,28 @@ fn run_midi_sender(
                     Some(server_elapsed + patch_elapsed),
                     false,
                 );
+            }
+            GridMidiCommand::SetGains { gains_db } => {
+                let mut failed = None;
+                for (instance_id, gain_db) in gains_db.iter().enumerate() {
+                    // 古いサーバーはこのコマンドを知らない。音量差が付かないだけなので
+                    // ログにとどめ、再生は続ける。
+                    if let Err(error) =
+                        supervisor.set_live_instance_gain_db(instance_id as u8, *gain_db)
+                    {
+                        failed = Some(format!("{error:#}"));
+                        break;
+                    }
+                }
+                crate::log_line(&format!(
+                    "grid-sequencer: gains instances={} boosted={} result={}",
+                    gains_db.len(),
+                    describe_boosted(&gains_db),
+                    match &failed {
+                        Some(error) => format!("error \"{error}\""),
+                        None => "ok".to_string(),
+                    },
+                ));
             }
             GridMidiCommand::Stop => {
                 adaptive_buffer = None;
@@ -300,6 +331,21 @@ fn apply(
         .lock()
         .unwrap()
         .apply_result(result, elapsed, idle_on_success);
+}
+
+/// 0 dB でない行だけを `row2:+6dB` のように並べる。全部 0 dB なら `none`。
+fn describe_boosted(gains_db: &[f32]) -> String {
+    let boosted = gains_db
+        .iter()
+        .enumerate()
+        .filter(|(_, gain)| **gain != 0.0)
+        .map(|(index, gain)| format!("row{}:{gain:+}dB", index + 1))
+        .collect::<Vec<_>>();
+    if boosted.is_empty() {
+        "none".to_string()
+    } else {
+        boosted.join(",")
+    }
 }
 
 #[cfg(test)]
