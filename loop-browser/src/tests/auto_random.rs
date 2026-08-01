@@ -2,9 +2,15 @@ use super::*;
 use crate::playback::position::set_grid_for_test;
 
 fn auto_random_browser() -> LoopBrowser {
+    auto_random_browser_with_span(1)
+}
+
+/// 1 周が `span_measures` 小節のグリッド。ヘルパの WAV は BPM120 4/4 なので 1 小節 2 秒、
+/// span 8 でちょうど 16 秒（「長いグリッド」の境界）になる。
+fn auto_random_browser_with_span(span_measures: usize) -> LoopBrowser {
     let mut browser = browser_with_direct_wavs(2);
     let first = browser.wav_analyses[0].0.clone();
-    browser.track_grid = vec![vec![Some(LoopTrackClip::explicit(first, 1))]];
+    browser.track_grid = vec![vec![Some(LoopTrackClip::explicit(first, span_measures))]];
     browser
 }
 
@@ -85,6 +91,35 @@ fn the_next_grid_is_staged_on_the_last_cycle_and_only_once() {
         browser.pump_auto_random(),
         LoopBrowserAction::Continue
     ));
+}
+
+#[test]
+fn a_long_cycle_stages_the_next_grid_on_its_first_lap_instead_of_repeating_itself() {
+    let mut browser = auto_random_browser_with_span(8);
+    browser.metadata.value.auto_random = true;
+    assert_eq!(browser.cycle_seconds(), 16.0);
+    assert_eq!(browser.auto_random_cycles(), 1);
+
+    // 16 秒あれば 1 周の途中でも先読みは間に合う。同じ内容を 2 周聴かせるほうが間延びする。
+    playing(&browser, 0, 0);
+    assert_eq!(staged_token(&browser.pump_auto_random()), 1);
+}
+
+#[test]
+fn a_cycle_just_under_the_threshold_still_plays_two_laps() {
+    let mut browser = auto_random_browser_with_span(7);
+    browser.metadata.value.auto_random = true;
+    assert_eq!(browser.cycle_seconds(), 14.0);
+    assert_eq!(browser.auto_random_cycles(), 2);
+
+    playing(&browser, 0, 0);
+    assert!(matches!(
+        browser.pump_auto_random(),
+        LoopBrowserAction::Continue
+    ));
+
+    playing(&browser, 1, 0);
+    assert_eq!(staged_token(&browser.pump_auto_random()), 1);
 }
 
 #[test]

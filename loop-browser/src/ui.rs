@@ -207,11 +207,12 @@ fn draw_category_overlay(state: &LoopBrowser, frame: &mut Frame<'_>) {
 }
 
 /// オートランダムモードが ON のときだけステータス行に出すマーク。
-fn auto_random_suffix(state: &LoopBrowser) -> &'static str {
+/// 周回数は 1 周の演奏時間で変わるので、いま何周で引き直すのかを出す。
+fn auto_random_suffix(state: &LoopBrowser) -> String {
     if state.auto_random() {
-        "  [AUTO 2周]"
+        format!("  [AUTO {}周]", state.auto_random_cycles())
     } else {
-        ""
+        String::new()
     }
 }
 

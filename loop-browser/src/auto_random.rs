@@ -1,22 +1,31 @@
 //! オートランダムモード（`Shift+O`）。
 //!
-//! ON の間、グリッドを 2 周演奏するごとに `Shift+R` 相当の一括ランダムを自動で引き直す。
+//! ON の間、グリッドを何周かするごとに `Shift+R` 相当の一括ランダムを自動で引き直す。
 //! そのままだと差し替えのたびに準備（デコード + time stretch）を待つ無音ができるので、
-//! **最後の 1 周を使って裏で次のグリッドを準備し、周の境目で差し替える**（ダブルバッファリング）。
+//! **裏で次のグリッドを準備し、周の境目で差し替える**（ダブルバッファリング）。
+//!
+//! 何周で引き直すかは 1 周の演奏時間で決まる（`auto_random_cycles`）。短いグリッドは
+//! 2 周演奏し、最後の 1 周を丸ごと先読みの猶予に使う。長いグリッドは 1 周だけ演奏し、
+//! その 1 周の途中から先読みする（同じ内容を 2 周聴かされる間延びを避けるため）。
 //!
 //! 役割分担:
 //! - ここ（UI スレッド）: 周回数を見て抽選し、`GridPreload` を返す。差し替わったのを検知して表示と TOML を確定する
 //! - `playback::worker`: `active` を鳴らしたまま `standby` を用意し、周の境目で差し替える
 //!
-//! 準備が 1 周に間に合わなければ worker は差し替えずに現行グリッドをもう 1 周させる。
+//! 準備が間に合わなければ worker は差し替えずに現行グリッドをもう 1 周させる。
 //! そのときは stall として予約を捨て、次の周で引き直す（音を止めないことを最優先する）。
 
 use crate::batch_random::StagedRandomGrid;
 use crate::playback::position;
 use crate::{LoopBrowser, LoopBrowserAction, LoopGridChange};
 
-/// 何周演奏したら引き直すか。最後の 1 周が先読みの猶予になる。
-const AUTO_RANDOM_CYCLES: u64 = 2;
+/// 1 周がこの秒数以上なら長いグリッドとみなす。
+const LONG_CYCLE_SECONDS: f64 = 16.0;
+/// 長いグリッドの周回数。1 周の途中から先読みするので猶予は短くなるが、
+/// 16 秒あればデコード + time stretch は間に合う。
+const AUTO_RANDOM_CYCLES_LONG: u64 = 1;
+/// 短いグリッドの周回数。最後の 1 周が丸ごと先読みの猶予になる。
+const AUTO_RANDOM_CYCLES_SHORT: u64 = 2;
 /// 予約してからこの周回数だけ待っても差し替わらなければ、諦めて引き直す。
 const AUTO_RANDOM_STALL_CYCLES: u64 = 2;
 
@@ -30,6 +39,18 @@ pub struct StagedAutoRandom {
 impl LoopBrowser {
     pub fn auto_random(&self) -> bool {
         self.metadata.value.auto_random
+    }
+
+    /// いま鳴っているグリッドを何周したら引き直すか。1 周が長いほど少ない周回で次へ行く。
+    ///
+    /// 見るのは `self.track_grid`（＝いま鳴っているグリッド）。auto random は差し替わってから
+    /// commit するので、抽選する時点の `track_grid` は再生中のものと一致する。
+    pub fn auto_random_cycles(&self) -> u64 {
+        if self.cycle_seconds() >= LONG_CYCLE_SECONDS {
+            AUTO_RANDOM_CYCLES_LONG
+        } else {
+            AUTO_RANDOM_CYCLES_SHORT
+        }
     }
 
     pub fn toggle_auto_random(&mut self) {
@@ -96,7 +117,7 @@ impl LoopBrowser {
     fn stage_auto_random(&mut self, cycle: u64) -> LoopBrowserAction {
         if !self.auto_random()
             || self.auto_random_staged.is_some()
-            || cycle.saturating_add(1) < AUTO_RANDOM_CYCLES
+            || cycle.saturating_add(1) < self.auto_random_cycles()
         {
             return LoopBrowserAction::Continue;
         }

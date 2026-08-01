@@ -270,6 +270,33 @@ fn a_one_shot_longer_than_the_loops_extends_the_grid_axis() {
 }
 
 #[test]
+fn the_cycle_seconds_are_the_measure_seconds_times_the_played_measure_count() {
+    let mut browser = browser_with_direct_wavs(1);
+    let wav = browser.wav_analyses[0].0.clone();
+
+    // BPM120 4/4 なので 1 小節 2 秒。4 小節のグリッドは 1 周 8 秒。
+    browser.track_grid[0] = vec![
+        Some(LoopTrackClip::explicit(wav, 4)),
+        None,
+        None,
+        None,
+        None,
+        None,
+    ];
+    assert_eq!(browser.measure_seconds(), 2.0);
+    assert_eq!(browser.cycle_seconds(), 8.0);
+
+    // cursor で伸びるのは表示だけ。鳴る長さは変わらない。
+    browser.measure_cursor = 5;
+    assert_eq!(browser.displayed_measure_count(), 6);
+    assert_eq!(browser.cycle_seconds(), 8.0);
+
+    // 空のグリッドでも 0 や NaN にはしない（既定の 1 小節ぶん）。
+    browser.track_grid[0] = vec![None];
+    assert_eq!(browser.cycle_seconds(), 2.0);
+}
+
+#[test]
 fn allocated_empty_columns_do_not_extend_playback_or_normal_display() {
     let mut browser = browser_with_direct_wavs(1);
     let wav = browser.wav_analyses[0].0.clone();

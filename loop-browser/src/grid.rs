@@ -214,6 +214,15 @@ impl LoopBrowser {
         self.measure_seconds_of(&self.track_grid)
     }
 
+    /// グリッドを1巡するのにかかる秒数。
+    /// 1小節の秒数 × grid の小節数。one-shot で伸びた span も `measure_count_of` が拾う。
+    ///
+    /// `displayed_measure_count()` は measure cursor に引きずられて伸びるので使わない。
+    /// 実際に鳴るのは `effective_measure_count()` のぶんだけ。
+    pub fn cycle_seconds(&self) -> f64 {
+        self.measure_seconds() * self.effective_measure_count() as f64
+    }
+
     /// loop は解析の小節数、one-shot は「鳴り終わるまでの小節数を 2 の冪へ切り上げ」。
     /// one-shot を 1/2/4/8… の区切りでだけ鳴らし直し、長い空白も途中の重なりも作らないため。
     pub fn span_for_wav_at(&self, wav: &LoopWavId, measure_seconds: f64) -> Option<usize> {
