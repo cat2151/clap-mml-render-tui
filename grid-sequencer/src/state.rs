@@ -133,6 +133,13 @@ pub struct GridState {
     /// 進行の最終小節へ入ったことを画面側へ伝えるフラグ。抽選はカタログと rng を
     /// 持つ画面側の仕事なので、ここでは合図だけを立てる。
     preload_due: bool,
+    /// サイクルを鳴らしきったらクロックを止める（シングルバッファリング。詳細は
+    /// [`crate::single_buffer`]）。
+    stop_at_cycle_end: bool,
+    /// 進行を1周し終えたことを `poll_steps` へ伝える一度きりの合図。
+    cycle_wrapped: bool,
+    /// 鳴らしきった最後の音の締切。画面側が出力の吐き出し待ちの起点に使う。
+    cycle_stopped_at: Option<Instant>,
     clock: StepClock,
 }
 
@@ -158,6 +165,9 @@ impl GridState {
             pending: None,
             pending_ready: false,
             preload_due: false,
+            stop_at_cycle_end: false,
+            cycle_wrapped: false,
+            cycle_stopped_at: None,
             clock: StepClock::default(),
         }
     }
@@ -197,6 +207,7 @@ impl GridState {
         self.sounding.clear();
         self.pending_display.clear();
         self.last_scheduled = None;
+        self.reset_cycle_stop();
         self.clock.start(now);
     }
 
@@ -210,7 +221,15 @@ impl GridState {
             let ahead = deadline.saturating_duration_since(now);
             let mut messages = self.expire_sounding();
             self.advance_schedule();
-            messages.extend(self.attack_current_step());
+            let stopping = std::mem::take(&mut self.cycle_wrapped);
+            if stopping {
+                // 鳴らしきった。次の小節は組み立てず、残っている音を止めてクロックを畳む。
+                messages.extend(self.silence_sounding());
+                self.clock.stop();
+                self.cycle_stopped_at = Some(deadline);
+            } else {
+                messages.extend(self.attack_current_step());
+            }
             scheduled.extend(messages.into_iter().map(|(instance_id, message)| {
                 GridScheduledMessage {
                     instance_id,
@@ -221,6 +240,9 @@ impl GridState {
             self.pending_display
                 .push_back((deadline, self.schedule_index));
             self.last_scheduled = Some(deadline);
+            if stopping {
+                break;
+            }
         }
         self.advance_display(now);
         scheduled
@@ -244,6 +266,7 @@ impl GridState {
         self.started = false;
         self.pending_display.clear();
         self.last_scheduled = None;
+        self.reset_cycle_stop();
         self.silence_sounding()
             .into_iter()
             .map(|(instance_id, message)| GridScheduledMessage {

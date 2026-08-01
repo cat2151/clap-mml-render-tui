@@ -57,6 +57,9 @@ pub struct GridConnectionStatus {
     pub preload: GridProgress,
     /// 先読みロードで1件でも失敗したか。立っていたら bank を差し替えてはいけない。
     pub preload_failed: bool,
+    /// 出力バッファを上限まで厚くしてもフレームドロップが止まらない状態が続いたか。
+    /// 画面側はこれを見てシングルバッファリングへ落ちる（[`crate::single_buffer`]）。
+    pub overloaded: bool,
 }
 
 impl Default for GridConnectionStatus {
@@ -77,6 +80,7 @@ impl Default for GridConnectionStatus {
                 total: 0,
             },
             preload_failed: false,
+            overloaded: false,
         }
     }
 }
@@ -247,6 +251,19 @@ impl GridConnectionStatus {
             total: 0,
         };
         self.preload_failed = false;
+    }
+
+    /// 慢性的なフレームドロップが成立した。
+    ///
+    /// `begin_connecting()` では降ろさない。シングルバッファリングはサイクルごとに
+    /// `prepare()`（= `begin_connecting()`）を通るので、そこで消すと latch にならない。
+    pub(super) fn mark_overloaded(&mut self) {
+        self.overloaded = true;
+    }
+
+    /// 判定を白紙へ戻す。画面を離れる（`Stop`）ときだけ呼ぶ。
+    pub(super) fn clear_overload(&mut self) {
+        self.overloaded = false;
     }
 
     pub(super) fn update_adaptive_buffer(&mut self, multiplier: u16, underrun_frames: u64) {

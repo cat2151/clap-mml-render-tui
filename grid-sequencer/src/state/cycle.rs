@@ -8,6 +8,8 @@
 //! 先読みが間に合わなかったときは差し替えを見送り、今の grid のまま次の周へ入る。
 //! **音を止めないことを最優先**にするため。
 
+use std::time::Instant;
+
 use cmrt_realtime_play::BANK_COUNT;
 
 use super::{ChordPlayback, GridRow, GridState};
@@ -103,6 +105,44 @@ impl GridState {
         self.pending = None;
         self.pending_ready = false;
         self.preload_due = false;
+    }
+
+    /// サイクルを鳴らしきったらクロックを止めるようにする（シングルバッファリング）。
+    /// 冪等なので毎フレーム呼んでよい。
+    pub fn arm_cycle_stop(&mut self) {
+        self.stop_at_cycle_end = true;
+    }
+
+    /// 鳴らしきりでの停止をやめる。ダブルバッファリングへ戻すときに呼ぶ。
+    pub fn disarm_cycle_stop(&mut self) {
+        self.reset_cycle_stop();
+    }
+
+    /// サイクルを鳴らしきってクロックが止まったことを一度だけ報告する。
+    /// 返すのは最後の音の締切。
+    pub fn take_cycle_stopped(&mut self) -> Option<Instant> {
+        self.cycle_stopped_at.take()
+    }
+
+    pub(super) fn reset_cycle_stop(&mut self) {
+        self.stop_at_cycle_end = false;
+        self.cycle_wrapped = false;
+        self.cycle_stopped_at = None;
+    }
+
+    /// bank を動かさずに差し替え待ちを取り込む（シングルバッファリング）。
+    ///
+    /// 待機 bank へ先読みしていないので `pending_ready` は立たない。取り込んだ patch は
+    /// 呼び出し側が今の bank へロードし直す。差し替えたかどうかを返す。
+    pub fn commit_pending_cycle_in_place(&mut self) -> bool {
+        let Some(pending) = self.pending.take() else {
+            return false;
+        };
+        self.rows = pending.rows;
+        self.chord = Some(pending.chord);
+        self.pending_ready = false;
+        self.apply_chord_to_rows();
+        true
     }
 
     /// 進行を1周したので、先読みが終わっていれば bank ごと差し替える。

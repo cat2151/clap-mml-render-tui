@@ -18,13 +18,22 @@ impl GridSequencerScreen {
     /// コード進行データの更新アナウンスを出し終えたら true を返す。共有ランタイムは
     /// これを受けてアプリを再起動する。
     pub fn pump_step(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) -> bool {
-        let ready = self.connection_status().phase.accepts_notes();
-        if self.poll_start_wait(now, ready) {
+        let status = self.connection_status();
+        // 上限バッファでもフレームドロップが止まらない環境では、裏読みが成立しない。
+        if status.overloaded && !self.overload_applied {
+            self.enter_single_buffering("overload");
+        }
+        if self.poll_start_wait(now, status.phase.accepts_notes()) {
             let scheduled = self.state.poll_steps(now, LOOKAHEAD);
             self.send_scheduled(&scheduled);
-            // 進行の最終小節へ入っていれば、待機 bank へ次サイクルを先読みする。
-            // 演奏は止まらない（差し替えは次の小節境界で起きる）。
-            self.advance_cycle_swap(now, ctx);
+            if self.single_buffering {
+                // 鳴らしきってからロードする。この間は演奏が止まる。
+                self.advance_single_buffer_cycle(now, ctx);
+            } else {
+                // 進行の最終小節へ入っていれば、待機 bank へ次サイクルを先読みする。
+                // 演奏は止まらない（差し替えは次の小節境界で起きる）。
+                self.advance_cycle_swap(now, ctx);
+            }
         }
         self.take_restart_request(now)
     }

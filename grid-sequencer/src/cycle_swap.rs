@@ -145,12 +145,17 @@ impl GridSequencerScreen {
     }
 
     /// 先読みを打ち切る。`r` キーのように grid を丸ごと差し替えるときに呼ぶ。
+    ///
+    /// シングルバッファリング（[`crate::single_buffer`]）の待ちも一緒に畳む。どちらの
+    /// 段取りも「次サイクルへの差し替え待ち」なので、捨てるときは足並みを揃える。
     pub(crate) fn cancel_cycle_swap(&mut self) {
         if self.cycle_swap.take().is_some() {
             if let Some(sender) = &self.midi_sender {
                 sender.finish_preload();
             }
         }
+        self.cycle_end_at = None;
+        self.state.disarm_cycle_stop();
         self.state.discard_pending_cycle();
     }
 }

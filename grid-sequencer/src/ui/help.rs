@@ -12,7 +12,7 @@ const TITLE: &str = " Grid Sequencer ヘルプ(Keybinds)  Esc/q/?:close ";
 
 /// 画面下部に常に出しておく1行のキーバインド要約。
 pub(super) const KEYBIND_TEXT: &str =
-    " c:chord  r:randomize  R:randomize-notes  t:tracks  ?:help  Ctrl+G:screen  q:quit";
+    " c:chord  r:randomize  R:randomize-notes  t:tracks  b:1buf  ?:help  Ctrl+G:screen  q:quit";
 
 pub(super) fn draw_overlay(f: &mut Frame<'_>, track_count: usize) {
     let lines = help_lines(track_count);
@@ -50,6 +50,7 @@ fn help_lines(track_count: usize) -> Vec<Line<'static>> {
         Line::from("  R        patch を据え置き、note / 音長 / セルだけランダム設定"),
         Line::from("           (音色ロードが無いので再生が途切れない)"),
         Line::from("  t        track数を 1/2/4/8/16 で切替してアプリを再起動"),
+        Line::from("  b        シングルバッファリングの on/off"),
         Line::from("  ?        このヘルプ"),
         Line::from("  Ctrl+G   画面切替メニュー"),
         Line::from("  q        終了"),
@@ -65,6 +66,12 @@ fn help_lines(track_count: usize) -> Vec<Line<'static>> {
         Line::from(""),
         Line::from("準備中の行は色が落ちます。暗いグレー = instance 未構築、"),
         Line::from("グレー = instance のみ構築済み、通常色 = 音色ロードまで完了。"),
+        Line::from(""),
+        Line::from("シングルバッファリング(b)は裏での読み込みをやめ、進行を1周"),
+        Line::from("鳴らしきる→音色ロード→先頭から再開、を繰り返します。ロード中は"),
+        Line::from("無音になる代わりに、演奏中のブツ切れが無くなります。出力バッファを"),
+        Line::from("上限まで厚くしてもフレームドロップが10秒続いたときは、自動で"),
+        Line::from("こちらへ切り替わります(ステータス行が single / sb になります)。"),
     ]);
     lines
 }

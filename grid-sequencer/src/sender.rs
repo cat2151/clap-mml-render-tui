@@ -11,6 +11,7 @@ use std::{
 use cmrt_realtime_play::{FastMidiEvent, RealtimePlayServerSupervisor};
 
 mod adaptive_buffer;
+mod overload;
 mod status;
 mod worker;
 
@@ -116,6 +117,9 @@ impl GridMidiSender {
     }
 
     pub fn stop(&self) {
+        // 判定はここで降ろす。ワーカー側でも戻すが、キューを捌く前に画面へ入り直すと
+        // 古い判定を読んでシングルバッファリングのまま再開してしまう。
+        self.status.lock().unwrap().clear_overload();
         let _ = self.tx.send(GridMidiCommand::Stop);
     }
 

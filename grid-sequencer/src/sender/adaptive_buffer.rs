@@ -14,6 +14,9 @@ pub(super) struct AdaptiveBuffer {
     multiplier: u16,
     underrun_frames: u64,
     last_total_underrun_frames: u64,
+    /// 直近の `observe()` で新たに増えたフレームドロップ数。慢性ドロップの判定
+    /// （[`super::overload`]）へ渡すために覚えておく。
+    last_new_underrun_frames: u64,
     stable_since: Instant,
 }
 
@@ -23,12 +26,23 @@ impl AdaptiveBuffer {
             multiplier: INITIAL_BUFFER_MULTIPLIER,
             underrun_frames: 0,
             last_total_underrun_frames: total_underrun_frames,
+            last_new_underrun_frames: 0,
             stable_since: now,
         }
     }
 
     pub(super) fn multiplier(self) -> u16 {
         self.multiplier
+    }
+
+    /// 梯子が上限に達しているか（これ以上厚くできない）。
+    pub(super) fn is_at_max(self) -> bool {
+        self.multiplier >= MAX_BUFFER_MULTIPLIER
+    }
+
+    /// 直近の `observe()` で新たに増えたフレームドロップ数。
+    pub(super) fn last_new_underrun_frames(self) -> u64 {
+        self.last_new_underrun_frames
     }
 
     /// サーバーが倍率を受け付けなかったときに、直前の値へ戻す。
@@ -47,6 +61,7 @@ impl AdaptiveBuffer {
     pub(super) fn observe(&mut self, now: Instant, total_underrun_frames: u64) -> Option<u16> {
         if total_underrun_frames < self.last_total_underrun_frames {
             self.last_total_underrun_frames = total_underrun_frames;
+            self.last_new_underrun_frames = 0;
             self.underrun_frames = 0;
             self.stable_since = now;
             return None;
@@ -54,6 +69,7 @@ impl AdaptiveBuffer {
 
         let new_underruns = total_underrun_frames.saturating_sub(self.last_total_underrun_frames);
         self.last_total_underrun_frames = total_underrun_frames;
+        self.last_new_underrun_frames = new_underruns;
         if new_underruns > 0 {
             self.underrun_frames = self.underrun_frames.saturating_add(new_underruns);
             self.stable_since = now;

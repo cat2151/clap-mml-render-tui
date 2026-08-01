@@ -83,9 +83,16 @@ fn status_line(
     };
     let multiplier = connection.buffer_multiplier;
     let latency_ms = screen.buffer_latency_ms(multiplier);
+    // 裏読みをやめているかどうかは、音の途切れ方の説明そのものなので必ず出す。
+    let mode = if screen.single_buffering() {
+        "single"
+    } else {
+        "auto"
+    };
+    let compact_mode = if screen.single_buffering() { " sb" } else { "" };
     let text = if width >= 160 {
         format!(
-            " SHM {} | buffer x{multiplier} ({latency_ms:.0}ms) auto | underrun {} frames | {} instances | BPM {} 1/16={:.1}ms | step {:>2}/{} | GR {:.1} dB | {} ",
+            " SHM {} | buffer x{multiplier} ({latency_ms:.0}ms) {mode} | underrun {} frames | {} instances | BPM {} 1/16={:.1}ms | step {:>2}/{} | GR {:.1} dB | {} ",
             connection.label(),
             connection.underrun_frames,
             screen.track_count(),
@@ -99,7 +106,7 @@ fn status_line(
     } else {
         // 90桁でも patch 状態まで出し切れるよう、倍率とレイテンシは最短表記にする。
         format!(
-            " SHM {} | buf x{multiplier} {latency_ms:.0}ms | underrun {}f | {}tr | {}bpm | step {}/{} | GR{:.1} | {} ",
+            " SHM {} | buf x{multiplier} {latency_ms:.0}ms{compact_mode} | underrun {}f | {}tr | {}bpm | step {}/{} | GR{:.1} | {} ",
             connection.label(),
             connection.underrun_frames,
             screen.track_count(),

@@ -66,6 +66,12 @@ pub struct GridSequencerScreen {
     pub(crate) waiting_for_patches: bool,
     /// `Ready` へ戻ってから鳴らし始める時刻。待ちに入った時点では未定。
     pub(crate) resume_at: Option<Instant>,
+    /// シングルバッファリングへ落ちているか。詳細は [`crate::single_buffer`]。
+    pub(crate) single_buffering: bool,
+    /// 自動判定を一度だけ適用するための記録。手動で戻したあと蒸し返さないために持つ。
+    pub(crate) overload_applied: bool,
+    /// サイクルを鳴らしきってから音色ロードへ入る時刻。`None` なら待っていない。
+    pub(crate) cycle_end_at: Option<Instant>,
 }
 
 impl GridSequencerScreen {
@@ -110,6 +116,9 @@ impl GridSequencerScreen {
             cycle_swap: None,
             waiting_for_patches: false,
             resume_at: None,
+            single_buffering: false,
+            overload_applied: false,
+            cycle_end_at: None,
         }
     }
 
@@ -121,6 +130,11 @@ impl GridSequencerScreen {
     /// chord mode が on か。セッションへ保存する値。
     pub fn chord_enabled(&self) -> bool {
         self.chord_enabled
+    }
+
+    /// シングルバッファリングへ落ちているか。ステータス行の表示に使う。
+    pub fn single_buffering(&self) -> bool {
+        self.single_buffering
     }
 
     /// 想定レイテンシ（出力バッファに溜める目標時間）。

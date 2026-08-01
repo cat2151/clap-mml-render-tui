@@ -14,6 +14,7 @@ use cmrt_realtime_play::{LimiterMeter, RealtimePlayServerSupervisor};
 
 use super::{
     adaptive_buffer::{AdaptiveBuffer, INITIAL_BUFFER_MULTIPLIER, RESTORE_BUFFER_MULTIPLIER},
+    overload::OverloadDetector,
     GridConnectionStatus, GridMidiCommand,
 };
 
@@ -36,6 +37,9 @@ pub(super) fn run_midi_sender(
     status: Arc<Mutex<GridConnectionStatus>>,
 ) {
     let mut adaptive_buffer = None;
+    // 慢性ドロップの判定は `adaptive_buffer` の中に置かないこと。`Prepare` のたびに
+    // `adaptive_buffer = None` されるので、そこに持たせると latch が毎回消える。
+    let mut overload = OverloadDetector::new();
     // 先読みロード中は出力バッファを厚くしている。戻し忘れを防ぐために持つ。
     let mut preloading = false;
     loop {
@@ -46,6 +50,7 @@ pub(super) fn run_midi_sender(
                     supervisor.as_ref(),
                     &status,
                     &mut adaptive_buffer,
+                    &mut overload,
                     Instant::now(),
                 );
                 continue;
@@ -175,6 +180,9 @@ pub(super) fn run_midi_sender(
             GridMidiCommand::Stop => {
                 adaptive_buffer = None;
                 preloading = false;
+                // 画面を離れるので判定も白紙へ戻す。次に入るときはダブルバッファリングから。
+                overload = OverloadDetector::new();
+                status.lock().unwrap().clear_overload();
                 let started = Instant::now();
                 let result = supervisor
                     .stop_live_all()
@@ -255,6 +263,7 @@ fn poll_runtime_status(
     supervisor: &RealtimePlayServerSupervisor,
     status: &Mutex<GridConnectionStatus>,
     adaptive_buffer: &mut Option<AdaptiveBuffer>,
+    overload: &mut OverloadDetector,
     now: Instant,
 ) {
     status
@@ -267,7 +276,17 @@ fn poll_runtime_status(
     let Some(buffer) = adaptive_buffer.as_mut() else {
         return;
     };
+    // 梯子を上げる前の厚さで判定する。上げた直後に上限になっても、そのドロップは
+    // 1段下での出来事なので数えない。
+    let was_at_max = buffer.is_at_max();
     let adjustment = buffer.observe(now, supervisor.underrun_frames());
+    if overload.observe(now, was_at_max, buffer.last_new_underrun_frames()) {
+        status.lock().unwrap().mark_overloaded();
+        crate::log_line(&format!(
+            "grid-sequencer: overload detected multiplier={} -> single buffering",
+            buffer.multiplier()
+        ));
+    }
     if let Some(multiplier) = adjustment {
         let previous = status.lock().unwrap().buffer_multiplier;
         // 倍率の設定に失敗しても演奏は止めない。古いサーバーは新しい上限（x32 以上）を

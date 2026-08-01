@@ -104,11 +104,18 @@ impl GridState {
     /// 進行を1周し終えたら、先読みロードが済んでいる次サイクルへ bank ごと差し替える
     /// （[`super::cycle`]）。差し替えは `attack_current_step()` の直前に起きるので、
     /// その小節の頭から新しい進行の1コード目がそのまま鳴る。
+    ///
+    /// シングルバッファリング（[`crate::single_buffer`]）では裏読みをしていないので
+    /// 差し替えず、「鳴らしきった」合図だけを立てて `poll_steps` にクロックを畳ませる。
     pub(super) fn advance_chord(&mut self) {
         let Some(chord) = self.chord.as_mut() else {
             return;
         };
         if chord.advance() {
+            if self.stop_at_cycle_end {
+                self.cycle_wrapped = true;
+                return;
+            }
             self.commit_pending_cycle();
         }
         // 最終小節へ入った。画面側はここから次の抽選と先読みロードを始める。

@@ -18,6 +18,7 @@ mod cycle_swap;
 mod screen;
 mod screen_runtime;
 mod sender;
+mod single_buffer;
 mod start_wait;
 mod state;
 pub mod ui;
@@ -201,6 +202,10 @@ impl GridSequencerScreen {
         self.cancel_cycle_swap();
         self.waiting_for_patches = false;
         self.resume_at = None;
+        // 画面を出たら判定は白紙。次に入るときはダブルバッファリングから試す
+        // （送信ワーカー側の判定も `stop()` で戻る）。
+        self.single_buffering = false;
+        self.overload_applied = false;
         let _note_offs = self.state.take_reset_messages();
         if let Some(sender) = &self.midi_sender {
             sender.stop();
@@ -304,6 +309,7 @@ impl GridSequencerScreen {
                 self.help_open = true;
                 cmrt_tui_core::memory::request_refresh();
             }
+            KeyCode::Char('b') => self.toggle_single_buffering(),
             KeyCode::Char('c') => self.toggle_chord_mode(now, ctx),
             KeyCode::Char('r') => self.randomize(now, ctx),
             KeyCode::Char('R') => self.randomize_keeping_patches(now, ctx),
