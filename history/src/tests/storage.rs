@@ -144,6 +144,27 @@ fn load_session_state_normalizes_keyboard_restore_values() {
         }
     );
     assert_eq!(state.grid_sequencer_track_count, 16);
+    assert!(
+        !state.grid_sequencer_chord_mode,
+        "chord mode を知らない古い history は off 扱い"
+    );
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn session_state_round_trips_the_grid_sequencer_chord_mode() {
+    let tmp = std::env::temp_dir().join("cmrt_test_grid_chord_mode_round_trip");
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
+
+    save_session_state(&SessionState {
+        grid_sequencer_chord_mode: true,
+        ..SessionState::default()
+    })
+    .unwrap();
+
+    assert!(load_session_state().grid_sequencer_chord_mode);
 
     std::fs::remove_dir_all(&tmp).ok();
 }

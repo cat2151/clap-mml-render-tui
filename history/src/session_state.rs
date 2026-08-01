@@ -18,6 +18,10 @@ pub struct SessionState {
     pub keyboard: KeyboardSessionState,
     /// Grid Sequencer が使用する track / CLAP instance 数。
     pub grid_sequencer_track_count: usize,
+    /// Grid Sequencer の chord mode が on だったか。`t` キーはアプリ再起動を伴うので、
+    /// これを持ち越さないと track 数を変えるたびに chord mode が解除されてしまう。
+    #[serde(default)]
+    pub grid_sequencer_chord_mode: bool,
     /// keyboard の音出し確認 overlay を最後に表示したローカル日付（YYYY-MM-DD）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keyboard_note_guide_overlay_date: Option<String>,
@@ -34,6 +38,7 @@ impl Default for SessionState {
             active_screen: cmrt_tui_core::screen_switch::PrimaryScreen::Notepad,
             keyboard: KeyboardSessionState::default(),
             grid_sequencer_track_count: cmrt_realtime_play::DEFAULT_LIVE_INSTANCE_COUNT,
+            grid_sequencer_chord_mode: false,
             keyboard_note_guide_overlay_date: None,
             notepad_sound_check_guide_overlay_date: None,
         }
@@ -54,6 +59,8 @@ struct SessionStateWire {
     keyboard: Option<KeyboardSessionState>,
     #[serde(default = "default_grid_sequencer_track_count")]
     grid_sequencer_track_count: usize,
+    #[serde(default)]
+    grid_sequencer_chord_mode: bool,
     #[serde(default)]
     keyboard_note_guide_overlay_date: Option<String>,
     #[serde(default)]
@@ -83,6 +90,7 @@ impl<'de> serde::Deserialize<'de> for SessionState {
             grid_sequencer_track_count: cmrt_realtime_play::normalize_live_instance_count(
                 wire.grid_sequencer_track_count,
             ),
+            grid_sequencer_chord_mode: wire.grid_sequencer_chord_mode,
             keyboard_note_guide_overlay_date: wire.keyboard_note_guide_overlay_date,
             notepad_sound_check_guide_overlay_date: wire.notepad_sound_check_guide_overlay_date,
         })

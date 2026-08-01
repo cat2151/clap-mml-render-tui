@@ -22,7 +22,7 @@ mod start_wait;
 mod state;
 pub mod ui;
 
-pub use screen::GridSequencerScreen;
+pub use screen::{GridSequencerParts, GridSequencerScreen};
 pub use sender::{
     GridConnectionPhase, GridConnectionStatus, GridMidiSender, GridProgress, GridRowReadiness,
 };
@@ -252,18 +252,23 @@ impl GridSequencerScreen {
 
     /// 非同期の patch 一覧が Ready へ遷移したら、未設定 row へ一度だけ割り当てて
     /// 有効な全 instance の patch prepare を開始する。
+    ///
+    /// セッションから復元した chord mode も、patch 一覧が揃うここで on にする。割り当てと
+    /// 同じ prepare に相乗りさせるので、音色ロードは1回で済む。
     pub fn refresh_context(&mut self, ctx: &GridSequencerContext<'_>) {
         self.patch_status = ctx.patch_status();
         if ctx.chord_source_updated && self.restart_notice.is_none() {
             self.restart_notice = Some(Instant::now());
             log_line("grid-sequencer: chord-source updated, restarting");
         }
+        let chord_restored = self.poll_pending_chord(Instant::now(), ctx);
         let assigned = self.state.fill_missing_patches(ctx.patches());
-        if assigned == 0 {
+        if assigned == 0 && !chord_restored {
             return;
         }
         log_line(&format!(
-            "grid-sequencer: patch-list-ready assigned={assigned} instances={}",
+            "grid-sequencer: patch-list-ready assigned={assigned} chord_restored={chord_restored} \
+             instances={}",
             self.track_count()
         ));
         self.prepare_connection();

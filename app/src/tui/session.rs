@@ -14,6 +14,7 @@ struct LoadedSessionState {
     active_screen: crate::screen_switch::PrimaryScreen,
     keyboard: crate::history::KeyboardSessionState,
     grid_sequencer_track_count: usize,
+    grid_sequencer_chord_mode: bool,
     keyboard_note_guide_overlay_date: Option<String>,
     notepad_sound_check_guide_overlay_date: Option<String>,
 }
@@ -35,6 +36,7 @@ fn load_initial_session_state() -> LoadedSessionState {
         active_screen,
         keyboard,
         grid_sequencer_track_count,
+        grid_sequencer_chord_mode,
         keyboard_note_guide_overlay_date,
         notepad_sound_check_guide_overlay_date,
     } = crate::history::load_session_state();
@@ -45,6 +47,7 @@ fn load_initial_session_state() -> LoadedSessionState {
         active_screen,
         keyboard,
         grid_sequencer_track_count,
+        grid_sequencer_chord_mode,
         keyboard_note_guide_overlay_date,
         notepad_sound_check_guide_overlay_date,
     }
@@ -103,6 +106,7 @@ impl<'a> TuiApp<'a> {
             active_screen,
             keyboard,
             grid_sequencer_track_count,
+            grid_sequencer_chord_mode,
             keyboard_note_guide_overlay_date,
             notepad_sound_check_guide_overlay_date,
         } = load_initial_session_state();
@@ -177,12 +181,15 @@ impl<'a> TuiApp<'a> {
                     active_screen == crate::screen_switch::PrimaryScreen::LoopBrowser;
                 screen
             },
-            grid_sequencer:
-                super::grid_sequencer::GridSequencerScreen::with_sample_rate_and_track_count(
-                    grid_midi_sender,
-                    cfg.sample_rate,
-                    grid_sequencer_track_count,
-                ),
+            grid_sequencer: super::grid_sequencer::GridSequencerScreen::new_with(
+                super::grid_sequencer::GridSequencerParts {
+                    midi_sender: grid_midi_sender,
+                    sample_rate: cfg.sample_rate,
+                    buffer_frames: cfg.buffer_size,
+                    track_count: grid_sequencer_track_count,
+                    chord_enabled: grid_sequencer_chord_mode,
+                },
+            ),
             voicing: super::voicing::VoicingState::new(
                 crate::history::load_voicing_cache(),
                 voicing_layers,
@@ -202,6 +209,7 @@ impl<'a> TuiApp<'a> {
             active_screen: self.active_screen,
             keyboard: self.keyboard.state.session_state(),
             grid_sequencer_track_count: self.grid_sequencer.track_count(),
+            grid_sequencer_chord_mode: self.grid_sequencer.chord_enabled(),
             keyboard_note_guide_overlay_date: self
                 .keyboard
                 .note_guide

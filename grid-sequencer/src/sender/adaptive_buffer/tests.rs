@@ -22,15 +22,29 @@ fn underruns_raise_one_level_and_reset_the_level_counter() {
 }
 
 #[test]
+fn underruns_climb_past_sixteen_up_to_the_maximum() {
+    let now = Instant::now();
+    let mut buffer = AdaptiveBuffer::new(now, 0);
+    let mut underruns = 0;
+    for expected in [4, 8, 16, 32, 64, 128, 256] {
+        underruns += 1;
+        assert_eq!(buffer.observe(now, underruns), Some(expected));
+    }
+    assert_eq!(buffer.multiplier(), MAX_BUFFER_MULTIPLIER);
+}
+
+#[test]
 fn maximum_level_accumulates_underruns_without_growing() {
     let now = Instant::now();
     let mut buffer = AdaptiveBuffer::new(now, 0);
-    assert_eq!(buffer.observe(now, 1), Some(4));
-    assert_eq!(buffer.observe(now, 2), Some(8));
-    assert_eq!(buffer.observe(now, 3), Some(16));
+    let mut underruns = 0;
+    while buffer.multiplier() < MAX_BUFFER_MULTIPLIER {
+        underruns += 1;
+        assert!(buffer.observe(now, underruns).is_some());
+    }
 
-    assert_eq!(buffer.observe(now, 11), None);
-    assert_eq!(buffer.multiplier(), 16);
+    assert_eq!(buffer.observe(now, underruns + 8), None);
+    assert_eq!(buffer.multiplier(), MAX_BUFFER_MULTIPLIER);
     assert_eq!(buffer.underrun_frames(), 8);
 }
 
@@ -62,6 +76,17 @@ fn a_new_underrun_restarts_the_stability_period() {
     assert_eq!(buffer.observe(almost_stable, 2), Some(8));
     assert_eq!(buffer.observe(now + STABLE_INTERVAL, 2), None);
     assert_eq!(buffer.observe(almost_stable + STABLE_INTERVAL, 2), Some(4));
+}
+
+#[test]
+fn reverting_restores_the_multiplier_the_server_last_accepted() {
+    let now = Instant::now();
+    let mut buffer = AdaptiveBuffer::new(now, 0);
+    assert_eq!(buffer.observe(now, 1), Some(4));
+
+    buffer.revert(2);
+
+    assert_eq!(buffer.multiplier(), 2);
 }
 
 #[test]

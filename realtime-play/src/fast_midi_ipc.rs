@@ -106,7 +106,7 @@ impl FastMidiClient {
         Err(FastIpcError::UnsupportedPlatform)
     }
 
-    pub fn set_buffer_multiplier(&mut self, _multiplier: u8) -> Result<(), FastIpcError> {
+    pub fn set_buffer_multiplier(&mut self, _multiplier: u16) -> Result<(), FastIpcError> {
         Err(FastIpcError::UnsupportedPlatform)
     }
 

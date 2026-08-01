@@ -83,6 +83,7 @@ fn session_state_serialize_deserialize() {
         active_screen: PrimaryScreen::Notepad,
         keyboard: KeyboardSessionState::default(),
         grid_sequencer_track_count: 16,
+        grid_sequencer_chord_mode: false,
         keyboard_note_guide_overlay_date: Some("2026-07-20".to_string()),
         notepad_sound_check_guide_overlay_date: Some("2026-07-19".to_string()),
     };
@@ -109,6 +110,7 @@ fn session_state_serialize_deserialize_zero() {
         active_screen: PrimaryScreen::Notepad,
         keyboard: KeyboardSessionState::default(),
         grid_sequencer_track_count: 16,
+        grid_sequencer_chord_mode: false,
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
     };
@@ -127,6 +129,7 @@ fn session_state_serialize_deserialize_daw_screen() {
         active_screen: PrimaryScreen::Daw,
         keyboard: KeyboardSessionState::default(),
         grid_sequencer_track_count: 16,
+        grid_sequencer_chord_mode: false,
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
     };
@@ -226,6 +229,7 @@ fn save_and_load_session_state_roundtrip() {
         active_screen: PrimaryScreen::Notepad,
         keyboard: KeyboardSessionState::default(),
         grid_sequencer_track_count: 16,
+        grid_sequencer_chord_mode: false,
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
     };
@@ -304,6 +308,7 @@ fn save_and_load_session_state_roundtrip_daw_mode() {
         active_screen: PrimaryScreen::Daw,
         keyboard: KeyboardSessionState::default(),
         grid_sequencer_track_count: 16,
+        grid_sequencer_chord_mode: false,
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
     };

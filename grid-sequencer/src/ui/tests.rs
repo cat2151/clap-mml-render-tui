@@ -208,8 +208,24 @@ fn the_status_line_shows_adaptive_buffer_and_current_level_underruns() {
 
     let rendered = render_with_connection(&screen, &connection);
 
-    assert!(rendered.contains("buffer x8 auto"), "{rendered}");
-    assert!(rendered.contains("underrun 1536 frames"), "{rendered}");
+    assert!(rendered.contains("buf x8 85ms"), "{rendered}");
+    assert!(rendered.contains("underrun 1536f"), "{rendered}");
+}
+
+/// 倍率が上がるほど想定レイテンシも伸びる。x256 まで出し切っても桁が溢れないこと。
+#[test]
+fn the_status_line_shows_the_expected_latency_of_the_largest_buffer() {
+    let screen = screen_with_first_row(60, StepDuration::Sixteenth, &[]);
+    let connection = GridConnectionStatus {
+        buffer_multiplier: 256,
+        underrun_frames: 1_536,
+        ..GridConnectionStatus::default()
+    };
+
+    let rendered = render_with_connection(&screen, &connection);
+
+    assert!(rendered.contains("buf x256 2731ms"), "{rendered}");
+    assert!(rendered.contains("p:"), "{rendered}");
 }
 
 #[test]

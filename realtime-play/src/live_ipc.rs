@@ -135,7 +135,7 @@ impl RealtimePlayServerSupervisor {
         }
     }
 
-    pub fn set_live_buffer_multiplier(&self, multiplier: u8) -> Result<()> {
+    pub fn set_live_buffer_multiplier(&self, multiplier: u16) -> Result<()> {
         validate_buffer_multiplier(multiplier)?;
         *self.live_buffer_multiplier.lock().unwrap() = multiplier;
         self.with_fast_client(|client| client.set_buffer_multiplier(multiplier))
@@ -159,7 +159,7 @@ impl RealtimePlayServerSupervisor {
         result
     }
 
-    pub fn set_connected_live_buffer_multiplier(&self, multiplier: u8) -> Result<()> {
+    pub fn set_connected_live_buffer_multiplier(&self, multiplier: u16) -> Result<()> {
         validate_buffer_multiplier(multiplier)?;
         *self.live_buffer_multiplier.lock().unwrap() = multiplier;
         let mut client = self.fast_client.lock().unwrap();
@@ -169,7 +169,7 @@ impl RealtimePlayServerSupervisor {
         }
     }
 
-    pub fn remember_live_buffer_multiplier(&self, multiplier: u8) -> Result<()> {
+    pub fn remember_live_buffer_multiplier(&self, multiplier: u16) -> Result<()> {
         validate_buffer_multiplier(multiplier)?;
         *self.live_buffer_multiplier.lock().unwrap() = multiplier;
         Ok(())
@@ -215,9 +215,12 @@ impl RealtimePlayServerSupervisor {
     }
 }
 
-fn validate_buffer_multiplier(multiplier: u8) -> Result<()> {
-    if !matches!(multiplier, 1 | 2 | 4 | 8 | 16) {
-        anyhow::bail!("buffer multiplier must be 1, 2, 4, 8, or 16");
+fn validate_buffer_multiplier(multiplier: u16) -> Result<()> {
+    if !super::is_valid_buffer_multiplier(multiplier) {
+        anyhow::bail!(
+            "buffer multiplier must be a power of two up to {}",
+            super::MAX_LIVE_BUFFER_MULTIPLIER
+        );
     }
     Ok(())
 }

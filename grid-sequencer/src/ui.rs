@@ -1,7 +1,7 @@
 //! grid sequencer 画面の描画。
 //!
-//! 上から「grid 本体 / ステータス1行 / キーバインド1行」の縦3分割で、
-//! help は最後に overlay として重ねる。
+//! 上から「コード進行1行（chord mode 中だけ）/ grid 本体 / ステータス1行 /
+//! キーバインド1行」の縦分割で、help は最後に overlay として重ねる。
 
 use ratatui::{
     layout::{Constraint, Direction, Layout},
@@ -18,25 +18,43 @@ use crate::{
     GridConnectionPhase, GridConnectionStatus, GridSequencerScreen, BPM, GRID_STEPS, STEP_INTERVAL,
 };
 
+mod chord_line;
 mod grid;
 mod help;
 mod progress;
 mod restart_notice;
 
 pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: &mut Frame<'_>) {
+    // コード進行行は出すときだけ確保する。off のときの1行は grid に使う。
+    let chord_line = chord_line::line(screen);
+    let mut constraints = Vec::with_capacity(4);
+    if chord_line.is_some() {
+        constraints.push(Constraint::Length(1));
+    }
+    constraints.extend([
+        Constraint::Min(5),
+        Constraint::Length(1),
+        Constraint::Length(1),
+    ]);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(5),
-            Constraint::Length(1),
-            Constraint::Length(1),
-        ])
+        .constraints(constraints)
         .split(f.area());
-    grid::draw(screen, connection, f, chunks[0]);
-    f.render_widget(status_line(screen, connection, chunks[1].width), chunks[1]);
+    let grid_index = if let Some(chord_line) = chord_line {
+        f.render_widget(Paragraph::new(chord_line).style(base_style()), chunks[0]);
+        1
+    } else {
+        0
+    };
+    let (status_area, keybind_area) = (chunks[grid_index + 1], chunks[grid_index + 2]);
+    grid::draw(screen, connection, f, chunks[grid_index]);
+    f.render_widget(
+        status_line(screen, connection, status_area.width),
+        status_area,
+    );
     f.render_widget(
         Paragraph::new(help::KEYBIND_TEXT).style(base_style().fg(MONOKAI_GRAY)),
-        chunks[2],
+        keybind_area,
     );
     // 準備中とエラーは中央 overlay で知らせる。help は常に最前面。
     if connection.is_preparing() || connection.error_message().is_some() {
@@ -63,11 +81,12 @@ fn status_line(
         | GridConnectionPhase::WaitingForPatches
         | GridConnectionPhase::PatchSetting => MONOKAI_YELLOW,
     };
+    let multiplier = connection.buffer_multiplier;
+    let latency_ms = screen.buffer_latency_ms(multiplier);
     let text = if width >= 160 {
         format!(
-            " SHM {} | buffer x{} auto | underrun {} frames | {} instances | BPM {} 1/16={:.1}ms | step {:>2}/{} | GR {:.1} dB | {}{} ",
+            " SHM {} | buffer x{multiplier} ({latency_ms:.0}ms) auto | underrun {} frames | {} instances | BPM {} 1/16={:.1}ms | step {:>2}/{} | GR {:.1} dB | {} ",
             connection.label(),
-            connection.buffer_multiplier,
             connection.underrun_frames,
             screen.track_count(),
             BPM,
@@ -76,13 +95,12 @@ fn status_line(
             GRID_STEPS,
             connection.limiter_reduction_db,
             screen.patch_status.label(),
-            chord_status(screen),
         )
     } else {
+        // 90桁でも patch 状態まで出し切れるよう、倍率とレイテンシは最短表記にする。
         format!(
-            " SHM {} | buffer x{} auto | underrun {} frames | {}tr | {}bpm | step {}/{} | GR{:.1} | {}{} ",
+            " SHM {} | buf x{multiplier} {latency_ms:.0}ms | underrun {}f | {}tr | {}bpm | step {}/{} | GR{:.1} | {} ",
             connection.label(),
-            connection.buffer_multiplier,
             connection.underrun_frames,
             screen.track_count(),
             BPM,
@@ -90,27 +108,9 @@ fn status_line(
             GRID_STEPS,
             connection.limiter_reduction_db,
             compact_patch_status(screen),
-            chord_status(screen),
         )
     };
     Paragraph::new(text).style(base_style().fg(color))
-}
-
-/// chord mode の進行・Key・現在位置。off のときは何も出さない。
-fn chord_status(screen: &GridSequencerScreen) -> String {
-    if let Some(error) = screen.chord_error() {
-        return format!(" | chord: {error}");
-    }
-    match screen.state.chord() {
-        Some(chord) => format!(
-            " | chord Key:{} {} [{}/{}]",
-            chord.key(),
-            chord.degrees(),
-            chord.index() + 1,
-            chord.chord_count()
-        ),
-        None => String::new(),
-    }
 }
 
 fn compact_patch_status(screen: &GridSequencerScreen) -> String {

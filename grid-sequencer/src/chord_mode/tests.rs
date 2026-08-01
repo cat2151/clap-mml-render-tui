@@ -7,6 +7,8 @@ use super::*;
 use crate::tests::ctx_with;
 use crate::{GridPatchLoad, GridVoicingLookup, NoVoicingLookup};
 
+mod restore;
+
 const CATALOG_JSON: &str = r#"[
     {"degrees":"I-IV-V-I","description":"test"},
     {"degrees":"IIm-V-I","description":"test"}

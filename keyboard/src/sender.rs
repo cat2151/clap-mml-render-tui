@@ -133,7 +133,7 @@ fn run_midi_sender(
     initial_buffer_multiplier: u8,
 ) {
     let mut buffer_multiplier = initial_buffer_multiplier;
-    let _ = supervisor.remember_live_buffer_multiplier(buffer_multiplier);
+    let _ = supervisor.remember_live_buffer_multiplier(u16::from(buffer_multiplier));
     while let Ok(command) = rx.recv() {
         match command {
             KeyboardMidiCommand::Send { messages } => {
@@ -169,7 +169,7 @@ fn run_midi_sender(
                 status.lock().unwrap().phase = KeyboardConnectionPhase::PatchSetting;
                 let started = Instant::now();
                 let result = supervisor
-                    .set_live_buffer_multiplier(buffer_multiplier)
+                    .set_live_buffer_multiplier(u16::from(buffer_multiplier))
                     .and_then(|()| {
                         prepare_patch(
                             supervisor.as_ref(),
@@ -193,7 +193,7 @@ fn run_midi_sender(
             KeyboardMidiCommand::SetBufferMultiplier(multiplier) => {
                 buffer_multiplier = multiplier;
                 let started = Instant::now();
-                let result = supervisor.set_live_buffer_multiplier(multiplier);
+                let result = supervisor.set_live_buffer_multiplier(u16::from(multiplier));
                 set_result(
                     &status,
                     buffer_multiplier,

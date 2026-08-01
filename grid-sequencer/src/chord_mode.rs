@@ -30,24 +30,65 @@ impl GridSequencerScreen {
             let note_offs = self.state.set_chord(None, now);
             self.send_scheduled(&note_offs);
             self.chord_error = None;
+            self.chord_enabled = false;
+            self.pending_chord = false;
             // 音色ロードを伴わない切替なので、音量差はここで戻す。
             self.apply_chord_gains();
             log_line("grid-sequencer: chord off");
             return;
         }
+        if self.enable_chord_mode(now, ctx) {
+            self.prepare_connection();
+        }
+    }
+
+    /// chord mode を on にする。和音の行へ patch を当て、進行を引く。
+    ///
+    /// 音色ロード（`prepare_connection()`）は呼ばない。復元時は初回のロードへ相乗り
+    /// させたいので、いつロードするかは呼び出し側が決める。
+    pub(crate) fn enable_chord_mode(
+        &mut self,
+        now: Instant,
+        ctx: &GridSequencerContext<'_>,
+    ) -> bool {
         let patch = match self.pick_chord_patch(ctx) {
             Ok(patch) => patch,
             Err(error) => {
                 self.chord_error = Some(error.to_string());
                 log_line(&format!("grid-sequencer: chord on rejected reason={error}"));
-                return;
+                return false;
             }
         };
         if !self.reroll_chord(now, ctx) {
-            return;
+            return false;
         }
         self.state.rows_mut()[CHORD_ROW].patch = Some(patch);
-        self.prepare_connection();
+        self.chord_enabled = true;
+        true
+    }
+
+    /// セッションから復元した chord mode を、patch 一覧が揃ってから適用する。
+    ///
+    /// 毎フレーム呼ぶ。読み込み中は待ち、揃ったら成否によらず1回だけ試して予約を下ろす
+    /// （失敗のたびに引き直すと、理由が変わらないまま log を溢れさせるだけになる）。
+    ///
+    /// on にできたときだけ true を返す。音色ロードは呼び出し側（`refresh_context`）が
+    /// 他の行の割り当てとまとめて1回だけ走らせる。
+    ///
+    /// 失敗しても `chord_enabled`（＝セッションへ保存する値）は下ろさない。カタログの
+    /// 取得失敗など一時的な理由のことがあり、ユーザーが選んだ設定を黙って捨てないため。
+    pub(crate) fn poll_pending_chord(
+        &mut self,
+        now: Instant,
+        ctx: &GridSequencerContext<'_>,
+    ) -> bool {
+        if !self.pending_chord || self.state.chord().is_some() || ctx.patches_are_loading() {
+            return false;
+        }
+        self.pending_chord = false;
+        let applied = self.enable_chord_mode(now, ctx);
+        log_line(&format!("grid-sequencer: chord restore applied={applied}"));
+        applied
     }
 
     /// 進行と Key だけを引き直して即座に差し替える。音色はそのまま。

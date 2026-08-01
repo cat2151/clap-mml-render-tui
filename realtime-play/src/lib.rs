@@ -45,6 +45,17 @@ pub const LIVE_INSTANCE_COUNT_ENV: &str = "CMRT_LIVE_INSTANCE_COUNT";
 /// 次の patch を先読みし、小節境界で入れ替えることで差し替えの無音をなくす。
 pub const BANK_COUNT: usize = 2;
 
+/// live 出力バッファの倍率として指定できる最大値。
+///
+/// サーバー側のリングは `buffer_size * MAX_LIVE_BUFFER_MULTIPLIER` を起動時に確保するので、
+/// ここを広げるときは必ずサーバー側の `MAX_BUFFER_MULTIPLIER` も同じ値へ揃えること。
+pub const MAX_LIVE_BUFFER_MULTIPLIER: u16 = 256;
+
+/// 倍率として受け付ける値か（1〜[`MAX_LIVE_BUFFER_MULTIPLIER`] の2冪）。
+pub fn is_valid_buffer_multiplier(multiplier: u16) -> bool {
+    multiplier.is_power_of_two() && multiplier <= MAX_LIVE_BUFFER_MULTIPLIER
+}
+
 /// トラック数に対して、サーバーが生成すべき instance 数（= bank 2 本ぶん）。
 pub fn server_instance_count(track_count: usize) -> usize {
     normalize_live_instance_count(track_count) * BANK_COUNT
@@ -66,7 +77,7 @@ pub struct RealtimePlayServerSupervisor {
     agent: ureq::Agent,
     state: Mutex<PlayServerState>,
     fast_client: Mutex<Option<fast_midi_ipc::FastMidiClient>>,
-    live_buffer_multiplier: Mutex<u8>,
+    live_buffer_multiplier: Mutex<u16>,
     startup_progress: Arc<Mutex<Option<RealtimePlayServerStartupProgress>>>,
     next_request_id: AtomicU64,
 }

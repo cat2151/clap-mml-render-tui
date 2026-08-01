@@ -42,7 +42,7 @@ pub struct GridConnectionStatus {
     pub phase: GridConnectionPhase,
     pub last_send: Option<Duration>,
     pub limiter_reduction_db: f32,
-    pub buffer_multiplier: u8,
+    pub buffer_multiplier: u16,
     pub underrun_frames: u64,
     pub server_startup: Option<GridProgress>,
     pub patch_setting: Option<GridProgress>,
@@ -249,7 +249,7 @@ impl GridConnectionStatus {
         self.preload_failed = false;
     }
 
-    pub(super) fn update_adaptive_buffer(&mut self, multiplier: u8, underrun_frames: u64) {
+    pub(super) fn update_adaptive_buffer(&mut self, multiplier: u16, underrun_frames: u64) {
         self.buffer_multiplier = multiplier;
         self.underrun_frames = underrun_frames;
     }

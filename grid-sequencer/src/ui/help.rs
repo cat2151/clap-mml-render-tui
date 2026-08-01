@@ -45,6 +45,7 @@ fn help_lines(track_count: usize) -> Vec<Line<'static>> {
         Line::from("           進行 / Key / 全行の音色と譜面を引き直します。次の音色は"),
         Line::from("           鳴らしながら裏で読み込むので、演奏は途切れません。"),
         Line::from("           行1の音色は config.toml の chord_patch_categories から。"),
+        Line::from("           on/off は t キーやアプリ終了をまたいで保存されます。"),
         Line::from("  r        grid を丸ごとランダム設定(patch / note / 音長 / セル)"),
         Line::from("  R        patch を据え置き、note / 音長 / セルだけランダム設定"),
         Line::from("           (音色ロードが無いので再生が途切れない)"),
