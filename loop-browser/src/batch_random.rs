@@ -189,7 +189,7 @@ impl LoopBrowser {
             target.start_measure,
             candidate.clone(),
         );
-        let grid = cmrt_loop_browser_domain::track_grid::normalize_previous_markers(&grid).0;
+        let grid = self.renormalized(&grid);
         bpm_interval(
             grid[target.track]
                 .iter()
@@ -212,7 +212,9 @@ impl LoopBrowser {
                 selected.clone(),
             );
         }
-        cmrt_loop_browser_domain::track_grid::normalize_previous_markers(&grid).0
+        // 差し替え後のグリッドで span を引き直す。loop が入れ替わると target BPM が動き、
+        // one-shot が何小節ぶんかも変わるため。
+        self.renormalized(&grid)
     }
 
     fn write_batch_clip(
@@ -222,11 +224,7 @@ impl LoopBrowser {
         start: usize,
         wav: LoopWavId,
     ) {
-        let span_measures = self
-            .analysis_for_wav(&wav)
-            .map(|analysis| analysis.measures)
-            .unwrap_or(1)
-            .max(1);
+        let span_measures = self.span_for_wav(&wav).unwrap_or(1).max(1);
         let end = start.saturating_add(span_measures);
         if grid.first().is_some_and(|row| end > row.len()) {
             for row in grid.iter_mut() {

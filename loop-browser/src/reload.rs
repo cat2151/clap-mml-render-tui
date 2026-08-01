@@ -3,8 +3,7 @@ use cmrt_loop_browser_domain::metadata::metadata_path;
 use cmrt_loop_browser_domain::persisted::PersistedDoc;
 use cmrt_loop_browser_domain::random::{load_from as load_random_decks, random_deck_path};
 use cmrt_loop_browser_domain::track_grid::{
-    load_from as load_track_grid, normalize_previous_markers, reflow_with_spans, track_grid_path,
-    LoadedTrackGrid,
+    load_from as load_track_grid, track_grid_path, LoadedTrackGrid,
 };
 
 impl LoopBrowser {
@@ -30,12 +29,7 @@ impl LoopBrowser {
                 ..Self::default()
             },
         };
-        let (reflowed_grid, _) = reflow_with_spans(&loaded_grid.grid, |wav| {
-            browser
-                .analysis_for_wav(wav)
-                .map(|analysis| analysis.measures)
-        });
-        let (track_grid, _) = normalize_previous_markers(&reflowed_grid);
+        let track_grid = browser.reflowed_from_analysis(&loaded_grid.grid);
         let grid_changed = track_grid != loaded_grid.grid;
         if track_grid_writable && (loaded_grid.needs_migration || grid_changed) {
             if let Some(path) = track_grid_path.as_ref() {

@@ -2,8 +2,8 @@ use super::*;
 
 impl LoopBrowser {
     pub fn normalize_track_grid(&mut self) {
-        self.track_grid =
-            cmrt_loop_browser_domain::track_grid::normalize_previous_markers(&self.track_grid).0;
+        let normalized = self.renormalized(&self.track_grid);
+        self.track_grid = normalized;
     }
 
     pub fn save_track_grid(&self) -> anyhow::Result<()> {
@@ -167,11 +167,7 @@ impl LoopBrowser {
     }
 
     fn write_clip_at(&mut self, start: usize, wav: LoopWavId, operation: &str) -> Option<usize> {
-        let span_measures = self
-            .analysis_for_wav(&wav)
-            .map(|analysis| analysis.measures)
-            .unwrap_or(1)
-            .max(1);
+        let span_measures = self.span_for_wav(&wav).unwrap_or(1).max(1);
         let Some(end) = start.checked_add(span_measures) else {
             self.track_grid_error = Some(format!(
                 "track listが大きすぎるためclipを{operation}できません"
