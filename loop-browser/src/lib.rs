@@ -14,6 +14,7 @@ use cmrt_loop_domain::loop_waveform::{LoopWaveform, WaveformDisplayScale};
 use cmrt_tui_core::navigation::NavigationCount;
 
 mod action;
+mod auto_random;
 mod batch_random;
 mod catalog;
 mod grid;
@@ -82,10 +83,10 @@ pub(crate) fn perf_log_line(message: &str) {
 pub fn loop_browser_keybind_text(pane: LoopBrowserPane) -> &'static str {
     match pane {
         LoopBrowserPane::Tree => {
-            "Ctrl+G:画面切替 Tab:track list p:演奏停止/再開 r:ランダムWAV Shift+C/D/E/F/G/A/B:pad登録/解除 c/d/e/f/g/a/b:pad演奏 1-9:hjkl prefix PgUp/PgDn:±10 t:dirカテゴリ v:dirお気に入り V:お気に入り限定 hjkl・矢印:移動/展開 Enter/Space:再生 q:終了"
+            "Ctrl+G:画面切替 Tab:track list p:演奏停止/再開 r:ランダムWAV Shift+O:auto random Shift+C/D/E/F/G/A/B:pad登録/解除 c/d/e/f/g/a/b:pad演奏 1-9:hjkl prefix PgUp/PgDn:±10 t:dirカテゴリ v:dirお気に入り V:お気に入り限定 hjkl・矢印:移動/展開 Enter/Space:再生 q:終了"
         }
         LoopBrowserPane::Tracks => {
-            "Ctrl+G:画面切替 Tab:loop tree p:演奏停止/再開 r:ランダムWAV m:mix level Shift+R:全track random Shift+M:2track random solo Alt+↓/↑:track並び替え 1-9:hjkl prefix s:solo toggle c..b:pad h/l・←/→:measure j/k・↓/↑:track（右/下端で追加） q:終了"
+            "Ctrl+G:画面切替 Tab:loop tree p:演奏停止/再開 r:ランダムWAV m:mix level Shift+R:全track random Shift+O:auto random Shift+M:2track random solo Alt+↓/↑:track並び替え 1-9:hjkl prefix s:solo toggle c..b:pad h/l・←/→:measure j/k・↓/↑:track（右/下端で追加） q:終了"
         }
     }
 }
@@ -173,6 +174,9 @@ pub struct LoopBrowser {
     pub stretch_diagnostics: playback::diagnostics::SharedLoopStretchDiagnostics,
     pub playback_position: playback::position::SharedPlaybackPosition,
     pub navigation_count: NavigationCount,
+    /// オートランダムで抽選済み・まだ鳴り始めていないグリッド。
+    auto_random_staged: Option<auto_random::StagedAutoRandom>,
+    auto_random_next_token: u64,
     pending_preview_trace: Option<u64>,
     pub pending_render_trace: Option<u64>,
     pub last_render_metrics: Option<performance::RenderMetrics>,
@@ -219,6 +223,8 @@ impl Default for LoopBrowser {
             stretch_diagnostics: playback::diagnostics::new_shared(),
             playback_position: playback::position::new_shared(),
             navigation_count: NavigationCount::default(),
+            auto_random_staged: None,
+            auto_random_next_token: 0,
             pending_preview_trace: None,
             pending_render_trace: None,
             last_render_metrics: None,

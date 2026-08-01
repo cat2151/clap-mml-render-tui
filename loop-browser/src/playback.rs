@@ -44,6 +44,12 @@ enum LoopPlaybackCommand {
         start_measure: usize,
         reason: LoopGridChange,
     },
+    /// 演奏を止めずに裏で次のグリッドを準備し、周の境目で差し替える（オートランダム用）。
+    PreloadGrid {
+        grid: LoopPlaybackGrid,
+        token: u64,
+        reason: LoopGridChange,
+    },
     ReplaceTrackLayout {
         grid: LoopPlaybackGrid,
         start_measure: usize,
@@ -133,6 +139,14 @@ impl LoopPlaybackController {
         let _ = self.sender.send(LoopPlaybackCommand::RestartGridAt {
             grid,
             start_measure,
+            reason,
+        });
+    }
+
+    pub fn preload_grid(&self, grid: LoopPlaybackGrid, token: u64, reason: LoopGridChange) {
+        let _ = self.sender.send(LoopPlaybackCommand::PreloadGrid {
+            grid,
+            token,
             reason,
         });
     }

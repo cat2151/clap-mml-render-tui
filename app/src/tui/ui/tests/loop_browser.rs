@@ -178,7 +178,7 @@ fn draws_wav_pads_track_grid_and_pane_specific_footer() {
     app.loop_browser.state.handle_key(KeyCode::Tab);
     app.loop_browser.state.handle_key(KeyCode::Char('c'));
 
-    let screen = render_lines(&mut app, 180, 20).join("\n");
+    let screen = render_lines(&mut app, 200, 20).join("\n");
 
     assert!(screen.contains("[WAV PADS]"));
     assert!(screen.contains("[TRACK LIST BPM120 AUTO-STRETCH]"));
@@ -266,13 +266,13 @@ fn track_pane_shows_solo_and_mute_labels_and_shortcut() {
     app.loop_browser.state.handle_key(KeyCode::Char('j'));
     app.loop_browser.state.handle_key(KeyCode::Char('s'));
 
-    let screen = render_lines(&mut app, 180, 20).join("\n");
+    let screen = render_lines(&mut app, 200, 20).join("\n");
 
     assert!(screen.contains("mute T1"), "{screen}");
     assert!(screen.contains("solo T2"), "{screen}");
     assert!(screen.contains("s:solo toggle"), "{screen}");
 
-    let buffer = render_buffer(&mut app, 180, 20);
+    let buffer = render_buffer(&mut app, 200, 20);
     let (mute_x, mute_y) = find_text(&buffer, "mute T1");
     let (solo_x, solo_y) = find_text(&buffer, "solo T2");
     assert_eq!(buffer.cell((mute_x, mute_y)).unwrap().fg, MONOKAI_GRAY);

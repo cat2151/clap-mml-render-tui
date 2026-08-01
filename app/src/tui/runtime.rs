@@ -141,6 +141,9 @@ impl<'a> TuiApp<'a> {
                 self.save_notepad_and_session_state();
                 return Ok(TuiExitReason::RestartApp);
             }
+            if self.active_screen == PrimaryScreen::LoopBrowser {
+                self.pump_loop_browser_step();
+            }
             self.pump_notepad_sound_check_guide();
             let terminal_draw_started = std::time::Instant::now();
             terminal.draw(|f| self.draw(f))?;
@@ -254,6 +257,11 @@ impl<'a> TuiApp<'a> {
                             LoopBrowserAction::GridRefresh { grid, reason } => {
                                 self.update_loop_grid(grid, reason)
                             }
+                            LoopBrowserAction::GridPreload {
+                                grid,
+                                token,
+                                reason,
+                            } => self.preload_loop_grid(grid, token, reason),
                             LoopBrowserAction::TrackLayoutChanged {
                                 start_measure,
                                 grid,

@@ -2,26 +2,32 @@ use std::collections::HashMap;
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use super::diagnostics::{log_event, path_label, SharedLoopStretchDiagnostics};
+use super::diagnostics::{log_event, SharedLoopStretchDiagnostics};
 use super::gain::effective_track_gain;
 use super::position::{self, ScheduledMeasure, SharedPlaybackPosition};
 use super::preparation::{profile_label, PreparationWorker, PreparedSet};
 use super::sinks::{
     play_path, play_path_profiled, stop_pad_sinks, stop_sinks, take_pad_voice, TrackSink,
 };
-use super::tempo::{grid_target_bpm, measure_duration, measure_timing};
+use super::tempo::{grid_target_bpm, measure_timing};
 use super::{LoopPlaybackCommand, LoopPlaybackGrid};
 use crate::LoopGridChange;
-use crate::LoopPlaybackClip;
 use anyhow::{Context, Result};
 use cmrt_loop_browser_domain::time_stretch::format_bpm;
 use cmrt_tui_core::PlayState;
 
+mod measure_start;
 mod transport;
 
+use measure_start::start_measure;
+pub use measure_start::starting_clips;
 pub use transport::TransportState;
 #[cfg(test)]
 pub use transport::{measure_at_or_after, next_measure};
+
+/// measure の開始がスケジュールよりこれ以上遅れたらログに出す。
+/// rodio/cpal は underrun カウンタを出さないので、worker スレッドの遅れを代理指標にする。
+const MEASURE_LATENESS_LOG_THRESHOLD: Duration = Duration::from_millis(5);
 
 pub fn playback_worker(
     receiver: mpsc::Receiver<LoopPlaybackCommand>,
@@ -43,6 +49,11 @@ pub fn playback_worker(
     let initial_target = grid_target_bpm(&grid);
     let mut pending_generation = Some(preparation.submit(grid, LoopGridChange::Initial));
     let mut active: Option<PreparedSet> = None;
+    // 先読み（オートランダム）で用意した次のグリッド。周の境目でだけ active へ差し替える。
+    let mut standby: Option<PreparedSet> = None;
+    let mut preload_generation: Option<u64> = None;
+    let mut standby_token = 0u64;
+    let mut active_token = 0u64;
     let mut transport = TransportState::default();
     set_play_state(
         state,
@@ -51,10 +62,17 @@ pub fn playback_worker(
 
     loop {
         while let Some(result) = preparation.try_result() {
+            // 先読みの結果は standby に置くだけ。active も PlayState も触らず、演奏を続ける。
+            if preload_generation == Some(result.generation) {
+                preload_generation = None;
+                standby = Some(result.prepared);
+                continue;
+            }
             if pending_generation != Some(result.generation) {
                 continue;
             }
             pending_generation = None;
+            active_token = 0;
             active = Some(result.prepared);
             let prepared = active.as_ref().expect("just assigned");
             if transport.is_paused() {
@@ -75,9 +93,34 @@ pub fn playback_worker(
         }
         pad_sinks.retain(|_, sink| !sink.empty());
         measure_sinks.retain(|voice| !voice.sink.empty());
-        if measure_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-            measure_deadline = None;
-            position::clear(&playback_position);
+        let mut expired_deadline = None;
+        if let Some(deadline) = measure_deadline {
+            if Instant::now() >= deadline {
+                measure_deadline = None;
+                expired_deadline = Some(deadline);
+                position::clear(&playback_position);
+            }
+        }
+        // 先読みが間に合っていて、いま周の境目なら差し替える。
+        // 間に合っていなければ何もしない＝音を止めずに現行グリッドをもう1周させる。
+        if !transport.is_paused()
+            && measure_deadline.is_none()
+            && standby.is_some()
+            && active
+                .as_ref()
+                .is_some_and(|prepared| transport.wraps_next(&prepared.grid))
+        {
+            let prepared = standby.take().expect("standby.is_some() を確認済み");
+            log_event(format!(
+                "event=grid-swapped token={standby_token} generation={} target_bpm={}",
+                prepared.generation,
+                format_bpm(prepared.target_bpm.bpm),
+            ));
+            preparation.promote_background(&prepared);
+            active = Some(prepared);
+            active_token = standby_token;
+            transport.clear_current();
+            transport.reset_cycle();
         }
         if !transport.is_paused() && measure_deadline.is_none() {
             if let Some(prepared) = active.as_ref() {
@@ -86,6 +129,12 @@ pub fn playback_worker(
                     let start_result =
                         start_measure(&handle, prepared, measure, &track_volumes_db, &solo_tracks);
                     let started_at = Instant::now();
+                    log_measure_lateness(
+                        expired_deadline,
+                        started_at,
+                        measure,
+                        &preload_generation,
+                    );
                     let timing = measure_timing(&prepared.grid, prepared.target_bpm.bpm);
                     transport.started(measure);
                     measure_deadline = Some(started_at + timing.duration);
@@ -96,6 +145,8 @@ pub fn playback_worker(
                             started_at,
                             timing.duration,
                             timing.beats_per_measure,
+                            transport.cycle(),
+                            active_token,
                         ),
                     );
                     match start_result {
@@ -194,9 +245,32 @@ pub fn playback_worker(
                 grid: next_grid,
                 reason,
             }) => {
+                standby = None;
+                preload_generation = None;
+                standby_token = 0;
                 let target_bpm = grid_target_bpm(&next_grid);
                 pending_generation = Some(preparation.submit(next_grid, reason));
                 set_preparation_state(state, transport.is_paused(), target_bpm.bpm);
+            }
+            Ok(LoopPlaybackCommand::PreloadGrid {
+                grid,
+                token,
+                reason,
+            }) => {
+                // 鳴っていないとき・前景の準備中は先読みしない。
+                // UI 側が周回数を見て予約を捨て、次の周で引き直す。
+                if transport.is_paused() || active.is_none() || pending_generation.is_some() {
+                    log_event(format!(
+                        "event=preload-rejected token={token} paused={} active={} preparing={}",
+                        transport.is_paused(),
+                        active.is_some(),
+                        pending_generation.is_some(),
+                    ));
+                } else {
+                    standby = None;
+                    standby_token = token;
+                    preload_generation = Some(preparation.submit_background(grid, reason));
+                }
             }
             Ok(LoopPlaybackCommand::RestartGridAt {
                 grid,
@@ -211,6 +285,10 @@ pub fn playback_worker(
                 measure_deadline = None;
                 position::clear(&playback_position);
                 active = None;
+                active_token = 0;
+                standby = None;
+                preload_generation = None;
+                standby_token = 0;
                 transport.restart_at(start_measure);
                 let target_bpm = grid_target_bpm(&grid);
                 pending_generation = Some(preparation.submit(grid, reason));
@@ -230,6 +308,10 @@ pub fn playback_worker(
                 measure_deadline = None;
                 position::clear(&playback_position);
                 active = None;
+                active_token = 0;
+                standby = None;
+                preload_generation = None;
+                standby_token = 0;
                 track_volumes_db = next_track_volumes_db;
                 solo_tracks = next_solo_tracks;
                 transport.restart_at(start_measure);
@@ -260,6 +342,9 @@ pub fn playback_worker(
                 }
             }
             Ok(LoopPlaybackCommand::Pause) => {
+                standby = None;
+                preload_generation = None;
+                standby_token = 0;
                 transport.pause();
                 stop_sinks(&mut measure_sinks);
                 stop_pad_sinks(&mut pad_sinks);
@@ -292,6 +377,29 @@ pub fn playback_worker(
     }
 }
 
+/// measure の開始がスケジュールから遅れた量を記録する。
+/// 先読み中に遅れが出るなら、裏の準備が演奏を押しのけている疑いがある。
+fn log_measure_lateness(
+    expired_deadline: Option<Instant>,
+    started_at: Instant,
+    measure: usize,
+    preload_generation: &Option<u64>,
+) {
+    let Some(deadline) = expired_deadline else {
+        return;
+    };
+    let lateness = started_at.saturating_duration_since(deadline);
+    if lateness < MEASURE_LATENESS_LOG_THRESHOLD {
+        return;
+    }
+    log_event(format!(
+        "event=measure-late measure={} lateness_ms={} preloading={}",
+        measure + 1,
+        lateness.as_millis(),
+        preload_generation.is_some(),
+    ));
+}
+
 fn set_preparation_state(state: &Arc<Mutex<PlayState>>, paused: bool, bpm: f64) {
     if paused {
         set_play_state(state, PlayState::Idle);
@@ -301,66 +409,6 @@ fn set_preparation_state(state: &Arc<Mutex<PlayState>>, paused: bool, bpm: f64) 
             PlayState::Running(format!("BPM{}変換中", format_bpm(bpm))),
         );
     }
-}
-
-pub fn starting_clips(grid: &LoopPlaybackGrid, measure: usize) -> Vec<(usize, &LoopPlaybackClip)> {
-    grid.iter()
-        .enumerate()
-        .filter_map(|(track, cells)| {
-            cells
-                .get(measure)
-                .and_then(Option::as_ref)
-                .map(|clip| (track, clip))
-        })
-        .collect()
-}
-
-fn start_measure(
-    handle: &rodio::OutputStreamHandle,
-    prepared: &PreparedSet,
-    measure: usize,
-    track_volumes_db: &[i32],
-    solo_tracks: &[bool],
-) -> Result<Vec<TrackSink>> {
-    let clips = starting_clips(&prepared.grid, measure);
-    let mut sinks = Vec::with_capacity(clips.len());
-    for (track, clip) in clips {
-        let Some(Ok(audio)) = prepared.audio_for(clip) else {
-            log_event(format!(
-                "event=playback-skip generation={} measure={} track={} path=\"{}\" reason=prepared-audio-unavailable",
-                prepared.generation,
-                measure + 1,
-                track + 1,
-                path_label(&clip.path),
-            ));
-            continue;
-        };
-        let sink = Arc::new(rodio::Sink::try_new(handle)?);
-        sink.set_volume(effective_track_gain(track, track_volumes_db, solo_tracks));
-        let info = audio.info();
-        let playback_duration = measure_duration(&prepared.grid, prepared.target_bpm.bpm)
-            .checked_mul(u32::try_from(clip.span_measures).unwrap_or(u32::MAX))
-            .unwrap_or(Duration::MAX);
-        let output_frames =
-            super::scheduling::append_clip_source(&sink, audio, clip, playback_duration);
-        log_event(format!(
-            "event=playback-start generation={} measure={} track={} path=\"{}\" source_bpm={} target_bpm={} output_frames={} output_seconds={:.6} cropped={} profile={}",
-            prepared.generation,
-            measure + 1,
-            track + 1,
-            path_label(&clip.path),
-            clip.source_bpm()
-                .map(format_bpm)
-                .unwrap_or_else(|| "one-shot".to_string()),
-            format_bpm(prepared.target_bpm.bpm),
-            output_frames,
-            super::diagnostics::duration_seconds(output_frames, info.sample_rate),
-            output_frames < info.output_frames,
-            super::diagnostics::profile_label(info.profile),
-        ));
-        sinks.push(TrackSink { track, sink });
-    }
-    Ok(sinks)
 }
 
 fn set_play_state(state: &Arc<Mutex<PlayState>>, next: PlayState) {

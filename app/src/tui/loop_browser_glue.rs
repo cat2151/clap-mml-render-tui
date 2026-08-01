@@ -65,6 +65,31 @@ impl<'a> TuiApp<'a> {
         }
     }
 
+    /// 演奏を止めずに裏で次のグリッドを準備させる（オートランダムの先読み）。
+    pub(in crate::tui) fn preload_loop_grid(
+        &self,
+        grid: LoopPlaybackGrid,
+        token: u64,
+        reason: LoopGridChange,
+    ) {
+        if let Some(playback) = &self.loop_browser.playback {
+            playback.preload_grid(grid, token, reason);
+        }
+    }
+
+    /// オートランダムの状態機械を 1 フレームぶん進める。
+    /// 周回数の判定と抽選は画面側にあり、ここは結果を再生スレッドへ流すだけ。
+    pub(in crate::tui) fn pump_loop_browser_step(&mut self) {
+        if let crate::tui::loop_browser::LoopBrowserAction::GridPreload {
+            grid,
+            token,
+            reason,
+        } = self.loop_browser.state.pump_auto_random()
+        {
+            self.preload_loop_grid(grid, token, reason);
+        }
+    }
+
     pub(in crate::tui) fn restart_loop_grid_at(
         &self,
         grid: LoopPlaybackGrid,

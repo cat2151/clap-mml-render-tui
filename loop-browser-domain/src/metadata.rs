@@ -107,6 +107,9 @@ pub struct LoopBrowserMetadata {
     pub category_assignments: Vec<LoopCategoryAssignment>,
     #[serde(default)]
     pub pad_assignments: Vec<LoopPadAssignment>,
+    /// オートランダムモード（2 周ごとに全 track を引き直す）が有効か。
+    #[serde(default)]
+    pub auto_random: bool,
 }
 
 impl Default for LoopBrowserMetadata {
@@ -116,6 +119,7 @@ impl Default for LoopBrowserMetadata {
             favorite_dirs: Vec::new(),
             category_assignments: Vec::new(),
             pad_assignments: Vec::new(),
+            auto_random: false,
         }
     }
 }
@@ -127,6 +131,12 @@ impl LoopBrowserMetadata {
 
     pub fn save_to(&self, path: &Path) -> Result<()> {
         save_to_path(path, self)
+    }
+
+    /// オートランダムモードを切り替え、切り替え後の値を返す。
+    pub fn toggle_auto_random(&mut self) -> bool {
+        self.auto_random = !self.auto_random;
+        self.auto_random
     }
 
     pub fn is_favorite(&self, dir: &LoopDirId) -> bool {

@@ -60,8 +60,14 @@ impl LoopBrowser {
     }
 
     pub fn playback_grid(&self) -> LoopPlaybackGrid {
-        let measure_count = self.effective_measure_count();
-        self.track_grid
+        self.playback_grid_of(&self.track_grid)
+    }
+
+    /// 任意の track grid（まだ `self.track_grid` へ反映していない先読み用のものを含む）を
+    /// 再生スレッドへ渡す形へ変換する。
+    pub fn playback_grid_of(&self, track_grid: &LoopTrackGrid) -> LoopPlaybackGrid {
+        let measure_count = measure_count_of(track_grid);
+        track_grid
             .iter()
             .map(|track| {
                 (0..measure_count)
@@ -190,17 +196,21 @@ impl LoopBrowser {
     }
 
     fn effective_measure_count(&self) -> usize {
-        self.track_grid
-            .iter()
-            .flat_map(|track| {
-                track.iter().enumerate().filter_map(|(measure, clip)| {
-                    clip.as_ref()
-                        .filter(|clip| !clip.is_previous())
-                        .map(|clip| measure.saturating_add(clip.span_measures))
-                })
-            })
-            .max()
-            .unwrap_or(1)
-            .max(1)
+        measure_count_of(&self.track_grid)
     }
+}
+
+fn measure_count_of(track_grid: &LoopTrackGrid) -> usize {
+    track_grid
+        .iter()
+        .flat_map(|track| {
+            track.iter().enumerate().filter_map(|(measure, clip)| {
+                clip.as_ref()
+                    .filter(|clip| !clip.is_previous())
+                    .map(|clip| measure.saturating_add(clip.span_measures))
+            })
+        })
+        .max()
+        .unwrap_or(1)
+        .max(1)
 }

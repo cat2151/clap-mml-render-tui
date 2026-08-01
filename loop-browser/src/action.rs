@@ -9,6 +9,8 @@ pub enum LoopGridChange {
     TrackOrder,
     Pad(char),
     Category,
+    /// オートランダムモードが 2 周ごとに自動で引き直したグリッド。
+    AutoRandom,
 }
 
 impl LoopGridChange {
@@ -20,6 +22,7 @@ impl LoopGridChange {
             Self::TrackOrder => "track-order".to_string(),
             Self::Pad(pad) => format!("pad-{pad}"),
             Self::Category => "category".to_string(),
+            Self::AutoRandom => "auto-random".to_string(),
         }
     }
 }
@@ -51,6 +54,12 @@ pub enum LoopBrowserAction {
     },
     GridRefresh {
         grid: LoopPlaybackGrid,
+        reason: LoopGridChange,
+    },
+    /// 演奏を止めずに裏で準備し、周の境目で差し替えてもらうグリッド（オートランダム）。
+    GridPreload {
+        grid: LoopPlaybackGrid,
+        token: u64,
         reason: LoopGridChange,
     },
     TrackLayoutChanged {

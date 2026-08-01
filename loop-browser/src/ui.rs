@@ -52,10 +52,17 @@ pub fn draw(state: &mut LoopBrowser, play_state: &PlayState, frame: &mut Frame) 
             status_color(play_state),
         )
     } else if state.playback_paused {
-        ("loop browser  ⏸ 停止中".to_string(), MONOKAI_CYAN)
+        (
+            format!("loop browser{}  ⏸ 停止中", auto_random_suffix(state)),
+            MONOKAI_CYAN,
+        )
     } else {
         (
-            format!("loop browser{}", play_status_suffix(play_state)),
+            format!(
+                "loop browser{}{}",
+                auto_random_suffix(state),
+                play_status_suffix(play_state)
+            ),
             status_color(play_state),
         )
     };
@@ -197,6 +204,15 @@ fn draw_category_overlay(state: &LoopBrowser, frame: &mut Frame<'_>) {
         ),
         area,
     );
+}
+
+/// オートランダムモードが ON のときだけステータス行に出すマーク。
+fn auto_random_suffix(state: &LoopBrowser) -> &'static str {
+    if state.auto_random() {
+        "  [AUTO 2周]"
+    } else {
+        ""
+    }
 }
 
 fn draw_notice(frame: &mut Frame<'_>, message: &str) {

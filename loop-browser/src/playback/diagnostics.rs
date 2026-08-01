@@ -46,6 +46,8 @@ pub struct StretchStatusView {
 #[derive(Clone, Debug)]
 pub struct LoopStretchDiagnostics {
     generation: u64,
+    /// 裏で準備中のグリッドの generation。前景の表示を消さずに status を受け取るために別枠で持つ。
+    background_generation: Option<u64>,
     target_bpm: TargetBpm,
     reason: LoopGridChange,
     entries: HashMap<StretchKey, StretchStatus>,
@@ -55,6 +57,7 @@ impl Default for LoopStretchDiagnostics {
     fn default() -> Self {
         Self {
             generation: 0,
+            background_generation: None,
             target_bpm: TargetBpm {
                 bpm: cmrt_loop_browser_domain::time_stretch::TARGET_BPM,
                 has_common_range: true,
@@ -74,9 +77,47 @@ impl LoopStretchDiagnostics {
         target_bpm: TargetBpm,
     ) {
         self.generation = generation;
+        self.background_generation = None;
         self.reason = reason;
         self.target_bpm = target_bpm;
         self.entries.clear();
+        self.insert_pending(grid, target_bpm);
+    }
+
+    /// 先読みの開始。まだ前のグリッドが鳴って表示されているので `entries` は消さず、
+    /// 新しいグリッドぶんの Pending を足すだけにする。
+    pub fn begin_background(
+        &mut self,
+        generation: u64,
+        grid: &LoopPlaybackGrid,
+        target_bpm: TargetBpm,
+    ) {
+        self.background_generation = Some(generation);
+        self.insert_pending(grid, target_bpm);
+    }
+
+    /// 先読みしたグリッドへ差し替わったので前景へ昇格させる。
+    /// 同時に、新しいグリッドに無い entry を落として蓄積を防ぐ。
+    pub fn promote_background(
+        &mut self,
+        generation: u64,
+        grid: &LoopPlaybackGrid,
+        target_bpm: TargetBpm,
+    ) {
+        self.generation = generation;
+        self.background_generation = None;
+        self.reason = LoopGridChange::AutoRandom;
+        self.target_bpm = target_bpm;
+        let keys = grid
+            .iter()
+            .flatten()
+            .filter_map(Option::as_ref)
+            .map(|clip| StretchKey::new(clip, target_bpm.bpm))
+            .collect::<std::collections::HashSet<_>>();
+        self.entries.retain(|key, _| keys.contains(key));
+    }
+
+    fn insert_pending(&mut self, grid: &LoopPlaybackGrid, target_bpm: TargetBpm) {
         for clip in grid.iter().flatten().filter_map(Option::as_ref) {
             self.entries
                 .entry(StretchKey::new(clip, target_bpm.bpm))
@@ -91,7 +132,7 @@ impl LoopStretchDiagnostics {
         target_bpm: f64,
         status: StretchStatus,
     ) {
-        if self.generation == generation {
+        if self.generation == generation || self.background_generation == Some(generation) {
             self.entries
                 .insert(StretchKey::new(clip, target_bpm), status);
         }

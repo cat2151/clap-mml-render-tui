@@ -382,6 +382,7 @@ fn favorites_only_shift_a_saves_only_pad_metadata() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+mod auto_random;
 mod batch_random;
 mod grid;
 mod help;

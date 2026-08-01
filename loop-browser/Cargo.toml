@@ -19,3 +19,6 @@ rand = "0.8"
 rodio = "0.19"
 ratatui = "0.28"
 crossterm = "0.28"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Threading"] }

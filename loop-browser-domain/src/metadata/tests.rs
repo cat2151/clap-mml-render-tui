@@ -93,3 +93,25 @@ fn metadata_rejects_invalid_or_duplicate_pads() {
     metadata.pad_assignments[1].pad = 'x';
     assert!(validate_metadata(&metadata).is_err());
 }
+
+#[test]
+fn auto_random_round_trips_and_defaults_to_off_for_older_files() {
+    let dir = temp_dir("cmrt-metadata-auto-random");
+    let path = dir.join("loop_browser.toml");
+    std::fs::create_dir_all(&dir).unwrap();
+    // auto_random を知らない頃の TOML を読んでも既定の OFF になる。
+    std::fs::write(
+        &path,
+        "version = 1\nfavorite_dirs = []\ncategory_assignments = []\n",
+    )
+    .unwrap();
+    let mut metadata = load_from_path(&path).unwrap();
+    assert!(!metadata.auto_random);
+
+    assert!(metadata.toggle_auto_random());
+    metadata.save_to(&path).unwrap();
+    assert!(LoopBrowserMetadata::load_from(&path).unwrap().auto_random);
+
+    assert!(!metadata.toggle_auto_random());
+    let _ = std::fs::remove_dir_all(dir);
+}

@@ -39,6 +39,11 @@ impl LoopBrowser {
                 start_measure: self.measure_cursor,
             };
         }
+        if key.modifiers == KeyModifiers::SHIFT && key.code == KeyCode::Char('O') {
+            self.navigation_count.clear();
+            self.toggle_auto_random();
+            return LoopBrowserAction::Continue;
+        }
         if key.modifiers == KeyModifiers::NONE {
             if let KeyCode::Char(digit @ '0'..='9') = key.code {
                 if self.navigation_count.push_digit(digit) {

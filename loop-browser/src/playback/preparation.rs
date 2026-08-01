@@ -1,15 +1,14 @@
 use std::collections::HashMap;
-use std::fs::Metadata;
+#[cfg(test)]
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc};
 use std::thread::JoinHandle;
 use std::time::Instant;
-use std::time::UNIX_EPOCH;
-
-use rubberband_ffi::StretchProfile;
 
 use crate::{LoopGridChange, LoopPlaybackClip, LoopPlaybackGrid};
+use rubberband_ffi::StretchProfile;
+
 use cmrt_loop_browser_domain::time_stretch::{
     format_bpm, prepare_path, profile_for_category, PreparedAudio, TargetBpm,
 };
@@ -19,46 +18,24 @@ use super::diagnostics::{
 };
 use super::tempo::grid_target_bpm;
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct AudioKey {
-    path: PathBuf,
-    bpm_bits: Option<u64>,
-    target_bpm_bits: u64,
-    profile: StretchProfile,
-}
+mod prepared_set;
+mod thread_priority;
 
-impl AudioKey {
-    fn new(clip: &LoopPlaybackClip, target_bpm: f64) -> Self {
-        Self {
-            path: clip.path.clone(),
-            bpm_bits: clip.source_bpm().map(f64::to_bits),
-            target_bpm_bits: target_bpm.to_bits(),
-            profile: profile_for_category(clip.category.as_deref()),
-        }
-    }
-}
+use prepared_set::{AudioKey, CacheKey};
+pub use prepared_set::{PreparedEntry, PreparedSet};
+use thread_priority::ThreadPriorityGuard;
 
-pub type PreparedEntry = Result<Arc<PreparedAudio>, Arc<str>>;
-
-pub struct PreparedSet {
-    pub generation: u64,
-    pub grid: LoopPlaybackGrid,
-    pub target_bpm: TargetBpm,
-    audio: HashMap<AudioKey, PreparedEntry>,
-    pub warning: Option<String>,
-}
-
-impl PreparedSet {
-    pub fn audio_for(&self, clip: &LoopPlaybackClip) -> Option<&PreparedEntry> {
-        self.audio.get(&AudioKey::new(clip, self.target_bpm.bpm))
-    }
-}
+/// 先読みジョブで clip 1 本を実際にストレッチしたあとに空ける間隔。
+/// オーディオ出力スレッドに息継ぎを与えるためで、キャッシュヒット時は CPU を使っていないので挟まない。
+const PRELOAD_CLIP_GAP: std::time::Duration = std::time::Duration::from_millis(20);
 
 struct PrepareJob {
     generation: u64,
     reason: LoopGridChange,
     grid: LoopPlaybackGrid,
     submitted_at: Instant,
+    /// 演奏を止めずに裏で走らせる先読みジョブか。優先度とペーシングと診断の扱いが変わる。
+    background: bool,
 }
 
 pub struct PreparationResult {
@@ -106,16 +83,32 @@ impl PreparationWorker {
     }
 
     pub fn submit(&mut self, grid: LoopPlaybackGrid, reason: LoopGridChange) -> u64 {
+        self.submit_job(grid, reason, false)
+    }
+
+    /// 演奏を止めずに裏で準備する。generation の採番規則は前景と同じなので、
+    /// あとからユーザー操作の `submit` が来れば先読みは自然にキャンセルされる。
+    pub fn submit_background(&mut self, grid: LoopPlaybackGrid, reason: LoopGridChange) -> u64 {
+        self.submit_job(grid, reason, true)
+    }
+
+    fn submit_job(
+        &mut self,
+        grid: LoopPlaybackGrid,
+        reason: LoopGridChange,
+        background: bool,
+    ) -> u64 {
         self.next_generation = self.next_generation.wrapping_add(1).max(1);
         let generation = self.next_generation;
         self.latest_generation.store(generation, Ordering::Release);
         let target_bpm = grid_target_bpm(&grid);
-        self.diagnostics_begin(generation, reason, &grid, target_bpm);
+        self.diagnostics_begin(generation, reason, &grid, target_bpm, background);
         let _ = self.sender.send(PreparationCommand::Prepare(PrepareJob {
             generation,
             reason,
             grid,
             submitted_at: Instant::now(),
+            background,
         }));
         generation
     }
@@ -126,13 +119,22 @@ impl PreparationWorker {
         reason: LoopGridChange,
         grid: &LoopPlaybackGrid,
         target_bpm: TargetBpm,
+        background: bool,
     ) {
-        self.diagnostics
-            .lock()
-            .unwrap()
-            .begin(generation, reason, grid, target_bpm);
+        // 先読み中はまだ前のグリッドが鳴って表示もされているので、その診断表示を消さない。
+        if background {
+            self.diagnostics
+                .lock()
+                .unwrap()
+                .begin_background(generation, grid, target_bpm);
+        } else {
+            self.diagnostics
+                .lock()
+                .unwrap()
+                .begin(generation, reason, grid, target_bpm);
+        }
         log_event(format!(
-            "event=preparation-submitted generation={generation} reason={} tracks={} measures={} clip_cells={} target_bpm={} common_range={}",
+            "event=preparation-submitted generation={generation} background={background} reason={} tracks={} measures={} clip_cells={} target_bpm={} common_range={}",
             reason.label(),
             grid.len(),
             grid.iter().map(Vec::len).max().unwrap_or(0),
@@ -148,6 +150,15 @@ impl PreparationWorker {
 
     pub fn cancel(&self) {
         self.latest_generation.fetch_add(1, Ordering::AcqRel);
+    }
+
+    /// 先読みしたグリッドへ差し替わったので、その診断表示を前景へ昇格させる。
+    pub fn promote_background(&self, prepared: &PreparedSet) {
+        self.diagnostics.lock().unwrap().promote_background(
+            prepared.generation,
+            &prepared.grid,
+            prepared.target_bpm,
+        );
     }
 }
 
@@ -180,11 +191,13 @@ fn preparation_loop(
                     continue;
                 }
                 log_event(format!(
-                    "event=preparation-worker-start generation={} reason={} queue_ms={}",
+                    "event=preparation-worker-start generation={} background={} reason={} queue_ms={}",
                     job.generation,
+                    job.background,
                     job.reason.label(),
                     job.submitted_at.elapsed().as_millis(),
                 ));
+                let _priority = job.background.then(ThreadPriorityGuard::below_normal);
                 if let Some(prepared) =
                     prepare_grid(&job, latest_generation, &mut cache, diagnostics)
                 {
@@ -304,6 +317,9 @@ fn prepare_grid(
             ));
         }
         audio.insert(audio_key, prepared);
+        if job.background && !cache_hit {
+            std::thread::sleep(PRELOAD_CLIP_GAP);
+        }
     }
     if latest_generation.load(Ordering::Acquire) != job.generation {
         log_cancelled(job, started_at, prepared_count, cache_hits, cache_misses);
@@ -326,8 +342,9 @@ fn prepare_grid(
         message
     });
     log_event(format!(
-        "event=preparation-finished generation={} outcome={} total_ms={} prepared={} errors={} cache_hits={} cache_misses={} target_bpm={}",
+        "event=preparation-finished generation={} background={} outcome={} total_ms={} prepared={} errors={} cache_hits={} cache_misses={} target_bpm={}",
         job.generation,
+        job.background,
         if errors.is_empty() { "ok" } else { "partial-error" },
         started_at.elapsed().as_millis(),
         prepared_count,
@@ -361,26 +378,6 @@ fn log_cancelled(
         cache_hits,
         cache_misses,
     ));
-}
-
-#[derive(Eq, Hash, PartialEq)]
-struct CacheKey {
-    audio: AudioKey,
-    file_len: u64,
-    modified_nanos: Option<u128>,
-}
-
-impl CacheKey {
-    fn new(audio: &AudioKey, metadata: Option<&Metadata>) -> Self {
-        Self {
-            audio: audio.clone(),
-            file_len: metadata.map_or(0, Metadata::len),
-            modified_nanos: metadata
-                .and_then(|metadata| metadata.modified().ok())
-                .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
-                .map(|duration| duration.as_nanos()),
-        }
-    }
 }
 
 pub fn profile_label(clip: &LoopPlaybackClip) -> &'static str {

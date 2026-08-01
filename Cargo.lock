@@ -594,6 +594,7 @@ dependencies = [
  "ratatui",
  "rodio",
  "rubberband-ffi",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

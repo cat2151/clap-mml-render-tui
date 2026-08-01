@@ -49,6 +49,7 @@ fn incompatible_grid_warns_that_bpm_120_is_kept() {
         reason: LoopGridChange::Initial,
         grid: vec![vec![Some(slow), Some(fast)]],
         submitted_at: Instant::now(),
+        background: false,
     };
     let latest_generation = AtomicU64::new(1);
     let mut cache = HashMap::new();

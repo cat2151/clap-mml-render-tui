@@ -23,33 +23,70 @@ impl BpmInterval {
     }
 }
 
+/// 抽選しただけでまだ確定していないグリッド。
+/// `Shift+R` は即 commit するが、オートランダムは先読みが鳴り始めるまで commit を待つ。
+pub struct StagedRandomGrid {
+    pub grid: LoopTrackGrid,
+    pub decks: LoopRandomDeckState,
+    pub start_measure: usize,
+}
+
 impl LoopBrowser {
     pub fn randomize_current_measure(&mut self) -> LoopBrowserAction {
-        if !self.track_grid_writable || !self.random_decks.writable {
+        let Some(staged) = self.stage_random_grid() else {
             return LoopBrowserAction::Continue;
+        };
+        let start_measure = staged.start_measure;
+        if !self.commit_random_grid(staged) {
+            return LoopBrowserAction::Continue;
+        }
+        LoopBrowserAction::GridReplaced {
+            start_measure,
+            grid: self.playback_grid(),
+            reason: LoopGridChange::BatchRandom,
+        }
+    }
+
+    /// 全 track を引き直した結果を作る。デッキのクローンに対して抽選するので、
+    /// 結果を捨てても副作用は残らない。
+    pub fn stage_random_grid(&mut self) -> Option<StagedRandomGrid> {
+        if !self.track_grid_writable || !self.random_decks.writable {
+            return None;
         }
         let targets = self.batch_random_targets();
         if targets.is_empty() || targets.iter().any(|target| target.candidates.is_empty()) {
             self.show_batch_random_notice("一括randomの候補がないtrackがあります");
-            return LoopBrowserAction::Continue;
+            return None;
         }
+        let Some((grid, decks)) = self.find_red_free_random_grid(&targets) else {
+            self.show_batch_random_notice("BPM範囲外を解消できる組み合わせがありません");
+            return None;
+        };
+        Some(StagedRandomGrid {
+            grid,
+            decks,
+            start_measure: targets
+                .iter()
+                .map(|target| target.start_measure)
+                .min()
+                .unwrap_or(self.measure_cursor),
+        })
+    }
 
+    /// 抽選結果を表示と TOML へ確定する。保存に失敗したら元の状態へ戻して `false` を返す。
+    pub fn commit_random_grid(&mut self, staged: StagedRandomGrid) -> bool {
         let previous_grid = self.track_grid.clone();
         let previous_decks = self.random_decks.value.clone();
-        let Some((next_grid, next_decks)) = self.find_red_free_random_grid(&targets) else {
-            self.show_batch_random_notice("BPM範囲外を解消できる組み合わせがありません");
-            return LoopBrowserAction::Continue;
-        };
 
-        self.random_decks.value = next_decks;
+        self.random_decks.value = staged.decks;
         if let Err(error) = self.save_random_decks() {
             self.random_decks.value = previous_decks;
             self.random_decks.error = Some(format!("random deckを保存できません: {error}"));
-            return LoopBrowserAction::Continue;
+            return false;
         }
         self.random_decks.error = None;
 
-        self.track_grid = next_grid;
+        self.track_grid = staged.grid;
         if let Err(error) = self.save_track_grid() {
             self.track_grid = previous_grid;
             self.random_decks.value = previous_decks;
@@ -59,20 +96,11 @@ impl LoopBrowser {
                 ));
             }
             self.track_grid_error = Some(format!("track listを保存できません: {error}"));
-            return LoopBrowserAction::Continue;
+            return false;
         }
         self.track_grid_error = None;
         self.sync_tree_to_current_cell();
-
-        LoopBrowserAction::GridReplaced {
-            start_measure: targets
-                .iter()
-                .map(|target| target.start_measure)
-                .min()
-                .unwrap_or(self.measure_cursor),
-            grid: self.playback_grid(),
-            reason: LoopGridChange::BatchRandom,
-        }
+        true
     }
 
     fn batch_random_targets(&self) -> Vec<BatchRandomTarget> {
