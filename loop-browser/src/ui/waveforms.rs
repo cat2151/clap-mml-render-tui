@@ -1,4 +1,5 @@
 use crate::LoopBrowser;
+use cmrt_loop_domain::loop_wav_analysis::LoopWavKind;
 use cmrt_loop_domain::loop_waveform::{LoopWaveform, WaveformDisplayScale, SILENCE_DB_TENTHS};
 use cmrt_tui_core::theme::{cursor_highlight_style, MONOKAI_GRAY};
 use ratatui::{style::Color, text::Span};
@@ -21,6 +22,7 @@ pub fn render_cell(
     track: usize,
     measure: usize,
     cell_width: usize,
+    measure_seconds: f64,
 ) -> Vec<Span<'static>> {
     let Some((start, clip)) = browser.clip_at(track, measure) else {
         return vec![Span::styled("·", base_style())];
@@ -37,10 +39,63 @@ pub fn render_cell(
     if output_len == 0 || output_offset >= output_len {
         return vec![Span::styled("?", base_style())];
     }
+    let waveform_output_len = browser
+        .analysis_for_wav(&clip.wav)
+        .map_or(output_len, |analysis| {
+            waveform_output_columns(
+                analysis.kind,
+                analysis.duration_seconds,
+                clip.span_measures,
+                measure_seconds,
+                output_len,
+            )
+        });
     let scale = browser.waveform_display_scale();
     (0..cell_width)
-        .map(|column| render_column(waveform, scale, output_offset + column, output_len))
+        .map(|column| {
+            render_timeline_column(waveform, scale, output_offset + column, waveform_output_len)
+        })
         .collect()
+}
+
+fn waveform_output_columns(
+    kind: LoopWavKind,
+    duration_seconds: f64,
+    span_measures: usize,
+    measure_seconds: f64,
+    output_len: usize,
+) -> usize {
+    if kind != LoopWavKind::OneShot || output_len == 0 {
+        return output_len;
+    }
+    let span_seconds = measure_seconds * span_measures as f64;
+    if !duration_seconds.is_finite()
+        || duration_seconds <= 0.0
+        || !span_seconds.is_finite()
+        || span_seconds <= 0.0
+    {
+        return output_len;
+    }
+    (duration_seconds / span_seconds * output_len as f64)
+        .ceil()
+        .clamp(1.0, output_len as f64) as usize
+}
+
+fn silent_column() -> Span<'static> {
+    Span::styled("·", base_style().fg(MONOKAI_GRAY))
+}
+
+fn render_timeline_column(
+    waveform: &LoopWaveform,
+    scale: WaveformDisplayScale,
+    output_column: usize,
+    waveform_output_len: usize,
+) -> Span<'static> {
+    if output_column >= waveform_output_len {
+        silent_column()
+    } else {
+        render_column(waveform, scale, output_column, waveform_output_len)
+    }
 }
 
 fn render_column(
@@ -57,7 +112,7 @@ fn render_column(
         .min(waveform.len());
     let rms = aggregate_rms(&waveform.rms_db_tenths[source_start..source_end]);
     if rms <= SILENCE_DB_TENTHS {
-        return Span::styled("·", base_style().fg(MONOKAI_GRAY));
+        return silent_column();
     }
     let flux = waveform.spectral_flux[source_start..source_end]
         .iter()
@@ -164,69 +219,4 @@ fn hsl_to_rgb(hue_degrees: f32, saturation: f32, lightness: f32) -> Color {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn motion_thresholds_select_blue_green_and_orange() {
-        assert_eq!(theme_hue(0.0), BLUE_HUE);
-        assert_eq!(theme_hue(ONE_SEMITONE_OCTAVES), GREEN_HUE);
-        assert_eq!(theme_hue(SIX_SEMITONES_OCTAVES), ORANGE_HUE);
-    }
-
-    #[test]
-    fn aggregate_rms_uses_mean_energy_instead_of_peak() {
-        assert_eq!(aggregate_rms(&[-200, -200]), -200);
-        assert_eq!(aggregate_rms(&[SILENCE_DB_TENTHS; 2]), SILENCE_DB_TENTHS);
-        assert!(aggregate_rms(&[-100, -300]) < -100);
-    }
-
-    #[test]
-    fn hsl_output_uses_requested_dominant_theme_channel() {
-        let Color::Rgb(orange_r, orange_g, orange_b) = hsl_to_rgb(ORANGE_HUE, 0.8, 0.5) else {
-            panic!("RGB expected");
-        };
-        assert!(orange_r > orange_g && orange_g > orange_b);
-        let Color::Rgb(_, green, blue) = hsl_to_rgb(BLUE_HUE, 0.8, 0.5) else {
-            panic!("RGB expected");
-        };
-        assert!(blue > green);
-    }
-
-    #[test]
-    fn active_beat_band_overrides_cursor_background_and_keeps_waveform_foreground() {
-        let foreground = Color::Rgb(12, 200, 80);
-        let source = vec![Span::styled(
-            "abcdefghijklmnop",
-            base_style().fg(foreground),
-        )];
-        let mut rendered = Vec::new();
-
-        append_cell(
-            &mut rendered,
-            &source,
-            false,
-            true,
-            Some(crate::playback::position::PlaybackBeat {
-                measure: 1,
-                beat: 2,
-                beats_per_measure: 4,
-            }),
-            1,
-            16,
-        );
-
-        assert_eq!(rendered.len(), 16);
-        for (column, span) in rendered.iter().enumerate() {
-            assert_eq!(span.style.fg, Some(foreground));
-            if (8..12).contains(&column) {
-                assert_eq!(span.style.bg, Some(playhead::ACTIVE_BEAT_BG));
-            } else {
-                assert_eq!(
-                    span.style.bg,
-                    Some(cmrt_tui_core::theme::cursor_highlight_bg(foreground))
-                );
-            }
-        }
-    }
-}
+mod tests;

@@ -264,6 +264,7 @@ fn render_visible_grid(
 ) -> RenderedGrid {
     let measures = browser.measure_scroll
         ..(browser.measure_scroll + visible_measures).min(browser.displayed_measure_count());
+    let measure_seconds = browser.measure_seconds();
     let rows = (browser.track_scroll
         ..(browser.track_scroll + visible_tracks).min(browser.track_grid().len()))
         .map(|track| {
@@ -271,7 +272,16 @@ fn render_visible_grid(
             let muted = !browser.track_is_audible(track);
             let cells = measures
                 .clone()
-                .map(|measure| render_cell(browser, diagnostics, track, measure, target_bpm))
+                .map(|measure| {
+                    render_cell(
+                        browser,
+                        diagnostics,
+                        track,
+                        measure,
+                        target_bpm,
+                        measure_seconds,
+                    )
+                })
                 .collect();
             RenderedRow {
                 track,
@@ -297,11 +307,13 @@ fn render_cell(
     track: usize,
     measure: usize,
     target_bpm: f64,
+    measure_seconds: f64,
 ) -> RenderedCell {
     let occupied = browser.clip_at(track, measure);
     let repeated = occupied.is_some_and(|(_, clip)| clip.is_previous());
     let clip = occupied.map(|(_, clip)| clip);
-    let waveform_spans = waveforms::render_cell(browser, track, measure, CELL_WIDTH);
+    let waveform_spans =
+        waveforms::render_cell(browser, track, measure, CELL_WIDTH, measure_seconds);
     let wav_label = occupied
         .map(|(start, clip)| {
             if start == measure {

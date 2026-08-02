@@ -50,3 +50,14 @@ pub fn scheduled_output_frames(
     }
     prepared_frames.min(limit as usize)
 }
+
+pub fn scheduled_idle_seconds(
+    output_frames: usize,
+    sample_rate: u32,
+    playback_duration: Duration,
+) -> f64 {
+    if sample_rate == 0 {
+        return 0.0;
+    }
+    (playback_duration.as_secs_f64() - output_frames as f64 / f64::from(sample_rate)).max(0.0)
+}

@@ -51,13 +51,21 @@ pub fn start_measure(
         let sink = Arc::new(rodio::Sink::try_new(handle)?);
         sink.set_volume(effective_track_gain(track, track_volumes_db, solo_tracks));
         let info = audio.info();
-        let playback_duration = measure_duration(&prepared.grid, prepared.target_bpm.bpm)
+        let measure_duration = measure_duration(&prepared.grid, prepared.target_bpm.bpm);
+        let playback_duration = measure_duration
             .checked_mul(u32::try_from(clip.span_measures).unwrap_or(u32::MAX))
             .unwrap_or(Duration::MAX);
         let output_frames =
             super::super::scheduling::append_clip_source(&sink, audio, clip, playback_duration);
+        let output_seconds =
+            super::super::diagnostics::duration_seconds(output_frames, info.sample_rate);
+        let scheduled_idle_seconds = super::super::scheduling::scheduled_idle_seconds(
+            output_frames,
+            info.sample_rate,
+            playback_duration,
+        );
         log_event(format!(
-            "event=playback-start generation={} measure={} track={} path=\"{}\" source_bpm={} target_bpm={} output_frames={} output_seconds={:.6} cropped={} profile={}",
+            "event=playback-start generation={} measure={} track={} path=\"{}\" source_bpm={} target_bpm={} span_measures={} measure_seconds={:.6} retrigger_after_seconds={:.6} output_frames={} output_seconds={:.6} scheduled_idle_seconds={:.6} cropped={} profile={}",
             prepared.generation,
             measure + 1,
             track + 1,
@@ -66,8 +74,12 @@ pub fn start_measure(
                 .map(format_bpm)
                 .unwrap_or_else(|| "one-shot".to_string()),
             format_bpm(prepared.target_bpm.bpm),
+            clip.span_measures,
+            measure_duration.as_secs_f64(),
+            playback_duration.as_secs_f64(),
             output_frames,
-            super::super::diagnostics::duration_seconds(output_frames, info.sample_rate),
+            output_seconds,
+            scheduled_idle_seconds,
             output_frames < info.output_frames,
             super::super::diagnostics::profile_label(info.profile),
         ));

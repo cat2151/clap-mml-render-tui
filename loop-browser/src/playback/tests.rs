@@ -161,6 +161,13 @@ fn one_shot_output_is_not_cropped_to_the_measure_duration() {
 }
 
 #[test]
+fn scheduled_idle_reports_the_gap_between_one_shot_end_and_span_boundary() {
+    let idle = scheduling::scheduled_idle_seconds(211_028, 44_100, Duration::from_secs(8));
+
+    assert!((idle - 3.214_785).abs() < 0.000_001);
+}
+
+#[test]
 fn updated_grid_is_used_when_the_next_measure_is_selected() {
     let before = vec![vec![
         clip("current.wav", 1, 120.0),
