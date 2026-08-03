@@ -441,3 +441,4 @@ fn a_long_patch_name_is_truncated_from_the_head_in_the_grid() {
 }
 
 mod chord;
+mod layout;

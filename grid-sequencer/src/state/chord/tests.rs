@@ -9,7 +9,11 @@ fn step_at(state: &mut GridState, now: Instant) -> Vec<GridScheduledMessage> {
 }
 
 fn messages(scheduled: &[GridScheduledMessage]) -> Vec<[u8; 3]> {
-    scheduled.iter().map(|item| item.message).collect()
+    scheduled
+        .iter()
+        .filter(|item| item.message[0] != 0xB0)
+        .map(|item| item.message)
+        .collect()
 }
 
 fn at_step(now: Instant, step: u64) -> Instant {

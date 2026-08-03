@@ -96,6 +96,7 @@ impl GridState {
         self.chord = chord;
         self.discard_pending_cycle();
         self.apply_chord_to_rows();
+        self.refresh_cc1_display_pattern();
         self.take_silence_messages(now)
     }
 

@@ -40,7 +40,7 @@ pub(super) fn draw(
         Paragraph::new(lines).style(base_style()).block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(" Grid Sequencer ")
+                .title(" Grid Sequencer / Note ")
                 .style(base_style())
                 .border_style(base_style().fg(MONOKAI_CYAN)),
         ),

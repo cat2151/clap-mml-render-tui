@@ -1,7 +1,7 @@
 //! grid sequencer 画面の描画。
 //!
-//! 上から「コード進行1行（chord mode 中だけ）/ grid 本体 / ステータス1行 /
-//! キーバインド1行」の縦分割で、help は最後に overlay として重ねる。
+//! 上から「コード進行1行（chord mode 中だけ）/ NOTE grid / CC1 grid /
+//! ステータス1行 / キーバインド1行」の縦分割で、help は最後に overlay として重ねる。
 
 use ratatui::{
     layout::{Constraint, Direction, Layout},
@@ -18,6 +18,7 @@ use crate::{
     GridConnectionPhase, GridConnectionStatus, GridSequencerScreen, BPM, GRID_STEPS, STEP_INTERVAL,
 };
 
+mod cc1_grid;
 mod chord_line;
 mod grid;
 mod help;
@@ -47,7 +48,7 @@ pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: 
         0
     };
     let (status_area, keybind_area) = (chunks[grid_index + 1], chunks[grid_index + 2]);
-    grid::draw(screen, connection, f, chunks[grid_index]);
+    draw_grids(screen, connection, f, chunks[grid_index]);
     f.render_widget(
         status_line(screen, connection, status_area.width),
         status_area,
@@ -66,6 +67,35 @@ pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: 
     if screen.help_open {
         help::draw_overlay(f, screen.track_count());
     }
+}
+
+/// NOTE grid を必要行数ぶん先に確保し、残りを CC1 grid に割り当てる。
+fn draw_grids(
+    screen: &GridSequencerScreen,
+    connection: &GridConnectionStatus,
+    f: &mut Frame<'_>,
+    area: ratatui::layout::Rect,
+) {
+    // 上下のborder 2行に、header 1行と全track行が必要。
+    let note_height = u16::try_from(screen.track_count() + 3)
+        .unwrap_or(u16::MAX)
+        .min(area.height);
+    let note_area = ratatui::layout::Rect {
+        height: note_height,
+        ..area
+    };
+    grid::draw(screen, connection, f, note_area);
+
+    let cc1_height = area.height.saturating_sub(note_height);
+    if cc1_height == 0 {
+        return;
+    }
+    let cc1_area = ratatui::layout::Rect {
+        y: area.y.saturating_add(note_height),
+        height: cc1_height,
+        ..area
+    };
+    cc1_grid::draw(screen, connection, f, cc1_area);
 }
 
 fn status_line(

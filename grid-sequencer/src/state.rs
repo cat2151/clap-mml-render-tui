@@ -3,6 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod cc1;
 mod chord;
 mod clock;
 mod cycle;
@@ -116,6 +117,8 @@ pub struct GridState {
     /// step 0 を飛ばさないようにするためのフラグ。
     started: bool,
     sounding: Vec<SoundingNote>,
+    /// 小節ごとに抽選する CC1 と、実発音まで待たせる表示状態。
+    cc1: cc1::Cc1State,
     /// 組み立て済みで、まだ締切が来ていないステップの (締切, 列)。表示位置を
     /// 実際に鳴るタイミングへ合わせるために持つ。
     pending_display: VecDeque<(Instant, usize)>,
@@ -158,6 +161,7 @@ impl GridState {
             schedule_index: 0,
             started: false,
             sounding: Vec::new(),
+            cc1: cc1::Cc1State::new(row_count),
             pending_display: VecDeque::new(),
             last_scheduled: None,
             chord: None,
@@ -205,6 +209,7 @@ impl GridState {
         self.schedule_index = 0;
         self.started = false;
         self.sounding.clear();
+        self.cc1.reset_for_start();
         self.pending_display.clear();
         self.last_scheduled = None;
         self.reset_cycle_stop();
@@ -228,6 +233,9 @@ impl GridState {
                 self.clock.stop();
                 self.cycle_stopped_at = Some(deadline);
             } else {
+                if self.schedule_index == 0 {
+                    self.prepare_cc1_measure(deadline);
+                }
                 messages.extend(self.attack_current_step());
             }
             scheduled.extend(messages.into_iter().map(|(instance_id, message)| {
@@ -264,6 +272,7 @@ impl GridState {
         self.step_index = 0;
         self.schedule_index = 0;
         self.started = false;
+        self.cc1.reset_for_start();
         self.pending_display.clear();
         self.last_scheduled = None;
         self.reset_cycle_stop();
@@ -290,6 +299,7 @@ impl GridState {
                 .expect("front was just observed");
             self.step_index = step;
         }
+        self.advance_cc1_display(now);
     }
 
     /// 鳴っている音の残りステップを1減らし、尽きたものの note off を返す。
@@ -317,65 +327,6 @@ impl GridState {
         } else {
             self.started = true;
         }
-    }
-
-    /// 組み立て中の列で note on が立っている行を発音する。
-    fn attack_current_step(&mut self) -> Vec<(u8, [u8; 3])> {
-        let attacks = self.collect_attacks();
-        let mut messages = Vec::new();
-        for (instance_id, notes, steps) in attacks {
-            // 同じ instance で鳴っている音はすべて止めてから鳴らし直す。1音とは
-            // 限らない（chord mode の和音）ので、1件だけ差し替えてはいけない。
-            let mut released = Vec::new();
-            self.sounding.retain(|note| {
-                if note.instance_id == instance_id {
-                    released.push(note.midi_note);
-                    false
-                } else {
-                    true
-                }
-            });
-            messages.extend(
-                released
-                    .into_iter()
-                    .map(|midi_note| (instance_id, note_off(midi_note))),
-            );
-            for midi_note in notes {
-                self.sounding.push(SoundingNote {
-                    instance_id,
-                    midi_note,
-                    remaining_steps: steps,
-                });
-                messages.push((instance_id, note_on(midi_note, VELOCITY)));
-            }
-        }
-        messages
-    }
-
-    /// この列で鳴らす (instance, note number 群, 持続ステップ数) を行順に集める。
-    fn collect_attacks(&self) -> Vec<(u8, Vec<u8>, u8)> {
-        let step = self.schedule_index;
-        let chord = self.chord.as_ref().map(ChordPlayback::current);
-        let mut attacks = Vec::new();
-        for (index, row) in self.rows.iter().enumerate() {
-            let instance_id = self.instance_id(index);
-            match chord {
-                // chord mode の行はセルを使わず、grid の先頭ステップだけ全音符で和音を鳴らす。
-                // 音色ロードは待機 bank の裏で済ませてあるので、進行の変わり目でも
-                // 鳴らし始めを遅らせる必要はない。
-                Some(notes) if index == CHORD_ROW => {
-                    if step == 0 && !notes.is_empty() {
-                        attacks.push((instance_id, notes.to_vec(), StepDuration::Whole.steps()));
-                    }
-                }
-                _ => {
-                    if row.cells[step] {
-                        attacks.push((instance_id, vec![row.note], row.duration.steps()));
-                    }
-                }
-            }
-        }
-        attacks
     }
 
     /// 鳴っている音の note off だけを作り、発音中リストを空にする。

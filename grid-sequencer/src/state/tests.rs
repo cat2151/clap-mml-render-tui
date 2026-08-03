@@ -7,6 +7,7 @@ fn step_at(state: &mut GridState, now: Instant) -> Vec<[u8; 3]> {
     state
         .poll_steps(now, Duration::ZERO)
         .into_iter()
+        .filter(|scheduled| scheduled.message[0] != 0xB0)
         .map(|scheduled| scheduled.message)
         .collect()
 }
@@ -96,7 +97,7 @@ fn messages_of_one_step_share_the_same_offset() {
 
     let scheduled = state.poll_steps(now, STEP_INTERVAL);
 
-    assert_eq!(scheduled.len(), 4);
+    assert_eq!(scheduled.len(), 8);
     assert!(scheduled
         .iter()
         .all(|item| item.ahead == scheduled[0].ahead));
@@ -115,7 +116,11 @@ fn equal_note_numbers_on_different_rows_are_independent() {
     state.rows[1].cells[1] = true;
     state.start(now);
 
-    let first = state.poll_steps(now, Duration::ZERO);
+    let first = state
+        .poll_steps(now, Duration::ZERO)
+        .into_iter()
+        .filter(|scheduled| scheduled.message[0] != 0xB0)
+        .collect::<Vec<_>>();
     assert_eq!(
         first,
         vec![GridScheduledMessage {
@@ -125,7 +130,11 @@ fn equal_note_numbers_on_different_rows_are_independent() {
         }]
     );
 
-    let second = state.poll_steps(at_step(now, 1), Duration::ZERO);
+    let second = state
+        .poll_steps(at_step(now, 1), Duration::ZERO)
+        .into_iter()
+        .filter(|scheduled| scheduled.message[0] != 0xB0)
+        .collect::<Vec<_>>();
     assert_eq!(
         second,
         vec![GridScheduledMessage {
