@@ -1,4 +1,7 @@
-//! MIDI CC1（modulation）レーン。小節頭に抽選した値を note on の直前へ送る。
+//! MIDI CC1（modulation）レーン。小節頭に抽選した値を、全stepで全行へ送る。
+//!
+//! modulation は note on の瞬間だけでなく発音中にも効くので、note on するセルに
+//! 限らず毎ステップ送る。伸ばしている音や chord mode の全音符にもランプがかかる。
 //!
 //! 抽選と表示の仕組みそのものは [`super::measure_lane`] にある。
 
@@ -13,9 +16,22 @@ const MODULATION_CC: u8 = 1;
 pub(super) const CC1_CHOICES: [u8; 2] = [0, 127];
 
 impl GridState {
-    /// 実発音中の小節に対応する CC1 grid。`None` のセルでは CC1 を送らない。
+    /// 実発音中の小節に対応する CC1 grid。全stepで送るので、再生中は全セルが埋まる。
     pub(crate) fn cc1_display(&self) -> &[LaneDisplayRow] {
         self.cc1.display()
+    }
+
+    /// 組み立て中の列で全行へ送る CC1。note on の有無は見ない。
+    pub(super) fn cc1_messages_for_step(&self) -> Vec<(u8, [u8; 3])> {
+        let step = self.schedule_index;
+        (0..self.row_count())
+            .map(|row| {
+                (
+                    self.instance_id(row),
+                    control_change(self.cc1.value_at(row, step)),
+                )
+            })
+            .collect()
     }
 
     /// 実発音中の小節のパターン名。再生前は `None`。

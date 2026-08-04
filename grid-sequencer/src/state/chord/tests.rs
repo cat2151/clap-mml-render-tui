@@ -12,10 +12,17 @@ fn step_at(state: &mut GridState, now: Instant) -> Vec<GridScheduledMessage> {
 
 /// CC1 を除き、抽選値の velocity は既定値へ均して譜面だけを見る。
 fn messages(scheduled: &[GridScheduledMessage]) -> Vec<[u8; 3]> {
+    notes(scheduled)
+        .into_iter()
+        .map(|item| normalize_velocity(item.message))
+        .collect()
+}
+
+/// CC1 は全stepで全行へ送るので、譜面を見るテストでは note だけを取り出す。
+fn notes(scheduled: &[GridScheduledMessage]) -> Vec<&GridScheduledMessage> {
     scheduled
         .iter()
         .filter(|item| item.message[0] != 0xB0)
-        .map(|item| normalize_velocity(item.message))
         .collect()
 }
 
@@ -56,8 +63,8 @@ fn the_chord_row_sounds_only_on_the_first_step() {
     );
     for step in 1..GRID_STEPS as u64 {
         assert!(
-            step_at(&mut state, at_step(now, step)).is_empty(),
-            "step {step} では和音の行は何も送らない"
+            messages(&step_at(&mut state, at_step(now, step))).is_empty(),
+            "step {step} では和音の行は何も鳴らさない"
         );
     }
 }
@@ -87,7 +94,7 @@ fn the_chord_is_held_for_a_whole_note_and_replaced_by_the_next_chord() {
             [0x90, 72, 100],
         ]
     );
-    assert!(wrapped
+    assert!(notes(&wrapped)
         .iter()
         .all(|item| item.instance_id == CHORD_ROW as u8));
     assert_eq!(state.chord().unwrap().index(), 1);
@@ -254,7 +261,7 @@ fn other_rows_keep_playing_their_own_rhythm_under_the_chord() {
     let second = step_at(&mut state, at_step(now, 1));
 
     assert_eq!(messages(&second), vec![[0x90, 60, 100]]);
-    assert_eq!(second[0].instance_id, 1);
+    assert_eq!(notes(&second)[0].instance_id, 1);
 }
 
 #[test]

@@ -111,7 +111,8 @@ fn messages_of_one_step_share_the_same_offset() {
 
     let scheduled = state.poll_steps(now, STEP_INTERVAL);
 
-    assert_eq!(scheduled.len(), 8);
+    // 全行へ毎step送る CC1 と、4行ぶんの note on。
+    assert_eq!(scheduled.len(), GRID_ROWS + 4);
     assert!(scheduled
         .iter()
         .all(|item| item.ahead == scheduled[0].ahead));
@@ -150,16 +151,16 @@ fn equal_note_numbers_on_different_rows_are_independent() {
         }]
     );
     assert_eq!(
-        state.poll_steps(at_step(now, 2), Duration::ZERO),
+        scheduled_at(&mut state, at_step(now, 2)),
         vec![GridScheduledMessage {
             instance_id: 1,
             ahead: Duration::ZERO,
             message: [0x80, 67, 0],
         }]
     );
-    assert!(state.poll_steps(at_step(now, 3), Duration::ZERO).is_empty());
+    assert!(scheduled_at(&mut state, at_step(now, 3)).is_empty());
     assert_eq!(
-        state.poll_steps(at_step(now, 4), Duration::ZERO),
+        scheduled_at(&mut state, at_step(now, 4)),
         vec![GridScheduledMessage {
             instance_id: 0,
             ahead: Duration::ZERO,

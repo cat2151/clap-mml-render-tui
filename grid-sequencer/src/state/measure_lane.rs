@@ -1,8 +1,14 @@
 //! 小節単位でパターンを抽選し、実発音まで表示を待たせる汎用レーン。
 //!
-//! CC1 modulation と note velocity は「小節頭に全セルの値を決め、note on する
-//! セルだけ送信・表示する」点がまったく同じなので、候補値だけを差し替えて
-//! 同じ仕組みを使い回す。値の決め方そのものは [`pattern`] にある。
+//! CC1 modulation と note velocity は「小節頭に全セルの値を決め、実発音の
+//! タイミングまで表示を待たせる」点が同じなので、同じ仕組みを使い回す。
+//! 違うのは候補値と、次の2つ。
+//!
+//! - 送信・表示するセル（[`LaneCoverage`]）。CC1 は発音していない間も効くので
+//!   全セル、velocity は note on するセルだけ。
+//! - ランプを張る区間（[`span`]）。
+//!
+//! 値の決め方そのものは [`pattern`] にある。
 
 use std::{collections::VecDeque, time::Instant};
 
@@ -11,8 +17,9 @@ use rand::Rng;
 use super::{GridState, GRID_STEPS};
 
 pub(super) mod pattern;
+mod span;
 
-use pattern::{ramp_value, MeasurePattern, MeasurePlan};
+use pattern::{ramp_value, MeasurePattern, MeasurePlan, RampSpan};
 
 /// 1行ぶんの表示。`None` は「そのステップでは発音しない＝値を送らない」。
 pub(crate) type LaneDisplayRow = [Option<u8>; GRID_STEPS];
@@ -20,6 +27,15 @@ pub(crate) type LaneDisplayRow = [Option<u8>; GRID_STEPS];
 pub(super) type TriggerTable = Vec<[bool; GRID_STEPS]>;
 
 type LaneValueRow = [u8; GRID_STEPS];
+
+/// このレーンの値をどのセルで使うか。送信対象と表示対象は必ず一致させる。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum LaneCoverage {
+    /// 全セル。発音していない間も効く CC1 用。
+    EveryStep,
+    /// note on するセルだけ。note on にしか載らない velocity 用。
+    SoundingCells,
+}
 
 /// 実発音1小節ぶんの表示。パターン名も値の表示と同じタイミングで切り替えたいので、
 /// 先読みのキューには2つまとめて積む。
@@ -34,6 +50,8 @@ struct LaneMeasure {
 pub(super) struct MeasureLane {
     /// このレーンが取りうる `[低い値, 高い値]`。
     choices: [u8; 2],
+    /// 値を使うセルの範囲。表示の埋め方もこれで決まる。
+    coverage: LaneCoverage,
     /// 現在スケジュール中の小節で使う値。非発音セルも先に決めておく。
     values: Vec<LaneValueRow>,
     /// 実際に鳴っている小節の表示。
@@ -43,9 +61,10 @@ pub(super) struct MeasureLane {
 }
 
 impl MeasureLane {
-    pub(super) fn new(row_count: usize, choices: [u8; 2]) -> Self {
+    pub(super) fn new(row_count: usize, choices: [u8; 2], coverage: LaneCoverage) -> Self {
         Self {
             choices,
+            coverage,
             values: vec![[choices[0]; GRID_STEPS]; row_count],
             display: LaneMeasure {
                 rows: vec![[None; GRID_STEPS]; row_count],
@@ -76,17 +95,18 @@ impl MeasureLane {
     }
 
     /// 新しい小節で使う全セルの値を `pattern` に従って決め、送信対象だけを
-    /// 表示待ちへ積む。
+    /// 表示待ちへ積む。`spans` は行ごとのランプ区間。
     pub(super) fn draw_measure(
         &mut self,
         deadline: Instant,
         pattern: MeasurePattern,
         rng: &mut impl Rng,
         triggers: &[[bool; GRID_STEPS]],
+        spans: &[RampSpan],
     ) {
         match pattern {
             MeasurePattern::Random => self.fill_random(rng),
-            MeasurePattern::Ramp { ascending } => self.fill_ramp(ascending),
+            MeasurePattern::Ramp { ascending } => self.fill_ramp(ascending, spans),
         }
         let rows = self.display_for(triggers);
         self.pending_display.push_back((
@@ -126,19 +146,24 @@ impl MeasureLane {
         }
     }
 
-    /// ランプはステップ位置だけで決まるので、全行が同じ並びになる。
-    fn fill_ramp(&mut self, ascending: bool) {
+    /// ランプは区間の中でのステップ位置で決まるので、区間が違えば行ごとに並びも違う。
+    fn fill_ramp(&mut self, ascending: bool, spans: &[RampSpan]) {
         let choices = self.choices;
-        let row: LaneValueRow = std::array::from_fn(|step| ramp_value(choices, ascending, step));
-        self.values.fill(row);
+        for (values, span) in self.values.iter_mut().zip(spans) {
+            *values = std::array::from_fn(|step| ramp_value(choices, ascending, step, *span));
+        }
     }
 
     fn display_for(&self, triggers: &[[bool; GRID_STEPS]]) -> Vec<LaneDisplayRow> {
+        let coverage = self.coverage;
         self.values
             .iter()
             .zip(triggers)
             .map(|(values, triggers)| {
-                std::array::from_fn(|step| triggers[step].then_some(values[step]))
+                std::array::from_fn(|step| match coverage {
+                    LaneCoverage::EveryStep => Some(values[step]),
+                    LaneCoverage::SoundingCells => triggers[step].then_some(values[step]),
+                })
             })
             .collect()
     }
@@ -151,12 +176,13 @@ impl GridState {
         self.draw_lane_measures(deadline, &mut rng);
     }
 
-    /// 小節途中で譜面だけが変わったとき、全レーンの送信対象を引き直す。
+    /// 小節途中で譜面だけが変わったとき、送信対象を引き直す。
+    ///
+    /// CC1 は全セルが送信対象なので譜面に左右されない。velocity だけでよい。
     pub(super) fn refresh_lane_display_patterns(&mut self) {
         // 発音表を値として先に作る。レーンへ `&self` を借りるクロージャを渡すと、
         // レーン自身の可変借用と衝突してコンパイルが通らない。
         let triggers = self.trigger_table();
-        self.cc1.refresh_display(&triggers);
         self.velocity.refresh_display(&triggers);
     }
 
@@ -172,11 +198,28 @@ impl GridState {
 
     fn draw_lane_measures(&mut self, deadline: Instant, rng: &mut impl Rng) {
         let triggers = self.trigger_table();
+        let cc1_spans = self.cc1_ramp_spans(&triggers);
+        let velocity_spans = self.velocity_ramp_spans(&triggers);
         // パターンは小節につき1回だけ引く。CC1 と velocity は同じ抽選結果を分け合う。
         let plan = MeasurePlan::draw(rng);
-        self.cc1.draw_measure(deadline, plan.cc1, rng, &triggers);
+        self.cc1
+            .draw_measure(deadline, plan.cc1, rng, &triggers, &cc1_spans);
         self.velocity
-            .draw_measure(deadline, plan.velocity, rng, &triggers);
+            .draw_measure(deadline, plan.velocity, rng, &triggers, &velocity_spans);
+    }
+
+    /// 行ごとの CC1 ランプ区間。音が伸びている間も効くので、行の音長ぶん先まで張る。
+    fn cc1_ramp_spans(&self, triggers: &TriggerTable) -> Vec<RampSpan> {
+        triggers
+            .iter()
+            .enumerate()
+            .map(|(row, triggers)| span::cc1_span(triggers, self.row_sustain_steps(row)))
+            .collect()
+    }
+
+    /// 行ごとの velocity ランプ区間。note on にしか載らないので最後の note on で終える。
+    fn velocity_ramp_spans(&self, triggers: &TriggerTable) -> Vec<RampSpan> {
+        triggers.iter().map(span::velocity_span).collect()
     }
 }
 

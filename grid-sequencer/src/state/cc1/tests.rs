@@ -2,13 +2,22 @@ use std::time::{Duration, Instant};
 
 use super::super::StepDuration;
 use super::*;
-use crate::{step_offset, ChordPlayback};
+use crate::{step_offset, ChordPlayback, GRID_STEPS};
 
 fn messages_at(state: &mut GridState, now: Instant) -> Vec<[u8; 3]> {
     state
         .poll_steps(now, Duration::ZERO)
         .into_iter()
         .map(|scheduled| scheduled.message)
+        .collect()
+}
+
+fn cc1_messages_at(state: &mut GridState, now: Instant) -> Vec<(u8, u8)> {
+    state
+        .poll_steps(now, Duration::ZERO)
+        .into_iter()
+        .filter(|scheduled| scheduled.message[0] == CONTROL_CHANGE)
+        .map(|scheduled| (scheduled.instance_id, scheduled.message[2]))
         .collect()
 }
 
@@ -25,7 +34,6 @@ fn note_on_is_preceded_by_cc1_from_the_measure_plan() {
     assert!(matches!(messages[0], [0xB0, 1, 0 | 127]));
     assert!(matches!(messages[1], [0x90, 60, _]));
     assert_eq!(state.cc1_display()[0][0], Some(messages[0][2]));
-    assert!(state.cc1_display()[0][1..].iter().all(Option::is_none));
 }
 
 #[test]
@@ -46,14 +54,33 @@ fn retrigger_orders_cc1_before_note_off_and_note_on() {
     assert!(matches!(messages[2], [0x90, 60, _]));
 }
 
+/// modulation は発音中にも効くので、鳴らないステップでも送る。
 #[test]
-fn silent_steps_do_not_send_cc1() {
+fn silent_steps_still_send_cc1() {
     let now = Instant::now();
     let mut state = GridState::with_row_count(1);
     state.start(now);
 
-    assert!(messages_at(&mut state, now).is_empty());
-    assert!(state.cc1_display()[0].iter().all(Option::is_none));
+    assert_eq!(cc1_messages_at(&mut state, now).len(), 1);
+    assert_eq!(cc1_messages_at(&mut state, now + step_offset(1)).len(), 1);
+}
+
+/// 送るのは全行ぶん。譜面が空の行にも毎ステップ送る。
+#[test]
+fn every_row_gets_a_cc1_on_every_step() {
+    let now = Instant::now();
+    let mut state = GridState::with_row_count(3);
+    state.rows[0].cells[0] = true;
+    state.start(now);
+
+    for step in 0..GRID_STEPS as u64 {
+        let sent = cc1_messages_at(&mut state, now + step_offset(step));
+        let instances = sent
+            .iter()
+            .map(|(instance, _)| *instance)
+            .collect::<Vec<_>>();
+        assert_eq!(instances, vec![0, 1, 2], "step {step}");
+    }
 }
 
 #[test]
@@ -73,9 +100,11 @@ fn chord_attack_uses_one_cc1_for_all_simultaneous_notes() {
         .all(|message| matches!(message, [0x90, 60 | 64 | 67, _])));
 }
 
-/// CC1 grid は「実際に鳴るセル」だけを見せる。無音セルの抽選値は表に出ない。
+/// CC1 grid は全stepで送る値をそのまま見せる。無音セルも埋まる。
+///
+/// ランプがどの区間に張られるかは [`super::super::measure_lane`] のテストで見る。
 #[test]
-fn the_display_covers_the_whole_measure_of_sounding_cells() {
+fn the_display_covers_every_step_of_the_measure() {
     let now = Instant::now();
     let mut state = GridState::with_row_count(1);
     state.rows[0].cells[0] = true;
@@ -85,12 +114,7 @@ fn the_display_covers_the_whole_measure_of_sounding_cells() {
 
     let display = &state.cc1_display()[0];
 
-    // 小節頭はランプの端なので必ず2値のどちらか。step 4 は補間値もありうる。
+    assert!(display.iter().all(Option::is_some), "{display:?}");
+    // 小節頭は最初の note on の位置なので、ランプなら必ず2値のどちらか。
     assert!(matches!(display[0], Some(0 | 127)));
-    assert!(display[4].is_some());
-    assert_eq!(
-        display.iter().filter(|value| value.is_some()).count(),
-        2,
-        "{display:?}"
-    );
 }

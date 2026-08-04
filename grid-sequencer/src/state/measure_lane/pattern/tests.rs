@@ -7,8 +7,12 @@ use super::*;
 const VELOCITY: [u8; 2] = [100, 127];
 
 fn ramp_row(choices: [u8; 2], ascending: bool) -> Vec<u8> {
+    span_row(choices, ascending, RampSpan::WHOLE_MEASURE)
+}
+
+fn span_row(choices: [u8; 2], ascending: bool, span: RampSpan) -> Vec<u8> {
     (0..GRID_STEPS)
-        .map(|step| ramp_value(choices, ascending, step))
+        .map(|step| ramp_value(choices, ascending, step, span))
         .collect()
 }
 
@@ -37,6 +41,34 @@ fn the_middle_of_a_ramp_is_interpolated() {
 
     assert_eq!(up[1], 102);
     assert_eq!(up[8], 114);
+}
+
+/// 区間を絞っても、その両端で2値ちょうどに届く。中央に2音しかない行の救済。
+#[test]
+fn a_narrow_span_still_reaches_both_choices() {
+    let up = span_row(VELOCITY, true, RampSpan { start: 6, end: 9 });
+
+    assert_eq!((up[6], up[9]), (100, 127));
+    assert!(up[7] > 100 && up[7] < 127, "{up:?}");
+}
+
+/// 区間の外は端の値でクランプする。先頭の休符は始点の値、末尾は終点の値。
+#[test]
+fn the_values_outside_the_span_are_clamped_to_its_ends() {
+    let up = span_row(VELOCITY, true, RampSpan { start: 6, end: 9 });
+
+    assert!(up[..6].iter().all(|value| *value == 100), "{up:?}");
+    assert!(up[10..].iter().all(|value| *value == 127), "{up:?}");
+}
+
+/// 幅が潰れた区間は始点の値で一定。音が1つしかない行の velocity がこれ。
+#[test]
+fn a_collapsed_span_holds_the_starting_choice() {
+    let up = span_row(VELOCITY, true, RampSpan { start: 7, end: 7 });
+    let down = span_row(VELOCITY, false, RampSpan { start: 7, end: 7 });
+
+    assert!(up.iter().all(|value| *value == 100), "{up:?}");
+    assert!(down.iter().all(|value| *value == 127), "{down:?}");
 }
 
 #[test]

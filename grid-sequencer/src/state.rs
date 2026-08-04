@@ -165,8 +165,16 @@ impl GridState {
             schedule_index: 0,
             started: false,
             sounding: Vec::new(),
-            cc1: measure_lane::MeasureLane::new(row_count, cc1::CC1_CHOICES),
-            velocity: measure_lane::MeasureLane::new(row_count, velocity::VELOCITY_CHOICES),
+            cc1: measure_lane::MeasureLane::new(
+                row_count,
+                cc1::CC1_CHOICES,
+                measure_lane::LaneCoverage::EveryStep,
+            ),
+            velocity: measure_lane::MeasureLane::new(
+                row_count,
+                velocity::VELOCITY_CHOICES,
+                measure_lane::LaneCoverage::SoundingCells,
+            ),
             pending_display: VecDeque::new(),
             last_scheduled: None,
             chord: None,
@@ -241,6 +249,9 @@ impl GridState {
                 if self.schedule_index == 0 {
                     self.prepare_lane_measures(deadline);
                 }
+                // CC1 は発音中にも効くので、note on の有無に関わらず全stepで送る。
+                // note on より前に置くのは、鳴り始めの値を確実に載せるため。
+                messages.extend(self.cc1_messages_for_step());
                 messages.extend(self.attack_current_step());
             }
             scheduled.extend(messages.into_iter().map(|(instance_id, message)| {

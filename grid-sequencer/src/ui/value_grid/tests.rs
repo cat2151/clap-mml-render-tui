@@ -47,8 +47,9 @@ fn sounding_screen() -> GridSequencerScreen {
     screen
 }
 
+/// CC1 は全stepで送るので、鳴らないステップにも値が出る（無音セルの `.` は出ない）。
 #[test]
-fn the_cc1_grid_shows_values_only_on_note_trigger_steps() {
+fn the_cc1_grid_shows_a_value_on_every_step() {
     let screen = sounding_screen();
 
     let rendered = rendered_grid(&screen, " CC1 Modulation ", screen.state.cc1_display(), 127);
@@ -58,7 +59,7 @@ fn the_cc1_grid_shows_values_only_on_note_trigger_steps() {
         rendered.contains("127") || rendered.contains('0'),
         "{rendered}"
     );
-    assert!(rendered.contains('.'), "{rendered}");
+    assert!(!rendered.contains('.'), "{rendered}");
 }
 
 #[test]
