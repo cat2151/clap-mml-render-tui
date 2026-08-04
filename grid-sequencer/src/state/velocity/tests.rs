@@ -67,7 +67,12 @@ fn the_measure_is_redrawn_only_at_its_head() {
     }
     let head_of_next = note_ons_at(&mut state, now + step_offset(GRID_STEPS as u64))[0][2];
 
-    assert!(measure.iter().all(|value| VELOCITY_CHOICES.contains(value)));
+    // ランプの補間値もありうるので、途中の値は範囲だけを見る。小節頭は必ず端の値。
+    let range = VELOCITY_CHOICES[0]..=VELOCITY_CHOICES[1];
+    assert!(
+        measure.iter().all(|value| range.contains(value)),
+        "{measure:?}"
+    );
     assert!(VELOCITY_CHOICES.contains(&head_of_next));
 }
 

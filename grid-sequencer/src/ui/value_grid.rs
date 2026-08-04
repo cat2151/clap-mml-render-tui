@@ -21,7 +21,7 @@ const CELL_WIDTH: usize = 4;
 pub(super) fn draw(
     frame: &mut Frame<'_>,
     area: Rect,
-    title: &'static str,
+    title: String,
     display: &[[Option<u8>; GRID_STEPS]],
     playhead: usize,
     connection: &GridConnectionStatus,

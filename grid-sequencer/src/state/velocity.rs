@@ -2,15 +2,27 @@
 //!
 //! 抽選と表示の仕組みそのものは [`super::measure_lane`] にある。
 
-use super::{measure_lane::LaneDisplayRow, GridState};
+use super::{
+    measure_lane::{pattern::MeasurePattern, LaneDisplayRow},
+    GridState,
+};
 
-/// 小節ごとに、セル単位で選び直す2値。
+/// このレーンが取りうる `[低い値, 高い値]`。
 pub(super) const VELOCITY_CHOICES: [u8; 2] = [100, 127];
 
 impl GridState {
     /// 実発音中の小節に対応する velocity grid。`None` のセルは発音しないステップ。
     pub(crate) fn velocity_display(&self) -> &[LaneDisplayRow] {
         self.velocity.display()
+    }
+
+    /// 実発音中の小節のパターン名。再生前は `None`。
+    pub(crate) fn velocity_pattern_label(&self) -> Option<&'static str> {
+        Some(match self.velocity.pattern()? {
+            MeasurePattern::Random => "random",
+            MeasurePattern::Ramp { ascending: true } => "vel up",
+            MeasurePattern::Ramp { ascending: false } => "vel down",
+        })
     }
 }
 

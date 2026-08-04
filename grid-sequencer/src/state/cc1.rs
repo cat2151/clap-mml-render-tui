@@ -2,17 +2,29 @@
 //!
 //! 抽選と表示の仕組みそのものは [`super::measure_lane`] にある。
 
-use super::{measure_lane::LaneDisplayRow, GridState};
+use super::{
+    measure_lane::{pattern::MeasurePattern, LaneDisplayRow},
+    GridState,
+};
 
 const CONTROL_CHANGE: u8 = 0xB0;
 const MODULATION_CC: u8 = 1;
-/// 小節ごとに、セル単位で選び直す2値。
+/// このレーンが取りうる `[低い値, 高い値]`。
 pub(super) const CC1_CHOICES: [u8; 2] = [0, 127];
 
 impl GridState {
     /// 実発音中の小節に対応する CC1 grid。`None` のセルでは CC1 を送らない。
     pub(crate) fn cc1_display(&self) -> &[LaneDisplayRow] {
         self.cc1.display()
+    }
+
+    /// 実発音中の小節のパターン名。再生前は `None`。
+    pub(crate) fn cc1_pattern_label(&self) -> Option<&'static str> {
+        Some(match self.cc1.pattern()? {
+            MeasurePattern::Random => "random",
+            MeasurePattern::Ramp { ascending: true } => "cc1 up",
+            MeasurePattern::Ramp { ascending: false } => "cc1 down",
+        })
     }
 }
 

@@ -40,7 +40,8 @@ fn retrigger_orders_cc1_before_note_off_and_note_on() {
 
     let messages = messages_at(&mut state, now + step_offset(1));
 
-    assert!(matches!(messages[0], [0xB0, 1, 0 | 127]));
+    // 小節の途中はランプの補間値もありうるので、値そのものは問わない。
+    assert!(matches!(messages[0], [0xB0, 1, _]));
     assert_eq!(messages[1], [0x80, 60, 0]);
     assert!(matches!(messages[2], [0x90, 60, _]));
 }
@@ -84,8 +85,9 @@ fn the_display_covers_the_whole_measure_of_sounding_cells() {
 
     let display = &state.cc1_display()[0];
 
+    // 小節頭はランプの端なので必ず2値のどちらか。step 4 は補間値もありうる。
     assert!(matches!(display[0], Some(0 | 127)));
-    assert!(matches!(display[4], Some(0 | 127)));
+    assert!(display[4].is_some());
     assert_eq!(
         display.iter().filter(|value| value.is_some()).count(),
         2,

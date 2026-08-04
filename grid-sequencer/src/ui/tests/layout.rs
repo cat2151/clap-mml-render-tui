@@ -19,6 +19,35 @@ fn short_terminals_keep_the_full_note_grid_and_show_both_value_grids_below_it() 
     assert!(rendered.contains("SHM idle"), "{rendered}");
 }
 
+/// パターン名は実発音中の小節のものなので、鳴り始めるまでタイトルには出ない。
+#[test]
+fn the_value_grid_titles_carry_the_pattern_of_the_sounding_measure() {
+    let now = Instant::now();
+    let mut screen = GridSequencerScreen::with_track_count(None, 1);
+    screen.state.rows_mut()[0].cells[0] = true;
+
+    let idle = render(&screen);
+    assert!(idle.contains(" CC1 Modulation "), "{idle}");
+    assert!(!idle.contains("CC1 Modulation ["), "{idle}");
+
+    screen.state.start(now);
+    screen.state.poll_steps(now, Duration::ZERO);
+    let sounding = render(&screen);
+
+    assert!(
+        ["[random]", "[cc1 up]", "[cc1 down]"]
+            .iter()
+            .any(|label| sounding.contains(label)),
+        "{sounding}"
+    );
+    assert!(
+        ["[random]", "[vel up]", "[vel down]"]
+            .iter()
+            .any(|label| sounding.contains(label)),
+        "{sounding}"
+    );
+}
+
 #[test]
 fn tall_terminals_show_every_track_of_both_value_grids() {
     let screen = GridSequencerScreen::new(None);

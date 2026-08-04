@@ -95,7 +95,7 @@ fn draw_grids(
     draw_value_grid(
         f,
         value_grid_area(area, note_height, cc1_height),
-        " CC1 Modulation ",
+        value_grid_title("CC1 Modulation", screen.state.cc1_pattern_label()),
         screen.state.cc1_display(),
         screen,
         connection,
@@ -103,11 +103,20 @@ fn draw_grids(
     draw_value_grid(
         f,
         value_grid_area(area, note_height + cc1_height, rest - cc1_height),
-        " Velocity ",
+        value_grid_title("Velocity", screen.state.velocity_pattern_label()),
         screen.state.velocity_display(),
         screen,
         connection,
     );
+}
+
+/// 小節ごとの抽選パターンはタイトルへ添える。実発音中の小節のものなので、
+/// grid の値と同じタイミングで切り替わる。再生前は添えない。
+fn value_grid_title(name: &str, pattern: Option<&str>) -> String {
+    match pattern {
+        Some(pattern) => format!(" {name} [{pattern}] "),
+        None => format!(" {name} "),
+    }
 }
 
 fn value_grid_area(area: ratatui::layout::Rect, top: u16, height: u16) -> ratatui::layout::Rect {
@@ -122,7 +131,7 @@ fn value_grid_area(area: ratatui::layout::Rect, top: u16, height: u16) -> ratatu
 fn draw_value_grid(
     f: &mut Frame<'_>,
     area: ratatui::layout::Rect,
-    title: &'static str,
+    title: String,
     display: &[[Option<u8>; GRID_STEPS]],
     screen: &GridSequencerScreen,
     connection: &GridConnectionStatus,

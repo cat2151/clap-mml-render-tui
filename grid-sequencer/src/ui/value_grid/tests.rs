@@ -7,7 +7,7 @@ use crate::GridSequencerScreen;
 
 fn rendered_grid(
     screen: &GridSequencerScreen,
-    title: &'static str,
+    title: &str,
     display: &[[Option<u8>; GRID_STEPS]],
     accent: u8,
 ) -> String {
@@ -18,7 +18,7 @@ fn rendered_grid(
             draw(
                 frame,
                 frame.area(),
-                title,
+                title.to_string(),
                 display,
                 screen.state.step_index(),
                 &connection,
