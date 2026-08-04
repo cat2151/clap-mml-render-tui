@@ -3,11 +3,14 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod attack;
 mod cc1;
 mod chord;
 mod clock;
 mod cycle;
+mod measure_lane;
 mod randomize;
+mod velocity;
 
 pub use chord::{snap_rows_to_chord, ChordPlayback, CHORD_ROW};
 pub use clock::{frames_ahead, step_offset, BPM, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL};
@@ -21,7 +24,6 @@ pub const GRID_STEPS: usize = 16;
 
 const NOTE_ON: u8 = 0x90;
 const NOTE_OFF: u8 = 0x80;
-const VELOCITY: u8 = 100;
 /// 行の note number の既定値（C4）。
 const DEFAULT_NOTE: u8 = 60;
 
@@ -118,7 +120,9 @@ pub struct GridState {
     started: bool,
     sounding: Vec<SoundingNote>,
     /// 小節ごとに抽選する CC1 と、実発音まで待たせる表示状態。
-    cc1: cc1::Cc1State,
+    cc1: measure_lane::MeasureLane,
+    /// 小節ごとに抽選する note velocity。CC1 と同じ仕組みで動く。
+    velocity: measure_lane::MeasureLane,
     /// 組み立て済みで、まだ締切が来ていないステップの (締切, 列)。表示位置を
     /// 実際に鳴るタイミングへ合わせるために持つ。
     pending_display: VecDeque<(Instant, usize)>,
@@ -161,7 +165,8 @@ impl GridState {
             schedule_index: 0,
             started: false,
             sounding: Vec::new(),
-            cc1: cc1::Cc1State::new(row_count),
+            cc1: measure_lane::MeasureLane::new(row_count, cc1::CC1_CHOICES),
+            velocity: measure_lane::MeasureLane::new(row_count, velocity::VELOCITY_CHOICES),
             pending_display: VecDeque::new(),
             last_scheduled: None,
             chord: None,
@@ -209,7 +214,7 @@ impl GridState {
         self.schedule_index = 0;
         self.started = false;
         self.sounding.clear();
-        self.cc1.reset_for_start();
+        self.reset_lanes_for_start();
         self.pending_display.clear();
         self.last_scheduled = None;
         self.reset_cycle_stop();
@@ -234,7 +239,7 @@ impl GridState {
                 self.cycle_stopped_at = Some(deadline);
             } else {
                 if self.schedule_index == 0 {
-                    self.prepare_cc1_measure(deadline);
+                    self.prepare_lane_measures(deadline);
                 }
                 messages.extend(self.attack_current_step());
             }
@@ -272,7 +277,7 @@ impl GridState {
         self.step_index = 0;
         self.schedule_index = 0;
         self.started = false;
-        self.cc1.reset_for_start();
+        self.reset_lanes_for_start();
         self.pending_display.clear();
         self.last_scheduled = None;
         self.reset_cycle_stop();
@@ -299,7 +304,7 @@ impl GridState {
                 .expect("front was just observed");
             self.step_index = step;
         }
-        self.advance_cc1_display(now);
+        self.advance_lane_displays(now);
     }
 
     /// 鳴っている音の残りステップを1減らし、尽きたものの note off を返す。

@@ -1,18 +1,21 @@
 use std::time::Duration;
 
 use super::*;
-use crate::state::{step_offset, GridScheduledMessage, StepDuration, GRID_STEPS};
+use crate::state::{
+    step_offset, velocity::normalize_velocity, GridScheduledMessage, StepDuration, GRID_STEPS,
+};
 
 /// 先読みなしで1ステップだけ取り出す。
 fn step_at(state: &mut GridState, now: Instant) -> Vec<GridScheduledMessage> {
     state.poll_steps(now, Duration::ZERO)
 }
 
+/// CC1 を除き、抽選値の velocity は既定値へ均して譜面だけを見る。
 fn messages(scheduled: &[GridScheduledMessage]) -> Vec<[u8; 3]> {
     scheduled
         .iter()
         .filter(|item| item.message[0] != 0xB0)
-        .map(|item| item.message)
+        .map(|item| normalize_velocity(item.message))
         .collect()
 }
 

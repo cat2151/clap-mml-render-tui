@@ -3,12 +3,28 @@ use std::time::{Duration, Instant};
 use ratatui::{backend::TestBackend, Terminal};
 
 use super::*;
+use crate::GridSequencerScreen;
 
-fn rendered_cc1_grid(screen: &GridSequencerScreen) -> String {
+fn rendered_grid(
+    screen: &GridSequencerScreen,
+    title: &'static str,
+    display: &[[Option<u8>; GRID_STEPS]],
+    accent: u8,
+) -> String {
     let mut terminal = Terminal::new(TestBackend::new(90, 6)).unwrap();
     let connection = screen.connection_status();
     terminal
-        .draw(|frame| draw(screen, &connection, frame, frame.area()))
+        .draw(|frame| {
+            draw(
+                frame,
+                frame.area(),
+                title,
+                display,
+                screen.state.step_index(),
+                &connection,
+                accent,
+            )
+        })
         .unwrap();
     let buffer = terminal.backend().buffer();
     (0..buffer.area.height)
@@ -21,16 +37,21 @@ fn rendered_cc1_grid(screen: &GridSequencerScreen) -> String {
         .join("\n")
 }
 
-#[test]
-fn grid_shows_values_only_on_note_trigger_steps() {
+fn sounding_screen() -> GridSequencerScreen {
     let now = Instant::now();
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
     screen.state.rows_mut()[0].cells[0] = true;
     screen.state.rows_mut()[0].cells[4] = true;
     screen.state.start(now);
     screen.state.poll_steps(now, Duration::ZERO);
+    screen
+}
 
-    let rendered = rendered_cc1_grid(&screen);
+#[test]
+fn the_cc1_grid_shows_values_only_on_note_trigger_steps() {
+    let screen = sounding_screen();
+
+    let rendered = rendered_grid(&screen, " CC1 Modulation ", screen.state.cc1_display(), 127);
 
     assert!(rendered.contains("CC1 Modulation"), "{rendered}");
     assert!(
@@ -41,8 +62,23 @@ fn grid_shows_values_only_on_note_trigger_steps() {
 }
 
 #[test]
+fn the_velocity_grid_shows_values_only_on_note_trigger_steps() {
+    let screen = sounding_screen();
+
+    let rendered = rendered_grid(&screen, " Velocity ", screen.state.velocity_display(), 127);
+
+    assert!(rendered.contains("Velocity"), "{rendered}");
+    assert!(
+        rendered.contains("100") || rendered.contains("127"),
+        "{rendered}"
+    );
+    assert!(rendered.contains('.'), "{rendered}");
+}
+
+#[test]
 fn cells_use_four_columns_so_three_digit_values_stay_aligned() {
     assert_eq!(cell_text(Some(0)), "0   ");
+    assert_eq!(cell_text(Some(100)), "100 ");
     assert_eq!(cell_text(Some(127)), "127 ");
     assert_eq!(cell_text(None), ".   ");
     assert_eq!(step_ruler().chars().count(), GRID_STEPS * CELL_WIDTH);

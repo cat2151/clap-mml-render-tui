@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant};
 
+use super::super::StepDuration;
 use super::*;
 use crate::{step_offset, ChordPlayback};
 
@@ -22,7 +23,7 @@ fn note_on_is_preceded_by_cc1_from_the_measure_plan() {
 
     assert_eq!(messages.len(), 2);
     assert!(matches!(messages[0], [0xB0, 1, 0 | 127]));
-    assert_eq!(messages[1], [0x90, 60, 100]);
+    assert!(matches!(messages[1], [0x90, 60, _]));
     assert_eq!(state.cc1_display()[0][0], Some(messages[0][2]));
     assert!(state.cc1_display()[0][1..].iter().all(Option::is_none));
 }
@@ -41,7 +42,7 @@ fn retrigger_orders_cc1_before_note_off_and_note_on() {
 
     assert!(matches!(messages[0], [0xB0, 1, 0 | 127]));
     assert_eq!(messages[1], [0x80, 60, 0]);
-    assert_eq!(messages[2], [0x90, 60, 100]);
+    assert!(matches!(messages[2], [0x90, 60, _]));
 }
 
 #[test]
@@ -52,9 +53,6 @@ fn silent_steps_do_not_send_cc1() {
 
     assert!(messages_at(&mut state, now).is_empty());
     assert!(state.cc1_display()[0].iter().all(Option::is_none));
-    assert!(state.cc1.values[0]
-        .iter()
-        .all(|value| matches!(value, 0 | 127)));
 }
 
 #[test]
@@ -69,42 +67,28 @@ fn chord_attack_uses_one_cc1_for_all_simultaneous_notes() {
 
     assert_eq!(messages.len(), 4);
     assert!(matches!(messages[0], [0xB0, 1, 0 | 127]));
-    assert_eq!(
-        &messages[1..],
-        &[[0x90, 60, 100], [0x90, 64, 100], [0x90, 67, 100]]
-    );
+    assert!(messages[1..]
+        .iter()
+        .all(|message| matches!(message, [0x90, 60 | 64 | 67, _])));
 }
 
+/// CC1 grid は「実際に鳴るセル」だけを見せる。無音セルの抽選値は表に出ない。
 #[test]
-fn lookahead_does_not_reveal_the_next_measure_before_its_deadline() {
-    let now = Instant::now();
-    let deadline = now + step_offset(1);
-    let mut state = GridState::with_row_count(1);
-    state.cc1.display[0][0] = Some(0);
-    let mut next = vec![[None; GRID_STEPS]];
-    next[0][0] = Some(127);
-    state.cc1.pending_display.push_back((deadline, next));
-
-    state.advance_cc1_display(now);
-    assert_eq!(state.cc1_display()[0][0], Some(0));
-
-    state.advance_cc1_display(deadline);
-    assert_eq!(state.cc1_display()[0][0], Some(127));
-}
-
-#[test]
-fn a_mid_measure_score_change_reuses_the_values_drawn_at_the_measure_start() {
+fn the_display_covers_the_whole_measure_of_sounding_cells() {
     let now = Instant::now();
     let mut state = GridState::with_row_count(1);
     state.rows[0].cells[0] = true;
+    state.rows[0].cells[4] = true;
     state.start(now);
     messages_at(&mut state, now);
-    let already_drawn = state.cc1.values[0][3];
 
-    state.rows[0].cells[0] = false;
-    state.rows[0].cells[3] = true;
-    state.refresh_cc1_display_pattern();
+    let display = &state.cc1_display()[0];
 
-    assert_eq!(state.cc1_display()[0][0], None);
-    assert_eq!(state.cc1_display()[0][3], Some(already_drawn));
+    assert!(matches!(display[0], Some(0 | 127)));
+    assert!(matches!(display[4], Some(0 | 127)));
+    assert_eq!(
+        display.iter().filter(|value| value.is_some()).count(),
+        2,
+        "{display:?}"
+    );
 }

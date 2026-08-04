@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use super::velocity::normalize_velocity;
 use super::*;
 
 /// 先読みなしで1ステップだけ取り出す（従来の「締切が来たら送る」と同じ挙動）。
@@ -8,7 +9,20 @@ fn step_at(state: &mut GridState, now: Instant) -> Vec<[u8; 3]> {
         .poll_steps(now, Duration::ZERO)
         .into_iter()
         .filter(|scheduled| scheduled.message[0] != 0xB0)
-        .map(|scheduled| scheduled.message)
+        .map(|scheduled| normalize_velocity(scheduled.message))
+        .collect()
+}
+
+/// `step_at` と同じ取り出し方で、instance と先読み時間まで見たいとき用。
+fn scheduled_at(state: &mut GridState, now: Instant) -> Vec<GridScheduledMessage> {
+    state
+        .poll_steps(now, Duration::ZERO)
+        .into_iter()
+        .filter(|scheduled| scheduled.message[0] != 0xB0)
+        .map(|scheduled| GridScheduledMessage {
+            message: normalize_velocity(scheduled.message),
+            ..scheduled
+        })
         .collect()
 }
 
@@ -116,11 +130,7 @@ fn equal_note_numbers_on_different_rows_are_independent() {
     state.rows[1].cells[1] = true;
     state.start(now);
 
-    let first = state
-        .poll_steps(now, Duration::ZERO)
-        .into_iter()
-        .filter(|scheduled| scheduled.message[0] != 0xB0)
-        .collect::<Vec<_>>();
+    let first = scheduled_at(&mut state, now);
     assert_eq!(
         first,
         vec![GridScheduledMessage {
@@ -130,11 +140,7 @@ fn equal_note_numbers_on_different_rows_are_independent() {
         }]
     );
 
-    let second = state
-        .poll_steps(at_step(now, 1), Duration::ZERO)
-        .into_iter()
-        .filter(|scheduled| scheduled.message[0] != 0xB0)
-        .collect::<Vec<_>>();
+    let second = scheduled_at(&mut state, at_step(now, 1));
     assert_eq!(
         second,
         vec![GridScheduledMessage {

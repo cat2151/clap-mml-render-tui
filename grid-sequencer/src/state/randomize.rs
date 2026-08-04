@@ -128,7 +128,7 @@ impl GridState {
     fn randomize_rows(&mut self, patches: &[(String, String)]) {
         randomize_row_slice(&mut self.rows, patches);
         self.apply_chord_to_rows();
-        self.refresh_cc1_display_pattern();
+        self.refresh_lane_display_patterns();
     }
 
     /// 鳴っている音を止める note off を、送信済みの先読みぶんより後ろへ置いて返す。

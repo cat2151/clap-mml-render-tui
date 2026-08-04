@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use super::super::{SCHEDULE_GUARD, STEP_INTERVAL};
+use super::super::{velocity::normalize_velocity, SCHEDULE_GUARD, STEP_INTERVAL};
 use super::*;
 
 fn pairs(names: &[&str]) -> Vec<(String, String)> {
@@ -120,10 +120,11 @@ fn keeping_patches_still_silences_sounding_notes() {
     assert_eq!(silenced[0].ahead, SCHEDULE_GUARD);
 }
 
+/// CC1 を除き、抽選値の velocity は既定値へ均して譜面だけを見る。
 fn messages_of(scheduled: &[GridScheduledMessage]) -> Vec<[u8; 3]> {
     scheduled
         .iter()
         .filter(|item| item.message[0] != 0xB0)
-        .map(|item| item.message)
+        .map(|item| normalize_velocity(item.message))
         .collect()
 }

@@ -1,7 +1,8 @@
 //! grid sequencer 画面の描画。
 //!
 //! 上から「コード進行1行（chord mode 中だけ）/ NOTE grid / CC1 grid /
-//! ステータス1行 / キーバインド1行」の縦分割で、help は最後に overlay として重ねる。
+//! VELOCITY grid / ステータス1行 / キーバインド1行」の縦分割で、help は最後に
+//! overlay として重ねる。
 
 use ratatui::{
     layout::{Constraint, Direction, Layout},
@@ -18,12 +19,12 @@ use crate::{
     GridConnectionPhase, GridConnectionStatus, GridSequencerScreen, BPM, GRID_STEPS, STEP_INTERVAL,
 };
 
-mod cc1_grid;
 mod chord_line;
 mod grid;
 mod help;
 mod progress;
 mod restart_notice;
+mod value_grid;
 
 pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: &mut Frame<'_>) {
     // コード進行行は出すときだけ確保する。off のときの1行は grid に使う。
@@ -69,7 +70,9 @@ pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: 
     }
 }
 
-/// NOTE grid を必要行数ぶん先に確保し、残りを CC1 grid に割り当てる。
+/// NOTE grid を必要行数ぶん先に確保し、残りを CC1 と VELOCITY で2等分する。
+///
+/// 低い端末でも両方のタイトルが必ず出るよう、片方に必要行数を全部渡すことはしない。
 fn draw_grids(
     screen: &GridSequencerScreen,
     connection: &GridConnectionStatus,
@@ -86,16 +89,56 @@ fn draw_grids(
     };
     grid::draw(screen, connection, f, note_area);
 
-    let cc1_height = area.height.saturating_sub(note_height);
-    if cc1_height == 0 {
+    let rest = area.height.saturating_sub(note_height);
+    // 端数は CC1 側へ寄せる。
+    let cc1_height = rest.div_ceil(2);
+    draw_value_grid(
+        f,
+        value_grid_area(area, note_height, cc1_height),
+        " CC1 Modulation ",
+        screen.state.cc1_display(),
+        screen,
+        connection,
+    );
+    draw_value_grid(
+        f,
+        value_grid_area(area, note_height + cc1_height, rest - cc1_height),
+        " Velocity ",
+        screen.state.velocity_display(),
+        screen,
+        connection,
+    );
+}
+
+fn value_grid_area(area: ratatui::layout::Rect, top: u16, height: u16) -> ratatui::layout::Rect {
+    ratatui::layout::Rect {
+        y: area.y.saturating_add(top),
+        height,
+        ..area
+    }
+}
+
+/// 抽選値の grid。強調するのは最大値（CC1 も velocity も 127）のセル。
+fn draw_value_grid(
+    f: &mut Frame<'_>,
+    area: ratatui::layout::Rect,
+    title: &'static str,
+    display: &[[Option<u8>; GRID_STEPS]],
+    screen: &GridSequencerScreen,
+    connection: &GridConnectionStatus,
+) {
+    if area.height == 0 {
         return;
     }
-    let cc1_area = ratatui::layout::Rect {
-        y: area.y.saturating_add(note_height),
-        height: cc1_height,
-        ..area
-    };
-    cc1_grid::draw(screen, connection, f, cc1_area);
+    value_grid::draw(
+        f,
+        area,
+        title,
+        display,
+        screen.state.step_index(),
+        connection,
+        127,
+    );
 }
 
 fn status_line(

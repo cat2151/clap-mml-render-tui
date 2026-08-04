@@ -1,4 +1,4 @@
-//! 小節頭で抽選した MIDI CC1 の専用 grid。
+//! 小節頭で抽選した値の grid。CC1 modulation と velocity で共用する。
 
 use ratatui::{
     layout::Rect,
@@ -13,31 +13,29 @@ use cmrt_tui_core::{
     theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_DARK_GRAY, MONOKAI_GRAY, MONOKAI_GREEN},
 };
 
-use crate::{GridConnectionStatus, GridRowReadiness, GridSequencerScreen, GRID_STEPS};
+use crate::{GridConnectionStatus, GridRowReadiness, GRID_STEPS};
 
 const CELL_WIDTH: usize = 4;
 
+/// `accent` の値を持つセルだけを目立たせて描く。
 pub(super) fn draw(
-    screen: &GridSequencerScreen,
-    connection: &GridConnectionStatus,
     frame: &mut Frame<'_>,
     area: Rect,
+    title: &'static str,
+    display: &[[Option<u8>; GRID_STEPS]],
+    playhead: usize,
+    connection: &GridConnectionStatus,
+    accent: u8,
 ) {
-    let playhead = screen.state.step_index();
     let mut lines = vec![header_line()];
-    lines.extend(
-        screen
-            .state
-            .cc1_display()
-            .iter()
-            .enumerate()
-            .map(|(row, values)| row_line(row, values, playhead, connection.row_readiness(row))),
-    );
+    lines.extend(display.iter().enumerate().map(|(row, values)| {
+        row_line(row, values, playhead, connection.row_readiness(row), accent)
+    }));
     frame.render_widget(
         Paragraph::new(lines).style(base_style()).block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(" CC1 Modulation ")
+                .title(title)
                 .style(base_style())
                 .border_style(base_style().fg(MONOKAI_CYAN)),
         ),
@@ -58,13 +56,14 @@ fn row_line(
     values: &[Option<u8>; GRID_STEPS],
     playhead: usize,
     readiness: GridRowReadiness,
+    accent: u8,
 ) -> Line<'static> {
     let mut spans = vec![Span::styled(
         format!(" {:>2} ", row + 1),
         label_style(readiness),
     )];
     for (step, value) in values.iter().enumerate() {
-        let style = cell_style(readiness, *value);
+        let style = cell_style(readiness, *value, accent);
         let style = if step == playhead {
             cursor_highlight_style(style)
         } else {
@@ -90,11 +89,11 @@ fn label_style(readiness: GridRowReadiness) -> Style {
     }
 }
 
-fn cell_style(readiness: GridRowReadiness, value: Option<u8>) -> Style {
-    let color = match (readiness, value) {
-        (GridRowReadiness::Prepared, Some(127)) => MONOKAI_GREEN,
-        (GridRowReadiness::Prepared, _) | (GridRowReadiness::InstanceReady, _) => MONOKAI_GRAY,
-        (GridRowReadiness::Pending, _) => MONOKAI_DARK_GRAY,
+fn cell_style(readiness: GridRowReadiness, value: Option<u8>, accent: u8) -> Style {
+    let color = match readiness {
+        GridRowReadiness::Prepared if value == Some(accent) => MONOKAI_GREEN,
+        GridRowReadiness::Prepared | GridRowReadiness::InstanceReady => MONOKAI_GRAY,
+        GridRowReadiness::Pending => MONOKAI_DARK_GRAY,
     };
     base_style().fg(color)
 }
