@@ -4,7 +4,7 @@ use ratatui::{
     style::{Color, Style},
     widgets::{Block, Borders},
 };
-use tui_textarea::TextArea;
+use ratatui_textarea::TextArea;
 
 use crate::theme::{cursor_highlight_style, MONOKAI_BG, MONOKAI_FG, MONOKAI_GRAY};
 
@@ -75,7 +75,7 @@ pub fn single_line_textarea_cursor_position(area: Rect, textarea: &TextArea<'_>)
         width: area.width.saturating_sub(2),
         height: area.height.saturating_sub(2),
     };
-    let (row, col) = textarea.cursor();
+    let ratatui_textarea::DataCursor(row, col) = textarea.cursor();
     let area_max_x = area.x.saturating_add(area.width.saturating_sub(1));
     let area_max_y = area.y.saturating_add(area.height.saturating_sub(1));
     let max_x = inner.x.saturating_add(inner.width.saturating_sub(1));

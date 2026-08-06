@@ -15,11 +15,16 @@ use cmrt_realtime_play::RealtimePlayServerSupervisor;
 
 use crate::play_state::PlayState;
 
+/// 本アプリのレンダリング結果は常にインターリーブステレオ。
+/// rodio 0.22 の `ChannelCount` は `NonZero<u16>` なので、生成箇所ごとに
+/// unwrap を書かずに済むよう定数で共有する。
+pub const STEREO: rodio::ChannelCount = rodio::ChannelCount::new(2).unwrap();
+
 #[derive(Clone)]
 pub struct PlaybackSession {
     play_state: Arc<Mutex<PlayState>>,
     session: Arc<AtomicU64>,
-    active_sink: Arc<Mutex<Option<Arc<rodio::Sink>>>>,
+    active_sink: Arc<Mutex<Option<Arc<rodio::Player>>>>,
     /// realtime play server backend のときだけ設定される。世代更新時に発音を止める。
     realtime_play_server: Option<Arc<RealtimePlayServerSupervisor>>,
 }
@@ -52,7 +57,7 @@ impl PlaybackSession {
         &self.session
     }
 
-    pub fn active_sink(&self) -> &Arc<Mutex<Option<Arc<rodio::Sink>>>> {
+    pub fn active_sink(&self) -> &Arc<Mutex<Option<Arc<rodio::Player>>>> {
         &self.active_sink
     }
 
@@ -102,7 +107,7 @@ pub fn set_play_state_for_session(
 }
 
 pub fn clear_active_sink_for_session(
-    active_sink: &Mutex<Option<Arc<rodio::Sink>>>,
+    active_sink: &Mutex<Option<Arc<rodio::Player>>>,
     session_token: &AtomicU64,
     session: u64,
 ) {
@@ -115,7 +120,7 @@ pub fn clear_active_sink_for_session(
 pub fn play_samples_for_session(
     state: &Mutex<PlayState>,
     session_token: &AtomicU64,
-    active_sink: &Mutex<Option<Arc<rodio::Sink>>>,
+    active_sink: &Mutex<Option<Arc<rodio::Player>>>,
     session: u64,
     sample_rate: u32,
     samples: Vec<f32>,
@@ -125,8 +130,22 @@ pub fn play_samples_for_session(
         return;
     }
 
-    let (_stream, stream_handle) = match rodio::OutputStream::try_default() {
-        Ok(stream_and_handle) => stream_and_handle,
+    let sample_rate = match rodio::SampleRate::new(sample_rate) {
+        Some(sample_rate) => sample_rate,
+        None => {
+            clear_active_sink_for_session(active_sink, session_token, session);
+            set_play_state_for_session(
+                state,
+                session_token,
+                session,
+                PlayState::Err("エラー: sample rate が 0 です".to_string()),
+            );
+            return;
+        }
+    };
+    // device sink を drop すると再生が止まるため、sleep_until_end まで保持する。
+    let device_sink = match rodio::DeviceSinkBuilder::open_default_sink() {
+        Ok(device_sink) => device_sink,
         Err(e) => {
             clear_active_sink_for_session(active_sink, session_token, session);
             set_play_state_for_session(
@@ -138,21 +157,12 @@ pub fn play_samples_for_session(
             return;
         }
     };
-    let sink = match rodio::Sink::try_new(&stream_handle) {
-        Ok(sink) => sink,
-        Err(e) => {
-            clear_active_sink_for_session(active_sink, session_token, session);
-            set_play_state_for_session(
-                state,
-                session_token,
-                session,
-                PlayState::Err(format!("エラー: sink init failed: {e}")),
-            );
-            return;
-        }
-    };
-    let sink = Arc::new(sink);
-    sink.append(rodio::buffer::SamplesBuffer::new(2, sample_rate, samples));
+    let sink = Arc::new(rodio::Player::connect_new(device_sink.mixer()));
+    sink.append(rodio::buffer::SamplesBuffer::new(
+        STEREO,
+        sample_rate,
+        samples,
+    ));
     {
         let mut active_sink_guard = active_sink.lock().unwrap();
         if !session_is_current(session_token, session) {

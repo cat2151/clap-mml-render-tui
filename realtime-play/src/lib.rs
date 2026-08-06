@@ -5,7 +5,6 @@
 //! Windows の共有メモリ経由の低レイテンシ MIDI 送信を担う。
 
 use std::{
-    io::Read as _,
     net::{SocketAddr, TcpStream},
     process::{Child, Command},
     sync::{
@@ -111,10 +110,16 @@ impl RealtimePlayServerSupervisor {
             SUPPORTED_SERVER_INSTANCE_COUNTS.contains(&live_instance_count),
             "server instance count must be one of {SUPPORTED_SERVER_INSTANCE_COUNTS:?}"
         );
-        let agent = ureq::AgentBuilder::new()
-            .timeout_read(Duration::from_secs(30))
-            .timeout_write(Duration::from_secs(30))
-            .build();
+        // http_status_as_error(false): 4xx/5xx も Ok として受け取り、
+        // 本文をエラーメッセージへ載せられるようにする（ureq 3 の StatusCode error は本文を持たない）。
+        let agent = ureq::Agent::new_with_config(
+            ureq::Agent::config_builder()
+                .timeout_send_body(Some(Duration::from_secs(30)))
+                .timeout_recv_response(Some(Duration::from_secs(30)))
+                .timeout_recv_body(Some(Duration::from_secs(30)))
+                .http_status_as_error(false)
+                .build(),
+        );
         Self {
             port: cfg.realtime_play_server_port,
             command: cfg.realtime_play_server_command.clone(),
@@ -346,19 +351,16 @@ impl RealtimePlayServerSupervisor {
         let url = format!("http://127.0.0.1:{}{}", self.port, path);
         let request = self.agent.post(&url);
         let response = match body {
-            Some((content_type, body)) => {
-                request.set("Content-Type", content_type).send_bytes(body)
-            }
-            None => request.send_bytes(&[]),
+            Some((content_type, body)) => request.header("Content-Type", content_type).send(body),
+            None => request.send_empty(),
         };
         match response {
-            Ok(response) if (200..300).contains(&response.status()) => Ok(()),
-            Ok(response) => Err(PlayRequestError::Server {
-                status: response.status(),
-                message: format!("realtime play server returned HTTP {}", response.status()),
-            }),
-            Err(ureq::Error::Status(status, response)) => {
-                let body = response_body(response);
+            Ok(mut response) => {
+                let status = response.status().as_u16();
+                if response.status().is_success() {
+                    return Ok(());
+                }
+                let body = response_body(&mut response);
                 let body = body.trim();
                 let message = if body.is_empty() {
                     format!("realtime play server returned HTTP {status}")
@@ -367,9 +369,7 @@ impl RealtimePlayServerSupervisor {
                 };
                 Err(PlayRequestError::Server { status, message })
             }
-            Err(ureq::Error::Transport(error)) => {
-                Err(PlayRequestError::Transport(error.to_string()))
-            }
+            Err(error) => Err(PlayRequestError::Transport(error.to_string())),
         }
     }
 
@@ -427,10 +427,8 @@ impl Drop for RealtimePlayServerSupervisor {
     }
 }
 
-fn response_body(response: ureq::Response) -> String {
-    let mut body = String::new();
-    let _ = response.into_reader().read_to_string(&mut body);
-    body
+fn response_body(response: &mut ureq::http::Response<ureq::Body>) -> String {
+    response.body_mut().read_to_string().unwrap_or_default()
 }
 
 #[cfg(test)]

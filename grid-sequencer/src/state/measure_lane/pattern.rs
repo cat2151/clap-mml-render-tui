@@ -4,7 +4,7 @@
 //! 「上り下りの組み合わせ4通り」の計5通りを均等に引くので、小節単位で
 //! クレッシェンド／デクレッシェンドの起伏が付く。
 
-use rand::Rng;
+use rand::RngExt;
 
 use crate::GRID_STEPS;
 
@@ -54,8 +54,8 @@ const PLANS: [Option<(bool, bool)>; 5] = [
 ];
 
 impl MeasurePlan {
-    pub(in crate::state) fn draw(rng: &mut impl Rng) -> Self {
-        Self::from_plan(PLANS[rng.gen_range(0..PLANS.len())])
+    pub(in crate::state) fn draw(rng: &mut impl RngExt) -> Self {
+        Self::from_plan(PLANS[rng.random_range(0..PLANS.len())])
     }
 
     fn from_plan(plan: Option<(bool, bool)>) -> Self {

@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use rand::Rng;
+use rand::RngExt;
 
 use cmrt_realtime_play::PatchVoicing;
 use cmrt_tui_core::{patches::patch_matches_categories, random::random_index};
@@ -42,20 +42,20 @@ pub fn pick_chord_patch(
 /// `GridState` の外へ出してあるのは、chord mode が「鳴っている grid を触らずに
 /// 次サイクルを抽選する」ために、複製した行の並びへ同じ抽選をかけるため。
 pub fn randomize_row_slice(rows: &mut [GridRow], patches: &[(String, String)]) {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     for row in rows {
         if let Some(index) = random_index(patches.len()) {
             row.patch = Some(patches[index].0.clone());
         }
-        row.base_note = rng.gen_range(RANDOM_NOTE_MIN..=RANDOM_NOTE_MAX);
+        row.base_note = rng.random_range(RANDOM_NOTE_MIN..=RANDOM_NOTE_MAX);
         row.note = row.base_note;
-        row.duration = if rng.gen_bool(0.5) {
+        row.duration = if rng.random_bool(0.5) {
             StepDuration::Sixteenth
         } else {
             StepDuration::Quarter
         };
         for step in 0..GRID_STEPS {
-            row.cells[step] = rng.gen_bool(CELL_ON_RATIO);
+            row.cells[step] = rng.random_bool(CELL_ON_RATIO);
         }
     }
 }

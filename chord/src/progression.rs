@@ -2,7 +2,7 @@
 //! degree 表記から note number 群への変換。
 
 use anyhow::{Context, Result};
-use rand::Rng;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 
 /// Key 指定に使う12種のルート音名。chord2mml の `key` トークンは `[A-G][#＃♯]*[b♭]*`
@@ -79,10 +79,10 @@ impl ChordProgressionCatalog {
         if self.entries.is_empty() {
             return None;
         }
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for _ in 0..attempts {
-            let entry = &self.entries[rng.gen_range(0..self.entries.len())];
-            let key = KEYS[rng.gen_range(0..KEYS.len())];
+            let entry = &self.entries[rng.random_range(0..self.entries.len())];
+            let key = KEYS[rng.random_range(0..KEYS.len())];
             if let Ok(chords) = chord_notes(&entry.degrees, key) {
                 return Some(ChordProgressionPick {
                     key,

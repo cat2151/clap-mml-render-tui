@@ -1,5 +1,5 @@
 use crossterm::event::KeyEvent;
-use tui_textarea::TextArea;
+use ratatui_textarea::TextArea;
 
 pub struct KeyboardMmlInput<'a> {
     active: bool,

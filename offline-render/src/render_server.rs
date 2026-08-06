@@ -41,10 +41,16 @@ enum RenderRequestError {
 
 impl RenderServerSupervisor {
     pub(super) fn new(cfg: &Config) -> Self {
-        let agent = ureq::AgentBuilder::new()
-            .timeout_read(Duration::from_secs(120))
-            .timeout_write(Duration::from_secs(120))
-            .build();
+        // http_status_as_error(false): 4xx/5xx も Ok として受け取り、
+        // 本文をエラーメッセージへ載せられるようにする（ureq 3 の StatusCode error は本文を持たない）。
+        let agent = ureq::Agent::new_with_config(
+            ureq::Agent::config_builder()
+                .timeout_send_body(Some(Duration::from_secs(120)))
+                .timeout_recv_response(Some(Duration::from_secs(120)))
+                .timeout_recv_body(Some(Duration::from_secs(120)))
+                .http_status_as_error(false)
+                .build(),
+        );
         Self {
             port: cfg.offline_render_server_port,
             command: cfg.offline_render_server_command.clone(),
@@ -172,27 +178,30 @@ impl RenderServerSupervisor {
         let response = self
             .agent
             .post(&url)
-            .set("Content-Type", "text/plain; charset=utf-8")
-            .send_string(mml);
-        let response = match response {
+            .header("Content-Type", "text/plain; charset=utf-8")
+            .send(mml);
+        let mut response = match response {
             Ok(response) => response,
-            Err(ureq::Error::Status(status, response)) => {
-                let body = response.into_string().unwrap_or_default();
-                let body = body.trim();
-                let message = if body.is_empty() {
-                    format!("render-server returned HTTP {status}")
-                } else {
-                    format!("render-server returned HTTP {status}: {body}")
-                };
-                return Err(RenderRequestError::Server(message));
-            }
-            Err(ureq::Error::Transport(error)) => {
+            Err(error) => {
                 return Err(RenderRequestError::Transport(error.to_string()));
             }
         };
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let body = response.body_mut().read_to_string().unwrap_or_default();
+            let body = body.trim();
+            let message = if body.is_empty() {
+                format!("render-server returned HTTP {status}")
+            } else {
+                format!("render-server returned HTTP {status}: {body}")
+            };
+            return Err(RenderRequestError::Server(message));
+        }
 
         let content_type = response
-            .header("Content-Type")
+            .headers()
+            .get("Content-Type")
+            .and_then(|value| value.to_str().ok())
             .unwrap_or_default()
             .to_string();
         if !content_type
@@ -200,7 +209,7 @@ impl RenderServerSupervisor {
             .next()
             .is_some_and(|value| value.trim().eq_ignore_ascii_case("audio/wav"))
         {
-            let body = response.into_string().unwrap_or_default();
+            let body = response.body_mut().read_to_string().unwrap_or_default();
             return Err(RenderRequestError::Server(format!(
                 "render-server returned unexpected Content-Type '{content_type}': {}",
                 body.trim()
@@ -209,7 +218,8 @@ impl RenderServerSupervisor {
 
         let mut bytes = Vec::new();
         response
-            .into_reader()
+            .body_mut()
+            .as_reader()
             .read_to_end(&mut bytes)
             .map_err(|error| RenderRequestError::Transport(error.to_string()))?;
         decode_wav_bytes(&bytes, self.expected_sample_rate)

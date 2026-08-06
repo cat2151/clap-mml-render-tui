@@ -126,36 +126,42 @@ impl CachedSource {
     ) -> Result<SourceRefreshOutcome> {
         let metadata = load_http_metadata(&self.metadata_path);
         let can_revalidate = self.data_path.exists() && metadata.source == self.source.trim();
-        let agent = ureq::AgentBuilder::new()
-            .timeout_connect(Duration::from_secs(5))
-            .timeout_read(Duration::from_secs(10))
-            .build();
+        // http_status_as_error(false): 304 のヘッダ（ETag / Last-Modified）を読む必要があるため、
+        // 非 2xx も Ok として受け取りステータスコードで分岐する。
+        let agent = ureq::Agent::new_with_config(
+            ureq::Agent::config_builder()
+                .timeout_connect(Some(Duration::from_secs(5)))
+                .timeout_recv_response(Some(Duration::from_secs(10)))
+                .timeout_recv_body(Some(Duration::from_secs(10)))
+                .http_status_as_error(false)
+                .build(),
+        );
         let mut request = agent.get(self.source.trim());
         if can_revalidate {
             if let Some(etag) = metadata.etag.as_deref() {
-                request = request.set("If-None-Match", etag);
+                request = request.header("If-None-Match", etag);
             }
             if let Some(last_modified) = metadata.last_modified.as_deref() {
-                request = request.set("If-Modified-Since", last_modified);
+                request = request.header("If-Modified-Since", last_modified);
             }
         }
 
-        // ureq は 304 を Ok で返すことも Err(Status) で返すこともあるため両方を受ける。
-        match request.call() {
-            Ok(response) if response.status() == 304 && can_revalidate => {
-                self.store_not_modified(&response, metadata, io_lock)
-            }
-            Ok(response) => self.store_response(response, io_lock, validate),
-            Err(ureq::Error::Status(304, response)) if can_revalidate => {
-                self.store_not_modified(&response, metadata, io_lock)
-            }
-            Err(error) => Err(anyhow::anyhow!("URL取得に失敗しました: {error}")),
+        let response = request
+            .call()
+            .map_err(|error| anyhow::anyhow!("URL取得に失敗しました: {error}"))?;
+        let status = response.status();
+        if status == ureq::http::StatusCode::NOT_MODIFIED && can_revalidate {
+            return self.store_not_modified(&response, metadata, io_lock);
         }
+        if !status.is_success() {
+            anyhow::bail!("URL取得に失敗しました: HTTP {}", status.as_u16());
+        }
+        self.store_response(response, io_lock, validate)
     }
 
     fn store_not_modified(
         &self,
-        response: &ureq::Response,
+        response: &ureq::http::Response<ureq::Body>,
         previous: HttpMetadata,
         io_lock: &Mutex<()>,
     ) -> Result<SourceRefreshOutcome> {
@@ -167,14 +173,15 @@ impl CachedSource {
 
     fn store_response(
         &self,
-        response: ureq::Response,
+        mut response: ureq::http::Response<ureq::Body>,
         io_lock: &Mutex<()>,
         validate: SourceValidator,
     ) -> Result<SourceRefreshOutcome> {
         let metadata = self.metadata_from_response(&response);
         let mut bytes = Vec::new();
         response
-            .into_reader()
+            .body_mut()
+            .as_reader()
             .take(MAX_SOURCE_BYTES + 1)
             .read_to_end(&mut bytes)?;
         if bytes.len() as u64 > MAX_SOURCE_BYTES {
@@ -196,17 +203,17 @@ impl CachedSource {
         validate(bytes).with_context(|| format!("{} JSONの検証に失敗しました", self.label))
     }
 
-    fn metadata_from_response(&self, response: &ureq::Response) -> HttpMetadata {
+    fn metadata_from_response(&self, response: &ureq::http::Response<ureq::Body>) -> HttpMetadata {
         HttpMetadata {
             source: self.source.trim().to_string(),
-            etag: response.header("ETag").map(str::to_string),
-            last_modified: response.header("Last-Modified").map(str::to_string),
+            etag: header_string(response, "ETag"),
+            last_modified: header_string(response, "Last-Modified"),
         }
     }
 
     fn refreshed_metadata(
         &self,
-        response: &ureq::Response,
+        response: &ureq::http::Response<ureq::Body>,
         previous: HttpMetadata,
     ) -> HttpMetadata {
         let current = self.metadata_from_response(response);
@@ -225,6 +232,14 @@ struct HttpMetadata {
     etag: Option<String>,
     #[serde(default)]
     last_modified: Option<String>,
+}
+
+fn header_string(response: &ureq::http::Response<ureq::Body>, name: &str) -> Option<String> {
+    response
+        .headers()
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string)
 }
 
 fn outcome(changed: bool) -> SourceRefreshOutcome {

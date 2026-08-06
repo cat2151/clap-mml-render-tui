@@ -6,7 +6,7 @@ pub(super) use std::{
 pub(super) use ratatui::{
     backend::TestBackend, buffer::Buffer, layout::Position, style::Color, Terminal,
 };
-pub(super) use tui_textarea::TextArea;
+pub(super) use ratatui_textarea::TextArea;
 
 pub(super) use cmrt_runtime::Config;
 pub(super) use cmrt_tui_core::buffer_test::{find_text_ignoring_spaces, help_overlay_bounds};

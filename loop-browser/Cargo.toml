@@ -15,10 +15,10 @@ cmrt-runtime = { path = "../cmrt-runtime" }
 cmrt-tui-core = { path = "../tui-core" }
 rubberband-ffi = { path = "../rubberband-ffi" }
 anyhow = "1"
-rand = "0.8"
-rodio = "0.19"
-ratatui = "0.28"
-crossterm = "0.28"
+rand = "0.10"
+rodio = "0.22"
+ratatui = "0.30"
+crossterm = "0.29"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_System_Threading"] }

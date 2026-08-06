@@ -164,7 +164,7 @@ impl KeyboardPatchCatalog {
                 })
                 .filter(|coordinates| Some(*coordinates) != current)
                 .collect();
-            self.random_remaining.shuffle(&mut rand::thread_rng());
+            self.random_remaining.shuffle(&mut rand::rng());
         }
 
         let (category_index, patch_index) = self.random_remaining.pop()?;

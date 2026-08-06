@@ -4,7 +4,7 @@ pub(super) use std::{
     time::{Duration, Instant},
 };
 
-pub(super) use tui_textarea::TextArea;
+pub(super) use ratatui_textarea::TextArea;
 
 pub(super) use cmrt_runtime::Config;
 

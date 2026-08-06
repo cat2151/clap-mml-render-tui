@@ -5,4 +5,6 @@ edition = "2021"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-ureq = { version = "2", features = ["json"] }
+# ureq 3 の send_json は pretty JSON を送るため、compact な body は自前で組み立てる。
+serde_json = "1"
+ureq = { version = "3", features = ["json"] }

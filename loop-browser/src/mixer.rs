@@ -43,7 +43,7 @@ impl LoopBrowser {
                     .then_some(track)
             })
             .collect::<Vec<_>>();
-        eligible.shuffle(&mut rand::thread_rng());
+        eligible.shuffle(&mut rand::rng());
         self.solo_tracks.resize(self.track_grid.len(), false);
         self.solo_tracks.fill(false);
         for track in eligible.into_iter().take(2) {

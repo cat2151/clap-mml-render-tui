@@ -1,5 +1,5 @@
 use ratatui::widgets::ListState;
-use tui_textarea::TextArea;
+use ratatui_textarea::TextArea;
 
 /// notepad の編集対象と、vim風編集にだけ必要な一時状態。
 pub(crate) struct NotepadEditorState<'a> {

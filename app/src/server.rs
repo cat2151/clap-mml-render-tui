@@ -116,10 +116,13 @@ pub fn run_server(cfg: &Config, entry: &PluginEntry, port: u16) -> Result<()> {
 /// サーバーが起動していない場合はエラーを返す。
 pub fn shutdown_server(port: u16) -> Result<()> {
     let url = format!("http://127.0.0.1:{}/shutdown", port);
-    let agent = ureq::AgentBuilder::new()
-        .timeout_read(std::time::Duration::from_secs(5))
-        .timeout_write(std::time::Duration::from_secs(5))
-        .build();
+    let agent = ureq::Agent::new_with_config(
+        ureq::Agent::config_builder()
+            .timeout_send_body(Some(std::time::Duration::from_secs(5)))
+            .timeout_recv_response(Some(std::time::Duration::from_secs(5)))
+            .timeout_recv_body(Some(std::time::Duration::from_secs(5)))
+            .build(),
+    );
     agent.get(&url).call().map_err(|e| {
         anyhow::anyhow!(
             "サーバーへのシャットダウン要求に失敗しました ({}): {}",

@@ -8,9 +8,9 @@ cmrt-chord = { path = "../chord" }
 cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-tui-core = { path = "../tui-core" }
 anyhow = "1"
-crossterm = "0.28"
-rand = "0.8"
-ratatui = "0.28"
+crossterm = "0.29"
+rand = "0.10"
+ratatui = "0.30"
 
 [dev-dependencies]
 cmrt-runtime = { path = "../cmrt-runtime" }

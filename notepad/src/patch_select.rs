@@ -1,5 +1,5 @@
 use ratatui::widgets::ListState;
-use tui_textarea::TextArea;
+use ratatui_textarea::TextArea;
 
 use cmrt_tui_core::patches::PatchSortOrder;
 

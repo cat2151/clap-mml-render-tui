@@ -6,7 +6,7 @@ use crate::LoopPlaybackClip;
 use cmrt_loop_browser_domain::time_stretch::PreparedAudio;
 
 pub fn append_clip_source(
-    sink: &rodio::Sink,
+    sink: &rodio::Player,
     audio: &PreparedAudio,
     clip: &LoopPlaybackClip,
     playback_duration: Duration,

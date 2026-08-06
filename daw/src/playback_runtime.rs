@@ -13,7 +13,7 @@ pub(crate) struct DawPlaybackRuntime {
     pub(crate) play_state: Arc<Mutex<DawPlayState>>,
     pub(crate) transition_lock: Arc<Mutex<()>>,
     pub(crate) preview_session: Arc<AtomicU64>,
-    pub(crate) preview_sink: Arc<Mutex<Option<Arc<rodio::Sink>>>>,
+    pub(crate) preview_sink: Arc<Mutex<Option<Arc<rodio::Player>>>>,
     pub(crate) realtime_play_server: Option<Arc<RealtimePlayServerSupervisor>>,
     pub(crate) position: Arc<Mutex<Option<PlayPosition>>>,
     pub(crate) ab_repeat: Arc<Mutex<AbRepeatState>>,

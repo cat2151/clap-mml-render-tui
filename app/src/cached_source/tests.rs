@@ -146,7 +146,10 @@ fn url_source_uses_etag_and_preserves_json_on_304() {
     let first = request_rx.recv().unwrap();
     let second = request_rx.recv().unwrap();
     assert!(!first.to_ascii_lowercase().contains("if-none-match"));
-    assert!(second.contains("If-None-Match: \"v1\""));
+    // ureq 3 は http crate 経由でヘッダ名を小文字で送出するため、名前は大小無視で比較する。
+    assert!(second
+        .to_ascii_lowercase()
+        .contains("if-none-match: \"v1\""));
     fs::remove_dir_all(temp).ok();
 }
 

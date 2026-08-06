@@ -105,7 +105,21 @@ impl DawApp {
             let sample_rate = daw_cfg.sample_rate as u32;
             let offline_render_workers = daw_cfg.effective_offline_render_workers();
 
-            let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else {
+            let Some(rodio_sample_rate) = rodio::SampleRate::new(sample_rate) else {
+                cmrt_tui_core::logging::append_log_line(&log_lines, "preview: sample rate is zero");
+                let mut state = play_state.lock().unwrap();
+                if *state == DawPlayState::Preview
+                    && preview_session.load(Ordering::Acquire) == session
+                {
+                    *state = DawPlayState::Idle;
+                    drop(state);
+                    *preview_sink.lock().unwrap() = None;
+                    *play_position.lock().unwrap() = None;
+                }
+                return;
+            };
+            // device sink を drop すると再生が止まるため、スレッドが終わるまで保持する。
+            let Ok(device_sink) = rodio::DeviceSinkBuilder::open_default_sink() else {
                 cmrt_tui_core::logging::append_log_line(&log_lines, "preview: audio init failed");
                 let mut state = play_state.lock().unwrap();
                 if *state == DawPlayState::Preview
@@ -118,20 +132,7 @@ impl DawApp {
                 }
                 return;
             };
-            let Ok(sink) = rodio::Sink::try_new(&stream_handle) else {
-                cmrt_tui_core::logging::append_log_line(&log_lines, "preview: sink init failed");
-                let mut state = play_state.lock().unwrap();
-                if *state == DawPlayState::Preview
-                    && preview_session.load(Ordering::Acquire) == session
-                {
-                    *state = DawPlayState::Idle;
-                    drop(state);
-                    *preview_sink.lock().unwrap() = None;
-                    *play_position.lock().unwrap() = None;
-                }
-                return;
-            };
-            let shared_sink = Arc::new(sink);
+            let shared_sink = Arc::new(rodio::Player::connect_new(device_sink.mixer()));
 
             let samples_opt = if let Some(samples) = overlay_preview_cache
                 .lock()
@@ -244,8 +245,8 @@ impl DawApp {
                     },
                     || {
                         let source = rodio::buffer::SamplesBuffer::new(
-                            2,
-                            sample_rate,
+                            cmrt_tui_core::playback_session::STEREO,
+                            rodio_sample_rate,
                             samples.as_ref().clone(),
                         );
                         *preview_sink.lock().unwrap() = Some(Arc::clone(&shared_sink));

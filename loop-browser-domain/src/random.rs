@@ -122,13 +122,13 @@ fn new_deck(scope: LoopRandomScope, candidates: &[LoopWavId]) -> StoredRandomDec
         order: candidates.to_vec(),
         next: 0,
     };
-    deck.order.shuffle(&mut rand::thread_rng());
+    deck.order.shuffle(&mut rand::rng());
     deck
 }
 
 fn reshuffle(deck: &mut StoredRandomDeck, candidates: &[LoopWavId]) {
     deck.order = candidates.to_vec();
-    deck.order.shuffle(&mut rand::thread_rng());
+    deck.order.shuffle(&mut rand::rng());
     deck.next = 0;
 }
 

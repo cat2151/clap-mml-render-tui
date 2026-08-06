@@ -67,8 +67,10 @@ pub fn format_bpm(bpm: f64) -> String {
 #[derive(Clone, Debug)]
 pub struct PreparedAudio {
     samples: Arc<[f32]>,
-    channels: u16,
-    sample_rate: u32,
+    // rodio の Source が要求する NonZero 型のまま持つ。値は decoder 由来なので
+    // 非ゼロが保証され、再生時に unwrap を挟まずに済む。
+    channels: rodio::ChannelCount,
+    sample_rate: rodio::SampleRate,
     info: PreparedAudioInfo,
 }
 
@@ -97,7 +99,7 @@ impl PreparedAudio {
 
     #[cfg(test)]
     fn frames(&self) -> usize {
-        self.samples.len() / usize::from(self.channels)
+        self.samples.len() / usize::from(self.channels.get())
     }
 }
 
@@ -124,22 +126,22 @@ impl Iterator for PreparedAudioSource {
 impl ExactSizeIterator for PreparedAudioSource {}
 
 impl rodio::Source for PreparedAudioSource {
-    fn current_frame_len(&self) -> Option<usize> {
+    fn current_span_len(&self) -> Option<usize> {
         Some(self.audio.samples.len().saturating_sub(self.position))
     }
 
-    fn channels(&self) -> u16 {
+    fn channels(&self) -> rodio::ChannelCount {
         self.audio.channels
     }
 
-    fn sample_rate(&self) -> u32 {
+    fn sample_rate(&self) -> rodio::SampleRate {
         self.audio.sample_rate
     }
 
     fn total_duration(&self) -> Option<Duration> {
-        let frames = self.audio.samples.len() / usize::from(self.audio.channels);
+        let frames = self.audio.samples.len() / usize::from(self.audio.channels.get());
         Some(Duration::from_secs_f64(
-            frames as f64 / f64::from(self.audio.sample_rate),
+            frames as f64 / f64::from(self.audio.sample_rate.get()),
         ))
     }
 }
@@ -199,19 +201,20 @@ where
         .with_context(|| format!("WAVをdecodeできません: {}", path.display()))?;
     let channels = source.channels();
     let sample_rate = source.sample_rate();
-    let input = source.convert_samples::<f32>().collect::<Vec<_>>();
+    // rodio 0.22 の Decoder は f32 を直接吐くため、変換は不要。
+    let input = source.collect::<Vec<_>>();
     if input.is_empty() {
         anyhow::bail!("WAVにsampleがありません: {}", path.display());
     }
-    let input_frames = input.len() / usize::from(channels);
+    let input_frames = input.len() / usize::from(channels.get());
     let profile = profile_for_category(category);
     let mut samples = if (ratio - 1.0).abs() < f64::EPSILON {
         input
     } else {
         rubberband_ffi::stretch_interleaved_with_cancel(
             &input,
-            sample_rate,
-            channels,
+            sample_rate.get(),
+            channels.get(),
             ratio,
             profile,
             cancelled,
@@ -224,10 +227,10 @@ where
             )
         })?
     };
-    let rubberband_output_frames = samples.len() / usize::from(channels);
+    let rubberband_output_frames = samples.len() / usize::from(channels.get());
     let expected_frames = (input_frames as f64 * ratio).round() as usize;
     let expected_samples = expected_frames
-        .checked_mul(usize::from(channels))
+        .checked_mul(usize::from(channels.get()))
         .ok_or_else(|| anyhow::anyhow!("伸縮後のsample数が大きすぎます"))?;
     samples.resize(expected_samples, 0.0);
     samples.truncate(expected_samples);
@@ -239,8 +242,8 @@ where
             input_frames,
             rubberband_output_frames,
             output_frames: expected_frames,
-            channels,
-            sample_rate,
+            channels: channels.get(),
+            sample_rate: sample_rate.get(),
             time_ratio: ratio,
             profile,
         },
@@ -328,8 +331,8 @@ mod tests {
         writer.finalize().unwrap();
 
         let audio = prepare_path(&path, Some(99.0), 120.0, Some("drum"), || false).unwrap();
-        assert_eq!(audio.channels, 2);
-        assert_eq!(audio.sample_rate, 48_000);
+        assert_eq!(audio.channels.get(), 2);
+        assert_eq!(audio.sample_rate.get(), 48_000);
         assert_eq!(audio.frames(), 3_960);
         assert_eq!(audio.info().input_frames, 4_800);
         assert!(audio.info().rubberband_output_frames > 0);

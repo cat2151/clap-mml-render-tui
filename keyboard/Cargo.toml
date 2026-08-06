@@ -9,11 +9,11 @@ cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-runtime = { path = "../cmrt-runtime" }
 cmrt-tui-core = { path = "../tui-core" }
 anyhow = "1"
-crossterm = "0.28"
-rand = "0.8"
-ratatui = "0.28"
+crossterm = "0.29"
+rand = "0.10"
+ratatui = "0.30"
 serde = { version = "1", features = ["derive"] }
-tui-textarea = { version = "0.6", features = ["crossterm"] }
+ratatui-textarea = { version = "0.9", features = ["crossterm"] }
 
 [dev-dependencies]
 serde_json = "1"

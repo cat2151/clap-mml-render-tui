@@ -9,5 +9,5 @@ path = "src/lib.rs"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-thiserror = "1"
-toml = "0.8"
+thiserror = "2"
+toml = "1"

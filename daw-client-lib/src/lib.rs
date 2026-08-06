@@ -17,6 +17,7 @@ pub enum Error {
     EmptyBaseUrl,
     Http { status: u16, body: String },
     Transport(String),
+    InvalidRequest(String),
     InvalidResponse(String),
 }
 
@@ -132,11 +133,16 @@ struct PostAbRepeatRequest {
 impl DawClient {
     pub fn new(base_url: impl AsRef<str>) -> Result<Self, Error> {
         let base_url = normalize_base_url(base_url.as_ref())?;
-        let agent = ureq::AgentBuilder::new()
-            .timeout_connect(CONNECT_TIMEOUT)
-            .timeout_read(READ_WRITE_TIMEOUT)
-            .timeout_write(READ_WRITE_TIMEOUT)
+        // http_status_as_error(false): 4xx/5xx も Ok として受け取り、
+        // 本文をエラーメッセージへ載せられるようにする（ureq 3 の StatusCode error は本文を持たない）。
+        let config = ureq::Agent::config_builder()
+            .timeout_connect(Some(CONNECT_TIMEOUT))
+            .timeout_send_body(Some(READ_WRITE_TIMEOUT))
+            .timeout_recv_response(Some(READ_WRITE_TIMEOUT))
+            .timeout_recv_body(Some(READ_WRITE_TIMEOUT))
+            .http_status_as_error(false)
             .build();
+        let agent = ureq::Agent::new_with_config(config);
         Ok(Self { agent, base_url })
     }
 
@@ -208,45 +214,57 @@ impl DawClient {
     }
 
     pub fn get_mmls(&self, if_none_match: Option<&str>) -> Result<Option<GetMmlsResponse>, Error> {
-        let mut request = self.agent.get(&self.endpoint_url("/mmls"));
+        let mut request = self.agent.get(self.endpoint_url("/mmls"));
         if let Some(etag) = if_none_match {
-            request = request.set("If-None-Match", etag);
+            request = request.header("If-None-Match", etag);
         }
-        match request.call() {
-            Ok(response) if response.status() == 304 => Ok(None),
-            Ok(response) => {
-                let etag = response
-                    .header("ETag")
-                    .ok_or_else(|| Error::InvalidResponse("missing ETag header".to_string()))?
-                    .to_string();
-                let body: GetMmlsBody = response
-                    .into_json()
-                    .map_err(|error| Error::InvalidResponse(error.to_string()))?;
-                Ok(Some(GetMmlsResponse {
-                    etag,
-                    tracks: body.tracks,
-                }))
-            }
-            Err(error) => Err(Error::from_ureq(error)),
+        let mut response = request.call().map_err(Error::from_ureq)?;
+        if response.status() == ureq::http::StatusCode::NOT_MODIFIED {
+            return Ok(None);
         }
+        if let Some(error) = error_for_status(&mut response) {
+            return Err(error);
+        }
+        let etag = response
+            .headers()
+            .get("ETag")
+            .and_then(|etag| etag.to_str().ok())
+            .ok_or_else(|| Error::InvalidResponse("missing ETag header".to_string()))?
+            .to_string();
+        let body: GetMmlsBody = response
+            .body_mut()
+            .read_json()
+            .map_err(|error| Error::InvalidResponse(error.to_string()))?;
+        Ok(Some(GetMmlsResponse {
+            etag,
+            tracks: body.tracks,
+        }))
     }
 
     fn get_json<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T, Error> {
-        let response = self
+        let mut response = self
             .agent
-            .get(&self.endpoint_url(path))
+            .get(self.endpoint_url(path))
             .call()
             .map_err(Error::from_ureq)?;
+        if let Some(error) = error_for_status(&mut response) {
+            return Err(error);
+        }
         response
-            .into_json()
+            .body_mut()
+            .read_json()
             .map_err(|error| Error::InvalidResponse(error.to_string()))
     }
 
     fn post_status<T: Serialize>(&self, path: &str, body: T) -> Result<(), Error> {
+        // ureq の send_json は pretty JSON を送るため、compact な body を自前で作って送る。
+        let body = serde_json::to_string(&body)
+            .map_err(|error| Error::InvalidRequest(error.to_string()))?;
         let response = self
             .agent
-            .post(&self.endpoint_url(path))
-            .send_json(body)
+            .post(self.endpoint_url(path))
+            .header("Content-Type", "application/json")
+            .send(body)
             .map_err(Error::from_ureq)?;
         self.read_status_response(response)
     }
@@ -254,16 +272,23 @@ impl DawClient {
     fn post_empty_status(&self, path: &str) -> Result<(), Error> {
         let response = self
             .agent
-            .post(&self.endpoint_url(path))
-            .call()
+            .post(self.endpoint_url(path))
+            .send_empty()
             .map_err(Error::from_ureq)?;
         self.read_status_response(response)
     }
 
-    fn read_status_response(&self, response: ureq::Response) -> Result<(), Error> {
-        let http_status = response.status();
+    fn read_status_response(
+        &self,
+        mut response: ureq::http::Response<ureq::Body>,
+    ) -> Result<(), Error> {
+        if let Some(error) = error_for_status(&mut response) {
+            return Err(error);
+        }
+        let http_status = response.status().as_u16();
         let status: StatusResponse = response
-            .into_json()
+            .body_mut()
+            .read_json()
             .map_err(|error| Error::InvalidResponse(error.to_string()))?;
         if status.status == "ok" {
             Ok(())
@@ -283,13 +308,25 @@ impl DawClient {
 impl Error {
     fn from_ureq(error: ureq::Error) -> Self {
         match error {
-            ureq::Error::Status(status, response) => {
-                let body = response.into_string().unwrap_or_default();
-                Self::Http { status, body }
-            }
-            ureq::Error::Transport(error) => Self::Transport(error.to_string()),
+            // Agent は http_status_as_error(false) なので通常ここには来ないが、
+            // 設定漏れで来ても status を落とさないよう受けておく。
+            ureq::Error::StatusCode(status) => Self::Http {
+                status,
+                body: String::new(),
+            },
+            other => Self::Transport(other.to_string()),
         }
     }
+}
+
+/// 2xx 以外を `Error::Http` に変換する。本文はエラーメッセージへ載せる。
+fn error_for_status(response: &mut ureq::http::Response<ureq::Body>) -> Option<Error> {
+    if response.status().is_success() {
+        return None;
+    }
+    let status = response.status().as_u16();
+    let body = response.body_mut().read_to_string().unwrap_or_default();
+    Some(Error::Http { status, body })
 }
 
 impl std::fmt::Display for Error {
@@ -300,6 +337,7 @@ impl std::fmt::Display for Error {
                 write!(f, "http request failed with status {status}: {body}")
             }
             Self::Transport(error) => write!(f, "http transport error: {error}"),
+            Self::InvalidRequest(error) => write!(f, "invalid request body: {error}"),
             Self::InvalidResponse(error) => write!(f, "invalid response body: {error}"),
         }
     }

@@ -5,7 +5,7 @@ edition = "2021"
 links = "rubberband"
 
 [dependencies]
-thiserror = "1"
+thiserror = "2"
 
 [build-dependencies]
 cc = "1"

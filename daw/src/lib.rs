@@ -90,7 +90,7 @@ mod ui;
 
 use ratatui::backend::CrosstermBackend;
 use ratatui::{Frame, Terminal};
-use tui_textarea::TextArea;
+use ratatui_textarea::TextArea;
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, OnceLock};

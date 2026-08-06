@@ -134,9 +134,21 @@ impl DawApp {
             let sample_rate = daw_cfg.sample_rate as u32;
             let offline_render_workers = daw_cfg.effective_offline_render_workers();
 
-            // OutputStream と Sink をスレッドに 1 つだけ作成し、小節をまたいで再利用する。
+            let Some(rodio_sample_rate) = rodio::SampleRate::new(sample_rate) else {
+                cmrt_tui_core::logging::append_log_line(&log_lines, "play: sample rate is zero");
+                let mut state = play_state.lock().unwrap();
+                if *state == DawPlayState::Playing {
+                    *state = DawPlayState::Idle;
+                    drop(state);
+                    *play_position.lock().unwrap() = None;
+                }
+                return;
+            };
+
+            // device sink と Player をスレッドに 1 つだけ作成し、小節をまたいで再利用する。
             // これにより小節ごとのオーディオ初期化オーバーヘッドとグリッチを防ぐ。
-            let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() else {
+            // device sink を drop すると再生が止まるため、スレッドが終わるまで保持する。
+            let Ok(device_sink) = rodio::DeviceSinkBuilder::open_default_sink() else {
                 // Audio init failed: only reset to Idle if we are still the active Playing session.
                 cmrt_tui_core::logging::append_log_line(&log_lines, "play: audio init failed");
                 let mut state = play_state.lock().unwrap();
@@ -147,16 +159,7 @@ impl DawApp {
                 }
                 return;
             };
-            let Ok(sink) = rodio::Sink::try_new(&stream_handle) else {
-                cmrt_tui_core::logging::append_log_line(&log_lines, "play: sink init failed");
-                let mut state = play_state.lock().unwrap();
-                if *state == DawPlayState::Playing {
-                    *state = DawPlayState::Idle;
-                    drop(state);
-                    *play_position.lock().unwrap() = None;
-                }
-                return;
-            };
+            let sink = rodio::Player::connect_new(device_sink.mixer());
 
             let mut measure_index = start_measure_index;
             let mut current_measure = None::<QueuedMeasure>;
@@ -226,7 +229,11 @@ impl DawApp {
                     let measure_duration = measure_duration(measure_samples, sample_rate);
                     let PlaybackMeasureAudio { samples, source } = playback_audio;
                     let chunk = mix_measure_chunk(&mut active_layers, samples, measure_samples);
-                    sink.append(rodio::buffer::SamplesBuffer::new(2, sample_rate, chunk));
+                    sink.append(rodio::buffer::SamplesBuffer::new(
+                        cmrt_tui_core::playback_session::STEREO,
+                        rodio_sample_rate,
+                        chunk,
+                    ));
                     *play_position.lock().unwrap() = Some(PlayPosition {
                         measure_index: current_measure_index,
                         measure_start,
@@ -316,8 +323,8 @@ impl DawApp {
                 let next_chunk =
                     mix_measure_chunk(&mut active_layers, next_samples, measure_samples);
                 sink.append(rodio::buffer::SamplesBuffer::new(
-                    2,
-                    sample_rate,
+                    cmrt_tui_core::playback_session::STEREO,
+                    rodio_sample_rate,
                     next_chunk,
                 ));
                 let append_time = Instant::now();
@@ -335,7 +342,7 @@ impl DawApp {
 
                 // 小節境界は期待再生開始時刻を基準にポーリングする。
                 // 50ms 前を目標に次小節チャンクを append したうえで、
-                // rodio::Sink には「現在キュー先頭の小節だけの終了」を待つ API がないため、
+                // rodio::Player には「現在キュー先頭の小節だけの終了」を待つ API がないため、
                 // play_position / ログ更新だけを時間ベースで境界に同期する。
                 if !wait_until_or_stop(&play_state, next_measure_start) {
                     break 'outer;

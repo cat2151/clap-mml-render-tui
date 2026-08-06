@@ -16,13 +16,13 @@ cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-runtime = { path = "../cmrt-runtime" }
 cmrt-tui-core = { path = "../tui-core" }
 anyhow = "1"
-crossterm = "0.28"
-ratatui = "0.28"
-rodio = "0.19"
+crossterm = "0.29"
+ratatui = "0.30"
+rodio = "0.22"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tiny_http = "0.12"
-tui-textarea = { version = "0.6", features = ["crossterm"] }
+ratatui-textarea = { version = "0.9", features = ["crossterm"] }
 mmlabc-to-smf = { git = "https://github.com/cat2151/mmlabc-to-smf-rust.git", package = "mmlabc-to-smf", features = ["cli"] }
 
 [dev-dependencies]
@@ -31,4 +31,4 @@ cmrt-history = { path = "../history", features = ["test-support"] }
 # crate 内テストで、実クリップボードに触れないスタブ実装を使うためのフラグ。
 cmrt-tui-core = { path = "../tui-core", features = ["test-support"] }
 hound = "3.5"
-toml = "0.8"
+toml = "1"

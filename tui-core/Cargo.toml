@@ -15,13 +15,13 @@ cmrt-runtime = { path = "../cmrt-runtime" }
 anyhow = "1"
 arboard = "3.6.1"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-crossterm = "0.28"
+crossterm = "0.29"
 hound = "3.5"
-rand = "0.8"
-ratatui = "0.28"
-rodio = "0.19"
+rand = "0.10"
+ratatui = "0.30"
+rodio = "0.22"
 serde = { version = "1", features = ["derive"] }
-tui-textarea = { version = "0.6", features = ["crossterm"] }
+ratatui-textarea = { version = "0.9", features = ["crossterm"] }
 
 # メモリ計測（memory モジュール）。プロセス一覧の走査と Working Set / 空き物理メモリの取得。
 [target.'cfg(windows)'.dependencies]

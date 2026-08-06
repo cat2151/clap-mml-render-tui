@@ -12,7 +12,7 @@
 
 use std::{collections::VecDeque, time::Instant};
 
-use rand::Rng;
+use rand::RngExt;
 
 use super::{GridState, GRID_STEPS};
 
@@ -100,7 +100,7 @@ impl MeasureLane {
         &mut self,
         deadline: Instant,
         pattern: MeasurePattern,
-        rng: &mut impl Rng,
+        rng: &mut impl RngExt,
         triggers: &[[bool; GRID_STEPS]],
         spans: &[RampSpan],
     ) {
@@ -137,11 +137,11 @@ impl MeasureLane {
         }
     }
 
-    fn fill_random(&mut self, rng: &mut impl Rng) {
+    fn fill_random(&mut self, rng: &mut impl RngExt) {
         let choices = self.choices;
         for row in &mut self.values {
             for value in row {
-                *value = choices[usize::from(rng.gen_bool(0.5))];
+                *value = choices[usize::from(rng.random_bool(0.5))];
             }
         }
     }
@@ -172,7 +172,7 @@ impl MeasureLane {
 impl GridState {
     /// 新しい小節へ入るとき、全レーンの値を抽選し直す。
     pub(super) fn prepare_lane_measures(&mut self, deadline: Instant) {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         self.draw_lane_measures(deadline, &mut rng);
     }
 
@@ -196,7 +196,7 @@ impl GridState {
         self.velocity.reset_for_start();
     }
 
-    fn draw_lane_measures(&mut self, deadline: Instant, rng: &mut impl Rng) {
+    fn draw_lane_measures(&mut self, deadline: Instant, rng: &mut impl RngExt) {
         let triggers = self.trigger_table();
         let cc1_spans = self.cc1_ramp_spans(&triggers);
         let velocity_spans = self.velocity_ramp_spans(&triggers);

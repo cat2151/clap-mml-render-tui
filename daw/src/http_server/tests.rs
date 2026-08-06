@@ -3,7 +3,7 @@ use std::{
     sync::{mpsc, Arc, Mutex, OnceLock},
 };
 
-use tui_textarea::TextArea;
+use ratatui_textarea::TextArea;
 
 use super::routes::{
     get_snapshot_mml, get_snapshot_mmls, get_status_snapshot, if_none_match_matches,

@@ -29,7 +29,7 @@ pub fn starting_clips(grid: &LoopPlaybackGrid, measure: usize) -> Vec<(usize, &L
 }
 
 pub fn start_measure(
-    handle: &rodio::OutputStreamHandle,
+    handle: &rodio::mixer::Mixer,
     prepared: &PreparedSet,
     measure: usize,
     track_volumes_db: &[i32],
@@ -48,7 +48,7 @@ pub fn start_measure(
             ));
             continue;
         };
-        let sink = Arc::new(rodio::Sink::try_new(handle)?);
+        let sink = Arc::new(rodio::Player::connect_new(handle));
         sink.set_volume(effective_track_gain(track, track_volumes_db, solo_tracks));
         let info = audio.info();
         let measure_duration = measure_duration(&prepared.grid, prepared.target_bpm.bpm);

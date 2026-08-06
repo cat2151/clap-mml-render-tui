@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 
 pub struct TrackSink {
     pub track: usize,
-    pub sink: Arc<rodio::Sink>,
+    pub sink: Arc<rodio::Player>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -20,14 +20,14 @@ pub struct PlayPathTiming {
     pub append: Duration,
 }
 
-pub fn play_path(handle: &rodio::OutputStreamHandle, path: &Path) -> Result<Arc<rodio::Sink>> {
+pub fn play_path(handle: &rodio::mixer::Mixer, path: &Path) -> Result<Arc<rodio::Player>> {
     play_path_profiled(handle, path).0
 }
 
 pub fn play_path_profiled(
-    handle: &rodio::OutputStreamHandle,
+    handle: &rodio::mixer::Mixer,
     path: &Path,
-) -> (Result<Arc<rodio::Sink>>, PlayPathTiming) {
+) -> (Result<Arc<rodio::Player>>, PlayPathTiming) {
     let mut timing = PlayPathTiming::default();
 
     let stage = Instant::now();
@@ -55,13 +55,7 @@ pub fn play_path_profiled(
     timing.decode = stage.elapsed();
 
     let stage = Instant::now();
-    let sink = match rodio::Sink::try_new(handle) {
-        Ok(sink) => Arc::new(sink),
-        Err(error) => {
-            timing.sink = stage.elapsed();
-            return (Err(error.into()), timing);
-        }
-    };
+    let sink = Arc::new(rodio::Player::connect_new(handle));
     timing.sink = stage.elapsed();
 
     let stage = Instant::now();
@@ -76,7 +70,7 @@ pub fn stop_sinks(sinks: &mut Vec<TrackSink>) {
     }
 }
 
-pub fn stop_pad_sinks(sinks: &mut HashMap<char, Arc<rodio::Sink>>) {
+pub fn stop_pad_sinks(sinks: &mut HashMap<char, Arc<rodio::Player>>) {
     for (_, sink) in sinks.drain() {
         sink.stop();
     }

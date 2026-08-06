@@ -4,7 +4,7 @@ pub(super) use std::{
 };
 
 pub(super) use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-pub(super) use tui_textarea::{CursorMove, TextArea};
+pub(super) use ratatui_textarea::{CursorMove, TextArea};
 
 pub(super) use cmrt_runtime::Config;
 

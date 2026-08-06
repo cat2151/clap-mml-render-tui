@@ -39,10 +39,12 @@ pub fn playback_worker(
     playback_position: SharedPlaybackPosition,
 ) -> Result<()> {
     position::clear(&playback_position);
-    let (_stream, handle) =
-        rodio::OutputStream::try_default().context("audio output deviceを開けません")?;
-    let mut preview_sink: Option<Arc<rodio::Sink>> = None;
-    let mut pad_sinks = HashMap::<char, Arc<rodio::Sink>>::new();
+    // device sink を drop すると全 Player の再生が止まるため、worker が生きている間は保持する。
+    let device_sink =
+        rodio::DeviceSinkBuilder::open_default_sink().context("audio output deviceを開けません")?;
+    let handle = device_sink.mixer();
+    let mut preview_sink: Option<Arc<rodio::Player>> = None;
+    let mut pad_sinks = HashMap::<char, Arc<rodio::Player>>::new();
     let mut measure_sinks = Vec::<TrackSink>::new();
     let mut measure_deadline = None;
     let mut preparation = PreparationWorker::spawn(diagnostics);
@@ -127,7 +129,7 @@ pub fn playback_worker(
                 let next = transport.next_measure_to_start(&prepared.grid);
                 if let Some(measure) = next {
                     let start_result =
-                        start_measure(&handle, prepared, measure, &track_volumes_db, &solo_tracks);
+                        start_measure(handle, prepared, measure, &track_volumes_db, &solo_tracks);
                     let started_at = Instant::now();
                     log_measure_lateness(
                         expired_deadline,
@@ -200,7 +202,7 @@ pub fn playback_worker(
                 if let Some(sink) = preview_sink.take() {
                     sink.stop();
                 }
-                let (result, timing) = play_path_profiled(&handle, &path);
+                let (result, timing) = play_path_profiled(handle, &path);
                 let outcome = match result {
                     Ok(sink) => {
                         preview_sink = Some(sink);
@@ -232,7 +234,7 @@ pub fn playback_worker(
                 if let Some(sink) = take_pad_voice(&mut pad_sinks, pad) {
                     sink.stop();
                 }
-                match play_path(&handle, &path) {
+                match play_path(handle, &path) {
                     Ok(sink) => {
                         pad_sinks.insert(pad, sink);
                     }

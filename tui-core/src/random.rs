@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
-use rand::{seq::SliceRandom, Rng};
+use rand::{seq::SliceRandom, RngExt};
 
 pub fn random_index(len: usize) -> Option<usize> {
     if len == 0 {
         return None;
     }
 
-    Some(rand::thread_rng().gen_range(0..len))
+    Some(rand::rng().random_range(0..len))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,7 +19,7 @@ pub struct RandomIndexDeck {
 impl RandomIndexDeck {
     pub fn new(len: usize) -> Self {
         let mut remaining = (0..len).collect::<Vec<_>>();
-        remaining.shuffle(&mut rand::thread_rng());
+        remaining.shuffle(&mut rand::rng());
         Self { len, remaining }
     }
 

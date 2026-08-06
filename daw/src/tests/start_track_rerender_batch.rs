@@ -1,4 +1,4 @@
-use tui_textarea::TextArea;
+use ratatui_textarea::TextArea;
 
 use super::*;
 use crate::{CacheState, CellCache, DawMode};
