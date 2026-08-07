@@ -68,8 +68,29 @@ fn the_preload_sends_one_instance_per_step() {
     assert!(screen.cycle_swap.is_none(), "先読みは終わっている");
 }
 
+/// HOLD は patch / pattern を保持するため、待機 bank のロードも bank 切替も不要。
+#[test]
+fn hold_stages_the_next_progression_without_starting_a_bank_preload() {
+    let now = Instant::now();
+    let catalog = catalog();
+    let patches = patches();
+    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let mut screen = screen_in_chord_mode(now, &ctx);
+    screen.pattern_evolution = crate::PatternEvolution::Hold;
+    screen.state.stage_preload_due_for_test();
+
+    screen.advance_cycle_swap(now, &ctx);
+
+    assert!(screen.state.has_pending_cycle(), "次の進行は境界待ちにする");
+    assert!(screen.cycle_swap.is_none(), "patch の先読みは開始しない");
+    assert_eq!(screen.state.bank(), 0, "active bank はそのまま");
+}
+
 fn sent_rows(screen: &crate::GridSequencerScreen) -> usize {
-    screen.cycle_swap.as_ref().map_or(0, |swap| swap.next_row)
+    screen
+        .cycle_swap
+        .as_ref()
+        .map_or(0, |swap| swap.next_instance)
 }
 
 /// 先読み中は演奏している grid を書き換えない。書き換えると、まだ鳴っている
@@ -92,7 +113,7 @@ fn the_playing_grid_is_untouched_while_preloading() {
     assert_eq!(screen.state.bank(), 0, "差し替えは小節境界まで起きない");
 }
 
-/// 抽選のたびに譜面（note / 音長 / セル）も引き直す。`r` キーと同じ範囲。
+/// 抽選のたびに譜面（note / pattern）も引き直す。`r` キーと同じ範囲。
 #[test]
 fn staging_a_cycle_rerolls_the_score_too() {
     let now = Instant::now();
@@ -100,17 +121,19 @@ fn staging_a_cycle_rerolls_the_score_too() {
     let patches = patches();
     let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
     let mut screen = screen_in_chord_mode(now, &ctx);
-    // 引き直しが起きたことが分かるよう、全セルを落としておく。
+    // 引き直しが起きたことが分かるよう、全patternを空にしておく。
     for row in screen.state.rows_mut() {
-        row.cells = [false; GRID_STEPS];
+        row.pattern = crate::NotePattern::default();
     }
 
     assert!(screen.stage_next_cycle(now, &ctx));
 
     let staged = screen.state.pending_rows_for_test();
     assert!(
-        staged.iter().any(|row| row.cells.iter().any(|cell| *cell)),
-        "セルが引き直される"
+        staged
+            .iter()
+            .any(|row| row.pattern.steps().contains(&crate::NoteStep::Attack)),
+        "note patternが引き直される"
     );
 }
 

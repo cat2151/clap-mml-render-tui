@@ -148,6 +148,10 @@ fn load_session_state_normalizes_keyboard_restore_values() {
         !state.grid_sequencer_chord_mode,
         "chord mode を知らない古い history は off 扱い"
     );
+    assert!(
+        state.grid_sequencer.is_none(),
+        "grid rows を知らない古い history は未保存扱い"
+    );
 
     std::fs::remove_dir_all(&tmp).ok();
 }
@@ -165,6 +169,43 @@ fn session_state_round_trips_the_grid_sequencer_chord_mode() {
     .unwrap();
 
     assert!(load_session_state().grid_sequencer_chord_mode);
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn session_state_round_trips_the_editable_grid() {
+    let tmp = std::env::temp_dir().join("cmrt_test_editable_grid_round_trip");
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
+    let grid = GridSequencerSessionState {
+        instances: vec![GridSequencerInstanceState {
+            patch: Some("Keys/Piano.fxp".to_string()),
+            lane_mode: GridLaneModeState::Single,
+            voicing_rotation: 0,
+            lanes: vec![GridSequencerLaneState {
+                base_note: 67,
+                note_steps: (0..16)
+                    .map(|step| {
+                        if step % 4 == 0 {
+                            GridNoteStepState::Attack
+                        } else {
+                            GridNoteStepState::Tie
+                        }
+                    })
+                    .collect(),
+            }],
+        }],
+        pattern_evolution: GridPatternEvolutionState::Hold,
+    };
+
+    save_session_state(&SessionState {
+        grid_sequencer: Some(grid.clone()),
+        ..SessionState::default()
+    })
+    .unwrap();
+
+    assert_eq!(load_session_state().grid_sequencer, Some(grid));
 
     std::fs::remove_dir_all(&tmp).ok();
 }

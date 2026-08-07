@@ -20,6 +20,9 @@ pub(super) const KIND_STOP_ALL: u32 = 6;
 /// 千分率のゲイン（1000 = 等倍）として流用する。構造体を変えないので VERSION は据え置ける。
 /// この KIND を知らない古いサーバーは "unknown command kind" を返すだけで、再生は続く。
 pub(super) const KIND_SET_INSTANCE_GAIN: u32 = 7;
+/// instance別RMS auto-trimのon/off。`buffer_multiplier`をbool（0/1）として流用する。
+/// 構造体を変えないのでVERSIONは据え置ける。
+pub(super) const KIND_SET_AUTO_GAIN: u32 = 8;
 /// instance ゲインの上限（+12dB 相当）。サーバー側の検証値と一致させること。
 pub(super) const MAX_INSTANCE_GAIN: f32 = 4.0;
 pub(super) const RESPONSE_OK: u32 = 1;

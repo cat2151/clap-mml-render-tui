@@ -1,6 +1,6 @@
 //! bank のダブルバッファと、次サイクルの差し替え待ち。
 //!
-//! chord mode は N 個の行を 2 つの bank（= 2N 個の CLAP instance）へ交互に割り当てる。
+//! chord mode は N 個のinstanceを 2 つの bank（= 2N 個の CLAP instance）へ交互に割り当てる。
 //! 鳴っている bank の裏でもう一方へ次の patch を先読みしておき、進行を1周した
 //! 小節境界で bank ごと差し替える。patch ロードが演奏の外側で終わっているので、
 //! 差し替えに伴う無音も、鳴らしきる前に切る尻切れも起きない。
@@ -12,13 +12,16 @@ use std::time::Instant;
 
 use cmrt_realtime_play::BANK_COUNT;
 
-use super::{ChordPlayback, GridRow, GridState};
+use super::{ChordPlayback, GridInstance, GridState};
 
 /// 次のサイクルへ差し替える予定の grid と進行。先読みロードが終わるまで待たせる。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct PendingCycle {
-    pub(super) rows: Vec<GridRow>,
+    pub(super) instances: Vec<GridInstance>,
     pub(super) chord: ChordPlayback,
+    /// true なら待機 bank へ先読み済みで、commit 時に bank を切り替える。
+    /// HOLD は patch を変えないので false のまま現在 bank 上で取り込む。
+    switch_bank: bool,
 }
 
 impl GridState {
@@ -27,22 +30,22 @@ impl GridState {
         self.bank
     }
 
-    /// 行に対応する、いま鳴らすべき CLAP instance の ID。
-    pub fn instance_id(&self, row: usize) -> u8 {
-        (self.bank * self.rows.len() + row) as u8
+    /// 論理instanceに対応する、いま鳴らすべき CLAP instance の ID。
+    pub fn instance_id(&self, instance: usize) -> u8 {
+        (self.bank * self.instances.len() + instance) as u8
     }
 
-    /// 行に対応する、待機中の bank の CLAP instance の ID。先読みロードの宛先。
-    pub fn standby_instance_id(&self, row: usize) -> u8 {
-        ((self.bank + 1) % BANK_COUNT * self.rows.len() + row) as u8
+    /// 論理instanceに対応する、待機中の bank の CLAP instance の ID。先読みロードの宛先。
+    pub fn standby_instance_id(&self, instance: usize) -> u8 {
+        ((self.bank + 1) % BANK_COUNT * self.instances.len() + instance) as u8
     }
 
     /// いま鳴っている bank の (instance ID, patch)。
     pub fn patches(&self) -> impl Iterator<Item = (u8, Option<&str>)> {
-        self.rows
+        self.instances
             .iter()
             .enumerate()
-            .map(|(row, item)| (self.instance_id(row), item.patch.as_deref()))
+            .map(|(instance, item)| (self.instance_id(instance), item.patch.as_deref()))
     }
 
     /// 差し替え待ちの grid の (instance ID, patch)。先読みロードはこれを流し込む。
@@ -51,11 +54,14 @@ impl GridState {
         let Some(pending) = self.pending.as_ref() else {
             return Vec::new();
         };
+        if !pending.switch_bank {
+            return Vec::new();
+        }
         pending
-            .rows
+            .instances
             .iter()
             .enumerate()
-            .map(|(row, item)| (self.standby_instance_id(row), item.patch.clone()))
+            .map(|(instance, item)| (self.standby_instance_id(instance), item.patch.clone()))
             .collect()
     }
 
@@ -69,10 +75,40 @@ impl GridState {
     ///
     /// この時点ではまだ鳴らさない。`mark_pending_ready()` で先読みロードの完了を
     /// 伝えたあと、進行を1周した小節境界で初めて差し替わる。
-    pub fn stage_next_cycle(&mut self, rows: Vec<GridRow>, chord: ChordPlayback) {
-        debug_assert_eq!(rows.len(), self.rows.len(), "bank ごとの行数は揃える");
-        self.pending = Some(PendingCycle { rows, chord });
+    pub fn stage_next_cycle(&mut self, instances: Vec<GridInstance>, chord: ChordPlayback) {
+        debug_assert_eq!(
+            instances.len(),
+            self.instances.len(),
+            "bank ごとのinstance数は揃える"
+        );
+        self.pending = Some(PendingCycle {
+            instances,
+            chord,
+            switch_bank: true,
+        });
         self.pending_ready = false;
+    }
+
+    /// patch / pattern を保持する HOLD 用に、次の進行を現在 bank 上で差し替え待ちにする。
+    ///
+    /// patch の先読みは不要なので、この時点で commit 可能として扱う。実際のinstances/chord
+    /// の差し替えは通常どおり進行境界まで待つ。
+    pub fn stage_next_cycle_in_place(
+        &mut self,
+        instances: Vec<GridInstance>,
+        chord: ChordPlayback,
+    ) {
+        debug_assert_eq!(
+            instances.len(),
+            self.instances.len(),
+            "bank ごとのinstance数は揃える"
+        );
+        self.pending = Some(PendingCycle {
+            instances,
+            chord,
+            switch_bank: false,
+        });
+        self.pending_ready = true;
     }
 
     /// 先読みロードが終わり、待機 bank が鳴らせる状態になったことを伝える。
@@ -93,11 +129,16 @@ impl GridState {
 
     /// テスト用。差し替え待ちの grid。
     #[cfg(test)]
-    pub(crate) fn pending_rows_for_test(&self) -> Vec<GridRow> {
+    pub(crate) fn pending_instances_for_test(&self) -> Vec<GridInstance> {
         self.pending
             .as_ref()
-            .map(|pending| pending.rows.clone())
+            .map(|pending| pending.instances.clone())
             .unwrap_or_default()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn pending_rows_for_test(&self) -> Vec<GridInstance> {
+        self.pending_instances_for_test()
     }
 
     /// 差し替え待ちを捨てる。`r` キーのように grid を丸ごと引き直すときに使う。
@@ -138,17 +179,18 @@ impl GridState {
         let Some(pending) = self.pending.take() else {
             return false;
         };
-        self.rows = pending.rows;
+        self.instances = pending.instances;
         self.chord = Some(pending.chord);
         self.pending_ready = false;
-        self.apply_chord_to_rows();
+        self.refresh_lane_display_patterns();
         true
     }
 
     /// 進行を1周したので、先読みが終わっていれば bank ごと差し替える。
     ///
-    /// 間に合っていなければ差し替えを見送り、今の grid のまま次の周へ入る
-    /// （差し替え待ちは次の周まで持ち越す）。差し替えたかどうかを返す。
+    /// AUTO は待機 bank の先読みが間に合っていなければ差し替えを見送り、今の grid の
+    /// まま次の周へ入る。HOLD は先読みせず、同じ bank 上で進行を取り込む。
+    /// 差し替えたかどうかを返す。
     pub(super) fn commit_pending_cycle(&mut self) -> bool {
         if !self.pending_ready {
             return false;
@@ -156,9 +198,11 @@ impl GridState {
         let Some(pending) = self.pending.take() else {
             return false;
         };
-        self.rows = pending.rows;
+        self.instances = pending.instances;
         self.chord = Some(pending.chord);
-        self.bank = (self.bank + 1) % BANK_COUNT;
+        if pending.switch_bank {
+            self.bank = (self.bank + 1) % BANK_COUNT;
+        }
         self.pending_ready = false;
         true
     }

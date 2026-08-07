@@ -24,11 +24,11 @@ impl GridState {
     /// 組み立て中の列で全行へ送る CC1。note on の有無は見ない。
     pub(super) fn cc1_messages_for_step(&self) -> Vec<(u8, [u8; 3])> {
         let step = self.schedule_index;
-        (0..self.row_count())
-            .map(|row| {
+        (0..self.instance_count())
+            .map(|instance| {
                 (
-                    self.instance_id(row),
-                    control_change(self.cc1.value_at(row, step)),
+                    self.instance_id(instance),
+                    control_change(self.cc1.value_at(instance, step)),
                 )
             })
             .collect()

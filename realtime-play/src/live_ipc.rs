@@ -213,6 +213,18 @@ impl RealtimePlayServerSupervisor {
         }
         result.map_err(|error| anyhow!(error))
     }
+
+    /// live mixのinstance別RMS auto-trimを切り替える。
+    pub fn set_live_auto_gain_enabled(&self, enabled: bool) -> Result<()> {
+        let result = self.with_fast_client(|client| client.set_auto_gain_enabled(enabled));
+        if let Err(error) = &result {
+            log_realtime_play_event(format!(
+                "action=shm-auto-gain event=error enabled={enabled} error=\"{}\"",
+                super::logging::truncate_for_log(&format!("{error:#}"), 1_000)
+            ));
+        }
+        result
+    }
 }
 
 fn validate_buffer_multiplier(multiplier: u16) -> Result<()> {

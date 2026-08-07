@@ -2,6 +2,22 @@ use std::time::Instant;
 
 use super::{GridMidiSender, GridPatchStatus, GridState};
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PatternEvolution {
+    #[default]
+    Auto,
+    Hold,
+}
+
+impl PatternEvolution {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Auto => "AUTO",
+            Self::Hold => "HOLD",
+        }
+    }
+}
+
 /// サンプルレート未指定時の既定値（config.toml の既定と同じ）。
 const DEFAULT_SAMPLE_RATE: f64 = 48_000.0;
 /// 出力バッファ1単位のフレーム数の既定値（config.toml の既定と同じ）。
@@ -22,6 +38,8 @@ pub struct GridSequencerParts {
     pub track_count: usize,
     /// 前回終了時の chord mode。true なら patch 一覧が揃い次第 on にする。
     pub chord_enabled: bool,
+    /// 前回終了時に保存した手入力 grid。`None` なら初回入場時にランダム生成する。
+    pub restored_session: Option<crate::GridSequencerSession>,
 }
 
 impl Default for GridSequencerParts {
@@ -32,6 +50,7 @@ impl Default for GridSequencerParts {
             buffer_frames: DEFAULT_BUFFER_FRAMES,
             track_count: crate::GRID_ROWS,
             chord_enabled: false,
+            restored_session: None,
         }
     }
 }
@@ -47,10 +66,22 @@ pub struct GridSequencerScreen {
     /// 出力バッファ1単位のフレーム数。想定レイテンシの表示にだけ使う。
     pub(crate) buffer_frames: usize,
     pub help_open: bool,
+    /// cycle ごとに譜面を再抽選するか、人間の編集を保持するか。
+    pub(crate) pattern_evolution: PatternEvolution,
+    /// mouse down から up まで継続するnote eventの描画・消去操作。
+    pub(crate) note_gesture: Option<crate::input::NoteGesture>,
+    /// PATCH 欄から開く、行単位の音色選択 overlay。
+    pub(crate) patch_selector: Option<crate::patch_selector::PatchSelector>,
+    /// note gesture の mouse down 直前に確保した undo 候補。
+    pub(crate) pending_undo: Option<crate::undo::UndoSnapshot>,
+    /// 直前の論理操作を戻す1段 undo。
+    pub(crate) undo: Option<crate::undo::UndoSnapshot>,
     /// 直近のランダム化時点での patch 一覧の状態。ステータス行の表示だけに使う。
     pub patch_status: GridPatchStatus,
     /// 一度でも grid を作ったか。2回目以降の入場で前回の grid を残すために見る。
     pub(crate) grid_ready: bool,
+    /// 復元 patch を現在の catalog とまだ照合していない。
+    pub(crate) restored_patches_pending: bool,
     /// chord mode を開始／継続できなかった理由。コード進行行に出す。
     pub(crate) chord_error: Option<String>,
     /// chord mode が on か。セッションへ保存する値であり、[`GridState`] ではなく
@@ -99,16 +130,41 @@ impl GridSequencerScreen {
             buffer_frames,
             track_count,
             chord_enabled,
+            restored_session,
         } = parts;
         let track_count = cmrt_realtime_play::normalize_live_instance_count(track_count);
+        let restored_session = restored_session.filter(|session| !session.instances.is_empty());
+        let restored = restored_session.is_some();
+        let (state, pattern_evolution) = if let Some(session) = restored_session {
+            let mut instances = session.instances;
+            while instances.len() < track_count {
+                instances.push(crate::GridInstance::new(instances.len()));
+            }
+            instances.truncate(track_count);
+            let mut state = GridState::with_instance_count(track_count);
+            let restored = state.restore_instances(instances);
+            debug_assert!(restored);
+            (state, session.pattern_evolution)
+        } else {
+            (
+                GridState::with_instance_count(track_count),
+                PatternEvolution::Auto,
+            )
+        };
         Self {
             midi_sender,
-            state: GridState::with_row_count(track_count),
+            state,
             sample_rate,
             buffer_frames,
             help_open: false,
+            pattern_evolution,
+            note_gesture: None,
+            patch_selector: None,
+            pending_undo: None,
+            undo: None,
             patch_status: GridPatchStatus::default(),
-            grid_ready: false,
+            grid_ready: restored,
+            restored_patches_pending: restored,
             chord_error: None,
             chord_enabled,
             pending_chord: chord_enabled,
@@ -127,9 +183,18 @@ impl GridSequencerScreen {
         self.chord_error.as_deref()
     }
 
+    /// chord progression またはエラーの1行を描画するか。input layout も同じ判定を使う。
+    pub(crate) fn chord_line_visible(&self) -> bool {
+        self.chord_error.is_some() || self.state.chord().is_some()
+    }
+
     /// chord mode が on か。セッションへ保存する値。
     pub fn chord_enabled(&self) -> bool {
         self.chord_enabled
+    }
+
+    pub fn pattern_evolution(&self) -> PatternEvolution {
+        self.pattern_evolution
     }
 
     /// シングルバッファリングへ落ちているか。ステータス行の表示に使う。
@@ -154,6 +219,6 @@ impl GridSequencerScreen {
     }
 
     pub fn track_count(&self) -> usize {
-        self.state.row_count()
+        self.state.instance_count()
     }
 }

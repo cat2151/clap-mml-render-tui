@@ -2,13 +2,13 @@ use anyhow::Result;
 use crossterm::{
     cursor::SetCursorStyle,
     event::{
-        self, Event, KeyCode, KeyModifiers, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
-        PushKeyboardEnhancementFlags,
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers,
+        KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{backend::Backend, backend::CrosstermBackend, layout::Rect, Terminal};
 
 use super::grid_sequencer::GridSequencerAction;
 use super::keyboard::KeyboardAction;
@@ -17,16 +17,23 @@ use super::{NormalAction, PlayState, PrimaryScreen, TuiApp, TuiExitReason};
 
 mod screen;
 
+#[cfg(test)]
+mod tests;
+
 use screen::DawRunOutcome;
 
 struct TerminalCleanup {
     raw_mode_enabled: bool,
     alternate_screen_enabled: bool,
     keyboard_enhancement_enabled: bool,
+    mouse_capture_enabled: bool,
 }
 
 impl Drop for TerminalCleanup {
     fn drop(&mut self) {
+        if self.mouse_capture_enabled {
+            let _ = execute!(std::io::stdout(), DisableMouseCapture);
+        }
         let _ = execute!(std::io::stdout(), SetCursorStyle::DefaultUserShape);
         if self.keyboard_enhancement_enabled {
             let _ = execute!(std::io::stdout(), PopKeyboardEnhancementFlags);
@@ -40,7 +47,37 @@ impl Drop for TerminalCleanup {
     }
 }
 
+fn sync_mouse_capture(enabled: &mut bool, requested: bool) -> Result<()> {
+    if *enabled == requested {
+        return Ok(());
+    }
+    if requested {
+        execute!(std::io::stdout(), EnableMouseCapture)?;
+    } else {
+        execute!(std::io::stdout(), DisableMouseCapture)?;
+    }
+    *enabled = requested;
+    Ok(())
+}
+
+fn clear_terminal_for_new_screen<B: Backend>(
+    terminal: &mut Terminal<B>,
+    rendered_screen: &mut Option<PrimaryScreen>,
+    active_screen: PrimaryScreen,
+) -> std::result::Result<(), B::Error> {
+    if *rendered_screen == Some(active_screen) {
+        return Ok(());
+    }
+    terminal.clear()?;
+    *rendered_screen = Some(active_screen);
+    Ok(())
+}
+
 impl<'a> TuiApp<'a> {
+    pub(crate) fn uses_mouse_capture(&self) -> bool {
+        self.active_screen == PrimaryScreen::GridSequencer
+    }
+
     pub(crate) fn uses_textarea_cursor(&self) -> bool {
         match self.active_screen {
             PrimaryScreen::Keyboard => self.keyboard.mml_input.is_active(),
@@ -56,6 +93,7 @@ impl<'a> TuiApp<'a> {
             raw_mode_enabled: true,
             alternate_screen_enabled: false,
             keyboard_enhancement_enabled: false,
+            mouse_capture_enabled: false,
         };
         let mut stdout = std::io::stdout();
         if matches!(
@@ -72,6 +110,9 @@ impl<'a> TuiApp<'a> {
         cleanup.alternate_screen_enabled = true;
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
+        // Terminal の初期bufferは空画面を前提にするが、実端末のalternate screenには
+        // 前回内容が残る実装もある。初回と画面切替時だけ物理画面ごと消去する。
+        let mut rendered_screen = None;
         let mut uses_textarea_cursor = self.uses_textarea_cursor();
         execute!(
             std::io::stdout(),
@@ -99,6 +140,10 @@ impl<'a> TuiApp<'a> {
         }
         self.prepare_restored_keyboard_connection();
         self.enter_restored_grid_sequencer();
+        sync_mouse_capture(
+            &mut cleanup.mouse_capture_enabled,
+            self.uses_mouse_capture(),
+        )?;
 
         loop {
             if quit_from_startup_daw {
@@ -109,6 +154,8 @@ impl<'a> TuiApp<'a> {
                 return Ok(TuiExitReason::RestartApp);
             }
             if crate::daw::take_http_mode_switch_request() {
+                sync_mouse_capture(&mut cleanup.mouse_capture_enabled, false)?;
+                rendered_screen = None;
                 match self.run_daw_screen(&mut terminal, false)? {
                     DawRunOutcome::Continue => {}
                     DawRunOutcome::Quit => break,
@@ -119,6 +166,10 @@ impl<'a> TuiApp<'a> {
                 }
                 continue;
             }
+            sync_mouse_capture(
+                &mut cleanup.mouse_capture_enabled,
+                self.uses_mouse_capture(),
+            )?;
             let next_uses_textarea_cursor = self.uses_textarea_cursor();
             if next_uses_textarea_cursor != uses_textarea_cursor {
                 execute!(
@@ -145,6 +196,7 @@ impl<'a> TuiApp<'a> {
                 self.pump_loop_browser_step();
             }
             self.pump_notepad_sound_check_guide();
+            clear_terminal_for_new_screen(&mut terminal, &mut rendered_screen, self.active_screen)?;
             let terminal_draw_started = std::time::Instant::now();
             terminal.draw(|f| self.draw(f))?;
             let terminal_draw_elapsed = terminal_draw_started.elapsed();
@@ -164,7 +216,26 @@ impl<'a> TuiApp<'a> {
             );
 
             if event::poll(std::time::Duration::from_millis(50))? {
-                if let Event::Key(key) = event::read()? {
+                let input = event::read()?;
+                if let Event::Mouse(mouse) = input {
+                    if self.active_screen == PrimaryScreen::GridSequencer
+                        && !self.screen_switch_menu.is_open()
+                    {
+                        let size = terminal.backend().size()?;
+                        self.handle_grid_sequencer_mouse_event(
+                            mouse,
+                            Rect::new(0, 0, size.width, size.height),
+                        );
+                    }
+                    continue;
+                }
+                if matches!(input, Event::FocusLost) {
+                    if self.active_screen == PrimaryScreen::GridSequencer {
+                        self.grid_sequencer.cancel_mouse_gesture();
+                    }
+                    continue;
+                }
+                if let Event::Key(key) = input {
                     use crossterm::event::KeyEventKind;
                     if self.screen_switch_menu.is_open() {
                         if self.active_screen == PrimaryScreen::Keyboard
@@ -174,6 +245,8 @@ impl<'a> TuiApp<'a> {
                         } else if key.kind == KeyEventKind::Press {
                             if let Some(target) = self.handle_screen_switch_menu_key(key) {
                                 if target == crate::screen_switch::PrimaryScreen::Daw {
+                                    sync_mouse_capture(&mut cleanup.mouse_capture_enabled, false)?;
+                                    rendered_screen = None;
                                     match self.run_daw_screen(&mut terminal, false)? {
                                         DawRunOutcome::Continue => {}
                                         DawRunOutcome::Quit => break,
@@ -197,6 +270,7 @@ impl<'a> TuiApp<'a> {
                             KeyboardAction::Continue | KeyboardAction::ReturnToNotepad => {}
                             KeyboardAction::Quit => break,
                             KeyboardAction::LaunchDaw => {
+                                rendered_screen = None;
                                 match self.run_daw_screen(&mut terminal, false)? {
                                     DawRunOutcome::Continue => {}
                                     DawRunOutcome::Quit => break,
@@ -294,6 +368,7 @@ impl<'a> TuiApp<'a> {
                         NormalAction::Continue => {}
                         NormalAction::Quit => break,
                         NormalAction::LaunchDaw => {
+                            rendered_screen = None;
                             match self.run_daw_screen(&mut terminal, false)? {
                                 DawRunOutcome::Continue => {}
                                 DawRunOutcome::Quit => break,

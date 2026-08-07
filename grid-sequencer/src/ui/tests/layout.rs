@@ -24,7 +24,7 @@ fn short_terminals_keep_the_full_note_grid_and_show_both_value_grids_below_it() 
 fn the_value_grid_titles_carry_the_pattern_of_the_sounding_measure() {
     let now = Instant::now();
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
-    screen.state.rows_mut()[0].cells[0] = true;
+    screen.state.rows_mut()[0].pattern.draw_span(0, 0);
 
     let idle = render(&screen);
     assert!(idle.contains(" CC1 Modulation "), "{idle}");
@@ -59,4 +59,13 @@ fn tall_terminals_show_every_track_of_both_value_grids() {
     assert!(cc1.contains(" 16 "), "{rendered}");
     assert!(velocity.contains(" 16 "), "{rendered}");
     assert!(rendered.contains("SHM idle"), "{rendered}");
+}
+
+#[test]
+fn the_note_grid_title_always_shows_auto_or_hold() {
+    let mut screen = GridSequencerScreen::new(None);
+    assert!(render(&screen).contains("Note [AUTO]"));
+
+    screen.pattern_evolution = crate::PatternEvolution::Hold;
+    assert!(render(&screen).contains("Note [HOLD]"));
 }

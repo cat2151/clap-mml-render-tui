@@ -31,6 +31,9 @@ impl<'a> TuiApp<'a> {
 
     pub(in crate::tui) fn try_open_screen_switch_menu(&mut self, key: KeyEvent) -> bool {
         if self.can_open_screen_switch_menu() && is_screen_switch_trigger(key) {
+            if self.active_screen == PrimaryScreen::GridSequencer {
+                self.grid_sequencer.cancel_mouse_gesture();
+            }
             self.screen_switch_menu.open();
             true
         } else {

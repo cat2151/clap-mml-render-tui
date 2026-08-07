@@ -24,7 +24,13 @@ impl GridSequencerScreen {
             self.enter_single_buffering("overload");
         }
         if self.poll_start_wait(now, status.phase.accepts_notes()) {
+            let bank_before = self.state.bank();
+            let chord_before = self
+                .state
+                .chord()
+                .map(|chord| (chord.index(), chord.chord_count()));
             let scheduled = self.state.poll_steps(now, LOOKAHEAD);
+            self.log_chord_schedule(&scheduled, bank_before, chord_before);
             self.send_scheduled(&scheduled);
             if self.single_buffering {
                 // 鳴らしきってからロードする。この間は演奏が止まる。
@@ -61,6 +67,58 @@ impl GridSequencerScreen {
         for batch in batches(scheduled, self.sample_rate) {
             sender.send_scheduled(batch);
         }
+    }
+
+    /// patch selector の調査用に、低頻度な chord attack と bank 遷移だけを記録する。
+    /// 全行の Note On を記録すると通常演奏で log が埋まるため、和音行へ限定する。
+    fn log_chord_schedule(
+        &self,
+        scheduled: &[GridScheduledMessage],
+        bank_before: usize,
+        chord_before: Option<(usize, usize)>,
+    ) {
+        let bank_after = self.state.bank();
+        let chord_after = self
+            .state
+            .chord()
+            .map(|chord| (chord.index(), chord.chord_count()));
+        if bank_before != bank_after || chord_before != chord_after {
+            crate::log_line(&format!(
+                "grid-sequencer: chord-transport mode={} chord={chord_before:?}->{chord_after:?} \
+                 active_bank={bank_before}->{bank_after}",
+                self.pattern_evolution().label(),
+            ));
+        }
+
+        let instance_count = self.state.instance_count();
+        let attacks = scheduled
+            .iter()
+            .filter(|event| {
+                event.message[0] & 0xf0 == 0x90
+                    && event.message[2] != 0
+                    && usize::from(event.instance_id) % instance_count == crate::CHORD_ROW
+            })
+            .map(|event| {
+                format!(
+                    "bank:{} instance:{} note:{} ahead_ms:{}",
+                    usize::from(event.instance_id) / instance_count,
+                    event.instance_id,
+                    event.message[1],
+                    event.ahead.as_millis(),
+                )
+            })
+            .collect::<Vec<_>>();
+        if attacks.is_empty() {
+            return;
+        }
+        crate::log_line(&format!(
+            "grid-sequencer: chord-note-on mode={} active_bank={} chord={chord_after:?} \
+             logical_patch={:?} events=[{}]",
+            self.pattern_evolution().label(),
+            bank_after,
+            self.state.instances()[crate::CHORD_ROW].patch.as_deref(),
+            attacks.join(", "),
+        ));
     }
 }
 

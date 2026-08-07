@@ -1,6 +1,5 @@
 use std::time::{Duration, Instant};
 
-use super::super::StepDuration;
 use super::*;
 use crate::{step_offset, ChordPlayback, GRID_STEPS};
 
@@ -25,7 +24,7 @@ fn cc1_messages_at(state: &mut GridState, now: Instant) -> Vec<(u8, u8)> {
 fn note_on_is_preceded_by_cc1_from_the_measure_plan() {
     let now = Instant::now();
     let mut state = GridState::with_row_count(1);
-    state.rows[0].cells[0] = true;
+    state.instances[0].pattern.draw_span(0, 0);
     state.start(now);
 
     let messages = messages_at(&mut state, now);
@@ -37,20 +36,19 @@ fn note_on_is_preceded_by_cc1_from_the_measure_plan() {
 }
 
 #[test]
-fn retrigger_orders_cc1_before_note_off_and_note_on() {
+fn adjacent_attacks_release_then_apply_cc1_before_retriggering() {
     let now = Instant::now();
     let mut state = GridState::with_row_count(1);
-    state.rows[0].duration = StepDuration::Quarter;
-    state.rows[0].cells[0] = true;
-    state.rows[0].cells[1] = true;
+    state.instances[0].pattern.draw_span(0, 0);
+    state.instances[0].pattern.draw_span(1, 1);
     state.start(now);
     messages_at(&mut state, now);
 
     let messages = messages_at(&mut state, now + step_offset(1));
 
     // 小節の途中はランプの補間値もありうるので、値そのものは問わない。
-    assert!(matches!(messages[0], [0xB0, 1, _]));
-    assert_eq!(messages[1], [0x80, 60, 0]);
+    assert_eq!(messages[0], [0x80, 60, 0]);
+    assert!(matches!(messages[1], [0xB0, 1, _]));
     assert!(matches!(messages[2], [0x90, 60, _]));
 }
 
@@ -70,7 +68,7 @@ fn silent_steps_still_send_cc1() {
 fn every_row_gets_a_cc1_on_every_step() {
     let now = Instant::now();
     let mut state = GridState::with_row_count(3);
-    state.rows[0].cells[0] = true;
+    state.instances[0].pattern.draw_span(0, 0);
     state.start(now);
 
     for step in 0..GRID_STEPS as u64 {
@@ -80,6 +78,31 @@ fn every_row_gets_a_cc1_on_every_step() {
             .map(|(instance, _)| *instance)
             .collect::<Vec<_>>();
         assert_eq!(instances, vec![0, 1, 2], "step {step}");
+    }
+}
+
+#[test]
+fn four_note_lanes_do_not_duplicate_instance_cc1() {
+    let now = Instant::now();
+    let mut state = GridState::with_instance_count(2);
+    for lane in &mut state.instances[1].lanes {
+        lane.pattern.draw_span(0, 0);
+    }
+    state.set_chord(
+        ChordPlayback::new("C", "I7".to_string(), vec![vec![60, 64, 67, 71]]),
+        now,
+    );
+    state.start(now);
+
+    for step in 0..GRID_STEPS as u64 {
+        let sent = cc1_messages_at(&mut state, now + step_offset(step));
+        assert_eq!(
+            sent.iter()
+                .map(|(instance, _)| *instance)
+                .collect::<Vec<_>>(),
+            vec![0, 1],
+            "step {step}"
+        );
     }
 }
 
@@ -107,8 +130,8 @@ fn chord_attack_uses_one_cc1_for_all_simultaneous_notes() {
 fn the_display_covers_every_step_of_the_measure() {
     let now = Instant::now();
     let mut state = GridState::with_row_count(1);
-    state.rows[0].cells[0] = true;
-    state.rows[0].cells[4] = true;
+    state.instances[0].pattern.draw_span(0, 0);
+    state.instances[0].pattern.draw_span(4, 4);
     state.start(now);
     messages_at(&mut state, now);
 

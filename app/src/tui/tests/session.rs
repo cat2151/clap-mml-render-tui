@@ -190,6 +190,79 @@ fn grid_track_count_is_persisted_and_restored() {
 }
 
 #[test]
+fn edited_grid_is_persisted_and_restored_without_persisting_derived_note() {
+    let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
+    let tmp = std::env::temp_dir().join(format!(
+        "cmrt_test_edited_grid_restore_{}_{}",
+        std::process::id(),
+        unique
+    ));
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
+    let pattern = crate::tui::grid_sequencer::NotePattern::from_steps((0..16).map(|step| {
+        if step % 3 == 0 {
+            crate::tui::grid_sequencer::NoteStep::Attack
+        } else {
+            crate::tui::grid_sequencer::NoteStep::Rest
+        }
+    }));
+    let instance = crate::tui::grid_sequencer::GridInstance {
+        patch: Some("Keys/Piano.fxp".to_string()),
+        lane_mode: crate::tui::grid_sequencer::GridLaneMode::Single,
+        voicing_rotation: 0,
+        lanes: vec![crate::tui::grid_sequencer::GridLane {
+            base_note: 64,
+            pattern: pattern.clone(),
+        }],
+    };
+    let mut voicing_instance = crate::tui::grid_sequencer::GridInstance::new(1);
+    voicing_instance.voicing_rotation = -5;
+    let mut app = TuiApp::new_for_test(test_config());
+    app.grid_sequencer = crate::tui::grid_sequencer::GridSequencerScreen::new_with(
+        crate::tui::grid_sequencer::GridSequencerParts {
+            track_count: 2,
+            restored_session: Some(crate::tui::grid_sequencer::GridSequencerSession::new(
+                vec![instance, voicing_instance],
+                crate::tui::grid_sequencer::PatternEvolution::Hold,
+            )),
+            ..crate::tui::grid_sequencer::GridSequencerParts::default()
+        },
+    );
+    app.active_screen = crate::screen_switch::PrimaryScreen::GridSequencer;
+
+    app.save_history_state();
+
+    let json = std::fs::read_to_string(
+        crate::test_utils::session_state_path_for_test().expect("isolated history path"),
+    )
+    .unwrap();
+    assert!(
+        !json.contains("\"note\":"),
+        "derived note must not be stored"
+    );
+    assert!(json.contains("\"note_steps\""));
+    assert!(!json.contains("\"duration\""));
+    assert!(!json.contains("\"cells\""));
+    let cfg = test_config();
+    let restored = TuiApp::new(&cfg, None);
+    let session = restored.grid_sequencer.session_state().unwrap();
+    assert_eq!(
+        session.pattern_evolution,
+        crate::tui::grid_sequencer::PatternEvolution::Hold
+    );
+    assert_eq!(session.instances.len(), 2);
+    assert_eq!(
+        session.instances[0].patch.as_deref(),
+        Some("Keys/Piano.fxp")
+    );
+    assert_eq!(session.instances[0].lanes[0].base_note, 64);
+    assert_eq!(session.instances[0].lanes[0].pattern, pattern);
+    assert_eq!(session.instances[1].voicing_rotation, -5);
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
 fn daw_mode_switch_request_can_be_consumed_from_tui_runtime() {
     assert!(!crate::daw::take_http_mode_switch_request());
 

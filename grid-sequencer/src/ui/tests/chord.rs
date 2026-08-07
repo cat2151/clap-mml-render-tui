@@ -28,42 +28,70 @@ fn chord_playback() -> crate::ChordPlayback {
 }
 
 fn chord_screen() -> GridSequencerScreen {
-    let mut screen = screen_with_first_row(60, StepDuration::Quarter, &[0, 3, 7]);
+    let mut screen = screen_with_first_row(60, &[0, 3, 7]);
     screen
         .state
         .set_chord(Some(chord_playback()), Instant::now());
     screen
 }
 
-/// 和音の行はセルの設定値ではなく「先頭ステップだけ全音符」を見せる。
+/// 和音の行は1つのAttackと小節末尾までのTieを見せる。
 #[test]
-fn the_chord_row_shows_a_whole_note_on_the_first_step_only() {
+fn the_chord_row_shows_an_attack_tied_through_the_measure() {
     let screen = chord_screen();
 
     let rendered = render(&screen);
     let first_row = rendered.lines().nth(CHORD_FIRST_ROW_Y).unwrap();
 
-    assert!(first_row.contains("1/1"), "{first_row}");
+    assert!(!first_row.contains("1/1"), "{first_row}");
     assert!(first_row.contains("  61"), "ルート音を出す: {first_row}");
     assert_eq!(
         slice_chars(first_row, FIRST_CELL_X, CELLS_WIDTH),
-        format!("# {}", ". ".repeat(GRID_STEPS - 1)),
+        format!("# {}", "- ".repeat(GRID_STEPS - 1)),
     );
 }
 
 #[test]
 fn other_rows_keep_their_own_cells_while_the_chord_row_is_playing() {
     let mut screen = chord_screen();
-    screen.state.rows_mut()[1].cells[2] = true;
+    screen.state.rows_mut()[1].pattern.draw_span(2, 2);
 
     let rendered = render(&screen);
-    let second_row = rendered.lines().nth(CHORD_FIRST_ROW_Y + 1).unwrap();
+    let second_row = rendered.lines().nth(CHORD_FIRST_ROW_Y + 4).unwrap();
 
     assert_eq!(
         slice_chars(second_row, FIRST_CELL_X + 4, 2),
         "# ",
         "{second_row}"
     );
+}
+
+#[test]
+fn two_instances_render_one_summary_and_four_grouped_voice_rows() {
+    let mut screen = GridSequencerScreen::with_track_count(None, 2);
+    screen.state.instances_mut()[1].patch = Some("Leads/Mono Lead.fxp".to_string());
+    screen
+        .state
+        .set_chord(Some(chord_playback()), Instant::now());
+
+    let rendered = render(&screen);
+    let lines = rendered.lines().collect::<Vec<_>>();
+    let rows = &lines[CHORD_FIRST_ROW_Y..CHORD_FIRST_ROW_Y + 5];
+    assert!(rows[0].contains("  1 C "), "{}", rows[0]);
+    assert!(rows[1].contains("  2 4 "), "{}", rows[1]);
+    assert!(rows[1].contains("  73 "), "triad octave voice: {}", rows[1]);
+    assert!(rows[2].contains("    3 "), "{}", rows[2]);
+    assert!(rows[2].contains("  68 "), "{}", rows[2]);
+    assert!(rows[3].contains("    2 "), "{}", rows[3]);
+    assert!(rows[3].contains("  65 "), "{}", rows[3]);
+    assert!(rows[4].contains("    1 "), "{}", rows[4]);
+    assert!(
+        rows[4].contains("  61 "),
+        "root must be bottom: {}",
+        rows[4]
+    );
+    assert_eq!(rendered.matches("Leads/Mono Lead.fxp").count(), 1);
+    assert!(rendered.contains("2i/5l"), "{rendered}");
 }
 
 /// 進行は画面下部のステータス行ではなく、grid の直上の1行目に出す。
@@ -137,7 +165,15 @@ fn the_help_overlay_explains_the_chord_mode() {
         "{rendered}"
     );
     assert!(
-        contains_ignoring_spaces(&rendered, "全音符の和音で鳴らし(+6dB)"),
+        contains_ignoring_spaces(&rendered, "instance 1は全音符の和音(AUTO時のみ+6dB)"),
+        "{rendered}"
+    );
+    assert!(
+        contains_ignoring_spaces(&rendered, "独立patternで鳴らします"),
+        "{rendered}"
+    );
+    assert!(
+        contains_ignoring_spaces(&rendered, "mono patchも使用可"),
         "{rendered}"
     );
     assert!(

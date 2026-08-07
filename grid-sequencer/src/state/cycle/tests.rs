@@ -35,6 +35,21 @@ fn rows_map_onto_the_instances_of_their_bank() {
     );
 }
 
+#[test]
+fn all_four_lanes_share_their_instances_bank_id() {
+    let mut state = state_with(2);
+    assert_eq!(state.instances()[1].lanes.len(), 4);
+    assert!((0..4).all(|_| state.instance_id(1) == 1));
+    assert_eq!(state.standby_instance_id(1), 3);
+
+    let instances = state.instances().to_vec();
+    state.stage_next_cycle(instances, chord());
+    state.mark_pending_ready();
+    assert!(state.commit_pending_cycle());
+    assert!((0..4).all(|_| state.instance_id(1) == 3));
+    assert_eq!(state.standby_instance_id(1), 1);
+}
+
 /// 先読みロードの宛先は「待機 bank の instance」でなければならない。
 /// 鳴っている bank へ流し込むと、その場で音が差し替わってしまう。
 #[test]
@@ -73,6 +88,29 @@ fn a_staged_cycle_does_not_swap_until_it_is_marked_ready() {
     assert!(state.commit_pending_cycle());
     assert_eq!(state.bank(), 1);
     assert!(!state.has_pending_cycle(), "差し替えたら待ちは空になる");
+}
+
+/// HOLD は patch を変えないので、待機 bank へ積み直さず現在 bank 上で進行だけを
+/// 差し替える。live edit した patch の instance が境界で変わらないことが重要。
+#[test]
+fn an_in_place_cycle_commits_without_switching_bank() {
+    let mut state = state_with(2);
+    let mut rows = state.rows().to_vec();
+    rows[0].patch = Some("Held/A.fxp".to_string());
+
+    state.stage_next_cycle_in_place(rows, chord());
+
+    assert!(
+        state.pending_patches().is_empty(),
+        "HOLD は standby bank へ何もロードしない"
+    );
+    assert!(state.commit_pending_cycle(), "先読み完了待ちは不要");
+    assert_eq!(state.bank(), 0, "HOLD では active bank を維持する");
+    assert_eq!(
+        state.rows()[0].patch.as_deref(),
+        Some("Held/A.fxp"),
+        "現在 bank 上で rows を取り込む"
+    );
 }
 
 /// 抽選し直したら「準備できた」も取り消す。古いロード結果で差し替えないため。

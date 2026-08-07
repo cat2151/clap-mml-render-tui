@@ -15,6 +15,7 @@ struct LoadedSessionState {
     keyboard: crate::history::KeyboardSessionState,
     grid_sequencer_track_count: usize,
     grid_sequencer_chord_mode: bool,
+    grid_sequencer: Option<crate::history::GridSequencerSessionState>,
     keyboard_note_guide_overlay_date: Option<String>,
     notepad_sound_check_guide_overlay_date: Option<String>,
 }
@@ -37,6 +38,7 @@ fn load_initial_session_state() -> LoadedSessionState {
         keyboard,
         grid_sequencer_track_count,
         grid_sequencer_chord_mode,
+        grid_sequencer,
         keyboard_note_guide_overlay_date,
         notepad_sound_check_guide_overlay_date,
     } = crate::history::load_session_state();
@@ -48,9 +50,118 @@ fn load_initial_session_state() -> LoadedSessionState {
         keyboard,
         grid_sequencer_track_count,
         grid_sequencer_chord_mode,
+        grid_sequencer,
         keyboard_note_guide_overlay_date,
         notepad_sound_check_guide_overlay_date,
     }
+}
+
+fn grid_session_from_history(
+    session: Option<crate::history::GridSequencerSessionState>,
+) -> Option<super::grid_sequencer::GridSequencerSession> {
+    let session = session.filter(|session| !session.instances.is_empty())?;
+    let instances = session
+        .instances
+        .into_iter()
+        .map(|instance| super::grid_sequencer::GridInstance {
+            patch: instance.patch,
+            lane_mode: match instance.lane_mode {
+                crate::history::GridLaneModeState::Single => {
+                    super::grid_sequencer::GridLaneMode::Single
+                }
+                crate::history::GridLaneModeState::ChordVoices4 => {
+                    super::grid_sequencer::GridLaneMode::ChordVoices4
+                }
+            },
+            voicing_rotation: instance.voicing_rotation,
+            lanes: instance
+                .lanes
+                .into_iter()
+                .map(|lane| super::grid_sequencer::GridLane {
+                    base_note: lane.base_note,
+                    pattern: super::grid_sequencer::NotePattern::from_steps(
+                        lane.note_steps.into_iter().map(history_note_step_to_domain),
+                    ),
+                })
+                .collect(),
+        })
+        .collect();
+    let pattern_evolution = match session.pattern_evolution {
+        crate::history::GridPatternEvolutionState::Auto => {
+            super::grid_sequencer::PatternEvolution::Auto
+        }
+        crate::history::GridPatternEvolutionState::Hold => {
+            super::grid_sequencer::PatternEvolution::Hold
+        }
+    };
+    Some(super::grid_sequencer::GridSequencerSession::new(
+        instances,
+        pattern_evolution,
+    ))
+}
+
+fn history_note_step_to_domain(
+    step: crate::history::GridNoteStepState,
+) -> super::grid_sequencer::NoteStep {
+    match step {
+        crate::history::GridNoteStepState::Rest => super::grid_sequencer::NoteStep::Rest,
+        crate::history::GridNoteStepState::Attack => super::grid_sequencer::NoteStep::Attack,
+        crate::history::GridNoteStepState::Tie => super::grid_sequencer::NoteStep::Tie,
+    }
+}
+
+fn domain_note_step_to_history(
+    step: &super::grid_sequencer::NoteStep,
+) -> crate::history::GridNoteStepState {
+    match step {
+        super::grid_sequencer::NoteStep::Rest => crate::history::GridNoteStepState::Rest,
+        super::grid_sequencer::NoteStep::Attack => crate::history::GridNoteStepState::Attack,
+        super::grid_sequencer::NoteStep::Tie => crate::history::GridNoteStepState::Tie,
+    }
+}
+
+fn grid_session_to_history(
+    session: Option<super::grid_sequencer::GridSequencerSession>,
+) -> Option<crate::history::GridSequencerSessionState> {
+    session.map(|session| crate::history::GridSequencerSessionState {
+        instances: session
+            .instances
+            .into_iter()
+            .map(|instance| crate::history::GridSequencerInstanceState {
+                patch: instance.patch,
+                lane_mode: match instance.lane_mode {
+                    super::grid_sequencer::GridLaneMode::Single => {
+                        crate::history::GridLaneModeState::Single
+                    }
+                    super::grid_sequencer::GridLaneMode::ChordVoices4 => {
+                        crate::history::GridLaneModeState::ChordVoices4
+                    }
+                },
+                voicing_rotation: instance.voicing_rotation,
+                lanes: instance
+                    .lanes
+                    .into_iter()
+                    .map(|lane| crate::history::GridSequencerLaneState {
+                        base_note: lane.base_note,
+                        note_steps: lane
+                            .pattern
+                            .steps()
+                            .iter()
+                            .map(domain_note_step_to_history)
+                            .collect(),
+                    })
+                    .collect(),
+            })
+            .collect(),
+        pattern_evolution: match session.pattern_evolution {
+            super::grid_sequencer::PatternEvolution::Auto => {
+                crate::history::GridPatternEvolutionState::Auto
+            }
+            super::grid_sequencer::PatternEvolution::Hold => {
+                crate::history::GridPatternEvolutionState::Hold
+            }
+        },
+    })
 }
 
 /// パッチ一覧の非同期読み込みを開始し、共有状態ハンドルを返す。
@@ -107,6 +218,7 @@ impl<'a> TuiApp<'a> {
             keyboard,
             grid_sequencer_track_count,
             grid_sequencer_chord_mode,
+            grid_sequencer,
             keyboard_note_guide_overlay_date,
             notepad_sound_check_guide_overlay_date,
         } = load_initial_session_state();
@@ -188,6 +300,7 @@ impl<'a> TuiApp<'a> {
                     buffer_frames: cfg.buffer_size,
                     track_count: grid_sequencer_track_count,
                     chord_enabled: grid_sequencer_chord_mode,
+                    restored_session: grid_session_from_history(grid_sequencer),
                 },
             ),
             voicing: super::voicing::VoicingState::new(
@@ -210,6 +323,7 @@ impl<'a> TuiApp<'a> {
             keyboard: self.keyboard.state.session_state(),
             grid_sequencer_track_count: self.grid_sequencer.track_count(),
             grid_sequencer_chord_mode: self.grid_sequencer.chord_enabled(),
+            grid_sequencer: grid_session_to_history(self.grid_sequencer.session_state()),
             keyboard_note_guide_overlay_date: self
                 .keyboard
                 .note_guide

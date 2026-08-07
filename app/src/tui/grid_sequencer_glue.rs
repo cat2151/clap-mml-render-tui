@@ -9,7 +9,8 @@
 
 use std::time::Instant;
 
-use crossterm::event::KeyEvent;
+use crossterm::event::{KeyEvent, MouseEvent};
+use ratatui::layout::Rect;
 
 use cmrt_chord::ChordProgressionCatalog;
 
@@ -101,6 +102,24 @@ impl TuiApp<'_> {
             chord_source_updated: false,
         });
         self.grid_sequencer.handle_key(key, Instant::now(), &ctx)
+    }
+
+    pub(in crate::tui) fn handle_grid_sequencer_mouse_event(
+        &mut self,
+        mouse: MouseEvent,
+        terminal_area: Rect,
+    ) {
+        let patch_dirs_configured = crate::patches::has_configured_patch_dirs(&self.cfg);
+        let patch_load = self.patch_load_state.lock().unwrap();
+        let ctx = grid_sequencer_context(GridContextParts {
+            patch_dirs_configured,
+            patch_load: &patch_load,
+            voicing: &self.voicing,
+            chord_catalog: &self.chord_catalog,
+            chord_patch_categories: &self.cfg.chord_patch_categories,
+            chord_source_updated: false,
+        });
+        self.grid_sequencer.handle_mouse(mouse, terminal_area, &ctx);
     }
 
     /// 1フレームぶん進める。コード進行データの更新アナウンスを出し終えたら true を

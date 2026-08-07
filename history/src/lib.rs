@@ -10,6 +10,7 @@
 use std::path::PathBuf;
 
 mod daw;
+mod grid_sequencer_session;
 mod helpers;
 mod patch_phrase_store;
 mod paths;
@@ -23,6 +24,10 @@ pub use cmrt_tui_core::screen_switch::PrimaryScreen;
 pub use daw::{
     daw_cache_mml_hash, load_daw_session_state, save_daw_session_state,
     save_daw_sound_check_guide_overlay_date, DawCachedMeasure, DawSessionState,
+};
+pub use grid_sequencer_session::{
+    GridLaneModeState, GridNoteStepState, GridPatternEvolutionState, GridSequencerInstanceState,
+    GridSequencerLaneState, GridSequencerRowState, GridSequencerSessionState,
 };
 pub use patch_phrase_store::{
     load_patch_phrase_store, normalize_patch_phrase_store_for_available_patches,

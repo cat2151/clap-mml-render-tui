@@ -1,9 +1,10 @@
 use std::time::Duration;
 
 use super::*;
-use crate::state::{
-    step_offset, velocity::normalize_velocity, GridScheduledMessage, StepDuration, GRID_STEPS,
-};
+use crate::state::{step_offset, velocity::normalize_velocity, GridScheduledMessage, GRID_STEPS};
+use crate::{NotePattern, NoteStep};
+
+mod voicing;
 
 /// 先読みなしで1ステップだけ取り出す。
 fn step_at(state: &mut GridState, now: Instant) -> Vec<GridScheduledMessage> {
@@ -53,7 +54,7 @@ fn the_chord_row_sounds_only_on_the_first_step() {
     let now = Instant::now();
     let mut state = GridState::default();
     // 和音の行はセルを無視する。全ステップを on にしても鳴るのは先頭だけ。
-    state.rows[CHORD_ROW].cells = [true; GRID_STEPS];
+    state.instances[CHORD_ROW].pattern = NotePattern::from_steps([NoteStep::Attack; GRID_STEPS]);
     state.set_chord(Some(c_major_then_f_major()), now);
     state.start(now);
 
@@ -189,45 +190,49 @@ fn other_rows_snap_to_the_chord_while_keeping_their_octave() {
     let now = Instant::now();
     let mut state = GridState::default();
     // C2 付近と C6 付近。C major に寄せても元の音域から離れないこと。
-    state.rows[1].base_note = 38;
-    state.rows[2].base_note = 81;
-    state.rows[3].base_note = 67;
+    state.instances[2].base_note = 38;
+    state.instances[3].base_note = 81;
+    state.instances[4].base_note = 67;
 
     state.set_chord(Some(c_major_then_f_major()), now);
 
-    assert_eq!(state.rows[1].note, 36, "38 は下の C(36) が最も近い");
-    assert_eq!(state.rows[2].note, 79, "81 は下の G(79) が最も近い");
-    assert_eq!(state.rows[3].note, 67, "既に構成音ならそのまま");
+    assert_eq!(
+        state.resolved_note(LaneAddress::new(2, 0)),
+        Some(36),
+        "38 は下の C(36) が最も近い"
+    );
+    assert_eq!(state.resolved_note(LaneAddress::new(3, 0)), Some(79));
+    assert_eq!(state.resolved_note(LaneAddress::new(4, 0)), Some(67));
 }
 
 #[test]
 fn other_rows_follow_the_chord_change() {
     let now = Instant::now();
     let mut state = GridState::default();
-    state.rows[1].base_note = 64;
+    state.instances[2].base_note = 64;
     state.set_chord(Some(c_major_then_f_major()), now);
-    assert_eq!(state.rows[1].note, 64, "C major では E(64) はそのまま");
+    assert_eq!(state.resolved_note(LaneAddress::new(2, 0)), Some(64));
 
     state.advance_chord();
 
-    assert_eq!(state.rows[1].note, 65, "F major では E(64) は F(65) へ");
+    assert_eq!(state.resolved_note(LaneAddress::new(2, 0)), Some(65));
 
     state.advance_chord();
 
-    assert_eq!(state.rows[1].note, 64, "1周して C major へ戻る");
+    assert_eq!(state.resolved_note(LaneAddress::new(2, 0)), Some(64));
 }
 
 #[test]
 fn turning_the_chord_mode_off_restores_the_base_notes() {
     let now = Instant::now();
     let mut state = GridState::default();
-    state.rows[1].base_note = 38;
+    state.instances[2].base_note = 38;
     state.set_chord(Some(c_major_then_f_major()), now);
-    assert_eq!(state.rows[1].note, 36);
+    assert_eq!(state.resolved_note(LaneAddress::new(2, 0)), Some(36));
 
     state.set_chord(None, now);
 
-    assert_eq!(state.rows[1].note, 38);
+    assert_eq!(state.resolved_note(LaneAddress::new(2, 0)), Some(38));
     assert!(state.chord().is_none());
 }
 
@@ -251,9 +256,8 @@ fn switching_the_chord_mode_silences_the_sounding_notes() {
 fn other_rows_keep_playing_their_own_rhythm_under_the_chord() {
     let now = Instant::now();
     let mut state = GridState::default();
-    state.rows[1].base_note = 62;
-    state.rows[1].duration = StepDuration::Sixteenth;
-    state.rows[1].cells[1] = true;
+    state.instances[1].base_note = 62;
+    state.instances[1].pattern.draw_span(1, 1);
     state.set_chord(Some(c_major_then_f_major()), now);
     state.start(now);
     step_at(&mut state, now);
@@ -279,4 +283,40 @@ fn snapping_picks_the_lower_note_on_a_tie() {
 #[test]
 fn snapping_without_any_pitch_class_keeps_the_base_note() {
     assert_eq!(snap_to_chord(60, &[false; 12]), 60);
+}
+
+#[test]
+fn staggered_chord_voice_attacks_do_not_release_each_other() {
+    let now = Instant::now();
+    let mut state = GridState::with_instance_count(2);
+    state.instances[1].lanes[0].pattern.draw_span(0, 3);
+    state.instances[1].lanes[1].pattern.draw_span(2, 2);
+    state.set_chord(Some(c_major_then_f_major()), now);
+    state.start(now);
+
+    let voice_messages = |scheduled: Vec<GridScheduledMessage>| {
+        scheduled
+            .into_iter()
+            .filter(|message| message.instance_id == 1 && message.message[0] != 0xB0)
+            .map(|message| normalize_velocity(message.message))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        voice_messages(step_at(&mut state, now)),
+        vec![[0x90, 60, 100]]
+    );
+    assert!(voice_messages(step_at(&mut state, at_step(now, 1))).is_empty());
+    assert_eq!(
+        voice_messages(step_at(&mut state, at_step(now, 2))),
+        vec![[0x90, 64, 100]],
+        "lane 0のnote offを送らない"
+    );
+    assert_eq!(
+        voice_messages(step_at(&mut state, at_step(now, 3))),
+        vec![[0x80, 64, 0]]
+    );
+    assert_eq!(
+        voice_messages(step_at(&mut state, at_step(now, 4))),
+        vec![[0x80, 60, 0]]
+    );
 }

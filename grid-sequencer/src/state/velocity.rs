@@ -12,8 +12,20 @@ pub(super) const VELOCITY_CHOICES: [u8; 2] = [100, 127];
 
 impl GridState {
     /// 実発音中の小節に対応する velocity grid。`None` のセルは発音しないステップ。
+    #[cfg(test)]
     pub(crate) fn velocity_display(&self) -> &[LaneDisplayRow] {
         self.velocity.display()
+    }
+
+    /// 現在可視なNOTE rowと同じ順序へ、stored laneの表示値を写す。
+    pub(crate) fn visible_velocity_display(&self) -> Vec<LaneDisplayRow> {
+        self.visible_note_rows()
+            .into_iter()
+            .filter_map(|row| {
+                self.stored_lane_index(row.address)
+                    .and_then(|index| self.velocity.display().get(index).copied())
+            })
+            .collect()
     }
 
     /// 実発音中の小節のパターン名。再生前は `None`。

@@ -9,7 +9,6 @@ fn rendered_grid(
     screen: &GridSequencerScreen,
     title: &str,
     display: &[[Option<u8>; GRID_STEPS]],
-    accent: u8,
 ) -> String {
     let mut terminal = Terminal::new(TestBackend::new(90, 6)).unwrap();
     let connection = screen.connection_status();
@@ -22,7 +21,7 @@ fn rendered_grid(
                 display,
                 screen.state.step_index(),
                 &connection,
-                accent,
+                &[0],
             )
         })
         .unwrap();
@@ -40,8 +39,8 @@ fn rendered_grid(
 fn sounding_screen() -> GridSequencerScreen {
     let now = Instant::now();
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
-    screen.state.rows_mut()[0].cells[0] = true;
-    screen.state.rows_mut()[0].cells[4] = true;
+    screen.state.rows_mut()[0].pattern.draw_span(0, 0);
+    screen.state.rows_mut()[0].pattern.draw_span(4, 4);
     screen.state.start(now);
     screen.state.poll_steps(now, Duration::ZERO);
     screen
@@ -52,7 +51,7 @@ fn sounding_screen() -> GridSequencerScreen {
 fn the_cc1_grid_shows_a_value_on_every_step() {
     let screen = sounding_screen();
 
-    let rendered = rendered_grid(&screen, " CC1 Modulation ", screen.state.cc1_display(), 127);
+    let rendered = rendered_grid(&screen, " CC1 Modulation ", screen.state.cc1_display());
 
     assert!(rendered.contains("CC1 Modulation"), "{rendered}");
     assert!(
@@ -66,7 +65,7 @@ fn the_cc1_grid_shows_a_value_on_every_step() {
 fn the_velocity_grid_shows_values_only_on_note_trigger_steps() {
     let screen = sounding_screen();
 
-    let rendered = rendered_grid(&screen, " Velocity ", screen.state.velocity_display(), 127);
+    let rendered = rendered_grid(&screen, " Velocity ", screen.state.velocity_display());
 
     assert!(rendered.contains("Velocity"), "{rendered}");
     assert!(

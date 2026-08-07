@@ -1,4 +1,5 @@
 use anyhow::Result;
+use serde::Deserialize;
 
 // keyboard 画面のセッション状態は `cmrt-tui-core` が所有する。
 pub use cmrt_tui_core::keyboard_session_state::KeyboardSessionState;
@@ -22,6 +23,9 @@ pub struct SessionState {
     /// これを持ち越さないと track 数を変えるたびに chord mode が解除されてしまう。
     #[serde(default)]
     pub grid_sequencer_chord_mode: bool,
+    /// 人間が編集した Grid Sequencer の行と AUTO / HOLD 状態。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grid_sequencer: Option<crate::GridSequencerSessionState>,
     /// keyboard の音出し確認 overlay を最後に表示したローカル日付（YYYY-MM-DD）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keyboard_note_guide_overlay_date: Option<String>,
@@ -39,6 +43,7 @@ impl Default for SessionState {
             keyboard: KeyboardSessionState::default(),
             grid_sequencer_track_count: cmrt_realtime_play::DEFAULT_LIVE_INSTANCE_COUNT,
             grid_sequencer_chord_mode: false,
+            grid_sequencer: None,
             keyboard_note_guide_overlay_date: None,
             notepad_sound_check_guide_overlay_date: None,
         }
@@ -61,6 +66,8 @@ struct SessionStateWire {
     grid_sequencer_track_count: usize,
     #[serde(default)]
     grid_sequencer_chord_mode: bool,
+    #[serde(default, deserialize_with = "deserialize_grid_sequencer")]
+    grid_sequencer: Option<crate::GridSequencerSessionState>,
     #[serde(default)]
     keyboard_note_guide_overlay_date: Option<String>,
     #[serde(default)]
@@ -91,6 +98,7 @@ impl<'de> serde::Deserialize<'de> for SessionState {
                 wire.grid_sequencer_track_count,
             ),
             grid_sequencer_chord_mode: wire.grid_sequencer_chord_mode,
+            grid_sequencer: wire.grid_sequencer,
             keyboard_note_guide_overlay_date: wire.keyboard_note_guide_overlay_date,
             notepad_sound_check_guide_overlay_date: wire.notepad_sound_check_guide_overlay_date,
         })
@@ -99,6 +107,16 @@ impl<'de> serde::Deserialize<'de> for SessionState {
 
 fn default_grid_sequencer_track_count() -> usize {
     cmrt_realtime_play::DEFAULT_LIVE_INSTANCE_COUNT
+}
+
+fn deserialize_grid_sequencer<'de, D>(
+    deserializer: D,
+) -> Result<Option<crate::GridSequencerSessionState>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(serde_json::from_value(value).ok())
 }
 
 /// セッション状態（現在行番号）を history.json に保存する。

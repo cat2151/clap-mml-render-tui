@@ -22,10 +22,22 @@ pub struct GridProgress {
     pub total: usize,
 }
 
-/// grid の1行（= CLAP instance 1つ）の準備段階。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GridRowPatchPhase {
+    Loading,
+    Error(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GridRowPatchStatus {
+    pub row: usize,
+    pub phase: GridRowPatchPhase,
+}
+
+/// grid の1instanceの準備段階。所属する全note laneへ同じ値を使う。
 ///
 /// 起動時の待ち時間は「サーバー側の instance 初期化」と「patch のロード」の
-/// 2段階からなり、どちらも instance id = 行番号 の順に1つずつ進む。行の色を
+/// 2段階からなり、どちらもinstance id順に1つずつ進む。laneの色を
 /// この段階で塗り分けることで、待ち時間そのものを進捗表示にする。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GridRowReadiness {
@@ -52,6 +64,8 @@ pub struct GridConnectionStatus {
     pub server_startup_elapsed: Option<Duration>,
     /// 音色ロード（16 instance 分の patch prepare）の確定所要時間。
     pub patch_setting_elapsed: Option<Duration>,
+    /// mouse selectorから差し替えている1instance。全体の接続phaseはReadyのまま保つ。
+    pub row_patch: Option<GridRowPatchStatus>,
     /// 待機 bank への先読みロードの進捗。`phase` は動かさない（演奏中に走るため）。
     /// `completed` は成功も失敗も数える。ステータス行の表示にだけ使う。
     pub preload: GridProgress,
@@ -75,6 +89,7 @@ impl Default for GridConnectionStatus {
             stage_started_at: None,
             server_startup_elapsed: None,
             patch_setting_elapsed: None,
+            row_patch: None,
             preload: GridProgress {
                 completed: 0,
                 total: 0,
@@ -87,6 +102,21 @@ impl Default for GridConnectionStatus {
 
 impl GridConnectionStatus {
     pub fn label(&self) -> String {
+        if matches!(self.phase, GridConnectionPhase::Ready) {
+            if let Some(row_patch) = &self.row_patch {
+                return match &row_patch.phase {
+                    GridRowPatchPhase::Loading => {
+                        format!("ready | instance {} patch loading", row_patch.row + 1)
+                    }
+                    GridRowPatchPhase::Error(error) => {
+                        format!(
+                            "ready | instance {} patch error: {error}",
+                            row_patch.row + 1
+                        )
+                    }
+                };
+            }
+        }
         match &self.phase {
             GridConnectionPhase::Idle => "idle".to_string(),
             GridConnectionPhase::Connecting => self
@@ -105,12 +135,12 @@ impl GridConnectionStatus {
         }
     }
 
-    /// 指定行（= instance id）の準備段階。grid のグレーアウト表示に使う。
+    /// 指定instanceの準備段階。所属laneのグレーアウト表示に使う。
     ///
     /// `Idle` を `Prepared` にしているのは、MIDI sender を持たないテストモードと
     /// 画面離脱後がこの phase であり、どちらも「準備中」ではないため。
     pub fn row_readiness(&self, row: usize) -> GridRowReadiness {
-        match &self.phase {
+        let readiness = match &self.phase {
             GridConnectionPhase::Idle | GridConnectionPhase::Ready => GridRowReadiness::Prepared,
             GridConnectionPhase::Connecting => {
                 if row < self.server_startup.map_or(0, |progress| progress.completed) {
@@ -128,7 +158,21 @@ impl GridConnectionStatus {
                 }
             }
             GridConnectionPhase::Error(_) => GridRowReadiness::Pending,
+        };
+        if matches!(
+            self.phase,
+            GridConnectionPhase::Idle | GridConnectionPhase::Ready
+        ) {
+            if let Some(row_patch) = &self.row_patch {
+                if row_patch.row == row {
+                    return match row_patch.phase {
+                        GridRowPatchPhase::Loading => GridRowReadiness::InstanceReady,
+                        GridRowPatchPhase::Error(_) => GridRowReadiness::Pending,
+                    };
+                }
+            }
         }
+        readiness
     }
 
     /// 起動待ちの最中か（中央 overlay を出すかどうかの判定）。
@@ -146,6 +190,12 @@ impl GridConnectionStatus {
             GridConnectionPhase::Error(message) => Some(message),
             _ => None,
         }
+    }
+
+    pub fn row_patch_is_loading(&self) -> bool {
+        self.row_patch
+            .as_ref()
+            .is_some_and(|status| matches!(status.phase, GridRowPatchPhase::Loading))
     }
 
     /// 段1・段2それぞれの経過時間。確定していなければ、進行中の段だけ
@@ -175,6 +225,7 @@ impl GridConnectionStatus {
         self.stage_started_at = Some(Instant::now());
         self.server_startup_elapsed = None;
         self.patch_setting_elapsed = None;
+        self.row_patch = None;
     }
 
     pub(super) fn update_server_startup(&mut self, completed: usize, total: usize) {
@@ -204,6 +255,24 @@ impl GridConnectionStatus {
 
     pub(super) fn update_patch_setting(&mut self, completed: usize, total: usize) {
         self.patch_setting = Some(GridProgress { completed, total });
+    }
+
+    pub(super) fn begin_row_patch_setting(&mut self, row: usize) {
+        self.row_patch = Some(GridRowPatchStatus {
+            row,
+            phase: GridRowPatchPhase::Loading,
+        });
+    }
+
+    pub(super) fn finish_row_patch_setting(&mut self, row: usize, error: Option<String>) {
+        self.row_patch = error.map(|error| GridRowPatchStatus {
+            row,
+            phase: GridRowPatchPhase::Error(error),
+        });
+    }
+
+    pub(super) fn clear_row_patch_setting(&mut self) {
+        self.row_patch = None;
     }
 
     pub(super) fn finish_patch_setting(&mut self, elapsed: Duration) {
@@ -271,3 +340,6 @@ impl GridConnectionStatus {
         self.underrun_frames = underrun_frames;
     }
 }
+
+#[cfg(test)]
+mod tests;

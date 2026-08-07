@@ -8,10 +8,10 @@ use cmrt_tui_core::{
 };
 
 use super::*;
-use crate::{GridPatchStatus, GridProgress, StepDuration, GRID_ROWS, STEP_INTERVAL};
+use crate::{GridPatchStatus, GridProgress, GRID_ROWS, STEP_INTERVAL};
 
-/// 情報欄(40桁) + 枠線(1桁) のぶんだけ右にある、grid の先頭セルの列。
-const FIRST_CELL_X: usize = 41;
+/// 情報欄(36桁) + 枠線(1桁) のぶんだけ右にある、grid の先頭セルの列。
+const FIRST_CELL_X: usize = 37;
 /// 枠線(1行) + ヘッダ(1行) のぶんだけ下にある、grid の1行目の行。
 const FIRST_ROW_Y: usize = 2;
 /// 1セルは記号+空白の2桁。
@@ -80,35 +80,32 @@ fn has_progress_overlay(rendered: &str) -> bool {
 }
 
 /// 1行目だけを鳴らす、決め打ちの grid。
-fn screen_with_first_row(note: u8, duration: StepDuration, cells: &[usize]) -> GridSequencerScreen {
+fn screen_with_first_row(note: u8, attacks: &[usize]) -> GridSequencerScreen {
     let mut screen = GridSequencerScreen::new(None);
     let row = &mut screen.state.rows_mut()[0];
     row.patch = Some("Keys/Piano.fxp".to_string());
-    row.note = note;
-    row.duration = duration;
-    for step in cells {
-        row.cells[*step] = true;
+    row.base_note = note;
+    for step in attacks {
+        row.pattern.draw_span(*step, *step);
     }
     screen
 }
 
 #[test]
 fn every_row_is_drawn_with_its_left_hand_columns() {
-    let mut screen = screen_with_first_row(60, StepDuration::Quarter, &[0]);
+    let mut screen = screen_with_first_row(60, &[0]);
     let last = &mut screen.state.rows_mut()[GRID_ROWS - 1];
     last.patch = Some("Leads/Saw.fxp".to_string());
-    last.note = 84;
+    last.base_note = 84;
 
     let rendered = render(&screen);
     let lines = rendered.lines().collect::<Vec<_>>();
 
     assert!(rendered.contains("PATCH"), "{rendered}");
     assert!(rendered.contains("NOTE"), "{rendered}");
-    assert!(rendered.contains("DUR"), "{rendered}");
+    assert!(!rendered.contains("DUR"), "{rendered}");
     assert!(rendered.contains("Keys/Piano.fxp"), "{rendered}");
     assert!(rendered.contains("Leads/Saw.fxp"), "{rendered}");
-    assert!(rendered.contains("1/4"), "{rendered}");
-    assert!(rendered.contains("1/16"), "{rendered}");
     assert_eq!(slice_chars(lines[FIRST_ROW_Y], 1, 4), "  1 ");
     assert_eq!(
         slice_chars(lines[FIRST_ROW_Y + GRID_ROWS - 1], 1, 4),
@@ -119,7 +116,7 @@ fn every_row_is_drawn_with_its_left_hand_columns() {
 #[test]
 fn note_on_cells_are_marked_and_rests_are_dots() {
     let on_steps = [0usize, 4, 8];
-    let screen = screen_with_first_row(60, StepDuration::Sixteenth, &on_steps);
+    let screen = screen_with_first_row(60, &on_steps);
 
     let rendered = render(&screen);
     let first_row = rendered.lines().nth(FIRST_ROW_Y).unwrap();
@@ -135,9 +132,18 @@ fn note_on_cells_are_marked_and_rests_are_dots() {
 }
 
 #[test]
+fn long_notes_render_attack_ties_and_rests_distinctly() {
+    let mut screen = screen_with_first_row(60, &[]);
+    screen.state.rows_mut()[0].pattern.draw_span(0, 3);
+    let rendered = render(&screen);
+    let first_row = rendered.lines().nth(FIRST_ROW_Y).unwrap();
+    assert_eq!(slice_chars(first_row, FIRST_CELL_X, 10), "# - - - . ");
+}
+
+#[test]
 fn the_playhead_column_follows_the_step_progression() {
     let now = Instant::now();
-    let mut screen = screen_with_first_row(60, StepDuration::Sixteenth, &[]);
+    let mut screen = screen_with_first_row(60, &[]);
     screen.state.start(now);
     screen.state.poll_steps(now, Duration::ZERO);
     screen.state.poll_steps(now + STEP_INTERVAL, Duration::ZERO);
@@ -171,14 +177,14 @@ fn the_step_ruler_marks_every_fourth_step() {
 
 #[test]
 fn the_status_line_shows_instances_and_limiter_reduction() {
-    let mut screen = screen_with_first_row(60, StepDuration::Sixteenth, &[]);
+    let mut screen = screen_with_first_row(60, &[]);
     screen.patch_status = GridPatchStatus::Ready(42);
 
     let rendered = render(&screen);
 
     assert!(rendered.contains("SHM idle"), "{rendered}");
     assert!(rendered.contains("130bpm"), "{rendered}");
-    assert!(rendered.contains("16tr"), "{rendered}");
+    assert!(rendered.contains("16i/16l"), "{rendered}");
     assert!(rendered.contains("step 1/16"), "{rendered}");
     assert!(rendered.contains("GR0.0"), "{rendered}");
     assert!(rendered.contains("p:42"), "{rendered}");
@@ -194,12 +200,12 @@ fn compact_grid_draws_only_the_selected_tracks() {
     assert_eq!(slice_chars(lines[FIRST_ROW_Y], 1, 4), "  1 ");
     assert_eq!(slice_chars(lines[FIRST_ROW_Y + 1], 1, 4), "  2 ");
     assert_ne!(slice_chars(lines[FIRST_ROW_Y + 2], 1, 4), "  3 ");
-    assert!(rendered.contains("2tr"), "{rendered}");
+    assert!(rendered.contains("2i/2l"), "{rendered}");
 }
 
 #[test]
 fn the_status_line_shows_adaptive_buffer_and_current_level_underruns() {
-    let screen = screen_with_first_row(60, StepDuration::Sixteenth, &[]);
+    let screen = screen_with_first_row(60, &[]);
     let connection = GridConnectionStatus {
         buffer_multiplier: 8,
         underrun_frames: 1_536,
@@ -215,7 +221,7 @@ fn the_status_line_shows_adaptive_buffer_and_current_level_underruns() {
 /// 倍率が上がるほど想定レイテンシも伸びる。x256 まで出し切っても桁が溢れないこと。
 #[test]
 fn the_status_line_shows_the_expected_latency_of_the_largest_buffer() {
-    let screen = screen_with_first_row(60, StepDuration::Sixteenth, &[]);
+    let screen = screen_with_first_row(60, &[]);
     let connection = GridConnectionStatus {
         buffer_multiplier: 256,
         underrun_frames: 1_536,
@@ -350,7 +356,7 @@ fn the_error_overlay_shows_the_reason_and_greys_out_every_row() {
 
 #[test]
 fn the_overlay_disappears_and_rows_regain_their_colour_once_ready() {
-    let screen = screen_with_first_row(60, StepDuration::Sixteenth, &[0]);
+    let screen = screen_with_first_row(60, &[0]);
     let connection = GridConnectionStatus {
         phase: GridConnectionPhase::Ready,
         ..GridConnectionStatus::default()
@@ -369,60 +375,13 @@ fn the_overlay_disappears_and_rows_regain_their_colour_once_ready() {
 /// overlay を出さず grid も通常色で描く。
 #[test]
 fn the_idle_test_mode_draws_the_grid_without_any_overlay() {
-    let screen = screen_with_first_row(60, StepDuration::Sixteenth, &[0]);
+    let screen = screen_with_first_row(60, &[0]);
 
     let rendered = render(&screen);
     let terminal = terminal_for(&screen);
 
     assert!(!has_progress_overlay(&rendered), "{rendered}");
     assert_eq!(row_label_fg(&terminal, 0), MONOKAI_FG);
-}
-
-#[test]
-fn the_keybind_line_is_always_visible() {
-    let screen = GridSequencerScreen::new(None);
-
-    let rendered = render(&screen);
-
-    assert!(rendered.contains("r:randomize"), "{rendered}");
-    assert!(rendered.contains("R:randomize-notes"), "{rendered}");
-    assert!(rendered.contains("t:tracks"), "{rendered}");
-    assert!(rendered.contains("Ctrl+G:screen"), "{rendered}");
-    assert!(rendered.contains("q:quit"), "{rendered}");
-}
-
-#[test]
-fn the_help_overlay_lists_the_keybinds() {
-    let mut screen = GridSequencerScreen::new(None);
-    screen.help_open = true;
-
-    let terminal = terminal_for(&screen);
-    let buffer = terminal.backend().buffer();
-
-    // 全角文字はセル2つぶんを占めるため、空白を無視して探す。
-    find_text_ignoring_spaces(buffer, "ヘルプ(Keybinds)");
-    find_text_ignoring_spaces(buffer, "画面切替メニュー");
-    find_text_ignoring_spaces(buffer, "Ctrl+G");
-}
-
-/// メモリ行は overlay の先頭に出す。ヘルプが端末より長いと下が切り落とされるため。
-#[test]
-fn the_help_overlay_shows_the_memory_usage_at_the_top() {
-    let mut screen = GridSequencerScreen::new(None);
-    screen.help_open = true;
-
-    let terminal = terminal_for(&screen);
-    let buffer = terminal.backend().buffer();
-    let (_, top, _, _) = cmrt_tui_core::buffer_test::help_overlay_bounds(buffer);
-
-    let memory_line = buffer_to_string(&terminal)
-        .lines()
-        .nth(usize::from(top) + 1)
-        .unwrap()
-        .replace(' ', "");
-
-    assert!(memory_line.contains("実メモリ合計"), "{memory_line}");
-    assert!(memory_line.contains("OS空き"), "{memory_line}");
 }
 
 /// 情報欄は幅が限られるので先頭を省略するが、ステータス行にはフルパスが残る。
@@ -441,4 +400,6 @@ fn a_long_patch_name_is_truncated_from_the_head_in_the_grid() {
 }
 
 mod chord;
+mod help;
 mod layout;
+mod patch_selector;

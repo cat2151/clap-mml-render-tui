@@ -84,6 +84,7 @@ fn session_state_serialize_deserialize() {
         keyboard: KeyboardSessionState::default(),
         grid_sequencer_track_count: 16,
         grid_sequencer_chord_mode: false,
+        grid_sequencer: None,
         keyboard_note_guide_overlay_date: Some("2026-07-20".to_string()),
         notepad_sound_check_guide_overlay_date: Some("2026-07-19".to_string()),
     };
@@ -111,6 +112,7 @@ fn session_state_serialize_deserialize_zero() {
         keyboard: KeyboardSessionState::default(),
         grid_sequencer_track_count: 16,
         grid_sequencer_chord_mode: false,
+        grid_sequencer: None,
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
     };
@@ -130,6 +132,7 @@ fn session_state_serialize_deserialize_daw_screen() {
         keyboard: KeyboardSessionState::default(),
         grid_sequencer_track_count: 16,
         grid_sequencer_chord_mode: false,
+        grid_sequencer: None,
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
     };
@@ -230,6 +233,7 @@ fn save_and_load_session_state_roundtrip() {
         keyboard: KeyboardSessionState::default(),
         grid_sequencer_track_count: 16,
         grid_sequencer_chord_mode: false,
+        grid_sequencer: None,
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
     };
@@ -309,6 +313,7 @@ fn save_and_load_session_state_roundtrip_daw_mode() {
         keyboard: KeyboardSessionState::default(),
         grid_sequencer_track_count: 16,
         grid_sequencer_chord_mode: false,
+        grid_sequencer: None,
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
     };

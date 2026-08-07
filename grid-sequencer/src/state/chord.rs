@@ -9,7 +9,7 @@
 
 use std::time::Instant;
 
-use super::{GridRow, GridScheduledMessage, GridState};
+use super::{GridLaneMode, GridScheduledMessage, GridState, LaneAddress};
 
 /// 和音を鳴らす行。UI の行1 = realtime play server の instance 0。
 pub const CHORD_ROW: usize = 0;
@@ -61,6 +61,10 @@ impl ChordPlayback {
         &self.chords[self.index]
     }
 
+    pub fn max_voice_count(&self) -> usize {
+        self.chords.iter().map(Vec::len).max().unwrap_or(0)
+    }
+
     /// 次のコードへ進める。進行を1周して先頭へ戻ったときだけ true。
     fn advance(&mut self) -> bool {
         self.index = (self.index + 1) % self.chords.len();
@@ -95,16 +99,16 @@ impl GridState {
     ) -> Vec<GridScheduledMessage> {
         self.chord = chord;
         self.discard_pending_cycle();
-        self.apply_chord_to_rows();
         self.refresh_lane_display_patterns();
         self.take_silence_messages(now)
     }
 
     /// grid を1周したときに次のコードへ進める。
     ///
-    /// 進行を1周し終えたら、先読みロードが済んでいる次サイクルへ bank ごと差し替える
-    /// （[`super::cycle`]）。差し替えは `attack_current_step()` の直前に起きるので、
-    /// その小節の頭から新しい進行の1コード目がそのまま鳴る。
+    /// 進行を1周し終えたら、準備済みの次サイクルへ差し替える（[`super::cycle`]）。
+    /// AUTO は待機 bank へ移り、HOLD は現在 bank のまま進行だけを取り込む。
+    /// 差し替えは `attack_current_step()` の直前に起きるので、その小節の頭から
+    /// 新しい進行の1コード目がそのまま鳴る。
     ///
     /// シングルバッファリング（[`crate::single_buffer`]）では裏読みをしていないので
     /// 差し替えず、「鳴らしきった」合図だけを立てて `poll_steps` にクロックを畳ませる。
@@ -123,43 +127,63 @@ impl GridState {
         if self.chord.as_ref().is_some_and(ChordPlayback::is_last) {
             self.preload_due = true;
         }
-        self.apply_chord_to_rows();
     }
 
-    /// 和音以外の行の note number を、現在のコードの構成音へ寄せる。
-    ///
-    /// 構成音をそのまま割り当てると全行が和音と同じ狭い音域へ集まってしまうので、
-    /// 抽選した `base_note` の高さを保ったまま、最も近い構成音へスナップする。
-    /// chord mode を解除したときは `base_note` へ戻す。
-    pub(super) fn apply_chord_to_rows(&mut self) {
-        let classes = self.chord.as_ref().map(ChordPlayback::pitch_classes);
-        apply_pitch_classes(&mut self.rows, classes);
-    }
-}
-
-/// 行の並びの note number を、与えたコードの構成音へ寄せる。
-///
-/// `GridState` の外へ出してあるのは、chord mode が「鳴っている grid を触らずに
-/// 次サイクルを抽選する」ために、複製した行の並びへ同じ処理をかけるため。
-pub fn snap_rows_to_chord(rows: &mut [GridRow], chord: &ChordPlayback) {
-    apply_pitch_classes(rows, Some(chord.pitch_classes()));
-}
-
-fn apply_pitch_classes(rows: &mut [GridRow], classes: Option<[bool; 12]>) {
-    for (index, row) in rows.iter_mut().enumerate() {
-        match classes {
-            // 和音の行は `note` を使わない（`current()` の全構成音を鳴らす）。
-            Some(_) if index == CHORD_ROW => {}
-            Some(classes) => row.note = snap_to_chord(row.base_note, &classes),
-            None => row.note = row.base_note,
+    /// 保存値ではなく現在の mode / chord から、その lane が次に鳴らす音を導出する。
+    pub fn resolved_note(&self, address: LaneAddress) -> Option<u8> {
+        let instance = self.instances.get(address.instance)?;
+        let lane = instance.lanes.get(address.lane)?;
+        let Some(chord) = self.chord.as_ref() else {
+            return (address.lane == 0).then_some(lane.base_note);
+        };
+        if address.instance == CHORD_ROW {
+            // chord instance は個別laneではなく summary owner が全構成音を鳴らす。
+            return None;
+        }
+        match instance.lane_mode {
+            GridLaneMode::Single => Some(snap_to_chord(lane.base_note, &chord.pitch_classes())),
+            GridLaneMode::ChordVoices4 => {
+                rotated_chord_voice(chord.current(), address.lane, instance.voicing_rotation)
+            }
         }
     }
+}
+
+/// signedな`rotation`ぶん構成音を累積してずらす。正は上へ、負は下へ転回する。
+///
+/// C-E-Gを例にすると、`1`はE-G-C5、`-1`はG3-C-E、`-3`はC3-E3-G3になる。
+pub(super) fn rotated_chord_voice(notes: &[u8], lane: usize, rotation: i8) -> Option<u8> {
+    let notes = &notes[..notes.len().min(super::CHORD_VOICE_LANES)];
+    let rendered_voice_count = if notes.len() == 3 {
+        super::CHORD_VOICE_LANES
+    } else {
+        notes.len()
+    };
+    if lane >= rendered_voice_count || notes.is_empty() {
+        return None;
+    }
+    let note_count = i16::try_from(notes.len()).ok()?;
+    let rotation = i16::from(rotation);
+    let mut previous = None;
+    for voice in 0..=lane {
+        let sequence = rotation + i16::try_from(voice).ok()?;
+        let note_index = usize::try_from(sequence.rem_euclid(note_count)).ok()?;
+        let mut note = i16::from(notes[note_index]) + 12 * sequence.div_euclid(note_count);
+        while previous.is_some_and(|previous| note <= previous) {
+            note += 12;
+        }
+        if !(0..=127).contains(&note) {
+            return None;
+        }
+        previous = Some(note);
+    }
+    previous.map(|note| note as u8)
 }
 
 /// `base` に最も近い、ピッチクラスが `classes` に含まれる note number を返す。
 ///
 /// 同距離なら低いほうを選ぶ（上へ寄って音域が上ずるのを防ぐ）。
-fn snap_to_chord(base: u8, classes: &[bool; 12]) -> u8 {
+pub(super) fn snap_to_chord(base: u8, classes: &[bool; 12]) -> u8 {
     if !classes.iter().any(|on| *on) {
         return base;
     }

@@ -8,16 +8,31 @@ mod cc1;
 mod chord;
 mod clock;
 mod cycle;
+mod edit;
+mod instance;
 mod measure_lane;
+mod note_pattern;
 mod randomize;
+mod session;
 mod velocity;
 
-pub use chord::{snap_rows_to_chord, ChordPlayback, CHORD_ROW};
+pub use edit::PitchDirection;
+pub use instance::{
+    GridInstance, GridLane, GridLaneMode, LaneAddress, VisibleNoteRow, VisibleRowKind,
+    CHORD_VOICE_LANES,
+};
+pub use note_pattern::{NotePattern, NoteStep};
+
+pub use chord::{ChordPlayback, CHORD_ROW};
 pub use clock::{frames_ahead, step_offset, BPM, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL};
 use clock::{StepClock, SCHEDULE_GUARD};
-pub use randomize::{pick_chord_patch, randomize_row_slice};
+pub(crate) use randomize::patch_is_chord_candidate;
+pub use randomize::{pick_chord_patch, randomize_instance_slice};
 
-/// grid の既定・最大行数（＝パート数）。
+#[cfg(test)]
+pub type GridRow = GridInstance;
+
+/// grid の既定・最大 instance 数。
 pub const GRID_ROWS: usize = 16;
 /// grid の列数（＝1周のステップ数）。
 pub const GRID_STEPS: usize = 16;
@@ -27,70 +42,19 @@ const NOTE_OFF: u8 = 0x80;
 /// 行の note number の既定値（C4）。
 const DEFAULT_NOTE: u8 = 60;
 
-/// 行の音長。ステップ長（16分音符）の何個ぶん鳴らすかを決める。
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum StepDuration {
-    #[default]
-    Sixteenth,
-    Quarter,
-    /// 全音符。grid 1周（16ステップ）ぶん鳴らし続ける。chord mode の和音で使う。
-    Whole,
-}
-
-impl StepDuration {
-    /// この音長が占めるステップ数。
-    pub fn steps(self) -> u8 {
-        match self {
-            Self::Sixteenth => 1,
-            Self::Quarter => 4,
-            Self::Whole => GRID_STEPS as u8,
-        }
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Sixteenth => "1/16",
-            Self::Quarter => "1/4",
-            Self::Whole => "1/1",
-        }
-    }
-}
-
-/// grid の1行。1行 = 1パート。
-///
-/// 行番号を realtime play server の instance ID として使い、`patch` と MIDI を
-/// その行専用の CLAP instance へ送る。
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GridRow {
-    pub patch: Option<String>,
-    /// 実際に鳴らす note number。chord mode 中は `base_note` をコード構成音へ
-    /// 寄せた値が入る。
-    pub note: u8,
-    /// ランダム抽選した素の note number。chord mode を切ったときの復帰点であり、
-    /// コードへ寄せるときの「音域の目安」でもある。
-    pub base_note: u8,
-    pub duration: StepDuration,
-    pub cells: [bool; GRID_STEPS],
-}
-
-impl Default for GridRow {
-    fn default() -> Self {
-        Self {
-            patch: None,
-            note: DEFAULT_NOTE,
-            base_note: DEFAULT_NOTE,
-            duration: StepDuration::default(),
-            cells: [false; GRID_STEPS],
-        }
-    }
-}
-
 /// 発音中のノートと、その残りステップ数。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct SoundingNote {
+    owner: SoundOwner,
     instance_id: u8,
     midi_note: u8,
     remaining_steps: u8,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SoundOwner {
+    Lane(LaneAddress),
+    ChordInstance { instance: usize },
 }
 
 /// 先読みで組み立てた、まだ鳴っていない MIDI メッセージ1件。
@@ -110,7 +74,7 @@ pub struct GridScheduledMessage {
 /// `GridSequencerScreen` が `GridMidiSender` 経由で行う。
 #[derive(Debug)]
 pub struct GridState {
-    rows: Vec<GridRow>,
+    instances: Vec<GridInstance>,
     /// 表示用の再生位置。先読みで組み立て済みでも、締切が来るまでは進めない。
     step_index: usize,
     /// メッセージ組み立て用のカーソル。先読みぶんだけ `step_index` より先を指す。
@@ -131,7 +95,7 @@ pub struct GridState {
     last_scheduled: Option<Instant>,
     /// chord mode の再生状態。`None` なら従来どおりの単音演奏。
     chord: Option<ChordPlayback>,
-    /// いま鳴らしている bank（0 か 1）。行 `r` は instance `bank * 行数 + r` へ写る。
+    /// いま鳴らしている bank（0 か 1）。instance index を bank 幅として写す。
     bank: usize,
     /// 抽選済みで、先読みロードが終われば差し替える次サイクル。詳細は [`cycle`]。
     pending: Option<cycle::PendingCycle>,
@@ -152,26 +116,30 @@ pub struct GridState {
 
 impl Default for GridState {
     fn default() -> Self {
-        Self::with_row_count(GRID_ROWS)
+        Self::with_instance_count(GRID_ROWS)
     }
 }
 
 impl GridState {
-    pub fn with_row_count(row_count: usize) -> Self {
-        assert!(row_count > 0, "grid row count must be positive");
+    pub fn with_instance_count(instance_count: usize) -> Self {
+        assert!(instance_count > 0, "grid instance count must be positive");
+        let instances = (0..instance_count)
+            .map(GridInstance::new)
+            .collect::<Vec<_>>();
+        let stored_lane_count = instances.iter().map(|instance| instance.lanes.len()).sum();
         Self {
-            rows: vec![GridRow::default(); row_count],
+            instances,
             step_index: 0,
             schedule_index: 0,
             started: false,
             sounding: Vec::new(),
             cc1: measure_lane::MeasureLane::new(
-                row_count,
+                instance_count,
                 cc1::CC1_CHOICES,
                 measure_lane::LaneCoverage::EveryStep,
             ),
             velocity: measure_lane::MeasureLane::new(
-                row_count,
+                stored_lane_count,
                 velocity::VELOCITY_CHOICES,
                 measure_lane::LaneCoverage::SoundingCells,
             ),
@@ -189,17 +157,114 @@ impl GridState {
         }
     }
 
+    pub fn instance_count(&self) -> usize {
+        self.instances.len()
+    }
+
+    #[cfg(test)]
+    pub fn with_row_count(row_count: usize) -> Self {
+        Self::with_instance_count(row_count)
+    }
+
+    #[cfg(test)]
     pub fn row_count(&self) -> usize {
-        self.rows.len()
+        self.instance_count()
     }
 
-    pub fn rows(&self) -> &[GridRow] {
-        &self.rows
+    #[cfg(test)]
+    pub fn rows(&self) -> &[GridInstance] {
+        self.instances()
     }
 
-    /// 行を直接書き換える。将来のセル編集 UI と、決め打ちの grid を作るテストで使う。
-    pub fn rows_mut(&mut self) -> &mut [GridRow] {
-        &mut self.rows
+    #[cfg(test)]
+    pub fn rows_mut(&mut self) -> &mut [GridInstance] {
+        self.instances_mut()
+    }
+
+    pub fn stored_lane_count(&self) -> usize {
+        self.instances
+            .iter()
+            .map(|instance| instance.lanes.len())
+            .sum()
+    }
+
+    pub fn visible_lane_count(&self) -> usize {
+        self.visible_note_rows().len()
+    }
+
+    pub fn instances(&self) -> &[GridInstance] {
+        &self.instances
+    }
+
+    pub fn instances_mut(&mut self) -> &mut [GridInstance] {
+        &mut self.instances
+    }
+
+    pub fn lane(&self, address: LaneAddress) -> Option<&GridLane> {
+        self.instances
+            .get(address.instance)?
+            .lanes
+            .get(address.lane)
+    }
+
+    pub fn lane_mut(&mut self, address: LaneAddress) -> Option<&mut GridLane> {
+        self.instances
+            .get_mut(address.instance)?
+            .lanes
+            .get_mut(address.lane)
+    }
+
+    pub fn visible_note_rows(&self) -> Vec<VisibleNoteRow> {
+        let chord_on = self.chord.is_some();
+        self.instances
+            .iter()
+            .enumerate()
+            .flat_map(|(instance_index, instance)| {
+                let count = if chord_on && instance_index == CHORD_ROW {
+                    // chord専用instanceは保存modeによらず、常にsummary 1 rowだけを出す。
+                    1.min(instance.lanes.len())
+                } else if chord_on {
+                    instance.lanes.len()
+                } else {
+                    1.min(instance.lanes.len())
+                };
+                let lanes = if chord_on && instance.lane_mode == GridLaneMode::ChordVoices4 {
+                    // piano rollと同じく高音を上、lane 0（既定root）を最下段へ置く。
+                    (0..count).rev().collect::<Vec<_>>()
+                } else {
+                    (0..count).collect::<Vec<_>>()
+                };
+                lanes.into_iter().map(move |lane| VisibleNoteRow {
+                    address: LaneAddress::new(instance_index, lane),
+                    kind: if chord_on && instance_index == CHORD_ROW {
+                        VisibleRowKind::ChordSummary
+                    } else {
+                        VisibleRowKind::Normal
+                    },
+                })
+            })
+            .collect()
+    }
+
+    pub fn stored_lane_addresses(&self) -> Vec<LaneAddress> {
+        self.instances
+            .iter()
+            .enumerate()
+            .flat_map(|(instance, item)| {
+                (0..item.lanes.len()).map(move |lane| LaneAddress::new(instance, lane))
+            })
+            .collect()
+    }
+
+    pub(super) fn stored_lane_index(&self, address: LaneAddress) -> Option<usize> {
+        let instance = self.instances.get(address.instance)?;
+        (address.lane < instance.lanes.len()).then(|| {
+            self.instances[..address.instance]
+                .iter()
+                .map(|item| item.lanes.len())
+                .sum::<usize>()
+                + address.lane
+        })
     }
 
     /// 現在の再生位置（列）。

@@ -325,12 +325,53 @@ fn staging_the_next_cycle_rerolls_every_patch() {
 }
 
 #[test]
-fn only_the_chord_row_is_boosted_and_only_while_the_chord_mode_is_on() {
+fn hold_stages_a_new_progression_without_replacing_the_score() {
+    let now = Instant::now();
+    let catalog = catalog();
+    let patches = categorized_patches();
+    let ctx = ctx_with_categories(&patches, &catalog, &AllPoly, &[]);
+    let mut screen = screen();
+    screen.start(now, &ctx);
+    screen.handle_key(press_c(), now, &ctx);
+    screen.pattern_evolution = crate::PatternEvolution::Hold;
+    for (index, row) in screen.state.rows_mut().iter_mut().enumerate() {
+        row.patch = Some(format!("Kept/{index}.fxp"));
+        row.base_note = 48 + index as u8;
+        row.pattern = crate::NotePattern::from_steps((0..crate::GRID_STEPS).map(|step| {
+            if step % (index + 2) == 0 {
+                crate::NoteStep::Attack
+            } else {
+                crate::NoteStep::Rest
+            }
+        }));
+    }
+    let before = screen.state.rows().to_vec();
+
+    assert!(screen.stage_next_cycle(now, &ctx));
+
+    let staged = screen.state.pending_rows_for_test();
+    for (actual, expected) in staged.iter().zip(&before) {
+        assert_eq!(actual.patch, expected.patch);
+        assert_eq!(actual.base_note, expected.base_note);
+        assert_eq!(actual.pattern, expected.pattern);
+    }
+}
+
+#[test]
+fn only_auto_chord_mode_boosts_the_chord_row() {
     // 返すのは bank 2 本ぶん。差し替え先の bank にも同じ音量差を載せておかないと、
     // 切り替わった瞬間に和音だけ音量が落ちる。
-    assert_eq!(crate::chord_gains_db(4, false), vec![0.0; 8]);
     assert_eq!(
-        crate::chord_gains_db(4, true),
+        crate::chord_gains_db(4, false, crate::PatternEvolution::Auto),
+        vec![0.0; 8]
+    );
+    assert_eq!(
+        crate::chord_gains_db(4, true, crate::PatternEvolution::Hold),
+        vec![0.0; 8],
+        "手編集を保持するHOLDでは全instanceを同じゲインへ戻す"
+    );
+    assert_eq!(
+        crate::chord_gains_db(4, true, crate::PatternEvolution::Auto),
         vec![
             crate::CHORD_GAIN_DB,
             0.0,

@@ -44,6 +44,18 @@ fn entering_grid_sequencer_starts_playing_and_help_blocks_the_menu() {
     assert!(!app.try_open_screen_switch_menu(ctrl_g()));
 }
 
+#[test]
+fn only_the_grid_sequencer_requests_mouse_capture() {
+    let mut app = TuiApp::new_for_test(test_config());
+    assert!(!app.uses_mouse_capture());
+
+    app.switch_to_primary_screen(PrimaryScreen::GridSequencer, None);
+    assert!(app.uses_mouse_capture());
+
+    app.switch_to_primary_screen(PrimaryScreen::Notepad, None);
+    assert!(!app.uses_mouse_capture());
+}
+
 /// 画面を離れるときに再生を止めないと、音が鳴りっぱなしになる。
 #[test]
 fn leaving_grid_sequencer_stops_the_progression() {
@@ -62,12 +74,12 @@ fn leaving_grid_sequencer_stops_the_progression() {
 fn returning_to_grid_sequencer_keeps_the_previous_grid() {
     let mut app = TuiApp::new_for_test(test_config());
     app.switch_to_primary_screen(PrimaryScreen::GridSequencer, None);
-    let grid = app.grid_sequencer.state.rows().to_vec();
+    let grid = app.grid_sequencer.state.instances().to_vec();
 
     app.switch_to_primary_screen(PrimaryScreen::Notepad, None);
     app.switch_to_primary_screen(PrimaryScreen::GridSequencer, None);
 
-    assert_eq!(app.grid_sequencer.state.rows(), grid.as_slice());
+    assert_eq!(app.grid_sequencer.state.instances(), grid.as_slice());
     assert!(app.grid_sequencer.state.is_running());
 }
 

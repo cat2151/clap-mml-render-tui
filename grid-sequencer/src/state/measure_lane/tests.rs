@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use rand::{rngs::StdRng, SeedableRng};
 
 use super::*;
-use crate::{ChordPlayback, StepDuration};
+use crate::ChordPlayback;
 
 const CHOICES: [u8; 2] = [100, 127];
 
@@ -166,22 +166,22 @@ fn a_mid_measure_score_change_reuses_the_values_drawn_at_the_measure_start() {
     assert_eq!(lane.display()[0][3], Some(already_drawn));
 }
 
-/// 譜面から引くランプ区間。行の音長ぶんだけ CC1 の終点が velocity より後ろになる。
+/// 譜面から引くランプ区間。Tieぶんだけ CC1 の終点が velocity より後ろになる。
 #[test]
 fn the_spans_come_from_the_score_of_each_row() {
     let mut state = GridState::with_row_count(2);
-    state.rows[0].cells[6] = true;
-    state.rows[0].cells[9] = true;
-    state.rows[1].duration = StepDuration::Quarter;
-    state.rows[1].cells[0] = true;
-    let triggers = state.trigger_table();
+    state.instances[0].pattern.draw_span(6, 6);
+    state.instances[0].pattern.draw_span(9, 9);
+    state.instances[1].pattern.draw_span(0, 3);
+    let instance_triggers = state.instance_trigger_table();
+    let lane_triggers = state.lane_trigger_table();
 
-    let cc1 = state.cc1_ramp_spans(&triggers);
-    let velocity = state.velocity_ramp_spans(&triggers);
+    let cc1 = state.cc1_ramp_spans(&instance_triggers);
+    let velocity = state.velocity_ramp_spans(&lane_triggers);
 
-    assert_eq!(cc1[0], RampSpan { start: 6, end: 10 });
+    assert_eq!(cc1[0], RampSpan { start: 6, end: 9 });
     assert_eq!(velocity[0], RampSpan { start: 6, end: 9 });
-    assert_eq!(cc1[1], RampSpan { start: 0, end: 4 });
+    assert_eq!(cc1[1], RampSpan { start: 0, end: 3 });
     // 音が1つだけの行は幅が潰れ、その音は始点の値で鳴る。
     assert_eq!(velocity[1], RampSpan { start: 0, end: 0 });
 }
@@ -193,7 +193,7 @@ fn the_chord_row_spans_the_whole_measure() {
     let mut state = GridState::with_row_count(1);
     let chord = ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]).unwrap();
     state.set_chord(Some(chord), now);
-    let triggers = state.trigger_table();
+    let triggers = state.instance_trigger_table();
 
     let cc1 = state.cc1_ramp_spans(&triggers);
 

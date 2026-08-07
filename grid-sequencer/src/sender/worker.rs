@@ -145,6 +145,33 @@ pub(super) fn run_midi_sender(
                 }
                 status.lock().unwrap().record_preload_step(result.is_ok());
             }
+            GridMidiCommand::SetRowPatch {
+                request_id,
+                queued_at,
+                reason,
+                row,
+                instance_id,
+                patch,
+            } => {
+                let queue_ms = queued_at.elapsed().as_millis();
+                let current = adaptive_buffer
+                    .map(AdaptiveBuffer::multiplier)
+                    .unwrap_or(INITIAL_BUFFER_MULTIPLIER);
+                let _ = supervisor
+                    .set_connected_live_buffer_multiplier(current.max(PRELOAD_BUFFER_MULTIPLIER));
+                let started = Instant::now();
+                let result = supervisor.prepare_live_patch(instance_id, patch.as_deref());
+                let _ = supervisor.set_connected_live_buffer_multiplier(current);
+                let error = result.as_ref().err().map(|error| format!("{error:#}"));
+                crate::log_line(&format!(
+                    "grid-sequencer: instance-patch request={request_id} reason={reason} logical_instance={} \
+                     server_instance={instance_id} patch={patch:?} queue_ms={queue_ms} load_ms={} result={}",
+                    row + 1,
+                    started.elapsed().as_millis(),
+                    if result.is_ok() { "ok" } else { "error" },
+                ));
+                status.lock().unwrap().finish_row_patch_setting(row, error);
+            }
             GridMidiCommand::PreloadFinished => {
                 if preloading {
                     preloading = false;
@@ -174,6 +201,16 @@ pub(super) fn run_midi_sender(
                     match &failed {
                         Some(error) => format!("error \"{error}\""),
                         None => "ok".to_string(),
+                    },
+                ));
+            }
+            GridMidiCommand::SetAutoGain { enabled } => {
+                let result = supervisor.set_live_auto_gain_enabled(enabled);
+                crate::log_line(&format!(
+                    "grid-sequencer: auto-gain enabled={enabled} result={}",
+                    match &result {
+                        Ok(()) => "ok".to_string(),
+                        Err(error) => format!("error \"{error:#}\""),
                     },
                 ));
             }

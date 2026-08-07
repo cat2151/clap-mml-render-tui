@@ -20,31 +20,31 @@ fn a_single_note_collapses_the_velocity_span() {
     assert_eq!(span, RampSpan { start: 7, end: 7 });
 }
 
-/// CC1 は最後の音が鳴り終わるところまで伸ばす。
+/// CC1 はpatternから導出した最後のsounding cellまで伸ばす。
 #[test]
-fn cc1_extends_the_span_by_the_sustain_of_the_last_note() {
+fn cc1_ends_at_the_actual_tail_of_the_last_note() {
     assert_eq!(
-        cc1_span(&triggers_at(&[6, 9]), 1),
-        RampSpan { start: 6, end: 10 }
+        cc1_span(&triggers_at(&[6, 9]), Some(9)),
+        RampSpan { start: 6, end: 9 }
     );
     assert_eq!(
-        cc1_span(&triggers_at(&[0]), 4),
-        RampSpan { start: 0, end: 4 }
+        cc1_span(&triggers_at(&[0]), Some(3)),
+        RampSpan { start: 0, end: 3 }
     );
 }
 
 /// chord mode の和音行は step 0 の全音符。小節頭が始点、小節末尾が終点になる。
 #[test]
 fn a_whole_note_at_the_measure_head_spans_the_whole_measure() {
-    let span = cc1_span(&triggers_at(&[0]), GRID_STEPS as u8);
+    let span = cc1_span(&triggers_at(&[0]), Some(GRID_STEPS - 1));
 
     assert_eq!(span, RampSpan::WHOLE_MEASURE);
 }
 
-/// 小節末尾をはみ出す音長は末尾でクランプする。
+/// 壊れた終端値でも小節末尾でクランプする。
 #[test]
 fn the_cc1_span_never_runs_past_the_measure() {
-    let span = cc1_span(&triggers_at(&[14]), 4);
+    let span = cc1_span(&triggers_at(&[14]), Some(GRID_STEPS + 2));
 
     assert_eq!(
         span,
@@ -59,5 +59,5 @@ fn the_cc1_span_never_runs_past_the_measure() {
 #[test]
 fn a_silent_row_falls_back_to_the_whole_measure() {
     assert_eq!(velocity_span(&triggers_at(&[])), RampSpan::WHOLE_MEASURE);
-    assert_eq!(cc1_span(&triggers_at(&[]), 1), RampSpan::WHOLE_MEASURE);
+    assert_eq!(cc1_span(&triggers_at(&[]), None), RampSpan::WHOLE_MEASURE);
 }

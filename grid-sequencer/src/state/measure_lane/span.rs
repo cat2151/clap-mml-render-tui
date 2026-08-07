@@ -28,11 +28,11 @@ pub(super) fn velocity_span(triggers: &[bool; GRID_STEPS]) -> RampSpan {
 ///
 /// 終点は小節末尾でクランプする。chord mode の和音行（step 0 に全音符）は
 /// これで「小節頭が始点、小節末尾が終点」になる。
-pub(super) fn cc1_span(triggers: &[bool; GRID_STEPS], sustain_steps: u8) -> RampSpan {
+pub(super) fn cc1_span(triggers: &[bool; GRID_STEPS], sounding_end: Option<usize>) -> RampSpan {
     match sounding_range(triggers) {
-        Some((first, last)) => RampSpan {
+        Some((first, _)) => RampSpan {
             start: first,
-            end: (last + usize::from(sustain_steps)).min(GRID_STEPS - 1),
+            end: sounding_end.unwrap_or(first).min(GRID_STEPS - 1),
         },
         None => RampSpan::WHOLE_MEASURE,
     }

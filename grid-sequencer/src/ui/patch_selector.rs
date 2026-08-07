@@ -1,0 +1,79 @@
+use ratatui::{
+    style::Style,
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
+    Frame,
+};
+
+use cmrt_tui_core::{
+    status::base_style,
+    theme::{cursor_highlight_style, MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG},
+};
+
+use crate::{patch_selector::PatchSelectorLayout, GridSequencerScreen};
+
+pub(super) fn draw(f: &mut Frame<'_>, screen: &GridSequencerScreen) {
+    let Some(selector) = screen.patch_selector.as_ref() else {
+        return;
+    };
+    let layout = PatchSelectorLayout::new(f.area());
+    f.render_widget(Clear, layout.popup);
+    f.render_widget(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(format!(" instance {} patch select ", selector.instance + 1))
+            .style(base_style().fg(MONOKAI_FG).bg(MONOKAI_BG))
+            .border_style(base_style().fg(MONOKAI_CYAN)),
+        layout.popup,
+    );
+
+    let categories = selector
+        .category_range(&layout)
+        .map(|index| {
+            item(
+                &selector.categories[index].name,
+                index == selector.category_cursor,
+            )
+        })
+        .collect::<Vec<_>>();
+    f.render_widget(
+        List::new(categories).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(format!(" Categories ({}) ", selector.categories.len()))
+                .border_style(base_style().fg(MONOKAI_CYAN)),
+        ),
+        layout.category_pane,
+    );
+
+    let category = selector.selected_category();
+    let patches = selector
+        .patch_range(&layout)
+        .map(|index| item(&category.patches[index], index == selector.patch_cursor))
+        .collect::<Vec<_>>();
+    f.render_widget(
+        List::new(patches).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(format!(" {} ({}) ", category.name, category.patches.len()))
+                .border_style(base_style().fg(MONOKAI_CYAN)),
+        ),
+        layout.patch_pane,
+    );
+    f.render_widget(
+        Paragraph::new(
+            " wheel/↑↓:preview  ←→:category  r:random  click/Enter:apply  Esc/right:cancel",
+        )
+        .style(base_style().fg(MONOKAI_CYAN)),
+        layout.hint,
+    );
+}
+
+fn item(text: &str, selected: bool) -> ListItem<'static> {
+    let prefix = if selected { "▶ " } else { "  " };
+    let style = if selected {
+        cursor_highlight_style(Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG))
+    } else {
+        Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG)
+    };
+    ListItem::new(format!("{prefix}{text}")).style(style)
+}

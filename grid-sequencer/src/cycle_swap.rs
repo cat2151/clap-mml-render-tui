@@ -5,8 +5,9 @@
 //!
 //! 流れ:
 //! 1. 進行の最終小節へ入ると `GridState` が `preload_due` を立てる。
-//! 2. 次の進行・Key・patch・譜面を抽選し、差し替え待ちとして預ける（まだ鳴らさない）。
-//! 3. **1ステップにつき1インスタンスずつ**、待機 bank へ patch を先読みする。
+//! 2. AUTO は次の進行・Key・patch・譜面を抽選し、差し替え待ちとして預ける。
+//!    HOLD は patch・譜面を保持し、進行だけを現在 bank 上の差し替え待ちにする。
+//! 3. AUTO だけ、**1ステップにつき1インスタンスずつ**待機 bank へ patch を先読みする。
 //!    まとめて投げるとサーバーのレンダースレッドが連続で止まり underrun になる。
 //! 4. 全件終わったら「準備できた」と伝える。次に進行を1周した小節境界で差し替わる。
 //!
@@ -15,13 +16,13 @@
 
 use std::time::Instant;
 
-use crate::{log_line, GridSequencerContext, GridSequencerScreen, STEP_INTERVAL};
+use crate::{log_line, GridSequencerContext, GridSequencerScreen, PatternEvolution, STEP_INTERVAL};
 
 /// 待機 bank への先読みロードの進み具合。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct CycleSwap {
-    /// 次に先読みする行。行数に達したら送信完了。
-    next_row: usize,
+    /// 次に先読みするinstance。instance数に達したら送信完了。
+    next_instance: usize,
     /// 送信し終えた patch の件数（= 完了を待っている件数）。
     sent: usize,
     /// 直前に送った時刻。送信間隔を空けるために見る。
@@ -31,7 +32,7 @@ pub(crate) struct CycleSwap {
 impl CycleSwap {
     fn new() -> Self {
         Self {
-            next_row: 0,
+            next_instance: 0,
             sent: 0,
             last_sent: None,
         }
@@ -74,9 +75,9 @@ impl GridSequencerScreen {
             // 永久に切り替わらなくなるので、送った時点で完了とみなす。
             None => (swap.sent, false),
         };
-        if swap.next_row < self.state.row_count() {
+        if swap.next_instance < self.state.instance_count() {
             if swap.may_send(now, completed) {
-                self.preload_one_row(swap.next_row, now);
+                self.preload_one_instance(swap.next_instance, now);
             }
             return;
         }
@@ -88,18 +89,18 @@ impl GridSequencerScreen {
     }
 
     /// 待機 bank の1行ぶんだけ patch を先読みする。
-    fn preload_one_row(&mut self, row: usize, now: Instant) {
+    fn preload_one_instance(&mut self, instance: usize, now: Instant) {
         let (instance_id, patch) = self
             .state
             .pending_patches()
-            .get(row)
+            .get(instance)
             .cloned()
-            .unwrap_or((self.state.standby_instance_id(row), None));
+            .unwrap_or((self.state.standby_instance_id(instance), None));
         if let Some(sender) = &self.midi_sender {
             sender.preload(instance_id, patch.as_deref());
         }
         if let Some(swap) = self.cycle_swap.as_mut() {
-            swap.next_row += 1;
+            swap.next_instance += 1;
             swap.sent += 1;
             swap.last_sent = Some(now);
         }
@@ -116,14 +117,21 @@ impl GridSequencerScreen {
         if !self.stage_next_cycle(now, ctx) {
             return;
         }
+        if self.pattern_evolution == PatternEvolution::Hold {
+            log_line(&format!(
+                "grid-sequencer: hold-cycle ready active_bank={} preload=skipped",
+                self.state.bank(),
+            ));
+            return;
+        }
         if let Some(sender) = &self.midi_sender {
             sender.begin_preload_cycle();
         }
         self.cycle_swap = Some(CycleSwap::new());
         log_line(&format!(
-            "grid-sequencer: preload begin standby_bank={} rows={}",
+            "grid-sequencer: preload begin standby_bank={} instances={}",
             (self.state.bank() + 1) % cmrt_realtime_play::BANK_COUNT,
-            self.state.row_count(),
+            self.state.instance_count(),
         ));
     }
 
@@ -157,6 +165,19 @@ impl GridSequencerScreen {
         self.cycle_end_at = None;
         self.state.disarm_cycle_stop();
         self.state.discard_pending_cycle();
+    }
+
+    /// live edit でpending instancesだけを捨てる。
+    ///
+    /// シングルバッファリングが既にサイクルを鳴らしきっていた場合、出力リングの
+    /// drain 時刻は残す。これまで一緒に消すと、停止済み clock を再開する契機まで
+    /// 失われるため。
+    pub(crate) fn cancel_cycle_swap_preserving_drain(&mut self) {
+        let drain_end = (self.single_buffering && !self.state.is_running())
+            .then_some(self.cycle_end_at)
+            .flatten();
+        self.cancel_cycle_swap();
+        self.cycle_end_at = drain_end;
     }
 }
 

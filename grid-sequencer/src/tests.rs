@@ -184,7 +184,7 @@ fn shift_r_rerolls_the_grid_without_touching_patches() {
     screen.start(now, &ready_ctx(&patches));
     for row in screen.state.rows_mut() {
         row.patch = Some("Kept/Patch.fxp".to_string());
-        row.cells = [false; GRID_STEPS];
+        row.pattern = NotePattern::default();
     }
 
     screen.handle_key(shift_press(KeyCode::Char('R')), now, &ready_ctx(&patches));
@@ -199,8 +199,8 @@ fn shift_r_rerolls_the_grid_without_touching_patches() {
             .state
             .rows()
             .iter()
-            .any(|row| row.cells.iter().any(|cell| *cell)),
-        "patch 以外は引き直すので、セルはどこかが note on になる"
+            .any(|row| row.pattern.steps().contains(&NoteStep::Attack)),
+        "patch 以外は引き直すので、どこかにAttackが生成される"
     );
 }
 
@@ -234,8 +234,8 @@ fn entering_the_screen_randomizes_and_starts_playing() {
             .state
             .rows()
             .iter()
-            .any(|row| row.cells.iter().any(|cell| *cell)),
-        "入った瞬間から鳴らすため、少なくとも1つのセルは note on になる"
+            .any(|row| row.pattern.steps().contains(&NoteStep::Attack)),
+        "入った瞬間から鳴らすため、少なくとも1つのAttackが生成される"
     );
 }
 
@@ -262,7 +262,7 @@ fn resume_keeps_the_grid_and_restarts_the_clock() {
     let grid = screen.state.rows().to_vec();
     screen.finish();
 
-    screen.resume(now + STEP_INTERVAL);
+    screen.resume(now + STEP_INTERVAL, &ready_ctx(&patches));
 
     assert_eq!(screen.state.rows(), grid.as_slice());
     assert!(screen.state.is_running());
@@ -294,6 +294,45 @@ fn key_release_events_are_ignored() {
         screen.handle_key(release, Instant::now(), &ready_ctx(&patches)),
         GridSequencerAction::Continue
     ));
+}
+
+#[test]
+fn a_toggles_auto_and_hold_and_randomize_does_not_change_the_mode() {
+    let patches = one_patch();
+    let now = Instant::now();
+    let mut screen = silent_screen();
+
+    screen.handle_key(press(KeyCode::Char('a')), now, &ready_ctx(&patches));
+    assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
+    screen.handle_key(press(KeyCode::Char('r')), now, &ready_ctx(&patches));
+    assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
+    screen.handle_key(shift_press(KeyCode::Char('R')), now, &ready_ctx(&patches));
+    assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
+
+    screen.handle_key(press(KeyCode::Char('a')), now, &ready_ctx(&patches));
+    assert_eq!(screen.pattern_evolution(), PatternEvolution::Auto);
+}
+
+#[test]
+fn x_clears_cells_keeps_row_parameters_and_enters_hold() {
+    let patches = one_patch();
+    let mut screen = silent_screen();
+    let row = &mut screen.state.rows_mut()[1];
+    row.patch = Some("Kept/Patch.fxp".to_string());
+    row.base_note = 73;
+    row.pattern.draw_span(4, 7);
+
+    screen.handle_key(
+        press(KeyCode::Char('x')),
+        Instant::now(),
+        &ready_ctx(&patches),
+    );
+
+    let row = &screen.state.rows()[1];
+    assert_eq!(row.patch.as_deref(), Some("Kept/Patch.fxp"));
+    assert_eq!(row.base_note, 73);
+    assert_eq!(row.pattern, NotePattern::default());
+    assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
 }
 
 /// 接続前に進めてしまうと、Ready 復帰時に欠落ステップをまとめて鳴らしてしまう。

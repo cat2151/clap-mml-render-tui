@@ -1,8 +1,7 @@
 use std::time::{Duration, Instant};
 
-use super::super::StepDuration;
 use super::*;
-use crate::{step_offset, ChordPlayback, GRID_STEPS};
+use crate::{step_offset, ChordPlayback, NotePattern, NoteStep, GRID_STEPS};
 
 fn note_ons_at(state: &mut GridState, now: Instant) -> Vec<[u8; 3]> {
     state
@@ -17,7 +16,7 @@ fn note_ons_at(state: &mut GridState, now: Instant) -> Vec<[u8; 3]> {
 fn note_on_carries_the_velocity_drawn_for_that_cell() {
     let now = Instant::now();
     let mut state = GridState::with_row_count(1);
-    state.rows[0].cells[0] = true;
+    state.instances[0].pattern.draw_span(0, 0);
     state.start(now);
 
     let note_ons = note_ons_at(&mut state, now);
@@ -48,12 +47,41 @@ fn a_chord_sounds_every_note_with_the_same_velocity() {
     );
 }
 
+#[test]
+fn chord_voice_attacks_use_the_velocity_of_each_stored_lane() {
+    let now = Instant::now();
+    let mut state = GridState::with_instance_count(2);
+    for lane in &mut state.instances[1].lanes {
+        lane.pattern.draw_span(0, 0);
+    }
+    state.set_chord(
+        ChordPlayback::new("C", "I7".to_string(), vec![vec![60, 64, 67, 71]]),
+        now,
+    );
+    state.start(now);
+
+    let note_ons = state
+        .poll_steps(now, Duration::ZERO)
+        .into_iter()
+        .filter(|message| message.instance_id == 1 && message.message[0] == 0x90)
+        .map(|message| message.message)
+        .collect::<Vec<_>>();
+    assert_eq!(note_ons.len(), 4);
+    for (lane, message) in note_ons.iter().enumerate() {
+        assert_eq!(
+            message[2],
+            state.velocity_display()[lane + 1][0].unwrap(),
+            "lane {lane}"
+        );
+    }
+}
+
 /// 抽選は小節頭だけ。同じ小節の中では値が固定される。
 #[test]
 fn the_measure_is_redrawn_only_at_its_head() {
     let now = Instant::now();
     let mut state = GridState::with_row_count(1);
-    state.rows[0].cells.fill(true);
+    state.instances[0].pattern = NotePattern::from_steps([NoteStep::Attack; GRID_STEPS]);
     state.start(now);
 
     let mut measure = Vec::new();
@@ -80,8 +108,7 @@ fn the_measure_is_redrawn_only_at_its_head() {
 fn a_sustained_note_is_not_retriggered_mid_measure() {
     let now = Instant::now();
     let mut state = GridState::with_row_count(1);
-    state.rows[0].duration = StepDuration::Quarter;
-    state.rows[0].cells[0] = true;
+    state.instances[0].pattern.draw_span(0, 3);
     state.start(now);
 
     let first = note_ons_at(&mut state, now);

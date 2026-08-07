@@ -165,6 +165,44 @@ fn switching_back_to_double_buffering_disarms_the_stop() {
     assert!(screen.cycle_end_at.is_none());
 }
 
+#[test]
+fn live_edit_during_the_drain_wait_keeps_the_clock_restart_deadline() {
+    let now = Instant::now();
+    let catalog = catalog();
+    let patches = patches();
+    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let mut screen = screen_in_single_buffering(now, &ctx);
+    let load_at = run_until_cycle_end(&mut screen, now, &ctx);
+
+    screen.begin_manual_edit();
+    assert_eq!(screen.cycle_end_at, Some(load_at));
+    assert!(!screen.state.is_running());
+
+    pump(&mut screen, load_at, &ctx);
+    assert!(screen.state.is_running(), "drain後に現在の譜面で再開する");
+    assert!(screen.cycle_end_at.is_none());
+}
+
+#[test]
+fn hold_keeps_the_score_when_a_single_buffered_cycle_is_committed() {
+    let now = Instant::now();
+    let catalog = catalog();
+    let patches = patches();
+    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let mut screen = screen_in_single_buffering(now, &ctx);
+    screen.pattern_evolution = crate::PatternEvolution::Hold;
+    let before = screen.state.rows().to_vec();
+    let load_at = run_until_cycle_end(&mut screen, now, &ctx);
+
+    pump(&mut screen, load_at, &ctx);
+
+    for (actual, expected) in screen.state.rows().iter().zip(&before) {
+        assert_eq!(actual.patch, expected.patch);
+        assert_eq!(actual.base_note, expected.base_note);
+        assert_eq!(actual.pattern, expected.pattern);
+    }
+}
+
 /// 1サイクル鳴らしきるまで進め、音色ロードへ入る時刻を返す。
 fn run_until_cycle_end(
     screen: &mut GridSequencerScreen,

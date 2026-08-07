@@ -1,7 +1,10 @@
 use std::time::{Duration, Instant};
 
+use rand::{rngs::StdRng, SeedableRng};
+
 use super::super::{velocity::normalize_velocity, SCHEDULE_GUARD, STEP_INTERVAL};
 use super::*;
+use crate::NoteStep;
 
 fn pairs(names: &[&str]) -> Vec<(String, String)> {
     names
@@ -15,8 +18,9 @@ fn every_row_gets_a_patch_from_the_loaded_list() {
     let patches = pairs(&["a/Alpha.fxp", "b/Beta.fxp"]);
     let mut state = GridState::default();
     state.randomize_all(Instant::now(), &patches);
-    assert!(state.rows.iter().all(|row| {
-        row.patch
+    assert!(state.instances.iter().all(|instance| {
+        instance
+            .patch
             .as_deref()
             .is_some_and(|patch| patches.iter().any(|(display, _)| display == patch))
     }));
@@ -25,10 +29,10 @@ fn every_row_gets_a_patch_from_the_loaded_list() {
 #[test]
 fn existing_patches_are_kept_while_the_patch_list_is_unavailable() {
     let mut state = GridState::default();
-    state.rows[0].patch = Some("kept/Patch.fxp".to_string());
+    state.instances[0].patch = Some("kept/Patch.fxp".to_string());
     state.randomize_all(Instant::now(), &[]);
-    assert_eq!(state.rows[0].patch.as_deref(), Some("kept/Patch.fxp"));
-    assert_eq!(state.rows[1].patch, None);
+    assert_eq!(state.instances[0].patch.as_deref(), Some("kept/Patch.fxp"));
+    assert_eq!(state.instances[1].patch, None);
 }
 
 #[test]
@@ -36,17 +40,42 @@ fn notes_stay_inside_the_generated_range() {
     let mut state = GridState::default();
     state.randomize_all(Instant::now(), &[]);
     assert!(state
-        .rows
+        .instances
         .iter()
-        .all(|row| (RANDOM_NOTE_MIN..=RANDOM_NOTE_MAX).contains(&row.note)));
+        .flat_map(|instance| &instance.lanes)
+        .all(|lane| (RANDOM_NOTE_MIN..=RANDOM_NOTE_MAX).contains(&lane.base_note)));
+}
+
+#[test]
+fn generated_patterns_reach_one_two_and_four_step_notes_without_orphan_ties() {
+    let mut rng = StdRng::seed_from_u64(7);
+    let mut lengths = std::collections::BTreeSet::new();
+    for _ in 0..256 {
+        let pattern = random_pattern(&mut rng);
+        for step in 0..GRID_STEPS {
+            match pattern.step(step).unwrap() {
+                NoteStep::Attack => {
+                    lengths.insert(pattern.attack_len(step).unwrap());
+                }
+                NoteStep::Tie => assert!(
+                    step > 0 && pattern.step(step - 1) != Some(NoteStep::Rest),
+                    "orphan Tie at step {step}"
+                ),
+                NoteStep::Rest => {}
+            }
+        }
+    }
+    assert!(lengths.contains(&1));
+    assert!(lengths.contains(&2));
+    assert!(lengths.contains(&4));
 }
 
 #[test]
 fn sounding_notes_are_silenced_so_they_do_not_hang() {
     let now = Instant::now();
     let mut state = GridState::default();
-    state.rows[0].note = 64;
-    state.rows[0].cells[0] = true;
+    state.instances[0].base_note = 64;
+    state.instances[0].pattern.draw_span(0, 0);
     state.start(now);
     let scheduled = state.poll_steps(now, Duration::ZERO);
     assert_eq!(messages_of(&scheduled), vec![[0x90, 64, 100]]);
@@ -63,9 +92,8 @@ fn sounding_notes_are_silenced_so_they_do_not_hang() {
 fn silencing_waits_for_the_notes_already_sent_ahead() {
     let now = Instant::now();
     let mut state = GridState::default();
-    state.rows[0].note = 64;
-    state.rows[0].duration = StepDuration::Quarter;
-    state.rows[0].cells[0] = true;
+    state.instances[0].base_note = 64;
+    state.instances[0].pattern.draw_span(0, 3);
     state.start(now);
     // 2ステップ先まで送信済みにする。
     state.poll_steps(now, STEP_INTERVAL * 2);
@@ -79,27 +107,31 @@ fn silencing_waits_for_the_notes_already_sent_ahead() {
 #[test]
 fn keeping_patches_rerolls_everything_except_the_patch() {
     let mut state = GridState::default();
-    for row in &mut state.rows {
-        row.patch = Some("kept/Patch.fxp".to_string());
-        row.cells = [false; GRID_STEPS];
+    for instance in &mut state.instances {
+        instance.patch = Some("kept/Patch.fxp".to_string());
+        for lane in &mut instance.lanes {
+            lane.pattern = NotePattern::default();
+        }
     }
 
     state.randomize_keeping_patches(Instant::now());
 
     assert!(state
-        .rows
+        .instances
         .iter()
-        .all(|row| row.patch.as_deref() == Some("kept/Patch.fxp")));
+        .all(|instance| instance.patch.as_deref() == Some("kept/Patch.fxp")));
     assert!(state
-        .rows
+        .instances
         .iter()
-        .all(|row| (RANDOM_NOTE_MIN..=RANDOM_NOTE_MAX).contains(&row.note)));
+        .flat_map(|instance| &instance.lanes)
+        .all(|lane| (RANDOM_NOTE_MIN..=RANDOM_NOTE_MAX).contains(&lane.base_note)));
     assert!(
         state
-            .rows
+            .instances
             .iter()
-            .any(|row| row.cells.iter().any(|cell| *cell)),
-        "patch 以外は引き直すので、セルはどこかが note on になる"
+            .flat_map(|instance| &instance.lanes)
+            .any(|lane| lane.pattern.steps().contains(&NoteStep::Attack)),
+        "patch 以外は引き直すので、どこかにAttackが生成される"
     );
 }
 
@@ -109,8 +141,8 @@ fn keeping_patches_rerolls_everything_except_the_patch() {
 fn keeping_patches_still_silences_sounding_notes() {
     let now = Instant::now();
     let mut state = GridState::default();
-    state.rows[0].note = 64;
-    state.rows[0].cells[0] = true;
+    state.instances[0].base_note = 64;
+    state.instances[0].pattern.draw_span(0, 0);
     state.start(now);
     state.poll_steps(now, Duration::ZERO);
 

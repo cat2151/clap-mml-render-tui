@@ -4,8 +4,12 @@
 //! サーバーとのやり取りは [`worker`] のスレッドが受け持つ。
 
 use std::{
-    sync::{mpsc, Arc, Mutex},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc, Arc, Mutex,
+    },
     thread::JoinHandle,
+    time::Instant,
 };
 
 use cmrt_realtime_play::{FastMidiEvent, RealtimePlayServerSupervisor};
@@ -15,7 +19,12 @@ mod overload;
 mod status;
 mod worker;
 
-pub use status::{GridConnectionPhase, GridConnectionStatus, GridProgress, GridRowReadiness};
+static NEXT_ROW_PATCH_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
+
+pub use status::{
+    GridConnectionPhase, GridConnectionStatus, GridProgress, GridRowPatchPhase, GridRowPatchStatus,
+    GridRowReadiness,
+};
 
 enum GridMidiCommand {
     StartServer,
@@ -33,10 +42,22 @@ enum GridMidiCommand {
         instance_id: u8,
         patch: Option<String>,
     },
+    /// 演奏中の bank にある1行だけを差し替える。ほかの行は止めない。
+    SetRowPatch {
+        request_id: u64,
+        queued_at: Instant,
+        reason: &'static str,
+        row: usize,
+        instance_id: u8,
+        patch: Option<String>,
+    },
     /// 先読みロードの終了。厚くしていた出力バッファを戻す。
     PreloadFinished,
     SetGains {
         gains_db: Vec<f32>,
+    },
+    SetAutoGain {
+        enabled: bool,
     },
     Stop,
     Shutdown,
@@ -103,6 +124,37 @@ impl GridMidiSender {
         });
     }
 
+    /// 現在 bank の1行だけを差し替える。全 instance 用の `prepare` と違い、
+    /// `stop_live_all()` は呼ばない。
+    pub fn set_row_patch(
+        &self,
+        row: usize,
+        instance_id: u8,
+        patch: Option<&str>,
+        reason: &'static str,
+    ) -> u64 {
+        let request_id = NEXT_ROW_PATCH_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
+        self.status.lock().unwrap().begin_row_patch_setting(row);
+        if self
+            .tx
+            .send(GridMidiCommand::SetRowPatch {
+                request_id,
+                queued_at: Instant::now(),
+                reason,
+                row,
+                instance_id,
+                patch: patch.map(str::to_string),
+            })
+            .is_err()
+        {
+            self.status
+                .lock()
+                .unwrap()
+                .finish_row_patch_setting(row, Some("MIDI worker stopped".to_string()));
+        }
+        request_id
+    }
+
     /// 先読みを終える（全件送り終えた、または打ち切った）。バッファ厚を戻す。
     pub fn finish_preload(&self) {
         let _ = self.tx.send(GridMidiCommand::PreloadFinished);
@@ -116,10 +168,17 @@ impl GridMidiSender {
         let _ = self.tx.send(GridMidiCommand::SetGains { gains_db });
     }
 
+    pub fn set_auto_gain_enabled(&self, enabled: bool) {
+        let _ = self.tx.send(GridMidiCommand::SetAutoGain { enabled });
+    }
+
     pub fn stop(&self) {
         // 判定はここで降ろす。ワーカー側でも戻すが、キューを捌く前に画面へ入り直すと
         // 古い判定を読んでシングルバッファリングのまま再開してしまう。
-        self.status.lock().unwrap().clear_overload();
+        let mut status = self.status.lock().unwrap();
+        status.clear_overload();
+        status.clear_row_patch_setting();
+        drop(status);
         let _ = self.tx.send(GridMidiCommand::Stop);
     }
 

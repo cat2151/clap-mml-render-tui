@@ -13,6 +13,7 @@ fn begin_connecting_clears_meter_and_sets_phase() {
         stage_started_at: None,
         server_startup_elapsed: Some(Duration::from_secs(8)),
         patch_setting_elapsed: Some(Duration::from_millis(300)),
+        ..GridConnectionStatus::default()
     };
     status.begin_connecting();
     assert_eq!(status.phase, GridConnectionPhase::Connecting);
@@ -67,8 +68,10 @@ fn row_readiness_follows_the_two_preparation_stages() {
 
 #[test]
 fn an_error_greys_out_every_row_and_exposes_its_message() {
-    let mut status = GridConnectionStatus::default();
-    status.phase = GridConnectionPhase::Error("patch prepare failed".to_string());
+    let status = GridConnectionStatus {
+        phase: GridConnectionPhase::Error("patch prepare failed".to_string()),
+        ..GridConnectionStatus::default()
+    };
 
     assert_eq!(status.row_readiness(0), GridRowReadiness::Pending);
     assert_eq!(status.row_readiness(15), GridRowReadiness::Pending);
@@ -93,4 +96,40 @@ fn adaptive_buffer_status_tracks_the_current_level() {
     status.update_adaptive_buffer(16, 1_024);
     assert_eq!(status.buffer_multiplier, 16);
     assert_eq!(status.underrun_frames, 1_024);
+}
+
+#[test]
+fn one_row_patch_load_does_not_stop_other_rows() {
+    let mut status = GridConnectionStatus {
+        phase: GridConnectionPhase::Ready,
+        ..GridConnectionStatus::default()
+    };
+
+    status.begin_row_patch_setting(2);
+
+    assert!(status.row_patch_is_loading());
+    assert_eq!(status.row_readiness(2), GridRowReadiness::InstanceReady);
+    assert_eq!(status.row_readiness(1), GridRowReadiness::Prepared);
+    assert!(status.phase.accepts_notes());
+    assert_eq!(status.label(), "ready | instance 3 patch loading");
+
+    status.finish_row_patch_setting(2, None);
+    assert!(!status.row_patch_is_loading());
+    assert_eq!(status.row_readiness(2), GridRowReadiness::Prepared);
+}
+
+#[test]
+fn one_row_patch_error_is_visible_without_disabling_playback() {
+    let mut status = GridConnectionStatus {
+        phase: GridConnectionPhase::Ready,
+        ..GridConnectionStatus::default()
+    };
+
+    status.begin_row_patch_setting(1);
+    status.finish_row_patch_setting(1, Some("bad patch".to_string()));
+
+    assert_eq!(status.row_readiness(1), GridRowReadiness::Pending);
+    assert_eq!(status.row_readiness(0), GridRowReadiness::Prepared);
+    assert!(status.phase.accepts_notes());
+    assert_eq!(status.label(), "ready | instance 2 patch error: bad patch");
 }

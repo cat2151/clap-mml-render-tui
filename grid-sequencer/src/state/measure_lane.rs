@@ -182,7 +182,7 @@ impl GridState {
     pub(super) fn refresh_lane_display_patterns(&mut self) {
         // 発音表を値として先に作る。レーンへ `&self` を借りるクロージャを渡すと、
         // レーン自身の可変借用と衝突してコンパイルが通らない。
-        let triggers = self.trigger_table();
+        let triggers = self.lane_trigger_table();
         self.velocity.refresh_display(&triggers);
     }
 
@@ -197,23 +197,31 @@ impl GridState {
     }
 
     fn draw_lane_measures(&mut self, deadline: Instant, rng: &mut impl RngExt) {
-        let triggers = self.trigger_table();
-        let cc1_spans = self.cc1_ramp_spans(&triggers);
-        let velocity_spans = self.velocity_ramp_spans(&triggers);
+        let instance_triggers = self.instance_trigger_table();
+        let lane_triggers = self.lane_trigger_table();
+        let cc1_spans = self.cc1_ramp_spans(&instance_triggers);
+        let velocity_spans = self.velocity_ramp_spans(&lane_triggers);
         // パターンは小節につき1回だけ引く。CC1 と velocity は同じ抽選結果を分け合う。
         let plan = MeasurePlan::draw(rng);
         self.cc1
-            .draw_measure(deadline, plan.cc1, rng, &triggers, &cc1_spans);
-        self.velocity
-            .draw_measure(deadline, plan.velocity, rng, &triggers, &velocity_spans);
+            .draw_measure(deadline, plan.cc1, rng, &instance_triggers, &cc1_spans);
+        self.velocity.draw_measure(
+            deadline,
+            plan.velocity,
+            rng,
+            &lane_triggers,
+            &velocity_spans,
+        );
     }
 
-    /// 行ごとの CC1 ランプ区間。音が伸びている間も効くので、行の音長ぶん先まで張る。
+    /// 行ごとの CC1 ランプ区間。最後のnoteのtailまで張る。
     fn cc1_ramp_spans(&self, triggers: &TriggerTable) -> Vec<RampSpan> {
         triggers
             .iter()
             .enumerate()
-            .map(|(row, triggers)| span::cc1_span(triggers, self.row_sustain_steps(row)))
+            .map(|(instance, triggers)| {
+                span::cc1_span(triggers, self.instance_sounding_end(instance))
+            })
             .collect()
     }
 

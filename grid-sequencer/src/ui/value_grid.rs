@@ -16,6 +16,7 @@ use cmrt_tui_core::{
 use crate::{GridConnectionStatus, GridRowReadiness, GRID_STEPS};
 
 const CELL_WIDTH: usize = 4;
+const ACCENT: u8 = 127;
 
 /// `accent` の値を持つセルだけを目立たせて描く。
 pub(super) fn draw(
@@ -25,11 +26,18 @@ pub(super) fn draw(
     display: &[[Option<u8>; GRID_STEPS]],
     playhead: usize,
     connection: &GridConnectionStatus,
-    accent: u8,
+    row_instances: &[usize],
 ) {
     let mut lines = vec![header_line()];
     lines.extend(display.iter().enumerate().map(|(row, values)| {
-        row_line(row, values, playhead, connection.row_readiness(row), accent)
+        let instance = row_instances.get(row).copied().unwrap_or(row);
+        row_line(
+            row,
+            values,
+            playhead,
+            connection.row_readiness(instance),
+            ACCENT,
+        )
     }));
     frame.render_widget(
         Paragraph::new(lines).style(base_style()).block(

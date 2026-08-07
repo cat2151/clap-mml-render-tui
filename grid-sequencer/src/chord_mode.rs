@@ -8,7 +8,8 @@ use std::time::Instant;
 use cmrt_chord::ChordProgressionCatalog;
 
 use crate::{
-    log_line, pick_chord_patch, ChordPlayback, GridSequencerContext, GridSequencerScreen, CHORD_ROW,
+    log_line, pick_chord_patch, ChordPlayback, GridSequencerContext, GridSequencerScreen,
+    PatternEvolution, CHORD_ROW,
 };
 
 /// 1回の抽選で、変換できる進行を探すために引き直す回数。
@@ -26,6 +27,8 @@ impl GridSequencerScreen {
     /// on にするときは、和音が潰れないよう先に patch を当ててから進行を引く。
     /// どちらかが失敗したら on にせず、ステータス行に理由を出す。
     pub(crate) fn toggle_chord_mode(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
+        // chord on/offでvisible row mappingが変わる前に、開始laneへlockされたgestureを閉じる。
+        self.cancel_mouse_gesture();
         if self.state.chord().is_some() {
             let note_offs = self.state.set_chord(None, now);
             self.send_scheduled(&note_offs);
@@ -62,7 +65,7 @@ impl GridSequencerScreen {
         if !self.reroll_chord(now, ctx) {
             return false;
         }
-        self.state.rows_mut()[CHORD_ROW].patch = Some(patch);
+        self.state.instances_mut()[CHORD_ROW].patch = Some(patch);
         self.chord_enabled = true;
         true
     }
@@ -101,12 +104,26 @@ impl GridSequencerScreen {
             log_line("grid-sequencer: chord reroll failed reason=catalog-empty");
             return false;
         };
+        if playback.max_voice_count() > crate::CHORD_VOICE_LANES {
+            log_line(&format!(
+                "grid-sequencer: chord voices truncated for multi-lane instances max={} limit={}",
+                playback.max_voice_count(),
+                crate::CHORD_VOICE_LANES,
+            ));
+        }
         log_line(&format!(
             "grid-sequencer: chord set key={} degrees={} chords={}",
             playback.key(),
             playback.degrees(),
             playback.chord_count(),
         ));
+        if playback.max_voice_count() > crate::CHORD_VOICE_LANES {
+            log_line(&format!(
+                "grid-sequencer: chord voices truncated for multi-lane instances max={} limit={}",
+                playback.max_voice_count(),
+                crate::CHORD_VOICE_LANES,
+            ));
+        }
         let note_offs = self.state.set_chord(Some(playback), now);
         self.send_scheduled(&note_offs);
         self.chord_error = None;
@@ -115,8 +132,10 @@ impl GridSequencerScreen {
 
     /// 次サイクルを抽選し、差し替え待ちとして預ける。まだ鳴らさない。
     ///
-    /// 進行・Key に加えて、**全行の音色・note・音長・セル**を引き直す（`r` キーと同じ範囲）。
-    /// 音色ロードは待機 bank の裏で走らせるので、ここで演奏は止まらない。
+    /// AUTO では進行・Key に加えて全instance/laneを引き直す。HOLD では進行・Keyだけを引き、
+    /// 現在のlane patternを保ったままresolved noteだけを新しいコードへ追随させる。
+    /// AUTO の音色ロードは待機 bank の裏で走らせる。HOLD は音色を保持するため
+    /// ロードせず、現在 bank 上で進行だけを境界時に取り込む。
     /// 抽選できたら true を返す。
     pub(crate) fn stage_next_cycle(
         &mut self,
@@ -129,26 +148,33 @@ impl GridSequencerScreen {
             return false;
         };
         // 鳴っている grid はそのままに、複製の上で引き直す。差し替えは小節境界まで待つ。
-        let mut rows = self.state.rows().to_vec();
-        crate::randomize_row_slice(&mut rows, ctx.patches());
-        crate::snap_rows_to_chord(&mut rows, &playback);
-        // 和音の行だけは無差別抽選の結果を捨て、条件に合う patch へ当て直す。
-        match self.pick_chord_patch(ctx) {
-            Ok(patch) => rows[CHORD_ROW].patch = Some(patch),
-            // 引けなくても chord mode は続ける（直前に当たっていた patch のまま鳴らす）。
-            Err(error) => {
-                self.chord_error = Some(error.to_string());
-                rows[CHORD_ROW].patch = self.state.rows()[CHORD_ROW].patch.clone();
+        let mut instances = self.state.instances().to_vec();
+        if self.pattern_evolution == PatternEvolution::Auto {
+            crate::randomize_instance_slice(&mut instances, ctx.patches());
+        }
+        if self.pattern_evolution == PatternEvolution::Auto {
+            // 和音の行だけは無差別抽選の結果を捨て、条件に合う patch へ当て直す。
+            match self.pick_chord_patch(ctx) {
+                Ok(patch) => instances[CHORD_ROW].patch = Some(patch),
+                // 引けなくても chord mode は続ける（直前の patch のまま鳴らす）。
+                Err(error) => {
+                    self.chord_error = Some(error.to_string());
+                    instances[CHORD_ROW].patch = self.state.instances()[CHORD_ROW].patch.clone();
+                }
             }
         }
         log_line(&format!(
-            "grid-sequencer: cycle staged key={} degrees={} chords={} rows={}",
+            "grid-sequencer: cycle staged mode={} key={} degrees={} chords={} instances={}",
+            self.pattern_evolution.label(),
             playback.key(),
             playback.degrees(),
             playback.chord_count(),
-            rows.len(),
+            instances.len(),
         ));
-        self.state.stage_next_cycle(rows, playback);
+        match self.pattern_evolution {
+            PatternEvolution::Auto => self.state.stage_next_cycle(instances, playback),
+            PatternEvolution::Hold => self.state.stage_next_cycle_in_place(instances, playback),
+        }
         self.chord_error = None;
         true
     }
@@ -169,7 +195,7 @@ impl GridSequencerScreen {
             return;
         }
         match self.pick_chord_patch(ctx) {
-            Ok(patch) => self.state.rows_mut()[CHORD_ROW].patch = Some(patch),
+            Ok(patch) => self.state.instances_mut()[CHORD_ROW].patch = Some(patch),
             Err(error) => self.chord_error = Some(error.to_string()),
         }
     }
