@@ -10,9 +10,11 @@ use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 
+pub use cmrt_arpeggiator::ArpPattern;
 use cmrt_chord::ChordProgressionCatalog;
 use cmrt_realtime_play::PatchVoicing;
 
+mod arpeggio;
 mod chord_mode;
 mod cycle_swap;
 mod input;

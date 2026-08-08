@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "app",
+    "arpeggiator",
     "chord",
     "cmrt-runtime",
     "config-editor-lib",

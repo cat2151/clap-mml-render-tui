@@ -462,6 +462,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmrt-arpeggiator"
+version = "0.1.0"
+dependencies = [
+ "rand 0.10.2",
+]
+
+[[package]]
 name = "cmrt-chord"
 version = "0.1.0"
 dependencies = [
@@ -549,6 +556,7 @@ name = "cmrt-grid-sequencer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cmrt-arpeggiator",
  "cmrt-chord",
  "cmrt-realtime-play",
  "cmrt-runtime",

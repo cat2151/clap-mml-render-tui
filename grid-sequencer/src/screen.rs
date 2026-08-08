@@ -1,4 +1,6 @@
-use std::time::Instant;
+use std::{collections::HashMap, time::Instant};
+
+use cmrt_arpeggiator::ArpPattern;
 
 use super::{GridMidiSender, GridPatchStatus, GridState};
 
@@ -103,6 +105,11 @@ pub struct GridSequencerScreen {
     pub(crate) overload_applied: bool,
     /// サイクルを鳴らしきってから音色ロードへ入る時刻。`None` なら待っていない。
     pub(crate) cycle_end_at: Option<Instant>,
+    /// instance ごとの、直近に適用したアルペジオ音型。wheel の種別送りカーソル。
+    /// 譜面そのものは `state` 側に入るので、セッションへは保存しない。
+    pub(crate) arp_patterns: HashMap<usize, ArpPattern>,
+    /// 直近に適用したアルペジオ音型。NOTE grid のタイトルに出すだけ。
+    pub(crate) last_arp: Option<ArpPattern>,
 }
 
 impl GridSequencerScreen {
@@ -175,6 +182,8 @@ impl GridSequencerScreen {
             single_buffering: false,
             overload_applied: false,
             cycle_end_at: None,
+            arp_patterns: HashMap::new(),
+            last_arp: None,
         }
     }
 

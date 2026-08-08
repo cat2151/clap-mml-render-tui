@@ -3,6 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod arpeggio;
 mod attack;
 mod cc1;
 mod chord;

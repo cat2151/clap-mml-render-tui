@@ -44,6 +44,9 @@ fn help_lines(track_count: usize) -> Vec<Line<'static>> {
         Line::from(
             "           右drag:note消去、PATCH click/wheel:選択/random、NOTE wheel:音高/転回",
         ),
+        Line::from("           grid wheel:アルペジオ生成(chord mode中の4 voice行のみ)"),
+        Line::from("           up/downで音型送り。Up/Down/UpDown/DownUp/UpDownHold/Converge/"),
+        Line::from("           Diverge/Octave/Random。長さは1/2/4stepからランダム"),
         Line::from("  u        直前の編集をundo（mouse dragは通過cell数によらず1操作）"),
         Line::from("  a        AUTO/HOLD切替（AUTOはコード進行1周ごとに全行を再抽選）"),
         Line::from("           HOLD: 手編集した譜面を保持し、コード変更時は発音音高だけ更新"),

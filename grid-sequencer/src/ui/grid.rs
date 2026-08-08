@@ -41,15 +41,22 @@ pub(super) fn draw(
         Paragraph::new(lines).style(base_style()).block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(format!(
-                    " Grid Sequencer / Note [{}] ",
-                    screen.pattern_evolution().label()
-                ))
+                .title(title(screen))
                 .style(base_style())
                 .border_style(base_style().fg(MONOKAI_CYAN)),
         ),
         area,
     );
+}
+
+/// 直近に適用したアルペジオ音型はタイトルへ添える。CC1 / Velocity grid が小節ごとの
+/// 抽選パターンを出しているのと同じ扱い。まだ一度も生成していなければ添えない。
+fn title(screen: &GridSequencerScreen) -> String {
+    let evolution = screen.pattern_evolution().label();
+    match screen.last_arp() {
+        Some(arp) => format!(" Grid Sequencer / Note [{evolution}] arp:{} ", arp.label()),
+        None => format!(" Grid Sequencer / Note [{evolution}] "),
+    }
 }
 
 fn header_line() -> Line<'static> {

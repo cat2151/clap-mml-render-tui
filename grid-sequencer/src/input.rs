@@ -275,13 +275,18 @@ impl GridSequencerScreen {
             self.randomize_instance_patch(instance, ctx);
             return;
         }
-        let Some(GridHit::LaneNote { address }) = hit else {
-            return;
-        };
         let direction = match kind {
             MouseEventKind::ScrollUp => PitchDirection::Up,
             MouseEventKind::ScrollDown => PitchDirection::Down,
             _ => return,
+        };
+        // step セル上の wheel は音高ではなく、その instance のフレーズを引き直す。
+        if let Some(GridHit::NoteCell { address, .. }) = hit {
+            self.cycle_arpeggio(address.instance, direction);
+            return;
+        }
+        let Some(GridHit::LaneNote { address }) = hit else {
+            return;
         };
         let snapshot = self.capture_undo();
         let changed = if self.state.rotate_chord_voicing(address.instance, direction) {
