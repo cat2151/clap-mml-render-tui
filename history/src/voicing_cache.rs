@@ -22,7 +22,7 @@ pub struct VoicingCache {
 impl VoicingCache {
     pub fn get(&self, patch: &str) -> Option<PatchVoicing> {
         self.entries
-            .get(&cmrt_tui_core::patches::normalize_patch_lookup_key(patch))
+            .get(&cmrt_surge_patches::normalize_patch_lookup_key(patch))
             .copied()
     }
 
@@ -32,7 +32,7 @@ impl VoicingCache {
         if voicing == PatchVoicing::Unknown {
             return false;
         }
-        let key = cmrt_tui_core::patches::normalize_patch_lookup_key(patch);
+        let key = cmrt_surge_patches::normalize_patch_lookup_key(patch);
         if key.is_empty() {
             return false;
         }
@@ -50,7 +50,7 @@ impl VoicingCache {
             if voicing == PatchVoicing::Unknown {
                 anyhow::bail!("共有voicing判定にunknownは指定できません: {patch}");
             }
-            let key = cmrt_tui_core::patches::normalize_patch_lookup_key(&patch);
+            let key = cmrt_surge_patches::normalize_patch_lookup_key(&patch);
             if key.is_empty() {
                 anyhow::bail!("共有voicing判定に空のpatch keyがあります");
             }

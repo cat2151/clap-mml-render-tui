@@ -1,4 +1,4 @@
-//! grid sequencer 画面（1/2/4/8/16 instancesのnote lanesを16ステップでループ再生する）。
+//! grid sequencer 画面（1/2/3/4/8/16 instancesのnote lanesを16ステップでループ再生する）。
 //!
 //! 画面の状態・入力・描画・MIDI 送信はこの crate に閉じており、共有ランタイム
 //! （app 側の `TuiApp`）からは `GridSequencerContext` で必要な情報を注入してもらう。
@@ -18,6 +18,7 @@ mod arpeggio;
 mod chord_mode;
 mod cycle_swap;
 mod input;
+mod patch_role;
 mod patch_selector;
 mod screen;
 mod screen_runtime;
@@ -36,9 +37,9 @@ pub use sender::{
 };
 pub use session::GridSequencerSession;
 pub use state::{
-    frames_ahead, pick_chord_patch, randomize_instance_slice, step_offset, ChordPlayback,
-    GridInstance, GridLane, GridLaneMode, GridScheduledMessage, GridState, LaneAddress,
-    NotePattern, NoteStep, PitchDirection, VisibleNoteRow, VisibleRowKind, BPM, CHORD_ROW,
+    frames_ahead, randomize_instance_slice, step_offset, ChordPlayback, GridInstance, GridLane,
+    GridLaneMode, GridScheduledMessage, GridState, LaneAddress, NotePattern, NoteStep,
+    PitchDirection, VisibleNoteRow, VisibleRowKind, ARPEGGIO_ROW, BASS_ROW, BPM, CHORD_ROW,
     CHORD_VOICE_LANES, GRID_ROWS, GRID_STEPS, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL,
 };
 
@@ -126,6 +127,12 @@ pub struct GridSequencerContext<'a> {
     /// 和音に使う patch のカテゴリ（config.toml の `chord_patch_categories`）。
     /// 空ならカテゴリでは絞らない。
     pub chord_patch_categories: &'a [String],
+    /// bass 行に使う patch のカテゴリ（config.toml の `bass_patch_categories`）。
+    /// 空ならカテゴリでは絞らない。
+    pub bass_patch_categories: &'a [String],
+    /// アルペジオ行に使う patch のカテゴリ（config.toml の `arpeggio_patch_categories`）。
+    /// 空ならカテゴリでは絞らない。
+    pub arpeggio_patch_categories: &'a [String],
     /// コード進行カタログが更新されたか（再起動アナウンスの合図。一度だけ true）。
     pub chord_source_updated: bool,
 }
@@ -360,7 +367,7 @@ impl GridSequencerScreen {
             KeyCode::Char('q') => return GridSequencerAction::Quit,
             KeyCode::Char('t') => {
                 let next = cmrt_realtime_play::next_live_instance_count(self.track_count());
-                self.resize_for_restart(next);
+                self.resize_for_restart(next, ctx.patches());
                 return GridSequencerAction::RestartWithTrackCount(next);
             }
             KeyCode::Char('?') => {

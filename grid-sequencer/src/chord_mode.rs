@@ -5,11 +5,12 @@
 
 use std::time::Instant;
 
-use cmrt_chord::ChordProgressionCatalog;
+use cmrt_chord::{ChordProgressionCatalog, ChordVoicing};
+use cmrt_surge_patches::{pick_for_role, PatchRole};
 
 use crate::{
-    log_line, pick_chord_patch, ChordPlayback, GridSequencerContext, GridSequencerScreen,
-    PatternEvolution, CHORD_ROW,
+    log_line, ChordPlayback, GridSequencerContext, GridSequencerScreen, PatternEvolution,
+    ARPEGGIO_ROW, BASS_ROW, CHORD_ROW,
 };
 
 /// 1回の抽選で、変換できる進行を探すために引き直す回数。
@@ -66,8 +67,34 @@ impl GridSequencerScreen {
             return false;
         }
         self.state.instances_mut()[CHORD_ROW].patch = Some(patch);
+        // bass / アルペジオは引けなくても chord mode は続ける（直前の音色のまま鳴るだけ）。
+        self.apply_row_patch(BASS_ROW, ctx);
+        self.apply_row_patch(ARPEGGIO_ROW, ctx);
         self.chord_enabled = true;
         true
+    }
+
+    /// 用途が決まっている行へ、その用途のカテゴリから引いた patch を当てる。
+    /// 行が無い構成（track 数が足りない）では何もしない。
+    fn apply_row_patch(&mut self, row: usize, ctx: &GridSequencerContext<'_>) {
+        let Some(patch) = self.pick_row_patch(row, ctx) else {
+            return;
+        };
+        if let Some(instance) = self.state.instances_mut().get_mut(row) {
+            instance.patch = Some(patch);
+        }
+    }
+
+    /// bass 行・アルペジオ行に使える patch を1つ引く。
+    ///
+    /// どちらも和音を1 instance へ重ねないので、chord 行と違い poly 判定は要求しない。
+    fn pick_row_patch(&self, row: usize, ctx: &GridSequencerContext<'_>) -> Option<String> {
+        let role = match row {
+            BASS_ROW => PatchRole::Bass,
+            ARPEGGIO_ROW => PatchRole::Arpeggio,
+            _ => return None,
+        };
+        pick_for_role(ctx.patches(), &ctx.role_filter(role), &ctx.poly_lookup())
     }
 
     /// セッションから復元した chord mode を、patch 一覧が揃ってから適用する。
@@ -97,7 +124,9 @@ impl GridSequencerScreen {
     /// 進行と Key だけを引き直して即座に差し替える。音色はそのまま。
     /// 成功したかどうかを返す。
     pub(crate) fn reroll_chord(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) -> bool {
-        let Some(playback) = pick_chord(ctx.chord_catalog) else {
+        // 即座に差し替わるので、接続相手はいま鳴っているコード。
+        let seed = self.state.chord().and_then(ChordPlayback::current_voicing);
+        let Some(playback) = pick_chord(ctx.chord_catalog, seed.as_ref()) else {
             self.chord_error = Some(CATALOG_UNAVAILABLE.to_string());
             let note_offs = self.state.set_chord(None, now);
             self.send_scheduled(&note_offs);
@@ -142,7 +171,9 @@ impl GridSequencerScreen {
         _now: Instant,
         ctx: &GridSequencerContext<'_>,
     ) -> bool {
-        let Some(playback) = pick_chord(ctx.chord_catalog) else {
+        // 差し替えは小節境界。その直前に鳴っているのは現在の進行の最後のコード。
+        let seed = self.state.chord().and_then(ChordPlayback::last_voicing);
+        let Some(playback) = pick_chord(ctx.chord_catalog, seed.as_ref()) else {
             self.chord_error = Some(CATALOG_UNAVAILABLE.to_string());
             log_line("grid-sequencer: cycle stage failed reason=catalog-empty");
             return false;
@@ -161,6 +192,15 @@ impl GridSequencerScreen {
                     self.chord_error = Some(error.to_string());
                     instances[CHORD_ROW].patch = self.state.instances()[CHORD_ROW].patch.clone();
                 }
+            }
+            // bass とアルペジオの行も同じく、用途ごとのカテゴリから当て直す。
+            for row in [BASS_ROW, ARPEGGIO_ROW] {
+                let Some(instance) = instances.get_mut(row) else {
+                    continue;
+                };
+                instance.patch = self
+                    .pick_row_patch(row, ctx)
+                    .or_else(|| self.state.instances()[row].patch.clone());
             }
         }
         log_line(&format!(
@@ -198,6 +238,8 @@ impl GridSequencerScreen {
             Ok(patch) => self.state.instances_mut()[CHORD_ROW].patch = Some(patch),
             Err(error) => self.chord_error = Some(error.to_string()),
         }
+        self.apply_row_patch(BASS_ROW, ctx);
+        self.apply_row_patch(ARPEGGIO_ROW, ctx);
     }
 
     /// 和音に使える patch を1つ引く。カテゴリと poly 判定の両方を満たすものだけが当たり。
@@ -205,14 +247,40 @@ impl GridSequencerScreen {
         if ctx.patches().is_empty() {
             return Err(PATCHES_UNAVAILABLE);
         }
-        pick_chord_patch(ctx.patches(), ctx.voicing, ctx.chord_patch_categories)
-            .ok_or(CHORD_PATCH_UNAVAILABLE)
+        pick_for_role(
+            ctx.patches(),
+            &ctx.role_filter(PatchRole::Chord),
+            &ctx.poly_lookup(),
+        )
+        .ok_or(CHORD_PATCH_UNAVAILABLE)
     }
 }
 
-fn pick_chord(catalog: &ChordProgressionCatalog) -> Option<ChordPlayback> {
+/// 進行を1つ抽選し、auto voicing を通してから再生状態へ組み立てる。
+///
+/// auto voicing はここだけを通る（mode 切り替えは無く、常に効く）。`seed` は
+/// 「この進行の1コード目が接続する相手」。cycle をまたいで引き直すとき、いま鳴って
+/// いるコードを渡すと境界の top note の跳躍も最小化される。
+fn pick_chord(
+    catalog: &ChordProgressionCatalog,
+    seed: Option<&ChordVoicing>,
+) -> Option<ChordPlayback> {
     let pick = catalog.pick_playable(PICK_ATTEMPTS)?;
-    ChordPlayback::new(pick.key, pick.degrees, pick.chords)
+    let voicings = cmrt_chord::auto_voice(&pick.chords, seed);
+    let (top_jump, bass_jump) = cmrt_chord::max_jumps(&voicings);
+    // 接続相手との境界も1つの進行として測る。ここが跳ねていたら seed が効いていない。
+    let bridge_top_jump = match (seed, voicings.first()) {
+        (Some(seed), Some(first)) => cmrt_chord::max_jumps(&[seed.clone(), first.clone()])
+            .0
+            .to_string(),
+        _ => "-".to_string(),
+    };
+    log_line(&format!(
+        "grid-sequencer: auto voicing key={} degrees={} top_max_jump={top_jump} bass_max_jump={bass_jump} bridge_top_jump={bridge_top_jump}",
+        pick.key,
+        pick.degrees,
+    ));
+    ChordPlayback::from_voicings(pick.key, pick.degrees, voicings)
 }
 
 #[cfg(test)]

@@ -8,7 +8,7 @@ use super::PATCH_SELECT_PREVIEW_FALLBACK_PHRASE;
 
 impl<'a> NotepadScreen<'a> {
     fn sort_patch_select_pairs(&mut self) {
-        cmrt_tui_core::patches::sort_patch_pairs(
+        cmrt_surge_patches::sort_patch_pairs(
             &mut self.patch_select.patch_all,
             self.patch_select.patch_select_sort_order,
         );
@@ -83,8 +83,7 @@ impl<'a> NotepadScreen<'a> {
             }
         }
         self.patch_select.patch_all = self.patch_select.patch_all_source_order.clone();
-        if self.patch_select.patch_select_sort_order
-            == cmrt_tui_core::patches::PatchSortOrder::Category
+        if self.patch_select.patch_select_sort_order == cmrt_surge_patches::PatchSortOrder::Category
         {
             self.sort_patch_select_pairs();
         }
@@ -189,8 +188,7 @@ impl<'a> NotepadScreen<'a> {
         self.patch_select.patch_select_sort_order =
             self.patch_select.patch_select_sort_order.toggle();
         self.patch_select.patch_all = self.patch_select.patch_all_source_order.clone();
-        if self.patch_select.patch_select_sort_order
-            == cmrt_tui_core::patches::PatchSortOrder::Category
+        if self.patch_select.patch_select_sort_order == cmrt_surge_patches::PatchSortOrder::Category
         {
             self.sort_patch_select_pairs();
         }

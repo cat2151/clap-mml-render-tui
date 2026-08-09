@@ -50,8 +50,8 @@ fn a_chord_sounds_every_note_with_the_same_velocity() {
 #[test]
 fn chord_voice_attacks_use_the_velocity_of_each_stored_lane() {
     let now = Instant::now();
-    let mut state = GridState::with_instance_count(2);
-    for lane in &mut state.instances[1].lanes {
+    let mut state = GridState::with_instance_count(3);
+    for lane in &mut state.instances[2].lanes {
         lane.pattern.draw_span(0, 0);
     }
     state.set_chord(
@@ -63,14 +63,14 @@ fn chord_voice_attacks_use_the_velocity_of_each_stored_lane() {
     let note_ons = state
         .poll_steps(now, Duration::ZERO)
         .into_iter()
-        .filter(|message| message.instance_id == 1 && message.message[0] == 0x90)
+        .filter(|message| message.instance_id == 2 && message.message[0] == 0x90)
         .map(|message| message.message)
         .collect::<Vec<_>>();
     assert_eq!(note_ons.len(), 4);
     for (lane, message) in note_ons.iter().enumerate() {
         assert_eq!(
             message[2],
-            state.velocity_display()[lane + 1][0].unwrap(),
+            state.velocity_display()[lane + 2][0].unwrap(),
             "lane {lane}"
         );
     }

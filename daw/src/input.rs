@@ -24,10 +24,7 @@ const PATCH_FILTER_QUERY_JSON_KEY: &str = "Surge XT patch filter";
 
 impl DawApp {
     fn resolve_patch_name(&self, patch_name: &str) -> Option<String> {
-        cmrt_tui_core::patches::resolve_display_patch_name(
-            &self.overlays.patch_select.all,
-            patch_name,
-        )
+        cmrt_surge_patches::resolve_display_patch_name(&self.overlays.patch_select.all, patch_name)
     }
 
     fn normalize_patch_phrase_store_key(&mut self, patch_name: String) -> String {

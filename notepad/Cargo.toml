@@ -14,6 +14,7 @@ cmrt-history = { path = "../history" }
 cmrt-offline-render = { path = "../offline-render" }
 cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-runtime = { path = "../cmrt-runtime" }
+cmrt-surge-patches = { path = "../surge-patches" }
 cmrt-tui-core = { path = "../tui-core" }
 mmlabc-to-smf = { git = "https://github.com/cat2151/mmlabc-to-smf-rust.git", package = "mmlabc-to-smf", features = ["cli"] }
 anyhow = "1"

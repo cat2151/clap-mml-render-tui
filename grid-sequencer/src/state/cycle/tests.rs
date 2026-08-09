@@ -37,17 +37,17 @@ fn rows_map_onto_the_instances_of_their_bank() {
 
 #[test]
 fn all_four_lanes_share_their_instances_bank_id() {
-    let mut state = state_with(2);
-    assert_eq!(state.instances()[1].lanes.len(), 4);
-    assert!((0..4).all(|_| state.instance_id(1) == 1));
-    assert_eq!(state.standby_instance_id(1), 3);
+    let mut state = state_with(3);
+    assert_eq!(state.instances()[2].lanes.len(), 4);
+    assert!((0..4).all(|_| state.instance_id(2) == 2));
+    assert_eq!(state.standby_instance_id(2), 5);
 
     let instances = state.instances().to_vec();
     state.stage_next_cycle(instances, chord());
     state.mark_pending_ready();
     assert!(state.commit_pending_cycle());
-    assert!((0..4).all(|_| state.instance_id(1) == 3));
-    assert_eq!(state.standby_instance_id(1), 1);
+    assert!((0..4).all(|_| state.instance_id(2) == 5));
+    assert_eq!(state.standby_instance_id(2), 2);
 }
 
 /// 先読みロードの宛先は「待機 bank の instance」でなければならない。

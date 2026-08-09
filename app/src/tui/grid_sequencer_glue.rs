@@ -34,6 +34,8 @@ struct GridContextParts<'ctx> {
     voicing: &'ctx VoicingState,
     chord_catalog: &'ctx ChordProgressionCatalog,
     chord_patch_categories: &'ctx [String],
+    bass_patch_categories: &'ctx [String],
+    arpeggio_patch_categories: &'ctx [String],
     chord_source_updated: bool,
 }
 
@@ -48,6 +50,8 @@ fn grid_sequencer_context<'ctx>(parts: GridContextParts<'ctx>) -> GridSequencerC
         chord_catalog: parts.chord_catalog,
         voicing: parts.voicing,
         chord_patch_categories: parts.chord_patch_categories,
+        bass_patch_categories: parts.bass_patch_categories,
+        arpeggio_patch_categories: parts.arpeggio_patch_categories,
         chord_source_updated: parts.chord_source_updated,
     }
 }
@@ -70,6 +74,8 @@ impl TuiApp<'_> {
             voicing: &self.voicing,
             chord_catalog: &self.chord_catalog,
             chord_patch_categories: &self.cfg.chord_patch_categories,
+            bass_patch_categories: &self.cfg.bass_patch_categories,
+            arpeggio_patch_categories: &self.cfg.arpeggio_patch_categories,
             chord_source_updated: false,
         });
         self.grid_sequencer.enter(Instant::now(), &ctx);
@@ -99,6 +105,8 @@ impl TuiApp<'_> {
             voicing: &self.voicing,
             chord_catalog: &self.chord_catalog,
             chord_patch_categories: &self.cfg.chord_patch_categories,
+            bass_patch_categories: &self.cfg.bass_patch_categories,
+            arpeggio_patch_categories: &self.cfg.arpeggio_patch_categories,
             chord_source_updated: false,
         });
         self.grid_sequencer.handle_key(key, Instant::now(), &ctx)
@@ -117,6 +125,8 @@ impl TuiApp<'_> {
             voicing: &self.voicing,
             chord_catalog: &self.chord_catalog,
             chord_patch_categories: &self.cfg.chord_patch_categories,
+            bass_patch_categories: &self.cfg.bass_patch_categories,
+            arpeggio_patch_categories: &self.cfg.arpeggio_patch_categories,
             chord_source_updated: false,
         });
         self.grid_sequencer.handle_mouse(mouse, terminal_area, &ctx);
@@ -135,6 +145,8 @@ impl TuiApp<'_> {
             voicing: &self.voicing,
             chord_catalog: &self.chord_catalog,
             chord_patch_categories: &self.cfg.chord_patch_categories,
+            bass_patch_categories: &self.cfg.bass_patch_categories,
+            arpeggio_patch_categories: &self.cfg.arpeggio_patch_categories,
             chord_source_updated,
         });
         self.grid_sequencer.refresh_context(&ctx);

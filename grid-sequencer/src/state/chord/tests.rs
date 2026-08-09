@@ -4,6 +4,7 @@ use super::*;
 use crate::state::{step_offset, velocity::normalize_velocity, GridScheduledMessage, GRID_STEPS};
 use crate::{NotePattern, NoteStep};
 
+mod bass;
 mod voicing;
 
 /// 先読みなしで1ステップだけ取り出す。
@@ -190,49 +191,50 @@ fn other_rows_snap_to_the_chord_while_keeping_their_octave() {
     let now = Instant::now();
     let mut state = GridState::default();
     // C2 付近と C6 付近。C major に寄せても元の音域から離れないこと。
-    state.instances[2].base_note = 38;
-    state.instances[3].base_note = 81;
-    state.instances[4].base_note = 67;
+    // 行1=chord・行2=bass・行3=ChordVoices4 は音高を自動導出するので、行4以降で見る。
+    state.instances[3].base_note = 38;
+    state.instances[4].base_note = 81;
+    state.instances[5].base_note = 67;
 
     state.set_chord(Some(c_major_then_f_major()), now);
 
     assert_eq!(
-        state.resolved_note(LaneAddress::new(2, 0)),
+        state.resolved_note(LaneAddress::new(3, 0)),
         Some(36),
         "38 は下の C(36) が最も近い"
     );
-    assert_eq!(state.resolved_note(LaneAddress::new(3, 0)), Some(79));
-    assert_eq!(state.resolved_note(LaneAddress::new(4, 0)), Some(67));
+    assert_eq!(state.resolved_note(LaneAddress::new(4, 0)), Some(79));
+    assert_eq!(state.resolved_note(LaneAddress::new(5, 0)), Some(67));
 }
 
 #[test]
 fn other_rows_follow_the_chord_change() {
     let now = Instant::now();
     let mut state = GridState::default();
-    state.instances[2].base_note = 64;
+    state.instances[3].base_note = 64;
     state.set_chord(Some(c_major_then_f_major()), now);
-    assert_eq!(state.resolved_note(LaneAddress::new(2, 0)), Some(64));
+    assert_eq!(state.resolved_note(LaneAddress::new(3, 0)), Some(64));
 
     state.advance_chord();
 
-    assert_eq!(state.resolved_note(LaneAddress::new(2, 0)), Some(65));
+    assert_eq!(state.resolved_note(LaneAddress::new(3, 0)), Some(65));
 
     state.advance_chord();
 
-    assert_eq!(state.resolved_note(LaneAddress::new(2, 0)), Some(64));
+    assert_eq!(state.resolved_note(LaneAddress::new(3, 0)), Some(64));
 }
 
 #[test]
 fn turning_the_chord_mode_off_restores_the_base_notes() {
     let now = Instant::now();
     let mut state = GridState::default();
-    state.instances[2].base_note = 38;
+    state.instances[3].base_note = 38;
     state.set_chord(Some(c_major_then_f_major()), now);
-    assert_eq!(state.resolved_note(LaneAddress::new(2, 0)), Some(36));
+    assert_eq!(state.resolved_note(LaneAddress::new(3, 0)), Some(36));
 
     state.set_chord(None, now);
 
-    assert_eq!(state.resolved_note(LaneAddress::new(2, 0)), Some(38));
+    assert_eq!(state.resolved_note(LaneAddress::new(3, 0)), Some(38));
     assert!(state.chord().is_none());
 }
 
@@ -256,8 +258,8 @@ fn switching_the_chord_mode_silences_the_sounding_notes() {
 fn other_rows_keep_playing_their_own_rhythm_under_the_chord() {
     let now = Instant::now();
     let mut state = GridState::default();
-    state.instances[1].base_note = 62;
-    state.instances[1].pattern.draw_span(1, 1);
+    state.instances[3].base_note = 62;
+    state.instances[3].pattern.draw_span(1, 1);
     state.set_chord(Some(c_major_then_f_major()), now);
     state.start(now);
     step_at(&mut state, now);
@@ -265,7 +267,7 @@ fn other_rows_keep_playing_their_own_rhythm_under_the_chord() {
     let second = step_at(&mut state, at_step(now, 1));
 
     assert_eq!(messages(&second), vec![[0x90, 60, 100]]);
-    assert_eq!(notes(&second)[0].instance_id, 1);
+    assert_eq!(notes(&second)[0].instance_id, 3);
 }
 
 #[test]
@@ -288,16 +290,16 @@ fn snapping_without_any_pitch_class_keeps_the_base_note() {
 #[test]
 fn staggered_chord_voice_attacks_do_not_release_each_other() {
     let now = Instant::now();
-    let mut state = GridState::with_instance_count(2);
-    state.instances[1].lanes[0].pattern.draw_span(0, 3);
-    state.instances[1].lanes[1].pattern.draw_span(2, 2);
+    let mut state = GridState::with_instance_count(3);
+    state.instances[2].lanes[0].pattern.draw_span(0, 3);
+    state.instances[2].lanes[1].pattern.draw_span(2, 2);
     state.set_chord(Some(c_major_then_f_major()), now);
     state.start(now);
 
     let voice_messages = |scheduled: Vec<GridScheduledMessage>| {
         scheduled
             .into_iter()
-            .filter(|message| message.instance_id == 1 && message.message[0] != 0xB0)
+            .filter(|message| message.instance_id == 2 && message.message[0] != 0xB0)
             .map(|message| normalize_velocity(message.message))
             .collect::<Vec<_>>()
     };

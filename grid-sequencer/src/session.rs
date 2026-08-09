@@ -25,12 +25,24 @@ impl GridSequencerScreen {
         })
     }
 
-    pub(crate) fn resize_for_restart(&mut self, instance_count: usize) {
+    /// track 数を変えて再起動する準備。既存の行はそのまま引き継ぐ。
+    ///
+    /// 増やしたぶんの行は抽選して埋める。空のまま足すと、HOLD では譜面を引き直さないので
+    /// 増やした行が延々と無音のままになる（`r` を押すまで気づけない）。
+    pub(crate) fn resize_for_restart(
+        &mut self,
+        instance_count: usize,
+        patches: &[(String, String)],
+    ) {
         let mut instances = self.state.instances().to_vec();
+        let previous_count = instances.len();
         while instances.len() < instance_count {
             instances.push(GridInstance::new(instances.len()));
         }
         instances.truncate(instance_count);
+        if let Some(added) = instances.get_mut(previous_count..) {
+            crate::randomize_instance_slice(added, patches);
+        }
 
         self.finish();
         let mut state = GridState::with_instance_count(instance_count);

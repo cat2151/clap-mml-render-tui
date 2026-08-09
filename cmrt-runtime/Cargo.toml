@@ -9,6 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 cmrt-core = { path = "../core-lib" }
+cmrt-surge-patches = { path = "../surge-patches" }
 anyhow = "1"
 dirs = "6"
 serde = { version = "1", features = ["derive"] }

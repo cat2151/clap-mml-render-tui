@@ -35,9 +35,14 @@ use process::{build_realtime_play_server_command, spawn_realtime_play_server, st
 /// UI が見せるトラック数の既定値。サーバーが生成する instance 数はこの 2 倍になる。
 pub const DEFAULT_LIVE_INSTANCE_COUNT: usize = INSTANCE_COUNT / BANK_COUNT;
 /// UI が見せるトラック数（grid sequencer の `t` キーが循環する値）。
-pub const SUPPORTED_LIVE_INSTANCE_COUNTS: [usize; 5] = [1, 2, 4, 8, 16];
+///
+/// 3 は chord mode 用。行1=chord・行2=bass・行3=4 voice（アルペジオ）で過不足がない。
+pub const SUPPORTED_LIVE_INSTANCE_COUNTS: [usize; 6] = [1, 2, 3, 4, 8, 16];
 /// サーバーへ要求できる instance 数。トラック数それぞれの bank 2 本ぶん。
-pub const SUPPORTED_SERVER_INSTANCE_COUNTS: [usize; 6] = [1, 2, 4, 8, 16, 32];
+///
+/// ここを増やすときは play server 側（`realtime-play-server/src/config.rs` の
+/// `SUPPORTED_LIVE_INSTANCE_COUNTS`）も必ず揃えること。2 repo に二重定義されている。
+pub const SUPPORTED_SERVER_INSTANCE_COUNTS: [usize; 7] = [1, 2, 4, 6, 8, 16, 32];
 pub const LIVE_INSTANCE_COUNT_ENV: &str = "CMRT_LIVE_INSTANCE_COUNT";
 
 /// bank の数。grid sequencer の chord mode は、鳴っている bank の裏でもう一方へ

@@ -103,6 +103,8 @@ fn row_line(
     let instance_label = group_header.then(|| (address.instance + 1).to_string());
     let voice_label = if summary {
         "C".to_string()
+    } else if screen.state.chord().is_some() && address.instance == crate::BASS_ROW {
+        "B".to_string()
     } else {
         (address.lane + 1).to_string()
     };

@@ -2,11 +2,9 @@ use std::time::Instant;
 
 use rand::RngExt;
 
-use cmrt_realtime_play::PatchVoicing;
-use cmrt_tui_core::{patches::patch_matches_categories, random::random_index};
+use cmrt_tui_core::random::random_index;
 
 use super::{GridInstance, GridScheduledMessage, GridState, NotePattern, GRID_STEPS};
-use crate::GridVoicingLookup;
 
 /// ランダム生成に使う note number の範囲（C2〜C6）。
 const RANDOM_NOTE_MIN: u8 = 36;
@@ -15,37 +13,6 @@ const RANDOM_NOTE_MAX: u8 = 84;
 const CELL_ON_RATIO: f64 = 0.25;
 /// 1stepを多めにしつつ、2/4step noteも生成する重み付き候補。
 const NOTE_LENGTHS: [usize; 6] = [1, 1, 1, 2, 2, 4];
-
-/// 和音に使える patch を1つ引く。当たりは「指定カテゴリに属し、かつ poly と
-/// 判明している」もの。
-///
-/// mono patch では和音が最後の1音しか鳴らないため、chord mode の行には使えない。
-/// 未判定（`None`）も外れ扱いにするので、voicing キャッシュが空だと何も引けない。
-/// `categories` が空ならカテゴリでは絞らない。
-pub fn pick_chord_patch(
-    patches: &[(String, String)],
-    voicing: &dyn GridVoicingLookup,
-    categories: &[String],
-) -> Option<String> {
-    // 当たりが薄いときに引き直しで粘るより、先に候補を絞ったほうが確実で速い。
-    let candidates = patches
-        .iter()
-        .filter(|(display, lower)| patch_is_chord_candidate(display, lower, voicing, categories))
-        .collect::<Vec<_>>();
-    let index = random_index(candidates.len())?;
-    Some(candidates[index].0.clone())
-}
-
-/// chord instance用の既存候補判定。PATCH wheelでも同じ集合を共有する。
-pub(crate) fn patch_is_chord_candidate(
-    display: &str,
-    normalized_path: &str,
-    voicing: &dyn GridVoicingLookup,
-    categories: &[String],
-) -> bool {
-    patch_matches_categories(normalized_path, categories)
-        && voicing.cached_voicing(display) == Some(PatchVoicing::Poly)
-}
 
 /// instance群を丸ごと引き直す。`patches` が空なら patch だけ据え置く。
 ///

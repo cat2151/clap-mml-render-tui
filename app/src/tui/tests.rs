@@ -41,5 +41,7 @@ fn test_config() -> crate::config::Config {
         voicing_override_source: String::new(),
         chord_progression_source: String::new(),
         chord_patch_categories: Vec::new(),
+        bass_patch_categories: Vec::new(),
+        arpeggio_patch_categories: Vec::new(),
     }
 }

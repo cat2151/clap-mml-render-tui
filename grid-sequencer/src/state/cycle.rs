@@ -141,6 +141,12 @@ impl GridState {
         self.pending_instances_for_test()
     }
 
+    /// テスト用。差し替え待ちのコード進行。
+    #[cfg(test)]
+    pub(crate) fn pending_chord_for_test(&self) -> Option<&super::ChordPlayback> {
+        self.pending.as_ref().map(|pending| &pending.chord)
+    }
+
     /// 差し替え待ちを捨てる。`r` キーのように grid を丸ごと引き直すときに使う。
     pub fn discard_pending_cycle(&mut self) {
         self.pending = None;

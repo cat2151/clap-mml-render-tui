@@ -1,18 +1,19 @@
 //! PATCH 欄から開く、mouse/keyboard 共用の行単位 patch selector。
+//!
+//! ここは選択状態と、preview / 確定 / 取り消しの適用まで。入力のさばきは
+//! [`input`]、画面上の当たり判定は [`layout`] にある。
 
 use std::ops::Range;
 
 use cmrt_realtime_play::PatchVoicing;
-use cmrt_tui_core::{
-    patches::{group_patch_pairs_by_category, PatchCategory},
-    random::random_index,
+use cmrt_surge_patches::{group_patch_pairs_by_category, matches_role, PatchCategory, PatchRole};
+use cmrt_tui_core::random::random_index;
+
+use crate::{
+    GridPatchLoad, GridSequencerContext, GridSequencerScreen, ARPEGGIO_ROW, BASS_ROW, CHORD_ROW,
 };
-use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
-use ratatui::layout::Rect;
 
-use crate::state::patch_is_chord_candidate;
-use crate::{GridPatchLoad, GridSequencerContext, GridSequencerScreen, CHORD_ROW};
-
+mod input;
 mod layout;
 
 use layout::contains;
@@ -178,14 +179,22 @@ impl GridSequencerScreen {
             return;
         };
         let current = item.patch.as_deref();
-        let chord_target = instance == CHORD_ROW && self.state.chord().is_some();
+        let chord_on = self.state.chord().is_some();
+        // chord mode 中は行ごとに用途が決まっている。それ以外の行は Free（＝和音向きの
+        // 音色を避ける）で引き、chord mode off なら全行が Free。
+        let role = match instance {
+            CHORD_ROW if chord_on => PatchRole::Chord,
+            BASS_ROW if chord_on => PatchRole::Bass,
+            ARPEGGIO_ROW if chord_on => PatchRole::Arpeggio,
+            _ => PatchRole::Free,
+        };
+        let filter = ctx.role_filter(role);
+        let voicing = ctx.poly_lookup();
         let candidates = ctx
             .patches()
             .iter()
             .filter(|(display, lower)| {
-                patch_is_chord_candidate(display, lower, ctx.voicing, ctx.chord_patch_categories)
-                    == chord_target
-                    && current != Some(display.as_str())
+                matches_role(display, lower, &filter, &voicing) && current != Some(display.as_str())
             })
             .map(|(display, _)| display)
             .collect::<Vec<_>>();
@@ -212,118 +221,6 @@ impl GridSequencerScreen {
         };
         let poly_only = instance == CHORD_ROW && self.state.chord().is_some();
         self.patch_selector = PatchSelector::new(instance, current, ctx, poly_only);
-    }
-
-    pub(crate) fn handle_patch_selector_mouse(
-        &mut self,
-        event: MouseEvent,
-        terminal_area: Rect,
-        ctx: &GridSequencerContext<'_>,
-    ) {
-        let layout = PatchSelectorLayout::new(terminal_area);
-        match event.kind {
-            MouseEventKind::Down(MouseButton::Right | MouseButton::Middle) => {
-                self.cancel_patch_selector();
-            }
-            MouseEventKind::Down(MouseButton::Left) => {
-                let Some(selector) = self.patch_selector.as_mut() else {
-                    return;
-                };
-                if let Some(index) = layout.category_at(selector, event.column, event.row) {
-                    selector.select_category(index);
-                    self.preview_patch_selection(ctx);
-                } else if let Some(index) = layout.patch_at(selector, event.column, event.row) {
-                    selector.select_patch(index);
-                    self.apply_patch_selection(ctx);
-                } else {
-                    self.cancel_patch_selector();
-                }
-            }
-            MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
-                let delta = if matches!(event.kind, MouseEventKind::ScrollUp) {
-                    -1
-                } else {
-                    1
-                };
-                let Some(selector) = self.patch_selector.as_mut() else {
-                    return;
-                };
-                if contains(layout.category_pane, event.column, event.row) {
-                    selector.move_category(delta);
-                } else if contains(layout.patch_pane, event.column, event.row) {
-                    selector.move_patch(delta);
-                }
-                self.preview_patch_selection(ctx);
-            }
-            MouseEventKind::Up(_)
-            | MouseEventKind::Drag(_)
-            | MouseEventKind::Moved
-            | MouseEventKind::ScrollLeft
-            | MouseEventKind::ScrollRight => {}
-        }
-    }
-
-    pub(crate) fn handle_patch_selector_key(
-        &mut self,
-        key: KeyEvent,
-        ctx: &GridSequencerContext<'_>,
-    ) {
-        match key.code {
-            KeyCode::Esc | KeyCode::Char('q') => {
-                self.cancel_patch_selector();
-                return;
-            }
-            KeyCode::Enter => {
-                self.apply_patch_selection(ctx);
-                return;
-            }
-            _ => {}
-        }
-        let Some(selector) = self.patch_selector.as_mut() else {
-            return;
-        };
-        let navigated = match key.code {
-            KeyCode::Left | KeyCode::Char('h') => {
-                selector.move_category(-1);
-                true
-            }
-            KeyCode::Right | KeyCode::Char('l') => {
-                selector.move_category(1);
-                true
-            }
-            KeyCode::Up | KeyCode::Char('k') => {
-                selector.move_patch(-1);
-                true
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                selector.move_patch(1);
-                true
-            }
-            KeyCode::PageUp => {
-                selector.move_patch(-10);
-                true
-            }
-            KeyCode::PageDown => {
-                selector.move_patch(10);
-                true
-            }
-            KeyCode::Home => {
-                selector.patch_cursor = 0;
-                true
-            }
-            KeyCode::End => {
-                selector.patch_cursor = selector.selected_category().patches.len() - 1;
-                true
-            }
-            KeyCode::Char('r') => {
-                selector.select_random_patch();
-                true
-            }
-            _ => false,
-        };
-        if navigated {
-            self.preview_patch_selection(ctx);
-        }
     }
 
     fn preview_patch_selection(&mut self, ctx: &GridSequencerContext<'_>) {

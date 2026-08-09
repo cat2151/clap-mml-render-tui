@@ -1,7 +1,7 @@
 use ratatui::widgets::ListState;
 use ratatui_textarea::TextArea;
 
-use cmrt_tui_core::patches::PatchSortOrder;
+use cmrt_surge_patches::PatchSortOrder;
 
 use super::PatchSelectPane;
 

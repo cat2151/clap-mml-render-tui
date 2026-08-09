@@ -215,14 +215,20 @@ fn edited_grid_is_persisted_and_restored_without_persisting_derived_note() {
             pattern: pattern.clone(),
         }],
     };
-    let mut voicing_instance = crate::tui::grid_sequencer::GridInstance::new(1);
+    // voicing_rotation を持てるのは 4 voice の行（行3 = instance 2）だけ。
+    let mut voicing_instance = crate::tui::grid_sequencer::GridInstance::new(2);
     voicing_instance.voicing_rotation = -5;
     let mut app = TuiApp::new_for_test(test_config());
     app.grid_sequencer = crate::tui::grid_sequencer::GridSequencerScreen::new_with(
         crate::tui::grid_sequencer::GridSequencerParts {
-            track_count: 2,
+            track_count: 4,
             restored_session: Some(crate::tui::grid_sequencer::GridSequencerSession::new(
-                vec![instance, voicing_instance],
+                vec![
+                    instance,
+                    crate::tui::grid_sequencer::GridInstance::new(1),
+                    voicing_instance,
+                    crate::tui::grid_sequencer::GridInstance::new(3),
+                ],
                 crate::tui::grid_sequencer::PatternEvolution::Hold,
             )),
             ..crate::tui::grid_sequencer::GridSequencerParts::default()
@@ -250,14 +256,14 @@ fn edited_grid_is_persisted_and_restored_without_persisting_derived_note() {
         session.pattern_evolution,
         crate::tui::grid_sequencer::PatternEvolution::Hold
     );
-    assert_eq!(session.instances.len(), 2);
+    assert_eq!(session.instances.len(), 4);
     assert_eq!(
         session.instances[0].patch.as_deref(),
         Some("Keys/Piano.fxp")
     );
     assert_eq!(session.instances[0].lanes[0].base_note, 64);
     assert_eq!(session.instances[0].lanes[0].pattern, pattern);
-    assert_eq!(session.instances[1].voicing_rotation, -5);
+    assert_eq!(session.instances[2].voicing_rotation, -5);
 
     std::fs::remove_dir_all(&tmp).ok();
 }

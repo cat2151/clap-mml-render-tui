@@ -9,15 +9,15 @@
 
 use cmrt_arpeggiator::ArpNote;
 
-use super::{GridState, LaneAddress, CHORD_ROW};
+use super::{GridState, LaneAddress, BASS_ROW, CHORD_ROW};
 
 impl GridState {
     /// アルペジオに使える声部数。`resolved_note` が音を返す lane を数える。
     ///
-    /// chord OFF・[`CHORD_ROW`]・Single lane の instance では 2 未満になるので、
-    /// 呼び出し側はこれで対象外を弾ける。
+    /// chord OFF・[`CHORD_ROW`]・[`BASS_ROW`]・Single lane の instance では 2 未満に
+    /// なるので、呼び出し側はこれで対象外を弾ける。
     pub fn arp_voice_count(&self, instance: usize) -> usize {
-        if self.chord.is_none() || instance == CHORD_ROW {
+        if self.chord.is_none() || instance == CHORD_ROW || instance == BASS_ROW {
             return 0;
         }
         let Some(item) = self.instances.get(instance) else {
@@ -36,7 +36,7 @@ impl GridState {
     /// 声部数を超える `voice` は無視する（lane が無いので鳴らしようがない）。
     /// 変化がなければ `false` を返し、表示の作り直しもしない。
     pub fn apply_arpeggio(&mut self, instance: usize, notes: &[ArpNote]) -> bool {
-        if self.chord.is_none() || instance == CHORD_ROW {
+        if self.chord.is_none() || instance == CHORD_ROW || instance == BASS_ROW {
             return false;
         }
         let Some(item) = self.instances.get_mut(instance) else {

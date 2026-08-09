@@ -22,7 +22,7 @@ impl DawApp {
             available_patches
                 .as_deref()
                 .and_then(|pairs| {
-                    cmrt_tui_core::patches::resolve_display_patch_name(pairs, &patch_name)
+                    cmrt_surge_patches::resolve_display_patch_name(pairs, &patch_name)
                 })
                 .unwrap_or_else(|| self.normalize_patch_phrase_store_key(patch_name))
         });

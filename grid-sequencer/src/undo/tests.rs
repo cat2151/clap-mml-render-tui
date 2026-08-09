@@ -50,34 +50,35 @@ fn one_cross_row_drag_undoes_every_touched_row_together() {
 
 #[test]
 fn chord_voicing_wheel_is_undoable() {
-    let mut screen = GridSequencerScreen::with_track_count(None, 2);
+    // chord ON の行は 3=和音、4=bass、5〜8が 4 voice。
+    let mut screen = GridSequencerScreen::with_track_count(None, 4);
     screen.state.set_chord(
         ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]),
         Instant::now(),
     );
     assert_eq!(
-        crate::chord_gains_db(2, true, screen.pattern_evolution())[0],
+        crate::chord_gains_db(4, true, screen.pattern_evolution())[0],
         crate::CHORD_GAIN_DB
     );
 
     screen.handle_mouse(
-        mouse_at(MouseEventKind::ScrollDown, 32, 5),
+        mouse_at(MouseEventKind::ScrollDown, 32, 6),
         AREA,
         &context(),
     );
-    assert_eq!(screen.state.instances()[1].voicing_rotation, -1);
+    assert_eq!(screen.state.instances()[2].voicing_rotation, -1);
     assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
     assert_eq!(
-        crate::chord_gains_db(2, true, screen.pattern_evolution()),
-        vec![0.0; 4]
+        crate::chord_gains_db(4, true, screen.pattern_evolution()),
+        vec![0.0; 8]
     );
 
     screen.handle_key(press('u'), Instant::now(), &context());
 
-    assert_eq!(screen.state.instances()[1].voicing_rotation, 0);
+    assert_eq!(screen.state.instances()[2].voicing_rotation, 0);
     assert_eq!(screen.pattern_evolution(), PatternEvolution::Auto);
     assert_eq!(
-        crate::chord_gains_db(2, true, screen.pattern_evolution())[0],
+        crate::chord_gains_db(4, true, screen.pattern_evolution())[0],
         crate::CHORD_GAIN_DB
     );
 }

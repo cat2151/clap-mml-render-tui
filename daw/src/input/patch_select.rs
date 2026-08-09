@@ -186,7 +186,7 @@ impl DawApp {
             .collect();
         self.overlays.patch_select.cursor = initial_patch_name
             .map(|patch_name| {
-                cmrt_tui_core::patches::resolve_display_patch_name(
+                cmrt_surge_patches::resolve_display_patch_name(
                     &self.overlays.patch_select.all,
                     patch_name,
                 )

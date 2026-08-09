@@ -18,6 +18,7 @@ members = [
     "offline-render",
     "realtime-play",
     "rubberband-ffi",
+    "surge-patches",
     "tui-core",
 ]
 resolver = "2"

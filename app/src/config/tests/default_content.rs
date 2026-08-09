@@ -63,6 +63,23 @@ fn default_config_content_lists_the_chord_patch_categories() {
     );
 }
 
+/// chord mode の3行はそれぞれ別カテゴリから抽選するので、3つとも案内する。
+#[test]
+fn default_config_content_lists_the_bass_and_arpeggio_patch_categories() {
+    let content = default_config_content();
+
+    assert!(
+        content.contains(r#"bass_patch_categories = ["Basses"]"#),
+        "{content}"
+    );
+    assert!(
+        content.contains(
+            r#"arpeggio_patch_categories = ["Bells", "Brass", "Guitars", "Keys", "Leads", "Mallets", "Modelled", "MPE", "Organs", "Plucks"]"#
+        ),
+        "{content}"
+    );
+}
+
 #[test]
 fn default_config_content_uses_config_editor_key() {
     let content = default_config_content();

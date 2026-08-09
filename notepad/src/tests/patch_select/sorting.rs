@@ -37,7 +37,7 @@ fn handle_patch_select_ctrl_s_toggles_sort_order_and_keeps_selected_patch() {
 
     assert_eq!(
         app.patch_select.patch_select_sort_order,
-        cmrt_tui_core::patches::PatchSortOrder::Category
+        cmrt_surge_patches::PatchSortOrder::Category
     );
     assert_eq!(
         app.patch_select.patch_filtered,
@@ -62,7 +62,7 @@ fn handle_patch_select_ctrl_s_toggles_sort_order_and_keeps_selected_patch() {
 
     assert_eq!(
         app.patch_select.patch_select_sort_order,
-        cmrt_tui_core::patches::PatchSortOrder::Path
+        cmrt_surge_patches::PatchSortOrder::Path
     );
     assert_eq!(
         app.patch_select.patch_filtered,

@@ -1,8 +1,8 @@
 //! 人間が grid を編集するときの domain API。
 
 use super::{
-    chord::rotated_chord_voice, GridLaneMode, GridState, LaneAddress, NotePattern, CHORD_ROW,
-    GRID_STEPS,
+    chord::rotated_chord_voice, GridLaneMode, GridState, LaneAddress, NotePattern, BASS_ROW,
+    CHORD_ROW, GRID_STEPS,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -135,6 +135,7 @@ impl GridState {
             return false;
         };
         if instance_index == CHORD_ROW
+            || instance_index == BASS_ROW
             || instance.lane_mode != GridLaneMode::ChordVoices4
             || voice_count < 2
         {
@@ -166,8 +167,10 @@ impl GridState {
             return false;
         };
         if instance.lanes.get(address.lane).is_none()
-            || (self.chord.is_some() && address.instance == CHORD_ROW)
+            || (self.chord.is_some()
+                && (address.instance == CHORD_ROW || address.instance == BASS_ROW))
         {
+            // bass 行の音高もコードから自動導出するので、保存値を触らせない。
             return false;
         }
         // chord voiceの音高は現在の構成音から自動導出する。

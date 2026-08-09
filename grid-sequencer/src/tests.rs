@@ -34,6 +34,8 @@ pub(crate) fn ctx_with<'a>(
         voicing,
         // 既定ではカテゴリで絞らない。カテゴリの検証は chord_mode 側のテストで行う。
         chord_patch_categories: &[],
+        bass_patch_categories: &[],
+        arpeggio_patch_categories: &[],
         chord_source_updated: false,
     }
 }
@@ -75,7 +77,7 @@ fn t_cycles_track_count_and_requests_restart() {
     let patches = one_patch();
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
 
-    for expected in [2, 4, 8, 16, 1] {
+    for expected in [2, 3, 4, 8, 16, 1] {
         let action = screen.handle_key(
             press(KeyCode::Char('t')),
             Instant::now(),

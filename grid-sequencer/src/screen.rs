@@ -144,10 +144,17 @@ impl GridSequencerScreen {
         let restored = restored_session.is_some();
         let (state, pattern_evolution) = if let Some(session) = restored_session {
             let mut instances = session.instances;
+            let saved_count = instances.len();
             while instances.len() < track_count {
                 instances.push(crate::GridInstance::new(instances.len()));
             }
             instances.truncate(track_count);
+            // 保存値が track 数に足りないぶんは譜面を抽選して埋める。空のまま足すと
+            // HOLD では引き直しが走らず、その行が無音のままになる。patch 一覧はまだ
+            // 読み込み中なので、音色は後から `fill_missing_patches` が当てる。
+            if let Some(added) = instances.get_mut(saved_count..) {
+                crate::randomize_instance_slice(added, &[]);
+            }
             let mut state = GridState::with_instance_count(track_count);
             let restored = state.restore_instances(instances);
             debug_assert!(restored);

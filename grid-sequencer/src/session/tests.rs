@@ -29,7 +29,8 @@ fn restored_notes_are_derived_from_base_note_and_current_chord() {
         instance(1, "Bass", 62),
         instance(2, "Lead", 62),
     ]));
-    assert_eq!(state.resolved_note(crate::LaneAddress::new(1, 0)), Some(60));
+    // 行2は bass 行なので保存値ではなくコードの bass 音（auto voicing 無しなら無音）。
+    assert_eq!(state.resolved_note(crate::LaneAddress::new(1, 0)), None);
     assert_eq!(state.resolved_note(crate::LaneAddress::new(2, 0)), Some(60));
 }
 
@@ -62,11 +63,40 @@ fn ready_patch_catalog_replaces_only_disappeared_saved_patches() {
 }
 
 #[test]
-fn resizing_keeps_instances_and_the_second_instances_four_lanes() {
-    let mut second = instance(1, "Bass", 36);
-    second.voicing_rotation = -5;
+fn resizing_keeps_instances_and_the_chord_voice_instances_four_lanes() {
+    let mut third = instance(2, "Bass", 36);
+    third.voicing_rotation = -5;
     let session = GridSequencerSession::new(
-        vec![instance(0, "Piano", 60), second],
+        vec![instance(0, "Piano", 60), instance(1, "Sub", 36), third],
+        PatternEvolution::Hold,
+    );
+    let mut screen = GridSequencerScreen::new_with(crate::GridSequencerParts {
+        track_count: 4,
+        restored_session: Some(session),
+        ..crate::GridSequencerParts::default()
+    });
+    screen.resize_for_restart(4, &[]);
+    assert_eq!(screen.track_count(), 4);
+    assert_eq!(screen.state.instances()[2].lanes.len(), 4);
+    assert_eq!(screen.state.instances()[2].voicing_rotation, -5);
+    assert_eq!(
+        screen.state.instances()[2].lane_mode,
+        GridLaneMode::ChordVoices4
+    );
+    // 足りないぶんは既定の行として足す（譜面は抽選で埋まる）。
+    let added = &screen.state.instances()[3];
+    assert_eq!(added.lane_mode, GridInstance::new(3).lane_mode);
+    assert_eq!(added.lanes.len(), 1);
+    assert_eq!(added.voicing_rotation, 0);
+}
+
+/// track 数を増やしたら、増やした行は抽選して埋める。
+///
+/// 空のまま足すと HOLD では譜面を引き直さないので、増やした行が無音のままになる。
+#[test]
+fn growing_the_track_count_fills_the_added_rows_with_notes() {
+    let session = GridSequencerSession::new(
+        vec![instance(0, "Piano", 60), instance(1, "Sub", 36)],
         PatternEvolution::Hold,
     );
     let mut screen = GridSequencerScreen::new_with(crate::GridSequencerParts {
@@ -74,14 +104,50 @@ fn resizing_keeps_instances_and_the_second_instances_four_lanes() {
         restored_session: Some(session),
         ..crate::GridSequencerParts::default()
     });
-    screen.resize_for_restart(4);
-    assert_eq!(screen.track_count(), 4);
-    assert_eq!(screen.state.instances()[1].lanes.len(), 4);
-    assert_eq!(screen.state.instances()[1].voicing_rotation, -5);
-    assert_eq!(
-        screen.state.instances()[1].lane_mode,
-        GridLaneMode::ChordVoices4
+    let patches = vec![("Keys/New.fxp".to_string(), "keys/new.fxp".to_string())];
+
+    screen.resize_for_restart(4, &patches);
+
+    for instance_index in 2..4 {
+        let item = &screen.state.instances()[instance_index];
+        assert_eq!(
+            item.patch.as_deref(),
+            Some("Keys/New.fxp"),
+            "増やした行 {instance_index} に音色が付いていない"
+        );
+        assert!(
+            item.lanes
+                .iter()
+                .any(|lane| (0..GRID_STEPS).any(|step| lane.pattern.is_attack(step))),
+            "増やした行 {instance_index} が無音のまま"
+        );
+    }
+    // 既存の行は触らない（HOLD で手編集した譜面を守る）。
+    assert_eq!(screen.state.instances()[0].patch.as_deref(), Some("Piano"));
+    assert_eq!(screen.state.instances()[0].lanes[0].base_note, 60);
+}
+
+/// bass 行が 4 voice の既定行だった頃のセッションを引き継ぐ。
+#[test]
+fn a_restored_bass_row_is_migrated_back_to_a_single_lane() {
+    let mut old_bass = instance(1, "Bass", 36);
+    old_bass.lane_mode = GridLaneMode::ChordVoices4;
+    old_bass.voicing_rotation = -3;
+    old_bass.normalize();
+    assert_eq!(old_bass.lanes.len(), 4);
+
+    let session = GridSequencerSession::new(
+        vec![instance(0, "Piano", 60), old_bass],
+        PatternEvolution::Hold,
     );
-    assert_eq!(screen.state.instances()[2], GridInstance::new(2));
-    assert_eq!(screen.state.instances()[3], GridInstance::new(3));
+    let screen = GridSequencerScreen::new_with(crate::GridSequencerParts {
+        track_count: 2,
+        restored_session: Some(session),
+        ..crate::GridSequencerParts::default()
+    });
+
+    let bass = &screen.state.instances()[crate::BASS_ROW];
+    assert_eq!(bass.lane_mode, GridLaneMode::Single);
+    assert_eq!(bass.lanes.len(), 1);
+    assert_eq!(bass.voicing_rotation, 0);
 }

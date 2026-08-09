@@ -529,6 +529,7 @@ dependencies = [
  "cmrt-offline-render",
  "cmrt-realtime-play",
  "cmrt-runtime",
+ "cmrt-surge-patches",
  "cmrt-tui-core",
  "crossterm",
  "hound",
@@ -560,6 +561,7 @@ dependencies = [
  "cmrt-chord",
  "cmrt-realtime-play",
  "cmrt-runtime",
+ "cmrt-surge-patches",
  "cmrt-tui-core",
  "crossterm",
  "rand 0.10.2",
@@ -573,6 +575,7 @@ dependencies = [
  "anyhow",
  "cmrt-realtime-play",
  "cmrt-runtime",
+ "cmrt-surge-patches",
  "cmrt-tui-core",
  "dirs",
  "serde",
@@ -587,6 +590,7 @@ dependencies = [
  "cmrt-chord",
  "cmrt-realtime-play",
  "cmrt-runtime",
+ "cmrt-surge-patches",
  "cmrt-tui-core",
  "crossterm",
  "rand 0.10.2",
@@ -651,6 +655,7 @@ dependencies = [
  "cmrt-offline-render",
  "cmrt-realtime-play",
  "cmrt-runtime",
+ "cmrt-surge-patches",
  "cmrt-tui-core",
  "crossterm",
  "hound",
@@ -693,9 +698,17 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "cmrt-core 0.1.0",
+ "cmrt-surge-patches",
  "dirs",
  "serde",
  "toml 1.1.4+spec-1.1.0",
+]
+
+[[package]]
+name = "cmrt-surge-patches"
+version = "0.1.0"
+dependencies = [
+ "rand 0.10.2",
 ]
 
 [[package]]
@@ -708,6 +721,7 @@ dependencies = [
  "cmrt-core 0.1.0",
  "cmrt-realtime-play",
  "cmrt-runtime",
+ "cmrt-surge-patches",
  "crossterm",
  "hound",
  "rand 0.10.2",

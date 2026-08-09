@@ -24,11 +24,10 @@ pub use instance::{
 };
 pub use note_pattern::{NotePattern, NoteStep};
 
-pub use chord::{ChordPlayback, CHORD_ROW};
+pub use chord::{ChordPlayback, ARPEGGIO_ROW, BASS_ROW, CHORD_ROW};
 pub use clock::{frames_ahead, step_offset, BPM, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL};
 use clock::{StepClock, SCHEDULE_GUARD};
-pub(crate) use randomize::patch_is_chord_candidate;
-pub use randomize::{pick_chord_patch, randomize_instance_slice};
+pub use randomize::randomize_instance_slice;
 
 #[cfg(test)]
 pub type GridRow = GridInstance;

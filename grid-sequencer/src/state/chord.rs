@@ -9,10 +9,19 @@
 
 use std::time::Instant;
 
+use cmrt_chord::ChordVoicing;
+
 use super::{GridLaneMode, GridScheduledMessage, GridState, LaneAddress};
 
 /// 和音を鳴らす行。UI の行1 = realtime play server の instance 0。
 pub const CHORD_ROW: usize = 0;
+
+/// bass を鳴らす行。UI の行2。和音とは別の patch で、行の pattern をそのまま使う。
+pub const BASS_ROW: usize = 1;
+
+/// アルペジオを書く行。UI の行3。[`super::GridLaneMode::ChordVoices4`] の既定行で、
+/// 4 voice を独立した pattern で鳴らす（[`super::arpeggio`]）。
+pub const ARPEGGIO_ROW: usize = 2;
 
 /// 抽選済みのコード進行と、その再生位置。
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -21,19 +30,50 @@ pub struct ChordPlayback {
     degrees: String,
     /// コード1つぶんの note number 群を進行の順に並べたもの。空にはしない。
     chords: Vec<Vec<u8>>,
+    /// コード1つにつき1音の bass。`chords` と同じ長さ。
+    /// auto voicing を通していない経路では全て `None` になり、bass 行は鳴らない。
+    basses: Vec<Option<u8>>,
     index: usize,
 }
 
 impl ChordPlayback {
     /// 空の進行は再生できないので `None` を返す。
+    ///
+    /// bass は付かない。auto voicing を通した実経路では [`Self::from_voicings`] を使う。
     pub fn new(key: &'static str, degrees: String, chords: Vec<Vec<u8>>) -> Option<Self> {
         if chords.is_empty() {
             return None;
+        }
+        let basses = vec![None; chords.len()];
+        Some(Self {
+            key,
+            degrees,
+            chords,
+            basses,
+            index: 0,
+        })
+    }
+
+    /// auto voicing 済みの進行から作る。空の進行は再生できないので `None` を返す。
+    pub fn from_voicings(
+        key: &'static str,
+        degrees: String,
+        voicings: Vec<ChordVoicing>,
+    ) -> Option<Self> {
+        if voicings.is_empty() {
+            return None;
+        }
+        let mut chords = Vec::with_capacity(voicings.len());
+        let mut basses = Vec::with_capacity(voicings.len());
+        for voicing in voicings {
+            chords.push(voicing.notes);
+            basses.push(voicing.bass);
         }
         Some(Self {
             key,
             degrees,
             chords,
+            basses,
             index: 0,
         })
     }
@@ -59,6 +99,29 @@ impl ChordPlayback {
     /// いま鳴らすべき和音の note number 群。
     pub fn current(&self) -> &[u8] {
         &self.chords[self.index]
+    }
+
+    /// いま鳴らすべき bass 音。auto voicing を通していない進行では `None`。
+    pub fn current_bass(&self) -> Option<u8> {
+        self.basses.get(self.index).copied().flatten()
+    }
+
+    /// 進行内の `index` 番目の voicing。次の進行を接続するための seed に使う。
+    pub fn voicing_at(&self, index: usize) -> Option<ChordVoicing> {
+        Some(ChordVoicing {
+            bass: *self.basses.get(index)?,
+            notes: self.chords.get(index)?.clone(),
+        })
+    }
+
+    /// いま鳴らしている voicing。
+    pub fn current_voicing(&self) -> Option<ChordVoicing> {
+        self.voicing_at(self.index)
+    }
+
+    /// 進行の最後の voicing。次サイクルへ差し替える直前に鳴っているコード。
+    pub fn last_voicing(&self) -> Option<ChordVoicing> {
+        self.voicing_at(self.chords.len().checked_sub(1)?)
     }
 
     pub fn max_voice_count(&self) -> usize {
@@ -139,6 +202,11 @@ impl GridState {
         if address.instance == CHORD_ROW {
             // chord instance は個別laneではなく summary owner が全構成音を鳴らす。
             return None;
+        }
+        if address.instance == BASS_ROW {
+            // bass 行は行の pattern をそのまま使い、音高だけをコードの bass 音へ固定する。
+            // 保存値の base_note は見ない。
+            return (address.lane == 0).then(|| chord.current_bass()).flatten();
         }
         match instance.lane_mode {
             GridLaneMode::Single => Some(snap_to_chord(lane.base_note, &chord.pitch_classes())),

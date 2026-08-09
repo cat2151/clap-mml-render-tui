@@ -43,6 +43,14 @@ buffer_size = 512
         cfg.chord_patch_categories,
         ["Keys", "Organs", "Pads", "Polysynths"]
     );
+    assert_eq!(cfg.bass_patch_categories, ["Basses"]);
+    assert_eq!(
+        cfg.arpeggio_patch_categories,
+        [
+            "Bells", "Brass", "Guitars", "Keys", "Leads", "Mallets", "Modelled", "MPE", "Organs",
+            "Plucks"
+        ]
+    );
 }
 
 #[test]
@@ -58,6 +66,8 @@ voicing_shared_source = "data/shared.json"
 voicing_override_source = ""
 chord_progression_source = ""
 chord_patch_categories = []
+bass_patch_categories = []
+arpeggio_patch_categories = []
 "#;
     let cfg: Config = toml::from_str(toml_str).unwrap();
 
@@ -65,6 +75,8 @@ chord_patch_categories = []
     assert!(cfg.voicing_override_source.is_empty());
     assert!(cfg.chord_progression_source.is_empty());
     assert!(cfg.chord_patch_categories.is_empty());
+    assert!(cfg.bass_patch_categories.is_empty());
+    assert!(cfg.arpeggio_patch_categories.is_empty());
 }
 
 #[test]

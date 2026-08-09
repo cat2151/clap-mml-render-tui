@@ -1,10 +1,15 @@
 use serde::Serialize;
 
+use cmrt_surge_patches::{
+    DEFAULT_ARPEGGIO_PATCH_CATEGORY_NAMES, DEFAULT_BASS_PATCH_CATEGORY_NAMES,
+    DEFAULT_CHORD_PATCH_CATEGORY_NAMES,
+};
+
 use crate::{
-    DEFAULT_CHORD_PATCH_CATEGORY_NAMES, DEFAULT_CHORD_PROGRESSION_SOURCE,
-    DEFAULT_OFFLINE_RENDER_SERVER_PORT, DEFAULT_OFFLINE_RENDER_SERVER_WORKERS,
-    DEFAULT_OFFLINE_RENDER_WORKERS, DEFAULT_REALTIME_PLAY_SERVER_PORT,
-    DEFAULT_VOICING_OVERRIDE_SOURCE, DEFAULT_VOICING_SHARED_SOURCE,
+    DEFAULT_CHORD_PROGRESSION_SOURCE, DEFAULT_OFFLINE_RENDER_SERVER_PORT,
+    DEFAULT_OFFLINE_RENDER_SERVER_WORKERS, DEFAULT_OFFLINE_RENDER_WORKERS,
+    DEFAULT_REALTIME_PLAY_SERVER_PORT, DEFAULT_VOICING_OVERRIDE_SOURCE,
+    DEFAULT_VOICING_SHARED_SOURCE,
 };
 
 #[derive(Serialize)]
@@ -75,6 +80,18 @@ pub fn default_patches_dirs() -> Vec<String> {
     Vec::new()
 }
 
+/// カテゴリ名の配列を config.toml の TOML 配列リテラルへ直す。
+fn patch_categories_line(names: &[&str]) -> String {
+    format!(
+        "[{}]",
+        names
+            .iter()
+            .map(|name| format!("\"{name}\""))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+}
+
 /// OS に応じたデフォルトの config.toml 内容を生成する。
 pub fn default_config_content() -> String {
     default_config_content_with_app_settings("")
@@ -104,14 +121,10 @@ pub fn default_config_content_with_app_settings(app_settings: &str) -> String {
         format!("{}\n", app_settings.trim_end())
     };
     // 定数と config.toml のひな形がずれないよう、リテラルではなく定数から組み立てる。
-    let chord_patch_categories_line = format!(
-        "[{}]",
-        DEFAULT_CHORD_PATCH_CATEGORY_NAMES
-            .iter()
-            .map(|name| format!("\"{name}\""))
-            .collect::<Vec<_>>()
-            .join(", ")
-    );
+    let chord_patch_categories_line = patch_categories_line(&DEFAULT_CHORD_PATCH_CATEGORY_NAMES);
+    let bass_patch_categories_line = patch_categories_line(&DEFAULT_BASS_PATCH_CATEGORY_NAMES);
+    let arpeggio_patch_categories_line =
+        patch_categories_line(&DEFAULT_ARPEGGIO_PATCH_CATEGORY_NAMES);
     format!(
         r#"# clap-mml-render-tui config
 #
@@ -178,6 +191,17 @@ chord_progression_source = "{DEFAULT_CHORD_PROGRESSION_SOURCE}"
 # ここに挙げたカテゴリの中から、さらに poly と判明している patch だけを抽選します。
 # 空リストにするとカテゴリで絞らず、poly 判定だけで抽選します。
 chord_patch_categories = {chord_patch_categories_line}
+
+# 【省略可】chord mode の bass 行（行2）に使う patch のカテゴリ
+# 照合の仕方は chord_patch_categories と同じです。bass は単音なので mono / poly は問いません。
+# 空リストにするとカテゴリで絞らず、全 patch から抽選します。
+bass_patch_categories = {bass_patch_categories_line}
+
+# 【省略可】chord mode のアルペジオ行（行3 = 4 voice の行）に使う patch のカテゴリ
+# 照合の仕方は chord_patch_categories と同じです。mono / poly は問いません。
+# 音程が意味を持つ行なので、既定では打楽器・効果音のカテゴリを外しています。
+# 空リストにするとカテゴリで絞らず、全 patch から抽選します。
+arpeggio_patch_categories = {arpeggio_patch_categories_line}
 
 # 【省略可】Surge XT パッチの検索対象ディレクトリ一覧（TUI / DAW の音色選択・ランダム音色で使う）
 # 例 (Windows): patches_dirs = ['C:\ProgramData\Surge XT\patches_factory', 'C:\ProgramData\Surge XT\patches_3rdparty']

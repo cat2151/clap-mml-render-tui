@@ -75,6 +75,8 @@ fn collect_patch_pairs_combines_factory_and_thirdparty_using_common_base() {
         voicing_override_source: String::new(),
         chord_progression_source: String::new(),
         chord_patch_categories: Vec::new(),
+        bass_patch_categories: Vec::new(),
+        arpeggio_patch_categories: Vec::new(),
     };
 
     let pairs = collect_patch_pairs(&cfg).unwrap();
@@ -129,6 +131,8 @@ fn collect_patch_pairs_sorts_display_names_naturally() {
         voicing_override_source: String::new(),
         chord_progression_source: String::new(),
         chord_patch_categories: Vec::new(),
+        bass_patch_categories: Vec::new(),
+        arpeggio_patch_categories: Vec::new(),
     };
 
     let pairs = collect_patch_pairs(&cfg).unwrap();
@@ -149,254 +153,32 @@ fn collect_patch_pairs_sorts_display_names_naturally() {
 }
 
 #[test]
-fn compare_patch_names_natural_orders_numeric_suffixes() {
-    let mut items = vec![
-        "Pads/Pad 11.fxp".to_string(),
-        "Pads/Pad 2.fxp".to_string(),
-        "Pads/Pad 1.fxp".to_string(),
-    ];
-    items.sort_by(|left, right| compare_patch_names_natural(left, right));
-
-    assert_eq!(
-        items,
-        vec![
-            "Pads/Pad 1.fxp".to_string(),
-            "Pads/Pad 2.fxp".to_string(),
-            "Pads/Pad 11.fxp".to_string(),
-        ]
-    );
-}
-
-#[test]
-fn compare_normalized_patch_names_natural_orders_numeric_suffixes() {
-    let mut items = vec![
-        "pads/pad 11.fxp".to_string(),
-        "pads/pad 2.fxp".to_string(),
-        "pads/pad 1.fxp".to_string(),
-    ];
-    items.sort_by(|left, right| compare_normalized_patch_names_natural(left, right));
-
-    assert_eq!(
-        items,
-        vec![
-            "pads/pad 1.fxp".to_string(),
-            "pads/pad 2.fxp".to_string(),
-            "pads/pad 11.fxp".to_string(),
-        ]
-    );
-}
-
-#[test]
-fn resolve_display_patch_name_adds_factory_prefix_when_missing() {
-    let pairs = vec![
+fn filter_patches_matches_every_term_case_insensitively() {
+    let all = vec![
         (
-            "patches_factory/Pads/Factory Pad.fxp".to_string(),
-            "patches_factory/pads/factory pad.fxp".to_string(),
+            "patches_factory/Pads/Warm Pad.fxp".to_string(),
+            "patches_factory/pads/warm pad.fxp".to_string(),
         ),
         (
-            "patches_3rdparty/Leads/Third Lead.fxp".to_string(),
-            "patches_3rdparty/leads/third lead.fxp".to_string(),
+            "patches_factory/Leads/Warm Lead.fxp".to_string(),
+            "patches_factory/leads/warm lead.fxp".to_string(),
         ),
     ];
 
-    let resolved = resolve_display_patch_name(&pairs, "Pads/Factory Pad.fxp");
-
     assert_eq!(
-        resolved.as_deref(),
-        Some("patches_factory/Pads/Factory Pad.fxp")
+        filter_patches(&all, "WARM pad"),
+        vec!["patches_factory/Pads/Warm Pad.fxp".to_string()]
     );
+    assert_eq!(filter_patches(&all, "   ").len(), 2);
 }
 
 #[test]
-fn resolve_display_patch_name_prefers_existing_prefixed_name() {
-    let pairs = vec![(
-        "patches_3rdparty/Leads/Third Lead.fxp".to_string(),
-        "patches_3rdparty/leads/third lead.fxp".to_string(),
-    )];
-
-    let resolved = resolve_display_patch_name(&pairs, "patches_3rdparty/Leads/Third Lead.fxp");
+fn filter_items_matches_every_term_case_insensitively() {
+    let items = vec!["Warm Pad".to_string(), "Warm Lead".to_string()];
 
     assert_eq!(
-        resolved.as_deref(),
-        Some("patches_3rdparty/Leads/Third Lead.fxp")
+        filter_items(&items, "warm LEAD"),
+        vec!["Warm Lead".to_string()]
     );
-}
-
-#[test]
-fn sort_patch_pairs_can_group_by_category_before_path() {
-    let mut pairs = vec![
-        (
-            "patches_factory/pad/Super Pad.fxp".to_string(),
-            "patches_factory/pad/super pad.fxp".to_string(),
-        ),
-        (
-            "patches_3rdparty/john/lead/Great Lead.fxp".to_string(),
-            "patches_3rdparty/john/lead/great lead.fxp".to_string(),
-        ),
-        (
-            "patches_3rdparty/john/pad/Great Pad.fxp".to_string(),
-            "patches_3rdparty/john/pad/great pad.fxp".to_string(),
-        ),
-        (
-            "patches_factory/lead/Super Lead.fxp".to_string(),
-            "patches_factory/lead/super lead.fxp".to_string(),
-        ),
-    ];
-
-    sort_patch_pairs(&mut pairs, PatchSortOrder::Category);
-
-    assert_eq!(
-        pairs
-            .into_iter()
-            .map(|(display, _)| display)
-            .collect::<Vec<_>>(),
-        vec![
-            "patches_factory/lead/Super Lead.fxp".to_string(),
-            "patches_3rdparty/john/lead/Great Lead.fxp".to_string(),
-            "patches_factory/pad/Super Pad.fxp".to_string(),
-            "patches_3rdparty/john/pad/Great Pad.fxp".to_string(),
-        ]
-    );
-}
-
-#[test]
-fn sort_patch_pairs_path_order_keeps_factory_before_thirdparty() {
-    let mut pairs = vec![
-        (
-            "patches_3rdparty/john/lead/Great Lead.fxp".to_string(),
-            "patches_3rdparty/john/lead/great lead.fxp".to_string(),
-        ),
-        (
-            "patches_factory/pad/Super Pad.fxp".to_string(),
-            "patches_factory/pad/super pad.fxp".to_string(),
-        ),
-        (
-            "patches_3rdparty/john/pad/Great Pad.fxp".to_string(),
-            "patches_3rdparty/john/pad/great pad.fxp".to_string(),
-        ),
-        (
-            "patches_factory/lead/Super Lead.fxp".to_string(),
-            "patches_factory/lead/super lead.fxp".to_string(),
-        ),
-    ];
-
-    sort_patch_pairs(&mut pairs, PatchSortOrder::Path);
-
-    assert_eq!(
-        pairs
-            .into_iter()
-            .map(|(display, _)| display)
-            .collect::<Vec<_>>(),
-        vec![
-            "patches_factory/lead/Super Lead.fxp".to_string(),
-            "patches_factory/pad/Super Pad.fxp".to_string(),
-            "patches_3rdparty/john/lead/Great Lead.fxp".to_string(),
-            "patches_3rdparty/john/pad/Great Pad.fxp".to_string(),
-        ]
-    );
-}
-
-#[test]
-fn sort_patch_pairs_category_order_handles_vendorless_thirdparty_paths() {
-    let mut pairs = vec![
-        (
-            "patches_3rdparty/lead/Great Lead.fxp".to_string(),
-            "patches_3rdparty/lead/great lead.fxp".to_string(),
-        ),
-        (
-            "patches_factory/pad/Super Pad.fxp".to_string(),
-            "patches_factory/pad/super pad.fxp".to_string(),
-        ),
-        (
-            "patches_3rdparty/pad/Great Pad.fxp".to_string(),
-            "patches_3rdparty/pad/great pad.fxp".to_string(),
-        ),
-        (
-            "patches_factory/lead/Super Lead.fxp".to_string(),
-            "patches_factory/lead/super lead.fxp".to_string(),
-        ),
-    ];
-
-    sort_patch_pairs(&mut pairs, PatchSortOrder::Category);
-
-    assert_eq!(
-        pairs
-            .into_iter()
-            .map(|(display, _)| display)
-            .collect::<Vec<_>>(),
-        vec![
-            "patches_factory/lead/Super Lead.fxp".to_string(),
-            "patches_3rdparty/lead/Great Lead.fxp".to_string(),
-            "patches_factory/pad/Super Pad.fxp".to_string(),
-            "patches_3rdparty/pad/Great Pad.fxp".to_string(),
-        ]
-    );
-}
-
-#[test]
-fn group_patch_pairs_merges_factory_and_thirdparty_categories() {
-    let pairs = vec![
-        (
-            "patches_3rdparty/john/Pad/Pad 2.fxp".to_string(),
-            "patches_3rdparty/john/pad/pad 2.fxp".to_string(),
-        ),
-        (
-            "patches_factory/Lead/Lead 1.fxp".to_string(),
-            "patches_factory/lead/lead 1.fxp".to_string(),
-        ),
-        (
-            "patches_factory/Pad/Pad 11.fxp".to_string(),
-            "patches_factory/pad/pad 11.fxp".to_string(),
-        ),
-        (
-            "patches_factory/Pad/Pad 1.fxp".to_string(),
-            "patches_factory/pad/pad 1.fxp".to_string(),
-        ),
-    ];
-
-    let categories = group_patch_pairs_by_category(&pairs);
-
-    assert_eq!(
-        categories,
-        vec![
-            PatchCategory {
-                name: "Lead".to_string(),
-                patches: vec!["patches_factory/Lead/Lead 1.fxp".to_string()],
-            },
-            PatchCategory {
-                name: "Pad".to_string(),
-                patches: vec![
-                    "patches_factory/Pad/Pad 1.fxp".to_string(),
-                    "patches_factory/Pad/Pad 11.fxp".to_string(),
-                    "patches_3rdparty/john/Pad/Pad 2.fxp".to_string(),
-                ],
-            },
-        ]
-    );
-}
-
-#[test]
-fn group_patch_pairs_handles_vendorless_thirdparty_categories() {
-    let pairs = vec![
-        (
-            "patches_3rdparty/Pad/Third Pad.fxp".to_string(),
-            "patches_3rdparty/pad/third pad.fxp".to_string(),
-        ),
-        (
-            "patches_factory/Pad/Factory Pad.fxp".to_string(),
-            "patches_factory/pad/factory pad.fxp".to_string(),
-        ),
-    ];
-
-    let categories = group_patch_pairs_by_category(&pairs);
-
-    assert_eq!(categories.len(), 1);
-    assert_eq!(categories[0].name, "Pad");
-    assert_eq!(
-        categories[0].patches,
-        vec![
-            "patches_factory/Pad/Factory Pad.fxp".to_string(),
-            "patches_3rdparty/Pad/Third Pad.fxp".to_string(),
-        ]
-    );
+    assert_eq!(filter_items(&items, ""), items);
 }

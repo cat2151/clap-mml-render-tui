@@ -122,7 +122,7 @@ impl DawApp {
         let patch_pairs = cmrt_tui_core::patches::collect_patch_pairs(self.cfg.as_ref())
             .map_err(|error| format!("patch 一覧の取得に失敗しました: {error}"))?;
         let display_patch_name =
-            cmrt_tui_core::patches::resolve_display_patch_name(&patch_pairs, patch_name)
+            cmrt_surge_patches::resolve_display_patch_name(&patch_pairs, patch_name)
                 .ok_or_else(|| format!("patch が見つかりません: {patch_name}"))?;
         let patch_json = Self::build_patch_json(&display_patch_name);
         self.commit_insert_cell(track, 0, &patch_json);

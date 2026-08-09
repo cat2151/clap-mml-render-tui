@@ -59,7 +59,8 @@ pub struct GridInstance {
 
 impl GridInstance {
     pub fn new(index: usize) -> Self {
-        let lane_mode = if index == 1 {
+        // 行1 = chord、行2 = bass は chord mode が占有するので、4声コードの既定行は行3。
+        let lane_mode = if index == 2 {
             GridLaneMode::ChordVoices4
         } else {
             GridLaneMode::Single

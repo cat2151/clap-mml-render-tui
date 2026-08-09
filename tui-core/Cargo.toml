@@ -12,6 +12,7 @@ test-support = []
 cmrt-core = { path = "../core-lib" }
 cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-runtime = { path = "../cmrt-runtime" }
+cmrt-surge-patches = { path = "../surge-patches" }
 anyhow = "1"
 arboard = "3.6.1"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }

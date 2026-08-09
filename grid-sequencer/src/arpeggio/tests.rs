@@ -9,10 +9,11 @@ use crate::{ChordPlayback, LaneAddress, NoteStep, PatternEvolution, GRID_STEPS};
 const AREA: Rect = Rect::new(0, 0, 90, 24);
 /// NOTE grid の step セル領域の左端。ここより左は PATCH / NOTE 欄。
 const FIRST_CELL_COLUMN: u16 = 37;
-/// chord mode 中の行番号。行3が和音、行4〜7が 4 voice(lane 3〜0)、行8が Single lane。
+/// chord mode 中の行番号。行3が和音、行4が bass、行5〜8が 4 voice(lane 3〜0)、
+/// 行9が Single lane。
 const CHORD_SUMMARY_ROW: u16 = 3;
-const TOP_VOICE_ROW: u16 = 4;
-const SINGLE_LANE_ROW: u16 = 8;
+const TOP_VOICE_ROW: u16 = 5;
+const SINGLE_LANE_ROW: u16 = 9;
 
 fn context() -> crate::GridSequencerContext<'static> {
     crate::tests::ctx_with(
@@ -35,9 +36,9 @@ fn wheel(kind: MouseEventKind, column: u16, row: u16) -> MouseEvent {
     }
 }
 
-/// 和音の instance と 4 voice の instance、Single lane の instance を1つずつ持つ画面。
+/// 和音・bass・4 voice・Single lane の instance を1つずつ持つ画面。
 fn chorded_screen() -> GridSequencerScreen {
-    let mut screen = GridSequencerScreen::with_track_count(None, 3);
+    let mut screen = GridSequencerScreen::with_track_count(None, 4);
     screen.state.set_chord(
         ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]),
         Instant::now(),
@@ -81,7 +82,7 @@ fn wheel_up_on_a_step_cell_writes_an_up_arpeggio_across_the_four_voices() {
     assert_eq!(screen.last_arp(), Some(ArpPattern::Up));
     // up arpeggio は lane 0,1,2,3 を順に叩くので、lane L の attack は step ≡ L (mod 4)。
     for lane in 0..4 {
-        let pattern = lane_pattern(&screen, 1, lane);
+        let pattern = lane_pattern(&screen, 2, lane);
         for step in 0..GRID_STEPS {
             assert_eq!(
                 pattern.as_bytes()[step] == b'#',
@@ -166,7 +167,7 @@ fn a_single_lane_row_has_too_few_voices_to_arpeggiate() {
         &context(),
     );
     assert_eq!(screen.last_arp(), None);
-    assert!(is_silent(&screen, 2));
+    assert!(is_silent(&screen, 3));
 }
 
 #[test]
@@ -186,9 +187,9 @@ fn without_a_chord_the_step_cell_wheel_does_nothing() {
 #[test]
 fn one_wheel_click_is_one_undo_step() {
     let mut screen = chorded_screen();
-    screen.state.draw_note_span(LaneAddress::new(1, 0), 0, 1);
+    screen.state.draw_note_span(LaneAddress::new(2, 0), 0, 1);
     let before = (0..4)
-        .map(|lane| lane_pattern(&screen, 1, lane))
+        .map(|lane| lane_pattern(&screen, 2, lane))
         .collect::<Vec<_>>();
 
     screen.handle_mouse(
@@ -198,7 +199,7 @@ fn one_wheel_click_is_one_undo_step() {
     );
     assert_ne!(
         (0..4)
-            .map(|lane| lane_pattern(&screen, 1, lane))
+            .map(|lane| lane_pattern(&screen, 2, lane))
             .collect::<Vec<_>>(),
         before
     );
@@ -206,7 +207,7 @@ fn one_wheel_click_is_one_undo_step() {
     screen.undo(&context());
     assert_eq!(
         (0..4)
-            .map(|lane| lane_pattern(&screen, 1, lane))
+            .map(|lane| lane_pattern(&screen, 2, lane))
             .collect::<Vec<_>>(),
         before
     );
@@ -222,7 +223,7 @@ fn the_note_column_wheel_still_rotates_the_voicing() {
         AREA,
         &context(),
     );
-    assert_eq!(screen.state.instances()[1].voicing_rotation, -1);
+    assert_eq!(screen.state.instances()[2].voicing_rotation, -1);
     assert_eq!(screen.last_arp(), None);
 }
 
@@ -236,7 +237,7 @@ fn changing_the_track_count_drops_the_pattern_cursor() {
     );
     assert_eq!(screen.last_arp(), Some(ArpPattern::Up));
 
-    screen.resize_for_restart(2);
+    screen.resize_for_restart(2, &[]);
     assert_eq!(screen.last_arp(), None);
     assert!(screen.arp_patterns.is_empty());
 }
@@ -254,6 +255,6 @@ fn a_left_click_on_a_step_cell_still_draws_a_note() {
         AREA,
         &context(),
     );
-    assert_eq!(lane_pattern(&screen, 1, 3), "..#.............");
+    assert_eq!(lane_pattern(&screen, 2, 3), "..#.............");
     assert_eq!(screen.last_arp(), None);
 }

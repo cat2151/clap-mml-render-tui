@@ -88,7 +88,7 @@ pub fn normalize_patch_phrase_store_for_available_patches(
     let patch_names = store.patches.keys().cloned().collect::<Vec<_>>();
     let mut changed = false;
     for patch_name in patch_names {
-        let Some(resolved) = cmrt_tui_core::patches::resolve_display_patch_name(pairs, &patch_name)
+        let Some(resolved) = cmrt_surge_patches::resolve_display_patch_name(pairs, &patch_name)
         else {
             continue;
         };
@@ -146,7 +146,7 @@ pub fn sync_patch_favorite_order(store: &mut PatchPhraseStore, patch_order: &[St
                 .then_some(patch_name.clone())
         })
         .collect::<Vec<_>>();
-    extras.sort_by(|left, right| cmrt_tui_core::patches::compare_patch_names_natural(left, right));
+    extras.sort_by(|left, right| cmrt_surge_patches::compare_patch_names_natural(left, right));
     for patch_name in extras {
         changed |= store.favorite_patches.get(ordered.len()) != Some(&patch_name);
         ordered.push(patch_name);

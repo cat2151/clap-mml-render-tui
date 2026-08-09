@@ -14,6 +14,7 @@ cmrt-history = { path = "../history" }
 cmrt-offline-render = { path = "../offline-render" }
 cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-runtime = { path = "../cmrt-runtime" }
+cmrt-surge-patches = { path = "../surge-patches" }
 cmrt-tui-core = { path = "../tui-core" }
 anyhow = "1"
 crossterm = "0.29"

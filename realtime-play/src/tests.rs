@@ -39,6 +39,8 @@ fn cfg_for_port(port: u16) -> Config {
         voicing_override_source: String::new(),
         chord_progression_source: String::new(),
         chord_patch_categories: Vec::new(),
+        bass_patch_categories: Vec::new(),
+        arpeggio_patch_categories: Vec::new(),
     }
 }
 
@@ -151,11 +153,13 @@ fn configured_server_command_description_is_explicit() {
 #[test]
 fn live_instance_counts_normalize_and_cycle() {
     assert_eq!(normalize_live_instance_count(0), 16);
-    assert_eq!(normalize_live_instance_count(3), 16);
+    assert_eq!(normalize_live_instance_count(5), 16);
     assert_eq!(normalize_live_instance_count(8), 8);
+    // 3 は chord mode（和音 / bass / アルペジオ）用に足した値。
+    assert_eq!(normalize_live_instance_count(3), 3);
     assert_eq!(
-        [1, 2, 4, 8, 16].map(next_live_instance_count),
-        [2, 4, 8, 16, 1]
+        [1, 2, 3, 4, 8, 16].map(next_live_instance_count),
+        [2, 3, 4, 8, 16, 1]
     );
 }
 
@@ -164,9 +168,10 @@ fn live_instance_counts_normalize_and_cycle() {
 #[test]
 fn each_track_takes_two_instances_for_double_buffering() {
     assert_eq!(server_instance_count(1), 2);
+    assert_eq!(server_instance_count(3), 6);
     assert_eq!(server_instance_count(16), 32);
     // 未対応の値はトラック数の既定へ丸めてから 2 倍する。
-    assert_eq!(server_instance_count(3), 32);
+    assert_eq!(server_instance_count(5), 32);
     for tracks in SUPPORTED_LIVE_INSTANCE_COUNTS {
         assert!(SUPPORTED_SERVER_INSTANCE_COUNTS.contains(&server_instance_count(tracks)));
     }

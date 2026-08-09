@@ -223,11 +223,12 @@ fn load_session_state_normalizes_grid_sequencer_track_count() {
         r#"{
   "lines": ["cde"],
   "active_screen": "grid_sequencer",
-  "grid_sequencer_track_count": 3
+  "grid_sequencer_track_count": 5
 }"#,
     )
     .unwrap();
 
+    // 3 は chord mode 用に足したので通る。5 のような未対応値だけが既定へ落ちる。
     assert_eq!(load_session_state().grid_sequencer_track_count, 16);
 
     std::fs::remove_dir_all(&tmp).ok();

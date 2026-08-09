@@ -1,13 +1,14 @@
 //! 保存値・undo snapshot から instance/lane を復元する。
 
-use super::{measure_lane, velocity, GridInstance, GridState};
+use super::{measure_lane, velocity, GridInstance, GridLaneMode, GridState};
 
 impl GridState {
     pub(crate) fn restore_instances(&mut self, mut instances: Vec<GridInstance>) -> bool {
         if instances.len() != self.instances.len() {
             return false;
         }
-        for instance in &mut instances {
+        for (index, instance) in instances.iter_mut().enumerate() {
+            restore_lane_mode(index, instance);
             instance.normalize();
         }
         let stored_lane_count = instances
@@ -37,3 +38,24 @@ impl GridState {
         }
     }
 }
+
+/// `lane_mode` は行番号から決まるもので、ユーザーが編集できる値ではない。保存値を
+/// 信じずに毎回 index の既定へ寄せ直す。
+///
+/// bass 行（[`super::BASS_ROW`]）が 4 voice の既定行だった頃のセッションを引き継ぐために要る。
+/// そのままだと bass 行に空の lane が3本ぶら下がり、4 voice の行が1つも無くなって
+/// アルペジオ（[`super::arpeggio`]）が書けなくなる。
+fn restore_lane_mode(index: usize, instance: &mut GridInstance) {
+    let lane_mode = GridInstance::new(index).lane_mode;
+    if instance.lane_mode == lane_mode {
+        return;
+    }
+    instance.lane_mode = lane_mode;
+    if lane_mode == GridLaneMode::Single {
+        // 転回は 4 voice の行だけが持つ状態。Single へ落とすときは一緒に捨てる。
+        instance.voicing_rotation = 0;
+    }
+}
+
+#[cfg(test)]
+mod tests;

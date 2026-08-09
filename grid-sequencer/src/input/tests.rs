@@ -162,7 +162,8 @@ fn draw_gesture_can_cross_rows_and_keeps_each_rows_own_note() {
 
 #[test]
 fn chord_voice_drag_draws_an_arpeggio_across_skipped_rows() {
-    let mut screen = GridSequencerScreen::with_track_count(None, 2);
+    // chord ON の行は 3=和音、4=bass、5〜8が 4 voice(lane 3〜0)。
+    let mut screen = GridSequencerScreen::with_track_count(None, 4);
     screen.state.set_chord(
         ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]),
         Instant::now(),
@@ -170,43 +171,43 @@ fn chord_voice_drag_draws_an_arpeggio_across_skipped_rows() {
 
     // 下段root(lane0)から上へ飛ばす。中間laneも直線補間したstepへ描く。
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Left), cell(1), 7),
+        mouse(MouseEventKind::Down(MouseButton::Left), cell(1), 8),
         AREA,
         &context(),
     );
     screen.handle_mouse(
-        mouse(MouseEventKind::Drag(MouseButton::Left), cell(5), 5),
+        mouse(MouseEventKind::Drag(MouseButton::Left), cell(5), 6),
         AREA,
         &context(),
     );
-    assert_eq!(lane_pattern(&screen, 1, 0), ".#..............");
-    assert_eq!(lane_pattern(&screen, 1, 1), "...#............");
-    assert_eq!(lane_pattern(&screen, 1, 2), ".....#..........");
-    assert_eq!(lane_pattern(&screen, 1, 3), "................");
+    assert_eq!(lane_pattern(&screen, 2, 0), ".#..............");
+    assert_eq!(lane_pattern(&screen, 2, 1), "...#............");
+    assert_eq!(lane_pattern(&screen, 2, 2), ".....#..........");
+    assert_eq!(lane_pattern(&screen, 2, 3), "................");
     screen.handle_mouse(
-        mouse(MouseEventKind::Up(MouseButton::Left), cell(5), 5),
+        mouse(MouseEventKind::Up(MouseButton::Left), cell(5), 6),
         AREA,
         &context(),
     );
 
     // triadでoctave上を重ねるlane3も独立patternとして編集できる。
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Left), cell(6), 4),
+        mouse(MouseEventKind::Down(MouseButton::Left), cell(6), 5),
         AREA,
         &context(),
     );
     screen.handle_mouse(
-        mouse(MouseEventKind::Up(MouseButton::Left), cell(6), 4),
+        mouse(MouseEventKind::Up(MouseButton::Left), cell(6), 5),
         AREA,
         &context(),
     );
-    assert_eq!(lane_pattern(&screen, 1, 3), "......#.........");
+    assert_eq!(lane_pattern(&screen, 2, 3), "......#.........");
 }
 
 #[test]
 fn repeated_chord_voice_wheel_down_accumulates_and_survives_chord_changes() {
-    let mut screen = GridSequencerScreen::with_track_count(None, 2);
-    let before = screen.state.instances()[1]
+    let mut screen = GridSequencerScreen::with_track_count(None, 4);
+    let before = screen.state.instances()[2]
         .lanes
         .iter()
         .map(|lane| lane.base_note)
@@ -215,16 +216,16 @@ fn repeated_chord_voice_wheel_down_accumulates_and_survives_chord_changes() {
         ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]),
         Instant::now(),
     );
-    screen.handle_mouse(mouse(MouseEventKind::ScrollDown, 32, 5), AREA, &context());
-    assert_eq!(screen.state.instances()[1].voicing_rotation, -1);
+    screen.handle_mouse(mouse(MouseEventKind::ScrollDown, 32, 6), AREA, &context());
+    assert_eq!(screen.state.instances()[2].voicing_rotation, -1);
     assert_eq!(
         (0..4)
-            .map(|lane| screen.state.resolved_note(LaneAddress::new(1, lane)))
+            .map(|lane| screen.state.resolved_note(LaneAddress::new(2, lane)))
             .collect::<Vec<_>>(),
         vec![Some(55), Some(60), Some(64), Some(67)]
     );
     assert_eq!(
-        screen.state.instances()[1]
+        screen.state.instances()[2]
             .lanes
             .iter()
             .map(|lane| lane.base_note)
@@ -233,12 +234,12 @@ fn repeated_chord_voice_wheel_down_accumulates_and_survives_chord_changes() {
     );
 
     // 高速wheel相当の連続downでもroot positionへwrapせず、そのまま下がり続ける。
-    screen.handle_mouse(mouse(MouseEventKind::ScrollDown, 32, 5), AREA, &context());
-    screen.handle_mouse(mouse(MouseEventKind::ScrollDown, 32, 5), AREA, &context());
-    assert_eq!(screen.state.instances()[1].voicing_rotation, -3);
+    screen.handle_mouse(mouse(MouseEventKind::ScrollDown, 32, 6), AREA, &context());
+    screen.handle_mouse(mouse(MouseEventKind::ScrollDown, 32, 6), AREA, &context());
+    assert_eq!(screen.state.instances()[2].voicing_rotation, -3);
     assert_eq!(
         (0..4)
-            .map(|lane| screen.state.resolved_note(LaneAddress::new(1, lane)))
+            .map(|lane| screen.state.resolved_note(LaneAddress::new(2, lane)))
             .collect::<Vec<_>>(),
         vec![Some(48), Some(52), Some(55), Some(60)]
     );
@@ -247,22 +248,23 @@ fn repeated_chord_voice_wheel_down_accumulates_and_survives_chord_changes() {
         ChordPlayback::new("D", "I".to_string(), vec![vec![62, 66, 69]]),
         Instant::now(),
     );
-    assert_eq!(screen.state.instances()[1].voicing_rotation, -3);
+    assert_eq!(screen.state.instances()[2].voicing_rotation, -3);
     assert_eq!(
         (0..4)
-            .map(|lane| screen.state.resolved_note(LaneAddress::new(1, lane)))
+            .map(|lane| screen.state.resolved_note(LaneAddress::new(2, lane)))
             .collect::<Vec<_>>(),
         vec![Some(50), Some(54), Some(57), Some(62)]
     );
 
     screen.state.set_chord(None, Instant::now());
-    screen.handle_mouse(mouse(MouseEventKind::ScrollUp, 32, 3), AREA, &context());
+    // chord OFF では chord 行が消えて行が1つ繰り上がる。行4が 4 voice の instance。
+    screen.handle_mouse(mouse(MouseEventKind::ScrollUp, 32, 4), AREA, &context());
     assert_eq!(
-        screen.state.instances()[1].lanes[0].base_note,
+        screen.state.instances()[2].lanes[0].base_note,
         before[0] + 1
     );
     assert_eq!(
-        screen.state.instances()[1].lanes[1..]
+        screen.state.instances()[2].lanes[1..]
             .iter()
             .map(|lane| lane.base_note)
             .collect::<Vec<_>>(),
@@ -273,13 +275,13 @@ fn repeated_chord_voice_wheel_down_accumulates_and_survives_chord_changes() {
 #[test]
 fn toggling_chord_mode_finishes_an_active_lane_gesture_before_remapping_rows() {
     let now = Instant::now();
-    let mut screen = GridSequencerScreen::with_track_count(None, 2);
+    let mut screen = GridSequencerScreen::with_track_count(None, 4);
     screen.state.set_chord(
         ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]),
         now,
     );
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Left), cell(2), 7),
+        mouse(MouseEventKind::Down(MouseButton::Left), cell(2), 8),
         AREA,
         &context(),
     );
@@ -289,7 +291,7 @@ fn toggling_chord_mode_finishes_an_active_lane_gesture_before_remapping_rows() {
 
     assert!(screen.note_gesture.is_none());
     assert!(screen.state.chord().is_none());
-    assert_eq!(lane_pattern(&screen, 1, 0), "..#.............");
+    assert_eq!(lane_pattern(&screen, 2, 0), "..#.............");
 }
 
 #[test]

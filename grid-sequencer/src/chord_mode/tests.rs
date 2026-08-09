@@ -242,9 +242,12 @@ fn the_chord_patch_is_limited_to_the_configured_categories() {
 
     // 抽選なので、何回引いても対象カテゴリから出ないことを確かめる。
     for _ in 0..40 {
-        let picked =
-            crate::pick_chord_patch(ctx.patches(), ctx.voicing, ctx.chord_patch_categories)
-                .expect("Keys / Organs は候補にある");
+        let picked = pick_for_role(
+            ctx.patches(),
+            &ctx.role_filter(PatchRole::Chord),
+            &ctx.poly_lookup(),
+        )
+        .expect("Keys / Organs は候補にある");
         assert!(
             picked.contains("/Keys/") || picked.contains("/Organs/"),
             "対象外のカテゴリを引いた: {picked}"
@@ -261,8 +264,12 @@ fn an_empty_category_list_means_no_category_filter() {
     let mut seen = std::collections::HashSet::new();
     for _ in 0..200 {
         seen.insert(
-            crate::pick_chord_patch(ctx.patches(), ctx.voicing, ctx.chord_patch_categories)
-                .unwrap(),
+            pick_for_role(
+                ctx.patches(),
+                &ctx.role_filter(PatchRole::Chord),
+                &ctx.poly_lookup(),
+            )
+            .unwrap(),
         );
     }
     assert_eq!(seen.len(), patches.len(), "全カテゴリが当たりになる");
@@ -385,4 +392,150 @@ fn only_auto_chord_mode_boosts_the_chord_row() {
         "どちらの bank でも和音の行だけが持ち上がる"
     );
     assert_eq!(crate::CHORD_GAIN_DB, 6.0);
+}
+
+/// 抽選した進行は必ず auto voicing を通る。mode 切り替えは無く、常に効く。
+#[test]
+fn a_picked_progression_always_comes_back_auto_voiced() {
+    let now = Instant::now();
+    let catalog = catalog();
+    let patches = patches();
+    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
+    let mut screen = screen();
+    screen.start(now, &ctx);
+
+    screen.handle_key(press_c(), now, &ctx);
+
+    let chord = screen.state.chord().expect("chord mode が on になる");
+    let voicings = (0..chord.chord_count())
+        .map(|index| chord.voicing_at(index).expect("voicing がある"))
+        .collect::<Vec<_>>();
+    assert!(
+        voicings.iter().all(|voicing| voicing.bass.is_some()),
+        "bass 行が鳴らす音が付いている: {voicings:?}"
+    );
+    let (top_jump, _) = cmrt_chord::max_jumps(&voicings);
+    assert!(
+        top_jump <= 4,
+        "top note の跳躍が縮んでいない: {top_jump} ({voicings:?})"
+    );
+}
+
+/// 次サイクルは「いま鳴っている進行の最後のコード」に接続する。
+#[test]
+fn the_next_cycle_connects_to_the_last_chord_of_the_current_progression() {
+    let now = Instant::now();
+    let catalog = catalog();
+    let patches = patches();
+    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
+    let mut screen = screen();
+    screen.start(now, &ctx);
+    screen.handle_key(press_c(), now, &ctx);
+    let last = screen
+        .state
+        .chord()
+        .expect("chord mode が on")
+        .last_voicing()
+        .expect("voicing がある");
+
+    assert!(screen.stage_next_cycle(now, &ctx));
+
+    let staged = screen
+        .state
+        .pending_chord_for_test()
+        .expect("次サイクルが預けられている")
+        .voicing_at(0)
+        .expect("voicing がある");
+    let bridge = vec![last, staged];
+    let (top_jump, _) = cmrt_chord::max_jumps(&bridge);
+    assert!(
+        top_jump <= 6,
+        "cycle 境界で top note が跳んでいる: {top_jump} ({bridge:?})"
+    );
+}
+
+/// bass 行には bass 用カテゴリの patch を当てる。poly でなくてよい。
+#[test]
+fn the_bass_row_gets_a_patch_from_the_bass_categories() {
+    let now = Instant::now();
+    let catalog = catalog();
+    let patches = patches();
+    let bass_categories = vec!["Leads".to_string()];
+    let mut ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
+    ctx.bass_patch_categories = &bass_categories;
+    let mut screen = screen();
+    screen.start(now, &ctx);
+
+    screen.handle_key(press_c(), now, &ctx);
+
+    assert_eq!(
+        screen.state.instances()[crate::BASS_ROW].patch.as_deref(),
+        Some("Leads/Mono.fxp"),
+        "mono patch でも bass 行には使える"
+    );
+}
+
+/// アルペジオ行は専用カテゴリからだけ引く。chord 行の候補集合とは独立。
+#[test]
+fn the_arpeggio_row_gets_a_patch_from_the_arpeggio_categories() {
+    let now = Instant::now();
+    let catalog = catalog();
+    let patches = vec![
+        ("Keys/Poly.fxp".to_string(), "keys/poly.fxp".to_string()),
+        ("Leads/Mono.fxp".to_string(), "leads/mono.fxp".to_string()),
+        (
+            "Percussion/Kick.fxp".to_string(),
+            "percussion/kick.fxp".to_string(),
+        ),
+    ];
+    let arpeggio_categories = vec!["Leads".to_string()];
+    let mut ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
+    ctx.arpeggio_patch_categories = &arpeggio_categories;
+    let mut screen = screen();
+    screen.start(now, &ctx);
+
+    screen.handle_key(press_c(), now, &ctx);
+
+    assert_eq!(
+        screen.state.instances()[crate::ARPEGGIO_ROW]
+            .patch
+            .as_deref(),
+        Some("Leads/Mono.fxp"),
+        "打楽器や chord 用 patch ではなく、arpeggio カテゴリから引く"
+    );
+}
+
+/// AUTO のサイクル抽選でも、用途の決まった3行は専用カテゴリへ当て直す。
+#[test]
+fn the_staged_cycle_reassigns_the_dedicated_rows_from_their_categories() {
+    let now = Instant::now();
+    let catalog = catalog();
+    let patches = vec![
+        ("Keys/Poly.fxp".to_string(), "keys/poly.fxp".to_string()),
+        ("Leads/Mono.fxp".to_string(), "leads/mono.fxp".to_string()),
+        ("Basses/Sub.fxp".to_string(), "basses/sub.fxp".to_string()),
+    ];
+    let chord_categories = vec!["Keys".to_string()];
+    let bass_categories = vec!["Basses".to_string()];
+    let arpeggio_categories = vec!["Leads".to_string()];
+    let mut ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
+    ctx.chord_patch_categories = &chord_categories;
+    ctx.bass_patch_categories = &bass_categories;
+    ctx.arpeggio_patch_categories = &arpeggio_categories;
+    let mut screen = screen();
+    screen.start(now, &ctx);
+    screen.handle_key(press_c(), now, &ctx);
+
+    assert!(screen.stage_next_cycle(now, &ctx));
+
+    let staged = screen.state.pending_rows_for_test();
+    assert_eq!(staged[CHORD_ROW].patch.as_deref(), Some("Keys/Poly.fxp"));
+    assert_eq!(
+        staged[crate::BASS_ROW].patch.as_deref(),
+        Some("Basses/Sub.fxp")
+    );
+    assert_eq!(
+        staged[crate::ARPEGGIO_ROW].patch.as_deref(),
+        Some("Leads/Mono.fxp")
+    );
 }

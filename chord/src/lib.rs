@@ -5,8 +5,10 @@
 //!
 //! keyboard 画面の MML 入力と grid sequencer の chord mode の両方から使う。
 
+mod auto_voicing;
 mod progression;
 
+pub use auto_voicing::{auto_voice, max_jumps, ChordVoicing};
 pub use progression::{
     chord_notes, ChordProgression, ChordProgressionCatalog, ChordProgressionPick, KEYS,
 };

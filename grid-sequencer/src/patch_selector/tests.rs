@@ -1,7 +1,8 @@
 use std::time::Instant;
 
 use cmrt_realtime_play::PatchVoicing;
-use crossterm::event::{KeyModifiers, MouseEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use ratatui::layout::Rect;
 
 use super::*;
 use crate::{tests::ctx_with, ChordPlayback, GridPatchLoad, GridRow, PatternEvolution};
@@ -189,11 +190,15 @@ fn patch_name_wheel_uses_chord_candidates_only_on_the_chord_instance() {
         .map(|patch| (patch.to_string(), patch.to_lowercase()))
         .collect::<Vec<_>>();
     let chord_categories = vec!["Pads".to_string()];
+    let bass_categories = vec!["Bass".to_string()];
     let mut ctx = context(&patches);
     ctx.chord_patch_categories = &chord_categories;
-    let mut screen = GridSequencerScreen::with_track_count(None, 2);
+    ctx.bass_patch_categories = &bass_categories;
+    // chord ON の行は 3=和音、4=bass、5〜8が 4 voice。
+    let mut screen = GridSequencerScreen::with_track_count(None, 4);
     screen.state.instances_mut()[0].patch = Some("Bass/Mono.fxp".to_string());
     screen.state.instances_mut()[1].patch = Some("Pads/Poly.fxp".to_string());
+    screen.state.instances_mut()[2].patch = Some("Pads/Poly.fxp".to_string());
     screen.state.set_chord(
         ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]),
         Instant::now(),
@@ -206,10 +211,17 @@ fn patch_name_wheel_uses_chord_candidates_only_on_the_chord_instance() {
         Some("Pads/Poly.fxp")
     );
 
-    // instance 2のchild lane上でもinstance共有PATCHを変更し、chord候補は除外する。
-    screen.handle_mouse(mouse(MouseEventKind::ScrollUp, 7, 5), AREA, &ctx);
+    // bass 行は bass 用カテゴリから引く。poly 判定は問わない。
+    screen.handle_mouse(mouse(MouseEventKind::ScrollDown, 7, 4), AREA, &ctx);
     assert_eq!(
         screen.state.instances()[1].patch.as_deref(),
+        Some("Bass/Mono.fxp")
+    );
+
+    // 4 voiceのchild lane上でもinstance共有PATCHを変更し、chord候補は除外する。
+    screen.handle_mouse(mouse(MouseEventKind::ScrollUp, 7, 6), AREA, &ctx);
+    assert_eq!(
+        screen.state.instances()[2].patch.as_deref(),
         Some("Bass/Mono.fxp")
     );
     assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
@@ -219,21 +231,21 @@ fn patch_name_wheel_uses_chord_candidates_only_on_the_chord_instance() {
 fn child_lane_opens_its_shared_instance_selector_and_allows_a_mono_patch() {
     let patches = patches();
     let ctx = context(&patches);
-    let mut screen = GridSequencerScreen::with_track_count(None, 2);
+    let mut screen = GridSequencerScreen::with_track_count(None, 4);
     screen.state.set_chord(
         ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]),
         Instant::now(),
     );
 
-    // 上から2番目のvoice rowから、instance共有のPATCH欄をclickする。
+    // 上から2番目のvoice row（行6）から、instance共有のPATCH欄をclickする。
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Left), 7, 5),
+        mouse(MouseEventKind::Down(MouseButton::Left), 7, 6),
         AREA,
         &ctx,
     );
 
     let selector = screen.patch_selector.as_ref().unwrap();
-    assert_eq!(selector.instance, 1);
+    assert_eq!(selector.instance, 2);
     assert!(selector
         .categories
         .iter()
@@ -248,10 +260,10 @@ fn child_lane_opens_its_shared_instance_selector_and_allows_a_mono_patch() {
     screen.handle_patch_selector_key(press(KeyCode::Enter), &ctx);
 
     assert_eq!(
-        screen.state.instances()[1].patch.as_deref(),
+        screen.state.instances()[2].patch.as_deref(),
         Some("Bass/Mono.fxp")
     );
-    assert_eq!(screen.state.instances()[1].lanes.len(), 4);
+    assert_eq!(screen.state.instances()[2].lanes.len(), 4);
 }
 
 #[test]
@@ -392,5 +404,35 @@ fn an_overlay_that_appears_after_opening_cancels_the_selector_without_applying()
     assert_eq!(
         screen.state.rows()[0].patch.as_deref(),
         Some("Keys/Alpha.fxp")
+    );
+}
+
+/// アルペジオ行の PATCH wheel は arpeggio 用カテゴリからだけ引く。
+/// chord mode 中は「chord 用カテゴリ以外」ではなくなるので、打楽器は候補に入らない。
+#[test]
+fn patch_name_wheel_uses_arpeggio_candidates_on_the_arpeggio_instance() {
+    let patches = ["Percussion/Kick.fxp", "Leads/Mono.fxp", "Pads/Poly.fxp"]
+        .into_iter()
+        .map(|patch| (patch.to_string(), patch.to_lowercase()))
+        .collect::<Vec<_>>();
+    let arpeggio_categories = vec!["Leads".to_string()];
+    let mut ctx = context(&patches);
+    ctx.arpeggio_patch_categories = &arpeggio_categories;
+    let mut screen = GridSequencerScreen::with_track_count(None, 4);
+    screen.state.instances_mut()[crate::ARPEGGIO_ROW].patch =
+        Some("Percussion/Kick.fxp".to_string());
+    screen.state.set_chord(
+        ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]),
+        Instant::now(),
+    );
+
+    // 行3（4 voice）の PATCH 欄で wheel。行5〜8 のどの voice row からでも instance 単位。
+    screen.handle_mouse(mouse(MouseEventKind::ScrollDown, 7, 6), AREA, &ctx);
+
+    assert_eq!(
+        screen.state.instances()[crate::ARPEGGIO_ROW]
+            .patch
+            .as_deref(),
+        Some("Leads/Mono.fxp")
     );
 }
