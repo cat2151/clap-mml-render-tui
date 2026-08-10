@@ -20,10 +20,9 @@ mod used_wavs;
 mod viewport;
 
 use analysis::stretch_label;
-use viewport::{fit, keep_visible};
+use viewport::{fit, keep_visible, measure_cell_width, measure_label};
 
 const TRACK_LABEL_WIDTH: usize = 9;
-const CELL_WIDTH: usize = 16;
 const THREE_PANE_MIN_HEIGHT: u16 = 13;
 
 pub fn draw(state: &mut LoopBrowser, frame: &mut Frame<'_>, area: Rect) {
@@ -96,26 +95,29 @@ pub fn draw(state: &mut LoopBrowser, frame: &mut Frame<'_>, area: Rect) {
     if width == 0 || height == 0 {
         return;
     }
-    let visible_tracks = usize::from(height.saturating_sub(1)).max(1);
-    let visible_measures =
-        ((usize::from(width).saturating_sub(TRACK_LABEL_WIDTH)) / CELL_WIDTH).max(1);
+    let available = usize::from(width).saturating_sub(TRACK_LABEL_WIDTH);
+    let cell_width = measure_cell_width(available, state.displayed_measure_count());
+    let viewport = GridViewport {
+        visible_tracks: usize::from(height.saturating_sub(1)).max(1),
+        visible_measures: (available / cell_width).max(1),
+        cell_width,
+    };
     let diagnostics = state.stretch_diagnostics.lock().unwrap().clone();
     let browser = &mut *state;
     keep_visible(
         browser.track_cursor,
-        visible_tracks,
+        viewport.visible_tracks,
         &mut browser.track_scroll,
     );
     keep_visible(
         browser.measure_cursor,
-        visible_measures,
+        viewport.visible_measures,
         &mut browser.measure_scroll,
     );
     let rendered = render_visible_grid(
         browser,
         &diagnostics,
-        visible_tracks,
-        visible_measures,
+        viewport,
         focused,
         target_bpm.bpm,
         playback_marker,
@@ -141,9 +143,18 @@ enum GridContent {
     Waveform,
 }
 
+/// 1 回の描画で決まるグリッドの寸法。`cell_width` は小節数に合わせて毎回引き直す。
+#[derive(Clone, Copy)]
+struct GridViewport {
+    visible_tracks: usize,
+    visible_measures: usize,
+    cell_width: usize,
+}
+
 struct RenderedGrid {
     measures: Range<usize>,
     rows: Vec<RenderedRow>,
+    cell_width: usize,
     focused: bool,
     track_cursor: usize,
     measure_cursor: usize,
@@ -187,11 +198,14 @@ fn draw_grid(frame: &mut Frame<'_>, area: Rect, rendered: &RenderedGrid, content
                 measure,
                 rendered.playback_marker.beats_per_measure,
                 rendered.playback_marker.beat,
-                CELL_WIDTH,
+                rendered.cell_width,
             );
         } else {
             header.push(Span::styled(
-                fit(&format!("measure {}", measure + 1), CELL_WIDTH),
+                fit(
+                    &measure_label(measure, rendered.cell_width),
+                    rendered.cell_width,
+                ),
                 style,
             ));
         }
@@ -228,7 +242,7 @@ fn draw_grid(frame: &mut Frame<'_>, area: Rect, rendered: &RenderedGrid, content
                     cursor,
                     rendered.playback_marker.beat,
                     measure,
-                    CELL_WIDTH,
+                    rendered.cell_width,
                 );
                 continue;
             }
@@ -246,7 +260,7 @@ fn draw_grid(frame: &mut Frame<'_>, area: Rect, rendered: &RenderedGrid, content
             } else {
                 cell_style
             };
-            spans.push(Span::styled(fit(label, CELL_WIDTH), style));
+            spans.push(Span::styled(fit(label, rendered.cell_width), style));
         }
         lines.push(Line::from(spans));
     }
@@ -256,17 +270,17 @@ fn draw_grid(frame: &mut Frame<'_>, area: Rect, rendered: &RenderedGrid, content
 fn render_visible_grid(
     browser: &LoopBrowser,
     diagnostics: &crate::playback::diagnostics::LoopStretchDiagnostics,
-    visible_tracks: usize,
-    visible_measures: usize,
+    viewport: GridViewport,
     focused: bool,
     target_bpm: f64,
     playback_marker: PlaybackMarker,
 ) -> RenderedGrid {
     let measures = browser.measure_scroll
-        ..(browser.measure_scroll + visible_measures).min(browser.displayed_measure_count());
+        ..(browser.measure_scroll + viewport.visible_measures)
+            .min(browser.displayed_measure_count());
     let measure_seconds = browser.measure_seconds();
     let rows = (browser.track_scroll
-        ..(browser.track_scroll + visible_tracks).min(browser.track_grid().len()))
+        ..(browser.track_scroll + viewport.visible_tracks).min(browser.track_grid().len()))
         .map(|track| {
             let solo = browser.track_is_soloed(track);
             let muted = !browser.track_is_audible(track);
@@ -278,6 +292,7 @@ fn render_visible_grid(
                         diagnostics,
                         track,
                         measure,
+                        viewport.cell_width,
                         target_bpm,
                         measure_seconds,
                     )
@@ -294,6 +309,7 @@ fn render_visible_grid(
     RenderedGrid {
         measures,
         rows,
+        cell_width: viewport.cell_width,
         focused,
         track_cursor: browser.track_cursor,
         measure_cursor: browser.measure_cursor,
@@ -306,14 +322,21 @@ fn render_cell(
     diagnostics: &crate::playback::diagnostics::LoopStretchDiagnostics,
     track: usize,
     measure: usize,
+    cell_width: usize,
     target_bpm: f64,
     measure_seconds: f64,
 ) -> RenderedCell {
     let occupied = browser.clip_at(track, measure);
     let repeated = occupied.is_some_and(|(_, clip)| clip.is_previous());
     let clip = occupied.map(|(_, clip)| clip);
-    let waveform_spans =
-        waveforms::render_cell(browser, track, measure, CELL_WIDTH, measure_seconds);
+    let waveform_spans = waveforms::render_cell(
+        browser,
+        track,
+        measure,
+        cell_width,
+        measure_seconds,
+        target_bpm,
+    );
     let wav_label = occupied
         .map(|(start, clip)| {
             if start == measure {

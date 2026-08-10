@@ -105,6 +105,10 @@ fn used_wav_pane_groups_by_wav_and_adds_measures_for_multiple_wavs() {
     app.loop_browser.state.handle_key(KeyCode::Char('c'));
     app.loop_browser.state.handle_key(KeyCode::Char('l'));
     app.loop_browser.state.handle_key(KeyCode::Char('d'));
+    // セル幅は小節数に合わせて詰まるので、grid が横スクロールへ落ちるところまで
+    // カーソルを右へ送る。used wav ペインが「見えていない小節」も拾うことの確認。
+    app.loop_browser.state.handle_key(KeyCode::Char('9'));
+    app.loop_browser.state.handle_key(KeyCode::Char('l'));
     app.loop_browser.state.handle_key(KeyCode::Char('9'));
     app.loop_browser.state.handle_key(KeyCode::Char('l'));
 

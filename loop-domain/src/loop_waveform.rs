@@ -106,6 +106,32 @@ impl WaveformDisplayScale {
         }
     }
 
+    /// Preserve the library-wide spectral-flux scale while maximizing the RMS
+    /// range of the values that will actually be displayed. Silence is excluded
+    /// so it remains visually distinct from the quietest audible column.
+    pub fn with_displayed_rms(mut self, values: impl IntoIterator<Item = i16>) -> Self {
+        let mut audible = values
+            .into_iter()
+            .filter(|&value| value > SILENCE_DB_TENTHS);
+        let Some(first) = audible.next() else {
+            self.rms_low = SILENCE_DB_TENTHS;
+            self.rms_high = SILENCE_DB_TENTHS;
+            return self;
+        };
+        let (low, high) = audible.fold((first, first), |(low, high), value| {
+            (low.min(value), high.max(value))
+        });
+        self.rms_low = low;
+        // A perfectly flat loop has no dynamic range to expand. Give its only
+        // audible value the lowest rank instead of inventing a mid-height beat.
+        self.rms_high = if high == low {
+            high.saturating_add(1)
+        } else {
+            high
+        };
+        self
+    }
+
     pub fn rms_rank(self, value: i16) -> f32 {
         normalized_rank(value, self.rms_low, self.rms_high)
     }
@@ -163,5 +189,31 @@ mod tests {
         let scale = WaveformDisplayScale::from_waveforms(&[waveform]);
         assert_eq!(scale.rms_rank(-120), 0.5);
         assert_eq!(scale.flux_rank(50), 0.5);
+    }
+
+    #[test]
+    fn displayed_rms_scale_uses_audible_minimum_and_maximum() {
+        let library_waveform = LoopWaveform {
+            rms_db_tenths: vec![-800, -100],
+            spectral_flux: vec![0, 1_000],
+            centroid_motion_millioctaves: 0,
+        };
+        let scale = WaveformDisplayScale::from_waveforms(&[library_waveform]).with_displayed_rms([
+            SILENCE_DB_TENTHS,
+            -300,
+            -200,
+            -100,
+        ]);
+
+        assert_eq!(scale.rms_rank(-300), 0.0);
+        assert_eq!(scale.rms_rank(-100), 1.0);
+        assert_eq!(scale.flux_rank(500), 0.5);
+    }
+
+    #[test]
+    fn flat_loop_uses_lowest_rms_rank() {
+        let scale = WaveformDisplayScale::default().with_displayed_rms([-120; 4]);
+
+        assert_eq!(scale.rms_rank(-120), 0.0);
     }
 }

@@ -30,7 +30,7 @@ pub fn draw(state: &mut LoopBrowser, play_state: &PlayState, frame: &mut Frame) 
         .split(frame.area());
     let panes = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
         .split(chunks[0]);
 
     let tree_started = std::time::Instant::now();

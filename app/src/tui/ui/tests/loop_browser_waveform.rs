@@ -64,19 +64,50 @@ fn draws_continuous_eight_measure_waveform_across_scrolled_cells() {
     app.loop_browser.state = browser_with_waveform(8);
     place_selected_wav(&mut app);
 
-    let first = render_lines(&mut app, 180, 20).join("\n");
+    // 8 小節が入りきらない幅で描く。セル幅は下限 8 まで詰まり、残りは横スクロールになる。
+    let first = render_lines(&mut app, 100, 20).join("\n");
     assert!(first.contains("[RMS / SPECTRAL MOTION]"));
-    assert!(first.contains("1   2   3   4"));
+    assert!(first.contains("1 2 3 4"));
     for glyph in ['▁', '▂', '▃', '▄'] {
-        assert!(first.contains(&glyph.to_string().repeat(16)), "{first}");
+        assert!(first.contains(&glyph.to_string().repeat(8)), "{first}");
     }
 
     app.loop_browser.state.handle_key(KeyCode::Char('7'));
     app.loop_browser.state.handle_key(KeyCode::Char('l'));
-    let last = render_lines(&mut app, 180, 20).join("\n");
+    let last = render_lines(&mut app, 100, 20).join("\n");
+    assert!(app.loop_browser.state.measure_scroll > 0);
     for glyph in ['▅', '▆', '▇', '█'] {
-        assert!(last.contains(&glyph.to_string().repeat(16)), "{last}");
+        assert!(last.contains(&glyph.to_string().repeat(8)), "{last}");
     }
+}
+
+/// 幅が足りている端末では 16 小節が横スクロールなしで全部並ぶ。
+/// 440 桁なら右ペイン 264 / 内側 262 / track ラベルを引いて 253 桁、
+/// これを 16 小節で割ってセル幅 15 になる。
+#[test]
+fn a_sixteen_measure_loop_fits_on_one_screen_without_horizontal_scrolling() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
+    app.loop_browser.state = browser_with_waveform(16);
+    place_selected_wav(&mut app);
+
+    let screen = render_lines(&mut app, 440, 20).join("\n");
+
+    assert_eq!(app.loop_browser.state.measure_scroll, 0);
+    assert!(screen.contains("measure 16"), "{screen}");
+    assert!(screen.contains("↳ 16/16"), "{screen}");
+    let waveform_row = screen
+        .lines()
+        .find(|line| line.contains("T1") && line.contains('▁'))
+        .expect("waveform row should be drawn");
+    assert_eq!(
+        waveform_row
+            .chars()
+            .filter(|glyph| "▁▂▃▄▅▆▇█".contains(*glyph))
+            .count(),
+        16 * 15,
+        "{waveform_row}"
+    );
 }
 
 #[test]
@@ -102,7 +133,9 @@ fn compact_height_hides_stretch_but_keeps_one_waveform_track() {
 
     let compact = render_lines(&mut app, 180, 14).join("\n");
     assert!(compact.contains("[RMS / SPECTRAL MOTION]"));
-    assert!(compact.contains(&"▁".repeat(16)));
+    // 2 小節しかないループは上限まで広がり、1 文字 = 32 分音符になる。
+    assert!(compact.contains(&"▁".repeat(32)), "{compact}");
+    assert!(!compact.contains(&"▁".repeat(33)), "{compact}");
     assert!(!compact.contains("[USED WAV / ANALYSIS"));
 
     let still_compact = render_lines(&mut app, 180, 17).join("\n");

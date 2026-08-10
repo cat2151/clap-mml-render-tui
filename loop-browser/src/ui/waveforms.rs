@@ -23,6 +23,7 @@ pub fn render_cell(
     measure: usize,
     cell_width: usize,
     measure_seconds: f64,
+    target_bpm: f64,
 ) -> Vec<Span<'static>> {
     let Some((start, clip)) = browser.clip_at(track, measure) else {
         return vec![Span::styled("·", base_style())];
@@ -45,12 +46,19 @@ pub fn render_cell(
             waveform_output_columns(
                 analysis.kind,
                 analysis.duration_seconds,
+                analysis.tempo.map(|tempo| tempo.bpm),
+                target_bpm,
                 clip.span_measures,
                 measure_seconds,
                 output_len,
             )
         });
-    let scale = browser.waveform_display_scale();
+    let scale = display_scale(
+        browser.waveform_display_scale(),
+        waveform,
+        waveform_output_len,
+        output_len,
+    );
     (0..cell_width)
         .map(|column| {
             render_timeline_column(waveform, scale, output_offset + column, waveform_output_len)
@@ -61,12 +69,14 @@ pub fn render_cell(
 fn waveform_output_columns(
     kind: LoopWavKind,
     duration_seconds: f64,
+    source_bpm: Option<f64>,
+    target_bpm: f64,
     span_measures: usize,
     measure_seconds: f64,
     output_len: usize,
 ) -> usize {
-    if kind != LoopWavKind::OneShot || output_len == 0 {
-        return output_len;
+    if output_len == 0 {
+        return 0;
     }
     let span_seconds = measure_seconds * span_measures as f64;
     if !duration_seconds.is_finite()
@@ -76,13 +86,58 @@ fn waveform_output_columns(
     {
         return output_len;
     }
-    (duration_seconds / span_seconds * output_len as f64)
-        .ceil()
-        .clamp(1.0, output_len as f64) as usize
+    let playback_seconds = match kind {
+        LoopWavKind::OneShot => duration_seconds,
+        LoopWavKind::Loop => {
+            let Some(source_bpm) = source_bpm else {
+                return output_len;
+            };
+            if !source_bpm.is_finite()
+                || source_bpm <= 0.0
+                || !target_bpm.is_finite()
+                || target_bpm <= 0.0
+            {
+                return output_len;
+            }
+            duration_seconds * source_bpm / target_bpm
+        }
+    };
+    if !playback_seconds.is_finite() || playback_seconds <= 0.0 {
+        return output_len;
+    }
+    let columns = (playback_seconds / span_seconds * output_len as f64).ceil();
+    if !columns.is_finite() {
+        return output_len;
+    }
+    columns.clamp(1.0, usize::MAX as f64) as usize
 }
 
 fn silent_column() -> Span<'static> {
     Span::styled("·", base_style().fg(MONOKAI_GRAY))
+}
+
+fn display_scale(
+    scale: WaveformDisplayScale,
+    waveform: &LoopWaveform,
+    waveform_output_len: usize,
+    output_len: usize,
+) -> WaveformDisplayScale {
+    scale.with_displayed_rms(
+        (0..output_len).map(|column| timeline_rms(waveform, column, waveform_output_len)),
+    )
+}
+
+fn timeline_rms(waveform: &LoopWaveform, output_column: usize, waveform_output_len: usize) -> i16 {
+    if output_column >= waveform_output_len || waveform_output_len == 0 {
+        return SILENCE_DB_TENTHS;
+    }
+    let source_start = output_column.saturating_mul(waveform.len()) / waveform_output_len;
+    let source_end = (output_column + 1)
+        .saturating_mul(waveform.len())
+        .div_ceil(waveform_output_len)
+        .max(source_start + 1)
+        .min(waveform.len());
+    aggregate_rms(&waveform.rms_db_tenths[source_start..source_end])
 }
 
 fn render_timeline_column(
@@ -110,7 +165,7 @@ fn render_column(
         .div_ceil(output_len)
         .max(source_start + 1)
         .min(waveform.len());
-    let rms = aggregate_rms(&waveform.rms_db_tenths[source_start..source_end]);
+    let rms = timeline_rms(waveform, output_column, output_len);
     if rms <= SILENCE_DB_TENTHS {
         return silent_column();
     }
