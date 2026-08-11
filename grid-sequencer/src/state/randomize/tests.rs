@@ -16,7 +16,7 @@ fn pairs(names: &[&str]) -> Vec<(String, String)> {
 #[test]
 fn every_row_gets_a_patch_from_the_loaded_list() {
     let patches = pairs(&["a/Alpha.fxp", "b/Beta.fxp"]);
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     state.randomize_all(Instant::now(), &patches);
     assert!(state.instances.iter().all(|instance| {
         instance
@@ -28,7 +28,7 @@ fn every_row_gets_a_patch_from_the_loaded_list() {
 
 #[test]
 fn existing_patches_are_kept_while_the_patch_list_is_unavailable() {
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     state.instances[0].patch = Some("kept/Patch.fxp".to_string());
     state.randomize_all(Instant::now(), &[]);
     assert_eq!(state.instances[0].patch.as_deref(), Some("kept/Patch.fxp"));
@@ -37,7 +37,7 @@ fn existing_patches_are_kept_while_the_patch_list_is_unavailable() {
 
 #[test]
 fn notes_stay_inside_the_generated_range() {
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     state.randomize_all(Instant::now(), &[]);
     assert!(state
         .instances
@@ -73,7 +73,7 @@ fn generated_patterns_reach_one_two_and_four_step_notes_without_orphan_ties() {
 #[test]
 fn sounding_notes_are_silenced_so_they_do_not_hang() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     state.instances[0].base_note = 64;
     state.instances[0].pattern.draw_span(0, 0);
     state.start(now);
@@ -91,7 +91,7 @@ fn sounding_notes_are_silenced_so_they_do_not_hang() {
 #[test]
 fn silencing_waits_for_the_notes_already_sent_ahead() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     state.instances[0].base_note = 64;
     state.instances[0].pattern.draw_span(0, 3);
     state.start(now);
@@ -106,7 +106,7 @@ fn silencing_waits_for_the_notes_already_sent_ahead() {
 /// 音色ロードを走らせないため、patch だけは引き直さない。
 #[test]
 fn keeping_patches_rerolls_everything_except_the_patch() {
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     for instance in &mut state.instances {
         instance.patch = Some("kept/Patch.fxp".to_string());
         for lane in &mut instance.lanes {
@@ -140,7 +140,7 @@ fn keeping_patches_rerolls_everything_except_the_patch() {
 #[test]
 fn keeping_patches_still_silences_sounding_notes() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     state.instances[0].base_note = 64;
     state.instances[0].pattern.draw_span(0, 0);
     state.start(now);

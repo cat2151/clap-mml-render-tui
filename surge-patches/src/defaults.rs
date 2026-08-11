@@ -12,3 +12,19 @@ pub const DEFAULT_BASS_PATCH_CATEGORY_NAMES: [&str; 1] = ["Basses"];
 pub const DEFAULT_ARPEGGIO_PATCH_CATEGORY_NAMES: [&str; 10] = [
     "Bells", "Brass", "Guitars", "Keys", "Leads", "Mallets", "Modelled", "MPE", "Organs", "Plucks",
 ];
+
+/// drum 4 役に共通の既定カテゴリ。
+///
+/// Surge のカテゴリは打楽器を `Percussion`（factory）と `Drums`（3rdparty に多い）の
+/// 2 つでしか分けておらず、kick と hi-hat をカテゴリでは分離できない。役割の分離は
+/// キーワード（下記）が受け持つので、カテゴリは4役とも同じで良い。
+pub const DEFAULT_DRUM_PATCH_CATEGORY_NAMES: [&str; 2] = ["Percussion", "Drums"];
+
+/// kick（bass drum）に使う patch の名前キーワード。小文字化した patch パスへの部分一致。
+///
+/// `bd` のような短い語は他の語に埋もれて誤爆するので入れていない。
+pub const DEFAULT_KICK_PATCH_KEYWORDS: [&str; 2] = ["kick", "bass drum"];
+/// snare に使う patch の名前キーワード。clap も snare 相当の役として拾う。
+pub const DEFAULT_SNARE_PATCH_KEYWORDS: [&str; 3] = ["snare", "rimshot", "clap"];
+/// hi-hat に使う patch の名前キーワード。`hat` だけで `hi-hat` / `hihat` も拾える。
+pub const DEFAULT_HIHAT_PATCH_KEYWORDS: [&str; 3] = ["hat", "hi-hat", "hihat"];

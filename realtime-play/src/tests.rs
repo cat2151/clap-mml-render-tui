@@ -41,6 +41,10 @@ fn cfg_for_port(port: u16) -> Config {
         chord_patch_categories: Vec::new(),
         bass_patch_categories: Vec::new(),
         arpeggio_patch_categories: Vec::new(),
+        drum_patch_categories: Vec::new(),
+        kick_patch_keywords: Vec::new(),
+        snare_patch_keywords: Vec::new(),
+        hihat_patch_keywords: Vec::new(),
     }
 }
 
@@ -157,9 +161,11 @@ fn live_instance_counts_normalize_and_cycle() {
     assert_eq!(normalize_live_instance_count(8), 8);
     // 3 は chord mode（和音 / bass / アルペジオ）用に足した値。
     assert_eq!(normalize_live_instance_count(3), 3);
+    // 7 は drum（chord / bass / アルペジオ + drum 4 role）用に足した値。
+    assert_eq!(normalize_live_instance_count(7), 7);
     assert_eq!(
-        [1, 2, 3, 4, 8, 16].map(next_live_instance_count),
-        [2, 3, 4, 8, 16, 1]
+        [1, 2, 3, 4, 7, 8, 16].map(next_live_instance_count),
+        [2, 3, 4, 7, 8, 16, 1]
     );
 }
 

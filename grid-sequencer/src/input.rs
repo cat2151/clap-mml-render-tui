@@ -293,10 +293,13 @@ impl GridSequencerScreen {
             return;
         }
         // step セル上の wheel は音高ではなく、その instance のフレーズを引き直す。
-        // bass 行だけはアルペジオではなくベースラインを引く。どちらも list 送り。
+        // 行の役割ごとに引くものが違う（bass 行はベースライン、drum 行はリズム、
+        // それ以外はアルペジオ）。どれも list 送り。
         if let Some(GridHit::NoteCell { address, .. }) = hit {
             if address.instance == crate::BASS_ROW {
                 self.cycle_bass_line(list);
+            } else if let Some(role) = self.state.drum_role(address.instance) {
+                self.cycle_drum_pattern(address.instance, role, list);
             } else {
                 self.cycle_arpeggio(address.instance, list);
             }

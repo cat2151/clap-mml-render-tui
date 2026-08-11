@@ -17,6 +17,7 @@ members = [
     "notepad",
     "offline-render",
     "realtime-play",
+    "rhythm",
     "rubberband-ffi",
     "surge-patches",
     "tui-core",

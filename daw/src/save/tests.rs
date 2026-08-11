@@ -57,6 +57,10 @@ fn build_test_app(tracks: usize, measures: usize) -> DawApp {
             chord_patch_categories: Vec::new(),
             bass_patch_categories: Vec::new(),
             arpeggio_patch_categories: Vec::new(),
+            drum_patch_categories: Vec::new(),
+            kick_patch_keywords: Vec::new(),
+            snare_patch_keywords: Vec::new(),
+            hihat_patch_keywords: Vec::new(),
         }),
         entry_ptr: 0,
         cache: Arc::new(Mutex::new(vec![

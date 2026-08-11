@@ -209,6 +209,7 @@ fn edited_grid_is_persisted_and_restored_without_persisting_derived_note() {
     let instance = crate::tui::grid_sequencer::GridInstance {
         patch: Some("Keys/Piano.fxp".to_string()),
         lane_mode: crate::tui::grid_sequencer::GridLaneMode::Single,
+        drum: None,
         voicing_rotation: 0,
         lanes: vec![crate::tui::grid_sequencer::GridLane {
             base_note: 64,

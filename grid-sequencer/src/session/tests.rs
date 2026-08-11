@@ -83,9 +83,10 @@ fn resizing_keeps_instances_and_the_chord_voice_instances_four_lanes() {
         screen.state.instances()[2].lane_mode,
         GridLaneMode::ChordVoices4
     );
-    // 足りないぶんは既定の行として足す（譜面は抽選で埋まる）。
+    // 足りないぶんは既定の行として足す。track 4 の行4は drum 行になる。
     let added = &screen.state.instances()[3];
-    assert_eq!(added.lane_mode, GridInstance::new(3).lane_mode);
+    assert_eq!(added.lane_mode, GridLaneMode::Drum);
+    assert!(added.drum.is_some());
     assert_eq!(added.lanes.len(), 1);
     assert_eq!(added.voicing_rotation, 0);
 }

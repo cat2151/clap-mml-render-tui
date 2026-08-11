@@ -37,7 +37,7 @@ pub(crate) fn layout_for(screen: &GridSequencerScreen, area: Rect) -> layout::Gr
         screen.state.instance_count(),
         visible_rows.len(),
         screen.chord_line_visible(),
-        screen.state.chord().is_some(),
+        &pattern_list::section_heights(screen),
     )
 }
 

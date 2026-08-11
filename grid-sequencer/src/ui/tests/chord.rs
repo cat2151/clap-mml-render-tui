@@ -212,6 +212,10 @@ fn the_help_overlay_explains_the_chord_mode() {
         "{rendered}"
     );
     assert!(
+        contains_ignoring_spaces(&rendered, "drum行 kick/snare/hat/perc"),
+        "{rendered}"
+    );
+    assert!(
         contains_ignoring_spaces(&rendered, "無くなります(自動切替あり)"),
         "24行の端末でも help の末尾まで表示できること: {rendered}"
     );

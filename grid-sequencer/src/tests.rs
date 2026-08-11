@@ -36,6 +36,10 @@ pub(crate) fn ctx_with<'a>(
         chord_patch_categories: &[],
         bass_patch_categories: &[],
         arpeggio_patch_categories: &[],
+        drum_patch_categories: &[],
+        kick_patch_keywords: &[],
+        snare_patch_keywords: &[],
+        hihat_patch_keywords: &[],
         chord_source_updated: false,
     }
 }
@@ -77,7 +81,7 @@ fn t_cycles_track_count_and_requests_restart() {
     let patches = one_patch();
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
 
-    for expected in [2, 3, 4, 8, 16, 1] {
+    for expected in [2, 3, 4, 7, 8, 16, 1] {
         let action = screen.handle_key(
             press(KeyCode::Char('t')),
             Instant::now(),

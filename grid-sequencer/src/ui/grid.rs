@@ -61,6 +61,9 @@ fn title(screen: &GridSequencerScreen) -> String {
     if let Some(bass) = screen.last_bass() {
         title.push_str(&format!(" bass:{}", bass.label()));
     }
+    if let Some(drum) = screen.last_drum() {
+        title.push_str(&format!(" {}:{}", drum.role().label(), drum.label()));
+    }
     title.push(' ');
     title
 }
@@ -126,7 +129,11 @@ fn row_line(
     } else {
         String::new()
     };
-    let note_label = resolved.map_or_else(|| "--".to_string(), |note| note.to_string());
+    // drum 行は音高が意味を持たない（1 instance = 1 打楽器）ので、番号ではなく役割を出す。
+    let note_label = match instance.drum {
+        Some(role) => role.label().to_string(),
+        None => resolved.map_or_else(|| "--".to_string(), |note| note.to_string()),
+    };
     let mut spans = vec![Span::styled(
         label_columns(
             instance_label.as_deref().unwrap_or(""),

@@ -5,6 +5,9 @@
 //!
 //! カーソルは直近に適用した型（NOTE grid のタイトルに出しているものと同じ）に付ける。
 //! まだ一度も回していない section には印が付かないので、未操作だと分かる。
+//!
+//! 出す section は行の構成で変わる（arp / bass は chord mode 中だけ、drum は drum 行が
+//! あるとき）。高さが足りないときは後ろの section から落とす。
 
 use ratatui::{
     layout::Rect,
@@ -20,26 +23,121 @@ use cmrt_tui_core::{
 };
 
 use cmrt_arpeggiator::{ArpPattern, BassPattern};
+use cmrt_rhythm::{DrumPattern, DrumRole};
 
 use crate::GridSequencerScreen;
 
 /// 枠線ぶん。上下1行ずつ。
 const BORDERS: usize = 2;
-/// section 見出し1行 + 型の数。
-const ARP_LINES: usize = 1 + ArpPattern::ALL.len();
-const BASS_LINES: usize = 1 + BassPattern::ALL.len();
 
-/// 中身に必要なぶんだけの高さ（枠線込み）。`available` はこの pane へ割ける行数。
+/// 1 section ぶんの中身。見出し1行＋型の並び。
+struct Section {
+    name: String,
+    labels: Vec<&'static str>,
+    current: Option<&'static str>,
+}
+
+impl Section {
+    fn height(&self) -> usize {
+        1 + self.labels.len()
+    }
+}
+
+/// 出す section を優先順（＝上から並べる順）に組み立てる。
+///
+/// 高さが足りないときに落とすのは後ろから。arp のほうが型が多く、4 voice 行のほうが
+/// 触る機会も多いので先頭へ置く。
+fn sections(screen: &GridSequencerScreen) -> Vec<Section> {
+    let mut sections = Vec::new();
+    if screen.state.chord().is_some() {
+        sections.push(Section {
+            name: "arp".to_string(),
+            labels: ArpPattern::ALL
+                .iter()
+                .map(|pattern| pattern.label())
+                .collect(),
+            current: screen.last_arp().map(ArpPattern::label),
+        });
+        sections.push(Section {
+            name: "bass".to_string(),
+            labels: BassPattern::ALL
+                .iter()
+                .map(|pattern| pattern.label())
+                .collect(),
+            current: screen.last_bass().map(BassPattern::label),
+        });
+    }
+    if let Some(role) = drum_section_role(screen) {
+        sections.push(Section {
+            name: format!("drum {}", role.label().to_lowercase()),
+            labels: DrumPattern::all_for(role)
+                .iter()
+                .map(|pattern| pattern.label())
+                .collect(),
+            current: screen
+                .last_drum()
+                .filter(|pattern| pattern.role() == role)
+                .map(DrumPattern::label),
+        });
+    }
+    sections
+}
+
+/// drum の list を出す役割。型ごとに list が違うので、1つに絞って出す。
+///
+/// wheel を回したあとはその行の役割、まだ回していなければ画面のいちばん下の
+/// drum 行（＝ kick）の list を出す。
+fn drum_section_role(screen: &GridSequencerScreen) -> Option<DrumRole> {
+    if let Some(pattern) = screen.last_drum() {
+        return Some(pattern.role());
+    }
+    (0..screen.state.instance_count())
+        .rev()
+        .find_map(|instance| screen.state.drum_role(instance))
+}
+
+/// 出す section それぞれの行数を、優先順に並べたもの。
+///
+/// 高さの計算（[`height_for`]）と描画（[`lines`]）が同じ判断をするための唯一の入口。
+pub(crate) fn section_heights(screen: &GridSequencerScreen) -> Vec<usize> {
+    sections(screen)
+        .iter()
+        .map(Section::height)
+        .collect::<Vec<_>>()
+}
+
+/// 中身に必要なぶんだけの高さ（枠線込み）。0 なら pane を出さない。
 ///
 /// grid と同じ高さへ引き伸ばすと、広い端末では list の下に長い空白が伸びる。
 /// 出す行数は端末の高さで変わらないので、枠を中身へ詰める。
-/// bass が落ちる高さでは arp だけのぶんへさらに詰める（[`lines`] と同じ分岐）。
-pub(super) fn height_for(available: u16) -> u16 {
-    let full = (BORDERS + ARP_LINES + BASS_LINES) as u16;
-    if available >= full {
-        return full;
+/// 入りきらないぶんは後ろの section から落とす（[`lines`] と同じ分岐）。
+pub(super) fn height_for(section_heights: &[usize], available: u16) -> u16 {
+    let content = fitted(
+        section_heights,
+        usize::from(available).saturating_sub(BORDERS),
+    );
+    if content == 0 {
+        return 0;
     }
-    ((BORDERS + ARP_LINES) as u16).min(available)
+    u16::try_from(BORDERS + content).unwrap_or(u16::MAX)
+}
+
+/// 前から順に入るところまで採用したときの合計行数。
+///
+/// 1つも入らない高さでも、先頭の section だけは切り詰めて出す。まるごと消すと
+/// 「送り先の list がある」こと自体が見えなくなる。
+fn fitted(section_heights: &[usize], available: usize) -> usize {
+    let mut used = 0;
+    for height in section_heights {
+        if used + height > available {
+            break;
+        }
+        used += height;
+    }
+    if used == 0 {
+        return section_heights.first().copied().unwrap_or(0).min(available);
+    }
+    used
 }
 
 pub(super) fn draw(screen: &GridSequencerScreen, f: &mut Frame<'_>, area: Rect) {
@@ -56,38 +154,35 @@ pub(super) fn draw(screen: &GridSequencerScreen, f: &mut Frame<'_>, area: Rect) 
     );
 }
 
-/// 両方の section を出す。入りきらないときは bass を落として arp を優先する。
-///
-/// arp のほうが型が多く、4 voice 行のほうが触る機会も多い。どちらも入らない高さでは
-/// 上から順に切れるが、そこまで低い端末では grid 自体が成立していない。
+/// 入りきる section だけを上から並べる。[`fitted`] と同じ判断をすること。
 fn lines(screen: &GridSequencerScreen, height: usize) -> Vec<Line<'static>> {
     let available = height.saturating_sub(BORDERS);
-    let mut lines = section(
-        "arp",
-        ArpPattern::ALL.iter().map(|pattern| pattern.label()),
-        screen.last_arp().map(ArpPattern::label),
-    );
-    if available >= ARP_LINES + BASS_LINES {
-        lines.extend(section(
-            "bass",
-            BassPattern::ALL.iter().map(|pattern| pattern.label()),
-            screen.last_bass().map(BassPattern::label),
-        ));
+    let sections = sections(screen);
+    let mut lines = Vec::new();
+    let mut used = 0;
+    for section in &sections {
+        if used + section.height() > available {
+            break;
+        }
+        used += section.height();
+        lines.extend(render(section));
+    }
+    if lines.is_empty() {
+        if let Some(section) = sections.first() {
+            lines.extend(render(section));
+            lines.truncate(available);
+        }
     }
     lines
 }
 
-fn section(
-    name: &str,
-    labels: impl Iterator<Item = &'static str>,
-    current: Option<&'static str>,
-) -> Vec<Line<'static>> {
+fn render(section: &Section) -> Vec<Line<'static>> {
     let mut lines = vec![Line::styled(
-        name.to_string(),
+        section.name.clone(),
         base_style().fg(MONOKAI_GRAY),
     )];
-    lines.extend(labels.map(|label| {
-        let selected = current == Some(label);
+    lines.extend(section.labels.iter().map(|label| {
+        let selected = section.current == Some(*label);
         let marker = if selected { "> " } else { "  " };
         Line::styled(format!("{marker}{label}"), entry_style(selected))
     }));

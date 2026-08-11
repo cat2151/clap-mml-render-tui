@@ -1,8 +1,25 @@
-use super::*;
-use crate::ListDirection;
+use std::time::Instant;
 
-/// 枠線ぶんを足した、両方の section が入りきる高さ。
-const TALL: usize = BORDERS + ARP_LINES + BASS_LINES;
+use super::*;
+use crate::{ChordPlayback, ListDirection};
+
+/// section を全部出せる、十分な高さ。
+const TALL: usize = 64;
+
+/// arp / bass の section が出る画面（＝ chord mode 中）。drum 行は持たない。
+fn chorded_screen() -> GridSequencerScreen {
+    let mut screen = GridSequencerScreen::with_track_count(None, 3);
+    screen.state.set_chord(
+        ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]),
+        Instant::now(),
+    );
+    screen
+}
+
+/// drum の section だけが出る画面（chord mode off）。
+fn drum_screen() -> GridSequencerScreen {
+    GridSequencerScreen::with_track_count(None, crate::FULL_DRUM_TRACK_COUNT)
+}
 
 fn texts(screen: &GridSequencerScreen, height: usize) -> Vec<String> {
     lines(screen, height)
@@ -11,9 +28,17 @@ fn texts(screen: &GridSequencerScreen, height: usize) -> Vec<String> {
         .collect()
 }
 
+fn arp_lines() -> usize {
+    1 + ArpPattern::ALL.len()
+}
+
+fn bass_lines() -> usize {
+    1 + BassPattern::ALL.len()
+}
+
 #[test]
 fn both_sections_list_every_pattern_in_the_order_the_wheel_sends_them() {
-    let screen = GridSequencerScreen::new(None);
+    let screen = chorded_screen();
     let texts = texts(&screen, TALL);
 
     let expected = std::iter::once("arp".to_string())
@@ -24,9 +49,52 @@ fn both_sections_list_every_pattern_in_the_order_the_wheel_sends_them() {
     assert_eq!(texts, expected);
 }
 
+/// chord mode を使わなくても drum の list は出る。drum は chord mode の外の機能。
+#[test]
+fn the_drum_section_appears_without_the_chord_mode() {
+    let screen = drum_screen();
+
+    assert!(screen.state.chord().is_none());
+    let expected = std::iter::once("drum kick".to_string())
+        .chain(
+            DrumPattern::all_for(DrumRole::Kick)
+                .iter()
+                .map(|p| format!("  {}", p.label())),
+        )
+        .collect::<Vec<_>>();
+    assert_eq!(texts(&screen, TALL), expected);
+}
+
+/// 出すのは1役ぶん。回した行の役割へ list ごと切り替わる。
+#[test]
+fn the_drum_section_follows_the_role_the_wheel_last_turned() {
+    let mut screen = drum_screen();
+    screen.cycle_drum_pattern(
+        crate::FIRST_DRUM_ROW,
+        DrumRole::Percussion,
+        ListDirection::Next,
+    );
+
+    let texts = texts(&screen, TALL);
+    assert_eq!(texts[0], "drum perc");
+    assert_eq!(
+        texts.len(),
+        1 + DrumPattern::all_for(DrumRole::Percussion).len()
+    );
+}
+
+/// drum 行が無い構成では drum の section も出ない。
+#[test]
+fn a_grid_without_drum_rows_has_no_drum_section() {
+    let screen = GridSequencerScreen::with_track_count(None, 3);
+
+    assert!(texts(&screen, TALL).is_empty());
+    assert!(section_heights(&screen).is_empty());
+}
+
 #[test]
 fn nothing_is_marked_until_the_wheel_has_been_turned() {
-    let screen = GridSequencerScreen::new(None);
+    let screen = chorded_screen();
 
     assert!(!texts(&screen, TALL)
         .iter()
@@ -35,7 +103,7 @@ fn nothing_is_marked_until_the_wheel_has_been_turned() {
 
 #[test]
 fn the_marker_follows_the_pattern_the_wheel_last_applied() {
-    let mut screen = GridSequencerScreen::new(None);
+    let mut screen = chorded_screen();
     screen.last_arp = Some(ArpPattern::UpDown);
     screen.last_bass = Some(BassPattern::EighthOctave);
 
@@ -49,7 +117,7 @@ fn the_marker_follows_the_pattern_the_wheel_last_applied() {
 /// 下へ回すと list の下の項目へ進む。並びが見えていることの意味はここにある。
 #[test]
 fn turning_the_wheel_down_moves_the_marker_down_the_list() {
-    let mut screen = GridSequencerScreen::new(None);
+    let mut screen = chorded_screen();
     screen.last_arp = Some(ArpPattern::default());
     let first = marked_index(&screen);
 
@@ -59,22 +127,64 @@ fn turning_the_wheel_down_moves_the_marker_down_the_list() {
 }
 
 #[test]
-fn a_short_pane_drops_the_bass_section_before_it_clips_the_arp_one() {
-    let screen = GridSequencerScreen::new(None);
+fn a_short_pane_drops_the_last_section_before_it_clips_the_first_one() {
+    let screen = chorded_screen();
 
-    let texts = texts(&screen, TALL - 1);
-    assert_eq!(texts.len(), ARP_LINES);
+    let texts = texts(&screen, BORDERS + arp_lines() + bass_lines() - 1);
+    assert_eq!(texts.len(), arp_lines());
     assert_eq!(texts[0], "arp");
+}
+
+/// 高さの見積もりと実際に描く行数が食い違うと、枠の中に空白が残る。
+#[test]
+fn the_pane_height_matches_the_lines_actually_drawn() {
+    let screen = chorded_screen();
+
+    for available in 0..=(BORDERS + arp_lines() + bass_lines() + 4) {
+        let height = height_for(
+            &section_heights(&screen),
+            u16::try_from(available).expect("small"),
+        );
+        let drawn = lines(&screen, usize::from(height)).len();
+        assert_eq!(
+            usize::from(height),
+            if drawn == 0 { 0 } else { BORDERS + drawn },
+            "available={available}"
+        );
+    }
 }
 
 /// pane の幅は一番長いラベルと印がちょうど収まる幅。溢れると右端が切れる。
 #[test]
 fn every_entry_fits_the_pane_width() {
-    let screen = GridSequencerScreen::new(None);
     let content = usize::from(crate::ui::layout::PATTERN_LIST_WIDTH) - BORDERS;
 
-    for line in texts(&screen, TALL) {
-        assert!(line.chars().count() <= content, "{line}");
+    for screen in [chorded_screen(), drum_screen()] {
+        for line in texts(&screen, TALL) {
+            assert!(line.chars().count() <= content, "{line}");
+        }
+    }
+}
+
+/// drum は役割ごとに list が違うので、どの役割でも幅に収まることを見る。
+#[test]
+fn every_drum_role_entry_fits_the_pane_width() {
+    let content = usize::from(crate::ui::layout::PATTERN_LIST_WIDTH) - BORDERS;
+
+    for role in DrumRole::ALL {
+        assert!(
+            format!("drum {}", role.label().to_lowercase())
+                .chars()
+                .count()
+                <= content
+        );
+        for pattern in DrumPattern::all_for(role) {
+            assert!(
+                pattern.label().chars().count() + 2 <= content,
+                "{}",
+                pattern.label()
+            );
+        }
     }
 }
 
@@ -88,7 +198,7 @@ fn marked_index(screen: &GridSequencerScreen) -> usize {
 /// wheel からの実際の送りでも、印が list の並びどおりに動く。
 #[test]
 fn the_marker_tracks_a_real_wheel_turn() {
-    let mut screen = GridSequencerScreen::new(None);
+    let mut screen = chorded_screen();
     screen.cycle_arpeggio(0, ListDirection::Next);
     assert_eq!(screen.last_arp(), None, "voice が足りない行では動かない");
 

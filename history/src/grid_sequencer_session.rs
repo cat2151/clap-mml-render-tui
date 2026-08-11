@@ -5,6 +5,11 @@
 use serde::{ser::SerializeStruct, Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
+mod legacy;
+
+use legacy::migrate_legacy_rows;
+pub use legacy::GridSequencerRowState;
+
 const GRID_STEPS: usize = 16;
 const DEFAULT_NOTE: u8 = 60;
 const CHORD_VOICE_LANES: usize = 4;
@@ -58,6 +63,13 @@ impl<'de> Deserialize<'de> for GridSequencerSessionState {
 pub struct GridSequencerInstanceState {
     pub patch: Option<String>,
     pub lane_mode: GridLaneModeState,
+    /// drum 行なら、その instance が担当する打楽器。
+    ///
+    /// 役割は track 数から決まるが、track 4 のときだけ抽選になる。抽選結果をここへ
+    /// 残しておかないと、起動のたびに役割（＝ patch とリズム）が変わってしまう。
+    /// drum が無い頃のセッションには field ごと無い。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub drum: Option<GridDrumRoleState>,
     pub voicing_rotation: i8,
     pub lanes: Vec<GridSequencerLaneState>,
 }
@@ -75,6 +87,7 @@ impl Default for GridSequencerInstanceState {
         Self {
             patch: None,
             lane_mode: GridLaneModeState::Single,
+            drum: None,
             voicing_rotation: 0,
             lanes: vec![GridSequencerLaneState::default()],
         }
@@ -96,6 +109,7 @@ impl<'de> Deserialize<'de> for GridSequencerInstanceState {
             .cloned()
             .and_then(|value| serde_json::from_value(value).ok())
             .unwrap_or_default();
+        let drum = object.get("drum").and_then(parse_drum_role);
         let voicing_rotation = object
             .get("voicing_rotation")
             .and_then(Value::as_i64)
@@ -114,6 +128,7 @@ impl<'de> Deserialize<'de> for GridSequencerInstanceState {
         let mut result = Self {
             patch,
             lane_mode,
+            drum,
             voicing_rotation,
             lanes,
         };
@@ -138,6 +153,28 @@ impl GridLaneModeState {
             Self::BassOctave2 => BASS_OCTAVE_LANES,
             Self::ChordVoices4 => CHORD_VOICE_LANES,
         }
+    }
+}
+
+/// drum 行が担当する打楽器。domain の `DrumRole` に対応する wire DTO。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GridDrumRoleState {
+    Kick,
+    Snare,
+    HiHat,
+    Percussion,
+}
+
+/// 知らない値は「drum 行ではない」として捨てる。役割は track 数から当て直されるので、
+/// 落としてもリズムが消えるだけで壊れない。
+fn parse_drum_role(value: &Value) -> Option<GridDrumRoleState> {
+    match value.as_str()? {
+        "kick" => Some(GridDrumRoleState::Kick),
+        "snare" => Some(GridDrumRoleState::Snare),
+        "hi_hat" => Some(GridDrumRoleState::HiHat),
+        "percussion" => Some(GridDrumRoleState::Percussion),
+        _ => None,
     }
 }
 
@@ -194,58 +231,6 @@ impl<'de> Deserialize<'de> for GridSequencerLaneState {
     }
 }
 
-/// 旧rows形式の読み書きテストとmigration入力に使うDTO。
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GridSequencerRowState {
-    pub patch: Option<String>,
-    pub base_note: u8,
-    pub note_steps: Vec<GridNoteStepState>,
-}
-
-impl Serialize for GridSequencerRowState {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut note_steps = self.note_steps.clone();
-        normalize_note_steps(&mut note_steps);
-        let mut row = serializer.serialize_struct("GridSequencerRowState", 3)?;
-        row.serialize_field("patch", &self.patch)?;
-        row.serialize_field("base_note", &self.base_note)?;
-        row.serialize_field("note_steps", &note_steps)?;
-        row.end()
-    }
-}
-
-impl Default for GridSequencerRowState {
-    fn default() -> Self {
-        let lane = GridSequencerLaneState::default();
-        Self {
-            patch: None,
-            base_note: lane.base_note,
-            note_steps: lane.note_steps,
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for GridSequencerRowState {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let value = Value::deserialize(deserializer)?;
-        let lane = parse_lane(&value);
-        let patch = value
-            .as_object()
-            .and_then(|object| parse_patch(object.get("patch")));
-        Ok(Self {
-            patch,
-            base_note: lane.base_note,
-            note_steps: lane.note_steps,
-        })
-    }
-}
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GridNoteStepState {
@@ -296,34 +281,6 @@ fn deserialize_instances(value: &Value) -> Vec<GridSequencerInstanceState> {
                 .collect()
         })
         .unwrap_or_default()
-}
-
-fn migrate_legacy_rows(value: Option<&Value>) -> Vec<GridSequencerInstanceState> {
-    let Some(rows) = value.and_then(Value::as_array) else {
-        return Vec::new();
-    };
-    rows.iter()
-        .filter_map(|row| serde_json::from_value::<GridSequencerRowState>(row.clone()).ok())
-        .enumerate()
-        .map(|(index, row)| {
-            let lane_mode = if index == 1 {
-                GridLaneModeState::ChordVoices4
-            } else {
-                GridLaneModeState::Single
-            };
-            let mut instance = GridSequencerInstanceState {
-                patch: row.patch,
-                lane_mode,
-                voicing_rotation: 0,
-                lanes: vec![GridSequencerLaneState {
-                    base_note: row.base_note,
-                    note_steps: row.note_steps,
-                }],
-            };
-            instance.normalize();
-            instance
-        })
-        .collect()
 }
 
 fn parse_patch(value: Option<&Value>) -> Option<String> {

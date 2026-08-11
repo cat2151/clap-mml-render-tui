@@ -11,7 +11,6 @@ const AREA: Rect = Rect::new(0, 0, 90, 24);
 /// 行6〜9が 4 voice(lane 3〜0)、行10が Single lane。
 const CHORD_SUMMARY_ROW: u16 = 3;
 const TOP_VOICE_ROW: u16 = 6;
-const SINGLE_LANE_ROW: u16 = 10;
 
 fn context() -> crate::GridSequencerContext<'static> {
     crate::tests::ctx_with(
@@ -24,6 +23,11 @@ fn context() -> crate::GridSequencerContext<'static> {
 /// step セルの列。grid は中央寄せなので、chord 行の有無で左端が動く。
 fn cell(screen: &GridSequencerScreen, step: usize) -> u16 {
     crate::ui::layout_for(screen, AREA).step_column(step)
+}
+
+/// lane が描かれる端末行。drum 行が増えたぶん行番号が動くので、直書きせず引く。
+fn lane_row(screen: &GridSequencerScreen, address: LaneAddress) -> u16 {
+    crate::ui::layout_for(screen, AREA).lane_line(&screen.state.visible_note_rows(), address)
 }
 
 fn wheel(kind: MouseEventKind, column: u16, row: u16) -> MouseEvent {
@@ -161,20 +165,30 @@ fn the_chord_summary_row_is_not_arpeggiated() {
     assert_eq!(screen.pattern_evolution(), PatternEvolution::Auto);
 }
 
+/// track 8 の行8。drum でも chord mode 専用でもない、1 lane しか無い行。
+const FREE_SINGLE_LANE_ROW: usize = 7;
+
 #[test]
 fn a_single_lane_row_has_too_few_voices_to_arpeggiate() {
-    let mut screen = chorded_screen();
+    let mut screen = GridSequencerScreen::with_track_count(None, 8);
+    screen.state.set_chord(
+        ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]),
+        Instant::now(),
+    );
+    let address = LaneAddress::new(FREE_SINGLE_LANE_ROW, 0);
+
     screen.handle_mouse(
         wheel(
             MouseEventKind::ScrollDown,
             cell(&screen, 0),
-            SINGLE_LANE_ROW,
+            lane_row(&screen, address),
         ),
         AREA,
         &context(),
     );
+
     assert_eq!(screen.last_arp(), None);
-    assert!(is_silent(&screen, 3));
+    assert!(is_silent(&screen, FREE_SINGLE_LANE_ROW));
 }
 
 #[test]

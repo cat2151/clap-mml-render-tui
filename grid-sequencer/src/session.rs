@@ -54,6 +54,7 @@ impl GridSequencerScreen {
         // instance 番号の指す先が変わるので、音型と patch のカーソルは引き継がない。
         self.reset_arp_patterns();
         self.reset_bass_pattern();
+        self.reset_drum_patterns();
         self.reset_patch_bags();
     }
 

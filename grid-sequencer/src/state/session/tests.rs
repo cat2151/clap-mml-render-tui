@@ -8,9 +8,9 @@ fn legacy_instances() -> Vec<GridInstance> {
     legacy_voices.lane_mode = GridLaneMode::ChordVoices4;
     legacy_voices.voicing_rotation = -3;
     legacy_voices.normalize();
-    let single = GridInstance::new(0);
-    let mut fourth = GridInstance::new(0);
-    fourth.lanes[0].pattern.draw_span(1, 1);
+    let mut single = GridInstance::new(0);
+    single.lanes[0].pattern.draw_span(1, 1);
+    let fourth = GridInstance::new(0);
     vec![chord, legacy_voices, single, fourth]
 }
 
@@ -45,14 +45,29 @@ fn the_restored_chord_voice_row_can_be_arpeggiated_again() {
 }
 
 /// lane_mode 以外の保存値（pattern）は触らない。
+///
+/// 行4は drum 行になって譜面を当て直されるので、確認するのは行3の lane 0。
 #[test]
 fn restoring_keeps_the_saved_patterns_of_untouched_rows() {
     let mut state = GridState::with_instance_count(4);
     assert!(state.restore_instances(legacy_instances()));
 
     assert!(state
-        .lane(LaneAddress::new(3, 0))
+        .lane(LaneAddress::new(2, 0))
         .expect("lane exists")
         .pattern
         .is_attack(1));
+}
+
+/// 保存値に drum 行の役割が無い（drum を入れる前の）セッションでも、
+/// track 数に応じて役割とリズムが当たる。
+#[test]
+fn a_session_saved_before_drums_gains_its_drum_row() {
+    let mut state = GridState::with_instance_count(4);
+    assert!(state.restore_instances(legacy_instances()));
+
+    let drum = &state.instances()[3];
+    assert!(drum.drum.is_some());
+    assert_eq!(drum.lane_mode, GridLaneMode::Drum);
+    assert_eq!(drum.lanes.len(), 1);
 }

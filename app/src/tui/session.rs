@@ -76,6 +76,7 @@ fn grid_session_from_history(
                     super::grid_sequencer::GridLaneMode::ChordVoices4
                 }
             },
+            drum: instance.drum.map(history_drum_role_to_domain),
             voicing_rotation: instance.voicing_rotation,
             lanes: instance
                 .lanes
@@ -101,6 +102,32 @@ fn grid_session_from_history(
         instances,
         pattern_evolution,
     ))
+}
+
+fn history_drum_role_to_domain(
+    role: crate::history::GridDrumRoleState,
+) -> super::grid_sequencer::DrumRole {
+    match role {
+        crate::history::GridDrumRoleState::Kick => super::grid_sequencer::DrumRole::Kick,
+        crate::history::GridDrumRoleState::Snare => super::grid_sequencer::DrumRole::Snare,
+        crate::history::GridDrumRoleState::HiHat => super::grid_sequencer::DrumRole::HiHat,
+        crate::history::GridDrumRoleState::Percussion => {
+            super::grid_sequencer::DrumRole::Percussion
+        }
+    }
+}
+
+fn domain_drum_role_to_history(
+    role: super::grid_sequencer::DrumRole,
+) -> crate::history::GridDrumRoleState {
+    match role {
+        super::grid_sequencer::DrumRole::Kick => crate::history::GridDrumRoleState::Kick,
+        super::grid_sequencer::DrumRole::Snare => crate::history::GridDrumRoleState::Snare,
+        super::grid_sequencer::DrumRole::HiHat => crate::history::GridDrumRoleState::HiHat,
+        super::grid_sequencer::DrumRole::Percussion => {
+            crate::history::GridDrumRoleState::Percussion
+        }
+    }
 }
 
 fn history_note_step_to_domain(
@@ -142,7 +169,12 @@ fn grid_session_to_history(
                     super::grid_sequencer::GridLaneMode::ChordVoices4 => {
                         crate::history::GridLaneModeState::ChordVoices4
                     }
+                    // drum 行の lane の形は Single と同じ。役割は `drum` が持つ。
+                    super::grid_sequencer::GridLaneMode::Drum => {
+                        crate::history::GridLaneModeState::Single
+                    }
                 },
+                drum: instance.drum.map(domain_drum_role_to_history),
                 voicing_rotation: instance.voicing_rotation,
                 lanes: instance
                     .lanes

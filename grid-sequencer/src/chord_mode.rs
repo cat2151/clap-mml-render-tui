@@ -67,34 +67,80 @@ impl GridSequencerScreen {
             return false;
         }
         self.state.instances_mut()[CHORD_ROW].patch = Some(patch);
-        // bass / アルペジオは引けなくても chord mode は続ける（直前の音色のまま鳴るだけ）。
-        self.apply_row_patch(BASS_ROW, ctx);
-        self.apply_row_patch(ARPEGGIO_ROW, ctx);
+        // bass / アルペジオ / drum は引けなくても chord mode は続ける
+        // （直前の音色のまま鳴るだけ）。
+        self.apply_assigned_patches(ctx, false);
         self.chord_enabled = true;
         true
     }
 
-    /// 用途が決まっている行へ、その用途のカテゴリから引いた patch を当てる。
-    /// 行が無い構成（track 数が足りない）では何もしない。
-    fn apply_row_patch(&mut self, row: usize, ctx: &GridSequencerContext<'_>) {
-        let Some(patch) = self.pick_row_patch(row, ctx) else {
-            return;
-        };
-        if let Some(instance) = self.state.instances_mut().get_mut(row) {
-            instance.patch = Some(patch);
+    /// 用途が決まっている行（chord 行を除く）。
+    ///
+    /// chord 行は poly 判定が要るぶん扱いが違うので、この一覧には入れない。
+    fn assigned_rows(&self) -> Vec<usize> {
+        (0..self.state.instance_count())
+            .filter(|row| self.row_patch_role(*row).is_some())
+            .collect()
+    }
+
+    /// その行の patch の用途。用途が決まっていない行は `None`。
+    ///
+    /// drum 行は chord mode の on/off に関わらず用途が決まっている（打楽器の音でないと
+    /// リズムにならない）。bass とアルペジオの行は chord mode 中だけの役目。
+    fn row_patch_role(&self, row: usize) -> Option<PatchRole> {
+        if let Some(drum) = self.state.drum_role(row) {
+            return Some(crate::patch_role::drum_patch_role(drum));
+        }
+        self.state.chord()?;
+        match row {
+            BASS_ROW => Some(PatchRole::Bass),
+            ARPEGGIO_ROW => Some(PatchRole::Arpeggio),
+            _ => None,
         }
     }
 
-    /// bass 行・アルペジオ行に使える patch を1つ引く。
+    /// 用途が決まっている行へ、その用途の候補から patch を当てる。当てた行数を返す。
     ///
-    /// どちらも和音を1 instance へ重ねないので、chord 行と違い poly 判定は要求しない。
-    fn pick_row_patch(&self, row: usize, ctx: &GridSequencerContext<'_>) -> Option<String> {
-        let role = match row {
-            BASS_ROW => PatchRole::Bass,
-            ARPEGGIO_ROW => PatchRole::Arpeggio,
-            _ => return None,
+    /// `only_missing` が true なら、まだ音色の付いていない行だけを埋める。復元した音色や
+    /// 手で選んだ音色を、patch 一覧が揃ったタイミングで奪わないため。
+    pub(crate) fn apply_assigned_patches(
+        &mut self,
+        ctx: &GridSequencerContext<'_>,
+        only_missing: bool,
+    ) -> usize {
+        let mut applied = 0;
+        for row in self.assigned_rows() {
+            if only_missing && self.state.instances()[row].patch.is_some() {
+                continue;
+            }
+            applied += usize::from(self.apply_row_patch(row, ctx));
+        }
+        applied
+    }
+
+    /// 用途が決まっている行へ、その用途のカテゴリから引いた patch を当てる。
+    /// 行が無い構成（track 数が足りない）では何もしない。当てられたら true。
+    fn apply_row_patch(&mut self, row: usize, ctx: &GridSequencerContext<'_>) -> bool {
+        let Some(patch) = self.pick_row_patch(row, ctx) else {
+            return false;
         };
-        pick_for_role(ctx.patches(), &ctx.role_filter(role), &ctx.poly_lookup())
+        let Some(instance) = self.state.instances_mut().get_mut(row) else {
+            return false;
+        };
+        instance.patch = Some(patch);
+        true
+    }
+
+    /// bass 行・アルペジオ行・drum 行に使える patch を1つ引く。
+    ///
+    /// どれも和音を1 instance へ重ねないので、chord 行と違い poly 判定は要求しない。
+    fn pick_row_patch(&self, row: usize, ctx: &GridSequencerContext<'_>) -> Option<String> {
+        let role = self.row_patch_role(row)?;
+        pick_for_role(
+            ctx.patches(),
+            &ctx.role_filter(role).filter(),
+            &ctx.poly_lookup(),
+        )
     }
 
     /// セッションから復元した chord mode を、patch 一覧が揃ってから適用する。
@@ -193,8 +239,8 @@ impl GridSequencerScreen {
                     instances[CHORD_ROW].patch = self.state.instances()[CHORD_ROW].patch.clone();
                 }
             }
-            // bass とアルペジオの行も同じく、用途ごとのカテゴリから当て直す。
-            for row in [BASS_ROW, ARPEGGIO_ROW] {
+            // bass・アルペジオ・drum の行も同じく、用途ごとのカテゴリから当て直す。
+            for row in self.assigned_rows() {
                 let Some(instance) = instances.get_mut(row) else {
                     continue;
                 };
@@ -221,25 +267,25 @@ impl GridSequencerScreen {
 
     /// chord mode 中の `r` / `R` に追随する。進行と Key を引き直し、
     /// `repick_patch` なら和音の行の音色も当て直す。
+    /// drum 行は chord mode の外にも居るので、進行の引き直しとは切り離して当て直す。
     pub(crate) fn rechord_after_randomize(
         &mut self,
         now: Instant,
         ctx: &GridSequencerContext<'_>,
         repick_patch: bool,
     ) {
-        if self.state.chord().is_none() {
-            return;
+        if self.state.chord().is_some() {
+            self.reroll_chord(now, ctx);
+            if repick_patch {
+                match self.pick_chord_patch(ctx) {
+                    Ok(patch) => self.state.instances_mut()[CHORD_ROW].patch = Some(patch),
+                    Err(error) => self.chord_error = Some(error.to_string()),
+                }
+            }
         }
-        self.reroll_chord(now, ctx);
-        if !repick_patch {
-            return;
+        if repick_patch {
+            self.apply_assigned_patches(ctx, false);
         }
-        match self.pick_chord_patch(ctx) {
-            Ok(patch) => self.state.instances_mut()[CHORD_ROW].patch = Some(patch),
-            Err(error) => self.chord_error = Some(error.to_string()),
-        }
-        self.apply_row_patch(BASS_ROW, ctx);
-        self.apply_row_patch(ARPEGGIO_ROW, ctx);
     }
 
     /// 和音に使える patch を1つ引く。カテゴリと poly 判定の両方を満たすものだけが当たり。
@@ -249,7 +295,7 @@ impl GridSequencerScreen {
         }
         pick_for_role(
             ctx.patches(),
-            &ctx.role_filter(PatchRole::Chord),
+            &ctx.role_filter(PatchRole::Chord).filter(),
             &ctx.poly_lookup(),
         )
         .ok_or(CHORD_PATCH_UNAVAILABLE)

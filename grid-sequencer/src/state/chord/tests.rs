@@ -32,6 +32,17 @@ fn at_step(now: Instant, step: u64) -> Instant {
     now + step_offset(step)
 }
 
+/// 和音の鳴り方だけを見るテストの土台。
+///
+/// 行4以降は drum 行（[`crate::state::drum`]）で、入場時から譜面が入っている。
+/// chord mode の3行構成にしておけば、和音の note に drum の note が混ざらない。
+fn chord_only_state() -> GridState {
+    GridState::with_instance_count(3)
+}
+
+/// 音高の寄せ方を見るテストで使う、drum でも chord mode 専用でもない行。
+const FREE_ROW: usize = 7;
+
 fn g_major() -> ChordPlayback {
     ChordPlayback::new("G", "V".to_string(), vec![vec![67, 71, 74]]).unwrap()
 }
@@ -53,7 +64,7 @@ fn an_empty_progression_cannot_be_played() {
 #[test]
 fn the_chord_row_sounds_only_on_the_first_step() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = chord_only_state();
     // 和音の行はセルを無視する。全ステップを on にしても鳴るのは先頭だけ。
     state.instances[CHORD_ROW].pattern = NotePattern::from_steps([NoteStep::Attack; GRID_STEPS]);
     state.set_chord(Some(c_major_then_f_major()), now);
@@ -74,7 +85,7 @@ fn the_chord_row_sounds_only_on_the_first_step() {
 #[test]
 fn the_chord_is_held_for_a_whole_note_and_replaced_by_the_next_chord() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = chord_only_state();
     state.set_chord(Some(c_major_then_f_major()), now);
     state.start(now);
     step_at(&mut state, now);
@@ -105,7 +116,7 @@ fn the_chord_is_held_for_a_whole_note_and_replaced_by_the_next_chord() {
 #[test]
 fn entering_the_last_bar_raises_the_preload_signal_once() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = chord_only_state();
     state.set_chord(Some(c_major_then_f_major()), now);
     state.start(now);
     step_at(&mut state, now);
@@ -126,7 +137,7 @@ fn entering_the_last_bar_raises_the_preload_signal_once() {
 #[test]
 fn completing_the_progression_swaps_the_ready_bank_and_keeps_playing() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = chord_only_state();
     state.set_chord(Some(c_major_then_f_major()), now);
     state.start(now);
     step_at(&mut state, now);
@@ -169,7 +180,7 @@ fn completing_the_progression_swaps_the_ready_bank_and_keeps_playing() {
 #[test]
 fn an_unfinished_preload_keeps_the_current_bank() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = chord_only_state();
     state.set_chord(Some(c_major_then_f_major()), now);
     state.start(now);
     step_at(&mut state, now);
@@ -189,59 +200,66 @@ fn an_unfinished_preload_keeps_the_current_bank() {
 #[test]
 fn other_rows_snap_to_the_chord_while_keeping_their_octave() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     // C2 付近と C6 付近。C major に寄せても元の音域から離れないこと。
-    // 行1=chord・行2=bass・行3=ChordVoices4 は音高を自動導出するので、行4以降で見る。
-    state.instances[3].base_note = 38;
-    state.instances[4].base_note = 81;
-    state.instances[5].base_note = 67;
+    // 行1=chord・行2=bass・行3=ChordVoices4 は音高を自動導出し、行4〜行7 は drum で
+    // 音高を寄せないので、寄せの対象になる行はその先。
+    state.instances[FREE_ROW].base_note = 38;
+    state.instances[FREE_ROW + 1].base_note = 81;
+    state.instances[FREE_ROW + 2].base_note = 67;
 
     state.set_chord(Some(c_major_then_f_major()), now);
 
     assert_eq!(
-        state.resolved_note(LaneAddress::new(3, 0)),
+        state.resolved_note(LaneAddress::new(FREE_ROW, 0)),
         Some(36),
         "38 は下の C(36) が最も近い"
     );
-    assert_eq!(state.resolved_note(LaneAddress::new(4, 0)), Some(79));
-    assert_eq!(state.resolved_note(LaneAddress::new(5, 0)), Some(67));
+    assert_eq!(
+        state.resolved_note(LaneAddress::new(FREE_ROW + 1, 0)),
+        Some(79)
+    );
+    assert_eq!(
+        state.resolved_note(LaneAddress::new(FREE_ROW + 2, 0)),
+        Some(67)
+    );
 }
 
 #[test]
 fn other_rows_follow_the_chord_change() {
     let now = Instant::now();
-    let mut state = GridState::default();
-    state.instances[3].base_note = 64;
+    let mut state = GridState::silent();
+    state.instances[FREE_ROW].base_note = 64;
     state.set_chord(Some(c_major_then_f_major()), now);
-    assert_eq!(state.resolved_note(LaneAddress::new(3, 0)), Some(64));
+    assert_eq!(state.resolved_note(LaneAddress::new(FREE_ROW, 0)), Some(64));
 
     state.advance_chord();
 
-    assert_eq!(state.resolved_note(LaneAddress::new(3, 0)), Some(65));
+    assert_eq!(state.resolved_note(LaneAddress::new(FREE_ROW, 0)), Some(65));
 
     state.advance_chord();
 
-    assert_eq!(state.resolved_note(LaneAddress::new(3, 0)), Some(64));
+    assert_eq!(state.resolved_note(LaneAddress::new(FREE_ROW, 0)), Some(64));
 }
 
 #[test]
 fn turning_the_chord_mode_off_restores_the_base_notes() {
     let now = Instant::now();
-    let mut state = GridState::default();
-    state.instances[3].base_note = 38;
+    let mut state = GridState::silent();
+    state.instances[FREE_ROW].base_note = 38;
     state.set_chord(Some(c_major_then_f_major()), now);
-    assert_eq!(state.resolved_note(LaneAddress::new(3, 0)), Some(36));
+    assert_eq!(state.resolved_note(LaneAddress::new(FREE_ROW, 0)), Some(36));
 
     state.set_chord(None, now);
 
-    assert_eq!(state.resolved_note(LaneAddress::new(3, 0)), Some(38));
+    assert_eq!(state.resolved_note(LaneAddress::new(FREE_ROW, 0)), Some(38));
     assert!(state.chord().is_none());
 }
 
 #[test]
 fn switching_the_chord_mode_silences_the_sounding_notes() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = chord_only_state();
     state.set_chord(Some(c_major_then_f_major()), now);
     state.start(now);
     step_at(&mut state, now);
@@ -257,9 +275,9 @@ fn switching_the_chord_mode_silences_the_sounding_notes() {
 #[test]
 fn other_rows_keep_playing_their_own_rhythm_under_the_chord() {
     let now = Instant::now();
-    let mut state = GridState::default();
-    state.instances[3].base_note = 62;
-    state.instances[3].pattern.draw_span(1, 1);
+    let mut state = GridState::silent();
+    state.instances[FREE_ROW].base_note = 62;
+    state.instances[FREE_ROW].pattern.draw_span(1, 1);
     state.set_chord(Some(c_major_then_f_major()), now);
     state.start(now);
     step_at(&mut state, now);
@@ -267,7 +285,7 @@ fn other_rows_keep_playing_their_own_rhythm_under_the_chord() {
     let second = step_at(&mut state, at_step(now, 1));
 
     assert_eq!(messages(&second), vec![[0x90, 60, 100]]);
-    assert_eq!(notes(&second)[0].instance_id, 3);
+    assert_eq!(notes(&second)[0].instance_id, FREE_ROW as u8);
 }
 
 #[test]

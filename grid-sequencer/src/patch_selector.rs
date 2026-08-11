@@ -186,13 +186,18 @@ impl GridSequencerScreen {
         let chord_on = self.state.chord().is_some();
         // chord mode 中は行ごとに用途が決まっている。それ以外の行は Free（＝和音向きの
         // 音色を避ける）で引き、chord mode off なら全行が Free。
-        let role = match instance {
-            CHORD_ROW if chord_on => PatchRole::Chord,
-            BASS_ROW if chord_on => PatchRole::Bass,
-            ARPEGGIO_ROW if chord_on => PatchRole::Arpeggio,
-            _ => PatchRole::Free,
+        // drum 行は chord mode の on/off に関わらず用途が決まっている。
+        let role = match self.state.drum_role(instance) {
+            Some(drum) => crate::patch_role::drum_patch_role(drum),
+            None => match instance {
+                CHORD_ROW if chord_on => PatchRole::Chord,
+                BASS_ROW if chord_on => PatchRole::Bass,
+                ARPEGGIO_ROW if chord_on => PatchRole::Arpeggio,
+                _ => PatchRole::Free,
+            },
         };
-        let filter = ctx.role_filter(role);
+        let role_filter = ctx.role_filter(role);
+        let filter = role_filter.filter();
         let voicing = ctx.poly_lookup();
         // 現在の patch も除外しない。袋の中身は「用途に合う音色の全体」で固定しておき、
         // 音色を替えるたびに候補が変わって袋が作り直されるのを避ける。

@@ -1,6 +1,9 @@
 //! 保存値・undo snapshot から instance/lane を復元する。
 
-use super::{measure_lane, velocity, GridInstance, GridLaneMode, GridState};
+use super::{
+    drum, instance::default_lane_mode, measure_lane, velocity, GridInstance, GridLaneMode,
+    GridState,
+};
 
 impl GridState {
     pub(crate) fn restore_instances(&mut self, mut instances: Vec<GridInstance>) -> bool {
@@ -11,6 +14,8 @@ impl GridState {
             restore_lane_mode(index, instance);
             instance.normalize();
         }
+        // drum 行かどうかは track 数で変わるので、行番号ぶんの復元が終わってから当て直す。
+        drum::apply_drum_roles(&mut instances);
         let stored_lane_count = instances
             .iter()
             .map(|instance| instance.lanes.len())
@@ -46,8 +51,11 @@ impl GridState {
 /// そのままだと bass 行に余った lane がぶら下がり、4 voice の行が1つも無くなって
 /// アルペジオ（[`super::arpeggio`]）が書けなくなる。逆に bass 行が 1 lane だった頃の
 /// セッションは、`normalize()` の resize で octave 上の lane が空のまま足される。
+///
+/// drum 行の [`GridLaneMode::Drum`] は track 数から決まるので、ここでは一度落として
+/// [`drum::apply_drum_roles`] へ委ねる。
 fn restore_lane_mode(index: usize, instance: &mut GridInstance) {
-    let lane_mode = GridInstance::new(index).lane_mode;
+    let lane_mode = default_lane_mode(index);
     if instance.lane_mode == lane_mode {
         return;
     }

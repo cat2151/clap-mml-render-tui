@@ -1,4 +1,4 @@
-//! grid sequencer 画面（1/2/3/4/8/16 instancesのnote lanesを16ステップでループ再生する）。
+//! grid sequencer 画面（1/2/3/4/7/8/16 instancesのnote lanesを16ステップでループ再生する）。
 //!
 //! 画面の状態・入力・描画・MIDI 送信はこの crate に閉じており、共有ランタイム
 //! （app 側の `TuiApp`）からは `GridSequencerContext` で必要な情報を注入してもらう。
@@ -11,13 +11,15 @@ use std::time::Instant;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 
 pub use cmrt_arpeggiator::{ArpPattern, BassPattern};
-use cmrt_chord::ChordProgressionCatalog;
 use cmrt_realtime_play::PatchVoicing;
+pub use cmrt_rhythm::{DrumPattern, DrumRole};
 
 mod arpeggio;
 mod bass_line;
 mod chord_mode;
+mod context;
 mod cycle_swap;
+mod drum_line;
 mod input;
 mod patch_bag;
 mod patch_role;
@@ -32,6 +34,7 @@ mod state;
 pub mod ui;
 mod undo;
 
+pub use context::{GridPatchLoad, GridPatchStatus, GridSequencerContext};
 pub(crate) use input::ListDirection;
 pub use screen::{GridSequencerParts, GridSequencerScreen, PatternEvolution};
 pub use sender::{
@@ -43,7 +46,8 @@ pub use state::{
     frames_ahead, randomize_instance_slice, step_offset, ChordPlayback, GridInstance, GridLane,
     GridLaneMode, GridScheduledMessage, GridState, LaneAddress, NotePattern, NoteStep,
     PitchDirection, VisibleNoteRow, VisibleRowKind, ARPEGGIO_ROW, BASS_OCTAVE_LANES, BASS_ROW, BPM,
-    CHORD_ROW, CHORD_VOICE_LANES, GRID_ROWS, GRID_STEPS, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL,
+    CHORD_ROW, CHORD_VOICE_LANES, FIRST_DRUM_ROW, FULL_DRUM_TRACK_COUNT, GRID_ROWS, GRID_STEPS,
+    LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL,
 };
 
 #[cfg(test)]
@@ -111,85 +115,6 @@ pub enum GridSequencerAction {
     RestartWithTrackCount(usize),
 }
 
-/// patch 一覧のバックグラウンド読み込み状態のスナップショット。
-/// 共有ランタイム側の `PatchLoadState` から glue が変換して渡す。
-pub enum GridPatchLoad<'a> {
-    Loading,
-    Ready(&'a [(String, String)]),
-    Err(&'a str),
-}
-
-/// grid sequencer 画面が共有ランタイムから受け取る情報一式。
-pub struct GridSequencerContext<'a> {
-    pub patch_dirs_configured: bool,
-    pub patch_load: GridPatchLoad<'a>,
-    /// chord mode が進行を抽選するカタログ。空なら chord mode は開始できない。
-    pub chord_catalog: &'a ChordProgressionCatalog,
-    /// 和音用 patch の当たり判定に使う mono/poly 判定。
-    pub voicing: &'a dyn GridVoicingLookup,
-    /// 和音に使う patch のカテゴリ（config.toml の `chord_patch_categories`）。
-    /// 空ならカテゴリでは絞らない。
-    pub chord_patch_categories: &'a [String],
-    /// bass 行に使う patch のカテゴリ（config.toml の `bass_patch_categories`）。
-    /// 空ならカテゴリでは絞らない。
-    pub bass_patch_categories: &'a [String],
-    /// アルペジオ行に使う patch のカテゴリ（config.toml の `arpeggio_patch_categories`）。
-    /// 空ならカテゴリでは絞らない。
-    pub arpeggio_patch_categories: &'a [String],
-    /// コード進行カタログが更新されたか（再起動アナウンスの合図。一度だけ true）。
-    pub chord_source_updated: bool,
-}
-
-impl GridSequencerContext<'_> {
-    /// ランダム選択に使える patch 一覧。読み込み中・エラー時は空を返す。
-    fn patches(&self) -> &[(String, String)] {
-        match &self.patch_load {
-            GridPatchLoad::Ready(pairs) => pairs,
-            GridPatchLoad::Loading | GridPatchLoad::Err(_) => &[],
-        }
-    }
-
-    fn patch_status(&self) -> GridPatchStatus {
-        if !self.patch_dirs_configured {
-            return GridPatchStatus::NotConfigured;
-        }
-        match &self.patch_load {
-            GridPatchLoad::Ready(pairs) => GridPatchStatus::Ready(pairs.len()),
-            GridPatchLoad::Loading => GridPatchStatus::Loading,
-            GridPatchLoad::Err(error) => GridPatchStatus::Err((*error).to_string()),
-        }
-    }
-
-    fn patches_are_loading(&self) -> bool {
-        matches!(self.patch_load, GridPatchLoad::Loading)
-    }
-
-    fn patches_are_ready(&self) -> bool {
-        matches!(self.patch_load, GridPatchLoad::Ready(_))
-    }
-}
-
-/// ステータス行に出す patch 一覧の状態（直近のランダム化時点のスナップショット）。
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub enum GridPatchStatus {
-    #[default]
-    Loading,
-    Ready(usize),
-    NotConfigured,
-    Err(String),
-}
-
-impl GridPatchStatus {
-    pub fn label(&self) -> String {
-        match self {
-            Self::Loading => "patches loading".to_string(),
-            Self::Ready(count) => format!("{count} patches"),
-            Self::NotConfigured => "patches_dirs 未設定".to_string(),
-            Self::Err(error) => format!("patches error: {error}"),
-        }
-    }
-}
-
 impl GridSequencerScreen {
     /// 画面へ入る。初回はランダムな grid を作り、2回目以降は前回の grid を続ける。
     pub fn enter(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
@@ -210,6 +135,8 @@ impl GridSequencerScreen {
         self.patch_status = ctx.patch_status();
         // 入場時は何も送っていないので、引き直しで出る note off は捨ててよい。
         let _ = self.state.randomize_all(now, ctx.patches());
+        // 無差別抽選のあとに、用途が決まっている行（drum）だけ当て直す。
+        self.apply_assigned_patches(ctx, false);
         self.grid_ready = true;
         self.restored_patches_pending = false;
         self.cancel_cycle_swap();
@@ -328,13 +255,20 @@ impl GridSequencerScreen {
             false
         };
         let chord_restored = self.poll_pending_chord(Instant::now(), ctx);
+        // 用途が決まっている行は無差別抽選より先に埋める。あとから埋めると
+        // drum 行に打楽器でない音色が残る。
+        let by_role = if ctx.patches_are_ready() {
+            self.apply_assigned_patches(ctx, true)
+        } else {
+            0
+        };
         let assigned = self.state.fill_missing_patches(ctx.patches());
-        if assigned == 0 && !chord_restored && !restored_validated {
+        if assigned == 0 && by_role == 0 && !chord_restored && !restored_validated {
             return;
         }
         log_line(&format!(
-            "grid-sequencer: patch-list-ready assigned={assigned} chord_restored={chord_restored} \
-             instances={}",
+            "grid-sequencer: patch-list-ready assigned={assigned} by_role={by_role} \
+             chord_restored={chord_restored} instances={}",
             self.track_count()
         ));
         self.prepare_connection_or_start_server(ctx);

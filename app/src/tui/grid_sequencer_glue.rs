@@ -36,6 +36,10 @@ struct GridContextParts<'ctx> {
     chord_patch_categories: &'ctx [String],
     bass_patch_categories: &'ctx [String],
     arpeggio_patch_categories: &'ctx [String],
+    drum_patch_categories: &'ctx [String],
+    kick_patch_keywords: &'ctx [String],
+    snare_patch_keywords: &'ctx [String],
+    hihat_patch_keywords: &'ctx [String],
     chord_source_updated: bool,
 }
 
@@ -52,6 +56,10 @@ fn grid_sequencer_context<'ctx>(parts: GridContextParts<'ctx>) -> GridSequencerC
         chord_patch_categories: parts.chord_patch_categories,
         bass_patch_categories: parts.bass_patch_categories,
         arpeggio_patch_categories: parts.arpeggio_patch_categories,
+        drum_patch_categories: parts.drum_patch_categories,
+        kick_patch_keywords: parts.kick_patch_keywords,
+        snare_patch_keywords: parts.snare_patch_keywords,
+        hihat_patch_keywords: parts.hihat_patch_keywords,
         chord_source_updated: parts.chord_source_updated,
     }
 }
@@ -76,6 +84,10 @@ impl TuiApp<'_> {
             chord_patch_categories: &self.cfg.chord_patch_categories,
             bass_patch_categories: &self.cfg.bass_patch_categories,
             arpeggio_patch_categories: &self.cfg.arpeggio_patch_categories,
+            drum_patch_categories: &self.cfg.drum_patch_categories,
+            kick_patch_keywords: &self.cfg.kick_patch_keywords,
+            snare_patch_keywords: &self.cfg.snare_patch_keywords,
+            hihat_patch_keywords: &self.cfg.hihat_patch_keywords,
             chord_source_updated: false,
         });
         self.grid_sequencer.enter(Instant::now(), &ctx);
@@ -107,6 +119,10 @@ impl TuiApp<'_> {
             chord_patch_categories: &self.cfg.chord_patch_categories,
             bass_patch_categories: &self.cfg.bass_patch_categories,
             arpeggio_patch_categories: &self.cfg.arpeggio_patch_categories,
+            drum_patch_categories: &self.cfg.drum_patch_categories,
+            kick_patch_keywords: &self.cfg.kick_patch_keywords,
+            snare_patch_keywords: &self.cfg.snare_patch_keywords,
+            hihat_patch_keywords: &self.cfg.hihat_patch_keywords,
             chord_source_updated: false,
         });
         self.grid_sequencer.handle_key(key, Instant::now(), &ctx)
@@ -127,6 +143,10 @@ impl TuiApp<'_> {
             chord_patch_categories: &self.cfg.chord_patch_categories,
             bass_patch_categories: &self.cfg.bass_patch_categories,
             arpeggio_patch_categories: &self.cfg.arpeggio_patch_categories,
+            drum_patch_categories: &self.cfg.drum_patch_categories,
+            kick_patch_keywords: &self.cfg.kick_patch_keywords,
+            snare_patch_keywords: &self.cfg.snare_patch_keywords,
+            hihat_patch_keywords: &self.cfg.hihat_patch_keywords,
             chord_source_updated: false,
         });
         self.grid_sequencer.handle_mouse(mouse, terminal_area, &ctx);
@@ -147,6 +167,10 @@ impl TuiApp<'_> {
             chord_patch_categories: &self.cfg.chord_patch_categories,
             bass_patch_categories: &self.cfg.bass_patch_categories,
             arpeggio_patch_categories: &self.cfg.arpeggio_patch_categories,
+            drum_patch_categories: &self.cfg.drum_patch_categories,
+            kick_patch_keywords: &self.cfg.kick_patch_keywords,
+            snare_patch_keywords: &self.cfg.snare_patch_keywords,
+            hihat_patch_keywords: &self.cfg.hihat_patch_keywords,
             chord_source_updated,
         });
         self.grid_sequencer.refresh_context(&ctx);

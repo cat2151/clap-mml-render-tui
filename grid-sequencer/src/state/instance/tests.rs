@@ -22,6 +22,7 @@ fn only_the_stacked_modes_flip_the_display_order() {
     assert!(!GridLaneMode::Single.stacks_high_notes_on_top());
     assert!(GridLaneMode::BassOctave2.stacks_high_notes_on_top());
     assert!(GridLaneMode::ChordVoices4.stacks_high_notes_on_top());
+    assert!(!GridLaneMode::Drum.stacks_high_notes_on_top());
 }
 
 #[test]
@@ -29,6 +30,7 @@ fn normalization_fills_and_truncates_lanes_to_the_mode_capacity() {
     let mut four = GridInstance {
         patch: None,
         lane_mode: GridLaneMode::ChordVoices4,
+        drum: None,
         voicing_rotation: 0,
         lanes: vec![GridLane::default()],
     };

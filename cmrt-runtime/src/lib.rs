@@ -107,6 +107,20 @@ pub struct Config {
     /// 空にすると全カテゴリが対象。
     #[serde(default = "default_arpeggio_patch_categories")]
     pub arpeggio_patch_categories: Vec<String>,
+    /// drum 行に使う patch のカテゴリ一覧。4 役（kick / snare / hi-hat / percussion）で共通。
+    /// 空にすると全カテゴリが対象。
+    #[serde(default = "default_drum_patch_categories")]
+    pub drum_patch_categories: Vec<String>,
+    /// kick 行に使う patch の名前キーワード一覧。上のカテゴリの中をさらに絞る。
+    /// 空にするとカテゴリだけで絞る。
+    #[serde(default = "default_kick_patch_keywords")]
+    pub kick_patch_keywords: Vec<String>,
+    /// snare 行に使う patch の名前キーワード一覧。
+    #[serde(default = "default_snare_patch_keywords")]
+    pub snare_patch_keywords: Vec<String>,
+    /// hi-hat 行に使う patch の名前キーワード一覧。
+    #[serde(default = "default_hihat_patch_keywords")]
+    pub hihat_patch_keywords: Vec<String>,
 }
 
 fn default_offline_render_workers() -> usize {
@@ -162,6 +176,22 @@ pub fn default_bass_patch_categories() -> Vec<String> {
 
 pub fn default_arpeggio_patch_categories() -> Vec<String> {
     to_category_names(&cmrt_surge_patches::DEFAULT_ARPEGGIO_PATCH_CATEGORY_NAMES)
+}
+
+pub fn default_drum_patch_categories() -> Vec<String> {
+    to_category_names(&cmrt_surge_patches::DEFAULT_DRUM_PATCH_CATEGORY_NAMES)
+}
+
+pub fn default_kick_patch_keywords() -> Vec<String> {
+    to_category_names(&cmrt_surge_patches::DEFAULT_KICK_PATCH_KEYWORDS)
+}
+
+pub fn default_snare_patch_keywords() -> Vec<String> {
+    to_category_names(&cmrt_surge_patches::DEFAULT_SNARE_PATCH_KEYWORDS)
+}
+
+pub fn default_hihat_patch_keywords() -> Vec<String> {
+    to_category_names(&cmrt_surge_patches::DEFAULT_HIHAT_PATCH_KEYWORDS)
 }
 
 fn to_category_names(names: &[&str]) -> Vec<String> {

@@ -77,6 +77,10 @@ fn collect_patch_pairs_combines_factory_and_thirdparty_using_common_base() {
         chord_patch_categories: Vec::new(),
         bass_patch_categories: Vec::new(),
         arpeggio_patch_categories: Vec::new(),
+        drum_patch_categories: Vec::new(),
+        kick_patch_keywords: Vec::new(),
+        snare_patch_keywords: Vec::new(),
+        hihat_patch_keywords: Vec::new(),
     };
 
     let pairs = collect_patch_pairs(&cfg).unwrap();
@@ -133,6 +137,10 @@ fn collect_patch_pairs_sorts_display_names_naturally() {
         chord_patch_categories: Vec::new(),
         bass_patch_categories: Vec::new(),
         arpeggio_patch_categories: Vec::new(),
+        drum_patch_categories: Vec::new(),
+        kick_patch_keywords: Vec::new(),
+        snare_patch_keywords: Vec::new(),
+        hihat_patch_keywords: Vec::new(),
     };
 
     let pairs = collect_patch_pairs(&cfg).unwrap();

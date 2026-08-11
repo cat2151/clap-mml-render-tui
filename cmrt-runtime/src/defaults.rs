@@ -2,7 +2,8 @@ use serde::Serialize;
 
 use cmrt_surge_patches::{
     DEFAULT_ARPEGGIO_PATCH_CATEGORY_NAMES, DEFAULT_BASS_PATCH_CATEGORY_NAMES,
-    DEFAULT_CHORD_PATCH_CATEGORY_NAMES,
+    DEFAULT_CHORD_PATCH_CATEGORY_NAMES, DEFAULT_DRUM_PATCH_CATEGORY_NAMES,
+    DEFAULT_HIHAT_PATCH_KEYWORDS, DEFAULT_KICK_PATCH_KEYWORDS, DEFAULT_SNARE_PATCH_KEYWORDS,
 };
 
 use crate::{
@@ -80,7 +81,7 @@ pub fn default_patches_dirs() -> Vec<String> {
     Vec::new()
 }
 
-/// カテゴリ名の配列を config.toml の TOML 配列リテラルへ直す。
+/// カテゴリ名・キーワードの配列を config.toml の TOML 配列リテラルへ直す。
 fn patch_categories_line(names: &[&str]) -> String {
     format!(
         "[{}]",
@@ -125,6 +126,10 @@ pub fn default_config_content_with_app_settings(app_settings: &str) -> String {
     let bass_patch_categories_line = patch_categories_line(&DEFAULT_BASS_PATCH_CATEGORY_NAMES);
     let arpeggio_patch_categories_line =
         patch_categories_line(&DEFAULT_ARPEGGIO_PATCH_CATEGORY_NAMES);
+    let drum_patch_categories_line = patch_categories_line(&DEFAULT_DRUM_PATCH_CATEGORY_NAMES);
+    let kick_patch_keywords_line = patch_categories_line(&DEFAULT_KICK_PATCH_KEYWORDS);
+    let snare_patch_keywords_line = patch_categories_line(&DEFAULT_SNARE_PATCH_KEYWORDS);
+    let hihat_patch_keywords_line = patch_categories_line(&DEFAULT_HIHAT_PATCH_KEYWORDS);
     format!(
         r#"# clap-mml-render-tui config
 #
@@ -202,6 +207,20 @@ bass_patch_categories = {bass_patch_categories_line}
 # 音程が意味を持つ行なので、既定では打楽器・効果音のカテゴリを外しています。
 # 空リストにするとカテゴリで絞らず、全 patch から抽選します。
 arpeggio_patch_categories = {arpeggio_patch_categories_line}
+
+# 【省略可】drum 行（track 数 4 以上のとき、行4以降）に使う patch のカテゴリ
+# 照合の仕方は chord_patch_categories と同じです。4 役で共通の設定です。
+# Surge のカテゴリは打楽器を Percussion / Drums の粒度でしか分けていないため、
+# kick / snare / hi-hat / percussion の振り分けは下のキーワードで行います。
+drum_patch_categories = {drum_patch_categories_line}
+
+# 【省略可】drum 4 役に振り分けるための patch 名キーワード
+# 上の drum_patch_categories で絞ったあと、小文字化した patch のパスへ部分一致させます。
+# percussion 行には「kick / snare / hi-hat のどれにも当たらなかったもの」が回ります。
+# 空リストにするとキーワードで絞らず、カテゴリ内の全 patch が候補になります。
+kick_patch_keywords = {kick_patch_keywords_line}
+snare_patch_keywords = {snare_patch_keywords_line}
+hihat_patch_keywords = {hihat_patch_keywords_line}
 
 # 【省略可】Surge XT パッチの検索対象ディレクトリ一覧（TUI / DAW の音色選択・ランダム音色で使う）
 # 例 (Windows): patches_dirs = ['C:\ProgramData\Surge XT\patches_factory', 'C:\ProgramData\Surge XT\patches_3rdparty']

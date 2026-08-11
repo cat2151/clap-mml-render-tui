@@ -46,13 +46,15 @@ pub enum GridHit {
 }
 
 impl GridSequencerLayout {
+    /// `pattern_list_sections` は右 pane に出す section それぞれの行数（優先順）。
+    /// 空なら pane を出さない。中身は [`super::pattern_list::section_heights`] が決める。
     pub fn new(
         area: Rect,
         note_rows: usize,
         cc1_rows: usize,
         velocity_rows: usize,
         chord_visible: bool,
-        chord_on: bool,
+        pattern_list_sections: &[usize],
     ) -> Self {
         let mut constraints = Vec::with_capacity(4);
         if chord_visible {
@@ -69,9 +71,9 @@ impl GridSequencerLayout {
             .split(area);
         let grid_index = usize::from(chord_visible);
         let rows = chunks[grid_index];
-        // フレーズ型を送れるのは chord mode 中だけ。list も、grid を1 step も削らずに
-        // 置ける幅があるときにしか出さない。
-        let list_fits = chord_on && rows.width >= GRID_WIDTH + PATTERN_LIST_WIDTH;
+        // list は、grid を1 step も削らずに置ける幅があるときにしか出さない。
+        let list_height = super::pattern_list::height_for(pattern_list_sections, rows.height);
+        let list_fits = list_height > 0 && rows.width >= GRID_WIDTH + PATTERN_LIST_WIDTH;
         // grid と list をぴったり隣接させた塊を、画面の横中央へ置く。余りは左右へ
         // 均等に散らす。片側へ寄せると、広い端末で塊と余白が離れて視線が飛ぶ。
         let grid_width = GRID_WIDTH.min(rows.width);
@@ -82,7 +84,7 @@ impl GridSequencerLayout {
         let pattern_list = list_fits.then(|| Rect {
             x: left + grid_width,
             width: PATTERN_LIST_WIDTH,
-            height: super::pattern_list::height_for(rows.height),
+            height: list_height,
             ..rows
         });
         let grids = Rect {
@@ -145,6 +147,19 @@ impl GridSequencerLayout {
     #[cfg(test)]
     fn content_column(&self, offset: u16) -> u16 {
         self.note.x + 1 + offset
+    }
+
+    /// `address` の lane が描かれる端末行。[`Self::hit_test`] の逆写像。
+    ///
+    /// 行の並びは chord mode と drum 行の有無で動く。列と同じく、テストは行も
+    /// 直書きせずここから引く。
+    #[cfg(test)]
+    pub(crate) fn lane_line(&self, visible_rows: &[VisibleNoteRow], address: LaneAddress) -> u16 {
+        let index = visible_rows
+            .iter()
+            .position(|row| row.address == address)
+            .expect("the lane is visible");
+        self.note.y + 2 + u16::try_from(index).expect("visible rows fit in u16")
     }
 
     pub fn hit_test(

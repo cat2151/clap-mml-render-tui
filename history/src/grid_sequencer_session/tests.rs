@@ -17,6 +17,7 @@ fn new_format_round_trip_preserves_grid_values_and_omits_legacy_fields() {
         instances: vec![GridSequencerInstanceState {
             patch: Some("Keys/Piano.fxp".to_string()),
             lane_mode: GridLaneModeState::Single,
+            drum: None,
             voicing_rotation: 0,
             lanes: vec![GridSequencerLaneState {
                 base_note: 64,
@@ -50,6 +51,7 @@ fn downward_voicing_rotation_round_trips_as_a_negative_value() {
         instances: vec![GridSequencerInstanceState {
             patch: Some("Bass/Poly.fxp".to_string()),
             lane_mode: GridLaneModeState::ChordVoices4,
+            drum: None,
             voicing_rotation: -5,
             lanes: vec![GridSequencerLaneState::default(); CHORD_VOICE_LANES],
         }],

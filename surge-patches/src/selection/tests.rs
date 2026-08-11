@@ -129,3 +129,107 @@ fn pick_for_role_returns_none_when_nothing_matches() {
 
     assert_eq!(pick_for_role(&all, &filter, &PolyByName), None);
 }
+
+/// 実機の Surge にある名前をそのまま並べた drum の候補。
+fn drum_pairs() -> Vec<(String, String)> {
+    pairs(&[
+        "patches_factory/Percussion/Kick 909ish.fxp",
+        "patches_3rdparty/Vendor/Drums/Bass Drum.fxp",
+        "patches_factory/Percussion/Snare Tight.fxp",
+        "patches_3rdparty/Vendor/Drums/Closed Hi-Hat.fxp",
+        "patches_3rdparty/Vendor/Drums/Cowbell.fxp",
+        "patches_factory/Pads/Poly Pad.fxp",
+    ])
+}
+
+fn matching(pairs: &[(String, String)], filter: &RoleFilter<'_>) -> Vec<String> {
+    pairs
+        .iter()
+        .filter(|(display, lower)| matches_role(display, lower, filter, &PolyByName))
+        .map(|(display, _)| display.clone())
+        .collect()
+}
+
+/// カテゴリは `Percussion` / `Drums` の粒度しか無いので、役割はキーワードで分ける。
+#[test]
+fn drum_roles_split_one_category_by_name_keywords() {
+    let all = drum_pairs();
+    let cats = categories(&["Percussion", "Drums"]);
+    let kick = categories(&["kick", "bass drum"]);
+    let snare = categories(&["snare"]);
+    let hat = categories(&["hat"]);
+
+    assert_eq!(
+        matching(
+            &all,
+            &RoleFilter::with_keywords(PatchRole::Kick, &cats, &kick)
+        ),
+        [
+            "patches_factory/Percussion/Kick 909ish.fxp",
+            "patches_3rdparty/Vendor/Drums/Bass Drum.fxp",
+        ]
+    );
+    assert_eq!(
+        matching(
+            &all,
+            &RoleFilter::with_keywords(PatchRole::Snare, &cats, &snare)
+        ),
+        ["patches_factory/Percussion/Snare Tight.fxp"]
+    );
+    assert_eq!(
+        matching(
+            &all,
+            &RoleFilter::with_keywords(PatchRole::HiHat, &cats, &hat)
+        ),
+        ["patches_3rdparty/Vendor/Drums/Closed Hi-Hat.fxp"]
+    );
+}
+
+/// percussion は「他の3役に取られなかった残り全部」。判定が反転する。
+#[test]
+fn percussion_takes_what_the_other_drum_roles_left() {
+    let all = drum_pairs();
+    let cats = categories(&["Percussion", "Drums"]);
+    let others = categories(&["kick", "bass drum", "snare", "hat"]);
+
+    assert_eq!(
+        matching(
+            &all,
+            &RoleFilter::with_keywords(PatchRole::Percussion, &cats, &others)
+        ),
+        ["patches_3rdparty/Vendor/Drums/Cowbell.fxp"]
+    );
+}
+
+/// drum は単音なので poly を要求しない。要求すると候補がほぼ全滅する。
+#[test]
+fn drum_roles_do_not_require_poly() {
+    let cats = categories(&["Percussion"]);
+    let kick = categories(&["kick"]);
+    let filter = RoleFilter::with_keywords(PatchRole::Kick, &cats, &kick);
+
+    assert!(matches_role(
+        "patches_factory/Percussion/Kick Tech 1.fxp",
+        "patches_factory/percussion/kick tech 1.fxp",
+        &filter,
+        &PolyByName
+    ));
+}
+
+/// キーワードが空なら、kick / snare / hi-hat はカテゴリだけで絞る。
+#[test]
+fn drum_roles_without_keywords_fall_back_to_the_category() {
+    let all = drum_pairs();
+    let cats = categories(&["Percussion"]);
+
+    assert_eq!(
+        matching(
+            &all,
+            &RoleFilter::with_keywords(PatchRole::Kick, &cats, &[])
+        ),
+        [
+            "patches_factory/Percussion/Kick 909ish.fxp",
+            "patches_factory/Percussion/Snare Tight.fxp",
+        ]
+    );
+}

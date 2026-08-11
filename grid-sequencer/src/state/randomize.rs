@@ -4,7 +4,7 @@ use rand::RngExt;
 
 use cmrt_tui_core::random::random_index;
 
-use super::{GridInstance, GridScheduledMessage, GridState, NotePattern, GRID_STEPS};
+use super::{drum, GridInstance, GridScheduledMessage, GridState, NotePattern, GRID_STEPS};
 
 /// ランダム生成に使う note number の範囲（C2〜C6）。
 const RANDOM_NOTE_MIN: u8 = 36;
@@ -23,6 +23,12 @@ pub fn randomize_instance_slice(instances: &mut [GridInstance], patches: &[(Stri
     for instance in instances {
         if let Some(index) = random_index(patches.len()) {
             instance.patch = Some(patches[index].0.clone());
+        }
+        // drum 行は音高も譜面も専用（[`super::drum`]）。音高を引き直すと打楽器の音色
+        // そのものが変わり、汎用の譜面を当てるとリズムでなくなる。
+        if let Some(role) = instance.drum {
+            drum::randomize_drum_pattern(instance, role, &mut rng);
+            continue;
         }
         for lane in &mut instance.lanes {
             lane.base_note = rng.random_range(RANDOM_NOTE_MIN..=RANDOM_NOTE_MAX);

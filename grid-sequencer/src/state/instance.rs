@@ -1,5 +1,7 @@
 //! CLAP instance と、その instance が共有する note lane の所有モデル。
 
+use cmrt_rhythm::DrumRole;
+
 use super::{NotePattern, DEFAULT_NOTE};
 
 /// 初期検証で chord 構成音へ割り当てる voice 数。
@@ -27,12 +29,14 @@ pub enum GridLaneMode {
     /// bass の root と octave 上の2声。[`super::BASS_ROW`] だけが持つ。
     BassOctave2,
     ChordVoices4,
+    /// drum 行（[`super::drum`]）。lane は1本で、音高はコードへ寄せない。
+    Drum,
 }
 
 impl GridLaneMode {
     pub const fn lane_count(self) -> usize {
         match self {
-            Self::Single => 1,
+            Self::Single | Self::Drum => 1,
             Self::BassOctave2 => BASS_OCTAVE_LANES,
             Self::ChordVoices4 => CHORD_VOICE_LANES,
         }
@@ -63,6 +67,9 @@ impl Default for GridLane {
 pub struct GridInstance {
     pub patch: Option<String>,
     pub lane_mode: GridLaneMode,
+    /// drum 行なら、その instance が担当する打楽器。役割は track 数から決まる
+    /// （[`super::drum::drum_role_for`]）ので、ユーザーが直に編集する値ではない。
+    pub drum: Option<DrumRole>,
     /// ChordVoices4の累積転回数。正は上方向、負は下方向へNOTE wheelで進む。
     pub voicing_rotation: i8,
     pub lanes: Vec<GridLane>,
@@ -70,18 +77,30 @@ pub struct GridInstance {
 
 impl GridInstance {
     pub fn new(index: usize) -> Self {
-        // 行1 = chord、行2 = bass は chord mode が占有するので、4声コードの既定行は行3。
-        let lane_mode = match index {
-            1 => GridLaneMode::BassOctave2,
-            2 => GridLaneMode::ChordVoices4,
-            _ => GridLaneMode::Single,
-        };
+        let lane_mode = default_lane_mode(index);
         Self {
             patch: None,
             lane_mode,
+            drum: None,
             voicing_rotation: 0,
             lanes: vec![GridLane::default(); lane_mode.lane_count()],
         }
+    }
+
+    /// drum 行かどうかを切り替える。lane の形も一緒に付け替える。
+    ///
+    /// `index` を取るのは、drum を降ろしたときに行番号どおりの mode へ戻すため。
+    pub(crate) fn set_drum_role(&mut self, index: usize, role: Option<DrumRole>) {
+        self.drum = role;
+        self.lane_mode = match role {
+            Some(_) => GridLaneMode::Drum,
+            None => default_lane_mode(index),
+        };
+        if self.lane_mode != GridLaneMode::ChordVoices4 {
+            // 転回は 4 voice の行だけが持つ状態。他の mode へ落とすときは一緒に捨てる。
+            self.voicing_rotation = 0;
+        }
+        self.normalize();
     }
 
     /// 保存値の不足 lane を補い、mode の capacity を超えた lane を捨てる。
@@ -89,6 +108,17 @@ impl GridInstance {
         let lane_count = self.lane_mode.lane_count();
         self.lanes.resize(lane_count, GridLane::default());
         self.lanes.truncate(lane_count);
+    }
+}
+
+/// 行番号だけから決まる lane の形。drum 行はこの上から [`GridLaneMode::Drum`] で覆われる。
+///
+/// 行1 = chord、行2 = bass は chord mode が占有するので、4声コードの既定行は行3。
+pub(crate) fn default_lane_mode(index: usize) -> GridLaneMode {
+    match index {
+        1 => GridLaneMode::BassOctave2,
+        2 => GridLaneMode::ChordVoices4,
+        _ => GridLaneMode::Single,
     }
 }
 

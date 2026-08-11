@@ -220,6 +220,8 @@ impl GridState {
             GridLaneMode::ChordVoices4 => {
                 rotated_chord_voice(chord.current(), address.lane, instance.voicing_rotation)
             }
+            // drum 行はコードへ寄せない。寄せると kick の音高が小節ごとに動いてしまう。
+            GridLaneMode::Drum => (address.lane == 0).then_some(lane.base_note),
         }
     }
 }

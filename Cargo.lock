@@ -560,6 +560,7 @@ dependencies = [
  "cmrt-arpeggiator",
  "cmrt-chord",
  "cmrt-realtime-play",
+ "cmrt-rhythm",
  "cmrt-runtime",
  "cmrt-surge-patches",
  "cmrt-tui-core",
@@ -690,6 +691,13 @@ dependencies = [
  "serde_json",
  "ureq",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "cmrt-rhythm"
+version = "0.1.0"
+dependencies = [
+ "rand 0.10.2",
 ]
 
 [[package]]

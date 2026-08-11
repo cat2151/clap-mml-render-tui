@@ -45,13 +45,23 @@ fn the_pane_does_not_eat_into_the_sixteen_step_cells() {
     );
 }
 
-/// フレーズを送れない chord mode off では出さない。
+/// chord mode off ではアルペジオ・ベースラインの list を出さない。
+/// 出るのは drum の list だけ（drum は chord mode の外の機能）。
 #[test]
-fn the_pane_is_hidden_while_the_chord_mode_is_off() {
+fn the_arp_and_bass_lists_are_hidden_while_the_chord_mode_is_off() {
     let rendered = render(&GridSequencerScreen::new(None));
 
-    assert!(!rendered.contains("Phrase"), "{rendered}");
     assert!(!rendered.contains("UpDownHold"), "{rendered}");
+    assert!(!rendered.contains("####+Oct"), "{rendered}");
+    assert!(rendered.contains("drum kick"), "{rendered}");
+}
+
+/// drum 行も chord mode も無い構成では pane ごと出さない。
+#[test]
+fn the_pane_is_hidden_without_any_section() {
+    let rendered = render(&GridSequencerScreen::with_track_count(None, 3));
+
+    assert!(!rendered.contains("Phrase"), "{rendered}");
 }
 
 /// 直近に送った型に印が付く。どこまで送ったかが list 上で分かる。

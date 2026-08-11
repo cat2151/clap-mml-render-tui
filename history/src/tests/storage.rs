@@ -182,6 +182,8 @@ fn session_state_round_trips_the_editable_grid() {
         instances: vec![GridSequencerInstanceState {
             patch: Some("Keys/Piano.fxp".to_string()),
             lane_mode: GridLaneModeState::Single,
+            // track 4 の drum 行は役割が抽選なので、保存して初めて起動をまたげる。
+            drum: Some(crate::GridDrumRoleState::HiHat),
             voicing_rotation: 0,
             lanes: vec![GridSequencerLaneState {
                 base_note: 67,

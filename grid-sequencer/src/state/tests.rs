@@ -34,7 +34,7 @@ fn at_step(now: Instant, step: u64) -> Instant {
 #[test]
 fn the_first_step_sounds_immediately_on_entry() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     state.instances[0].pattern.draw_span(0, 0);
     state.start(now);
 
@@ -45,7 +45,7 @@ fn the_first_step_sounds_immediately_on_entry() {
 #[test]
 fn a_stopped_state_produces_nothing() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     state.instances[0].pattern.draw_span(0, 0);
 
     assert!(!state.is_running());
@@ -55,7 +55,7 @@ fn a_stopped_state_produces_nothing() {
 #[test]
 fn a_sixteenth_note_is_released_on_the_next_step() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     state.instances[0].base_note = 62;
     state.instances[0].pattern.draw_span(0, 0);
     state.start(now);
@@ -68,7 +68,7 @@ fn a_sixteenth_note_is_released_on_the_next_step() {
 #[test]
 fn a_quarter_note_sustains_for_four_steps() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     state.instances[0].base_note = 65;
     state.instances[0].pattern.draw_span(0, 3);
     state.start(now);
@@ -83,7 +83,7 @@ fn a_quarter_note_sustains_for_four_steps() {
 #[test]
 fn rows_sharing_a_step_sound_together_in_row_order() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     state.instances[0].base_note = 60;
     state.instances[0].pattern.draw_span(0, 0);
     state.instances[3].base_note = 64;
@@ -100,7 +100,7 @@ fn rows_sharing_a_step_sound_together_in_row_order() {
 #[test]
 fn messages_of_one_step_share_the_same_offset() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     for row in 0..4 {
         state.instances[row].base_note = 60 + row as u8;
         state.instances[row].pattern.draw_span(1, 1);
@@ -121,7 +121,7 @@ fn messages_of_one_step_share_the_same_offset() {
 #[test]
 fn equal_note_numbers_on_different_rows_are_independent() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     // 行0の4分音符が鳴り続けている間に、別instanceの行1で同じnoteを鳴らす。
     state.instances[0].base_note = 67;
     state.instances[0].pattern.draw_span(0, 3);
@@ -170,7 +170,7 @@ fn equal_note_numbers_on_different_rows_are_independent() {
 #[test]
 fn the_playhead_wraps_after_sixteen_steps() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     state.instances[0].pattern.draw_span(0, 0);
     state.start(now);
 
@@ -191,7 +191,7 @@ fn the_playhead_wraps_after_sixteen_steps() {
 #[test]
 fn the_playhead_does_not_run_ahead_of_the_lookahead() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     state.instances[0].pattern.draw_span(0, 0);
     state.start(now);
 
@@ -208,7 +208,7 @@ fn the_playhead_does_not_run_ahead_of_the_lookahead() {
 #[test]
 fn take_reset_messages_silences_everything_and_stops_the_clock() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     state.instances[0].base_note = 60;
     state.instances[0].pattern.draw_span(0, 3);
     state.instances[1].base_note = 72;
@@ -236,7 +236,7 @@ fn take_reset_messages_silences_everything_and_stops_the_clock() {
 #[test]
 fn restarting_replays_from_the_first_step() {
     let now = Instant::now();
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     state.instances[0].pattern.draw_span(0, 0);
     state.start(now);
     step_at(&mut state, now);
@@ -251,7 +251,7 @@ fn restarting_replays_from_the_first_step() {
 
 #[test]
 fn patches_carry_the_instance_id_of_the_playing_bank() {
-    let mut state = GridState::default();
+    let mut state = GridState::silent();
     state.instances[0].patch = Some("first/Patch.fxp".to_string());
     state.instances[1].patch = Some("second/Patch.fxp".to_string());
     assert_eq!(
