@@ -68,6 +68,8 @@ pub struct GridSequencerScreen {
     pub(crate) sample_rate: f64,
     /// 出力バッファ1単位のフレーム数。想定レイテンシの表示にだけ使う。
     pub(crate) buffer_frames: usize,
+    /// Non-zero while the server and this screen share an absolute musical epoch.
+    pub(crate) timeline_id: u64,
     pub help_open: bool,
     /// cycle ごとに譜面を再抽選するか、人間の編集を保持するか。
     pub(crate) pattern_evolution: PatternEvolution,
@@ -184,6 +186,7 @@ impl GridSequencerScreen {
             state,
             sample_rate,
             buffer_frames,
+            timeline_id: 0,
             help_open: false,
             pattern_evolution,
             note_gesture: None,

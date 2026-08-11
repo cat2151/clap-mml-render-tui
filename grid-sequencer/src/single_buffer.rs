@@ -83,7 +83,7 @@ impl GridSequencerScreen {
         if !self.state.commit_pending_cycle_in_place() {
             // 抽選できていない。音色が変わらないのでロードせず、そのまま次の周へ入る。
             log_line("grid-sequencer: no staged cycle, restarting without a patch load");
-            self.state.start(now);
+            self.restart_timeline(now);
             return;
         }
         self.prepare_connection();

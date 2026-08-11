@@ -23,7 +23,7 @@ fn start_fires_immediately_so_the_first_step_sounds_on_entry() {
     clock.start(now);
 
     assert!(clock.is_running());
-    assert_eq!(clock.take_due(now, Duration::ZERO), vec![now]);
+    assert_eq!(clock.take_due(now, Duration::ZERO)[0].deadline, now);
 }
 
 #[test]
@@ -36,9 +36,13 @@ fn lookahead_returns_every_step_inside_the_window() {
     let due = clock.take_due(now, LOOKAHEAD);
 
     assert_eq!(due.len(), 3);
-    assert_eq!(due[0], now);
-    assert_eq!(due[1], now + STEP_INTERVAL);
-    assert_eq!(due[2], now + STEP_INTERVAL * 2);
+    assert_eq!(due[0].deadline, now);
+    assert_eq!(due[1].deadline, now + STEP_INTERVAL);
+    assert_eq!(due[2].deadline, now + STEP_INTERVAL * 2);
+    assert_eq!(
+        due.iter().map(|due| due.step).collect::<Vec<_>>(),
+        vec![0, 1, 2]
+    );
     // 同じ now で呼び直しても二重に返さない。
     assert!(clock.take_due(now, LOOKAHEAD).is_empty());
 }
@@ -54,9 +58,9 @@ fn deadlines_do_not_drift_over_a_full_bar() {
 
     assert_eq!(due.len(), 17);
     // 16ステップ = 60秒 * 16 / (130*4) = 1.846153846 秒。
-    assert_eq!(due[16], now + Duration::from_nanos(1_846_153_846));
+    assert_eq!(due[16].deadline, now + Duration::from_nanos(1_846_153_846));
     // STEP_INTERVAL を16回足すと 6ns 手前になる。絶対位置で計算する理由がこれ。
-    assert!(due[16] > now + STEP_INTERVAL * 16);
+    assert!(due[16].deadline > now + STEP_INTERVAL * 16);
 }
 
 #[test]
@@ -69,8 +73,8 @@ fn polling_slightly_late_keeps_the_original_phase() {
     // 10ms 遅れて呼んでも、次の締切は 1ステップ後のまま。
     let late = now + Duration::from_millis(10);
     assert_eq!(
-        clock.take_due(late, STEP_INTERVAL),
-        vec![now + STEP_INTERVAL]
+        clock.take_due(late, STEP_INTERVAL)[0].deadline,
+        now + STEP_INTERVAL
     );
 }
 
@@ -85,12 +89,13 @@ fn large_delay_snaps_to_now_instead_of_bursting_the_missed_steps() {
     let resumed = now + Duration::from_secs(10);
     let due = clock.take_due(resumed, Duration::ZERO);
 
-    assert_eq!(due, vec![resumed]);
-    assert!(clock.take_due(resumed, Duration::ZERO).is_empty());
-    assert_eq!(
-        clock.take_due(resumed + STEP_INTERVAL, Duration::ZERO),
-        vec![resumed + STEP_INTERVAL]
+    assert!(
+        due.is_empty(),
+        "the next absolute step is slightly after resumed"
     );
+    let resumed_step = clock.take_due(resumed + STEP_INTERVAL, Duration::ZERO);
+    assert_eq!(resumed_step.len(), 1);
+    assert!(resumed_step[0].step > 1);
 }
 
 #[test]

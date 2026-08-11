@@ -43,11 +43,11 @@ pub use sender::{
 };
 pub use session::GridSequencerSession;
 pub use state::{
-    frames_ahead, randomize_instance_slice, step_offset, ChordPlayback, GridInstance, GridLane,
-    GridLaneMode, GridScheduledMessage, GridState, LaneAddress, NotePattern, NoteStep,
-    PitchDirection, VisibleNoteRow, VisibleRowKind, ARPEGGIO_ROW, BASS_OCTAVE_LANES, BASS_ROW, BPM,
-    CHORD_ROW, CHORD_VOICE_LANES, FIRST_DRUM_ROW, FULL_DRUM_TRACK_COUNT, GRID_ROWS, GRID_STEPS,
-    LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL,
+    frames_ahead, randomize_instance_slice, step_offset, step_timeline_seconds, ChordPlayback,
+    GridInstance, GridLane, GridLaneMode, GridScheduledMessage, GridState, LaneAddress,
+    NotePattern, NoteStep, PitchDirection, VisibleNoteRow, VisibleRowKind, ARPEGGIO_ROW,
+    BASS_OCTAVE_LANES, BASS_ROW, BPM, CHORD_ROW, CHORD_VOICE_LANES, FIRST_DRUM_ROW,
+    FULL_DRUM_TRACK_COUNT, GRID_ROWS, GRID_STEPS, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL,
 };
 
 #[cfg(test)]

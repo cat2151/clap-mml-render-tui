@@ -60,6 +60,11 @@ pub struct GridConnectionStatus {
     pub auto_gain_db: [f32; cmrt_realtime_play::INSTANCE_COUNT],
     pub buffer_multiplier: u16,
     pub underrun_frames: u64,
+    /// Underruns accumulated for this Grid screen session; adaptive level changes do not reset it.
+    pub underrun_frames_total: u64,
+    pub timing: cmrt_realtime_play::TimingMetrics,
+    pub pump_late_max_us: u64,
+    pub sender_queue_max_us: u64,
     pub server_startup: Option<GridProgress>,
     pub patch_setting: Option<GridProgress>,
     /// 進行中の段が始まった時刻。確定値が出るまでの経過時間表示に使う。
@@ -89,6 +94,10 @@ impl Default for GridConnectionStatus {
             auto_gain_db: [0.0; cmrt_realtime_play::INSTANCE_COUNT],
             buffer_multiplier: super::adaptive_buffer::INITIAL_BUFFER_MULTIPLIER,
             underrun_frames: 0,
+            underrun_frames_total: 0,
+            timing: cmrt_realtime_play::TimingMetrics::default(),
+            pump_late_max_us: 0,
+            sender_queue_max_us: 0,
             server_startup: None,
             patch_setting: None,
             stage_started_at: None,
@@ -362,6 +371,35 @@ impl GridConnectionStatus {
     pub(super) fn update_adaptive_buffer(&mut self, multiplier: u16, underrun_frames: u64) {
         self.buffer_multiplier = multiplier;
         self.underrun_frames = underrun_frames;
+    }
+
+    pub(super) fn record_underruns(&mut self, frames: u64) {
+        self.underrun_frames_total = self.underrun_frames_total.saturating_add(frames);
+    }
+
+    pub(super) fn update_timing(&mut self, timing: cmrt_realtime_play::TimingMetrics) {
+        self.timing = timing;
+    }
+
+    pub(super) fn reset_timing_session(&mut self) {
+        self.underrun_frames_total = 0;
+        self.timing = cmrt_realtime_play::TimingMetrics::default();
+        self.pump_late_max_us = 0;
+        self.sender_queue_max_us = 0;
+    }
+
+    pub(super) fn observe_sender_timing(&mut self, pump_late: Duration, sender_queue: Duration) {
+        self.pump_late_max_us = self
+            .pump_late_max_us
+            .max(pump_late.as_micros().min(u128::from(u64::MAX)) as u64);
+        self.sender_queue_max_us = self
+            .sender_queue_max_us
+            .max(sender_queue.as_micros().min(u128::from(u64::MAX)) as u64);
+    }
+
+    pub(super) fn reset_sender_timing_window(&mut self) {
+        self.pump_late_max_us = 0;
+        self.sender_queue_max_us = 0;
     }
 }
 

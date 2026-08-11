@@ -55,7 +55,7 @@ impl GridSequencerScreen {
         }
         self.waiting_for_patches = false;
         self.resume_at = None;
-        self.state.start(now);
+        self.restart_timeline(now);
         crate::log_line("grid-sequencer: resumed after patch load");
         true
     }

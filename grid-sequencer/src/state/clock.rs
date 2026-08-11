@@ -35,6 +35,17 @@ pub const fn step_offset(steps: u64) -> Duration {
     Duration::from_nanos(steps.saturating_mul(NANOS_PER_MINUTE) / (BPM * STEPS_PER_BEAT))
 }
 
+/// Musical time for a step, calculated from its ordinal rather than by repeated addition.
+pub fn step_timeline_seconds(step: u64) -> f64 {
+    step as f64 * 60.0 / (BPM * STEPS_PER_BEAT) as f64
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct ClockDeadline {
+    pub(super) step: u64,
+    pub(super) deadline: Instant,
+}
+
 /// `ahead`（今から鳴るまでの時間）を live MIDI の offset に使うフレーム数へ変換する。
 pub fn frames_ahead(ahead: Duration, sample_rate: f64) -> u32 {
     if sample_rate <= 0.0 {
@@ -53,8 +64,6 @@ pub fn frames_ahead(ahead: Duration, sample_rate: f64) -> u32 {
 pub struct StepClock {
     /// 締切計算の基準時刻。`None` なら停止中。
     anchor: Option<Instant>,
-    /// `anchor` に対応するステップ番号。大幅遅延からの復帰時にここへ張り直す。
-    anchor_step: u64,
     /// 次に発行するステップの通し番号。
     next_step: u64,
 }
@@ -64,7 +73,6 @@ impl StepClock {
     /// 画面へ入った瞬間から音を出すため、初回だけは待たせない。
     pub(super) fn start(&mut self, now: Instant) {
         self.anchor = Some(now);
-        self.anchor_step = 0;
         self.next_step = 0;
     }
 
@@ -81,7 +89,7 @@ impl StepClock {
     ///
     /// 大幅遅延時（非Ready停滞など）は now 基準へアンカーを張り直し、復帰直後の
     /// バースト送信を防ぐ（欠落ステップはスキップ）。
-    pub(super) fn take_due(&mut self, now: Instant, lookahead: Duration) -> Vec<Instant> {
+    pub(super) fn take_due(&mut self, now: Instant, lookahead: Duration) -> Vec<ClockDeadline> {
         if self.anchor.is_none() {
             return Vec::new();
         }
@@ -92,7 +100,10 @@ impl StepClock {
             if deadline > horizon {
                 break;
             }
-            due.push(deadline);
+            due.push(ClockDeadline {
+                step: self.next_step,
+                deadline,
+            });
             self.next_step += 1;
         }
         due
@@ -100,17 +111,19 @@ impl StepClock {
 
     fn next_deadline(&self) -> Option<Instant> {
         let anchor = self.anchor?;
-        Some(anchor + step_offset(self.next_step - self.anchor_step))
+        Some(anchor + step_offset(self.next_step))
     }
 
-    /// 1ステップ以上遅れていたら、次のステップの締切が `now` になるよう張り直す。
+    /// 1ステップ以上遅れていたら、欠落したordinalを飛ばす。wall clockだけを張り直すと
+    /// absolute timeline secondsが過去へ戻るため、元のanchorは維持する。
     fn snap_if_far_behind(&mut self, now: Instant) {
         let Some(deadline) = self.next_deadline() else {
             return;
         };
         if deadline + STEP_INTERVAL <= now {
-            self.anchor = Some(now);
-            self.anchor_step = self.next_step;
+            let elapsed = now.saturating_duration_since(self.anchor.expect("running clock"));
+            let next = (elapsed.as_secs_f64() * (BPM * STEPS_PER_BEAT) as f64 / 60.0).ceil();
+            self.next_step = (next as u64).max(self.next_step);
         }
     }
 }

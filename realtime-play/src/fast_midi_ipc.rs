@@ -13,12 +13,43 @@ pub const MAX_MIDI_MESSAGES: usize = 128;
 pub const MAX_PATCH_BYTES: usize = 4096;
 pub const MAX_RESPONSE_BYTES: usize = 16 * 1024;
 pub type InstanceId = u8;
+pub type TimelineId = u64;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FastMidiEvent {
     pub instance_id: InstanceId,
     pub offset_frames: u32,
     pub message: [u8; 3],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TimelineMidiEvent {
+    pub timeline_id: TimelineId,
+    pub instance_id: InstanceId,
+    pub timeline_seconds: f64,
+    pub message: [u8; 3],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LiveTimelineConfig {
+    pub timeline_id: TimelineId,
+    pub sample_rate_hz: f64,
+    pub tempo_bpm: f64,
+    pub time_signature_numerator: u16,
+    pub time_signature_denominator: u16,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct TimingMetrics {
+    pub events: u64,
+    pub late_events: u64,
+    pub late_events_total: u64,
+    pub max_late_samples: u64,
+    pub max_late_us: f64,
+    pub output_lead_min_frames: u64,
+    pub output_lead_max_frames: u64,
+    pub process_load_p95: f32,
+    pub process_load_max: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -82,6 +113,17 @@ impl FastMidiClient {
         Err(FastIpcError::UnsupportedPlatform)
     }
 
+    pub fn begin_live_timeline(&mut self, _config: LiveTimelineConfig) -> Result<(), FastIpcError> {
+        Err(FastIpcError::UnsupportedPlatform)
+    }
+
+    pub fn send_timeline_events(
+        &mut self,
+        _events: &[TimelineMidiEvent],
+    ) -> Result<(), FastIpcError> {
+        Err(FastIpcError::UnsupportedPlatform)
+    }
+
     pub fn prepare_patch(
         &mut self,
         _instance_id: InstanceId,
@@ -132,5 +174,9 @@ impl FastMidiClient {
 
     pub fn underrun_frames(&self) -> u64 {
         0
+    }
+
+    pub fn timing_metrics(&self) -> TimingMetrics {
+        TimingMetrics::default()
     }
 }

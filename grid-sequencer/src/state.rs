@@ -28,7 +28,9 @@ pub use instance::{
 pub use note_pattern::{NotePattern, NoteStep};
 
 pub use chord::{ChordPlayback, ARPEGGIO_ROW, BASS_ROW, CHORD_ROW};
-pub use clock::{frames_ahead, step_offset, BPM, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL};
+pub use clock::{
+    frames_ahead, step_offset, step_timeline_seconds, BPM, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL,
+};
 use clock::{StepClock, SCHEDULE_GUARD};
 pub use drum::{FIRST_DRUM_ROW, FULL_DRUM_TRACK_COUNT};
 pub use randomize::randomize_instance_slice;
@@ -65,10 +67,12 @@ enum SoundOwner {
 ///
 /// `ahead` は「`poll_steps()` に渡した `now` から実際に鳴るまで」の時間。送信側が
 /// これをフレーム数へ直して live MIDI の offset に載せる。
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GridScheduledMessage {
     pub instance_id: u8,
     pub ahead: Duration,
+    /// Absolute musical time from the most recent Grid timeline start.
+    pub timeline_seconds: f64,
     pub message: [u8; 3],
 }
 
@@ -97,6 +101,8 @@ pub struct GridState {
     /// 先読みで既に送ってしまったステップのうち、いちばん新しいものの締切。
     /// 送信済みの note on より後ろへ note off を置くために見る。
     last_scheduled: Option<Instant>,
+    last_scheduled_timeline_seconds: Option<f64>,
+    last_poll_lateness: Duration,
     /// chord mode の再生状態。`None` なら従来どおりの単音演奏。
     chord: Option<ChordPlayback>,
     /// いま鳴らしている bank（0 か 1）。instance index を bank 幅として写す。
@@ -151,6 +157,8 @@ impl GridState {
             ),
             pending_display: VecDeque::new(),
             last_scheduled: None,
+            last_scheduled_timeline_seconds: None,
+            last_poll_lateness: Duration::ZERO,
             chord: None,
             bank: 0,
             pending: None,
@@ -230,6 +238,8 @@ impl GridState {
         self.reset_lanes_for_start();
         self.pending_display.clear();
         self.last_scheduled = None;
+        self.last_scheduled_timeline_seconds = None;
+        self.last_poll_lateness = Duration::ZERO;
         self.reset_cycle_stop();
         self.clock.start(now);
     }
@@ -240,8 +250,14 @@ impl GridState {
     /// 先読みして送るので、UI のポーリング間隔ぶんのジッタが発音位置に乗らない。
     pub fn poll_steps(&mut self, now: Instant, lookahead: Duration) -> Vec<GridScheduledMessage> {
         let mut scheduled = Vec::new();
-        for deadline in self.clock.take_due(now, lookahead) {
+        self.last_poll_lateness = Duration::ZERO;
+        for due in self.clock.take_due(now, lookahead) {
+            let deadline = due.deadline;
+            self.last_poll_lateness = self
+                .last_poll_lateness
+                .max(now.saturating_duration_since(deadline));
             let ahead = deadline.saturating_duration_since(now);
+            let timeline_seconds = clock::step_timeline_seconds(due.step);
             let mut messages = self.expire_sounding();
             self.advance_schedule();
             let stopping = std::mem::take(&mut self.cycle_wrapped);
@@ -263,18 +279,24 @@ impl GridState {
                 GridScheduledMessage {
                     instance_id,
                     ahead,
+                    timeline_seconds,
                     message,
                 }
             }));
             self.pending_display
                 .push_back((deadline, self.schedule_index));
             self.last_scheduled = Some(deadline);
+            self.last_scheduled_timeline_seconds = Some(timeline_seconds);
             if stopping {
                 break;
             }
         }
         self.advance_display(now);
         scheduled
+    }
+
+    pub(crate) fn last_poll_lateness(&self) -> Duration {
+        self.last_poll_lateness
     }
 
     /// 鳴っている音を止める note off を、送信済みの先読みぶんより後ろへ置くための猶予。
@@ -284,6 +306,12 @@ impl GridState {
             Some(deadline) => (deadline + SCHEDULE_GUARD).saturating_duration_since(now),
             None => Duration::ZERO,
         }
+    }
+
+    pub(crate) fn silence_timeline_seconds(&self) -> f64 {
+        self.last_scheduled_timeline_seconds
+            .map(|seconds| seconds + SCHEDULE_GUARD.as_secs_f64())
+            .unwrap_or(0.0)
     }
 
     /// 鳴っている音をすべて止める note off を作り、再生位置とクロックをリセットする。
@@ -296,12 +324,14 @@ impl GridState {
         self.reset_lanes_for_start();
         self.pending_display.clear();
         self.last_scheduled = None;
+        self.last_scheduled_timeline_seconds = None;
         self.reset_cycle_stop();
         self.silence_sounding()
             .into_iter()
             .map(|(instance_id, message)| GridScheduledMessage {
                 instance_id,
                 ahead: Duration::ZERO,
+                timeline_seconds: 0.0,
                 message,
             })
             .collect()

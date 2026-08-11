@@ -135,6 +135,7 @@ fn equal_note_numbers_on_different_rows_are_independent() {
         vec![GridScheduledMessage {
             instance_id: 0,
             ahead: Duration::ZERO,
+            timeline_seconds: 0.0,
             message: [0x90, 67, 100],
         }]
     );
@@ -145,6 +146,7 @@ fn equal_note_numbers_on_different_rows_are_independent() {
         vec![GridScheduledMessage {
             instance_id: 1,
             ahead: Duration::ZERO,
+            timeline_seconds: step_timeline_seconds(1),
             message: [0x90, 67, 100],
         }]
     );
@@ -153,6 +155,7 @@ fn equal_note_numbers_on_different_rows_are_independent() {
         vec![GridScheduledMessage {
             instance_id: 1,
             ahead: Duration::ZERO,
+            timeline_seconds: step_timeline_seconds(2),
             message: [0x80, 67, 0],
         }]
     );
@@ -162,6 +165,7 @@ fn equal_note_numbers_on_different_rows_are_independent() {
         vec![GridScheduledMessage {
             instance_id: 0,
             ahead: Duration::ZERO,
+            timeline_seconds: step_timeline_seconds(4),
             message: [0x80, 67, 0],
         }]
     );

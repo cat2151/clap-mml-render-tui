@@ -12,14 +12,16 @@ use std::{
     time::Instant,
 };
 
-use cmrt_realtime_play::{FastMidiEvent, RealtimePlayServerSupervisor};
+use cmrt_realtime_play::{RealtimePlayServerSupervisor, TimelineMidiEvent};
 
 mod adaptive_buffer;
+mod gain_summary;
 mod overload;
 mod status;
 mod worker;
 
 static NEXT_ROW_PATCH_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
+static NEXT_LIVE_TIMELINE_ID: AtomicU64 = AtomicU64::new(1);
 
 pub use status::{
     GridConnectionPhase, GridConnectionStatus, GridProgress, GridRowPatchPhase, GridRowPatchStatus,
@@ -29,7 +31,12 @@ pub use status::{
 enum GridMidiCommand {
     StartServer,
     Send {
-        events: Vec<FastMidiEvent>,
+        events: Vec<TimelineMidiEvent>,
+        queued_at: Instant,
+        pump_lateness: std::time::Duration,
+    },
+    BeginTimeline {
+        config: cmrt_realtime_play::LiveTimelineConfig,
     },
     /// 鳴っている bank の音色を丸ごと差し替える。`stop_live_all()` を伴うので
     /// ロード中は無音になる。起動時と `r` キー用。
@@ -93,10 +100,32 @@ impl GridMidiSender {
         let _ = self.tx.send(GridMidiCommand::StartServer);
     }
 
-    pub fn send_scheduled(&self, events: Vec<FastMidiEvent>) {
+    pub fn send_scheduled(
+        &self,
+        events: Vec<TimelineMidiEvent>,
+        pump_lateness: std::time::Duration,
+    ) {
         if !events.is_empty() {
-            let _ = self.tx.send(GridMidiCommand::Send { events });
+            let _ = self.tx.send(GridMidiCommand::Send {
+                events,
+                queued_at: Instant::now(),
+                pump_lateness,
+            });
         }
+    }
+
+    pub fn begin_timeline(&self, sample_rate_hz: f64) -> u64 {
+        let timeline_id = NEXT_LIVE_TIMELINE_ID.fetch_add(1, Ordering::Relaxed).max(1);
+        let _ = self.tx.send(GridMidiCommand::BeginTimeline {
+            config: cmrt_realtime_play::LiveTimelineConfig {
+                timeline_id,
+                sample_rate_hz,
+                tempo_bpm: crate::BPM as f64,
+                time_signature_numerator: 4,
+                time_signature_denominator: 4,
+            },
+        });
+        timeline_id
     }
 
     pub fn prepare<'a>(&self, patches: impl Iterator<Item = (u8, Option<&'a str>)>) {
@@ -178,6 +207,7 @@ impl GridMidiSender {
         let mut status = self.status.lock().unwrap();
         status.clear_overload();
         status.clear_row_patch_setting();
+        status.reset_timing_session();
         drop(status);
         let _ = self.tx.send(GridMidiCommand::Stop);
     }

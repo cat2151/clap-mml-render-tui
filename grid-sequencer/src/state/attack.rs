@@ -74,6 +74,7 @@ impl GridState {
             return Vec::new();
         };
         let ahead = self.silence_ahead(now);
+        let timeline_seconds = self.silence_timeline_seconds();
         let instance_id = self.instance_id(address.instance);
         let owner = SoundOwner::Lane(address);
 
@@ -108,6 +109,7 @@ impl GridState {
             .map(|(instance_id, message)| GridScheduledMessage {
                 instance_id,
                 ahead,
+                timeline_seconds,
                 message,
             })
             .collect()

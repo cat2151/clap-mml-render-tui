@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     fast_midi_ipc::{
-        FastIpcError, FastMidiClient, FastMidiEvent, InstanceId, LimiterMeter, INSTANCE_COUNT,
+        FastIpcError, FastMidiClient, FastMidiEvent, InstanceId, LimiterMeter, LiveTimelineConfig,
+        TimelineMidiEvent, TimingMetrics, INSTANCE_COUNT,
     },
     logging::log_realtime_play_event,
     RealtimePlayServerSupervisor,
@@ -60,6 +61,17 @@ impl RealtimePlayServerSupervisor {
     pub fn send_live_events(&self, events: &[FastMidiEvent]) -> Result<LimiterMeter> {
         self.with_fast_client(|client| {
             client.send_events(events)?;
+            Ok(client.limiter_meter())
+        })
+    }
+
+    pub fn begin_live_timeline(&self, config: LiveTimelineConfig) -> Result<()> {
+        self.with_fast_client(|client| client.begin_live_timeline(config))
+    }
+
+    pub fn send_timeline_events(&self, events: &[TimelineMidiEvent]) -> Result<LimiterMeter> {
+        self.with_fast_client(|client| {
+            client.send_timeline_events(events)?;
             Ok(client.limiter_meter())
         })
     }
@@ -193,6 +205,15 @@ impl RealtimePlayServerSupervisor {
             .as_ref()
             .map(FastMidiClient::underrun_frames)
             .unwrap_or(0)
+    }
+
+    pub fn timing_metrics(&self) -> TimingMetrics {
+        self.fast_client
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(FastMidiClient::timing_metrics)
+            .unwrap_or_default()
     }
 
     /// instance ごとに auto-trim が掛けているゲイン（dB）。

@@ -126,11 +126,13 @@ impl GridState {
     /// 鳴っている音を止める note off を、送信済みの先読みぶんより後ろへ置いて返す。
     pub(super) fn take_silence_messages(&mut self, now: Instant) -> Vec<GridScheduledMessage> {
         let ahead = self.silence_ahead(now);
+        let timeline_seconds = self.silence_timeline_seconds();
         self.silence_sounding()
             .into_iter()
             .map(|(instance_id, message)| GridScheduledMessage {
                 instance_id,
                 ahead,
+                timeline_seconds,
                 message,
             })
             .collect()

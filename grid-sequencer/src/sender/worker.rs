@@ -14,6 +14,7 @@ use cmrt_realtime_play::{LimiterMeter, RealtimePlayServerSupervisor};
 
 use super::{
     adaptive_buffer::{AdaptiveBuffer, INITIAL_BUFFER_MULTIPLIER, RESTORE_BUFFER_MULTIPLIER},
+    gain_summary::describe_boosted,
     overload::OverloadDetector,
     GridConnectionStatus, GridMidiCommand,
 };
@@ -42,6 +43,8 @@ pub(super) fn run_midi_sender(
     let mut overload = OverloadDetector::new();
     // 先読みロード中は出力バッファを厚くしている。戻し忘れを防ぐために持つ。
     let mut preloading = false;
+    let mut last_timing_log = Instant::now();
+    let mut timing_late_baseline = 0u64;
     loop {
         let command = match rx.recv_timeout(METER_POLL_INTERVAL) {
             Ok(command) => command,
@@ -51,6 +54,8 @@ pub(super) fn run_midi_sender(
                     &status,
                     &mut adaptive_buffer,
                     &mut overload,
+                    &mut last_timing_log,
+                    timing_late_baseline,
                     Instant::now(),
                 );
                 continue;
@@ -69,9 +74,38 @@ pub(super) fn run_midi_sender(
                     Err(error) => apply(&status, Err(error), Some(server_elapsed), false),
                 }
             }
-            GridMidiCommand::Send { events } => {
+            GridMidiCommand::Send {
+                events,
+                queued_at,
+                pump_lateness,
+            } => {
+                status
+                    .lock()
+                    .unwrap()
+                    .observe_sender_timing(pump_lateness, queued_at.elapsed());
                 let started = Instant::now();
-                let result = supervisor.send_live_events(&events);
+                let result = supervisor.send_timeline_events(&events);
+                apply(&status, result, Some(started.elapsed()), false);
+            }
+            GridMidiCommand::BeginTimeline { config } => {
+                let started = Instant::now();
+                let result = supervisor
+                    .begin_live_timeline(config)
+                    .map(|()| supervisor.limiter_meter());
+                crate::log_line(&format!(
+                    "grid-sequencer: timeline begin id={} sample_rate={} bpm={} result={}",
+                    config.timeline_id,
+                    config.sample_rate_hz,
+                    config.tempo_bpm,
+                    if result.is_ok() { "ok" } else { "error" },
+                ));
+                if result.is_ok() {
+                    timing_late_baseline = supervisor.timing_metrics().late_events_total;
+                    status
+                        .lock()
+                        .unwrap()
+                        .update_timing(cmrt_realtime_play::TimingMetrics::default());
+                }
                 apply(&status, result, Some(started.elapsed()), false);
             }
             GridMidiCommand::Prepare { patches } => {
@@ -301,12 +335,42 @@ fn poll_runtime_status(
     status: &Mutex<GridConnectionStatus>,
     adaptive_buffer: &mut Option<AdaptiveBuffer>,
     overload: &mut OverloadDetector,
+    last_timing_log: &mut Instant,
+    timing_late_baseline: u64,
     now: Instant,
 ) {
     {
         let mut status = status.lock().unwrap();
         status.update_limiter_meter(supervisor.limiter_meter());
         status.update_auto_gain_db(supervisor.live_auto_gain_db());
+        let mut timing = supervisor.timing_metrics();
+        timing.late_events_total = timing
+            .late_events_total
+            .saturating_sub(timing_late_baseline);
+        status.update_timing(timing);
+        if now.saturating_duration_since(*last_timing_log) >= Duration::from_secs(5) {
+            let timing = status.timing;
+            crate::log_line(&format!(
+                "grid-sequencer: timing window_events={} late={}/{} late_max_samples={} \
+                 late_max_us={:.1} lead_frames={}..{} cpu_p95={:.0}% cpu_max={:.1}% \
+                 underrun_level={} underrun_total={} pump_late_max_us={} sender_queue_max_us={}",
+                timing.events,
+                timing.late_events,
+                timing.late_events_total,
+                timing.max_late_samples,
+                timing.max_late_us,
+                timing.output_lead_min_frames,
+                timing.output_lead_max_frames,
+                timing.process_load_p95,
+                timing.process_load_max,
+                status.underrun_frames,
+                status.underrun_frames_total,
+                status.pump_late_max_us,
+                status.sender_queue_max_us,
+            ));
+            status.reset_sender_timing_window();
+            *last_timing_log = now;
+        }
     }
     if !status.lock().unwrap().phase.accepts_notes() {
         return;
@@ -318,6 +382,10 @@ fn poll_runtime_status(
     // 1段下での出来事なので数えない。
     let was_at_max = buffer.is_at_max();
     let adjustment = buffer.observe(now, supervisor.underrun_frames());
+    status
+        .lock()
+        .unwrap()
+        .record_underruns(buffer.last_new_underrun_frames());
     if overload.observe(now, was_at_max, buffer.last_new_underrun_frames()) {
         status.lock().unwrap().mark_overloaded();
         crate::log_line(&format!(
@@ -365,21 +433,6 @@ fn apply(
         .lock()
         .unwrap()
         .apply_result(result, elapsed, idle_on_success);
-}
-
-/// 0 dB でない行だけを `row2:+6dB` のように並べる。全部 0 dB なら `none`。
-fn describe_boosted(gains_db: &[f32]) -> String {
-    let boosted = gains_db
-        .iter()
-        .enumerate()
-        .filter(|(_, gain)| **gain != 0.0)
-        .map(|(index, gain)| format!("row{}:{gain:+}dB", index + 1))
-        .collect::<Vec<_>>();
-    if boosted.is_empty() {
-        "none".to_string()
-    } else {
-        boosted.join(",")
-    }
 }
 
 #[cfg(test)]

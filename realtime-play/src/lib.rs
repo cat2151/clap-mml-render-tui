@@ -27,7 +27,10 @@ pub use logging::set_log_sink;
 
 use logging::{log_realtime_play_event, truncate_for_log};
 
-pub use fast_midi_ipc::{FastMidiEvent, InstanceId, LimiterMeter, INSTANCE_COUNT};
+pub use fast_midi_ipc::{
+    FastMidiEvent, InstanceId, LimiterMeter, LiveTimelineConfig, TimelineId, TimelineMidiEvent,
+    TimingMetrics, INSTANCE_COUNT,
+};
 pub use live_ipc::{PatchVoicing, VoicingReport};
 
 use process::{build_realtime_play_server_command, spawn_realtime_play_server, stop_child};

@@ -1,15 +1,22 @@
 use std::time::{Duration, Instant};
 
-use cmrt_realtime_play::{fast_midi_ipc::MAX_MIDI_MESSAGES, FastMidiEvent};
+use cmrt_realtime_play::{fast_midi_ipc::MAX_MIDI_MESSAGES, TimelineMidiEvent};
 
-use super::{
-    frames_ahead, GridScheduledMessage, GridSequencerContext, GridSequencerScreen, LOOKAHEAD,
-};
+use super::{GridScheduledMessage, GridSequencerContext, GridSequencerScreen, LOOKAHEAD};
 
 /// コード進行データ更新のアナウンスを出しておく時間。読めるだけの長さがあればよい。
 const RESTART_NOTICE_DURATION: Duration = Duration::from_secs(3);
 
 impl GridSequencerScreen {
+    pub(crate) fn restart_timeline(&mut self, now: Instant) {
+        self.timeline_id = self
+            .midi_sender
+            .as_ref()
+            .map(|sender| sender.begin_timeline(self.sample_rate))
+            .unwrap_or(1);
+        self.state.start(now);
+    }
+
     /// 先読み分のステップを組み立て、offset つきでまとめて送る。
     ///
     /// 接続前・音色切替中は進めない。クロックの締切はそのまま残り、Ready 復帰時に
@@ -29,9 +36,11 @@ impl GridSequencerScreen {
                 .state
                 .chord()
                 .map(|chord| (chord.index(), chord.chord_count()));
-            let scheduled = self.state.poll_steps(now, LOOKAHEAD);
+            let scheduled = self
+                .state
+                .poll_steps(now, self.scheduling_lookahead(status.buffer_multiplier));
             self.log_chord_schedule(&scheduled, bank_before, chord_before);
-            self.send_scheduled(&scheduled);
+            self.send_scheduled_with_lateness(&scheduled, self.state.last_poll_lateness());
             if self.single_buffering {
                 // 鳴らしきってからロードする。この間は演奏が止まる。
                 self.advance_single_buffer_cycle(now, ctx);
@@ -58,15 +67,35 @@ impl GridSequencerScreen {
 
     /// 組み立て済みのメッセージを、`ahead` をフレーム数へ直して送る。
     pub(crate) fn send_scheduled(&self, scheduled: &[GridScheduledMessage]) {
+        self.send_scheduled_with_lateness(scheduled, Duration::ZERO);
+    }
+
+    fn send_scheduled_with_lateness(
+        &self,
+        scheduled: &[GridScheduledMessage],
+        pump_lateness: Duration,
+    ) {
         if scheduled.is_empty() {
             return;
         }
         let Some(sender) = &self.midi_sender else {
             return;
         };
-        for batch in batches(scheduled, self.sample_rate) {
-            sender.send_scheduled(batch);
+        for batch in batches(scheduled, self.timeline_id) {
+            sender.send_scheduled(batch, pump_lateness);
         }
+    }
+
+    /// Keep enough absolute events queued for the next adaptive-buffer level as well as UI/IPC
+    /// scheduling jitter. A larger output lead must never move the musical phase.
+    fn scheduling_lookahead(&self, multiplier: u16) -> Duration {
+        let next_multiplier = multiplier
+            .saturating_mul(2)
+            .min(cmrt_realtime_play::MAX_LIVE_BUFFER_MULTIPLIER);
+        let two_buffer_leads = Duration::from_secs_f64(
+            2.0 * self.buffer_frames as f64 * f64::from(next_multiplier) / self.sample_rate,
+        );
+        two_buffer_leads + LOOKAHEAD + Duration::from_millis(50)
     }
 
     /// patch selector の調査用に、低頻度な chord attack と bank 遷移だけを記録する。
@@ -127,17 +156,17 @@ impl GridSequencerScreen {
 /// 同じ `ahead` のメッセージ（＝同じステップ）は必ず1回の送信へまとめる。サーバー側は
 /// 受信時の live 位置を基準に offset を解釈するため、バッチを跨ぐと基準がずれるから。
 /// 1バッチの上限は共有メモリのスロット容量。
-fn batches(scheduled: &[GridScheduledMessage], sample_rate: f64) -> Vec<Vec<FastMidiEvent>> {
-    let mut batches: Vec<Vec<FastMidiEvent>> = Vec::new();
-    let mut current: Vec<FastMidiEvent> = Vec::new();
+fn batches(scheduled: &[GridScheduledMessage], timeline_id: u64) -> Vec<Vec<TimelineMidiEvent>> {
+    let mut batches: Vec<Vec<TimelineMidiEvent>> = Vec::new();
+    let mut current: Vec<TimelineMidiEvent> = Vec::new();
     for group in group_by_ahead(scheduled) {
         if !current.is_empty() && current.len() + group.len() > MAX_MIDI_MESSAGES {
             batches.push(std::mem::take(&mut current));
         }
-        let offset = frames_ahead(group[0].ahead, sample_rate);
-        current.extend(group.iter().map(|scheduled| FastMidiEvent {
+        current.extend(group.iter().map(|scheduled| TimelineMidiEvent {
+            timeline_id,
             instance_id: scheduled.instance_id,
-            offset_frames: offset,
+            timeline_seconds: scheduled.timeline_seconds,
             message: scheduled.message,
         }));
     }
