@@ -8,6 +8,7 @@ use cmrt_loop_browser_domain::track_grid::{
 
 impl LoopBrowser {
     pub fn reload(&mut self, loop_dirs: &[String], loop_categories: &[String]) {
+        let bpm_mode = self.bpm_mode;
         let metadata = PersistedDoc::load(
             metadata_path,
             LoopBrowserMetadata::load_from,
@@ -29,6 +30,7 @@ impl LoopBrowser {
                 ..Self::default()
             },
         };
+        browser.bpm_mode = bpm_mode;
         let track_grid = browser.reflowed_from_analysis(&loaded_grid.grid);
         let grid_changed = track_grid != loaded_grid.grid;
         if track_grid_writable && (loaded_grid.needs_migration || grid_changed) {

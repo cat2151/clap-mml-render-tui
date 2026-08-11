@@ -31,6 +31,7 @@ mod session;
 mod single_buffer;
 mod start_wait;
 mod state;
+mod tempo;
 pub mod ui;
 mod undo;
 
@@ -43,7 +44,8 @@ pub use sender::{
 };
 pub use session::GridSequencerSession;
 pub use state::{
-    frames_ahead, randomize_instance_slice, step_offset, step_timeline_seconds, ChordPlayback,
+    frames_ahead, lookahead_at, randomize_instance_slice, schedule_guard_at, step_interval_at,
+    step_offset, step_offset_at, step_timeline_seconds, step_timeline_seconds_at, ChordPlayback,
     GridInstance, GridLane, GridLaneMode, GridScheduledMessage, GridState, LaneAddress,
     NotePattern, NoteStep, PitchDirection, VisibleNoteRow, VisibleRowKind, ARPEGGIO_ROW,
     BASS_OCTAVE_LANES, BASS_ROW, BPM, CHORD_ROW, CHORD_VOICE_LANES, FIRST_DRUM_ROW,
@@ -140,7 +142,7 @@ impl GridSequencerScreen {
         self.grid_ready = true;
         self.restored_patches_pending = false;
         self.cancel_cycle_swap();
-        self.state.start(now);
+        self.state.start_at_bpm(now, self.bpm());
         log_line(&format!(
             "grid-sequencer: start instances={}",
             self.track_count()
@@ -153,7 +155,7 @@ impl GridSequencerScreen {
         self.cancel_mouse_gesture();
         self.help_open = false;
         self.cancel_cycle_swap();
-        self.state.start(now);
+        self.state.start_at_bpm(now, self.bpm());
         self.refresh_context(ctx);
         if !self.waiting_for_patches {
             self.prepare_connection_or_start_server(ctx);
@@ -164,6 +166,7 @@ impl GridSequencerScreen {
     pub fn finish(&mut self) {
         self.cancel_mouse_gesture();
         self.help_open = false;
+        self.bpm_input = None;
         self.cancel_cycle_swap();
         self.waiting_for_patches = false;
         self.resume_at = None;
@@ -283,6 +286,10 @@ impl GridSequencerScreen {
         if key.kind != KeyEventKind::Press {
             return GridSequencerAction::Continue;
         }
+        if self.bpm_input.is_some() {
+            self.handle_bpm_input_key(key, now);
+            return GridSequencerAction::Continue;
+        }
         if self.patch_selector.is_some() {
             if self.patch_selector_input_enabled() {
                 self.handle_patch_selector_key(key, ctx);
@@ -300,6 +307,13 @@ impl GridSequencerScreen {
             }
             return GridSequencerAction::Continue;
         }
+        if key.modifiers == crossterm::event::KeyModifiers::CONTROL
+            && key.code == KeyCode::Char('b')
+        {
+            self.cancel_mouse_gesture();
+            self.bpm_input = Some(cmrt_tui_core::bpm::BpmInput::default());
+            return GridSequencerAction::Continue;
+        }
         match key.code {
             KeyCode::Char('q') => return GridSequencerAction::Quit,
             KeyCode::Char('t') => {
@@ -313,7 +327,7 @@ impl GridSequencerScreen {
                 cmrt_tui_core::memory::request_refresh();
             }
             KeyCode::Char('a') => self.toggle_pattern_evolution(),
-            KeyCode::Char('b') => self.toggle_single_buffering(),
+            KeyCode::Char('b') if key.modifiers.is_empty() => self.toggle_single_buffering(),
             KeyCode::Char('c') => self.toggle_chord_mode(now, ctx),
             KeyCode::Char('r') => self.randomize(now, ctx),
             KeyCode::Char('R') => self.randomize_keeping_patches(now, ctx),

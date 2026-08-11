@@ -19,17 +19,23 @@ mod batch_random;
 mod catalog;
 mod grid;
 mod input;
+mod keybind;
+mod logging;
 mod mixer;
 pub mod performance;
 pub mod playback;
 mod random_navigation;
 mod reload;
 mod screen;
+mod tempo;
 mod track_input;
 mod track_order;
 mod tree;
 
 pub use action::{LoopBrowserAction, LoopGridChange, LoopPlaybackClip, LoopPlaybackGrid};
+pub use keybind::loop_browser_keybind_text;
+pub use logging::set_log_sinks;
+pub(crate) use logging::{log_line, perf_log_line};
 use tree::{collect_visible, find_favorite_node, insert_relative_path, node_path, sort_tree};
 
 pub mod ui;
@@ -53,43 +59,6 @@ impl LoopBrowser {
 
 pub use playback::LoopPlaybackController;
 pub use screen::LoopBrowserScreen;
-
-use std::sync::OnceLock;
-
-type LogSink = fn(&str);
-static LOG_SINK: OnceLock<LogSink> = OnceLock::new();
-static PERF_LOG_SINK: OnceLock<LogSink> = OnceLock::new();
-
-/// app 起動時に、グローバルログ（`log/log.txt`）への書き込み関数を注入する。
-/// `log` は同期書き込み、`perf_log` はレンダースレッドを塞がない非同期書き込みを想定する。
-pub fn set_log_sinks(log: LogSink, perf_log: LogSink) {
-    let _ = LOG_SINK.set(log);
-    let _ = PERF_LOG_SINK.set(perf_log);
-}
-
-pub(crate) fn log_line(message: &str) {
-    if let Some(sink) = LOG_SINK.get() {
-        sink(message);
-    }
-}
-
-pub(crate) fn perf_log_line(message: &str) {
-    if let Some(sink) = PERF_LOG_SINK.get() {
-        sink(message);
-    }
-}
-
-/// loop browser 各ペインのキーバインド説明文（app のステータスバーからも参照）。
-pub fn loop_browser_keybind_text(pane: LoopBrowserPane) -> &'static str {
-    match pane {
-        LoopBrowserPane::Tree => {
-            "Ctrl+G:画面切替 Tab:track list p:演奏停止/再開 r:ランダムWAV Shift+O:auto random Shift+C/D/E/F/G/A/B:pad登録/解除 c/d/e/f/g/a/b:pad演奏 1-9:hjkl prefix PgUp/PgDn:±10 t:dirカテゴリ v:dirお気に入り V:お気に入り限定 hjkl・矢印:移動/展開 Enter/Space:再生 q:終了"
-        }
-        LoopBrowserPane::Tracks => {
-            "Ctrl+G:画面切替 Tab:loop tree p:演奏停止/再開 r:ランダムWAV m:mix level Shift+R:全track random Shift+O:auto random Shift+M:2track random solo Alt+↓/↑:track並び替え 1-9:hjkl prefix s:solo toggle c..b:pad h/l・←/→:measure j/k・↓/↑:track（右/下端で追加） q:終了"
-        }
-    }
-}
 
 const REMOVED_NOTICE_DURATION: Duration = Duration::from_millis(1_500);
 pub const PAD_KEYS: [char; 7] = ['c', 'd', 'e', 'f', 'g', 'a', 'b'];
@@ -160,6 +129,8 @@ pub struct LoopBrowser {
     pub category_overlay: Option<LoopDirId>,
     pub mixer_overlay_open: bool,
     pub help_overlay: Option<LoopBrowserPane>,
+    pub(crate) bpm_mode: cmrt_tui_core::bpm::BpmMode,
+    pub(crate) bpm_input: Option<cmrt_tui_core::bpm::BpmInput>,
     pub mixer_cursor_track: usize,
     pub category_keys: Vec<(char, String)>,
     pub notice: Option<LoopBrowserNotice>,
@@ -209,6 +180,8 @@ impl Default for LoopBrowser {
             category_overlay: None,
             mixer_overlay_open: false,
             help_overlay: None,
+            bpm_mode: cmrt_tui_core::bpm::BpmMode::Auto,
+            bpm_input: None,
             mixer_cursor_track: 0,
             category_keys: Vec::new(),
             notice: None,
@@ -233,6 +206,14 @@ impl Default for LoopBrowser {
 }
 
 impl LoopBrowser {
+    pub fn set_bpm_mode(&mut self, mode: cmrt_tui_core::bpm::BpmMode) {
+        self.bpm_mode = mode;
+    }
+
+    pub fn bpm_mode(&self) -> cmrt_tui_core::bpm::BpmMode {
+        self.bpm_mode
+    }
+
     pub fn from_index(
         index: cmrt_loop_browser_domain::library::LoopIndex,
         categories: &[String],

@@ -114,13 +114,13 @@ impl GridMidiSender {
         }
     }
 
-    pub fn begin_timeline(&self, sample_rate_hz: f64) -> u64 {
+    pub fn begin_timeline(&self, sample_rate_hz: f64, tempo_bpm: f64) -> u64 {
         let timeline_id = NEXT_LIVE_TIMELINE_ID.fetch_add(1, Ordering::Relaxed).max(1);
         let _ = self.tx.send(GridMidiCommand::BeginTimeline {
             config: cmrt_realtime_play::LiveTimelineConfig {
                 timeline_id,
                 sample_rate_hz,
-                tempo_bpm: crate::BPM as f64,
+                tempo_bpm,
                 time_signature_numerator: 4,
                 time_signature_denominator: 4,
             },

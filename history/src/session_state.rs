@@ -26,6 +26,12 @@ pub struct SessionState {
     /// 人間が編集した Grid Sequencer の行と AUTO / HOLD 状態。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grid_sequencer: Option<crate::GridSequencerSessionState>,
+    /// Grid Sequencer の手動BPM。`None` は既定の自動（BPM130）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grid_sequencer_bpm: Option<f64>,
+    /// Loop Browser の手動BPM。`None` は配置clipからの自動選択。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loop_browser_bpm: Option<f64>,
     /// keyboard の音出し確認 overlay を最後に表示したローカル日付（YYYY-MM-DD）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keyboard_note_guide_overlay_date: Option<String>,
@@ -44,6 +50,8 @@ impl Default for SessionState {
             grid_sequencer_track_count: cmrt_realtime_play::DEFAULT_LIVE_INSTANCE_COUNT,
             grid_sequencer_chord_mode: false,
             grid_sequencer: None,
+            grid_sequencer_bpm: None,
+            loop_browser_bpm: None,
             keyboard_note_guide_overlay_date: None,
             notepad_sound_check_guide_overlay_date: None,
         }
@@ -68,6 +76,10 @@ struct SessionStateWire {
     grid_sequencer_chord_mode: bool,
     #[serde(default, deserialize_with = "deserialize_grid_sequencer")]
     grid_sequencer: Option<crate::GridSequencerSessionState>,
+    #[serde(default)]
+    grid_sequencer_bpm: Option<f64>,
+    #[serde(default)]
+    loop_browser_bpm: Option<f64>,
     #[serde(default)]
     keyboard_note_guide_overlay_date: Option<String>,
     #[serde(default)]
@@ -99,10 +111,16 @@ impl<'de> serde::Deserialize<'de> for SessionState {
             ),
             grid_sequencer_chord_mode: wire.grid_sequencer_chord_mode,
             grid_sequencer: wire.grid_sequencer,
+            grid_sequencer_bpm: valid_saved_bpm(wire.grid_sequencer_bpm),
+            loop_browser_bpm: valid_saved_bpm(wire.loop_browser_bpm),
             keyboard_note_guide_overlay_date: wire.keyboard_note_guide_overlay_date,
             notepad_sound_check_guide_overlay_date: wire.notepad_sound_check_guide_overlay_date,
         })
     }
+}
+
+fn valid_saved_bpm(bpm: Option<f64>) -> Option<f64> {
+    bpm.and_then(cmrt_tui_core::bpm::valid_bpm)
 }
 
 fn default_grid_sequencer_track_count() -> usize {

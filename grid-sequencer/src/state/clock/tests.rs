@@ -64,6 +64,18 @@ fn deadlines_do_not_drift_over_a_full_bar() {
 }
 
 #[test]
+fn manual_decimal_bpm_uses_absolute_deadlines_without_accumulation() {
+    let bpm = 123.456789;
+    let step = 100_000;
+    let direct = step_offset_at(step, bpm);
+    let repeated = step_interval_at(bpm) * u32::try_from(step).unwrap();
+    let mathematical = Duration::from_nanos((step as f64 * 60_000_000_000.0 / (bpm * 4.0)) as u64);
+
+    assert_eq!(direct, mathematical);
+    assert_ne!(direct, repeated);
+}
+
+#[test]
 fn polling_slightly_late_keeps_the_original_phase() {
     let now = Instant::now();
     let mut clock = StepClock::default();

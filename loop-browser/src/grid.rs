@@ -159,7 +159,7 @@ impl LoopBrowser {
         &self,
         track_grid: &LoopTrackGrid,
     ) -> cmrt_loop_browser_domain::time_stretch::TargetBpm {
-        cmrt_loop_browser_domain::time_stretch::select_target_bpm(
+        cmrt_loop_browser_domain::time_stretch::select_target_bpm_with_override(
             track_grid
                 .iter()
                 .flatten()
@@ -169,6 +169,7 @@ impl LoopBrowser {
                         .and_then(|analysis| analysis.tempo)
                         .map(|tempo| tempo.bpm)
                 }),
+            self.bpm_mode.manual(),
         )
     }
 

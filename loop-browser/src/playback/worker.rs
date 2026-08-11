@@ -16,9 +16,11 @@ use anyhow::{Context, Result};
 use cmrt_loop_browser_domain::time_stretch::format_bpm;
 use cmrt_tui_core::PlayState;
 
+mod config;
 mod measure_start;
 mod transport;
 
+pub(super) use config::PlaybackWorkerConfig;
 use measure_start::start_measure;
 pub use measure_start::starting_clips;
 pub use transport::TransportState;
@@ -31,13 +33,17 @@ const MEASURE_LATENESS_LOG_THRESHOLD: Duration = Duration::from_millis(5);
 
 pub fn playback_worker(
     receiver: mpsc::Receiver<LoopPlaybackCommand>,
-    grid: LoopPlaybackGrid,
-    mut track_volumes_db: Vec<i32>,
-    mut solo_tracks: Vec<bool>,
+    config: PlaybackWorkerConfig,
     state: &Arc<Mutex<PlayState>>,
     diagnostics: SharedLoopStretchDiagnostics,
     playback_position: SharedPlaybackPosition,
 ) -> Result<()> {
+    let PlaybackWorkerConfig {
+        grid,
+        mut track_volumes_db,
+        mut solo_tracks,
+        mut bpm_mode,
+    } = config;
     position::clear(&playback_position);
     // device sink を drop すると全 Player の再生が止まるため、worker が生きている間は保持する。
     let device_sink =
@@ -48,8 +54,8 @@ pub fn playback_worker(
     let mut measure_sinks = Vec::<TrackSink>::new();
     let mut measure_deadline = None;
     let mut preparation = PreparationWorker::spawn(diagnostics);
-    let initial_target = grid_target_bpm(&grid);
-    let mut pending_generation = Some(preparation.submit(grid, LoopGridChange::Initial));
+    let initial_target = grid_target_bpm(&grid, bpm_mode);
+    let mut pending_generation = Some(preparation.submit(grid, LoopGridChange::Initial, bpm_mode));
     let mut active: Option<PreparedSet> = None;
     // 先読み（オートランダム）で用意した次のグリッド。周の境目でだけ active へ差し替える。
     let mut standby: Option<PreparedSet> = None;
@@ -250,8 +256,8 @@ pub fn playback_worker(
                 standby = None;
                 preload_generation = None;
                 standby_token = 0;
-                let target_bpm = grid_target_bpm(&next_grid);
-                pending_generation = Some(preparation.submit(next_grid, reason));
+                let target_bpm = grid_target_bpm(&next_grid, bpm_mode);
+                pending_generation = Some(preparation.submit(next_grid, reason, bpm_mode));
                 set_preparation_state(state, transport.is_paused(), target_bpm.bpm);
             }
             Ok(LoopPlaybackCommand::PreloadGrid {
@@ -271,7 +277,8 @@ pub fn playback_worker(
                 } else {
                     standby = None;
                     standby_token = token;
-                    preload_generation = Some(preparation.submit_background(grid, reason));
+                    preload_generation =
+                        Some(preparation.submit_background(grid, reason, bpm_mode));
                 }
             }
             Ok(LoopPlaybackCommand::RestartGridAt {
@@ -292,8 +299,8 @@ pub fn playback_worker(
                 preload_generation = None;
                 standby_token = 0;
                 transport.restart_at(start_measure);
-                let target_bpm = grid_target_bpm(&grid);
-                pending_generation = Some(preparation.submit(grid, reason));
+                let target_bpm = grid_target_bpm(&grid, bpm_mode);
+                pending_generation = Some(preparation.submit(grid, reason, bpm_mode));
                 set_preparation_state(state, transport.is_paused(), target_bpm.bpm);
             }
             Ok(LoopPlaybackCommand::ReplaceTrackLayout {
@@ -317,8 +324,9 @@ pub fn playback_worker(
                 track_volumes_db = next_track_volumes_db;
                 solo_tracks = next_solo_tracks;
                 transport.restart_at(start_measure);
-                let target_bpm = grid_target_bpm(&grid);
-                pending_generation = Some(preparation.submit(grid, LoopGridChange::TrackOrder));
+                let target_bpm = grid_target_bpm(&grid, bpm_mode);
+                pending_generation =
+                    Some(preparation.submit(grid, LoopGridChange::TrackOrder, bpm_mode));
                 set_preparation_state(state, transport.is_paused(), target_bpm.bpm);
             }
             Ok(LoopPlaybackCommand::SetTrackVolume { track, volume_db }) => {
@@ -363,6 +371,26 @@ pub fn playback_worker(
                 if pending_generation.is_some() {
                     set_play_state(state, PlayState::Running("WAV loop変換中".to_string()));
                 }
+            }
+            Ok(LoopPlaybackCommand::SetBpmMode { mode, grid }) => {
+                stop_sinks(&mut measure_sinks);
+                stop_pad_sinks(&mut pad_sinks);
+                if let Some(sink) = preview_sink.take() {
+                    sink.stop();
+                }
+                measure_deadline = None;
+                position::clear(&playback_position);
+                active = None;
+                active_token = 0;
+                standby = None;
+                preload_generation = None;
+                standby_token = 0;
+                bpm_mode = mode;
+                transport.restart_at(0);
+                let target_bpm = grid_target_bpm(&grid, bpm_mode);
+                pending_generation =
+                    Some(preparation.submit(grid, LoopGridChange::Tempo, bpm_mode));
+                set_preparation_state(state, transport.is_paused(), target_bpm.bpm);
             }
             Ok(LoopPlaybackCommand::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => {
                 preparation.cancel();

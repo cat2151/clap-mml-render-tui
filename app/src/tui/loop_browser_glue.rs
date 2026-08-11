@@ -33,6 +33,7 @@ impl<'a> TuiApp<'a> {
                 Arc::clone(self.playback_session.play_state()),
                 Arc::clone(&self.loop_browser.state.stretch_diagnostics),
                 Arc::clone(&self.loop_browser.state.playback_position),
+                self.loop_browser.state.bpm_mode(),
             ));
         }
     }
@@ -131,6 +132,16 @@ impl<'a> TuiApp<'a> {
         }
         if paused {
             *self.playback_session.play_state().lock().unwrap() = PlayState::Idle;
+        }
+    }
+
+    pub(in crate::tui) fn set_loop_bpm_mode(
+        &self,
+        mode: cmrt_tui_core::bpm::BpmMode,
+        grid: LoopPlaybackGrid,
+    ) {
+        if let Some(playback) = &self.loop_browser.playback {
+            playback.set_bpm_mode(mode, grid);
         }
     }
 }

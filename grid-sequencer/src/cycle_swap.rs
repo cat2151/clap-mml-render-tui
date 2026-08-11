@@ -16,7 +16,7 @@
 
 use std::time::Instant;
 
-use crate::{log_line, GridSequencerContext, GridSequencerScreen, PatternEvolution, STEP_INTERVAL};
+use crate::{log_line, GridSequencerContext, GridSequencerScreen, PatternEvolution};
 
 /// 待機 bank への先読みロードの進み具合。
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -46,12 +46,12 @@ impl CycleSwap {
     /// 2つの条件で間隔を空ける:
     /// - 直前の1件がサーバー側で終わっている（同時に走らせない）
     /// - 前回の送信から1ステップぶん空いている（リングが回復する余裕を作る）
-    fn may_send(&self, now: Instant, completed: usize) -> bool {
+    fn may_send(&self, now: Instant, completed: usize, interval: std::time::Duration) -> bool {
         if completed < self.sent {
             return false;
         }
         match self.last_sent {
-            Some(last) => now.saturating_duration_since(last) >= STEP_INTERVAL,
+            Some(last) => now.saturating_duration_since(last) >= interval,
             None => true,
         }
     }
@@ -76,7 +76,7 @@ impl GridSequencerScreen {
             None => (swap.sent, false),
         };
         if swap.next_instance < self.state.instance_count() {
-            if swap.may_send(now, completed) {
+            if swap.may_send(now, completed, crate::step_interval_at(self.bpm())) {
                 self.preload_one_instance(swap.next_instance, now);
             }
             return;

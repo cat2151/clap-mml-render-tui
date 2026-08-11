@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use cmrt_realtime_play::{fast_midi_ipc::MAX_MIDI_MESSAGES, TimelineMidiEvent};
 
-use super::{GridScheduledMessage, GridSequencerContext, GridSequencerScreen, LOOKAHEAD};
+use super::{GridScheduledMessage, GridSequencerContext, GridSequencerScreen};
 
 /// コード進行データ更新のアナウンスを出しておく時間。読めるだけの長さがあればよい。
 const RESTART_NOTICE_DURATION: Duration = Duration::from_secs(3);
@@ -12,9 +12,9 @@ impl GridSequencerScreen {
         self.timeline_id = self
             .midi_sender
             .as_ref()
-            .map(|sender| sender.begin_timeline(self.sample_rate))
+            .map(|sender| sender.begin_timeline(self.sample_rate, self.bpm()))
             .unwrap_or(1);
-        self.state.start(now);
+        self.state.start_at_bpm(now, self.bpm());
     }
 
     /// 先読み分のステップを組み立て、offset つきでまとめて送る。
@@ -95,7 +95,7 @@ impl GridSequencerScreen {
         let two_buffer_leads = Duration::from_secs_f64(
             2.0 * self.buffer_frames as f64 * f64::from(next_multiplier) / self.sample_rate,
         );
-        two_buffer_leads + LOOKAHEAD + Duration::from_millis(50)
+        two_buffer_leads + crate::lookahead_at(self.bpm()) + Duration::from_millis(50)
     }
 
     /// patch selector の調査用に、低頻度な chord attack と bank 遷移だけを記録する。

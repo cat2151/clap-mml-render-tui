@@ -12,6 +12,7 @@ use cmrt_tui_core::theme::{MONOKAI_CYAN, MONOKAI_FG, MONOKAI_YELLOW};
 use cmrt_tui_core::PlayState;
 
 mod help;
+mod tempo;
 mod tracks;
 mod tree;
 mod waveforms;
@@ -89,6 +90,9 @@ pub fn draw(state: &mut LoopBrowser, play_state: &PlayState, frame: &mut Frame) 
     }
     if state.starting {
         draw_startup_overlay(frame);
+    }
+    if state.bpm_input.is_some() {
+        tempo::draw_overlay(frame, state);
     }
     state.last_render_metrics = Some(crate::performance::RenderMetrics {
         trace_id,

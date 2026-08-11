@@ -6,6 +6,7 @@ use std::time::Instant;
 #[cfg(test)]
 use super::LoopPlaybackClip;
 use super::{LoopGridChange, LoopPlaybackGrid};
+use cmrt_tui_core::bpm::BpmMode;
 use cmrt_tui_core::PlayState;
 
 pub mod diagnostics;
@@ -21,9 +22,9 @@ mod worker;
 use sinks::take_pad_voice;
 #[cfg(test)]
 use tempo::{grid_target_bpm, measure_duration, measure_timing};
-use worker::playback_worker;
 #[cfg(test)]
 use worker::{measure_at_or_after, next_measure, starting_clips, TransportState};
+use worker::{playback_worker, PlaybackWorkerConfig};
 
 enum LoopPlaybackCommand {
     Preview {
@@ -65,6 +66,10 @@ enum LoopPlaybackCommand {
     },
     Pause,
     ResumeAt(usize),
+    SetBpmMode {
+        mode: BpmMode,
+        grid: LoopPlaybackGrid,
+    },
     Stop,
 }
 
@@ -81,14 +86,18 @@ impl LoopPlaybackController {
         state: Arc<Mutex<PlayState>>,
         diagnostics: diagnostics::SharedLoopStretchDiagnostics,
         playback_position: position::SharedPlaybackPosition,
+        bpm_mode: BpmMode,
     ) -> Self {
         let (sender, receiver) = mpsc::channel();
         let worker = std::thread::spawn(move || {
             if let Err(error) = playback_worker(
                 receiver,
-                grid,
-                track_volumes_db,
-                solo_tracks,
+                PlaybackWorkerConfig {
+                    grid,
+                    track_volumes_db,
+                    solo_tracks,
+                    bpm_mode,
+                },
                 &state,
                 diagnostics,
                 playback_position,
@@ -185,6 +194,12 @@ impl LoopPlaybackController {
             LoopPlaybackCommand::ResumeAt(start_measure)
         };
         let _ = self.sender.send(command);
+    }
+
+    pub fn set_bpm_mode(&self, mode: BpmMode, grid: LoopPlaybackGrid) {
+        let _ = self
+            .sender
+            .send(LoopPlaybackCommand::SetBpmMode { mode, grid });
     }
 
     pub fn stop(&mut self) {

@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use super::*;
+use crate::LOOKAHEAD;
 use crate::STEP_INTERVAL;
 
 const TIMELINE_ID: u64 = 42;

@@ -2,6 +2,7 @@
 //!
 //! 特定画面（DAW / loop browser / keyboard 等）に依存しない、値ドメインと
 //! 共通ウィジェットだけを集約する。
+pub mod bpm;
 #[cfg(any(test, feature = "test-support"))]
 pub mod buffer_test;
 pub mod clipboard;

@@ -11,7 +11,7 @@ use cmrt_tui_core::{
     theme::{MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_PINK, MONOKAI_YELLOW},
 };
 
-use crate::{GridConnectionPhase, GridConnectionStatus, GridSequencerScreen, BPM, GRID_STEPS};
+use crate::{GridConnectionPhase, GridConnectionStatus, GridSequencerScreen, GRID_STEPS};
 
 mod chord_line;
 mod grid;
@@ -21,6 +21,7 @@ mod patch_selector;
 mod pattern_list;
 mod progress;
 mod restart_notice;
+mod tempo;
 mod value_grid;
 
 /// 描画と mouse の当たり判定が同じ矩形を見るための、唯一の layout の作り方。
@@ -69,6 +70,9 @@ pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: 
     }
     if screen.help_open {
         help::draw_overlay(f, screen.track_count());
+    }
+    if screen.bpm_input.is_some() {
+        tempo::draw_overlay(f, screen);
     }
 }
 
@@ -169,7 +173,7 @@ fn status_line(
     let lead_max_ms = timing.output_lead_max_frames as f64 / screen.sample_rate * 1_000.0;
     let text = if width >= 160 {
         format!(
-            " SHM {} | buffer x{multiplier} ({latency_ms:.0}ms) {mode} | drop {}/{}f | late {}/{:.0}us | lead {:.0}..{:.0}ms | cpu95 {:.0}% | {} instances / {} lanes | BPM {} | step {:>2}/{} | GR {:.1} dB | {} ",
+            " SHM {} | buffer x{multiplier} ({latency_ms:.0}ms) {mode} | drop {}/{}f | late {}/{:.0}us | lead {:.0}..{:.0}ms | cpu95 {:.0}% | {} instances / {} lanes | BPM {} {} | step {:>2}/{} | GR {:.1} dB | {} ",
             connection.label(),
             connection.underrun_frames,
             connection.underrun_frames_total,
@@ -180,7 +184,8 @@ fn status_line(
             timing.process_load_p95,
             screen.track_count(),
             screen.state.visible_lane_count(),
-            BPM,
+            screen.bpm(),
+            screen.bpm_mode().label(),
             screen.state.step_index() + 1,
             GRID_STEPS,
             connection.limiter_reduction_db,
@@ -189,7 +194,7 @@ fn status_line(
     } else {
         // 90桁でも patch 状態まで出し切れるよう、倍率とレイテンシは最短表記にする。
         format!(
-            " SHM {} x{multiplier}/{latency_ms:.0}ms{compact_mode} d{}/{} l{}/{:.0}u lead{:.0}-{:.0} p{:.0}% {}i/{}l {}bpm s{}/{} GR{:.1} {} ",
+            " SHM {} x{multiplier}/{latency_ms:.0}ms{compact_mode} d{}/{} l{}/{:.0}u lead{:.0}-{:.0} p{:.0}% {}i/{}l {}bpm{} s{}/{} GR{:.1} {} ",
             connection.label(),
             connection.underrun_frames,
             connection.underrun_frames_total,
@@ -200,7 +205,8 @@ fn status_line(
             timing.process_load_p95,
             screen.track_count(),
             screen.state.visible_lane_count(),
-            BPM,
+            screen.bpm(),
+            if screen.bpm_mode().manual().is_some() { "M" } else { "A" },
             screen.state.step_index() + 1,
             GRID_STEPS,
             connection.limiter_reduction_db,

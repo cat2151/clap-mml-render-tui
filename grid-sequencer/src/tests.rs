@@ -44,7 +44,7 @@ pub(crate) fn ctx_with<'a>(
     }
 }
 
-fn ready_ctx(patches: &[(String, String)]) -> GridSequencerContext<'_> {
+pub(crate) fn ready_ctx(patches: &[(String, String)]) -> GridSequencerContext<'_> {
     ctx_with(
         GridPatchLoad::Ready(patches),
         empty_catalog(),

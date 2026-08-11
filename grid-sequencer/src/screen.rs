@@ -2,6 +2,7 @@ use std::{collections::HashMap, time::Instant};
 
 use cmrt_arpeggiator::{ArpPattern, BassPattern};
 use cmrt_rhythm::DrumPattern;
+use cmrt_tui_core::bpm::{BpmInput, BpmMode};
 
 use super::{patch_bag::PatchBag, GridMidiSender, GridPatchStatus, GridState};
 
@@ -41,6 +42,7 @@ pub struct GridSequencerParts {
     pub track_count: usize,
     /// 前回終了時の chord mode。true なら patch 一覧が揃い次第 on にする。
     pub chord_enabled: bool,
+    pub bpm_mode: BpmMode,
     /// 前回終了時に保存した手入力 grid。`None` なら初回入場時にランダム生成する。
     pub restored_session: Option<crate::GridSequencerSession>,
 }
@@ -53,6 +55,7 @@ impl Default for GridSequencerParts {
             buffer_frames: DEFAULT_BUFFER_FRAMES,
             track_count: crate::GRID_ROWS,
             chord_enabled: false,
+            bpm_mode: BpmMode::Auto,
             restored_session: None,
         }
     }
@@ -71,6 +74,8 @@ pub struct GridSequencerScreen {
     /// Non-zero while the server and this screen share an absolute musical epoch.
     pub(crate) timeline_id: u64,
     pub help_open: bool,
+    pub(crate) bpm_mode: BpmMode,
+    pub(crate) bpm_input: Option<BpmInput>,
     /// cycle ごとに譜面を再抽選するか、人間の編集を保持するか。
     pub(crate) pattern_evolution: PatternEvolution,
     /// mouse down から up まで継続するnote eventの描画・消去操作。
@@ -153,6 +158,7 @@ impl GridSequencerScreen {
             buffer_frames,
             track_count,
             chord_enabled,
+            bpm_mode,
             restored_session,
         } = parts;
         let track_count = cmrt_realtime_play::normalize_live_instance_count(track_count);
@@ -188,6 +194,8 @@ impl GridSequencerScreen {
             buffer_frames,
             timeline_id: 0,
             help_open: false,
+            bpm_mode,
+            bpm_input: None,
             pattern_evolution,
             note_gesture: None,
             patch_selector: None,
@@ -219,6 +227,14 @@ impl GridSequencerScreen {
     /// コード進行行に出す chord mode のエラー。
     pub fn chord_error(&self) -> Option<&str> {
         self.chord_error.as_deref()
+    }
+
+    pub fn bpm_mode(&self) -> BpmMode {
+        self.bpm_mode
+    }
+
+    pub fn bpm(&self) -> f64 {
+        self.bpm_mode.resolve(crate::BPM)
     }
 
     /// chord progression またはエラーの1行を描画するか。input layout も同じ判定を使う。

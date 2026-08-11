@@ -174,6 +174,35 @@ fn session_state_round_trips_the_grid_sequencer_chord_mode() {
 }
 
 #[test]
+fn session_state_round_trips_independent_manual_bpms() {
+    let tmp = std::env::temp_dir().join("cmrt_test_bpm_round_trip");
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
+
+    save_session_state(&SessionState {
+        grid_sequencer_bpm: Some(128.123456789),
+        loop_browser_bpm: Some(91.75),
+        ..SessionState::default()
+    })
+    .unwrap();
+
+    let loaded = load_session_state();
+    assert_eq!(loaded.grid_sequencer_bpm, Some(128.123456789));
+    assert_eq!(loaded.loop_browser_bpm, Some(91.75));
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn invalid_saved_bpms_fall_back_to_auto() {
+    let state: SessionState =
+        serde_json::from_str(r#"{"grid_sequencer_bpm":19.9,"loop_browser_bpm":301}"#).unwrap();
+
+    assert_eq!(state.grid_sequencer_bpm, None);
+    assert_eq!(state.loop_browser_bpm, None);
+}
+
+#[test]
 fn session_state_round_trips_the_editable_grid() {
     let tmp = std::env::temp_dir().join("cmrt_test_editable_grid_round_trip");
     std::fs::remove_dir_all(&tmp).ok();

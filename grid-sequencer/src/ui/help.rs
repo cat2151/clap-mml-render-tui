@@ -13,7 +13,7 @@ const TITLE: &str = " Grid Sequencer ヘルプ(Keybinds)  Esc/q/?:close ";
 
 /// 画面下部に常に出しておく1行のキーバインド要約。
 pub(super) const KEYBIND_TEXT: &str =
-    " mouse:edit u:undo a:A/H x:clear c:chord r/R:random t:tracks Ctrl+G:screen q:quit";
+    "mouse:edit Ctrl+B:BPM a:A/H x:clear c:chord r/R:random t:tracks Ctrl+G:screen q:quit";
 
 /// 枠線が食う幅・高さ。
 const BORDER_SIZE: u16 = 2;
@@ -73,6 +73,7 @@ fn pane_width(lines: &[Line<'_>]) -> u16 {
 fn keybind_lines() -> Vec<Line<'static>> {
     [
         " Ctrl+G  画面切替メニュー",
+        " Ctrl+B  BPM設定 / 自動BPMへ戻す",
         " 左click 1step の note / 消去",
         " 左drag  長い note、row横断で arpeggio",
         " 右drag  note 消去",
@@ -104,7 +105,7 @@ fn feature_lines(track_count: usize) -> Vec<Line<'static>> {
     let mut lines = memory::overlay_lines();
     lines.extend(
         [
-            format!("{track_count}行 x 16step(115ms/16分, BPM130)を1.85秒で1周"),
+            format!("{track_count}行 x 16step。BPMはCtrl+Bで設定できます"),
             "NOTE欄  # = Attack   - = Tie   . = Rest".to_string(),
             "lane色  暗=未構築  灰=instanceのみ  通常=ロード済".to_string(),
             "chord mode(c) 行1=和音 行2=bass 行3=4 voice。".to_string(),

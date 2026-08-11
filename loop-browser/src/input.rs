@@ -7,6 +7,9 @@ impl LoopBrowser {
     }
 
     pub fn handle_key_event(&mut self, key: KeyEvent) -> LoopBrowserAction {
+        if self.bpm_input.is_some() {
+            return self.handle_bpm_input_key(key);
+        }
         if self.help_overlay.is_some() {
             self.navigation_count.clear();
             if matches!(
@@ -24,6 +27,11 @@ impl LoopBrowser {
         if self.category_overlay.is_some() {
             self.navigation_count.clear();
             return self.handle_category_overlay_key(key.code);
+        }
+        if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('b') {
+            self.navigation_count.clear();
+            self.bpm_input = Some(cmrt_tui_core::bpm::BpmInput::default());
+            return LoopBrowserAction::Continue;
         }
         if key.code == KeyCode::Char('?') {
             self.navigation_count.clear();

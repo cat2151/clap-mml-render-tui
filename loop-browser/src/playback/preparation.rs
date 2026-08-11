@@ -7,6 +7,7 @@ use std::thread::JoinHandle;
 use std::time::Instant;
 
 use crate::{LoopGridChange, LoopPlaybackClip, LoopPlaybackGrid};
+use cmrt_tui_core::bpm::BpmMode;
 use rubberband_ffi::StretchProfile;
 
 use cmrt_loop_browser_domain::time_stretch::{
@@ -36,6 +37,7 @@ struct PrepareJob {
     submitted_at: Instant,
     /// 演奏を止めずに裏で走らせる先読みジョブか。優先度とペーシングと診断の扱いが変わる。
     background: bool,
+    bpm_mode: BpmMode,
 }
 
 pub struct PreparationResult {
@@ -82,14 +84,24 @@ impl PreparationWorker {
         }
     }
 
-    pub fn submit(&mut self, grid: LoopPlaybackGrid, reason: LoopGridChange) -> u64 {
-        self.submit_job(grid, reason, false)
+    pub fn submit(
+        &mut self,
+        grid: LoopPlaybackGrid,
+        reason: LoopGridChange,
+        bpm_mode: BpmMode,
+    ) -> u64 {
+        self.submit_job(grid, reason, false, bpm_mode)
     }
 
     /// 演奏を止めずに裏で準備する。generation の採番規則は前景と同じなので、
     /// あとからユーザー操作の `submit` が来れば先読みは自然にキャンセルされる。
-    pub fn submit_background(&mut self, grid: LoopPlaybackGrid, reason: LoopGridChange) -> u64 {
-        self.submit_job(grid, reason, true)
+    pub fn submit_background(
+        &mut self,
+        grid: LoopPlaybackGrid,
+        reason: LoopGridChange,
+        bpm_mode: BpmMode,
+    ) -> u64 {
+        self.submit_job(grid, reason, true, bpm_mode)
     }
 
     fn submit_job(
@@ -97,11 +109,12 @@ impl PreparationWorker {
         grid: LoopPlaybackGrid,
         reason: LoopGridChange,
         background: bool,
+        bpm_mode: BpmMode,
     ) -> u64 {
         self.next_generation = self.next_generation.wrapping_add(1).max(1);
         let generation = self.next_generation;
         self.latest_generation.store(generation, Ordering::Release);
-        let target_bpm = grid_target_bpm(&grid);
+        let target_bpm = grid_target_bpm(&grid, bpm_mode);
         self.diagnostics_begin(generation, reason, &grid, target_bpm, background);
         let _ = self.sender.send(PreparationCommand::Prepare(PrepareJob {
             generation,
@@ -109,6 +122,7 @@ impl PreparationWorker {
             grid,
             submitted_at: Instant::now(),
             background,
+            bpm_mode,
         }));
         generation
     }
@@ -219,7 +233,7 @@ fn prepare_grid(
     diagnostics: &SharedLoopStretchDiagnostics,
 ) -> Option<PreparedSet> {
     let started_at = Instant::now();
-    let target_bpm = grid_target_bpm(&job.grid);
+    let target_bpm = grid_target_bpm(&job.grid, job.bpm_mode);
     let mut audio = HashMap::<AudioKey, PreparedEntry>::new();
     let mut errors = Vec::new();
     let mut prepared_count = 0usize;
@@ -329,7 +343,11 @@ fn prepare_grid(
         let omitted = errors.len().saturating_sub(2);
         let mut details = Vec::new();
         if !target_bpm.has_common_range {
-            details.push("配置clipに共通BPMなし（BPM120を維持）".to_string());
+            details.push(if job.bpm_mode.manual().is_some() {
+                "手動BPMが配置clipの伸縮範囲外".to_string()
+            } else {
+                "配置clipに共通BPMなし（BPM120を維持）".to_string()
+            });
         }
         details.extend(errors.iter().take(2).cloned());
         let mut message = format!("BPM{}: {}", format_bpm(target_bpm.bpm), details.join(" / "));

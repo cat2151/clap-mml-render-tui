@@ -1,14 +1,14 @@
 use std::time::{Duration, Instant};
 
-/// grid sequencer の固定テンポ。
-pub const BPM: u64 = 130;
+/// grid sequencer の自動モードで使う既定テンポ。
+pub const BPM: f64 = 130.0;
 /// 1ステップ = 16分音符（1拍を4分割）。
 pub const STEPS_PER_BEAT: u64 = 4;
 
 const NANOS_PER_MINUTE: u64 = 60_000_000_000;
 const NANOS_PER_SECOND: u128 = 1_000_000_000;
 
-const STEP_NANOS: u64 = NANOS_PER_MINUTE / (BPM * STEPS_PER_BEAT);
+const STEP_NANOS: u64 = NANOS_PER_MINUTE / (130 * STEPS_PER_BEAT);
 
 /// 1ステップの長さ。BPM130 では 115.3846ms。
 ///
@@ -25,19 +25,44 @@ pub const LOOKAHEAD: Duration = Duration::from_nanos(STEP_NANOS * 2);
 
 /// 先読み済みの note on より後、次のステップより前に note off を置くための猶予（半ステップ）。
 /// これがないと、送信済みで未発音の note on を先回りして止めてしまい音が残る。
+#[cfg(test)]
 pub const SCHEDULE_GUARD: Duration = Duration::from_nanos(STEP_NANOS / 2);
+
+pub fn step_interval_at(bpm: f64) -> Duration {
+    duration_from_nanos_f64(NANOS_PER_MINUTE as f64 / (bpm * STEPS_PER_BEAT as f64))
+}
+
+pub fn lookahead_at(bpm: f64) -> Duration {
+    step_interval_at(bpm) * 2
+}
+
+pub fn schedule_guard_at(bpm: f64) -> Duration {
+    step_interval_at(bpm) / 2
+}
 
 /// アンカーから `steps` ステップぶん進んだ位置。整数演算のみで、丸め誤差を蓄積しない。
 ///
 /// `STEP_INTERVAL * steps` とは一致しない（16ステップで 6ns ずれる）。ステップの絶対位置は
 /// 必ずこちらで求めること。
 pub const fn step_offset(steps: u64) -> Duration {
-    Duration::from_nanos(steps.saturating_mul(NANOS_PER_MINUTE) / (BPM * STEPS_PER_BEAT))
+    Duration::from_nanos(steps.saturating_mul(NANOS_PER_MINUTE) / (130 * STEPS_PER_BEAT))
+}
+
+pub fn step_offset_at(steps: u64, bpm: f64) -> Duration {
+    duration_from_nanos_f64(steps as f64 * NANOS_PER_MINUTE as f64 / (bpm * STEPS_PER_BEAT as f64))
+}
+
+fn duration_from_nanos_f64(nanos: f64) -> Duration {
+    Duration::from_nanos(nanos.clamp(0.0, u64::MAX as f64) as u64)
 }
 
 /// Musical time for a step, calculated from its ordinal rather than by repeated addition.
 pub fn step_timeline_seconds(step: u64) -> f64 {
-    step as f64 * 60.0 / (BPM * STEPS_PER_BEAT) as f64
+    step_timeline_seconds_at(step, BPM)
+}
+
+pub fn step_timeline_seconds_at(step: u64, bpm: f64) -> f64 {
+    step as f64 * 60.0 / (bpm * STEPS_PER_BEAT as f64)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -60,20 +85,37 @@ pub fn frames_ahead(ahead: Duration, sample_rate: f64) -> u32 {
 /// 専用スレッドは持たず、UI ループが毎フレーム `take_due()` を呼んでポーリングする
 /// （keyboard 画面の周期送信と同じ方式）。締切はアンカーからの絶対位置で計算するため、
 /// ポーリング間隔がぶれてもテンポはずれない。
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct StepClock {
     /// 締切計算の基準時刻。`None` なら停止中。
     anchor: Option<Instant>,
     /// 次に発行するステップの通し番号。
     next_step: u64,
+    bpm: f64,
+}
+
+impl Default for StepClock {
+    fn default() -> Self {
+        Self {
+            anchor: None,
+            next_step: 0,
+            bpm: BPM,
+        }
+    }
 }
 
 impl StepClock {
     /// 次の `take_due()` で即座に1ステップ目が発火するようアンカーを `now` に置く。
     /// 画面へ入った瞬間から音を出すため、初回だけは待たせない。
+    #[cfg(test)]
     pub(super) fn start(&mut self, now: Instant) {
+        self.start_at_bpm(now, BPM);
+    }
+
+    pub(super) fn start_at_bpm(&mut self, now: Instant, bpm: f64) {
         self.anchor = Some(now);
         self.next_step = 0;
+        self.bpm = bpm;
     }
 
     pub(super) fn stop(&mut self) {
@@ -82,6 +124,18 @@ impl StepClock {
 
     pub(super) fn is_running(&self) -> bool {
         self.anchor.is_some()
+    }
+
+    pub(super) fn step_interval(&self) -> Duration {
+        step_interval_at(self.bpm)
+    }
+
+    pub(super) fn schedule_guard(&self) -> Duration {
+        schedule_guard_at(self.bpm)
+    }
+
+    pub(super) fn timeline_seconds(&self, step: u64) -> f64 {
+        step_timeline_seconds_at(step, self.bpm)
     }
 
     /// `now + lookahead` までに締切が来るステップを、締切つきで古い順に返す。
@@ -111,7 +165,7 @@ impl StepClock {
 
     fn next_deadline(&self) -> Option<Instant> {
         let anchor = self.anchor?;
-        Some(anchor + step_offset(self.next_step))
+        Some(anchor + step_offset_at(self.next_step, self.bpm))
     }
 
     /// 1ステップ以上遅れていたら、欠落したordinalを飛ばす。wall clockだけを張り直すと
@@ -120,9 +174,9 @@ impl StepClock {
         let Some(deadline) = self.next_deadline() else {
             return;
         };
-        if deadline + STEP_INTERVAL <= now {
+        if deadline + self.step_interval() <= now {
             let elapsed = now.saturating_duration_since(self.anchor.expect("running clock"));
-            let next = (elapsed.as_secs_f64() * (BPM * STEPS_PER_BEAT) as f64 / 60.0).ceil();
+            let next = (elapsed.as_secs_f64() * self.bpm * STEPS_PER_BEAT as f64 / 60.0).ceil();
             self.next_step = (next as u64).max(self.next_step);
         }
     }

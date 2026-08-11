@@ -357,6 +357,9 @@ impl<'a> TuiApp<'a> {
                                 paused,
                                 start_measure,
                             } => self.set_loop_playback_paused(paused, start_measure),
+                            LoopBrowserAction::BpmChanged { mode, grid } => {
+                                self.set_loop_bpm_mode(mode, grid)
+                            }
                             LoopBrowserAction::Quit => {
                                 self.stop_loop_browser();
                                 break;

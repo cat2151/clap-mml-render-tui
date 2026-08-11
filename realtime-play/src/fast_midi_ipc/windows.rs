@@ -26,9 +26,11 @@ use windows_sys::Win32::{
 
 use super::*;
 
+mod platform;
 mod protocol;
 mod timeline;
 
+use platform::{last_os_error, wide_name};
 use protocol::*;
 
 struct Mapping {
@@ -439,18 +441,5 @@ fn open_event(name: &[u16], access: u32) -> Result<OwnedHandle, FastIpcError> {
         Err(FastIpcError::NotAvailable)
     } else {
         Ok(OwnedHandle(handle))
-    }
-}
-
-fn wide_name(port: u16, suffix: &str) -> Vec<u16> {
-    format!("Local\\cmrt-realtime-midi-v{VERSION}-{port}-{suffix}\0")
-        .encode_utf16()
-        .collect()
-}
-
-fn last_os_error(operation: &'static str) -> FastIpcError {
-    FastIpcError::Os {
-        operation,
-        code: unsafe { GetLastError() },
     }
 }

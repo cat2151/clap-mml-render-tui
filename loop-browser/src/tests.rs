@@ -388,6 +388,7 @@ mod grid;
 mod help;
 mod mixer;
 mod navigation;
+mod one_shot;
 mod performance;
 mod random;
 mod track_order;

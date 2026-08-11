@@ -50,6 +50,7 @@ fn incompatible_grid_warns_that_bpm_120_is_kept() {
         grid: vec![vec![Some(slow), Some(fast)]],
         submitted_at: Instant::now(),
         background: false,
+        bpm_mode: cmrt_tui_core::bpm::BpmMode::Auto,
     };
     let latest_generation = AtomicU64::new(1);
     let mut cache = HashMap::new();
@@ -66,10 +67,42 @@ fn incompatible_grid_warns_that_bpm_120_is_kept() {
 }
 
 #[test]
+fn incompatible_manual_bpm_is_kept_and_the_clip_becomes_silent_with_a_warning() {
+    let job = PrepareJob {
+        generation: 1,
+        reason: LoopGridChange::Tempo,
+        grid: vec![vec![Some(clip(None))]],
+        submitted_at: Instant::now(),
+        background: false,
+        bpm_mode: cmrt_tui_core::bpm::BpmMode::Manual(300.0),
+    };
+    let latest_generation = AtomicU64::new(1);
+    let mut cache = HashMap::new();
+    let diagnostics = crate::playback::diagnostics::new_shared();
+
+    let prepared = prepare_grid(&job, &latest_generation, &mut cache, &diagnostics).unwrap();
+
+    assert_eq!(prepared.target_bpm.bpm, 300.0);
+    assert!(!prepared.target_bpm.has_common_range);
+    assert!(prepared.warning.as_deref().is_some_and(|warning| {
+        warning.contains("手動BPMが配置clipの伸縮範囲外")
+            && warning.contains("対象clipは無音、他clipは再生継続")
+    }));
+}
+
+#[test]
 fn every_submission_gets_a_new_generation_without_debounce() {
     let mut worker = PreparationWorker::spawn(crate::playback::diagnostics::new_shared());
-    let first = worker.submit(Vec::new(), LoopGridChange::Initial);
-    let second = worker.submit(Vec::new(), LoopGridChange::Category);
+    let first = worker.submit(
+        Vec::new(),
+        LoopGridChange::Initial,
+        cmrt_tui_core::bpm::BpmMode::Auto,
+    );
+    let second = worker.submit(
+        Vec::new(),
+        LoopGridChange::Category,
+        cmrt_tui_core::bpm::BpmMode::Auto,
+    );
     assert_eq!(second, first + 1);
     assert_eq!(worker.latest_generation.load(Ordering::Acquire), second);
 }

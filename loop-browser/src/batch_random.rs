@@ -146,7 +146,7 @@ impl LoopBrowser {
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
-        let target_bpm = common_candidate_bpm(&intervals)?;
+        let target_bpm = common_candidate_bpm(&intervals, self.bpm_mode.manual())?;
         let mut decks = self.random_decks.value.clone();
         let mut selections = Vec::with_capacity(targets.len());
         for (target, candidates) in targets.iter().zip(&intervals) {
@@ -243,13 +243,7 @@ impl LoopBrowser {
     }
 
     fn bpm_red_tracks(&self, grid: &LoopTrackGrid) -> HashSet<usize> {
-        let target_bpm = cmrt_loop_browser_domain::time_stretch::select_target_bpm(
-            grid.iter()
-                .flatten()
-                .filter_map(Option::as_ref)
-                .filter_map(|clip| self.source_bpm_for_red(clip)),
-        )
-        .bpm;
+        let target_bpm = self.target_bpm_of(grid).bpm;
         grid.iter()
             .enumerate()
             .filter_map(|(track, cells)| {
@@ -301,11 +295,21 @@ fn bpm_interval(bpms: impl IntoIterator<Item = f64>) -> Option<BpmInterval> {
     (interval.minimum <= interval.maximum).then_some(interval)
 }
 
-fn common_candidate_bpm(candidates: &[Vec<(LoopWavId, BpmInterval)>]) -> Option<f64> {
+fn common_candidate_bpm(
+    candidates: &[Vec<(LoopWavId, BpmInterval)>],
+    manual_bpm: Option<f64>,
+) -> Option<f64> {
     if candidates.iter().any(Vec::is_empty) {
         return None;
     }
-    let mut points = vec![cmrt_loop_browser_domain::time_stretch::TARGET_BPM];
+    let mut points = vec![manual_bpm.unwrap_or(cmrt_loop_browser_domain::time_stretch::TARGET_BPM)];
+    if manual_bpm.is_some() {
+        return points.into_iter().find(|point| {
+            candidates
+                .iter()
+                .all(|track| track.iter().any(|(_, interval)| interval.contains(*point)))
+        });
+    }
     for (_, interval) in candidates.iter().flatten() {
         if interval.minimum.is_finite() {
             points.push(interval.minimum);

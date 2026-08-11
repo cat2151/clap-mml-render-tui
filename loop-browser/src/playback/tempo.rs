@@ -1,7 +1,8 @@
 use std::time::Duration;
 
 use crate::{LoopPlaybackClip, LoopPlaybackGrid};
-use cmrt_loop_browser_domain::time_stretch::{select_target_bpm, TargetBpm};
+use cmrt_loop_browser_domain::time_stretch::TargetBpm;
+use cmrt_tui_core::bpm::BpmMode;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MeasureTiming {
@@ -9,12 +10,13 @@ pub struct MeasureTiming {
     pub beats_per_measure: usize,
 }
 
-pub fn grid_target_bpm(grid: &LoopPlaybackGrid) -> TargetBpm {
-    select_target_bpm(
+pub fn grid_target_bpm(grid: &LoopPlaybackGrid, mode: BpmMode) -> TargetBpm {
+    cmrt_loop_browser_domain::time_stretch::select_target_bpm_with_override(
         grid.iter()
             .flatten()
             .filter_map(Option::as_ref)
             .filter_map(LoopPlaybackClip::source_bpm),
+        mode.manual(),
     )
 }
 

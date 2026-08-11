@@ -47,8 +47,9 @@ pub fn draw(state: &mut LoopBrowser, frame: &mut Frame<'_>, area: Rect) {
     let track_block = Block::default()
         .borders(Borders::ALL)
         .title(format!(
-            " [TRACK LIST BPM{} AUTO-STRETCH] ",
-            cmrt_loop_browser_domain::time_stretch::format_bpm(target_bpm.bpm)
+            " [TRACK LIST BPM{} {}-STRETCH] ",
+            target_bpm.bpm,
+            state.bpm_mode().label()
         ))
         .border_style(focus_border_style(focused));
     let used_wavs_block = Block::default()

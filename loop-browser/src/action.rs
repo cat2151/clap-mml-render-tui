@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use cmrt_tui_core::bpm::BpmMode;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum LoopGridChange {
     #[default]
@@ -9,6 +11,7 @@ pub enum LoopGridChange {
     TrackOrder,
     Pad(char),
     Category,
+    Tempo,
     /// オートランダムモードが 2 周ごとに自動で引き直したグリッド。
     AutoRandom,
 }
@@ -22,6 +25,7 @@ impl LoopGridChange {
             Self::TrackOrder => "track-order".to_string(),
             Self::Pad(pad) => format!("pad-{pad}"),
             Self::Category => "category".to_string(),
+            Self::Tempo => "tempo".to_string(),
             Self::AutoRandom => "auto-random".to_string(),
         }
     }
@@ -78,6 +82,10 @@ pub enum LoopBrowserAction {
     SetPlaybackPaused {
         paused: bool,
         start_measure: usize,
+    },
+    BpmChanged {
+        mode: BpmMode,
+        grid: LoopPlaybackGrid,
     },
     Quit,
 }

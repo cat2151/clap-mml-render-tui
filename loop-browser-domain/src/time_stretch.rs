@@ -51,6 +51,25 @@ pub fn select_target_bpm(source_bpms: impl IntoIterator<Item = f64>) -> TargetBp
     }
 }
 
+pub fn select_target_bpm_with_override(
+    source_bpms: impl IntoIterator<Item = f64>,
+    manual_bpm: Option<f64>,
+) -> TargetBpm {
+    let source_bpms = source_bpms.into_iter().collect::<Vec<_>>();
+    let Some(bpm) = manual_bpm else {
+        return select_target_bpm(source_bpms);
+    };
+    let has_common_range = source_bpms.iter().all(|source_bpm| {
+        source_bpm.is_finite()
+            && *source_bpm > 0.0
+            && (MIN_TIME_RATIO..=MAX_TIME_RATIO).contains(&(source_bpm / bpm))
+    });
+    TargetBpm {
+        bpm,
+        has_common_range,
+    }
+}
+
 pub fn format_bpm(bpm: f64) -> String {
     let rounded = bpm.round();
     if (bpm - rounded).abs() < 0.000_000_1 {
@@ -272,6 +291,17 @@ mod tests {
         let invalid = select_target_bpm([f64::NAN]);
         assert_eq!(invalid.bpm, 120.0);
         assert!(!invalid.has_common_range);
+    }
+
+    #[test]
+    fn manual_target_is_kept_and_reports_incompatible_sources() {
+        let compatible = select_target_bpm_with_override([100.0, 120.0], Some(100.0));
+        assert_eq!(compatible.bpm, 100.0);
+        assert!(compatible.has_common_range);
+
+        let incompatible = select_target_bpm_with_override([160.0], Some(100.0));
+        assert_eq!(incompatible.bpm, 100.0);
+        assert!(!incompatible.has_common_range);
     }
 
     #[test]

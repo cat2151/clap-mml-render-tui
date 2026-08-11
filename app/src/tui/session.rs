@@ -16,6 +16,8 @@ struct LoadedSessionState {
     grid_sequencer_track_count: usize,
     grid_sequencer_chord_mode: bool,
     grid_sequencer: Option<crate::history::GridSequencerSessionState>,
+    grid_sequencer_bpm: Option<f64>,
+    loop_browser_bpm: Option<f64>,
     keyboard_note_guide_overlay_date: Option<String>,
     notepad_sound_check_guide_overlay_date: Option<String>,
 }
@@ -39,6 +41,8 @@ fn load_initial_session_state() -> LoadedSessionState {
         grid_sequencer_track_count,
         grid_sequencer_chord_mode,
         grid_sequencer,
+        grid_sequencer_bpm,
+        loop_browser_bpm,
         keyboard_note_guide_overlay_date,
         notepad_sound_check_guide_overlay_date,
     } = crate::history::load_session_state();
@@ -51,6 +55,8 @@ fn load_initial_session_state() -> LoadedSessionState {
         grid_sequencer_track_count,
         grid_sequencer_chord_mode,
         grid_sequencer,
+        grid_sequencer_bpm,
+        loop_browser_bpm,
         keyboard_note_guide_overlay_date,
         notepad_sound_check_guide_overlay_date,
     }
@@ -257,6 +263,8 @@ impl<'a> TuiApp<'a> {
             grid_sequencer_track_count,
             grid_sequencer_chord_mode,
             grid_sequencer,
+            grid_sequencer_bpm,
+            loop_browser_bpm,
             keyboard_note_guide_overlay_date,
             notepad_sound_check_guide_overlay_date,
         } = load_initial_session_state();
@@ -327,6 +335,11 @@ impl<'a> TuiApp<'a> {
             ),
             loop_browser: {
                 let mut screen = super::loop_browser::LoopBrowserScreen::default();
+                screen
+                    .state
+                    .set_bpm_mode(cmrt_tui_core::bpm::BpmMode::from_saved_manual(
+                        loop_browser_bpm,
+                    ));
                 screen.state.starting =
                     active_screen == crate::screen_switch::PrimaryScreen::LoopBrowser;
                 screen
@@ -338,6 +351,7 @@ impl<'a> TuiApp<'a> {
                     buffer_frames: cfg.buffer_size,
                     track_count: grid_sequencer_track_count,
                     chord_enabled: grid_sequencer_chord_mode,
+                    bpm_mode: cmrt_tui_core::bpm::BpmMode::from_saved_manual(grid_sequencer_bpm),
                     restored_session: grid_session_from_history(grid_sequencer),
                 },
             ),
@@ -362,6 +376,8 @@ impl<'a> TuiApp<'a> {
             grid_sequencer_track_count: self.grid_sequencer.track_count(),
             grid_sequencer_chord_mode: self.grid_sequencer.chord_enabled(),
             grid_sequencer: grid_session_to_history(self.grid_sequencer.session_state()),
+            grid_sequencer_bpm: self.grid_sequencer.bpm_mode().manual(),
+            loop_browser_bpm: self.loop_browser.state.bpm_mode().manual(),
             keyboard_note_guide_overlay_date: self
                 .keyboard
                 .note_guide

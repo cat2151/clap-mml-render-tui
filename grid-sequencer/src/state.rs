@@ -28,10 +28,13 @@ pub use instance::{
 pub use note_pattern::{NotePattern, NoteStep};
 
 pub use chord::{ChordPlayback, ARPEGGIO_ROW, BASS_ROW, CHORD_ROW};
+use clock::StepClock;
+#[cfg(test)]
+pub use clock::SCHEDULE_GUARD;
 pub use clock::{
-    frames_ahead, step_offset, step_timeline_seconds, BPM, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL,
+    frames_ahead, lookahead_at, schedule_guard_at, step_interval_at, step_offset, step_offset_at,
+    step_timeline_seconds, step_timeline_seconds_at, BPM, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL,
 };
-use clock::{StepClock, SCHEDULE_GUARD};
 pub use drum::{FIRST_DRUM_ROW, FULL_DRUM_TRACK_COUNT};
 pub use randomize::randomize_instance_slice;
 
@@ -231,6 +234,10 @@ impl GridState {
 
     /// 画面へ入るときの初期化。再生位置を先頭へ戻してクロックを走らせる。
     pub fn start(&mut self, now: Instant) {
+        self.start_at_bpm(now, BPM);
+    }
+
+    pub fn start_at_bpm(&mut self, now: Instant, bpm: f64) {
         self.step_index = 0;
         self.schedule_index = 0;
         self.started = false;
@@ -241,7 +248,7 @@ impl GridState {
         self.last_scheduled_timeline_seconds = None;
         self.last_poll_lateness = Duration::ZERO;
         self.reset_cycle_stop();
-        self.clock.start(now);
+        self.clock.start_at_bpm(now, bpm);
     }
 
     /// `now + lookahead` までに鳴るステップをまとめて組み立て、送るべき MIDI メッセージを
@@ -257,7 +264,7 @@ impl GridState {
                 .last_poll_lateness
                 .max(now.saturating_duration_since(deadline));
             let ahead = deadline.saturating_duration_since(now);
-            let timeline_seconds = clock::step_timeline_seconds(due.step);
+            let timeline_seconds = self.clock.timeline_seconds(due.step);
             let mut messages = self.expire_sounding();
             self.advance_schedule();
             let stopping = std::mem::take(&mut self.cycle_wrapped);
@@ -303,14 +310,16 @@ impl GridState {
     /// まだ何も送っていなければ即座（0）で良い。
     pub(crate) fn silence_ahead(&self, now: Instant) -> Duration {
         match self.last_scheduled {
-            Some(deadline) => (deadline + SCHEDULE_GUARD).saturating_duration_since(now),
+            Some(deadline) => {
+                (deadline + self.clock.schedule_guard()).saturating_duration_since(now)
+            }
             None => Duration::ZERO,
         }
     }
 
     pub(crate) fn silence_timeline_seconds(&self) -> f64 {
         self.last_scheduled_timeline_seconds
-            .map(|seconds| seconds + SCHEDULE_GUARD.as_secs_f64())
+            .map(|seconds| seconds + self.clock.schedule_guard().as_secs_f64())
             .unwrap_or(0.0)
     }
 
