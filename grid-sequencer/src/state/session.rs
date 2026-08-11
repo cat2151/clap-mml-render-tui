@@ -43,16 +43,17 @@ impl GridState {
 /// 信じずに毎回 index の既定へ寄せ直す。
 ///
 /// bass 行（[`super::BASS_ROW`]）が 4 voice の既定行だった頃のセッションを引き継ぐために要る。
-/// そのままだと bass 行に空の lane が3本ぶら下がり、4 voice の行が1つも無くなって
-/// アルペジオ（[`super::arpeggio`]）が書けなくなる。
+/// そのままだと bass 行に余った lane がぶら下がり、4 voice の行が1つも無くなって
+/// アルペジオ（[`super::arpeggio`]）が書けなくなる。逆に bass 行が 1 lane だった頃の
+/// セッションは、`normalize()` の resize で octave 上の lane が空のまま足される。
 fn restore_lane_mode(index: usize, instance: &mut GridInstance) {
     let lane_mode = GridInstance::new(index).lane_mode;
     if instance.lane_mode == lane_mode {
         return;
     }
     instance.lane_mode = lane_mode;
-    if lane_mode == GridLaneMode::Single {
-        // 転回は 4 voice の行だけが持つ状態。Single へ落とすときは一緒に捨てる。
+    if lane_mode != GridLaneMode::ChordVoices4 {
+        // 転回は 4 voice の行だけが持つ状態。他の mode へ落とすときは一緒に捨てる。
         instance.voicing_rotation = 0;
     }
 }

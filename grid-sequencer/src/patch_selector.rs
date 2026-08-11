@@ -10,7 +10,8 @@ use cmrt_surge_patches::{group_patch_pairs_by_category, matches_role, PatchCateg
 use cmrt_tui_core::random::random_index;
 
 use crate::{
-    GridPatchLoad, GridSequencerContext, GridSequencerScreen, ARPEGGIO_ROW, BASS_ROW, CHORD_ROW,
+    patch_bag::PatchBag, GridPatchLoad, GridSequencerContext, GridSequencerScreen, ListDirection,
+    ARPEGGIO_ROW, BASS_ROW, CHORD_ROW,
 };
 
 mod input;
@@ -169,16 +170,19 @@ impl PatchSelector {
 }
 
 impl GridSequencerScreen {
-    /// PATCH名上のwheelで、そのinstanceの用途に合う別patchをランダム適用する。
-    pub(crate) fn randomize_instance_patch(
+    /// PATCH名上のwheelで、そのinstanceの用途に合う patch list を1つ送る。
+    ///
+    /// 引く順序は [`PatchBag`] が持つ。下で次、上で前に聴いた音色へ戻る。
+    pub(crate) fn cycle_instance_patch(
         &mut self,
         instance: usize,
+        direction: ListDirection,
         ctx: &GridSequencerContext<'_>,
     ) {
         let Some(item) = self.state.instances().get(instance) else {
             return;
         };
-        let current = item.patch.as_deref();
+        let current = item.patch.clone();
         let chord_on = self.state.chord().is_some();
         // chord mode 中は行ごとに用途が決まっている。それ以外の行は Free（＝和音向きの
         // 音色を避ける）で引き、chord mode off なら全行が Free。
@@ -190,24 +194,38 @@ impl GridSequencerScreen {
         };
         let filter = ctx.role_filter(role);
         let voicing = ctx.poly_lookup();
+        // 現在の patch も除外しない。袋の中身は「用途に合う音色の全体」で固定しておき、
+        // 音色を替えるたびに候補が変わって袋が作り直されるのを避ける。
         let candidates = ctx
             .patches()
             .iter()
-            .filter(|(display, lower)| {
-                matches_role(display, lower, &filter, &voicing) && current != Some(display.as_str())
-            })
-            .map(|(display, _)| display)
+            .filter(|(display, lower)| matches_role(display, lower, &filter, &voicing))
+            .map(|(display, _)| display.clone())
             .collect::<Vec<_>>();
-        let Some(index) = random_index(candidates.len()) else {
+        // 用途か候補が変わったら、袋も辿った履歴も作り直す。
+        if !matches!(self.patch_bags.get(&instance), Some(bag) if bag.matches(role, &candidates)) {
+            self.patch_bags.insert(
+                instance,
+                PatchBag::new(role, candidates, current.as_deref()),
+            );
+        }
+        let Some(bag) = self.patch_bags.get_mut(&instance) else {
             return;
         };
-        let patch = candidates[index].clone();
+        let Some(patch) = bag.advance(direction).map(str::to_string) else {
+            return;
+        };
         let undo = self.capture_undo();
         if self.state.set_instance_patch(instance, patch.clone()) {
             self.begin_manual_edit();
-            self.prepare_patch(instance, Some(&patch), "wheel-random");
+            self.prepare_patch(instance, Some(&patch), "wheel-patch");
             self.commit_undo(undo);
         }
+    }
+
+    /// instance 番号の指す先が変わるとき（`t` キーの track 数切替）に袋を捨てる。
+    pub(crate) fn reset_patch_bags(&mut self) {
+        self.patch_bags.clear();
     }
 
     pub(crate) fn open_patch_selector(&mut self, instance: usize, ctx: &GridSequencerContext<'_>) {

@@ -129,7 +129,7 @@ fn growing_the_track_count_fills_the_added_rows_with_notes() {
 
 /// bass 行が 4 voice の既定行だった頃のセッションを引き継ぐ。
 #[test]
-fn a_restored_bass_row_is_migrated_back_to_a_single_lane() {
+fn a_restored_bass_row_is_migrated_back_to_its_two_lanes() {
     let mut old_bass = instance(1, "Bass", 36);
     old_bass.lane_mode = GridLaneMode::ChordVoices4;
     old_bass.voicing_rotation = -3;
@@ -147,7 +147,32 @@ fn a_restored_bass_row_is_migrated_back_to_a_single_lane() {
     });
 
     let bass = &screen.state.instances()[crate::BASS_ROW];
-    assert_eq!(bass.lane_mode, GridLaneMode::Single);
-    assert_eq!(bass.lanes.len(), 1);
+    assert_eq!(bass.lane_mode, GridLaneMode::BassOctave2);
+    assert_eq!(bass.lanes.len(), 2);
     assert_eq!(bass.voicing_rotation, 0);
+}
+
+/// bass 行が 1 lane だった頃のセッションでは、octave 上の lane を空で足す。
+#[test]
+fn a_restored_single_lane_bass_row_gains_an_empty_octave_lane() {
+    let mut old_bass = instance(1, "Bass", 36);
+    old_bass.lane_mode = GridLaneMode::Single;
+    old_bass.normalize();
+    old_bass.lanes[0].pattern.draw_span(2, 3);
+
+    let session = GridSequencerSession::new(
+        vec![instance(0, "Piano", 60), old_bass],
+        PatternEvolution::Hold,
+    );
+    let screen = GridSequencerScreen::new_with(crate::GridSequencerParts {
+        track_count: 2,
+        restored_session: Some(session),
+        ..crate::GridSequencerParts::default()
+    });
+
+    let bass = &screen.state.instances()[crate::BASS_ROW];
+    assert_eq!(bass.lanes.len(), 2);
+    // 保存されていた root の pattern はそのまま、octave 上は空で始まる。
+    assert!(bass.lanes[0].pattern.is_attack(2));
+    assert!((0..GRID_STEPS).all(|step| !bass.lanes[1].pattern.is_attack(step)));
 }

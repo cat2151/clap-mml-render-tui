@@ -4,7 +4,7 @@
 //! VELOCITY grid / ステータス1行 / キーバインド1行」の縦分割で、help は最後に
 //! overlay として重ねる。
 
-use ratatui::{widgets::Paragraph, Frame};
+use ratatui::{layout::Rect, widgets::Paragraph, Frame};
 
 use cmrt_tui_core::{
     status::base_style,
@@ -20,24 +20,37 @@ mod grid;
 mod help;
 pub mod layout;
 mod patch_selector;
+mod pattern_list;
 mod progress;
 mod restart_notice;
 mod value_grid;
 
-pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: &mut Frame<'_>) {
-    let chord_line = chord_line::line(screen);
+/// 描画と mouse の当たり判定が同じ矩形を見るための、唯一の layout の作り方。
+///
+/// grid は中央寄せなので左端が端末幅で動く。片方だけ別の式で組むと、見えている
+/// セルと当たるセルがずれる。
+pub(crate) fn layout_for(screen: &GridSequencerScreen, area: Rect) -> layout::GridSequencerLayout {
     let visible_rows = screen.state.visible_note_rows();
-    let layout = layout::GridSequencerLayout::new(
-        f.area(),
+    layout::GridSequencerLayout::new(
+        area,
         visible_rows.len(),
         screen.state.instance_count(),
         visible_rows.len(),
-        chord_line.is_some(),
-    );
+        screen.chord_line_visible(),
+        screen.state.chord().is_some(),
+    )
+}
+
+pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: &mut Frame<'_>) {
+    let chord_line = chord_line::line(screen);
+    let layout = layout_for(screen, f.area());
     if let (Some(line), Some(area)) = (chord_line, layout.chord_line) {
         f.render_widget(Paragraph::new(line).style(base_style()), area);
     }
     draw_grids(screen, connection, f, &layout);
+    if let Some(area) = layout.pattern_list {
+        pattern_list::draw(screen, f, area);
+    }
     f.render_widget(
         status_line(screen, connection, layout.status.width),
         layout.status,

@@ -22,8 +22,8 @@ fn a_legacy_session_moves_its_chord_voice_row_to_the_default_index() {
     assert!(state.restore_instances(legacy_instances()));
 
     let bass = &state.instances()[crate::BASS_ROW];
-    assert_eq!(bass.lane_mode, GridLaneMode::Single);
-    assert_eq!(bass.lanes.len(), 1);
+    assert_eq!(bass.lane_mode, GridLaneMode::BassOctave2);
+    assert_eq!(bass.lanes.len(), 2);
     assert_eq!(bass.voicing_rotation, 0);
 
     let voices = &state.instances()[2];

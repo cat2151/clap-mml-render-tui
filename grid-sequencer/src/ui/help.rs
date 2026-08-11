@@ -1,90 +1,131 @@
 use ratatui::{
+    layout::{Constraint, Direction, Layout, Rect},
     text::Line,
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
 
-use cmrt_tui_core::{
-    memory, status::base_style, theme::MONOKAI_CYAN, ui::centered_text_block_rect,
-};
+use cmrt_tui_core::{memory, status::base_style, theme::MONOKAI_CYAN, ui::centered_rect_with_size};
 
+/// `cmrt_tui_core::buffer_test::help_overlay_bounds` が枠を探す目印でもあるので、
+/// 「ヘルプ(Keybinds)」の並びは他画面と揃えたまま変えない。
 const TITLE: &str = " Grid Sequencer ヘルプ(Keybinds)  Esc/q/?:close ";
 
 /// 画面下部に常に出しておく1行のキーバインド要約。
 pub(super) const KEYBIND_TEXT: &str =
     " mouse:edit u:undo a:A/H x:clear c:chord r/R:random t:tracks Ctrl+G:screen q:quit";
 
+/// 枠線が食う幅・高さ。
+const BORDER_SIZE: u16 = 2;
+/// 左右 pane の間に空ける余白。
+const PANE_GAP: u16 = 2;
+
+/// ヘルプは2 pane。左はキーバインドだけ、右は非自明な挙動の説明だけを置く。
+/// 「何のキーか」と「何が起きるか」を混ぜると、どちらも探しにくくなる。
 pub(super) fn draw_overlay(f: &mut Frame<'_>, track_count: usize) {
-    let lines = help_lines(track_count);
-    let area = centered_text_block_rect(f.area(), TITLE, &lines);
+    let keybinds = keybind_lines();
+    let features = feature_lines(track_count);
+    let area = overlay_rect(f.area(), &keybinds, &features);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(TITLE)
+        .style(base_style())
+        .border_style(base_style().fg(MONOKAI_CYAN));
+    let inner = block.inner(area);
     f.render_widget(Clear, area);
+    f.render_widget(block, area);
+
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(pane_width(&keybinds)),
+            Constraint::Length(PANE_GAP),
+            Constraint::Min(0),
+        ])
+        .split(inner);
+    f.render_widget(Paragraph::new(keybinds).style(base_style()), panes[0]);
+    // 端末が狭いときは右 pane が削られる。折り返して読めるようにしておく。
     f.render_widget(
-        Paragraph::new(lines).style(base_style()).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(TITLE)
-                .style(base_style())
-                .border_style(base_style().fg(MONOKAI_CYAN)),
-        ),
-        area,
+        Paragraph::new(features)
+            .style(base_style())
+            .wrap(Wrap { trim: false }),
+        panes[2],
     );
 }
 
-fn help_lines(track_count: usize) -> Vec<Line<'static>> {
-    // メモリ行は先頭に置く。端末が低いと centered_text_block_rect が下を切り落とすため。
+/// 2 pane を並べた大きさの矩形。タイトルが本文より長い場合はタイトルに合わせる。
+fn overlay_rect(area: Rect, keybinds: &[Line<'_>], features: &[Line<'_>]) -> Rect {
+    let content_width = pane_width(keybinds)
+        .saturating_add(PANE_GAP)
+        .saturating_add(pane_width(features));
+    let width = content_width
+        .max(Line::from(TITLE).width() as u16)
+        .saturating_add(BORDER_SIZE);
+    let height = (keybinds.len().max(features.len()) as u16).saturating_add(BORDER_SIZE);
+    centered_rect_with_size(width, height, area)
+}
+
+fn pane_width(lines: &[Line<'_>]) -> u16 {
+    u16::try_from(lines.iter().map(Line::width).max().unwrap_or(0)).unwrap_or(u16::MAX)
+}
+
+/// 左 pane。キーと、その1行の意味だけ。全角=2セルで幅38に収める。
+fn keybind_lines() -> Vec<Line<'static>> {
+    [
+        " Ctrl+G  画面切替メニュー",
+        " 左click 1step の note / 消去",
+        " 左drag  長い note、row横断で arpeggio",
+        " 右drag  note 消去",
+        " wheel   PATCH欄:音色を送る(↓次 ↑前)",
+        "         NOTE欄:音高 / 転回(↑上げる)",
+        "         grid:フレーズを送る(↓次 ↑前)",
+        " u       直前の編集を undo",
+        " a       AUTO / HOLD 切替",
+        " x       全 note 消去",
+        " c       chord mode on/off",
+        " r       全ランダム(patch 含む)",
+        " R       note/pattern だけランダム",
+        " t       track数 1/2/3/4/8/16 切替",
+        " b       シングルバッファリング切替",
+        " ?       このヘルプ",
+        " q       終了",
+    ]
+    .into_iter()
+    .map(Line::from)
+    .collect()
+}
+
+/// 右 pane。キーを見ても分からない挙動だけに絞る。
+///
+/// 90x24 の端末でも枠内へ収める前提で、幅48セル・18行に切り詰めてある。
+/// 足すときは同じだけ削ること（溢れると右 pane が折り返して下が切れる）。
+fn feature_lines(track_count: usize) -> Vec<Line<'static>> {
+    // メモリ行は先頭に置く。端末が低いと overlay_rect が下を切り落とすため。
     let mut lines = memory::overlay_lines();
-    lines.extend(vec![
-        Line::from(format!(
-            "{track_count}行 x 16ステップ を常時ループ再生します。"
-        )),
-        Line::from("BPM130、1ステップ = 115ms(16分音符)、16ステップ = 1.85秒で1周。"),
-        Line::from("  Ctrl+G   画面切替メニュー"),
-        Line::from("  NOTE     # = Attack  - = Tie  . = Rest"),
-        Line::from("  mouse    左drag:長いnote／row横断でarpeggio、左click:1step note/消去"),
-        Line::from(
-            "           右drag:note消去、PATCH click/wheel:選択/random、NOTE wheel:音高/転回",
-        ),
-        Line::from("           grid wheel:アルペジオ生成(chord mode中の4 voice行のみ)"),
-        Line::from("           up/downで音型送り。Up/Down/UpDown/DownUp/UpDownHold/Converge/"),
-        Line::from("           Diverge/Octave/Random。長さは1/2/4stepからランダム"),
-        Line::from("  u        直前の編集をundo（mouse dragは通過cell数によらず1操作）"),
-        Line::from("  a        AUTO/HOLD切替（AUTOはコード進行1周ごとに全行を再抽選）"),
-        Line::from("           HOLD: 手編集した譜面を保持し、コード変更時は発音音高だけ更新"),
-        Line::from("  x        全note消去（mouse編集とxはHOLDへ移行）"),
-        Line::from("  c        chord mode の on/off。転回とoctaveは全自動(auto voicing)で、"),
-        Line::from("           top noteの跳躍を最小化し、進行の引き直しもまたいで繋ぎます。"),
-        Line::from("           instance 1は全音符の和音(AUTO時のみ+6dB)。instance 2はbassで、"),
-        Line::from("           instance 3は4 voiceを独立patternで鳴らします(patchは4行で共有)。"),
-        Line::from("           高音が上、rootが下。NOTE wheelで最下音を1 chord noteずつ転回。"),
-        Line::from("           mono patchも使用可。行1/2/3はそれぞれ別カテゴリから抽選。"),
-        Line::from("           音色は config.toml の chord/bass/arpeggio_patch_categories。"),
-        Line::from("           on/off は t キーやアプリ終了をまたいで保存されます。"),
-        Line::from("  r        grid を丸ごとランダム設定(patch / note / pattern)"),
-        Line::from("  R        patch を据え置き、note / patternだけランダム設定"),
-        Line::from("           (音色ロードが無いので再生が途切れない)"),
-        Line::from("  t        track数を 1/2/3/4/8/16 で切替してアプリを再起動"),
-        Line::from("           chord mode は 3 track がちょうど（和音/bass/アルペジオ）"),
-        Line::from("  b        シングルバッファリングの on/off"),
-        Line::from("  ?        このヘルプ"),
-        Line::from("  q        終了"),
-        Line::from(""),
-        Line::from(format!(
-            "{track_count} instancesは realtime play server の CLAP instance 0〜{} に対応し、",
-            track_count - 1
-        )),
-        Line::from(format!(
-            "instanceごとに別の音色です。r は{track_count} instanceぶんの音色ロードを"
-        )),
-        Line::from("やり直すため、その間だけ再生が止まります。"),
-        Line::from(""),
-        Line::from("準備中のlaneは同じinstance単位で色が落ちます。暗いグレー = 未構築、"),
-        Line::from("グレー = instance のみ構築済み、通常色 = 音色ロードまで完了。"),
-        Line::from(""),
-        Line::from("シングルバッファリング(b)は裏での読み込みをやめ、進行を1周"),
-        Line::from("鳴らしきる→音色ロード→先頭から再開、を繰り返します。ロード中は"),
-        Line::from("無音になる代わりに、演奏中のブツ切れが無くなります。出力バッファを"),
-        Line::from("上限まで厚くしてもフレームドロップが10秒続いたときは、自動で"),
-        Line::from("こちらへ切り替わります(ステータス行が single / sb になります)。"),
-    ]);
+    lines.extend(
+        [
+            format!("{track_count}行 x 16step(115ms/16分, BPM130)を1.85秒で1周"),
+            "NOTE欄  # = Attack   - = Tie   . = Rest".to_string(),
+            "lane色  暗=未構築  灰=instanceのみ  通常=ロード済".to_string(),
+            "chord mode(c) 行1=和音 行2=bass 行3=4 voice。".to_string(),
+            "  転回とoctaveは全自動(auto voicing)で、top note".to_string(),
+            "  の跳躍を最小化し、進行の引き直しもまたいで繋ぎ".to_string(),
+            "  ます。on/off は保存されます。".to_string(),
+            "grid の wheel↓ で次のフレーズ(chord mode中)".to_string(),
+            "  4 voice行 Up/Down/UpDown/DownUp/UpDownHold/".to_string(),
+            "    Converge/Diverge/Octave/Random".to_string(),
+            "  bass行 Whole/8th/8th+Oct/#-##/#-##+Oct/".to_string(),
+            "    ####+Oct  +Oct は八分ごとに octave 上と往復".to_string(),
+            "    Whole は回した瞬間から鳴り出します。".to_string(),
+            "AUTO / HOLD(a) AUTO は1周ごとに全行を再抽選。".to_string(),
+            "  HOLD は手編集した譜面を保持し、コード変更時は".to_string(),
+            "  発音音高だけ更新。mouse編集/x/生成で HOLD へ。".to_string(),
+            "シングルバッファリング(b) 1周鳴らしきる→音色".to_string(),
+            "  ロード→先頭から再開。ロード中は無音になる代わ".to_string(),
+            "  りに演奏のブツ切れが無くなります(自動切替あり)".to_string(),
+        ]
+        .into_iter()
+        .map(Line::from),
+    );
     lines
 }

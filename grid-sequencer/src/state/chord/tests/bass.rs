@@ -79,10 +79,40 @@ fn the_bass_row_keeps_its_own_rhythm() {
     );
 }
 
-/// bass 行に lane が複数あっても（session 復元で `ChordVoices4` のまま来た場合）、
-/// 鳴らすのは lane 0 だけ。
+/// lane 1 は bass 音の1オクターブ上。コードが進んでも追従する。
 #[test]
-fn only_the_first_lane_of_the_bass_row_sounds() {
+fn the_second_lane_of_the_bass_row_plays_an_octave_above() {
+    let now = Instant::now();
+    let mut state = GridState::with_instance_count(4);
+    state.set_chord(Some(voiced_c_then_f()), now);
+
+    assert_eq!(state.resolved_note(LaneAddress::new(BASS_ROW, 1)), Some(60));
+
+    state.advance_chord();
+
+    assert_eq!(state.resolved_note(LaneAddress::new(BASS_ROW, 1)), Some(65));
+}
+
+/// オクターブ上が MIDI note number の上限を越えるなら鳴らさない。
+#[test]
+fn an_octave_above_the_top_of_the_range_stays_silent() {
+    let now = Instant::now();
+    let mut state = GridState::with_instance_count(4);
+    let high = ChordPlayback::from_voicings("C", "I".to_string(), vec![voicing(120, &[120])])
+        .expect("a progression with one chord");
+    state.set_chord(Some(high), now);
+
+    assert_eq!(
+        state.resolved_note(LaneAddress::new(BASS_ROW, 0)),
+        Some(120)
+    );
+    assert_eq!(state.resolved_note(LaneAddress::new(BASS_ROW, 1)), None);
+}
+
+/// bass 行に lane が3本以上あっても（session 復元で `ChordVoices4` のまま来た場合）、
+/// 鳴らすのは root と octave 上の2本だけ。
+#[test]
+fn only_the_first_two_lanes_of_the_bass_row_sound() {
     let now = Instant::now();
     let mut state = GridState::with_instance_count(4);
     state.instances[BASS_ROW].lane_mode = crate::GridLaneMode::ChordVoices4;
@@ -90,7 +120,8 @@ fn only_the_first_lane_of_the_bass_row_sounds() {
     state.set_chord(Some(voiced_c_then_f()), now);
 
     assert_eq!(state.resolved_note(LaneAddress::new(BASS_ROW, 0)), Some(48));
-    for lane in 1..4 {
+    assert_eq!(state.resolved_note(LaneAddress::new(BASS_ROW, 1)), Some(60));
+    for lane in 2..4 {
         assert_eq!(state.resolved_note(LaneAddress::new(BASS_ROW, lane)), None);
     }
 }
@@ -103,4 +134,5 @@ fn a_progression_without_a_bass_leaves_the_row_silent() {
     state.set_chord(Some(c_major_then_f_major()), now);
 
     assert_eq!(state.resolved_note(LaneAddress::new(BASS_ROW, 0)), None);
+    assert_eq!(state.resolved_note(LaneAddress::new(BASS_ROW, 1)), None);
 }

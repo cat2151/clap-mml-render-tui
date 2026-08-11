@@ -15,8 +15,9 @@ fn the_keybind_line_is_always_visible() {
     assert!(rendered.contains("q:quit"), "{rendered}");
 }
 
+/// 左 pane にキーバインド、右 pane に挙動の説明。混ぜないこと自体が仕様。
 #[test]
-fn the_help_overlay_lists_the_keybinds_and_explains_hold() {
+fn the_help_overlay_splits_keybinds_from_the_feature_notes() {
     let mut screen = GridSequencerScreen::new(None);
     screen.help_open = true;
 
@@ -32,7 +33,15 @@ fn the_help_overlay_lists_the_keybinds_and_explains_hold() {
     assert!(
         rendered
             .replace(' ', "")
-            .contains("HOLD:手編集した譜面を保持"),
+            .contains("HOLDは手編集した譜面を保持"),
+        "{rendered}"
+    );
+    // 左 pane の先頭（Ctrl+G）と右 pane の先頭（メモリ行）が同じ行に並ぶ＝2 pane。
+    assert!(
+        rendered.lines().any(|line| {
+            let line = line.replace(' ', "");
+            line.contains("Ctrl+G") && line.contains("実メモリ合計")
+        }),
         "{rendered}"
     );
 }

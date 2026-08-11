@@ -1,8 +1,10 @@
 //! 組み立て中の列の発音。lane ごとの owner を保って MIDI メッセージ列を作る。
 
+use std::time::Instant;
+
 use super::{
-    measure_lane::TriggerTable, note_off, note_on, GridState, LaneAddress, SoundOwner,
-    SoundingNote, CHORD_ROW, GRID_STEPS,
+    measure_lane::TriggerTable, note_off, note_on, GridScheduledMessage, GridState, LaneAddress,
+    SoundOwner, SoundingNote, CHORD_ROW, GRID_STEPS,
 };
 
 struct Attack {
@@ -48,6 +50,67 @@ impl GridState {
             }
         }
         messages
+    }
+
+    /// 譜面の小節頭を待たずに、いま `address` の音を鳴らし始める。小節末で切れる。
+    ///
+    /// 1meas 伸ばすベースライン（`BassPattern::Whole`）は step 0 にしか Attack が無いので、
+    /// 小節の途中で選ぶと次の小節頭まで最大1meas無音になり、wheel を回しても手応えが無い。
+    /// 送った型をその場で聴けるよう、ここで1音だけ差し込む。
+    ///
+    /// `ahead` を [`GridState::silence_ahead`] に合わせるのは、先読みで既に送信済みの
+    /// note off に後から追い越されて消されるのを防ぐため。
+    pub fn preview_lane_now(
+        &mut self,
+        address: LaneAddress,
+        now: Instant,
+    ) -> Vec<GridScheduledMessage> {
+        if !self.is_running() {
+            return Vec::new();
+        }
+        let (Some(midi_note), Some(velocity_lane)) =
+            (self.resolved_note(address), self.stored_lane_index(address))
+        else {
+            return Vec::new();
+        };
+        let ahead = self.silence_ahead(now);
+        let instance_id = self.instance_id(address.instance);
+        let owner = SoundOwner::Lane(address);
+
+        // 同じ lane で鳴っている音は先に止める（`attack_current_step` と同じ手順）。
+        let mut released = Vec::new();
+        self.sounding.retain(|note| {
+            if note.owner == owner {
+                released.push((note.instance_id, note.midi_note));
+                false
+            } else {
+                true
+            }
+        });
+        let mut messages = released
+            .into_iter()
+            .map(|(instance_id, midi_note)| (instance_id, note_off(midi_note)))
+            .collect::<Vec<_>>();
+
+        // 組み立て済みの列の次から数えるので、ちょうど次の小節頭で切れる。そこで
+        // 譜面の step 0 の Attack が鳴り、聴感上は途切れずに繋がる。
+        let velocity = self.velocity.value_at(velocity_lane, self.schedule_index);
+        self.sounding.push(SoundingNote {
+            owner,
+            instance_id,
+            midi_note,
+            remaining_steps: (GRID_STEPS - self.schedule_index) as u8,
+        });
+        messages.push((instance_id, note_on(midi_note, velocity)));
+
+        messages
+            .into_iter()
+            .map(|(instance_id, message)| GridScheduledMessage {
+                instance_id,
+                ahead,
+                message,
+            })
+            .collect()
     }
 
     /// stored lane × step の発音表。Velocity の抽選・表示に使う。
@@ -181,3 +244,6 @@ impl GridState {
             })
     }
 }
+
+#[cfg(test)]
+mod tests;

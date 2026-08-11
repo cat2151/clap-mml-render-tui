@@ -7,13 +7,11 @@ use super::*;
 use crate::{ChordPlayback, LaneAddress, NoteStep, PatternEvolution, GRID_STEPS};
 
 const AREA: Rect = Rect::new(0, 0, 90, 24);
-/// NOTE grid の step セル領域の左端。ここより左は PATCH / NOTE 欄。
-const FIRST_CELL_COLUMN: u16 = 37;
-/// chord mode 中の行番号。行3が和音、行4が bass、行5〜8が 4 voice(lane 3〜0)、
-/// 行9が Single lane。
+/// chord mode 中の行番号。行3が和音、行4/5が bass(octave 上/root)、
+/// 行6〜9が 4 voice(lane 3〜0)、行10が Single lane。
 const CHORD_SUMMARY_ROW: u16 = 3;
-const TOP_VOICE_ROW: u16 = 5;
-const SINGLE_LANE_ROW: u16 = 9;
+const TOP_VOICE_ROW: u16 = 6;
+const SINGLE_LANE_ROW: u16 = 10;
 
 fn context() -> crate::GridSequencerContext<'static> {
     crate::tests::ctx_with(
@@ -23,8 +21,9 @@ fn context() -> crate::GridSequencerContext<'static> {
     )
 }
 
-fn cell(step: usize) -> u16 {
-    FIRST_CELL_COLUMN + step as u16 * 2
+/// step セルの列。grid は中央寄せなので、chord 行の有無で左端が動く。
+fn cell(screen: &GridSequencerScreen, step: usize) -> u16 {
+    crate::ui::layout_for(screen, AREA).step_column(step)
 }
 
 fn wheel(kind: MouseEventKind, column: u16, row: u16) -> MouseEvent {
@@ -71,10 +70,10 @@ fn is_silent(screen: &GridSequencerScreen, instance: usize) -> bool {
 }
 
 #[test]
-fn wheel_up_on_a_step_cell_writes_an_up_arpeggio_across_the_four_voices() {
+fn wheel_down_on_a_step_cell_writes_an_up_arpeggio_across_the_four_voices() {
     let mut screen = chorded_screen();
     screen.handle_mouse(
-        wheel(MouseEventKind::ScrollUp, cell(0), TOP_VOICE_ROW),
+        wheel(MouseEventKind::ScrollDown, cell(&screen, 0), TOP_VOICE_ROW),
         AREA,
         &context(),
     );
@@ -98,7 +97,7 @@ fn generating_an_arpeggio_moves_the_screen_into_hold() {
     let mut screen = chorded_screen();
     assert_eq!(screen.pattern_evolution(), PatternEvolution::Auto);
     screen.handle_mouse(
-        wheel(MouseEventKind::ScrollUp, cell(3), TOP_VOICE_ROW),
+        wheel(MouseEventKind::ScrollDown, cell(&screen, 3), TOP_VOICE_ROW),
         AREA,
         &context(),
     );
@@ -110,7 +109,7 @@ fn the_wheel_sends_the_pattern_cursor_in_both_directions() {
     let mut screen = chorded_screen();
     for expected in ArpPattern::ALL {
         screen.handle_mouse(
-            wheel(MouseEventKind::ScrollUp, cell(0), TOP_VOICE_ROW),
+            wheel(MouseEventKind::ScrollDown, cell(&screen, 0), TOP_VOICE_ROW),
             AREA,
             &context(),
         );
@@ -118,7 +117,7 @@ fn the_wheel_sends_the_pattern_cursor_in_both_directions() {
     }
     // 1周したら先頭へ戻る。
     screen.handle_mouse(
-        wheel(MouseEventKind::ScrollUp, cell(0), TOP_VOICE_ROW),
+        wheel(MouseEventKind::ScrollDown, cell(&screen, 0), TOP_VOICE_ROW),
         AREA,
         &context(),
     );
@@ -126,7 +125,7 @@ fn the_wheel_sends_the_pattern_cursor_in_both_directions() {
 
     for expected in ArpPattern::ALL.iter().rev() {
         screen.handle_mouse(
-            wheel(MouseEventKind::ScrollDown, cell(0), TOP_VOICE_ROW),
+            wheel(MouseEventKind::ScrollUp, cell(&screen, 0), TOP_VOICE_ROW),
             AREA,
             &context(),
         );
@@ -135,10 +134,10 @@ fn the_wheel_sends_the_pattern_cursor_in_both_directions() {
 }
 
 #[test]
-fn the_first_wheel_down_starts_from_the_end_of_the_list() {
+fn the_first_wheel_up_starts_from_the_end_of_the_list() {
     let mut screen = chorded_screen();
     screen.handle_mouse(
-        wheel(MouseEventKind::ScrollDown, cell(0), TOP_VOICE_ROW),
+        wheel(MouseEventKind::ScrollUp, cell(&screen, 0), TOP_VOICE_ROW),
         AREA,
         &context(),
     );
@@ -149,7 +148,11 @@ fn the_first_wheel_down_starts_from_the_end_of_the_list() {
 fn the_chord_summary_row_is_not_arpeggiated() {
     let mut screen = chorded_screen();
     screen.handle_mouse(
-        wheel(MouseEventKind::ScrollUp, cell(0), CHORD_SUMMARY_ROW),
+        wheel(
+            MouseEventKind::ScrollDown,
+            cell(&screen, 0),
+            CHORD_SUMMARY_ROW,
+        ),
         AREA,
         &context(),
     );
@@ -162,7 +165,11 @@ fn the_chord_summary_row_is_not_arpeggiated() {
 fn a_single_lane_row_has_too_few_voices_to_arpeggiate() {
     let mut screen = chorded_screen();
     screen.handle_mouse(
-        wheel(MouseEventKind::ScrollUp, cell(0), SINGLE_LANE_ROW),
+        wheel(
+            MouseEventKind::ScrollDown,
+            cell(&screen, 0),
+            SINGLE_LANE_ROW,
+        ),
         AREA,
         &context(),
     );
@@ -173,14 +180,14 @@ fn a_single_lane_row_has_too_few_voices_to_arpeggiate() {
 #[test]
 fn without_a_chord_the_step_cell_wheel_does_nothing() {
     let mut screen = GridSequencerScreen::with_track_count(None, 3);
-    // chord OFF では 4 voice instance も1 rowしか出ないので、行3が instance 1。
+    // chord OFF では 4 voice instance も1 rowしか出ないので、行4が instance 2。
     screen.handle_mouse(
-        wheel(MouseEventKind::ScrollUp, cell(0), 3),
+        wheel(MouseEventKind::ScrollDown, cell(&screen, 0), 4),
         AREA,
         &context(),
     );
     assert_eq!(screen.last_arp(), None);
-    assert!(is_silent(&screen, 1));
+    assert!(is_silent(&screen, 2));
     assert_eq!(screen.pattern_evolution(), PatternEvolution::Auto);
 }
 
@@ -193,7 +200,7 @@ fn one_wheel_click_is_one_undo_step() {
         .collect::<Vec<_>>();
 
     screen.handle_mouse(
-        wheel(MouseEventKind::ScrollUp, cell(0), TOP_VOICE_ROW),
+        wheel(MouseEventKind::ScrollDown, cell(&screen, 0), TOP_VOICE_ROW),
         AREA,
         &context(),
     );
@@ -217,9 +224,13 @@ fn one_wheel_click_is_one_undo_step() {
 #[test]
 fn the_note_column_wheel_still_rotates_the_voicing() {
     let mut screen = chorded_screen();
-    // NOTE 欄（column 32）は従来どおり転回。アルペジオは生成しない。
+    // NOTE 欄（column 32）は list ではなく値なので、下で下げる。アルペジオは生成しない。
     screen.handle_mouse(
-        wheel(MouseEventKind::ScrollDown, 32, TOP_VOICE_ROW),
+        wheel(
+            MouseEventKind::ScrollDown,
+            crate::ui::layout_for(&screen, AREA).note_column(),
+            TOP_VOICE_ROW,
+        ),
         AREA,
         &context(),
     );
@@ -231,7 +242,7 @@ fn the_note_column_wheel_still_rotates_the_voicing() {
 fn changing_the_track_count_drops_the_pattern_cursor() {
     let mut screen = chorded_screen();
     screen.handle_mouse(
-        wheel(MouseEventKind::ScrollUp, cell(0), TOP_VOICE_ROW),
+        wheel(MouseEventKind::ScrollDown, cell(&screen, 0), TOP_VOICE_ROW),
         AREA,
         &context(),
     );
@@ -248,7 +259,7 @@ fn a_left_click_on_a_step_cell_still_draws_a_note() {
     screen.handle_mouse(
         MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
-            column: cell(2),
+            column: cell(&screen, 2),
             row: TOP_VOICE_ROW,
             modifiers: KeyModifiers::NONE,
         },

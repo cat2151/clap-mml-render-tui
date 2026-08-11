@@ -54,6 +54,10 @@ pub struct GridConnectionStatus {
     pub phase: GridConnectionPhase,
     pub last_send: Option<Duration>,
     pub limiter_reduction_db: f32,
+    /// CLAP instance ごとに auto-trim が掛けているゲイン（dB）。添字は bank 込みの
+    /// サーバー instance id なので、論理 instance から引くときは
+    /// [`Self::instance_auto_gain_db`] を通すこと。
+    pub auto_gain_db: [f32; cmrt_realtime_play::INSTANCE_COUNT],
     pub buffer_multiplier: u16,
     pub underrun_frames: u64,
     pub server_startup: Option<GridProgress>,
@@ -82,6 +86,7 @@ impl Default for GridConnectionStatus {
             phase: GridConnectionPhase::Idle,
             last_send: None,
             limiter_reduction_db: 0.0,
+            auto_gain_db: [0.0; cmrt_realtime_play::INSTANCE_COUNT],
             buffer_multiplier: super::adaptive_buffer::INITIAL_BUFFER_MULTIPLIER,
             underrun_frames: 0,
             server_startup: None,
@@ -192,6 +197,17 @@ impl GridConnectionStatus {
         }
     }
 
+    /// 指定した CLAP instance に auto-trim が掛けているゲイン（dB）。
+    ///
+    /// 範囲外の instance は 0 dB。track 数はサーバーの上限より少ないことがあり、
+    /// そこは「auto gain が動いていない」と同じ扱いでよい。
+    pub fn instance_auto_gain_db(&self, instance_id: u8) -> f32 {
+        self.auto_gain_db
+            .get(usize::from(instance_id))
+            .copied()
+            .unwrap_or(0.0)
+    }
+
     pub fn row_patch_is_loading(&self) -> bool {
         self.row_patch
             .as_ref()
@@ -218,6 +234,7 @@ impl GridConnectionStatus {
         self.phase = GridConnectionPhase::Connecting;
         self.last_send = None;
         self.limiter_reduction_db = 0.0;
+        self.auto_gain_db = [0.0; cmrt_realtime_play::INSTANCE_COUNT];
         self.buffer_multiplier = super::adaptive_buffer::INITIAL_BUFFER_MULTIPLIER;
         self.underrun_frames = 0;
         self.server_startup = None;
@@ -298,6 +315,13 @@ impl GridConnectionStatus {
 
     pub(super) fn update_limiter_meter(&mut self, meter: cmrt_realtime_play::LimiterMeter) {
         self.limiter_reduction_db = meter.peak_reduction_db.max(meter.current_reduction_db);
+    }
+
+    pub(super) fn update_auto_gain_db(
+        &mut self,
+        gains_db: [f32; cmrt_realtime_play::INSTANCE_COUNT],
+    ) {
+        self.auto_gain_db = gains_db;
     }
 
     /// 先読みロードを1件投げた。UI スレッドから、送信の直前に呼ぶ。

@@ -69,6 +69,9 @@ fn grid_session_from_history(
                 crate::history::GridLaneModeState::Single => {
                     super::grid_sequencer::GridLaneMode::Single
                 }
+                crate::history::GridLaneModeState::BassOctave2 => {
+                    super::grid_sequencer::GridLaneMode::BassOctave2
+                }
                 crate::history::GridLaneModeState::ChordVoices4 => {
                     super::grid_sequencer::GridLaneMode::ChordVoices4
                 }
@@ -132,6 +135,9 @@ fn grid_session_to_history(
                 lane_mode: match instance.lane_mode {
                     super::grid_sequencer::GridLaneMode::Single => {
                         crate::history::GridLaneModeState::Single
+                    }
+                    super::grid_sequencer::GridLaneMode::BassOctave2 => {
+                        crate::history::GridLaneModeState::BassOctave2
                     }
                     super::grid_sequencer::GridLaneMode::ChordVoices4 => {
                         crate::history::GridLaneModeState::ChordVoices4

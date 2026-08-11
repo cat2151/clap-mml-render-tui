@@ -46,7 +46,7 @@ fn the_chord_row_shows_an_attack_tied_through_the_measure() {
     assert!(!first_row.contains("1/1"), "{first_row}");
     assert!(first_row.contains("  61"), "ルート音を出す: {first_row}");
     assert_eq!(
-        slice_chars(first_row, FIRST_CELL_X, CELLS_WIDTH),
+        slice_chars(first_row, first_cell_x(&screen), CELLS_WIDTH),
         format!("# {}", "- ".repeat(GRID_STEPS - 1)),
     );
 }
@@ -54,33 +54,47 @@ fn the_chord_row_shows_an_attack_tied_through_the_measure() {
 #[test]
 fn other_rows_keep_their_own_cells_while_the_chord_row_is_playing() {
     let mut screen = chord_screen();
-    // chord ON の並びは 和音 / bass / 4 voice(lane 3〜0) / Single lane…。
+    // chord ON の並びは 和音 / bass(octave 上/root) / 4 voice(lane 3〜0) / Single lane…。
     screen.state.rows_mut()[3].pattern.draw_span(2, 2);
 
     let rendered = render(&screen);
-    let single_lane_row = rendered.lines().nth(CHORD_FIRST_ROW_Y + 6).unwrap();
+    let single_lane_row = rendered.lines().nth(CHORD_FIRST_ROW_Y + 7).unwrap();
 
     assert_eq!(
-        slice_chars(single_lane_row, FIRST_CELL_X + 4, 2),
+        slice_chars(single_lane_row, first_cell_x(&screen) + 4, 2),
         "# ",
         "{single_lane_row}"
     );
 }
 
-/// bass 行は行の pattern をそのまま鳴らすので、セルは編集結果がそのまま出る。
+/// bass 行は lane の pattern をそのまま鳴らすので、セルは編集結果がそのまま出る。
+/// 2 lane あり、octave 上が上段・root が下段。
 #[test]
 fn the_bass_row_shows_its_own_cells_under_the_chord_row() {
     let mut screen = chord_screen();
+    // `rows_mut()[1]` は Deref で lane 0（root）を指す。
     screen.state.rows_mut()[1].pattern.draw_span(2, 2);
+    screen.state.instances_mut()[1].lanes[1]
+        .pattern
+        .draw_span(6, 6);
 
     let rendered = render(&screen);
-    let bass_row = rendered.lines().nth(CHORD_FIRST_ROW_Y + 1).unwrap();
+    let lines = rendered.lines().collect::<Vec<_>>();
+    let octave_row = lines[CHORD_FIRST_ROW_Y + 1];
+    let root_row = lines[CHORD_FIRST_ROW_Y + 2];
 
-    assert!(bass_row.contains("  2 B "), "{bass_row}");
+    // 行番号と patch は最上段（octave 上）に付く。
+    assert!(octave_row.contains("  2 8 "), "{octave_row}");
+    assert!(root_row.contains("    B "), "{root_row}");
     assert_eq!(
-        slice_chars(bass_row, FIRST_CELL_X + 4, 2),
+        slice_chars(root_row, first_cell_x(&screen) + 4, 2),
         "# ",
-        "{bass_row}"
+        "{root_row}"
+    );
+    assert_eq!(
+        slice_chars(octave_row, first_cell_x(&screen) + 12, 2),
+        "# ",
+        "{octave_row}"
     );
 }
 
@@ -94,23 +108,24 @@ fn the_chord_rows_render_a_summary_a_bass_and_four_grouped_voice_rows() {
 
     let rendered = render(&screen);
     let lines = rendered.lines().collect::<Vec<_>>();
-    let rows = &lines[CHORD_FIRST_ROW_Y..CHORD_FIRST_ROW_Y + 6];
+    let rows = &lines[CHORD_FIRST_ROW_Y..CHORD_FIRST_ROW_Y + 7];
     assert!(rows[0].contains("  1 C "), "{}", rows[0]);
-    assert!(rows[1].contains("  2 B "), "bass row: {}", rows[1]);
-    assert!(rows[2].contains("  3 4 "), "{}", rows[2]);
-    assert!(rows[2].contains("  73 "), "triad octave voice: {}", rows[2]);
-    assert!(rows[3].contains("    3 "), "{}", rows[3]);
-    assert!(rows[3].contains("  68 "), "{}", rows[3]);
-    assert!(rows[4].contains("    2 "), "{}", rows[4]);
-    assert!(rows[4].contains("  65 "), "{}", rows[4]);
-    assert!(rows[5].contains("    1 "), "{}", rows[5]);
+    assert!(rows[1].contains("  2 8 "), "bass octave row: {}", rows[1]);
+    assert!(rows[2].contains("    B "), "bass root row: {}", rows[2]);
+    assert!(rows[3].contains("  3 4 "), "{}", rows[3]);
+    assert!(rows[3].contains("  73 "), "triad octave voice: {}", rows[3]);
+    assert!(rows[4].contains("    3 "), "{}", rows[4]);
+    assert!(rows[4].contains("  68 "), "{}", rows[4]);
+    assert!(rows[5].contains("    2 "), "{}", rows[5]);
+    assert!(rows[5].contains("  65 "), "{}", rows[5]);
+    assert!(rows[6].contains("    1 "), "{}", rows[6]);
     assert!(
-        rows[5].contains("  61 "),
+        rows[6].contains("  61 "),
         "root must be bottom: {}",
-        rows[5]
+        rows[6]
     );
     assert_eq!(rendered.matches("Leads/Mono Lead.fxp").count(), 1);
-    assert!(rendered.contains("4i/7l"), "{rendered}");
+    assert!(rendered.contains("4i/8l"), "{rendered}");
 }
 
 /// 進行は画面下部のステータス行ではなく、grid の直上の1行目に出す。
@@ -180,23 +195,24 @@ fn the_help_overlay_explains_the_chord_mode() {
     let rendered = render(&screen);
 
     assert!(
-        contains_ignoring_spaces(&rendered, "chord mode の on/off"),
+        contains_ignoring_spaces(&rendered, "行1=和音 行2=bass 行3=4 voice"),
         "{rendered}"
     );
     assert!(
-        contains_ignoring_spaces(&rendered, "instance 1は全音符の和音(AUTO時のみ+6dB)"),
+        contains_ignoring_spaces(&rendered, "auto voicing"),
+        "{rendered}"
+    );
+    // 48セルに収まらないので2行に割ってある。
+    assert!(
+        contains_ignoring_spaces(&rendered, "bass行 Whole/8th/8th+Oct/#-##/#-##+Oct/"),
         "{rendered}"
     );
     assert!(
-        contains_ignoring_spaces(&rendered, "独立patternで鳴らします"),
+        contains_ignoring_spaces(&rendered, "####+Oct"),
         "{rendered}"
     );
     assert!(
-        contains_ignoring_spaces(&rendered, "mono patchも使用可"),
-        "{rendered}"
-    );
-    assert!(
-        contains_ignoring_spaces(&rendered, "chord/bass/arpeggio_patch_categories"),
+        contains_ignoring_spaces(&rendered, "無くなります(自動切替あり)"),
         "24行の端末でも help の末尾まで表示できること: {rendered}"
     );
 }

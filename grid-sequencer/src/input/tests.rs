@@ -6,7 +6,6 @@ use super::*;
 use crate::{ChordPlayback, GridRow, LaneAddress, NoteStep};
 
 const AREA: Rect = Rect::new(0, 0, 90, 24);
-const FIRST_CELL: (u16, u16) = (37, 2);
 
 fn context() -> crate::GridSequencerContext<'static> {
     crate::tests::ctx_with(
@@ -32,8 +31,14 @@ fn shifted_mouse(kind: MouseEventKind, column: u16, row: u16) -> MouseEvent {
     }
 }
 
-fn cell(step: usize) -> u16 {
-    FIRST_CELL.0 + step as u16 * 2
+/// step セルの列。grid は中央寄せなので、chord 行の有無で左端が動く。
+fn cell(screen: &GridSequencerScreen, step: usize) -> u16 {
+    crate::ui::layout_for(screen, AREA).step_column(step)
+}
+
+/// NOTE 欄（音高）の列。
+fn note_column(screen: &GridSequencerScreen) -> u16 {
+    crate::ui::layout_for(screen, AREA).note_column()
 }
 
 fn pattern(screen: &GridSequencerScreen, row: usize) -> String {
@@ -69,19 +74,19 @@ fn lane_pattern(screen: &GridSequencerScreen, instance: usize, lane: usize) -> S
 fn left_drag_draws_one_long_note_and_shrinks_from_the_down_snapshot() {
     let mut screen = GridSequencerScreen::with_track_count(None, 2);
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Left), cell(4), 2),
+        mouse(MouseEventKind::Down(MouseButton::Left), cell(&screen, 4), 2),
         AREA,
         &context(),
     );
     screen.handle_mouse(
-        mouse(MouseEventKind::Drag(MouseButton::Left), cell(7), 2),
+        mouse(MouseEventKind::Drag(MouseButton::Left), cell(&screen, 7), 2),
         AREA,
         &context(),
     );
     assert_eq!(&pattern(&screen, 0)[4..8], "#---");
 
     screen.handle_mouse(
-        mouse(MouseEventKind::Drag(MouseButton::Left), cell(5), 2),
+        mouse(MouseEventKind::Drag(MouseButton::Left), cell(&screen, 5), 2),
         AREA,
         &context(),
     );
@@ -89,7 +94,7 @@ fn left_drag_draws_one_long_note_and_shrinks_from_the_down_snapshot() {
     assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
 
     screen.handle_mouse(
-        mouse(MouseEventKind::Up(MouseButton::Left), cell(5), 2),
+        mouse(MouseEventKind::Up(MouseButton::Left), cell(&screen, 5), 2),
         AREA,
         &context(),
     );
@@ -101,19 +106,19 @@ fn shrinking_restores_existing_notes_that_leave_the_drawn_span() {
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
     screen.state.rows_mut()[0].pattern.draw_span(6, 7);
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Left), cell(4), 2),
+        mouse(MouseEventKind::Down(MouseButton::Left), cell(&screen, 4), 2),
         AREA,
         &context(),
     );
     screen.handle_mouse(
-        mouse(MouseEventKind::Drag(MouseButton::Left), cell(7), 2),
+        mouse(MouseEventKind::Drag(MouseButton::Left), cell(&screen, 7), 2),
         AREA,
         &context(),
     );
     assert_eq!(&pattern(&screen, 0)[4..8], "#---");
 
     screen.handle_mouse(
-        mouse(MouseEventKind::Drag(MouseButton::Left), cell(5), 2),
+        mouse(MouseEventKind::Drag(MouseButton::Left), cell(&screen, 5), 2),
         AREA,
         &context(),
     );
@@ -124,12 +129,12 @@ fn shrinking_restores_existing_notes_that_leave_the_drawn_span() {
 fn dragging_left_of_the_anchor_clamps_to_a_one_step_note() {
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Left), cell(4), 2),
+        mouse(MouseEventKind::Down(MouseButton::Left), cell(&screen, 4), 2),
         AREA,
         &context(),
     );
     screen.handle_mouse(
-        mouse(MouseEventKind::Drag(MouseButton::Left), cell(1), 2),
+        mouse(MouseEventKind::Drag(MouseButton::Left), cell(&screen, 1), 2),
         AREA,
         &context(),
     );
@@ -140,19 +145,19 @@ fn dragging_left_of_the_anchor_clamps_to_a_one_step_note() {
 fn draw_gesture_can_cross_rows_and_keeps_each_rows_own_note() {
     let mut screen = GridSequencerScreen::with_track_count(None, 2);
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Left), cell(1), 2),
+        mouse(MouseEventKind::Down(MouseButton::Left), cell(&screen, 1), 2),
         AREA,
         &context(),
     );
     screen.handle_mouse(
-        mouse(MouseEventKind::Drag(MouseButton::Left), cell(4), 3),
+        mouse(MouseEventKind::Drag(MouseButton::Left), cell(&screen, 4), 3),
         AREA,
         &context(),
     );
     assert_eq!(pattern(&screen, 0), ".#..............");
     assert_eq!(pattern(&screen, 1), "....#...........");
     screen.handle_mouse(
-        mouse(MouseEventKind::Drag(MouseButton::Left), cell(3), 2),
+        mouse(MouseEventKind::Drag(MouseButton::Left), cell(&screen, 3), 2),
         AREA,
         &context(),
     );
@@ -162,7 +167,7 @@ fn draw_gesture_can_cross_rows_and_keeps_each_rows_own_note() {
 
 #[test]
 fn chord_voice_drag_draws_an_arpeggio_across_skipped_rows() {
-    // chord ON の行は 3=和音、4=bass、5〜8が 4 voice(lane 3〜0)。
+    // chord ON の行は 3=和音、4/5=bass(octave 上/root)、6〜9が 4 voice(lane 3〜0)。
     let mut screen = GridSequencerScreen::with_track_count(None, 4);
     screen.state.set_chord(
         ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]),
@@ -171,12 +176,12 @@ fn chord_voice_drag_draws_an_arpeggio_across_skipped_rows() {
 
     // 下段root(lane0)から上へ飛ばす。中間laneも直線補間したstepへ描く。
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Left), cell(1), 8),
+        mouse(MouseEventKind::Down(MouseButton::Left), cell(&screen, 1), 9),
         AREA,
         &context(),
     );
     screen.handle_mouse(
-        mouse(MouseEventKind::Drag(MouseButton::Left), cell(5), 6),
+        mouse(MouseEventKind::Drag(MouseButton::Left), cell(&screen, 5), 7),
         AREA,
         &context(),
     );
@@ -185,19 +190,19 @@ fn chord_voice_drag_draws_an_arpeggio_across_skipped_rows() {
     assert_eq!(lane_pattern(&screen, 2, 2), ".....#..........");
     assert_eq!(lane_pattern(&screen, 2, 3), "................");
     screen.handle_mouse(
-        mouse(MouseEventKind::Up(MouseButton::Left), cell(5), 6),
+        mouse(MouseEventKind::Up(MouseButton::Left), cell(&screen, 5), 7),
         AREA,
         &context(),
     );
 
     // triadでoctave上を重ねるlane3も独立patternとして編集できる。
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Left), cell(6), 5),
+        mouse(MouseEventKind::Down(MouseButton::Left), cell(&screen, 6), 6),
         AREA,
         &context(),
     );
     screen.handle_mouse(
-        mouse(MouseEventKind::Up(MouseButton::Left), cell(6), 5),
+        mouse(MouseEventKind::Up(MouseButton::Left), cell(&screen, 6), 6),
         AREA,
         &context(),
     );
@@ -216,7 +221,11 @@ fn repeated_chord_voice_wheel_down_accumulates_and_survives_chord_changes() {
         ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]),
         Instant::now(),
     );
-    screen.handle_mouse(mouse(MouseEventKind::ScrollDown, 32, 6), AREA, &context());
+    screen.handle_mouse(
+        mouse(MouseEventKind::ScrollDown, note_column(&screen), 6),
+        AREA,
+        &context(),
+    );
     assert_eq!(screen.state.instances()[2].voicing_rotation, -1);
     assert_eq!(
         (0..4)
@@ -234,8 +243,16 @@ fn repeated_chord_voice_wheel_down_accumulates_and_survives_chord_changes() {
     );
 
     // 高速wheel相当の連続downでもroot positionへwrapせず、そのまま下がり続ける。
-    screen.handle_mouse(mouse(MouseEventKind::ScrollDown, 32, 6), AREA, &context());
-    screen.handle_mouse(mouse(MouseEventKind::ScrollDown, 32, 6), AREA, &context());
+    screen.handle_mouse(
+        mouse(MouseEventKind::ScrollDown, note_column(&screen), 6),
+        AREA,
+        &context(),
+    );
+    screen.handle_mouse(
+        mouse(MouseEventKind::ScrollDown, note_column(&screen), 6),
+        AREA,
+        &context(),
+    );
     assert_eq!(screen.state.instances()[2].voicing_rotation, -3);
     assert_eq!(
         (0..4)
@@ -258,7 +275,11 @@ fn repeated_chord_voice_wheel_down_accumulates_and_survives_chord_changes() {
 
     screen.state.set_chord(None, Instant::now());
     // chord OFF では chord 行が消えて行が1つ繰り上がる。行4が 4 voice の instance。
-    screen.handle_mouse(mouse(MouseEventKind::ScrollUp, 32, 4), AREA, &context());
+    screen.handle_mouse(
+        mouse(MouseEventKind::ScrollUp, note_column(&screen), 4),
+        AREA,
+        &context(),
+    );
     assert_eq!(
         screen.state.instances()[2].lanes[0].base_note,
         before[0] + 1
@@ -281,7 +302,7 @@ fn toggling_chord_mode_finishes_an_active_lane_gesture_before_remapping_rows() {
         now,
     );
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Left), cell(2), 8),
+        mouse(MouseEventKind::Down(MouseButton::Left), cell(&screen, 2), 9),
         AREA,
         &context(),
     );
@@ -303,7 +324,7 @@ fn left_down_on_attack_or_tie_erases_the_whole_note() {
         screen.handle_mouse(
             mouse(
                 MouseEventKind::Down(MouseButton::Left),
-                cell(clicked_step),
+                cell(&screen, clicked_step),
                 2,
             ),
             AREA,
@@ -319,12 +340,20 @@ fn right_drag_erases_each_note_event_it_crosses() {
     screen.state.rows_mut()[0].pattern.draw_span(0, 2);
     screen.state.rows_mut()[0].pattern.draw_span(4, 5);
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Right), cell(1), 2),
+        mouse(
+            MouseEventKind::Down(MouseButton::Right),
+            cell(&screen, 1),
+            2,
+        ),
         AREA,
         &context(),
     );
     screen.handle_mouse(
-        mouse(MouseEventKind::Drag(MouseButton::Right), cell(4), 2),
+        mouse(
+            MouseEventKind::Drag(MouseButton::Right),
+            cell(&screen, 4),
+            2,
+        ),
         AREA,
         &context(),
     );
@@ -335,17 +364,17 @@ fn right_drag_erases_each_note_event_it_crosses() {
 fn a_new_down_finishes_a_gesture_whose_up_was_lost() {
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Left), cell(0), 2),
+        mouse(MouseEventKind::Down(MouseButton::Left), cell(&screen, 0), 2),
         AREA,
         &context(),
     );
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Left), cell(1), 2),
+        mouse(MouseEventKind::Down(MouseButton::Left), cell(&screen, 1), 2),
         AREA,
         &context(),
     );
     screen.handle_mouse(
-        mouse(MouseEventKind::Drag(MouseButton::Left), cell(2), 2),
+        mouse(MouseEventKind::Drag(MouseButton::Left), cell(&screen, 2), 2),
         AREA,
         &context(),
     );
@@ -360,11 +389,7 @@ fn editing_discards_a_cycle_staged_from_the_old_rows() {
         ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]).unwrap(),
     );
     screen.handle_mouse(
-        mouse(
-            MouseEventKind::Down(MouseButton::Left),
-            FIRST_CELL.0,
-            FIRST_CELL.1,
-        ),
+        mouse(MouseEventKind::Down(MouseButton::Left), cell(&screen, 0), 2),
         AREA,
         &context(),
     );
@@ -380,7 +405,7 @@ fn chord_row_and_overlays_block_mouse_edits() {
         Instant::now(),
     );
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Left), cell(0), 3),
+        mouse(MouseEventKind::Down(MouseButton::Left), cell(&screen, 0), 3),
         AREA,
         &context(),
     );
@@ -389,7 +414,7 @@ fn chord_row_and_overlays_block_mouse_edits() {
     screen.state.set_chord(None, Instant::now());
     screen.help_open = true;
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Left), cell(0), 2),
+        mouse(MouseEventKind::Down(MouseButton::Left), cell(&screen, 0), 2),
         AREA,
         &context(),
     );
@@ -398,7 +423,7 @@ fn chord_row_and_overlays_block_mouse_edits() {
     screen.help_open = false;
     screen.waiting_for_patches = true;
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Left), cell(0), 2),
+        mouse(MouseEventKind::Down(MouseButton::Left), cell(&screen, 0), 2),
         AREA,
         &context(),
     );
@@ -410,7 +435,7 @@ fn chord_error_line_and_input_use_the_same_vertical_layout() {
     let mut screen = GridSequencerScreen::with_track_count(None, 2);
     screen.chord_error = Some("test error".to_string());
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Left), cell(0), 3),
+        mouse(MouseEventKind::Down(MouseButton::Left), cell(&screen, 0), 3),
         AREA,
         &context(),
     );
@@ -421,10 +446,14 @@ fn chord_error_line_and_input_use_the_same_vertical_layout() {
 fn wheel_edits_note_and_shift_wheel_edits_octave() {
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
     screen.state.rows_mut()[0].base_note = 60;
-    screen.handle_mouse(mouse(MouseEventKind::ScrollUp, 32, 2), AREA, &context());
+    screen.handle_mouse(
+        mouse(MouseEventKind::ScrollUp, note_column(&screen), 2),
+        AREA,
+        &context(),
+    );
     assert_eq!(screen.state.rows()[0].base_note, 61);
     screen.handle_mouse(
-        shifted_mouse(MouseEventKind::ScrollUp, 32, 2),
+        shifted_mouse(MouseEventKind::ScrollUp, note_column(&screen), 2),
         AREA,
         &context(),
     );
@@ -436,7 +465,7 @@ fn clipped_cell_does_not_change_state() {
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
     let narrow = Rect::new(0, 0, 39, 24);
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Left), cell(3), 2),
+        mouse(MouseEventKind::Down(MouseButton::Left), cell(&screen, 3), 2),
         narrow,
         &context(),
     );

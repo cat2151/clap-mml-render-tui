@@ -190,6 +190,16 @@ impl FastMidiClient {
         }
     }
 
+    /// instance ごとの auto-trim ゲイン（dB）。サーバーが公開している最新値。
+    pub fn auto_gain_db(&self) -> [f32; INSTANCE_COUNT] {
+        let ring = self.mapping.ring();
+        let mut gains = [0.0; INSTANCE_COUNT];
+        for (gain, slot) in gains.iter_mut().zip(ring.auto_gain_db_bits.iter()) {
+            *gain = f32::from_bits(slot.load(Ordering::Acquire));
+        }
+        gains
+    }
+
     pub fn underrun_frames(&self) -> u64 {
         self.mapping.ring().underrun_frames.load(Ordering::Acquire)
     }

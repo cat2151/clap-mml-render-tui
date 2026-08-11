@@ -8,6 +8,7 @@ use serde_json::Value;
 const GRID_STEPS: usize = 16;
 const DEFAULT_NOTE: u8 = 60;
 const CHORD_VOICE_LANES: usize = 4;
+const BASS_OCTAVE_LANES: usize = 2;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct GridSequencerSessionState {
@@ -126,6 +127,7 @@ impl<'de> Deserialize<'de> for GridSequencerInstanceState {
 pub enum GridLaneModeState {
     #[default]
     Single,
+    BassOctave2,
     ChordVoices4,
 }
 
@@ -133,6 +135,7 @@ impl GridLaneModeState {
     fn lane_count(self) -> usize {
         match self {
             Self::Single => 1,
+            Self::BassOctave2 => BASS_OCTAVE_LANES,
             Self::ChordVoices4 => CHORD_VOICE_LANES,
         }
     }
@@ -146,6 +149,7 @@ impl<'de> Deserialize<'de> for GridLaneModeState {
         let value = Value::deserialize(deserializer)?;
         Ok(match value.as_str() {
             Some("chord_voices4") => Self::ChordVoices4,
+            Some("bass_octave2") => Self::BassOctave2,
             _ => Self::Single,
         })
     }

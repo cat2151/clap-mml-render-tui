@@ -303,10 +303,11 @@ fn poll_runtime_status(
     overload: &mut OverloadDetector,
     now: Instant,
 ) {
-    status
-        .lock()
-        .unwrap()
-        .update_limiter_meter(supervisor.limiter_meter());
+    {
+        let mut status = status.lock().unwrap();
+        status.update_limiter_meter(supervisor.limiter_meter());
+        status.update_auto_gain_db(supervisor.live_auto_gain_db());
+    }
     if !status.lock().unwrap().phase.accepts_notes() {
         return;
     }

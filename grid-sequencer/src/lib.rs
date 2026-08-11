@@ -10,14 +10,16 @@ use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 
-pub use cmrt_arpeggiator::ArpPattern;
+pub use cmrt_arpeggiator::{ArpPattern, BassPattern};
 use cmrt_chord::ChordProgressionCatalog;
 use cmrt_realtime_play::PatchVoicing;
 
 mod arpeggio;
+mod bass_line;
 mod chord_mode;
 mod cycle_swap;
 mod input;
+mod patch_bag;
 mod patch_role;
 mod patch_selector;
 mod screen;
@@ -30,6 +32,7 @@ mod state;
 pub mod ui;
 mod undo;
 
+pub(crate) use input::ListDirection;
 pub use screen::{GridSequencerParts, GridSequencerScreen, PatternEvolution};
 pub use sender::{
     GridConnectionPhase, GridConnectionStatus, GridMidiSender, GridProgress, GridRowPatchPhase,
@@ -39,8 +42,8 @@ pub use session::GridSequencerSession;
 pub use state::{
     frames_ahead, randomize_instance_slice, step_offset, ChordPlayback, GridInstance, GridLane,
     GridLaneMode, GridScheduledMessage, GridState, LaneAddress, NotePattern, NoteStep,
-    PitchDirection, VisibleNoteRow, VisibleRowKind, ARPEGGIO_ROW, BASS_ROW, BPM, CHORD_ROW,
-    CHORD_VOICE_LANES, GRID_ROWS, GRID_STEPS, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL,
+    PitchDirection, VisibleNoteRow, VisibleRowKind, ARPEGGIO_ROW, BASS_OCTAVE_LANES, BASS_ROW, BPM,
+    CHORD_ROW, CHORD_VOICE_LANES, GRID_ROWS, GRID_STEPS, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL,
 };
 
 #[cfg(test)]

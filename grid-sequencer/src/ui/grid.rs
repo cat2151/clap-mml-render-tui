@@ -16,7 +16,7 @@ use crate::{
     VisibleRowKind, GRID_STEPS,
 };
 
-use super::layout::PATCH_WIDTH;
+use super::layout::{GAIN_WIDTH, PATCH_WIDTH};
 
 const NOTE_CELL: &str = "# ";
 const TIE_CELL: &str = "- ";
@@ -49,20 +49,26 @@ pub(super) fn draw(
     );
 }
 
-/// 直近に適用したアルペジオ音型はタイトルへ添える。CC1 / Velocity grid が小節ごとの
-/// 抽選パターンを出しているのと同じ扱い。まだ一度も生成していなければ添えない。
+/// 直近に適用したアルペジオ音型とベースラインの型はタイトルへ添える。CC1 / Velocity
+/// grid が小節ごとの抽選パターンを出しているのと同じ扱い。まだ一度も生成していない
+/// ものは添えない。
 fn title(screen: &GridSequencerScreen) -> String {
     let evolution = screen.pattern_evolution().label();
-    match screen.last_arp() {
-        Some(arp) => format!(" Grid Sequencer / Note [{evolution}] arp:{} ", arp.label()),
-        None => format!(" Grid Sequencer / Note [{evolution}] "),
+    let mut title = format!(" Grid Sequencer / Note [{evolution}]");
+    if let Some(arp) = screen.last_arp() {
+        title.push_str(&format!(" arp:{}", arp.label()));
     }
+    if let Some(bass) = screen.last_bass() {
+        title.push_str(&format!(" bass:{}", bass.label()));
+    }
+    title.push(' ');
+    title
 }
 
 fn header_line() -> Line<'static> {
     let style = base_style().fg(MONOKAI_GRAY);
     Line::from(vec![
-        Span::styled(label_columns("#", "V", "PATCH", "NOTE"), style),
+        Span::styled(label_columns("#", "V", "PATCH", "GAIN", "NOTE"), style),
         Span::styled(step_ruler(), style),
     ])
 }
@@ -93,23 +99,30 @@ fn row_line(
         .filter(|selector| selector.instance == address.instance)
         .and_then(|selector| selector.selected_patch())
         .or(instance.patch.as_deref());
-    let group_header = if screen.state.chord().is_some()
-        && instance.lane_mode == crate::GridLaneMode::ChordVoices4
-    {
-        address.lane + 1 == instance.lanes.len()
-    } else {
-        address.lane == 0
-    };
+    let group_header =
+        if screen.state.chord().is_some() && instance.lane_mode.stacks_high_notes_on_top() {
+            // 高音が上へ反転しているので、行の先頭は最終 lane。
+            address.lane + 1 == instance.lanes.len()
+        } else {
+            address.lane == 0
+        };
     let instance_label = group_header.then(|| (address.instance + 1).to_string());
     let voice_label = if summary {
         "C".to_string()
     } else if screen.state.chord().is_some() && address.instance == crate::BASS_ROW {
-        "B".to_string()
+        // bass 音は B、その1オクターブ上は 8（8va）。V 欄は1文字ぶんしかない。
+        if address.lane == 0 { "B" } else { "8" }.to_string()
     } else {
         (address.lane + 1).to_string()
     };
     let patch_label = if group_header {
         truncate_patch(displayed_patch, PATCH_WIDTH)
+    } else {
+        String::new()
+    };
+    // gain は instance ごとの値なので、patch 名と同じ「グループの先頭行だけ」に出す。
+    let gain_label = if group_header {
+        auto_gain_label(screen, connection, address.instance)
     } else {
         String::new()
     };
@@ -119,6 +132,7 @@ fn row_line(
             instance_label.as_deref().unwrap_or(""),
             &voice_label,
             &patch_label,
+            &gain_label,
             &note_label,
         ),
         label_style(readiness, inactive),
@@ -174,11 +188,26 @@ fn cell_style(readiness: GridRowReadiness, step: NoteStep, inactive: bool) -> St
     base_style().fg(color)
 }
 
-fn label_columns(instance: &str, voice: &str, patch: &str, note: &str) -> String {
+fn label_columns(instance: &str, voice: &str, patch: &str, gain: &str, note: &str) -> String {
     format!(
-        " {instance:>2} {voice:>1} {patch:<width$} {note:>4} ",
-        width = PATCH_WIDTH
+        " {instance:>2} {voice:>1} {patch:<patch_width$} {gain:>gain_width$} {note:>4} ",
+        patch_width = PATCH_WIDTH,
+        gain_width = GAIN_WIDTH,
     )
+}
+
+/// auto gain が instance へ掛けている trim。0 dB のときも `+0.0` を出す。
+///
+/// 「効いていて 0 dB」と「そもそも動いていない」は空欄では見分けられないが、
+/// auto gain は grid sequencer の再生中つねに on なので、空欄にすると
+/// 「表示が壊れている」ようにしか見えない。
+fn auto_gain_label(
+    screen: &GridSequencerScreen,
+    connection: &GridConnectionStatus,
+    row: usize,
+) -> String {
+    let instance_id = screen.state.instance_id(row);
+    format!("{:+.1}", connection.instance_auto_gain_db(instance_id))
 }
 
 fn step_ruler() -> String {

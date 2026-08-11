@@ -4,10 +4,25 @@ use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
 
 use crate::{
-    ui::layout::{GridHit, GridSequencerLayout},
-    GridSequencerContext, GridSequencerScreen, LaneAddress, NotePattern, NoteStep,
-    PatternEvolution, PitchDirection,
+    ui::layout::GridHit, GridSequencerContext, GridSequencerScreen, LaneAddress, NotePattern,
+    NoteStep, PatternEvolution, PitchDirection,
 };
+
+/// 並んだ list を送る向き。
+///
+/// 音高を上下させる [`PitchDirection`] とは別物として扱う。同じ wheel でも、対象が
+/// 「値」なのか「list」なのかで下へ回したときの意味が逆になるため。
+///
+/// - 値（NOTE 欄の音高・転回）は上へ回せば上がる。piano roll と同じ空間の上下。
+/// - list（PATCH 欄の音色・step セルのフレーズ型）はブラウザのスクロールと同じで、
+///   下へ回すと次へ進む。
+///
+/// この2つを1つの型で兼用していたせいで、step セルと PATCH 欄だけ送りが逆になっていた。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ListDirection {
+    Next,
+    Prev,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum NoteGestureMode {
@@ -53,13 +68,7 @@ impl GridSequencerScreen {
             return;
         }
         let visible_rows = self.state.visible_note_rows();
-        let layout = GridSequencerLayout::new(
-            terminal_area,
-            visible_rows.len(),
-            self.state.instance_count(),
-            visible_rows.len(),
-            self.chord_line_visible(),
-        );
+        let layout = crate::ui::layout_for(self, terminal_area);
         let hit = layout.hit_test(event.column, event.row, &visible_rows);
         match event.kind {
             MouseEventKind::Down(MouseButton::Left | MouseButton::Right) => {
@@ -271,18 +280,26 @@ impl GridSequencerScreen {
         hit: Option<GridHit>,
         ctx: &GridSequencerContext<'_>,
     ) {
-        if let Some(GridHit::InstancePatch { instance }) = hit {
-            self.randomize_instance_patch(instance, ctx);
-            return;
-        }
-        let direction = match kind {
-            MouseEventKind::ScrollUp => PitchDirection::Up,
-            MouseEventKind::ScrollDown => PitchDirection::Down,
+        // 同じ wheel でも、送る対象が list か値かで下の意味が変わる。両方の対応をここに
+        // 並べて、どちらのモデルで動く欄なのかを対象ごとに選ぶ。
+        let (list, direction) = match kind {
+            MouseEventKind::ScrollDown => (ListDirection::Next, PitchDirection::Down),
+            MouseEventKind::ScrollUp => (ListDirection::Prev, PitchDirection::Up),
             _ => return,
         };
+        // PATCH 欄の wheel は音色の list 送り。下で次、上で前に聴いた音色へ戻る。
+        if let Some(GridHit::InstancePatch { instance }) = hit {
+            self.cycle_instance_patch(instance, list, ctx);
+            return;
+        }
         // step セル上の wheel は音高ではなく、その instance のフレーズを引き直す。
+        // bass 行だけはアルペジオではなくベースラインを引く。どちらも list 送り。
         if let Some(GridHit::NoteCell { address, .. }) = hit {
-            self.cycle_arpeggio(address.instance, direction);
+            if address.instance == crate::BASS_ROW {
+                self.cycle_bass_line(list);
+            } else {
+                self.cycle_arpeggio(address.instance, list);
+            }
             return;
         }
         let Some(GridHit::LaneNote { address }) = hit else {

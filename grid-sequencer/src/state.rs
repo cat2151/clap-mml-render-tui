@@ -5,6 +5,7 @@ use std::{
 
 mod arpeggio;
 mod attack;
+mod bass_line;
 mod cc1;
 mod chord;
 mod clock;
@@ -20,7 +21,7 @@ mod velocity;
 pub use edit::PitchDirection;
 pub use instance::{
     GridInstance, GridLane, GridLaneMode, LaneAddress, VisibleNoteRow, VisibleRowKind,
-    CHORD_VOICE_LANES,
+    BASS_OCTAVE_LANES, CHORD_VOICE_LANES,
 };
 pub use note_pattern::{NotePattern, NoteStep};
 
@@ -228,7 +229,7 @@ impl GridState {
                 } else {
                     1.min(instance.lanes.len())
                 };
-                let lanes = if chord_on && instance.lane_mode == GridLaneMode::ChordVoices4 {
+                let lanes = if chord_on && instance.lane_mode.stacks_high_notes_on_top() {
                     // piano rollと同じく高音を上、lane 0（既定root）を最下段へ置く。
                     (0..count).rev().collect::<Vec<_>>()
                 } else {

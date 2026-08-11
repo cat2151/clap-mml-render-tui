@@ -1,8 +1,8 @@
 use std::{collections::HashMap, time::Instant};
 
-use cmrt_arpeggiator::ArpPattern;
+use cmrt_arpeggiator::{ArpPattern, BassPattern};
 
-use super::{GridMidiSender, GridPatchStatus, GridState};
+use super::{patch_bag::PatchBag, GridMidiSender, GridPatchStatus, GridState};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PatternEvolution {
@@ -110,6 +110,14 @@ pub struct GridSequencerScreen {
     pub(crate) arp_patterns: HashMap<usize, ArpPattern>,
     /// 直近に適用したアルペジオ音型。NOTE grid のタイトルに出すだけ。
     pub(crate) last_arp: Option<ArpPattern>,
+    /// 直近に適用したベースラインの型。wheel の種別送りカーソル。bass 行は1本しか
+    /// 無いので instance ごとには持たない。譜面そのものは `state` 側に入る。
+    pub(crate) bass_pattern: Option<BassPattern>,
+    /// 直近に適用したベースラインの型。NOTE grid のタイトルに出すだけ。
+    pub(crate) last_bass: Option<BassPattern>,
+    /// instance ごとの、PATCH 欄の wheel が辿る patch list。詳細は [`crate::patch_bag`]。
+    /// 適用した patch は `state` 側に入るので、セッションへは保存しない。
+    pub(crate) patch_bags: HashMap<usize, PatchBag>,
 }
 
 impl GridSequencerScreen {
@@ -191,6 +199,9 @@ impl GridSequencerScreen {
             cycle_end_at: None,
             arp_patterns: HashMap::new(),
             last_arp: None,
+            bass_pattern: None,
+            last_bass: None,
+            patch_bags: HashMap::new(),
         }
     }
 

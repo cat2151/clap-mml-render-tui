@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use ratatui::{backend::TestBackend, style::Color, Terminal};
+use ratatui::{backend::TestBackend, layout::Rect, style::Color, Terminal};
 
 use cmrt_tui_core::{
     buffer_test::find_text_ignoring_spaces,
@@ -10,12 +10,28 @@ use cmrt_tui_core::{
 use super::*;
 use crate::{GridPatchStatus, GridProgress, GRID_ROWS, STEP_INTERVAL};
 
-/// 情報欄(36桁) + 枠線(1桁) のぶんだけ右にある、grid の先頭セルの列。
-const FIRST_CELL_X: usize = 37;
+/// テストで使う端末の大きさ。
+const TEST_WIDTH: u16 = 90;
+const TEST_HEIGHT: u16 = 24;
 /// 枠線(1行) + ヘッダ(1行) のぶんだけ下にある、grid の1行目の行。
 const FIRST_ROW_Y: usize = 2;
 /// 1セルは記号+空白の2桁。
 const CELLS_WIDTH: usize = GRID_STEPS * 2;
+
+fn test_layout(screen: &GridSequencerScreen) -> super::layout::GridSequencerLayout {
+    super::layout_for(screen, Rect::new(0, 0, TEST_WIDTH, TEST_HEIGHT))
+}
+
+/// 中央寄せした grid の左端。塊の幅（＝右 pane の有無）で動くので、描画結果を読む
+/// テストは列を直接書かずここから測る。
+fn grid_x(screen: &GridSequencerScreen) -> usize {
+    usize::from(test_layout(screen).note.x)
+}
+
+/// 情報欄(42桁) + 枠線(1桁) のぶんだけ右にある、grid の先頭セルの列。
+fn first_cell_x(screen: &GridSequencerScreen) -> usize {
+    usize::from(test_layout(screen).step_column(0))
+}
 
 fn buffer_to_string(terminal: &Terminal<TestBackend>) -> String {
     let buffer = terminal.backend().buffer();
@@ -35,7 +51,7 @@ fn slice_chars(line: &str, start: usize, len: usize) -> String {
 }
 
 fn terminal_for(screen: &GridSequencerScreen) -> Terminal<TestBackend> {
-    let mut terminal = Terminal::new(TestBackend::new(90, 24)).unwrap();
+    let mut terminal = Terminal::new(TestBackend::new(TEST_WIDTH, TEST_HEIGHT)).unwrap();
     let connection = screen.connection_status();
     terminal.draw(|f| draw(screen, &connection, f)).unwrap();
     terminal
@@ -49,7 +65,7 @@ fn render_with_connection(
     screen: &GridSequencerScreen,
     connection: &GridConnectionStatus,
 ) -> String {
-    let mut terminal = Terminal::new(TestBackend::new(90, 24)).unwrap();
+    let mut terminal = Terminal::new(TestBackend::new(TEST_WIDTH, TEST_HEIGHT)).unwrap();
     terminal.draw(|f| draw(screen, connection, f)).unwrap();
     buffer_to_string(&terminal)
 }
@@ -58,18 +74,22 @@ fn terminal_with_connection(
     screen: &GridSequencerScreen,
     connection: &GridConnectionStatus,
 ) -> Terminal<TestBackend> {
-    let mut terminal = Terminal::new(TestBackend::new(90, 24)).unwrap();
+    let mut terminal = Terminal::new(TestBackend::new(TEST_WIDTH, TEST_HEIGHT)).unwrap();
     terminal.draw(|f| draw(screen, connection, f)).unwrap();
     terminal
 }
 
 /// 指定した grid 行の、左情報欄（行番号の桁）の前景色。
-/// 中央 overlay は画面中央に出るので、左端のこの列とは重ならない。
-fn row_label_fg(terminal: &Terminal<TestBackend>, row: usize) -> Color {
+/// 中央 overlay は画面中央に出るので、grid 左端寄りのこの列とは重ならない。
+fn row_label_fg(
+    terminal: &Terminal<TestBackend>,
+    screen: &GridSequencerScreen,
+    row: usize,
+) -> Color {
     terminal
         .backend()
         .buffer()
-        .cell((3u16, (FIRST_ROW_Y + row) as u16))
+        .cell(((grid_x(screen) + 3) as u16, (FIRST_ROW_Y + row) as u16))
         .unwrap()
         .fg
 }
@@ -106,9 +126,10 @@ fn every_row_is_drawn_with_its_left_hand_columns() {
     assert!(!rendered.contains("DUR"), "{rendered}");
     assert!(rendered.contains("Keys/Piano.fxp"), "{rendered}");
     assert!(rendered.contains("Leads/Saw.fxp"), "{rendered}");
-    assert_eq!(slice_chars(lines[FIRST_ROW_Y], 1, 4), "  1 ");
+    let label_x = grid_x(&screen) + 1;
+    assert_eq!(slice_chars(lines[FIRST_ROW_Y], label_x, 4), "  1 ");
     assert_eq!(
-        slice_chars(lines[FIRST_ROW_Y + GRID_ROWS - 1], 1, 4),
+        slice_chars(lines[FIRST_ROW_Y + GRID_ROWS - 1], label_x, 4),
         " 16 "
     );
 }
@@ -125,7 +146,7 @@ fn note_on_cells_are_marked_and_rests_are_dots() {
         .map(|step| if on_steps.contains(&step) { "# " } else { ". " })
         .collect::<String>();
     assert_eq!(
-        slice_chars(first_row, FIRST_CELL_X, CELLS_WIDTH),
+        slice_chars(first_row, first_cell_x(&screen), CELLS_WIDTH),
         expected,
         "{rendered}"
     );
@@ -137,7 +158,10 @@ fn long_notes_render_attack_ties_and_rests_distinctly() {
     screen.state.rows_mut()[0].pattern.draw_span(0, 3);
     let rendered = render(&screen);
     let first_row = rendered.lines().nth(FIRST_ROW_Y).unwrap();
-    assert_eq!(slice_chars(first_row, FIRST_CELL_X, 10), "# - - - . ");
+    assert_eq!(
+        slice_chars(first_row, first_cell_x(&screen), 10),
+        "# - - - . "
+    );
 }
 
 #[test]
@@ -152,12 +176,9 @@ fn the_playhead_column_follows_the_step_progression() {
     let terminal = terminal_for(&screen);
     let buffer = terminal.backend().buffer();
 
-    let first = buffer
-        .cell((FIRST_CELL_X as u16, FIRST_ROW_Y as u16))
-        .unwrap();
-    let second = buffer
-        .cell((FIRST_CELL_X as u16 + 2, FIRST_ROW_Y as u16))
-        .unwrap();
+    let cell_x = first_cell_x(&screen) as u16;
+    let first = buffer.cell((cell_x, FIRST_ROW_Y as u16)).unwrap();
+    let second = buffer.cell((cell_x + 2, FIRST_ROW_Y as u16)).unwrap();
     assert_ne!(first.bg, cursor_highlight_bg(first.fg));
     assert_eq!(second.bg, cursor_highlight_bg(second.fg));
 }
@@ -170,24 +191,9 @@ fn the_step_ruler_marks_every_fourth_step() {
     let header = rendered.lines().nth(FIRST_ROW_Y - 1).unwrap();
 
     assert_eq!(
-        slice_chars(header, FIRST_CELL_X, CELLS_WIDTH).trim_end(),
+        slice_chars(header, first_cell_x(&screen), CELLS_WIDTH).trim_end(),
         "1       5       9       13"
     );
-}
-
-#[test]
-fn the_status_line_shows_instances_and_limiter_reduction() {
-    let mut screen = screen_with_first_row(60, &[]);
-    screen.patch_status = GridPatchStatus::Ready(42);
-
-    let rendered = render(&screen);
-
-    assert!(rendered.contains("SHM idle"), "{rendered}");
-    assert!(rendered.contains("130bpm"), "{rendered}");
-    assert!(rendered.contains("16i/16l"), "{rendered}");
-    assert!(rendered.contains("step 1/16"), "{rendered}");
-    assert!(rendered.contains("GR0.0"), "{rendered}");
-    assert!(rendered.contains("p:42"), "{rendered}");
 }
 
 #[test]
@@ -197,75 +203,11 @@ fn compact_grid_draws_only_the_selected_tracks() {
     let rendered = render(&screen);
     let lines = rendered.lines().collect::<Vec<_>>();
 
-    assert_eq!(slice_chars(lines[FIRST_ROW_Y], 1, 4), "  1 ");
-    assert_eq!(slice_chars(lines[FIRST_ROW_Y + 1], 1, 4), "  2 ");
-    assert_ne!(slice_chars(lines[FIRST_ROW_Y + 2], 1, 4), "  3 ");
+    let label_x = grid_x(&screen) + 1;
+    assert_eq!(slice_chars(lines[FIRST_ROW_Y], label_x, 4), "  1 ");
+    assert_eq!(slice_chars(lines[FIRST_ROW_Y + 1], label_x, 4), "  2 ");
+    assert_ne!(slice_chars(lines[FIRST_ROW_Y + 2], label_x, 4), "  3 ");
     assert!(rendered.contains("2i/2l"), "{rendered}");
-}
-
-#[test]
-fn the_status_line_shows_adaptive_buffer_and_current_level_underruns() {
-    let screen = screen_with_first_row(60, &[]);
-    let connection = GridConnectionStatus {
-        buffer_multiplier: 8,
-        underrun_frames: 1_536,
-        ..GridConnectionStatus::default()
-    };
-
-    let rendered = render_with_connection(&screen, &connection);
-
-    assert!(rendered.contains("buf x8 85ms"), "{rendered}");
-    assert!(rendered.contains("underrun 1536f"), "{rendered}");
-}
-
-/// 倍率が上がるほど想定レイテンシも伸びる。x256 まで出し切っても桁が溢れないこと。
-#[test]
-fn the_status_line_shows_the_expected_latency_of_the_largest_buffer() {
-    let screen = screen_with_first_row(60, &[]);
-    let connection = GridConnectionStatus {
-        buffer_multiplier: 256,
-        underrun_frames: 1_536,
-        ..GridConnectionStatus::default()
-    };
-
-    let rendered = render_with_connection(&screen, &connection);
-
-    assert!(rendered.contains("buf x256 2731ms"), "{rendered}");
-    assert!(rendered.contains("p:"), "{rendered}");
-}
-
-#[test]
-fn the_status_line_shows_instance_startup_progress() {
-    let screen = GridSequencerScreen::new(None);
-    let connection = GridConnectionStatus {
-        phase: GridConnectionPhase::Connecting,
-        server_startup: Some(GridProgress {
-            completed: 6,
-            total: 16,
-        }),
-        ..GridConnectionStatus::default()
-    };
-
-    let rendered = render_with_connection(&screen, &connection);
-
-    assert!(rendered.contains("SHM starting server 6/16"), "{rendered}");
-}
-
-#[test]
-fn the_status_line_shows_patch_setting_progress() {
-    let screen = GridSequencerScreen::new(None);
-    let connection = GridConnectionStatus {
-        phase: GridConnectionPhase::PatchSetting,
-        patch_setting: Some(GridProgress {
-            completed: 11,
-            total: 16,
-        }),
-        ..GridConnectionStatus::default()
-    };
-
-    let rendered = render_with_connection(&screen, &connection);
-
-    assert!(rendered.contains("SHM patches 11/16"), "{rendered}");
 }
 
 #[test]
@@ -307,10 +249,18 @@ fn rows_lose_their_grey_out_one_by_one_as_patches_load() {
     let terminal = terminal_with_connection(&screen, &connection);
 
     for row in 0..5 {
-        assert_eq!(row_label_fg(&terminal, row), MONOKAI_FG, "row {row}");
+        assert_eq!(
+            row_label_fg(&terminal, &screen, row),
+            MONOKAI_FG,
+            "row {row}"
+        );
     }
     for row in 5..GRID_ROWS {
-        assert_eq!(row_label_fg(&terminal, row), MONOKAI_GRAY, "row {row}");
+        assert_eq!(
+            row_label_fg(&terminal, &screen, row),
+            MONOKAI_GRAY,
+            "row {row}"
+        );
     }
 }
 
@@ -329,10 +279,18 @@ fn rows_stay_dark_until_the_server_has_built_their_instance() {
     let terminal = terminal_with_connection(&screen, &connection);
 
     for row in 0..3 {
-        assert_eq!(row_label_fg(&terminal, row), MONOKAI_GRAY, "row {row}");
+        assert_eq!(
+            row_label_fg(&terminal, &screen, row),
+            MONOKAI_GRAY,
+            "row {row}"
+        );
     }
     for row in 3..GRID_ROWS {
-        assert_eq!(row_label_fg(&terminal, row), MONOKAI_DARK_GRAY, "row {row}");
+        assert_eq!(
+            row_label_fg(&terminal, &screen, row),
+            MONOKAI_DARK_GRAY,
+            "row {row}"
+        );
     }
 }
 
@@ -350,7 +308,11 @@ fn the_error_overlay_shows_the_reason_and_greys_out_every_row() {
     find_text_ignoring_spaces(buffer, "準備エラー");
     find_text_ignoring_spaces(buffer, "gridrow3patchpreparefailed");
     for row in 0..GRID_ROWS {
-        assert_eq!(row_label_fg(&terminal, row), MONOKAI_DARK_GRAY, "row {row}");
+        assert_eq!(
+            row_label_fg(&terminal, &screen, row),
+            MONOKAI_DARK_GRAY,
+            "row {row}"
+        );
     }
 }
 
@@ -367,7 +329,11 @@ fn the_overlay_disappears_and_rows_regain_their_colour_once_ready() {
 
     assert!(!has_progress_overlay(&rendered), "{rendered}");
     for row in 0..GRID_ROWS {
-        assert_eq!(row_label_fg(&terminal, row), MONOKAI_FG, "row {row}");
+        assert_eq!(
+            row_label_fg(&terminal, &screen, row),
+            MONOKAI_FG,
+            "row {row}"
+        );
     }
 }
 
@@ -381,7 +347,7 @@ fn the_idle_test_mode_draws_the_grid_without_any_overlay() {
     let terminal = terminal_for(&screen);
 
     assert!(!has_progress_overlay(&rendered), "{rendered}");
-    assert_eq!(row_label_fg(&terminal, 0), MONOKAI_FG);
+    assert_eq!(row_label_fg(&terminal, &screen, 0), MONOKAI_FG);
 }
 
 /// 情報欄は幅が限られるので先頭を省略するが、ステータス行にはフルパスが残る。
@@ -399,7 +365,10 @@ fn a_long_patch_name_is_truncated_from_the_head_in_the_grid() {
     assert!(!first_row.contains("patches_factory"), "{first_row}");
 }
 
+mod auto_gain;
 mod chord;
 mod help;
 mod layout;
 mod patch_selector;
+mod pattern_list;
+mod status_line;

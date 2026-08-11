@@ -4,7 +4,9 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    fast_midi_ipc::{FastIpcError, FastMidiClient, FastMidiEvent, InstanceId, LimiterMeter},
+    fast_midi_ipc::{
+        FastIpcError, FastMidiClient, FastMidiEvent, InstanceId, LimiterMeter, INSTANCE_COUNT,
+    },
     logging::log_realtime_play_event,
     RealtimePlayServerSupervisor,
 };
@@ -191,6 +193,19 @@ impl RealtimePlayServerSupervisor {
             .as_ref()
             .map(FastMidiClient::underrun_frames)
             .unwrap_or(0)
+    }
+
+    /// instance ごとに auto-trim が掛けているゲイン（dB）。
+    ///
+    /// auto gain の判断はサーバー内で完結するので、UI へ「効いているか」を出すには
+    /// この読み出しだけが手がかりになる。未接続なら全 0 dB。
+    pub fn live_auto_gain_db(&self) -> [f32; INSTANCE_COUNT] {
+        self.fast_client
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(FastMidiClient::auto_gain_db)
+            .unwrap_or([0.0; INSTANCE_COUNT])
     }
 
     fn with_fast_client<T>(

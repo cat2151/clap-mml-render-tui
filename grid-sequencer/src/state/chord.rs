@@ -16,7 +16,9 @@ use super::{GridLaneMode, GridScheduledMessage, GridState, LaneAddress};
 /// 和音を鳴らす行。UI の行1 = realtime play server の instance 0。
 pub const CHORD_ROW: usize = 0;
 
-/// bass を鳴らす行。UI の行2。和音とは別の patch で、行の pattern をそのまま使う。
+/// bass を鳴らす行。UI の行2。和音とは別の patch で、lane の pattern をそのまま使う。
+/// [`super::GridLaneMode::BassOctave2`] の行で、lane 0 = bass 音・lane 1 = 1オクターブ上
+/// （[`super::bass_line`]）。
 pub const BASS_ROW: usize = 1;
 
 /// アルペジオを書く行。UI の行3。[`super::GridLaneMode::ChordVoices4`] の既定行で、
@@ -204,16 +206,34 @@ impl GridState {
             return None;
         }
         if address.instance == BASS_ROW {
-            // bass 行は行の pattern をそのまま使い、音高だけをコードの bass 音へ固定する。
-            // 保存値の base_note は見ない。
-            return (address.lane == 0).then(|| chord.current_bass()).flatten();
+            // bass 行は lane の pattern をそのまま使い、音高だけをコードの bass 音へ固定する。
+            // lane 0 = bass 音、lane 1 = その1オクターブ上。保存値の base_note は見ない。
+            return bass_octave_note(chord.current_bass(), address.lane);
         }
         match instance.lane_mode {
             GridLaneMode::Single => Some(snap_to_chord(lane.base_note, &chord.pitch_classes())),
+            // BassOctave2 は BASS_ROW 専用で、その分岐は上で返している。ここへ来るのは
+            // lane_mode だけが残った壊れた状態なので、音を重ねないよう lane 0 に絞る。
+            GridLaneMode::BassOctave2 => {
+                (address.lane == 0).then(|| snap_to_chord(lane.base_note, &chord.pitch_classes()))
+            }
             GridLaneMode::ChordVoices4 => {
                 rotated_chord_voice(chord.current(), address.lane, instance.voicing_rotation)
             }
         }
+    }
+}
+
+/// bass 行の lane を音高へ解決する。lane 0 は bass 音そのまま、lane 1 は1オクターブ上。
+///
+/// [`super::BASS_OCTAVE_LANES`] を超える lane（旧セッションが残した余りの lane）と、
+/// MIDI note number の上限を越えるオクターブ上は鳴らさない。
+fn bass_octave_note(bass: Option<u8>, lane: usize) -> Option<u8> {
+    let bass = bass?;
+    match lane {
+        0 => Some(bass),
+        1 => bass.checked_add(12).filter(|note| *note <= 127),
+        _ => None,
     }
 }
 

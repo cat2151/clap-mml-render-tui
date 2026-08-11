@@ -126,6 +126,10 @@ impl FastMidiClient {
         LimiterMeter::default()
     }
 
+    pub fn auto_gain_db(&self) -> [f32; INSTANCE_COUNT] {
+        [0.0; INSTANCE_COUNT]
+    }
+
     pub fn underrun_frames(&self) -> u64 {
         0
     }

@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use cmrt_arpeggiator::{generate, ArpNote, ArpPattern};
+use cmrt_arpeggiator::{generate_arpeggio, ArpNote, ArpPattern};
 
 use super::*;
 use crate::{ChordPlayback, NoteStep, GRID_STEPS};
@@ -141,7 +141,7 @@ fn voices_without_a_lane_are_dropped() {
 fn a_generated_arpeggio_lands_on_every_step_of_the_instance() {
     let mut state = chorded_state();
     let voice_count = state.arp_voice_count(2);
-    let notes = generate(ArpPattern::Up, voice_count, GRID_STEPS, &mut rand::rng());
+    let notes = generate_arpeggio(ArpPattern::Up, voice_count, GRID_STEPS, &mut rand::rng());
     assert!(state.apply_arpeggio(2, &notes));
 
     // up arpeggioは lane 0..3 を順に叩くので、各 step にちょうど1つ Attack が立つ。

@@ -51,8 +51,10 @@ impl GridSequencerScreen {
         self.state = state;
         self.pending_undo = None;
         self.undo = None;
-        // instance 番号の指す先が変わるので、音型のカーソルは引き継がない。
+        // instance 番号の指す先が変わるので、音型と patch のカーソルは引き継がない。
         self.reset_arp_patterns();
+        self.reset_bass_pattern();
+        self.reset_patch_bags();
     }
 
     pub(crate) fn validate_restored_patches(&mut self, patches: &[(String, String)]) -> bool {

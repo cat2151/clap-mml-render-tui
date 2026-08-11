@@ -68,9 +68,12 @@ fn chord_voice_attacks_use_the_velocity_of_each_stored_lane() {
         .collect::<Vec<_>>();
     assert_eq!(note_ons.len(), 4);
     for (lane, message) in note_ons.iter().enumerate() {
+        let stored = state
+            .stored_lane_index(crate::LaneAddress::new(2, lane))
+            .expect("stored lane");
         assert_eq!(
             message[2],
-            state.velocity_display()[lane + 2][0].unwrap(),
+            state.velocity_display()[stored][0].unwrap(),
             "lane {lane}"
         );
     }

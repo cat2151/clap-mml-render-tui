@@ -12,6 +12,16 @@ fn mouse(kind: MouseEventKind, column: u16) -> MouseEvent {
     mouse_at(kind, column, 2)
 }
 
+/// step セルの列。grid は中央寄せなので、chord 行の有無で左端が動く。
+fn cell(screen: &GridSequencerScreen, step: usize) -> u16 {
+    crate::ui::layout_for(screen, AREA).step_column(step)
+}
+
+/// NOTE 欄（音高）の列。
+fn note_column(screen: &GridSequencerScreen) -> u16 {
+    crate::ui::layout_for(screen, AREA).note_column()
+}
+
 fn mouse_at(kind: MouseEventKind, column: u16, row: u16) -> MouseEvent {
     MouseEvent {
         kind,
@@ -25,17 +35,17 @@ fn mouse_at(kind: MouseEventKind, column: u16, row: u16) -> MouseEvent {
 fn one_cross_row_drag_undoes_every_touched_row_together() {
     let mut screen = GridSequencerScreen::with_track_count(None, 2);
     screen.handle_mouse(
-        mouse_at(MouseEventKind::Down(MouseButton::Left), 37, 2),
+        mouse_at(MouseEventKind::Down(MouseButton::Left), cell(&screen, 0), 2),
         AREA,
         &context(),
     );
     screen.handle_mouse(
-        mouse_at(MouseEventKind::Drag(MouseButton::Left), 41, 3),
+        mouse_at(MouseEventKind::Drag(MouseButton::Left), cell(&screen, 2), 3),
         AREA,
         &context(),
     );
     screen.handle_mouse(
-        mouse_at(MouseEventKind::Up(MouseButton::Left), 41, 3),
+        mouse_at(MouseEventKind::Up(MouseButton::Left), cell(&screen, 2), 3),
         AREA,
         &context(),
     );
@@ -62,7 +72,7 @@ fn chord_voicing_wheel_is_undoable() {
     );
 
     screen.handle_mouse(
-        mouse_at(MouseEventKind::ScrollDown, 32, 6),
+        mouse_at(MouseEventKind::ScrollDown, note_column(&screen), 6),
         AREA,
         &context(),
     );
@@ -99,17 +109,17 @@ fn context() -> crate::GridSequencerContext<'static> {
 fn one_drag_is_undone_as_one_operation_and_restores_auto() {
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
     screen.handle_mouse(
-        mouse(MouseEventKind::Down(MouseButton::Left), 37),
+        mouse(MouseEventKind::Down(MouseButton::Left), cell(&screen, 0)),
         AREA,
         &context(),
     );
     screen.handle_mouse(
-        mouse(MouseEventKind::Drag(MouseButton::Left), 39),
+        mouse(MouseEventKind::Drag(MouseButton::Left), cell(&screen, 1)),
         AREA,
         &context(),
     );
     screen.handle_mouse(
-        mouse(MouseEventKind::Up(MouseButton::Left), 39),
+        mouse(MouseEventKind::Up(MouseButton::Left), cell(&screen, 1)),
         AREA,
         &context(),
     );
@@ -125,7 +135,8 @@ fn one_drag_is_undone_as_one_operation_and_restores_auto() {
 #[test]
 fn second_drag_replaces_the_single_undo_slot() {
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
-    for column in [37, 39] {
+    for step in [0, 1] {
+        let column = cell(&screen, step);
         screen.handle_mouse(
             mouse(MouseEventKind::Down(MouseButton::Left), column),
             AREA,

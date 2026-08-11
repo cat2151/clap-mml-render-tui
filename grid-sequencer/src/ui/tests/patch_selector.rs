@@ -86,8 +86,8 @@ fn a_manual_patch_load_greys_only_the_target_row() {
     let terminal = terminal_with_connection(&screen, &connection);
     let rendered = render_with_connection(&screen, &connection);
 
-    assert_eq!(row_label_fg(&terminal, 0), MONOKAI_FG);
-    assert_eq!(row_label_fg(&terminal, 1), MONOKAI_GRAY);
+    assert_eq!(row_label_fg(&terminal, &screen, 0), MONOKAI_FG);
+    assert_eq!(row_label_fg(&terminal, &screen, 1), MONOKAI_GRAY);
     assert!(rendered.contains("instance 2 patch loading"), "{rendered}");
     assert!(!has_progress_overlay(&rendered), "{rendered}");
 }
