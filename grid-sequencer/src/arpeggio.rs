@@ -27,7 +27,7 @@ impl GridSequencerScreen {
         if !self.state.apply_arpeggio(instance, &notes) {
             return;
         }
-        self.begin_manual_edit();
+        self.begin_manual_edit(crate::CycleRandomItem::Arp);
         self.commit_undo(snapshot);
         log_line(&format!(
             "grid-sequencer: arpeggio instance={instance} pattern={} voices={voice_count}",

@@ -110,7 +110,7 @@ fn the_arpeggio_row_gets_a_patch_from_the_arpeggio_categories() {
     );
 }
 
-/// AUTO のサイクル抽選でも、用途の決まった3行は専用カテゴリへ当て直す。
+/// PATCH が ON のサイクル抽選でも、用途の決まった3行は専用カテゴリへ当て直す。
 #[test]
 fn the_staged_cycle_reassigns_the_dedicated_rows_from_their_categories() {
     let now = Instant::now();

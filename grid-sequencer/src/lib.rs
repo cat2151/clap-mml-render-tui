@@ -18,6 +18,7 @@ mod arpeggio;
 mod bass_line;
 mod chord_mode;
 mod context;
+mod cycle_random;
 mod cycle_swap;
 mod drum_line;
 mod input;
@@ -36,8 +37,9 @@ pub mod ui;
 mod undo;
 
 pub use context::{GridPatchLoad, GridPatchStatus, GridSequencerContext};
+pub use cycle_random::{CycleRandom, CycleRandomItem};
 pub(crate) use input::ListDirection;
-pub use screen::{GridSequencerParts, GridSequencerScreen, PatternEvolution};
+pub use screen::{GridSequencerParts, GridSequencerScreen};
 pub use sender::{
     GridConnectionPhase, GridConnectionStatus, GridMidiSender, GridProgress, GridRowPatchPhase,
     GridRowPatchStatus, GridRowReadiness,
@@ -45,10 +47,10 @@ pub use sender::{
 pub use session::GridSequencerSession;
 pub use state::{
     frames_ahead, lookahead_at, randomize_instance_slice, schedule_guard_at, step_interval_at,
-    step_offset, step_offset_at, step_timeline_seconds, step_timeline_seconds_at, ChordPlayback,
-    GridInstance, GridLane, GridLaneMode, GridScheduledMessage, GridState, LaneAddress,
-    NotePattern, NoteStep, PitchDirection, VisibleNoteRow, VisibleRowKind, ARPEGGIO_ROW,
-    BASS_OCTAVE_LANES, BASS_ROW, BPM, CHORD_ROW, CHORD_VOICE_LANES, FIRST_DRUM_ROW,
+    step_offset, step_offset_at, step_timeline_seconds, step_timeline_seconds_at, AppliedTempo,
+    ChordPlayback, DrawnPhrases, GridInstance, GridLane, GridLaneMode, GridScheduledMessage,
+    GridState, LaneAddress, NotePattern, NoteStep, PitchDirection, VisibleNoteRow, VisibleRowKind,
+    ARPEGGIO_ROW, BASS_OCTAVE_LANES, BASS_ROW, BPM, CHORD_ROW, CHORD_VOICE_LANES, FIRST_DRUM_ROW,
     FULL_DRUM_TRACK_COUNT, GRID_ROWS, GRID_STEPS, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL,
 };
 
@@ -86,19 +88,16 @@ pub(crate) fn log_line(message: &str) {
     }
 }
 
-/// AUTO chord mode の和音の行へ与える音量差（dB）。他の行は 0 dB のまま。
+/// 完全ランダム演奏中の chord mode で、和音の行へ与える音量差（dB）。他の行は 0 dB のまま。
 pub const CHORD_GAIN_DB: f32 = 6.0;
 
-/// instance ごとの音量差（dB）。AUTO chord mode 中だけ和音の行が持ち上がる。
+/// instance ごとの音量差（dB）。譜面ごと毎周変わる完全ランダム演奏中だけ、chord mode の
+/// 和音の行が持ち上がる。
 ///
 /// 返す長さは bank 2 本ぶん（= `instance_count * BANK_COUNT`）。差し替え先の bank にも
 /// 同じ音量差を載せておく必要があるので、両方の `CHORD_ROW` を持ち上げる。
-pub fn chord_gains_db(
-    instance_count: usize,
-    chord_on: bool,
-    pattern_evolution: PatternEvolution,
-) -> Vec<f32> {
-    let boost_chord = chord_on && pattern_evolution == PatternEvolution::Auto;
+pub fn chord_gains_db(instance_count: usize, chord_on: bool, note_random: bool) -> Vec<f32> {
+    let boost_chord = chord_on && note_random;
     (0..instance_count * cmrt_realtime_play::BANK_COUNT)
         .map(|instance| {
             if boost_chord && instance % instance_count == CHORD_ROW {
@@ -134,14 +133,19 @@ impl GridSequencerScreen {
     pub fn start(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
         self.cancel_mouse_gesture();
         self.help_open = false;
+        self.close_cycle_random_overlay();
         self.patch_status = ctx.patch_status();
         // 入場時は何も送っていないので、引き直しで出る note off は捨ててよい。
         let _ = self.state.randomize_all(now, ctx.patches());
+        self.absorb_drawn_phrases(self.state.drawn_phrases());
         // 無差別抽選のあとに、用途が決まっている行（drum）だけ当て直す。
         self.apply_assigned_patches(ctx, false);
         self.grid_ready = true;
         self.restored_patches_pending = false;
         self.cancel_cycle_swap();
+        // クロックを走らせる前に自動BPMを引く。範囲を指定していれば、起動のたびに
+        // 違うテンポで始まる。
+        self.reseed_auto_bpm();
         self.state.start_at_bpm(now, self.bpm());
         log_line(&format!(
             "grid-sequencer: start instances={}",
@@ -154,6 +158,7 @@ impl GridSequencerScreen {
     pub fn resume(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
         self.cancel_mouse_gesture();
         self.help_open = false;
+        self.close_cycle_random_overlay();
         self.cancel_cycle_swap();
         self.state.start_at_bpm(now, self.bpm());
         self.refresh_context(ctx);
@@ -166,6 +171,7 @@ impl GridSequencerScreen {
     pub fn finish(&mut self) {
         self.cancel_mouse_gesture();
         self.help_open = false;
+        self.close_cycle_random_overlay();
         self.bpm_input = None;
         self.cancel_cycle_swap();
         self.waiting_for_patches = false;
@@ -207,10 +213,10 @@ impl GridSequencerScreen {
         self.wait_for_patches();
     }
 
-    /// AUTO chord mode の和音を他の行より目立たせるための音量差を適用する。
+    /// chord mode の和音を他の行より目立たせるための音量差を適用する。
     ///
     /// ゲインはサーバー側が instance ごとに保持し、音色ロードで live を作り直しても
-    /// 残る。chord mode または AUTO/HOLD が変わったときに送り直す。
+    /// 残る。chord mode または NOTE の random が変わったときに送り直す。
     pub(crate) fn apply_chord_gains(&self) {
         let Some(sender) = &self.midi_sender else {
             return;
@@ -218,7 +224,7 @@ impl GridSequencerScreen {
         sender.set_gains(chord_gains_db(
             self.state.instance_count(),
             self.state.chord().is_some(),
-            self.pattern_evolution,
+            self.cycle_random.note,
         ));
     }
 
@@ -290,6 +296,10 @@ impl GridSequencerScreen {
             self.handle_bpm_input_key(key, now);
             return GridSequencerAction::Continue;
         }
+        if self.cycle_random_open() {
+            self.handle_cycle_random_key(key);
+            return GridSequencerAction::Continue;
+        }
         if self.patch_selector.is_some() {
             if self.patch_selector_input_enabled() {
                 self.handle_patch_selector_key(key, ctx);
@@ -326,7 +336,7 @@ impl GridSequencerScreen {
                 self.help_open = true;
                 cmrt_tui_core::memory::request_refresh();
             }
-            KeyCode::Char('a') => self.toggle_pattern_evolution(),
+            KeyCode::Char('a') => self.toggle_cycle_random_overlay(),
             KeyCode::Char('b') if key.modifiers.is_empty() => self.toggle_single_buffering(),
             KeyCode::Char('c') => self.toggle_chord_mode(now, ctx),
             KeyCode::Char('r') => self.randomize(now, ctx),
@@ -345,6 +355,7 @@ impl GridSequencerScreen {
         // 全 instance を差し替えるので、走っている先読みは意味を失う。
         self.cancel_cycle_swap();
         let _note_offs = self.state.randomize_all(now, ctx.patches());
+        self.absorb_drawn_phrases(self.state.drawn_phrases());
         // chord mode 中は和音の行だけ poly patch を当て直す（無差別抽選で mono を
         // 引くと和音が潰れるため）。
         self.rechord_after_randomize(now, ctx, true);
@@ -366,6 +377,7 @@ impl GridSequencerScreen {
         // 譜面が変わるので、抽選済みの次サイクルは古くなる。走っている先読みごと捨てる。
         self.cancel_cycle_swap_preserving_drain();
         let note_offs = self.state.randomize_keeping_patches(now);
+        self.absorb_drawn_phrases(self.state.drawn_phrases());
         log_line(&format!(
             "grid-sequencer: randomize-keep-patch instances={} note_offs={}",
             self.track_count(),
@@ -378,8 +390,9 @@ impl GridSequencerScreen {
 
     fn clear_notes(&mut self) {
         let undo = self.capture_undo();
-        // `x` は白紙の pattern を保持するという明示操作なので、すでに空でも HOLD にする。
-        self.begin_manual_edit();
+        // `x` は白紙の pattern を保持するという明示操作なので、すでに空でも
+        // NOTE の引き直しを止める。
+        self.begin_manual_edit(CycleRandomItem::Note);
         self.state.clear_notes();
         self.commit_undo(undo);
     }

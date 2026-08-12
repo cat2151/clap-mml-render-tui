@@ -7,7 +7,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent,
 use ratatui::layout::Rect;
 
 use super::*;
-use crate::{tests::ctx_with, ChordPlayback, GridPatchLoad, GridRow, PatternEvolution};
+use crate::{tests::ctx_with, ChordPlayback, GridPatchLoad, GridRow};
 
 const AREA: Rect = Rect::new(0, 0, 100, 30);
 

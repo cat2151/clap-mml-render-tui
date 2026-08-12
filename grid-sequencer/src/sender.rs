@@ -23,6 +23,13 @@ mod worker;
 static NEXT_ROW_PATCH_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 static NEXT_LIVE_TIMELINE_ID: AtomicU64 = AtomicU64::new(1);
 
+/// grid の拍子。16ステップ = 4拍 = 1小節ちょうど。
+///
+/// tempo map の区間は拍子も持つので、timeline を張るときとテンポを変えるときの
+/// 両方でここを通す（wire へ直書きしない）。
+const TIME_SIGNATURE_NUMERATOR: u16 = 4;
+const TIME_SIGNATURE_DENOMINATOR: u16 = 4;
+
 pub use status::{
     GridConnectionPhase, GridConnectionStatus, GridProgress, GridRowPatchPhase, GridRowPatchStatus,
     GridRowReadiness,
@@ -37,6 +44,10 @@ enum GridMidiCommand {
     },
     BeginTimeline {
         config: cmrt_realtime_play::LiveTimelineConfig,
+    },
+    /// 走っている timeline の tempo map へテンポ変化点を積む。演奏は途切れない。
+    SetLiveTempo {
+        change: cmrt_realtime_play::LiveTempoChange,
     },
     /// 鳴っている bank の音色を丸ごと差し替える。`stop_live_all()` を伴うので
     /// ロード中は無音になる。起動時と `r` キー用。
@@ -114,6 +125,9 @@ impl GridMidiSender {
         }
     }
 
+    /// 音楽的な epoch を張り直す。**サーバー側はプラグインの状態をリセットし、
+    /// サンプルクロックの原点も 0 へ戻す**ので、テンポを変えたいだけのときに
+    /// 呼んではいけない（そちらは [`Self::set_live_tempo`]）。
     pub fn begin_timeline(&self, sample_rate_hz: f64, tempo_bpm: f64) -> u64 {
         let timeline_id = NEXT_LIVE_TIMELINE_ID.fetch_add(1, Ordering::Relaxed).max(1);
         let _ = self.tx.send(GridMidiCommand::BeginTimeline {
@@ -121,11 +135,32 @@ impl GridMidiSender {
                 timeline_id,
                 sample_rate_hz,
                 tempo_bpm,
-                time_signature_numerator: 4,
-                time_signature_denominator: 4,
+                time_signature_numerator: TIME_SIGNATURE_NUMERATOR,
+                time_signature_denominator: TIME_SIGNATURE_DENOMINATOR,
             },
         });
         timeline_id
+    }
+
+    /// 走っている timeline の tempo map へ「`at_seconds` から `tempo_bpm`」を積む。
+    ///
+    /// timeline は作り直されないので、演奏もプラグインの状態も途切れない。これを
+    /// 送らないと、クライアント側のステップ間隔だけが変わってサーバーの CLAP
+    /// transport は古いテンポのまま残り、tempo-sync するパッチがずれる。
+    /// まだ timeline を張っていない（id が 0）なら何もしない。
+    pub fn set_live_tempo(&self, timeline_id: u64, at_seconds: f64, tempo_bpm: f64) {
+        if timeline_id == 0 {
+            return;
+        }
+        let _ = self.tx.send(GridMidiCommand::SetLiveTempo {
+            change: cmrt_realtime_play::LiveTempoChange {
+                timeline_id,
+                at_seconds,
+                tempo_bpm,
+                time_signature_numerator: TIME_SIGNATURE_NUMERATOR,
+                time_signature_denominator: TIME_SIGNATURE_DENOMINATOR,
+            },
+        });
     }
 
     pub fn prepare<'a>(&self, patches: impl Iterator<Item = (u8, Option<&'a str>)>) {

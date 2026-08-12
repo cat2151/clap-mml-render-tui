@@ -67,7 +67,7 @@ fn chord_voicing_wheel_is_undoable() {
         Instant::now(),
     );
     assert_eq!(
-        crate::chord_gains_db(4, true, screen.pattern_evolution())[0],
+        crate::chord_gains_db(4, true, screen.cycle_random().note)[0],
         crate::CHORD_GAIN_DB
     );
 
@@ -77,18 +77,18 @@ fn chord_voicing_wheel_is_undoable() {
         &context(),
     );
     assert_eq!(screen.state.instances()[2].voicing_rotation, -1);
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
+    assert!(!screen.cycle_random().note);
     assert_eq!(
-        crate::chord_gains_db(4, true, screen.pattern_evolution()),
+        crate::chord_gains_db(4, true, screen.cycle_random().note),
         vec![0.0; 8]
     );
 
     screen.handle_key(press('u'), Instant::now(), &context());
 
     assert_eq!(screen.state.instances()[2].voicing_rotation, 0);
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Auto);
+    assert!(screen.cycle_random().note);
     assert_eq!(
-        crate::chord_gains_db(4, true, screen.pattern_evolution())[0],
+        crate::chord_gains_db(4, true, screen.cycle_random().note)[0],
         crate::CHORD_GAIN_DB
     );
 }
@@ -124,12 +124,12 @@ fn one_drag_is_undone_as_one_operation_and_restores_auto() {
         &context(),
     );
     assert_eq!(screen.state.rows()[0].pattern.attack_len(0), Some(2));
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
+    assert!(!screen.cycle_random().note);
 
     screen.handle_key(press('u'), Instant::now(), &context());
 
     assert_eq!(screen.state.rows()[0].pattern, NotePattern::default());
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Auto);
+    assert!(screen.cycle_random().note);
 }
 
 #[test]

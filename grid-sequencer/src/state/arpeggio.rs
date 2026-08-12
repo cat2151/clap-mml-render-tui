@@ -9,7 +9,30 @@
 
 use cmrt_arpeggiator::ArpNote;
 
-use super::{GridState, LaneAddress, BASS_ROW, CHORD_ROW};
+use super::{GridInstance, GridState, LaneAddress, BASS_ROW, CHORD_ROW};
+
+/// instance の全 lane の pattern を捨て、アルペジオを書き直す。変化があれば true。
+///
+/// [`GridState`] を経由しない形にしてあるのは、1周ごとの抽選が「鳴っている grid を
+/// 触らずに複製の上で引く」ため（[`super::randomize`]）。
+pub(super) fn write_arpeggio(instance: &mut GridInstance, notes: &[ArpNote]) -> bool {
+    let before = instance.lanes.clone();
+    for lane in &mut instance.lanes {
+        lane.pattern.clear();
+    }
+    // step 昇順に描くことで、`draw_span` の「新しい Attack が既存 note の Tie 上へ
+    // 来たら前の note を切り詰める」挙動が打ち切りの二重の安全網になる。
+    let mut notes = notes.to_vec();
+    notes.sort_by_key(|note| note.step);
+    for note in notes {
+        let Some(lane) = instance.lanes.get_mut(note.voice) else {
+            continue;
+        };
+        let end = note.step + note.duration_steps.max(1) - 1;
+        let _ = lane.pattern.draw_span(note.step, end);
+    }
+    instance.lanes != before
+}
 
 impl GridState {
     /// アルペジオに使える声部数。`resolved_note` が音を返す lane を数える。
@@ -42,22 +65,7 @@ impl GridState {
         let Some(item) = self.instances.get_mut(instance) else {
             return false;
         };
-        let before = item.lanes.clone();
-        for lane in &mut item.lanes {
-            lane.pattern.clear();
-        }
-        // step 昇順に描くことで、`draw_span` の「新しい Attack が既存 note の Tie 上へ
-        // 来たら前の note を切り詰める」挙動が打ち切りの二重の安全網になる。
-        let mut notes = notes.to_vec();
-        notes.sort_by_key(|note| note.step);
-        for note in notes {
-            let Some(lane) = item.lanes.get_mut(note.voice) else {
-                continue;
-            };
-            let end = note.step + note.duration_steps.max(1) - 1;
-            let _ = lane.pattern.draw_span(note.step, end);
-        }
-        if item.lanes == before {
+        if !write_arpeggio(item, notes) {
             return false;
         }
         self.refresh_lane_display_patterns();

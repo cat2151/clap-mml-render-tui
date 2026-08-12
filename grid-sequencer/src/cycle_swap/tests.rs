@@ -68,15 +68,15 @@ fn the_preload_sends_one_instance_per_step() {
     assert!(screen.cycle_swap.is_none(), "先読みは終わっている");
 }
 
-/// HOLD は patch / pattern を保持するため、待機 bank のロードも bank 切替も不要。
+/// 音色を据え置く周は、待機 bank のロードも bank 切替も不要。
 #[test]
-fn hold_stages_the_next_progression_without_starting_a_bank_preload() {
+fn keeping_the_patches_stages_the_next_progression_without_starting_a_bank_preload() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
     let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
     let mut screen = screen_in_chord_mode(now, &ctx);
-    screen.pattern_evolution = crate::PatternEvolution::Hold;
+    screen.cycle_random = crate::CycleRandom::HOLD;
     screen.state.stage_preload_due_for_test();
 
     screen.advance_cycle_swap(now, &ctx);
@@ -84,6 +84,31 @@ fn hold_stages_the_next_progression_without_starting_a_bank_preload() {
     assert!(screen.state.has_pending_cycle(), "次の進行は境界待ちにする");
     assert!(screen.cycle_swap.is_none(), "patch の先読みは開始しない");
     assert_eq!(screen.state.bank(), 0, "active bank はそのまま");
+}
+
+/// 譜面を据え置いて音色だけ毎周変える構成。ここが動かないと「patch だけ random」が
+/// 成立しない（先読みが走らないと差し替え先 bank に音色が載らない）。
+#[test]
+fn randomizing_only_the_patches_still_starts_the_bank_preload() {
+    let now = Instant::now();
+    let catalog = catalog();
+    let patches = patches();
+    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let mut screen = screen_in_chord_mode(now, &ctx);
+    screen.cycle_random = crate::CycleRandom {
+        patch: true,
+        ..crate::CycleRandom::HOLD
+    };
+    let before = screen.state.instances().to_vec();
+    screen.state.stage_preload_due_for_test();
+
+    screen.advance_cycle_swap(now, &ctx);
+
+    assert!(screen.cycle_swap.is_some(), "音色の先読みは始める");
+    let staged = screen.state.pending_instances_for_test();
+    for (staged, before) in staged.iter().zip(&before) {
+        assert_eq!(staged.lanes, before.lanes, "譜面は据え置く");
+    }
 }
 
 fn sent_rows(screen: &crate::GridSequencerScreen) -> usize {

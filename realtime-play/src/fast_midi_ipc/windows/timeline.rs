@@ -13,6 +13,22 @@ impl FastMidiClient {
         self.push(slot)
     }
 
+    /// 走っている live timeline の tempo map へ「`at_seconds` から新しいテンポ」を積む。
+    ///
+    /// [`Self::begin_live_timeline`] と違い timeline は作り直されないので、演奏も
+    /// プラグインの状態も途切れない。
+    pub fn set_live_tempo(&mut self, change: LiveTempoChange) -> Result<(), FastIpcError> {
+        validate_tempo_change(change)?;
+        let mut slot = zeroed_slot();
+        slot.kind = KIND_SET_LIVE_TEMPO;
+        slot.timeline_id = change.timeline_id;
+        slot.timeline_seconds_bits[0] = change.at_seconds.to_bits();
+        slot.tempo_bits = change.tempo_bpm.to_bits();
+        slot.time_signature_numerator = u32::from(change.time_signature_numerator);
+        slot.time_signature_denominator = u32::from(change.time_signature_denominator);
+        self.push(slot)
+    }
+
     pub fn send_timeline_events(
         &mut self,
         events: &[TimelineMidiEvent],
@@ -43,6 +59,25 @@ fn validate_timeline_config(config: LiveTimelineConfig) -> Result<(), FastIpcErr
     {
         return Err(FastIpcError::InvalidPayload(
             "invalid live timeline configuration".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// [`validate_timeline_config`] と同じ条件に「変化点の絶対秒が有限・非負」を足したもの。
+/// サーバー側 (`realtime-ipc`) の検証と一致させること。
+fn validate_tempo_change(change: LiveTempoChange) -> Result<(), FastIpcError> {
+    if change.timeline_id == 0
+        || !change.at_seconds.is_finite()
+        || change.at_seconds < 0.0
+        || !change.tempo_bpm.is_finite()
+        || change.tempo_bpm <= 0.0
+        || change.time_signature_numerator == 0
+        || change.time_signature_denominator == 0
+        || !change.time_signature_denominator.is_power_of_two()
+    {
+        return Err(FastIpcError::InvalidPayload(
+            "invalid live tempo change".into(),
         ));
     }
     Ok(())

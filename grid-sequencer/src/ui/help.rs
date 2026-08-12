@@ -13,7 +13,7 @@ const TITLE: &str = " Grid Sequencer ヘルプ(Keybinds)  Esc/q/?:close ";
 
 /// 画面下部に常に出しておく1行のキーバインド要約。
 pub(super) const KEYBIND_TEXT: &str =
-    "mouse:edit Ctrl+B:BPM a:A/H x:clear c:chord r/R:random t:tracks Ctrl+G:screen q:quit";
+    "mouse:edit Ctrl+B:BPM a:rnd x:clear c:chord r/R:random t:tracks Ctrl+G:screen q:quit";
 
 /// 枠線が食う幅・高さ。
 const BORDER_SIZE: u16 = 2;
@@ -73,7 +73,7 @@ fn pane_width(lines: &[Line<'_>]) -> u16 {
 fn keybind_lines() -> Vec<Line<'static>> {
     [
         " Ctrl+G  画面切替メニュー",
-        " Ctrl+B  BPM設定 / 自動BPMへ戻す",
+        " Ctrl+B  BPM設定 / 自動BPMの範囲",
         " 左click 1step の note / 消去",
         " 左drag  長い note、row横断で arpeggio",
         " 右drag  note 消去",
@@ -81,7 +81,7 @@ fn keybind_lines() -> Vec<Line<'static>> {
         "         NOTE欄:音高 / 転回(↑上げる)",
         "         grid:フレーズを送る(↓次 ↑前)",
         " u       直前の編集を undo",
-        " a       AUTO / HOLD 切替",
+        " a       1周ごとの random 設定",
         " x       全 note 消去",
         " c       chord mode on/off",
         " r       全ランダム(patch 含む)",
@@ -105,22 +105,22 @@ fn feature_lines(track_count: usize) -> Vec<Line<'static>> {
     let mut lines = memory::overlay_lines();
     lines.extend(
         [
-            format!("{track_count}行 x 16step。BPMはCtrl+Bで設定できます"),
+            format!("{track_count}行 x 16step。Ctrl+B でBPM。80-160 と"),
+            "  入れるとコード進行1周ごとに範囲内で変わります".to_string(),
             "NOTE欄  # = Attack   - = Tie   . = Rest".to_string(),
             "lane色  暗=未構築  灰=instanceのみ  通常=ロード済".to_string(),
             "chord mode(c) 行1=和音 行2=bass 行3=4 voice。".to_string(),
             "  転回とoctaveは全自動(auto voicing)で、top note".to_string(),
-            "  の跳躍を最小化し、進行の引き直しもまたいで繋ぎ".to_string(),
-            "  ます。on/off は保存されます。".to_string(),
+            "  の跳躍を最小化。on/off は保存されます。".to_string(),
             "grid の wheel↓ で次のフレーズ(chord mode中)".to_string(),
             "  4 voice行 Up/Down/UpDown/DownUp/UpDownHold/".to_string(),
             "    Converge/Diverge/Octave/Random".to_string(),
             "  bass行 Whole/8th/8th+Oct/#-##/#-##+Oct/".to_string(),
             "    ####+Oct  +Oct=octave往復 Whole=即鳴り".to_string(),
             "  drum行 kick/snare/hat/perc の刻み(行4以降)".to_string(),
-            "AUTO / HOLD(a) AUTO は1周ごとに全行を再抽選。".to_string(),
-            "  HOLD は手編集した譜面を保持し、コード変更時は".to_string(),
-            "  発音音高だけ更新。mouse編集/x/生成で HOLD へ。".to_string(),
+            "1周ごとの random(a) 何を引き直すか6項目で".to_string(),
+            "  選択。PATCH/NOTE/DRUM/ARP/CHORD/BPM。手で".to_string(),
+            "  触った項目だけが自動で OFF になります。".to_string(),
             "シングルバッファリング(b) 1周鳴らしきる→音色".to_string(),
             "  ロード→先頭から再開。ロード中は無音になる代わ".to_string(),
             "  りに演奏のブツ切れが無くなります(自動切替あり)".to_string(),

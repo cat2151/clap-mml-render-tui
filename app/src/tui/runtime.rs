@@ -334,8 +334,9 @@ impl<'a> TuiApp<'a> {
                             LoopBrowserAction::GridPreload {
                                 grid,
                                 token,
+                                mode,
                                 reason,
-                            } => self.preload_loop_grid(grid, token, reason),
+                            } => self.preload_loop_grid(grid, token, mode, reason),
                             LoopBrowserAction::TrackLayoutChanged {
                                 start_measure,
                                 grid,

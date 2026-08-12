@@ -46,9 +46,11 @@ enum LoopPlaybackCommand {
         reason: LoopGridChange,
     },
     /// 演奏を止めずに裏で次のグリッドを準備し、周の境目で差し替える（オートランダム用）。
+    /// `mode` は差し替え後のテンポ。準備はこのテンポで time stretch する。
     PreloadGrid {
         grid: LoopPlaybackGrid,
         token: u64,
+        mode: BpmMode,
         reason: LoopGridChange,
     },
     ReplaceTrackLayout {
@@ -152,10 +154,17 @@ impl LoopPlaybackController {
         });
     }
 
-    pub fn preload_grid(&self, grid: LoopPlaybackGrid, token: u64, reason: LoopGridChange) {
+    pub fn preload_grid(
+        &self,
+        grid: LoopPlaybackGrid,
+        token: u64,
+        mode: BpmMode,
+        reason: LoopGridChange,
+    ) {
         let _ = self.sender.send(LoopPlaybackCommand::PreloadGrid {
             grid,
             token,
+            mode,
             reason,
         });
     }

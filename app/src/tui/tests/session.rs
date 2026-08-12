@@ -232,6 +232,71 @@ fn screen_bpm_modes_are_persisted_and_restored_independently() {
 }
 
 #[test]
+fn screen_bpm_ranges_are_persisted_and_restored_independently() {
+    let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
+    let tmp = std::env::temp_dir().join(format!(
+        "cmrt_test_screen_bpm_range_restore_{}_{}",
+        std::process::id(),
+        unique
+    ));
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
+
+    let grid_range = cmrt_tui_core::bpm::BpmRange::new(80.0, 160.0).unwrap();
+    let loop_range = cmrt_tui_core::bpm::BpmRange::new(90.0, 140.0).unwrap();
+    let mut app = TuiApp::new_for_test(test_config());
+    app.grid_sequencer = crate::tui::grid_sequencer::GridSequencerScreen::new_with(
+        crate::tui::grid_sequencer::GridSequencerParts {
+            bpm_range: grid_range,
+            ..crate::tui::grid_sequencer::GridSequencerParts::default()
+        },
+    );
+    app.loop_browser.state.set_bpm_range(loop_range);
+
+    app.save_history_state();
+
+    let saved = crate::history::load_session_state();
+    assert_eq!(saved.grid_sequencer_bpm_range, Some([80.0, 160.0]));
+    assert_eq!(saved.loop_browser_bpm_range, Some([90.0, 140.0]));
+
+    let cfg = test_config();
+    let restored = TuiApp::new(&cfg, None);
+    assert_eq!(restored.grid_sequencer.bpm_range(), grid_range);
+    assert_eq!(restored.loop_browser.state.bpm_range(), loop_range);
+    // 引いた BPM は保存しない。起動時に範囲から引き直す。
+    assert!(
+        (80.0..=160.0).contains(&restored.grid_sequencer.bpm()),
+        "{}",
+        restored.grid_sequencer.bpm()
+    );
+    let loop_bpm = restored.loop_browser.state.bpm_mode().bpm();
+    assert!((90.0..=140.0).contains(&loop_bpm), "{loop_bpm}");
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn the_default_bpm_ranges_are_not_written_to_the_session() {
+    let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
+    let tmp = std::env::temp_dir().join(format!(
+        "cmrt_test_default_bpm_range_{}_{}",
+        std::process::id(),
+        unique
+    ));
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
+
+    let app = TuiApp::new_for_test(test_config());
+    app.save_history_state();
+
+    let saved = crate::history::load_session_state();
+    assert_eq!(saved.grid_sequencer_bpm_range, None);
+    assert_eq!(saved.loop_browser_bpm_range, None);
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
 fn edited_grid_is_persisted_and_restored_without_persisting_derived_note() {
     let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
     let tmp = std::env::temp_dir().join(format!(
@@ -272,7 +337,7 @@ fn edited_grid_is_persisted_and_restored_without_persisting_derived_note() {
                     voicing_instance,
                     crate::tui::grid_sequencer::GridInstance::new(3),
                 ],
-                crate::tui::grid_sequencer::PatternEvolution::Hold,
+                crate::tui::grid_sequencer::CycleRandom::HOLD,
             )),
             ..crate::tui::grid_sequencer::GridSequencerParts::default()
         },
@@ -285,9 +350,20 @@ fn edited_grid_is_persisted_and_restored_without_persisting_derived_note() {
         crate::test_utils::session_state_path_for_test().expect("isolated history path"),
     )
     .unwrap();
+    // lane からは `base_note` だけを保存する。発音音高（コードから導出する `note`）を
+    // 残すと、コードを変えたときに古い音高が復活する。
+    // `cycle_random` にも `note` という項目があるので、lane を見て確かめる。
+    let stored: serde_json::Value = serde_json::from_str(&json).unwrap();
+    let lanes = stored["grid_sequencer"]["instances"]
+        .as_array()
+        .expect("instances")
+        .iter()
+        .flat_map(|instance| instance["lanes"].as_array().expect("lanes"))
+        .collect::<Vec<_>>();
+    assert!(!lanes.is_empty());
     assert!(
-        !json.contains("\"note\":"),
-        "derived note must not be stored"
+        lanes.iter().all(|lane| lane.get("note").is_none()),
+        "derived note must not be stored: {json}"
     );
     assert!(json.contains("\"note_steps\""));
     assert!(!json.contains("\"duration\""));
@@ -296,8 +372,8 @@ fn edited_grid_is_persisted_and_restored_without_persisting_derived_note() {
     let restored = TuiApp::new(&cfg, None);
     let session = restored.grid_sequencer.session_state().unwrap();
     assert_eq!(
-        session.pattern_evolution,
-        crate::tui::grid_sequencer::PatternEvolution::Hold
+        session.cycle_random,
+        crate::tui::grid_sequencer::CycleRandom::HOLD
     );
     assert_eq!(session.instances.len(), 4);
     assert_eq!(

@@ -5,12 +5,17 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use cmrt_tui_core::bpm::BpmMode;
 use rodio::Source as _;
 use rubberband_ffi::StretchProfile;
 
+/// 自動モードの寄せ先の既定値。BPM範囲を指定していないときはこの1点へ寄せる。
 pub const TARGET_BPM: f64 = 120.0;
 pub const MIN_TIME_RATIO: f64 = 0.8;
 pub const MAX_TIME_RATIO: f64 = 1.25;
+
+// BPM の表示整形は画面と共有する（grid sequencer 側でも同じ書式を使う）。
+pub use cmrt_tui_core::bpm::format_bpm;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TargetBpm {
@@ -19,13 +24,24 @@ pub struct TargetBpm {
 }
 
 pub fn select_target_bpm(source_bpms: impl IntoIterator<Item = f64>) -> TargetBpm {
+    select_target_bpm_toward(source_bpms, TARGET_BPM)
+}
+
+/// 全 clip が time stretch 範囲に収まる共通区間を求め、そこへ `target` を clamp する。
+///
+/// 共通区間が無い・解析値が壊れている場合は `target` をそのまま返し、
+/// `has_common_range: false` で呼び出し側へ知らせる。
+pub fn select_target_bpm_toward(
+    source_bpms: impl IntoIterator<Item = f64>,
+    target: f64,
+) -> TargetBpm {
     let mut minimum = 0.0_f64;
     let mut maximum = f64::INFINITY;
     let mut has_source = false;
     for source_bpm in source_bpms {
         if !source_bpm.is_finite() || source_bpm <= 0.0 {
             return TargetBpm {
-                bpm: TARGET_BPM,
+                bpm: target,
                 has_common_range: false,
             };
         }
@@ -35,29 +51,31 @@ pub fn select_target_bpm(source_bpms: impl IntoIterator<Item = f64>) -> TargetBp
     }
     if !has_source {
         return TargetBpm {
-            bpm: TARGET_BPM,
+            bpm: target,
             has_common_range: true,
         };
     }
     if minimum > maximum {
         return TargetBpm {
-            bpm: TARGET_BPM,
+            bpm: target,
             has_common_range: false,
         };
     }
     TargetBpm {
-        bpm: TARGET_BPM.clamp(minimum, maximum),
+        bpm: target.clamp(minimum, maximum),
         has_common_range: true,
     }
 }
 
+/// 手動モードならその BPM をそのまま使い、自動モードなら寄せ先へ clamp する。
 pub fn select_target_bpm_with_override(
     source_bpms: impl IntoIterator<Item = f64>,
-    manual_bpm: Option<f64>,
+    mode: BpmMode,
 ) -> TargetBpm {
     let source_bpms = source_bpms.into_iter().collect::<Vec<_>>();
-    let Some(bpm) = manual_bpm else {
-        return select_target_bpm(source_bpms);
+    let bpm = match mode {
+        BpmMode::Auto(target) => return select_target_bpm_toward(source_bpms, target),
+        BpmMode::Manual(bpm) => bpm,
     };
     let has_common_range = source_bpms.iter().all(|source_bpm| {
         source_bpm.is_finite()
@@ -67,19 +85,6 @@ pub fn select_target_bpm_with_override(
     TargetBpm {
         bpm,
         has_common_range,
-    }
-}
-
-pub fn format_bpm(bpm: f64) -> String {
-    let rounded = bpm.round();
-    if (bpm - rounded).abs() < 0.000_000_1 {
-        format!("{rounded:.0}")
-    } else {
-        let formatted = format!("{bpm:.2}");
-        formatted
-            .trim_end_matches('0')
-            .trim_end_matches('.')
-            .to_string()
     }
 }
 
@@ -295,13 +300,32 @@ mod tests {
 
     #[test]
     fn manual_target_is_kept_and_reports_incompatible_sources() {
-        let compatible = select_target_bpm_with_override([100.0, 120.0], Some(100.0));
+        let compatible = select_target_bpm_with_override([100.0, 120.0], BpmMode::Manual(100.0));
         assert_eq!(compatible.bpm, 100.0);
         assert!(compatible.has_common_range);
 
-        let incompatible = select_target_bpm_with_override([160.0], Some(100.0));
+        let incompatible = select_target_bpm_with_override([160.0], BpmMode::Manual(100.0));
         assert_eq!(incompatible.bpm, 100.0);
         assert!(!incompatible.has_common_range);
+    }
+
+    #[test]
+    fn an_automatic_target_other_than_120_is_clamped_the_same_way() {
+        // 寄せ先が動いても clamp の作法は変わらない。共通区間に収まる寄せ先はそのまま通る。
+        assert_eq!(select_target_bpm_toward([130.0], 140.0).bpm, 140.0);
+        assert_eq!(select_target_bpm_toward([95.0], 140.0).bpm, 118.75);
+        assert_eq!(select_target_bpm_toward([160.0], 90.0).bpm, 128.0);
+        assert_eq!(select_target_bpm_toward([], 90.0).bpm, 90.0);
+        // 共通区間が1点しかない組み合わせでは、寄せ先を引いてもそこへ潰される。
+        assert_eq!(select_target_bpm_toward([96.0, 150.0], 140.0).bpm, 120.0);
+
+        let mode = select_target_bpm_with_override([130.0], BpmMode::Auto(140.0));
+        assert_eq!(mode.bpm, 140.0);
+        assert!(mode.has_common_range);
+
+        let no_common_range = select_target_bpm_with_override([60.0, 200.0], BpmMode::Auto(140.0));
+        assert_eq!(no_common_range.bpm, 140.0);
+        assert!(!no_common_range.has_common_range);
     }
 
     #[test]

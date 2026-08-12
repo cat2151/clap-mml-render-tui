@@ -29,7 +29,14 @@ fn new_format_round_trip_preserves_grid_values_and_omits_legacy_fields() {
                 ],
             }],
         }],
-        pattern_evolution: GridPatternEvolutionState::Hold,
+        cycle_random: GridCycleRandomState {
+            patch: false,
+            note: false,
+            drum: false,
+            arp: false,
+            chord: true,
+            bpm: true,
+        },
     };
     let json = serde_json::to_string(&state).unwrap();
     assert!(json.contains("\"instances\""));
@@ -55,7 +62,14 @@ fn downward_voicing_rotation_round_trips_as_a_negative_value() {
             voicing_rotation: -5,
             lanes: vec![GridSequencerLaneState::default(); CHORD_VOICE_LANES],
         }],
-        pattern_evolution: GridPatternEvolutionState::Hold,
+        cycle_random: GridCycleRandomState {
+            patch: false,
+            note: false,
+            drum: false,
+            arp: false,
+            chord: true,
+            bpm: true,
+        },
     };
 
     let json = serde_json::to_string(&state).unwrap();
@@ -88,7 +102,18 @@ fn legacy_rows_migrate_to_instances_and_expand_the_second_row() {
     assert!(restored.instances[1].lanes[1..]
         .iter()
         .all(|lane| lane == &GridSequencerLaneState::default()));
-    assert_eq!(restored.pattern_evolution, GridPatternEvolutionState::Hold);
+    assert_eq!(
+        restored.cycle_random,
+        GridCycleRandomState {
+            patch: false,
+            note: false,
+            drum: false,
+            arp: false,
+            chord: true,
+            bpm: true,
+        },
+        "旧 HOLD は譜面まわりの4項目だけ OFF へ移行する"
+    );
 }
 
 #[test]
@@ -165,4 +190,31 @@ fn legacy_quarter_extends_until_the_next_attack_and_clamps_at_the_bar() {
     )
     .unwrap();
     assert_eq!(&kinds(&tail.note_steps)[14..], "#-");
+}
+
+/// `cycle_random` を知らない頃のセッションは、AUTO / HOLD から移行する。
+#[test]
+fn legacy_pattern_evolution_migrates_into_cycle_random() {
+    let auto: GridSequencerSessionState =
+        serde_json::from_str(r#"{"instances":[],"pattern_evolution":"auto"}"#).unwrap();
+    assert_eq!(auto.cycle_random, GridCycleRandomState::default());
+
+    // field ごと無い（さらに古い）セッションも既定の全 ON で読む。
+    let missing: GridSequencerSessionState = serde_json::from_str(r#"{"instances":[]}"#).unwrap();
+    assert_eq!(missing.cycle_random, GridCycleRandomState::default());
+}
+
+/// 項目を足したあとに古い版が書き戻した JSON でも、足した項目が黙って OFF にならない。
+#[test]
+fn a_partial_cycle_random_object_keeps_the_missing_items_on() {
+    let restored: GridSequencerSessionState =
+        serde_json::from_str(r#"{"instances":[],"cycle_random":{"patch":false}}"#).unwrap();
+
+    assert_eq!(
+        restored.cycle_random,
+        GridCycleRandomState {
+            patch: false,
+            ..GridCycleRandomState::default()
+        }
+    );
 }

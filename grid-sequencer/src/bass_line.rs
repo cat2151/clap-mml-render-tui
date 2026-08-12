@@ -26,7 +26,7 @@ impl GridSequencerScreen {
         let notes = generate_bass_line(pattern, GRID_STEPS);
         let snapshot = self.capture_undo();
         if self.state.apply_bass_line(&notes) {
-            self.begin_manual_edit();
+            self.begin_manual_edit(crate::CycleRandomItem::Arp);
             self.commit_undo(snapshot);
         }
         // 譜面が変わらなかったときも、送った型は必ず聴かせる。

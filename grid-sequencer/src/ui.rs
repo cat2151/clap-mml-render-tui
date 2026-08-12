@@ -14,6 +14,7 @@ use cmrt_tui_core::{
 use crate::{GridConnectionPhase, GridConnectionStatus, GridSequencerScreen, GRID_STEPS};
 
 mod chord_line;
+pub(crate) mod cycle_random;
 mod grid;
 mod help;
 pub mod layout;
@@ -73,6 +74,9 @@ pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: 
     }
     if screen.bpm_input.is_some() {
         tempo::draw_overlay(f, screen);
+    }
+    if screen.cycle_random_open() {
+        cycle_random::draw_overlay(f, screen);
     }
 }
 

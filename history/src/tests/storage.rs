@@ -203,6 +203,39 @@ fn invalid_saved_bpms_fall_back_to_auto() {
 }
 
 #[test]
+fn session_state_round_trips_independent_automatic_bpm_ranges() {
+    let tmp = std::env::temp_dir().join("cmrt_test_bpm_range_round_trip");
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
+
+    save_session_state(&SessionState {
+        grid_sequencer_bpm_range: Some([80.0, 160.0]),
+        loop_browser_bpm_range: Some([90.0, 140.0]),
+        ..SessionState::default()
+    })
+    .unwrap();
+
+    let loaded = load_session_state();
+    assert_eq!(loaded.grid_sequencer_bpm_range, Some([80.0, 160.0]));
+    assert_eq!(loaded.loop_browser_bpm_range, Some([90.0, 140.0]));
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn invalid_saved_bpm_ranges_fall_back_to_the_fixed_default() {
+    // 下限が範囲外 / 上下が逆 / 小数の端は、どれも範囲として成立しない。
+    for json in [
+        r#"{"grid_sequencer_bpm_range":[19,160],"loop_browser_bpm_range":[80,301]}"#,
+        r#"{"grid_sequencer_bpm_range":[160,80],"loop_browser_bpm_range":[80.5,160]}"#,
+    ] {
+        let state: SessionState = serde_json::from_str(json).unwrap();
+        assert_eq!(state.grid_sequencer_bpm_range, None, "json={json}");
+        assert_eq!(state.loop_browser_bpm_range, None, "json={json}");
+    }
+}
+
+#[test]
 fn session_state_round_trips_the_editable_grid() {
     let tmp = std::env::temp_dir().join("cmrt_test_editable_grid_round_trip");
     std::fs::remove_dir_all(&tmp).ok();
@@ -227,7 +260,7 @@ fn session_state_round_trips_the_editable_grid() {
                     .collect(),
             }],
         }],
-        pattern_evolution: GridPatternEvolutionState::Hold,
+        cycle_random: GridCycleRandomState::default(),
     };
 
     save_session_state(&SessionState {

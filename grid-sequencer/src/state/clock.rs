@@ -89,6 +89,12 @@ pub fn frames_ahead(ahead: Duration, sample_rate: f64) -> u32 {
 pub struct StepClock {
     /// 締切計算の基準時刻。`None` なら停止中。
     anchor: Option<Instant>,
+    /// アンカーに対応するステップ番号。テンポを変えるたびに張り直すので 0 とは限らない。
+    anchor_step: u64,
+    /// アンカー時点の絶対 musical time（秒）。テンポを変えても `timeline_seconds` を
+    /// 単調増加に保つために持つ。サーバーはこの秒数でイベントを並べるので、
+    /// 過去へ戻すと鳴らし損ねる。
+    anchor_seconds: f64,
     /// 次に発行するステップの通し番号。
     next_step: u64,
     bpm: f64,
@@ -98,6 +104,8 @@ impl Default for StepClock {
     fn default() -> Self {
         Self {
             anchor: None,
+            anchor_step: 0,
+            anchor_seconds: 0.0,
             next_step: 0,
             bpm: BPM,
         }
@@ -114,8 +122,33 @@ impl StepClock {
 
     pub(super) fn start_at_bpm(&mut self, now: Instant, bpm: f64) {
         self.anchor = Some(now);
+        self.anchor_step = 0;
+        self.anchor_seconds = 0.0;
         self.next_step = 0;
         self.bpm = bpm;
+    }
+
+    /// `at_step` の頭からテンポを変える。演奏は止めず、位相も musical time も繋がる。
+    ///
+    /// `at_step` の締切と絶対 musical time は**変更前のテンポで**求めてからアンカーに
+    /// する。これで「そのステップはこれまでどおりの位置で鳴り、次のステップから新しい
+    /// 間隔になる」となり、周の境目でテンポを差し替えても音が飛ばない。
+    ///
+    /// 丸めはアンカーを張り直すたびに1回だけ乗る（1ns 未満）。ステップの絶対位置は
+    /// アンカーからの通し計算なので、周の内側では従来どおり誤差が積もらない。
+    ///
+    /// 乗り換えた絶対 musical time（＝新しい `anchor_seconds`）を返す。これはそのまま
+    /// サーバーの tempo map へ積む「この秒から新テンポ」なので、呼び出し側は必ず送ること。
+    /// 停止中は何もせず `None`。
+    pub(super) fn retempo(&mut self, at_step: u64, bpm: f64) -> Option<f64> {
+        self.anchor?;
+        let anchor = self.deadline_of(at_step);
+        let anchor_seconds = self.timeline_seconds(at_step);
+        self.anchor_seconds = anchor_seconds;
+        self.anchor = Some(anchor);
+        self.anchor_step = at_step;
+        self.bpm = bpm;
+        Some(anchor_seconds)
     }
 
     pub(super) fn stop(&mut self) {
@@ -124,6 +157,18 @@ impl StepClock {
 
     pub(super) fn is_running(&self) -> bool {
         self.anchor.is_some()
+    }
+
+    pub(super) fn bpm(&self) -> f64 {
+        self.bpm
+    }
+
+    /// まだ組み立てていない、次に発行するステップ。
+    ///
+    /// 先読み済みのステップは既に送信済みで、その絶対 musical time は変更前のテンポで
+    /// 確定している。演奏中にテンポを乗り換えるなら、境目はここより前にしないこと。
+    pub(super) fn next_step(&self) -> u64 {
+        self.next_step
     }
 
     pub(super) fn step_interval(&self) -> Duration {
@@ -135,7 +180,8 @@ impl StepClock {
     }
 
     pub(super) fn timeline_seconds(&self, step: u64) -> f64 {
-        step_timeline_seconds_at(step, self.bpm)
+        self.anchor_seconds
+            + step_timeline_seconds_at(step.saturating_sub(self.anchor_step), self.bpm)
     }
 
     /// `now + lookahead` までに締切が来るステップを、締切つきで古い順に返す。
@@ -164,8 +210,15 @@ impl StepClock {
     }
 
     fn next_deadline(&self) -> Option<Instant> {
-        let anchor = self.anchor?;
-        Some(anchor + step_offset_at(self.next_step, self.bpm))
+        self.anchor
+            .is_some()
+            .then(|| self.deadline_of(self.next_step))
+    }
+
+    /// アンカーから数えた `step` の絶対位置。アンカーが無いときは呼ばないこと。
+    fn deadline_of(&self, step: u64) -> Instant {
+        self.anchor.expect("running clock")
+            + step_offset_at(step.saturating_sub(self.anchor_step), self.bpm)
     }
 
     /// 1ステップ以上遅れていたら、欠落したordinalを飛ばす。wall clockだけを張り直すと
@@ -177,7 +230,7 @@ impl StepClock {
         if deadline + self.step_interval() <= now {
             let elapsed = now.saturating_duration_since(self.anchor.expect("running clock"));
             let next = (elapsed.as_secs_f64() * self.bpm * STEPS_PER_BEAT as f64 / 60.0).ceil();
-            self.next_step = (next as u64).max(self.next_step);
+            self.next_step = (next as u64 + self.anchor_step).max(self.next_step);
         }
     }
 }

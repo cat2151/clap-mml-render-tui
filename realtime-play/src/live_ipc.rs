@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     fast_midi_ipc::{
-        FastIpcError, FastMidiClient, FastMidiEvent, InstanceId, LimiterMeter, LiveTimelineConfig,
-        TimelineMidiEvent, TimingMetrics, INSTANCE_COUNT,
+        FastIpcError, FastMidiClient, FastMidiEvent, InstanceId, LimiterMeter, LiveTempoChange,
+        LiveTimelineConfig, TimelineMidiEvent, TimingMetrics, INSTANCE_COUNT,
     },
     logging::log_realtime_play_event,
     RealtimePlayServerSupervisor,
@@ -67,6 +67,14 @@ impl RealtimePlayServerSupervisor {
 
     pub fn begin_live_timeline(&self, config: LiveTimelineConfig) -> Result<()> {
         self.with_fast_client(|client| client.begin_live_timeline(config))
+    }
+
+    /// 走っている live timeline の tempo map へテンポ変化点を積む。
+    ///
+    /// `begin_live_timeline` と違い、サーバー側は timeline を作り直さない
+    /// （プラグインの状態もサンプルクロックの原点も動かない）ので、演奏は途切れない。
+    pub fn set_live_tempo(&self, change: LiveTempoChange) -> Result<()> {
+        self.with_fast_client(|client| client.set_live_tempo(change))
     }
 
     pub fn send_timeline_events(&self, events: &[TimelineMidiEvent]) -> Result<LimiterMeter> {

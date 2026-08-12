@@ -302,25 +302,31 @@ fn key_release_events_are_ignored() {
     ));
 }
 
+/// `a` は overlay の開閉だけ。設定は overlay の中で切り替える。
 #[test]
-fn a_toggles_auto_and_hold_and_randomize_does_not_change_the_mode() {
+fn a_opens_the_cycle_random_overlay_and_randomize_keeps_the_settings() {
     let patches = one_patch();
     let now = Instant::now();
     let mut screen = silent_screen();
+    assert_eq!(screen.cycle_random(), crate::CycleRandom::ALL);
 
     screen.handle_key(press(KeyCode::Char('a')), now, &ready_ctx(&patches));
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
+    assert!(screen.cycle_random_open());
+    // overlay の `2` は NOTE。
+    screen.handle_key(press(KeyCode::Char('2')), now, &ready_ctx(&patches));
+    assert!(!screen.cycle_random().note);
+
+    screen.handle_key(press(KeyCode::Esc), now, &ready_ctx(&patches));
+    assert!(!screen.cycle_random_open());
+
+    // `r` / `R` はその場の引き直しであって、1周ごとの設定には触らない。
     screen.handle_key(press(KeyCode::Char('r')), now, &ready_ctx(&patches));
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
     screen.handle_key(shift_press(KeyCode::Char('R')), now, &ready_ctx(&patches));
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
-
-    screen.handle_key(press(KeyCode::Char('a')), now, &ready_ctx(&patches));
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Auto);
+    assert!(!screen.cycle_random().note);
 }
 
 #[test]
-fn x_clears_cells_keeps_row_parameters_and_enters_hold() {
+fn x_clears_cells_keeps_row_parameters_and_stops_the_note_random() {
     let patches = one_patch();
     let mut screen = silent_screen();
     let row = &mut screen.state.rows_mut()[1];
@@ -338,7 +344,7 @@ fn x_clears_cells_keeps_row_parameters_and_enters_hold() {
     assert_eq!(row.patch.as_deref(), Some("Kept/Patch.fxp"));
     assert_eq!(row.base_note, 73);
     assert_eq!(row.pattern, NotePattern::default());
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
+    assert!(!screen.cycle_random().get(crate::CycleRandomItem::Note));
 }
 
 /// 接続前に進めてしまうと、Ready 復帰時に欠落ステップをまとめて鳴らしてしまう。

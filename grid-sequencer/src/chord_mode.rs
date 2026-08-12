@@ -9,8 +9,8 @@ use cmrt_chord::{ChordProgressionCatalog, ChordVoicing};
 use cmrt_surge_patches::{pick_for_role, PatchRole};
 
 use crate::{
-    log_line, ChordPlayback, GridSequencerContext, GridSequencerScreen, PatternEvolution,
-    ARPEGGIO_ROW, BASS_ROW, CHORD_ROW,
+    log_line, ChordPlayback, GridSequencerContext, GridSequencerScreen, ARPEGGIO_ROW, BASS_ROW,
+    CHORD_ROW,
 };
 
 /// 1回の抽選で、変換できる進行を探すために引き直す回数。
@@ -207,29 +207,29 @@ impl GridSequencerScreen {
 
     /// 次サイクルを抽選し、差し替え待ちとして預ける。まだ鳴らさない。
     ///
-    /// AUTO では進行・Key に加えて全instance/laneを引き直す。HOLD では進行・Keyだけを引き、
-    /// 現在のlane patternを保ったままresolved noteだけを新しいコードへ追随させる。
-    /// AUTO の音色ロードは待機 bank の裏で走らせる。HOLD は音色を保持するため
-    /// ロードせず、現在 bank 上で進行だけを境界時に取り込む。
+    /// 何を引き直すかは [`crate::CycleRandom`] が決める。PATCH が ON の周だけ待機 bank
+    /// への音色ロードが要るので、そのときだけ bank を切り替える差し替えとして預ける
+    /// （OFF なら現在 bank 上で境界時に取り込むだけで済み、演奏も途切れない）。
     /// 抽選できたら true を返す。
     pub(crate) fn stage_next_cycle(
         &mut self,
         _now: Instant,
         ctx: &GridSequencerContext<'_>,
     ) -> bool {
-        // 差し替えは小節境界。その直前に鳴っているのは現在の進行の最後のコード。
-        let seed = self.state.chord().and_then(ChordPlayback::last_voicing);
-        let Some(playback) = pick_chord(ctx.chord_catalog, seed.as_ref()) else {
-            self.chord_error = Some(CATALOG_UNAVAILABLE.to_string());
-            log_line("grid-sequencer: cycle stage failed reason=catalog-empty");
+        let policy = self.cycle_random;
+        if !policy.chord && !policy.instances_change() {
+            // 引き直すものが何も無い。差し替えずに同じ周をもう1度鳴らす。
+            return true;
+        }
+        let Some(playback) = self.pick_next_playback(ctx) else {
             return false;
         };
         // 鳴っている grid はそのままに、複製の上で引き直す。差し替えは小節境界まで待つ。
         let mut instances = self.state.instances().to_vec();
-        if self.pattern_evolution == PatternEvolution::Auto {
-            crate::randomize_instance_slice(&mut instances, ctx.patches());
-        }
-        if self.pattern_evolution == PatternEvolution::Auto {
+        let drawn =
+            crate::randomize_instance_slice(&mut instances, ctx.patches(), policy, Some(&playback));
+        self.absorb_drawn_phrases(drawn);
+        if policy.patch {
             // 和音の行だけは無差別抽選の結果を捨て、条件に合う patch へ当て直す。
             match self.pick_chord_patch(ctx) {
                 Ok(patch) => instances[CHORD_ROW].patch = Some(patch),
@@ -250,19 +250,37 @@ impl GridSequencerScreen {
             }
         }
         log_line(&format!(
-            "grid-sequencer: cycle staged mode={} key={} degrees={} chords={} instances={}",
-            self.pattern_evolution.label(),
+            "grid-sequencer: cycle staged random={} key={} degrees={} chords={} instances={}",
+            policy.compact_label(),
             playback.key(),
             playback.degrees(),
             playback.chord_count(),
             instances.len(),
         ));
-        match self.pattern_evolution {
-            PatternEvolution::Auto => self.state.stage_next_cycle(instances, playback),
-            PatternEvolution::Hold => self.state.stage_next_cycle_in_place(instances, playback),
+        if policy.patch {
+            self.state.stage_next_cycle(instances, playback);
+        } else {
+            self.state.stage_next_cycle_in_place(instances, playback);
         }
         self.chord_error = None;
         true
+    }
+
+    /// 次サイクルで鳴らす進行。CHORD が OFF なら同じ進行を頭から続投する。
+    ///
+    /// 引けなかったときだけ `None`。差し替えそのものを見送る合図になる。
+    fn pick_next_playback(&mut self, ctx: &GridSequencerContext<'_>) -> Option<ChordPlayback> {
+        if !self.cycle_random.chord {
+            return self.state.chord().map(ChordPlayback::restarted);
+        }
+        // 差し替えは小節境界。その直前に鳴っているのは現在の進行の最後のコード。
+        let seed = self.state.chord().and_then(ChordPlayback::last_voicing);
+        let playback = pick_chord(ctx.chord_catalog, seed.as_ref());
+        if playback.is_none() {
+            self.chord_error = Some(CATALOG_UNAVAILABLE.to_string());
+            log_line("grid-sequencer: cycle stage failed reason=catalog-empty");
+        }
+        playback
     }
 
     /// chord mode 中の `r` / `R` に追随する。進行と Key を引き直し、

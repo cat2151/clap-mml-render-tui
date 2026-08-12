@@ -30,6 +30,9 @@ impl GridSequencerScreen {
         if status.overloaded && !self.overload_applied {
             self.enter_single_buffering("overload");
         }
+        // 次の周のテンポを先に予約しておく。組み立ては先読みするので、周の頭が
+        // 来る前に預けておかないと1周ぶん取り逃がす。
+        self.arm_next_cycle_bpm();
         if self.poll_start_wait(now, status.phase.accepts_notes()) {
             let bank_before = self.state.bank();
             let chord_before = self
@@ -39,6 +42,8 @@ impl GridSequencerScreen {
             let scheduled = self
                 .state
                 .poll_steps(now, self.scheduling_lookahead(status.buffer_multiplier));
+            // 周の頭を跨いだならテンポが乗り換わっている。表示を追従させる。
+            self.absorb_applied_cycle_bpm();
             self.log_chord_schedule(&scheduled, bank_before, chord_before);
             self.send_scheduled_with_lateness(&scheduled, self.state.last_poll_lateness());
             if self.single_buffering {
@@ -113,9 +118,9 @@ impl GridSequencerScreen {
             .map(|chord| (chord.index(), chord.chord_count()));
         if bank_before != bank_after || chord_before != chord_after {
             crate::log_line(&format!(
-                "grid-sequencer: chord-transport mode={} chord={chord_before:?}->{chord_after:?} \
+                "grid-sequencer: chord-transport random={} chord={chord_before:?}->{chord_after:?} \
                  active_bank={bank_before}->{bank_after}",
-                self.pattern_evolution().label(),
+                self.cycle_random.compact_label(),
             ));
         }
 
@@ -141,9 +146,9 @@ impl GridSequencerScreen {
             return;
         }
         crate::log_line(&format!(
-            "grid-sequencer: chord-note-on mode={} active_bank={} chord={chord_after:?} \
+            "grid-sequencer: chord-note-on random={} active_bank={} chord={chord_after:?} \
              logical_patch={:?} events=[{}]",
-            self.pattern_evolution().label(),
+            self.cycle_random.compact_label(),
             bank_after,
             self.state.instances()[crate::CHORD_ROW].patch.as_deref(),
             attacks.join(", "),

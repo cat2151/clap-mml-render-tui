@@ -53,7 +53,7 @@ fn patch_name_wheel_uses_chord_candidates_only_on_the_chord_instance() {
         screen.state.instances()[2].patch.as_deref(),
         Some("Bass/Mono.fxp")
     );
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
+    assert!(!screen.cycle_random().patch);
 }
 
 /// アルペジオ行の PATCH wheel は arpeggio 用カテゴリからだけ引く。

@@ -18,6 +18,7 @@
 use crate::batch_random::StagedRandomGrid;
 use crate::playback::position;
 use crate::{LoopBrowser, LoopBrowserAction, LoopGridChange};
+use cmrt_tui_core::bpm::BpmMode;
 
 /// 1 周がこの秒数以上なら長いグリッドとみなす。
 const LONG_CYCLE_SECONDS: f64 = 16.0;
@@ -121,12 +122,14 @@ impl LoopBrowser {
         {
             return LoopBrowserAction::Continue;
         }
-        let Some(staged) = self.stage_random_grid() else {
+        // 周の区切りは自動BPMを引き直す区切りでもある。範囲に幅が無ければ据え置き。
+        let Some(staged) = self.stage_random_grid(self.next_auto_bpm_mode()) else {
             return LoopBrowserAction::Continue;
         };
         self.auto_random_next_token = self.auto_random_next_token.wrapping_add(1).max(1);
         let token = self.auto_random_next_token;
         let grid = self.playback_grid_of(&staged.grid);
+        let mode = staged.mode;
         self.auto_random_staged = Some(StagedAutoRandom {
             token,
             staged_at_cycle: cycle,
@@ -135,7 +138,16 @@ impl LoopBrowser {
         LoopBrowserAction::GridPreload {
             grid,
             token,
+            mode,
             reason: LoopGridChange::AutoRandom,
         }
+    }
+
+    /// 次の周へ向けて引き直した自動モード。手動モード中と、幅のない範囲では据え置き。
+    fn next_auto_bpm_mode(&self) -> BpmMode {
+        if self.bpm_mode.auto_target().is_none() || self.bpm_range.is_fixed() {
+            return self.bpm_mode;
+        }
+        BpmMode::Auto(self.bpm_range.sample())
     }
 }

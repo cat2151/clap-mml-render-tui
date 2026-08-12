@@ -93,7 +93,7 @@ fn left_drag_draws_one_long_note_and_shrinks_from_the_down_snapshot() {
         &context(),
     );
     assert_eq!(&pattern(&screen, 0)[4..8], "#-..");
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
+    assert!(!screen.cycle_random().get(crate::CycleRandomItem::Note));
 
     screen.handle_mouse(
         mouse(MouseEventKind::Up(MouseButton::Left), cell(&screen, 5), 2),
@@ -312,7 +312,7 @@ fn editing_discards_a_cycle_staged_from_the_old_rows() {
         &context(),
     );
     assert!(!screen.state.has_pending_cycle());
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
+    assert!(!screen.cycle_random().get(crate::CycleRandomItem::Note));
 }
 
 #[test]

@@ -222,7 +222,7 @@ impl GridSequencerScreen {
         };
         let undo = self.capture_undo();
         if self.state.set_instance_patch(instance, patch.clone()) {
-            self.begin_manual_edit();
+            self.begin_manual_edit(crate::CycleRandomItem::Patch);
             self.prepare_patch(instance, Some(&patch), "wheel-patch");
             self.commit_undo(undo);
         }
@@ -306,9 +306,10 @@ impl GridSequencerScreen {
         }
         let undo = self.capture_undo();
         if self.state.set_instance_patch(instance, patch.clone()) {
-            self.begin_manual_edit();
+            self.begin_manual_edit(crate::CycleRandomItem::Patch);
             // preview の送信先 bank は、確定までの間に切り替わり得る。patch 名が同じ
-            // というだけで省略せず、HOLD へ固定した後の active instance へ必ず積む。
+            // というだけで省略せず、PATCH を据え置きに倒した後の active instance へ
+            // 必ず積む。
             self.prepare_patch(instance, Some(&patch), "confirm");
             self.commit_undo(undo);
         }

@@ -5,10 +5,10 @@
 //!
 //! 流れ:
 //! 1. 進行の最終小節へ入ると `GridState` が `preload_due` を立てる。
-//! 2. AUTO は次の進行・Key・patch・譜面を抽選し、差し替え待ちとして預ける。
-//!    HOLD は patch・譜面を保持し、進行だけを現在 bank 上の差し替え待ちにする。
-//! 3. AUTO だけ、**1ステップにつき1インスタンスずつ**待機 bank へ patch を先読みする。
-//!    まとめて投げるとサーバーのレンダースレッドが連続で止まり underrun になる。
+//! 2. [`crate::CycleRandom`] に従って次サイクルを抽選し、差し替え待ちとして預ける。
+//! 3. PATCH が ON の周だけ、**1ステップにつき1インスタンスずつ**待機 bank へ patch を
+//!    先読みする。まとめて投げるとサーバーのレンダースレッドが連続で止まり underrun
+//!    になる。OFF の周は音色が変わらないので、現在 bank 上で取り込むだけで済む。
 //! 4. 全件終わったら「準備できた」と伝える。次に進行を1周した小節境界で差し替わる。
 //!
 //! 小節の頭までに間に合わなければ差し替えを見送り、今の grid のまま次の周へ入る。
@@ -16,7 +16,7 @@
 
 use std::time::Instant;
 
-use crate::{log_line, GridSequencerContext, GridSequencerScreen, PatternEvolution};
+use crate::{log_line, GridSequencerContext, GridSequencerScreen};
 
 /// 待機 bank への先読みロードの進み具合。
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -117,10 +117,13 @@ impl GridSequencerScreen {
         if !self.stage_next_cycle(now, ctx) {
             return;
         }
-        if self.pattern_evolution == PatternEvolution::Hold {
+        // 音色が変わらない周は、待機 bank への先読みも bank 切替も要らない。
+        // 差し替えは現在 bank 上で境界時に取り込まれる（`stage_next_cycle_in_place`）。
+        if !self.cycle_random.patch {
             log_line(&format!(
-                "grid-sequencer: hold-cycle ready active_bank={} preload=skipped",
+                "grid-sequencer: in-place cycle ready active_bank={} preload=skipped random={}",
                 self.state.bank(),
+                self.cycle_random.compact_label(),
             ));
             return;
         }

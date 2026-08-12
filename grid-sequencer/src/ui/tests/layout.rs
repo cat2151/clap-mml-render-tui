@@ -62,10 +62,10 @@ fn tall_terminals_show_every_track_of_both_value_grids() {
 }
 
 #[test]
-fn the_note_grid_title_always_shows_auto_or_hold() {
+fn the_note_grid_title_always_shows_the_cycle_random_items() {
     let mut screen = GridSequencerScreen::new(None);
-    assert!(render(&screen).contains("Note [AUTO]"));
+    assert!(render(&screen).contains("Note [PNDACB]"));
 
-    screen.pattern_evolution = crate::PatternEvolution::Hold;
-    assert!(render(&screen).contains("Note [HOLD]"));
+    screen.cycle_random = crate::CycleRandom::HOLD;
+    assert!(render(&screen).contains("Note [----CB]"));
 }

@@ -7,7 +7,7 @@ fn the_keybind_line_is_always_visible() {
     let rendered = render(&screen);
 
     assert!(rendered.contains("mouse:edit"), "{rendered}");
-    assert!(rendered.contains("a:A/H"), "{rendered}");
+    assert!(rendered.contains("a:rnd"), "{rendered}");
     assert!(rendered.contains("x:clear"), "{rendered}");
     assert!(rendered.contains("r/R:random"), "{rendered}");
     assert!(rendered.contains("t:tracks"), "{rendered}");
@@ -33,7 +33,7 @@ fn the_help_overlay_splits_keybinds_from_the_feature_notes() {
     assert!(
         rendered
             .replace(' ', "")
-            .contains("HOLDは手編集した譜面を保持"),
+            .contains("触った項目だけが自動でOFF"),
         "{rendered}"
     );
     // 左 pane の先頭（Ctrl+G）と右 pane の先頭（メモリ行）が同じ行に並ぶ＝2 pane。

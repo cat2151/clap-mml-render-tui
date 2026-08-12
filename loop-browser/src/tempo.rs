@@ -15,6 +15,12 @@ impl LoopBrowser {
                 LoopBrowserAction::Continue
             }
             BpmInputAction::Apply(mode) => self.apply_bpm_mode(mode),
+            BpmInputAction::ApplyAuto(range) => {
+                if let Some(range) = range {
+                    self.bpm_range = range;
+                }
+                self.apply_bpm_mode(BpmMode::Auto(self.bpm_range.sample()))
+            }
         }
     }
 

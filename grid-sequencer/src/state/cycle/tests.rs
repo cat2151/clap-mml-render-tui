@@ -90,7 +90,7 @@ fn a_staged_cycle_does_not_swap_until_it_is_marked_ready() {
     assert!(!state.has_pending_cycle(), "差し替えたら待ちは空になる");
 }
 
-/// HOLD は patch を変えないので、待機 bank へ積み直さず現在 bank 上で進行だけを
+/// patch を変えない周は、待機 bank へ積み直さず現在 bank 上で進行だけを
 /// 差し替える。live edit した patch の instance が境界で変わらないことが重要。
 #[test]
 fn an_in_place_cycle_commits_without_switching_bank() {
@@ -102,10 +102,14 @@ fn an_in_place_cycle_commits_without_switching_bank() {
 
     assert!(
         state.pending_patches().is_empty(),
-        "HOLD は standby bank へ何もロードしない"
+        "in place の差し替えは standby bank へ何もロードしない"
     );
     assert!(state.commit_pending_cycle(), "先読み完了待ちは不要");
-    assert_eq!(state.bank(), 0, "HOLD では active bank を維持する");
+    assert_eq!(
+        state.bank(),
+        0,
+        "in place の差し替えは active bank を維持する"
+    );
     assert_eq!(
         state.rows()[0].patch.as_deref(),
         Some("Held/A.fxp"),

@@ -153,7 +153,7 @@ fn randomizing_keeps_the_drum_rows_on_a_drum_rhythm() {
     let note = state.instances()[kick_row].lanes[0].base_note;
 
     for _ in 0..16 {
-        crate::randomize_instance_slice(state.instances_mut(), &[]);
+        crate::randomize_instance_slice(state.instances_mut(), &[], crate::CycleRandom::ALL, None);
         let kick = &state.instances()[kick_row];
         assert_eq!(kick.lanes[0].base_note, note, "drum の音高は動かさない");
         assert!(

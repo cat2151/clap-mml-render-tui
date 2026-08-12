@@ -1,5 +1,6 @@
 use super::*;
 use cmrt_loop_browser_domain::random::LoopRandomScope;
+use cmrt_tui_core::bpm::BpmMode;
 use std::collections::HashSet;
 
 #[derive(Clone)]
@@ -29,11 +30,15 @@ pub struct StagedRandomGrid {
     pub grid: LoopTrackGrid,
     pub decks: LoopRandomDeckState,
     pub start_measure: usize,
+    /// このグリッドを組み立てたときの BPM。commit で初めて画面へ反映する。
+    /// 先に反映してしまうと、鳴らずに捨てられたときテンポだけが変わって残る。
+    pub mode: BpmMode,
 }
 
 impl LoopBrowser {
     pub fn randomize_current_measure(&mut self) -> LoopBrowserAction {
-        let Some(staged) = self.stage_random_grid() else {
+        // 手動の一括randomではテンポを動かさない（引き直すのはオートランダムだけ）。
+        let Some(staged) = self.stage_random_grid(self.bpm_mode) else {
             return LoopBrowserAction::Continue;
         };
         let start_measure = staged.start_measure;
@@ -47,9 +52,20 @@ impl LoopBrowser {
         }
     }
 
-    /// 全 track を引き直した結果を作る。デッキのクローンに対して抽選するので、
-    /// 結果を捨てても副作用は残らない。
-    pub fn stage_random_grid(&mut self) -> Option<StagedRandomGrid> {
+    /// 全 track を引き直した結果を、`mode` のテンポ前提で作る。デッキのクローンに対して
+    /// 抽選するので、結果を捨てても副作用は残らない。
+    ///
+    /// 抽選中だけ `bpm_mode` を差し替えるのは、clip の span も「BPM範囲外」の赤判定も
+    /// target BPM から逆算されるため。`self` を通す全ての計算が同じテンポを見る必要がある。
+    /// 差し替えは必ずここで巻き戻し、確定は [`Self::commit_random_grid`] に任せる。
+    pub fn stage_random_grid(&mut self, mode: BpmMode) -> Option<StagedRandomGrid> {
+        let previous_mode = std::mem::replace(&mut self.bpm_mode, mode);
+        let staged = self.stage_random_grid_at_current_bpm();
+        self.bpm_mode = previous_mode;
+        staged
+    }
+
+    fn stage_random_grid_at_current_bpm(&mut self) -> Option<StagedRandomGrid> {
         if !self.track_grid_writable || !self.random_decks.writable {
             return None;
         }
@@ -70,6 +86,7 @@ impl LoopBrowser {
                 .map(|target| target.start_measure)
                 .min()
                 .unwrap_or(self.measure_cursor),
+            mode: self.bpm_mode,
         })
     }
 
@@ -77,10 +94,14 @@ impl LoopBrowser {
     pub fn commit_random_grid(&mut self, staged: StagedRandomGrid) -> bool {
         let previous_grid = self.track_grid.clone();
         let previous_decks = self.random_decks.value.clone();
+        // 抽選時のテンポをここで初めて採用する。grid とテンポは組で決まっているので、
+        // 保存に失敗して grid を戻すときは bpm_mode も戻す。
+        let previous_mode = std::mem::replace(&mut self.bpm_mode, staged.mode);
 
         self.random_decks.value = staged.decks;
         if let Err(error) = self.save_random_decks() {
             self.random_decks.value = previous_decks;
+            self.bpm_mode = previous_mode;
             self.random_decks.error = Some(format!("random deckを保存できません: {error}"));
             return false;
         }
@@ -90,6 +111,7 @@ impl LoopBrowser {
         if let Err(error) = self.save_track_grid() {
             self.track_grid = previous_grid;
             self.random_decks.value = previous_decks;
+            self.bpm_mode = previous_mode;
             if let Err(rollback_error) = self.save_random_decks() {
                 self.random_decks.error = Some(format!(
                     "random deckのrollbackを保存できません: {rollback_error}"
@@ -146,7 +168,7 @@ impl LoopBrowser {
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
-        let target_bpm = common_candidate_bpm(&intervals, self.bpm_mode.manual())?;
+        let target_bpm = common_candidate_bpm(&intervals, self.bpm_mode)?;
         let mut decks = self.random_decks.value.clone();
         let mut selections = Vec::with_capacity(targets.len());
         for (target, candidates) in targets.iter().zip(&intervals) {
@@ -295,15 +317,21 @@ fn bpm_interval(bpms: impl IntoIterator<Item = f64>) -> Option<BpmInterval> {
     (interval.minimum <= interval.maximum).then_some(interval)
 }
 
+/// 全 track が time stretch 範囲に収まる target BPM を1点選ぶ。
+///
+/// 手動モードはその1点だけを検査する（外れたら組み合わせごと諦める）。自動モードは
+/// 寄せ先（範囲から引いた BPM）に最も近い実現可能な点を選ぶので、引いた BPM が
+/// そのままでは無理でも近いテンポへ落として組み合わせを成立させられる。
 fn common_candidate_bpm(
     candidates: &[Vec<(LoopWavId, BpmInterval)>],
-    manual_bpm: Option<f64>,
+    mode: BpmMode,
 ) -> Option<f64> {
     if candidates.iter().any(Vec::is_empty) {
         return None;
     }
-    let mut points = vec![manual_bpm.unwrap_or(cmrt_loop_browser_domain::time_stretch::TARGET_BPM)];
-    if manual_bpm.is_some() {
+    let target = mode.bpm();
+    let mut points = vec![target];
+    if mode.manual().is_some() {
         return points.into_iter().find(|point| {
             candidates
                 .iter()
@@ -319,9 +347,9 @@ fn common_candidate_bpm(
         }
     }
     points.sort_by(|left, right| {
-        (left - cmrt_loop_browser_domain::time_stretch::TARGET_BPM)
+        (left - target)
             .abs()
-            .total_cmp(&(right - cmrt_loop_browser_domain::time_stretch::TARGET_BPM).abs())
+            .total_cmp(&(right - target).abs())
             .then_with(|| left.total_cmp(right))
     });
     points.into_iter().find(|point| {

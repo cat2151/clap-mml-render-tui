@@ -38,7 +38,7 @@ fn restored_notes_are_derived_from_base_note_and_current_chord() {
 fn ready_patch_catalog_replaces_only_disappeared_saved_patches() {
     let session = GridSequencerSession::new(
         vec![instance(0, "Still Here", 60), instance(1, "Gone", 62)],
-        PatternEvolution::Hold,
+        CycleRandom::HOLD,
     );
     let mut screen = GridSequencerScreen::new_with(crate::GridSequencerParts {
         track_count: 2,
@@ -68,7 +68,7 @@ fn resizing_keeps_instances_and_the_chord_voice_instances_four_lanes() {
     third.voicing_rotation = -5;
     let session = GridSequencerSession::new(
         vec![instance(0, "Piano", 60), instance(1, "Sub", 36), third],
-        PatternEvolution::Hold,
+        CycleRandom::HOLD,
     );
     let mut screen = GridSequencerScreen::new_with(crate::GridSequencerParts {
         track_count: 4,
@@ -93,12 +93,13 @@ fn resizing_keeps_instances_and_the_chord_voice_instances_four_lanes() {
 
 /// track 数を増やしたら、増やした行は抽選して埋める。
 ///
-/// 空のまま足すと HOLD では譜面を引き直さないので、増やした行が無音のままになる。
+/// 空のまま足すと NOTE を OFF にしている間は譜面を引き直さないので、増やした行が
+/// 無音のままになる。
 #[test]
 fn growing_the_track_count_fills_the_added_rows_with_notes() {
     let session = GridSequencerSession::new(
         vec![instance(0, "Piano", 60), instance(1, "Sub", 36)],
-        PatternEvolution::Hold,
+        CycleRandom::HOLD,
     );
     let mut screen = GridSequencerScreen::new_with(crate::GridSequencerParts {
         track_count: 2,
@@ -123,7 +124,7 @@ fn growing_the_track_count_fills_the_added_rows_with_notes() {
             "増やした行 {instance_index} が無音のまま"
         );
     }
-    // 既存の行は触らない（HOLD で手編集した譜面を守る）。
+    // 既存の行は触らない（手編集した譜面を守る）。
     assert_eq!(screen.state.instances()[0].patch.as_deref(), Some("Piano"));
     assert_eq!(screen.state.instances()[0].lanes[0].base_note, 60);
 }
@@ -137,10 +138,8 @@ fn a_restored_bass_row_is_migrated_back_to_its_two_lanes() {
     old_bass.normalize();
     assert_eq!(old_bass.lanes.len(), 4);
 
-    let session = GridSequencerSession::new(
-        vec![instance(0, "Piano", 60), old_bass],
-        PatternEvolution::Hold,
-    );
+    let session =
+        GridSequencerSession::new(vec![instance(0, "Piano", 60), old_bass], CycleRandom::HOLD);
     let screen = GridSequencerScreen::new_with(crate::GridSequencerParts {
         track_count: 2,
         restored_session: Some(session),
@@ -161,10 +160,8 @@ fn a_restored_single_lane_bass_row_gains_an_empty_octave_lane() {
     old_bass.normalize();
     old_bass.lanes[0].pattern.draw_span(2, 3);
 
-    let session = GridSequencerSession::new(
-        vec![instance(0, "Piano", 60), old_bass],
-        PatternEvolution::Hold,
-    );
+    let session =
+        GridSequencerSession::new(vec![instance(0, "Piano", 60), old_bass], CycleRandom::HOLD);
     let screen = GridSequencerScreen::new_with(crate::GridSequencerParts {
         track_count: 2,
         restored_session: Some(session),

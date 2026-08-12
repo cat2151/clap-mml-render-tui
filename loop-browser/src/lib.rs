@@ -130,6 +130,8 @@ pub struct LoopBrowser {
     pub mixer_overlay_open: bool,
     pub help_overlay: Option<LoopBrowserPane>,
     pub(crate) bpm_mode: cmrt_tui_core::bpm::BpmMode,
+    /// 自動BPMを引く範囲。セッションへ保存するのはこちらで、引いた値ではない。
+    pub(crate) bpm_range: cmrt_tui_core::bpm::BpmRange,
     pub(crate) bpm_input: Option<cmrt_tui_core::bpm::BpmInput>,
     pub mixer_cursor_track: usize,
     pub category_keys: Vec<(char, String)>,
@@ -180,7 +182,12 @@ impl Default for LoopBrowser {
             category_overlay: None,
             mixer_overlay_open: false,
             help_overlay: None,
-            bpm_mode: cmrt_tui_core::bpm::BpmMode::Auto,
+            bpm_mode: cmrt_tui_core::bpm::BpmMode::Auto(
+                cmrt_loop_browser_domain::time_stretch::TARGET_BPM,
+            ),
+            bpm_range: cmrt_tui_core::bpm::BpmRange::fixed(
+                cmrt_loop_browser_domain::time_stretch::TARGET_BPM,
+            ),
             bpm_input: None,
             mixer_cursor_track: 0,
             category_keys: Vec::new(),
@@ -212,6 +219,15 @@ impl LoopBrowser {
 
     pub fn bpm_mode(&self) -> cmrt_tui_core::bpm::BpmMode {
         self.bpm_mode
+    }
+
+    pub fn set_bpm_range(&mut self, range: cmrt_tui_core::bpm::BpmRange) {
+        self.bpm_range = range;
+    }
+
+    /// 自動BPMを引く範囲。セッションへ保存する値。
+    pub fn bpm_range(&self) -> cmrt_tui_core::bpm::BpmRange {
+        self.bpm_range
     }
 
     pub fn from_index(

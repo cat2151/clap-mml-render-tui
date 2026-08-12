@@ -18,7 +18,7 @@ const BASS_OCTAVE_LANES: usize = 2;
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct GridSequencerSessionState {
     pub instances: Vec<GridSequencerInstanceState>,
-    pub pattern_evolution: GridPatternEvolutionState,
+    pub cycle_random: GridCycleRandomState,
 }
 
 impl Serialize for GridSequencerSessionState {
@@ -28,7 +28,7 @@ impl Serialize for GridSequencerSessionState {
     {
         let mut state = serializer.serialize_struct("GridSequencerSessionState", 2)?;
         state.serialize_field("instances", &self.instances)?;
-        state.serialize_field("pattern_evolution", &self.pattern_evolution)?;
+        state.serialize_field("cycle_random", &self.cycle_random)?;
         state.end()
     }
 }
@@ -42,11 +42,11 @@ impl<'de> Deserialize<'de> for GridSequencerSessionState {
         let Some(object) = value.as_object() else {
             return Ok(Self::default());
         };
-        let pattern_evolution = object
-            .get("pattern_evolution")
-            .cloned()
-            .and_then(|value| serde_json::from_value(value).ok())
-            .unwrap_or_default();
+        let cycle_random = match object.get("cycle_random") {
+            Some(value) => deserialize_cycle_random(value),
+            // 6項目へ分解する前のセッション。AUTO/HOLD の2値から移行する。
+            None => migrate_pattern_evolution(object.get("pattern_evolution")),
+        };
         // fieldが存在すれば、空・壊れた配列でもlegacy rowsより優先する。
         let instances = match object.get("instances") {
             Some(value) => deserialize_instances(value),
@@ -54,7 +54,7 @@ impl<'de> Deserialize<'de> for GridSequencerSessionState {
         };
         Ok(Self {
             instances,
-            pattern_evolution,
+            cycle_random,
         })
     }
 }
@@ -250,24 +250,68 @@ impl<'de> Deserialize<'de> for GridNoteStepState {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum GridPatternEvolutionState {
-    #[default]
-    Auto,
-    Hold,
+/// コード進行1周ごとに引き直す対象。既定は全 ON。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct GridCycleRandomState {
+    pub patch: bool,
+    pub note: bool,
+    pub drum: bool,
+    pub arp: bool,
+    pub chord: bool,
+    pub bpm: bool,
 }
 
-impl<'de> Deserialize<'de> for GridPatternEvolutionState {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let value = Value::deserialize(deserializer)?;
-        Ok(match value.as_str() {
-            Some("hold") => Self::Hold,
-            _ => Self::Auto,
-        })
+impl Default for GridCycleRandomState {
+    fn default() -> Self {
+        Self {
+            patch: true,
+            note: true,
+            drum: true,
+            arp: true,
+            chord: true,
+            bpm: true,
+        }
+    }
+}
+
+/// 欠けた field は既定（ON）として読む。項目を足したセッションを古い版が書き戻しても、
+/// 足した項目が黙って OFF にならないため。
+fn deserialize_cycle_random(value: &Value) -> GridCycleRandomState {
+    let default = GridCycleRandomState::default();
+    let Some(object) = value.as_object() else {
+        return default;
+    };
+    let flag = |name: &str, fallback: bool| {
+        object
+            .get(name)
+            .and_then(Value::as_bool)
+            .unwrap_or(fallback)
+    };
+    GridCycleRandomState {
+        patch: flag("patch", default.patch),
+        note: flag("note", default.note),
+        drum: flag("drum", default.drum),
+        arp: flag("arp", default.arp),
+        chord: flag("chord", default.chord),
+        bpm: flag("bpm", default.bpm),
+    }
+}
+
+/// 旧 `pattern_evolution`（AUTO / HOLD）からの移行。
+///
+/// HOLD は「譜面も音色も据え置き、進行とテンポだけ動かす」だったので、
+/// 譜面まわりの4項目だけを OFF にする。
+fn migrate_pattern_evolution(value: Option<&Value>) -> GridCycleRandomState {
+    if value.and_then(Value::as_str) != Some("hold") {
+        return GridCycleRandomState::default();
+    }
+    GridCycleRandomState {
+        patch: false,
+        note: false,
+        drum: false,
+        arp: false,
+        chord: true,
+        bpm: true,
     }
 }
 

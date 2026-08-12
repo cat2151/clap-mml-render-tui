@@ -18,6 +18,8 @@ struct LoadedSessionState {
     grid_sequencer: Option<crate::history::GridSequencerSessionState>,
     grid_sequencer_bpm: Option<f64>,
     loop_browser_bpm: Option<f64>,
+    grid_sequencer_bpm_range: Option<[f64; 2]>,
+    loop_browser_bpm_range: Option<[f64; 2]>,
     keyboard_note_guide_overlay_date: Option<String>,
     notepad_sound_check_guide_overlay_date: Option<String>,
 }
@@ -43,6 +45,8 @@ fn load_initial_session_state() -> LoadedSessionState {
         grid_sequencer,
         grid_sequencer_bpm,
         loop_browser_bpm,
+        grid_sequencer_bpm_range,
+        loop_browser_bpm_range,
         keyboard_note_guide_overlay_date,
         notepad_sound_check_guide_overlay_date,
     } = crate::history::load_session_state();
@@ -57,9 +61,35 @@ fn load_initial_session_state() -> LoadedSessionState {
         grid_sequencer,
         grid_sequencer_bpm,
         loop_browser_bpm,
+        grid_sequencer_bpm_range,
+        loop_browser_bpm_range,
         keyboard_note_guide_overlay_date,
         notepad_sound_check_guide_overlay_date,
     }
+}
+
+/// 保存済みの自動BPM範囲を復元する。未保存・不正なら `default_bpm` 固定の範囲。
+fn bpm_range_from_history(
+    saved: Option<[f64; 2]>,
+    default_bpm: f64,
+) -> cmrt_tui_core::bpm::BpmRange {
+    saved
+        .and_then(|[minimum, maximum]| cmrt_tui_core::bpm::BpmRange::new(minimum, maximum))
+        .unwrap_or_else(|| cmrt_tui_core::bpm::BpmRange::fixed(default_bpm))
+}
+
+/// 既定のままの範囲は保存しない（history.json にキーを増やさない）。
+fn bpm_range_to_history(range: cmrt_tui_core::bpm::BpmRange, default_bpm: f64) -> Option<[f64; 2]> {
+    (range != cmrt_tui_core::bpm::BpmRange::fixed(default_bpm))
+        .then(|| [range.minimum(), range.maximum()])
+}
+
+/// 復元直後の BPM モード。手動値が残っていればそれを、無ければ範囲から1つ引く。
+fn restored_bpm_mode(
+    manual: Option<f64>,
+    range: cmrt_tui_core::bpm::BpmRange,
+) -> cmrt_tui_core::bpm::BpmMode {
+    cmrt_tui_core::bpm::BpmMode::from_saved(manual, range.sample())
 }
 
 fn grid_session_from_history(
@@ -96,17 +126,17 @@ fn grid_session_from_history(
                 .collect(),
         })
         .collect();
-    let pattern_evolution = match session.pattern_evolution {
-        crate::history::GridPatternEvolutionState::Auto => {
-            super::grid_sequencer::PatternEvolution::Auto
-        }
-        crate::history::GridPatternEvolutionState::Hold => {
-            super::grid_sequencer::PatternEvolution::Hold
-        }
+    let cycle_random = super::grid_sequencer::CycleRandom {
+        patch: session.cycle_random.patch,
+        note: session.cycle_random.note,
+        drum: session.cycle_random.drum,
+        arp: session.cycle_random.arp,
+        chord: session.cycle_random.chord,
+        bpm: session.cycle_random.bpm,
     };
     Some(super::grid_sequencer::GridSequencerSession::new(
         instances,
-        pattern_evolution,
+        cycle_random,
     ))
 }
 
@@ -197,13 +227,13 @@ fn grid_session_to_history(
                     .collect(),
             })
             .collect(),
-        pattern_evolution: match session.pattern_evolution {
-            super::grid_sequencer::PatternEvolution::Auto => {
-                crate::history::GridPatternEvolutionState::Auto
-            }
-            super::grid_sequencer::PatternEvolution::Hold => {
-                crate::history::GridPatternEvolutionState::Hold
-            }
+        cycle_random: crate::history::GridCycleRandomState {
+            patch: session.cycle_random.patch,
+            note: session.cycle_random.note,
+            drum: session.cycle_random.drum,
+            arp: session.cycle_random.arp,
+            chord: session.cycle_random.chord,
+            bpm: session.cycle_random.bpm,
         },
     })
 }
@@ -265,6 +295,8 @@ impl<'a> TuiApp<'a> {
             grid_sequencer,
             grid_sequencer_bpm,
             loop_browser_bpm,
+            grid_sequencer_bpm_range,
+            loop_browser_bpm_range,
             keyboard_note_guide_overlay_date,
             notepad_sound_check_guide_overlay_date,
         } = load_initial_session_state();
@@ -311,6 +343,8 @@ impl<'a> TuiApp<'a> {
             crate::chord_progression_source::ChordProgressionSource::spawn(cfg);
         let playback_session = PlaybackSession::new(realtime_play_server);
         let patch_load_state = spawn_patch_loader(cfg);
+        let grid_bpm_range =
+            bpm_range_from_history(grid_sequencer_bpm_range, super::grid_sequencer::BPM);
 
         Self {
             active_screen,
@@ -335,11 +369,14 @@ impl<'a> TuiApp<'a> {
             ),
             loop_browser: {
                 let mut screen = super::loop_browser::LoopBrowserScreen::default();
+                let range = bpm_range_from_history(
+                    loop_browser_bpm_range,
+                    crate::loop_browser::time_stretch::TARGET_BPM,
+                );
+                screen.state.set_bpm_range(range);
                 screen
                     .state
-                    .set_bpm_mode(cmrt_tui_core::bpm::BpmMode::from_saved_manual(
-                        loop_browser_bpm,
-                    ));
+                    .set_bpm_mode(restored_bpm_mode(loop_browser_bpm, range));
                 screen.state.starting =
                     active_screen == crate::screen_switch::PrimaryScreen::LoopBrowser;
                 screen
@@ -351,7 +388,8 @@ impl<'a> TuiApp<'a> {
                     buffer_frames: cfg.buffer_size,
                     track_count: grid_sequencer_track_count,
                     chord_enabled: grid_sequencer_chord_mode,
-                    bpm_mode: cmrt_tui_core::bpm::BpmMode::from_saved_manual(grid_sequencer_bpm),
+                    bpm_mode: restored_bpm_mode(grid_sequencer_bpm, grid_bpm_range),
+                    bpm_range: grid_bpm_range,
                     restored_session: grid_session_from_history(grid_sequencer),
                 },
             ),
@@ -378,6 +416,14 @@ impl<'a> TuiApp<'a> {
             grid_sequencer: grid_session_to_history(self.grid_sequencer.session_state()),
             grid_sequencer_bpm: self.grid_sequencer.bpm_mode().manual(),
             loop_browser_bpm: self.loop_browser.state.bpm_mode().manual(),
+            grid_sequencer_bpm_range: bpm_range_to_history(
+                self.grid_sequencer.bpm_range(),
+                super::grid_sequencer::BPM,
+            ),
+            loop_browser_bpm_range: bpm_range_to_history(
+                self.loop_browser.state.bpm_range(),
+                crate::loop_browser::time_stretch::TARGET_BPM,
+            ),
             keyboard_note_guide_overlay_date: self
                 .keyboard
                 .note_guide

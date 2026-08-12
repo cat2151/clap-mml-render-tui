@@ -94,7 +94,7 @@ fn clicking_a_patch_changes_only_that_row_enters_hold_and_cancels_pending_cycle(
         screen.state.rows()[1].patch.as_deref(),
         Some("Bass/Mono.fxp")
     );
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
+    assert!(!screen.cycle_random().patch);
     assert!(!screen.state.has_pending_cycle());
     assert!(screen.patch_selector.is_none());
 
@@ -103,7 +103,7 @@ fn clicking_a_patch_changes_only_that_row_enters_hold_and_cancels_pending_cycle(
         screen.state.rows()[0].patch.as_deref(),
         Some("Keys/Alpha.fxp")
     );
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Auto);
+    assert!(screen.cycle_random().patch);
 }
 
 #[test]
@@ -194,7 +194,7 @@ fn selector_revalidates_the_catalog_before_applying() {
         screen.state.rows()[0].patch.as_deref(),
         Some("Keys/Alpha.fxp")
     );
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Auto);
+    assert!(screen.cycle_random().patch);
 }
 
 #[test]
@@ -265,7 +265,7 @@ fn r_selects_and_previews_a_random_patch_without_closing_the_overlay() {
         screen.state.rows()[0].patch.as_deref(),
         Some(selected.as_str())
     );
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
+    assert!(!screen.cycle_random().patch);
 }
 
 #[test]
@@ -293,7 +293,7 @@ fn escape_cancels_a_preview_without_committing_it() {
         screen.state.rows()[0].patch.as_deref(),
         Some("Keys/Alpha.fxp")
     );
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Auto);
+    assert!(screen.cycle_random().patch);
 }
 
 #[test]

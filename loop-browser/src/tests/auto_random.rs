@@ -43,6 +43,23 @@ fn staged_token(action: &LoopBrowserAction) -> u64 {
     }
 }
 
+fn staged_mode(action: &LoopBrowserAction) -> cmrt_tui_core::bpm::BpmMode {
+    match action {
+        LoopBrowserAction::GridPreload { mode, .. } => *mode,
+        _ => panic!("GridPreload を期待したが別の action だった"),
+    }
+}
+
+/// 自動BPMに幅を持たせた browser。ヘルパの WAV は BPM120 なので、100〜140 は
+/// time stretch 範囲（96〜150）に丸ごと収まる＝引いた値がそのまま通る。
+fn ranged_auto_random_browser() -> LoopBrowser {
+    let mut browser = auto_random_browser();
+    browser.metadata.value.auto_random = true;
+    browser.set_bpm_range(cmrt_tui_core::bpm::BpmRange::new(100.0, 140.0).unwrap());
+    browser.set_bpm_mode(cmrt_tui_core::bpm::BpmMode::Auto(120.0));
+    browser
+}
+
 #[test]
 fn shift_o_toggles_auto_random_from_both_panes_and_persists_it() {
     let mut browser = auto_random_browser();
@@ -158,6 +175,73 @@ fn a_staged_grid_that_never_starts_playing_is_dropped_and_drawn_again() {
     playing(&browser, 3, 0);
     let second = staged_token(&browser.pump_auto_random());
     assert_ne!(first, second);
+}
+
+#[test]
+fn each_staged_cycle_redraws_the_automatic_bpm_without_moving_the_current_one() {
+    let mut browser = ranged_auto_random_browser();
+    let playing_mode = browser.bpm_mode();
+
+    let mut drawn = std::collections::HashSet::new();
+    // 予約が差し替わらないまま周が進むと捨てて引き直す。その周ごとにテンポも引き直す。
+    for cycle in (1..48).step_by(2) {
+        playing(&browser, cycle, 0);
+        let mode = staged_mode(&browser.pump_auto_random());
+        assert!(
+            (100.0..=140.0).contains(&mode.bpm()),
+            "範囲外を引いた: {}",
+            mode.bpm()
+        );
+        drawn.insert(mode.bpm() as i64);
+        // 鳴り始めるまでは現在のテンポを動かさない。
+        assert_eq!(browser.bpm_mode(), playing_mode);
+    }
+    assert!(drawn.len() > 1, "テンポが引き直されていない: {drawn:?}");
+}
+
+#[test]
+fn the_staged_tempo_is_adopted_only_once_the_grid_is_actually_playing() {
+    let mut browser = ranged_auto_random_browser();
+    let deck_path = enable_random_persistence(&mut browser, "tempo-commit");
+    let playing_mode = browser.bpm_mode();
+
+    playing(&browser, 1, 0);
+    let action = browser.pump_auto_random();
+    let staged = staged_mode(&action);
+    let token = staged_token(&action);
+    assert_eq!(browser.bpm_mode(), playing_mode);
+
+    playing(&browser, 0, token);
+    browser.pump_auto_random();
+    assert_eq!(browser.bpm_mode(), staged);
+    assert!(browser.track_grid_error.is_none());
+    let _ = std::fs::remove_dir_all(deck_path.parent().unwrap().parent().unwrap());
+}
+
+#[test]
+fn a_manual_bpm_is_never_redrawn_by_auto_random() {
+    let mut browser = ranged_auto_random_browser();
+    browser.set_bpm_mode(cmrt_tui_core::bpm::BpmMode::Manual(128.0));
+
+    for cycle in (1..16).step_by(2) {
+        playing(&browser, cycle, 0);
+        let mode = staged_mode(&browser.pump_auto_random());
+        assert_eq!(mode, cmrt_tui_core::bpm::BpmMode::Manual(128.0));
+    }
+}
+
+#[test]
+fn a_manual_batch_random_keeps_the_current_tempo() {
+    let mut browser = ranged_auto_random_browser();
+    let deck_path = enable_random_persistence(&mut browser, "manual-batch");
+    let before = browser.bpm_mode();
+
+    // `Shift+R` は明示操作なので、grid だけ引き直してテンポは据え置く。
+    for _ in 0..16 {
+        browser.randomize_current_measure();
+        assert_eq!(browser.bpm_mode(), before);
+    }
+    let _ = std::fs::remove_dir_all(deck_path.parent().unwrap().parent().unwrap());
 }
 
 #[test]

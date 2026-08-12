@@ -71,10 +71,11 @@ impl<'a> TuiApp<'a> {
         &self,
         grid: LoopPlaybackGrid,
         token: u64,
+        mode: cmrt_tui_core::bpm::BpmMode,
         reason: LoopGridChange,
     ) {
         if let Some(playback) = &self.loop_browser.playback {
-            playback.preload_grid(grid, token, reason);
+            playback.preload_grid(grid, token, mode, reason);
         }
     }
 
@@ -84,10 +85,11 @@ impl<'a> TuiApp<'a> {
         if let crate::tui::loop_browser::LoopBrowserAction::GridPreload {
             grid,
             token,
+            mode,
             reason,
         } = self.loop_browser.state.pump_auto_random()
         {
-            self.preload_loop_grid(grid, token, reason);
+            self.preload_loop_grid(grid, token, mode, reason);
         }
     }
 

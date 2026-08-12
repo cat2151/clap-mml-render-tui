@@ -169,7 +169,7 @@ impl LoopBrowser {
                         .and_then(|analysis| analysis.tempo)
                         .map(|tempo| tempo.bpm)
                 }),
-            self.bpm_mode.manual(),
+            self.bpm_mode,
         )
     }
 

@@ -4,7 +4,7 @@ use crossterm::event::{KeyModifiers, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
 
 use super::*;
-use crate::{ChordPlayback, LaneAddress, NoteStep, PatternEvolution, BASS_ROW};
+use crate::{ChordPlayback, CycleRandomItem, LaneAddress, NoteStep, BASS_ROW};
 
 const AREA: Rect = Rect::new(0, 0, 90, 24);
 /// chord mode 中の行番号。行3が和音、行4/5が bass(octave 上/root)、
@@ -117,11 +117,11 @@ fn the_first_wheel_up_starts_from_the_end_of_the_list() {
 }
 
 #[test]
-fn generating_a_bass_line_moves_the_screen_into_hold() {
+fn generating_a_bass_line_stops_the_arp_random() {
     let mut screen = chorded_screen();
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Auto);
+    assert!(screen.cycle_random().get(CycleRandomItem::Arp));
     scroll(&mut screen, MouseEventKind::ScrollDown, BASS_ROOT_ROW);
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
+    assert!(!screen.cycle_random().get(CycleRandomItem::Arp));
 }
 
 #[test]
@@ -149,7 +149,7 @@ fn one_wheel_click_is_one_undo_step() {
             .collect::<Vec<_>>(),
         before
     );
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Auto);
+    assert!(screen.cycle_random().get(CycleRandomItem::Arp));
 }
 
 #[test]
@@ -159,7 +159,7 @@ fn without_a_chord_the_bass_row_wheel_does_nothing() {
     scroll(&mut screen, MouseEventKind::ScrollDown, 3);
     assert_eq!(screen.last_bass(), None);
     assert_eq!(lane_pattern(&screen, 0), "................");
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Auto);
+    assert!(screen.cycle_random().get(CycleRandomItem::Arp));
 }
 
 #[test]

@@ -61,6 +61,8 @@ pub fn playback_worker(
     let mut standby: Option<PreparedSet> = None;
     let mut preload_generation: Option<u64> = None;
     let mut standby_token = 0u64;
+    // 先読みを準備したときのテンポ。差し替えが成立したときだけ現行テンポへ昇格させる。
+    let mut standby_bpm_mode = bpm_mode;
     let mut active_token = 0u64;
     let mut transport = TransportState::default();
     set_play_state(
@@ -127,6 +129,8 @@ pub fn playback_worker(
             preparation.promote_background(&prepared);
             active = Some(prepared);
             active_token = standby_token;
+            // 差し替えが成立して初めて、先読みを準備したテンポが現行テンポになる。
+            bpm_mode = standby_bpm_mode;
             transport.clear_current();
             transport.reset_cycle();
         }
@@ -263,6 +267,7 @@ pub fn playback_worker(
             Ok(LoopPlaybackCommand::PreloadGrid {
                 grid,
                 token,
+                mode,
                 reason,
             }) => {
                 // 鳴っていないとき・前景の準備中は先読みしない。
@@ -277,8 +282,8 @@ pub fn playback_worker(
                 } else {
                     standby = None;
                     standby_token = token;
-                    preload_generation =
-                        Some(preparation.submit_background(grid, reason, bpm_mode));
+                    standby_bpm_mode = mode;
+                    preload_generation = Some(preparation.submit_background(grid, reason, mode));
                 }
             }
             Ok(LoopPlaybackCommand::RestartGridAt {
@@ -386,6 +391,7 @@ pub fn playback_worker(
                 preload_generation = None;
                 standby_token = 0;
                 bpm_mode = mode;
+                standby_bpm_mode = mode;
                 transport.restart_at(0);
                 let target_bpm = grid_target_bpm(&grid, bpm_mode);
                 pending_generation =

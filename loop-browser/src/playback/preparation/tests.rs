@@ -50,7 +50,9 @@ fn incompatible_grid_warns_that_bpm_120_is_kept() {
         grid: vec![vec![Some(slow), Some(fast)]],
         submitted_at: Instant::now(),
         background: false,
-        bpm_mode: cmrt_tui_core::bpm::BpmMode::Auto,
+        bpm_mode: cmrt_tui_core::bpm::BpmMode::Auto(
+            cmrt_loop_browser_domain::time_stretch::TARGET_BPM,
+        ),
     };
     let latest_generation = AtomicU64::new(1);
     let mut cache = HashMap::new();
@@ -96,12 +98,12 @@ fn every_submission_gets_a_new_generation_without_debounce() {
     let first = worker.submit(
         Vec::new(),
         LoopGridChange::Initial,
-        cmrt_tui_core::bpm::BpmMode::Auto,
+        cmrt_tui_core::bpm::BpmMode::Auto(cmrt_loop_browser_domain::time_stretch::TARGET_BPM),
     );
     let second = worker.submit(
         Vec::new(),
         LoopGridChange::Category,
-        cmrt_tui_core::bpm::BpmMode::Auto,
+        cmrt_tui_core::bpm::BpmMode::Auto(cmrt_loop_browser_domain::time_stretch::TARGET_BPM),
     );
     assert_eq!(second, first + 1);
     assert_eq!(worker.latest_generation.load(Ordering::Acquire), second);

@@ -18,6 +18,7 @@ mod measure_lane;
 mod note_pattern;
 mod randomize;
 mod session;
+mod tempo;
 mod velocity;
 
 pub use edit::PitchDirection;
@@ -36,7 +37,8 @@ pub use clock::{
     step_timeline_seconds, step_timeline_seconds_at, BPM, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL,
 };
 pub use drum::{FIRST_DRUM_ROW, FULL_DRUM_TRACK_COUNT};
-pub use randomize::randomize_instance_slice;
+pub use randomize::{randomize_instance_slice, DrawnPhrases};
+pub use tempo::AppliedTempo;
 
 #[cfg(test)]
 pub type GridRow = GridInstance;
@@ -108,6 +110,8 @@ pub struct GridState {
     last_poll_lateness: Duration,
     /// chord mode の再生状態。`None` なら従来どおりの単音演奏。
     chord: Option<ChordPlayback>,
+    /// 直近の引き直しで当てた型（[`DrawnPhrases`]）。表示のためだけに持つ。
+    drawn: DrawnPhrases,
     /// いま鳴らしている bank（0 か 1）。instance index を bank 幅として写す。
     bank: usize,
     /// 抽選済みで、先読みロードが終われば差し替える次サイクル。詳細は [`cycle`]。
@@ -124,6 +128,11 @@ pub struct GridState {
     cycle_wrapped: bool,
     /// 鳴らしきった最後の音の締切。画面側が出力の吐き出し待ちの起点に使う。
     cycle_stopped_at: Option<Instant>,
+    /// 次に1周したところで乗り換えるテンポ。抽選は範囲を持つ画面側の仕事なので、
+    /// ここは預かって周の頭で適用するだけ。
+    next_cycle_bpm: Option<f64>,
+    /// 周の頭で実際に乗り換えたテンポ。画面側が表示の追従とサーバーへの通知に取る。
+    applied_cycle_bpm: Option<AppliedTempo>,
     clock: StepClock,
 }
 
@@ -163,6 +172,7 @@ impl GridState {
             last_scheduled_timeline_seconds: None,
             last_poll_lateness: Duration::ZERO,
             chord: None,
+            drawn: DrawnPhrases::default(),
             bank: 0,
             pending: None,
             pending_ready: false,
@@ -170,6 +180,8 @@ impl GridState {
             stop_at_cycle_end: false,
             cycle_wrapped: false,
             cycle_stopped_at: None,
+            next_cycle_bpm: None,
+            applied_cycle_bpm: None,
             clock: StepClock::default(),
         }
     }
@@ -248,6 +260,8 @@ impl GridState {
         self.last_scheduled_timeline_seconds = None;
         self.last_poll_lateness = Duration::ZERO;
         self.reset_cycle_stop();
+        // クロックを作り直すので、周の頭へ向けた古い予約は意味を失う。
+        self.disarm_next_cycle_bpm();
         self.clock.start_at_bpm(now, bpm);
     }
 
@@ -266,7 +280,7 @@ impl GridState {
             let ahead = deadline.saturating_duration_since(now);
             let timeline_seconds = self.clock.timeline_seconds(due.step);
             let mut messages = self.expire_sounding();
-            self.advance_schedule();
+            self.advance_schedule(due.step);
             let stopping = std::mem::take(&mut self.cycle_wrapped);
             if stopping {
                 // 鳴らしきった。次の小節は組み立てず、残っている音を止めてクロックを畳む。
@@ -377,12 +391,19 @@ impl GridState {
         messages
     }
 
-    fn advance_schedule(&mut self) {
+    /// `step` は、いま組み立てているステップの通し番号。周の頭でテンポを乗り換えるのに要る。
+    fn advance_schedule(&mut self, step: u64) {
         if self.started {
             self.schedule_index = (self.schedule_index + 1) % GRID_STEPS;
             if self.schedule_index == 0 {
                 // grid を1周したので、chord mode なら次のコードへ進む。
-                self.advance_chord();
+                let progression_wrapped = self.advance_chord();
+                // テンポの引き直しはコード進行1周ごと。小節（grid 1周）ごとに変えると
+                // 進行の途中でテンポが動き、フレーズが繋がらない。chord mode を使って
+                // いない間は進行という単位が無いので、従来どおり grid 1周を単位にする。
+                if progression_wrapped || self.chord.is_none() {
+                    self.apply_next_cycle_bpm(step);
+                }
             }
         } else {
             self.started = true;

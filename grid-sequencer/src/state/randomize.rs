@@ -2,9 +2,16 @@ use std::time::Instant;
 
 use rand::RngExt;
 
+use cmrt_arpeggiator::{generate_arpeggio, generate_bass_line, ArpPattern, BassPattern};
+use cmrt_rhythm::DrumPattern;
 use cmrt_tui_core::random::random_index;
 
-use super::{drum, GridInstance, GridScheduledMessage, GridState, NotePattern, GRID_STEPS};
+use crate::CycleRandom;
+
+use super::{
+    arpeggio::write_arpeggio, bass_line::write_bass_line, drum, ChordPlayback, GridInstance,
+    GridScheduledMessage, GridState, NotePattern, ARPEGGIO_ROW, BASS_ROW, GRID_STEPS,
+};
 
 /// ランダム生成に使う note number の範囲（C2〜C6）。
 const RANDOM_NOTE_MIN: u8 = 36;
@@ -13,28 +20,108 @@ const RANDOM_NOTE_MAX: u8 = 84;
 const CELL_ON_RATIO: f64 = 0.25;
 /// 1stepを多めにしつつ、2/4step noteも生成する重み付き候補。
 const NOTE_LENGTHS: [usize; 6] = [1, 1, 1, 2, 2, 4];
+/// アルペジオを組める最小の声部数。1声では音型にならない。
+const MIN_ARP_VOICES: usize = 2;
+
+/// 抽選で引いた「型」。Phrase pane のカーソルと NOTE grid のタイトルに出す。
+///
+/// 引かなかった種別は `None`。drum は行ごとに引くので、最後に引いた1つだけを持つ
+/// （表示も「直近に適用した型」1つぶん）。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DrawnPhrases {
+    pub arp: Option<ArpPattern>,
+    pub bass: Option<BassPattern>,
+    pub drum: Option<DrumPattern>,
+}
 
 /// instance群を丸ごと引き直す。`patches` が空なら patch だけ据え置く。
 ///
 /// `GridState` の外へ出してあるのは、chord mode が「鳴っている grid を触らずに
 /// 次サイクルを抽選する」ために、複製したinstance群へ同じ抽選をかけるため。
-pub fn randomize_instance_slice(instances: &mut [GridInstance], patches: &[(String, String)]) {
+///
+/// 何を引き直すかは `policy`（[`CycleRandom`]）で決まる。項目が重ならないよう、
+/// **1行はちょうど1項目に属する**:
+///
+/// - drum 行 … DRUM（リズム型）
+/// - chord mode 中の bass 行・アルペジオ行 … ARP（音型）
+/// - それ以外の行 … NOTE（生の譜面と音高）
+/// - 全行の patch … PATCH
+///
+/// `chord` は差し替え先の進行。`None`（chord mode OFF）なら bass 行もアルペジオ行も
+/// 役割を持たないので、普通の行として NOTE で引かれる。
+pub fn randomize_instance_slice(
+    instances: &mut [GridInstance],
+    patches: &[(String, String)],
+    policy: CycleRandom,
+    chord: Option<&ChordPlayback>,
+) -> DrawnPhrases {
     let mut rng = rand::rng();
-    for instance in instances {
-        if let Some(index) = random_index(patches.len()) {
-            instance.patch = Some(patches[index].0.clone());
+    let mut drawn = DrawnPhrases::default();
+    for (index, instance) in instances.iter_mut().enumerate() {
+        if policy.patch {
+            if let Some(patch_index) = random_index(patches.len()) {
+                instance.patch = Some(patches[patch_index].0.clone());
+            }
         }
         // drum 行は音高も譜面も専用（[`super::drum`]）。音高を引き直すと打楽器の音色
         // そのものが変わり、汎用の譜面を当てるとリズムでなくなる。
         if let Some(role) = instance.drum {
-            drum::randomize_drum_pattern(instance, role, &mut rng);
+            if policy.drum {
+                let pattern = DrumPattern::random_for(role, &mut rng);
+                drum::write_drum_pattern(instance, pattern);
+                drawn.drum = Some(pattern);
+            }
             continue;
         }
-        for lane in &mut instance.lanes {
-            lane.base_note = rng.random_range(RANDOM_NOTE_MIN..=RANDOM_NOTE_MAX);
-            lane.pattern = random_pattern(&mut rng);
+        // chord mode 中の bass 行・アルペジオ行は音高がコードから導出されるので、
+        // 譜面は「型」から作る。生のランダム譜面を当てると、コードに乗らない
+        // ばらばらのリズムになる。
+        if let Some(chord) = chord.filter(|_| index == BASS_ROW || index == ARPEGGIO_ROW) {
+            if policy.arp {
+                randomize_phrase_row(instance, index, chord, &mut rng, &mut drawn);
+            }
+            continue;
+        }
+        if policy.note {
+            for lane in &mut instance.lanes {
+                lane.base_note = rng.random_range(RANDOM_NOTE_MIN..=RANDOM_NOTE_MAX);
+                lane.pattern = random_pattern(&mut rng);
+            }
         }
     }
+    drawn
+}
+
+/// bass 行・アルペジオ行の譜面を、型を引いて書き直す。
+fn randomize_phrase_row(
+    instance: &mut GridInstance,
+    index: usize,
+    chord: &ChordPlayback,
+    rng: &mut impl RngExt,
+    drawn: &mut DrawnPhrases,
+) {
+    if index == BASS_ROW {
+        let pattern = random_choice(&BassPattern::ALL, rng);
+        write_bass_line(instance, &generate_bass_line(pattern, GRID_STEPS));
+        drawn.bass = Some(pattern);
+        return;
+    }
+    // 進行内のどのコードでも鳴る声部数で組む。多いほうへ寄せると、構成音の少ない
+    // コードの周だけ上の声部が無音になってリズムが欠ける。
+    let voices = chord.min_voice_count().min(instance.lanes.len());
+    if voices < MIN_ARP_VOICES {
+        return;
+    }
+    let pattern = random_choice(&ArpPattern::ALL, rng);
+    write_arpeggio(
+        instance,
+        &generate_arpeggio(pattern, voices, GRID_STEPS, rng),
+    );
+    drawn.arp = Some(pattern);
+}
+
+fn random_choice<T: Copy>(choices: &[T], rng: &mut impl RngExt) -> T {
+    choices[rng.random_range(0..choices.len())]
 }
 
 fn random_pattern(rng: &mut impl RngExt) -> NotePattern {
@@ -68,6 +155,11 @@ impl GridState {
         assigned
     }
 
+    /// 直近の引き直しで当てた型。表示のためだけに持つ（[`DrawnPhrases`]）。
+    pub fn drawn_phrases(&self) -> DrawnPhrases {
+        self.drawn
+    }
+
     /// 全instanceのpatchと、全laneのnote number / note event patternを引き直す。
     ///
     /// 引き直す前に鳴っていた音の note off を返す（鳴りっぱなしを防ぐ）。
@@ -78,7 +170,7 @@ impl GridState {
         now: Instant,
         patches: &[(String, String)],
     ) -> Vec<GridScheduledMessage> {
-        self.randomize_instances(patches);
+        self.randomize_instances(patches, CycleRandom::ALL);
         self.take_silence_messages(now)
     }
 
@@ -109,8 +201,13 @@ impl GridState {
     /// 返した note off は必ず送ること。`randomize_all` と違って音色切替の
     /// `stop_live_all()` が後ろに続かないため、送らないと音が鳴りっぱなしになる。
     pub fn randomize_keeping_patches(&mut self, now: Instant) -> Vec<GridScheduledMessage> {
-        // patch 一覧を空で渡すと patch だけ据え置かれる（`randomize_instances` 参照）。
-        self.randomize_instances(&[]);
+        self.randomize_instances(
+            &[],
+            CycleRandom {
+                patch: false,
+                ..CycleRandom::ALL
+            },
+        );
         self.take_silence_messages(now)
     }
 
@@ -118,8 +215,9 @@ impl GridState {
     ///
     /// chord mode 中は引き直した note を現在のコードへ寄せ直すので、コードから
     /// 外れた音は出ない。
-    fn randomize_instances(&mut self, patches: &[(String, String)]) {
-        randomize_instance_slice(&mut self.instances, patches);
+    fn randomize_instances(&mut self, patches: &[(String, String)], policy: CycleRandom) {
+        let chord = self.chord.clone();
+        self.drawn = randomize_instance_slice(&mut self.instances, patches, policy, chord.as_ref());
         self.refresh_lane_display_patterns();
     }
 

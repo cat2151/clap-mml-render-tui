@@ -61,9 +61,13 @@ pub enum LoopBrowserAction {
         reason: LoopGridChange,
     },
     /// 演奏を止めずに裏で準備し、周の境目で差し替えてもらうグリッド（オートランダム）。
+    ///
+    /// `mode` は差し替え後のテンポ。裏の準備をこのテンポで time stretch しないと、
+    /// 周の境目で差し替えた瞬間に長さが合わなくなる。
     GridPreload {
         grid: LoopPlaybackGrid,
         token: u64,
+        mode: BpmMode,
         reason: LoopGridChange,
     },
     TrackLayoutChanged {

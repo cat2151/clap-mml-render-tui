@@ -55,7 +55,10 @@ fn tempo_stays_at_120_when_all_clips_fit_and_uses_the_first_clip_meter() {
         vec![None, clip("top.wav", 1, 120.0)],
         vec![clip("first.wav", 2, 100.0), None],
     ];
-    let target = grid_target_bpm(&grid, cmrt_tui_core::bpm::BpmMode::Auto);
+    let target = grid_target_bpm(
+        &grid,
+        cmrt_tui_core::bpm::BpmMode::Auto(cmrt_loop_browser_domain::time_stretch::TARGET_BPM),
+    );
     assert_eq!(target.bpm, 120.0);
     assert_eq!(
         measure_duration(&grid, target.bpm),
@@ -66,7 +69,10 @@ fn tempo_stays_at_120_when_all_clips_fit_and_uses_the_first_clip_meter() {
 #[test]
 fn measure_duration_uses_the_automatically_adjusted_bpm() {
     let grid = vec![vec![clip("fast.wav", 1, 160.0)]];
-    let target = grid_target_bpm(&grid, cmrt_tui_core::bpm::BpmMode::Auto);
+    let target = grid_target_bpm(
+        &grid,
+        cmrt_tui_core::bpm::BpmMode::Auto(cmrt_loop_browser_domain::time_stretch::TARGET_BPM),
+    );
 
     assert_eq!(target.bpm, 128.0);
     assert_eq!(
@@ -83,7 +89,10 @@ fn one_shots_do_not_affect_target_bpm_or_meter_selection() {
         vec![one_shot("hit.wav"), None],
         vec![None, Some(three_four)],
     ];
-    let target = grid_target_bpm(&grid, cmrt_tui_core::bpm::BpmMode::Auto);
+    let target = grid_target_bpm(
+        &grid,
+        cmrt_tui_core::bpm::BpmMode::Auto(cmrt_loop_browser_domain::time_stretch::TARGET_BPM),
+    );
     let timing = measure_timing(&grid, target.bpm);
 
     assert_eq!(target.bpm, 128.0);
@@ -93,7 +102,10 @@ fn one_shots_do_not_affect_target_bpm_or_meter_selection() {
 #[test]
 fn all_one_shots_use_default_tempo_without_a_stretch_constraint() {
     let grid = vec![vec![one_shot("hit.wav")]];
-    let target = grid_target_bpm(&grid, cmrt_tui_core::bpm::BpmMode::Auto);
+    let target = grid_target_bpm(
+        &grid,
+        cmrt_tui_core::bpm::BpmMode::Auto(cmrt_loop_browser_domain::time_stretch::TARGET_BPM),
+    );
 
     assert_eq!(target.bpm, 120.0);
     assert!(target.has_common_range);
@@ -113,7 +125,10 @@ fn measure_timing_exposes_the_meter_numerator_as_beat_count() {
 #[test]
 fn incompatible_clips_fall_back_to_120() {
     let grid = vec![vec![clip("slow.wav", 1, 60.0), clip("fast.wav", 1, 200.0)]];
-    let target = grid_target_bpm(&grid, cmrt_tui_core::bpm::BpmMode::Auto);
+    let target = grid_target_bpm(
+        &grid,
+        cmrt_tui_core::bpm::BpmMode::Auto(cmrt_loop_browser_domain::time_stretch::TARGET_BPM),
+    );
 
     assert_eq!(target.bpm, 120.0);
     assert!(!target.has_common_range);

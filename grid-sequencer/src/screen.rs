@@ -2,25 +2,12 @@ use std::{collections::HashMap, time::Instant};
 
 use cmrt_arpeggiator::{ArpPattern, BassPattern};
 use cmrt_rhythm::DrumPattern;
-use cmrt_tui_core::bpm::{BpmInput, BpmMode};
+use cmrt_tui_core::bpm::{BpmInput, BpmMode, BpmRange};
 
-use super::{patch_bag::PatchBag, GridMidiSender, GridPatchStatus, GridState};
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum PatternEvolution {
-    #[default]
-    Auto,
-    Hold,
-}
-
-impl PatternEvolution {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Auto => "AUTO",
-            Self::Hold => "HOLD",
-        }
-    }
-}
+use super::{
+    cycle_random::CycleRandomOverlay, patch_bag::PatchBag, CycleRandom, DrawnPhrases,
+    GridMidiSender, GridPatchStatus, GridState,
+};
 
 /// サンプルレート未指定時の既定値（config.toml の既定と同じ）。
 const DEFAULT_SAMPLE_RATE: f64 = 48_000.0;
@@ -43,6 +30,8 @@ pub struct GridSequencerParts {
     /// 前回終了時の chord mode。true なら patch 一覧が揃い次第 on にする。
     pub chord_enabled: bool,
     pub bpm_mode: BpmMode,
+    /// 自動BPMを引く範囲。既定は幅を持たない `BPM` 固定。
+    pub bpm_range: BpmRange,
     /// 前回終了時に保存した手入力 grid。`None` なら初回入場時にランダム生成する。
     pub restored_session: Option<crate::GridSequencerSession>,
 }
@@ -55,7 +44,8 @@ impl Default for GridSequencerParts {
             buffer_frames: DEFAULT_BUFFER_FRAMES,
             track_count: crate::GRID_ROWS,
             chord_enabled: false,
-            bpm_mode: BpmMode::Auto,
+            bpm_mode: BpmMode::Auto(crate::BPM),
+            bpm_range: BpmRange::fixed(crate::BPM),
             restored_session: None,
         }
     }
@@ -75,9 +65,13 @@ pub struct GridSequencerScreen {
     pub(crate) timeline_id: u64,
     pub help_open: bool,
     pub(crate) bpm_mode: BpmMode,
+    /// 自動BPMを引く範囲。セッションへ保存するのはこちらで、引いた値ではない。
+    pub(crate) bpm_range: BpmRange,
     pub(crate) bpm_input: Option<BpmInput>,
-    /// cycle ごとに譜面を再抽選するか、人間の編集を保持するか。
-    pub(crate) pattern_evolution: PatternEvolution,
+    /// コード進行1周ごとに何を引き直すか。詳細は [`crate::cycle_random`]。
+    pub(crate) cycle_random: CycleRandom,
+    /// `a` キーで開く、1周ごとの random 設定 overlay。`None` なら閉じている。
+    pub(crate) cycle_random_overlay: Option<CycleRandomOverlay>,
     /// mouse down から up まで継続するnote eventの描画・消去操作。
     pub(crate) note_gesture: Option<crate::input::NoteGesture>,
     /// PATCH 欄から開く、行単位の音色選択 overlay。
@@ -159,12 +153,13 @@ impl GridSequencerScreen {
             track_count,
             chord_enabled,
             bpm_mode,
+            bpm_range,
             restored_session,
         } = parts;
         let track_count = cmrt_realtime_play::normalize_live_instance_count(track_count);
         let restored_session = restored_session.filter(|session| !session.instances.is_empty());
         let restored = restored_session.is_some();
-        let (state, pattern_evolution) = if let Some(session) = restored_session {
+        let (state, cycle_random) = if let Some(session) = restored_session {
             let mut instances = session.instances;
             let saved_count = instances.len();
             while instances.len() < track_count {
@@ -172,19 +167,19 @@ impl GridSequencerScreen {
             }
             instances.truncate(track_count);
             // 保存値が track 数に足りないぶんは譜面を抽選して埋める。空のまま足すと
-            // HOLD では引き直しが走らず、その行が無音のままになる。patch 一覧はまだ
-            // 読み込み中なので、音色は後から `fill_missing_patches` が当てる。
+            // NOTE を OFF にしている間は引き直しが走らず、その行が無音のままになる。
+            // patch 一覧はまだ読み込み中なので、音色は後から `fill_missing_patches` が当てる。
             if let Some(added) = instances.get_mut(saved_count..) {
-                crate::randomize_instance_slice(added, &[]);
+                crate::randomize_instance_slice(added, &[], CycleRandom::ALL, None);
             }
             let mut state = GridState::with_instance_count(track_count);
             let restored = state.restore_instances(instances);
             debug_assert!(restored);
-            (state, session.pattern_evolution)
+            (state, session.cycle_random)
         } else {
             (
                 GridState::with_instance_count(track_count),
-                PatternEvolution::Auto,
+                CycleRandom::ALL,
             )
         };
         Self {
@@ -195,8 +190,10 @@ impl GridSequencerScreen {
             timeline_id: 0,
             help_open: false,
             bpm_mode,
+            bpm_range,
             bpm_input: None,
-            pattern_evolution,
+            cycle_random,
+            cycle_random_overlay: None,
             note_gesture: None,
             patch_selector: None,
             pending_undo: None,
@@ -233,8 +230,13 @@ impl GridSequencerScreen {
         self.bpm_mode
     }
 
+    /// 自動BPMを引く範囲。セッションへ保存する値。
+    pub fn bpm_range(&self) -> BpmRange {
+        self.bpm_range
+    }
+
     pub fn bpm(&self) -> f64 {
-        self.bpm_mode.resolve(crate::BPM)
+        self.bpm_mode.bpm()
     }
 
     /// chord progression またはエラーの1行を描画するか。input layout も同じ判定を使う。
@@ -247,8 +249,21 @@ impl GridSequencerScreen {
         self.chord_enabled
     }
 
-    pub fn pattern_evolution(&self) -> PatternEvolution {
-        self.pattern_evolution
+    /// 抽選で引いた型を、表示用のカーソル（Phrase pane と NOTE grid のタイトル）へ
+    /// 取り込む。
+    ///
+    /// 1周ごとの抽選は進行の最終小節で走るので、表示は実際に鳴り出すより1小節ぶん
+    /// 先行する。カーソルは常に「次に鳴る型」を指す。
+    pub(crate) fn absorb_drawn_phrases(&mut self, drawn: DrawnPhrases) {
+        if let Some(arp) = drawn.arp {
+            self.last_arp = Some(arp);
+        }
+        if let Some(bass) = drawn.bass {
+            self.last_bass = Some(bass);
+        }
+        if let Some(drum) = drawn.drum {
+            self.last_drum = Some(drum);
+        }
     }
 
     /// シングルバッファリングへ落ちているか。ステータス行の表示に使う。

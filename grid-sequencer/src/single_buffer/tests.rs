@@ -174,7 +174,7 @@ fn live_edit_during_the_drain_wait_keeps_the_clock_restart_deadline() {
     let mut screen = screen_in_single_buffering(now, &ctx);
     let load_at = run_until_cycle_end(&mut screen, now, &ctx);
 
-    screen.begin_manual_edit();
+    screen.begin_manual_edit(crate::CycleRandomItem::Note);
     assert_eq!(screen.cycle_end_at, Some(load_at));
     assert!(!screen.state.is_running());
 
@@ -190,7 +190,7 @@ fn hold_keeps_the_score_when_a_single_buffered_cycle_is_committed() {
     let patches = patches();
     let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
     let mut screen = screen_in_single_buffering(now, &ctx);
-    screen.pattern_evolution = crate::PatternEvolution::Hold;
+    screen.cycle_random = crate::CycleRandom::HOLD;
     let before = screen.state.rows().to_vec();
     let load_at = run_until_cycle_end(&mut screen, now, &ctx);
 

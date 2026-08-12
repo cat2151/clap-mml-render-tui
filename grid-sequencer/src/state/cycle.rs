@@ -20,7 +20,7 @@ pub(super) struct PendingCycle {
     pub(super) instances: Vec<GridInstance>,
     pub(super) chord: ChordPlayback,
     /// true なら待機 bank へ先読み済みで、commit 時に bank を切り替える。
-    /// HOLD は patch を変えないので false のまま現在 bank 上で取り込む。
+    /// patch を変えない周は false のまま現在 bank 上で取り込む。
     switch_bank: bool,
 }
 
@@ -89,7 +89,7 @@ impl GridState {
         self.pending_ready = false;
     }
 
-    /// patch / pattern を保持する HOLD 用に、次の進行を現在 bank 上で差し替え待ちにする。
+    /// patch を据え置く周のために、次の進行を現在 bank 上で差し替え待ちにする。
     ///
     /// patch の先読みは不要なので、この時点で commit 可能として扱う。実際のinstances/chord
     /// の差し替えは通常どおり進行境界まで待つ。
@@ -194,8 +194,8 @@ impl GridState {
 
     /// 進行を1周したので、先読みが終わっていれば bank ごと差し替える。
     ///
-    /// AUTO は待機 bank の先読みが間に合っていなければ差し替えを見送り、今の grid の
-    /// まま次の周へ入る。HOLD は先読みせず、同じ bank 上で進行を取り込む。
+    /// 先読みする周は、間に合っていなければ差し替えを見送って今の grid のまま次の周へ
+    /// 入る。先読みしない周は同じ bank 上で進行を取り込む。
     /// 差し替えたかどうかを返す。
     pub(super) fn commit_pending_cycle(&mut self) -> bool {
         if !self.pending_ready {

@@ -16,7 +16,7 @@ pub fn grid_target_bpm(grid: &LoopPlaybackGrid, mode: BpmMode) -> TargetBpm {
             .flatten()
             .filter_map(Option::as_ref)
             .filter_map(LoopPlaybackClip::source_bpm),
-        mode.manual(),
+        mode,
     )
 }
 

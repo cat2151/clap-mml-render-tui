@@ -111,6 +111,61 @@ fn large_delay_snaps_to_now_instead_of_bursting_the_missed_steps() {
 }
 
 #[test]
+fn retempo_keeps_the_boundary_step_in_place_and_only_widens_what_follows() {
+    let now = Instant::now();
+    let mut clock = StepClock::default();
+    clock.start(now);
+    // 16ステップぶん取り出す（0..=16）。17番目が次の周の頭。
+    let due = clock.take_due(now, step_offset(16));
+    let wrap = due[16];
+    assert_eq!(wrap.step, 16);
+
+    let wrap_seconds = clock.timeline_seconds(wrap.step);
+    clock.retempo(wrap.step, 65.0);
+
+    // 周の頭そのものは、変更前のテンポで決まった位置のまま動かさない。
+    assert_eq!(clock.timeline_seconds(wrap.step), wrap_seconds);
+    // 続くステップだけが新しい間隔になる。BPM65 は BPM130 のちょうど倍の長さ。
+    let next = clock.take_due(wrap.deadline + step_offset_at(1, 65.0), Duration::ZERO);
+    assert_eq!(next.len(), 1);
+    assert_eq!(next[0].step, 17);
+    assert_eq!(next[0].deadline, wrap.deadline + STEP_INTERVAL * 2);
+    assert!(clock.timeline_seconds(17) > wrap_seconds);
+}
+
+#[test]
+fn retempo_never_rewinds_the_musical_timeline() {
+    let now = Instant::now();
+    let mut clock = StepClock::default();
+    clock.start(now);
+    let mut last = f64::NEG_INFINITY;
+    let mut at = now;
+
+    // テンポを上げ下げしながら 8 周ぶん進めても、絶対 musical time は単調増加する。
+    for (cycle, bpm) in [160.0, 80.0, 130.0, 200.0, 90.0, 140.0, 100.0, 120.0]
+        .into_iter()
+        .enumerate()
+    {
+        at += Duration::from_secs(5);
+        for due in clock.take_due(at, Duration::ZERO) {
+            let seconds = clock.timeline_seconds(due.step);
+            assert!(seconds >= last, "cycle={cycle} {last} -> {seconds}");
+            last = seconds;
+        }
+        let step = clock.next_step;
+        clock.retempo(step, bpm);
+        assert!(clock.timeline_seconds(step) >= last);
+    }
+}
+
+#[test]
+fn retempo_on_a_stopped_clock_does_nothing() {
+    let mut clock = StepClock::default();
+    clock.retempo(0, 90.0);
+    assert!(!clock.is_running());
+}
+
+#[test]
 fn stop_halts_the_progression() {
     let now = Instant::now();
     let mut clock = StepClock::default();

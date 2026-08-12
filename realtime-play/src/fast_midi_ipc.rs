@@ -39,6 +39,21 @@ pub struct LiveTimelineConfig {
     pub time_signature_denominator: u16,
 }
 
+/// live timeline の tempo map へ積む変化点。
+///
+/// テンポは timeline の属性ではなく timeline 上のデータなので、これを送っても
+/// timeline は作り直されない（`begin_live_timeline` と違い、サーバー側の
+/// プラグイン状態もサンプルクロックの原点も動かない）。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LiveTempoChange {
+    pub timeline_id: TimelineId,
+    /// この絶対秒（timeline 原点から）から新しいテンポにする。
+    pub at_seconds: f64,
+    pub tempo_bpm: f64,
+    pub time_signature_numerator: u16,
+    pub time_signature_denominator: u16,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct TimingMetrics {
     pub events: u64,
@@ -114,6 +129,10 @@ impl FastMidiClient {
     }
 
     pub fn begin_live_timeline(&mut self, _config: LiveTimelineConfig) -> Result<(), FastIpcError> {
+        Err(FastIpcError::UnsupportedPlatform)
+    }
+
+    pub fn set_live_tempo(&mut self, _change: LiveTempoChange) -> Result<(), FastIpcError> {
         Err(FastIpcError::UnsupportedPlatform)
     }
 

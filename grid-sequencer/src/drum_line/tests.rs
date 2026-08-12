@@ -7,7 +7,7 @@ use cmrt_rhythm::{DrumPattern, DrumRole, HatPattern, KickPattern};
 
 use super::*;
 use crate::{
-    ChordPlayback, LaneAddress, NoteStep, PatternEvolution, FIRST_DRUM_ROW, FULL_DRUM_TRACK_COUNT,
+    ChordPlayback, CycleRandomItem, LaneAddress, NoteStep, FIRST_DRUM_ROW, FULL_DRUM_TRACK_COUNT,
     GRID_STEPS,
 };
 
@@ -171,7 +171,7 @@ fn the_chord_mode_does_not_route_a_drum_row_to_the_arpeggiator() {
     assert!(screen.last_drum().is_some());
 }
 
-/// 引き直しは手編集なので HOLD へ落ちる。AUTO のままだと1周で消える。
+/// 引き直しは手編集なので DRUM の random を落とす。ON のままだと1周で消える。
 #[test]
 fn one_wheel_click_holds_the_pattern_and_is_one_undo_step() {
     let mut screen = screen();
@@ -187,7 +187,7 @@ fn one_wheel_click_holds_the_pattern_and_is_one_undo_step() {
         &context(),
     );
     let after_two = pattern_text(&screen, KICK_ROW);
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
+    assert!(!screen.cycle_random().get(CycleRandomItem::Drum));
 
     screen.undo(&context());
 

@@ -4,7 +4,7 @@ use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
 
 use super::*;
-use crate::{ChordPlayback, LaneAddress, NoteStep, PatternEvolution, GRID_STEPS};
+use crate::{ChordPlayback, CycleRandomItem, LaneAddress, NoteStep, GRID_STEPS};
 
 const AREA: Rect = Rect::new(0, 0, 90, 24);
 /// chord mode 中の行番号。行3が和音、行4/5が bass(octave 上/root)、
@@ -97,15 +97,15 @@ fn wheel_down_on_a_step_cell_writes_an_up_arpeggio_across_the_four_voices() {
 }
 
 #[test]
-fn generating_an_arpeggio_moves_the_screen_into_hold() {
+fn generating_an_arpeggio_stops_the_arp_random() {
     let mut screen = chorded_screen();
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Auto);
+    assert!(screen.cycle_random().get(CycleRandomItem::Arp));
     screen.handle_mouse(
         wheel(MouseEventKind::ScrollDown, cell(&screen, 3), TOP_VOICE_ROW),
         AREA,
         &context(),
     );
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Hold);
+    assert!(!screen.cycle_random().get(CycleRandomItem::Arp));
 }
 
 #[test]
@@ -162,7 +162,7 @@ fn the_chord_summary_row_is_not_arpeggiated() {
     );
     assert_eq!(screen.last_arp(), None);
     assert!(is_silent(&screen, 0));
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Auto);
+    assert!(screen.cycle_random().get(CycleRandomItem::Arp));
 }
 
 /// track 8 の行8。drum でも chord mode 専用でもない、1 lane しか無い行。
@@ -202,7 +202,7 @@ fn without_a_chord_the_step_cell_wheel_does_nothing() {
     );
     assert_eq!(screen.last_arp(), None);
     assert!(is_silent(&screen, 2));
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Auto);
+    assert!(screen.cycle_random().get(CycleRandomItem::Arp));
 }
 
 #[test]
@@ -232,7 +232,7 @@ fn one_wheel_click_is_one_undo_step() {
             .collect::<Vec<_>>(),
         before
     );
-    assert_eq!(screen.pattern_evolution(), PatternEvolution::Auto);
+    assert!(screen.cycle_random().get(CycleRandomItem::Arp));
 }
 
 #[test]

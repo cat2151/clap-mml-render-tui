@@ -53,8 +53,8 @@ pub(super) fn draw(
 /// grid が小節ごとの抽選パターンを出しているのと同じ扱い。まだ一度も生成していない
 /// ものは添えない。
 fn title(screen: &GridSequencerScreen) -> String {
-    let evolution = screen.pattern_evolution().label();
-    let mut title = format!(" Grid Sequencer / Note [{evolution}]");
+    let random = screen.cycle_random().compact_label();
+    let mut title = format!(" Grid Sequencer / Note [{random}]");
     if let Some(arp) = screen.last_arp() {
         title.push_str(&format!(" arp:{}", arp.label()));
     }

@@ -1,18 +1,18 @@
 //! Grid Sequencer の1段 undo。
 
-use crate::{GridInstance, GridSequencerContext, GridSequencerScreen, PatternEvolution};
+use crate::{CycleRandom, GridInstance, GridSequencerContext, GridSequencerScreen};
 
 #[derive(Clone, Debug)]
 pub(crate) struct UndoSnapshot {
     instances: Vec<GridInstance>,
-    pattern_evolution: PatternEvolution,
+    cycle_random: CycleRandom,
 }
 
 impl GridSequencerScreen {
     pub(crate) fn capture_undo(&self) -> UndoSnapshot {
         UndoSnapshot {
             instances: self.state.instances().to_vec(),
-            pattern_evolution: self.pattern_evolution,
+            cycle_random: self.cycle_random,
         }
     }
 
@@ -31,7 +31,7 @@ impl GridSequencerScreen {
 
     pub(crate) fn commit_undo(&mut self, snapshot: UndoSnapshot) {
         if snapshot.instances != self.state.instances()
-            || snapshot.pattern_evolution != self.pattern_evolution
+            || snapshot.cycle_random != self.cycle_random
         {
             self.undo = Some(snapshot);
         }
@@ -50,7 +50,7 @@ impl GridSequencerScreen {
             .collect::<Vec<_>>();
         let restored = self.state.restore_instances(snapshot.instances);
         debug_assert!(restored);
-        self.set_pattern_evolution(snapshot.pattern_evolution);
+        self.restore_cycle_random(snapshot.cycle_random);
         self.cancel_cycle_swap_preserving_drain();
 
         let patch_instances_changed = self

@@ -111,7 +111,7 @@ fn randomizing_keeps_the_drum_rows_on_drum_patches() {
     );
 }
 
-/// AUTO のサイクル抽選でも drum 行を当て直す。
+/// PATCH が ON のサイクル抽選でも drum 行を当て直す。
 #[test]
 fn the_staged_cycle_reassigns_the_drum_rows() {
     let now = Instant::now();

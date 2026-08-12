@@ -76,18 +76,22 @@ pub fn set_beat_for_test(
 ) {
     let beats_per_measure = beats_per_measure.max(1);
     let beat = beat.min(beats_per_measure - 1);
-    let duration = Duration::from_secs(3_600);
-    let elapsed = duration.mul_f64((beat as f64 + 0.25) / beats_per_measure as f64);
+    // 小節の何割まで進んだ位置か。`beat` の頭ちょうどに置くと丸めで前の beat へ倒れうる
+    // ので、beat の 1/4 だけ内側へ寄せる。
+    let ratio = (beat as f64 + 0.25) / beats_per_measure as f64;
+    // OS 起動直後は `Instant` の原点が近く、1時間ぶん遡ると overflow する（実際に踏んだ）。
+    // 遡れるところまで小節長を縮めても経過位置の比率は同じなので、報告される beat は
+    // 変わらない。
+    let mut duration = Duration::from_secs(3_600);
+    let started_at = loop {
+        if let Some(started_at) = Instant::now().checked_sub(duration.mul_f64(ratio)) {
+            break started_at;
+        }
+        duration /= 2;
+    };
     set(
         shared,
-        ScheduledMeasure::new(
-            measure,
-            Instant::now() - elapsed,
-            duration,
-            beats_per_measure,
-            0,
-            0,
-        ),
+        ScheduledMeasure::new(measure, started_at, duration, beats_per_measure, 0, 0),
     );
 }
 

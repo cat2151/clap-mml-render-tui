@@ -9,7 +9,30 @@
 
 use cmrt_arpeggiator::BassNote;
 
-use super::{GridState, BASS_ROW};
+use super::{GridInstance, GridState, BASS_ROW};
+
+/// bass 行の全 lane の pattern を捨て、ベースラインを書き直す。変化があれば true。
+///
+/// [`GridState`] を経由しない形にしてあるのは、1周ごとの抽選が「鳴っている grid を
+/// 触らずに複製の上で引く」ため（[`super::randomize`]）。
+pub(super) fn write_bass_line(instance: &mut GridInstance, notes: &[BassNote]) -> bool {
+    let before = instance.lanes.clone();
+    for lane in &mut instance.lanes {
+        lane.pattern.clear();
+    }
+    // step 昇順に描くことで、`draw_span` の「新しい Attack が既存 note の Tie 上へ
+    // 来たら前の note を切り詰める」挙動が打ち切りの安全網になる。
+    let mut notes = notes.to_vec();
+    notes.sort_by_key(|note| note.step);
+    for note in notes {
+        let Some(lane) = instance.lanes.get_mut(note.voice) else {
+            continue;
+        };
+        let end = note.step + note.duration_steps.max(1) - 1;
+        let _ = lane.pattern.draw_span(note.step, end);
+    }
+    instance.lanes != before
+}
 
 impl GridState {
     /// bass 行にベースラインを書けるか。chord OFF では音高が導出できないので書けない。
@@ -28,22 +51,7 @@ impl GridState {
         let Some(item) = self.instances.get_mut(BASS_ROW) else {
             return false;
         };
-        let before = item.lanes.clone();
-        for lane in &mut item.lanes {
-            lane.pattern.clear();
-        }
-        // step 昇順に描くことで、`draw_span` の「新しい Attack が既存 note の Tie 上へ
-        // 来たら前の note を切り詰める」挙動が打ち切りの安全網になる。
-        let mut notes = notes.to_vec();
-        notes.sort_by_key(|note| note.step);
-        for note in notes {
-            let Some(lane) = item.lanes.get_mut(note.voice) else {
-                continue;
-            };
-            let end = note.step + note.duration_steps.max(1) - 1;
-            let _ = lane.pattern.draw_span(note.step, end);
-        }
-        if item.lanes == before {
+        if !write_bass_line(item, notes) {
             return false;
         }
         self.refresh_lane_display_patterns();

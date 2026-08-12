@@ -32,6 +32,13 @@ pub struct SessionState {
     /// Loop Browser の手動BPM。`None` は配置clipからの自動選択。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub loop_browser_bpm: Option<f64>,
+    /// Grid Sequencer の自動BPMを引く範囲 `[最小, 最大]`。`None` は既定の固定値。
+    /// 保存するのは範囲だけで、引いた BPM は起動のたびに引き直す。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grid_sequencer_bpm_range: Option<[f64; 2]>,
+    /// Loop Browser の自動BPMを引く範囲 `[最小, 最大]`。`None` は既定の固定値。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loop_browser_bpm_range: Option<[f64; 2]>,
     /// keyboard の音出し確認 overlay を最後に表示したローカル日付（YYYY-MM-DD）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keyboard_note_guide_overlay_date: Option<String>,
@@ -52,6 +59,8 @@ impl Default for SessionState {
             grid_sequencer: None,
             grid_sequencer_bpm: None,
             loop_browser_bpm: None,
+            grid_sequencer_bpm_range: None,
+            loop_browser_bpm_range: None,
             keyboard_note_guide_overlay_date: None,
             notepad_sound_check_guide_overlay_date: None,
         }
@@ -80,6 +89,10 @@ struct SessionStateWire {
     grid_sequencer_bpm: Option<f64>,
     #[serde(default)]
     loop_browser_bpm: Option<f64>,
+    #[serde(default)]
+    grid_sequencer_bpm_range: Option<[f64; 2]>,
+    #[serde(default)]
+    loop_browser_bpm_range: Option<[f64; 2]>,
     #[serde(default)]
     keyboard_note_guide_overlay_date: Option<String>,
     #[serde(default)]
@@ -113,6 +126,8 @@ impl<'de> serde::Deserialize<'de> for SessionState {
             grid_sequencer: wire.grid_sequencer,
             grid_sequencer_bpm: valid_saved_bpm(wire.grid_sequencer_bpm),
             loop_browser_bpm: valid_saved_bpm(wire.loop_browser_bpm),
+            grid_sequencer_bpm_range: valid_saved_bpm_range(wire.grid_sequencer_bpm_range),
+            loop_browser_bpm_range: valid_saved_bpm_range(wire.loop_browser_bpm_range),
             keyboard_note_guide_overlay_date: wire.keyboard_note_guide_overlay_date,
             notepad_sound_check_guide_overlay_date: wire.notepad_sound_check_guide_overlay_date,
         })
@@ -121,6 +136,12 @@ impl<'de> serde::Deserialize<'de> for SessionState {
 
 fn valid_saved_bpm(bpm: Option<f64>) -> Option<f64> {
     bpm.and_then(cmrt_tui_core::bpm::valid_bpm)
+}
+
+/// 保存済みの自動BPM範囲を、`BpmRange` として成立するものだけ通す。
+fn valid_saved_bpm_range(range: Option<[f64; 2]>) -> Option<[f64; 2]> {
+    let [minimum, maximum] = range?;
+    cmrt_tui_core::bpm::BpmRange::new(minimum, maximum).map(|_| [minimum, maximum])
 }
 
 fn default_grid_sequencer_track_count() -> usize {

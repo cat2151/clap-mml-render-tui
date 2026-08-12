@@ -4,8 +4,8 @@ use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
 
 use crate::{
-    ui::layout::GridHit, GridSequencerContext, GridSequencerScreen, LaneAddress, NotePattern,
-    NoteStep, PatternEvolution, PitchDirection,
+    ui::layout::GridHit, CycleRandomItem, GridSequencerContext, GridSequencerScreen, LaneAddress,
+    NotePattern, NoteStep, PitchDirection,
 };
 
 /// 並んだ list を送る向き。
@@ -55,6 +55,12 @@ impl GridSequencerScreen {
         terminal_area: Rect,
         ctx: &GridSequencerContext<'_>,
     ) {
+        if self.cycle_random_open() {
+            if let MouseEventKind::Down(MouseButton::Left) = event.kind {
+                self.handle_cycle_random_click(event.column, event.row, terminal_area);
+            }
+            return;
+        }
         if self.patch_selector.is_some() {
             if self.patch_selector_input_enabled() {
                 self.handle_patch_selector_mouse(event, terminal_area, ctx);
@@ -95,34 +101,6 @@ impl GridSequencerScreen {
             .take()
             .is_some_and(|gesture| gesture.changed);
         self.finish_undo_gesture(changed);
-    }
-
-    pub(crate) fn begin_manual_edit(&mut self) {
-        self.set_pattern_evolution(PatternEvolution::Hold);
-        // HOLD 中にも、編集前のinstancesから作ったpending cycleが存在し得る。
-        self.cancel_cycle_swap_preserving_drain();
-    }
-
-    pub(crate) fn set_pattern_evolution(&mut self, next: PatternEvolution) {
-        if self.pattern_evolution == next {
-            return;
-        }
-        self.pattern_evolution = next;
-        // instance 1の増幅は完全ランダム(AUTO)限定。音色ロードなしでも即時反映する。
-        self.apply_chord_gains();
-    }
-
-    pub(crate) fn toggle_pattern_evolution(&mut self) {
-        let undo = self.capture_undo();
-        let next = match self.pattern_evolution {
-            PatternEvolution::Auto => {
-                self.cancel_cycle_swap_preserving_drain();
-                PatternEvolution::Hold
-            }
-            PatternEvolution::Hold => PatternEvolution::Auto,
-        };
-        self.set_pattern_evolution(next);
-        self.commit_undo(undo);
     }
 
     pub(crate) fn mouse_edit_enabled(&self) -> bool {
@@ -178,7 +156,7 @@ impl GridSequencerScreen {
             NoteGestureMode::EraseNotes => self.state.erase_note_at(address, step),
         };
         if changed {
-            self.begin_manual_edit();
+            self.begin_manual_edit(CycleRandomItem::Note);
         }
         self.note_gesture = Some(NoteGesture {
             button,
@@ -228,7 +206,7 @@ impl GridSequencerScreen {
             let changed = self.apply_gesture_point(&mut gesture, address, step);
             if changed {
                 if !gesture.changed {
-                    self.begin_manual_edit();
+                    self.begin_manual_edit(CycleRandomItem::Note);
                 }
                 gesture.changed = true;
             }
@@ -317,7 +295,7 @@ impl GridSequencerScreen {
             self.state.move_lane_pitch(address, direction)
         };
         if changed {
-            self.begin_manual_edit();
+            self.begin_manual_edit(CycleRandomItem::Note);
             self.commit_undo(snapshot);
         }
     }

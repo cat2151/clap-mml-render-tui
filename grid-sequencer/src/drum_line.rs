@@ -26,7 +26,7 @@ impl GridSequencerScreen {
         self.last_drum = Some(pattern);
         let snapshot = self.capture_undo();
         if self.state.apply_drum_pattern(instance, pattern) {
-            self.begin_manual_edit();
+            self.begin_manual_edit(crate::CycleRandomItem::Drum);
             self.commit_undo(snapshot);
         }
         log_line(&format!(

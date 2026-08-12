@@ -1,18 +1,18 @@
 //! 編集可能な grid の復元・保存と instance 数変更時の引継ぎ。
 
-use crate::{GridInstance, GridSequencerScreen, GridState, PatternEvolution};
+use crate::{CycleRandom, GridInstance, GridSequencerScreen, GridState};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GridSequencerSession {
     pub instances: Vec<GridInstance>,
-    pub pattern_evolution: PatternEvolution,
+    pub cycle_random: CycleRandom,
 }
 
 impl GridSequencerSession {
-    pub fn new(instances: Vec<GridInstance>, pattern_evolution: PatternEvolution) -> Self {
+    pub fn new(instances: Vec<GridInstance>, cycle_random: CycleRandom) -> Self {
         Self {
             instances,
-            pattern_evolution,
+            cycle_random,
         }
     }
 }
@@ -21,14 +21,15 @@ impl GridSequencerScreen {
     pub fn session_state(&self) -> Option<GridSequencerSession> {
         self.grid_ready.then(|| GridSequencerSession {
             instances: self.state.instances().to_vec(),
-            pattern_evolution: self.pattern_evolution,
+            cycle_random: self.cycle_random,
         })
     }
 
     /// track 数を変えて再起動する準備。既存の行はそのまま引き継ぐ。
     ///
-    /// 増やしたぶんの行は抽選して埋める。空のまま足すと、HOLD では譜面を引き直さないので
-    /// 増やした行が延々と無音のままになる（`r` を押すまで気づけない）。
+    /// 増やしたぶんの行は抽選して埋める。空のまま足すと、NOTE を OFF にしていると
+    /// 譜面を引き直さないので増やした行が延々と無音のままになる（`r` を押すまで
+    /// 気づけない）。
     pub(crate) fn resize_for_restart(
         &mut self,
         instance_count: usize,
@@ -41,7 +42,7 @@ impl GridSequencerScreen {
         }
         instances.truncate(instance_count);
         if let Some(added) = instances.get_mut(previous_count..) {
-            crate::randomize_instance_slice(added, patches);
+            crate::randomize_instance_slice(added, patches, CycleRandom::ALL, None);
         }
 
         self.finish();

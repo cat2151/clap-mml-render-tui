@@ -130,6 +130,26 @@ impl ChordPlayback {
         self.chords.iter().map(Vec::len).max().unwrap_or(0)
     }
 
+    /// 進行内のどのコードでも鳴る声部数。アルペジオの声部数はこれで決める。
+    ///
+    /// [`Self::max_voice_count`] で組むと、構成音の少ないコードの周だけ上の声部が
+    /// 無音になり、リズムが欠ける。
+    pub fn min_voice_count(&self) -> usize {
+        self.chords.iter().map(Vec::len).min().unwrap_or(0)
+    }
+
+    /// 同じ進行を頭から鳴らし直す複製。
+    ///
+    /// 進行を引き直さない周（CHORD を OFF にした周）でも、次サイクルへは
+    /// 「先頭から1周ぶん」を預ける必要がある。最終小節を指したまま預けると、
+    /// 差し替えた次の周が最後のコードから始まってしまう。
+    pub fn restarted(&self) -> Self {
+        Self {
+            index: 0,
+            ..self.clone()
+        }
+    }
+
     /// 次のコードへ進める。進行を1周して先頭へ戻ったときだけ true。
     fn advance(&mut self) -> bool {
         self.index = (self.index + 1) % self.chords.len();
@@ -171,20 +191,26 @@ impl GridState {
     /// grid を1周したときに次のコードへ進める。
     ///
     /// 進行を1周し終えたら、準備済みの次サイクルへ差し替える（[`super::cycle`]）。
-    /// AUTO は待機 bank へ移り、HOLD は現在 bank のまま進行だけを取り込む。
+    /// 音色を引き直す周は待機 bank へ移り、据え置く周は現在 bank のまま進行だけを
+    /// 取り込む。
     /// 差し替えは `attack_current_step()` の直前に起きるので、その小節の頭から
     /// 新しい進行の1コード目がそのまま鳴る。
     ///
     /// シングルバッファリング（[`crate::single_buffer`]）では裏読みをしていないので
     /// 差し替えず、「鳴らしきった」合図だけを立てて `poll_steps` にクロックを畳ませる。
-    pub(super) fn advance_chord(&mut self) {
+    ///
+    /// 進行を1周して先頭のコードへ戻ったときだけ true を返す。テンポの引き直しは
+    /// 小節ではなくこの進行1周を単位にするので（[`super::tempo`]）、その境目を
+    /// 知っているここが報告する。鳴らしきって止まる周は、次の音が無いので false。
+    pub(super) fn advance_chord(&mut self) -> bool {
         let Some(chord) = self.chord.as_mut() else {
-            return;
+            return false;
         };
-        if chord.advance() {
+        let wrapped = chord.advance();
+        if wrapped {
             if self.stop_at_cycle_end {
                 self.cycle_wrapped = true;
-                return;
+                return false;
             }
             self.commit_pending_cycle();
         }
@@ -192,6 +218,7 @@ impl GridState {
         if self.chord.as_ref().is_some_and(ChordPlayback::is_last) {
             self.preload_due = true;
         }
+        wrapped
     }
 
     /// 保存値ではなく現在の mode / chord から、その lane が次に鳴らす音を導出する。
