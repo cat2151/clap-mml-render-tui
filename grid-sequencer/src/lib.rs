@@ -46,12 +46,13 @@ pub use sender::{
 };
 pub use session::GridSequencerSession;
 pub use state::{
-    frames_ahead, lookahead_at, randomize_instance_slice, schedule_guard_at, step_interval_at,
-    step_offset, step_offset_at, step_timeline_seconds, step_timeline_seconds_at, AppliedTempo,
-    ChordPlayback, DrawnPhrases, GridInstance, GridLane, GridLaneMode, GridScheduledMessage,
-    GridState, LaneAddress, NotePattern, NoteStep, PitchDirection, VisibleNoteRow, VisibleRowKind,
-    ARPEGGIO_ROW, BASS_OCTAVE_LANES, BASS_ROW, BPM, CHORD_ROW, CHORD_VOICE_LANES, FIRST_DRUM_ROW,
-    FULL_DRUM_TRACK_COUNT, GRID_ROWS, GRID_STEPS, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL,
+    clamp_swing, frames_ahead, lookahead_at, randomize_instance_slice, schedule_guard_at,
+    step_interval_at, step_offset, step_offset_at, step_timeline_seconds, step_timeline_seconds_at,
+    swing_offset_seconds, AppliedTempo, ChordPlayback, DrawnPhrases, GridInstance, GridLane,
+    GridLaneMode, GridScheduledMessage, GridState, LaneAddress, NotePattern, NoteStep,
+    PitchDirection, VisibleNoteRow, VisibleRowKind, ARPEGGIO_ROW, BASS_OCTAVE_LANES, BASS_ROW, BPM,
+    CHORD_ROW, CHORD_VOICE_LANES, FIRST_DRUM_ROW, FULL_DRUM_TRACK_COUNT, GRID_ROWS, GRID_STEPS,
+    LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL, SWING_MAX, SWING_MIN,
 };
 
 #[cfg(test)]

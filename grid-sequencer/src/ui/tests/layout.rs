@@ -64,8 +64,8 @@ fn tall_terminals_show_every_track_of_both_value_grids() {
 #[test]
 fn the_note_grid_title_always_shows_the_cycle_random_items() {
     let mut screen = GridSequencerScreen::new(None);
-    assert!(render(&screen).contains("Note [PNDACB]"));
+    assert!(render(&screen).contains("Note [PNDACBS]"));
 
     screen.cycle_random = crate::CycleRandom::HOLD;
-    assert!(render(&screen).contains("Note [----CB]"));
+    assert!(render(&screen).contains("Note [----CB-]"));
 }

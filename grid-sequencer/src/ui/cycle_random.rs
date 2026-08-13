@@ -29,7 +29,7 @@ const BORDER_SIZE: u16 = 2;
 /// 項目の並びのあとに置く操作説明。空行1つを挟む。
 const FOOTER: [&str; 3] = [
     "",
-    " 1-6 / click:切替   Space:切替   ↑↓:移動",
+    " 1-7 / click:切替   Space:切替   ↑↓:移動",
     " A:全ON   N:全OFF   Esc / q / a:閉じる",
 ];
 

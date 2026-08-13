@@ -114,6 +114,7 @@ fn grid_session_from_history(
             },
             drum: instance.drum.map(history_drum_role_to_domain),
             voicing_rotation: instance.voicing_rotation,
+            swing: super::grid_sequencer::clamp_swing(instance.swing),
             lanes: instance
                 .lanes
                 .into_iter()
@@ -133,6 +134,7 @@ fn grid_session_from_history(
         arp: session.cycle_random.arp,
         chord: session.cycle_random.chord,
         bpm: session.cycle_random.bpm,
+        swing: session.cycle_random.swing,
     };
     Some(super::grid_sequencer::GridSequencerSession::new(
         instances,
@@ -212,6 +214,7 @@ fn grid_session_to_history(
                 },
                 drum: instance.drum.map(domain_drum_role_to_history),
                 voicing_rotation: instance.voicing_rotation,
+                swing: instance.swing,
                 lanes: instance
                     .lanes
                     .into_iter()
@@ -234,6 +237,7 @@ fn grid_session_to_history(
             arp: session.cycle_random.arp,
             chord: session.cycle_random.chord,
             bpm: session.cycle_random.bpm,
+            swing: session.cycle_random.swing,
         },
     })
 }

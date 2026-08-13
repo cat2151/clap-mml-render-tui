@@ -7,7 +7,9 @@ use crate::{LaneAddress, VisibleNoteRow, GRID_STEPS};
 pub(super) const PATCH_WIDTH: usize = 24;
 /// auto gain の表示幅。`-12.0`（下限）まで欠けずに入る。
 pub(super) const GAIN_WIDTH: usize = 5;
-pub(super) const LABEL_WIDTH: u16 = 42;
+/// swing の表示幅。`50`〜`66` と非適用の `-`、見出しの `SW` がちょうど入る。
+pub(super) const SWING_WIDTH: usize = 2;
+pub(super) const LABEL_WIDTH: u16 = 45;
 pub(super) const NOTE_CELL_WIDTH: u16 = 2;
 
 const PATCH_START: u16 = 6;
@@ -17,6 +19,9 @@ const PATCH_START: u16 = 6;
 const GAIN_START: u16 = 31;
 const NOTE_START: u16 = 37;
 const NOTE_WIDTH: u16 = 4;
+/// SWING 欄の左端。GAIN と同じく表示専用なので当たり判定は持たない。
+#[cfg(test)]
+const SWING_START: u16 = 42;
 
 /// フレーズ型 list を出す右 pane の幅。`  UpDownHold ` と枠線が収まる最小。
 pub(super) const PATTERN_LIST_WIDTH: u16 = 14;
@@ -24,7 +29,7 @@ pub(super) const PATTERN_LIST_WIDTH: u16 = 14;
 ///
 /// 端末がこれより広くても grid は横へ伸ばさない。中身は 16 step ぶんで固定なので、
 /// 伸ばしても枠が広がるだけで、右の pane との間に大きな空白ができる。
-const GRID_WIDTH: u16 = LABEL_WIDTH + GRID_STEPS as u16 * NOTE_CELL_WIDTH + 2;
+pub(super) const GRID_WIDTH: u16 = LABEL_WIDTH + GRID_STEPS as u16 * NOTE_CELL_WIDTH + 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GridSequencerLayout {
@@ -142,6 +147,12 @@ impl GridSequencerLayout {
     #[cfg(test)]
     pub(crate) fn gain_column(&self) -> u16 {
         self.content_column(GAIN_START)
+    }
+
+    /// SWING 欄（shuffle 量）の列。
+    #[cfg(test)]
+    pub(crate) fn swing_column(&self) -> u16 {
+        self.content_column(SWING_START)
     }
 
     #[cfg(test)]

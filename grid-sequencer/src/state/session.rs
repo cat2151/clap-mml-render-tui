@@ -12,6 +12,8 @@ impl GridState {
         }
         for (index, instance) in instances.iter_mut().enumerate() {
             restore_lane_mode(index, instance);
+            // undo snapshot も保存値も、範囲外の swing を持ち込ませない。
+            instance.swing = super::clamp_swing(instance.swing);
             instance.normalize();
         }
         // drum 行かどうかは track 数で変わるので、行番号ぶんの復元が終わってから当て直す。

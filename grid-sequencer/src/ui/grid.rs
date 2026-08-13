@@ -16,7 +16,7 @@ use crate::{
     VisibleRowKind, GRID_STEPS,
 };
 
-use super::layout::{GAIN_WIDTH, PATCH_WIDTH};
+use super::layout::{GAIN_WIDTH, PATCH_WIDTH, SWING_WIDTH};
 
 const NOTE_CELL: &str = "# ";
 const TIE_CELL: &str = "- ";
@@ -29,13 +29,15 @@ pub(super) fn draw(
     area: Rect,
 ) {
     let playhead = screen.state.step_index();
+    // instance ごとの発音表から毎回引き直す値なので、行ごとに呼ばず1回で済ませる。
+    let swings = screen.state.effective_swings();
     let mut lines = vec![header_line()];
     lines.extend(
         screen
             .state
             .visible_note_rows()
             .into_iter()
-            .map(|visible| row_line(screen, connection, visible, playhead)),
+            .map(|visible| row_line(screen, connection, visible, playhead, &swings)),
     );
     f.render_widget(
         Paragraph::new(lines).style(base_style()).block(
@@ -71,7 +73,10 @@ fn title(screen: &GridSequencerScreen) -> String {
 fn header_line() -> Line<'static> {
     let style = base_style().fg(MONOKAI_GRAY);
     Line::from(vec![
-        Span::styled(label_columns("#", "V", "PATCH", "GAIN", "NOTE"), style),
+        Span::styled(
+            label_columns("#", "V", "PATCH", "GAIN", "NOTE", "SW"),
+            style,
+        ),
         Span::styled(step_ruler(), style),
     ])
 }
@@ -81,6 +86,7 @@ fn row_line(
     connection: &GridConnectionStatus,
     visible: VisibleNoteRow,
     playhead: usize,
+    swings: &[Option<u8>],
 ) -> Line<'static> {
     let address = visible.address;
     let instance = &screen.state.instances()[address.instance];
@@ -129,6 +135,13 @@ fn row_line(
     } else {
         String::new()
     };
+    // swing も instance ごと。跳ねない行（裏拍に note on が無い）は値を持っていても
+    // 効かないので `-` を出す。
+    let swing_label = if group_header {
+        swing_label(swings, address.instance)
+    } else {
+        String::new()
+    };
     // drum 行は音高が意味を持たない（1 instance = 1 打楽器）ので、番号ではなく役割を出す。
     let note_label = match instance.drum {
         Some(role) => role.label().to_string(),
@@ -141,6 +154,7 @@ fn row_line(
             &patch_label,
             &gain_label,
             &note_label,
+            &swing_label,
         ),
         label_style(readiness, inactive),
     )];
@@ -195,11 +209,23 @@ fn cell_style(readiness: GridRowReadiness, step: NoteStep, inactive: bool) -> St
     base_style().fg(color)
 }
 
-fn label_columns(instance: &str, voice: &str, patch: &str, gain: &str, note: &str) -> String {
+/// 情報欄（step セルの左側）の1行。**桁の唯一の出所**で、[`super::layout`] の
+/// `*_START` / `LABEL_WIDTH` はこの書式を数えた値。コンパイラは整合を見ないので、
+/// 書式を変えたら向こうの定数も必ず直すこと（[`tests`] が幅の一致だけは守る）。
+fn label_columns(
+    instance: &str,
+    voice: &str,
+    patch: &str,
+    gain: &str,
+    note: &str,
+    swing: &str,
+) -> String {
     format!(
-        " {instance:>2} {voice:>1} {patch:<patch_width$} {gain:>gain_width$} {note:>4} ",
+        " {instance:>2} {voice:>1} {patch:<patch_width$} {gain:>gain_width$} {note:>4} \
+         {swing:>swing_width$} ",
         patch_width = PATCH_WIDTH,
         gain_width = GAIN_WIDTH,
+        swing_width = SWING_WIDTH,
     )
 }
 
@@ -217,6 +243,17 @@ fn auto_gain_label(
     format!("{:+.1}", connection.instance_auto_gain_db(instance_id))
 }
 
+/// shuffle 量の百分率。50 は「跳ねる余地はあるが等分」、`-` は「跳ねようがない」。
+///
+/// 裏拍に note on を持たない行（表拍の四分・八分だけの行、chord mode の和音行）は
+/// 値を持っていても発音位置が動かないので、数字を出すと嘘になる。
+fn swing_label(swings: &[Option<u8>], instance: usize) -> String {
+    match swings.get(instance).copied().flatten() {
+        Some(swing) => swing.to_string(),
+        None => "-".to_string(),
+    }
+}
+
 fn step_ruler() -> String {
     (0..GRID_STEPS)
         .map(|step| {
@@ -228,6 +265,9 @@ fn step_ruler() -> String {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests;
 
 fn truncate_patch(patch: Option<&str>, width: usize) -> String {
     let Some(patch) = patch else {

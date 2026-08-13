@@ -318,6 +318,7 @@ fn edited_grid_is_persisted_and_restored_without_persisting_derived_note() {
         lane_mode: crate::tui::grid_sequencer::GridLaneMode::Single,
         drum: None,
         voicing_rotation: 0,
+        swing: 61,
         lanes: vec![crate::tui::grid_sequencer::GridLane {
             base_note: 64,
             pattern: pattern.clone(),
@@ -383,6 +384,8 @@ fn edited_grid_is_persisted_and_restored_without_persisting_derived_note() {
     assert_eq!(session.instances[0].lanes[0].base_note, 64);
     assert_eq!(session.instances[0].lanes[0].pattern, pattern);
     assert_eq!(session.instances[2].voicing_rotation, -5);
+    // swing は domain と DTO の変換が手書きなので、往復して初めて繋がったと言える。
+    assert_eq!(session.instances[0].swing, 61);
 
     std::fs::remove_dir_all(&tmp).ok();
 }

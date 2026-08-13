@@ -111,8 +111,13 @@ fn the_grid_keeps_its_content_width_and_the_block_is_centred() {
     // grid と list の間に隙間を作らない。
     assert_eq!(pane.x, layout.note.x + GRID_WIDTH);
     assert_eq!(pane.x + pane.width, layout.note.x + block_width);
-    // 左右の余白は同じ幅になる。
-    assert_eq!(layout.note.x, 200 - (pane.x + pane.width));
+    // 左右の余白はほぼ同じ幅になる。余りが奇数のときだけ右が1桁広い。
+    let right = 200 - (pane.x + pane.width);
+    assert!(
+        layout.note.x.abs_diff(right) <= 1,
+        "{} vs {right}",
+        layout.note.x
+    );
     // コード行も塊に揃える。
     let chord_line = layout.chord_line.expect("chord mode 中は出る");
     assert_eq!(chord_line.x, layout.note.x);
@@ -163,14 +168,17 @@ fn the_bottom_lines_keep_the_whole_terminal_width() {
 /// 出す section が無ければ list を出さず、grid だけを中央へ置く。
 #[test]
 fn the_phrase_list_pane_only_appears_when_a_section_is_shown() {
-    let area = Rect::new(0, 0, 90, 30);
+    let width = GRID_WIDTH + PATTERN_LIST_WIDTH;
+    let area = Rect::new(0, 0, width, 30);
     let off = GridSequencerLayout::new(area, 5, 2, 5, false, NO_LIST);
     assert_eq!(off.pattern_list, None);
     assert_eq!(off.note.width, GRID_WIDTH);
-    assert_eq!(off.note.x, (90 - GRID_WIDTH) / 2);
+    assert_eq!(off.note.x, (width - GRID_WIDTH) / 2);
 
     let on = GridSequencerLayout::new(area, 5, 2, 5, true, CHORD_LIST);
-    let pane = on.pattern_list.expect("90桁なら list が入る");
+    let pane = on
+        .pattern_list
+        .expect("塊がちょうど収まる幅なら list が入る");
     assert_eq!(pane.width, PATTERN_LIST_WIDTH);
     // 値 grid も NOTE grid と同じ幅・同じ左端で縦に揃える。
     for grid in [on.note, on.cc1, on.velocity] {
@@ -183,7 +191,8 @@ fn the_phrase_list_pane_only_appears_when_a_section_is_shown() {
 #[test]
 fn a_terminal_too_narrow_for_both_keeps_the_grid_and_drops_the_pane() {
     let visible = rows(&[(0, 0)]);
-    let layout = GridSequencerLayout::new(Rect::new(0, 0, 89, 20), 1, 1, 1, true, CHORD_LIST);
+    let width = GRID_WIDTH + PATTERN_LIST_WIDTH - 1;
+    let layout = GridSequencerLayout::new(Rect::new(0, 0, width, 20), 1, 1, 1, true, CHORD_LIST);
 
     assert_eq!(layout.pattern_list, None);
     assert_eq!(layout.note.width, GRID_WIDTH);
@@ -211,7 +220,7 @@ fn a_terminal_narrower_than_the_grid_uses_every_column() {
 #[test]
 fn the_pane_does_not_move_any_note_cell_relative_to_the_grid() {
     let visible = rows(&[(0, 0)]);
-    let area = Rect::new(0, 0, 90, 20);
+    let area = Rect::new(0, 0, GRID_WIDTH + PATTERN_LIST_WIDTH, 20);
     let without = GridSequencerLayout::new(area, 1, 1, 1, true, NO_LIST);
     let with = GridSequencerLayout::new(area, 1, 1, 1, true, CHORD_LIST);
 

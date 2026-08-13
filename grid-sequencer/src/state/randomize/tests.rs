@@ -160,3 +160,61 @@ fn messages_of(scheduled: &[GridScheduledMessage]) -> Vec<[u8; 3]> {
         .map(|item| normalize_velocity(item.message))
         .collect()
 }
+
+#[test]
+fn swing_is_drawn_inside_the_valid_range_for_every_row() {
+    let mut state = GridState::silent();
+    state.randomize_all(Instant::now(), &[]);
+    assert!(
+        state
+            .instances
+            .iter()
+            .all(|instance| (SWING_MIN..=SWING_MAX).contains(&instance.swing)),
+        "{:?}",
+        state
+            .instances
+            .iter()
+            .map(|instance| instance.swing)
+            .collect::<Vec<_>>()
+    );
+}
+
+/// SWING が OFF の周は swing を据え置く。譜面だけ引き直しても groove は変わらない。
+#[test]
+fn swing_is_held_when_the_policy_says_so() {
+    let mut instances = vec![GridInstance::new(0); 4];
+    for (index, instance) in instances.iter_mut().enumerate() {
+        instance.swing = SWING_MIN + index as u8;
+    }
+
+    randomize_instance_slice(
+        &mut instances,
+        &[],
+        CycleRandom {
+            swing: false,
+            ..CycleRandom::ALL
+        },
+        None,
+    );
+
+    let swings = instances
+        .iter()
+        .map(|instance| instance.swing)
+        .collect::<Vec<_>>();
+    assert_eq!(swings, vec![50, 51, 52, 53]);
+}
+
+/// drum 行も対象。hi-hat の16分こそ跳ねてほしい行なので、役割で除外しない。
+#[test]
+fn drum_rows_get_swing_too() {
+    let mut instances = vec![GridInstance::new(0); crate::FULL_DRUM_TRACK_COUNT];
+    drum::apply_drum_roles(&mut instances);
+    assert!(instances.iter().any(|instance| instance.drum.is_some()));
+
+    randomize_instance_slice(&mut instances, &[], CycleRandom::ALL, None);
+
+    assert!(instances
+        .iter()
+        .filter(|instance| instance.drum.is_some())
+        .all(|instance| (SWING_MIN..=SWING_MAX).contains(&instance.swing)));
+}

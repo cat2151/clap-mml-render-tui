@@ -5,13 +5,19 @@
 use serde::{ser::SerializeStruct, Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
+mod cycle_random;
 mod legacy;
 
+pub use cycle_random::GridCycleRandomState;
+use cycle_random::{deserialize_cycle_random, migrate_pattern_evolution};
 use legacy::migrate_legacy_rows;
 pub use legacy::GridSequencerRowState;
 
 const GRID_STEPS: usize = 16;
 const DEFAULT_NOTE: u8 = 60;
+/// shuffle 量の有効域（百分率）。50 = 跳ねなし。domain 側の `SWING_MIN`/`SWING_MAX` と対。
+const SWING_MIN: u8 = 50;
+const SWING_MAX: u8 = 66;
 const CHORD_VOICE_LANES: usize = 4;
 const BASS_OCTAVE_LANES: usize = 2;
 
@@ -44,7 +50,7 @@ impl<'de> Deserialize<'de> for GridSequencerSessionState {
         };
         let cycle_random = match object.get("cycle_random") {
             Some(value) => deserialize_cycle_random(value),
-            // 6項目へ分解する前のセッション。AUTO/HOLD の2値から移行する。
+            // 項目別へ分解する前のセッション。AUTO/HOLD の2値から移行する。
             None => migrate_pattern_evolution(object.get("pattern_evolution")),
         };
         // fieldが存在すれば、空・壊れた配列でもlegacy rowsより優先する。
@@ -71,6 +77,9 @@ pub struct GridSequencerInstanceState {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub drum: Option<GridDrumRoleState>,
     pub voicing_rotation: i8,
+    /// shuffle 量（百分率）。swing が無い頃のセッションには field ごと無いので、
+    /// 読めなければ [`SWING_MIN`]（跳ねなし）へ落とす。
+    pub swing: u8,
     pub lanes: Vec<GridSequencerLaneState>,
 }
 
@@ -89,6 +98,7 @@ impl Default for GridSequencerInstanceState {
             lane_mode: GridLaneModeState::Single,
             drum: None,
             voicing_rotation: 0,
+            swing: SWING_MIN,
             lanes: vec![GridSequencerLaneState::default()],
         }
     }
@@ -115,6 +125,11 @@ impl<'de> Deserialize<'de> for GridSequencerInstanceState {
             .and_then(Value::as_i64)
             .and_then(|value| i8::try_from(value).ok())
             .unwrap_or(0);
+        let swing = object
+            .get("swing")
+            .and_then(Value::as_i64)
+            .unwrap_or(i64::from(SWING_MIN))
+            .clamp(i64::from(SWING_MIN), i64::from(SWING_MAX)) as u8;
         let lanes = object
             .get("lanes")
             .and_then(Value::as_array)
@@ -130,6 +145,7 @@ impl<'de> Deserialize<'de> for GridSequencerInstanceState {
             lane_mode,
             drum,
             voicing_rotation,
+            swing,
             lanes,
         };
         result.normalize();
@@ -247,71 +263,6 @@ impl<'de> Deserialize<'de> for GridNoteStepState {
     {
         let value = Value::deserialize(deserializer)?;
         Ok(note_step_from_value(&value))
-    }
-}
-
-/// コード進行1周ごとに引き直す対象。既定は全 ON。
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-pub struct GridCycleRandomState {
-    pub patch: bool,
-    pub note: bool,
-    pub drum: bool,
-    pub arp: bool,
-    pub chord: bool,
-    pub bpm: bool,
-}
-
-impl Default for GridCycleRandomState {
-    fn default() -> Self {
-        Self {
-            patch: true,
-            note: true,
-            drum: true,
-            arp: true,
-            chord: true,
-            bpm: true,
-        }
-    }
-}
-
-/// 欠けた field は既定（ON）として読む。項目を足したセッションを古い版が書き戻しても、
-/// 足した項目が黙って OFF にならないため。
-fn deserialize_cycle_random(value: &Value) -> GridCycleRandomState {
-    let default = GridCycleRandomState::default();
-    let Some(object) = value.as_object() else {
-        return default;
-    };
-    let flag = |name: &str, fallback: bool| {
-        object
-            .get(name)
-            .and_then(Value::as_bool)
-            .unwrap_or(fallback)
-    };
-    GridCycleRandomState {
-        patch: flag("patch", default.patch),
-        note: flag("note", default.note),
-        drum: flag("drum", default.drum),
-        arp: flag("arp", default.arp),
-        chord: flag("chord", default.chord),
-        bpm: flag("bpm", default.bpm),
-    }
-}
-
-/// 旧 `pattern_evolution`（AUTO / HOLD）からの移行。
-///
-/// HOLD は「譜面も音色も据え置き、進行とテンポだけ動かす」だったので、
-/// 譜面まわりの4項目だけを OFF にする。
-fn migrate_pattern_evolution(value: Option<&Value>) -> GridCycleRandomState {
-    if value.and_then(Value::as_str) != Some("hold") {
-        return GridCycleRandomState::default();
-    }
-    GridCycleRandomState {
-        patch: false,
-        note: false,
-        drum: false,
-        arp: false,
-        chord: true,
-        bpm: true,
     }
 }
 

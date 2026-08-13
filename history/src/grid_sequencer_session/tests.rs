@@ -19,6 +19,7 @@ fn new_format_round_trip_preserves_grid_values_and_omits_legacy_fields() {
             lane_mode: GridLaneModeState::Single,
             drum: None,
             voicing_rotation: 0,
+            swing: SWING_MIN,
             lanes: vec![GridSequencerLaneState {
                 base_note: 64,
                 note_steps: vec![
@@ -36,6 +37,7 @@ fn new_format_round_trip_preserves_grid_values_and_omits_legacy_fields() {
             arp: false,
             chord: true,
             bpm: true,
+            swing: false,
         },
     };
     let json = serde_json::to_string(&state).unwrap();
@@ -60,6 +62,7 @@ fn downward_voicing_rotation_round_trips_as_a_negative_value() {
             lane_mode: GridLaneModeState::ChordVoices4,
             drum: None,
             voicing_rotation: -5,
+            swing: 62,
             lanes: vec![GridSequencerLaneState::default(); CHORD_VOICE_LANES],
         }],
         cycle_random: GridCycleRandomState {
@@ -69,6 +72,7 @@ fn downward_voicing_rotation_round_trips_as_a_negative_value() {
             arp: false,
             chord: true,
             bpm: true,
+            swing: false,
         },
     };
 
@@ -111,6 +115,7 @@ fn legacy_rows_migrate_to_instances_and_expand_the_second_row() {
             arp: false,
             chord: true,
             bpm: true,
+            swing: false,
         },
         "旧 HOLD は譜面まわりの4項目だけ OFF へ移行する"
     );
@@ -217,4 +222,49 @@ fn a_partial_cycle_random_object_keeps_the_missing_items_on() {
             ..GridCycleRandomState::default()
         }
     );
+}
+
+#[test]
+fn swing_round_trips_and_defaults_to_no_shuffle_when_missing() {
+    let restored: GridSequencerSessionState = serde_json::from_str(
+        r#"{"instances":[{"patch":null,"lane_mode":"single","voicing_rotation":0,"swing":63,"lanes":[]},{"patch":null,"lane_mode":"single","voicing_rotation":0,"lanes":[]}]}"#,
+    )
+    .unwrap();
+
+    assert_eq!(restored.instances[0].swing, 63);
+    // swing を知らない頃のセッション。跳ねなしから始める。
+    assert_eq!(restored.instances[1].swing, SWING_MIN);
+}
+
+#[test]
+fn an_out_of_range_swing_is_clamped_instead_of_wrapping() {
+    let restored: GridSequencerSessionState = serde_json::from_str(
+        r#"{"instances":[{"lane_mode":"single","swing":900,"lanes":[]},{"lane_mode":"single","swing":-4,"lanes":[]}]}"#,
+    )
+    .unwrap();
+
+    assert_eq!(restored.instances[0].swing, SWING_MAX);
+    assert_eq!(restored.instances[1].swing, SWING_MIN);
+}
+
+/// 項目を知らない版が書き戻したセッションでも、SWING が黙って OFF にならない。
+#[test]
+fn a_cycle_random_without_the_swing_flag_keeps_it_on() {
+    let restored: GridSequencerSessionState = serde_json::from_str(
+        r#"{"instances":[],"cycle_random":{"patch":false,"note":true,"drum":true,"arp":true,"chord":true,"bpm":true}}"#,
+    )
+    .unwrap();
+
+    assert!(restored.cycle_random.swing);
+    assert!(!restored.cycle_random.patch);
+}
+
+/// 旧 HOLD は「据え置き」の意図なので、swing も一緒に止める。
+#[test]
+fn the_legacy_hold_migration_turns_swing_off() {
+    let restored: GridSequencerSessionState =
+        serde_json::from_str(r#"{"instances":[],"pattern_evolution":"hold"}"#).unwrap();
+
+    assert!(!restored.cycle_random.swing);
+    assert!(restored.cycle_random.chord);
 }

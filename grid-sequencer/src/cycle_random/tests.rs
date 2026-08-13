@@ -22,9 +22,9 @@ fn the_default_is_everything_random() {
 
 #[test]
 fn the_compact_label_shows_only_the_items_that_are_on() {
-    assert_eq!(CycleRandom::ALL.compact_label(), "PNDACB");
-    assert_eq!(CycleRandom::NONE.compact_label(), "------");
-    assert_eq!(CycleRandom::HOLD.compact_label(), "----CB");
+    assert_eq!(CycleRandom::ALL.compact_label(), "PNDACBS");
+    assert_eq!(CycleRandom::NONE.compact_label(), "-------");
+    assert_eq!(CycleRandom::HOLD.compact_label(), "----CB-");
     assert_eq!(
         CycleRandom {
             note: false,
@@ -32,7 +32,7 @@ fn the_compact_label_shows_only_the_items_that_are_on() {
             ..CycleRandom::ALL
         }
         .compact_label(),
-        "P-D-CB"
+        "P-D-CBS"
     );
 }
 

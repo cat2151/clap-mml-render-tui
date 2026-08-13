@@ -4,8 +4,8 @@
 //! スイッチに束ねられていた。「patch だけ毎周変える」「drum の型だけ固定する」と
 //! いった中間が表現できず、しかも手編集のたびに両方まとめて止まっていた。
 //!
-//! ここでは対象を6項目へ分解する。項目どうしが重ならないよう、instance の引き直しは
-//! **行の役割ごとにちょうど1項目へ属する**（[`crate::state::randomize`]）。
+//! ここでは対象を7項目へ分解する。項目どうしが重ならないよう、**譜面の**引き直しは
+//! 行の役割ごとにちょうど1項目へ属する（[`crate::state::randomize`]）。
 //!
 //! | 項目 | 対象 |
 //! |---|---|
@@ -15,6 +15,10 @@
 //! | ARP   | chord mode 中の bass 行・アルペジオ行の音型 |
 //! | CHORD | コード進行と Key |
 //! | BPM   | テンポ（Ctrl+B で範囲を指定したときだけ実効） |
+//! | SWING | 全行の shuffle 量（[`crate::state::swing`]） |
+//!
+//! SWING だけは譜面の分割と直交する。行の役割に関わらず全行へ配り、実際に跳ねるかは
+//! その行の譜面が決める。末尾に足してあるのは、既存項目の数字キーを動かさないため。
 //!
 //! 描画と当たり判定は [`crate::ui::cycle_random`]。
 
@@ -31,17 +35,19 @@ pub enum CycleRandomItem {
     Arp,
     Chord,
     Bpm,
+    Swing,
 }
 
 impl CycleRandomItem {
     /// overlay に並べる順序。数字キーの並びでもある。
-    pub const ALL: [CycleRandomItem; 6] = [
+    pub const ALL: [CycleRandomItem; 7] = [
         Self::Patch,
         Self::Note,
         Self::Drum,
         Self::Arp,
         Self::Chord,
         Self::Bpm,
+        Self::Swing,
     ];
 
     pub fn label(self) -> &'static str {
@@ -52,6 +58,7 @@ impl CycleRandomItem {
             Self::Arp => "ARP",
             Self::Chord => "CHORD",
             Self::Bpm => "BPM",
+            Self::Swing => "SWING",
         }
     }
 
@@ -64,6 +71,7 @@ impl CycleRandomItem {
             Self::Arp => 'A',
             Self::Chord => 'C',
             Self::Bpm => 'B',
+            Self::Swing => 'S',
         }
     }
 
@@ -76,6 +84,7 @@ impl CycleRandomItem {
             Self::Arp => "bass 行・アルペジオ行の音型",
             Self::Chord => "コード進行と Key",
             Self::Bpm => "テンポ (Ctrl+Bで範囲)",
+            Self::Swing => "全行の shuffle 量 (50-66%)",
         }
     }
 }
@@ -89,6 +98,7 @@ pub struct CycleRandom {
     pub arp: bool,
     pub chord: bool,
     pub bpm: bool,
+    pub swing: bool,
 }
 
 impl Default for CycleRandom {
@@ -106,6 +116,7 @@ impl CycleRandom {
         arp: true,
         chord: true,
         bpm: true,
+        swing: true,
     };
 
     /// 全項目 OFF。
@@ -116,10 +127,14 @@ impl CycleRandom {
         arp: false,
         chord: false,
         bpm: false,
+        swing: false,
     };
 
     /// 旧 HOLD 相当。譜面と音色を据え置き、進行とテンポだけ動かす。
     /// 旧セッションの移行先でもある（[`crate::session`]）。
+    ///
+    /// swing は「演奏の質感を毎周変える」もので、譜面を据え置く意図と食い違うので
+    /// 譜面まわりと同じく OFF 側へ入れる。
     pub const HOLD: Self = Self {
         patch: false,
         note: false,
@@ -127,6 +142,7 @@ impl CycleRandom {
         arp: false,
         chord: true,
         bpm: true,
+        swing: false,
     };
 
     pub fn get(self, item: CycleRandomItem) -> bool {
@@ -137,6 +153,7 @@ impl CycleRandom {
             CycleRandomItem::Arp => self.arp,
             CycleRandomItem::Chord => self.chord,
             CycleRandomItem::Bpm => self.bpm,
+            CycleRandomItem::Swing => self.swing,
         }
     }
 
@@ -148,16 +165,20 @@ impl CycleRandom {
             CycleRandomItem::Arp => self.arp = on,
             CycleRandomItem::Chord => self.chord = on,
             CycleRandomItem::Bpm => self.bpm = on,
+            CycleRandomItem::Swing => self.swing = on,
         }
     }
 
-    /// instance 群（音色・譜面）を引き直す項目がひとつでも ON か。
+    /// instance 群（音色・譜面・swing）を引き直す項目がひとつでも ON か。
     /// どれも OFF なら次サイクルの抽選そのものを省ける。
+    ///
+    /// swing も [`crate::GridInstance`] のフィールドなので、ここへ数えないと
+    /// 「SWING だけ ON」の周は抽選そのものが省かれて何も変わらない。
     pub fn instances_change(self) -> bool {
-        self.patch || self.note || self.drum || self.arp
+        self.patch || self.note || self.drum || self.arp || self.swing
     }
 
-    /// ON の項目だけ頭文字を並べた6文字。OFF は `-`。例: `P-D--B`。
+    /// ON の項目だけ頭文字を並べた7文字。OFF は `-`。例: `P-D--BS`。
     ///
     /// NOTE grid のタイトルとログに出す。overlay を開かなくても現在値が読める。
     pub fn compact_label(self) -> String {
@@ -277,7 +298,7 @@ impl GridSequencerScreen {
             KeyCode::Char(' ') | KeyCode::Enter => self.toggle_cycle_random(overlay.selected()),
             KeyCode::Char('A') => self.set_all_cycle_random(true),
             KeyCode::Char('N') => self.set_all_cycle_random(false),
-            KeyCode::Char(digit @ '1'..='6') => {
+            KeyCode::Char(digit @ '1'..='7') => {
                 let index = digit as usize - '1' as usize;
                 overlay.set_cursor(index);
                 self.toggle_cycle_random(CycleRandomItem::ALL[index]);

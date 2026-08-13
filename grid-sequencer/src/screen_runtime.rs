@@ -158,9 +158,13 @@ impl GridSequencerScreen {
 
 /// 送信単位へ切り分ける。
 ///
-/// 同じ `ahead` のメッセージ（＝同じステップ）は必ず1回の送信へまとめる。サーバー側は
-/// 受信時の live 位置を基準に offset を解釈するため、バッチを跨ぐと基準がずれるから。
-/// 1バッチの上限は共有メモリのスロット容量。
+/// 同じ `ahead` のメッセージは必ず1回の送信へまとめる。1バッチの上限は共有メモリの
+/// スロット容量。
+///
+/// 「同じ `ahead` ＝同じステップ」は swing（[`crate::state::swing`]）が入ってからは
+/// 成り立たない。同じステップでも跳ねた instance は後ろの group へ回る。発音位置は
+/// 絶対 `timeline_seconds` で決まり、サーバーは整列挿入する（play-server の
+/// `BlockScheduler::schedule`）ので、ステップが複数バッチへ割れても位置は変わらない。
 fn batches(scheduled: &[GridScheduledMessage], timeline_id: u64) -> Vec<Vec<TimelineMidiEvent>> {
     let mut batches: Vec<Vec<TimelineMidiEvent>> = Vec::new();
     let mut current: Vec<TimelineMidiEvent> = Vec::new();
@@ -181,7 +185,8 @@ fn batches(scheduled: &[GridScheduledMessage], timeline_id: u64) -> Vec<Vec<Time
     batches
 }
 
-/// 同じ `ahead` を持つ連続したメッセージ（＝同じステップぶん）へ切り分ける。
+/// 同じ `ahead` を持つ連続したメッセージへ切り分ける。`poll_steps` がステップ内を
+/// 時刻順へ並べてくるので、跳ねた instance と跳ねない instance が交互になることはない。
 fn group_by_ahead(scheduled: &[GridScheduledMessage]) -> Vec<&[GridScheduledMessage]> {
     let mut groups = Vec::new();
     let mut start = 0;

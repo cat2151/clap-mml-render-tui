@@ -247,6 +247,7 @@ fn session_state_round_trips_the_editable_grid() {
             // track 4 の drum 行は役割が抽選なので、保存して初めて起動をまたげる。
             drum: Some(crate::GridDrumRoleState::HiHat),
             voicing_rotation: 0,
+            swing: 63,
             lanes: vec![GridSequencerLaneState {
                 base_note: 67,
                 note_steps: (0..16)

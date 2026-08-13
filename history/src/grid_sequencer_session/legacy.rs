@@ -83,6 +83,8 @@ pub(super) fn migrate_legacy_rows(value: Option<&Value>) -> Vec<GridSequencerIns
                 // 旧形式には drum 行が無い。役割は復元後に track 数から当たる。
                 drum: None,
                 voicing_rotation: 0,
+                // 旧形式には swing が無い。跳ねなしから始める。
+                swing: super::SWING_MIN,
                 lanes: vec![GridSequencerLaneState {
                     base_note: row.base_note,
                     note_steps: row.note_steps,

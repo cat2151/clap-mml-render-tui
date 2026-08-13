@@ -10,8 +10,10 @@ use cmrt_tui_core::{
 use super::*;
 use crate::{GridPatchStatus, GridProgress, GRID_ROWS, STEP_INTERVAL};
 
-/// テストで使う端末の大きさ。
-const TEST_WIDTH: u16 = 90;
+/// テストで使う端末の大きさ。grid と右 pane の塊がちょうど収まる幅
+/// （[`super::layout`] の `GRID_WIDTH` + `PATTERN_LIST_WIDTH`）。情報欄の桁が増えると
+/// この閾値も動くので、直書きせず定数から引く。
+const TEST_WIDTH: u16 = super::layout::GRID_WIDTH + super::layout::PATTERN_LIST_WIDTH;
 const TEST_HEIGHT: u16 = 24;
 /// 枠線(1行) + ヘッダ(1行) のぶんだけ下にある、grid の1行目の行。
 const FIRST_ROW_Y: usize = 2;
@@ -372,3 +374,4 @@ mod layout;
 mod patch_selector;
 mod pattern_list;
 mod status_line;
+mod swing;

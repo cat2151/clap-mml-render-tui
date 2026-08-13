@@ -98,16 +98,17 @@ fn keybind_lines() -> Vec<Line<'static>> {
 
 /// 右 pane。キーを見ても分からない挙動だけに絞る。
 ///
-/// 90x24 の端末でも枠内へ収める前提で、幅48セル・18行に切り詰めてある。
+/// 24行の端末でも枠内へ収める前提で、幅48セル・19行に切り詰めてある。
 /// 足すときは同じだけ削ること（溢れると右 pane が折り返して下が切れる）。
 fn feature_lines(track_count: usize) -> Vec<Line<'static>> {
     // メモリ行は先頭に置く。端末が低いと overlay_rect が下を切り落とすため。
     let mut lines = memory::overlay_lines();
     lines.extend(
         [
-            format!("{track_count}行 x 16step。Ctrl+B でBPM。80-160 と"),
-            "  入れるとコード進行1周ごとに範囲内で変わります".to_string(),
+            format!("{track_count}行x16step。Ctrl+B:BPM(80-160 で1周ごと範囲)"),
             "NOTE欄  # = Attack   - = Tie   . = Rest".to_string(),
+            "SW欄  shuffle量%。50=等分 66=標準。16分の裏拍に".to_string(),
+            "  note on がある行だけ跳ねます(無い行は -)".to_string(),
             "lane色  暗=未構築  灰=instanceのみ  通常=ロード済".to_string(),
             "chord mode(c) 行1=和音 行2=bass 行3=4 voice。".to_string(),
             "  転回とoctaveは全自動(auto voicing)で、top note".to_string(),
@@ -118,9 +119,9 @@ fn feature_lines(track_count: usize) -> Vec<Line<'static>> {
             "  bass行 Whole/8th/8th+Oct/#-##/#-##+Oct/".to_string(),
             "    ####+Oct  +Oct=octave往復 Whole=即鳴り".to_string(),
             "  drum行 kick/snare/hat/perc の刻み(行4以降)".to_string(),
-            "1周ごとの random(a) 何を引き直すか6項目で".to_string(),
-            "  選択。PATCH/NOTE/DRUM/ARP/CHORD/BPM。手で".to_string(),
-            "  触った項目だけが自動で OFF になります。".to_string(),
+            "1周ごとの random(a) 何を引き直すか7項目で".to_string(),
+            "  選択。PATCH/NOTE/DRUM/ARP/CHORD/BPM/SWING。".to_string(),
+            "  手で触った項目だけが自動で OFF になります。".to_string(),
             "シングルバッファリング(b) 1周鳴らしきる→音色".to_string(),
             "  ロード→先頭から再開。ロード中は無音になる代わ".to_string(),
             "  りに演奏のブツ切れが無くなります(自動切替あり)".to_string(),

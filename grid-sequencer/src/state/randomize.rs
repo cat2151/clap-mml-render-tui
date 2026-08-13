@@ -10,7 +10,8 @@ use crate::CycleRandom;
 
 use super::{
     arpeggio::write_arpeggio, bass_line::write_bass_line, drum, ChordPlayback, GridInstance,
-    GridScheduledMessage, GridState, NotePattern, ARPEGGIO_ROW, BASS_ROW, GRID_STEPS,
+    GridScheduledMessage, GridState, NotePattern, ARPEGGIO_ROW, BASS_ROW, GRID_STEPS, SWING_MAX,
+    SWING_MIN,
 };
 
 /// ランダム生成に使う note number の範囲（C2〜C6）。
@@ -62,6 +63,12 @@ pub fn randomize_instance_slice(
             if let Some(patch_index) = random_index(patches.len()) {
                 instance.patch = Some(patches[patch_index].0.clone());
             }
+        }
+        // swing は譜面の役割分けと直交する。drum の hi-hat こそ跳ねてほしい行なので、
+        // 下の `continue` より手前で全行へ配る。実際に跳ねるかは譜面が決める
+        // （[`super::swing`]）。
+        if policy.swing {
+            instance.swing = rng.random_range(SWING_MIN..=SWING_MAX);
         }
         // drum 行は音高も譜面も専用（[`super::drum`]）。音高を引き直すと打楽器の音色
         // そのものが変わり、汎用の譜面を当てるとリズムでなくなる。

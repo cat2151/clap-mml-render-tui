@@ -2,7 +2,7 @@
 
 use cmrt_rhythm::DrumRole;
 
-use super::{NotePattern, DEFAULT_NOTE};
+use super::{NotePattern, DEFAULT_NOTE, SWING_MIN};
 
 /// 初期検証で chord 構成音へ割り当てる voice 数。
 pub const CHORD_VOICE_LANES: usize = 4;
@@ -72,6 +72,12 @@ pub struct GridInstance {
     pub drum: Option<DrumRole>,
     /// ChordVoices4の累積転回数。正は上方向、負は下方向へNOTE wheelで進む。
     pub voicing_rotation: i8,
+    /// shuffle クオンタイズの量（百分率）。[`SWING_MIN`]〜[`SWING_MAX`]。
+    ///
+    /// 実際に効くかは譜面しだい（[`super::swing`]）。ここは「引いた値」であって
+    /// 「効いている値」ではない。整数なのは [`GridInstance`] が `Eq` を要求するため
+    /// （undo の差分比較が導出 `PartialEq` に乗っている）。
+    pub swing: u8,
     pub lanes: Vec<GridLane>,
 }
 
@@ -83,6 +89,7 @@ impl GridInstance {
             lane_mode,
             drum: None,
             voicing_rotation: 0,
+            swing: SWING_MIN,
             lanes: vec![GridLane::default(); lane_mode.lane_count()],
         }
     }

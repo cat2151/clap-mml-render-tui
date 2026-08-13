@@ -32,6 +32,7 @@ fn normalization_fills_and_truncates_lanes_to_the_mode_capacity() {
         lane_mode: GridLaneMode::ChordVoices4,
         drum: None,
         voicing_rotation: 0,
+        swing: SWING_MIN,
         lanes: vec![GridLane::default()],
     };
     four.normalize();
