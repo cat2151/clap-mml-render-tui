@@ -110,18 +110,12 @@ pub struct GridSequencerScreen {
     /// instance ごとの、直近に適用したアルペジオ音型。wheel の種別送りカーソル。
     /// 譜面そのものは `state` 側に入るので、セッションへは保存しない。
     pub(crate) arp_patterns: HashMap<usize, ArpPattern>,
-    /// 直近に適用したアルペジオ音型。NOTE grid のタイトルに出すだけ。
-    pub(crate) last_arp: Option<ArpPattern>,
     /// 直近に適用したベースラインの型。wheel の種別送りカーソル。bass 行は1本しか
     /// 無いので instance ごとには持たない。譜面そのものは `state` 側に入る。
     pub(crate) bass_pattern: Option<BassPattern>,
-    /// 直近に適用したベースラインの型。NOTE grid のタイトルに出すだけ。
-    pub(crate) last_bass: Option<BassPattern>,
     /// instance ごとの、直近に適用した drum のリズム型。wheel の種別送りカーソル。
     /// 譜面そのものは `state` 側に入るので、セッションへは保存しない。
     pub(crate) drum_patterns: HashMap<usize, DrumPattern>,
-    /// 直近に適用した drum のリズム型。NOTE grid のタイトルと右 pane に出すだけ。
-    pub(crate) last_drum: Option<DrumPattern>,
     /// instance ごとの、PATCH 欄の wheel が辿る patch list。詳細は [`crate::patch_bag`]。
     /// 適用した patch は `state` 側に入るので、セッションへは保存しない。
     pub(crate) patch_bags: HashMap<usize, PatchBag>,
@@ -212,11 +206,8 @@ impl GridSequencerScreen {
             overload_applied: false,
             cycle_end_at: None,
             arp_patterns: HashMap::new(),
-            last_arp: None,
             bass_pattern: None,
-            last_bass: None,
             drum_patterns: HashMap::new(),
-            last_drum: None,
             patch_bags: HashMap::new(),
         }
     }
@@ -241,7 +232,7 @@ impl GridSequencerScreen {
 
     /// chord progression またはエラーの1行を描画するか。input layout も同じ判定を使う。
     pub(crate) fn chord_line_visible(&self) -> bool {
-        self.chord_error.is_some() || self.state.chord().is_some()
+        self.chord_error.is_some() || self.state.display_chord().is_some()
     }
 
     /// chord mode が on か。セッションへ保存する値。
@@ -252,15 +243,10 @@ impl GridSequencerScreen {
     /// 抽選で引いた型を、表示用のカーソル（Phrase pane と NOTE grid のタイトル）へ
     /// 取り込む。
     ///
-    /// 1周ごとの抽選は進行の最終小節で走るので、表示は実際に鳴り出すより1小節ぶん
-    /// 先行する。カーソルは常に「次に鳴る型」を指す。
+    /// 手動の引き直しで得た型を、現在の表示と操作カーソルへ即時反映する。
+    /// 1周ごとの自動抽選はここを通さず、`GridState` が実発音の締切まで表示を待たせる。
     pub(crate) fn absorb_drawn_phrases(&mut self, drawn: DrawnPhrases) {
-        if let Some(arp) = drawn.arp {
-            self.last_arp = Some(arp);
-        }
-        if let Some(bass) = drawn.bass {
-            self.last_bass = Some(bass);
-        }
+        self.state.display_drawn_now(drawn);
         for drum in drawn.drums() {
             if let Some(instance) = self
                 .state
@@ -270,7 +256,6 @@ impl GridSequencerScreen {
             {
                 self.drum_patterns.insert(instance, drum);
             }
-            self.last_drum = Some(drum);
         }
     }
 

@@ -30,7 +30,7 @@ mod value_grid;
 /// grid は中央寄せなので左端が端末幅で動く。片方だけ別の式で組むと、見えている
 /// セルと当たるセルがずれる。
 pub(crate) fn layout_for(screen: &GridSequencerScreen, area: Rect) -> layout::GridSequencerLayout {
-    let visible_rows = screen.state.visible_note_rows();
+    let visible_rows = screen.state.display_visible_note_rows();
     layout::GridSequencerLayout::new(
         area,
         visible_rows.len(),
@@ -102,7 +102,7 @@ fn draw_grids(
     let velocity_display = screen.state.visible_velocity_display();
     let velocity_instances = screen
         .state
-        .visible_note_rows()
+        .display_visible_note_rows()
         .into_iter()
         .map(|row| row.address.instance)
         .collect::<Vec<_>>();
@@ -187,7 +187,7 @@ fn status_line(
             lead_max_ms,
             timing.process_load_p95,
             screen.track_count(),
-            screen.state.visible_lane_count(),
+            screen.state.display_visible_note_rows().len(),
             screen.bpm(),
             screen.bpm_mode().label(),
             screen.state.step_index() + 1,
@@ -208,7 +208,7 @@ fn status_line(
             lead_max_ms,
             timing.process_load_p95,
             screen.track_count(),
-            screen.state.visible_lane_count(),
+            screen.state.display_visible_note_rows().len(),
             screen.bpm(),
             if screen.bpm_mode().manual().is_some() { "M" } else { "A" },
             screen.state.step_index() + 1,

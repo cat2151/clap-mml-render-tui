@@ -5,7 +5,10 @@
 
 use std::time::{Duration, Instant};
 
-use super::{note_off, swing_offset_seconds, GridScheduledMessage, GridState, GRID_STEPS};
+use super::{
+    note_off, presentation::PendingDisplay, swing_offset_seconds, GridScheduledMessage, GridState,
+    GRID_STEPS,
+};
 
 impl GridState {
     /// `now + lookahead` までに鳴るステップをまとめて組み立て、送るべき MIDI メッセージを
@@ -40,8 +43,11 @@ impl GridState {
                 messages.extend(self.attack_current_step());
             }
             scheduled.extend(self.apply_swing(messages, ahead, timeline_seconds, stopping));
-            self.pending_display
-                .push_back((deadline, self.schedule_index));
+            self.pending_display.push_back(PendingDisplay {
+                deadline,
+                step: self.schedule_index,
+                presentation: self.capture_presentation(),
+            });
             self.last_scheduled = Some(deadline);
             self.last_scheduled_timeline_seconds = Some(timeline_seconds);
             if stopping {
@@ -134,6 +140,7 @@ impl GridState {
         self.started = false;
         self.reset_lanes_for_start();
         self.pending_display.clear();
+        self.display = None;
         self.last_scheduled = None;
         self.last_scheduled_timeline_seconds = None;
         self.reset_cycle_stop();
@@ -153,13 +160,14 @@ impl GridState {
         while self
             .pending_display
             .front()
-            .is_some_and(|(deadline, _)| *deadline <= now)
+            .is_some_and(|pending| pending.deadline <= now)
         {
-            let (_, step) = self
+            let pending = self
                 .pending_display
                 .pop_front()
                 .expect("front was just observed");
-            self.step_index = step;
+            self.step_index = pending.step;
+            self.display = Some(pending.presentation);
         }
         self.advance_lane_displays(now);
     }

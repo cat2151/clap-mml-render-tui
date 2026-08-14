@@ -11,7 +11,7 @@
 
 use cmrt_rhythm::{DrumPattern, DrumRole};
 
-use crate::{log_line, GridSequencerScreen, ListDirection};
+use crate::{log_line, DrawnPhrases, GridSequencerScreen, ListDirection};
 
 impl GridSequencerScreen {
     /// drum 行の step セル上の wheel。型を1つ送ってリズムを引き直す。
@@ -23,7 +23,9 @@ impl GridSequencerScreen {
     ) {
         let pattern = self.advance_drum_pattern(instance, role, direction);
         // 引いた結果がたまたま同じ譜面でも、カーソルと表示は送った型に合わせる。
-        self.last_drum = Some(pattern);
+        let mut drawn = DrawnPhrases::default();
+        drawn.record_drum(pattern);
+        self.state.display_drawn_now(drawn);
         let snapshot = self.capture_undo();
         if self.state.apply_drum_pattern(instance, pattern) {
             self.begin_manual_edit(crate::CycleRandomItem::Drum);
@@ -64,20 +66,17 @@ impl GridSequencerScreen {
     /// instance 番号の意味が変わるとき（`t` キーの track 数切替）にカーソルを捨てる。
     pub(crate) fn reset_drum_patterns(&mut self) {
         self.drum_patterns.clear();
-        self.last_drum = None;
+        self.state.clear_displayed_drums();
     }
 
     /// 直近に適用したリズム型。NOTE grid のタイトルと右 pane に出す。
     pub fn last_drum(&self) -> Option<DrumPattern> {
-        self.last_drum
+        self.state.displayed_drawn_phrases().last_drum()
     }
 
     /// roleごとの直近の抽選・手動適用結果。右paneの各sectionの印に使う。
     pub(crate) fn last_drum_for(&self, role: DrumRole) -> Option<DrumPattern> {
-        self.drum_patterns
-            .values()
-            .copied()
-            .find(|pattern| pattern.role() == role)
+        self.state.displayed_drawn_phrases().drum_for(role)
     }
 }
 

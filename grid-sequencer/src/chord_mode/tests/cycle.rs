@@ -36,24 +36,25 @@ fn staging_cycles_through_every_drum_bass_and_arp_combination_once() {
         * cmrt_arpeggiator::BassPattern::ALL.len()
         * cmrt_arpeggiator::ArpPattern::ALL.len();
     let displayed = |screen: &GridSequencerScreen| {
+        let phrases = screen.state.displayed_drawn_phrases();
         (
             cmrt_rhythm::DrumRole::ALL.map(|role| {
-                screen
-                    .last_drum_for(role)
+                phrases
+                    .drum_for(role)
                     .expect("every drum role is drawn together")
             }),
-            screen.last_bass().expect("bass is drawn with ARP"),
-            screen.last_arp().expect("arpeggio is drawn with ARP"),
+            phrases.bass.expect("bass is drawn with ARP"),
+            phrases.arp.expect("arpeggio is drawn with ARP"),
         )
     };
     let mut drawn = vec![displayed(&screen)];
 
     for _ in 1..expected_count {
         assert!(screen.stage_next_cycle(now, &ctx));
+        assert!(screen.state.commit_pending_cycle_in_place());
         let combination = displayed(&screen);
         assert!(!drawn.contains(&combination), "{combination:?}");
         drawn.push(combination);
-        assert!(screen.state.commit_pending_cycle_in_place());
     }
 
     assert_eq!(drawn.len(), expected_count);

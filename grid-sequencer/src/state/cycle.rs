@@ -12,13 +12,14 @@ use std::time::Instant;
 
 use cmrt_realtime_play::BANK_COUNT;
 
-use super::{ChordPlayback, GridInstance, GridState};
+use super::{ChordPlayback, DrawnPhrases, GridInstance, GridState};
 
 /// 次のサイクルへ差し替える予定の grid と進行。先読みロードが終わるまで待たせる。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct PendingCycle {
     pub(super) instances: Vec<GridInstance>,
     pub(super) chord: ChordPlayback,
+    pub(super) drawn: DrawnPhrases,
     /// true なら待機 bank へ先読み済みで、commit 時に bank を切り替える。
     /// patch を変えない周は false のまま現在 bank 上で取り込む。
     switch_bank: bool,
@@ -76,6 +77,15 @@ impl GridState {
     /// この時点ではまだ鳴らさない。`mark_pending_ready()` で先読みロードの完了を
     /// 伝えたあと、進行を1周した小節境界で初めて差し替わる。
     pub fn stage_next_cycle(&mut self, instances: Vec<GridInstance>, chord: ChordPlayback) {
+        self.stage_next_cycle_with_drawn(instances, chord, DrawnPhrases::default());
+    }
+
+    pub(crate) fn stage_next_cycle_with_drawn(
+        &mut self,
+        instances: Vec<GridInstance>,
+        chord: ChordPlayback,
+        drawn: DrawnPhrases,
+    ) {
         debug_assert_eq!(
             instances.len(),
             self.instances.len(),
@@ -84,6 +94,7 @@ impl GridState {
         self.pending = Some(PendingCycle {
             instances,
             chord,
+            drawn: self.drawn.merged(drawn),
             switch_bank: true,
         });
         self.pending_ready = false;
@@ -98,6 +109,15 @@ impl GridState {
         instances: Vec<GridInstance>,
         chord: ChordPlayback,
     ) {
+        self.stage_next_cycle_in_place_with_drawn(instances, chord, DrawnPhrases::default());
+    }
+
+    pub(crate) fn stage_next_cycle_in_place_with_drawn(
+        &mut self,
+        instances: Vec<GridInstance>,
+        chord: ChordPlayback,
+        drawn: DrawnPhrases,
+    ) {
         debug_assert_eq!(
             instances.len(),
             self.instances.len(),
@@ -106,6 +126,7 @@ impl GridState {
         self.pending = Some(PendingCycle {
             instances,
             chord,
+            drawn: self.drawn.merged(drawn),
             switch_bank: false,
         });
         self.pending_ready = true;
@@ -187,6 +208,7 @@ impl GridState {
         };
         self.instances = pending.instances;
         self.chord = Some(pending.chord);
+        self.drawn = pending.drawn;
         self.pending_ready = false;
         self.refresh_lane_display_patterns();
         true
@@ -206,6 +228,7 @@ impl GridState {
         };
         self.instances = pending.instances;
         self.chord = Some(pending.chord);
+        self.drawn = pending.drawn;
         if pending.switch_bank {
             self.bank = (self.bank + 1) % BANK_COUNT;
         }

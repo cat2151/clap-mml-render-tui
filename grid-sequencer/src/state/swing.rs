@@ -8,7 +8,7 @@
 //! chord mode の和音行は step 0 で1発鳴らして1meas伸ばすだけなので、この規則だけで
 //! 自動的に対象外になる。行の種類を見る専用の分岐は要らない。
 
-use super::{GridState, GRID_STEPS, STEPS_PER_BEAT};
+use super::{GridState, LaneAddress, CHORD_ROW, GRID_STEPS, STEPS_PER_BEAT};
 
 /// 跳ねなし（等分）。
 pub const SWING_MIN: u8 = 50;
@@ -65,6 +65,29 @@ impl GridState {
     /// [`GridState::effective_swings`] の1件版。1行だけ知りたいとき用。
     pub fn effective_swing(&self, instance: usize) -> Option<u8> {
         self.effective_swings().get(instance).copied().flatten()
+    }
+
+    /// 描画用スナップショットで実際に効いている swing。先読み側の次 loop を参照して
+    /// NOTE grid のセルより先に値だけ切り替わらないよう、発音用とは入口を分ける。
+    pub(crate) fn display_effective_swings(&self) -> Vec<Option<u8>> {
+        self.display_instances()
+            .iter()
+            .enumerate()
+            .map(|(instance_index, instance)| {
+                if self.display_chord().is_some() && instance_index == CHORD_ROW {
+                    return None;
+                }
+                let attacks = std::array::from_fn(|step| {
+                    instance.lanes.iter().enumerate().any(|(lane, item)| {
+                        item.pattern.is_attack(step)
+                            && self
+                                .display_resolved_note(LaneAddress::new(instance_index, lane))
+                                .is_some()
+                    })
+                });
+                has_offbeat_attack(&attacks).then(|| clamp_swing(instance.swing))
+            })
+            .collect()
     }
 }
 

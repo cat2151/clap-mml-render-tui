@@ -10,7 +10,7 @@
 
 use cmrt_arpeggiator::{generate_arpeggio, ArpPattern};
 
-use crate::{log_line, GridSequencerScreen, ListDirection, GRID_STEPS};
+use crate::{log_line, DrawnPhrases, GridSequencerScreen, ListDirection, GRID_STEPS};
 
 impl GridSequencerScreen {
     /// step セル上の wheel。音型を1つ送ってアルペジオを引き直す。
@@ -21,7 +21,8 @@ impl GridSequencerScreen {
         }
         let pattern = self.advance_arp_pattern(instance, direction);
         // 引いた結果がたまたま同じ譜面でも、カーソルと表示は送った音型に合わせる。
-        self.last_arp = Some(pattern);
+        self.state
+            .display_drawn_now(DrawnPhrases::with_arp(pattern));
         let notes = generate_arpeggio(pattern, voice_count, GRID_STEPS, &mut rand::rng());
         let snapshot = self.capture_undo();
         if !self.state.apply_arpeggio(instance, &notes) {
@@ -53,12 +54,12 @@ impl GridSequencerScreen {
     /// instance 番号の意味が変わるとき（`t` キーの track 数切替）にカーソルを捨てる。
     pub(crate) fn reset_arp_patterns(&mut self) {
         self.arp_patterns.clear();
-        self.last_arp = None;
+        self.state.clear_displayed_arp();
     }
 
     /// 直近に適用した音型。NOTE grid のタイトルへ出す。
     pub fn last_arp(&self) -> Option<ArpPattern> {
-        self.last_arp
+        self.state.displayed_drawn_phrases().arp
     }
 }
 

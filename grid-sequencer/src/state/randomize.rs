@@ -33,19 +33,69 @@ pub struct DrawnPhrases {
     pub arp: Option<ArpPattern>,
     pub bass: Option<BassPattern>,
     drums: [Option<DrumPattern>; DrumRole::ALL.len()],
+    last_drum: Option<DrumPattern>,
 }
 
 impl DrawnPhrases {
+    pub(crate) fn with_arp(pattern: ArpPattern) -> Self {
+        Self {
+            arp: Some(pattern),
+            ..Self::default()
+        }
+    }
+
+    pub(crate) fn with_bass(pattern: BassPattern) -> Self {
+        Self {
+            bass: Some(pattern),
+            ..Self::default()
+        }
+    }
+
     pub(crate) fn record_drum(&mut self, pattern: DrumPattern) {
         let index = DrumRole::ALL
             .iter()
             .position(|role| *role == pattern.role())
             .expect("DrumRole::ALL contains every role");
         self.drums[index] = Some(pattern);
+        self.last_drum = Some(pattern);
     }
 
     pub(crate) fn drums(self) -> impl Iterator<Item = DrumPattern> {
         self.drums.into_iter().flatten()
+    }
+
+    pub(crate) fn drum_for(self, role: DrumRole) -> Option<DrumPattern> {
+        let index = DrumRole::ALL
+            .iter()
+            .position(|candidate| *candidate == role)?;
+        self.drums[index]
+    }
+
+    pub(crate) fn last_drum(self) -> Option<DrumPattern> {
+        self.last_drum
+    }
+
+    pub(crate) fn merged(mut self, update: Self) -> Self {
+        if update.arp.is_some() {
+            self.arp = update.arp;
+        }
+        if update.bass.is_some() {
+            self.bass = update.bass;
+        }
+        for (current, next) in self.drums.iter_mut().zip(update.drums) {
+            if next.is_some() {
+                *current = next;
+            }
+        }
+        if update.last_drum.is_some() {
+            self.last_drum = update.last_drum;
+        }
+        self
+    }
+
+    pub(crate) fn clear_drums(&mut self) {
+        self.drums.fill(None);
+        self.last_drum = None;
     }
 }
 

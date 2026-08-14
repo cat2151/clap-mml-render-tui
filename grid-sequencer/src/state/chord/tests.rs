@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use super::*;
 use crate::state::{step_offset, velocity::normalize_velocity, GridScheduledMessage, GRID_STEPS};
-use crate::{NotePattern, NoteStep};
+use crate::{DrawnPhrases, NotePattern, NoteStep};
 
 mod bass;
 mod voicing;
@@ -132,6 +132,44 @@ fn entering_the_last_bar_raises_the_preload_signal_once() {
     assert_eq!(state.chord().unwrap().index(), 1);
 }
 
+/// MIDI は先読みで次の小節まで組み立てても、コード名と解決音はその小節が実際に
+/// 鳴り始めるまで切り替えない。再生ヘッドだけ遅らせると、残り数stepで次のコードが
+/// 見えてしまうため、表示内容も同じ締切へ揃える。
+#[test]
+fn lookahead_keeps_the_displayed_chord_until_its_audio_deadline() {
+    let now = Instant::now();
+    let mut state = chord_only_state();
+    state.set_chord(Some(c_major_then_f_major()), now);
+    state.start(now);
+
+    state.poll_steps(now, at_step(now, GRID_STEPS as u64).duration_since(now));
+
+    assert_eq!(
+        state.chord().unwrap().index(),
+        1,
+        "MIDI生成側は次のコードへ進む"
+    );
+    assert_eq!(
+        state.display_chord().unwrap().index(),
+        0,
+        "発音前のコードを先行表示しない"
+    );
+    assert_eq!(
+        state.display_resolved_note(LaneAddress::new(ARPEGGIO_ROW, 0)),
+        Some(60),
+        "表示音高も現在聞こえるC chordを保つ"
+    );
+
+    state.poll_steps(at_step(now, GRID_STEPS as u64), Duration::ZERO);
+
+    assert_eq!(state.display_chord().unwrap().index(), 1);
+    assert_eq!(
+        state.display_resolved_note(LaneAddress::new(ARPEGGIO_ROW, 0)),
+        Some(65),
+        "締切でF chordへ切り替わる"
+    );
+}
+
 /// ダブルバッファの肝。1周し終えた小節の頭で、待機 bank の grid と進行へ丸ごと
 /// 差し替わり、**その場で**新しい和音が鳴る（旧実装のような1小節の無音を挟まない）。
 #[test]
@@ -173,6 +211,53 @@ fn completing_the_progression_swaps_the_ready_bank_and_keeps_playing() {
     assert!(attacks
         .iter()
         .all(|item| item.instance_id == state.instance_id(CHORD_ROW)));
+}
+
+#[test]
+fn lookahead_keeps_the_old_grid_bank_and_phrase_until_the_cycle_deadline() {
+    let now = Instant::now();
+    let mut state = chord_only_state();
+    state.set_chord(Some(c_major_then_f_major()), now);
+    state.instances[2].patch = Some("Old/Lead.fxp".to_string());
+    state.display_drawn_now(DrawnPhrases::with_arp(cmrt_arpeggiator::ArpPattern::Up));
+    state.start(now);
+
+    let mut next = state.instances().to_vec();
+    next[2].patch = Some("Next/Lead.fxp".to_string());
+    state.stage_next_cycle_with_drawn(
+        next,
+        g_major(),
+        DrawnPhrases::with_arp(cmrt_arpeggiator::ArpPattern::Down),
+    );
+    state.mark_pending_ready();
+    let cycle_steps = 2 * GRID_STEPS as u64;
+
+    state.poll_steps(now, at_step(now, cycle_steps).duration_since(now));
+
+    assert_eq!(state.bank(), 1, "MIDI生成側は待機bankへ移る");
+    assert_eq!(state.instances()[2].patch.as_deref(), Some("Next/Lead.fxp"));
+    assert_eq!(state.display_instance_id(2), 2, "表示は旧bankのinstance");
+    assert_eq!(
+        state.display_instances()[2].patch.as_deref(),
+        Some("Old/Lead.fxp")
+    );
+    assert_eq!(
+        state.displayed_drawn_phrases().arp,
+        Some(cmrt_arpeggiator::ArpPattern::Up)
+    );
+
+    state.poll_steps(at_step(now, cycle_steps), Duration::ZERO);
+
+    assert_eq!(state.display_instance_id(2), 5, "締切で新bankへ移る");
+    assert_eq!(
+        state.display_instances()[2].patch.as_deref(),
+        Some("Next/Lead.fxp")
+    );
+    assert_eq!(state.display_chord().unwrap().degrees(), "V");
+    assert_eq!(
+        state.displayed_drawn_phrases().arp,
+        Some(cmrt_arpeggiator::ArpPattern::Down)
+    );
 }
 
 /// 先読みが間に合わなかったら差し替えを見送り、今の grid のまま次の周へ入る。

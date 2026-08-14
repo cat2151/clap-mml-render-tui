@@ -11,7 +11,7 @@ use std::time::Instant;
 
 use cmrt_chord::ChordVoicing;
 
-use super::{GridLaneMode, GridScheduledMessage, GridState, LaneAddress};
+use super::{GridInstance, GridLaneMode, GridScheduledMessage, GridState, LaneAddress};
 
 /// 和音を鳴らす行。UI の行1 = realtime play server の instance 0。
 pub const CHORD_ROW: usize = 0;
@@ -223,33 +223,41 @@ impl GridState {
 
     /// 保存値ではなく現在の mode / chord から、その lane が次に鳴らす音を導出する。
     pub fn resolved_note(&self, address: LaneAddress) -> Option<u8> {
-        let instance = self.instances.get(address.instance)?;
-        let lane = instance.lanes.get(address.lane)?;
-        let Some(chord) = self.chord.as_ref() else {
-            return (address.lane == 0).then_some(lane.base_note);
-        };
-        if address.instance == CHORD_ROW {
-            // chord instance は個別laneではなく summary owner が全構成音を鳴らす。
-            return None;
+        resolved_note_from(&self.instances, self.chord.as_ref(), address)
+    }
+}
+
+pub(super) fn resolved_note_from(
+    instances: &[GridInstance],
+    chord: Option<&ChordPlayback>,
+    address: LaneAddress,
+) -> Option<u8> {
+    let instance = instances.get(address.instance)?;
+    let lane = instance.lanes.get(address.lane)?;
+    let Some(chord) = chord else {
+        return (address.lane == 0).then_some(lane.base_note);
+    };
+    if address.instance == CHORD_ROW {
+        // chord instance は個別laneではなく summary owner が全構成音を鳴らす。
+        return None;
+    }
+    if address.instance == BASS_ROW {
+        // bass 行は lane の pattern をそのまま使い、音高だけをコードの bass 音へ固定する。
+        // lane 0 = bass 音、lane 1 = その1オクターブ上。保存値の base_note は見ない。
+        return bass_octave_note(chord.current_bass(), address.lane);
+    }
+    match instance.lane_mode {
+        GridLaneMode::Single => Some(snap_to_chord(lane.base_note, &chord.pitch_classes())),
+        // BassOctave2 は BASS_ROW 専用で、その分岐は上で返している。ここへ来るのは
+        // lane_mode だけが残った壊れた状態なので、音を重ねないよう lane 0 に絞る。
+        GridLaneMode::BassOctave2 => {
+            (address.lane == 0).then(|| snap_to_chord(lane.base_note, &chord.pitch_classes()))
         }
-        if address.instance == BASS_ROW {
-            // bass 行は lane の pattern をそのまま使い、音高だけをコードの bass 音へ固定する。
-            // lane 0 = bass 音、lane 1 = その1オクターブ上。保存値の base_note は見ない。
-            return bass_octave_note(chord.current_bass(), address.lane);
+        GridLaneMode::ChordVoices4 => {
+            rotated_chord_voice(chord.current(), address.lane, instance.voicing_rotation)
         }
-        match instance.lane_mode {
-            GridLaneMode::Single => Some(snap_to_chord(lane.base_note, &chord.pitch_classes())),
-            // BassOctave2 は BASS_ROW 専用で、その分岐は上で返している。ここへ来るのは
-            // lane_mode だけが残った壊れた状態なので、音を重ねないよう lane 0 に絞る。
-            GridLaneMode::BassOctave2 => {
-                (address.lane == 0).then(|| snap_to_chord(lane.base_note, &chord.pitch_classes()))
-            }
-            GridLaneMode::ChordVoices4 => {
-                rotated_chord_voice(chord.current(), address.lane, instance.voicing_rotation)
-            }
-            // drum 行はコードへ寄せない。寄せると kick の音高が小節ごとに動いてしまう。
-            GridLaneMode::Drum => (address.lane == 0).then_some(lane.base_note),
-        }
+        // drum 行はコードへ寄せない。寄せると kick の音高が小節ごとに動いてしまう。
+        GridLaneMode::Drum => (address.lane == 0).then_some(lane.base_note),
     }
 }
 

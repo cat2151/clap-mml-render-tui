@@ -45,7 +45,7 @@ impl Section {
 /// 左にarp+bass、右にdrum全roleの列を組み立てる。片方が無ければ1列で使う。
 fn section_columns(screen: &GridSequencerScreen) -> Vec<Vec<Section>> {
     let mut phrase_sections = Vec::new();
-    if screen.state.chord().is_some() {
+    if screen.state.display_chord().is_some() {
         phrase_sections.push(Section {
             name: "arp".to_string(),
             labels: ArpPattern::ALL

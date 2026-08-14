@@ -143,6 +143,39 @@ fn the_progression_is_drawn_above_the_grid() {
 }
 
 #[test]
+fn lookahead_does_not_draw_the_next_chord_before_its_deadline() {
+    let now = Instant::now();
+    let mut screen = chord_screen();
+    screen.state.start(now);
+
+    screen
+        .state
+        .poll_steps(now, crate::step_offset(crate::GRID_STEPS as u64));
+
+    assert_eq!(screen.state.chord().unwrap().index(), 1);
+    let before = render(&screen);
+    assert!(
+        contains_ignoring_spaces(&before, "chord Key:C# I-IV-V-I [1/4]"),
+        "{before}"
+    );
+    let first_row = before.lines().nth(CHORD_FIRST_ROW_Y).unwrap();
+    assert!(first_row.contains("  61 "), "{first_row}");
+
+    screen.state.poll_steps(
+        now + crate::step_offset(crate::GRID_STEPS as u64),
+        std::time::Duration::ZERO,
+    );
+
+    let at_deadline = render(&screen);
+    assert!(
+        contains_ignoring_spaces(&at_deadline, "chord Key:C# I-IV-V-I [2/4]"),
+        "{at_deadline}"
+    );
+    let first_row = at_deadline.lines().nth(CHORD_FIRST_ROW_Y).unwrap();
+    assert!(first_row.contains("  66 "), "{first_row}");
+}
+
+#[test]
 fn the_reason_the_chord_mode_could_not_start_is_drawn_above_the_grid() {
     let mut screen = GridSequencerScreen::new(None);
     screen.chord_error = Some("poly patch が見つかりません".to_string());

@@ -43,8 +43,14 @@ impl GridState {
     }
 
     pub fn visible_note_rows(&self) -> Vec<VisibleNoteRow> {
-        let chord_on = self.chord.is_some();
-        self.instances
+        Self::visible_note_rows_from(&self.instances, self.chord.is_some())
+    }
+
+    pub(super) fn visible_note_rows_from(
+        instances: &[GridInstance],
+        chord_on: bool,
+    ) -> Vec<VisibleNoteRow> {
+        instances
             .iter()
             .enumerate()
             .flat_map(|(instance_index, instance)| {

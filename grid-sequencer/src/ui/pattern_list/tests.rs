@@ -154,8 +154,12 @@ fn nothing_is_marked_until_the_wheel_has_been_turned() {
 #[test]
 fn the_marker_follows_the_pattern_the_wheel_last_applied() {
     let mut screen = chorded_screen();
-    screen.last_arp = Some(ArpPattern::UpDown);
-    screen.last_bass = Some(BassPattern::EighthOctave);
+    screen
+        .state
+        .display_drawn_now(crate::DrawnPhrases::with_arp(ArpPattern::UpDown));
+    screen
+        .state
+        .display_drawn_now(crate::DrawnPhrases::with_bass(BassPattern::EighthOctave));
 
     let marked = texts(&screen, TALL)
         .into_iter()
@@ -168,10 +172,14 @@ fn the_marker_follows_the_pattern_the_wheel_last_applied() {
 #[test]
 fn turning_the_wheel_down_moves_the_marker_down_the_list() {
     let mut screen = chorded_screen();
-    screen.last_arp = Some(ArpPattern::default());
+    screen
+        .state
+        .display_drawn_now(crate::DrawnPhrases::with_arp(ArpPattern::default()));
     let first = marked_index(&screen);
 
-    screen.last_arp = Some(ArpPattern::default().next());
+    screen
+        .state
+        .display_drawn_now(crate::DrawnPhrases::with_arp(ArpPattern::default().next()));
 
     assert_eq!(marked_index(&screen), first + 1);
 }
@@ -265,6 +273,8 @@ fn the_marker_tracks_a_real_wheel_turn() {
     screen.cycle_arpeggio(0, ListDirection::Next);
     assert_eq!(screen.last_arp(), None, "voice が足りない行では動かない");
 
-    screen.last_arp = Some(ArpPattern::default());
+    screen
+        .state
+        .display_drawn_now(crate::DrawnPhrases::with_arp(ArpPattern::default()));
     assert_eq!(marked_index(&screen), 1, "arp 見出しの次が先頭の型");
 }

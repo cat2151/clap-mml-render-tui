@@ -24,7 +24,7 @@ pub(super) fn line(screen: &GridSequencerScreen) -> Option<Line<'static>> {
             base_style().fg(MONOKAI_PINK),
         )));
     }
-    screen.state.chord().map(progression_line)
+    screen.state.display_chord().map(progression_line)
 }
 
 fn progression_line(chord: &ChordPlayback) -> Line<'static> {

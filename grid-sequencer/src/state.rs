@@ -17,6 +17,7 @@ mod lanes;
 mod measure_lane;
 mod note_pattern;
 mod pattern_bag;
+mod presentation;
 mod randomize;
 mod schedule;
 mod session;
@@ -106,8 +107,12 @@ pub struct GridState {
     /// 小節ごとに抽選する note velocity。CC1 と同じ仕組みで動く。
     velocity: measure_lane::MeasureLane,
     /// 組み立て済みで、まだ締切が来ていないステップの (締切, 列)。表示位置を
-    /// 実際に鳴るタイミングへ合わせるために持つ。
-    pending_display: VecDeque<(Instant, usize)>,
+    /// 実際に鳴るタイミングへ合わせるために持つ。先読みで chord / grid / bank が
+    /// 進んでも、対応する締切まではこのスナップショットを画面へ出さない。
+    pending_display: VecDeque<presentation::PendingDisplay>,
+    /// 実際に鳴っている内容の表示スナップショット。まだ最初のステップを鳴らして
+    /// いない間は `None` とし、現在のスケジューリング状態をそのまま表示する。
+    display: Option<presentation::GridPresentation>,
     /// 先読みで既に送ってしまったステップのうち、いちばん新しいものの締切。
     /// 送信済みの note on より後ろへ note off を置くために見る。
     last_scheduled: Option<Instant>,
@@ -175,6 +180,7 @@ impl GridState {
                 measure_lane::LaneCoverage::SoundingCells,
             ),
             pending_display: VecDeque::new(),
+            display: None,
             last_scheduled: None,
             last_scheduled_timeline_seconds: None,
             last_poll_lateness: Duration::ZERO,
@@ -264,6 +270,7 @@ impl GridState {
         self.sounding.clear();
         self.reset_lanes_for_start();
         self.pending_display.clear();
+        self.display = None;
         self.last_scheduled = None;
         self.last_scheduled_timeline_seconds = None;
         self.last_poll_lateness = Duration::ZERO;

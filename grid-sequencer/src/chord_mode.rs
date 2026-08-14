@@ -234,7 +234,6 @@ impl GridSequencerScreen {
             Some(&playback),
             patterns,
         );
-        self.absorb_drawn_phrases(drawn);
         if policy.patch {
             // 和音の行だけは無差別抽選の結果を捨て、条件に合う patch へ当て直す。
             match self.pick_chord_patch(ctx) {
@@ -264,9 +263,11 @@ impl GridSequencerScreen {
             instances.len(),
         ));
         if policy.patch {
-            self.state.stage_next_cycle(instances, playback);
+            self.state
+                .stage_next_cycle_with_drawn(instances, playback, drawn);
         } else {
-            self.state.stage_next_cycle_in_place(instances, playback);
+            self.state
+                .stage_next_cycle_in_place_with_drawn(instances, playback, drawn);
         }
         self.chord_error = None;
         true

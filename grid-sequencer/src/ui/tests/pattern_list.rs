@@ -68,7 +68,9 @@ fn the_pane_is_hidden_without_any_section() {
 #[test]
 fn the_pattern_the_wheel_last_applied_is_marked_in_the_list() {
     let mut screen = chord_screen();
-    screen.last_arp = Some(crate::ArpPattern::UpDown);
+    screen
+        .state
+        .display_drawn_now(crate::DrawnPhrases::with_arp(crate::ArpPattern::UpDown));
 
     let rendered = render(&screen);
 

@@ -12,7 +12,9 @@ use std::time::Instant;
 
 use cmrt_arpeggiator::{generate_bass_line, BassPattern, BASS_ROOT_VOICE};
 
-use crate::{log_line, GridSequencerScreen, LaneAddress, ListDirection, BASS_ROW, GRID_STEPS};
+use crate::{
+    log_line, DrawnPhrases, GridSequencerScreen, LaneAddress, ListDirection, BASS_ROW, GRID_STEPS,
+};
 
 impl GridSequencerScreen {
     /// bass 行の step セル上の wheel。型を1つ送ってベースラインを引き直す。
@@ -22,7 +24,8 @@ impl GridSequencerScreen {
         }
         let pattern = self.advance_bass_pattern(direction);
         // 引いた結果がたまたま同じ譜面でも、カーソルと表示は送った型に合わせる。
-        self.last_bass = Some(pattern);
+        self.state
+            .display_drawn_now(DrawnPhrases::with_bass(pattern));
         let notes = generate_bass_line(pattern, GRID_STEPS);
         let snapshot = self.capture_undo();
         if self.state.apply_bass_line(&notes) {
@@ -68,12 +71,12 @@ impl GridSequencerScreen {
     /// 譜面を作り直すとき（`t` キーの track 数切替）にカーソルを捨てる。
     pub(crate) fn reset_bass_pattern(&mut self) {
         self.bass_pattern = None;
-        self.last_bass = None;
+        self.state.clear_displayed_bass();
     }
 
     /// 直近に適用した型。NOTE grid のタイトルへ出す。
     pub fn last_bass(&self) -> Option<BassPattern> {
-        self.last_bass
+        self.state.displayed_drawn_phrases().bass
     }
 }
 

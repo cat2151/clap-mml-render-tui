@@ -30,12 +30,12 @@ pub(super) fn draw(
 ) {
     let playhead = screen.state.step_index();
     // instance ごとの発音表から毎回引き直す値なので、行ごとに呼ばず1回で済ませる。
-    let swings = screen.state.effective_swings();
+    let swings = screen.state.display_effective_swings();
     let mut lines = vec![header_line()];
     lines.extend(
         screen
             .state
-            .visible_note_rows()
+            .display_visible_note_rows()
             .into_iter()
             .map(|visible| row_line(screen, connection, visible, playhead, &swings)),
     );
@@ -89,17 +89,17 @@ fn row_line(
     swings: &[Option<u8>],
 ) -> Line<'static> {
     let address = visible.address;
-    let instance = &screen.state.instances()[address.instance];
+    let instance = &screen.state.display_instances()[address.instance];
     let lane = &instance.lanes[address.lane];
     let readiness = connection.row_readiness(address.instance);
     let summary = visible.kind == VisibleRowKind::ChordSummary;
     let resolved = if summary {
         screen
             .state
-            .chord()
+            .display_chord()
             .and_then(|chord| chord.current().first().copied())
     } else {
-        screen.state.resolved_note(address)
+        screen.state.display_resolved_note(address)
     };
     let inactive = !summary && resolved.is_none();
     let displayed_patch = screen
@@ -108,17 +108,18 @@ fn row_line(
         .filter(|selector| selector.instance == address.instance)
         .and_then(|selector| selector.selected_patch())
         .or(instance.patch.as_deref());
-    let group_header =
-        if screen.state.chord().is_some() && instance.lane_mode.stacks_high_notes_on_top() {
-            // 高音が上へ反転しているので、行の先頭は最終 lane。
-            address.lane + 1 == instance.lanes.len()
-        } else {
-            address.lane == 0
-        };
+    let group_header = if screen.state.display_chord().is_some()
+        && instance.lane_mode.stacks_high_notes_on_top()
+    {
+        // 高音が上へ反転しているので、行の先頭は最終 lane。
+        address.lane + 1 == instance.lanes.len()
+    } else {
+        address.lane == 0
+    };
     let instance_label = group_header.then(|| (address.instance + 1).to_string());
     let voice_label = if summary {
         "C".to_string()
-    } else if screen.state.chord().is_some() && address.instance == crate::BASS_ROW {
+    } else if screen.state.display_chord().is_some() && address.instance == crate::BASS_ROW {
         // bass 音は B、その1オクターブ上は 8（8va）。V 欄は1文字ぶんしかない。
         if address.lane == 0 { "B" } else { "8" }.to_string()
     } else {
@@ -239,7 +240,7 @@ fn auto_gain_label(
     connection: &GridConnectionStatus,
     row: usize,
 ) -> String {
-    let instance_id = screen.state.instance_id(row);
+    let instance_id = screen.state.display_instance_id(row);
     format!("{:+.1}", connection.instance_auto_gain_db(instance_id))
 }
 
