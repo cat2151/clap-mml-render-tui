@@ -1,4 +1,4 @@
-//! step セルの wheel が送るフレーズ型の list を、grid の右へ縦に並べる。
+//! step セルの wheel が送るフレーズ型のlistを、gridの右へ並べる。
 //!
 //! wheel が「list を送る操作」であることは、送り先の list が見えていて初めて自明になる。
 //! 並びが上から下へ見えていれば、ホイールを下へ回すと次へ進むことを覚えなくてよい。
@@ -6,11 +6,10 @@
 //! カーソルは直近に適用した型（NOTE grid のタイトルに出しているものと同じ）に付ける。
 //! まだ一度も回していない section には印が付かないので、未操作だと分かる。
 //!
-//! 出す section は行の構成で変わる（arp / bass は chord mode 中だけ、drum は drum 行が
-//! あるとき）。高さが足りないときは後ろの section から落とす。
+//! arp+bassとdrumは別の縦列にして、限られた高さでも全roleを同時に見せる。
 
 use ratatui::{
-    layout::Rect,
+    layout::{Constraint, Direction, Layout, Rect},
     style::Style,
     text::Line,
     widgets::{Block, Borders, Paragraph},
@@ -43,14 +42,11 @@ impl Section {
     }
 }
 
-/// 出す section を優先順（＝上から並べる順）に組み立てる。
-///
-/// 高さが足りないときに落とすのは後ろから。arp のほうが型が多く、4 voice 行のほうが
-/// 触る機会も多いので先頭へ置く。
-fn sections(screen: &GridSequencerScreen) -> Vec<Section> {
-    let mut sections = Vec::new();
+/// 左にarp+bass、右にdrum全roleの列を組み立てる。片方が無ければ1列で使う。
+fn section_columns(screen: &GridSequencerScreen) -> Vec<Vec<Section>> {
+    let mut phrase_sections = Vec::new();
     if screen.state.chord().is_some() {
-        sections.push(Section {
+        phrase_sections.push(Section {
             name: "arp".to_string(),
             labels: ArpPattern::ALL
                 .iter()
@@ -58,7 +54,7 @@ fn sections(screen: &GridSequencerScreen) -> Vec<Section> {
                 .collect(),
             current: screen.last_arp().map(ArpPattern::label),
         });
-        sections.push(Section {
+        phrase_sections.push(Section {
             name: "bass".to_string(),
             labels: BassPattern::ALL
                 .iter()
@@ -67,113 +63,108 @@ fn sections(screen: &GridSequencerScreen) -> Vec<Section> {
             current: screen.last_bass().map(BassPattern::label),
         });
     }
-    if let Some(role) = drum_section_role(screen) {
-        sections.push(Section {
+
+    let mut drum_sections = Vec::new();
+    // drum は1候補しかないroleも省略しない。画面の下から上（kick→snare→hat→perc）の
+    // 順に置き、各行のwheelの送り先を常に確認できるようにする。
+    for role in drum_section_roles(screen) {
+        drum_sections.push(Section {
             name: format!("drum {}", role.label().to_lowercase()),
             labels: DrumPattern::all_for(role)
                 .iter()
                 .map(|pattern| pattern.label())
                 .collect(),
-            current: screen
-                .last_drum()
-                .filter(|pattern| pattern.role() == role)
-                .map(DrumPattern::label),
+            current: screen.last_drum_for(role).map(DrumPattern::label),
         });
     }
-    sections
+
+    [phrase_sections, drum_sections]
+        .into_iter()
+        .filter(|sections| !sections.is_empty())
+        .collect()
 }
 
-/// drum の list を出す役割。型ごとに list が違うので、1つに絞って出す。
-///
-/// wheel を回したあとはその行の役割、まだ回していなければ画面のいちばん下の
-/// drum 行（＝ kick）の list を出す。
-fn drum_section_role(screen: &GridSequencerScreen) -> Option<DrumRole> {
-    if let Some(pattern) = screen.last_drum() {
-        return Some(pattern.role());
-    }
+/// 画面に存在するdrum roleを、下の行から上の行の順に返す。
+fn drum_section_roles(screen: &GridSequencerScreen) -> Vec<DrumRole> {
     (0..screen.state.instance_count())
         .rev()
-        .find_map(|instance| screen.state.drum_role(instance))
+        .filter_map(|instance| screen.state.drum_role(instance))
+        .fold(Vec::new(), |mut roles, role| {
+            if !roles.contains(&role) {
+                roles.push(role);
+            }
+            roles
+        })
 }
 
-/// 出す section それぞれの行数を、優先順に並べたもの。
-///
-/// 高さの計算（[`height_for`]）と描画（[`lines`]）が同じ判断をするための唯一の入口。
+/// 各列の行数。paneの高さは最も長い列へ合わせる。
 pub(crate) fn section_heights(screen: &GridSequencerScreen) -> Vec<usize> {
-    sections(screen)
+    section_columns(screen)
         .iter()
-        .map(Section::height)
+        .map(|sections| sections.iter().map(Section::height).sum())
         .collect::<Vec<_>>()
 }
 
 /// 中身に必要なぶんだけの高さ（枠線込み）。0 なら pane を出さない。
 ///
-/// grid と同じ高さへ引き伸ばすと、広い端末では list の下に長い空白が伸びる。
-/// 出す行数は端末の高さで変わらないので、枠を中身へ詰める。
-/// 入りきらないぶんは後ろの section から落とす（[`lines`] と同じ分岐）。
+/// gridと同じ高さへ引き伸ばさず、最長列の中身へ詰める。
 pub(super) fn height_for(section_heights: &[usize], available: u16) -> u16 {
-    let content = fitted(
-        section_heights,
-        usize::from(available).saturating_sub(BORDERS),
-    );
+    let maximum = usize::from(available).saturating_sub(BORDERS);
+    let content = section_heights
+        .iter()
+        .copied()
+        .max()
+        .unwrap_or(0)
+        .min(maximum);
     if content == 0 {
         return 0;
     }
     u16::try_from(BORDERS + content).unwrap_or(u16::MAX)
 }
 
-/// 前から順に入るところまで採用したときの合計行数。
-///
-/// 1つも入らない高さでも、先頭の section だけは切り詰めて出す。まるごと消すと
-/// 「送り先の list がある」こと自体が見えなくなる。
-fn fitted(section_heights: &[usize], available: usize) -> usize {
-    let mut used = 0;
-    for height in section_heights {
-        if used + height > available {
-            break;
-        }
-        used += height;
-    }
-    if used == 0 {
-        return section_heights.first().copied().unwrap_or(0).min(available);
-    }
-    used
-}
-
 pub(super) fn draw(screen: &GridSequencerScreen, f: &mut Frame<'_>, area: Rect) {
-    let lines = lines(screen, usize::from(area.height));
-    f.render_widget(
-        Paragraph::new(lines).style(base_style()).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" Phrase ")
-                .style(base_style())
-                .border_style(base_style().fg(MONOKAI_CYAN)),
-        ),
-        area,
-    );
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Phrase ")
+        .style(base_style())
+        .border_style(base_style().fg(MONOKAI_CYAN));
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let mut columns = section_columns(screen);
+    // 2列ぶんの幅が無ければ従来幅へ畳む。drum全roleを先に置き、そのあとへ
+    // arp+bassを続けることで、今回の主目的であるdrum listを狭い画面でも欠かさない。
+    if inner.width < crate::ui::layout::PATTERN_LIST_WIDTH - BORDERS as u16 && columns.len() == 2 {
+        let phrases = columns.remove(0);
+        let mut drums = columns.remove(0);
+        drums.extend(phrases);
+        columns.push(drums);
+    }
+    let constraints = vec![Constraint::Ratio(1, columns.len() as u32); columns.len()];
+    let areas = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(constraints)
+        .split(inner);
+    for (sections, area) in columns.iter().zip(areas.iter()) {
+        f.render_widget(
+            Paragraph::new(lines_for_column(sections, usize::from(area.height)))
+                .style(base_style()),
+            *area,
+        );
+    }
 }
 
-/// 入りきる section だけを上から並べる。[`fitted`] と同じ判断をすること。
+#[cfg(test)]
 fn lines(screen: &GridSequencerScreen, height: usize) -> Vec<Line<'static>> {
     let available = height.saturating_sub(BORDERS);
-    let sections = sections(screen);
-    let mut lines = Vec::new();
-    let mut used = 0;
-    for section in &sections {
-        if used + section.height() > available {
-            break;
-        }
-        used += section.height();
-        lines.extend(render(section));
-    }
-    if lines.is_empty() {
-        if let Some(section) = sections.first() {
-            lines.extend(render(section));
-            lines.truncate(available);
-        }
-    }
-    lines
+    section_columns(screen)
+        .iter()
+        .flat_map(|sections| lines_for_column(sections, available))
+        .collect()
+}
+
+fn lines_for_column(sections: &[Section], available: usize) -> Vec<Line<'static>> {
+    sections.iter().flat_map(render).take(available).collect()
 }
 
 fn render(section: &Section) -> Vec<Line<'static>> {

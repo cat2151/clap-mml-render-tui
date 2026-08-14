@@ -69,29 +69,30 @@ pub(super) fn apply_drum_roles(instances: &mut [GridInstance]) {
         instance.set_drum_role(index, role);
         if let Some(role) = role.filter(|_| changed) {
             instance.lanes[0].base_note = DRUM_NOTE;
-            randomize_drum_pattern(instance, role, &mut rng);
+            write_initial_drum_pattern(instance, role, &mut rng);
         }
     }
 }
 
 /// drum 行の譜面を、役割に合った型で引き直す。
-pub(super) fn randomize_drum_pattern(
-    instance: &mut GridInstance,
-    role: DrumRole,
-    rng: &mut impl RngExt,
-) {
-    write_drum_pattern(instance, DrumPattern::random_for(role, rng));
+fn write_initial_drum_pattern(instance: &mut GridInstance, role: DrumRole, rng: &mut impl RngExt) {
+    // role割当直後の仮譜面。画面開始時の本抽選は組み合わせbagを通る。
+    write_drum_pattern(instance, DrumPattern::default_for(role), rng);
 }
 
 /// 指定した型の譜面を drum 行の lane 0 へ書く。音高は動かさない。
 /// 譜面が変わったときだけ true。
-pub(super) fn write_drum_pattern(instance: &mut GridInstance, pattern: DrumPattern) -> bool {
+pub(super) fn write_drum_pattern(
+    instance: &mut GridInstance,
+    pattern: DrumPattern,
+    rng: &mut impl RngExt,
+) -> bool {
     let Some(lane) = instance.lanes.first_mut() else {
         return false;
     };
     let before = lane.pattern.clone();
     lane.pattern.clear();
-    for hit in generate_drum(pattern, GRID_STEPS) {
+    for hit in generate_drum(pattern, GRID_STEPS, rng) {
         let end = hit.step + hit.duration_steps.max(1) - 1;
         let _ = lane.pattern.draw_span(hit.step, end);
     }
@@ -115,7 +116,8 @@ impl GridState {
         let Some(item) = self.instances.get_mut(instance) else {
             return false;
         };
-        if item.drum != Some(pattern.role()) || !write_drum_pattern(item, pattern) {
+        if item.drum != Some(pattern.role()) || !write_drum_pattern(item, pattern, &mut rand::rng())
+        {
             return false;
         }
         self.refresh_lane_display_patterns();

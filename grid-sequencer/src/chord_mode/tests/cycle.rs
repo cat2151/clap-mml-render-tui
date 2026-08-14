@@ -4,6 +4,61 @@
 
 use super::*;
 
+/// DRUMとARPがONなら、drum 4role・bass・arpeggioを1つの組み合わせとしてbagから引く。
+/// stagingの外でbagだけを試しても、loop経路が個別抽選へ戻る退行を検出できないため、
+/// 実際の次cycle生成を全324通りぶん通す。
+#[test]
+fn staging_cycles_through_every_drum_bass_and_arp_combination_once() {
+    let now = Instant::now();
+    let catalog = catalog();
+    let patches = categorized_patches();
+    let ctx = ctx_with_categories(&patches, &catalog, &AllPoly, &[]);
+    let mut screen = screen();
+    screen.start(now, &ctx);
+    screen.handle_key(press_c(), now, &ctx);
+    // `r`の即時抽選をこのbagの1個目にする。以後のloop stagingが別の個別抽選へ
+    // 逸れず、同じbagの続きを引くことまで確認する。
+    screen.handle_key(
+        crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('r'),
+            crossterm::event::KeyModifiers::NONE,
+        ),
+        now,
+        &ctx,
+    );
+    screen.cycle_random = crate::CycleRandom {
+        drum: true,
+        arp: true,
+        chord: false,
+        ..crate::CycleRandom::NONE
+    };
+    let expected_count = cmrt_rhythm::DrumPatternCombination::all().len()
+        * cmrt_arpeggiator::BassPattern::ALL.len()
+        * cmrt_arpeggiator::ArpPattern::ALL.len();
+    let displayed = |screen: &GridSequencerScreen| {
+        (
+            cmrt_rhythm::DrumRole::ALL.map(|role| {
+                screen
+                    .last_drum_for(role)
+                    .expect("every drum role is drawn together")
+            }),
+            screen.last_bass().expect("bass is drawn with ARP"),
+            screen.last_arp().expect("arpeggio is drawn with ARP"),
+        )
+    };
+    let mut drawn = vec![displayed(&screen)];
+
+    for _ in 1..expected_count {
+        assert!(screen.stage_next_cycle(now, &ctx));
+        let combination = displayed(&screen);
+        assert!(!drawn.contains(&combination), "{combination:?}");
+        drawn.push(combination);
+        assert!(screen.state.commit_pending_cycle_in_place());
+    }
+
+    assert_eq!(drawn.len(), expected_count);
+}
+
 /// 進行を1周したら、進行・Key に加えて全行の音色も引き直す。
 #[test]
 fn staging_the_next_cycle_rerolls_every_patch() {

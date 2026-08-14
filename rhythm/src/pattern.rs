@@ -1,7 +1,7 @@
 //! リズム型と、1小節の中での Attack 位置。
 //!
 //! 1 step = 16分音符・16 step = 1小節という前提はこの module の外（呼び出し側の grid）に
-//! ある。ここは「何 step ごとに鳴らすか」しか知らない。
+//! ある。ここは「どの step で鳴らすか」しか知らない。
 
 use rand::RngExt;
 
@@ -10,10 +10,8 @@ use crate::role::DrumRole;
 /// リズム型1つの Attack 位置。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Placement {
-    /// 鳴らさない。
-    Silent,
-    /// 小節頭に1音だけ。
-    Once,
+    /// 指定した step だけで鳴らす。
+    Fixed(&'static [usize]),
     /// `offset` step 目から `every` step ごと。
     Every { every: usize, offset: usize },
 }
@@ -22,9 +20,11 @@ impl Placement {
     /// `steps` step ぶんの Attack 位置を昇順で返す。
     fn attacks(self, steps: usize) -> Vec<usize> {
         match self {
-            Self::Silent => Vec::new(),
-            Self::Once if steps == 0 => Vec::new(),
-            Self::Once => vec![0],
+            Self::Fixed(attacks) => attacks
+                .iter()
+                .copied()
+                .take_while(|step| *step < steps)
+                .collect(),
             Self::Every { every, offset } => (offset..steps).step_by(every.max(1)).collect(),
         }
     }
@@ -36,28 +36,25 @@ pub enum KickPattern {
     /// 四分音符で4つ打ち。
     #[default]
     Quarter,
-    /// 小節頭に1音だけ。
-    Whole,
-    Silent,
+    /// 1拍目と3拍目の裏（16 stepなら0・10）。
+    OneAndThreeOffbeat,
 }
 
 impl KickPattern {
     /// wheel の種別送りで巡回する順序。
-    pub const ALL: [KickPattern; 3] = [Self::Quarter, Self::Whole, Self::Silent];
+    pub const ALL: [KickPattern; 2] = [Self::Quarter, Self::OneAndThreeOffbeat];
 
     pub fn label(self) -> &'static str {
         match self {
             Self::Quarter => "4th",
-            Self::Whole => "Whole",
-            Self::Silent => "Silent",
+            Self::OneAndThreeOffbeat => "1+3&",
         }
     }
 
     fn placement(self) -> Placement {
         match self {
             Self::Quarter => QUARTER,
-            Self::Whole => Placement::Once,
-            Self::Silent => Placement::Silent,
+            Self::OneAndThreeOffbeat => Placement::Fixed(&[0, 10]),
         }
     }
 }
@@ -68,17 +65,15 @@ pub enum SnarePattern {
     /// 2・4拍（16 step なら step 4 と 12）。八分裏ではない。
     #[default]
     Backbeat,
-    Silent,
 }
 
 impl SnarePattern {
     /// wheel の種別送りで巡回する順序。
-    pub const ALL: [SnarePattern; 2] = [Self::Backbeat, Self::Silent];
+    pub const ALL: [SnarePattern; 1] = [Self::Backbeat];
 
     pub fn label(self) -> &'static str {
         match self {
             Self::Backbeat => "Backbeat",
-            Self::Silent => "Silent",
         }
     }
 
@@ -89,7 +84,6 @@ impl SnarePattern {
                 every: 8,
                 offset: 4,
             },
-            Self::Silent => Placement::Silent,
         }
     }
 }
@@ -102,18 +96,19 @@ pub enum HatPattern {
     Eighth,
     /// 16分音符で埋める。
     Sixteenth,
-    Silent,
+    /// 八分裏から四分音符間隔。16 stepなら2・6・10・14。
+    OffbeatQuarter,
 }
 
 impl HatPattern {
     /// wheel の種別送りで巡回する順序。
-    pub const ALL: [HatPattern; 3] = [Self::Eighth, Self::Sixteenth, Self::Silent];
+    pub const ALL: [HatPattern; 3] = [Self::Eighth, Self::Sixteenth, Self::OffbeatQuarter];
 
     pub fn label(self) -> &'static str {
         match self {
             Self::Eighth => "8beat",
             Self::Sixteenth => "16beat",
-            Self::Silent => "Silent",
+            Self::OffbeatQuarter => "Offbeat4th",
         }
     }
 
@@ -121,53 +116,32 @@ impl HatPattern {
         match self {
             Self::Eighth => EIGHTH,
             Self::Sixteenth => SIXTEENTH,
-            Self::Silent => Placement::Silent,
+            Self::OffbeatQuarter => Placement::Every {
+                every: 4,
+                offset: 2,
+            },
         }
     }
 }
 
-/// percussion のリズム型。他の役割の型を合併したもの。
+/// percussion のリズム型。
 ///
 /// 「kick / snare / hi-hat に取られなかった残り全部」を鳴らす行なので、
-/// どの刻みが合うかは当たった patch 次第。だから list も広く取ってある。
+/// 固定の刻みを持たず、毎回ランダムな位置で鳴らす。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PercPattern {
     #[default]
-    Quarter,
-    Eighth,
-    Sixteenth,
-    /// 小節頭に1音だけ。
-    Whole,
-    Silent,
+    /// 小節内の1〜3箇所を引き直す。
+    Random,
 }
 
 impl PercPattern {
     /// wheel の種別送りで巡回する順序。
-    pub const ALL: [PercPattern; 5] = [
-        Self::Quarter,
-        Self::Eighth,
-        Self::Sixteenth,
-        Self::Whole,
-        Self::Silent,
-    ];
+    pub const ALL: [PercPattern; 1] = [Self::Random];
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Quarter => "4th",
-            Self::Eighth => "8beat",
-            Self::Sixteenth => "16beat",
-            Self::Whole => "Whole",
-            Self::Silent => "Silent",
-        }
-    }
-
-    fn placement(self) -> Placement {
-        match self {
-            Self::Quarter => QUARTER,
-            Self::Eighth => EIGHTH,
-            Self::Sixteenth => SIXTEENTH,
-            Self::Whole => Placement::Once,
-            Self::Silent => Placement::Silent,
+            Self::Random => "Random",
         }
     }
 }
@@ -197,6 +171,50 @@ pub enum DrumPattern {
     Perc(PercPattern),
 }
 
+/// 1回のdrum抽選で4roleへ同時に当てるpatternの組み合わせ。
+///
+/// grid sequencerは全組み合わせをbagへ入れ、この単位で1つずつ引く。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DrumPatternCombination {
+    patterns: [DrumPattern; DrumRole::ALL.len()],
+}
+
+impl DrumPatternCombination {
+    /// roleごとのlistの直積を、重複なしですべて返す。
+    pub fn all() -> Vec<Self> {
+        let mut combinations = Vec::new();
+        for percussion in PercPattern::ALL {
+            for hat in HatPattern::ALL {
+                for snare in SnarePattern::ALL {
+                    for kick in KickPattern::ALL {
+                        combinations.push(Self {
+                            patterns: [
+                                DrumPattern::Perc(percussion),
+                                DrumPattern::Hat(hat),
+                                DrumPattern::Snare(snare),
+                                DrumPattern::Kick(kick),
+                            ],
+                        });
+                    }
+                }
+            }
+        }
+        combinations
+    }
+
+    pub fn pattern_for(self, role: DrumRole) -> DrumPattern {
+        let index = DrumRole::ALL
+            .iter()
+            .position(|candidate| *candidate == role)
+            .expect("DrumRole::ALL contains every role");
+        self.patterns[index]
+    }
+
+    pub fn patterns(self) -> impl Iterator<Item = DrumPattern> {
+        self.patterns.into_iter()
+    }
+}
+
 impl DrumPattern {
     /// この型が属する役割。
     pub fn role(self) -> DrumRole {
@@ -216,18 +234,6 @@ impl DrumPattern {
             DrumRole::HiHat => Self::Hat(HatPattern::default()),
             DrumRole::Percussion => Self::Perc(PercPattern::default()),
         }
-    }
-
-    /// 譜面の引き直し（`r` / AUTO サイクル）で当てる型。
-    ///
-    /// kick / snare / hi-hat はビートの土台なので抽選せず既定のままにする（`Silent` を
-    /// 引くとリズムそのものが消えてしまう）。percussion だけは list 全体から引いて、
-    /// 引き直しごとの表情を変える。刻みを変えたいときは wheel で送る。
-    pub fn random_for(role: DrumRole, rng: &mut impl RngExt) -> Self {
-        if role != DrumRole::Percussion {
-            return Self::default_for(role);
-        }
-        Self::Perc(PercPattern::ALL[rng.random_range(0..PercPattern::ALL.len())])
     }
 
     /// 右 pane と log に出す型の名前。
@@ -269,12 +275,12 @@ impl DrumPattern {
         }
     }
 
-    fn placement(self) -> Placement {
+    fn placement(self) -> Option<Placement> {
         match self {
-            Self::Kick(pattern) => pattern.placement(),
-            Self::Snare(pattern) => pattern.placement(),
-            Self::Hat(pattern) => pattern.placement(),
-            Self::Perc(pattern) => pattern.placement(),
+            Self::Kick(pattern) => Some(pattern.placement()),
+            Self::Snare(pattern) => Some(pattern.placement()),
+            Self::Hat(pattern) => Some(pattern.placement()),
+            Self::Perc(PercPattern::Random) => None,
         }
     }
 }
@@ -301,8 +307,12 @@ pub struct DrumHit {
 ///
 /// note は次の Attack まで伸ばしっぱなしにする。ドラムの音は patch 側で減衰して消えるので、
 /// 長さを別に決めるより素直で、note off の取りこぼしも起きない。
-pub fn generate_drum(pattern: DrumPattern, steps: usize) -> Vec<DrumHit> {
-    let attacks = pattern.placement().attacks(steps);
+/// [`PercPattern::Random`] は小節内の1〜3箇所を重複なしで引く。
+pub fn generate_drum(pattern: DrumPattern, steps: usize, rng: &mut impl RngExt) -> Vec<DrumHit> {
+    let attacks = pattern.placement().map_or_else(
+        || random_attacks(steps, rng),
+        |placement| placement.attacks(steps),
+    );
     attacks
         .iter()
         .enumerate()
@@ -311,6 +321,22 @@ pub fn generate_drum(pattern: DrumPattern, steps: usize) -> Vec<DrumHit> {
             duration_steps: attacks.get(index + 1).copied().unwrap_or(steps) - step,
         })
         .collect()
+}
+
+fn random_attacks(steps: usize, rng: &mut impl RngExt) -> Vec<usize> {
+    if steps == 0 {
+        return Vec::new();
+    }
+    let count = rng.random_range(1..=steps.min(3));
+    let mut attacks = Vec::with_capacity(count);
+    while attacks.len() < count {
+        let step = rng.random_range(0..steps);
+        if !attacks.contains(&step) {
+            attacks.push(step);
+        }
+    }
+    attacks.sort_unstable();
+    attacks
 }
 
 #[cfg(test)]

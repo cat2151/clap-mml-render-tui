@@ -23,8 +23,11 @@ const NOTE_WIDTH: u16 = 4;
 #[cfg(test)]
 const SWING_START: u16 = 42;
 
-/// フレーズ型 list を出す右 pane の幅。`  UpDownHold ` と枠線が収まる最小。
-pub(super) const PATTERN_LIST_WIDTH: u16 = 14;
+/// フレーズ型listを2列（arp+bass / drum）で出す右paneの幅。
+/// 1列12桁×2 + 左右の枠線。
+pub(super) const PATTERN_LIST_WIDTH: u16 = 26;
+/// 1列へ畳んでも最長labelを欠かさない従来幅。
+pub(super) const PATTERN_LIST_MIN_WIDTH: u16 = 14;
 /// grid の中身がちょうど収まる幅。NOTE grid も値 grid も同じ 68 桁 + 枠線。
 ///
 /// 端末がこれより広くても grid は横へ伸ばさない。中身は 16 step ぶんで固定なので、
@@ -77,18 +80,30 @@ impl GridSequencerLayout {
         let grid_index = usize::from(chord_visible);
         let rows = chunks[grid_index];
         // list は、grid を1 step も削らずに置ける幅があるときにしか出さない。
-        let list_height = super::pattern_list::height_for(pattern_list_sections, rows.height);
-        let list_fits = list_height > 0 && rows.width >= GRID_WIDTH + PATTERN_LIST_WIDTH;
+        let two_columns = rows.width >= GRID_WIDTH + PATTERN_LIST_WIDTH;
+        let list_width = if two_columns {
+            PATTERN_LIST_WIDTH
+        } else {
+            PATTERN_LIST_MIN_WIDTH
+        };
+        let narrow_height = [pattern_list_sections.iter().sum::<usize>()];
+        let heights = if two_columns {
+            pattern_list_sections
+        } else {
+            &narrow_height
+        };
+        let list_height = super::pattern_list::height_for(heights, rows.height);
+        let list_fits = list_height > 0 && rows.width >= GRID_WIDTH + PATTERN_LIST_MIN_WIDTH;
         // grid と list をぴったり隣接させた塊を、画面の横中央へ置く。余りは左右へ
         // 均等に散らす。片側へ寄せると、広い端末で塊と余白が離れて視線が飛ぶ。
         let grid_width = GRID_WIDTH.min(rows.width);
-        let block_width = grid_width + if list_fits { PATTERN_LIST_WIDTH } else { 0 };
+        let block_width = grid_width + if list_fits { list_width } else { 0 };
         let left = rows.x + (rows.width - block_width) / 2;
         // 高さは中身ぶんへ詰める。grid と同じ高さへ伸ばすと、縦に広い端末では
         // list の下にただの空白が伸びるだけになる。
         let pattern_list = list_fits.then(|| Rect {
             x: left + grid_width,
-            width: PATTERN_LIST_WIDTH,
+            width: list_width,
             height: list_height,
             ..rows
         });

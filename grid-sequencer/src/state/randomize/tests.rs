@@ -195,6 +195,7 @@ fn swing_is_held_when_the_policy_says_so() {
             ..CycleRandom::ALL
         },
         None,
+        None,
     );
 
     let swings = instances
@@ -211,7 +212,9 @@ fn drum_rows_get_swing_too() {
     drum::apply_drum_roles(&mut instances);
     assert!(instances.iter().any(|instance| instance.drum.is_some()));
 
-    randomize_instance_slice(&mut instances, &[], CycleRandom::ALL, None);
+    let mut bags = super::super::pattern_bag::PatternBags::default();
+    let patterns = bags.draw(true, false);
+    randomize_instance_slice(&mut instances, &[], CycleRandom::ALL, None, patterns);
 
     assert!(instances
         .iter()

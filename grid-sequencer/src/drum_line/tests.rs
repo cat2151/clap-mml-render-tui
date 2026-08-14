@@ -3,7 +3,7 @@ use std::time::Instant;
 use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
 
-use cmrt_rhythm::{DrumPattern, DrumRole, HatPattern, KickPattern};
+use cmrt_rhythm::{DrumPattern, DrumRole, HatPattern, KickPattern, PercPattern};
 
 use super::*;
 use crate::{
@@ -92,6 +92,28 @@ fn wheel_up_on_a_drum_row_starts_from_the_end_of_the_list() {
     assert_eq!(screen.last_drum(), Some(expected));
 }
 
+#[test]
+fn wheel_up_on_percussion_applies_random() {
+    let mut screen = screen();
+    let percussion_row = FIRST_DRUM_ROW;
+
+    screen.handle_mouse(
+        wheel(&screen, MouseEventKind::ScrollUp, percussion_row),
+        AREA,
+        &context(),
+    );
+
+    assert_eq!(
+        screen.last_drum(),
+        Some(DrumPattern::Perc(PercPattern::Random))
+    );
+    let attack_count = pattern_text(&screen, percussion_row)
+        .chars()
+        .filter(|cell| *cell == '#')
+        .count();
+    assert!((1..=3).contains(&attack_count));
+}
+
 /// list は役割ごとに分かれている。kick 行を回しても hi-hat の型は出てこない。
 #[test]
 fn the_list_never_leaves_the_role_of_the_row() {
@@ -175,12 +197,12 @@ fn the_chord_mode_does_not_route_a_drum_row_to_the_arpeggiator() {
 #[test]
 fn one_wheel_click_holds_the_pattern_and_is_one_undo_step() {
     let mut screen = screen();
-    let before = pattern_text(&screen, KICK_ROW);
     screen.handle_mouse(
         wheel(&screen, MouseEventKind::ScrollDown, KICK_ROW),
         AREA,
         &context(),
     );
+    let after_one = pattern_text(&screen, KICK_ROW);
     screen.handle_mouse(
         wheel(&screen, MouseEventKind::ScrollDown, KICK_ROW),
         AREA,
@@ -191,8 +213,8 @@ fn one_wheel_click_holds_the_pattern_and_is_one_undo_step() {
 
     screen.undo(&context());
 
-    assert_ne!(after_two, before);
-    assert_eq!(pattern_text(&screen, KICK_ROW), "#---#---#---#---");
+    assert_ne!(after_two, after_one);
+    assert_eq!(pattern_text(&screen, KICK_ROW), after_one);
 }
 
 /// カーソルは track 数の切替で捨てる。instance 番号の指す役割が変わるため。

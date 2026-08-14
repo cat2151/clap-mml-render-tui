@@ -42,7 +42,7 @@ impl GridSequencerScreen {
         }
         instances.truncate(instance_count);
         if let Some(added) = instances.get_mut(previous_count..) {
-            crate::randomize_instance_slice(added, patches, CycleRandom::ALL, None);
+            crate::randomize_instance_slice(added, patches, CycleRandom::ALL, None, None);
         }
 
         self.finish();

@@ -3,15 +3,15 @@ use std::time::Instant;
 use rand::RngExt;
 
 use cmrt_arpeggiator::{generate_arpeggio, generate_bass_line, ArpPattern, BassPattern};
-use cmrt_rhythm::DrumPattern;
+use cmrt_rhythm::{DrumPattern, DrumRole};
 use cmrt_tui_core::random::random_index;
 
 use crate::CycleRandom;
 
 use super::{
     arpeggio::write_arpeggio, bass_line::write_bass_line, drum, ChordPlayback, GridInstance,
-    GridScheduledMessage, GridState, NotePattern, ARPEGGIO_ROW, BASS_ROW, GRID_STEPS, SWING_MAX,
-    SWING_MIN,
+    GridScheduledMessage, GridState, NotePattern, PatternCombination, ARPEGGIO_ROW, BASS_ROW,
+    GRID_STEPS, SWING_MAX, SWING_MIN,
 };
 
 /// ランダム生成に使う note number の範囲（C2〜C6）。
@@ -26,13 +26,27 @@ const MIN_ARP_VOICES: usize = 2;
 
 /// 抽選で引いた「型」。Phrase pane のカーソルと NOTE grid のタイトルに出す。
 ///
-/// 引かなかった種別は `None`。drum は行ごとに引くので、最後に引いた1つだけを持つ
-/// （表示も「直近に適用した型」1つぶん）。
+/// 引かなかった種別は `None`。drum はroleごとに結果を持つ。最後の1つだけに潰すと、
+/// loopごとに全roleを抽選できていても右paneでは1roleしか確認できないため。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct DrawnPhrases {
     pub arp: Option<ArpPattern>,
     pub bass: Option<BassPattern>,
-    pub drum: Option<DrumPattern>,
+    drums: [Option<DrumPattern>; DrumRole::ALL.len()],
+}
+
+impl DrawnPhrases {
+    pub(crate) fn record_drum(&mut self, pattern: DrumPattern) {
+        let index = DrumRole::ALL
+            .iter()
+            .position(|role| *role == pattern.role())
+            .expect("DrumRole::ALL contains every role");
+        self.drums[index] = Some(pattern);
+    }
+
+    pub(crate) fn drums(self) -> impl Iterator<Item = DrumPattern> {
+        self.drums.into_iter().flatten()
+    }
 }
 
 /// instance群を丸ごと引き直す。`patches` が空なら patch だけ据え置く。
@@ -55,6 +69,7 @@ pub fn randomize_instance_slice(
     patches: &[(String, String)],
     policy: CycleRandom,
     chord: Option<&ChordPlayback>,
+    patterns: Option<PatternCombination>,
 ) -> DrawnPhrases {
     let mut rng = rand::rng();
     let mut drawn = DrawnPhrases::default();
@@ -74,9 +89,11 @@ pub fn randomize_instance_slice(
         // そのものが変わり、汎用の譜面を当てるとリズムでなくなる。
         if let Some(role) = instance.drum {
             if policy.drum {
-                let pattern = DrumPattern::random_for(role, &mut rng);
-                drum::write_drum_pattern(instance, pattern);
-                drawn.drum = Some(pattern);
+                let pattern = patterns
+                    .and_then(|combination| combination.drum_pattern(role))
+                    .expect("DRUM random requires a drum pattern combination");
+                drum::write_drum_pattern(instance, pattern, &mut rng);
+                drawn.record_drum(pattern);
             }
             continue;
         }
@@ -85,7 +102,7 @@ pub fn randomize_instance_slice(
         // ばらばらのリズムになる。
         if let Some(chord) = chord.filter(|_| index == BASS_ROW || index == ARPEGGIO_ROW) {
             if policy.arp {
-                randomize_phrase_row(instance, index, chord, &mut rng, &mut drawn);
+                randomize_phrase_row(instance, index, chord, patterns, &mut rng, &mut drawn);
             }
             continue;
         }
@@ -104,11 +121,14 @@ fn randomize_phrase_row(
     instance: &mut GridInstance,
     index: usize,
     chord: &ChordPlayback,
+    patterns: Option<PatternCombination>,
     rng: &mut impl RngExt,
     drawn: &mut DrawnPhrases,
 ) {
     if index == BASS_ROW {
-        let pattern = random_choice(&BassPattern::ALL, rng);
+        let pattern = patterns
+            .and_then(PatternCombination::bass_pattern)
+            .expect("ARP random requires a bass pattern combination");
         write_bass_line(instance, &generate_bass_line(pattern, GRID_STEPS));
         drawn.bass = Some(pattern);
         return;
@@ -119,16 +139,14 @@ fn randomize_phrase_row(
     if voices < MIN_ARP_VOICES {
         return;
     }
-    let pattern = random_choice(&ArpPattern::ALL, rng);
+    let pattern = patterns
+        .and_then(PatternCombination::arp_pattern)
+        .expect("ARP random requires an arpeggio pattern combination");
     write_arpeggio(
         instance,
         &generate_arpeggio(pattern, voices, GRID_STEPS, rng),
     );
     drawn.arp = Some(pattern);
-}
-
-fn random_choice<T: Copy>(choices: &[T], rng: &mut impl RngExt) -> T {
-    choices[rng.random_range(0..choices.len())]
 }
 
 fn random_pattern(rng: &mut impl RngExt) -> NotePattern {
@@ -148,6 +166,20 @@ fn random_pattern(rng: &mut impl RngExt) -> NotePattern {
 }
 
 impl GridState {
+    /// 現在ONで、実際に画面へ存在するpattern対象のbagから1組引く。
+    pub(crate) fn draw_pattern_combination(
+        &mut self,
+        policy: CycleRandom,
+        chord_mode: bool,
+    ) -> Option<PatternCombination> {
+        let include_drums = policy.drum && self.instances.iter().any(|item| item.drum.is_some());
+        let include_arp = policy.arp
+            && chord_mode
+            && self.instances.get(BASS_ROW).is_some()
+            && self.instances.get(ARPEGGIO_ROW).is_some();
+        self.pattern_bags.draw(include_drums, include_arp)
+    }
+
     /// patch 一覧の非同期読み込み後、まだ未設定のinstanceだけへ音色を割り当てる。
     pub fn fill_missing_patches(&mut self, patches: &[(String, String)]) -> usize {
         let mut assigned = 0;
@@ -224,7 +256,14 @@ impl GridState {
     /// 外れた音は出ない。
     fn randomize_instances(&mut self, patches: &[(String, String)], policy: CycleRandom) {
         let chord = self.chord.clone();
-        self.drawn = randomize_instance_slice(&mut self.instances, patches, policy, chord.as_ref());
+        let patterns = self.draw_pattern_combination(policy, chord.is_some());
+        self.drawn = randomize_instance_slice(
+            &mut self.instances,
+            patches,
+            policy,
+            chord.as_ref(),
+            patterns,
+        );
         self.refresh_lane_display_patterns();
     }
 

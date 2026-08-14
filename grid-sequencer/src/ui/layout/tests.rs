@@ -187,11 +187,25 @@ fn the_phrase_list_pane_only_appears_when_a_section_is_shown() {
     }
 }
 
+#[test]
+fn the_phrase_list_uses_one_column_at_the_previous_minimum_width() {
+    let width = GRID_WIDTH + PATTERN_LIST_MIN_WIDTH;
+    let layout = GridSequencerLayout::new(Rect::new(0, 0, width, 30), 5, 2, 5, true, CHORD_LIST);
+
+    assert_eq!(
+        layout
+            .pattern_list
+            .expect("minimum width still shows the pane")
+            .width,
+        PATTERN_LIST_MIN_WIDTH
+    );
+}
+
 /// 16 step ぶんを削ってまでは出さない。grid の幅が最優先。
 #[test]
 fn a_terminal_too_narrow_for_both_keeps_the_grid_and_drops_the_pane() {
     let visible = rows(&[(0, 0)]);
-    let width = GRID_WIDTH + PATTERN_LIST_WIDTH - 1;
+    let width = GRID_WIDTH + PATTERN_LIST_MIN_WIDTH - 1;
     let layout = GridSequencerLayout::new(Rect::new(0, 0, width, 20), 1, 1, 1, true, CHORD_LIST);
 
     assert_eq!(layout.pattern_list, None);

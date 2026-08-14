@@ -16,6 +16,7 @@ mod instance;
 mod lanes;
 mod measure_lane;
 mod note_pattern;
+mod pattern_bag;
 mod randomize;
 mod schedule;
 mod session;
@@ -29,6 +30,7 @@ pub use instance::{
     BASS_OCTAVE_LANES, CHORD_VOICE_LANES,
 };
 pub use note_pattern::{NotePattern, NoteStep};
+pub use pattern_bag::PatternCombination;
 
 pub use chord::{ChordPlayback, ARPEGGIO_ROW, BASS_ROW, CHORD_ROW};
 use clock::StepClock;
@@ -115,6 +117,8 @@ pub struct GridState {
     chord: Option<ChordPlayback>,
     /// 直近の引き直しで当てた型（[`DrawnPhrases`]）。表示のためだけに持つ。
     drawn: DrawnPhrases,
+    /// Cycle Randomの有効対象別にpattern組み合わせを重複なしで1周させるbag群。
+    pattern_bags: pattern_bag::PatternBags,
     /// いま鳴らしている bank（0 か 1）。instance index を bank 幅として写す。
     bank: usize,
     /// 抽選済みで、先読みロードが終われば差し替える次サイクル。詳細は [`cycle`]。
@@ -176,6 +180,7 @@ impl GridState {
             last_poll_lateness: Duration::ZERO,
             chord: None,
             drawn: DrawnPhrases::default(),
+            pattern_bags: pattern_bag::PatternBags::default(),
             bank: 0,
             pending: None,
             pending_ready: false,

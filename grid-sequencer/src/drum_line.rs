@@ -1,7 +1,7 @@
 //! drum 行の step セル上の mouse wheel で、リズム型を差し替える。
 //!
-//! wheel は型（[`DrumPattern`]）を1つずつ送るだけ。ベースライン（[`crate::bass_line`]）と
-//! 同じく生成は決定的なので、同じ型へ戻れば同じ譜面が出る。
+//! wheel は型（[`DrumPattern`]）を1つずつ送るだけ。固定型は同じ型へ戻れば同じ譜面が出る。
+//! percussion の Random だけは、アルペジオの Random と同じく適用するたびに引き直す。
 //!
 //! 型は名前の並んだ list なので、送りは [`ListDirection`] に従って下で次、上で前。
 //! list は行の役割ごとに分かれていて、kick 行を回しても hi-hat の型は出てこない。
@@ -70,6 +70,14 @@ impl GridSequencerScreen {
     /// 直近に適用したリズム型。NOTE grid のタイトルと右 pane に出す。
     pub fn last_drum(&self) -> Option<DrumPattern> {
         self.last_drum
+    }
+
+    /// roleごとの直近の抽選・手動適用結果。右paneの各sectionの印に使う。
+    pub(crate) fn last_drum_for(&self, role: DrumRole) -> Option<DrumPattern> {
+        self.drum_patterns
+            .values()
+            .copied()
+            .find(|pattern| pattern.role() == role)
     }
 }
 

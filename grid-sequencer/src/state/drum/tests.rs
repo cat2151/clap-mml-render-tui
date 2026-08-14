@@ -1,4 +1,4 @@
-use cmrt_rhythm::{DrumPattern, DrumRole, HatPattern, KickPattern};
+use cmrt_rhythm::{DrumPattern, DrumRole, HatPattern, KickPattern, PercPattern, SnarePattern};
 
 use crate::{
     state::{GridInstance, GridLaneMode},
@@ -92,18 +92,61 @@ fn assigning_a_role_writes_its_rhythm() {
     let attacks = (0..GRID_STEPS)
         .filter(|step| kick.lanes[0].pattern.is_attack(*step))
         .collect::<Vec<_>>();
-    assert_eq!(attacks, [0, 4, 8, 12]);
+    assert!(
+        attacks == [0, 4, 8, 12] || attacks == [0, 10],
+        "{attacks:?}"
+    );
+}
+
+#[test]
+fn one_and_three_offbeat_kick_matches_the_requested_grid_pattern() {
+    let mut state = GridState::with_instance_count(FULL_DRUM_TRACK_COUNT);
+    let row = FULL_DRUM_TRACK_COUNT - 1;
+
+    let _ = state.apply_drum_pattern(row, DrumPattern::Kick(KickPattern::OneAndThreeOffbeat));
+
+    assert_eq!(pattern_text(&state.instances()[row]), "#---------#-----");
 }
 
 /// 「次の音まで伸ばしっぱなし」が譜面（Attack + Tie）としてそのまま出ること。
 #[test]
 fn a_written_rhythm_ties_until_the_next_attack() {
     let mut state = GridState::with_instance_count(FULL_DRUM_TRACK_COUNT);
-    let row = FULL_DRUM_TRACK_COUNT - 1;
-    assert!(state.apply_drum_pattern(row, DrumPattern::Kick(KickPattern::Whole)));
+    let row = FULL_DRUM_TRACK_COUNT - 2;
+    let _ = state.apply_drum_pattern(row, DrumPattern::Snare(SnarePattern::Backbeat));
     let pattern = &state.instances()[row].lanes[0].pattern;
-    assert_eq!(pattern.step(0), Some(NoteStep::Attack));
-    assert!((1..GRID_STEPS).all(|step| pattern.step(step) == Some(NoteStep::Tie)));
+    assert_eq!(pattern.step(4), Some(NoteStep::Attack));
+    assert!((5..12).all(|step| pattern.step(step) == Some(NoteStep::Tie)));
+    assert_eq!(pattern.step(12), Some(NoteStep::Attack));
+    assert!((13..GRID_STEPS).all(|step| pattern.step(step) == Some(NoteStep::Tie)));
+}
+
+#[test]
+fn offbeat_quarter_hat_matches_the_documented_grid_pattern() {
+    let mut state = GridState::with_instance_count(FULL_DRUM_TRACK_COUNT);
+    let row = FULL_DRUM_TRACK_COUNT - 3;
+    assert_eq!(state.drum_role(row), Some(DrumRole::HiHat));
+
+    let _ = state.apply_drum_pattern(row, DrumPattern::Hat(HatPattern::OffbeatQuarter));
+
+    assert_eq!(pattern_text(&state.instances()[row]), "..#---#---#---#-");
+}
+
+#[test]
+fn random_percussion_writes_one_to_three_held_notes() {
+    let mut state = GridState::with_instance_count(FULL_DRUM_TRACK_COUNT);
+    let row = FIRST_DRUM_ROW;
+    let _ = state.apply_drum_pattern(row, DrumPattern::Perc(PercPattern::Random));
+    let pattern = &state.instances()[row].lanes[0].pattern;
+    let attacks = (0..GRID_STEPS)
+        .filter(|step| pattern.is_attack(*step))
+        .collect::<Vec<_>>();
+
+    assert!((1..=3).contains(&attacks.len()), "{attacks:?}");
+    for (index, attack) in attacks.iter().enumerate() {
+        let expected = attacks.get(index + 1).copied().unwrap_or(GRID_STEPS) - attack;
+        assert_eq!(pattern.attack_len(*attack), Some(expected as u8));
+    }
 }
 
 /// 役割の違う型は当たらない。wheel が別の行の list を当てないための番人。
@@ -112,7 +155,7 @@ fn a_pattern_from_another_role_is_rejected() {
     let mut state = GridState::with_instance_count(FULL_DRUM_TRACK_COUNT);
     let kick_row = FULL_DRUM_TRACK_COUNT - 1;
     assert!(!state.apply_drum_pattern(kick_row, DrumPattern::Hat(HatPattern::Sixteenth)));
-    assert!(!state.apply_drum_pattern(0, DrumPattern::Kick(KickPattern::Whole)));
+    assert!(!state.apply_drum_pattern(0, DrumPattern::Kick(KickPattern::Quarter)));
 }
 
 /// chord mode 中でも drum の音高は動かない。動くと kick のピッチが小節ごとに変わる。
@@ -153,7 +196,14 @@ fn randomizing_keeps_the_drum_rows_on_a_drum_rhythm() {
     let note = state.instances()[kick_row].lanes[0].base_note;
 
     for _ in 0..16 {
-        crate::randomize_instance_slice(state.instances_mut(), &[], crate::CycleRandom::ALL, None);
+        let patterns = state.draw_pattern_combination(crate::CycleRandom::ALL, false);
+        crate::randomize_instance_slice(
+            state.instances_mut(),
+            &[],
+            crate::CycleRandom::ALL,
+            None,
+            patterns,
+        );
         let kick = &state.instances()[kick_row];
         assert_eq!(kick.lanes[0].base_note, note, "drum の音高は動かさない");
         assert!(
@@ -170,7 +220,7 @@ fn randomizing_keeps_the_drum_rows_on_a_drum_rhythm() {
 fn written(pattern: DrumPattern) -> String {
     let mut instance = GridInstance::new(FULL_DRUM_TRACK_COUNT - 1);
     instance.set_drum_role(FULL_DRUM_TRACK_COUNT - 1, Some(pattern.role()));
-    super::write_drum_pattern(&mut instance, pattern);
+    super::write_drum_pattern(&mut instance, pattern, &mut rand::rng());
     pattern_text(&instance)
 }
 

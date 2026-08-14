@@ -28,6 +28,19 @@ fn texts(screen: &GridSequencerScreen, height: usize) -> Vec<String> {
         .collect()
 }
 
+fn column_texts(screen: &GridSequencerScreen, height: usize) -> Vec<Vec<String>> {
+    let available = height.saturating_sub(BORDERS);
+    section_columns(screen)
+        .iter()
+        .map(|sections| {
+            lines_for_column(sections, available)
+                .into_iter()
+                .map(|line| line.to_string())
+                .collect()
+        })
+        .collect()
+}
+
 fn arp_lines() -> usize {
     1 + ArpPattern::ALL.len()
 }
@@ -49,25 +62,43 @@ fn both_sections_list_every_pattern_in_the_order_the_wheel_sends_them() {
     assert_eq!(texts, expected);
 }
 
-/// chord mode を使わなくても drum の list は出る。drum は chord mode の外の機能。
+fn drum_lines() -> usize {
+    DrumRole::ALL
+        .iter()
+        .map(|role| 1 + DrumPattern::all_for(*role).len())
+        .sum()
+}
+
+fn expected_drum_lines() -> Vec<String> {
+    [
+        DrumRole::Kick,
+        DrumRole::Snare,
+        DrumRole::HiHat,
+        DrumRole::Percussion,
+    ]
+    .into_iter()
+    .flat_map(|role| {
+        std::iter::once(format!("drum {}", role.label().to_lowercase())).chain(
+            DrumPattern::all_for(role)
+                .into_iter()
+                .map(|pattern| format!("  {}", pattern.label())),
+        )
+    })
+    .collect()
+}
+
+/// chord mode を使わなくても、存在するdrum 4roleのlistはすべて出る。
 #[test]
-fn the_drum_section_appears_without_the_chord_mode() {
+fn every_drum_section_appears_without_the_chord_mode() {
     let screen = drum_screen();
 
     assert!(screen.state.chord().is_none());
-    let expected = std::iter::once("drum kick".to_string())
-        .chain(
-            DrumPattern::all_for(DrumRole::Kick)
-                .iter()
-                .map(|p| format!("  {}", p.label())),
-        )
-        .collect::<Vec<_>>();
-    assert_eq!(texts(&screen, TALL), expected);
+    assert_eq!(texts(&screen, TALL), expected_drum_lines());
 }
 
-/// 出すのは1役ぶん。回した行の役割へ list ごと切り替わる。
+/// 1候補しかないsnare / percussionもsectionごと省略しない。
 #[test]
-fn the_drum_section_follows_the_role_the_wheel_last_turned() {
+fn one_pattern_drum_roles_are_not_omitted() {
     let mut screen = drum_screen();
     screen.cycle_drum_pattern(
         crate::FIRST_DRUM_ROW,
@@ -76,11 +107,30 @@ fn the_drum_section_follows_the_role_the_wheel_last_turned() {
     );
 
     let texts = texts(&screen, TALL);
-    assert_eq!(texts[0], "drum perc");
-    assert_eq!(
-        texts.len(),
-        1 + DrumPattern::all_for(DrumRole::Percussion).len()
-    );
+    for expected in ["drum snr", "  Backbeat", "drum perc", "> Random"] {
+        assert!(texts.iter().any(|line| line == expected), "{texts:?}");
+    }
+}
+
+#[test]
+fn every_drawn_drum_role_gets_its_own_marker() {
+    let mut screen = drum_screen();
+    let mut drawn = crate::DrawnPhrases::default();
+    for pattern in cmrt_rhythm::DrumPatternCombination::all()[0].patterns() {
+        drawn.record_drum(pattern);
+    }
+    screen.absorb_drawn_phrases(drawn);
+
+    let marked = texts(&screen, TALL)
+        .into_iter()
+        .filter(|line| line.starts_with('>'))
+        .collect::<Vec<_>>();
+
+    assert_eq!(marked.len(), DrumRole::ALL.len());
+    for role in DrumRole::ALL {
+        let label = screen.last_drum_for(role).unwrap().label();
+        assert!(marked.iter().any(|line| line == &format!("> {label}")));
+    }
 }
 
 /// drum 行が無い構成では drum の section も出ない。
@@ -127,12 +177,25 @@ fn turning_the_wheel_down_moves_the_marker_down_the_list() {
 }
 
 #[test]
-fn a_short_pane_drops_the_last_section_before_it_clips_the_first_one() {
+fn a_short_pane_clips_only_the_rows_below_its_height() {
     let screen = chorded_screen();
 
     let texts = texts(&screen, BORDERS + arp_lines() + bass_lines() - 1);
-    assert_eq!(texts.len(), arp_lines());
+    assert_eq!(texts.len(), arp_lines() + bass_lines() - 1);
     assert_eq!(texts[0], "arp");
+}
+
+#[test]
+fn a_short_drum_pane_keeps_all_drum_sections_ahead_of_chord_sections() {
+    let mut screen = drum_screen();
+    screen.state.set_chord(
+        ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]),
+        Instant::now(),
+    );
+
+    let columns = column_texts(&screen, BORDERS + drum_lines());
+
+    assert_eq!(columns.last().unwrap(), &expected_drum_lines());
 }
 
 /// 高さの見積もりと実際に描く行数が食い違うと、枠の中に空白が残る。
@@ -157,7 +220,7 @@ fn the_pane_height_matches_the_lines_actually_drawn() {
 /// pane の幅は一番長いラベルと印がちょうど収まる幅。溢れると右端が切れる。
 #[test]
 fn every_entry_fits_the_pane_width() {
-    let content = usize::from(crate::ui::layout::PATTERN_LIST_WIDTH) - BORDERS;
+    let content = (usize::from(crate::ui::layout::PATTERN_LIST_WIDTH) - BORDERS) / 2;
 
     for screen in [chorded_screen(), drum_screen()] {
         for line in texts(&screen, TALL) {
@@ -169,7 +232,7 @@ fn every_entry_fits_the_pane_width() {
 /// drum は役割ごとに list が違うので、どの役割でも幅に収まることを見る。
 #[test]
 fn every_drum_role_entry_fits_the_pane_width() {
-    let content = usize::from(crate::ui::layout::PATTERN_LIST_WIDTH) - BORDERS;
+    let content = (usize::from(crate::ui::layout::PATTERN_LIST_WIDTH) - BORDERS) / 2;
 
     for role in DrumRole::ALL {
         assert!(

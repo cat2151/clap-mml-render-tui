@@ -11,7 +11,7 @@ fn chord_screen() -> GridSequencerScreen {
     screen
 }
 
-/// 90桁の端末では grid の右へ list が並ぶ。送り先が見えていることが目的なので、
+/// 2列paneが入る端末では grid の右へ全listが並ぶ。送り先が見えていることが目的なので、
 /// 型の名前がそのまま読める形で出す。
 #[test]
 fn the_phrase_list_is_drawn_to_the_right_of_the_grid() {

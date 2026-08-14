@@ -10,7 +10,11 @@
 //! ```
 //! use cmrt_rhythm::{generate_drum, DrumPattern, DrumRole, KickPattern};
 //!
-//! let hits = generate_drum(DrumPattern::Kick(KickPattern::Quarter), 16);
+//! let hits = generate_drum(
+//!     DrumPattern::Kick(KickPattern::Quarter),
+//!     16,
+//!     &mut rand::rng(),
+//! );
 //! assert_eq!(hits.len(), 4);
 //! assert_eq!(hits[0].step, 0);
 //! // note は次の音が鳴るまで伸ばしっぱなしにする。
@@ -23,6 +27,7 @@ mod pattern;
 mod role;
 
 pub use pattern::{
-    generate_drum, DrumHit, DrumPattern, HatPattern, KickPattern, PercPattern, SnarePattern,
+    generate_drum, DrumHit, DrumPattern, DrumPatternCombination, HatPattern, KickPattern,
+    PercPattern, SnarePattern,
 };
 pub use role::DrumRole;

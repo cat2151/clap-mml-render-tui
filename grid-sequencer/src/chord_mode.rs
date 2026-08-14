@@ -226,8 +226,14 @@ impl GridSequencerScreen {
         };
         // 鳴っている grid はそのままに、複製の上で引き直す。差し替えは小節境界まで待つ。
         let mut instances = self.state.instances().to_vec();
-        let drawn =
-            crate::randomize_instance_slice(&mut instances, ctx.patches(), policy, Some(&playback));
+        let patterns = self.state.draw_pattern_combination(policy, true);
+        let drawn = crate::randomize_instance_slice(
+            &mut instances,
+            ctx.patches(),
+            policy,
+            Some(&playback),
+            patterns,
+        );
         self.absorb_drawn_phrases(drawn);
         if policy.patch {
             // 和音の行だけは無差別抽選の結果を捨て、条件に合う patch へ当て直す。

@@ -50,9 +50,10 @@ pub use state::{
     step_interval_at, step_offset, step_offset_at, step_timeline_seconds, step_timeline_seconds_at,
     swing_offset_seconds, AppliedTempo, ChordPlayback, DrawnPhrases, GridInstance, GridLane,
     GridLaneMode, GridScheduledMessage, GridState, LaneAddress, NotePattern, NoteStep,
-    PitchDirection, VisibleNoteRow, VisibleRowKind, ARPEGGIO_ROW, BASS_OCTAVE_LANES, BASS_ROW, BPM,
-    CHORD_ROW, CHORD_VOICE_LANES, FIRST_DRUM_ROW, FULL_DRUM_TRACK_COUNT, GRID_ROWS, GRID_STEPS,
-    LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL, SWING_MAX, SWING_MIN,
+    PatternCombination, PitchDirection, VisibleNoteRow, VisibleRowKind, ARPEGGIO_ROW,
+    BASS_OCTAVE_LANES, BASS_ROW, BPM, CHORD_ROW, CHORD_VOICE_LANES, FIRST_DRUM_ROW,
+    FULL_DRUM_TRACK_COUNT, GRID_ROWS, GRID_STEPS, LOOKAHEAD, STEPS_PER_BEAT, STEP_INTERVAL,
+    SWING_MAX, SWING_MIN,
 };
 
 #[cfg(test)]
