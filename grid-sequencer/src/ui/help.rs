@@ -13,7 +13,7 @@ const TITLE: &str = " Grid Sequencer ヘルプ(Keybinds)  Esc/q/?:close ";
 
 /// 画面下部に常に出しておく1行のキーバインド要約。
 pub(super) const KEYBIND_TEXT: &str =
-    "mouse:edit Ctrl+B:BPM a:rnd x:clear c:chord r/R:random t:tracks Ctrl+G:screen q:quit";
+    "mouse:edit Ctrl+B:BPM a:rnd i:chord input x:clear c:chord r/R:random t:tracks Ctrl+G:screen q:quit";
 
 /// 枠線が食う幅・高さ。
 const BORDER_SIZE: u16 = 2;
@@ -84,6 +84,7 @@ fn keybind_lines() -> Vec<Line<'static>> {
         " a       1周ごとの random 設定",
         " x       全 note 消去",
         " c       chord mode on/off",
+        " i       コード進行を入力して固定",
         " r       全ランダム(patch 含む)",
         " R       note/pattern だけランダム",
         " t       track数 1/2/3/4/7/8/16 切替",
@@ -111,8 +112,8 @@ fn feature_lines(track_count: usize) -> Vec<Line<'static>> {
             "  note on がある行だけ跳ねます(無い行は -)".to_string(),
             "lane色  暗=未構築  灰=instanceのみ  通常=ロード済".to_string(),
             "chord mode(c) 行1=和音 行2=bass 行3=4 voice。".to_string(),
-            "  転回とoctaveは全自動(auto voicing)で、top note".to_string(),
-            "  の跳躍を最小化。on/off は保存されます。".to_string(),
+            "  i: key:G Isus4-I で入力・固定。".to_string(),
+            "  転回/octaveは全自動(auto voicing)。保存対応。".to_string(),
             "grid の wheel↓ で次のフレーズ(chord mode中)".to_string(),
             "  4 voice行 Up/Down/UpDown/DownUp/UpDownHold/".to_string(),
             "    Converge/Diverge/Octave/Random".to_string(),

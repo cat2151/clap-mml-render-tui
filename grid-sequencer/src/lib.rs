@@ -16,6 +16,7 @@ pub use cmrt_rhythm::{DrumPattern, DrumRole};
 
 mod arpeggio;
 mod bass_line;
+mod chord_input;
 mod chord_mode;
 mod context;
 mod cycle_random;
@@ -44,7 +45,7 @@ pub use sender::{
     GridConnectionPhase, GridConnectionStatus, GridMidiSender, GridProgress, GridRowPatchPhase,
     GridRowPatchStatus, GridRowReadiness,
 };
-pub use session::GridSequencerSession;
+pub use session::{FixedChordProgression, GridSequencerSession};
 pub use state::{
     clamp_swing, frames_ahead, lookahead_at, randomize_instance_slice, schedule_guard_at,
     step_interval_at, step_offset, step_offset_at, step_timeline_seconds, step_timeline_seconds_at,
@@ -135,6 +136,7 @@ impl GridSequencerScreen {
     pub fn start(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
         self.cancel_mouse_gesture();
         self.help_open = false;
+        self.close_chord_input();
         self.close_cycle_random_overlay();
         self.patch_status = ctx.patch_status();
         // 入場時は何も送っていないので、引き直しで出る note off は捨ててよい。
@@ -160,6 +162,7 @@ impl GridSequencerScreen {
     pub fn resume(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
         self.cancel_mouse_gesture();
         self.help_open = false;
+        self.close_chord_input();
         self.close_cycle_random_overlay();
         self.cancel_cycle_swap();
         self.state.start_at_bpm(now, self.bpm());
@@ -173,6 +176,7 @@ impl GridSequencerScreen {
     pub fn finish(&mut self) {
         self.cancel_mouse_gesture();
         self.help_open = false;
+        self.close_chord_input();
         self.close_cycle_random_overlay();
         self.bpm_input = None;
         self.cancel_cycle_swap();
@@ -298,6 +302,10 @@ impl GridSequencerScreen {
             self.handle_bpm_input_key(key, now);
             return GridSequencerAction::Continue;
         }
+        if self.chord_input.is_some() {
+            self.handle_chord_input_key(key, now, ctx);
+            return GridSequencerAction::Continue;
+        }
         if self.cycle_random_open() {
             self.handle_cycle_random_key(key);
             return GridSequencerAction::Continue;
@@ -341,6 +349,7 @@ impl GridSequencerScreen {
             KeyCode::Char('a') => self.toggle_cycle_random_overlay(),
             KeyCode::Char('b') if key.modifiers.is_empty() => self.toggle_single_buffering(),
             KeyCode::Char('c') => self.toggle_chord_mode(now, ctx),
+            KeyCode::Char('i') => self.open_chord_input(),
             KeyCode::Char('r') => self.randomize(now, ctx),
             KeyCode::Char('R') => self.randomize_keeping_patches(now, ctx),
             KeyCode::Char('u') => self.undo(ctx),

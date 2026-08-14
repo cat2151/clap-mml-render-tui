@@ -13,6 +13,7 @@ use cmrt_tui_core::{
 
 use crate::{GridConnectionPhase, GridConnectionStatus, GridSequencerScreen, GRID_STEPS};
 
+mod chord_input;
 mod chord_line;
 pub(crate) mod cycle_random;
 mod grid;
@@ -77,6 +78,10 @@ pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: 
     }
     if screen.cycle_random_open() {
         cycle_random::draw_overlay(f, screen);
+    }
+    // 入力中の文字とエラーを必ず読めるよう、固定コード進行入力は最前面に置く。
+    if screen.chord_input_open() {
+        chord_input::draw_overlay(f, screen);
     }
 }
 

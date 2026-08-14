@@ -14,6 +14,7 @@ fn kinds(values: &[GridNoteStepState]) -> String {
 #[test]
 fn new_format_round_trip_preserves_grid_values_and_omits_legacy_fields() {
     let state = GridSequencerSessionState {
+        fixed_chord: None,
         instances: vec![GridSequencerInstanceState {
             patch: Some("Keys/Piano.fxp".to_string()),
             lane_mode: GridLaneModeState::Single,
@@ -46,6 +47,7 @@ fn new_format_round_trip_preserves_grid_values_and_omits_legacy_fields() {
     assert!(json.contains("note_steps"));
     assert!(!json.contains("\"cells\""));
     assert!(!json.contains("\"duration\""));
+    assert!(!json.contains("\"fixed_chord\""));
     let restored: GridSequencerSessionState = serde_json::from_str(&json).unwrap();
     let mut expected = state;
     expected.instances[0].lanes[0]
@@ -57,6 +59,7 @@ fn new_format_round_trip_preserves_grid_values_and_omits_legacy_fields() {
 #[test]
 fn downward_voicing_rotation_round_trips_as_a_negative_value() {
     let state = GridSequencerSessionState {
+        fixed_chord: None,
         instances: vec![GridSequencerInstanceState {
             patch: Some("Bass/Poly.fxp".to_string()),
             lane_mode: GridLaneModeState::ChordVoices4,
@@ -234,6 +237,27 @@ fn swing_round_trips_and_defaults_to_no_shuffle_when_missing() {
     assert_eq!(restored.instances[0].swing, 63);
     // swing を知らない頃のセッション。跳ねなしから始める。
     assert_eq!(restored.instances[1].swing, SWING_MIN);
+}
+
+#[test]
+fn fixed_chord_source_text_round_trips_without_validation() {
+    let state = GridSequencerSessionState {
+        fixed_chord: Some(GridFixedChordState {
+            input: "KEY:G♭ Isus4-I".to_string(),
+        }),
+        ..GridSequencerSessionState::default()
+    };
+
+    let json = serde_json::to_string(&state).unwrap();
+    let restored: GridSequencerSessionState = serde_json::from_str(&json).unwrap();
+
+    assert!(json.contains("\"fixed_chord\""));
+    assert_eq!(restored.fixed_chord, state.fixed_chord);
+
+    let invalid: GridSequencerSessionState =
+        serde_json::from_str(r#"{"instances":[],"fixed_chord":{"input":"not valid yet"}}"#)
+            .unwrap();
+    assert_eq!(invalid.fixed_chord.unwrap().input, "not valid yet");
 }
 
 #[test]

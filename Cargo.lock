@@ -303,12 +303,11 @@ dependencies = [
 [[package]]
 name = "chord2mml-core"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/chord2mml-rust#2030aae999fe4bda630c6dd40cf91935d72839ed"
+source = "git+https://github.com/cat2151/chord2mml-rust#7148117056ed05f5bd084630149c7c87f3fbd74c"
 dependencies = [
  "anyhow",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
  "tree-sitter",
  "tree-sitter-chord",
 ]
@@ -567,6 +566,7 @@ dependencies = [
  "crossterm",
  "rand 0.10.2",
  "ratatui",
+ "ratatui-textarea",
 ]
 
 [[package]]
@@ -3477,7 +3477,7 @@ dependencies = [
 [[package]]
 name = "tree-sitter-chord"
 version = "0.0.1"
-source = "git+https://github.com/cat2151/chord2mml-rust#2030aae999fe4bda630c6dd40cf91935d72839ed"
+source = "git+https://github.com/cat2151/chord2mml-rust#7148117056ed05f5bd084630149c7c87f3fbd74c"
 dependencies = [
  "cc",
  "tree-sitter",

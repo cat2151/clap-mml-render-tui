@@ -1,7 +1,7 @@
 //! chord mode の永続化（セッションからの復元と、`t` キーをまたぐ持ち越し）。
 
 use super::*;
-use crate::GridSequencerParts;
+use crate::{FixedChordProgression, GridInstance, GridSequencerParts, GridSequencerSession};
 
 fn press_t() -> KeyEvent {
     KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE)
@@ -11,6 +11,18 @@ fn press_t() -> KeyEvent {
 fn restored_screen() -> GridSequencerScreen {
     GridSequencerScreen::new_with(GridSequencerParts {
         chord_enabled: true,
+        ..GridSequencerParts::default()
+    })
+}
+
+fn restored_fixed_screen(input: &str) -> GridSequencerScreen {
+    let mut cycle_random = crate::CycleRandom::ALL;
+    cycle_random.chord = false;
+    let session = GridSequencerSession::new(vec![GridInstance::new(0)], cycle_random)
+        .with_fixed_chord(Some(FixedChordProgression::new(input)));
+    GridSequencerScreen::new_with(GridSequencerParts {
+        chord_enabled: true,
+        restored_session: Some(session),
         ..GridSequencerParts::default()
     })
 }
@@ -92,5 +104,41 @@ fn a_restored_chord_mode_is_not_retried_after_it_fails() {
     assert!(
         screen.chord_enabled(),
         "失敗は一時的なこともあるので、ユーザーの選択は保持したまま次回また試す"
+    );
+}
+
+#[test]
+fn a_saved_fixed_progression_is_restored_without_the_catalog() {
+    let empty = ChordProgressionCatalog::default();
+    let patches = patches();
+    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &empty, &OnePolyPatch);
+    let mut screen = restored_fixed_screen("key:G Isus4-I");
+
+    screen.start(Instant::now(), &ctx);
+    screen.refresh_context(&ctx);
+
+    let chord = screen.state.chord().expect("固定進行を復元する");
+    assert_eq!((chord.key(), chord.degrees()), ("G", "Isus4-I"));
+    assert_eq!(screen.fixed_chord().unwrap().input(), "key:G Isus4-I");
+    assert!(!screen.cycle_random().chord);
+}
+
+#[test]
+fn invalid_saved_fixed_text_is_preserved_as_an_editable_error() {
+    let patches = patches();
+    let empty = ChordProgressionCatalog::default();
+    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &empty, &OnePolyPatch);
+    let mut screen = restored_fixed_screen("not valid yet");
+
+    screen.start(Instant::now(), &ctx);
+    screen.refresh_context(&ctx);
+
+    assert!(screen.state.chord().is_none());
+    assert!(screen.chord_error().is_some());
+    assert_eq!(screen.fixed_chord().unwrap().input(), "not valid yet");
+    screen.open_chord_input();
+    assert_eq!(
+        screen.chord_input_overlay().unwrap().value(),
+        "not valid yet"
     );
 }

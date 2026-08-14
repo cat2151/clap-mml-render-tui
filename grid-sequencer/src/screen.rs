@@ -68,6 +68,8 @@ pub struct GridSequencerScreen {
     /// 自動BPMを引く範囲。セッションへ保存するのはこちらで、引いた値ではない。
     pub(crate) bpm_range: BpmRange,
     pub(crate) bpm_input: Option<BpmInput>,
+    /// `i` キーで開く固定コード進行の1行入力overlay。
+    pub(crate) chord_input: Option<crate::chord_input::ChordInputOverlay>,
     /// コード進行1周ごとに何を引き直すか。詳細は [`crate::cycle_random`]。
     pub(crate) cycle_random: CycleRandom,
     /// `a` キーで開く、1周ごとの random 設定 overlay。`None` なら閉じている。
@@ -93,6 +95,8 @@ pub struct GridSequencerScreen {
     pub(crate) chord_enabled: bool,
     /// セッションから復元した chord mode を、patch 一覧が揃ってから適用するための予約。
     pub(crate) pending_chord: bool,
+    /// 手入力で固定したコード進行。元入力を保存し、復元時にも同じparserへ通す。
+    pub(crate) fixed_chord: Option<crate::FixedChordProgression>,
     /// コード進行データ更新の再起動アナウンスを出し始めた時刻。
     pub(crate) restart_notice: Option<Instant>,
     /// 待機 bank への先読みロードの進み具合。`None` なら先読みしていない。
@@ -153,7 +157,7 @@ impl GridSequencerScreen {
         let track_count = cmrt_realtime_play::normalize_live_instance_count(track_count);
         let restored_session = restored_session.filter(|session| !session.instances.is_empty());
         let restored = restored_session.is_some();
-        let (state, cycle_random) = if let Some(session) = restored_session {
+        let (state, mut cycle_random, fixed_chord) = if let Some(session) = restored_session {
             let mut instances = session.instances;
             let saved_count = instances.len();
             while instances.len() < track_count {
@@ -169,13 +173,19 @@ impl GridSequencerScreen {
             let mut state = GridState::with_instance_count(track_count);
             let restored = state.restore_instances(instances);
             debug_assert!(restored);
-            (state, session.cycle_random)
+            (state, session.cycle_random, session.fixed_chord)
         } else {
             (
                 GridState::with_instance_count(track_count),
                 CycleRandom::ALL,
+                None,
             )
         };
+        // fixed_chord が残っているセッションでは固定指定を正本とする。通常の保存経路では
+        // CHORD ON 時に fixed_chord を消すが、手編集された不整合JSONも安全側へ正規化する。
+        if fixed_chord.is_some() {
+            cycle_random.chord = false;
+        }
         Self {
             midi_sender,
             state,
@@ -186,6 +196,7 @@ impl GridSequencerScreen {
             bpm_mode,
             bpm_range,
             bpm_input: None,
+            chord_input: None,
             cycle_random,
             cycle_random_overlay: None,
             note_gesture: None,
@@ -198,6 +209,7 @@ impl GridSequencerScreen {
             chord_error: None,
             chord_enabled,
             pending_chord: chord_enabled,
+            fixed_chord,
             restart_notice: None,
             cycle_swap: None,
             waiting_for_patches: false,
@@ -238,6 +250,10 @@ impl GridSequencerScreen {
     /// chord mode が on か。セッションへ保存する値。
     pub fn chord_enabled(&self) -> bool {
         self.chord_enabled
+    }
+
+    pub fn fixed_chord(&self) -> Option<&crate::FixedChordProgression> {
+        self.fixed_chord.as_ref()
     }
 
     /// 抽選で引いた型を、表示用のカーソル（Phrase pane と NOTE grid のタイトル）へ

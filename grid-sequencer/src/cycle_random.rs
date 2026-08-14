@@ -260,6 +260,11 @@ impl GridSequencerScreen {
             return;
         }
         self.cycle_random.set(item, on);
+        // CHORDを再び自動抽選へ入れる操作を、固定入力の明示的な解除として扱う。
+        // 現在の進行はその場で切らず、次の進行境界からランダムへ戻る。
+        if item == CycleRandomItem::Chord && on {
+            self.fixed_chord = None;
+        }
         match item {
             // 和音の増幅は「譜面ごと毎周変わる完全ランダム演奏」限定。音色ロード
             // なしで即時反映する。

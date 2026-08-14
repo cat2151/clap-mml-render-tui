@@ -63,6 +63,25 @@ fn ready_patch_catalog_replaces_only_disappeared_saved_patches() {
 }
 
 #[test]
+fn fixed_chord_source_survives_session_capture_and_track_resize() {
+    let session = GridSequencerSession::new(vec![instance(0, "Piano", 60)], CycleRandom::HOLD)
+        .with_fixed_chord(Some(FixedChordProgression::new("KEY:G♭ I-IV")));
+    let mut screen = GridSequencerScreen::new_with(crate::GridSequencerParts {
+        track_count: 1,
+        restored_session: Some(session),
+        ..crate::GridSequencerParts::default()
+    });
+
+    screen.resize_for_restart(2, &[]);
+
+    assert_eq!(screen.fixed_chord().unwrap().input(), "KEY:G♭ I-IV");
+    assert_eq!(
+        screen.session_state().unwrap().fixed_chord.unwrap().input(),
+        "KEY:G♭ I-IV"
+    );
+}
+
+#[test]
 fn resizing_keeps_instances_and_the_chord_voice_instances_four_lanes() {
     let mut third = instance(2, "Bass", 36);
     third.voicing_rotation = -5;

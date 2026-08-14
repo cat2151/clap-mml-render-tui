@@ -26,8 +26,8 @@ pub use daw::{
     save_daw_sound_check_guide_overlay_date, DawCachedMeasure, DawSessionState,
 };
 pub use grid_sequencer_session::{
-    GridCycleRandomState, GridDrumRoleState, GridLaneModeState, GridNoteStepState,
-    GridSequencerInstanceState, GridSequencerLaneState, GridSequencerRowState,
+    GridCycleRandomState, GridDrumRoleState, GridFixedChordState, GridLaneModeState,
+    GridNoteStepState, GridSequencerInstanceState, GridSequencerLaneState, GridSequencerRowState,
     GridSequencerSessionState,
 };
 pub use patch_phrase_store::{

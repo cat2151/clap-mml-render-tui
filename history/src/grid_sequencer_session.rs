@@ -25,6 +25,13 @@ const BASS_OCTAVE_LANES: usize = 2;
 pub struct GridSequencerSessionState {
     pub instances: Vec<GridSequencerInstanceState>,
     pub cycle_random: GridCycleRandomState,
+    pub fixed_chord: Option<GridFixedChordState>,
+}
+
+/// 固定コード進行の永続化形式。派生したnoteではなく、再parse・再編集できる元入力を持つ。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridFixedChordState {
+    pub input: String,
 }
 
 impl Serialize for GridSequencerSessionState {
@@ -32,9 +39,13 @@ impl Serialize for GridSequencerSessionState {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("GridSequencerSessionState", 2)?;
+        let field_count = 2 + usize::from(self.fixed_chord.is_some());
+        let mut state = serializer.serialize_struct("GridSequencerSessionState", field_count)?;
         state.serialize_field("instances", &self.instances)?;
         state.serialize_field("cycle_random", &self.cycle_random)?;
+        if let Some(fixed_chord) = &self.fixed_chord {
+            state.serialize_field("fixed_chord", fixed_chord)?;
+        }
         state.end()
     }
 }
@@ -58,9 +69,13 @@ impl<'de> Deserialize<'de> for GridSequencerSessionState {
             Some(value) => deserialize_instances(value),
             None => migrate_legacy_rows(object.get("rows")),
         };
+        let fixed_chord = object
+            .get("fixed_chord")
+            .and_then(|value| serde_json::from_value(value.clone()).ok());
         Ok(Self {
             instances,
             cycle_random,
+            fixed_chord,
         })
     }
 }

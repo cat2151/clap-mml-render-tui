@@ -369,6 +369,7 @@ fn a_long_patch_name_is_truncated_from_the_head_in_the_grid() {
 
 mod auto_gain;
 mod chord;
+mod chord_input;
 mod help;
 mod layout;
 mod patch_selector;

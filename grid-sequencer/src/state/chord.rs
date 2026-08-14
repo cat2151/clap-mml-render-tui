@@ -28,7 +28,7 @@ pub const ARPEGGIO_ROW: usize = 2;
 /// 抽選済みのコード進行と、その再生位置。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ChordPlayback {
-    key: &'static str,
+    key: String,
     degrees: String,
     /// コード1つぶんの note number 群を進行の順に並べたもの。空にはしない。
     chords: Vec<Vec<u8>>,
@@ -42,13 +42,13 @@ impl ChordPlayback {
     /// 空の進行は再生できないので `None` を返す。
     ///
     /// bass は付かない。auto voicing を通した実経路では [`Self::from_voicings`] を使う。
-    pub fn new(key: &'static str, degrees: String, chords: Vec<Vec<u8>>) -> Option<Self> {
+    pub fn new(key: impl Into<String>, degrees: String, chords: Vec<Vec<u8>>) -> Option<Self> {
         if chords.is_empty() {
             return None;
         }
         let basses = vec![None; chords.len()];
         Some(Self {
-            key,
+            key: key.into(),
             degrees,
             chords,
             basses,
@@ -58,7 +58,7 @@ impl ChordPlayback {
 
     /// auto voicing 済みの進行から作る。空の進行は再生できないので `None` を返す。
     pub fn from_voicings(
-        key: &'static str,
+        key: impl Into<String>,
         degrees: String,
         voicings: Vec<ChordVoicing>,
     ) -> Option<Self> {
@@ -72,7 +72,7 @@ impl ChordPlayback {
             basses.push(voicing.bass);
         }
         Some(Self {
-            key,
+            key: key.into(),
             degrees,
             chords,
             basses,
@@ -81,7 +81,7 @@ impl ChordPlayback {
     }
 
     pub fn key(&self) -> &str {
-        self.key
+        &self.key
     }
 
     pub fn degrees(&self) -> &str {

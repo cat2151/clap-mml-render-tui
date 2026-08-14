@@ -9,8 +9,8 @@ use cmrt_chord::{ChordProgressionCatalog, ChordVoicing};
 use cmrt_surge_patches::{pick_for_role, PatchRole};
 
 use crate::{
-    log_line, ChordPlayback, GridSequencerContext, GridSequencerScreen, ARPEGGIO_ROW, BASS_ROW,
-    CHORD_ROW,
+    log_line, ChordPlayback, CycleRandomItem, FixedChordProgression, GridSequencerContext,
+    GridSequencerScreen, ARPEGGIO_ROW, BASS_ROW, CHORD_ROW,
 };
 
 /// 1回の抽選で、変換できる進行を探すために引き直す回数。
@@ -63,7 +63,20 @@ impl GridSequencerScreen {
                 return false;
             }
         };
-        if !self.reroll_chord(now, ctx) {
+        if let Some(fixed) = self.fixed_chord.clone() {
+            let seed = self.state.chord().and_then(ChordPlayback::current_voicing);
+            let playback = match fixed_chord_playback(fixed.input(), seed.as_ref()) {
+                Ok(playback) => playback,
+                Err(error) => {
+                    self.chord_error = Some(error.clone());
+                    log_line(&format!(
+                        "grid-sequencer: fixed chord restore rejected reason={error}"
+                    ));
+                    return false;
+                }
+            };
+            self.apply_chord_playback(playback, now, "fixed");
+        } else if !self.reroll_chord(now, ctx) {
             return false;
         }
         self.state.instances_mut()[CHORD_ROW].patch = Some(patch);
@@ -72,6 +85,40 @@ impl GridSequencerScreen {
         self.apply_assigned_patches(ctx, false);
         self.chord_enabled = true;
         true
+    }
+
+    /// 1行入力から固定進行を即時適用する。失敗時は演奏・patch・固定設定を変更しない。
+    pub(crate) fn apply_fixed_chord_input(
+        &mut self,
+        input: &str,
+        now: Instant,
+        ctx: &GridSequencerContext<'_>,
+    ) -> Result<(), String> {
+        let seed = self.state.chord().and_then(ChordPlayback::current_voicing);
+        let playback = fixed_chord_playback(input, seed.as_ref())?;
+        let was_off = self.state.chord().is_none();
+        let chord_patch = if was_off {
+            Some(self.pick_chord_patch(ctx).map_err(str::to_string)?)
+        } else {
+            None
+        };
+
+        self.cancel_mouse_gesture();
+        self.cancel_cycle_swap_preserving_drain();
+        self.apply_chord_playback(playback, now, "fixed-input");
+        if let Some(patch) = chord_patch {
+            self.state.instances_mut()[CHORD_ROW].patch = Some(patch);
+            self.apply_assigned_patches(ctx, false);
+        }
+        self.chord_enabled = true;
+        self.pending_chord = false;
+        self.fixed_chord = Some(FixedChordProgression::new(input.trim()));
+        self.set_cycle_random(CycleRandomItem::Chord, false);
+        self.chord_error = None;
+        if was_off {
+            self.prepare_connection();
+        }
+        Ok(())
     }
 
     /// 用途が決まっている行（chord 行を除く）。
@@ -179,6 +226,11 @@ impl GridSequencerScreen {
             log_line("grid-sequencer: chord reroll failed reason=catalog-empty");
             return false;
         };
+        self.apply_chord_playback(playback, now, "random");
+        true
+    }
+
+    fn apply_chord_playback(&mut self, playback: ChordPlayback, now: Instant, source: &str) {
         if playback.max_voice_count() > crate::CHORD_VOICE_LANES {
             log_line(&format!(
                 "grid-sequencer: chord voices truncated for multi-lane instances max={} limit={}",
@@ -187,22 +239,14 @@ impl GridSequencerScreen {
             ));
         }
         log_line(&format!(
-            "grid-sequencer: chord set key={} degrees={} chords={}",
+            "grid-sequencer: chord set source={source} key={} degrees={} chords={}",
             playback.key(),
             playback.degrees(),
             playback.chord_count(),
         ));
-        if playback.max_voice_count() > crate::CHORD_VOICE_LANES {
-            log_line(&format!(
-                "grid-sequencer: chord voices truncated for multi-lane instances max={} limit={}",
-                playback.max_voice_count(),
-                crate::CHORD_VOICE_LANES,
-            ));
-        }
         let note_offs = self.state.set_chord(Some(playback), now);
         self.send_scheduled(&note_offs);
         self.chord_error = None;
-        true
     }
 
     /// 次サイクルを抽選し、差し替え待ちとして預ける。まだ鳴らさない。
@@ -300,7 +344,9 @@ impl GridSequencerScreen {
         repick_patch: bool,
     ) {
         if self.state.chord().is_some() {
-            self.reroll_chord(now, ctx);
+            if self.fixed_chord.is_none() {
+                self.reroll_chord(now, ctx);
+            }
             if repick_patch {
                 match self.pick_chord_patch(ctx) {
                     Ok(patch) => self.state.instances_mut()[CHORD_ROW].patch = Some(patch),
@@ -352,6 +398,14 @@ fn pick_chord(
         pick.degrees,
     ));
     ChordPlayback::from_voicings(pick.key, pick.degrees, voicings)
+}
+
+/// chord2mml-core の構造化parserから固定進行を作り、既存のauto voicingへ渡す。
+fn fixed_chord_playback(input: &str, seed: Option<&ChordVoicing>) -> Result<ChordPlayback, String> {
+    let parsed = cmrt_chord::parse_chord_progression(input)?;
+    let voicings = cmrt_chord::auto_voice(parsed.chords(), seed);
+    ChordPlayback::from_voicings(parsed.key_name(), parsed.chord_label(), voicings)
+        .ok_or_else(|| "コード進行が空です".to_string())
 }
 
 #[cfg(test)]

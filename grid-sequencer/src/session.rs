@@ -2,10 +2,29 @@
 
 use crate::{CycleRandom, GridInstance, GridSequencerScreen, GridState};
 
+/// セッションへ保存する固定コード進行。解析済み派生値ではなく、再編集できる元入力を持つ。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FixedChordProgression {
+    input: String,
+}
+
+impl FixedChordProgression {
+    pub fn new(input: impl Into<String>) -> Self {
+        Self {
+            input: input.into(),
+        }
+    }
+
+    pub fn input(&self) -> &str {
+        &self.input
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GridSequencerSession {
     pub instances: Vec<GridInstance>,
     pub cycle_random: CycleRandom,
+    pub fixed_chord: Option<FixedChordProgression>,
 }
 
 impl GridSequencerSession {
@@ -13,7 +32,13 @@ impl GridSequencerSession {
         Self {
             instances,
             cycle_random,
+            fixed_chord: None,
         }
+    }
+
+    pub fn with_fixed_chord(mut self, fixed_chord: Option<FixedChordProgression>) -> Self {
+        self.fixed_chord = fixed_chord;
+        self
     }
 }
 
@@ -22,6 +47,7 @@ impl GridSequencerScreen {
         self.grid_ready.then(|| GridSequencerSession {
             instances: self.state.instances().to_vec(),
             cycle_random: self.cycle_random,
+            fixed_chord: self.fixed_chord.clone(),
         })
     }
 

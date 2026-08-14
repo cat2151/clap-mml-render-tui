@@ -241,6 +241,7 @@ fn session_state_round_trips_the_editable_grid() {
     std::fs::remove_dir_all(&tmp).ok();
     let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
     let grid = GridSequencerSessionState {
+        fixed_chord: None,
         instances: vec![GridSequencerInstanceState {
             patch: Some("Keys/Piano.fxp".to_string()),
             lane_mode: GridLaneModeState::Single,

@@ -35,7 +35,6 @@ fn key_prefix_transposes_degrees() {
 }
 
 /// ハイフンは chord2mml が受け付ける区切り文字なので、スペース区切りと同じ結果になる。
-/// （`chord_notes` は degrees をハイフンで数えるので、比較相手は変換だけを通す）
 #[test]
 fn hyphen_and_space_separators_agree() {
     for entry in catalog().entries() {
@@ -71,6 +70,43 @@ fn unparsable_notation_is_rejected_instead_of_being_treated_as_raw_mml() {
     assert!(chord_notes("zzz", "C").is_err());
     // 同じ入力を note_progression へ渡すと、生 MML として鳴ってしまう（keyboard の仕様）。
     assert!(crate::note_progression("Key:C cdefg").is_ok());
+}
+
+#[test]
+fn structured_progression_comes_from_chord2mml_parse_result() {
+    let parsed = parse_chord_progression("key:G Isus4-I").unwrap();
+
+    assert_eq!(parsed.input(), "key:G Isus4-I");
+    assert_eq!(parsed.normalized_input(), "key:G Isus4-I");
+    assert_eq!(parsed.key_text(), "key:G");
+    assert_eq!(parsed.key_pitch_class(), 7);
+    assert_eq!(parsed.key_name(), "G");
+    assert_eq!(parsed.chord_texts(), &["Isus4", "I"]);
+    assert_eq!(parsed.chord_label(), "Isus4-I");
+    assert_eq!(parsed.chords().len(), 2);
+}
+
+#[test]
+fn structured_progression_requires_one_leading_key_and_only_chords() {
+    for input in [
+        "I-IV",
+        "I key:G IV",
+        "key:C I key:G IV",
+        "key:G I | IV",
+        "key:G",
+    ] {
+        assert!(parse_chord_progression(input).is_err(), "input={input}");
+    }
+}
+
+#[test]
+fn key_accidentals_are_not_parsed_locally() {
+    let flat = parse_chord_progression("KEY:G♭ I").unwrap();
+    let wrapped = parse_chord_progression("key:B♯ I").unwrap();
+    assert_eq!(flat.key_pitch_class(), 6);
+    assert_eq!(flat.key_name(), "F#");
+    assert_eq!(wrapped.key_pitch_class(), 0);
+    assert_eq!(wrapped.key_name(), "C");
 }
 
 /// 全カタログ × 全 Key を実際に変換し、進行ごとの成否が Key に依存しないことと、

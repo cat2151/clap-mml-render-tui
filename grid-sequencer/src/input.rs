@@ -55,6 +55,10 @@ impl GridSequencerScreen {
         terminal_area: Rect,
         ctx: &GridSequencerContext<'_>,
     ) {
+        if self.chord_input.is_some() {
+            self.cancel_mouse_gesture();
+            return;
+        }
         if self.cycle_random_open() {
             if let MouseEventKind::Down(MouseButton::Left) = event.kind {
                 self.handle_cycle_random_click(event.column, event.row, terminal_area);

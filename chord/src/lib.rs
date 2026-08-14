@@ -10,7 +10,8 @@ mod progression;
 
 pub use auto_voicing::{auto_voice, max_jumps, ChordVoicing};
 pub use progression::{
-    chord_notes, ChordProgression, ChordProgressionCatalog, ChordProgressionPick, KEYS,
+    chord_notes, parse_chord_progression, ChordProgression, ChordProgressionCatalog,
+    ChordProgressionPick, ParsedChordProgression, KEYS,
 };
 
 use midly::{MidiMessage, Smf, TrackEventKind};
