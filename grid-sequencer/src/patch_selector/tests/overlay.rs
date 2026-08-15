@@ -51,6 +51,7 @@ fn loading_error_empty_and_unconfigured_catalogs_do_not_open() {
     unconfigured.patch_dirs_configured = false;
     screen.open_patch_selector(0, &unconfigured);
     assert!(screen.patch_selector.is_none());
+    assert!(screen.cycle_random().patch);
 }
 
 #[test]
@@ -65,6 +66,8 @@ fn clicking_a_patch_changes_only_that_row_enters_hold_and_cancels_pending_cycle(
         ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]).unwrap(),
     );
     screen.open_patch_selector(0, &ctx);
+    assert!(!screen.cycle_random().patch);
+    assert!(!screen.state.has_pending_cycle());
     let layout = PatchSelectorLayout::new(AREA, false);
     let beta = screen
         .patch_selector
@@ -275,6 +278,7 @@ fn escape_cancels_a_preview_without_committing_it() {
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
     screen.state.rows_mut()[0].patch = Some("Keys/Alpha.fxp".to_string());
     screen.open_patch_selector(0, &ctx);
+    assert!(!screen.cycle_random().patch);
 
     screen.handle_patch_selector_key(press(KeyCode::Down), &ctx);
     assert_eq!(
@@ -293,6 +297,41 @@ fn escape_cancels_a_preview_without_committing_it() {
         screen.state.rows()[0].patch.as_deref(),
         Some("Keys/Alpha.fxp")
     );
+    assert!(screen.cycle_random().patch);
+}
+
+#[test]
+fn escape_keeps_patch_random_off_when_it_was_already_off() {
+    let patches = patches();
+    let ctx = context(&patches);
+    let mut screen = GridSequencerScreen::with_track_count(None, 1);
+    screen.set_cycle_random(crate::CycleRandomItem::Patch, false);
+
+    screen.open_patch_selector(0, &ctx);
+    screen.handle_patch_selector_key(press(KeyCode::Esc), &ctx);
+
+    assert!(screen.patch_selector.is_none());
+    assert!(!screen.cycle_random().patch);
+}
+
+#[test]
+fn confirming_the_current_patch_holds_patch_random_and_undo_restores_it() {
+    let patches = patches();
+    let ctx = context(&patches);
+    let mut screen = GridSequencerScreen::with_track_count(None, 1);
+    screen.state.rows_mut()[0].patch = Some("Keys/Alpha.fxp".to_string());
+
+    screen.open_patch_selector(0, &ctx);
+    screen.handle_patch_selector_key(press(KeyCode::Enter), &ctx);
+
+    assert!(screen.patch_selector.is_none());
+    assert_eq!(
+        screen.state.rows()[0].patch.as_deref(),
+        Some("Keys/Alpha.fxp")
+    );
+    assert!(!screen.cycle_random().patch);
+
+    screen.handle_key(press(KeyCode::Char('u')), Instant::now(), &ctx);
     assert!(screen.cycle_random().patch);
 }
 

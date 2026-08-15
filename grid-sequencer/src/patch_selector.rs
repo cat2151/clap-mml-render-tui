@@ -37,6 +37,8 @@ pub(crate) struct PatchSelector {
     poly_only: bool,
     original_patch: Option<String>,
     previewed_patch: Option<String>,
+    patch_random_before_open: bool,
+    undo_before_open: crate::undo::UndoSnapshot,
 }
 
 impl PatchSelector {
@@ -45,6 +47,8 @@ impl PatchSelector {
         current_patch: Option<&str>,
         ctx: &GridSequencerContext<'_>,
         poly_only: bool,
+        patch_random_before_open: bool,
+        undo_before_open: crate::undo::UndoSnapshot,
     ) -> Option<Self> {
         if !ctx.patch_dirs_configured {
             return None;
@@ -90,6 +94,8 @@ impl PatchSelector {
             poly_only,
             original_patch: current_patch.map(str::to_string),
             previewed_patch: current_patch.map(str::to_string),
+            patch_random_before_open,
+            undo_before_open,
         })
     }
 
@@ -253,6 +259,8 @@ impl GridSequencerScreen {
     }
 
     pub(crate) fn open_patch_selector(&mut self, instance: usize, ctx: &GridSequencerContext<'_>) {
+        let undo_before_open = self.capture_undo();
+        let patch_random_before_open = self.cycle_random.patch;
         let Some(current) = self
             .state
             .instances()
@@ -262,7 +270,20 @@ impl GridSequencerScreen {
             return;
         };
         let poly_only = instance == CHORD_ROW && self.state.chord().is_some();
-        self.patch_selector = PatchSelector::new(instance, current, ctx, poly_only);
+        let Some(selector) = PatchSelector::new(
+            instance,
+            current,
+            ctx,
+            poly_only,
+            patch_random_before_open,
+            undo_before_open,
+        ) else {
+            return;
+        };
+        self.patch_selector = Some(selector);
+        // selector 内で試聴している patch を周回境界の自動抽選で上書きさせない。
+        // Esc 等でキャンセルした場合は、開く前の設定へ戻す。
+        self.begin_manual_edit(crate::CycleRandomItem::Patch);
     }
 
     fn preview_patch_selection(&mut self, ctx: &GridSequencerContext<'_>) {
@@ -303,6 +324,10 @@ impl GridSequencerScreen {
                 "cancel-restore",
             );
         }
+        self.set_cycle_random(
+            crate::CycleRandomItem::Patch,
+            selector.patch_random_before_open,
+        );
     }
 
     fn apply_patch_selection(&mut self, ctx: &GridSequencerContext<'_>) {
@@ -326,17 +351,21 @@ impl GridSequencerScreen {
                     "invalid-restore",
                 );
             }
+            self.set_cycle_random(
+                crate::CycleRandomItem::Patch,
+                selector.patch_random_before_open,
+            );
             return;
         }
-        let undo = self.capture_undo();
         if self.state.set_instance_patch(instance, patch.clone()) {
-            self.begin_manual_edit(crate::CycleRandomItem::Patch);
             // preview の送信先 bank は、確定までの間に切り替わり得る。patch 名が同じ
             // というだけで省略せず、PATCH を据え置きに倒した後の active instance へ
             // 必ず積む。
             self.prepare_patch(instance, Some(&patch), "confirm");
-            self.commit_undo(undo);
         }
+        // selector を開く操作から確定までを1操作として扱う。同じ patch を確定して
+        // 音色だけ据え置いた場合も、PATCH random を OFF にした差分を undo 可能にする。
+        self.commit_undo(selector.undo_before_open);
     }
 
     pub(crate) fn prepare_instance_patch(&self, instance: usize) {
