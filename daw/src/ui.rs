@@ -116,6 +116,7 @@ fn cache_render_snapshot(app: &DawApp) -> CacheRenderSnapshot {
 }
 
 pub(super) fn draw(app: &DawApp, f: &mut Frame) {
+    cmrt_tui_core::ui::draw_frame_background(f);
     let area = f.area();
     let block = Block::default()
         .borders(Borders::ALL)

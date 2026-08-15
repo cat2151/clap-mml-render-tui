@@ -144,7 +144,7 @@ pub fn play_samples_for_session(
         }
     };
     // device sink を drop すると再生が止まるため、sleep_until_end まで保持する。
-    let device_sink = match rodio::DeviceSinkBuilder::open_default_sink() {
+    let device_sink = match crate::audio_output::open_default_sink() {
         Ok(device_sink) => device_sink,
         Err(e) => {
             clear_active_sink_for_session(active_sink, session_token, session);

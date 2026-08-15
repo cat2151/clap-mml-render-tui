@@ -15,6 +15,7 @@ use super::keyboard::KeyboardAction;
 use super::loop_browser::LoopBrowserAction;
 use super::{NormalAction, PlayState, PrimaryScreen, TuiApp, TuiExitReason};
 
+mod line_wrap;
 mod screen;
 
 #[cfg(test)]
@@ -25,6 +26,7 @@ use screen::DawRunOutcome;
 struct TerminalCleanup {
     raw_mode_enabled: bool,
     alternate_screen_enabled: bool,
+    line_wrap_disabled: bool,
     keyboard_enhancement_enabled: bool,
     mouse_capture_enabled: bool,
 }
@@ -37,6 +39,9 @@ impl Drop for TerminalCleanup {
         let _ = execute!(std::io::stdout(), SetCursorStyle::DefaultUserShape);
         if self.keyboard_enhancement_enabled {
             let _ = execute!(std::io::stdout(), PopKeyboardEnhancementFlags);
+        }
+        if self.line_wrap_disabled {
+            let _ = line_wrap::enable(&mut std::io::stdout());
         }
         if self.alternate_screen_enabled {
             let _ = execute!(std::io::stdout(), LeaveAlternateScreen);
@@ -92,6 +97,7 @@ impl<'a> TuiApp<'a> {
         let mut cleanup = TerminalCleanup {
             raw_mode_enabled: true,
             alternate_screen_enabled: false,
+            line_wrap_disabled: false,
             keyboard_enhancement_enabled: false,
             mouse_capture_enabled: false,
         };
@@ -108,6 +114,8 @@ impl<'a> TuiApp<'a> {
         }
         execute!(stdout, EnterAlternateScreen)?;
         cleanup.alternate_screen_enabled = true;
+        line_wrap::disable(&mut stdout)?;
+        cleanup.line_wrap_disabled = true;
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
         // Terminal の初期bufferは空画面を前提にするが、実端末のalternate screenには
@@ -233,6 +241,11 @@ impl<'a> TuiApp<'a> {
                     if self.active_screen == PrimaryScreen::GridSequencer {
                         self.grid_sequencer.cancel_mouse_gesture();
                     }
+                    continue;
+                }
+                if matches!(input, Event::Resize(_, _)) {
+                    // resize 後の実画面と ratatui の差分bufferを次frameで再同期する。
+                    rendered_screen = None;
                     continue;
                 }
                 if let Event::Key(key) = input {

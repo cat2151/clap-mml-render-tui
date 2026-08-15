@@ -17,6 +17,8 @@ use super::{
     RENDER_SERVER_START_POLL_INTERVAL, RENDER_SERVER_START_TIMEOUT,
 };
 
+const EXIT_ON_STDIN_CLOSE_ENV: &str = "CMRT_RENDER_SERVER_EXIT_ON_STDIN_CLOSE";
+
 pub(super) struct RenderServerSupervisor {
     port: u16,
     command: String,
@@ -240,7 +242,8 @@ impl RenderServerSupervisor {
 
         let mut command = self.build_command();
         command
-            .stdin(Stdio::null())
+            .env(EXIT_ON_STDIN_CLOSE_ENV, "1")
+            .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
         command.spawn().map_err(|error| {

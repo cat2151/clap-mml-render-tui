@@ -17,6 +17,7 @@ use cmrt_notepad::ui as notepad;
 use super::{PrimaryScreen, TuiApp};
 
 pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
+    cmrt_tui_core::ui::draw_frame_background(f);
     match app.active_screen {
         PrimaryScreen::Keyboard => {
             app.sync_keyboard_patch_catalog();

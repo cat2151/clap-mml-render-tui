@@ -1,4 +1,11 @@
-use ratatui::{layout::Rect, text::Line};
+use ratatui::{
+    backend::TestBackend,
+    layout::Rect,
+    style::{Color, Style},
+    text::Line,
+    widgets::Block,
+    Terminal,
+};
 
 use super::*;
 
@@ -23,4 +30,26 @@ fn centered_text_block_rect_clamps_large_content_to_area() {
 
     assert_eq!(rect.width, area.width);
     assert_eq!(rect.height, 3);
+}
+
+#[test]
+fn frame_background_replaces_every_previous_cell() {
+    let mut terminal = Terminal::new(TestBackend::new(8, 4)).unwrap();
+    terminal
+        .draw(|frame| {
+            frame.render_widget(
+                Block::default().style(Style::default().bg(Color::Red)),
+                frame.area(),
+            );
+        })
+        .unwrap();
+
+    terminal.draw(draw_frame_background).unwrap();
+
+    assert!(terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .all(|cell| cell.bg == crate::theme::MONOKAI_BG));
 }

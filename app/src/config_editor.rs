@@ -1,7 +1,10 @@
 use anyhow::{anyhow, Result};
 use crossterm::{
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{
+        disable_raw_mode, enable_raw_mode, DisableLineWrap, EnableLineWrap, EnterAlternateScreen,
+        LeaveAlternateScreen,
+    },
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 use serde::Serialize;
@@ -59,14 +62,18 @@ pub fn edit_config_toml(terminal: &mut AppTerminal) -> Result<()> {
 
 fn suspend_terminal(terminal: &mut AppTerminal) -> Result<()> {
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    execute!(terminal.backend_mut(), EnableLineWrap, LeaveAlternateScreen)?;
     terminal.show_cursor()?;
     Ok(())
 }
 
 fn resume_terminal(terminal: &mut AppTerminal) -> Result<()> {
     enable_raw_mode()?;
-    execute!(terminal.backend_mut(), EnterAlternateScreen)?;
+    execute!(
+        terminal.backend_mut(),
+        EnterAlternateScreen,
+        DisableLineWrap
+    )?;
     terminal.clear()?;
     Ok(())
 }

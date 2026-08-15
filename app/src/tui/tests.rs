@@ -6,6 +6,7 @@ mod keyboard_mml;
 mod normal_mode;
 mod screen_switch;
 mod session;
+mod session_bpm;
 
 static NEXT_TEST_ID: AtomicUsize = AtomicUsize::new(0);
 

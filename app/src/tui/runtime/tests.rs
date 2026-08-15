@@ -46,4 +46,14 @@ fn terminal_is_cleared_on_first_draw_and_primary_screen_changes_only() {
     )
     .unwrap();
     assert_eq!(first_cell(&terminal), " ");
+
+    draw_remnant(&mut terminal);
+    rendered_screen = None; // resize や外部画面からの復帰による再同期要求
+    clear_terminal_for_new_screen(
+        &mut terminal,
+        &mut rendered_screen,
+        PrimaryScreen::GridSequencer,
+    )
+    .unwrap();
+    assert_eq!(first_cell(&terminal), " ");
 }

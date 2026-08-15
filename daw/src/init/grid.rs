@@ -92,11 +92,11 @@ pub(super) fn build_grid_buffers_or_default(
         return buffers;
     }
 
-    // DAW アプリ本体はまだ未構築なので append_log_line() は使えず、ここでは stderr にフォールバックする。
-    eprintln!(
+    // DAW アプリ本体はまだ未構築で、TUI 中の stderr は実画面を壊すため永続ログへ退避する。
+    let _ = cmrt_tui_core::logging::append_log_line_to_file(&format!(
         "DAW セッションのサイズが大きすぎるか破損しているため、デフォルトサイズ {}x{} にフォールバックします。",
         TRACKS, MEASURES
-    );
+    ));
     try_build_grid_buffers(TRACKS, MEASURES)
         .expect("default DAW grid should be allocatable in supported environments")
 }

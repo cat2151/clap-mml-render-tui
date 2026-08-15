@@ -59,8 +59,15 @@ impl DawApp {
                 SetCursorStyle::DefaultUserShape
             }
         )?;
+        // DAW は共有runtimeとは別の描画loopを持つため、entry時に自前で再同期する。
+        terminal.clear()?;
+        let mut redraw_invalidated = false;
 
         loop {
+            if redraw_invalidated {
+                terminal.clear()?;
+                redraw_invalidated = false;
+            }
             self.apply_pending_http_commands();
             self.sync_http_status_snapshot();
             let next_uses_textarea_cursor = self.uses_textarea_cursor();
@@ -79,7 +86,12 @@ impl DawApp {
             terminal.draw(|f| self.draw(f))?;
 
             if event::poll(std::time::Duration::from_millis(50))? {
-                if let Event::Key(key) = event::read()? {
+                let input = event::read()?;
+                if matches!(input, Event::Resize(_, _)) {
+                    redraw_invalidated = true;
+                    continue;
+                }
+                if let Event::Key(key) = input {
                     use crossterm::event::KeyEventKind;
                     if key.kind != KeyEventKind::Press {
                         continue;

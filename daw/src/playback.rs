@@ -148,7 +148,7 @@ impl DawApp {
             // device sink と Player をスレッドに 1 つだけ作成し、小節をまたいで再利用する。
             // これにより小節ごとのオーディオ初期化オーバーヘッドとグリッチを防ぐ。
             // device sink を drop すると再生が止まるため、スレッドが終わるまで保持する。
-            let Ok(device_sink) = rodio::DeviceSinkBuilder::open_default_sink() else {
+            let Ok(device_sink) = cmrt_tui_core::audio_output::open_default_sink() else {
                 // Audio init failed: only reset to Idle if we are still the active Playing session.
                 cmrt_tui_core::logging::append_log_line(&log_lines, "play: audio init failed");
                 let mut state = play_state.lock().unwrap();

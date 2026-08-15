@@ -220,7 +220,9 @@ fn take_pending_http_commands() -> Vec<DawHttpCommand> {
 fn run_daw_http_server() {
     let addr = format!("127.0.0.1:{DEFAULT_PORT}");
     let Ok(server) = tiny_http::Server::http(&addr) else {
-        eprintln!("DAW HTTP サーバーの起動に失敗しました: {addr}");
+        let _ = cmrt_tui_core::logging::append_log_line_to_file(&format!(
+            "DAW HTTP サーバーの起動に失敗しました: {addr}"
+        ));
         return;
     };
 

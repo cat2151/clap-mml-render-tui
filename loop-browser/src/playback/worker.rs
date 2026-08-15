@@ -18,11 +18,13 @@ use cmrt_tui_core::PlayState;
 
 mod config;
 mod measure_start;
+mod state;
 mod transport;
 
 pub(super) use config::PlaybackWorkerConfig;
 use measure_start::start_measure;
 pub use measure_start::starting_clips;
+use state::{set_play_state, set_preparation_state};
 pub use transport::TransportState;
 #[cfg(test)]
 pub use transport::{measure_at_or_after, next_measure};
@@ -46,8 +48,8 @@ pub fn playback_worker(
     } = config;
     position::clear(&playback_position);
     // device sink を drop すると全 Player の再生が止まるため、worker が生きている間は保持する。
-    let device_sink =
-        rodio::DeviceSinkBuilder::open_default_sink().context("audio output deviceを開けません")?;
+    let device_sink = cmrt_tui_core::audio_output::open_default_sink()
+        .context("audio output deviceを開けません")?;
     let handle = device_sink.mixer();
     let mut preview_sink: Option<Arc<rodio::Player>> = None;
     let mut pad_sinks = HashMap::<char, Arc<rodio::Player>>::new();
@@ -434,19 +436,4 @@ fn log_measure_lateness(
         lateness.as_millis(),
         preload_generation.is_some(),
     ));
-}
-
-fn set_preparation_state(state: &Arc<Mutex<PlayState>>, paused: bool, bpm: f64) {
-    if paused {
-        set_play_state(state, PlayState::Idle);
-    } else {
-        set_play_state(
-            state,
-            PlayState::Running(format!("BPM{}変換中", format_bpm(bpm))),
-        );
-    }
-}
-
-fn set_play_state(state: &Arc<Mutex<PlayState>>, next: PlayState) {
-    *state.lock().unwrap() = next;
 }

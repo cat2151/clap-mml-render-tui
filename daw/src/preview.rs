@@ -119,7 +119,7 @@ impl DawApp {
                 return;
             };
             // device sink を drop すると再生が止まるため、スレッドが終わるまで保持する。
-            let Ok(device_sink) = rodio::DeviceSinkBuilder::open_default_sink() else {
+            let Ok(device_sink) = cmrt_tui_core::audio_output::open_default_sink() else {
                 cmrt_tui_core::logging::append_log_line(&log_lines, "preview: audio init failed");
                 let mut state = play_state.lock().unwrap();
                 if *state == DawPlayState::Preview

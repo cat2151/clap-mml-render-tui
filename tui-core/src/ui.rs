@@ -15,6 +15,14 @@ mod tests;
 
 const BLOCK_BORDER_SIZE: usize = 2;
 
+/// 現在frameの全セルを共通背景で所有し、前画面の未描画セルを残さない。
+pub fn draw_frame_background(f: &mut Frame<'_>) {
+    f.render_widget(
+        Block::default().style(crate::status::base_style()),
+        f.area(),
+    );
+}
+
 /// 指定した割合で中央に配置した矩形を返す。ポップアップ表示に利用する。
 pub fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
     let px = percent_x.min(100);
