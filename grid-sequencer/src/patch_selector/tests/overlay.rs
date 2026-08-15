@@ -65,7 +65,7 @@ fn clicking_a_patch_changes_only_that_row_enters_hold_and_cancels_pending_cycle(
         ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]).unwrap(),
     );
     screen.open_patch_selector(0, &ctx);
-    let layout = PatchSelectorLayout::new(AREA);
+    let layout = PatchSelectorLayout::new(AREA, false);
     let beta = screen
         .patch_selector
         .as_ref()
@@ -204,7 +204,7 @@ fn mouse_wheel_previews_the_cursor_patch_without_committing_until_enter() {
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
     screen.state.rows_mut()[0].patch = Some("Keys/Alpha.fxp".to_string());
     screen.open_patch_selector(0, &ctx);
-    let layout = PatchSelectorLayout::new(AREA);
+    let layout = PatchSelectorLayout::new(AREA, false);
 
     screen.handle_patch_selector_mouse(
         mouse(

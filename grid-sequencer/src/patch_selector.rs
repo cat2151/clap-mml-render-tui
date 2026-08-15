@@ -8,24 +8,32 @@ use std::ops::Range;
 use cmrt_realtime_play::PatchVoicing;
 use cmrt_surge_patches::{group_patch_pairs_by_category, matches_role, PatchCategory, PatchRole};
 use cmrt_tui_core::random::random_index;
+use ratatui_textarea::TextArea;
 
 use crate::{
     patch_bag::PatchBag, GridPatchLoad, GridSequencerContext, GridSequencerScreen, ListDirection,
     ARPEGGIO_ROW, BASS_ROW, CHORD_ROW,
 };
 
+mod filter;
 mod input;
 mod layout;
 
 use layout::contains;
 pub(crate) use layout::PatchSelectorLayout;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PatchSelector {
     pub(crate) instance: usize,
+    source_categories: Vec<PatchCategory>,
     pub(crate) categories: Vec<PatchCategory>,
     pub(crate) category_cursor: usize,
     pub(crate) patch_cursor: usize,
+    query: String,
+    query_textarea: TextArea<'static>,
+    query_before_input: String,
+    category_cursor_before_input: usize,
+    patch_cursor_before_input: usize,
+    pub(crate) filter_active: bool,
     poly_only: bool,
     original_patch: Option<String>,
     previewed_patch: Option<String>,
@@ -69,9 +77,16 @@ impl PatchSelector {
         });
         Some(Self {
             instance,
+            source_categories: categories.clone(),
             categories,
             category_cursor: selected.map_or(0, |(category, _)| category),
             patch_cursor: selected.map_or(0, |(_, patch)| patch),
+            query: String::new(),
+            query_textarea: cmrt_tui_core::text_input::new_single_line_textarea(""),
+            query_before_input: String::new(),
+            category_cursor_before_input: 0,
+            patch_cursor_before_input: 0,
+            filter_active: false,
             poly_only,
             original_patch: current_patch.map(str::to_string),
             previewed_patch: current_patch.map(str::to_string),
@@ -119,6 +134,10 @@ impl PatchSelector {
     }
 
     fn select_random_patch(&mut self) {
+        if self.has_query() {
+            self.select_random_filtered_patch();
+            return;
+        }
         let total = self
             .categories
             .iter()
@@ -287,10 +306,15 @@ impl GridSequencerScreen {
     }
 
     fn apply_patch_selection(&mut self, ctx: &GridSequencerContext<'_>) {
-        let Some(selector) = self.patch_selector.take() else {
+        let Some(patch) = self
+            .patch_selector
+            .as_ref()
+            .and_then(PatchSelector::selected_patch)
+            .map(str::to_string)
+        else {
             return;
         };
-        let Some(patch) = selector.selected_patch().map(str::to_string) else {
+        let Some(selector) = self.patch_selector.take() else {
             return;
         };
         let instance = selector.instance;

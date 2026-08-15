@@ -36,7 +36,70 @@ fn the_patch_selector_overlay_shows_categories_and_patches() {
     assert!(rendered.contains("Keys/Beta.fxp"), "{rendered}");
     assert!(rendered.contains("wheel/↑↓:preview"), "{rendered}");
     assert!(rendered.contains("r:random"), "{rendered}");
+    assert!(rendered.contains("/:filter"), "{rendered}");
     assert!(rendered.contains("click/Enter:apply"), "{rendered}");
+}
+
+#[test]
+fn patch_filter_shows_all_and_only_hit_categories_with_counts() {
+    let patches = vec![
+        (
+            "Guitars/Soft Strum.fxp".to_string(),
+            "guitars/soft strum.fxp".to_string(),
+        ),
+        (
+            "Sequences/Hard Strum.fxp".to_string(),
+            "sequences/hard strum.fxp".to_string(),
+        ),
+        (
+            "Strum/Plain Pad.fxp".to_string(),
+            "strum/plain pad.fxp".to_string(),
+        ),
+    ];
+    let ctx = crate::tests::ctx_with(
+        crate::GridPatchLoad::Ready(&patches),
+        crate::tests::empty_catalog(),
+        &crate::NoVoicingLookup,
+    );
+    let mut screen = GridSequencerScreen::with_track_count(None, 1);
+    screen.open_patch_selector(0, &ctx);
+    screen.handle_patch_selector_key(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE), &ctx);
+    for ch in "strum".chars() {
+        screen
+            .handle_patch_selector_key(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE), &ctx);
+    }
+
+    let terminal = terminal_for(&screen);
+    let rendered = buffer_to_string(&terminal);
+
+    assert!(rendered.contains("Patch name filter"), "{rendered}");
+    find_text_ignoring_spaces(terminal.backend().buffer(), "全カテゴリ(2)");
+    assert!(rendered.contains("Guitars (1)"), "{rendered}");
+    assert!(rendered.contains("Sequences (1)"), "{rendered}");
+    assert!(!rendered.contains("Strum (0)"), "{rendered}");
+    assert!(rendered.contains("Enter:confirm"), "{rendered}");
+}
+
+#[test]
+fn an_empty_active_filter_has_an_input_but_no_pseudo_category_or_counts() {
+    let patches = vec![
+        ("Keys/Alpha.fxp".to_string(), "keys/alpha.fxp".to_string()),
+        ("Keys/Beta.fxp".to_string(), "keys/beta.fxp".to_string()),
+    ];
+    let ctx = crate::tests::ctx_with(
+        crate::GridPatchLoad::Ready(&patches),
+        crate::tests::empty_catalog(),
+        &crate::NoVoicingLookup,
+    );
+    let mut screen = GridSequencerScreen::with_track_count(None, 1);
+    screen.open_patch_selector(0, &ctx);
+    screen.handle_patch_selector_key(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE), &ctx);
+
+    let rendered = render(&screen);
+
+    assert!(rendered.contains("Patch name filter"), "{rendered}");
+    assert!(!rendered.contains("全カテゴリ"), "{rendered}");
+    assert!(rendered.contains("Categories (1)"), "{rendered}");
 }
 
 #[test]
