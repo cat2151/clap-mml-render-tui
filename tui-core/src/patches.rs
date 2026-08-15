@@ -40,9 +40,12 @@ fn collect_patch_pairs_with_optional_base(
     Ok(pairs)
 }
 
-/// クエリ文字列（空白区切りでAND条件）でパッチリストをフィルタする。
-/// `all` は (表示名, 小文字化済み表示名) のペアであること（起動時に一度だけ計算）。
-pub fn filter_patches(all: &[(String, String)], query: &str) -> Vec<String> {
+/// クエリ文字列（空白区切りでAND条件）で patch の表示パス全文をフィルタする。
+///
+/// category、vendor、filename のすべてが検索対象になる。filename stem だけを探す
+/// grid sequencer の patch name 検索とは検索範囲が異なるため、共通化しない。
+/// `all` は (表示パス, 小文字化済み表示パス) のペアであること（起動時に一度だけ計算）。
+pub fn filter_patches_by_display_path(all: &[(String, String)], query: &str) -> Vec<String> {
     let terms: Vec<String> = query.split_whitespace().map(|t| t.to_lowercase()).collect();
     if terms.is_empty() {
         return all.iter().map(|(orig, _)| orig.clone()).collect();

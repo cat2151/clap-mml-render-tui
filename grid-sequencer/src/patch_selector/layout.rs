@@ -8,7 +8,7 @@ use super::PatchSelector;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct PatchSelectorLayout {
     pub(crate) popup: Rect,
-    pub(crate) filter: Option<Rect>,
+    pub(crate) name_search: Option<Rect>,
     pub(crate) category_pane: Rect,
     pub(crate) patch_pane: Rect,
     pub(crate) category_list: Rect,
@@ -17,10 +17,10 @@ pub(crate) struct PatchSelectorLayout {
 }
 
 impl PatchSelectorLayout {
-    pub(crate) fn new(area: Rect, filter_visible: bool) -> Self {
+    pub(crate) fn new(area: Rect, name_search_visible: bool) -> Self {
         let popup = cmrt_tui_core::ui::centered_rect(88, 76, area);
         let inner = Block::default().borders(Borders::ALL).inner(popup);
-        let constraints = if filter_visible {
+        let constraints = if name_search_visible {
             vec![
                 Constraint::Length(3),
                 Constraint::Min(1),
@@ -33,7 +33,7 @@ impl PatchSelectorLayout {
             .direction(Direction::Vertical)
             .constraints(constraints)
             .split(inner);
-        let (filter, panes_index, hint_index) = if filter_visible {
+        let (name_search, panes_index, hint_index) = if name_search_visible {
             (Some(vertical[0]), 1, 2)
         } else {
             (None, 0, 1)
@@ -46,7 +46,7 @@ impl PatchSelectorLayout {
         let patch_pane = panes[1];
         Self {
             popup,
-            filter,
+            name_search,
             category_pane,
             patch_pane,
             category_list: Block::default().borders(Borders::ALL).inner(category_pane),

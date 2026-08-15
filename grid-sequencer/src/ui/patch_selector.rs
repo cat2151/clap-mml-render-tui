@@ -15,7 +15,7 @@ pub(super) fn draw(f: &mut Frame<'_>, screen: &GridSequencerScreen) {
     let Some(selector) = screen.patch_selector.as_ref() else {
         return;
     };
-    let layout = PatchSelectorLayout::new(f.area(), selector.filter_visible());
+    let layout = PatchSelectorLayout::new(f.area(), selector.name_search_visible());
     f.render_widget(Clear, layout.popup);
     f.render_widget(
         Block::default()
@@ -26,20 +26,20 @@ pub(super) fn draw(f: &mut Frame<'_>, screen: &GridSequencerScreen) {
         layout.popup,
     );
 
-    if let Some(filter_area) = layout.filter {
+    if let Some(filter_area) = layout.name_search {
         let filter = cmrt_tui_core::text_input::build_query_textarea_widget(
-            selector.query_textarea(),
-            selector.query(),
+            selector.name_query_textarea(),
+            selector.name_query(),
             " Patch name filter ",
             "type patch name",
             MONOKAI_CYAN,
         );
         f.render_widget(&filter, filter_area);
-        if selector.filter_active {
+        if selector.name_search_active {
             f.set_cursor_position(
                 cmrt_tui_core::text_input::single_line_textarea_cursor_position(
                     filter_area,
-                    selector.query_textarea(),
+                    selector.name_query_textarea(),
                 ),
             );
         }
@@ -49,7 +49,7 @@ pub(super) fn draw(f: &mut Frame<'_>, screen: &GridSequencerScreen) {
         .category_range(&layout)
         .map(|index| {
             let category = &selector.categories[index];
-            let label = if selector.has_query() {
+            let label = if selector.has_name_query() {
                 format!("{} ({})", category.name, category.patches.len())
             } else {
                 category.name.clone()
@@ -81,7 +81,7 @@ pub(super) fn draw(f: &mut Frame<'_>, screen: &GridSequencerScreen) {
         ),
         layout.patch_pane,
     );
-    let hint = if selector.filter_active {
+    let hint = if selector.name_search_active {
         " type:filter  Enter:confirm  Esc:cancel input"
     } else {
         " wheel/↑↓:preview  ←→:category  r:random  /:filter  click/Enter:apply  Esc/right:cancel"

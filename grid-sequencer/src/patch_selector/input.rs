@@ -13,11 +13,11 @@ impl GridSequencerScreen {
         terminal_area: Rect,
         ctx: &GridSequencerContext<'_>,
     ) {
-        let filter_visible = self
+        let name_search_visible = self
             .patch_selector
             .as_ref()
-            .is_some_and(super::PatchSelector::filter_visible);
-        let layout = PatchSelectorLayout::new(terminal_area, filter_visible);
+            .is_some_and(super::PatchSelector::name_search_visible);
+        let layout = PatchSelectorLayout::new(terminal_area, name_search_visible);
         match event.kind {
             MouseEventKind::Down(MouseButton::Right | MouseButton::Middle) => {
                 self.cancel_patch_selector();
@@ -33,7 +33,7 @@ impl GridSequencerScreen {
                     selector.select_patch(index);
                     self.apply_patch_selection(ctx);
                 } else if layout
-                    .filter
+                    .name_search
                     .is_some_and(|area| contains(area, event.column, event.row))
                 {
                     // textarea が keyboard focus を持ったままなので、clickでは状態を変えない。
@@ -73,21 +73,21 @@ impl GridSequencerScreen {
         if self
             .patch_selector
             .as_ref()
-            .is_some_and(|selector| selector.filter_active)
+            .is_some_and(|selector| selector.name_search_active)
         {
             let preview = match key.code {
                 KeyCode::Esc => {
                     self.patch_selector
                         .as_mut()
                         .expect("filter belongs to an open selector")
-                        .cancel_filter_input();
+                        .cancel_name_search_input();
                     false
                 }
                 KeyCode::Enter => {
                     self.patch_selector
                         .as_mut()
                         .expect("filter belongs to an open selector")
-                        .confirm_filter_input();
+                        .confirm_name_search_input();
                     true
                 }
                 _ => {
@@ -95,8 +95,8 @@ impl GridSequencerScreen {
                         .patch_selector
                         .as_mut()
                         .expect("filter belongs to an open selector");
-                    selector.sync_filter_textarea();
-                    selector.apply_filter_key(key);
+                    selector.sync_name_search_textarea();
+                    selector.apply_name_search_key(key);
                     false
                 }
             };
@@ -117,7 +117,7 @@ impl GridSequencerScreen {
             }
             KeyCode::Char('/') => {
                 if let Some(selector) = self.patch_selector.as_mut() {
-                    selector.start_filter_input();
+                    selector.start_name_search_input();
                 }
                 return;
             }

@@ -50,9 +50,9 @@ pub(crate) const PATCH_FILTER_QUERY_JSON_KEY: &str = "Surge XT patch filter";
 
 pub const NOTEPAD_SOUND_CHECK_GUIDE_MESSAGE: &str = "j,kキーを押して音が鳴ることを確認してください";
 
-// パッチ名 / 文字列リストのフィルタは notepad と DAW の双方から使うため
-// `cmrt-tui-core` にある。crate 内では短いパスで参照する。
-pub(crate) use cmrt_tui_core::patches::{filter_items, filter_patches};
+// patch 表示パス / 文字列リストのフィルタは共有処理なので `cmrt-tui-core` にある。
+// crate 内では短いパスで参照する。
+pub(crate) use cmrt_tui_core::patches::{filter_items, filter_patches_by_display_path};
 
 #[cfg(test)]
 use cache::{mark_cache_entry_recent, resolve_cached_samples, try_insert_cache};

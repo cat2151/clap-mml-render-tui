@@ -62,8 +62,8 @@ fn mouse(kind: MouseEventKind, column: u16, row: u16) -> MouseEvent {
 fn press(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
 }
-/// `/` で開く、grid sequencer 内だけの patch name 絞り込み。
-mod filter;
+/// `/` で開く、grid sequencer 内だけの patch name 検索。
+mod name_search;
 /// overlay を開いてから選ぶまで。
 mod overlay;
 /// PATCH 欄の wheel で patch list を送る側（[`crate::patch_bag`]）。

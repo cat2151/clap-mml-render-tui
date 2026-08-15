@@ -18,52 +18,52 @@ fn write_test_wav(path: &Path, sample_rate: u32, channels: u16, samples: &[f32])
 }
 
 #[test]
-fn filter_patches_empty_query_returns_all() {
+fn display_path_filter_empty_query_returns_all() {
     let all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
-    let result = filter_patches(&all, "");
+    let result = filter_patches_by_display_path(&all, "");
     assert_eq!(result, vec!["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
 }
 
 #[test]
-fn filter_patches_single_term_matches_substring() {
+fn display_path_filter_single_term_matches_substring() {
     let all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
-    let result = filter_patches(&all, "pad");
+    let result = filter_patches_by_display_path(&all, "pad");
     assert_eq!(result, vec!["Pads/Pad 1.fxp"]);
 }
 
 #[test]
-fn filter_patches_case_insensitive() {
+fn display_path_filter_is_case_insensitive() {
     let all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
-    let result = filter_patches(&all, "PAD");
+    let result = filter_patches_by_display_path(&all, "PAD");
     assert_eq!(result, vec!["Pads/Pad 1.fxp"]);
 }
 
 #[test]
-fn filter_patches_multiple_terms_act_as_and() {
+fn display_path_filter_multiple_terms_act_as_and() {
     let all = make_patches(&["Pads/Soft Pad.fxp", "Pads/Hard Pad.fxp", "Leads/Lead 1.fxp"]);
-    let result = filter_patches(&all, "pad soft");
+    let result = filter_patches_by_display_path(&all, "pad soft");
     assert_eq!(result, vec!["Pads/Soft Pad.fxp"]);
 }
 
 #[test]
-fn filter_patches_no_match_returns_empty() {
+fn display_path_filter_no_match_returns_empty() {
     let all = make_patches(&["Pads/Pad 1.fxp"]);
-    let result = filter_patches(&all, "xyznomatch");
+    let result = filter_patches_by_display_path(&all, "xyznomatch");
     assert!(result.is_empty());
 }
 
 #[test]
-fn filter_patches_whitespace_only_query_returns_all() {
+fn display_path_filter_whitespace_only_query_returns_all() {
     let all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
     // split_whitespace で空のイテレータになり、全件返す
-    let result = filter_patches(&all, "   ");
+    let result = filter_patches_by_display_path(&all, "   ");
     assert_eq!(result, vec!["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
 }
 
 #[test]
-fn filter_patches_empty_list_returns_empty() {
+fn display_path_filter_empty_list_returns_empty() {
     let all: Vec<(String, String)> = vec![];
-    let result = filter_patches(&all, "pad");
+    let result = filter_patches_by_display_path(&all, "pad");
     assert!(result.is_empty());
 }
 

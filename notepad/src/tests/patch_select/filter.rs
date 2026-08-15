@@ -1,6 +1,28 @@
 use super::*;
 
 #[test]
+fn parent_dir_supplies_the_default_generic_display_path_query() {
+    assert_eq!(
+        NotepadScreen::default_display_path_filter_query_from_parent_dir(
+            "patches_factory/Instrument/Soft Strum.fxp"
+        )
+        .as_deref(),
+        Some("instrument")
+    );
+    assert_eq!(
+        NotepadScreen::default_display_path_filter_query_from_parent_dir(
+            "patches_3rdparty/Acme/Guitars/Clean Voice.fxp"
+        )
+        .as_deref(),
+        Some("guitars")
+    );
+    assert_eq!(
+        NotepadScreen::default_display_path_filter_query_from_parent_dir("No Category.fxp"),
+        None
+    );
+}
+
+#[test]
 fn handle_patch_select_slash_then_chars_filter_and_preview_first_result() {
     let mut app = NotepadScreen::new_for_test(test_config());
     app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];

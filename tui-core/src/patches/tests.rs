@@ -161,7 +161,7 @@ fn collect_patch_pairs_sorts_display_names_naturally() {
 }
 
 #[test]
-fn filter_patches_matches_every_term_case_insensitively() {
+fn filter_patches_by_display_path_matches_every_term_case_insensitively() {
     let all = vec![
         (
             "patches_factory/Pads/Warm Pad.fxp".to_string(),
@@ -174,10 +174,37 @@ fn filter_patches_matches_every_term_case_insensitively() {
     ];
 
     assert_eq!(
-        filter_patches(&all, "WARM pad"),
+        filter_patches_by_display_path(&all, "WARM pad"),
         vec!["patches_factory/Pads/Warm Pad.fxp".to_string()]
     );
-    assert_eq!(filter_patches(&all, "   ").len(), 2);
+    assert_eq!(filter_patches_by_display_path(&all, "   ").len(), 2);
+}
+
+#[test]
+fn display_path_filter_searches_category_vendor_and_patch_name() {
+    let all = vec![
+        (
+            "patches_factory/Instrument/Soft Strum.fxp".to_string(),
+            "patches_factory/instrument/soft strum.fxp".to_string(),
+        ),
+        (
+            "patches_3rdparty/Acme/Guitars/Plain Voice.fxp".to_string(),
+            "patches_3rdparty/acme/guitars/plain voice.fxp".to_string(),
+        ),
+    ];
+
+    assert_eq!(
+        filter_patches_by_display_path(&all, "instrument"),
+        vec!["patches_factory/Instrument/Soft Strum.fxp".to_string()]
+    );
+    assert_eq!(
+        filter_patches_by_display_path(&all, "acme"),
+        vec!["patches_3rdparty/Acme/Guitars/Plain Voice.fxp".to_string()]
+    );
+    assert_eq!(
+        filter_patches_by_display_path(&all, "strum"),
+        vec!["patches_factory/Instrument/Soft Strum.fxp".to_string()]
+    );
 }
 
 #[test]

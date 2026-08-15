@@ -2,7 +2,7 @@ use std::collections::{HashMap, VecDeque};
 
 use super::AUDIO_CACHE_MAX_ENTRIES;
 
-// パッチ名 / 文字列リストのフィルタ（filter_patches / filter_items）は
+// patch 表示パス / 文字列リストのフィルタ（filter_patches_by_display_path / filter_items）は
 // notepad と DAW の双方から使うため `cmrt-tui-core` へ切り出した。
 // 従来の `crate::filter_*` パスは `tui.rs` の再エクスポートで維持する。
 

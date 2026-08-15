@@ -96,8 +96,10 @@ impl<'a> NotepadScreen<'a> {
         self.patch_select.patch_query = self.current_line_patch_filter_query().unwrap_or_default();
         self.patch_select.patch_query_textarea =
             cmrt_tui_core::text_input::new_single_line_textarea(&self.patch_select.patch_query);
-        self.patch_select.patch_filtered =
-            crate::filter_patches(&self.patch_select.patch_all, &self.patch_select.patch_query);
+        self.patch_select.patch_filtered = crate::filter_patches_by_display_path(
+            &self.patch_select.patch_all,
+            &self.patch_select.patch_query,
+        );
         self.patch_select.patch_favorites_query.clear();
         self.patch_select.patch_favorites_query_textarea =
             cmrt_tui_core::text_input::new_single_line_textarea("");
@@ -192,8 +194,10 @@ impl<'a> NotepadScreen<'a> {
         {
             self.sort_patch_select_pairs();
         }
-        self.patch_select.patch_filtered =
-            crate::filter_patches(&self.patch_select.patch_all, &self.patch_select.patch_query);
+        self.patch_select.patch_filtered = crate::filter_patches_by_display_path(
+            &self.patch_select.patch_all,
+            &self.patch_select.patch_query,
+        );
         self.refresh_patch_select_favorites();
 
         self.patch_select.patch_cursor = selected_patch

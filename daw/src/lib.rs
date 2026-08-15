@@ -236,7 +236,9 @@ impl DawApp {
 
     // ─── ランダム音色 ─────────────────────────────────────────
 
-    fn patch_query_terms(query: Option<&str>) -> Option<Vec<String>> {
+    /// Notepad と同じく、category、vendor、filename を含む表示パス全文を検索する。
+    /// grid sequencer の filename stem 専用検索とは検索範囲が異なる。
+    fn patch_display_path_query_terms(query: Option<&str>) -> Option<Vec<String>> {
         query
             .map(str::trim)
             .filter(|query| !query.is_empty())
@@ -248,31 +250,34 @@ impl DawApp {
             })
     }
 
-    fn patch_matches_query(lower_patch_name: &str, terms: &[String]) -> bool {
+    fn patch_display_path_matches_query(lower_display_path: &str, terms: &[String]) -> bool {
         terms
             .iter()
-            .all(|term| lower_patch_name.contains(term.as_str()))
+            .all(|term| lower_display_path.contains(term.as_str()))
     }
 
-    fn filter_patch_pairs_by_query(
+    fn filter_patch_pairs_by_display_path_query(
         patches: Vec<(String, String)>,
         query: Option<&str>,
     ) -> Vec<(String, String)> {
-        let Some(terms) = Self::patch_query_terms(query) else {
+        let Some(terms) = Self::patch_display_path_query_terms(query) else {
             return patches;
         };
         patches
             .into_iter()
-            .filter(|(_, lower)| Self::patch_matches_query(lower, &terms))
+            .filter(|(_, lower)| Self::patch_display_path_matches_query(lower, &terms))
             .collect()
     }
 
-    fn filter_patch_names_by_query(all: &[(String, String)], query: &str) -> Vec<String> {
-        let Some(terms) = Self::patch_query_terms(Some(query)) else {
+    fn filter_patch_names_by_display_path_query(
+        all: &[(String, String)],
+        query: &str,
+    ) -> Vec<String> {
+        let Some(terms) = Self::patch_display_path_query_terms(Some(query)) else {
             return all.iter().map(|(orig, _)| orig.clone()).collect();
         };
         all.iter()
-            .filter(|(_, lower)| Self::patch_matches_query(lower, &terms))
+            .filter(|(_, lower)| Self::patch_display_path_matches_query(lower, &terms))
             .map(|(orig, _)| orig.clone())
             .collect()
     }
@@ -283,7 +288,7 @@ impl DawApp {
 
     fn pick_random_patch_name_with_query(&mut self, query: Option<&str>) -> Option<String> {
         let patches = cmrt_tui_core::patches::collect_patch_pairs(&self.cfg).ok()?;
-        let candidates = Self::filter_patch_pairs_by_query(patches, query)
+        let candidates = Self::filter_patch_pairs_by_display_path_query(patches, query)
             .into_iter()
             .map(|(orig, _)| orig)
             .collect::<Vec<_>>();

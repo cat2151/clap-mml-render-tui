@@ -2,7 +2,9 @@ mod handler;
 mod normal;
 mod state;
 
-use crate::{filter_patches, PatchLoadState, PATCH_FILTER_QUERY_JSON_KEY, PATCH_JSON_KEY};
+use crate::{
+    filter_patches_by_display_path, PatchLoadState, PATCH_FILTER_QUERY_JSON_KEY, PATCH_JSON_KEY,
+};
 use mmlabc_to_smf::mml_preprocessor;
 use serde_json::Value;
 
@@ -79,7 +81,13 @@ impl<'a> NotepadScreen<'a> {
             .and_then(|json| serde_json::from_str::<Value>(json).ok())
     }
 
-    fn patch_category_filter_query(patch_name: &str) -> Option<String> {
+    /// 保存済みの汎用 filter が無い場合に、現在 patch の親 dir 名を初期検索語にする。
+    ///
+    /// 戻り値は category 専用条件ではない。category、vendor、filename のすべてを対象にする
+    /// 表示パス全文 filter へ、そのまま渡す query である。
+    pub(crate) fn default_display_path_filter_query_from_parent_dir(
+        patch_name: &str,
+    ) -> Option<String> {
         let (parent, _) = patch_name.rsplit_once('/')?;
         let category = parent.rsplit('/').next()?.trim();
         if category.is_empty() {
@@ -103,7 +111,9 @@ impl<'a> NotepadScreen<'a> {
     fn has_matching_patches_for_query(&self, query: &str) -> bool {
         let state = self.patch_load_state.lock().unwrap();
         match &*state {
-            PatchLoadState::Ready(pairs) => !filter_patches(pairs, query).is_empty(),
+            PatchLoadState::Ready(pairs) => {
+                !filter_patches_by_display_path(pairs, query).is_empty()
+            }
             PatchLoadState::Loading | PatchLoadState::Err(_) => false,
         }
     }
@@ -113,7 +123,9 @@ impl<'a> NotepadScreen<'a> {
             .and_then(|query| self.has_matching_patches_for_query(&query).then_some(query))
             .or_else(|| {
                 self.current_line_patch_name()
-                    .and_then(|patch_name| Self::patch_category_filter_query(&patch_name))
+                    .and_then(|patch_name| {
+                        Self::default_display_path_filter_query_from_parent_dir(&patch_name)
+                    })
                     .filter(|query| self.has_matching_patches_for_query(query))
             })
     }
@@ -194,8 +206,10 @@ impl<'a> NotepadScreen<'a> {
     }
 
     pub(super) fn update_patch_filter(&mut self) {
-        self.patch_select.patch_filtered =
-            filter_patches(&self.patch_select.patch_all, &self.patch_select.patch_query);
+        self.patch_select.patch_filtered = filter_patches_by_display_path(
+            &self.patch_select.patch_all,
+            &self.patch_select.patch_query,
+        );
         self.patch_select.patch_cursor = 0;
         self.sync_patch_select_states();
         self.preview_selected_patch();

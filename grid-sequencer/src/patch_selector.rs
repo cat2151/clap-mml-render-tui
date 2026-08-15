@@ -15,9 +15,9 @@ use crate::{
     ARPEGGIO_ROW, BASS_ROW, CHORD_ROW,
 };
 
-mod filter;
 mod input;
 mod layout;
+mod name_search;
 
 use layout::contains;
 pub(crate) use layout::PatchSelectorLayout;
@@ -28,12 +28,12 @@ pub(crate) struct PatchSelector {
     pub(crate) categories: Vec<PatchCategory>,
     pub(crate) category_cursor: usize,
     pub(crate) patch_cursor: usize,
-    query: String,
-    query_textarea: TextArea<'static>,
-    query_before_input: String,
+    name_query: String,
+    name_query_textarea: TextArea<'static>,
+    name_query_before_input: String,
     category_cursor_before_input: usize,
     patch_cursor_before_input: usize,
-    pub(crate) filter_active: bool,
+    pub(crate) name_search_active: bool,
     poly_only: bool,
     original_patch: Option<String>,
     previewed_patch: Option<String>,
@@ -85,12 +85,12 @@ impl PatchSelector {
             categories,
             category_cursor: selected.map_or(0, |(category, _)| category),
             patch_cursor: selected.map_or(0, |(_, patch)| patch),
-            query: String::new(),
-            query_textarea: cmrt_tui_core::text_input::new_single_line_textarea(""),
-            query_before_input: String::new(),
+            name_query: String::new(),
+            name_query_textarea: cmrt_tui_core::text_input::new_single_line_textarea(""),
+            name_query_before_input: String::new(),
             category_cursor_before_input: 0,
             patch_cursor_before_input: 0,
-            filter_active: false,
+            name_search_active: false,
             poly_only,
             original_patch: current_patch.map(str::to_string),
             previewed_patch: current_patch.map(str::to_string),
@@ -140,8 +140,8 @@ impl PatchSelector {
     }
 
     fn select_random_patch(&mut self) {
-        if self.has_query() {
-            self.select_random_filtered_patch();
+        if self.has_name_query() {
+            self.select_random_name_search_result();
             return;
         }
         let total = self

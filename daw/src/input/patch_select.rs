@@ -85,7 +85,7 @@ impl DawApp {
     }
 
     fn update_patch_filter(&mut self) {
-        self.overlays.patch_select.filtered = Self::filter_patch_names_by_query(
+        self.overlays.patch_select.filtered = Self::filter_patch_names_by_display_path_query(
             &self.overlays.patch_select.all,
             &self.overlays.patch_select.query,
         );

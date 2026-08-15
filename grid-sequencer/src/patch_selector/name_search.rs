@@ -1,4 +1,8 @@
-//! patch selector 内だけで使う、patch name の絞り込み状態と派生カテゴリ。
+//! patch selector 内だけで使う、filename stem 専用の patch name 検索。
+//!
+//! category、vendor、filename を含む表示パス全文検索とは検索範囲が異なる。
+//! `Instrument/Soft Strum.fxp` を `strum` で発見しつつ、category 名だけが一致する
+//! `Strum/Plain Pad.fxp` は結果に含めないため、表示パス検索とは共通化しない。
 
 use cmrt_surge_patches::PatchCategory;
 use ratatui_textarea::TextArea;
@@ -8,63 +12,71 @@ use super::PatchSelector;
 pub(super) const ALL_CATEGORIES_NAME: &str = "全カテゴリ";
 
 impl PatchSelector {
-    pub(crate) fn query(&self) -> &str {
-        &self.query
+    pub(crate) fn name_query(&self) -> &str {
+        &self.name_query
     }
 
-    pub(crate) fn query_textarea(&self) -> &TextArea<'static> {
-        &self.query_textarea
+    pub(crate) fn name_query_textarea(&self) -> &TextArea<'static> {
+        &self.name_query_textarea
     }
 
-    pub(crate) fn has_query(&self) -> bool {
-        self.query.split_whitespace().next().is_some()
+    pub(crate) fn has_name_query(&self) -> bool {
+        self.name_query.split_whitespace().next().is_some()
     }
 
-    pub(crate) fn filter_visible(&self) -> bool {
-        self.filter_active || self.has_query()
+    pub(crate) fn name_search_visible(&self) -> bool {
+        self.name_search_active || self.has_name_query()
     }
 
-    pub(super) fn start_filter_input(&mut self) {
-        self.query_before_input = self.query.clone();
+    pub(super) fn start_name_search_input(&mut self) {
+        self.name_query_before_input = self.name_query.clone();
         self.category_cursor_before_input = self.category_cursor;
         self.patch_cursor_before_input = self.patch_cursor;
-        self.query_textarea = cmrt_tui_core::text_input::new_single_line_textarea(&self.query);
-        self.filter_active = true;
+        self.name_query_textarea =
+            cmrt_tui_core::text_input::new_single_line_textarea(&self.name_query);
+        self.name_search_active = true;
     }
 
-    pub(super) fn confirm_filter_input(&mut self) {
-        self.filter_active = false;
+    pub(super) fn confirm_name_search_input(&mut self) {
+        self.name_search_active = false;
     }
 
-    pub(super) fn cancel_filter_input(&mut self) {
-        self.query = self.query_before_input.clone();
-        self.query_textarea = cmrt_tui_core::text_input::new_single_line_textarea(&self.query);
-        self.rebuild_categories();
+    pub(super) fn cancel_name_search_input(&mut self) {
+        self.name_query = self.name_query_before_input.clone();
+        self.name_query_textarea =
+            cmrt_tui_core::text_input::new_single_line_textarea(&self.name_query);
+        self.rebuild_name_search_results();
         self.category_cursor = self
             .category_cursor_before_input
             .min(self.categories.len().saturating_sub(1));
         self.patch_cursor = self
             .patch_cursor_before_input
             .min(self.selected_category().patches.len().saturating_sub(1));
-        self.filter_active = false;
+        self.name_search_active = false;
     }
 
-    pub(super) fn sync_filter_textarea(&mut self) {
-        cmrt_tui_core::text_input::sync_single_line_textarea(&mut self.query_textarea, &self.query);
+    pub(super) fn sync_name_search_textarea(&mut self) {
+        cmrt_tui_core::text_input::sync_single_line_textarea(
+            &mut self.name_query_textarea,
+            &self.name_query,
+        );
     }
 
-    pub(super) fn apply_filter_key(&mut self, key: crossterm::event::KeyEvent) {
-        if !cmrt_tui_core::text_input::apply_key_event_to_textarea(&mut self.query_textarea, key) {
+    pub(super) fn apply_name_search_key(&mut self, key: crossterm::event::KeyEvent) {
+        if !cmrt_tui_core::text_input::apply_key_event_to_textarea(
+            &mut self.name_query_textarea,
+            key,
+        ) {
             return;
         }
-        self.query = cmrt_tui_core::text_input::textarea_value(&self.query_textarea);
-        self.rebuild_categories();
+        self.name_query = cmrt_tui_core::text_input::textarea_value(&self.name_query_textarea);
+        self.rebuild_name_search_results();
         self.category_cursor = 0;
         self.patch_cursor = 0;
     }
 
-    fn rebuild_categories(&mut self) {
-        let terms = query_terms(&self.query);
+    fn rebuild_name_search_results(&mut self) {
+        let terms = name_query_terms(&self.name_query);
         if terms.is_empty() {
             self.categories = self.source_categories.clone();
             return;
@@ -77,7 +89,7 @@ impl PatchSelector {
                 let patches = category
                     .patches
                     .iter()
-                    .filter(|patch| patch_name_matches(patch, &terms))
+                    .filter(|patch| patch_filename_stem_matches(patch, &terms))
                     .cloned()
                     .collect::<Vec<_>>();
                 (!patches.is_empty()).then(|| PatchCategory {
@@ -98,7 +110,7 @@ impl PatchSelector {
         .collect();
     }
 
-    pub(super) fn select_random_filtered_patch(&mut self) {
+    pub(super) fn select_random_name_search_result(&mut self) {
         let patches = &self.categories[0].patches;
         let total = patches.len();
         if total <= 1 {
@@ -129,14 +141,14 @@ impl PatchSelector {
     }
 }
 
-fn query_terms(query: &str) -> Vec<String> {
+fn name_query_terms(query: &str) -> Vec<String> {
     query
         .split_whitespace()
         .map(|term| term.to_lowercase())
         .collect()
 }
 
-fn patch_name_matches(path: &str, terms: &[String]) -> bool {
+fn patch_filename_stem_matches(path: &str, terms: &[String]) -> bool {
     let filename = path.rsplit(['/', '\\']).next().unwrap_or(path);
     let stem = filename
         .rsplit_once('.')
@@ -152,17 +164,17 @@ mod tests {
 
     #[test]
     fn matches_terms_against_only_the_filename_stem() {
-        assert!(patch_name_matches(
+        assert!(patch_filename_stem_matches(
             "Instrument/Soft Strum.fxp",
-            &query_terms("STRUM soft")
+            &name_query_terms("STRUM soft")
         ));
-        assert!(!patch_name_matches(
+        assert!(!patch_filename_stem_matches(
             "Strum/Soft Pad.fxp",
-            &query_terms("strum")
+            &name_query_terms("strum")
         ));
-        assert!(!patch_name_matches(
+        assert!(!patch_filename_stem_matches(
             "Instrument/Everything.fxp",
-            &query_terms("fxp")
+            &name_query_terms("fxp")
         ));
     }
 }

@@ -1,5 +1,5 @@
 use crate::NotepadScreen;
-use crate::{filter_patches, Mode, PatchLoadState, PlayState};
+use crate::{filter_patches_by_display_path, Mode, PatchLoadState, PlayState};
 
 impl<'a> NotepadScreen<'a> {
     fn normalize_current_line_patch_json_if_known(&mut self) {
@@ -167,7 +167,7 @@ impl<'a> NotepadScreen<'a> {
                     return Err("patches_dirs にパッチが見つかりません".to_string());
                 }
                 PatchLoadState::Ready(pairs) => match selection_query {
-                    Some(query) => filter_patches(pairs, query),
+                    Some(query) => filter_patches_by_display_path(pairs, query),
                     None => pairs.iter().map(|(display, _)| display.clone()).collect(),
                 },
             }
