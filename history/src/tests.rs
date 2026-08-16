@@ -91,6 +91,7 @@ fn session_state_serialize_deserialize() {
         loop_browser_bpm_range: None,
         keyboard_note_guide_overlay_date: Some("2026-07-20".to_string()),
         notepad_sound_check_guide_overlay_date: Some("2026-07-19".to_string()),
+        mml_overlay_patch: Some("Leads/Lead 1.fxp".to_string()),
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
@@ -104,6 +105,10 @@ fn session_state_serialize_deserialize() {
     assert_eq!(
         loaded.notepad_sound_check_guide_overlay_date.as_deref(),
         Some("2026-07-19")
+    );
+    assert_eq!(
+        loaded.mml_overlay_patch.as_deref(),
+        Some("Leads/Lead 1.fxp")
     );
 }
 
@@ -123,6 +128,7 @@ fn session_state_serialize_deserialize_zero() {
         loop_browser_bpm_range: None,
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
+        mml_overlay_patch: None,
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
@@ -147,6 +153,7 @@ fn session_state_serialize_deserialize_daw_screen() {
         loop_browser_bpm_range: None,
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
+        mml_overlay_patch: None,
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
@@ -252,6 +259,7 @@ fn save_and_load_session_state_roundtrip() {
         loop_browser_bpm_range: None,
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
+        mml_overlay_patch: None,
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     std::fs::write(&tmp_path, &json).unwrap();
@@ -336,6 +344,7 @@ fn save_and_load_session_state_roundtrip_daw_mode() {
         loop_browser_bpm_range: None,
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
+        mml_overlay_patch: None,
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     std::fs::write(&tmp_path, &json).unwrap();

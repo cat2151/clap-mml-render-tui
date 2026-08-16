@@ -1,5 +1,7 @@
 //! MML 入力オーバーレイの描画。
 
+mod patch_select;
+
 use ratatui::{
     layout::Rect,
     style::Style,
@@ -17,7 +19,6 @@ use cmrt_tui_core::{
 
 use crate::MmlOverlay;
 
-const TITLE: &str = " MML  Esc:close ";
 const PLACEHOLDER: &str = "cde";
 /// 入力欄の枠(2行) + 入力行(1行) + 発音表示(1行)。
 const OVERLAY_HEIGHT: u16 = 4;
@@ -35,7 +36,13 @@ pub fn draw(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>) {
     };
     let value = textarea_value(overlay.textarea());
     frame.render_widget(
-        &build_query_textarea_widget(overlay.textarea(), &value, TITLE, PLACEHOLDER, MONOKAI_CYAN),
+        &build_query_textarea_widget(
+            overlay.textarea(),
+            &value,
+            title(overlay),
+            PLACEHOLDER,
+            MONOKAI_CYAN,
+        ),
         input_area,
     );
     frame.set_cursor_position(single_line_textarea_cursor_position(
@@ -43,18 +50,35 @@ pub fn draw(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>) {
         overlay.textarea(),
     ));
 
-    if overlay_area.height < OVERLAY_HEIGHT {
-        return;
+    if overlay_area.height >= OVERLAY_HEIGHT {
+        let status_area = Rect {
+            y: overlay_area.y + overlay_area.height - 1,
+            height: 1,
+            ..overlay_area
+        };
+        frame.render_widget(
+            Paragraph::new(sounding_label(overlay.sounding()))
+                .style(Style::default().fg(MONOKAI_GRAY)),
+            status_area,
+        );
     }
-    let status_area = Rect {
-        y: overlay_area.y + overlay_area.height - 1,
-        height: 1,
-        ..overlay_area
-    };
-    frame.render_widget(
-        Paragraph::new(sounding_label(overlay.sounding())).style(Style::default().fg(MONOKAI_GRAY)),
-        status_area,
-    );
+
+    // 音色選択は入力欄へ重ねて出す。入力欄より後に描くこと。
+    if let Some(select) = overlay.patch_select() {
+        patch_select::draw(select, frame);
+    }
+}
+
+/// 入力欄の枠のタイトル。行頭 JSON は横に長く、幅の狭い入力欄では
+/// スクロールアウトして見えなくなるため、いま何の音色かはここへ出す。
+///
+/// 表示は入力欄の中身から読み直す。手で JSON を書き換えたときも、
+/// 実際に書かれている音色がそのまま出る。
+fn title(overlay: &MmlOverlay<'_>) -> String {
+    match crate::patch_json::patch_name(&overlay.value()) {
+        Some(patch) => format!(" MML [{patch}]  Ctrl+T:音色  Esc:close "),
+        None => " MML  Ctrl+T:音色  Esc:close ".to_string(),
+    }
 }
 
 /// いま鳴っている音の表示。オクターブは MML の数え方（C5 = 60）に合わせる。

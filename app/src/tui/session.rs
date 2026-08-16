@@ -26,6 +26,7 @@ struct LoadedSessionState {
     loop_browser_bpm_range: Option<[f64; 2]>,
     keyboard_note_guide_overlay_date: Option<String>,
     notepad_sound_check_guide_overlay_date: Option<String>,
+    mml_overlay_patch: Option<String>,
 }
 
 /// 復元したセッションのカーソルを現在の行数に収まる範囲へ丸める。
@@ -53,6 +54,7 @@ fn load_initial_session_state() -> LoadedSessionState {
         loop_browser_bpm_range,
         keyboard_note_guide_overlay_date,
         notepad_sound_check_guide_overlay_date,
+        mml_overlay_patch,
     } = crate::history::load_session_state();
     let initial_cursor = clamp_session_cursor(cursor, lines.len());
     LoadedSessionState {
@@ -69,6 +71,7 @@ fn load_initial_session_state() -> LoadedSessionState {
         loop_browser_bpm_range,
         keyboard_note_guide_overlay_date,
         notepad_sound_check_guide_overlay_date,
+        mml_overlay_patch,
     }
 }
 
@@ -157,6 +160,7 @@ impl<'a> TuiApp<'a> {
             loop_browser_bpm_range,
             keyboard_note_guide_overlay_date,
             notepad_sound_check_guide_overlay_date,
+            mml_overlay_patch,
         } = load_initial_session_state();
         let entry_ptr = entry
             .map(|entry| entry as *const PluginEntry as usize)
@@ -255,7 +259,11 @@ impl<'a> TuiApp<'a> {
                     restored_session: grid_session_from_history(grid_sequencer),
                 },
             ),
-            mml_overlay: super::mml_overlay::MmlOverlay::default(),
+            mml_overlay: {
+                let mut overlay = super::mml_overlay::MmlOverlay::default();
+                overlay.set_restored_patch(mml_overlay_patch);
+                overlay
+            },
             mml_overlay_sender,
             voicing: super::voicing::VoicingState::new(
                 crate::history::load_voicing_cache(),
@@ -298,6 +306,7 @@ impl<'a> TuiApp<'a> {
                 .sound_check_guide()
                 .last_overlay_date()
                 .map(str::to_owned),
+            mml_overlay_patch: self.mml_overlay.patch().map(str::to_owned),
         });
     }
 

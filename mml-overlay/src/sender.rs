@@ -1,8 +1,8 @@
 //! MML オーバーレイ専用の MIDI 送信。
 //!
 //! オーバーレイを開くと現在の画面の演奏は止まる（呼び出し側が止める）ので、
-//! 音源インスタンスは keyboard 画面と同じ 0 番を借りる。patch は指定せず、
-//! realtime server の既定音色（init saw）で鳴らす。
+//! 音源インスタンスは keyboard 画面と同じ 0 番を借りる。音色を指定しなければ
+//! realtime server の既定音色（init saw）で鳴る。
 //!
 //! 接続確立は初回に数百 ms 掛かることがあるため、送信はワーカースレッドへ逃がして
 //! 入力の手応えを落とさない。
@@ -18,8 +18,9 @@ use cmrt_realtime_play::RealtimePlayServerSupervisor;
 const MML_OVERLAY_INSTANCE: u8 = 0;
 
 enum SenderCommand {
-    /// 音源を既定音色で使えるようにする。オーバーレイを開いた時点で先に走らせる。
-    Prepare,
+    /// 音源をこの音色で使えるようにする。`None` なら既定音色。
+    /// オーバーレイを開いた時点と、音色を選び直したときに走らせる。
+    Prepare(Option<String>),
     Send(Vec<[u8; 3]>),
     Shutdown,
 }
@@ -42,8 +43,10 @@ impl MmlOverlaySender {
         }
     }
 
-    pub fn prepare(&self) {
-        let _ = self.tx.send(SenderCommand::Prepare);
+    pub fn prepare(&self, patch: Option<&str>) {
+        let _ = self
+            .tx
+            .send(SenderCommand::Prepare(patch.map(str::to_string)));
     }
 
     pub fn send(&self, messages: Vec<[u8; 3]>) {
@@ -70,10 +73,12 @@ fn log_error(message: String) {
 fn run_sender(rx: mpsc::Receiver<SenderCommand>, supervisor: Arc<RealtimePlayServerSupervisor>) {
     while let Ok(command) = rx.recv() {
         match command {
-            SenderCommand::Prepare => {
-                if let Err(error) = supervisor.prepare_live_patch(MML_OVERLAY_INSTANCE, None) {
+            SenderCommand::Prepare(patch) => {
+                if let Err(error) =
+                    supervisor.prepare_live_patch(MML_OVERLAY_INSTANCE, patch.as_deref())
+                {
                     log_error(format!(
-                        "action=mml-overlay-prepare event=error error=\"{error:#}\""
+                        "action=mml-overlay-prepare event=error patch={patch:?} error=\"{error:#}\""
                     ));
                 }
             }

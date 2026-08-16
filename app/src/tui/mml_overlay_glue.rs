@@ -8,7 +8,7 @@ use std::time::Instant;
 use crossterm::event::KeyEvent;
 
 use super::mml_overlay::{is_mml_overlay_trigger, MmlOverlayAction};
-use super::TuiApp;
+use super::{PatchLoadState, TuiApp};
 
 impl TuiApp<'_> {
     /// Ctrl+P ならオーバーレイを開く。開いたら true。
@@ -22,11 +22,20 @@ impl TuiApp<'_> {
         // オーバーレイは keyboard 画面と同じ音源インスタンスを借りるので、
         // 先にいまの画面の演奏を止めて明け渡してもらう。
         self.stop_active_screen_playback();
-        self.mml_overlay.open();
+        // 音色選択に使う一覧は、開くたびに最新のスナップショットを渡す。
+        // 起動直後で読み込みが終わっていなければ空のまま開き、音色選択だけが効かない。
+        self.mml_overlay.open(self.loaded_patch_pairs());
         if let Some(sender) = &self.mml_overlay_sender {
-            sender.prepare();
+            sender.prepare(self.mml_overlay.patch());
         }
         true
+    }
+
+    fn loaded_patch_pairs(&self) -> Vec<(String, String)> {
+        match &*self.patch_load_state.lock().unwrap() {
+            PatchLoadState::Ready(pairs) => pairs.clone(),
+            PatchLoadState::Loading | PatchLoadState::Err(_) => Vec::new(),
+        }
     }
 
     /// オーバーレイが開いている間、キーはすべてオーバーレイが取る。
@@ -34,6 +43,14 @@ impl TuiApp<'_> {
         match self.mml_overlay.handle_key(key, Instant::now()) {
             MmlOverlayAction::Continue => {}
             MmlOverlayAction::Send(messages) => self.send_mml_overlay_messages(messages),
+            MmlOverlayAction::SetPatch { patch, messages } => {
+                // 音色の読み込みと発音は同じワーカースレッドが順に処理するので、
+                // ここで積む順序がそのまま音源へ届く順序になる。
+                if let Some(sender) = &self.mml_overlay_sender {
+                    sender.prepare(patch.as_deref());
+                }
+                self.send_mml_overlay_messages(messages);
+            }
             MmlOverlayAction::Close(messages) => {
                 self.send_mml_overlay_messages(messages);
                 // 借りていた音源を返す。開いたときに止めた演奏はここで戻る。

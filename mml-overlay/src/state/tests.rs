@@ -1,3 +1,5 @@
+mod patch;
+
 use super::*;
 
 fn press(code: KeyCode) -> KeyEvent {
@@ -6,7 +8,7 @@ fn press(code: KeyCode) -> KeyEvent {
 
 fn opened() -> MmlOverlay<'static> {
     let mut overlay = MmlOverlay::default();
-    overlay.open();
+    overlay.open(Vec::new());
     overlay
 }
 
@@ -145,7 +147,7 @@ fn reopening_starts_from_an_empty_input() {
     overlay.handle_key(press(KeyCode::Char('c')), now);
     overlay.handle_key(press(KeyCode::Esc), now);
 
-    overlay.open();
+    overlay.open(Vec::new());
     assert_eq!(overlay.value(), "");
     assert!(overlay.is_open());
 }

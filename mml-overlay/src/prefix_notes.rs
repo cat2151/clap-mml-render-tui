@@ -7,6 +7,8 @@
 
 use mmlabc_to_smf::{pass1_parser::parse_mml, pass2_ast::tokens_to_ast, types::AstNote};
 
+use crate::patch_json::strip_patch_json;
+
 /// `AstNote::note_type` のうち、実際に発音するもの。
 /// `rest` / `program_change` / `tempo_set` も同じ列に混ざって来るため必ず絞る。
 const NOTE_TYPE: &str = "note";
@@ -38,8 +40,14 @@ pub fn prefix_byte_index(text: &str, cursor_chars: usize) -> usize {
 }
 
 /// カーソル位置までの MML から、いま鳴らすべき音を求める。
+///
+/// 行頭の patch 指定 JSON はここで剥がす。JSON を prefix に含めたまま渡すと、
+/// カーソルが JSON の途中にある間だけ「閉じ括弧が無い JSON 片」が MML として
+/// パーサへ流れてしまうため。カーソルが JSON の中にある間は発音しない。
 pub fn notes_at_cursor(text: &str, cursor_chars: usize) -> Option<PrefixNotes> {
-    notes_at_prefix(&text[..prefix_byte_index(text, cursor_chars)])
+    let stripped = strip_patch_json(text);
+    let cursor_chars = cursor_chars.checked_sub(stripped.offset_chars)?;
+    notes_at_prefix(&stripped.mml[..prefix_byte_index(stripped.mml, cursor_chars)])
 }
 
 /// prefix 文字列から、いま鳴らすべき音を求める。

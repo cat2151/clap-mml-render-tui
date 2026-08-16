@@ -45,6 +45,10 @@ pub struct SessionState {
     /// notepad の音出し確認 overlay を最後に表示したローカル日付（YYYY-MM-DD）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notepad_sound_check_guide_overlay_date: Option<String>,
+    /// MML 入力 overlay で最後に選んだ音色。`None` は realtime server の既定音色。
+    /// MML 本体は揮発だが、音色だけは開き直しても引き継ぐ。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mml_overlay_patch: Option<String>,
 }
 
 impl Default for SessionState {
@@ -63,6 +67,7 @@ impl Default for SessionState {
             loop_browser_bpm_range: None,
             keyboard_note_guide_overlay_date: None,
             notepad_sound_check_guide_overlay_date: None,
+            mml_overlay_patch: None,
         }
     }
 }
@@ -97,6 +102,8 @@ struct SessionStateWire {
     keyboard_note_guide_overlay_date: Option<String>,
     #[serde(default)]
     notepad_sound_check_guide_overlay_date: Option<String>,
+    #[serde(default)]
+    mml_overlay_patch: Option<String>,
 }
 
 impl<'de> serde::Deserialize<'de> for SessionState {
@@ -130,6 +137,7 @@ impl<'de> serde::Deserialize<'de> for SessionState {
             loop_browser_bpm_range: valid_saved_bpm_range(wire.loop_browser_bpm_range),
             keyboard_note_guide_overlay_date: wire.keyboard_note_guide_overlay_date,
             notepad_sound_check_guide_overlay_date: wire.notepad_sound_check_guide_overlay_date,
+            mml_overlay_patch: wire.mml_overlay_patch,
         })
     }
 }

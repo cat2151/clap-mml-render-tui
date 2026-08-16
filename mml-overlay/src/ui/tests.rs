@@ -21,7 +21,7 @@ fn render(overlay: &MmlOverlay<'_>) -> String {
 
 fn overlay_with(input: &str) -> MmlOverlay<'static> {
     let mut overlay = MmlOverlay::default();
-    overlay.open();
+    overlay.open(Vec::new());
     let now = Instant::now();
     for code in input.chars().map(KeyCode::Char) {
         overlay.handle_key(KeyEvent::new(code, KeyModifiers::NONE), now);
@@ -55,11 +55,39 @@ fn shows_every_member_of_a_sounding_chord() {
 #[test]
 fn shows_a_placeholder_before_anything_is_typed() {
     let mut overlay = MmlOverlay::default();
-    overlay.open();
+    overlay.open(Vec::new());
     let rendered = render(&overlay);
 
     assert!(rendered.contains("cde"), "{rendered}");
     assert!(rendered.contains("sounding: -"), "{rendered}");
+}
+
+#[test]
+fn shows_the_selected_patch_in_the_title() {
+    let mut overlay = MmlOverlay::default();
+    overlay.set_restored_patch(Some("Leads/Lead 1.fxp".to_string()));
+    overlay.open(Vec::new());
+    let rendered = render(&overlay);
+
+    assert!(rendered.contains("Lead 1.fxp"), "{rendered}");
+}
+
+#[test]
+fn draws_the_patch_select_over_the_input() {
+    let mut overlay = MmlOverlay::default();
+    overlay.open(vec![(
+        "Leads/Lead 1.fxp".to_string(),
+        "leads/lead 1.fxp".to_string(),
+    )]);
+    overlay.handle_key(
+        KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL),
+        Instant::now(),
+    );
+    let rendered = render(&overlay);
+
+    // 全角文字はセル単位で分かれて見えるので、ASCII の部分だけで確かめる。
+    assert!(rendered.contains("Enter:"), "{rendered}");
+    assert!(rendered.contains("Lead 1.fxp"), "{rendered}");
 }
 
 #[test]
