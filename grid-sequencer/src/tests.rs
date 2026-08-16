@@ -347,6 +347,66 @@ fn x_clears_cells_keeps_row_parameters_and_stops_the_note_random() {
     assert!(!screen.cycle_random().get(crate::CycleRandomItem::Note));
 }
 
+/// DAW 画面の `P` と同じく、押すたびに停止と再開が入れ替わる。
+#[test]
+fn shift_p_toggles_playing() {
+    let patches = one_patch();
+    let now = Instant::now();
+    let mut screen = silent_screen();
+    screen.start(now, &ready_ctx(&patches));
+    assert!(screen.is_playing());
+
+    screen.handle_key(shift_press(KeyCode::Char('P')), now, &ready_ctx(&patches));
+    assert!(!screen.is_playing());
+
+    screen.handle_key(shift_press(KeyCode::Char('P')), now, &ready_ctx(&patches));
+    assert!(screen.is_playing());
+}
+
+/// 止めても grid は残る。`P` で戻したときに同じ譜面が鳴り直すのが前提。
+#[test]
+fn stopping_keeps_the_grid_contents() {
+    let patches = one_patch();
+    let now = Instant::now();
+    let mut screen = silent_screen();
+    screen.start(now, &ready_ctx(&patches));
+    let before = screen
+        .state
+        .rows()
+        .iter()
+        .map(|row| row.pattern.clone())
+        .collect::<Vec<_>>();
+
+    screen.stop_playing();
+
+    let after = screen
+        .state
+        .rows()
+        .iter()
+        .map(|row| row.pattern.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(before, after);
+    assert!(!screen.is_playing());
+}
+
+/// `stop_playing` は演奏だけを止める。開いている入力欄まで閉じるのは
+/// 画面を離れる `finish` の役目。
+#[test]
+fn stopping_does_not_close_the_chord_input() {
+    let patches = one_patch();
+    let now = Instant::now();
+    let mut screen = silent_screen();
+    screen.start(now, &ready_ctx(&patches));
+    screen.handle_key(press(KeyCode::Char('i')), now, &ready_ctx(&patches));
+    assert!(screen.chord_input_open());
+
+    screen.stop_playing();
+    assert!(screen.chord_input_open());
+
+    screen.finish();
+    assert!(!screen.chord_input_open());
+}
+
 /// 接続前に進めてしまうと、Ready 復帰時に欠落ステップをまとめて鳴らしてしまう。
 #[test]
 fn pump_step_does_not_advance_while_the_connection_is_not_ready() {

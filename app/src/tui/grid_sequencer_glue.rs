@@ -181,6 +181,11 @@ impl TuiApp<'_> {
         self.grid_sequencer.finish();
     }
 
+    /// 画面に留まったまま演奏だけ止める（MML オーバーレイへ音源を明け渡すとき）。
+    pub(in crate::tui) fn stop_grid_sequencer_playback(&mut self) {
+        self.grid_sequencer.stop_playing();
+    }
+
     pub(in crate::tui) fn grid_sequencer_connection_status(&self) -> GridConnectionStatus {
         self.grid_sequencer.connection_status()
     }

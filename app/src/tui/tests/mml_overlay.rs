@@ -43,6 +43,32 @@ fn opening_the_overlay_stops_the_grid_sequencer() {
     assert_eq!(app.active_screen, PrimaryScreen::GridSequencer);
 }
 
+/// 借りた音源は閉じるときに返す。止めた演奏はそのまま戻る。
+#[test]
+fn closing_the_overlay_resumes_the_grid_sequencer() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.switch_to_primary_screen(PrimaryScreen::GridSequencer, None);
+    app.try_open_mml_overlay(ctrl_p());
+    assert!(!app.grid_sequencer.is_playing());
+
+    app.handle_mml_overlay_key_event(press(KeyCode::Esc));
+
+    assert!(app.grid_sequencer.is_playing());
+    assert_eq!(app.active_screen, PrimaryScreen::GridSequencer);
+}
+
+#[test]
+fn closing_the_overlay_restarts_the_loop_browser() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.begin_loop_browser_startup();
+    app.loop_browser.state.starting = false;
+    app.try_open_mml_overlay(ctrl_p());
+
+    app.handle_mml_overlay_key_event(press(KeyCode::Esc));
+
+    assert!(app.loop_browser.state.starting);
+}
+
 #[test]
 fn a_modal_screen_state_blocks_the_overlay() {
     let mut app = TuiApp::new_for_test(test_config());

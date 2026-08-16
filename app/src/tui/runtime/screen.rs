@@ -61,11 +61,35 @@ impl<'a> TuiApp<'a> {
             .set_play_state_if_current(session, PlayState::Idle);
     }
 
-    /// いまの画面が鳴らしている音を止める。
+    /// MML オーバーレイへ音源インスタンスを明け渡すため、いまの画面の演奏を止める。
     ///
-    /// 画面を離れるときのほか、MML オーバーレイへ音源インスタンスを明け渡すときにも使う。
-    /// 後者では画面はそのまま残るが、演奏は再開されない。
+    /// 画面はそのまま残るので、開いている入力欄やヘルプは閉じない
+    /// （画面を離れる [`Self::leave_active_screen`] との違いはそこ）。
     pub(in crate::tui) fn stop_active_screen_playback(&mut self) {
+        match self.active_screen {
+            PrimaryScreen::Notepad => self.stop_notepad_playback(),
+            PrimaryScreen::Keyboard => self.finish_keyboard(),
+            PrimaryScreen::LoopBrowser => self.stop_loop_browser(),
+            PrimaryScreen::GridSequencer => self.stop_grid_sequencer_playback(),
+            PrimaryScreen::Daw => {}
+        }
+    }
+
+    /// [`Self::stop_active_screen_playback`] で止めた演奏を再開する。
+    ///
+    /// MML オーバーレイを閉じたときに使う。画面は離れていないので、いた場所から
+    /// 演奏だけが戻る（grid sequencer なら同じ grid のまま鳴り直す）。
+    pub(in crate::tui) fn resume_active_screen_playback(&mut self) {
+        match self.active_screen {
+            PrimaryScreen::Keyboard => self.resume_keyboard(),
+            PrimaryScreen::LoopBrowser => self.begin_loop_browser_startup(),
+            PrimaryScreen::GridSequencer => self.enter_grid_sequencer(),
+            // notepad と DAW は明示的に再生する画面なので、勝手に鳴らし始めない。
+            PrimaryScreen::Notepad | PrimaryScreen::Daw => {}
+        }
+    }
+
+    fn leave_active_screen(&mut self) {
         match self.active_screen {
             PrimaryScreen::Notepad => self.stop_notepad_playback(),
             PrimaryScreen::Keyboard => self.finish_keyboard(),
@@ -73,10 +97,6 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::GridSequencer => self.finish_grid_sequencer(),
             PrimaryScreen::Daw => {}
         }
-    }
-
-    fn leave_active_screen(&mut self) {
-        self.stop_active_screen_playback();
     }
 
     pub(in crate::tui) fn switch_to_primary_screen(

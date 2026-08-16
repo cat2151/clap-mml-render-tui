@@ -73,6 +73,7 @@ fn pane_width(lines: &[Line<'_>]) -> u16 {
 fn keybind_lines() -> Vec<Line<'static>> {
     [
         " Ctrl+G  画面切替メニュー",
+        " Ctrl+P  MML入力(どの画面からでも)",
         " Ctrl+B  BPM設定 / 自動BPMの範囲",
         " 左click 1step の note / 消去",
         " 左drag  長い note、row横断で arpeggio",
@@ -80,6 +81,7 @@ fn keybind_lines() -> Vec<Line<'static>> {
         " wheel   PATCH欄:音色を送る(↓次 ↑前)",
         "         NOTE欄:音高 / 転回(↑上げる)",
         "         grid:フレーズを送る(↓次 ↑前)",
+        " P       演奏を停止 / 再開(DAWと同じキー)",
         " u       直前の編集を undo",
         " a       1周ごとの random 設定",
         " x       全 note 消去",

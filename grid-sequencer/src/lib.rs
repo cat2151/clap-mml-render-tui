@@ -172,17 +172,26 @@ impl GridSequencerScreen {
         }
     }
 
-    /// 画面を離れるときの後始末。鳴っている音を止めてから再生を停止する。
+    /// 画面を離れるときの後始末。開いている overlay を閉じてから再生を停止する。
     pub fn finish(&mut self) {
         self.cancel_mouse_gesture();
         self.help_open = false;
         self.close_chord_input();
         self.close_cycle_random_overlay();
         self.bpm_input = None;
+        self.stop_playing();
+    }
+
+    /// 演奏だけを止める。鳴っている音を消してクロックを止めるが、grid の内容は
+    /// 残るので [`Self::resume`] で続きから鳴らし直せる。
+    ///
+    /// 画面を離れるとき（[`Self::finish`]）と、`P` で明示的に止めたとき、MML
+    /// オーバーレイへ音源を明け渡すときの3つで共有する。
+    pub fn stop_playing(&mut self) {
         self.cancel_cycle_swap();
         self.waiting_for_patches = false;
         self.resume_at = None;
-        // 画面を出たら判定は白紙。次に入るときはダブルバッファリングから試す
+        // 止めたら判定は白紙。次に走らせるときはダブルバッファリングから試す
         // （送信ワーカー側の判定も `stop()` で戻る）。
         self.single_buffering = false;
         self.overload_applied = false;
@@ -195,6 +204,24 @@ impl GridSequencerScreen {
                     * cmrt_realtime_play::BANK_COUNT
             ]);
             sender.stop();
+        }
+    }
+
+    /// 演奏中か。
+    pub fn is_playing(&self) -> bool {
+        self.state.is_running()
+    }
+
+    /// 再生/停止をトグルする。止まっていれば直前の grid のまま鳴らし直す。
+    ///
+    /// DAW 画面の `P`（`TogglePlay`）と同じ操作感に揃えてある。
+    fn toggle_playing(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
+        if self.is_playing() {
+            self.stop_playing();
+            log_line("grid-sequencer: stop-playing key=P");
+        } else {
+            self.resume(now, ctx);
+            log_line("grid-sequencer: resume-playing key=P");
         }
     }
 
@@ -346,6 +373,7 @@ impl GridSequencerScreen {
                 self.help_open = true;
                 cmrt_tui_core::memory::request_refresh();
             }
+            KeyCode::Char('P') => self.toggle_playing(now, ctx),
             KeyCode::Char('a') => self.toggle_cycle_random_overlay(),
             KeyCode::Char('b') if key.modifiers.is_empty() => self.toggle_single_buffering(),
             KeyCode::Char('c') => self.toggle_chord_mode(now, ctx),

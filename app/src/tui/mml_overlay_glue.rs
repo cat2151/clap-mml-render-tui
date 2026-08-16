@@ -33,8 +33,11 @@ impl TuiApp<'_> {
     pub(in crate::tui) fn handle_mml_overlay_key_event(&mut self, key: KeyEvent) {
         match self.mml_overlay.handle_key(key, Instant::now()) {
             MmlOverlayAction::Continue => {}
-            MmlOverlayAction::Send(messages) | MmlOverlayAction::Close(messages) => {
+            MmlOverlayAction::Send(messages) => self.send_mml_overlay_messages(messages),
+            MmlOverlayAction::Close(messages) => {
                 self.send_mml_overlay_messages(messages);
+                // 借りていた音源を返す。開いたときに止めた演奏はここで戻る。
+                self.resume_active_screen_playback();
             }
         }
     }
