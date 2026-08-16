@@ -29,7 +29,7 @@ use logging::{log_realtime_play_event, truncate_for_log};
 
 pub use fast_midi_ipc::{
     FastMidiEvent, InstanceId, LimiterMeter, LiveTempoChange, LiveTimelineConfig, TimelineId,
-    TimelineMidiEvent, TimingMetrics, INSTANCE_COUNT,
+    TimelineMidiEvent, TimingMetrics, INSTANCE_COUNT, MAX_MIDI_MESSAGES,
 };
 pub use live_ipc::{PatchVoicing, VoicingReport};
 

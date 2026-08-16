@@ -6,12 +6,18 @@
 //! keyboard 画面の MML 入力と grid sequencer の chord mode の両方から使う。
 
 mod auto_voicing;
+mod cursor;
 mod progression;
+mod timed;
 
 pub use auto_voicing::{auto_voice, max_jumps, ChordVoicing};
+pub use cursor::cursor_sounding_unit;
 pub use progression::{
     chord_notes, parse_chord_progression, ChordProgression, ChordProgressionCatalog,
     ChordProgressionPick, ParsedChordProgression, KEYS,
+};
+pub use timed::{
+    resolve_chord_or_mml, timed_performance, ResolvedMml, TimedMidiEvent, TimedPerformance,
 };
 
 use midly::{MidiMessage, Smf, TrackEventKind};
@@ -25,8 +31,7 @@ pub fn note_progression(input: &str) -> Result<Vec<Vec<u8>>, String> {
     if input.trim().is_empty() {
         return Err("MMLを入力してください".to_string());
     }
-    let mml = chord2mml_core::convert(input).unwrap_or_else(|_| input.to_string());
-    mml_note_progression(&mml)
+    mml_note_progression(&resolve_chord_or_mml(input).mml)
 }
 
 /// MML を、同時発音ごとにまとめた note number の列へ変換する。

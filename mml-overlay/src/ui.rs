@@ -1,28 +1,31 @@
 //! MML 入力オーバーレイの描画。
 
+mod history_select;
 mod patch_select;
+mod status;
 
 use ratatui::{
-    layout::Rect,
+    layout::{Constraint, Direction, Layout, Rect},
     style::Style,
-    widgets::{Clear, Paragraph},
+    widgets::{Block, Borders, Clear},
     Frame,
 };
+use ratatui_textarea::TextArea;
 
 use cmrt_tui_core::{
-    text_input::{
-        build_query_textarea_widget, single_line_textarea_cursor_position, textarea_value,
-    },
-    theme::{MONOKAI_CYAN, MONOKAI_GRAY},
+    text_input::single_line_textarea_cursor_position,
+    theme::{MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY},
     ui::centered_rect_with_size,
 };
 
 use crate::MmlOverlay;
 
-const PLACEHOLDER: &str = "cde";
-/// 入力欄の枠(2行) + 入力行(1行) + 発音表示(1行)。
-const OVERLAY_HEIGHT: u16 = 4;
-const OVERLAY_MAX_WIDTH: u16 = 64;
+const PLACEHOLDER: &str = "1行1フレーズ。上下キーでその行を演奏";
+/// 入力欄に見せる行数。これを超えた行は入力欄の中でスクロールする。
+const INPUT_ROWS: u16 = 8;
+/// 入力欄の枠(2行) + 入力行 + 状態行(1行)。
+const OVERLAY_HEIGHT: u16 = INPUT_ROWS + 3;
+const OVERLAY_MAX_WIDTH: u16 = 72;
 
 pub fn draw(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>) {
     let area = frame.area();
@@ -30,74 +33,59 @@ pub fn draw(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>) {
     let overlay_area = centered_rect_with_size(width, OVERLAY_HEIGHT.min(area.height), area);
     frame.render_widget(Clear, overlay_area);
 
-    let input_area = Rect {
-        height: overlay_area.height.saturating_sub(1),
-        ..overlay_area
-    };
-    let value = textarea_value(overlay.textarea());
-    frame.render_widget(
-        &build_query_textarea_widget(
-            overlay.textarea(),
-            &value,
-            title(overlay),
-            PLACEHOLDER,
-            MONOKAI_CYAN,
-        ),
-        input_area,
-    );
-    frame.set_cursor_position(single_line_textarea_cursor_position(
-        input_area,
-        overlay.textarea(),
-    ));
-
-    if overlay_area.height >= OVERLAY_HEIGHT {
-        let status_area = Rect {
-            y: overlay_area.y + overlay_area.height - 1,
-            height: 1,
-            ..overlay_area
-        };
-        frame.render_widget(
-            Paragraph::new(sounding_label(overlay.sounding()))
-                .style(Style::default().fg(MONOKAI_GRAY)),
-            status_area,
-        );
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(3), Constraint::Length(1)])
+        .split(overlay_area);
+    draw_input(overlay, frame, chunks[0]);
+    if chunks.len() > 1 {
+        status::draw(overlay, frame, chunks[1]);
     }
 
-    // 音色選択は入力欄へ重ねて出す。入力欄より後に描くこと。
+    // 音色選択と履歴は入力欄へ重ねて出す。入力欄より後に描くこと。
     if let Some(select) = overlay.patch_select() {
         patch_select::draw(select, frame);
     }
+    if let Some(select) = overlay.history_select() {
+        history_select::draw(select, frame);
+    }
 }
 
-/// 入力欄の枠のタイトル。行頭 JSON は横に長く、幅の狭い入力欄では
-/// スクロールアウトして見えなくなるため、いま何の音色かはここへ出す。
+fn draw_input(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>, area: Rect) {
+    frame.render_widget(
+        &build_input_widget(overlay.textarea(), title(overlay)),
+        area,
+    );
+    frame.set_cursor_position(single_line_textarea_cursor_position(
+        area,
+        overlay.textarea(),
+    ));
+}
+
+/// 描画用の複製へ枠と placeholder を付ける。
 ///
-/// 表示は入力欄の中身から読み直す。手で JSON を書き換えたときも、
-/// 実際に書かれている音色がそのまま出る。
+/// 持ち続けている `TextArea` はカーソル位置と編集履歴を持つので、フレームごとの
+/// 見た目だけをここで足して本体には触らない。
+fn build_input_widget<'a>(textarea: &TextArea<'a>, title: String) -> TextArea<'a> {
+    let mut widget = textarea.clone();
+    widget.set_placeholder_text(PLACEHOLDER);
+    widget.set_placeholder_style(Style::default().fg(MONOKAI_GRAY).bg(MONOKAI_BG));
+    widget.set_block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .style(Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG))
+            .border_style(Style::default().fg(MONOKAI_CYAN)),
+    );
+    widget
+}
+
+/// 入力欄の枠のタイトル。音色は入力欄のテキストに現れないので、ここへ出す。
 fn title(overlay: &MmlOverlay<'_>) -> String {
-    match crate::patch_json::patch_name(&overlay.value()) {
-        Some(patch) => format!(" MML [{patch}]  Ctrl+T:音色  Esc:close "),
-        None => " MML  Ctrl+T:音色  Esc:close ".to_string(),
+    match overlay.patch() {
+        Some(patch) => format!(" MML [{patch}] "),
+        None => " MML [既定音色] ".to_string(),
     }
-}
-
-/// いま鳴っている音の表示。オクターブは MML の数え方（C5 = 60）に合わせる。
-fn sounding_label(sounding: &[u8]) -> String {
-    if sounding.is_empty() {
-        return " sounding: -".to_string();
-    }
-    let names = sounding
-        .iter()
-        .map(|pitch| note_name(*pitch))
-        .collect::<Vec<_>>();
-    format!(" sounding: {}", names.join(" "))
-}
-
-fn note_name(pitch: u8) -> String {
-    const NAMES: [&str; 12] = [
-        "c", "c+", "d", "d+", "e", "f", "f+", "g", "g+", "a", "a+", "b",
-    ];
-    format!("{}{}", NAMES[usize::from(pitch) % 12], pitch / 12)
 }
 
 #[cfg(test)]

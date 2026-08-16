@@ -1,13 +1,16 @@
 //! MML 入力オーバーレイと共有ランタイムの接続。
 //!
 //! オーバーレイ自体は `cmrt-mml-overlay` crate に閉じている。ここが持つのは
-//! 「どの画面から開いてよいか」「開くときに何を止めるか」「鳴らす先はどこか」の 3 つだけ。
+//! 「どの画面から開いてよいか」「開くときに何を止めるか」「鳴らす先はどこか」
+//! 「開くときに何のスナップショットを渡すか」の 4 つだけ。
 
 use std::time::Instant;
 
 use crossterm::event::KeyEvent;
 
-use super::mml_overlay::{is_mml_overlay_trigger, MmlOverlayAction};
+use super::mml_overlay::{
+    is_mml_overlay_trigger, MmlOverlayAction, MmlOverlayContext, PatchChange,
+};
 use super::{PatchLoadState, TuiApp};
 
 impl TuiApp<'_> {
@@ -22,13 +25,24 @@ impl TuiApp<'_> {
         // オーバーレイは keyboard 画面と同じ音源インスタンスを借りるので、
         // 先にいまの画面の演奏を止めて明け渡してもらう。
         self.stop_active_screen_playback();
-        // 音色選択に使う一覧は、開くたびに最新のスナップショットを渡す。
-        // 起動直後で読み込みが終わっていなければ空のまま開き、音色選択だけが効かない。
-        self.mml_overlay.open(self.loaded_patch_pairs());
+        let context = self.mml_overlay_context();
+        self.mml_overlay.open(context);
         if let Some(sender) = &self.mml_overlay_sender {
             sender.prepare(self.mml_overlay.patch());
         }
         true
+    }
+
+    /// 音色一覧とフレーズ履歴は、開くたびに最新のスナップショットを渡す。
+    /// 起動直後で読み込みが終わっていなければ空のまま開き、その選択だけが効かない。
+    fn mml_overlay_context(&self) -> MmlOverlayContext {
+        let patches = self.loaded_patch_pairs();
+        let (history, favorites) = self.notepad.phrase_history();
+        MmlOverlayContext {
+            patches,
+            history: history.to_vec(),
+            favorites: favorites.to_vec(),
+        }
     }
 
     fn loaded_patch_pairs(&self) -> Vec<(String, String)> {
@@ -51,8 +65,20 @@ impl TuiApp<'_> {
                 }
                 self.send_mml_overlay_messages(messages);
             }
+            MmlOverlayAction::PlayLine { patch, events } => {
+                let Some(sender) = &self.mml_overlay_sender else {
+                    return;
+                };
+                if let PatchChange::Switch(patch) = patch {
+                    sender.prepare(patch.as_deref());
+                }
+                sender.play_line(events);
+            }
             MmlOverlayAction::Close(messages) => {
                 self.send_mml_overlay_messages(messages);
+                if let Some(sender) = &self.mml_overlay_sender {
+                    sender.stop_line();
+                }
                 // 借りていた音源を返す。開いたときに止めた演奏はここで戻る。
                 self.resume_active_screen_playback();
             }

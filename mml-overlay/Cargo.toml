@@ -4,11 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+cmrt-chord = { path = "../chord" }
 cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-tui-core = { path = "../tui-core" }
-mmlabc-to-smf = { git = "https://github.com/cat2151/mmlabc-to-smf-rust.git", package = "mmlabc-to-smf", default-features = false, features = [
-    "parser",
-] }
+# MML のパースは cmrt-chord 経由で本家へ通す。ここが直に使うのは行頭 JSON を
+# 剥がす mml_preprocessor だけなので、tree-sitter を引く parser feature は要らない。
+mmlabc-to-smf = { git = "https://github.com/cat2151/mmlabc-to-smf-rust.git", package = "mmlabc-to-smf", default-features = false }
 serde_json = "1.0"
 crossterm = "0.29"
 ratatui = "0.30"

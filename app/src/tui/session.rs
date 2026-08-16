@@ -188,9 +188,11 @@ impl<'a> TuiApp<'a> {
             &play_server,
         )));
         // MML オーバーレイも同じ SHM 接続を共有する（借りる instance は keyboard と同じ）。
-        let mml_overlay_sender = Some(super::mml_overlay::MmlOverlaySender::new(Arc::clone(
-            &play_server,
-        )));
+        // sample rate は行ぜんぶを鳴らすときの live timeline を張るのに要る。
+        let mml_overlay_sender = Some(super::mml_overlay::MmlOverlaySender::new(
+            Arc::clone(&play_server),
+            cfg.sample_rate,
+        ));
         let keyboard_midi_sender = Some(super::keyboard::KeyboardMidiSender::new(
             play_server,
             keyboard_state.buffer_multiplier(),

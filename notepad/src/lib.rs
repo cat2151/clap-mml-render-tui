@@ -270,6 +270,17 @@ impl<'a> NotepadScreen<'a> {
         self.playback.session.begin()
     }
 
+    /// notepad のフレーズ履歴（履歴, お気に入り）。
+    ///
+    /// MML オーバーレイが読むために公開している。まだディスクへ書いていない分も
+    /// 含めたいので、保存ファイルからではなくここから取ること。
+    pub fn phrase_history(&self) -> (&[String], &[String]) {
+        (
+            &self.patch_phrase_store.notepad.history,
+            &self.patch_phrase_store.notepad.favorites,
+        )
+    }
+
     pub fn set_play_state_if_current(&self, session: u64, next_state: PlayState) {
         self.playback
             .session

@@ -23,6 +23,16 @@ pub fn new_single_line_textarea<'a>(text: &str) -> TextArea<'a> {
     textarea
 }
 
+/// 複数行の入力欄を、行の配列から作る。
+///
+/// 1 行入力と同じ配色にする（カーソル行の下線も引かない）。行数だけが違い、
+/// 改行を受け付けるかどうかは呼び出し側のキー処理が決める。
+pub fn new_multi_line_textarea<'a>(lines: Vec<String>) -> TextArea<'a> {
+    let mut textarea = TextArea::new(lines);
+    apply_single_line_textarea_theme(&mut textarea);
+    textarea
+}
+
 pub fn sync_single_line_textarea<'a>(textarea: &mut TextArea<'a>, text: &str) {
     if textarea_value(textarea) != text {
         *textarea = new_single_line_textarea(text);

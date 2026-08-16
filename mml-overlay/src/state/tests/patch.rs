@@ -1,9 +1,6 @@
-//! 行頭 JSON への音色 insert / overwrite と、音色選択の試聴。
+//! 音色は入力欄と別に持つ（`Ctrl+T` だけが書き換える）。
 
 use super::*;
-
-const LEAD_JSON: &str = r#"{"Surge XT patch": "Leads/Lead 1.fxp"}"#;
-const PAD_JSON: &str = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#;
 
 fn patches() -> Vec<(String, String)> {
     ["Leads/Lead 1.fxp", "Pads/Pad 1.fxp"]
@@ -14,17 +11,11 @@ fn patches() -> Vec<(String, String)> {
 
 fn opened_with_patches() -> MmlOverlay<'static> {
     let mut overlay = MmlOverlay::default();
-    overlay.open(patches());
+    overlay.open(MmlOverlayContext {
+        patches: patches(),
+        ..MmlOverlayContext::default()
+    });
     overlay
-}
-
-fn ctrl(code: KeyCode) -> KeyEvent {
-    KeyEvent::new(code, KeyModifiers::CONTROL)
-}
-
-fn column(overlay: &MmlOverlay<'_>) -> usize {
-    let DataCursor(_, column) = overlay.textarea().cursor();
-    column
 }
 
 #[test]
@@ -49,9 +40,7 @@ fn ctrl_t_does_nothing_while_the_patch_list_is_still_loading() {
 fn moving_in_the_patch_select_previews_the_patch_with_the_note_at_the_cursor() {
     let mut overlay = opened_with_patches();
     let now = Instant::now();
-    for code in "cde".chars().map(KeyCode::Char) {
-        overlay.handle_key(press(code), now);
-    }
+    type_chars(&mut overlay, "cde", now);
     overlay.handle_key(ctrl(KeyCode::Char('t')), now);
 
     assert_eq!(
@@ -73,43 +62,24 @@ fn previewing_an_empty_mml_sounds_the_fallback_note() {
         overlay.handle_key(press(KeyCode::Down), now),
         MmlOverlayAction::SetPatch {
             patch: Some("Pads/Pad 1.fxp".to_string()),
-            messages: vec![[0x90, PREVIEW_PITCH, PREVIEW_VELOCITY]],
+            // 試聴用の `c` を既定のオクターブ・velocity で鳴らす。
+            messages: vec![[0x90, 60, 127]],
         }
     );
 }
 
+/// 音色は入力欄には現れない。フレーズを 1 行ずつ書き並べる邪魔をしないため。
 #[test]
-fn confirming_inserts_the_patch_json_and_keeps_the_cursor_on_the_same_note() {
+fn confirming_keeps_the_input_untouched() {
     let mut overlay = opened_with_patches();
     let now = Instant::now();
-    for code in "cde".chars().map(KeyCode::Char) {
-        overlay.handle_key(press(code), now);
-    }
+    type_chars(&mut overlay, "cde", now);
     overlay.handle_key(ctrl(KeyCode::Char('t')), now);
     overlay.handle_key(press(KeyCode::Enter), now);
 
-    assert_eq!(overlay.value(), format!("{LEAD_JSON} cde"));
-    assert_eq!(column(&overlay), LEAD_JSON.chars().count() + 1 + 3);
+    assert_eq!(overlay.value(), "cde");
     assert_eq!(overlay.patch(), Some("Leads/Lead 1.fxp"));
     assert!(overlay.patch_select().is_none());
-}
-
-#[test]
-fn confirming_again_overwrites_the_existing_patch_json() {
-    let mut overlay = opened_with_patches();
-    let now = Instant::now();
-    for code in "cde".chars().map(KeyCode::Char) {
-        overlay.handle_key(press(code), now);
-    }
-    overlay.handle_key(ctrl(KeyCode::Char('t')), now);
-    overlay.handle_key(press(KeyCode::Enter), now);
-
-    overlay.handle_key(ctrl(KeyCode::Char('t')), now);
-    overlay.handle_key(press(KeyCode::Down), now);
-    overlay.handle_key(press(KeyCode::Enter), now);
-
-    assert_eq!(overlay.value(), format!("{PAD_JSON} cde"));
-    assert_eq!(column(&overlay), PAD_JSON.chars().count() + 1 + 3);
 }
 
 #[test]
@@ -129,7 +99,7 @@ fn cancelling_restores_the_patch_that_was_current_when_it_opened() {
             messages: Vec::new(),
         }
     );
-    assert_eq!(overlay.value(), format!("{LEAD_JSON} "));
+    assert_eq!(overlay.patch(), Some("Leads/Lead 1.fxp"));
     assert!(overlay.is_open());
 }
 
@@ -150,52 +120,16 @@ fn cancelling_without_previewing_asks_for_nothing() {
 fn reopening_restores_the_patch_but_not_the_mml() {
     let mut overlay = opened_with_patches();
     let now = Instant::now();
-    for code in "cde".chars().map(KeyCode::Char) {
-        overlay.handle_key(press(code), now);
-    }
+    type_chars(&mut overlay, "cde", now);
     overlay.handle_key(ctrl(KeyCode::Char('t')), now);
     overlay.handle_key(press(KeyCode::Enter), now);
     overlay.handle_key(press(KeyCode::Esc), now);
 
-    overlay.open(patches());
+    overlay.open(MmlOverlayContext {
+        patches: patches(),
+        ..MmlOverlayContext::default()
+    });
 
-    assert_eq!(overlay.value(), format!("{LEAD_JSON} "));
+    assert_eq!(overlay.value(), "");
     assert_eq!(overlay.patch(), Some("Leads/Lead 1.fxp"));
-}
-
-#[test]
-fn a_hand_edited_patch_json_is_what_gets_remembered() {
-    let mut overlay = opened_with_patches();
-    let now = Instant::now();
-    for ch in format!("{PAD_JSON} c").chars() {
-        overlay.handle_key(press(KeyCode::Char(ch)), now);
-    }
-    overlay.handle_key(press(KeyCode::Esc), now);
-
-    assert_eq!(overlay.patch(), Some("Pads/Pad 1.fxp"));
-}
-
-#[test]
-fn a_cursor_inside_the_patch_json_sounds_nothing() {
-    let mut overlay = opened_with_patches();
-    let now = Instant::now();
-    overlay.handle_key(press(KeyCode::Char('c')), now);
-    overlay.handle_key(ctrl(KeyCode::Char('t')), now);
-    overlay.handle_key(press(KeyCode::Enter), now);
-
-    // 行頭へ戻ってから1つ進める。ここは JSON の中なので鳴らない。
-    overlay.handle_key(ctrl(KeyCode::Char('a')), now);
-    assert_eq!(
-        overlay.handle_key(press(KeyCode::Right), now),
-        MmlOverlayAction::Continue
-    );
-
-    // JSON を抜けた最初の音でまた鳴る（試聴で鳴っていた音を止めてから）。
-    for _ in 0..LEAD_JSON.chars().count() {
-        overlay.handle_key(press(KeyCode::Right), now);
-    }
-    assert_eq!(
-        overlay.handle_key(press(KeyCode::Right), now),
-        MmlOverlayAction::Send(vec![[0x80, 60, 0], [0x90, 60, 127]])
-    );
 }
