@@ -390,6 +390,7 @@ dependencies = [
  "cmrt-loop-browser",
  "cmrt-loop-browser-domain",
  "cmrt-loop-domain",
+ "cmrt-mml-overlay",
  "cmrt-notepad",
  "cmrt-offline-render",
  "cmrt-realtime-play",
@@ -644,6 +645,18 @@ dependencies = [
  "hound",
  "rustfft",
  "serde",
+]
+
+[[package]]
+name = "cmrt-mml-overlay"
+version = "0.1.0"
+dependencies = [
+ "cmrt-realtime-play",
+ "cmrt-tui-core",
+ "crossterm",
+ "mmlabc-to-smf",
+ "ratatui",
+ "ratatui-textarea",
 ]
 
 [[package]]

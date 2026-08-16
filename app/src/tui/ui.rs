@@ -41,6 +41,9 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     if app.screen_switch_menu.is_open() {
         crate::screen_switch::draw_screen_switch_menu(f, app.active_screen);
     }
+    if app.mml_overlay.is_open() {
+        cmrt_mml_overlay::ui::draw(&app.mml_overlay, f);
+    }
 }
 
 #[cfg(test)]

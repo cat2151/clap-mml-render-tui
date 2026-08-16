@@ -3,6 +3,7 @@ pub(super) use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 pub(super) use std::sync::atomic::{AtomicUsize, Ordering};
 
 mod keyboard_mml;
+mod mml_overlay;
 mod normal_mode;
 mod screen_switch;
 mod session;

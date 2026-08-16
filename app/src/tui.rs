@@ -25,6 +25,10 @@ mod loop_browser_glue;
 // `cmrt-grid-sequencer` crate に閉じている。
 pub(crate) use cmrt_grid_sequencer as grid_sequencer;
 mod grid_sequencer_glue;
+// MML 入力オーバーレイ（どの画面からでも Ctrl+P で開く）は `cmrt-mml-overlay` crate に
+// 閉じている。ここは開閉のきっかけと MIDI 送信をつなぐだけ。
+pub(crate) use cmrt_mml_overlay as mml_overlay;
+mod mml_overlay_glue;
 mod runtime;
 mod session;
 mod ui;
@@ -42,6 +46,7 @@ use crate::chord_progression_source::ChordProgressionSource;
 use self::grid_sequencer::GridSequencerScreen;
 use self::keyboard::KeyboardScreen;
 use self::loop_browser::LoopBrowserScreen;
+use self::mml_overlay::{MmlOverlay, MmlOverlaySender};
 use self::notepad::{Mode, NormalAction, NotepadScreen};
 use self::voicing::VoicingState;
 use crate::config::Config;
@@ -74,6 +79,11 @@ pub struct TuiApp<'a> {
     pub(in crate::tui) keyboard: KeyboardScreen<'a>,
     pub(in crate::tui) loop_browser: LoopBrowserScreen,
     pub(in crate::tui) grid_sequencer: GridSequencerScreen,
+    /// どの画面からでも開ける MML 入力オーバーレイ。開くと現在の画面の演奏は止まり、
+    /// keyboard 画面と同じ音源インスタンスを借りる。
+    pub(in crate::tui) mml_overlay: MmlOverlay<'a>,
+    /// 送信先。テストでは `None`（音は鳴らさず状態遷移だけ確かめる）。
+    mml_overlay_sender: Option<MmlOverlaySender>,
     /// patch ごとの mono/poly 判定結果のキャッシュ。起動時に読み込み、
     /// 新しく probe した patch を検出したら書き戻す。keyboard 画面と
     /// grid sequencer の chord mode（poly patch 抽選）が読む。

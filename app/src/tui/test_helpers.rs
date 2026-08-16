@@ -20,6 +20,8 @@ impl TuiApp<'static> {
                 keyboard::KeyboardNoteGuide::new(None),
             ),
             loop_browser: loop_browser::LoopBrowserScreen::default(),
+            mml_overlay: mml_overlay::MmlOverlay::default(),
+            mml_overlay_sender: None,
             grid_sequencer: grid_sequencer::GridSequencerScreen::new(None),
             voicing: voicing::VoicingState::new(
                 crate::history::VoicingCache::default(),

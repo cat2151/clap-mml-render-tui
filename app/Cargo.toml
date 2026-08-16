@@ -18,6 +18,7 @@ cmrt-keyboard = { path = "../keyboard" }
 cmrt-loop-browser = { path = "../loop-browser" }
 cmrt-loop-browser-domain = { path = "../loop-browser-domain" }
 cmrt-loop-domain = { path = "../loop-domain" }
+cmrt-mml-overlay = { path = "../mml-overlay" }
 cmrt-notepad = { path = "../notepad" }
 cmrt-offline-render = { path = "../offline-render" }
 cmrt-realtime-play = { path = "../realtime-play" }

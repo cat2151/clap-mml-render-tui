@@ -1,0 +1,14 @@
+[package]
+name = "cmrt-mml-overlay"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cmrt-realtime-play = { path = "../realtime-play" }
+cmrt-tui-core = { path = "../tui-core" }
+mmlabc-to-smf = { git = "https://github.com/cat2151/mmlabc-to-smf-rust.git", package = "mmlabc-to-smf", default-features = false, features = [
+    "parser",
+] }
+crossterm = "0.29"
+ratatui = "0.30"
+ratatui-textarea = { version = "0.9", features = ["crossterm"] }

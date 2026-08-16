@@ -84,6 +84,9 @@ impl<'a> TuiApp<'a> {
     }
 
     pub(crate) fn uses_textarea_cursor(&self) -> bool {
+        if self.mml_overlay.is_open() {
+            return true;
+        }
         match self.active_screen {
             PrimaryScreen::Keyboard => self.keyboard.mml_input.is_active(),
             PrimaryScreen::LoopBrowser | PrimaryScreen::GridSequencer => false,
@@ -203,6 +206,7 @@ impl<'a> TuiApp<'a> {
             if self.active_screen == PrimaryScreen::LoopBrowser {
                 self.pump_loop_browser_step();
             }
+            self.pump_mml_overlay();
             self.pump_notepad_sound_check_guide();
             clear_terminal_for_new_screen(&mut terminal, &mut rendered_screen, self.active_screen)?;
             let terminal_draw_started = std::time::Instant::now();
@@ -228,6 +232,7 @@ impl<'a> TuiApp<'a> {
                 if let Event::Mouse(mouse) = input {
                     if self.active_screen == PrimaryScreen::GridSequencer
                         && !self.screen_switch_menu.is_open()
+                        && !self.mml_overlay.is_open()
                     {
                         let size = terminal.backend().size()?;
                         self.handle_grid_sequencer_mouse_event(
@@ -250,6 +255,14 @@ impl<'a> TuiApp<'a> {
                 }
                 if let Event::Key(key) = input {
                     use crossterm::event::KeyEventKind;
+                    // MML オーバーレイは開いている間キーを総取りする。keyboard 画面だけは
+                    // Release も届くので、文字が二重に入らないよう Press だけ渡す。
+                    if self.mml_overlay.is_open() {
+                        if key.kind == KeyEventKind::Press {
+                            self.handle_mml_overlay_key_event(key);
+                        }
+                        continue;
+                    }
                     if self.screen_switch_menu.is_open() {
                         if self.active_screen == PrimaryScreen::Keyboard
                             && key.kind == KeyEventKind::Release
@@ -276,6 +289,9 @@ impl<'a> TuiApp<'a> {
                         continue;
                     }
                     if key.kind == KeyEventKind::Press && self.try_open_screen_switch_menu(key) {
+                        continue;
+                    }
+                    if key.kind == KeyEventKind::Press && self.try_open_mml_overlay(key) {
                         continue;
                     }
                     if self.active_screen == PrimaryScreen::Keyboard {

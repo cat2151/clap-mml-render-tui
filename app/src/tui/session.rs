@@ -183,6 +183,10 @@ impl<'a> TuiApp<'a> {
         let grid_midi_sender = Some(super::grid_sequencer::GridMidiSender::new(Arc::clone(
             &play_server,
         )));
+        // MML オーバーレイも同じ SHM 接続を共有する（借りる instance は keyboard と同じ）。
+        let mml_overlay_sender = Some(super::mml_overlay::MmlOverlaySender::new(Arc::clone(
+            &play_server,
+        )));
         let keyboard_midi_sender = Some(super::keyboard::KeyboardMidiSender::new(
             play_server,
             keyboard_state.buffer_multiplier(),
@@ -251,6 +255,8 @@ impl<'a> TuiApp<'a> {
                     restored_session: grid_session_from_history(grid_sequencer),
                 },
             ),
+            mml_overlay: super::mml_overlay::MmlOverlay::default(),
+            mml_overlay_sender,
             voicing: super::voicing::VoicingState::new(
                 crate::history::load_voicing_cache(),
                 voicing_layers,

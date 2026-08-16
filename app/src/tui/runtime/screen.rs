@@ -61,7 +61,11 @@ impl<'a> TuiApp<'a> {
             .set_play_state_if_current(session, PlayState::Idle);
     }
 
-    fn leave_active_screen(&mut self) {
+    /// いまの画面が鳴らしている音を止める。
+    ///
+    /// 画面を離れるときのほか、MML オーバーレイへ音源インスタンスを明け渡すときにも使う。
+    /// 後者では画面はそのまま残るが、演奏は再開されない。
+    pub(in crate::tui) fn stop_active_screen_playback(&mut self) {
         match self.active_screen {
             PrimaryScreen::Notepad => self.stop_notepad_playback(),
             PrimaryScreen::Keyboard => self.finish_keyboard(),
@@ -69,6 +73,10 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::GridSequencer => self.finish_grid_sequencer(),
             PrimaryScreen::Daw => {}
         }
+    }
+
+    fn leave_active_screen(&mut self) {
+        self.stop_active_screen_playback();
     }
 
     pub(in crate::tui) fn switch_to_primary_screen(
