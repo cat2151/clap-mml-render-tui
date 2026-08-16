@@ -8,17 +8,31 @@
 //! 原点が 0 に戻るぶん、積む秒は「行の先頭からの秒 + [`LOOKAHEAD_SECONDS`]」で済み、
 //! 経過時間を追いかけずに済む。
 //!
-//! 止めるほうは `stop_live_all` を使う。`stop_live_instance` でも音は止まるが、
-//! 全 instance が非アクティブになるとサーバーが live モード自体を畳んで timeline を
-//! 落とすため、「止める」と「timeline を保つ」を両立できない。
+//! 止めるほうはここには無い。「何が鳴っているか」を持たない（[`super::sounding`] が
+//! 1 つだけ持つ）ので、ここは積むことだけを担う。以前はここが `active` フラグで
+//! 「自分は鳴らしていないから止めない」と早期 return しており、打鍵の生 MIDI の
+//! note off まで道連れに握り潰していた。
+//!
+//! なお止めるときに使うのは `stop_live_all` で、`stop_live_instance` ではない。
+//! 後者でも音は止まるが、全 instance が非アクティブになるとサーバーが live モード
+//! 自体を畳むため、「止める」と「timeline を保つ」を両立できない。
 
 use cmrt_chord::TimedMidiEvent;
-use cmrt_realtime_play::{
-    LiveTimelineConfig, RealtimePlayServerSupervisor, TimelineId, TimelineMidiEvent,
-    MAX_MIDI_MESSAGES,
-};
+use cmrt_realtime_play::{LiveTimelineConfig, TimelineId, TimelineMidiEvent};
 
+use super::sink::SoundSink;
 use super::{log_error, MML_OVERLAY_INSTANCE};
+
+/// 行を積んだ結果。呼び出し側が「音源で何が鳴っているか」を更新するのに使う。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum LineOutcome {
+    /// 行ぜんぶを積めた。
+    Playing,
+    /// timeline は張れたが、積み切れなかった。note off が落ちている恐れがある。
+    Partial,
+    /// timeline を張れなかった。音は出ていない。
+    Failed,
+}
 
 /// 行の演奏を積むとき、先頭の音を何秒先へ置くか。
 ///
@@ -40,8 +54,6 @@ pub(super) struct LinePlayback {
     sample_rate_hz: f64,
     /// 次に張る timeline の id。サーバーは 0 を無効値として弾くので 1 から始める。
     next_timeline_id: TimelineId,
-    /// 積んだ演奏がまだ残っているか。無駄な停止コマンドを送らないために持つ。
-    active: bool,
 }
 
 impl LinePlayback {
@@ -49,22 +61,14 @@ impl LinePlayback {
         Self {
             sample_rate_hz,
             next_timeline_id: 1,
-            active: false,
         }
     }
 
-    pub(super) fn play(
-        &mut self,
-        supervisor: &RealtimePlayServerSupervisor,
-        events: &[TimedMidiEvent],
-    ) {
-        if events.is_empty() {
-            self.stop(supervisor);
-            return;
-        }
+    /// 行を積む。呼ぶ前に前の演奏が止まっていることは呼び出し側の責任。
+    pub(super) fn play(&mut self, sink: &impl SoundSink, events: &[TimedMidiEvent]) -> LineOutcome {
         let timeline_id = self.next_timeline_id;
         self.next_timeline_id = advance_timeline_id(timeline_id);
-        if let Err(error) = supervisor.begin_live_timeline(LiveTimelineConfig {
+        if let Err(error) = sink.begin_timeline(LiveTimelineConfig {
             timeline_id,
             sample_rate_hz: self.sample_rate_hz,
             tempo_bpm: TIMELINE_TEMPO_BPM,
@@ -72,46 +76,27 @@ impl LinePlayback {
             time_signature_denominator: 4,
         }) {
             log_error(format!(
-                "action=mml-overlay-line-begin event=error timeline={timeline_id} error=\"{error:#}\""
+                "action=mml-overlay-line-begin event=error timeline={timeline_id} error=\"{error}\""
             ));
-            self.active = false;
-            return;
+            return LineOutcome::Failed;
         }
-        // timeline を張った時点で前の演奏は消えている。ここから先が失敗しても
-        // 音が残ることはないので、積めたところまでで打ち切ってよい。
-        self.active = true;
-
+        let mut outcome = LineOutcome::Playing;
         if events.len() > MAX_LINE_EVENTS {
             log_error(format!(
                 "action=mml-overlay-line-send event=truncated total={} kept={MAX_LINE_EVENTS}",
                 events.len()
             ));
+            outcome = LineOutcome::Partial;
         }
-        for batch in timeline_batches(events, timeline_id) {
-            if let Err(error) = supervisor.send_timeline_events(&batch) {
+        for batch in timeline_batches(events, timeline_id, sink.max_batch_events()) {
+            if let Err(error) = sink.send_timeline_events(&batch) {
                 log_error(format!(
-                    "action=mml-overlay-line-send event=error timeline={timeline_id} error=\"{error:#}\""
+                    "action=mml-overlay-line-send event=error timeline={timeline_id} error=\"{error}\""
                 ));
-                return;
+                return LineOutcome::Partial;
             }
         }
-    }
-
-    #[cfg(test)]
-    pub(super) fn is_active(&self) -> bool {
-        self.active
-    }
-
-    pub(super) fn stop(&mut self, supervisor: &RealtimePlayServerSupervisor) {
-        if !self.active {
-            return;
-        }
-        self.active = false;
-        if let Err(error) = supervisor.stop_live_all() {
-            log_error(format!(
-                "action=mml-overlay-line-stop event=error error=\"{error:#}\""
-            ));
-        }
+        outcome
     }
 }
 
@@ -127,10 +112,11 @@ fn advance_timeline_id(current: TimelineId) -> TimelineId {
 fn timeline_batches(
     events: &[TimedMidiEvent],
     timeline_id: TimelineId,
+    batch_size: usize,
 ) -> Vec<Vec<TimelineMidiEvent>> {
     let count = events.len().min(MAX_LINE_EVENTS);
     events[..count]
-        .chunks(MAX_MIDI_MESSAGES)
+        .chunks(batch_size)
         .map(|batch| {
             batch
                 .iter()

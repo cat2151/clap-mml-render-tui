@@ -47,7 +47,7 @@ fn moving_in_the_patch_select_previews_the_patch_with_the_note_at_the_cursor() {
         overlay.handle_key(press(KeyCode::Down), now),
         MmlOverlayAction::SetPatch {
             patch: Some("Pads/Pad 1.fxp".to_string()),
-            messages: vec![[0x80, 64, 0], [0x90, 64, 127]],
+            messages: vec![[0x90, 64, 127]],
         }
     );
 }

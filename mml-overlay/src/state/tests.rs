@@ -41,15 +41,17 @@ fn typing_a_note_sends_note_on() {
     assert_eq!(overlay.sounding(), [60]);
 }
 
+/// 次の音は note on だけ返す。前の音を止めるのは、受け取った側が
+/// 「鳴らす前に必ず止める」で行う。ここで note off を組み立てないのが要点。
 #[test]
-fn typing_the_next_note_stops_the_previous_one_first() {
+fn typing_the_next_note_asks_for_the_new_note_only() {
     let mut overlay = opened();
     let now = Instant::now();
     overlay.handle_key(press(KeyCode::Char('c')), now);
 
     assert_eq!(
         overlay.handle_key(press(KeyCode::Char('d')), now),
-        MmlOverlayAction::Send(vec![[0x80, 60, 0], [0x90, 62, 127]])
+        MmlOverlayAction::Send(vec![[0x90, 62, 127]])
     );
 }
 
@@ -61,7 +63,7 @@ fn moving_the_cursor_left_sounds_the_earlier_note_again() {
 
     assert_eq!(
         overlay.handle_key(press(KeyCode::Left), now),
-        MmlOverlayAction::Send(vec![[0x80, 62, 0], [0x90, 60, 127]])
+        MmlOverlayAction::Send(vec![[0x90, 60, 127]])
     );
 }
 
@@ -91,12 +93,7 @@ fn moving_from_a_note_back_into_a_chord_sounds_the_chord() {
 
     assert_eq!(
         overlay.handle_key(press(KeyCode::Left), now),
-        MmlOverlayAction::Send(vec![
-            [0x80, 60, 0],
-            [0x90, 60, 127],
-            [0x90, 64, 127],
-            [0x90, 67, 127],
-        ])
+        MmlOverlayAction::Send(vec![[0x90, 60, 127], [0x90, 64, 127], [0x90, 67, 127],])
     );
 }
 
@@ -134,7 +131,7 @@ fn a_modifier_resounds_the_same_note_shifted() {
 
     assert_eq!(
         overlay.handle_key(press(KeyCode::Char('+')), now),
-        MmlOverlayAction::Send(vec![[0x80, 60, 0], [0x90, 61, 127]])
+        MmlOverlayAction::Send(vec![[0x90, 61, 127]])
     );
 }
 
@@ -161,13 +158,7 @@ fn a_chord_sounds_every_member_at_once() {
 
     assert_eq!(
         overlay.handle_key(press(KeyCode::Char('g')), now),
-        MmlOverlayAction::Send(vec![
-            [0x80, 60, 0],
-            [0x80, 64, 0],
-            [0x90, 60, 127],
-            [0x90, 64, 127],
-            [0x90, 67, 127],
-        ])
+        MmlOverlayAction::Send(vec![[0x90, 60, 127], [0x90, 64, 127], [0x90, 67, 127],])
     );
 }
 
@@ -180,7 +171,7 @@ fn the_gate_stops_the_note_after_it_expires() {
     // 既定の 8 分音符を既定テンポ 120 で鳴らした長さ。
     let gate = Duration::from_millis(250);
     assert_eq!(overlay.poll(now + gate - Duration::from_millis(1)), None);
-    assert_eq!(overlay.poll(now + gate), Some(vec![[0x80, 60, 0]]));
+    assert_eq!(overlay.poll(now + gate), Some(MmlOverlayAction::Stop));
     assert!(overlay.sounding().is_empty());
     assert_eq!(overlay.poll(now + gate), None);
 }
@@ -195,13 +186,13 @@ fn writing_a_note_length_resounds_the_note_for_that_length() {
 
     assert_eq!(
         overlay.handle_key(press(KeyCode::Char('1')), now),
-        MmlOverlayAction::Send(vec![[0x80, 60, 0], [0x90, 60, 127]])
+        MmlOverlayAction::Send(vec![[0x90, 60, 127]])
     );
     // 全音符 = 既定テンポ 120 で 2 秒。8 分音符の 250ms では止まらない。
     assert_eq!(overlay.poll(now + Duration::from_millis(1999)), None);
     assert_eq!(
         overlay.poll(now + Duration::from_millis(2000)),
-        Some(vec![[0x80, 60, 0]])
+        Some(MmlOverlayAction::Stop)
     );
 }
 
@@ -216,7 +207,7 @@ fn a_tempo_command_stretches_the_gate() {
     assert_eq!(overlay.poll(now + Duration::from_millis(499)), None);
     assert_eq!(
         overlay.poll(now + Duration::from_millis(500)),
-        Some(vec![[0x80, 60, 0]])
+        Some(MmlOverlayAction::Stop)
     );
 }
 
@@ -228,7 +219,7 @@ fn closing_stops_every_sounding_note() {
 
     assert_eq!(
         overlay.handle_key(press(KeyCode::Esc), now),
-        MmlOverlayAction::Close(vec![[0x80, 60, 0]])
+        MmlOverlayAction::Close
     );
     assert!(!overlay.is_open());
     assert!(overlay.sounding().is_empty());
@@ -256,6 +247,6 @@ fn deleting_the_last_note_and_typing_it_again_sounds_it() {
 
     assert_eq!(
         overlay.handle_key(press(KeyCode::Char('c')), now),
-        MmlOverlayAction::Send(vec![[0x80, 60, 0], [0x90, 60, 127]])
+        MmlOverlayAction::Send(vec![[0x90, 60, 127]])
     );
 }

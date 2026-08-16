@@ -27,6 +27,11 @@ pub use state::{MmlOverlay, MmlOverlayAction, MmlOverlayContext, PatchChange};
 pub(crate) const NOTE_ON: u8 = 0x90;
 pub(crate) const NOTE_OFF: u8 = 0x80;
 
+/// オーバーレイの調査ログ。1 行 1 事象で、キーと値を空白区切りで並べる。
+pub(crate) fn log_line(message: String) {
+    let _ = cmrt_tui_core::logging::append_log_line_to_file(&format!("mml-overlay: {message}"));
+}
+
 /// このキーはどの画面からでも MML オーバーレイを開く。
 pub fn is_mml_overlay_trigger(key: KeyEvent) -> bool {
     key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('p')

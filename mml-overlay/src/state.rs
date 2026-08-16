@@ -1,4 +1,12 @@
 //! MML 入力オーバーレイの状態と、打鍵から発音までの判定。
+//!
+//! **ここは「何を鳴らしてほしいか」しか言わない。** 音源で何が鳴っているかも、
+//! それをどう止めるかも持たない（`sender` 側の [`crate::sender`] に 1 つだけある）。
+//! かつては打鍵の note off をここで組み立てて [`MmlOverlayAction::Send`] へ混ぜて
+//! いたが、行を鳴らす経路だけが「止めるのは行演奏側の仕事」として note off を
+//! 出さずに記録を捨てており、移動先が空行だとサーバーへ何も飛ばずに鳴りっぱなしに
+//! なった。止める役を 1 か所へ寄せたので、ここが持つ [`MmlOverlay::sounding`] と
+//! [`MmlOverlay::gate_deadline`] は**表示と gate の計時のためだけ**にある。
 
 mod history;
 mod patch;
@@ -13,7 +21,7 @@ use crate::cursor_notes::{notes_at_cursor, CursorNotes};
 use crate::history_select::{is_history_select_trigger, HistorySelect};
 use crate::line_play::{line_events, LineStatus};
 use crate::patch_select::{is_patch_select_trigger, PatchSelect};
-use crate::{NOTE_OFF, NOTE_ON};
+use crate::NOTE_ON;
 
 /// 行を鳴らす前に音源の音色を差し替えるか。
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -25,25 +33,30 @@ pub enum PatchChange {
 }
 
 /// オーバーレイが呼び出し側へ求める処理。
+///
+/// 音を出す変種（[`Self::Send`] / [`Self::SetPatch`] / [`Self::PlayLine`]）は、
+/// どれも「鳴っているものを止めてから鳴らす」の意味になる。止める指示は載せない。
 #[derive(Clone, Debug, PartialEq)]
 pub enum MmlOverlayAction {
     Continue,
-    /// この MIDI メッセージを送る（前の音の note off → 新しい音の note on の順）。
+    /// 鳴っているものを止めてから、この note on を送る。
     Send(Vec<[u8; 3]>),
-    /// 音源の音色を差し替えてから、続けてこの MIDI メッセージを送る。
+    /// 鳴っているものを止め、音源の音色を差し替えてから、この note on を送る。
     /// `patch` が `None` なら realtime server の既定音色へ戻す。
     SetPatch {
         patch: Option<String>,
         messages: Vec<[u8; 3]>,
     },
-    /// 走っている行の演奏を止め、あらためてこの行を頭から積む。
+    /// 鳴っているものを止め、あらためてこの行を頭から積む。
     /// `events` が空なら止めるだけ。
     PlayLine {
         patch: PatchChange,
         events: Vec<TimedMidiEvent>,
     },
-    /// オーバーレイを閉じる。付随する note off を含む。
-    Close(Vec<[u8; 3]>),
+    /// 鳴っているものを止める。gate が切れたときだけ出る。
+    Stop,
+    /// オーバーレイを閉じる。鳴っているものを止めるのも含む。
+    Close,
 }
 
 /// オーバーレイを開くときに呼び出し側から渡すスナップショット。
@@ -72,11 +85,11 @@ pub struct MmlOverlay<'a> {
     /// 直近に打鍵で鳴らした発音単位。これと違う単位になった瞬間だけ発音する。
     /// 行をまたいだら別の音として扱うため、行番号も同一性に含める。
     last_notes: Option<(usize, CursorNotes)>,
-    /// いま鳴っている note number。
+    /// 打鍵で鳴らした note number。表示だけに使う。
     sounding: Vec<u8>,
-    /// いま鳴っている音が chord 表記から来たか。表示だけに使う。
+    /// 打鍵で鳴らした音が chord 表記から来たか。表示だけに使う。
     sounding_from_chord: bool,
-    /// 鳴っている音を止める時刻。書かれた音長ぶんだけ先に置く。
+    /// 打鍵で鳴らした音を止める時刻。書かれた音長ぶんだけ先に置く。
     gate_deadline: Option<Instant>,
     /// 入力欄とは別に持つ音色。`Ctrl+T` と履歴の取り込みだけが書き換える。
     patch: Option<String>,
@@ -205,12 +218,19 @@ impl<'a> MmlOverlay<'a> {
     }
 
     /// gate の期限が来た音を止める。メインループから毎フレーム呼ぶ。
-    pub fn poll(&mut self, now: Instant) -> Option<Vec<[u8; 3]>> {
+    ///
+    /// gate は打鍵の 1 音にしか張らない（行を鳴らすときに必ず落とす）ので、
+    /// ここが発火するのは「打鍵の音だけが鳴っている」ときに限られる。
+    pub fn poll(&mut self, now: Instant) -> Option<MmlOverlayAction> {
         if now < self.gate_deadline? {
             return None;
         }
-        let messages = self.stop_all();
-        (!messages.is_empty()).then_some(messages)
+        crate::log_line(format!(
+            "action=mml-overlay-gate-expired pitches={:?}",
+            self.sounding
+        ));
+        self.forget_sounding();
+        Some(MmlOverlayAction::Stop)
     }
 
     fn close(&mut self) -> MmlOverlayAction {
@@ -220,17 +240,19 @@ impl<'a> MmlOverlay<'a> {
         self.patch_select = None;
         self.history_select = None;
         self.open = false;
-        MmlOverlayAction::Close(self.stop_all())
+        self.forget_sounding();
+        MmlOverlayAction::Close
     }
 
     /// カーソルのある行をまるごと鳴らす。
     ///
-    /// 打鍵の 1 音は行の演奏に飲み込まれるので、鳴らしていた音の記録は落とす。
-    /// note off を送らないのは、行の演奏を積む側が先に音源を止めるため。
+    /// 打鍵の 1 音は行の演奏に飲み込まれるので、その記録は落とす。ここで note off を
+    /// 組み立てないのは、[`MmlOverlayAction::PlayLine`] 自体が「鳴っているものを
+    /// 止めてから積む」の意味だから。止めるのは受け取る側の 1 か所だけが行う。
     fn play_current_line(&mut self, patch: PatchChange) -> MmlOverlayAction {
         let (status, events) = line_events(self.current_line());
         self.line_status = status;
-        self.forget_typed_note();
+        self.forget_cursor_unit();
         MmlOverlayAction::PlayLine { patch, events }
     }
 
@@ -260,18 +282,23 @@ impl<'a> MmlOverlay<'a> {
         notes_at_cursor(self.current_line(), column).map(|notes| (row, notes))
     }
 
+    /// この発音単位の note on。前の音を止めるのは受け取る側の仕事。
     fn start_notes(&mut self, notes: &CursorNotes, now: Instant) -> Vec<[u8; 3]> {
-        let mut messages = self.stop_all();
-        messages.extend(
-            notes
-                .pitches
-                .iter()
-                .map(|pitch| [NOTE_ON, *pitch, notes.velocity]),
-        );
+        // gate の長さは MML の音長そのもの。「打鍵をやめても鳴り続ける」を追うには、
+        // 何 ms 先に止める約束をしたのかが残っていないと判断できない。
+        crate::log_line(format!(
+            "action=mml-overlay-note-on pitches={:?} gate_ms={}",
+            notes.pitches,
+            notes.duration.as_millis()
+        ));
         self.sounding.clone_from(&notes.pitches);
         self.sounding_from_chord = notes.from_chord;
         self.gate_deadline = Some(now + notes.duration);
-        messages
+        notes
+            .pitches
+            .iter()
+            .map(|pitch| [NOTE_ON, *pitch, notes.velocity])
+            .collect()
     }
 
     fn current_line(&self) -> &str {
@@ -286,22 +313,21 @@ impl<'a> MmlOverlay<'a> {
         row
     }
 
-    /// 打鍵で鳴らした音の記録を捨てる。行の演奏で音源ごと止まるときに使う。
-    /// 記録を残すと、行内へカーソルが戻ったときに同じ音が鳴り直さない。
-    fn forget_typed_note(&mut self) {
+    /// カーソル同一性の記録ごと捨てる。行の演奏で打鍵の音が飲み込まれるときに使う。
+    /// 同一性を残すと、行内へカーソルが戻ったときに同じ音が鳴り直さない。
+    pub(super) fn forget_cursor_unit(&mut self) {
         self.last_notes = None;
+        self.forget_sounding();
+    }
+
+    /// 表示と gate の記録を捨てる。
+    ///
+    /// **ここは音を止めない。** 音を止めるのは [`MmlOverlayAction`] を受け取った側で、
+    /// この関数を呼ぶ経路は必ず `Stop` / `Close` / `Send` / `PlayLine` のどれかを返す。
+    fn forget_sounding(&mut self) {
         self.sounding.clear();
         self.sounding_from_chord = false;
         self.gate_deadline = None;
-    }
-
-    fn stop_all(&mut self) -> Vec<[u8; 3]> {
-        self.gate_deadline = None;
-        self.sounding_from_chord = false;
-        self.sounding
-            .drain(..)
-            .map(|pitch| [NOTE_OFF, pitch, 0])
-            .collect()
     }
 }
 

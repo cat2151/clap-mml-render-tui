@@ -54,47 +54,51 @@ impl TuiApp<'_> {
 
     /// オーバーレイが開いている間、キーはすべてオーバーレイが取る。
     pub(in crate::tui) fn handle_mml_overlay_key_event(&mut self, key: KeyEvent) {
-        match self.mml_overlay.handle_key(key, Instant::now()) {
-            MmlOverlayAction::Continue => {}
-            MmlOverlayAction::Send(messages) => self.send_mml_overlay_messages(messages),
+        let action = self.mml_overlay.handle_key(key, Instant::now());
+        self.apply_mml_overlay_action(action);
+    }
+
+    /// 鳴らした音の gate が切れていれば止める。毎フレーム呼ぶ。
+    pub(in crate::tui) fn pump_mml_overlay(&mut self) {
+        if let Some(action) = self.mml_overlay.poll(Instant::now()) {
+            self.apply_mml_overlay_action(action);
+        }
+    }
+
+    /// オーバーレイの求めを sender へ流す。
+    ///
+    /// note off はここには出てこない。「鳴っているものを止める」は sender 側が
+    /// 1 か所で持っていて、音を鳴らすコマンドはどれも停止込みの意味になっている。
+    fn apply_mml_overlay_action(&mut self, action: MmlOverlayAction) {
+        // 閉じるときだけ sender の外へ用がある（音源を借りていた画面へ返す）ので、
+        // sender を借りる前に片づける。
+        if action == MmlOverlayAction::Close {
+            if let Some(sender) = &self.mml_overlay_sender {
+                sender.stop();
+            }
+            // 借りていた音源を返す。開いたときに止めた演奏はここで戻る。
+            self.resume_active_screen_playback();
+            return;
+        }
+        let Some(sender) = &self.mml_overlay_sender else {
+            return;
+        };
+        match action {
+            MmlOverlayAction::Continue | MmlOverlayAction::Close => {}
+            MmlOverlayAction::Send(messages) => sender.send(messages),
             MmlOverlayAction::SetPatch { patch, messages } => {
                 // 音色の読み込みと発音は同じワーカースレッドが順に処理するので、
                 // ここで積む順序がそのまま音源へ届く順序になる。
-                if let Some(sender) = &self.mml_overlay_sender {
-                    sender.prepare(patch.as_deref());
-                }
-                self.send_mml_overlay_messages(messages);
+                sender.prepare(patch.as_deref());
+                sender.send(messages);
             }
             MmlOverlayAction::PlayLine { patch, events } => {
-                let Some(sender) = &self.mml_overlay_sender else {
-                    return;
-                };
                 if let PatchChange::Switch(patch) = patch {
                     sender.prepare(patch.as_deref());
                 }
                 sender.play_line(events);
             }
-            MmlOverlayAction::Close(messages) => {
-                self.send_mml_overlay_messages(messages);
-                if let Some(sender) = &self.mml_overlay_sender {
-                    sender.stop_line();
-                }
-                // 借りていた音源を返す。開いたときに止めた演奏はここで戻る。
-                self.resume_active_screen_playback();
-            }
-        }
-    }
-
-    /// 鳴らした音の gate が切れていれば止める。毎フレーム呼ぶ。
-    pub(in crate::tui) fn pump_mml_overlay(&mut self) {
-        if let Some(messages) = self.mml_overlay.poll(Instant::now()) {
-            self.send_mml_overlay_messages(messages);
-        }
-    }
-
-    fn send_mml_overlay_messages(&self, messages: Vec<[u8; 3]>) {
-        if let Some(sender) = &self.mml_overlay_sender {
-            sender.send(messages);
+            MmlOverlayAction::Stop => sender.stop(),
         }
     }
 }

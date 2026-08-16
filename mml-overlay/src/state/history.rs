@@ -66,6 +66,6 @@ impl MmlOverlay<'_> {
     fn replace_text(&mut self, mml: &str) {
         self.textarea = cmrt_tui_core::text_input::new_multi_line_textarea(vec![mml.to_string()]);
         self.textarea.move_cursor(ratatui_textarea::CursorMove::End);
-        self.forget_typed_note();
+        self.forget_cursor_unit();
     }
 }
