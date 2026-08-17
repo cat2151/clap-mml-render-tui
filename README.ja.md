@@ -141,33 +141,45 @@ OS別の `patches_dirs` 既定値は次のとおりです。
 
 #### 複数プラグインの使い分け
 
-`[plugins.<名前>]` にプラグインごとの設定を書いておき、`active_plugin` の1行で切り替えられます。
+`active_plugin` の1行で切り替えられます。`Surge XT` と `Dexed` は**組み込み**なので、標準の場所へインストールしてあれば書くのはこの1行だけです。
 
 ```toml
-active_plugin = 'dexed'
+active_plugin = 'Dexed'
+```
 
-[plugins.surge_xt]
-plugin_path  = 'C:\Program Files\Common Files\CLAP\Surge Synth Team\Surge XT.clap'
-plugin_id    = 'org.surge-synth-team.surge-xt'
-patches_dirs = [
-  'C:\ProgramData\Surge XT\patches_factory',
-  'C:\ProgramData\Surge XT\patches_3rdparty',
-]
+組み込みプロファイルの中身は次のとおりで、パスは OS ごとの標準インストール先です。
 
-[plugins.dexed]
-plugin_path = 'C:\Program Files\Common Files\CLAP\Dexed.clap'
-plugin_id   = 'com.digital-suburban.dexed'
+| 名前 | plugin_id | patches_dirs |
+| --- | --- | --- |
+| `Surge XT` | `org.surge-synth-team.surge-xt` | 上の表の OS 別既定値 |
+| `Dexed` | `com.digital-suburban.dexed` | 無し（音色選択が未対応のため） |
+
+名前は大文字小文字・空白・アンダースコアの違いを無視して照合します（`Dexed` / `dexed`、`Surge XT` / `surge_xt` / `SurgeXT` はすべて同じ）。
+
+標準以外の場所に入れている場合や、組み込みに無いプラグインを使う場合だけ `[plugins.<名前>]` を書きます。**書いた項目だけが組み込みの値を上書き**するので、パスを変えたいだけなら `plugin_path` の1行で足ります。
+
+```toml
+active_plugin = 'Surge XT'
+
+# パスだけ差し替える。plugin_id と patches_dirs は組み込みの値のまま。
+[plugins."Surge XT"]
+plugin_path = 'D:\my\clap\Surge XT.clap'
+
+# 組み込みに無いプラグインは全部書く。
+[plugins.my_synth]
+plugin_path  = 'D:\my\clap\MySynth.clap'
+patches_dirs = ['D:\my\patches']
 ```
 
 | 項目 | 説明 |
 | --- | --- |
-| `active_plugin` | 使う `[plugins.*]` の名前です。書かなければトップレベルの `plugin_path` / `patches_dirs` をそのまま使います。 |
+| `active_plugin` | 使うプロファイルの名前です。組み込みの名前か `[plugins.*]` の名前を書きます。書かなければトップレベルの `plugin_path` / `patches_dirs` をそのまま使います。 |
 | `plugins.<名前>.plugin_path` | そのプラグインのパスです。 |
 | `plugins.<名前>.plugin_id` | 期待する CLAP plugin ID です。省略できます。 |
-| `plugins.<名前>.patches_dirs` | そのプラグインの音色置き場です。書かなければ音色一覧は空になります。 |
+| `plugins.<名前>.patches_dirs` | そのプラグインの音色置き場です。組み込みの値を消したいときは `patches_dirs = []` と書きます。 |
 
 - `active_plugin` を書くと、トップレベルの `plugin_path` / `patches_dirs` は使われません（エラーにはならず、プロファイルが優先されます）。
-- `active_plugin` が指す `[plugins.*]` が無い場合はエラーになり、定義済みのプロファイル名が表示されます。
+- `active_plugin` の名前が組み込みにも `[plugins.*]` にも無い場合はエラーで起動しません。使える名前が両方とも表示されます。
 - Dexed は現在**初期音色のみ**に対応しています。音色（cartridge の `.syx` と program）の選択は未対応なので、`patches_dirs` は書かないでください。
 - プラグインを切り替えたときは、レンダリング結果のキャッシュを手で消してください。音色を指定していない行（MML 先頭に `{"Surge XT patch": ...}` が無い行）は、キャッシュのキーが切り替え前後で同じになるため、前のプラグインの音が鳴ります。消す場所は次の2つです（Windows の場合）。
   - `%LOCALAPPDATA%\clap-mml-render-tui\notepad_cache\*.wav`（notepad / MML入力overlay のキャッシュ）
