@@ -41,6 +41,7 @@ fn test_config() -> Config {
         kick_patch_keywords: Vec::new(),
         snare_patch_keywords: Vec::new(),
         hihat_patch_keywords: Vec::new(),
+        ..Default::default()
     }
 }
 

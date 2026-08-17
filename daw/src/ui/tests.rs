@@ -66,6 +66,7 @@ fn build_test_app() -> DawApp {
             kick_patch_keywords: Vec::new(),
             snare_patch_keywords: Vec::new(),
             hihat_patch_keywords: Vec::new(),
+            ..Default::default()
         }),
         entry_ptr: 0,
         cache: Arc::new(Mutex::new(vec![

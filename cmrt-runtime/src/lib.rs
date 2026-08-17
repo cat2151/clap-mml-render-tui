@@ -1,15 +1,21 @@
+mod core_config;
 mod defaults;
 mod paths;
+mod plugin_profile;
 
+pub use core_config::{
+    configured_patch_dirs, core_config_from_config, core_config_patch_root_dir,
+    shared_patch_root_dir,
+};
 pub use defaults::{
     default_config_content, default_config_content_with_app_settings, default_patches_dirs,
     default_plugin_path, serialize_patches_dirs_line,
 };
 pub use paths::{config_app_dir, config_file_path, log_file_path, native_probe_log_file_path};
+pub use plugin_profile::{apply_active_plugin_profile, PluginProfile};
 
 use serde::Deserialize;
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::collections::{BTreeMap, HashSet};
 
 /// app の HTTP サーバー（`--server` CLI モード / DAW HTTP サーバー）が listen する localhost port。
 pub const DEFAULT_PORT: u16 = 62151;
@@ -44,7 +50,19 @@ pub enum RealtimeAudioBackend {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
+    /// 使用するプラグインのパス。`active_plugin` を使う config では書かないので、
+    /// 省略を許して空文字にする（空のまま使われた場合は読み手が「空です」と弾く）。
+    #[serde(default)]
     pub plugin_path: String,
+    /// 使用中プラグインの CLAP plugin ID。プロファイル解決後の値が入る。
+    #[serde(default)]
+    pub plugin_id: Option<String>,
+    /// 使う `[plugins.*]` の名前。未指定ならトップレベルの指定をそのまま使う（後方互換）。
+    #[serde(default)]
+    pub active_plugin: Option<String>,
+    /// プラグインごとの設定。`active_plugin` が指すものだけが使われる。
+    #[serde(default)]
+    pub plugins: BTreeMap<String, PluginProfile>,
     pub input_midi: String,
     pub output_midi: String,
     pub output_wav: String,
@@ -121,6 +139,50 @@ pub struct Config {
     /// hi-hat 行に使う patch の名前キーワード一覧。
     #[serde(default = "default_hihat_patch_keywords")]
     pub hihat_patch_keywords: Vec<String>,
+}
+
+/// `..Default::default()` で構造体リテラルを組めるようにするためのもの。
+///
+/// 実運用の既定値は config.toml のひな形（[`default_config_content`]）と serde の
+/// `#[serde(default)]` が持つ。ここは主にテストの土台で、`toml::from_str` の経路は
+/// 通らないので、両者がずれても実害が出ないよう serde 側と同じ関数から値を取る。
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            plugin_path: String::new(),
+            plugin_id: None,
+            active_plugin: None,
+            plugins: BTreeMap::new(),
+            input_midi: String::new(),
+            output_midi: String::new(),
+            output_wav: String::new(),
+            sample_rate: 48_000.0,
+            buffer_size: 512,
+            patches_dirs: None,
+            loop_dirs: Vec::new(),
+            loop_categories: default_loop_categories(),
+            offline_render_workers: DEFAULT_OFFLINE_RENDER_WORKERS,
+            offline_render_server_workers: DEFAULT_OFFLINE_RENDER_SERVER_WORKERS,
+            offline_render_backend: OfflineRenderBackend::default(),
+            offline_render_server_port: DEFAULT_OFFLINE_RENDER_SERVER_PORT,
+            offline_render_server_command: String::new(),
+            realtime_audio_backend: RealtimeAudioBackend::default(),
+            realtime_play_server_port: DEFAULT_REALTIME_PLAY_SERVER_PORT,
+            realtime_play_server_command: String::new(),
+            realtime_play_server_prewarm: default_realtime_play_server_prewarm(),
+            autoplay_on_startup: default_autoplay_on_startup(),
+            voicing_shared_source: default_voicing_shared_source(),
+            voicing_override_source: default_voicing_override_source(),
+            chord_progression_source: default_chord_progression_source(),
+            chord_patch_categories: default_chord_patch_categories(),
+            bass_patch_categories: default_bass_patch_categories(),
+            arpeggio_patch_categories: default_arpeggio_patch_categories(),
+            drum_patch_categories: default_drum_patch_categories(),
+            kick_patch_keywords: default_kick_patch_keywords(),
+            snare_patch_keywords: default_snare_patch_keywords(),
+            hihat_patch_keywords: default_hihat_patch_keywords(),
+        }
+    }
 }
 
 fn default_offline_render_workers() -> usize {
@@ -261,8 +323,15 @@ impl Config {
         }
         let text = std::fs::read_to_string(&path)
             .map_err(|e| anyhow::anyhow!("config.toml が読めない ({}): {}", path.display(), e))?;
-        let cfg: Self = toml::from_str(&text).map_err(|e| {
+        let mut cfg: Self = toml::from_str(&text).map_err(|e| {
             anyhow::anyhow!("config.toml のパースに失敗 ({}): {}", path.display(), e)
+        })?;
+        apply_active_plugin_profile(&mut cfg).map_err(|e| {
+            anyhow::anyhow!(
+                "config.toml のプラグイン設定が不正 ({}): {}",
+                path.display(),
+                e
+            )
         })?;
         cfg.validate()
             .map_err(|e| anyhow::anyhow!("config.toml の検証に失敗 ({}): {}", path.display(), e))?;
@@ -342,49 +411,6 @@ fn validate_offline_render_workers(name: &str, workers: usize) -> anyhow::Result
         );
     }
     Ok(())
-}
-
-pub fn configured_patch_dirs(cfg: &Config) -> Vec<String> {
-    cfg.patches_dirs
-        .clone()
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|dir| !dir.trim().is_empty())
-        .collect()
-}
-
-pub fn core_config_patch_root_dir(cfg: &Config) -> Option<String> {
-    shared_patch_root_dir(&configured_patch_dirs(cfg))
-}
-
-/// アプリ設定からレンダリング用の `CoreConfig` を組み立てる。
-/// notepad / DAW / offline render / server の各経路で共有する。
-pub fn core_config_from_config(cfg: &Config) -> cmrt_core::CoreConfig {
-    cmrt_core::CoreConfig {
-        output_midi: cfg.output_midi.clone(),
-        output_wav: cfg.output_wav.clone(),
-        sample_rate: cfg.sample_rate,
-        buffer_size: cfg.buffer_size,
-        patch_path: None,
-        patches_dir: core_config_patch_root_dir(cfg),
-        random_patch: false,
-    }
-}
-
-pub fn shared_patch_root_dir(dirs: &[String]) -> Option<String> {
-    let mut dir_paths = dirs.iter().map(PathBuf::from);
-    let mut common = dir_paths.next()?;
-    for dir in dir_paths {
-        while !Path::new(&dir).starts_with(&common) {
-            if !common.pop() {
-                return None;
-            }
-        }
-    }
-    if common.as_os_str().is_empty() {
-        return None;
-    }
-    Some(common.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]

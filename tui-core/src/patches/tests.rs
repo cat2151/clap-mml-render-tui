@@ -81,6 +81,7 @@ fn collect_patch_pairs_combines_factory_and_thirdparty_using_common_base() {
         kick_patch_keywords: Vec::new(),
         snare_patch_keywords: Vec::new(),
         hihat_patch_keywords: Vec::new(),
+        ..Default::default()
     };
 
     let pairs = collect_patch_pairs(&cfg).unwrap();
@@ -141,6 +142,7 @@ fn collect_patch_pairs_sorts_display_names_naturally() {
         kick_patch_keywords: Vec::new(),
         snare_patch_keywords: Vec::new(),
         hihat_patch_keywords: Vec::new(),
+        ..Default::default()
     };
 
     let pairs = collect_patch_pairs(&cfg).unwrap();

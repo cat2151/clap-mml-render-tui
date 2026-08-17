@@ -139,6 +139,40 @@ OS別の `patches_dirs` 既定値は次のとおりです。
 - Linux: `$XDG_DATA_HOME/surge-data/patches_factory`, `$XDG_DATA_HOME/surge-data/patches_3rdparty`（`XDG_DATA_HOME` 未設定時は `~/.local/share`）
 - macOS: `/Library/Application Support/Surge XT/patches_factory`, `/Library/Application Support/Surge XT/patches_3rdparty`
 
+#### 複数プラグインの使い分け
+
+`[plugins.<名前>]` にプラグインごとの設定を書いておき、`active_plugin` の1行で切り替えられます。
+
+```toml
+active_plugin = 'dexed'
+
+[plugins.surge_xt]
+plugin_path  = 'C:\Program Files\Common Files\CLAP\Surge Synth Team\Surge XT.clap'
+plugin_id    = 'org.surge-synth-team.surge-xt'
+patches_dirs = [
+  'C:\ProgramData\Surge XT\patches_factory',
+  'C:\ProgramData\Surge XT\patches_3rdparty',
+]
+
+[plugins.dexed]
+plugin_path = 'C:\Program Files\Common Files\CLAP\Dexed.clap'
+plugin_id   = 'com.digital-suburban.dexed'
+```
+
+| 項目 | 説明 |
+| --- | --- |
+| `active_plugin` | 使う `[plugins.*]` の名前です。書かなければトップレベルの `plugin_path` / `patches_dirs` をそのまま使います。 |
+| `plugins.<名前>.plugin_path` | そのプラグインのパスです。 |
+| `plugins.<名前>.plugin_id` | 期待する CLAP plugin ID です。省略できます。 |
+| `plugins.<名前>.patches_dirs` | そのプラグインの音色置き場です。書かなければ音色一覧は空になります。 |
+
+- `active_plugin` を書くと、トップレベルの `plugin_path` / `patches_dirs` は使われません（エラーにはならず、プロファイルが優先されます）。
+- `active_plugin` が指す `[plugins.*]` が無い場合はエラーになり、定義済みのプロファイル名が表示されます。
+- Dexed は現在**初期音色のみ**に対応しています。音色（cartridge の `.syx` と program）の選択は未対応なので、`patches_dirs` は書かないでください。
+- プラグインを切り替えたときは、レンダリング結果のキャッシュを手で消してください。音色を指定していない行（MML 先頭に `{"Surge XT patch": ...}` が無い行）は、キャッシュのキーが切り替え前後で同じになるため、前のプラグインの音が鳴ります。消す場所は次の2つです（Windows の場合）。
+  - `%LOCALAPPDATA%\clap-mml-render-tui\notepad_cache\*.wav`（notepad / MML入力overlay のキャッシュ）
+  - `%LOCALAPPDATA%\clap-mml-render-tui\daw\*.wav`（DAW のトラックWAV）
+
 `offline_render_backend = "render_server"` にすると、TUI側はCLAPプラグインを直接ロードせず、`127.0.0.1:<offline_render_server_port>/render` にMMLを送ってWAVを受け取ります。render-serverへの接続に失敗した場合、cmrtは子プロセスを起動し、通信エラー時は一度だけ再起動して再試行します。
 
 ### updateコマンド

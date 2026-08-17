@@ -52,6 +52,7 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
             kick_patch_keywords: Vec::new(),
             snare_patch_keywords: Vec::new(),
             hihat_patch_keywords: Vec::new(),
+            ..Default::default()
         }),
         entry_ptr: 0,
         cache: Arc::new(Mutex::new(vec![

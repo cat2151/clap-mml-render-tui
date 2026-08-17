@@ -31,6 +31,35 @@ fn patch_cache_hit(
         })
 }
 
+/// 音色一覧が空のときに 1 行だけ出す説明。
+///
+/// 一覧が空になる理由は「絞り込みで消えた」と「そもそもこのプラグインに音色置き場が無い」の
+/// 2 つがあり、後者は Dexed のように `patches_dirs` を持たないプラグインで必ず起きる。
+/// 空の枠だけだと利用者が原因を切り分けられないので、どちらなのかを書く。
+/// ペインは画面幅の 1/4 程度しかないので、1 行に詰めず短い行へ割る。
+/// ペインが 1 行しか無い場合でも用が足りるよう、先頭行だけで意味が通る順に並べる。
+pub(crate) fn empty_patch_list_lines(patch_all_is_empty: bool) -> Vec<&'static str> {
+    if patch_all_is_empty {
+        vec![
+            "音色一覧がありません",
+            "config.toml の",
+            "patches_dirs 未設定",
+        ]
+    } else {
+        vec!["一致する音色がありません"]
+    }
+}
+
+/// 高さ 1 行の `ListItem` を並べて返す。1 つの `ListItem` に複数行を入れると、
+/// ペインの高さが足りないときに ratatui がその item を丸ごと描かないので分ける。
+fn empty_patch_list_notice(app: &NotepadScreen<'_>) -> Vec<ListItem<'static>> {
+    let style = base_style().fg(MONOKAI_GRAY);
+    empty_patch_list_lines(app.patch_select.patch_all.is_empty())
+        .into_iter()
+        .map(|text| ListItem::new(Line::from(Span::styled(text, style))))
+        .collect()
+}
+
 fn favorite_title(app: &NotepadScreen<'_>, favorite_count: usize) -> String {
     if app.patch_select.patch_favorites_query.trim().is_empty() {
         format!(" Favorite音色 ({favorite_count}) ")
@@ -167,7 +196,7 @@ pub(crate) fn draw_patch_select(
     f.render_widget(&patch_query_widget, query_panes[0]);
     f.render_widget(&favorites_query_widget, query_panes[1]);
 
-    let (patch_items, favorite_count, favorite_items): (Vec<ListItem>, usize, Vec<ListItem>) = {
+    let (mut patch_items, favorite_count, favorite_items): (Vec<ListItem>, usize, Vec<ListItem>) = {
         let cache = app.audio.cache.lock().unwrap();
         let disk_hashes = app.audio.known_disk_hashes.lock().unwrap();
         let patch_items = app
@@ -230,6 +259,9 @@ pub(crate) fn draw_patch_select(
                 .collect(),
         )
     };
+    if patch_items.is_empty() {
+        patch_items = empty_patch_list_notice(app);
+    }
     let selection_status = match app.patch_select.patch_select_focus {
         PatchSelectPane::Patches => super::selection_status_text(
             app.patch_select.patch_cursor,

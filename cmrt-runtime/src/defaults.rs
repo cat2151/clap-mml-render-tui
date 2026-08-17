@@ -139,6 +139,25 @@ pub fn default_config_content_with_app_settings(app_settings: &str) -> String {
 # 例 (macOS):   plugin_path = '/Library/Audio/Plug-Ins/CLAP/Surge XT.clap'
 {plugin_path_line}
 
+# 【省略可】複数プラグインを使い分ける場合は、下のようにプロファイルを書き、
+# active_plugin の1行で切り替えられます。active_plugin を書くと、上の
+# plugin_path / patches_dirs ではなくプロファイルの値が使われます。
+#
+# active_plugin = 'dexed'
+#
+# [plugins.surge_xt]
+# plugin_path  = 'C:\Program Files\Common Files\CLAP\Surge Synth Team\Surge XT.clap'
+# plugin_id    = 'org.surge-synth-team.surge-xt'
+# patches_dirs = [
+#   'C:\ProgramData\Surge XT\patches_factory',
+#   'C:\ProgramData\Surge XT\patches_3rdparty',
+# ]
+#
+# [plugins.dexed]
+# plugin_path = 'C:\Program Files\Common Files\CLAP\Dexed.clap'
+# plugin_id   = 'com.digital-suburban.dexed'
+# # patches_dirs は書きません。Dexed の音色選択は未対応で、初期音色だけが鳴ります。
+
 {app_settings}
 input_midi  = "input.mid"
 # output_midi, output_wav は自動的にシステム設定ディレクトリの clap-mml-render-tui/phrase/ または clap-mml-render-tui/daw/ に保存されます。

@@ -86,6 +86,32 @@ fn patch_select_screen_renders_as_overlay_on_normal_screen() {
 }
 
 #[test]
+fn patch_select_screen_explains_why_the_patch_list_is_empty() {
+    let mut app = NotepadScreen::new_for_test(test_config());
+    app.mode = Mode::PatchSelect;
+
+    let normalized = render_lines(&mut app, 100, 24).join("\n").replace(' ', "");
+
+    assert!(normalized.contains("現在0/0"));
+    assert!(normalized.contains("音色一覧がありません"));
+    assert!(normalized.contains("patches_dirs未設定"));
+}
+
+#[test]
+fn patch_select_screen_says_the_filter_matched_nothing_when_patches_exist() {
+    let mut app = NotepadScreen::new_for_test(test_config());
+    app.patch_select.patch_all = vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
+    app.patch_select.patch_filtered = Vec::new();
+    app.patch_select.patch_query = "zzz".to_string();
+    app.mode = Mode::PatchSelect;
+
+    let normalized = render_lines(&mut app, 100, 16).join("\n").replace(' ', "");
+
+    assert!(normalized.contains("一致する音色がありません"));
+    assert!(!normalized.contains("patches_dirs未設定"));
+}
+
+#[test]
 fn patch_select_screen_shows_filter_confirm_title_when_filter_active() {
     let mut app = NotepadScreen::new_for_test(test_config());
     app.patch_select.patch_all = vec![
