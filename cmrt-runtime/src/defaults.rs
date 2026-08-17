@@ -40,6 +40,29 @@ pub fn default_plugin_path() -> &'static str {
     ""
 }
 
+/// OS ごとのデフォルト Dexed パスを返す。
+/// `active_plugin = 'Dexed'` の 1 行だけで使えるようにするための組み込み値。
+/// 既知 OS でない場合は空文字を返す（ユーザーに設定を促す）。
+#[cfg(target_os = "windows")]
+pub fn default_dexed_plugin_path() -> &'static str {
+    r"C:\Program Files\Common Files\CLAP\Dexed.clap"
+}
+
+#[cfg(target_os = "macos")]
+pub fn default_dexed_plugin_path() -> &'static str {
+    "/Library/Audio/Plug-Ins/CLAP/Dexed.clap"
+}
+
+#[cfg(target_os = "linux")]
+pub fn default_dexed_plugin_path() -> &'static str {
+    "/usr/lib/clap/Dexed.clap"
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+pub fn default_dexed_plugin_path() -> &'static str {
+    ""
+}
+
 /// OS ごとのデフォルト patches_dirs を返す。
 /// 既知 OS でない場合や取得できない場合は空配列を返す（ユーザーに設定を促す）。
 #[cfg(target_os = "windows")]
@@ -139,24 +162,22 @@ pub fn default_config_content_with_app_settings(app_settings: &str) -> String {
 # 例 (macOS):   plugin_path = '/Library/Audio/Plug-Ins/CLAP/Surge XT.clap'
 {plugin_path_line}
 
-# 【省略可】複数プラグインを使い分ける場合は、下のようにプロファイルを書き、
-# active_plugin の1行で切り替えられます。active_plugin を書くと、上の
-# plugin_path / patches_dirs ではなくプロファイルの値が使われます。
+# 【省略可】複数プラグインを使い分ける場合は、active_plugin の1行で切り替えられます。
+# 'Surge XT' と 'Dexed' は組み込みなので、標準の場所へインストールしてあれば
+# この1行だけで済みます（大文字小文字・空白・アンダースコアの違いは無視されます）。
+# active_plugin を書くと、上の plugin_path / patches_dirs は使われません。
 #
-# active_plugin = 'dexed'
+# active_plugin = 'Dexed'
 #
-# [plugins.surge_xt]
-# plugin_path  = 'C:\Program Files\Common Files\CLAP\Surge Synth Team\Surge XT.clap'
-# plugin_id    = 'org.surge-synth-team.surge-xt'
-# patches_dirs = [
-#   'C:\ProgramData\Surge XT\patches_factory',
-#   'C:\ProgramData\Surge XT\patches_3rdparty',
-# ]
+# 標準以外の場所に入れている場合や、組み込みに無いプラグインを使う場合だけ、
+# 下のように書きます。書いた項目だけが組み込みの値を上書きします。
 #
-# [plugins.dexed]
-# plugin_path = 'C:\Program Files\Common Files\CLAP\Dexed.clap'
-# plugin_id   = 'com.digital-suburban.dexed'
-# # patches_dirs は書きません。Dexed の音色選択は未対応で、初期音色だけが鳴ります。
+# [plugins."Surge XT"]
+# plugin_path = 'D:\my\clap\Surge XT.clap'
+#
+# [plugins.my_synth]
+# plugin_path  = 'D:\my\clap\MySynth.clap'
+# patches_dirs = ['D:\my\patches']
 
 {app_settings}
 input_midi  = "input.mid"

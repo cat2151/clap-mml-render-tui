@@ -105,7 +105,9 @@ fn an_active_plugin_without_a_matching_profile_lists_the_available_names() {
 
     let message = error.to_string();
     assert!(message.contains("dxd"));
-    assert!(message.contains("dexed"));
+    // 組み込みの名前も config の名前も、両方を示す。
+    assert!(message.contains("Dexed"));
+    assert!(message.contains("Surge XT"));
     assert!(message.contains("surge_xt"));
 }
 
@@ -127,4 +129,95 @@ plugin_path = "   "
     .unwrap_err();
 
     assert!(error.to_string().contains("plugin_path"));
+}
+
+const MINIMAL_CONFIG: &str = r#"
+input_midi  = "input.mid"
+output_midi = "output.mid"
+output_wav  = "output.wav"
+sample_rate = 48000
+buffer_size = 512
+"#;
+
+/// ユーザーが最初に書く形。`[plugins.*]` が 1 つも無くても動くことがこの機能の要。
+#[test]
+fn a_builtin_name_alone_needs_no_plugins_table() {
+    let cfg = load_from_toml(&format!("active_plugin = 'Dexed'\n{MINIMAL_CONFIG}")).unwrap();
+
+    assert_eq!(cfg.plugin_path, crate::default_dexed_plugin_path());
+    assert_eq!(cfg.plugin_id.as_deref(), Some("com.digital-suburban.dexed"));
+    // Dexed の音色選択は未対応なので音色置き場は持たない。
+    assert!(configured_patch_dirs(&cfg).is_empty());
+}
+
+#[test]
+fn the_builtin_surge_profile_brings_its_patch_directories() {
+    let cfg = load_from_toml(&format!("active_plugin = 'Surge XT'\n{MINIMAL_CONFIG}")).unwrap();
+
+    assert_eq!(cfg.plugin_path, crate::default_plugin_path());
+    assert_eq!(
+        cfg.plugin_id.as_deref(),
+        Some("org.surge-synth-team.surge-xt")
+    );
+    assert_eq!(configured_patch_dirs(&cfg), crate::default_patches_dirs());
+}
+
+/// 大文字小文字・空白・アンダースコアの違いで起動できなくなるのは事故のもと。
+#[test]
+fn builtin_names_ignore_case_spaces_and_underscores() {
+    for name in ["dexed", "DEXED", "De xed"] {
+        let cfg = load_from_toml(&format!("active_plugin = '{name}'\n{MINIMAL_CONFIG}")).unwrap();
+        assert_eq!(cfg.plugin_id.as_deref(), Some("com.digital-suburban.dexed"));
+    }
+    for name in ["surge_xt", "surge xt", "SurgeXT"] {
+        let cfg = load_from_toml(&format!("active_plugin = '{name}'\n{MINIMAL_CONFIG}")).unwrap();
+        assert_eq!(
+            cfg.plugin_id.as_deref(),
+            Some("org.surge-synth-team.surge-xt")
+        );
+    }
+}
+
+/// 標準以外の場所に入れている人は plugin_path だけ書けばよく、
+/// plugin_id や patches_dirs を書き写す必要はない。
+#[test]
+fn a_configured_profile_overrides_only_the_fields_it_writes() {
+    let cfg = load_from_toml(&format!(
+        "active_plugin = 'Surge XT'\n{MINIMAL_CONFIG}\n\
+         [plugins.\"Surge XT\"]\nplugin_path = '/opt/clap/Surge XT.clap'\n"
+    ))
+    .unwrap();
+
+    assert_eq!(cfg.plugin_path, "/opt/clap/Surge XT.clap");
+    assert_eq!(
+        cfg.plugin_id.as_deref(),
+        Some("org.surge-synth-team.surge-xt")
+    );
+    assert_eq!(configured_patch_dirs(&cfg), crate::default_patches_dirs());
+}
+
+/// 組み込みの `patches_dirs` を消したいときは、明示的に空配列を書く。
+#[test]
+fn an_empty_patches_dirs_clears_the_builtin_ones() {
+    let cfg = load_from_toml(&format!(
+        "active_plugin = 'Surge XT'\n{MINIMAL_CONFIG}\n\
+         [plugins.\"Surge XT\"]\npatches_dirs = []\n"
+    ))
+    .unwrap();
+
+    assert_eq!(cfg.plugin_path, crate::default_plugin_path());
+    assert!(configured_patch_dirs(&cfg).is_empty());
+}
+
+/// 組み込みと同名の profile を config に書いても、既存の書き方（全項目を書く）は壊れない。
+#[test]
+fn a_fully_written_profile_still_wins_over_the_builtin() {
+    let cfg = load_from_toml(&format!(
+        "active_plugin = 'Dexed'\n{MINIMAL_CONFIG}\n\
+         [plugins.Dexed]\nplugin_path = '/opt/clap/Dexed.clap'\nplugin_id = 'custom.dexed'\n"
+    ))
+    .unwrap();
+
+    assert_eq!(cfg.plugin_path, "/opt/clap/Dexed.clap");
+    assert_eq!(cfg.plugin_id.as_deref(), Some("custom.dexed"));
 }
