@@ -149,10 +149,10 @@ active_plugin = 'Dexed'
 
 組み込みプロファイルの中身は次のとおりで、パスは OS ごとの標準インストール先です。
 
-| 名前 | plugin_id | patches_dirs |
-| --- | --- | --- |
-| `Surge XT` | `org.surge-synth-team.surge-xt` | 上の表の OS 別既定値 |
-| `Dexed` | `com.digital-suburban.dexed` | Dexed の cartridge 置き場（Windows: `%APPDATA%\DigitalSuburban\Dexed\Cartridges`） |
+| 名前 | plugin_id | patches_dirs | 用途別カテゴリ |
+| --- | --- | --- | --- |
+| `Surge XT` | `org.surge-synth-team.surge-xt` | 上の表の OS 別既定値 | トップレベルの設定（＝ Surge のカテゴリ名）をそのまま使う |
+| `Dexed` | `com.digital-suburban.dexed` | Dexed の cartridge 置き場（Windows: `%APPDATA%\DigitalSuburban\Dexed\Cartridges`） | 全て空（＝絞らない） |
 
 名前は大文字小文字・空白・アンダースコアの違いを無視して照合します（`Dexed` / `dexed`、`Surge XT` / `surge_xt` / `SurgeXT` はすべて同じ）。
 
@@ -177,15 +177,17 @@ patches_dirs = ['D:\my\patches']
 | `plugins.<名前>.plugin_path` | そのプラグインのパスです。 |
 | `plugins.<名前>.plugin_id` | 期待する CLAP plugin ID です。省略できます。 |
 | `plugins.<名前>.patches_dirs` | そのプラグインの音色置き場です。組み込みの値を消したいときは `patches_dirs = []` と書きます。 |
+| `plugins.<名前>.<用途>_patch_categories` / `<役>_patch_keywords` | 用途別 patch 自動選択の絞り込みです。トップレベルと同じ 7 つのキー名（`chord_patch_categories` / `bass_patch_categories` / `arpeggio_patch_categories` / `drum_patch_categories` / `kick_patch_keywords` / `snare_patch_keywords` / `hihat_patch_keywords`）をそのまま書けます。書いた項目だけがそのプラグインのときに効きます。 |
 
-- `active_plugin` を書くと、トップレベルの `plugin_path` / `patches_dirs` は使われません（エラーにはならず、プロファイルが優先されます）。
+- `active_plugin` を書くと、トップレベルの `plugin_path` / `patches_dirs` は使われません（エラーにはならず、プロファイルが優先されます）。用途別カテゴリも、プロファイル側に書いてある項目（組み込み Dexed の 7 項目を含む）はプロファイルが優先されます。
 - `active_plugin` の名前が組み込みにも `[plugins.*]` にも無い場合はエラーで起動しません。使える名前が両方とも表示されます。
 - Dexed の音色は「cartridge の `.syx` 1個 = 32 program」なので、一覧では cartridge をディレクトリに見立てて `SynprezFM/SynprezFM_01.syx/00 Say Again.` のように 1 program ずつ並びます（番号は 0 始まりの2桁）。`patches_dirs` に cartridge の置き場を指定すれば、Surge の `.fxp` と同じように選べます。
-- Dexed の mono/poly は音色ではなくインスタンスの設定（`MonoMode`）で、その既定値は POLY です。そのため grid sequencer の和音行では Dexed の音色をすべて和音向きとして扱います。行の用途（chord / bass / drum）で候補を絞るカテゴリ設定（`chord_patch_categories` など）は Surge のカテゴリ名が既定値なので、Dexed で用途別の自動選択を使うときは cartridge の置き場のディレクトリ名を書いてください。
+- Dexed の mono/poly は音色ではなくインスタンスの設定（`MonoMode`）で、その既定値は POLY です。そのため grid sequencer の和音行では Dexed の音色をすべて和音向きとして扱います。
+- 行の用途（chord / bass / arpeggio / drum）で候補を絞るカテゴリ設定は Surge のカテゴリ名が既定値です。Dexed の cartridge は「ディレクトリ名＝用途」ではないので、組み込みの Dexed プロファイルはこの絞り込みを全て空にしてあります（＝どの行も全 program が候補）。cartridge の置き場のディレクトリ名で絞りたいときは、`[plugins.Dexed]` にカテゴリを書いてください。
 - 用途別の自動選択に使う mono/poly の共有判定データ（`voicing_shared_source` / `voicing_override_source`）は Surge XT 専用です。Surge XT 以外を使っているときは取得しません。
-- プラグインを切り替えたときは、レンダリング結果のキャッシュを手で消してください。**音色を指定していない行**（MML 先頭に `{"Surge XT patch": ...}` が無い行）だけは、キャッシュのキーが切り替え前後で同じになるため、前のプラグインの音が鳴ります。音色を指定した行は音色名がキーに入るので混ざりません。消す場所は次の2つです（Windows の場合）。
-  - `%LOCALAPPDATA%\clap-mml-render-tui\notepad_cache\*.wav`（notepad / MML入力overlay のキャッシュ）
-  - `%LOCALAPPDATA%\clap-mml-render-tui\daw\*.wav`（DAW のトラックWAV）
+- レンダリング結果のキャッシュはプラグインごとに別ディレクトリへ置くので、切り替えても前のプラグインの音は鳴りません（手で消す必要はありません）。置き場は次の2つで、`<プラグイン>` は `plugin_path` のファイル名（拡張子なし）です（Windows の場合）。
+  - `%LOCALAPPDATA%\clap-mml-render-tui\notepad_cache\<プラグイン>\*.wav`（notepad / MML入力overlay のキャッシュ）
+  - `%LOCALAPPDATA%\clap-mml-render-tui\daw\<プラグイン>\*.wav`（DAW のトラックWAV）
 
 `offline_render_backend = "render_server"` にすると、TUI側はCLAPプラグインを直接ロードせず、`127.0.0.1:<offline_render_server_port>/render` にMMLを送ってWAVを受け取ります。render-serverへの接続に失敗した場合、cmrtは子プロセスを起動し、通信エラー時は一度だけ再起動して再試行します。
 
