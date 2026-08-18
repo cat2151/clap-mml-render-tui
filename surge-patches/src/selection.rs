@@ -17,7 +17,8 @@ pub enum PatchRole {
     /// 声部を順に鳴らすアルペジオ行。同時発音しないので poly 判定は要らない。
     Arpeggio,
     /// 用途が決まっていない行。[`PatchRole::Chord`] の候補になる patch を避ける
-    /// （和音向きの音色は chord 行へ回すため）。
+    /// （和音向きの音色は chord 行へ回すため）。カテゴリ設定が空のときは
+    /// 「chord 行へ回すべき音色」が定義されていないので何も避けない。
     Free,
     /// drum の bass drum 行。
     Kick,
@@ -33,6 +34,7 @@ pub enum PatchRole {
 ///
 /// `categories` が空なら「カテゴリでは絞らない」。[`PatchRole::Free`] のときは
 /// **避けたい chord 候補のカテゴリ**（＝ chord 用のカテゴリ設定）を渡すこと。
+/// その設定が空なら Free は何も避けない（避ける対象が定義されていないため）。
 ///
 /// `keywords` は打楽器の役割でだけ使う。Surge のカテゴリは `Percussion` / `Drums` の
 /// 粒度しか無く、kick と hi-hat をカテゴリでは分離できないため、表示名の部分一致で絞る。
@@ -99,7 +101,12 @@ pub fn matches_role(
         // 未判定（voicing キャッシュが空）も外れ扱いなので、キャッシュが無いと何も当たらない。
         PatchRole::Chord => in_category && voicing.is_poly(display),
         PatchRole::Bass | PatchRole::Arpeggio => in_category,
-        PatchRole::Free => !(in_category && voicing.is_poly(display)),
+        // カテゴリが空＝「どれを chord 行へ回すか」が定義されていない。ここで
+        // `in_category` を全 true として避けにかかると、poly と判定される patch が
+        // 多いプラグイン（全 patch を poly とみなすもの）では候補が 0 件になる。
+        PatchRole::Free => {
+            filter.categories.is_empty() || !(in_category && voicing.is_poly(display))
+        }
         // 打楽器は poly 判定を要求しない（drum 行は1音しか鳴らさない）。
         // キーワードが空ならカテゴリだけで絞る。
         PatchRole::Kick | PatchRole::Snare | PatchRole::HiHat => {

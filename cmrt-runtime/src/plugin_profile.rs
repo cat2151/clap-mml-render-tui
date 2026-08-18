@@ -24,6 +24,9 @@ use crate::{
 ///
 /// 各項目は「書かなければ組み込みプロファイルの値を引き継ぐ」。`patches_dirs` を
 /// 明示的に空にしたいときは `patches_dirs = []` と書く。
+///
+/// [`PatchRoleFilters`] の項目はトップレベルと同じキー名で、`[plugins.*]` の中へ
+/// そのまま書ける。
 #[derive(Deserialize, Debug, Clone, Default, PartialEq, Eq)]
 pub struct PluginProfile {
     #[serde(default)]
@@ -34,6 +37,89 @@ pub struct PluginProfile {
     /// このプラグインの音色置き場。
     #[serde(default)]
     pub patches_dirs: Option<Vec<String>>,
+    /// 用途別の patch 自動選択の絞り込み。トップレベルと同じキー名で書ける。
+    #[serde(flatten)]
+    pub patch_roles: PatchRoleFilters,
+}
+
+/// 用途別 patch 自動選択（grid sequencer の chord / bass / arpeggio / drum 行）の
+/// 絞り込み設定のうち、プラグインごとに正解が違うもの。
+///
+/// トップレベルの既定値は Surge のカテゴリ名なので、cartridge を音色置き場にする
+/// Dexed では 1 つも当たらない。プラグインごとの正解をここへ持たせる。
+///
+/// 各項目は `None` が「書かれていない」で、そのときトップレベルの値をそのまま使う。
+/// `[]` は「カテゴリで絞らない」という**明示の指定**なので区別が要る。
+#[derive(Deserialize, Debug, Clone, Default, PartialEq, Eq)]
+pub struct PatchRoleFilters {
+    #[serde(default)]
+    pub chord_patch_categories: Option<Vec<String>>,
+    #[serde(default)]
+    pub bass_patch_categories: Option<Vec<String>>,
+    #[serde(default)]
+    pub arpeggio_patch_categories: Option<Vec<String>>,
+    #[serde(default)]
+    pub drum_patch_categories: Option<Vec<String>>,
+    #[serde(default)]
+    pub kick_patch_keywords: Option<Vec<String>>,
+    #[serde(default)]
+    pub snare_patch_keywords: Option<Vec<String>>,
+    #[serde(default)]
+    pub hihat_patch_keywords: Option<Vec<String>>,
+}
+
+impl PatchRoleFilters {
+    /// どの項目でも絞らない設定。カテゴリ階層を持たない音色置き場のプラグイン用。
+    ///
+    /// cartridge のディレクトリ名（`SynprezFM` など）は用途と無関係なので、
+    /// カテゴリで絞る前提そのものが成り立たない。絞らずに全 program を候補にする。
+    pub fn unfiltered() -> Self {
+        Self {
+            chord_patch_categories: Some(Vec::new()),
+            bass_patch_categories: Some(Vec::new()),
+            arpeggio_patch_categories: Some(Vec::new()),
+            drum_patch_categories: Some(Vec::new()),
+            kick_patch_keywords: Some(Vec::new()),
+            snare_patch_keywords: Some(Vec::new()),
+            hihat_patch_keywords: Some(Vec::new()),
+        }
+    }
+
+    /// `self` を土台に `over` の「書かれている項目」だけを上書きする。
+    fn overridden_by(self, over: Self) -> Self {
+        Self {
+            chord_patch_categories: over.chord_patch_categories.or(self.chord_patch_categories),
+            bass_patch_categories: over.bass_patch_categories.or(self.bass_patch_categories),
+            arpeggio_patch_categories: over
+                .arpeggio_patch_categories
+                .or(self.arpeggio_patch_categories),
+            drum_patch_categories: over.drum_patch_categories.or(self.drum_patch_categories),
+            kick_patch_keywords: over.kick_patch_keywords.or(self.kick_patch_keywords),
+            snare_patch_keywords: over.snare_patch_keywords.or(self.snare_patch_keywords),
+            hihat_patch_keywords: over.hihat_patch_keywords.or(self.hihat_patch_keywords),
+        }
+    }
+
+    /// 書かれている項目だけをトップレベルフィールドへ焼き込む。
+    fn apply_to(self, cfg: &mut Config) {
+        let assignments: [(Option<Vec<String>>, &mut Vec<String>); 7] = [
+            (self.chord_patch_categories, &mut cfg.chord_patch_categories),
+            (self.bass_patch_categories, &mut cfg.bass_patch_categories),
+            (
+                self.arpeggio_patch_categories,
+                &mut cfg.arpeggio_patch_categories,
+            ),
+            (self.drum_patch_categories, &mut cfg.drum_patch_categories),
+            (self.kick_patch_keywords, &mut cfg.kick_patch_keywords),
+            (self.snare_patch_keywords, &mut cfg.snare_patch_keywords),
+            (self.hihat_patch_keywords, &mut cfg.hihat_patch_keywords),
+        ];
+        for (from_profile, target) in assignments {
+            if let Some(value) = from_profile {
+                *target = value;
+            }
+        }
+    }
 }
 
 impl PluginProfile {
@@ -47,6 +133,7 @@ impl PluginProfile {
             },
             plugin_id: over.plugin_id.or(self.plugin_id),
             patches_dirs: over.patches_dirs.or(self.patches_dirs),
+            patch_roles: self.patch_roles.overridden_by(over.patch_roles),
         }
     }
 }
@@ -64,6 +151,8 @@ pub fn builtin_plugin_profiles() -> BTreeMap<String, PluginProfile> {
                 plugin_path: default_plugin_path().to_string(),
                 plugin_id: Some(SURGE_XT_PLUGIN_ID.to_string()),
                 patches_dirs: Some(default_patches_dirs()),
+                // カテゴリ設定のトップレベル既定値が Surge のものなので、書く必要が無い。
+                patch_roles: PatchRoleFilters::default(),
             },
         ),
         (
@@ -72,6 +161,7 @@ pub fn builtin_plugin_profiles() -> BTreeMap<String, PluginProfile> {
                 plugin_path: default_dexed_plugin_path().to_string(),
                 plugin_id: Some(DEXED_PLUGIN_ID.to_string()),
                 patches_dirs: Some(default_dexed_cartridge_dirs()),
+                patch_roles: PatchRoleFilters::unfiltered(),
             },
         ),
     ])
@@ -159,6 +249,7 @@ pub fn apply_active_plugin_profile(cfg: &mut Config) -> anyhow::Result<()> {
     cfg.plugin_path = profile.plugin_path;
     cfg.plugin_id = profile.plugin_id;
     cfg.patches_dirs = profile.patches_dirs;
+    profile.patch_roles.apply_to(cfg);
     Ok(())
 }
 

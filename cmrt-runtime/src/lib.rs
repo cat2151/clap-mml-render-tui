@@ -12,7 +12,9 @@ pub use defaults::{
 };
 pub use paths::{config_app_dir, config_file_path, log_file_path, native_probe_log_file_path};
 pub use plugin_identity::{plugin_file_stem, DEXED_PLUGIN_ID, SURGE_XT_PLUGIN_ID};
-pub use plugin_profile::{apply_active_plugin_profile, builtin_plugin_profiles, PluginProfile};
+pub use plugin_profile::{
+    apply_active_plugin_profile, builtin_plugin_profiles, PatchRoleFilters, PluginProfile,
+};
 
 use serde::Deserialize;
 use std::collections::{BTreeMap, HashSet};

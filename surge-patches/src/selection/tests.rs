@@ -91,6 +91,38 @@ fn free_is_the_complement_of_chord() {
     }
 }
 
+/// 全 patch を poly とみなすプラグイン（Surge 以外）用のスタブ。
+struct AlwaysPoly;
+
+impl VoicingLookup for AlwaysPoly {
+    fn is_poly(&self, _patch: &str) -> bool {
+        true
+    }
+}
+
+/// chord のカテゴリ設定が空なら、Free は何も避けない。
+///
+/// ここを「カテゴリ空＝全 patch が chord 候補」と解釈すると、全 patch を poly と
+/// みなすプラグインでは Free 行（chord mode off の全行）の候補が 0 件になる。
+#[test]
+fn free_keeps_every_patch_when_the_chord_categories_are_empty() {
+    let free = RoleFilter::new(PatchRole::Free, &[]);
+
+    for (display, lower) in pairs(&[
+        "cartridges/SynprezFM/BRASS 1",
+        "patches_factory/Pads/Poly Pad.fxp",
+    ]) {
+        assert!(
+            matches_role(&display, &lower, &free, &AlwaysPoly),
+            "{display} が Free の候補から外れている"
+        );
+        assert!(
+            matches_role(&display, &lower, &free, &PolyByName),
+            "{display} が Free の候補から外れている"
+        );
+    }
+}
+
 #[test]
 fn empty_categories_do_not_narrow_the_candidates() {
     let filter = RoleFilter::new(PatchRole::Arpeggio, &[]);

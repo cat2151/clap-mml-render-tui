@@ -229,3 +229,51 @@ fn a_fully_written_profile_still_wins_over_the_builtin() {
     assert_eq!(cfg.plugin_path, "/opt/clap/Dexed.clap");
     assert_eq!(cfg.plugin_id.as_deref(), Some("custom.dexed"));
 }
+
+/// Dexed の cartridge には Surge のようなカテゴリ階層が無いので、組み込みプロファイルは
+/// 用途別の絞り込みを全て外す。ここが効かないと chord / bass / drum 行の候補が 0 件になる。
+#[test]
+fn the_builtin_dexed_profile_does_not_narrow_the_patch_roles() {
+    let cfg = load_from_toml(&format!("active_plugin = 'Dexed'\n{MINIMAL_CONFIG}")).unwrap();
+
+    assert!(cfg.chord_patch_categories.is_empty());
+    assert!(cfg.bass_patch_categories.is_empty());
+    assert!(cfg.arpeggio_patch_categories.is_empty());
+    assert!(cfg.drum_patch_categories.is_empty());
+    assert!(cfg.kick_patch_keywords.is_empty());
+    assert!(cfg.snare_patch_keywords.is_empty());
+    assert!(cfg.hihat_patch_keywords.is_empty());
+}
+
+/// Surge のプロファイルは絞り込みを書かないので、トップレベルの設定がそのまま残る。
+/// 既存 config を持つ Surge ユーザーの挙動が変わらないことの担保。
+#[test]
+fn the_surge_profile_keeps_the_top_level_patch_categories() {
+    let cfg = load_from_toml(&format!(
+        "active_plugin = 'Surge XT'\nchord_patch_categories = ['MyPads']\n\
+         kick_patch_keywords = ['thump']\n{MINIMAL_CONFIG}"
+    ))
+    .unwrap();
+
+    assert_eq!(cfg.chord_patch_categories, ["MyPads".to_string()]);
+    assert_eq!(cfg.kick_patch_keywords, ["thump".to_string()]);
+    assert_eq!(
+        cfg.bass_patch_categories,
+        crate::default_bass_patch_categories()
+    );
+}
+
+/// プロファイル側にカテゴリを書けば、そのプラグインだけ絞り込める。
+/// トップレベル（＝ Surge 用）とプラグイン用を同じ config に共存させるための経路。
+#[test]
+fn a_profile_can_narrow_the_patch_roles_by_itself() {
+    let cfg = load_from_toml(&format!(
+        "active_plugin = 'Dexed'\nchord_patch_categories = ['Pads']\n{MINIMAL_CONFIG}\n\
+         [plugins.Dexed]\nchord_patch_categories = ['SynprezFM']\n"
+    ))
+    .unwrap();
+
+    assert_eq!(cfg.chord_patch_categories, ["SynprezFM".to_string()]);
+    // 書かなかった項目は組み込み Dexed プロファイルの「絞らない」が残る。
+    assert!(cfg.bass_patch_categories.is_empty());
+}

@@ -282,6 +282,12 @@ voicing_override_source = "{DEFAULT_VOICING_OVERRIDE_SOURCE}"
 # 無効化すると chord mode（c キー）は使えません。
 chord_progression_source = "{DEFAULT_CHORD_PROGRESSION_SOURCE}"
 
+# 【省略可】用途別 patch 自動選択のカテゴリ／キーワード（以下 7 項目）
+# 既定値は Surge XT のカテゴリ名です。プラグインごとに変えたいときは、同じキー名を
+# [plugins.<名前>] の中へ書けばそのプラグインのときだけ効きます。
+# 組み込みの Dexed プロファイルは cartridge にカテゴリ階層が無いため、7 項目とも
+# 空（＝絞らず全 program を候補にする）を既定にしています。
+
 # 【省略可】chord mode の和音に使う patch のカテゴリ
 # patch パスのカテゴリ階層（patches_factory/<category>/ または
 # patches_3rdparty/<vendor>/<category>/）と、大文字小文字を無視して照合します。
