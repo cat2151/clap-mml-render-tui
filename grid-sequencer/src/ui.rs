@@ -19,6 +19,7 @@ pub(crate) mod cycle_random;
 mod grid;
 mod help;
 pub mod layout;
+mod patch_notice;
 mod patch_selector;
 mod pattern_list;
 mod progress;
@@ -69,6 +70,10 @@ pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: 
     }
     if screen.restart_notice_open() {
         restart_notice::draw_overlay(f);
+    }
+    // selector が開けなかった理由。selector とは排他なので重ならない。
+    if screen.patch_notice_open() {
+        patch_notice::draw_overlay(f, screen);
     }
     if screen.help_open {
         help::draw_overlay(f, screen.track_count());

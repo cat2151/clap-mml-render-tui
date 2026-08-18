@@ -372,6 +372,7 @@ mod chord;
 mod chord_input;
 mod help;
 mod layout;
+mod patch_notice;
 mod patch_selector;
 mod pattern_list;
 mod status_line;

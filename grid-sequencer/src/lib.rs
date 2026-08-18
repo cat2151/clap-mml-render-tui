@@ -24,6 +24,7 @@ mod cycle_swap;
 mod drum_line;
 mod input;
 mod patch_bag;
+mod patch_notice;
 mod patch_role;
 mod patch_selector;
 mod screen;

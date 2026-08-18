@@ -7,7 +7,9 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent,
 use ratatui::layout::Rect;
 
 use super::*;
-use crate::{tests::ctx_with, ChordPlayback, GridPatchLoad, GridRow};
+use crate::{
+    patch_notice::PatchUnavailable, tests::ctx_with, ChordPlayback, GridPatchLoad, GridRow,
+};
 
 const AREA: Rect = Rect::new(0, 0, 100, 30);
 
@@ -57,6 +59,16 @@ fn mouse(kind: MouseEventKind, column: u16, row: u16) -> MouseEvent {
         row,
         modifiers: KeyModifiers::NONE,
     }
+}
+
+/// 開けなかった／回せなかった理由。無反応と区別するため、必ず残っていること。
+fn notice_reason(screen: &GridSequencerScreen) -> PatchUnavailable {
+    screen
+        .patch_notice
+        .as_ref()
+        .expect("開けなかった理由が通知に残る")
+        .reason
+        .clone()
 }
 
 fn press(code: KeyCode) -> KeyEvent {

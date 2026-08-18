@@ -3,7 +3,7 @@
 //! ここは選択状態と、preview / 確定 / 取り消しの適用まで。入力のさばきは
 //! [`input`]、画面上の当たり判定は [`layout`] にある。
 
-use std::ops::Range;
+use std::{ops::Range, time::Instant};
 
 use cmrt_realtime_play::PatchVoicing;
 use cmrt_surge_patches::{group_patch_pairs_by_category, matches_role, PatchCategory, PatchRole};
@@ -11,8 +11,10 @@ use cmrt_tui_core::random::random_index;
 use ratatui_textarea::TextArea;
 
 use crate::{
-    patch_bag::PatchBag, GridPatchLoad, GridSequencerContext, GridSequencerScreen, ListDirection,
-    ARPEGGIO_ROW, BASS_ROW, CHORD_ROW,
+    patch_bag::PatchBag,
+    patch_notice::{catalog_unavailable, PatchNotice, PatchUnavailable},
+    GridPatchLoad, GridSequencerContext, GridSequencerScreen, ListDirection, ARPEGGIO_ROW,
+    BASS_ROW, CHORD_ROW,
 };
 
 mod input;
@@ -49,14 +51,15 @@ impl PatchSelector {
         poly_only: bool,
         patch_random_before_open: bool,
         undo_before_open: crate::undo::UndoSnapshot,
-    ) -> Option<Self> {
-        if !ctx.patch_dirs_configured {
-            return None;
+    ) -> Result<Self, PatchUnavailable> {
+        if let Some(reason) = catalog_unavailable(ctx) {
+            return Err(reason);
         }
-        let GridPatchLoad::Ready(pairs) = &ctx.patch_load else {
-            return None;
+        let all_pairs = match &ctx.patch_load {
+            GridPatchLoad::Ready(pairs @ [_, ..]) => *pairs,
+            _ => return Err(catalog_unavailable(ctx).expect("使えない一覧には必ず理由がある")),
         };
-        let pairs = pairs
+        let pairs = all_pairs
             .iter()
             .filter(|(patch, _)| {
                 !poly_only || ctx.voicing.cached_voicing(patch) == Some(PatchVoicing::Poly)
@@ -65,7 +68,8 @@ impl PatchSelector {
             .collect::<Vec<_>>();
         let categories = group_patch_pairs_by_category(&pairs);
         if categories.is_empty() {
-            return None;
+            // ここまで来たら一覧は空でない。消えたのは poly 絞り込みのせい。
+            return Err(PatchUnavailable::NoPolyPatches);
         }
         let selected = current_patch.and_then(|current| {
             categories
@@ -79,7 +83,7 @@ impl PatchSelector {
                         .map(|patch_index| (category_index, patch_index))
                 })
         });
-        Some(Self {
+        Ok(Self {
             instance,
             source_categories: categories.clone(),
             categories,
@@ -243,8 +247,12 @@ impl GridSequencerScreen {
             return;
         };
         let Some(patch) = bag.advance(direction).map(str::to_string) else {
+            // 袋が空。ここで黙って戻ると wheel も「回しても無反応」にしか見えない。
+            let reason = catalog_unavailable(ctx).unwrap_or(PatchUnavailable::NoRolePatches);
+            self.patch_notice = Some(PatchNotice::new(reason, Instant::now()));
             return;
         };
+        self.patch_notice = None;
         let undo = self.capture_undo();
         if self.state.set_instance_patch(instance, patch.clone()) {
             self.begin_manual_edit(crate::CycleRandomItem::Patch);
@@ -270,16 +278,22 @@ impl GridSequencerScreen {
             return;
         };
         let poly_only = instance == CHORD_ROW && self.state.chord().is_some();
-        let Some(selector) = PatchSelector::new(
+        let selector = match PatchSelector::new(
             instance,
             current,
             ctx,
             poly_only,
             patch_random_before_open,
             undo_before_open,
-        ) else {
-            return;
+        ) {
+            Ok(selector) => selector,
+            // 開けないときに黙って戻ると、押しても無反応にしか見えない。理由を出す。
+            Err(reason) => {
+                self.patch_notice = Some(PatchNotice::new(reason, Instant::now()));
+                return;
+            }
         };
+        self.patch_notice = None;
         self.patch_selector = Some(selector);
         // selector 内で試聴している patch を周回境界の自動抽選で上書きさせない。
         // Esc 等でキャンセルした場合は、開く前の設定へ戻す。

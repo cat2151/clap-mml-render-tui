@@ -182,3 +182,45 @@ fn current_patch(screen: &GridSequencerScreen) -> String {
         .clone()
         .expect("wheel が patch を当てている")
 }
+
+/// 用途の絞り込みで候補が 0 件になった wheel も、黙って何もしないのではなく理由を出す。
+#[test]
+fn a_wheel_with_no_candidates_for_the_role_reports_why_nothing_changed() {
+    let patches = ["Bass/Mono.fxp"]
+        .into_iter()
+        .map(|patch| (patch.to_string(), patch.to_lowercase()))
+        .collect::<Vec<_>>();
+    let chord_categories = vec!["Pads".to_string()];
+    let mut ctx = context(&patches);
+    ctx.chord_patch_categories = &chord_categories;
+    let mut screen = GridSequencerScreen::with_track_count(None, 4);
+    screen.state.set_chord(
+        ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]),
+        Instant::now(),
+    );
+
+    screen.handle_mouse(
+        mouse(MouseEventKind::ScrollDown, patch_column(&screen), 3),
+        AREA,
+        &ctx,
+    );
+
+    assert_eq!(notice_reason(&screen), PatchUnavailable::NoRolePatches);
+}
+
+/// 一覧そのものが無いときは、用途ではなく一覧側の理由を出す（selector と同じ文面）。
+/// `patches_dirs` が無ければ一覧も空になるので、両方を欠いた状態で確かめる。
+#[test]
+fn a_wheel_without_a_catalog_reports_the_catalog_reason() {
+    let mut ctx = context(&[]);
+    ctx.patch_dirs_configured = false;
+    let mut screen = GridSequencerScreen::with_track_count(None, 2);
+
+    screen.handle_mouse(
+        mouse(MouseEventKind::ScrollDown, patch_column(&screen), 3),
+        AREA,
+        &ctx,
+    );
+
+    assert_eq!(notice_reason(&screen), PatchUnavailable::NotConfigured);
+}

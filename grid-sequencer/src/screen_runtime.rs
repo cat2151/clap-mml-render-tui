@@ -55,7 +55,20 @@ impl GridSequencerScreen {
                 self.advance_cycle_swap(now, ctx);
             }
         }
+        self.expire_patch_notice(now);
         self.take_restart_request(now)
+    }
+
+    /// 表示時間が過ぎた patch selector の通知を消す。操作を塞がないので、
+    /// 消えるきっかけは時間だけ（[`crate::patch_notice`]）。
+    fn expire_patch_notice(&mut self, now: Instant) {
+        if self
+            .patch_notice
+            .as_ref()
+            .is_some_and(|notice| notice.expired(now))
+        {
+            self.patch_notice = None;
+        }
     }
 
     /// 再起動アナウンスの表示時間が過ぎていたら、一度だけ true を返す。

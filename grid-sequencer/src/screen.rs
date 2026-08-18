@@ -99,6 +99,8 @@ pub struct GridSequencerScreen {
     pub(crate) fixed_chord: Option<crate::FixedChordProgression>,
     /// コード進行データ更新の再起動アナウンスを出し始めた時刻。
     pub(crate) restart_notice: Option<Instant>,
+    /// patch selector を開けなかった理由の通知。詳細は [`crate::patch_notice`]。
+    pub(crate) patch_notice: Option<crate::patch_notice::PatchNotice>,
     /// 待機 bank への先読みロードの進み具合。`None` なら先読みしていない。
     pub(crate) cycle_swap: Option<crate::cycle_swap::CycleSwap>,
     /// 音色ロードの完了を待っている。詳細は [`crate::start_wait`]。
@@ -211,6 +213,7 @@ impl GridSequencerScreen {
             pending_chord: chord_enabled,
             fixed_chord,
             restart_notice: None,
+            patch_notice: None,
             cycle_swap: None,
             waiting_for_patches: false,
             resume_at: None,
@@ -294,6 +297,11 @@ impl GridSequencerScreen {
     /// 再起動アナウンスを表示中かどうか。
     pub fn restart_notice_open(&self) -> bool {
         self.restart_notice.is_some()
+    }
+
+    /// patch selector を開けなかった理由を表示中かどうか。
+    pub fn patch_notice_open(&self) -> bool {
+        self.patch_notice.is_some()
     }
 
     pub fn track_count(&self) -> usize {

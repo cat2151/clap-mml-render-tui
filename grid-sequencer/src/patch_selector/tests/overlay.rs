@@ -23,8 +23,9 @@ fn ready_catalog_opens_at_the_rows_current_patch() {
     assert_eq!(selector.selected_patch(), Some("Keys/Beta.fxp"));
 }
 
+/// 開けないときは黙って戻らず、必ず理由を通知に残す。理由ごとに次の一手が違う。
 #[test]
-fn loading_error_empty_and_unconfigured_catalogs_do_not_open() {
+fn loading_error_empty_and_unconfigured_catalogs_report_why_they_do_not_open() {
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
     let loading = ctx_with(
         GridPatchLoad::Loading,
@@ -33,6 +34,7 @@ fn loading_error_empty_and_unconfigured_catalogs_do_not_open() {
     );
     screen.open_patch_selector(0, &loading);
     assert!(screen.patch_selector.is_none());
+    assert_eq!(notice_reason(&screen), PatchUnavailable::Loading);
 
     let error = ctx_with(
         GridPatchLoad::Err("catalog failed"),
@@ -41,17 +43,56 @@ fn loading_error_empty_and_unconfigured_catalogs_do_not_open() {
     );
     screen.open_patch_selector(0, &error);
     assert!(screen.patch_selector.is_none());
+    assert_eq!(
+        notice_reason(&screen),
+        PatchUnavailable::LoadError("catalog failed".to_string())
+    );
 
     let empty = context(&[]);
     screen.open_patch_selector(0, &empty);
     assert!(screen.patch_selector.is_none());
+    assert_eq!(notice_reason(&screen), PatchUnavailable::NoPatches);
 
     let patches = patches();
     let mut unconfigured = context(&patches);
     unconfigured.patch_dirs_configured = false;
     screen.open_patch_selector(0, &unconfigured);
     assert!(screen.patch_selector.is_none());
+    assert_eq!(notice_reason(&screen), PatchUnavailable::NotConfigured);
     assert!(screen.cycle_random().patch);
+}
+
+/// 「一覧はあるが和音行の poly 絞りで消えた」は、一覧 0 件とは別の理由として出す。
+#[test]
+fn a_chord_row_without_poly_patches_reports_the_filter_as_the_reason() {
+    let patches = vec![("Bass/Mono.fxp".to_string(), "bass/mono.fxp".to_string())];
+    let ctx = context(&patches);
+    let mut screen = GridSequencerScreen::with_track_count(None, 2);
+    screen.state.set_chord(
+        ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]),
+        Instant::now(),
+    );
+
+    screen.open_patch_selector(CHORD_ROW, &ctx);
+
+    assert!(screen.patch_selector.is_none());
+    assert_eq!(notice_reason(&screen), PatchUnavailable::NoPolyPatches);
+}
+
+/// 開けたときに前の通知が残っていると、直った理由が画面に居座る。
+#[test]
+fn opening_the_selector_clears_a_previous_notice() {
+    let patches = patches();
+    let mut screen = GridSequencerScreen::with_track_count(None, 1);
+    let mut unconfigured = context(&patches);
+    unconfigured.patch_dirs_configured = false;
+    screen.open_patch_selector(0, &unconfigured);
+    assert!(screen.patch_notice_open());
+
+    screen.open_patch_selector(0, &context(&patches));
+
+    assert!(screen.patch_selector.is_some());
+    assert!(!screen.patch_notice_open());
 }
 
 #[test]
