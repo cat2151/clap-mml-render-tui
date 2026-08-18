@@ -13,6 +13,7 @@ use crate::CoreConfig;
 /// notepad / DAW / offline render / server の各経路で共有する。
 pub fn core_config_from_config(cfg: &Config) -> CoreConfig {
     CoreConfig {
+        plugin_id: cfg.plugin_id.clone(),
         output_midi: cfg.output_midi.clone(),
         output_wav: cfg.output_wav.clone(),
         sample_rate: cfg.sample_rate,

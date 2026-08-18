@@ -16,6 +16,7 @@ fn reexports_core_config() {
         patch_path: Some("/patches/Pad 1.fxp".into()),
         patches_dir: Some("/patches".into()),
         random_patch: false,
+        ..Default::default()
     };
 
     assert_eq!(config.output_midi, "out.mid");
@@ -46,6 +47,7 @@ fn cache_render_extracts_patch_from_embedded_json() {
         patch_path: Some("/patches/Default.fxp".into()),
         patches_dir: Some(patches_dir.to_string_lossy().into_owned()),
         random_patch: true,
+        ..Default::default()
     };
 
     let patch = extract_patch_from_json(Some(r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#), &config);
@@ -64,6 +66,7 @@ fn cache_render_returns_none_when_json_patch_is_missing() {
         patch_path: Some("/patches/Default.fxp".into()),
         patches_dir: Some("/patches".into()),
         random_patch: true,
+        ..Default::default()
     };
 
     let patch = extract_patch_from_json(Some(r#"{"tempo":120}"#), &config);
@@ -82,6 +85,7 @@ fn cache_render_prepares_inputs_with_resolved_embedded_patch() {
         patch_path: Some("patches/Default.fxp".into()),
         patches_dir: Some(patches_dir.to_string_lossy().into_owned()),
         random_patch: true,
+        ..Default::default()
     };
 
     let prepared = prepare_cache_render(r#"{"Surge XT patch":"Pads/Pad 1.fxp"}t120o4c"#, &config)
@@ -112,6 +116,7 @@ fn cache_render_prepare_queue_prepares_deferred_render_inputs() {
         patch_path: Some("/patches/Default.fxp".into()),
         patches_dir: Some("/patches".into()),
         random_patch: true,
+        ..Default::default()
     };
 
     let prepared = prepare_cache_render_via_queue("t120o4c", &config)
@@ -151,6 +156,7 @@ fn cache_render_extracts_patch_from_embedded_json_with_factory_prefix_fallback()
         patch_path: Some("/patches/Default.fxp".into()),
         patches_dir: Some(root.to_string_lossy().into_owned()),
         random_patch: false,
+        ..Default::default()
     };
 
     let patch = extract_patch_from_json(Some(r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#), &config);
@@ -180,6 +186,7 @@ fn mml_with_resolved_embedded_patch_keeps_core_patch_value_relative_to_base() {
         patch_path: Some("/patches/Default.fxp".into()),
         patches_dir: Some(root.to_string_lossy().into_owned()),
         random_patch: false,
+        ..Default::default()
     };
 
     let rewritten =
@@ -244,6 +251,7 @@ fn probe_test_core_config() -> CoreConfig {
         patch_path: Some("/patches/Pad 1.fxp".into()),
         patches_dir: Some("/patches".into()),
         random_patch: false,
+        ..Default::default()
     }
 }
 
