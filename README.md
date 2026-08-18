@@ -1,15 +1,15 @@
 # clap-mml-render-tui
 
 ### Overview
-An MML TUI DAW (of sorts). Enjoy the rich sounds of Surge XT easily with MML. Written in Rust.
+An MML TUI DAW (of sorts). Easily enjoy the rich sounds of Surge XT with MML. Written in Rust.
 
-### Purpose
+### Usage
 
-- For playing around with sound using MML
-- For casual installation. Just having Rust installed is enough.
+- For playing around with MML sounds.
+- For casual installation. Rust is the only prerequisite.
 
 ### Tech Stack
-- Plugin Host Library
+- Plugin host library
   - https://github.com/prokopyl/clack
 
 ### Preparation
@@ -32,17 +32,17 @@ cargo install --force --git https://github.com/cat2151/clap-mml-render-tui
 cmrt
 ```
 
-You can play by entering MML in the TUI screen.
+You can play around by entering MML in the TUI screen.
 
 ### Keyboard Screen
 
-Press the `v` key to move to the keyboard screen.
+Press the `v` key to switch to the keyboard screen.
 
-- `c d e f g a b` keys: Play CDEFGAB notes.
+- `c d e f g a b` keys: Play C D E F G A B (Do Re Mi Fa Sol La Si).
 
 ### Configuration
 
-Upon first launch, `config.toml` will be automatically created. It is located in the OS standard configuration directory.
+`config.toml` is automatically created on first launch. Its location is under the OS standard configuration directory.
 
 - Windows: `%LOCALAPPDATA%\clap-mml-render-tui\config.toml`
 - Linux: `~/.config/clap-mml-render-tui/config.toml`
@@ -61,8 +61,8 @@ editors = ["fresh", "zed", "code", "edit", "nano", "vim"]
 
 input_midi  = "input.mid"
 
-# output_midi and output_wav are automatically saved under
-# clap-mml-render-tui/phrase/ or clap-mml-render-tui/daw/ in the config directory.
+# output_midi, output_wav are automatically saved under the config directory
+# in clap-mml-render-tui/phrase/ or clap-mml-render-tui/daw/.
 # The following values are used internally.
 output_midi = "output.mid"
 output_wav  = "output.wav"
@@ -70,12 +70,12 @@ output_wav  = "output.wav"
 sample_rate = 48000
 buffer_size = 512
 
-# Number of concurrent offline renders for DAW (1-16)
+# Number of concurrent DAW offline renders (1-16)
 offline_render_workers = 2
 
 # Offline rendering backend
-# in_process: Renders within the cmrt main process.
-# render_server: Renders by POSTing to /render on a render-server child process.
+# in_process: Renders within the main cmrt process.
+# render_server: Renders by POSTing /render to a render-server child process.
 offline_render_backend = "in_process"
 offline_render_server_workers = 4
 offline_render_server_port = 62153
@@ -87,7 +87,7 @@ realtime_play_server_port = 62154
 realtime_play_server_command = ""
 
 # Whether to autoplay on startup
-# Notepad mode: Immediately plays the current line. DAW mode: Starts playback from the beginning of the song (measure 0).
+# Notepad mode: Plays the current line immediately. DAW mode: Starts playback from the beginning of the song (measure 0).
 autoplay_on_startup = true
 
 # List of directories to search for Surge XT patches
@@ -96,52 +96,52 @@ patches_dirs = [
   'C:\ProgramData\Surge XT\patches_3rdparty',
 ]
 
-# List of directories to search for WAV loop browser
+# List of directories to search for WAV loops in the loop browser
 loop_dirs = []
 
-# List of categories that can be assigned to WAV loop directories
+# List of categories that can be assigned to loop directories
 loop_categories = ["guitar", "drum", "bass", "spoken", "sequence"]
 ```
 
-The configuration items are as follows.
+Configuration items are as follows.
 
 | Item | Default Value | Description |
 | --- | --- | --- |
-| `plugin_path` | OS-specific Surge XT CLAP default path | Path to the CLAP plugin to use. |
-| `editors` | `["fresh", "zed", "code", "edit", "nano", "vim"]` | Editor candidates to try in order from left. |
-| `input_midi` | `input.mid` | Input MIDI file name for internal processing. |
-| `output_midi` | `output.mid` | Output MIDI file name for internal processing. |
-| `output_wav` | `output.wav` | Output WAV file name for internal processing. |
+| `plugin_path` | OS-specific Surge XT CLAP standard path | Path to the CLAP plugin to use. |
+| `editors` | `["fresh", "zed", "code", "edit", "nano", "vim"]` | Editor candidates, tried from left to right. |
+| `input_midi` | `input.mid` | Input MIDI filename for internal processing. |
+| `output_midi` | `output.mid` | Output MIDI filename for internal processing. |
+| `output_wav` | `output.wav` | Output WAV filename for internal processing. |
 | `sample_rate` | `48000` | Sample rate for rendering. |
 | `buffer_size` | `512` | Buffer size for rendering. |
 | `offline_render_workers` | `2` | Number of concurrent `in_process` renders. |
 | `offline_render_backend` | `in_process` | Destination for offline rendering. |
-| `offline_render_server_workers` | `4` | Number of concurrent `render_server` processes. |
+| `offline_render_server_workers` | `4` | Number of concurrent `render_server` instances. |
 | `offline_render_server_port` | `62153` | Localhost port for `render_server`. |
-| `offline_render_server_command` | Empty string | Command to start `render_server`. |
+| `offline_render_server_command` | Empty string | Startup command for `render_server`. |
 | `realtime_audio_backend` | `in_process` | Destination for real-time playback. |
 | `realtime_play_server_port` | `62154` | Localhost port for `play_server`. |
-| `realtime_play_server_command` | Empty string | Command to start `play_server`. |
-| `autoplay_on_startup` | `true` | Whether to autoplay immediately on startup. |
-| `patches_dirs` | OS-specific Surge XT patches default directories | List of directories to search for sound presets. |
-| `loop_dirs` | `[]` | List of directories to search in the WAV loop browser. After changing, run `cmrt scan-loops`. |
-| `loop_categories` | `["guitar", "drum", "bass", "spoken", "sequence"]` | List of categories to assign to loop directories. Keys for category overlay are determined from unused English letters within the category name. |
+| `realtime_play_server_command` | Empty string | Startup command for `play_server`. |
+| `autoplay_on_startup` | `true` | Whether to autoplay immediately after startup. |
+| `patches_dirs` | OS-specific Surge XT patches standard directory | List of directories to search for sound patches. |
+| `loop_dirs` | `[]` | List of directories to search for in the WAV loop browser. After changing, run `cmrt scan-loops`. |
+| `loop_categories` | `["guitar", "drum", "bass", "spoken", "sequence"]` | List of categories to assign to loop directories. Keys for category overlay are determined from unused English letters within the category names. |
 
-OS-specific default `plugin_path` values are as follows.
+Default `plugin_path` values by OS are as follows.
 
 - Windows: `C:\Program Files\Common Files\CLAP\Surge Synth Team\Surge XT.clap`
 - Linux: `/usr/lib/clap/Surge XT.clap`
 - macOS: `/Library/Audio/Plug-Ins/CLAP/Surge XT.clap`
 
-OS-specific default `patches_dirs` values are as follows.
+Default `patches_dirs` values by OS are as follows.
 
 - Windows: `C:\ProgramData\Surge XT\patches_factory`, `C:\ProgramData\Surge XT\patches_3rdparty`
-- Linux: `$XDG_DATA_HOME/surge-data/patches_factory`, `$XDG_DATA_HOME/surge-data/patches_3rdparty` (if `XDG_DATA_HOME` is not set, `~/.local/share`)
+- Linux: `$XDG_DATA_HOME/surge-data/patches_factory`, `$XDG_DATA_HOME/surge-data/patches_3rdparty` (if `XDG_DATA_HOME` is unset, `~/.local/share` is used)
 - macOS: `/Library/Application Support/Surge XT/patches_factory`, `/Library/Application Support/Surge XT/patches_3rdparty`
 
-#### Using Multiple Plugins
+#### Using multiple plugins
 
-You can switch with a single line `active_plugin`. `Surge XT` and `Dexed` are **built-in**, so if they are installed in their standard locations, you only need to write this one line.
+You can switch with a single line for `active_plugin`. `Surge XT` and `Dexed` are **built-in**, so if they are installed in their standard locations, you only need to write this one line.
 
 ```toml
 active_plugin = 'Dexed'
@@ -152,20 +152,20 @@ The contents of the built-in profiles are as follows, with paths being the stand
 | Name | plugin_id | patches_dirs |
 | --- | --- | --- |
 | `Surge XT` | `org.surge-synth-team.surge-xt` | OS-specific default values from the table above |
-| `Dexed` | `com.digital-suburban.dexed` | None (due to unsupported patch selection) |
+| `Dexed` | `com.digital-suburban.dexed` | Dexed cartridge location (Windows: `%APPDATA%\DigitalSuburban\Dexed\Cartridges`) |
 
-Names are matched ignoring differences in case, spaces, and underscores (`Dexed` / `dexed`, `Surge XT` / `surge_xt` / `SurgeXT` are all treated the same).
+Names are matched case-insensitively and ignoring differences in spaces and underscores (`Dexed` / `dexed`, `Surge XT` / `surge_xt` / `SurgeXT` are all treated as the same).
 
-You only need to write `[plugins.<name>]` if you have plugins installed in non-standard locations or if you are using a plugin not listed as built-in. **Only the specified items will override the built-in values**, so if you just want to change the path, a single `plugin_path` line is sufficient.
+You only need to write `[plugins.<name>]` if you have installed a plugin in a non-standard location or are using a plugin not built-in. **Only the specified items will override the built-in values**, so if you just want to change the path, a single `plugin_path` line is sufficient.
 
 ```toml
 active_plugin = 'Surge XT'
 
-# Only override the path. plugin_id and patches_dirs remain built-in values.
+# Just replace the path. plugin_id and patches_dirs remain built-in values.
 [plugins."Surge XT"]
 plugin_path = 'D:\my\clap\Surge XT.clap'
 
-# For plugins not built-in, specify all details.
+# For non-built-in plugins, specify all details.
 [plugins.my_synth]
 plugin_path  = 'D:\my\clap\MySynth.clap'
 patches_dirs = ['D:\my\patches']
@@ -173,19 +173,20 @@ patches_dirs = ['D:\my\patches']
 
 | Item | Description |
 | --- | --- |
-| `active_plugin` | The name of the profile to use. Specify either a built-in name or a `[plugins.*]` name. If not specified, the top-level `plugin_path` / `patches_dirs` will be used directly. |
-| `plugins.<name>.plugin_path` | The path to that plugin. |
-| `plugins.<name>.plugin_id` | The expected CLAP plugin ID. Can be omitted. |
-| `plugins.<name>.patches_dirs` | The location for that plugin's patches. To clear built-in values, set `patches_dirs = []`. |
+| `active_plugin` | Name of the profile to use. Specify either a built-in name or a `[plugins.*]` name. If omitted, the top-level `plugin_path` / `patches_dirs` will be used as is. |
+| `plugins.<name>.plugin_path` | Path to that plugin. |
+| `plugins.<name>.plugin_id` | Expected CLAP plugin ID. Can be omitted. |
+| `plugins.<name>.patches_dirs` | Patch location for that plugin. To clear built-in values, write `patches_dirs = []`. |
 
-- If `active_plugin` is specified, the top-level `plugin_path` / `patches_dirs` will not be used (no error will occur, and the profile will take precedence).
-- If the `active_plugin` name is neither built-in nor present in `[plugins.*]`, the application will fail to launch with an error. All available names from both sources will be displayed.
-- Dexed currently only supports **initial patches**. Patch (cartridge `.syx` and program) selection is not supported, so please do not specify `patches_dirs`.
-- When switching plugins, manually clear the rendering result cache. For lines without patch specified (lines without `{"Surge XT patch": ...}` at the beginning of MML), the cache key remains the same before and after the switch, resulting in the sound of the previous plugin being played. The two locations to clear the cache are (for Windows):
-  - `%LOCALAPPDATA%\clap-mml-render-tui\notepad_cache\*.wav` (notepad / MML input overlay cache)
+- If `active_plugin` is specified, the top-level `plugin_path` / `patches_dirs` will not be used (no error, the profile takes precedence).
+- If the `active_plugin` name is not found in either built-in profiles or `[plugins.*]`, the application will fail to start with an error. All available names from both sources will be displayed.
+- Dexed sounds are organized as '1 cartridge `.syx` file = 32 programs', so in the list, cartridges are treated as directories, and programs are listed individually like `SynprezFM/SynprezFM_01.syx/00 Say Again.` (numbers are 2-digit, starting from 0). If you specify the cartridge location in `patches_dirs`, you can select them just like Surge's `.fxp` files.
+- For Dexed, automatic sound selection based on line purpose (grid sequencer's chord / bass / drum lines) does not work. This is because Dexed's mono/poly is an instance setting, not a sound characteristic, so it cannot determine if a sound is suitable for chords. Manual sound selection works as usual.
+- When switching plugins, please manually clear the rendering cache. **Only for lines where no sound patch is specified** (lines without `{"Surge XT patch": ...}` at the beginning of the MML), the cache key remains the same before and after the switch, causing the sound from the previous plugin to play. Lines with a specified sound patch include the patch name in the key, so they won't be mixed. The two locations to clear are (for Windows):
+  - `%LOCALAPPDATA%\clap-mml-render-tui\notepad_cache\*.wav` (Notepad / MML input overlay cache)
   - `%LOCALAPPDATA%\clap-mml-render-tui\daw\*.wav` (DAW track WAV)
 
-If `offline_render_backend = "render_server"` is set, the TUI will not directly load the CLAP plugin. Instead, it sends MML to `127.0.0.1:<offline_render_server_port>/render` and receives WAV data. If the connection to the render-server fails, cmrt will launch a child process and retry once upon communication error.
+If `offline_render_backend = "render_server"` is set, the TUI will not directly load CLAP plugins, but instead send MML to `127.0.0.1:<offline_render_server_port>/render` and receive WAV data. If the connection to the render-server fails, cmrt will launch a child process, and in case of a communication error, it will restart and retry once.
 
 ### Update Command
 
@@ -199,8 +200,8 @@ cmrt update
 cmrt --server
 ```
 
-- Integrates with the bluesky-text-to-audio Chrome extension
-  - When an MML is found in a Bluesky post, it can be played with Surge XT.
+- Works with the bluesky-text-to-audio Chrome extension.
+- When an MML is found in a Bluesky post, it can be played with Surge XT.
 
 ### CLI Mode
 
@@ -208,30 +209,30 @@ cmrt --server
 cmrt cde
 ```
 
-- Typing `cde` will play Do-Re-Mi.
+- Typing `cde` will play C-D-E (Do-Re-Mi).
 
 ```
 cmrt CM7
 ```
 
 - Typing `CM7` will play a C major seventh chord.
-- It also supports various chord progression notations (some are not yet supported).
+- It supports various chord progression notations (some are not yet supported).
 
 # Breaking Changes
 - Frequent breaking changes are made daily.
 
 # Future Plans
-- It makes sense to obtain Surge XT patches via an API, so that will be implemented (currently, they are searched for from `toml` specifications, which is inefficient. Implementation timing is deferred, prioritizing other features).
+- It is logical to retrieve Surge XT patches via an API, so this will be implemented (currently, they are inefficiently searched via toml. Implementation timing is deferred, prioritizing other features).
 
 # Concept Notes
 - Atomic Measure
     - Inspired by Obsidian's atomic notes.
-    - By making the unit of all processing "offline rendering per measure",
-    - while accepting certain constraints,
+    - By making the unit of all processing 'offline rendering in 1-measure units,'
+    - while incurring some constraints,
     - various benefits can be gained.
-    - This approach is suitable for sketching and rapidly iterating on edits.
-    - For more extensive editing, existing feature-rich DAWs would be more appropriate.
-    - *Note: "atomic measure" in English might sound like a term from physics, so for now, the Japanese term 「アトミック小節」 (Atomic Measure) is kept without direct translation.
+    - This is suitable for sketching and rapid editing cycles.
+    - For more serious editing, existing feature-rich DAWs would be more appropriate.
+    - Note: 'atomic measure' tends to sound like a physics term, so for now, the Japanese original opted to keep 'アトミック小節' without directly translating it.
 
 # Out of Scope
-- Effects are essential for editing, so they are intentionally set as out of scope and deferred to much later. One reason for this is that Surge XT's patches encapsulate effects (effects are derived from patches).
+- Effects are deemed outside the scope and postponed significantly, as they require dedicated editing. One reason for this is that in Surge XT, patches already encapsulate effects (effects are derived from patches).
