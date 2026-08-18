@@ -18,7 +18,10 @@ const PATCH_DIR_PREFIXES: [&str; 2] = ["patches_factory", "patches_3rdparty"];
 const RENDER_PREROLL_MS: u64 = 100;
 static CACHE_RENDER_PREPARE_QUEUE: OnceLock<CacheRenderPrepareQueue> = OnceLock::new();
 
+mod core_config;
 mod native_render_probe;
+
+pub use core_config::core_config_from_config;
 
 #[cfg(test)]
 use native_render_probe::clear_native_render_probe_state_for_tests;

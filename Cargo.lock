@@ -382,7 +382,6 @@ dependencies = [
  "clap",
  "cmrt-chord",
  "cmrt-config-editor",
- "cmrt-core 0.1.0",
  "cmrt-daw",
  "cmrt-grid-sequencer",
  "cmrt-history",
@@ -394,6 +393,7 @@ dependencies = [
  "cmrt-notepad",
  "cmrt-offline-render",
  "cmrt-realtime-play",
+ "cmrt-render-core",
  "cmrt-runtime",
  "cmrt-tui-core",
  "crossterm",
@@ -493,17 +493,6 @@ dependencies = [
 [[package]]
 name = "cmrt-core"
 version = "0.1.0"
-dependencies = [
- "anyhow",
- "clack-host",
- "cmrt-core 0.1.0 (git+https://github.com/cat2151/clap-mml-play-server)",
- "mmlabc-to-smf",
- "serde_json",
-]
-
-[[package]]
-name = "cmrt-core"
-version = "0.1.0"
 source = "git+https://github.com/cat2151/clap-mml-play-server#e979df63691fdf02fbcf4d64b53e496b02623e9a"
 dependencies = [
  "anyhow",
@@ -524,10 +513,10 @@ name = "cmrt-daw"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "cmrt-core 0.1.0",
  "cmrt-history",
  "cmrt-offline-render",
  "cmrt-realtime-play",
+ "cmrt-render-core",
  "cmrt-runtime",
  "cmrt-surge-patches",
  "cmrt-tui-core",
@@ -666,10 +655,10 @@ name = "cmrt-notepad"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "cmrt-core 0.1.0",
  "cmrt-history",
  "cmrt-offline-render",
  "cmrt-realtime-play",
+ "cmrt-render-core",
  "cmrt-runtime",
  "cmrt-surge-patches",
  "cmrt-tui-core",
@@ -688,8 +677,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clack-host",
- "cmrt-core 0.1.0",
  "cmrt-history",
+ "cmrt-render-core",
  "cmrt-runtime",
  "hound",
  "toml",
@@ -709,6 +698,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmrt-render-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clack-host",
+ "cmrt-core",
+ "cmrt-runtime",
+ "mmlabc-to-smf",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
 name = "cmrt-rhythm"
 version = "0.1.0"
 dependencies = [
@@ -720,7 +722,6 @@ name = "cmrt-runtime"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "cmrt-core 0.1.0",
  "cmrt-surge-patches",
  "dirs",
  "serde",
@@ -741,8 +742,8 @@ dependencies = [
  "anyhow",
  "arboard",
  "chrono",
- "cmrt-core 0.1.0",
  "cmrt-realtime-play",
+ "cmrt-render-core",
  "cmrt-runtime",
  "cmrt-surge-patches",
  "crossterm",

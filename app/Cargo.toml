@@ -10,7 +10,6 @@ path = "src/main.rs"
 [dependencies]
 cmrt-chord = { path = "../chord" }
 cmrt-config-editor = { path = "../config-editor-lib" }
-cmrt-core = { path = "../core-lib" }
 cmrt-daw = { path = "../daw" }
 cmrt-grid-sequencer = { path = "../grid-sequencer" }
 cmrt-history = { path = "../history" }
@@ -22,6 +21,7 @@ cmrt-mml-overlay = { path = "../mml-overlay" }
 cmrt-notepad = { path = "../notepad" }
 cmrt-offline-render = { path = "../offline-render" }
 cmrt-realtime-play = { path = "../realtime-play" }
+cmrt-render-core = { path = "../core-lib" }
 cmrt-runtime = { path = "../cmrt-runtime" }
 cmrt-tui-core = { path = "../tui-core" }
 rubberband-ffi = { path = "../rubberband-ffi" }

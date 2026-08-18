@@ -243,7 +243,7 @@ impl<'a> NotepadScreen<'a> {
         std::thread::spawn(move || {
             // 行頭 JSON のパッチ指定を解決済みパスへ正規化して /play-mml へ送る。
             // SMF は再生時間の計算と旧サーバーへのフォールバック用。
-            let core_cfg = cmrt_runtime::core_config_from_config(cfg.as_ref());
+            let core_cfg = cmrt_core::core_config_from_config(cfg.as_ref());
             let resolved_mml = cmrt_core::mml_with_resolved_embedded_patch(&mml, &core_cfg);
             let smf_bytes = match cmrt_core::mml_to_smf_bytes(resolved_mml.as_ref()) {
                 Ok(smf_bytes) => smf_bytes,

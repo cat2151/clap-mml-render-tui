@@ -18,4 +18,6 @@ patches_dirs = ["/tmp/surge-data/patches_factory", "/tmp/surge-data/patches_3rdp
         "Config から生成した CoreConfig は常に random_patch=false にする"
     );
     assert_eq!(core_cfg.patches_dir.as_deref(), Some("/tmp/surge-data"));
+    assert_eq!(core_cfg.output_wav, "output.wav");
+    assert_eq!(core_cfg.buffer_size, 512);
 }

@@ -3,10 +3,7 @@ mod defaults;
 mod paths;
 mod plugin_profile;
 
-pub use core_config::{
-    configured_patch_dirs, core_config_from_config, core_config_patch_root_dir,
-    shared_patch_root_dir,
-};
+pub use core_config::{configured_patch_dirs, core_config_patch_root_dir, shared_patch_root_dir};
 pub use defaults::{
     default_config_content, default_config_content_with_app_settings, default_dexed_plugin_path,
     default_patches_dirs, default_plugin_path, serialize_patches_dirs_line,

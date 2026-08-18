@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-cmrt-core = { path = "../core-lib" }
 cmrt-history = { path = "../history" }
+cmrt-render-core = { path = "../core-lib" }
 cmrt-runtime = { path = "../cmrt-runtime" }
 anyhow = "1"
 hound = "3.5"

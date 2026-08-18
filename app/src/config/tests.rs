@@ -1,6 +1,5 @@
 use super::*;
 
-mod core_config;
 mod default_content;
 mod editors;
 mod parsing;

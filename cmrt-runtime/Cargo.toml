@@ -8,7 +8,6 @@ name = "cmrt_runtime"
 path = "src/lib.rs"
 
 [dependencies]
-cmrt-core = { path = "../core-lib" }
 cmrt-surge-patches = { path = "../surge-patches" }
 anyhow = "1"
 dirs = "6"
