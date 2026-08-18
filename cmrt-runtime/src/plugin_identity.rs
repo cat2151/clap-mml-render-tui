@@ -3,24 +3,11 @@
 //! 「いま何のプラグインを使っているか」で振る舞いを変えたい場所（voicing 判定の
 //! データ源、キャッシュの置き場）が複数あるので、判定規則をここ 1 か所に置く。
 
-use std::path::PathBuf;
+// プラグインの ID とファイル名は play server repo 側が単一ソース。
+// 「その材料で Config をどう判定するか」だけが TUI 側の知識としてここに残る。
+pub use cmrt_server_config::{plugin_file_stem, DEXED_PLUGIN_ID, SURGE_XT_PLUGIN_ID};
 
 use crate::{default_plugin_path, Config};
-
-pub const SURGE_XT_PLUGIN_ID: &str = "org.surge-synth-team.surge-xt";
-pub const DEXED_PLUGIN_ID: &str = "com.digital-suburban.dexed";
-
-/// `plugin_path` のファイル名から拡張子を落としたもの（`Surge XT.clap` → `Surge XT`）。
-///
-/// `plugin_id` は `active_plugin` / `[plugins.*]` を書いた config にしか無いのに対し、
-/// `plugin_path` はどの書き方でも必ず埋まる。plugin_id が無い config の同定に使う。
-pub fn plugin_file_stem(plugin_path: &str) -> String {
-    PathBuf::from(plugin_path.trim())
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .unwrap_or_default()
-        .to_string()
-}
 
 impl Config {
     /// 使用中プラグインが Surge XT か。

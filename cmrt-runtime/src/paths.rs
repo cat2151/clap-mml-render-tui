@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+#[cfg(test)]
 const APP_DIR_NAME: &str = "clap-mml-render-tui";
 
 /// OS 標準の設定ディレクトリ内のアプリ設定ディレクトリを返す。
@@ -7,14 +8,20 @@ const APP_DIR_NAME: &str = "clap-mml-render-tui";
 /// - Linux:   ~/.config/clap-mml-render-tui
 /// - macOS:   ~/Library/Application Support/clap-mml-render-tui
 ///
+/// 場所そのものは play server repo 側（[`cmrt_server_config::config_app_dir`]）が
+/// 単一ソース。サーバーと TUI が同じ config.toml を読むため。
+///
 /// システムの設定ディレクトリが取得できない場合は `None` を返す。
+///
+/// テストのときだけ差し替えのフックを噛ませる。ここを丸ごと共有 crate の再エクスポートに
+/// すると、この crate 自身のテストが実ユーザーの config.toml を触りうる。
 pub fn config_app_dir() -> Option<PathBuf> {
     #[cfg(test)]
     if let Some(app_dir) = test_config_app_dir() {
         return Some(app_dir);
     }
 
-    dirs::config_local_dir().map(|d| d.join(APP_DIR_NAME))
+    cmrt_server_config::config_app_dir()
 }
 
 pub fn config_file_path() -> Option<PathBuf> {
