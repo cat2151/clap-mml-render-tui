@@ -104,6 +104,58 @@ pub fn default_patches_dirs() -> Vec<String> {
     Vec::new()
 }
 
+/// OS ごとのデフォルト Dexed cartridge ディレクトリを返す。
+///
+/// Dexed が初回起動時に factory cartridge を展開する場所。`.syx` 1 個が
+/// 32 program に展開される（`cmrt_core::dx7`）。
+/// 既知 OS でない場合や取得できない場合は空配列を返す（ユーザーに設定を促す）。
+#[cfg(target_os = "windows")]
+pub fn default_dexed_cartridge_dirs() -> Vec<String> {
+    dirs::config_dir()
+        .map(|dir| {
+            vec![dir
+                .join("DigitalSuburban")
+                .join("Dexed")
+                .join("Cartridges")
+                .to_string_lossy()
+                .into_owned()]
+        })
+        .unwrap_or_default()
+}
+
+#[cfg(target_os = "macos")]
+pub fn default_dexed_cartridge_dirs() -> Vec<String> {
+    dirs::data_dir()
+        .map(|dir| {
+            vec![dir
+                .join("DigitalSuburban")
+                .join("Dexed")
+                .join("Cartridges")
+                .to_string_lossy()
+                .into_owned()]
+        })
+        .unwrap_or_default()
+}
+
+#[cfg(target_os = "linux")]
+pub fn default_dexed_cartridge_dirs() -> Vec<String> {
+    dirs::data_dir()
+        .map(|dir| {
+            vec![dir
+                .join("DigitalSuburban")
+                .join("Dexed")
+                .join("Cartridges")
+                .to_string_lossy()
+                .into_owned()]
+        })
+        .unwrap_or_default()
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+pub fn default_dexed_cartridge_dirs() -> Vec<String> {
+    Vec::new()
+}
+
 /// カテゴリ名・キーワードの配列を config.toml の TOML 配列リテラルへ直す。
 fn patch_categories_line(names: &[&str]) -> String {
     format!(

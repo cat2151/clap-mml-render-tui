@@ -60,18 +60,23 @@ fn an_active_profile_is_baked_into_the_top_level_fields() {
     assert_eq!(cfg.plugin_id.as_deref(), Some("com.digital-suburban.dexed"));
 }
 
-/// プロファイルに `patches_dirs` を書かなければ「音色置き場は無い」。
+/// プロファイルに `patches_dirs` を書かなければ組み込みの値が残る。
 /// 他プロファイルや旧トップレベルの Surge 用ディレクトリを流用してはいけない。
 #[test]
-fn a_profile_without_patches_dirs_has_no_patch_directories() {
+fn a_profile_without_patches_dirs_falls_back_to_the_builtin_ones() {
     let cfg = load_from_toml(&format!(
         "active_plugin = 'dexed'\nplugin_path = '/clap/Surge XT.clap'\n\
          patches_dirs = ['/surge/patches_factory']\n{SURGE_AND_DEXED_PROFILES}"
     ))
     .unwrap();
 
-    assert_eq!(cfg.patches_dirs, None);
-    assert!(configured_patch_dirs(&cfg).is_empty());
+    assert_eq!(
+        configured_patch_dirs(&cfg),
+        crate::default_dexed_cartridge_dirs()
+    );
+    assert!(!configured_patch_dirs(&cfg)
+        .iter()
+        .any(|dir| dir.contains("surge")));
 }
 
 #[test]
@@ -146,8 +151,11 @@ fn a_builtin_name_alone_needs_no_plugins_table() {
 
     assert_eq!(cfg.plugin_path, crate::default_dexed_plugin_path());
     assert_eq!(cfg.plugin_id.as_deref(), Some("com.digital-suburban.dexed"));
-    // Dexed の音色選択は未対応なので音色置き場は持たない。
-    assert!(configured_patch_dirs(&cfg).is_empty());
+    // Dexed が factory cartridge を展開する場所が組み込みで入る。
+    assert_eq!(
+        configured_patch_dirs(&cfg),
+        crate::default_dexed_cartridge_dirs()
+    );
 }
 
 #[test]

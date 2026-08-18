@@ -484,7 +484,6 @@ dependencies = [
 [[package]]
 name = "cmrt-clack-timeline"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#20e6e8fe6e7ff801eb47e62cfd3a9c8895bf6c5c"
 dependencies = [
  "clack-host",
  "cmrt-timeline",
@@ -502,7 +501,6 @@ dependencies = [
 [[package]]
 name = "cmrt-core"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#20e6e8fe6e7ff801eb47e62cfd3a9c8895bf6c5c"
 dependencies = [
  "anyhow",
  "cat-self-update-lib",
@@ -749,7 +747,6 @@ dependencies = [
 [[package]]
 name = "cmrt-timeline"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#20e6e8fe6e7ff801eb47e62cfd3a9c8895bf6c5c"
 
 [[package]]
 name = "cmrt-tui-core"
