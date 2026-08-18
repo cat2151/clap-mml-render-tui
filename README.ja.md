@@ -181,7 +181,8 @@ patches_dirs = ['D:\my\patches']
 - `active_plugin` を書くと、トップレベルの `plugin_path` / `patches_dirs` は使われません（エラーにはならず、プロファイルが優先されます）。
 - `active_plugin` の名前が組み込みにも `[plugins.*]` にも無い場合はエラーで起動しません。使える名前が両方とも表示されます。
 - Dexed の音色は「cartridge の `.syx` 1個 = 32 program」なので、一覧では cartridge をディレクトリに見立てて `SynprezFM/SynprezFM_01.syx/00 Say Again.` のように 1 program ずつ並びます（番号は 0 始まりの2桁）。`patches_dirs` に cartridge の置き場を指定すれば、Surge の `.fxp` と同じように選べます。
-- Dexed では、行の用途（grid sequencer の chord / bass / drum 行）にもとづく音色の自動選択が働きません。Dexed の mono/poly は音色ではなくインスタンスの設定なので、和音向きかどうかを音色から判定できないためです。音色の手動選択は普通に使えます。
+- Dexed の mono/poly は音色ではなくインスタンスの設定（`MonoMode`）で、その既定値は POLY です。そのため grid sequencer の和音行では Dexed の音色をすべて和音向きとして扱います。行の用途（chord / bass / drum）で候補を絞るカテゴリ設定（`chord_patch_categories` など）は Surge のカテゴリ名が既定値なので、Dexed で用途別の自動選択を使うときは cartridge の置き場のディレクトリ名を書いてください。
+- 用途別の自動選択に使う mono/poly の共有判定データ（`voicing_shared_source` / `voicing_override_source`）は Surge XT 専用です。Surge XT 以外を使っているときは取得しません。
 - プラグインを切り替えたときは、レンダリング結果のキャッシュを手で消してください。**音色を指定していない行**（MML 先頭に `{"Surge XT patch": ...}` が無い行）だけは、キャッシュのキーが切り替え前後で同じになるため、前のプラグインの音が鳴ります。音色を指定した行は音色名がキーに入るので混ざりません。消す場所は次の2つです（Windows の場合）。
   - `%LOCALAPPDATA%\clap-mml-render-tui\notepad_cache\*.wav`（notepad / MML入力overlay のキャッシュ）
   - `%LOCALAPPDATA%\clap-mml-render-tui\daw\*.wav`（DAW のトラックWAV）

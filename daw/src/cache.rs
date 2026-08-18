@@ -10,7 +10,7 @@ fn cache_wav_path(track: usize, measure: usize) -> Option<PathBuf> {
     if measure == 0 {
         return None;
     }
-    cmrt_core::ensure_daw_dir()
+    cmrt_core::ensure_daw_cache_dir()
         .ok()
         .map(|daw_dir| daw_dir.join(format!("track{}_meas{}.wav", track, measure)))
 }

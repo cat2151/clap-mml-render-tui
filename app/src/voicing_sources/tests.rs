@@ -131,3 +131,30 @@ fn persisted_sources_are_read_again_for_each_keyboard_entry() {
     assert_eq!(second.get("Winds/Reload.fxp"), Some(PatchVoicing::Mono));
     fs::remove_dir_all(temp).ok();
 }
+
+#[test]
+fn surge_only_sources_are_not_fetched_for_other_plugins() {
+    let surge = Config {
+        plugin_path: cmrt_runtime::default_plugin_path().to_string(),
+        ..Config::default()
+    };
+    assert!(
+        SourceSet::from_config(&surge).is_some(),
+        "Surge XT では共有 voicing データを読む"
+    );
+
+    let dexed = Config {
+        plugin_id: Some(cmrt_runtime::DEXED_PLUGIN_ID.to_string()),
+        plugin_path: cmrt_runtime::default_dexed_plugin_path().to_string(),
+        ..Config::default()
+    };
+    assert!(
+        SourceSet::from_config(&dexed).is_none(),
+        "Surge 以外では Surge 専用 JSON を取りに行かない"
+    );
+    // 取りに行かない＝レイヤは常に空。判定は VoicingPolicy が受け持つ。
+    assert_eq!(
+        VoicingSourceRefresh::spawn(&dexed).load_for_keyboard(),
+        VoicingLayers::default()
+    );
+}

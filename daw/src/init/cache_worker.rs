@@ -41,7 +41,7 @@ pub(super) fn store_cache_job_samples(
     // 開発用: track/measure ごとに WAV ファイルを出力する。
     // measure 0 は音色/ヘッダセルであり演奏内容ではないためスキップ。
     let wav_ok = if job.measure > 0 {
-        if let Ok(daw_dir) = cmrt_core::ensure_daw_dir() {
+        if let Ok(daw_dir) = cmrt_core::ensure_daw_cache_dir() {
             let wav_path = daw_dir.join(format!("track{}_meas{}.wav", job.track, job.measure));
             cmrt_core::write_wav(&samples, daw_cfg.sample_rate as u32, &wav_path).is_ok()
         } else {

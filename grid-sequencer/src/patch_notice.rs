@@ -19,8 +19,8 @@ pub(crate) const PATCH_NOTICE_DURATION: Duration = Duration::from_secs(5);
 /// が組み立てる。理由の判定をここ以外に持たない（同じ条件を 2 か所で書くと必ずずれる）。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum PatchUnavailable {
-    /// config.toml に `patches_dirs` が無い。音色置き場を持たないプラグイン
-    /// （Dexed など）では常にこれになる。
+    /// config.toml に `patches_dirs` が無い。組み込みプロファイルを持つ
+    /// プラグイン（Surge XT / Dexed）では、`active_plugin` を書けば埋まる。
     NotConfigured,
     /// 一覧をバックグラウンドで読み込み中。待てば開ける。
     Loading,

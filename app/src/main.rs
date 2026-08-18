@@ -323,6 +323,14 @@ fn main() -> Result<()> {
 
     let cfg = config::load()?;
 
+    // レンダリング結果キャッシュの置き場を、使用中プラグインごとに分ける。
+    // キャッシュキーは MML 文字列の hash なので、音色を指定していない行は
+    // プラグインを切り替えても同じキーになる。ここで名前空間を決めておく。
+    cmrt_core::init_cache_plugin_namespace(&cfg.plugin_path);
+    // 名前空間を切る前のバージョンが残したキャッシュは、誰も読まないのに
+    // LRU の上限計算からも外れて消えなくなるので、ここで捨てる。
+    cmrt_core::remove_legacy_unnamespaced_caches();
+
     if matches!(&action, CliAction::ScanLoops) {
         return run_scan_loops(&cfg);
     }

@@ -18,7 +18,7 @@ use crate::tui::{Mode, PatchLoadState, PlayState, PrimaryScreen, TuiApp};
 
 impl KeyboardVoicingLookup for VoicingState {
     fn cached_voicing(&self, patch: &str) -> Option<PatchVoicing> {
-        self.layers.resolve(&self.cache, patch)
+        self.resolve(patch)
     }
 }
 

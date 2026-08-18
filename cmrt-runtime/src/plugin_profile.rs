@@ -14,7 +14,7 @@ use serde::Deserialize;
 
 use crate::{
     default_dexed_cartridge_dirs, default_dexed_plugin_path, default_patches_dirs,
-    default_plugin_path, Config,
+    default_plugin_path, Config, DEXED_PLUGIN_ID, SURGE_XT_PLUGIN_ID,
 };
 
 /// `[plugins.<名前>]` 1 つ分のプラグイン設定。
@@ -62,7 +62,7 @@ pub fn builtin_plugin_profiles() -> BTreeMap<String, PluginProfile> {
             "Surge XT".to_string(),
             PluginProfile {
                 plugin_path: default_plugin_path().to_string(),
-                plugin_id: Some("org.surge-synth-team.surge-xt".to_string()),
+                plugin_id: Some(SURGE_XT_PLUGIN_ID.to_string()),
                 patches_dirs: Some(default_patches_dirs()),
             },
         ),
@@ -70,7 +70,7 @@ pub fn builtin_plugin_profiles() -> BTreeMap<String, PluginProfile> {
             "Dexed".to_string(),
             PluginProfile {
                 plugin_path: default_dexed_plugin_path().to_string(),
-                plugin_id: Some("com.digital-suburban.dexed".to_string()),
+                plugin_id: Some(DEXED_PLUGIN_ID.to_string()),
                 patches_dirs: Some(default_dexed_cartridge_dirs()),
             },
         ),

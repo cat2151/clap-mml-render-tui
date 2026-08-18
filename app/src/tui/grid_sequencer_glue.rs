@@ -24,7 +24,7 @@ use crate::tui::{PatchLoadState, PlayState, PrimaryScreen, TuiApp};
 
 impl GridVoicingLookup for VoicingState {
     fn cached_voicing(&self, patch: &str) -> Option<PatchVoicing> {
-        self.layers.resolve(&self.cache, patch)
+        self.resolve(patch)
     }
 }
 

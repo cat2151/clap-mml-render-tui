@@ -271,6 +271,7 @@ impl<'a> TuiApp<'a> {
                 crate::history::load_voicing_cache(),
                 voicing_layers,
                 voicing_source_refresh,
+                super::voicing::VoicingPolicy::from_config(cfg),
             ),
             chord_progression_source,
             chord_catalog: cmrt_chord::ChordProgressionCatalog::default(),
