@@ -134,9 +134,16 @@ fn append_native_probe_log_line_to_file(line: &str) -> std::io::Result<()> {
     append_log_line_to_optional_path(cmrt_runtime::native_probe_log_file_path(), line)
 }
 
-fn push_log_line(log_lines: &Arc<Mutex<VecDeque<String>>>, line: String) {
+/// UI 表示用のインメモリバッファへだけ 1 行 push する。
+///
+/// ログファイルの書き先は実ユーザーの `log/log.txt` 固定なので、テストからは
+/// こちらだけを使う（[`append_log_line`] はファイルにも書く）。
+pub fn append_log_line_in_memory(
+    log_lines: &Arc<Mutex<VecDeque<String>>>,
+    line: impl Into<String>,
+) {
     let mut lines = log_lines.lock().unwrap();
-    lines.push_back(line);
+    lines.push_back(line.into());
     trim_log_lines(&mut lines);
 }
 
@@ -144,9 +151,9 @@ fn push_log_line(log_lines: &Arc<Mutex<VecDeque<String>>>, line: String) {
 pub fn append_log_line(log_lines: &Arc<Mutex<VecDeque<String>>>, line: impl Into<String>) {
     let line = line.into();
     if let Err(err) = append_log_line_to_file(&line) {
-        push_log_line(log_lines, format!("[log write error] {err}"));
+        append_log_line_in_memory(log_lines, format!("[log write error] {err}"));
     }
-    push_log_line(log_lines, line);
+    append_log_line_in_memory(log_lines, line);
 }
 
 fn append_native_probe_log_line(line: impl AsRef<str>) {

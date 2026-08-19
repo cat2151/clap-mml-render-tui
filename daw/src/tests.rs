@@ -327,3 +327,36 @@ fn complete_track_rerender_batch_respects_cache_render_worker_limit() {
 mod track_rerender_batch_worker_limits;
 
 mod start_track_rerender_batch;
+
+/// 注入したログ sink へ実際に流れることの番人。
+///
+/// `append_log_line` は sink 未注入だとログを黙って捨てる。main.rs の
+/// `cmrt_daw::set_log_sink` を消しても画面は動いてしまうので、ここで固定する。
+#[test]
+fn the_injected_log_sink_receives_the_line() {
+    static RECEIVED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    fn sink(line: &str) {
+        RECEIVED.lock().unwrap().push(line.to_string());
+    }
+    // OnceLock なのでテストバイナリ全体で1回だけ刺さる。既に他のテストが刺していても
+    // sink は同じものなので、この assert は成立する。
+    super::set_log_sink(sink);
+
+    let log_lines = Arc::new(Mutex::new(VecDeque::new()));
+    super::append_log_line(&log_lines, "sink test: hello");
+
+    assert!(
+        RECEIVED
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|line| line == "sink test: hello"),
+        "注入した sink がログ行を受け取っていない"
+    );
+    // 画面表示用のバッファにも積まれること（DAW 下部のログ表示）。
+    assert!(log_lines
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|line| line == "sink test: hello"));
+}

@@ -5,9 +5,9 @@
 
 use cmrt_realtime_play::PatchVoicing;
 use cmrt_rhythm::DrumRole;
-use cmrt_surge_patches::{PatchRole, RoleFilter, VoicingLookup};
+use cmrt_surge_patches::{matches_role, PatchRole, RoleFilter, VoicingLookup};
 
-use crate::{GridSequencerContext, GridVoicingLookup};
+use crate::{GridSequencerContext, GridVoicingLookup, ARPEGGIO_ROW, BASS_ROW, CHORD_ROW};
 
 /// この画面の voicing 判定を、patch catalog 側の trait へ橋渡しするアダプタ。
 pub(crate) struct PolyLookup<'a>(&'a dyn GridVoicingLookup);
@@ -41,6 +41,26 @@ pub(crate) fn drum_patch_role(role: DrumRole) -> PatchRole {
         DrumRole::Snare => PatchRole::Snare,
         DrumRole::HiHat => PatchRole::HiHat,
         DrumRole::Percussion => PatchRole::Percussion,
+    }
+}
+
+/// 行（instance）の用途。chord mode の on/off と、その行の drum 割り当てで決まる。
+///
+/// drum 行は chord mode の on/off に関わらず用途が決まっている。chord mode 中は
+/// 先頭 3 行の用途も決まっていて、それ以外は [`PatchRole::Free`]（＝和音向きの
+/// 音色を避ける）。chord mode off なら drum 以外の全行が Free。
+///
+/// PATCH 欄の wheel と、画面を起動せずに候補を数える診断
+/// （[`GridSequencerContext::role_candidates`]）が同じ規則を通るよう、ここ1か所に置く。
+pub fn row_patch_role(instance: usize, chord_on: bool, drum: Option<DrumRole>) -> PatchRole {
+    match drum {
+        Some(drum) => drum_patch_role(drum),
+        None => match instance {
+            CHORD_ROW if chord_on => PatchRole::Chord,
+            BASS_ROW if chord_on => PatchRole::Bass,
+            ARPEGGIO_ROW if chord_on => PatchRole::Arpeggio,
+            _ => PatchRole::Free,
+        },
     }
 }
 
@@ -91,5 +111,20 @@ impl GridSequencerContext<'_> {
 
     pub(crate) fn poly_lookup(&self) -> PolyLookup<'_> {
         PolyLookup(self.voicing)
+    }
+
+    /// 用途に合う patch の表示名一覧。PATCH 欄の wheel が引く袋の中身そのもの。
+    ///
+    /// wheel も一覧フィルタもこれを通るので、「設定を変えたらどの行の候補が
+    /// 何件になるか」を画面を起動せずに確かめられる（`cmrt patch-roles`）。
+    pub fn role_candidates(&self, role: PatchRole) -> Vec<&str> {
+        let role_filter = self.role_filter(role);
+        let filter = role_filter.filter();
+        let voicing = self.poly_lookup();
+        self.patches()
+            .iter()
+            .filter(|(display, lower)| matches_role(display, lower, &filter, &voicing))
+            .map(|(display, _)| display.as_str())
+            .collect()
     }
 }

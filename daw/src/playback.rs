@@ -111,12 +111,12 @@ impl DawApp {
         let tracks = self.editor.tracks;
 
         *play_state.lock().unwrap() = DawPlayState::Playing;
-        cmrt_tui_core::logging::append_log_line(&log_lines, "play: start");
+        crate::append_log_line(&log_lines, "play: start");
         for line in play_start_log_lines(
             &self.playback.measure_mmls.lock().unwrap(),
             self.ab_repeat_state(),
         ) {
-            cmrt_tui_core::logging::append_log_line(&log_lines, line);
+            crate::append_log_line(&log_lines, line);
         }
 
         if self.cfg.realtime_audio_backend == RealtimeAudioBackend::PlayServer {
@@ -135,7 +135,7 @@ impl DawApp {
             let offline_render_workers = daw_cfg.effective_offline_render_workers();
 
             let Some(rodio_sample_rate) = rodio::SampleRate::new(sample_rate) else {
-                cmrt_tui_core::logging::append_log_line(&log_lines, "play: sample rate is zero");
+                crate::append_log_line(&log_lines, "play: sample rate is zero");
                 let mut state = play_state.lock().unwrap();
                 if *state == DawPlayState::Playing {
                     *state = DawPlayState::Idle;
@@ -150,7 +150,7 @@ impl DawApp {
             // device sink を drop すると再生が止まるため、スレッドが終わるまで保持する。
             let Ok(device_sink) = cmrt_tui_core::audio_output::open_default_sink() else {
                 // Audio init failed: only reset to Idle if we are still the active Playing session.
-                cmrt_tui_core::logging::append_log_line(&log_lines, "play: audio init failed");
+                crate::append_log_line(&log_lines, "play: audio init failed");
                 let mut state = play_state.lock().unwrap();
                 if *state == DawPlayState::Playing {
                     *state = DawPlayState::Idle;
@@ -184,7 +184,7 @@ impl DawApp {
                         (*ab_repeat.lock().unwrap()).normalized_range(effective_count);
                     let current_measure_index =
                         current_play_measure_index(measure_index, effective_count, ab_repeat_range);
-                    cmrt_tui_core::logging::append_log_line(
+                    crate::append_log_line(
                         &log_lines,
                         format_playback_measure_resolution_log(
                             measure_index,
@@ -218,7 +218,7 @@ impl DawApp {
                     ) {
                         Ok(playback_audio) => playback_audio,
                         Err(_) => {
-                            cmrt_tui_core::logging::append_log_line(
+                            crate::append_log_line(
                                 &log_lines,
                                 format!("meas{}: render error", current_measure_index + 1),
                             );
@@ -239,7 +239,7 @@ impl DawApp {
                         measure_start,
                         measure_duration,
                     });
-                    cmrt_tui_core::logging::append_log_line(
+                    crate::append_log_line(
                         &log_lines,
                         source.build_log_line(current_measure_index + 1),
                     );
@@ -307,7 +307,7 @@ impl DawApp {
                 ) {
                     Ok(playback_audio) => playback_audio,
                     Err(_) => {
-                        cmrt_tui_core::logging::append_log_line(
+                        crate::append_log_line(
                             &log_lines,
                             format!("meas{}: render error", lookahead_measure_index + 1),
                         );
@@ -330,7 +330,7 @@ impl DawApp {
                 let append_time = Instant::now();
                 let next_measure_start =
                     resolved_measure_start_after_append(expected_next_measure_start, append_time);
-                cmrt_tui_core::logging::append_log_line(
+                crate::append_log_line(
                     &log_lines,
                     format_playback_future_append_log(
                         lookahead_measure_index,
@@ -353,7 +353,7 @@ impl DawApp {
                     measure_start: next_measure_start,
                     measure_duration: next_measure_duration,
                 });
-                cmrt_tui_core::logging::append_log_line(
+                crate::append_log_line(
                     &log_lines,
                     format_playback_measure_advance_log(
                         current.measure_index,
@@ -361,7 +361,7 @@ impl DawApp {
                         effective_count,
                     ),
                 );
-                cmrt_tui_core::logging::append_log_line(
+                crate::append_log_line(
                     &log_lines,
                     next_source.build_log_line(lookahead_measure_index + 1),
                 );
@@ -380,7 +380,7 @@ impl DawApp {
                 *state = DawPlayState::Idle;
                 drop(state);
                 *play_position.lock().unwrap() = None;
-                cmrt_tui_core::logging::append_log_line(&log_lines, "play: finished");
+                crate::append_log_line(&log_lines, "play: finished");
             }
         });
     }

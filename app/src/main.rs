@@ -1,12 +1,10 @@
 use anyhow::{Context, Result};
 use chord2mml_core::convert as chord_to_mml;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
-use clap_mml_render_tui::{
-    config, config_editor, loop_browser::library as loop_library, server, tui, updater,
-    voicing_cache_builder,
-};
+use clap_mml_render_tui::{config, config_editor, server, tui, updater, voicing_cache_builder};
 use cmrt_core::{load_entry, mml_to_play};
 
+mod scan_loops;
 mod scan_progress_log;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -21,6 +19,7 @@ enum CliAction {
     Check,
     ScanLoops,
     BuildVoicingCache { force: bool },
+    PatchRoles,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -87,6 +86,8 @@ enum Commands {
     },
     /// loop_dirs を走査して WAV ループキャッシュを再構築する
     ScanLoops,
+    /// grid sequencer の各行に patch の候補が出るかを調べる（画面を起動しない動作確認）
+    PatchRoles,
 }
 
 fn cli_command() -> clap::Command {
@@ -154,6 +155,10 @@ where
         return Ok(CliAction::ScanLoops);
     }
 
+    if matches!(cli.command, Some(Commands::PatchRoles)) {
+        return Ok(CliAction::PatchRoles);
+    }
+
     if let Some(Commands::BuildVoicingCache { force }) = cli.command {
         return Ok(CliAction::BuildVoicingCache { force });
     }
@@ -187,86 +192,6 @@ fn cli_playback_mml(input: &str) -> CliPlaybackMml {
     }
 }
 
-fn write_scan_progress(
-    event: &loop_library::LoopScanProgress,
-    stdout: &mut dyn std::io::Write,
-    stderr: &mut dyn std::io::Write,
-) -> std::io::Result<()> {
-    match event {
-        loop_library::LoopScanProgress::Started { roots } => {
-            writeln!(stdout, "WAVループ走査を開始します: {roots} roots")?;
-            stdout.flush()
-        }
-        loop_library::LoopScanProgress::Analyzing {
-            current,
-            total,
-            path,
-        } => {
-            writeln!(stdout, "[{current}/{total}] WAVを解析: {}", path.display())?;
-            stdout.flush()
-        }
-        loop_library::LoopScanProgress::Visualizing { .. } => Ok(()),
-        loop_library::LoopScanProgress::Skipped { path, error } => {
-            writeln!(
-                stderr,
-                "警告: WAVをスキップしました: {}\n  {error}",
-                path.display()
-            )?;
-            stderr.flush()
-        }
-    }
-}
-
-fn write_scan_summary(
-    summary: loop_library::LoopScanSummary,
-    stdout: &mut dyn std::io::Write,
-) -> std::io::Result<()> {
-    writeln!(
-        stdout,
-        "ループキャッシュを更新しました: {} roots / {} indexed WAV / {} skipped WAV",
-        summary.roots, summary.wav_files, summary.skipped_wav_files
-    )?;
-    stdout.flush()
-}
-
-fn run_scan_loops(cfg: &config::Config) -> Result<()> {
-    let stdout = std::io::stdout();
-    let stderr = std::io::stderr();
-    let mut stdout = stdout.lock();
-    let mut stderr = stderr.lock();
-    let mut output_error = None;
-    let log_path = config::scan_loops_log_file_path()
-        .ok_or_else(|| anyhow::anyhow!("scan-loops logの保存先を取得できません"))?;
-    let mut progress_log =
-        scan_progress_log::ScanProgressLog::start(&log_path, std::time::Duration::from_secs(1))
-            .with_context(|| format!("scan-loops logを開始できません: {}", log_path.display()))?;
-    let scan_result = loop_library::scan_and_save_with_progress(&cfg.loop_dirs, |event| {
-        progress_log.observe(&event);
-        if output_error.is_none() {
-            output_error = write_scan_progress(&event, &mut stdout, &mut stderr).err();
-        }
-    });
-    let summary = match scan_result {
-        Ok(summary) => summary,
-        Err(error) => {
-            let _ = progress_log.fail(&error);
-            return Err(error);
-        }
-    };
-    if let Some(error) = output_error {
-        let _ = progress_log.fail(&error);
-        return Err(error).context("scan-loopsの進捗を出力できません");
-    }
-    if let Err(error) = write_scan_summary(summary, &mut stdout) {
-        let _ = progress_log.fail(&error);
-        return Err(error).context("scan-loopsの完了結果を出力できません");
-    }
-    progress_log
-        .finish(summary)
-        .context("scan-loops logを完了できません")?;
-    Ok(())
-}
-
 fn main() -> Result<()> {
     // loop browser のデータ層（別 crate）に app ディレクトリ解決を注入する。
     clap_mml_render_tui::loop_browser::set_app_dir_resolver(config::config_app_dir);
@@ -282,6 +207,9 @@ fn main() -> Result<()> {
     cmrt_notepad::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
     // grid sequencer 画面 crate にグローバルログ sink を注入する。
     cmrt_grid_sequencer::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
+    // DAW 画面 crate / MML 入力オーバーレイ crate にグローバルログ sink を注入する。
+    cmrt_daw::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
+    cmrt_mml_overlay::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
     // DAW 画面 crate に config.toml 編集関数を注入する（terminal suspend は app ポリシー）。
     cmrt_daw::set_config_editor(config_editor::edit_config_toml);
 
@@ -332,7 +260,7 @@ fn main() -> Result<()> {
     cmrt_core::remove_legacy_unnamespaced_caches();
 
     if matches!(&action, CliAction::ScanLoops) {
-        return run_scan_loops(&cfg);
+        return scan_loops::run_scan_loops(&cfg);
     }
 
     // plugin_path が未設定の場合は設定ファイルを編集するよう案内する
@@ -351,6 +279,8 @@ fn main() -> Result<()> {
         CliAction::Server(_) | CliAction::CliMml(_) => true,
         // 判定は play-server 側プロセスがプラグインをロードして行う。
         CliAction::BuildVoicingCache { .. } => false,
+        // config と patch 一覧だけを見る診断なので、プラグインはロードしない。
+        CliAction::PatchRoles => false,
         CliAction::Tui => cfg.offline_render_backend == config::OfflineRenderBackend::InProcess,
         CliAction::Help(_)
         | CliAction::Version(_)
@@ -400,6 +330,9 @@ fn main() -> Result<()> {
         }
         CliAction::BuildVoicingCache { force } => {
             return voicing_cache_builder::run_build_voicing_cache(&cfg, force);
+        }
+        CliAction::PatchRoles => {
+            return tui::patch_role_report::run_patch_role_report(&cfg);
         }
         CliAction::Tui => {}
         CliAction::Help(_)

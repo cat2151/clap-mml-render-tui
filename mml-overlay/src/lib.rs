@@ -27,10 +27,27 @@ pub use state::{MmlOverlay, MmlOverlayAction, MmlOverlayContext, PatchChange};
 pub(crate) const NOTE_ON: u8 = 0x90;
 pub(crate) const NOTE_OFF: u8 = 0x80;
 
+type LogSink = fn(&str);
+static LOG_SINK: std::sync::OnceLock<LogSink> = std::sync::OnceLock::new();
+
+/// app 起動時に、グローバルログ（`log/log.txt`）への書き込み関数を注入する。
+/// 未注入の場合、この crate のログは黙って捨てられる。
+///
+/// 直接ファイルへ書かないのは、書き先が実ユーザーの `log/log.txt` 固定で、
+/// 他 crate のテストからこの crate を通したときもそこへ追記してしまうため。
+pub fn set_log_sink(log: LogSink) {
+    let _ = LOG_SINK.set(log);
+}
+
 /// オーバーレイの調査ログ。1 行 1 事象で、キーと値を空白区切りで並べる。
 pub(crate) fn log_line(message: String) {
-    let _ = cmrt_tui_core::logging::append_log_line_to_file(&format!("mml-overlay: {message}"));
+    if let Some(sink) = LOG_SINK.get() {
+        sink(&format!("mml-overlay: {message}"));
+    }
 }
+
+#[cfg(test)]
+mod tests;
 
 /// このキーはどの画面からでも MML オーバーレイを開く。
 pub fn is_mml_overlay_trigger(key: KeyEvent) -> bool {

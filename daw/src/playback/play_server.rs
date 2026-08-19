@@ -47,7 +47,7 @@ impl DawApp {
                     measure_start,
                     measure_duration,
                 });
-                cmrt_tui_core::logging::append_log_line(
+                crate::append_log_line(
                     &log_lines,
                     format_playback_measure_resolution_log(
                         measure_index,
@@ -62,19 +62,19 @@ impl DawApp {
                     .unwrap_or_default();
                 if mml.trim().is_empty() {
                     let _ = play_server.stop();
-                    cmrt_tui_core::logging::append_log_line(
+                    crate::append_log_line(
                         &log_lines,
                         format!("meas{}: play-server empty", current_measure_index + 1),
                     );
                 } else {
                     match cmrt_core::mml_to_smf_bytes(mml).and_then(|smf| play_server.play_smf(smf))
                     {
-                        Ok(()) => cmrt_tui_core::logging::append_log_line(
+                        Ok(()) => crate::append_log_line(
                             &log_lines,
                             format!("meas{}: play-server", current_measure_index + 1),
                         ),
                         Err(_) => {
-                            cmrt_tui_core::logging::append_log_line(
+                            crate::append_log_line(
                                 &log_lines,
                                 format!("meas{}: play-server error", current_measure_index + 1),
                             );
@@ -100,7 +100,7 @@ impl DawApp {
                     next_effective_count,
                     next_ab_repeat_range,
                 );
-                cmrt_tui_core::logging::append_log_line(
+                crate::append_log_line(
                     &log_lines,
                     format_playback_measure_advance_log(
                         current_measure_index,
@@ -117,7 +117,7 @@ impl DawApp {
                 *state = DawPlayState::Idle;
                 drop(state);
                 *play_position.lock().unwrap() = None;
-                cmrt_tui_core::logging::append_log_line(&log_lines, "play: finished");
+                crate::append_log_line(&log_lines, "play: finished");
             }
         });
     }

@@ -29,6 +29,9 @@ mod grid_sequencer_glue;
 // 閉じている。ここは開閉のきっかけと MIDI 送信をつなぐだけ。
 pub(crate) use cmrt_mml_overlay as mml_overlay;
 mod mml_overlay_glue;
+// `cmrt patch-roles`（画面を起動せずに PATCH 欄の候補を数える診断）。voicing の解決を
+// TUI と同じ経路で行うため、画面ランタイム側に置いてある。
+pub mod patch_role_report;
 mod runtime;
 mod session;
 mod ui;

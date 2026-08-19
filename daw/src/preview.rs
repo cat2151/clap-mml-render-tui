@@ -95,10 +95,7 @@ impl DawApp {
             *play_state.lock().unwrap() = DawPlayState::Preview;
             session
         };
-        cmrt_tui_core::logging::append_log_line(
-            &log_lines,
-            format!("preview: meas{}", measure_index + 1),
-        );
+        crate::append_log_line(&log_lines, format!("preview: meas{}", measure_index + 1));
 
         std::thread::spawn(move || {
             let daw_cfg = (*cfg).clone();
@@ -106,7 +103,7 @@ impl DawApp {
             let offline_render_workers = daw_cfg.effective_offline_render_workers();
 
             let Some(rodio_sample_rate) = rodio::SampleRate::new(sample_rate) else {
-                cmrt_tui_core::logging::append_log_line(&log_lines, "preview: sample rate is zero");
+                crate::append_log_line(&log_lines, "preview: sample rate is zero");
                 let mut state = play_state.lock().unwrap();
                 if *state == DawPlayState::Preview
                     && preview_session.load(Ordering::Acquire) == session
@@ -120,7 +117,7 @@ impl DawApp {
             };
             // device sink を drop すると再生が止まるため、スレッドが終わるまで保持する。
             let Ok(device_sink) = cmrt_tui_core::audio_output::open_default_sink() else {
-                cmrt_tui_core::logging::append_log_line(&log_lines, "preview: audio init failed");
+                crate::append_log_line(&log_lines, "preview: audio init failed");
                 let mut state = play_state.lock().unwrap();
                 if *state == DawPlayState::Preview
                     && preview_session.load(Ordering::Acquire) == session
@@ -140,7 +137,7 @@ impl DawApp {
                 .get(&overlay_cache_key)
                 .cloned()
             {
-                cmrt_tui_core::logging::append_log_line(
+                crate::append_log_line(
                     &log_lines,
                     format!("meas{}: overlay cache hit", measure_index + 1),
                 );
@@ -153,7 +150,7 @@ impl DawApp {
                 &track_gains,
             ) {
                 if cached.cached_tracks.len() != active_tracks.len() {
-                    cmrt_tui_core::logging::append_log_line(
+                    crate::append_log_line(
                         &log_lines,
                         format!("meas{}: render", measure_index + 1),
                     );
@@ -176,7 +173,7 @@ impl DawApp {
                     )
                     .map(|samples| (Arc::new(samples), false))
                 } else {
-                    cmrt_tui_core::logging::append_log_line(
+                    crate::append_log_line(
                         &log_lines,
                         format!(
                             "meas{}: cache hit {}",
@@ -196,10 +193,7 @@ impl DawApp {
                     Some((Arc::new(cached.samples), false))
                 }
             } else {
-                cmrt_tui_core::logging::append_log_line(
-                    &log_lines,
-                    format!("meas{}: render", measure_index + 1),
-                );
+                crate::append_log_line(&log_lines, format!("meas{}: render", measure_index + 1));
                 render_mixed_preview_tracks(
                     &render_queue,
                     RenderPriority::High,
@@ -257,7 +251,7 @@ impl DawApp {
                     shared_sink.sleep_until_end();
                 }
             } else {
-                cmrt_tui_core::logging::append_log_line(
+                crate::append_log_line(
                     &log_lines,
                     format!("meas{}: render error", measure_index + 1),
                 );
@@ -270,7 +264,7 @@ impl DawApp {
                 drop(state);
                 preview_sink.lock().unwrap().take();
                 *play_position.lock().unwrap() = None;
-                cmrt_tui_core::logging::append_log_line(&log_lines, "preview: finished");
+                crate::append_log_line(&log_lines, "preview: finished");
             }
         });
     }

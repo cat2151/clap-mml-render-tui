@@ -38,10 +38,7 @@ impl DawApp {
             *play_state.lock().unwrap() = DawPlayState::Preview;
             session
         };
-        cmrt_tui_core::logging::append_log_line(
-            &log_lines,
-            format!("preview: meas{}", measure_index + 1),
-        );
+        crate::append_log_line(&log_lines, format!("preview: meas{}", measure_index + 1));
 
         std::thread::spawn(move || {
             let mml = active_tracks
@@ -54,7 +51,7 @@ impl DawApp {
             let result =
                 cmrt_core::mml_to_smf_bytes(&mml).and_then(|smf| play_server.play_smf(smf));
             if let Err(error) = result {
-                cmrt_tui_core::logging::append_log_line(
+                crate::append_log_line(
                     &log_lines,
                     format!("meas{}: play-server error: {}", measure_index + 1, error),
                 );
@@ -88,7 +85,7 @@ impl DawApp {
                 *state = DawPlayState::Idle;
                 drop(state);
                 *play_position.lock().unwrap() = None;
-                cmrt_tui_core::logging::append_log_line(&log_lines, "preview: finished");
+                crate::append_log_line(&log_lines, "preview: finished");
             }
         });
     }

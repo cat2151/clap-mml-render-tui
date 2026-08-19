@@ -159,10 +159,7 @@ where
         .collect();
 
     if active_tracks.is_empty() {
-        cmrt_tui_core::logging::append_log_line(
-            log_lines,
-            format!("meas{measure_number}: empty -> silence"),
-        );
+        crate::append_log_line(log_lines, format!("meas{measure_number}: empty -> silence"));
         return Ok(PlaybackMeasureAudio {
             samples: vec![0.0f32; measure_samples],
             source: PlaybackMeasureSource::Empty,
@@ -173,10 +170,7 @@ where
         try_get_cached_samples(cache, measure_number, measure_samples, tracks, track_gains)
     {
         if cached.cached_tracks.len() != active_tracks.len() {
-            cmrt_tui_core::logging::append_log_line(
-                log_lines,
-                format!("meas{measure_number}: render"),
-            );
+            crate::append_log_line(log_lines, format!("meas{measure_number}: render"));
             let mut mixed = vec![0.0f32; measure_samples];
             for track in active_tracks {
                 let gain = track_gains.get(track).copied().unwrap_or(1.0);
@@ -203,7 +197,7 @@ where
                 .collect::<Vec<_>>()
                 .join(", ")
         };
-        cmrt_tui_core::logging::append_log_line(
+        crate::append_log_line(
             log_lines,
             format!("meas{measure_number}: cache hit {cache_entries}"),
         );
@@ -215,7 +209,7 @@ where
         });
     }
 
-    cmrt_tui_core::logging::append_log_line(log_lines, format!("meas{measure_number}: render"));
+    crate::append_log_line(log_lines, format!("meas{measure_number}: render"));
     let mut mixed = vec![0.0f32; measure_samples];
     for track in active_tracks {
         let gain = track_gains.get(track).copied().unwrap_or(1.0);

@@ -308,8 +308,38 @@ impl DawApp {
     }
 
     fn append_log_line(&self, message: impl Into<String>) {
-        cmrt_tui_core::logging::append_log_line(&self.log_lines, message);
+        append_log_line(&self.log_lines, message);
     }
+}
+
+type LogSink = fn(&str);
+static LOG_SINK: OnceLock<LogSink> = OnceLock::new();
+
+/// app 起動時に、グローバルログ（`log/log.txt`）への書き込み関数を注入する。
+/// 未注入の場合、この crate のログはファイルへ残らない（画面下部の表示は変わらない）。
+///
+/// 直接ファイルへ書かないのは、書き先が実ユーザーの `log/log.txt` 固定で、
+/// テストからでもそこへ追記してしまうため。他の画面 crate と同じ注入の形にそろえてある。
+pub fn set_log_sink(log: LogSink) {
+    let _ = LOG_SINK.set(log);
+}
+
+/// 注入されたログ sink へ 1 行流す。画面表示用バッファを持たない場所（HTTP サーバー
+/// スレッドや、まだ `DawApp` が組み上がっていない初期化中）はこちらを使う。
+pub(crate) fn log_line(line: &str) {
+    if let Some(sink) = LOG_SINK.get() {
+        sink(line);
+    }
+}
+
+/// DAW のログ 1 行を、注入されたログ sink と画面表示用バッファの両方へ流す。
+pub(crate) fn append_log_line(
+    log_lines: &Arc<Mutex<VecDeque<String>>>,
+    message: impl Into<String>,
+) {
+    let line = message.into();
+    log_line(&line);
+    cmrt_tui_core::logging::append_log_line_in_memory(log_lines, line);
 }
 
 pub fn ensure_http_server_for_mode_switch() {

@@ -290,14 +290,14 @@ impl DawApp {
             (queued, completion_logs)
         };
         for (_, queued_log) in &queued {
-            cmrt_tui_core::logging::append_log_line(&ctx.log_lines, queued_log.clone());
+            crate::append_log_line(&ctx.log_lines, queued_log.clone());
         }
         for (next_job, _) in queued {
             Self::mark_cache_rendering_in(&ctx.cache, next_job.track, next_job.measure);
             let _ = ctx.cache_tx.send(next_job);
         }
         for completion_log in completion_logs {
-            cmrt_tui_core::logging::append_log_line(&ctx.log_lines, completion_log);
+            crate::append_log_line(&ctx.log_lines, completion_log);
         }
     }
 }

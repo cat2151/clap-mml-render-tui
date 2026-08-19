@@ -6,15 +6,14 @@
 use std::{ops::Range, time::Instant};
 
 use cmrt_realtime_play::PatchVoicing;
-use cmrt_surge_patches::{group_patch_pairs_by_category, matches_role, PatchCategory, PatchRole};
+use cmrt_surge_patches::{group_patch_pairs_by_category, PatchCategory};
 use cmrt_tui_core::random::random_index;
 use ratatui_textarea::TextArea;
 
 use crate::{
     patch_bag::PatchBag,
     patch_notice::{catalog_unavailable, PatchNotice, PatchUnavailable},
-    GridPatchLoad, GridSequencerContext, GridSequencerScreen, ListDirection, ARPEGGIO_ROW,
-    BASS_ROW, CHORD_ROW,
+    GridPatchLoad, GridSequencerContext, GridSequencerScreen, ListDirection, CHORD_ROW,
 };
 
 mod input;
@@ -216,25 +215,14 @@ impl GridSequencerScreen {
         // chord mode 中は行ごとに用途が決まっている。それ以外の行は Free（＝和音向きの
         // 音色を避ける）で引き、chord mode off なら全行が Free。
         // drum 行は chord mode の on/off に関わらず用途が決まっている。
-        let role = match self.state.drum_role(instance) {
-            Some(drum) => crate::patch_role::drum_patch_role(drum),
-            None => match instance {
-                CHORD_ROW if chord_on => PatchRole::Chord,
-                BASS_ROW if chord_on => PatchRole::Bass,
-                ARPEGGIO_ROW if chord_on => PatchRole::Arpeggio,
-                _ => PatchRole::Free,
-            },
-        };
-        let role_filter = ctx.role_filter(role);
-        let filter = role_filter.filter();
-        let voicing = ctx.poly_lookup();
+        let role =
+            crate::patch_role::row_patch_role(instance, chord_on, self.state.drum_role(instance));
         // 現在の patch も除外しない。袋の中身は「用途に合う音色の全体」で固定しておき、
         // 音色を替えるたびに候補が変わって袋が作り直されるのを避ける。
         let candidates = ctx
-            .patches()
-            .iter()
-            .filter(|(display, lower)| matches_role(display, lower, &filter, &voicing))
-            .map(|(display, _)| display.clone())
+            .role_candidates(role)
+            .into_iter()
+            .map(str::to_string)
             .collect::<Vec<_>>();
         // 用途か候補が変わったら、袋も辿った履歴も作り直す。
         if !matches!(self.patch_bags.get(&instance), Some(bag) if bag.matches(role, &candidates)) {

@@ -1,0 +1,255 @@
+//! `cmrt patch-roles`: grid sequencer の各行に patch の候補が出るかを、画面を起動せずに調べる。
+//!
+//! PATCH 欄の wheel が引く候補は「config の用途別カテゴリ」「patch 一覧」
+//! 「patch ごとの mono/poly 判定」の3つで決まる。プラグインを切り替えたときに
+//! どれか1つでも噛み合わないと wheel が無反応になるが、それを目視で確かめるには
+//! 画面を開いて全行の wheel を回すしかなかった。ここはその確認を機械化する。
+//!
+//! 候補の判定は [`cmrt_grid_sequencer::GridSequencerContext::role_candidates`]
+//! ＝ wheel 本体と同じ述語を通す。voicing の解決も TUI と同じ
+//! [`super::voicing::VoicingState`] を通すので、画面と食い違わない。
+
+use anyhow::Result;
+
+use super::grid_sequencer::{
+    row_patch_role, DrumRole, GridPatchLoad, GridSequencerContext, PatchRole, ARPEGGIO_ROW,
+    BASS_ROW, CHORD_ROW, FIRST_DRUM_ROW, FULL_DRUM_TRACK_COUNT,
+};
+use super::voicing::{VoicingPolicy, VoicingState};
+use crate::config::Config;
+
+/// 候補が0件の行が1つでもあれば `Err`。スクリプトから終了コードで判定できるようにするため。
+pub fn run_patch_role_report(cfg: &Config) -> Result<()> {
+    let pairs = crate::patches::collect_patch_pairs(cfg)?;
+    let policy = VoicingPolicy::from_config(cfg);
+    // TUI 起動時と同じ経路で voicing 判定を組む（Surge なら共有 JSON の取得を待つ）。
+    let source_refresh = crate::voicing_sources::VoicingSourceRefresh::spawn(cfg);
+    let layers = source_refresh.load_for_keyboard();
+    let voicing = VoicingState::new(
+        crate::history::load_voicing_cache(),
+        layers,
+        source_refresh,
+        policy,
+    );
+    let chord_catalog = cmrt_chord::ChordProgressionCatalog::default();
+    let ctx = GridSequencerContext {
+        patch_dirs_configured: crate::patches::has_configured_patch_dirs(cfg),
+        patch_load: GridPatchLoad::Ready(&pairs),
+        chord_catalog: &chord_catalog,
+        voicing: &voicing,
+        chord_patch_categories: &cfg.chord_patch_categories,
+        bass_patch_categories: &cfg.bass_patch_categories,
+        arpeggio_patch_categories: &cfg.arpeggio_patch_categories,
+        drum_patch_categories: &cfg.drum_patch_categories,
+        kick_patch_keywords: &cfg.kick_patch_keywords,
+        snare_patch_keywords: &cfg.snare_patch_keywords,
+        hihat_patch_keywords: &cfg.hihat_patch_keywords,
+        chord_source_updated: false,
+    };
+
+    print_plugin_section(cfg, policy);
+    print_patch_section(cfg, pairs.len());
+    print_filter_section(cfg);
+    print_role_section(&ctx);
+    let empty_rows = print_row_section(&ctx);
+
+    println!();
+    if pairs.is_empty() {
+        anyhow::bail!(
+            "patch が1件も読み込めていません。config.toml の patches_dirs（プロファイルを使う場合は [plugins.*] の patches_dirs）を確認してください。"
+        );
+    }
+    if !empty_rows.is_empty() {
+        anyhow::bail!(
+            "候補が0件の行があります: {}。この行では PATCH 欄の wheel が無反応になります。",
+            empty_rows.join(" / ")
+        );
+    }
+    println!("判定: すべての行に候補があります。PATCH 欄の wheel はどの行でも回ります。");
+    Ok(())
+}
+
+fn print_plugin_section(cfg: &Config, policy: VoicingPolicy) {
+    println!("[プラグイン]");
+    println!(
+        "  active_plugin : {}",
+        optional(cfg.active_plugin.as_deref())
+    );
+    println!("  plugin_path   : {}", optional_str(&cfg.plugin_path));
+    println!("  plugin_id     : {}", optional(cfg.plugin_id.as_deref()));
+    println!(
+        "  Surge XT か   : {}",
+        if cfg.is_surge_xt() {
+            "はい"
+        } else {
+            "いいえ"
+        }
+    );
+    println!("  voicing 判定  : {}", voicing_policy_label(policy));
+}
+
+fn print_patch_section(cfg: &Config, count: usize) {
+    println!();
+    println!("[patch 一覧]");
+    println!(
+        "  patches_dirs  : {}",
+        if crate::patches::has_configured_patch_dirs(cfg) {
+            "設定あり"
+        } else {
+            "未設定"
+        }
+    );
+    println!("  読み込み件数  : {count}");
+}
+
+fn print_filter_section(cfg: &Config) {
+    println!();
+    println!("[用途別カテゴリ / キーワード（[plugins.*] プロファイル適用後）]");
+    for (label, values) in [
+        ("chord_patch_categories   ", &cfg.chord_patch_categories),
+        ("bass_patch_categories    ", &cfg.bass_patch_categories),
+        ("arpeggio_patch_categories", &cfg.arpeggio_patch_categories),
+        ("drum_patch_categories    ", &cfg.drum_patch_categories),
+        ("kick_patch_keywords      ", &cfg.kick_patch_keywords),
+        ("snare_patch_keywords     ", &cfg.snare_patch_keywords),
+        ("hihat_patch_keywords     ", &cfg.hihat_patch_keywords),
+    ] {
+        println!("  {label} : {}", list_label(values));
+    }
+}
+
+/// 全 8 役割の候補数。行の割り当てが変わっても、行が取りうる用途はこの 8 つで尽きる。
+fn print_role_section(ctx: &GridSequencerContext<'_>) {
+    println!();
+    println!("[用途ごとの候補数]");
+    for role in ALL_ROLES {
+        let candidates = ctx.role_candidates(role);
+        println!(
+            "  {:<11} {:>6} 件  {}",
+            role_label(role),
+            candidates.len(),
+            sample_label(&candidates)
+        );
+    }
+}
+
+/// 行ごとの用途と候補数。候補が0件だった行のラベルを返す。
+///
+/// drum 行の割り当ては track 数だけで決まる（`state::drum` の `drum_role_for`）。
+/// ここは 4 role を過不足なく持つ [`FULL_DRUM_TRACK_COUNT`] の構成で表を出す。
+/// track 4（drum 行が1つだけ）のときは役割が抽選になるが、抽選先は 4 role の
+/// どれかなので、上の「用途ごとの候補数」で全て押さえてある。
+fn print_row_section(ctx: &GridSequencerContext<'_>) -> Vec<String> {
+    let mut empty = Vec::new();
+    for chord_on in [true, false] {
+        println!();
+        println!(
+            "[行ごとの用途（chord mode {} / track {FULL_DRUM_TRACK_COUNT}）]",
+            if chord_on { "ON" } else { "OFF" }
+        );
+        for row in 0..FULL_DRUM_TRACK_COUNT {
+            let drum = row
+                .checked_sub(FIRST_DRUM_ROW)
+                .and_then(|index| DrumRole::ALL.get(index))
+                .copied();
+            let role = row_patch_role(row, chord_on, drum);
+            let count = ctx.role_candidates(role).len();
+            println!(
+                "  行{row} {:<10} {:<11} {count:>6} 件",
+                row_label(row, chord_on, drum),
+                role_label(role)
+            );
+            if count == 0 {
+                empty.push(format!(
+                    "chord mode {} の行{row}（{}）",
+                    if chord_on { "ON" } else { "OFF" },
+                    role_label(role)
+                ));
+            }
+        }
+    }
+    empty
+}
+
+const ALL_ROLES: [PatchRole; 8] = [
+    PatchRole::Chord,
+    PatchRole::Bass,
+    PatchRole::Arpeggio,
+    PatchRole::Free,
+    PatchRole::Kick,
+    PatchRole::Snare,
+    PatchRole::HiHat,
+    PatchRole::Percussion,
+];
+
+fn role_label(role: PatchRole) -> &'static str {
+    match role {
+        PatchRole::Chord => "Chord",
+        PatchRole::Bass => "Bass",
+        PatchRole::Arpeggio => "Arpeggio",
+        PatchRole::Free => "Free",
+        PatchRole::Kick => "Kick",
+        PatchRole::Snare => "Snare",
+        PatchRole::HiHat => "HiHat",
+        PatchRole::Percussion => "Percussion",
+    }
+}
+
+fn row_label(row: usize, chord_on: bool, drum: Option<DrumRole>) -> String {
+    if let Some(drum) = drum {
+        return drum.label().to_string();
+    }
+    match row {
+        CHORD_ROW if chord_on => "CHORD".to_string(),
+        BASS_ROW if chord_on => "BASS".to_string(),
+        ARPEGGIO_ROW if chord_on => "ARP".to_string(),
+        _ => "-".to_string(),
+    }
+}
+
+fn voicing_policy_label(policy: VoicingPolicy) -> &'static str {
+    match policy {
+        VoicingPolicy::Sources => "Sources（共有 JSON / ユーザー判定 / override から引く）",
+        VoicingPolicy::AssumePoly => "AssumePoly（判定手段が無いので全 patch を poly とみなす）",
+    }
+}
+
+fn list_label(values: &[String]) -> String {
+    if values.is_empty() {
+        "(空 = 絞らない)".to_string()
+    } else {
+        values.join(", ")
+    }
+}
+
+fn sample_label(candidates: &[&str]) -> String {
+    if candidates.is_empty() {
+        return String::new();
+    }
+    let head = candidates
+        .iter()
+        .take(2)
+        .copied()
+        .collect::<Vec<_>>()
+        .join(" | ");
+    if candidates.len() > 2 {
+        format!("例: {head} ...")
+    } else {
+        format!("例: {head}")
+    }
+}
+
+fn optional(value: Option<&str>) -> String {
+    value.map_or_else(|| "(未設定)".to_string(), str::to_string)
+}
+
+fn optional_str(value: &str) -> &str {
+    if value.is_empty() {
+        "(未設定)"
+    } else {
+        value
+    }
+}
+
+#[cfg(test)]
+mod tests;
