@@ -1,31 +1,10 @@
 @echo off
 chcp 65001 > nul
-rem 兄弟 repo (..\clap-mml-play-server) をローカルパスで直接参照するビルドへ切り替える。
-rem cross-repo の変更を「両 repo を同時に書いて、push する前にローカルで検証」するためのもの。
-rem 生成する .cargo\config.toml は .gitignore 済み。絶対パスは書かない（相対パスのみ）。
-setlocal
-cd /d "%~dp0"
-
-set "SIBLING=..\clap-mml-play-server"
-if not exist "%SIBLING%\core-lib\Cargo.toml" (
-    echo [ERROR] 兄弟 repo が見つかりません: %SIBLING%
-    echo         この repo と clap-mml-play-server を同じ親ディレクトリへ並べて置いてください。
-    exit /b 1
+rem 兄弟 repo (..\clap-mml-play-server) の作業ツリーを直接参照するビルドへ切り替える。
+rem 実体は scripts\cross_repo_local.py。この .bat は Windows 用の入口。
+where /q python
+if errorlevel 1 (
+    py -3 "%~dp0scripts\cross_repo_local.py" on %*
+) else (
+    python "%~dp0scripts\cross_repo_local.py" on %*
 )
-if not exist "%SIBLING%\server-config\Cargo.toml" (
-    echo [ERROR] 兄弟 repo に server-config がありません: %SIBLING%
-    echo         clap-mml-play-server を最新へ更新してください。
-    exit /b 1
-)
-
-if not exist ".cargo" mkdir ".cargo"
-> ".cargo\config.toml" echo # cross_repo_local_on.bat が生成。commit しないこと（.gitignore 済み）。
->> ".cargo\config.toml" echo [patch."https://github.com/cat2151/clap-mml-play-server"]
->> ".cargo\config.toml" echo cmrt-core = { path = "../clap-mml-play-server/core-lib" }
->> ".cargo\config.toml" echo cmrt-server-config = { path = "../clap-mml-play-server/server-config" }
-
-echo ローカル横断ビルドを ON にしました。
-echo   clap-mml-play-server の cmrt-core を %SIBLING%\core-lib から解決します。
-echo   clap-mml-play-server の cmrt-server-config を %SIBLING%\server-config から解決します。
-echo 戻すときは cross_repo_local_off.bat を実行してください（Cargo.lock も戻します）。
-endlocal

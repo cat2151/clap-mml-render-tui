@@ -16,3 +16,7 @@ target
 # ローカル横断ビルド用に cross_repo_local_on.bat が生成する [patch] 設定。
 # 環境ごとの一時設定なので commit しない。
 .cargo/config.toml
+
+#
+__pycache__/
+*.pyc

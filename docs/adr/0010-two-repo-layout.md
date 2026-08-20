@@ -60,13 +60,38 @@ Adding cmrt-core          v0.1.0 (..\clap-mml-play-server\core-lib)
 Adding cmrt-server-config v0.1.0 (..\clap-mml-play-server\server-config)
 ```
 
+**ロジックの実体は `scripts/cross_repo_local.py`。`.bat` は Windows 用の入口でしかない。**
+`on` / `off` に加えて `cross_repo_local_status.bat` があり、**commit して安全でなければ
+非 0 で終了する**（後述の 3 つの壊れ方をすべて機械的に検出する）。
+`[patch]` へ書く crate の表は Python 側 `PATCHED_CRATES` の 1 か所だけ。
+
+### なぜ .bat ではなく Python か
+
+- **`cargo xtask` は採れない。** このツールの仕事は「ビルド設定を直すこと」なので、
+  ワークスペースがビルドできない状態で動かせなければ意味がない（鶏と卵）
+- 判定に `Cargo.lock` のパースと 2 repo の rev 比較が要る。`tomllib` と `git rev-parse` で
+  素直に書ける一方、cmd では書けない
+- `.bat` は CRLF 必須（後述）という壊れ方の温床がある。`.py` にはそれが無い
+
+## off が Cargo.lock を「戻して、さらに進める」理由
+
+`off` は `git checkout -- Cargo.lock` の**後に必ず `cargo update -p cmrt-core -p cmrt-server-config`
+を走らせる**。checkout だけで止めると、lock は「ローカルモードに入る前」の古い rev へ戻る。
+その rev には兄弟 repo で今まさに足した API が無いので、
+**ローカルモードでは通っていたコードが、OFF にした瞬間ビルド不能になる**。
+実際に 2026-08-20 の commit `fa2daca` はこれで壊れた lock（`a6fd74d` を指したまま）を含んでいた。
+AGENTS.md の「古い lock を放置せず最新 HEAD へ追従」はこの経路にも効く。
+
 ## 罠
 
 - **`cross_repo_local_off.bat` は `git checkout -- Cargo.lock` をする。** ローカルモード中に行った
   正当な `cargo update` の結果も、未 commit の lock 変更も巻き戻る。ローカルモード中の lock は
   `[patch]` で `source` 行が剥がれた別物なので「一部だけ残す」ことはできない。
-  **lock を触る作業とローカル横断モードを混ぜないこと**
+  **lock を触る作業とローカル横断モードを混ぜないこと**（どうしても残すなら `off --keep-lock`）
 - **ローカルモード ON 中の `Cargo.lock` は commit してはいけない**
+- **CI は main への直 push をビルドしない。** `call-rust-windows-cargo-check.yml` は
+  `pull_request: types: [closed]` でしか動かない。直 push で壊れた lock を入れると、
+  気づくのは翌朝の nightly workflow になる。**commit 前に `cross_repo_local_status.bat`**
 - **bat は CRLF 必須。** LF だと cmd がパースに失敗して全行がコマンド扱いになる
   （`'server"' is not recognized as an internal or external command`）。
   worktree を CRLF へ直しても `git diff` は差分なし扱いで、次に git が触ると LF へ戻るので、
