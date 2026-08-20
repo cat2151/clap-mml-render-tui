@@ -288,6 +288,11 @@ impl<'a> TuiApp<'a> {
                         }
                         continue;
                     }
+                    // play server が起動できない知らせは、どのキーでも閉じる。
+                    // 画面の操作を邪魔したままにしないため、閉じるキーはここで食う。
+                    if key.kind == KeyEventKind::Press && self.dismiss_play_server_notice() {
+                        continue;
+                    }
                     if key.kind == KeyEventKind::Press && self.try_open_screen_switch_menu(key) {
                         continue;
                     }

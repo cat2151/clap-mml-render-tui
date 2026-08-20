@@ -14,7 +14,7 @@ struct CapturedRequest {
     body: Vec<u8>,
 }
 
-fn cfg_for_port(port: u16) -> Config {
+pub(crate) fn cfg_for_port(port: u16) -> Config {
     Config {
         plugin_path: String::new(),
         input_midi: String::new(),
@@ -141,14 +141,6 @@ fn http_stop_remains_for_scheduled_playback() {
 }
 
 #[test]
-fn configured_server_command_description_is_explicit() {
-    let supervisor = RealtimePlayServerSupervisor::new(&cfg_for_port(62_154));
-    let (_, description) = supervisor.build_command();
-
-    assert_eq!(description, "source=config shell_command=\"exit 0\"");
-}
-
-#[test]
 fn live_instance_counts_normalize_and_cycle() {
     assert_eq!(normalize_live_instance_count(0), 16);
     assert_eq!(normalize_live_instance_count(5), 16);
@@ -175,20 +167,4 @@ fn each_track_takes_two_instances_for_double_buffering() {
     for tracks in SUPPORTED_LIVE_INSTANCE_COUNTS {
         assert!(SUPPORTED_SERVER_INSTANCE_COUNTS.contains(&server_instance_count(tracks)));
     }
-}
-
-#[test]
-fn supervisor_keeps_requested_live_instance_count() {
-    let supervisor =
-        RealtimePlayServerSupervisor::with_live_instance_count(&cfg_for_port(62_154), 4);
-    assert_eq!(supervisor.live_instance_count(), 4);
-    let (command, _) = supervisor.build_command();
-    assert_eq!(
-        command
-            .get_envs()
-            .find(|(name, _)| *name == LIVE_INSTANCE_COUNT_ENV)
-            .and_then(|(_, value)| value)
-            .and_then(std::ffi::OsStr::to_str),
-        Some("4")
-    );
 }

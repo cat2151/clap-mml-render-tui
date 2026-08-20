@@ -191,7 +191,7 @@ impl<'a> TuiApp<'a> {
             cfg.sample_rate,
         ));
         let keyboard_midi_sender = Some(super::keyboard::KeyboardMidiSender::new(
-            play_server,
+            Arc::clone(&play_server),
             keyboard_state.buffer_multiplier(),
         ));
         let restore_keyboard = active_screen == crate::screen_switch::PrimaryScreen::Keyboard;
@@ -275,6 +275,8 @@ impl<'a> TuiApp<'a> {
             patch_plugins: cmrt_tui_core::patch_plugins::PatchPlugins::from_config(cfg),
             patch_load_state,
             playback_session,
+            play_server,
+            dismissed_play_server_failure: None,
         }
     }
 

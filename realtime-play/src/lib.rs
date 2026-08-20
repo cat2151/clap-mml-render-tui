@@ -1,20 +1,18 @@
 //! realtime play server（外部プロセス）の監督と、そこへの MIDI / MML 送信。
 //!
 //! notepad 再生・DAW・keyboard 画面が共有する再生インフラ。`RealtimePlayServerSupervisor`
-//! がサーバープロセスの起動・再起動・HTTP リクエストを担い、`fast_midi_ipc` が
-//! Windows の共有メモリ経由の低レイテンシ MIDI 送信を担う。
+//! が HTTP リクエストを、[`supervisor_process`] がそのサーバープロセスの生存管理を担い、
+//! `fast_midi_ipc` が Windows の共有メモリ経由の低レイテンシ MIDI 送信を担う。
 
 use std::{
-    net::{SocketAddr, TcpStream},
-    process::{Child, Command},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc, Mutex,
     },
-    time::{Duration, Instant},
+    time::Duration,
 };
 
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{anyhow, Result};
 
 use cmrt_runtime::Config;
 
@@ -22,6 +20,8 @@ pub mod fast_midi_ipc;
 mod live_ipc;
 mod logging;
 mod process;
+mod startup_failure;
+mod supervisor_process;
 
 pub use logging::set_log_sink;
 
@@ -32,8 +32,9 @@ pub use fast_midi_ipc::{
     TimelineMidiEvent, TimingMetrics, INSTANCE_COUNT, MAX_MIDI_MESSAGES,
 };
 pub use live_ipc::{PatchVoicing, VoicingReport};
+pub use startup_failure::ServerStartupFailure;
 
-use process::{build_realtime_play_server_command, spawn_realtime_play_server, stop_child};
+use supervisor_process::PlayServerState;
 
 /// UI が見せるトラック数の既定値。サーバーが生成する instance 数はこの 2 倍になる。
 pub const DEFAULT_LIVE_INSTANCE_COUNT: usize = INSTANCE_COUNT / BANK_COUNT;
@@ -74,9 +75,6 @@ const PLAY_SERVER_PLAY_MML_PATH: &str = "/play-mml";
 const PLAY_SERVER_STOP_PATH: &str = "/stop";
 const PLAY_CONTENT_TYPE_MIDI: &str = "audio/midi";
 const PLAY_CONTENT_TYPE_MML: &str = "text/plain; charset=utf-8";
-const PLAY_SERVER_CONNECT_TIMEOUT: Duration = Duration::from_millis(150);
-const PLAY_SERVER_START_TIMEOUT: Duration = Duration::from_secs(30);
-const PLAY_SERVER_START_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 pub struct RealtimePlayServerSupervisor {
     port: u16,
@@ -88,18 +86,15 @@ pub struct RealtimePlayServerSupervisor {
     live_buffer_multiplier: Mutex<u16>,
     startup_progress: Arc<Mutex<Option<RealtimePlayServerStartupProgress>>>,
     next_request_id: AtomicU64,
+    /// 直近に server が落ちた理由。`state` とは別の錠にしてあるのは、
+    /// UI（描画スレッド）が spawn 待ちにブロックされずに読めるようにするため。
+    last_startup_failure: Mutex<Option<ServerStartupFailure>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RealtimePlayServerStartupProgress {
     pub initialized_instances: usize,
     pub total_instances: usize,
-}
-
-#[derive(Default)]
-struct PlayServerState {
-    child: Option<Child>,
-    generation: u64,
 }
 
 enum PlayRequestError {
@@ -139,6 +134,7 @@ impl RealtimePlayServerSupervisor {
             live_buffer_multiplier: Mutex::new(4),
             startup_progress: Arc::new(Mutex::new(None)),
             next_request_id: AtomicU64::new(1),
+            last_startup_failure: Mutex::new(None),
         }
     }
 
@@ -226,34 +222,6 @@ impl RealtimePlayServerSupervisor {
         }
     }
 
-    fn running_server_generation(&self) -> Result<Option<u64>> {
-        let mut state = self.state.lock().unwrap();
-        self.drop_exited_child_locked(&mut state)?;
-        if self.port_accepts_connections() {
-            return Ok(Some(state.generation));
-        }
-        if state.child.is_none() {
-            return Ok(None);
-        }
-        self.wait_for_port_locked(&mut state).map(Some)
-    }
-
-    fn ensure_started(&self) -> Result<u64> {
-        let mut state = self.state.lock().unwrap();
-        self.drop_exited_child_locked(&mut state)?;
-        if self.port_accepts_connections() {
-            return Ok(state.generation);
-        }
-        if state.child.is_none() {
-            self.spawn_child_locked(&mut state)?;
-        }
-        self.wait_for_port_locked(&mut state)
-    }
-
-    pub fn ensure_started_for_fast_midi(&self) -> Result<()> {
-        self.ensure_started().map(|_| ())
-    }
-
     pub fn port(&self) -> u16 {
         self.port
     }
@@ -264,74 +232,6 @@ impl RealtimePlayServerSupervisor {
 
     pub fn startup_progress(&self) -> Option<RealtimePlayServerStartupProgress> {
         *self.startup_progress.lock().unwrap()
-    }
-
-    fn recover_after_transport_failure(&self, failed_generation: u64) -> Result<u64> {
-        let mut state = self.state.lock().unwrap();
-        self.drop_exited_child_locked(&mut state)?;
-
-        if state.generation == failed_generation {
-            self.restart_locked(&mut state)?;
-        } else if state.child.is_none() && !self.port_accepts_connections() {
-            self.spawn_child_locked(&mut state)?;
-        }
-
-        self.wait_for_port_locked(&mut state)
-    }
-
-    fn restart_locked(&self, state: &mut PlayServerState) -> Result<()> {
-        stop_child(state.child.take());
-        self.bump_generation_locked(state);
-        self.spawn_child_locked(state)
-    }
-
-    fn spawn_child_locked(&self, state: &mut PlayServerState) -> Result<()> {
-        state.child = Some(self.spawn_child()?);
-        self.bump_generation_locked(state);
-        Ok(())
-    }
-
-    fn bump_generation_locked(&self, state: &mut PlayServerState) {
-        state.generation = state.generation.wrapping_add(1);
-        if state.generation == 0 {
-            state.generation = 1;
-        }
-    }
-
-    fn wait_for_port_locked(&self, state: &mut PlayServerState) -> Result<u64> {
-        let deadline = Instant::now() + PLAY_SERVER_START_TIMEOUT;
-        loop {
-            self.drop_exited_child_locked(state)?;
-            if self.port_accepts_connections() {
-                return Ok(state.generation);
-            }
-            if state.child.is_none() {
-                self.spawn_child_locked(state)?;
-            }
-            if Instant::now() >= deadline {
-                anyhow::bail!(
-                    "realtime play server did not start listening on 127.0.0.1:{} within {:?}",
-                    self.port,
-                    PLAY_SERVER_START_TIMEOUT
-                );
-            }
-            std::thread::sleep(PLAY_SERVER_START_POLL_INTERVAL);
-        }
-    }
-
-    fn drop_exited_child_locked(&self, state: &mut PlayServerState) -> Result<()> {
-        let Some(child) = state.child.as_mut() else {
-            return Ok(());
-        };
-        if child
-            .try_wait()
-            .with_context(|| "realtime play server child status check failed")?
-            .is_some()
-        {
-            state.child = None;
-            self.bump_generation_locked(state);
-        }
-        Ok(())
     }
 
     fn send_play_once(&self, smf_bytes: &[u8]) -> std::result::Result<(), PlayRequestError> {
@@ -381,34 +281,6 @@ impl RealtimePlayServerSupervisor {
             Err(error) => Err(PlayRequestError::Transport(error.to_string())),
         }
     }
-
-    fn port_accepts_connections(&self) -> bool {
-        TcpStream::connect_timeout(&self.socket_addr(), PLAY_SERVER_CONNECT_TIMEOUT).is_ok()
-    }
-
-    fn socket_addr(&self) -> SocketAddr {
-        SocketAddr::from(([127, 0, 0, 1], self.port))
-    }
-
-    fn spawn_child(&self) -> Result<Child> {
-        let (command, launch_description) = self.build_command();
-        spawn_realtime_play_server(
-            command,
-            &launch_description,
-            self.port,
-            self.live_instance_count,
-            Arc::clone(&self.startup_progress),
-        )
-    }
-
-    fn build_command(&self) -> (Command, String) {
-        let (mut command, description) = build_realtime_play_server_command(&self.command);
-        command.env(
-            LIVE_INSTANCE_COUNT_ENV,
-            self.live_instance_count.to_string(),
-        );
-        (command, description)
-    }
 }
 
 pub fn normalize_live_instance_count(count: usize) -> usize {
@@ -426,14 +298,6 @@ pub fn next_live_instance_count(current: usize) -> usize {
         .position(|count| *count == current)
         .expect("normalized live instance count is supported");
     SUPPORTED_LIVE_INSTANCE_COUNTS[(index + 1) % SUPPORTED_LIVE_INSTANCE_COUNTS.len()]
-}
-
-impl Drop for RealtimePlayServerSupervisor {
-    fn drop(&mut self) {
-        if let Ok(mut state) = self.state.lock() {
-            stop_child(state.child.take());
-        }
-    }
 }
 
 fn response_body(response: &mut ureq::http::Response<ureq::Body>) -> String {

@@ -79,5 +79,6 @@ mod keyboard_screen;
 mod loop_browser;
 mod loop_browser_used_wavs;
 mod loop_browser_waveform;
+mod play_server_notice;
 mod render_contract;
 mod screen_switch;

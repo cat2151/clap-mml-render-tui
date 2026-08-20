@@ -32,6 +32,8 @@ mod mml_overlay_glue;
 // `cmrt patch-roles`（画面を起動せずに PATCH 欄の候補を数える診断）。voicing の解決を
 // TUI と同じ経路で行うため、画面ランタイム側に置いてある。
 pub mod patch_role_report;
+// play server が起動できないことを画面へ出す知らせ。
+mod play_server_notice;
 mod runtime;
 mod session;
 mod ui;
@@ -107,6 +109,11 @@ pub struct TuiApp<'a> {
     patch_load_state: Arc<Mutex<PatchLoadState>>,
     /// 再生セッションの世代管理。notepad・keyboard・loop browser で共有する。
     pub(in crate::tui) playback_session: PlaybackSession,
+    /// 各画面が共有する play server の監督。ここが持つのは
+    /// 「起動できていないことを画面に出す」ためだけ（送信は各 sender が持つ）。
+    play_server: Arc<cmrt_realtime_play::RealtimePlayServerSupervisor>,
+    /// ユーザーが閉じた知らせ。同じ理由で出し直さないために覚えておく。
+    dismissed_play_server_failure: Option<cmrt_realtime_play::ServerStartupFailure>,
 }
 
 impl<'a> TuiApp<'a> {

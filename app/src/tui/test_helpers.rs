@@ -5,6 +5,8 @@ impl TuiApp<'static> {
         // loop browser データ層（別 crate）へ、テストでも app ディレクトリ解決を注入する。
         crate::loop_browser::set_app_dir_resolver(crate::config::config_app_dir);
         let notepad = NotepadScreen::new_for_test(cfg.clone());
+        // テストでは spawn しない。監督を作るだけではプロセスは立ち上がらない。
+        let play_server = Arc::new(cmrt_realtime_play::RealtimePlayServerSupervisor::new(&cfg));
         let patch_plugins = cmrt_tui_core::patch_plugins::PatchPlugins::from_config(&cfg);
         let voicing_policies = voicing::VoicingPolicies::from_config(&cfg);
         Self {
@@ -35,6 +37,8 @@ impl TuiApp<'static> {
                 crate::chord_progression_source::ChordProgressionSource::disabled(),
             chord_catalog: ChordProgressionCatalog::default(),
             patch_plugins,
+            play_server,
+            dismissed_play_server_failure: None,
         }
     }
 }

@@ -44,6 +44,10 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     if app.mml_overlay.is_open() {
         cmrt_mml_overlay::ui::draw(&app.mml_overlay, f);
     }
+    // 音が鳴らない理由なので、どの画面・どのオーバーレイよりも前に出す。
+    if let Some(failure) = app.play_server_notice() {
+        super::play_server_notice::draw(f, &failure);
+    }
 }
 
 #[cfg(test)]

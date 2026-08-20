@@ -8,8 +8,19 @@ use anyhow::{anyhow, Result};
 
 use super::{
     logging::{log_realtime_play_event, truncate_for_log},
+    startup_failure::StderrCapture,
     RealtimePlayServerStartupProgress,
 };
+
+/// 起動しようとしたコマンドと、その素性。
+///
+/// `description` はログ 1 行ぶんの key=value 列で、`exe` は「どの実体を掴んだか」だけを
+/// 取り出したもの。落ちたときのエラー文と UI は後者だけを使う。
+pub(super) struct ServerLaunch {
+    pub(super) command: Command,
+    pub(super) description: String,
+    pub(super) exe: String,
+}
 
 const STARTUP_PROGRESS_PREFIX: &str = "cmrt-server-startup: instances=";
 
@@ -74,28 +85,36 @@ pub(super) fn default_realtime_play_server_executable_name() -> &'static str {
     }
 }
 
-pub(super) fn build_realtime_play_server_command(configured: &str) -> (Command, String) {
+pub(super) fn build_realtime_play_server_command(configured: &str) -> ServerLaunch {
     let trimmed = configured.trim();
     if !trimmed.is_empty() {
-        return (
-            shell_command(trimmed),
-            format!("source=config shell_command={trimmed:?}"),
-        );
+        return ServerLaunch {
+            command: shell_command(trimmed),
+            description: format!("source=config shell_command={trimmed:?}"),
+            exe: trimmed.to_owned(),
+        };
     }
 
     if let Some(path) = sibling_realtime_play_server_path() {
-        let description = format!("source=sibling fullpath=\"{}\"", path.display());
-        return (Command::new(path), description);
+        return ServerLaunch {
+            command: Command::new(&path),
+            description: format!("source=sibling fullpath=\"{}\"", path.display()),
+            exe: path.display().to_string(),
+        };
     }
     if let Some(path) = path_realtime_play_server_path() {
-        let description = format!("source=PATH fullpath=\"{}\"", path.display());
-        return (Command::new(path), description);
+        return ServerLaunch {
+            command: Command::new(&path),
+            description: format!("source=PATH fullpath=\"{}\"", path.display()),
+            exe: path.display().to_string(),
+        };
     }
     let executable = default_realtime_play_server_executable_name();
-    (
-        Command::new(executable),
-        format!("source=unresolved-PATH executable={executable:?}"),
-    )
+    ServerLaunch {
+        command: Command::new(executable),
+        description: format!("source=unresolved-PATH executable={executable:?}"),
+        exe: executable.to_owned(),
+    }
 }
 
 pub(super) fn spawn_realtime_play_server(
@@ -104,6 +123,7 @@ pub(super) fn spawn_realtime_play_server(
     port: u16,
     live_instance_count: usize,
     startup_progress: Arc<Mutex<Option<RealtimePlayServerStartupProgress>>>,
+    stderr_capture: StderrCapture,
 ) -> Result<Child> {
     *startup_progress.lock().unwrap() = Some(RealtimePlayServerStartupProgress {
         initialized_instances: 0,
@@ -122,6 +142,7 @@ pub(super) fn spawn_realtime_play_server(
     let pid = child.id();
     if let Some(stderr) = child.stderr.take() {
         let thread_progress = Arc::clone(&startup_progress);
+        let thread_capture = stderr_capture.clone();
         let thread_result = std::thread::Builder::new()
             .name("realtime-play-server-stderr".to_string())
             .spawn(move || {
@@ -141,6 +162,8 @@ pub(super) fn spawn_realtime_play_server(
                                 "action=server-stderr pid={pid} line=\"{}\"",
                                 truncate_for_log(&line, 1_000)
                             ));
+                            // 落ちたときに「なぜ」を言えるよう、末尾だけ手元に残す。
+                            thread_capture.push(truncate_for_log(&line, 1_000));
                         }
                         Err(error) => {
                             log_realtime_play_event(format!(
@@ -150,12 +173,17 @@ pub(super) fn spawn_realtime_play_server(
                         }
                     }
                 }
+                thread_capture.mark_finished();
             });
         if let Err(error) = thread_result {
             log_realtime_play_event(format!(
                 "action=server-stderr-reader-start-error pid={pid} error={error:?}"
             ));
+            // 読み手が居ない以上、待っても stderr は 1 行も増えない。
+            stderr_capture.mark_finished();
         }
+    } else {
+        stderr_capture.mark_finished();
     }
     log_realtime_play_event(format!(
         "action=server-spawned port={port} pid={pid} {launch_description}"
