@@ -177,13 +177,14 @@ patches_dirs = ['D:\my\patches']
 | `plugins.<名前>.plugin_path` | そのプラグインのパスです。 |
 | `plugins.<名前>.plugin_id` | 期待する CLAP plugin ID です。省略できます。 |
 | `plugins.<名前>.patches_dirs` | そのプラグインの音色置き場です。組み込みの値を消したいときは `patches_dirs = []` と書きます。 |
-| `plugins.<名前>.<用途>_patch_categories` / `<役>_patch_keywords` | 用途別 patch 自動選択の絞り込みです。トップレベルと同じ 7 つのキー名（`chord_patch_categories` / `bass_patch_categories` / `arpeggio_patch_categories` / `drum_patch_categories` / `kick_patch_keywords` / `snare_patch_keywords` / `hihat_patch_keywords`）をそのまま書けます。書いた項目だけがそのプラグインのときに効きます。 |
+| `plugins.<名前>.<用途>_patch_categories` / `<役>_patch_keywords` | 用途別 patch 自動選択の絞り込みです。7 つのキー名（`chord_patch_categories` / `bass_patch_categories` / `arpeggio_patch_categories` / `drum_patch_categories` / `kick_patch_keywords` / `snare_patch_keywords` / `hihat_patch_keywords`）を書けます。書いた項目だけがそのプラグインのときに効きます。書かなければそのプラグインの既定値（Surge XT はカテゴリ名、それ以外は「絞らない」）が使われます。 |
 
 - `active_plugin` を書くと、トップレベルの `plugin_path` / `patches_dirs` は使われません（エラーにはならず、プロファイルが優先されます）。用途別カテゴリも、プロファイル側に書いてある項目（組み込み Dexed の 7 項目を含む）はプロファイルが優先されます。
 - `active_plugin` の名前が組み込みにも `[plugins.*]` にも無い場合はエラーで起動しません。使える名前が両方とも表示されます。
 - Dexed の音色は「cartridge の `.syx` 1個 = 32 program」なので、一覧では cartridge をディレクトリに見立てて `SynprezFM/SynprezFM_01.syx/00 Say Again.` のように 1 program ずつ並びます（番号は 0 始まりの2桁）。`patches_dirs` に cartridge の置き場を指定すれば、Surge の `.fxp` と同じように選べます。
 - Dexed の mono/poly は音色ではなくインスタンスの設定（`MonoMode`）で、その既定値は POLY です。そのため grid sequencer の和音行では Dexed の音色をすべて和音向きとして扱います。
-- 行の用途（chord / bass / arpeggio / drum）で候補を絞るカテゴリ設定は Surge のカテゴリ名が既定値です。Dexed の cartridge は「ディレクトリ名＝用途」ではないので、組み込みの Dexed プロファイルはこの絞り込みを全て空にしてあります（＝どの行も全 program が候補）。cartridge の置き場のディレクトリ名で絞りたいときは、`[plugins.Dexed]` にカテゴリを書いてください。
+- 行の用途（chord / bass / arpeggio / drum）で候補を絞るカテゴリ設定の既定値は、**プラグインごとに違います**。Surge XT は Surge のカテゴリ名、Dexed と組み込みに無いプラグインは「絞らない」（＝どの行も全 program が候補）です。Dexed の cartridge は「ディレクトリ名＝用途」ではないためで、組み込みに無いプラグインも音色置き場の体系が分からないので絞りません。変えたいときは `[plugins.<名前>]` に 7 項目を書いてください（生成される config.toml の末尾に、Surge XT の既定値をコメントで載せてあります）。
+- 7 項目はトップレベルにも書けますが、**効くのは既定プラグイン（音色を無指定にした行が鳴るもの）に対してだけ**です。`active_plugin` が無かった時代の書き方で、新しく生成する config.toml はトップレベルへ書きません。すでにトップレベルに書いてある config はそのまま動きます。
 - 用途別の自動選択に使う mono/poly の共有判定データ（`voicing_shared_source` / `voicing_override_source`）は Surge XT 専用です。Surge XT 以外を使っているときは取得しません。
 - レンダリング結果のキャッシュはプラグインごとに別ディレクトリへ置くので、切り替えても前のプラグインの音は鳴りません（手で消す必要はありません）。置き場は次の2つで、`<プラグイン>` は `plugin_path` のファイル名（拡張子なし）です（Windows の場合）。
   - `%LOCALAPPDATA%\clap-mml-render-tui\notepad_cache\<プラグイン>\*.wav`（notepad / MML入力overlay のキャッシュ）

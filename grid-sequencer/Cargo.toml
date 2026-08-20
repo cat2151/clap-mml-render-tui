@@ -8,7 +8,7 @@ cmrt-arpeggiator = { path = "../arpeggiator" }
 cmrt-chord = { path = "../chord" }
 cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-rhythm = { path = "../rhythm" }
-cmrt-surge-patches = { path = "../surge-patches" }
+cmrt-patches = { path = "../patches" }
 cmrt-tui-core = { path = "../tui-core" }
 anyhow = "1"
 crossterm = "0.29"

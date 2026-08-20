@@ -15,6 +15,7 @@ pub mod mixer;
 pub mod mixer_overlay;
 pub mod navigation;
 pub mod patch_load;
+pub mod patch_plugins;
 pub mod patches;
 pub mod play_state;
 pub mod playback_session;

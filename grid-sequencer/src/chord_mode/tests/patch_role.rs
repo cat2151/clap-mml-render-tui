@@ -6,14 +6,14 @@ use super::*;
 fn the_chord_patch_is_limited_to_the_configured_categories() {
     let catalog = catalog();
     let patches = categorized_patches();
-    let categories = ["Keys".to_string(), "Organs".to_string()];
-    let ctx = ctx_with_categories(&patches, &catalog, &AllPoly, &categories);
+    let plugins = chord_category_plugins(&["Keys", "Organs"]);
+    let ctx = ctx_with_plugins(&patches, &catalog, &AllPoly, &plugins);
 
     // 抽選なので、何回引いても対象カテゴリから出ないことを確かめる。
     for _ in 0..40 {
         let picked = pick_for_role(
             ctx.patches(),
-            &ctx.role_filter(PatchRole::Chord).filter(),
+            &ctx.role_filters(PatchRole::Chord),
             &ctx.poly_lookup(),
         )
         .expect("Keys / Organs は候補にある");
@@ -28,14 +28,14 @@ fn the_chord_patch_is_limited_to_the_configured_categories() {
 fn an_empty_category_list_means_no_category_filter() {
     let catalog = catalog();
     let patches = categorized_patches();
-    let ctx = ctx_with_categories(&patches, &catalog, &AllPoly, &[]);
+    let ctx = ctx_with_plugins(&patches, &catalog, &AllPoly, unfiltered_plugins());
 
     let mut seen = std::collections::HashSet::new();
     for _ in 0..200 {
         seen.insert(
             pick_for_role(
                 ctx.patches(),
-                &ctx.role_filter(PatchRole::Chord).filter(),
+                &ctx.role_filters(PatchRole::Chord),
                 &ctx.poly_lookup(),
             )
             .unwrap(),
@@ -48,8 +48,8 @@ fn an_empty_category_list_means_no_category_filter() {
 fn a_category_with_no_poly_patch_yields_nothing() {
     let catalog = catalog();
     let patches = categorized_patches();
-    let categories = ["Basses".to_string()];
-    let ctx = ctx_with_categories(&patches, &catalog, &AllPoly, &categories);
+    let plugins = chord_category_plugins(&["Basses"]);
+    let ctx = ctx_with_plugins(&patches, &catalog, &AllPoly, &plugins);
     let mut screen = screen();
     screen.start(Instant::now(), &ctx);
 
@@ -65,9 +65,12 @@ fn the_bass_row_gets_a_patch_from_the_bass_categories() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let bass_categories = vec!["Leads".to_string()];
+    let plugins = plugins_with(PatchRoles {
+        bass_patch_categories: vec!["Leads".to_string()],
+        ..PatchRoles::default()
+    });
     let mut ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
-    ctx.bass_patch_categories = &bass_categories;
+    ctx.patch_plugins = &plugins;
     let mut screen = screen();
     screen.start(now, &ctx);
 
@@ -93,9 +96,12 @@ fn the_arpeggio_row_gets_a_patch_from_the_arpeggio_categories() {
             "percussion/kick.fxp".to_string(),
         ),
     ];
-    let arpeggio_categories = vec!["Leads".to_string()];
+    let plugins = plugins_with(PatchRoles {
+        arpeggio_patch_categories: vec!["Leads".to_string()],
+        ..PatchRoles::default()
+    });
     let mut ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
-    ctx.arpeggio_patch_categories = &arpeggio_categories;
+    ctx.patch_plugins = &plugins;
     let mut screen = screen();
     screen.start(now, &ctx);
 
@@ -120,13 +126,14 @@ fn the_staged_cycle_reassigns_the_dedicated_rows_from_their_categories() {
         ("Leads/Mono.fxp".to_string(), "leads/mono.fxp".to_string()),
         ("Basses/Sub.fxp".to_string(), "basses/sub.fxp".to_string()),
     ];
-    let chord_categories = vec!["Keys".to_string()];
-    let bass_categories = vec!["Basses".to_string()];
-    let arpeggio_categories = vec!["Leads".to_string()];
+    let plugins = plugins_with(PatchRoles {
+        chord_patch_categories: vec!["Keys".to_string()],
+        bass_patch_categories: vec!["Basses".to_string()],
+        arpeggio_patch_categories: vec!["Leads".to_string()],
+        ..PatchRoles::default()
+    });
     let mut ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
-    ctx.chord_patch_categories = &chord_categories;
-    ctx.bass_patch_categories = &bass_categories;
-    ctx.arpeggio_patch_categories = &arpeggio_categories;
+    ctx.patch_plugins = &plugins;
     let mut screen = screen();
     screen.start(now, &ctx);
     screen.handle_key(press_c(), now, &ctx);

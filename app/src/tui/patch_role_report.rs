@@ -15,13 +15,14 @@ use super::grid_sequencer::{
     row_patch_role, DrumRole, GridPatchLoad, GridSequencerContext, PatchRole, ARPEGGIO_ROW,
     BASS_ROW, CHORD_ROW, FIRST_DRUM_ROW, FULL_DRUM_TRACK_COUNT,
 };
-use super::voicing::{VoicingPolicy, VoicingState};
+use super::voicing::{VoicingPolicies, VoicingState};
 use crate::config::Config;
+use cmrt_tui_core::patch_plugins::{CatalogPlugin, PatchPlugins};
 
 /// 候補が0件の行が1つでもあれば `Err`。スクリプトから終了コードで判定できるようにするため。
 pub fn run_patch_role_report(cfg: &Config) -> Result<()> {
     let pairs = crate::patches::collect_patch_pairs(cfg)?;
-    let policy = VoicingPolicy::from_config(cfg);
+    let patch_plugins = PatchPlugins::from_config(cfg);
     // TUI 起動時と同じ経路で voicing 判定を組む（Surge なら共有 JSON の取得を待つ）。
     let source_refresh = crate::voicing_sources::VoicingSourceRefresh::spawn(cfg);
     let layers = source_refresh.load_for_keyboard();
@@ -29,7 +30,7 @@ pub fn run_patch_role_report(cfg: &Config) -> Result<()> {
         crate::history::load_voicing_cache(),
         layers,
         source_refresh,
-        policy,
+        VoicingPolicies::from_config(cfg),
     );
     let chord_catalog = cmrt_chord::ChordProgressionCatalog::default();
     let ctx = GridSequencerContext {
@@ -37,19 +38,13 @@ pub fn run_patch_role_report(cfg: &Config) -> Result<()> {
         patch_load: GridPatchLoad::Ready(&pairs),
         chord_catalog: &chord_catalog,
         voicing: &voicing,
-        chord_patch_categories: &cfg.chord_patch_categories,
-        bass_patch_categories: &cfg.bass_patch_categories,
-        arpeggio_patch_categories: &cfg.arpeggio_patch_categories,
-        drum_patch_categories: &cfg.drum_patch_categories,
-        kick_patch_keywords: &cfg.kick_patch_keywords,
-        snare_patch_keywords: &cfg.snare_patch_keywords,
-        hihat_patch_keywords: &cfg.hihat_patch_keywords,
+        patch_plugins: &patch_plugins,
         chord_source_updated: false,
     };
 
-    print_plugin_section(cfg, policy);
+    print_plugin_section(cfg, &patch_plugins);
     print_patch_section(cfg, pairs.len());
-    print_filter_section(cfg);
+    print_filter_section(&patch_plugins);
     print_role_section(&ctx);
     let empty_rows = print_row_section(&ctx);
 
@@ -69,7 +64,7 @@ pub fn run_patch_role_report(cfg: &Config) -> Result<()> {
     Ok(())
 }
 
-fn print_plugin_section(cfg: &Config, policy: VoicingPolicy) {
+fn print_plugin_section(cfg: &Config, patch_plugins: &PatchPlugins) {
     println!("[プラグイン]");
     println!(
         "  active_plugin : {}",
@@ -77,15 +72,14 @@ fn print_plugin_section(cfg: &Config, policy: VoicingPolicy) {
     );
     println!("  plugin_path   : {}", optional_str(&cfg.plugin_path));
     println!("  plugin_id     : {}", optional(cfg.plugin_id.as_deref()));
-    println!(
-        "  Surge XT か   : {}",
-        if cfg.is_surge_xt() {
-            "はい"
-        } else {
-            "いいえ"
-        }
-    );
-    println!("  voicing 判定  : {}", voicing_policy_label(policy));
+    println!();
+    println!("[カタログに音色を載せるプラグイン（先頭が既定）]");
+    for plugin in patch_plugins.plugins() {
+        println!("  {}", plugin.name);
+        println!("    plugin_path : {}", optional_str(&plugin.plugin_path));
+        println!("    Surge XT か : {}", yes_no(plugin.is_surge_xt()));
+        println!("    voicing 判定: {}", voicing_policy_label(plugin));
+    }
 }
 
 fn print_patch_section(cfg: &Config, count: usize) {
@@ -102,19 +96,30 @@ fn print_patch_section(cfg: &Config, count: usize) {
     println!("  読み込み件数  : {count}");
 }
 
-fn print_filter_section(cfg: &Config) {
-    println!();
-    println!("[用途別カテゴリ / キーワード（[plugins.*] プロファイル適用後）]");
-    for (label, values) in [
-        ("chord_patch_categories   ", &cfg.chord_patch_categories),
-        ("bass_patch_categories    ", &cfg.bass_patch_categories),
-        ("arpeggio_patch_categories", &cfg.arpeggio_patch_categories),
-        ("drum_patch_categories    ", &cfg.drum_patch_categories),
-        ("kick_patch_keywords      ", &cfg.kick_patch_keywords),
-        ("snare_patch_keywords     ", &cfg.snare_patch_keywords),
-        ("hihat_patch_keywords     ", &cfg.hihat_patch_keywords),
-    ] {
-        println!("  {label} : {}", list_label(values));
+/// 用途別の絞り込みはプラグインごとに違う（Surge のカテゴリを cartridge へ当てると
+/// 候補が全滅する）。プロファイル適用後の解決結果をプラグインごとに出す。
+fn print_filter_section(patch_plugins: &PatchPlugins) {
+    for plugin in patch_plugins.plugins() {
+        let roles = &plugin.patch_roles;
+        println!();
+        println!(
+            "[用途別カテゴリ / キーワード（{} / [plugins.*] プロファイル適用後）]",
+            plugin.name
+        );
+        for (label, values) in [
+            ("chord_patch_categories   ", &roles.chord_patch_categories),
+            ("bass_patch_categories    ", &roles.bass_patch_categories),
+            (
+                "arpeggio_patch_categories",
+                &roles.arpeggio_patch_categories,
+            ),
+            ("drum_patch_categories    ", &roles.drum_patch_categories),
+            ("kick_patch_keywords      ", &roles.kick_patch_keywords),
+            ("snare_patch_keywords     ", &roles.snare_patch_keywords),
+            ("hihat_patch_keywords     ", &roles.hihat_patch_keywords),
+        ] {
+            println!("  {label} : {}", list_label(values));
+        }
     }
 }
 
@@ -207,10 +212,19 @@ fn row_label(row: usize, chord_on: bool, drum: Option<DrumRole>) -> String {
     }
 }
 
-fn voicing_policy_label(policy: VoicingPolicy) -> &'static str {
-    match policy {
-        VoicingPolicy::Sources => "Sources（共有 JSON / ユーザー判定 / override から引く）",
-        VoicingPolicy::AssumePoly => "AssumePoly（判定手段が無いので全 patch を poly とみなす）",
+fn voicing_policy_label(plugin: &CatalogPlugin) -> &'static str {
+    if plugin.is_surge_xt() {
+        "Sources（共有 JSON / ユーザー判定 / override から引く）"
+    } else {
+        "AssumePoly（判定手段が無いので全 patch を poly とみなす）"
+    }
+}
+
+fn yes_no(value: bool) -> &'static str {
+    if value {
+        "はい"
+    } else {
+        "いいえ"
     }
 }
 

@@ -7,7 +7,7 @@ pub use cmrt_server_config::{
     default_plugin_path,
 };
 
-use cmrt_surge_patches::{
+use cmrt_patches::surge_xt::{
     DEFAULT_ARPEGGIO_PATCH_CATEGORY_NAMES, DEFAULT_BASS_PATCH_CATEGORY_NAMES,
     DEFAULT_CHORD_PATCH_CATEGORY_NAMES, DEFAULT_DRUM_PATCH_CATEGORY_NAMES,
     DEFAULT_HIHAT_PATCH_KEYWORDS, DEFAULT_KICK_PATCH_KEYWORDS, DEFAULT_SNARE_PATCH_KEYWORDS,
@@ -65,15 +65,7 @@ pub fn default_config_content_with_app_settings(app_settings: &str) -> String {
     } else {
         format!("{}\n", app_settings.trim_end())
     };
-    // 定数と config.toml のひな形がずれないよう、リテラルではなく定数から組み立てる。
-    let chord_patch_categories_line = patch_categories_line(&DEFAULT_CHORD_PATCH_CATEGORY_NAMES);
-    let bass_patch_categories_line = patch_categories_line(&DEFAULT_BASS_PATCH_CATEGORY_NAMES);
-    let arpeggio_patch_categories_line =
-        patch_categories_line(&DEFAULT_ARPEGGIO_PATCH_CATEGORY_NAMES);
-    let drum_patch_categories_line = patch_categories_line(&DEFAULT_DRUM_PATCH_CATEGORY_NAMES);
-    let kick_patch_keywords_line = patch_categories_line(&DEFAULT_KICK_PATCH_KEYWORDS);
-    let snare_patch_keywords_line = patch_categories_line(&DEFAULT_SNARE_PATCH_KEYWORDS);
-    let hihat_patch_keywords_line = patch_categories_line(&DEFAULT_HIHAT_PATCH_KEYWORDS);
+    let patch_roles_block = surge_xt_patch_roles_block();
     format!(
         r#"# clap-mml-render-tui config
 #
@@ -91,14 +83,10 @@ pub fn default_config_content_with_app_settings(app_settings: &str) -> String {
 # active_plugin = 'Dexed'
 #
 # 標準以外の場所に入れている場合や、組み込みに無いプラグインを使う場合だけ、
-# 下のように書きます。書いた項目だけが組み込みの値を上書きします。
-#
-# [plugins."Surge XT"]
-# plugin_path = 'D:\my\clap\Surge XT.clap'
-#
-# [plugins.my_synth]
-# plugin_path  = 'D:\my\clap\MySynth.clap'
-# patches_dirs = ['D:\my\patches']
+# [plugins.<名前>] を書きます。書いた項目だけが組み込みの値を上書きします。
+# **書く場所はこのファイルの末尾**です（TOML はテーブル見出しから下がすべてその中身に
+# なるので、途中に書くと後続のトップレベル項目が吸い込まれます）。
+# 末尾のコメント済みブロックを参照してください。
 
 {app_settings}
 input_midi  = "input.mid"
@@ -151,44 +139,6 @@ voicing_override_source = "{DEFAULT_VOICING_OVERRIDE_SOURCE}"
 # 無効化すると chord mode（c キー）は使えません。
 chord_progression_source = "{DEFAULT_CHORD_PROGRESSION_SOURCE}"
 
-# 【省略可】用途別 patch 自動選択のカテゴリ／キーワード（以下 7 項目）
-# 既定値は Surge XT のカテゴリ名です。プラグインごとに変えたいときは、同じキー名を
-# [plugins.<名前>] の中へ書けばそのプラグインのときだけ効きます。
-# 組み込みの Dexed プロファイルは cartridge にカテゴリ階層が無いため、7 項目とも
-# 空（＝絞らず全 program を候補にする）を既定にしています。
-
-# 【省略可】chord mode の和音に使う patch のカテゴリ
-# patch パスのカテゴリ階層（patches_factory/<category>/ または
-# patches_3rdparty/<vendor>/<category>/）と、大文字小文字を無視して照合します。
-# ここに挙げたカテゴリの中から、さらに poly と判明している patch だけを抽選します。
-# 空リストにするとカテゴリで絞らず、poly 判定だけで抽選します。
-chord_patch_categories = {chord_patch_categories_line}
-
-# 【省略可】chord mode の bass 行（行2）に使う patch のカテゴリ
-# 照合の仕方は chord_patch_categories と同じです。bass は単音なので mono / poly は問いません。
-# 空リストにするとカテゴリで絞らず、全 patch から抽選します。
-bass_patch_categories = {bass_patch_categories_line}
-
-# 【省略可】chord mode のアルペジオ行（行3 = 4 voice の行）に使う patch のカテゴリ
-# 照合の仕方は chord_patch_categories と同じです。mono / poly は問いません。
-# 音程が意味を持つ行なので、既定では打楽器・効果音のカテゴリを外しています。
-# 空リストにするとカテゴリで絞らず、全 patch から抽選します。
-arpeggio_patch_categories = {arpeggio_patch_categories_line}
-
-# 【省略可】drum 行（track 数 4 以上のとき、行4以降）に使う patch のカテゴリ
-# 照合の仕方は chord_patch_categories と同じです。4 役で共通の設定です。
-# Surge のカテゴリは打楽器を Percussion / Drums の粒度でしか分けていないため、
-# kick / snare / hi-hat / percussion の振り分けは下のキーワードで行います。
-drum_patch_categories = {drum_patch_categories_line}
-
-# 【省略可】drum 4 役に振り分けるための patch 名キーワード
-# 上の drum_patch_categories で絞ったあと、小文字化した patch のパスへ部分一致させます。
-# percussion 行には「kick / snare / hi-hat のどれにも当たらなかったもの」が回ります。
-# 空リストにするとキーワードで絞らず、カテゴリ内の全 patch が候補になります。
-kick_patch_keywords = {kick_patch_keywords_line}
-snare_patch_keywords = {snare_patch_keywords_line}
-hihat_patch_keywords = {hihat_patch_keywords_line}
-
 # 【省略可】Surge XT パッチの検索対象ディレクトリ一覧（TUI / DAW の音色選択・ランダム音色で使う）
 # 例 (Windows): patches_dirs = ['C:\ProgramData\Surge XT\patches_factory', 'C:\ProgramData\Surge XT\patches_3rdparty']
 # 例 (Linux):   patches_dirs = ['/home/user/.local/share/surge-data/patches_factory', '/home/user/.local/share/surge-data/patches_3rdparty']
@@ -202,7 +152,80 @@ loop_dirs = []
 # 【省略可】WAV ループディレクトリへ付与できるカテゴリ一覧
 loop_categories = ["guitar", "drum", "bass", "spoken", "sequence"]
 
-"#,
+{patch_roles_block}"#,
+    )
+}
+
+/// 用途別 patch 自動選択の 7 項目を、**コメント済みの `[plugins."Surge XT"]` ブロック**として
+/// 組み立てる。
+///
+/// トップレベルへ値として書き出さないのが要点。トップレベルの値は既定プラグインにだけ効く
+/// レガシー綴りで、そこへ Surge のカテゴリ名を書き出すと `active_plugin = 'my_synth'` の
+/// ような config で候補が全滅する（`docs/adr/0007-patch-role-defaults-three-layers.md`）。既定値は
+/// [`crate::PatchRoles::builtin_for`] がプラグインごとに持つので、ここは**見て編集できる
+/// ようにするための案内**でしかない。
+///
+/// **必ず config.toml の末尾へ置くこと。** TOML はテーブル見出しから下がすべてその
+/// テーブルの中身になるので、途中に置くとコメントを外した瞬間に後続のトップレベル項目が
+/// `[plugins."Surge XT"]` の中へ吸い込まれる。
+fn surge_xt_patch_roles_block() -> String {
+    let chord = patch_categories_line(&DEFAULT_CHORD_PATCH_CATEGORY_NAMES);
+    let bass = patch_categories_line(&DEFAULT_BASS_PATCH_CATEGORY_NAMES);
+    let arpeggio = patch_categories_line(&DEFAULT_ARPEGGIO_PATCH_CATEGORY_NAMES);
+    let drum = patch_categories_line(&DEFAULT_DRUM_PATCH_CATEGORY_NAMES);
+    let kick = patch_categories_line(&DEFAULT_KICK_PATCH_KEYWORDS);
+    let snare = patch_categories_line(&DEFAULT_SNARE_PATCH_KEYWORDS);
+    let hihat = patch_categories_line(&DEFAULT_HIHAT_PATCH_KEYWORDS);
+    format!(
+        r#"# 【省略可】用途別 patch 自動選択のカテゴリ／キーワード（以下 7 項目）
+# 音色置き場の体系ごとに正解が違うため、既定値はプラグインごとに組み込みで持っています。
+# 下に書いてあるのが Surge XT の既定値です（そのまま効いているので、書かなくても
+# 同じ結果になります）。cartridge を使う Dexed はカテゴリ階層を持たないので「絞らない」が
+# 既定で、組み込みに無いプラグインも同じく「絞らない」が既定です。
+#
+# 変えたいときだけ、下の行のコメント（先頭の `# `）を外して書き換えてください。
+# 【注意】ここから下はすべて [plugins."Surge XT"] の中身になります。トップレベルの項目を
+# 足すときは、このブロックより上へ書いてください。
+#
+# [plugins."Surge XT"]
+#
+# 標準以外の場所に入れているときだけ書きます。書かなければ組み込みの値が使われます。
+# plugin_path  = 'D:\my\clap\Surge XT.clap'
+# patches_dirs = ['D:\my\patches']
+#
+# chord mode の和音に使う patch のカテゴリ。patch パスのカテゴリ階層
+# （patches_factory/<category>/ または patches_3rdparty/<vendor>/<category>/）と、
+# 大文字小文字を無視して照合します。ここから、さらに poly と判明している patch だけを
+# 抽選します。空リストにするとカテゴリで絞らず、poly 判定だけで抽選します。
+# chord_patch_categories = {chord}
+#
+# chord mode の bass 行（行2）に使う patch のカテゴリ。照合の仕方は同じです。
+# bass は単音なので mono / poly は問いません。
+# bass_patch_categories = {bass}
+#
+# chord mode のアルペジオ行（行3。4 voice の行）に使う patch のカテゴリ。
+# 音程が意味を持つ行なので、既定では打楽器・効果音のカテゴリを外しています。
+# arpeggio_patch_categories = {arpeggio}
+#
+# drum 行（track 数 4 以上のとき、行4以降）に使う patch のカテゴリ。4 役で共通です。
+# Surge のカテゴリは打楽器を Percussion / Drums の粒度でしか分けていないため、
+# kick / snare / hi-hat / percussion の振り分けは下のキーワードで行います。
+# drum_patch_categories = {drum}
+#
+# drum 4 役に振り分けるための patch 名キーワード。上のカテゴリで絞ったあと、
+# 小文字化した patch のパスへ部分一致させます。percussion 行には
+# 「kick / snare / hi-hat のどれにも当たらなかったもの」が回ります。
+# kick_patch_keywords = {kick}
+# snare_patch_keywords = {snare}
+# hihat_patch_keywords = {hihat}
+#
+# 組み込みに無いプラグインを足すときも、この下へ続けます。用途別 7 項目を書かなければ
+# 「絞らない」が既定なので、まずは plugin_path と patches_dirs だけで動きます。
+#
+# [plugins.my_synth]
+# plugin_path  = 'D:\my\clap\MySynth.clap'
+# patches_dirs = ['D:\my\patches']
+"#
     )
 }
 

@@ -5,8 +5,8 @@
 
 use std::{ops::Range, time::Instant};
 
+use cmrt_patches::{group_patch_pairs_by_category, PatchCategory};
 use cmrt_realtime_play::PatchVoicing;
-use cmrt_surge_patches::{group_patch_pairs_by_category, PatchCategory};
 use cmrt_tui_core::random::random_index;
 use ratatui_textarea::TextArea;
 

@@ -21,9 +21,7 @@ impl DawApp {
         self.overlays.history.patch_name = patch_name.map(|patch_name| {
             available_patches
                 .as_deref()
-                .and_then(|pairs| {
-                    cmrt_surge_patches::resolve_display_patch_name(pairs, &patch_name)
-                })
+                .and_then(|pairs| cmrt_patches::resolve_display_patch_name(pairs, &patch_name))
                 .unwrap_or_else(|| self.normalize_patch_phrase_store_key(patch_name))
         });
         self.overlays.history.query.clear();

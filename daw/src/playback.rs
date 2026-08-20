@@ -125,7 +125,7 @@ impl DawApp {
         }
 
         #[cfg(test)]
-        if self.entry_ptr == 0 {
+        if !self.plugin_entries.is_available() {
             return;
         }
 

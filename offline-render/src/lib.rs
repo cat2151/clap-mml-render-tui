@@ -9,17 +9,21 @@
 use std::{io::Cursor, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Result};
-use clack_host::prelude::PluginEntry;
 use cmrt_core::{
-    core_config_from_config, mml_render_with_probe, prepare_cache_render_inputs,
-    render_prepared_cache_with_probe, CacheRenderInputs, NativeRenderProbeContext,
+    mml_render_with_probe, prepare_cache_render_inputs, render_prepared_cache_with_probe,
+    CacheRenderInputs, NativeRenderProbeContext,
 };
 use cmrt_runtime::{Config, OfflineRenderBackend};
 use hound::SampleFormat;
 
 use render_server::RenderServerSupervisor;
 
+mod in_process;
+mod plugin_entries;
 mod render_server;
+
+pub use in_process::InProcessPlugins;
+pub use plugin_entries::PluginEntries;
 
 const RENDER_SERVER_PATH: &str = "/render";
 const RENDER_SERVER_PATCH_NAME: &str = "(render-server)";
@@ -38,19 +42,27 @@ pub struct OfflineRenderOutput {
 }
 
 pub enum PreparedOfflineRender {
-    InProcess(CacheRenderInputs),
+    /// `plugin` はカタログ上の添字。**prepare 時に決めたプラグインでレンダリングする。**
+    /// ここで持たずにレンダー時へ引き直すと、prepare 済み MML（先頭 JSON が解決済みの
+    /// 絶対パスへ書き換わっている）から形を読み直すことになり、判別材料が変わる。
+    InProcess {
+        prepared: CacheRenderInputs,
+        plugin: usize,
+    },
     RenderServer(String),
 }
 
 enum OfflineRendererBackend {
-    InProcess { cfg: Arc<Config>, entry_ptr: usize },
+    InProcess(InProcessPlugins),
     RenderServer { supervisor: RenderServerSupervisor },
 }
 
 impl OfflineRenderer {
-    pub fn new(cfg: Arc<Config>, entry_ptr: usize) -> Self {
+    pub fn new(cfg: Arc<Config>, entries: PluginEntries) -> Self {
         let backend = match cfg.offline_render_backend {
-            OfflineRenderBackend::InProcess => OfflineRendererBackend::InProcess { cfg, entry_ptr },
+            OfflineRenderBackend::InProcess => {
+                OfflineRendererBackend::InProcess(InProcessPlugins::new(cfg.as_ref(), &entries))
+            }
             OfflineRenderBackend::RenderServer => OfflineRendererBackend::RenderServer {
                 supervisor: RenderServerSupervisor::new(&cfg),
             },
@@ -66,11 +78,10 @@ impl OfflineRenderer {
         probe_context: Option<&NativeRenderProbeContext>,
     ) -> Result<OfflineRenderOutput> {
         match self.backend.as_ref() {
-            OfflineRendererBackend::InProcess { cfg, entry_ptr } => {
-                let entry = plugin_entry(*entry_ptr)?;
-                let core_cfg = core_config_from_config(cfg.as_ref());
+            OfflineRendererBackend::InProcess(plugins) => {
+                let (entry, core_cfg) = plugins.for_mml(mml)?;
                 let (samples, patch_name) =
-                    mml_render_with_probe(mml, &core_cfg, entry, probe_context)?;
+                    mml_render_with_probe(mml, core_cfg, entry, probe_context)?;
                 Ok(OfflineRenderOutput {
                     samples,
                     patch_name,
@@ -82,9 +93,10 @@ impl OfflineRenderer {
 
     pub fn prepare_cache_render(&self, mml: &str) -> Result<PreparedOfflineRender> {
         match self.backend.as_ref() {
-            OfflineRendererBackend::InProcess { cfg, .. } => {
-                let core_cfg = core_config_from_config(cfg.as_ref());
-                prepare_cache_render_inputs(mml, &core_cfg).map(PreparedOfflineRender::InProcess)
+            OfflineRendererBackend::InProcess(plugins) => {
+                let plugin = plugins.index_for_mml(mml);
+                prepare_cache_render_inputs(mml, plugins.core_cfg(plugin))
+                    .map(|prepared| PreparedOfflineRender::InProcess { prepared, plugin })
             }
             OfflineRendererBackend::RenderServer { .. } => {
                 Ok(PreparedOfflineRender::RenderServer(mml.to_string()))
@@ -99,33 +111,22 @@ impl OfflineRenderer {
     ) -> Result<Vec<f32>> {
         match (self.backend.as_ref(), prepared) {
             (
-                OfflineRendererBackend::InProcess { entry_ptr, .. },
-                PreparedOfflineRender::InProcess(prepared),
-            ) => {
-                let entry = plugin_entry(*entry_ptr)?;
-                render_prepared_cache_with_probe(prepared, entry, probe_context)
-            }
+                OfflineRendererBackend::InProcess(plugins),
+                PreparedOfflineRender::InProcess { prepared, plugin },
+            ) => render_prepared_cache_with_probe(prepared, plugins.entry(plugin)?, probe_context),
             (
                 OfflineRendererBackend::RenderServer { supervisor },
                 PreparedOfflineRender::RenderServer(mml),
             ) => supervisor.render_mml(&mml).map(|rendered| rendered.samples),
-            (OfflineRendererBackend::InProcess { .. }, PreparedOfflineRender::RenderServer(_))
-            | (OfflineRendererBackend::RenderServer { .. }, PreparedOfflineRender::InProcess(_)) => {
-                Err(anyhow!(
-                    "offline render backend changed while a render job was prepared"
-                ))
-            }
+            (OfflineRendererBackend::InProcess(_), PreparedOfflineRender::RenderServer(_))
+            | (
+                OfflineRendererBackend::RenderServer { .. },
+                PreparedOfflineRender::InProcess { .. },
+            ) => Err(anyhow!(
+                "offline render backend changed while a render job was prepared"
+            )),
         }
     }
-}
-
-fn plugin_entry(entry_ptr: usize) -> Result<&'static PluginEntry> {
-    if entry_ptr == 0 {
-        anyhow::bail!("in-process offline render requires a loaded CLAP PluginEntry");
-    }
-    // SAFETY: production callers pass a pointer to the PluginEntry owned by main(), and
-    // existing render workers already rely on that entry outliving the worker threads.
-    Ok(unsafe { &*(entry_ptr as *const PluginEntry) })
 }
 
 fn decode_wav_bytes(bytes: &[u8], expected_sample_rate: u32) -> Result<Vec<f32>> {

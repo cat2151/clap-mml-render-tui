@@ -38,7 +38,7 @@ mod tempo;
 pub mod ui;
 mod undo;
 
-pub use cmrt_surge_patches::PatchRole;
+pub use cmrt_patches::PatchRole;
 pub use context::{GridPatchLoad, GridPatchStatus, GridSequencerContext};
 pub use cycle_random::{CycleRandom, CycleRandomItem};
 pub(crate) use input::ListDirection;

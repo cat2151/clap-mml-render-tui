@@ -1,3 +1,5 @@
+use cmrt_tui_core::patch_plugins::{CatalogPlugin, PatchPlugins};
+
 use crate::config::Config;
 use crate::history::VoicingCache;
 use crate::realtime_play::PatchVoicing;
@@ -27,12 +29,33 @@ pub(in crate::tui) enum VoicingPolicy {
 }
 
 impl VoicingPolicy {
-    pub(in crate::tui) fn from_config(cfg: &Config) -> Self {
-        if cfg.is_surge_xt() {
+    fn for_plugin(plugin: &CatalogPlugin) -> Self {
+        if plugin.is_surge_xt() {
             Self::Sources
         } else {
             Self::AssumePoly
         }
+    }
+}
+
+/// patch ごとの voicing 判定方針。
+///
+/// カタログに複数プラグインの音色が並ぶと [`VoicingPolicy`] は 1 つでは足りない。
+/// Surge の patch は [`VoicingPolicy::Sources`]、cartridge の patch は
+/// [`VoicingPolicy::AssumePoly`] を**同時に**使う必要がある。
+pub(in crate::tui) struct VoicingPolicies {
+    plugins: PatchPlugins,
+}
+
+impl VoicingPolicies {
+    pub(in crate::tui) fn from_config(cfg: &Config) -> Self {
+        Self {
+            plugins: PatchPlugins::from_config(cfg),
+        }
+    }
+
+    fn for_patch(&self, patch: &str) -> VoicingPolicy {
+        VoicingPolicy::for_plugin(self.plugins.for_patch(patch))
     }
 }
 
@@ -45,7 +68,7 @@ pub(in crate::tui) struct VoicingState {
     pub(in crate::tui) cache: VoicingCache,
     pub(in crate::tui) layers: VoicingLayers,
     pub(in crate::tui) source_refresh: VoicingSourceRefresh,
-    policy: VoicingPolicy,
+    policies: VoicingPolicies,
 }
 
 impl VoicingState {
@@ -53,20 +76,20 @@ impl VoicingState {
         cache: VoicingCache,
         layers: VoicingLayers,
         source_refresh: VoicingSourceRefresh,
-        policy: VoicingPolicy,
+        policies: VoicingPolicies,
     ) -> Self {
         Self {
             cache,
             layers,
             source_refresh,
-            policy,
+            policies,
         }
     }
 
     /// patch の mono/poly を決める。画面側（keyboard / grid sequencer）の
     /// `*VoicingLookup` はどちらもこれ 1 本を呼ぶ。
     pub(in crate::tui) fn resolve(&self, patch: &str) -> Option<PatchVoicing> {
-        match self.policy {
+        match self.policies.for_patch(patch) {
             VoicingPolicy::Sources => self.layers.resolve(&self.cache, patch),
             VoicingPolicy::AssumePoly => Some(PatchVoicing::Poly),
         }

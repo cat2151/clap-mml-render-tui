@@ -1,4 +1,4 @@
-use clack_host::prelude::PluginEntry;
+use cmrt_offline_render::PluginEntries;
 
 use std::sync::{Arc, Mutex};
 
@@ -143,7 +143,7 @@ fn spawn_play_server_prewarm(
 }
 
 impl<'a> TuiApp<'a> {
-    pub fn new(cfg: &'a Config, entry: Option<&'a PluginEntry>) -> Self {
+    pub fn new(cfg: &'a Config, plugin_entries: PluginEntries) -> Self {
         crate::logging::install_native_probe_logger();
         let cfg_arc = Arc::new(cfg.clone());
         let LoadedSessionState {
@@ -162,9 +162,6 @@ impl<'a> TuiApp<'a> {
             notepad_sound_check_guide_overlay_date,
             mml_overlay_patch,
         } = load_initial_session_state();
-        let entry_ptr = entry
-            .map(|entry| entry as *const PluginEntry as usize)
-            .unwrap_or(0);
         let play_server = Arc::new(
             crate::realtime_play::RealtimePlayServerSupervisor::with_live_instance_count(
                 cfg_arc.as_ref(),
@@ -218,7 +215,7 @@ impl<'a> TuiApp<'a> {
             active_screen,
             screen_switch_menu: crate::screen_switch::ScreenSwitchMenu::default(),
             cfg: Arc::clone(&cfg_arc),
-            entry_ptr,
+            plugin_entries: plugin_entries.clone(),
             notepad: NotepadScreen::new(NotepadScreenParts {
                 lines,
                 cursor,
@@ -227,7 +224,7 @@ impl<'a> TuiApp<'a> {
                 patch_load_state: Arc::clone(&patch_load_state),
                 patch_phrase_store: crate::history::load_patch_phrase_store(),
                 cfg: Arc::clone(&cfg_arc),
-                entry_ptr,
+                plugin_entries,
             }),
             keyboard: super::keyboard::KeyboardScreen::new(
                 keyboard_midi_sender,
@@ -271,10 +268,11 @@ impl<'a> TuiApp<'a> {
                 crate::history::load_voicing_cache(),
                 voicing_layers,
                 voicing_source_refresh,
-                super::voicing::VoicingPolicy::from_config(cfg),
+                super::voicing::VoicingPolicies::from_config(cfg),
             ),
             chord_progression_source,
             chord_catalog: cmrt_chord::ChordProgressionCatalog::default(),
+            patch_plugins: cmrt_tui_core::patch_plugins::PatchPlugins::from_config(cfg),
             patch_load_state,
             playback_session,
         }

@@ -6,13 +6,20 @@
 //! 足すことになり、`DawCachedMeasure::normalize()` のように config を持てない
 //! 場所も含む。そこで**ディレクトリを分ける**ことで誤ヒットを断つ。
 //!
+//! **音色を指定した行は、カタログに複数プラグインが並んでも衝突しない。** MML 先頭の
+//! JSON に patch の表示パスが埋まっており、Surge の `.fxp` パスと Dexed の `.syx/NN`
+//! パスでは MML 文字列そのものが違うため。
+//!
 //! 名前空間は `plugin_path` のファイル名（拡張子なし）1 本で決める。`active_plugin`
 //! や `plugin_id` を使うと、`active_plugin = 'Surge XT'` の config と
 //! トップレベル `plugin_path` だけの旧 config が別ディレクトリになってしまう。
 //! plugin_path はどちらの書き方でも必ず埋まるので、同じ Surge XT なら同じ場所になる。
 //!
-//! 1 プロセス 1 プラグインなので、起動時に一度だけ [`init_cache_plugin_namespace`]
-//! で決める。
+//! **名前空間が 1 つでよい根拠は「1 プロセス 1 プラグイン」ではない**（カタログには
+//! 複数プラグインの音色が並ぶ）。**音色を無指定にした行が鳴るプラグインは既定
+//! プラグイン 1 つに固定されている**こと（`docs/adr/0004-default-plugin-owns-unspecified-patches.md`）が根拠。
+//! 衝突しうるのはその無指定の行だけなので、起動時に一度だけ
+//! [`init_cache_plugin_namespace`] で決めれば足りる。
 
 use std::{path::PathBuf, sync::OnceLock};
 
@@ -30,7 +37,8 @@ static CACHE_PLUGIN_NAMESPACE: OnceLock<String> = OnceLock::new();
 
 /// 使用中プラグインの `plugin_path` からキャッシュ名前空間を決める。
 ///
-/// 2 回目以降の呼び出しは無視する（1 プロセス 1 プラグインのため）。
+/// ここへ渡すのは**既定プラグイン**の `plugin_path`。2 回目以降の呼び出しは無視する
+/// （名前空間を分ける必要があるのは音色無指定の行だけで、それは既定プラグインで鳴る）。
 pub fn init_cache_plugin_namespace(plugin_path: &str) {
     let _ = CACHE_PLUGIN_NAMESPACE.set(cache_plugin_namespace(plugin_path));
 }

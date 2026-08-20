@@ -6,7 +6,7 @@
 use std::time::Instant;
 
 use cmrt_chord::{ChordProgressionCatalog, ChordVoicing};
-use cmrt_surge_patches::{pick_for_role, PatchRole};
+use cmrt_patches::{pick_for_role, PatchRole};
 
 use crate::{
     log_line, ChordPlayback, CycleRandomItem, FixedChordProgression, GridSequencerContext,
@@ -183,11 +183,7 @@ impl GridSequencerScreen {
     /// どれも和音を1 instance へ重ねないので、chord 行と違い poly 判定は要求しない。
     fn pick_row_patch(&self, row: usize, ctx: &GridSequencerContext<'_>) -> Option<String> {
         let role = self.row_patch_role(row)?;
-        pick_for_role(
-            ctx.patches(),
-            &ctx.role_filter(role).filter(),
-            &ctx.poly_lookup(),
-        )
+        pick_for_role(ctx.patches(), &ctx.role_filters(role), &ctx.poly_lookup())
     }
 
     /// セッションから復元した chord mode を、patch 一覧が揃ってから適用する。
@@ -366,7 +362,7 @@ impl GridSequencerScreen {
         }
         pick_for_role(
             ctx.patches(),
-            &ctx.role_filter(PatchRole::Chord).filter(),
+            &ctx.role_filters(PatchRole::Chord),
             &ctx.poly_lookup(),
         )
         .ok_or(CHORD_PATCH_UNAVAILABLE)

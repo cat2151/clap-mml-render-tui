@@ -2,39 +2,6 @@ use super::*;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
-fn shared_patch_root_dir_returns_single_dir_as_is() {
-    let dirs = vec!["/tmp/patches_factory".to_string()];
-
-    let base = shared_patch_root_dir(&dirs);
-
-    assert_eq!(base.as_deref(), Some("/tmp/patches_factory"));
-}
-
-#[test]
-fn shared_patch_root_dir_returns_common_parent_for_multiple_dirs() {
-    let dirs = vec![
-        "/tmp/surge-data/patches_factory".to_string(),
-        "/tmp/surge-data/patches_3rdparty".to_string(),
-    ];
-
-    let base = shared_patch_root_dir(&dirs);
-
-    assert_eq!(base.as_deref(), Some("/tmp/surge-data"));
-}
-
-#[test]
-fn shared_patch_root_dir_returns_none_when_only_empty_root_matches() {
-    let dirs = vec![
-        "patches_factory".to_string(),
-        "patches_3rdparty".to_string(),
-    ];
-
-    let base = shared_patch_root_dir(&dirs);
-
-    assert_eq!(base, None);
-}
-
-#[test]
 fn collect_patch_pairs_combines_factory_and_thirdparty_using_common_base() {
     let suffix = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -74,13 +41,6 @@ fn collect_patch_pairs_combines_factory_and_thirdparty_using_common_base() {
         voicing_shared_source: String::new(),
         voicing_override_source: String::new(),
         chord_progression_source: String::new(),
-        chord_patch_categories: Vec::new(),
-        bass_patch_categories: Vec::new(),
-        arpeggio_patch_categories: Vec::new(),
-        drum_patch_categories: Vec::new(),
-        kick_patch_keywords: Vec::new(),
-        snare_patch_keywords: Vec::new(),
-        hihat_patch_keywords: Vec::new(),
         ..Default::default()
     };
 
@@ -135,13 +95,6 @@ fn collect_patch_pairs_sorts_display_names_naturally() {
         voicing_shared_source: String::new(),
         voicing_override_source: String::new(),
         chord_progression_source: String::new(),
-        chord_patch_categories: Vec::new(),
-        bass_patch_categories: Vec::new(),
-        arpeggio_patch_categories: Vec::new(),
-        drum_patch_categories: Vec::new(),
-        kick_patch_keywords: Vec::new(),
-        snare_patch_keywords: Vec::new(),
-        hihat_patch_keywords: Vec::new(),
         ..Default::default()
     };
 
@@ -218,4 +171,66 @@ fn filter_items_matches_every_term_case_insensitively() {
         vec!["Warm Lead".to_string()]
     );
     assert_eq!(filter_items(&items, ""), items);
+}
+
+/// 基点の違うプラグインを連結しても、display は「そのプラグインだけを相対化したとき」と
+/// ビット単位で同じになる。display 文字列は永続 ID なので、カタログにプラグインが
+/// 増えても既存の音色の指し先が変わってはいけない（`docs/adr/0006-per-profile-relative-base.md`）。
+///
+/// 連結の規則は、開発機のインストール状況に左右されないよう `catalog_plugins` を
+/// 通さずにここで直接確かめる。
+#[test]
+fn extending_with_two_plugins_keeps_each_display_relative_to_its_own_base() {
+    let suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    let root = std::env::temp_dir().join(format!("cmrt_patch_dir_groups_{suffix}"));
+    let surge = root.join("surge-data").join("patches_factory");
+    let cartridges = root.join("elsewhere").join("Cartridges");
+    std::fs::create_dir_all(surge.join("Pads")).unwrap();
+    std::fs::create_dir_all(&cartridges).unwrap();
+    std::fs::write(surge.join("Pads").join("Factory Pad.fxp"), b"dummy").unwrap();
+    std::fs::write(cartridges.join("Only Voice.fxp"), b"dummy").unwrap();
+
+    let catalog = vec![
+        catalog_plugin(
+            root.join("surge-data").to_string_lossy().into_owned(),
+            surge.to_string_lossy().into_owned(),
+        ),
+        catalog_plugin(
+            cartridges.to_string_lossy().into_owned(),
+            cartridges.to_string_lossy().into_owned(),
+        ),
+    ];
+
+    let mut pairs = Vec::new();
+    for plugin in &catalog {
+        extend_with_plugin(&mut pairs, plugin).unwrap();
+    }
+    sort_patch_pairs(&mut pairs, PatchSortOrder::Path);
+
+    assert_eq!(
+        pairs
+            .into_iter()
+            .map(|(display, _)| display)
+            .collect::<Vec<_>>(),
+        vec![
+            "Only Voice.fxp".to_string(),
+            "patches_factory/Pads/Factory Pad.fxp".to_string(),
+        ]
+    );
+
+    std::fs::remove_dir_all(root).ok();
+}
+
+fn catalog_plugin(base: String, dir: String) -> CatalogPlugin {
+    CatalogPlugin {
+        name: "test".to_string(),
+        plugin_path: String::new(),
+        plugin_id: None,
+        base: Some(base),
+        dirs: vec![dir],
+        patch_roles: cmrt_runtime::PatchRoles::default(),
+    }
 }

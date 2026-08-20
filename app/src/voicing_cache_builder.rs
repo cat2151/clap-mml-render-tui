@@ -7,6 +7,8 @@
 
 use anyhow::Result;
 
+use cmrt_tui_core::patch_plugins::PatchPlugins;
+
 use crate::{
     config::Config,
     history::{load_voicing_cache, save_voicing_cache},
@@ -26,16 +28,26 @@ pub fn run_build_voicing_cache(cfg: &Config, force: bool) -> Result<()> {
         return Ok(());
     }
 
+    // probe は CLAP note event の NOTE_END を数える方式なので、note dialect が MIDI
+    // だけのプラグイン（Dexed）では「mono」と「測れなかった」を区別できない。
+    // そういう音色は probe せず、`VoicingPolicy::AssumePoly` に任せる。
+    let patch_plugins = PatchPlugins::from_config(cfg);
     let mut cache = load_voicing_cache();
-    let targets = pairs
+    let probable = pairs
         .iter()
         .map(|(display, _)| display.as_str())
+        .filter(|patch| patch_plugins.for_patch(patch).is_surge_xt())
+        .collect::<Vec<_>>();
+    let targets = probable
+        .iter()
+        .copied()
         .filter(|patch| force || cache.get(patch).is_none())
         .collect::<Vec<_>>();
 
     println!(
-        "patch {} 件中 {} 件を判定します（判定済みをスキップ）。",
+        "patch {} 件中 probe できるのは {} 件、うち {} 件を判定します（判定済みをスキップ）。",
         pairs.len(),
+        probable.len(),
         targets.len()
     );
     if targets.is_empty() {

@@ -4,7 +4,9 @@ use cmrt_chord::ChordProgressionCatalog;
 use cmrt_realtime_play::PatchVoicing;
 
 use super::*;
-use crate::tests::ctx_with;
+use cmrt_tui_core::patch_plugins::{PatchPlugins, PatchRoles};
+
+use crate::tests::{ctx_with, plugins_with, unfiltered_plugins};
 use crate::{GridPatchLoad, GridVoicingLookup, NoVoicingLookup};
 
 mod cycle;
@@ -225,14 +227,22 @@ impl GridVoicingLookup for AllPoly {
     }
 }
 
-fn ctx_with_categories<'a>(
+/// chord 行のカテゴリだけを絞ったテスト用カタログ。ctx より先に束縛すること。
+fn chord_category_plugins(categories: &[&str]) -> PatchPlugins {
+    plugins_with(PatchRoles {
+        chord_patch_categories: categories.iter().map(|name| name.to_string()).collect(),
+        ..PatchRoles::default()
+    })
+}
+
+fn ctx_with_plugins<'a>(
     patches: &'a [(String, String)],
     catalog: &'a ChordProgressionCatalog,
     voicing: &'a dyn GridVoicingLookup,
-    categories: &'a [String],
+    plugins: &'a PatchPlugins,
 ) -> GridSequencerContext<'a> {
     let mut ctx = ctx_with(GridPatchLoad::Ready(patches), catalog, voicing);
-    ctx.chord_patch_categories = categories;
+    ctx.patch_plugins = plugins;
     ctx
 }
 

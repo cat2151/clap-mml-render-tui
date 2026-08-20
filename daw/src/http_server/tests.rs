@@ -35,7 +35,7 @@ fn build_test_app(cfg: Config) -> DawApp {
         sound_check_guide: cmrt_tui_core::sound_check_guide::SoundCheckGuide::new(None),
         textarea: TextArea::default(),
         cfg: Arc::new(cfg),
-        entry_ptr: 0,
+        plugin_entries: cmrt_offline_render::PluginEntries::none(),
         cache: Arc::new(Mutex::new(vec![
             vec![CellCache::empty(); measures + 1];
             tracks
@@ -80,13 +80,6 @@ fn default_config() -> Config {
         voicing_shared_source: String::new(),
         voicing_override_source: String::new(),
         chord_progression_source: String::new(),
-        chord_patch_categories: Vec::new(),
-        bass_patch_categories: Vec::new(),
-        arpeggio_patch_categories: Vec::new(),
-        drum_patch_categories: Vec::new(),
-        kick_patch_keywords: Vec::new(),
-        snare_patch_keywords: Vec::new(),
-        hihat_patch_keywords: Vec::new(),
         ..Default::default()
     }
 }

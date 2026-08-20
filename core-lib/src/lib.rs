@@ -1,8 +1,9 @@
+pub use clap_mml_play_server_core::dx7::is_cartridge_patch_path;
 pub use clap_mml_play_server_core::patch_list::{collect_patches, to_relative};
 pub use clap_mml_play_server_core::pipeline;
 pub use clap_mml_play_server_core::pipeline::{
-    ensure_cmrt_dir, ensure_daw_dir, ensure_phrase_dir, mml_str_to_smf_bytes, mml_to_smf_bytes,
-    play_samples, write_wav, RenderOptions, RenderPreroll,
+    embedded_patch_ref, ensure_cmrt_dir, ensure_daw_dir, ensure_phrase_dir, mml_str_to_smf_bytes,
+    mml_to_smf_bytes, play_samples, write_wav, RenderOptions, RenderPreroll,
 };
 pub use clap_mml_play_server_core::{host, load_entry, midi, patch_list, render, CoreConfig};
 
@@ -26,7 +27,7 @@ pub use cache_dirs::{
     cache_plugin_namespace, ensure_daw_cache_dir, ensure_notepad_cache_dir,
     init_cache_plugin_namespace, remove_legacy_unnamespaced_caches, DEFAULT_CACHE_PLUGIN_NAMESPACE,
 };
-pub use core_config::core_config_from_config;
+pub use core_config::{core_config_for_plugin, core_config_from_config};
 
 #[cfg(test)]
 use native_render_probe::clear_native_render_probe_state_for_tests;

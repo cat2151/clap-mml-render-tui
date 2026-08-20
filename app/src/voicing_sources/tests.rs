@@ -2,6 +2,37 @@ use std::{fs, path::PathBuf};
 
 use super::*;
 
+use cmrt_tui_core::patch_plugins::{CatalogPlugin, PatchPlugins};
+
+fn catalog(plugins: &[CatalogPlugin]) -> PatchPlugins {
+    PatchPlugins::from_catalog(plugins.to_vec())
+}
+
+fn surge_plugin() -> CatalogPlugin {
+    catalog_plugin(
+        cmrt_runtime::SURGE_XT_PLUGIN_ID,
+        cmrt_runtime::default_plugin_path(),
+    )
+}
+
+fn dexed_plugin() -> CatalogPlugin {
+    catalog_plugin(
+        cmrt_runtime::DEXED_PLUGIN_ID,
+        cmrt_runtime::default_dexed_plugin_path(),
+    )
+}
+
+fn catalog_plugin(plugin_id: &str, plugin_path: &str) -> CatalogPlugin {
+    CatalogPlugin {
+        name: String::new(),
+        plugin_path: plugin_path.to_string(),
+        plugin_id: Some(plugin_id.to_string()),
+        base: None,
+        dirs: Vec::new(),
+        patch_roles: cmrt_runtime::PatchRoles::default(),
+    }
+}
+
 fn unique_temp_dir(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!(
         "cmrt-voicing-source-{name}-{}-{}",
@@ -132,29 +163,35 @@ fn persisted_sources_are_read_again_for_each_keyboard_entry() {
     fs::remove_dir_all(temp).ok();
 }
 
+/// Surge 専用 JSON を取りに行くかは、既定プラグインではなく**カタログ全体**で決まる。
+/// カタログに Surge の音色が 1 つでも載るなら、既定プラグインが Dexed でも JSON は要る。
 #[test]
-fn surge_only_sources_are_not_fetched_for_other_plugins() {
-    let surge = Config {
-        plugin_path: cmrt_runtime::default_plugin_path().to_string(),
-        ..Config::default()
-    };
-    assert!(
-        SourceSet::from_config(&surge).is_some(),
-        "Surge XT では共有 voicing データを読む"
-    );
-
-    let dexed = Config {
+fn surge_only_sources_follow_the_whole_catalog() {
+    let cfg = Config {
         plugin_id: Some(cmrt_runtime::DEXED_PLUGIN_ID.to_string()),
         plugin_path: cmrt_runtime::default_dexed_plugin_path().to_string(),
         ..Config::default()
     };
+
     assert!(
-        SourceSet::from_config(&dexed).is_none(),
-        "Surge 以外では Surge 専用 JSON を取りに行かない"
+        SourceSet::from_catalog(&cfg, &catalog(&[surge_plugin()])).is_some(),
+        "Surge XT では共有 voicing データを読む"
     );
-    // 取りに行かない＝レイヤは常に空。判定は VoicingPolicy が受け持つ。
+    assert!(
+        SourceSet::from_catalog(&cfg, &catalog(&[dexed_plugin(), surge_plugin()])).is_some(),
+        "既定が Dexed でも、カタログに Surge が載るなら読む"
+    );
+    assert!(
+        SourceSet::from_catalog(&cfg, &catalog(&[dexed_plugin()])).is_none(),
+        "カタログに Surge が載らないなら、Surge 専用 JSON を取りに行かない"
+    );
+}
+
+/// 取りに行かない＝レイヤは常に空。判定は `VoicingPolicy` が受け持つ。
+#[test]
+fn layers_are_empty_without_sources() {
     assert_eq!(
-        VoicingSourceRefresh::spawn(&dexed).load_for_keyboard(),
+        VoicingSourceRefresh::disabled().load_for_keyboard(),
         VoicingLayers::default()
     );
 }

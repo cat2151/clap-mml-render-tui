@@ -42,6 +42,7 @@ use ratatui::Frame;
 use std::sync::{Arc, Mutex};
 
 use cmrt_chord::ChordProgressionCatalog;
+use cmrt_tui_core::patch_plugins::PatchPlugins;
 use cmrt_tui_core::playback_session::PlaybackSession;
 
 use crate::chord_progression_source::ChordProgressionSource;
@@ -77,7 +78,9 @@ pub struct TuiApp<'a> {
     pub(super) active_screen: PrimaryScreen,
     pub(super) screen_switch_menu: ScreenSwitchMenu,
     cfg: Arc<Config>,
-    entry_ptr: usize, // *const PluginEntry as usize。render_server backend では 0。
+    /// カタログのプラグインごとのロード済み CLAP entry。
+    /// render_server backend / テストでは空。
+    plugin_entries: cmrt_offline_render::PluginEntries,
     pub(in crate::tui) notepad: NotepadScreen<'a>,
     pub(in crate::tui) keyboard: KeyboardScreen<'a>,
     pub(in crate::tui) loop_browser: LoopBrowserScreen,
@@ -96,6 +99,9 @@ pub struct TuiApp<'a> {
     /// 読み込み済みのコード進行カタログ。grid sequencer 画面へ入るときに読む
     /// （キャッシュがまだ無い初回だけ待たされるため、起動時には読まない）。
     pub(in crate::tui) chord_catalog: ChordProgressionCatalog,
+    /// patch 文字列から「その音色を鳴らすプラグイン」と、そのプラグイン向けの
+    /// 用途別カテゴリ／キーワードを引く表。grid sequencer 画面へ毎フレーム渡す。
+    pub(in crate::tui) patch_plugins: PatchPlugins,
     /// バックグラウンドスレッドが収集したパッチリストの状態。
     /// notepad（音色選択）と keyboard（patch catalog）が同じ実体を読む。
     patch_load_state: Arc<Mutex<PatchLoadState>>,

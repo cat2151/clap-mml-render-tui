@@ -24,7 +24,7 @@ const PATCH_FILTER_QUERY_JSON_KEY: &str = "Surge XT patch filter";
 
 impl DawApp {
     fn resolve_patch_name(&self, patch_name: &str) -> Option<String> {
-        cmrt_surge_patches::resolve_display_patch_name(&self.overlays.patch_select.all, patch_name)
+        cmrt_patches::resolve_display_patch_name(&self.overlays.patch_select.all, patch_name)
     }
 
     fn normalize_patch_phrase_store_key(&mut self, patch_name: String) -> String {
@@ -374,7 +374,7 @@ impl DawApp {
         measure_index: usize,
         track_mmls: Option<Vec<String>>,
     ) -> bool {
-        if self.entry_ptr != 0 {
+        if self.plugin_entries.is_available() {
             return false;
         }
         if *self.playback.play_state.lock().unwrap() == super::DawPlayState::Preview {

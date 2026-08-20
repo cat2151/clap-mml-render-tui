@@ -72,7 +72,7 @@ impl DawApp {
         }
 
         #[cfg(test)]
-        if self.entry_ptr == 0 {
+        if !self.plugin_entries.is_available() {
             insert_overlay_preview_cache(
                 &mut self.playback.overlay_preview_cache.lock().unwrap(),
                 cache_key,

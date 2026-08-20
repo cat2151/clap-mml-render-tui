@@ -1,17 +1,25 @@
 mod core_config;
 mod defaults;
+mod patch_roles;
 mod paths;
 mod plugin_identity;
 mod plugin_profile;
 
-pub use core_config::{configured_patch_dirs, core_config_patch_root_dir, shared_patch_root_dir};
+pub use core_config::{
+    catalog_plugins, configured_patch_dirs, core_config_patch_root_dir, shared_patch_root_dir,
+    CatalogPlugin,
+};
 pub use defaults::{
     default_config_content, default_config_content_with_app_settings, default_dexed_cartridge_dirs,
     default_dexed_plugin_path, default_patches_dirs, default_plugin_path,
     serialize_patches_dirs_line,
 };
+pub use patch_roles::{layered_patch_role_filters, PatchRoles};
 pub use paths::{config_app_dir, config_file_path, log_file_path, native_probe_log_file_path};
-pub use plugin_identity::{plugin_file_stem, DEXED_PLUGIN_ID, SURGE_XT_PLUGIN_ID};
+pub use plugin_identity::{
+    is_surge_xt_plugin, patch_form_of, plugin_file_stem, PatchForm, DEXED_PLUGIN_ID,
+    SURGE_XT_PLUGIN_ID,
+};
 pub use plugin_profile::{
     apply_active_plugin_profile, builtin_plugin_profiles, PatchRoleFilters, PluginProfile,
 };
@@ -120,30 +128,27 @@ pub struct Config {
     /// grid sequencer の chord mode が使うコード進行JSON。HTTP(S) URLまたはconfig.toml基準のpath。
     #[serde(default = "default_chord_progression_source")]
     pub chord_progression_source: String,
-    /// chord mode の和音に使う patch のカテゴリ一覧。空にすると全カテゴリが対象。
-    #[serde(default = "default_chord_patch_categories")]
-    pub chord_patch_categories: Vec<String>,
-    /// chord mode の bass 行に使う patch のカテゴリ一覧。空にすると全カテゴリが対象。
-    #[serde(default = "default_bass_patch_categories")]
-    pub bass_patch_categories: Vec<String>,
-    /// chord mode のアルペジオ行（4 voice の行）に使う patch のカテゴリ一覧。
-    /// 空にすると全カテゴリが対象。
-    #[serde(default = "default_arpeggio_patch_categories")]
-    pub arpeggio_patch_categories: Vec<String>,
-    /// drum 行に使う patch のカテゴリ一覧。4 役（kick / snare / hi-hat / percussion）で共通。
-    /// 空にすると全カテゴリが対象。
-    #[serde(default = "default_drum_patch_categories")]
-    pub drum_patch_categories: Vec<String>,
-    /// kick 行に使う patch の名前キーワード一覧。上のカテゴリの中をさらに絞る。
-    /// 空にするとカテゴリだけで絞る。
-    #[serde(default = "default_kick_patch_keywords")]
-    pub kick_patch_keywords: Vec<String>,
-    /// snare 行に使う patch の名前キーワード一覧。
-    #[serde(default = "default_snare_patch_keywords")]
-    pub snare_patch_keywords: Vec<String>,
-    /// hi-hat 行に使う patch の名前キーワード一覧。
-    #[serde(default = "default_hihat_patch_keywords")]
-    pub hihat_patch_keywords: Vec<String>,
+    /// トップレベルに書かれた用途別絞り込み（`chord_patch_categories` など 7 項目）。
+    ///
+    /// `active_plugin` が無かった時代の綴りで、値は Surge XT のカテゴリ名。**効くのは
+    /// 既定プラグインに対してだけ**で、カタログに並ぶ他のプラグインの土台にはしない
+    /// （[`PatchRoles`] の module doc の層 2）。土台にすると、プロファイルを持たない
+    /// `[plugins.my_synth]` が Surge のカテゴリで絞られて候補を失う。
+    ///
+    /// 書かれていない項目は `None`。新しく生成する config.toml はここへ何も書かず、
+    /// プラグインごとの既定は [`PatchRoles::builtin_for`] が持つ。
+    #[serde(flatten)]
+    pub top_level_patch_roles: PatchRoleFilters,
+    /// `active_plugin` が指すプロファイルの用途別絞り込み（差分のまま）。
+    ///
+    /// config には書かれない。プロファイル解決時に埋まる。上のトップレベル 7 項目を
+    /// 土台にこれを当てたものが「既定プラグインの用途別絞り込み」で、解決は
+    /// [`PatchRoles::resolve`] が行う。
+    ///
+    /// **ここをトップレベルへ焼き込んではいけない。** 焼き込むと土台が失われ、
+    /// カタログに複数プラグインが並んだときに「書かれていない項目」を解決できなくなる。
+    #[serde(skip)]
+    pub active_patch_roles: PatchRoleFilters,
 }
 
 /// `..Default::default()` で構造体リテラルを組めるようにするためのもの。
@@ -179,13 +184,8 @@ impl Default for Config {
             voicing_shared_source: default_voicing_shared_source(),
             voicing_override_source: default_voicing_override_source(),
             chord_progression_source: default_chord_progression_source(),
-            chord_patch_categories: default_chord_patch_categories(),
-            bass_patch_categories: default_bass_patch_categories(),
-            arpeggio_patch_categories: default_arpeggio_patch_categories(),
-            drum_patch_categories: default_drum_patch_categories(),
-            kick_patch_keywords: default_kick_patch_keywords(),
-            snare_patch_keywords: default_snare_patch_keywords(),
-            hihat_patch_keywords: default_hihat_patch_keywords(),
+            top_level_patch_roles: PatchRoleFilters::default(),
+            active_patch_roles: PatchRoleFilters::default(),
         }
     }
 }
@@ -231,38 +231,6 @@ fn default_voicing_override_source() -> String {
 
 fn default_chord_progression_source() -> String {
     DEFAULT_CHORD_PROGRESSION_SOURCE.to_string()
-}
-
-pub fn default_chord_patch_categories() -> Vec<String> {
-    to_category_names(&cmrt_surge_patches::DEFAULT_CHORD_PATCH_CATEGORY_NAMES)
-}
-
-pub fn default_bass_patch_categories() -> Vec<String> {
-    to_category_names(&cmrt_surge_patches::DEFAULT_BASS_PATCH_CATEGORY_NAMES)
-}
-
-pub fn default_arpeggio_patch_categories() -> Vec<String> {
-    to_category_names(&cmrt_surge_patches::DEFAULT_ARPEGGIO_PATCH_CATEGORY_NAMES)
-}
-
-pub fn default_drum_patch_categories() -> Vec<String> {
-    to_category_names(&cmrt_surge_patches::DEFAULT_DRUM_PATCH_CATEGORY_NAMES)
-}
-
-pub fn default_kick_patch_keywords() -> Vec<String> {
-    to_category_names(&cmrt_surge_patches::DEFAULT_KICK_PATCH_KEYWORDS)
-}
-
-pub fn default_snare_patch_keywords() -> Vec<String> {
-    to_category_names(&cmrt_surge_patches::DEFAULT_SNARE_PATCH_KEYWORDS)
-}
-
-pub fn default_hihat_patch_keywords() -> Vec<String> {
-    to_category_names(&cmrt_surge_patches::DEFAULT_HIHAT_PATCH_KEYWORDS)
-}
-
-fn to_category_names(names: &[&str]) -> Vec<String> {
-    names.iter().map(|name| (*name).to_string()).collect()
 }
 
 impl Config {

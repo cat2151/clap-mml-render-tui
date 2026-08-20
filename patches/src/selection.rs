@@ -71,6 +71,24 @@ impl<'a> RoleFilter<'a> {
     }
 }
 
+/// patch ごとに当てる [`RoleFilter`] を選ぶもの。
+///
+/// カタログに複数プラグインの音色が並ぶと、絞り込みは 1 組では足りない。Surge の
+/// カテゴリを cartridge の音色へ当てると候補が全滅するので（cartridge にカテゴリ階層が
+/// 無い）、patch 文字列ごとに引き分ける。
+///
+/// プラグインが 1 つだけの呼び出し側は [`RoleFilter`] をそのまま渡せばよい
+/// （下の実装が全 patch へ同じ絞り込みを返す）。
+pub trait RoleFilterLookup {
+    fn filter_for(&self, display: &str) -> RoleFilter<'_>;
+}
+
+impl RoleFilterLookup for RoleFilter<'_> {
+    fn filter_for(&self, _display: &str) -> RoleFilter<'_> {
+        *self
+    }
+}
+
 /// patch の mono/poly 判定。判定データを持つのは呼び出し側（voicing キャッシュ）なので、
 /// ここでは trait で受け取るだけにする。
 pub trait VoicingLookup {
@@ -117,20 +135,35 @@ pub fn matches_role(
     }
 }
 
+/// 役割の候補になる patch を全部集める。
+///
+/// 絞り込みは patch ごとに `filters` から引く。プラグインが 1 つだけなら
+/// `&RoleFilter` をそのまま渡せる。
+pub fn candidates_for_role<'a>(
+    pairs: &'a [(String, String)],
+    filters: &dyn RoleFilterLookup,
+    voicing: &dyn VoicingLookup,
+) -> Vec<&'a str> {
+    pairs
+        .iter()
+        .filter(|(display, lower)| {
+            matches_role(display, lower, &filters.filter_for(display), voicing)
+        })
+        .map(|(display, _)| display.as_str())
+        .collect()
+}
+
 /// 役割の候補から patch を1つ引く。候補が無ければ `None`。
 ///
 /// 当たりが薄いときに引き直しで粘るより、先に候補を絞ったほうが確実で速い。
 pub fn pick_for_role(
     pairs: &[(String, String)],
-    filter: &RoleFilter<'_>,
+    filters: &dyn RoleFilterLookup,
     voicing: &dyn VoicingLookup,
 ) -> Option<String> {
-    let candidates = pairs
-        .iter()
-        .filter(|(display, lower)| matches_role(display, lower, filter, voicing))
-        .collect::<Vec<_>>();
+    let candidates = candidates_for_role(pairs, filters, voicing);
     let index = random_index(candidates.len())?;
-    Some(candidates[index].0.clone())
+    Some(candidates[index].to_string())
 }
 
 fn random_index(len: usize) -> Option<usize> {

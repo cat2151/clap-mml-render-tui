@@ -9,7 +9,7 @@
 //! 引いたものではなく画面に出ていた patch そのものなので、上へ戻しきれば必ず元の音色
 //! へ帰れる。
 
-use cmrt_surge_patches::PatchRole;
+use cmrt_patches::PatchRole;
 use rand::seq::SliceRandom;
 
 use crate::ListDirection;

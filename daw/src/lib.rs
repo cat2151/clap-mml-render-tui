@@ -191,7 +191,9 @@ pub struct DawApp {
     pub(crate) textarea: TextArea<'static>,
 
     cfg: Arc<Config>,
-    entry_ptr: usize, // *const PluginEntry as usize。render_server backend では 0。
+    /// カタログのプラグインごとのロード済み CLAP entry。
+    /// render_server backend / テストでは空。
+    plugin_entries: cmrt_offline_render::PluginEntries,
 
     /// セルごとのキャッシュ [track][measure]
     pub(crate) cache: Arc<Mutex<Vec<Vec<CellCache>>>>,
@@ -221,12 +223,12 @@ pub struct DawApp {
 }
 
 impl DawApp {
-    pub fn new(cfg: Arc<Config>, entry_ptr: usize) -> Self {
-        init::new(cfg, entry_ptr)
+    pub fn new(cfg: Arc<Config>, plugin_entries: cmrt_offline_render::PluginEntries) -> Self {
+        init::new(cfg, plugin_entries)
     }
 
     fn offline_render_available(&self) -> bool {
-        self.entry_ptr != 0
+        self.plugin_entries.is_available()
             || self.cfg.offline_render_backend == cmrt_runtime::OfflineRenderBackend::RenderServer
     }
 

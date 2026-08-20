@@ -140,12 +140,12 @@ impl PreparedRenderQueue {
 impl RenderQueue {
     pub(super) fn new(
         cfg: Arc<cmrt_runtime::Config>,
-        entry_ptr: usize,
+        plugin_entries: cmrt_offline_render::PluginEntries,
         render_workers: usize,
     ) -> Self {
         let (request_tx, request_rx) = mpsc::channel::<RenderRequest>();
         let prepared_queue = Arc::new(PreparedRenderQueue::default());
-        let renderer = OfflineRenderer::new(Arc::clone(&cfg), entry_ptr);
+        let renderer = OfflineRenderer::new(Arc::clone(&cfg), plugin_entries);
 
         {
             let prepared_queue = Arc::clone(&prepared_queue);

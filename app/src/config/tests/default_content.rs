@@ -53,31 +53,65 @@ fn default_config_content_uses_voicing_source_urls() {
     )));
 }
 
+/// 用途別 7 項目は**トップレベルへ値として書かない**。トップレベルの値は既定プラグインに
+/// だけ効くレガシー綴りなので、Surge のカテゴリ名を書き出すと `active_plugin` に別の
+/// プラグインを指した config で候補が全滅する（`docs/adr/0007-patch-role-defaults-three-layers.md`）。
 #[test]
-fn default_config_content_lists_the_chord_patch_categories() {
+fn default_config_content_does_not_write_the_patch_roles_at_the_top_level() {
     let content = default_config_content();
 
-    assert!(
-        content.contains(r#"chord_patch_categories = ["Keys", "Organs", "Pads", "Polysynths"]"#),
-        "{content}"
-    );
+    for line in content.lines() {
+        assert!(
+            !line.starts_with("chord_patch_categories")
+                && !line.starts_with("bass_patch_categories")
+                && !line.starts_with("arpeggio_patch_categories")
+                && !line.starts_with("drum_patch_categories")
+                && !line.starts_with("kick_patch_keywords")
+                && !line.starts_with("snare_patch_keywords")
+                && !line.starts_with("hihat_patch_keywords"),
+            "用途別 7 項目をトップレベルへ書いてはいけない: {line}"
+        );
+    }
 }
 
-/// chord mode の3行はそれぞれ別カテゴリから抽選するので、3つとも案内する。
+/// 値は見えないと編集できないので、`[plugins."Surge XT"]` のコメントとして案内する。
 #[test]
-fn default_config_content_lists_the_bass_and_arpeggio_patch_categories() {
+fn default_config_content_shows_the_surge_patch_roles_as_a_commented_profile() {
     let content = default_config_content();
 
+    assert!(content.contains(r#"# [plugins."Surge XT"]"#), "{content}");
     assert!(
-        content.contains(r#"bass_patch_categories = ["Basses"]"#),
+        content.contains(r#"# chord_patch_categories = ["Keys", "Organs", "Pads", "Polysynths"]"#),
+        "{content}"
+    );
+    assert!(
+        content.contains(r#"# bass_patch_categories = ["Basses"]"#),
         "{content}"
     );
     assert!(
         content.contains(
-            r#"arpeggio_patch_categories = ["Bells", "Brass", "Guitars", "Keys", "Leads", "Mallets", "Modelled", "MPE", "Organs", "Plucks"]"#
+            r#"# arpeggio_patch_categories = ["Bells", "Brass", "Guitars", "Keys", "Leads", "Mallets", "Modelled", "MPE", "Organs", "Plucks"]"#
         ),
         "{content}"
     );
+}
+
+/// コメントを外した瞬間に後続のトップレベル項目が吸い込まれないよう、テーブル見出しは
+/// 必ずファイル末尾に置く。
+#[test]
+fn the_commented_profile_is_the_last_thing_in_the_default_config() {
+    let content = default_config_content();
+    let header = content
+        .rfind(r#"# [plugins."Surge XT"]"#)
+        .expect("commented profile header");
+
+    for line in content[header..].lines() {
+        let line = line.trim();
+        assert!(
+            line.is_empty() || line.starts_with('#'),
+            "コメント済みプロファイルより後ろに設定行を置いてはいけない: {line}"
+        );
+    }
 }
 
 #[test]

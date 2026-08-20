@@ -1,7 +1,7 @@
 use rand::seq::SliceRandom;
 use ratatui::widgets::ListState;
 
-use cmrt_surge_patches::PatchCategory;
+use cmrt_patches::PatchCategory;
 
 use super::{KeyboardContext, KeyboardPatchLoad, KeyboardScreen};
 
@@ -256,8 +256,8 @@ impl KeyboardScreen<'_> {
                 let current_patch = self
                     .state
                     .patch()
-                    .and_then(|patch| cmrt_surge_patches::resolve_display_patch_name(pairs, patch));
-                let categories = cmrt_surge_patches::group_patch_pairs_by_category(pairs);
+                    .and_then(|patch| cmrt_patches::resolve_display_patch_name(pairs, patch));
+                let categories = cmrt_patches::group_patch_pairs_by_category(pairs);
                 self.state
                     .patch_catalog
                     .load(categories, current_patch.as_deref());

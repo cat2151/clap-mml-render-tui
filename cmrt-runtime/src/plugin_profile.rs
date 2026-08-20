@@ -7,6 +7,10 @@
 //! 焼き込んでおくと `cfg.plugin_path` / `cfg.patches_dirs` の読み手（app・各画面）が
 //! プロファイルの存在を一切知らずに済む。
 //!
+//! 用途別 patch カテゴリ（[`PatchRoleFilters`]）だけは焼き込まない。トップレベルの値は
+//! 「プロファイルが書いていない項目の土台」で、カタログに複数プラグインが並ぶと
+//! プラグインごとに別の解決結果が要るため。解決は [`crate::PatchRoles::resolve`]。
+//!
 //! 既知のプラグインは [`builtin_plugin_profiles`] に組み込みで持っている。
 //! 標準の場所へインストールしてあるなら `active_plugin = 'Dexed'` の 1 行だけでよく、
 //! `[plugins.*]` を書く必要はない。
@@ -34,36 +38,11 @@ pub fn apply_active_plugin_profile(cfg: &mut Config) -> anyhow::Result<()> {
     cfg.plugin_path = profile.plugin_path;
     cfg.plugin_id = profile.plugin_id;
     cfg.patches_dirs = profile.patches_dirs;
-    apply_patch_roles(profile.patch_roles, cfg);
+    // 用途別カテゴリだけは焼き込まず、差分のまま持つ。トップレベルの値は
+    // 「プロファイルが書いていない項目の土台」であり、カタログに複数プラグインが
+    // 並ぶとプラグインごとに別の解決結果が要るため、土台を潰してはいけない。
+    cfg.active_patch_roles = profile.patch_roles;
     Ok(())
-}
-
-/// 用途別 patch カテゴリのうち「書かれている項目」だけをトップレベルフィールドへ焼き込む。
-///
-/// `None` は「書かれていない」なのでトップレベルの既定値を残し、`[]` は「カテゴリで
-/// 絞らない」という明示の指定なのでそのまま空で焼き込む。この区別が Dexed
-/// （cartridge にカテゴリ階層が無い）の候補を全滅させないための要。
-fn apply_patch_roles(roles: PatchRoleFilters, cfg: &mut Config) {
-    let assignments: [(Option<Vec<String>>, &mut Vec<String>); 7] = [
-        (
-            roles.chord_patch_categories,
-            &mut cfg.chord_patch_categories,
-        ),
-        (roles.bass_patch_categories, &mut cfg.bass_patch_categories),
-        (
-            roles.arpeggio_patch_categories,
-            &mut cfg.arpeggio_patch_categories,
-        ),
-        (roles.drum_patch_categories, &mut cfg.drum_patch_categories),
-        (roles.kick_patch_keywords, &mut cfg.kick_patch_keywords),
-        (roles.snare_patch_keywords, &mut cfg.snare_patch_keywords),
-        (roles.hihat_patch_keywords, &mut cfg.hihat_patch_keywords),
-    ];
-    for (from_profile, target) in assignments {
-        if let Some(value) = from_profile {
-            *target = value;
-        }
-    }
 }
 
 #[cfg(test)]

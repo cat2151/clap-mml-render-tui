@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use chord2mml_core::convert as chord_to_mml;
+use clack_host::prelude::PluginEntry;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use clap_mml_render_tui::{config, config_editor, server, tui, updater, voicing_cache_builder};
 use cmrt_core::{load_entry, mml_to_play};
@@ -291,21 +292,25 @@ fn main() -> Result<()> {
             unreachable!()
         }
     };
-    let entry = if needs_plugin_entry {
-        Some(load_entry(&cfg.plugin_path)?)
+    // カタログに音色を載せるプラグインぶんの entry をロードする。並びは
+    // `catalog_plugins` と同じで、先頭が既定プラグイン。オフラインレンダリングは
+    // MML が指す音色でこの中から引き分ける（`docs/adr/0009-offline-entry-map.md`）。
+    // server / CLI 経路が使うのは先頭の 1 本だけ。
+    let entries: Vec<PluginEntry> = if needs_plugin_entry {
+        config::catalog_plugins(&cfg)
+            .iter()
+            .map(|plugin| load_entry(&plugin.plugin_path))
+            .collect::<Result<Vec<_>>>()?
     } else {
-        None
+        Vec::new()
     };
+    let plugin_entries = cmrt_offline_render::PluginEntries::from_loaded(&entries);
+    // MML 1 本ごとに「その音色のプラグイン」を引く表。server / CLI もこれを通す。
+    let in_process_plugins = cmrt_offline_render::InProcessPlugins::new(&cfg, &plugin_entries);
 
     match action {
         CliAction::Server(port) => {
-            return server::run_server(
-                &cfg,
-                entry
-                    .as_ref()
-                    .expect("server mode must load a CLAP PluginEntry"),
-                port,
-            );
+            return server::run_server(&cfg, &in_process_plugins, port);
         }
         CliAction::CliMml(mml) => {
             let playback_mml = cli_playback_mml(&mml);
@@ -317,14 +322,8 @@ fn main() -> Result<()> {
                     println!("CLI モード: MML = {mml}");
                 }
             }
-            let core_cfg = config::core_config_from_config(&cfg);
-            let patch = mml_to_play(
-                playback_mml.mml(),
-                &core_cfg,
-                entry
-                    .as_ref()
-                    .expect("CLI mode must load a CLAP PluginEntry"),
-            )?;
+            let (entry, core_cfg) = in_process_plugins.for_mml(playback_mml.mml())?;
+            let patch = mml_to_play(playback_mml.mml(), core_cfg, entry)?;
             println!("patch: {}", patch);
             return Ok(());
         }
@@ -346,7 +345,7 @@ fn main() -> Result<()> {
     }
 
     // TUI モード
-    let mut app = tui::TuiApp::new(&cfg, entry.as_ref());
+    let mut app = tui::TuiApp::new(&cfg, plugin_entries);
 
     let exit_reason = app.run()?;
     drop(app);

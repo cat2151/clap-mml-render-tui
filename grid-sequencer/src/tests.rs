@@ -1,6 +1,7 @@
 use crossterm::event::KeyModifiers;
 
 use super::*;
+use cmrt_tui_core::patch_plugins::{PatchPlugins, PatchRoles};
 
 fn press(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
@@ -22,6 +23,18 @@ pub(crate) fn empty_catalog() -> &'static cmrt_chord::ChordProgressionCatalog {
     CATALOG.get_or_init(cmrt_chord::ChordProgressionCatalog::default)
 }
 
+/// 用途別絞り込みだけを差し替えたテスト用カタログ。
+/// `ctx.patch_plugins = &plugins` で ctx へ差し込む。
+pub(crate) fn plugins_with(patch_roles: PatchRoles) -> PatchPlugins {
+    PatchPlugins::single_plugin(patch_roles)
+}
+
+/// どの用途でも絞らないカタログ。カテゴリの検証は chord_mode 側のテストで行う。
+pub(crate) fn unfiltered_plugins() -> &'static PatchPlugins {
+    static PLUGINS: std::sync::OnceLock<PatchPlugins> = std::sync::OnceLock::new();
+    PLUGINS.get_or_init(|| plugins_with(PatchRoles::default()))
+}
+
 pub(crate) fn ctx_with<'a>(
     patch_load: GridPatchLoad<'a>,
     catalog: &'a cmrt_chord::ChordProgressionCatalog,
@@ -32,14 +45,7 @@ pub(crate) fn ctx_with<'a>(
         patch_load,
         chord_catalog: catalog,
         voicing,
-        // 既定ではカテゴリで絞らない。カテゴリの検証は chord_mode 側のテストで行う。
-        chord_patch_categories: &[],
-        bass_patch_categories: &[],
-        arpeggio_patch_categories: &[],
-        drum_patch_categories: &[],
-        kick_patch_keywords: &[],
-        snare_patch_keywords: &[],
-        hihat_patch_keywords: &[],
+        patch_plugins: unfiltered_plugins(),
         chord_source_updated: false,
     }
 }

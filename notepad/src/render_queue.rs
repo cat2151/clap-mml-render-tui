@@ -12,7 +12,7 @@ use anyhow::{anyhow, Result};
 use cmrt_core::NativeRenderProbeContext;
 
 use cmrt_history::daw_cache_mml_hash;
-use cmrt_offline_render::OfflineRenderer;
+use cmrt_offline_render::{OfflineRenderer, PluginEntries};
 use cmrt_runtime::{Config, OfflineRenderBackend};
 
 use crate::{truncate_for_log, ActiveRenderGuard};
@@ -74,12 +74,12 @@ use state::{
 impl TuiRenderQueue {
     pub(super) fn new(
         cfg: Arc<Config>,
-        entry_ptr: usize,
+        plugin_entries: PluginEntries,
         active_offline_render_count: Arc<std::sync::atomic::AtomicUsize>,
     ) -> Self {
         let configured_workers = cfg.effective_offline_render_workers();
         let render_workers = render_worker_count(cfg.offline_render_backend, configured_workers);
-        let renderer = OfflineRenderer::new(Arc::clone(&cfg), entry_ptr);
+        let renderer = OfflineRenderer::new(Arc::clone(&cfg), plugin_entries);
         log_notepad_event(format!(
             "render queue backend={} workers={render_workers} configured_workers={configured_workers}",
             cfg.offline_render_backend.as_str()

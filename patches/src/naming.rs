@@ -2,7 +2,7 @@
 
 use std::cmp::Ordering;
 
-use crate::layout::PATCH_DIR_PREFIXES;
+use crate::surge_xt::PATCH_DIR_PREFIXES;
 
 /// 区切り文字と大文字小文字の揺れを吸収した、照合用のキーへ直す。
 pub fn normalize_patch_lookup_key(patch_name: &str) -> String {
@@ -92,7 +92,8 @@ pub fn compare_patch_names_natural(left: &str, right: &str) -> Ordering {
 /// 保存された patch 名を、いま列挙されている patch の表示名へ突き合わせる。
 ///
 /// prefix 抜きで保存された名前も拾えるよう、`patches_factory` / `patches_3rdparty` を
-/// 補ったキーでも探す。
+/// 補ったキーでも探す。**これは Surge の prefix だけの後方互換**で、カートリッジ形式は
+/// もともと prefix を持たないので素通りする。
 pub fn resolve_display_patch_name(pairs: &[(String, String)], patch_name: &str) -> Option<String> {
     let key = normalize_patch_lookup_key(patch_name);
     if key.is_empty() {

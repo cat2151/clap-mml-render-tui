@@ -526,10 +526,10 @@ dependencies = [
  "anyhow",
  "cmrt-history",
  "cmrt-offline-render",
+ "cmrt-patches",
  "cmrt-realtime-play",
  "cmrt-render-core",
  "cmrt-runtime",
- "cmrt-surge-patches",
  "cmrt-tui-core",
  "crossterm",
  "hound",
@@ -559,10 +559,10 @@ dependencies = [
  "anyhow",
  "cmrt-arpeggiator",
  "cmrt-chord",
+ "cmrt-patches",
  "cmrt-realtime-play",
  "cmrt-rhythm",
  "cmrt-runtime",
- "cmrt-surge-patches",
  "cmrt-tui-core",
  "crossterm",
  "rand 0.10.2",
@@ -575,9 +575,9 @@ name = "cmrt-history"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cmrt-patches",
  "cmrt-realtime-play",
  "cmrt-runtime",
- "cmrt-surge-patches",
  "cmrt-tui-core",
  "dirs",
  "serde",
@@ -590,9 +590,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "cmrt-chord",
+ "cmrt-patches",
  "cmrt-realtime-play",
  "cmrt-runtime",
- "cmrt-surge-patches",
  "cmrt-tui-core",
  "crossterm",
  "rand 0.10.2",
@@ -668,10 +668,10 @@ dependencies = [
  "anyhow",
  "cmrt-history",
  "cmrt-offline-render",
+ "cmrt-patches",
  "cmrt-realtime-play",
  "cmrt-render-core",
  "cmrt-runtime",
- "cmrt-surge-patches",
  "cmrt-tui-core",
  "crossterm",
  "hound",
@@ -691,9 +691,17 @@ dependencies = [
  "cmrt-history",
  "cmrt-render-core",
  "cmrt-runtime",
+ "cmrt-tui-core",
  "hound",
  "toml",
  "ureq",
+]
+
+[[package]]
+name = "cmrt-patches"
+version = "0.1.0"
+dependencies = [
+ "rand 0.10.2",
 ]
 
 [[package]]
@@ -733,8 +741,8 @@ name = "cmrt-runtime"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cmrt-patches",
  "cmrt-server-config",
- "cmrt-surge-patches",
  "serde",
  "toml",
 ]
@@ -751,13 +759,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cmrt-surge-patches"
-version = "0.1.0"
-dependencies = [
- "rand 0.10.2",
-]
-
-[[package]]
 name = "cmrt-timeline"
 version = "0.1.0"
 source = "git+https://github.com/cat2151/clap-mml-play-server#a6fd74dd6e1601bd1b47bf0cb0b8def417e294cb"
@@ -769,10 +770,10 @@ dependencies = [
  "anyhow",
  "arboard",
  "chrono",
+ "cmrt-patches",
  "cmrt-realtime-play",
  "cmrt-render-core",
  "cmrt-runtime",
- "cmrt-surge-patches",
  "crossterm",
  "hound",
  "rand 0.10.2",

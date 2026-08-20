@@ -143,7 +143,10 @@ impl<'a> TuiApp<'a> {
         self.switch_to_primary_screen(PrimaryScreen::Daw, None);
         self.save_notepad_and_session_state();
 
-        let mut daw = crate::daw::DawApp::new(std::sync::Arc::clone(&self.cfg), self.entry_ptr);
+        let mut daw = crate::daw::DawApp::new(
+            std::sync::Arc::clone(&self.cfg),
+            self.plugin_entries.clone(),
+        );
         match daw.run_with_terminal(terminal, autoplay_on_entry)? {
             crate::daw::DawExitReason::SwitchTo {
                 target,

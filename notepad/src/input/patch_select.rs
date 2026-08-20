@@ -17,7 +17,7 @@ impl<'a> NotepadScreen<'a> {
         let state = self.patch_load_state.lock().unwrap();
         match &*state {
             PatchLoadState::Ready(pairs) => {
-                cmrt_surge_patches::resolve_display_patch_name(pairs, patch_name)
+                cmrt_patches::resolve_display_patch_name(pairs, patch_name)
             }
             PatchLoadState::Loading | PatchLoadState::Err(_) => None,
         }

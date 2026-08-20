@@ -8,7 +8,7 @@ use super::PATCH_SELECT_PREVIEW_FALLBACK_PHRASE;
 
 impl<'a> NotepadScreen<'a> {
     fn sort_patch_select_pairs(&mut self) {
-        cmrt_surge_patches::sort_patch_pairs(
+        cmrt_patches::sort_patch_pairs(
             &mut self.patch_select.patch_all,
             self.patch_select.patch_select_sort_order,
         );
@@ -83,8 +83,7 @@ impl<'a> NotepadScreen<'a> {
             }
         }
         self.patch_select.patch_all = self.patch_select.patch_all_source_order.clone();
-        if self.patch_select.patch_select_sort_order == cmrt_surge_patches::PatchSortOrder::Category
-        {
+        if self.patch_select.patch_select_sort_order == cmrt_patches::PatchSortOrder::Category {
             self.sort_patch_select_pairs();
         }
         if cmrt_history::normalize_patch_phrase_store_for_available_patches(
@@ -190,8 +189,7 @@ impl<'a> NotepadScreen<'a> {
         self.patch_select.patch_select_sort_order =
             self.patch_select.patch_select_sort_order.toggle();
         self.patch_select.patch_all = self.patch_select.patch_all_source_order.clone();
-        if self.patch_select.patch_select_sort_order == cmrt_surge_patches::PatchSortOrder::Category
-        {
+        if self.patch_select.patch_select_sort_order == cmrt_patches::PatchSortOrder::Category {
             self.sort_patch_select_pairs();
         }
         self.patch_select.patch_filtered = crate::filter_patches_by_display_path(

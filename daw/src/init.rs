@@ -25,7 +25,7 @@ fn realtime_audio_startup_log_line(cfg: &cmrt_runtime::Config) -> String {
     )
 }
 
-pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
+pub(super) fn new(cfg: Arc<Config>, plugin_entries: cmrt_offline_render::PluginEntries) -> DawApp {
     super::http_server::set_active_http_state_cfg(Arc::clone(&cfg));
     let DawGridBuffers {
         tracks,
@@ -43,7 +43,11 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
     let cache = Arc::new(Mutex::new(cache));
 
     let cache_render_workers = cfg.effective_offline_render_workers();
-    let render_queue = RenderQueue::new(Arc::clone(&cfg), entry_ptr, cache_render_workers);
+    let render_queue = RenderQueue::new(
+        Arc::clone(&cfg),
+        plugin_entries.clone(),
+        cache_render_workers,
+    );
     cmrt_tui_core::logging::install_native_probe_logger();
 
     // CacheJob は共通 RenderQueue に入り、MML -> SMF 前処理を 1 MML ずつ行う。
@@ -199,7 +203,7 @@ pub(super) fn new(cfg: Arc<Config>, entry_ptr: usize) -> DawApp {
         sound_check_guide: cmrt_tui_core::sound_check_guide::SoundCheckGuide::new(None),
         textarea: cmrt_tui_core::text_input::new_single_line_textarea(""),
         cfg,
-        entry_ptr,
+        plugin_entries,
         cache,
         cache_tx,
         cache_render_workers,

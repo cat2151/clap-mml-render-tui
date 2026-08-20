@@ -3,28 +3,45 @@
 //! 「いま何のプラグインを使っているか」で振る舞いを変えたい場所（voicing 判定の
 //! データ源、キャッシュの置き場）が複数あるので、判定規則をここ 1 か所に置く。
 
-// プラグインの ID とファイル名は play server repo 側が単一ソース。
-// 「その材料で Config をどう判定するか」だけが TUI 側の知識としてここに残る。
-pub use cmrt_server_config::{plugin_file_stem, DEXED_PLUGIN_ID, SURGE_XT_PLUGIN_ID};
+// プラグインの ID とファイル名、および「その音色は state file か cartridge か」の判定は
+// play server repo 側が単一ソース。「その材料で Config をどう判定するか」だけが
+// TUI 側の知識としてここに残る。
+//
+// `patch_form_of` / `PatchForm` を素通しで再輸出しているのは、画面 crate（tui-core など）が
+// config crate だけを見ればよい形を保つため。
+pub use cmrt_server_config::{
+    patch_form_of, plugin_file_stem, PatchForm, DEXED_PLUGIN_ID, SURGE_XT_PLUGIN_ID,
+};
 
 use crate::{default_plugin_path, Config};
 
+/// このプラグインが Surge XT か。
+///
+/// `voicing_shared_source` / `voicing_override_source` が指す JSON は Surge の
+/// patch 表示パスをキーにした Surge 専用データなので、Surge のときだけ読む。
+///
+/// `plugin_id` はプロファイル解決後に埋まる。書かれていない config は
+/// `active_plugin` が無かった時代のもの（＝Surge 専用）か、`[plugins.*]` に
+/// `plugin_id` を書かなかったもののどちらかなので、`plugin_path` のファイル名で
+/// 見分ける。
+///
+/// 1 プロセスへ複数のプラグインを載せると「Config 全体が Surge か」では問えなくなる
+/// （音色ごとに違う）。プロファイル 1 つぶんの材料だけを受け取る形にしてある。
+pub fn is_surge_xt_plugin(plugin_id: Option<&str>, plugin_path: &str) -> bool {
+    match plugin_id {
+        Some(id) => id == SURGE_XT_PLUGIN_ID,
+        None => plugin_file_stem(plugin_path)
+            .eq_ignore_ascii_case(&plugin_file_stem(default_plugin_path())),
+    }
+}
+
 impl Config {
-    /// 使用中プラグインが Surge XT か。
+    /// 既定プラグイン（音色無指定の行が鳴るもの）が Surge XT か。
     ///
-    /// `voicing_shared_source` / `voicing_override_source` が指す JSON は Surge の
-    /// patch 表示パスをキーにした Surge 専用データなので、Surge のときだけ読む。
-    ///
-    /// `plugin_id` はプロファイル解決後に埋まる。書かれていない config は
-    /// `active_plugin` が無かった時代のもの（＝Surge 専用）か、`[plugins.*]` に
-    /// `plugin_id` を書かなかったもののどちらかなので、`plugin_path` のファイル名で
-    /// 見分ける。
+    /// **音色ごとの判定にはこれを使わないこと。** カタログに複数プラグインが並ぶと
+    /// 答えが音色によって変わる。その用途には `PatchPlugins`（tui-core）を通す。
     pub fn is_surge_xt(&self) -> bool {
-        match self.plugin_id.as_deref() {
-            Some(id) => id == SURGE_XT_PLUGIN_ID,
-            None => plugin_file_stem(&self.plugin_path)
-                .eq_ignore_ascii_case(&plugin_file_stem(default_plugin_path())),
-        }
+        is_surge_xt_plugin(self.plugin_id.as_deref(), &self.plugin_path)
     }
 }
 

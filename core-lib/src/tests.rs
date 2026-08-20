@@ -386,3 +386,28 @@ fn requested_native_render_probe_emits_paired_logs_for_tui_overlap() {
         );
     });
 }
+
+/// どのプラグインで鳴らすかの判別は、base で解決する**前**の display 文字列で行う。
+/// base 自体がプラグインごとに違うので、解決を先にすると鶏と卵になる。
+///
+/// 実装は play server 側（`cmrt_core::embedded_patch_ref`）の再輸出。あちらに
+/// テストが無いので、この契約はここで押さえておく。
+#[test]
+fn embedded_patch_ref_returns_the_unresolved_display_string() {
+    assert_eq!(
+        embedded_patch_ref(r#"{"Surge XT patch":"Dexed_01.syx/00 Say Again."}cde"#).as_deref(),
+        Some("Dexed_01.syx/00 Say Again.")
+    );
+    assert_eq!(
+        embedded_patch_ref(r#"{"Surge XT patch":"Pads/Pad 1.fxp"}t120o4c"#).as_deref(),
+        Some("Pads/Pad 1.fxp")
+    );
+}
+
+/// 先頭 JSON が無い / 音色キーが無い MML は `None`。呼び出し側はこれを
+/// 「既定プラグイン」として扱う（`docs/adr/0004-default-plugin-owns-unspecified-patches.md`）。
+#[test]
+fn embedded_patch_ref_is_none_without_a_patch_key() {
+    assert_eq!(embedded_patch_ref("cde"), None);
+    assert_eq!(embedded_patch_ref(r#"{"tempo":120}cde"#), None);
+}

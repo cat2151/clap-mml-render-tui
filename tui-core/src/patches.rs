@@ -1,43 +1,45 @@
 //! 設定された patch ディレクトリからの patch 一覧収集と、一覧の絞り込み。
 //!
-//! Surge XT のディレクトリ構造・カテゴリ体系の知識は [`cmrt_surge_patches`] に閉じてある。
+//! Surge XT のディレクトリ構造・カテゴリ体系の知識は [`cmrt_patches`] に閉じてある。
 //! ここは `Config`（＝設定された patch dir）と、別 repo の `.fxp` 走査
 //! （`cmrt_core::collect_patches`）を繋ぐ層に徹する。
 
 use anyhow::Result;
-use cmrt_runtime::{configured_patch_dirs, shared_patch_root_dir, Config};
-use cmrt_surge_patches::{sort_patch_pairs, PatchSortOrder};
+use cmrt_patches::{sort_patch_pairs, PatchSortOrder};
+use cmrt_runtime::{catalog_plugins, configured_patch_dirs, CatalogPlugin, Config};
 
 pub fn has_configured_patch_dirs(cfg: &Config) -> bool {
     !configured_patch_dirs(cfg).is_empty()
 }
 
+/// 設定された patch ディレクトリを走査し、(表示パス, 小文字化済み表示パス) の一覧を作る。
+///
+/// 相対化の基点は [`CatalogPlugin`] ごとに別。プラグインを跨いだ共通の親で相対化すると
+/// display 文字列（＝永続 ID）が変わってしまうため、**プラグインごとに相対化してから
+/// 連結する**。並べ替えは連結後に 1 回だけ行うので、プラグインが増えても一覧は
+/// 表示パス順のまま混ざる。
 pub fn collect_patch_pairs(cfg: &Config) -> Result<Vec<(String, String)>> {
-    let dirs = configured_patch_dirs(cfg);
-    let Some(base_dir) = shared_patch_root_dir(&dirs) else {
-        return collect_patch_pairs_with_optional_base(&dirs, None);
-    };
-    collect_patch_pairs_with_optional_base(&dirs, Some(base_dir.as_str()))
+    let mut pairs = Vec::new();
+    for plugin in catalog_plugins(cfg) {
+        extend_with_plugin(&mut pairs, &plugin)?;
+    }
+    sort_patch_pairs(&mut pairs, PatchSortOrder::Path);
+    Ok(pairs)
 }
 
-fn collect_patch_pairs_with_optional_base(
-    dirs: &[String],
-    base_dir: Option<&str>,
-) -> Result<Vec<(String, String)>> {
-    let mut pairs = Vec::new();
-    for dir in dirs {
+fn extend_with_plugin(pairs: &mut Vec<(String, String)>, plugin: &CatalogPlugin) -> Result<()> {
+    for dir in &plugin.dirs {
         let paths = cmrt_core::collect_patches(dir)?;
         pairs.extend(paths.into_iter().map(|path| {
-            let display = match base_dir {
-                Some(base_dir) => cmrt_core::to_relative(base_dir, &path),
+            let display = match plugin.base.as_deref() {
+                Some(base) => cmrt_core::to_relative(base, &path),
                 None => path.to_string_lossy().into_owned(),
             };
             let lower = display.to_lowercase();
             (display, lower)
         }));
     }
-    sort_patch_pairs(&mut pairs, PatchSortOrder::Path);
-    Ok(pairs)
+    Ok(())
 }
 
 /// クエリ文字列（空白区切りでAND条件）で patch の表示パス全文をフィルタする。

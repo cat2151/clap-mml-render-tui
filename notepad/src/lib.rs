@@ -178,8 +178,9 @@ pub struct NotepadScreenParts {
     pub patch_load_state: Arc<Mutex<PatchLoadState>>,
     pub patch_phrase_store: cmrt_history::PatchPhraseStore,
     pub cfg: Arc<Config>,
-    /// `*const PluginEntry as usize`。render_server backend / テストでは 0。
-    pub entry_ptr: usize,
+    /// カタログのプラグインごとのロード済み CLAP entry。
+    /// render_server backend / テストでは空。
+    pub plugin_entries: cmrt_offline_render::PluginEntries,
 }
 
 impl NotepadScreen<'static> {
@@ -192,12 +193,12 @@ impl NotepadScreen<'static> {
             patch_load_state,
             patch_phrase_store,
             cfg,
-            entry_ptr,
+            plugin_entries,
         } = parts;
         let active_offline_render_count = Arc::new(AtomicUsize::new(0));
         let render_queue = TuiRenderQueue::new(
             Arc::clone(&cfg),
-            entry_ptr,
+            plugin_entries,
             Arc::clone(&active_offline_render_count),
         );
         Self::from_parts(

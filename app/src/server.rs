@@ -1,11 +1,11 @@
 //! サーバーモード: HTTP POSTでMMLを受け取りWAVデータを返す
 
 use anyhow::Result;
-use clack_host::prelude::PluginEntry;
 use cmrt_core::mml_render;
+use cmrt_offline_render::InProcessPlugins;
 use std::io::{Cursor, Read};
 
-use crate::config::{core_config_from_config, Config};
+use crate::config::Config;
 
 pub use cmrt_runtime::DEFAULT_PORT;
 
@@ -16,7 +16,11 @@ const MAX_BODY_BYTES: u64 = 1024 * 1024; // 1 MiB
 ///
 /// `port` でlistenし、POSTリクエストのbodyをMMLとして受け取り、
 /// レンダリングしたWAVバイト列をレスポンスとして返す。
-pub fn run_server(cfg: &Config, entry: &PluginEntry, port: u16) -> Result<()> {
+///
+/// どのプラグインで鳴らすかはリクエストごとに MML の音色で決まる（`plugins`）。
+/// 起動時の 1 つで決め打つと、混在カタログで別プラグインの音色を受け取ったとき
+/// 「操作は成功したが前の音のまま」という静かな間違いになる。
+pub fn run_server(cfg: &Config, plugins: &InProcessPlugins, port: u16) -> Result<()> {
     let addr = format!("127.0.0.1:{}", port);
     let server = tiny_http::Server::http(&addr)
         .map_err(|e| anyhow::anyhow!("HTTPサーバーの起動に失敗 ({}): {}", addr, e))?;
@@ -73,8 +77,10 @@ pub fn run_server(cfg: &Config, entry: &PluginEntry, port: u16) -> Result<()> {
         let mml_preview: String = mml.chars().take(80).collect();
         println!("MML受信: {}", mml_preview.escape_default());
 
-        let core_cfg = core_config_from_config(cfg);
-        match mml_render(&mml, &core_cfg, entry) {
+        let rendered = plugins
+            .for_mml(&mml)
+            .and_then(|(entry, core_cfg)| mml_render(&mml, core_cfg, entry));
+        match rendered {
             Ok((samples, patch_display)) => {
                 println!("レンダリング完了: patch={}", patch_display);
 

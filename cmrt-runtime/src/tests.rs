@@ -220,3 +220,45 @@ patches_dirs = ["/tmp/surge-data/patches_factory", "/tmp/surge-data/patches_3rdp
         Some("/tmp/surge-data")
     );
 }
+
+/// ひな形はそのままでも、末尾のコメント済みプロファイルを丸ごと有効にしても TOML として
+/// 通る。テーブル見出しが末尾にあることの担保（途中に置くと、後続のトップレベル項目が
+/// `[plugins."Surge XT"]` の中身になって型が合わなくなる）。
+#[test]
+fn the_default_config_parses_with_and_without_the_commented_profile() {
+    let content = default_config_content();
+    let cfg: Config = toml::from_str(&content).expect("ひな形がそのまま TOML として通ること");
+    // 用途別 7 項目はトップレベルに書かれていない。既定値はプラグインごとに持つ。
+    assert_eq!(cfg.top_level_patch_roles, PatchRoleFilters::default());
+
+    let header = content
+        .rfind(r#"# [plugins."Surge XT"]"#)
+        .expect("コメント済みプロファイル");
+    // ユーザーがやるのと同じで、設定行（`# キー = 値` と `# [テーブル]`）だけコメントを外す。
+    // 説明文にも `=` は出るので、`=` の左が TOML のキーの形をしている行だけを設定行とみなす。
+    let is_setting = |body: &str| {
+        body.starts_with('[')
+            || body.split_once('=').is_some_and(|(key, _)| {
+                let key = key.trim();
+                !key.is_empty() && key.chars().all(|c| c.is_ascii_lowercase() || c == '_')
+            })
+    };
+    let uncommented: String = content[header..]
+        .lines()
+        .map(|line| match line.strip_prefix("# ") {
+            Some(body) if is_setting(body) => body.trim_end(),
+            _ => line.trim_end(),
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let with_profile = format!("{}{uncommented}\n", &content[..header]);
+    let cfg: Config =
+        toml::from_str(&with_profile).expect("コメントを外しても TOML として通ること");
+
+    let surge = cfg.plugins.get("Surge XT").expect("Surge XT プロファイル");
+    assert_eq!(
+        surge.patch_roles.chord_patch_categories,
+        Some(PatchRoles::builtin_for(Some(SURGE_XT_PLUGIN_ID), "").chord_patch_categories)
+    );
+    assert!(cfg.plugins.contains_key("my_synth"));
+}

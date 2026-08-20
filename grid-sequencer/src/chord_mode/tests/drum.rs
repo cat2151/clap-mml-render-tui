@@ -25,29 +25,15 @@ fn drum_patches() -> Vec<(String, String)> {
     ]
 }
 
-struct DrumConfig {
-    categories: Vec<String>,
-    kick: Vec<String>,
-    snare: Vec<String>,
-    hihat: Vec<String>,
-}
-
-impl DrumConfig {
-    fn new() -> Self {
-        Self {
-            categories: vec!["Percussion".to_string()],
-            kick: vec!["kick".to_string()],
-            snare: vec!["snare".to_string()],
-            hihat: vec!["hat".to_string()],
-        }
-    }
-
-    fn apply<'a>(&'a self, ctx: &mut GridSequencerContext<'a>) {
-        ctx.drum_patch_categories = &self.categories;
-        ctx.kick_patch_keywords = &self.kick;
-        ctx.snare_patch_keywords = &self.snare;
-        ctx.hihat_patch_keywords = &self.hihat;
-    }
+/// drum 4 役をキーワードで分けるテスト用カタログ。ctx より先に束縛すること。
+fn drum_plugins() -> PatchPlugins {
+    plugins_with(PatchRoles {
+        drum_patch_categories: vec!["Percussion".to_string()],
+        kick_patch_keywords: vec!["kick".to_string()],
+        snare_patch_keywords: vec!["snare".to_string()],
+        hihat_patch_keywords: vec!["hat".to_string()],
+        ..PatchRoles::default()
+    })
 }
 
 /// drum 行は chord mode を使わなくても役割に合う patch が当たる。
@@ -57,9 +43,9 @@ fn drum_rows_get_their_own_patch_without_the_chord_mode() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = drum_patches();
-    let config = DrumConfig::new();
+    let plugins = drum_plugins();
     let mut ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllUnknown);
-    config.apply(&mut ctx);
+    ctx.patch_plugins = &plugins;
     let mut screen = GridSequencerScreen::with_track_count(None, crate::FULL_DRUM_TRACK_COUNT);
 
     screen.start(now, &ctx);
@@ -91,9 +77,9 @@ fn randomizing_keeps_the_drum_rows_on_drum_patches() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = drum_patches();
-    let config = DrumConfig::new();
+    let plugins = drum_plugins();
     let mut ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllUnknown);
-    config.apply(&mut ctx);
+    ctx.patch_plugins = &plugins;
     let mut screen = GridSequencerScreen::with_track_count(None, crate::FULL_DRUM_TRACK_COUNT);
     screen.start(now, &ctx);
 
@@ -117,9 +103,9 @@ fn the_staged_cycle_reassigns_the_drum_rows() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = drum_patches();
-    let config = DrumConfig::new();
+    let plugins = drum_plugins();
     let mut ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
-    config.apply(&mut ctx);
+    ctx.patch_plugins = &plugins;
     let mut screen = GridSequencerScreen::with_track_count(None, crate::FULL_DRUM_TRACK_COUNT);
     screen.start(now, &ctx);
     screen.handle_key(press_c(), now, &ctx);

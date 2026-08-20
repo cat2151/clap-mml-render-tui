@@ -1,4 +1,5 @@
 use super::*;
+use cmrt_tui_core::patch_plugins::PatchRoles;
 
 #[test]
 fn patch_name_wheel_uses_chord_candidates_only_on_the_chord_instance() {
@@ -6,11 +7,13 @@ fn patch_name_wheel_uses_chord_candidates_only_on_the_chord_instance() {
         .into_iter()
         .map(|patch| (patch.to_string(), patch.to_lowercase()))
         .collect::<Vec<_>>();
-    let chord_categories = vec!["Pads".to_string()];
-    let bass_categories = vec!["Bass".to_string()];
+    let plugins = crate::tests::plugins_with(PatchRoles {
+        chord_patch_categories: vec!["Pads".to_string()],
+        bass_patch_categories: vec!["Bass".to_string()],
+        ..PatchRoles::default()
+    });
     let mut ctx = context(&patches);
-    ctx.chord_patch_categories = &chord_categories;
-    ctx.bass_patch_categories = &bass_categories;
+    ctx.patch_plugins = &plugins;
     // chord ON の行は 3=和音、4=bass、5〜8が 4 voice。
     let mut screen = GridSequencerScreen::with_track_count(None, 4);
     screen.state.instances_mut()[0].patch = Some("Bass/Mono.fxp".to_string());
@@ -64,9 +67,12 @@ fn patch_name_wheel_uses_arpeggio_candidates_on_the_arpeggio_instance() {
         .into_iter()
         .map(|patch| (patch.to_string(), patch.to_lowercase()))
         .collect::<Vec<_>>();
-    let arpeggio_categories = vec!["Leads".to_string()];
+    let plugins = crate::tests::plugins_with(PatchRoles {
+        arpeggio_patch_categories: vec!["Leads".to_string()],
+        ..PatchRoles::default()
+    });
     let mut ctx = context(&patches);
-    ctx.arpeggio_patch_categories = &arpeggio_categories;
+    ctx.patch_plugins = &plugins;
     let mut screen = GridSequencerScreen::with_track_count(None, 4);
     screen.state.instances_mut()[crate::ARPEGGIO_ROW].patch =
         Some("Percussion/Kick.fxp".to_string());
@@ -190,9 +196,12 @@ fn a_wheel_with_no_candidates_for_the_role_reports_why_nothing_changed() {
         .into_iter()
         .map(|patch| (patch.to_string(), patch.to_lowercase()))
         .collect::<Vec<_>>();
-    let chord_categories = vec!["Pads".to_string()];
+    let plugins = crate::tests::plugins_with(PatchRoles {
+        chord_patch_categories: vec!["Pads".to_string()],
+        ..PatchRoles::default()
+    });
     let mut ctx = context(&patches);
-    ctx.chord_patch_categories = &chord_categories;
+    ctx.patch_plugins = &plugins;
     let mut screen = GridSequencerScreen::with_track_count(None, 4);
     screen.state.set_chord(
         ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]),

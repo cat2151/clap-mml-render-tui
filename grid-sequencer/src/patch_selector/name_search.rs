@@ -4,7 +4,7 @@
 //! `Instrument/Soft Strum.fxp` を `strum` で発見しつつ、category 名だけが一致する
 //! `Strum/Plain Pad.fxp` は結果に含めないため、表示パス検索とは共通化しない。
 
-use cmrt_surge_patches::PatchCategory;
+use cmrt_patches::PatchCategory;
 use ratatui_textarea::TextArea;
 
 use super::PatchSelector;

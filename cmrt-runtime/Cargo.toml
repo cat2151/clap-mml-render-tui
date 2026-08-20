@@ -8,7 +8,7 @@ name = "cmrt_runtime"
 path = "src/lib.rs"
 
 [dependencies]
-cmrt-surge-patches = { path = "../surge-patches" }
+cmrt-patches = { path = "../patches" }
 # config.toml のうち「プラグインをロードする側の知識」（標準インストール先・
 # active_plugin の解決規則・音色ディレクトリの畳み込み）は play server repo 側が単一ソース。
 cmrt-server-config = { git = "https://github.com/cat2151/clap-mml-play-server", package = "cmrt-server-config" }

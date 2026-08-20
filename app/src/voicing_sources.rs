@@ -9,6 +9,7 @@ use std::{
 };
 
 use anyhow::Result;
+use cmrt_tui_core::patch_plugins::PatchPlugins;
 
 use crate::{
     cached_source::CachedSource, config::Config, history::VoicingCache, realtime_play::PatchVoicing,
@@ -22,10 +23,19 @@ struct SourceSet {
 
 impl SourceSet {
     fn from_config(cfg: &Config) -> Option<Self> {
+        Self::from_catalog(cfg, &PatchPlugins::from_config(cfg))
+    }
+
+    /// カタログを外から渡す形。**カタログは開発機のインストール状況で変わる**ので、
+    /// テストはこちらを通す。
+    fn from_catalog(cfg: &Config, plugins: &PatchPlugins) -> Option<Self> {
         // shared / override の JSON はキーが Surge の patch 表示パスで、Surge 以外の
         // プラグインでは 1 件も当たらない。取りに行くだけ無駄なので読まない
-        // （Surge 以外の判定は [`VoicingPolicy`] が受け持つ）。
-        if !cfg.is_surge_xt() {
+        // （Surge 以外の判定は `VoicingPolicy` が受け持つ）。
+        //
+        // 見るのは既定プラグインではなく**カタログ全体**。カタログに Surge の音色が
+        // 1 つでも載るなら、既定プラグインが別でもこの JSON は要る。
+        if !plugins.any_surge_xt() {
             return None;
         }
         let config_dir = crate::config::config_app_dir()?;

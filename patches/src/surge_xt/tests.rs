@@ -1,7 +1,11 @@
-use super::*;
+use crate::layout::{patch_category, patch_matches_categories, PatchLayout};
 
 #[test]
 fn patch_category_reads_the_factory_layout() {
+    assert_eq!(
+        PatchLayout::of("patches_factory/Pads/Warm Pad.fxp"),
+        PatchLayout::SurgeXt
+    );
     assert_eq!(patch_category("patches_factory/Pads/Warm Pad.fxp"), "Pads");
 }
 
@@ -19,11 +23,6 @@ fn patch_category_handles_vendorless_thirdparty_paths() {
         patch_category("patches_3rdparty/Leads/Sharp Lead.fxp"),
         "Leads"
     );
-}
-
-#[test]
-fn patch_category_falls_back_to_the_first_segment_without_a_known_prefix() {
-    assert_eq!(patch_category("Pads/Warm Pad.fxp"), "Pads");
 }
 
 #[test]
@@ -48,13 +47,5 @@ fn patch_matches_categories_keeps_singular_and_plural_apart() {
     assert!(!patch_matches_categories(
         "patches_3rdparty/John/Bass/Deep.fxp",
         &categories
-    ));
-}
-
-#[test]
-fn empty_categories_match_everything() {
-    assert!(patch_matches_categories(
-        "patches_factory/Drums/Kick.fxp",
-        &[]
     ));
 }

@@ -20,7 +20,7 @@ members = [
     "realtime-play",
     "rhythm",
     "rubberband-ffi",
-    "surge-patches",
+    "patches",
     "tui-core",
 ]
 resolver = "2"

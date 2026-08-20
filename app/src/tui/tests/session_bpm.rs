@@ -29,7 +29,7 @@ fn screen_bpm_modes_are_persisted_and_restored_independently() {
     assert_eq!(saved.loop_browser_bpm, Some(93.75));
 
     let cfg = test_config();
-    let restored = TuiApp::new(&cfg, None);
+    let restored = TuiApp::new(&cfg, cmrt_offline_render::PluginEntries::none());
     assert_eq!(
         restored.grid_sequencer.bpm_mode(),
         cmrt_tui_core::bpm::BpmMode::Manual(127.125)
@@ -71,7 +71,7 @@ fn screen_bpm_ranges_are_persisted_and_restored_independently() {
     assert_eq!(saved.loop_browser_bpm_range, Some([90.0, 140.0]));
 
     let cfg = test_config();
-    let restored = TuiApp::new(&cfg, None);
+    let restored = TuiApp::new(&cfg, cmrt_offline_render::PluginEntries::none());
     assert_eq!(restored.grid_sequencer.bpm_range(), grid_range);
     assert_eq!(restored.loop_browser.state.bpm_range(), loop_range);
     // 引いた BPM は保存しない。起動時に範囲から引き直す。
