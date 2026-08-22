@@ -11,6 +11,7 @@
 // config crate だけを見ればよい形を保つため。
 pub use cmrt_server_config::{
     patch_form_of, plugin_file_stem, PatchForm, DEXED_PLUGIN_ID, SURGE_XT_PLUGIN_ID,
+    VAPORIZER2_PLUGIN_ID,
 };
 
 use crate::{default_plugin_path, Config};
@@ -32,6 +33,30 @@ pub fn is_surge_xt_plugin(plugin_id: Option<&str>, plugin_path: &str) -> bool {
         Some(id) => id == SURGE_XT_PLUGIN_ID,
         None => plugin_file_stem(plugin_path)
             .eq_ignore_ascii_case(&plugin_file_stem(default_plugin_path())),
+    }
+}
+
+/// このプラグインが Vaporizer2 か。
+///
+/// 用途別カテゴリの組み込み既定（[`crate::PatchRoles::builtin_for`]）を選ぶのに使う。
+/// Vaporizer2 の音色置き場は `.vvp` のフラットな 1 階層で、カテゴリは
+/// **ファイル名先頭 2 文字のコード**から取る独自の体系なので、Surge のカテゴリ名を
+/// 当てると候補が全滅する。
+///
+/// `plugin_id` が書かれていない config でも判定できるよう、ファイル名も見る。
+/// Vaporizer2 に既定の `plugin_path` はあるが `patches_dirs` の既定値は無いので、
+/// このプラグインを使う config は必ず `[plugins.Vaporizer2]` を書いている
+/// ＝ `plugin_id` が埋まっているのが普通。ファイル名判定は保険。
+///
+/// [`is_surge_xt_plugin`] と違い既定 `plugin_path` との比較にしないのは、
+/// **既定プラグインが Vaporizer2 でない config**（`plugin_path` が Surge や Dexed）でも
+/// カタログの 2 つめ以降として現れるため。
+pub fn is_vaporizer2_plugin(plugin_id: Option<&str>, plugin_path: &str) -> bool {
+    match plugin_id {
+        Some(id) => id == VAPORIZER2_PLUGIN_ID,
+        None => plugin_file_stem(plugin_path)
+            .to_lowercase()
+            .contains("vaporizer"),
     }
 }
 

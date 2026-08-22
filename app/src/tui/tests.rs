@@ -8,6 +8,7 @@ mod normal_mode;
 mod screen_switch;
 mod session;
 mod session_bpm;
+mod vaporizer2_screens;
 
 static NEXT_TEST_ID: AtomicUsize = AtomicUsize::new(0);
 

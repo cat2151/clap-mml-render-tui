@@ -50,6 +50,67 @@ fn build_voicing_cache_subcommand_is_recognized() {
     );
 }
 
+/// 診断の `--config` は省略でき、渡せばそのパスがそのまま届く。
+/// 実ユーザーの config.toml を書き換えて戻す運用（戻し忘れが即事故）を無くすための入口。
+#[test]
+fn patch_roles_subcommand_takes_an_optional_config_path() {
+    assert_eq!(
+        parse_cli_from(["cmrt", "patch-roles"]).unwrap(),
+        CliAction::PatchRoles { config: None }
+    );
+    assert_eq!(
+        parse_cli_from(["cmrt", "patch-roles", "--config", "/tmp/try.toml"]).unwrap(),
+        CliAction::PatchRoles {
+            config: Some(PathBuf::from("/tmp/try.toml"))
+        }
+    );
+}
+
+/// `render-mml` は音色も MML も省略でき、複数の `--patch` を並べられる。
+#[test]
+fn render_mml_subcommand_collects_every_patch_option() {
+    assert_eq!(
+        parse_cli_from(["cmrt", "render-mml"]).unwrap(),
+        CliAction::RenderMml(RenderMmlRequest::default())
+    );
+    assert_eq!(
+        parse_cli_from([
+            "cmrt",
+            "render-mml",
+            "--config",
+            "/tmp/try.toml",
+            "--patch",
+            "AR Accent Arp.vvp",
+            "--patch",
+            "Pads/Pad 1.fxp",
+            "--out-dir",
+            "/tmp/wav",
+            "--poly-check",
+            "cde",
+        ])
+        .unwrap(),
+        CliAction::RenderMml(RenderMmlRequest {
+            config: Some(PathBuf::from("/tmp/try.toml")),
+            patches: vec![
+                "AR Accent Arp.vvp".to_string(),
+                "Pads/Pad 1.fxp".to_string()
+            ],
+            mml: Some("cde".to_string()),
+            out_dir: Some(PathBuf::from("/tmp/wav")),
+            poly_check: true,
+        })
+    );
+}
+
+/// `render-mml` という文字列が MML として再生されないこと。
+#[test]
+fn render_mml_subcommand_takes_precedence_over_cli_mml_mode() {
+    assert_ne!(
+        parse_cli_from(["cmrt", "render-mml"]).unwrap(),
+        CliAction::CliMml("render-mml".to_string())
+    );
+}
+
 #[test]
 fn check_subcommand_takes_precedence_over_cli_mml_mode() {
     assert_ne!(

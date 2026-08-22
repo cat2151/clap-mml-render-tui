@@ -17,6 +17,26 @@
 
 **音色を無指定にした MML は必ず既定プラグイン（カタログの先頭）。**
 
+## 3 プラグイン目は無改修で通った（2026-08-22）
+
+`PluginEntries` も `InProcessPlugins` も**カタログの並び**で持つだけなので、
+Vaporizer2 を足しても引き分けのコードは 1 バイトも変わらなかった
+（`.vvp` の判別が `PatchPlugins::index_for_patch()` へ入っているため）。
+play-server の render server 側（`kind_for_patch()` / `extract_patch_from_json()`）も同じ。
+
+実測（`cmrt render-mml`、in-process / render server の両バックエンド）:
+
+| patch | 引き分けたプラグイン | rms | 無音 |
+|---|---|---|---|
+| `patches_factory/Pads/Pad 1.fxp` | Surge XT | 0.0335 | no |
+| `Dexed_01.syx/00 Say Again.` | Dexed | 0.0316 | no |
+| `AT Ambience 1.vvp` | **Vaporizer2** | 0.0477 | no |
+
+**`.vvp` に固有の危険はアポストロフィ**（`AT I'll House Your Grains.vvp` など 2 件）。
+MML の和音記法が `'...'` なので、先頭 JSON を素の文字列連結で作ると MML 側が壊れる。
+**JSON を通していれば壊れない**ことを往復テストで固定してある
+（`app/src/render_mml/tests.rs::a_patch_name_round_trips_through_the_mml_head_json`）。
+
 ## なぜ「静かに間違う」ので全経路に通す必要があるか
 
 **Surge のインスタンスへ DX7 の SysEx を送ると、Surge は理解できない 163 byte を
@@ -55,3 +75,6 @@ production の `load_entry` 呼び出しはこの経路と play-server 側の 3 
 
 - `offline-render/src/in_process/tests.rs` — cartridge の MML が Dexed の entry へ、
   `.fxp` の MML が Surge の entry へ、無指定が既定プラグインへ行くこと
+- `app/src/render_mml/tests.rs::each_patch_form_reports_its_own_plugin` — 3 形すべての引き分け
+  （**`.vvp` が Surge の添字へ落ちないこと**）
+- `app/src/render_mml/tests.rs::an_unspecified_patch_reports_the_default_plugin` — 無指定は必ず先頭

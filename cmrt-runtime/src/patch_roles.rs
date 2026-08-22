@@ -23,7 +23,7 @@
 //! 層 2 を既定プラグイン限定にしておくと、既存 config は今までどおりの結果になり、
 //! 新しく足したプラグインだけが層 3（そのプラグインの既定）へ落ちる。
 
-use crate::{is_surge_xt_plugin, Config, PatchRoleFilters};
+use crate::{is_surge_xt_plugin, is_vaporizer2_plugin, Config, PatchRoleFilters};
 
 /// プラグイン 1 つぶんの、解決済みの用途別絞り込み。
 ///
@@ -42,9 +42,10 @@ pub struct PatchRoles {
 impl PatchRoles {
     /// このプラグインの組み込み既定（層 3）。
     ///
-    /// カテゴリ階層を持つ音色置き場を使うプラグインでなければ「絞らない」が正解。
-    /// カテゴリ名は音色置き場の体系ごとの知識なので、Surge XT のぶんは
-    /// [`cmrt_patches::surge_xt`] が単一ソースとして持つ。
+    /// カテゴリの体系を持たない音色置き場を使うプラグイン（Dexed の cartridge）は
+    /// 「絞らない」が正解。カテゴリ名は音色置き場の体系ごとの知識なので、
+    /// Surge XT のぶんは [`cmrt_patches::surge_xt`] が、Vaporizer2 のぶんは
+    /// [`cmrt_patches::vaporizer2`] が単一ソースとして持つ。
     ///
     /// **組み込みプロファイル（play server repo 側の `builtin_plugin_profiles`）へは
     /// 書けない。** そちらへ書くと PS がカテゴリ名を知ることになり、いったん消した
@@ -52,6 +53,8 @@ impl PatchRoles {
     pub fn builtin_for(plugin_id: Option<&str>, plugin_path: &str) -> Self {
         if is_surge_xt_plugin(plugin_id, plugin_path) {
             Self::surge_xt()
+        } else if is_vaporizer2_plugin(plugin_id, plugin_path) {
+            Self::vaporizer2()
         } else {
             Self::default()
         }
@@ -60,6 +63,29 @@ impl PatchRoles {
     /// Surge XT の音色置き場（`patches_factory` / `patches_3rdparty`）向けの既定。
     fn surge_xt() -> Self {
         use cmrt_patches::surge_xt::{
+            DEFAULT_ARPEGGIO_PATCH_CATEGORY_NAMES, DEFAULT_BASS_PATCH_CATEGORY_NAMES,
+            DEFAULT_CHORD_PATCH_CATEGORY_NAMES, DEFAULT_DRUM_PATCH_CATEGORY_NAMES,
+            DEFAULT_HIHAT_PATCH_KEYWORDS, DEFAULT_KICK_PATCH_KEYWORDS,
+            DEFAULT_SNARE_PATCH_KEYWORDS,
+        };
+        Self {
+            chord_patch_categories: to_owned(&DEFAULT_CHORD_PATCH_CATEGORY_NAMES),
+            bass_patch_categories: to_owned(&DEFAULT_BASS_PATCH_CATEGORY_NAMES),
+            arpeggio_patch_categories: to_owned(&DEFAULT_ARPEGGIO_PATCH_CATEGORY_NAMES),
+            drum_patch_categories: to_owned(&DEFAULT_DRUM_PATCH_CATEGORY_NAMES),
+            kick_patch_keywords: to_owned(&DEFAULT_KICK_PATCH_KEYWORDS),
+            snare_patch_keywords: to_owned(&DEFAULT_SNARE_PATCH_KEYWORDS),
+            hihat_patch_keywords: to_owned(&DEFAULT_HIHAT_PATCH_KEYWORDS),
+        }
+    }
+
+    /// Vaporizer2 の音色置き場（`.vvp` のフラットな 1 階層）向けの既定。
+    ///
+    /// カテゴリはパスの階層ではなく**ファイル名先頭 2 文字のコードの展開名**
+    /// （`Pad` / `Bass` / `Arpeggio` …）。Surge の複数形（`Pads` / `Basses`）とは
+    /// 綴りが違うので、Surge のぶんを流用すると候補がほぼ全滅する。
+    fn vaporizer2() -> Self {
+        use cmrt_patches::vaporizer2::{
             DEFAULT_ARPEGGIO_PATCH_CATEGORY_NAMES, DEFAULT_BASS_PATCH_CATEGORY_NAMES,
             DEFAULT_CHORD_PATCH_CATEGORY_NAMES, DEFAULT_DRUM_PATCH_CATEGORY_NAMES,
             DEFAULT_HIHAT_PATCH_KEYWORDS, DEFAULT_KICK_PATCH_KEYWORDS,

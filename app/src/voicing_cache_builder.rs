@@ -29,8 +29,10 @@ pub fn run_build_voicing_cache(cfg: &Config, force: bool) -> Result<()> {
     }
 
     // probe は CLAP note event の NOTE_END を数える方式なので、note dialect が MIDI
-    // だけのプラグイン（Dexed）では「mono」と「測れなかった」を区別できない。
-    // そういう音色は probe せず、`VoicingPolicy::AssumePoly` に任せる。
+    // だけのプラグイン（Dexed / Vaporizer2）では「mono」と「測れなかった」を区別できない。
+    // そういう音色は probe せず `VoicingPolicy` に任せる。Dexed は poly へ倒し
+    // （`AssumePoly`）、Vaporizer2 は `.vvp` の `m_uPolyMode` を読む（`VvpHeader`）ので、
+    // どちらもこのキャッシュを必要としない。
     let patch_plugins = PatchPlugins::from_config(cfg);
     let mut cache = load_voicing_cache();
     let probable = pairs

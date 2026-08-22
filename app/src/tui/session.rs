@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use cmrt_tui_core::playback_session::PlaybackSession;
 
 use super::notepad::{NotepadScreen, NotepadScreenParts};
+use super::voicing::VvpVoicings;
 use super::{PatchLoadState, TuiApp};
 use crate::config::Config;
 
@@ -100,7 +101,11 @@ fn restored_bpm_mode(
 }
 
 /// パッチ一覧の非同期読み込みを開始し、共有状態ハンドルを返す。
-fn spawn_patch_loader(cfg: &Config) -> Arc<Mutex<PatchLoadState>> {
+///
+/// 一覧が揃った直後に `.vvp` の mono/poly も読んでおく。読むのは同じスレッドで、
+/// 一覧を公開するより**前**。公開してから読むと、その隙に PATCH 欄の wheel が回った
+/// ときだけ Vaporizer2 の音色が和音行の候補から消える、という再現しにくい状態ができる。
+fn spawn_patch_loader(cfg: &Config, vvp_voicings: VvpVoicings) -> Arc<Mutex<PatchLoadState>> {
     // パッチリストはバックグラウンドスレッドで収集する。
     // 起動時の同期スキャンによる遅延を避けるため。
     let patch_load_state = Arc::new(Mutex::new(PatchLoadState::Loading));
@@ -108,6 +113,17 @@ fn spawn_patch_loader(cfg: &Config) -> Arc<Mutex<PatchLoadState>> {
     let cfg = cfg.clone();
     std::thread::spawn(move || match crate::patches::collect_patch_pairs(&cfg) {
         Ok(pairs) => {
+            let started = std::time::Instant::now();
+            let read = vvp_voicings.prefetch(
+                &cmrt_tui_core::patch_plugins::PatchPlugins::from_config(&cfg),
+                &pairs,
+            );
+            if read > 0 {
+                crate::logging::global_log_sink(&format!(
+                    "vvp-voicing: event=prefetch count={read} ms={}",
+                    started.elapsed().as_millis()
+                ));
+            }
             *state_bg.lock().unwrap() = PatchLoadState::Ready(pairs);
         }
         Err(e) => {
@@ -207,7 +223,9 @@ impl<'a> TuiApp<'a> {
         let chord_progression_source =
             crate::chord_progression_source::ChordProgressionSource::spawn(cfg);
         let playback_session = PlaybackSession::new(realtime_play_server);
-        let patch_load_state = spawn_patch_loader(cfg);
+        // memo は一覧読み込みスレッドと `VoicingState` の両方が持つ（`Arc` 共有）。
+        let vvp_voicings = VvpVoicings::default();
+        let patch_load_state = spawn_patch_loader(cfg, vvp_voicings.clone());
         let grid_bpm_range =
             bpm_range_from_history(grid_sequencer_bpm_range, super::grid_sequencer::BPM);
 
@@ -264,11 +282,12 @@ impl<'a> TuiApp<'a> {
                 overlay
             },
             mml_overlay_sender,
-            voicing: super::voicing::VoicingState::new(
+            voicing: super::voicing::VoicingState::with_vvp_voicings(
                 crate::history::load_voicing_cache(),
                 voicing_layers,
                 voicing_source_refresh,
                 super::voicing::VoicingPolicies::from_config(cfg),
+                vvp_voicings,
             ),
             chord_progression_source,
             chord_catalog: cmrt_chord::ChordProgressionCatalog::default(),

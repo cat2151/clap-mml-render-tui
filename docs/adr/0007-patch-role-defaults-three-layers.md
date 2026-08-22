@@ -15,8 +15,24 @@
 | 2 | config トップレベルに書かれた項目（**レガシー綴り**） | **既定プラグインだけ** |
 | 3 | そのプラグインの組み込み既定（`PatchRoles::builtin_for`） | そのプラグイン |
 
-層 3 は Surge XT なら `cmrt_patches::surge_xt::DEFAULT_*`、**それ以外は空（＝絞らない）**。
-判定は `is_surge_xt_plugin`（`plugin_id`、無ければ `plugin_path` のファイル名）。
+層 3 は `PatchRoles::builtin_for()` の 3 分岐:
+
+| プラグイン | 層 3 の中身 | 判定 |
+|---|---|---|
+| Surge XT | `cmrt_patches::surge_xt::DEFAULT_*` | `is_surge_xt_plugin`（`plugin_id`、無ければ**既定 `plugin_path` と同じファイル名か**） |
+| **Vaporizer2** | **`cmrt_patches::vaporizer2::DEFAULT_*`**（2026-08-22 追加） | `is_vaporizer2_plugin`（`plugin_id`、無ければ**ファイル名に `vaporizer` を含むか**） |
+| それ以外 | 空（＝絞らない） | — |
+
+**Vaporizer2 の判定だけ作りが違う**のは意図的。Surge は「既定プラグインかどうか」を
+見ればよいが、Vaporizer2 は**既定プラグインでなくてもカタログの 2 つめ以降として現れる**ので、
+config の `plugin_path`（＝既定プラグインのパス）との一致比較では当たらない。
+
+Vaporizer2 のカテゴリは `.vvp` のファイル名先頭 2 文字のコードを展開した名前
+（`AR` → `Arpeggio`）。**Surge の複数形（`Pads` / `Organs` / `Basses`）とは綴りが違う**ので、
+「Surge のぶんをコピーした」間違いは `the_vaporizer2_categories_are_not_the_surge_ones` が落ちる。
+ただし drum 3 役のキーワード（`kick` / `snare` / `hat`）だけは
+`crate::surge_xt` から `pub use` で共有している（太鼓の一般名でプラグインに依らないため。
+同じ語を 2 組書くと片方だけ直したときに役が食い違う）。
 
 ## 解こうとした問題
 
@@ -73,6 +89,12 @@ PatchRole::Free => filter.categories.is_empty() || !(in_category && voicing.is_p
 
 意味づけ: **カテゴリが空＝「どれを chord 行へ回すか」が定義されていない**のだから、
 Free は何も避けない。
+
+**逆に、層 3 を足したプラグインでは Free が減る。** Vaporizer2 を足したとき、
+`.vvp` 460 件は当初カテゴリが空だったので 460 件すべてが Free に居た。
+組み込み既定が入って chord カテゴリの 190 件が chord 側へ移り、**Free は 270 件になった**
+（合計で −190）。**この減り方が「層 3 が効いた」ことの機械的な確認になる**
+（`cmrt patch-roles` の Free 3773 → 3583）。
 
 ## 生成する config.toml の形（ファイル末尾のコメント済みプロファイル）
 

@@ -4,13 +4,20 @@ use serde::Serialize;
 // ここ（config.toml のひな形生成）は TUI 固有なので、値だけを借りて組み立てる。
 pub use cmrt_server_config::{
     default_dexed_cartridge_dirs, default_dexed_plugin_path, default_patches_dirs,
-    default_plugin_path,
+    default_plugin_path, default_vaporizer2_plugin_path,
 };
 
 use cmrt_patches::surge_xt::{
     DEFAULT_ARPEGGIO_PATCH_CATEGORY_NAMES, DEFAULT_BASS_PATCH_CATEGORY_NAMES,
     DEFAULT_CHORD_PATCH_CATEGORY_NAMES, DEFAULT_DRUM_PATCH_CATEGORY_NAMES,
     DEFAULT_HIHAT_PATCH_KEYWORDS, DEFAULT_KICK_PATCH_KEYWORDS, DEFAULT_SNARE_PATCH_KEYWORDS,
+};
+use cmrt_patches::vaporizer2::{
+    DEFAULT_ARPEGGIO_PATCH_CATEGORY_NAMES as VAPORIZER2_ARPEGGIO_CATEGORY_NAMES,
+    DEFAULT_BASS_PATCH_CATEGORY_NAMES as VAPORIZER2_BASS_CATEGORY_NAMES,
+    DEFAULT_CHORD_PATCH_CATEGORY_NAMES as VAPORIZER2_CHORD_CATEGORY_NAMES,
+    DEFAULT_DRUM_PATCH_CATEGORY_NAMES as VAPORIZER2_DRUM_CATEGORY_NAMES,
+    PATCH_CATEGORY_CODES as VAPORIZER2_PATCH_CATEGORY_CODES,
 };
 
 use crate::{
@@ -65,7 +72,12 @@ pub fn default_config_content_with_app_settings(app_settings: &str) -> String {
     } else {
         format!("{}\n", app_settings.trim_end())
     };
-    let patch_roles_block = surge_xt_patch_roles_block();
+    let patch_roles_block = format!(
+        "{}{}{}",
+        surge_xt_patch_roles_block(),
+        vaporizer2_patch_roles_block(),
+        other_plugin_profile_block()
+    );
     format!(
         r#"# clap-mml-render-tui config
 #
@@ -76,11 +88,16 @@ pub fn default_config_content_with_app_settings(app_settings: &str) -> String {
 {plugin_path_line}
 
 # 【省略可】複数プラグインを使い分ける場合は、active_plugin の1行で切り替えられます。
-# 'Surge XT' と 'Dexed' は組み込みなので、標準の場所へインストールしてあれば
-# この1行だけで済みます（大文字小文字・空白・アンダースコアの違いは無視されます）。
-# active_plugin を書くと、上の plugin_path / patches_dirs は使われません。
+# 'Surge XT' / 'Dexed' / 'Vaporizer2' は組み込みなので、標準の場所へインストールして
+# あればプラグイン本体のパスは書かずに済みます（大文字小文字・空白・アンダースコアの
+# 違いは無視されます）。active_plugin を書くと、上の plugin_path / patches_dirs は
+# 使われません。
 #
 # active_plugin = 'Dexed'
+#
+# ただし 'Vaporizer2' だけは音色置き場の既定値を持ちません（プリセットの置き場所が
+# インストールごとに違うため）。末尾の [plugins.Vaporizer2] に patches_dirs を
+# 書いてください。書かないと Vaporizer2 の音色は1件も一覧に出ません。
 #
 # 標準以外の場所に入れている場合や、組み込みに無いプラグインを使う場合だけ、
 # [plugins.<名前>] を書きます。書いた項目だけが組み込みの値を上書きします。
@@ -218,7 +235,82 @@ fn surge_xt_patch_roles_block() -> String {
 # kick_patch_keywords = {kick}
 # snare_patch_keywords = {snare}
 # hihat_patch_keywords = {hihat}
+"#
+    )
+}
+
+/// Vaporizer2 の音色置き場と用途別カテゴリを、**コメント済みの `[plugins.Vaporizer2]`
+/// ブロック**として組み立てる。
+///
+/// `patches_dirs` を書く欄があることが要点。Vaporizer2 は
+/// [`cmrt_server_config::default_vaporizer2_plugin_path`] は持つが**音色置き場の既定値を
+/// 持たない**（プリセットの置き場所が `%APPDATA%\Vaporizer2\VASTvaporizerSettings.xml` や
+/// レジストリで決まるインストールごとの値なので、こちらから決め打ちできない）。
+/// この 1 行が無いと `catalog_plugins` が Vaporizer2 を飛ばし、`.vvp` の音色は
+/// 1 件も一覧に出ない。
+///
+/// カテゴリコードの対応表も併記する。`.vvp` のカテゴリは**ファイル名先頭 2 文字**で、
+/// 生のコード（`PD`）のままでは下の用途別項目に書いた展開名（`Pad`）と照合できない。
+/// 表が無いと、ユーザーは自分の音色置き場を見てもどう書けばよいか分からない。
+fn vaporizer2_patch_roles_block() -> String {
+    let chord = patch_categories_line(&VAPORIZER2_CHORD_CATEGORY_NAMES);
+    let bass = patch_categories_line(&VAPORIZER2_BASS_CATEGORY_NAMES);
+    let arpeggio = patch_categories_line(&VAPORIZER2_ARPEGGIO_CATEGORY_NAMES);
+    let drum = patch_categories_line(&VAPORIZER2_DRUM_CATEGORY_NAMES);
+    let category_codes = vaporizer2_category_code_lines();
+    format!(
+        r#"
+# 【省略可】Vaporizer2（VAST Dynamics）の音色置き場と用途別カテゴリ。
+# Vaporizer2 を使うときは patches_dirs の 1 行だけ必須です（プリセットの置き場所は
+# インストールごとに違うので、こちらでは決め打ちできません）。プラグイン本体を標準の
+# 場所へ入れてあれば plugin_path は要りません。
+# 【注意】ここから下はすべて [plugins.Vaporizer2] の中身になります。
 #
+# [plugins.Vaporizer2]
+# patches_dirs = ['D:\my\Vaporizer2\Presets']
+# plugin_path  = 'D:\my\clap\VASTvaporizer2.clap'
+#
+# 用途別カテゴリは Vaporizer2 の体系で書きます。カテゴリは .vvp の**ファイル名先頭
+# 2 文字**（'AR Accent Arp.vvp' なら AR）で、下の対応表の**展開名**のほうを書きます。
+# Surge XT のカテゴリ名（複数形の Pads / Basses など）とは綴りが違うので流用できません。
+{category_codes}
+#
+# chord_patch_categories = {chord}
+# bass_patch_categories = {bass}
+# arpeggio_patch_categories = {arpeggio}
+#
+# 出荷プリセットに Drum は 9 件しかないので、drum 4 役はほぼ空になります。
+# drum_patch_categories = {drum}
+#
+# kick / snare / hi-hat の振り分けキーワードは Surge XT と同じ既定です
+# （太鼓の一般名なのでプラグインに依りません）。
+"#
+    )
+}
+
+/// カテゴリコード → 展開名の対応表を、config.toml のコメント行へ折り返して並べる。
+///
+/// 表は [`cmrt_patches::vaporizer2`] が単一ソース。ここへ書き写すと、コードを足したときに
+/// ひな形だけ古いまま残る。
+fn vaporizer2_category_code_lines() -> String {
+    const PER_LINE: usize = 4;
+    VAPORIZER2_PATCH_CATEGORY_CODES
+        .chunks(PER_LINE)
+        .map(|chunk| {
+            let pairs = chunk
+                .iter()
+                .map(|(code, name)| format!("{code} {name}"))
+                .collect::<Vec<_>>()
+                .join(" / ");
+            format!("#   {pairs}")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// 組み込みに無いプラグインを足すときの雛形。**ひな形の最後**に置く。
+fn other_plugin_profile_block() -> String {
+    r#"
 # 組み込みに無いプラグインを足すときも、この下へ続けます。用途別 7 項目を書かなければ
 # 「絞らない」が既定なので、まずは plugin_path と patches_dirs だけで動きます。
 #
@@ -226,7 +318,7 @@ fn surge_xt_patch_roles_block() -> String {
 # plugin_path  = 'D:\my\clap\MySynth.clap'
 # patches_dirs = ['D:\my\patches']
 "#
-    )
+    .to_string()
 }
 
 /// `patches_dirs = [...]` の 1 行を安全な TOML 文字列として生成する。

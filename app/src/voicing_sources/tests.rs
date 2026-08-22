@@ -15,6 +15,13 @@ fn surge_plugin() -> CatalogPlugin {
     )
 }
 
+fn vaporizer2_plugin() -> CatalogPlugin {
+    catalog_plugin(
+        cmrt_runtime::VAPORIZER2_PLUGIN_ID,
+        r"C:\Program Files\Common Files\CLAP\VASTvaporizer2.clap",
+    )
+}
+
 fn dexed_plugin() -> CatalogPlugin {
     catalog_plugin(
         cmrt_runtime::DEXED_PLUGIN_ID,
@@ -184,6 +191,10 @@ fn surge_only_sources_follow_the_whole_catalog() {
     assert!(
         SourceSet::from_catalog(&cfg, &catalog(&[dexed_plugin()])).is_none(),
         "カタログに Surge が載らないなら、Surge 専用 JSON を取りに行かない"
+    );
+    assert!(
+        SourceSet::from_catalog(&cfg, &catalog(&[dexed_plugin(), vaporizer2_plugin()])).is_none(),
+        "Vaporizer2 の mono/poly は `.vvp` に書いてあるので、この JSON は要らない"
     );
 }
 

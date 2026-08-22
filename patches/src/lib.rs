@@ -7,13 +7,14 @@
 //!
 //! - [`surge_xt`] — `patches_factory/<category>/` と `patches_3rdparty/<vendor>/<category>/`
 //! - [`cartridge`] — Dexed の `<cartridge>.syx/<voice>`
+//! - [`vaporizer2`] — `<コード> <名前>.vvp`（ファイル名先頭 2 文字がカテゴリコード）
 //!
-//! どちらで読むかを選ぶ中立の入口が [`layout`]（[`layout::PatchLayout`]）。
-//! プラグインを足すときはこの 2 つに並べて 3 つめを足し、`PatchLayout` へ分岐を
+//! どれで読むかを選ぶ中立の入口が [`layout`]（[`layout::PatchLayout`]）。
+//! プラグインを足すときはこの 3 つに並べて 4 つめを足し、`PatchLayout` へ分岐を
 //! 1 本増やす。
 //!
 //! 扱うのは「列挙済みのパス列を解釈・分類・抽選する」ところまで。patch ファイルの
-//! 列挙そのもの（`.fxp` / `.syx` の走査）は別 repo（`clap-mml-play-server`）の
+//! 列挙そのもの（`.fxp` / `.syx` / `.vvp` の走査）は別 repo（`clap-mml-play-server`）の
 //! 責務なのでここには持ち込まない。
 //!
 //! patch は全体を通して `(表示名, 小文字化した表示名)` のペアで受け渡す。
@@ -25,6 +26,7 @@ pub mod layout;
 mod naming;
 mod selection;
 pub mod surge_xt;
+pub mod vaporizer2;
 
 pub use grouping::{
     group_patch_pairs_by_category, sort_patch_pairs, PatchCategory, PatchSortOrder,

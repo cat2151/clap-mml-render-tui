@@ -7,7 +7,7 @@
 //! 「全部 poly とみなす」を Surge へ当てると和音行へ mono の音色が来る。
 //!
 //! # 何で判別しているか
-//! 材料は **patch 文字列の形だけ**（`.syx` コンポーネントを含むか）。
+//! 材料は **patch 文字列の形だけ**（`.syx` / `.vvp` コンポーネントを含むか）。
 //! patch 文字列そのものへプラグイン名を入れる仕様変更は、display 文字列が
 //! 永続 ID であるため保存済みデータの移行が要る（`docs/adr/0001-patch-string-decides-the-plugin.md`）。
 //! 「このプラグインはどちらの形を扱うか」は `cmrt_server_config::patch_form_of` が
@@ -25,6 +25,9 @@ pub struct PatchPlugins {
     /// patch 文字列の形ごとの、`plugins` の添字。
     state_file: usize,
     cartridge: usize,
+    /// `.vvp`（Vaporizer2）。**`state_file` と分けて持つ。** 単位は「1 ファイル = 1 音色」で
+    /// 同じだが、一緒にすると Surge の添字へ落ち、Surge のカテゴリで候補が全滅する。
+    vvp: usize,
 }
 
 impl PatchPlugins {
@@ -65,6 +68,7 @@ impl PatchPlugins {
         Self {
             state_file: index_of(PatchForm::StateFile),
             cartridge: index_of(PatchForm::Cartridge),
+            vvp: index_of(PatchForm::Vvp),
             plugins,
         }
     }
@@ -78,9 +82,14 @@ impl PatchPlugins {
     ///
     /// patch 一覧の絞り込みは patch ごとにこれを引くので、プラグインごとの材料は
     /// 呼び出し側が**添字で引ける形に組んでから**ループへ入ること。
+    /// 判定の実体は play server repo 側（`is_cartridge_patch_path` / `is_vvp_patch_path`）が
+    /// 単一ソース。サーバーの `kind_for_patch` も同じ関数を通すので、
+    /// 「画面に出た音色が、送った先のインスタンスでは鳴らせない」がここでは起きない。
     pub fn index_for_patch(&self, patch: &str) -> usize {
         if cmrt_core::is_cartridge_patch_path(patch) {
             self.cartridge
+        } else if cmrt_core::is_vvp_patch_path(patch) {
+            self.vvp
         } else {
             self.state_file
         }

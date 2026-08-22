@@ -221,6 +221,44 @@ patches_dirs = ["/tmp/surge-data/patches_factory", "/tmp/surge-data/patches_3rdp
     );
 }
 
+/// Vaporizer2 は**音色置き場の既定値を持たない**（プリセットの置き場所がインストールごとに
+/// 違う）ので、patches_dirs を書く場所をひな形が案内していないと、インストール済みでも
+/// 音色が 1 件も一覧に出ない。
+#[test]
+fn the_default_config_shows_a_commented_vaporizer2_profile() {
+    let content = default_config_content();
+
+    assert!(content.contains("# [plugins.Vaporizer2]"), "{content}");
+    assert!(content.contains("# patches_dirs = "), "{content}");
+    assert!(
+        content.contains(
+            r#"# chord_patch_categories = ["Pad", "Chord", "Organ", "Synth", "Atmosphere"]"#
+        ),
+        "{content}"
+    );
+    assert!(
+        content.contains(r#"# bass_patch_categories = ["Bass"]"#),
+        "{content}"
+    );
+    // active_plugin の案内にも 3 つめとして出す。
+    assert!(content.contains("'Vaporizer2'"), "{content}");
+}
+
+/// カテゴリは `.vvp` のファイル名先頭 2 文字なので、**対応表が無いとユーザーは自分の
+/// 音色置き場を見ても何を書けばよいか分からない**。表は [`cmrt_patches::vaporizer2`] が
+/// 単一ソースなので、そこに足したコードがひな形にも必ず出ることを見る。
+#[test]
+fn the_default_config_lists_every_vaporizer2_category_code() {
+    let content = default_config_content();
+
+    for (code, name) in cmrt_patches::vaporizer2::PATCH_CATEGORY_CODES {
+        assert!(
+            content.contains(&format!("{code} {name}")),
+            "カテゴリコード {code} の案内がひな形に無い"
+        );
+    }
+}
+
 /// ひな形はそのままでも、末尾のコメント済みプロファイルを丸ごと有効にしても TOML として
 /// 通る。テーブル見出しが末尾にあることの担保（途中に置くと、後続のトップレベル項目が
 /// `[plugins."Surge XT"]` の中身になって型が合わなくなる）。

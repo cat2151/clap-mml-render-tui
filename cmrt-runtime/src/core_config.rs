@@ -55,6 +55,15 @@ impl CatalogPlugin {
     pub fn is_surge_xt(&self) -> bool {
         crate::is_surge_xt_plugin(self.plugin_id.as_deref(), &self.plugin_path)
     }
+
+    /// このプラグインが Vaporizer2 か。
+    ///
+    /// 用途別カテゴリの組み込み既定（[`crate::PatchRoles::builtin_for`]）と、
+    /// voicing 判定の方針の切り替えに使う。`.vvp` の mono/poly は音色ファイルの
+    /// 先頭に書いてあるので、Surge の共有 JSON にも実行時 probe にも頼らない。
+    pub fn is_vaporizer2(&self) -> bool {
+        crate::is_vaporizer2_plugin(self.plugin_id.as_deref(), &self.plugin_path)
+    }
 }
 
 /// カタログに音色を載せるプラグインの一覧。**先頭が既定プラグイン**

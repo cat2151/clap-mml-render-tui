@@ -2,8 +2,12 @@ use anyhow::{Context, Result};
 use chord2mml_core::convert as chord_to_mml;
 use clack_host::prelude::PluginEntry;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
-use clap_mml_render_tui::{config, config_editor, server, tui, updater, voicing_cache_builder};
+use clap_mml_render_tui::{
+    config, config_editor, render_mml, render_mml::RenderMmlRequest, server, tui, updater,
+    voicing_cache_builder,
+};
 use cmrt_core::{load_entry, mml_to_play};
+use std::path::PathBuf;
 
 mod scan_loops;
 mod scan_progress_log;
@@ -20,7 +24,8 @@ enum CliAction {
     Check,
     ScanLoops,
     BuildVoicingCache { force: bool },
-    PatchRoles,
+    PatchRoles { config: Option<PathBuf> },
+    RenderMml(RenderMmlRequest),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -87,8 +92,31 @@ enum Commands {
     },
     /// loop_dirs を走査して WAV ループキャッシュを再構築する
     ScanLoops,
+    /// MML 1 本をオフラインでレンダリングして出音を数字で出す（画面を起動しない動作確認）
+    RenderMml {
+        /// 既定の置き場ではなく、この config.toml を読む
+        #[arg(long, value_name = "PATH")]
+        config: Option<PathBuf>,
+        /// 鳴らす音色の display 文字列。複数指定すると 1 プロセスで順に鳴らして比べる
+        #[arg(long = "patch", value_name = "DISPLAY")]
+        patches: Vec<String>,
+        /// WAV の書き出し先（省略時は環境変数 CMRT_TEST_WAV_OUT_DIR。どちらも無ければ書かない）
+        #[arg(long, value_name = "DIR")]
+        out_dir: Option<PathBuf>,
+        /// 和音が本当に和音で鳴るかを、単音のレンダリングと突き合わせて判定する
+        #[arg(long)]
+        poly_check: bool,
+        /// レンダリングする MML（省略時は 1 音だけ鳴らす既定 MML）
+        #[arg(value_name = "MML")]
+        mml: Option<String>,
+    },
     /// grid sequencer の各行に patch の候補が出るかを調べる（画面を起動しない動作確認）
-    PatchRoles,
+    PatchRoles {
+        /// 既定の置き場ではなく、この config.toml を読む（実ユーザーの設定を書き換えずに
+        /// `active_plugin` や `[plugins.*]` を試すため）
+        #[arg(long, value_name = "PATH")]
+        config: Option<PathBuf>,
+    },
 }
 
 fn cli_command() -> clap::Command {
@@ -156,8 +184,25 @@ where
         return Ok(CliAction::ScanLoops);
     }
 
-    if matches!(cli.command, Some(Commands::PatchRoles)) {
-        return Ok(CliAction::PatchRoles);
+    if let Some(Commands::PatchRoles { config }) = cli.command {
+        return Ok(CliAction::PatchRoles { config });
+    }
+
+    if let Some(Commands::RenderMml {
+        config,
+        patches,
+        out_dir,
+        poly_check,
+        mml,
+    }) = cli.command
+    {
+        return Ok(CliAction::RenderMml(RenderMmlRequest {
+            config,
+            patches,
+            mml,
+            out_dir,
+            poly_check,
+        }));
     }
 
     if let Some(Commands::BuildVoicingCache { force }) = cli.command {
@@ -250,7 +295,15 @@ fn main() -> Result<()> {
         return updater::run_check();
     }
 
-    let cfg = config::load()?;
+    let cfg = match &action {
+        // 診断コマンドだけは読む config を差し替えられる。既定の置き場を作りに行かないので、
+        // 実ユーザーの config.toml には 1 バイトも触らない。
+        CliAction::PatchRoles { config: Some(path) }
+        | CliAction::RenderMml(RenderMmlRequest {
+            config: Some(path), ..
+        }) => cmrt_runtime::Config::load_from_path(path)?,
+        _ => config::load()?,
+    };
 
     // レンダリング結果キャッシュの置き場を、使用中プラグインごとに分ける。
     // キャッシュキーは MML 文字列の hash なので、音色を指定していない行は
@@ -281,8 +334,11 @@ fn main() -> Result<()> {
         // 判定は play-server 側プロセスがプラグインをロードして行う。
         CliAction::BuildVoicingCache { .. } => false,
         // config と patch 一覧だけを見る診断なので、プラグインはロードしない。
-        CliAction::PatchRoles => false,
-        CliAction::Tui => cfg.offline_render_backend == config::OfflineRenderBackend::InProcess,
+        CliAction::PatchRoles { .. } => false,
+        // in-process バックエンドのときだけ、この プロセスが CLAP をホストする。
+        CliAction::RenderMml(_) | CliAction::Tui => {
+            cfg.offline_render_backend == config::OfflineRenderBackend::InProcess
+        }
         CliAction::Help(_)
         | CliAction::Version(_)
         | CliAction::Shutdown(_)
@@ -330,7 +386,10 @@ fn main() -> Result<()> {
         CliAction::BuildVoicingCache { force } => {
             return voicing_cache_builder::run_build_voicing_cache(&cfg, force);
         }
-        CliAction::PatchRoles => {
+        CliAction::RenderMml(request) => {
+            return render_mml::run(&cfg, &plugin_entries, &request);
+        }
+        CliAction::PatchRoles { .. } => {
             return tui::patch_role_report::run_patch_role_report(&cfg);
         }
         CliAction::Tui => {}

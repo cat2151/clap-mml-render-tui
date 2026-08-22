@@ -141,7 +141,7 @@ OS別の `patches_dirs` 既定値は次のとおりです。
 
 #### 複数プラグインの使い分け
 
-`active_plugin` の1行で切り替えられます。`Surge XT` と `Dexed` は**組み込み**なので、標準の場所へインストールしてあれば書くのはこの1行だけです。
+`active_plugin` の1行で切り替えられます。`Surge XT` と `Dexed` は**組み込み**なので、標準の場所へインストールしてあれば書くのはこの1行だけです（`Vaporizer2` も組み込みですが、音色置き場だけは書く必要があります。下記）。
 
 ```toml
 active_plugin = 'Dexed'
@@ -153,6 +153,7 @@ active_plugin = 'Dexed'
 | --- | --- | --- | --- |
 | `Surge XT` | `org.surge-synth-team.surge-xt` | 上の表の OS 別既定値 | トップレベルの設定（＝ Surge のカテゴリ名）をそのまま使う |
 | `Dexed` | `com.digital-suburban.dexed` | Dexed の cartridge 置き場（Windows: `%APPDATA%\DigitalSuburban\Dexed\Cartridges`） | 全て空（＝絞らない） |
+| `Vaporizer2` | `com.vastdynamics.VAST2` | **既定値なし。`patches_dirs` を書いてください** | Vaporizer2 のカテゴリ名（`Pad` / `Bass` / `Arpeggio` など） |
 
 名前は大文字小文字・空白・アンダースコアの違いを無視して照合します（`Dexed` / `dexed`、`Surge XT` / `surge_xt` / `SurgeXT` はすべて同じ）。
 
@@ -183,7 +184,19 @@ patches_dirs = ['D:\my\patches']
 - `active_plugin` の名前が組み込みにも `[plugins.*]` にも無い場合はエラーで起動しません。使える名前が両方とも表示されます。
 - Dexed の音色は「cartridge の `.syx` 1個 = 32 program」なので、一覧では cartridge をディレクトリに見立てて `SynprezFM/SynprezFM_01.syx/00 Say Again.` のように 1 program ずつ並びます（番号は 0 始まりの2桁）。`patches_dirs` に cartridge の置き場を指定すれば、Surge の `.fxp` と同じように選べます。
 - Dexed の mono/poly は音色ではなくインスタンスの設定（`MonoMode`）で、その既定値は POLY です。そのため grid sequencer の和音行では Dexed の音色をすべて和音向きとして扱います。
-- 行の用途（chord / bass / arpeggio / drum）で候補を絞るカテゴリ設定の既定値は、**プラグインごとに違います**。Surge XT は Surge のカテゴリ名、Dexed と組み込みに無いプラグインは「絞らない」（＝どの行も全 program が候補）です。Dexed の cartridge は「ディレクトリ名＝用途」ではないためで、組み込みに無いプラグインも音色置き場の体系が分からないので絞りません。変えたいときは `[plugins.<名前>]` に 7 項目を書いてください（生成される config.toml の末尾に、Surge XT の既定値をコメントで載せてあります）。
+- Vaporizer2 の音色は `.vvp` ファイル1個 = 1音色で、Surge の `.fxp` と同じように選べます。一覧の見出しに出るカテゴリは**ファイル名の先頭2文字**（`AR Accent Arp.vvp` なら `AR` = `Arpeggio`）です。
+- Vaporizer2 だけは `patches_dirs` の既定値を持ちません。プリセットの置き場がプラグイン側のグローバル設定（`%APPDATA%\Vaporizer2\VASTvaporizerSettings.xml` など）で決まる環境依存の値で、そこを cmrt が勝手に読み書きするとお使いのDAW環境を壊すためです。次のように1行書いてください。書くまでは音色0件としてカタログに載りません。
+
+```toml
+active_plugin = 'Vaporizer2'
+
+[plugins.Vaporizer2]
+patches_dirs = ['D:\Vaporizer2\Presets']
+```
+
+- Vaporizer2 の mono/poly は音色ごとに違い、`.vvp` の中身（`m_uPolyMode`）から読みます。そのため grid sequencer の和音行には、和音の鳴る音色だけが候補として出ます（読めなかった音色は和音行の候補に出しません）。
+- Vaporizer2 の出荷プリセットのうち、名前に `MPE` が付くものは cmrt では音が出ません。MPE（ノートごとのピッチ・プレッシャー）の演奏情報を前提にした音色で、cmrt はそれを送らないためです。
+- 行の用途（chord / bass / arpeggio / drum）で候補を絞るカテゴリ設定の既定値は、**プラグインごとに違います**。Surge XT は Surge のカテゴリ名、Vaporizer2 は Vaporizer2 のカテゴリ名、Dexed と組み込みに無いプラグインは「絞らない」（＝どの行も全 program が候補）です。Dexed の cartridge は「ディレクトリ名＝用途」ではないためで、組み込みに無いプラグインも音色置き場の体系が分からないので絞りません。変えたいときは `[plugins.<名前>]` に 7 項目を書いてください（生成される config.toml の末尾に、Surge XT の既定値をコメントで載せてあります）。
 - 7 項目はトップレベルにも書けますが、**効くのは既定プラグイン（音色を無指定にした行が鳴るもの）に対してだけ**です。`active_plugin` が無かった時代の書き方で、新しく生成する config.toml はトップレベルへ書きません。すでにトップレベルに書いてある config はそのまま動きます。
 - 用途別の自動選択に使う mono/poly の共有判定データ（`voicing_shared_source` / `voicing_override_source`）は Surge XT 専用です。Surge XT 以外を使っているときは取得しません。
 - レンダリング結果のキャッシュはプラグインごとに別ディレクトリへ置くので、切り替えても前のプラグインの音は鳴りません（手で消す必要はありません）。置き場は次の2つで、`<プラグイン>` は `plugin_path` のファイル名（拡張子なし）です（Windows の場合）。
@@ -233,6 +246,34 @@ cmrt patch-roles
 - プラグインや `patches_dirs`、用途別カテゴリ（`chord_patch_categories` など）を変えたあと、
   「wheel を回しても無反応」になっていないかを確認するために使います
 - 候補が0件の行があると、その行を挙げて終了コード 1 で終わります
+- `--config <パス>` を付けると、その config.toml を読みます。設定を変えたら
+  どうなるかを、いま使っている config.toml を書き換えずに試せます
+- 複数プラグインの音色が並んでいるときは、用途ごとの候補数にプラグイン別の内訳も出ます。
+  合計だけでは「あるプラグインの音色がその行へ1件も出ていない」ことに気づけないためです
+
+```
+cmrt patch-roles --config C:\tmp\try.toml
+```
+
+### render-mmlコマンド
+
+```
+cmrt render-mml --patch "AR Accent Arp.vvp"
+```
+
+- 指定した音色でMMLをオフラインレンダリングし、長さ・音量（`peak` / `rms`）・無音かどうか・
+  出音のダイジェスト値を1行で表示します。画面は起動しません
+- `patch-roles` が「音色が一覧に出るか」を数えるのに対し、こちらは「その音色が実際に音になるか」を見ます
+- `--patch` は何個でも並べられます。まとめ行に「異なる出音 N / M」が出るので、
+  **音色を替えたのに前の音のまま**になっていないかが分かります
+- `--out-dir <ディレクトリ>` を付けるとWAVを書き出します（付けなければ1バイトも書きません）。
+  耳で確かめたいときに使います
+- `--poly-check` を付けると、和音と単音を鳴らし比べて、その音色が和音で鳴るかどうかを判定します
+- `--config <パス>` は `patch-roles` と同じです
+
+```
+cmrt render-mml --config C:\tmp\try.toml --out-dir C:\tmp\wav --patch "PD Juno Dream Pad.vvp" --poly-check
+```
 
 # 破壊的変更
 - 毎日頻繁に破壊的変更します

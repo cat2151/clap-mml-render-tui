@@ -89,6 +89,29 @@ fn namespace_differs_between_surge_and_dexed() {
     );
 }
 
+/// 3 つめのプラグインも自分の名前空間を持つ。
+///
+/// キャッシュキーは MML 文字列の hash なので、**音色を指定していない行**は
+/// プラグインを替えても同じキーになる。ここが分かれていないと、既定プラグインを
+/// Vaporizer2 へ替えたときに Surge / Dexed が書いた WAV を読んでしまう。
+/// 名前空間は `plugin_path` の stem なので無改修で分かれるはずで、これはその番人。
+#[test]
+fn namespace_differs_for_vaporizer2_too() {
+    let vaporizer2 = cache_plugin_namespace(cmrt_runtime::default_vaporizer2_plugin_path());
+
+    assert_ne!(
+        vaporizer2,
+        cache_plugin_namespace(cmrt_runtime::default_plugin_path())
+    );
+    assert_ne!(
+        vaporizer2,
+        cache_plugin_namespace(cmrt_runtime::default_dexed_plugin_path())
+    );
+    // ディレクトリ名として使えない文字が残っていないこと。
+    assert!(!vaporizer2.contains(|c: char| std::path::is_separator(c) || c == ':'));
+    assert_ne!(vaporizer2, DEFAULT_CACHE_PLUGIN_NAMESPACE);
+}
+
 #[test]
 fn namespace_replaces_characters_that_cannot_be_a_directory_name() {
     // file_stem は最後のパス区切りより後ろを見るので、区切り以外の危険文字だけが残る。

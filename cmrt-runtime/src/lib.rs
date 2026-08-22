@@ -12,13 +12,13 @@ pub use core_config::{
 pub use defaults::{
     default_config_content, default_config_content_with_app_settings, default_dexed_cartridge_dirs,
     default_dexed_plugin_path, default_patches_dirs, default_plugin_path,
-    serialize_patches_dirs_line,
+    default_vaporizer2_plugin_path, serialize_patches_dirs_line,
 };
 pub use patch_roles::{layered_patch_role_filters, PatchRoles};
 pub use paths::{config_app_dir, config_file_path, log_file_path, native_probe_log_file_path};
 pub use plugin_identity::{
-    is_surge_xt_plugin, patch_form_of, plugin_file_stem, PatchForm, DEXED_PLUGIN_ID,
-    SURGE_XT_PLUGIN_ID,
+    is_surge_xt_plugin, is_vaporizer2_plugin, patch_form_of, plugin_file_stem, PatchForm,
+    DEXED_PLUGIN_ID, SURGE_XT_PLUGIN_ID, VAPORIZER2_PLUGIN_ID,
 };
 pub use plugin_profile::{
     apply_active_plugin_profile, builtin_plugin_profiles, PatchRoleFilters, PluginProfile,
@@ -32,6 +32,7 @@ pub use cmrt_server_config::{
 
 use serde::Deserialize;
 use std::collections::{BTreeMap, HashSet};
+use std::path::Path;
 
 /// app の HTTP サーバー（`--server` CLI モード / DAW HTTP サーバー）が listen する localhost port。
 pub const DEFAULT_PORT: u16 = 62151;
@@ -294,7 +295,17 @@ impl Config {
                 ));
             }
         }
-        let text = std::fs::read_to_string(&path)
+        Self::load_from_path(&path)
+    }
+
+    /// 指定した config.toml をそのまま読む。**既定の置き場を作りに行かない。**
+    ///
+    /// 診断コマンド（`cmrt patch-roles --config ...`）が「別の config だとどうなるか」を
+    /// 実ユーザーの config.toml を書き換えずに確かめるための入口。
+    /// `active_plugin` や `[plugins.*]` を試すたびに実ファイルを編集して戻す運用は、
+    /// 戻し忘れが即座に本番の設定事故になる（`docs/adr/0011-verification-and-baselines.md`）。
+    pub fn load_from_path(path: &Path) -> anyhow::Result<Self> {
+        let text = std::fs::read_to_string(path)
             .map_err(|e| anyhow::anyhow!("config.toml が読めない ({}): {}", path.display(), e))?;
         let mut cfg: Self = toml::from_str(&text).map_err(|e| {
             anyhow::anyhow!("config.toml のパースに失敗 ({}): {}", path.display(), e)

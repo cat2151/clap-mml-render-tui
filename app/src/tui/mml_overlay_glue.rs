@@ -45,7 +45,7 @@ impl TuiApp<'_> {
         }
     }
 
-    fn loaded_patch_pairs(&self) -> Vec<(String, String)> {
+    pub(in crate::tui) fn loaded_patch_pairs(&self) -> Vec<(String, String)> {
         match &*self.patch_load_state.lock().unwrap() {
             PatchLoadState::Ready(pairs) => pairs.clone(),
             PatchLoadState::Loading | PatchLoadState::Err(_) => Vec::new(),

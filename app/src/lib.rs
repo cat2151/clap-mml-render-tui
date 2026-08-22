@@ -15,6 +15,7 @@ pub use cmrt_loop_browser_domain as loop_browser;
 pub(crate) use cmrt_loop_domain::{loop_wav_analysis, loop_waveform};
 pub(crate) mod patches;
 pub(crate) mod realtime_play;
+pub mod render_mml;
 pub(crate) mod screen_switch;
 pub mod server;
 pub(crate) mod sound_check_guide;

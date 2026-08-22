@@ -1,5 +1,7 @@
 use super::*;
 
+use cmrt_tui_core::patch_plugins::CatalogPlugin;
+
 /// 表に出す 8 役割が、行が取りうる用途を1つも取りこぼしていないことの番人。
 ///
 /// 行→用途の対応（[`row_patch_role`]）が増えたのに [`ALL_ROLES`] を足し忘れると、
@@ -64,4 +66,44 @@ fn unset_values_are_shown_as_unset() {
     assert_eq!(optional(Some("Dexed")), "Dexed");
     assert_eq!(optional_str(""), "(未設定)");
     assert_eq!(optional_str("x.clap"), "x.clap");
+}
+
+/// 内訳はカタログの並び順どおりに、1 件も落とさず 1 件も重複させずに数える。
+///
+/// 「Vaporizer2 の候補が 0 件」を見つけるための欄なので、**0 件のプラグインも
+/// 省略せずに出す**（省略すると「行が無い」と「数えていない」の区別が付かない）。
+#[test]
+fn the_breakdown_counts_every_candidate_once_per_plugin() {
+    use cmrt_runtime::{PatchRoles, DEXED_PLUGIN_ID, SURGE_XT_PLUGIN_ID, VAPORIZER2_PLUGIN_ID};
+
+    let plugin = |name: &str, plugin_id: &str| CatalogPlugin {
+        name: name.to_string(),
+        plugin_path: String::new(),
+        plugin_id: Some(plugin_id.to_string()),
+        base: None,
+        dirs: Vec::new(),
+        patch_roles: PatchRoles::default(),
+    };
+    let patch_plugins = PatchPlugins::from_catalog(vec![
+        plugin("Surge XT", SURGE_XT_PLUGIN_ID),
+        plugin("Dexed", DEXED_PLUGIN_ID),
+        plugin("Vaporizer2", VAPORIZER2_PLUGIN_ID),
+    ]);
+
+    let counts = per_plugin_counts(
+        &[
+            "Pads/Pad 1.fxp",
+            "AR Accent Arp.vvp",
+            "PD Emily.vvp",
+            "Dexed_01.syx/00 Bell",
+        ],
+        &patch_plugins,
+    );
+
+    assert_eq!(counts, "Surge XT 1 / Dexed 1 / Vaporizer2 2");
+    // 候補が 0 件でも、プラグインの行は消えない。
+    assert_eq!(
+        per_plugin_counts(&[], &patch_plugins),
+        "Surge XT 0 / Dexed 0 / Vaporizer2 0"
+    );
 }

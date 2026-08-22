@@ -122,6 +122,10 @@ fn catalog_plugins_relativize_each_plugin_against_its_own_base() {
 
 /// 音色置き場が 1 つも実在しないプラグインはカタログへ載せない。
 /// 載せると `read_dir` の `Err` で一覧の収集そのものが失敗する。
+///
+/// Vaporizer2 の組み込みプロファイルは `patches_dirs` を持たない（プリセット置き場は
+/// ユーザーが決めるものなので config に書いてもらう）。config に書かなければ、
+/// **インストール済みでもカタログには載らない**という倒れ方をここが決めている。
 #[test]
 fn catalog_plugins_skip_a_plugin_without_patch_dirs() {
     let cfg = config_with_patch_dirs(r#"patches_dirs = ["/tmp/patches_factory"]"#);
@@ -174,6 +178,50 @@ fn catalog_plugins_resolve_patch_roles_per_plugin() {
         vec!["Keys".to_string()]
     );
     assert!(plugins[1].patch_roles.chord_patch_categories.is_empty());
+}
+
+/// Vaporizer2 が 3 つめのカタログ項目として並ぶこと。基点は自分の音色置き場から取り、
+/// 他プラグインと束ねない（束ねると display 文字列＝永続 ID が壊れる。ADR 0006）。
+#[test]
+fn a_vaporizer2_profile_becomes_a_third_catalog_plugin() {
+    let cfg = config_with_patch_dirs(r#"patches_dirs = ["/opt/surge/patches_factory"]"#);
+
+    let plugins = catalog_plugins_with(
+        &cfg,
+        vec![
+            (
+                "Dexed".to_string(),
+                profile("/usr/lib/clap/Dexed.clap", &["/home/f/dexed/Cartridges"]),
+            ),
+            (
+                "Vaporizer2".to_string(),
+                profile(
+                    "/usr/lib/clap/VASTvaporizer2.clap",
+                    &["/home/f/Vaporizer2/Presets"],
+                ),
+            ),
+        ],
+    );
+
+    assert_eq!(plugins.len(), 3);
+    assert_eq!(plugins[2].name, "Vaporizer2");
+    assert_eq!(
+        plugins[2].base.as_deref(),
+        Some("/home/f/Vaporizer2/Presets")
+    );
+    assert!(!plugins[2].is_surge_xt());
+    // 用途別絞り込みは Vaporizer2 の組み込み既定。`plugin_id` を書いていない
+    // プロファイルでもファイル名で当たる。Surge のカテゴリへ落ちると
+    // chord / bass / arpeggio 行の候補が全滅する。
+    assert_eq!(
+        plugins[2].patch_roles,
+        PatchRoles::builtin_for(None, "/usr/lib/clap/VASTvaporizer2.clap")
+    );
+    assert_eq!(
+        plugins[2].patch_roles.bass_patch_categories,
+        vec!["Bass".to_string()]
+    );
+    assert_ne!(plugins[2].patch_roles, plugins[0].patch_roles);
 }
 
 /// `active_plugin` を書かない config でも、既定プラグインと同じものを指す `[plugins.*]` に

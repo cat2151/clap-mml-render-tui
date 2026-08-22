@@ -1,6 +1,6 @@
 # ADR 0005: 混在カタログは既定 ON。実在する dir だけ載せる
 
-- 状態: 採用（2026-08-20）
+- 状態: 採用（2026-08-20 / 2026-08-22 に 3 プラグイン目で再確認）
 - 関連: [0004](0004-default-plugin-owns-unspecified-patches.md) / [0006](0006-per-profile-relative-base.md) /
   [0009](0009-offline-entry-map.md)
 
@@ -53,10 +53,23 @@
 - `SourceSet::from_catalog(cfg, &PatchPlugins)`（`app/src/voicing_sources.rs`）
 - `VoicingPolicies { plugins }` を直接組むテストヘルパ（`app/src/tui/voicing/tests.rs`）
 
+## 3 つめ（Vaporizer2）は「config に 1 行書くまで載らない」（2026-08-22）
+
+**プラグイン本体はインストール済み・組み込みプロファイルもある。それでも既定では載らない。**
+Vaporizer2 は**音色置き場の既定値を持たない**（置き場がユーザー固有の設定で決まるため。
+play-server 側 ADR 0014）ので、上の表の「音色置き場」チェックで `catalog_plugins_with()` が
+`continue` する。
+
+`[plugins.Vaporizer2]` に `patches_dirs` を 1 行書くと 3 つめとして載る。
+**既定 config の数字が 1 件も動かないのが正しい**（既存ユーザーの一覧を勝手に変えない）。
+
 ## 実測（2026-08-20 / release / `active_plugin = 'Dexed'`）
 
 `cmrt patch-roles`: カタログは Dexed（既定）→ Surge XT の 2 つ、Dexed は 1 度しか出ない。
 patch 件数 **4064**（= Surge 3008 + Dexed 1056）。
 候補数 Chord 1807 / Bass 1464 / Arpeggio 2059 / Free 3313 /
 Kick 1106 / Snare 1101 / HiHat 1078 / Percussion 1178。
-→ ベースラインは [0011](0011-verification-and-baselines.md)
+
+**Vaporizer2 を足した config**（`--config` で試す）では 3 プラグイン / patch 件数 **4524**
+（= 4064 + `.vvp` 460）。候補数は Chord 1983 / Bass 1567 / Arpeggio 2123 / Free 3597。
+→ ベースラインと読み方は [0011](0011-verification-and-baselines.md)

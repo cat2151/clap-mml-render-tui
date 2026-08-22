@@ -15,9 +15,9 @@ use super::grid_sequencer::{
     row_patch_role, DrumRole, GridPatchLoad, GridSequencerContext, PatchRole, ARPEGGIO_ROW,
     BASS_ROW, CHORD_ROW, FIRST_DRUM_ROW, FULL_DRUM_TRACK_COUNT,
 };
-use super::voicing::{VoicingPolicies, VoicingState};
+use super::voicing::{VoicingPolicies, VoicingPolicy, VoicingState};
 use crate::config::Config;
-use cmrt_tui_core::patch_plugins::{CatalogPlugin, PatchPlugins};
+use cmrt_tui_core::patch_plugins::PatchPlugins;
 
 /// 候補が0件の行が1つでもあれば `Err`。スクリプトから終了コードで判定できるようにするため。
 pub fn run_patch_role_report(cfg: &Config) -> Result<()> {
@@ -32,6 +32,9 @@ pub fn run_patch_role_report(cfg: &Config) -> Result<()> {
         source_refresh,
         VoicingPolicies::from_config(cfg),
     );
+    // `.vvp` の mono/poly は音色ファイルの先頭に書いてある。ここで先に読んでおくと、
+    // 下の候補数え上げが 1 音色 1 回の読みで済む（画面側は起動時に同じことをする）。
+    voicing.prefetch_vvp_voicings(&pairs);
     let chord_catalog = cmrt_chord::ChordProgressionCatalog::default();
     let ctx = GridSequencerContext {
         patch_dirs_configured: crate::patches::has_configured_patch_dirs(cfg),
@@ -45,7 +48,7 @@ pub fn run_patch_role_report(cfg: &Config) -> Result<()> {
     print_plugin_section(cfg, &patch_plugins);
     print_patch_section(cfg, pairs.len());
     print_filter_section(&patch_plugins);
-    print_role_section(&ctx);
+    print_role_section(&ctx, &patch_plugins);
     let empty_rows = print_row_section(&ctx);
 
     println!();
@@ -78,7 +81,10 @@ fn print_plugin_section(cfg: &Config, patch_plugins: &PatchPlugins) {
         println!("  {}", plugin.name);
         println!("    plugin_path : {}", optional_str(&plugin.plugin_path));
         println!("    Surge XT か : {}", yes_no(plugin.is_surge_xt()));
-        println!("    voicing 判定: {}", voicing_policy_label(plugin));
+        println!(
+            "    voicing 判定: {}",
+            VoicingPolicy::for_plugin(plugin).label()
+        );
     }
 }
 
@@ -124,7 +130,11 @@ fn print_filter_section(patch_plugins: &PatchPlugins) {
 }
 
 /// 全 8 役割の候補数。行の割り当てが変わっても、行が取りうる用途はこの 8 つで尽きる。
-fn print_role_section(ctx: &GridSequencerContext<'_>) {
+///
+/// **カタログが混在なら、プラグインごとの内訳も出す。** 合計だけでは
+/// 「Vaporizer2 の音色がこの役へ 1 件も出ていない」が見えない（他プラグインの数千件に
+/// 埋もれる）。プラグインを足したときに効いたのかどうかは、この内訳が動くかで決まる。
+fn print_role_section(ctx: &GridSequencerContext<'_>, patch_plugins: &PatchPlugins) {
     println!();
     println!("[用途ごとの候補数]");
     for role in ALL_ROLES {
@@ -135,7 +145,32 @@ fn print_role_section(ctx: &GridSequencerContext<'_>) {
             candidates.len(),
             sample_label(&candidates)
         );
+        if patch_plugins.plugins().len() > 1 {
+            println!(
+                "                       内訳: {}",
+                per_plugin_counts(&candidates, patch_plugins)
+            );
+        }
     }
+}
+
+/// 候補をプラグインごとに数えて `名前 件数` の 1 行にする。
+///
+/// 引き分けは patch 一覧のフィルタ・PATCH 欄の wheel と同じ
+/// [`PatchPlugins::index_for_patch`] を通す。別の判定を書くと、内訳は正しく見えるのに
+/// 画面では違うプラグインへ送られている、という食い違いが起きる。
+fn per_plugin_counts(candidates: &[&str], patch_plugins: &PatchPlugins) -> String {
+    let mut counts = vec![0usize; patch_plugins.plugins().len()];
+    for display in candidates {
+        counts[patch_plugins.index_for_patch(display)] += 1;
+    }
+    patch_plugins
+        .plugins()
+        .iter()
+        .zip(counts)
+        .map(|(plugin, count)| format!("{} {count}", plugin.name))
+        .collect::<Vec<_>>()
+        .join(" / ")
 }
 
 /// 行ごとの用途と候補数。候補が0件だった行のラベルを返す。
@@ -209,14 +244,6 @@ fn row_label(row: usize, chord_on: bool, drum: Option<DrumRole>) -> String {
         BASS_ROW if chord_on => "BASS".to_string(),
         ARPEGGIO_ROW if chord_on => "ARP".to_string(),
         _ => "-".to_string(),
-    }
-}
-
-fn voicing_policy_label(plugin: &CatalogPlugin) -> &'static str {
-    if plugin.is_surge_xt() {
-        "Sources（共有 JSON / ユーザー判定 / override から引く）"
-    } else {
-        "AssumePoly（判定手段が無いので全 patch を poly とみなす）"
     }
 }
 

@@ -99,6 +99,51 @@ fn surge_xt_defaults_come_from_the_builtin_not_from_the_config() {
     assert!(!builtin.kick_patch_keywords.is_empty());
 }
 
+/// Vaporizer2 の既定もカテゴリ名を持つ。**Surge のぶんを流用してはいけない。**
+#[test]
+fn vaporizer2_defaults_come_from_its_own_category_table() {
+    let builtin = PatchRoles::builtin_for(Some(crate::VAPORIZER2_PLUGIN_ID), "");
+
+    assert_eq!(
+        builtin.chord_patch_categories,
+        cmrt_patches::vaporizer2::DEFAULT_CHORD_PATCH_CATEGORY_NAMES
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(builtin.bass_patch_categories, vec!["Bass".to_string()]);
+}
+
+/// **綴りが Surge と違う**ことの番人。Vaporizer2 のカテゴリは単数形（`Pad` / `Bass`）で、
+/// Surge の複数形（`Pads` / `Basses`）とは 1 つも一致しない。ここが揃ってしまうと
+/// 「Surge のぶんをコピーしただけ」の間違いに気づけない。
+#[test]
+fn the_vaporizer2_categories_are_not_the_surge_ones() {
+    let surge = PatchRoles::builtin_for(Some(crate::SURGE_XT_PLUGIN_ID), "");
+    let vaporizer2 = PatchRoles::builtin_for(Some(crate::VAPORIZER2_PLUGIN_ID), "");
+
+    assert_ne!(
+        surge.chord_patch_categories,
+        vaporizer2.chord_patch_categories
+    );
+    assert_ne!(
+        surge.bass_patch_categories,
+        vaporizer2.bass_patch_categories
+    );
+    // drum の振り分けキーワードだけは共有している（太鼓の一般名なので）。
+    assert_eq!(surge.kick_patch_keywords, vaporizer2.kick_patch_keywords);
+}
+
+/// `plugin_id` を書かない config でも、ファイル名で Vaporizer2 だと分かる。
+/// **既定 `plugin_path` との一致ではなくファイル名に `vaporizer` を含むかで見る**ので、
+/// 標準以外の場所へ入れていても当たる。
+#[test]
+fn vaporizer2_is_recognized_by_its_file_name_when_the_id_is_missing() {
+    let builtin = PatchRoles::builtin_for(None, r"D:\my\clap\VASTvaporizer2.clap");
+
+    assert_eq!(builtin.bass_patch_categories, vec!["Bass".to_string()]);
+}
+
 /// `plugin_id` を書かない旧 config でも、ファイル名で Surge XT だと分かる。
 #[test]
 fn surge_xt_is_recognized_by_its_file_name_when_the_id_is_missing() {

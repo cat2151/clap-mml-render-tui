@@ -27,3 +27,36 @@ fn empty_categories_match_everything() {
     ));
     assert!(patch_matches_categories("Dexed_01.syx/00 Say Again.", &[]));
 }
+
+/// `.vvp` は**必ず** Vaporizer2 の読み方へ落ちる。Surge の prefix の下に音色置き場を
+/// 置いていても拡張子が勝つ。ここが逆転すると、`.vvp` が Surge のカテゴリ階層で
+/// 読まれて用途別の候補から全部外れる。
+#[test]
+fn a_vvp_patch_always_reads_as_vaporizer2() {
+    assert_eq!(
+        PatchLayout::of("AR Accent Arp.vvp"),
+        PatchLayout::Vaporizer2
+    );
+    assert_eq!(
+        PatchLayout::of("patches_factory/Pads/PD Emily.vvp"),
+        PatchLayout::Vaporizer2
+    );
+    assert_eq!(
+        PatchLayout::of("/Vaporizer2/PD Emily.vvp/"),
+        PatchLayout::Vaporizer2
+    );
+}
+
+/// 3 つめの体系を足しても、既存 2 つの読み方は 1 つも変わらない。
+#[test]
+fn the_existing_layouts_are_untouched_by_the_third_one() {
+    assert_eq!(
+        PatchLayout::of("patches_factory/Pads/Warm Pad.fxp"),
+        PatchLayout::SurgeXt
+    );
+    assert_eq!(
+        PatchLayout::of("Dexed_01.syx/00 Say Again."),
+        PatchLayout::Cartridge
+    );
+    assert_eq!(patch_category("Dexed_01.syx/00 Say Again."), "Dexed_01.syx");
+}
