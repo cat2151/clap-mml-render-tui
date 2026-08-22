@@ -42,6 +42,7 @@ impl TuiApp<'_> {
             patches,
             history: history.to_vec(),
             favorites: favorites.to_vec(),
+            catalog_notes: self.catalog_notes.clone(),
         }
     }
 

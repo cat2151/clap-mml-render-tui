@@ -384,3 +384,30 @@ fn patch_select_only_highlights_the_focused_pane() {
     assert!(pane_contains_cursor_highlight(&buffer, panes[0]));
     assert!(!pane_contains_cursor_highlight(&buffer, panes[1]));
 }
+
+/// 設定不足でカタログから外れたプラグインの案内は、音色選択の枠の下辺に出る。
+///
+/// 一覧が 0 件のときの案内（上のテスト）とは別の軸で、**一覧が十分にあるときにも出る**。
+/// 一覧に出てこないものの話なので、一覧をいくら眺めても分からない。
+#[test]
+fn patch_select_screen_shows_why_a_plugin_is_missing_from_the_catalog() {
+    let mut app = NotepadScreen::new_for_test(test_config());
+    app.catalog_notes = vec!["Vaporizer2 は patches_dirs が無いため一覧に出ません".to_string()];
+    app.mode = Mode::PatchSelect;
+
+    let lines = render_lines(&mut app, 100, 24).join("\n");
+
+    assert!(lines.contains("Vaporizer2"), "{lines}");
+    assert!(lines.contains("patches_dirs"), "{lines}");
+}
+
+/// 外れたプラグインが無ければ 1 文字も出さない。
+#[test]
+fn patch_select_screen_shows_no_catalog_note_when_nothing_was_skipped() {
+    let mut app = NotepadScreen::new_for_test(test_config());
+    app.mode = Mode::PatchSelect;
+
+    let lines = render_lines(&mut app, 100, 24).join("\n");
+
+    assert!(!lines.contains("Vaporizer2"), "{lines}");
+}

@@ -66,6 +66,63 @@ impl CatalogPlugin {
     }
 }
 
+/// カタログへ載せなかったプラグインと、その理由。
+///
+/// **黙って外す**のが今までの倒れ方で、それ自体は変えない（音色置き場が無いプラグインを
+/// 載せると、別プラグインの音色がそのインスタンスへ送られる。
+/// `docs/adr/0005-mixed-catalog-on-by-default.md`）。変えたのは
+/// 「外したことが誰にも見えない」ほうで、CLI 診断・ログ・音色選択の 3 経路が
+/// これを読んで同じ 1 行を出す。
+///
+/// インストールされていないプラグインはここに出てこない。
+/// [`installed_plugin_profiles`] の時点で落ちており、「入れていないものが出ない」のは
+/// 説明の要らない当たり前だから。ここに出るのは**入っているのに設定不足で外れたもの**だけ。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkippedCatalogPlugin {
+    /// プロファイル名。config の `[plugins.<名前>]` と同じ綴り。
+    pub name: String,
+    pub reason: CatalogSkipReason,
+}
+
+/// カタログから外した理由。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CatalogSkipReason {
+    /// `patches_dirs` が書かれていない。**Vaporizer2 の組み込みプロファイルがこれ**
+    /// （プリセット置き場がインストールごとに違うので既定値を持たない）。
+    NoPatchDirs,
+    /// `patches_dirs` は書かれているが、1 つも実在しない。
+    /// 書いた dir を持って回るのは、綴り間違いを名指しで返すため。
+    PatchDirsMissing(Vec<String>),
+}
+
+impl SkippedCatalogPlugin {
+    /// CLI 診断・ログ・音色選択の注記が共有する 1 行。
+    ///
+    /// **文言をここ以外に持たない。** 3 経路で書き分けると、直すときに片方だけ古くなる。
+    pub fn notice_line(&self) -> String {
+        match &self.reason {
+            CatalogSkipReason::NoPatchDirs => format!(
+                "{} は config.toml の [plugins.{}] に patches_dirs が無いため一覧に出ません",
+                self.name, self.name
+            ),
+            CatalogSkipReason::PatchDirsMissing(dirs) => format!(
+                "{} は [plugins.{}] の patches_dirs が実在しないため一覧に出ません: {}",
+                self.name,
+                self.name,
+                dirs.join(" / ")
+            ),
+        }
+    }
+
+    /// ログ行に書く機械可読な理由。`key=value` のログを grep するためのもの。
+    pub fn reason_code(&self) -> &'static str {
+        match self.reason {
+            CatalogSkipReason::NoPatchDirs => "no-patches-dirs",
+            CatalogSkipReason::PatchDirsMissing(_) => "patch-dirs-missing",
+        }
+    }
+}
+
 /// カタログに音色を載せるプラグインの一覧。**先頭が既定プラグイン**
 /// （＝音色を無指定にした行が鳴るもの）。
 ///
@@ -78,7 +135,32 @@ impl CatalogPlugin {
 /// プロファイル名の昇順 → config で足した名前）なので、`PluginEntries` のような
 /// 「添字で対応づける表」と揃う。
 pub fn catalog_plugins(cfg: &Config) -> Vec<CatalogPlugin> {
+    catalog_plugins_detailed(cfg).0
+}
+
+/// [`catalog_plugins`] と、**そのとき外したプラグインの一覧**。
+///
+/// 載せたぶんと外したぶんを 1 回の走査で同時に返す。外れた判定を別の関数で
+/// 書き直すと、条件がずれて「一覧には出ないのに『外していません』と言う」状態になる。
+pub fn catalog_plugins_detailed(cfg: &Config) -> (Vec<CatalogPlugin>, Vec<SkippedCatalogPlugin>) {
     catalog_plugins_with(cfg, installed_plugin_profiles(cfg))
+}
+
+/// カタログから外したプラグインだけが要るとき用。
+pub fn skipped_catalog_plugins(cfg: &Config) -> Vec<SkippedCatalogPlugin> {
+    catalog_plugins_detailed(cfg).1
+}
+
+/// 画面へ出す「一覧に出てこない音色がある」ことの案内。外れたものが無ければ空。
+///
+/// 音色選択を持つ画面はどれもこれを使う。**組み立てをここ 1 か所に置く**のは、
+/// 画面ごとに数え方が分かれると「ある画面にだけ案内が出ない」からで、それは
+/// 案内が無いこと自体が症状なので誰も気づけない。
+pub fn catalog_notice_lines(cfg: &Config) -> Vec<String> {
+    skipped_catalog_plugins(cfg)
+        .iter()
+        .map(SkippedCatalogPlugin::notice_line)
+        .collect()
 }
 
 /// [`catalog_plugins`] の組み立て部分。実在チェックを済ませたプロファイルを受け取る。
@@ -87,12 +169,25 @@ pub fn catalog_plugins(cfg: &Config) -> Vec<CatalogPlugin> {
 /// 開発機のインストール状況に左右されないようにするため。
 fn catalog_plugins_with(
     cfg: &Config,
-    installed: Vec<(String, PluginProfile)>,
-) -> Vec<CatalogPlugin> {
+    installed: Vec<InstalledProfile>,
+) -> (Vec<CatalogPlugin>, Vec<SkippedCatalogPlugin>) {
     let mut plugins = vec![active_catalog_plugin(cfg)];
-    for (name, profile) in installed {
+    let mut skipped = Vec::new();
+    for InstalledProfile {
+        name,
+        profile,
+        missing_dirs,
+    } in installed
+    {
         let dirs = cmrt_server_config::configured_patch_dirs(profile.patches_dirs.as_deref());
         if dirs.is_empty() {
+            // 外した事実をここで作る。判定と理由が同じ 1 か所に居ることが要点。
+            let reason = if missing_dirs.is_empty() {
+                CatalogSkipReason::NoPatchDirs
+            } else {
+                CatalogSkipReason::PatchDirsMissing(missing_dirs)
+            };
+            skipped.push(SkippedCatalogPlugin { name, reason });
             continue;
         }
         let plugin = CatalogPlugin {
@@ -123,7 +218,7 @@ fn catalog_plugins_with(
         }
         plugins.push(plugin);
     }
-    plugins
+    (plugins, skipped)
 }
 
 /// 既定プラグイン（音色を無指定にした行が鳴るもの）ぶんのカタログ項目。
@@ -159,7 +254,7 @@ fn active_catalog_plugin(cfg: &Config) -> CatalogPlugin {
 ///
 /// 並びはプロファイル名の昇順（`BTreeMap` の順）。`PluginEntries` のような
 /// 「添字で対応づける表」と揃えるため、決まった順であることだけが要件。
-fn installed_plugin_profiles(cfg: &Config) -> Vec<(String, PluginProfile)> {
+fn installed_plugin_profiles(cfg: &Config) -> Vec<InstalledProfile> {
     // 既定プラグインが定まらない config では混在させない。`plugin_path` が空なのは
     // 「どのプラグインも指していない」ということで、そもそも entry をロードできない
     // （読み手が「空です」と弾く）。同定できない以上、既定プラグインと同じものを
@@ -170,20 +265,33 @@ fn installed_plugin_profiles(cfg: &Config) -> Vec<(String, PluginProfile)> {
     cmrt_server_config::installed_plugin_profiles(&cfg.plugins)
         .into_iter()
         .map(|(name, profile)| {
-            let dirs: Vec<String> =
+            let (dirs, missing_dirs): (Vec<String>, Vec<String>) =
                 cmrt_server_config::configured_patch_dirs(profile.patches_dirs.as_deref())
                     .into_iter()
-                    .filter(|dir| Path::new(dir).is_dir())
-                    .collect();
-            (
+                    .partition(|dir| Path::new(dir).is_dir());
+            InstalledProfile {
                 name,
-                PluginProfile {
+                profile: PluginProfile {
                     patches_dirs: Some(dirs),
                     ..profile
                 },
-            )
+                missing_dirs,
+            }
         })
         .collect()
+}
+
+/// [`installed_plugin_profiles`] が返す 1 つぶん。
+///
+/// `missing_dirs` を捨てずに持ち回るのは、音色置き場が 1 つも残らなかったときに
+/// 「書いていない」のか「書いたが実在しない」のかを言い分けるため。
+/// 捨ててしまうと、綴りを間違えた dir が「未設定です」と案内されて直しようがない。
+struct InstalledProfile {
+    name: String,
+    /// `patches_dirs` は**実在する dir だけ**に絞り込んである。
+    profile: PluginProfile,
+    /// 書かれていたが実在しなかった dir。
+    missing_dirs: Vec<String>,
 }
 
 /// 同じプラグインを 2 度カタログへ載せないための同定。

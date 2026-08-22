@@ -136,3 +136,60 @@ fn draws_the_history_select_over_the_input() {
     assert!(rendered.contains("cdefg"), "{rendered}");
     assert!(rendered.contains("gfedc"), "{rendered}");
 }
+
+/// カタログから外れたプラグインの案内は、音色選択を開いている間だけ枠の下に出る。
+///
+/// 一覧に**出てこない**ものの話なので、一覧をいくら眺めても分からない。
+/// これが出ないと「Vaporizer2 を入れたのに 1 件も出ない」の原因に辿り着けない。
+#[test]
+fn the_patch_select_shows_why_a_plugin_is_missing_from_the_list() {
+    let mut overlay = MmlOverlay::default();
+    overlay.open(MmlOverlayContext {
+        patches: vec![(
+            "Leads/Lead 1.fxp".to_string(),
+            "leads/lead 1.fxp".to_string(),
+        )],
+        catalog_notes: vec!["Vaporizer2 は patches_dirs が無いため一覧に出ません".to_string()],
+        ..MmlOverlayContext::default()
+    });
+    overlay.handle_key(
+        KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL),
+        Instant::now(),
+    );
+
+    let rendered = render(&overlay);
+
+    assert!(rendered.contains("Vaporizer2"), "{rendered}");
+    assert!(rendered.contains("patches_dirs"), "{rendered}");
+}
+
+/// 案内が無いときは 1 行も取らない。ふだんの見え方を変えないことの番人。
+#[test]
+fn the_patch_select_takes_no_extra_row_without_a_note() {
+    let patches = vec![(
+        "Leads/Lead 1.fxp".to_string(),
+        "leads/lead 1.fxp".to_string(),
+    )];
+    let open_with = |catalog_notes: Vec<String>| {
+        let mut overlay = MmlOverlay::default();
+        overlay.open(MmlOverlayContext {
+            patches: patches.clone(),
+            catalog_notes,
+            ..MmlOverlayContext::default()
+        });
+        overlay.handle_key(
+            KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL),
+            Instant::now(),
+        );
+        render(&overlay)
+    };
+
+    let without = open_with(Vec::new());
+    let with = open_with(vec![
+        "Vaporizer2 は patches_dirs が無いため一覧に出ません".to_string()
+    ]);
+
+    assert_ne!(without, with);
+    // 案内が無いほうには、案内のための空行も色も出ない。
+    assert!(!without.contains("Vaporizer2"), "{without}");
+}

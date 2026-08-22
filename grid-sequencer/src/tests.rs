@@ -47,6 +47,7 @@ pub(crate) fn ctx_with<'a>(
         voicing,
         patch_plugins: unfiltered_plugins(),
         chord_source_updated: false,
+        catalog_notes: &[],
     }
 }
 

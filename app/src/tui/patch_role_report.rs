@@ -43,9 +43,11 @@ pub fn run_patch_role_report(cfg: &Config) -> Result<()> {
         voicing: &voicing,
         patch_plugins: &patch_plugins,
         chord_source_updated: false,
+        catalog_notes: &[],
     };
 
     print_plugin_section(cfg, &patch_plugins);
+    print_skipped_section(&cmrt_runtime::skipped_catalog_plugins(cfg));
     print_patch_section(cfg, pairs.len());
     print_filter_section(&patch_plugins);
     print_role_section(&ctx, &patch_plugins);
@@ -86,6 +88,32 @@ fn print_plugin_section(cfg: &Config, patch_plugins: &PatchPlugins) {
             VoicingPolicy::for_plugin(plugin).label()
         );
     }
+}
+
+/// インストールされているのに設定不足でカタログから外れたプラグイン。
+///
+/// **0 件のときも欄ごと出す。** 省略すると「外れたものは無い」と「そもそも数えていない」の
+/// 区別が付かず、この診断で切り分けたい当のことが分からなくなる（プラグイン別内訳が
+/// 候補 0 件のプラグインも省略しないのと同じ理由）。
+///
+/// 文言は [`cmrt_runtime::SkippedCatalogPlugin::notice_line`] が単一ソース。
+/// 音色選択の注記・log.txt の行と同じ 1 行がここにも出る。
+fn print_skipped_section(skipped: &[cmrt_runtime::SkippedCatalogPlugin]) {
+    println!();
+    println!("[カタログから外したプラグイン]");
+    for line in skipped_section_lines(skipped) {
+        println!("  {line}");
+    }
+}
+
+/// 欄の中身。テストが読めるよう print から分けてある。
+fn skipped_section_lines(skipped: &[cmrt_runtime::SkippedCatalogPlugin]) -> Vec<String> {
+    if skipped.is_empty() {
+        return vec![
+            "なし（インストール済みのプラグインはすべてカタログに載っています）".to_string(),
+        ];
+    }
+    skipped.iter().map(|plugin| plugin.notice_line()).collect()
 }
 
 fn print_patch_section(cfg: &Config, count: usize) {

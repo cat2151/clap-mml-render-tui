@@ -70,6 +70,12 @@ pub struct MmlOverlayContext {
     /// notepad 画面と共有しているフレーズ履歴。
     pub history: Vec<String>,
     pub favorites: Vec<String>,
+    /// 設定不足でカタログから外れたプラグインの案内（`SkippedCatalogPlugin::notice_line`）。
+    ///
+    /// 「音色一覧に出てこない」は一覧を見ているだけでは絶対に気づけない
+    /// （**出ていないものは見えない**）ので、音色選択を開いている間だけ枠の下へ出す。
+    /// 空なら 1 行も増えない。
+    pub catalog_notes: Vec<String>,
 }
 
 /// どの画面からでも開ける MML 入力オーバーレイ。
@@ -98,6 +104,8 @@ pub struct MmlOverlay<'a> {
     /// 開いている間だけ持つフレーズ履歴のスナップショット。
     history: Vec<String>,
     favorites: Vec<String>,
+    /// 開いている間だけ持つ「カタログから外れたプラグイン」の案内。
+    catalog_notes: Vec<String>,
     patch_select: Option<PatchSelect<'a>>,
     history_select: Option<HistorySelect<'a>>,
     /// 直近に行を演奏した結果。
@@ -117,6 +125,7 @@ impl Default for MmlOverlay<'_> {
             patches: Vec::new(),
             history: Vec::new(),
             favorites: Vec::new(),
+            catalog_notes: Vec::new(),
             patch_select: None,
             history_select: None,
             line_status: LineStatus::Idle,
@@ -181,6 +190,7 @@ impl<'a> MmlOverlay<'a> {
         self.patches = context.patches;
         self.history = context.history;
         self.favorites = context.favorites;
+        self.catalog_notes = context.catalog_notes;
         self.patch_select = None;
         self.history_select = None;
         self.open = true;

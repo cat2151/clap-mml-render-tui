@@ -73,3 +73,62 @@ Kick 1106 / Snare 1101 / HiHat 1078 / Percussion 1178。
 **Vaporizer2 を足した config**（`--config` で試す）では 3 プラグイン / patch 件数 **4524**
 （= 4064 + `.vvp` 460）。候補数は Chord 1983 / Bass 1567 / Arpeggio 2123 / Free 3597。
 → ベースラインと読み方は [0011](0011-verification-and-baselines.md)
+
+## 外したことを 3 経路で見せる（2026-08-22 追記）
+
+**黙って外す倒れ方そのものは変えていない。** 変えたのは「外したことが誰にも見えない」ほう。
+
+きっかけは実際に起きた迷子で、**Vaporizer2 をインストールし、実装も 10 Stage 全部入っているのに、
+音色選択に 460 件が 1 件も出ない**というもの。原因は実 config へ `[plugins.Vaporizer2]` を
+書いていなかっただけだが、**ログにも画面にも `cmrt patch-roles` にも痕跡が無く**、
+`catalog_plugins_with()` の `continue` を知っている人にしか切り分けられなかった。
+
+**「一覧に出てこない」は一覧を見ていて気づけない。**（出ていないものは見えない）
+だから通知は一覧の外に置くしかない。
+
+`catalog_plugins_detailed()` が、載せたぶんと**外したぶん＋理由**を 1 回の走査で同時に返す
+（`SkippedCatalogPlugin` / `CatalogSkipReason`）。判定と理由を同じ 1 か所で作るのが要点で、
+別の関数で書き直すと条件がずれて「一覧には出ないのに『外していません』と言う」状態になる。
+
+| 経路 | 出るもの |
+|---|---|
+| `cmrt patch-roles` | `[カタログから外したプラグイン]` 欄。**0 件でも「なし」と出す**（「無い」と「数えていない」を区別するため） |
+| `log/log.txt` | `patch-load: event=skipped plugin=... reason=no-patches-dirs note="..."`。`event=ready` / `event=error` も同時に新設 |
+| 音色選択（4 画面） | MML overlay / grid sequencer / keyboard / notepad。枠の下辺か help 行の上へ 1 行 |
+
+理由は 2 つに分ける。**「書いていない」と「書いたが実在しない」は次の一手が違う**
+（後者に「未設定です」と案内すると、書いた本人には直しようがない）:
+
+- `NoPatchDirs` — `patches_dirs` が無い。Vaporizer2 の組み込みがこれ
+- `PatchDirsMissing(dirs)` — 書いてあるが 1 つも実在しない。**綴りを間違えた dir を名指しで返す**
+
+**インストールしていないプラグインはここに出てこない。** `installed_plugin_profiles()` の
+時点で落ちており、「入れていないものが出ない」は説明の要らない当たり前だから。
+出るのは**入っているのに設定不足で外れたもの**だけ。
+
+### 文言と数え方の単一ソース
+
+- 文言: `SkippedCatalogPlugin::notice_line()`。3 経路で書き分けると直すとき片方だけ古くなる
+- 数え方: `catalog_notice_lines(cfg)`。**画面側では数えない**
+
+画面が自分で数えると 2 つ壊れる。(1) 案内が出ない画面が 1 つ残っても気づけない
+（**案内が無いこと自体が症状**なので見ただけでは分からない）。(2) 上の「テストが開発機に
+左右される」罠を画面のテストが踏む。実際 `NotepadScreen` に数えさせた版では
+keyboard 画面のテストが**このマシンに Vaporizer2 が入っているせいで**落ちた。
+`NotepadScreenParts.catalog_notes` として app から渡す形に直してある。
+
+### 番人テスト
+
+| テスト | 場所 |
+|---|---|
+| `a_plugin_without_patch_dirs_is_reported_as_skipped` | `cmrt-runtime/src/core_config/tests.rs` |
+| `a_plugin_whose_patch_dirs_all_vanished_is_reported_as_missing` | 同上 |
+| `a_plugin_with_patch_dirs_is_not_reported_as_skipped` | 同上 |
+| `the_default_plugin_is_never_reported_as_skipped` | 同上 |
+| `the_report_lists_skipped_plugins_even_when_there_are_none` | `app/src/tui/patch_role_report/tests.rs` |
+| `the_screens_show_which_plugins_are_missing_from_the_catalog` | `app/src/tui/tests/vaporizer2_screens.rs` |
+| `the_screens_show_no_note_when_every_plugin_is_in_the_catalog` | 同上 |
+| `the_patch_select_shows_why_a_plugin_is_missing_from_the_list` | `mml-overlay/src/ui/tests.rs` |
+| `the_selector_carries_the_reason_a_plugin_is_missing_from_the_catalog` | `grid-sequencer/src/patch_selector/tests/overlay.rs` |
+| `the_screen_shows_why_a_plugin_is_missing_from_the_catalog` | `keyboard/src/ui/tests.rs` |
+| `patch_select_screen_shows_why_a_plugin_is_missing_from_the_catalog` | `notepad/src/ui/tests/overlay_screens/patch_select.rs` |

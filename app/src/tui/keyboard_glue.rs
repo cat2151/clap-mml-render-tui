@@ -26,6 +26,7 @@ fn keyboard_context<'ctx>(
     patch_dirs_configured: bool,
     patch_load: &'ctx PatchLoadState,
     voicing: &'ctx VoicingState,
+    catalog_notes: &'ctx [String],
 ) -> KeyboardContext<'ctx> {
     KeyboardContext {
         patch_dirs_configured,
@@ -35,6 +36,7 @@ fn keyboard_context<'ctx>(
             PatchLoadState::Err(error) => KeyboardPatchLoad::Err(error),
         },
         voicing,
+        catalog_notes,
     }
 }
 
@@ -62,7 +64,12 @@ impl<'a> TuiApp<'a> {
 
         let patch_dirs_configured = self.patch_dirs_configured();
         let patch_load = self.patch_load_state.lock().unwrap();
-        let ctx = keyboard_context(patch_dirs_configured, &patch_load, &self.voicing);
+        let ctx = keyboard_context(
+            patch_dirs_configured,
+            &patch_load,
+            &self.voicing,
+            &self.catalog_notes,
+        );
         self.keyboard.start(patch, &ctx);
         drop(patch_load);
 
@@ -77,7 +84,12 @@ impl<'a> TuiApp<'a> {
 
         let patch_dirs_configured = self.patch_dirs_configured();
         let patch_load = self.patch_load_state.lock().unwrap();
-        let ctx = keyboard_context(patch_dirs_configured, &patch_load, &self.voicing);
+        let ctx = keyboard_context(
+            patch_dirs_configured,
+            &patch_load,
+            &self.voicing,
+            &self.catalog_notes,
+        );
         self.keyboard.resume(&ctx);
         drop(patch_load);
 
@@ -95,7 +107,12 @@ impl<'a> TuiApp<'a> {
         }
         let patch_dirs_configured = self.patch_dirs_configured();
         let patch_load = self.patch_load_state.lock().unwrap();
-        let ctx = keyboard_context(patch_dirs_configured, &patch_load, &self.voicing);
+        let ctx = keyboard_context(
+            patch_dirs_configured,
+            &patch_load,
+            &self.voicing,
+            &self.catalog_notes,
+        );
         self.keyboard.prepare_connection(&ctx);
     }
 
@@ -105,7 +122,12 @@ impl<'a> TuiApp<'a> {
         let action = {
             let patch_dirs_configured = self.patch_dirs_configured();
             let patch_load = self.patch_load_state.lock().unwrap();
-            let ctx = keyboard_context(patch_dirs_configured, &patch_load, &self.voicing);
+            let ctx = keyboard_context(
+                patch_dirs_configured,
+                &patch_load,
+                &self.voicing,
+                &self.catalog_notes,
+            );
             self.keyboard.handle_key(key, &ctx)
         };
 
@@ -146,7 +168,12 @@ impl<'a> TuiApp<'a> {
     pub(in crate::tui) fn sync_keyboard_patch_catalog(&mut self) {
         let patch_dirs_configured = self.patch_dirs_configured();
         let patch_load = self.patch_load_state.lock().unwrap();
-        let ctx = keyboard_context(patch_dirs_configured, &patch_load, &self.voicing);
+        let ctx = keyboard_context(
+            patch_dirs_configured,
+            &patch_load,
+            &self.voicing,
+            &self.catalog_notes,
+        );
         self.keyboard.sync_patch_catalog(&ctx);
     }
 

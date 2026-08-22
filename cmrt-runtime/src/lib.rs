@@ -6,8 +6,9 @@ mod plugin_identity;
 mod plugin_profile;
 
 pub use core_config::{
-    catalog_plugins, configured_patch_dirs, core_config_patch_root_dir, shared_patch_root_dir,
-    CatalogPlugin,
+    catalog_notice_lines, catalog_plugins, catalog_plugins_detailed, configured_patch_dirs,
+    core_config_patch_root_dir, shared_patch_root_dir, skipped_catalog_plugins, CatalogPlugin,
+    CatalogSkipReason, SkippedCatalogPlugin,
 };
 pub use defaults::{
     default_config_content, default_config_content_with_app_settings, default_dexed_cartridge_dirs,

@@ -37,6 +37,7 @@ struct GridContextParts<'ctx> {
     chord_catalog: &'ctx ChordProgressionCatalog,
     patch_plugins: &'ctx PatchPlugins,
     chord_source_updated: bool,
+    catalog_notes: &'ctx [String],
 }
 
 fn grid_sequencer_context<'ctx>(parts: GridContextParts<'ctx>) -> GridSequencerContext<'ctx> {
@@ -51,6 +52,7 @@ fn grid_sequencer_context<'ctx>(parts: GridContextParts<'ctx>) -> GridSequencerC
         voicing: parts.voicing,
         patch_plugins: parts.patch_plugins,
         chord_source_updated: parts.chord_source_updated,
+        catalog_notes: parts.catalog_notes,
     }
 }
 
@@ -72,6 +74,7 @@ impl TuiApp<'_> {
             voicing: &self.voicing,
             chord_catalog: &self.chord_catalog,
             patch_plugins: &self.patch_plugins,
+            catalog_notes: &self.catalog_notes,
             chord_source_updated: false,
         });
         self.grid_sequencer.enter(Instant::now(), &ctx);
@@ -101,6 +104,7 @@ impl TuiApp<'_> {
             voicing: &self.voicing,
             chord_catalog: &self.chord_catalog,
             patch_plugins: &self.patch_plugins,
+            catalog_notes: &self.catalog_notes,
             chord_source_updated: false,
         });
         self.grid_sequencer.handle_key(key, Instant::now(), &ctx)
@@ -119,6 +123,7 @@ impl TuiApp<'_> {
             voicing: &self.voicing,
             chord_catalog: &self.chord_catalog,
             patch_plugins: &self.patch_plugins,
+            catalog_notes: &self.catalog_notes,
             chord_source_updated: false,
         });
         self.grid_sequencer.handle_mouse(mouse, terminal_area, &ctx);
@@ -137,6 +142,7 @@ impl TuiApp<'_> {
             voicing: &self.voicing,
             chord_catalog: &self.chord_catalog,
             patch_plugins: &self.patch_plugins,
+            catalog_notes: &self.catalog_notes,
             chord_source_updated,
         });
         self.grid_sequencer.refresh_context(&ctx);

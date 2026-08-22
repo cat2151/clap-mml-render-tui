@@ -111,26 +111,61 @@ fn spawn_patch_loader(cfg: &Config, vvp_voicings: VvpVoicings) -> Arc<Mutex<Patc
     let patch_load_state = Arc::new(Mutex::new(PatchLoadState::Loading));
     let state_bg = Arc::clone(&patch_load_state);
     let cfg = cfg.clone();
-    std::thread::spawn(move || match crate::patches::collect_patch_pairs(&cfg) {
-        Ok(pairs) => {
-            let started = std::time::Instant::now();
-            let read = vvp_voicings.prefetch(
-                &cmrt_tui_core::patch_plugins::PatchPlugins::from_config(&cfg),
-                &pairs,
-            );
-            if read > 0 {
-                crate::logging::global_log_sink(&format!(
-                    "vvp-voicing: event=prefetch count={read} ms={}",
-                    started.elapsed().as_millis()
-                ));
+    std::thread::spawn(move || {
+        let loading_started = std::time::Instant::now();
+        match crate::patches::collect_patch_pairs(&cfg) {
+            Ok(pairs) => {
+                let started = std::time::Instant::now();
+                let read = vvp_voicings.prefetch(
+                    &cmrt_tui_core::patch_plugins::PatchPlugins::from_config(&cfg),
+                    &pairs,
+                );
+                if read > 0 {
+                    crate::logging::global_log_sink(&format!(
+                        "vvp-voicing: event=prefetch count={read} ms={}",
+                        started.elapsed().as_millis()
+                    ));
+                }
+                log_patch_load(&cfg, pairs.len(), loading_started.elapsed());
+                *state_bg.lock().unwrap() = PatchLoadState::Ready(pairs);
             }
-            *state_bg.lock().unwrap() = PatchLoadState::Ready(pairs);
-        }
-        Err(e) => {
-            *state_bg.lock().unwrap() = PatchLoadState::Err(e.to_string());
+            Err(e) => {
+                // ここまで一覧の失敗はエラー文字列が画面に出るだけで、閉じたあとには
+                // 何も残らなかった。原因を後から追えるようにログにも落とす。
+                crate::logging::global_log_sink(&format!(
+                    "patch-load: event=error error=\"{e:#}\""
+                ));
+                *state_bg.lock().unwrap() = PatchLoadState::Err(e.to_string());
+            }
         }
     });
     patch_load_state
+}
+
+/// 一覧の読み込み結果を log.txt へ 1 行ずつ残す。
+///
+/// **`event=skipped` がこの関数の主目的。** 「インストールしてあるのに音色が 1 件も
+/// 出ない」は、カタログを組む時点で黙って外していることが原因なのに、これまでは
+/// 画面にもログにも痕跡が無く、`cmrt patch-roles` を知っている人にしか切り分けられなかった。
+///
+/// 文言は [`cmrt_runtime::SkippedCatalogPlugin`] が単一ソース。`reason` は grep 用の
+/// 機械可読な短い綴り、`note` はそのまま読める 1 行で、音色選択の注記と同じもの。
+fn log_patch_load(cfg: &Config, count: usize, elapsed: std::time::Duration) {
+    let (listed, skipped) = cmrt_runtime::catalog_plugins_detailed(cfg);
+    let names: Vec<&str> = listed.iter().map(|plugin| plugin.name.as_str()).collect();
+    crate::logging::global_log_sink(&format!(
+        "patch-load: event=ready count={count} ms={} plugins={}",
+        elapsed.as_millis(),
+        names.join(",")
+    ));
+    for plugin in skipped {
+        crate::logging::global_log_sink(&format!(
+            "patch-load: event=skipped plugin={} reason={} note=\"{}\"",
+            plugin.name,
+            plugin.reason_code(),
+            plugin.notice_line()
+        ));
+    }
 }
 
 /// realtime play server をバックグラウンドで先行起動する。
@@ -228,6 +263,9 @@ impl<'a> TuiApp<'a> {
         let patch_load_state = spawn_patch_loader(cfg, vvp_voicings.clone());
         let grid_bpm_range =
             bpm_range_from_history(grid_sequencer_bpm_range, super::grid_sequencer::BPM);
+        // 設定不足でカタログから外れたプラグインの案内。config は起動中に変わらないので
+        // ここで 1 回だけ数え、音色選択を持つ画面すべてへ同じものを配る。
+        let catalog_notes = cmrt_runtime::catalog_notice_lines(cfg);
 
         Self {
             active_screen,
@@ -243,6 +281,7 @@ impl<'a> TuiApp<'a> {
                 patch_phrase_store: crate::history::load_patch_phrase_store(),
                 cfg: Arc::clone(&cfg_arc),
                 plugin_entries,
+                catalog_notes: catalog_notes.clone(),
             }),
             keyboard: super::keyboard::KeyboardScreen::new(
                 keyboard_midi_sender,
@@ -293,6 +332,7 @@ impl<'a> TuiApp<'a> {
             chord_catalog: cmrt_chord::ChordProgressionCatalog::default(),
             patch_plugins: cmrt_tui_core::patch_plugins::PatchPlugins::from_config(cfg),
             patch_load_state,
+            catalog_notes,
             playback_session,
             play_server,
             dismissed_play_server_failure: None,

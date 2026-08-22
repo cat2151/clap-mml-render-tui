@@ -3,7 +3,8 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::Style,
-    widgets::{Block, Borders, Clear, List, ListItem, ListState},
+    text::Line,
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
     Frame,
 };
 
@@ -12,7 +13,7 @@ use cmrt_tui_core::{
     text_input::{
         build_query_textarea_widget, single_line_textarea_cursor_position, textarea_value,
     },
-    theme::{cursor_highlight_style, MONOKAI_FG, MONOKAI_YELLOW},
+    theme::{cursor_highlight_style, MONOKAI_FG, MONOKAI_PINK, MONOKAI_YELLOW},
     ui::centered_rect,
 };
 
@@ -27,12 +28,53 @@ pub(super) fn draw(select: &PatchSelect<'_>, frame: &mut Frame<'_>) {
     let area = centered_rect(80, 70, frame.area());
     frame.render_widget(Clear, area);
 
+    // 案内が無いときは 1 行も取らない。ふだんの見え方を変えないため。
+    let notes_height = notes_height(select, area.width);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(QUERY_HEIGHT), Constraint::Min(1)])
+        .constraints([
+            Constraint::Length(QUERY_HEIGHT),
+            Constraint::Min(1),
+            Constraint::Length(notes_height),
+        ])
         .split(area);
     draw_query(select, frame, chunks[0]);
     draw_list(select, frame, chunks[1]);
+    if notes_height > 0 {
+        draw_notes(select, frame, chunks[2]);
+    }
+}
+
+/// 案内に要る行数。折り返しぶんも数える（1 行に収まらないと尻切れになる）。
+fn notes_height(select: &PatchSelect<'_>, width: u16) -> u16 {
+    let notes = select.catalog_notes();
+    if notes.is_empty() {
+        return 0;
+    }
+    let width = usize::from(width.max(1));
+    notes
+        .iter()
+        .map(|note| note.chars().count().div_ceil(width).max(1) as u16)
+        .sum()
+}
+
+/// 「一覧に出ていない音色がある」ことの案内。
+///
+/// 一覧の中身をいくら眺めても分からない情報なので、枠の外に出す。文言は
+/// `cmrt_runtime::SkippedCatalogPlugin::notice_line` が単一ソースで、
+/// `cmrt patch-roles` の欄・log.txt の `patch-load: event=skipped` と同じ 1 行。
+fn draw_notes(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
+    let lines: Vec<Line<'_>> = select
+        .catalog_notes()
+        .iter()
+        .map(|note| Line::from(note.as_str()))
+        .collect();
+    frame.render_widget(
+        Paragraph::new(lines)
+            .style(base_style().fg(MONOKAI_PINK))
+            .wrap(Wrap { trim: false }),
+        area,
+    );
 }
 
 fn draw_query(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {

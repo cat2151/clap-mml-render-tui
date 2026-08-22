@@ -401,3 +401,33 @@ fn same_day_footer_replaces_normal_key_guide_with_colored_message() {
     assert!(!screen.contains("patch -/+1"));
     assert!(has_colored_message_start(&terminal));
 }
+
+/// 設定不足でカタログから外れたプラグインの案内は、help 行の上に全幅で出る。
+///
+/// keyboard 画面の音色一覧は常時表示なので、開く操作を待たずに出す。
+/// 一覧に**出てこない**ものの話なので、一覧をいくら眺めても分からない。
+#[test]
+fn the_screen_shows_why_a_plugin_is_missing_from_the_catalog() {
+    let render = |notes: &[String]| {
+        let mut screen = crate::KeyboardScreen::new(
+            None,
+            KeyboardState::default(),
+            crate::KeyboardMmlInput::default(),
+            crate::KeyboardNoteGuide::new(None),
+        );
+        screen.state.patch_catalog.set_catalog_notes(notes);
+        let mut terminal = Terminal::new(TestBackend::new(90, 16)).unwrap();
+        terminal
+            .draw(|f| draw(&mut screen, &crate::KeyboardConnectionStatus::default(), f))
+            .unwrap();
+        buffer_to_string(&terminal)
+    };
+
+    let with = render(&["Vaporizer2 は patches_dirs が無いため一覧に出ません".to_string()]);
+    assert!(with.contains("Vaporizer2"), "{with}");
+    assert!(with.contains("patches_dirs"), "{with}");
+
+    // 案内が無ければ 1 行も増やさない。ふだんの見え方を変えないことの番人。
+    let without = render(&[]);
+    assert!(!without.contains("Vaporizer2"), "{without}");
+}

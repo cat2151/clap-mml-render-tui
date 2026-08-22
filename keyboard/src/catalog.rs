@@ -21,6 +21,8 @@ pub struct KeyboardPatchCatalog {
     random_remaining: Vec<(usize, usize)>,
     category_list_state: ListState,
     patch_list_state: ListState,
+    /// 設定不足でカタログから外れたプラグインの案内。描画だけに使う。
+    catalog_notes: Vec<String>,
 }
 
 impl Default for KeyboardPatchCatalog {
@@ -33,6 +35,7 @@ impl Default for KeyboardPatchCatalog {
             random_remaining: Vec::new(),
             category_list_state: ListState::default(),
             patch_list_state: ListState::default(),
+            catalog_notes: Vec::new(),
         }
     }
 }
@@ -87,6 +90,18 @@ impl KeyboardPatchCatalog {
         self.patch_cursor = selection.map(|(_, patch)| patch);
         self.random_remaining.clear();
         self.sync_list_states(1, 1);
+    }
+
+    /// 設定不足でカタログから外れたプラグインの案内。無ければ空。
+    /// 文言は `cmrt_runtime::SkippedCatalogPlugin::notice_line` が単一ソース。
+    pub fn catalog_notes(&self) -> &[String] {
+        &self.catalog_notes
+    }
+
+    pub(super) fn set_catalog_notes(&mut self, notes: &[String]) {
+        if self.catalog_notes != notes {
+            self.catalog_notes = notes.to_vec();
+        }
     }
 
     pub fn categories(&self) -> &[PatchCategory] {
@@ -241,6 +256,10 @@ fn sync_list_offset(
 
 impl KeyboardScreen<'_> {
     pub fn sync_patch_catalog(&mut self, ctx: &KeyboardContext<'_>) {
+        // 一覧が読めたかどうかと無関係に出す案内なので、下の早期 return より前に置く。
+        self.state
+            .patch_catalog
+            .set_catalog_notes(ctx.catalog_notes);
         if !ctx.patch_dirs_configured {
             self.state.patch_catalog.set_not_configured();
             return;

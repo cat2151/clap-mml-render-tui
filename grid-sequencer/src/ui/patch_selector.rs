@@ -1,12 +1,13 @@
 use ratatui::{
     style::Style,
+    text::Line,
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
     Frame,
 };
 
 use cmrt_tui_core::{
     status::base_style,
-    theme::{cursor_highlight_style, MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG},
+    theme::{cursor_highlight_style, MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_PINK},
 };
 
 use crate::{patch_selector::PatchSelectorLayout, GridSequencerScreen};
@@ -17,14 +18,18 @@ pub(super) fn draw(f: &mut Frame<'_>, screen: &GridSequencerScreen) {
     };
     let layout = PatchSelectorLayout::new(f.area(), selector.name_search_visible());
     f.render_widget(Clear, layout.popup);
-    f.render_widget(
-        Block::default()
-            .borders(Borders::ALL)
-            .title(format!(" instance {} patch select ", selector.instance + 1))
-            .style(base_style().fg(MONOKAI_FG).bg(MONOKAI_BG))
-            .border_style(base_style().fg(MONOKAI_CYAN)),
-        layout.popup,
-    );
+    // 案内は枠の下辺へ載せる。中の layout を動かさないので、2 ペインの行数も
+    // クリック判定（`PatchSelectorLayout`）も 1 ドットも変わらない。
+    let mut block = Block::default()
+        .borders(Borders::ALL)
+        .title(format!(" instance {} patch select ", selector.instance + 1))
+        .style(base_style().fg(MONOKAI_FG).bg(MONOKAI_BG))
+        .border_style(base_style().fg(MONOKAI_CYAN));
+    for note in selector.catalog_notes() {
+        block = block
+            .title_bottom(Line::from(format!(" {note} ")).style(base_style().fg(MONOKAI_PINK)));
+    }
+    f.render_widget(block, layout.popup);
 
     if let Some(filter_area) = layout.name_search {
         let filter = cmrt_tui_core::text_input::build_query_textarea_widget(

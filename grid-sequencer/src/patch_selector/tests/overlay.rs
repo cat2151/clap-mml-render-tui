@@ -394,3 +394,39 @@ fn an_overlay_that_appears_after_opening_cancels_the_selector_without_applying()
         Some("Keys/Alpha.fxp")
     );
 }
+
+/// 設定不足でカタログから外れたプラグインの案内は、selector が開いている間ずっと
+/// 枠の下辺に出る。一覧 0 件の通知（[`PatchUnavailable`]）とは別の軸で、
+/// **一覧が十分にあるときにも出る**のがこの案内の要点。
+#[test]
+fn the_selector_carries_the_reason_a_plugin_is_missing_from_the_catalog() {
+    let patches = patches();
+    let mut ctx = context(&patches);
+    let notes = vec!["Vaporizer2 は patches_dirs が無いため一覧に出ません".to_string()];
+    ctx.catalog_notes = &notes;
+    let mut screen = GridSequencerScreen::with_track_count(None, 2);
+
+    screen.open_patch_selector(0, &ctx);
+
+    let selector = screen.patch_selector.as_ref().unwrap();
+    assert_eq!(selector.catalog_notes(), notes.as_slice());
+    // 一覧そのものは開けている（0 件の通知とは別の軸であることの担保）。
+    assert!(!selector.categories.is_empty());
+}
+
+/// 外れたプラグインが無ければ 1 文字も出さない。
+#[test]
+fn the_selector_shows_no_note_when_every_plugin_is_in_the_catalog() {
+    let patches = patches();
+    let ctx = context(&patches);
+    let mut screen = GridSequencerScreen::with_track_count(None, 2);
+
+    screen.open_patch_selector(0, &ctx);
+
+    assert!(screen
+        .patch_selector
+        .as_ref()
+        .unwrap()
+        .catalog_notes()
+        .is_empty());
+}

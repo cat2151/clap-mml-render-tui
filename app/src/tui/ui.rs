@@ -50,5 +50,6 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     }
 }
 
+// 描画結果を読むヘルパ（`render_lines`）を別のテストモジュールからも引くので pub。
 #[cfg(test)]
-mod tests;
+pub(in crate::tui) mod tests;

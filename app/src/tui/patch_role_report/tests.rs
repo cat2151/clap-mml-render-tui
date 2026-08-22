@@ -107,3 +107,32 @@ fn the_breakdown_counts_every_candidate_once_per_plugin() {
         "Surge XT 0 / Dexed 0 / Vaporizer2 0"
     );
 }
+
+/// 設定不足でカタログから外れたプラグインは、名前と直し方つきで欄に出る。
+///
+/// **0 件のときも欄は空にしない。** 「外れたものは無い」と「そもそも数えていない」を
+/// 区別できないと、この診断で切り分けたい当のことが分からなくなる。
+#[test]
+fn the_report_lists_skipped_plugins_even_when_there_are_none() {
+    use cmrt_runtime::{CatalogSkipReason, SkippedCatalogPlugin};
+
+    let none = skipped_section_lines(&[]);
+    assert_eq!(none.len(), 1);
+    assert!(none[0].contains("なし"), "{}", none[0]);
+
+    let lines = skipped_section_lines(&[SkippedCatalogPlugin {
+        name: "Vaporizer2".to_string(),
+        reason: CatalogSkipReason::NoPatchDirs,
+    }]);
+
+    assert_eq!(lines.len(), 1);
+    // 文言は cmrt_runtime 側が単一ソース。ここでは「素通ししている」ことだけ見る。
+    assert_eq!(
+        lines[0],
+        SkippedCatalogPlugin {
+            name: "Vaporizer2".to_string(),
+            reason: CatalogSkipReason::NoPatchDirs,
+        }
+        .notice_line()
+    );
+}

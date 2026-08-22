@@ -48,6 +48,42 @@ drum 行の表は track 7 固定（track 4 は drum 行が 1 つで役割が抽�
 - 「voicing 判定」欄にプラグインごとの `VoicingPolicy` が出る（`Sources` / `VvpHeader` /
   `AssumePoly`。[0008](0008-voicing-per-patch.md)）
 
+**`[カタログから外したプラグイン]` 欄が、載らなかった理由を名指しで出す**（2026-08-22 追加）。
+上の内訳は**載ったプラグインしか数えない**ので、「インストールしてあるのに 1 件も出ない」は
+内訳を見ても分からない（行そのものが無い）。この欄がその 1 つ手前を見せる。
+
+```text
+[カタログから外したプラグイン]
+  Vaporizer2 は config.toml の [plugins.Vaporizer2] に patches_dirs が無いため一覧に出ません
+```
+
+- **外れたものが無いときも「なし」と 1 行出す**（「無い」と「数えていない」を区別するため）
+- 文言は `SkippedCatalogPlugin::notice_line()` が単一ソースで、音色選択の注記・
+  `log.txt` の `patch-load: event=skipped` と**同じ 1 行**。理由の切り分けは
+  [0005](0005-mixed-catalog-on-by-default.md)
+
+## `log/log.txt` — 起動時の一覧読み込み（2026-08-22 追加）
+
+音色一覧の読み込みは、成功も失敗もログに 1 行も残っていなかった。とくに読み込み失敗は
+エラー文字列が画面に出るだけで、閉じたあとには何も残らなかった。
+
+```text
+patch-load: event=ready count=4524 ms=312 plugins=Dexed,Surge XT,Vaporizer2
+patch-load: event=skipped plugin=Vaporizer2 reason=no-patches-dirs note="..."
+patch-load: event=error error="..."
+```
+
+- 置き場は `%LOCALAPPDATA%\clap-mml-render-tui\log\log.txt`。**ログレベルの概念は
+  このプロジェクトに無い**ので導入していない（既存の `vvp-voicing:` / `play-server:` と
+  同じ `サブシステム: key=value` 形式に揃えただけ）
+- `reason` は grep 用の短い綴り（`no-patches-dirs` / `patch-dirs-missing`）、
+  `note` はそのまま読める 1 行
+- 読み方:
+
+```
+type %LOCALAPPDATA%\clap-mml-render-tui\log\log.txt | findstr patch-load
+```
+
 ## `cmrt render-mml` — 画面を開かずにオフラインで鳴らす
 
 ```

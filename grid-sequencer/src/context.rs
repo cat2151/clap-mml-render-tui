@@ -32,6 +32,11 @@ pub struct GridSequencerContext<'a> {
     pub patch_plugins: &'a PatchPlugins,
     /// コード進行カタログが更新されたか（再起動アナウンスの合図。一度だけ true）。
     pub chord_source_updated: bool,
+    /// 設定不足でカタログから外れたプラグインの案内。patch selector の枠下へ出す。
+    ///
+    /// 一覧に**出てこない**ものの話なので、`patch_load` をいくら見ても分からない。
+    /// 空なら 1 文字も表示しない。
+    pub catalog_notes: &'a [String],
 }
 
 impl GridSequencerContext<'_> {

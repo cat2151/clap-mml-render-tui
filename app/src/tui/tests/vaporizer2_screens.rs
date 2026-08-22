@@ -11,6 +11,8 @@
 
 use super::*;
 
+use crate::tui::ui::tests::render_lines;
+
 /// 3 種別が混ざった一覧。`.vvp` にはアポストロフィ入りの実名も混ぜる
 /// （MML の和音記法が `'...'` なので、素通しできているかを見る）。
 fn mixed_patches() -> Vec<(String, String)> {
@@ -92,4 +94,45 @@ fn every_screen_reads_the_one_shared_patch_list() {
         _ => panic!("notepad 側の一覧が共有されていない"),
     };
     assert_eq!(from_notepad, mixed_patches());
+}
+
+/// 「設定不足でカタログから外れたプラグインがある」ことの案内も、
+/// 一覧と同じく **1 か所で数えて全画面へ配る**。
+///
+/// 画面ごとに数えると、案内が出ない画面がひとつ残っても誰も気づけない
+/// （**案内が無いこと自体が症状**なので、見ただけでは分からない）。
+/// 数えるのは `cmrt_runtime::catalog_notice_lines`、文言は
+/// `SkippedCatalogPlugin::notice_line` が単一ソース。
+#[test]
+fn the_screens_show_which_plugins_are_missing_from_the_catalog() {
+    let note = "Vaporizer2 は patches_dirs が無いため一覧に出ません";
+    let mut app = app_with_mixed_patches();
+    app.catalog_notes = vec![note.to_string()];
+
+    // MML 入力オーバーレイ（Ctrl+P → Ctrl+T）。
+    app.try_open_mml_overlay(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
+    app.handle_mml_overlay_key_event(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL));
+    let overlay = render_lines(&mut app, 100, 24).join("\n");
+    assert!(overlay.contains("Vaporizer2"), "{overlay}");
+
+    // keyboard 画面（音色一覧が常時出ている画面）。
+    app.handle_mml_overlay_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    app.handle_mml_overlay_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    app.start_keyboard(None);
+    let keyboard = render_lines(&mut app, 100, 24).join("\n");
+    assert!(keyboard.contains("Vaporizer2"), "{keyboard}");
+}
+
+/// 外れたプラグインが無ければ、どの画面にも案内は出ない。
+/// **ふだんの見え方を 1 文字も変えない**ことの番人。
+#[test]
+fn the_screens_show_no_note_when_every_plugin_is_in_the_catalog() {
+    let mut app = app_with_mixed_patches();
+    assert!(app.catalog_notes.is_empty());
+
+    app.try_open_mml_overlay(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
+    app.handle_mml_overlay_key_event(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL));
+    let overlay = render_lines(&mut app, 100, 24).join("\n");
+
+    assert!(!overlay.contains("Vaporizer2"), "{overlay}");
 }

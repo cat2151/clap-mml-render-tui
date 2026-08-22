@@ -40,11 +40,20 @@ pub(crate) struct PatchSelect<'a> {
     previewed: Option<String>,
     /// 描画できた行数。描画は `&self` で回るので内部可変で持つ。
     page_size: Cell<usize>,
+    /// 設定不足でカタログから外れたプラグインの案内。枠の下へそのまま出す。
+    catalog_notes: Vec<String>,
 }
 
 impl<'a> PatchSelect<'a> {
     /// 音色が 1 つも無ければ開かない（`None` を返す）。
-    pub(crate) fn open(all: Vec<(String, String)>, current: Option<&str>) -> Option<Self> {
+    ///
+    /// `catalog_notes` は「設定不足でカタログから外れたプラグイン」の案内。
+    /// 一覧に**出てこないもの**の話なので、一覧そのものからは決して分からない。
+    pub(crate) fn open(
+        all: Vec<(String, String)>,
+        current: Option<&str>,
+        catalog_notes: Vec<String>,
+    ) -> Option<Self> {
         if all.is_empty() {
             return None;
         }
@@ -60,6 +69,7 @@ impl<'a> PatchSelect<'a> {
             original: current.map(str::to_string),
             previewed: current.map(str::to_string),
             page_size: Cell::new(DEFAULT_PAGE_SIZE),
+            catalog_notes,
         })
     }
 
@@ -77,6 +87,11 @@ impl<'a> PatchSelect<'a> {
 
     pub(crate) fn total(&self) -> usize {
         self.all.len()
+    }
+
+    /// 設定不足でカタログから外れたプラグインの案内。無ければ空。
+    pub(crate) fn catalog_notes(&self) -> &[String] {
+        &self.catalog_notes
     }
 
     pub(crate) fn original(&self) -> Option<&str> {

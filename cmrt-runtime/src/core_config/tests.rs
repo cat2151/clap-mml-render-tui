@@ -11,6 +11,25 @@ fn profile(plugin_path: &str, patches_dirs: &[&str]) -> PluginProfile {
     }
 }
 
+/// 実在チェック済みプロファイルの並び（[`installed_plugin_profiles`] が返す形）へ包む。
+/// 実在しない dir の記録は、それを見るテストだけが [`InstalledProfile`] を直接組む。
+fn installed(profiles: Vec<(String, PluginProfile)>) -> Vec<InstalledProfile> {
+    profiles
+        .into_iter()
+        .map(|(name, profile)| InstalledProfile {
+            name,
+            profile,
+            missing_dirs: Vec::new(),
+        })
+        .collect()
+}
+
+/// カタログに**載ったぶん**だけを見るテスト用の包み。外したぶんを見るテストは
+/// [`catalog_plugins_with`] を直接呼ぶ。
+fn listed(cfg: &Config, profiles: Vec<(String, PluginProfile)>) -> Vec<CatalogPlugin> {
+    catalog_plugins_with(cfg, installed(profiles)).0
+}
+
 fn config_with_patch_dirs(patches_dirs_line: &str) -> Config {
     let toml_str = format!(
         r#"
@@ -30,7 +49,7 @@ buffer_size = 512
 fn catalog_plugins_has_no_dirs_when_none_are_configured() {
     let cfg = config_with_patch_dirs("");
 
-    let plugins = catalog_plugins_with(&cfg, Vec::new());
+    let plugins = listed(&cfg, Vec::new());
 
     assert_eq!(plugins.len(), 1);
     assert!(plugins[0].dirs.is_empty());
@@ -41,7 +60,7 @@ fn catalog_plugins_has_no_dirs_when_none_are_configured() {
 fn catalog_plugins_uses_a_single_dir_as_its_own_base() {
     let cfg = config_with_patch_dirs(r#"patches_dirs = ["/tmp/patches_factory"]"#);
 
-    let plugins = catalog_plugins_with(&cfg, Vec::new());
+    let plugins = listed(&cfg, Vec::new());
 
     assert_eq!(plugins[0].base.as_deref(), Some("/tmp/patches_factory"));
     assert_eq!(plugins[0].dirs, vec!["/tmp/patches_factory".to_string()]);
@@ -55,7 +74,7 @@ fn catalog_plugins_share_one_base_across_dirs_of_the_same_plugin() {
         r#"patches_dirs = ["/tmp/surge-data/patches_factory", "/tmp/surge-data/patches_3rdparty"]"#,
     );
 
-    let plugins = catalog_plugins_with(&cfg, Vec::new());
+    let plugins = listed(&cfg, Vec::new());
 
     assert_eq!(plugins[0].base.as_deref(), Some("/tmp/surge-data"));
     assert_eq!(
@@ -72,7 +91,7 @@ fn catalog_plugins_share_one_base_across_dirs_of_the_same_plugin() {
 fn catalog_plugins_have_no_base_when_dirs_share_no_parent() {
     let cfg = config_with_patch_dirs(r#"patches_dirs = ["patches_factory", "patches_3rdparty"]"#);
 
-    let plugins = catalog_plugins_with(&cfg, Vec::new());
+    let plugins = listed(&cfg, Vec::new());
 
     assert_eq!(plugins.len(), 1);
     assert_eq!(plugins[0].base, None);
@@ -88,7 +107,7 @@ fn catalog_plugins_resolve_patch_roles_from_the_top_level_values() {
         ..Default::default()
     };
 
-    let plugins = catalog_plugins_with(&cfg, Vec::new());
+    let plugins = listed(&cfg, Vec::new());
 
     assert_eq!(
         plugins[0].patch_roles.chord_patch_categories,
@@ -103,7 +122,7 @@ fn catalog_plugins_resolve_patch_roles_from_the_top_level_values() {
 fn catalog_plugins_relativize_each_plugin_against_its_own_base() {
     let cfg = config_with_patch_dirs(r#"patches_dirs = ["/tmp/surge-data/patches_factory"]"#);
 
-    let plugins = catalog_plugins_with(
+    let plugins = listed(
         &cfg,
         vec![(
             "Dexed".to_string(),
@@ -130,7 +149,7 @@ fn catalog_plugins_relativize_each_plugin_against_its_own_base() {
 fn catalog_plugins_skip_a_plugin_without_patch_dirs() {
     let cfg = config_with_patch_dirs(r#"patches_dirs = ["/tmp/patches_factory"]"#);
 
-    let plugins = catalog_plugins_with(
+    let plugins = listed(
         &cfg,
         vec![(
             "Dexed".to_string(),
@@ -147,7 +166,7 @@ fn catalog_plugins_skip_a_plugin_without_patch_dirs() {
 fn catalog_plugins_do_not_list_the_active_plugin_twice() {
     let cfg = config_with_patch_dirs(r#"patches_dirs = ["/tmp/my-surge-patches"]"#);
 
-    let plugins = catalog_plugins_with(
+    let plugins = listed(
         &cfg,
         vec![(
             "Surge XT".to_string(),
@@ -171,7 +190,7 @@ fn catalog_plugins_resolve_patch_roles_per_plugin() {
 
     let mut dexed = profile("/usr/lib/clap/Dexed.clap", &["/home/f/dexed/Cartridges"]);
     dexed.patch_roles = crate::PatchRoleFilters::unfiltered();
-    let plugins = catalog_plugins_with(&cfg, vec![("Dexed".to_string(), dexed)]);
+    let plugins = listed(&cfg, vec![("Dexed".to_string(), dexed)]);
 
     assert_eq!(
         plugins[0].patch_roles.chord_patch_categories,
@@ -186,7 +205,7 @@ fn catalog_plugins_resolve_patch_roles_per_plugin() {
 fn a_vaporizer2_profile_becomes_a_third_catalog_plugin() {
     let cfg = config_with_patch_dirs(r#"patches_dirs = ["/opt/surge/patches_factory"]"#);
 
-    let plugins = catalog_plugins_with(
+    let plugins = listed(
         &cfg,
         vec![
             (
@@ -239,7 +258,7 @@ fn a_profile_for_the_default_plugin_still_contributes_its_patch_roles() {
     );
     surge.patch_roles.chord_patch_categories = Some(vec!["MyPads".to_string()]);
 
-    let plugins = catalog_plugins_with(&cfg, vec![("Surge XT".to_string(), surge)]);
+    let plugins = listed(&cfg, vec![("Surge XT".to_string(), surge)]);
 
     // 二重には載らない。
     assert_eq!(plugins.len(), 1);
@@ -260,8 +279,90 @@ fn a_profile_for_the_default_plugin_still_contributes_its_patch_roles() {
 fn the_default_surge_plugin_narrows_even_with_an_empty_config() {
     let cfg = config_with_patch_dirs("");
 
-    let plugins = catalog_plugins_with(&cfg, Vec::new());
+    let plugins = listed(&cfg, Vec::new());
 
     assert!(!plugins[0].patch_roles.chord_patch_categories.is_empty());
     assert!(!plugins[0].patch_roles.kick_patch_keywords.is_empty());
+}
+
+/// 音色置き場を書いていないプラグインは、カタログから外れたことが理由つきで残る。
+/// **Vaporizer2 の組み込みプロファイルがまさにこれ**で、この 1 件が見えないと
+/// 「インストールしたのに音色が 1 件も出ない」の原因に誰も辿り着けない。
+#[test]
+fn a_plugin_without_patch_dirs_is_reported_as_skipped() {
+    let cfg = config_with_patch_dirs(r#"patches_dirs = ["/opt/surge/patches_factory"]"#);
+    let vaporizer2 = profile("/usr/lib/clap/VASTvaporizer2.clap", &[]);
+
+    let (plugins, skipped) = catalog_plugins_with(
+        &cfg,
+        installed(vec![("Vaporizer2".to_string(), vaporizer2)]),
+    );
+
+    // 載せないという倒れ方そのものは変えていない。
+    assert_eq!(plugins.len(), 1);
+    assert_eq!(skipped.len(), 1);
+    assert_eq!(skipped[0].name, "Vaporizer2");
+    assert_eq!(skipped[0].reason, CatalogSkipReason::NoPatchDirs);
+    assert_eq!(skipped[0].reason_code(), "no-patches-dirs");
+    // 案内は「どこへ何を書くか」まで言う。
+    let notice = skipped[0].notice_line();
+    assert!(notice.contains("Vaporizer2"), "{notice}");
+    assert!(notice.contains("[plugins.Vaporizer2]"), "{notice}");
+    assert!(notice.contains("patches_dirs"), "{notice}");
+}
+
+/// 書いてあるが 1 つも実在しない場合は「未設定」と言わない。綴りを間違えた dir を
+/// 名指しで返す（「未設定です」と案内されると、書いてある本人には直しようがない）。
+#[test]
+fn a_plugin_whose_patch_dirs_all_vanished_is_reported_as_missing() {
+    let cfg = config_with_patch_dirs(r#"patches_dirs = ["/opt/surge/patches_factory"]"#);
+    let vaporizer2 = profile("/usr/lib/clap/VASTvaporizer2.clap", &[]);
+
+    let (_, skipped) = catalog_plugins_with(
+        &cfg,
+        vec![InstalledProfile {
+            name: "Vaporizer2".to_string(),
+            profile: vaporizer2,
+            missing_dirs: vec!["/typo/Vaporizer2/Presets".to_string()],
+        }],
+    );
+
+    assert_eq!(
+        skipped[0].reason,
+        CatalogSkipReason::PatchDirsMissing(vec!["/typo/Vaporizer2/Presets".to_string()])
+    );
+    assert_eq!(skipped[0].reason_code(), "patch-dirs-missing");
+    assert!(
+        skipped[0]
+            .notice_line()
+            .contains("/typo/Vaporizer2/Presets"),
+        "{}",
+        skipped[0].notice_line()
+    );
+}
+
+/// 音色置き場を持つプラグインは載るので、外した一覧には出ない。
+/// 「何でもかんでも外したと言う」実装への番人。
+#[test]
+fn a_plugin_with_patch_dirs_is_not_reported_as_skipped() {
+    let cfg = config_with_patch_dirs(r#"patches_dirs = ["/opt/surge/patches_factory"]"#);
+    let dexed = profile("/usr/lib/clap/Dexed.clap", &["/opt/dexed/cartridges"]);
+
+    let (plugins, skipped) =
+        catalog_plugins_with(&cfg, installed(vec![("Dexed".to_string(), dexed)]));
+
+    assert_eq!(plugins.len(), 2);
+    assert!(skipped.is_empty());
+}
+
+/// 既定プラグインは音色置き場が空でも外れない（実在チェックをしない唯一の枠）。
+/// 外した一覧にも出ない。出すと「設定を直せば載る」という誤った案内になる。
+#[test]
+fn the_default_plugin_is_never_reported_as_skipped() {
+    let cfg = config_with_patch_dirs("");
+
+    let (plugins, skipped) = catalog_plugins_with(&cfg, Vec::new());
+
+    assert_eq!(plugins.len(), 1);
+    assert!(skipped.is_empty());
 }

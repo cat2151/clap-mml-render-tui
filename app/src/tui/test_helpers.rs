@@ -16,6 +16,8 @@ impl TuiApp<'static> {
             plugin_entries: cmrt_offline_render::PluginEntries::none(),
             playback_session: notepad.playback_session().clone(),
             patch_load_state: Arc::clone(&notepad.patch_load_state),
+            // 実マシンのインストール状況を読ませない。案内を見るテストは自分で入れる。
+            catalog_notes: Vec::new(),
             notepad,
             keyboard: KeyboardScreen::new(
                 None,

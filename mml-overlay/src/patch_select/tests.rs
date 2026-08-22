@@ -17,7 +17,7 @@ fn all() -> Vec<(String, String)> {
 }
 
 fn opened(current: Option<&str>) -> PatchSelect<'static> {
-    PatchSelect::open(all(), current).expect("patch list is not empty")
+    PatchSelect::open(all(), current, Vec::new()).expect("patch list is not empty")
 }
 
 fn previewed(action: PatchSelectAction) -> Option<String> {
@@ -29,7 +29,7 @@ fn previewed(action: PatchSelectAction) -> Option<String> {
 
 #[test]
 fn an_empty_patch_list_does_not_open() {
-    assert!(PatchSelect::open(Vec::new(), None).is_none());
+    assert!(PatchSelect::open(Vec::new(), None, Vec::new()).is_none());
 }
 
 #[test]

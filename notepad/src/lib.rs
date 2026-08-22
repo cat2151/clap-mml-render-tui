@@ -159,6 +159,11 @@ pub struct NotepadScreen<'a> {
     pub(crate) patch_phrase_store_dirty: bool,
     pub(crate) startup_normal_cache_primed: bool,
     pub(crate) cfg: Arc<Config>,
+    /// 設定不足でカタログから外れたプラグインの案内。音色選択の枠下へ出す。
+    ///
+    /// 一覧に**出てこない**ものの話なので、`patch_load_state` をいくら見ても分からない。
+    /// config は起動中に変わらないので、組み立てのときに 1 回だけ数える。
+    pub(crate) catalog_notes: Vec<String>,
 }
 
 /// [`NotepadScreen::new`] の引数一式。
@@ -181,6 +186,12 @@ pub struct NotepadScreenParts {
     /// カタログのプラグインごとのロード済み CLAP entry。
     /// render_server backend / テストでは空。
     pub plugin_entries: cmrt_offline_render::PluginEntries,
+    /// 設定不足でカタログから外れたプラグインの案内
+    /// （`cmrt_runtime::catalog_notice_lines`）。
+    ///
+    /// **画面側では数えない。** 数えると実マシンのインストール状況を読むことになり、
+    /// 画面のテストがマシン依存になる（`docs/adr/0005-mixed-catalog-on-by-default.md`）。
+    pub catalog_notes: Vec<String>,
 }
 
 impl NotepadScreen<'static> {
@@ -194,6 +205,7 @@ impl NotepadScreen<'static> {
             patch_phrase_store,
             cfg,
             plugin_entries,
+            catalog_notes,
         } = parts;
         let active_offline_render_count = Arc::new(AtomicUsize::new(0));
         let render_queue = TuiRenderQueue::new(
@@ -208,6 +220,7 @@ impl NotepadScreen<'static> {
             patch_load_state,
             patch_phrase_store,
             cfg,
+            catalog_notes,
         )
     }
 
@@ -229,6 +242,7 @@ impl NotepadScreen<'static> {
             Arc::new(Mutex::new(PatchLoadState::Ready(Vec::new()))),
             cmrt_history::PatchPhraseStore::default(),
             Arc::new(cfg),
+            Vec::new(),
         )
     }
 }
@@ -241,6 +255,7 @@ impl<'a> NotepadScreen<'a> {
         patch_load_state: Arc<Mutex<PatchLoadState>>,
         patch_phrase_store: cmrt_history::PatchPhraseStore,
         cfg: Arc<Config>,
+        catalog_notes: Vec<String>,
     ) -> Self {
         Self {
             mode: Mode::Normal,
@@ -257,6 +272,7 @@ impl<'a> NotepadScreen<'a> {
             patch_phrase_store,
             patch_phrase_store_dirty: false,
             startup_normal_cache_primed: false,
+            catalog_notes,
             cfg,
         }
     }
@@ -269,6 +285,15 @@ impl<'a> NotepadScreen<'a> {
 
     pub fn begin_playback_session(&self) -> u64 {
         self.playback.session.begin()
+    }
+
+    /// 設定不足でカタログから外れたプラグインの案内。無ければ空。
+    ///
+    /// 画面が自分で数えたものを app 側が引く。**数えるのは 1 か所**にしておかないと、
+    /// 画面ごとに違う案内が出る。文言は
+    /// `cmrt_runtime::SkippedCatalogPlugin::notice_line` が単一ソース。
+    pub fn catalog_notes(&self) -> &[String] {
+        &self.catalog_notes
     }
 
     /// notepad のフレーズ履歴（履歴, お気に入り）。

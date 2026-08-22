@@ -40,6 +40,8 @@ pub(crate) struct PatchSelector {
     previewed_patch: Option<String>,
     patch_random_before_open: bool,
     undo_before_open: crate::undo::UndoSnapshot,
+    /// 設定不足でカタログから外れたプラグインの案内。開いている間ずっと枠下に出す。
+    catalog_notes: Vec<String>,
 }
 
 impl PatchSelector {
@@ -99,7 +101,13 @@ impl PatchSelector {
             previewed_patch: current_patch.map(str::to_string),
             patch_random_before_open,
             undo_before_open,
+            catalog_notes: ctx.catalog_notes.to_vec(),
         })
+    }
+
+    /// 設定不足でカタログから外れたプラグインの案内。無ければ空。
+    pub(crate) fn catalog_notes(&self) -> &[String] {
+        &self.catalog_notes
     }
 
     pub(crate) fn selected_category(&self) -> &PatchCategory {

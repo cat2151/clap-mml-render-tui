@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::NotepadScreen;
 use crate::PatchSelectPane;
-use cmrt_tui_core::theme::{cursor_highlight_style, MONOKAI_GRAY, MONOKAI_YELLOW};
+use cmrt_tui_core::theme::{cursor_highlight_style, MONOKAI_GRAY, MONOKAI_PINK, MONOKAI_YELLOW};
 
 use super::super::{
     cache_marker,
@@ -80,10 +80,16 @@ pub(crate) fn draw_patch_select(
 ) {
     let area = cmrt_tui_core::ui::centered_rect(88, 76, f.area());
     f.render_widget(Clear, area);
-    let overlay_block = Block::default()
+    // 案内は枠の下辺へ載せる。中の layout を動かさないので、2 ペインの行数も
+    // ページ送りの幅も変わらない。
+    let mut overlay_block = Block::default()
         .borders(Borders::ALL)
         .style(base_style())
         .border_style(base_style().fg(MONOKAI_YELLOW));
+    for note in &app.catalog_notes {
+        overlay_block = overlay_block
+            .title_bottom(Line::from(format!(" {note} ")).style(base_style().fg(MONOKAI_PINK)));
+    }
     let inner = overlay_block.inner(area);
     f.render_widget(overlay_block, area);
     let chunks = Layout::default()

@@ -15,7 +15,11 @@ use super::{MmlOverlay, MmlOverlayAction};
 
 impl MmlOverlay<'_> {
     pub(super) fn open_patch_select(&mut self) {
-        self.patch_select = PatchSelect::open(self.patches.clone(), self.patch.as_deref());
+        self.patch_select = PatchSelect::open(
+            self.patches.clone(),
+            self.patch.as_deref(),
+            self.catalog_notes.clone(),
+        );
     }
 
     pub(super) fn handle_patch_select_key(

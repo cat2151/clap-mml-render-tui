@@ -38,7 +38,11 @@ fn test_config() -> Config {
     }
 }
 
-fn render_lines(app: &mut TuiApp<'static>, width: u16, height: u16) -> Vec<String> {
+pub(in crate::tui) fn render_lines(
+    app: &mut TuiApp<'static>,
+    width: u16,
+    height: u16,
+) -> Vec<String> {
     let backend = TestBackend::new(width, height);
     let mut terminal = Terminal::new(backend).unwrap();
     terminal.draw(|f| draw(app, f)).unwrap();

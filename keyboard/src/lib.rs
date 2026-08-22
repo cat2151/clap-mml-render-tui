@@ -70,6 +70,11 @@ pub struct KeyboardContext<'a> {
     pub patch_dirs_configured: bool,
     pub patch_load: KeyboardPatchLoad<'a>,
     pub voicing: &'a dyn KeyboardVoicingLookup,
+    /// 設定不足でカタログから外れたプラグインの案内。help 行の上へ出す。
+    ///
+    /// 一覧に**出てこない**ものの話なので、`patch_load` をいくら見ても分からない。
+    /// 空なら 1 行も増えない。
+    pub catalog_notes: &'a [String],
 }
 
 impl KeyboardContext<'_> {

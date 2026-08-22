@@ -12,7 +12,9 @@ use crate::{
     ModulationMode, NumericInput, NumericInputTarget, PitchBendMode, VelocityMode, KEYBOARD_NOTES,
 };
 use cmrt_tui_core::status::{base_style, visible_list_page_size, LIST_HIGHLIGHT_SYMBOL};
-use cmrt_tui_core::theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_PURPLE};
+use cmrt_tui_core::theme::{
+    cursor_highlight_style, MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_PINK, MONOKAI_PURPLE,
+};
 
 mod guide;
 mod mml_overlay;
@@ -27,12 +29,16 @@ use note::note_playback_status_text;
 /// patch catalog / voicing 判定の同期は共有ランタイム（`TuiApp`）側の責務なので、
 /// 呼び出し前に済ませておくこと。
 pub fn draw(screen: &mut KeyboardScreen<'_>, connection: &KeyboardConnectionStatus, f: &mut Frame) {
+    // 「一覧に出ていない音色がある」ことの案内。help 行の上へ、行数ぶんだけ場所を取る。
+    // 案内が無いときは 1 行も増えないので、ふだんの見え方は変わらない。
+    let catalog_notes = screen.state.patch_catalog.catalog_notes().to_vec();
+    let help_height = 3 + u16::try_from(catalog_notes.len()).unwrap_or(0);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(5),
             Constraint::Length(1),
-            Constraint::Length(3),
+            Constraint::Length(help_height),
         ])
         .split(f.area());
     let panes = Layout::default()
@@ -69,11 +75,15 @@ pub fn draw(screen: &mut KeyboardScreen<'_>, connection: &KeyboardConnectionStat
         Paragraph::new(status).style(base_style().fg(color)),
         chunks[1],
     );
-    let keyboard_help = keyboard_help_lines(
+    let mut help_lines: Vec<Line<'_>> = catalog_notes
+        .iter()
+        .map(|note| Line::from(Span::styled(note.clone(), base_style().fg(MONOKAI_PINK))))
+        .collect();
+    help_lines.extend(keyboard_help_lines(
         screen.note_guide.presentation(),
         screen.state.navigation_count.value(),
-    );
-    f.render_widget(Paragraph::new(keyboard_help).style(base_style()), chunks[2]);
+    ));
+    f.render_widget(Paragraph::new(help_lines).style(base_style()), chunks[2]);
     draw_connection_overlay(&connection.phase, f, panes[0]);
     draw_numeric_input_overlay(
         screen.state.numeric_input(),

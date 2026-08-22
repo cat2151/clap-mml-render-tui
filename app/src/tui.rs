@@ -107,6 +107,12 @@ pub struct TuiApp<'a> {
     /// バックグラウンドスレッドが収集したパッチリストの状態。
     /// notepad（音色選択）と keyboard（patch catalog）が同じ実体を読む。
     patch_load_state: Arc<Mutex<PatchLoadState>>,
+    /// 設定不足でカタログから外れたプラグインの案内
+    /// （[`cmrt_runtime::SkippedCatalogPlugin::notice_line`]）。音色選択を開く画面へ配る。
+    ///
+    /// 一覧に**出てこない**ものの話なので、`patch_load_state` をいくら見ても分からない。
+    /// config は起動中に変わらないので、起動時に 1 回だけ数えて持ち回る。
+    pub(in crate::tui) catalog_notes: Vec<String>,
     /// 再生セッションの世代管理。notepad・keyboard・loop browser で共有する。
     pub(in crate::tui) playback_session: PlaybackSession,
     /// 各画面が共有する play server の監督。ここが持つのは
