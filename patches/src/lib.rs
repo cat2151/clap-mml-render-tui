@@ -1,39 +1,20 @@
-//! patch の display 文字列を解釈・分類・抽選する crate。
+//! 抽象化済みpatch metadataを分類・抽選するcrate。
 //!
-//! 並べ替え・名前の突き合わせ・用途別の抽選（[`grouping`] / [`naming`] /
-//! [`selection`]）はプラグインに依らない。プラグイン固有なのは「patch 文字列の
-//! どこがカテゴリか」「用途ごとの既定カテゴリ名は何か」だけで、それを
-//! **プラグインごとの module へ分けて持つ**:
-//!
-//! - [`surge_xt`] — `patches_factory/<category>/` と `patches_3rdparty/<vendor>/<category>/`
-//! - [`cartridge`] — Dexed の `<cartridge>.syx/<voice>`
-//! - [`vaporizer2`] — `<コード> <名前>.vvp`（ファイル名先頭 2 文字がカテゴリコード）
-//! - [`floe`] — `<category>/<名前>.floe-preset`（先頭ディレクトリがカテゴリ）
-//!
-//! どれで読むかを選ぶ中立の入口が [`layout`]（[`layout::PatchLayout`]）。
-//! プラグインを足すときはこの 3 つに並べて 4 つめを足し、`PatchLayout` へ分岐を
-//! 1 本増やす。
-//!
-//! 扱うのは「列挙済みのパス列を解釈・分類・抽選する」ところまで。patch ファイルの
-//! 列挙そのもの（`.fxp` / `.syx` / `.vvp` の走査）は別 repo（`clap-mml-play-server`）の
-//! 責務なのでここには持ち込まない。
+//! plugin固有のpath解釈はplay-server共有coreが行い、このcrateは返されたcategory・
+//! sort metadataと、plugin非依存の検索・用途別抽選だけを扱う。
 //!
 //! patch は全体を通して `(表示名, 小文字化した表示名)` のペアで受け渡す。
 //! 小文字化した側をパス照合に、表示名側を voicing 判定と結果の返却に使う。
 
-pub mod cartridge;
-pub mod floe;
 mod grouping;
-pub mod layout;
+mod layout;
 mod naming;
 mod selection;
-pub mod surge_xt;
-pub mod vaporizer2;
 
 pub use grouping::{
     group_patch_pairs_by_category, sort_patch_pairs, PatchCategory, PatchSortOrder,
 };
-pub use layout::{patch_category, patch_matches_categories, PatchLayout};
+pub use layout::{patch_category, patch_matches_categories};
 pub use naming::{
     compare_normalized_patch_names_natural, compare_patch_names_natural,
     normalize_patch_lookup_key, resolve_display_patch_name,

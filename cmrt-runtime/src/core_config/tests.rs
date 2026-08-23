@@ -231,7 +231,6 @@ fn a_vaporizer2_profile_becomes_a_third_catalog_plugin() {
         plugins[2].base.as_deref(),
         Some("/home/f/Vaporizer2/Presets")
     );
-    assert!(!plugins[2].is_surge_xt());
     // 用途別絞り込みは Vaporizer2 の組み込み既定。`plugin_id` を書いていない
     // プロファイルでもファイル名で当たる。Surge のカテゴリへ落ちると
     // chord / bass / arpeggio 行の候補が全滅する。

@@ -33,8 +33,8 @@ pub fn run_patch_role_report(cfg: &Config) -> Result<()> {
         VoicingPolicies::from_config(cfg),
     );
     // この診断は現在のconfigと音色fileを直接検査するため、TUI用cacheには依存しない。
-    // `.vvp`はここで先に読み、下の候補数え上げをmemoだけで処理する。
-    voicing.prefetch_vvp_voicings(&pairs);
+    // catalog metadata型のvoicingはここで先に読み、下の候補数え上げをmemoだけで処理する。
+    voicing.prefetch_catalog_voicings(&pairs);
     let chord_catalog = cmrt_chord::ChordProgressionCatalog::default();
     let ctx = GridSequencerContext {
         patch_dirs_configured: crate::patches::has_configured_patch_dirs(cfg),
@@ -79,10 +79,14 @@ fn print_plugin_section(cfg: &Config, patch_plugins: &PatchPlugins) {
     println!("  plugin_id     : {}", optional(cfg.plugin_id.as_deref()));
     println!();
     println!("[カタログに音色を載せるプラグイン（先頭が既定）]");
-    for plugin in patch_plugins.plugins() {
+    for (index, plugin) in patch_plugins.plugins().iter().enumerate() {
         println!("  {}", plugin.name);
         println!("    plugin_path : {}", optional_str(&plugin.plugin_path));
-        println!("    Surge XT か : {}", yes_no(plugin.is_surge_xt()));
+        let source = patch_plugins
+            .audio_info(index)
+            .map(|info| format!("{:?}", info.voicing_source()))
+            .unwrap_or_else(|| "unknown".to_string());
+        println!("    voicing source: {source}");
         println!(
             "    voicing 判定: {}",
             VoicingPolicy::for_plugin(plugin).label()
@@ -198,7 +202,9 @@ fn print_role_section(ctx: &GridSequencerContext<'_>, patch_plugins: &PatchPlugi
 fn per_plugin_counts(candidates: &[&str], patch_plugins: &PatchPlugins) -> String {
     let mut counts = vec![0usize; patch_plugins.plugins().len()];
     for display in candidates {
-        counts[patch_plugins.index_for_patch(display)] += 1;
+        if let Ok(index) = patch_plugins.index_for_patch(display) {
+            counts[index] += 1;
+        }
     }
     patch_plugins
         .plugins()
@@ -280,14 +286,6 @@ fn row_label(row: usize, chord_on: bool, drum: Option<DrumRole>) -> String {
         BASS_ROW if chord_on => "BASS".to_string(),
         ARPEGGIO_ROW if chord_on => "ARP".to_string(),
         _ => "-".to_string(),
-    }
-}
-
-fn yes_no(value: bool) -> &'static str {
-    if value {
-        "はい"
-    } else {
-        "いいえ"
     }
 }
 

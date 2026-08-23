@@ -47,7 +47,7 @@ pub enum PreparedOfflineRender {
     /// 絶対パスへ書き換わっている）から形を読み直すことになり、判別材料が変わる。
     InProcess {
         prepared: CacheRenderInputs,
-        plugin: usize,
+        plugin: cmrt_core::PluginKey,
     },
     RenderServer(String),
 }
@@ -94,8 +94,8 @@ impl OfflineRenderer {
     pub fn prepare_cache_render(&self, mml: &str) -> Result<PreparedOfflineRender> {
         match self.backend.as_ref() {
             OfflineRendererBackend::InProcess(plugins) => {
-                let plugin = plugins.index_for_mml(mml)?;
-                let core_cfg = plugins.core_cfg(plugin)?;
+                let plugin = plugins.plugin_key_for_mml(mml)?;
+                let core_cfg = plugins.core_cfg_for_key(&plugin)?;
                 prepare_cache_render_inputs(mml, &core_cfg)
                     .map(|prepared| PreparedOfflineRender::InProcess { prepared, plugin })
             }
@@ -115,7 +115,7 @@ impl OfflineRenderer {
                 OfflineRendererBackend::InProcess(plugins),
                 PreparedOfflineRender::InProcess { prepared, plugin },
             ) => {
-                let entry = plugins.entry(plugin)?;
+                let entry = plugins.entry(&plugin)?;
                 render_prepared_cache_with_probe(prepared, &entry, probe_context)
             }
             (

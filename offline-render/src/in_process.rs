@@ -52,36 +52,64 @@ impl InProcessPlugins {
     /// `CoreConfig` の `plugin_id` と `patches_dir`（音色パスの解決基点）は
     /// プラグインごとに違うので、entry だけ差し替えても足りない。必ず対で使うこと。
     pub fn for_mml(&self, mml: &str) -> Result<(PluginEntry, CoreConfig)> {
-        let index = self.index_for_mml(mml)?;
-        let core_cfg = self.core_cfg(index)?;
-        Ok((self.entries.entry(index)?, core_cfg))
+        let key = self.plugin_key_for_mml(mml)?;
+        let core_cfg = self.core_cfg_for_key(&key)?;
+        Ok((self.entries.entry(&key)?, core_cfg))
     }
 
-    /// この MML を鳴らすプラグインの、カタログ上の添字。
+    pub(crate) fn plugin_key_for_mml(&self, mml: &str) -> Result<cmrt_core::PluginKey> {
+        let loaded = self.loaded_catalog()?;
+        match embedded_patch_ref(mml) {
+            Some(patch) => loaded
+                .patch_plugins
+                .patch_ref(&patch)
+                .map(|patch| patch.plugin)
+                .map_err(anyhow::Error::new),
+            None => loaded
+                .patch_plugins
+                .audio_info(0)
+                .map(|plugin| plugin.key.clone())
+                .ok_or_else(|| anyhow::anyhow!("既定プラグインがcatalogにありません")),
+        }
+    }
+
+    /// この MML を鳴らすプラグインの、カタログ上の添字。旧来の期待値を確認するテスト用。
     ///
     /// **音色を無指定にした MML は常に既定プラグイン（先頭）**
     /// （`docs/adr/0004-default-plugin-owns-unspecified-patches.md`）。patch 文字列の形で引くと、
     /// 空文字列が「cartridge ではない」と判定されて、
     /// 既定が Dexed のときに無指定の MML まで Surge 側へ飛ぶ。
+    #[cfg(test)]
     pub(crate) fn index_for_mml(&self, mml: &str) -> Result<usize> {
         let loaded = self.loaded_catalog()?;
-        Ok(match embedded_patch_ref(mml) {
-            Some(patch) => loaded.patch_plugins.index_for_patch(&patch),
-            None => 0,
-        })
+        let key = self.plugin_key_for_mml(mml)?;
+        loaded
+            .plugin_index(&key)
+            .ok_or_else(|| anyhow::anyhow!("plugin keyがcatalogにありません: {key}"))
     }
 
-    /// カタログ上 `index` 番目のプラグインのレンダリング設定。範囲外は既定プラグインへ落とす。
+    /// カタログ上 `index` 番目のプラグインのレンダリング設定。
     pub(crate) fn core_cfg(&self, index: usize) -> Result<CoreConfig> {
         let loaded = self.loaded_catalog()?;
-        let plugin = loaded.catalog.get(index).unwrap_or(&loaded.catalog[0]);
+        let plugin = loaded
+            .catalog
+            .get(index)
+            .ok_or_else(|| anyhow::anyhow!("plugin indexがcatalog範囲外です: {index}"))?;
         Ok(core_config_for_plugin(&self.cfg, plugin))
     }
 
-    /// カタログ上 `index` 番目のプラグインの entry。範囲外は既定プラグインへ落とす。
-    pub(crate) fn entry(&self, index: usize) -> Result<PluginEntry> {
+    pub(crate) fn core_cfg_for_key(&self, key: &cmrt_core::PluginKey) -> Result<CoreConfig> {
+        let loaded = self.loaded_catalog()?;
+        let index = loaded
+            .plugin_index(key)
+            .ok_or_else(|| anyhow::anyhow!("plugin keyがcatalogにありません: {key}"))?;
+        self.core_cfg(index)
+    }
+
+    /// カタログ上 `index` 番目のプラグインの entry。
+    pub(crate) fn entry(&self, key: &cmrt_core::PluginKey) -> Result<PluginEntry> {
         let _ = self.loaded_catalog()?;
-        self.entries.entry(index)
+        self.entries.entry(key)
     }
 
     fn loaded_catalog(&self) -> Result<&crate::plugin_entries::LoadedPluginEntries> {

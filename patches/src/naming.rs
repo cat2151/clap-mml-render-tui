@@ -2,8 +2,6 @@
 
 use std::cmp::Ordering;
 
-use crate::surge_xt::PATCH_DIR_PREFIXES;
-
 /// 区切り文字と大文字小文字の揺れを吸収した、照合用のキーへ直す。
 pub fn normalize_patch_lookup_key(patch_name: &str) -> String {
     patch_name
@@ -100,24 +98,14 @@ pub fn resolve_display_patch_name(pairs: &[(String, String)], patch_name: &str) 
         return None;
     }
 
-    let mut candidates = vec![key.clone()];
-    if !PATCH_DIR_PREFIXES
-        .iter()
-        .any(|prefix| key == *prefix || key.starts_with(&format!("{prefix}/")))
-    {
-        candidates.extend(
-            PATCH_DIR_PREFIXES
+    clap_mml_play_server_core::patch_lookup_candidates(&key)
+        .into_iter()
+        .find_map(|candidate| {
+            pairs
                 .iter()
-                .map(|prefix| format!("{prefix}/{key}")),
-        );
-    }
-
-    candidates.into_iter().find_map(|candidate| {
-        pairs
-            .iter()
-            .find(|(_, lower)| lower == &candidate)
-            .map(|(display, _)| display.clone())
-    })
+                .find(|(_, lower)| lower == &candidate)
+                .map(|(display, _)| display.clone())
+        })
 }
 
 #[cfg(test)]

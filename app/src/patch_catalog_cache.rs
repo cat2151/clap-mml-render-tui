@@ -2,16 +2,20 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::Write as _;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use cmrt_runtime::{CatalogPlugin, Config, PatchRoles, SkippedCatalogPlugin};
 use cmrt_tui_core::patch_load::{PatchCatalogSnapshot, PatchLoadMeasurement};
 use serde::{Deserialize, Serialize};
 
-const CACHE_FORMAT_VERSION: u32 = 3;
+use measurements::collect_patch_load_measurements;
+#[cfg(test)]
+use measurements::{estimate_eta, format_eta, measure_patch_loads};
+
+mod measurements;
+
+const CACHE_FORMAT_VERSION: u32 = 4;
 const CACHE_RELATIVE_PATH: &str = "patch-catalog/catalog.json";
 pub const BUILD_COMMAND: &str = "cmrt build-patch-catalog-cache";
 
@@ -20,8 +24,8 @@ pub struct BuildSummary {
     pub path: PathBuf,
     pub patch_count: usize,
     pub plugin_names: Vec<String>,
-    pub vvp_voicing_count: usize,
-    pub vvp_unknown_count: usize,
+    pub catalog_voicing_count: usize,
+    pub catalog_unknown_count: usize,
     pub measured_load_count: usize,
     pub first_load_failure_count: usize,
     pub second_load_failure_count: usize,
@@ -29,7 +33,7 @@ pub struct BuildSummary {
 
 pub struct LoadedPatchCatalogCache {
     snapshot: PatchCatalogSnapshot,
-    vvp_voicings: BTreeMap<String, cmrt_realtime_play::PatchVoicing>,
+    patch_voicings: BTreeMap<String, cmrt_realtime_play::PatchVoicing>,
 }
 
 impl LoadedPatchCatalogCache {
@@ -39,7 +43,7 @@ impl LoadedPatchCatalogCache {
         PatchCatalogSnapshot,
         BTreeMap<String, cmrt_realtime_play::PatchVoicing>,
     ) {
-        (self.snapshot, self.vvp_voicings)
+        (self.snapshot, self.patch_voicings)
     }
 }
 
@@ -49,19 +53,20 @@ struct CacheFile {
     patches: Vec<CachedPatch>,
     plugins: Vec<CachedPlugin>,
     #[serde(default)]
-    vvp_voicings: BTreeMap<String, cmrt_realtime_play::PatchVoicing>,
+    patch_voicings: BTreeMap<String, cmrt_realtime_play::PatchVoicing>,
     #[serde(default)]
     catalog_notes: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
 struct CachedPatch {
-    display: String,
+    /// server shared coreが解釈したplugin key・表示名・分類・voicing。
+    audio: cmrt_core::AudioPatch,
     #[serde(flatten)]
     measurement: PatchLoadMeasurement,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct CachedPlugin {
     name: String,
     plugin_path: String,
@@ -113,8 +118,9 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
     let path = cache_file_path().context("patch catalog cacheの保存先を取得できません")?;
     let (plugins, skipped) = cmrt_runtime::catalog_plugins_detailed(cfg);
     let pairs = cmrt_tui_core::patches::collect_patch_pairs_from_catalog(&plugins)?;
-    let vvp_voicings = collect_vvp_voicings(&plugins, &pairs);
-    let vvp_unknown_count = vvp_voicings
+    let audio_patches = describe_patches(&plugins, &pairs)?;
+    let patch_voicings = collect_patch_voicings(&plugins, &audio_patches);
+    let catalog_unknown_count = patch_voicings
         .values()
         .filter(|voicing| **voicing == cmrt_realtime_play::PatchVoicing::Unknown)
         .count();
@@ -134,21 +140,19 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
     let catalog_notes = catalog_notes(&plugins, &skipped);
     let cache = CacheFile {
         format_version: CACHE_FORMAT_VERSION,
-        patches: pairs
+        patches: audio_patches
             .into_iter()
-            .map(|(display, _)| {
+            .map(|audio| {
+                let display = &audio.reference.display;
                 let measurement = load_measurements
-                    .get(&display)
+                    .get(display)
                     .cloned()
                     .with_context(|| format!("patch load計測結果がありません: {display}"))?;
-                Ok(CachedPatch {
-                    display,
-                    measurement,
-                })
+                Ok(CachedPatch { audio, measurement })
             })
             .collect::<Result<Vec<_>>>()?,
         plugins: plugins.iter().map(CachedPlugin::from).collect(),
-        vvp_voicings,
+        patch_voicings,
         catalog_notes,
     };
     write_cache(&path, &cache)?;
@@ -156,107 +160,12 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
         path,
         patch_count: cache.patches.len(),
         plugin_names: plugins.into_iter().map(|plugin| plugin.name).collect(),
-        vvp_voicing_count: cache.vvp_voicings.len(),
-        vvp_unknown_count,
+        catalog_voicing_count: cache.patch_voicings.len(),
+        catalog_unknown_count,
         measured_load_count,
         first_load_failure_count,
         second_load_failure_count,
     })
-}
-
-fn collect_patch_load_measurements(
-    cfg: &Config,
-    pairs: &[(String, String)],
-) -> Result<BTreeMap<String, PatchLoadMeasurement>> {
-    if pairs.is_empty() {
-        return Ok(BTreeMap::new());
-    }
-    let supervisor =
-        cmrt_realtime_play::RealtimePlayServerSupervisor::with_live_instance_count(cfg, 2);
-    supervisor
-        .start_owned_for_fast_midi()
-        .context("patch load計測用realtime play serverを起動できません")?;
-    let total = pairs.len();
-    let progress_started = Instant::now();
-    Ok(measure_patch_loads(
-        pairs,
-        |instance_id, patch| supervisor.prepare_live_patch(instance_id, Some(patch)),
-        Instant::now,
-        |index, patch| {
-            print!("[{index}/{total}] {patch} ... ");
-            let _ = std::io::stdout().flush();
-        },
-        |index, _patch, measurement| {
-            let eta = estimate_eta(progress_started.elapsed(), index, total);
-            println!(
-                "first={} second={} ETA={}",
-                measurement
-                    .first_load_error
-                    .as_deref()
-                    .map_or("ok".to_string(), |error| format!("error: {error}")),
-                match (
-                    measurement.second_load_ms,
-                    measurement.second_load_error.as_deref(),
-                ) {
-                    (Some(ms), _) => format!("{ms}ms"),
-                    (None, Some(error)) => format!("error: {error}"),
-                    (None, None) => "error: no measurement".to_string(),
-                },
-                format_eta(eta),
-            );
-        },
-    ))
-}
-
-fn measure_patch_loads<L, N, S, P>(
-    pairs: &[(String, String)],
-    mut load: L,
-    mut now: N,
-    mut report_started: S,
-    mut report: P,
-) -> BTreeMap<String, PatchLoadMeasurement>
-where
-    L: FnMut(u8, &str) -> Result<()>,
-    N: FnMut() -> Instant,
-    S: FnMut(usize, &str),
-    P: FnMut(usize, &str, &PatchLoadMeasurement),
-{
-    let mut measurements = BTreeMap::new();
-    for (offset, (display, _)) in pairs.iter().enumerate() {
-        report_started(offset + 1, display);
-        let first_load_error = load(0, display).err().map(|error| format!("{error:#}"));
-        let second_started = now();
-        let second_result = load(1, display);
-        let second_elapsed = now().duration_since(second_started);
-        let (second_load_ms, second_load_error) = match second_result {
-            Ok(()) => (
-                Some(u64::try_from(second_elapsed.as_millis()).unwrap_or(u64::MAX)),
-                None,
-            ),
-            Err(error) => (None, Some(format!("{error:#}"))),
-        };
-        let measurement = PatchLoadMeasurement {
-            second_load_ms,
-            first_load_error,
-            second_load_error,
-        };
-        report(offset + 1, display, &measurement);
-        measurements.insert(display.clone(), measurement);
-    }
-    measurements
-}
-
-fn estimate_eta(elapsed: Duration, completed: usize, total: usize) -> Duration {
-    let remaining = total.saturating_sub(completed);
-    if completed == 0 || remaining == 0 {
-        return Duration::ZERO;
-    }
-    elapsed.mul_f64(remaining as f64 / completed as f64)
-}
-
-fn format_eta(eta: Duration) -> String {
-    let seconds = eta.as_secs();
-    format!("{}分{:02}秒", seconds / 60, seconds % 60)
 }
 
 pub fn load() -> Result<LoadedPatchCatalogCache> {
@@ -292,15 +201,7 @@ fn load_from(path: &Path) -> Result<LoadedPatchCatalogCache> {
     {
         anyhow::bail!("patch catalog cacheにplugin_pathが空のpluginがあります");
     }
-    if let Some(display) = cache
-        .patches
-        .iter()
-        .map(|patch| &patch.display)
-        .filter(|display| cmrt_core::is_vvp_patch_path(display))
-        .find(|display| !cache.vvp_voicings.contains_key(*display))
-    {
-        anyhow::bail!("patch catalog cacheにVVP voicingがありません: {display}");
-    }
+    validate_catalog_voicings(&cache)?;
     if let Some(display) = cache
         .patches
         .iter()
@@ -308,55 +209,125 @@ fn load_from(path: &Path) -> Result<LoadedPatchCatalogCache> {
             patch.measurement.second_load_ms.is_none()
                 && patch.measurement.second_load_error.is_none()
         })
-        .map(|patch| &patch.display)
+        .map(|patch| &patch.audio.reference.display)
     {
         anyhow::bail!("patch catalog cacheに2回目のload計測結果がありません: {display}");
     }
-    let vvp_voicings = cache.vvp_voicings;
+    let patch_voicings = cache.patch_voicings;
     let mut load_measurements = BTreeMap::new();
-    let pairs = cache
+    let audio_patches = cache
         .patches
         .into_iter()
         .map(|patch| {
-            let display = patch.display;
-            let lower = display.to_lowercase();
+            let display = patch.audio.reference.display.clone();
             load_measurements.insert(display.clone(), patch.measurement);
-            (display, lower)
+            patch.audio
+        })
+        .collect::<Vec<_>>();
+    let pairs = audio_patches
+        .iter()
+        .map(|patch| {
+            (
+                patch.reference.display.clone(),
+                patch.normalized_display.clone(),
+            )
         })
         .collect();
     Ok(LoadedPatchCatalogCache {
         snapshot: PatchCatalogSnapshot::new(
             pairs,
+            audio_patches,
             cache.plugins.into_iter().map(CatalogPlugin::from).collect(),
             cache.catalog_notes,
             load_measurements,
         ),
-        vvp_voicings,
+        patch_voicings,
     })
 }
 
-fn collect_vvp_voicings(
+fn describe_patches(
     plugins: &[CatalogPlugin],
     pairs: &[(String, String)],
-) -> BTreeMap<String, cmrt_realtime_play::PatchVoicing> {
+) -> Result<Vec<cmrt_core::AudioPatch>> {
     let patch_plugins = cmrt_tui_core::patch_plugins::PatchPlugins::from_catalog(plugins.to_vec());
     pairs
         .iter()
-        .filter(|(display, _)| cmrt_core::is_vvp_patch_path(display))
         .map(|(display, _)| {
-            let plugin = patch_plugins.for_patch(display);
-            let path = match plugin.base.as_deref() {
-                Some(base) => Path::new(base).join(display),
-                None => PathBuf::from(display),
-            };
-            let voicing = match cmrt_core::read_vvp_header(&path) {
-                Ok(header) if header.poly => cmrt_realtime_play::PatchVoicing::Poly,
-                Ok(_) => cmrt_realtime_play::PatchVoicing::Mono,
-                Err(_) => cmrt_realtime_play::PatchVoicing::Unknown,
-            };
-            (display.clone(), voicing)
+            let index = patch_plugins
+                .index_for_patch(display)
+                .map_err(anyhow::Error::new)?;
+            let info = patch_plugins
+                .audio_info(index)
+                .with_context(|| format!("plugin情報がありません: {display}"))?;
+            Ok(info.describe_patch(display, None))
         })
         .collect()
+}
+
+fn collect_patch_voicings(
+    plugins: &[CatalogPlugin],
+    patches: &[cmrt_core::AudioPatch],
+) -> BTreeMap<String, cmrt_realtime_play::PatchVoicing> {
+    let patch_plugins = cmrt_tui_core::patch_plugins::PatchPlugins::from_catalog(plugins.to_vec());
+    patches
+        .iter()
+        .filter_map(|patch| {
+            let info = patch_plugins.audio_info_for_ref(&patch.reference).ok()?;
+            if info.voicing_source() != cmrt_core::PluginVoicingSource::CatalogMetadata {
+                return None;
+            }
+            let voicing = match patch.voicing {
+                cmrt_core::PatchVoicingHint::Known { voicing } => local_voicing(voicing),
+                cmrt_core::PatchVoicingHint::ExternalLookup { .. } => return None,
+            };
+            Some((patch.reference.display.clone(), voicing))
+        })
+        .collect()
+}
+
+fn local_voicing(voicing: cmrt_core::AdapterPatchVoicing) -> cmrt_realtime_play::PatchVoicing {
+    match voicing {
+        cmrt_core::AdapterPatchVoicing::Mono => cmrt_realtime_play::PatchVoicing::Mono,
+        cmrt_core::AdapterPatchVoicing::Poly => cmrt_realtime_play::PatchVoicing::Poly,
+        cmrt_core::AdapterPatchVoicing::Unknown => cmrt_realtime_play::PatchVoicing::Unknown,
+    }
+}
+
+fn validate_catalog_voicings(cache: &CacheFile) -> Result<()> {
+    let plugins = cache
+        .plugins
+        .iter()
+        .cloned()
+        .map(CatalogPlugin::from)
+        .collect::<Vec<_>>();
+    let patch_plugins = cmrt_tui_core::patch_plugins::PatchPlugins::from_catalog(plugins);
+    for patch in &cache.patches {
+        let routed_ref = patch_plugins
+            .patch_ref(&patch.audio.reference.display)
+            .map_err(anyhow::Error::new)?;
+        if routed_ref.plugin != patch.audio.reference.plugin {
+            anyhow::bail!(
+                "patch catalog cacheのplugin keyが現在のcatalogと一致しません: {}",
+                patch.audio.reference.display
+            );
+        }
+        let info = patch_plugins
+            .audio_info_for_ref(&patch.audio.reference)
+            .map_err(anyhow::Error::new)?;
+        let needs_catalog_value =
+            info.voicing_source() == cmrt_core::PluginVoicingSource::CatalogMetadata;
+        if needs_catalog_value
+            && !cache
+                .patch_voicings
+                .contains_key(&patch.audio.reference.display)
+        {
+            anyhow::bail!(
+                "patch catalog cacheにadapter voicingがありません: {}",
+                patch.audio.reference.display
+            );
+        }
+    }
+    Ok(())
 }
 
 fn catalog_notes(plugins: &[CatalogPlugin], skipped: &[SkippedCatalogPlugin]) -> Vec<String> {

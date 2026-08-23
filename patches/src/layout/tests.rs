@@ -1,21 +1,15 @@
 use super::*;
 
-/// prefix 抜きで保存された Surge の名前はカートリッジ側の読み方へ落ちるが、
-/// どちらも先頭セグメントをカテゴリとして読むので結果は変わらない。
-/// **この同値が崩れると、保存済みの patch 名がカテゴリを失う。**
 #[test]
-fn a_prefixless_surge_name_reads_the_same_either_way() {
-    assert_eq!(PatchLayout::of("Pads/Warm Pad.fxp"), PatchLayout::Cartridge);
+fn abstract_metadata_keeps_prefixless_categories() {
     assert_eq!(patch_category("Pads/Warm Pad.fxp"), "Pads");
-    assert_eq!(patch_path_sort_parts("Pads/Warm Pad.fxp").0, 0);
 }
 
-/// prefix は先頭セグメントとして完全に一致したときだけ効く。
 #[test]
-fn a_prefix_lookalike_is_not_the_surge_layout() {
+fn a_prefix_lookalike_is_a_plain_category() {
     assert_eq!(
-        PatchLayout::of("patches_factory_backup/Pads/Warm Pad.fxp"),
-        PatchLayout::Cartridge
+        patch_category("patches_factory_backup/Pads/Warm Pad.fxp"),
+        "patches_factory_backup"
     );
 }
 
@@ -28,45 +22,20 @@ fn empty_categories_match_everything() {
     assert!(patch_matches_categories("Dexed_01.syx/00 Say Again.", &[]));
 }
 
-/// `.vvp` は**必ず** Vaporizer2 の読み方へ落ちる。Surge の prefix の下に音色置き場を
-/// 置いていても拡張子が勝つ。ここが逆転すると、`.vvp` が Surge のカテゴリ階層で
-/// 読まれて用途別の候補から全部外れる。
 #[test]
-fn a_vvp_patch_always_reads_as_vaporizer2() {
-    assert_eq!(
-        PatchLayout::of("AR Accent Arp.vvp"),
-        PatchLayout::Vaporizer2
-    );
-    assert_eq!(
-        PatchLayout::of("patches_factory/Pads/PD Emily.vvp"),
-        PatchLayout::Vaporizer2
-    );
-    assert_eq!(
-        PatchLayout::of("/Vaporizer2/PD Emily.vvp/"),
-        PatchLayout::Vaporizer2
-    );
+fn adapter_metadata_expands_derived_categories() {
+    assert_eq!(patch_category("AR Accent Arp.vvp"), "Arpeggio");
+    assert_eq!(patch_category("patches_factory/Pads/PD Emily.vvp"), "Pad");
 }
 
-/// 3 つめの体系を足しても、既存 2 つの読み方は 1 つも変わらない。
 #[test]
-fn the_existing_layouts_are_untouched_by_the_third_one() {
-    assert_eq!(
-        PatchLayout::of("patches_factory/Pads/Warm Pad.fxp"),
-        PatchLayout::SurgeXt
-    );
-    assert_eq!(
-        PatchLayout::of("Dexed_01.syx/00 Say Again."),
-        PatchLayout::Cartridge
-    );
+fn existing_categories_remain_stable() {
+    assert_eq!(patch_category("patches_factory/Pads/Warm Pad.fxp"), "Pads");
     assert_eq!(patch_category("Dexed_01.syx/00 Say Again."), "Dexed_01.syx");
 }
 
 #[test]
-fn a_floe_preset_extension_has_priority_over_every_directory_layout() {
-    assert_eq!(
-        PatchLayout::of("patches_factory/Pads/Realistic.floe-preset"),
-        PatchLayout::Floe
-    );
+fn first_directory_is_available_as_a_neutral_category() {
     assert_eq!(
         patch_category("Celtic Harp Factory Presets/Realistic Celtic Harp.floe-preset"),
         "Celtic Harp Factory Presets"

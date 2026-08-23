@@ -4,4 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+clap-mml-play-server-core = { git = "https://github.com/cat2151/clap-mml-play-server", package = "cmrt-core" }
 rand = "0.10"

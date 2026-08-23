@@ -1,7 +1,7 @@
 //! 行の用途（[`PatchRole`]）と、この画面が持つ設定・voicing 判定との橋渡し。
 //!
-//! 「どのカテゴリから引くか」「poly を要求するか」といった Surge 固有の判断は
-//! [`cmrt_patches`] 側にあり、ここは context から材料を渡すだけ。
+//! 「どのカテゴリから引くか」「poly を要求するか」といったplugin固有の判断は
+//! play-server shared crateが返すmetadataにあり、ここはcontextから材料を渡すだけ。
 
 use cmrt_patches::{candidates_for_role, PatchRole, RoleFilter, RoleFilterLookup, VoicingLookup};
 use cmrt_realtime_play::PatchVoicing;
@@ -36,7 +36,11 @@ pub(crate) struct GridRoleFilters<'a> {
 
 impl RoleFilterLookup for GridRoleFilters<'_> {
     fn filter_for(&self, display: &str) -> RoleFilter<'_> {
-        let (categories, keywords) = &self.per_plugin[self.plugins.index_for_patch(display)];
+        let index = self
+            .plugins
+            .index_for_patch(display)
+            .expect("catalog内のpatchは所有pluginへroutingできること");
+        let (categories, keywords) = &self.per_plugin[index];
         RoleFilter::with_keywords(self.role, categories, keywords)
     }
 }

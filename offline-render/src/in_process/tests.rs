@@ -112,14 +112,18 @@ fn each_plugin_renders_with_its_own_base_and_plugin_id() {
     );
 }
 
-/// prepare 時のカタログとレンダー時のカタログがずれても、範囲外の添字で落ちない。
+/// prepare 時のカタログとレンダー時のカタログがずれた場合は、別 plugin へ流さず拒否する。
 #[test]
-fn out_of_range_plugin_index_falls_back_to_the_default_plugin() {
+fn out_of_range_plugin_index_is_rejected() {
     let plugins = plugins_from(vec![surge_catalog_entry(), dexed_catalog_entry()]);
 
-    assert_eq!(
-        plugins.core_cfg(9).unwrap().patches_dir,
-        plugins.core_cfg(0).unwrap().patches_dir
+    let error = plugins.core_cfg(9).unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("plugin indexがcatalog範囲外です: 9"),
+        "{error}"
     );
 }
 

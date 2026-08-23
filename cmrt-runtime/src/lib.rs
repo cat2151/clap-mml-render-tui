@@ -18,9 +18,8 @@ pub use defaults::{
 pub use patch_roles::{layered_patch_role_filters, PatchRoles};
 pub use paths::{config_app_dir, config_file_path, log_file_path, native_probe_log_file_path};
 pub use plugin_identity::{
-    is_floe_plugin, is_sforzando_plugin, is_surge_xt_plugin, is_vaporizer2_plugin, patch_form_of,
-    plugin_file_stem, PatchForm, DEXED_PLUGIN_ID, FLOE_PLUGIN_ID, SFORZANDO_PLUGIN_ID,
-    SURGE_XT_PLUGIN_ID, VAPORIZER2_PLUGIN_ID,
+    plugin_file_stem, DEXED_PLUGIN_ID, FLOE_PLUGIN_ID, SFORZANDO_PLUGIN_ID, SURGE_XT_PLUGIN_ID,
+    VAPORIZER2_PLUGIN_ID,
 };
 pub use plugin_profile::{
     apply_active_plugin_profile, builtin_plugin_profiles, PatchRoleFilters, PluginProfile,

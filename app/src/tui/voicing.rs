@@ -7,9 +7,9 @@ use crate::history::VoicingCache;
 use crate::realtime_play::PatchVoicing;
 use crate::voicing_sources::{VoicingLayers, VoicingSourceRefresh};
 
-mod vvp_voicings;
+mod catalog_voicings;
 
-pub(in crate::tui) use vvp_voicings::VvpVoicings;
+pub(in crate::tui) use catalog_voicings::CatalogVoicings;
 
 /// patch の mono/poly をどう決めるか。使用中プラグインで切り替わる。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,25 +32,16 @@ pub(in crate::tui) enum VoicingPolicy {
     /// 画面ごと使えなくなる。poly と外した場合の実害（和音行で単音の音色が鳴る）
     /// のほうが軽いので、poly 側へ倒す。
     AssumePoly,
-    /// Vaporizer2: 音色ファイル（`.vvp`）の先頭に書いてある `m_uPolyMode` を読む。
-    ///
-    /// 実行時 probe が使えないのは [`VoicingPolicy::AssumePoly`] と同じ理由（note dialect が
-    /// MIDI だけ）だが、こちらは**ファイルに答えが書いてある**ので poly へ倒す必要が無い。
-    /// 出荷プリセット 460 件のうち 144 件が Mono で、poly へ倒すと和音行へ出てしまう
-    /// （鳴らすと最後の 1 音しか出ない）。
-    ///
-    /// 読みの実体は [`VvpVoicings`]。
-    VvpHeader,
+    /// server adapterがcatalog構築時に返す判定を使う。
+    CatalogMetadata,
 }
 
 impl VoicingPolicy {
     pub(in crate::tui) fn for_plugin(plugin: &CatalogPlugin) -> Self {
-        if plugin.is_surge_xt() {
-            Self::Sources
-        } else if plugin.is_vaporizer2() {
-            Self::VvpHeader
-        } else {
-            Self::AssumePoly
+        match cmrt_core::plugin_voicing_source(plugin.plugin_id.as_deref(), &plugin.plugin_path) {
+            cmrt_core::PluginVoicingSource::ExternalLookup => Self::Sources,
+            cmrt_core::PluginVoicingSource::CatalogMetadata => Self::CatalogMetadata,
+            cmrt_core::PluginVoicingSource::AssumePoly => Self::AssumePoly,
         }
     }
 
@@ -59,7 +50,7 @@ impl VoicingPolicy {
         match self {
             Self::Sources => "Sources（共有 JSON / ユーザー判定 / override から引く）",
             Self::AssumePoly => "AssumePoly（判定手段が無いので全 patch を poly とみなす）",
-            Self::VvpHeader => "VvpHeader（.vvp の m_uPolyMode をファイルの先頭から読む）",
+            Self::CatalogMetadata => "CatalogMetadata（server adapterの判定を使う）",
         }
     }
 }
@@ -102,16 +93,16 @@ impl VoicingPolicies {
 
     /// 判定方針と、その判定に使うプラグイン。
     ///
-    /// [`VoicingPolicy::VvpHeader`] は display 文字列を実ファイルへ戻すのに基点が要るので、
+    /// [`VoicingPolicy::CatalogMetadata`] はdisplay文字列を実ファイルへ戻す基点が要るので、
     /// 方針だけでは足りない。
-    fn plugin_for_patch(&self, patch: &str) -> CatalogPlugin {
+    fn plugin_for_patch(&self, patch: &str) -> Option<CatalogPlugin> {
         if let Some(state) = &self.patch_load_state {
             let state = state.lock().unwrap();
             if let PatchLoadState::Ready(snapshot) = &*state {
-                return snapshot.patch_plugins().for_patch(patch).clone();
+                return snapshot.patch_plugins().for_patch(patch).ok().cloned();
             }
         }
-        self.plugins.for_patch(patch).clone()
+        self.plugins.for_patch(patch).ok().cloned()
     }
 }
 
@@ -125,9 +116,7 @@ pub(in crate::tui) struct VoicingState {
     pub(in crate::tui) layers: VoicingLayers,
     pub(in crate::tui) source_refresh: VoicingSourceRefresh,
     policies: VoicingPolicies,
-    /// `.vvp` のmono/poly。TUIではpatch catalog cacheから復元する。
-    /// 音色を差し替えた場合は明示的cache再構築で更新する。
-    vvp: VvpVoicings,
+    catalog: CatalogVoicings,
 }
 
 impl VoicingState {
@@ -137,47 +126,47 @@ impl VoicingState {
         source_refresh: VoicingSourceRefresh,
         policies: VoicingPolicies,
     ) -> Self {
-        Self::with_vvp_voicings(
+        Self::with_catalog_voicings(
             cache,
             layers,
             source_refresh,
             policies,
-            VvpVoicings::default(),
+            CatalogVoicings::default(),
         )
     }
 
     /// memoを外から渡す形。file cache workerが復元したmemoを共有するために要る。
-    pub(in crate::tui) fn with_vvp_voicings(
+    pub(in crate::tui) fn with_catalog_voicings(
         cache: VoicingCache,
         layers: VoicingLayers,
         source_refresh: VoicingSourceRefresh,
         policies: VoicingPolicies,
-        vvp: VvpVoicings,
+        catalog: CatalogVoicings,
     ) -> Self {
         Self {
             cache,
             layers,
             source_refresh,
             policies,
-            vvp,
+            catalog,
         }
     }
 
     /// patch の mono/poly を決める。画面側（keyboard / grid sequencer）の
     /// `*VoicingLookup` はどちらもこれ 1 本を呼ぶ。
     pub(in crate::tui) fn resolve(&self, patch: &str) -> Option<PatchVoicing> {
-        let plugin = self.policies.plugin_for_patch(patch);
+        let plugin = self.policies.plugin_for_patch(patch)?;
         let policy = VoicingPolicy::for_plugin(&plugin);
         match policy {
             VoicingPolicy::Sources => self.layers.resolve(&self.cache, patch),
             VoicingPolicy::AssumePoly => Some(PatchVoicing::Poly),
-            VoicingPolicy::VvpHeader => self.vvp.voicing(&plugin, patch),
+            VoicingPolicy::CatalogMetadata => self.catalog.voicing(&plugin, patch),
         }
     }
 
-    /// 一覧に載っている `.vvp` を先に全部読む。読んだ件数を返す。
-    pub(in crate::tui) fn prefetch_vvp_voicings(&self, pairs: &[(String, String)]) -> usize {
-        self.vvp.prefetch(&self.policies.plugins, pairs)
+    /// adapterがcatalog metadataを提供するpatchを先読みする。
+    pub(in crate::tui) fn prefetch_catalog_voicings(&self, pairs: &[(String, String)]) -> usize {
+        self.catalog.prefetch(&self.policies.plugins, pairs)
     }
 }
 

@@ -25,6 +25,7 @@ pub struct PatchLoadMeasurement {
 #[derive(Clone)]
 pub struct PatchCatalogSnapshot {
     pairs: Vec<(String, String)>,
+    audio_patches: Vec<cmrt_core::AudioPatch>,
     plugins: PatchPlugins,
     catalog_notes: Vec<String>,
     load_measurements: BTreeMap<String, PatchLoadMeasurement>,
@@ -33,12 +34,14 @@ pub struct PatchCatalogSnapshot {
 impl PatchCatalogSnapshot {
     pub fn new(
         pairs: Vec<(String, String)>,
+        audio_patches: Vec<cmrt_core::AudioPatch>,
         plugins: Vec<CatalogPlugin>,
         catalog_notes: Vec<String>,
         load_measurements: BTreeMap<String, PatchLoadMeasurement>,
     ) -> Self {
         Self {
             pairs,
+            audio_patches,
             plugins: PatchPlugins::from_catalog(plugins),
             catalog_notes,
             load_measurements,
@@ -51,6 +54,11 @@ impl PatchCatalogSnapshot {
 
     pub fn patch_plugins(&self) -> &PatchPlugins {
         &self.plugins
+    }
+
+    /// server shared coreが解釈済みの、plugin key付きpatch情報。
+    pub fn audio_patches(&self) -> &[cmrt_core::AudioPatch] {
+        &self.audio_patches
     }
 
     pub fn catalog_notes(&self) -> &[String] {
@@ -69,6 +77,7 @@ impl PatchCatalogSnapshot {
     pub fn from_pairs(pairs: Vec<(String, String)>) -> Self {
         Self::new(
             pairs,
+            Vec::new(),
             vec![CatalogPlugin {
                 name: String::new(),
                 plugin_path: String::new(),

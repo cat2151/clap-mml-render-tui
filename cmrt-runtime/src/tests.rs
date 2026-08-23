@@ -251,7 +251,7 @@ fn the_default_config_shows_a_commented_vaporizer2_profile() {
 fn the_default_config_lists_every_vaporizer2_category_code() {
     let content = default_config_content();
 
-    for (code, name) in cmrt_patches::vaporizer2::PATCH_CATEGORY_CODES {
+    for (code, name) in cmrt_server_config::VAPORIZER2_CATEGORY_CODES {
         assert!(
             content.contains(&format!("{code} {name}")),
             "カテゴリコード {code} の案内がひな形に無い"

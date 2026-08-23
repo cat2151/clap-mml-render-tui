@@ -6,10 +6,11 @@
 //! `PluginEntry` を直接使うので、鳴らしうるプラグインぶんのentryを共有状態へ公開し、
 //! レンダリングのたびにpatch文字列で引き分ける。
 //!
-//! # 並び
-//! `cmrt_runtime::catalog_plugins(cfg)` と**同じ並び**。先頭が既定プラグイン
-//! （＝音色を無指定にした行が鳴るもの）。同じ `Config` から作る限り決まった順になる。
+//! entry列を受け取る境界で[`cmrt_core::PluginKey`]へ変換し、レンダー中はcatalogの
+//! 並び順ではなくkeyで参照する。先頭という規則は「音色無指定時の既定」を決める
+//! 境界にだけ残す。
 
+use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
 
 use clack_host::prelude::PluginEntry;
@@ -34,6 +35,8 @@ enum PluginEntriesInner {
 
 pub(crate) struct LoadedPluginEntries {
     entries: Arc<[PluginEntry]>,
+    entry_indices: BTreeMap<cmrt_core::PluginKey, usize>,
+    plugin_indices: BTreeMap<cmrt_core::PluginKey, usize>,
     pub(crate) catalog: Vec<CatalogPlugin>,
     pub(crate) patch_plugins: PatchPlugins,
 }
@@ -88,15 +91,19 @@ impl PluginEntries {
     pub fn is_available(&self) -> bool {
         self.loaded()
             .ok()
-            .is_some_and(|loaded| !loaded.entries.is_empty())
+            .is_some_and(|loaded| !loaded.entry_indices.is_empty())
     }
 
-    pub(crate) fn entry(&self, index: usize) -> Result<PluginEntry, anyhow::Error> {
-        self.loaded()?
+    pub(crate) fn entry(&self, key: &cmrt_core::PluginKey) -> Result<PluginEntry, anyhow::Error> {
+        let loaded = self.loaded()?;
+        let index = loaded.entry_indices.get(key).copied().ok_or_else(|| {
+            anyhow::anyhow!("in-process offline render requires loaded PluginEntry: {key}")
+        })?;
+        loaded
             .entries
             .get(index)
             .cloned()
-            .ok_or_else(|| anyhow::anyhow!("in-process offline render requires loaded PluginEntry"))
+            .ok_or_else(|| anyhow::anyhow!("PluginEntry indexが範囲外です: {index}"))
     }
 
     pub(crate) fn loaded(&self) -> Result<&LoadedPluginEntries, anyhow::Error> {
@@ -116,10 +123,38 @@ pub(crate) fn loaded_entries(
     catalog: Vec<CatalogPlugin>,
     entries: Vec<PluginEntry>,
 ) -> LoadedPluginEntries {
+    let patch_plugins = PatchPlugins::from_catalog(catalog.clone());
+    let plugin_indices = patch_plugins
+        .plugins()
+        .iter()
+        .enumerate()
+        .filter_map(|(index, _)| {
+            patch_plugins
+                .audio_info(index)
+                .map(|plugin| (plugin.key.clone(), index))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let entry_indices = entries
+        .iter()
+        .enumerate()
+        .filter_map(|(index, _)| {
+            patch_plugins
+                .audio_info(index)
+                .map(|plugin| (plugin.key.clone(), index))
+        })
+        .collect();
     LoadedPluginEntries {
         entries: entries.into(),
-        patch_plugins: PatchPlugins::from_catalog(catalog.clone()),
+        entry_indices,
+        plugin_indices,
+        patch_plugins,
         catalog,
+    }
+}
+
+impl LoadedPluginEntries {
+    pub(crate) fn plugin_index(&self, key: &cmrt_core::PluginKey) -> Option<usize> {
+        self.plugin_indices.get(key).copied()
     }
 }
 

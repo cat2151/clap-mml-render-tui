@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use cmrt_tui_core::playback_session::PlaybackSession;
 
 use super::notepad::{NotepadScreen, NotepadScreenParts};
-use super::voicing::VvpVoicings;
+use super::voicing::CatalogVoicings;
 use super::{PatchLoadState, TuiApp};
 use crate::config::Config;
 
@@ -102,11 +102,11 @@ fn restored_bpm_mode(
 
 /// パッチ一覧の非同期読み込みを開始し、共有状態ハンドルを返す。
 ///
-/// `.vvp` のmono/polyも同じfile cacheから復元し、一覧より先にmemoへ公開する。
+/// adapterが生成したvoicingも同じfile cacheから復元し、一覧より先にmemoへ公開する。
 /// TUI起動中に音色fileは走査しない。
 fn spawn_patch_loader(
     cfg: &Config,
-    vvp_voicings: VvpVoicings,
+    catalog_voicings: CatalogVoicings,
     plugin_entries: PluginEntries,
 ) -> Arc<Mutex<PatchLoadState>> {
     // TUIはfile cacheを読むだけ。catalog走査とcache更新は明示的CLIだけが行う。
@@ -117,10 +117,10 @@ fn spawn_patch_loader(
         let loading_started = std::time::Instant::now();
         match crate::patch_catalog_cache::load() {
             Ok(cache) => {
-                let (snapshot, cached_vvp_voicings) = cache.into_parts();
-                let restored_vvp_count = vvp_voicings.load_persisted(cached_vvp_voicings);
+                let (snapshot, cached_voicings) = cache.into_parts();
+                let restored_voicing_count = catalog_voicings.load_persisted(cached_voicings);
                 crate::logging::global_log_sink(&format!(
-                    "vvp-voicing: event=cache-restored count={restored_vvp_count}"
+                    "catalog-voicing: event=cache-restored count={restored_voicing_count}"
                 ));
                 let snapshot = Arc::new(snapshot);
                 log_patch_load(&snapshot, loading_started.elapsed());
@@ -281,9 +281,9 @@ impl<'a> TuiApp<'a> {
             crate::chord_progression_source::ChordProgressionSource::spawn(cfg);
         let playback_session = PlaybackSession::new(realtime_play_server);
         // memo は一覧読み込みスレッドと `VoicingState` の両方が持つ（`Arc` 共有）。
-        let vvp_voicings = VvpVoicings::default();
+        let catalog_voicings = CatalogVoicings::default();
         let patch_load_state =
-            spawn_patch_loader(cfg, vvp_voicings.clone(), plugin_entries.clone());
+            spawn_patch_loader(cfg, catalog_voicings.clone(), plugin_entries.clone());
         let grid_bpm_range =
             bpm_range_from_history(grid_sequencer_bpm_range, super::grid_sequencer::BPM);
         // 設定不足でカタログから外れたプラグインの案内。config は起動中に変わらないので
@@ -344,7 +344,7 @@ impl<'a> TuiApp<'a> {
                 overlay
             },
             mml_overlay_sender,
-            voicing: super::voicing::VoicingState::with_vvp_voicings(
+            voicing: super::voicing::VoicingState::with_catalog_voicings(
                 crate::history::load_voicing_cache(),
                 voicing_layers,
                 voicing_source_refresh,
@@ -352,7 +352,7 @@ impl<'a> TuiApp<'a> {
                     cfg,
                     Arc::clone(&patch_load_state),
                 ),
-                vvp_voicings,
+                catalog_voicings,
             ),
             chord_progression_source,
             chord_catalog: cmrt_chord::ChordProgressionCatalog::default(),

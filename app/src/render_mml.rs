@@ -342,7 +342,12 @@ fn render_one(
 pub(crate) fn plugin_name_for(catalog: &PatchPlugins, patch: Option<&str>) -> String {
     match patch {
         None => catalog.plugins().first().map(|plugin| plugin.name.as_str()),
-        Some(patch) => Some(catalog.for_patch(patch).name.as_str()),
+        Some(patch) => {
+            return catalog
+                .for_patch(patch)
+                .map(|plugin| plugin.name.clone())
+                .unwrap_or_else(|error| format!("routing error: {error}"));
+        }
     }
     .unwrap_or("(カタログが空)")
     .to_string()

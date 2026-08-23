@@ -4,19 +4,19 @@ use super::*;
 #[test]
 fn none_is_not_available() {
     let entries = PluginEntries::none();
+    let key = cmrt_core::PluginKey::from_identity(Some("test.plugin"), "");
 
     assert!(!entries.is_available());
-    assert!(entries.entry(0).is_err());
+    assert!(entries.entry(&key).is_err());
 }
 
-/// カタログに載っていない添字を引いても落ちず、「その位置は鳴らせない」を返す。
-/// catalog_plugins と entry 列の長さがずれても、静かに別プラグインを掴むより
-/// エラーになるほうがよい。
+/// カタログに載っていないkeyを引いても落ちず、「そのpluginは鳴らせない」を返す。
 #[test]
-fn out_of_range_index_reports_no_entry() {
+fn unknown_key_reports_no_entry() {
     let entries = PluginEntries::none();
+    let key = cmrt_core::PluginKey::from_identity(Some("missing.plugin"), "");
 
-    assert!(entries.entry(7).is_err());
+    assert!(entries.entry(&key).is_err());
 }
 
 #[test]

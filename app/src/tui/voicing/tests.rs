@@ -103,8 +103,8 @@ fn plugins_without_patch_level_data_are_all_poly() {
         state.resolve("SynprezFM/SynprezFM_01.syx/00 Say Again."),
         Some(PatchVoicing::Poly)
     );
-    // 名前を知らない patch でも同じ。判定していないのではなく、poly と決めている。
-    assert_eq!(state.resolve(""), Some(PatchVoicing::Poly));
+    // patch未指定はpluginへfallbackせず、判定対象外。
+    assert_eq!(state.resolve(""), None);
 }
 
 /// カタログにプラグインが 1 つだけなら、判定方針は全 patch で同じ。
@@ -176,14 +176,9 @@ fn floe_presets_use_assume_poly_in_a_mixed_catalog() {
     );
 }
 
-/// カタログに Vaporizer2 が居なければ `.vvp` は既定プラグインの方針へ落ちる
-/// （既存の倒れ方を変えない）。ファイルを開きに行かないので置き場も要らない。
 #[test]
-fn a_vvp_patch_without_vaporizer2_in_the_catalog_falls_back_to_the_default_policy() {
-    assert_eq!(
-        state(&[dexed_plugin()]).resolve("PD Wide.vvp"),
-        Some(PatchVoicing::Poly)
-    );
+fn an_unsupported_patch_does_not_fall_back_to_an_unrelated_policy() {
+    assert_eq!(state(&[dexed_plugin()]).resolve("PD Wide.vvp"), None);
     assert_eq!(state(&[surge_plugin()]).resolve("PD Wide.vvp"), None);
 }
 
@@ -198,7 +193,7 @@ fn prefetching_reports_how_many_vvp_files_it_read() {
         ("PD Wide.vvp".to_string(), "pd wide.vvp".to_string()),
         ("Keys/Bright.fxp".to_string(), "keys/bright.fxp".to_string()),
     ];
-    assert_eq!(state.prefetch_vvp_voicings(&pairs), 1);
+    assert_eq!(state.prefetch_catalog_voicings(&pairs), 1);
 
     // 先読み済みなら、音色ファイルを消しても答えは変わらない。
     std::fs::remove_file(presets.root.join("PD Wide.vvp")).unwrap();
@@ -216,5 +211,5 @@ fn every_policy_has_its_own_label() {
 
     assert!(labels[0].starts_with("Sources"));
     assert!(labels[1].starts_with("AssumePoly"));
-    assert!(labels[2].starts_with("VvpHeader"));
+    assert!(labels[2].starts_with("CatalogMetadata"));
 }

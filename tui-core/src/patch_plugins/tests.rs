@@ -18,15 +18,20 @@ fn plugin(name: &str, plugin_id: &str) -> CatalogPlugin {
     }
 }
 
-/// プラグインが 1 つだけのカタログでは、どの形の patch も同じプラグインへ落ちる。
-/// カタログに `.syx` が並ばない今日の構成では、この経路しか通らない。
+fn routed_name<'a>(plugins: &'a PatchPlugins, patch: &str) -> &'a str {
+    &plugins.for_patch(patch).unwrap().name
+}
+
 #[test]
-fn a_single_plugin_catalog_answers_the_same_for_every_patch_form() {
+fn a_single_concrete_catalog_rejects_an_unsupported_patch() {
     let plugins = PatchPlugins::new(vec![plugin("Surge XT", SURGE_XT_PLUGIN_ID)]);
 
-    assert_eq!(plugins.for_patch("Pads/Pad 1.fxp").name, "Surge XT");
-    assert_eq!(plugins.for_patch("Dexed_01.syx/00 Bell").name, "Surge XT");
-    assert!(plugins.any_surge_xt());
+    assert_eq!(routed_name(&plugins, "Pads/Pad 1.fxp"), "Surge XT");
+    assert!(matches!(
+        plugins.for_patch("Dexed_01.syx/00 Bell"),
+        Err(cmrt_core::RouteError::Unsupported { .. })
+    ));
+    assert!(plugins.any_external_voicing());
 }
 
 #[test]
@@ -36,8 +41,8 @@ fn a_mixed_catalog_routes_each_patch_form_to_its_own_plugin() {
         plugin("Dexed", DEXED_PLUGIN_ID),
     ]);
 
-    assert_eq!(plugins.for_patch("Pads/Pad 1.fxp").name, "Surge XT");
-    assert_eq!(plugins.for_patch("Dexed_01.syx/00 Bell").name, "Dexed");
+    assert_eq!(routed_name(&plugins, "Pads/Pad 1.fxp"), "Surge XT");
+    assert_eq!(routed_name(&plugins, "Dexed_01.syx/00 Bell"), "Dexed");
 }
 
 /// `.vvp` は「1 ファイル = 1 音色」で `.fxp` と単位が同じだが、**Surge の添字へ落として
@@ -51,22 +56,23 @@ fn a_vvp_patch_goes_to_vaporizer2_not_to_the_other_state_file_plugin() {
         plugin("Vaporizer2", VAPORIZER2_PLUGIN_ID),
     ]);
 
-    assert_eq!(plugins.for_patch("AR Accent Arp.vvp").name, "Vaporizer2");
-    assert_eq!(plugins.for_patch("MyBank/PD Emily.VVP").name, "Vaporizer2");
-    assert_eq!(plugins.for_patch("Pads/Pad 1.fxp").name, "Surge XT");
-    assert_eq!(plugins.for_patch("Dexed_01.syx/00 Bell").name, "Dexed");
+    assert_eq!(routed_name(&plugins, "AR Accent Arp.vvp"), "Vaporizer2");
+    assert_eq!(routed_name(&plugins, "MyBank/PD Emily.VVP"), "Vaporizer2");
+    assert_eq!(routed_name(&plugins, "Pads/Pad 1.fxp"), "Surge XT");
+    assert_eq!(routed_name(&plugins, "Dexed_01.syx/00 Bell"), "Dexed");
 }
 
-/// Vaporizer2 がカタログに無ければ `.vvp` は既定プラグインへ落ちる。候補が減るだけで
-/// 済ませる既存の倒れ方（`PatchPlugins::new` の doc）を `.vvp` でも変えない。
 #[test]
-fn a_vvp_patch_falls_back_to_the_default_plugin_when_vaporizer2_is_absent() {
+fn an_unsupported_patch_does_not_fall_back_to_the_first_plugin() {
     let plugins = PatchPlugins::new(vec![
         plugin("Dexed", DEXED_PLUGIN_ID),
         plugin("Surge XT", SURGE_XT_PLUGIN_ID),
     ]);
 
-    assert_eq!(plugins.for_patch("AR Accent Arp.vvp").name, "Dexed");
+    assert!(matches!(
+        plugins.for_patch("AR Accent Arp.vvp"),
+        Err(cmrt_core::RouteError::Unsupported { .. })
+    ));
 }
 
 /// 既定プラグイン（先頭）が優先される。Dexed が既定なら cartridge は Dexed のまま。
@@ -77,8 +83,8 @@ fn the_default_plugin_wins_when_it_handles_the_form() {
         plugin("Surge XT", SURGE_XT_PLUGIN_ID),
     ]);
 
-    assert_eq!(plugins.for_patch("Dexed_01.syx/00 Bell").name, "Dexed");
-    assert_eq!(plugins.for_patch("Pads/Pad 1.fxp").name, "Surge XT");
+    assert_eq!(routed_name(&plugins, "Dexed_01.syx/00 Bell"), "Dexed");
+    assert_eq!(routed_name(&plugins, "Pads/Pad 1.fxp"), "Surge XT");
 }
 
 /// Surge を 1 つも積んでいなければ共有 voicing JSON は取りに行かない。
@@ -86,7 +92,7 @@ fn the_default_plugin_wins_when_it_handles_the_form() {
 fn a_catalog_without_surge_reports_no_surge() {
     let plugins = PatchPlugins::new(vec![plugin("Dexed", DEXED_PLUGIN_ID)]);
 
-    assert!(!plugins.any_surge_xt());
+    assert!(!plugins.any_external_voicing());
 }
 
 #[test]
@@ -98,11 +104,11 @@ fn four_plugin_catalog_routes_floe_only_to_floe() {
         plugin("Floe", FLOE_PLUGIN_ID),
     ]);
 
-    assert_eq!(plugins.for_patch("Pads/Pad 1.fxp").name, "Surge XT");
-    assert_eq!(plugins.for_patch("Dexed.syx/00 Bell").name, "Dexed");
-    assert_eq!(plugins.for_patch("PD Emily.vvp").name, "Vaporizer2");
+    assert_eq!(routed_name(&plugins, "Pads/Pad 1.fxp"), "Surge XT");
+    assert_eq!(routed_name(&plugins, "Dexed.syx/00 Bell"), "Dexed");
+    assert_eq!(routed_name(&plugins, "PD Emily.vvp"), "Vaporizer2");
     assert_eq!(
-        plugins.for_patch("Celtic Harp/Realistic.floe-preset").name,
+        routed_name(&plugins, "Celtic Harp/Realistic.floe-preset"),
         "Floe"
     );
 }
@@ -118,28 +124,28 @@ fn five_plugin_catalog_routes_sfz_only_to_sforzando() {
     ]);
 
     assert_eq!(
-        plugins.for_patch("Garritan/Glockenspiel.sfz").name,
+        routed_name(&plugins, "Garritan/Glockenspiel.sfz"),
         "Sforzando"
     );
     assert_eq!(
-        plugins.for_patch("Garritan/Glockenspiel.SFZ").name,
+        routed_name(&plugins, "Garritan/Glockenspiel.SFZ"),
         "Sforzando"
     );
-    assert_eq!(plugins.for_patch("Pads/Pad 1.fxp").name, "Surge XT");
-    assert_eq!(plugins.for_patch("Dexed.syx/00 Bell").name, "Dexed");
-    assert_eq!(plugins.for_patch("PD Emily.vvp").name, "Vaporizer2");
+    assert_eq!(routed_name(&plugins, "Pads/Pad 1.fxp"), "Surge XT");
+    assert_eq!(routed_name(&plugins, "Dexed.syx/00 Bell"), "Dexed");
+    assert_eq!(routed_name(&plugins, "PD Emily.vvp"), "Vaporizer2");
     assert_eq!(
-        plugins.for_patch("Celtic Harp/Realistic.floe-preset").name,
+        routed_name(&plugins, "Celtic Harp/Realistic.floe-preset"),
         "Floe"
     );
 }
 
 #[test]
-fn floe_absence_keeps_the_existing_fallback() {
+fn a_missing_plugin_is_reported_instead_of_falling_back() {
     let plugins = PatchPlugins::new(vec![plugin("Dexed", DEXED_PLUGIN_ID)]);
 
-    assert_eq!(
-        plugins.for_patch("Celtic Harp/Realistic.floe-preset").name,
-        "Dexed"
-    );
+    assert!(matches!(
+        plugins.for_patch("Celtic Harp/Realistic.floe-preset"),
+        Err(cmrt_core::RouteError::Unsupported { .. })
+    ));
 }

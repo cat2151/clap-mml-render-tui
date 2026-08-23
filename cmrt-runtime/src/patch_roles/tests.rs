@@ -107,7 +107,7 @@ fn surge_xt_defaults_come_from_the_builtin_not_from_the_config() {
 
     assert_eq!(
         builtin.chord_patch_categories,
-        cmrt_patches::surge_xt::DEFAULT_CHORD_PATCH_CATEGORY_NAMES
+        cmrt_server_config::SURGE_CHORD_CATEGORIES
             .iter()
             .map(|name| (*name).to_string())
             .collect::<Vec<_>>()
@@ -122,7 +122,7 @@ fn vaporizer2_defaults_come_from_its_own_category_table() {
 
     assert_eq!(
         builtin.chord_patch_categories,
-        cmrt_patches::vaporizer2::DEFAULT_CHORD_PATCH_CATEGORY_NAMES
+        cmrt_server_config::VAPORIZER2_CHORD_CATEGORIES
             .iter()
             .map(|name| (*name).to_string())
             .collect::<Vec<_>>()

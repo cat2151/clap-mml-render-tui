@@ -1,5 +1,8 @@
 use super::*;
-use std::{collections::VecDeque, time::Duration};
+use std::{
+    collections::VecDeque,
+    time::{Duration, Instant},
+};
 
 fn plugin() -> CachedPlugin {
     CachedPlugin {
@@ -13,9 +16,28 @@ fn plugin() -> CachedPlugin {
     }
 }
 
+fn catalog_metadata_plugin() -> CachedPlugin {
+    CachedPlugin {
+        name: "catalog-metadata-plugin".to_string(),
+        plugin_path: "C:/catalog-metadata.clap".to_string(),
+        plugin_id: Some(cmrt_runtime::VAPORIZER2_PLUGIN_ID.to_string()),
+        ..plugin()
+    }
+}
+
 fn cached_patch(display: &str, second_load_ms: u64) -> CachedPatch {
+    cached_patch_for(&plugin(), display, second_load_ms)
+}
+
+fn cached_patch_for(plugin: &CachedPlugin, display: &str, second_load_ms: u64) -> CachedPatch {
+    let info = cmrt_core::AudioPluginInfo::new(
+        plugin.name.clone(),
+        plugin.plugin_path.clone(),
+        plugin.plugin_id.clone(),
+        plugin.base.clone(),
+    );
     CachedPatch {
-        display: display.to_string(),
+        audio: info.describe_patch(display, None),
         measurement: PatchLoadMeasurement {
             second_load_ms: Some(second_load_ms),
             ..PatchLoadMeasurement::default()
@@ -44,12 +66,12 @@ fn cache_round_trip_rebuilds_lowercase_search_value() {
         format_version: CACHE_FORMAT_VERSION,
         patches: vec![patch],
         plugins: vec![plugin()],
-        vvp_voicings: BTreeMap::new(),
+        patch_voicings: BTreeMap::new(),
         catalog_notes: vec!["notice".to_string()],
     };
     write_cache(&path, &cache).unwrap();
 
-    let (loaded, vvp_voicings) = load_from(&path).unwrap().into_parts();
+    let (loaded, patch_voicings) = load_from(&path).unwrap().into_parts();
 
     assert_eq!(
         loaded.pairs(),
@@ -61,6 +83,18 @@ fn cache_round_trip_rebuilds_lowercase_search_value() {
     assert_eq!(loaded.catalog_notes(), &["notice"]);
     assert_eq!(loaded.catalog_plugins()[0].name, "Surge XT");
     assert_eq!(
+        loaded.audio_patches()[0].reference.display,
+        "Leads/LOUD Lead.fxp"
+    );
+    assert_eq!(
+        loaded.audio_patches()[0].reference.plugin,
+        cmrt_core::PluginKey::from_identity(
+            Some(cmrt_runtime::SURGE_XT_PLUGIN_ID),
+            "C:/Surge XT.clap"
+        )
+    );
+    assert_eq!(loaded.audio_patches()[0].sort.category, "Leads");
+    assert_eq!(
         loaded.load_measurements()["Leads/LOUD Lead.fxp"].second_load_ms,
         Some(234)
     );
@@ -70,7 +104,27 @@ fn cache_round_trip_rebuilds_lowercase_search_value() {
             .as_deref(),
         Some("warmup failed")
     );
-    assert!(vvp_voicings.is_empty());
+    assert!(patch_voicings.is_empty());
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn cache_rejects_a_patch_whose_plugin_key_does_not_match_the_catalog() {
+    let path = temp_path("wrong_plugin_key");
+    let mut patch = cached_patch("Leads/Lead.fxp", 12);
+    patch.audio.reference.plugin = cmrt_core::PluginKey::from_identity(Some("another.plugin"), "");
+    let cache = CacheFile {
+        format_version: CACHE_FORMAT_VERSION,
+        patches: vec![patch],
+        plugins: vec![plugin()],
+        patch_voicings: BTreeMap::new(),
+        catalog_notes: Vec::new(),
+    };
+    write_cache(&path, &cache).unwrap();
+
+    let error = load_from(&path).err().unwrap();
+
+    assert!(error.to_string().contains("plugin key"), "{error}");
     let _ = fs::remove_file(path);
 }
 
@@ -81,7 +135,7 @@ fn unsupported_version_is_rejected() {
         format_version: CACHE_FORMAT_VERSION + 1,
         patches: Vec::new(),
         plugins: vec![plugin()],
-        vvp_voicings: BTreeMap::new(),
+        patch_voicings: BTreeMap::new(),
         catalog_notes: Vec::new(),
     };
     write_cache(&path, &cache).unwrap();
@@ -126,7 +180,7 @@ fn plugin_with_empty_path_is_rejected() {
         format_version: CACHE_FORMAT_VERSION,
         patches: Vec::new(),
         plugins: vec![empty_path_plugin],
-        vvp_voicings: BTreeMap::new(),
+        patch_voicings: BTreeMap::new(),
         catalog_notes: Vec::new(),
     };
     write_cache(&path, &cache).unwrap();
@@ -140,11 +194,12 @@ fn plugin_with_empty_path_is_rejected() {
 #[test]
 fn vvp_voicing_round_trips_without_reading_the_preset() {
     let path = temp_path("vvp_round_trip");
+    let metadata_plugin = catalog_metadata_plugin();
     let cache = CacheFile {
         format_version: CACHE_FORMAT_VERSION,
-        patches: vec![cached_patch("PD Wide.vvp", 12)],
-        plugins: vec![plugin()],
-        vvp_voicings: BTreeMap::from([(
+        patches: vec![cached_patch_for(&metadata_plugin, "PD Wide.vvp", 12)],
+        plugins: vec![metadata_plugin],
+        patch_voicings: BTreeMap::from([(
             "PD Wide.vvp".to_string(),
             cmrt_realtime_play::PatchVoicing::Poly,
         )]),
@@ -164,18 +219,19 @@ fn vvp_voicing_round_trips_without_reading_the_preset() {
 #[test]
 fn vvp_patch_without_persisted_voicing_is_rejected() {
     let path = temp_path("missing_vvp_voicing");
+    let metadata_plugin = catalog_metadata_plugin();
     let cache = CacheFile {
         format_version: CACHE_FORMAT_VERSION,
-        patches: vec![cached_patch("PD Wide.vvp", 12)],
-        plugins: vec![plugin()],
-        vvp_voicings: BTreeMap::new(),
+        patches: vec![cached_patch_for(&metadata_plugin, "PD Wide.vvp", 12)],
+        plugins: vec![metadata_plugin],
+        patch_voicings: BTreeMap::new(),
         catalog_notes: Vec::new(),
     };
     write_cache(&path, &cache).unwrap();
 
     let error = load_from(&path).err().unwrap();
 
-    assert!(error.to_string().contains("VVP voicing"));
+    assert!(error.to_string().contains("adapter voicing"));
     let _ = fs::remove_file(path);
 }
 
@@ -209,7 +265,9 @@ fn cache_build_reads_vvp_poly_mode_once() {
         ("PD Missing.vvp".to_string(), "pd missing.vvp".to_string()),
     ];
 
-    let voicings = collect_vvp_voicings(&[plugin], &pairs);
+    let plugins = [plugin];
+    let patches = describe_patches(&plugins, &pairs).unwrap();
+    let voicings = collect_patch_voicings(&plugins, &patches);
 
     assert_eq!(
         voicings.get("PD Wide.vvp"),
@@ -290,11 +348,11 @@ fn cache_rejects_a_patch_without_a_second_load_result() {
     let cache = CacheFile {
         format_version: CACHE_FORMAT_VERSION,
         patches: vec![CachedPatch {
-            display: "Lead.fxp".to_string(),
             measurement: PatchLoadMeasurement::default(),
+            ..cached_patch("Lead.fxp", 0)
         }],
         plugins: vec![plugin()],
-        vvp_voicings: BTreeMap::new(),
+        patch_voicings: BTreeMap::new(),
         catalog_notes: Vec::new(),
     };
     write_cache(&path, &cache).unwrap();

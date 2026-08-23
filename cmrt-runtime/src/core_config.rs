@@ -59,27 +59,6 @@ pub struct CatalogPlugin {
     pub patch_roles: PatchRoles,
 }
 
-impl CatalogPlugin {
-    /// このプラグインが Surge XT か。voicing 判定のデータ源の切り替えに使う。
-    pub fn is_surge_xt(&self) -> bool {
-        crate::is_surge_xt_plugin(self.plugin_id.as_deref(), &self.plugin_path)
-    }
-
-    /// このプラグインが Vaporizer2 か。
-    ///
-    /// 用途別カテゴリの組み込み既定（[`crate::PatchRoles::builtin_for`]）と、
-    /// voicing 判定の方針の切り替えに使う。`.vvp` の mono/poly は音色ファイルの
-    /// 先頭に書いてあるので、Surge の共有 JSON にも実行時 probe にも頼らない。
-    pub fn is_vaporizer2(&self) -> bool {
-        crate::is_vaporizer2_plugin(self.plugin_id.as_deref(), &self.plugin_path)
-    }
-
-    /// このプラグインが Floe か。Floe の patch はすべて poly とみなす。
-    pub fn is_floe(&self) -> bool {
-        crate::is_floe_plugin(self.plugin_id.as_deref(), &self.plugin_path)
-    }
-}
-
 /// カタログへ載せなかったプラグインと、その理由。
 ///
 /// **黙って外す**のが今までの倒れ方で、それ自体は変えない（音色置き場が無いプラグインを
@@ -385,7 +364,7 @@ struct InstalledProfile {
 ///
 /// `plugin_id` は `active_plugin` を使わない旧 config には書かれていないので、
 /// **両方に書かれているときだけ** それで判定し、無ければ `plugin_path` のファイル名で
-/// 見る（[`crate::is_surge_xt_plugin`] と同じ考え方）。これにより、既定プラグインの
+/// 見る。これにより、既定プラグインの
 /// `patches_dirs` を config で差し替えてあっても、組み込みプロファイルの既定 dir が
 /// 二重に載ることはない。
 fn is_same_plugin(a: &CatalogPlugin, b: &CatalogPlugin) -> bool {

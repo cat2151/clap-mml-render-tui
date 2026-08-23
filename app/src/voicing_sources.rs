@@ -42,7 +42,7 @@ impl SourceSet {
         //
         // 見るのは既定プラグインではなく**カタログ全体**。カタログに Surge の音色が
         // 1 つでも載るなら、既定プラグインが別でもこの JSON は要る。
-        if !plugins.any_surge_xt() {
+        if !plugins.any_external_voicing() {
             return None;
         }
         let config_dir = crate::config::config_app_dir()?;

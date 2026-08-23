@@ -703,6 +703,7 @@ dependencies = [
 name = "cmrt-patches"
 version = "0.1.0"
 dependencies = [
+ "cmrt-core",
  "rand 0.10.2",
 ]
 
@@ -743,7 +744,6 @@ name = "cmrt-runtime"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "cmrt-patches",
  "cmrt-server-config",
  "serde",
  "toml",

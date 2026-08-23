@@ -29,10 +29,12 @@ pub(super) fn requested_patches(
         .ok_or_else(|| unknown_plugin_error(name, catalog))?;
     let patches = crate::patches::collect_patch_pairs(cfg)?
         .into_iter()
-        .filter_map(|(display, _)| {
-            (catalog.index_for_patch(&display) == index).then_some(Some(display))
+        .filter_map(|(display, _)| match catalog.index_for_patch(&display) {
+            Ok(routed) if routed == index => Some(Ok(Some(display))),
+            Ok(_) => None,
+            Err(error) => Some(Err(anyhow::Error::new(error))),
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>>>()?;
     if patches.is_empty() {
         anyhow::bail!(
             "plugin '{}' の patch が 0 件です",
@@ -47,7 +49,7 @@ pub(super) fn requested_patches(
 
 fn verify_routing(catalog: &PatchPlugins, patches: &[Option<String>], wanted: &str) -> Result<()> {
     for patch in patches.iter().flatten() {
-        let routed = catalog.for_patch(patch);
+        let routed = catalog.for_patch(patch).map_err(anyhow::Error::new)?;
         if normalize_plugin_name(&routed.name) != wanted {
             anyhow::bail!(
                 "verify 失敗: patch '{patch}' が '{}' へ routing されました",
