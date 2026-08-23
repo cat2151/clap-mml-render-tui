@@ -84,7 +84,9 @@ impl TuiApp<'_> {
         self.chord_catalog = self.chord_progression_source.catalog();
 
         let patch_dirs_configured = crate::patches::has_configured_patch_dirs(&self.cfg);
-        let patch_load = self.patch_load_state.lock().unwrap();
+        // voicing 解決も同じ共有状態を読む。MutexGuard を画面側へ持ち込むと、
+        // patch 候補の判定中に同じ Mutex を再ロックして自己デッドロックする。
+        let patch_load = self.patch_load_state.lock().unwrap().clone();
         let ctx = grid_sequencer_context(GridContextParts {
             patch_dirs_configured,
             patch_load: &patch_load,
@@ -95,8 +97,6 @@ impl TuiApp<'_> {
             chord_source_updated: false,
         });
         self.grid_sequencer.enter(Instant::now(), &ctx);
-        drop(patch_load);
-
         self.active_screen = PrimaryScreen::GridSequencer;
     }
 
@@ -113,8 +113,7 @@ impl TuiApp<'_> {
         key: KeyEvent,
     ) -> GridSequencerAction {
         let patch_dirs_configured = crate::patches::has_configured_patch_dirs(&self.cfg);
-        // patch 一覧の MutexGuard は画面へ渡す間だけ保持する。
-        let patch_load = self.patch_load_state.lock().unwrap();
+        let patch_load = self.patch_load_state.lock().unwrap().clone();
         let ctx = grid_sequencer_context(GridContextParts {
             patch_dirs_configured,
             patch_load: &patch_load,
@@ -133,7 +132,7 @@ impl TuiApp<'_> {
         terminal_area: Rect,
     ) {
         let patch_dirs_configured = crate::patches::has_configured_patch_dirs(&self.cfg);
-        let patch_load = self.patch_load_state.lock().unwrap();
+        let patch_load = self.patch_load_state.lock().unwrap().clone();
         let ctx = grid_sequencer_context(GridContextParts {
             patch_dirs_configured,
             patch_load: &patch_load,
@@ -152,7 +151,7 @@ impl TuiApp<'_> {
         // 更新通知は一度しか取れないので、画面へ渡すのはこの1回だけ。
         let chord_source_updated = self.chord_progression_source.take_update_notice();
         let patch_dirs_configured = crate::patches::has_configured_patch_dirs(&self.cfg);
-        let patch_load = self.patch_load_state.lock().unwrap();
+        let patch_load = self.patch_load_state.lock().unwrap().clone();
         let ctx = grid_sequencer_context(GridContextParts {
             patch_dirs_configured,
             patch_load: &patch_load,

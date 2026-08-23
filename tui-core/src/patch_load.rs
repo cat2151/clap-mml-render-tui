@@ -95,6 +95,7 @@ impl PatchCatalogSnapshot {
 }
 
 /// バックグラウンドpatch cache読み込みの状態。
+#[derive(Clone)]
 pub enum PatchLoadState {
     Loading,
     Ready(Arc<PatchCatalogSnapshot>),

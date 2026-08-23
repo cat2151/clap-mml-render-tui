@@ -71,7 +71,8 @@ impl<'a> TuiApp<'a> {
             .set_play_state_if_current(session, PlayState::Idle);
 
         let patch_dirs_configured = self.patch_dirs_configured();
-        let patch_load = self.patch_load_state.lock().unwrap();
+        // voicing 解決も同じ共有状態を読むため、画面処理中は MutexGuard を保持しない。
+        let patch_load = self.patch_load_state.lock().unwrap().clone();
         let ctx = keyboard_context(
             patch_dirs_configured,
             &patch_load,
@@ -79,8 +80,6 @@ impl<'a> TuiApp<'a> {
             &self.catalog_notes,
         );
         self.keyboard.start(patch, &ctx);
-        drop(patch_load);
-
         self.active_screen = PrimaryScreen::Keyboard;
     }
 
@@ -91,7 +90,7 @@ impl<'a> TuiApp<'a> {
             .set_play_state_if_current(session, PlayState::Idle);
 
         let patch_dirs_configured = self.patch_dirs_configured();
-        let patch_load = self.patch_load_state.lock().unwrap();
+        let patch_load = self.patch_load_state.lock().unwrap().clone();
         let ctx = keyboard_context(
             patch_dirs_configured,
             &patch_load,
@@ -99,8 +98,6 @@ impl<'a> TuiApp<'a> {
             &self.catalog_notes,
         );
         self.keyboard.resume(&ctx);
-        drop(patch_load);
-
         self.active_screen = PrimaryScreen::Keyboard;
     }
 
@@ -114,7 +111,7 @@ impl<'a> TuiApp<'a> {
             return;
         }
         let patch_dirs_configured = self.patch_dirs_configured();
-        let patch_load = self.patch_load_state.lock().unwrap();
+        let patch_load = self.patch_load_state.lock().unwrap().clone();
         let ctx = keyboard_context(
             patch_dirs_configured,
             &patch_load,
@@ -129,7 +126,7 @@ impl<'a> TuiApp<'a> {
 
         let action = {
             let patch_dirs_configured = self.patch_dirs_configured();
-            let patch_load = self.patch_load_state.lock().unwrap();
+            let patch_load = self.patch_load_state.lock().unwrap().clone();
             let ctx = keyboard_context(
                 patch_dirs_configured,
                 &patch_load,
@@ -175,7 +172,7 @@ impl<'a> TuiApp<'a> {
 
     pub(in crate::tui) fn sync_keyboard_patch_catalog(&mut self) {
         let patch_dirs_configured = self.patch_dirs_configured();
-        let patch_load = self.patch_load_state.lock().unwrap();
+        let patch_load = self.patch_load_state.lock().unwrap().clone();
         let ctx = keyboard_context(
             patch_dirs_configured,
             &patch_load,

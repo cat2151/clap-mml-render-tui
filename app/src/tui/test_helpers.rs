@@ -10,14 +10,16 @@ impl TuiApp<'static> {
         let patch_plugins = cmrt_tui_core::patch_plugins::PatchPlugins::single_plugin(
             cmrt_runtime::PatchRoles::resolve_for_default_plugin(&cfg, &cfg.active_patch_roles),
         );
-        let voicing_policies = voicing::VoicingPolicies::from_config(&cfg);
+        let patch_load_state = Arc::clone(&notepad.patch_load_state);
+        let voicing_policies =
+            voicing::VoicingPolicies::with_patch_load_state(&cfg, Arc::clone(&patch_load_state));
         Self {
             active_screen: crate::screen_switch::PrimaryScreen::Notepad,
             screen_switch_menu: crate::screen_switch::ScreenSwitchMenu::default(),
             cfg: Arc::new(cfg),
             plugin_entries: cmrt_offline_render::PluginEntries::none(),
             playback_session: notepad.playback_session().clone(),
-            patch_load_state: Arc::clone(&notepad.patch_load_state),
+            patch_load_state,
             // 実マシンのインストール状況を読ませない。案内を見るテストは自分で入れる。
             catalog_notes: Vec::new(),
             notepad,

@@ -45,6 +45,18 @@ fn entering_grid_sequencer_starts_playing_and_help_blocks_the_menu() {
 }
 
 #[test]
+fn entering_grid_sequencer_does_not_relock_the_shared_patch_catalog() {
+    let mut app = TuiApp::new_for_test(test_config());
+    *app.patch_load_state.lock().unwrap() =
+        PatchLoadState::ready(make_patches(&["patches_factory/Polysynths/Test.fxp"]));
+
+    app.switch_to_primary_screen(PrimaryScreen::GridSequencer, None);
+
+    assert_eq!(app.active_screen, PrimaryScreen::GridSequencer);
+    assert!(app.grid_sequencer.state.is_running());
+}
+
+#[test]
 fn only_the_grid_sequencer_requests_mouse_capture() {
     let mut app = TuiApp::new_for_test(test_config());
     assert!(!app.uses_mouse_capture());
