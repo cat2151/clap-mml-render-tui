@@ -5,6 +5,7 @@ use ratatui::{backend::TestBackend, Terminal};
 
 use super::*;
 use crate::{MmlOverlayContext, PatchCatalogSnapshot};
+use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 
 fn render(overlay: &MmlOverlay<'_>) -> String {
     render_with_status(overlay, &MmlOverlaySenderStatus::default())
@@ -127,6 +128,13 @@ fn draws_the_patch_select_over_the_input() {
             "Leads/Lead 1.fxp".to_string(),
             "leads/lead 1.fxp".to_string(),
         )]),
+        load_measurements: std::collections::BTreeMap::from([(
+            "Leads/Lead 1.fxp".to_string(),
+            PatchLoadMeasurement {
+                second_load_ms: Some(200),
+                ..PatchLoadMeasurement::default()
+            },
+        )]),
         ..MmlOverlayContext::default()
     });
     overlay.handle_key(
@@ -137,6 +145,38 @@ fn draws_the_patch_select_over_the_input() {
 
     assert!(rendered.contains("Enter:"), "{rendered}");
     assert!(rendered.contains("Lead 1.fxp"), "{rendered}");
+    assert!(rendered.contains("Load"), "{rendered}");
+    assert!(rendered.contains("0.2s"), "{rendered}");
+}
+
+#[test]
+fn failed_patch_load_is_shown_as_a_dash() {
+    let patch = "Leads/Broken.fxp";
+    let mut overlay = MmlOverlay::default();
+    overlay.open(MmlOverlayContext {
+        patch_catalog: PatchCatalogSnapshot::Ready(vec![(patch.to_string(), patch.to_lowercase())]),
+        load_measurements: std::collections::BTreeMap::from([(
+            patch.to_string(),
+            PatchLoadMeasurement {
+                second_load_error: Some("load failed".to_string()),
+                ..PatchLoadMeasurement::default()
+            },
+        )]),
+        ..MmlOverlayContext::default()
+    });
+    overlay.handle_key(
+        KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL),
+        Instant::now(),
+    );
+
+    let rendered = render(&overlay);
+
+    assert!(
+        rendered
+            .lines()
+            .any(|line| line.contains("Broken.fxp") && line.contains('-')),
+        "{rendered}"
+    );
 }
 
 #[test]

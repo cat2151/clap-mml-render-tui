@@ -71,6 +71,26 @@ impl RealtimePlayServerSupervisor {
         self.ensure_started().map(|_| ())
     }
 
+    /// このsupervisorが所有する新しいserverだけを起動する。
+    ///
+    /// catalog計測のようにlive instanceの状態を書き換えるCLIが、TUI等の既存serverへ
+    /// 相乗りしないための入口。portが既に使われている場合は何も操作せず失敗する。
+    pub fn start_owned_for_fast_midi(&self) -> Result<()> {
+        let mut state = self.state.lock().unwrap();
+        self.drop_exited_child_locked(&mut state)?;
+        if state.child.is_some() {
+            anyhow::bail!("realtime play serverはこのsupervisorで既に起動中です");
+        }
+        if self.port_accepts_connections() {
+            anyhow::bail!(
+                "realtime play server port {} は既に使用中です。起動中のTUI/serverを終了してから再実行してください",
+                self.port
+            );
+        }
+        self.spawn_child_locked(&mut state)?;
+        self.wait_for_port_locked(&mut state).map(|_| ())
+    }
+
     pub(crate) fn recover_after_transport_failure(&self, failed_generation: u64) -> Result<u64> {
         let mut state = self.state.lock().unwrap();
         self.drop_exited_child_locked(&mut state)?;

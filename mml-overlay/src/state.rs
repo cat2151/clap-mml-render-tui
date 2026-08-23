@@ -11,11 +11,16 @@
 mod history;
 mod patch;
 
-use std::time::{Duration, Instant};
+use std::{
+    collections::BTreeMap,
+    time::{Duration, Instant},
+};
 
 use cmrt_chord::TimedMidiEvent;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui_textarea::{DataCursor, TextArea};
+
+use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 
 use crate::cursor_notes::{notes_at_cursor, CursorNotes};
 use crate::history_select::{is_history_select_trigger, HistorySelect};
@@ -81,6 +86,8 @@ pub enum PatchCatalogSnapshot {
 #[derive(Default)]
 pub struct MmlOverlayContext {
     pub patch_catalog: PatchCatalogSnapshot,
+    /// catalog構築時に計測したpatch別のload結果。
+    pub load_measurements: BTreeMap<String, PatchLoadMeasurement>,
     /// notepad 画面と共有しているフレーズ履歴。
     pub history: Vec<String>,
     pub favorites: Vec<String>,
@@ -115,6 +122,8 @@ pub struct MmlOverlay<'a> {
     patch: Option<String>,
     /// 開いている間だけ持つ patch 一覧のスナップショット（表示名, 小文字化）。
     patch_catalog: PatchCatalogSnapshot,
+    /// patch selectのLoad列へ渡す、開いているcatalogと同世代の計測結果。
+    load_measurements: BTreeMap<String, PatchLoadMeasurement>,
     /// 開いている間だけ持つフレーズ履歴のスナップショット。
     history: Vec<String>,
     favorites: Vec<String>,
@@ -141,6 +150,7 @@ impl Default for MmlOverlay<'_> {
             sender_command_id: 0,
             patch: None,
             patch_catalog: PatchCatalogSnapshot::Loading,
+            load_measurements: BTreeMap::new(),
             history: Vec::new(),
             favorites: Vec::new(),
             catalog_notes: Vec::new(),
@@ -208,6 +218,7 @@ impl<'a> MmlOverlay<'a> {
         self.sender_command_id = 0;
         self.line_status = LineStatus::Idle;
         self.patch_catalog = context.patch_catalog;
+        self.load_measurements = context.load_measurements;
         self.history = context.history;
         self.favorites = context.favorites;
         self.catalog_notes = context.catalog_notes;

@@ -4,8 +4,9 @@
 //! なって邪魔になるうえ、聴き比べたいのはフレーズのほうで音色は共通、という使い方が
 //! 前提のため。選んだ音色は枠のタイトルにだけ出る。
 
-use std::time::Instant;
+use std::{collections::BTreeMap, time::Instant};
 
+use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 use crossterm::event::KeyEvent;
 
 use crate::cursor_notes::{notes_at_prefix, CursorNotes, PREVIEW_MML};
@@ -45,6 +46,7 @@ impl MmlOverlay<'_> {
                     patches.clone(),
                     self.patch.as_deref(),
                     self.catalog_notes.clone(),
+                    self.load_measurements.clone(),
                 );
                 crate::log_line(format!(
                     "action=patch-select event=open result=success count={count}"
@@ -57,7 +59,11 @@ impl MmlOverlay<'_> {
     ///
     /// Loading 中に Ctrl+T が押されていれば、Ready になった同じタイミングで selector を
     /// 自動で開く。overlay の開き直しを要求しないことがこの同期 API の責務。
-    pub fn sync_patch_catalog(&mut self, catalog: PatchCatalogSnapshot) {
+    pub fn sync_patch_catalog(
+        &mut self,
+        catalog: PatchCatalogSnapshot,
+        load_measurements: BTreeMap<String, PatchLoadMeasurement>,
+    ) {
         if !self.open || !matches!(&self.patch_catalog, PatchCatalogSnapshot::Loading) {
             return;
         }
@@ -68,6 +74,7 @@ impl MmlOverlay<'_> {
             PatchCatalogSnapshot::Error(error) => format!("error detail={error:?}"),
         };
         self.patch_catalog = catalog;
+        self.load_measurements = load_measurements;
         crate::log_line(format!(
             "action=patch-catalog event=sync result={result} open_requested={requested}"
         ));

@@ -1,4 +1,5 @@
 use super::*;
+use std::{collections::VecDeque, time::Duration};
 
 fn plugin() -> CachedPlugin {
     CachedPlugin {
@@ -9,6 +10,16 @@ fn plugin() -> CachedPlugin {
         dirs: vec!["C:/patches".to_string()],
         source_notices: Vec::new(),
         patch_roles: PatchRoles::default(),
+    }
+}
+
+fn cached_patch(display: &str, second_load_ms: u64) -> CachedPatch {
+    CachedPatch {
+        display: display.to_string(),
+        measurement: PatchLoadMeasurement {
+            second_load_ms: Some(second_load_ms),
+            ..PatchLoadMeasurement::default()
+        },
     }
 }
 
@@ -27,9 +38,11 @@ fn temp_path(label: &str) -> PathBuf {
 #[test]
 fn cache_round_trip_rebuilds_lowercase_search_value() {
     let path = temp_path("round_trip");
+    let mut patch = cached_patch("Leads/LOUD Lead.fxp", 234);
+    patch.measurement.first_load_error = Some("warmup failed".to_string());
     let cache = CacheFile {
         format_version: CACHE_FORMAT_VERSION,
-        patches: vec!["Leads/LOUD Lead.fxp".to_string()],
+        patches: vec![patch],
         plugins: vec![plugin()],
         vvp_voicings: BTreeMap::new(),
         catalog_notes: vec!["notice".to_string()],
@@ -47,6 +60,16 @@ fn cache_round_trip_rebuilds_lowercase_search_value() {
     );
     assert_eq!(loaded.catalog_notes(), &["notice"]);
     assert_eq!(loaded.catalog_plugins()[0].name, "Surge XT");
+    assert_eq!(
+        loaded.load_measurements()["Leads/LOUD Lead.fxp"].second_load_ms,
+        Some(234)
+    );
+    assert_eq!(
+        loaded.load_measurements()["Leads/LOUD Lead.fxp"]
+            .first_load_error
+            .as_deref(),
+        Some("warmup failed")
+    );
     assert!(vvp_voicings.is_empty());
     let _ = fs::remove_file(path);
 }
@@ -62,6 +85,21 @@ fn unsupported_version_is_rejected() {
         catalog_notes: Vec::new(),
     };
     write_cache(&path, &cache).unwrap();
+
+    let error = load_from(&path).err().unwrap();
+
+    assert!(error.to_string().contains("format version"));
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn legacy_string_patch_cache_reports_the_version_before_decoding_entries() {
+    let path = temp_path("legacy_version");
+    fs::write(
+        &path,
+        br#"{"format_version":2,"patches":["Lead.fxp"],"plugins":[]}"#,
+    )
+    .unwrap();
 
     let error = load_from(&path).err().unwrap();
 
@@ -104,7 +142,7 @@ fn vvp_voicing_round_trips_without_reading_the_preset() {
     let path = temp_path("vvp_round_trip");
     let cache = CacheFile {
         format_version: CACHE_FORMAT_VERSION,
-        patches: vec!["PD Wide.vvp".to_string()],
+        patches: vec![cached_patch("PD Wide.vvp", 12)],
         plugins: vec![plugin()],
         vvp_voicings: BTreeMap::from([(
             "PD Wide.vvp".to_string(),
@@ -128,7 +166,7 @@ fn vvp_patch_without_persisted_voicing_is_rejected() {
     let path = temp_path("missing_vvp_voicing");
     let cache = CacheFile {
         format_version: CACHE_FORMAT_VERSION,
-        patches: vec!["PD Wide.vvp".to_string()],
+        patches: vec![cached_patch("PD Wide.vvp", 12)],
         plugins: vec![plugin()],
         vvp_voicings: BTreeMap::new(),
         catalog_notes: Vec::new(),
@@ -186,4 +224,100 @@ fn cache_build_reads_vvp_poly_mode_once() {
         Some(&cmrt_realtime_play::PatchVoicing::Unknown)
     );
     let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn every_patch_loads_on_instance_zero_then_instance_one() {
+    let pairs = vec![
+        ("A.fxp".to_string(), "a.fxp".to_string()),
+        ("B.fxp".to_string(), "b.fxp".to_string()),
+        ("C.fxp".to_string(), "c.fxp".to_string()),
+    ];
+    let base = Instant::now();
+    let mut times = VecDeque::from([
+        base,
+        base + Duration::from_millis(234),
+        base + Duration::from_secs(1),
+        base + Duration::from_millis(1_999),
+        base + Duration::from_secs(2),
+        base + Duration::from_millis(2_007),
+    ]);
+    let mut calls = Vec::new();
+    let measurements = measure_patch_loads(
+        &pairs,
+        |instance, patch| {
+            calls.push((instance, patch.to_string()));
+            match (instance, patch) {
+                (0, "A.fxp") => anyhow::bail!("warmup failed"),
+                (1, "B.fxp") => anyhow::bail!("second failed"),
+                _ => Ok(()),
+            }
+        },
+        || times.pop_front().unwrap(),
+        |_, _| {},
+        |_, _, _| {},
+    );
+
+    assert_eq!(
+        calls,
+        vec![
+            (0, "A.fxp".to_string()),
+            (1, "A.fxp".to_string()),
+            (0, "B.fxp".to_string()),
+            (1, "B.fxp".to_string()),
+            (0, "C.fxp".to_string()),
+            (1, "C.fxp".to_string()),
+        ]
+    );
+    assert_eq!(measurements["A.fxp"].second_load_ms, Some(234));
+    assert!(measurements["A.fxp"]
+        .first_load_error
+        .as_deref()
+        .unwrap()
+        .contains("warmup failed"));
+    assert_eq!(measurements["B.fxp"].second_load_ms, None);
+    assert!(measurements["B.fxp"]
+        .second_load_error
+        .as_deref()
+        .unwrap()
+        .contains("second failed"));
+    assert_eq!(measurements["C.fxp"].second_load_ms, Some(7));
+}
+
+#[test]
+fn cache_rejects_a_patch_without_a_second_load_result() {
+    let path = temp_path("missing_load_result");
+    let cache = CacheFile {
+        format_version: CACHE_FORMAT_VERSION,
+        patches: vec![CachedPatch {
+            display: "Lead.fxp".to_string(),
+            measurement: PatchLoadMeasurement::default(),
+        }],
+        plugins: vec![plugin()],
+        vvp_voicings: BTreeMap::new(),
+        catalog_notes: Vec::new(),
+    };
+    write_cache(&path, &cache).unwrap();
+
+    let error = load_from(&path).err().unwrap();
+
+    assert!(error.to_string().contains("2回目のload計測結果"));
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn eta_uses_the_average_of_completed_patches_for_the_remaining_count() {
+    assert_eq!(
+        estimate_eta(Duration::from_secs(503), 2, 5),
+        Duration::from_millis(754_500)
+    );
+    assert_eq!(estimate_eta(Duration::from_secs(503), 5, 5), Duration::ZERO);
+    assert_eq!(estimate_eta(Duration::from_secs(503), 0, 5), Duration::ZERO);
+}
+
+#[test]
+fn eta_format_uses_total_minutes_and_two_digit_seconds() {
+    assert_eq!(format_eta(Duration::from_secs(5)), "0分05秒");
+    assert_eq!(format_eta(Duration::from_secs(754)), "12分34秒");
+    assert_eq!(format_eta(Duration::from_secs(7_445)), "124分05秒");
 }

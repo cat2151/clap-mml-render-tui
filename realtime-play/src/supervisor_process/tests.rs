@@ -109,3 +109,14 @@ fn supervisor_keeps_requested_live_instance_count() {
         Some("4")
     );
 }
+
+#[test]
+fn owned_start_refuses_an_already_listening_port() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let supervisor = RealtimePlayServerSupervisor::new(&cfg_for_port(port));
+
+    let error = supervisor.start_owned_for_fast_midi().unwrap_err();
+
+    assert!(format!("{error:#}").contains("既に使用中"));
+}

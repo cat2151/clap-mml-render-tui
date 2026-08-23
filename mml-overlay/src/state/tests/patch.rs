@@ -36,10 +36,26 @@ fn ctrl_t_waits_for_the_patch_list_and_opens_when_ready() {
     assert!(!overlay.is_patch_select_open());
     assert!(overlay.is_waiting_for_patch_catalog());
 
-    overlay.sync_patch_catalog(PatchCatalogSnapshot::Ready(patches()));
+    let measurements = std::collections::BTreeMap::from([(
+        "Leads/Lead 1.fxp".to_string(),
+        cmrt_tui_core::patch_load::PatchLoadMeasurement {
+            second_load_ms: Some(321),
+            ..Default::default()
+        },
+    )]);
+    overlay.sync_patch_catalog(PatchCatalogSnapshot::Ready(patches()), measurements);
 
     assert!(overlay.is_patch_select_open());
     assert!(!overlay.is_waiting_for_patch_catalog());
+    assert_eq!(
+        overlay
+            .patch_select()
+            .unwrap()
+            .load_measurement("Leads/Lead 1.fxp")
+            .unwrap()
+            .second_load_ms,
+        Some(321)
+    );
 }
 
 #[test]

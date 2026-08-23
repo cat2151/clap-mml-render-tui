@@ -4,8 +4,9 @@
 //! 「どの画面から開いてよいか」「開くときに何を止めるか」「鳴らす先はどこか」
 //! 「開くときに何のスナップショットを渡すか」の 4 つだけ。
 
-use std::time::Instant;
+use std::{collections::BTreeMap, time::Instant};
 
+use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 use crossterm::event::KeyEvent;
 
 use super::mml_overlay::{
@@ -37,7 +38,7 @@ impl TuiApp<'_> {
     /// 音色一覧の状態とフレーズ履歴を、開くたびに最新のスナップショットで渡す。
     /// 音色一覧が Loading なら、完了後に [`Self::pump_mml_overlay`] が差し替える。
     fn mml_overlay_context(&self) -> MmlOverlayContext {
-        let patch_catalog = self.mml_overlay_patch_catalog_snapshot();
+        let (patch_catalog, load_measurements) = self.mml_overlay_patch_catalog_snapshot();
         let (history, favorites) = self.notepad.phrase_history();
         let catalog_notes = match &*self.patch_load_state.lock().unwrap() {
             PatchLoadState::Ready(snapshot) if !snapshot.catalog_notes().is_empty() => {
@@ -48,19 +49,25 @@ impl TuiApp<'_> {
         };
         MmlOverlayContext {
             patch_catalog,
+            load_measurements,
             history: history.to_vec(),
             favorites: favorites.to_vec(),
             catalog_notes,
         }
     }
 
-    fn mml_overlay_patch_catalog_snapshot(&self) -> PatchCatalogSnapshot {
+    fn mml_overlay_patch_catalog_snapshot(
+        &self,
+    ) -> (PatchCatalogSnapshot, BTreeMap<String, PatchLoadMeasurement>) {
         match &*self.patch_load_state.lock().unwrap() {
-            PatchLoadState::Loading => PatchCatalogSnapshot::Loading,
-            PatchLoadState::Ready(snapshot) => {
-                PatchCatalogSnapshot::Ready(snapshot.pairs().to_vec())
+            PatchLoadState::Loading => (PatchCatalogSnapshot::Loading, BTreeMap::new()),
+            PatchLoadState::Ready(snapshot) => (
+                PatchCatalogSnapshot::Ready(snapshot.pairs().to_vec()),
+                snapshot.load_measurements().clone(),
+            ),
+            PatchLoadState::Err(error) => {
+                (PatchCatalogSnapshot::Error(error.clone()), BTreeMap::new())
             }
-            PatchLoadState::Err(error) => PatchCatalogSnapshot::Error(error.clone()),
         }
     }
 
@@ -92,8 +99,9 @@ impl TuiApp<'_> {
         if !self.mml_overlay.is_waiting_for_patch_catalog() {
             return;
         }
-        let catalog = self.mml_overlay_patch_catalog_snapshot();
-        self.mml_overlay.sync_patch_catalog(catalog);
+        let (catalog, load_measurements) = self.mml_overlay_patch_catalog_snapshot();
+        self.mml_overlay
+            .sync_patch_catalog(catalog, load_measurements);
     }
 
     /// オーバーレイの求めを sender へ流す。

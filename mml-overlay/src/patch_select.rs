@@ -7,12 +7,14 @@
 //!
 //! 選択そのものはここに閉じ、音を鳴らす/テキストを書き換えるのは [`crate::state`] 側。
 
-use std::cell::Cell;
+use std::{cell::Cell, collections::BTreeMap};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui_textarea::TextArea;
 
-use cmrt_tui_core::{patches::filter_patches_by_display_path, text_input};
+use cmrt_tui_core::{
+    patch_load::PatchLoadMeasurement, patches::filter_patches_by_display_path, text_input,
+};
 
 /// 一覧に表示できる行数の既定値。実際の値は描画時に [`PatchSelect::set_page_size`] で入る。
 const DEFAULT_PAGE_SIZE: usize = 10;
@@ -42,6 +44,7 @@ pub(crate) struct PatchSelect<'a> {
     page_size: Cell<usize>,
     /// 設定不足でカタログから外れたプラグインの案内。枠の下へそのまま出す。
     catalog_notes: Vec<String>,
+    load_measurements: BTreeMap<String, PatchLoadMeasurement>,
 }
 
 impl<'a> PatchSelect<'a> {
@@ -53,6 +56,7 @@ impl<'a> PatchSelect<'a> {
         all: Vec<(String, String)>,
         current: Option<&str>,
         catalog_notes: Vec<String>,
+        load_measurements: BTreeMap<String, PatchLoadMeasurement>,
     ) -> Option<Self> {
         if all.is_empty() {
             return None;
@@ -70,6 +74,7 @@ impl<'a> PatchSelect<'a> {
             previewed: current.map(str::to_string),
             page_size: Cell::new(DEFAULT_PAGE_SIZE),
             catalog_notes,
+            load_measurements,
         })
     }
 
@@ -92,6 +97,10 @@ impl<'a> PatchSelect<'a> {
     /// 設定不足でカタログから外れたプラグインの案内。無ければ空。
     pub(crate) fn catalog_notes(&self) -> &[String] {
         &self.catalog_notes
+    }
+
+    pub(crate) fn load_measurement(&self, patch: &str) -> Option<&PatchLoadMeasurement> {
+        self.load_measurements.get(patch)
     }
 
     pub(crate) fn original(&self) -> Option<&str> {

@@ -2,14 +2,16 @@
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use cmrt_runtime::{CatalogPlugin, Config, PatchRoles, SkippedCatalogPlugin};
-use cmrt_tui_core::patch_load::PatchCatalogSnapshot;
+use cmrt_tui_core::patch_load::{PatchCatalogSnapshot, PatchLoadMeasurement};
 use serde::{Deserialize, Serialize};
 
-const CACHE_FORMAT_VERSION: u32 = 2;
+const CACHE_FORMAT_VERSION: u32 = 3;
 const CACHE_RELATIVE_PATH: &str = "patch-catalog/catalog.json";
 pub const BUILD_COMMAND: &str = "cmrt build-patch-catalog-cache";
 
@@ -20,6 +22,9 @@ pub struct BuildSummary {
     pub plugin_names: Vec<String>,
     pub vvp_voicing_count: usize,
     pub vvp_unknown_count: usize,
+    pub measured_load_count: usize,
+    pub first_load_failure_count: usize,
+    pub second_load_failure_count: usize,
 }
 
 pub struct LoadedPatchCatalogCache {
@@ -41,12 +46,19 @@ impl LoadedPatchCatalogCache {
 #[derive(Serialize, Deserialize)]
 struct CacheFile {
     format_version: u32,
-    patches: Vec<String>,
+    patches: Vec<CachedPatch>,
     plugins: Vec<CachedPlugin>,
     #[serde(default)]
     vvp_voicings: BTreeMap<String, cmrt_realtime_play::PatchVoicing>,
     #[serde(default)]
     catalog_notes: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct CachedPatch {
+    display: String,
+    #[serde(flatten)]
+    measurement: PatchLoadMeasurement,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -106,10 +118,35 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
         .values()
         .filter(|voicing| **voicing == cmrt_realtime_play::PatchVoicing::Unknown)
         .count();
+    let load_measurements = collect_patch_load_measurements(cfg, &pairs)?;
+    let measured_load_count = load_measurements
+        .values()
+        .filter(|measurement| measurement.second_load_ms.is_some())
+        .count();
+    let first_load_failure_count = load_measurements
+        .values()
+        .filter(|measurement| measurement.first_load_error.is_some())
+        .count();
+    let second_load_failure_count = load_measurements
+        .values()
+        .filter(|measurement| measurement.second_load_error.is_some())
+        .count();
     let catalog_notes = catalog_notes(&plugins, &skipped);
     let cache = CacheFile {
         format_version: CACHE_FORMAT_VERSION,
-        patches: pairs.into_iter().map(|(display, _)| display).collect(),
+        patches: pairs
+            .into_iter()
+            .map(|(display, _)| {
+                let measurement = load_measurements
+                    .get(&display)
+                    .cloned()
+                    .with_context(|| format!("patch load計測結果がありません: {display}"))?;
+                Ok(CachedPatch {
+                    display,
+                    measurement,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?,
         plugins: plugins.iter().map(CachedPlugin::from).collect(),
         vvp_voicings,
         catalog_notes,
@@ -121,7 +158,105 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
         plugin_names: plugins.into_iter().map(|plugin| plugin.name).collect(),
         vvp_voicing_count: cache.vvp_voicings.len(),
         vvp_unknown_count,
+        measured_load_count,
+        first_load_failure_count,
+        second_load_failure_count,
     })
+}
+
+fn collect_patch_load_measurements(
+    cfg: &Config,
+    pairs: &[(String, String)],
+) -> Result<BTreeMap<String, PatchLoadMeasurement>> {
+    if pairs.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let supervisor =
+        cmrt_realtime_play::RealtimePlayServerSupervisor::with_live_instance_count(cfg, 2);
+    supervisor
+        .start_owned_for_fast_midi()
+        .context("patch load計測用realtime play serverを起動できません")?;
+    let total = pairs.len();
+    let progress_started = Instant::now();
+    Ok(measure_patch_loads(
+        pairs,
+        |instance_id, patch| supervisor.prepare_live_patch(instance_id, Some(patch)),
+        Instant::now,
+        |index, patch| {
+            print!("[{index}/{total}] {patch} ... ");
+            let _ = std::io::stdout().flush();
+        },
+        |index, _patch, measurement| {
+            let eta = estimate_eta(progress_started.elapsed(), index, total);
+            println!(
+                "first={} second={} ETA={}",
+                measurement
+                    .first_load_error
+                    .as_deref()
+                    .map_or("ok".to_string(), |error| format!("error: {error}")),
+                match (
+                    measurement.second_load_ms,
+                    measurement.second_load_error.as_deref(),
+                ) {
+                    (Some(ms), _) => format!("{ms}ms"),
+                    (None, Some(error)) => format!("error: {error}"),
+                    (None, None) => "error: no measurement".to_string(),
+                },
+                format_eta(eta),
+            );
+        },
+    ))
+}
+
+fn measure_patch_loads<L, N, S, P>(
+    pairs: &[(String, String)],
+    mut load: L,
+    mut now: N,
+    mut report_started: S,
+    mut report: P,
+) -> BTreeMap<String, PatchLoadMeasurement>
+where
+    L: FnMut(u8, &str) -> Result<()>,
+    N: FnMut() -> Instant,
+    S: FnMut(usize, &str),
+    P: FnMut(usize, &str, &PatchLoadMeasurement),
+{
+    let mut measurements = BTreeMap::new();
+    for (offset, (display, _)) in pairs.iter().enumerate() {
+        report_started(offset + 1, display);
+        let first_load_error = load(0, display).err().map(|error| format!("{error:#}"));
+        let second_started = now();
+        let second_result = load(1, display);
+        let second_elapsed = now().duration_since(second_started);
+        let (second_load_ms, second_load_error) = match second_result {
+            Ok(()) => (
+                Some(u64::try_from(second_elapsed.as_millis()).unwrap_or(u64::MAX)),
+                None,
+            ),
+            Err(error) => (None, Some(format!("{error:#}"))),
+        };
+        let measurement = PatchLoadMeasurement {
+            second_load_ms,
+            first_load_error,
+            second_load_error,
+        };
+        report(offset + 1, display, &measurement);
+        measurements.insert(display.clone(), measurement);
+    }
+    measurements
+}
+
+fn estimate_eta(elapsed: Duration, completed: usize, total: usize) -> Duration {
+    let remaining = total.saturating_sub(completed);
+    if completed == 0 || remaining == 0 {
+        return Duration::ZERO;
+    }
+    elapsed.mul_f64(remaining as f64 / completed as f64)
+}
+
+fn format_eta(eta: Duration) -> String {
+    let seconds = eta.as_secs();
+    format!("{}分{:02}秒", seconds / 60, seconds % 60)
 }
 
 pub fn load() -> Result<LoadedPatchCatalogCache> {
@@ -132,15 +267,21 @@ pub fn load() -> Result<LoadedPatchCatalogCache> {
 fn load_from(path: &Path) -> Result<LoadedPatchCatalogCache> {
     let bytes = fs::read(path)
         .with_context(|| format!("patch catalog cacheを読めません: {}", path.display()))?;
-    let cache: CacheFile = serde_json::from_slice(&bytes)
+    let value: serde_json::Value = serde_json::from_slice(&bytes)
         .with_context(|| format!("patch catalog cacheが不正です: {}", path.display()))?;
-    if cache.format_version != CACHE_FORMAT_VERSION {
+    let format_version = value
+        .get("format_version")
+        .and_then(serde_json::Value::as_u64)
+        .context("patch catalog cacheにformat_versionがありません")?;
+    if format_version != u64::from(CACHE_FORMAT_VERSION) {
         anyhow::bail!(
             "patch catalog cacheのformat versionが非対応です: expected={}, actual={}",
             CACHE_FORMAT_VERSION,
-            cache.format_version
+            format_version
         );
     }
+    let cache: CacheFile = serde_json::from_value(value)
+        .with_context(|| format!("patch catalog cacheが不正です: {}", path.display()))?;
     if cache.plugins.is_empty() {
         anyhow::bail!("patch catalog cacheにpluginがありません");
     }
@@ -154,17 +295,32 @@ fn load_from(path: &Path) -> Result<LoadedPatchCatalogCache> {
     if let Some(display) = cache
         .patches
         .iter()
+        .map(|patch| &patch.display)
         .filter(|display| cmrt_core::is_vvp_patch_path(display))
         .find(|display| !cache.vvp_voicings.contains_key(*display))
     {
         anyhow::bail!("patch catalog cacheにVVP voicingがありません: {display}");
     }
+    if let Some(display) = cache
+        .patches
+        .iter()
+        .find(|patch| {
+            patch.measurement.second_load_ms.is_none()
+                && patch.measurement.second_load_error.is_none()
+        })
+        .map(|patch| &patch.display)
+    {
+        anyhow::bail!("patch catalog cacheに2回目のload計測結果がありません: {display}");
+    }
     let vvp_voicings = cache.vvp_voicings;
+    let mut load_measurements = BTreeMap::new();
     let pairs = cache
         .patches
         .into_iter()
-        .map(|display| {
+        .map(|patch| {
+            let display = patch.display;
             let lower = display.to_lowercase();
+            load_measurements.insert(display.clone(), patch.measurement);
             (display, lower)
         })
         .collect();
@@ -173,6 +329,7 @@ fn load_from(path: &Path) -> Result<LoadedPatchCatalogCache> {
             pairs,
             cache.plugins.into_iter().map(CatalogPlugin::from).collect(),
             cache.catalog_notes,
+            load_measurements,
         ),
         vvp_voicings,
     })
