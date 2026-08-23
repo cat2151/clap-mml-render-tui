@@ -95,11 +95,39 @@ fn render_mml_subcommand_collects_every_patch_option() {
                 "AR Accent Arp.vvp".to_string(),
                 "Pads/Pad 1.fxp".to_string()
             ],
+            plugin: None,
             mml: Some("cde".to_string()),
             out_dir: Some(PathBuf::from("/tmp/wav")),
             poly_check: true,
+            verify: false,
         })
     );
+}
+
+#[test]
+fn render_mml_can_verify_every_patch_for_one_plugin() {
+    assert_eq!(
+        parse_cli_from(["cmrt", "render-mml", "--plugin", "Floe", "--verify", "o3c",]).unwrap(),
+        CliAction::RenderMml(RenderMmlRequest {
+            plugin: Some("Floe".to_string()),
+            verify: true,
+            mml: Some("o3c".to_string()),
+            ..RenderMmlRequest::default()
+        })
+    );
+}
+
+#[test]
+fn render_mml_rejects_plugin_with_explicit_patch() {
+    assert!(parse_cli_from([
+        "cmrt",
+        "render-mml",
+        "--plugin",
+        "Floe",
+        "--patch",
+        "Harp.floe-preset",
+    ])
+    .is_err());
 }
 
 /// `render-mml` という文字列が MML として再生されないこと。

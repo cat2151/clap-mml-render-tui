@@ -68,3 +68,11 @@ fn the_surge_test_does_not_claim_vaporizer2() {
     assert!(!config_with(Some(VAPORIZER2_PLUGIN_ID), "").is_surge_xt());
     assert!(!config_with(None, "VASTvaporizer2.clap").is_surge_xt());
 }
+
+#[test]
+fn floe_is_decided_by_id_or_filename_fallback() {
+    assert!(is_floe_plugin(Some(FLOE_PLUGIN_ID), "anything.clap"));
+    assert!(!is_floe_plugin(Some(SURGE_XT_PLUGIN_ID), "Floe.clap"));
+    assert!(is_floe_plugin(None, r"C:\CLAP\FLOE.clap"));
+    assert!(!is_floe_plugin(None, "Surge XT.clap"));
+}

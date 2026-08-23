@@ -60,3 +60,15 @@ fn the_existing_layouts_are_untouched_by_the_third_one() {
     );
     assert_eq!(patch_category("Dexed_01.syx/00 Say Again."), "Dexed_01.syx");
 }
+
+#[test]
+fn a_floe_preset_extension_has_priority_over_every_directory_layout() {
+    assert_eq!(
+        PatchLayout::of("patches_factory/Pads/Realistic.floe-preset"),
+        PatchLayout::Floe
+    );
+    assert_eq!(
+        patch_category("Celtic Harp Factory Presets/Realistic Celtic Harp.floe-preset"),
+        "Celtic Harp Factory Presets"
+    );
+}

@@ -48,7 +48,7 @@ pub fn run_patch_role_report(cfg: &Config) -> Result<()> {
 
     print_plugin_section(cfg, &patch_plugins);
     print_skipped_section(&cmrt_runtime::skipped_catalog_plugins(cfg));
-    print_patch_section(cfg, pairs.len());
+    print_patch_section(cfg, &pairs, &patch_plugins);
     print_filter_section(&patch_plugins);
     print_role_section(&ctx, &patch_plugins);
     let empty_rows = print_row_section(&ctx);
@@ -116,7 +116,7 @@ fn skipped_section_lines(skipped: &[cmrt_runtime::SkippedCatalogPlugin]) -> Vec<
     skipped.iter().map(|plugin| plugin.notice_line()).collect()
 }
 
-fn print_patch_section(cfg: &Config, count: usize) {
+fn print_patch_section(cfg: &Config, pairs: &[(String, String)], patch_plugins: &PatchPlugins) {
     println!();
     println!("[patch 一覧]");
     println!(
@@ -127,7 +127,15 @@ fn print_patch_section(cfg: &Config, count: usize) {
             "未設定"
         }
     );
-    println!("  読み込み件数  : {count}");
+    println!("  読み込み件数  : {}", pairs.len());
+    let displays = pairs
+        .iter()
+        .map(|(display, _)| display.as_str())
+        .collect::<Vec<_>>();
+    println!(
+        "  プラグイン別  : {}",
+        per_plugin_counts(&displays, patch_plugins)
+    );
 }
 
 /// 用途別の絞り込みはプラグインごとに違う（Surge のカテゴリを cartridge へ当てると

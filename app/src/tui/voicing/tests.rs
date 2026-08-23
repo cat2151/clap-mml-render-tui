@@ -39,6 +39,13 @@ fn dexed_plugin() -> CatalogPlugin {
     )
 }
 
+fn floe_plugin() -> CatalogPlugin {
+    catalog_plugin(
+        cmrt_runtime::FLOE_PLUGIN_ID,
+        cmrt_runtime::default_floe_plugin_path(),
+    )
+}
+
 /// `.vvp` を実際に置いた音色置き場ごと用意する。Vaporizer2 の判定は
 /// **音色ファイルの中身**を読むので、カタログを並べるだけでは何も決まらない。
 struct Vaporizer2Presets {
@@ -153,6 +160,20 @@ fn a_three_plugin_catalog_reads_each_patch_form_its_own_way() {
         Some(PatchVoicing::Poly)
     );
     assert_eq!(state.resolve("LD Screamer.vvp"), Some(PatchVoicing::Mono));
+}
+
+#[test]
+fn floe_presets_use_assume_poly_in_a_mixed_catalog() {
+    let mixed = state(&[surge_plugin(), dexed_plugin(), floe_plugin()]);
+
+    assert_eq!(
+        mixed.resolve("Celtic Harp/Realistic.floe-preset"),
+        Some(PatchVoicing::Poly)
+    );
+    assert_eq!(
+        VoicingPolicy::for_plugin(&floe_plugin()),
+        VoicingPolicy::AssumePoly
+    );
 }
 
 /// カタログに Vaporizer2 が居なければ `.vvp` は既定プラグインの方針へ落ちる

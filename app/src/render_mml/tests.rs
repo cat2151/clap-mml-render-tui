@@ -1,7 +1,8 @@
 use super::*;
 
 use cmrt_runtime::{
-    CatalogPlugin, PatchRoles, DEXED_PLUGIN_ID, SURGE_XT_PLUGIN_ID, VAPORIZER2_PLUGIN_ID,
+    CatalogPlugin, PatchRoles, DEXED_PLUGIN_ID, FLOE_PLUGIN_ID, SURGE_XT_PLUGIN_ID,
+    VAPORIZER2_PLUGIN_ID,
 };
 
 fn plugin(name: &str, plugin_id: &str) -> CatalogPlugin {
@@ -20,6 +21,7 @@ fn mixed_catalog() -> PatchPlugins {
         plugin("Dexed", DEXED_PLUGIN_ID),
         plugin("Surge XT", SURGE_XT_PLUGIN_ID),
         plugin("Vaporizer2", VAPORIZER2_PLUGIN_ID),
+        plugin("Floe", FLOE_PLUGIN_ID),
     ])
 }
 
@@ -65,6 +67,13 @@ fn each_patch_form_reports_its_own_plugin() {
     assert_eq!(
         plugin_name_for(&catalog, Some("Dexed_01.syx/00 Say Again.")),
         "Dexed"
+    );
+    assert_eq!(
+        plugin_name_for(
+            &catalog,
+            Some("Celtic Harp/Realistic Celtic Harp.floe-preset")
+        ),
+        "Floe"
     );
 }
 
@@ -192,7 +201,10 @@ fn the_chord_and_the_single_notes_last_the_same_time() {
 #[test]
 fn no_patch_option_still_renders_one_line() {
     let request = RenderMmlRequest::default();
-    assert_eq!(patches_or_none(&request), vec![None]);
+    assert_eq!(
+        selection::requested_patches(&Config::default(), &mixed_catalog(), &request).unwrap(),
+        vec![None]
+    );
 }
 
 #[test]
@@ -202,9 +214,36 @@ fn every_patch_option_becomes_its_own_render() {
         ..RenderMmlRequest::default()
     };
     assert_eq!(
-        patches_or_none(&request),
+        selection::requested_patches(&Config::default(), &mixed_catalog(), &request).unwrap(),
         vec![Some("a.vvp".to_string()), Some("b.vvp".to_string())]
     );
+}
+
+#[test]
+fn unknown_or_empty_plugin_selection_is_an_error() {
+    let unknown = RenderMmlRequest {
+        plugin: Some("Unknown".to_string()),
+        ..RenderMmlRequest::default()
+    };
+    assert!(selection::requested_patches(&Config::default(), &mixed_catalog(), &unknown).is_err());
+
+    let empty = RenderMmlRequest {
+        plugin: Some("Floe".to_string()),
+        ..RenderMmlRequest::default()
+    };
+    let error = selection::requested_patches(&Config::default(), &mixed_catalog(), &empty)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("0 件"), "{error}");
+}
+
+#[test]
+fn verification_default_mml_spans_multiple_octaves() {
+    let notes = cmrt_chord::mml_note_progression(VERIFY_DEFAULT_MML).unwrap();
+    let pitches = notes.into_iter().flatten().collect::<Vec<_>>();
+
+    assert!(pitches.iter().min().unwrap() < &48);
+    assert!(pitches.iter().max().unwrap() > &72);
 }
 
 /// `--out-dir` を渡さなければ WAV は 1 バイトも書かない（環境変数も無いとき）。
@@ -243,6 +282,7 @@ fn a_patch_name_round_trips_through_the_mml_head_json() {
         "FX The Wolves's Cries.vvp",
         "patches_factory/Pads/Pad 1.fxp",
         "Dexed_01.syx/00 Say Again.",
+        "Celtic Harp/Realistic Celtic Harp.floe-preset",
     ] {
         let line = mml_with_patch(Some(patch), POLY_CHECK_CHORD_MML);
         assert_eq!(

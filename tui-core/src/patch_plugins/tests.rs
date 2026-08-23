@@ -1,6 +1,8 @@
 use super::*;
 
-use cmrt_runtime::{PatchRoles, DEXED_PLUGIN_ID, SURGE_XT_PLUGIN_ID, VAPORIZER2_PLUGIN_ID};
+use cmrt_runtime::{
+    PatchRoles, DEXED_PLUGIN_ID, FLOE_PLUGIN_ID, SURGE_XT_PLUGIN_ID, VAPORIZER2_PLUGIN_ID,
+};
 
 fn plugin(name: &str, plugin_id: &str) -> CatalogPlugin {
     CatalogPlugin {
@@ -82,4 +84,32 @@ fn a_catalog_without_surge_reports_no_surge() {
     let plugins = PatchPlugins::new(vec![plugin("Dexed", DEXED_PLUGIN_ID)]);
 
     assert!(!plugins.any_surge_xt());
+}
+
+#[test]
+fn four_plugin_catalog_routes_floe_only_to_floe() {
+    let plugins = PatchPlugins::new(vec![
+        plugin("Surge XT", SURGE_XT_PLUGIN_ID),
+        plugin("Dexed", DEXED_PLUGIN_ID),
+        plugin("Vaporizer2", VAPORIZER2_PLUGIN_ID),
+        plugin("Floe", FLOE_PLUGIN_ID),
+    ]);
+
+    assert_eq!(plugins.for_patch("Pads/Pad 1.fxp").name, "Surge XT");
+    assert_eq!(plugins.for_patch("Dexed.syx/00 Bell").name, "Dexed");
+    assert_eq!(plugins.for_patch("PD Emily.vvp").name, "Vaporizer2");
+    assert_eq!(
+        plugins.for_patch("Celtic Harp/Realistic.floe-preset").name,
+        "Floe"
+    );
+}
+
+#[test]
+fn floe_absence_keeps_the_existing_fallback() {
+    let plugins = PatchPlugins::new(vec![plugin("Dexed", DEXED_PLUGIN_ID)]);
+
+    assert_eq!(
+        plugins.for_patch("Celtic Harp/Realistic.floe-preset").name,
+        "Dexed"
+    );
 }

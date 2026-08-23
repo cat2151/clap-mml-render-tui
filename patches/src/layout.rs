@@ -5,7 +5,7 @@
 //! **どの体系で読むかを patch 文字列の形から決めるだけ**で、体系そのものは
 //! [`crate::surge_xt`] / [`crate::cartridge`] / [`crate::vaporizer2`] が持つ。
 
-use crate::{cartridge, surge_xt, vaporizer2};
+use crate::{cartridge, floe, surge_xt, vaporizer2};
 
 /// patch 文字列をどの体系で読むか。
 ///
@@ -22,6 +22,8 @@ pub enum PatchLayout {
     Cartridge,
     /// `<...>/<コード> <名前>.vvp`。ファイル名先頭 2 文字のコードがカテゴリになる。
     Vaporizer2,
+    /// `<category>/<name>.floe-preset`。先頭ディレクトリがカテゴリになる。
+    Floe,
 }
 
 impl PatchLayout {
@@ -32,7 +34,9 @@ impl PatchLayout {
     /// 残りは今までどおり「Surge の prefix があるか」で分かれる。
     pub fn of(path: &str) -> Self {
         let path = path.trim_matches('/');
-        if vaporizer2::has_vvp_extension(path) {
+        if floe::has_floe_preset_extension(path) {
+            Self::Floe
+        } else if vaporizer2::has_vvp_extension(path) {
             Self::Vaporizer2
         } else if surge_xt::has_known_prefix(path) {
             Self::SurgeXt
@@ -53,6 +57,7 @@ pub(crate) fn patch_category_sort_parts(path: &str) -> (&str, u8, &str, &str) {
         PatchLayout::SurgeXt => surge_xt::category_sort_parts(path),
         PatchLayout::Cartridge => cartridge::category_sort_parts(path),
         PatchLayout::Vaporizer2 => vaporizer2::category_sort_parts(path),
+        PatchLayout::Floe => floe::category_sort_parts(path),
     }
 }
 
@@ -63,6 +68,7 @@ pub(crate) fn patch_path_sort_parts(path: &str) -> (u8, &str) {
         PatchLayout::SurgeXt => surge_xt::path_sort_parts(path),
         PatchLayout::Cartridge => cartridge::path_sort_parts(path),
         PatchLayout::Vaporizer2 => vaporizer2::path_sort_parts(path),
+        PatchLayout::Floe => floe::path_sort_parts(path),
     }
 }
 

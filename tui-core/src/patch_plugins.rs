@@ -28,6 +28,8 @@ pub struct PatchPlugins {
     /// `.vvp`（Vaporizer2）。**`state_file` と分けて持つ。** 単位は「1 ファイル = 1 音色」で
     /// 同じだが、一緒にすると Surge の添字へ落ち、Surge のカテゴリで候補が全滅する。
     vvp: usize,
+    /// `.floe-preset`（Floe）。Surge XT の state-file routing と混ぜないための添字。
+    floe_preset: usize,
 }
 
 impl PatchPlugins {
@@ -69,6 +71,7 @@ impl PatchPlugins {
             state_file: index_of(PatchForm::StateFile),
             cartridge: index_of(PatchForm::Cartridge),
             vvp: index_of(PatchForm::Vvp),
+            floe_preset: index_of(PatchForm::FloePreset),
             plugins,
         }
     }
@@ -88,6 +91,8 @@ impl PatchPlugins {
     pub fn index_for_patch(&self, patch: &str) -> usize {
         if cmrt_core::is_cartridge_patch_path(patch) {
             self.cartridge
+        } else if cmrt_core::is_floe_preset_path(patch) {
+            self.floe_preset
         } else if cmrt_core::is_vvp_patch_path(patch) {
             self.vvp
         } else {

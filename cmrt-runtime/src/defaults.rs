@@ -3,8 +3,8 @@ use serde::Serialize;
 // プラグインの標準インストール先と音色置き場は play server repo 側が単一ソース。
 // ここ（config.toml のひな形生成）は TUI 固有なので、値だけを借りて組み立てる。
 pub use cmrt_server_config::{
-    default_dexed_cartridge_dirs, default_dexed_plugin_path, default_patches_dirs,
-    default_plugin_path, default_vaporizer2_plugin_path,
+    default_dexed_cartridge_dirs, default_dexed_plugin_path, default_floe_plugin_path,
+    default_patches_dirs, default_plugin_path, default_vaporizer2_plugin_path,
 };
 
 use cmrt_patches::surge_xt::{
@@ -73,9 +73,10 @@ pub fn default_config_content_with_app_settings(app_settings: &str) -> String {
         format!("{}\n", app_settings.trim_end())
     };
     let patch_roles_block = format!(
-        "{}{}{}",
+        "{}{}{}{}",
         surge_xt_patch_roles_block(),
         vaporizer2_patch_roles_block(),
+        floe_profile_block(),
         other_plugin_profile_block()
     );
     format!(
@@ -88,16 +89,16 @@ pub fn default_config_content_with_app_settings(app_settings: &str) -> String {
 {plugin_path_line}
 
 # 【省略可】複数プラグインを使い分ける場合は、active_plugin の1行で切り替えられます。
-# 'Surge XT' / 'Dexed' / 'Vaporizer2' は組み込みなので、標準の場所へインストールして
+# 'Surge XT' / 'Dexed' / 'Vaporizer2' / 'Floe' は組み込みなので、標準の場所へインストールして
 # あればプラグイン本体のパスは書かずに済みます（大文字小文字・空白・アンダースコアの
 # 違いは無視されます）。active_plugin を書くと、上の plugin_path / patches_dirs は
 # 使われません。
 #
 # active_plugin = 'Dexed'
 #
-# ただし 'Vaporizer2' だけは音色置き場の既定値を持ちません（プリセットの置き場所が
-# インストールごとに違うため）。末尾の [plugins.Vaporizer2] に patches_dirs を
-# 書いてください。書かないと Vaporizer2 の音色は1件も一覧に出ません。
+# Vaporizer2 と Floe は音色置き場の既定値を持ちません（プリセットの置き場所が
+# インストールごとに違うため）。末尾の各 [plugins.*] に patches_dirs を書いてください。
+# 書かないプラグインの音色は一覧に出ません。
 #
 # 標準以外の場所に入れている場合や、組み込みに無いプラグインを使う場合だけ、
 # [plugins.<名前>] を書きます。書いた項目だけが組み込みの値を上書きします。
@@ -306,6 +307,20 @@ fn vaporizer2_category_code_lines() -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// Floe の preset root を指定するためのコメント済みプロファイル。
+fn floe_profile_block() -> String {
+    r#"
+# 【省略可】Floe の音色置き場。Floe を使うときは patches_dirs を指定してください。
+# プラグイン本体を標準の場所へ入れてあれば plugin_path / plugin_id は不要です。
+# `.floe-preset` の先頭ディレクトリがカテゴリになり、用途別には絞り込みません。
+#
+# [plugins.Floe]
+# patches_dirs = ['D:\my\Floe\presets']
+# plugin_path  = 'D:\my\clap\Floe.clap'
+"#
+    .to_string()
 }
 
 /// 組み込みに無いプラグインを足すときの雛形。**ひな形の最後**に置く。

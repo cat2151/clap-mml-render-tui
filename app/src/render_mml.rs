@@ -25,6 +25,7 @@ use cmrt_runtime::{Config, OfflineRenderBackend};
 use cmrt_tui_core::patch_plugins::PatchPlugins;
 
 mod analysis;
+mod selection;
 
 pub(crate) use analysis::RenderStats;
 
@@ -35,16 +36,23 @@ pub struct RenderMmlRequest {
     pub config: Option<PathBuf>,
     /// 鳴らす音色の display 文字列。複数指定すると 1 プロセスで順に鳴らして比べる。
     pub patches: Vec<String>,
+    /// 共有カタログから、このプラグインへ routing される全音色を選ぶ。
+    pub plugin: Option<String>,
     /// レンダリングする MML。省略時は [`DEFAULT_MML`]。
     pub mml: Option<String>,
     /// WAV の書き出し先。省略時は環境変数 [`WAV_OUT_DIR_ENV`]。どちらも無ければ書かない。
     pub out_dir: Option<PathBuf>,
     /// 和音が本当に和音で鳴るかを、単音のレンダリングと突き合わせて判定する。
     pub poly_check: bool,
+    /// 無音・0件・routing 不一致を終了コードで失敗にする。
+    pub verify: bool,
 }
 
 /// 音色だけを見たいときの既定 MML。1 音を全音符 1 つぶん。
 pub const DEFAULT_MML: &str = "t120v11'c1'";
+
+/// verification 向け既定。低音から高音まで順に鳴らし、drum の狭い key range も拾う。
+pub const VERIFY_DEFAULT_MML: &str = "t180v11o2l16cdefgabo4cdefgabo6cdefgab";
 
 /// `--out-dir` を省略したときに見る環境変数。play-server 側の番人テストと同じ名前。
 pub const WAV_OUT_DIR_ENV: &str = "CMRT_TEST_WAV_OUT_DIR";
@@ -72,9 +80,14 @@ const MONO_ENERGY_GAIN: f64 = 1.10;
 const MAX_RMS_JITTER: f64 = 0.10;
 
 pub fn run(cfg: &Config, entries: &PluginEntries, request: &RenderMmlRequest) -> Result<()> {
-    let mml = request.mml.as_deref().unwrap_or(DEFAULT_MML);
+    let mml = request.mml.as_deref().unwrap_or(if request.verify {
+        VERIFY_DEFAULT_MML
+    } else {
+        DEFAULT_MML
+    });
     let out_dir = resolve_out_dir(request)?;
     let catalog = PatchPlugins::from_catalog(cmrt_runtime::catalog_plugins(cfg));
+    let patches = selection::requested_patches(cfg, &catalog, request)?;
     let renderer = OfflineRenderer::new(std::sync::Arc::new(cfg.clone()), entries.clone());
 
     println!("[render-mml]");
@@ -90,9 +103,17 @@ pub fn run(cfg: &Config, entries: &PluginEntries, request: &RenderMmlRequest) ->
     );
 
     if request.poly_check {
-        return run_poly_check(cfg, &renderer, &catalog, request, out_dir.as_deref());
+        return run_poly_check(cfg, &renderer, &catalog, &patches, out_dir.as_deref());
     }
-    run_renders(cfg, &renderer, &catalog, request, mml, out_dir.as_deref())
+    run_renders(
+        cfg,
+        &renderer,
+        &catalog,
+        request,
+        &patches,
+        mml,
+        out_dir.as_deref(),
+    )
 }
 
 fn run_renders(
@@ -100,6 +121,7 @@ fn run_renders(
     renderer: &OfflineRenderer,
     catalog: &PatchPlugins,
     request: &RenderMmlRequest,
+    patches: &[Option<String>],
     mml: &str,
     out_dir: Option<&Path>,
 ) -> Result<()> {
@@ -108,28 +130,39 @@ fn run_renders(
 
     // **サンプル列は溜めない。** 1 本 4 秒のステレオで 1.5MB あり、460 音色を
     // 一度に流すと 700MB になる。まとめに要るのは digest と無音判定だけ。
-    let mut digests = Vec::new();
+    let mut renders = Vec::new();
     let mut silent = Vec::new();
-    for patch in patches_or_none(request) {
+    for patch in patches {
         let stat = render_one(cfg, renderer, catalog, patch.as_deref(), mml, out_dir)?;
-        digests.push(stat.digest);
+        let name = patch.clone().unwrap_or_else(|| "(無指定)".to_string());
+        renders.push((name.clone(), stat.digest));
         if stat.is_silent() {
-            silent.push(patch.unwrap_or_else(|| "(無指定)".to_string()));
+            silent.push(name);
         }
     }
 
     println!();
     println!("[まとめ]");
-    println!("  レンダリング数 : {}", digests.len());
+    println!("  レンダリング数 : {}", renders.len());
+    println!("  load/render error: 0 件");
     println!("  無音           : {} 件", silent.len());
     for patch in &silent {
         println!("    無音: {patch}");
     }
     println!(
         "  異なる出音     : {} / {}",
-        analysis::distinct_digests(&digests),
-        digests.len()
+        analysis::distinct_digests(
+            &renders
+                .iter()
+                .map(|(_, digest)| *digest)
+                .collect::<Vec<_>>()
+        ),
+        renders.len()
     );
+    print_duplicate_digests(&renders);
+    if request.verify && !silent.is_empty() {
+        anyhow::bail!("verify 失敗: 無音の音色が {} 件あります", silent.len());
+    }
     Ok(())
 }
 
@@ -157,14 +190,14 @@ fn run_poly_check(
     cfg: &Config,
     renderer: &OfflineRenderer,
     catalog: &PatchPlugins,
-    request: &RenderMmlRequest,
+    patches: &[Option<String>],
     out_dir: Option<&Path>,
 ) -> Result<()> {
     let chord_mml = POLY_CHECK_CHORD_MML;
     println!("  chord         : {chord_mml}");
     println!();
 
-    for patch in patches_or_none(request) {
+    for patch in patches {
         let patch = patch.as_deref();
         let chord = render_one(cfg, renderer, catalog, patch, chord_mml, out_dir)?;
         // 同じ MML を 2 回。RMS がぶれる音色かどうかを、判定と同じ土俵で測っておく。
@@ -315,12 +348,19 @@ pub(crate) fn plugin_name_for(catalog: &PatchPlugins, patch: Option<&str>) -> St
     .to_string()
 }
 
-/// `--patch` 無指定なら「音色を指定しない 1 本」として扱う。
-fn patches_or_none(request: &RenderMmlRequest) -> Vec<Option<String>> {
-    if request.patches.is_empty() {
-        return vec![None];
+fn print_duplicate_digests(renders: &[(String, u64)]) {
+    let mut by_digest = std::collections::BTreeMap::<u64, Vec<&str>>::new();
+    for (patch, digest) in renders {
+        by_digest.entry(*digest).or_default().push(patch);
     }
-    request.patches.iter().cloned().map(Some).collect()
+    let duplicates = by_digest
+        .into_iter()
+        .filter(|(_, patches)| patches.len() > 1)
+        .collect::<Vec<_>>();
+    println!("  重複 digest    : {} 組", duplicates.len());
+    for (digest, patches) in duplicates {
+        println!("    {digest:016x}: {}", patches.join(" | "));
+    }
 }
 
 /// MML 先頭 JSON へ音色を埋める。キーは `"Surge XT patch"` のまま

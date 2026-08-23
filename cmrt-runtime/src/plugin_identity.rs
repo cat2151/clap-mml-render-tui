@@ -10,8 +10,8 @@
 // `patch_form_of` / `PatchForm` を素通しで再輸出しているのは、画面 crate（tui-core など）が
 // config crate だけを見ればよい形を保つため。
 pub use cmrt_server_config::{
-    patch_form_of, plugin_file_stem, PatchForm, DEXED_PLUGIN_ID, SURGE_XT_PLUGIN_ID,
-    VAPORIZER2_PLUGIN_ID,
+    patch_form_of, plugin_file_stem, PatchForm, DEXED_PLUGIN_ID, FLOE_PLUGIN_ID,
+    SURGE_XT_PLUGIN_ID, VAPORIZER2_PLUGIN_ID,
 };
 
 use crate::{default_plugin_path, Config};
@@ -57,6 +57,16 @@ pub fn is_vaporizer2_plugin(plugin_id: Option<&str>, plugin_path: &str) -> bool 
         None => plugin_file_stem(plugin_path)
             .to_lowercase()
             .contains("vaporizer"),
+    }
+}
+
+/// このプラグインが Floe か。ID を優先し、未指定時だけファイル名で判定する。
+pub fn is_floe_plugin(plugin_id: Option<&str>, plugin_path: &str) -> bool {
+    match plugin_id {
+        Some(id) => id == FLOE_PLUGIN_ID,
+        None => plugin_file_stem(plugin_path)
+            .to_lowercase()
+            .contains("floe"),
     }
 }
 

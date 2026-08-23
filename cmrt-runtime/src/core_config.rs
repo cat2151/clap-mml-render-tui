@@ -64,6 +64,11 @@ impl CatalogPlugin {
     pub fn is_vaporizer2(&self) -> bool {
         crate::is_vaporizer2_plugin(self.plugin_id.as_deref(), &self.plugin_path)
     }
+
+    /// このプラグインが Floe か。Floe の patch はすべて poly とみなす。
+    pub fn is_floe(&self) -> bool {
+        crate::is_floe_plugin(self.plugin_id.as_deref(), &self.plugin_path)
+    }
 }
 
 /// カタログへ載せなかったプラグインと、その理由。

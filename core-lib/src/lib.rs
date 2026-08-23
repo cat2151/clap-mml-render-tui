@@ -1,4 +1,5 @@
 pub use clap_mml_play_server_core::dx7::is_cartridge_patch_path;
+pub use clap_mml_play_server_core::floe::is_floe_preset_path;
 pub use clap_mml_play_server_core::patch_list::{collect_patches, to_relative};
 pub use clap_mml_play_server_core::pipeline;
 pub use clap_mml_play_server_core::pipeline::{

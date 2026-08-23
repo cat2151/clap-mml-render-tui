@@ -100,12 +100,18 @@ enum Commands {
         /// 鳴らす音色の display 文字列。複数指定すると 1 プロセスで順に鳴らして比べる
         #[arg(long = "patch", value_name = "DISPLAY")]
         patches: Vec<String>,
+        /// 指定プラグインへ routing される共有カタログ上の全音色を鳴らす
+        #[arg(long, value_name = "NAME", conflicts_with = "patches")]
+        plugin: Option<String>,
         /// WAV の書き出し先（省略時は環境変数 CMRT_TEST_WAV_OUT_DIR。どちらも無ければ書かない）
         #[arg(long, value_name = "DIR")]
         out_dir: Option<PathBuf>,
         /// 和音が本当に和音で鳴るかを、単音のレンダリングと突き合わせて判定する
         #[arg(long)]
         poly_check: bool,
+        /// 0件・誤 routing・load/render error・無音を失敗終了にする
+        #[arg(long)]
+        verify: bool,
         /// レンダリングする MML（省略時は 1 音だけ鳴らす既定 MML）
         #[arg(value_name = "MML")]
         mml: Option<String>,
@@ -191,17 +197,21 @@ where
     if let Some(Commands::RenderMml {
         config,
         patches,
+        plugin,
         out_dir,
         poly_check,
+        verify,
         mml,
     }) = cli.command
     {
         return Ok(CliAction::RenderMml(RenderMmlRequest {
             config,
             patches,
+            plugin,
             mml,
             out_dir,
             poly_check,
+            verify,
         }));
     }
 

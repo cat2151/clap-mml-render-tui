@@ -8,6 +8,7 @@
 //! - [`surge_xt`] — `patches_factory/<category>/` と `patches_3rdparty/<vendor>/<category>/`
 //! - [`cartridge`] — Dexed の `<cartridge>.syx/<voice>`
 //! - [`vaporizer2`] — `<コード> <名前>.vvp`（ファイル名先頭 2 文字がカテゴリコード）
+//! - [`floe`] — `<category>/<名前>.floe-preset`（先頭ディレクトリがカテゴリ）
 //!
 //! どれで読むかを選ぶ中立の入口が [`layout`]（[`layout::PatchLayout`]）。
 //! プラグインを足すときはこの 3 つに並べて 4 つめを足し、`PatchLayout` へ分岐を
@@ -21,6 +22,7 @@
 //! 小文字化した側をパス照合に、表示名側を voicing 判定と結果の返却に使う。
 
 pub mod cartridge;
+pub mod floe;
 mod grouping;
 pub mod layout;
 mod naming;

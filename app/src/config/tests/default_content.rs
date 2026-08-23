@@ -23,6 +23,15 @@ fn default_config_content_uses_patches_dirs_key() {
 }
 
 #[test]
+fn default_config_content_shows_how_to_configure_floe_presets() {
+    let content = default_config_content();
+
+    assert!(content.contains("# [plugins.Floe]"), "{content}");
+    assert!(content.contains("Floe\\presets"), "{content}");
+    assert!(content.contains(".floe-preset"), "{content}");
+}
+
+#[test]
 fn default_config_content_uses_empty_loop_dirs() {
     let content = default_config_content();
 

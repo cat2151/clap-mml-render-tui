@@ -1,6 +1,6 @@
 use super::*;
 
-use cmrt_runtime::{PatchRoles, DEXED_PLUGIN_ID, SURGE_XT_PLUGIN_ID};
+use cmrt_runtime::{PatchRoles, DEXED_PLUGIN_ID, FLOE_PLUGIN_ID, SURGE_XT_PLUGIN_ID};
 
 /// 2 プラグインぶんのカタログ。開発機のインストール状況に左右されないよう、
 /// `catalog_plugins()` を通さずに手で並べる。
@@ -21,6 +21,10 @@ fn surge_catalog_entry() -> CatalogPlugin {
 
 fn dexed_catalog_entry() -> CatalogPlugin {
     catalog_entry("Dexed", DEXED_PLUGIN_ID, "/data/Dexed/Cartridges")
+}
+
+fn floe_catalog_entry() -> CatalogPlugin {
+    catalog_entry("Floe", FLOE_PLUGIN_ID, "/data/Floe/presets")
 }
 
 fn config_for_test() -> Config {
@@ -124,4 +128,27 @@ fn a_missing_entry_is_an_error_instead_of_a_null_dereference() {
         .expect("entry が無い構成では in-process レンダリングできない");
 
     assert!(error.to_string().contains("PluginEntry"), "{error}");
+}
+
+#[test]
+fn floe_preset_selects_the_floe_entry_and_base() {
+    let plugins = plugins_from(vec![
+        surge_catalog_entry(),
+        dexed_catalog_entry(),
+        floe_catalog_entry(),
+    ]);
+
+    let index = plugins.index_for_mml(&mml_with_patch(
+        "Celtic Harp Factory Presets/Realistic Celtic Harp.floe-preset",
+    ));
+
+    assert_eq!(index, 2);
+    assert_eq!(
+        plugins.core_cfg(index).plugin_id.as_deref(),
+        Some(FLOE_PLUGIN_ID)
+    );
+    assert_eq!(
+        plugins.core_cfg(index).patches_dir.as_deref(),
+        Some("/data/Floe/presets")
+    );
 }
