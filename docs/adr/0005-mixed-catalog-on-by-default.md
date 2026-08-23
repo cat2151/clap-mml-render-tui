@@ -1,6 +1,6 @@
 # ADR 0005: 混在カタログは既定 ON。実在する dir だけ載せる
 
-- 状態: 採用（2026-08-20 / 2026-08-22 に 3 プラグイン目で再確認）
+- 状態: 採用（2026-08-20 / 2026-08-23 に 5 プラグインで再確認）
 - 関連: [0004](0004-default-plugin-owns-unspecified-patches.md) / [0006](0006-per-profile-relative-base.md) /
   [0009](0009-offline-entry-map.md)
 
@@ -40,6 +40,10 @@
 （`app/src/tui/session.rs`）。つまり notepad / mml-overlay / keyboard の一覧にも Dexed が混ざる。
 **だからオフライン経路の entry 引き分け（[0009](0009-offline-entry-map.md)）が前提になる。**
 
+Sforzando もこの経路へ載せる。MML overlay 専用の SFZ 一覧は作らず、notepad / keyboard /
+grid sequencer / DAW が同じ `Arc<Mutex<PatchLoadState>>` を読む。番人は
+`app/src/tui/tests/sforzando_screens.rs`。
+
 ## 罠: テストが開発機に左右される
 
 カタログが「このマシンに何がインストールされているか」に依存するので、
@@ -74,6 +78,13 @@ Kick 1106 / Snare 1101 / HiHat 1078 / Percussion 1178。
 （= 4064 + `.vvp` 460）。候補数は Chord 1983 / Bass 1567 / Arpeggio 2123 / Free 3597。
 → ベースラインと読み方は [0011](0011-verification-and-baselines.md)
 
+## 実測（2026-08-23 / debug / `active_plugin = 'Dexed'`）
+
+実 config に Floe / Sforzando / Vaporizer2 の profile を設定した `cmrt patch-roles` では、
+Dexed 1056 / Floe 13 / **Sforzando 583** / Surge XT 3008 / Vaporizer2 460、合計 **5120**。
+Sforzando は user bank 529 件と installed bank manifest 登録 54 件だけを載せる。実在する 595 SFZ のうち、
+helper / manifest 未登録 12 件はロード不能なので除外し、source notice と log に件数を残す。
+
 ## 外したことを 3 経路で見せる（2026-08-22 追記）
 
 **黙って外す倒れ方そのものは変えていない。** 変えたのは「外したことが誰にも見えない」ほう。
@@ -101,6 +112,8 @@ Kick 1106 / Snare 1101 / HiHat 1078 / Percussion 1178。
 
 - `NoPatchDirs` — `patches_dirs` が無い。Vaporizer2 の組み込みがこれ
 - `PatchDirsMissing(dirs)` — 書いてあるが 1 つも実在しない。**綴りを間違えた dir を名指しで返す**
+- `PatchSourceUnavailable` — plugin adapter がロード可能な source を解決できない。
+  config の欠落場所と resolver の診断を同じ行へ出す
 
 **インストールしていないプラグインはここに出てこない。** `installed_plugin_profiles()` の
 時点で落ちており、「入れていないものが出ない」は説明の要らない当たり前だから。

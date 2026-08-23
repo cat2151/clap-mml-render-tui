@@ -40,6 +40,8 @@ impl PresetDir {
             plugin_id: Some(cmrt_runtime::VAPORIZER2_PLUGIN_ID.to_string()),
             base: Some(self.root.to_string_lossy().into_owned()),
             dirs: vec![self.root.to_string_lossy().into_owned()],
+            resolved_patches: None,
+            source_notices: Vec::new(),
             patch_roles: cmrt_runtime::PatchRoles::default(),
         }
     }
@@ -225,6 +227,8 @@ fn every_installed_preset_reports_a_voicing() {
         plugin_id: Some(cmrt_runtime::VAPORIZER2_PLUGIN_ID.to_string()),
         base: Some(root.to_string_lossy().into_owned()),
         dirs: vec![root.to_string_lossy().into_owned()],
+        resolved_patches: None,
+        source_notices: Vec::new(),
         patch_roles: cmrt_runtime::PatchRoles::default(),
     };
     let voicings = VvpVoicings::default();

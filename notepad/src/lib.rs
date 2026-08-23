@@ -14,6 +14,7 @@ mod audio_cache;
 mod cache;
 mod disk_cache;
 mod input;
+mod logging;
 mod notepad_editor;
 mod notepad_history;
 mod patch_phrase;
@@ -35,6 +36,7 @@ use cmrt_tui_core::sound_check_guide::SoundCheckGuide;
 pub use cmrt_tui_core::PlayState;
 
 use audio_cache::NotepadAudioCache;
+pub use logging::set_log_sink;
 use notepad_editor::NotepadEditorState;
 use notepad_history::NotepadHistoryState;
 use patch_phrase::PatchPhraseState;
@@ -56,15 +58,6 @@ pub(crate) use cmrt_tui_core::patches::{filter_items, filter_patches_by_display_
 
 #[cfg(test)]
 use cache::{mark_cache_entry_recent, resolve_cached_samples, try_insert_cache};
-
-type LogSink = fn(&str);
-static LOG_SINK: std::sync::OnceLock<LogSink> = std::sync::OnceLock::new();
-
-/// app 起動時に、グローバルログ（`log/log.txt`）への書き込み関数を注入する。
-/// 未注入の場合、この crate のログは黙って捨てられる。
-pub fn set_log_sink(log: LogSink) {
-    let _ = LOG_SINK.set(log);
-}
 
 /// notepad 画面の内部モード。
 ///
@@ -278,9 +271,7 @@ impl<'a> NotepadScreen<'a> {
     }
 
     pub(crate) fn log_notepad_event(message: impl Into<String>) {
-        if let Some(sink) = LOG_SINK.get() {
-            sink(&format!("notepad: {}", message.into()));
-        }
+        logging::log_notepad_event(message);
     }
 
     pub fn begin_playback_session(&self) -> u64 {

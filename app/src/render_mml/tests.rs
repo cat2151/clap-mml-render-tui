@@ -12,6 +12,8 @@ fn plugin(name: &str, plugin_id: &str) -> CatalogPlugin {
         plugin_id: Some(plugin_id.to_string()),
         base: None,
         dirs: Vec::new(),
+        resolved_patches: None,
+        source_notices: Vec::new(),
         patch_roles: PatchRoles::default(),
     }
 }

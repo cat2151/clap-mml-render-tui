@@ -7,7 +7,7 @@
 //! 「全部 poly とみなす」を Surge へ当てると和音行へ mono の音色が来る。
 //!
 //! # 何で判別しているか
-//! 材料は **patch 文字列の形だけ**（`.syx` / `.vvp` コンポーネントを含むか）。
+//! 材料は **patch 文字列の形だけ**（`.syx` / `.vvp` / `.floe-preset` / `.sfz` を含むか）。
 //! patch 文字列そのものへプラグイン名を入れる仕様変更は、display 文字列が
 //! 永続 ID であるため保存済みデータの移行が要る（`docs/adr/0001-patch-string-decides-the-plugin.md`）。
 //! 「このプラグインはどちらの形を扱うか」は `cmrt_server_config::patch_form_of` が
@@ -30,6 +30,8 @@ pub struct PatchPlugins {
     vvp: usize,
     /// `.floe-preset`（Floe）。Surge XT の state-file routing と混ぜないための添字。
     floe_preset: usize,
+    /// `.sfz`（sforzando）。CLAP state 経路へ誤投入しないための添字。
+    sfz: usize,
 }
 
 impl PatchPlugins {
@@ -50,6 +52,8 @@ impl PatchPlugins {
             plugin_id: None,
             base: None,
             dirs: Vec::new(),
+            resolved_patches: None,
+            source_notices: Vec::new(),
             patch_roles,
         }])
     }
@@ -72,6 +76,7 @@ impl PatchPlugins {
             cartridge: index_of(PatchForm::Cartridge),
             vvp: index_of(PatchForm::Vvp),
             floe_preset: index_of(PatchForm::FloePreset),
+            sfz: index_of(PatchForm::Sfz),
             plugins,
         }
     }
@@ -91,6 +96,8 @@ impl PatchPlugins {
     pub fn index_for_patch(&self, patch: &str) -> usize {
         if cmrt_core::is_cartridge_patch_path(patch) {
             self.cartridge
+        } else if cmrt_core::is_sfz_patch_path(patch) {
+            self.sfz
         } else if cmrt_core::is_floe_preset_path(patch) {
             self.floe_preset
         } else if cmrt_core::is_vvp_patch_path(patch) {

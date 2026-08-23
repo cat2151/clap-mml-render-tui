@@ -62,6 +62,12 @@ pub fn nonblocking_log_sink(line: &str) {
     append_global_log_line_nonblocking(line.to_string());
 }
 
+/// 同一 process で使う play-server core の診断を、TUI-safe な非同期 sink へ向ける。
+/// server binary はこれを呼ばず、既定の stderr を親 app に pipe させる。
+pub fn install_embedded_core_log_sink() {
+    cmrt_core::set_log_sink(nonblocking_log_sink);
+}
+
 fn try_send_log_line(sender: &mpsc::SyncSender<String>, line: String) {
     let _ = sender.try_send(line);
 }

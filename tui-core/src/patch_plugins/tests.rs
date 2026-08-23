@@ -1,7 +1,8 @@
 use super::*;
 
 use cmrt_runtime::{
-    PatchRoles, DEXED_PLUGIN_ID, FLOE_PLUGIN_ID, SURGE_XT_PLUGIN_ID, VAPORIZER2_PLUGIN_ID,
+    PatchRoles, DEXED_PLUGIN_ID, FLOE_PLUGIN_ID, SFORZANDO_PLUGIN_ID, SURGE_XT_PLUGIN_ID,
+    VAPORIZER2_PLUGIN_ID,
 };
 
 fn plugin(name: &str, plugin_id: &str) -> CatalogPlugin {
@@ -11,6 +12,8 @@ fn plugin(name: &str, plugin_id: &str) -> CatalogPlugin {
         plugin_id: Some(plugin_id.to_string()),
         base: None,
         dirs: Vec::new(),
+        resolved_patches: None,
+        source_notices: Vec::new(),
         patch_roles: PatchRoles::default(),
     }
 }
@@ -95,6 +98,33 @@ fn four_plugin_catalog_routes_floe_only_to_floe() {
         plugin("Floe", FLOE_PLUGIN_ID),
     ]);
 
+    assert_eq!(plugins.for_patch("Pads/Pad 1.fxp").name, "Surge XT");
+    assert_eq!(plugins.for_patch("Dexed.syx/00 Bell").name, "Dexed");
+    assert_eq!(plugins.for_patch("PD Emily.vvp").name, "Vaporizer2");
+    assert_eq!(
+        plugins.for_patch("Celtic Harp/Realistic.floe-preset").name,
+        "Floe"
+    );
+}
+
+#[test]
+fn five_plugin_catalog_routes_sfz_only_to_sforzando() {
+    let plugins = PatchPlugins::new(vec![
+        plugin("Surge XT", SURGE_XT_PLUGIN_ID),
+        plugin("Dexed", DEXED_PLUGIN_ID),
+        plugin("Vaporizer2", VAPORIZER2_PLUGIN_ID),
+        plugin("Floe", FLOE_PLUGIN_ID),
+        plugin("Sforzando", SFORZANDO_PLUGIN_ID),
+    ]);
+
+    assert_eq!(
+        plugins.for_patch("Garritan/Glockenspiel.sfz").name,
+        "Sforzando"
+    );
+    assert_eq!(
+        plugins.for_patch("Garritan/Glockenspiel.SFZ").name,
+        "Sforzando"
+    );
     assert_eq!(plugins.for_patch("Pads/Pad 1.fxp").name, "Surge XT");
     assert_eq!(plugins.for_patch("Dexed.syx/00 Bell").name, "Dexed");
     assert_eq!(plugins.for_patch("PD Emily.vvp").name, "Vaporizer2");

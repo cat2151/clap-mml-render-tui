@@ -11,7 +11,7 @@
 // config crate だけを見ればよい形を保つため。
 pub use cmrt_server_config::{
     patch_form_of, plugin_file_stem, PatchForm, DEXED_PLUGIN_ID, FLOE_PLUGIN_ID,
-    SURGE_XT_PLUGIN_ID, VAPORIZER2_PLUGIN_ID,
+    SFORZANDO_PLUGIN_ID, SURGE_XT_PLUGIN_ID, VAPORIZER2_PLUGIN_ID,
 };
 
 use crate::{default_plugin_path, Config};
@@ -67,6 +67,16 @@ pub fn is_floe_plugin(plugin_id: Option<&str>, plugin_path: &str) -> bool {
         None => plugin_file_stem(plugin_path)
             .to_lowercase()
             .contains("floe"),
+    }
+}
+
+/// このプラグインが sforzando か。ID を優先し、未指定時だけファイル名で判定する。
+pub fn is_sforzando_plugin(plugin_id: Option<&str>, plugin_path: &str) -> bool {
+    match plugin_id {
+        Some(id) => id == SFORZANDO_PLUGIN_ID,
+        None => plugin_file_stem(plugin_path)
+            .to_lowercase()
+            .contains("sforzando"),
     }
 }
 

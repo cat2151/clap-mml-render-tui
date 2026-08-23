@@ -6,10 +6,14 @@
 //!
 //! ここから `CoreConfig` を組む処理は core-lib 側（`cmrt_core::core_config_from_config`）に
 //! 置いてある。この crate を config 専用の葉 crate に保つため。
+//!
+//! 診断は戻り値の `source_notices` / `CatalogSkipReason` として返す。この library から
+//! stdout/stderr へ直接書くと alternate screen 中の TUI 描画を壊すため、表示とログ保存は
+//! app 側の overlay / 注入済み log sink に任せる。
 
 pub use cmrt_server_config::shared_patch_root_dir;
 
-use std::path::Path;
+use std::path::PathBuf;
 
 use crate::{layered_patch_role_filters, Config, PatchRoles, PluginProfile};
 
@@ -46,6 +50,11 @@ pub struct CatalogPlugin {
     pub base: Option<String>,
     /// このプラグインの音色置き場。
     pub dirs: Vec<String>,
+    /// Adapter が「実際にロード可能」と解決済みの file。`None` は通常の directory scan。
+    /// vendor metadata は play-server 側に残し、TUI へは path だけを渡す。
+    pub resolved_patches: Option<Vec<PathBuf>>,
+    /// 一部 source の破損や、ロード不能 file の除外を知らせる汎用診断。
+    pub source_notices: Vec<String>,
     /// このプラグインの音色に当てる用途別絞り込み（解決済み）。
     pub patch_roles: PatchRoles,
 }
@@ -98,6 +107,11 @@ pub enum CatalogSkipReason {
     /// `patches_dirs` は書かれているが、1 つも実在しない。
     /// 書いた dir を持って回るのは、綴り間違いを名指しで返すため。
     PatchDirsMissing(Vec<String>),
+    /// Plugin adapter がロード可能な patch source を解決できなかった。
+    PatchSourceUnavailable {
+        configured_missing: Vec<String>,
+        source_error: String,
+    },
 }
 
 impl SkippedCatalogPlugin {
@@ -116,6 +130,20 @@ impl SkippedCatalogPlugin {
                 self.name,
                 dirs.join(" / ")
             ),
+            CatalogSkipReason::PatchSourceUnavailable {
+                configured_missing,
+                source_error,
+            } => {
+                let configured = if configured_missing.is_empty() {
+                    "未設定".to_string()
+                } else {
+                    format!("実在しない: {}", configured_missing.join(" / "))
+                };
+                format!(
+                    "{} はロード可能な音色 source が無いため一覧に出ません: config {configured} / resolver {source_error}",
+                    self.name
+                )
+            }
         }
     }
 
@@ -124,6 +152,7 @@ impl SkippedCatalogPlugin {
         match self.reason {
             CatalogSkipReason::NoPatchDirs => "no-patches-dirs",
             CatalogSkipReason::PatchDirsMissing(_) => "patch-dirs-missing",
+            CatalogSkipReason::PatchSourceUnavailable { .. } => "patch-source-unavailable",
         }
     }
 }
@@ -162,9 +191,16 @@ pub fn skipped_catalog_plugins(cfg: &Config) -> Vec<SkippedCatalogPlugin> {
 /// 画面ごとに数え方が分かれると「ある画面にだけ案内が出ない」からで、それは
 /// 案内が無いこと自体が症状なので誰も気づけない。
 pub fn catalog_notice_lines(cfg: &Config) -> Vec<String> {
-    skipped_catalog_plugins(cfg)
+    let (plugins, skipped) = catalog_plugins_detailed(cfg);
+    plugins
         .iter()
-        .map(SkippedCatalogPlugin::notice_line)
+        .flat_map(|plugin| {
+            plugin
+                .source_notices
+                .iter()
+                .map(move |notice| format!("{}: {notice}", plugin.name))
+        })
+        .chain(skipped.iter().map(SkippedCatalogPlugin::notice_line))
         .collect()
 }
 
@@ -182,9 +218,22 @@ fn catalog_plugins_with(
         name,
         profile,
         missing_dirs,
+        resolved_patches,
+        source_notices,
+        source_error,
     } in installed
     {
         let dirs = cmrt_server_config::configured_patch_dirs(profile.patches_dirs.as_deref());
+        if let Some(source_error) = source_error {
+            skipped.push(SkippedCatalogPlugin {
+                name,
+                reason: CatalogSkipReason::PatchSourceUnavailable {
+                    configured_missing: missing_dirs,
+                    source_error,
+                },
+            });
+            continue;
+        }
         if dirs.is_empty() {
             // 外した事実をここで作る。判定と理由が同じ 1 か所に居ることが要点。
             let reason = if missing_dirs.is_empty() {
@@ -205,6 +254,8 @@ fn catalog_plugins_with(
             plugin_id: profile.plugin_id,
             base: shared_patch_root_dir(&dirs),
             dirs,
+            resolved_patches,
+            source_notices,
         };
         if let Some(listed) = plugins
             .iter_mut()
@@ -232,7 +283,23 @@ fn catalog_plugins_with(
 /// 設定ミスなので、一覧の収集がエラーになるという今までどおりの振る舞いを残す
 /// （`docs/adr/0005-mixed-catalog-on-by-default.md`）。
 fn active_catalog_plugin(cfg: &Config) -> CatalogPlugin {
-    let dirs = configured_patch_dirs(cfg);
+    let mut resolved = cmrt_server_config::resolve_patch_catalog(
+        cfg.plugin_id.as_deref(),
+        &cfg.plugin_path,
+        cfg.patches_dirs.as_deref(),
+    );
+    // The legacy/default profile deliberately surfaces a misspelled ordinary directory as a
+    // collection error. Adapter-resolved catalogs keep their stricter loadable-source result.
+    if resolved.resolved_patches.is_none() {
+        resolved.dirs = configured_patch_dirs(cfg);
+        resolved.configured_missing.clear();
+    }
+    if let Some(source_error) = resolved.source_error.take() {
+        resolved
+            .notices
+            .push(format!("ロード可能な音色 source がない: {source_error}"));
+    }
+    let dirs = resolved.dirs;
     CatalogPlugin {
         name: cfg
             .active_plugin
@@ -242,6 +309,8 @@ fn active_catalog_plugin(cfg: &Config) -> CatalogPlugin {
         plugin_id: cfg.plugin_id.clone(),
         base: shared_patch_root_dir(&dirs),
         dirs,
+        resolved_patches: resolved.resolved_patches,
+        source_notices: resolved.notices,
         patch_roles: PatchRoles::resolve_for_default_plugin(cfg, &cfg.active_patch_roles),
     }
 }
@@ -270,17 +339,21 @@ fn installed_plugin_profiles(cfg: &Config) -> Vec<InstalledProfile> {
     cmrt_server_config::installed_plugin_profiles(&cfg.plugins)
         .into_iter()
         .map(|(name, profile)| {
-            let (dirs, missing_dirs): (Vec<String>, Vec<String>) =
-                cmrt_server_config::configured_patch_dirs(profile.patches_dirs.as_deref())
-                    .into_iter()
-                    .partition(|dir| Path::new(dir).is_dir());
+            let resolved = cmrt_server_config::resolve_patch_catalog(
+                profile.plugin_id.as_deref(),
+                &profile.plugin_path,
+                profile.patches_dirs.as_deref(),
+            );
             InstalledProfile {
                 name,
                 profile: PluginProfile {
-                    patches_dirs: Some(dirs),
+                    patches_dirs: Some(resolved.dirs),
                     ..profile
                 },
-                missing_dirs,
+                missing_dirs: resolved.configured_missing,
+                resolved_patches: resolved.resolved_patches,
+                source_notices: resolved.notices,
+                source_error: resolved.source_error,
             }
         })
         .collect()
@@ -297,6 +370,12 @@ struct InstalledProfile {
     profile: PluginProfile,
     /// 書かれていたが実在しなかった dir。
     missing_dirs: Vec<String>,
+    /// Adapter が解決済みの file paths。通常 scanner を使う plugin は `None`。
+    resolved_patches: Option<Vec<PathBuf>>,
+    /// Partial source failures and exclusions.
+    source_notices: Vec<String>,
+    /// No loadable source could be resolved.
+    source_error: Option<String>,
 }
 
 /// 同じプラグインを 2 度カタログへ載せないための同定。

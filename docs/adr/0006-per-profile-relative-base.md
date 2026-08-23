@@ -13,6 +13,8 @@ Surge XT: base = C:\ProgramData\Surge XT
           → display = patches_factory/...  /  patches_3rdparty/...
 Dexed   : base = %APPDATA%\DigitalSuburban\Dexed\Cartridges
           → display = Dexed_01.syx/00 Say Again.
+Sforzando: base = N:\app4HDD（設定した 2 ルートの共通親）
+          → display = Plogue/Free Sounds/Programs/.../*.sfz / sfz/.../*.sfz
 ```
 
 ## 理由: 素朴に union すると壊れる
@@ -42,6 +44,7 @@ display が `ProgramData/Surge XT/patches_factory/...` と
 | Surge XT | `patches_factory/<category>/<patch>.fxp` | `patches_factory` |
 | Surge XT | `patches_3rdparty/<vendor>/<category>/<patch>.fxp` | `patches_3rdparty` |
 | Dexed | `Dexed_01.syx/00 Say Again.` | cartridge ファイル名 |
+| Sforzando | `sfz/<library>/<patch>.sfz` | 設定ルートを区別する先頭ディレクトリ |
 
 カテゴリ抽出（`patches/src/layout.rs` の `patch_category_sort_parts()`）は最初から両形式を
 1 本で扱っている: prefix を strip して次のセグメントを category にし、

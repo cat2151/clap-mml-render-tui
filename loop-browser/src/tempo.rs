@@ -16,17 +16,23 @@ impl LoopBrowser {
             }
             BpmInputAction::Apply(mode) => self.apply_bpm_mode(mode),
             BpmInputAction::ApplyAuto(range) => {
-                if let Some(range) = range {
+                let range_changed = range.is_some_and(|range| {
+                    let changed = self.bpm_range != range;
                     self.bpm_range = range;
-                }
-                self.apply_bpm_mode(BpmMode::Auto(self.bpm_range.sample()))
+                    changed
+                });
+                self.apply_bpm_change(BpmMode::Auto(self.bpm_range.sample()), range_changed)
             }
         }
     }
 
     fn apply_bpm_mode(&mut self, mode: BpmMode) -> LoopBrowserAction {
+        self.apply_bpm_change(mode, false)
+    }
+
+    fn apply_bpm_change(&mut self, mode: BpmMode, range_changed: bool) -> LoopBrowserAction {
         self.bpm_input = None;
-        if self.bpm_mode == mode {
+        if self.bpm_mode == mode && !range_changed {
             return LoopBrowserAction::Continue;
         }
         self.bpm_mode = mode;

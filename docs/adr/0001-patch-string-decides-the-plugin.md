@@ -1,6 +1,6 @@
 # ADR 0001: patch 文字列がプラグインを決める
 
-- 状態: 採用（2026-08-20 / 2026-08-22 に `.vvp` を第 3 の形として追加）
+- 状態: 採用（2026-08-20 / 2026-08-22 に `.vvp`、2026-08-23 に `.floe-preset` と `.sfz` を追加）
 - 関連: [0003](0003-mml-patch-key.md) / [0006](0006-per-profile-relative-base.md) /
   play-server `docs/adr/0007-patch-string-decides-the-plugin.md`（判別規則の実装本体）
 
@@ -16,10 +16,13 @@ Dexed      : "SynprezFM/SynprezFM_01.syx/01 Say Again."
                                               └ 0-based index を 2 桁 ┘
 Vaporizer2 : "AR Accent Arp.vvp"
              └ 先頭 2 文字がカテゴリコード（AR = Arpeggio）┘
+Floe       : "Celtic Harp Factory Presets/Realistic Celtic Harp.floe-preset"
+Sforzando  : "sfz/Virtual-Playing-Orchestra3/Woodwinds/flute-SOLO-sustain.sfz"
 ```
 
 - config に `[tracks.*]` / `[instances.*]` のような「track → プラグイン」マッピングは**作らない**
-- 判別は**拡張子だけ**。`.syx` → Dexed / `.vvp` → Vaporizer2 / それ以外 → Surge XT
+- 判別は**拡張子だけ**。`.syx` → Dexed / `.vvp` → Vaporizer2 /
+  `.floe-preset` → Floe / `.sfz` → Sforzando / それ以外 → Surge XT
   （実体は play-server の `patch_form_of_path()` 1 本）
 - **「プラグイン名を patch 文字列へ明示的に入れる」仕様変更には、いま踏み込まない**
 
@@ -82,3 +85,5 @@ realtime-ipc が**すべて無改修**になった。当初「別次元の変更
   画面からは「選んだのに鳴らない」に見える）
 - `tui-core/src/patch_plugins/tests.rs::a_vvp_patch_falls_back_to_the_default_plugin_when_vaporizer2_is_absent`
   — Vaporizer2 を積んでいない環境の倒れ方が変わっていないこと
+- `tui-core/src/patch_plugins/tests.rs::five_plugin_catalog_routes_sfz_only_to_sforzando`
+  — `.sfz` が state file の既定プラグインへ落ちないこと

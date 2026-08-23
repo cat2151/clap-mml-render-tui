@@ -6,6 +6,8 @@ pub use clap_mml_play_server_core::pipeline::{
     embedded_patch_ref, ensure_cmrt_dir, ensure_daw_dir, ensure_phrase_dir, mml_str_to_smf_bytes,
     mml_to_smf_bytes, play_samples, write_wav, RenderOptions, RenderPreroll,
 };
+pub use clap_mml_play_server_core::sforzando::is_sfz_patch_path;
+pub use clap_mml_play_server_core::{set_log_sink, LogSink};
 // `.vvp`（Vaporizer2）の判定とヘッダ読み。どちらも実体は play server repo 側が単一ソース
 // （サーバーの `kind_for_patch` も同じ判定を通る）。TUI 側がヘッダ読みまで要るのは、
 // **mono/poly を音色ファイルの先頭から読む**ため。Vaporizer2 は note dialect が MIDI だけで

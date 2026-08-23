@@ -8,6 +8,14 @@ fn floe_builtin_roles_do_not_filter_any_category_or_keyword() {
     );
 }
 
+#[test]
+fn sforzando_builtin_roles_do_not_filter_any_category_or_keyword() {
+    assert_eq!(
+        PatchRoles::builtin_for(Some(crate::SFORZANDO_PLUGIN_ID), "sforzando_x64.clap"),
+        PatchRoles::default()
+    );
+}
+
 fn top_level_roles() -> PatchRoleFilters {
     PatchRoleFilters {
         chord_patch_categories: Some(vec!["Keys".to_string()]),

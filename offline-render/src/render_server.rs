@@ -1,5 +1,5 @@
 use std::{
-    io::Read as _,
+    io::{BufRead as _, BufReader, Read},
     net::{SocketAddr, TcpStream},
     process::{Child, Command, Stdio},
     sync::{
@@ -245,14 +245,19 @@ impl RenderServerSupervisor {
             .env(EXIT_ON_STDIN_CLOSE_ENV, "1")
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        command.spawn().map_err(|error| {
+            .stderr(Stdio::piped());
+        let mut child = command.spawn().map_err(|error| {
             anyhow!(
                 "render-server の起動に失敗しました (command: {}): {}",
                 self.command_description(),
                 error
             )
-        })
+        })?;
+        let pid = child.id();
+        if let Some(stderr) = child.stderr.take() {
+            spawn_render_server_stderr_logger(stderr, pid);
+        }
+        Ok(child)
     }
 
     fn build_command(&self) -> Command {
@@ -285,6 +290,38 @@ impl RenderServerSupervisor {
     fn spawn_count_for_test(&self) -> u64 {
         self.spawn_count.load(Ordering::Relaxed)
     }
+}
+
+fn spawn_render_server_stderr_logger(stderr: impl Read + Send + 'static, pid: u32) {
+    let result = std::thread::Builder::new()
+        .name("offline-render-server-stderr".to_string())
+        .spawn(move || {
+            for line in BufReader::new(stderr).lines() {
+                match line {
+                    Ok(line) => log_offline_render_event(render_server_stderr_log_message(
+                        pid, &line,
+                    )),
+                    Err(error) => {
+                        log_offline_render_event(format!(
+                            "backend=render_server event=server-stderr-read-error pid={pid} error={error:?}"
+                        ));
+                        break;
+                    }
+                }
+            }
+        });
+    if let Err(error) = result {
+        log_offline_render_event(format!(
+            "backend=render_server event=server-stderr-reader-start-error pid={pid} error={error:?}"
+        ));
+    }
+}
+
+fn render_server_stderr_log_message(pid: u32, line: &str) -> String {
+    format!(
+        "backend=render_server event=server-stderr pid={pid} line=\"{}\"",
+        truncate_for_log(line, 1_000)
+    )
 }
 
 impl Drop for RenderServerSupervisor {
@@ -382,5 +419,13 @@ offline_render_server_command = "exit 0"
 
         assert!(generation > 7);
         assert_eq!(supervisor.spawn_count_for_test(), 1);
+    }
+
+    #[test]
+    fn render_server_stderr_is_formatted_for_the_app_log() {
+        assert_eq!(
+            render_server_stderr_log_message(42, "11 helper files excluded"),
+            "backend=render_server event=server-stderr pid=42 line=\"11 helper files excluded\""
+        );
     }
 }

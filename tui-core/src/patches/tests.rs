@@ -205,8 +205,9 @@ fn extending_with_two_plugins_keeps_each_display_relative_to_its_own_base() {
     ];
 
     let mut pairs = Vec::new();
+    let mut seen = std::collections::HashSet::new();
     for plugin in &catalog {
-        extend_with_plugin(&mut pairs, plugin).unwrap();
+        extend_with_plugin(&mut pairs, &mut seen, plugin).unwrap();
     }
     sort_patch_pairs(&mut pairs, PatchSortOrder::Path);
 
@@ -224,6 +225,38 @@ fn extending_with_two_plugins_keeps_each_display_relative_to_its_own_base() {
     std::fs::remove_dir_all(root).ok();
 }
 
+#[test]
+fn adapter_resolved_paths_are_used_without_rescanning_vendor_files() {
+    let root = std::env::temp_dir().join(format!("cmrt_sfz_overlap_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let bank = root.join("Bank");
+    std::fs::create_dir_all(&bank).unwrap();
+    std::fs::write(bank.join("Piano.sfz"), b"<region>").unwrap();
+    std::fs::write(bank.join("Not Sforzando.fxp"), b"state").unwrap();
+    let piano = std::fs::canonicalize(bank.join("Piano.sfz")).unwrap();
+    let plugin = CatalogPlugin {
+        name: "adapter fixture".to_string(),
+        plugin_path: "adapter.clap".to_string(),
+        plugin_id: Some("org.example.adapter".to_string()),
+        base: Some(root.to_string_lossy().into_owned()),
+        dirs: vec![
+            root.to_string_lossy().into_owned(),
+            bank.to_string_lossy().into_owned(),
+        ],
+        resolved_patches: Some(vec![piano]),
+        source_notices: Vec::new(),
+        patch_roles: cmrt_runtime::PatchRoles::default(),
+    };
+    let mut pairs = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    extend_with_plugin(&mut pairs, &mut seen, &plugin).unwrap();
+
+    assert_eq!(pairs.len(), 1);
+    assert_eq!(pairs[0].0, "Bank/Piano.sfz");
+    let _ = std::fs::remove_dir_all(root);
+}
+
 fn catalog_plugin(base: String, dir: String) -> CatalogPlugin {
     CatalogPlugin {
         name: "test".to_string(),
@@ -231,6 +264,8 @@ fn catalog_plugin(base: String, dir: String) -> CatalogPlugin {
         plugin_id: None,
         base: Some(base),
         dirs: vec![dir],
+        resolved_patches: None,
+        source_notices: Vec::new(),
         patch_roles: cmrt_runtime::PatchRoles::default(),
     }
 }

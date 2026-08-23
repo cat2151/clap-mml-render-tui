@@ -150,6 +150,8 @@ fn spawn_patch_loader(cfg: &Config, vvp_voicings: VvpVoicings) -> Arc<Mutex<Patc
 ///
 /// 文言は [`cmrt_runtime::SkippedCatalogPlugin`] が単一ソース。`reason` は grep 用の
 /// 機械可読な短い綴り、`note` はそのまま読める 1 行で、音色選択の注記と同じもの。
+/// alternate screen を壊さないよう、catalog library は標準出力へ書かず、この app sink が
+/// file へ保存する。
 fn log_patch_load(cfg: &Config, count: usize, elapsed: std::time::Duration) {
     let (listed, skipped) = cmrt_runtime::catalog_plugins_detailed(cfg);
     let names: Vec<&str> = listed.iter().map(|plugin| plugin.name.as_str()).collect();
@@ -158,6 +160,14 @@ fn log_patch_load(cfg: &Config, count: usize, elapsed: std::time::Duration) {
         elapsed.as_millis(),
         names.join(",")
     ));
+    for plugin in &listed {
+        for notice in &plugin.source_notices {
+            crate::logging::global_log_sink(&format!(
+                "patch-load: event=source-notice plugin={} note=\"{}\"",
+                plugin.name, notice
+            ));
+        }
+    }
     for plugin in skipped {
         crate::logging::global_log_sink(&format!(
             "patch-load: event=skipped plugin={} reason={} note=\"{}\"",

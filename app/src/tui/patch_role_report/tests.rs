@@ -82,6 +82,8 @@ fn the_breakdown_counts_every_candidate_once_per_plugin() {
         plugin_id: Some(plugin_id.to_string()),
         base: None,
         dirs: Vec::new(),
+        resolved_patches: None,
+        source_notices: Vec::new(),
         patch_roles: PatchRoles::default(),
     };
     let patch_plugins = PatchPlugins::from_catalog(vec![

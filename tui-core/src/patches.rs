@@ -7,6 +7,8 @@
 use anyhow::Result;
 use cmrt_patches::{sort_patch_pairs, PatchSortOrder};
 use cmrt_runtime::{catalog_plugins, configured_patch_dirs, CatalogPlugin, Config};
+use std::collections::HashSet;
+use std::path::Path;
 
 pub fn has_configured_patch_dirs(cfg: &Config) -> bool {
     !configured_patch_dirs(cfg).is_empty()
@@ -20,26 +22,64 @@ pub fn has_configured_patch_dirs(cfg: &Config) -> bool {
 /// 表示パス順のまま混ざる。
 pub fn collect_patch_pairs(cfg: &Config) -> Result<Vec<(String, String)>> {
     let mut pairs = Vec::new();
+    let mut seen = HashSet::new();
     for plugin in catalog_plugins(cfg) {
-        extend_with_plugin(&mut pairs, &plugin)?;
+        extend_with_plugin(&mut pairs, &mut seen, &plugin)?;
     }
     sort_patch_pairs(&mut pairs, PatchSortOrder::Path);
     Ok(pairs)
 }
 
-fn extend_with_plugin(pairs: &mut Vec<(String, String)>, plugin: &CatalogPlugin) -> Result<()> {
-    for dir in &plugin.dirs {
-        let paths = cmrt_core::collect_patches(dir)?;
-        pairs.extend(paths.into_iter().map(|path| {
-            let display = match plugin.base.as_deref() {
-                Some(base) => cmrt_core::to_relative(base, &path),
-                None => path.to_string_lossy().into_owned(),
-            };
-            let lower = display.to_lowercase();
-            (display, lower)
-        }));
+fn extend_with_plugin(
+    pairs: &mut Vec<(String, String)>,
+    seen: &mut HashSet<String>,
+    plugin: &CatalogPlugin,
+) -> Result<()> {
+    if let Some(paths) = &plugin.resolved_patches {
+        extend_with_paths(pairs, seen, plugin, paths.iter().cloned());
+    } else {
+        for dir in &plugin.dirs {
+            let paths = cmrt_core::collect_patches(dir)?;
+            extend_with_paths(pairs, seen, plugin, paths);
+        }
     }
     Ok(())
+}
+
+fn extend_with_paths(
+    pairs: &mut Vec<(String, String)>,
+    seen: &mut HashSet<String>,
+    plugin: &CatalogPlugin,
+    paths: impl IntoIterator<Item = std::path::PathBuf>,
+) {
+    pairs.extend(paths.into_iter().filter_map(|path| {
+        let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+        if !seen.insert(canonical_key(&canonical)) {
+            return None;
+        }
+        let display = match plugin.base.as_deref() {
+            Some(base) => relative_display(base, &path),
+            None => path.to_string_lossy().into_owned(),
+        };
+        let lower = display.to_lowercase();
+        Some((display, lower))
+    }));
+}
+
+fn relative_display(base: &str, path: &Path) -> String {
+    match (std::fs::canonicalize(base), std::fs::canonicalize(path)) {
+        (Ok(base), Ok(path)) => cmrt_core::to_relative(&base.to_string_lossy(), &path),
+        _ => cmrt_core::to_relative(base, path),
+    }
+}
+
+fn canonical_key(path: &Path) -> String {
+    let key = path.to_string_lossy().into_owned();
+    if cfg!(windows) {
+        key.to_lowercase()
+    } else {
+        key
+    }
 }
 
 /// クエリ文字列（空白区切りでAND条件）で patch の表示パス全文をフィルタする。

@@ -249,6 +249,7 @@ fn cli_playback_mml(input: &str) -> CliPlaybackMml {
 }
 
 fn main() -> Result<()> {
+    clap_mml_render_tui::logging::install_embedded_core_log_sink();
     // loop browser のデータ層（別 crate）に app ディレクトリ解決を注入する。
     clap_mml_render_tui::loop_browser::set_app_dir_resolver(config::config_app_dir);
     // loop browser 画面 crate にグローバルログ sink を注入する。

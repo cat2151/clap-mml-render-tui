@@ -4,7 +4,8 @@ use serde::Serialize;
 // ここ（config.toml のひな形生成）は TUI 固有なので、値だけを借りて組み立てる。
 pub use cmrt_server_config::{
     default_dexed_cartridge_dirs, default_dexed_plugin_path, default_floe_plugin_path,
-    default_patches_dirs, default_plugin_path, default_vaporizer2_plugin_path,
+    default_patches_dirs, default_plugin_path, default_sforzando_plugin_path,
+    default_vaporizer2_plugin_path,
 };
 
 use cmrt_patches::surge_xt::{
@@ -73,10 +74,11 @@ pub fn default_config_content_with_app_settings(app_settings: &str) -> String {
         format!("{}\n", app_settings.trim_end())
     };
     let patch_roles_block = format!(
-        "{}{}{}{}",
+        "{}{}{}{}{}",
         surge_xt_patch_roles_block(),
         vaporizer2_patch_roles_block(),
         floe_profile_block(),
+        sforzando_profile_block(),
         other_plugin_profile_block()
     );
     format!(
@@ -319,6 +321,20 @@ fn floe_profile_block() -> String {
 # [plugins.Floe]
 # patches_dirs = ['D:\my\Floe\presets']
 # plugin_path  = 'D:\my\clap\Floe.clap'
+"#
+    .to_string()
+}
+
+/// sforzando の config fallback を指定するためのコメント済みプロファイル。
+fn sforzando_profile_block() -> String {
+    r#"
+# 【省略可】sforzando の SFZ 音色置き場。CLAP preset-discovery の場所と和集合になります。
+# discovery が場所を返さない版でも使えるよう、実際の `.sfz` root を指定してください。
+# 用途別カテゴリ・mono/poly は初期対応では絞り込みません。
+#
+# [plugins.Sforzando]
+# patches_dirs = ['D:\my\sfz']
+# plugin_path  = 'D:\my\clap\sforzando_x64.clap'
 "#
     .to_string()
 }

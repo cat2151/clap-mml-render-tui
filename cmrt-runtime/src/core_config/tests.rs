@@ -20,6 +20,9 @@ fn installed(profiles: Vec<(String, PluginProfile)>) -> Vec<InstalledProfile> {
             name,
             profile,
             missing_dirs: Vec::new(),
+            resolved_patches: None,
+            source_notices: Vec::new(),
+            source_error: None,
         })
         .collect()
 }
@@ -324,6 +327,9 @@ fn a_plugin_whose_patch_dirs_all_vanished_is_reported_as_missing() {
             name: "Vaporizer2".to_string(),
             profile: vaporizer2,
             missing_dirs: vec!["/typo/Vaporizer2/Presets".to_string()],
+            resolved_patches: None,
+            source_notices: Vec::new(),
+            source_error: None,
         }],
     );
 
@@ -338,6 +344,78 @@ fn a_plugin_whose_patch_dirs_all_vanished_is_reported_as_missing() {
             .contains("/typo/Vaporizer2/Presets"),
         "{}",
         skipped[0].notice_line()
+    );
+}
+
+#[test]
+fn adapter_reports_config_and_program_source_failures_together() {
+    let cfg = config_with_patch_dirs(r#"patches_dirs = ["/opt/surge/patches_factory"]"#);
+    let sforzando = PluginProfile {
+        plugin_id: Some(crate::SFORZANDO_PLUGIN_ID.to_string()),
+        ..profile("/usr/lib/clap/sforzando.clap", &[])
+    };
+
+    let (_, skipped) = catalog_plugins_with(
+        &cfg,
+        vec![InstalledProfile {
+            name: "Sforzando".to_string(),
+            profile: sforzando,
+            missing_dirs: vec!["/typo/sfz".to_string()],
+            resolved_patches: Some(Vec::new()),
+            source_notices: Vec::new(),
+            source_error: Some("no registered programs".to_string()),
+        }],
+    );
+
+    assert_eq!(skipped[0].reason_code(), "patch-source-unavailable");
+    let notice = skipped[0].notice_line();
+    assert!(notice.contains("/typo/sfz"), "{notice}");
+    assert!(notice.contains("no registered programs"), "{notice}");
+}
+
+#[test]
+fn adapter_source_failure_skips_a_plugin_even_when_its_directory_exists() {
+    let cfg = config_with_patch_dirs(r#"patches_dirs = ["/opt/surge/patches_factory"]"#);
+    let adapter = profile("/usr/lib/clap/adapter.clap", &["/existing/programs"]);
+
+    let (plugins, skipped) = catalog_plugins_with(
+        &cfg,
+        vec![InstalledProfile {
+            name: "adapter".to_string(),
+            profile: adapter,
+            missing_dirs: Vec::new(),
+            resolved_patches: Some(Vec::new()),
+            source_notices: Vec::new(),
+            source_error: Some("no loadable programs".to_string()),
+        }],
+    );
+
+    assert_eq!(plugins.len(), 1);
+    assert_eq!(skipped.len(), 1);
+    assert_eq!(skipped[0].reason_code(), "patch-source-unavailable");
+}
+
+#[test]
+fn adapter_source_notice_is_retained_as_catalog_data() {
+    let cfg = config_with_patch_dirs(r#"patches_dirs = ["/opt/surge/patches_factory"]"#);
+    let adapter = profile("/usr/lib/clap/adapter.clap", &["/existing/programs"]);
+
+    let (plugins, skipped) = catalog_plugins_with(
+        &cfg,
+        vec![InstalledProfile {
+            name: "adapter".to_string(),
+            profile: adapter,
+            missing_dirs: Vec::new(),
+            resolved_patches: Some(vec!["/existing/programs/voice.patch".into()]),
+            source_notices: vec!["11 helper files excluded".to_string()],
+            source_error: None,
+        }],
+    );
+
+    assert!(skipped.is_empty());
+    assert_eq!(
+        plugins[1].source_notices,
+        ["11 helper files excluded".to_string()]
     );
 }
 
