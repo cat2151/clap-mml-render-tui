@@ -242,7 +242,7 @@ impl<'a> NotepadScreen<'a> {
         let ready_pairs = {
             let state = self.patch_load_state.lock().unwrap();
             match &*state {
-                crate::PatchLoadState::Ready(pairs) => Some(pairs.clone()),
+                crate::PatchLoadState::Ready(snapshot) => Some(snapshot.pairs().to_vec()),
                 crate::PatchLoadState::Loading | crate::PatchLoadState::Err(_) => None,
             }
         };

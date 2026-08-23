@@ -79,7 +79,7 @@ pub fn run_server(cfg: &Config, plugins: &InProcessPlugins, port: u16) -> Result
 
         let rendered = plugins
             .for_mml(&mml)
-            .and_then(|(entry, core_cfg)| mml_render(&mml, core_cfg, entry));
+            .and_then(|(entry, core_cfg)| mml_render(&mml, &core_cfg, &entry));
         match rendered {
             Ok((samples, patch_display)) => {
                 println!("レンダリング完了: patch={}", patch_display);

@@ -39,18 +39,27 @@ impl TuiApp<'_> {
     fn mml_overlay_context(&self) -> MmlOverlayContext {
         let patch_catalog = self.mml_overlay_patch_catalog_snapshot();
         let (history, favorites) = self.notepad.phrase_history();
+        let catalog_notes = match &*self.patch_load_state.lock().unwrap() {
+            PatchLoadState::Ready(snapshot) if !snapshot.catalog_notes().is_empty() => {
+                snapshot.catalog_notes().to_vec()
+            }
+            PatchLoadState::Ready(_) => self.catalog_notes.clone(),
+            PatchLoadState::Loading | PatchLoadState::Err(_) => Vec::new(),
+        };
         MmlOverlayContext {
             patch_catalog,
             history: history.to_vec(),
             favorites: favorites.to_vec(),
-            catalog_notes: self.catalog_notes.clone(),
+            catalog_notes,
         }
     }
 
     fn mml_overlay_patch_catalog_snapshot(&self) -> PatchCatalogSnapshot {
         match &*self.patch_load_state.lock().unwrap() {
             PatchLoadState::Loading => PatchCatalogSnapshot::Loading,
-            PatchLoadState::Ready(pairs) => PatchCatalogSnapshot::Ready(pairs.clone()),
+            PatchLoadState::Ready(snapshot) => {
+                PatchCatalogSnapshot::Ready(snapshot.pairs().to_vec())
+            }
             PatchLoadState::Err(error) => PatchCatalogSnapshot::Error(error.clone()),
         }
     }
@@ -58,7 +67,7 @@ impl TuiApp<'_> {
     #[cfg(test)]
     pub(in crate::tui) fn loaded_patch_pairs(&self) -> Vec<(String, String)> {
         match &*self.patch_load_state.lock().unwrap() {
-            PatchLoadState::Ready(pairs) => pairs.clone(),
+            PatchLoadState::Ready(snapshot) => snapshot.pairs().to_vec(),
             PatchLoadState::Loading | PatchLoadState::Err(_) => Vec::new(),
         }
     }

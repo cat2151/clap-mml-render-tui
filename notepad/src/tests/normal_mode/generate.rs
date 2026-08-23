@@ -6,7 +6,7 @@ fn handle_normal_g_inserts_generated_line_above_current_line_and_plays_it() {
     app.editor.lines = vec!["line 0".to_string(), "line 1".to_string()];
     app.editor.cursor = 1;
     app.editor.list_state.select(Some(1));
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Pads/Pad 1.fxp",
     ]))));
 
@@ -46,7 +46,7 @@ fn handle_normal_g_inserts_generated_line_above_current_line_and_plays_it() {
 #[test]
 fn handle_normal_g_shows_error_when_patches_are_unavailable() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(Vec::new())));
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(Vec::new())));
 
     let result = app.handle_normal(KeyCode::Char('g'));
 

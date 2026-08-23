@@ -13,6 +13,7 @@ pub mod logging;
 pub use cmrt_loop_browser_domain as loop_browser;
 #[cfg(test)]
 pub(crate) use cmrt_loop_domain::{loop_wav_analysis, loop_waveform};
+pub mod patch_catalog_cache;
 pub(crate) mod patches;
 pub(crate) mod realtime_play;
 pub mod render_mml;

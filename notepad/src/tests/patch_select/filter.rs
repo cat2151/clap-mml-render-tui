@@ -197,7 +197,7 @@ fn open_patch_select_overlay_prefills_saved_patch_filter_from_current_line() {
     app.editor.lines = vec![
         r#"{"Surge XT patch":"Pads/Pad 2.fxp","Surge XT patch filter":"pads"} l8cdef"#.to_string(),
     ];
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Pads/Pad 1.fxp",
         "Pads/Pad 2.fxp",
         "Leads/Lead 1.fxp",

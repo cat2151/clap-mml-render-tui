@@ -21,10 +21,18 @@ pub fn has_configured_patch_dirs(cfg: &Config) -> bool {
 /// 連結する**。並べ替えは連結後に 1 回だけ行うので、プラグインが増えても一覧は
 /// 表示パス順のまま混ざる。
 pub fn collect_patch_pairs(cfg: &Config) -> Result<Vec<(String, String)>> {
+    collect_patch_pairs_from_catalog(&catalog_plugins(cfg))
+}
+
+/// 解決済みcatalogを再利用してpatch一覧を収集する。
+/// catalog resolverを一度だけ実行したいcache構築経路向け。
+pub fn collect_patch_pairs_from_catalog(
+    plugins: &[CatalogPlugin],
+) -> Result<Vec<(String, String)>> {
     let mut pairs = Vec::new();
     let mut seen = HashSet::new();
-    for plugin in catalog_plugins(cfg) {
-        extend_with_plugin(&mut pairs, &mut seen, &plugin)?;
+    for plugin in plugins {
+        extend_with_plugin(&mut pairs, &mut seen, plugin)?;
     }
     sort_patch_pairs(&mut pairs, PatchSortOrder::Path);
     Ok(pairs)

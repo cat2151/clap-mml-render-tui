@@ -163,12 +163,16 @@ impl<'a> NotepadScreen<'a> {
             match &*state {
                 PatchLoadState::Loading => return Err("パッチを読み込み中です...".to_string()),
                 PatchLoadState::Err(e) => return Err(format!("パッチの読み込みに失敗: {}", e)),
-                PatchLoadState::Ready(pairs) if pairs.is_empty() => {
+                PatchLoadState::Ready(snapshot) if snapshot.pairs().is_empty() => {
                     return Err("patches_dirs にパッチが見つかりません".to_string());
                 }
-                PatchLoadState::Ready(pairs) => match selection_query {
-                    Some(query) => filter_patches_by_display_path(pairs, query),
-                    None => pairs.iter().map(|(display, _)| display.clone()).collect(),
+                PatchLoadState::Ready(snapshot) => match selection_query {
+                    Some(query) => filter_patches_by_display_path(snapshot.pairs(), query),
+                    None => snapshot
+                        .pairs()
+                        .iter()
+                        .map(|(display, _)| display.clone())
+                        .collect(),
                 },
             }
         };
@@ -263,7 +267,7 @@ impl<'a> NotepadScreen<'a> {
             match &*state {
                 PatchLoadState::Loading => Err("パッチを読み込み中です...".to_string()),
                 PatchLoadState::Err(e) => Err(format!("パッチの読み込みに失敗: {}", e)),
-                PatchLoadState::Ready(p) if p.is_empty() => {
+                PatchLoadState::Ready(snapshot) if snapshot.pairs().is_empty() => {
                     Err("patches_dirs にパッチが見つかりません".to_string())
                 }
                 PatchLoadState::Ready(_) => Ok(()),

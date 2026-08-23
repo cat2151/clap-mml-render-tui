@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn start_patch_select_builds_favorite_items_in_registered_order() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Pad B", "Pad A",
     ]))));
     app.patch_phrase_store.favorite_patches = vec![
@@ -48,7 +48,7 @@ fn start_patch_select_builds_favorite_items_in_registered_order() {
 #[test]
 fn start_patch_select_migrates_prefixed_favorites_from_legacy_patch_name() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "patches_factory/Pads/Pad 1.fxp",
     ]))));
     app.patch_phrase_store.patches.insert(
@@ -79,7 +79,7 @@ fn start_patch_select_migrates_prefixed_favorites_from_legacy_patch_name() {
 fn open_patch_select_overlay_selects_requested_initial_patch() {
     let mut app = NotepadScreen::new_for_test(test_config());
     app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Pads/Pad 1.fxp",
         "Leads/Lead 1.fxp",
         "Bass/Bass 1.fxp",

@@ -50,6 +50,14 @@ fn build_voicing_cache_subcommand_is_recognized() {
     );
 }
 
+#[test]
+fn build_patch_catalog_cache_subcommand_is_recognized() {
+    assert_eq!(
+        parse_cli_from(["cmrt", "build-patch-catalog-cache"]).unwrap(),
+        CliAction::BuildPatchCatalogCache
+    );
+}
+
 /// 診断の `--config` は省略でき、渡せばそのパスがそのまま届く。
 /// 実ユーザーの config.toml を書き換えて戻す運用（戻し忘れが即事故）を無くすための入口。
 #[test]

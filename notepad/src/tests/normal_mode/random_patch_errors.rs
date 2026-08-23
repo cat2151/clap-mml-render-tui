@@ -43,7 +43,7 @@ fn handle_normal_r_shows_error_when_patch_loading_failed() {
 #[test]
 fn handle_normal_r_shows_error_when_patch_list_is_empty() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(Vec::new())));
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(Vec::new())));
 
     app.handle_normal(KeyCode::Char('r'));
 

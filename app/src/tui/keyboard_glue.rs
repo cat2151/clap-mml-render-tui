@@ -26,15 +26,23 @@ fn keyboard_context<'ctx>(
     patch_dirs_configured: bool,
     patch_load: &'ctx PatchLoadState,
     voicing: &'ctx VoicingState,
-    catalog_notes: &'ctx [String],
+    fallback_catalog_notes: &'ctx [String],
 ) -> KeyboardContext<'ctx> {
+    let (patch_load, catalog_notes) = match patch_load {
+        PatchLoadState::Loading => (KeyboardPatchLoad::Loading, &[][..]),
+        PatchLoadState::Ready(snapshot) => {
+            let notes = if snapshot.catalog_notes().is_empty() {
+                fallback_catalog_notes
+            } else {
+                snapshot.catalog_notes()
+            };
+            (KeyboardPatchLoad::Ready(snapshot.pairs()), notes)
+        }
+        PatchLoadState::Err(error) => (KeyboardPatchLoad::Err(error), &[][..]),
+    };
     KeyboardContext {
         patch_dirs_configured,
-        patch_load: match patch_load {
-            PatchLoadState::Loading => KeyboardPatchLoad::Loading,
-            PatchLoadState::Ready(pairs) => KeyboardPatchLoad::Ready(pairs),
-            PatchLoadState::Err(error) => KeyboardPatchLoad::Err(error),
-        },
+        patch_load,
         voicing,
         catalog_notes,
     }

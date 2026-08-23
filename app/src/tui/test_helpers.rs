@@ -7,7 +7,9 @@ impl TuiApp<'static> {
         let notepad = NotepadScreen::new_for_test(cfg.clone());
         // テストでは spawn しない。監督を作るだけではプロセスは立ち上がらない。
         let play_server = Arc::new(cmrt_realtime_play::RealtimePlayServerSupervisor::new(&cfg));
-        let patch_plugins = cmrt_tui_core::patch_plugins::PatchPlugins::from_config(&cfg);
+        let patch_plugins = cmrt_tui_core::patch_plugins::PatchPlugins::single_plugin(
+            cmrt_runtime::PatchRoles::resolve_for_default_plugin(&cfg, &cfg.active_patch_roles),
+        );
         let voicing_policies = voicing::VoicingPolicies::from_config(&cfg);
         Self {
             active_screen: crate::screen_switch::PrimaryScreen::Notepad,

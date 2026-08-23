@@ -1,14 +1,12 @@
 use super::*;
 
-/// entry を渡さない経路（render server backend / テスト）は、
-/// 「in-process では鳴らせない」を `0` で表し続ける。ここが `true` を返すと
-/// 呼び出し側が in-process 経路へ入り、null ポインタを踏む。
+/// entryを渡さない経路（render server backend / テスト）は利用不可のまま。
 #[test]
 fn none_is_not_available() {
     let entries = PluginEntries::none();
 
     assert!(!entries.is_available());
-    assert_eq!(entries.ptr(0), 0);
+    assert!(entries.entry(0).is_err());
 }
 
 /// カタログに載っていない添字を引いても落ちず、「その位置は鳴らせない」を返す。
@@ -18,5 +16,23 @@ fn none_is_not_available() {
 fn out_of_range_index_reports_no_entry() {
     let entries = PluginEntries::none();
 
-    assert_eq!(entries.ptr(7), 0);
+    assert!(entries.entry(7).is_err());
+}
+
+#[test]
+fn pending_entries_report_loading_then_the_published_error() {
+    let entries = PluginEntries::pending();
+    assert!(entries
+        .loaded()
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("準備中"));
+
+    entries.publish_error("cache unavailable");
+
+    assert_eq!(
+        entries.loaded().err().unwrap().to_string(),
+        "cache unavailable"
+    );
 }

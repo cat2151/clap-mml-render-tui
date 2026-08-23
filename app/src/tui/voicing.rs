@@ -1,4 +1,6 @@
+use cmrt_tui_core::patch_load::PatchLoadState;
 use cmrt_tui_core::patch_plugins::{CatalogPlugin, PatchPlugins};
+use std::sync::{Arc, Mutex};
 
 use crate::config::Config;
 use crate::history::VoicingCache;
@@ -69,12 +71,32 @@ impl VoicingPolicy {
 /// [`VoicingPolicy::AssumePoly`] を**同時に**使う必要がある。
 pub(in crate::tui) struct VoicingPolicies {
     plugins: PatchPlugins,
+    patch_load_state: Option<Arc<Mutex<PatchLoadState>>>,
 }
 
 impl VoicingPolicies {
     pub(in crate::tui) fn from_config(cfg: &Config) -> Self {
         Self {
-            plugins: PatchPlugins::from_config(cfg),
+            plugins: fallback_plugins(cfg),
+            patch_load_state: None,
+        }
+    }
+
+    pub(in crate::tui) fn with_patch_load_state(
+        cfg: &Config,
+        patch_load_state: Arc<Mutex<PatchLoadState>>,
+    ) -> Self {
+        Self {
+            plugins: fallback_plugins(cfg),
+            patch_load_state: Some(patch_load_state),
+        }
+    }
+
+    #[cfg(test)]
+    fn from_catalog(plugins: Vec<CatalogPlugin>) -> Self {
+        Self {
+            plugins: PatchPlugins::from_catalog(plugins),
+            patch_load_state: None,
         }
     }
 
@@ -82,9 +104,14 @@ impl VoicingPolicies {
     ///
     /// [`VoicingPolicy::VvpHeader`] は display 文字列を実ファイルへ戻すのに基点が要るので、
     /// 方針だけでは足りない。
-    fn for_patch(&self, patch: &str) -> (VoicingPolicy, &CatalogPlugin) {
-        let plugin = self.plugins.for_patch(patch);
-        (VoicingPolicy::for_plugin(plugin), plugin)
+    fn plugin_for_patch(&self, patch: &str) -> CatalogPlugin {
+        if let Some(state) = &self.patch_load_state {
+            let state = state.lock().unwrap();
+            if let PatchLoadState::Ready(snapshot) = &*state {
+                return snapshot.patch_plugins().for_patch(patch).clone();
+            }
+        }
+        self.plugins.for_patch(patch).clone()
     }
 }
 
@@ -98,9 +125,8 @@ pub(in crate::tui) struct VoicingState {
     pub(in crate::tui) layers: VoicingLayers,
     pub(in crate::tui) source_refresh: VoicingSourceRefresh,
     policies: VoicingPolicies,
-    /// `.vvp` の mono/poly。ファイルから読んだ結果を memo するだけで、
-    /// ユーザー判定（`cache`）とは混ぜない（**永続化しない**。答えは音色ファイル側にあり、
-    /// 音色を差し替えたら読み直すのが正しい）。
+    /// `.vvp` のmono/poly。TUIではpatch catalog cacheから復元する。
+    /// 音色を差し替えた場合は明示的cache再構築で更新する。
     vvp: VvpVoicings,
 }
 
@@ -120,8 +146,7 @@ impl VoicingState {
         )
     }
 
-    /// memo を外から渡す形。一覧の読み込みはバックグラウンドスレッドなので、
-    /// そちらで先読みした memo をそのまま持たせるために要る。
+    /// memoを外から渡す形。file cache workerが復元したmemoを共有するために要る。
     pub(in crate::tui) fn with_vvp_voicings(
         cache: VoicingCache,
         layers: VoicingLayers,
@@ -141,11 +166,12 @@ impl VoicingState {
     /// patch の mono/poly を決める。画面側（keyboard / grid sequencer）の
     /// `*VoicingLookup` はどちらもこれ 1 本を呼ぶ。
     pub(in crate::tui) fn resolve(&self, patch: &str) -> Option<PatchVoicing> {
-        let (policy, plugin) = self.policies.for_patch(patch);
+        let plugin = self.policies.plugin_for_patch(patch);
+        let policy = VoicingPolicy::for_plugin(&plugin);
         match policy {
             VoicingPolicy::Sources => self.layers.resolve(&self.cache, patch),
             VoicingPolicy::AssumePoly => Some(PatchVoicing::Poly),
-            VoicingPolicy::VvpHeader => self.vvp.voicing(plugin, patch),
+            VoicingPolicy::VvpHeader => self.vvp.voicing(&plugin, patch),
         }
     }
 
@@ -153,6 +179,23 @@ impl VoicingState {
     pub(in crate::tui) fn prefetch_vvp_voicings(&self, pairs: &[(String, String)]) -> usize {
         self.vvp.prefetch(&self.policies.plugins, pairs)
     }
+}
+
+fn fallback_plugins(cfg: &Config) -> PatchPlugins {
+    let dirs = cmrt_runtime::configured_patch_dirs(cfg);
+    PatchPlugins::from_catalog(vec![CatalogPlugin {
+        name: cfg.active_plugin.clone().unwrap_or_default(),
+        plugin_path: cfg.plugin_path.clone(),
+        plugin_id: cfg.plugin_id.clone(),
+        base: cmrt_runtime::shared_patch_root_dir(&dirs),
+        dirs,
+        resolved_patches: None,
+        source_notices: Vec::new(),
+        patch_roles: cmrt_runtime::PatchRoles::resolve_for_default_plugin(
+            cfg,
+            &cfg.active_patch_roles,
+        ),
+    }])
 }
 
 #[cfg(test)]

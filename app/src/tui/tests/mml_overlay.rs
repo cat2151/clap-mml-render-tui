@@ -104,7 +104,7 @@ fn patch_select_requested_during_initial_load_opens_when_the_catalog_is_ready() 
     assert!(app.mml_overlay.is_waiting_for_patch_catalog());
 
     *app.patch_load_state.lock().unwrap() =
-        PatchLoadState::Ready(make_patches(&["Leads/Lead 1.fxp"]));
+        PatchLoadState::ready(make_patches(&["Leads/Lead 1.fxp"]));
     app.pump_mml_overlay();
 
     assert!(app.mml_overlay.is_patch_select_open());

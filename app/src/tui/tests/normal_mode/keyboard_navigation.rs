@@ -19,7 +19,7 @@ fn numbered_patches(categories: &[(&str, usize)]) -> Vec<(String, String)> {
 
 fn keyboard_app(categories: &[(&str, usize)], patch: &str) -> TuiApp<'static> {
     let mut app = TuiApp::new_for_test(test_config());
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(numbered_patches(
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(numbered_patches(
         categories,
     ))));
     app.start_keyboard(Some(patch.to_string()));

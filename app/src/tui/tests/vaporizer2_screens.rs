@@ -30,7 +30,7 @@ fn mixed_patches() -> Vec<(String, String)> {
 /// なくなってしまう。
 fn app_with_mixed_patches() -> TuiApp<'static> {
     let app = TuiApp::new_for_test(test_config());
-    *app.patch_load_state.lock().unwrap() = PatchLoadState::Ready(mixed_patches());
+    *app.patch_load_state.lock().unwrap() = PatchLoadState::ready(mixed_patches());
     app
 }
 
@@ -90,7 +90,7 @@ fn every_screen_reads_the_one_shared_patch_list() {
     ));
     // 共有できていれば、notepad 側から見ても同じ 5 件が入っている。
     let from_notepad = match &*app.notepad.patch_load_state.lock().unwrap() {
-        PatchLoadState::Ready(pairs) => pairs.clone(),
+        PatchLoadState::Ready(snapshot) => snapshot.pairs().to_vec(),
         _ => panic!("notepad 側の一覧が共有されていない"),
     };
     assert_eq!(from_notepad, mixed_patches());

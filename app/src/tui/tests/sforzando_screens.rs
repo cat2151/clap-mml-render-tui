@@ -9,7 +9,7 @@ const SFZ_PATCH: &str = "Virtual-Playing-Orchestra3/Woodwinds/flute-SOLO-sustain
 
 fn app_with_sfz_patch() -> TuiApp<'static> {
     let app = TuiApp::new_for_test(test_config());
-    *app.patch_load_state.lock().unwrap() = PatchLoadState::Ready(make_patches(&[
+    *app.patch_load_state.lock().unwrap() = PatchLoadState::ready(make_patches(&[
         "patches_factory/Pads/Pad 1.fxp",
         "Dexed_01.syx/00 Say Again.",
         SFZ_PATCH,

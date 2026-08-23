@@ -58,7 +58,9 @@ fn plugins_from(catalog: Vec<CatalogPlugin>) -> InProcessPlugins {
 fn cartridge_patch_selects_the_cartridge_plugin() {
     let plugins = plugins_from(vec![surge_catalog_entry(), dexed_catalog_entry()]);
 
-    let index = plugins.index_for_mml(&mml_with_patch("Dexed_01.syx/00 Say Again."));
+    let index = plugins
+        .index_for_mml(&mml_with_patch("Dexed_01.syx/00 Say Again."))
+        .unwrap();
 
     assert_eq!(index, 1);
 }
@@ -68,7 +70,9 @@ fn cartridge_patch_selects_the_cartridge_plugin() {
 fn state_file_patch_selects_the_state_file_plugin() {
     let plugins = plugins_from(vec![dexed_catalog_entry(), surge_catalog_entry()]);
 
-    let index = plugins.index_for_mml(&mml_with_patch("patches_factory/Basses/Init Saw.fxp"));
+    let index = plugins
+        .index_for_mml(&mml_with_patch("patches_factory/Basses/Init Saw.fxp"))
+        .unwrap();
 
     assert_eq!(index, 1);
 }
@@ -80,8 +84,8 @@ fn state_file_patch_selects_the_state_file_plugin() {
 fn mml_without_a_patch_selects_the_default_plugin() {
     let plugins = plugins_from(vec![dexed_catalog_entry(), surge_catalog_entry()]);
 
-    assert_eq!(plugins.index_for_mml("cde"), 0);
-    assert_eq!(plugins.index_for_mml("{\"bpm\":120}cde"), 0);
+    assert_eq!(plugins.index_for_mml("cde").unwrap(), 0);
+    assert_eq!(plugins.index_for_mml("{\"bpm\":120}cde").unwrap(), 0);
 }
 
 /// 相対化の基点と `plugin_id` はプラグインごとに違う。別プラグインの base で
@@ -91,19 +95,19 @@ fn each_plugin_renders_with_its_own_base_and_plugin_id() {
     let plugins = plugins_from(vec![surge_catalog_entry(), dexed_catalog_entry()]);
 
     assert_eq!(
-        plugins.core_cfg(0).patches_dir.as_deref(),
+        plugins.core_cfg(0).unwrap().patches_dir.as_deref(),
         Some("/data/Surge XT")
     );
     assert_eq!(
-        plugins.core_cfg(0).plugin_id.as_deref(),
+        plugins.core_cfg(0).unwrap().plugin_id.as_deref(),
         Some(SURGE_XT_PLUGIN_ID)
     );
     assert_eq!(
-        plugins.core_cfg(1).patches_dir.as_deref(),
+        plugins.core_cfg(1).unwrap().patches_dir.as_deref(),
         Some("/data/Dexed/Cartridges")
     );
     assert_eq!(
-        plugins.core_cfg(1).plugin_id.as_deref(),
+        plugins.core_cfg(1).unwrap().plugin_id.as_deref(),
         Some(DEXED_PLUGIN_ID)
     );
 }
@@ -114,8 +118,8 @@ fn out_of_range_plugin_index_falls_back_to_the_default_plugin() {
     let plugins = plugins_from(vec![surge_catalog_entry(), dexed_catalog_entry()]);
 
     assert_eq!(
-        plugins.core_cfg(9).patches_dir,
-        plugins.core_cfg(0).patches_dir
+        plugins.core_cfg(9).unwrap().patches_dir,
+        plugins.core_cfg(0).unwrap().patches_dir
     );
 }
 
@@ -140,17 +144,19 @@ fn floe_preset_selects_the_floe_entry_and_base() {
         floe_catalog_entry(),
     ]);
 
-    let index = plugins.index_for_mml(&mml_with_patch(
-        "Celtic Harp Factory Presets/Realistic Celtic Harp.floe-preset",
-    ));
+    let index = plugins
+        .index_for_mml(&mml_with_patch(
+            "Celtic Harp Factory Presets/Realistic Celtic Harp.floe-preset",
+        ))
+        .unwrap();
 
     assert_eq!(index, 2);
     assert_eq!(
-        plugins.core_cfg(index).plugin_id.as_deref(),
+        plugins.core_cfg(index).unwrap().plugin_id.as_deref(),
         Some(FLOE_PLUGIN_ID)
     );
     assert_eq!(
-        plugins.core_cfg(index).patches_dir.as_deref(),
+        plugins.core_cfg(index).unwrap().patches_dir.as_deref(),
         Some("/data/Floe/presets")
     );
 }

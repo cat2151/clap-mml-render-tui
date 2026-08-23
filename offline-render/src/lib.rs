@@ -53,16 +53,16 @@ pub enum PreparedOfflineRender {
 }
 
 enum OfflineRendererBackend {
-    InProcess(InProcessPlugins),
+    InProcess(Box<InProcessPlugins>),
     RenderServer { supervisor: RenderServerSupervisor },
 }
 
 impl OfflineRenderer {
     pub fn new(cfg: Arc<Config>, entries: PluginEntries) -> Self {
         let backend = match cfg.offline_render_backend {
-            OfflineRenderBackend::InProcess => {
-                OfflineRendererBackend::InProcess(InProcessPlugins::new(cfg.as_ref(), &entries))
-            }
+            OfflineRenderBackend::InProcess => OfflineRendererBackend::InProcess(Box::new(
+                InProcessPlugins::new(cfg.as_ref(), &entries),
+            )),
             OfflineRenderBackend::RenderServer => OfflineRendererBackend::RenderServer {
                 supervisor: RenderServerSupervisor::new(&cfg),
             },
@@ -81,7 +81,7 @@ impl OfflineRenderer {
             OfflineRendererBackend::InProcess(plugins) => {
                 let (entry, core_cfg) = plugins.for_mml(mml)?;
                 let (samples, patch_name) =
-                    mml_render_with_probe(mml, core_cfg, entry, probe_context)?;
+                    mml_render_with_probe(mml, &core_cfg, &entry, probe_context)?;
                 Ok(OfflineRenderOutput {
                     samples,
                     patch_name,
@@ -94,8 +94,9 @@ impl OfflineRenderer {
     pub fn prepare_cache_render(&self, mml: &str) -> Result<PreparedOfflineRender> {
         match self.backend.as_ref() {
             OfflineRendererBackend::InProcess(plugins) => {
-                let plugin = plugins.index_for_mml(mml);
-                prepare_cache_render_inputs(mml, plugins.core_cfg(plugin))
+                let plugin = plugins.index_for_mml(mml)?;
+                let core_cfg = plugins.core_cfg(plugin)?;
+                prepare_cache_render_inputs(mml, &core_cfg)
                     .map(|prepared| PreparedOfflineRender::InProcess { prepared, plugin })
             }
             OfflineRendererBackend::RenderServer { .. } => {
@@ -113,7 +114,10 @@ impl OfflineRenderer {
             (
                 OfflineRendererBackend::InProcess(plugins),
                 PreparedOfflineRender::InProcess { prepared, plugin },
-            ) => render_prepared_cache_with_probe(prepared, plugins.entry(plugin)?, probe_context),
+            ) => {
+                let entry = plugins.entry(plugin)?;
+                render_prepared_cache_with_probe(prepared, &entry, probe_context)
+            }
             (
                 OfflineRendererBackend::RenderServer { supervisor },
                 PreparedOfflineRender::RenderServer(mml),

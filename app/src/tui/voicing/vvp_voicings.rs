@@ -14,9 +14,8 @@
 //! 全読み = 681MB は絶対にしない）。ここはその結果を display 文字列で引ける形に memo する。
 //!
 //! memo が要るのは、用途別の候補を数える `candidates_for_role` が**一覧全体を舐める**ため。
-//! memo が無いと絞り込みのたびに `.vvp` の数だけファイル open が走る。逆に memo さえあれば
-//! 1 音色 1 回で済むので、[`VvpVoicings::prefetch`] は「初回のフィルタで待たされる」ぶんを
-//! 起動時のバックグラウンドへ前倒しするだけの最適化であり、正しさには要らない。
+//! TUI は明示的CLIが永続化した判定結果から memo を復元する。音色ファイルを直接読むのは
+//! cache構築と、cacheを使わない診断・テストだけ。
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -32,14 +31,30 @@ use crate::realtime_play::PatchVoicing;
 /// 区別するために `Option` を値へ入れてある。区別しないと、壊れた 1 ファイルを
 /// フィルタのたびに開き直すことになる。
 ///
-/// 一覧の読み込みはバックグラウンドスレッドなので、memo は `Arc` で共有して
-/// [`VvpVoicings::prefetch`] だけそちらへ渡す。
+/// cacheの読み込みはバックグラウンドスレッドなので、memo は `Arc` で共有する。
 #[derive(Clone, Default)]
 pub(in crate::tui) struct VvpVoicings {
     memo: Arc<Mutex<HashMap<String, Option<PatchVoicing>>>>,
 }
 
 impl VvpVoicings {
+    /// file cacheから復元した判定をmemoへ入れる。`Unknown`は判定不能として記憶する。
+    pub(in crate::tui) fn load_persisted(
+        &self,
+        entries: impl IntoIterator<Item = (String, PatchVoicing)>,
+    ) -> usize {
+        let mut memo = self.memo.lock().unwrap();
+        memo.clear();
+        memo.extend(entries.into_iter().map(|(patch, voicing)| {
+            let decided = match voicing {
+                PatchVoicing::Mono | PatchVoicing::Poly => Some(voicing),
+                PatchVoicing::Unknown => None,
+            };
+            (patch, decided)
+        }));
+        memo.len()
+    }
+
     /// この `.vvp` の mono/poly。読めなければ `None`（＝未判定扱い）。
     ///
     /// `plugin` は display 文字列を実ファイルへ戻すための基点として使う。
@@ -56,7 +71,7 @@ impl VvpVoicings {
         decided
     }
 
-    /// 一覧に載っている `.vvp` を先に全部読んでおく。読んだ件数を返す。
+    /// 一覧に載っている `.vvp` を先に全部読んでおく。診断・テスト用。
     ///
     /// **`.vvp` 以外は 1 バイトも読まない。** 引き分けは
     /// [`PatchPlugins::index_for_patch`] ＝ PATCH 欄の wheel と同じ述語を通すので、

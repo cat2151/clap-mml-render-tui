@@ -19,6 +19,7 @@ pub use cmrt_runtime::{CatalogPlugin, PatchRoles};
 
 use cmrt_runtime::{catalog_plugins, patch_form_of, Config, PatchForm};
 
+#[derive(Clone)]
 pub struct PatchPlugins {
     /// カタログに音色を載せるプラグイン。先頭が既定プラグイン。
     plugins: Vec<CatalogPlugin>,

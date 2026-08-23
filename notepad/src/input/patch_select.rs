@@ -16,8 +16,8 @@ impl<'a> NotepadScreen<'a> {
     fn resolve_loaded_patch_name(&self, patch_name: &str) -> Option<String> {
         let state = self.patch_load_state.lock().unwrap();
         match &*state {
-            PatchLoadState::Ready(pairs) => {
-                cmrt_patches::resolve_display_patch_name(pairs, patch_name)
+            PatchLoadState::Ready(snapshot) => {
+                cmrt_patches::resolve_display_patch_name(snapshot.pairs(), patch_name)
             }
             PatchLoadState::Loading | PatchLoadState::Err(_) => None,
         }
@@ -111,8 +111,8 @@ impl<'a> NotepadScreen<'a> {
     fn has_matching_patches_for_query(&self, query: &str) -> bool {
         let state = self.patch_load_state.lock().unwrap();
         match &*state {
-            PatchLoadState::Ready(pairs) => {
-                !filter_patches_by_display_path(pairs, query).is_empty()
+            PatchLoadState::Ready(snapshot) => {
+                !filter_patches_by_display_path(snapshot.pairs(), query).is_empty()
             }
             PatchLoadState::Loading | PatchLoadState::Err(_) => false,
         }

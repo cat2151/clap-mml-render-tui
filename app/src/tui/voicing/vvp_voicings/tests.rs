@@ -134,6 +134,28 @@ fn a_result_is_read_once_even_when_the_file_could_not_be_read() {
     assert_eq!(voicings.memo.lock().unwrap().len(), 2);
 }
 
+#[test]
+fn persisted_voicings_are_used_without_opening_preset_files() {
+    let dir = PresetDir::new("persisted");
+    let plugin = dir.plugin();
+    let voicings = VvpVoicings::default();
+
+    assert_eq!(
+        voicings.load_persisted([
+            ("PD Cached.vvp".to_string(), PatchVoicing::Poly),
+            ("LD Unknown.vvp".to_string(), PatchVoicing::Unknown),
+        ]),
+        2
+    );
+
+    // どちらのfileも存在しない。fileを開かず、永続cacheの答えだけを返す。
+    assert_eq!(
+        voicings.voicing(&plugin, "PD Cached.vvp"),
+        Some(PatchVoicing::Poly)
+    );
+    assert_eq!(voicings.voicing(&plugin, "LD Unknown.vvp"), None);
+}
+
 /// memo は `Arc` 共有。バックグラウンドで先読みした結果を画面側が引けること。
 #[test]
 fn a_clone_shares_the_same_memo() {

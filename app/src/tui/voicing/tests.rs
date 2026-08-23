@@ -8,9 +8,7 @@ fn state(plugins: &[CatalogPlugin]) -> VoicingState {
         VoicingCache::default(),
         VoicingLayers::default(),
         VoicingSourceRefresh::disabled(),
-        VoicingPolicies {
-            plugins: PatchPlugins::from_catalog(plugins.to_vec()),
-        },
+        VoicingPolicies::from_catalog(plugins.to_vec()),
     )
 }
 

@@ -28,7 +28,7 @@ use crate::{is_surge_xt_plugin, is_vaporizer2_plugin, Config, PatchRoleFilters};
 /// プラグイン 1 つぶんの、解決済みの用途別絞り込み。
 ///
 /// カテゴリが空なら「カテゴリでは絞らない」、キーワードが空なら「キーワードでは絞らない」。
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PatchRoles {
     pub chord_patch_categories: Vec<String>,
     pub bass_patch_categories: Vec<String>,

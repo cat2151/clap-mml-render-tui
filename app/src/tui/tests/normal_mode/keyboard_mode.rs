@@ -65,7 +65,7 @@ fn keyboard_shift_h_cycles_buffer_without_releasing_held_notes() {
 #[test]
 fn keyboard_patch_keys_navigate_categories_and_apply_the_selected_patch() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "patches_factory/Lead/Lead 1.fxp",
         "patches_factory/Lead/Lead 2.fxp",
         "patches_factory/Pad/Pad 0.fxp",
@@ -117,7 +117,7 @@ fn keyboard_patch_keys_navigate_categories_and_apply_the_selected_patch() {
 #[test]
 fn keyboard_vim_keys_and_ctrl_page_keys_navigate_patches() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "patches_factory/Lead/Lead 1.fxp",
         "patches_factory/Lead/Lead 2.fxp",
         "patches_factory/Pad/Pad 0.fxp",
@@ -174,7 +174,7 @@ fn keyboard_vim_keys_and_ctrl_page_keys_navigate_patches() {
 #[test]
 fn keyboard_r_selects_each_other_patch_once_and_releases_held_notes() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "patches_factory/Lead/Lead 1.fxp",
         "patches_factory/Lead/Lead 2.fxp",
         "patches_factory/Pad/Pad 1.fxp",
@@ -203,7 +203,7 @@ fn keyboard_r_selects_each_other_patch_once_and_releases_held_notes() {
 #[test]
 fn keyboard_keeps_an_unknown_patch_until_the_first_navigation_key() {
     let mut app = TuiApp::new_for_test(test_config());
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "patches_factory/Lead/Lead 1.fxp",
         "patches_factory/Pad/Pad 1.fxp",
     ]))));

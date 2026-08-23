@@ -78,8 +78,11 @@ impl<'a> NotepadScreen<'a> {
     ) {
         {
             let state = self.patch_load_state.lock().unwrap();
-            if let PatchLoadState::Ready(pairs) = &*state {
-                self.patch_select.patch_all_source_order = pairs.clone();
+            if let PatchLoadState::Ready(snapshot) = &*state {
+                self.patch_select.patch_all_source_order = snapshot.pairs().to_vec();
+                if !snapshot.catalog_notes().is_empty() {
+                    self.catalog_notes = snapshot.catalog_notes().to_vec();
+                }
             }
         }
         self.patch_select.patch_all = self.patch_select.patch_all_source_order.clone();

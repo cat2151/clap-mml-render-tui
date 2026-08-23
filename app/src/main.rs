@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chord2mml_core::convert as chord_to_mml;
 use clack_host::prelude::PluginEntry;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
@@ -9,6 +9,8 @@ use clap_mml_render_tui::{
 use cmrt_core::{load_entry, mml_to_play};
 use std::path::PathBuf;
 
+mod cli_output;
+mod process_restart;
 mod scan_loops;
 mod scan_progress_log;
 
@@ -24,6 +26,7 @@ enum CliAction {
     Check,
     ScanLoops,
     BuildVoicingCache { force: bool },
+    BuildPatchCatalogCache,
     PatchRoles { config: Option<PathBuf> },
     RenderMml(RenderMmlRequest),
 }
@@ -90,6 +93,8 @@ enum Commands {
         #[arg(long)]
         force: bool,
     },
+    /// TUIが読むpatch catalog cacheを現在のconfigから再構築する
+    BuildPatchCatalogCache,
     /// loop_dirs を走査して WAV ループキャッシュを再構築する
     ScanLoops,
     /// MML 1 本をオフラインでレンダリングして出音を数字で出す（画面を起動しない動作確認）
@@ -127,21 +132,11 @@ enum Commands {
 
 fn cli_command() -> clap::Command {
     Cli::command()
-        .version(version_text())
+        .version(cli_output::version_text())
         .after_help(format!(
             "サーバーモードでは HTTP POST でMMLを受け取りWAVデータを返します。\n  例: curl -X POST http://127.0.0.1:{}/ --data 'cde'",
             server::DEFAULT_PORT
         ))
-}
-
-fn version_text() -> String {
-    format!(
-        "{} (git {}, Rubber Band C API {} @ {})",
-        env!("CARGO_PKG_VERSION"),
-        env!("GIT_COMMIT_HASH"),
-        rubberband_ffi::C_API_MAJOR_VERSION,
-        rubberband_ffi::GIT_REVISION
-    )
 }
 
 fn parse_cli_from<I, T>(args: I) -> Result<CliAction>
@@ -219,23 +214,15 @@ where
         return Ok(CliAction::BuildVoicingCache { force });
     }
 
+    if matches!(cli.command, Some(Commands::BuildPatchCatalogCache)) {
+        return Ok(CliAction::BuildPatchCatalogCache);
+    }
+
     if let Some(mml) = cli.mml {
         return Ok(CliAction::CliMml(mml));
     }
 
     Ok(CliAction::Tui)
-}
-
-fn print_help(help: &str) {
-    print!("{}", help);
-    if !help.ends_with('\n') {
-        println!();
-    }
-    println!();
-    match config::config_file_path() {
-        Some(p) => println!("設定ファイル: {}", p.display()),
-        None => println!("設定ファイル: (システムの設定ディレクトリが見つかりません)"),
-    }
 }
 
 fn cli_playback_mml(input: &str) -> CliPlaybackMml {
@@ -273,7 +260,7 @@ fn main() -> Result<()> {
     let action = parse_cli_from(std::env::args_os())?;
 
     if let CliAction::Help(help) = &action {
-        print_help(help);
+        cli_output::print_help(help);
         return Ok(());
     }
 
@@ -328,6 +315,19 @@ fn main() -> Result<()> {
         return scan_loops::run_scan_loops(&cfg);
     }
 
+    if matches!(&action, CliAction::BuildPatchCatalogCache) {
+        let summary = clap_mml_render_tui::patch_catalog_cache::build_and_save(&cfg)?;
+        println!(
+            "patch catalog cacheを構築しました: patches={} plugins={} vvp_voicings={} vvp_unknown={} path={}",
+            summary.patch_count,
+            summary.plugin_names.join(","),
+            summary.vvp_voicing_count,
+            summary.vvp_unknown_count,
+            summary.path.display()
+        );
+        return Ok(());
+    }
+
     // plugin_path が未設定の場合は設定ファイルを編集するよう案内する
     if cfg.plugin_path.is_empty() {
         let path_hint = match config::config_file_path() {
@@ -344,6 +344,7 @@ fn main() -> Result<()> {
         CliAction::Server(_) | CliAction::CliMml(_) => true,
         // 判定は play-server 側プロセスがプラグインをロードして行う。
         CliAction::BuildVoicingCache { .. } => false,
+        CliAction::BuildPatchCatalogCache => false,
         // config と patch 一覧だけを見る診断なので、プラグインはロードしない。
         CliAction::PatchRoles { .. } => false,
         // in-process バックエンドのときだけ、この プロセスが CLAP をホストする。
@@ -363,15 +364,28 @@ fn main() -> Result<()> {
     // `catalog_plugins` と同じで、先頭が既定プラグイン。オフラインレンダリングは
     // MML が指す音色でこの中から引き分ける（`docs/adr/0009-offline-entry-map.md`）。
     // server / CLI 経路が使うのは先頭の 1 本だけ。
-    let entries: Vec<PluginEntry> = if needs_plugin_entry {
+    let catalog = if needs_plugin_entry && !matches!(action, CliAction::Tui) {
         config::catalog_plugins(&cfg)
+    } else {
+        Vec::new()
+    };
+    let entries: Vec<PluginEntry> = if !catalog.is_empty() {
+        catalog
             .iter()
             .map(|plugin| load_entry(&plugin.plugin_path))
             .collect::<Result<Vec<_>>>()?
     } else {
         Vec::new()
     };
-    let plugin_entries = cmrt_offline_render::PluginEntries::from_loaded(&entries);
+    let plugin_entries = if matches!(action, CliAction::Tui)
+        && cfg.offline_render_backend == config::OfflineRenderBackend::InProcess
+    {
+        cmrt_offline_render::PluginEntries::pending()
+    } else if !catalog.is_empty() {
+        cmrt_offline_render::PluginEntries::from_loaded(catalog, &entries)
+    } else {
+        cmrt_offline_render::PluginEntries::none()
+    };
     // MML 1 本ごとに「その音色のプラグイン」を引く表。server / CLI もこれを通す。
     let in_process_plugins = cmrt_offline_render::InProcessPlugins::new(&cfg, &plugin_entries);
 
@@ -390,13 +404,14 @@ fn main() -> Result<()> {
                 }
             }
             let (entry, core_cfg) = in_process_plugins.for_mml(playback_mml.mml())?;
-            let patch = mml_to_play(playback_mml.mml(), core_cfg, entry)?;
+            let patch = mml_to_play(playback_mml.mml(), &core_cfg, &entry)?;
             println!("patch: {}", patch);
             return Ok(());
         }
         CliAction::BuildVoicingCache { force } => {
             return voicing_cache_builder::run_build_voicing_cache(&cfg, force);
         }
+        CliAction::BuildPatchCatalogCache => unreachable!(),
         CliAction::RenderMml(request) => {
             return render_mml::run(&cfg, &plugin_entries, &request);
         }
@@ -421,28 +436,7 @@ fn main() -> Result<()> {
     drop(app);
     match exit_reason {
         tui::TuiExitReason::Quit => Ok(()),
-        tui::TuiExitReason::RestartApp => restart_current_process(),
-    }
-}
-
-fn restart_current_process() -> Result<()> {
-    let exe = std::env::current_exe().context("現在の実行ファイルパスを取得できませんでした")?;
-    let args = std::env::args_os().skip(1).collect::<Vec<_>>();
-    let status = std::process::Command::new(&exe)
-        .args(args)
-        .status()
-        .with_context(|| format!("アプリの再起動に失敗しました: {}", exe.display()))?;
-
-    if status.success() {
-        Ok(())
-    } else {
-        anyhow::bail!(
-            "再起動したアプリが終了コード {} で終了しました",
-            status
-                .code()
-                .map(|code| code.to_string())
-                .unwrap_or_else(|| "不明".to_string())
-        );
+        tui::TuiExitReason::RestartApp => process_restart::restart_current_process(),
     }
 }
 

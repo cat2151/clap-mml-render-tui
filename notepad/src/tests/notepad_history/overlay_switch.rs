@@ -4,7 +4,7 @@ use super::*;
 fn handle_notepad_history_n_p_t_switch_to_corresponding_overlays() {
     let mut app = NotepadScreen::new_for_test(test_config());
     app.editor.lines = vec![r#"{"Surge XT patch":"Line Patch"} line phrase"#.to_string()];
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Line Patch",
         "Pads/Pad 1.fxp",
     ]))));

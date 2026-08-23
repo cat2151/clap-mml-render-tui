@@ -232,7 +232,7 @@ impl NotepadScreen<'static> {
                 Arc::new(AtomicUsize::new(0)),
             ),
             SoundCheckGuide::new(None),
-            Arc::new(Mutex::new(PatchLoadState::Ready(Vec::new()))),
+            Arc::new(Mutex::new(PatchLoadState::ready(Vec::new()))),
             cmrt_history::PatchPhraseStore::default(),
             Arc::new(cfg),
             Vec::new(),

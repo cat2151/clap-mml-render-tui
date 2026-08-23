@@ -102,79 +102,91 @@ fn restored_bpm_mode(
 
 /// パッチ一覧の非同期読み込みを開始し、共有状態ハンドルを返す。
 ///
-/// 一覧が揃った直後に `.vvp` の mono/poly も読んでおく。読むのは同じスレッドで、
-/// 一覧を公開するより**前**。公開してから読むと、その隙に PATCH 欄の wheel が回った
-/// ときだけ Vaporizer2 の音色が和音行の候補から消える、という再現しにくい状態ができる。
-fn spawn_patch_loader(cfg: &Config, vvp_voicings: VvpVoicings) -> Arc<Mutex<PatchLoadState>> {
-    // パッチリストはバックグラウンドスレッドで収集する。
-    // 起動時の同期スキャンによる遅延を避けるため。
+/// `.vvp` のmono/polyも同じfile cacheから復元し、一覧より先にmemoへ公開する。
+/// TUI起動中に音色fileは走査しない。
+fn spawn_patch_loader(
+    cfg: &Config,
+    vvp_voicings: VvpVoicings,
+    plugin_entries: PluginEntries,
+) -> Arc<Mutex<PatchLoadState>> {
+    // TUIはfile cacheを読むだけ。catalog走査とcache更新は明示的CLIだけが行う。
     let patch_load_state = Arc::new(Mutex::new(PatchLoadState::Loading));
     let state_bg = Arc::clone(&patch_load_state);
     let cfg = cfg.clone();
     std::thread::spawn(move || {
         let loading_started = std::time::Instant::now();
-        match crate::patches::collect_patch_pairs(&cfg) {
-            Ok(pairs) => {
-                let started = std::time::Instant::now();
-                let read = vvp_voicings.prefetch(
-                    &cmrt_tui_core::patch_plugins::PatchPlugins::from_config(&cfg),
-                    &pairs,
-                );
-                if read > 0 {
-                    crate::logging::global_log_sink(&format!(
-                        "vvp-voicing: event=prefetch count={read} ms={}",
-                        started.elapsed().as_millis()
-                    ));
+        match crate::patch_catalog_cache::load() {
+            Ok(cache) => {
+                let (snapshot, cached_vvp_voicings) = cache.into_parts();
+                let restored_vvp_count = vvp_voicings.load_persisted(cached_vvp_voicings);
+                crate::logging::global_log_sink(&format!(
+                    "vvp-voicing: event=cache-restored count={restored_vvp_count}"
+                ));
+                let snapshot = Arc::new(snapshot);
+                log_patch_load(&snapshot, loading_started.elapsed());
+                *state_bg.lock().unwrap() = PatchLoadState::Ready(Arc::clone(&snapshot));
+
+                if cfg.offline_render_backend == crate::config::OfflineRenderBackend::InProcess {
+                    let loaded = snapshot
+                        .catalog_plugins()
+                        .iter()
+                        .map(|plugin| cmrt_core::load_entry(&plugin.plugin_path))
+                        .collect::<anyhow::Result<Vec<_>>>();
+                    match loaded {
+                        Ok(entries) => {
+                            if let Err(error) = plugin_entries
+                                .publish_owned(snapshot.catalog_plugins().to_vec(), entries)
+                            {
+                                crate::logging::global_log_sink(&format!(
+                                    "patch-load: event=entry-publish-failed error=\"{error}\""
+                                ));
+                            }
+                        }
+                        Err(error) => {
+                            let message = format!("PluginEntryの読み込みに失敗: {error:#}");
+                            plugin_entries.publish_error(message.clone());
+                            crate::logging::global_log_sink(&format!(
+                                "patch-load: event=entry-load-failed error=\"{message}\""
+                            ));
+                        }
+                    }
                 }
-                log_patch_load(&cfg, pairs.len(), loading_started.elapsed());
-                *state_bg.lock().unwrap() = PatchLoadState::Ready(pairs);
             }
             Err(e) => {
-                // ここまで一覧の失敗はエラー文字列が画面に出るだけで、閉じたあとには
-                // 何も残らなかった。原因を後から追えるようにログにも落とす。
+                let message = format!(
+                    "patch catalog cacheを利用できません: {e:#}。`{}` を実行してください",
+                    crate::patch_catalog_cache::BUILD_COMMAND
+                );
                 crate::logging::global_log_sink(&format!(
-                    "patch-load: event=error error=\"{e:#}\""
+                    "patch-load: event=cache-error error=\"{message}\""
                 ));
-                *state_bg.lock().unwrap() = PatchLoadState::Err(e.to_string());
+                plugin_entries.publish_error(message.clone());
+                *state_bg.lock().unwrap() = PatchLoadState::Err(message);
             }
         }
     });
     patch_load_state
 }
 
-/// 一覧の読み込み結果を log.txt へ 1 行ずつ残す。
-///
-/// **`event=skipped` がこの関数の主目的。** 「インストールしてあるのに音色が 1 件も
-/// 出ない」は、カタログを組む時点で黙って外していることが原因なのに、これまでは
-/// 画面にもログにも痕跡が無く、`cmrt patch-roles` を知っている人にしか切り分けられなかった。
-///
-/// 文言は [`cmrt_runtime::SkippedCatalogPlugin`] が単一ソース。`reason` は grep 用の
-/// 機械可読な短い綴り、`note` はそのまま読める 1 行で、音色選択の注記と同じもの。
-/// alternate screen を壊さないよう、catalog library は標準出力へ書かず、この app sink が
-/// file へ保存する。
-fn log_patch_load(cfg: &Config, count: usize, elapsed: std::time::Duration) {
-    let (listed, skipped) = cmrt_runtime::catalog_plugins_detailed(cfg);
-    let names: Vec<&str> = listed.iter().map(|plugin| plugin.name.as_str()).collect();
+/// cache読み込み結果と、cache構築時に保存されたcatalog注記をlog.txtへ残す。
+/// alternate screenを壊さないよう標準出力へは書かない。
+fn log_patch_load(
+    snapshot: &cmrt_tui_core::patch_load::PatchCatalogSnapshot,
+    elapsed: std::time::Duration,
+) {
+    let names: Vec<&str> = snapshot
+        .catalog_plugins()
+        .iter()
+        .map(|plugin| plugin.name.as_str())
+        .collect();
     crate::logging::global_log_sink(&format!(
-        "patch-load: event=ready count={count} ms={} plugins={}",
+        "patch-load: event=cache-ready count={} ms={} plugins={}",
+        snapshot.pairs().len(),
         elapsed.as_millis(),
         names.join(",")
     ));
-    for plugin in &listed {
-        for notice in &plugin.source_notices {
-            crate::logging::global_log_sink(&format!(
-                "patch-load: event=source-notice plugin={} note=\"{}\"",
-                plugin.name, notice
-            ));
-        }
-    }
-    for plugin in skipped {
-        crate::logging::global_log_sink(&format!(
-            "patch-load: event=skipped plugin={} reason={} note=\"{}\"",
-            plugin.name,
-            plugin.reason_code(),
-            plugin.notice_line()
-        ));
+    for note in snapshot.catalog_notes() {
+        crate::logging::global_log_sink(&format!("patch-load: event=catalog-note note=\"{note}\""));
     }
 }
 
@@ -270,12 +282,13 @@ impl<'a> TuiApp<'a> {
         let playback_session = PlaybackSession::new(realtime_play_server);
         // memo は一覧読み込みスレッドと `VoicingState` の両方が持つ（`Arc` 共有）。
         let vvp_voicings = VvpVoicings::default();
-        let patch_load_state = spawn_patch_loader(cfg, vvp_voicings.clone());
+        let patch_load_state =
+            spawn_patch_loader(cfg, vvp_voicings.clone(), plugin_entries.clone());
         let grid_bpm_range =
             bpm_range_from_history(grid_sequencer_bpm_range, super::grid_sequencer::BPM);
         // 設定不足でカタログから外れたプラグインの案内。config は起動中に変わらないので
         // ここで 1 回だけ数え、音色選択を持つ画面すべてへ同じものを配る。
-        let catalog_notes = cmrt_runtime::catalog_notice_lines(cfg);
+        let catalog_notes = Vec::new();
 
         Self {
             active_screen,
@@ -335,12 +348,17 @@ impl<'a> TuiApp<'a> {
                 crate::history::load_voicing_cache(),
                 voicing_layers,
                 voicing_source_refresh,
-                super::voicing::VoicingPolicies::from_config(cfg),
+                super::voicing::VoicingPolicies::with_patch_load_state(
+                    cfg,
+                    Arc::clone(&patch_load_state),
+                ),
                 vvp_voicings,
             ),
             chord_progression_source,
             chord_catalog: cmrt_chord::ChordProgressionCatalog::default(),
-            patch_plugins: cmrt_tui_core::patch_plugins::PatchPlugins::from_config(cfg),
+            patch_plugins: cmrt_tui_core::patch_plugins::PatchPlugins::single_plugin(
+                cmrt_runtime::PatchRoles::resolve_for_default_plugin(cfg, &cfg.active_patch_roles),
+            ),
             patch_load_state,
             catalog_notes,
             playback_session,

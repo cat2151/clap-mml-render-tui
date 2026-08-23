@@ -45,7 +45,7 @@ fn record_patch_phrase_history_truncates_to_recent_100_items() {
 #[test]
 fn record_patch_phrase_history_resolves_factory_prefixed_patch_name() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "patches_factory/Pads/Pad 1.fxp",
     ]))));
 
@@ -66,7 +66,7 @@ fn record_patch_phrase_history_resolves_factory_prefixed_patch_name() {
 #[test]
 fn start_patch_phrase_migrates_existing_history_and_favorites_to_prefixed_patch_name() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "patches_factory/Pads/Pad 1.fxp",
     ]))));
     app.patch_phrase_store.patches.insert(

@@ -9,7 +9,7 @@ const FLOE_PATCH: &str = "Celtic Harp Factory Presets/Realistic Celtic Harp.floe
 
 fn app_with_floe_patch() -> TuiApp<'static> {
     let app = TuiApp::new_for_test(test_config());
-    *app.patch_load_state.lock().unwrap() = PatchLoadState::Ready(make_patches(&[
+    *app.patch_load_state.lock().unwrap() = PatchLoadState::ready(make_patches(&[
         "patches_factory/Pads/Pad 1.fxp",
         FLOE_PATCH,
     ]));

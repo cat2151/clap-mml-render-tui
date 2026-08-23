@@ -9,6 +9,7 @@ use std::{
 };
 
 use anyhow::Result;
+#[cfg(test)]
 use cmrt_tui_core::patch_plugins::PatchPlugins;
 
 use crate::{
@@ -23,11 +24,17 @@ struct SourceSet {
 
 impl SourceSet {
     fn from_config(cfg: &Config) -> Option<Self> {
-        Self::from_catalog(cfg, &PatchPlugins::from_config(cfg))
+        let config_dir = crate::config::config_app_dir()?;
+        Some(Self::new(
+            &config_dir,
+            cfg.voicing_shared_source.clone(),
+            cfg.voicing_override_source.clone(),
+        ))
     }
 
     /// カタログを外から渡す形。**カタログは開発機のインストール状況で変わる**ので、
     /// テストはこちらを通す。
+    #[cfg(test)]
     fn from_catalog(cfg: &Config, plugins: &PatchPlugins) -> Option<Self> {
         // shared / override の JSON はキーが Surge の patch 表示パスで、Surge 以外の
         // プラグインでは 1 件も当たらない。取りに行くだけ無駄なので読まない

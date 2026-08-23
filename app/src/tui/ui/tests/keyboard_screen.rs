@@ -87,7 +87,7 @@ fn keyboard_screen_shows_category_and_patch_panes_while_connecting() {
     .map(|patch| (patch.to_string(), patch.to_lowercase()))
     .collect();
     app.patch_load_state = std::sync::Arc::new(std::sync::Mutex::new(
-        crate::tui::PatchLoadState::Ready(patches),
+        crate::tui::PatchLoadState::ready(patches),
     ));
     app.start_keyboard(Some("patches_factory/Pad/Factory Pad.fxp".to_string()));
 

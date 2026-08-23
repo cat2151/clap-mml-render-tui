@@ -41,18 +41,35 @@ struct GridContextParts<'ctx> {
 }
 
 fn grid_sequencer_context<'ctx>(parts: GridContextParts<'ctx>) -> GridSequencerContext<'ctx> {
+    let (patch_load, patch_plugins, catalog_notes) = match parts.patch_load {
+        PatchLoadState::Loading => (
+            GridPatchLoad::Loading,
+            parts.patch_plugins,
+            parts.catalog_notes,
+        ),
+        PatchLoadState::Ready(snapshot) => (
+            GridPatchLoad::Ready(snapshot.pairs()),
+            snapshot.patch_plugins(),
+            if snapshot.catalog_notes().is_empty() {
+                parts.catalog_notes
+            } else {
+                snapshot.catalog_notes()
+            },
+        ),
+        PatchLoadState::Err(error) => (
+            GridPatchLoad::Err(error),
+            parts.patch_plugins,
+            parts.catalog_notes,
+        ),
+    };
     GridSequencerContext {
         patch_dirs_configured: parts.patch_dirs_configured,
-        patch_load: match parts.patch_load {
-            PatchLoadState::Loading => GridPatchLoad::Loading,
-            PatchLoadState::Ready(pairs) => GridPatchLoad::Ready(pairs),
-            PatchLoadState::Err(error) => GridPatchLoad::Err(error),
-        },
+        patch_load,
         chord_catalog: parts.chord_catalog,
         voicing: parts.voicing,
-        patch_plugins: parts.patch_plugins,
+        patch_plugins,
         chord_source_updated: parts.chord_source_updated,
-        catalog_notes: parts.catalog_notes,
+        catalog_notes,
     }
 }
 

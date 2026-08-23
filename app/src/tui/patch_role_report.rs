@@ -32,8 +32,8 @@ pub fn run_patch_role_report(cfg: &Config) -> Result<()> {
         source_refresh,
         VoicingPolicies::from_config(cfg),
     );
-    // `.vvp` の mono/poly は音色ファイルの先頭に書いてある。ここで先に読んでおくと、
-    // 下の候補数え上げが 1 音色 1 回の読みで済む（画面側は起動時に同じことをする）。
+    // この診断は現在のconfigと音色fileを直接検査するため、TUI用cacheには依存しない。
+    // `.vvp`はここで先に読み、下の候補数え上げをmemoだけで処理する。
     voicing.prefetch_vvp_voicings(&pairs);
     let chord_catalog = cmrt_chord::ChordProgressionCatalog::default();
     let ctx = GridSequencerContext {

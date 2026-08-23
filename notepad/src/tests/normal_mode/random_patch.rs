@@ -13,7 +13,7 @@ fn extract_line_patch_json(line: &str) -> Value {
 fn handle_normal_r_inserts_random_patch_at_start_of_plain_line() {
     let mut app = NotepadScreen::new_for_test(test_config());
     app.editor.lines = vec!["cde".to_string()];
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Pads/Pad 1.fxp",
     ]))));
 
@@ -30,7 +30,7 @@ fn handle_normal_r_inserts_random_patch_at_start_of_plain_line() {
 fn handle_normal_r_replaces_existing_patch_at_start_of_current_line() {
     let mut app = NotepadScreen::new_for_test(test_config());
     app.editor.lines = vec![r#"{"Surge XT patch":"Old/Pad.fxp"} cde"#.to_string()];
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Leads/Lead 1.fxp",
     ]))));
 
@@ -51,7 +51,7 @@ fn handle_normal_r_replaces_existing_patch_at_start_of_current_line() {
 fn handle_normal_r_uses_current_patch_category_when_filter_is_missing() {
     let mut app = NotepadScreen::new_for_test(test_config());
     app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} cde"#.to_string()];
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Pads/Pad 1.fxp",
         "Pads/Pad 2.fxp",
         "Leads/Lead 1.fxp",
@@ -82,7 +82,7 @@ fn handle_normal_r_prioritizes_saved_patch_filter_over_current_patch_category() 
     app.editor.lines = vec![
         r#"{"Surge XT patch":"Leads/Lead 1.fxp","Surge XT patch filter":"pads"} cde"#.to_string(),
     ];
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Pads/Pad 1.fxp",
         "Pads/Pad 2.fxp",
         "Leads/Lead 1.fxp",
@@ -110,7 +110,7 @@ fn handle_normal_r_does_not_repeat_within_the_same_filter_cycle() {
     app.editor.lines = vec![
         r#"{"Surge XT patch":"Pads/Pad 1.fxp","Surge XT patch filter":"pad"} cde"#.to_string(),
     ];
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&patch_refs))));
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&patch_refs))));
 
     let mut seen = HashSet::new();
     for _ in 0..160 {
@@ -134,7 +134,7 @@ fn handle_normal_r_drops_saved_filter_when_it_matches_no_patch() {
     app.editor.lines = vec![
         r#"{"Surge XT patch":"Lead 1.fxp","Surge XT patch filter":"missing"} cde"#.to_string(),
     ];
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Pads/Pad 1.fxp",
         "Lead 1.fxp",
     ]))));
@@ -155,7 +155,7 @@ fn handle_normal_r_drops_saved_filter_when_it_matches_no_patch() {
 #[test]
 fn handle_normal_r_keeps_independent_history_per_filter_query() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Pads/Pad 1.fxp",
         "Pads/Pad 2.fxp",
         "Pads/Pad 3.fxp",
@@ -204,7 +204,7 @@ fn handle_normal_r_keeps_independent_history_per_filter_query() {
 fn handle_normal_r_reapplies_same_patch_to_each_semicolon_branch() {
     let mut app = NotepadScreen::new_for_test(test_config());
     app.editor.lines = vec![r#"{"Surge XT patch":"Old/Pad.fxp"} c;f"#.to_string()];
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Leads/Lead 1.fxp",
     ]))));
 
@@ -226,7 +226,7 @@ fn handle_normal_r_replaces_spaced_semicolon_branch_patch_without_duplication() 
     app.editor.lines = vec![
         r#"{"Surge XT patch":"Old/Pad.fxp"} c; {"Surge XT patch":"Older/Lead.fxp"} f"#.to_string(),
     ];
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Leads/Lead 1.fxp",
     ]))));
 
@@ -246,7 +246,7 @@ fn handle_normal_r_replaces_spaced_semicolon_branch_patch_without_duplication() 
 fn handle_normal_r_inserts_c_for_empty_line_before_playing() {
     let mut app = NotepadScreen::new_for_test(test_config());
     app.editor.lines = vec![String::new()];
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Pads/Pad 1.fxp",
     ]))));
 
@@ -267,7 +267,7 @@ fn handle_normal_r_inserts_c_for_empty_line_before_playing() {
 fn handle_normal_r_inserts_c_when_all_semicolon_branches_are_empty() {
     let mut app = NotepadScreen::new_for_test(test_config());
     app.editor.lines = vec![" ; ".to_string()];
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(make_patches(&[
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "Pads/Pad 1.fxp",
     ]))));
 
