@@ -72,7 +72,7 @@ fn typing_on_a_line_ignores_the_line_above() {
 
     assert_eq!(
         overlay.handle_key(press(KeyCode::Char('c')), now),
-        MmlOverlayAction::Send(vec![[0x90, 60, 127]])
+        send(vec![[0x90, 60, 127]], 250)
     );
 }
 
@@ -87,10 +87,11 @@ fn typing_a_chord_name_sounds_the_chord_right_away() {
 
     let action = overlay.handle_key(press(KeyCode::Char('C')), now);
 
-    let MmlOverlayAction::Send(messages) = &action else {
+    let MmlOverlayAction::Send(notes) = &action else {
         panic!("expected note on messages, got {action:?}");
     };
-    let pitches = messages
+    let pitches = notes
+        .messages
         .iter()
         .filter(|message| message[0] == NOTE_ON)
         .map(|message| message[1])
@@ -165,7 +166,7 @@ fn playing_a_line_forgets_the_typed_note() {
     // 同じ発音単位の中へ戻っただけでも、記録を落としてあるので鳴り直す。
     assert_eq!(
         overlay.handle_key(press(KeyCode::Left), now),
-        MmlOverlayAction::Send(vec![[0x90, 60, 127]])
+        send(vec![[0x90, 60, 127]], 250)
     );
 }
 

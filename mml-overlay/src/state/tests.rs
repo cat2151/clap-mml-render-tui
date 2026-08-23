@@ -29,6 +29,13 @@ fn type_chars(overlay: &mut MmlOverlay<'_>, text: &str, now: Instant) -> MmlOver
     action
 }
 
+fn send(messages: Vec<[u8; 3]>, duration_ms: u64) -> MmlOverlayAction {
+    MmlOverlayAction::Send(NoteRequest {
+        messages,
+        duration: Duration::from_millis(duration_ms),
+    })
+}
+
 #[test]
 fn typing_a_note_sends_note_on() {
     let mut overlay = opened();
@@ -36,7 +43,7 @@ fn typing_a_note_sends_note_on() {
 
     assert_eq!(
         overlay.handle_key(press(KeyCode::Char('c')), now),
-        MmlOverlayAction::Send(vec![[0x90, 60, 127]])
+        send(vec![[0x90, 60, 127]], 250)
     );
     assert_eq!(overlay.sounding(), [60]);
 }
@@ -51,7 +58,7 @@ fn typing_the_next_note_asks_for_the_new_note_only() {
 
     assert_eq!(
         overlay.handle_key(press(KeyCode::Char('d')), now),
-        MmlOverlayAction::Send(vec![[0x90, 62, 127]])
+        send(vec![[0x90, 62, 127]], 250)
     );
 }
 
@@ -63,7 +70,7 @@ fn moving_the_cursor_left_sounds_the_earlier_note_again() {
 
     assert_eq!(
         overlay.handle_key(press(KeyCode::Left), now),
-        MmlOverlayAction::Send(vec![[0x90, 60, 127]])
+        send(vec![[0x90, 60, 127]], 250)
     );
 }
 
@@ -93,7 +100,7 @@ fn moving_from_a_note_back_into_a_chord_sounds_the_chord() {
 
     assert_eq!(
         overlay.handle_key(press(KeyCode::Left), now),
-        MmlOverlayAction::Send(vec![[0x90, 60, 127], [0x90, 64, 127], [0x90, 67, 127],])
+        send(vec![[0x90, 60, 127], [0x90, 64, 127], [0x90, 67, 127]], 250,)
     );
 }
 
@@ -131,7 +138,7 @@ fn a_modifier_resounds_the_same_note_shifted() {
 
     assert_eq!(
         overlay.handle_key(press(KeyCode::Char('+')), now),
-        MmlOverlayAction::Send(vec![[0x90, 61, 127]])
+        send(vec![[0x90, 61, 127]], 250)
     );
 }
 
@@ -158,22 +165,18 @@ fn a_chord_sounds_every_member_at_once() {
 
     assert_eq!(
         overlay.handle_key(press(KeyCode::Char('g')), now),
-        MmlOverlayAction::Send(vec![[0x90, 60, 127], [0x90, 64, 127], [0x90, 67, 127],])
+        send(vec![[0x90, 60, 127], [0x90, 64, 127], [0x90, 67, 127]], 250,)
     );
 }
 
 #[test]
-fn the_gate_stops_the_note_after_it_expires() {
+fn a_bare_note_requests_its_full_mml_duration() {
     let mut overlay = opened();
     let now = Instant::now();
-    overlay.handle_key(press(KeyCode::Char('c')), now);
+    let action = overlay.handle_key(press(KeyCode::Char('c')), now);
 
-    // 既定の 8 分音符を既定テンポ 120 で鳴らした長さ。
-    let gate = Duration::from_millis(250);
-    assert_eq!(overlay.poll(now + gate - Duration::from_millis(1)), None);
-    assert_eq!(overlay.poll(now + gate), Some(MmlOverlayAction::Stop));
-    assert!(overlay.sounding().is_empty());
-    assert_eq!(overlay.poll(now + gate), None);
+    // 既定の 8 分音符を既定テンポ 120 で鳴らした長さをsenderへそのまま渡す。
+    assert_eq!(action, send(vec![[0x90, 60, 127]], 250));
 }
 
 /// 音長を書き足したら、その長さで鳴らし直す。`c` のあと `1` を打っても
@@ -186,14 +189,9 @@ fn writing_a_note_length_resounds_the_note_for_that_length() {
 
     assert_eq!(
         overlay.handle_key(press(KeyCode::Char('1')), now),
-        MmlOverlayAction::Send(vec![[0x90, 60, 127]])
+        send(vec![[0x90, 60, 127]], 2000)
     );
-    // 全音符 = 既定テンポ 120 で 2 秒。8 分音符の 250ms では止まらない。
-    assert_eq!(overlay.poll(now + Duration::from_millis(1999)), None);
-    assert_eq!(
-        overlay.poll(now + Duration::from_millis(2000)),
-        Some(MmlOverlayAction::Stop)
-    );
+    // 全音符 = 既定テンポ 120 で 2 秒。senderは実発音開始後からこの長さを数える。
 }
 
 /// テンポ指定も音長へ効く。`t60` なら 8 分音符は 500ms。
@@ -202,12 +200,9 @@ fn a_tempo_command_stretches_the_gate() {
     let mut overlay = opened();
     let now = Instant::now();
     type_chars(&mut overlay, "t60", now);
-    overlay.handle_key(press(KeyCode::Char('c')), now);
-
-    assert_eq!(overlay.poll(now + Duration::from_millis(499)), None);
     assert_eq!(
-        overlay.poll(now + Duration::from_millis(500)),
-        Some(MmlOverlayAction::Stop)
+        overlay.handle_key(press(KeyCode::Char('c')), now),
+        send(vec![[0x90, 60, 127]], 500)
     );
 }
 
@@ -247,6 +242,44 @@ fn deleting_the_last_note_and_typing_it_again_sounds_it() {
 
     assert_eq!(
         overlay.handle_key(press(KeyCode::Char('c')), now),
-        MmlOverlayAction::Send(vec![[0x90, 60, 127]])
+        send(vec![[0x90, 60, 127]], 250)
     );
+}
+
+#[test]
+fn sender_status_tracks_actual_sound_and_ignores_an_older_command() {
+    let mut overlay = opened();
+    let now = Instant::now();
+    overlay.handle_key(press(KeyCode::Char('C')), now);
+    overlay.expect_sender_command(2);
+
+    overlay.sync_sender_status(&MmlOverlaySenderStatus {
+        command_id: 1,
+        sounding: Vec::new(),
+        ..MmlOverlaySenderStatus::default()
+    });
+    assert_eq!(overlay.sounding(), [60, 64, 67]);
+
+    overlay.sync_sender_status(&MmlOverlaySenderStatus {
+        command_id: 2,
+        loading: true,
+        sounding: Vec::new(),
+        ..MmlOverlaySenderStatus::default()
+    });
+    assert!(overlay.sounding().is_empty());
+
+    overlay.sync_sender_status(&MmlOverlaySenderStatus {
+        command_id: 2,
+        sounding: vec![60, 64, 67],
+        ..MmlOverlaySenderStatus::default()
+    });
+    assert_eq!(overlay.sounding(), [60, 64, 67]);
+    assert!(overlay.sounding_from_chord());
+
+    overlay.sync_sender_status(&MmlOverlaySenderStatus {
+        command_id: 2,
+        sounding: Vec::new(),
+        ..MmlOverlaySenderStatus::default()
+    });
+    assert!(overlay.sounding().is_empty());
 }

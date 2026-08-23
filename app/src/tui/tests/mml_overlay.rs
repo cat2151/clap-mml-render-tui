@@ -5,6 +5,10 @@ fn ctrl_p() -> KeyEvent {
     KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL)
 }
 
+fn ctrl_t() -> KeyEvent {
+    KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL)
+}
+
 fn press(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
 }
@@ -86,6 +90,25 @@ fn other_keys_do_not_open_the_overlay() {
     assert!(!app.try_open_mml_overlay(press(KeyCode::Char('p'))));
     assert!(!app.try_open_mml_overlay(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL)));
     assert!(!app.mml_overlay.is_open());
+}
+
+#[test]
+fn patch_select_requested_during_initial_load_opens_when_the_catalog_is_ready() {
+    let mut app = TuiApp::new_for_test(test_config());
+    *app.patch_load_state.lock().unwrap() = PatchLoadState::Loading;
+    assert!(app.try_open_mml_overlay(ctrl_p()));
+
+    app.handle_mml_overlay_key_event(ctrl_t());
+
+    assert!(!app.mml_overlay.is_patch_select_open());
+    assert!(app.mml_overlay.is_waiting_for_patch_catalog());
+
+    *app.patch_load_state.lock().unwrap() =
+        PatchLoadState::Ready(make_patches(&["Leads/Lead 1.fxp"]));
+    app.pump_mml_overlay();
+
+    assert!(app.mml_overlay.is_patch_select_open());
+    assert!(!app.mml_overlay.is_waiting_for_patch_catalog());
 }
 
 #[test]

@@ -24,10 +24,12 @@ enum Sent {
 #[derive(Default)]
 struct FakeSink {
     sent: RefCell<Vec<Sent>>,
+    prepare_delay: Duration,
     /// 生 MIDI の送信を失敗させる。
     midi_fails: bool,
     /// timeline を張るのを失敗させる。
     begin_fails: bool,
+    midi_delay: Duration,
 }
 
 impl FakeSink {
@@ -46,11 +48,13 @@ impl FakeSink {
 
 impl SoundSink for FakeSink {
     fn prepare_patch(&self, patch: Option<&str>) -> SinkResult {
+        std::thread::sleep(self.prepare_delay);
         self.push(Sent::Prepare(patch.map(str::to_string)));
         Ok(())
     }
 
     fn send_midi(&self, messages: &[[u8; 3]]) -> SinkResult {
+        std::thread::sleep(self.midi_delay);
         self.push(Sent::Midi(messages.to_vec()));
         if self.midi_fails {
             return Err("midi failed".to_string());
@@ -98,6 +102,34 @@ fn line(count: usize) -> Vec<TimedMidiEvent> {
         .collect()
 }
 
+#[test]
+fn zero_note_window_is_reported_as_an_audibility_risk() {
+    assert_eq!(audibility(Some(0)), "at-risk-zero-window");
+    assert_eq!(audibility(Some(1)), "at-risk-short-window");
+    assert_eq!(audibility(Some(20)), "at-risk-short-window");
+    assert_eq!(audibility(Some(21)), "unverified-nonzero-window");
+    assert_eq!(audibility(None), "unverified-no-note-window");
+    assert_eq!(optional_ms(Some(0)), "0");
+    assert_eq!(optional_ms(None), "unknown");
+}
+
+#[test]
+fn gate_starts_after_slow_patch_prepare_and_keeps_the_full_note_length() {
+    let sink = FakeSink {
+        prepare_delay: Duration::from_millis(40),
+        ..FakeSink::default()
+    };
+    let mut voice = voice();
+    let gate = Duration::from_secs(2);
+    let request_started = Instant::now();
+
+    assert!(voice.prepare(&sink, Some("slow.sfz")));
+    assert!(voice.play_notes(&sink, &[note_on(60)], gate));
+
+    assert!(request_started.elapsed() >= Duration::from_millis(40));
+    assert!(voice.gate_wait(Instant::now()).unwrap() > Duration::from_millis(1900));
+}
+
 /// 鳴っていないのに止めに行かない。無駄なリセットは音を切ってしまう。
 #[test]
 fn stopping_silence_sends_nothing() {
@@ -112,10 +144,10 @@ fn stopping_silence_sends_nothing() {
 fn the_next_note_stops_the_previous_one_first() {
     let sink = FakeSink::default();
     let mut voice = voice();
-    voice.play_notes(&sink, &[note_on(60)]);
+    voice.play_notes(&sink, &[note_on(60)], Duration::from_millis(250));
     sink.take();
 
-    voice.play_notes(&sink, &[note_on(62)]);
+    voice.play_notes(&sink, &[note_on(62)], Duration::from_millis(250));
 
     assert_eq!(
         sink.sent(),
@@ -133,7 +165,7 @@ fn the_next_note_stops_the_previous_one_first() {
 fn an_empty_line_still_stops_the_typed_note() {
     let sink = FakeSink::default();
     let mut voice = voice();
-    voice.play_notes(&sink, &[note_on(60)]);
+    voice.play_notes(&sink, &[note_on(60)], Duration::from_millis(250));
     sink.take();
 
     voice.play_line(&sink, &[]);
@@ -146,7 +178,7 @@ fn an_empty_line_still_stops_the_typed_note() {
 fn playing_a_line_stops_the_typed_note_before_the_timeline() {
     let sink = FakeSink::default();
     let mut voice = voice();
-    voice.play_notes(&sink, &[note_on(60)]);
+    voice.play_notes(&sink, &[note_on(60)], Duration::from_millis(250));
     sink.take();
 
     voice.play_line(&sink, &line(3));
@@ -182,7 +214,7 @@ fn typing_during_a_line_resets_the_instrument_first() {
     voice.play_line(&sink, &line(3));
     sink.take();
 
-    voice.play_notes(&sink, &[note_on(60)]);
+    voice.play_notes(&sink, &[note_on(60)], Duration::from_millis(250));
 
     assert_eq!(
         sink.sent(),
@@ -195,7 +227,7 @@ fn typing_during_a_line_resets_the_instrument_first() {
 fn preparing_a_patch_stops_what_is_sounding() {
     let sink = FakeSink::default();
     let mut voice = voice();
-    voice.play_notes(&sink, &[note_on(60)]);
+    voice.play_notes(&sink, &[note_on(60)], Duration::from_millis(250));
     sink.take();
 
     voice.prepare(&sink, Some("lead.fxp"));
@@ -214,7 +246,7 @@ fn preparing_a_patch_stops_what_is_sounding() {
 fn a_failed_note_off_escalates_to_an_instrument_reset() {
     let mut sink = FakeSink::default();
     let mut voice = voice();
-    voice.play_notes(&sink, &[note_on(60)]);
+    voice.play_notes(&sink, &[note_on(60)], Duration::from_millis(250));
     sink.take();
     sink.midi_fails = true;
 
@@ -232,7 +264,7 @@ fn a_failed_note_on_is_stopped_by_resetting_the_instrument() {
     let mut sink = FakeSink::default();
     let mut voice = voice();
     sink.midi_fails = true;
-    voice.play_notes(&sink, &[note_on(60)]);
+    voice.play_notes(&sink, &[note_on(60)], Duration::from_millis(250));
     sink.midi_fails = false;
     sink.take();
 

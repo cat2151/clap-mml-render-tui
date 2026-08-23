@@ -4,11 +4,17 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{backend::TestBackend, Terminal};
 
 use super::*;
-use crate::MmlOverlayContext;
+use crate::{MmlOverlayContext, PatchCatalogSnapshot};
 
 fn render(overlay: &MmlOverlay<'_>) -> String {
+    render_with_status(overlay, &MmlOverlaySenderStatus::default())
+}
+
+fn render_with_status(overlay: &MmlOverlay<'_>, status: &MmlOverlaySenderStatus) -> String {
     let mut terminal = Terminal::new(TestBackend::new(60, 16)).unwrap();
-    terminal.draw(|frame| draw(overlay, frame)).unwrap();
+    terminal
+        .draw(|frame| draw_with_status(overlay, status, frame))
+        .unwrap();
     let buffer = terminal.backend().buffer();
     (0..buffer.area.height)
         .map(|y| {
@@ -18,6 +24,20 @@ fn render(overlay: &MmlOverlay<'_>) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+#[test]
+fn loading_patch_is_shown_in_the_center_above_the_mml_overlay() {
+    let status = MmlOverlaySenderStatus {
+        command_id: 7,
+        loading: true,
+        loading_patch: Some("Orchestra/slow.sfz".to_string()),
+        sounding: Vec::new(),
+    };
+
+    let rendered = render_with_status(&opened(), &status);
+
+    assert!(rendered.contains("Now loading..."), "{rendered}");
 }
 
 fn opened() -> MmlOverlay<'static> {
@@ -103,10 +123,10 @@ fn shows_whether_the_played_line_was_read_as_a_chord() {
 fn draws_the_patch_select_over_the_input() {
     let mut overlay = MmlOverlay::default();
     overlay.open(MmlOverlayContext {
-        patches: vec![(
+        patch_catalog: PatchCatalogSnapshot::Ready(vec![(
             "Leads/Lead 1.fxp".to_string(),
             "leads/lead 1.fxp".to_string(),
-        )],
+        )]),
         ..MmlOverlayContext::default()
     });
     overlay.handle_key(
@@ -117,6 +137,58 @@ fn draws_the_patch_select_over_the_input() {
 
     assert!(rendered.contains("Enter:"), "{rendered}");
     assert!(rendered.contains("Lead 1.fxp"), "{rendered}");
+}
+
+#[test]
+fn ctrl_t_while_the_patch_catalog_is_loading_shows_the_reason() {
+    let mut overlay = opened();
+    overlay.handle_key(
+        KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL),
+        Instant::now(),
+    );
+
+    let rendered = render(&overlay);
+    let compact = rendered.replace(' ', "");
+
+    assert!(compact.contains("読み込み中"), "{rendered}");
+    assert!(compact.contains("自動で開きます"), "{rendered}");
+}
+
+#[test]
+fn ctrl_t_after_the_patch_catalog_failed_shows_the_reason() {
+    let mut overlay = MmlOverlay::default();
+    overlay.open(MmlOverlayContext {
+        patch_catalog: PatchCatalogSnapshot::Error("scan failed".to_string()),
+        ..MmlOverlayContext::default()
+    });
+    overlay.handle_key(
+        KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL),
+        Instant::now(),
+    );
+
+    let rendered = render(&overlay);
+    let compact = rendered.replace(' ', "");
+
+    assert!(compact.contains("読み込みに失敗"), "{rendered}");
+    assert!(rendered.contains("scan failed"), "{rendered}");
+}
+
+#[test]
+fn ctrl_t_with_an_empty_patch_catalog_shows_the_reason() {
+    let mut overlay = MmlOverlay::default();
+    overlay.open(MmlOverlayContext {
+        patch_catalog: PatchCatalogSnapshot::Ready(Vec::new()),
+        ..MmlOverlayContext::default()
+    });
+    overlay.handle_key(
+        KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL),
+        Instant::now(),
+    );
+
+    let rendered = render(&overlay);
+    let compact = rendered.replace(' ', "");
+
+    assert!(compact.contains("音色がありません"), "{rendered}");
 }
 
 #[test]
@@ -145,10 +217,10 @@ fn draws_the_history_select_over_the_input() {
 fn the_patch_select_shows_why_a_plugin_is_missing_from_the_list() {
     let mut overlay = MmlOverlay::default();
     overlay.open(MmlOverlayContext {
-        patches: vec![(
+        patch_catalog: PatchCatalogSnapshot::Ready(vec![(
             "Leads/Lead 1.fxp".to_string(),
             "leads/lead 1.fxp".to_string(),
-        )],
+        )]),
         catalog_notes: vec!["Vaporizer2 は patches_dirs が無いため一覧に出ません".to_string()],
         ..MmlOverlayContext::default()
     });
@@ -173,7 +245,7 @@ fn the_patch_select_takes_no_extra_row_without_a_note() {
     let open_with = |catalog_notes: Vec<String>| {
         let mut overlay = MmlOverlay::default();
         overlay.open(MmlOverlayContext {
-            patches: patches.clone(),
+            patch_catalog: PatchCatalogSnapshot::Ready(patches.clone()),
             catalog_notes,
             ..MmlOverlayContext::default()
         });

@@ -12,7 +12,7 @@ fn patches() -> Vec<(String, String)> {
 fn opened_with_patches() -> MmlOverlay<'static> {
     let mut overlay = MmlOverlay::default();
     overlay.open(MmlOverlayContext {
-        patches: patches(),
+        patch_catalog: PatchCatalogSnapshot::Ready(patches()),
         ..MmlOverlayContext::default()
     });
     overlay
@@ -28,12 +28,18 @@ fn ctrl_t_opens_the_patch_select() {
 }
 
 #[test]
-fn ctrl_t_does_nothing_while_the_patch_list_is_still_loading() {
+fn ctrl_t_waits_for_the_patch_list_and_opens_when_ready() {
     let mut overlay = opened();
 
     overlay.handle_key(ctrl(KeyCode::Char('t')), Instant::now());
 
-    assert!(overlay.patch_select().is_none());
+    assert!(!overlay.is_patch_select_open());
+    assert!(overlay.is_waiting_for_patch_catalog());
+
+    overlay.sync_patch_catalog(PatchCatalogSnapshot::Ready(patches()));
+
+    assert!(overlay.is_patch_select_open());
+    assert!(!overlay.is_waiting_for_patch_catalog());
 }
 
 #[test]
@@ -47,7 +53,10 @@ fn moving_in_the_patch_select_previews_the_patch_with_the_note_at_the_cursor() {
         overlay.handle_key(press(KeyCode::Down), now),
         MmlOverlayAction::SetPatch {
             patch: Some("Pads/Pad 1.fxp".to_string()),
-            messages: vec![[0x90, 64, 127]],
+            notes: Some(NoteRequest {
+                messages: vec![[0x90, 64, 127]],
+                duration: Duration::from_millis(250),
+            }),
         }
     );
 }
@@ -63,7 +72,10 @@ fn previewing_an_empty_mml_sounds_the_fallback_note() {
         MmlOverlayAction::SetPatch {
             patch: Some("Pads/Pad 1.fxp".to_string()),
             // 試聴用の `c` を既定のオクターブ・velocity で鳴らす。
-            messages: vec![[0x90, 60, 127]],
+            notes: Some(NoteRequest {
+                messages: vec![[0x90, 60, 127]],
+                duration: Duration::from_millis(250),
+            }),
         }
     );
 }
@@ -96,7 +108,7 @@ fn cancelling_restores_the_patch_that_was_current_when_it_opened() {
         overlay.handle_key(press(KeyCode::Esc), now),
         MmlOverlayAction::SetPatch {
             patch: Some("Leads/Lead 1.fxp".to_string()),
-            messages: Vec::new(),
+            notes: None,
         }
     );
     assert_eq!(overlay.patch(), Some("Leads/Lead 1.fxp"));
@@ -126,7 +138,7 @@ fn reopening_restores_the_patch_but_not_the_mml() {
     overlay.handle_key(press(KeyCode::Esc), now);
 
     overlay.open(MmlOverlayContext {
-        patches: patches(),
+        patch_catalog: PatchCatalogSnapshot::Ready(patches()),
         ..MmlOverlayContext::default()
     });
 

@@ -12,7 +12,7 @@
 //! 状態機械が破れている。破れを見つけたら以後の停止を音源リセット
 //! （`stop_live_all`）へ格上げして、耳に聞こえる被害を出さずに log だけ残す。
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, time::Instant};
 
 use super::log_line;
 use crate::{NOTE_OFF, NOTE_ON};
@@ -28,6 +28,9 @@ pub(super) struct Sounding {
     timeline: bool,
     /// 記録と実態がずれた疑いがあるか。ずれたら次の停止を音源リセットへ格上げする。
     suspect: bool,
+    /// 生 MIDI の note on を server が受理した時刻。
+    /// UI が gate を開始した時刻ではなく、実際の送信窓を測るための値。
+    note_submitted_at: Option<Instant>,
 }
 
 impl Sounding {
@@ -86,6 +89,17 @@ impl Sounding {
         self.timeline = true;
     }
 
+    /// 生 MIDI の送信が成功した直後に記録する。
+    pub(super) fn mark_note_submitted(&mut self, now: Instant) {
+        self.note_submitted_at = Some(now);
+    }
+
+    /// server が note on を受理してから停止処理を始めるまでの時間。
+    pub(super) fn note_window_ms(&self, now: Instant) -> Option<u128> {
+        self.note_submitted_at
+            .map(|submitted_at| now.saturating_duration_since(submitted_at).as_millis())
+    }
+
     /// 記録に残っている生 MIDI の音を全部止める note off。
     pub(super) fn note_offs(&self) -> Vec<[u8; 3]> {
         self.typed
@@ -101,6 +115,7 @@ impl Sounding {
     pub(super) fn clear(&mut self, hard: bool) {
         self.typed.clear();
         self.timeline = false;
+        self.note_submitted_at = None;
         if hard {
             self.suspect = false;
         }

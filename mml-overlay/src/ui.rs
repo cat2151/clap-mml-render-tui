@@ -1,6 +1,7 @@
 //! MML 入力オーバーレイの描画。
 
 mod history_select;
+mod loading;
 mod patch_select;
 mod status;
 
@@ -18,7 +19,7 @@ use cmrt_tui_core::{
     ui::centered_rect_with_size,
 };
 
-use crate::MmlOverlay;
+use crate::{MmlOverlay, MmlOverlaySenderStatus};
 
 const PLACEHOLDER: &str = "1行1フレーズ。上下キーでその行を演奏";
 /// 入力欄に見せる行数。これを超えた行は入力欄の中でスクロールする。
@@ -28,6 +29,14 @@ const OVERLAY_HEIGHT: u16 = INPUT_ROWS + 3;
 const OVERLAY_MAX_WIDTH: u16 = 72;
 
 pub fn draw(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>) {
+    draw_with_status(overlay, &MmlOverlaySenderStatus::default(), frame);
+}
+
+pub fn draw_with_status(
+    overlay: &MmlOverlay<'_>,
+    sender_status: &MmlOverlaySenderStatus,
+    frame: &mut Frame<'_>,
+) {
     let area = frame.area();
     let width = area.width.saturating_sub(2).min(OVERLAY_MAX_WIDTH);
     let overlay_area = centered_rect_with_size(width, OVERLAY_HEIGHT.min(area.height), area);
@@ -49,6 +58,7 @@ pub fn draw(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>) {
     if let Some(select) = overlay.history_select() {
         history_select::draw(select, frame);
     }
+    loading::draw(sender_status, frame);
 }
 
 fn draw_input(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>, area: Rect) {

@@ -3,7 +3,7 @@
 use std::time::Instant;
 
 use super::*;
-use cmrt_mml_overlay::{MmlOverlay, MmlOverlayAction, MmlOverlayContext};
+use cmrt_mml_overlay::{MmlOverlay, MmlOverlayAction, MmlOverlayContext, PatchCatalogSnapshot};
 
 const SFZ_PATCH: &str = "Virtual-Playing-Orchestra3/Woodwinds/flute-SOLO-sustain.sfz";
 
@@ -35,7 +35,10 @@ fn every_screen_receives_sfz_from_the_one_shared_patch_list() {
 fn selecting_sfz_requests_preview_without_changing_its_display_string() {
     let mut overlay = MmlOverlay::default();
     overlay.open(MmlOverlayContext {
-        patches: make_patches(&["patches_factory/Pads/Pad 1.fxp", SFZ_PATCH]),
+        patch_catalog: PatchCatalogSnapshot::Ready(make_patches(&[
+            "patches_factory/Pads/Pad 1.fxp",
+            SFZ_PATCH,
+        ])),
         ..MmlOverlayContext::default()
     });
     let now = Instant::now();
@@ -46,10 +49,10 @@ fn selecting_sfz_requests_preview_without_changing_its_display_string() {
 
     let mut preview = None;
     for ch in "flute".chars() {
-        if let MmlOverlayAction::SetPatch { patch, messages } =
+        if let MmlOverlayAction::SetPatch { patch, notes } =
             overlay.handle_key(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE), now)
         {
-            assert!(!messages.is_empty());
+            assert!(notes.is_some_and(|notes| !notes.messages.is_empty()));
             preview = patch;
         }
     }

@@ -21,8 +21,10 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub use history_select::is_history_select_trigger;
 pub use patch_select::is_patch_select_trigger;
-pub use sender::MmlOverlaySender;
-pub use state::{MmlOverlay, MmlOverlayAction, MmlOverlayContext, PatchChange};
+pub use sender::{MmlOverlaySender, MmlOverlaySenderStatus};
+pub use state::{
+    MmlOverlay, MmlOverlayAction, MmlOverlayContext, NoteRequest, PatchCatalogSnapshot, PatchChange,
+};
 
 pub(crate) const NOTE_ON: u8 = 0x90;
 pub(crate) const NOTE_OFF: u8 = 0x80;

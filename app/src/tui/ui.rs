@@ -42,7 +42,12 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
         crate::screen_switch::draw_screen_switch_menu(f, app.active_screen);
     }
     if app.mml_overlay.is_open() {
-        cmrt_mml_overlay::ui::draw(&app.mml_overlay, f);
+        let sender_status = app
+            .mml_overlay_sender
+            .as_ref()
+            .map(cmrt_mml_overlay::MmlOverlaySender::status)
+            .unwrap_or_default();
+        cmrt_mml_overlay::ui::draw_with_status(&app.mml_overlay, &sender_status, f);
     }
     // 音が鳴らない理由なので、どの画面・どのオーバーレイよりも前に出す。
     if let Some(failure) = app.play_server_notice() {

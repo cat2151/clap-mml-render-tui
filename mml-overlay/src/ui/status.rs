@@ -11,13 +11,20 @@ use cmrt_tui_core::theme::{
     MONOKAI_CYAN, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_PINK, MONOKAI_YELLOW,
 };
 
-use crate::{line_play::LineStatus, MmlOverlay};
+use crate::{line_play::LineStatus, state::PatchCatalogNotice, MmlOverlay};
 
 const KEY_HINTS: &str = "^T音色 ^O履歴 ^Space再演奏 Esc閉じる ";
 /// キー割り当ての表示に要る幅（全角は 2 桁ぶん）。
 const KEY_HINTS_WIDTH: u16 = 38;
 
 pub(super) fn draw(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>, area: Rect) {
+    if let Some((message, color)) = patch_catalog_notice(overlay) {
+        frame.render_widget(
+            Paragraph::new(format!(" {message}")).style(Style::default().fg(color)),
+            area,
+        );
+        return;
+    }
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Min(0), Constraint::Length(KEY_HINTS_WIDTH)])
@@ -35,6 +42,19 @@ pub(super) fn draw(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>, area: Rect) 
                 .alignment(Alignment::Right),
             chunks[1],
         );
+    }
+}
+
+fn patch_catalog_notice(overlay: &MmlOverlay<'_>) -> Option<(String, Color)> {
+    match overlay.patch_catalog_notice()? {
+        PatchCatalogNotice::Loading => Some((
+            "音色一覧を読み込み中です。完了後に自動で開きます".to_string(),
+            MONOKAI_YELLOW,
+        )),
+        PatchCatalogNotice::Empty => Some(("選択できる音色がありません".to_string(), MONOKAI_PINK)),
+        PatchCatalogNotice::Error(error) => {
+            Some((format!("音色一覧の読み込みに失敗: {error}"), MONOKAI_PINK))
+        }
     }
 }
 

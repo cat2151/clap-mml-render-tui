@@ -3,7 +3,7 @@
 use std::time::Instant;
 
 use super::*;
-use cmrt_mml_overlay::{MmlOverlay, MmlOverlayAction, MmlOverlayContext};
+use cmrt_mml_overlay::{MmlOverlay, MmlOverlayAction, MmlOverlayContext, PatchCatalogSnapshot};
 
 const FLOE_PATCH: &str = "Celtic Harp Factory Presets/Realistic Celtic Harp.floe-preset";
 
@@ -34,7 +34,10 @@ fn mml_overlay_receives_floe_from_the_shared_patch_list() {
 fn selecting_floe_requests_a_preview_and_keeps_the_display_string() {
     let mut overlay = MmlOverlay::default();
     overlay.open(MmlOverlayContext {
-        patches: make_patches(&["patches_factory/Pads/Pad 1.fxp", FLOE_PATCH]),
+        patch_catalog: PatchCatalogSnapshot::Ready(make_patches(&[
+            "patches_factory/Pads/Pad 1.fxp",
+            FLOE_PATCH,
+        ])),
         ..MmlOverlayContext::default()
     });
     let now = Instant::now();
@@ -46,8 +49,8 @@ fn selecting_floe_requests_a_preview_and_keeps_the_display_string() {
     let mut preview = None;
     for ch in "floe".chars() {
         let action = overlay.handle_key(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE), now);
-        if let MmlOverlayAction::SetPatch { patch, messages } = action {
-            assert!(!messages.is_empty());
+        if let MmlOverlayAction::SetPatch { patch, notes } = action {
+            assert!(notes.is_some_and(|notes| !notes.messages.is_empty()));
             preview = patch;
         }
     }

@@ -1,6 +1,7 @@
 //! 記録が実態に追随しているか、追随できなくなったことを見つけられるか。
 
 use super::*;
+use std::time::Duration;
 
 fn note_on(pitch: u8) -> [u8; 3] {
     [NOTE_ON, pitch, 127]
@@ -100,4 +101,20 @@ fn a_soft_stop_keeps_the_suspicion() {
     sounding.clear(false);
 
     assert!(sounding.needs_hard_stop());
+}
+
+#[test]
+fn submitted_note_window_is_measured_until_stop_and_cleared_afterwards() {
+    let mut sounding = Sounding::default();
+    let submitted_at = Instant::now();
+    sounding.record_sent(&[note_on(60)]);
+    sounding.mark_note_submitted(submitted_at);
+
+    assert_eq!(
+        sounding.note_window_ms(submitted_at + Duration::from_millis(250)),
+        Some(250)
+    );
+
+    sounding.clear(false);
+    assert_eq!(sounding.note_window_ms(Instant::now()), None);
 }

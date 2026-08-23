@@ -9,7 +9,7 @@ use std::time::Instant;
 use crossterm::event::KeyEvent;
 
 use super::mml_overlay::{
-    is_mml_overlay_trigger, MmlOverlayAction, MmlOverlayContext, PatchChange,
+    is_mml_overlay_trigger, MmlOverlayAction, MmlOverlayContext, PatchCatalogSnapshot, PatchChange,
 };
 use super::{PatchLoadState, TuiApp};
 
@@ -28,24 +28,34 @@ impl TuiApp<'_> {
         let context = self.mml_overlay_context();
         self.mml_overlay.open(context);
         if let Some(sender) = &self.mml_overlay_sender {
-            sender.prepare(self.mml_overlay.patch());
+            let command_id = sender.prepare(self.mml_overlay.patch());
+            self.mml_overlay.expect_sender_command(command_id);
         }
         true
     }
 
-    /// 音色一覧とフレーズ履歴は、開くたびに最新のスナップショットを渡す。
-    /// 起動直後で読み込みが終わっていなければ空のまま開き、その選択だけが効かない。
+    /// 音色一覧の状態とフレーズ履歴を、開くたびに最新のスナップショットで渡す。
+    /// 音色一覧が Loading なら、完了後に [`Self::pump_mml_overlay`] が差し替える。
     fn mml_overlay_context(&self) -> MmlOverlayContext {
-        let patches = self.loaded_patch_pairs();
+        let patch_catalog = self.mml_overlay_patch_catalog_snapshot();
         let (history, favorites) = self.notepad.phrase_history();
         MmlOverlayContext {
-            patches,
+            patch_catalog,
             history: history.to_vec(),
             favorites: favorites.to_vec(),
             catalog_notes: self.catalog_notes.clone(),
         }
     }
 
+    fn mml_overlay_patch_catalog_snapshot(&self) -> PatchCatalogSnapshot {
+        match &*self.patch_load_state.lock().unwrap() {
+            PatchLoadState::Loading => PatchCatalogSnapshot::Loading,
+            PatchLoadState::Ready(pairs) => PatchCatalogSnapshot::Ready(pairs.clone()),
+            PatchLoadState::Err(error) => PatchCatalogSnapshot::Error(error.clone()),
+        }
+    }
+
+    #[cfg(test)]
     pub(in crate::tui) fn loaded_patch_pairs(&self) -> Vec<(String, String)> {
         match &*self.patch_load_state.lock().unwrap() {
             PatchLoadState::Ready(pairs) => pairs.clone(),
@@ -55,15 +65,26 @@ impl TuiApp<'_> {
 
     /// オーバーレイが開いている間、キーはすべてオーバーレイが取る。
     pub(in crate::tui) fn handle_mml_overlay_key_event(&mut self, key: KeyEvent) {
+        // loader 完了と Ctrl+T が同じ frame に来ても、古い Loading を見せない。
+        self.sync_mml_overlay_patch_catalog();
         let action = self.mml_overlay.handle_key(key, Instant::now());
         self.apply_mml_overlay_action(action);
     }
 
-    /// 鳴らした音の gate が切れていれば止める。毎フレーム呼ぶ。
+    /// worker が実際に到達した一覧・loading・発音状態を表示へ反映する。毎フレーム呼ぶ。
     pub(in crate::tui) fn pump_mml_overlay(&mut self) {
-        if let Some(action) = self.mml_overlay.poll(Instant::now()) {
-            self.apply_mml_overlay_action(action);
+        self.sync_mml_overlay_patch_catalog();
+        if let Some(sender) = &self.mml_overlay_sender {
+            self.mml_overlay.sync_sender_status(&sender.status());
         }
+    }
+
+    fn sync_mml_overlay_patch_catalog(&mut self) {
+        if !self.mml_overlay.is_waiting_for_patch_catalog() {
+            return;
+        }
+        let catalog = self.mml_overlay_patch_catalog_snapshot();
+        self.mml_overlay.sync_patch_catalog(catalog);
     }
 
     /// オーバーレイの求めを sender へ流す。
@@ -75,7 +96,8 @@ impl TuiApp<'_> {
         // sender を借りる前に片づける。
         if action == MmlOverlayAction::Close {
             if let Some(sender) = &self.mml_overlay_sender {
-                sender.stop();
+                let command_id = sender.stop();
+                self.mml_overlay.expect_sender_command(command_id);
             }
             // 借りていた音源を返す。開いたときに止めた演奏はここで戻る。
             self.resume_active_screen_playback();
@@ -84,22 +106,26 @@ impl TuiApp<'_> {
         let Some(sender) = &self.mml_overlay_sender else {
             return;
         };
-        match action {
-            MmlOverlayAction::Continue | MmlOverlayAction::Close => {}
-            MmlOverlayAction::Send(messages) => sender.send(messages),
-            MmlOverlayAction::SetPatch { patch, messages } => {
-                // 音色の読み込みと発音は同じワーカースレッドが順に処理するので、
-                // ここで積む順序がそのまま音源へ届く順序になる。
-                sender.prepare(patch.as_deref());
-                sender.send(messages);
+        let command_id = match action {
+            MmlOverlayAction::Continue | MmlOverlayAction::Close => None,
+            MmlOverlayAction::Send(notes) => {
+                let id = sender.send(self.mml_overlay.patch(), notes.messages, notes.duration);
+                Some(id)
             }
+            MmlOverlayAction::SetPatch { patch, notes } => Some(match notes {
+                Some(notes) => sender.send(patch.as_deref(), notes.messages, notes.duration),
+                None => sender.prepare(patch.as_deref()),
+            }),
             MmlOverlayAction::PlayLine { patch, events } => {
-                if let PatchChange::Switch(patch) = patch {
-                    sender.prepare(patch.as_deref());
-                }
-                sender.play_line(events);
+                let patch = match &patch {
+                    PatchChange::Keep => self.mml_overlay.patch(),
+                    PatchChange::Switch(patch) => patch.as_deref(),
+                };
+                Some(sender.play_line(patch, events))
             }
-            MmlOverlayAction::Stop => sender.stop(),
+        };
+        if let Some(command_id) = command_id {
+            self.mml_overlay.expect_sender_command(command_id);
         }
     }
 }

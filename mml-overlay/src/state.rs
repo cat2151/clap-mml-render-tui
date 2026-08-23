@@ -5,13 +5,13 @@
 //! かつては打鍵の note off をここで組み立てて [`MmlOverlayAction::Send`] へ混ぜて
 //! いたが、行を鳴らす経路だけが「止めるのは行演奏側の仕事」として note off を
 //! 出さずに記録を捨てており、移動先が空行だとサーバーへ何も飛ばずに鳴りっぱなしに
-//! なった。止める役を 1 か所へ寄せたので、ここが持つ [`MmlOverlay::sounding`] と
-//! [`MmlOverlay::gate_deadline`] は**表示と gate の計時のためだけ**にある。
+//! なった。止める役と gate の計時は sender worker へ寄せ、ここが持つ
+//! [`MmlOverlay::sounding`] は表示専用とする。
 
 mod history;
 mod patch;
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use cmrt_chord::TimedMidiEvent;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -21,7 +21,15 @@ use crate::cursor_notes::{notes_at_cursor, CursorNotes};
 use crate::history_select::{is_history_select_trigger, HistorySelect};
 use crate::line_play::{line_events, LineStatus};
 use crate::patch_select::{is_patch_select_trigger, PatchSelect};
+use crate::MmlOverlaySenderStatus;
 use crate::NOTE_ON;
+
+/// 生 MIDI の note on と、送信成功後に保つべき音長。
+#[derive(Clone, Debug, PartialEq)]
+pub struct NoteRequest {
+    pub messages: Vec<[u8; 3]>,
+    pub duration: Duration,
+}
 
 /// 行を鳴らす前に音源の音色を差し替えるか。
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -40,12 +48,12 @@ pub enum PatchChange {
 pub enum MmlOverlayAction {
     Continue,
     /// 鳴っているものを止めてから、この note on を送る。
-    Send(Vec<[u8; 3]>),
+    Send(NoteRequest),
     /// 鳴っているものを止め、音源の音色を差し替えてから、この note on を送る。
     /// `patch` が `None` なら realtime server の既定音色へ戻す。
     SetPatch {
         patch: Option<String>,
-        messages: Vec<[u8; 3]>,
+        notes: Option<NoteRequest>,
     },
     /// 鳴っているものを止め、あらためてこの行を頭から積む。
     /// `events` が空なら止めるだけ。
@@ -53,20 +61,26 @@ pub enum MmlOverlayAction {
         patch: PatchChange,
         events: Vec<TimedMidiEvent>,
     },
-    /// 鳴っているものを止める。gate が切れたときだけ出る。
-    Stop,
     /// オーバーレイを閉じる。鳴っているものを止めるのも含む。
     Close,
 }
 
+/// MML overlay が受け取る、plugin 非依存の音色一覧スナップショット。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum PatchCatalogSnapshot {
+    /// バックグラウンド収集中。Ctrl+T は完了後の open 予約になる。
+    #[default]
+    Loading,
+    /// 収集済みの（表示名, 小文字化済み表示名）。空なら選べる音色がない。
+    Ready(Vec<(String, String)>),
+    /// 収集に失敗した理由。Ctrl+T 時に overlay 内へ表示する。
+    Error(String),
+}
+
 /// オーバーレイを開くときに呼び出し側から渡すスナップショット。
-///
-/// どれも読み込みが終わっていなければ空で渡してよく、その場合は音色選択や
-/// 履歴が開かないだけになる。
 #[derive(Default)]
 pub struct MmlOverlayContext {
-    /// 音色一覧（表示名, 小文字化）。
-    pub patches: Vec<(String, String)>,
+    pub patch_catalog: PatchCatalogSnapshot,
     /// notepad 画面と共有しているフレーズ履歴。
     pub history: Vec<String>,
     pub favorites: Vec<String>,
@@ -95,17 +109,21 @@ pub struct MmlOverlay<'a> {
     sounding: Vec<u8>,
     /// 打鍵で鳴らした音が chord 表記から来たか。表示だけに使う。
     sounding_from_chord: bool,
-    /// 打鍵で鳴らした音を止める時刻。書かれた音長ぶんだけ先に置く。
-    gate_deadline: Option<Instant>,
+    /// senderへ最後に依頼したcommand。古いworker状態で表示を巻き戻さないための世代。
+    sender_command_id: u64,
     /// 入力欄とは別に持つ音色。`Ctrl+T` と履歴の取り込みだけが書き換える。
     patch: Option<String>,
     /// 開いている間だけ持つ patch 一覧のスナップショット（表示名, 小文字化）。
-    patches: Vec<(String, String)>,
+    patch_catalog: PatchCatalogSnapshot,
     /// 開いている間だけ持つフレーズ履歴のスナップショット。
     history: Vec<String>,
     favorites: Vec<String>,
     /// 開いている間だけ持つ「カタログから外れたプラグイン」の案内。
     catalog_notes: Vec<String>,
+    /// Ctrl+T を処理できなかった理由。標準 stream ではなく overlay 内へ出す。
+    patch_catalog_notice: Option<PatchCatalogNotice>,
+    /// Loading 中の Ctrl+T を、一覧完成後に自動で実行する予約。
+    patch_select_requested: bool,
     patch_select: Option<PatchSelect<'a>>,
     history_select: Option<HistorySelect<'a>>,
     /// 直近に行を演奏した結果。
@@ -120,12 +138,14 @@ impl Default for MmlOverlay<'_> {
             last_notes: None,
             sounding: Vec::new(),
             sounding_from_chord: false,
-            gate_deadline: None,
+            sender_command_id: 0,
             patch: None,
-            patches: Vec::new(),
+            patch_catalog: PatchCatalogSnapshot::Loading,
             history: Vec::new(),
             favorites: Vec::new(),
             catalog_notes: Vec::new(),
+            patch_catalog_notice: None,
+            patch_select_requested: false,
             patch_select: None,
             history_select: None,
             line_status: LineStatus::Idle,
@@ -185,12 +205,14 @@ impl<'a> MmlOverlay<'a> {
         self.last_notes = None;
         self.sounding.clear();
         self.sounding_from_chord = false;
-        self.gate_deadline = None;
+        self.sender_command_id = 0;
         self.line_status = LineStatus::Idle;
-        self.patches = context.patches;
+        self.patch_catalog = context.patch_catalog;
         self.history = context.history;
         self.favorites = context.favorites;
         self.catalog_notes = context.catalog_notes;
+        self.patch_catalog_notice = None;
+        self.patch_select_requested = false;
         self.patch_select = None;
         self.history_select = None;
         self.open = true;
@@ -227,27 +249,28 @@ impl<'a> MmlOverlay<'a> {
         self.refresh(now)
     }
 
-    /// gate の期限が来た音を止める。メインループから毎フレーム呼ぶ。
-    ///
-    /// gate は打鍵の 1 音にしか張らない（行を鳴らすときに必ず落とす）ので、
-    /// ここが発火するのは「打鍵の音だけが鳴っている」ときに限られる。
-    pub fn poll(&mut self, now: Instant) -> Option<MmlOverlayAction> {
-        if now < self.gate_deadline? {
-            return None;
+    /// 呼び出し側がsenderへ積んだ最新commandを記録する。
+    pub fn expect_sender_command(&mut self, command_id: u64) {
+        self.sender_command_id = command_id;
+    }
+
+    /// workerが実際に到達した発音状態を表示へ反映する。
+    pub fn sync_sender_status(&mut self, status: &MmlOverlaySenderStatus) {
+        if status.command_id() < self.sender_command_id {
+            return;
         }
-        crate::log_line(format!(
-            "action=mml-overlay-gate-expired pitches={:?}",
-            self.sounding
-        ));
-        self.forget_sounding();
-        Some(MmlOverlayAction::Stop)
+        self.sender_command_id = status.command_id();
+        self.sounding.clear();
+        self.sounding.extend_from_slice(status.sounding());
     }
 
     fn close(&mut self) -> MmlOverlayAction {
-        self.patches = Vec::new();
+        self.patch_catalog = PatchCatalogSnapshot::Loading;
         self.history = Vec::new();
         self.favorites = Vec::new();
         self.patch_select = None;
+        self.patch_catalog_notice = None;
+        self.patch_select_requested = false;
         self.history_select = None;
         self.open = false;
         self.forget_sounding();
@@ -275,7 +298,7 @@ impl<'a> MmlOverlay<'a> {
     /// `1` を打てば全音符で鳴り直す。
     ///
     /// 休符やコマンドの上には鳴らす単位が無い。鳴っている音は gate に任せる。
-    fn refresh(&mut self, now: Instant) -> MmlOverlayAction {
+    fn refresh(&mut self, _now: Instant) -> MmlOverlayAction {
         let notes = self.notes_at_cursor();
         if notes == self.last_notes {
             return MmlOverlayAction::Continue;
@@ -284,7 +307,7 @@ impl<'a> MmlOverlay<'a> {
         let Some((_, notes)) = notes else {
             return MmlOverlayAction::Continue;
         };
-        MmlOverlayAction::Send(self.start_notes(&notes, now))
+        MmlOverlayAction::Send(self.start_notes(&notes))
     }
 
     fn notes_at_cursor(&self) -> Option<(usize, CursorNotes)> {
@@ -293,7 +316,7 @@ impl<'a> MmlOverlay<'a> {
     }
 
     /// この発音単位の note on。前の音を止めるのは受け取る側の仕事。
-    fn start_notes(&mut self, notes: &CursorNotes, now: Instant) -> Vec<[u8; 3]> {
+    fn start_notes(&mut self, notes: &CursorNotes) -> NoteRequest {
         // gate の長さは MML の音長そのもの。「打鍵をやめても鳴り続ける」を追うには、
         // 何 ms 先に止める約束をしたのかが残っていないと判断できない。
         crate::log_line(format!(
@@ -303,12 +326,15 @@ impl<'a> MmlOverlay<'a> {
         ));
         self.sounding.clone_from(&notes.pitches);
         self.sounding_from_chord = notes.from_chord;
-        self.gate_deadline = Some(now + notes.duration);
-        notes
+        let messages = notes
             .pitches
             .iter()
             .map(|pitch| [NOTE_ON, *pitch, notes.velocity])
-            .collect()
+            .collect();
+        NoteRequest {
+            messages,
+            duration: notes.duration,
+        }
     }
 
     fn current_line(&self) -> &str {
@@ -330,15 +356,21 @@ impl<'a> MmlOverlay<'a> {
         self.forget_sounding();
     }
 
-    /// 表示と gate の記録を捨てる。
+    /// 表示の記録を捨てる。
     ///
     /// **ここは音を止めない。** 音を止めるのは [`MmlOverlayAction`] を受け取った側で、
-    /// この関数を呼ぶ経路は必ず `Stop` / `Close` / `Send` / `PlayLine` のどれかを返す。
+    /// この関数を呼ぶ経路は必ず `Close` / `Send` / `PlayLine` のどれかを返す。
     fn forget_sounding(&mut self) {
         self.sounding.clear();
         self.sounding_from_chord = false;
-        self.gate_deadline = None;
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum PatchCatalogNotice {
+    Loading,
+    Empty,
+    Error(String),
 }
 
 /// このキーはカーソルのある行をもう一度鳴らす。
