@@ -1,8 +1,7 @@
 use super::*;
 
 use cmrt_runtime::{
-    CatalogPlugin, PatchRoles, DEXED_PLUGIN_ID, FLOE_PLUGIN_ID, SURGE_XT_PLUGIN_ID,
-    VAPORIZER2_PLUGIN_ID,
+    CatalogPlugin, DEXED_PLUGIN_ID, FLOE_PLUGIN_ID, SURGE_XT_PLUGIN_ID, VAPORIZER2_PLUGIN_ID,
 };
 
 fn plugin(name: &str, plugin_id: &str) -> CatalogPlugin {
@@ -14,7 +13,6 @@ fn plugin(name: &str, plugin_id: &str) -> CatalogPlugin {
         dirs: Vec::new(),
         resolved_patches: None,
         source_notices: Vec::new(),
-        patch_roles: PatchRoles::default(),
     }
 }
 

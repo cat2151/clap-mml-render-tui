@@ -39,9 +39,6 @@ buffer_size = 512
         cfg.chord_progression_source,
         DEFAULT_CHORD_PROGRESSION_SOURCE
     );
-    // 書かれていない用途別 7 項目は「書かれていない」まま。既定値はプラグインごとに
-    // `PatchRoles::builtin_for` が持つ（`docs/adr/0007-patch-role-defaults-three-layers.md`）。
-    assert_eq!(cfg.top_level_patch_roles, PatchRoleFilters::default());
 }
 
 #[test]
@@ -56,28 +53,12 @@ buffer_size = 512
 voicing_shared_source = "data/shared.json"
 voicing_override_source = ""
 chord_progression_source = ""
-chord_patch_categories = []
-bass_patch_categories = []
-arpeggio_patch_categories = []
 "#;
     let cfg: Config = toml::from_str(toml_str).unwrap();
 
     assert_eq!(cfg.voicing_shared_source, "data/shared.json");
     assert!(cfg.voicing_override_source.is_empty());
     assert!(cfg.chord_progression_source.is_empty());
-    // 明示の `[]` は「絞らない」。書かれていない (`None`) とは区別する。
-    assert_eq!(
-        cfg.top_level_patch_roles.chord_patch_categories,
-        Some(Vec::new())
-    );
-    assert_eq!(
-        cfg.top_level_patch_roles.bass_patch_categories,
-        Some(Vec::new())
-    );
-    assert_eq!(
-        cfg.top_level_patch_roles.arpeggio_patch_categories,
-        Some(Vec::new())
-    );
 }
 
 #[test]

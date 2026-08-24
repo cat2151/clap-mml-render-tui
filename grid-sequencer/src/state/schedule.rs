@@ -16,6 +16,18 @@ impl GridState {
     ///
     /// 先読みして送るので、UI のポーリング間隔ぶんのジッタが発音位置に乗らない。
     pub fn poll_steps(&mut self, now: Instant, lookahead: Duration) -> Vec<GridScheduledMessage> {
+        self.poll_steps_at(now, lookahead, now)
+    }
+
+    /// スケジューリング用 wall clock と、実際に聞こえる位置を表す表示 clock を分けて進める。
+    /// 出力 underrun 中もイベントの先読みは続けるが、表示はサーバーの musical clock と
+    /// 一緒に止める。
+    pub(crate) fn poll_steps_at(
+        &mut self,
+        now: Instant,
+        lookahead: Duration,
+        display_now: Instant,
+    ) -> Vec<GridScheduledMessage> {
         let mut scheduled = Vec::new();
         self.last_poll_lateness = Duration::ZERO;
         for due in self.clock.take_due(now, lookahead) {
@@ -26,7 +38,7 @@ impl GridState {
             let ahead = deadline.saturating_duration_since(now);
             let timeline_seconds = self.clock.timeline_seconds(due.step);
             let mut messages = self.expire_sounding();
-            self.advance_schedule(due.step);
+            let cycle_started = self.advance_schedule(due.step);
             let stopping = std::mem::take(&mut self.cycle_wrapped);
             if stopping {
                 // 鳴らしきった。次の小節は組み立てず、残っている音を止めてクロックを畳む。
@@ -45,8 +57,10 @@ impl GridState {
             scheduled.extend(self.apply_swing(messages, ahead, timeline_seconds, stopping));
             self.pending_display.push_back(PendingDisplay {
                 deadline,
+                ordinal: due.step,
                 step: self.schedule_index,
                 presentation: self.capture_presentation(),
+                cycle_started,
             });
             self.last_scheduled = Some(deadline);
             self.last_scheduled_timeline_seconds = Some(timeline_seconds);
@@ -54,7 +68,7 @@ impl GridState {
                 break;
             }
         }
-        self.advance_display(now);
+        self.advance_display(display_now);
         scheduled
     }
 
@@ -136,6 +150,8 @@ impl GridState {
     pub fn take_reset_messages(&mut self) -> Vec<GridScheduledMessage> {
         self.clock.stop();
         self.step_index = 0;
+        self.displayed_ordinal = None;
+        self.display_lateness = Duration::ZERO;
         self.schedule_index = 0;
         self.started = false;
         self.reset_lanes_for_start();
@@ -166,7 +182,15 @@ impl GridState {
                 .pending_display
                 .pop_front()
                 .expect("front was just observed");
+            if pending.cycle_started {
+                // `advance_schedule()` が bank を切り替えた時点では、この deadline より
+                // 前に鳴る旧 bank のイベントがまだ残っている。実発音が境界を越えた
+                // ここで初めて、空いた bank を次回の先読みに使ってよい。
+                self.preload_due = true;
+            }
             self.step_index = pending.step;
+            self.displayed_ordinal = Some(pending.ordinal);
+            self.display_lateness = now.saturating_duration_since(pending.deadline);
             self.display = Some(pending.presentation);
         }
         self.advance_lane_displays(now);
@@ -188,12 +212,14 @@ impl GridState {
     }
 
     /// `step` は、いま組み立てているステップの通し番号。周の頭でテンポを乗り換えるのに要る。
-    fn advance_schedule(&mut self, step: u64) {
+    fn advance_schedule(&mut self, step: u64) -> bool {
+        let mut cycle_started = false;
         if self.started {
             self.schedule_index = (self.schedule_index + 1) % GRID_STEPS;
             if self.schedule_index == 0 {
                 // grid を1周したので、chord mode なら次のコードへ進む。
                 let progression_wrapped = self.advance_chord();
+                cycle_started = progression_wrapped;
                 // テンポの引き直しはコード進行1周ごと。小節（grid 1周）ごとに変えると
                 // 進行の途中でテンポが動き、フレーズが繋がらない。chord mode を使って
                 // いない間は進行という単位が無いので、従来どおり grid 1周を単位にする。
@@ -204,6 +230,7 @@ impl GridState {
         } else {
             self.started = true;
         }
+        cycle_started
     }
 
     /// 鳴っている音の note off だけを作り、発音中リストを空にする。
@@ -214,3 +241,6 @@ impl GridState {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -9,7 +9,7 @@
 mod grouping;
 mod layout;
 mod naming;
-mod selection;
+mod roles;
 
 pub use grouping::{
     group_patch_pairs_by_category, sort_patch_pairs, PatchCategory, PatchSortOrder,
@@ -19,7 +19,7 @@ pub use naming::{
     compare_normalized_patch_names_natural, compare_patch_names_natural,
     normalize_patch_lookup_key, resolve_display_patch_name,
 };
-pub use selection::{
-    candidates_for_role, matches_role, pick_for_role, PatchRole, RoleFilter, RoleFilterLookup,
-    VoicingLookup,
+pub use roles::{
+    builtin_role_presets, normalize_user_role_presets, DrumPatchRole, PatchRole, PatchRoleIndex,
+    PatchRoleInput, PatchRolePreset,
 };

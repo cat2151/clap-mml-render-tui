@@ -230,18 +230,8 @@ fn the_default_config_shows_a_commented_vaporizer2_profile() {
 
     assert!(content.contains("# [plugins.Vaporizer2]"), "{content}");
     assert!(content.contains("# patches_dirs = "), "{content}");
-    assert!(
-        content.contains(
-            r#"# chord_patch_categories = ["Pad", "Chord", "Organ", "Synth", "Atmosphere"]"#
-        ),
-        "{content}"
-    );
-    assert!(
-        content.contains(r#"# bass_patch_categories = ["Bass"]"#),
-        "{content}"
-    );
-    // active_plugin の案内にも 3 つめとして出す。
-    assert!(content.contains("'Vaporizer2'"), "{content}");
+    assert!(content.contains("Vaporizer2"), "{content}");
+    assert!(!content.contains("chord_patch_categories"), "{content}");
 }
 
 /// カテゴリは `.vvp` のファイル名先頭 2 文字なので、**対応表が無いとユーザーは自分の
@@ -265,9 +255,7 @@ fn the_default_config_lists_every_vaporizer2_category_code() {
 #[test]
 fn the_default_config_parses_with_and_without_the_commented_profile() {
     let content = default_config_content();
-    let cfg: Config = toml::from_str(&content).expect("ひな形がそのまま TOML として通ること");
-    // 用途別 7 項目はトップレベルに書かれていない。既定値はプラグインごとに持つ。
-    assert_eq!(cfg.top_level_patch_roles, PatchRoleFilters::default());
+    let _cfg: Config = toml::from_str(&content).expect("ひな形がそのまま TOML として通ること");
 
     let header = content
         .rfind(r#"# [plugins."Surge XT"]"#)
@@ -293,10 +281,6 @@ fn the_default_config_parses_with_and_without_the_commented_profile() {
     let cfg: Config =
         toml::from_str(&with_profile).expect("コメントを外しても TOML として通ること");
 
-    let surge = cfg.plugins.get("Surge XT").expect("Surge XT プロファイル");
-    assert_eq!(
-        surge.patch_roles.chord_patch_categories,
-        Some(PatchRoles::builtin_for(Some(SURGE_XT_PLUGIN_ID), "").chord_patch_categories)
-    );
+    assert!(cfg.plugins.contains_key("Surge XT"));
     assert!(cfg.plugins.contains_key("my_synth"));
 }

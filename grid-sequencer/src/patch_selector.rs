@@ -219,24 +219,16 @@ impl GridSequencerScreen {
             return;
         };
         let current = item.patch.clone();
-        let chord_on = self.state.chord().is_some();
-        // chord mode 中は行ごとに用途が決まっている。それ以外の行は Free（＝和音向きの
-        // 音色を避ける）で引き、chord mode off なら全行が Free。
-        // drum 行は chord mode の on/off に関わらず用途が決まっている。
-        let role =
-            crate::patch_role::row_patch_role(instance, chord_on, self.state.drum_role(instance));
+        let purpose = self.row_patch_purpose(instance);
         // 現在の patch も除外しない。袋の中身は「用途に合う音色の全体」で固定しておき、
         // 音色を替えるたびに候補が変わって袋が作り直されるのを避ける。
-        let candidates = ctx
-            .role_candidates(role)
-            .into_iter()
-            .map(str::to_string)
-            .collect::<Vec<_>>();
+        let candidates = self.patch_candidates_for_row(instance, ctx);
         // 用途か候補が変わったら、袋も辿った履歴も作り直す。
-        if !matches!(self.patch_bags.get(&instance), Some(bag) if bag.matches(role, &candidates)) {
+        if !matches!(self.patch_bags.get(&instance), Some(bag) if bag.matches(purpose, &candidates))
+        {
             self.patch_bags.insert(
                 instance,
-                PatchBag::new(role, candidates, current.as_deref()),
+                PatchBag::new(purpose, candidates, current.as_deref()),
             );
         }
         let Some(bag) = self.patch_bags.get_mut(&instance) else {

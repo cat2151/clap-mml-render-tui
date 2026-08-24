@@ -17,16 +17,17 @@ use cmrt_tui_core::{
     ui::centered_rect,
 };
 
-use crate::patch_select::PatchSelect;
+use crate::patch_select::{PatchSelect, PatchSelectFocus};
 
-const QUERY_TITLE: &str = " 絞り込み  Enter:決定  Esc:取消 ";
-const QUERY_PLACEHOLDER: &str = "lead saw";
+const QUERY_TITLE: &str = " Regex (空白=AND)  Enter:決定  Esc:取消 ";
+const QUERY_PLACEHOLDER: &str = r"例: warm pad|strings";
 /// 絞り込み欄の高さ（枠2行 + 入力1行）。
 const QUERY_HEIGHT: u16 = 3;
+const CATEGORY_COLUMN_WIDTH: u16 = 12;
 const LOAD_COLUMN_WIDTH: u16 = 7;
 
 pub(super) fn draw(select: &PatchSelect<'_>, frame: &mut Frame<'_>) {
-    let area = centered_rect(80, 70, frame.area());
+    let area = centered_rect(94, 78, frame.area());
     frame.render_widget(Clear, area);
 
     // 案内が無いときは 1 行も取らない。ふだんの見え方を変えないため。
@@ -40,10 +41,26 @@ pub(super) fn draw(select: &PatchSelect<'_>, frame: &mut Frame<'_>) {
         ])
         .split(area);
     draw_query(select, frame, chunks[0]);
-    draw_list(select, frame, chunks[1]);
+    draw_panes(select, frame, chunks[1]);
     if notes_height > 0 {
         draw_notes(select, frame, chunks[2]);
     }
+}
+
+fn draw_panes(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
+    let group_width = (area.width / 5).clamp(12, 22);
+    let preset_width = (area.width / 4).clamp(14, 30);
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(group_width),
+            Constraint::Length(preset_width),
+            Constraint::Min(12),
+        ])
+        .split(area);
+    draw_groups(select, frame, panes[0]);
+    draw_presets(select, frame, panes[1]);
+    draw_list(select, frame, panes[2]);
 }
 
 /// 案内に要る行数。折り返しぶんも数える（1 行に収まらないと尻切れになる）。
@@ -96,22 +113,73 @@ fn draw_query(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
     frame.set_cursor_position(single_line_textarea_cursor_position(area, textarea));
 }
 
-fn draw_list(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
-    let block = Block::default()
+fn pane_block(title: String, focused: bool) -> Block<'static> {
+    Block::default()
         .borders(Borders::ALL)
-        .title(list_title(select))
+        .title(title)
         .style(base_style())
-        .border_style(base_style().fg(MONOKAI_YELLOW));
-    let page_size = usize::from(block.inner(area).height.saturating_sub(1));
-    select.set_page_size(page_size);
+        .border_style(base_style().fg(if focused { MONOKAI_YELLOW } else { MONOKAI_FG }))
+}
 
+fn draw_groups(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
+    let block = pane_block(
+        " Role  ←/→ ".to_string(),
+        select.focus() == PatchSelectFocus::Groups,
+    );
+    let rows = select
+        .groups()
+        .iter()
+        .map(|group| Row::new([Cell::from(group.label())]))
+        .collect::<Vec<_>>();
+    let mut state = TableState::default().with_selected(Some(select.group_cursor()));
+    frame.render_stateful_widget(
+        Table::new(rows, [Constraint::Fill(1)])
+            .block(block)
+            .row_highlight_style(cursor_highlight_style(Style::default().fg(MONOKAI_FG)))
+            .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
+        area,
+        &mut state,
+    );
+}
+
+fn draw_presets(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
+    let block = pane_block(
+        " Preset  Ctrl+A:add ".to_string(),
+        select.focus() == PatchSelectFocus::Presets,
+    );
+    let rows = select
+        .presets()
+        .iter()
+        .map(|preset| {
+            let prefix = if preset.is_user { "+ " } else { "" };
+            Row::new([Cell::from(format!("{prefix}{}", preset.label))])
+        })
+        .collect::<Vec<_>>();
+    let mut state = TableState::default().with_selected(Some(select.preset_cursor()));
+    frame.render_stateful_widget(
+        Table::new(rows, [Constraint::Fill(1)])
+            .block(block)
+            .row_highlight_style(cursor_highlight_style(Style::default().fg(MONOKAI_FG)))
+            .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
+        area,
+        &mut state,
+    );
+}
+
+fn draw_list(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
+    let block = pane_block(
+        list_title(select),
+        select.focus() == PatchSelectFocus::Patches,
+    );
     let rows = select
         .filtered()
-        .iter()
         .map(|patch| {
             Row::new([
-                Cell::from(patch.as_str()),
-                Cell::from(Line::from(load_label(select, patch)).alignment(Alignment::Right)),
+                Cell::from(patch.selector_category().unwrap_or("")),
+                Cell::from(patch.display()),
+                Cell::from(
+                    Line::from(load_label(select, patch.display())).alignment(Alignment::Right),
+                ),
             ])
         })
         .collect::<Vec<_>>();
@@ -120,9 +188,14 @@ fn draw_list(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
     frame.render_stateful_widget(
         Table::new(
             rows,
-            [Constraint::Fill(1), Constraint::Length(LOAD_COLUMN_WIDTH)],
+            [
+                Constraint::Length(CATEGORY_COLUMN_WIDTH),
+                Constraint::Fill(1),
+                Constraint::Length(LOAD_COLUMN_WIDTH),
+            ],
         )
         .header(Row::new([
+            Cell::from("Category"),
             Cell::from("Patch"),
             Cell::from(Line::from("Load").alignment(Alignment::Right)),
         ]))
@@ -150,7 +223,14 @@ fn format_load_time(milliseconds: u64) -> String {
 }
 
 fn list_title(select: &PatchSelect<'_>) -> String {
-    format!(" 音色 ({}/{}) ", select.filtered().len(), select.total())
+    if select.filter_error().is_some() {
+        return " Regex error  Ctrl+R:random ".to_string();
+    }
+    format!(
+        " 音色 ({}/{}) Ctrl+R:random ",
+        select.filtered_len(),
+        select.total()
+    )
 }
 
 #[cfg(test)]

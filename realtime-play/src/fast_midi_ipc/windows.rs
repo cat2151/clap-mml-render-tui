@@ -2,7 +2,7 @@ use std::{
     ffi::c_void,
     mem::size_of,
     ptr::{self, NonNull},
-    sync::atomic::Ordering,
+    sync::{atomic::Ordering, Arc},
     time::Instant,
 };
 
@@ -29,9 +29,11 @@ use super::*;
 mod platform;
 mod protocol;
 mod timeline;
+mod underrun;
 
-use platform::{last_os_error, wide_name};
+use platform::{last_os_error, wide_name, OwnedHandle};
 use protocol::*;
+pub use underrun::FastMidiUnderrunReader;
 
 struct Mapping {
     handle: HANDLE,
@@ -39,6 +41,9 @@ struct Mapping {
 }
 
 unsafe impl Send for Mapping {}
+// SharedRing の並行アクセス対象は atomic と、protocol で同期された response だけ。
+// 読み取り専用 meter handle は command の応答待ちと並行して使う。
+unsafe impl Sync for Mapping {}
 
 impl Mapping {
     fn ring(&self) -> &SharedRing {
@@ -57,18 +62,8 @@ impl Drop for Mapping {
     }
 }
 
-struct OwnedHandle(HANDLE);
-
-unsafe impl Send for OwnedHandle {}
-
-impl Drop for OwnedHandle {
-    fn drop(&mut self) {
-        unsafe { CloseHandle(self.0) };
-    }
-}
-
 pub struct FastMidiClient {
-    mapping: Mapping,
+    mapping: Arc<Mapping>,
     command_event: OwnedHandle,
     response_event: OwnedHandle,
     pid: u32,
@@ -85,7 +80,7 @@ impl FastMidiClient {
         if mapping_handle.is_null() {
             return Err(FastIpcError::NotAvailable);
         }
-        let mapping = map_handle(mapping_handle)?;
+        let mapping = Arc::new(map_handle(mapping_handle)?);
         validate_ring(mapping.ring())?;
         let command_event = open_event(&command_event_name, EVENT_MODIFY_STATE)?;
         let response_event = open_event(&response_event_name, SYNCHRONIZE_ACCESS)?;
@@ -100,6 +95,10 @@ impl FastMidiClient {
             pid,
             next_request_id: 1,
         })
+    }
+
+    pub fn underrun_reader(&self) -> FastMidiUnderrunReader {
+        FastMidiUnderrunReader::new(Arc::clone(&self.mapping))
     }
 
     pub fn send_events(&mut self, events: &[FastMidiEvent]) -> Result<(), FastIpcError> {
@@ -276,7 +275,7 @@ impl FastMidiClient {
                 return Err(FastIpcError::ResponseTimeout);
             }
             let wait_ms = (deadline - now).as_millis().min(u32::MAX as u128) as u32;
-            match unsafe { WaitForSingleObject(self.response_event.0, wait_ms) } {
+            match unsafe { WaitForSingleObject(self.response_event.raw(), wait_ms) } {
                 WAIT_OBJECT_0 => {}
                 WAIT_TIMEOUT => return Err(FastIpcError::ResponseTimeout),
                 _ => return Err(last_os_error("WaitForSingleObject")),
@@ -336,7 +335,7 @@ impl FastMidiClient {
         unsafe { ptr::write(ring.slots[index].get(), slot) };
         ring.write_index
             .store(write.wrapping_add(1), Ordering::Release);
-        if unsafe { SetEvent(self.command_event.0) } == 0 {
+        if unsafe { SetEvent(self.command_event.raw()) } == 0 {
             return Err(last_os_error("SetEvent"));
         }
         Ok(())
@@ -440,6 +439,6 @@ fn open_event(name: &[u16], access: u32) -> Result<OwnedHandle, FastIpcError> {
     if handle.is_null() {
         Err(FastIpcError::NotAvailable)
     } else {
-        Ok(OwnedHandle(handle))
+        Ok(OwnedHandle::new(handle))
     }
 }

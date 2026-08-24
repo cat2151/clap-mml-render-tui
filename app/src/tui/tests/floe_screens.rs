@@ -3,9 +3,20 @@
 use std::time::Instant;
 
 use super::*;
-use cmrt_mml_overlay::{MmlOverlay, MmlOverlayAction, MmlOverlayContext, PatchCatalogSnapshot};
+use cmrt_mml_overlay::{
+    MmlOverlay, MmlOverlayAction, MmlOverlayContext, PatchCatalogEntry, PatchCatalogSnapshot,
+};
 
 const FLOE_PATCH: &str = "Celtic Harp Factory Presets/Realistic Celtic Harp.floe-preset";
+
+fn mml_patches(items: &[&str]) -> Vec<PatchCatalogEntry> {
+    make_patches(items)
+        .into_iter()
+        .map(|(display, normalized)| {
+            PatchCatalogEntry::new(display, normalized, String::new(), None)
+        })
+        .collect()
+}
 
 fn app_with_floe_patch() -> TuiApp<'static> {
     let app = TuiApp::new_for_test(test_config());
@@ -34,7 +45,7 @@ fn mml_overlay_receives_floe_from_the_shared_patch_list() {
 fn selecting_floe_requests_a_preview_and_keeps_the_display_string() {
     let mut overlay = MmlOverlay::default();
     overlay.open(MmlOverlayContext {
-        patch_catalog: PatchCatalogSnapshot::Ready(make_patches(&[
+        patch_catalog: PatchCatalogSnapshot::Ready(mml_patches(&[
             "patches_factory/Pads/Pad 1.fxp",
             FLOE_PATCH,
         ])),

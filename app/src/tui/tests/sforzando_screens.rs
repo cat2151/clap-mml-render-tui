@@ -3,9 +3,20 @@
 use std::time::Instant;
 
 use super::*;
-use cmrt_mml_overlay::{MmlOverlay, MmlOverlayAction, MmlOverlayContext, PatchCatalogSnapshot};
+use cmrt_mml_overlay::{
+    MmlOverlay, MmlOverlayAction, MmlOverlayContext, PatchCatalogEntry, PatchCatalogSnapshot,
+};
 
 const SFZ_PATCH: &str = "Virtual-Playing-Orchestra3/Woodwinds/flute-SOLO-sustain.sfz";
+
+fn mml_patches(items: &[&str]) -> Vec<PatchCatalogEntry> {
+    make_patches(items)
+        .into_iter()
+        .map(|(display, normalized)| {
+            PatchCatalogEntry::new(display, normalized, String::new(), None)
+        })
+        .collect()
+}
 
 fn app_with_sfz_patch() -> TuiApp<'static> {
     let app = TuiApp::new_for_test(test_config());
@@ -35,7 +46,7 @@ fn every_screen_receives_sfz_from_the_one_shared_patch_list() {
 fn selecting_sfz_requests_preview_without_changing_its_display_string() {
     let mut overlay = MmlOverlay::default();
     overlay.open(MmlOverlayContext {
-        patch_catalog: PatchCatalogSnapshot::Ready(make_patches(&[
+        patch_catalog: PatchCatalogSnapshot::Ready(mml_patches(&[
             "patches_factory/Pads/Pad 1.fxp",
             SFZ_PATCH,
         ])),

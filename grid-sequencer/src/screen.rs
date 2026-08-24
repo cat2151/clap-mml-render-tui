@@ -5,8 +5,8 @@ use cmrt_rhythm::DrumPattern;
 use cmrt_tui_core::bpm::{BpmInput, BpmMode, BpmRange};
 
 use super::{
-    cycle_random::CycleRandomOverlay, patch_bag::PatchBag, CycleRandom, DrawnPhrases,
-    GridMidiSender, GridPatchStatus, GridState,
+    cycle_random::CycleRandomOverlay, patch_bag::PatchBag, playback_sync::PlaybackSync,
+    CycleRandom, DrawnPhrases, GridMidiSender, GridPatchStatus, GridState,
 };
 
 /// サンプルレート未指定時の既定値（config.toml の既定と同じ）。
@@ -63,6 +63,8 @@ pub struct GridSequencerScreen {
     pub(crate) buffer_frames: usize,
     /// Non-zero while the server and this screen share an absolute musical epoch.
     pub(crate) timeline_id: u64,
+    /// サーバーが drop 中に止めた musical clock を表示へ反映する同期状態。
+    pub(crate) playback_sync: PlaybackSync,
     pub help_open: bool,
     pub(crate) bpm_mode: BpmMode,
     /// 自動BPMを引く範囲。セッションへ保存するのはこちらで、引いた値ではない。
@@ -194,6 +196,7 @@ impl GridSequencerScreen {
             sample_rate,
             buffer_frames,
             timeline_id: 0,
+            playback_sync: PlaybackSync::default(),
             help_open: false,
             bpm_mode,
             bpm_range,

@@ -1,7 +1,9 @@
 # ADR 0002: config はプラグインプロファイル方式
 
-- 状態: 採用（2026-08-20）
-- 関連: [0005](0005-mixed-catalog-on-by-default.md) / [0007](0007-patch-role-defaults-three-layers.md)
+- 状態: config 選択方式は [0014](0014-fixed-surge-primary-plugin.md) により廃止（2026-08-24）
+- 関連: [0005](0005-mixed-catalog-on-by-default.md) / [0007](0007-patch-role-defaults-three-layers.md) / [0014](0014-fixed-surge-primary-plugin.md)
+
+> 以下は当時の決定記録。`active_plugin` とトップレベルの plugin 設定は現在の入力構文ではない。
 
 ## 決定
 

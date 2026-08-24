@@ -10,7 +10,7 @@ use std::{
     fs::{File, OpenOptions},
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock, TryLockError},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -104,17 +104,44 @@ fn strip_log_file_timestamp_prefix(line: &str) -> &str {
 }
 
 fn append_log_line_to_path(path: &Path, line: &str) -> std::io::Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-
     let _guard = log_file_lock()
         .lock()
         .expect("log file lock should not be poisoned");
+    append_log_lines_without_lock(path, line)
+}
+
+/// panic hookは通常ロガー自身のpanicからも呼ばれうる。通常mutexを待つと同じthreadで
+/// deadlockするため、取得できないときだけ同じdirectoryの`panic.log`へ退避する。
+fn append_panic_report_to_path(path: &Path, report: &str) -> std::io::Result<()> {
+    let _guard = match log_file_lock().try_lock() {
+        Ok(guard) => guard,
+        Err(TryLockError::Poisoned(error)) => error.into_inner(),
+        Err(TryLockError::WouldBlock) => {
+            let fallback = path.with_file_name("panic.log");
+            return append_log_lines_without_lock(&fallback, report);
+        }
+    };
+    append_log_lines_without_lock(path, report)
+}
+
+fn append_log_lines_without_lock(path: &Path, lines: &str) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let now = SystemTime::now();
+    let mut formatted = String::new();
+    let mut source_lines = lines.lines().peekable();
+    if source_lines.peek().is_none() {
+        formatted.push_str(&format_log_file_line_at("", now));
+        formatted.push('\n');
+    } else {
+        for line in source_lines {
+            formatted.push_str(&format_log_file_line_at(line, now));
+            formatted.push('\n');
+        }
+    }
     let mut file = OpenOptions::new().create(true).append(true).open(path)?;
-    let formatted_line = format_log_file_line_at(line, SystemTime::now());
-    file.write_all(formatted_line.as_bytes())?;
-    file.write_all(b"\n")?;
+    file.write_all(formatted.as_bytes())?;
     file.flush()
 }
 
@@ -128,6 +155,16 @@ fn append_log_line_to_optional_path(path: Option<PathBuf>, line: &str) -> std::i
 /// ログファイル（`log/log.txt`）へ 1 行追記する。app 側の sink（`global_log_sink` 等）からも使う。
 pub fn append_log_line_to_file(line: &str) -> std::io::Result<()> {
     append_log_line_to_optional_path(cmrt_runtime::log_file_path(), line)
+}
+
+/// panic payloadとbacktraceを終了前に同期書き込みする。
+///
+/// 通常ログのmutexを待てない場合は`log/panic.log`へフォールバックする。
+pub fn append_panic_report_to_file(report: &str) -> std::io::Result<()> {
+    let Some(path) = cmrt_runtime::log_file_path() else {
+        return Ok(());
+    };
+    append_panic_report_to_path(&path, report)
 }
 
 fn append_native_probe_log_line_to_file(line: &str) -> std::io::Result<()> {

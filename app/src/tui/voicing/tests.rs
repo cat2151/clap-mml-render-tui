@@ -21,7 +21,6 @@ fn catalog_plugin(plugin_id: &str, plugin_path: &str) -> CatalogPlugin {
         dirs: Vec::new(),
         resolved_patches: None,
         source_notices: Vec::new(),
-        patch_roles: cmrt_runtime::PatchRoles::default(),
     }
 }
 

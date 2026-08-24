@@ -113,15 +113,29 @@ impl std::error::Error for FastIpcError {}
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub use windows::FastMidiClient;
+pub use windows::{FastMidiClient, FastMidiUnderrunReader};
 
 #[cfg(not(windows))]
 pub struct FastMidiClient;
 
 #[cfg(not(windows))]
+pub struct FastMidiUnderrunReader;
+
+#[cfg(not(windows))]
+impl FastMidiUnderrunReader {
+    pub fn underrun_frames(&self) -> u64 {
+        0
+    }
+}
+
+#[cfg(not(windows))]
 impl FastMidiClient {
     pub fn connect(_port: u16) -> Result<Self, FastIpcError> {
         Err(FastIpcError::UnsupportedPlatform)
+    }
+
+    pub fn underrun_reader(&self) -> FastMidiUnderrunReader {
+        FastMidiUnderrunReader
     }
 
     pub fn send_events(&mut self, _events: &[FastMidiEvent]) -> Result<(), FastIpcError> {

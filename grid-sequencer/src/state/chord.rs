@@ -156,12 +156,6 @@ impl ChordPlayback {
         self.index == 0
     }
 
-    /// いま鳴らしているのが進行の最後のコードか（= この小節が最終小節）。
-    /// 待機 bank への先読みロードを始める合図に使う。
-    pub(super) fn is_last(&self) -> bool {
-        self.index + 1 == self.chords.len()
-    }
-
     /// 和音に含まれるピッチクラス（0〜11）の集合。
     pub(super) fn pitch_classes(&self) -> [bool; 12] {
         let mut classes = [false; 12];
@@ -184,6 +178,7 @@ impl GridState {
     ) -> Vec<GridScheduledMessage> {
         self.chord = chord;
         self.discard_pending_cycle();
+        self.request_cycle_preload();
         self.refresh_lane_display_patterns();
         self.take_silence_messages(now)
     }
@@ -213,10 +208,6 @@ impl GridState {
                 return false;
             }
             self.commit_pending_cycle();
-        }
-        // 最終小節へ入った。画面側はここから次の抽選と先読みロードを始める。
-        if self.chord.as_ref().is_some_and(ChordPlayback::is_last) {
-            self.preload_due = true;
         }
         wrapped
     }

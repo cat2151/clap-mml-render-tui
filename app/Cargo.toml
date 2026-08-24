@@ -12,6 +12,7 @@ cmrt-chord = { path = "../chord" }
 cmrt-config-editor = { path = "../config-editor-lib" }
 cmrt-daw = { path = "../daw" }
 cmrt-grid-sequencer = { path = "../grid-sequencer" }
+cmrt-patches = { path = "../patches" }
 cmrt-history = { path = "../history" }
 cmrt-keyboard = { path = "../keyboard" }
 cmrt-loop-browser = { path = "../loop-browser" }

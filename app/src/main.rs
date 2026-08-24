@@ -1,5 +1,4 @@
 use anyhow::Result;
-use chord2mml_core::convert as chord_to_mml;
 use clack_host::prelude::PluginEntry;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use clap_mml_render_tui::{
@@ -10,9 +9,12 @@ use cmrt_core::{load_entry, mml_to_play};
 use std::path::PathBuf;
 
 mod cli_output;
+mod cli_playback;
 mod process_restart;
 mod scan_loops;
 mod scan_progress_log;
+
+use cli_playback::{cli_playback_mml, CliPlaybackMml};
 
 #[derive(Debug, PartialEq, Eq)]
 enum CliAction {
@@ -29,20 +31,6 @@ enum CliAction {
     BuildPatchCatalogCache,
     PatchRoles { config: Option<PathBuf> },
     RenderMml(RenderMmlRequest),
-}
-
-#[derive(Debug, PartialEq, Eq)]
-enum CliPlaybackMml {
-    Chord { chord: String, mml: String },
-    Mml(String),
-}
-
-impl CliPlaybackMml {
-    fn mml(&self) -> &str {
-        match self {
-            Self::Chord { mml, .. } | Self::Mml(mml) => mml,
-        }
-    }
 }
 
 #[derive(Debug, Parser)]
@@ -124,7 +112,7 @@ enum Commands {
     /// grid sequencer の各行に patch の候補が出るかを調べる（画面を起動しない動作確認）
     PatchRoles {
         /// 既定の置き場ではなく、この config.toml を読む（実ユーザーの設定を書き換えずに
-        /// `active_plugin` や `[plugins.*]` を試すため）
+        /// `[plugins.*]` を試すため）
         #[arg(long, value_name = "PATH")]
         config: Option<PathBuf>,
     },
@@ -225,17 +213,19 @@ where
     Ok(CliAction::Tui)
 }
 
-fn cli_playback_mml(input: &str) -> CliPlaybackMml {
-    match chord_to_mml(input) {
-        Ok(mml) => CliPlaybackMml::Chord {
-            chord: input.to_string(),
-            mml,
-        },
-        Err(_) => CliPlaybackMml::Mml(input.to_string()),
+fn main() -> Result<()> {
+    clap_mml_render_tui::logging::install_panic_log_hook();
+    let result = run();
+    if let Err(error) = &result {
+        clap_mml_render_tui::logging::global_log_sink(&format!(
+            "app: event=fatal-error error={:?}",
+            format!("{error:#}")
+        ));
     }
+    result
 }
 
-fn main() -> Result<()> {
+fn run() -> Result<()> {
     clap_mml_render_tui::logging::install_embedded_core_log_sink();
     // loop browser のデータ層（別 crate）に app ディレクトリ解決を注入する。
     clap_mml_render_tui::loop_browser::set_app_dir_resolver(config::config_app_dir);

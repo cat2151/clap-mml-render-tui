@@ -9,15 +9,14 @@
 //! 引いたものではなく画面に出ていた patch そのものなので、上へ戻しきれば必ず元の音色
 //! へ帰れる。
 
-use cmrt_patches::PatchRole;
 use rand::seq::SliceRandom;
 
-use crate::ListDirection;
+use crate::{GridPatchPurpose, ListDirection};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PatchBag {
     /// この袋を作ったときの行の用途。chord mode の on/off で変わる。
-    role: PatchRole,
+    purpose: GridPatchPurpose,
     /// 袋を作る元。用途か候補が変われば袋ごと作り直す判定に使う。
     candidates: Vec<String>,
     /// 引いた順。`cursor` がこの中を前後する。
@@ -32,9 +31,13 @@ impl PatchBag {
     ///
     /// `current` が候補に含まれていなくてもよい。「wheel を回す前に鳴っていた音色」
     /// へ戻れることのほうが、list の中身が候補だけで揃っていることより大事。
-    pub(crate) fn new(role: PatchRole, candidates: Vec<String>, current: Option<&str>) -> Self {
+    pub(crate) fn new(
+        purpose: GridPatchPurpose,
+        candidates: Vec<String>,
+        current: Option<&str>,
+    ) -> Self {
         Self {
-            role,
+            purpose,
             candidates,
             sequence: current.map(str::to_string).into_iter().collect(),
             cursor: 0,
@@ -43,8 +46,8 @@ impl PatchBag {
     }
 
     /// 同じ用途・同じ候補で作った袋か。違えば呼び出し側が作り直す。
-    pub(crate) fn matches(&self, role: PatchRole, candidates: &[String]) -> bool {
-        self.role == role && self.candidates == candidates
+    pub(crate) fn matches(&self, purpose: GridPatchPurpose, candidates: &[String]) -> bool {
+        self.purpose == purpose && self.candidates == candidates
     }
 
     /// カーソルを1つ送って、適用する patch を返す。

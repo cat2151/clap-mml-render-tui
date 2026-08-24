@@ -1,8 +1,8 @@
 //! random対象のフレーズ型をまとめて引くshuffle bag。
 //!
 //! テトリスの7-bagと同じく、有効な対象の全組み合わせをshuffleした袋から1つずつ引き、
-//! 空になったら補充する。Cycle Randomの対象別に袋を分けるため、DRUMだけなら6通り、
-//! ARP（bass + arpeggio）だけなら54通り、両方なら324通りを重複なしで1周する。
+//! 空になったら補充する。Cycle Randomの対象と実在する行の組み合わせごとに袋を分ける。
+//! たとえばbassだけなら6通り、arpeggioだけなら9通り、両方なら54通りを重複なしで1周する。
 
 use std::collections::HashMap;
 
@@ -19,8 +19,8 @@ pub struct PatternCombination {
 }
 
 impl PatternCombination {
-    fn all(include_drums: bool, include_arp: bool) -> Vec<Self> {
-        if !include_drums && !include_arp {
+    fn all(include_drums: bool, include_bass: bool, include_arpeggio: bool) -> Vec<Self> {
+        if !include_drums && !include_bass && !include_arpeggio {
             return Vec::new();
         }
         let drums = if include_drums {
@@ -31,12 +31,12 @@ impl PatternCombination {
         } else {
             vec![None]
         };
-        let basses = if include_arp {
+        let basses = if include_bass {
             BassPattern::ALL.into_iter().map(Some).collect::<Vec<_>>()
         } else {
             vec![None]
         };
-        let arpeggios = if include_arp {
+        let arpeggios = if include_arpeggio {
             ArpPattern::ALL.into_iter().map(Some).collect::<Vec<_>>()
         } else {
             vec![None]
@@ -73,7 +73,8 @@ impl PatternCombination {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct PatternBagKey {
     drums: bool,
-    arp: bool,
+    bass: bool,
+    arpeggio: bool,
 }
 
 #[derive(Debug)]
@@ -84,7 +85,7 @@ struct PatternBag {
 
 impl PatternBag {
     fn new(key: PatternBagKey) -> Self {
-        let combinations = PatternCombination::all(key.drums, key.arp);
+        let combinations = PatternCombination::all(key.drums, key.bass, key.arpeggio);
         let deck = RandomIndexDeck::new(combinations.len());
         Self { combinations, deck }
     }
@@ -106,13 +107,15 @@ impl PatternBags {
     pub(super) fn draw(
         &mut self,
         include_drums: bool,
-        include_arp: bool,
+        include_bass: bool,
+        include_arpeggio: bool,
     ) -> Option<PatternCombination> {
         let key = PatternBagKey {
             drums: include_drums,
-            arp: include_arp,
+            bass: include_bass,
+            arpeggio: include_arpeggio,
         };
-        if !key.drums && !key.arp {
+        if !key.drums && !key.bass && !key.arpeggio {
             return None;
         }
         Some(

@@ -4,7 +4,7 @@
 //! 持つのに対し、ここは「いつ次を抽選し、待機 bank へどの順で patch を流し込むか」を持つ。
 //!
 //! 流れ:
-//! 1. 進行の最終小節へ入ると `GridState` が `preload_due` を立てる。
+//! 1. 進行の先頭が実際に鳴り始めると `GridState` が `preload_due` を立てる。
 //! 2. [`crate::CycleRandom`] に従って次サイクルを抽選し、差し替え待ちとして預ける。
 //! 3. PATCH が ON の周だけ、**1ステップにつき1インスタンスずつ**待機 bank へ patch を
 //!    先読みする。まとめて投げるとサーバーのレンダースレッドが連続で止まり underrun
@@ -16,7 +16,13 @@
 
 use std::time::Instant;
 
+use cmrt_tui_core::patch_load::PatchLoadMeasurement;
+
 use crate::{log_line, GridSequencerContext, GridSequencerScreen};
+
+/// catalog値を持たないpatchだけが選ばれた場合の控えめな初期値。1件目の実測後は
+/// その値で補正されるので、未知のまま固定されることはない。
+const DEFAULT_PATCH_LOAD_MS: u64 = 100;
 
 /// 待機 bank への先読みロードの進み具合。
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -58,7 +64,7 @@ impl CycleSwap {
 }
 
 impl GridSequencerScreen {
-    /// 毎ステップ呼ぶ。先読みの開始・1件ずつの送信・完了判定をここで進める。
+    /// 毎フレーム呼ぶ。先読みの開始・1件ずつの送信・完了判定をここで進める。
     pub(crate) fn advance_cycle_swap(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
         if self.state.take_preload_due() {
             self.begin_cycle_swap(now, ctx);
@@ -128,7 +134,8 @@ impl GridSequencerScreen {
             return;
         }
         if let Some(sender) = &self.midi_sender {
-            sender.begin_preload_cycle();
+            let pending = self.state.pending_patches();
+            sender.begin_preload_cycle(preload_weights_ms(&pending, ctx.load_measurements));
         }
         self.cycle_swap = Some(CycleSwap::new());
         log_line(&format!(
@@ -160,6 +167,7 @@ impl GridSequencerScreen {
     /// シングルバッファリング（[`crate::single_buffer`]）の待ちも一緒に畳む。どちらの
     /// 段取りも「次サイクルへの差し替え待ち」なので、捨てるときは足並みを揃える。
     pub(crate) fn cancel_cycle_swap(&mut self) {
+        let restart_preload = self.state.is_running();
         if self.cycle_swap.take().is_some() {
             if let Some(sender) = &self.midi_sender {
                 sender.finish_preload();
@@ -168,6 +176,12 @@ impl GridSequencerScreen {
         self.cycle_end_at = None;
         self.state.disarm_cycle_stop();
         self.state.discard_pending_cycle();
+        // auto random が有効なままなら、手編集や設定変更で古い先読みを捨てても
+        // 次の境界まで待たず、現在の内容から次サイクルを仕込み直す。single-buffer の
+        // drain 待ちで既に停止している場合は、現在譜面を再開する段取りを保つ。
+        if restart_preload {
+            self.state.request_cycle_preload();
+        }
     }
 
     /// live edit でpending instancesだけを捨てる。
@@ -181,6 +195,63 @@ impl GridSequencerScreen {
             .flatten();
         self.cancel_cycle_swap();
         self.cycle_end_at = drain_end;
+    }
+}
+
+/// 今回選ばれた patch 群の catalog 時間を、順序を保ったまま ETA の重みにする。
+/// 欠測値には今回の既知値の中央値（それも無ければ catalog 全体の中央値）を使う。
+/// `None` は patch の解除なので、最小の重みだけを与える。
+fn preload_weights_ms(
+    patches: &[(u8, Option<String>)],
+    measurements: Option<&std::collections::BTreeMap<String, PatchLoadMeasurement>>,
+) -> Vec<u64> {
+    let selected_known = patches
+        .iter()
+        .filter_map(|(_, patch)| measured_ms(measurements, patch.as_deref()))
+        .collect::<Vec<_>>();
+    let fallback = median(selected_known).or_else(|| {
+        measurements.map(|measurements| {
+            median(
+                measurements
+                    .values()
+                    .filter_map(|measurement| measurement.second_load_ms)
+                    .map(|ms| ms.max(1))
+                    .collect(),
+            )
+            .unwrap_or(DEFAULT_PATCH_LOAD_MS)
+        })
+    });
+    let fallback = fallback.unwrap_or(DEFAULT_PATCH_LOAD_MS);
+    patches
+        .iter()
+        .map(|(_, patch)| match patch.as_deref() {
+            Some(patch) => measured_ms(measurements, Some(patch)).unwrap_or(fallback),
+            None => 1,
+        })
+        .collect()
+}
+
+fn measured_ms(
+    measurements: Option<&std::collections::BTreeMap<String, PatchLoadMeasurement>>,
+    patch: Option<&str>,
+) -> Option<u64> {
+    measurements?
+        .get(patch?)?
+        .second_load_ms
+        .map(|ms| ms.max(1))
+}
+
+fn median(mut values: Vec<u64>) -> Option<u64> {
+    if values.is_empty() {
+        return None;
+    }
+    values.sort_unstable();
+    let middle = values.len() / 2;
+    if values.len().is_multiple_of(2) {
+        let lower = values[middle - 1];
+        Some(lower.saturating_add((values[middle] - lower) / 2))
+    } else {
+        Some(values[middle])
     }
 }
 

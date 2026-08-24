@@ -66,10 +66,17 @@ impl GridState {
             .collect()
     }
 
-    /// 進行の最終小節へ入ったことを一度だけ報告する。画面側が次の抽選と
-    /// 先読みロードを始める合図。
+    /// コード進行の新しい1周が始まったことを一度だけ報告する。画面側が次の抽選と
+    /// 待機 bank への先読みロードを始める合図。
     pub fn take_preload_due(&mut self) -> bool {
         std::mem::take(&mut self.preload_due)
+    }
+
+    /// 現在のコード進行が鳴っているなら、次サイクルの抽選を要求する。
+    ///
+    /// 再生開始時と、手編集・設定変更で古い pending cycle を捨てた直後に使う。
+    pub(crate) fn request_cycle_preload(&mut self) {
+        self.preload_due = self.chord.is_some();
     }
 
     /// 抽選し終えた次サイクルを、差し替え待ちとして預ける。
@@ -142,7 +149,7 @@ impl GridState {
         self.pending.is_some()
     }
 
-    /// テスト用。最終小節へ入った合図を、クロックを回さずに立てる。
+    /// テスト用。次サイクルを抽選する合図を、クロックを回さずに立てる。
     #[cfg(test)]
     pub(crate) fn stage_preload_due_for_test(&mut self) {
         self.preload_due = true;

@@ -8,6 +8,8 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 
+use cmrt_patches::{PatchRoleIndex, PatchRoleInput};
+
 use crate::patch_plugins::{CatalogPlugin, PatchPlugins};
 
 /// catalog構築時に同じpatchを2回loadして得た計測結果。
@@ -27,6 +29,7 @@ pub struct PatchCatalogSnapshot {
     pairs: Vec<(String, String)>,
     audio_patches: Vec<cmrt_core::AudioPatch>,
     plugins: PatchPlugins,
+    patch_roles: PatchRoleIndex,
     catalog_notes: Vec<String>,
     load_measurements: BTreeMap<String, PatchLoadMeasurement>,
 }
@@ -39,13 +42,16 @@ impl PatchCatalogSnapshot {
         catalog_notes: Vec<String>,
         load_measurements: BTreeMap<String, PatchLoadMeasurement>,
     ) -> Self {
-        Self {
+        let mut snapshot = Self {
             pairs,
             audio_patches,
             plugins: PatchPlugins::from_catalog(plugins),
+            patch_roles: PatchRoleIndex::default(),
             catalog_notes,
             load_measurements,
-        }
+        };
+        snapshot.rebuild_patch_roles(&[]);
+        snapshot
     }
 
     pub fn pairs(&self) -> &[(String, String)] {
@@ -54,6 +60,28 @@ impl PatchCatalogSnapshot {
 
     pub fn patch_plugins(&self) -> &PatchPlugins {
         &self.plugins
+    }
+
+    pub fn patch_roles(&self) -> &PatchRoleIndex {
+        &self.patch_roles
+    }
+
+    /// Roleへ追加したユーザー正規表現を含め、TUI共有の分類索引を作り直す。
+    pub fn rebuild_patch_roles(&mut self, user_presets: &[(String, String)]) {
+        self.patch_roles = PatchRoleIndex::build(
+            self.pairs
+                .iter()
+                .enumerate()
+                .map(|(index, (display, normalized_display))| PatchRoleInput {
+                    display,
+                    normalized_display,
+                    selector_category: self
+                        .audio_patches
+                        .get(index)
+                        .and_then(|patch| patch.selector_category.as_deref()),
+                }),
+            user_presets,
+        );
     }
 
     /// server shared coreが解釈済みの、plugin key付きpatch情報。
@@ -86,7 +114,6 @@ impl PatchCatalogSnapshot {
                 dirs: Vec::new(),
                 resolved_patches: None,
                 source_notices: Vec::new(),
-                patch_roles: Default::default(),
             }],
             Vec::new(),
             BTreeMap::new(),

@@ -83,6 +83,8 @@ pub struct RealtimePlayServerSupervisor {
     agent: ureq::Agent,
     state: Mutex<PlayServerState>,
     fast_client: Mutex<Option<fast_midi_ipc::FastMidiClient>>,
+    /// command の同期応答待ちに塞がれず、出力 callback の drop 数だけを読む handle。
+    fast_underrun_reader: Mutex<Option<fast_midi_ipc::FastMidiUnderrunReader>>,
     live_buffer_multiplier: Mutex<u16>,
     startup_progress: Arc<Mutex<Option<RealtimePlayServerStartupProgress>>>,
     next_request_id: AtomicU64,
@@ -131,6 +133,7 @@ impl RealtimePlayServerSupervisor {
             agent,
             state: Mutex::new(PlayServerState::default()),
             fast_client: Mutex::new(None),
+            fast_underrun_reader: Mutex::new(None),
             live_buffer_multiplier: Mutex::new(4),
             startup_progress: Arc::new(Mutex::new(None)),
             next_request_id: AtomicU64::new(1),

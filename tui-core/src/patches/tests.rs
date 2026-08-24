@@ -245,7 +245,6 @@ fn adapter_resolved_paths_are_used_without_rescanning_vendor_files() {
         ],
         resolved_patches: Some(vec![piano]),
         source_notices: Vec::new(),
-        patch_roles: cmrt_runtime::PatchRoles::default(),
     };
     let mut pairs = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -266,6 +265,5 @@ fn catalog_plugin(base: String, dir: String) -> CatalogPlugin {
         dirs: vec![dir],
         resolved_patches: None,
         source_notices: Vec::new(),
-        patch_roles: cmrt_runtime::PatchRoles::default(),
     }
 }

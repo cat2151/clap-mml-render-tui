@@ -1,10 +1,10 @@
 mod core_config;
 mod defaults;
-mod patch_roles;
 mod paths;
 mod plugin_identity;
 mod plugin_profile;
 
+pub use cmrt_server_config::PRIMARY_PLUGIN_PROFILE_NAME;
 pub use core_config::{
     catalog_notice_lines, catalog_plugins, catalog_plugins_detailed, configured_patch_dirs,
     core_config_patch_root_dir, shared_patch_root_dir, skipped_catalog_plugins, CatalogPlugin,
@@ -15,15 +15,12 @@ pub use defaults::{
     default_dexed_plugin_path, default_floe_plugin_path, default_patches_dirs, default_plugin_path,
     default_sforzando_plugin_path, default_vaporizer2_plugin_path, serialize_patches_dirs_line,
 };
-pub use patch_roles::{layered_patch_role_filters, PatchRoles};
 pub use paths::{config_app_dir, config_file_path, log_file_path, native_probe_log_file_path};
 pub use plugin_identity::{
     plugin_file_stem, DEXED_PLUGIN_ID, FLOE_PLUGIN_ID, SFORZANDO_PLUGIN_ID, SURGE_XT_PLUGIN_ID,
     VAPORIZER2_PLUGIN_ID,
 };
-pub use plugin_profile::{
-    apply_active_plugin_profile, builtin_plugin_profiles, PatchRoleFilters, PluginProfile,
-};
+pub use plugin_profile::{apply_primary_plugin_profile, builtin_plugin_profiles, PluginProfile};
 
 // サーバー側の既定値（port と worker 数）は play server repo 側が単一ソース。
 pub use cmrt_server_config::{
@@ -65,17 +62,13 @@ pub enum RealtimeAudioBackend {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
-    /// 使用するプラグインのパス。`active_plugin` を使う config では書かないので、
-    /// 省略を許して空文字にする（空のまま使われた場合は読み手が「空です」と弾く）。
+    /// 固定の既定プラグイン Surge XT のパス。load 時に profile から解決する runtime view。
     #[serde(default)]
     pub plugin_path: String,
-    /// 使用中プラグインの CLAP plugin ID。プロファイル解決後の値が入る。
+    /// Surge XT の CLAP plugin ID。profile 解決後の値が入る。
     #[serde(default)]
     pub plugin_id: Option<String>,
-    /// 使う `[plugins.*]` の名前。未指定ならトップレベルの指定をそのまま使う（後方互換）。
-    #[serde(default)]
-    pub active_plugin: Option<String>,
-    /// プラグインごとの設定。`active_plugin` が指すものだけが使われる。
+    /// Surge XT の override と、混在カタログへ載せる各プラグインの設定。
     #[serde(default)]
     pub plugins: BTreeMap<String, PluginProfile>,
     pub input_midi: String,
@@ -83,7 +76,7 @@ pub struct Config {
     pub output_wav: String,
     pub sample_rate: f64,
     pub buffer_size: usize,
-    /// パッチ検索対象ディレクトリ一覧
+    /// Surge XT のパッチ検索対象ディレクトリ一覧。load 時に profile から解決する。
     pub patches_dirs: Option<Vec<String>>,
     /// WAV ループブラウザーの検索対象ディレクトリ一覧
     #[serde(default)]
@@ -130,27 +123,6 @@ pub struct Config {
     /// grid sequencer の chord mode が使うコード進行JSON。HTTP(S) URLまたはconfig.toml基準のpath。
     #[serde(default = "default_chord_progression_source")]
     pub chord_progression_source: String,
-    /// トップレベルに書かれた用途別絞り込み（`chord_patch_categories` など 7 項目）。
-    ///
-    /// `active_plugin` が無かった時代の綴りで、値は Surge XT のカテゴリ名。**効くのは
-    /// 既定プラグインに対してだけ**で、カタログに並ぶ他のプラグインの土台にはしない
-    /// （[`PatchRoles`] の module doc の層 2）。土台にすると、プロファイルを持たない
-    /// `[plugins.my_synth]` が Surge のカテゴリで絞られて候補を失う。
-    ///
-    /// 書かれていない項目は `None`。新しく生成する config.toml はここへ何も書かず、
-    /// プラグインごとの既定は [`PatchRoles::builtin_for`] が持つ。
-    #[serde(flatten)]
-    pub top_level_patch_roles: PatchRoleFilters,
-    /// `active_plugin` が指すプロファイルの用途別絞り込み（差分のまま）。
-    ///
-    /// config には書かれない。プロファイル解決時に埋まる。上のトップレベル 7 項目を
-    /// 土台にこれを当てたものが「既定プラグインの用途別絞り込み」で、解決は
-    /// [`PatchRoles::resolve`] が行う。
-    ///
-    /// **ここをトップレベルへ焼き込んではいけない。** 焼き込むと土台が失われ、
-    /// カタログに複数プラグインが並んだときに「書かれていない項目」を解決できなくなる。
-    #[serde(skip)]
-    pub active_patch_roles: PatchRoleFilters,
 }
 
 /// `..Default::default()` で構造体リテラルを組めるようにするためのもの。
@@ -163,7 +135,6 @@ impl Default for Config {
         Self {
             plugin_path: String::new(),
             plugin_id: None,
-            active_plugin: None,
             plugins: BTreeMap::new(),
             input_midi: String::new(),
             output_midi: String::new(),
@@ -186,8 +157,6 @@ impl Default for Config {
             voicing_shared_source: default_voicing_shared_source(),
             voicing_override_source: default_voicing_override_source(),
             chord_progression_source: default_chord_progression_source(),
-            top_level_patch_roles: PatchRoleFilters::default(),
-            active_patch_roles: PatchRoleFilters::default(),
         }
     }
 }
@@ -303,23 +272,29 @@ impl Config {
     ///
     /// 診断コマンド（`cmrt patch-roles --config ...`）が「別の config だとどうなるか」を
     /// 実ユーザーの config.toml を書き換えずに確かめるための入口。
-    /// `active_plugin` や `[plugins.*]` を試すたびに実ファイルを編集して戻す運用は、
+    /// `[plugins.*]` を試すたびに実ファイルを編集して戻す運用は、
     /// 戻し忘れが即座に本番の設定事故になる（`docs/adr/0011-verification-and-baselines.md`）。
     pub fn load_from_path(path: &Path) -> anyhow::Result<Self> {
         let text = std::fs::read_to_string(path)
             .map_err(|e| anyhow::anyhow!("config.toml が読めない ({}): {}", path.display(), e))?;
-        let mut cfg: Self = toml::from_str(&text).map_err(|e| {
-            anyhow::anyhow!("config.toml のパースに失敗 ({}): {}", path.display(), e)
-        })?;
-        apply_active_plugin_profile(&mut cfg).map_err(|e| {
-            anyhow::anyhow!(
-                "config.toml のプラグイン設定が不正 ({}): {}",
-                path.display(),
-                e
-            )
-        })?;
+        Self::from_toml_str(&text).map_err(|e| {
+            anyhow::anyhow!("config.toml の読み込みに失敗 ({}): {:#}", path.display(), e)
+        })
+    }
+
+    /// `load_from_path` のうちファイルに触れない部分。
+    ///
+    /// config 構文の検査と固定 Surge XT の解決を 1 経路にまとめ、診断・テストでも
+    /// production と同じ順序を通す。
+    pub(crate) fn from_toml_str(text: &str) -> anyhow::Result<Self> {
+        let mut cfg: Self =
+            toml::from_str(text).map_err(|e| anyhow::anyhow!("config.toml のパースに失敗: {e}"))?;
+        cmrt_server_config::reject_retired_top_level_plugin_keys(text)
+            .map_err(|e| anyhow::anyhow!("config.toml のプラグイン設定が不正: {e}"))?;
+        apply_primary_plugin_profile(&mut cfg)
+            .map_err(|e| anyhow::anyhow!("config.toml のプラグイン設定が不正: {e}"))?;
         cfg.validate()
-            .map_err(|e| anyhow::anyhow!("config.toml の検証に失敗 ({}): {}", path.display(), e))?;
+            .map_err(|e| anyhow::anyhow!("config.toml の検証に失敗: {e}"))?;
         Ok(cfg)
     }
 

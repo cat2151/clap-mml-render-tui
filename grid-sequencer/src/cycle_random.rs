@@ -265,14 +265,16 @@ impl GridSequencerScreen {
         if item == CycleRandomItem::Chord && on {
             self.fixed_chord = None;
         }
-        match item {
-            // 和音の増幅は「譜面ごと毎周変わる完全ランダム演奏」限定。音色ロード
-            // なしで即時反映する。
-            CycleRandomItem::Note => self.apply_chord_gains(),
-            // 音色を据え置くと決めた以上、走っている先読み（＝差し替え先 bank への
-            // 音色ロード）は意味を失う。
-            CycleRandomItem::Patch if !on => self.cancel_cycle_swap_preserving_drain(),
-            _ => {}
+        // 既に抽選済みの次サイクルは変更前の設定で作られている。先読み開始を進行の
+        // 先頭へ早めたぶん保持時間も長いので、譜面に関わる設定変更では必ず捨てて
+        // 現在の設定から仕込み直す。BPM は pending grid とは別に予約する。
+        if item != CycleRandomItem::Bpm {
+            self.cancel_cycle_swap_preserving_drain();
+        }
+        // 和音の増幅は「譜面ごと毎周変わる完全ランダム演奏」限定。音色ロード
+        // なしで即時反映する。
+        if item == CycleRandomItem::Note {
+            self.apply_chord_gains();
         }
         log_line(&format!(
             "grid-sequencer: cycle-random {}={on} value={}",

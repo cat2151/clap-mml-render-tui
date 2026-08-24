@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{backend::TestBackend, Terminal};
 
 use super::*;
-use crate::{MmlOverlayContext, PatchCatalogSnapshot};
+use crate::{MmlOverlayContext, PatchCatalogEntry, PatchCatalogSnapshot};
 use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 
 fn render(overlay: &MmlOverlay<'_>) -> String {
@@ -12,7 +12,7 @@ fn render(overlay: &MmlOverlay<'_>) -> String {
 }
 
 fn render_with_status(overlay: &MmlOverlay<'_>, status: &MmlOverlaySenderStatus) -> String {
-    let mut terminal = Terminal::new(TestBackend::new(60, 16)).unwrap();
+    let mut terminal = Terminal::new(TestBackend::new(80, 16)).unwrap();
     terminal
         .draw(|frame| draw_with_status(overlay, status, frame))
         .unwrap();
@@ -124,9 +124,11 @@ fn shows_whether_the_played_line_was_read_as_a_chord() {
 fn draws_the_patch_select_over_the_input() {
     let mut overlay = MmlOverlay::default();
     overlay.open(MmlOverlayContext {
-        patch_catalog: PatchCatalogSnapshot::Ready(vec![(
+        patch_catalog: PatchCatalogSnapshot::Ready(vec![PatchCatalogEntry::new(
             "Leads/Lead 1.fxp".to_string(),
             "leads/lead 1.fxp".to_string(),
+            "Surge XT".to_string(),
+            Some("Leads".to_string()),
         )]),
         load_measurements: std::collections::BTreeMap::from([(
             "Leads/Lead 1.fxp".to_string(),
@@ -144,6 +146,11 @@ fn draws_the_patch_select_over_the_input() {
     let rendered = render(&overlay);
 
     assert!(rendered.contains("Enter:"), "{rendered}");
+    assert!(rendered.contains("Role"), "{rendered}");
+    assert!(rendered.contains("Preset"), "{rendered}");
+    assert!(rendered.contains("Bass › bass|bs"), "{rendered}");
+    assert!(rendered.contains("Category"), "{rendered}");
+    assert!(rendered.contains("Leads"), "{rendered}");
     assert!(rendered.contains("Lead 1.fxp"), "{rendered}");
     assert!(rendered.contains("Load"), "{rendered}");
     assert!(rendered.contains("0.2s"), "{rendered}");
@@ -154,7 +161,9 @@ fn failed_patch_load_is_shown_as_a_dash() {
     let patch = "Leads/Broken.fxp";
     let mut overlay = MmlOverlay::default();
     overlay.open(MmlOverlayContext {
-        patch_catalog: PatchCatalogSnapshot::Ready(vec![(patch.to_string(), patch.to_lowercase())]),
+        patch_catalog: PatchCatalogSnapshot::Ready(vec![PatchCatalogEntry::from_display(
+            patch.to_string(),
+        )]),
         load_measurements: std::collections::BTreeMap::from([(
             patch.to_string(),
             PatchLoadMeasurement {
@@ -257,9 +266,8 @@ fn draws_the_history_select_over_the_input() {
 fn the_patch_select_shows_why_a_plugin_is_missing_from_the_list() {
     let mut overlay = MmlOverlay::default();
     overlay.open(MmlOverlayContext {
-        patch_catalog: PatchCatalogSnapshot::Ready(vec![(
+        patch_catalog: PatchCatalogSnapshot::Ready(vec![PatchCatalogEntry::from_display(
             "Leads/Lead 1.fxp".to_string(),
-            "leads/lead 1.fxp".to_string(),
         )]),
         catalog_notes: vec!["Vaporizer2 は patches_dirs が無いため一覧に出ません".to_string()],
         ..MmlOverlayContext::default()
@@ -278,9 +286,8 @@ fn the_patch_select_shows_why_a_plugin_is_missing_from_the_list() {
 /// 案内が無いときは 1 行も取らない。ふだんの見え方を変えないことの番人。
 #[test]
 fn the_patch_select_takes_no_extra_row_without_a_note() {
-    let patches = vec![(
+    let patches = vec![PatchCatalogEntry::from_display(
         "Leads/Lead 1.fxp".to_string(),
-        "leads/lead 1.fxp".to_string(),
     )];
     let open_with = |catalog_notes: Vec<String>| {
         let mut overlay = MmlOverlay::default();

@@ -99,6 +99,19 @@ fn note_cc1_and_velocity_heights_use_their_own_row_counts() {
     assert_eq!(layout.velocity.height, 8);
 }
 
+#[test]
+fn patch_load_progress_sits_directly_below_the_note_tracks() {
+    let layout = GridSequencerLayout::new(Rect::new(0, 0, 80, 30), 5, 2, 5, false, NO_LIST);
+
+    assert_eq!(layout.patch_load_progress.height, 1);
+    assert_eq!(
+        layout.patch_load_progress.y,
+        layout.note.y + layout.note.height
+    );
+    assert_eq!(layout.patch_load_progress.x, layout.note.x);
+    assert_eq!(layout.patch_load_progress.width, layout.note.width);
+}
+
 /// 端末がいくら広くても grid は中身ぶんの幅しか取らず、塊ごと中央へ寄る。
 #[test]
 fn the_grid_keeps_its_content_width_and_the_block_is_centred() {

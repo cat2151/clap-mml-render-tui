@@ -223,11 +223,11 @@ impl GridState {
         chord_mode: bool,
     ) -> Option<PatternCombination> {
         let include_drums = policy.drum && self.instances.iter().any(|item| item.drum.is_some());
-        let include_arp = policy.arp
-            && chord_mode
-            && self.instances.get(BASS_ROW).is_some()
-            && self.instances.get(ARPEGGIO_ROW).is_some();
-        self.pattern_bags.draw(include_drums, include_arp)
+        let include_bass = policy.arp && chord_mode && self.instances.get(BASS_ROW).is_some();
+        let include_arpeggio =
+            policy.arp && chord_mode && self.instances.get(ARPEGGIO_ROW).is_some();
+        self.pattern_bags
+            .draw(include_drums, include_bass, include_arpeggio)
     }
 
     /// patch 一覧の非同期読み込み後、まだ未設定のinstanceだけへ音色を割り当てる。

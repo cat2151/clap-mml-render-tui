@@ -27,6 +27,7 @@ mod patch_bag;
 mod patch_notice;
 mod patch_role;
 mod patch_selector;
+mod playback_sync;
 mod screen;
 mod screen_runtime;
 mod sender;
@@ -38,15 +39,14 @@ mod tempo;
 pub mod ui;
 mod undo;
 
-pub use cmrt_patches::PatchRole;
 pub use context::{GridPatchLoad, GridPatchStatus, GridSequencerContext};
 pub use cycle_random::{CycleRandom, CycleRandomItem};
 pub(crate) use input::ListDirection;
-pub use patch_role::row_patch_role;
+pub use patch_role::{candidates_for_purpose, row_patch_purpose, GridPatchPurpose};
 pub use screen::{GridSequencerParts, GridSequencerScreen};
 pub use sender::{
-    GridConnectionPhase, GridConnectionStatus, GridMidiSender, GridProgress, GridRowPatchPhase,
-    GridRowPatchStatus, GridRowReadiness,
+    GridConnectionPhase, GridConnectionStatus, GridMidiSender, GridPreloadEstimate, GridProgress,
+    GridRowPatchPhase, GridRowPatchStatus, GridRowReadiness,
 };
 pub use session::{FixedChordProgression, GridSequencerSession};
 pub use state::{
@@ -143,10 +143,9 @@ impl GridSequencerScreen {
         self.close_cycle_random_overlay();
         self.patch_status = ctx.patch_status();
         // 入場時は何も送っていないので、引き直しで出る note off は捨ててよい。
-        let _ = self.state.randomize_all(now, ctx.patches());
+        let _ = self.state.randomize_all(now, &[]);
         self.absorb_drawn_phrases(self.state.drawn_phrases());
-        // 無差別抽選のあとに、用途が決まっている行（drum）だけ当て直す。
-        self.apply_assigned_patches(ctx, false);
+        self.apply_random_patches(ctx, false);
         self.grid_ready = true;
         self.restored_patches_pending = false;
         self.cancel_cycle_swap();
@@ -300,19 +299,16 @@ impl GridSequencerScreen {
             false
         };
         let chord_restored = self.poll_pending_chord(Instant::now(), ctx);
-        // 用途が決まっている行は無差別抽選より先に埋める。あとから埋めると
-        // drum 行に打楽器でない音色が残る。
-        let by_role = if ctx.patches_are_ready() {
-            self.apply_assigned_patches(ctx, true)
+        let assigned = if ctx.patches_are_ready() {
+            self.apply_random_patches(ctx, true)
         } else {
             0
         };
-        let assigned = self.state.fill_missing_patches(ctx.patches());
-        if assigned == 0 && by_role == 0 && !chord_restored && !restored_validated {
+        if assigned == 0 && !chord_restored && !restored_validated {
             return;
         }
         log_line(&format!(
-            "grid-sequencer: patch-list-ready assigned={assigned} by_role={by_role} \
+            "grid-sequencer: patch-list-ready assigned={assigned} \
              chord_restored={chord_restored} instances={}",
             self.track_count()
         ));
@@ -396,7 +392,7 @@ impl GridSequencerScreen {
         self.patch_status = ctx.patch_status();
         // 全 instance を差し替えるので、走っている先読みは意味を失う。
         self.cancel_cycle_swap();
-        let _note_offs = self.state.randomize_all(now, ctx.patches());
+        let _note_offs = self.state.randomize_all(now, &[]);
         self.absorb_drawn_phrases(self.state.drawn_phrases());
         // chord mode 中は和音の行だけ poly patch を当て直す（無差別抽選で mono を
         // 引くと和音が潰れるため）。

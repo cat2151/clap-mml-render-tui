@@ -12,7 +12,6 @@ fn plugin() -> CachedPlugin {
         base: Some("C:/patches".to_string()),
         dirs: vec!["C:/patches".to_string()],
         source_notices: Vec::new(),
-        patch_roles: PatchRoles::default(),
     }
 }
 
@@ -60,7 +59,7 @@ fn temp_path(label: &str) -> PathBuf {
 #[test]
 fn cache_round_trip_rebuilds_lowercase_search_value() {
     let path = temp_path("round_trip");
-    let mut patch = cached_patch("Leads/LOUD Lead.fxp", 234);
+    let mut patch = cached_patch("patches_factory/Leads/LOUD Lead.fxp", 234);
     patch.measurement.first_load_error = Some("warmup failed".to_string());
     let cache = CacheFile {
         format_version: CACHE_FORMAT_VERSION,
@@ -76,15 +75,15 @@ fn cache_round_trip_rebuilds_lowercase_search_value() {
     assert_eq!(
         loaded.pairs(),
         &[(
-            "Leads/LOUD Lead.fxp".to_string(),
-            "leads/loud lead.fxp".to_string()
+            "patches_factory/Leads/LOUD Lead.fxp".to_string(),
+            "patches_factory/leads/loud lead.fxp".to_string()
         )]
     );
     assert_eq!(loaded.catalog_notes(), &["notice"]);
     assert_eq!(loaded.catalog_plugins()[0].name, "Surge XT");
     assert_eq!(
         loaded.audio_patches()[0].reference.display,
-        "Leads/LOUD Lead.fxp"
+        "patches_factory/Leads/LOUD Lead.fxp"
     );
     assert_eq!(
         loaded.audio_patches()[0].reference.plugin,
@@ -95,16 +94,50 @@ fn cache_round_trip_rebuilds_lowercase_search_value() {
     );
     assert_eq!(loaded.audio_patches()[0].sort.category, "Leads");
     assert_eq!(
-        loaded.load_measurements()["Leads/LOUD Lead.fxp"].second_load_ms,
+        loaded.audio_patches()[0].selector_category.as_deref(),
+        Some("Leads")
+    );
+    assert_eq!(
+        loaded.load_measurements()["patches_factory/Leads/LOUD Lead.fxp"].second_load_ms,
         Some(234)
     );
     assert_eq!(
-        loaded.load_measurements()["Leads/LOUD Lead.fxp"]
+        loaded.load_measurements()["patches_factory/Leads/LOUD Lead.fxp"]
             .first_load_error
             .as_deref(),
         Some("warmup failed")
     );
     assert!(patch_voicings.is_empty());
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn cache_load_backfills_selector_category_without_remeasuring_patches() {
+    let path = temp_path("selector_category_backfill");
+    let cache = CacheFile {
+        format_version: CACHE_FORMAT_VERSION,
+        patches: vec![cached_patch("patches_factory/Basses/Attacky.fxp", 12)],
+        plugins: vec![plugin()],
+        patch_voicings: BTreeMap::new(),
+        catalog_notes: Vec::new(),
+    };
+    let mut value = serde_json::to_value(cache).unwrap();
+    value["patches"][0]["audio"]
+        .as_object_mut()
+        .unwrap()
+        .remove("selector_category");
+    fs::write(&path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+
+    let (loaded, _) = load_from(&path).unwrap().into_parts();
+
+    assert_eq!(
+        loaded.audio_patches()[0].selector_category.as_deref(),
+        Some("Basses")
+    );
+    assert_eq!(
+        loaded.load_measurements()["patches_factory/Basses/Attacky.fxp"].second_load_ms,
+        Some(12)
+    );
     let _ = fs::remove_file(path);
 }
 
@@ -257,7 +290,6 @@ fn cache_build_reads_vvp_poly_mode_once() {
         dirs: vec![root.to_string_lossy().into_owned()],
         resolved_patches: None,
         source_notices: Vec::new(),
-        patch_roles: PatchRoles::default(),
     };
     let pairs = vec![
         ("PD Wide.vvp".to_string(), "pd wide.vvp".to_string()),

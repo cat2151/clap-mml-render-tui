@@ -198,7 +198,10 @@ pub(super) fn run_midi_sender(
                         "grid-sequencer: preload failed instance={instance_id} error=\"{error:#}\""
                     )),
                 }
-                status.lock().unwrap().record_preload_step(result.is_ok());
+                status
+                    .lock()
+                    .unwrap()
+                    .record_preload_step(result.is_ok(), started.elapsed());
             }
             GridMidiCommand::SetRowPatch {
                 request_id,

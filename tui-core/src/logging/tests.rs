@@ -8,8 +8,8 @@ use std::{
 use std::collections::VecDeque;
 
 use super::{
-    append_log_line_to_path, format_log_file_line_at, load_log_lines_from_path,
-    strip_log_file_timestamp_prefix,
+    append_log_line_to_path, append_panic_report_to_path, format_log_file_line_at,
+    load_log_lines_from_path, log_file_lock, strip_log_file_timestamp_prefix,
 };
 
 fn split_log_file_line(line: &str) -> (&str, &str) {
@@ -141,6 +141,54 @@ fn append_log_line_to_path_keeps_concurrent_lines_intact() {
     assert_eq!(actual_lines.len(), thread_count * lines_per_thread);
     assert_eq!(actual_set, expected_set);
 
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn a_multiline_panic_report_flushes_each_line_with_a_timestamp() {
+    let tmp = std::env::temp_dir().join(format!(
+        "cmrt_test_panic_logging_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let path = tmp.join("log").join("log.txt");
+
+    append_panic_report_to_path(&path, "panic: boom\npanic: backtrace line").unwrap();
+
+    let lines = std::fs::read_to_string(&path).unwrap();
+    let messages = lines
+        .lines()
+        .map(|line| split_log_file_line(line).1)
+        .collect::<Vec<_>>();
+    assert_eq!(messages, ["panic: boom", "panic: backtrace line"]);
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn a_panic_while_the_main_log_is_locked_uses_the_fallback_file() {
+    let tmp = std::env::temp_dir().join(format!(
+        "cmrt_test_panic_log_fallback_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let path = tmp.join("log").join("log.txt");
+    let _guard = log_file_lock().lock().unwrap();
+
+    append_panic_report_to_path(&path, "panic: lock unavailable").unwrap();
+
+    assert!(!path.exists());
+    let fallback = path.with_file_name("panic.log");
+    let line = std::fs::read_to_string(fallback).unwrap();
+    assert_eq!(
+        split_log_file_line(line.trim_end()).1,
+        "panic: lock unavailable"
+    );
     std::fs::remove_dir_all(&tmp).ok();
 }
 

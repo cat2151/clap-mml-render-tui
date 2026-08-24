@@ -3,8 +3,11 @@
 //! 画面側は config も patch 一覧も自分では持たない。app 側の glue
 //! （`tui::grid_sequencer_glue`）が毎フレーム組み立てて渡す。
 
+use std::{borrow::Cow, collections::BTreeMap};
+
 use cmrt_chord::ChordProgressionCatalog;
-use cmrt_tui_core::patch_plugins::PatchPlugins;
+use cmrt_patches::PatchRoleIndex;
+use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 
 use crate::GridVoicingLookup;
 
@@ -20,16 +23,15 @@ pub enum GridPatchLoad<'a> {
 pub struct GridSequencerContext<'a> {
     pub patch_dirs_configured: bool,
     pub patch_load: GridPatchLoad<'a>,
+    /// catalog 構築時に計測した patch ごとのロード時間。auto random の ETA に使う。
+    /// cache 読み込み前や cache を使わない診断では `None`。
+    pub load_measurements: Option<&'a BTreeMap<String, PatchLoadMeasurement>>,
     /// chord mode が進行を抽選するカタログ。空なら chord mode は開始できない。
     pub chord_catalog: &'a ChordProgressionCatalog,
     /// 和音用 patch の当たり判定に使う mono/poly 判定。
     pub voicing: &'a dyn GridVoicingLookup,
-    /// patch 文字列から「その音色を鳴らすプラグイン」と、そのプラグイン向けの
-    /// 用途別カテゴリ／キーワードを引く表。
-    ///
-    /// カタログに複数プラグインの音色が並ぶと絞り込みは 1 組では足りないので、
-    /// この画面は config の 7 項目を直接は見ず、必ずここを通す。
-    pub patch_plugins: &'a PatchPlugins,
+    /// MML selectorと共有する、最新の排他的Role分類索引。
+    pub patch_roles: Cow<'a, PatchRoleIndex>,
     /// コード進行カタログが更新されたか（再起動アナウンスの合図。一度だけ true）。
     pub chord_source_updated: bool,
     /// 設定不足でカタログから外れたプラグインの案内。patch selector の枠下へ出す。

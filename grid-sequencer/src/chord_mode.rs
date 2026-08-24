@@ -6,11 +6,10 @@
 use std::time::Instant;
 
 use cmrt_chord::{ChordProgressionCatalog, ChordVoicing};
-use cmrt_patches::{pick_for_role, PatchRole};
 
 use crate::{
     log_line, ChordPlayback, CycleRandomItem, FixedChordProgression, GridSequencerContext,
-    GridSequencerScreen, ARPEGGIO_ROW, BASS_ROW, CHORD_ROW,
+    GridSequencerScreen, CHORD_ROW,
 };
 
 /// 1回の抽選で、変換できる進行を探すために引き直す回数。
@@ -82,7 +81,7 @@ impl GridSequencerScreen {
         self.state.instances_mut()[CHORD_ROW].patch = Some(patch);
         // bass / アルペジオ / drum は引けなくても chord mode は続ける
         // （直前の音色のまま鳴るだけ）。
-        self.apply_assigned_patches(ctx, false);
+        self.apply_dedicated_patches(ctx);
         self.chord_enabled = true;
         true
     }
@@ -108,7 +107,7 @@ impl GridSequencerScreen {
         self.apply_chord_playback(playback, now, "fixed-input");
         if let Some(patch) = chord_patch {
             self.state.instances_mut()[CHORD_ROW].patch = Some(patch);
-            self.apply_assigned_patches(ctx, false);
+            self.apply_dedicated_patches(ctx);
         }
         self.chord_enabled = true;
         self.pending_chord = false;
@@ -119,71 +118,6 @@ impl GridSequencerScreen {
             self.prepare_connection();
         }
         Ok(())
-    }
-
-    /// 用途が決まっている行（chord 行を除く）。
-    ///
-    /// chord 行は poly 判定が要るぶん扱いが違うので、この一覧には入れない。
-    fn assigned_rows(&self) -> Vec<usize> {
-        (0..self.state.instance_count())
-            .filter(|row| self.row_patch_role(*row).is_some())
-            .collect()
-    }
-
-    /// その行の patch の用途。用途が決まっていない行は `None`。
-    ///
-    /// drum 行は chord mode の on/off に関わらず用途が決まっている（打楽器の音でないと
-    /// リズムにならない）。bass とアルペジオの行は chord mode 中だけの役目。
-    fn row_patch_role(&self, row: usize) -> Option<PatchRole> {
-        if let Some(drum) = self.state.drum_role(row) {
-            return Some(crate::patch_role::drum_patch_role(drum));
-        }
-        self.state.chord()?;
-        match row {
-            BASS_ROW => Some(PatchRole::Bass),
-            ARPEGGIO_ROW => Some(PatchRole::Arpeggio),
-            _ => None,
-        }
-    }
-
-    /// 用途が決まっている行へ、その用途の候補から patch を当てる。当てた行数を返す。
-    ///
-    /// `only_missing` が true なら、まだ音色の付いていない行だけを埋める。復元した音色や
-    /// 手で選んだ音色を、patch 一覧が揃ったタイミングで奪わないため。
-    pub(crate) fn apply_assigned_patches(
-        &mut self,
-        ctx: &GridSequencerContext<'_>,
-        only_missing: bool,
-    ) -> usize {
-        let mut applied = 0;
-        for row in self.assigned_rows() {
-            if only_missing && self.state.instances()[row].patch.is_some() {
-                continue;
-            }
-            applied += usize::from(self.apply_row_patch(row, ctx));
-        }
-        applied
-    }
-
-    /// 用途が決まっている行へ、その用途のカテゴリから引いた patch を当てる。
-    /// 行が無い構成（track 数が足りない）では何もしない。当てられたら true。
-    fn apply_row_patch(&mut self, row: usize, ctx: &GridSequencerContext<'_>) -> bool {
-        let Some(patch) = self.pick_row_patch(row, ctx) else {
-            return false;
-        };
-        let Some(instance) = self.state.instances_mut().get_mut(row) else {
-            return false;
-        };
-        instance.patch = Some(patch);
-        true
-    }
-
-    /// bass 行・アルペジオ行・drum 行に使える patch を1つ引く。
-    ///
-    /// どれも和音を1 instance へ重ねないので、chord 行と違い poly 判定は要求しない。
-    fn pick_row_patch(&self, row: usize, ctx: &GridSequencerContext<'_>) -> Option<String> {
-        let role = self.row_patch_role(row)?;
-        pick_for_role(ctx.patches(), &ctx.role_filters(role), &ctx.poly_lookup())
     }
 
     /// セッションから復元した chord mode を、patch 一覧が揃ってから適用する。
@@ -267,32 +201,10 @@ impl GridSequencerScreen {
         // 鳴っている grid はそのままに、複製の上で引き直す。差し替えは小節境界まで待つ。
         let mut instances = self.state.instances().to_vec();
         let patterns = self.state.draw_pattern_combination(policy, true);
-        let drawn = crate::randomize_instance_slice(
-            &mut instances,
-            ctx.patches(),
-            policy,
-            Some(&playback),
-            patterns,
-        );
+        let drawn =
+            crate::randomize_instance_slice(&mut instances, &[], policy, Some(&playback), patterns);
         if policy.patch {
-            // 和音の行だけは無差別抽選の結果を捨て、条件に合う patch へ当て直す。
-            match self.pick_chord_patch(ctx) {
-                Ok(patch) => instances[CHORD_ROW].patch = Some(patch),
-                // 引けなくても chord mode は続ける（直前の patch のまま鳴らす）。
-                Err(error) => {
-                    self.chord_error = Some(error.to_string());
-                    instances[CHORD_ROW].patch = self.state.instances()[CHORD_ROW].patch.clone();
-                }
-            }
-            // bass・アルペジオ・drum の行も同じく、用途ごとのカテゴリから当て直す。
-            for row in self.assigned_rows() {
-                let Some(instance) = instances.get_mut(row) else {
-                    continue;
-                };
-                instance.patch = self
-                    .pick_row_patch(row, ctx)
-                    .or_else(|| self.state.instances()[row].patch.clone());
-            }
+            self.apply_random_patches_to(&mut instances, ctx);
         }
         log_line(&format!(
             "grid-sequencer: cycle staged random={} key={} degrees={} chords={} instances={}",
@@ -339,19 +251,11 @@ impl GridSequencerScreen {
         ctx: &GridSequencerContext<'_>,
         repick_patch: bool,
     ) {
-        if self.state.chord().is_some() {
-            if self.fixed_chord.is_none() {
-                self.reroll_chord(now, ctx);
-            }
-            if repick_patch {
-                match self.pick_chord_patch(ctx) {
-                    Ok(patch) => self.state.instances_mut()[CHORD_ROW].patch = Some(patch),
-                    Err(error) => self.chord_error = Some(error.to_string()),
-                }
-            }
+        if self.state.chord().is_some() && self.fixed_chord.is_none() {
+            self.reroll_chord(now, ctx);
         }
         if repick_patch {
-            self.apply_assigned_patches(ctx, false);
+            self.apply_random_patches(ctx, false);
         }
     }
 
@@ -360,12 +264,10 @@ impl GridSequencerScreen {
         if ctx.patches().is_empty() {
             return Err(PATCHES_UNAVAILABLE);
         }
-        pick_for_role(
-            ctx.patches(),
-            &ctx.role_filters(PatchRole::Chord),
-            &ctx.poly_lookup(),
-        )
-        .ok_or(CHORD_PATCH_UNAVAILABLE)
+        let candidates = self.patch_candidates_for_purpose(crate::GridPatchPurpose::Chord, ctx);
+        let index =
+            cmrt_tui_core::random::random_index(candidates.len()).ok_or(CHORD_PATCH_UNAVAILABLE)?;
+        Ok(candidates[index].clone())
     }
 }
 

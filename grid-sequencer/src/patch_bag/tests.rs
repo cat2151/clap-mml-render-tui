@@ -9,7 +9,7 @@ fn candidates(count: usize) -> Vec<String> {
 }
 
 fn bag(count: usize, current: Option<&str>) -> PatchBag {
-    PatchBag::new(PatchRole::Free, candidates(count), current)
+    PatchBag::new(GridPatchPurpose::Note, candidates(count), current)
 }
 
 fn next(bag: &mut PatchBag) -> String {
@@ -113,7 +113,7 @@ fn a_single_candidate_is_handed_out_even_though_it_cannot_avoid_repeating() {
 fn a_bag_is_stale_once_the_role_or_the_candidates_change() {
     let bag = bag(3, None);
 
-    assert!(bag.matches(PatchRole::Free, &candidates(3)));
-    assert!(!bag.matches(PatchRole::Bass, &candidates(3)));
-    assert!(!bag.matches(PatchRole::Free, &candidates(4)));
+    assert!(bag.matches(GridPatchPurpose::Note, &candidates(3)));
+    assert!(!bag.matches(GridPatchPurpose::Bass, &candidates(3)));
+    assert!(!bag.matches(GridPatchPurpose::Note, &candidates(4)));
 }

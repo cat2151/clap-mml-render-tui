@@ -213,11 +213,35 @@ fn drum_rows_get_swing_too() {
     assert!(instances.iter().any(|instance| instance.drum.is_some()));
 
     let mut bags = super::super::pattern_bag::PatternBags::default();
-    let patterns = bags.draw(true, false);
+    let patterns = bags.draw(true, false, false);
     randomize_instance_slice(&mut instances, &[], CycleRandom::ALL, None, patterns);
 
     assert!(instances
         .iter()
         .filter(|instance| instance.drum.is_some())
         .all(|instance| (SWING_MIN..=SWING_MAX).contains(&instance.swing)));
+}
+
+/// 2track chord modeにはChord行とBass行だけがあり、Arpeggio行は無い。
+/// Bassだけでも専用bagから音型を引けないと、次cycleの抽選時にpanicする。
+#[test]
+fn two_track_chord_mode_draws_a_bass_pattern_without_an_arpeggio_row() {
+    let chord = ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]).unwrap();
+    let mut state = GridState::with_instance_count(2);
+    let patterns = state
+        .draw_pattern_combination(CycleRandom::ALL, true)
+        .expect("the existing bass row has a pattern bag");
+    assert!(patterns.bass_pattern().is_some());
+    assert_eq!(patterns.arp_pattern(), None);
+
+    let drawn = randomize_instance_slice(
+        &mut state.instances,
+        &[],
+        CycleRandom::ALL,
+        Some(&chord),
+        Some(patterns),
+    );
+
+    assert!(drawn.bass.is_some());
+    assert_eq!(drawn.arp, None);
 }

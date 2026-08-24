@@ -1,19 +1,12 @@
 use super::*;
-use cmrt_tui_core::patch_plugins::PatchRoles;
 
 #[test]
 fn patch_name_wheel_uses_chord_candidates_only_on_the_chord_instance() {
-    let patches = ["Bass/Mono.fxp", "Pads/Poly.fxp"]
+    let patches = ["Bass/Mono.fxp", "Pads/Poly.fxp", "Leads/Mono.fxp"]
         .into_iter()
         .map(|patch| (patch.to_string(), patch.to_lowercase()))
         .collect::<Vec<_>>();
-    let plugins = crate::tests::plugins_with(PatchRoles {
-        chord_patch_categories: vec!["Pads".to_string()],
-        bass_patch_categories: vec!["Bass".to_string()],
-        ..PatchRoles::default()
-    });
-    let mut ctx = context(&patches);
-    ctx.patch_plugins = &plugins;
+    let ctx = context(&patches);
     // chord ON の行は 3=和音、4=bass、5〜8が 4 voice。
     let mut screen = GridSequencerScreen::with_track_count(None, 4);
     screen.state.instances_mut()[0].patch = Some("Bass/Mono.fxp".to_string());
@@ -54,7 +47,7 @@ fn patch_name_wheel_uses_chord_candidates_only_on_the_chord_instance() {
     );
     assert_eq!(
         screen.state.instances()[2].patch.as_deref(),
-        Some("Bass/Mono.fxp")
+        Some("Leads/Mono.fxp")
     );
     assert!(!screen.cycle_random().patch);
 }
@@ -67,12 +60,7 @@ fn patch_name_wheel_uses_arpeggio_candidates_on_the_arpeggio_instance() {
         .into_iter()
         .map(|patch| (patch.to_string(), patch.to_lowercase()))
         .collect::<Vec<_>>();
-    let plugins = crate::tests::plugins_with(PatchRoles {
-        arpeggio_patch_categories: vec!["Leads".to_string()],
-        ..PatchRoles::default()
-    });
-    let mut ctx = context(&patches);
-    ctx.patch_plugins = &plugins;
+    let ctx = context(&patches);
     let mut screen = GridSequencerScreen::with_track_count(None, 4);
     screen.state.instances_mut()[crate::ARPEGGIO_ROW].patch =
         Some("Percussion/Kick.fxp".to_string());
@@ -139,7 +127,7 @@ fn toggling_chord_mode_rebuilds_the_patch_bag_for_the_new_role() {
     let mut screen = GridSequencerScreen::with_track_count(None, 4);
     screen.state.instances_mut()[crate::BASS_ROW].patch = Some("Keys/Alpha.fxp".to_string());
 
-    // chord OFF の行2は Free。行3の PATCH 欄が instance 1。
+    // chord OFF の行2は通常NOTE。行3の PATCH 欄が instance 1。
     screen.handle_mouse(
         mouse(MouseEventKind::ScrollDown, patch_column(&screen), 3),
         AREA,
@@ -158,9 +146,9 @@ fn toggling_chord_mode_rebuilds_the_patch_bag_for_the_new_role() {
         AREA,
         &ctx,
     );
-    assert_ne!(bass_patch(&screen), before_chord);
+    assert_eq!(bass_patch(&screen), "Bass/Mono.fxp");
 
-    // 戻り先は Free の袋の履歴ではなく、作り直した袋の先頭。
+    // 戻り先は通常NOTEの袋の履歴ではなく、作り直した袋の先頭。
     screen.handle_mouse(
         mouse(MouseEventKind::ScrollUp, patch_column(&screen), 5),
         AREA,
@@ -196,12 +184,7 @@ fn a_wheel_with_no_candidates_for_the_role_reports_why_nothing_changed() {
         .into_iter()
         .map(|patch| (patch.to_string(), patch.to_lowercase()))
         .collect::<Vec<_>>();
-    let plugins = crate::tests::plugins_with(PatchRoles {
-        chord_patch_categories: vec!["Pads".to_string()],
-        ..PatchRoles::default()
-    });
-    let mut ctx = context(&patches);
-    ctx.patch_plugins = &plugins;
+    let ctx = context(&patches);
     let mut screen = GridSequencerScreen::with_track_count(None, 4);
     screen.state.set_chord(
         ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]),

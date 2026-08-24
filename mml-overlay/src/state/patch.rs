@@ -45,6 +45,8 @@ impl MmlOverlay<'_> {
                 self.patch_select = PatchSelect::open(
                     patches.clone(),
                     self.patch.as_deref(),
+                    self.patch_filter_presets.clone(),
+                    self.patch_role_index.clone(),
                     self.catalog_notes.clone(),
                     self.load_measurements.clone(),
                 );
@@ -62,6 +64,7 @@ impl MmlOverlay<'_> {
     pub fn sync_patch_catalog(
         &mut self,
         catalog: PatchCatalogSnapshot,
+        patch_role_index: cmrt_patches::PatchRoleIndex,
         load_measurements: BTreeMap<String, PatchLoadMeasurement>,
     ) {
         if !self.open || !matches!(&self.patch_catalog, PatchCatalogSnapshot::Loading) {
@@ -74,6 +77,7 @@ impl MmlOverlay<'_> {
             PatchCatalogSnapshot::Error(error) => format!("error detail={error:?}"),
         };
         self.patch_catalog = catalog;
+        self.patch_role_index = patch_role_index;
         self.load_measurements = load_measurements;
         crate::log_line(format!(
             "action=patch-catalog event=sync result={result} open_requested={requested}"
@@ -115,6 +119,14 @@ impl MmlOverlay<'_> {
                 self.patch_select = None;
                 self.patch = Some(patch);
                 MmlOverlayAction::Continue
+            }
+            PatchSelectAction::SaveUserPresets { presets, preview } => {
+                self.patch_filter_presets.clone_from(&presets);
+                let preview = preview.map(|patch| {
+                    let notes = self.preview_notes(now);
+                    (patch, notes)
+                });
+                MmlOverlayAction::SavePatchFilterPresets { presets, preview }
             }
             PatchSelectAction::Cancel => self.cancel_patch_select(),
         }

@@ -11,6 +11,7 @@
 pub mod cursor_notes;
 pub(crate) mod history_select;
 pub mod line_play;
+mod patch_catalog;
 pub mod patch_json;
 pub(crate) mod patch_select;
 mod sender;
@@ -20,6 +21,7 @@ pub mod ui;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub use history_select::is_history_select_trigger;
+pub use patch_catalog::PatchCatalogEntry;
 pub use patch_select::is_patch_select_trigger;
 pub use sender::{MmlOverlaySender, MmlOverlaySenderStatus};
 pub use state::{

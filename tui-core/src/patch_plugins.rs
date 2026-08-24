@@ -8,11 +8,11 @@
 //!
 //! Plugin-specific routing is owned by the play-server shared core.  This
 //! module only associates the returned [`cmrt_core::PluginKey`] with TUI
-//! configuration such as resolved role filters.
+//! catalog metadata.
 
 // カタログ 1 プラグインぶんの型はここから再輸出する。画面 crate（grid sequencer など）は
 // config crate に依存せず、この表を通してだけプラグイン別の設定に触れる。
-pub use cmrt_runtime::{CatalogPlugin, PatchRoles};
+pub use cmrt_runtime::CatalogPlugin;
 
 use cmrt_runtime::{catalog_plugins, Config};
 
@@ -34,8 +34,8 @@ impl PatchPlugins {
         Self::new(plugins)
     }
 
-    /// プラグイン 1 つだけのカタログ。用途別絞り込みだけを差し替えたいとき用。
-    pub fn single_plugin(patch_roles: PatchRoles) -> Self {
+    /// プラグイン1つだけのテスト用カタログ。
+    pub fn single_plugin() -> Self {
         let mut plugins = Self::new(vec![CatalogPlugin {
             name: String::new(),
             plugin_path: String::new(),
@@ -44,7 +44,6 @@ impl PatchPlugins {
             dirs: Vec::new(),
             resolved_patches: None,
             source_notices: Vec::new(),
-            patch_roles,
         }]);
         plugins.single_fallback = true;
         plugins

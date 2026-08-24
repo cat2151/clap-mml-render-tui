@@ -1,5 +1,9 @@
 use std::time::{Duration, Instant};
 
+use super::GridPreloadEstimate;
+
+mod preload;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum GridConnectionPhase {
     Idle,
@@ -16,7 +20,7 @@ impl GridConnectionPhase {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct GridProgress {
     pub completed: usize,
     pub total: usize,
@@ -62,6 +66,9 @@ pub struct GridConnectionStatus {
     pub underrun_frames: u64,
     /// Underruns accumulated for this Grid screen session; adaptive level changes do not reset it.
     pub underrun_frames_total: u64,
+    /// サーバー起動後の生の underrun counter。MIDI worker が patch load で塞がっていても
+    /// UI スレッドから直接読むため、表示クロックの補正に使える。
+    pub output_underrun_frames: u64,
     pub timing: cmrt_realtime_play::TimingMetrics,
     pub pump_late_max_us: u64,
     pub sender_queue_max_us: u64,
@@ -78,6 +85,8 @@ pub struct GridConnectionStatus {
     /// 待機 bank への先読みロードの進捗。`phase` は動かさない（演奏中に走るため）。
     /// `completed` は成功も失敗も数える。ステータス行の表示にだけ使う。
     pub preload: GridProgress,
+    /// catalog のロード時間比率と、今回の実測時間を組み合わせる ETA 推定器。
+    pub preload_estimate: Option<GridPreloadEstimate>,
     /// 先読みロードで1件でも失敗したか。立っていたら bank を差し替えてはいけない。
     pub preload_failed: bool,
     /// 出力バッファを上限まで厚くしてもフレームドロップが止まらない状態が続いたか。
@@ -95,6 +104,7 @@ impl Default for GridConnectionStatus {
             buffer_multiplier: super::adaptive_buffer::INITIAL_BUFFER_MULTIPLIER,
             underrun_frames: 0,
             underrun_frames_total: 0,
+            output_underrun_frames: 0,
             timing: cmrt_realtime_play::TimingMetrics::default(),
             pump_late_max_us: 0,
             sender_queue_max_us: 0,
@@ -108,6 +118,7 @@ impl Default for GridConnectionStatus {
                 completed: 0,
                 total: 0,
             },
+            preload_estimate: None,
             preload_failed: false,
             overloaded: false,
         }
@@ -252,6 +263,7 @@ impl GridConnectionStatus {
         self.server_startup_elapsed = None;
         self.patch_setting_elapsed = None;
         self.row_patch = None;
+        self.clear_preload();
     }
 
     pub(super) fn update_server_startup(&mut self, completed: usize, total: usize) {
@@ -331,28 +343,6 @@ impl GridConnectionStatus {
         gains_db: [f32; cmrt_realtime_play::INSTANCE_COUNT],
     ) {
         self.auto_gain_db = gains_db;
-    }
-
-    /// 先読みロードを1件投げた。UI スレッドから、送信の直前に呼ぶ。
-    pub(super) fn begin_preload_step(&mut self) {
-        self.preload.total = self.preload.total.saturating_add(1);
-    }
-
-    /// 先読みロードを1件終えた。送信スレッドから呼ぶ。
-    pub(super) fn record_preload_step(&mut self, succeeded: bool) {
-        self.preload.completed = self.preload.completed.saturating_add(1);
-        if !succeeded {
-            self.preload_failed = true;
-        }
-    }
-
-    /// 先読みの集計を初期化する。新しいサイクルの先読みを始める前に呼ぶ。
-    pub(super) fn reset_preload(&mut self) {
-        self.preload = GridProgress {
-            completed: 0,
-            total: 0,
-        };
-        self.preload_failed = false;
     }
 
     /// 慢性的なフレームドロップが成立した。

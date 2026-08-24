@@ -19,6 +19,7 @@ pub(crate) mod cycle_random;
 mod grid;
 mod help;
 pub mod layout;
+mod patch_load_progress;
 mod patch_notice;
 mod patch_selector;
 mod pattern_list;
@@ -50,6 +51,7 @@ pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: 
         f.render_widget(Paragraph::new(line).style(base_style()), area);
     }
     draw_grids(screen, connection, f, &layout);
+    patch_load_progress::draw(f, layout.patch_load_progress, connection);
     if let Some(area) = layout.pattern_list {
         pattern_list::draw(screen, f, area);
     }

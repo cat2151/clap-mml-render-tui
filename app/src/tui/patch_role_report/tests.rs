@@ -2,54 +2,67 @@ use super::*;
 
 use cmrt_tui_core::patch_plugins::CatalogPlugin;
 
-/// 表に出す 8 役割が、行が取りうる用途を1つも取りこぼしていないことの番人。
-///
-/// 行→用途の対応（[`row_patch_role`]）が増えたのに [`ALL_ROLES`] を足し忘れると、
-/// 「候補が0件の行がある」ことを報告できないまま素通りする。
+/// 行→用途が診断表示の8用途だけを返すことの番人。
 #[test]
 fn every_row_role_appears_in_the_role_table() {
+    let all = [
+        GridPatchPurpose::Note,
+        GridPatchPurpose::Chord,
+        GridPatchPurpose::Bass,
+        GridPatchPurpose::Arpeggio,
+        GridPatchPurpose::Kick,
+        GridPatchPurpose::Snare,
+        GridPatchPurpose::HiHat,
+        GridPatchPurpose::Percussion,
+    ];
     for chord_on in [true, false] {
         for row in 0..FULL_DRUM_TRACK_COUNT {
             let drum = row
                 .checked_sub(FIRST_DRUM_ROW)
                 .and_then(|index| DrumRole::ALL.get(index))
                 .copied();
-            let role = row_patch_role(row, chord_on, drum);
+            let role = row_patch_purpose(row, chord_on, drum);
             assert!(
-                ALL_ROLES.contains(&role),
-                "chord_on={chord_on} row={row} の用途 {role:?} が ALL_ROLES に無い"
+                all.contains(&role),
+                "chord_on={chord_on} row={row} の用途 {role:?} が診断表に無い"
             );
         }
     }
 }
 
-/// chord mode を切ると先頭3行は Free に戻るが、drum 行の用途は変わらない。
+/// chord mode を切ると先頭3行はNOTEに戻るが、drum 行の用途は変わらない。
 #[test]
 fn drum_rows_keep_their_role_when_chord_mode_is_off() {
-    assert_eq!(row_patch_role(CHORD_ROW, true, None), PatchRole::Chord);
-    assert_eq!(row_patch_role(CHORD_ROW, false, None), PatchRole::Free);
-    assert_eq!(row_patch_role(BASS_ROW, true, None), PatchRole::Bass);
-    assert_eq!(row_patch_role(BASS_ROW, false, None), PatchRole::Free);
     assert_eq!(
-        row_patch_role(ARPEGGIO_ROW, true, None),
-        PatchRole::Arpeggio
+        row_patch_purpose(CHORD_ROW, true, None),
+        GridPatchPurpose::Chord
     );
-    assert_eq!(row_patch_role(ARPEGGIO_ROW, false, None), PatchRole::Free);
+    assert_eq!(
+        row_patch_purpose(CHORD_ROW, false, None),
+        GridPatchPurpose::Note
+    );
+    assert_eq!(
+        row_patch_purpose(BASS_ROW, true, None),
+        GridPatchPurpose::Bass
+    );
+    assert_eq!(
+        row_patch_purpose(BASS_ROW, false, None),
+        GridPatchPurpose::Note
+    );
+    assert_eq!(
+        row_patch_purpose(ARPEGGIO_ROW, true, None),
+        GridPatchPurpose::Arpeggio
+    );
+    assert_eq!(
+        row_patch_purpose(ARPEGGIO_ROW, false, None),
+        GridPatchPurpose::Note
+    );
     for chord_on in [true, false] {
         assert_eq!(
-            row_patch_role(FIRST_DRUM_ROW, chord_on, Some(DrumRole::Kick)),
-            PatchRole::Kick
+            row_patch_purpose(FIRST_DRUM_ROW, chord_on, Some(DrumRole::Kick)),
+            GridPatchPurpose::Kick
         );
     }
-}
-
-#[test]
-fn an_empty_filter_reads_as_unfiltered() {
-    assert_eq!(list_label(&[]), "(空 = 絞らない)");
-    assert_eq!(
-        list_label(&["Keys".to_string(), "Pads".to_string()]),
-        "Keys, Pads"
-    );
 }
 
 #[test]
@@ -74,7 +87,7 @@ fn unset_values_are_shown_as_unset() {
 /// 省略せずに出す**（省略すると「行が無い」と「数えていない」の区別が付かない）。
 #[test]
 fn the_breakdown_counts_every_candidate_once_per_plugin() {
-    use cmrt_runtime::{PatchRoles, DEXED_PLUGIN_ID, SURGE_XT_PLUGIN_ID, VAPORIZER2_PLUGIN_ID};
+    use cmrt_runtime::{DEXED_PLUGIN_ID, SURGE_XT_PLUGIN_ID, VAPORIZER2_PLUGIN_ID};
 
     let plugin = |name: &str, plugin_id: &str| CatalogPlugin {
         name: name.to_string(),
@@ -84,7 +97,6 @@ fn the_breakdown_counts_every_candidate_once_per_plugin() {
         dirs: Vec::new(),
         resolved_patches: None,
         source_notices: Vec::new(),
-        patch_roles: PatchRoles::default(),
     };
     let patch_plugins = PatchPlugins::from_catalog(vec![
         plugin("Surge XT", SURGE_XT_PLUGIN_ID),

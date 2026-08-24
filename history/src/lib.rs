@@ -12,6 +12,7 @@ use std::path::PathBuf;
 mod daw;
 mod grid_sequencer_session;
 mod helpers;
+mod mml_patch_filter_presets;
 mod patch_phrase_store;
 mod paths;
 mod session_state;
@@ -30,6 +31,7 @@ pub use grid_sequencer_session::{
     GridNoteStepState, GridSequencerInstanceState, GridSequencerLaneState, GridSequencerRowState,
     GridSequencerSessionState,
 };
+pub use mml_patch_filter_presets::{load_mml_patch_filter_presets, save_mml_patch_filter_presets};
 pub use patch_phrase_store::{
     load_patch_phrase_store, normalize_patch_phrase_store_for_available_patches,
     rename_patch_phrase_store_key, save_patch_phrase_store, sync_patch_favorite_order,

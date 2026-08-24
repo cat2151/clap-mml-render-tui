@@ -17,6 +17,7 @@ use cmrt_realtime_play::{RealtimePlayServerSupervisor, TimelineMidiEvent};
 mod adaptive_buffer;
 mod gain_summary;
 mod overload;
+mod preload_estimate;
 mod status;
 mod worker;
 
@@ -30,6 +31,7 @@ static NEXT_LIVE_TIMELINE_ID: AtomicU64 = AtomicU64::new(1);
 const TIME_SIGNATURE_NUMERATOR: u16 = 4;
 const TIME_SIGNATURE_DENOMINATOR: u16 = 4;
 
+pub use preload_estimate::GridPreloadEstimate;
 pub use status::{
     GridConnectionPhase, GridConnectionStatus, GridProgress, GridRowPatchPhase, GridRowPatchStatus,
     GridRowReadiness,
@@ -172,8 +174,8 @@ impl GridMidiSender {
     }
 
     /// 新しいサイクルの先読みを始める。進捗と失敗フラグを初期化する。
-    pub fn begin_preload_cycle(&self) {
-        self.status.lock().unwrap().reset_preload();
+    pub fn begin_preload_cycle(&self, load_weights_ms: Vec<u64>) {
+        self.status.lock().unwrap().reset_preload(load_weights_ms);
     }
 
     /// 待機 bank へ patch を1件だけ先読みする。演奏は止めない。
@@ -182,10 +184,19 @@ impl GridMidiSender {
     /// 連続で止まり、出力リングを食い潰して underrun になる。
     pub fn preload(&self, instance_id: u8, patch: Option<&str>) {
         self.status.lock().unwrap().begin_preload_step();
-        let _ = self.tx.send(GridMidiCommand::Preload {
-            instance_id,
-            patch: patch.map(str::to_string),
-        });
+        if self
+            .tx
+            .send(GridMidiCommand::Preload {
+                instance_id,
+                patch: patch.map(str::to_string),
+            })
+            .is_err()
+        {
+            self.status
+                .lock()
+                .unwrap()
+                .record_preload_step(false, std::time::Duration::ZERO);
+        }
     }
 
     /// 現在 bank の1行だけを差し替える。全 instance 用の `prepare` と違い、
@@ -221,6 +232,7 @@ impl GridMidiSender {
 
     /// 先読みを終える（全件送り終えた、または打ち切った）。バッファ厚を戻す。
     pub fn finish_preload(&self) {
+        self.status.lock().unwrap().finish_preload();
         let _ = self.tx.send(GridMidiCommand::PreloadFinished);
     }
 
@@ -242,6 +254,7 @@ impl GridMidiSender {
         let mut status = self.status.lock().unwrap();
         status.clear_overload();
         status.clear_row_patch_setting();
+        status.clear_preload();
         status.reset_timing_session();
         drop(status);
         let _ = self.tx.send(GridMidiCommand::Stop);
@@ -249,6 +262,9 @@ impl GridMidiSender {
 
     pub fn status(&self) -> GridConnectionStatus {
         let mut status = self.status.lock().unwrap().clone();
+        // worker は patch load の同期呼び出し中に止まる。そこを経由すると、まさに
+        // 補正したい underrun をロード完了まで観測できないため共有メモリから直接読む。
+        status.output_underrun_frames = self.supervisor.underrun_frames();
         if matches!(status.phase, GridConnectionPhase::Connecting) {
             if let Some(progress) = self.supervisor.startup_progress() {
                 status.update_server_startup(

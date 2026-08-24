@@ -117,7 +117,8 @@ fn spawn_patch_loader(
         let loading_started = std::time::Instant::now();
         match crate::patch_catalog_cache::load() {
             Ok(cache) => {
-                let (snapshot, cached_voicings) = cache.into_parts();
+                let (mut snapshot, cached_voicings) = cache.into_parts();
+                snapshot.rebuild_patch_roles(&crate::history::load_mml_patch_filter_presets());
                 let restored_voicing_count = catalog_voicings.load_persisted(cached_voicings);
                 crate::logging::global_log_sink(&format!(
                     "catalog-voicing: event=cache-restored count={restored_voicing_count}"
@@ -356,9 +357,6 @@ impl<'a> TuiApp<'a> {
             ),
             chord_progression_source,
             chord_catalog: cmrt_chord::ChordProgressionCatalog::default(),
-            patch_plugins: cmrt_tui_core::patch_plugins::PatchPlugins::single_plugin(
-                cmrt_runtime::PatchRoles::resolve_for_default_plugin(cfg, &cfg.active_patch_roles),
-            ),
             patch_load_state,
             catalog_notes,
             playback_session,

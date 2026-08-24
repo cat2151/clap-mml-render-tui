@@ -96,6 +96,10 @@ pub struct GridState {
     instances: Vec<GridInstance>,
     /// 表示用の再生位置。先読みで組み立て済みでも、締切が来るまでは進めない。
     step_index: usize,
+    /// 表示中ステップの timeline 開始からの通し番号。小節ごとの同期検査に使う。
+    displayed_ordinal: Option<u64>,
+    /// 表示を対応する締切より遅く更新した時間。補正後に残った表示誤差。
+    display_lateness: Duration,
     /// メッセージ組み立て用のカーソル。先読みぶんだけ `step_index` より先を指す。
     schedule_index: usize,
     /// 1ステップ目をまだ鳴らしていない間だけ false。`advance_schedule()` が
@@ -130,8 +134,8 @@ pub struct GridState {
     pending: Option<cycle::PendingCycle>,
     /// 待機 bank の先読みロードが終わったか。立っていないと差し替えない。
     pending_ready: bool,
-    /// 進行の最終小節へ入ったことを画面側へ伝えるフラグ。抽選はカタログと rng を
-    /// 持つ画面側の仕事なので、ここでは合図だけを立てる。
+    /// コード進行の新しい1周が実際に鳴り始めたことを画面側へ伝えるフラグ。
+    /// 抽選はカタログと rng を持つ画面側の仕事なので、ここでは合図だけを立てる。
     preload_due: bool,
     /// サイクルを鳴らしきったらクロックを止める（シングルバッファリング。詳細は
     /// [`crate::single_buffer`]）。
@@ -166,6 +170,8 @@ impl GridState {
         Self {
             instances,
             step_index: 0,
+            displayed_ordinal: None,
+            display_lateness: Duration::ZERO,
             schedule_index: 0,
             started: false,
             sounding: Vec::new(),
@@ -249,6 +255,14 @@ impl GridState {
         self.step_index
     }
 
+    pub(crate) fn displayed_ordinal(&self) -> Option<u64> {
+        self.displayed_ordinal
+    }
+
+    pub(crate) fn display_lateness(&self) -> Duration {
+        self.display_lateness
+    }
+
     pub fn is_running(&self) -> bool {
         self.clock.is_running()
     }
@@ -265,6 +279,8 @@ impl GridState {
 
     pub fn start_at_bpm(&mut self, now: Instant, bpm: f64) {
         self.step_index = 0;
+        self.displayed_ordinal = None;
+        self.display_lateness = Duration::ZERO;
         self.schedule_index = 0;
         self.started = false;
         self.sounding.clear();
@@ -277,6 +293,9 @@ impl GridState {
         self.reset_cycle_stop();
         // クロックを作り直すので、周の頭へ向けた古い予約は意味を失う。
         self.disarm_next_cycle_bpm();
+        // 再生開始直後から待機 bank を使える。進行の最終小節まで遊ばせず、次の
+        // サイクルをここから仕込み始める。
+        self.request_cycle_preload();
         self.clock.start_at_bpm(now, bpm);
     }
 }

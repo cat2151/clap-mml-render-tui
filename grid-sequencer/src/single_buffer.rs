@@ -61,7 +61,7 @@ impl GridSequencerScreen {
             return;
         }
         self.state.arm_cycle_stop();
-        // 最終小節へ入ったら次サイクルを抽選しておく。ロードはまだ走らせない。
+        // 進行の先頭から次サイクルを抽選しておく。ロードはまだ走らせない。
         if self.state.take_preload_due() && !self.state.has_pending_cycle() {
             self.stage_next_cycle(now, ctx);
         }

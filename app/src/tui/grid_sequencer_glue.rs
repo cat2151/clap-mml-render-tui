@@ -7,6 +7,7 @@
 //! ctx は必ずフィールドから直接組み立てること。`&mut self` を取るヘルパー越しに
 //! 作ると、ctx が借りている voicing / chord_catalog と画面の `&mut` が衝突する。
 
+use std::borrow::Cow;
 use std::time::Instant;
 
 use crossterm::event::{KeyEvent, MouseEvent};
@@ -19,7 +20,6 @@ use crate::tui::grid_sequencer::{
     GridConnectionStatus, GridPatchLoad, GridSequencerAction, GridSequencerContext,
     GridVoicingLookup,
 };
-use cmrt_tui_core::patch_plugins::PatchPlugins;
 
 use crate::tui::voicing::VoicingState;
 use crate::tui::{PatchLoadState, PlayState, PrimaryScreen, TuiApp};
@@ -35,21 +35,22 @@ struct GridContextParts<'ctx> {
     patch_load: &'ctx PatchLoadState,
     voicing: &'ctx VoicingState,
     chord_catalog: &'ctx ChordProgressionCatalog,
-    patch_plugins: &'ctx PatchPlugins,
     chord_source_updated: bool,
     catalog_notes: &'ctx [String],
 }
 
 fn grid_sequencer_context<'ctx>(parts: GridContextParts<'ctx>) -> GridSequencerContext<'ctx> {
-    let (patch_load, patch_plugins, catalog_notes) = match parts.patch_load {
+    let (patch_load, load_measurements, patch_roles, catalog_notes) = match parts.patch_load {
         PatchLoadState::Loading => (
             GridPatchLoad::Loading,
-            parts.patch_plugins,
+            None,
+            Cow::Owned(Default::default()),
             parts.catalog_notes,
         ),
         PatchLoadState::Ready(snapshot) => (
             GridPatchLoad::Ready(snapshot.pairs()),
-            snapshot.patch_plugins(),
+            Some(snapshot.load_measurements()),
+            Cow::Borrowed(snapshot.patch_roles()),
             if snapshot.catalog_notes().is_empty() {
                 parts.catalog_notes
             } else {
@@ -58,16 +59,18 @@ fn grid_sequencer_context<'ctx>(parts: GridContextParts<'ctx>) -> GridSequencerC
         ),
         PatchLoadState::Err(error) => (
             GridPatchLoad::Err(error),
-            parts.patch_plugins,
+            None,
+            Cow::Owned(Default::default()),
             parts.catalog_notes,
         ),
     };
     GridSequencerContext {
         patch_dirs_configured: parts.patch_dirs_configured,
         patch_load,
+        load_measurements,
         chord_catalog: parts.chord_catalog,
         voicing: parts.voicing,
-        patch_plugins,
+        patch_roles,
         chord_source_updated: parts.chord_source_updated,
         catalog_notes,
     }
@@ -92,7 +95,6 @@ impl TuiApp<'_> {
             patch_load: &patch_load,
             voicing: &self.voicing,
             chord_catalog: &self.chord_catalog,
-            patch_plugins: &self.patch_plugins,
             catalog_notes: &self.catalog_notes,
             chord_source_updated: false,
         });
@@ -119,7 +121,6 @@ impl TuiApp<'_> {
             patch_load: &patch_load,
             voicing: &self.voicing,
             chord_catalog: &self.chord_catalog,
-            patch_plugins: &self.patch_plugins,
             catalog_notes: &self.catalog_notes,
             chord_source_updated: false,
         });
@@ -138,7 +139,6 @@ impl TuiApp<'_> {
             patch_load: &patch_load,
             voicing: &self.voicing,
             chord_catalog: &self.chord_catalog,
-            patch_plugins: &self.patch_plugins,
             catalog_notes: &self.catalog_notes,
             chord_source_updated: false,
         });
@@ -157,7 +157,6 @@ impl TuiApp<'_> {
             patch_load: &patch_load,
             voicing: &self.voicing,
             chord_catalog: &self.chord_catalog,
-            patch_plugins: &self.patch_plugins,
             catalog_notes: &self.catalog_notes,
             chord_source_updated,
         });

@@ -23,8 +23,15 @@ pub(super) struct GridPresentation {
 #[derive(Clone, Debug)]
 pub(super) struct PendingDisplay {
     pub(super) deadline: Instant,
+    pub(super) ordinal: u64,
     pub(super) step: usize,
     pub(super) presentation: GridPresentation,
+    /// この step からコード進行の新しい1周が実際に鳴り始める。
+    ///
+    /// bank は先読みスケジューリング時点で先に切り替わるため、その場で旧 bank を
+    /// ロードし直すと、まだ耳に聞こえている旧 bank を壊してしまう。deadline まで
+    /// 待ってから次の先読みを始めるための合図として持つ。
+    pub(super) cycle_started: bool,
 }
 
 impl GridState {

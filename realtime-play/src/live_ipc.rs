@@ -207,11 +207,11 @@ impl RealtimePlayServerSupervisor {
     }
 
     pub fn underrun_frames(&self) -> u64 {
-        self.fast_client
+        self.fast_underrun_reader
             .lock()
             .unwrap()
             .as_ref()
-            .map(FastMidiClient::underrun_frames)
+            .map(|reader| reader.underrun_frames())
             .unwrap_or(0)
     }
 
@@ -246,6 +246,7 @@ impl RealtimePlayServerSupervisor {
         if client.is_none() {
             let mut connected = connect_fast_client(self.port)?;
             connected.set_buffer_multiplier(*self.live_buffer_multiplier.lock().unwrap())?;
+            *self.fast_underrun_reader.lock().unwrap() = Some(connected.underrun_reader());
             *client = Some(connected);
         }
         let result = operation(client.as_mut().expect("client was initialized"));
@@ -254,6 +255,7 @@ impl RealtimePlayServerSupervisor {
             Err(FastIpcError::ServerStopped | FastIpcError::ProtocolMismatch)
         ) {
             *client = None;
+            *self.fast_underrun_reader.lock().unwrap() = None;
         }
         result.map_err(|error| anyhow!(error))
     }

@@ -1,29 +1,33 @@
-//! `cmrt patch-roles`: grid sequencer の各行に patch の候補が出るかを、画面を起動せずに調べる。
-//!
-//! PATCH 欄の wheel が引く候補は「config の用途別カテゴリ」「patch 一覧」
-//! 「patch ごとの mono/poly 判定」の3つで決まる。プラグインを切り替えたときに
-//! どれか1つでも噛み合わないと wheel が無反応になるが、それを目視で確かめるには
-//! 画面を開いて全行の wheel を回すしかなかった。ここはその確認を機械化する。
-//!
-//! 候補の判定は [`cmrt_grid_sequencer::GridSequencerContext::role_candidates`]
-//! ＝ wheel 本体と同じ述語を通す。voicing の解決も TUI と同じ
-//! [`super::voicing::VoicingState`] を通すので、画面と食い違わない。
+//! `cmrt patch-roles`: 共有Role分類とGrid各行の候補を画面なしで診断する。
+
+use std::borrow::Cow;
 
 use anyhow::Result;
+use cmrt_patches::{PatchRole, PatchRoleIndex, PatchRoleInput};
+use cmrt_tui_core::patch_plugins::PatchPlugins;
 
 use super::grid_sequencer::{
-    row_patch_role, DrumRole, GridPatchLoad, GridSequencerContext, PatchRole, ARPEGGIO_ROW,
-    BASS_ROW, CHORD_ROW, FIRST_DRUM_ROW, FULL_DRUM_TRACK_COUNT,
+    candidates_for_purpose, row_patch_purpose, DrumRole, GridPatchLoad, GridPatchPurpose,
+    GridSequencerContext, ARPEGGIO_ROW, BASS_ROW, CHORD_ROW, FIRST_DRUM_ROW, FULL_DRUM_TRACK_COUNT,
 };
 use super::voicing::{VoicingPolicies, VoicingPolicy, VoicingState};
 use crate::config::Config;
-use cmrt_tui_core::patch_plugins::PatchPlugins;
 
-/// 候補が0件の行が1つでもあれば `Err`。スクリプトから終了コードで判定できるようにするため。
+/// 候補が0件の行が1つでもあれば`Err`。スクリプトから終了コードで判定できる。
 pub fn run_patch_role_report(cfg: &Config) -> Result<()> {
     let pairs = crate::patches::collect_patch_pairs(cfg)?;
     let patch_plugins = PatchPlugins::from_config(cfg);
-    // TUI 起動時と同じ経路で voicing 判定を組む（Surge なら共有 JSON の取得を待つ）。
+    let patch_roles = PatchRoleIndex::build(
+        pairs
+            .iter()
+            .map(|(display, normalized_display)| PatchRoleInput {
+                display,
+                normalized_display,
+                selector_category: None,
+            }),
+        &crate::history::load_mml_patch_filter_presets(),
+    );
+
     let source_refresh = crate::voicing_sources::VoicingSourceRefresh::spawn(cfg);
     let layers = source_refresh.load_for_keyboard();
     let voicing = VoicingState::new(
@@ -32,16 +36,15 @@ pub fn run_patch_role_report(cfg: &Config) -> Result<()> {
         source_refresh,
         VoicingPolicies::from_config(cfg),
     );
-    // この診断は現在のconfigと音色fileを直接検査するため、TUI用cacheには依存しない。
-    // catalog metadata型のvoicingはここで先に読み、下の候補数え上げをmemoだけで処理する。
     voicing.prefetch_catalog_voicings(&pairs);
     let chord_catalog = cmrt_chord::ChordProgressionCatalog::default();
     let ctx = GridSequencerContext {
         patch_dirs_configured: crate::patches::has_configured_patch_dirs(cfg),
         patch_load: GridPatchLoad::Ready(&pairs),
+        load_measurements: None,
         chord_catalog: &chord_catalog,
         voicing: &voicing,
-        patch_plugins: &patch_plugins,
+        patch_roles: Cow::Borrowed(&patch_roles),
         chord_source_updated: false,
         catalog_notes: &[],
     };
@@ -49,32 +52,28 @@ pub fn run_patch_role_report(cfg: &Config) -> Result<()> {
     print_plugin_section(cfg, &patch_plugins);
     print_skipped_section(&cmrt_runtime::skipped_catalog_plugins(cfg));
     print_patch_section(cfg, &pairs, &patch_plugins);
-    print_filter_section(&patch_plugins);
-    print_role_section(&ctx, &patch_plugins);
+    print_role_section(&patch_roles, &patch_plugins);
     let empty_rows = print_row_section(&ctx);
 
     println!();
     if pairs.is_empty() {
         anyhow::bail!(
-            "patch が1件も読み込めていません。config.toml の patches_dirs（プロファイルを使う場合は [plugins.*] の patches_dirs）を確認してください。"
+            "patch が1件も読み込めていません。config.toml の patches_dirs を確認してください。"
         );
     }
     if !empty_rows.is_empty() {
         anyhow::bail!(
-            "候補が0件の行があります: {}。この行では PATCH 欄の wheel が無反応になります。",
+            "候補が0件の行があります: {}。空の用途へALLからfallbackはしません。",
             empty_rows.join(" / ")
         );
     }
-    println!("判定: すべての行に候補があります。PATCH 欄の wheel はどの行でも回ります。");
+    println!("判定: すべての行に用途別候補があります。");
     Ok(())
 }
 
 fn print_plugin_section(cfg: &Config, patch_plugins: &PatchPlugins) {
     println!("[プラグイン]");
-    println!(
-        "  active_plugin : {}",
-        optional(cfg.active_plugin.as_deref())
-    );
+    println!("  primary_plugin: Surge XT (固定)");
     println!("  plugin_path   : {}", optional_str(&cfg.plugin_path));
     println!("  plugin_id     : {}", optional(cfg.plugin_id.as_deref()));
     println!();
@@ -94,14 +93,6 @@ fn print_plugin_section(cfg: &Config, patch_plugins: &PatchPlugins) {
     }
 }
 
-/// インストールされているのに設定不足でカタログから外れたプラグイン。
-///
-/// **0 件のときも欄ごと出す。** 省略すると「外れたものは無い」と「そもそも数えていない」の
-/// 区別が付かず、この診断で切り分けたい当のことが分からなくなる（プラグイン別内訳が
-/// 候補 0 件のプラグインも省略しないのと同じ理由）。
-///
-/// 文言は [`cmrt_runtime::SkippedCatalogPlugin::notice_line`] が単一ソース。
-/// 音色選択の注記・log.txt の行と同じ 1 行がここにも出る。
 fn print_skipped_section(skipped: &[cmrt_runtime::SkippedCatalogPlugin]) {
     println!();
     println!("[カタログから外したプラグイン]");
@@ -110,7 +101,6 @@ fn print_skipped_section(skipped: &[cmrt_runtime::SkippedCatalogPlugin]) {
     }
 }
 
-/// 欄の中身。テストが読めるよう print から分けてある。
 fn skipped_section_lines(skipped: &[cmrt_runtime::SkippedCatalogPlugin]) -> Vec<String> {
     if skipped.is_empty() {
         return vec![
@@ -142,43 +132,15 @@ fn print_patch_section(cfg: &Config, pairs: &[(String, String)], patch_plugins: 
     );
 }
 
-/// 用途別の絞り込みはプラグインごとに違う（Surge のカテゴリを cartridge へ当てると
-/// 候補が全滅する）。プロファイル適用後の解決結果をプラグインごとに出す。
-fn print_filter_section(patch_plugins: &PatchPlugins) {
-    for plugin in patch_plugins.plugins() {
-        let roles = &plugin.patch_roles;
-        println!();
-        println!(
-            "[用途別カテゴリ / キーワード（{} / [plugins.*] プロファイル適用後）]",
-            plugin.name
-        );
-        for (label, values) in [
-            ("chord_patch_categories   ", &roles.chord_patch_categories),
-            ("bass_patch_categories    ", &roles.bass_patch_categories),
-            (
-                "arpeggio_patch_categories",
-                &roles.arpeggio_patch_categories,
-            ),
-            ("drum_patch_categories    ", &roles.drum_patch_categories),
-            ("kick_patch_keywords      ", &roles.kick_patch_keywords),
-            ("snare_patch_keywords     ", &roles.snare_patch_keywords),
-            ("hihat_patch_keywords     ", &roles.hihat_patch_keywords),
-        ] {
-            println!("  {label} : {}", list_label(values));
-        }
-    }
-}
-
-/// 全 8 役割の候補数。行の割り当てが変わっても、行が取りうる用途はこの 8 つで尽きる。
-///
-/// **カタログが混在なら、プラグインごとの内訳も出す。** 合計だけでは
-/// 「Vaporizer2 の音色がこの役へ 1 件も出ていない」が見えない（他プラグインの数千件に
-/// 埋もれる）。プラグインを足したときに効いたのかどうかは、この内訳が動くかで決まる。
-fn print_role_section(ctx: &GridSequencerContext<'_>, patch_plugins: &PatchPlugins) {
+fn print_role_section(patch_roles: &PatchRoleIndex, patch_plugins: &PatchPlugins) {
     println!();
-    println!("[用途ごとの候補数]");
-    for role in ALL_ROLES {
-        let candidates = ctx.role_candidates(role);
+    println!("[catalog Roleごとの件数]");
+    for role in PatchRole::ALL {
+        let candidates = patch_roles
+            .candidates(role)
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
         println!(
             "  {:<11} {:>6} 件  {}",
             role_label(role),
@@ -194,11 +156,6 @@ fn print_role_section(ctx: &GridSequencerContext<'_>, patch_plugins: &PatchPlugi
     }
 }
 
-/// 候補をプラグインごとに数えて `名前 件数` の 1 行にする。
-///
-/// 引き分けは patch 一覧のフィルタ・PATCH 欄の wheel と同じ
-/// [`PatchPlugins::index_for_patch`] を通す。別の判定を書くと、内訳は正しく見えるのに
-/// 画面では違うプラグインへ送られている、という食い違いが起きる。
 fn per_plugin_counts(candidates: &[&str], patch_plugins: &PatchPlugins) -> String {
     let mut counts = vec![0usize; patch_plugins.plugins().len()];
     for display in candidates {
@@ -215,12 +172,6 @@ fn per_plugin_counts(candidates: &[&str], patch_plugins: &PatchPlugins) -> Strin
         .join(" / ")
 }
 
-/// 行ごとの用途と候補数。候補が0件だった行のラベルを返す。
-///
-/// drum 行の割り当ては track 数だけで決まる（`state::drum` の `drum_role_for`）。
-/// ここは 4 role を過不足なく持つ [`FULL_DRUM_TRACK_COUNT`] の構成で表を出す。
-/// track 4（drum 行が1つだけ）のときは役割が抽選になるが、抽選先は 4 role の
-/// どれかなので、上の「用途ごとの候補数」で全て押さえてある。
 fn print_row_section(ctx: &GridSequencerContext<'_>) -> Vec<String> {
     let mut empty = Vec::new();
     for chord_on in [true, false] {
@@ -229,23 +180,33 @@ fn print_row_section(ctx: &GridSequencerContext<'_>) -> Vec<String> {
             "[行ごとの用途（chord mode {} / track {FULL_DRUM_TRACK_COUNT}）]",
             if chord_on { "ON" } else { "OFF" }
         );
+        let reserved = if chord_on {
+            vec![
+                PatchRole::Chord,
+                PatchRole::Bass,
+                PatchRole::Lead,
+                PatchRole::Drum,
+            ]
+        } else {
+            vec![PatchRole::Drum]
+        };
         for row in 0..FULL_DRUM_TRACK_COUNT {
             let drum = row
                 .checked_sub(FIRST_DRUM_ROW)
                 .and_then(|index| DrumRole::ALL.get(index))
                 .copied();
-            let role = row_patch_role(row, chord_on, drum);
-            let count = ctx.role_candidates(role).len();
+            let purpose = row_patch_purpose(row, chord_on, drum);
+            let count = candidates_for_purpose(ctx, purpose, &reserved).len();
             println!(
                 "  行{row} {:<10} {:<11} {count:>6} 件",
                 row_label(row, chord_on, drum),
-                role_label(role)
+                purpose_label(purpose)
             );
             if count == 0 {
                 empty.push(format!(
                     "chord mode {} の行{row}（{}）",
                     if chord_on { "ON" } else { "OFF" },
-                    role_label(role)
+                    purpose_label(purpose)
                 ));
             }
         }
@@ -253,27 +214,27 @@ fn print_row_section(ctx: &GridSequencerContext<'_>) -> Vec<String> {
     empty
 }
 
-const ALL_ROLES: [PatchRole; 8] = [
-    PatchRole::Chord,
-    PatchRole::Bass,
-    PatchRole::Arpeggio,
-    PatchRole::Free,
-    PatchRole::Kick,
-    PatchRole::Snare,
-    PatchRole::HiHat,
-    PatchRole::Percussion,
-];
-
 fn role_label(role: PatchRole) -> &'static str {
     match role {
-        PatchRole::Chord => "Chord",
         PatchRole::Bass => "Bass",
-        PatchRole::Arpeggio => "Arpeggio",
-        PatchRole::Free => "Free",
-        PatchRole::Kick => "Kick",
-        PatchRole::Snare => "Snare",
-        PatchRole::HiHat => "HiHat",
-        PatchRole::Percussion => "Percussion",
+        PatchRole::Chord => "Chord",
+        PatchRole::Lead => "Lead",
+        PatchRole::Drum => "Drum",
+        PatchRole::Triggered => "Triggered",
+        PatchRole::Etc => "Etc",
+    }
+}
+
+fn purpose_label(purpose: GridPatchPurpose) -> &'static str {
+    match purpose {
+        GridPatchPurpose::Note => "NOTE",
+        GridPatchPurpose::Chord => "Chord",
+        GridPatchPurpose::Bass => "Bass",
+        GridPatchPurpose::Arpeggio => "Arpeggio",
+        GridPatchPurpose::Kick => "Kick",
+        GridPatchPurpose::Snare => "Snare",
+        GridPatchPurpose::HiHat => "HiHat",
+        GridPatchPurpose::Percussion => "Percussion",
     }
 }
 
@@ -286,14 +247,6 @@ fn row_label(row: usize, chord_on: bool, drum: Option<DrumRole>) -> String {
         BASS_ROW if chord_on => "BASS".to_string(),
         ARPEGGIO_ROW if chord_on => "ARP".to_string(),
         _ => "-".to_string(),
-    }
-}
-
-fn list_label(values: &[String]) -> String {
-    if values.is_empty() {
-        "(空 = 絞らない)".to_string()
-    } else {
-        values.join(", ")
     }
 }
 

@@ -2,10 +2,10 @@
 
 use super::*;
 
-fn patches() -> Vec<(String, String)> {
+fn patches() -> Vec<PatchCatalogEntry> {
     ["Leads/Lead 1.fxp", "Pads/Pad 1.fxp"]
         .into_iter()
-        .map(|patch| (patch.to_string(), patch.to_lowercase()))
+        .map(|patch| PatchCatalogEntry::from_display(patch.to_string()))
         .collect()
 }
 
@@ -28,6 +28,42 @@ fn ctrl_t_opens_the_patch_select() {
 }
 
 #[test]
+fn adding_a_patch_filter_preset_is_forwarded_to_the_host_for_json_persistence() {
+    let patch = "Instruments/Violin.fxp";
+    let mut overlay = MmlOverlay::default();
+    overlay.open(MmlOverlayContext {
+        patch_catalog: PatchCatalogSnapshot::Ready(vec![PatchCatalogEntry::from_display(
+            patch.to_string(),
+        )]),
+        ..MmlOverlayContext::default()
+    });
+    let now = Instant::now();
+    overlay.handle_key(ctrl(KeyCode::Char('t')), now);
+    overlay.handle_key(press(KeyCode::Left), now);
+    overlay.handle_key(press(KeyCode::Left), now);
+    for _ in 0..3 {
+        overlay.handle_key(press(KeyCode::Down), now);
+    }
+    for ch in "violin".chars() {
+        overlay.handle_key(press(KeyCode::Char(ch)), now);
+    }
+
+    assert_eq!(
+        overlay.handle_key(ctrl(KeyCode::Char('a')), now),
+        MmlOverlayAction::SavePatchFilterPresets {
+            presets: vec![("lead".to_string(), "violin".to_string())],
+            preview: Some((
+                patch.to_string(),
+                Some(NoteRequest {
+                    messages: vec![[0x90, 60, 127]],
+                    duration: Duration::from_millis(250),
+                })
+            )),
+        }
+    );
+}
+
+#[test]
 fn ctrl_t_waits_for_the_patch_list_and_opens_when_ready() {
     let mut overlay = opened();
 
@@ -43,7 +79,11 @@ fn ctrl_t_waits_for_the_patch_list_and_opens_when_ready() {
             ..Default::default()
         },
     )]);
-    overlay.sync_patch_catalog(PatchCatalogSnapshot::Ready(patches()), measurements);
+    overlay.sync_patch_catalog(
+        PatchCatalogSnapshot::Ready(patches()),
+        Default::default(),
+        measurements,
+    );
 
     assert!(overlay.is_patch_select_open());
     assert!(!overlay.is_waiting_for_patch_catalog());

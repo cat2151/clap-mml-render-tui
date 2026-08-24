@@ -2,7 +2,10 @@
 
 - 状態: 採用（2026-08-20）
 - 関連: [0002](0002-config-plugin-profiles.md) / [0005](0005-mixed-catalog-on-by-default.md) /
-  [0010](0010-two-repo-layout.md)
+  [0010](0010-two-repo-layout.md) / [0014](0014-fixed-surge-primary-plugin.md)
+
+> config トップレベルを第2層にした入力構文は 0014 で廃止した。
+> 第2層の field は低レベル API 用の runtime 差分としてのみ残る。
 
 ## 決定
 

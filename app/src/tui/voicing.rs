@@ -173,17 +173,13 @@ impl VoicingState {
 fn fallback_plugins(cfg: &Config) -> PatchPlugins {
     let dirs = cmrt_runtime::configured_patch_dirs(cfg);
     PatchPlugins::from_catalog(vec![CatalogPlugin {
-        name: cfg.active_plugin.clone().unwrap_or_default(),
+        name: cmrt_runtime::PRIMARY_PLUGIN_PROFILE_NAME.to_string(),
         plugin_path: cfg.plugin_path.clone(),
         plugin_id: cfg.plugin_id.clone(),
         base: cmrt_runtime::shared_patch_root_dir(&dirs),
         dirs,
         resolved_patches: None,
         source_notices: Vec::new(),
-        patch_roles: cmrt_runtime::PatchRoles::resolve_for_default_plugin(
-            cfg,
-            &cfg.active_patch_roles,
-        ),
     }])
 }
 

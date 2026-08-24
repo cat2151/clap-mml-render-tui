@@ -7,7 +7,6 @@ fn profile(plugin_path: &str, patches_dirs: &[&str]) -> PluginProfile {
         plugin_path: plugin_path.to_string(),
         plugin_id: None,
         patches_dirs: Some(patches_dirs.iter().map(|dir| dir.to_string()).collect()),
-        patch_roles: crate::PatchRoleFilters::default(),
     }
 }
 
@@ -100,25 +99,6 @@ fn catalog_plugins_have_no_base_when_dirs_share_no_parent() {
     assert_eq!(plugins[0].base, None);
 }
 
-/// 用途別絞り込みは、トップレベルの値をプロファイルの差分で解決したもの。
-#[test]
-fn catalog_plugins_resolve_patch_roles_from_the_top_level_values() {
-    let mut cfg = config_with_patch_dirs("");
-    cfg.top_level_patch_roles.chord_patch_categories = Some(vec!["Keys".to_string()]);
-    cfg.active_patch_roles = crate::PatchRoleFilters {
-        bass_patch_categories: Some(Vec::new()),
-        ..Default::default()
-    };
-
-    let plugins = listed(&cfg, Vec::new());
-
-    assert_eq!(
-        plugins[0].patch_roles.chord_patch_categories,
-        vec!["Keys".to_string()]
-    );
-    assert!(plugins[0].patch_roles.bass_patch_categories.is_empty());
-}
-
 /// 2 つめのプラグインは**自分の dir を基点に**相対化する。プラグインを跨いだ共通の親を
 /// 取ると display 文字列（＝永続 ID）が変わり、保存済みデータが指し先を失う。
 #[test]
@@ -166,7 +146,7 @@ fn catalog_plugins_skip_a_plugin_without_patch_dirs() {
 /// 既定プラグインと同じプラグインのプロファイルは二重に載せない。
 /// 既定は焼き込み済みで名前が残らないので、突き合わせはプラグインの同一性で行う。
 #[test]
-fn catalog_plugins_do_not_list_the_active_plugin_twice() {
+fn catalog_plugins_do_not_list_the_primary_plugin_twice() {
     let cfg = config_with_patch_dirs(r#"patches_dirs = ["/tmp/my-surge-patches"]"#);
 
     let plugins = listed(
@@ -182,24 +162,6 @@ fn catalog_plugins_do_not_list_the_active_plugin_twice() {
 
     assert_eq!(plugins.len(), 1);
     assert_eq!(plugins[0].dirs, vec!["/tmp/my-surge-patches".to_string()]);
-}
-
-/// 用途別絞り込みはプラグインごとに解決する。トップレベルの値（＝既定プラグイン用の
-/// レガシー綴り）が 2 つめのプラグインへ漏れない。
-#[test]
-fn catalog_plugins_resolve_patch_roles_per_plugin() {
-    let mut cfg = config_with_patch_dirs("");
-    cfg.top_level_patch_roles.chord_patch_categories = Some(vec!["Keys".to_string()]);
-
-    let mut dexed = profile("/usr/lib/clap/Dexed.clap", &["/home/f/dexed/Cartridges"]);
-    dexed.patch_roles = crate::PatchRoleFilters::unfiltered();
-    let plugins = listed(&cfg, vec![("Dexed".to_string(), dexed)]);
-
-    assert_eq!(
-        plugins[0].patch_roles.chord_patch_categories,
-        vec!["Keys".to_string()]
-    );
-    assert!(plugins[1].patch_roles.chord_patch_categories.is_empty());
 }
 
 /// Vaporizer2 が 3 つめのカタログ項目として並ぶこと。基点は自分の音色置き場から取り、
@@ -231,60 +193,6 @@ fn a_vaporizer2_profile_becomes_a_third_catalog_plugin() {
         plugins[2].base.as_deref(),
         Some("/home/f/Vaporizer2/Presets")
     );
-    // 用途別絞り込みは Vaporizer2 の組み込み既定。`plugin_id` を書いていない
-    // プロファイルでもファイル名で当たる。Surge のカテゴリへ落ちると
-    // chord / bass / arpeggio 行の候補が全滅する。
-    assert_eq!(
-        plugins[2].patch_roles,
-        PatchRoles::builtin_for(None, "/usr/lib/clap/VASTvaporizer2.clap")
-    );
-    assert_eq!(
-        plugins[2].patch_roles.bass_patch_categories,
-        vec!["Bass".to_string()]
-    );
-    assert_ne!(plugins[2].patch_roles, plugins[0].patch_roles);
-}
-
-/// `active_plugin` を書かない config でも、既定プラグインと同じものを指す `[plugins.*]` に
-/// 書いた用途別絞り込みは効く。
-///
-/// この経路では `apply_active_plugin_profile` が動かない（`active_plugin` が無いので
-/// `Ok(None)` で戻る）ため、重複排除でプロファイルを丸ごと捨てると、書いた設定が
-/// **黙って無視される**。音色置き場は既定側が正なので捨てるが、絞り込みだけは拾う。
-#[test]
-fn a_profile_for_the_default_plugin_still_contributes_its_patch_roles() {
-    let cfg = config_with_patch_dirs("");
-    let mut surge = profile(
-        "/usr/lib/clap/Surge XT.clap",
-        &["/opt/surge/patches_factory"],
-    );
-    surge.patch_roles.chord_patch_categories = Some(vec!["MyPads".to_string()]);
-
-    let plugins = listed(&cfg, vec![("Surge XT".to_string(), surge)]);
-
-    // 二重には載らない。
-    assert_eq!(plugins.len(), 1);
-    assert_eq!(
-        plugins[0].patch_roles.chord_patch_categories,
-        vec!["MyPads".to_string()]
-    );
-    // 書かなかった項目は Surge XT の組み込み既定のまま。
-    assert_eq!(
-        plugins[0].patch_roles.bass_patch_categories,
-        crate::PatchRoles::builtin_for(Some(crate::SURGE_XT_PLUGIN_ID), "").bass_patch_categories
-    );
-}
-
-/// 既定プラグインが Surge XT なら、config へ 1 文字も書かなくてもカテゴリで絞られる。
-/// 既定値の置き場がトップレベルから組み込みへ移ったあとの担保。
-#[test]
-fn the_default_surge_plugin_narrows_even_with_an_empty_config() {
-    let cfg = config_with_patch_dirs("");
-
-    let plugins = listed(&cfg, Vec::new());
-
-    assert!(!plugins[0].patch_roles.chord_patch_categories.is_empty());
-    assert!(!plugins[0].patch_roles.kick_patch_keywords.is_empty());
 }
 
 /// 音色置き場を書いていないプラグインは、カタログから外れたことが理由つきで残る。

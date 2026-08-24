@@ -1,76 +1,51 @@
-//! 用途ごとの patch 抽選。カテゴリ設定で候補が絞られることの検証。
+//! 最新のcatalog RoleをGrid用途へ写す経路の検証。
 
 use super::*;
 
 #[test]
-fn the_chord_patch_is_limited_to_the_configured_categories() {
+fn chord_candidates_are_chord_role_and_poly_only() {
     let catalog = catalog();
     let patches = categorized_patches();
-    let plugins = chord_category_plugins(&["Keys", "Organs"]);
-    let ctx = ctx_with_plugins(&patches, &catalog, &AllPoly, &plugins);
+    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let screen = screen();
 
-    // 抽選なので、何回引いても対象カテゴリから出ないことを確かめる。
-    for _ in 0..40 {
-        let picked = pick_for_role(
-            ctx.patches(),
-            &ctx.role_filters(PatchRole::Chord),
-            &ctx.poly_lookup(),
-        )
-        .expect("Keys / Organs は候補にある");
-        assert!(
-            picked.contains("/Keys/") || picked.contains("/Organs/"),
-            "対象外のカテゴリを引いた: {picked}"
-        );
-    }
+    let candidates = screen.patch_candidates_for_purpose(crate::GridPatchPurpose::Chord, &ctx);
+
+    assert_eq!(
+        candidates,
+        vec![
+            "patches_factory/Keys/Grand.fxp",
+            "patches_factory/Pads/Warm.fxp",
+            "patches_3rdparty/Vendor/Organs/Drawbar.fxp",
+        ]
+    );
 }
 
 #[test]
-fn an_empty_category_list_means_no_category_filter() {
+fn a_catalog_without_a_chord_role_patch_rejects_chord_mode() {
+    let now = Instant::now();
     let catalog = catalog();
-    let patches = categorized_patches();
-    let ctx = ctx_with_plugins(&patches, &catalog, &AllPoly, unfiltered_plugins());
-
-    let mut seen = std::collections::HashSet::new();
-    for _ in 0..200 {
-        seen.insert(
-            pick_for_role(
-                ctx.patches(),
-                &ctx.role_filters(PatchRole::Chord),
-                &ctx.poly_lookup(),
-            )
-            .unwrap(),
-        );
-    }
-    assert_eq!(seen.len(), patches.len(), "全カテゴリが当たりになる");
-}
-
-#[test]
-fn a_category_with_no_poly_patch_yields_nothing() {
-    let catalog = catalog();
-    let patches = categorized_patches();
-    let plugins = chord_category_plugins(&["Basses"]);
-    let ctx = ctx_with_plugins(&patches, &catalog, &AllPoly, &plugins);
+    let patches = vec![("Basses/Sub.fxp".to_string(), "basses/sub.fxp".to_string())];
+    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
     let mut screen = screen();
-    screen.start(Instant::now(), &ctx);
+    screen.start(now, &ctx);
 
-    screen.handle_key(press_c(), Instant::now(), &ctx);
+    screen.handle_key(press_c(), now, &ctx);
 
     assert!(screen.state.chord().is_none());
     assert_eq!(screen.chord_error(), Some(CHORD_PATCH_UNAVAILABLE));
 }
 
-/// bass 行には bass 用カテゴリの patch を当てる。poly でなくてよい。
 #[test]
-fn the_bass_row_gets_a_patch_from_the_bass_categories() {
+fn bass_and_arpeggio_rows_use_bass_and_lead_roles() {
     let now = Instant::now();
     let catalog = catalog();
-    let patches = patches();
-    let plugins = plugins_with(PatchRoles {
-        bass_patch_categories: vec!["Leads".to_string()],
-        ..PatchRoles::default()
-    });
-    let mut ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
-    ctx.patch_plugins = &plugins;
+    let patches = vec![
+        ("Keys/Poly.fxp".to_string(), "keys/poly.fxp".to_string()),
+        ("Basses/Sub.fxp".to_string(), "basses/sub.fxp".to_string()),
+        ("Leads/Mono.fxp".to_string(), "leads/mono.fxp".to_string()),
+    ];
+    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
     let mut screen = screen();
     screen.start(now, &ctx);
 
@@ -78,62 +53,27 @@ fn the_bass_row_gets_a_patch_from_the_bass_categories() {
 
     assert_eq!(
         screen.state.instances()[crate::BASS_ROW].patch.as_deref(),
-        Some("Leads/Mono.fxp"),
-        "mono patch でも bass 行には使える"
+        Some("Basses/Sub.fxp")
     );
-}
-
-/// アルペジオ行は専用カテゴリからだけ引く。chord 行の候補集合とは独立。
-#[test]
-fn the_arpeggio_row_gets_a_patch_from_the_arpeggio_categories() {
-    let now = Instant::now();
-    let catalog = catalog();
-    let patches = vec![
-        ("Keys/Poly.fxp".to_string(), "keys/poly.fxp".to_string()),
-        ("Leads/Mono.fxp".to_string(), "leads/mono.fxp".to_string()),
-        (
-            "Percussion/Kick.fxp".to_string(),
-            "percussion/kick.fxp".to_string(),
-        ),
-    ];
-    let plugins = plugins_with(PatchRoles {
-        arpeggio_patch_categories: vec!["Leads".to_string()],
-        ..PatchRoles::default()
-    });
-    let mut ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
-    ctx.patch_plugins = &plugins;
-    let mut screen = screen();
-    screen.start(now, &ctx);
-
-    screen.handle_key(press_c(), now, &ctx);
-
     assert_eq!(
         screen.state.instances()[crate::ARPEGGIO_ROW]
             .patch
             .as_deref(),
-        Some("Leads/Mono.fxp"),
-        "打楽器や chord 用 patch ではなく、arpeggio カテゴリから引く"
+        Some("Leads/Mono.fxp")
     );
 }
 
-/// PATCH が ON のサイクル抽選でも、用途の決まった3行は専用カテゴリへ当て直す。
 #[test]
-fn the_staged_cycle_reassigns_the_dedicated_rows_from_their_categories() {
+fn staged_cycle_reassigns_all_rows_from_their_purpose_pools() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = vec![
         ("Keys/Poly.fxp".to_string(), "keys/poly.fxp".to_string()),
-        ("Leads/Mono.fxp".to_string(), "leads/mono.fxp".to_string()),
         ("Basses/Sub.fxp".to_string(), "basses/sub.fxp".to_string()),
+        ("Leads/Mono.fxp".to_string(), "leads/mono.fxp".to_string()),
+        ("Synth/Other.fxp".to_string(), "synth/other.fxp".to_string()),
     ];
-    let plugins = plugins_with(PatchRoles {
-        chord_patch_categories: vec!["Keys".to_string()],
-        bass_patch_categories: vec!["Basses".to_string()],
-        arpeggio_patch_categories: vec!["Leads".to_string()],
-        ..PatchRoles::default()
-    });
-    let mut ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
-    ctx.patch_plugins = &plugins;
+    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
     let mut screen = screen();
     screen.start(now, &ctx);
     screen.handle_key(press_c(), now, &ctx);

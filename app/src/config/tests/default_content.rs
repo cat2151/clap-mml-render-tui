@@ -23,6 +23,28 @@ fn default_config_content_uses_patches_dirs_key() {
 }
 
 #[test]
+fn default_config_has_no_retired_top_level_plugin_settings() {
+    let content = default_config_content();
+    assert!(!content.contains("active_plugin"), "{content}");
+
+    let table: toml::Table = toml::from_str(&content).unwrap();
+    for key in [
+        "plugin_path",
+        "plugin_id",
+        "patches_dirs",
+        "chord_patch_categories",
+        "bass_patch_categories",
+        "arpeggio_patch_categories",
+        "drum_patch_categories",
+        "kick_patch_keywords",
+        "snare_patch_keywords",
+        "hihat_patch_keywords",
+    ] {
+        assert!(!table.contains_key(key), "トップレベルに {key} がある");
+    }
+}
+
+#[test]
 fn default_config_content_shows_how_to_configure_floe_presets() {
     let content = default_config_content();
 
@@ -62,65 +84,34 @@ fn default_config_content_uses_voicing_source_urls() {
     )));
 }
 
-/// 用途別 7 項目は**トップレベルへ値として書かない**。トップレベルの値は既定プラグインに
-/// だけ効くレガシー綴りなので、Surge のカテゴリ名を書き出すと `active_plugin` に別の
-/// プラグインを指した config で候補が全滅する（`docs/adr/0007-patch-role-defaults-three-layers.md`）。
+/// 旧用途別 7 項目は新しい catalog PatchRole へ置き換えたため、コメントにも残さない。
 #[test]
-fn default_config_content_does_not_write_the_patch_roles_at_the_top_level() {
+fn default_config_content_does_not_mention_retired_patch_role_settings() {
     let content = default_config_content();
 
-    for line in content.lines() {
+    for key in [
+        "chord_patch_categories",
+        "bass_patch_categories",
+        "arpeggio_patch_categories",
+        "drum_patch_categories",
+        "kick_patch_keywords",
+        "snare_patch_keywords",
+        "hihat_patch_keywords",
+    ] {
         assert!(
-            !line.starts_with("chord_patch_categories")
-                && !line.starts_with("bass_patch_categories")
-                && !line.starts_with("arpeggio_patch_categories")
-                && !line.starts_with("drum_patch_categories")
-                && !line.starts_with("kick_patch_keywords")
-                && !line.starts_with("snare_patch_keywords")
-                && !line.starts_with("hihat_patch_keywords"),
-            "用途別 7 項目をトップレベルへ書いてはいけない: {line}"
+            !content.contains(key),
+            "廃止した用途別設定 {key} をひな形へ残してはいけない"
         );
     }
 }
 
-/// 値は見えないと編集できないので、`[plugins."Surge XT"]` のコメントとして案内する。
 #[test]
-fn default_config_content_shows_the_surge_patch_roles_as_a_commented_profile() {
+fn default_config_content_keeps_the_surge_profile_example() {
     let content = default_config_content();
 
     assert!(content.contains(r#"# [plugins."Surge XT"]"#), "{content}");
-    assert!(
-        content.contains(r#"# chord_patch_categories = ["Keys", "Organs", "Pads", "Polysynths"]"#),
-        "{content}"
-    );
-    assert!(
-        content.contains(r#"# bass_patch_categories = ["Basses"]"#),
-        "{content}"
-    );
-    assert!(
-        content.contains(
-            r#"# arpeggio_patch_categories = ["Bells", "Brass", "Guitars", "Keys", "Leads", "Mallets", "Modelled", "MPE", "Organs", "Plucks"]"#
-        ),
-        "{content}"
-    );
-}
-
-/// コメントを外した瞬間に後続のトップレベル項目が吸い込まれないよう、テーブル見出しは
-/// 必ずファイル末尾に置く。
-#[test]
-fn the_commented_profile_is_the_last_thing_in_the_default_config() {
-    let content = default_config_content();
-    let header = content
-        .rfind(r#"# [plugins."Surge XT"]"#)
-        .expect("commented profile header");
-
-    for line in content[header..].lines() {
-        let line = line.trim();
-        assert!(
-            line.is_empty() || line.starts_with('#'),
-            "コメント済みプロファイルより後ろに設定行を置いてはいけない: {line}"
-        );
-    }
+    assert!(content.contains("# plugin_path  = 'D:\\my\\clap\\Surge XT.clap'"));
+    assert!(content.contains("# patches_dirs = ['D:\\my\\patches']"));
 }
 
 #[test]

@@ -7,9 +7,6 @@ impl TuiApp<'static> {
         let notepad = NotepadScreen::new_for_test(cfg.clone());
         // テストでは spawn しない。監督を作るだけではプロセスは立ち上がらない。
         let play_server = Arc::new(cmrt_realtime_play::RealtimePlayServerSupervisor::new(&cfg));
-        let patch_plugins = cmrt_tui_core::patch_plugins::PatchPlugins::single_plugin(
-            cmrt_runtime::PatchRoles::resolve_for_default_plugin(&cfg, &cfg.active_patch_roles),
-        );
         let patch_load_state = Arc::clone(&notepad.patch_load_state);
         let voicing_policies =
             voicing::VoicingPolicies::with_patch_load_state(&cfg, Arc::clone(&patch_load_state));
@@ -42,7 +39,6 @@ impl TuiApp<'static> {
             chord_progression_source:
                 crate::chord_progression_source::ChordProgressionSource::disabled(),
             chord_catalog: ChordProgressionCatalog::default(),
-            patch_plugins,
             play_server,
             dismissed_play_server_failure: None,
         }

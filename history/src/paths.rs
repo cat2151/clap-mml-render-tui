@@ -66,6 +66,10 @@ pub(crate) fn patch_phrase_store_path() -> Option<PathBuf> {
     history_file_path("patch_history.json")
 }
 
+pub(crate) fn mml_patch_filter_presets_path() -> Option<PathBuf> {
+    history_file_path("mml_patch_filters.json")
+}
+
 pub(crate) fn voicing_cache_path() -> Option<PathBuf> {
     history_file_path("voicing_cache.json")
 }

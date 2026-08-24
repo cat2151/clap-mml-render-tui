@@ -17,6 +17,7 @@ use std::{
 };
 
 use cmrt_chord::TimedMidiEvent;
+use cmrt_patches::PatchRoleIndex;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui_textarea::{DataCursor, TextArea};
 
@@ -26,8 +27,8 @@ use crate::cursor_notes::{notes_at_cursor, CursorNotes};
 use crate::history_select::{is_history_select_trigger, HistorySelect};
 use crate::line_play::{line_events, LineStatus};
 use crate::patch_select::{is_patch_select_trigger, PatchSelect};
-use crate::MmlOverlaySenderStatus;
 use crate::NOTE_ON;
+use crate::{MmlOverlaySenderStatus, PatchCatalogEntry};
 
 /// 生 MIDI の note on と、送信成功後に保つべき音長。
 #[derive(Clone, Debug, PartialEq)]
@@ -52,6 +53,12 @@ pub enum PatchChange {
 #[derive(Clone, Debug, PartialEq)]
 pub enum MmlOverlayAction {
     Continue,
+    /// MML patch selector で追加した正規表現プリセットを host app に保存させる。
+    SavePatchFilterPresets {
+        presets: Vec<(String, String)>,
+        /// 絞り込み更新で新しい先頭候補へ移った場合は、保存と同時に試聴する。
+        preview: Option<(String, Option<NoteRequest>)>,
+    },
     /// 鳴っているものを止めてから、この note on を送る。
     Send(NoteRequest),
     /// 鳴っているものを止め、音源の音色を差し替えてから、この note on を送る。
@@ -76,8 +83,8 @@ pub enum PatchCatalogSnapshot {
     /// バックグラウンド収集中。Ctrl+T は完了後の open 予約になる。
     #[default]
     Loading,
-    /// 収集済みの（表示名, 小文字化済み表示名）。空なら選べる音色がない。
-    Ready(Vec<(String, String)>),
+    /// 収集済みのselector行。空なら選べる音色がない。
+    Ready(Vec<PatchCatalogEntry>),
     /// 収集に失敗した理由。Ctrl+T 時に overlay 内へ表示する。
     Error(String),
 }
@@ -86,11 +93,15 @@ pub enum PatchCatalogSnapshot {
 #[derive(Default)]
 pub struct MmlOverlayContext {
     pub patch_catalog: PatchCatalogSnapshot,
+    /// MML selectorとGrid Sequencerが共有する、同じcatalog世代のRole索引。
+    pub patch_role_index: PatchRoleIndex,
     /// catalog構築時に計測したpatch別のload結果。
     pub load_measurements: BTreeMap<String, PatchLoadMeasurement>,
     /// notepad 画面と共有しているフレーズ履歴。
     pub history: Vec<String>,
     pub favorites: Vec<String>,
+    /// `(Grid Sequencer 上の役割 group, 正規表現)` のユーザー追加プリセット。
+    pub patch_filter_presets: Vec<(String, String)>,
     /// 設定不足でカタログから外れたプラグインの案内（`SkippedCatalogPlugin::notice_line`）。
     ///
     /// 「音色一覧に出てこない」は一覧を見ているだけでは絶対に気づけない
@@ -122,11 +133,14 @@ pub struct MmlOverlay<'a> {
     patch: Option<String>,
     /// 開いている間だけ持つ patch 一覧のスナップショット（表示名, 小文字化）。
     patch_catalog: PatchCatalogSnapshot,
+    patch_role_index: PatchRoleIndex,
     /// patch selectのLoad列へ渡す、開いているcatalogと同世代の計測結果。
     load_measurements: BTreeMap<String, PatchLoadMeasurement>,
     /// 開いている間だけ持つフレーズ履歴のスナップショット。
     history: Vec<String>,
     favorites: Vec<String>,
+    /// 開いている間だけ持つユーザー追加の patch filter preset。
+    patch_filter_presets: Vec<(String, String)>,
     /// 開いている間だけ持つ「カタログから外れたプラグイン」の案内。
     catalog_notes: Vec<String>,
     /// Ctrl+T を処理できなかった理由。標準 stream ではなく overlay 内へ出す。
@@ -150,9 +164,11 @@ impl Default for MmlOverlay<'_> {
             sender_command_id: 0,
             patch: None,
             patch_catalog: PatchCatalogSnapshot::Loading,
+            patch_role_index: PatchRoleIndex::default(),
             load_measurements: BTreeMap::new(),
             history: Vec::new(),
             favorites: Vec::new(),
+            patch_filter_presets: Vec::new(),
             catalog_notes: Vec::new(),
             patch_catalog_notice: None,
             patch_select_requested: false,
@@ -218,9 +234,11 @@ impl<'a> MmlOverlay<'a> {
         self.sender_command_id = 0;
         self.line_status = LineStatus::Idle;
         self.patch_catalog = context.patch_catalog;
+        self.patch_role_index = context.patch_role_index;
         self.load_measurements = context.load_measurements;
         self.history = context.history;
         self.favorites = context.favorites;
+        self.patch_filter_presets = context.patch_filter_presets;
         self.catalog_notes = context.catalog_notes;
         self.patch_catalog_notice = None;
         self.patch_select_requested = false;
@@ -277,8 +295,10 @@ impl<'a> MmlOverlay<'a> {
 
     fn close(&mut self) -> MmlOverlayAction {
         self.patch_catalog = PatchCatalogSnapshot::Loading;
+        self.patch_role_index = PatchRoleIndex::default();
         self.history = Vec::new();
         self.favorites = Vec::new();
+        self.patch_filter_presets = Vec::new();
         self.patch_select = None;
         self.patch_catalog_notice = None;
         self.patch_select_requested = false;

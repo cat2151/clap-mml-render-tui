@@ -38,6 +38,8 @@ pub(super) const GRID_WIDTH: u16 = LABEL_WIDTH + GRID_STEPS as u16 * NOTE_CELL_W
 pub struct GridSequencerLayout {
     pub chord_line: Option<Rect>,
     pub note: Rect,
+    /// NOTE の最終 track の直下に置く、auto random patch のロード進捗欄。
+    pub patch_load_progress: Rect,
     pub cc1: Rect,
     pub velocity: Rect,
     /// フレーズ型 list を出す右 pane。chord mode off か幅不足なら `None`。
@@ -113,7 +115,11 @@ impl GridSequencerLayout {
             ..rows
         };
         let note_height = requested_grid_height(note_rows).min(grids.height);
-        let rest = grids.height.saturating_sub(note_height);
+        let progress_height = u16::from(grids.height > note_height);
+        let rest = grids
+            .height
+            .saturating_sub(note_height)
+            .saturating_sub(progress_height);
         let velocity_minimum = u16::from(velocity_rows > 0 && rest > 0);
         let cc1_height = requested_grid_height(cc1_rows).min(rest - velocity_minimum);
         let velocity_height = requested_grid_height(velocity_rows).min(rest - cc1_height);
@@ -127,8 +133,13 @@ impl GridSequencerLayout {
                 height: note_height,
                 ..grids
             },
-            cc1: value_grid_area(grids, note_height, cc1_height),
-            velocity: value_grid_area(grids, note_height + cc1_height, velocity_height),
+            patch_load_progress: value_grid_area(grids, note_height, progress_height),
+            cc1: value_grid_area(grids, note_height + progress_height, cc1_height),
+            velocity: value_grid_area(
+                grids,
+                note_height + progress_height + cc1_height,
+                velocity_height,
+            ),
             pattern_list,
             // ステータスとキーバインドは塊へ寄せない。どちらも幅いっぱいでようやく
             // 収まる長さで、中央寄せのぶん詰めると末尾の情報から欠けていく。

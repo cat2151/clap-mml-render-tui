@@ -9,7 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 # config.toml のうち「プラグインをロードする側の知識」（標準インストール先・
-# active_plugin の解決規則・音色ディレクトリの畳み込み）は play server repo 側が単一ソース。
+# 固定 Surge XT と profile の解決規則・音色ディレクトリの畳み込み）は play server repo 側が単一ソース。
 cmrt-server-config = { git = "https://github.com/cat2151/clap-mml-play-server", package = "cmrt-server-config" }
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }

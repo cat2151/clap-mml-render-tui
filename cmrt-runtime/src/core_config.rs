@@ -15,7 +15,7 @@ pub use cmrt_server_config::shared_patch_root_dir;
 
 use std::path::PathBuf;
 
-use crate::{layered_patch_role_filters, Config, PatchRoles, PluginProfile};
+use crate::{Config, PluginProfile};
 
 pub fn configured_patch_dirs(cfg: &Config) -> Vec<String> {
     cmrt_server_config::configured_patch_dirs(cfg.patches_dirs.as_deref())
@@ -55,8 +55,6 @@ pub struct CatalogPlugin {
     pub resolved_patches: Option<Vec<PathBuf>>,
     /// 一部 source の破損や、ロード不能 file の除外を知らせる汎用診断。
     pub source_notices: Vec<String>,
-    /// このプラグインの音色に当てる用途別絞り込み（解決済み）。
-    pub patch_roles: PatchRoles,
 }
 
 /// カタログへ載せなかったプラグインと、その理由。
@@ -136,10 +134,10 @@ impl SkippedCatalogPlugin {
     }
 }
 
-/// カタログに音色を載せるプラグインの一覧。**先頭が既定プラグイン**
+/// カタログに音色を載せるプラグインの一覧。**先頭は固定の Surge XT**
 /// （＝音色を無指定にした行が鳴るもの）。
 ///
-/// 先頭は `active_plugin` の解決結果（トップレベルへ焼き込み済み）。そのうしろへ、
+/// 先頭は `[plugins."Surge XT"]` の解決結果（runtime field へ焼き込み済み）。そのうしろへ、
 /// **このマシンに実際にインストールされていて音色置き場も実在する**プロファイルを
 /// 並べる。config への opt-in は要らない（`docs/adr/0005-mixed-catalog-on-by-default.md`）。
 ///
@@ -191,7 +189,7 @@ fn catalog_plugins_with(
     cfg: &Config,
     installed: Vec<InstalledProfile>,
 ) -> (Vec<CatalogPlugin>, Vec<SkippedCatalogPlugin>) {
-    let mut plugins = vec![active_catalog_plugin(cfg)];
+    let mut plugins = vec![primary_catalog_plugin(cfg)];
     let mut skipped = Vec::new();
     for InstalledProfile {
         name,
@@ -224,10 +222,6 @@ fn catalog_plugins_with(
             continue;
         }
         let plugin = CatalogPlugin {
-            patch_roles: PatchRoles::resolve(
-                &profile.patch_roles,
-                &PatchRoles::builtin_for(profile.plugin_id.as_deref(), &profile.plugin_path),
-            ),
             name,
             plugin_path: profile.plugin_path,
             plugin_id: profile.plugin_id,
@@ -236,19 +230,10 @@ fn catalog_plugins_with(
             resolved_patches,
             source_notices,
         };
-        if let Some(listed) = plugins
-            .iter_mut()
-            .find(|listed| is_same_plugin(listed, &plugin))
-        {
+        if plugins.iter().any(|listed| is_same_plugin(listed, &plugin)) {
             // 既定プラグインと同じものが `[plugins.*]` にも書かれている。音色置き場は
-            // 既定側（トップレベル or `active_plugin` の解決結果）が正なので捨てるが、
-            // **用途別絞り込みだけは拾う**。`active_plugin` を書かない config では
-            // `apply_active_plugin_profile` が動かないので、ここで拾わないと
-            // `[plugins."Surge XT"]` に書いたカテゴリが黙って無視される。
-            listed.patch_roles = PatchRoles::resolve_for_default_plugin(
-                cfg,
-                &layered_patch_role_filters(&cfg.active_patch_roles, &profile.patch_roles),
-            );
+            // 固定の既定側は既に profile を runtime field へ焼き込み済みなので、重複する
+            // plugin は捨てる。
             continue;
         }
         plugins.push(plugin);
@@ -261,7 +246,7 @@ fn catalog_plugins_with(
 /// **ここだけは音色置き場の実在チェックをしない。** 設定に書かれた dir が無いことは
 /// 設定ミスなので、一覧の収集がエラーになるという今までどおりの振る舞いを残す
 /// （`docs/adr/0005-mixed-catalog-on-by-default.md`）。
-fn active_catalog_plugin(cfg: &Config) -> CatalogPlugin {
+fn primary_catalog_plugin(cfg: &Config) -> CatalogPlugin {
     let mut resolved = cmrt_server_config::resolve_patch_catalog(
         cfg.plugin_id.as_deref(),
         &cfg.plugin_path,
@@ -280,17 +265,13 @@ fn active_catalog_plugin(cfg: &Config) -> CatalogPlugin {
     }
     let dirs = resolved.dirs;
     CatalogPlugin {
-        name: cfg
-            .active_plugin
-            .clone()
-            .unwrap_or_else(|| crate::plugin_file_stem(&cfg.plugin_path).to_string()),
+        name: crate::PRIMARY_PLUGIN_PROFILE_NAME.to_string(),
         plugin_path: cfg.plugin_path.clone(),
         plugin_id: cfg.plugin_id.clone(),
         base: shared_patch_root_dir(&dirs),
         dirs,
         resolved_patches: resolved.resolved_patches,
         source_notices: resolved.notices,
-        patch_roles: PatchRoles::resolve_for_default_plugin(cfg, &cfg.active_patch_roles),
     }
 }
 
@@ -362,9 +343,8 @@ struct InstalledProfile {
 /// 既定プラグインはトップレベルへ焼き込み済みで、由来のプロファイル名が残っていない。
 /// 名前では突き合わせられないので、プラグインそのものの同一性で見る。
 ///
-/// `plugin_id` は `active_plugin` を使わない旧 config には書かれていないので、
-/// **両方に書かれているときだけ** それで判定し、無ければ `plugin_path` のファイル名で
-/// 見る。これにより、既定プラグインの
+/// `plugin_id` を持たない低レベルの構成もあるので、**両方に書かれているときだけ**
+/// それで判定し、無ければ `plugin_path` のファイル名で見る。これにより、既定プラグインの
 /// `patches_dirs` を config で差し替えてあっても、組み込みプロファイルの既定 dir が
 /// 二重に載ることはない。
 fn is_same_plugin(a: &CatalogPlugin, b: &CatalogPlugin) -> bool {

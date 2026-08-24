@@ -6,11 +6,13 @@
 
 use std::{collections::BTreeMap, time::Instant};
 
+use cmrt_patches::PatchRoleIndex;
 use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 use crossterm::event::KeyEvent;
 
 use super::mml_overlay::{
-    is_mml_overlay_trigger, MmlOverlayAction, MmlOverlayContext, PatchCatalogSnapshot, PatchChange,
+    is_mml_overlay_trigger, MmlOverlayAction, MmlOverlayContext, PatchCatalogEntry,
+    PatchCatalogSnapshot, PatchChange,
 };
 use super::{PatchLoadState, TuiApp};
 
@@ -38,7 +40,8 @@ impl TuiApp<'_> {
     /// 音色一覧の状態とフレーズ履歴を、開くたびに最新のスナップショットで渡す。
     /// 音色一覧が Loading なら、完了後に [`Self::pump_mml_overlay`] が差し替える。
     fn mml_overlay_context(&self) -> MmlOverlayContext {
-        let (patch_catalog, load_measurements) = self.mml_overlay_patch_catalog_snapshot();
+        let (patch_catalog, patch_role_index, load_measurements) =
+            self.mml_overlay_patch_catalog_snapshot();
         let (history, favorites) = self.notepad.phrase_history();
         let catalog_notes = match &*self.patch_load_state.lock().unwrap() {
             PatchLoadState::Ready(snapshot) if !snapshot.catalog_notes().is_empty() => {
@@ -49,25 +52,38 @@ impl TuiApp<'_> {
         };
         MmlOverlayContext {
             patch_catalog,
+            patch_role_index,
             load_measurements,
             history: history.to_vec(),
             favorites: favorites.to_vec(),
+            patch_filter_presets: crate::history::load_mml_patch_filter_presets(),
             catalog_notes,
         }
     }
 
     fn mml_overlay_patch_catalog_snapshot(
         &self,
-    ) -> (PatchCatalogSnapshot, BTreeMap<String, PatchLoadMeasurement>) {
+    ) -> (
+        PatchCatalogSnapshot,
+        PatchRoleIndex,
+        BTreeMap<String, PatchLoadMeasurement>,
+    ) {
         match &*self.patch_load_state.lock().unwrap() {
-            PatchLoadState::Loading => (PatchCatalogSnapshot::Loading, BTreeMap::new()),
+            PatchLoadState::Loading => (
+                PatchCatalogSnapshot::Loading,
+                PatchRoleIndex::default(),
+                BTreeMap::new(),
+            ),
             PatchLoadState::Ready(snapshot) => (
-                PatchCatalogSnapshot::Ready(snapshot.pairs().to_vec()),
+                PatchCatalogSnapshot::Ready(mml_overlay_catalog_entries(snapshot)),
+                snapshot.patch_roles().clone(),
                 snapshot.load_measurements().clone(),
             ),
-            PatchLoadState::Err(error) => {
-                (PatchCatalogSnapshot::Error(error.clone()), BTreeMap::new())
-            }
+            PatchLoadState::Err(error) => (
+                PatchCatalogSnapshot::Error(error.clone()),
+                PatchRoleIndex::default(),
+                BTreeMap::new(),
+            ),
         }
     }
 
@@ -99,9 +115,10 @@ impl TuiApp<'_> {
         if !self.mml_overlay.is_waiting_for_patch_catalog() {
             return;
         }
-        let (catalog, load_measurements) = self.mml_overlay_patch_catalog_snapshot();
+        let (catalog, patch_role_index, load_measurements) =
+            self.mml_overlay_patch_catalog_snapshot();
         self.mml_overlay
-            .sync_patch_catalog(catalog, load_measurements);
+            .sync_patch_catalog(catalog, patch_role_index, load_measurements);
     }
 
     /// オーバーレイの求めを sender へ流す。
@@ -109,6 +126,28 @@ impl TuiApp<'_> {
     /// note off はここには出てこない。「鳴っているものを止める」は sender 側が
     /// 1 か所で持っていて、音を鳴らすコマンドはどれも停止込みの意味になっている。
     fn apply_mml_overlay_action(&mut self, action: MmlOverlayAction) {
+        let action = match action {
+            MmlOverlayAction::SavePatchFilterPresets { presets, preview } => {
+                if let Err(error) = crate::history::save_mml_patch_filter_presets(&presets) {
+                    crate::logging::global_log_sink(&format!(
+                        "mml-overlay: action=patch-filter-preset event=save result=error detail={error:?}"
+                    ));
+                } else if let PatchLoadState::Ready(snapshot) =
+                    &mut *self.patch_load_state.lock().unwrap()
+                {
+                    std::sync::Arc::make_mut(snapshot).rebuild_patch_roles(&presets);
+                }
+                if let (Some(sender), Some((patch, notes))) = (&self.mml_overlay_sender, preview) {
+                    let command_id = match notes {
+                        Some(notes) => sender.send(Some(&patch), notes.messages, notes.duration),
+                        None => sender.prepare(Some(&patch)),
+                    };
+                    self.mml_overlay.expect_sender_command(command_id);
+                }
+                return;
+            }
+            action => action,
+        };
         // 閉じるときだけ sender の外へ用がある（音源を借りていた画面へ返す）ので、
         // sender を借りる前に片づける。
         if action == MmlOverlayAction::Close {
@@ -124,7 +163,9 @@ impl TuiApp<'_> {
             return;
         };
         let command_id = match action {
-            MmlOverlayAction::Continue | MmlOverlayAction::Close => None,
+            MmlOverlayAction::Continue
+            | MmlOverlayAction::Close
+            | MmlOverlayAction::SavePatchFilterPresets { .. } => None,
             MmlOverlayAction::Send(notes) => {
                 let id = sender.send(self.mml_overlay.patch(), notes.messages, notes.duration);
                 Some(id)
@@ -146,3 +187,37 @@ impl TuiApp<'_> {
         }
     }
 }
+
+fn mml_overlay_catalog_entries(
+    snapshot: &cmrt_tui_core::patch_load::PatchCatalogSnapshot,
+) -> Vec<PatchCatalogEntry> {
+    if snapshot.audio_patches().len() != snapshot.pairs().len() {
+        return snapshot
+            .pairs()
+            .iter()
+            .map(|(display, normalized)| {
+                PatchCatalogEntry::new(display.clone(), normalized.clone(), String::new(), None)
+            })
+            .collect();
+    }
+    snapshot
+        .audio_patches()
+        .iter()
+        .map(|patch| {
+            let plugin_sort_key = snapshot
+                .patch_plugins()
+                .audio_info_for_ref(&patch.reference)
+                .map(|plugin| plugin.name.clone())
+                .unwrap_or_else(|_| patch.reference.plugin.to_string());
+            PatchCatalogEntry::new(
+                patch.reference.display.clone(),
+                patch.normalized_display.clone(),
+                plugin_sort_key,
+                patch.selector_category.clone(),
+            )
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests;

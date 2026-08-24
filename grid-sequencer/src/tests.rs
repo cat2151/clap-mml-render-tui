@@ -1,7 +1,9 @@
 use crossterm::event::KeyModifiers;
 
 use super::*;
-use cmrt_tui_core::patch_plugins::{PatchPlugins, PatchRoles};
+use std::borrow::Cow;
+
+use cmrt_patches::{PatchRoleIndex, PatchRoleInput};
 
 fn press(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
@@ -23,16 +25,20 @@ pub(crate) fn empty_catalog() -> &'static cmrt_chord::ChordProgressionCatalog {
     CATALOG.get_or_init(cmrt_chord::ChordProgressionCatalog::default)
 }
 
-/// 用途別絞り込みだけを差し替えたテスト用カタログ。
-/// `ctx.patch_plugins = &plugins` で ctx へ差し込む。
-pub(crate) fn plugins_with(patch_roles: PatchRoles) -> PatchPlugins {
-    PatchPlugins::single_plugin(patch_roles)
-}
-
-/// どの用途でも絞らないカタログ。カテゴリの検証は chord_mode 側のテストで行う。
-pub(crate) fn unfiltered_plugins() -> &'static PatchPlugins {
-    static PLUGINS: std::sync::OnceLock<PatchPlugins> = std::sync::OnceLock::new();
-    PLUGINS.get_or_init(|| plugins_with(PatchRoles::default()))
+pub(crate) fn patch_roles(
+    patches: &[(String, String)],
+    user_presets: &[(String, String)],
+) -> PatchRoleIndex {
+    PatchRoleIndex::build(
+        patches
+            .iter()
+            .map(|(display, normalized_display)| PatchRoleInput {
+                display,
+                normalized_display,
+                selector_category: None,
+            }),
+        user_presets,
+    )
 }
 
 pub(crate) fn ctx_with<'a>(
@@ -40,12 +46,17 @@ pub(crate) fn ctx_with<'a>(
     catalog: &'a cmrt_chord::ChordProgressionCatalog,
     voicing: &'a dyn GridVoicingLookup,
 ) -> GridSequencerContext<'a> {
+    let patch_roles = match &patch_load {
+        GridPatchLoad::Ready(patches) => patch_roles(patches, &[]),
+        GridPatchLoad::Loading | GridPatchLoad::Err(_) => PatchRoleIndex::default(),
+    };
     GridSequencerContext {
         patch_dirs_configured: true,
         patch_load,
+        load_measurements: None,
         chord_catalog: catalog,
         voicing,
-        patch_plugins: unfiltered_plugins(),
+        patch_roles: Cow::Owned(patch_roles),
         chord_source_updated: false,
         catalog_notes: &[],
     }
@@ -157,7 +168,7 @@ fn esc_closes_the_help_overlay() {
 }
 
 #[test]
-fn r_assigns_a_patch_to_every_row() {
+fn r_assigns_note_patches_but_does_not_fallback_for_empty_drum_pools() {
     let patches = one_patch();
     let mut screen = silent_screen();
     assert!(screen.state.rows().iter().all(|row| row.patch.is_none()));
@@ -168,15 +179,17 @@ fn r_assigns_a_patch_to_every_row() {
         &ready_ctx(&patches),
     );
 
-    assert!(screen
-        .state
-        .rows()
-        .iter()
-        .all(|row| row.patch.as_deref() == Some("Keys/Piano.fxp")));
-    assert!(screen
-        .state
-        .patches()
-        .all(|(_, patch)| patch == Some("Keys/Piano.fxp")));
+    for (index, row) in screen.state.rows().iter().enumerate() {
+        if screen.state.drum_role(index).is_some() {
+            assert_eq!(row.patch, None, "drum候補が空ならALLへfallbackしない");
+        } else {
+            assert_eq!(
+                row.patch.as_deref(),
+                Some("Keys/Piano.fxp"),
+                "non-drum row {index}"
+            );
+        }
+    }
 }
 
 #[test]
@@ -226,11 +239,13 @@ fn ready_patch_list_fills_rows_that_started_while_loading() {
     let patches = one_patch();
     screen.refresh_context(&ready_ctx(&patches));
 
-    assert!(screen
-        .state
-        .rows()
-        .iter()
-        .all(|row| row.patch.as_deref() == Some("Keys/Piano.fxp")));
+    for (index, row) in screen.state.rows().iter().enumerate() {
+        if screen.state.drum_role(index).is_some() {
+            assert_eq!(row.patch, None);
+        } else {
+            assert_eq!(row.patch.as_deref(), Some("Keys/Piano.fxp"));
+        }
+    }
     assert_eq!(screen.patch_status, GridPatchStatus::Ready(1));
 }
 

@@ -4,9 +4,8 @@ use cmrt_chord::ChordProgressionCatalog;
 use cmrt_realtime_play::PatchVoicing;
 
 use super::*;
-use cmrt_tui_core::patch_plugins::{PatchPlugins, PatchRoles};
 
-use crate::tests::{ctx_with, plugins_with, unfiltered_plugins};
+use crate::tests::ctx_with;
 use crate::{GridPatchLoad, GridVoicingLookup, NoVoicingLookup};
 
 mod cycle;
@@ -212,6 +211,30 @@ fn categorized_patches() -> Vec<(String, String)> {
             "patches_factory/leads/saw.fxp".to_string(),
         ),
         (
+            "patches_factory/Basses/Sub.fxp".to_string(),
+            "patches_factory/basses/sub.fxp".to_string(),
+        ),
+        (
+            "patches_factory/Synth/Other.fxp".to_string(),
+            "patches_factory/synth/other.fxp".to_string(),
+        ),
+        (
+            "patches_factory/Drums/Perc Shaker.fxp".to_string(),
+            "patches_factory/drums/perc shaker.fxp".to_string(),
+        ),
+        (
+            "patches_factory/Drums/Closed Hat.fxp".to_string(),
+            "patches_factory/drums/closed hat.fxp".to_string(),
+        ),
+        (
+            "patches_factory/Drums/Snare.fxp".to_string(),
+            "patches_factory/drums/snare.fxp".to_string(),
+        ),
+        (
+            "patches_factory/Drums/Kick.fxp".to_string(),
+            "patches_factory/drums/kick.fxp".to_string(),
+        ),
+        (
             "patches_3rdparty/Vendor/Organs/Drawbar.fxp".to_string(),
             "patches_3rdparty/vendor/organs/drawbar.fxp".to_string(),
         ),
@@ -225,25 +248,6 @@ impl GridVoicingLookup for AllPoly {
     fn cached_voicing(&self, _patch: &str) -> Option<PatchVoicing> {
         Some(PatchVoicing::Poly)
     }
-}
-
-/// chord 行のカテゴリだけを絞ったテスト用カタログ。ctx より先に束縛すること。
-fn chord_category_plugins(categories: &[&str]) -> PatchPlugins {
-    plugins_with(PatchRoles {
-        chord_patch_categories: categories.iter().map(|name| name.to_string()).collect(),
-        ..PatchRoles::default()
-    })
-}
-
-fn ctx_with_plugins<'a>(
-    patches: &'a [(String, String)],
-    catalog: &'a ChordProgressionCatalog,
-    voicing: &'a dyn GridVoicingLookup,
-    plugins: &'a PatchPlugins,
-) -> GridSequencerContext<'a> {
-    let mut ctx = ctx_with(GridPatchLoad::Ready(patches), catalog, voicing);
-    ctx.patch_plugins = plugins;
-    ctx
 }
 
 #[test]

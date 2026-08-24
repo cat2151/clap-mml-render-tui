@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use cmrt_runtime::{CatalogPlugin, Config, PatchRoles, SkippedCatalogPlugin};
+use cmrt_runtime::{CatalogPlugin, Config, SkippedCatalogPlugin};
 use cmrt_tui_core::patch_load::{PatchCatalogSnapshot, PatchLoadMeasurement};
 use serde::{Deserialize, Serialize};
 
@@ -75,7 +75,6 @@ struct CachedPlugin {
     dirs: Vec<String>,
     #[serde(default)]
     source_notices: Vec<String>,
-    patch_roles: PatchRoles,
 }
 
 impl From<&CatalogPlugin> for CachedPlugin {
@@ -87,7 +86,6 @@ impl From<&CatalogPlugin> for CachedPlugin {
             base: plugin.base.clone(),
             dirs: plugin.dirs.clone(),
             source_notices: plugin.source_notices.clone(),
-            patch_roles: plugin.patch_roles.clone(),
         }
     }
 }
@@ -102,7 +100,6 @@ impl From<CachedPlugin> for CatalogPlugin {
             dirs: plugin.dirs,
             resolved_patches: None,
             source_notices: plugin.source_notices,
-            patch_roles: plugin.patch_roles,
         }
     }
 }
@@ -189,7 +186,7 @@ fn load_from(path: &Path) -> Result<LoadedPatchCatalogCache> {
             format_version
         );
     }
-    let cache: CacheFile = serde_json::from_value(value)
+    let mut cache: CacheFile = serde_json::from_value(value)
         .with_context(|| format!("patch catalog cacheが不正です: {}", path.display()))?;
     if cache.plugins.is_empty() {
         anyhow::bail!("patch catalog cacheにpluginがありません");
@@ -202,6 +199,7 @@ fn load_from(path: &Path) -> Result<LoadedPatchCatalogCache> {
         anyhow::bail!("patch catalog cacheにplugin_pathが空のpluginがあります");
     }
     validate_catalog_voicings(&cache)?;
+    populate_selector_categories(&mut cache)?;
     if let Some(display) = cache
         .patches
         .iter()
@@ -243,6 +241,27 @@ fn load_from(path: &Path) -> Result<LoadedPatchCatalogCache> {
         ),
         patch_voicings,
     })
+}
+
+/// optional field追加前のcatalogも、plugin固有I/Oや全patch再計測なしで補完する。
+fn populate_selector_categories(cache: &mut CacheFile) -> Result<()> {
+    let plugins = cache
+        .plugins
+        .iter()
+        .cloned()
+        .map(CatalogPlugin::from)
+        .collect::<Vec<_>>();
+    let patch_plugins = cmrt_tui_core::patch_plugins::PatchPlugins::from_catalog(plugins);
+    for patch in &mut cache.patches {
+        if patch.audio.selector_category.is_some() {
+            continue;
+        }
+        let info = patch_plugins
+            .audio_info_for_ref(&patch.audio.reference)
+            .map_err(anyhow::Error::new)?;
+        patch.audio.selector_category = info.selector_category(&patch.audio.reference.display);
+    }
+    Ok(())
 }
 
 fn describe_patches(

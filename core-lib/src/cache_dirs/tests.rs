@@ -71,9 +71,8 @@ fn namespace_uses_plugin_file_stem() {
 }
 
 #[test]
-fn namespace_is_same_for_profile_and_legacy_config() {
-    // `active_plugin = 'Surge XT'` でも、旧 config のトップレベル plugin_path でも
-    // 解決後の plugin_path は同じなので、キャッシュ置き場も同じになる。
+fn namespace_ignores_surrounding_whitespace_in_the_resolved_path() {
+    // config の表現ではなく解決後の plugin_path だけでキャッシュ置き場が決まる。
     let from_profile = cmrt_runtime::default_plugin_path();
     assert_eq!(
         cache_plugin_namespace(from_profile),

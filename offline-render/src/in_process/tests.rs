@@ -1,6 +1,6 @@
 use super::*;
 
-use cmrt_runtime::{PatchRoles, DEXED_PLUGIN_ID, FLOE_PLUGIN_ID, SURGE_XT_PLUGIN_ID};
+use cmrt_runtime::{DEXED_PLUGIN_ID, FLOE_PLUGIN_ID, SURGE_XT_PLUGIN_ID};
 
 /// 2 プラグインぶんのカタログ。開発機のインストール状況に左右されないよう、
 /// `catalog_plugins()` を通さずに手で並べる。
@@ -13,7 +13,6 @@ fn catalog_entry(name: &str, plugin_id: &str, base: &str) -> CatalogPlugin {
         dirs: vec![base.to_string()],
         resolved_patches: None,
         source_notices: Vec::new(),
-        patch_roles: PatchRoles::default(),
     }
 }
 

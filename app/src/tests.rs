@@ -164,36 +164,6 @@ fn cli_mml_mode_still_accepts_regular_positional_argument() {
 }
 
 #[test]
-fn cli_playback_mml_converts_single_chord_to_mml() {
-    assert_eq!(
-        cli_playback_mml("C"),
-        CliPlaybackMml::Chord {
-            chord: "C".to_string(),
-            mml: "v11'c1eg'".to_string(),
-        }
-    );
-}
-
-#[test]
-fn cli_playback_mml_converts_chord_progression_to_mml() {
-    assert_eq!(
-        cli_playback_mml("Dm G7 C"),
-        CliPlaybackMml::Chord {
-            chord: "Dm G7 C".to_string(),
-            mml: "v11'd1fa''g1b<df''c1eg'".to_string(),
-        }
-    );
-}
-
-#[test]
-fn cli_playback_mml_keeps_regular_mml_when_chord_parse_fails() {
-    assert_eq!(
-        cli_playback_mml("cde"),
-        CliPlaybackMml::Mml("cde".to_string())
-    );
-}
-
-#[test]
 fn server_flag_uses_default_port_when_value_is_omitted() {
     assert_eq!(
         parse_cli_from(["cmrt", "--server"]).unwrap(),

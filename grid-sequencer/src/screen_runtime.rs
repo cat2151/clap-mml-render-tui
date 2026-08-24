@@ -6,9 +6,13 @@ use super::{GridScheduledMessage, GridSequencerContext, GridSequencerScreen};
 
 /// コード進行データ更新のアナウンスを出しておく時間。読めるだけの長さがあればよい。
 const RESTART_NOTICE_DURATION: Duration = Duration::from_secs(3);
+/// 1小節境界でこの値を超えて遅れた表示更新は診断上 late とする。
+const MEASURE_SYNC_LATE: Duration = Duration::from_millis(50);
 
 impl GridSequencerScreen {
     pub(crate) fn restart_timeline(&mut self, now: Instant) {
+        let underrun_frames = self.connection_status().output_underrun_frames;
+        self.playback_sync.restart(now, underrun_frames);
         self.timeline_id = self
             .midi_sender
             .as_ref()
@@ -34,29 +38,58 @@ impl GridSequencerScreen {
         // 来る前に預けておかないと1周ぶん取り逃がす。
         self.arm_next_cycle_bpm();
         if self.poll_start_wait(now, status.phase.accepts_notes()) {
+            let display_now = self.playback_sync.audible_now(
+                now,
+                status.output_underrun_frames,
+                self.sample_rate,
+            );
             let bank_before = self.state.bank();
             let chord_before = self
                 .state
                 .chord()
                 .map(|chord| (chord.index(), chord.chord_count()));
-            let scheduled = self
-                .state
-                .poll_steps(now, self.scheduling_lookahead(status.buffer_multiplier));
+            let lookahead = self.scheduling_lookahead(status.buffer_multiplier);
+            let scheduled = self.state.poll_steps_at(now, lookahead, display_now);
             // 周の頭を跨いだならテンポが乗り換わっている。表示を追従させる。
             self.absorb_applied_cycle_bpm();
             self.log_chord_schedule(&scheduled, bank_before, chord_before);
             self.send_scheduled_with_lateness(&scheduled, self.state.last_poll_lateness());
+            self.check_measure_sync();
             if self.single_buffering {
                 // 鳴らしきってからロードする。この間は演奏が止まる。
                 self.advance_single_buffer_cycle(now, ctx);
             } else {
-                // 進行の最終小節へ入っていれば、待機 bank へ次サイクルを先読みする。
-                // 演奏は止まらない（差し替えは次の小節境界で起きる）。
+                // 進行の先頭が実際に鳴り始めていれば、空いた待機 bank へ次サイクルを
+                // 先読みする。演奏は止まらない（差し替えは次の進行境界で起きる）。
                 self.advance_cycle_swap(now, ctx);
             }
         }
         self.expire_patch_notice(now);
         self.take_restart_request(now)
+    }
+
+    /// 表示された各小節について、補正した drop と残った表示更新遅延を1回ずつ記録する。
+    fn check_measure_sync(&mut self) {
+        let Some(check) = self.playback_sync.check_measure(
+            self.state.displayed_ordinal(),
+            self.state.display_lateness(),
+            self.sample_rate,
+        ) else {
+            return;
+        };
+        crate::log_line(&format!(
+            "grid-sequencer: measure-sync measure={} result={} corrected_drop_frames={} \
+             corrected_drop_ms={:.3} display_late_us={}",
+            check.measure + 1,
+            if check.display_lateness <= MEASURE_SYNC_LATE {
+                "ok"
+            } else {
+                "late"
+            },
+            check.dropped_frames,
+            check.dropped.as_secs_f64() * 1_000.0,
+            check.display_lateness.as_micros(),
+        ));
     }
 
     /// 表示時間が過ぎた patch selector の通知を消す。操作を塞がないので、
