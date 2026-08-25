@@ -193,7 +193,7 @@ patches_dirs = ['D:\Vaporizer2\Presets']
 - 用途別の自動選択に使う mono/poly の共有判定データ（`voicing_shared_source` / `voicing_override_source`）は Surge XT の音色判定にだけ使います。
 - レンダリング結果のキャッシュはプラグインごとに別ディレクトリへ置くので、混在しても別プラグインの音を誤利用しません（手で消す必要はありません）。置き場は次の2つで、`<プラグイン>` は解決済み `plugin_path` のファイル名（拡張子なし）です（Windows の場合）。
   - `%LOCALAPPDATA%\clap-mml-render-tui\notepad_cache\<プラグイン>\*.wav`（notepad / MML入力overlay のキャッシュ）
-  - `%LOCALAPPDATA%\clap-mml-render-tui\daw\<プラグイン>\*.wav`（DAW のトラックWAV）
+  - `%LOCALAPPDATA%\clap-mml-render-tui\daw_cache\<プラグイン>\*.wav`（DAW のトラックWAV）
 
 `offline_render_backend = "render_server"` にすると、TUI側はCLAPプラグインを直接ロードせず、`127.0.0.1:<offline_render_server_port>/render` にMMLを送ってWAVを受け取ります。render-serverへの接続に失敗した場合、cmrtは子プロセスを起動し、通信エラー時は一度だけ再起動して再試行します。
 

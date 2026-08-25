@@ -137,7 +137,10 @@ fn cache_dirs_are_created_under_the_plugin_namespace() {
     let dir = ensure_daw_cache_dir().unwrap();
     assert!(dir.is_dir());
     assert_eq!(dir.file_name().unwrap().to_str().unwrap(), namespace());
-    assert_eq!(dir.parent().unwrap(), ensure_daw_dir().unwrap());
+    assert_eq!(
+        dir.parent().unwrap(),
+        ensure_cmrt_dir().unwrap().join("daw_cache")
+    );
 
     let dir = ensure_notepad_cache_dir().unwrap();
     assert!(dir.is_dir());
@@ -164,7 +167,7 @@ fn legacy_cache_file_names_are_recognized() {
 }
 
 #[test]
-fn legacy_cleanup_keeps_render_server_intermediate_files() {
+fn legacy_migration_moves_namespaced_daw_cache_and_keeps_intermediate_files() {
     let _base = BaseDirGuard::new("legacy-cleanup");
     let daw_dir = ensure_daw_dir().unwrap();
     let cell = daw_dir.join("track7_meas9.wav");
@@ -173,6 +176,10 @@ fn legacy_cleanup_keeps_render_server_intermediate_files() {
     for path in [&cell, &intermediate, &midi] {
         std::fs::write(path, b"x").unwrap();
     }
+    let old_namespaced_dir = daw_dir.join(namespace());
+    std::fs::create_dir_all(&old_namespaced_dir).unwrap();
+    let old_namespaced = old_namespaced_dir.join("track2_meas3.wav");
+    std::fs::write(&old_namespaced, b"old cache").unwrap();
     let notepad_dir = ensure_cmrt_dir().unwrap().join("notepad_cache");
     std::fs::create_dir_all(&notepad_dir).unwrap();
     let legacy = notepad_dir.join("00112233445566ff.wav");
@@ -183,9 +190,14 @@ fn legacy_cleanup_keeps_render_server_intermediate_files() {
         .join("00112233445566ff.wav");
     std::fs::write(&namespaced, b"x").unwrap();
 
-    remove_legacy_unnamespaced_caches();
+    migrate_legacy_caches();
 
     assert!(!cell.exists(), "旧セル WAV が残っている");
+    assert!(!old_namespaced.exists(), "旧配置にセル WAV が残っている");
+    assert_eq!(
+        std::fs::read(ensure_daw_cache_dir().unwrap().join("track2_meas3.wav")).unwrap(),
+        b"old cache"
+    );
     assert!(!legacy.exists(), "旧 notepad キャッシュが残っている");
     assert!(
         intermediate.exists(),

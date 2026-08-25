@@ -26,6 +26,9 @@ use anyhow::Result;
 
 use crate::{ensure_cmrt_dir, ensure_daw_dir};
 
+const DAW_CACHE_DIR_NAME: &str = "daw_cache";
+const NOTEPAD_CACHE_DIR_NAME: &str = "notepad_cache";
+
 /// 名前空間が決まっていないときに使う名前。
 ///
 /// 実運用では main が起動直後に [`init_cache_plugin_namespace`] を呼ぶので現れない。
@@ -79,7 +82,9 @@ pub fn cache_plugin_namespace(plugin_path: &str) -> String {
 /// [`ensure_daw_dir`] とは別階層になる。セル WAV を読み書きするのは TUI プロセス
 /// だけなので、TUI 側だけ名前空間を切っても整合は崩れない。
 pub fn ensure_daw_cache_dir() -> Result<PathBuf> {
-    let dir = ensure_daw_dir()?.join(namespace());
+    let dir = ensure_cmrt_dir()?
+        .join(DAW_CACHE_DIR_NAME)
+        .join(namespace());
     std::fs::create_dir_all(&dir)?;
     Ok(dir)
 }
@@ -87,23 +92,71 @@ pub fn ensure_daw_cache_dir() -> Result<PathBuf> {
 /// notepad (非DAW) モードの行単位オーディオキャッシュ置き場。
 /// `ensure_daw_dir` / `ensure_phrase_dir` と同じ `ensure_cmrt_dir` 配下に置く。
 pub fn ensure_notepad_cache_dir() -> Result<PathBuf> {
-    let dir = ensure_cmrt_dir()?.join("notepad_cache").join(namespace());
+    let dir = ensure_cmrt_dir()?
+        .join(NOTEPAD_CACHE_DIR_NAME)
+        .join(namespace());
     std::fs::create_dir_all(&dir)?;
     Ok(dir)
 }
 
-/// 名前空間を切る前のバージョンが残したキャッシュを 1 回だけ掃除する。
+/// 旧バージョンが残したキャッシュを、現在の配置へ 1 回だけ移行・掃除する。
 ///
-/// 置き場を変えた結果、旧ファイルは誰も読まないのに LRU の上限計算からも外れ、
-/// 二度と消えなくなる。ファイル名がキャッシュ専用の形をしているものだけを消すので、
+/// `daw/<plugin>/` にある名前空間付きセル WAV は `daw_cache/<plugin>/` へ移す。
+/// 名前空間を切る前のキャッシュは再利用できないため、ファイル名がキャッシュ専用の
+/// 形をしているものだけを消す。いずれも
 /// render-server が `daw/` 直下に置く中間ファイル（`daw_cache.mid` / `daw_cache.wav`）
-/// には触れない。掃除後は該当ファイルが無くなるので、次回以降は空振りで終わる。
-pub fn remove_legacy_unnamespaced_caches() {
+/// には触れない。移行後は旧配置が空になるので、次回以降は空振りで終わる。
+pub fn migrate_legacy_caches() {
     if let Ok(dir) = ensure_daw_dir() {
         remove_files_in(&dir, is_legacy_daw_cell_wav);
+        if let Ok(cache_root) = ensure_cmrt_dir().map(|dir| dir.join(DAW_CACHE_DIR_NAME)) {
+            migrate_namespaced_daw_caches(&dir, &cache_root);
+        }
     }
     if let Ok(dir) = ensure_cmrt_dir() {
-        remove_files_in(&dir.join("notepad_cache"), is_legacy_notepad_cache_wav);
+        remove_files_in(
+            &dir.join(NOTEPAD_CACHE_DIR_NAME),
+            is_legacy_notepad_cache_wav,
+        );
+    }
+}
+
+fn migrate_namespaced_daw_caches(legacy_root: &std::path::Path, cache_root: &std::path::Path) {
+    let Ok(namespaces) = std::fs::read_dir(legacy_root) else {
+        return;
+    };
+    for namespace in namespaces.flatten() {
+        let legacy_dir = namespace.path();
+        if !namespace
+            .file_type()
+            .is_ok_and(|file_type| file_type.is_dir())
+        {
+            continue;
+        }
+        let Ok(files) = std::fs::read_dir(&legacy_dir) else {
+            continue;
+        };
+        let destination_dir = cache_root.join(namespace.file_name());
+        for file in files.flatten() {
+            let source = file.path();
+            if !file.file_type().is_ok_and(|file_type| file_type.is_file())
+                || !is_cache_file(&source, is_legacy_daw_cell_wav)
+            {
+                continue;
+            }
+            if std::fs::create_dir_all(&destination_dir).is_err() {
+                break;
+            }
+            let destination = destination_dir.join(file.file_name());
+            if destination.is_file() {
+                // 新配置に同じセルのキャッシュがあれば、そちらを優先する。
+                let _ = std::fs::remove_file(&source);
+            } else if !destination.exists() {
+                let _ = std::fs::rename(&source, destination);
+            }
+        }
+        // キャッシュ以外のファイルがあれば失敗してそのまま残る。
+        let _ = std::fs::remove_dir(&legacy_dir);
     }
 }
 
@@ -132,16 +185,18 @@ fn remove_files_in(dir: &std::path::Path, is_target: fn(&str) -> bool) {
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("wav") {
-            continue;
-        }
-        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
-            continue;
-        };
-        if is_target(stem) {
+        if is_cache_file(&path, is_target) {
             let _ = std::fs::remove_file(&path);
         }
     }
+}
+
+fn is_cache_file(path: &std::path::Path, is_target: fn(&str) -> bool) -> bool {
+    path.extension().and_then(|ext| ext.to_str()) == Some("wav")
+        && path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .is_some_and(is_target)
 }
 
 #[cfg(test)]

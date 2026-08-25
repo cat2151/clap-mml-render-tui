@@ -29,6 +29,7 @@ config_local/clap-mml-render-tui/
   daw/
     daw_cache.mid          ← render-server の中間ファイル。従来どおり直下
     daw_cache.wav
+  daw_cache/
     Surge XT/track0_meas1.wav
     Dexed/track0_meas1.wav
   notepad_cache/
@@ -51,15 +52,16 @@ config_local/clap-mml-render-tui/
 ## 旧キャッシュの掃除を足した理由
 
 置き場を変えると、旧ファイルは**誰も読まないのに LRU の上限計算からも外れ、二度と消えなくなる**。
-起動時に 1 回だけ掃除する。消すのはキャッシュ専用のファイル名の形
-（`daw/track{数字}_meas{数字}.wav` と `notepad_cache/{16 桁 hex}.wav`）だけで、
-`daw_cache.mid` / `daw_cache.wav` には触れない。
+起動時に 1 回だけ移行・掃除する。`daw/<プラグイン>/track{数字}_meas{数字}.wav` は
+`daw_cache/<プラグイン>/` へ移す。名前空間導入前の
+`daw/track{数字}_meas{数字}.wav` と `notepad_cache/{16 桁 hex}.wav` は再利用できないため
+削除する。`daw/daw_cache.mid` / `daw/daw_cache.wav` には触れない。
 
 ## 罠
 
 - **`OnceLock` は main が `config::load()` の直後に `init_cache_plugin_namespace()` を呼んで決める。**
   ここより前にキャッシュ API を呼ぶコードを足すと、黙って `unknown-plugin` へ書く
-- **`remove_legacy_unnamespaced_caches()` は実際にファイルを消す。**
+- **`migrate_legacy_caches()` は実際にファイルを移動・削除する。**
   テストから呼ぶときは必ず `CMRT_BASE_DIR` を一時ディレクトリへ寄せる
 - **`ensure_notepad_cache_dir()` は名前が同じまま置き場が変わった。**
   呼び出し側は無改修だが、古いパスを前提にしたテストを書くと通らない
@@ -69,5 +71,5 @@ config_local/clap-mml-render-tui/
 
 ## 壊れたら気づく場所
 
-- `core-lib/src/cache_dirs/tests.rs::legacy_cleanup_keeps_render_server_intermediate_files`
+- `core-lib/src/cache_dirs/tests.rs::legacy_migration_moves_namespaced_daw_cache_and_keeps_intermediate_files`
   — 旧キャッシュ掃除が render-server の中間ファイルを消していないこと

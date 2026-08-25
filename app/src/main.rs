@@ -297,9 +297,8 @@ fn run() -> Result<()> {
     // キャッシュキーは MML 文字列の hash なので、音色を指定していない行は
     // プラグインを切り替えても同じキーになる。ここで名前空間を決めておく。
     cmrt_core::init_cache_plugin_namespace(&cfg.plugin_path);
-    // 名前空間を切る前のバージョンが残したキャッシュは、誰も読まないのに
-    // LRU の上限計算からも外れて消えなくなるので、ここで捨てる。
-    cmrt_core::remove_legacy_unnamespaced_caches();
+    // 旧配置のキャッシュを現在の配置へ移行し、再利用できないものは掃除する。
+    cmrt_core::migrate_legacy_caches();
 
     if matches!(&action, CliAction::ScanLoops) {
         return scan_loops::run_scan_loops(&cfg);

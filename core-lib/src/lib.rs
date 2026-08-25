@@ -31,7 +31,7 @@ mod native_render_probe;
 
 pub use cache_dirs::{
     cache_plugin_namespace, ensure_daw_cache_dir, ensure_notepad_cache_dir,
-    init_cache_plugin_namespace, remove_legacy_unnamespaced_caches, DEFAULT_CACHE_PLUGIN_NAMESPACE,
+    init_cache_plugin_namespace, migrate_legacy_caches, DEFAULT_CACHE_PLUGIN_NAMESPACE,
 };
 pub use core_config::{core_config_for_plugin, core_config_from_config};
 
