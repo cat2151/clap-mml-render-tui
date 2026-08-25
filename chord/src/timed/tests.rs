@@ -167,3 +167,18 @@ fn end_of_track(delta: u32) -> TrackEvent<'static> {
         kind: TrackEventKind::Meta(MetaMessage::EndOfTrack),
     }
 }
+
+/// 移設の要点は「同じ型であること」。`cmrt_chord::TimedMidiEvent` が
+/// `cmrt_midi_filter` の型そのものなら、詰め替えなしで filter へ渡せる。
+/// 将来うっかり chord 側へ同名の型を再定義したらここが型エラーで落ちる。
+#[test]
+fn the_events_go_straight_into_a_midi_filter_without_conversion() {
+    let performance = timed_performance("cde").unwrap();
+
+    let shifted: Vec<cmrt_midi_filter::TimedMidiEvent> =
+        cmrt_midi_filter::shift(&performance.events, 1.5);
+
+    assert_eq!(shifted.len(), performance.events.len());
+    assert_eq!(shifted[0].seconds, performance.events[0].seconds + 1.5);
+    assert_eq!(shifted[0].message, performance.events[0].message);
+}

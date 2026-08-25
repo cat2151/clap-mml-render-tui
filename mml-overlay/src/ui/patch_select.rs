@@ -19,7 +19,7 @@ use cmrt_tui_core::{
 
 use crate::patch_select::{PatchSelect, PatchSelectFocus};
 
-const QUERY_TITLE: &str = " Regex (空白=AND)  Enter:決定  Esc:取消 ";
+const QUERY_TITLE: &str = " Regex (空白=AND)  Enter:決定  Esc:取消  ^Space:試聴  ^L:演奏設定 ";
 const QUERY_PLACEHOLDER: &str = r"例: warm pad|strings";
 /// 絞り込み欄の高さ（枠2行 + 入力1行）。
 const QUERY_HEIGHT: u16 = 3;

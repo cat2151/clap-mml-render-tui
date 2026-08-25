@@ -96,6 +96,54 @@ fn save_history_state_persists_tui_cursor_lines_and_active_screen() {
 }
 
 #[test]
+fn the_mml_overlay_play_settings_survive_a_restart() {
+    // 保存（`Ctrl+L` で ON にして終了）から復元（次回起動）までを 1 本で通す。
+    // 復元側は `TuiApp::new` を実際に呼ぶ。`new_for_test` はセッションを読まないので、
+    // 「`new` が `set_restored_play_settings` を呼んでいること」はここでしか固定できない。
+    let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
+    let tmp = std::env::temp_dir().join(format!(
+        "cmrt_test_tui_mml_overlay_play_settings_{}_{}",
+        std::process::id(),
+        unique
+    ));
+    std::fs::remove_dir_all(&tmp).ok();
+    let _env_guards = crate::test_utils::set_local_dir_envs(&tmp);
+
+    let cfg = test_config();
+    let mut app = TuiApp::new_for_test(cfg.clone());
+    let now = std::time::Instant::now();
+    // `Ctrl+L` で開き、↓ で CC1 modulation へ移り、Space で ON、Enter で確定。
+    // repeat と velocity は OFF のまま残すので、3 値の取り違えも検出できる。
+    for key in [
+        KeyEvent::new(KeyCode::Char('l'), KeyModifiers::CONTROL),
+        KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
+        KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE),
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+    ] {
+        app.mml_overlay.handle_key(key, now);
+    }
+    let confirmed = app.mml_overlay.play_settings();
+    assert!(confirmed.filters.modulation, "Ctrl+L で ON にできていない");
+    app.save_history_state();
+    drop(app);
+
+    let saved = crate::history::load_session_state();
+    assert_eq!(
+        saved.mml_overlay_play_settings,
+        crate::history::MmlOverlayPlaySettings {
+            repeat: false,
+            modulation: true,
+            velocity: false,
+        }
+    );
+
+    let restarted = TuiApp::new(&cfg, cmrt_offline_render::PluginEntries::none());
+    assert_eq!(restarted.mml_overlay.play_settings(), confirmed);
+
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
 fn keyboard_q_persists_and_restores_patch_and_buffer() {
     let unique = NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed);
     let tmp = std::env::temp_dir().join(format!(

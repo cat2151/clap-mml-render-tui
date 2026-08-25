@@ -2,6 +2,7 @@ use super::*;
 use std::path::Path;
 
 mod migration;
+mod paths;
 mod storage;
 mod voicing_cache;
 
@@ -92,6 +93,11 @@ fn session_state_serialize_deserialize() {
         keyboard_note_guide_overlay_date: Some("2026-07-20".to_string()),
         notepad_sound_check_guide_overlay_date: Some("2026-07-19".to_string()),
         mml_overlay_patch: Some("Leads/Lead 1.fxp".to_string()),
+        mml_overlay_play_settings: MmlOverlayPlaySettings {
+            repeat: true,
+            modulation: false,
+            velocity: true,
+        },
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
@@ -109,6 +115,14 @@ fn session_state_serialize_deserialize() {
     assert_eq!(
         loaded.mml_overlay_patch.as_deref(),
         Some("Leads/Lead 1.fxp")
+    );
+    assert_eq!(
+        loaded.mml_overlay_play_settings,
+        MmlOverlayPlaySettings {
+            repeat: true,
+            modulation: false,
+            velocity: true,
+        }
     );
 }
 
@@ -129,6 +143,7 @@ fn session_state_serialize_deserialize_zero() {
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
         mml_overlay_patch: None,
+        mml_overlay_play_settings: MmlOverlayPlaySettings::default(),
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
@@ -154,6 +169,7 @@ fn session_state_serialize_deserialize_daw_screen() {
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
         mml_overlay_patch: None,
+        mml_overlay_play_settings: MmlOverlayPlaySettings::default(),
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     let loaded: SessionState = serde_json::from_str(&json).unwrap();
@@ -260,6 +276,7 @@ fn save_and_load_session_state_roundtrip() {
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
         mml_overlay_patch: None,
+        mml_overlay_play_settings: MmlOverlayPlaySettings::default(),
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     std::fs::write(&tmp_path, &json).unwrap();
@@ -271,58 +288,6 @@ fn save_and_load_session_state_roundtrip() {
     assert_eq!(loaded.cursor, 7);
     assert_eq!(loaded.lines, vec!["cde".to_string(), "fga".to_string()]);
     assert_eq!(loaded.active_screen, PrimaryScreen::Notepad);
-}
-
-#[test]
-fn session_state_path_is_in_history_dir() {
-    match super::session_state_path() {
-        None => { /* dirs 利用不可の環境ではスキップ */ }
-        Some(path) => assert_history_file_path(&path, "history.json"),
-    }
-}
-
-#[test]
-fn daw_file_path_ends_with_daw_json() {
-    // daw_file_path() が利用可能な環境では "daw.json" という名前で終わること
-    if let Some(path) = super::daw_file_path() {
-        assert_eq!(path.file_name().and_then(|n| n.to_str()), Some("daw.json"));
-    }
-}
-
-#[test]
-fn daw_file_path_same_dir_as_history_json() {
-    // daw_file_path() は history.json と同じディレクトリに配置される
-    let history_path = super::session_state_path();
-    let daw_path = super::daw_file_path();
-    // dirs が利用できない環境では両方 None になるのでスキップ。
-    // 一方のみが None の場合はロジックのバグを示すため失敗させる。
-    match (history_path, daw_path) {
-        (None, None) => { /* dirs 利用不可の環境ではスキップ */ }
-        (Some(h), Some(d)) => {
-            assert_eq!(h.parent(), d.parent());
-        }
-        (Some(_), None) => panic!("session_state_path() は Some だが daw_file_path() は None"),
-        (None, Some(_)) => panic!("daw_file_path() は Some だが session_state_path() は None"),
-    }
-}
-
-#[test]
-fn patch_phrase_store_path_same_dir_as_history_json() {
-    let history_path = super::session_state_path();
-    let patch_history_path = super::patch_phrase_store_path();
-    match (history_path, patch_history_path) {
-        (None, None) => { /* dirs 利用不可の環境ではスキップ */ }
-        (Some(h), Some(p)) => {
-            assert_eq!(h.parent(), p.parent());
-            assert_history_file_path(&p, "patch_history.json");
-        }
-        (Some(_), None) => {
-            panic!("session_state_path() は Some だが patch_phrase_store_path() は None")
-        }
-        (None, Some(_)) => {
-            panic!("patch_phrase_store_path() は Some だが session_state_path() は None")
-        }
-    }
 }
 
 #[test]
@@ -345,6 +310,7 @@ fn save_and_load_session_state_roundtrip_daw_mode() {
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
         mml_overlay_patch: None,
+        mml_overlay_play_settings: MmlOverlayPlaySettings::default(),
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
     std::fs::write(&tmp_path, &json).unwrap();
@@ -357,42 +323,45 @@ fn save_and_load_session_state_roundtrip_daw_mode() {
 }
 
 #[test]
-fn history_files_use_test_temp_dir_under_tests() {
-    let session_path = super::session_state_path().expect("session_state_path should be available");
-    let daw_path = super::daw_file_path().expect("daw_file_path should be available");
+fn save_and_load_session_state_roundtrip_mml_overlay_play_settings() {
+    // `Ctrl+L` の 3 値が、保存したファイルを読み直しても同じ組み合わせで戻ること。
+    // 3 値のうち一部だけ ON にして、取り違え（別の項目へ入る）も検出する。
+    let tmp_path = std::env::temp_dir().join("cmrt_test_history_roundtrip_play_settings.json");
 
-    assert!(
-        session_path.starts_with(std::env::temp_dir()),
-        "session_state_path should stay under a test-only temp dir: {}",
-        session_path.display()
-    );
-    assert!(
-        daw_path.starts_with(std::env::temp_dir()),
-        "daw_file_path should stay under a test-only temp dir: {}",
-        daw_path.display()
+    let state = SessionState {
+        mml_overlay_play_settings: MmlOverlayPlaySettings {
+            repeat: true,
+            modulation: false,
+            velocity: true,
+        },
+        ..SessionState::default()
+    };
+    let json = serde_json::to_string_pretty(&state).unwrap();
+    std::fs::write(&tmp_path, &json).unwrap();
+
+    let read_back = std::fs::read_to_string(&tmp_path).unwrap();
+    let loaded: SessionState = serde_json::from_str(&read_back).unwrap();
+    std::fs::remove_file(&tmp_path).ok();
+
+    assert_eq!(
+        loaded.mml_overlay_play_settings,
+        MmlOverlayPlaySettings {
+            repeat: true,
+            modulation: false,
+            velocity: true,
+        }
     );
 }
 
-/// `set_local_dir_envs` は history パスと `CMRT_BASE_DIR` を同時に差し替える。
-/// app 側 config パスの差し替えは app crate の `config::tests` が検証する。
 #[test]
-fn set_local_dir_envs_redirects_history_paths_and_cmrt_base_dir() {
-    let tmp = std::env::temp_dir().join("cmrt_test_local_dir_redirects_all_paths");
-    std::fs::remove_dir_all(&tmp).ok();
-
-    {
-        let _guard = crate::test_support::set_local_dir_envs(&tmp);
-        let app_dir = tmp.join("clap-mml-render-tui");
-
-        assert_eq!(
-            std::env::var_os("CMRT_BASE_DIR").map(std::path::PathBuf::from),
-            Some(app_dir.clone())
-        );
-        assert_eq!(
-            super::daw_file_path().as_deref(),
-            Some(app_dir.join("history").join("daw.json").as_path())
-        );
-    }
-
-    std::fs::remove_dir_all(&tmp).ok();
+fn a_history_file_written_before_the_play_settings_existed_loads_with_them_all_off() {
+    // 既存ユーザーの history.json にはこのキーが無い。既定は「全部 OFF」＝
+    // Stage 7 までと同じ挙動でなければならない。
+    let json = r#"{ "cursor": 0, "lines": ["cde"] }"#;
+    let loaded: SessionState = serde_json::from_str(json).unwrap();
+    assert_eq!(
+        loaded.mml_overlay_play_settings,
+        MmlOverlayPlaySettings::default()
+    );
+    assert!(!loaded.mml_overlay_play_settings.repeat);
 }

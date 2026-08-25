@@ -15,10 +15,11 @@ fn opened_with_history() -> MmlOverlay<'static> {
 }
 
 fn played_pitches(action: &MmlOverlayAction) -> Vec<u8> {
-    let MmlOverlayAction::PlayLine { events, .. } = action else {
+    let MmlOverlayAction::PlayLine { program, .. } = action else {
         panic!("expected a line playback, got {action:?}");
     };
-    events
+    program
+        .events()
         .iter()
         .filter(|event| event.message[0] == NOTE_ON)
         .map(|event| event.message[1])
@@ -152,7 +153,7 @@ fn cancelling_after_a_preview_stops_the_sound_and_restores_the_patch() {
         overlay.handle_key(press(KeyCode::Esc), now),
         MmlOverlayAction::PlayLine {
             patch: PatchChange::Switch(None),
-            events: Vec::new(),
+            program: LineProgram::silent(),
         }
     );
     assert!(overlay.history_select().is_none());

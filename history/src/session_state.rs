@@ -4,6 +4,24 @@ use serde::Deserialize;
 // keyboard 画面のセッション状態は `cmrt-tui-core` が所有する。
 pub use cmrt_tui_core::keyboard_session_state::KeyboardSessionState;
 
+/// MML 入力 overlay の演奏設定（`Ctrl+L` で開く 3 値）。
+///
+/// `cmrt-mml-overlay` の `PlaySettings` と同じ内容だが、こちらは素の `bool` で持つ。
+/// history は overlay に依存しない（依存させると依存方向が逆流する）ため、
+/// 詰め替えは両方を知っている `app` 側が行う。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MmlOverlayPlaySettings {
+    /// 鳴らし終わっても止めず、同じ内容を継ぎ足して鳴らし続ける。
+    #[serde(default)]
+    pub repeat: bool,
+    /// CC1 modulation を LFO で重ねる。
+    #[serde(default)]
+    pub modulation: bool,
+    /// note on の velocity を LFO の値で乗っ取る。
+    #[serde(default)]
+    pub velocity: bool,
+}
+
 /// 起動・終了で保存・復元するセッション状態。
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SessionState {
@@ -49,6 +67,10 @@ pub struct SessionState {
     /// MML 本体は揮発だが、音色だけは開き直しても引き継ぐ。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mml_overlay_patch: Option<String>,
+    /// MML 入力 overlay の演奏設定（`Ctrl+L`）。MML 本体は揮発だが、
+    /// 「どう鳴らすか」は音色と同じく開き直しても引き継ぐ。
+    #[serde(default)]
+    pub mml_overlay_play_settings: MmlOverlayPlaySettings,
 }
 
 impl Default for SessionState {
@@ -68,6 +90,7 @@ impl Default for SessionState {
             keyboard_note_guide_overlay_date: None,
             notepad_sound_check_guide_overlay_date: None,
             mml_overlay_patch: None,
+            mml_overlay_play_settings: MmlOverlayPlaySettings::default(),
         }
     }
 }
@@ -104,6 +127,8 @@ struct SessionStateWire {
     notepad_sound_check_guide_overlay_date: Option<String>,
     #[serde(default)]
     mml_overlay_patch: Option<String>,
+    #[serde(default)]
+    mml_overlay_play_settings: MmlOverlayPlaySettings,
 }
 
 impl<'de> serde::Deserialize<'de> for SessionState {
@@ -138,6 +163,7 @@ impl<'de> serde::Deserialize<'de> for SessionState {
             keyboard_note_guide_overlay_date: wire.keyboard_note_guide_overlay_date,
             notepad_sound_check_guide_overlay_date: wire.notepad_sound_check_guide_overlay_date,
             mml_overlay_patch: wire.mml_overlay_patch,
+            mml_overlay_play_settings: wire.mml_overlay_play_settings,
         })
     }
 }

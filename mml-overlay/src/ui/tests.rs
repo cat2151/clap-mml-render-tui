@@ -154,6 +154,10 @@ fn draws_the_patch_select_over_the_input() {
     assert!(rendered.contains("Lead 1.fxp"), "{rendered}");
     assert!(rendered.contains("Load"), "{rendered}");
     assert!(rendered.contains("0.2s"), "{rendered}");
+    // 音色一覧の中でだけ効くキーは、ここに出さないと気づけない。
+    // 全角は 2 セル目が空白になるので、見るのは ASCII の部分だけにする。
+    assert!(rendered.contains("^Space:"), "{rendered}");
+    assert!(rendered.contains("^L:"), "{rendered}");
 }
 
 #[test]
@@ -311,4 +315,112 @@ fn the_patch_select_takes_no_extra_row_without_a_note() {
     assert_ne!(without, with);
     // 案内が無いほうには、案内のための空行も色も出ない。
     assert!(!without.contains("Vaporizer2"), "{without}");
+}
+
+fn row_text(buffer: &ratatui::buffer::Buffer, y: u16) -> String {
+    (0..buffer.area.width)
+        .map(|x| buffer.cell((x, y)).unwrap().symbol().to_string())
+        .collect()
+}
+
+fn ctrl_l() -> KeyEvent {
+    KeyEvent::new(KeyCode::Char('l'), KeyModifiers::CONTROL)
+}
+
+#[test]
+fn draws_the_three_play_settings_with_their_on_off_marks() {
+    let mut overlay = opened();
+    let now = Instant::now();
+    overlay.handle_key(ctrl_l(), now);
+    // repeat だけ ON にする。
+    overlay.handle_key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE), now);
+
+    let rendered = render(&overlay);
+
+    assert!(rendered.contains("[*] repeat"), "{rendered}");
+    assert!(rendered.contains("[ ] CC1 modulation"), "{rendered}");
+    assert!(rendered.contains("[ ] velocity"), "{rendered}");
+}
+
+/// 音色選択の上へ重ねて描く。音色を選びながら設定を変えられることが要件のため。
+#[test]
+fn draws_the_play_settings_over_the_patch_select() {
+    let mut overlay = MmlOverlay::default();
+    overlay.open(MmlOverlayContext {
+        patch_catalog: PatchCatalogSnapshot::Ready(vec![PatchCatalogEntry::from_display(
+            "Leads/Lead 1.fxp".to_string(),
+        )]),
+        ..MmlOverlayContext::default()
+    });
+    let now = Instant::now();
+    overlay.handle_key(
+        KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL),
+        now,
+    );
+
+    let without = render(&overlay);
+    overlay.handle_key(ctrl_l(), now);
+    let with = render(&overlay);
+
+    assert!(
+        !without.contains("[*] repeat") && !without.contains("[ ] repeat"),
+        "{without}"
+    );
+    assert!(with.contains("[ ] repeat"), "{with}");
+}
+
+/// 閉じている間は 1 セルも増やさない。
+#[test]
+fn draws_nothing_extra_while_the_play_settings_are_closed() {
+    let mut overlay = opened();
+    let now = Instant::now();
+    let before = render(&overlay);
+    overlay.handle_key(ctrl_l(), now);
+    overlay.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE), now);
+
+    assert_eq!(render(&overlay), before);
+}
+
+/// `Ctrl+L` は入力欄の下のキー割り当てにも出す。見つけられなければ無いのと同じ。
+#[test]
+fn the_key_hints_mention_ctrl_l() {
+    let rendered = render(&opened());
+
+    assert!(rendered.contains("^L"), "{rendered}");
+}
+
+/// 選択行は枠の内側いっぱいまで反転する。項目名の長さで反転の幅が動くと、
+/// どこまでが 1 行なのか読み取れない。
+#[test]
+fn the_selected_row_is_highlighted_across_the_whole_inner_width() {
+    let mut overlay = opened();
+    overlay.handle_key(ctrl_l(), Instant::now());
+
+    let mut terminal = Terminal::new(TestBackend::new(80, 16)).unwrap();
+    terminal.draw(|frame| draw(&overlay, frame)).unwrap();
+    let buffer = terminal.backend().buffer();
+    let row = (0..buffer.area.height)
+        .find(|y| row_text(buffer, *y).contains("repeat"))
+        .expect("repeat の行が見つからない");
+    let first = (0..buffer.area.width)
+        .find(|x| buffer.cell((*x, row)).unwrap().symbol() == "[")
+        .expect("checkbox が見つからない");
+    let background = buffer.cell((first, row)).unwrap().bg;
+
+    // 反転は枠の右端の 1 つ手前まで届く（＝項目名の長さで反転の幅が動かない）。
+    let right_border = (first..buffer.area.width)
+        .find(|x| buffer.cell((*x, row)).unwrap().symbol() == "│")
+        .expect("枠の右辺が見つからない");
+    assert_ne!(background, MONOKAI_BG);
+    assert_eq!(buffer.cell((right_border - 1, row)).unwrap().bg, background);
+
+    // 選ばれていない行は反転しない。
+    let other = (0..buffer.area.height)
+        .find(|y| row_text(buffer, *y).contains("velocity"))
+        .expect("velocity の行が見つからない");
+    assert_ne!(buffer.cell((first, other)).unwrap().bg, background);
+    assert_ne!(
+        buffer.cell((right_border - 1, other)).unwrap().bg,
+        background
+    );
 }

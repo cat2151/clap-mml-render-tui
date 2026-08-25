@@ -1,11 +1,15 @@
 use std::{
-    sync::{atomic::AtomicU64, mpsc, Arc, Mutex},
+    sync::{
+        atomic::{AtomicU64, AtomicUsize},
+        mpsc, Arc, Mutex,
+    },
     time::{Duration, Instant},
 };
 
 use cmrt_realtime_play::{LiveTimelineConfig, TimelineMidiEvent};
 
 use super::*;
+use crate::line_play::{LinePerformance, LineProgram};
 use crate::{NOTE_OFF, NOTE_ON};
 
 #[derive(Clone, Debug)]
@@ -19,6 +23,20 @@ struct FakeSink {
     prepare_delay: Duration,
     prepared: Mutex<Vec<Option<String>>>,
     midi: Mutex<Vec<RecordedMidi>>,
+    /// timeline を張った回数。repeat が張り直していないことを worker 越しに見る。
+    begins: AtomicUsize,
+    /// timeline へ積んだ秒。継ぎ足しが伸び続けることを見る。
+    timeline_seconds: Mutex<Vec<f64>>,
+}
+
+impl FakeSink {
+    fn begins(&self) -> usize {
+        self.begins.load(Ordering::Acquire)
+    }
+
+    fn timeline_seconds(&self) -> Vec<f64> {
+        self.timeline_seconds.lock().unwrap().clone()
+    }
 }
 
 impl SoundSink for FakeSink {
@@ -44,10 +62,15 @@ impl SoundSink for FakeSink {
     }
 
     fn begin_timeline(&self, _config: LiveTimelineConfig) -> sink::SinkResult {
+        self.begins.fetch_add(1, Ordering::AcqRel);
         Ok(())
     }
 
-    fn send_timeline_events(&self, _events: &[TimelineMidiEvent]) -> sink::SinkResult {
+    fn send_timeline_events(&self, events: &[TimelineMidiEvent]) -> sink::SinkResult {
+        self.timeline_seconds
+            .lock()
+            .unwrap()
+            .extend(events.iter().map(|event| event.timeline_seconds));
         Ok(())
     }
 }
@@ -104,6 +127,24 @@ fn notes(patch: &str, pitch: u8, gate: Duration) -> SenderCommandKind {
         patch: Some(patch.to_string()),
         messages: vec![[NOTE_ON, pitch, 127]],
         gate,
+    }
+}
+
+/// 1 周 `loop_seconds` の行を鳴らす指示。`repeat` が worker の待ちに効く。
+fn line(loop_seconds: f64, repeat: bool) -> SenderCommandKind {
+    SenderCommandKind::PlayLine {
+        patch: Some("ready.sfz".to_string()),
+        program: LineProgram {
+            performance: LinePerformance {
+                events: vec![cmrt_chord::TimedMidiEvent {
+                    seconds: 0.0,
+                    message: [NOTE_ON, 60, 127],
+                }],
+                loop_seconds,
+            },
+            repeat,
+            filters: Default::default(),
+        },
     }
 }
 
@@ -187,4 +228,61 @@ fn a_new_request_during_load_suppresses_the_stale_preview() {
         *sink.prepared.lock().unwrap(),
         vec![Some("old.sfz".to_string()), Some("new.sfz".to_string())]
     );
+}
+
+/// **worker が自分でループを回すこと。** `Voice` 側の継ぎ足しが正しくても、
+/// `run_sender` の待ちが gate だけを見ていたら最初の先読みぶんで音が尽きる。
+/// ここは実際に worker thread を回して、時間が経つと勝手に伸びることを見る。
+#[test]
+fn the_worker_tops_up_a_repeating_line_on_its_own() {
+    let sink = Arc::new(FakeSink::default());
+    let harness = Harness::spawn(Arc::clone(&sink));
+
+    // 1 周 60ms。先読み 4 秒ぶんを積んだ後、20ms ほどで次の周が要る。
+    harness.send(1, line(0.06, true));
+    wait_until(|| !sink.timeline_seconds().is_empty());
+    let first = sink.timeline_seconds().len();
+    wait_until(|| sink.timeline_seconds().len() > first);
+
+    // 張り直していない。張り直すと毎周リセットが入って継ぎ目が出る。
+    assert_eq!(sink.begins(), 1);
+    let seconds = sink.timeline_seconds();
+    assert!(
+        seconds.windows(2).all(|pair| pair[1] > pair[0]),
+        "timeline_seconds must keep going forward: {seconds:?}"
+    );
+    // 先読み 4 秒ぶんが最初の 1 回で積まれている。
+    assert!(*seconds.last().unwrap() >= 4.0, "seconds={seconds:?}");
+}
+
+/// 止めたら worker も回すのをやめる。ここが残ると、誰も鳴らしていないつもりのまま
+/// サーバーへ積み続ける。
+#[test]
+fn stopping_ends_the_worker_side_repeat() {
+    let sink = Arc::new(FakeSink::default());
+    let harness = Harness::spawn(Arc::clone(&sink));
+    harness.send(1, line(0.06, true));
+    wait_until(|| !sink.timeline_seconds().is_empty());
+
+    harness.send(2, SenderCommandKind::Stop);
+    // 回っていれば 60ms ごとに伸びる。その 5 倍待てば Stop は確実に処理されている。
+    std::thread::sleep(Duration::from_millis(300));
+    let after_stop = sink.timeline_seconds().len();
+    std::thread::sleep(Duration::from_millis(300));
+
+    assert_eq!(sink.timeline_seconds().len(), after_stop);
+}
+
+/// repeat OFF は今までどおり 1 回積んで終わり。worker は寝たまま。
+#[test]
+fn without_repeat_the_worker_stays_asleep() {
+    let sink = Arc::new(FakeSink::default());
+    let harness = Harness::spawn(Arc::clone(&sink));
+
+    harness.send(1, line(0.06, false));
+    wait_until(|| !sink.timeline_seconds().is_empty());
+    std::thread::sleep(Duration::from_millis(300));
+
+    assert_eq!(sink.timeline_seconds().len(), 1);
+    assert_eq!(sink.begins(), 1);
 }

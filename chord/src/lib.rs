@@ -16,9 +16,14 @@ pub use progression::{
     chord_notes, parse_chord_progression, ChordProgression, ChordProgressionCatalog,
     ChordProgressionPick, ParsedChordProgression, KEYS,
 };
-pub use timed::{
-    resolve_chord_or_mml, timed_performance, ResolvedMml, TimedMidiEvent, TimedPerformance,
-};
+pub use timed::{resolve_chord_or_mml, timed_performance, ResolvedMml, TimedPerformance};
+
+/// 時刻つき MIDI イベントの型は [`cmrt_midi_filter`] が持つ。
+///
+/// filter 群（CC の差し込み・velocity 上書き・repeat のずらし）の入出力と同じ型でないと
+/// 変換のたびに詰め替えが要るため、定義はあちらへ置き、ここでは再輸出だけする。
+/// 既存の呼び出し側が `cmrt_chord::TimedMidiEvent` のまま通るようにするのが目的。
+pub use cmrt_midi_filter::TimedMidiEvent;
 
 use midly::{MidiMessage, Smf, TrackEventKind};
 

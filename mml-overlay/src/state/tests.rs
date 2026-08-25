@@ -1,8 +1,11 @@
 mod history;
 mod line;
 mod patch;
+mod play_settings;
 
 use std::time::Duration;
+
+use crossterm::event::KeyModifiers;
 
 use super::*;
 

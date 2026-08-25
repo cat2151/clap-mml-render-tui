@@ -5,6 +5,8 @@ edition = "2021"
 
 [dependencies]
 cmrt-chord = { path = "../chord" }
+# 時刻つき MIDI イベント列の変換（repeat のずらし・CC1・velocity）はここへ寄せる。
+cmrt-midi-filter = { path = "../midi-filter" }
 cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-tui-core = { path = "../tui-core" }
 cmrt-patches = { path = "../patches" }

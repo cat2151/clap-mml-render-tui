@@ -7,6 +7,7 @@
 //! 秒は SMF の tick と tempo メタイベントから求める。テンポは MML の `t` で
 //! 途中変更できるので、単一の BPM ではなく tempo map として畳む。
 
+use cmrt_midi_filter::TimedMidiEvent;
 use midly::{MetaMessage, MidiMessage, Smf, Timing, TrackEventKind};
 
 const NOTE_ON: u8 = 0x90;
@@ -16,13 +17,6 @@ const NOTE_OFF: u8 = 0x80;
 const DEFAULT_MICROS_PER_BEAT: f64 = 500_000.0;
 
 const MICROS_PER_SECOND: f64 = 1_000_000.0;
-
-/// フレーズ先頭を 0 秒とした MIDI イベント。
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct TimedMidiEvent {
-    pub seconds: f64,
-    pub message: [u8; 3],
-}
 
 /// 1 フレーズぶんの演奏内容。
 #[derive(Clone, Debug, PartialEq)]

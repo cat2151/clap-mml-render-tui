@@ -392,6 +392,7 @@ dependencies = [
  "cmrt-mml-overlay",
  "cmrt-notepad",
  "cmrt-offline-render",
+ "cmrt-patches",
  "cmrt-realtime-play",
  "cmrt-render-core",
  "cmrt-runtime",
@@ -474,6 +475,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chord2mml-core",
+ "cmrt-midi-filter",
  "midly",
  "mmlabc-to-smf",
  "rand 0.10.2",
@@ -484,6 +486,7 @@ dependencies = [
 [[package]]
 name = "cmrt-clack-timeline"
 version = "0.1.0"
+source = "git+https://github.com/cat2151/clap-mml-play-server#fb68199fad11ecb74544d6f6ad2135960dfc5f7b"
 dependencies = [
  "clack-host",
  "cmrt-timeline",
@@ -501,6 +504,7 @@ dependencies = [
 [[package]]
 name = "cmrt-core"
 version = "0.1.0"
+source = "git+https://github.com/cat2151/clap-mml-play-server#fb68199fad11ecb74544d6f6ad2135960dfc5f7b"
 dependencies = [
  "anyhow",
  "cat-self-update-lib",
@@ -650,16 +654,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmrt-midi-filter"
+version = "0.1.0"
+
+[[package]]
 name = "cmrt-mml-overlay"
 version = "0.1.0"
 dependencies = [
  "cmrt-chord",
+ "cmrt-midi-filter",
+ "cmrt-patches",
  "cmrt-realtime-play",
  "cmrt-tui-core",
  "crossterm",
  "mmlabc-to-smf",
  "ratatui",
  "ratatui-textarea",
+ "regex",
  "serde_json",
 ]
 
@@ -704,7 +715,7 @@ name = "cmrt-patches"
 version = "0.1.0"
 dependencies = [
  "cmrt-core",
- "rand 0.10.2",
+ "regex",
 ]
 
 [[package]]
@@ -752,6 +763,7 @@ dependencies = [
 [[package]]
 name = "cmrt-server-config"
 version = "0.1.0"
+source = "git+https://github.com/cat2151/clap-mml-play-server#fb68199fad11ecb74544d6f6ad2135960dfc5f7b"
 dependencies = [
  "anyhow",
  "clack-extensions",
@@ -766,6 +778,7 @@ dependencies = [
 [[package]]
 name = "cmrt-timeline"
 version = "0.1.0"
+source = "git+https://github.com/cat2151/clap-mml-play-server#fb68199fad11ecb74544d6f6ad2135960dfc5f7b"
 
 [[package]]
 name = "cmrt-tui-core"

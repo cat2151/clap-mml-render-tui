@@ -14,6 +14,7 @@ pub mod line_play;
 mod patch_catalog;
 pub mod patch_json;
 pub(crate) mod patch_select;
+pub mod play_settings;
 mod sender;
 mod state;
 pub mod ui;
@@ -23,6 +24,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 pub use history_select::is_history_select_trigger;
 pub use patch_catalog::PatchCatalogEntry;
 pub use patch_select::is_patch_select_trigger;
+pub use play_settings::{is_play_settings_trigger, PlaySettings};
 pub use sender::{MmlOverlaySender, MmlOverlaySenderStatus};
 pub use state::{
     MmlOverlay, MmlOverlayAction, MmlOverlayContext, NoteRequest, PatchCatalogSnapshot, PatchChange,

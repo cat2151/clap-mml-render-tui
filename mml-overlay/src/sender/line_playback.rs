@@ -1,12 +1,18 @@
 //! 1 行ぶんのフレーズを live timeline へ積む。
 //!
-//! **行を演奏するたびに timeline を張り直す。** サーバーの `BeginLiveTimeline` は
+//! **新しい行を演奏するたびに timeline を張り直す。** サーバーの `BeginLiveTimeline` は
 //! 全 renderer のリセットとスケジュール済みイベントの破棄を伴うので、これ 1 つで
 //! 「前の行を止める」と「新しい行を頭から鳴らす」が同時に片づく。patch は
 //! renderer が保持したままなので読み込み直しは起きない。
 //!
+//! **repeat はその逆で、張り直さずに同じ timeline へ未来のイベントを継ぎ足す**
+//! （[`repeat`] を参照）。張り直すと上のリセットが毎周入り、必ず継ぎ目が出るため。
+//! サーバーの `TimelineMidi` は `timeline_id` の一致だけ見て受け付けるので、
+//! 走っている timeline へ後から積める。
+//!
 //! 原点が 0 に戻るぶん、積む秒は「行の先頭からの秒 + [`LOOKAHEAD_SECONDS`]」で済み、
-//! 経過時間を追いかけずに済む。
+//! 経過時間を追いかけずに済む。repeat のときだけは「いつ次の周を積むか」を決めるために
+//! 経過時間を見るが、**積む中身は絶対秒のままなので鳴る位置は時計に左右されない**。
 //!
 //! 止めるほうはここには無い。「何が鳴っているか」を持たない（[`super::sounding`] が
 //! 1 つだけ持つ）ので、ここは積むことだけを担う。以前はここが `active` フラグで
@@ -17,11 +23,20 @@
 //! 後者でも音は止まるが、全 instance が非アクティブになるとサーバーが live モード
 //! 自体を畳むため、「止める」と「timeline を保つ」を両立できない。
 
+mod filters;
+mod repeat;
+
+use std::time::{Duration, Instant};
+
 use cmrt_chord::TimedMidiEvent;
 use cmrt_realtime_play::{LiveTimelineConfig, TimelineId, TimelineMidiEvent};
 
+use crate::line_play::LineProgram;
+
 use super::sink::SoundSink;
-use super::{log_error, MML_OVERLAY_INSTANCE};
+use super::{log_error, log_line, MML_OVERLAY_INSTANCE};
+
+use repeat::RepeatState;
 
 /// 行を積んだ結果。呼び出し側が「音源で何が鳴っているか」を更新するのに使う。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -54,6 +69,8 @@ pub(super) struct LinePlayback {
     sample_rate_hz: f64,
     /// 次に張る timeline の id。サーバーは 0 を無効値として弾くので 1 から始める。
     next_timeline_id: TimelineId,
+    /// 走っているループ。repeat OFF の演奏でも [`Self::stop_repeat`] でも捨てる。
+    repeat: Option<RepeatState>,
 }
 
 impl LinePlayback {
@@ -61,11 +78,16 @@ impl LinePlayback {
         Self {
             sample_rate_hz,
             next_timeline_id: 1,
+            repeat: None,
         }
     }
 
     /// 行を積む。呼ぶ前に前の演奏が止まっていることは呼び出し側の責任。
-    pub(super) fn play(&mut self, sink: &impl SoundSink, events: &[TimedMidiEvent]) -> LineOutcome {
+    ///
+    /// repeat 指定なら 1 周目だけでなく先読み ぶんの周回まで積み、以降は
+    /// [`Self::pump`] が同じ timeline へ継ぎ足す。
+    pub(super) fn play(&mut self, sink: &impl SoundSink, program: &LineProgram) -> LineOutcome {
+        self.repeat = None;
         let timeline_id = self.next_timeline_id;
         self.next_timeline_id = advance_timeline_id(timeline_id);
         if let Err(error) = sink.begin_timeline(LiveTimelineConfig {
@@ -80,24 +102,109 @@ impl LinePlayback {
             ));
             return LineOutcome::Failed;
         }
-        let mut outcome = LineOutcome::Playing;
-        if events.len() > MAX_LINE_EVENTS {
-            log_error(format!(
-                "action=mml-overlay-line-send event=truncated total={} kept={MAX_LINE_EVENTS}",
-                events.len()
+        let events = program.events();
+        let loop_seconds = program.performance.loop_seconds;
+        let repeating = program.repeat && repeat::is_repeatable(loop_seconds);
+        if program.repeat && !repeating {
+            log_line(format!(
+                "action=mml-overlay-line-repeat event=skipped timeline={timeline_id} loop_seconds={loop_seconds:.3}"
             ));
-            outcome = LineOutcome::Partial;
         }
-        for batch in timeline_batches(events, timeline_id, sink.max_batch_events()) {
-            if let Err(error) = sink.send_timeline_events(&batch) {
-                log_error(format!(
-                    "action=mml-overlay-line-send event=error timeline={timeline_id} error=\"{error}\""
-                ));
+        if !repeating {
+            // 1 回だけの演奏にも filter は掛ける。repeat と CC1 は独立した設定なので、
+            // 「repeat OFF だと modulation も効かない」になってはいけない。
+            let lap = filters::one_shot(events, program.filters, loop_seconds);
+            let outcome = truncation_outcome(lap.len());
+            if !send_cycle(sink, timeline_id, &lap) {
                 return LineOutcome::Partial;
             }
+            return outcome;
         }
-        outcome
+        let now = Instant::now();
+        let mut state = RepeatState::new(
+            timeline_id,
+            now,
+            events.to_vec(),
+            loop_seconds,
+            program.filters,
+        );
+        log_line(format!(
+            "action=mml-overlay-line-repeat event=start timeline={timeline_id} loop_seconds={loop_seconds:.3} events={}",
+            events.len()
+        ));
+        if !send_laps(sink, &mut state, now) {
+            return LineOutcome::Partial;
+        }
+        self.repeat = Some(state);
+        truncation_outcome(events.len())
     }
+
+    /// 走っているループの先読みを保つ。**[`SoundSink::begin_timeline`] は呼ばない。**
+    ///
+    /// 返すのは何か積んだときだけ。`Partial` は継ぎ足しに失敗してループを捨てたことを表し、
+    /// 積んだ note on の note off が落ちている恐れがある。
+    pub(super) fn pump(&mut self, sink: &impl SoundSink, now: Instant) -> Option<LineOutcome> {
+        let state = self.repeat.as_mut()?;
+        if !send_laps(sink, state, now) {
+            self.repeat = None;
+            return Some(LineOutcome::Partial);
+        }
+        Some(LineOutcome::Playing)
+    }
+
+    /// 次に [`Self::pump`] が仕事をするまでの待ち。ループが無ければ `None`。
+    pub(super) fn repeat_wait(&self, now: Instant) -> Option<Duration> {
+        self.repeat.as_ref().map(|state| state.wait(now))
+    }
+
+    /// ループを捨てる。以降 [`Self::pump`] は何も送らない。
+    ///
+    /// 音を止めるのはここではない（[`super::voice::Voice::stop`] がサーバーへ送る）。
+    /// ここがやるのは「もう継ぎ足さない」ことだけ。
+    pub(super) fn stop_repeat(&mut self) {
+        self.repeat = None;
+    }
+}
+
+/// 積むべき周を全部積む。1 つでも送信に失敗したら `false`。
+fn send_laps(sink: &impl SoundSink, state: &mut RepeatState, now: Instant) -> bool {
+    let timeline_id = state.timeline_id();
+    let filters = state.filters();
+    let loop_seconds = state.loop_seconds();
+    for offset in state.take_due_cycles(now) {
+        // 1 周ぶんを k 周目の絶対秒へずらし、**そのずらした絶対秒のまま** filter を掛ける。
+        // 周の絶対秒がそのまま LFO の位相なので、継ぎ足しの境目で位相が飛ばない。
+        let lap = filters::lap(state.cycle(), filters, offset, loop_seconds);
+        if !send_cycle(sink, timeline_id, &lap) {
+            return false;
+        }
+    }
+    true
+}
+
+/// 上限を超えたぶんは送る前に切られる。note off が落ちていれば鳴りっぱなしになるので
+/// `Partial` として呼び出し側に「次の停止は音源リセットへ倒せ」と伝える。
+fn truncation_outcome(count: usize) -> LineOutcome {
+    if count > MAX_LINE_EVENTS {
+        log_error(format!(
+            "action=mml-overlay-line-send event=truncated total={count} kept={MAX_LINE_EVENTS}"
+        ));
+        return LineOutcome::Partial;
+    }
+    LineOutcome::Playing
+}
+
+/// 1 周ぶんを共有メモリ 1 回ぶんずつに切って送る。
+fn send_cycle(sink: &impl SoundSink, timeline_id: TimelineId, events: &[TimedMidiEvent]) -> bool {
+    for batch in timeline_batches(events, timeline_id, sink.max_batch_events()) {
+        if let Err(error) = sink.send_timeline_events(&batch) {
+            log_error(format!(
+                "action=mml-overlay-line-send event=error timeline={timeline_id} error=\"{error}\""
+            ));
+            return false;
+        }
+    }
+    true
 }
 
 /// 次の timeline id。サーバーは 0 を無効値として弾くので、一周しても 0 は飛ばす。

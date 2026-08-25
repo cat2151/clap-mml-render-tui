@@ -174,12 +174,12 @@ impl TuiApp<'_> {
                 Some(notes) => sender.send(patch.as_deref(), notes.messages, notes.duration),
                 None => sender.prepare(patch.as_deref()),
             }),
-            MmlOverlayAction::PlayLine { patch, events } => {
+            MmlOverlayAction::PlayLine { patch, program } => {
                 let patch = match &patch {
                     PatchChange::Keep => self.mml_overlay.patch(),
                     PatchChange::Switch(patch) => patch.as_deref(),
                 };
-                Some(sender.play_line(patch, events))
+                Some(sender.play_line(patch, program))
             }
         };
         if let Some(command_id) = command_id {

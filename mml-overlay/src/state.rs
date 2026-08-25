@@ -10,23 +10,24 @@
 
 mod history;
 mod patch;
+mod play_settings;
 
 use std::{
     collections::BTreeMap,
     time::{Duration, Instant},
 };
 
-use cmrt_chord::TimedMidiEvent;
 use cmrt_patches::PatchRoleIndex;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 use ratatui_textarea::{DataCursor, TextArea};
 
 use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 
 use crate::cursor_notes::{notes_at_cursor, CursorNotes};
 use crate::history_select::{is_history_select_trigger, HistorySelect};
-use crate::line_play::{line_events, LineStatus};
+use crate::line_play::{is_replay_key, line_events, LineProgram, LineStatus};
 use crate::patch_select::{is_patch_select_trigger, PatchSelect};
+use crate::play_settings::{PlaySettings, PlaySettingsSelect};
 use crate::NOTE_ON;
 use crate::{MmlOverlaySenderStatus, PatchCatalogEntry};
 
@@ -68,10 +69,10 @@ pub enum MmlOverlayAction {
         notes: Option<NoteRequest>,
     },
     /// 鳴っているものを止め、あらためてこの行を頭から積む。
-    /// `events` が空なら止めるだけ。
+    /// `program` が空（[`LineProgram::is_silent`]）なら止めるだけ。
     PlayLine {
         patch: PatchChange,
-        events: Vec<TimedMidiEvent>,
+        program: LineProgram,
     },
     /// オーバーレイを閉じる。鳴っているものを止めるのも含む。
     Close,
@@ -149,6 +150,10 @@ pub struct MmlOverlay<'a> {
     patch_select_requested: bool,
     patch_select: Option<PatchSelect<'a>>,
     history_select: Option<HistorySelect<'a>>,
+    /// `Ctrl+L` で決める、この overlay 全体で共通の演奏設定。開き直しでは消えない
+    /// （音色と同じく、呼び出し側がセッションへ保存する）。
+    play_settings: PlaySettings,
+    play_settings_select: Option<PlaySettingsSelect>,
     /// 直近に行を演奏した結果。
     line_status: LineStatus,
 }
@@ -174,6 +179,8 @@ impl Default for MmlOverlay<'_> {
             patch_select_requested: false,
             patch_select: None,
             history_select: None,
+            play_settings: PlaySettings::default(),
+            play_settings_select: None,
             line_status: LineStatus::Idle,
         }
     }
@@ -244,10 +251,16 @@ impl<'a> MmlOverlay<'a> {
         self.patch_select_requested = false;
         self.patch_select = None;
         self.history_select = None;
+        self.play_settings_select = None;
         self.open = true;
     }
 
     pub fn handle_key(&mut self, key: KeyEvent, now: Instant) -> MmlOverlayAction {
+        // 演奏設定は最も手前のモーダル。音色選択の最中にも開ける必要があるので、
+        // どの委譲よりも先に判定する。
+        if let Some(action) = self.intercept_play_settings_key(key) {
+            return action;
+        }
         if self.patch_select.is_some() {
             return self.handle_patch_select_key(key, now);
         }
@@ -303,6 +316,7 @@ impl<'a> MmlOverlay<'a> {
         self.patch_catalog_notice = None;
         self.patch_select_requested = false;
         self.history_select = None;
+        self.play_settings_select = None;
         self.open = false;
         self.forget_sounding();
         MmlOverlayAction::Close
@@ -314,10 +328,13 @@ impl<'a> MmlOverlay<'a> {
     /// 組み立てないのは、[`MmlOverlayAction::PlayLine`] 自体が「鳴っているものを
     /// 止めてから積む」の意味だから。止めるのは受け取る側の 1 か所だけが行う。
     fn play_current_line(&mut self, patch: PatchChange) -> MmlOverlayAction {
-        let (status, events) = line_events(self.current_line());
+        let (status, performance) = line_events(self.current_line());
         self.line_status = status;
         self.forget_cursor_unit();
-        MmlOverlayAction::PlayLine { patch, events }
+        MmlOverlayAction::PlayLine {
+            patch,
+            program: self.play_settings.program(performance),
+        }
     }
 
     /// カーソルのある発音単位を調べ、直前と別の単位になっていれば鳴らす。
@@ -402,15 +419,6 @@ pub(crate) enum PatchCatalogNotice {
     Loading,
     Empty,
     Error(String),
-}
-
-/// このキーはカーソルのある行をもう一度鳴らす。
-///
-/// 行が変わったときは自動で鳴るが、同じ行を鳴らし直す手段が別に要る。
-/// `Ctrl+Space` は端末によって `Char(' ')` と `Char('\0')` のどちらでも届く。
-fn is_replay_key(key: KeyEvent) -> bool {
-    key.modifiers.contains(KeyModifiers::CONTROL)
-        && matches!(key.code, KeyCode::Char(' ') | KeyCode::Char('\0'))
 }
 
 #[cfg(test)]

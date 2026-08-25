@@ -28,6 +28,7 @@ struct LoadedSessionState {
     keyboard_note_guide_overlay_date: Option<String>,
     notepad_sound_check_guide_overlay_date: Option<String>,
     mml_overlay_patch: Option<String>,
+    mml_overlay_play_settings: crate::history::MmlOverlayPlaySettings,
 }
 
 /// 復元したセッションのカーソルを現在の行数に収まる範囲へ丸める。
@@ -56,6 +57,7 @@ fn load_initial_session_state() -> LoadedSessionState {
         keyboard_note_guide_overlay_date,
         notepad_sound_check_guide_overlay_date,
         mml_overlay_patch,
+        mml_overlay_play_settings,
     } = crate::history::load_session_state();
     let initial_cursor = clamp_session_cursor(cursor, lines.len());
     LoadedSessionState {
@@ -73,6 +75,7 @@ fn load_initial_session_state() -> LoadedSessionState {
         keyboard_note_guide_overlay_date,
         notepad_sound_check_guide_overlay_date,
         mml_overlay_patch,
+        mml_overlay_play_settings,
     }
 }
 
@@ -90,6 +93,33 @@ fn bpm_range_from_history(
 fn bpm_range_to_history(range: cmrt_tui_core::bpm::BpmRange, default_bpm: f64) -> Option<[f64; 2]> {
     (range != cmrt_tui_core::bpm::BpmRange::fixed(default_bpm))
         .then(|| [range.minimum(), range.maximum()])
+}
+
+/// MML overlay の演奏設定を history の素の bool から起こす。
+///
+/// `cmrt-history` は overlay に依存しない（依存させると依存方向が逆流する）ので、
+/// 型の詰め替えは両方を知っているここが行う。3 値の対応はこの 2 関数だけが知っている。
+fn play_settings_from_history(
+    saved: crate::history::MmlOverlayPlaySettings,
+) -> super::mml_overlay::PlaySettings {
+    super::mml_overlay::PlaySettings {
+        repeat: saved.repeat,
+        filters: super::mml_overlay::line_play::FilterSettings {
+            modulation: saved.modulation,
+            velocity: saved.velocity,
+        },
+    }
+}
+
+/// [`play_settings_from_history`] の逆。
+fn play_settings_to_history(
+    settings: super::mml_overlay::PlaySettings,
+) -> crate::history::MmlOverlayPlaySettings {
+    crate::history::MmlOverlayPlaySettings {
+        repeat: settings.repeat,
+        modulation: settings.filters.modulation,
+        velocity: settings.filters.velocity,
+    }
 }
 
 /// 復元直後の BPM モード。手動値が残っていればそれを、無ければ範囲から1つ引く。
@@ -235,6 +265,7 @@ impl<'a> TuiApp<'a> {
             keyboard_note_guide_overlay_date,
             notepad_sound_check_guide_overlay_date,
             mml_overlay_patch,
+            mml_overlay_play_settings,
         } = load_initial_session_state();
         let play_server = Arc::new(
             crate::realtime_play::RealtimePlayServerSupervisor::with_live_instance_count(
@@ -342,6 +373,9 @@ impl<'a> TuiApp<'a> {
             mml_overlay: {
                 let mut overlay = super::mml_overlay::MmlOverlay::default();
                 overlay.set_restored_patch(mml_overlay_patch);
+                overlay.set_restored_play_settings(play_settings_from_history(
+                    mml_overlay_play_settings,
+                ));
                 overlay
             },
             mml_overlay_sender,
@@ -395,6 +429,7 @@ impl<'a> TuiApp<'a> {
                 .last_overlay_date()
                 .map(str::to_owned),
             mml_overlay_patch: self.mml_overlay.patch().map(str::to_owned),
+            mml_overlay_play_settings: play_settings_to_history(self.mml_overlay.play_settings()),
         });
     }
 

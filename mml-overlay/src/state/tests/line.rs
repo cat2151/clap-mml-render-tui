@@ -3,10 +3,11 @@
 use super::*;
 
 fn played_pitches(action: &MmlOverlayAction) -> Vec<u8> {
-    let MmlOverlayAction::PlayLine { events, .. } = action else {
+    let MmlOverlayAction::PlayLine { program, .. } = action else {
         panic!("expected a line playback, got {action:?}");
     };
-    events
+    program
+        .events()
         .iter()
         .filter(|event| event.message[0] == NOTE_ON)
         .map(|event| event.message[1])
@@ -134,7 +135,7 @@ fn moving_to_an_empty_line_stops_the_previous_line() {
         action,
         MmlOverlayAction::PlayLine {
             patch: PatchChange::Keep,
-            events: Vec::new(),
+            program: LineProgram::silent(),
         }
     );
     assert_eq!(overlay.line_status(), &LineStatus::Idle);
@@ -182,7 +183,7 @@ fn a_line_that_cannot_be_parsed_reports_the_error_and_stays_silent() {
         action,
         MmlOverlayAction::PlayLine {
             patch: PatchChange::Keep,
-            events: Vec::new(),
+            program: LineProgram::silent(),
         }
     );
     assert!(matches!(overlay.line_status(), LineStatus::Error(_)));

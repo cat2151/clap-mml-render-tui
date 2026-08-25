@@ -13,9 +13,9 @@ use cmrt_tui_core::theme::{
 
 use crate::{line_play::LineStatus, state::PatchCatalogNotice, MmlOverlay};
 
-const KEY_HINTS: &str = "^T音色 ^O履歴 ^Space再演奏 Esc閉じる ";
+const KEY_HINTS: &str = "^T音色 ^O履歴 ^L演奏設定 ^Space再演奏 Esc閉じる ";
 /// キー割り当ての表示に要る幅（全角は 2 桁ぶん）。
-const KEY_HINTS_WIDTH: u16 = 38;
+const KEY_HINTS_WIDTH: u16 = 49;
 
 pub(super) fn draw(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>, area: Rect) {
     if let Some((message, color)) = patch_catalog_notice(overlay) {

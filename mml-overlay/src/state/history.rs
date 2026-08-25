@@ -6,6 +6,7 @@
 use crossterm::event::KeyEvent;
 
 use crate::history_select::{HistoryPick, HistorySelect, HistorySelectAction};
+use crate::line_play::LineProgram;
 
 use super::{MmlOverlay, MmlOverlayAction, PatchChange};
 
@@ -44,7 +45,7 @@ impl MmlOverlay<'_> {
         // 試聴で差し替えた音色を戻し、鳴っている演奏も止める。
         MmlOverlayAction::PlayLine {
             patch: PatchChange::Switch(self.patch.clone()),
-            events: Vec::new(),
+            program: LineProgram::silent(),
         }
     }
 
@@ -53,13 +54,16 @@ impl MmlOverlay<'_> {
     /// 音色を持たない項目（notepad で音色を指定せずに書いた行）は、いまの音色のまま
     /// 鳴らす。既定音色へ戻してしまうと、選んでいる音色でフレーズを試せなくなる。
     fn play_pick(&mut self, pick: &HistoryPick) -> MmlOverlayAction {
-        let (status, events) = crate::line_play::line_events(&pick.mml);
+        let (status, performance) = crate::line_play::line_events(&pick.mml);
         self.line_status = status;
         let patch = match &pick.patch {
             Some(patch) => PatchChange::Switch(Some(patch.clone())),
             None => PatchChange::Keep,
         };
-        MmlOverlayAction::PlayLine { patch, events }
+        MmlOverlayAction::PlayLine {
+            patch,
+            program: self.play_settings.program(performance),
+        }
     }
 
     /// 入力欄をこの 1 行で置き換える。

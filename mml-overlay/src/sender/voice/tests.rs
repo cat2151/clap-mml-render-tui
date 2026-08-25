@@ -5,9 +5,11 @@
 
 use std::cell::RefCell;
 
+use cmrt_chord::TimedMidiEvent;
 use cmrt_realtime_play::{LiveTimelineConfig, TimelineMidiEvent};
 
 use super::*;
+use crate::line_play::{FilterSettings, LinePerformance};
 use crate::sender::sink::SinkResult;
 use crate::{NOTE_OFF, NOTE_ON};
 
@@ -24,6 +26,9 @@ enum Sent {
 #[derive(Default)]
 struct FakeSink {
     sent: RefCell<Vec<Sent>>,
+    /// timeline へ積んだイベントそのもの。継ぎ足しの時刻と timeline id を見るために要る
+    /// （[`Sent::TimelineEvents`] は件数しか持たない）。
+    timeline: RefCell<Vec<TimelineMidiEvent>>,
     prepare_delay: Duration,
     /// 生 MIDI の送信を失敗させる。
     midi_fails: bool,
@@ -43,6 +48,18 @@ impl FakeSink {
 
     fn push(&self, sent: Sent) {
         self.sent.borrow_mut().push(sent);
+    }
+
+    fn timeline_events(&self) -> Vec<TimelineMidiEvent> {
+        self.timeline.borrow().clone()
+    }
+
+    fn count(&self, kind: &Sent) -> usize {
+        self.sent
+            .borrow()
+            .iter()
+            .filter(|sent| *sent == kind)
+            .count()
     }
 }
 
@@ -77,6 +94,7 @@ impl SoundSink for FakeSink {
 
     fn send_timeline_events(&self, events: &[TimelineMidiEvent]) -> SinkResult {
         self.push(Sent::TimelineEvents(events.len()));
+        self.timeline.borrow_mut().extend_from_slice(events);
         Ok(())
     }
 }
@@ -93,13 +111,17 @@ fn note_off(pitch: u8) -> [u8; 3] {
     [NOTE_OFF, pitch, 0]
 }
 
-fn line(count: usize) -> Vec<TimedMidiEvent> {
-    (0..count)
-        .map(|index| TimedMidiEvent {
-            seconds: index as f64 * 0.25,
-            message: note_on(60),
-        })
-        .collect()
+/// `count` 個の note on が 0.25 秒おきに並ぶ 1 行。1 回だけ鳴らす指示にする。
+fn line(count: usize) -> LineProgram {
+    LineProgram::once(LinePerformance {
+        events: (0..count)
+            .map(|index| TimedMidiEvent {
+                seconds: index as f64 * 0.25,
+                message: note_on(60),
+            })
+            .collect(),
+        loop_seconds: count as f64 * 0.25,
+    })
 }
 
 #[test]
@@ -168,7 +190,7 @@ fn an_empty_line_still_stops_the_typed_note() {
     voice.play_notes(&sink, &[note_on(60)], Duration::from_millis(250));
     sink.take();
 
-    voice.play_line(&sink, &[]);
+    voice.play_line(&sink, &LineProgram::silent());
 
     assert_eq!(sink.sent(), vec![Sent::Midi(vec![note_off(60)])]);
 }
@@ -301,3 +323,7 @@ fn a_hard_stop_leaves_nothing_to_stop() {
 
     assert!(sink.sent().is_empty());
 }
+
+#[cfg(test)]
+mod filters;
+mod repeat;

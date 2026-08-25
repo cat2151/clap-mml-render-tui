@@ -41,7 +41,7 @@ pub use paths::{daw_file_load_path, daw_file_path};
 pub use session_state::{
     load_session_state, save_keyboard_note_guide_overlay_date,
     save_notepad_sound_check_guide_overlay_date, save_session_state, KeyboardSessionState,
-    SessionState,
+    MmlOverlayPlaySettings, SessionState,
 };
 pub use voicing_cache::{load_voicing_cache, save_voicing_cache, VoicingCache};
 

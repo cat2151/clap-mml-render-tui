@@ -10,9 +10,10 @@ use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 use crossterm::event::KeyEvent;
 
 use crate::cursor_notes::{notes_at_prefix, CursorNotes, PREVIEW_MML};
+use crate::line_play::line_events;
 use crate::patch_select::{PatchSelect, PatchSelectAction};
 
-use super::{MmlOverlay, MmlOverlayAction, PatchCatalogNotice, PatchCatalogSnapshot};
+use super::{MmlOverlay, MmlOverlayAction, PatchCatalogNotice, PatchCatalogSnapshot, PatchChange};
 
 impl MmlOverlay<'_> {
     pub(super) fn open_patch_select(&mut self) {
@@ -110,10 +111,10 @@ impl MmlOverlay<'_> {
         };
         match select.handle_key(key) {
             PatchSelectAction::Continue => MmlOverlayAction::Continue,
-            PatchSelectAction::Preview(patch) => MmlOverlayAction::SetPatch {
-                patch: Some(patch),
-                notes: self.preview_notes(now),
-            },
+            PatchSelectAction::Preview(patch) => self.preview_patch(patch, now),
+            PatchSelectAction::PlayLine(patch) => {
+                self.play_current_line(PatchChange::Switch(Some(patch)))
+            }
             PatchSelectAction::Confirm(patch) => {
                 // 試聴で読み込み済みの音色がそのまま残るので、ここでは積み直さない。
                 self.patch_select = None;
@@ -142,6 +143,24 @@ impl MmlOverlay<'_> {
         MmlOverlayAction::SetPatch {
             patch: select.original().map(str::to_string),
             notes: None,
+        }
+    }
+
+    /// 音色一覧のカーソルが動いたときの試聴。
+    ///
+    /// repeat が ON なら、鳴っているループを音色ごと張り直す。音色を↑↓で流しながら
+    /// 同じフレーズを聴き比べるのが repeat の目的なので、ここで 1 音へ落とすと
+    /// ループが途切れて目的を果たさない。
+    ///
+    /// ただし鳴らす行が無いとき（空行・解釈できない行）は repeat でも 1 音へ戻す。
+    /// ループの代わりに無音になると、音色そのものを聴く手段が消えてしまうため。
+    fn preview_patch(&mut self, patch: String, now: Instant) -> MmlOverlayAction {
+        if self.play_settings().repeat && !line_events(self.current_line()).1.is_silent() {
+            return self.play_current_line(PatchChange::Switch(Some(patch)));
+        }
+        MmlOverlayAction::SetPatch {
+            patch: Some(patch),
+            notes: self.preview_notes(now),
         }
     }
 

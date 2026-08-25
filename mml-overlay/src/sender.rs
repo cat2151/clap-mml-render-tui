@@ -14,6 +14,10 @@
 //! 接続確立や patch load は数秒掛かることがあるため、送信はワーカースレッドへ逃がす。
 //! note gate もこの worker が「note on の送信成功後」から数える。gate 待ちには
 //! `recv_timeout` を使い、次の操作が来たら待ちを即座に打ち切って前の音を止める。
+//!
+//! 待ちの相手は 2 つある（[`voice::Wake`]）。gate の期限と、repeat の次の周を積む時刻の
+//! 早いほうまで待ち、時間切れならその片方だけを片づけてまた待つ。**repeat の周回は
+//! この worker のタイマーで積むが、積む中身は絶対秒なので鳴る位置は時計に左右されない。**
 
 mod line_playback;
 mod sink;
@@ -30,11 +34,12 @@ use std::{
     time::{Duration, Instant},
 };
 
-use cmrt_chord::TimedMidiEvent;
 use cmrt_realtime_play::RealtimePlayServerSupervisor;
 
+use crate::line_play::LineProgram;
+
 use sink::SoundSink;
-use voice::Voice;
+use voice::{Voice, Wake};
 
 /// オーバーレイが借りる音源インスタンス。
 pub(crate) const MML_OVERLAY_INSTANCE: u8 = 0;
@@ -54,7 +59,7 @@ enum SenderCommandKind {
     /// 鳴っているものを止めてから、この行を頭から積む。空なら止めるだけ。
     PlayLine {
         patch: Option<String>,
-        events: Vec<TimedMidiEvent>,
+        program: LineProgram,
     },
     /// 鳴っているものを止める。
     Stop,
@@ -164,10 +169,10 @@ impl MmlOverlaySender {
 
     /// 1 行ぶんのフレーズを、書かれた音長のまま演奏する。
     /// 空で呼ぶと、鳴っているものを止めるだけになる。
-    pub fn play_line(&self, patch: Option<&str>, events: Vec<TimedMidiEvent>) -> u64 {
+    pub fn play_line(&self, patch: Option<&str>, program: LineProgram) -> u64 {
         self.enqueue(SenderCommandKind::PlayLine {
             patch: patch.map(str::to_string),
-            events,
+            program,
         })
     }
 
@@ -224,16 +229,23 @@ fn run_sender<S: SoundSink + Send + Sync + 'static>(
 ) {
     let mut voice = Voice::new(sample_rate_hz);
     loop {
-        let received = match voice.gate_wait(Instant::now()) {
-            Some(wait) => match rx.recv_timeout(wait) {
+        let received = match voice.next_wake(Instant::now()) {
+            Some((wake, wait)) => match rx.recv_timeout(wait) {
                 Ok(command) => command,
+                // 待ちが切れた。次の操作は来ていないので、起きた理由のほうを片づける。
                 Err(RecvTimeoutError::Timeout) => {
-                    log_line(format!(
-                        "action=mml-overlay-gate-expired command_id={}",
-                        status.lock().unwrap().command_id
-                    ));
-                    voice.stop(&*sink, "gate");
-                    status.lock().unwrap().sounding.clear();
+                    match wake {
+                        Wake::Gate => {
+                            log_line(format!(
+                                "action=mml-overlay-gate-expired command_id={}",
+                                status.lock().unwrap().command_id
+                            ));
+                            voice.stop(&*sink, "gate");
+                            status.lock().unwrap().sounding.clear();
+                        }
+                        // 継ぎ足しは止めない。ここで stop を通すと毎周継ぎ目が出る。
+                        Wake::Repeat => voice.pump_repeat(&*sink, Instant::now()),
+                    }
                     continue;
                 }
                 Err(RecvTimeoutError::Disconnected) => break,
@@ -272,10 +284,10 @@ fn run_sender<S: SoundSink + Send + Sync + 'static>(
                     log_superseded_after_load(command.id, &latest_command_id);
                 }
             }
-            SenderCommandKind::PlayLine { patch, events } => {
+            SenderCommandKind::PlayLine { patch, program } => {
                 let ready = prepare_if_needed(&mut voice, &*sink, &status, patch.as_deref());
                 if ready && !is_superseded(command.id, &latest_command_id) {
-                    voice.play_line(&*sink, &events);
+                    voice.play_line(&*sink, &program);
                 } else if ready {
                     log_superseded_after_load(command.id, &latest_command_id);
                 }

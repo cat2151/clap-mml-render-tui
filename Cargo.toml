@@ -14,6 +14,7 @@ members = [
     "loop-browser",
     "loop-browser-domain",
     "loop-domain",
+    "midi-filter",
     "mml-overlay",
     "notepad",
     "offline-render",

@@ -3,6 +3,7 @@
 mod history_select;
 mod loading;
 mod patch_select;
+mod play_settings;
 mod status;
 
 use ratatui::{
@@ -57,6 +58,10 @@ pub fn draw_with_status(
     }
     if let Some(select) = overlay.history_select() {
         history_select::draw(select, frame);
+    }
+    // 演奏設定は音色選択の最中にも開ける最も手前のモーダルなので、最後に描く。
+    if let Some(select) = overlay.play_settings_select() {
+        play_settings::draw(select, frame);
     }
     loading::draw(sender_status, frame);
 }

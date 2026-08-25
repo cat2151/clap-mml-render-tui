@@ -16,6 +16,7 @@ use ratatui_textarea::TextArea;
 
 use cmrt_tui_core::{patch_load::PatchLoadMeasurement, text_input};
 
+use crate::line_play::is_replay_key;
 use crate::PatchCatalogEntry;
 
 use filter::{filter_candidates, is_valid_condition};
@@ -38,6 +39,12 @@ pub(crate) enum PatchSelectAction {
     Continue,
     /// この音色を試聴する。
     Preview(String),
+    /// この音色へ差し替えて、入力欄の現在行をまるごと演奏する。
+    ///
+    /// 音色一覧の行は MML を持たない（[`PatchCatalogEntry`] は音色名・カテゴリ・
+    /// load 時間だけ）ので、何を鳴らすかは呼び出し側が入力欄から決める。ここは
+    /// 「どの音色で」だけを言う。
+    PlayLine(String),
     /// この音色で確定して閉じる。
     Confirm(String),
     /// ユーザー追加プリセットを JSON へ保存する。
@@ -199,6 +206,9 @@ impl<'a> PatchSelect<'a> {
             }
             _ => {}
         }
+        if is_replay_key(key) {
+            return self.play_selected_line();
+        }
         if is_add_preset_key(key) {
             return self.add_query_as_preset();
         }
@@ -235,6 +245,19 @@ impl<'a> PatchSelect<'a> {
             return PatchSelectAction::Continue;
         }
         self.refilter()
+    }
+
+    /// 選択中の音色で現在行を鳴らす。
+    ///
+    /// 試聴と同じく音源へこの音色を読み込ませるので、[`Self::previewed`] も進める。
+    /// ここを飛ばすと、取り消し時に「読み込ませたのに元へ戻さない」が起きる。
+    fn play_selected_line(&mut self) -> PatchSelectAction {
+        let Some(patch) = self.selected() else {
+            return PatchSelectAction::Continue;
+        };
+        let patch = patch.to_string();
+        self.previewed = Some(patch.clone());
+        PatchSelectAction::PlayLine(patch)
     }
 
     fn move_focused_cursor(&mut self, delta: isize) -> PatchSelectAction {
