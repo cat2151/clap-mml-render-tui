@@ -12,7 +12,7 @@ mod session_bpm;
 mod sforzando_screens;
 mod vaporizer2_screens;
 
-static NEXT_TEST_ID: AtomicUsize = AtomicUsize::new(0);
+pub(super) static NEXT_TEST_ID: AtomicUsize = AtomicUsize::new(0);
 
 fn make_patches(items: &[&str]) -> Vec<(String, String)> {
     items
@@ -21,7 +21,7 @@ fn make_patches(items: &[&str]) -> Vec<(String, String)> {
         .collect()
 }
 
-fn test_config() -> crate::config::Config {
+pub(super) fn test_config() -> crate::config::Config {
     crate::config::Config {
         plugin_path: "/tmp/Surge XT.clap".to_string(),
         input_midi: "input.mid".to_string(),

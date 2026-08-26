@@ -147,6 +147,31 @@ fn help_does_not_show_old_semicolon_guidance() {
 }
 
 #[test]
+fn daily_help_and_footer_do_not_show_project_file_actions() {
+    let mut app = build_test_app();
+    app.workspace_kind = crate::WorkspaceKind::Daily;
+    app.daily_page_date = Some("2026-08-25".to_string());
+
+    let normal_screen = render_lines(&app, 180, 52).join("\n");
+    assert!(
+        !normal_screen.contains("f:file"),
+        "screen:\n{normal_screen}"
+    );
+
+    app.mode = DawMode::Help;
+    let help_screen = render_lines(&app, 180, 52).join("\n");
+    assert!(
+        !help_screen.contains("project file"),
+        "screen:\n{help_screen}"
+    );
+    assert!(
+        !help_screen.contains("Open Daily Archive"),
+        "screen:\n{help_screen}"
+    );
+    assert!(!help_screen.contains("Save As"), "screen:\n{help_screen}");
+}
+
+#[test]
 fn history_help_draws_on_top_of_history_overlay() {
     let mut app = build_test_app();
     app.mode = DawMode::Help;

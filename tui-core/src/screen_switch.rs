@@ -19,6 +19,7 @@ use crate::theme::{MONOKAI_CYAN, MONOKAI_FG, MONOKAI_YELLOW};
 pub enum PrimaryScreen {
     #[default]
     Notepad,
+    DailyDaw,
     Daw,
     Keyboard,
     LoopBrowser,
@@ -26,13 +27,18 @@ pub enum PrimaryScreen {
 }
 
 impl PrimaryScreen {
-    const ALL: [(char, Self, &'static str); 5] = [
+    const ALL: [(char, Self, &'static str); 6] = [
         ('N', Self::Notepad, "Notepad"),
+        ('A', Self::DailyDaw, "Daily DAW"),
         ('D', Self::Daw, "DAW"),
         ('K', Self::Keyboard, "Keyboard"),
         ('L', Self::LoopBrowser, "Loop Browser"),
         ('G', Self::GridSequencer, "Grid Sequencer"),
     ];
+
+    pub const fn is_daw(self) -> bool {
+        matches!(self, Self::DailyDaw | Self::Daw)
+    }
 
     fn from_menu_key(key: char) -> Option<Self> {
         Self::ALL.iter().find_map(|(candidate, screen, _)| {

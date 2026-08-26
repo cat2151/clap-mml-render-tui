@@ -159,6 +159,22 @@ pub(super) fn build_cell_mml_from_data(
     build_track_mml(&conductor, &init, &notes)
 }
 
+pub(super) fn measure_duration_samples_from_data(
+    data: &[Vec<String>],
+    num_measures: usize,
+    sample_rate: f64,
+) -> usize {
+    let conductor = conductor_fragments(data, num_measures);
+    let mut json_values = Vec::new();
+    append_fragment_json_values(&mut json_values, &conductor);
+    let merged_json = merged_json_prefix(json_values);
+    let beat = parse_beat_numerator((!merged_json.is_empty()).then_some(merged_json.as_str()));
+    let bpm = parse_tempo_bpm(&conductor_body(&conductor))
+        .unwrap_or(120.0)
+        .clamp(1.0, 960.0);
+    compute_measure_samples(beat, bpm, sample_rate)
+}
+
 /// data 配列から指定小節の演奏用 MML を構築する純粋関数。
 ///
 /// 音符が 1 つもない小節は空文字列を返す。
@@ -295,9 +311,9 @@ impl DawApp {
     /// 1小節のサンプル数を計算する（ステレオ: L/R インターリーブ）。
     /// beat_numerator * (60 / bpm) * sample_rate * 2
     pub(super) fn measure_duration_samples(&self) -> usize {
-        compute_measure_samples(
-            self.beat_numerator(),
-            self.tempo_bpm(),
+        measure_duration_samples_from_data(
+            &self.editor.data,
+            self.editor.measures,
             self.cfg.sample_rate,
         )
     }

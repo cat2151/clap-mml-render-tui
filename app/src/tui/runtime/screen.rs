@@ -1,9 +1,51 @@
 use anyhow::Result;
 use crossterm::event::KeyEvent;
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{backend::Backend, backend::CrosstermBackend, Terminal};
 
 use super::super::{Mode, PlayState, TuiApp};
 use crate::screen_switch::{is_screen_switch_trigger, PrimaryScreen, ScreenSwitchMenuAction};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::tui) enum DawEntryRoute {
+    Restored(PrimaryScreen),
+    ScreenSwitch(PrimaryScreen),
+    Keyboard,
+    Notepad,
+    Http,
+}
+
+impl DawEntryRoute {
+    pub(in crate::tui) const fn screen(self) -> Option<PrimaryScreen> {
+        match self {
+            Self::Restored(screen) | Self::ScreenSwitch(screen) if screen.is_daw() => Some(screen),
+            Self::Keyboard | Self::Notepad | Self::Http => Some(PrimaryScreen::Daw),
+            Self::Restored(_) | Self::ScreenSwitch(_) => None,
+        }
+    }
+}
+
+pub(in crate::tui) const fn daw_workspace_for_screen(
+    screen: PrimaryScreen,
+) -> Option<crate::daw::WorkspaceKind> {
+    match screen {
+        PrimaryScreen::DailyDaw => Some(crate::daw::WorkspaceKind::Daily),
+        PrimaryScreen::Daw => Some(crate::daw::WorkspaceKind::Persistent),
+        _ => None,
+    }
+}
+
+pub(in crate::tui) fn clear_terminal_for_new_screen<B: Backend>(
+    terminal: &mut Terminal<B>,
+    rendered_screen: &mut Option<PrimaryScreen>,
+    active_screen: PrimaryScreen,
+) -> std::result::Result<(), B::Error> {
+    if *rendered_screen == Some(active_screen) {
+        return Ok(());
+    }
+    terminal.clear()?;
+    *rendered_screen = Some(active_screen);
+    Ok(())
+}
 
 pub(super) enum DawRunOutcome {
     Continue,
@@ -15,7 +57,7 @@ impl<'a> TuiApp<'a> {
     pub(in crate::tui) fn can_open_screen_switch_menu(&self) -> bool {
         match self.active_screen {
             PrimaryScreen::Notepad => self.notepad.mode == Mode::Normal,
-            PrimaryScreen::Daw => false,
+            PrimaryScreen::DailyDaw | PrimaryScreen::Daw => false,
             PrimaryScreen::Keyboard => {
                 !self.keyboard.mml_input.is_active()
                     && self.keyboard.state.numeric_input().is_none()
@@ -71,7 +113,7 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::Keyboard => self.finish_keyboard(),
             PrimaryScreen::LoopBrowser => self.stop_loop_browser(),
             PrimaryScreen::GridSequencer => self.stop_grid_sequencer_playback(),
-            PrimaryScreen::Daw => {}
+            PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {}
         }
     }
 
@@ -85,7 +127,7 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::LoopBrowser => self.begin_loop_browser_startup(),
             PrimaryScreen::GridSequencer => self.enter_grid_sequencer(),
             // notepad と DAW は明示的に再生する画面なので、勝手に鳴らし始めない。
-            PrimaryScreen::Notepad | PrimaryScreen::Daw => {}
+            PrimaryScreen::Notepad | PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {}
         }
     }
 
@@ -95,7 +137,7 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::Keyboard => self.finish_keyboard(),
             PrimaryScreen::LoopBrowser => self.stop_loop_browser(),
             PrimaryScreen::GridSequencer => self.finish_grid_sequencer(),
-            PrimaryScreen::Daw => {}
+            PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {}
         }
     }
 
@@ -117,14 +159,14 @@ impl<'a> TuiApp<'a> {
                 self.active_screen = PrimaryScreen::Notepad;
                 self.notepad.reset_sound_check_guide();
             }
-            PrimaryScreen::Daw => {
+            PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {
                 self.notepad.mode = Mode::Normal;
-                self.active_screen = PrimaryScreen::Daw;
+                self.active_screen = target;
             }
             PrimaryScreen::Keyboard => {
                 if source == PrimaryScreen::Notepad {
                     self.start_keyboard_from_notepad();
-                } else if source == PrimaryScreen::Daw {
+                } else if source.is_daw() {
                     self.start_keyboard(keyboard_patch);
                 } else {
                     self.resume_keyboard();
@@ -138,25 +180,48 @@ impl<'a> TuiApp<'a> {
     pub(super) fn run_daw_screen(
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
+        entry_route: DawEntryRoute,
         autoplay_on_entry: bool,
     ) -> Result<DawRunOutcome> {
-        self.switch_to_primary_screen(PrimaryScreen::Daw, None);
-        self.save_notepad_and_session_state();
+        let mut requested_screen = entry_route
+            .screen()
+            .expect("run_daw_screen requires a DAW entry route");
+        let mut autoplay = autoplay_on_entry;
+        loop {
+            let workspace_kind = daw_workspace_for_screen(requested_screen)
+                .expect("run_daw_screen requires a DAW primary screen");
+            self.switch_to_primary_screen(requested_screen, None);
+            self.save_notepad_and_session_state();
 
-        let mut daw = crate::daw::DawApp::new(
-            std::sync::Arc::clone(&self.cfg),
-            self.plugin_entries.clone(),
-        );
-        match daw.run_with_terminal(terminal, autoplay_on_entry)? {
-            crate::daw::DawExitReason::SwitchTo {
-                target,
-                keyboard_patch,
-            } => {
-                self.switch_to_primary_screen(target, keyboard_patch);
-                Ok(DawRunOutcome::Continue)
+            let mut daw = crate::daw::DawApp::new_for_workspace(
+                std::sync::Arc::clone(&self.cfg),
+                self.plugin_entries.clone(),
+                workspace_kind,
+            );
+            let outcome = daw.run_with_terminal(terminal, autoplay);
+            drop(daw);
+
+            match outcome? {
+                crate::daw::DawExitReason::SwitchTo {
+                    target,
+                    keyboard_patch: _,
+                } if target.is_daw() => {
+                    requested_screen = target;
+                    autoplay = false;
+                }
+                crate::daw::DawExitReason::SwitchTo {
+                    target,
+                    keyboard_patch,
+                } => {
+                    self.switch_to_primary_screen(target, keyboard_patch);
+                    return Ok(DawRunOutcome::Continue);
+                }
+                crate::daw::DawExitReason::QuitApp => return Ok(DawRunOutcome::Quit),
+                crate::daw::DawExitReason::RestartApp => return Ok(DawRunOutcome::Restart),
             }
-            crate::daw::DawExitReason::QuitApp => Ok(DawRunOutcome::Quit),
-            crate::daw::DawExitReason::RestartApp => Ok(DawRunOutcome::Restart),
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

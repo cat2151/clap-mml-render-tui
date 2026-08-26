@@ -24,6 +24,9 @@ rodio = "0.22"
 serde = { version = "1", features = ["derive"] }
 ratatui-textarea = { version = "0.9", features = ["crossterm"] }
 
+[dev-dependencies]
+serde_json = "1"
+
 # メモリ計測（memory モジュール）。プロセス一覧の走査と Working Set / 空き物理メモリの取得。
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

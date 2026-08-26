@@ -8,19 +8,19 @@ use ratatui::{
 };
 
 use super::{
-    super::{DawApp, DawMode, DawPlayState},
+    super::{DawApp, DawMode, DawPlayState, DawProjectFileAction, WorkspaceKind},
     loop_measure_summary_label, loop_status_label, MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_PURPLE,
     MONOKAI_YELLOW,
 };
+use crate::messages::project as project_message;
 
-pub(super) fn daw_mode_title(mode: &DawMode) -> &'static str {
-    match mode {
-        DawMode::Normal => " [NORMAL] DAW mode ",
-        DawMode::Insert => " [INSERT] DAW mode ",
-        DawMode::Help => " [HELP] DAW mode ",
-        DawMode::Mixer => " [MIXER] DAW mode ",
-        DawMode::History => " [HISTORY] DAW mode ",
-        DawMode::PatchSelect => " [PATCH SELECT] DAW mode ",
+pub(super) fn daw_title(app: &DawApp) -> String {
+    match app.workspace_kind {
+        WorkspaceKind::Persistent => " [DAW] ".to_string(),
+        WorkspaceKind::Daily => format!(
+            " [DAILY DAW — {}] ",
+            app.daily_page_date.as_deref().unwrap_or("unknown")
+        ),
     }
 }
 
@@ -77,8 +77,11 @@ pub(super) fn draw_status(
     };
 
     let footer_text = match app.mode {
+        DawMode::Normal if app.workspace_kind == WorkspaceKind::Daily => {
+            "DAILY DAW  Shift+H:history  h/←・l/→:meas preview  j/k:track preview  dd:cut  p:paste  u:undo  i:INS  e:cfg  g:generate  a:A-B  Shift+P:play/stop  Enter/Space:1trk  Shift+Enter:all  Shift+Space:from here  n:notepad  v:keyboard  Ctrl+G:screens"
+        }
         DawMode::Normal => {
-            "DAW  Shift+H:history  h/←・l/→:meas preview  j/k:track preview  dd:cut  p:paste  u:undo  i:INS  e:config  g:generate  a:A-B  Shift+P:play/stop  Enter/Space:1trk  Shift+Enter:all  Shift+Space:from here  n:notepad  v:keyboard  Ctrl+G:screens"
+            "DAW  Shift+H:history  h/←・l/→:meas preview  j/k:track preview  dd:cut  p:paste  u:undo  i:INS  f:file  e:cfg  g:generate  a:A-B  Shift+P:play/stop  Enter/Space:1trk  Shift+Enter:all  Shift+Space:from here  n:notepad  v:keyboard  Ctrl+G:screens"
         }
         DawMode::Insert => "ESC:確定→NORMAL  Enter:確定→次小節",
         DawMode::Help => "HELP  ESC:キャンセル",
@@ -89,6 +92,21 @@ pub(super) fn draw_status(
         DawMode::PatchSelect => {
             "PATCH SELECT  ?:help  /:現在pane検索  Enter:確定  Space:preview  ESC:閉じる  n/p/t:overlay切替  h/l・←/→:ペイン移動してpreview  j/k・↑/↓:移動してpreview"
         }
+        DawMode::Project if app.workspace_kind == WorkspaceKind::Daily => "DAILY DAW",
+        DawMode::Project => match app.overlays.project.action {
+            Some(DawProjectFileAction::Open | DawProjectFileAction::OpenDailyArchive)
+                if app.overlays.project.filter_active =>
+            {
+                project_message::STATUS_FILTER
+            }
+            Some(DawProjectFileAction::Open | DawProjectFileAction::OpenDailyArchive) => {
+                project_message::STATUS_OPEN
+            }
+            Some(DawProjectFileAction::SaveAs) => {
+                project_message::STATUS_SAVE_AS
+            }
+            None => project_message::STATUS_MENU,
+        },
     };
 
     let play_color = match play_state {

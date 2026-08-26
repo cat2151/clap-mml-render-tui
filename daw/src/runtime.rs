@@ -13,12 +13,34 @@ use cmrt_tui_core::screen_switch::{
     is_screen_switch_trigger, PrimaryScreen, ScreenSwitchMenuAction,
 };
 
+fn target_leaves_workspace(workspace_kind: super::WorkspaceKind, target: PrimaryScreen) -> bool {
+    target != workspace_kind.primary_screen()
+}
+
 impl DawApp {
+    fn leave_for_primary_screen(&mut self, target: PrimaryScreen) -> Option<DawExitReason> {
+        if !target_leaves_workspace(self.workspace_kind, target) {
+            return None;
+        }
+        self.stop_play();
+        self.save_history_state();
+        Some(DawExitReason::SwitchTo {
+            target,
+            keyboard_patch: (target == PrimaryScreen::Keyboard)
+                .then(|| self.current_track_patch_name())
+                .flatten(),
+        })
+    }
+
     pub(crate) fn uses_textarea_cursor(&self) -> bool {
         match self.mode {
             DawMode::Insert => true,
             DawMode::History => self.overlays.history.filter_active,
             DawMode::PatchSelect => self.overlays.patch_select.filter_active,
+            DawMode::Project => {
+                self.overlays.project.action == Some(super::DawProjectFileAction::SaveAs)
+                    || self.overlays.project.filter_active
+            }
             DawMode::Normal | DawMode::Help | DawMode::Mixer => false,
         }
     }
@@ -100,15 +122,8 @@ impl DawApp {
                         if let ScreenSwitchMenuAction::SwitchTo(target) =
                             self.overlays.screen_switch.handle_key(key)
                         {
-                            if target != PrimaryScreen::Daw {
-                                self.stop_play();
-                                self.save_history_state();
-                                return Ok(DawExitReason::SwitchTo {
-                                    target,
-                                    keyboard_patch: (target == PrimaryScreen::Keyboard)
-                                        .then(|| self.current_track_patch_name())
-                                        .flatten(),
-                                });
+                            if let Some(exit) = self.leave_for_primary_screen(target) {
+                                return Ok(exit);
                             }
                         }
                         continue;
@@ -128,6 +143,9 @@ impl DawApp {
                             DawMode::PatchSelect if self.overlays.patch_select.filter_active => {
                                 self.handle_patch_select_key_event(key)
                             }
+                            DawMode::Project if self.overlays.project.action.is_some() => {
+                                self.handle_project_key_event(key)
+                            }
                             _ => {}
                         }
                         continue;
@@ -136,15 +154,9 @@ impl DawApp {
                     match self.mode {
                         DawMode::Normal => match self.handle_normal_key_event(key) {
                             DawNormalAction::SwitchTo(target) => {
-                                self.stop_play();
-                                self.save_history_state();
-                                return Ok(DawExitReason::SwitchTo {
-                                    target,
-                                    keyboard_patch: (target
-                                        == cmrt_tui_core::screen_switch::PrimaryScreen::Keyboard)
-                                        .then(|| self.current_track_patch_name())
-                                        .flatten(),
-                                });
+                                if let Some(exit) = self.leave_for_primary_screen(target) {
+                                    return Ok(exit);
+                                }
                             }
                             DawNormalAction::QuitApp => {
                                 self.stop_play();
@@ -168,9 +180,13 @@ impl DawApp {
                         DawMode::Mixer => self.handle_mixer(key.code),
                         DawMode::History => self.handle_history_overlay_key_event(key),
                         DawMode::PatchSelect => self.handle_patch_select_key_event(key),
+                        DawMode::Project => self.handle_project_key_event(key),
                     }
                 }
             }
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

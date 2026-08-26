@@ -6,6 +6,7 @@ mod history;
 mod logs;
 mod mixer;
 mod patch_select;
+mod project;
 mod status;
 
 use ratatui::{
@@ -14,9 +15,9 @@ use ratatui::{
     widgets::{Block, Borders},
     Frame,
 };
-use status::daw_mode_title;
+use status::daw_title;
 
-use super::{AbRepeatState, CacheState, DawApp, DawMode};
+use super::{AbRepeatState, CacheState, DawApp, DawMode, WorkspaceKind};
 use cmrt_tui_core::sound_check_guide::SoundCheckGuidePresentation;
 
 /// Pending インジケータのアニメーション 1 フレームの長さ（ミリ秒）
@@ -120,7 +121,7 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
     let area = f.area();
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(daw_mode_title(&app.mode))
+        .title(daw_title(app))
         .border_style(Style::default().fg(MONOKAI_CYAN))
         .style(Style::default().fg(MONOKAI_FG).bg(MONOKAI_BG));
     let inner = block.inner(area);
@@ -162,15 +163,20 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
             DawMode::Mixer => mixer::draw_mixer(f, app, inner),
             DawMode::History => history::draw_history(f, app, inner),
             DawMode::PatchSelect => patch_select::draw_patch_select(f, app, inner),
+            DawMode::Project if app.workspace_kind == WorkspaceKind::Persistent => {
+                project::draw_project(f, app, inner)
+            }
             _ => {}
         }
-        help::draw_help(f, inner, app.help_origin);
+        help::draw_help(f, inner, app.help_origin, app.workspace_kind);
     } else if app.mode == DawMode::Mixer {
         mixer::draw_mixer(f, app, inner);
     } else if app.mode == DawMode::History {
         history::draw_history(f, app, inner);
     } else if app.mode == DawMode::PatchSelect {
         patch_select::draw_patch_select(f, app, inner);
+    } else if app.mode == DawMode::Project && app.workspace_kind == WorkspaceKind::Persistent {
+        project::draw_project(f, app, inner);
     }
 
     if app.mode == DawMode::Normal
@@ -186,7 +192,7 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
     if app.overlays.screen_switch.is_open() {
         cmrt_tui_core::screen_switch::draw_screen_switch_menu(
             f,
-            cmrt_tui_core::screen_switch::PrimaryScreen::Daw,
+            app.workspace_kind.primary_screen(),
         );
     }
 }

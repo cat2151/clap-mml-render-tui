@@ -23,6 +23,9 @@ fn build_test_app(cfg: Config) -> DawApp {
     let measures = 2;
     let (cache_tx, _cache_rx) = std::sync::mpsc::channel();
     DawApp {
+        workspace_kind: crate::WorkspaceKind::Persistent,
+        daily_page_date: None,
+        config_app_dir: None,
         editor: crate::editor::DawEditorState::new(
             vec![vec![String::new(); measures + 1]; tracks],
             1,

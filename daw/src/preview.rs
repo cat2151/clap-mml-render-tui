@@ -48,7 +48,41 @@ impl DawApp {
         track_mmls: Vec<String>,
         track_gains: Vec<f32>,
     ) {
-        let active_tracks: Vec<usize> = (FIRST_PLAYABLE_TRACK..self.editor.tracks)
+        self.start_preview_with_snapshot_options(
+            measure_index,
+            track_mmls,
+            track_gains,
+            self.measure_duration_samples(),
+            true,
+        );
+    }
+
+    pub(super) fn start_uncached_preview_with_snapshot(
+        &self,
+        measure_index: usize,
+        track_mmls: Vec<String>,
+        track_gains: Vec<f32>,
+        measure_samples: usize,
+    ) {
+        self.start_preview_with_snapshot_options(
+            measure_index,
+            track_mmls,
+            track_gains,
+            measure_samples,
+            false,
+        );
+    }
+
+    fn start_preview_with_snapshot_options(
+        &self,
+        measure_index: usize,
+        track_mmls: Vec<String>,
+        track_gains: Vec<f32>,
+        measure_samples: usize,
+        allow_cell_cache: bool,
+    ) {
+        let tracks = track_mmls.len().max(track_gains.len());
+        let active_tracks: Vec<usize> = (FIRST_PLAYABLE_TRACK..tracks)
             .filter(|&track| {
                 track_gains.get(track).copied().unwrap_or(1.0) > 0.0
                     && track_mmls
@@ -66,11 +100,11 @@ impl DawApp {
                 measure_index,
                 track_mmls,
                 active_tracks,
+                measure_samples,
             );
             return;
         }
 
-        let measure_samples = self.measure_duration_samples();
         let play_state = Arc::clone(&self.playback.play_state);
         let play_transition_lock = Arc::clone(&self.playback.transition_lock);
         let preview_session = Arc::clone(&self.playback.preview_session);
@@ -81,7 +115,6 @@ impl DawApp {
         let cfg = Arc::clone(&self.cfg);
         let log_lines = Arc::clone(&self.log_lines);
         let render_queue = self.render_queue.clone();
-        let tracks = self.editor.tracks;
         let overlay_cache_key = overlay_preview_cache_key(measure_index, &track_mmls, &track_gains);
         let active_track_count = active_tracks.len();
 
@@ -142,14 +175,60 @@ impl DawApp {
                     format!("meas{}: overlay cache hit", measure_index + 1),
                 );
                 Some((samples, true))
-            } else if let Some(cached) = try_get_cached_samples(
-                &cache,
-                measure_index + 1,
-                measure_samples,
-                tracks,
-                &track_gains,
-            ) {
-                if cached.cached_tracks.len() != active_tracks.len() {
+            } else if allow_cell_cache {
+                if let Some(cached) = try_get_cached_samples(
+                    &cache,
+                    measure_index + 1,
+                    measure_samples,
+                    tracks,
+                    &track_gains,
+                ) {
+                    if cached.cached_tracks.len() != active_tracks.len() {
+                        crate::append_log_line(
+                            &log_lines,
+                            format!("meas{}: render", measure_index + 1),
+                        );
+                        render_mixed_preview_tracks(
+                            &render_queue,
+                            RenderPriority::High,
+                            measure_samples,
+                            &active_tracks,
+                            &track_mmls,
+                            &track_gains,
+                            |track, mml| {
+                                NativeRenderProbeContext::preview(
+                                    track,
+                                    measure_index,
+                                    active_track_count,
+                                    daw_cache_mml_hash(mml),
+                                    offline_render_workers,
+                                )
+                            },
+                        )
+                        .map(|samples| (Arc::new(samples), false))
+                    } else {
+                        crate::append_log_line(
+                            &log_lines,
+                            format!(
+                                "meas{}: cache hit {}",
+                                measure_index + 1,
+                                if cached.cached_tracks.is_empty() {
+                                    "empty-tracks".to_string()
+                                } else {
+                                    cached
+                                        .cached_tracks
+                                        .iter()
+                                        .map(|track| {
+                                            format!("track{track}/meas{}", measure_index + 1)
+                                        })
+                                        .collect::<Vec<_>>()
+                                        .join(", ")
+                                }
+                            ),
+                        );
+                        Some((Arc::new(cached.samples), false))
+                    }
+                } else {
                     crate::append_log_line(
                         &log_lines,
                         format!("meas{}: render", measure_index + 1),
@@ -172,25 +251,6 @@ impl DawApp {
                         },
                     )
                     .map(|samples| (Arc::new(samples), false))
-                } else {
-                    crate::append_log_line(
-                        &log_lines,
-                        format!(
-                            "meas{}: cache hit {}",
-                            measure_index + 1,
-                            if cached.cached_tracks.is_empty() {
-                                "empty-tracks".to_string()
-                            } else {
-                                cached
-                                    .cached_tracks
-                                    .iter()
-                                    .map(|track| format!("track{track}/meas{}", measure_index + 1))
-                                    .collect::<Vec<_>>()
-                                    .join(", ")
-                            }
-                        ),
-                    );
-                    Some((Arc::new(cached.samples), false))
                 }
             } else {
                 crate::append_log_line(&log_lines, format!("meas{}: render", measure_index + 1));

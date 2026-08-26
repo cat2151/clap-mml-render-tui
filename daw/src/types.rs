@@ -145,7 +145,7 @@ pub struct PlayPosition {
 
 // ─── 内部モード ───────────────────────────────────────────────
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DawMode {
     Normal,
     Insert,
@@ -153,6 +153,37 @@ pub enum DawMode {
     Mixer,
     History,
     PatchSelect,
+    Project,
+}
+
+/// DAW editor が使用する永続化・WAV cache の領域。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum WorkspaceKind {
+    #[default]
+    Persistent,
+    Daily,
+}
+
+impl WorkspaceKind {
+    pub(crate) const fn primary_screen(self) -> cmrt_tui_core::screen_switch::PrimaryScreen {
+        match self {
+            Self::Persistent => cmrt_tui_core::screen_switch::PrimaryScreen::Daw,
+            Self::Daily => cmrt_tui_core::screen_switch::PrimaryScreen::DailyDaw,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DawProjectFileAction {
+    SaveAs,
+    Open,
+    OpenDailyArchive,
+}
+
+impl DawProjectFileAction {
+    pub(crate) const fn is_open(self) -> bool {
+        matches!(self, Self::Open | Self::OpenDailyArchive)
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

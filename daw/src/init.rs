@@ -25,7 +25,27 @@ fn realtime_audio_startup_log_line(cfg: &cmrt_runtime::Config) -> String {
     )
 }
 
-pub(super) fn new(cfg: Arc<Config>, plugin_entries: cmrt_offline_render::PluginEntries) -> DawApp {
+pub(super) fn new(
+    cfg: Arc<Config>,
+    plugin_entries: cmrt_offline_render::PluginEntries,
+    workspace_kind: WorkspaceKind,
+) -> DawApp {
+    new_with_entry_context(
+        cfg,
+        plugin_entries,
+        workspace_kind,
+        cmrt_runtime::config_app_dir(),
+        cmrt_tui_core::sound_check_guide::local_date_string(),
+    )
+}
+
+fn new_with_entry_context(
+    cfg: Arc<Config>,
+    plugin_entries: cmrt_offline_render::PluginEntries,
+    workspace_kind: WorkspaceKind,
+    config_app_dir: Option<std::path::PathBuf>,
+    current_date: String,
+) -> DawApp {
     super::http_server::set_active_http_state_cfg(Arc::clone(&cfg));
     let DawGridBuffers {
         tracks,
@@ -38,7 +58,10 @@ pub(super) fn new(cfg: Arc<Config>, plugin_entries: cmrt_offline_render::PluginE
         play_track_gains,
         solo_tracks,
         track_volumes_db,
-    } = build_grid_buffers_or_default(load_saved_grid_size());
+    } = build_grid_buffers_or_default(match workspace_kind {
+        WorkspaceKind::Persistent => load_saved_grid_size(),
+        WorkspaceKind::Daily => None,
+    });
 
     let cache = Arc::new(Mutex::new(cache));
 
@@ -175,8 +198,13 @@ pub(super) fn new(cfg: Arc<Config>, plugin_entries: cmrt_offline_render::PluginE
                 let measure = job.measure;
                 match rendered.result {
                     Ok(samples) => {
-                        let _stored =
-                            store_cache_job_samples(&cache_result, &job, &daw_cfg, samples);
+                        let _stored = store_cache_job_samples(
+                            &cache_result,
+                            &job,
+                            &daw_cfg,
+                            workspace_kind,
+                            samples,
+                        );
                         DawApp::complete_track_rerender_batch_measure(
                             &rerender_completion_ctx,
                             track,
@@ -197,6 +225,9 @@ pub(super) fn new(cfg: Arc<Config>, plugin_entries: cmrt_offline_render::PluginE
     }
 
     let mut app = DawApp {
+        workspace_kind,
+        daily_page_date: None,
+        config_app_dir,
         editor: super::DawEditorState::new(data, 0, 0, tracks, measures),
         mode: DawMode::Normal,
         help_origin: DawMode::Normal,
@@ -226,7 +257,7 @@ pub(super) fn new(cfg: Arc<Config>, plugin_entries: cmrt_offline_render::PluginE
         random_patch_decks: cmrt_tui_core::random::RandomIndexDecks::default(),
     };
 
-    app.load();
+    app.load(&current_date);
     app.sync_http_grid_snapshot();
     app.sync_http_status_snapshot();
     app.append_log_line(offline_render_startup_log_line(

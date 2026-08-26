@@ -439,3 +439,6 @@ impl<'a> TuiApp<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

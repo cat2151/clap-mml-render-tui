@@ -19,6 +19,7 @@ cmrt-tui-core = { path = "../tui-core" }
 anyhow = "1"
 crossterm = "0.29"
 ratatui = "0.30"
+ratatui-explorer = "0.3"
 rodio = "0.22"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

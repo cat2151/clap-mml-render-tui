@@ -14,22 +14,42 @@ fn draw_shows_outer_border_in_monokai_cyan() {
 }
 
 #[test]
-fn draw_shows_normal_mode_title_in_top_border() {
+fn draw_shows_persistent_workspace_title_in_top_border() {
     let app = build_test_app();
 
     let lines = render_lines(&app, 60, 10);
 
-    assert!(lines[0].contains("[NORMAL] DAW mode"), "lines: {:?}", lines);
+    assert!(lines[0].contains("[DAW]"), "lines: {:?}", lines);
 }
 
 #[test]
-fn draw_shows_insert_mode_title_in_top_border() {
+fn draw_shows_daily_workspace_title_with_stored_page_date() {
     let mut app = build_test_app();
-    app.mode = DawMode::Insert;
+    app.workspace_kind = crate::WorkspaceKind::Daily;
+    app.daily_page_date = Some("2026-08-25".to_string());
 
     let lines = render_lines(&app, 60, 10);
 
-    assert!(lines[0].contains("[INSERT] DAW mode"), "lines: {:?}", lines);
+    assert!(
+        lines[0].contains("[DAILY DAW — 2026-08-25]"),
+        "lines: {:?}",
+        lines
+    );
+}
+
+#[test]
+fn daily_does_not_draw_project_overlay_or_file_footer_even_if_mode_is_forced() {
+    let mut app = build_test_app();
+    app.workspace_kind = crate::WorkspaceKind::Daily;
+    app.daily_page_date = Some("2026-08-25".to_string());
+    app.mode = DawMode::Project;
+
+    let screen = render_lines(&app, 140, 30).join("\n");
+
+    assert!(!screen.contains("Project File"), "screen:\n{screen}");
+    assert!(!screen.contains("Current:"), "screen:\n{screen}");
+    assert!(!screen.contains("Save As"), "screen:\n{screen}");
+    assert!(!screen.contains("Open Daily Archive"), "screen:\n{screen}");
 }
 
 #[test]

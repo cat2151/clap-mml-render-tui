@@ -328,4 +328,74 @@ fn insert_and_filter_modes_use_terminal_bar_cursor() {
     app.mode = DawMode::PatchSelect;
     app.overlays.patch_select.filter_active = true;
     assert!(app.uses_textarea_cursor());
+
+    app.mode = DawMode::Project;
+    app.overlays.project.action = Some(DawProjectFileAction::Open);
+    assert!(!app.uses_textarea_cursor());
+
+    app.overlays.project.action = Some(DawProjectFileAction::SaveAs);
+    assert!(app.uses_textarea_cursor());
+
+    app.overlays.project.action = None;
+    assert!(!app.uses_textarea_cursor());
+}
+
+#[test]
+fn draw_shows_project_actions_and_path_input() {
+    let mut app = build_test_app();
+    app.mode = DawMode::Project;
+
+    let menu = render_lines(&app, 120, 30).join("\n");
+    assert!(menu.contains("Project File"));
+    assert!(menu.contains("Save As"));
+    assert!(menu.contains("Open"));
+    assert!(menu.contains("Open Daily Archive"));
+
+    app.overlays.project.action = Some(DawProjectFileAction::SaveAs);
+    app.overlays.project.path_textarea =
+        cmrt_tui_core::text_input::new_single_line_textarea("song.cmrt-daw.json");
+    let input = render_lines(&app, 120, 30).join("\n");
+    assert!(input.contains("Save As path"));
+    assert!(input.contains("song.cmrt-daw.json"));
+    assert!(app.uses_textarea_cursor());
+
+    app.overlays.project.action = Some(DawProjectFileAction::Open);
+    let selector = render_lines(&app, 120, 30).join("\n");
+    assert!(selector.contains("*.cmrt-daw.json"));
+    assert!(selector.contains("j/k:select"));
+    assert!(selector.contains("Preview: Auto"));
+    assert!(selector.contains("Space:preview"));
+    assert!(!app.uses_textarea_cursor());
+
+    app.overlays.project.auto_preview = false;
+    app.overlays.project.preview_info = Some("tracks: 4  measures: 8".to_string());
+    let manual_preview = render_lines(&app, 120, 30).join("\n");
+    assert!(manual_preview.contains("Preview: Manual"));
+    assert!(manual_preview.contains("tracks: 4"));
+
+    app.overlays.project.filter_active = true;
+    app.overlays.project.query = "song".to_string();
+    app.overlays.project.query_textarea =
+        cmrt_tui_core::text_input::new_single_line_textarea("song");
+    let filter = render_lines(&app, 120, 30).join("\n");
+    assert!(filter.contains("Project filter"));
+    assert!(filter.contains("song"));
+    assert!(filter.contains("Enter:filter"));
+    assert!(app.uses_textarea_cursor());
+
+    app.overlays.project.action = None;
+    app.overlays.project.backup_notice_path =
+        Some(std::path::PathBuf::from("song.cmrt-daw.json.bak"));
+    let notice = render_lines(&app, 120, 30).join("\n");
+    assert!(notice.contains("Backup created"));
+    let compact_notice = notice
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect::<String>();
+    assert!(
+        compact_notice.contains("既存のプロジェクトファイルを次の名前に変更しました:"),
+        "notice:\n{notice}"
+    );
+    assert!(!notice.contains("Existing project was renamed to:"));
+    assert!(notice.contains("song.cmrt-daw.json.bak"));
 }

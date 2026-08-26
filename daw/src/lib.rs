@@ -26,6 +26,7 @@
 //!   Shift+Space         : 非play時、現在 meas から演奏開始して継続
 //!   s      : 現在 track の solo toggle
 //!   r      : measure 0 にランダム音色を設定
+//!   f      : Persistent で project file overlay を開く（a: Save As / o: Open / d: Open Daily Archive）
 //!   e      : config.toml を editor で開く
 //!   K / ?  : ヘルプ表示
 //!   q      : アプリ終了
@@ -66,14 +67,23 @@
 //!
 //! キー操作 (HELP):
 //!   ESC   : キャンセル → NORMAL
+//!
+//! キー操作 (PROJECT):
+//!   a     : Save As path 入力
+//!   o     : Open path 入力
+//!   d     : managed Daily Archive を copy として Open
+//!   Enter : path 入力を実行
+//!   ESC   : path 入力を戻る / overlay を閉じる
 
 mod batch_logging;
 mod cache;
+mod daily;
 mod editor;
 mod guide;
 mod http_server;
 mod init;
 mod input;
+mod messages;
 mod mixer;
 mod mml;
 mod overlays;
@@ -81,6 +91,7 @@ mod playback;
 mod playback_runtime;
 mod playback_util;
 mod preview;
+mod project;
 mod render_queue;
 mod runtime;
 mod save;
@@ -131,11 +142,11 @@ use editor::DawEditorState;
 use overlays::DawOverlays;
 use playback_runtime::DawPlaybackRuntime;
 use render_queue::RenderQueue;
-pub use types::DawExitReason;
 pub(crate) use types::{
     AbRepeatState, CacheState, CellCache, DawHistoryPane, DawMode, DawNormalAction,
-    DawPatchSelectPane, DawPlayState, PlayPosition,
+    DawPatchSelectPane, DawPlayState, DawProjectFileAction, PlayPosition,
 };
+pub use types::{DawExitReason, WorkspaceKind};
 
 // ─── 定数 ─────────────────────────────────────────────────────
 
@@ -183,6 +194,9 @@ pub(crate) struct NormalPasteUndo {
 // ─── DawApp ───────────────────────────────────────────────────
 
 pub struct DawApp {
+    pub(crate) workspace_kind: WorkspaceKind,
+    pub(crate) daily_page_date: Option<String>,
+    pub(crate) config_app_dir: Option<std::path::PathBuf>,
     pub(crate) editor: DawEditorState,
 
     pub(crate) mode: DawMode,
@@ -224,7 +238,23 @@ pub struct DawApp {
 
 impl DawApp {
     pub fn new(cfg: Arc<Config>, plugin_entries: cmrt_offline_render::PluginEntries) -> Self {
-        init::new(cfg, plugin_entries)
+        Self::new_for_workspace(cfg, plugin_entries, WorkspaceKind::Persistent)
+    }
+
+    pub fn new_for_workspace(
+        cfg: Arc<Config>,
+        plugin_entries: cmrt_offline_render::PluginEntries,
+        workspace_kind: WorkspaceKind,
+    ) -> Self {
+        init::new(cfg, plugin_entries, workspace_kind)
+    }
+
+    pub fn workspace_kind(&self) -> WorkspaceKind {
+        self.workspace_kind
+    }
+
+    pub fn daily_page_date(&self) -> Option<&str> {
+        self.daily_page_date.as_deref()
     }
 
     fn offline_render_available(&self) -> bool {

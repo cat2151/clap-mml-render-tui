@@ -2,15 +2,29 @@
 
 use std::path::PathBuf;
 
-use cmrt_history::{daw_cache_mml_hash, DawCachedMeasure, DawSessionState};
+use cmrt_history::{daw_cache_mml_hash, DawCachedMeasure};
 
-use super::{CacheState, CellCache, DawApp};
+use super::{CacheState, CellCache, DawApp, WorkspaceKind};
 
-fn cache_wav_path(track: usize, measure: usize) -> Option<PathBuf> {
+fn workspace_cache_dir(root: &std::path::Path, workspace_kind: WorkspaceKind) -> PathBuf {
+    match workspace_kind {
+        WorkspaceKind::Persistent => root.to_path_buf(),
+        WorkspaceKind::Daily => root.join("daily"),
+    }
+}
+
+pub(super) fn ensure_workspace_cache_dir(workspace_kind: WorkspaceKind) -> anyhow::Result<PathBuf> {
+    let root = cmrt_core::ensure_daw_cache_dir()?;
+    let dir = workspace_cache_dir(&root, workspace_kind);
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
+}
+
+fn cache_wav_path(workspace_kind: WorkspaceKind, track: usize, measure: usize) -> Option<PathBuf> {
     if measure == 0 {
         return None;
     }
-    cmrt_core::ensure_daw_cache_dir()
+    ensure_workspace_cache_dir(workspace_kind)
         .ok()
         .map(|daw_dir| daw_dir.join(format!("track{}_meas{}.wav", track, measure)))
 }
@@ -34,7 +48,7 @@ impl DawApp {
 
     /// 指定セルのキャッシュを無効化して状態を更新する
     pub(super) fn invalidate_cell(&self, track: usize, measure: usize) {
-        if let Some(path) = cache_wav_path(track, measure) {
+        if let Some(path) = cache_wav_path(self.workspace_kind, track, measure) {
             let _ = std::fs::remove_file(path);
         }
         let mut cache = self.cache.lock().unwrap();
@@ -86,8 +100,11 @@ impl DawApp {
         measure: usize,
     ) {
         let mut cache = cache.lock().unwrap();
-        cache[track][measure].state = CacheState::Rendering;
-        cache[track][measure].rendered_mml_hash = None;
+        let Some(cell) = cache.get_mut(track).and_then(|row| row.get_mut(measure)) else {
+            return;
+        };
+        cell.state = CacheState::Rendering;
+        cell.rendered_mml_hash = None;
     }
 
     /// 指定セルのキャッシュジョブをワーカーキューに投入する
@@ -113,7 +130,7 @@ impl DawApp {
                     if self.editor.data[t][m].trim().is_empty() {
                         cache[t][m] = CellCache::empty();
                     } else {
-                        if let Some(path) = cache_wav_path(t, m) {
+                        if let Some(path) = cache_wav_path(self.workspace_kind, t, m) {
                             let _ = std::fs::remove_file(path);
                         }
                         cache[t][m].set_pending();
@@ -128,7 +145,7 @@ impl DawApp {
                 if self.editor.data[track][m].trim().is_empty() {
                     cache[track][m] = CellCache::empty();
                 } else {
-                    if let Some(path) = cache_wav_path(track, m) {
+                    if let Some(path) = cache_wav_path(self.workspace_kind, track, m) {
                         let _ = std::fs::remove_file(path);
                     }
                     cache[track][m].set_pending();
@@ -168,12 +185,11 @@ impl DawApp {
         }
     }
 
-    pub(super) fn restore_cache_from_history(&self, history: &DawSessionState) {
+    pub(super) fn restore_cache_from_metadata(&self, cached_measures: &[DawCachedMeasure]) {
         let mut cache = self.cache.lock().unwrap();
         for t in 0..self.editor.tracks {
             for m in 1..=self.editor.measures {
-                let Some(saved) = history
-                    .cached_measures
+                let Some(saved) = cached_measures
                     .iter()
                     .find(|entry| entry.track == t && entry.measure == m)
                 else {
@@ -186,7 +202,7 @@ impl DawApp {
                 if current_mml_hash != saved.mml_hash {
                     continue;
                 }
-                let Some(path) = cache_wav_path(t, m) else {
+                let Some(path) = cache_wav_path(self.workspace_kind, t, m) else {
                     continue;
                 };
                 match cmrt_tui_core::wav_io::read_wav_cache_info(&path) {
@@ -248,3 +264,6 @@ impl DawApp {
         cached_measures
     }
 }
+
+#[cfg(test)]
+mod tests;

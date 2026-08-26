@@ -20,6 +20,9 @@ fn empty_track_volumes(tracks: usize) -> Vec<i32> {
 fn build_test_app(tracks: usize, measures: usize) -> DawApp {
     let (cache_tx, _cache_rx) = std::sync::mpsc::channel();
     DawApp {
+        workspace_kind: crate::WorkspaceKind::Persistent,
+        daily_page_date: None,
+        config_app_dir: None,
         editor: crate::editor::DawEditorState::new(
             vec![vec![String::new(); measures + 1]; tracks],
             1.min(tracks - 1),

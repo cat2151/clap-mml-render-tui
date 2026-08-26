@@ -7,10 +7,16 @@ use ratatui::{
 };
 
 use super::{MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_YELLOW};
+use crate::messages::project as project_message;
 
 const HELP_TITLE: &str = " ヘルプ (Keybinds) ";
 
-pub(super) fn draw_help(f: &mut Frame, area: Rect, mode: super::super::DawMode) {
+pub(super) fn draw_help(
+    f: &mut Frame,
+    area: Rect,
+    mode: super::super::DawMode,
+    workspace_kind: super::super::WorkspaceKind,
+) {
     let help_lines = match mode {
         super::super::DawMode::History => vec![
             Line::from(Span::styled(
@@ -85,6 +91,20 @@ pub(super) fn draw_help(f: &mut Frame, area: Rect, mode: super::super::DawMode) 
             Line::from("  u      : 直前の p を 1 回だけ取り消す"),
             Line::from("  g      : 現在 track/meas に generate を反映して preview"),
             Line::from("  e      : config.toml 編集 → 再起動"),
+            Line::from(
+                if workspace_kind == super::super::WorkspaceKind::Persistent {
+                    project_message::HELP_MENU
+                } else {
+                    ""
+                },
+            ),
+            Line::from(
+                if workspace_kind == super::super::WorkspaceKind::Persistent {
+                    project_message::HELP_OPEN
+                } else {
+                    ""
+                },
+            ),
             Line::from("  Enter/Space : 非play時、現在trackの現在measを再生"),
             Line::from("  Shift+Enter : 非play時、現在measの全trackを再生"),
             Line::from("  Shift+P : 演奏 / 停止"),

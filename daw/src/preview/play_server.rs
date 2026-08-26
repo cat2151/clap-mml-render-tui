@@ -12,13 +12,13 @@ impl DawApp {
         measure_index: usize,
         track_mmls: Vec<String>,
         active_tracks: Vec<usize>,
+        measure_samples: usize,
     ) {
         let Some(play_server) = self.playback.realtime_play_server.as_ref().cloned() else {
             self.append_log_line("preview: realtime play server is not initialized");
             return;
         };
 
-        let measure_samples = self.measure_duration_samples();
         let play_state = Arc::clone(&self.playback.play_state);
         let play_transition_lock = Arc::clone(&self.playback.transition_lock);
         let preview_session = Arc::clone(&self.playback.preview_session);

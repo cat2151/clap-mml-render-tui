@@ -361,6 +361,9 @@ impl DawApp {
                 )
             }
             KeyCode::Char('e') => return DawNormalAction::EditConfig,
+            KeyCode::Char('f') if self.accepts_project_file_key(key_event.modifiers) => {
+                self.start_project_overlay()
+            }
 
             KeyCode::Char('h') | KeyCode::Left if self.editor.cursor_measure > 0 => {
                 self.editor.cursor_measure -= 1;

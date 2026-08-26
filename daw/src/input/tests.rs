@@ -10,7 +10,7 @@ pub(super) use cmrt_runtime::Config;
 
 pub(super) use super::super::{
     AbRepeatState, CacheState, CellCache, DawApp, DawHistoryPane, DawMode, DawNormalAction,
-    DawPatchSelectPane, DawPlayState, PlayPosition,
+    DawPatchSelectPane, DawPlayState, DawProjectFileAction, PlayPosition,
 };
 pub(super) use super::{
     normal_playback_shortcut, preview_target_tracks, resolve_playback_start_measure_index,
@@ -48,6 +48,9 @@ fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob
     let (cache_tx, cache_rx) = std::sync::mpsc::channel();
     (
         DawApp {
+            workspace_kind: crate::WorkspaceKind::Persistent,
+            daily_page_date: None,
+            config_app_dir: None,
             editor: crate::editor::DawEditorState::new(
                 vec![vec![String::new(); measures + 1]; tracks],
                 1,
@@ -107,8 +110,10 @@ fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob
     )
 }
 
+mod daily_project;
 mod history_overlay;
 mod insert;
 mod mixer;
 mod normal;
 mod patch_select;
+mod project;

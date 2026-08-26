@@ -9,6 +9,7 @@ fn screen_switch_overlay_lists_every_primary_screen() {
 
     assert!(screen.contains("Screen Switch"));
     assert!(screen.contains("[N] Notepad"));
+    assert!(screen.contains("[A] Daily DAW"));
     assert!(screen.contains("[D] DAW"));
     assert!(screen.contains("[K] Keyboard"));
     assert!(screen.contains("[L] Loop Browser"));

@@ -11,6 +11,9 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
     let cache_render_workers = 4;
     let (cache_tx, cache_rx) = std::sync::mpsc::channel();
     let mut app = DawApp {
+        workspace_kind: crate::WorkspaceKind::Persistent,
+        daily_page_date: None,
+        config_app_dir: None,
         editor: crate::editor::DawEditorState::new(
             vec![vec![String::new(); measures + 1]; tracks],
             0,

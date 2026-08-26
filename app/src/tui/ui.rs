@@ -35,7 +35,9 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
         }
         // DAW 画面は `DawApp` が自前の描画ループを持つ。ここへ来るのは
         // DAW から戻る途中の一瞬だけなので notepad として描く。
-        PrimaryScreen::Notepad | PrimaryScreen::Daw => notepad::draw(&mut app.notepad, f),
+        PrimaryScreen::Notepad | PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {
+            notepad::draw(&mut app.notepad, f)
+        }
     }
 
     if app.screen_switch_menu.is_open() {

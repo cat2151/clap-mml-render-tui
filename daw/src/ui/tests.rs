@@ -14,7 +14,8 @@ pub(super) use cmrt_tui_core::theme::cursor_highlight_bg;
 
 pub(super) use super::{
     super::{
-        AbRepeatState, CacheState, CellCache, DawApp, DawMode, DawPlayState, PlayPosition, MEASURES,
+        AbRepeatState, CacheState, CellCache, DawApp, DawMode, DawPlayState, DawProjectFileAction,
+        PlayPosition, MEASURES,
     },
     cache_indicator, cache_indicator_color, cache_text_color, draw, loop_measure_summary_label,
     loop_status_label, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_PINK,
@@ -25,6 +26,9 @@ fn build_test_app() -> DawApp {
     let measures = 2;
     let (cache_tx, _cache_rx) = std::sync::mpsc::channel();
     DawApp {
+        workspace_kind: crate::WorkspaceKind::Persistent,
+        daily_page_date: None,
+        config_app_dir: None,
         editor: crate::editor::DawEditorState::new(
             vec![vec![String::new(); measures + 1]; tracks],
             0,

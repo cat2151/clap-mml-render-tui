@@ -22,6 +22,7 @@ mod screen;
 mod tests;
 
 use screen::DawRunOutcome;
+pub(in crate::tui) use screen::{clear_terminal_for_new_screen, DawEntryRoute};
 
 struct TerminalCleanup {
     raw_mode_enabled: bool,
@@ -65,19 +66,6 @@ fn sync_mouse_capture(enabled: &mut bool, requested: bool) -> Result<()> {
     Ok(())
 }
 
-fn clear_terminal_for_new_screen<B: Backend>(
-    terminal: &mut Terminal<B>,
-    rendered_screen: &mut Option<PrimaryScreen>,
-    active_screen: PrimaryScreen,
-) -> std::result::Result<(), B::Error> {
-    if *rendered_screen == Some(active_screen) {
-        return Ok(());
-    }
-    terminal.clear()?;
-    *rendered_screen = Some(active_screen);
-    Ok(())
-}
-
 impl<'a> TuiApp<'a> {
     pub(crate) fn uses_mouse_capture(&self) -> bool {
         self.active_screen == PrimaryScreen::GridSequencer
@@ -90,7 +78,9 @@ impl<'a> TuiApp<'a> {
         match self.active_screen {
             PrimaryScreen::Keyboard => self.keyboard.mml_input.is_active(),
             PrimaryScreen::LoopBrowser | PrimaryScreen::GridSequencer => false,
-            PrimaryScreen::Notepad | PrimaryScreen::Daw => self.notepad.uses_textarea_cursor(),
+            PrimaryScreen::Notepad | PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {
+                self.notepad.uses_textarea_cursor()
+            }
         }
     }
 
@@ -139,11 +129,14 @@ impl<'a> TuiApp<'a> {
         let started_in_notepad_mode =
             self.active_screen == crate::screen_switch::PrimaryScreen::Notepad;
 
-        // 前回 DAW モードで終了していた場合は直接 DAW モードで起動する
         let mut quit_from_startup_daw = false;
         let mut restart_from_startup_daw = false;
-        if self.active_screen == crate::screen_switch::PrimaryScreen::Daw {
-            match self.run_daw_screen(&mut terminal, self.cfg.autoplay_on_startup)? {
+        if self.active_screen.is_daw() {
+            match self.run_daw_screen(
+                &mut terminal,
+                DawEntryRoute::Restored(self.active_screen),
+                self.cfg.autoplay_on_startup,
+            )? {
                 DawRunOutcome::Continue => {}
                 DawRunOutcome::Quit => quit_from_startup_daw = true,
                 DawRunOutcome::Restart => restart_from_startup_daw = true,
@@ -167,7 +160,7 @@ impl<'a> TuiApp<'a> {
             if crate::daw::take_http_mode_switch_request() {
                 sync_mouse_capture(&mut cleanup.mouse_capture_enabled, false)?;
                 rendered_screen = None;
-                match self.run_daw_screen(&mut terminal, false)? {
+                match self.run_daw_screen(&mut terminal, DawEntryRoute::Http, false)? {
                     DawRunOutcome::Continue => {}
                     DawRunOutcome::Quit => break,
                     DawRunOutcome::Restart => {
@@ -221,7 +214,6 @@ impl<'a> TuiApp<'a> {
                 self.complete_loop_browser_startup();
                 continue;
             }
-            // notepad 画面を実際に表示している間だけ起動時キャッシュを温める。
             // keyboard / loop browser / DAW で起動した場合は、notepad へ切り替わるまで走らせない。
             self.prime_notepad_startup_cache_if_needed(
                 started_in_notepad_mode && self.cfg.autoplay_on_startup,
@@ -270,10 +262,14 @@ impl<'a> TuiApp<'a> {
                             let _ = self.handle_keyboard_key_event(key);
                         } else if key.kind == KeyEventKind::Press {
                             if let Some(target) = self.handle_screen_switch_menu_key(key) {
-                                if target == crate::screen_switch::PrimaryScreen::Daw {
+                                if target.is_daw() {
                                     sync_mouse_capture(&mut cleanup.mouse_capture_enabled, false)?;
                                     rendered_screen = None;
-                                    match self.run_daw_screen(&mut terminal, false)? {
+                                    match self.run_daw_screen(
+                                        &mut terminal,
+                                        DawEntryRoute::ScreenSwitch(target),
+                                        false,
+                                    )? {
                                         DawRunOutcome::Continue => {}
                                         DawRunOutcome::Quit => break,
                                         DawRunOutcome::Restart => {
@@ -305,7 +301,11 @@ impl<'a> TuiApp<'a> {
                             KeyboardAction::Quit => break,
                             KeyboardAction::LaunchDaw => {
                                 rendered_screen = None;
-                                match self.run_daw_screen(&mut terminal, false)? {
+                                match self.run_daw_screen(
+                                    &mut terminal,
+                                    DawEntryRoute::Keyboard,
+                                    false,
+                                )? {
                                     DawRunOutcome::Continue => {}
                                     DawRunOutcome::Quit => break,
                                     DawRunOutcome::Restart => {
@@ -317,7 +317,6 @@ impl<'a> TuiApp<'a> {
                         }
                         continue;
                     }
-                    // keyboard以外はPressのみ処理。Release/Repeatは無視（二重発火防止）。
                     if key.kind != KeyEventKind::Press {
                         continue;
                     }
@@ -407,7 +406,11 @@ impl<'a> TuiApp<'a> {
                         NormalAction::Quit => break,
                         NormalAction::LaunchDaw => {
                             rendered_screen = None;
-                            match self.run_daw_screen(&mut terminal, false)? {
+                            match self.run_daw_screen(
+                                &mut terminal,
+                                DawEntryRoute::Notepad,
+                                false,
+                            )? {
                                 DawRunOutcome::Continue => {}
                                 DawRunOutcome::Quit => break,
                                 DawRunOutcome::Restart => {

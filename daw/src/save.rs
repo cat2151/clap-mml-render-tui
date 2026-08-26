@@ -1,6 +1,6 @@
 //! DAW セッションの保存・読み込み
 
-use super::{DawApp, FIRST_PLAYABLE_TRACK, MIXER_MAX_DB, MIXER_MIN_DB};
+use super::{DawApp, WorkspaceKind, FIRST_PLAYABLE_TRACK, MIXER_MAX_DB, MIXER_MIN_DB};
 
 // ─── 保存形式 ─────────────────────────────────────────────────
 
@@ -145,7 +145,18 @@ pub(super) fn apply_save_file_to_track_volumes(
 impl DawApp {
     // ─── 保存 / 読み込み ──────────────────────────────────────
 
-    pub(super) fn load(&mut self) {
+    pub(super) fn load(&mut self, current_date: &str) {
+        let daw_state = cmrt_history::load_daw_session_state();
+        self.sound_check_guide = cmrt_tui_core::sound_check_guide::SoundCheckGuide::new(
+            daw_state.daw_sound_check_guide_overlay_date.clone(),
+        );
+        match self.workspace_kind {
+            WorkspaceKind::Persistent => self.load_persistent(&daw_state),
+            WorkspaceKind::Daily => self.initialize_daily_workspace(current_date),
+        }
+    }
+
+    fn load_persistent(&mut self, daw_state: &cmrt_history::DawSessionState) {
         let path = cmrt_history::daw_file_load_path();
         let content = path.as_ref().and_then(|p| std::fs::read_to_string(p).ok());
         if let Some(content) = content {
@@ -174,16 +185,16 @@ impl DawApp {
         }
         self.sync_cache_states();
         *self.playback.track_gains.lock().unwrap() = self.playback_track_gains();
-        let daw_state = cmrt_history::load_daw_session_state();
-        self.sound_check_guide = cmrt_tui_core::sound_check_guide::SoundCheckGuide::new(
-            daw_state.daw_sound_check_guide_overlay_date.clone(),
-        );
         self.editor.cursor_track = daw_state.cursor_track.min(self.editor.tracks - 1);
         self.editor.cursor_measure = daw_state.cursor_measure.min(self.editor.measures);
-        self.restore_cache_from_history(&daw_state);
+        self.restore_cache_from_metadata(&daw_state.cached_measures);
     }
 
     pub(super) fn save(&self) {
+        if self.workspace_kind == WorkspaceKind::Daily {
+            let _ = self.save_daily_recovery();
+            return;
+        }
         let Some(path) = cmrt_history::daw_file_path() else {
             return;
         };
@@ -203,6 +214,10 @@ impl DawApp {
 
     pub(super) fn save_history_state(&mut self) {
         self.flush_patch_phrase_store_if_dirty();
+        if self.workspace_kind == WorkspaceKind::Daily {
+            let _ = self.save_daily_recovery();
+            return;
+        }
         let _ = cmrt_history::save_daw_session_state(&cmrt_history::DawSessionState {
             cursor_track: self.editor.cursor_track,
             cursor_measure: self.editor.cursor_measure,
