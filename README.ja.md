@@ -1,7 +1,7 @@
 # clap-mml-render-tui
 
 ### 概要
-MML TUI DAW（のようなもの）。Surge XTのリッチな音をMMLで手軽に楽しめます。Rustで書かれています。
+MML TUI DAW（のようなもの）。Surge XT / Dexed / Vaporizer2 / Floe / Sforzando のリッチな音をMMLで手軽に楽しめます。Rustで書かれています。
 
 ### 用途
 
