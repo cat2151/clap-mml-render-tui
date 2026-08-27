@@ -142,6 +142,20 @@ render patch='AR Accent Arp.vvp' plugin=Vaporizer2 frames=192000 duration_ms=400
 | `CMRT_TEST_VAPORIZER2_CLAP` | Vaporizer2 の `.clap` パス |
 | `CMRT_TEST_VAPORIZER2_PRESETS` | `.vvp` の置き場（個人のパスなのでコードに書かない） |
 | `CMRT_TEST_WAV_OUT_DIR` | 耳で確かめるぶんの WAV 書き出し先。**未設定なら 1 バイトも書かない** |
+| `CMRT_TEST_PLAY_SERVER_EXE` | 実 play server の実行ファイル。共有メモリ IPC を**実サーバーへ繋いで**確かめる `#[ignore]` テストが使う（`realtime-play/src/live_ipc/tests.rs`） |
+
+**SHM プロトコルは 2 repo に二重定義されている**（TUI の
+`realtime-play/src/fast_midi_ipc/windows/protocol.rs` と play-server の
+`realtime-ipc/src/windows/protocol.rs`）。片方だけ直しても**両 repo の単体テストは緑のまま通る**ので、
+`CMRT_TEST_PLAY_SERVER_EXE` のテストだけがその食い違いを捕まえられる。
+
+```
+cargo test -p cmrt-realtime-play -- --include-ignored
+```
+
+テストはサーバーを自分で起こす。ポートは play server 側の
+`CMRT_REALTIME_PLAY_SERVER_PORT`（config.toml より強い）で既定の 62154 から離すので、
+**TUI を起動したままでよい**。子プロセスはテストの `Drop` が必ず落とす。
 
 play-server で `cargo test -p cmrt-core -- --include-ignored --test-threads=1`。
 **`--test-threads=1` は必須**（Vaporizer2 のテストが 2 本同時に走るとプロセスごと落ちる。

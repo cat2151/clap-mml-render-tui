@@ -8,8 +8,10 @@ use std::{
 use super::{INSTANCE_COUNT, MAX_MIDI_MESSAGES, MAX_PATCH_BYTES, MAX_RESPONSE_BYTES};
 
 pub(super) const MAGIC: [u8; 8] = *b"CMRTMIDI";
-/// v8 adds live tempo-map changes ([`KIND_SET_LIVE_TEMPO`]).
-pub(super) const VERSION: u32 = 8;
+/// v9 adds standby-bank patch preload ([`KIND_PREPARE_STANDBY_PATCH`]).
+///
+/// v8 was live tempo-map changes ([`KIND_SET_LIVE_TEMPO`]).
+pub(super) const VERSION: u32 = 9;
 pub(super) const SLOT_COUNT: usize = 64;
 pub(super) const KIND_MIDI: u32 = 1;
 pub(super) const KIND_STOP: u32 = 2;
@@ -33,6 +35,16 @@ pub(super) const KIND_TIMELINE_MIDI: u32 = 10;
 /// **このコマンドを知らないサーバーは黙って無視する**（テンポだけ古いまま鳴り続ける）。
 /// 音量と違ってテンポは正しさの問題なので、VERSION を上げて繋がらないようにしてある。
 pub(super) const KIND_SET_LIVE_TEMPO: u32 = 11;
+/// 非演奏 bank への先読みロード。slot の使い方も同期応答も
+/// [`KIND_PREPARE_PATCH`] と同じで、違うのは「対象 instance は鳴っている bank に
+/// 属さない」というこちらからの宣言だけ。サーバーはそれを根拠にその bank の
+/// レンダーを止めてロードしてよい。
+///
+/// **この KIND を知らない古いサーバーは "unknown command kind" を返す**ので、
+/// 先読みが黙って効かないままになる。先読みできるかは演奏の連続性に直結するため、
+/// VERSION を上げて繋がらないようにしてある。サーバー側の
+/// `realtime-ipc/src/windows/protocol.rs` と必ず揃えること。
+pub(super) const KIND_PREPARE_STANDBY_PATCH: u32 = 12;
 /// instance ゲインの上限（+12dB 相当）。サーバー側の検証値と一致させること。
 pub(super) const MAX_INSTANCE_GAIN: f32 = 4.0;
 pub(super) const RESPONSE_OK: u32 = 1;

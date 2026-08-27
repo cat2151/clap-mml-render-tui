@@ -25,16 +25,21 @@ use runtime_poll::{poll_runtime_status, RuntimePollContext};
 
 const METER_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
-/// 先読みロード中に確保したい出力バッファの厚さ（下限）。
+/// 演奏中の**行差し替え**（[`GridMidiCommand::SetRowPatch`]）のあいだだけ確保する
+/// 出力バッファの厚さ（下限）。
 ///
-/// patch のロードはサーバーのレンダースレッド上で同期実行され、その間リングが
-/// 補充されない。実測で 1 patch あたり平均 27ms（最悪 150ms）かかるのに対し、
-/// リングの余裕は 512 フレーム × multiplier ÷ 48kHz なので、既定の
-/// `INITIAL_BUFFER_MULTIPLIER`（= 2、21ms）では足りない。16 なら 170ms 稼げて、
-/// `LOOKAHEAD`（2ステップ = 230ms）にも収まる。
+/// この経路のロードはサーバーの coordinator が同期で待つため、その間はどの bank も
+/// render されずリングが補充されない（手動の行差し替えを無停止化しないのは
+/// 意図した契約。`PLAN-grid-bank-worker-separation.md` の「前提と守る契約」4）。
+/// 実測で 1 patch あたり平均 27ms（最悪 150ms）かかるのに対し、リングの余裕は
+/// 512 フレーム × multiplier ÷ 48kHz なので、既定の `INITIAL_BUFFER_MULTIPLIER`
+/// （= 2、21ms）では足りない。16 なら 170ms 稼げる。
 ///
 /// 適応バッファが既にこれより厚ければ、そちらを保つ（薄くすると underrun を招く）。
-const PRELOAD_BUFFER_MULTIPLIER: u16 = 16;
+///
+/// **待機 bank への先読み（[`GridMidiCommand::Preload`]）では使わない。**
+/// サーバーの bank worker 分離以降、先読み中も演奏 bank の render は止まらない。
+const ROW_PATCH_BUFFER_MULTIPLIER: u16 = 16;
 
 pub(super) fn run_midi_sender(
     rx: mpsc::Receiver<GridMidiCommand>,
@@ -45,8 +50,6 @@ pub(super) fn run_midi_sender(
     // 慢性ドロップの判定は `adaptive_buffer` の中に置かないこと。`Prepare` のたびに
     // `adaptive_buffer = None` されるので、そこに持たせると latch が毎回消える。
     let mut overload = OverloadDetector::new();
-    // 先読みロード中は出力バッファを厚くしている。戻し忘れを防ぐために持つ。
-    let mut preloading = false;
     let mut last_timing_log = Instant::now();
     let mut timing_late_baseline = 0u64;
     loop {
@@ -131,7 +134,6 @@ pub(super) fn run_midi_sender(
             }
             GridMidiCommand::Prepare { patches } => {
                 adaptive_buffer = None;
-                preloading = false;
                 // サーバー起動（CLAP インスタンス生成）と音色ロードは所要時間の桁が
                 // 違うので、別々に計測してどちらが支配的かを切り分けられるようにする。
                 let server_started = Instant::now();
@@ -176,19 +178,17 @@ pub(super) fn run_midi_sender(
                 );
             }
             GridMidiCommand::Preload { instance_id, patch } => {
-                // 初回だけ出力バッファを厚くする。ロード中はレンダースレッドが
-                // 止まるので、その間ぶんを先に貯めておかないと underrun になる。
-                if !preloading {
-                    preloading = true;
-                    let current = adaptive_buffer
-                        .map(AdaptiveBuffer::multiplier)
-                        .unwrap_or(INITIAL_BUFFER_MULTIPLIER);
-                    let _ = supervisor.set_connected_live_buffer_multiplier(
-                        current.max(PRELOAD_BUFFER_MULTIPLIER),
-                    );
-                }
                 let started = Instant::now();
-                let result = supervisor.prepare_live_patch(instance_id, patch.as_deref());
+                // 先読み専用コマンド。宛先は必ず「発音 deadline を越えて非演奏になった
+                // 待機 bank」なので、サーバーはその bank を止めてロードしてよい。
+                // 現在 bank を触る `SetRowPatch` とは別の API であることが契約の本体。
+                //
+                // **ここで出力バッファを厚くしないこと。** 同期で待つのはこの送信
+                // スレッドだけで、演奏 bank の render はサーバー側の bank worker が
+                // 続けている。厚くしても underrun は減らず、発音の遅れが増えるだけ。
+                // 実測（`realtime-play/src/live_ipc/tests/grid_cycle.rs`）でも倍率 2 と
+                // 16 の両方で underrun / late events の増分は 0 だった。
+                let result = supervisor.prepare_standby_patch(instance_id, patch.as_deref());
                 match &result {
                     Ok(()) => crate::log_line(&format!(
                         "grid-sequencer: preload instance={instance_id} ms={}",
@@ -216,7 +216,7 @@ pub(super) fn run_midi_sender(
                     .map(AdaptiveBuffer::multiplier)
                     .unwrap_or(INITIAL_BUFFER_MULTIPLIER);
                 let _ = supervisor
-                    .set_connected_live_buffer_multiplier(current.max(PRELOAD_BUFFER_MULTIPLIER));
+                    .set_connected_live_buffer_multiplier(current.max(ROW_PATCH_BUFFER_MULTIPLIER));
                 let started = Instant::now();
                 let result = supervisor.prepare_live_patch(instance_id, patch.as_deref());
                 let _ = supervisor.set_connected_live_buffer_multiplier(current);
@@ -229,16 +229,6 @@ pub(super) fn run_midi_sender(
                     if result.is_ok() { "ok" } else { "error" },
                 ));
                 status.lock().unwrap().finish_row_patch_setting(row, error);
-            }
-            GridMidiCommand::PreloadFinished => {
-                if preloading {
-                    preloading = false;
-                    // 適応バッファが持っている厚さへ戻す。まだ無ければ既定へ。
-                    let multiplier = adaptive_buffer
-                        .map(AdaptiveBuffer::multiplier)
-                        .unwrap_or(INITIAL_BUFFER_MULTIPLIER);
-                    let _ = supervisor.set_connected_live_buffer_multiplier(multiplier);
-                }
             }
             GridMidiCommand::SetGains { gains_db } => {
                 let mut failed = None;
@@ -274,7 +264,6 @@ pub(super) fn run_midi_sender(
             }
             GridMidiCommand::Stop => {
                 adaptive_buffer = None;
-                preloading = false;
                 // 画面を離れるので判定も白紙へ戻す。次に入るときはダブルバッファリングから。
                 overload = OverloadDetector::new();
                 status.lock().unwrap().clear_overload();

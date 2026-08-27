@@ -1,66 +1,26 @@
-use std::{
-    ffi::c_void,
-    mem::size_of,
-    ptr::{self, NonNull},
-    sync::{atomic::Ordering, Arc},
-    time::Instant,
-};
+use std::{ptr, sync::atomic::Ordering, sync::Arc, time::Instant};
 
 use windows_sys::Win32::{
-    Foundation::{
-        CloseHandle, GetLastError, ERROR_INVALID_PARAMETER, HANDLE, STILL_ACTIVE, WAIT_OBJECT_0,
-        WAIT_TIMEOUT,
-    },
+    Foundation::{WAIT_OBJECT_0, WAIT_TIMEOUT},
     System::{
-        Memory::{
-            MapViewOfFile, OpenFileMappingW, UnmapViewOfFile, FILE_MAP_ALL_ACCESS,
-            MEMORY_MAPPED_VIEW_ADDRESS,
-        },
+        Memory::{OpenFileMappingW, FILE_MAP_ALL_ACCESS},
         SystemInformation::GetTickCount64,
-        Threading::{
-            GetCurrentProcessId, GetExitCodeProcess, OpenEventW, OpenProcess, SetEvent,
-            WaitForSingleObject, EVENT_MODIFY_STATE, PROCESS_QUERY_LIMITED_INFORMATION,
-        },
+        Threading::{GetCurrentProcessId, SetEvent, WaitForSingleObject, EVENT_MODIFY_STATE},
     },
 };
 
 use super::*;
 
+mod connection;
 mod platform;
 mod protocol;
 mod timeline;
 mod underrun;
 
+use connection::{claim_client, map_handle, open_event, validate_ring, Mapping};
 use platform::{last_os_error, wide_name, OwnedHandle};
 use protocol::*;
 pub use underrun::FastMidiUnderrunReader;
-
-struct Mapping {
-    handle: HANDLE,
-    view: NonNull<SharedRing>,
-}
-
-unsafe impl Send for Mapping {}
-// SharedRing の並行アクセス対象は atomic と、protocol で同期された response だけ。
-// 読み取り専用 meter handle は command の応答待ちと並行して使う。
-unsafe impl Sync for Mapping {}
-
-impl Mapping {
-    fn ring(&self) -> &SharedRing {
-        unsafe { self.view.as_ref() }
-    }
-}
-
-impl Drop for Mapping {
-    fn drop(&mut self) {
-        unsafe {
-            UnmapViewOfFile(MEMORY_MAPPED_VIEW_ADDRESS {
-                Value: self.view.as_ptr().cast::<c_void>(),
-            });
-            CloseHandle(self.handle);
-        }
-    }
-}
 
 pub struct FastMidiClient {
     mapping: Arc<Mapping>,
@@ -120,6 +80,19 @@ impl FastMidiClient {
         patch: Option<&str>,
     ) -> Result<(), FastIpcError> {
         self.patch_request(KIND_PREPARE_PATCH, instance_id, patch)
+            .map(|_| ())
+    }
+
+    /// 非演奏 bank へ音色を先読みする。応答待ちは [`Self::prepare_patch`] と同じ。
+    ///
+    /// 「対象 instance は鳴っている bank に属さない」という宣言を伴うので、
+    /// 現在 bank の行音色変更・MML overlay・起動時 prepare には使わないこと。
+    pub fn prepare_standby_patch(
+        &mut self,
+        instance_id: InstanceId,
+        patch: Option<&str>,
+    ) -> Result<(), FastIpcError> {
+        self.patch_request(KIND_PREPARE_STANDBY_PATCH, instance_id, patch)
             .map(|_| ())
     }
 
@@ -383,62 +356,4 @@ fn validate_instance(instance_id: InstanceId) -> Result<(), FastIpcError> {
 
 fn zeroed_slot() -> CommandSlot {
     unsafe { std::mem::zeroed() }
-}
-
-fn validate_ring(ring: &SharedRing) -> Result<(), FastIpcError> {
-    if ring.magic != MAGIC || ring.version != VERSION {
-        return Err(FastIpcError::ProtocolMismatch);
-    }
-    Ok(())
-}
-
-fn claim_client(ring: &SharedRing, pid: u32) -> Result<(), FastIpcError> {
-    loop {
-        let owner = ring.client_pid.load(Ordering::Acquire);
-        if owner == 0 {
-            if ring
-                .client_pid
-                .compare_exchange(0, pid, Ordering::AcqRel, Ordering::Acquire)
-                .is_ok()
-            {
-                return Ok(());
-            }
-            continue;
-        }
-        if process_is_running(owner) {
-            return Err(FastIpcError::AlreadyConnected);
-        }
-        let _ = ring
-            .client_pid
-            .compare_exchange(owner, 0, Ordering::AcqRel, Ordering::Acquire);
-    }
-}
-
-fn process_is_running(pid: u32) -> bool {
-    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
-    if process.is_null() {
-        return unsafe { GetLastError() } != ERROR_INVALID_PARAMETER;
-    }
-    let mut exit_code = 0;
-    let read_ok = unsafe { GetExitCodeProcess(process, &mut exit_code) } != 0;
-    unsafe { CloseHandle(process) };
-    read_ok && exit_code == STILL_ACTIVE as u32
-}
-
-fn map_handle(handle: HANDLE) -> Result<Mapping, FastIpcError> {
-    let view = unsafe { MapViewOfFile(handle, FILE_MAP_ALL_ACCESS, 0, 0, size_of::<SharedRing>()) };
-    let Some(view) = NonNull::new(view.Value.cast::<SharedRing>()) else {
-        unsafe { CloseHandle(handle) };
-        return Err(last_os_error("MapViewOfFile"));
-    };
-    Ok(Mapping { handle, view })
-}
-
-fn open_event(name: &[u16], access: u32) -> Result<OwnedHandle, FastIpcError> {
-    let handle = unsafe { OpenEventW(access, 0, name.as_ptr()) };
-    if handle.is_null() {
-        Err(FastIpcError::NotAvailable)
-    } else {
-        Ok(OwnedHandle::new(handle))
-    }
 }

@@ -68,7 +68,7 @@ fn screen_in_chord_mode(
 }
 
 /// 進行の先頭から次サイクルを抽選し、1ステップにつき1件ずつ先読みする。
-/// まとめて投げるとサーバーのレンダースレッドが連続で止まり underrun になる。
+/// まとめて投げると送信スレッドが同期待ちで塞がり、timeline イベントの送出が遅れる。
 #[test]
 fn the_preload_sends_one_instance_per_step() {
     let now = Instant::now();
@@ -82,7 +82,7 @@ fn the_preload_sends_one_instance_per_step() {
     assert_eq!(sent_rows(&screen), 1, "1ステップで送るのは1件だけ");
 
     // `pump_step` はフレームごとに呼ばれる。1ステップ経つまでは次を送らない
-    // （まとめて投げるとサーバーのレンダースレッドが連続で止まる）。
+    // （まとめて投げると送信スレッドが同期待ちで塞がり続ける）。
     for frame in 1..10 {
         screen.advance_cycle_swap(now + STEP_INTERVAL / 20 * frame, &ctx);
     }

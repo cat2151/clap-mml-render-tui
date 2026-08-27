@@ -96,20 +96,54 @@ impl RealtimePlayServerSupervisor {
         self.send_live_events(&events)
     }
 
+    /// 鳴っている instance も対象にできる、通常の音色差し替え。
+    ///
+    /// 起動時の全 instance prepare・行音色変更・MML overlay・keyboard がこれを使う。
+    /// 非演奏 bank への先読みには [`Self::prepare_standby_patch`] を使うこと。
     pub fn prepare_live_patch(&self, instance_id: InstanceId, patch: Option<&str>) -> Result<()> {
+        self.prepare_patch_logged("shm-patch-prepare", instance_id, patch, false)
+    }
+
+    /// 非演奏 bank へ音色を先読みする。
+    ///
+    /// 「この instance は鳴っている bank に属さない」という宣言を伴う専用コマンド。
+    /// サーバーはそれを根拠に、その bank のレンダーを止めてロードできる。
+    /// **発音 deadline を越えて非演奏になった待機 bank にだけ送ること。**
+    /// 現在 bank へ送ると、鳴っている音が止まりうる。
+    pub fn prepare_standby_patch(
+        &self,
+        instance_id: InstanceId,
+        patch: Option<&str>,
+    ) -> Result<()> {
+        self.prepare_patch_logged("shm-standby-patch-prepare", instance_id, patch, true)
+    }
+
+    fn prepare_patch_logged(
+        &self,
+        action: &str,
+        instance_id: InstanceId,
+        patch: Option<&str>,
+        standby: bool,
+    ) -> Result<()> {
         let started = Instant::now();
         log_realtime_play_event(format!(
-            "action=shm-patch-prepare event=start instance={instance_id} patch={patch:?}"
+            "action={action} event=start instance={instance_id} patch={patch:?}"
         ));
-        let result = self.with_fast_client(|client| client.prepare_patch(instance_id, patch));
+        let result = self.with_fast_client(|client| {
+            if standby {
+                client.prepare_standby_patch(instance_id, patch)
+            } else {
+                client.prepare_patch(instance_id, patch)
+            }
+        });
         let elapsed_ms = started.elapsed().as_millis();
         match &result {
             Ok(()) => log_realtime_play_event(format!(
-                "action=shm-patch-prepare event=success instance={instance_id} \
+                "action={action} event=success instance={instance_id} \
                  elapsed_ms={elapsed_ms} patch={patch:?}"
             )),
             Err(error) => log_realtime_play_event(format!(
-                "action=shm-patch-prepare event=error instance={instance_id} \
+                "action={action} event=error instance={instance_id} \
                  elapsed_ms={elapsed_ms} patch={patch:?} error=\"{}\"",
                 super::logging::truncate_for_log(&format!("{error:#}"), 1_000)
             )),
@@ -306,32 +340,4 @@ fn connect_fast_client(port: u16) -> Result<FastMidiClient, FastIpcError> {
 }
 
 #[cfg(test)]
-mod live_gain_tests {
-    use super::amplitude_from_db;
-
-    #[test]
-    fn zero_db_is_unity_gain() {
-        assert!((amplitude_from_db(0.0) - 1.0).abs() < 1e-6);
-    }
-
-    #[test]
-    fn plus_six_db_roughly_doubles_the_amplitude() {
-        let gain = amplitude_from_db(6.0);
-        assert!((gain - 1.9953).abs() < 1e-3, "gain={gain}");
-    }
-
-    #[test]
-    fn minus_six_db_roughly_halves_the_amplitude() {
-        let gain = amplitude_from_db(-6.0);
-        assert!((gain - 0.5012).abs() < 1e-3, "gain={gain}");
-    }
-
-    /// 千分率へ丸めても dB のずれが無視できること（SHM が u32 milli で運ぶため）。
-    #[test]
-    fn rounding_to_milli_units_keeps_the_db_within_a_hundredth() {
-        let gain = amplitude_from_db(6.0);
-        let rounded = (gain * 1000.0).round() / 1000.0;
-        let db = 20.0 * rounded.log10();
-        assert!((db - 6.0).abs() < 0.01, "db={db}");
-    }
-}
+mod tests;

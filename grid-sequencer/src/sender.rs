@@ -71,8 +71,6 @@ enum GridMidiCommand {
         instance_id: u8,
         patch: Option<String>,
     },
-    /// 先読みロードの終了。厚くしていた出力バッファを戻す。
-    PreloadFinished,
     SetGains {
         gains_db: Vec<f32>,
     },
@@ -180,8 +178,10 @@ impl GridMidiSender {
 
     /// 待機 bank へ patch を1件だけ先読みする。演奏は止めない。
     ///
-    /// 1ステップにつき1件ずつ呼ぶこと。まとめて投げるとサーバーのレンダースレッドが
-    /// 連続で止まり、出力リングを食い潰して underrun になる。
+    /// ロード中も演奏 bank の render はサーバーの bank worker が続けるので、
+    /// 出力は途切れない。ただし**この送信スレッドは1件ごとに同期で待つ**ので、
+    /// 1ステップにつき1件ずつ呼ぶこと。まとめて投げると timeline イベントを送る口が
+    /// 塞がり、供給が遅れる。
     pub fn preload(&self, instance_id: u8, patch: Option<&str>) {
         self.status.lock().unwrap().begin_preload_step();
         if self
@@ -230,10 +230,12 @@ impl GridMidiSender {
         request_id
     }
 
-    /// 先読みを終える（全件送り終えた、または打ち切った）。バッファ厚を戻す。
+    /// 先読みを終える（全件送り終えた、または打ち切った）。
+    ///
+    /// 送信スレッドへ知らせることは無い。先読み中に出力バッファを厚くする
+    /// 暫定回避はサーバーの bank worker 分離で不要になり、状態は status だけ。
     pub fn finish_preload(&self) {
         self.status.lock().unwrap().finish_preload();
-        let _ = self.tx.send(GridMidiCommand::PreloadFinished);
     }
 
     /// instance ごとの音量差を dB で設定する（0.0 が等倍）。

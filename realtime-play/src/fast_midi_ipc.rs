@@ -165,6 +165,14 @@ impl FastMidiClient {
         Err(FastIpcError::UnsupportedPlatform)
     }
 
+    pub fn prepare_standby_patch(
+        &mut self,
+        _instance_id: InstanceId,
+        _patch: Option<&str>,
+    ) -> Result<(), FastIpcError> {
+        Err(FastIpcError::UnsupportedPlatform)
+    }
+
     pub fn probe_patch(
         &mut self,
         _instance_id: InstanceId,
