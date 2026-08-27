@@ -34,6 +34,14 @@ cmrt
 
 TUI画面でMML入力して遊べます
 
+### 対応オーディオプラグイン
+- ※CLAP、Windows、アカウント登録なしで無料で入手できるもの、に絞っています
+- Surge XT
+- Dexed
+- Vaporizer2
+- Floe
+- Sforzando
+
 ### keyboard画面
 
 `v`キーで、keyboard画面へ移動します。
