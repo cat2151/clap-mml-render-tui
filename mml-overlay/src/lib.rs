@@ -8,6 +8,7 @@
 //! 入力欄とは別に持ち（`Ctrl+T` で選ぶ）、呼び出し側がセッションへ保存する。
 //! `Ctrl+O` で開くフレーズ履歴は notepad 画面と共有していて、読むだけ。
 
+pub(crate) mod chord_transfer;
 pub mod cursor_notes;
 pub(crate) mod history_select;
 pub mod line_play;

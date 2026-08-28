@@ -3,9 +3,9 @@ use super::*;
 #[test]
 fn handle_history_overlay_slash_then_enter_keeps_filtered_results_for_j_navigation() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
-    app.editor.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         cmrt_history::PatchPhraseState {
@@ -37,7 +37,7 @@ fn handle_history_overlay_slash_then_enter_keeps_filtered_results_for_j_navigati
         DawPlayState::Preview
     ));
     assert_eq!(
-        app.playback.measure_track_mmls.lock().unwrap()[0][1],
+        app.playback.measure_track_mmls.lock().unwrap()[0][2],
         r#"{"Surge XT patch":"Pads/Pad 1.fxp"}gamma jk"#
     );
 }
@@ -45,9 +45,9 @@ fn handle_history_overlay_slash_then_enter_keeps_filtered_results_for_j_navigati
 #[test]
 fn handle_history_overlay_allows_slash_character_in_filter_query() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
-    app.editor.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         cmrt_history::PatchPhraseState {
@@ -76,9 +76,9 @@ fn handle_history_overlay_allows_slash_character_in_filter_query() {
 #[test]
 fn handle_history_overlay_filter_ctrl_a_uses_tui_textarea_default_binding() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
-    app.editor.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
     app.start_history_overlay();
 
     app.handle_history_overlay(KeyCode::Char('/'));

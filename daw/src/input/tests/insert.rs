@@ -11,20 +11,20 @@ fn commit_insert_skips_cache_refresh_when_text_is_unchanged() {
         let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
 
         let (mut app, cache_rx) = build_test_app();
-        app.editor.data[1][1] = "cdef".to_string();
+        app.editor.data[2][1] = "cdef".to_string();
         {
             let mut cache = app.cache.lock().unwrap();
-            cache[1][1].state = CacheState::Ready;
-            cache[1][1].generation = 7;
+            cache[2][1].state = CacheState::Ready;
+            cache[2][1].generation = 7;
         }
 
         app.start_insert();
         app.commit_insert();
 
         let cache = app.cache.lock().unwrap();
-        assert_eq!(app.editor.data[1][1], "cdef");
-        assert!(matches!(cache[1][1].state, CacheState::Ready));
-        assert_eq!(cache[1][1].generation, 7);
+        assert_eq!(app.editor.data[2][1], "cdef");
+        assert!(matches!(cache[2][1].state, CacheState::Ready));
+        assert_eq!(cache[2][1].generation, 7);
         assert!(
             cache_rx.try_recv().is_err(),
             "unchanged insert queued a cache job"
@@ -63,11 +63,11 @@ fn commit_insert_triggers_cache_refresh_when_text_changes() {
         let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
 
         let (mut app, cache_rx) = build_test_app();
-        app.editor.data[1][1] = "cdef".to_string();
+        app.editor.data[2][1] = "cdef".to_string();
         {
             let mut cache = app.cache.lock().unwrap();
-            cache[1][1].state = CacheState::Ready;
-            cache[1][1].generation = 7;
+            cache[2][1].state = CacheState::Ready;
+            cache[2][1].generation = 7;
         }
 
         app.start_insert();
@@ -78,14 +78,14 @@ fn commit_insert_triggers_cache_refresh_when_text_changes() {
         app.commit_insert();
 
         let cache = app.cache.lock().unwrap();
-        assert_eq!(app.editor.data[1][1], "gfed");
-        assert!(matches!(cache[1][1].state, CacheState::Rendering));
-        assert_eq!(cache[1][1].generation, 8);
+        assert_eq!(app.editor.data[2][1], "gfed");
+        assert!(matches!(cache[2][1].state, CacheState::Rendering));
+        assert_eq!(cache[2][1].generation, 8);
 
         let job = cache_rx
             .try_recv()
             .expect("changed insert did not queue a cache job");
-        assert_eq!(job.track, 1);
+        assert_eq!(job.track, 2);
         assert_eq!(job.measure, 1);
         assert_eq!(job.generation, 8);
     }
@@ -103,8 +103,8 @@ fn commit_insert_keeps_semicolon_text_in_same_measure() {
 
         let (mut app, cache_rx) = build_test_app();
         app.editor.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
-        app.editor.data[1][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
-        app.editor.data[2][1] = "existing".to_string();
+        app.editor.data[2][0] = r#"{"Surge XT patch": "piano"}"#.to_string();
+        app.editor.data[3][1] = "existing".to_string();
 
         app.start_insert();
         app.textarea = TextArea::default();
@@ -113,13 +113,13 @@ fn commit_insert_keeps_semicolon_text_in_same_measure() {
         }
         app.commit_insert();
 
-        assert_eq!(app.editor.data[1][1], "cde;gab");
-        assert_eq!(app.editor.data[2][1], "existing");
+        assert_eq!(app.editor.data[2][1], "cde;gab");
+        assert_eq!(app.editor.data[3][1], "existing");
 
         let job = cache_rx
             .try_recv()
             .expect("semicolon insert did not queue a cache job");
-        assert_eq!(job.track, 1);
+        assert_eq!(job.track, 2);
         assert_eq!(job.measure, 1);
         let preprocessed = mml_preprocessor::extract_embedded_json(&job.mml);
         let json: Value =

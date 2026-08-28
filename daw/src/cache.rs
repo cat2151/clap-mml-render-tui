@@ -4,7 +4,9 @@ use std::path::PathBuf;
 
 use cmrt_history::{daw_cache_mml_hash, DawCachedMeasure};
 
-use super::{CacheState, CellCache, DawApp, WorkspaceKind};
+use super::mml::{cell_has_content, cell_is_generated_from_chord_row};
+use super::tracks::track_renders_audio;
+use super::{CacheState, CellCache, DawApp, WorkspaceKind, CHORD_TRACK, FIRST_PLAYABLE_TRACK};
 
 fn workspace_cache_dir(root: &std::path::Path, workspace_kind: WorkspaceKind) -> PathBuf {
     match workspace_kind {
@@ -37,7 +39,7 @@ impl DawApp {
         let mut cache = self.cache.lock().unwrap();
         for t in 0..self.editor.tracks {
             for m in 0..=self.editor.measures {
-                if m == 0 || self.editor.data[t][m].trim().is_empty() {
+                if m == 0 || !track_renders_audio(t) || !cell_has_content(&self.editor.data, t, m) {
                     cache[t][m] = CellCache::empty();
                 } else if cache[t][m].state == CacheState::Empty {
                     cache[t][m].set_pending();
@@ -52,7 +54,10 @@ impl DawApp {
             let _ = std::fs::remove_file(path);
         }
         let mut cache = self.cache.lock().unwrap();
-        if measure == 0 || self.editor.data[track][measure].trim().is_empty() {
+        if measure == 0
+            || !track_renders_audio(track)
+            || !cell_has_content(&self.editor.data, track, measure)
+        {
             cache[track][measure] = CellCache::empty();
         } else {
             cache[track][measure].set_pending();
@@ -72,8 +77,13 @@ impl DawApp {
         if measure == 0 {
             return None;
         }
-        // セル自身の内容が空なら投入しない（track0 含む結合 MML で判定しない）
-        if self.editor.data[track][measure].trim().is_empty() {
+        // chord 行の中身は MML ではなくコード進行なので、レンダリングにかけない。
+        if !track_renders_audio(track) {
+            return None;
+        }
+        // セル自身の内容が空なら投入しない（track0 含む結合 MML で判定しない）。
+        // ただし chord 行から生成されるセルは、手書きが空でも中身がある。
+        if !cell_has_content(&self.editor.data, track, measure) {
             return None;
         }
         let mml = self.build_cell_mml(track, measure);
@@ -125,9 +135,9 @@ impl DawApp {
         if track == 0 {
             // track0 セル変更: 全演奏トラックの全小節が影響を受ける
             let mut cache = self.cache.lock().unwrap();
-            for t in 1..self.editor.tracks {
+            for t in FIRST_PLAYABLE_TRACK..self.editor.tracks {
                 for m in 1..=self.editor.measures {
-                    if self.editor.data[t][m].trim().is_empty() {
+                    if !cell_has_content(&self.editor.data, t, m) {
                         cache[t][m] = CellCache::empty();
                     } else {
                         if let Some(path) = cache_wav_path(self.workspace_kind, t, m) {
@@ -138,11 +148,37 @@ impl DawApp {
                     }
                 }
             }
-        } else if measure == 0 {
+        } else if track == CHORD_TRACK {
+            // chord 行セル変更: そこから生成される演奏セルが影響を受ける。
+            // init セル（measure 0）は全小節に効くので全小節、
+            // measure セルはその小節だけ。
+            let mut cache = self.cache.lock().unwrap();
+            let measures: Vec<usize> = if measure == 0 {
+                (1..=self.editor.measures).collect()
+            } else {
+                vec![measure]
+            };
+            for t in FIRST_PLAYABLE_TRACK..self.editor.tracks {
+                for &m in &measures {
+                    if !cell_is_generated_from_chord_row(&self.editor.data, t, m) {
+                        continue;
+                    }
+                    if cell_has_content(&self.editor.data, t, m) {
+                        if let Some(path) = cache_wav_path(self.workspace_kind, t, m) {
+                            let _ = std::fs::remove_file(path);
+                        }
+                        cache[t][m].set_pending();
+                        affected.push((t, m));
+                    } else {
+                        cache[t][m] = CellCache::empty();
+                    }
+                }
+            }
+        } else if measure == 0 && track_renders_audio(track) {
             // 音色セル（data[track][0]）変更: 同トラックの全小節が影響を受ける（issue #67 参照）
             let mut cache = self.cache.lock().unwrap();
             for m in 1..=self.editor.measures {
-                if self.editor.data[track][m].trim().is_empty() {
+                if !cell_has_content(&self.editor.data, track, m) {
                     cache[track][m] = CellCache::empty();
                 } else {
                     if let Some(path) = cache_wav_path(self.workspace_kind, track, m) {
@@ -195,7 +231,7 @@ impl DawApp {
                 else {
                     continue;
                 };
-                if self.editor.data[t][m].trim().is_empty() {
+                if !cell_has_content(&self.editor.data, t, m) {
                     continue;
                 }
                 let current_mml_hash = daw_cache_mml_hash(&self.build_cell_mml(t, m));
@@ -250,7 +286,7 @@ impl DawApp {
                 let current_mml_hash = daw_cache_mml_hash(&self.build_cell_mml(t, m));
                 if cache[t][m].state == CacheState::Ready
                     && cache[t][m].rendered_mml_hash == Some(current_mml_hash)
-                    && !self.editor.data[t][m].trim().is_empty()
+                    && cell_has_content(&self.editor.data, t, m)
                 {
                     cached_measures.push(DawCachedMeasure {
                         track: t,

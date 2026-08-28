@@ -16,19 +16,19 @@ fn handle_normal_g_sets_random_patch_and_generated_phrase_then_previews() {
             patches_dirs: Some(vec![tmp.to_string_lossy().into_owned()]),
             ..(*app.cfg).clone()
         });
-        app.editor.cursor_track = 1;
+        app.editor.cursor_track = 2;
         app.editor.cursor_measure = 1;
-        app.editor.data[1][0] = r#"{"Surge XT patch":"Old/Pad.fxp"}"#.to_string();
-        app.editor.data[1][1] = "old phrase".to_string();
+        app.editor.data[2][0] = r#"{"Surge XT patch":"Old/Pad.fxp"}"#.to_string();
+        app.editor.data[2][1] = "old phrase".to_string();
 
         let result = app.handle_normal(crossterm::event::KeyCode::Char('g'));
 
         assert!(matches!(result, super::super::DawNormalAction::Continue));
-        assert_eq!(app.editor.data[1][0], r#"{"Surge XT patch":"Pad 1.fxp"}"#);
+        assert_eq!(app.editor.data[2][0], r#"{"Surge XT patch":"Pad 1.fxp"}"#);
         assert!(
-            app.editor.data[1][1] == "c1" || app.editor.data[1][1] == "cfg1",
+            app.editor.data[2][1] == "c1" || app.editor.data[2][1] == "cfg1",
             "generated phrase: {}",
-            app.editor.data[1][1]
+            app.editor.data[2][1]
         );
         assert_eq!(
             app.patch_phrase_store
@@ -53,7 +53,7 @@ fn handle_normal_g_sets_random_patch_and_generated_phrase_then_previews() {
 #[test]
 fn handle_normal_g_rejects_init_column() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 0;
 
     let result = app.handle_normal(crossterm::event::KeyCode::Char('g'));
@@ -68,15 +68,15 @@ fn handle_normal_g_rejects_init_column() {
 #[test]
 fn skips_history_when_generate_is_noop() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
-    app.editor.data[1][0] = r#"{"Surge XT patch":"Pad 1.fxp"}"#.to_string();
-    app.editor.data[1][1] = "c1".to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch":"Pad 1.fxp"}"#.to_string();
+    app.editor.data[2][1] = "c1".to_string();
 
     app.apply_generate_to_current_measure_with("Pad 1.fxp".to_string(), "c1", 0);
 
-    assert_eq!(app.editor.data[1][0], r#"{"Surge XT patch":"Pad 1.fxp"}"#);
-    assert_eq!(app.editor.data[1][1], "c1");
+    assert_eq!(app.editor.data[2][0], r#"{"Surge XT patch":"Pad 1.fxp"}"#);
+    assert_eq!(app.editor.data[2][1], "c1");
     assert!(app.patch_phrase_store.patches.is_empty());
     assert!(!app.patch_phrase_store_dirty);
     assert!(matches!(

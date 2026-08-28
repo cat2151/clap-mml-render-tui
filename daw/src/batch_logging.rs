@@ -169,7 +169,9 @@ fn fill_all_batch_slots(
             next_job,
             format!(
                 "cache: rerender reserve track{} meas{} ({})",
-                track, next_measure, priority_order_label
+                crate::tracks::track_display_number(track),
+                next_measure,
+                priority_order_label
             ),
         ));
     }
@@ -197,7 +199,8 @@ impl DawApp {
         measures: &[usize],
         reason: &str,
     ) {
-        if track == 0 {
+        // conductor 行と chord 行はそれ自体をレンダリングしない。
+        if track == 0 || !crate::tracks::track_renders_audio(track) {
             return;
         }
         let pending: BTreeMap<usize, CacheJob> = measures
@@ -222,7 +225,8 @@ impl DawApp {
             active_measures: BTreeSet::new(),
             completion_log: format!(
                 "cache: rerender done track{} {} ({reason})",
-                track, measure_range
+                crate::tracks::track_display_number(track),
+                measure_range
             ),
         };
         let (queued, completion_logs, batch_started) = {
@@ -246,7 +250,8 @@ impl DawApp {
         }
         self.append_log_line(format!(
             "cache: rerender start track{} {} ({reason})",
-            track, measure_range
+            crate::tracks::track_display_number(track),
+            measure_range
         ));
         for (_, reserve_log) in &queued {
             self.append_log_line(reserve_log.clone());
@@ -265,7 +270,7 @@ impl DawApp {
         track: usize,
         measure: usize,
     ) {
-        if track == 0 || measure == 0 {
+        if track == 0 || measure == 0 || !crate::tracks::track_renders_audio(track) {
             return;
         }
         let play_position = ctx.play_position.lock().unwrap().clone();

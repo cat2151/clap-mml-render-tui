@@ -8,6 +8,7 @@
 //! なった。止める役と gate の計時は sender worker へ寄せ、ここが持つ
 //! [`MmlOverlay::sounding`] は表示専用とする。
 
+mod chord_transfer;
 mod contract;
 mod history;
 mod patch;
@@ -22,6 +23,7 @@ use ratatui_textarea::{DataCursor, TextArea};
 
 use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 
+use crate::chord_transfer::ChordTransferConfirm;
 use crate::cursor_notes::{notes_at_cursor, CursorNotes};
 use crate::history_select::{is_history_select_trigger, HistorySelect};
 use crate::line_play::{is_replay_key, line_events, LineStatus};
@@ -82,6 +84,12 @@ pub struct MmlOverlay<'a> {
     play_settings_select: Option<PlaySettingsSelect>,
     /// 直近に行を演奏した結果。
     line_status: LineStatus,
+    /// 打ちかけの 1 行を chord 行へ移せる画面か。開くときに呼び出し側が決める。
+    chord_row_transfer: bool,
+    /// いまの 1 行がコード表記として読めるか。ヒントの表示だけに使う。
+    chord_hint: bool,
+    /// 確定の直前に立っているダイアログ。最も手前のモーダル。
+    chord_transfer_confirm: Option<ChordTransferConfirm>,
 }
 
 impl Default for MmlOverlay<'_> {
@@ -109,6 +117,9 @@ impl Default for MmlOverlay<'_> {
             play_settings: PlaySettings::default(),
             play_settings_select: None,
             line_status: LineStatus::Idle,
+            chord_row_transfer: false,
+            chord_hint: false,
+            chord_transfer_confirm: None,
         }
     }
 }
@@ -184,10 +195,30 @@ impl<'a> MmlOverlay<'a> {
         self.patch_select = None;
         self.history_select = None;
         self.play_settings_select = None;
+        self.chord_row_transfer = context.chord_row_transfer;
+        self.chord_transfer_confirm = None;
         self.open = true;
+        // 開いた直後の初期テキストにも効かせる。手書きで書き込んでしまった
+        // コード表記は、開き直したときこそ気づける。
+        self.refresh_chord_hint();
     }
 
+    /// 打鍵を 1 つ処理する。
+    ///
+    /// chord のヒントは**どの経路を通っても最後に**作り直す。入力欄が変わる出口が
+    /// 複数ある（打鍵・行の移動・履歴の取り込み）ので、経路ごとに更新すると必ず
+    /// 取りこぼす。
     pub fn handle_key(&mut self, key: KeyEvent, now: Instant) -> MmlOverlayAction {
+        // 確定ダイアログは演奏設定よりさらに手前。開いている間は打鍵を入力欄へ通さない。
+        if self.chord_transfer_confirm.is_some() {
+            return self.handle_chord_transfer_key(key);
+        }
+        let action = self.handle_key_inner(key, now);
+        self.refresh_chord_hint();
+        action
+    }
+
+    fn handle_key_inner(&mut self, key: KeyEvent, now: Instant) -> MmlOverlayAction {
         // 演奏設定は最も手前のモーダル。音色選択の最中にも開ける必要があるので、
         // どの委譲よりも先に判定する。
         if let Some(action) = self.intercept_play_settings_key(key) {
@@ -260,6 +291,9 @@ impl<'a> MmlOverlay<'a> {
         self.patch_select_requested = false;
         self.history_select = None;
         self.play_settings_select = None;
+        self.chord_row_transfer = false;
+        self.chord_hint = false;
+        self.chord_transfer_confirm = None;
         self.open = false;
         self.forget_sounding();
     }

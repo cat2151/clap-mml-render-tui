@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::super::{
-    AbRepeatState, DawApp, DawMode, DawNormalAction, DawPlayState, NormalPasteUndo,
+    AbRepeatState, DawApp, DawMode, DawNormalAction, DawPlayState, NormalCellUndo,
     DEFAULT_TRACK0_MML, FIRST_PLAYABLE_TRACK,
 };
 use super::track_patch::PatchUpdateReason;
@@ -9,6 +9,8 @@ use super::track_patch::PatchUpdateReason;
 const TEMPO_TRACK: usize = 0;
 const INIT_MEASURE: usize = 0;
 
+mod chord_row;
+mod chord_wizard;
 mod playback;
 
 pub(super) use playback::{
@@ -126,26 +128,34 @@ impl DawApp {
             self.editor.cursor_measure,
             &yanked,
         ) {
-            self.editor.paste_undo = Some(NormalPasteUndo {
+            self.editor.cell_undo = Some(vec![NormalCellUndo {
                 track: self.editor.cursor_track,
                 measure: self.editor.cursor_measure,
                 previous,
-                pasted: yanked.clone(),
-            });
+                written: yanked.clone(),
+            }]);
             self.save();
             self.sync_playback_mml_state();
         }
         true
     }
 
-    fn undo_last_paste(&mut self) -> bool {
-        let Some(undo) = self.editor.paste_undo.take() else {
+    /// `u`: 直前の編集（`p` の 1 セル、または `G` が書いた複数セル）を 1 回だけ戻す。
+    ///
+    /// 書いた内容がそのまま残っているセルだけを戻す。書いたあとに手で直したセルは
+    /// 触らない（取り消しが、取り消しと無関係な編集を巻き込まないため）。
+    fn undo_last_edit(&mut self) -> bool {
+        let Some(undo) = self.editor.cell_undo.take() else {
             return false;
         };
-        if self.editor.data[undo.track][undo.measure] != undo.pasted {
-            return false;
+        let mut restored = false;
+        for cell in undo.iter().rev() {
+            if self.editor.data[cell.track][cell.measure] != cell.written {
+                continue;
+            }
+            restored |= self.commit_insert_cell(cell.track, cell.measure, &cell.previous);
         }
-        if self.commit_insert_cell(undo.track, undo.measure, &undo.previous) {
+        if restored {
             self.save();
             self.sync_playback_mml_state();
         }
@@ -359,6 +369,7 @@ impl DawApp {
                 self.editor.cursor_track -= 1;
                 self.preview_current_target_if_stopped();
             }
+            KeyCode::Char('C') => self.jump_between_chord_row_and_cursor_track(),
             KeyCode::Char('M') => {
                 self.editor.cursor_track = self.editor.tracks / 2;
             }
@@ -381,7 +392,7 @@ impl DawApp {
                 self.append_log_line("ヤンクバッファが空です".to_string());
             }
             KeyCode::Char('u') => {
-                self.undo_last_paste();
+                self.undo_last_edit();
             }
 
             KeyCode::Char('a') => self.cycle_ab_repeat(),
@@ -397,6 +408,7 @@ impl DawApp {
             }
 
             KeyCode::Char('g') => self.apply_generate_to_current_measure(),
+            KeyCode::Char('G') => self.apply_chord_wizard_to_current_measure(),
             KeyCode::Char('r') => {
                 if self.restore_default_tempo_init_if_empty() {
                     return DawNormalAction::Continue;

@@ -1,4 +1,4 @@
-use super::NormalPasteUndo;
+use super::NormalCellUndo;
 
 /// DAW の編集対象グリッドと、グリッド操作にだけ必要な一時状態。
 ///
@@ -8,13 +8,18 @@ pub(crate) struct DawEditorState {
     pub(crate) data: Vec<Vec<String>>,
     pub(crate) cursor_track: usize,
     pub(crate) cursor_measure: usize,
-    /// track 0 はヘッダ／テンポ、track 1 以降は演奏 track。
+    /// 行 index の総数。0 = Tempo / 1 = chord 行 / 2 以降が演奏 track
+    /// （対応は `crate::tracks` を参照）。
     pub(crate) tracks: usize,
     /// measure 0 は音色列、measure 1 以降は通常小節。
     pub(crate) measures: usize,
     pub(crate) yank_buffer: Option<String>,
     pub(crate) pending_delete: bool,
-    pub(crate) paste_undo: Option<NormalPasteUndo>,
+    /// `u` で 1 回だけ取り消せる直前の編集。paste は 1 セル、chord wizard（`G`）は
+    /// 複数セルを 1 操作で書くので、まとめて 1 つの塊として持つ。
+    pub(crate) cell_undo: Option<Vec<NormalCellUndo>>,
+    /// `C` で chord 行へ跳ぶ直前にいた行。もう一度 `C` を押すとここへ戻る。
+    pub(crate) chord_jump_return_track: Option<usize>,
 }
 
 impl DawEditorState {
@@ -33,7 +38,8 @@ impl DawEditorState {
             measures,
             yank_buffer: None,
             pending_delete: false,
-            paste_undo: None,
+            cell_undo: None,
+            chord_jump_return_track: None,
         }
     }
 }

@@ -13,7 +13,7 @@ fn apply_pending_http_commands_updates_mml_and_expands_grid() {
     let response_rx = enqueue_command(
         &state,
         DawHttpCommandKind::Mml {
-            track: 3,
+            track: 4,
             measure: 4,
             mml: "l8cde".to_string(),
         },
@@ -22,10 +22,10 @@ fn apply_pending_http_commands_updates_mml_and_expands_grid() {
     let mut app = build_test_app(cfg);
     app.apply_pending_http_commands();
 
-    assert_eq!(app.editor.tracks, 4);
+    assert_eq!(app.editor.tracks, 5);
     assert_eq!(app.editor.measures, 4);
-    assert_eq!(app.editor.data[3][4], "l8cde");
-    assert_eq!(state.lock().unwrap().grid_snapshot[3][4], "l8cde");
+    assert_eq!(app.editor.data[4][4], "l8cde");
+    assert_eq!(state.lock().unwrap().grid_snapshot[4][4], "l8cde");
     assert_eq!(response_rx.try_recv().unwrap(), Ok(()));
 
     deactivate_daw_http_server();
@@ -42,17 +42,17 @@ fn apply_pending_http_commands_updates_mixer_gain() {
     let cfg = default_config();
     let state = build_http_state(cfg.clone());
     activate_http_state(Arc::clone(&state));
-    let response_rx = enqueue_command(&state, DawHttpCommandKind::Mixer { track: 4, db: -6.0 });
+    let response_rx = enqueue_command(&state, DawHttpCommandKind::Mixer { track: 5, db: -6.0 });
 
     let mut app = build_test_app(cfg);
     app.apply_pending_http_commands();
 
-    assert_eq!(app.track_volume_db(4), -6);
+    assert_eq!(app.track_volume_db(5), -6);
     assert_eq!(
-        app.playback.track_gains.lock().unwrap()[4],
+        app.playback.track_gains.lock().unwrap()[5],
         10.0f32.powf(-6.0 / 20.0)
     );
-    assert_eq!(state.lock().unwrap().grid_snapshot.len(), 5);
+    assert_eq!(state.lock().unwrap().grid_snapshot.len(), 6);
     assert_eq!(response_rx.try_recv().unwrap(), Ok(()));
 
     deactivate_daw_http_server();
@@ -75,7 +75,7 @@ fn apply_pending_http_commands_updates_patch_init_cell() {
     let response_rx = enqueue_command(
         &state,
         DawHttpCommandKind::Patch {
-            track: 1,
+            track: 2,
             patch: "Pads/Factory Pad.fxp".to_string(),
         },
     );
@@ -84,11 +84,11 @@ fn apply_pending_http_commands_updates_patch_init_cell() {
     app.apply_pending_http_commands();
 
     assert_eq!(
-        app.editor.data[1][0],
+        app.editor.data[2][0],
         DawApp::build_patch_json("Pads/Factory Pad.fxp")
     );
     assert_eq!(
-        state.lock().unwrap().grid_snapshot[1][0],
+        state.lock().unwrap().grid_snapshot[2][0],
         DawApp::build_patch_json("Pads/Factory Pad.fxp")
     );
     assert_eq!(response_rx.try_recv().unwrap(), Ok(()));
@@ -110,21 +110,21 @@ fn apply_pending_http_commands_updates_random_patch_init_cell() {
     cfg.patches_dirs = Some(vec![tmp.to_string_lossy().into_owned()]);
     let state = build_http_state(cfg.clone());
     activate_http_state(Arc::clone(&state));
-    let response_rx = enqueue_command(&state, DawHttpCommandKind::RandomPatch { track: 1 });
+    let response_rx = enqueue_command(&state, DawHttpCommandKind::RandomPatch { track: 2 });
 
     let mut app = build_test_app(cfg);
-    app.editor.data[1][0] =
+    app.editor.data[2][0] =
         r#"{"Surge XT patch":"Old/Lead 1.fxp","Surge XT patch filter":"pad","custom":"keep"}l1"#
             .to_string();
-    app.editor.data[1][1] = "l8cde".to_string();
+    app.editor.data[2][1] = "l8cde".to_string();
     app.apply_pending_http_commands();
 
     assert_eq!(
-        app.editor.data[1][0],
+        app.editor.data[2][0],
         r#"{"Surge XT patch":"Pad/Pad 1.fxp","Surge XT patch filter":"pad","custom":"keep"}l1"#
     );
     assert_eq!(
-        state.lock().unwrap().grid_snapshot[1][0],
+        state.lock().unwrap().grid_snapshot[2][0],
         r#"{"Surge XT patch":"Pad/Pad 1.fxp","Surge XT patch filter":"pad","custom":"keep"}l1"#
     );
     assert_eq!(response_rx.try_recv().unwrap(), Ok(()));
@@ -133,7 +133,7 @@ fn apply_pending_http_commands_updates_random_patch_init_cell() {
         .lock()
         .unwrap()
         .iter()
-        .any(|line| line == "http: patch/random track=1"));
+        .any(|line| line == "http: patch/random track=2"));
 
     deactivate_daw_http_server();
     std::fs::remove_dir_all(&tmp).ok();
@@ -148,7 +148,7 @@ fn apply_random_patch_to_track_rejects_out_of_range_track() {
 
     assert_eq!(
         result,
-        Err("track は 1..=2 の範囲で指定してください".to_string())
+        Err("track は 2..=3 の範囲で指定してください".to_string())
     );
 }
 
@@ -161,7 +161,7 @@ fn apply_pending_http_commands_starts_play() {
     let response_rx = enqueue_command(&state, DawHttpCommandKind::PlayStart);
 
     let mut app = build_test_app(cfg);
-    app.editor.data[1][1] = "l8c".to_string();
+    app.editor.data[2][1] = "l8c".to_string();
     app.apply_pending_http_commands();
 
     assert!(matches!(

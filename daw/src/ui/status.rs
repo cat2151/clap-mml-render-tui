@@ -78,10 +78,10 @@ pub(super) fn draw_status(
 
     let footer_text = match app.mode {
         DawMode::Normal if app.workspace_kind == WorkspaceKind::Daily => {
-            "DAILY DAW  Shift+H:history  h/←・l/→:meas preview  j/k:track preview  dd:cut  p:paste  u:undo  i/Ctrl+P:MML入力  e:cfg  g:generate  a:A-B  Shift+P:play/stop  Enter/Space:1trk  Shift+Enter:all  Shift+Space:from here  n:notepad  v:keyboard  Ctrl+G:screens"
+            "DAILY DAW  Shift+H:history  h/←・l/→:meas preview  j/k:track preview  C:chord行  dd:cut  p:paste  u:undo  i/Ctrl+P:MML入力  e:cfg  g:generate  G:chord wizard  a:A-B  Shift+P:play/stop  Enter/Space:1trk  Shift+Enter:all  Shift+Space:from here  n:notepad  v:keyboard  Ctrl+G:screens"
         }
         DawMode::Normal => {
-            "DAW  Shift+H:history  h/←・l/→:meas preview  j/k:track preview  dd:cut  p:paste  u:undo  i/Ctrl+P:MML入力  f:file  e:cfg  g:generate  a:A-B  Shift+P:play/stop  Enter/Space:1trk  Shift+Enter:all  Shift+Space:from here  n:notepad  v:keyboard  Ctrl+G:screens"
+            "DAW  Shift+H:history  h/←・l/→:meas preview  j/k:track preview  C:chord行  dd:cut  p:paste  u:undo  i/Ctrl+P:MML入力  f:file  e:cfg  g:generate  G:chord wizard  a:A-B  Shift+P:play/stop  Enter/Space:1trk  Shift+Enter:all  Shift+Space:from here  n:notepad  v:keyboard  Ctrl+G:screens"
         }
         DawMode::Insert => "INSERT  ESC:確定→NORMAL  Enter:確定→次小節",
         DawMode::MmlOverlay => {

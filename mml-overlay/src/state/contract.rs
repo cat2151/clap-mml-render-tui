@@ -65,6 +65,14 @@ pub enum MmlOverlayAction {
         line: String,
         close: bool,
     },
+    /// 打ちかけの 1 行を chord 行へ移す。overlay 側は既に閉じてある。
+    ///
+    /// **破棄ではない。** MML のつもりで打った文字列がコード表記だったとき、
+    /// その文字列を捨てずに chord 行の同じ小節へ持っていく。編集中だったセルへは
+    /// 何も書かない（書くと 2 節のバグ＝無音のセルがそのまま残る）。
+    TransferToChordRow {
+        line: String,
+    },
     /// オーバーレイを閉じる。鳴っているものを止めるのも含む。
     Close,
 }
@@ -113,6 +121,11 @@ pub struct MmlOverlayContext {
     pub favorites: Vec<String>,
     /// `(Grid Sequencer 上の役割 group, 正規表現)` のユーザー追加プリセット。
     pub patch_filter_presets: Vec<(String, String)>,
+    /// 打ちかけの 1 行を chord 行へ移せるか。**chord 行を持つ画面（DAW）だけ `true`。**
+    ///
+    /// notepad / keyboard / grid から開いた overlay には移送先が無いので、
+    /// chord のヒントも確認ダイアログも一切出さない（出しても行き先が無い）。
+    pub chord_row_transfer: bool,
     /// 設定不足でカタログから外れたプラグインの案内（`SkippedCatalogPlugin::notice_line`）。
     ///
     /// 「音色一覧に出てこない」は一覧を見ているだけでは絶対に気づけない

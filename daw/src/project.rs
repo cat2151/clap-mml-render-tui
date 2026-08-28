@@ -1,6 +1,10 @@
 //! 明示的に保存・読み込みする DAW project file。
 
 mod save;
+mod validate;
+
+use validate::validate_project_file;
+pub(crate) use validate::{project_snapshot_for_recovery, validate_project_file_for_recovery};
 
 use std::path::{Path, PathBuf};
 
@@ -8,7 +12,11 @@ use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    mml::{build_cell_mml_from_data, measure_duration_samples_from_data},
+    mml::{build_cell_mml_from_data, cell_has_content, measure_duration_samples_from_data},
+    tracks::{
+        grid_row_from_saved_track, grid_track_count_from_saved, saved_track_count_from_grid,
+        saved_track_from_grid_row, CHORD_TRACK, FIRST_SAVED_PLAYABLE_TRACK,
+    },
     AbRepeatState, CacheState, CellCache, DawApp, FIRST_PLAYABLE_TRACK, MIXER_MAX_DB, MIXER_MIN_DB,
 };
 
@@ -24,12 +32,26 @@ pub(crate) struct DawProjectFile {
     project: DawProjectData,
 }
 
+/// project file 上の track 表現。
+///
+/// `track_count` / `track_index` は chord 行が入る前の番号のまま
+/// （0 = global header, 1.. = instrument）。chord 行だけは `chord_track` に置く。
+/// これで chord 行を使わない project file は従来と同一内容のまま読み書きできる。
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct DawProjectData {
     track_count: usize,
     playable_measure_count: usize,
     tracks: Vec<DawProjectTrack>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    chord_track: Option<DawProjectChordTrack>,
+}
+
+/// project file 上の chord 行。全セルが空なら書き出さない。
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DawProjectChordTrack {
+    non_empty_cells: Vec<DawProjectCell>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -100,6 +122,19 @@ fn cell_role(measure: usize) -> DawProjectCellRole {
     }
 }
 
+fn non_empty_cells(row: &[String], measures: usize) -> Vec<DawProjectCell> {
+    row.iter()
+        .enumerate()
+        .take(measures + 1)
+        .filter(|(_, mml)| !mml.trim().is_empty())
+        .map(|(measure_index, mml)| DawProjectCell {
+            measure_index,
+            role: cell_role(measure_index),
+            mml: mml.clone(),
+        })
+        .collect()
+}
+
 pub(crate) fn project_file_from_app(app: &DawApp) -> DawProjectFile {
     let tracks = app
         .editor
@@ -107,163 +142,35 @@ pub(crate) fn project_file_from_app(app: &DawApp) -> DawProjectFile {
         .iter()
         .enumerate()
         .take(app.editor.tracks)
-        .map(|(track_index, row)| DawProjectTrack {
-            track_index,
-            role: track_role(track_index),
-            volume_db: app.track_volumes_db.get(track_index).copied().unwrap_or(0),
-            non_empty_cells: row
-                .iter()
-                .enumerate()
-                .take(app.editor.measures + 1)
-                .filter(|(_, mml)| !mml.trim().is_empty())
-                .map(|(measure_index, mml)| DawProjectCell {
-                    measure_index,
-                    role: cell_role(measure_index),
-                    mml: mml.clone(),
-                })
-                .collect(),
+        .filter_map(|(row_index, row)| {
+            let track_index = saved_track_from_grid_row(row_index)?;
+            Some(DawProjectTrack {
+                track_index,
+                role: track_role(track_index),
+                volume_db: app.track_volumes_db.get(row_index).copied().unwrap_or(0),
+                non_empty_cells: non_empty_cells(row, app.editor.measures),
+            })
         })
         .collect();
+    let chord_cells = app
+        .editor
+        .data
+        .get(CHORD_TRACK)
+        .map(|row| non_empty_cells(row, app.editor.measures))
+        .unwrap_or_default();
 
     DawProjectFile {
         format: PROJECT_FORMAT.to_string(),
         format_version: PROJECT_FORMAT_VERSION,
         project: DawProjectData {
-            track_count: app.editor.tracks,
+            track_count: saved_track_count_from_grid(app.editor.tracks),
             playable_measure_count: app.editor.measures,
             tracks,
+            chord_track: (!chord_cells.is_empty()).then_some(DawProjectChordTrack {
+                non_empty_cells: chord_cells,
+            }),
         },
     }
-}
-
-fn try_empty_grid(tracks: usize, measures: usize) -> Result<Vec<Vec<String>>> {
-    let columns = measures
-        .checked_add(1)
-        .context("playable_measure_count が大きすぎます")?;
-    tracks
-        .checked_mul(columns)
-        .context("project grid が大きすぎます")?;
-
-    let mut data = Vec::new();
-    data.try_reserve_exact(tracks)
-        .context("project track 用メモリを確保できません")?;
-    for _ in 0..tracks {
-        let mut row = Vec::new();
-        row.try_reserve_exact(columns)
-            .context("project measure 用メモリを確保できません")?;
-        row.resize_with(columns, String::new);
-        data.push(row);
-    }
-    Ok(data)
-}
-
-fn validate_project_file(file: &DawProjectFile) -> Result<DawProjectSnapshot> {
-    if file.format != PROJECT_FORMAT {
-        bail!(
-            "project format が違います: expected={PROJECT_FORMAT}, actual={}",
-            file.format
-        );
-    }
-    if file.format_version != PROJECT_FORMAT_VERSION {
-        bail!(
-            "未対応の project format_version です: {}",
-            file.format_version
-        );
-    }
-
-    let project = &file.project;
-    if project.track_count <= FIRST_PLAYABLE_TRACK {
-        bail!("track_count は2以上である必要があります");
-    }
-    if project.playable_measure_count == 0 {
-        bail!("playable_measure_count は1以上である必要があります");
-    }
-    if project.tracks.len() != project.track_count {
-        bail!(
-            "tracks の要素数が track_count と一致しません: {} != {}",
-            project.tracks.len(),
-            project.track_count
-        );
-    }
-
-    let mut data = try_empty_grid(project.track_count, project.playable_measure_count)?;
-    let mut track_volumes_db = Vec::new();
-    track_volumes_db
-        .try_reserve_exact(project.track_count)
-        .context("track volume 用メモリを確保できません")?;
-    track_volumes_db.resize(project.track_count, 0);
-
-    for (expected_track_index, track) in project.tracks.iter().enumerate() {
-        if track.track_index != expected_track_index {
-            bail!(
-                "tracks は track_index 順に重複なく並べる必要があります: expected={}, actual={}",
-                expected_track_index,
-                track.track_index
-            );
-        }
-        if track.role != track_role(track.track_index) {
-            bail!("track{} の role が index と一致しません", track.track_index);
-        }
-        if track.track_index == 0 && track.volume_db != 0 {
-            bail!("global header track の volume_db は0である必要があります");
-        }
-        if !(MIXER_MIN_DB..=MIXER_MAX_DB).contains(&track.volume_db) {
-            bail!(
-                "track{} の volume_db が範囲外です: {}",
-                track.track_index,
-                track.volume_db
-            );
-        }
-        track_volumes_db[track.track_index] = track.volume_db;
-
-        let mut previous_measure = None;
-        for cell in &track.non_empty_cells {
-            if cell.measure_index > project.playable_measure_count {
-                bail!(
-                    "track{} の measure_index が範囲外です: {}",
-                    track.track_index,
-                    cell.measure_index
-                );
-            }
-            if previous_measure.is_some_and(|previous| cell.measure_index <= previous) {
-                bail!(
-                    "track{} の non_empty_cells は measure_index 順に重複なく並べる必要があります",
-                    track.track_index
-                );
-            }
-            if cell.role != cell_role(cell.measure_index) {
-                bail!(
-                    "track{} measure{} の role が index と一致しません",
-                    track.track_index,
-                    cell.measure_index
-                );
-            }
-            if cell.mml.trim().is_empty() {
-                bail!(
-                    "track{} measure{} は non_empty_cells 内で空にできません",
-                    track.track_index,
-                    cell.measure_index
-                );
-            }
-            previous_measure = Some(cell.measure_index);
-            data[track.track_index][cell.measure_index] = cell.mml.clone();
-        }
-    }
-
-    Ok(DawProjectSnapshot {
-        data,
-        track_volumes_db,
-        tracks: project.track_count,
-        measures: project.playable_measure_count,
-    })
-}
-
-pub(crate) fn validate_project_file_for_recovery(file: &DawProjectFile) -> Result<()> {
-    validate_project_file(file).map(|_| ())
-}
-
-pub(crate) fn project_snapshot_for_recovery(file: &DawProjectFile) -> Result<DawProjectSnapshot> {
-    validate_project_file(file)
 }
 
 fn resolve_project_path(path_text: &str) -> Result<PathBuf> {
@@ -290,22 +197,21 @@ fn read_project_file(path: &Path) -> Result<DawProjectSnapshot> {
 }
 
 fn preview_from_snapshot(snapshot: &DawProjectSnapshot, sample_rate: f64) -> DawProjectPreview {
+    // 「中身のある最初の小節」は生のセル文字列では判定しない。
+    // chord 行から生成される track はセルが空のままでも音が出る。
     let measure = (1..=snapshot.measures).find(|&measure| {
-        (FIRST_PLAYABLE_TRACK..snapshot.tracks).any(|track| {
-            snapshot.data[track]
-                .get(measure)
-                .is_some_and(|mml| !mml.trim().is_empty())
-        })
+        (FIRST_PLAYABLE_TRACK..snapshot.tracks)
+            .any(|track| cell_has_content(&snapshot.data, track, measure))
     });
     let track_mmls = (0..snapshot.tracks)
-        .map(|track| {
-            if track < FIRST_PLAYABLE_TRACK
-                || measure.is_none_or(|measure| snapshot.data[track][measure].trim().is_empty())
+        .map(|track| match measure {
+            Some(measure)
+                if track >= FIRST_PLAYABLE_TRACK
+                    && cell_has_content(&snapshot.data, track, measure) =>
             {
-                String::new()
-            } else {
-                build_cell_mml_from_data(&snapshot.data, snapshot.measures, track, measure.unwrap())
+                build_cell_mml_from_data(&snapshot.data, snapshot.measures, track, measure)
             }
+            _ => String::new(),
         })
         .collect();
     let track_gains = snapshot
@@ -406,7 +312,8 @@ impl DawApp {
         self.editor.cursor_measure = self.editor.cursor_measure.min(snapshot.measures);
         self.editor.yank_buffer = None;
         self.editor.pending_delete = false;
-        self.editor.paste_undo = None;
+        self.editor.cell_undo = None;
+        self.editor.chord_jump_return_track = None;
         self.track_volumes_db = snapshot.track_volumes_db;
         self.solo_tracks = vec![false; snapshot.tracks];
         *self.track_rerender_batches.lock().unwrap() = (0..snapshot.tracks).map(|_| None).collect();

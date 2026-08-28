@@ -530,6 +530,7 @@ name = "cmrt-daw"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chord2mml-core",
  "cmrt-history",
  "cmrt-mml-overlay",
  "cmrt-offline-render",
@@ -540,6 +541,7 @@ dependencies = [
  "cmrt-tui-core",
  "crossterm",
  "hound",
+ "midly",
  "mmlabc-to-smf",
  "ratatui",
  "ratatui-explorer",

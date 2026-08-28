@@ -31,9 +31,9 @@ fn save_as_then_open_restores_grid_and_mixer_from_one_file() {
     let project_path = tmp.path().join("song.cmrt-daw.json");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.data[0][0] = r#"{"beat":"4/4"}t132"#.to_string();
-    app.editor.data[1][0] = r#"{"Surge XT patch":"Piano"}"#.to_string();
-    app.editor.data[1][2] = "l8cdef".to_string();
-    app.track_volumes_db[1] = -6;
+    app.editor.data[2][0] = r#"{"Surge XT patch":"Piano"}"#.to_string();
+    app.editor.data[2][2] = "l8cdef".to_string();
+    app.track_volumes_db[2] = -6;
 
     app.start_project_overlay();
     app.handle_project_key_event(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
@@ -47,16 +47,16 @@ fn save_as_then_open_restores_grid_and_mixer_from_one_file() {
     assert!(json.contains("l8cdef"));
 
     app.editor.data[0][0] = "t60".to_string();
-    app.editor.data[1][2].clear();
-    app.track_volumes_db[1] = 3;
+    app.editor.data[2][2].clear();
+    app.track_volumes_db[2] = 3;
     app.start_project_overlay();
     app.handle_project_key_event(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::NONE));
     app.handle_project_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     assert_eq!(app.mode, DawMode::Normal);
     assert_eq!(app.editor.data[0][0], r#"{"beat":"4/4"}t132"#);
-    assert_eq!(app.editor.data[1][2], "l8cdef");
-    assert_eq!(app.track_volumes_db[1], -6);
+    assert_eq!(app.editor.data[2][2], "l8cdef");
+    assert_eq!(app.track_volumes_db[2], -6);
 }
 
 #[test]
@@ -67,7 +67,7 @@ fn save_as_renames_existing_file_and_notice_lives_with_project_overlay() {
     let backup_path = tmp.path().join("song.cmrt-daw.json.bak");
     std::fs::write(&project_path, "old project").unwrap();
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.data[1][1] = "new project".to_string();
+    app.editor.data[2][1] = "new project".to_string();
 
     app.start_project_overlay();
     app.handle_project_key_event(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
@@ -141,7 +141,7 @@ fn invalid_open_keeps_current_project_untouched_and_shows_error() {
     let project_path = tmp.path().join("broken.cmrt-daw.json");
     std::fs::write(&project_path, r#"{"format":"wrong"}"#).unwrap();
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.data[1][1] = "keep me".to_string();
+    app.editor.data[2][1] = "keep me".to_string();
     app.overlays.project.current_path = Some(project_path.clone());
 
     app.start_project_overlay();
@@ -149,7 +149,7 @@ fn invalid_open_keeps_current_project_untouched_and_shows_error() {
     app.handle_project_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     assert_eq!(app.mode, DawMode::Project);
-    assert_eq!(app.editor.data[1][1], "keep me");
+    assert_eq!(app.editor.data[2][1], "keep me");
     assert!(app.overlays.project.error.is_some());
 }
 
@@ -268,10 +268,10 @@ fn open_selector_automatically_previews_without_applying_project() {
     let project_path = tmp.path().join("preview.cmrt-daw.json");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.data[0][0] = "t150".to_string();
-    app.editor.data[1][2] = "cdef".to_string();
+    app.editor.data[2][2] = "cdef".to_string();
     app.save_project_as(&project_path.to_string_lossy())
         .unwrap();
-    app.editor.data[1][2] = "still-current".to_string();
+    app.editor.data[2][2] = "still-current".to_string();
     app.overlays.project.current_path = Some(project_path);
 
     app.start_project_overlay();
@@ -295,7 +295,7 @@ fn open_selector_automatically_previews_without_applying_project() {
         .as_deref()
         .unwrap()
         .contains("preview: meas2"));
-    assert_eq!(app.editor.data[1][2], "still-current");
+    assert_eq!(app.editor.data[2][2], "still-current");
 
     app.handle_project_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     assert!(*app.playback.play_state.lock().unwrap() == DawPlayState::Idle);
@@ -307,7 +307,7 @@ fn manual_project_preview_starts_only_with_space() {
     std::fs::create_dir_all(tmp.path()).unwrap();
     let project_path = tmp.path().join("preview.cmrt-daw.json");
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.data[1][1] = "g".to_string();
+    app.editor.data[2][1] = "g".to_string();
     app.save_project_as(&project_path.to_string_lossy())
         .unwrap();
     app.overlays.project.current_path = Some(project_path);
@@ -360,14 +360,15 @@ fn open_resizes_all_project_dependent_buffers() {
 
     app.open_project(&project_path.to_string_lossy()).unwrap();
 
-    assert_eq!((app.editor.tracks, app.editor.measures), (4, 3));
-    assert_eq!(app.editor.data.len(), 4);
+    // 保存ファイルの track_count は 4。グリッドは chord 行のぶん 1 行増えて 5 になる。
+    assert_eq!((app.editor.tracks, app.editor.measures), (5, 3));
+    assert_eq!(app.editor.data.len(), 5);
     assert!(app.editor.data.iter().all(|row| row.len() == 4));
-    assert_eq!(app.editor.data[3][3], "g");
-    assert_eq!(app.track_volumes_db, vec![0, -3, 0, 6]);
-    assert_eq!(app.solo_tracks, vec![false; 4]);
+    assert_eq!(app.editor.data[4][3], "g");
+    assert_eq!(app.track_volumes_db, vec![0, 0, -3, 0, 6]);
+    assert_eq!(app.solo_tracks, vec![false; 5]);
     let cache = app.cache.lock().unwrap();
-    assert_eq!(cache.len(), 4);
+    assert_eq!(cache.len(), 5);
     assert!(cache.iter().all(|row| row.len() == 4));
     drop(cache);
     assert_eq!(app.playback.measure_mmls.lock().unwrap().len(), 3);
@@ -377,6 +378,52 @@ fn open_resizes_all_project_dependent_buffers() {
         .lock()
         .unwrap()
         .iter()
-        .all(|tracks| tracks.len() == 4));
-    assert_eq!(app.playback.track_gains.lock().unwrap().len(), 4);
+        .all(|tracks| tracks.len() == 5));
+    assert_eq!(app.playback.track_gains.lock().unwrap().len(), 5);
+}
+
+// ─── chord 行 ────────────────────────────────────────────────
+
+/// chord 行に書いた内容は project file に保存され、開き直すと chord 行へ戻る。
+#[test]
+fn a_chord_row_survives_saving_and_opening_a_project_file() {
+    let tmp = unique_temp_dir("chord_row");
+    std::fs::create_dir_all(tmp.path()).unwrap();
+    let _history_guard = cmrt_history::test_support::set_local_dir_envs(tmp.path());
+    let project_path = tmp.path().join("chord.cmrt-daw.json");
+    let (mut app, _cache_rx) = build_test_app();
+    app.editor.data[0][0] = r#"{"beat":"4/4"}t120"#.to_string();
+    app.editor.data[crate::CHORD_TRACK][0] = "key:G".to_string();
+    app.editor.data[crate::CHORD_TRACK][1] = "I-IV-V-I".to_string();
+    app.editor.data[crate::FIRST_PLAYABLE_TRACK][1] = "cde".to_string();
+
+    app.save_project_as(&project_path.to_string_lossy())
+        .unwrap();
+    app.editor.data[crate::CHORD_TRACK][0].clear();
+    app.editor.data[crate::CHORD_TRACK][1].clear();
+    app.open_project(&project_path.to_string_lossy()).unwrap();
+
+    assert_eq!(app.editor.data[crate::CHORD_TRACK][0], "key:G");
+    assert_eq!(app.editor.data[crate::CHORD_TRACK][1], "I-IV-V-I");
+    assert_eq!(app.editor.data[crate::FIRST_PLAYABLE_TRACK][1], "cde");
+}
+
+/// chord 行を使わなければ project file に chord_track は現れない。
+#[test]
+fn an_empty_chord_row_is_left_out_of_the_project_file() {
+    let tmp = unique_temp_dir("chord_row_absent");
+    std::fs::create_dir_all(tmp.path()).unwrap();
+    let _history_guard = cmrt_history::test_support::set_local_dir_envs(tmp.path());
+    let project_path = tmp.path().join("plain.cmrt-daw.json");
+    let (mut app, _cache_rx) = build_test_app();
+    app.editor.data[0][0] = r#"{"beat":"4/4"}t120"#.to_string();
+    app.editor.data[crate::FIRST_PLAYABLE_TRACK][1] = "cde".to_string();
+
+    app.save_project_as(&project_path.to_string_lossy())
+        .unwrap();
+
+    let json = std::fs::read_to_string(&project_path).unwrap();
+    assert!(!json.contains("chord_track"), "json: {json}");
+    // 演奏 track の保存番号は chord 行のぶんずれない（画面の T1 = "track_index": 1）
+    assert!(json.contains(r#""track_index": 1"#), "json: {json}");
 }

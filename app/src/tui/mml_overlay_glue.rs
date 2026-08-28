@@ -62,6 +62,9 @@ impl TuiApp<'_> {
             history: history.to_vec(),
             favorites: favorites.to_vec(),
             patch_filter_presets: crate::history::load_mml_patch_filter_presets(),
+            // notepad / keyboard / grid には chord 行が無い。移送先が無いので
+            // chord のヒントも確認ダイアログも出さない。
+            chord_row_transfer: false,
             catalog_notes,
         }
     }
@@ -153,9 +156,12 @@ impl TuiApp<'_> {
         let command_id = match action {
             // Commit は 1 行モードでしか返らない。app 側は複数行モードでしか
             // 開かないのでここへは来ない（来ても sender へ用は無い）。
+            // TransferToChordRow も同じで、chord 行を持つのは DAW 画面だけ
+            // （`MmlOverlayContext::chord_row_transfer` を立てていない）。
             MmlOverlayAction::Continue
             | MmlOverlayAction::Close
             | MmlOverlayAction::Commit { .. }
+            | MmlOverlayAction::TransferToChordRow { .. }
             | MmlOverlayAction::SavePatchFilterPresets { .. } => None,
             MmlOverlayAction::Send(notes) => {
                 let id = sender.send(self.mml_overlay.patch(), notes.messages, notes.duration);

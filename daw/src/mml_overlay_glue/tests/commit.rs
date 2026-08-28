@@ -12,10 +12,10 @@ use crate::input::tests::build_test_app;
 /// track1 の meas1・meas2 に MML を置いて、meas1 のセルを開いた状態にする。
 fn opened_on_the_first_measure() -> (DawApp, std::sync::mpsc::Receiver<crate::CacheJob>) {
     let (mut app, cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
-    app.editor.data[1][1] = "cde".to_string();
-    app.editor.data[1][2] = "gab".to_string();
+    app.editor.data[2][1] = "cde".to_string();
+    app.editor.data[2][2] = "gab".to_string();
     assert!(app.try_open_mml_overlay(ctrl('p')));
     (app, cache_rx)
 }
@@ -28,7 +28,7 @@ fn enter_writes_the_line_back_and_opens_the_next_measure() {
     app.handle_mml_overlay_key_event(plain('f'));
     app.handle_mml_overlay_key_event(key(KeyCode::Enter));
 
-    assert_eq!(app.editor.data[1][1], "cdef", "確定した行がセルへ入るはず");
+    assert_eq!(app.editor.data[2][1], "cdef", "確定した行がセルへ入るはず");
     assert_eq!(app.editor.cursor_measure, 2, "次の meas へ進むはず");
     assert_eq!(app.mode, DawMode::MmlOverlay);
     assert!(
@@ -45,16 +45,16 @@ fn enter_writes_the_line_back_and_opens_the_next_measure() {
 #[test]
 fn enter_on_the_last_measure_keeps_the_cursor_in_range() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = app.editor.measures;
-    app.editor.data[1][app.editor.measures] = "gab".to_string();
+    app.editor.data[2][app.editor.measures] = "gab".to_string();
     assert!(app.try_open_mml_overlay(ctrl('p')));
 
     app.handle_mml_overlay_key_event(plain('c'));
     app.handle_mml_overlay_key_event(key(KeyCode::Enter));
 
     assert_eq!(app.editor.cursor_measure, app.editor.measures);
-    assert_eq!(app.editor.data[1][app.editor.measures], "gabc");
+    assert_eq!(app.editor.data[2][app.editor.measures], "gabc");
     assert!(app.mml_overlay.is_open());
     assert_eq!(
         app.mml_overlay.value(),
@@ -70,7 +70,7 @@ fn esc_writes_the_line_back_and_closes() {
     app.handle_mml_overlay_key_event(plain('f'));
     app.handle_mml_overlay_key_event(key(KeyCode::Esc));
 
-    assert_eq!(app.editor.data[1][1], "cdef");
+    assert_eq!(app.editor.data[2][1], "cdef");
     assert_eq!(app.editor.cursor_measure, 1, "閉じるときは進めない");
     assert_eq!(app.mode, DawMode::Normal);
     assert!(!app.mml_overlay.is_open());
@@ -85,7 +85,7 @@ fn an_emptied_line_clears_the_cell() {
     }
     app.handle_mml_overlay_key_event(key(KeyCode::Esc));
 
-    assert_eq!(app.editor.data[1][1], "");
+    assert_eq!(app.editor.data[2][1], "");
 }
 
 #[test]
@@ -130,10 +130,10 @@ fn real_catalog_commit_opens_the_next_measure_without_stalling() {
         app.cfg = std::sync::Arc::new(cfg);
         *app.patch_load.lock().unwrap() =
             cmrt_tui_core::patch_load::PatchLoadState::ready(pairs.clone());
-        app.editor.cursor_track = 1;
+        app.editor.cursor_track = 2;
         app.editor.cursor_measure = 1;
-        app.editor.data[1][1] = "cde".to_string();
-        app.editor.data[1][2] = "gab".to_string();
+        app.editor.data[2][1] = "cde".to_string();
+        app.editor.data[2][2] = "gab".to_string();
 
         let started = std::time::Instant::now();
         assert!(app.try_open_mml_overlay(ctrl('p')));

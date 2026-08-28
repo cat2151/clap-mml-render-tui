@@ -9,5 +9,5 @@ fn handle_normal_m_enters_mixer_mode_on_playable_track() {
 
     assert!(matches!(result, super::super::DawNormalAction::Continue));
     assert!(matches!(app.mode, DawMode::Mixer));
-    assert_eq!(app.overlays.mixer.cursor_track, 1);
+    assert_eq!(app.overlays.mixer.cursor_track, 2);
 }

@@ -54,6 +54,21 @@ pub fn resolve_chord_or_mml(input: &str) -> ResolvedMml {
     }
 }
 
+/// chord2mml がこの入力を受け付けるか。
+///
+/// **言語を決めるための判定ではない。** 「MML のつもりで書いた文字列が、実は
+/// コード表記としても読める」という**間違いの検出**にだけ使う
+/// （MML パーサは未知の文字を黙って捨てるので、誤りは無音や単音として現れ、
+/// 変換エラーにはならない）。言語を位置で決める呼び出し側（DAW）が、
+/// [`resolve_chord_or_mml`] のフォールバックを持ち込まずにこの判定だけを使えるよう、
+/// 真偽値だけを返す形で分けてある。
+pub fn parses_as_chord(input: &str) -> bool {
+    if input.trim().is_empty() {
+        return false;
+    }
+    chord2mml_core::convert(input).is_ok()
+}
+
 /// コード表記または MML を、時刻つきイベント列へ変換する。
 pub fn timed_performance(input: &str) -> Result<TimedPerformance, String> {
     if input.trim().is_empty() {

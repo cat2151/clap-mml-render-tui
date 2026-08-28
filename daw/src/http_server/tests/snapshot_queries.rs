@@ -188,7 +188,7 @@ fn sync_http_status_snapshot_captures_play_grid_and_cache_counts() {
     assert_eq!(snapshot.cache.rendering_count, 1);
     assert_eq!(snapshot.cache.ready_count, 1);
     assert_eq!(snapshot.cache.error_count, 0);
-    assert_eq!(snapshot.grid.tracks, 3);
+    assert_eq!(snapshot.grid.tracks, 4);
     assert_eq!(snapshot.grid.measures, 2);
 
     deactivate_daw_http_server();

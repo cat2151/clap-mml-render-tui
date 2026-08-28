@@ -7,6 +7,7 @@ fn sample_file() -> DawProjectFile {
         project: DawProjectData {
             track_count: 2,
             playable_measure_count: 2,
+            chord_track: None,
             tracks: vec![
                 DawProjectTrack {
                     track_index: 0,
@@ -44,10 +45,12 @@ fn project_json_is_self_identifying_and_roundtrips() {
 
     let loaded = serde_json::from_str(&json).unwrap();
     let snapshot = validate_project_file(&loaded).unwrap();
-    assert_eq!(snapshot.tracks, 2);
+    // 保存ファイルの track_count は chord 行を含まない（2）。
+    // グリッドは chord 行のぶん 1 行増える。
+    assert_eq!(snapshot.tracks, 3);
     assert_eq!(snapshot.measures, 2);
-    assert_eq!(snapshot.data[1][2], "cdef");
-    assert_eq!(snapshot.track_volumes_db, vec![0, -6]);
+    assert_eq!(snapshot.data[crate::FIRST_PLAYABLE_TRACK][2], "cdef");
+    assert_eq!(snapshot.track_volumes_db, vec![0, 0, -6]);
 }
 
 #[test]
@@ -109,13 +112,14 @@ fn preview_inspection_uses_first_playable_measure_without_applying_project() {
 
     let preview = preview_from_snapshot(&snapshot, 44_100.0);
 
-    assert_eq!((preview.tracks, preview.measures), (2, 2));
+    assert_eq!((preview.tracks, preview.measures), (3, 2));
     assert_eq!(preview.measure_index, Some(1));
     assert_eq!(preview.measure_samples, 176_400);
     assert!(preview.track_mmls[0].is_empty());
-    assert!(preview.track_mmls[1].contains("t120"));
-    assert!(preview.track_mmls[1].contains("cdef"));
-    assert!((preview.track_gains[1] - 0.501_187_2).abs() < 0.000_001);
+    assert!(preview.track_mmls[crate::CHORD_TRACK].is_empty());
+    assert!(preview.track_mmls[crate::FIRST_PLAYABLE_TRACK].contains("t120"));
+    assert!(preview.track_mmls[crate::FIRST_PLAYABLE_TRACK].contains("cdef"));
+    assert!((preview.track_gains[crate::FIRST_PLAYABLE_TRACK] - 0.501_187_2).abs() < 0.000_001);
 }
 
 #[test]
@@ -128,4 +132,43 @@ fn preview_inspection_accepts_project_without_playable_cells() {
 
     assert_eq!(preview.measure_index, None);
     assert!(preview.track_mmls.iter().all(String::is_empty));
+}
+
+// ─── chord 行 ────────────────────────────────────────────────
+
+/// chord 行は `tracks` ではなく専用フィールドに置き、グリッドの chord 行へ戻る。
+#[test]
+fn the_chord_track_field_loads_into_the_chord_row() {
+    let mut file = sample_file();
+    file.project.chord_track = Some(DawProjectChordTrack {
+        non_empty_cells: vec![
+            DawProjectCell {
+                measure_index: 0,
+                role: DawProjectCellRole::Initialization,
+                mml: "key:G".to_string(),
+            },
+            DawProjectCell {
+                measure_index: 2,
+                role: DawProjectCellRole::PlayableMeasure,
+                mml: "I-IV-V-I".to_string(),
+            },
+        ],
+    });
+
+    let snapshot = validate_project_file(&file).unwrap();
+
+    assert_eq!(snapshot.data[crate::CHORD_TRACK][0], "key:G");
+    assert_eq!(snapshot.data[crate::CHORD_TRACK][2], "I-IV-V-I");
+    // 演奏 track の中身は chord 行に吸われない
+    assert_eq!(snapshot.data[crate::FIRST_PLAYABLE_TRACK][2], "cdef");
+}
+
+/// chord 行を持たない project file は、chord 行が空のグリッドとして読める。
+#[test]
+fn a_project_file_without_a_chord_track_leaves_the_chord_row_empty() {
+    let snapshot = validate_project_file(&sample_file()).unwrap();
+
+    assert!(snapshot.data[crate::CHORD_TRACK]
+        .iter()
+        .all(|cell| cell.is_empty()));
 }

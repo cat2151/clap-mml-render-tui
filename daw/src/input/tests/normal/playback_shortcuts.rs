@@ -47,7 +47,7 @@ fn preview_shortcuts_keep_default_playback_start_position() {
 #[test]
 fn handle_normal_enter_uses_test_preview_path_when_plugin_entries_are_unavailable() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
 
     let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));

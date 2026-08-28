@@ -16,7 +16,10 @@ impl PlaybackMeasureSource {
                 } else {
                     let cache_entries = tracks
                         .iter()
-                        .map(|track| format!("track{track}/meas{measure_number}"))
+                        .map(|track| {
+                            let track = crate::tracks::track_display_number(*track);
+                            format!("track{track}/meas{measure_number}")
+                        })
                         .collect::<Vec<_>>()
                         .join(", ");
                     format!("play: start meas{measure_number} cache {cache_entries}")

@@ -14,6 +14,7 @@ use super::{
 use cmrt_tui_core::theme::cursor_highlight_style;
 
 mod init_cell;
+mod measure_cell;
 
 #[cfg(test)]
 mod tests;
@@ -139,11 +140,11 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &
         let label_fg = MONOKAI_GRAY;
 
         // 行 1: track ラベル + セル内容 (4 chars each)
-        let track_label = if t == 0 {
-            "Tempo".to_string()
-        } else {
-            format!("{:<width$}", format!("T{t}"), width = TRACK_LABEL_WIDTH)
-        };
+        let track_label = format!(
+            "{:<width$}",
+            crate::tracks::track_label(t),
+            width = TRACK_LABEL_WIDTH
+        );
         let label_style = if is_cursor_track {
             cursor_highlight_style(Style::default().fg(label_fg))
         } else {
@@ -172,23 +173,33 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &
 
             // セル表示（列ごとの桁数。init 列だけ広い）
             let width = cell_width(m);
-            let display: String = if mml.is_empty() {
-                " ".repeat(width)
-            } else {
+            // 手書きのセルが優先。空でも chord 行から生成されるセルは音が鳴るので、
+            // 何が鳴るのかを chord 行から借りて出す（空セル = 無音ではない）。
+            let text: Option<String> = if mml.trim().is_empty() {
+                measure_cell::generated_cell_text(&app.editor.data, t, m)
+            } else if m == 0 {
                 // init 列だけ `role:音色名` / `4/4 t120` へ組み直す。
                 // 組み直せないセル（生 MML）は従来どおり先頭 `width` 文字。
-                let text = if m == 0 {
-                    init_cell::init_cell_text(t, mml, catalog.as_deref())
-                } else {
-                    None
-                };
-                let text = text.as_deref().unwrap_or(mml.as_str());
-                let s: String = text.chars().take(width).collect();
-                format!("{s:<width$}")
+                init_cell::init_cell_text(t, mml, catalog.as_deref()).or_else(|| Some(mml.clone()))
+            } else {
+                Some(mml.clone())
+            };
+            // 紫 = 手書きではなく chord 行に由来する表示。
+            let borrowed_from_chord_row = mml.trim().is_empty() && text.is_some();
+            let display: String = match &text {
+                Some(text) => {
+                    let s: String = text.chars().take(width).collect();
+                    format!("{s:<width$}")
+                }
+                None => " ".repeat(width),
             };
 
             let fg = if is_muted_track {
                 MONOKAI_GRAY
+            } else if borrowed_from_chord_row
+                || (m == 0 && crate::mml::track_generates_from_chord_row(&app.editor.data, t))
+            {
+                MONOKAI_PURPLE
             } else {
                 cache_text_color(cs)
             };
@@ -202,21 +213,33 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &
 
             // 状態インジケータ（列と同じ桁数）: INSERTモードのカーソルtrackはスキップ
             if show_indicators {
-                let indicator_text = if solo_mode_active && m == 0 && t > 0 {
-                    if app.track_is_soloed(t) {
-                        "solo"
-                    } else {
-                        "mute"
-                    }
+                let solo_label = solo_mode_active && m == 0 && t >= crate::FIRST_PLAYABLE_TRACK;
+                // init 列のインジケータ行は空いているので、生成対象 track だけ
+                // chord2mml への指定を出す（solo 表示のほうが優先）。
+                let chord_directive = if solo_label || m != 0 {
+                    None
                 } else {
-                    cache_indicator(cs, anim_frame)
+                    init_cell::init_indicator_text(t, mml)
                 };
-                let indicator = format!(
-                    "{:<width$}",
-                    indicator_text.trim_end(),
-                    width = column_width(m)
-                );
-                let ind_fg = if solo_mode_active && m == 0 && t > 0 {
+                let indicator_text = if solo_label {
+                    if app.track_is_soloed(t) {
+                        "solo".to_string()
+                    } else {
+                        "mute".to_string()
+                    }
+                } else if let Some(directive) = &chord_directive {
+                    directive.clone()
+                } else {
+                    cache_indicator(cs, anim_frame).to_string()
+                };
+                // 列幅を越える指定はここで切る（隣の列を侵食させない）。
+                let indicator: String = indicator_text
+                    .trim_end()
+                    .chars()
+                    .take(column_width(m))
+                    .collect();
+                let indicator = format!("{indicator:<width$}", width = column_width(m));
+                let ind_fg = if solo_label {
                     if app.track_is_soloed(t) {
                         MONOKAI_FG
                     } else {
@@ -224,6 +247,8 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &
                     }
                 } else if is_muted_track {
                     MONOKAI_GRAY
+                } else if chord_directive.is_some() {
+                    MONOKAI_PURPLE
                 } else {
                     cache_indicator_color(cs)
                 };

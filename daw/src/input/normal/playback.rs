@@ -62,6 +62,7 @@ pub(in crate::input) fn format_patch_hot_reload_log(
     old_measure_samples: usize,
     new_measure_samples: usize,
 ) -> String {
+    let track = crate::tracks::track_display_number(track);
     let displayed = displayed_measure_index
         .map(|measure_index| format!("meas{}", measure_index + 1))
         .unwrap_or_else(|| "none".to_string());

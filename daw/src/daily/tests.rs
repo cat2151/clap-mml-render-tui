@@ -126,6 +126,7 @@ fn build_daily_app(config_app_dir: &Path) -> DawApp {
         patch_phrase_store: cmrt_history::PatchPhraseStore::default(),
         patch_phrase_store_dirty: false,
         random_patch_decks: cmrt_tui_core::random::RandomIndexDecks::default(),
+        chord_progression_source: None,
         patch_load: Arc::new(Mutex::new(
             cmrt_tui_core::patch_load::PatchLoadState::Loading,
         )),

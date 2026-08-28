@@ -83,13 +83,17 @@ pub(super) fn draw_help(
             Line::from("  k / ↑  : track 移動（上, 非play時 preview）"),
             Line::from("  M      : 中央 track へ移動"),
             Line::from("  L      : 末尾 track へ移動"),
+            Line::from("  C      : chord 行へ移動 / もう一度押すと元の track へ戻る"),
             Line::from("  i / Ctrl+P : MML 入力オーバーレイ（1 行モード）"),
             Line::from("  a      : off → start固定/end追従 → end固定 → off"),
             Line::from("  m      : mixer overlay"),
             Line::from("  dd     : 現在セルを yank して空にする（patch history 保存）"),
             Line::from("  p      : yank 内容で現在セルを上書き（上書き前は patch history 保存）"),
-            Line::from("  u      : 直前の p を 1 回だけ取り消す"),
+            Line::from("  u      : 直前の p / G を 1 回だけ取り消す"),
             Line::from("  g      : 現在 track/meas に generate を反映して preview"),
+            Line::from(
+                "  G      : chord wizard（コード進行を抽選して chord 行へ書き、現在 track を生成対象にする）",
+            ),
             Line::from("  e      : config.toml 編集 → 再起動"),
             Line::from(
                 if workspace_kind == super::super::WorkspaceKind::Persistent {

@@ -16,7 +16,9 @@ pub use progression::{
     chord_notes, parse_chord_progression, ChordProgression, ChordProgressionCatalog,
     ChordProgressionPick, ParsedChordProgression, KEYS,
 };
-pub use timed::{resolve_chord_or_mml, timed_performance, ResolvedMml, TimedPerformance};
+pub use timed::{
+    parses_as_chord, resolve_chord_or_mml, timed_performance, ResolvedMml, TimedPerformance,
+};
 
 /// 時刻つき MIDI イベントの型は [`cmrt_midi_filter`] が持つ。
 ///

@@ -18,6 +18,7 @@ cmrt-runtime = { path = "../cmrt-runtime" }
 cmrt-patches = { path = "../patches" }
 cmrt-tui-core = { path = "../tui-core" }
 anyhow = "1"
+chord2mml-core = { git = "https://github.com/cat2151/chord2mml-rust", package = "chord2mml-core", features = ["tree-sitter"] }
 crossterm = "0.29"
 ratatui = "0.30"
 ratatui-explorer = "0.3"
@@ -34,4 +35,6 @@ cmrt-history = { path = "../history", features = ["test-support"] }
 # crate 内テストで、実クリップボードに触れないスタブ実装を使うためのフラグ。
 cmrt-tui-core = { path = "../tui-core", features = ["test-support"] }
 hound = "3.5"
+# 生成した MML が実際に SMF のノートになったかを、テストから数えるための SMF パーサ。
+midly = "0.5"
 toml = "1"

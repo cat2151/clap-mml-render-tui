@@ -26,7 +26,7 @@ fn history_overlay_resolves_patch_name_from_the_injected_snapshot() {
         "patches_factory/Pads/Pad 1.fxp".to_string(),
         "patches_factory/pads/pad 1.fxp".to_string(),
     )]);
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 2;
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
@@ -72,7 +72,7 @@ fn history_overlay_does_not_scan_when_patch_dirs_are_unset() {
         patches_dirs: None,
         ..(*app.cfg).clone()
     });
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
 
     let started = std::time::Instant::now();
     app.start_history_overlay_for_patch_name(Some("Pads/Pad 1.fxp".to_string()));

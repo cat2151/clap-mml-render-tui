@@ -50,16 +50,18 @@ impl DawApp {
         let target_measure = self.patch_select_target_measure();
         let measure_index = target_measure.checked_sub(1)?;
 
-        let mut preview_data = vec![
-            self.editor.data[0].clone(),
-            self.editor.data[self.editor.cursor_track].clone(),
-        ];
-        preview_data[1][0] = Self::build_patch_json(&selected_patch_name);
-        preview_data[1][target_measure] = self.patch_select_preview_phrase(target_measure);
+        let mut preview_data = self.preview_grid_for_cursor_track();
+        preview_data[FIRST_PLAYABLE_TRACK][0] = Self::build_patch_json(&selected_patch_name);
+        preview_data[FIRST_PLAYABLE_TRACK][target_measure] =
+            self.patch_select_preview_phrase(target_measure);
 
         let mut track_mmls = self.build_measure_track_mmls_for_measure(target_measure);
-        track_mmls[self.editor.cursor_track] =
-            build_cell_mml_from_data(&preview_data, self.editor.measures, 1, target_measure);
+        track_mmls[self.editor.cursor_track] = build_cell_mml_from_data(
+            &preview_data,
+            self.editor.measures,
+            FIRST_PLAYABLE_TRACK,
+            target_measure,
+        );
         Some((measure_index, track_mmls))
     }
 

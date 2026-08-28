@@ -13,16 +13,16 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
         let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
 
         let (mut app, cache_rx) = build_test_app();
-        app.editor.cursor_track = 1;
+        app.editor.cursor_track = 2;
         app.editor.cursor_measure = 0;
         app.cfg = Arc::new(Config {
             patches_dirs: Some(vec![tmp.to_string_lossy().into_owned()]),
             ..(*app.cfg).clone()
         });
         app.editor.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
-        app.editor.data[1][1] = "cdef".to_string();
-        app.editor.data[1][2] = "gabc".to_string();
-        app.track_volumes_db[1] = -6;
+        app.editor.data[2][1] = "cdef".to_string();
+        app.editor.data[2][2] = "gabc".to_string();
+        app.track_volumes_db[2] = -6;
         // 共有 playback 状態を意図的に古い空データにしておき、
         // random patch 更新が hot reload 時に全共有 state を同期することを検証する。
         *app.playback.measure_track_mmls.lock().unwrap() =
@@ -32,15 +32,15 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
         app.handle_normal(crossterm::event::KeyCode::Char('r'));
 
         assert_eq!(
-            app.editor.data[1][0], r#"{"Surge XT patch": "Pad 1.fxp"}"#,
+            app.editor.data[2][0], r#"{"Surge XT patch": "Pad 1.fxp"}"#,
             "random patch should update the timbre cell"
         );
 
         let cache = app.cache.lock().unwrap();
-        assert!(matches!(cache[1][0].state, CacheState::Empty));
-        assert!(matches!(cache[1][1].state, CacheState::Rendering));
-        assert!(matches!(cache[1][2].state, CacheState::Rendering));
-        let expected_generations = [cache[1][1].generation, cache[1][2].generation];
+        assert!(matches!(cache[2][0].state, CacheState::Empty));
+        assert!(matches!(cache[2][1].state, CacheState::Rendering));
+        assert!(matches!(cache[2][2].state, CacheState::Rendering));
+        let expected_generations = [cache[2][1].generation, cache[2][2].generation];
         drop(cache);
 
         let job1 = cache_rx
@@ -97,13 +97,13 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
         );
         let play_measure_track_mmls = app.playback.measure_track_mmls.lock().unwrap().clone();
         assert!(
-            play_measure_track_mmls[0][1].contains(r#""Surge XT patch":"Pad 1.fxp""#),
+            play_measure_track_mmls[0][2].contains(r#""Surge XT patch":"Pad 1.fxp""#),
             "hot reload should refresh per-track playback MMLs: {:?}",
             play_measure_track_mmls
         );
         let play_track_gains = app.playback.track_gains.lock().unwrap().clone();
         assert!(
-            (play_track_gains[1] - track1_minus_6_db_gain()).abs() < f32::EPSILON,
+            (play_track_gains[2] - track1_minus_6_db_gain()).abs() < f32::EPSILON,
             "hot reload should refresh playback gains: {:?}",
             play_track_gains
         );
@@ -124,15 +124,15 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
         let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
 
         let (mut app, cache_rx) = build_test_app();
-        app.editor.cursor_track = 1;
+        app.editor.cursor_track = 2;
         app.editor.cursor_measure = 0;
         app.cfg = Arc::new(Config {
             patches_dirs: Some(vec![tmp.to_string_lossy().into_owned()]),
             ..(*app.cfg).clone()
         });
         app.editor.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
-        app.editor.data[1][1] = "cdef".to_string();
-        app.editor.data[1][2] = "gabc".to_string();
+        app.editor.data[2][1] = "cdef".to_string();
+        app.editor.data[2][2] = "gabc".to_string();
         *app.playback.play_state.lock().unwrap() = DawPlayState::Playing;
         *app.playback.position.lock().unwrap() = Some(PlayPosition {
             measure_index: 0,
@@ -154,7 +154,7 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
         assert!(cache_rx.try_recv().is_err());
 
         let batches = app.track_rerender_batches.lock().unwrap();
-        let batch = batches[1]
+        let batch = batches[2]
             .as_ref()
             .expect("active measures should stay in the batch");
         assert_eq!(batch.active_measures, BTreeSet::from([1, 2]));
@@ -206,7 +206,7 @@ fn handle_normal_r_restores_default_tempo_init_when_empty() {
         app.editor.cursor_track = 0;
         app.editor.cursor_measure = 0;
         app.editor.data[0][0] = "  ".to_string();
-        app.editor.data[1][1] = "cdef".to_string();
+        app.editor.data[2][1] = "cdef".to_string();
         app.playback.measure_mmls.lock().unwrap()[0] = "stale".to_string();
 
         let result = app.handle_normal(crossterm::event::KeyCode::Char('r'));
@@ -221,13 +221,13 @@ fn handle_normal_r_restores_default_tempo_init_when_empty() {
 
         let cache = app.cache.lock().unwrap();
         assert!(matches!(cache[0][0].state, CacheState::Empty));
-        assert!(matches!(cache[1][1].state, CacheState::Rendering));
+        assert!(matches!(cache[2][1].state, CacheState::Rendering));
         drop(cache);
 
         let job = cache_rx
             .try_recv()
             .expect("tempo init restore should rerender affected playable measures");
-        assert_eq!((job.track, job.measure), (1, 1));
+        assert_eq!((job.track, job.measure), (2, 1));
         assert_eq!(job.mml, r#"{"beat":"4/4"}t120cdef"#);
         assert!(
             cache_rx.try_recv().is_err(),

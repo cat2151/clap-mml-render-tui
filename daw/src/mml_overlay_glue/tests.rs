@@ -15,6 +15,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use super::super::{DawApp, DawMode, DawPlayState};
 use crate::input::tests::build_test_app;
 
+mod chord_transfer;
 mod commit;
 mod patch;
 
@@ -60,9 +61,9 @@ fn snapshot_pairs() -> Vec<(String, String)> {
 #[test]
 fn ctrl_p_opens_the_overlay_with_the_current_cell_in_a_single_line_input() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
-    app.editor.data[1][1] = "cdefg".to_string();
+    app.editor.data[2][1] = "cdefg".to_string();
 
     assert!(app.try_open_mml_overlay(ctrl('p')));
 
@@ -90,9 +91,9 @@ fn a_key_other_than_ctrl_p_does_not_open_the_overlay() {
 #[test]
 fn the_init_column_does_not_open_the_overlay() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 0;
-    app.editor.data[1][0] = r#"{"Surge XT patch": "Bass/Snapshot Bass.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch": "Bass/Snapshot Bass.fxp"}"#.to_string();
 
     assert!(!app.try_open_mml_overlay(ctrl('p')));
 
@@ -134,10 +135,10 @@ fn opening_the_overlay_stops_the_daw_playback() {
 #[test]
 fn the_overlay_opens_with_the_patch_of_the_cursor_track() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 2;
+    app.editor.cursor_track = 3;
     app.editor.cursor_measure = 1;
-    app.editor.data[1][0] = r#"{"Surge XT patch": "Pads/Snapshot Pad.fxp"}"#.to_string();
-    app.editor.data[2][0] = r#"{"Surge XT patch": "Bass/Snapshot Bass.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch": "Pads/Snapshot Pad.fxp"}"#.to_string();
+    app.editor.data[3][0] = r#"{"Surge XT patch": "Bass/Snapshot Bass.fxp"}"#.to_string();
 
     assert!(app.try_open_mml_overlay(ctrl('p')));
 
@@ -159,7 +160,7 @@ fn esc_closes_the_overlay_and_returns_to_normal() {
 #[test]
 fn the_daw_keys_still_work_after_closing_the_overlay() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
     assert!(app.try_open_mml_overlay(ctrl('p')));
     app.handle_mml_overlay_key_event(key(KeyCode::Esc));
@@ -175,14 +176,14 @@ fn the_daw_keys_still_work_after_closing_the_overlay() {
 fn enter_never_inserts_a_newline() {
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_measure = 1;
-    app.editor.data[1][1] = "cde".to_string();
+    app.editor.data[2][1] = "cde".to_string();
     assert!(app.try_open_mml_overlay(ctrl('p')));
 
     app.handle_mml_overlay_key_event(key(KeyCode::Enter));
 
     assert_eq!(app.mode, DawMode::MmlOverlay);
     assert!(app.mml_overlay.is_open());
-    assert!(!app.editor.data[1][1].contains('\n'));
+    assert!(!app.editor.data[2][1].contains('\n'));
     assert!(!app.mml_overlay.value().contains('\n'));
 }
 
@@ -213,7 +214,7 @@ fn ctrl_t_opens_the_patch_select_from_the_injected_snapshot_without_scanning() {
     let (mut app, _cache_rx) = build_test_app();
     point_config_at_missing_patch_dir(&mut app);
     *app.patch_load.lock().unwrap() = PatchLoadState::ready(snapshot_pairs());
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
     assert!(app.try_open_mml_overlay(ctrl('p')));
 
@@ -229,7 +230,7 @@ fn ctrl_t_opens_the_patch_select_from_the_injected_snapshot_without_scanning() {
 #[test]
 fn ctrl_t_waits_for_the_catalog_while_it_is_still_loading() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
     assert!(matches!(
         *app.patch_load.lock().unwrap(),
@@ -249,4 +250,20 @@ fn ctrl_t_waits_for_the_catalog_while_it_is_still_loading() {
         app.mml_overlay.is_patch_select_open(),
         "Loading 中の Ctrl+T は、一覧が来た時点で開くこと"
     );
+}
+
+/// chord 行の中身はコード進行なので、MML として鳴らすオーバーレイでは開かない。
+/// `i` はインラインの INSERT へ落ちて、そのまま文字を編集できる。
+#[test]
+fn the_chord_row_falls_back_to_the_inline_insert_instead_of_the_overlay() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.editor.cursor_track = crate::CHORD_TRACK;
+    app.editor.cursor_measure = 1;
+    app.editor.data[crate::CHORD_TRACK][1] = "I-IV-V-I".to_string();
+
+    app.open_mml_overlay_or_insert();
+
+    assert_eq!(app.mode, DawMode::Insert);
+    assert!(!app.mml_overlay.is_open());
+    assert_eq!(app.textarea.lines().join("\n"), "I-IV-V-I");
 }

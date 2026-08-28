@@ -25,7 +25,8 @@ pub(super) use super::{
 
 /// stop_play のログ出力を検証するための最小構成の DawApp を作る。
 fn build_test_app() -> DawApp {
-    let tracks = 3;
+    // 0 = Tempo / 1 = chord 行 / 2..=3 = 演奏 track。
+    let tracks = crate::FIRST_PLAYABLE_TRACK + 2;
     let measures = 2;
     let (cache_tx, _cache_rx) = std::sync::mpsc::channel();
     DawApp {
@@ -81,11 +82,12 @@ fn build_test_app() -> DawApp {
         track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
         solo_tracks: vec![false; tracks],
         track_volumes_db: vec![0; tracks],
-        overlays: crate::overlays::DawOverlays::new(1),
+        overlays: crate::overlays::DawOverlays::new(crate::FIRST_PLAYABLE_TRACK),
         patch_phrase_store: cmrt_history::PatchPhraseStore::default(),
         patch_phrase_store_dirty: false,
 
         random_patch_decks: cmrt_tui_core::random::RandomIndexDecks::default(),
+        chord_progression_source: None,
         patch_load: Arc::new(Mutex::new(
             cmrt_tui_core::patch_load::PatchLoadState::Loading,
         )),
@@ -95,13 +97,13 @@ fn build_test_app() -> DawApp {
 }
 
 fn playback_track_mmls(track: usize, mml: &str) -> Vec<String> {
-    let mut track_mmls = vec![String::new(); 3];
+    let mut track_mmls = vec![String::new(); crate::FIRST_PLAYABLE_TRACK + 2];
     track_mmls[track] = mml.to_string();
     track_mmls
 }
 
 fn playback_track_gains() -> Vec<f32> {
-    vec![0.0, 1.0, 1.0]
+    vec![0.0, 0.0, 1.0, 1.0]
 }
 
 mod cache_mixer;

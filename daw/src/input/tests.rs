@@ -43,7 +43,8 @@ impl Drop for TempDirGuard {
 }
 
 pub(crate) fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob>) {
-    let tracks = 3;
+    // 0 = Tempo / 1 = chord 行 / 2..=3 = 演奏 track。
+    let tracks = crate::FIRST_PLAYABLE_TRACK + 2;
     let measures = 2;
     let (cache_tx, cache_rx) = std::sync::mpsc::channel();
     (
@@ -53,7 +54,7 @@ pub(crate) fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::supe
             config_app_dir: None,
             editor: crate::editor::DawEditorState::new(
                 vec![vec![String::new(); measures + 1]; tracks],
-                1,
+                crate::FIRST_PLAYABLE_TRACK,
                 1,
                 tracks,
                 measures,
@@ -105,6 +106,7 @@ pub(crate) fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::supe
             patch_phrase_store_dirty: false,
 
             random_patch_decks: cmrt_tui_core::random::RandomIndexDecks::default(),
+            chord_progression_source: None,
             patch_load: Arc::new(Mutex::new(
                 cmrt_tui_core::patch_load::PatchLoadState::Loading,
             )),

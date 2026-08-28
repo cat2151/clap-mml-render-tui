@@ -1,8 +1,9 @@
 //! DAW 風モード
 //!
-//! 初回起動時は 9 tracks × (0..=8 measures) の matrix で開始する
+//! 初回起動時は 10 tracks × (0..=8 measures) の matrix で開始する
 //!   measure 0 = 音色 (timbre) / track ごとの共通ヘッダ
 //!   track   0 = 拍子JSON + テンポ (例: `{"beat": "4/4"}t120`) → render 時に全小節の先頭にくっつける
+//!   track   1 = chord 行（コード進行を書く専用行。音は鳴らさない。`tracks` モジュール参照）
 //!
 //! user は track 数・measure 数に対して実質無制限を求めている。
 //! そのためアプリ側で 64 のような小さな固定上限を設けず、言語・OS・ライブラリが許す範囲で扱うこと。
@@ -108,6 +109,7 @@ mod render_queue;
 mod runtime;
 mod save;
 mod timing;
+mod tracks;
 mod types;
 mod ui;
 
@@ -147,6 +149,19 @@ pub(crate) fn edit_config_toml(
     }
 }
 
+// ─── コード進行カタログ（app ポリシー注入）────────────────────
+
+/// chord wizard（`G`）へ渡す、コード進行（degrees 文字列）の一覧を返す関数。
+///
+/// カタログの取得・ネットワーク・キャッシュは app 側の責務なので、DAW は
+/// 「一覧を返す関数」だけを受け取る。`cmrt-chord` へは依存しない
+/// （`parse_chord_progression` を DAW へ持ち込まないため。資料 3.4）。
+///
+/// **遅延評価**にしてあるのは、カタログのキャッシュがまだ無い初回に app 側の
+/// 取得が最大 20 秒待つため。DAW 画面へ入るたびに待たされないよう、
+/// `G` を押したときにだけ呼ぶ。
+pub type ChordProgressionSource = Arc<dyn Fn() -> Vec<String> + Send + Sync>;
+
 // ─── 再エクスポート ───────────────────────────────────────────
 
 use batch_logging::{TrackRerenderBatch, TrackRerenderBatchCompletionContext};
@@ -162,13 +177,12 @@ pub use types::{DawExitReason, WorkspaceKind};
 
 // ─── 定数 ─────────────────────────────────────────────────────
 
-/// 初回起動時の track 数。track 0 = Tempo、track 1..=8 = 演奏 track。
-pub const TRACKS: usize = 9;
+/// 初回起動時の track 数。track 0 = Tempo、track 1 = chord 行、track 2..=9 = 演奏 track。
+pub const TRACKS: usize = 10;
 /// 初回起動時の小節数。measure 0 = 音色列。measure 1..=MEASURES = 通常小節。
 pub const MEASURES: usize = 8;
-/// track 0 はグローバルヘッダ（テンポ等）専用。演奏 track は 1 から始まる。
-pub(crate) const FIRST_PLAYABLE_TRACK: usize = 1;
 pub(crate) use cmrt_tui_core::mixer::{MIXER_MAX_DB, MIXER_MIN_DB};
+pub(crate) use tracks::{CHORD_TRACK, FIRST_PLAYABLE_TRACK};
 /// track 0 / measure 0 のデフォルト内容（拍子指定 JSON + テンポ設定）。
 /// セーブファイルが存在しない初回起動時に使用される。
 pub(crate) const DEFAULT_TRACK0_MML: &str = r#"{"beat": "4/4"}t120"#;
@@ -195,12 +209,20 @@ pub(crate) struct CacheJob {
     mml: String,
 }
 
+/// `u` で 1 回だけ取り消せる編集の、セル 1 つぶんの記録。
+///
+/// `p`（paste）は 1 セルだが、chord wizard（`G`）は chord 行・init セル・
+/// カーソルセルを **1 操作で複数まとめて**書く。取り消しはその塊が単位なので、
+/// [`crate::editor::DawEditorState::cell_undo`] は並びで持つ。
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct NormalPasteUndo {
+pub(crate) struct NormalCellUndo {
     track: usize,
     measure: usize,
+    /// 書き込む前の内容。取り消しはここへ戻す。
     previous: String,
-    pasted: String,
+    /// 書き込んだ内容。取り消し時にセルがこれのままのときだけ戻す
+    /// （書いたあと手で直したセルを、取り消しで壊さないため）。
+    written: String,
 }
 
 // ─── DawApp ───────────────────────────────────────────────────
@@ -246,6 +268,10 @@ pub struct DawApp {
     pub(crate) patch_phrase_store: cmrt_history::PatchPhraseStore,
     pub(crate) patch_phrase_store_dirty: bool,
     pub(crate) random_patch_decks: cmrt_tui_core::random::RandomIndexDecks,
+
+    /// chord wizard（`G`）が抽選するコード進行の供給元。未注入なら `None`
+    /// （`G` は「カタログが空」と 1 行ログを出して何もしない）。
+    pub(crate) chord_progression_source: Option<ChordProgressionSource>,
 
     /// app が起動時に file cache から読み込む、画面横断の patch catalog。
     ///
@@ -297,6 +323,14 @@ impl DawApp {
             realtime_play_supervisor,
             workspace_kind,
         )
+    }
+
+    /// chord wizard（`G`）が使うコード進行カタログの供給元を注入する。
+    ///
+    /// 構築時ではなく後付けなのは、DAW 画面を作るたびにカタログの取得完了を
+    /// 待たせないため（[`ChordProgressionSource`] を参照）。
+    pub fn set_chord_progression_source(&mut self, source: ChordProgressionSource) {
+        self.chord_progression_source = Some(source);
     }
 
     pub fn workspace_kind(&self) -> WorkspaceKind {

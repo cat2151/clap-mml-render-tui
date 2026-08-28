@@ -11,9 +11,9 @@ use cmrt_mml_overlay::MmlOverlayInputMode;
 #[test]
 fn handle_normal_i_opens_the_mml_overlay() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
-    app.editor.data[1][1] = "l8cdefg".to_string();
+    app.editor.data[2][1] = "l8cdefg".to_string();
 
     let result = app.handle_normal(KeyCode::Char('i'));
 
@@ -30,9 +30,9 @@ fn handle_normal_i_opens_the_mml_overlay() {
 #[test]
 fn handle_normal_i_on_the_init_column_still_starts_the_inline_insert() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 0;
-    app.editor.data[1][0] = r#"{"Surge XT patch": "Bass/Snapshot Bass.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch": "Bass/Snapshot Bass.fxp"}"#.to_string();
 
     app.handle_normal(KeyCode::Char('i'));
 
@@ -50,7 +50,7 @@ fn handle_normal_i_on_the_init_column_still_starts_the_inline_insert() {
 #[test]
 fn handle_normal_i_on_the_init_column_does_not_log_the_overlay_refusal() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 0;
 
     app.handle_normal(KeyCode::Char('i'));
@@ -66,15 +66,15 @@ fn handle_normal_i_on_the_init_column_does_not_log_the_overlay_refusal() {
 #[test]
 fn i_and_ctrl_p_open_the_same_overlay() {
     let (mut by_i, _rx_i) = build_test_app();
-    by_i.editor.cursor_track = 1;
+    by_i.editor.cursor_track = 2;
     by_i.editor.cursor_measure = 1;
-    by_i.editor.data[1][1] = "o5c".to_string();
+    by_i.editor.data[2][1] = "o5c".to_string();
     by_i.handle_normal(KeyCode::Char('i'));
 
     let (mut by_ctrl_p, _rx_p) = build_test_app();
-    by_ctrl_p.editor.cursor_track = 1;
+    by_ctrl_p.editor.cursor_track = 2;
     by_ctrl_p.editor.cursor_measure = 1;
-    by_ctrl_p.editor.data[1][1] = "o5c".to_string();
+    by_ctrl_p.editor.data[2][1] = "o5c".to_string();
     assert!(by_ctrl_p.try_open_mml_overlay(KeyEvent::new(
         KeyCode::Char('p'),
         crossterm::event::KeyModifiers::CONTROL,

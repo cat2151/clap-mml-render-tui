@@ -202,6 +202,20 @@ impl<'a> TuiApp<'a> {
                 Some(std::sync::Arc::clone(&self.play_server)),
                 workspace_kind,
             );
+            // chord wizard（`G`）用のコード進行カタログ。カタログの取得・キャッシュは
+            // app の責務なので、DAW へは「一覧を返す関数」だけを貸す。
+            // **遅延評価**にしてあるのは、キャッシュがまだ無い初回に `catalog()` が
+            // 取得完了を待つため（DAW 画面へ入るたびに待たされないよう、`G` を
+            // 押したときにだけ読む）。
+            let chord_progression_source = self.chord_progression_source.clone();
+            daw.set_chord_progression_source(std::sync::Arc::new(move || {
+                chord_progression_source
+                    .catalog()
+                    .entries()
+                    .iter()
+                    .map(|entry| entry.degrees.clone())
+                    .collect()
+            }));
             let outcome = daw.run_with_terminal(terminal, autoplay);
             drop(daw);
 

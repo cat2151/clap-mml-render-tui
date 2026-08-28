@@ -1,13 +1,29 @@
 //! DAW セッションの保存・読み込み
 
-use super::{DawApp, WorkspaceKind, FIRST_PLAYABLE_TRACK, MIXER_MAX_DB, MIXER_MIN_DB};
+use super::tracks::{
+    grid_row_from_saved_track, grid_track_count_from_saved, saved_track_from_grid_row, CHORD_TRACK,
+    FIRST_SAVED_PLAYABLE_TRACK,
+};
+use super::{DawApp, WorkspaceKind, MIXER_MAX_DB, MIXER_MIN_DB};
 
 // ─── 保存形式 ─────────────────────────────────────────────────
 
 /// DAW セッションの JSON 保存形式のルート。
+///
+/// `tracks` の track 番号は chord 行が入る前の番号のまま（0 = Tempo, 1.. = 演奏 track）。
+/// chord 行だけは `chord_track` に置く（`tracks` モジュールのコメント参照）。
+/// 中身が空の chord 行は書き出さないので、chord 行を使わなければ保存内容は従来と同一になる。
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(super) struct DawSaveFile {
     pub(super) tracks: Vec<DawSaveTrack>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) chord_track: Option<DawSaveChordTrack>,
+}
+
+/// JSON 保存形式の chord 行。全セルが空なら保存しない。
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(super) struct DawSaveChordTrack {
+    pub(super) meas: Vec<DawSaveMeas>,
 }
 
 /// JSON 保存形式のトラックエントリ。空トラックは含まれない。
@@ -36,15 +52,18 @@ pub(super) struct DawSaveMeas {
 /// （= 最大の playable measure index）である。
 /// そのため data/cell/cache の確保では常に `measures + 1` 列を用いる。
 pub(super) fn required_grid_size(file: &DawSaveFile) -> (usize, usize) {
-    let mut tracks = FIRST_PLAYABLE_TRACK + 1;
+    let mut tracks = grid_track_count_from_saved(FIRST_SAVED_PLAYABLE_TRACK + 1);
     let mut measures = 1;
     for save_track in &file.tracks {
-        tracks = tracks.max(save_track.track.saturating_add(1));
+        tracks = tracks.max(grid_row_from_saved_track(save_track.track).saturating_add(1));
         for save_meas in &save_track.meas {
             // `save_meas.meas` 自体が `DawApp.measures` と同じ意味の index 値。
             // 例: meas=25 を保持するには 0..=25 を扱える `measures=25` が必要。
             measures = measures.max(save_meas.meas.max(1));
         }
+    }
+    for save_meas in file.chord_track.iter().flat_map(|chord| &chord.meas) {
+        measures = measures.max(save_meas.meas.max(1));
     }
     (tracks, measures)
 }
@@ -56,6 +75,20 @@ pub(super) fn load_saved_grid_size() -> Option<(usize, usize)> {
     Some(required_grid_size(&file))
 }
 
+/// 1 行ぶんの非空セルを保存形式へ変換する。
+fn non_empty_measures(row: &[String], measures: usize) -> Vec<DawSaveMeas> {
+    row.iter()
+        .enumerate()
+        .take(measures + 1)
+        .filter(|(_, cell)| !cell.trim().is_empty())
+        .map(|(m, cell)| DawSaveMeas {
+            meas: m,
+            description: (m == 0).then(|| "initial".to_string()),
+            mml: cell.clone(),
+        })
+        .collect()
+}
+
 /// data グリッドを `DawSaveFile` に変換する（空トラック・空小節は除外）。
 pub(super) fn data_to_save_file(
     data: &[Vec<String>],
@@ -64,22 +97,16 @@ pub(super) fn data_to_save_file(
     measures: usize,
 ) -> DawSaveFile {
     let mut save_tracks: Vec<DawSaveTrack> = Vec::new();
+    let mut chord_meas: Vec<DawSaveMeas> = Vec::new();
     for (t, row) in data.iter().enumerate().take(tracks) {
-        let mut save_meas: Vec<DawSaveMeas> = Vec::new();
-        for (m, cell) in row.iter().enumerate().take(measures + 1) {
-            if !cell.trim().is_empty() {
-                let description = if m == 0 {
-                    Some("initial".to_string())
-                } else {
-                    None
-                };
-                save_meas.push(DawSaveMeas {
-                    meas: m,
-                    description,
-                    mml: cell.clone(),
-                });
-            }
+        let save_meas = non_empty_measures(row, measures);
+        if t == CHORD_TRACK {
+            chord_meas = save_meas;
+            continue;
         }
+        let Some(saved_track) = saved_track_from_grid_row(t) else {
+            continue;
+        };
         let volume_db = track_volumes_db
             .get(t)
             .copied()
@@ -91,7 +118,7 @@ pub(super) fn data_to_save_file(
                 None
             };
             save_tracks.push(DawSaveTrack {
-                track: t,
+                track: saved_track,
                 description,
                 volume_db,
                 meas: save_meas,
@@ -100,6 +127,7 @@ pub(super) fn data_to_save_file(
     }
     DawSaveFile {
         tracks: save_tracks,
+        chord_track: (!chord_meas.is_empty()).then_some(DawSaveChordTrack { meas: chord_meas }),
     }
 }
 
@@ -110,12 +138,25 @@ pub(super) fn apply_save_file_to_data(
     tracks: usize,
     measures: usize,
 ) {
-    for save_track in &file.tracks {
-        let t = save_track.track;
+    let rows = file
+        .tracks
+        .iter()
+        .map(|save_track| {
+            (
+                grid_row_from_saved_track(save_track.track),
+                &save_track.meas,
+            )
+        })
+        .chain(
+            file.chord_track
+                .iter()
+                .map(|chord_track| (CHORD_TRACK, &chord_track.meas)),
+        );
+    for (t, meas) in rows {
         if t >= tracks {
             continue;
         }
-        for save_meas in &save_track.meas {
+        for save_meas in meas {
             let m = save_meas.meas;
             if m > measures {
                 continue;
@@ -131,8 +172,11 @@ pub(super) fn apply_save_file_to_track_volumes(
     tracks: usize,
 ) {
     for save_track in &file.tracks {
-        let t = save_track.track;
-        if t >= tracks || t < FIRST_PLAYABLE_TRACK {
+        if save_track.track < FIRST_SAVED_PLAYABLE_TRACK {
+            continue;
+        }
+        let t = grid_row_from_saved_track(save_track.track);
+        if t >= tracks {
             continue;
         }
         track_volumes_db[t] = save_track

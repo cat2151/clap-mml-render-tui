@@ -19,7 +19,8 @@ use crate::{AbRepeatState, CacheState, CellCache, DawApp, DawMode, DawPlayState}
 use cmrt_runtime::Config;
 
 fn build_test_app(cfg: Config) -> DawApp {
-    let tracks = 3;
+    // 0 = Tempo / 1 = chord 行 / 2..=3 = 演奏 track。
+    let tracks = crate::FIRST_PLAYABLE_TRACK + 2;
     let measures = 2;
     let (cache_tx, _cache_rx) = std::sync::mpsc::channel();
     DawApp {
@@ -28,7 +29,7 @@ fn build_test_app(cfg: Config) -> DawApp {
         config_app_dir: None,
         editor: crate::editor::DawEditorState::new(
             vec![vec![String::new(); measures + 1]; tracks],
-            1,
+            crate::FIRST_PLAYABLE_TRACK,
             1,
             tracks,
             measures,
@@ -51,11 +52,12 @@ fn build_test_app(cfg: Config) -> DawApp {
         track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
         solo_tracks: vec![false; tracks],
         track_volumes_db: vec![0; tracks],
-        overlays: crate::overlays::DawOverlays::new(1),
+        overlays: crate::overlays::DawOverlays::new(crate::FIRST_PLAYABLE_TRACK),
         patch_phrase_store: cmrt_history::PatchPhraseStore::default(),
         patch_phrase_store_dirty: false,
 
         random_patch_decks: cmrt_tui_core::random::RandomIndexDecks::default(),
+        chord_progression_source: None,
         patch_load: Arc::new(Mutex::new(
             cmrt_tui_core::patch_load::PatchLoadState::Loading,
         )),

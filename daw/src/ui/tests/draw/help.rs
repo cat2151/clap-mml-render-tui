@@ -327,3 +327,47 @@ fn help_overlay_size_follows_daw_help_content() {
         "normal={normal_height} patch={patch_height}"
     );
 }
+
+/// `C` は往復キーなので、ヘルプにも「戻る」まで書いてあること。
+#[test]
+fn help_shows_the_chord_row_jump_as_a_round_trip() {
+    let mut app = build_test_app();
+    app.mode = DawMode::Help;
+
+    let normalized_lines: Vec<String> = render_lines(&app, 160, 52)
+        .into_iter()
+        .map(|line| line.replace(' ', ""))
+        .collect();
+
+    let line = normalized_lines
+        .iter()
+        .find(|line| line.contains("C:chord行へ移動"))
+        .unwrap_or_else(|| panic!("lines: {normalized_lines:?}"));
+    assert!(line.contains("元のtrackへ戻る"), "line: {line:?}");
+}
+
+/// `G` はヘルプに載っていること。`u` の説明も `G` を取り消せることまで書いてあること
+/// （複数セルを 1 操作で書くので、取り消せるかどうかが押す前に分からないと怖い）。
+#[test]
+fn help_shows_the_chord_wizard_and_that_undo_covers_it() {
+    let mut app = build_test_app();
+    app.mode = DawMode::Help;
+
+    let normalized_lines: Vec<String> = render_lines(&app, 160, 52)
+        .into_iter()
+        .map(|line| line.replace(' ', ""))
+        .collect();
+
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("G:chordwizard")),
+        "lines: {normalized_lines:?}"
+    );
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("u:直前のp/Gを1回だけ取り消す")),
+        "lines: {normalized_lines:?}"
+    );
+}

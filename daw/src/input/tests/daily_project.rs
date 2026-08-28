@@ -13,7 +13,7 @@ fn unique_temp_dir(name: &str) -> TempDirGuard {
 
 fn save_archive_project(app: &mut DawApp, archive_path: &std::path::Path, mml: &str) {
     std::fs::create_dir_all(archive_path.parent().unwrap()).unwrap();
-    app.editor.data[1][1] = mml.to_string();
+    app.editor.data[2][1] = mml.to_string();
     app.save_project_as(&archive_path.to_string_lossy())
         .unwrap();
 }
@@ -96,7 +96,7 @@ fn daily_archive_open_applies_copy_autosaves_and_clears_project_path() {
     let (mut app, _cache_rx) = build_test_app();
     app.config_app_dir = Some(tmp.path().to_path_buf());
     save_archive_project(&mut app, &archive_path, "archive melody");
-    app.editor.data[1][1] = "persistent melody".to_string();
+    app.editor.data[2][1] = "persistent melody".to_string();
     app.overlays.project.current_path = Some(tmp.path().join("named.cmrt-daw.json"));
 
     app.start_project_overlay();
@@ -106,7 +106,7 @@ fn daily_archive_open_applies_copy_autosaves_and_clears_project_path() {
     app.handle_project_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     assert_eq!(app.mode, DawMode::Normal);
-    assert_eq!(app.editor.data[1][1], "archive melody");
+    assert_eq!(app.editor.data[2][1], "archive melody");
     assert!(app.overlays.project.current_path.is_none());
     assert!(*app.playback.play_state.lock().unwrap() == DawPlayState::Idle);
     assert!(app.log_lines.lock().unwrap().iter().any(|line| {

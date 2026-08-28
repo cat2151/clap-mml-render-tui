@@ -16,18 +16,18 @@ fn handle_normal_r_uses_saved_patch_filter_query_for_random_selection() {
         let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
 
         let (mut app, _cache_rx) = build_test_app();
-        app.editor.cursor_track = 1;
+        app.editor.cursor_track = 2;
         app.editor.cursor_measure = 0;
         app.cfg = Arc::new(Config {
             patches_dirs: Some(vec![tmp.to_string_lossy().into_owned()]),
             ..(*app.cfg).clone()
         });
-        app.editor.data[1][0] =
+        app.editor.data[2][0] =
             r#"{"Surge XT patch":"Lead/Lead 1.fxp","Surge XT patch filter":"bass"}"#.to_string();
 
         app.handle_normal(crossterm::event::KeyCode::Char('r'));
 
-        let init_json: serde_json::Value = serde_json::from_str(&app.editor.data[1][0]).unwrap();
+        let init_json: serde_json::Value = serde_json::from_str(&app.editor.data[2][0]).unwrap();
         let selected_patch = init_json["Surge XT patch"]
             .as_str()
             .expect("selected patch should be stored as string");
@@ -55,20 +55,20 @@ fn handle_normal_r_keeps_filter_cycle_unique_for_160_candidates() {
         let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
 
         let (mut app, _cache_rx) = build_test_app();
-        app.editor.cursor_track = 1;
+        app.editor.cursor_track = 2;
         app.editor.cursor_measure = 0;
         app.cfg = Arc::new(Config {
             patches_dirs: Some(vec![tmp.to_string_lossy().into_owned()]),
             ..(*app.cfg).clone()
         });
-        app.editor.data[1][0] =
+        app.editor.data[2][0] =
             r#"{"Surge XT patch":"Pads/Pad 1.fxp","Surge XT patch filter":"pad"}"#.to_string();
 
         let mut seen = HashSet::new();
         for _ in 0..160 {
             app.handle_normal(crossterm::event::KeyCode::Char('r'));
             let init_json: serde_json::Value =
-                serde_json::from_str(&app.editor.data[1][0]).unwrap();
+                serde_json::from_str(&app.editor.data[2][0]).unwrap();
             let selected_patch = init_json["Surge XT patch"]
                 .as_str()
                 .expect("selected patch should be stored as string")
@@ -101,35 +101,35 @@ fn handle_normal_r_keeps_independent_history_per_filter_query() {
         let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
 
         let (mut app, _cache_rx) = build_test_app();
-        app.editor.cursor_track = 1;
+        app.editor.cursor_track = 2;
         app.editor.cursor_measure = 0;
         app.cfg = Arc::new(Config {
             patches_dirs: Some(vec![tmp.to_string_lossy().into_owned()]),
             ..(*app.cfg).clone()
         });
 
-        app.editor.data[1][0] =
+        app.editor.data[2][0] =
             r#"{"Surge XT patch":"Pads/Pad 1.fxp","Surge XT patch filter":"pad"}"#.to_string();
         app.handle_normal(crossterm::event::KeyCode::Char('r'));
-        let pad_first: serde_json::Value = serde_json::from_str(&app.editor.data[1][0]).unwrap();
+        let pad_first: serde_json::Value = serde_json::from_str(&app.editor.data[2][0]).unwrap();
         let pad_first = pad_first["Surge XT patch"].as_str().unwrap().to_string();
 
-        app.editor.data[1][0] =
+        app.editor.data[2][0] =
             r#"{"Surge XT patch":"Bass/Bass 1.fxp","Surge XT patch filter":"bass"}"#.to_string();
         app.handle_normal(crossterm::event::KeyCode::Char('r'));
-        let bass_first: serde_json::Value = serde_json::from_str(&app.editor.data[1][0]).unwrap();
+        let bass_first: serde_json::Value = serde_json::from_str(&app.editor.data[2][0]).unwrap();
         let bass_first = bass_first["Surge XT patch"].as_str().unwrap().to_string();
 
-        app.editor.data[1][0] =
+        app.editor.data[2][0] =
             format!(r#"{{"Surge XT patch":"{pad_first}","Surge XT patch filter":"pad"}}"#);
         app.handle_normal(crossterm::event::KeyCode::Char('r'));
-        let pad_second: serde_json::Value = serde_json::from_str(&app.editor.data[1][0]).unwrap();
+        let pad_second: serde_json::Value = serde_json::from_str(&app.editor.data[2][0]).unwrap();
         let pad_second = pad_second["Surge XT patch"].as_str().unwrap().to_string();
 
-        app.editor.data[1][0] =
+        app.editor.data[2][0] =
             format!(r#"{{"Surge XT patch":"{bass_first}","Surge XT patch filter":"bass"}}"#);
         app.handle_normal(crossterm::event::KeyCode::Char('r'));
-        let bass_second: serde_json::Value = serde_json::from_str(&app.editor.data[1][0]).unwrap();
+        let bass_second: serde_json::Value = serde_json::from_str(&app.editor.data[2][0]).unwrap();
         let bass_second = bass_second["Surge XT patch"].as_str().unwrap().to_string();
 
         assert_ne!(pad_first, pad_second);
@@ -150,25 +150,25 @@ fn handle_normal_r_preserves_trailing_init_mml_when_updating_patch_json() {
         let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
 
         let (mut app, _cache_rx) = build_test_app();
-        app.editor.cursor_track = 1;
+        app.editor.cursor_track = 2;
         app.editor.cursor_measure = 0;
         app.cfg = Arc::new(Config {
             patches_dirs: Some(vec![tmp.to_string_lossy().into_owned()]),
             ..(*app.cfg).clone()
         });
-        app.editor.data[1][0] =
+        app.editor.data[2][0] =
             r#"{"Surge XT patch":"Old/Lead 1.fxp","Surge XT patch filter":"pad","custom":"keep"}l1"#.to_string();
-        app.editor.data[1][1] = "cdef".to_string();
+        app.editor.data[2][1] = "cdef".to_string();
 
         app.handle_normal(crossterm::event::KeyCode::Char('r'));
 
         assert_eq!(
-            app.editor.data[1][0],
+            app.editor.data[2][0],
             r#"{"Surge XT patch":"Pad/Pad 1.fxp","Surge XT patch filter":"pad","custom":"keep"}l1"#
         );
         let play_measure_track_mmls = app.playback.measure_track_mmls.lock().unwrap().clone();
         assert!(
-            play_measure_track_mmls[0][1].contains("l1cdef"),
+            play_measure_track_mmls[0][2].contains("l1cdef"),
             "updated init MML should keep the trailing phrase in playback state: {:?}",
             play_measure_track_mmls
         );
@@ -188,20 +188,20 @@ fn handle_normal_r_preserves_init_json_formatting_and_whitespace() {
         let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
 
         let (mut app, _cache_rx) = build_test_app();
-        app.editor.cursor_track = 1;
+        app.editor.cursor_track = 2;
         app.editor.cursor_measure = 0;
         app.cfg = Arc::new(Config {
             patches_dirs: Some(vec![tmp.to_string_lossy().into_owned()]),
             ..(*app.cfg).clone()
         });
-        app.editor.data[1][0] =
+        app.editor.data[2][0] =
             r#"{ "custom" : "keep" , "Surge XT patch" : "Old/Lead 1.fxp" , "Surge XT patch filter" : "pad" }  l1 "#.to_string();
-        app.editor.data[1][1] = "cdef".to_string();
+        app.editor.data[2][1] = "cdef".to_string();
 
         app.handle_normal(crossterm::event::KeyCode::Char('r'));
 
         assert_eq!(
-            app.editor.data[1][0],
+            app.editor.data[2][0],
             r#"{ "custom" : "keep" , "Surge XT patch" : "Pad/Pad 1.fxp" , "Surge XT patch filter" : "pad" }  l1 "#
         );
     }

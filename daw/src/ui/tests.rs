@@ -18,11 +18,12 @@ pub(super) use super::{
         PlayPosition, MEASURES,
     },
     cache_indicator, cache_indicator_color, cache_text_color, draw, loop_measure_summary_label,
-    loop_status_label, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_PINK,
+    loop_status_label, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_PINK, MONOKAI_PURPLE,
 };
 
 fn build_test_app() -> DawApp {
-    let tracks = 3;
+    // 0 = Tempo / 1 = chord 行 / 2..=3 = 演奏 track。
+    let tracks = crate::FIRST_PLAYABLE_TRACK + 2;
     let measures = 2;
     let (cache_tx, _cache_rx) = std::sync::mpsc::channel();
     DawApp {
@@ -78,11 +79,12 @@ fn build_test_app() -> DawApp {
         track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
         solo_tracks: vec![false; tracks],
         track_volumes_db: vec![0; tracks],
-        overlays: crate::overlays::DawOverlays::new(1),
+        overlays: crate::overlays::DawOverlays::new(crate::FIRST_PLAYABLE_TRACK),
         patch_phrase_store: cmrt_history::PatchPhraseStore::default(),
         patch_phrase_store_dirty: false,
 
         random_patch_decks: cmrt_tui_core::random::RandomIndexDecks::default(),
+        chord_progression_source: None,
         patch_load: Arc::new(Mutex::new(
             cmrt_tui_core::patch_load::PatchLoadState::Loading,
         )),

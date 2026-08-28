@@ -3,13 +3,13 @@ use super::*;
 #[test]
 fn draw_shows_mml_and_uncached_dot_before_cache_is_ready() {
     let mut app = build_test_app();
-    app.editor.data[1][1] = "cdef".to_string();
+    app.editor.data[2][1] = "cdef".to_string();
     {
         let mut cache = app.cache.lock().unwrap();
-        cache[1][1].state = CacheState::Pending;
+        cache[2][1].state = CacheState::Pending;
     }
 
-    let lines = render_lines(&app, 40, 15);
+    let lines = render_lines(&app, 40, 19);
 
     assert!(
         lines.iter().any(|line| line.contains("cdef")),
@@ -26,13 +26,13 @@ fn draw_shows_mml_and_uncached_dot_before_cache_is_ready() {
 #[test]
 fn draw_renders_pending_indicator_in_visible_color() {
     let mut app = build_test_app();
-    app.editor.data[1][1] = "cdef".to_string();
+    app.editor.data[2][1] = "cdef".to_string();
     {
         let mut cache = app.cache.lock().unwrap();
-        cache[1][1].state = CacheState::Pending;
+        cache[2][1].state = CacheState::Pending;
     }
 
-    let buffer = render_buffer(&app, 40, 15);
+    let buffer = render_buffer(&app, 40, 19);
     let pending_indicator = (0..buffer.area.height)
         .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
         .find(|&(x, y)| {
@@ -51,7 +51,7 @@ fn draw_uses_contrast_background_for_selected_grid_cell_without_blink() {
     let mut app = build_test_app();
     app.editor.data[0][0] = "t120".to_string();
 
-    let buffer = render_buffer(&app, 40, 14);
+    let buffer = render_buffer(&app, 40, 18);
     let (x, y) = find_text_ignoring_spaces(&buffer, "t120");
     let cell = buffer.cell((x, y)).unwrap();
 
@@ -63,14 +63,14 @@ fn draw_uses_contrast_background_for_selected_grid_cell_without_blink() {
 }
 
 /// 指定 y 行の文字を 1 セル 1 要素で取り出す（多バイト記号も 1 要素）。
-fn row_symbols(buffer: &Buffer, y: u16) -> Vec<String> {
+pub(super) fn row_symbols(buffer: &Buffer, y: u16) -> Vec<String> {
     (0..buffer.area.width)
         .map(|x| buffer.cell((x, y)).unwrap().symbol().to_string())
         .collect()
 }
 
 /// 指定 y 行で `text` が始まる x 座標。見つからなければ panic。
-fn x_of_in_row(buffer: &Buffer, y: u16, text: &str) -> u16 {
+pub(super) fn x_of_in_row(buffer: &Buffer, y: u16, text: &str) -> u16 {
     let symbols = row_symbols(buffer, y);
     let needle: Vec<String> = text.chars().map(|c| c.to_string()).collect();
     (0..symbols.len())
@@ -85,7 +85,7 @@ fn x_of_in_row(buffer: &Buffer, y: u16, text: &str) -> u16 {
 }
 
 /// `Init` を含むヘッダ行の y 座標。
-fn header_row(buffer: &Buffer) -> u16 {
+pub(super) fn header_row(buffer: &Buffer) -> u16 {
     (0..buffer.area.height)
         .find(|&y| row_symbols(buffer, y).concat().contains("Init"))
         .expect("header row with Init")
@@ -94,16 +94,16 @@ fn header_row(buffer: &Buffer) -> u16 {
 #[test]
 fn grid_header_cells_and_indicators_share_the_same_column_x() {
     let mut app = build_test_app();
-    app.editor.data[1][1] = "cdef".to_string();
+    app.editor.data[2][1] = "cdef".to_string();
     {
         let mut cache = app.cache.lock().unwrap();
-        cache[1][1].state = CacheState::Pending;
+        cache[2][1].state = CacheState::Pending;
     }
 
-    let buffer = render_buffer(&app, 60, 15);
+    let buffer = render_buffer(&app, 60, 19);
     let header_y = header_row(&buffer);
     // track 1 の本体行はヘッダの 1 行下から 2 行ずつ。
-    let track1_y = header_y + 1 + 2;
+    let track1_y = header_y + 1 + 2 * crate::FIRST_PLAYABLE_TRACK as u16;
 
     let header_m1_x = x_of_in_row(&buffer, header_y, "M1");
     let cell_x = x_of_in_row(&buffer, track1_y, "cdef");
@@ -140,7 +140,7 @@ fn ab_repeat_markers_do_not_shift_the_measure_columns() {
         };
     }
 
-    let buffer = render_buffer(&app, 60, 15);
+    let buffer = render_buffer(&app, 60, 19);
     let header_y = header_row(&buffer);
 
     let init_x = x_of_in_row(&buffer, header_y, "Init");
@@ -154,11 +154,11 @@ fn ab_repeat_markers_do_not_shift_the_measure_columns() {
 #[test]
 fn init_cell_shows_more_than_four_characters() {
     let mut app = build_test_app();
-    app.editor.data[1][0] = "0123456789abcdef".to_string();
+    app.editor.data[2][0] = "0123456789abcdef".to_string();
 
-    let buffer = render_buffer(&app, 60, 15);
+    let buffer = render_buffer(&app, 60, 19);
     let header_y = header_row(&buffer);
-    let track1_y = header_y + 1 + 2;
+    let track1_y = header_y + 1 + 2 * crate::FIRST_PLAYABLE_TRACK as u16;
 
     // 13 桁まで出て 14 桁目は切れる。
     x_of_in_row(&buffer, track1_y, "0123456789abc");
@@ -199,7 +199,7 @@ fn every_measure_column_still_fits_in_an_80_column_terminal() {
 // ─── init 列（meas 0）の role:音色名 表示 ───────────────────
 
 /// role が引ける音色を持つ catalog snapshot を app へ注入する。
-fn inject_catalog(app: &mut DawApp, displays: &[&str]) {
+pub(super) fn inject_catalog(app: &mut DawApp, displays: &[&str]) {
     let pairs = displays
         .iter()
         .map(|display| {
@@ -212,23 +212,23 @@ fn inject_catalog(app: &mut DawApp, displays: &[&str]) {
     *app.patch_load.lock().unwrap() = cmrt_tui_core::patch_load::PatchLoadState::ready(pairs);
 }
 
-fn patch_init_cell(display: &str) -> String {
+pub(super) fn patch_init_cell(display: &str) -> String {
     format!(r#"{{"Surge XT patch": "{display}"}}"#)
 }
 
-const TEST_BASS_PATCH: &str = "patches_factory/Basses/Wobble Bass.fxp";
+pub(super) const TEST_BASS_PATCH: &str = "patches_factory/Basses/Wobble Bass.fxp";
 const TEST_LEAD_PATCH: &str = "patches_factory/Leads/Screaming Lead.fxp";
 
 #[test]
 fn init_column_shows_the_role_and_the_patch_name_per_track() {
     let mut app = build_test_app();
     app.editor.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
-    app.editor.data[1][0] = patch_init_cell(TEST_BASS_PATCH);
-    app.editor.data[2][0] = patch_init_cell(TEST_LEAD_PATCH);
+    app.editor.data[2][0] = patch_init_cell(TEST_BASS_PATCH);
+    app.editor.data[3][0] = patch_init_cell(TEST_LEAD_PATCH);
     inject_catalog(&mut app, &[TEST_BASS_PATCH, TEST_LEAD_PATCH]);
 
     // track 2 の行まで描くには grid 領域の高さが要る。
-    let lines = render_lines(&app, 60, 20);
+    let lines = render_lines(&app, 60, 24);
 
     assert!(
         lines.iter().any(|line| line.contains("bass:Wobble B")),
@@ -252,9 +252,9 @@ fn init_column_shows_the_role_and_the_patch_name_per_track() {
 #[test]
 fn init_column_shows_the_patch_name_alone_while_the_catalog_is_loading() {
     let mut app = build_test_app();
-    app.editor.data[1][0] = patch_init_cell(TEST_BASS_PATCH);
+    app.editor.data[2][0] = patch_init_cell(TEST_BASS_PATCH);
 
-    let lines = render_lines(&app, 60, 15);
+    let lines = render_lines(&app, 60, 19);
 
     assert!(
         lines.iter().any(|line| line.contains("Wobble Bass")),
@@ -269,10 +269,10 @@ fn init_column_shows_the_patch_name_alone_while_the_catalog_is_loading() {
 #[test]
 fn init_column_keeps_showing_a_plain_mml_cell_as_is() {
     let mut app = build_test_app();
-    app.editor.data[1][0] = "o4cdefgab".to_string();
+    app.editor.data[2][0] = "o4cdefgab".to_string();
     inject_catalog(&mut app, &[TEST_BASS_PATCH]);
 
-    let lines = render_lines(&app, 60, 15);
+    let lines = render_lines(&app, 60, 19);
 
     assert!(
         lines.iter().any(|line| line.contains("o4cdefgab")),
@@ -283,12 +283,12 @@ fn init_column_keeps_showing_a_plain_mml_cell_as_is() {
 #[test]
 fn init_column_truncates_a_long_role_and_patch_name_to_the_column_width() {
     let mut app = build_test_app();
-    app.editor.data[1][0] = patch_init_cell(TEST_LEAD_PATCH);
+    app.editor.data[2][0] = patch_init_cell(TEST_LEAD_PATCH);
     inject_catalog(&mut app, &[TEST_LEAD_PATCH]);
 
-    let buffer = render_buffer(&app, 60, 15);
+    let buffer = render_buffer(&app, 60, 19);
     let header_y = header_row(&buffer);
-    let track1_y = header_y + 1 + 2;
+    let track1_y = header_y + 1 + 2 * crate::FIRST_PLAYABLE_TRACK as u16;
 
     // `lead:Screaming Lead` は 13 桁で切られ、M1 列を侵食しない。
     let init_x = x_of_in_row(&buffer, header_y, "Init");
@@ -336,12 +336,12 @@ fn real_catalog_init_column_shows_role_prefixes() {
     let mut app = build_test_app();
     app.cfg = Arc::new(cfg);
     app.editor.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
-    app.editor.data[1][0] = patch_init_cell(&bass);
-    app.editor.data[2][0] = patch_init_cell(&lead);
+    app.editor.data[2][0] = patch_init_cell(&bass);
+    app.editor.data[3][0] = patch_init_cell(&lead);
     *app.patch_load.lock().unwrap() =
         cmrt_tui_core::patch_load::PatchLoadState::Ready(Arc::new(snapshot));
 
-    let lines = render_lines(&app, 60, 20);
+    let lines = render_lines(&app, 60, 24);
     eprintln!("real catalog init column:");
     for line in lines.iter().take(7) {
         eprintln!("  |{line}|");
@@ -362,5 +362,30 @@ fn real_catalog_init_column_shows_role_prefixes() {
     assert!(
         !lines.iter().any(|line| line.contains("{\"Su")),
         "JSON の頭出しが残っている: {lines:?}"
+    );
+}
+
+/// 行の並びは Tempo → Chord → T1 → T2。
+///
+/// chord 行が割り込んでも演奏 track のラベル番号はずれない
+/// （保存ファイルの `"track": 1` と画面の `T1` が同じものを指し続ける）。
+#[test]
+fn the_chord_row_sits_between_the_tempo_row_and_the_first_playable_track() {
+    let app = build_test_app();
+
+    let lines = render_lines(&app, 60, 24);
+    let labels: Vec<&str> = lines
+        .iter()
+        .filter_map(|line| {
+            ["Tempo", "Chord", "T1", "T2"]
+                .into_iter()
+                .find(|label| line.trim_start_matches('│').starts_with(label))
+        })
+        .collect();
+
+    assert_eq!(
+        labels,
+        vec!["Tempo", "Chord", "T1", "T2"],
+        "lines: {lines:?}"
     );
 }

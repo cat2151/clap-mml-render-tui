@@ -266,6 +266,7 @@ fn new_with_entry_context(
         patch_phrase_store: cmrt_history::load_patch_phrase_store(),
         patch_phrase_store_dirty: false,
         random_patch_decks: cmrt_tui_core::random::RandomIndexDecks::default(),
+        chord_progression_source: None,
         patch_load,
         mml_overlay: cmrt_mml_overlay::MmlOverlay::default(),
         mml_overlay_sender,

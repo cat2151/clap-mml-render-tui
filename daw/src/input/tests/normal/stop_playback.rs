@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn handle_normal_shift_space_stops_current_preview() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
     *app.playback.play_state.lock().unwrap() = DawPlayState::Preview;
     *app.playback.position.lock().unwrap() = Some(PlayPosition {
@@ -30,7 +30,7 @@ fn handle_normal_shift_space_stops_current_preview() {
 #[test]
 fn handle_normal_shift_space_stops_current_play() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
     *app.playback.play_state.lock().unwrap() = DawPlayState::Playing;
     *app.playback.position.lock().unwrap() = Some(PlayPosition {
@@ -57,7 +57,7 @@ fn handle_normal_shift_space_stops_current_play() {
 #[test]
 fn handle_normal_shift_enter_stops_current_play() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
     *app.playback.play_state.lock().unwrap() = DawPlayState::Playing;
     *app.playback.position.lock().unwrap() = Some(PlayPosition {
@@ -83,7 +83,7 @@ fn handle_normal_shift_enter_stops_current_play() {
 #[test]
 fn handle_normal_enter_stops_current_preview() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
     *app.playback.play_state.lock().unwrap() = DawPlayState::Preview;
     *app.playback.position.lock().unwrap() = Some(PlayPosition {
@@ -109,7 +109,7 @@ fn handle_normal_enter_stops_current_preview() {
 #[test]
 fn handle_normal_enter_stops_current_play() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
     *app.playback.play_state.lock().unwrap() = DawPlayState::Playing;
     *app.playback.position.lock().unwrap() = Some(PlayPosition {

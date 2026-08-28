@@ -45,10 +45,10 @@ fn confirm_patch_by_query(app: &mut DawApp, query: &str) {
 fn opened_with_the_pad_patch() -> (DawApp, std::sync::mpsc::Receiver<crate::CacheJob>) {
     let (mut app, cache_rx) = build_test_app();
     *app.patch_load.lock().unwrap() = PatchLoadState::ready(catalog_pairs());
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
-    app.editor.data[1][0] = PAD_INIT_CELL.to_string();
-    app.editor.data[1][1] = "cde".to_string();
+    app.editor.data[2][0] = PAD_INIT_CELL.to_string();
+    app.editor.data[2][1] = "cde".to_string();
     assert!(app.try_open_mml_overlay(ctrl('p')));
     (app, cache_rx)
 }
@@ -61,7 +61,7 @@ fn confirming_a_patch_writes_it_into_the_init_cell() {
 
     assert_eq!(app.mml_overlay.patch(), Some("Bass/Snapshot Bass.fxp"));
     assert_eq!(
-        app.editor.data[1][0],
+        app.editor.data[2][0],
         r#"{"Surge XT patch": "Bass/Snapshot Bass.fxp"}"#
     );
 }
@@ -83,7 +83,7 @@ fn previewing_a_patch_does_not_touch_the_init_cell() {
     app.handle_mml_overlay_key_event(key(KeyCode::Down));
 
     assert_eq!(
-        app.editor.data[1][0], PAD_INIT_CELL,
+        app.editor.data[2][0], PAD_INIT_CELL,
         "preview では init セルを書き換えないこと"
     );
     assert_eq!(app.mml_overlay.patch(), Some("Pads/Snapshot Pad.fxp"));
@@ -92,14 +92,14 @@ fn previewing_a_patch_does_not_touch_the_init_cell() {
 #[test]
 fn confirming_a_patch_keeps_the_patch_filter_query() {
     let (mut app, _cache_rx) = opened_with_the_pad_patch();
-    app.editor.data[1][0] =
+    app.editor.data[2][0] =
         r#"{"Surge XT patch": "Pads/Snapshot Pad.fxp", "Surge XT patch filter": "snapshot"}"#
             .to_string();
 
     confirm_patch_by_query(&mut app, "snapshot bass");
 
     assert_eq!(
-        app.editor.data[1][0],
+        app.editor.data[2][0],
         r#"{"Surge XT patch": "Bass/Snapshot Bass.fxp", "Surge XT patch filter": "snapshot"}"#,
         "音色名だけを差し替え、付随メタデータは壊さないこと"
     );
@@ -132,7 +132,7 @@ fn the_confirmed_patch_survives_closing_the_overlay() {
 
     assert_eq!(app.mode, DawMode::Normal);
     assert_eq!(
-        app.editor.data[1][0],
+        app.editor.data[2][0],
         r#"{"Surge XT patch": "Bass/Snapshot Bass.fxp"}"#
     );
 }
@@ -174,7 +174,7 @@ fn adding_a_patch_filter_preset_rebuilds_the_role_index() {
 #[test]
 fn confirming_a_patch_rerenders_the_measures_of_the_track() {
     let (mut app, cache_rx) = opened_with_the_pad_patch();
-    app.editor.data[1][2] = "gab".to_string();
+    app.editor.data[2][2] = "gab".to_string();
 
     confirm_patch_by_query(&mut app, "snapshot bass");
 

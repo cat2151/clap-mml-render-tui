@@ -7,10 +7,10 @@ use super::*;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 fn open_overlay_on_a_playable_cell(app: &mut DawApp) {
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
-    app.editor.data[1][0] = r#"{"Surge XT patch": "Bass/Overlay Bass.fxp"}"#.to_string();
-    app.editor.data[1][1] = "l8cdefg".to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch": "Bass/Overlay Bass.fxp"}"#.to_string();
+    app.editor.data[2][1] = "l8cdefg".to_string();
     assert!(app.open_mml_overlay());
 }
 

@@ -3,10 +3,10 @@ use super::*;
 #[test]
 fn handle_history_overlay_enter_overwrites_measure_and_backs_up_old_phrase() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 2;
-    app.editor.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
-    app.editor.data[1][2] = "before".to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.data[2][2] = "before".to_string();
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         cmrt_history::PatchPhraseState {
@@ -19,7 +19,7 @@ fn handle_history_overlay_enter_overwrites_measure_and_backs_up_old_phrase() {
     app.handle_history_overlay(KeyCode::Enter);
 
     assert!(matches!(app.mode, DawMode::Normal));
-    assert_eq!(app.editor.data[1][2], "after");
+    assert_eq!(app.editor.data[2][2], "after");
     assert_eq!(
         app.patch_phrase_store
             .patches
@@ -34,9 +34,9 @@ fn handle_history_overlay_enter_overwrites_measure_and_backs_up_old_phrase() {
 #[test]
 fn handle_history_overlay_enter_without_track_patch_sets_patch_and_backs_up_old_phrase() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 2;
-    app.editor.data[1][2] = "before".to_string();
+    app.editor.data[2][2] = "before".to_string();
     app.patch_phrase_store.notepad.history =
         vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
     app.start_history_overlay();
@@ -45,10 +45,10 @@ fn handle_history_overlay_enter_without_track_patch_sets_patch_and_backs_up_old_
 
     assert!(matches!(app.mode, DawMode::Normal));
     assert_eq!(
-        app.editor.data[1][0],
+        app.editor.data[2][0],
         r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#
     );
-    assert_eq!(app.editor.data[1][2], "l8cdef");
+    assert_eq!(app.editor.data[2][2], "l8cdef");
     assert_eq!(
         app.patch_phrase_store.notepad.history,
         vec![
@@ -62,9 +62,9 @@ fn handle_history_overlay_enter_without_track_patch_sets_patch_and_backs_up_old_
 #[test]
 fn handle_history_overlay_enter_from_favorites_uses_selected_favorite() {
     let (mut app, _cache_rx) = build_test_app();
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
-    app.editor.data[1][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch": "Pads/Pad 1.fxp"}"#.to_string();
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
         cmrt_history::PatchPhraseState {
@@ -77,5 +77,5 @@ fn handle_history_overlay_enter_from_favorites_uses_selected_favorite() {
 
     app.handle_history_overlay(KeyCode::Enter);
 
-    assert_eq!(app.editor.data[1][1], "favorite");
+    assert_eq!(app.editor.data[2][1], "favorite");
 }

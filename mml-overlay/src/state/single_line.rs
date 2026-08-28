@@ -39,8 +39,16 @@ impl MmlOverlay<'_> {
     ///
     /// 閉じない確定でも入力欄は触らない。次に何を編集するかを決めるのはホストで、
     /// ホストは [`MmlOverlay::open`] を呼び直して次の対象の内容を入れる。
+    ///
+    /// **打った文字列がコード表記として読めるときだけ、確定の直前にダイアログが立つ。**
+    /// `Enter` でも `Esc` でも同じで、そこを素通しすると「MML のつもりで書いた
+    /// コード表記が無音のセルとして残る」（発端のバグ）が確定の 2 経路のうち
+    /// 片方だけ塞がれた状態になる。
     fn commit_line(&mut self, close: bool) -> MmlOverlayAction {
         let line = self.current_line().to_string();
+        if self.intercept_commit_for_chord_transfer(&line, close) {
+            return MmlOverlayAction::Continue;
+        }
         if close {
             self.release_context();
         }

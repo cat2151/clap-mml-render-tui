@@ -39,7 +39,7 @@ fn start_patch_select_overlay_uses_injected_snapshot_instead_of_scanning() {
     let (mut app, _cache_rx) = build_test_app();
     point_config_at_missing_patch_dir(&mut app);
     *app.patch_load.lock().unwrap() = PatchLoadState::ready(snapshot_pairs());
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
 
     let started = std::time::Instant::now();
     app.start_patch_select_overlay(None);
@@ -72,7 +72,7 @@ fn start_patch_select_overlay_uses_injected_snapshot_instead_of_scanning() {
 fn start_patch_select_overlay_falls_back_to_scan_while_catalog_is_loading() {
     let (mut app, _cache_rx) = build_test_app();
     point_config_at_missing_patch_dir(&mut app);
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
 
     app.start_patch_select_overlay(None);
 
@@ -108,7 +108,7 @@ fn start_patch_select_overlay_reports_unset_patch_dirs_without_scanning() {
         patches_dirs: None,
         ..(*app.cfg).clone()
     });
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
 
     let started = std::time::Instant::now();
     app.start_patch_select_overlay(None);
@@ -153,7 +153,7 @@ fn real_catalog_patch_select_overlay_opens_without_scanning() {
     let (mut app, _cache_rx) = build_test_app();
     app.cfg = Arc::new(cfg);
     *app.patch_load.lock().unwrap() = PatchLoadState::ready(pairs.clone());
-    app.editor.cursor_track = 1;
+    app.editor.cursor_track = 2;
 
     let started = std::time::Instant::now();
     app.start_patch_select_overlay(None);

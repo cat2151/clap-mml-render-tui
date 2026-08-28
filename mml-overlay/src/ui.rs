@@ -1,5 +1,6 @@
 //! MML 入力オーバーレイの描画。
 
+mod chord_transfer;
 mod history_select;
 mod loading;
 mod patch_select;
@@ -30,9 +31,9 @@ const INPUT_ROWS: u16 = 8;
 const SINGLE_LINE_INPUT_ROWS: u16 = 1;
 const OVERLAY_MAX_WIDTH: u16 = 72;
 
-/// 入力欄の枠(2行) + 入力行 + 状態行(1行)。
-fn overlay_height(input_mode: MmlOverlayInputMode) -> u16 {
-    input_rows(input_mode) + 3
+/// 入力欄の枠(2行) + 入力行 + 状態行(1行) + chord ヒント(立っているときだけ 1 行)。
+fn overlay_height(input_mode: MmlOverlayInputMode, hint_rows: u16) -> u16 {
+    input_rows(input_mode) + 3 + hint_rows
 }
 
 fn input_rows(input_mode: MmlOverlayInputMode) -> u16 {
@@ -60,17 +61,25 @@ pub fn draw_with_status(
 ) {
     let area = frame.area();
     let width = area.width.saturating_sub(2).min(OVERLAY_MAX_WIDTH);
-    let height = overlay_height(overlay.input_mode()).min(area.height);
+    let hint_rows = chord_transfer::hint_rows(overlay);
+    let height = overlay_height(overlay.input_mode(), hint_rows).min(area.height);
     let overlay_area = centered_rect_with_size(width, height, area);
     frame.render_widget(Clear, overlay_area);
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(3), Constraint::Length(1)])
+        .constraints([
+            Constraint::Min(3),
+            Constraint::Length(1),
+            Constraint::Length(hint_rows),
+        ])
         .split(overlay_area);
     draw_input(overlay, frame, chunks[0]);
     if chunks.len() > 1 {
         status::draw(overlay, frame, chunks[1]);
+    }
+    if chunks.len() > 2 && hint_rows > 0 {
+        chord_transfer::draw_hint(frame, chunks[2]);
     }
 
     // 音色選択と履歴は入力欄へ重ねて出す。入力欄より後に描くこと。
@@ -83,6 +92,11 @@ pub fn draw_with_status(
     // 演奏設定は音色選択の最中にも開ける最も手前のモーダルなので、最後に描く。
     if let Some(select) = overlay.play_settings_select() {
         play_settings::draw(select, frame);
+    }
+    // 確定ダイアログはさらに手前。開いている間は他のモーダルが開くことは無いが、
+    // 描く順としては最後に置く（最後の砦なので何にも隠されない）。
+    if let Some(confirm) = overlay.chord_transfer_confirm() {
+        chord_transfer::draw(confirm, frame);
     }
     loading::draw(sender_status, frame);
 }

@@ -44,7 +44,7 @@ fn apply_random_patch_to_track_uses_injected_snapshot_instead_of_scanning() {
         *app.patch_load.lock().unwrap() = PatchLoadState::ready(snapshot_pairs());
 
         let started = std::time::Instant::now();
-        let applied = app.apply_random_patch_to_track(1);
+        let applied = app.apply_random_patch_to_track(2);
         let elapsed = started.elapsed();
 
         assert_eq!(
@@ -53,9 +53,9 @@ fn apply_random_patch_to_track_uses_injected_snapshot_instead_of_scanning() {
             "snapshot が Ready なら、走査できない Config でも音色が決まるはず"
         );
         assert!(
-            app.editor.data[1][0].contains("Pads/Snapshot Pad.fxp"),
+            app.editor.data[2][0].contains("Pads/Snapshot Pad.fxp"),
             "init セルへ snapshot の音色が入るはず: {}",
-            app.editor.data[1][0]
+            app.editor.data[2][0]
         );
         // 走査経路は実測 1.3 秒。snapshot 経路なら桁違いに速い。
         assert!(
@@ -90,7 +90,7 @@ fn apply_random_patch_to_track_falls_back_to_scan_while_catalog_is_loading() {
             "既定の test app は Loading で始まる"
         );
 
-        let applied = app.apply_random_patch_to_track(1);
+        let applied = app.apply_random_patch_to_track(2);
 
         assert_eq!(
             applied,
@@ -156,7 +156,7 @@ fn real_catalog_snapshot_path_beats_the_scan_path() {
         *app.patch_load.lock().unwrap() = PatchLoadState::ready(pairs.clone());
 
         let started = std::time::Instant::now();
-        assert_eq!(app.apply_random_patch_to_track(1), Ok(true));
+        assert_eq!(app.apply_random_patch_to_track(2), Ok(true));
         (started.elapsed(), pairs.len())
     };
     std::fs::remove_dir_all(&tmp).ok();

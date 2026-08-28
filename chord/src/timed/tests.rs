@@ -182,3 +182,21 @@ fn the_events_go_straight_into_a_midi_filter_without_conversion() {
     assert_eq!(shifted[0].seconds, performance.events[0].seconds + 1.5);
     assert_eq!(shifted[0].message, performance.events[0].message);
 }
+
+/// 「MML のつもりの文字列が chord としても読めるか」の判定。
+///
+/// 期待値はローカルの `chord2mml.exe`（`Cargo.lock` と同 revision）の Ok / Err に合わせる。
+#[test]
+fn parses_as_chord_only_says_yes_when_chord2mml_accepts_the_input() {
+    // degree も chord name も受け付ける。
+    assert!(parses_as_chord("I"));
+    assert!(parses_as_chord("I-IV-V"));
+    assert!(parses_as_chord("Cm7"));
+    assert!(parses_as_chord("key:G I-IV"));
+    // 小文字だけの MML は chord2mml が受け付けない（音名は大文字のみ）。
+    assert!(!parses_as_chord("cde"));
+    assert!(!parses_as_chord("t120 cdefg"));
+    // 空白だけ・空文字は chord ではない。
+    assert!(!parses_as_chord(""));
+    assert!(!parses_as_chord("   "));
+}

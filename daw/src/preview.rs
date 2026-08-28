@@ -219,6 +219,7 @@ impl DawApp {
                                         .cached_tracks
                                         .iter()
                                         .map(|track| {
+                                            let track = crate::tracks::track_display_number(*track);
                                             format!("track{track}/meas{}", measure_index + 1)
                                         })
                                         .collect::<Vec<_>>()
@@ -348,14 +349,7 @@ impl DawApp {
             if track < FIRST_PLAYABLE_TRACK || track >= self.editor.tracks {
                 continue;
             }
-            let notes = self
-                .editor
-                .data
-                .get(track)
-                .and_then(|row| row.get(displayed_measure))
-                .map(String::as_str)
-                .unwrap_or_default();
-            if notes.trim().is_empty() {
+            if !crate::mml::cell_has_content(&self.editor.data, track, displayed_measure) {
                 continue;
             }
             track_mmls[track] = self.build_cell_mml(track, displayed_measure);

@@ -6,7 +6,8 @@ use cmrt_runtime::Config;
 
 #[test]
 fn start_track_rerender_batch_logs_only_targeted_measures() {
-    let tracks = 3;
+    // 0 = Tempo / 1 = chord 行 / 2..=3 = 演奏 track。
+    let tracks = crate::FIRST_PLAYABLE_TRACK + 2;
     let measures = 4;
     let cache_render_workers = 4;
     let (cache_tx, cache_rx) = std::sync::mpsc::channel();
@@ -72,28 +73,33 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
         track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
         solo_tracks: vec![false; tracks],
         track_volumes_db: vec![0; tracks],
-        overlays: crate::overlays::DawOverlays::new(1),
+        overlays: crate::overlays::DawOverlays::new(crate::FIRST_PLAYABLE_TRACK),
         patch_phrase_store: cmrt_history::PatchPhraseStore::default(),
         patch_phrase_store_dirty: false,
 
         random_patch_decks: cmrt_tui_core::random::RandomIndexDecks::default(),
+        chord_progression_source: None,
         patch_load: Arc::new(Mutex::new(
             cmrt_tui_core::patch_load::PatchLoadState::Loading,
         )),
         mml_overlay: cmrt_mml_overlay::MmlOverlay::default(),
         mml_overlay_sender: None,
     };
-    app.editor.data[1][1] = "c".to_string();
-    app.editor.data[1][3] = "e".to_string();
-    app.editor.data[1][4] = "g".to_string();
+    app.editor.data[2][1] = "c".to_string();
+    app.editor.data[2][3] = "e".to_string();
+    app.editor.data[2][4] = "g".to_string();
     {
         let mut cache = app.cache.lock().unwrap();
-        cache[1][1].state = CacheState::Pending;
-        cache[1][3].state = CacheState::Pending;
-        cache[1][4].state = CacheState::Pending;
+        cache[2][1].state = CacheState::Pending;
+        cache[2][3].state = CacheState::Pending;
+        cache[2][4].state = CacheState::Pending;
     }
 
-    app.start_track_rerender_batch(1, &[1, 3, 4], "random patch update");
+    app.start_track_rerender_batch(
+        crate::FIRST_PLAYABLE_TRACK,
+        &[1, 3, 4],
+        "random patch update",
+    );
 
     let logs = app.log_lines.lock().unwrap().clone();
     assert!(

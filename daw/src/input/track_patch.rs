@@ -54,7 +54,7 @@ impl DawApp {
             return;
         }
         let affected_measures: Vec<usize> = (1..=self.editor.measures)
-            .filter(|&measure| !self.editor.data[track][measure].trim().is_empty())
+            .filter(|&measure| crate::mml::cell_has_content(&self.editor.data, track, measure))
             .collect();
         let current_init_mml = self.editor.data[track][INIT_MEASURE].clone();
         self.editor.data[track][INIT_MEASURE] =

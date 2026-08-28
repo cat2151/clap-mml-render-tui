@@ -43,7 +43,10 @@ impl DawApp {
     /// 「どの列がオーバーレイの対象外か」を知っているのはこのモジュールだけにしたいので、
     /// 分岐は呼び出し側（`input/normal.rs`）ではなくここへ置く。
     pub(crate) fn open_mml_overlay_or_insert(&mut self) {
-        if self.editor.cursor_measure == INIT_MEASURE || !self.open_mml_overlay() {
+        if self.editor.cursor_measure == INIT_MEASURE
+            || self.editor.cursor_track == super::CHORD_TRACK
+            || !self.open_mml_overlay()
+        {
             self.start_insert();
         }
     }
@@ -58,6 +61,13 @@ impl DawApp {
         if self.editor.cursor_measure == INIT_MEASURE {
             self.append_log_line(
                 "init 列は音色セルです。MML 入力は meas1 以降で開きます".to_string(),
+            );
+            return false;
+        }
+        // chord 行の中身は MML ではなくコード進行。MML として鳴らす overlay では開かない。
+        if self.editor.cursor_track == super::CHORD_TRACK {
+            self.append_log_line(
+                "chord 行は MML ではなくコード進行です。`i` でそのまま編集します".to_string(),
             );
             return false;
         }
@@ -97,6 +107,9 @@ impl DawApp {
             history,
             favorites,
             patch_filter_presets: cmrt_history::load_mml_patch_filter_presets(),
+            // DAW にだけ chord 行がある。MML のつもりで打った文字列がコード表記
+            // だったとき、その場で chord 行へ移せる。
+            chord_row_transfer: true,
             catalog_notes: self.mml_overlay_catalog_notes(),
         }
     }
@@ -188,6 +201,38 @@ impl DawApp {
         self.mml_overlay.open(context);
     }
 
+    /// 打ちかけの 1 行を chord 行の同じ小節へ移し、カーソルをそこへ持っていく。
+    ///
+    /// **編集中だったセルへは何も書かない。** 書くと「MML として無音になる文字列が
+    /// セルに残る」（2 節のバグ）が移送しても直らない。書かなければ、その track が
+    /// 生成対象なら chord 行から自動で埋まる（4.5 の「セルが空なら生成」）。
+    ///
+    /// カーソル移動は `C` と同じ関数を通すので、**移送した直後に `C` を押せば
+    /// 元の track へ戻れる**（戻り先はそこで覚えられる）。
+    fn transfer_mml_overlay_line_to_chord_row(&mut self, line: &str) {
+        let measure = self.editor.cursor_measure;
+        let track = self.editor.cursor_track;
+        if self.commit_insert_cell(super::CHORD_TRACK, measure, line) {
+            self.save();
+            self.sync_playback_mml_state();
+        }
+        self.append_log_line(format!(
+            "chord 行の meas{measure} へ移しました: {line}（C で元の track へ戻ります）"
+        ));
+        // 生成対象でない track へ戻っても音は変わらない。init セルの直し方を出す。
+        if !crate::mml::track_generates_from_chord_row(&self.editor.data, track) {
+            self.append_log_line(format!(
+                "{} は chord 行から生成されません。init セルへ \"{}\" を足すか G を押してください",
+                crate::tracks::track_label(track),
+                crate::mml::chord_generation::GENERATE_FROM_CHORD_TRACK_KEY
+            ));
+        }
+        if self.editor.cursor_track != super::CHORD_TRACK {
+            self.jump_between_chord_row_and_cursor_track();
+        }
+        self.close_mml_overlay();
+    }
+
     /// 音色フィルタのプリセット追加を保存し、role の索引を作り直す。
     ///
     /// 作り直さないと、init 列の `role:音色名` 表示がプリセット追加に追従しない。
@@ -244,6 +289,10 @@ impl DawApp {
                 self.close_mml_overlay();
                 return;
             }
+            MmlOverlayAction::TransferToChordRow { line } => {
+                self.transfer_mml_overlay_line_to_chord_row(&line);
+                return;
+            }
             MmlOverlayAction::SavePatchFilterPresets { presets, preview } => {
                 self.save_mml_overlay_patch_filter_presets(&presets);
                 let Some((patch, notes)) = preview else {
@@ -268,6 +317,7 @@ impl DawApp {
             MmlOverlayAction::Continue
             | MmlOverlayAction::Close
             | MmlOverlayAction::Commit { .. }
+            | MmlOverlayAction::TransferToChordRow { .. }
             | MmlOverlayAction::SavePatchFilterPresets { .. } => None,
             MmlOverlayAction::Send(notes) => {
                 Some(sender.send(self.mml_overlay.patch(), notes.messages, notes.duration))

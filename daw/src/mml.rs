@@ -1,8 +1,10 @@
 //! DawApp の MML 構築・拍子/テンポ解析メソッド
 
 use super::timing::{compute_measure_samples, parse_beat_numerator, parse_tempo_bpm};
-use super::{DawApp, FIRST_PLAYABLE_TRACK};
+use super::{DawApp, CHORD_TRACK, FIRST_PLAYABLE_TRACK};
 use serde_json::{Map, Value};
+
+pub(super) mod chord_generation;
 
 // ─── 純粋関数（テスト用） ──────────────────────────────────────
 
@@ -39,6 +41,119 @@ fn split_mml_fragment(cell: &str) -> MmlFragment {
         json,
         body: preprocessed.remaining_mml.trim().to_string(),
     }
+}
+
+fn cell_text(data: &[Vec<String>], track: usize, measure: usize) -> &str {
+    data.get(track)
+        .and_then(|row| row.get(measure))
+        .map(String::as_str)
+        .unwrap_or_default()
+}
+
+/// init セルの JSON から `"generate from chord track"` の値を取り出す。
+///
+/// **キーが存在するかどうかだけ**がその track を chord 行から生成するかの判定。
+/// 値は chord2mml へそのまま渡す任意の文字列で、cmrt 側では検証も語彙定義もしない。
+/// 文字列以外が書かれていた場合は空文字扱い（キーがある以上、生成対象ではある）。
+fn track_chord_directive(init: &MmlFragment) -> Option<&str> {
+    let value = init
+        .json
+        .as_ref()?
+        .get(chord_generation::GENERATE_FROM_CHORD_TRACK_KEY)?;
+    Some(value.as_str().unwrap_or_default())
+}
+
+/// init セルの生の文字列から `"generate from chord track"` の値を取り出す。
+///
+/// 判定と表示（`ui::grid`）の両方がここを通る。**キー名の文字列を他所へ
+/// 直書きしないこと**（綴りの二重管理になる）。
+pub(super) fn init_cell_chord_directive(init_cell: &str) -> Option<String> {
+    track_chord_directive(&split_mml_fragment(init_cell)).map(str::to_string)
+}
+
+/// init セルへ JSON のキーを書き足した文字列を返す。
+///
+/// **既存のキーは残す**（音色や filter を消さずに `"generate from chord track"` だけを
+/// 足せる）。同じキーがあれば上書きする。JSON が無い / 壊れている init セルには
+/// 新しい JSON を作り、JSON のうしろに body があればそのまま残す。
+///
+/// キー名の綴りを呼び出し側が直書きしなくて済むよう、値は `&str` で受ける。
+pub(super) fn init_cell_with_json_entries(init_cell: &str, entries: &[(&str, &str)]) -> String {
+    let fragment = split_mml_fragment(init_cell);
+    let mut object = match fragment.json {
+        Some(Value::Object(object)) => object,
+        // object 以外（配列や数値）が書かれていた場合は、生成キーを載せる器にならない。
+        // 捨てて作り直す（この JSON では音色も読めていないので失うものが無い）。
+        _ => Map::new(),
+    };
+    for (key, value) in entries {
+        object.insert((*key).to_string(), Value::String((*value).to_string()));
+    }
+    format!("{}{}", Value::Object(object), fragment.body)
+}
+
+/// その track が chord 行から生成される設定になっているか（init セルに生成キーがあるか）。
+///
+/// measure セルの中身は見ない。init 列の表示のように「その track の設定」だけを
+/// 知りたいときに使う。
+pub(super) fn track_generates_from_chord_row(data: &[Vec<String>], track: usize) -> bool {
+    track >= FIRST_PLAYABLE_TRACK && init_cell_chord_directive(cell_text(data, track, 0)).is_some()
+}
+
+/// そのセルの MML が chord 行から生成されるか（手書きが空 + init に生成キーがある）。
+///
+/// chord2mml を呼ばない安価な判定。chord 行を編集したときに、どのセルの
+/// キャッシュを捨てるべきかを選ぶのに使う。
+pub(super) fn cell_is_generated_from_chord_row(
+    data: &[Vec<String>],
+    track: usize,
+    measure: usize,
+) -> bool {
+    if measure == 0 || !track_generates_from_chord_row(data, track) {
+        return false;
+    }
+    cell_text(data, track, measure).trim().is_empty()
+}
+
+/// セル (track, measure) の音符 fragment を解決する。
+///
+/// 手書きのセルが空でなければ、それをそのまま使う（手書きが優先。生成が手書きを
+/// 黙って上書きすることはない）。空のときだけ、init に `"generate from chord track"`
+/// があれば chord 行の同じ measure から生成する。
+fn resolve_notes_fragment(
+    data: &[Vec<String>],
+    track: usize,
+    measure: usize,
+    init: &MmlFragment,
+) -> MmlFragment {
+    let cell = cell_text(data, track, measure);
+    if !cell.trim().is_empty() {
+        return split_mml_fragment(cell);
+    }
+    if track < FIRST_PLAYABLE_TRACK || measure == 0 {
+        return MmlFragment::empty();
+    }
+    let Some(directive) = track_chord_directive(init) else {
+        return MmlFragment::empty();
+    };
+    MmlFragment {
+        json: None,
+        body: chord_generation::generate_mml_from_chord_cell(
+            cell_text(data, CHORD_TRACK, 0),
+            directive,
+            cell_text(data, CHORD_TRACK, measure),
+        ),
+    }
+}
+
+/// セル (track, measure) が演奏される中身を持つか。
+///
+/// **手書きセルが空でも、chord 行から生成されるなら `true`。**
+/// キャッシュ投入や再生対象の判定を生のセル文字列で行うと、生成されたセルが
+/// 丸ごと無視されて音が出ない。
+pub(super) fn cell_has_content(data: &[Vec<String>], track: usize, measure: usize) -> bool {
+    let init = split_mml_fragment(cell_text(data, track, 0));
+    resolve_notes_fragment(data, track, measure, &init) != MmlFragment::empty()
 }
 
 fn conductor_fragments(data: &[Vec<String>], num_measures: usize) -> Vec<MmlFragment> {
@@ -151,11 +266,7 @@ pub(super) fn build_cell_mml_from_data(
         .and_then(|r| r.first())
         .map(|cell| split_mml_fragment(cell))
         .unwrap_or_else(MmlFragment::empty);
-    let notes = data
-        .get(track)
-        .and_then(|r| r.get(measure))
-        .map(|cell| split_mml_fragment(cell))
-        .unwrap_or_else(MmlFragment::empty);
+    let notes = resolve_notes_fragment(data, track, measure, &init);
     build_track_mml(&conductor, &init, &notes)
 }
 
@@ -197,19 +308,12 @@ pub(super) fn build_measure_mml_from_data(
         if solo_mode_active && !solo_tracks.get(t).copied().unwrap_or(false) {
             continue;
         }
-        let Some(notes_cell) = data.get(t).and_then(|row| row.get(measure)) else {
-            continue;
-        };
-        if notes_cell.trim().is_empty() {
+        let init = split_mml_fragment(cell_text(data, t, 0));
+        let notes = resolve_notes_fragment(data, t, measure, &init);
+        if notes == MmlFragment::empty() {
             continue;
         }
 
-        let init = data
-            .get(t)
-            .and_then(|row| row.first())
-            .map(|cell| split_mml_fragment(cell))
-            .unwrap_or_else(MmlFragment::empty);
-        let notes = split_mml_fragment(notes_cell);
         append_fragment_json_values(&mut json_values, [&init, &notes]);
         track_branches.extend(track_non_json_branches(
             &conductor_body,
@@ -232,18 +336,29 @@ pub(super) fn build_measure_mml_from_data(
 impl DawApp {
     // ─── MML 構築 ─────────────────────────────────────────────
 
+    /// overlay の preview 用に、conductor 行・chord 行・カーソル track だけを抜き出した
+    /// 縮小グリッドを作る。
+    ///
+    /// **行の並びは本物のグリッドと同じにすること。** `build_cell_mml_from_data` は
+    /// 行 index で行の役割（conductor / chord 行 / 演奏 track）を判断するので、
+    /// 詰めて並べると別の役割の行として解釈される。
+    pub(super) fn preview_grid_for_cursor_track(&self) -> Vec<Vec<String>> {
+        let mut grid: Vec<Vec<String>> = (0..FIRST_PLAYABLE_TRACK)
+            .map(|track| self.editor.data[track].clone())
+            .collect();
+        grid.push(self.editor.data[self.editor.cursor_track].clone());
+        grid
+    }
+
     pub(super) fn build_measure_track_mmls_for_measure(&self, measure: usize) -> Vec<String> {
         (0..self.editor.tracks)
             .map(|track| {
                 if track < FIRST_PLAYABLE_TRACK || !self.track_is_audible(track) {
                     String::new()
+                } else if cell_has_content(&self.editor.data, track, measure) {
+                    self.build_cell_mml(track, measure)
                 } else {
-                    let notes = self.editor.data[track][measure].trim();
-                    if notes.is_empty() {
-                        String::new()
-                    } else {
-                        self.build_cell_mml(track, measure)
-                    }
+                    String::new()
                 }
             })
             .collect()
@@ -320,4 +435,4 @@ impl DawApp {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

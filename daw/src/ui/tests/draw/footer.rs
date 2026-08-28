@@ -116,3 +116,41 @@ fn normal_footer_shows_shift_h_history_shortcut() {
         normalized_lines
     );
 }
+
+/// chord 行は `j` / `k` から遠いので、往復キーがフッタから見つかること。
+#[test]
+fn normal_footer_shows_the_chord_row_jump_shortcut() {
+    let app = build_test_app();
+
+    let normalized_lines: Vec<String> = render_lines(&app, FOOTER_FULL_KEYBIND_TEST_WIDTH, 20)
+        .into_iter()
+        .map(|line| line.replace(' ', ""))
+        .collect();
+
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("C:chord行")),
+        "lines: {:?}",
+        normalized_lines
+    );
+}
+
+/// `G` は破壊的（chord 行と init セルを書き換える）ので、案内がフッタに出ていること。
+#[test]
+fn normal_footer_shows_the_chord_wizard_shortcut() {
+    let app = build_test_app();
+
+    let normalized_lines: Vec<String> = render_lines(&app, FOOTER_FULL_KEYBIND_TEST_WIDTH, 20)
+        .into_iter()
+        .map(|line| line.replace(' ', ""))
+        .collect();
+
+    assert!(
+        normalized_lines
+            .iter()
+            .any(|line| line.contains("G:chordwizard")),
+        "lines: {:?}",
+        normalized_lines
+    );
+}

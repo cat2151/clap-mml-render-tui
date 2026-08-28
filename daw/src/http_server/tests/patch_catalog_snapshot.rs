@@ -30,7 +30,7 @@ fn apply_pending_http_patch_command_uses_the_injected_snapshot() {
     let response_rx = enqueue_command(
         &state,
         DawHttpCommandKind::Patch {
-            track: 1,
+            track: 2,
             patch: "Pads/Snapshot Pad.fxp".to_string(),
         },
     );
@@ -46,7 +46,7 @@ fn apply_pending_http_patch_command_uses_the_injected_snapshot() {
     let elapsed = started.elapsed();
 
     assert_eq!(
-        app.editor.data[1][0],
+        app.editor.data[2][0],
         DawApp::build_patch_json("Pads/Snapshot Pad.fxp"),
         "snapshot 由来の表示パス全文へ解決されるはず"
     );
@@ -82,7 +82,7 @@ fn apply_pending_http_patch_command_falls_back_to_scan_while_catalog_is_loading(
     let response_rx = enqueue_command(
         &state,
         DawHttpCommandKind::Patch {
-            track: 1,
+            track: 2,
             patch: "Pads/Snapshot Pad.fxp".to_string(),
         },
     );
