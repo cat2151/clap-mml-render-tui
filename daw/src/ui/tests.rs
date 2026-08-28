@@ -83,6 +83,11 @@ fn build_test_app() -> DawApp {
         patch_phrase_store_dirty: false,
 
         random_patch_decks: cmrt_tui_core::random::RandomIndexDecks::default(),
+        patch_load: Arc::new(Mutex::new(
+            cmrt_tui_core::patch_load::PatchLoadState::Loading,
+        )),
+        mml_overlay: cmrt_mml_overlay::MmlOverlay::default(),
+        mml_overlay_sender: None,
     }
 }
 
@@ -118,6 +123,7 @@ fn render_cursor_position(app: &DawApp, width: u16, height: u16) -> Position {
 
 mod draw;
 mod helpers;
+mod mml_overlay;
 mod overlay;
 mod screen_switch;
 mod sound_check_guide;

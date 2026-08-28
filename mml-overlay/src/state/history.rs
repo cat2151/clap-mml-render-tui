@@ -8,7 +8,7 @@ use crossterm::event::KeyEvent;
 use crate::history_select::{HistoryPick, HistorySelect, HistorySelectAction};
 use crate::line_play::LineProgram;
 
-use super::{MmlOverlay, MmlOverlayAction, PatchChange};
+use super::{MmlOverlay, MmlOverlayAction, MmlOverlayInputMode, PatchChange};
 
 impl MmlOverlay<'_> {
     pub(super) fn open_history_select(&mut self) {
@@ -67,8 +67,18 @@ impl MmlOverlay<'_> {
     }
 
     /// 入力欄をこの 1 行で置き換える。
+    ///
+    /// 1 行モードでは 1 行入力欄として作り直す（複数行の履歴が来ても改行を
+    /// 持ち込まない）。ここで複数行の入力欄に戻すと `Enter` が改行に戻ってしまう。
     fn replace_text(&mut self, mml: &str) {
-        self.textarea = cmrt_tui_core::text_input::new_multi_line_textarea(vec![mml.to_string()]);
+        self.textarea = match self.input_mode() {
+            MmlOverlayInputMode::MultiLine => {
+                cmrt_tui_core::text_input::new_multi_line_textarea(vec![mml.to_string()])
+            }
+            MmlOverlayInputMode::SingleLine => cmrt_tui_core::text_input::new_single_line_textarea(
+                super::single_line::first_line(mml),
+            ),
+        };
         self.textarea.move_cursor(ratatui_textarea::CursorMove::End);
         self.forget_cursor_unit();
     }

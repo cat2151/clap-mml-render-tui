@@ -148,7 +148,10 @@ pub struct PlayPosition {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DawMode {
     Normal,
+    /// セル内のインライン編集。init 列（音色 JSON）の直接編集がここ。
     Insert,
+    /// 1 行モードの MML 入力オーバーレイ（`Ctrl+P`）。
+    MmlOverlay,
     Help,
     Mixer,
     History,

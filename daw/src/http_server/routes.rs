@@ -14,6 +14,7 @@ const MAX_JSON_BODY_BYTES: u64 = 64 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 
 mod handlers;
+mod patch_list;
 mod response;
 mod snapshot;
 

@@ -1,9 +1,10 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::super::{
-    playback_util::effective_measure_count, AbRepeatState, DawApp, DawMode, DawNormalAction,
-    DawPlayState, NormalPasteUndo, DEFAULT_TRACK0_MML, FIRST_PLAYABLE_TRACK,
+    AbRepeatState, DawApp, DawMode, DawNormalAction, DawPlayState, NormalPasteUndo,
+    DEFAULT_TRACK0_MML, FIRST_PLAYABLE_TRACK,
 };
+use super::track_patch::PatchUpdateReason;
 
 const TEMPO_TRACK: usize = 0;
 const INIT_MEASURE: usize = 0;
@@ -11,7 +12,7 @@ const INIT_MEASURE: usize = 0;
 mod playback;
 
 pub(super) use playback::{
-    format_random_patch_hot_reload_log, normal_playback_shortcut, preview_target_tracks,
+    format_patch_hot_reload_log, normal_playback_shortcut, preview_target_tracks,
     resolve_playback_start_measure_index, NormalPlaybackShortcut,
 };
 
@@ -37,44 +38,12 @@ impl DawApp {
         else {
             return Ok(false);
         };
-        let affected_measures: Vec<usize> = (1..=self.editor.measures)
-            .filter(|&measure| !self.editor.data[track][measure].trim().is_empty())
-            .collect();
-        let current_init_mml = self.editor.data[track][INIT_MEASURE].clone();
-        self.editor.data[track][INIT_MEASURE] = Self::replace_patch_name_in_mml(
-            &current_init_mml,
+        self.apply_patch_name_to_track_init(
+            track,
             &patch,
             patch_filter_query.as_deref(),
+            PatchUpdateReason::RandomPatch,
         );
-        self.invalidate_cell(track, INIT_MEASURE);
-        self.invalidate_dependent_cells(track, INIT_MEASURE);
-        self.start_track_rerender_batch(track, &affected_measures, "random patch update");
-        self.save();
-
-        let new_mmls = self.build_measure_mmls();
-        let new_samples = self.measure_duration_samples();
-        let old_effective_count = {
-            let old_mmls = self.playback.measure_mmls.lock().unwrap();
-            effective_measure_count(&old_mmls)
-        };
-        let new_effective_count = effective_measure_count(&new_mmls);
-        let old_samples = *self.playback.measure_samples.lock().unwrap();
-        let displayed_measure_index = self
-            .playback
-            .position
-            .lock()
-            .unwrap()
-            .as_ref()
-            .map(|position| position.measure_index);
-        self.append_log_line(format_random_patch_hot_reload_log(
-            track,
-            displayed_measure_index,
-            old_effective_count,
-            new_effective_count,
-            old_samples,
-            new_samples,
-        ));
-        self.sync_playback_mml_state();
 
         Ok(true)
     }
@@ -397,7 +366,7 @@ impl DawApp {
                 self.editor.cursor_track = self.editor.tracks - 1;
             }
 
-            KeyCode::Char('i') => self.start_insert(),
+            KeyCode::Char('i') => self.open_mml_overlay_or_insert(),
             KeyCode::Char('m') => {
                 self.overlays.mixer.cursor_track = self
                     .editor

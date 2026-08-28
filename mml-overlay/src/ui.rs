@@ -20,14 +20,34 @@ use cmrt_tui_core::{
     ui::centered_rect_with_size,
 };
 
-use crate::{MmlOverlay, MmlOverlaySenderStatus};
+use crate::{MmlOverlay, MmlOverlayInputMode, MmlOverlaySenderStatus};
 
 const PLACEHOLDER: &str = "1行1フレーズ。上下キーでその行を演奏";
-/// 入力欄に見せる行数。これを超えた行は入力欄の中でスクロールする。
+const SINGLE_LINE_PLACEHOLDER: &str = "MMLを入力。Enterで確定";
+/// 複数行モードの入力欄に見せる行数。これを超えた行は入力欄の中でスクロールする。
 const INPUT_ROWS: u16 = 8;
-/// 入力欄の枠(2行) + 入力行 + 状態行(1行)。
-const OVERLAY_HEIGHT: u16 = INPUT_ROWS + 3;
+/// 1 行モードの入力欄に見せる行数。書き戻す先が 1 か所なので 1 行しか要らない。
+const SINGLE_LINE_INPUT_ROWS: u16 = 1;
 const OVERLAY_MAX_WIDTH: u16 = 72;
+
+/// 入力欄の枠(2行) + 入力行 + 状態行(1行)。
+fn overlay_height(input_mode: MmlOverlayInputMode) -> u16 {
+    input_rows(input_mode) + 3
+}
+
+fn input_rows(input_mode: MmlOverlayInputMode) -> u16 {
+    match input_mode {
+        MmlOverlayInputMode::MultiLine => INPUT_ROWS,
+        MmlOverlayInputMode::SingleLine => SINGLE_LINE_INPUT_ROWS,
+    }
+}
+
+fn placeholder(input_mode: MmlOverlayInputMode) -> &'static str {
+    match input_mode {
+        MmlOverlayInputMode::MultiLine => PLACEHOLDER,
+        MmlOverlayInputMode::SingleLine => SINGLE_LINE_PLACEHOLDER,
+    }
+}
 
 pub fn draw(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>) {
     draw_with_status(overlay, &MmlOverlaySenderStatus::default(), frame);
@@ -40,7 +60,8 @@ pub fn draw_with_status(
 ) {
     let area = frame.area();
     let width = area.width.saturating_sub(2).min(OVERLAY_MAX_WIDTH);
-    let overlay_area = centered_rect_with_size(width, OVERLAY_HEIGHT.min(area.height), area);
+    let height = overlay_height(overlay.input_mode()).min(area.height);
+    let overlay_area = centered_rect_with_size(width, height, area);
     frame.render_widget(Clear, overlay_area);
 
     let chunks = Layout::default()
@@ -68,7 +89,11 @@ pub fn draw_with_status(
 
 fn draw_input(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>, area: Rect) {
     frame.render_widget(
-        &build_input_widget(overlay.textarea(), title(overlay)),
+        &build_input_widget(
+            overlay.textarea(),
+            title(overlay),
+            placeholder(overlay.input_mode()),
+        ),
         area,
     );
     frame.set_cursor_position(single_line_textarea_cursor_position(
@@ -81,9 +106,13 @@ fn draw_input(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>, area: Rect) {
 ///
 /// 持ち続けている `TextArea` はカーソル位置と編集履歴を持つので、フレームごとの
 /// 見た目だけをここで足して本体には触らない。
-fn build_input_widget<'a>(textarea: &TextArea<'a>, title: String) -> TextArea<'a> {
+fn build_input_widget<'a>(
+    textarea: &TextArea<'a>,
+    title: String,
+    placeholder: &str,
+) -> TextArea<'a> {
     let mut widget = textarea.clone();
-    widget.set_placeholder_text(PLACEHOLDER);
+    widget.set_placeholder_text(placeholder);
     widget.set_placeholder_style(Style::default().fg(MONOKAI_GRAY).bg(MONOKAI_BG));
     widget.set_block(
         Block::default()

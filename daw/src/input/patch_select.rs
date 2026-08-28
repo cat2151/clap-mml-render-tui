@@ -146,16 +146,21 @@ impl DawApp {
             return;
         }
 
-        if !cmrt_tui_core::patches::has_configured_patch_dirs(&self.cfg) {
-            self.append_log_line("patches_dirs が設定されていません".to_string());
-            return;
-        }
-        let Ok(patches) = cmrt_tui_core::patches::collect_patch_pairs(&self.cfg) else {
+        // 一覧は注入 snapshot 優先。overlay を開くたびに走査すると 5120 patch で 1.3 秒
+        // UI が止まる（この overlay がその主犯だった）。
+        let Some(patches) = self.patch_pairs_for_configured_dirs("patch-select-overlay") else {
             self.append_log_line("パッチの読み込みに失敗しました".to_string());
             return;
         };
         if patches.is_empty() {
-            self.append_log_line("patches_dirs にパッチが見つかりません".to_string());
+            // 0 件の理由は「設定されていない」と「設定先に無い」で違う。snapshot が
+            // 非空なら patches_dirs が未設定でも開ける（snapshot のほうが正）。
+            let message = if cmrt_tui_core::patches::has_configured_patch_dirs(&self.cfg) {
+                "patches_dirs にパッチが見つかりません"
+            } else {
+                "patches_dirs が設定されていません"
+            };
+            self.append_log_line(message.to_string());
             return;
         }
 

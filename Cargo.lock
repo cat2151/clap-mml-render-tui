@@ -531,6 +531,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "cmrt-history",
+ "cmrt-mml-overlay",
  "cmrt-offline-render",
  "cmrt-patches",
  "cmrt-realtime-play",

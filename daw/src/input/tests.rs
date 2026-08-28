@@ -42,7 +42,7 @@ impl Drop for TempDirGuard {
     }
 }
 
-fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob>) {
+pub(crate) fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob>) {
     let tracks = 3;
     let measures = 2;
     let (cache_tx, cache_rx) = std::sync::mpsc::channel();
@@ -105,6 +105,11 @@ fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob
             patch_phrase_store_dirty: false,
 
             random_patch_decks: cmrt_tui_core::random::RandomIndexDecks::default(),
+            patch_load: Arc::new(Mutex::new(
+                cmrt_tui_core::patch_load::PatchLoadState::Loading,
+            )),
+            mml_overlay: cmrt_mml_overlay::MmlOverlay::default(),
+            mml_overlay_sender: None,
         },
         cache_rx,
     )

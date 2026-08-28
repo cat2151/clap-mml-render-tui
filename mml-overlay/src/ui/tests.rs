@@ -1,3 +1,5 @@
+mod single_line;
+
 use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};

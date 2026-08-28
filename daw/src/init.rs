@@ -28,11 +28,15 @@ fn realtime_audio_startup_log_line(cfg: &cmrt_runtime::Config) -> String {
 pub(super) fn new(
     cfg: Arc<Config>,
     plugin_entries: cmrt_offline_render::PluginEntries,
+    patch_load: Arc<Mutex<cmrt_tui_core::patch_load::PatchLoadState>>,
+    realtime_play_supervisor: Option<Arc<cmrt_realtime_play::RealtimePlayServerSupervisor>>,
     workspace_kind: WorkspaceKind,
 ) -> DawApp {
     new_with_entry_context(
         cfg,
         plugin_entries,
+        patch_load,
+        realtime_play_supervisor,
         workspace_kind,
         cmrt_runtime::config_app_dir(),
         cmrt_tui_core::sound_check_guide::local_date_string(),
@@ -42,11 +46,13 @@ pub(super) fn new(
 fn new_with_entry_context(
     cfg: Arc<Config>,
     plugin_entries: cmrt_offline_render::PluginEntries,
+    patch_load: Arc<Mutex<cmrt_tui_core::patch_load::PatchLoadState>>,
+    realtime_play_supervisor: Option<Arc<cmrt_realtime_play::RealtimePlayServerSupervisor>>,
     workspace_kind: WorkspaceKind,
     config_app_dir: Option<std::path::PathBuf>,
     current_date: String,
 ) -> DawApp {
-    super::http_server::set_active_http_state_cfg(Arc::clone(&cfg));
+    super::http_server::set_active_http_state_context(Arc::clone(&cfg), Arc::clone(&patch_load));
     let DawGridBuffers {
         tracks,
         measures,
@@ -87,6 +93,11 @@ fn new_with_entry_context(
     let play_measure_mmls = Arc::new(Mutex::new(play_measure_mmls));
     let play_measure_track_mmls = Arc::new(Mutex::new(play_measure_track_mmls));
     let play_track_gains = Arc::new(Mutex::new(play_track_gains));
+    // MML オーバーレイの発音は app から注入された supervisor を使う。DAW 自身の演奏用
+    // supervisor（下の `realtime_play_server`）は backend が in_process だと `None` に
+    // なるので、そちらを使うと実機ではオーバーレイが無音になる。
+    let mml_overlay_sender = realtime_play_supervisor
+        .map(|supervisor| cmrt_mml_overlay::MmlOverlaySender::new(supervisor, cfg.sample_rate));
     let realtime_play_server =
         if cfg.realtime_audio_backend == cmrt_runtime::RealtimeAudioBackend::PlayServer {
             Some(Arc::new(
@@ -255,6 +266,9 @@ fn new_with_entry_context(
         patch_phrase_store: cmrt_history::load_patch_phrase_store(),
         patch_phrase_store_dirty: false,
         random_patch_decks: cmrt_tui_core::random::RandomIndexDecks::default(),
+        patch_load,
+        mml_overlay: cmrt_mml_overlay::MmlOverlay::default(),
+        mml_overlay_sender,
     };
 
     app.load(&current_date);

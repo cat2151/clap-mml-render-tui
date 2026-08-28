@@ -77,6 +77,11 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
         patch_phrase_store_dirty: false,
 
         random_patch_decks: cmrt_tui_core::random::RandomIndexDecks::default(),
+        patch_load: Arc::new(Mutex::new(
+            cmrt_tui_core::patch_load::PatchLoadState::Loading,
+        )),
+        mml_overlay: cmrt_mml_overlay::MmlOverlay::default(),
+        mml_overlay_sender: None,
     };
     app.editor.data[1][1] = "c".to_string();
     app.editor.data[1][3] = "e".to_string();

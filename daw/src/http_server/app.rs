@@ -119,8 +119,9 @@ impl DawApp {
         }
         self.ensure_http_grid_size(track, self.editor.measures.max(1))?;
 
-        let patch_pairs = cmrt_tui_core::patches::collect_patch_pairs(self.cfg.as_ref())
-            .map_err(|error| format!("patch 一覧の取得に失敗しました: {error}"))?;
+        let patch_pairs = self
+            .patch_pairs_for_configured_dirs("http-post-patch")
+            .ok_or_else(|| "patch 一覧の取得に失敗しました".to_string())?;
         let display_patch_name = cmrt_patches::resolve_display_patch_name(&patch_pairs, patch_name)
             .ok_or_else(|| format!("patch が見つかりません: {patch_name}"))?;
         let patch_json = Self::build_patch_json(&display_patch_name);

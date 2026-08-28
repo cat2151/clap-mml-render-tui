@@ -196,6 +196,10 @@ impl<'a> TuiApp<'a> {
             let mut daw = crate::daw::DawApp::new_for_workspace(
                 std::sync::Arc::clone(&self.cfg),
                 self.plugin_entries.clone(),
+                std::sync::Arc::clone(&self.patch_load_state),
+                // MML オーバーレイの発音用。app の 1 本を貸す（DAW 内でもう 1 本
+                // supervisor を作ると SHM 接続が二重になる）。
+                Some(std::sync::Arc::clone(&self.play_server)),
                 workspace_kind,
             );
             let outcome = daw.run_with_terminal(terminal, autoplay);

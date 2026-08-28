@@ -314,4 +314,5 @@ fn handle_patch_select_left_in_filter_query_does_not_repreview() {
     );
 }
 
+mod catalog_snapshot;
 mod filter_input;

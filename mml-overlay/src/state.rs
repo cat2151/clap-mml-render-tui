@@ -8,14 +8,13 @@
 //! なった。止める役と gate の計時は sender worker へ寄せ、ここが持つ
 //! [`MmlOverlay::sounding`] は表示専用とする。
 
+mod contract;
 mod history;
 mod patch;
 mod play_settings;
+mod single_line;
 
-use std::{
-    collections::BTreeMap,
-    time::{Duration, Instant},
-};
+use std::{collections::BTreeMap, time::Instant};
 
 use cmrt_patches::PatchRoleIndex;
 use crossterm::event::{KeyCode, KeyEvent};
@@ -25,91 +24,16 @@ use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 
 use crate::cursor_notes::{notes_at_cursor, CursorNotes};
 use crate::history_select::{is_history_select_trigger, HistorySelect};
-use crate::line_play::{is_replay_key, line_events, LineProgram, LineStatus};
+use crate::line_play::{is_replay_key, line_events, LineStatus};
 use crate::patch_select::{is_patch_select_trigger, PatchSelect};
 use crate::play_settings::{PlaySettings, PlaySettingsSelect};
+use crate::MmlOverlaySenderStatus;
 use crate::NOTE_ON;
-use crate::{MmlOverlaySenderStatus, PatchCatalogEntry};
 
-/// 生 MIDI の note on と、送信成功後に保つべき音長。
-#[derive(Clone, Debug, PartialEq)]
-pub struct NoteRequest {
-    pub messages: Vec<[u8; 3]>,
-    pub duration: Duration,
-}
-
-/// 行を鳴らす前に音源の音色を差し替えるか。
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PatchChange {
-    /// いまの音色のまま鳴らす。
-    Keep,
-    /// 鳴らす前にこの音色へ差し替える（`None` は realtime server の既定音色へ戻す）。
-    Switch(Option<String>),
-}
-
-/// オーバーレイが呼び出し側へ求める処理。
-///
-/// 音を出す変種（[`Self::Send`] / [`Self::SetPatch`] / [`Self::PlayLine`]）は、
-/// どれも「鳴っているものを止めてから鳴らす」の意味になる。止める指示は載せない。
-#[derive(Clone, Debug, PartialEq)]
-pub enum MmlOverlayAction {
-    Continue,
-    /// MML patch selector で追加した正規表現プリセットを host app に保存させる。
-    SavePatchFilterPresets {
-        presets: Vec<(String, String)>,
-        /// 絞り込み更新で新しい先頭候補へ移った場合は、保存と同時に試聴する。
-        preview: Option<(String, Option<NoteRequest>)>,
-    },
-    /// 鳴っているものを止めてから、この note on を送る。
-    Send(NoteRequest),
-    /// 鳴っているものを止め、音源の音色を差し替えてから、この note on を送る。
-    /// `patch` が `None` なら realtime server の既定音色へ戻す。
-    SetPatch {
-        patch: Option<String>,
-        notes: Option<NoteRequest>,
-    },
-    /// 鳴っているものを止め、あらためてこの行を頭から積む。
-    /// `program` が空（[`LineProgram::is_silent`]）なら止めるだけ。
-    PlayLine {
-        patch: PatchChange,
-        program: LineProgram,
-    },
-    /// オーバーレイを閉じる。鳴っているものを止めるのも含む。
-    Close,
-}
-
-/// MML overlay が受け取る、plugin 非依存の音色一覧スナップショット。
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub enum PatchCatalogSnapshot {
-    /// バックグラウンド収集中。Ctrl+T は完了後の open 予約になる。
-    #[default]
-    Loading,
-    /// 収集済みのselector行。空なら選べる音色がない。
-    Ready(Vec<PatchCatalogEntry>),
-    /// 収集に失敗した理由。Ctrl+T 時に overlay 内へ表示する。
-    Error(String),
-}
-
-/// オーバーレイを開くときに呼び出し側から渡すスナップショット。
-#[derive(Default)]
-pub struct MmlOverlayContext {
-    pub patch_catalog: PatchCatalogSnapshot,
-    /// MML selectorとGrid Sequencerが共有する、同じcatalog世代のRole索引。
-    pub patch_role_index: PatchRoleIndex,
-    /// catalog構築時に計測したpatch別のload結果。
-    pub load_measurements: BTreeMap<String, PatchLoadMeasurement>,
-    /// notepad 画面と共有しているフレーズ履歴。
-    pub history: Vec<String>,
-    pub favorites: Vec<String>,
-    /// `(Grid Sequencer 上の役割 group, 正規表現)` のユーザー追加プリセット。
-    pub patch_filter_presets: Vec<(String, String)>,
-    /// 設定不足でカタログから外れたプラグインの案内（`SkippedCatalogPlugin::notice_line`）。
-    ///
-    /// 「音色一覧に出てこない」は一覧を見ているだけでは絶対に気づけない
-    /// （**出ていないものは見えない**）ので、音色選択を開いている間だけ枠の下へ出す。
-    /// 空なら 1 行も増えない。
-    pub catalog_notes: Vec<String>,
-}
+pub use contract::{
+    MmlOverlayAction, MmlOverlayContext, MmlOverlayInputMode, NoteRequest, PatchCatalogSnapshot,
+    PatchChange,
+};
 
 /// どの画面からでも開ける MML 入力オーバーレイ。
 ///
@@ -120,6 +44,8 @@ pub struct MmlOverlayContext {
 /// 残し、呼び出し側がセッションへ保存する。
 pub struct MmlOverlay<'a> {
     open: bool,
+    /// 入力欄が 1 行か複数行か。`Enter` / `Esc` の意味がこれで変わる。
+    input_mode: MmlOverlayInputMode,
     textarea: TextArea<'a>,
     /// 直近に打鍵で鳴らした発音単位。これと違う単位になった瞬間だけ発音する。
     /// 行をまたいだら別の音として扱うため、行番号も同一性に含める。
@@ -162,6 +88,7 @@ impl Default for MmlOverlay<'_> {
     fn default() -> Self {
         Self {
             open: false,
+            input_mode: MmlOverlayInputMode::MultiLine,
             textarea: cmrt_tui_core::text_input::new_multi_line_textarea(Vec::new()),
             last_notes: None,
             sounding: Vec::new(),
@@ -232,9 +159,14 @@ impl<'a> MmlOverlay<'a> {
         self.history_select.as_ref()
     }
 
-    /// 前回の音色だけを引き継いだ、空の入力欄で開く。
+    /// 前回の音色だけを引き継いだ入力欄で開く。
+    ///
+    /// 複数行モードは従来どおり必ず空で開く。1 行モードだけ
+    /// [`MmlOverlayContext::initial_text`] を入れた状態で開く（DAW が
+    /// 「そのセルの MML を編集する」ために使う）。
     pub fn open(&mut self, context: MmlOverlayContext) {
-        self.textarea = cmrt_tui_core::text_input::new_multi_line_textarea(Vec::new());
+        self.input_mode = context.input_mode;
+        self.textarea = single_line::new_textarea(context.input_mode, &context.initial_text);
         self.last_notes = None;
         self.sounding.clear();
         self.sounding_from_chord = false;
@@ -266,6 +198,11 @@ impl<'a> MmlOverlay<'a> {
         }
         if self.history_select.is_some() {
             return self.handle_history_select_key(key);
+        }
+        // 1 行モードの確定は、どのモーダルも開いていないときだけ。音色選択の
+        // `Enter`（＝候補の確定）を横取りしてはいけないので、委譲より後に置く。
+        if let Some(action) = self.intercept_single_line_key(key) {
+            return action;
         }
         if key.code == KeyCode::Esc {
             return self.close();
@@ -307,6 +244,12 @@ impl<'a> MmlOverlay<'a> {
     }
 
     fn close(&mut self) -> MmlOverlayAction {
+        self.release_context();
+        MmlOverlayAction::Close
+    }
+
+    /// 開いている間だけ持っていたスナップショットを手放し、閉じた状態にする。
+    pub(super) fn release_context(&mut self) {
         self.patch_catalog = PatchCatalogSnapshot::Loading;
         self.patch_role_index = PatchRoleIndex::default();
         self.history = Vec::new();
@@ -319,7 +262,6 @@ impl<'a> MmlOverlay<'a> {
         self.play_settings_select = None;
         self.open = false;
         self.forget_sounding();
-        MmlOverlayAction::Close
     }
 
     /// カーソルのある行をまるごと鳴らす。
@@ -385,7 +327,7 @@ impl<'a> MmlOverlay<'a> {
         }
     }
 
-    fn current_line(&self) -> &str {
+    pub(super) fn current_line(&self) -> &str {
         self.textarea
             .lines()
             .get(self.cursor_row())

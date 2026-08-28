@@ -13,15 +13,58 @@ use super::{
 };
 use cmrt_tui_core::theme::cursor_highlight_style;
 
+mod init_cell;
+
+#[cfg(test)]
+mod tests;
+
+/// init 列（meas 0）のセル桁数。音色名を `role:音色名` の形で出すため広く取る。
+pub(super) const INIT_CELL_WIDTH: usize = 13;
+/// meas 1 以降のセル桁数。
+pub(super) const MEASURE_CELL_WIDTH: usize = 4;
+/// 列と列の間に挟む区切り空白の桁数。
+const COLUMN_GAP: usize = 1;
+/// 行頭の track ラベル（`Tempo` / `T1`）の桁数。
+pub(super) const TRACK_LABEL_WIDTH: usize = 5;
+
+/// その列のセル本体（区切り空白を含まない）の桁数。
+pub(super) fn cell_width(measure_index: usize) -> usize {
+    if measure_index == 0 {
+        INIT_CELL_WIDTH
+    } else {
+        MEASURE_CELL_WIDTH
+    }
+}
+
+/// その列が占める桁数（セル本体 + 区切り空白）。
+pub(super) fn column_width(measure_index: usize) -> usize {
+    cell_width(measure_index) + COLUMN_GAP
+}
+
+/// grid 領域の左端から数えた、その列の内容が始まる x オフセット。
+///
+/// 列位置の計算はこの関数に閉じること。ヘッダ・セル・インジケータの 3 行が
+/// 縦に揃うかどうかは、すべてこの 1 か所に依存する。
+pub(super) fn column_x_offset(measure_index: usize) -> u16 {
+    let offset = TRACK_LABEL_WIDTH + (0..measure_index).map(column_width).sum::<usize>();
+    offset as u16
+}
+
 pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &[Vec<CacheState>]) {
     let solo_mode_active = app.solo_mode_active();
     let ab_repeat_markers = app.ab_repeat_state().marker_indices();
+    // init 列の role 表示に使う catalog。1 描画につき 1 回だけ lock を取る。
+    let catalog = app.catalog_snapshot();
 
     // ヘッダ行（列ラベル）
-    let mut header_spans = vec![Span::styled("     ", Style::default())];
+    // 行頭の空白は、init 列が始まる x までを埋める。
+    let mut header_spans = vec![Span::styled(
+        " ".repeat(column_x_offset(0) as usize),
+        Style::default(),
+    )];
     for m in 0..=app.editor.measures {
         let (label, style) = if m == 0 {
-            (" Init".to_string(), Style::default().fg(MONOKAI_GRAY))
+            ("Init".to_string(), Style::default().fg(MONOKAI_GRAY))
         } else {
             let measure_index = m - 1;
             match ab_repeat_markers {
@@ -30,28 +73,31 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &
                         && end_measure_index == measure_index =>
                 {
                     (
-                        format!("AB{m:<3}"),
+                        format!("AB{m}"),
                         Style::default()
                             .fg(MONOKAI_YELLOW)
                             .add_modifier(Modifier::BOLD),
                     )
                 }
                 Some((start_measure_index, _)) if start_measure_index == measure_index => (
-                    format!("A{m:<4}"),
+                    format!("A{m}"),
                     Style::default()
                         .fg(MONOKAI_GREEN)
                         .add_modifier(Modifier::BOLD),
                 ),
                 Some((_, end_measure_index)) if end_measure_index == measure_index => (
-                    format!("B{m:<4}"),
+                    format!("B{m}"),
                     Style::default()
                         .fg(MONOKAI_PURPLE)
                         .add_modifier(Modifier::BOLD),
                 ),
-                _ => (format!("M{m:<4}"), Style::default().fg(MONOKAI_GRAY)),
+                _ => (format!("M{m}"), Style::default().fg(MONOKAI_GRAY)),
             }
         };
-        header_spans.push(Span::styled(label, style));
+        header_spans.push(Span::styled(
+            format!("{label:<width$}", width = column_width(m)),
+            style,
+        ));
     }
     if area.height > 0 {
         f.render_widget(
@@ -96,7 +142,7 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &
         let track_label = if t == 0 {
             "Tempo".to_string()
         } else {
-            format!("T{:<2}  ", t)
+            format!("{:<width$}", format!("T{t}"), width = TRACK_LABEL_WIDTH)
         };
         let label_style = if is_cursor_track {
             cursor_highlight_style(Style::default().fg(label_fg))
@@ -108,7 +154,10 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &
         // INSERTモード時はカーソルtrackのインジケータ行（行2）が不要なので生成をスキップする。
         let show_indicators = !(is_cursor_track && app.mode == DawMode::Insert);
         let mut row2: Vec<Span> = if show_indicators {
-            vec![Span::styled("     ", Style::default())]
+            vec![Span::styled(
+                " ".repeat(column_x_offset(0) as usize),
+                Style::default(),
+            )]
         } else {
             vec![]
         };
@@ -121,12 +170,21 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &
         {
             let is_cursor = is_cursor_track && m == app.editor.cursor_measure;
 
-            // セル表示 (4 chars)
+            // セル表示（列ごとの桁数。init 列だけ広い）
+            let width = cell_width(m);
             let display: String = if mml.is_empty() {
-                "    ".to_string()
+                " ".repeat(width)
             } else {
-                let s: String = mml.chars().take(4).collect();
-                format!("{:<4}", s)
+                // init 列だけ `role:音色名` / `4/4 t120` へ組み直す。
+                // 組み直せないセル（生 MML）は従来どおり先頭 `width` 文字。
+                let text = if m == 0 {
+                    init_cell::init_cell_text(t, mml, catalog.as_deref())
+                } else {
+                    None
+                };
+                let text = text.as_deref().unwrap_or(mml.as_str());
+                let s: String = text.chars().take(width).collect();
+                format!("{s:<width$}")
             };
 
             let fg = if is_muted_track {
@@ -142,17 +200,22 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &
 
             row1.push(Span::styled(format!("{} ", display), style));
 
-            // 状態インジケータ (4 chars + 1 space): INSERTモードのカーソルtrackはスキップ
+            // 状態インジケータ（列と同じ桁数）: INSERTモードのカーソルtrackはスキップ
             if show_indicators {
-                let indicator = if solo_mode_active && m == 0 && t > 0 {
+                let indicator_text = if solo_mode_active && m == 0 && t > 0 {
                     if app.track_is_soloed(t) {
-                        "solo "
+                        "solo"
                     } else {
-                        "mute "
+                        "mute"
                     }
                 } else {
                     cache_indicator(cs, anim_frame)
                 };
+                let indicator = format!(
+                    "{:<width$}",
+                    indicator_text.trim_end(),
+                    width = column_width(m)
+                );
                 let ind_fg = if solo_mode_active && m == 0 && t > 0 {
                     if app.track_is_soloed(t) {
                         MONOKAI_FG

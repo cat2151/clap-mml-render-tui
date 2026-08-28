@@ -83,7 +83,7 @@ pub(super) fn draw_help(
             Line::from("  k / ↑  : track 移動（上, 非play時 preview）"),
             Line::from("  M      : 中央 track へ移動"),
             Line::from("  L      : 末尾 track へ移動"),
-            Line::from("  i      : INSERT モード"),
+            Line::from("  i / Ctrl+P : MML 入力オーバーレイ（1 行モード）"),
             Line::from("  a      : off → start固定/end追従 → end固定 → off"),
             Line::from("  m      : mixer overlay"),
             Line::from("  dd     : 現在セルを yank して空にする（patch history 保存）"),
@@ -117,7 +117,20 @@ pub(super) fn draw_help(
             Line::from("  q      : 終了"),
             Line::from(""),
             Line::from(Span::styled(
-                "INSERT モード",
+                "MML 入力オーバーレイ (i / Ctrl+P)",
+                Style::default()
+                    .fg(MONOKAI_YELLOW)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from("  Enter      : 確定 → 次小節の入力欄を開く"),
+            Line::from("  ESC        : 確定 → 閉じる"),
+            Line::from("  Ctrl+T     : 音色選択（確定すると init 列へ反映）"),
+            Line::from("  Ctrl+O     : フレーズ履歴"),
+            Line::from("  Ctrl+L     : 演奏設定 (repeat / CC1 / velocity)"),
+            Line::from("  Ctrl+Space : 現在行を鳴らし直す"),
+            Line::from(""),
+            Line::from(Span::styled(
+                "INSERT モード (init 列の i)",
                 Style::default()
                     .fg(MONOKAI_YELLOW)
                     .add_modifier(Modifier::BOLD),

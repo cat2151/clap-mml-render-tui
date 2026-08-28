@@ -1,5 +1,11 @@
 use super::*;
 
+use std::{collections::BTreeMap, sync::Arc};
+
+use cmrt_tui_core::patch_load::PatchLoadState;
+
+use super::super::mml_overlay::PatchCatalogSnapshot as OverlayCatalogSnapshot;
+
 #[test]
 fn server_selector_metadata_reaches_the_overlay_entry() {
     let plugin = cmrt_tui_core::patch_plugins::CatalogPlugin {
@@ -29,8 +35,12 @@ fn server_selector_metadata_reaches_the_overlay_entry() {
         BTreeMap::new(),
     );
 
-    let entries = mml_overlay_catalog_entries(&snapshot);
+    // 変換は DAW と共有の 1 実装（`cmrt_mml_overlay::host_patch_catalog`）を通る。
+    let host = host_patch_catalog(&PatchLoadState::Ready(Arc::new(snapshot)));
 
+    let OverlayCatalogSnapshot::Ready(entries) = host.catalog else {
+        panic!("ready な catalog になるはず");
+    };
     assert_eq!(entries[0].plugin_sort_key(), "surge xt");
     assert_eq!(entries[0].selector_category(), Some("Basses"));
 }

@@ -10,11 +10,10 @@ impl DawApp {
         if self.editor.cursor_track < FIRST_PLAYABLE_TRACK {
             return;
         }
-        let available_patches = if cmrt_tui_core::patches::has_configured_patch_dirs(&self.cfg) {
-            cmrt_tui_core::patches::collect_patch_pairs(&self.cfg).ok()
-        } else {
-            None
-        };
+        // 音色名の解決だけのために走査しない。注入 snapshot 優先で引く。
+        let available_patches = self
+            .patch_pairs_for_configured_dirs("history-overlay")
+            .filter(|pairs| !pairs.is_empty());
         if let Some(pairs) = available_patches.as_deref() {
             self.normalize_patch_phrase_store_for_available_patches(pairs);
         }

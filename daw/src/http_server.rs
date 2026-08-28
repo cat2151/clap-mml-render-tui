@@ -31,6 +31,9 @@ mod routes;
 #[derive(Default)]
 pub(crate) struct DawHttpState {
     cfg: Option<Arc<Config>>,
+    /// app が起動時に立てた file cache の patch 一覧。`GET /patches` はこれを優先して読み、
+    /// 走査（5120 patch で 1.3 秒）を避ける。
+    patch_load: Option<Arc<Mutex<cmrt_tui_core::patch_load::PatchLoadState>>>,
     pending_commands: VecDeque<DawHttpCommand>,
     grid_snapshot: Vec<Vec<String>>,
     status_snapshot: Option<DawStatusSnapshot>,
@@ -173,9 +176,13 @@ pub(crate) fn spawn_daw_http_server(state: Arc<Mutex<DawHttpState>>) {
     ensure_daw_http_server_thread();
 }
 
-pub(crate) fn set_active_http_state_cfg(cfg: Arc<Config>) {
+pub(crate) fn set_active_http_state_context(
+    cfg: Arc<Config>,
+    patch_load: Arc<Mutex<cmrt_tui_core::patch_load::PatchLoadState>>,
+) {
     let state = Arc::new(Mutex::new(DawHttpState {
         cfg: Some(cfg),
+        patch_load: Some(patch_load),
         pending_commands: VecDeque::new(),
         grid_snapshot: Vec::new(),
         status_snapshot: None,

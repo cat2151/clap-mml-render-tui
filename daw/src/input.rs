@@ -11,6 +11,7 @@ mod mixer;
 mod normal;
 mod patch_select;
 mod project;
+pub(crate) mod track_patch;
 
 use super::{AbRepeatState, DawApp, FIRST_PLAYABLE_TRACK};
 
@@ -75,7 +76,7 @@ impl DawApp {
         }
     }
 
-    fn extract_patch_json_and_phrase(mml: &str) -> Option<(Value, String)> {
+    pub(crate) fn extract_patch_json_and_phrase(mml: &str) -> Option<(Value, String)> {
         let preprocessed = mml_preprocessor::extract_embedded_json(mml);
         let value = preprocessed
             .embedded_json
@@ -84,7 +85,7 @@ impl DawApp {
         Some((value, preprocessed.remaining_mml.trim().to_string()))
     }
 
-    fn extract_patch_phrase(mml: &str) -> Option<(String, String)> {
+    pub(crate) fn extract_patch_phrase(mml: &str) -> Option<(String, String)> {
         let (value, phrase) = Self::extract_patch_json_and_phrase(mml)?;
         let patch_name = value
             .get(PATCH_JSON_KEY)
@@ -247,7 +248,7 @@ impl DawApp {
         self.track_patch_filter_query(self.editor.cursor_track)
     }
 
-    fn track_patch_filter_query(&self, track: usize) -> Option<String> {
+    pub(crate) fn track_patch_filter_query(&self, track: usize) -> Option<String> {
         if track < FIRST_PLAYABLE_TRACK || track >= self.editor.tracks {
             return None;
         }
@@ -341,7 +342,7 @@ impl DawApp {
         self.editor.cursor_measure.checked_sub(1)
     }
 
-    fn update_ab_repeat_follow_end_with_cursor(&self) {
+    pub(crate) fn update_ab_repeat_follow_end_with_cursor(&self) {
         let Some(end_measure_index) = self.cursor_play_measure_index() else {
             return;
         };
@@ -414,5 +415,7 @@ impl DawApp {
     }
 }
 
+// テスト用の `DawApp` 組み立ては 1 か所だけにしておく（画面 crate の他モジュールの
+// テストからも借りる）。組み立てを写すと、フィールドが増えるたびに全部へ追随が要る。
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

@@ -4,15 +4,13 @@
 //! 「どの画面から開いてよいか」「開くときに何を止めるか」「鳴らす先はどこか」
 //! 「開くときに何のスナップショットを渡すか」の 4 つだけ。
 
-use std::{collections::BTreeMap, time::Instant};
+use std::time::Instant;
 
-use cmrt_patches::PatchRoleIndex;
-use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 use crossterm::event::KeyEvent;
 
 use super::mml_overlay::{
-    is_mml_overlay_trigger, MmlOverlayAction, MmlOverlayContext, PatchCatalogEntry,
-    PatchCatalogSnapshot, PatchChange,
+    host_patch_catalog, is_mml_overlay_trigger, HostPatchCatalog, MmlOverlayAction,
+    MmlOverlayContext, MmlOverlayInputMode, PatchChange,
 };
 use super::{PatchLoadState, TuiApp};
 
@@ -40,8 +38,11 @@ impl TuiApp<'_> {
     /// 音色一覧の状態とフレーズ履歴を、開くたびに最新のスナップショットで渡す。
     /// 音色一覧が Loading なら、完了後に [`Self::pump_mml_overlay`] が差し替える。
     fn mml_overlay_context(&self) -> MmlOverlayContext {
-        let (patch_catalog, patch_role_index, load_measurements) =
-            self.mml_overlay_patch_catalog_snapshot();
+        let HostPatchCatalog {
+            catalog: patch_catalog,
+            patch_role_index,
+            load_measurements,
+        } = self.mml_overlay_patch_catalog_snapshot();
         let (history, favorites) = self.notepad.phrase_history();
         let catalog_notes = match &*self.patch_load_state.lock().unwrap() {
             PatchLoadState::Ready(snapshot) if !snapshot.catalog_notes().is_empty() => {
@@ -51,6 +52,10 @@ impl TuiApp<'_> {
             PatchLoadState::Loading | PatchLoadState::Err(_) => Vec::new(),
         };
         MmlOverlayContext {
+            // app からの Ctrl+P は従来どおり複数行・空の入力欄で開く。
+            // 1 行モードは DAW が明示的に指定したときだけ。
+            input_mode: MmlOverlayInputMode::MultiLine,
+            initial_text: String::new(),
             patch_catalog,
             patch_role_index,
             load_measurements,
@@ -61,30 +66,10 @@ impl TuiApp<'_> {
         }
     }
 
-    fn mml_overlay_patch_catalog_snapshot(
-        &self,
-    ) -> (
-        PatchCatalogSnapshot,
-        PatchRoleIndex,
-        BTreeMap<String, PatchLoadMeasurement>,
-    ) {
-        match &*self.patch_load_state.lock().unwrap() {
-            PatchLoadState::Loading => (
-                PatchCatalogSnapshot::Loading,
-                PatchRoleIndex::default(),
-                BTreeMap::new(),
-            ),
-            PatchLoadState::Ready(snapshot) => (
-                PatchCatalogSnapshot::Ready(mml_overlay_catalog_entries(snapshot)),
-                snapshot.patch_roles().clone(),
-                snapshot.load_measurements().clone(),
-            ),
-            PatchLoadState::Err(error) => (
-                PatchCatalogSnapshot::Error(error.clone()),
-                PatchRoleIndex::default(),
-                BTreeMap::new(),
-            ),
-        }
+    /// 一覧・Role 索引・load 計測は DAW と同じ 1 実装（`cmrt_mml_overlay::host_patch_catalog`）で
+    /// 作る。`Loading` / `Err` のときに何を渡すかが画面ごとに食い違わないようにするため。
+    fn mml_overlay_patch_catalog_snapshot(&self) -> HostPatchCatalog {
+        host_patch_catalog(&self.patch_load_state.lock().unwrap())
     }
 
     #[cfg(test)]
@@ -115,8 +100,11 @@ impl TuiApp<'_> {
         if !self.mml_overlay.is_waiting_for_patch_catalog() {
             return;
         }
-        let (catalog, patch_role_index, load_measurements) =
-            self.mml_overlay_patch_catalog_snapshot();
+        let HostPatchCatalog {
+            catalog,
+            patch_role_index,
+            load_measurements,
+        } = self.mml_overlay_patch_catalog_snapshot();
         self.mml_overlay
             .sync_patch_catalog(catalog, patch_role_index, load_measurements);
     }
@@ -163,8 +151,11 @@ impl TuiApp<'_> {
             return;
         };
         let command_id = match action {
+            // Commit は 1 行モードでしか返らない。app 側は複数行モードでしか
+            // 開かないのでここへは来ない（来ても sender へ用は無い）。
             MmlOverlayAction::Continue
             | MmlOverlayAction::Close
+            | MmlOverlayAction::Commit { .. }
             | MmlOverlayAction::SavePatchFilterPresets { .. } => None,
             MmlOverlayAction::Send(notes) => {
                 let id = sender.send(self.mml_overlay.patch(), notes.messages, notes.duration);
@@ -186,37 +177,6 @@ impl TuiApp<'_> {
             self.mml_overlay.expect_sender_command(command_id);
         }
     }
-}
-
-fn mml_overlay_catalog_entries(
-    snapshot: &cmrt_tui_core::patch_load::PatchCatalogSnapshot,
-) -> Vec<PatchCatalogEntry> {
-    if snapshot.audio_patches().len() != snapshot.pairs().len() {
-        return snapshot
-            .pairs()
-            .iter()
-            .map(|(display, normalized)| {
-                PatchCatalogEntry::new(display.clone(), normalized.clone(), String::new(), None)
-            })
-            .collect();
-    }
-    snapshot
-        .audio_patches()
-        .iter()
-        .map(|patch| {
-            let plugin_sort_key = snapshot
-                .patch_plugins()
-                .audio_info_for_ref(&patch.reference)
-                .map(|plugin| plugin.name.clone())
-                .unwrap_or_else(|_| patch.reference.plugin.to_string());
-            PatchCatalogEntry::new(
-                patch.reference.display.clone(),
-                patch.normalized_display.clone(),
-                plugin_sort_key,
-                patch.selector_category.clone(),
-            )
-        })
-        .collect()
 }
 
 #[cfg(test)]

@@ -49,6 +49,7 @@ fn get_snapshot_mml_rejects_unready_and_out_of_range_requests() {
     );
 
     let state = DawHttpState {
+        patch_load: None,
         cfg: None,
         pending_commands: VecDeque::new(),
         grid_snapshot: vec![vec!["t120".to_string()]],
@@ -73,6 +74,7 @@ fn get_snapshot_mmls_rejects_unready_state_and_returns_all_tracks_measures() {
     );
 
     let state = DawHttpState {
+        patch_load: None,
         cfg: None,
         pending_commands: VecDeque::new(),
         grid_snapshot: vec![

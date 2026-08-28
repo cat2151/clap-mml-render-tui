@@ -22,12 +22,13 @@ pub mod ui;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub use history_select::is_history_select_trigger;
-pub use patch_catalog::PatchCatalogEntry;
+pub use patch_catalog::{host_patch_catalog, HostPatchCatalog, PatchCatalogEntry};
 pub use patch_select::is_patch_select_trigger;
 pub use play_settings::{is_play_settings_trigger, PlaySettings};
 pub use sender::{MmlOverlaySender, MmlOverlaySenderStatus};
 pub use state::{
-    MmlOverlay, MmlOverlayAction, MmlOverlayContext, NoteRequest, PatchCatalogSnapshot, PatchChange,
+    MmlOverlay, MmlOverlayAction, MmlOverlayContext, MmlOverlayInputMode, NoteRequest,
+    PatchCatalogSnapshot, PatchChange,
 };
 
 pub(crate) const NOTE_ON: u8 = 0x90;

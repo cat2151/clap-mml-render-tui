@@ -1,5 +1,9 @@
 //! MML patch selector が表示・検索・整列に使うcatalogの1行。
 
+mod from_patch_load;
+
+pub use from_patch_load::{host_patch_catalog, HostPatchCatalog};
+
 /// plugin固有情報をserver側で解釈済みにした、selector向けの中立な表現。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PatchCatalogEntry {

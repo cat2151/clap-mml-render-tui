@@ -49,7 +49,12 @@ pub(in crate::input) fn resolve_playback_start_measure_index(
     }
 }
 
-pub(in crate::input) fn format_random_patch_hot_reload_log(
+/// init セルの音色を差し替えたときの hot reload ログ 1 行。
+///
+/// `label` は差し替えの出どころ（`random patch` / `mml overlay patch`）。綴りは
+/// 呼び出し側の [`crate::input::track_patch::PatchUpdateReason`] が 1 か所で持つ。
+pub(in crate::input) fn format_patch_hot_reload_log(
+    label: &str,
     track: usize,
     displayed_measure_index: Option<usize>,
     old_effective_count: Option<usize>,
@@ -61,6 +66,6 @@ pub(in crate::input) fn format_random_patch_hot_reload_log(
         .map(|measure_index| format!("meas{}", measure_index + 1))
         .unwrap_or_else(|| "none".to_string());
     format!(
-        "play: hot reload random patch track{track} display={displayed} effective_count={old_effective_count:?}->{new_effective_count:?} measure_samples={old_measure_samples}->{new_measure_samples}"
+        "play: hot reload {label} track{track} display={displayed} effective_count={old_effective_count:?}->{new_effective_count:?} measure_samples={old_measure_samples}->{new_measure_samples}"
     )
 }

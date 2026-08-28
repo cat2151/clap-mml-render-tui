@@ -9,6 +9,7 @@ use crossterm::{
 use ratatui::{backend::CrosstermBackend, Terminal};
 
 use super::{DawApp, DawExitReason, DawMode, DawNormalAction};
+use cmrt_mml_overlay::is_mml_overlay_trigger;
 use cmrt_tui_core::screen_switch::{
     is_screen_switch_trigger, PrimaryScreen, ScreenSwitchMenuAction,
 };
@@ -34,7 +35,7 @@ impl DawApp {
 
     pub(crate) fn uses_textarea_cursor(&self) -> bool {
         match self.mode {
-            DawMode::Insert => true,
+            DawMode::Insert | DawMode::MmlOverlay => true,
             DawMode::History => self.overlays.history.filter_active,
             DawMode::PatchSelect => self.overlays.patch_select.filter_active,
             DawMode::Project => {
@@ -105,6 +106,7 @@ impl DawApp {
                 uses_textarea_cursor = next_uses_textarea_cursor;
             }
             self.pump_sound_check_guide();
+            self.pump_mml_overlay();
             terminal.draw(|f| self.draw(f))?;
 
             if event::poll(std::time::Duration::from_millis(50))? {
@@ -126,6 +128,16 @@ impl DawApp {
                                 return Ok(exit);
                             }
                         }
+                        continue;
+                    }
+                    // MML オーバーレイは開いている間キーを総取りする（Ctrl+C も含む）。
+                    // 画面切替メニューや Ctrl+C の分岐より先に判定すること。
+                    if self.mode == DawMode::MmlOverlay {
+                        self.handle_mml_overlay_key_event(key);
+                        continue;
+                    }
+                    if self.mode == DawMode::Normal && is_mml_overlay_trigger(key) {
+                        self.try_open_mml_overlay(key);
                         continue;
                     }
                     if self.mode == DawMode::Normal && is_screen_switch_trigger(key) {
@@ -181,6 +193,8 @@ impl DawApp {
                         DawMode::History => self.handle_history_overlay_key_event(key),
                         DawMode::PatchSelect => self.handle_patch_select_key_event(key),
                         DawMode::Project => self.handle_project_key_event(key),
+                        // 開いている間は上で総取りしているのでここへは来ない。
+                        DawMode::MmlOverlay => {}
                     }
                 }
             }

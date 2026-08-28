@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use tiny_http::Request;
 
+use super::patch_list::http_patch_names;
 use super::{
     get_snapshot_mml, get_snapshot_mmls, get_status_snapshot, if_none_match_matches, json_response,
     parse_get_mml_query, request_header_value, snapshot_mmls_etag, text_response,
@@ -278,9 +279,11 @@ pub(crate) fn handle_get_patches(request: Request, state: &Arc<Mutex<DawHttpStat
             return;
         }
     };
-    let cfg = {
+    // 走査は重い（5120 patch で 1.3 秒）ので、state の lock は cfg と patch_load を
+    // 取り出すまでで手放す。
+    let (cfg, patch_load) = {
         let state = state.lock().unwrap();
-        state.cfg.clone()
+        (state.cfg.clone(), state.patch_load.clone())
     };
     let Some(cfg) = cfg else {
         let _ = request.respond(with_cors_headers(
@@ -290,33 +293,11 @@ pub(crate) fn handle_get_patches(request: Request, state: &Arc<Mutex<DawHttpStat
         return;
     };
 
-    if !cmrt_tui_core::patches::has_configured_patch_dirs(cfg.as_ref()) {
-        let empty = Vec::<String>::new();
-        let _ = request.respond(with_cors_headers(
-            json_response(200, &empty),
-            cors_origin.as_deref(),
-        ));
-        return;
-    }
-
-    match cmrt_tui_core::patches::collect_patch_pairs(cfg.as_ref()) {
-        Ok(pairs) => {
-            let patches = pairs
-                .into_iter()
-                .map(|(patch_name, _)| patch_name)
-                .collect::<Vec<_>>();
-            let _ = request.respond(with_cors_headers(
-                json_response(200, &patches),
-                cors_origin.as_deref(),
-            ));
-        }
-        Err(error) => {
-            let _ = request.respond(with_cors_headers(
-                text_response(500, format!("patch 一覧の取得に失敗しました: {error}\n")),
-                cors_origin.as_deref(),
-            ));
-        }
-    }
+    let response = match http_patch_names(cfg.as_ref(), patch_load.as_ref()) {
+        Ok(patches) => json_response(200, &patches),
+        Err((status, message)) => text_response(status, message),
+    };
+    let _ = request.respond(with_cors_headers(response, cors_origin.as_deref()));
 }
 
 pub(crate) fn handle_get_status(request: Request, state: &Arc<Mutex<DawHttpState>>) {

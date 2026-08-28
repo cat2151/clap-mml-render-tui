@@ -179,6 +179,16 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
         project::draw_project(f, app, inner);
     }
 
+    // MML 入力オーバーレイは grid の上へ全面で重ねる。他の overlay と同時には開かない。
+    if app.mode == DawMode::MmlOverlay {
+        let sender_status = app
+            .mml_overlay_sender
+            .as_ref()
+            .map(cmrt_mml_overlay::MmlOverlaySender::status)
+            .unwrap_or_default();
+        cmrt_mml_overlay::ui::draw_with_status(&app.mml_overlay, &sender_status, f);
+    }
+
     if app.mode == DawMode::Normal
         && app.sound_check_guide.presentation() == SoundCheckGuidePresentation::Overlay
     {

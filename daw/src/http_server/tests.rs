@@ -56,6 +56,11 @@ fn build_test_app(cfg: Config) -> DawApp {
         patch_phrase_store_dirty: false,
 
         random_patch_decks: cmrt_tui_core::random::RandomIndexDecks::default(),
+        patch_load: Arc::new(Mutex::new(
+            cmrt_tui_core::patch_load::PatchLoadState::Loading,
+        )),
+        mml_overlay: cmrt_mml_overlay::MmlOverlay::default(),
+        mml_overlay_sender: None,
     }
 }
 
@@ -103,6 +108,7 @@ fn enqueue_command(
 fn build_http_state(cfg: Config) -> Arc<Mutex<DawHttpState>> {
     Arc::new(Mutex::new(DawHttpState {
         cfg: Some(Arc::new(cfg)),
+        patch_load: None,
         pending_commands: VecDeque::new(),
         grid_snapshot: Vec::new(),
         status_snapshot: None,
@@ -131,5 +137,6 @@ fn lock_http_server_test_state() -> std::sync::MutexGuard<'static, ()> {
 mod apply_pending_commands;
 mod cors;
 mod lifecycle;
+mod patch_catalog_snapshot;
 mod request_headers;
 mod snapshot_queries;

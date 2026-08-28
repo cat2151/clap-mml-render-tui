@@ -2,12 +2,17 @@ mod history;
 mod line;
 mod patch;
 mod play_settings;
+mod single_line;
 
 use std::time::Duration;
 
 use crossterm::event::KeyModifiers;
 
 use super::*;
+// state.rs 本体が使わなくなった型は、テスト側で明示して引く
+// （子テストモジュールは `use super::*` でここから拾う）。
+use crate::line_play::LineProgram;
+use crate::PatchCatalogEntry;
 
 fn press(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)

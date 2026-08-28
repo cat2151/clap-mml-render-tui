@@ -15,7 +15,9 @@
 //!   j/k    : track (行) 移動
 //!   M      : 中央 track へ移動
 //!   L      : 末尾 track へ移動
-//!   i      : INSERT モード（現在セルを編集）
+//!   i      : MML 入力オーバーレイ（1 行モード）で現在セルを編集
+//!            （init 列だけは従来のインライン INSERT に落ちる）
+//!   Ctrl+P : 同上（`i` と同じ入口。init 列では開かない）
 //!   m      : mixer overlay を開く
 //!   dd     : 現在セルを yank して空にする
 //!   p      : yank 内容で現在セルを上書き
@@ -59,7 +61,15 @@
 //!   Enter    : (通常) 選択 patch で現在 track の init meas を上書きして overlay を閉じる / (検索入力中) 絞り込みを確定（overlay 継続）
 //!   ESC      : (通常) overlay を閉じる / (検索入力中) 絞り込み入力を中断
 //!
-//! キー操作 (INSERT):
+//! キー操作 (MML 入力オーバーレイ):
+//!   Enter      : 確定 → 次の小節の入力欄を開く
+//!   ESC        : 確定 → 閉じる → NORMAL
+//!   Ctrl+T     : 音色選択（確定するとその track の init 列へ反映）
+//!   Ctrl+O     : フレーズ履歴
+//!   Ctrl+L     : 演奏設定 (repeat / CC1 / velocity)
+//!   Ctrl+Space : 現在行を鳴らし直す
+//!
+//! キー操作 (INSERT: init 列専用):
 //!   ESC   : 確定 → NORMAL
 //!   Enter : 確定 → 次の小節へ移動 → INSERT 継続
 //!   Ctrl+C / Ctrl+X / Ctrl+V : コピー / カット / ペースト
@@ -86,7 +96,9 @@ mod input;
 mod messages;
 mod mixer;
 mod mml;
+mod mml_overlay_glue;
 mod overlays;
+mod patch_catalog;
 mod playback;
 mod playback_runtime;
 mod playback_util;
@@ -234,19 +246,57 @@ pub struct DawApp {
     pub(crate) patch_phrase_store: cmrt_history::PatchPhraseStore,
     pub(crate) patch_phrase_store_dirty: bool,
     pub(crate) random_patch_decks: cmrt_tui_core::random::RandomIndexDecks,
+
+    /// app が起動時に file cache から読み込む、画面横断の patch catalog。
+    ///
+    /// DAW 自身は音色 file を走査しない（`app/src/tui/session.rs` の方針）。
+    /// 一覧が要る場面は `patch_catalog` モジュール経由でここを読む。
+    pub(crate) patch_load: Arc<Mutex<cmrt_tui_core::patch_load::PatchLoadState>>,
+
+    /// 小節セルの MML を書くための 1 行入力オーバーレイ（`Ctrl+P`）。
+    pub(crate) mml_overlay: cmrt_mml_overlay::MmlOverlay<'static>,
+    /// オーバーレイの打鍵を鳴らす先。play server が無い構成では `None`
+    /// （音が鳴らないだけで、入力欄としては動く）。
+    pub(crate) mml_overlay_sender: Option<cmrt_mml_overlay::MmlOverlaySender>,
 }
 
 impl DawApp {
-    pub fn new(cfg: Arc<Config>, plugin_entries: cmrt_offline_render::PluginEntries) -> Self {
-        Self::new_for_workspace(cfg, plugin_entries, WorkspaceKind::Persistent)
+    pub fn new(
+        cfg: Arc<Config>,
+        plugin_entries: cmrt_offline_render::PluginEntries,
+        patch_load: Arc<Mutex<cmrt_tui_core::patch_load::PatchLoadState>>,
+        realtime_play_supervisor: Option<Arc<cmrt_realtime_play::RealtimePlayServerSupervisor>>,
+    ) -> Self {
+        Self::new_for_workspace(
+            cfg,
+            plugin_entries,
+            patch_load,
+            realtime_play_supervisor,
+            WorkspaceKind::Persistent,
+        )
     }
 
+    /// `patch_load` は app 側が起動時に立てた共有 catalog をそのまま渡す（`Arc::clone` 1 本）。
+    /// DAW 内でもう 1 本立てると、file 走査を DAW だけがやり直すことになる。
+    ///
+    /// `realtime_play_supervisor` も同じく app の 1 本を渡す。MML オーバーレイは
+    /// keyboard 画面と同じ音源 instance を借りるので、DAW 内で supervisor をもう 1 本
+    /// 作ると SHM 接続が二重になる。DAW 自身の演奏用 supervisor
+    /// （`realtime_audio_backend == PlayServer` のときだけ作る）とは別物。
     pub fn new_for_workspace(
         cfg: Arc<Config>,
         plugin_entries: cmrt_offline_render::PluginEntries,
+        patch_load: Arc<Mutex<cmrt_tui_core::patch_load::PatchLoadState>>,
+        realtime_play_supervisor: Option<Arc<cmrt_realtime_play::RealtimePlayServerSupervisor>>,
         workspace_kind: WorkspaceKind,
     ) -> Self {
-        init::new(cfg, plugin_entries, workspace_kind)
+        init::new(
+            cfg,
+            plugin_entries,
+            patch_load,
+            realtime_play_supervisor,
+            workspace_kind,
+        )
     }
 
     pub fn workspace_kind(&self) -> WorkspaceKind {
@@ -264,73 +314,6 @@ impl DawApp {
 
     pub(crate) fn ab_repeat_state(&self) -> AbRepeatState {
         *self.playback.ab_repeat.lock().unwrap()
-    }
-
-    // ─── ランダム音色 ─────────────────────────────────────────
-
-    /// Notepad と同じく、category、vendor、filename を含む表示パス全文を検索する。
-    /// grid sequencer の filename stem 専用検索とは検索範囲が異なる。
-    fn patch_display_path_query_terms(query: Option<&str>) -> Option<Vec<String>> {
-        query
-            .map(str::trim)
-            .filter(|query| !query.is_empty())
-            .map(|query| {
-                query
-                    .split_whitespace()
-                    .map(|term| term.to_lowercase())
-                    .collect()
-            })
-    }
-
-    fn patch_display_path_matches_query(lower_display_path: &str, terms: &[String]) -> bool {
-        terms
-            .iter()
-            .all(|term| lower_display_path.contains(term.as_str()))
-    }
-
-    fn filter_patch_pairs_by_display_path_query(
-        patches: Vec<(String, String)>,
-        query: Option<&str>,
-    ) -> Vec<(String, String)> {
-        let Some(terms) = Self::patch_display_path_query_terms(query) else {
-            return patches;
-        };
-        patches
-            .into_iter()
-            .filter(|(_, lower)| Self::patch_display_path_matches_query(lower, &terms))
-            .collect()
-    }
-
-    fn filter_patch_names_by_display_path_query(
-        all: &[(String, String)],
-        query: &str,
-    ) -> Vec<String> {
-        let Some(terms) = Self::patch_display_path_query_terms(Some(query)) else {
-            return all.iter().map(|(orig, _)| orig.clone()).collect();
-        };
-        all.iter()
-            .filter(|(_, lower)| Self::patch_display_path_matches_query(lower, &terms))
-            .map(|(orig, _)| orig.clone())
-            .collect()
-    }
-
-    fn pick_random_patch_name(&mut self) -> Option<String> {
-        self.pick_random_patch_name_with_query(None)
-    }
-
-    fn pick_random_patch_name_with_query(&mut self, query: Option<&str>) -> Option<String> {
-        let patches = cmrt_tui_core::patches::collect_patch_pairs(&self.cfg).ok()?;
-        let candidates = Self::filter_patch_pairs_by_display_path_query(patches, query)
-            .into_iter()
-            .map(|(orig, _)| orig)
-            .collect::<Vec<_>>();
-        if candidates.is_empty() {
-            return None;
-        }
-        let idx = self
-            .random_patch_decks
-            .next_index(query, candidates.len())?;
-        Some(candidates[idx].clone())
     }
 
     // ─── 描画 ─────────────────────────────────────────────────

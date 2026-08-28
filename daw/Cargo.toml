@@ -10,6 +10,7 @@ test-support = []
 
 [dependencies]
 cmrt-history = { path = "../history" }
+cmrt-mml-overlay = { path = "../mml-overlay" }
 cmrt-offline-render = { path = "../offline-render" }
 cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-render-core = { path = "../core-lib" }
