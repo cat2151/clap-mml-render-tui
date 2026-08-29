@@ -1,8 +1,8 @@
-//! MML オーバーレイ専用の MIDI 送信。
+//! MML オーバーレイと、同じ即時試聴経路を借りるホスト機能の MIDI 送信。
 //!
-//! オーバーレイを開くと現在の画面の演奏は止まる（呼び出し側が止める）ので、
-//! 音源インスタンスは keyboard 画面と同じ 0 番を借りる。音色を指定しなければ
-//! realtime server の既定音色（init saw）で鳴る。
+//! オーバーレイを開くときやホストが即時試聴するときは、現在の画面の演奏を呼び出し側で
+//! 止めてから使う。音源インスタンスは keyboard 画面と同じ 0 番を借りる。音色を指定
+//! しなければ realtime server の既定音色（init saw）で鳴る。
 //!
 //! 送信は 2 系統ある。打鍵ごとの 1 音は offset なしの生 MIDI で即座に、行ぜんぶの
 //! 演奏は live timeline へ絶対秒つきで積む（[`line_playback`] を参照）。
@@ -268,6 +268,11 @@ fn run_sender<S: SoundSink + Send + Sync + 'static>(
         begin_status(&status, command.id);
         match command.kind {
             SenderCommandKind::Prepare { patch } => {
+                // 同じ patch が既に ready でも、prepare は「音源を明け渡して準備する」
+                // 操作なので、前の line playback は必ず止める。直前の Stop command は
+                // newest_queued_command でこの Prepare に畳み込まれうるため、ここ自身が
+                // stop の意味を持つ必要がある。
+                voice.stop(&*sink, "prepare");
                 prepare_if_needed(&mut voice, &*sink, &status, patch.as_deref());
             }
             SenderCommandKind::PlayNotes {

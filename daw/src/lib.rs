@@ -281,8 +281,8 @@ pub struct DawApp {
 
     /// 小節セルの MML を書くための 1 行入力オーバーレイ（`Ctrl+P`）。
     pub(crate) mml_overlay: cmrt_mml_overlay::MmlOverlay<'static>,
-    /// オーバーレイの打鍵を鳴らす先。play server が無い構成では `None`
-    /// （音が鳴らないだけで、入力欄としては動く）。
+    /// オーバーレイの打鍵と chord wizard の即時試聴を鳴らす先。
+    /// play server が無い構成では `None`（音が鳴らないだけで、編集は動く）。
     pub(crate) mml_overlay_sender: Option<cmrt_mml_overlay::MmlOverlaySender>,
 }
 

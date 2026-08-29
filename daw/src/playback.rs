@@ -84,6 +84,7 @@ impl DawApp {
     }
 
     pub(super) fn start_play_from_measure(&self, start_measure_index: usize) {
+        self.stop_mml_overlay_sender();
         let measure_mmls = self.build_measure_mmls();
         let measure_track_mmls = self.build_measure_track_mmls();
         let track_gains = self.playback_track_gains();
@@ -386,6 +387,7 @@ impl DawApp {
     }
 
     pub(super) fn stop_play(&self) {
+        self.stop_mml_overlay_sender();
         let _transition_guard = self.playback.transition_lock.lock().unwrap();
         let prev_state = {
             let mut play_state = self.playback.play_state.lock().unwrap();

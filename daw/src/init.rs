@@ -93,9 +93,9 @@ fn new_with_entry_context(
     let play_measure_mmls = Arc::new(Mutex::new(play_measure_mmls));
     let play_measure_track_mmls = Arc::new(Mutex::new(play_measure_track_mmls));
     let play_track_gains = Arc::new(Mutex::new(play_track_gains));
-    // MML オーバーレイの発音は app から注入された supervisor を使う。DAW 自身の演奏用
-    // supervisor（下の `realtime_play_server`）は backend が in_process だと `None` に
-    // なるので、そちらを使うと実機ではオーバーレイが無音になる。
+    // MML オーバーレイと chord wizard の即時試聴は app から注入された supervisor を使う。
+    // DAW 自身の演奏用 supervisor（下の `realtime_play_server`）は backend が in_process
+    // だと `None` になるので、そちらを使うと既定構成で realtime 試聴が無音になる。
     let mml_overlay_sender = realtime_play_supervisor
         .map(|supervisor| cmrt_mml_overlay::MmlOverlaySender::new(supervisor, cfg.sample_rate));
     let realtime_play_server =

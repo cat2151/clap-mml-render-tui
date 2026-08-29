@@ -25,6 +25,8 @@ struct FakeSink {
     midi: Mutex<Vec<RecordedMidi>>,
     /// timeline を張った回数。repeat が張り直していないことを worker 越しに見る。
     begins: AtomicUsize,
+    /// timeline を含む realtime 音源を hard stop した回数。
+    stops: AtomicUsize,
     /// timeline へ積んだ秒。継ぎ足しが伸び続けることを見る。
     timeline_seconds: Mutex<Vec<f64>>,
 }
@@ -36,6 +38,10 @@ impl FakeSink {
 
     fn timeline_seconds(&self) -> Vec<f64> {
         self.timeline_seconds.lock().unwrap().clone()
+    }
+
+    fn stops(&self) -> usize {
+        self.stops.load(Ordering::Acquire)
     }
 }
 
@@ -58,6 +64,7 @@ impl SoundSink for FakeSink {
     }
 
     fn stop_all(&self) -> sink::SinkResult {
+        self.stops.fetch_add(1, Ordering::AcqRel);
         Ok(())
     }
 
@@ -285,4 +292,20 @@ fn without_repeat_the_worker_stays_asleep() {
 
     assert_eq!(sink.timeline_seconds().len(), 1);
     assert_eq!(sink.begins(), 1);
+}
+
+#[test]
+fn preparing_an_already_ready_patch_stops_the_previous_line() {
+    let sink = Arc::new(FakeSink::default());
+    let harness = Harness::spawn(Arc::clone(&sink));
+    harness.send(1, line(1.0, false));
+    wait_until(|| sink.begins() == 1);
+
+    harness.send(
+        2,
+        SenderCommandKind::Prepare {
+            patch: Some("ready.sfz".to_string()),
+        },
+    );
+    wait_until(|| sink.stops() == 1);
 }

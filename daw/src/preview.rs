@@ -101,6 +101,7 @@ impl DawApp {
         measure_samples: usize,
         allow_cell_cache: bool,
     ) {
+        self.stop_mml_overlay_sender();
         let tracks = track_mmls.len().max(track_gains.len());
         let active_tracks: Vec<usize> = (FIRST_PLAYABLE_TRACK..tracks)
             .filter(|&track| {

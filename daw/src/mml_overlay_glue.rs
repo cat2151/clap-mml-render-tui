@@ -30,6 +30,16 @@ use super::{DawApp, DawMode};
 const INIT_MEASURE: usize = 0;
 
 impl DawApp {
+    /// DAW が通常の preview/play へ移る前に、共有 realtime instance の音を止める。
+    ///
+    /// chord wizard の自動試聴も MML overlay と同じ sender を使うため、DAW の
+    /// `DawPlayState` が Idle でも realtime 側だけ鳴っている場合がある。
+    pub(crate) fn stop_mml_overlay_sender(&self) {
+        if let Some(sender) = &self.mml_overlay_sender {
+            sender.stop();
+        }
+    }
+
     /// `Ctrl+P` ならオーバーレイを開く。開いたら true。
     pub(crate) fn try_open_mml_overlay(&mut self, key: KeyEvent) -> bool {
         if !is_mml_overlay_trigger(key) {

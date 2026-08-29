@@ -50,6 +50,7 @@ use super::INIT_MEASURE;
 use crate::mml::chord_generation::{
     generate_mml_from_chord_cell, split_progression_into_measures, GENERATE_FROM_CHORD_TRACK_KEY,
 };
+use cmrt_mml_overlay::line_play::{chord_line_events, LineProgram, LineStatus};
 use cmrt_patches::PatchRole;
 
 /// wizard が配り始める小節。row 全体を書き換えるので常にここから。
@@ -63,6 +64,11 @@ const WIZARD_DIRECTIVE: &str = "close";
 
 /// 鳴らない進行を引いたときの引き直し上限。
 const PICK_ATTEMPTS: usize = 16;
+
+struct ChordWizardRealtimePreview {
+    patch: Option<String>,
+    program: LineProgram,
+}
 
 impl DawApp {
     /// `G`: コード進行を抽選し、カーソル行がそれを鳴らす状態にする。
@@ -172,15 +178,74 @@ impl DawApp {
         // meas.1 へ移す」）。patch history への退避は済んでいるので、ここで
         // cursor_measure が動いても行き先は変わらない。
         self.editor.cursor_measure = FIRST_PLAY_MEASURE;
-        let measure_index = FIRST_PLAY_MEASURE - 1;
 
         self.save();
         self.sync_playback_mml_state();
         self.stop_play();
-        if self.try_start_preview_with_track_mmls_for_test(measure_index, None) {
+        self.start_chord_wizard_realtime_preview(track, FIRST_PLAY_MEASURE);
+    }
+
+    /// wizard が書いた最初のコードを、offline cache の進捗とは独立に一度だけ鳴らす。
+    ///
+    /// chord 行を直接 MML として解釈せず、MML overlay の `Ctrl+Space` と同じ変換へ
+    /// chord init・演奏 track の directive・init MML を渡す。本番と同じ voicing にした
+    /// うえで、音色だけは realtime server へ別途指定する。
+    fn start_chord_wizard_realtime_preview(&self, track: usize, measure: usize) {
+        let request = match self.chord_wizard_realtime_preview(track, measure) {
+            Ok(request) => request,
+            Err(error) => {
+                self.append_log_line(format!("chord wizard: realtime preview error: {error}"));
+                return;
+            }
+        };
+        let Some(sender) = &self.mml_overlay_sender else {
+            self.append_log_line(
+                "chord wizard: realtime preview unavailable (play server is not initialized)",
+            );
             return;
+        };
+        let command_id = sender.play_line(request.patch.as_deref(), request.program);
+        self.append_log_line(format!(
+            "chord wizard: realtime preview queued meas{} track{} command_id={command_id}",
+            measure,
+            crate::tracks::track_display_number(track),
+        ));
+    }
+
+    fn chord_wizard_realtime_preview(
+        &self,
+        track: usize,
+        measure: usize,
+    ) -> Result<ChordWizardRealtimePreview, String> {
+        let chord_init = self
+            .editor
+            .data
+            .get(CHORD_TRACK)
+            .and_then(|row| row.get(INIT_MEASURE))
+            .ok_or_else(|| "chord init がありません".to_string())?;
+        let chord = self
+            .editor
+            .data
+            .get(CHORD_TRACK)
+            .and_then(|row| row.get(measure))
+            .ok_or_else(|| format!("meas{measure} がありません"))?;
+        let track_init = self
+            .editor
+            .data
+            .get(track)
+            .and_then(|row| row.get(INIT_MEASURE))
+            .ok_or_else(|| "演奏 track の init がありません".to_string())?;
+        let directive = crate::mml::init_cell_chord_directive(track_init).unwrap_or_default();
+        let mml_prefix = crate::mml::init_cell_mml_body(track_init);
+        let (status, performance) = chord_line_events(chord, chord_init, &directive, &mml_prefix);
+        match status {
+            LineStatus::Played { .. } => Ok(ChordWizardRealtimePreview {
+                patch: self.track_patch_name(track),
+                program: LineProgram::once(performance),
+            }),
+            LineStatus::Idle => Err(format!("meas{measure} の chord が空です")),
+            LineStatus::Error(error) => Err(error),
         }
-        self.start_preview(measure_index);
     }
 
     /// コード進行を抽選する。実際に音になるものが出るまで引き直す。
