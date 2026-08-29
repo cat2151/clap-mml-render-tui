@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use cmrt_core::NativeRenderProbeContext;
 
-use super::{insert_overlay_preview_cache, overlay_preview_cache_key, render_mixed_preview_tracks};
+use super::{
+    insert_overlay_preview_cache, overlay_preview_cache_key, render_mixed_preview_tracks,
+    MixedPreviewRenderRequest,
+};
 use crate::render_queue::RenderPriority;
 use crate::{DawApp, FIRST_PLAYABLE_TRACK, MAX_CACHED_SAMPLES};
 use cmrt_history::daw_cache_mml_hash;
@@ -89,11 +92,13 @@ impl DawApp {
             let offline_render_workers = daw_cfg.effective_offline_render_workers();
             let Some(samples) = render_mixed_preview_tracks(
                 &render_queue,
-                RenderPriority::Low,
-                measure_samples,
-                &active_tracks,
-                &track_mmls,
-                &track_gains,
+                MixedPreviewRenderRequest {
+                    priority: RenderPriority::Low,
+                    measure_samples,
+                    active_tracks: &active_tracks,
+                    track_mmls: &track_mmls,
+                    track_gains: &track_gains,
+                },
                 |track, mml| {
                     NativeRenderProbeContext::preview_prefetch(
                         track,
@@ -103,6 +108,7 @@ impl DawApp {
                         offline_render_workers,
                     )
                 },
+                |_| {},
             ) else {
                 return;
             };

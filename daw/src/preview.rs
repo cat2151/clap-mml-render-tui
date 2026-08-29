@@ -18,7 +18,27 @@ mod render;
 pub(super) use render::{begin_preview_output, PreviewOutputRequest, PreviewOutputState};
 use render::{
     insert_overlay_preview_cache, overlay_preview_cache_key, render_mixed_preview_tracks,
+    MixedPreviewRenderRequest, PreviewRenderProgress, PreviewRenderProgressPhase,
 };
+
+fn preview_render_progress_log_line(
+    measure_index: usize,
+    progress: PreviewRenderProgress,
+) -> String {
+    let track = crate::tracks::track_display_number(progress.track);
+    let phase = match progress.phase {
+        PreviewRenderProgressPhase::Started => "start".to_string(),
+        PreviewRenderProgressPhase::Done { elapsed_ms } => format!("done ms={elapsed_ms}"),
+        PreviewRenderProgressPhase::Error { elapsed_ms } => format!("error ms={elapsed_ms}"),
+    };
+    format!(
+        "preview: render progress meas{} {}/{} track{} {phase}",
+        measure_index + 1,
+        progress.completed,
+        progress.total,
+        track,
+    )
+}
 
 fn wait_preview_duration(
     play_state: &Arc<std::sync::Mutex<DawPlayState>>,
@@ -190,11 +210,13 @@ impl DawApp {
                         );
                         render_mixed_preview_tracks(
                             &render_queue,
-                            RenderPriority::High,
-                            measure_samples,
-                            &active_tracks,
-                            &track_mmls,
-                            &track_gains,
+                            MixedPreviewRenderRequest {
+                                priority: RenderPriority::High,
+                                measure_samples,
+                                active_tracks: &active_tracks,
+                                track_mmls: &track_mmls,
+                                track_gains: &track_gains,
+                            },
                             |track, mml| {
                                 NativeRenderProbeContext::preview(
                                     track,
@@ -203,6 +225,12 @@ impl DawApp {
                                     daw_cache_mml_hash(mml),
                                     offline_render_workers,
                                 )
+                            },
+                            |progress| {
+                                crate::append_log_line(
+                                    &log_lines,
+                                    preview_render_progress_log_line(measure_index, progress),
+                                );
                             },
                         )
                         .map(|samples| (Arc::new(samples), false))
@@ -236,11 +264,13 @@ impl DawApp {
                     );
                     render_mixed_preview_tracks(
                         &render_queue,
-                        RenderPriority::High,
-                        measure_samples,
-                        &active_tracks,
-                        &track_mmls,
-                        &track_gains,
+                        MixedPreviewRenderRequest {
+                            priority: RenderPriority::High,
+                            measure_samples,
+                            active_tracks: &active_tracks,
+                            track_mmls: &track_mmls,
+                            track_gains: &track_gains,
+                        },
                         |track, mml| {
                             NativeRenderProbeContext::preview(
                                 track,
@@ -250,6 +280,12 @@ impl DawApp {
                                 offline_render_workers,
                             )
                         },
+                        |progress| {
+                            crate::append_log_line(
+                                &log_lines,
+                                preview_render_progress_log_line(measure_index, progress),
+                            );
+                        },
                     )
                     .map(|samples| (Arc::new(samples), false))
                 }
@@ -257,11 +293,13 @@ impl DawApp {
                 crate::append_log_line(&log_lines, format!("meas{}: render", measure_index + 1));
                 render_mixed_preview_tracks(
                     &render_queue,
-                    RenderPriority::High,
-                    measure_samples,
-                    &active_tracks,
-                    &track_mmls,
-                    &track_gains,
+                    MixedPreviewRenderRequest {
+                        priority: RenderPriority::High,
+                        measure_samples,
+                        active_tracks: &active_tracks,
+                        track_mmls: &track_mmls,
+                        track_gains: &track_gains,
+                    },
                     |track, mml| {
                         NativeRenderProbeContext::preview(
                             track,
@@ -270,6 +308,12 @@ impl DawApp {
                             daw_cache_mml_hash(mml),
                             offline_render_workers,
                         )
+                    },
+                    |progress| {
+                        crate::append_log_line(
+                            &log_lines,
+                            preview_render_progress_log_line(measure_index, progress),
+                        );
                     },
                 )
                 .map(|samples| (Arc::new(samples), false))

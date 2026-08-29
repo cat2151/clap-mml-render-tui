@@ -88,6 +88,12 @@ impl DawApp {
             Some(_) => None,
             None => self.pick_random_patch_name_for_role(PatchRole::Chord),
         };
+        if let Some(patch_name) = patch_name.as_deref() {
+            self.append_log_line(random_patch_load_estimate_log_line(
+                patch_name,
+                self.catalog_patch_load_estimate_ms(patch_name),
+            ));
+        }
 
         self.apply_chord_wizard_with(&degrees, patch_name);
     }
@@ -213,3 +219,14 @@ impl DawApp {
         }
     }
 }
+
+fn random_patch_load_estimate_log_line(patch_name: &str, estimate_ms: Option<u64>) -> String {
+    let estimate = estimate_ms.map_or_else(
+        || "unknown".to_string(),
+        |milliseconds| format!("{:.3}s", milliseconds as f64 / 1_000.0),
+    );
+    format!("chord wizard: random patch load estimate={estimate} (catalog) patch={patch_name:?}")
+}
+
+#[cfg(test)]
+mod tests;

@@ -122,6 +122,14 @@ impl DawApp {
         snapshot_patch_pairs(&self.patch_load)
     }
 
+    /// catalog 構築時の2回目のload実測を、次回load時間の予想として返す。
+    pub(crate) fn catalog_patch_load_estimate_ms(&self, patch_name: &str) -> Option<u64> {
+        self.catalog_snapshot()?
+            .load_measurements()
+            .get(patch_name)?
+            .second_load_ms
+    }
+
     /// patch 一覧を、snapshot 優先・走査フォールバックで取得してログを 1 行残す。
     ///
     /// どちらを通ったかを必ず出すのは、遅延の再発を「体感」ではなくログで切り分けるため。

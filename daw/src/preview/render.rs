@@ -11,6 +11,29 @@ use super::super::{
     DawPlayState, PlayPosition, MAX_CACHED_SAMPLES, OVERLAY_PREVIEW_CACHE_MAX_ENTRIES,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum PreviewRenderProgressPhase {
+    Started,
+    Done { elapsed_ms: u128 },
+    Error { elapsed_ms: u128 },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct PreviewRenderProgress {
+    pub(super) track: usize,
+    pub(super) completed: usize,
+    pub(super) total: usize,
+    pub(super) phase: PreviewRenderProgressPhase,
+}
+
+pub(super) struct MixedPreviewRenderRequest<'a> {
+    pub(super) priority: RenderPriority,
+    pub(super) measure_samples: usize,
+    pub(super) active_tracks: &'a [usize],
+    pub(super) track_mmls: &'a [String],
+    pub(super) track_gains: &'a [f32],
+}
+
 pub(crate) struct PreviewOutputState<'a> {
     pub(crate) play_transition_lock: &'a Arc<Mutex<()>>,
     pub(crate) play_state: &'a Arc<Mutex<DawPlayState>>,
@@ -87,30 +110,55 @@ pub(super) fn insert_overlay_preview_cache(
 /// 指定された preview 用 track MML 群をオフラインレンダリングし、track ごとの gain を掛けて
 /// 1 本のステレオバッファへ合成して返す。
 /// 各 track のレンダリング結果は `measure_samples` 未満なら末尾を埋めて長さを揃える。
-pub(super) fn render_mixed_preview_tracks<F>(
+pub(super) fn render_mixed_preview_tracks<F, P>(
     render_queue: &RenderQueue,
-    priority: RenderPriority,
-    measure_samples: usize,
-    active_tracks: &[usize],
-    track_mmls: &[String],
-    track_gains: &[f32],
+    request: MixedPreviewRenderRequest<'_>,
     mut build_probe_context: F,
+    mut report_progress: P,
 ) -> Option<Vec<f32>>
 where
     F: FnMut(usize, &str) -> NativeRenderProbeContext,
+    P: FnMut(PreviewRenderProgress),
 {
-    let mut mixed = vec![0.0f32; measure_samples];
-    for track in active_tracks {
-        let gain = track_gains.get(*track).copied().unwrap_or(1.0);
-        let mml = track_mmls
+    let mut mixed = vec![0.0f32; request.measure_samples];
+    let total = request.active_tracks.len();
+    for (index, track) in request.active_tracks.iter().enumerate() {
+        let gain = request.track_gains.get(*track).copied().unwrap_or(1.0);
+        let mml = request
+            .track_mmls
             .get(*track)
             .map(String::as_str)
             .unwrap_or_default();
+        report_progress(PreviewRenderProgress {
+            track: *track,
+            completed: index,
+            total,
+            phase: PreviewRenderProgressPhase::Started,
+        });
+        let started = std::time::Instant::now();
         let probe_context = build_probe_context(*track, mml);
-        let result = render_queue.render_blocking(priority, mml, probe_context);
-        let samples = result
-            .ok()
-            .map(|samples| pad_playback_measure_samples(samples, measure_samples))?;
+        let result = render_queue.render_blocking(request.priority, mml, probe_context);
+        let elapsed_ms = started.elapsed().as_millis();
+        let samples = match result {
+            Ok(samples) => {
+                report_progress(PreviewRenderProgress {
+                    track: *track,
+                    completed: index + 1,
+                    total,
+                    phase: PreviewRenderProgressPhase::Done { elapsed_ms },
+                });
+                pad_playback_measure_samples(samples, request.measure_samples)
+            }
+            Err(_) => {
+                report_progress(PreviewRenderProgress {
+                    track: *track,
+                    completed: index + 1,
+                    total,
+                    phase: PreviewRenderProgressPhase::Error { elapsed_ms },
+                });
+                return None;
+            }
+        };
         if mixed.len() < samples.len() {
             mixed.resize(samples.len(), 0.0);
         }
