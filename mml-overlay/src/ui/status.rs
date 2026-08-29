@@ -11,9 +11,10 @@ use cmrt_tui_core::theme::{
     MONOKAI_CYAN, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_PINK, MONOKAI_YELLOW,
 };
 
-use crate::{line_play::LineStatus, state::PatchCatalogNotice, MmlOverlay};
+use crate::{line_play::LineStatus, state::PatchCatalogNotice, MmlOverlay, MmlOverlaySyntax};
 
-const KEY_HINTS: &str = "^T音色 ^O履歴 ^L演奏設定 ^Space再演奏 Esc閉じる ";
+const MML_KEY_HINTS: &str = "^T音色 ^O履歴 ^L演奏設定 ^Space再演奏 Esc閉じる ";
+const CHORD_KEY_HINTS: &str = "^T音色 ^L演奏設定 ^Space再演奏 Esc閉じる ";
 /// キー割り当ての表示に要る幅（全角は 2 桁ぶん）。
 const KEY_HINTS_WIDTH: u16 = 49;
 
@@ -37,9 +38,12 @@ pub(super) fn draw(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>, area: Rect) 
     );
     if chunks.len() > 1 {
         frame.render_widget(
-            Paragraph::new(KEY_HINTS)
-                .style(Style::default().fg(MONOKAI_GRAY))
-                .alignment(Alignment::Right),
+            Paragraph::new(match overlay.syntax() {
+                MmlOverlaySyntax::Mml => MML_KEY_HINTS,
+                MmlOverlaySyntax::Chord(_) => CHORD_KEY_HINTS,
+            })
+            .style(Style::default().fg(MONOKAI_GRAY))
+            .alignment(Alignment::Right),
             chunks[1],
         );
     }

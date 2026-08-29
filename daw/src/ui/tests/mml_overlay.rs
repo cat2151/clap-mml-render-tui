@@ -14,6 +14,16 @@ fn open_overlay_on_a_playable_cell(app: &mut DawApp) {
     assert!(app.open_mml_overlay());
 }
 
+fn open_overlay_on_a_chord_cell(app: &mut DawApp) {
+    app.editor.cursor_track = crate::CHORD_TRACK;
+    app.editor.cursor_measure = 1;
+    app.editor.data[crate::CHORD_TRACK][0] = "key:G".to_string();
+    app.editor.data[2][0] =
+        r#"{"Surge XT patch":"Pads/Chord Pad.fxp","generate from chord track":"close"}"#
+            .to_string();
+    assert!(app.open_mml_overlay());
+}
+
 #[test]
 fn draw_shows_the_input_box_with_the_cell_mml_and_the_track_patch() {
     let mut app = build_test_app();
@@ -75,6 +85,35 @@ fn the_overlay_footer_explains_the_two_commit_keys() {
     );
 }
 
+#[test]
+fn chord_input_shows_its_language_preview_track_and_patch() {
+    let mut app = build_test_app();
+    open_overlay_on_a_chord_cell(&mut app);
+
+    let screen = normalized_screen(&app, 160, 24);
+
+    assert!(
+        screen.contains("CHORD"),
+        "chord入力だと分かるはず:\n{screen}"
+    );
+    assert!(
+        screen.contains("T1"),
+        "借りる演奏trackを出すはず:\n{screen}"
+    );
+    assert!(
+        screen.contains("ChordPad.fxp"),
+        "借りるtrackの音色を出すはず:\n{screen}"
+    );
+    assert!(
+        screen.contains("Ctrl+T:演奏track音色"),
+        "Ctrl+Tの反映先をfooterに出すはず:\n{screen}"
+    );
+    assert!(
+        !screen.contains("Ctrl+O:履歴"),
+        "MML履歴は出さない:\n{screen}"
+    );
+}
+
 /// `?` の help は NORMAL から開く。オーバーレイの操作もそこへ載せる。
 #[test]
 fn the_help_page_lists_the_overlay_keys() {
@@ -84,7 +123,7 @@ fn the_help_page_lists_the_overlay_keys() {
     let help = normalized_screen(&app, 160, 60);
 
     assert!(
-        help.contains("i/Ctrl+P:MML入力オーバーレイ"),
+        help.contains("i/Ctrl+P:MML/chord入力オーバーレイ"),
         "NORMAL の項に `i` の新しい役目を出すはず:\n{help}"
     );
     assert!(

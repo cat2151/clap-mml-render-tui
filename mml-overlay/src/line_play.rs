@@ -106,7 +106,31 @@ pub fn line_events(line: &str) -> (LineStatus, LinePerformance) {
     if line.trim().is_empty() {
         return (LineStatus::Idle, LinePerformance::silent());
     }
-    match cmrt_chord::timed_performance(line) {
+    performance_events(cmrt_chord::timed_performance(line))
+}
+
+/// chord 行の 1 セルを、本番と同じ init/directive 文脈で演奏用イベント列へ変換する。
+pub fn chord_line_events(
+    line: &str,
+    chord_init: &str,
+    track_directive: &str,
+    mml_prefix: &str,
+) -> (LineStatus, LinePerformance) {
+    if line.trim().is_empty() {
+        return (LineStatus::Idle, LinePerformance::silent());
+    }
+    performance_events(cmrt_chord::timed_chord_cell_performance(
+        chord_init,
+        track_directive,
+        mml_prefix,
+        line,
+    ))
+}
+
+fn performance_events(
+    result: Result<cmrt_chord::TimedPerformance, String>,
+) -> (LineStatus, LinePerformance) {
+    match result {
         Ok(performance) => {
             let note_count = performance
                 .events

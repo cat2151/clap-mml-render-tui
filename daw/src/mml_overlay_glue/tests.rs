@@ -15,6 +15,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use super::super::{DawApp, DawMode, DawPlayState};
 use crate::input::tests::build_test_app;
 
+mod chord_input;
 mod chord_transfer;
 mod commit;
 mod patch;
@@ -252,10 +253,9 @@ fn ctrl_t_waits_for_the_catalog_while_it_is_still_loading() {
     );
 }
 
-/// chord 行の中身はコード進行なので、MML として鳴らすオーバーレイでは開かない。
-/// `i` はインラインの INSERT へ落ちて、そのまま文字を編集できる。
+/// chord 行も同じ1行overlayで編集する。言語だけをChordへ切り替える。
 #[test]
-fn the_chord_row_falls_back_to_the_inline_insert_instead_of_the_overlay() {
+fn the_chord_row_opens_the_overlay_in_chord_mode() {
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = crate::CHORD_TRACK;
     app.editor.cursor_measure = 1;
@@ -263,7 +263,11 @@ fn the_chord_row_falls_back_to_the_inline_insert_instead_of_the_overlay() {
 
     app.open_mml_overlay_or_insert();
 
-    assert_eq!(app.mode, DawMode::Insert);
-    assert!(!app.mml_overlay.is_open());
-    assert_eq!(app.textarea.lines().join("\n"), "I-IV-V-I");
+    assert_eq!(app.mode, DawMode::MmlOverlay);
+    assert!(app.mml_overlay.is_open());
+    assert!(matches!(
+        app.mml_overlay.syntax(),
+        cmrt_mml_overlay::MmlOverlaySyntax::Chord(None)
+    ));
+    assert_eq!(app.mml_overlay.value(), "I-IV-V-I");
 }

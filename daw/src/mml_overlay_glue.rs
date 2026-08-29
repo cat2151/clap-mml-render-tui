@@ -17,8 +17,9 @@ use std::time::Instant;
 use crossterm::event::KeyEvent;
 
 use cmrt_mml_overlay::{
-    host_patch_catalog, is_mml_overlay_trigger, HostPatchCatalog, MmlOverlayAction,
-    MmlOverlayContext, MmlOverlayInputMode, PatchChange,
+    host_patch_catalog, is_mml_overlay_trigger, is_patch_select_trigger, ChordPreviewContext,
+    HostPatchCatalog, MmlOverlayAction, MmlOverlayContext, MmlOverlayInputMode, MmlOverlaySyntax,
+    PatchChange,
 };
 use cmrt_tui_core::patch_load::PatchLoadState;
 
@@ -39,14 +40,12 @@ impl DawApp {
 
     /// `i` の入口。MML 入力はオーバーレイで行う。
     ///
-    /// init 列（meas 0）だけは中身が音色 JSON なので、従来のインライン INSERT に落ちる。
+    /// init 列（meas 0）だけは中身が音色 JSON / chord 全体の指定なので、
+    /// 従来のインライン INSERT に落ちる。
     /// 「どの列がオーバーレイの対象外か」を知っているのはこのモジュールだけにしたいので、
     /// 分岐は呼び出し側（`input/normal.rs`）ではなくここへ置く。
     pub(crate) fn open_mml_overlay_or_insert(&mut self) {
-        if self.editor.cursor_measure == INIT_MEASURE
-            || self.editor.cursor_track == super::CHORD_TRACK
-            || !self.open_mml_overlay()
-        {
+        if self.editor.cursor_measure == INIT_MEASURE || !self.open_mml_overlay() {
             self.start_insert();
         }
     }
@@ -64,13 +63,6 @@ impl DawApp {
             );
             return false;
         }
-        // chord 行の中身は MML ではなくコード進行。MML として鳴らす overlay では開かない。
-        if self.editor.cursor_track == super::CHORD_TRACK {
-            self.append_log_line(
-                "chord 行は MML ではなくコード進行です。`i` でそのまま編集します".to_string(),
-            );
-            return false;
-        }
         // オーバーレイは keyboard 画面と同じ音源 instance を借りる。
         // 先に DAW の演奏を止めて明け渡す。閉じても自動では再開しない。
         self.stop_play();
@@ -78,7 +70,9 @@ impl DawApp {
         self.mml_overlay.open(context);
         // そのセルが DAW で実際に鳴る音色を、オーバーレイの音色として渡す。
         // 渡さないと別の音色で鳴り、書いた音と grid の音が食い違う。
-        let patch = self.current_track_patch_name();
+        let patch = self
+            .mml_overlay_target_track()
+            .and_then(|track| self.track_patch_name(track));
         self.mml_overlay.set_restored_patch(patch);
         if let Some(sender) = &self.mml_overlay_sender {
             let command_id = sender.prepare(self.mml_overlay.patch());
@@ -95,12 +89,35 @@ impl DawApp {
             patch_role_index,
             load_measurements,
         } = host_patch_catalog(&self.patch_load.lock().unwrap());
-        let (history, favorites) = self.mml_overlay_phrase_history();
+        let chord_input = self.editor.cursor_track == super::CHORD_TRACK;
+        let target_track = self.mml_overlay_target_track();
+        let (history, favorites) = if chord_input {
+            (Vec::new(), Vec::new())
+        } else {
+            self.mml_overlay_phrase_history(target_track)
+        };
         MmlOverlayContext {
             // DAW は 1 行モード。`Enter` は改行ではなく確定。
             input_mode: MmlOverlayInputMode::SingleLine,
             initial_text: self.editor.data[self.editor.cursor_track][self.editor.cursor_measure]
                 .clone(),
+            syntax: if chord_input {
+                MmlOverlaySyntax::Chord(target_track.map(|track| {
+                    ChordPreviewContext {
+                        chord_init: self.editor.data[super::CHORD_TRACK][INIT_MEASURE].clone(),
+                        track_directive: crate::mml::init_cell_chord_directive(
+                            &self.editor.data[track][INIT_MEASURE],
+                        )
+                        .unwrap_or_default(),
+                        mml_prefix: crate::mml::init_cell_mml_body(
+                            &self.editor.data[track][INIT_MEASURE],
+                        ),
+                        target_label: crate::tracks::track_label(track),
+                    }
+                }))
+            } else {
+                MmlOverlaySyntax::Mml
+            },
             patch_catalog: catalog,
             patch_role_index,
             load_measurements,
@@ -109,16 +126,16 @@ impl DawApp {
             patch_filter_presets: cmrt_history::load_mml_patch_filter_presets(),
             // DAW にだけ chord 行がある。MML のつもりで打った文字列がコード表記
             // だったとき、その場で chord 行へ移せる。
-            chord_row_transfer: true,
+            chord_row_transfer: !chord_input,
             catalog_notes: self.mml_overlay_catalog_notes(),
         }
     }
 
     /// `Ctrl+O` のフレーズ履歴。DAW の history overlay と同じ選び方にする
     /// （その track に音色があればその音色の履歴、無ければ notepad の履歴）。
-    fn mml_overlay_phrase_history(&self) -> (Vec<String>, Vec<String>) {
-        let patch_history = self
-            .current_track_patch_name()
+    fn mml_overlay_phrase_history(&self, track: Option<usize>) -> (Vec<String>, Vec<String>) {
+        let patch_history = track
+            .and_then(|track| self.track_patch_name(track))
             .and_then(|patch_name| self.patch_phrase_store.patches.get(&patch_name))
             .map(|state| (state.history.clone(), state.favorites.clone()))
             .filter(|(history, favorites)| !history.is_empty() || !favorites.is_empty());
@@ -140,6 +157,15 @@ impl DawApp {
 
     /// 開いている間、キーはすべてオーバーレイが取る。
     pub(crate) fn handle_mml_overlay_key_event(&mut self, key: KeyEvent) {
+        if self.editor.cursor_track == super::CHORD_TRACK
+            && self.mml_overlay_target_track().is_none()
+            && is_patch_select_trigger(key)
+        {
+            self.append_log_line(
+                "chord preview の演奏 track がありません。演奏 track の init に \"generate from chord track\" を設定してください",
+            );
+            return;
+        }
         // loader 完了と Ctrl+T が同じ frame に来ても、古い Loading を見せない。
         self.sync_mml_overlay_patch_catalog();
         // 音色一覧をカーソルで流しているだけ（preview）では `patch()` は変わらない。
@@ -163,7 +189,9 @@ impl DawApp {
         let Some(patch_name) = patch_after else {
             return;
         };
-        let track = self.editor.cursor_track;
+        let Some(track) = self.mml_overlay_target_track() else {
+            return;
+        };
         let patch_filter_query = self.track_patch_filter_query(track);
         // track 0（Tempo 行）は `apply_patch_name_to_track_init` 側で弾かれる。
         self.apply_patch_name_to_track_init(
@@ -346,6 +374,25 @@ impl DawApp {
             self.mml_overlay.expect_sender_command(command_id);
         }
         self.mode = DawMode::Normal;
+    }
+
+    /// overlay の音色を所有する演奏 track。
+    ///
+    /// 通常セルではカーソルtrackそのもの。chord 行では `C` で来た元trackを優先し、
+    /// それが生成対象でなければ最初の chord 生成trackを借りる。directive の文字列から
+    /// bass/chord 等を推測しない（chord2mml へ渡す任意文字列なので語彙を持てない）。
+    fn mml_overlay_target_track(&self) -> Option<usize> {
+        if self.editor.cursor_track != super::CHORD_TRACK {
+            return Some(self.editor.cursor_track);
+        }
+        self.editor
+            .chord_jump_return_track
+            .filter(|&track| crate::mml::track_generates_from_chord_row(&self.editor.data, track))
+            .or_else(|| {
+                (super::FIRST_PLAYABLE_TRACK..self.editor.tracks).find(|&track| {
+                    crate::mml::track_generates_from_chord_row(&self.editor.data, track)
+                })
+            })
     }
 }
 

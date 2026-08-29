@@ -45,28 +45,7 @@ pub(crate) fn chord2mml_input(
     track_directive: &str,
     chord_cell: &str,
 ) -> Option<String> {
-    let chord_cell = chord_cell.trim();
-    if chord_cell.is_empty() {
-        return None;
-    }
-
-    let mut input = String::new();
-    for prefix in [chord_init.trim(), track_directive.trim()] {
-        if prefix.is_empty() {
-            continue;
-        }
-        if !input.is_empty() {
-            input.push(' ');
-        }
-        input.push_str(prefix);
-    }
-    if !input.is_empty() {
-        input.push(' ');
-    }
-    input.push_str("| ");
-    input.push_str(chord_cell);
-    input.push_str(" |");
-    Some(input)
+    cmrt_chord::chord_cell_input(chord_init, track_directive, chord_cell)
 }
 
 /// chord 行のセルから、演奏 track の 1 小節ぶんの MML を生成する。

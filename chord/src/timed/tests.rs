@@ -200,3 +200,42 @@ fn parses_as_chord_only_says_yes_when_chord2mml_accepts_the_input() {
     assert!(!parses_as_chord(""));
     assert!(!parses_as_chord("   "));
 }
+
+#[test]
+fn chord_cell_input_combines_both_init_layers_and_wraps_the_cell() {
+    assert_eq!(
+        chord_cell_input("key:G", "close", "II"),
+        Some("key:G close | II |".to_string())
+    );
+    assert_eq!(
+        chord_cell_input("", "drop2", " I-IV "),
+        Some("drop2 | I-IV |".to_string())
+    );
+    assert_eq!(chord_cell_input("key:G", "close", "  "), None);
+}
+
+#[test]
+fn chord_cell_performance_uses_the_chord_init_key() {
+    let in_c = timed_chord_cell_performance("key:C", "close", "", "II").unwrap();
+    let in_g = timed_chord_cell_performance("key:G", "close", "", "II").unwrap();
+
+    assert_eq!(note_on_pitches(&in_c), vec![62, 66, 69]);
+    assert_eq!(note_on_pitches(&in_g), vec![69, 73, 76]);
+    assert!(in_g.from_chord);
+}
+
+#[test]
+fn chord_cell_performance_never_falls_back_to_mml() {
+    let error = timed_chord_cell_performance("key:C", "close", "", "cde").unwrap_err();
+
+    assert!(error.contains("コード変換に失敗"), "{error}");
+}
+
+#[test]
+fn chord_cell_performance_applies_the_playback_tracks_mml_prefix() {
+    let default_octave = timed_chord_cell_performance("key:G", "close", "", "II").unwrap();
+    let lower_octave = timed_chord_cell_performance("key:G", "close", "o4", "II").unwrap();
+
+    assert_eq!(note_on_pitches(&default_octave), vec![69, 73, 76]);
+    assert_eq!(note_on_pitches(&lower_octave), vec![57, 61, 64]);
+}

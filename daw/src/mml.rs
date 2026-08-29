@@ -71,6 +71,11 @@ pub(super) fn init_cell_chord_directive(init_cell: &str) -> Option<String> {
     track_chord_directive(&split_mml_fragment(init_cell)).map(str::to_string)
 }
 
+/// init セルの JSON 以外の MML。chord 行から生成した MML の前にも本番と同じく付く。
+pub(super) fn init_cell_mml_body(init_cell: &str) -> String {
+    split_mml_fragment(init_cell).body
+}
+
 /// init セルへ JSON のキーを書き足した文字列を返す。
 ///
 /// **既存のキーは残す**（音色や filter を消さずに `"generate from chord track"` だけを

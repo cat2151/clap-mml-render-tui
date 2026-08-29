@@ -84,9 +84,14 @@ pub(super) fn draw_status(
             "DAW  Shift+H:history  h/←・l/→:meas preview  j/k:track preview  C:chord行  dd:cut  p:paste  u:undo  i/Ctrl+P:MML入力  f:file  e:cfg  g:generate  G:chord wizard  a:A-B  Shift+P:play/stop  Enter/Space:1trk  Shift+Enter:all  Shift+Space:from here  n:notepad  v:keyboard  Ctrl+G:screens"
         }
         DawMode::Insert => "INSERT  ESC:確定→NORMAL  Enter:確定→次小節",
-        DawMode::MmlOverlay => {
-            "MML  Ctrl+T:音色  Ctrl+O:履歴  Ctrl+L:演奏設定  Ctrl+Space:鳴らし直す  Enter:確定→次小節  ESC:確定→閉じる"
-        }
+        DawMode::MmlOverlay => match app.mml_overlay.syntax() {
+            cmrt_mml_overlay::MmlOverlaySyntax::Mml => {
+                "MML  Ctrl+T:音色  Ctrl+O:履歴  Ctrl+L:演奏設定  Ctrl+Space:鳴らし直す  Enter:確定→次小節  ESC:確定→閉じる"
+            }
+            cmrt_mml_overlay::MmlOverlaySyntax::Chord(_) => {
+                "CHORD  Ctrl+T:演奏track音色  Ctrl+L:演奏設定  Ctrl+Space:鳴らし直す  Enter:確定→次小節  ESC:確定→閉じる"
+            }
+        },
         DawMode::Help => "HELP  ESC:キャンセル",
         DawMode::Mixer => "MIXER  h/l:track移動  j/k:-/+3dB  ESC:閉じる",
         DawMode::History => {

@@ -18,7 +18,10 @@
 use std::ops::Range;
 use std::time::Duration;
 
-use cmrt_chord::{cursor_sounding_unit, timed_performance, TimedMidiEvent};
+use cmrt_chord::{
+    cursor_sounding_unit, parses_as_chord, timed_chord_cell_performance, timed_performance,
+    TimedMidiEvent, TimedPerformance,
+};
 
 use crate::{NOTE_OFF, NOTE_ON};
 
@@ -63,6 +66,27 @@ pub fn notes_at_cursor(line: &str, cursor_chars: usize) -> Option<CursorNotes> {
     notes_of(&line[..span.end], span)
 }
 
+/// chord 行の init と演奏 track の directive を反映し、カーソル位置の chord を鳴らす。
+///
+/// 発音単位の範囲は表示中の `line` から取り、変換だけを本番と同じ chord cell 文脈で
+/// 行う。合成後の文字列から範囲を取ると、隠れた prefix のぶんカーソルがずれる。
+pub fn notes_at_cursor_with_chord_context(
+    line: &str,
+    cursor_chars: usize,
+    chord_init: &str,
+    track_directive: &str,
+    mml_prefix: &str,
+) -> Option<CursorNotes> {
+    if !parses_as_chord(line) {
+        return None;
+    }
+    let span = cursor_sounding_unit(line, cursor_byte_index(line, cursor_chars))?;
+    let performance =
+        timed_chord_cell_performance(chord_init, track_directive, mml_prefix, &line[..span.end])
+            .ok()?;
+    notes_from_performance(&performance, span)
+}
+
 /// MML の末尾の音を、prefix ぜんぶを 1 単位として求める。
 pub(crate) fn notes_at_prefix(prefix: &str) -> Option<CursorNotes> {
     notes_of(prefix, 0..prefix.len())
@@ -75,6 +99,13 @@ pub(crate) fn notes_at_prefix(prefix: &str) -> Option<CursorNotes> {
 /// 無ければ `None`。
 fn notes_of(mml: &str, span: Range<usize>) -> Option<CursorNotes> {
     let performance = timed_performance(mml).ok()?;
+    notes_from_performance(&performance, span)
+}
+
+fn notes_from_performance(
+    performance: &TimedPerformance,
+    span: Range<usize>,
+) -> Option<CursorNotes> {
     let events = &performance.events;
     let onset = events.iter().rposition(is_note_on)?;
     let pitches = simultaneous_pitches(events, onset);

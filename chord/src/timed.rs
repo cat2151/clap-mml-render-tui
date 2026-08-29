@@ -69,19 +69,72 @@ pub fn parses_as_chord(input: &str) -> bool {
     chord2mml_core::convert(input).is_ok()
 }
 
+/// DAW の chord 行 1 セルを chord2mml へ渡す入力に組み立てる。
+///
+/// chord 行全体の指定、演奏 track 固有の指定、セル本体の順に連結する。
+/// セルを縦棒で囲むことで、複数コードがあっても 1 小節内へ等分される。
+/// 空セルには変換対象が無いので `None` を返す。
+pub fn chord_cell_input(
+    chord_init: &str,
+    track_directive: &str,
+    chord_cell: &str,
+) -> Option<String> {
+    let chord_cell = chord_cell.trim();
+    if chord_cell.is_empty() {
+        return None;
+    }
+
+    let mut input = [chord_init.trim(), track_directive.trim()]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    if !input.is_empty() {
+        input.push(' ');
+    }
+    input.push_str("| ");
+    input.push_str(chord_cell);
+    input.push_str(" |");
+    Some(input)
+}
+
+/// DAW の chord 行 1 セルを、時刻つき MIDI イベント列へ厳密に変換する。
+///
+/// [`timed_performance`] と違い、chord2mml が拒否した文字列を MML として扱う
+/// fallback は持たない。chord 行は言語が位置で確定しているため、壊れた chord を
+/// MML として部分的に鳴らすと、試聴と本番レンダリングが食い違う。
+/// `mml_prefix` は演奏 track init の JSON 以外の部分で、生成後の MML の前へ付ける。
+pub fn timed_chord_cell_performance(
+    chord_init: &str,
+    track_directive: &str,
+    mml_prefix: &str,
+    chord_cell: &str,
+) -> Result<TimedPerformance, String> {
+    let input = chord_cell_input(chord_init, track_directive, chord_cell)
+        .ok_or_else(|| "コードを入力してください".to_string())?;
+    let generated_mml = chord2mml_core::convert(&input)
+        .map_err(|error| format!("コード変換に失敗しました: {error}"))?;
+    let mml = format!("{mml_prefix}{generated_mml}");
+    timed_mml_performance(&mml, true)
+}
+
 /// コード表記または MML を、時刻つきイベント列へ変換する。
 pub fn timed_performance(input: &str) -> Result<TimedPerformance, String> {
     if input.trim().is_empty() {
         return Err("MMLを入力してください".to_string());
     }
     let resolved = resolve_chord_or_mml(input);
-    let bytes = mmlabc_to_smf::mml_to_smf_bytes(&resolved.mml)
+    timed_mml_performance(&resolved.mml, resolved.from_chord)
+}
+
+fn timed_mml_performance(mml: &str, from_chord: bool) -> Result<TimedPerformance, String> {
+    let bytes = mmlabc_to_smf::mml_to_smf_bytes(mml)
         .map_err(|error| format!("MML変換に失敗しました: {error}"))?;
     let (events, duration_seconds) = timed_events_from_smf(&bytes)?;
     Ok(TimedPerformance {
         events,
         duration_seconds,
-        from_chord: resolved.from_chord,
+        from_chord,
     })
 }
 

@@ -28,6 +28,26 @@ fn an_mml_line_is_reported_as_mml() {
     assert!(!performance.is_silent());
 }
 
+#[test]
+fn a_chord_line_uses_the_supplied_key_and_directive() {
+    let (status, performance) = chord_line_events("II", "key:G", "close", "");
+    let pitches = performance
+        .events
+        .iter()
+        .filter(|event| event.message[0] == NOTE_ON)
+        .map(|event| event.message[1])
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        status,
+        LineStatus::Played {
+            from_chord: true,
+            note_count: 3,
+        }
+    );
+    assert_eq!(pitches, vec![69, 73, 76]);
+}
+
 /// 空行を通るたびにエラーが出ると、上下でフレーズを見て回るのが煩わしい。
 /// 前の行を止めるためにイベントは空で返す。
 #[test]

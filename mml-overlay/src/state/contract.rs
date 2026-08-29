@@ -89,6 +89,30 @@ pub enum MmlOverlayInputMode {
     SingleLine,
 }
 
+/// chord 行を試聴するときに借りる演奏 track の文脈。
+///
+/// chord 行自身は音色も voicing も持たない。実際に chord 行から生成される track と
+/// 同じ音にするため、chord 行 init と演奏 track の directive を対で受け取る。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChordPreviewContext {
+    pub chord_init: String,
+    pub track_directive: String,
+    /// 演奏 track init の JSON 以外の MML。`o4` など本番で chord MML の前へ付く部分。
+    pub mml_prefix: String,
+    /// 入力枠へ表示する演奏 track 名（DAW の `T1` など）。
+    pub target_label: String,
+}
+
+/// 入力欄に書く言語。見た目だけでなく、打鍵プレビューの変換経路も決める。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum MmlOverlaySyntax {
+    /// MML と chord 表記を自動判定する従来の入力欄。
+    #[default]
+    Mml,
+    /// chord 行専用。`None` は編集できるが、借りられる演奏 track が無く試聴できない。
+    Chord(Option<ChordPreviewContext>),
+}
+
 /// MML overlay が受け取る、plugin 非依存の音色一覧スナップショット。
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum PatchCatalogSnapshot {
@@ -111,6 +135,8 @@ pub struct MmlOverlayContext {
     /// 複数行モードでは使わない（従来どおり常に空で開く）。1 行モードでは
     /// 改行より後ろを捨てて先頭 1 行だけを入れる。
     pub initial_text: String,
+    /// 入力欄に書く言語と、その試聴文脈。
+    pub syntax: MmlOverlaySyntax,
     pub patch_catalog: PatchCatalogSnapshot,
     /// MML selectorとGrid Sequencerが共有する、同じcatalog世代のRole索引。
     pub patch_role_index: PatchRoleIndex,

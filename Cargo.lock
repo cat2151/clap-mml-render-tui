@@ -530,6 +530,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chord2mml-core",
+ "cmrt-chord",
  "cmrt-history",
  "cmrt-mml-overlay",
  "cmrt-offline-render",

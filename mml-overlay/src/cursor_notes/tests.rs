@@ -167,6 +167,23 @@ fn a_progression_uses_the_pitches_of_the_selected_source_chord() {
     assert!(second.from_chord);
 }
 
+#[test]
+fn chord_context_uses_the_daw_key_without_shifting_the_source_span() {
+    let notes = notes_at_cursor_with_chord_context("II", 2, "key:G", "close", "").unwrap();
+
+    assert_eq!(notes.span, 0..2);
+    assert_eq!(notes.pitches, vec![69, 73, 76]);
+    assert!(notes.from_chord);
+}
+
+#[test]
+fn chord_context_does_not_treat_broken_chord_text_as_mml() {
+    assert_eq!(
+        notes_at_cursor_with_chord_context("cde", 3, "key:G", "close", ""),
+        None
+    );
+}
+
 /// 小文字の MML はコード表記と紛れない。単音のまま鳴る。
 #[test]
 fn lowercase_mml_is_not_read_as_a_chord() {

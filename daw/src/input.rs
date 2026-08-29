@@ -235,10 +235,14 @@ impl DawApp {
     }
 
     pub(crate) fn current_track_patch_name(&self) -> Option<String> {
-        if self.editor.cursor_track < FIRST_PLAYABLE_TRACK {
+        self.track_patch_name(self.editor.cursor_track)
+    }
+
+    pub(crate) fn track_patch_name(&self, track: usize) -> Option<String> {
+        if track < FIRST_PLAYABLE_TRACK || track >= self.editor.tracks {
             return None;
         }
-        Self::extract_patch_phrase(&self.editor.data[self.editor.cursor_track][0])
+        Self::extract_patch_phrase(&self.editor.data[track][0])
             .map(|(patch_name, _)| patch_name)
             .map(|patch_name| self.resolve_patch_name(&patch_name).unwrap_or(patch_name))
             .filter(|patch_name| !patch_name.trim().is_empty())

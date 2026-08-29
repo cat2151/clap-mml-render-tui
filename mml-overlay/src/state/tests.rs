@@ -1,3 +1,4 @@
+mod chord_input;
 mod chord_transfer;
 mod history;
 mod line;

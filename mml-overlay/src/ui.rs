@@ -21,10 +21,11 @@ use cmrt_tui_core::{
     ui::centered_rect_with_size,
 };
 
-use crate::{MmlOverlay, MmlOverlayInputMode, MmlOverlaySenderStatus};
+use crate::{MmlOverlay, MmlOverlayInputMode, MmlOverlaySenderStatus, MmlOverlaySyntax};
 
 const PLACEHOLDER: &str = "1行1フレーズ。上下キーでその行を演奏";
 const SINGLE_LINE_PLACEHOLDER: &str = "MMLを入力。Enterで確定";
+const CHORD_PLACEHOLDER: &str = "Chordを入力。Enterで確定";
 /// 複数行モードの入力欄に見せる行数。これを超えた行は入力欄の中でスクロールする。
 const INPUT_ROWS: u16 = 8;
 /// 1 行モードの入力欄に見せる行数。書き戻す先が 1 か所なので 1 行しか要らない。
@@ -43,8 +44,11 @@ fn input_rows(input_mode: MmlOverlayInputMode) -> u16 {
     }
 }
 
-fn placeholder(input_mode: MmlOverlayInputMode) -> &'static str {
-    match input_mode {
+fn placeholder(overlay: &MmlOverlay<'_>) -> &'static str {
+    if matches!(overlay.syntax(), MmlOverlaySyntax::Chord(_)) {
+        return CHORD_PLACEHOLDER;
+    }
+    match overlay.input_mode() {
         MmlOverlayInputMode::MultiLine => PLACEHOLDER,
         MmlOverlayInputMode::SingleLine => SINGLE_LINE_PLACEHOLDER,
     }
@@ -103,11 +107,7 @@ pub fn draw_with_status(
 
 fn draw_input(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>, area: Rect) {
     frame.render_widget(
-        &build_input_widget(
-            overlay.textarea(),
-            title(overlay),
-            placeholder(overlay.input_mode()),
-        ),
+        &build_input_widget(overlay.textarea(), title(overlay), placeholder(overlay)),
         area,
     );
     frame.set_cursor_position(single_line_textarea_cursor_position(
@@ -140,9 +140,16 @@ fn build_input_widget<'a>(
 
 /// 入力欄の枠のタイトル。音色は入力欄のテキストに現れないので、ここへ出す。
 fn title(overlay: &MmlOverlay<'_>) -> String {
-    match overlay.patch() {
-        Some(patch) => format!(" MML [{patch}] "),
-        None => " MML [既定音色] ".to_string(),
+    match overlay.syntax() {
+        MmlOverlaySyntax::Mml => match overlay.patch() {
+            Some(patch) => format!(" MML [{patch}] "),
+            None => " MML [既定音色] ".to_string(),
+        },
+        MmlOverlaySyntax::Chord(Some(context)) => match overlay.patch() {
+            Some(patch) => format!(" CHORD → {} [{patch}] ", context.target_label),
+            None => format!(" CHORD → {} [既定音色] ", context.target_label),
+        },
+        MmlOverlaySyntax::Chord(None) => " CHORD [試聴trackなし] ".to_string(),
     }
 }
 

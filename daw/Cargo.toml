@@ -9,6 +9,7 @@ edition = "2021"
 test-support = []
 
 [dependencies]
+cmrt-chord = { path = "../chord" }
 cmrt-history = { path = "../history" }
 cmrt-mml-overlay = { path = "../mml-overlay" }
 cmrt-offline-render = { path = "../offline-render" }

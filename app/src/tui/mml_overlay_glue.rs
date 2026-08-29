@@ -56,6 +56,7 @@ impl TuiApp<'_> {
             // 1 行モードは DAW が明示的に指定したときだけ。
             input_mode: MmlOverlayInputMode::MultiLine,
             initial_text: String::new(),
+            syntax: Default::default(),
             patch_catalog,
             patch_role_index,
             load_measurements,
