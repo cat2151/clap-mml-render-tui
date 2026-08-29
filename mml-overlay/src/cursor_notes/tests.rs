@@ -138,6 +138,35 @@ fn a_chord_name_sounds_every_member_while_typing() {
     assert!(notes.from_chord);
 }
 
+/// `II` の途中でも、カーソル左側の `I` ではなく chord 全体を鳴らす。
+#[test]
+fn every_position_in_a_roman_chord_uses_its_full_span_and_pitches() {
+    let first_character = notes_at_cursor("II", 1).unwrap();
+    let end = notes_at_cursor("II", 2).unwrap();
+    let tonic = notes_at_cursor("I", 1).unwrap();
+
+    assert_eq!(first_character.span, 0..2);
+    assert_eq!(end.span, 0..2);
+    assert_eq!(first_character.pitches, vec![62, 66, 69]);
+    assert_eq!(first_character, end);
+    assert_eq!(tonic.pitches, vec![60, 64, 67]);
+    assert_ne!(first_character.pitches, tonic.pitches);
+    assert!(first_character.from_chord);
+}
+
+#[test]
+fn a_progression_uses_the_pitches_of_the_selected_source_chord() {
+    let first = notes_at_cursor("I II", 1).unwrap();
+    let second = notes_at_cursor("I II", 3).unwrap();
+
+    assert_eq!(first.span, 0..1);
+    assert_eq!(first.pitches, vec![60, 64, 67]);
+    assert_eq!(second.span, 2..4);
+    assert_eq!(second.pitches, vec![62, 66, 69]);
+    assert!(first.from_chord);
+    assert!(second.from_chord);
+}
+
 /// 小文字の MML はコード表記と紛れない。単音のまま鳴る。
 #[test]
 fn lowercase_mml_is_not_read_as_a_chord() {

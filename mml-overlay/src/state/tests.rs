@@ -45,6 +45,19 @@ fn send(messages: Vec<[u8; 3]>, duration_ms: u64) -> MmlOverlayAction {
     })
 }
 
+fn assert_sent_pitches(action: &MmlOverlayAction, expected: &[u8]) {
+    let MmlOverlayAction::Send(notes) = action else {
+        panic!("expected note on messages, got {action:?}");
+    };
+    let pitches = notes
+        .messages
+        .iter()
+        .filter(|message| message[0] == NOTE_ON)
+        .map(|message| message[1])
+        .collect::<Vec<_>>();
+    assert_eq!(pitches, expected);
+}
+
 #[test]
 fn typing_a_note_sends_note_on() {
     let mut overlay = opened();
@@ -98,6 +111,44 @@ fn moving_inside_a_chord_does_not_resound_it() {
         overlay.handle_key(press(KeyCode::Left), now),
         MmlOverlayAction::Continue
     );
+}
+
+/// `II` を打ち終えた位置から 1 文字戻っても同じ chord 単位に留まる。
+#[test]
+fn moving_inside_a_roman_chord_keeps_its_sound_without_resounding() {
+    let mut overlay = opened();
+    let now = Instant::now();
+
+    let action = type_chars(&mut overlay, "II", now);
+    assert_sent_pitches(&action, &[62, 66, 69]);
+    assert_eq!(overlay.sounding(), [62, 66, 69]);
+
+    assert_eq!(
+        overlay.handle_key(press(KeyCode::Left), now),
+        MmlOverlayAction::Continue
+    );
+    assert_eq!(overlay.sounding(), [62, 66, 69]);
+    assert!(overlay.sounding_from_chord());
+}
+
+/// 構成音が同じ chord 同士でも、source range の境界を越えたときだけ鳴らし直す。
+#[test]
+fn crossing_between_identical_roman_chords_resounds_the_previous_chord() {
+    let mut overlay = opened();
+    let now = Instant::now();
+    type_chars(&mut overlay, "II II", now);
+
+    for _ in 0..2 {
+        assert_eq!(
+            overlay.handle_key(press(KeyCode::Left), now),
+            MmlOverlayAction::Continue
+        );
+    }
+    assert_eq!(overlay.sounding(), [62, 66, 69]);
+
+    let action = overlay.handle_key(press(KeyCode::Left), now);
+    assert_sent_pitches(&action, &[62, 66, 69]);
+    assert_eq!(overlay.sounding(), [62, 66, 69]);
 }
 
 /// 別の発音単位へ移れば鳴る。単音から和音へ戻るところ。

@@ -57,12 +57,68 @@ fn a_cursor_with_nothing_on_its_left_takes_the_unit_on_its_right() {
     assert_eq!(cursor_sounding_unit("c d", 2), Some(2..3));
 }
 
-/// コード表記の行は発音単位へ写せない。行頭からカーソルまでを 1 つとして扱う。
 #[test]
-fn a_chord_notation_line_falls_back_to_the_prefix() {
-    assert_eq!(cursor_sounding_unit("C Am", 4), Some(4..4));
-    assert_eq!(cursor_sounding_unit("C Am", 1), Some(1..1));
-    assert_eq!(cursor_sounding_unit("C Am", 0), None);
+fn every_caret_position_in_a_chord_selects_the_whole_chord() {
+    for cursor in 0..=2 {
+        assert_eq!(cursor_sounding_unit("II", cursor), Some(0..2));
+    }
+}
+
+#[test]
+fn chord_progressions_select_one_source_chord_at_a_time() {
+    for (line, expected) in [
+        (
+            "I II",
+            vec![Some(0..1), Some(0..1), Some(2..4), Some(2..4), Some(2..4)],
+        ),
+        (
+            "I-II",
+            vec![Some(0..1), Some(0..1), Some(2..4), Some(2..4), Some(2..4)],
+        ),
+    ] {
+        let actual = (0..=line.len())
+            .map(|cursor| cursor_sounding_unit(line, cursor))
+            .collect::<Vec<_>>();
+        assert_eq!(actual, expected, "line {line:?}");
+    }
+}
+
+#[test]
+fn chord_directives_and_whitespace_are_not_sounding_units() {
+    let line = "Key:C   I";
+    for cursor in 0..=7 {
+        assert_eq!(cursor_sounding_unit(line, cursor), None, "cursor {cursor}");
+    }
+    assert_eq!(cursor_sounding_unit(line, 8), Some(8..9));
+    assert_eq!(cursor_sounding_unit(line, 9), Some(8..9));
+
+    let line = "drop2   I";
+    for cursor in 0..=7 {
+        assert_eq!(cursor_sounding_unit(line, cursor), None, "cursor {cursor}");
+    }
+    assert_eq!(cursor_sounding_unit(line, 8), Some(8..9));
+    assert_eq!(cursor_sounding_unit(line, 9), Some(8..9));
+}
+
+#[test]
+fn dialect_and_unicode_chords_use_original_input_ranges() {
+    let line = "ii-V-I";
+    for (cursor, expected) in [
+        (0, 0..2),
+        (1, 0..2),
+        (2, 0..2),
+        (3, 3..4),
+        (4, 3..4),
+        (5, 5..6),
+        (6, 5..6),
+    ] {
+        assert_eq!(cursor_sounding_unit(line, cursor), Some(expected));
+    }
+
+    let line = "C♯・II";
+    for (cursor, expected) in [(0, 0..4), (1, 0..4), (4, 0..4), (7, 7..9), (9, 7..9)] {
+        assert_eq!(cursor_sounding_unit(line, cursor), Some(expected));
+    }
 }
 
 /// 小文字の MML はコード表記と紛れない。発音単位のほうで切れる。

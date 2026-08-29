@@ -303,7 +303,6 @@ dependencies = [
 [[package]]
 name = "chord2mml-core"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/chord2mml-rust#7148117056ed05f5bd084630149c7c87f3fbd74c"
 dependencies = [
  "anyhow",
  "serde",
@@ -3534,7 +3533,6 @@ dependencies = [
 [[package]]
 name = "tree-sitter-chord"
 version = "0.0.1"
-source = "git+https://github.com/cat2151/chord2mml-rust#7148117056ed05f5bd084630149c7c87f3fbd74c"
 dependencies = [
  "cc",
  "tree-sitter",

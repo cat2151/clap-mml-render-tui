@@ -174,13 +174,16 @@ pub fn parse_chord_progression(input: &str) -> Result<ParsedChordProgression, St
                 text,
                 pitch_class,
                 event_index,
+                ..
             } => {
                 if key.is_some() {
                     return Err("Key指定は1つだけにしてください".to_string());
                 }
                 key = Some((text.clone(), *pitch_class, *event_index));
             }
-            ParsedItem::Chord { text, event_index } => {
+            ParsedItem::Chord {
+                text, event_index, ..
+            } => {
                 first_chord_event.get_or_insert(*event_index);
                 chord_texts.push(text.clone());
             }
