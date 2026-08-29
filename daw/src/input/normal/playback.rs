@@ -37,11 +37,11 @@ pub(in crate::input) fn preview_target_tracks(
     Some(vec![cursor_track])
 }
 
-/// `h` / `j` / `k` / `l` で移動したあとの preview 対象 track。
+/// カーソル位置の単一 track preview 対象。
 ///
 /// chord 行自体は音を持たないため、その行を選んでいる間だけ chord 行から生成される
 /// 最初の演奏 track を代理にする。通常の演奏 track では従来どおりカーソル行を返す。
-pub(in crate::input) fn cursor_move_preview_track(
+pub(in crate::input) fn preview_target_track(
     data: &[Vec<String>],
     tracks: usize,
     cursor_track: usize,

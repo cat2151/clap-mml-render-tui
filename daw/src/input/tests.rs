@@ -13,7 +13,7 @@ pub(super) use super::super::{
     DawPatchSelectPane, DawPlayState, DawProjectFileAction, PlayPosition,
 };
 pub(super) use super::{
-    cursor_move_preview_track, normal_playback_shortcut, preview_target_tracks,
+    normal_playback_shortcut, preview_target_track, preview_target_tracks,
     resolve_playback_start_measure_index, NormalPlaybackShortcut,
 };
 

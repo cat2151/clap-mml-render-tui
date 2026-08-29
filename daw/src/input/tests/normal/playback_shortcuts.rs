@@ -71,3 +71,34 @@ fn handle_normal_enter_uses_test_preview_path_when_plugin_entries_are_unavailabl
         Some("preview: meas1")
     );
 }
+
+#[test]
+fn handle_normal_space_previews_chord_row_through_the_first_generated_track() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.editor.cursor_track = crate::CHORD_TRACK;
+    app.editor.cursor_measure = 1;
+    app.editor.data[crate::CHORD_TRACK][1] = "I".to_string();
+    app.editor.data[crate::FIRST_PLAYABLE_TRACK][0] =
+        r#"{"generate from chord track":"close"}"#.to_string();
+
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert!(matches!(
+        *app.playback.play_state.lock().unwrap(),
+        DawPlayState::Preview
+    ));
+    assert_eq!(
+        app.playback
+            .position
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|pos| pos.measure_index),
+        Some(0)
+    );
+    assert_eq!(
+        app.log_lines.lock().unwrap().back().map(String::as_str),
+        Some("preview: meas1")
+    );
+}

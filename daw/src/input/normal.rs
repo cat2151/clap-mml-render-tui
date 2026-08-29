@@ -14,7 +14,7 @@ mod chord_wizard;
 mod playback;
 
 pub(super) use playback::{
-    cursor_move_preview_track, format_patch_hot_reload_log, normal_playback_shortcut,
+    format_patch_hot_reload_log, normal_playback_shortcut, preview_target_track,
     preview_target_tracks, resolve_playback_start_measure_index, NormalPlaybackShortcut,
 };
 
@@ -219,11 +219,17 @@ impl DawApp {
     }
 
     fn start_preview_for_target_tracks(&mut self, preview_all_tracks: bool) {
-        let Some(target_tracks) = preview_target_tracks(
-            self.editor.tracks,
-            self.editor.cursor_track,
-            preview_all_tracks,
-        ) else {
+        let target_tracks = if preview_all_tracks {
+            preview_target_tracks(self.editor.tracks, self.editor.cursor_track, true)
+        } else {
+            preview_target_track(
+                &self.editor.data,
+                self.editor.tracks,
+                self.editor.cursor_track,
+            )
+            .map(|track| vec![track])
+        };
+        let Some(target_tracks) = target_tracks else {
             return;
         };
         self.start_preview_on_resolved_tracks(&target_tracks);
@@ -243,7 +249,7 @@ impl DawApp {
             return;
         }
         let target_track = if preview_chord_track {
-            cursor_move_preview_track(
+            preview_target_track(
                 &self.editor.data,
                 self.editor.tracks,
                 self.editor.cursor_track,

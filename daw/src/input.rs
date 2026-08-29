@@ -17,7 +17,7 @@ use super::{AbRepeatState, DawApp, FIRST_PLAYABLE_TRACK};
 
 #[cfg(test)]
 use normal::{
-    cursor_move_preview_track, normal_playback_shortcut, preview_target_tracks,
+    normal_playback_shortcut, preview_target_track, preview_target_tracks,
     resolve_playback_start_measure_index, NormalPlaybackShortcut,
 };
 
