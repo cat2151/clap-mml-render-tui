@@ -13,8 +13,8 @@ pub(super) use super::super::{
     DawPatchSelectPane, DawPlayState, DawProjectFileAction, PlayPosition,
 };
 pub(super) use super::{
-    normal_playback_shortcut, preview_target_tracks, resolve_playback_start_measure_index,
-    NormalPlaybackShortcut,
+    cursor_move_preview_track, normal_playback_shortcut, preview_target_tracks,
+    resolve_playback_start_measure_index, NormalPlaybackShortcut,
 };
 
 /// -6dB を線形 gain 値に変換する（10^(-6/20)）。

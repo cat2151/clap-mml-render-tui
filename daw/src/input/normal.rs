@@ -14,8 +14,8 @@ mod chord_wizard;
 mod playback;
 
 pub(super) use playback::{
-    format_patch_hot_reload_log, normal_playback_shortcut, preview_target_tracks,
-    resolve_playback_start_measure_index, NormalPlaybackShortcut,
+    cursor_move_preview_track, format_patch_hot_reload_log, normal_playback_shortcut,
+    preview_target_tracks, resolve_playback_start_measure_index, NormalPlaybackShortcut,
 };
 
 impl DawApp {
@@ -200,7 +200,7 @@ impl DawApp {
         };
     }
 
-    fn start_preview_for_target_tracks(&mut self, preview_all_tracks: bool) {
+    fn start_preview_on_resolved_tracks(&mut self, target_tracks: &[usize]) {
         let play_state = *self.playback.play_state.lock().unwrap();
         match play_state {
             DawPlayState::Idle => {}
@@ -212,6 +212,13 @@ impl DawApp {
         let Some(measure_index) = self.cursor_play_measure_index() else {
             return;
         };
+        if self.try_start_preview_for_test() {
+            return;
+        }
+        self.start_preview_on_tracks(measure_index, target_tracks);
+    }
+
+    fn start_preview_for_target_tracks(&mut self, preview_all_tracks: bool) {
         let Some(target_tracks) = preview_target_tracks(
             self.editor.tracks,
             self.editor.cursor_track,
@@ -219,10 +226,7 @@ impl DawApp {
         ) else {
             return;
         };
-        if self.try_start_preview_for_test() {
-            return;
-        }
-        self.start_preview_on_tracks(measure_index, &target_tracks);
+        self.start_preview_on_resolved_tracks(&target_tracks);
     }
 
     fn toggle_preview_for_target_tracks(&mut self, preview_all_tracks: bool) {
@@ -233,24 +237,28 @@ impl DawApp {
         }
     }
 
-    fn preview_current_target_if_stopped(&mut self) {
+    fn preview_current_target_if_stopped(&mut self, preview_chord_track: bool) {
         let play_state = *self.playback.play_state.lock().unwrap();
         if play_state == DawPlayState::Playing {
             return;
         }
-        let is_previewable = self.cursor_play_measure_index().is_some()
-            && self.editor.cursor_track >= FIRST_PLAYABLE_TRACK
-            && self.editor.cursor_track < self.editor.tracks;
-        if !is_previewable {
+        let target_track = if preview_chord_track {
+            cursor_move_preview_track(
+                &self.editor.data,
+                self.editor.tracks,
+                self.editor.cursor_track,
+            )
+        } else {
+            preview_target_tracks(self.editor.tracks, self.editor.cursor_track, false)
+                .and_then(|tracks| tracks.into_iter().next())
+        };
+        let (Some(_), Some(target_track)) = (self.cursor_play_measure_index(), target_track) else {
             if play_state == DawPlayState::Preview {
                 self.stop_play();
             }
             return;
-        }
-        if self.try_start_preview_for_test() {
-            return;
-        }
-        self.start_preview_for_target_tracks(false);
+        };
+        self.start_preview_on_resolved_tracks(&[target_track]);
     }
 
     // `new_for_test()` の DAW は PluginEntry を持たないため、
@@ -347,7 +355,7 @@ impl DawApp {
             KeyCode::Char('h') | KeyCode::Left if self.editor.cursor_measure > 0 => {
                 self.editor.cursor_measure -= 1;
                 self.update_ab_repeat_follow_end_with_cursor();
-                self.preview_current_target_if_stopped();
+                self.preview_current_target_if_stopped(true);
             }
             KeyCode::Char('H') => {
                 self.start_history_overlay();
@@ -357,17 +365,17 @@ impl DawApp {
             {
                 self.editor.cursor_measure += 1;
                 self.update_ab_repeat_follow_end_with_cursor();
-                self.preview_current_target_if_stopped();
+                self.preview_current_target_if_stopped(true);
             }
             KeyCode::Char('j') | KeyCode::Down
                 if self.editor.cursor_track + 1 < self.editor.tracks =>
             {
                 self.editor.cursor_track += 1;
-                self.preview_current_target_if_stopped();
+                self.preview_current_target_if_stopped(true);
             }
             KeyCode::Char('k') | KeyCode::Up if self.editor.cursor_track > 0 => {
                 self.editor.cursor_track -= 1;
-                self.preview_current_target_if_stopped();
+                self.preview_current_target_if_stopped(true);
             }
             KeyCode::Char('C') => self.jump_between_chord_row_and_cursor_track(),
             KeyCode::Char('M') => {

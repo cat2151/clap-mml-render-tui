@@ -32,7 +32,7 @@ impl DawApp {
         self.editor.cursor_track = destination;
         // カーソル移動で preview が追従する既存の挙動（`j` / `k`）に揃える。
         // chord 行は演奏されないので、跳んだ側では preview が止まる。
-        self.preview_current_target_if_stopped();
+        self.preview_current_target_if_stopped(false);
     }
 
     /// chord 行から戻る先。

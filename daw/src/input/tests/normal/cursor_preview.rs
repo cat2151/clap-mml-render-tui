@@ -84,6 +84,39 @@ fn handle_normal_cursor_move_restarts_preview_on_new_target() {
 }
 
 #[test]
+fn handle_normal_h_previews_the_measure_through_the_first_generated_chord_track() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.editor.cursor_track = crate::CHORD_TRACK;
+    app.editor.cursor_measure = 2;
+    app.editor.data[crate::CHORD_TRACK][1] = "I".to_string();
+    app.editor.data[crate::FIRST_PLAYABLE_TRACK][0] =
+        r#"{"generate from chord track":"close"}"#.to_string();
+
+    let result = app.handle_normal_key_event(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));
+
+    assert!(matches!(result, super::super::DawNormalAction::Continue));
+    assert_eq!(app.editor.cursor_track, crate::CHORD_TRACK);
+    assert_eq!(app.editor.cursor_measure, 1);
+    assert!(matches!(
+        *app.playback.play_state.lock().unwrap(),
+        DawPlayState::Preview
+    ));
+    assert_eq!(
+        app.playback
+            .position
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|position| position.measure_index),
+        Some(0)
+    );
+    assert_eq!(
+        app.log_lines.lock().unwrap().back().map(String::as_str),
+        Some("preview: meas1")
+    );
+}
+
+#[test]
 fn handle_normal_l_and_k_do_not_start_preview_while_playing() {
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 3;

@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use super::super::super::FIRST_PLAYABLE_TRACK;
+use super::super::super::{CHORD_TRACK, FIRST_PLAYABLE_TRACK};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::input) enum NormalPlaybackShortcut {
@@ -35,6 +35,22 @@ pub(in crate::input) fn preview_target_tracks(
         return None;
     }
     Some(vec![cursor_track])
+}
+
+/// `h` / `j` / `k` / `l` で移動したあとの preview 対象 track。
+///
+/// chord 行自体は音を持たないため、その行を選んでいる間だけ chord 行から生成される
+/// 最初の演奏 track を代理にする。通常の演奏 track では従来どおりカーソル行を返す。
+pub(in crate::input) fn cursor_move_preview_track(
+    data: &[Vec<String>],
+    tracks: usize,
+    cursor_track: usize,
+) -> Option<usize> {
+    if cursor_track == CHORD_TRACK {
+        return (FIRST_PLAYABLE_TRACK..tracks)
+            .find(|&track| crate::mml::track_generates_from_chord_row(data, track));
+    }
+    (cursor_track >= FIRST_PLAYABLE_TRACK && cursor_track < tracks).then_some(cursor_track)
 }
 
 pub(in crate::input) fn resolve_playback_start_measure_index(
