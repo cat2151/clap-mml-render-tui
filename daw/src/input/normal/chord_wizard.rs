@@ -50,6 +50,7 @@ use super::INIT_MEASURE;
 use crate::mml::chord_generation::{
     generate_mml_from_chord_cell, split_progression_into_measures, GENERATE_FROM_CHORD_TRACK_KEY,
 };
+use cmrt_patches::PatchRole;
 
 /// wizard が配り始める小節。row 全体を書き換えるので常にここから。
 const FIRST_PLAY_MEASURE: usize = INIT_MEASURE + 1;
@@ -85,7 +86,7 @@ impl DawApp {
         // 気に入って選んだ音色を黙って捨てるものではない）。
         let patch_name = match self.current_track_patch_name() {
             Some(_) => None,
-            None => self.pick_random_patch_name(),
+            None => self.pick_random_patch_name_for_role(PatchRole::Chord),
         };
 
         self.apply_chord_wizard_with(&degrees, patch_name);

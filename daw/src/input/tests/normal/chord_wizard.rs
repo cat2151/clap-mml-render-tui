@@ -338,6 +338,35 @@ fn pressing_g_picks_from_the_injected_catalog() {
     );
 }
 
+/// 音色未選択の track に wizard が音色を補うときは、共通 PatchRole の Chord 候補だけを使う。
+#[test]
+fn pressing_g_picks_only_a_chord_role_patch() {
+    let (mut app, _cache_rx) = build_wide_test_app();
+    cursor_at_wizard_target(&mut app);
+    set_catalog(&mut app, &["I-IV"]);
+    *app.patch_load.lock().unwrap() = cmrt_tui_core::patch_load::PatchLoadState::ready(vec![
+        (
+            "Bass/Deep Bass.fxp".to_string(),
+            "bass/deep bass.fxp".to_string(),
+        ),
+        (
+            "Pads/Warm Pad.fxp".to_string(),
+            "pads/warm pad.fxp".to_string(),
+        ),
+        (
+            "Leads/Bright Lead.fxp".to_string(),
+            "leads/bright lead.fxp".to_string(),
+        ),
+    ]);
+
+    press_g(&mut app);
+
+    assert_eq!(
+        app.current_track_patch_name().as_deref(),
+        Some("Pads/Warm Pad.fxp")
+    );
+}
+
 /// 抽選したものが chord2mml を通ることまで確かめてから書く。
 /// 通らないものしか無いカタログでは、1 セルも書かずにログだけ残す。
 #[test]

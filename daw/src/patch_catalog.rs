@@ -11,6 +11,7 @@
 //! 走査経路は snapshot がまだ `Loading` / `Err` のときのフォールバックとしてだけ残す。
 
 use super::DawApp;
+use cmrt_patches::{PatchRole, PatchRoleIndex, PatchRoleInput};
 use cmrt_runtime::Config;
 use cmrt_tui_core::patch_load::{PatchCatalogSnapshot, PatchLoadState};
 use std::sync::{Arc, Mutex};
@@ -205,6 +206,39 @@ impl DawApp {
 
     pub(crate) fn pick_random_patch_name(&mut self) -> Option<String> {
         self.pick_random_patch_name_with_query(None)
+    }
+
+    /// 共通の用途分類から、指定した Role の音色だけを抽選する。
+    ///
+    /// snapshot が Ready なら selector category とユーザー preset を反映済みの索引を使う。
+    /// 読み込み中の走査フォールバックでも同じ分類規則を適用し、別 Role の音色へは
+    /// フォールバックしない。
+    pub(crate) fn pick_random_patch_name_for_role(&mut self, role: PatchRole) -> Option<String> {
+        let snapshot = self.catalog_snapshot();
+        let patches = self.patch_pairs_for_lookup(&format!("random-patch-role-{}", role.key()))?;
+        let candidates = match snapshot {
+            Some(snapshot) => snapshot.patch_roles().candidates(role).to_vec(),
+            None => {
+                let presets = cmrt_history::load_mml_patch_filter_presets();
+                PatchRoleIndex::build(
+                    patches
+                        .iter()
+                        .map(|(display, normalized_display)| PatchRoleInput {
+                            display,
+                            normalized_display,
+                            selector_category: None,
+                        }),
+                    &presets,
+                )
+                .candidates(role)
+                .to_vec()
+            }
+        };
+        let deck_key = format!("role:{}", role.key());
+        let idx = self
+            .random_patch_decks
+            .next_index(Some(&deck_key), candidates.len())?;
+        Some(candidates[idx].clone())
     }
 
     pub(crate) fn pick_random_patch_name_with_query(
