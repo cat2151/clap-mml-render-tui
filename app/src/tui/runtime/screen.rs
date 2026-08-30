@@ -216,6 +216,7 @@ impl<'a> TuiApp<'a> {
                     .map(|entry| entry.degrees.clone())
                     .collect()
             }));
+            daw.populate_blank_daily_workspace();
             let outcome = daw.run_with_terminal(terminal, autoplay);
             drop(daw);
 

@@ -6,7 +6,66 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use cmrt_tui_core::patch_load::{PatchCatalogSnapshot, PatchLoadMeasurement, PatchLoadState};
 
 use crate::input::tests::build_test_app;
-use crate::{DawPlayState, CHORD_TRACK, DEFAULT_TRACK0_MML, FIRST_PLAYABLE_TRACK};
+use crate::{DawPlayState, WorkspaceKind, CHORD_TRACK, DEFAULT_TRACK0_MML, FIRST_PLAYABLE_TRACK};
+
+#[test]
+fn blank_daily_workspace_starts_with_the_chord_wizard_on_track1_meas1() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.workspace_kind = WorkspaceKind::Daily;
+    app.editor.cursor_track = 0;
+    app.editor.cursor_measure = 0;
+    app.chord_progression_source = Some(Arc::new(|| vec!["I-IV".to_string()]));
+    *app.patch_load.lock().unwrap() = PatchLoadState::Ready(Arc::new(PatchCatalogSnapshot::new(
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        BTreeMap::new(),
+    )));
+
+    app.populate_blank_daily_workspace();
+
+    assert_eq!(
+        (app.editor.cursor_track, app.editor.cursor_measure),
+        (FIRST_PLAYABLE_TRACK, 1)
+    );
+    assert_eq!(app.editor.data[CHORD_TRACK][1], "I");
+    assert_eq!(app.editor.data[CHORD_TRACK][2], "IV");
+    assert_eq!(
+        app.editor.data[FIRST_PLAYABLE_TRACK][0],
+        r#"{"generate from chord track":"close"}"#
+    );
+}
+
+#[test]
+fn daily_workspace_with_existing_content_is_not_replaced_on_entry() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.workspace_kind = WorkspaceKind::Daily;
+    app.editor.cursor_track = FIRST_PLAYABLE_TRACK + 1;
+    app.editor.cursor_measure = 2;
+    app.editor.data[FIRST_PLAYABLE_TRACK][1] = "cdef".to_string();
+    app.chord_progression_source = Some(Arc::new(|| vec!["I-IV".to_string()]));
+
+    app.populate_blank_daily_workspace();
+
+    assert_eq!(
+        (app.editor.cursor_track, app.editor.cursor_measure),
+        (FIRST_PLAYABLE_TRACK + 1, 2)
+    );
+    assert_eq!(app.editor.data[FIRST_PLAYABLE_TRACK][1], "cdef");
+    assert!(app.editor.data[CHORD_TRACK][1].is_empty());
+}
+
+#[test]
+fn persistent_workspace_is_not_populated_on_entry() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.chord_progression_source = Some(Arc::new(|| vec!["I-IV".to_string()]));
+
+    app.populate_blank_daily_workspace();
+
+    assert!(app.editor.data[CHORD_TRACK][1].is_empty());
+    assert!(app.editor.data[FIRST_PLAYABLE_TRACK][0].is_empty());
+}
 
 #[test]
 fn random_patch_logs_its_catalog_load_estimate_before_preview() {

@@ -71,6 +71,31 @@ struct ChordWizardRealtimePreview {
 }
 
 impl DawApp {
+    /// Daily DAW の空ページを、`G` を押した直後と同じ状態で開始する。
+    ///
+    /// コード進行カタログは app から構築後に注入されるため、DAW の load 時ではなく
+    /// 注入後に呼ぶ。復帰したページの chord／演奏領域に何か 1 セルでもあれば、
+    /// 既存内容とカーソルをそのまま保つ。
+    pub fn populate_blank_daily_workspace(&mut self) {
+        if self.workspace_kind != crate::WorkspaceKind::Daily
+            || self.editor.tracks <= FIRST_PLAYABLE_TRACK
+            || self.editor.measures < FIRST_PLAY_MEASURE
+            || self
+                .editor
+                .data
+                .iter()
+                .skip(CHORD_TRACK)
+                .flatten()
+                .any(|cell| !cell.trim().is_empty())
+        {
+            return;
+        }
+
+        self.editor.cursor_track = FIRST_PLAYABLE_TRACK;
+        self.editor.cursor_measure = FIRST_PLAY_MEASURE;
+        self.apply_chord_wizard_to_current_measure();
+    }
+
     /// `G`: コード進行を抽選し、カーソル行がそれを鳴らす状態にする。
     pub(super) fn apply_chord_wizard_to_current_measure(&mut self) {
         if self.editor.cursor_track < FIRST_PLAYABLE_TRACK {
