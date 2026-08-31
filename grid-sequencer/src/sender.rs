@@ -31,6 +31,15 @@ static NEXT_LIVE_TIMELINE_ID: AtomicU64 = AtomicU64::new(1);
 const TIME_SIGNATURE_NUMERATOR: u16 = 4;
 const TIME_SIGNATURE_DENOMINATOR: u16 = 4;
 
+/// 先読みサイクルの世代。
+///
+/// UI スレッドがサイクルを始める・畳むたびに1つ進む。送信スレッドは受け取った
+/// 完了通知の世代が今の世代と同じときだけ進捗を進める。wire 上の先読み要求は
+/// 取り消せないので、`r` キーや画面離脱でサイクルを畳んだ後にも古い完了通知が
+/// 届く。それを新しいサイクルの成功として数えると、実際にはロードしていない
+/// bank へ切り替わってしまう。
+type PreloadGeneration = Arc<AtomicU64>;
+
 pub use preload_estimate::GridPreloadEstimate;
 pub use status::{
     GridConnectionPhase, GridConnectionStatus, GridProgress, GridRowPatchPhase, GridRowPatchStatus,
@@ -58,7 +67,12 @@ enum GridMidiCommand {
     },
     /// 待機 bank への先読みロード1件。**演奏中に走る**ので `stop_live_all()` を
     /// 呼ばず、phase も動かさない（`accepts_notes()` を落とすと演奏が止まる）。
+    ///
+    /// 送信スレッドはこれを受けてもロードの完了を待たない。受付だけして
+    /// [`worker`] の状態機械へ預け、timeline イベントを送り続ける。
     Preload {
+        /// 要求を出した時点の先読みサイクル世代（[`PreloadGeneration`]）。
+        generation: u64,
         instance_id: u8,
         patch: Option<String>,
     },
@@ -85,6 +99,7 @@ pub struct GridMidiSender {
     tx: mpsc::Sender<GridMidiCommand>,
     status: Arc<Mutex<GridConnectionStatus>>,
     supervisor: Arc<RealtimePlayServerSupervisor>,
+    preload_generation: PreloadGeneration,
     worker: Option<JoinHandle<()>>,
 }
 
@@ -92,16 +107,21 @@ impl GridMidiSender {
     pub fn new(supervisor: Arc<RealtimePlayServerSupervisor>) -> Self {
         let (tx, rx) = mpsc::channel();
         let status = Arc::new(Mutex::new(GridConnectionStatus::default()));
+        let preload_generation: PreloadGeneration = Arc::new(AtomicU64::new(1));
         let worker_status = Arc::clone(&status);
         let worker_supervisor = Arc::clone(&supervisor);
+        let worker_generation = Arc::clone(&preload_generation);
         let worker = std::thread::Builder::new()
             .name("grid-sequencer-midi-sender".to_string())
-            .spawn(move || worker::run_midi_sender(rx, worker_supervisor, worker_status))
+            .spawn(move || {
+                worker::run_midi_sender(rx, worker_supervisor, worker_status, worker_generation)
+            })
             .expect("grid sequencer MIDI sender thread should start");
         Self {
             tx,
             status,
             supervisor,
+            preload_generation,
             worker: Some(worker),
         }
     }
@@ -172,21 +192,26 @@ impl GridMidiSender {
     }
 
     /// 新しいサイクルの先読みを始める。進捗と失敗フラグを初期化する。
+    ///
+    /// 世代を進めるので、前のサイクルの受付済み要求がまだ走っていても、その完了は
+    /// このサイクルの進捗にはならない。
     pub fn begin_preload_cycle(&self, load_weights_ms: Vec<u64>) {
+        self.preload_generation.fetch_add(1, Ordering::SeqCst);
         self.status.lock().unwrap().reset_preload(load_weights_ms);
     }
 
     /// 待機 bank へ patch を1件だけ先読みする。演奏は止めない。
     ///
-    /// ロード中も演奏 bank の render はサーバーの bank worker が続けるので、
-    /// 出力は途切れない。ただし**この送信スレッドは1件ごとに同期で待つ**ので、
-    /// 1ステップにつき1件ずつ呼ぶこと。まとめて投げると timeline イベントを送る口が
-    /// 塞がり、供給が遅れる。
+    /// ロード中も演奏 bank の render はサーバーの bank worker が続け、**送信スレッドも
+    /// 止まらない**（受付だけして完了は状態として待つ）。それでも1ステップにつき1件
+    /// ずつ呼ぶこと。完了通知 slot は共有メモリ上に1件ぶんしか無いので、まとめて
+    /// 投げても受付は順番待ちになるだけで早くならない。
     pub fn preload(&self, instance_id: u8, patch: Option<&str>) {
         self.status.lock().unwrap().begin_preload_step();
         if self
             .tx
             .send(GridMidiCommand::Preload {
+                generation: self.preload_generation.load(Ordering::SeqCst),
                 instance_id,
                 patch: patch.map(str::to_string),
             })
@@ -232,9 +257,11 @@ impl GridMidiSender {
 
     /// 先読みを終える（全件送り終えた、または打ち切った）。
     ///
-    /// 送信スレッドへ知らせることは無い。先読み中に出力バッファを厚くする
-    /// 暫定回避はサーバーの bank worker 分離で不要になり、状態は status だけ。
+    /// 送信スレッドへコマンドは送らない。代わりに世代を進めることで、まだ走って
+    /// いる要求の完了が「終わったサイクル」の結果だと送信スレッド側で分かるように
+    /// する（打ち切りのときに古い完了で進捗が進まないのが肝）。
     pub fn finish_preload(&self) {
+        self.preload_generation.fetch_add(1, Ordering::SeqCst);
         self.status.lock().unwrap().finish_preload();
     }
 
@@ -253,6 +280,7 @@ impl GridMidiSender {
     pub fn stop(&self) {
         // 判定はここで降ろす。ワーカー側でも戻すが、キューを捌く前に画面へ入り直すと
         // 古い判定を読んでシングルバッファリングのまま再開してしまう。
+        self.preload_generation.fetch_add(1, Ordering::SeqCst);
         let mut status = self.status.lock().unwrap();
         status.clear_overload();
         status.clear_row_patch_setting();
@@ -264,8 +292,9 @@ impl GridMidiSender {
 
     pub fn status(&self) -> GridConnectionStatus {
         let mut status = self.status.lock().unwrap().clone();
-        // worker は patch load の同期呼び出し中に止まる。そこを経由すると、まさに
-        // 補正したい underrun をロード完了まで観測できないため共有メモリから直接読む。
+        // worker は `Prepare` や `SetRowPatch` の同期呼び出し中に止まる（先読みでは
+        // もう止まらない）。そこを経由すると、まさに補正したい underrun を
+        // ロード完了まで観測できないため共有メモリから直接読む。
         status.output_underrun_frames = self.supervisor.underrun_frames();
         if matches!(status.phase, GridConnectionPhase::Connecting) {
             if let Some(progress) = self.supervisor.startup_progress() {

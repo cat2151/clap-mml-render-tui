@@ -31,7 +31,7 @@ pub use fast_midi_ipc::{
     FastMidiEvent, InstanceId, LimiterMeter, LiveTempoChange, LiveTimelineConfig, TimelineId,
     TimelineMidiEvent, TimingMetrics, INSTANCE_COUNT, MAX_MIDI_MESSAGES,
 };
-pub use live_ipc::{PatchVoicing, VoicingReport};
+pub use live_ipc::{PatchVoicing, StandbyPatchRequest, VoicingReport, STANDBY_LOAD_TIMEOUT};
 pub use startup_failure::ServerStartupFailure;
 
 use supervisor_process::PlayServerState;

@@ -21,6 +21,17 @@
 //! 切り替えられず、ここから明示的に指定する。薄い側（[`THIN_BUFFER_MULTIPLIER`]）が
 //! 通ることが、暫定回避を外してよい根拠そのものになる。
 //!
+//! # これが**番人にならない**こと
+//! ここは 1 周ぶんのイベントを**先読みの前に全部**送ってしまう。ロード中に
+//! timeline の供給が止まっても、送り終わったイベントで演奏が続くので metrics は
+//! 悪化しない。2026-08-31 の supply starvation（ロード中に MIDI が届かず note off が
+//! 遅れる）はここでは検出できない。その番人は `timeline_during_preload.rs`。
+//!
+//! late の読みについても同じ注意が要る。サーバーは timing metrics を 5 秒周期でしか
+//! publish しない（play-server の `player/timing_diagnostics.rs` の `WINDOW`）。
+//! この test は 2 秒ほどで終わるので、`late_before` / `late_after` はどちらも 0 の
+//! ままになりやすい。ここで意味のある回帰判定は underrun 側だと考えること。
+//!
 //! ```text
 //! $env:CMRT_TEST_PLAY_SERVER_EXE = "...\clap-mml-realtime-play-server.exe"
 //! cargo test -p cmrt-realtime-play -- --include-ignored grid_cycle
@@ -30,7 +41,9 @@ use std::time::Duration;
 
 use crate::{LiveTimelineConfig, TimelineMidiEvent};
 
-use super::harness::{number_field, TestPlayServer, PATCH_LOAD_DELAY_ENV, PLAY_SERVER_EXE_ENV};
+use super::harness::{
+    number_field, pick_port, TestPlayServer, PATCH_LOAD_DELAY_ENV, PLAY_SERVER_EXE_ENV,
+};
 
 /// 2 track × 2 bank。grid の最小構成で、bank 境界も preload も成立する。
 const INSTANCE_COUNT: usize = 4;
@@ -61,7 +74,7 @@ const BOOSTED_BUFFER_MULTIPLIER: u16 = 16;
 #[test]
 #[ignore = "実機の play server 実行ファイルが要る（CMRT_TEST_PLAY_SERVER_EXE）"]
 fn a_standby_preload_does_not_regress_the_metrics_of_a_running_grid_cycle() {
-    let port = 49_000 + (std::process::id() % 1_000) as u16;
+    let port = pick_port(49_000);
     run_grid_cycle_with_preload(port, THIN_BUFFER_MULTIPLIER).assert_no_regression();
 }
 
@@ -72,7 +85,7 @@ fn a_standby_preload_does_not_regress_the_metrics_of_a_running_grid_cycle() {
 #[test]
 #[ignore = "実機の play server 実行ファイルが要る（CMRT_TEST_PLAY_SERVER_EXE）"]
 fn a_standby_preload_does_not_regress_the_metrics_with_the_old_preload_buffer_boost() {
-    let port = 50_000 + (std::process::id() % 1_000) as u16;
+    let port = pick_port(50_000);
     run_grid_cycle_with_preload(port, BOOSTED_BUFFER_MULTIPLIER).assert_no_regression();
 }
 
@@ -170,7 +183,10 @@ fn run_grid_cycle_with_preload(port: u16, buffer_multiplier: u16) -> CycleOutcom
     let underrun_before = supervisor.underrun_frames();
     let late_before = supervisor.timing_metrics().late_events_total;
 
-    // 待機 bank（instance 2, 3）へ、grid と同じく **1 件ずつ同期で**先読みする。
+    // 待機 bank（instance 2, 3）へ 1 件ずつ先読みする。
+    // v10 以降、grid 本体は非同期 API（begin/poll）を使う。ここが同期 wrapper のままなのは、
+    // このテストが見るのが「先読み中に underrun / late が増えないこと」だけで、
+    // 供給が止まらないことの番人は timeline_during_preload.rs だからである。
     for instance in 2..INSTANCE_COUNT as u8 {
         supervisor
             .prepare_standby_patch(instance, None)

@@ -1,360 +1,163 @@
-//! MIDI 送信ワーカースレッドの本体。
+//! MIDI 送信ワーカースレッドのコマンドループ。
 //!
 //! [`super::GridMidiSender`] が投げたコマンドを1本のスレッドで順に処理し、
 //! 空き時間に出力バッファの適応調整とリミッターメーターの取り込みを行う。
 //! サーバーとやり取りするのはこのスレッドだけで、UI スレッドは status を読むだけ。
+//!
+//! # 塞いではいけない経路
+//!
+//! このループが止まると timeline event の送出も止まる。止めてよいのは
+//! 「その間どのみち音が出ない」コマンド（起動・全 instance のロード・停止）だけで、
+//! **演奏中に走る先読み（[`GridMidiCommand::Preload`]）で待ってはいけない**。
+//! v9 まではここで patch load の完了を同期で待っており、約 3 秒のロード中は
+//! `Send` が mpsc に溜まりっぱなしになって note-off が遅れていた。
+//!
+//! そのため、ループが直接扱うのは次の3つだけ:
+//!
+//! - `Send`: そのまま backend へ流す
+//! - `Preload`: [`PreloadTracker`] へ預けて即座に戻る
+//! - `Stop` / `Shutdown`: 先読みを畳んでから backend へ
+//!
+//! 残りは [`GridSenderBackend::handle_slow_command`] へ委ねる。実サーバー向けの
+//! 実装は [`supervisor_backend`]。この分け方のおかげで、ループ自体は
+//! 実サーバー無しの fake backend で試験できる（[`tests`]）。
 
 use std::{
-    sync::{mpsc, Arc, Mutex},
+    sync::{atomic::Ordering, mpsc, Arc, Mutex},
     time::{Duration, Instant},
 };
 
-use anyhow::Context as _;
-use cmrt_realtime_play::{LimiterMeter, RealtimePlayServerSupervisor};
+use cmrt_realtime_play::{RealtimePlayServerSupervisor, TimelineMidiEvent};
 
-use super::{
-    adaptive_buffer::{AdaptiveBuffer, INITIAL_BUFFER_MULTIPLIER, RESTORE_BUFFER_MULTIPLIER},
-    gain_summary::describe_adjusted,
-    overload::OverloadDetector,
-    GridConnectionStatus, GridMidiCommand,
-};
+use super::{GridConnectionStatus, GridMidiCommand, PreloadGeneration};
 
+mod preload;
 mod runtime_poll;
+mod supervisor_backend;
 
-use runtime_poll::{poll_runtime_status, RuntimePollContext};
+use preload::{PreloadOutcome, PreloadTracker};
+use supervisor_backend::SupervisorBackend;
 
 const METER_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
-/// 演奏中の**行差し替え**（[`GridMidiCommand::SetRowPatch`]）のあいだだけ確保する
-/// 出力バッファの厚さ（下限）。
+/// コマンドループがサーバーへ触るための窓口。
 ///
-/// この経路のロードはサーバーの coordinator が同期で待つため、その間はどの bank も
-/// render されずリングが補充されない（手動の行差し替えを無停止化しないのは
-/// 意図した契約。`PLAN-grid-bank-worker-separation.md` の「前提と守る契約」4）。
-/// 実測で 1 patch あたり平均 27ms（最悪 150ms）かかるのに対し、リングの余裕は
-/// 512 フレーム × multiplier ÷ 48kHz なので、既定の `INITIAL_BUFFER_MULTIPLIER`
-/// （= 2、21ms）では足りない。16 なら 170ms 稼げる。
-///
-/// 適応バッファが既にこれより厚ければ、そちらを保つ（薄くすると underrun を招く）。
-///
-/// **待機 bank への先読み（[`GridMidiCommand::Preload`]）では使わない。**
-/// サーバーの bank worker 分離以降、先読み中も演奏 bank の render は止まらない。
-const ROW_PATCH_BUFFER_MULTIPLIER: u16 = 16;
+/// 「止めてはいけない経路」（timeline 送出と先読みの受付/完了ポーリング）だけを
+/// 個別のメソッドにし、残りは [`Self::handle_slow_command`] へまとめてある。
+/// 全メソッドを機械的に列挙した trait にしないのは、ループが守るべき境界そのものを
+/// 型で表すため。
+pub(super) trait GridSenderBackend {
+    /// 先読み1件の受付票。実装では `cmrt_realtime_play::StandbyPatchRequest`。
+    type Standby;
+
+    fn send_timeline(
+        &mut self,
+        events: &[TimelineMidiEvent],
+        queued_at: Instant,
+        pump_lateness: Duration,
+    );
+
+    /// 先読みを要求し、**受付までで**戻る。ロードの完了は待たない。
+    fn begin_standby(
+        &mut self,
+        instance_id: u8,
+        patch: Option<&str>,
+    ) -> anyhow::Result<Self::Standby>;
+
+    /// 完了通知を非 blocking に読む。`Ok(None)` はまだロード中。
+    fn poll_standby(&mut self, request: &mut Self::Standby) -> anyhow::Result<Option<()>>;
+
+    /// 結果を捨てて、この要求を「自分のもの」ではなくする。
+    fn abandon_standby(&mut self, request: Self::Standby);
+
+    fn standby_request_id(&self, request: &Self::Standby) -> u32;
+
+    /// 先読み1件の決着をログと status へ書く。
+    fn record_preload_outcome(&mut self, outcome: PreloadOutcome);
+
+    /// 完了まで待ってよいコマンド。待っている間 timeline event は送れない。
+    fn handle_slow_command(&mut self, command: GridMidiCommand);
+
+    /// コマンドの空き時間にサーバー状態を取り込む。
+    fn poll_runtime(&mut self, now: Instant);
+}
 
 pub(super) fn run_midi_sender(
     rx: mpsc::Receiver<GridMidiCommand>,
     supervisor: Arc<RealtimePlayServerSupervisor>,
     status: Arc<Mutex<GridConnectionStatus>>,
+    preload_generation: PreloadGeneration,
 ) {
-    let mut adaptive_buffer = None;
-    // 慢性ドロップの判定は `adaptive_buffer` の中に置かないこと。`Prepare` のたびに
-    // `adaptive_buffer = None` されるので、そこに持たせると latch が毎回消える。
-    let mut overload = OverloadDetector::new();
-    let mut last_timing_log = Instant::now();
-    let mut timing_late_baseline = 0u64;
+    let mut backend = SupervisorBackend::new(supervisor, status);
+    run_command_loop(rx, &mut backend, &preload_generation);
+}
+
+pub(super) fn run_command_loop<B: GridSenderBackend>(
+    rx: mpsc::Receiver<GridMidiCommand>,
+    backend: &mut B,
+    preload_generation: &PreloadGeneration,
+) {
+    let mut preload = PreloadTracker::new();
     loop {
+        // 完了通知を見るのは**毎周回の先頭**。「コマンドが来ない暇なときだけ」に
+        // すると、イベント送信が続いている間ずっと先読みの完了に気づけない。
+        let outcomes = preload.advance(backend, preload_generation.load(Ordering::SeqCst));
+        report_preload(backend, outcomes);
         let command = match rx.recv_timeout(METER_POLL_INTERVAL) {
             Ok(command) => command,
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                poll_runtime_status(
-                    RuntimePollContext {
-                        supervisor: supervisor.as_ref(),
-                        status: &status,
-                        adaptive_buffer: &mut adaptive_buffer,
-                        overload: &mut overload,
-                        last_timing_log: &mut last_timing_log,
-                        timing_late_baseline,
-                    },
-                    Instant::now(),
-                );
+                backend.poll_runtime(Instant::now());
                 continue;
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         };
         match command {
-            GridMidiCommand::StartServer => {
-                adaptive_buffer = None;
-                let started = Instant::now();
-                let result = supervisor.ensure_started_for_fast_midi();
-                let server_elapsed = started.elapsed();
-                log_startup_summary("start-server", server_elapsed, None, 0, result.is_ok());
-                match result {
-                    Ok(()) => status.lock().unwrap().wait_for_patches(server_elapsed),
-                    Err(error) => apply(&status, Err(error), Some(server_elapsed), false),
-                }
-            }
             GridMidiCommand::Send {
                 events,
                 queued_at,
                 pump_lateness,
-            } => {
-                status
-                    .lock()
-                    .unwrap()
-                    .observe_sender_timing(pump_lateness, queued_at.elapsed());
-                let started = Instant::now();
-                let result = supervisor.send_timeline_events(&events);
-                apply(&status, result, Some(started.elapsed()), false);
-            }
-            GridMidiCommand::BeginTimeline { config } => {
-                let started = Instant::now();
-                let result = supervisor
-                    .begin_live_timeline(config)
-                    .map(|()| supervisor.limiter_meter());
-                crate::log_line(&format!(
-                    "grid-sequencer: timeline begin id={} sample_rate={} bpm={} result={}",
-                    config.timeline_id,
-                    config.sample_rate_hz,
-                    config.tempo_bpm,
-                    if result.is_ok() { "ok" } else { "error" },
-                ));
-                if result.is_ok() {
-                    timing_late_baseline = supervisor.timing_metrics().late_events_total;
-                    status
-                        .lock()
-                        .unwrap()
-                        .update_timing(cmrt_realtime_play::TimingMetrics::default());
-                }
-                apply(&status, result, Some(started.elapsed()), false);
-            }
-            GridMidiCommand::SetLiveTempo { change } => {
-                let result = supervisor.set_live_tempo(change);
-                // 失敗しても phase は動かさない。accepts_notes() を落とすと無音になる。
-                // テンポが追従しないだけで、演奏そのものは続けられる。
-                crate::log_line(&format!(
-                    "grid-sequencer: tempo-map id={} at_seconds={:.6} bpm={} result={}",
-                    change.timeline_id,
-                    change.at_seconds,
-                    change.tempo_bpm,
-                    match &result {
-                        Ok(()) => "ok".to_string(),
-                        Err(error) => format!("error \"{error:#}\""),
-                    },
-                ));
-            }
-            GridMidiCommand::Prepare { patches } => {
-                adaptive_buffer = None;
-                // サーバー起動（CLAP インスタンス生成）と音色ロードは所要時間の桁が
-                // 違うので、別々に計測してどちらが支配的かを切り分けられるようにする。
-                let server_started = Instant::now();
-                let ensure = supervisor.ensure_started_for_fast_midi();
-                let server_elapsed = server_started.elapsed();
-                let patch_started = Instant::now();
-                let result = ensure.and_then(|()| {
-                    status
-                        .lock()
-                        .unwrap()
-                        .begin_patch_setting(patches.len(), server_elapsed);
-                    prepare_instances(supervisor.as_ref(), &patches, |completed, total| {
-                        status
-                            .lock()
-                            .unwrap()
-                            .update_patch_setting(completed, total);
-                    })
-                });
-                let patch_elapsed = patch_started.elapsed();
-                log_startup_summary(
-                    "prepare",
-                    server_elapsed,
-                    Some(patch_elapsed),
-                    patches.len(),
-                    result.is_ok(),
-                );
-                status.lock().unwrap().finish_patch_setting(patch_elapsed);
-                if result.is_ok() {
-                    let now = Instant::now();
-                    let buffer = AdaptiveBuffer::new(now, supervisor.underrun_frames());
-                    status
-                        .lock()
-                        .unwrap()
-                        .update_adaptive_buffer(buffer.multiplier(), buffer.underrun_frames());
-                    adaptive_buffer = Some(buffer);
-                }
-                apply(
-                    &status,
-                    result.map(|()| supervisor.limiter_meter()),
-                    Some(server_elapsed + patch_elapsed),
-                    false,
-                );
-            }
-            GridMidiCommand::Preload { instance_id, patch } => {
-                let started = Instant::now();
-                // 先読み専用コマンド。宛先は必ず「発音 deadline を越えて非演奏になった
-                // 待機 bank」なので、サーバーはその bank を止めてロードしてよい。
-                // 現在 bank を触る `SetRowPatch` とは別の API であることが契約の本体。
-                //
-                // **ここで出力バッファを厚くしないこと。** 同期で待つのはこの送信
-                // スレッドだけで、演奏 bank の render はサーバー側の bank worker が
-                // 続けている。厚くしても underrun は減らず、発音の遅れが増えるだけ。
-                // 実測（`realtime-play/src/live_ipc/tests/grid_cycle.rs`）でも倍率 2 と
-                // 16 の両方で underrun / late events の増分は 0 だった。
-                let result = supervisor.prepare_standby_patch(instance_id, patch.as_deref());
-                match &result {
-                    Ok(()) => crate::log_line(&format!(
-                        "grid-sequencer: preload instance={instance_id} ms={}",
-                        started.elapsed().as_millis()
-                    )),
-                    Err(error) => crate::log_line(&format!(
-                        "grid-sequencer: preload failed instance={instance_id} error=\"{error:#}\""
-                    )),
-                }
-                status
-                    .lock()
-                    .unwrap()
-                    .record_preload_step(result.is_ok(), started.elapsed());
-            }
-            GridMidiCommand::SetRowPatch {
-                request_id,
-                queued_at,
-                reason,
-                row,
+            } => backend.send_timeline(&events, queued_at, pump_lateness),
+            GridMidiCommand::Preload {
+                generation,
                 instance_id,
                 patch,
             } => {
-                let queue_ms = queued_at.elapsed().as_millis();
-                let current = adaptive_buffer
-                    .map(AdaptiveBuffer::multiplier)
-                    .unwrap_or(INITIAL_BUFFER_MULTIPLIER);
-                let _ = supervisor
-                    .set_connected_live_buffer_multiplier(current.max(ROW_PATCH_BUFFER_MULTIPLIER));
-                let started = Instant::now();
-                let result = supervisor.prepare_live_patch(instance_id, patch.as_deref());
-                let _ = supervisor.set_connected_live_buffer_multiplier(current);
-                let error = result.as_ref().err().map(|error| format!("{error:#}"));
-                crate::log_line(&format!(
-                    "grid-sequencer: instance-patch request={request_id} reason={reason} logical_instance={} \
-                     server_instance={instance_id} patch={patch:?} queue_ms={queue_ms} load_ms={} result={}",
-                    row + 1,
-                    started.elapsed().as_millis(),
-                    if result.is_ok() { "ok" } else { "error" },
-                ));
-                status.lock().unwrap().finish_row_patch_setting(row, error);
-            }
-            GridMidiCommand::SetGains { gains } => {
-                let mut failed = None;
-                for (instance_id, gain) in gains.iter().enumerate() {
-                    // 古いサーバーはこのコマンドを知らない。音量差が付かないだけなので
-                    // ログにとどめ、再生は続ける。
-                    if let Err(error) = supervisor.set_live_instance_gain(instance_id as u8, *gain)
-                    {
-                        failed = Some(format!("{error:#}"));
-                        break;
-                    }
-                }
-                crate::log_line(&format!(
-                    "grid-sequencer: gains instances={} adjusted={} result={}",
-                    gains.len(),
-                    describe_adjusted(&gains),
-                    match &failed {
-                        Some(error) => format!("error \"{error}\""),
-                        None => "ok".to_string(),
-                    },
-                ));
-            }
-            GridMidiCommand::SetAutoGain { enabled } => {
-                let result = supervisor.set_live_auto_gain_enabled(enabled);
-                crate::log_line(&format!(
-                    "grid-sequencer: auto-gain enabled={enabled} result={}",
-                    match &result {
-                        Ok(()) => "ok".to_string(),
-                        Err(error) => format!("error \"{error:#}\""),
-                    },
-                ));
+                // 先読み専用コマンド。宛先は必ず「発音 deadline を越えて非演奏に
+                // なった待機 bank」なので、サーバーはその bank を止めてロードしてよい。
+                // 現在 bank を触る `SetRowPatch` とは別の API であることが契約の本体。
+                //
+                // **ここで出力バッファを厚くしないこと。** 演奏 bank の render は
+                // サーバー側の bank worker が続けている。厚くしても underrun は減らず、
+                // 発音の遅れが増えるだけ。実測（`realtime-play/src/live_ipc/tests/
+                // grid_cycle.rs`）でも倍率 2 と 16 の両方で underrun / late の増分は 0。
+                let outcomes = preload.submit(
+                    backend,
+                    generation,
+                    preload_generation.load(Ordering::SeqCst),
+                    instance_id,
+                    patch,
+                );
+                report_preload(backend, outcomes);
             }
             GridMidiCommand::Stop => {
-                adaptive_buffer = None;
-                // 画面を離れるので判定も白紙へ戻す。次に入るときはダブルバッファリングから。
-                overload = OverloadDetector::new();
-                status.lock().unwrap().clear_overload();
-                let started = Instant::now();
-                let result = supervisor
-                    .stop_live_all()
-                    .and_then(|()| {
-                        supervisor.set_connected_live_buffer_multiplier(RESTORE_BUFFER_MULTIPLIER)
-                    })
-                    .map(|()| LimiterMeter::default());
-                status
-                    .lock()
-                    .unwrap()
-                    .update_adaptive_buffer(RESTORE_BUFFER_MULTIPLIER, 0);
-                apply(&status, result, Some(started.elapsed()), true);
+                let outcomes = preload.cancel(backend);
+                report_preload(backend, outcomes);
+                backend.handle_slow_command(GridMidiCommand::Stop);
             }
-            GridMidiCommand::Shutdown => break,
+            GridMidiCommand::Shutdown => {
+                let outcomes = preload.cancel(backend);
+                report_preload(backend, outcomes);
+                break;
+            }
+            slow => backend.handle_slow_command(slow),
         }
     }
 }
 
-/// 起動待ちの内訳を1行にまとめてログへ残す。
-///
-/// 「サーバー起動が支配的か、音色ロードが支配的か」を後から log.txt だけで
-/// 切り分けられるようにするためのもの。サーバー側の内訳は同じログファイルの
-/// `cmrt-server-timing:` 行と突き合わせる。
-fn log_startup_summary(
-    stage: &str,
-    server: Duration,
-    patch: Option<Duration>,
-    instances: usize,
-    succeeded: bool,
-) {
-    let patch_ms = patch.map_or_else(|| "-".to_string(), |patch| patch.as_millis().to_string());
-    let total_ms = (server + patch.unwrap_or_default()).as_millis();
-    crate::log_line(&format!(
-        "grid-sequencer: startup stage={stage} server_ms={} patch_ms={patch_ms} \
-         total_ms={total_ms} instances={instances} result={}",
-        server.as_millis(),
-        if succeeded { "ok" } else { "error" }
-    ));
-}
-
-/// 指定された instance の音色をまとめて差し替える。`stop_live_all()` を伴うので
-/// この間は無音になる。鳴っている bank ぶんだけを渡すこと（待機 bank は
-/// [`GridMidiCommand::Preload`] が演奏中に裏で仕込む）。
-fn prepare_instances(
-    supervisor: &RealtimePlayServerSupervisor,
-    patches: &[(u8, Option<String>)],
-    mut report_progress: impl FnMut(usize, usize),
-) -> anyhow::Result<()> {
-    let available = supervisor.live_instance_count();
-    if let Some((instance_id, _)) = patches
-        .iter()
-        .find(|(instance_id, _)| usize::from(*instance_id) >= available)
-    {
-        anyhow::bail!("instance {instance_id} is outside the server range 0..{available}");
+fn report_preload<B: GridSenderBackend>(backend: &mut B, outcomes: Vec<PreloadOutcome>) {
+    for outcome in outcomes {
+        backend.record_preload_outcome(outcome);
     }
-    supervisor.stop_live_all()?;
-    supervisor.set_live_buffer_multiplier(INITIAL_BUFFER_MULTIPLIER)?;
-    report_progress(0, patches.len());
-    for (completed, (instance_id, patch)) in patches.iter().enumerate() {
-        if let Err(error) = supervisor
-            .prepare_live_patch(*instance_id, patch.as_deref())
-            .with_context(|| {
-                format!(
-                    "grid instance {instance_id} patch prepare failed (patch={:?})",
-                    patch.as_deref()
-                )
-            })
-        {
-            let _ = supervisor.stop_live_all();
-            return Err(error);
-        }
-        report_progress(completed + 1, patches.len());
-    }
-    Ok(())
-}
-
-fn apply(
-    status: &Mutex<GridConnectionStatus>,
-    result: anyhow::Result<LimiterMeter>,
-    elapsed: Option<std::time::Duration>,
-    idle_on_success: bool,
-) {
-    if let Err(error) = &result {
-        crate::log_line(&format!("grid-sequencer: MIDI worker error: {error:#}"));
-    }
-    status
-        .lock()
-        .unwrap()
-        .apply_result(result, elapsed, idle_on_success);
 }
 
 #[cfg(test)]

@@ -154,6 +154,9 @@ pub fn builtin_role_presets() -> &'static [PatchRolePreset] {
 }
 
 /// 分類の排他的cascade。Etcはどこにも入らなかった残り。
+///
+/// Triggeredは表示名・categoryのどちらに現れても最優先。その後のRoleは、pluginが
+/// 明示したselector categoryを表示名より先に評価する。
 const CASCADE: [PatchRole; 5] = [
     PatchRole::Triggered,
     PatchRole::Drum,
@@ -187,11 +190,7 @@ impl PatchRoleIndex {
         let drum_patterns = DrumPatchRole::ALL.map(|role| compile_condition(role.pattern()));
         let mut index = Self::default();
         for entry in entries {
-            let role = cascade
-                .iter()
-                .find(|compiled| compiled.matches(entry))
-                .map(|compiled| compiled.role)
-                .unwrap_or(PatchRole::Etc);
+            let role = classify_role(entry, &cascade);
             index.by_display.insert(entry.display.to_string(), role);
             index.by_role[role.index()].push(entry.display.to_string());
             if role == PatchRole::Drum {
@@ -233,6 +232,37 @@ impl CompiledRole {
             .iter()
             .any(|condition| condition_matches(condition, entry))
     }
+
+    fn matches_text(&self, text: &str) -> bool {
+        self.alternatives
+            .iter()
+            .any(|condition| condition.iter().all(|regex| regex.is_match(text)))
+    }
+}
+
+fn classify_role(entry: PatchRoleInput<'_>, cascade: &[CompiledRole]) -> PatchRole {
+    let (triggered, roles) = cascade
+        .split_first()
+        .expect("classification cascade contains Triggered");
+    debug_assert_eq!(triggered.role, PatchRole::Triggered);
+    if triggered.matches(entry) {
+        return PatchRole::Triggered;
+    }
+
+    if let Some(category) = entry.selector_category {
+        if let Some(compiled) = roles
+            .iter()
+            .find(|compiled| compiled.matches_text(category))
+        {
+            return compiled.role;
+        }
+    }
+
+    // 複数termのユーザー規則は、従来どおり表示名とcategoryをまたいでAND一致できる。
+    roles
+        .iter()
+        .find(|compiled| compiled.matches(entry))
+        .map_or(PatchRole::Etc, |compiled| compiled.role)
 }
 
 fn compile_role(role: PatchRole, user_presets: &[(String, String)]) -> CompiledRole {

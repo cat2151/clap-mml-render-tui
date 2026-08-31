@@ -1,3 +1,11 @@
+//! [`super::GridMidiSender`] のテスト。
+//!
+//! - `preload_during_playback`: 先読み中も送信キューが詰まらないこと（実サーバー / `#[ignore]`）
+//! - `test_play_server`: 実サーバーを起こすためのハーネス（判定は書かない）
+
+mod preload_during_playback;
+mod test_play_server;
+
 use cmrt_realtime_play::LimiterMeter;
 
 use super::*;

@@ -44,6 +44,36 @@ fn selector_category_and_user_rules_participate_in_classification() {
 }
 
 #[test]
+fn selector_category_wins_over_non_triggered_display_matches() {
+    let hate = "patches_3rdparty/Altenberg/Basses/Hate.fxp";
+    let bass_drum = "patches_3rdparty/Giana Brotherz/Drums/Bass Drum.fxp";
+    let organ_lead = "patches_factory/Leads/Organ Donor.fxp";
+    let steel_drum = "patches_3rdparty/Slowboat/Keys/Quick Steel Drum.fxp";
+    let bass_sequence = "patches_3rdparty/Bluelight/Basses/Bass Seq 110 BPM.fxp";
+    let index = PatchRoleIndex::build(
+        [
+            input(hate, Some("Basses")),
+            input(bass_drum, Some("Drums")),
+            input(organ_lead, Some("Leads")),
+            input(steel_drum, Some("Keys")),
+            input(bass_sequence, Some("Basses")),
+        ],
+        &[],
+    );
+
+    assert_eq!(index.role_of(hate), Some(PatchRole::Bass));
+    assert_eq!(index.role_of(bass_drum), Some(PatchRole::Drum));
+    assert_eq!(index.role_of(organ_lead), Some(PatchRole::Lead));
+    assert_eq!(index.role_of(steel_drum), Some(PatchRole::Chord));
+    assert_eq!(index.role_of(bass_sequence), Some(PatchRole::Triggered));
+    assert_eq!(index.candidates(PatchRole::Bass), [hate]);
+    assert!(!index
+        .drum_candidates(DrumPatchRole::HiHat)
+        .iter()
+        .any(|candidate| candidate == hate));
+}
+
+#[test]
 fn bass_word_boundary_rejects_sbs_but_accepts_super_bs() {
     let index = PatchRoleIndex::build([input("sbs", None), input("super-bs", None)], &[]);
 

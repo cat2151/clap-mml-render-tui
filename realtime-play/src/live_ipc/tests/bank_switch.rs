@@ -19,7 +19,7 @@
 
 use std::time::Duration;
 
-use super::harness::{TestPlayServer, PLAY_SERVER_EXE_ENV};
+use super::harness::{pick_port, TestPlayServer, PLAY_SERVER_EXE_ENV};
 
 /// 2 track × 2 bank。instance 0,1 が bank 0、2,3 が bank 1。
 const INSTANCE_COUNT: usize = 4;
@@ -39,7 +39,7 @@ fn the_standby_bank_makes_sound_after_the_switch() {
     let exe = std::env::var(PLAY_SERVER_EXE_ENV).unwrap_or_else(|_| {
         panic!("{PLAY_SERVER_EXE_ENV} に play server の実行ファイルを渡すこと")
     });
-    let port = 51_000 + (std::process::id() % 1_000) as u16;
+    let port = pick_port(51_000);
     let server = TestPlayServer::spawn(&exe, port, INSTANCE_COUNT);
 
     let cfg = crate::tests::cfg_for_port(port);
@@ -81,7 +81,8 @@ fn the_standby_bank_makes_sound_after_the_switch() {
         );
     }
 
-    // 待機 bank を先読みする（grid と同じく 1 件ずつ同期で）。
+    // 待機 bank を 1 件ずつ先読みする。ここで見たいのは auto gain の値なので、
+    // ロード完了まで待つ同期 wrapper のほうが素直（grid 本体は非同期 API を使う）。
     for instance in 2..INSTANCE_COUNT as u8 {
         supervisor
             .prepare_standby_patch(instance, None)

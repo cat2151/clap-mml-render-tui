@@ -3,10 +3,21 @@
 //! 2 repository に二重定義された SHM プロトコルの食い違いも、bank worker が
 //! 分かれているかも、ここでしか機械的に検出できない。
 
+use std::time::{Duration, Instant};
+
 use super::harness::{
-    number_field, thread_id_of, TestPlayServer, PATCH_LOAD_DELAY_ENV, PLAY_SERVER_EXE_ENV,
-    SLOW_PATCH_LOAD_MS, SPARE_INSTANCES_ENV, STANDBY_PATCH_ENV,
+    number_field, pick_port, thread_id_of, TestPlayServer, PATCH_LOAD_DELAY_ENV,
+    PLAY_SERVER_EXE_ENV, SLOW_PATCH_LOAD_MS, SPARE_INSTANCES_ENV, STANDBY_PATCH_ENV,
 };
+
+/// 非同期 API の検証で使う人工ロード時間。
+///
+/// 「begin がロード時間ぶん block しない」を見るので、判定の窓は広い方がよい。
+/// 500ms だと負荷の高いマシンで flaky になりうる。
+const ASYNC_PATCH_LOAD_MS: u64 = 2_000;
+/// 受付応答は IPC の 1 往復だけなので数 ms で戻るはず。
+/// ここを超えたら、どこかでロード完了を待っている。
+const ACCEPT_BUDGET: Duration = Duration::from_millis(500);
 
 /// 先読み専用コマンドが**実サーバー**へ届き、bank 1 の要求として処理されること。
 ///
@@ -31,7 +42,7 @@ fn the_standby_preload_reaches_a_real_play_server() {
         panic!("{PLAY_SERVER_EXE_ENV} に play server の実行ファイルを渡すこと")
     });
     // 起動中の TUI の既定ポート（62154）から離す。
-    let port = 45_000 + (std::process::id() % 1_000) as u16;
+    let port = pick_port(45_000);
     // 2 instance = 1 instance ずつの 2 bank。起動を最小にしつつ bank 境界は成立する。
     let server = TestPlayServer::spawn(&exe, port, 2);
 
@@ -58,11 +69,129 @@ fn the_standby_preload_reaches_a_real_play_server() {
 
     // サーバー側でも「先読みとして」「bank 1 の要求として」扱われたこと。
     // クライアントが成功を受け取っただけでは、bank の判定までは確かめられない。
-    server.wait_for_stderr_line(|line| line.contains("kind=prepare-standby-patch instance=1"));
+    // Stage 2 で受信ログへ request= が入ったので、kind と instance は続けて書かない。
+    server.wait_for_stderr_line(|line| {
+        line.starts_with("cmrt-ipc-recv: kind=prepare-standby-patch ")
+            && line.contains(" instance=1 ")
+    });
+    // protocol v10 でこの行は「受付」を意味する（v9 までは `result=ok` で
+    // ロード完了を兼ねていた）。完了は別 slot なので別の行で見る。
     let handled = server.wait_for_stderr_line(|line| {
         line.starts_with("cmrt-standby-patch: bank=1 local=0 instance=1")
     });
-    assert!(handled.contains("result=ok"), "{handled}");
+    assert!(handled.contains("event=accepted"), "{handled}");
+    // 同期 wrapper が戻っているのだから、専用 slot の完了通知も既に出ている。
+    let completed = server.wait_for_stderr_line(|line| {
+        line.starts_with("cmrt-standby-patch: request=") && line.contains("event=completed")
+    });
+    assert!(completed.contains("result=ok"), "{completed}");
+}
+
+/// **受付と完了が本当に分かれていることを、実サーバーで確かめる。**
+///
+/// Stage 3 の完了条件そのもの。人工に 2 秒止めたロードに対して、
+///
+/// 1. `begin_standby_patch` がロード時間を待たずに戻る
+/// 2. 直後の `poll_standby_patch` は block せず `Ok(None)`（ロード中）を返す
+/// 3. ロード中の 2 件目はクライアント側で断られる
+/// 4. やがて完了が `Ok(Some(()))` として届く
+///
+/// これらは 2 repository に二重定義された protocol の両側が揃っていないと通らない。
+/// 単体テストだけだと layout がずれても両方緑のままになる。
+///
+/// ```text
+/// $env:CMRT_TEST_PLAY_SERVER_EXE = "...\clap-mml-realtime-play-server.exe"
+/// cargo test -p cmrt-realtime-play -- --include-ignored async_standby
+/// ```
+#[test]
+#[ignore = "実機の play server 実行ファイルが要る（CMRT_TEST_PLAY_SERVER_EXE）"]
+fn the_async_standby_api_accepts_long_before_the_load_finishes() {
+    let exe = std::env::var(PLAY_SERVER_EXE_ENV).unwrap_or_else(|_| {
+        panic!("{PLAY_SERVER_EXE_ENV} に play server の実行ファイルを渡すこと")
+    });
+    let port = pick_port(52_000);
+    let server = TestPlayServer::spawn_with_env(
+        &exe,
+        port,
+        2,
+        &[(PATCH_LOAD_DELAY_ENV, ASYNC_PATCH_LOAD_MS.to_string())],
+    );
+
+    let cfg = crate::tests::cfg_for_port(port);
+    let supervisor = crate::RealtimePlayServerSupervisor::with_live_instance_count(&cfg, 2);
+    supervisor
+        .ensure_started_for_fast_midi()
+        .expect("起動済みサーバーへ繋がらない");
+
+    // 1. 受付までしか待たないこと。v9 の同期設計なら、ここで 2 秒止まる。
+    let began = Instant::now();
+    let mut request = supervisor
+        .begin_standby_patch(1, None)
+        .expect("待機 bank への先読みを受け付けてもらえない");
+    let accept_elapsed = began.elapsed();
+    assert!(
+        accept_elapsed < ACCEPT_BUDGET,
+        "受付応答に {accept_elapsed:?} かかった。ロード完了を待っている"
+    );
+
+    // 2. 直後の poll は「まだロード中」。ここで block しないことが本題。
+    let polled = Instant::now();
+    assert_eq!(
+        supervisor
+            .poll_standby_patch(&mut request)
+            .expect("ポーリングが失敗した"),
+        None,
+        "人工遅延中なのに完了している"
+    );
+    assert!(
+        polled.elapsed() < ACCEPT_BUDGET,
+        "poll が block している: {:?}",
+        polled.elapsed()
+    );
+
+    // 3. 完了通知 slot は 1 件ぶんしかないので、2 件目は断る。
+    let busy = supervisor
+        .begin_standby_patch(0, None)
+        .expect_err("ロード中なのに 2 件目が通ってしまった");
+    let busy = format!("{busy:#}");
+    assert!(busy.contains("in flight"), "{busy}");
+
+    // 4. やがて完了が届く。ポーリングの間、こちらは何をしていてもよい。
+    loop {
+        if supervisor
+            .poll_standby_patch(&mut request)
+            .expect("先読みが失敗した")
+            .is_some()
+        {
+            break;
+        }
+        assert!(
+            began.elapsed() < Duration::from_secs(30),
+            "完了通知が届かない"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        began.elapsed().as_millis() as u64 >= ASYNC_PATCH_LOAD_MS,
+        "人工遅延が効いていない: {:?}",
+        began.elapsed()
+    );
+
+    // 受付と完了が同じ request ID でログに残ること（Stage 3 の作業 4）。
+    let request_id = request.request_id();
+    server.wait_for_stderr_line(|line| {
+        line == format!("cmrt-standby-patch: request={request_id} instance=1 event=accepted")
+    });
+    let completed = server.wait_for_stderr_line(|line| {
+        line.starts_with(&format!("cmrt-standby-patch: request={request_id} "))
+            && line.contains("event=completed")
+    });
+    assert!(completed.contains("result=ok"), "{completed}");
+
+    // 完了したのだから、次の先読みは普通に始められる。
+    supervisor
+        .begin_standby_patch(1, None)
+        .expect("完了後なのに次の先読みを始められない");
 }
 
 /// **先読みのロードが、演奏中の bank を回しているのとは別の OS thread で走ること。**
@@ -82,7 +211,7 @@ fn the_standby_load_runs_on_a_different_thread_than_the_active_bank_render() {
         panic!("{PLAY_SERVER_EXE_ENV} に play server の実行ファイルを渡すこと")
     });
     // 同時に走る別のテストのサーバーとも、起動中の TUI（既定 62154）とも衝突させない。
-    let port = 46_000 + (std::process::id() % 1_000) as u16;
+    let port = pick_port(46_000);
     let server = TestPlayServer::spawn(&exe, port, 2);
 
     // bank ごとに worker が 1 本ずつ立っていること。
@@ -157,7 +286,7 @@ fn the_active_bank_keeps_rendering_during_a_slow_standby_load() {
     let exe = std::env::var(PLAY_SERVER_EXE_ENV).unwrap_or_else(|_| {
         panic!("{PLAY_SERVER_EXE_ENV} に play server の実行ファイルを渡すこと")
     });
-    let port = 47_000 + (std::process::id() % 1_000) as u16;
+    let port = pick_port(47_000);
     let server = TestPlayServer::spawn_with_env(
         &exe,
         port,
@@ -249,7 +378,7 @@ fn a_cross_plugin_standby_preload_keeps_the_active_bank_rendering() {
         eprintln!("skip: {STANDBY_PATCH_ENV} が無いので、プラグインをまたぐ先読みは確かめていない");
         return;
     };
-    let port = 48_000 + (std::process::id() % 1_000) as u16;
+    let port = pick_port(48_000);
     let server = TestPlayServer::spawn_with_env(
         &exe,
         port,

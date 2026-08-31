@@ -5,7 +5,7 @@
 
 use std::{
     io::{BufRead as _, BufReader},
-    net::{SocketAddr, TcpStream},
+    net::{SocketAddr, TcpListener, TcpStream},
     process::{Child, Command, Stdio},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -30,6 +30,28 @@ pub(super) const SPARE_INSTANCES_ENV: &str = "CMRT_SPARE_INSTANCES";
 /// 渡さなければ、それを要求するテストは skip される。
 pub(super) const STANDBY_PATCH_ENV: &str = "CMRT_TEST_STANDBY_PATCH";
 pub(super) const SERVER_START_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// `base` から始めて、**実際に bind できるポート**を1つ選ぶ。
+///
+/// 固定の `base + pid % 1000` だけだと Windows の予約ポート範囲
+/// （`netsh int ipv4 show excludedportrange protocol=tcp`。この開発機では
+/// 49745-49944 / 50000-50059 など）に当たって、サーバーが
+/// `os error 10013` で即死する。当たるかどうかは pid とマシン依存なので、
+/// 直った・直っていないの判定に混ざる flaky になる。**空いている所を探す**のが
+/// 唯一の安定した手当て。
+///
+/// 帯は test ごとに分けてあるので、探索幅を狭く保てば他の test と重ならない。
+pub(super) fn pick_port(base: u16) -> u16 {
+    let start = base + (std::process::id() % 1_000) as u16;
+    for port in start..start.saturating_add(64) {
+        // bind できたら即座に閉じる。listen しただけの socket は TIME_WAIT に
+        // 落ちないので、この直後にサーバーが同じポートを取れる。
+        if TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], port))).is_ok() {
+            return port;
+        }
+    }
+    panic!("{start} から 64 個ぶん探しても bind できるポートが無い");
+}
 
 /// サーバーのログ行から `thread=ThreadId(..)` を取り出す。
 pub(super) fn thread_id_of(line: &str) -> String {
@@ -128,7 +150,16 @@ impl TestPlayServer {
         }
     }
 
-    fn stderr_text(&self) -> String {
+    /// ここまでに溜まった stderr 行の複製。
+    ///
+    /// [`Self::wait_for_stderr_line`] は「出たか」しか見られないので、
+    /// **行と行の順序**を判定したいときはこちらで丸ごと取ってから
+    /// [`count_lines_between`] へ渡す。
+    pub(super) fn stderr_snapshot(&self) -> Vec<String> {
+        self.stderr_lines.lock().unwrap().clone()
+    }
+
+    pub(super) fn stderr_text(&self) -> String {
         self.stderr_lines.lock().unwrap().join(" / ")
     }
 }
@@ -151,4 +182,50 @@ pub(super) fn number_field(line: &str, name: &str) -> u64 {
         .expect("値が空")
         .parse()
         .unwrap_or_else(|error| panic!("{name}= が整数でない ({error}): {line}"))
+}
+
+/// `start` に一致した行の**後**、`end` に一致した行の**前**にある `wanted` の数。
+///
+/// 「ロード中も受信が続いていた」は、行が出たかどうかでは判定できない。
+/// ロード完了後にまとめて届いた場合も同じ行が出るからで、区別できるのは
+/// **順序**だけ。時刻の sleep でログを推測せず、サーバー自身が出した
+/// 開始行と終了行を目印にして、その間に挟まった行を数える。
+pub(super) fn count_lines_between(
+    lines: &[String],
+    start: impl Fn(&str) -> bool,
+    end: impl Fn(&str) -> bool,
+    wanted: impl Fn(&str) -> bool,
+) -> usize {
+    let first = lines
+        .iter()
+        .position(|line| start(line))
+        .unwrap_or_else(|| {
+            panic!(
+                "開始の目印が無い:
+{}",
+                lines.join(
+                    "
+"
+                )
+            )
+        });
+    let last = lines
+        .iter()
+        .skip(first + 1)
+        .position(|line| end(line))
+        .map(|offset| first + 1 + offset)
+        .unwrap_or_else(|| {
+            panic!(
+                "終了の目印が無い:
+{}",
+                lines.join(
+                    "
+"
+                )
+            )
+        });
+    lines[first + 1..last]
+        .iter()
+        .filter(|line| wanted(line))
+        .count()
 }

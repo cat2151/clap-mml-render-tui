@@ -12,6 +12,14 @@ pub const INSTANCE_COUNT: usize = 32;
 pub const MAX_MIDI_MESSAGES: usize = 128;
 pub const MAX_PATCH_BYTES: usize = 4096;
 pub const MAX_RESPONSE_BYTES: usize = 16 * 1024;
+/// standby 完了通知が運べるエラーメッセージの最大バイト数。
+///
+/// 汎用応答と違い、この slot は共有メモリに常設される固定長領域なので小さく取る。
+/// これを超えるメッセージはサーバー側の publish 時に UTF-8 境界で切り詰められる。
+/// 完了通知を落とすと先読みが永久に Loading のまま残るので、長すぎることを理由に
+/// publish を失敗させない。サーバー側の
+/// `cmrt_realtime_ipc::MAX_STANDBY_ERROR_BYTES` と必ず揃えること。
+pub const MAX_STANDBY_ERROR_BYTES: usize = 1024;
 pub type InstanceId = u8;
 pub type TimelineId = u64;
 
@@ -73,7 +81,9 @@ pub struct LimiterMeter {
     pub peak_reduction_db: f32,
 }
 
-#[derive(Debug)]
+/// サーバー側の `cmrt_realtime_ipc::FastIpcError` と同じ derive にしてある。
+/// 完了通知の成否を `Option<Result<(), FastIpcError>>` のまま比較したいため。
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FastIpcError {
     UnsupportedPlatform,
     NotAvailable,
@@ -165,11 +175,11 @@ impl FastMidiClient {
         Err(FastIpcError::UnsupportedPlatform)
     }
 
-    pub fn prepare_standby_patch(
+    pub fn begin_standby_patch(
         &mut self,
         _instance_id: InstanceId,
         _patch: Option<&str>,
-    ) -> Result<(), FastIpcError> {
+    ) -> Result<(u32, u64), FastIpcError> {
         Err(FastIpcError::UnsupportedPlatform)
     }
 
@@ -219,5 +229,19 @@ impl FastMidiClient {
 
     pub fn timing_metrics(&self) -> TimingMetrics {
         TimingMetrics::default()
+    }
+
+    pub fn poll_standby_completion(
+        &mut self,
+        _request_id: u32,
+        _since_sequence: u64,
+    ) -> Option<Result<(), FastIpcError>> {
+        Some(Err(FastIpcError::UnsupportedPlatform))
+    }
+
+    pub fn abandon_standby_patch(&mut self, _request_id: u32) {}
+
+    pub fn standby_in_flight(&self) -> Option<u32> {
+        None
     }
 }

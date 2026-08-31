@@ -14,6 +14,7 @@ use super::*;
 mod connection;
 mod platform;
 mod protocol;
+mod standby;
 mod timeline;
 mod underrun;
 
@@ -28,6 +29,11 @@ pub struct FastMidiClient {
     response_event: OwnedHandle,
     pid: u32,
     next_request_id: u32,
+    /// 「standby request は同時に 1 件だけ」をクライアント側でも守る見張り。
+    ///
+    /// サーバーも 2 件目を断るが、断られてから気づくと 1 往復ぶん無駄になるうえ、
+    /// 完了通知 slot は 1 件ぶんしかないので、こちらが先に弾いた方が安全。
+    standby: standby::StandbyInFlight,
 }
 
 impl FastMidiClient {
@@ -54,6 +60,7 @@ impl FastMidiClient {
             response_event,
             pid,
             next_request_id: 1,
+            standby: standby::StandbyInFlight::default(),
         })
     }
 
@@ -80,19 +87,6 @@ impl FastMidiClient {
         patch: Option<&str>,
     ) -> Result<(), FastIpcError> {
         self.patch_request(KIND_PREPARE_PATCH, instance_id, patch)
-            .map(|_| ())
-    }
-
-    /// 非演奏 bank へ音色を先読みする。応答待ちは [`Self::prepare_patch`] と同じ。
-    ///
-    /// 「対象 instance は鳴っている bank に属さない」という宣言を伴うので、
-    /// 現在 bank の行音色変更・MML overlay・起動時 prepare には使わないこと。
-    pub fn prepare_standby_patch(
-        &mut self,
-        instance_id: InstanceId,
-        patch: Option<&str>,
-    ) -> Result<(), FastIpcError> {
-        self.patch_request(KIND_PREPARE_STANDBY_PATCH, instance_id, patch)
             .map(|_| ())
     }
 
@@ -214,6 +208,21 @@ impl FastMidiClient {
         instance_id: InstanceId,
         patch: Option<&str>,
     ) -> Result<Vec<u8>, FastIpcError> {
+        self.patch_request_with_id(kind, instance_id, patch)
+            .map(|(_, payload)| payload)
+    }
+
+    /// patch 系要求を 1 件出して、汎用応答（= 受付応答）まで待つ。
+    ///
+    /// request ID も返すのは、standby のように「受付」と「完了」が別 slot へ
+    /// 分かれた要求で、完了通知の突き合わせに ID が要るため。
+    /// サーバー側の `realtime-ipc/src/windows.rs` と同じ形にしてある。
+    fn patch_request_with_id(
+        &mut self,
+        kind: u32,
+        instance_id: InstanceId,
+        patch: Option<&str>,
+    ) -> Result<(u32, Vec<u8>), FastIpcError> {
         validate_instance(instance_id)?;
         let patch_bytes = patch.map(str::as_bytes).unwrap_or_default();
         if patch_bytes.len() > MAX_PATCH_BYTES {
@@ -234,7 +243,8 @@ impl FastMidiClient {
             slot.patch[..patch_bytes.len()].copy_from_slice(patch_bytes);
         }
         self.push(slot)?;
-        self.wait_for_response(request_id)
+        let payload = self.wait_for_response(request_id)?;
+        Ok((request_id, payload))
     }
 
     fn wait_for_response(&self, request_id: u32) -> Result<Vec<u8>, FastIpcError> {
@@ -288,7 +298,11 @@ impl FastMidiClient {
         }))
     }
 
-    fn push(&mut self, slot: CommandSlot) -> Result<(), FastIpcError> {
+    /// サーバーがまだ生きていて、この接続が有効かを確かめる。
+    ///
+    /// 完了通知のポーリングでも使う。サーバーが落ちれば slot はもう更新されないので、
+    /// これを見ないと呼び出し元は timeout まで Loading のまま待つことになる。
+    fn check_server_alive(&self) -> Result<(), FastIpcError> {
         let ring = self.mapping.ring();
         validate_ring(ring)?;
         if ring.client_pid.load(Ordering::Acquire) != self.pid {
@@ -299,6 +313,12 @@ impl FastMidiClient {
         if elapsed > SERVER_STALE_MS {
             return Err(FastIpcError::ServerStopped);
         }
+        Ok(())
+    }
+
+    fn push(&mut self, slot: CommandSlot) -> Result<(), FastIpcError> {
+        let ring = self.mapping.ring();
+        self.check_server_alive()?;
         let write = ring.write_index.load(Ordering::Relaxed);
         let read = ring.read_index.load(Ordering::Acquire);
         if write.wrapping_sub(read) >= SLOT_COUNT as u32 {
