@@ -72,7 +72,7 @@ enum GridMidiCommand {
         patch: Option<String>,
     },
     SetGains {
-        gains_db: Vec<f32>,
+        gains: Vec<f32>,
     },
     SetAutoGain {
         enabled: bool,
@@ -238,12 +238,12 @@ impl GridMidiSender {
         self.status.lock().unwrap().finish_preload();
     }
 
-    /// instance ごとの音量差を dB で設定する（0.0 が等倍）。
+    /// instance ごとの振幅倍率を設定する（1.0 が等倍、0.0 が無音）。
     ///
     /// ゲインはサーバー側が保持するので、音色ロードで live を作り直しても残る。
     /// 変わったときだけ送ればよい。
-    pub fn set_gains(&self, gains_db: Vec<f32>) {
-        let _ = self.tx.send(GridMidiCommand::SetGains { gains_db });
+    pub fn set_amplitude_gains(&self, gains: Vec<f32>) {
+        let _ = self.tx.send(GridMidiCommand::SetGains { gains });
     }
 
     pub fn set_auto_gain_enabled(&self, enabled: bool) {

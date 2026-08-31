@@ -76,6 +76,7 @@ impl GridSequencerScreen {
         let restored = state.restore_instances(instances);
         debug_assert!(restored);
         self.state = state;
+        self.resize_track_mix_state(instance_count);
         self.pending_undo = None;
         self.undo = None;
         // instance 番号の指す先が変わるので、音型と patch のカーソルは引き継がない。

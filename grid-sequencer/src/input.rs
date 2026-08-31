@@ -80,6 +80,14 @@ impl GridSequencerScreen {
         let visible_rows = self.state.visible_note_rows();
         let layout = crate::ui::layout_for(self, terminal_area);
         let hit = layout.hit_test(event.column, event.row, &visible_rows);
+        if matches!(
+            event.kind,
+            MouseEventKind::Down(_) | MouseEventKind::ScrollUp | MouseEventKind::ScrollDown
+        ) {
+            if let Some(hit) = hit {
+                self.select_track(hit.instance());
+            }
+        }
         match event.kind {
             MouseEventKind::Down(MouseButton::Left | MouseButton::Right) => {
                 self.begin_cell_gesture(event.kind, hit, ctx)
@@ -179,7 +187,13 @@ impl GridSequencerScreen {
     fn handle_left_click(&mut self, hit: Option<GridHit>, ctx: &GridSequencerContext<'_>) {
         match hit {
             Some(GridHit::InstancePatch { instance }) => self.open_patch_selector(instance, ctx),
-            Some(GridHit::NoteCell { .. } | GridHit::LaneNote { .. }) | None => {}
+            Some(GridHit::InstanceSolo { instance }) => self.toggle_track_solo(instance),
+            Some(
+                GridHit::NoteCell { .. }
+                | GridHit::LaneNote { .. }
+                | GridHit::InstanceSelect { .. },
+            )
+            | None => {}
         }
     }
 

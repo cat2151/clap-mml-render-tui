@@ -203,8 +203,7 @@ impl RealtimePlayServerSupervisor {
     /// この機能を持たない古いサーバーはコマンドを拒否するが、その場合も
     /// 「音量差が付かないだけ」で再生は続く。
     pub fn set_live_instance_gain_db(&self, instance_id: InstanceId, gain_db: f32) -> Result<()> {
-        let gain = amplitude_from_db(gain_db);
-        let result = self.with_fast_client(|client| client.set_instance_gain(instance_id, gain));
+        let result = self.set_live_instance_gain(instance_id, amplitude_from_db(gain_db));
         if let Err(error) = &result {
             log_realtime_play_event(format!(
                 "action=shm-instance-gain event=error instance={instance_id} \
@@ -213,6 +212,11 @@ impl RealtimePlayServerSupervisor {
             ));
         }
         result
+    }
+
+    /// live mix で instance へ掛ける振幅倍率を設定する（1.0 が等倍、0.0 が無音）。
+    pub fn set_live_instance_gain(&self, instance_id: InstanceId, gain: f32) -> Result<()> {
+        self.with_fast_client(|client| client.set_instance_gain(instance_id, gain))
     }
 
     pub fn set_connected_live_buffer_multiplier(&self, multiplier: u16) -> Result<()> {

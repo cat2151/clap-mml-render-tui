@@ -13,7 +13,7 @@ const TITLE: &str = " Grid Sequencer ヘルプ(Keybinds)  Esc/q/?:close ";
 
 /// 画面下部に常に出しておく1行のキーバインド要約。
 pub(super) const KEYBIND_TEXT: &str =
-    "mouse:edit Ctrl+B:BPM a:rnd i:chord input x:clear c:chord r/R:random t:tracks Ctrl+G:screen q:quit";
+    "mouse:edit j/k,↑↓:track s:solo a:rnd i:chord input x:clear c:chord r/R:random t:tracks Ctrl+G:screen q:quit";
 
 /// 枠線が食う幅・高さ。
 const BORDER_SIZE: u16 = 2;
@@ -75,12 +75,13 @@ fn keybind_lines() -> Vec<Line<'static>> {
         " Ctrl+G  画面切替メニュー",
         " Ctrl+P  MML入力(どの画面からでも)",
         " Ctrl+B  BPM設定 / 自動BPMの範囲",
-        " 左click 1step の note / 消去",
+        " 左click 1step の note / 消去、S欄:solo切替",
         " 左drag  長い note、row横断で arpeggio",
         " 右drag  note 消去",
         " wheel   PATCH欄:音色を送る(↓次 ↑前)",
         "         NOTE欄:音高 / 転回(↑上げる)",
         "         grid:フレーズを送る(↓次 ↑前)",
+        " j/k ↑/↓ track選択  s solo切替(S/m/-)",
         " P       演奏を停止 / 再開(DAWと同じキー)",
         " u       直前の編集を undo",
         " a       1周ごとの random 設定",

@@ -33,6 +33,7 @@ mod screen_runtime;
 mod sender;
 mod session;
 mod single_buffer;
+mod solo;
 mod start_wait;
 mod state;
 mod tempo;
@@ -49,6 +50,7 @@ pub use sender::{
     GridRowPatchPhase, GridRowPatchStatus, GridRowReadiness,
 };
 pub use session::{FixedChordProgression, GridSequencerSession};
+pub use solo::{chord_gains_db, CHORD_GAIN_DB};
 pub use state::{
     clamp_swing, frames_ahead, lookahead_at, randomize_instance_slice, schedule_guard_at,
     step_interval_at, step_offset, step_offset_at, step_timeline_seconds, step_timeline_seconds_at,
@@ -92,27 +94,6 @@ pub(crate) fn log_line(message: &str) {
     if let Some(sink) = LOG_SINK.get() {
         sink(message);
     }
-}
-
-/// 完全ランダム演奏中の chord mode で、和音の行へ与える音量差（dB）。他の行は 0 dB のまま。
-pub const CHORD_GAIN_DB: f32 = 6.0;
-
-/// instance ごとの音量差（dB）。譜面ごと毎周変わる完全ランダム演奏中だけ、chord mode の
-/// 和音の行が持ち上がる。
-///
-/// 返す長さは bank 2 本ぶん（= `instance_count * BANK_COUNT`）。差し替え先の bank にも
-/// 同じ音量差を載せておく必要があるので、両方の `CHORD_ROW` を持ち上げる。
-pub fn chord_gains_db(instance_count: usize, chord_on: bool, note_random: bool) -> Vec<f32> {
-    let boost_chord = chord_on && note_random;
-    (0..instance_count * cmrt_realtime_play::BANK_COUNT)
-        .map(|instance| {
-            if boost_chord && instance % instance_count == CHORD_ROW {
-                CHORD_GAIN_DB
-            } else {
-                0.0
-            }
-        })
-        .collect()
 }
 
 /// 画面が返す、共有ランタイム側で処理すべき遷移要求。
@@ -200,8 +181,8 @@ impl GridSequencerScreen {
         let _note_offs = self.state.take_reset_messages();
         if let Some(sender) = &self.midi_sender {
             sender.set_auto_gain_enabled(false);
-            sender.set_gains(vec![
-                0.0;
+            sender.set_amplitude_gains(vec![
+                1.0;
                 self.state.instance_count()
                     * cmrt_realtime_play::BANK_COUNT
             ]);
@@ -244,23 +225,8 @@ impl GridSequencerScreen {
             sender.prepare(self.state.patches());
             sender.set_auto_gain_enabled(true);
         }
-        self.apply_chord_gains();
+        self.apply_playback_gains();
         self.wait_for_patches();
-    }
-
-    /// chord mode の和音を他の行より目立たせるための音量差を適用する。
-    ///
-    /// ゲインはサーバー側が instance ごとに保持し、音色ロードで live を作り直しても
-    /// 残る。chord mode または NOTE の random が変わったときに送り直す。
-    pub(crate) fn apply_chord_gains(&self) {
-        let Some(sender) = &self.midi_sender else {
-            return;
-        };
-        sender.set_gains(chord_gains_db(
-            self.state.instance_count(),
-            self.state.chord().is_some(),
-            self.cycle_random.note,
-        ));
     }
 
     fn prepare_connection_or_start_server(&mut self, ctx: &GridSequencerContext<'_>) {
@@ -373,6 +339,13 @@ impl GridSequencerScreen {
                 cmrt_tui_core::memory::request_refresh();
             }
             KeyCode::Char('P') => self.toggle_playing(now, ctx),
+            KeyCode::Char('j') | KeyCode::Down if key.modifiers.is_empty() => {
+                self.select_next_track()
+            }
+            KeyCode::Char('k') | KeyCode::Up if key.modifiers.is_empty() => {
+                self.select_previous_track()
+            }
+            KeyCode::Char('s') if key.modifiers.is_empty() => self.toggle_selected_track_solo(),
             KeyCode::Char('a') => self.toggle_cycle_random_overlay(),
             KeyCode::Char('b') if key.modifiers.is_empty() => self.toggle_single_buffering(),
             KeyCode::Char('c') => self.toggle_chord_mode(now, ctx),

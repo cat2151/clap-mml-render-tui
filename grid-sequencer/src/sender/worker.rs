@@ -14,7 +14,7 @@ use cmrt_realtime_play::{LimiterMeter, RealtimePlayServerSupervisor};
 
 use super::{
     adaptive_buffer::{AdaptiveBuffer, INITIAL_BUFFER_MULTIPLIER, RESTORE_BUFFER_MULTIPLIER},
-    gain_summary::describe_boosted,
+    gain_summary::describe_adjusted,
     overload::OverloadDetector,
     GridConnectionStatus, GridMidiCommand,
 };
@@ -230,22 +230,21 @@ pub(super) fn run_midi_sender(
                 ));
                 status.lock().unwrap().finish_row_patch_setting(row, error);
             }
-            GridMidiCommand::SetGains { gains_db } => {
+            GridMidiCommand::SetGains { gains } => {
                 let mut failed = None;
-                for (instance_id, gain_db) in gains_db.iter().enumerate() {
+                for (instance_id, gain) in gains.iter().enumerate() {
                     // 古いサーバーはこのコマンドを知らない。音量差が付かないだけなので
                     // ログにとどめ、再生は続ける。
-                    if let Err(error) =
-                        supervisor.set_live_instance_gain_db(instance_id as u8, *gain_db)
+                    if let Err(error) = supervisor.set_live_instance_gain(instance_id as u8, *gain)
                     {
                         failed = Some(format!("{error:#}"));
                         break;
                     }
                 }
                 crate::log_line(&format!(
-                    "grid-sequencer: gains instances={} boosted={} result={}",
-                    gains_db.len(),
-                    describe_boosted(&gains_db),
+                    "grid-sequencer: gains instances={} adjusted={} result={}",
+                    gains.len(),
+                    describe_adjusted(&gains),
                     match &failed {
                         Some(error) => format!("error \"{error}\""),
                         None => "ok".to_string(),

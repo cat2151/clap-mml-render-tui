@@ -13,7 +13,7 @@ use cmrt_tui_core::{
     theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_DARK_GRAY, MONOKAI_GRAY, MONOKAI_GREEN},
 };
 
-use crate::{GridConnectionStatus, GridRowReadiness, GRID_STEPS};
+use crate::{GridConnectionStatus, GridRowReadiness, GridSequencerScreen, GRID_STEPS};
 
 const CELL_WIDTH: usize = 4;
 const ACCENT: u8 = 127;
@@ -24,9 +24,9 @@ pub(super) fn draw(
     area: Rect,
     title: String,
     display: &[[Option<u8>; GRID_STEPS]],
-    playhead: usize,
     connection: &GridConnectionStatus,
     row_instances: &[usize],
+    screen: &GridSequencerScreen,
 ) {
     let mut lines = vec![header_line()];
     lines.extend(display.iter().enumerate().map(|(row, values)| {
@@ -34,8 +34,10 @@ pub(super) fn draw(
         row_line(
             row,
             values,
-            playhead,
+            screen.state.step_index(),
             connection.row_readiness(instance),
+            !screen.track_is_audible(instance),
+            instance == screen.selected_track(),
             ACCENT,
         )
     }));
@@ -64,14 +66,23 @@ fn row_line(
     values: &[Option<u8>; GRID_STEPS],
     playhead: usize,
     readiness: GridRowReadiness,
+    muted: bool,
+    selected: bool,
     accent: u8,
 ) -> Line<'static> {
-    let mut spans = vec![Span::styled(
-        format!(" {:>2} ", row + 1),
-        label_style(readiness),
-    )];
+    let label_style = label_style(readiness, muted);
+    let selected_style = if selected {
+        cursor_highlight_style(label_style)
+    } else {
+        label_style
+    };
+    let mut spans = vec![
+        Span::styled(" ", label_style),
+        Span::styled(format!("{:>2}", row + 1), selected_style),
+        Span::styled(" ", label_style),
+    ];
     for (step, value) in values.iter().enumerate() {
-        let style = cell_style(readiness, *value, accent);
+        let style = cell_style(readiness, *value, muted, accent);
         let style = if step == playhead {
             cursor_highlight_style(style)
         } else {
@@ -89,16 +100,18 @@ fn cell_text(value: Option<u8>) -> String {
     }
 }
 
-fn label_style(readiness: GridRowReadiness) -> Style {
+fn label_style(readiness: GridRowReadiness, muted: bool) -> Style {
     match readiness {
+        GridRowReadiness::Prepared if muted => base_style().fg(MONOKAI_GRAY),
         GridRowReadiness::Prepared => base_style(),
         GridRowReadiness::InstanceReady => base_style().fg(MONOKAI_GRAY),
         GridRowReadiness::Pending => base_style().fg(MONOKAI_DARK_GRAY),
     }
 }
 
-fn cell_style(readiness: GridRowReadiness, value: Option<u8>, accent: u8) -> Style {
+fn cell_style(readiness: GridRowReadiness, value: Option<u8>, muted: bool, accent: u8) -> Style {
     let color = match readiness {
+        GridRowReadiness::Prepared if muted => MONOKAI_GRAY,
         GridRowReadiness::Prepared if value == Some(accent) => MONOKAI_GREEN,
         GridRowReadiness::Prepared | GridRowReadiness::InstanceReady => MONOKAI_GRAY,
         GridRowReadiness::Pending => MONOKAI_DARK_GRAY,

@@ -19,9 +19,9 @@ fn rendered_grid(
                 frame.area(),
                 title.to_string(),
                 display,
-                screen.state.step_index(),
                 &connection,
                 &[0],
+                screen,
             )
         })
         .unwrap();

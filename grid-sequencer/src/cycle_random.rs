@@ -274,7 +274,7 @@ impl GridSequencerScreen {
         // 和音の増幅は「譜面ごと毎周変わる完全ランダム演奏」限定。音色ロード
         // なしで即時反映する。
         if item == CycleRandomItem::Note {
-            self.apply_chord_gains();
+            self.apply_playback_gains();
         }
         log_line(&format!(
             "grid-sequencer: cycle-random {}={on} value={}",

@@ -376,5 +376,6 @@ mod patch_load_progress;
 mod patch_notice;
 mod patch_selector;
 mod pattern_list;
+mod solo;
 mod status_line;
 mod swing;

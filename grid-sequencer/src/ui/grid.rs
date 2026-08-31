@@ -74,7 +74,7 @@ fn header_line() -> Line<'static> {
     let style = base_style().fg(MONOKAI_GRAY);
     Line::from(vec![
         Span::styled(
-            label_columns("#", "V", "PATCH", "GAIN", "NOTE", "SW"),
+            label_columns("#", "V", "S", "PATCH", "GAIN", "NOTE", "SW"),
             style,
         ),
         Span::styled(step_ruler(), style),
@@ -102,6 +102,7 @@ fn row_line(
         screen.state.display_resolved_note(address)
     };
     let inactive = !summary && resolved.is_none();
+    let muted = !screen.track_is_audible(address.instance);
     let displayed_patch = screen
         .patch_selector
         .as_ref()
@@ -130,6 +131,15 @@ fn row_line(
     } else {
         String::new()
     };
+    let solo_label = if !group_header {
+        ""
+    } else if screen.track_is_soloed(address.instance) {
+        "S"
+    } else if muted {
+        "m"
+    } else {
+        "-"
+    };
     // gain は instance ごとの値なので、patch 名と同じ「グループの先頭行だけ」に出す。
     let gain_label = if group_header {
         auto_gain_label(screen, connection, address.instance)
@@ -148,17 +158,29 @@ fn row_line(
         Some(role) => role.label().to_string(),
         None => resolved.map_or_else(|| "--".to_string(), |note| note.to_string()),
     };
-    let mut spans = vec![Span::styled(
-        label_columns(
-            instance_label.as_deref().unwrap_or(""),
-            &voice_label,
-            &patch_label,
-            &gain_label,
-            &note_label,
-            &swing_label,
-        ),
-        label_style(readiness, inactive),
-    )];
+    let style = label_style(readiness, inactive, muted);
+    let instance_style = if group_header && address.instance == screen.selected_track() {
+        cursor_highlight_style(style)
+    } else {
+        style
+    };
+    let solo_style = match solo_label {
+        "S" => base_style().fg(MONOKAI_GREEN),
+        "m" => base_style().fg(MONOKAI_GRAY),
+        _ => style,
+    };
+    let mut spans = label_spans(
+        instance_label.as_deref().unwrap_or(""),
+        &voice_label,
+        solo_label,
+        &patch_label,
+        &gain_label,
+        &note_label,
+        &swing_label,
+        style,
+        instance_style,
+        solo_style,
+    );
     for step in 0..GRID_STEPS {
         let note_step = if summary {
             if step == 0 {
@@ -169,7 +191,7 @@ fn row_line(
         } else {
             lane.pattern.step(step).unwrap_or(NoteStep::Rest)
         };
-        let style = cell_style(readiness, note_step, inactive);
+        let style = cell_style(readiness, note_step, inactive, muted);
         let style = if step == playhead {
             cursor_highlight_style(style)
         } else {
@@ -185,22 +207,24 @@ fn row_line(
     Line::from(spans)
 }
 
-fn label_style(readiness: GridRowReadiness, inactive: bool) -> Style {
+fn label_style(readiness: GridRowReadiness, inactive: bool, muted: bool) -> Style {
     if inactive {
         return base_style().fg(MONOKAI_DARK_GRAY);
     }
     match readiness {
+        GridRowReadiness::Prepared if muted => base_style().fg(MONOKAI_GRAY),
         GridRowReadiness::Prepared => base_style(),
         GridRowReadiness::InstanceReady => base_style().fg(MONOKAI_GRAY),
         GridRowReadiness::Pending => base_style().fg(MONOKAI_DARK_GRAY),
     }
 }
 
-fn cell_style(readiness: GridRowReadiness, step: NoteStep, inactive: bool) -> Style {
+fn cell_style(readiness: GridRowReadiness, step: NoteStep, inactive: bool, muted: bool) -> Style {
     let color = if inactive {
         MONOKAI_DARK_GRAY
     } else {
         match readiness {
+            GridRowReadiness::Prepared if muted => MONOKAI_GRAY,
             GridRowReadiness::Prepared if step == NoteStep::Attack => MONOKAI_GREEN,
             GridRowReadiness::Prepared if step == NoteStep::Tie => MONOKAI_CYAN,
             GridRowReadiness::Prepared | GridRowReadiness::InstanceReady => MONOKAI_GRAY,
@@ -216,18 +240,49 @@ fn cell_style(readiness: GridRowReadiness, step: NoteStep, inactive: bool) -> St
 fn label_columns(
     instance: &str,
     voice: &str,
+    solo: &str,
     patch: &str,
     gain: &str,
     note: &str,
     swing: &str,
 ) -> String {
     format!(
-        " {instance:>2} {voice:>1} {patch:<patch_width$} {gain:>gain_width$} {note:>4} \
+        " {instance:>2} {voice:>1} {solo:>1} {patch:<patch_width$} {gain:>gain_width$} {note:>4} \
          {swing:>swing_width$} ",
         patch_width = PATCH_WIDTH,
         gain_width = GAIN_WIDTH,
         swing_width = SWING_WIDTH,
     )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn label_spans(
+    instance: &str,
+    voice: &str,
+    solo: &str,
+    patch: &str,
+    gain: &str,
+    note: &str,
+    swing: &str,
+    style: Style,
+    instance_style: Style,
+    solo_style: Style,
+) -> Vec<Span<'static>> {
+    vec![
+        Span::styled(" ", style),
+        Span::styled(format!("{instance:>2}"), instance_style),
+        Span::styled(format!(" {voice:>1} "), style),
+        Span::styled(format!("{solo:>1}"), solo_style),
+        Span::styled(
+            format!(
+                " {patch:<patch_width$} {gain:>gain_width$} {note:>4} {swing:>swing_width$} ",
+                patch_width = PATCH_WIDTH,
+                gain_width = GAIN_WIDTH,
+                swing_width = SWING_WIDTH,
+            ),
+            style,
+        ),
+    ]
 }
 
 /// auto gain が instance へ掛けている trim。0 dB のときも `+0.0` を出す。

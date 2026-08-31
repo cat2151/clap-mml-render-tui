@@ -71,6 +71,18 @@ fn child_lane_patch_and_note_hits_keep_the_lane_ownership_rules() {
 }
 
 #[test]
+fn solo_column_hits_only_the_instance_group_header() {
+    let visible = rows(&[(0, 0), (1, 3), (1, 2), (1, 1), (1, 0)]);
+    let layout = GridSequencerLayout::new(Rect::new(0, 0, 100, 20), 5, 2, 5, false, NO_LIST);
+
+    assert_eq!(
+        layout.hit_test(layout.solo_column(), 3, &visible),
+        Some(GridHit::InstanceSolo { instance: 1 })
+    );
+    assert_eq!(layout.hit_test(layout.solo_column(), 4, &visible), None);
+}
+
+#[test]
 fn chord_line_moves_the_grids_down_by_one_row() {
     let visible = rows(&[(0, 0)]);
     let layout = GridSequencerLayout::new(Rect::new(0, 0, 80, 20), 1, 1, 1, true, NO_LIST);

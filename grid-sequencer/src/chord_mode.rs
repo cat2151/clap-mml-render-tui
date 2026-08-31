@@ -36,7 +36,7 @@ impl GridSequencerScreen {
             self.chord_enabled = false;
             self.pending_chord = false;
             // 音色ロードを伴わない切替なので、音量差はここで戻す。
-            self.apply_chord_gains();
+            self.apply_playback_gains();
             log_line("grid-sequencer: chord off");
             return;
         }

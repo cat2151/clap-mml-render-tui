@@ -9,19 +9,22 @@ pub(super) const PATCH_WIDTH: usize = 24;
 pub(super) const GAIN_WIDTH: usize = 5;
 /// swing の表示幅。`50`〜`66` と非適用の `-`、見出しの `SW` がちょうど入る。
 pub(super) const SWING_WIDTH: usize = 2;
-pub(super) const LABEL_WIDTH: u16 = 45;
+pub(super) const LABEL_WIDTH: u16 = 47;
 pub(super) const NOTE_CELL_WIDTH: u16 = 2;
 
-const PATCH_START: u16 = 6;
+const INSTANCE_START: u16 = 1;
+const INSTANCE_WIDTH: u16 = 2;
+const SOLO_START: u16 = 6;
+const PATCH_START: u16 = 8;
 /// GAIN 欄の左端。当たり判定は持たない（wheel も click も受けない表示専用の欄）ので、
 /// テストが列を測るためだけに要る。
 #[cfg(test)]
-const GAIN_START: u16 = 31;
-const NOTE_START: u16 = 37;
+const GAIN_START: u16 = 33;
+const NOTE_START: u16 = 39;
 const NOTE_WIDTH: u16 = 4;
 /// SWING 欄の左端。GAIN と同じく表示専用なので当たり判定は持たない。
 #[cfg(test)]
-const SWING_START: u16 = 42;
+const SWING_START: u16 = 44;
 
 /// フレーズ型listを2列（arp+bass / drum）で出す右paneの幅。
 /// 1列12桁×2 + 左右の枠線。
@@ -53,6 +56,19 @@ pub enum GridHit {
     NoteCell { address: LaneAddress, step: usize },
     LaneNote { address: LaneAddress },
     InstancePatch { instance: usize },
+    InstanceSelect { instance: usize },
+    InstanceSolo { instance: usize },
+}
+
+impl GridHit {
+    pub(crate) fn instance(self) -> usize {
+        match self {
+            Self::NoteCell { address, .. } | Self::LaneNote { address } => address.instance,
+            Self::InstancePatch { instance }
+            | Self::InstanceSelect { instance }
+            | Self::InstanceSolo { instance } => instance,
+        }
+    }
 }
 
 impl GridSequencerLayout {
@@ -169,6 +185,12 @@ impl GridSequencerLayout {
         self.content_column(PATCH_START)
     }
 
+    /// Solo 表示・直接操作欄の列。
+    #[cfg(test)]
+    pub(crate) fn solo_column(&self) -> u16 {
+        self.content_column(SOLO_START)
+    }
+
     /// GAIN 欄（auto gain）の列。
     #[cfg(test)]
     pub(crate) fn gain_column(&self) -> u16 {
@@ -227,6 +249,19 @@ impl GridSequencerLayout {
         let flat_row = usize::from(line - first_row);
         let row = *visible_rows.get(flat_row)?;
         let x = column - content_left;
+        let group_header = !visible_rows[..flat_row]
+            .iter()
+            .any(|visible| visible.address.instance == row.address.instance);
+        if group_header && x == SOLO_START {
+            return Some(GridHit::InstanceSolo {
+                instance: row.address.instance,
+            });
+        }
+        if (INSTANCE_START..INSTANCE_START + INSTANCE_WIDTH).contains(&x) {
+            return Some(GridHit::InstanceSelect {
+                instance: row.address.instance,
+            });
+        }
         if (PATCH_START..PATCH_START + PATCH_WIDTH as u16).contains(&x) {
             return Some(GridHit::InstancePatch {
                 instance: row.address.instance,

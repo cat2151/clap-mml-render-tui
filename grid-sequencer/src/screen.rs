@@ -63,6 +63,10 @@ pub struct GridSequencerScreen {
     pub(crate) buffer_frames: usize,
     /// Non-zero while the server and this screen share an absolute musical epoch.
     pub(crate) timeline_id: u64,
+    /// track 単位操作の対象。note のセルカーソルとは別の、軽量な選択状態。
+    pub(crate) selected_track: usize,
+    /// 直接操作するのは Solo だけ。1つでも true なら、それ以外が派生 mute になる。
+    pub(crate) solo_tracks: Vec<bool>,
     /// サーバーが drop 中に止めた musical clock を表示へ反映する同期状態。
     pub(crate) playback_sync: PlaybackSync,
     pub help_open: bool,
@@ -196,6 +200,8 @@ impl GridSequencerScreen {
             sample_rate,
             buffer_frames,
             timeline_id: 0,
+            selected_track: 0,
+            solo_tracks: vec![false; track_count],
             playback_sync: PlaybackSync::default(),
             help_open: false,
             bpm_mode,

@@ -151,15 +151,7 @@ fn draw_value_grid(
     if area.height == 0 {
         return;
     }
-    value_grid::draw(
-        f,
-        area,
-        title,
-        display,
-        screen.state.step_index(),
-        connection,
-        row_instances,
-    );
+    value_grid::draw(f, area, title, display, connection, row_instances, screen);
 }
 
 fn status_line(
