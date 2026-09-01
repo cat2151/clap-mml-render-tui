@@ -335,7 +335,7 @@ impl<'a> TuiApp<'a> {
                 patch_load_state: Arc::clone(&patch_load_state),
                 patch_phrase_store: crate::history::load_patch_phrase_store(),
                 cfg: Arc::clone(&cfg_arc),
-                plugin_entries,
+                plugin_entries: plugin_entries.clone(),
                 catalog_notes: catalog_notes.clone(),
             }),
             keyboard: super::keyboard::KeyboardScreen::new(
@@ -369,6 +369,10 @@ impl<'a> TuiApp<'a> {
                     bpm_range: grid_bpm_range,
                     restored_session: grid_session_from_history(grid_sequencer),
                 },
+            ),
+            grid_history_preview: crate::daw::DawGridPreviewPlayer::new(
+                Arc::clone(&cfg_arc),
+                plugin_entries,
             ),
             mml_overlay: {
                 let mut overlay = super::mml_overlay::MmlOverlay::default();

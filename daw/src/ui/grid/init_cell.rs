@@ -128,7 +128,7 @@ pub(super) fn init_cell_text(
         // chord 行の init セルは chord2mml への指定文字列（`key:G` など）。
         // 音色でも拍子でもないので組み直さず、そのまま出す。
         crate::CHORD_TRACK => None,
-        _ => match crate::mml::init_cell_chord_directive(mml) {
+        _ => match crate::mml::init_cell_chord_generation_label(mml) {
             // chord 行から生成される track。セルが空でも音が鳴るので、
             // その事実が init 列から読めるようにする。
             Some(directive) => Some(generated_label(&directive, patch_label(mml, snapshot))),
@@ -148,7 +148,7 @@ pub(super) fn init_indicator_text(track: usize, mml: &str) -> Option<String> {
     if track == crate::tracks::TEMPO_TRACK || track == crate::CHORD_TRACK {
         return None;
     }
-    let directive = crate::mml::init_cell_chord_directive(mml)?;
+    let directive = crate::mml::init_cell_chord_generation_label(mml)?;
     let directive = directive.trim();
     Some(if directive.is_empty() {
         GENERATED_WITHOUT_DIRECTIVE.to_string()

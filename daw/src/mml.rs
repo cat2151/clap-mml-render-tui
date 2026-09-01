@@ -2,46 +2,13 @@
 
 use super::timing::{compute_measure_samples, parse_beat_numerator, parse_tempo_bpm};
 use super::{DawApp, CHORD_TRACK, FIRST_PLAYABLE_TRACK};
+use fragment::{append_fragment_json_values, merged_json_prefix, split_mml_fragment, MmlFragment};
 use serde_json::{Map, Value};
 
 pub(super) mod chord_generation;
+mod fragment;
 
 // ─── 純粋関数（テスト用） ──────────────────────────────────────
-
-#[derive(Clone, Debug, PartialEq)]
-struct MmlFragment {
-    json: Option<Value>,
-    body: String,
-}
-
-impl MmlFragment {
-    fn empty() -> Self {
-        Self {
-            json: None,
-            body: String::new(),
-        }
-    }
-}
-
-fn split_mml_fragment(cell: &str) -> MmlFragment {
-    use mmlabc_to_smf::mml_preprocessor;
-
-    let cell = cell.trim();
-    if cell.is_empty() {
-        return MmlFragment::empty();
-    }
-
-    let preprocessed = mml_preprocessor::extract_embedded_json(cell);
-    let json = preprocessed
-        .embedded_json
-        .as_deref()
-        .and_then(|json| serde_json::from_str::<Value>(json).ok());
-
-    MmlFragment {
-        json,
-        body: preprocessed.remaining_mml.trim().to_string(),
-    }
-}
 
 fn cell_text(data: &[Vec<String>], track: usize, measure: usize) -> &str {
     data.get(track)
@@ -50,25 +17,54 @@ fn cell_text(data: &[Vec<String>], track: usize, measure: usize) -> &str {
         .unwrap_or_default()
 }
 
-/// init セルの JSON から `"generate from chord track"` の値を取り出す。
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ChordTrackGeneration {
+    Legacy(String),
+    Grid(crate::grid_import::DawGridChordGeneration),
+    Unsupported,
+}
+
+/// init セルの JSON から `"generate from chord track"` の設定を取り出す。
 ///
-/// **キーが存在するかどうかだけ**がその track を chord 行から生成するかの判定。
-/// 値は chord2mml へそのまま渡す任意の文字列で、cmrt 側では検証も語彙定義もしない。
-/// 文字列以外が書かれていた場合は空文字扱い（キーがある以上、生成対象ではある）。
-fn track_chord_directive(init: &MmlFragment) -> Option<&str> {
+/// 文字列は従来どおりchord2mml directive。objectはGrid importのversion付きrecipe。
+/// 未知versionをlegacy chordとして鳴らすとbass/arpが誤って和音になるため、依存関係は
+/// 保ったまま無音になる`Unsupported`として扱う。
+fn track_chord_generation(init: &MmlFragment) -> Option<ChordTrackGeneration> {
     let value = init
         .json
         .as_ref()?
         .get(chord_generation::GENERATE_FROM_CHORD_TRACK_KEY)?;
-    Some(value.as_str().unwrap_or_default())
+    Some(match value {
+        Value::String(directive) => ChordTrackGeneration::Legacy(directive.clone()),
+        Value::Object(_) => crate::grid_import::DawGridChordGeneration::from_json(value).map_or(
+            ChordTrackGeneration::Unsupported,
+            ChordTrackGeneration::Grid,
+        ),
+        // 旧仕様は文字列以外を空directiveとしていた。その互換性を維持する。
+        _ => ChordTrackGeneration::Legacy(String::new()),
+    })
 }
 
 /// init セルの生の文字列から `"generate from chord track"` の値を取り出す。
 ///
-/// 判定と表示（`ui::grid`）の両方がここを通る。**キー名の文字列を他所へ
-/// 直書きしないこと**（綴りの二重管理になる）。
+/// 従来形式の directive が必要な箇所だけがここを通る。object 形式を含む依存判定や
+/// 表示には `track_chord_generation` / `init_cell_chord_generation_label` を使う。
 pub(super) fn init_cell_chord_directive(init_cell: &str) -> Option<String> {
-    track_chord_directive(&split_mml_fragment(init_cell)).map(str::to_string)
+    match track_chord_generation(&split_mml_fragment(init_cell))? {
+        ChordTrackGeneration::Legacy(directive) => Some(directive),
+        ChordTrackGeneration::Grid(_) | ChordTrackGeneration::Unsupported => None,
+    }
+}
+
+/// init列に表示する生成種別。legacyは任意directive、Grid recipeは固定role名。
+pub(super) fn init_cell_chord_generation_label(init_cell: &str) -> Option<String> {
+    Some(
+        match track_chord_generation(&split_mml_fragment(init_cell))? {
+            ChordTrackGeneration::Legacy(directive) => directive,
+            ChordTrackGeneration::Grid(recipe) => recipe.binding.label().to_string(),
+            ChordTrackGeneration::Unsupported => "unsupported chord recipe".to_string(),
+        },
+    )
 }
 
 /// init セルの JSON 以外の MML。chord 行から生成した MML の前にも本番と同じく付く。
@@ -102,7 +98,8 @@ pub(super) fn init_cell_with_json_entries(init_cell: &str, entries: &[(&str, &st
 /// measure セルの中身は見ない。init 列の表示のように「その track の設定」だけを
 /// 知りたいときに使う。
 pub(super) fn track_generates_from_chord_row(data: &[Vec<String>], track: usize) -> bool {
-    track >= FIRST_PLAYABLE_TRACK && init_cell_chord_directive(cell_text(data, track, 0)).is_some()
+    track >= FIRST_PLAYABLE_TRACK
+        && track_chord_generation(&split_mml_fragment(cell_text(data, track, 0))).is_some()
 }
 
 /// そのセルの MML が chord 行から生成されるか（手書きが空 + init に生成キーがある）。
@@ -138,16 +135,29 @@ fn resolve_notes_fragment(
     if track < FIRST_PLAYABLE_TRACK || measure == 0 {
         return MmlFragment::empty();
     }
-    let Some(directive) = track_chord_directive(init) else {
+    let Some(generation) = track_chord_generation(init) else {
         return MmlFragment::empty();
     };
     MmlFragment {
         json: None,
-        body: chord_generation::generate_mml_from_chord_cell(
-            cell_text(data, CHORD_TRACK, 0),
-            directive,
-            cell_text(data, CHORD_TRACK, measure),
-        ),
+        body: match generation {
+            ChordTrackGeneration::Legacy(directive) => {
+                chord_generation::generate_mml_from_chord_cell(
+                    cell_text(data, CHORD_TRACK, 0),
+                    &directive,
+                    cell_text(data, CHORD_TRACK, measure),
+                )
+            }
+            ChordTrackGeneration::Grid(generation) => {
+                chord_generation::generate_grid_mml_from_chord_cell(
+                    &generation,
+                    cell_text(data, CHORD_TRACK, 0),
+                    cell_text(data, CHORD_TRACK, measure),
+                    measure,
+                )
+            }
+            ChordTrackGeneration::Unsupported => String::new(),
+        },
     }
 }
 
@@ -166,50 +176,6 @@ fn conductor_fragments(data: &[Vec<String>], num_measures: usize) -> Vec<MmlFrag
         .filter_map(|measure| data[0].get(measure))
         .map(|cell| split_mml_fragment(cell))
         .collect()
-}
-
-fn merge_json_object(target: &mut Map<String, Value>, source: Map<String, Value>) {
-    for (key, value) in source {
-        match target.get_mut(&key) {
-            Some(existing) => merge_json_value(existing, value),
-            None => {
-                target.insert(key, value);
-            }
-        }
-    }
-}
-
-fn merge_json_value(target: &mut Value, source: Value) {
-    match (target, source) {
-        (Value::Object(target), Value::Object(source)) => merge_json_object(target, source),
-        (Value::Array(target), Value::Array(source)) => target.extend(source),
-        (target, source) => *target = source,
-    }
-}
-
-fn merged_json_prefix(json_values: impl IntoIterator<Item = Value>) -> String {
-    let mut merged = None::<Value>;
-    for value in json_values {
-        match &mut merged {
-            Some(current) => merge_json_value(current, value),
-            None => merged = Some(value),
-        }
-    }
-
-    merged
-        .and_then(|value| serde_json::to_string(&value).ok())
-        .unwrap_or_default()
-}
-
-fn append_fragment_json_values<'a>(
-    json_values: &mut Vec<Value>,
-    fragments: impl IntoIterator<Item = &'a MmlFragment>,
-) {
-    json_values.extend(
-        fragments
-            .into_iter()
-            .filter_map(|fragment| fragment.json.clone()),
-    );
 }
 
 fn conductor_body(conductor: &[MmlFragment]) -> String {

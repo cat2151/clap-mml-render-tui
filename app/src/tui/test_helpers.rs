@@ -10,10 +10,11 @@ impl TuiApp<'static> {
         let patch_load_state = Arc::clone(&notepad.patch_load_state);
         let voicing_policies =
             voicing::VoicingPolicies::with_patch_load_state(&cfg, Arc::clone(&patch_load_state));
+        let cfg = Arc::new(cfg);
         Self {
             active_screen: crate::screen_switch::PrimaryScreen::Notepad,
             screen_switch_menu: crate::screen_switch::ScreenSwitchMenu::default(),
-            cfg: Arc::new(cfg),
+            cfg: Arc::clone(&cfg),
             plugin_entries: cmrt_offline_render::PluginEntries::none(),
             playback_session: notepad.playback_session().clone(),
             patch_load_state,
@@ -30,6 +31,7 @@ impl TuiApp<'static> {
             mml_overlay: mml_overlay::MmlOverlay::default(),
             mml_overlay_sender: None,
             grid_sequencer: grid_sequencer::GridSequencerScreen::new(None),
+            grid_history_preview: crate::daw::DawGridPreviewPlayer::disabled_for_tests(cfg),
             voicing: voicing::VoicingState::new(
                 crate::history::VoicingCache::default(),
                 crate::voicing_sources::VoicingLayers::default(),

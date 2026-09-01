@@ -75,6 +75,7 @@ fn keybind_lines() -> Vec<Line<'static>> {
         " Ctrl+G  画面切替メニュー",
         " Ctrl+P  MML入力(どの画面からでも)",
         " Ctrl+B  BPM設定 / 自動BPMの範囲",
+        " Shift+H history 自動play Space:toggle",
         " 左click 1step の note / 消去、S欄:solo切替",
         " 左drag  長い note、row横断で arpeggio",
         " 右drag  note 消去",
@@ -92,8 +93,7 @@ fn keybind_lines() -> Vec<Line<'static>> {
         " R       note/pattern だけランダム",
         " t       track数 1/2/3/4/7/8/16 切替",
         " b       シングルバッファリング切替",
-        " ?       このヘルプ",
-        " q       終了",
+        " ? / q   このヘルプ / 終了",
     ]
     .into_iter()
     .map(Line::from)

@@ -22,6 +22,7 @@ mod context;
 mod cycle_random;
 mod cycle_swap;
 mod drum_line;
+mod history;
 mod input;
 mod patch_bag;
 mod patch_notice;
@@ -42,6 +43,10 @@ mod undo;
 
 pub use context::{GridPatchLoad, GridPatchStatus, GridSequencerContext};
 pub use cycle_random::{CycleRandom, CycleRandomItem};
+pub use history::{
+    GridDawChordBinding, GridDawChordSource, GridDawChordVoicing, GridDawLane, GridDawTrack,
+    GridHistoryPreviewStatus, GridSongSnapshot,
+};
 pub(crate) use input::ListDirection;
 pub use patch_role::{candidates_for_purpose, row_patch_purpose, GridPatchPurpose};
 pub use screen::{GridSequencerParts, GridSequencerScreen};
@@ -101,6 +106,9 @@ pub enum GridSequencerAction {
     Continue,
     Quit,
     RestartWithTrackCount(usize),
+    PlayDailyDawPreview(GridSongSnapshot),
+    StopDailyDawPreview,
+    ImportToDailyDaw(GridSongSnapshot),
 }
 
 impl GridSequencerScreen {
@@ -120,6 +128,7 @@ impl GridSequencerScreen {
     pub fn start(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
         self.cancel_mouse_gesture();
         self.help_open = false;
+        self.close_history();
         self.close_chord_input();
         self.close_cycle_random_overlay();
         self.patch_status = ctx.patch_status();
@@ -145,20 +154,17 @@ impl GridSequencerScreen {
     pub fn resume(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
         self.cancel_mouse_gesture();
         self.help_open = false;
+        self.close_history();
         self.close_chord_input();
         self.close_cycle_random_overlay();
-        self.cancel_cycle_swap();
-        self.state.start_at_bpm(now, self.bpm());
-        self.refresh_context(ctx);
-        if !self.waiting_for_patches {
-            self.prepare_connection_or_start_server(ctx);
-        }
+        self.resume_grid_playback(now, ctx);
     }
 
     /// 画面を離れるときの後始末。開いている overlay を閉じてから再生を停止する。
     pub fn finish(&mut self) {
         self.cancel_mouse_gesture();
         self.help_open = false;
+        self.close_history();
         self.close_chord_input();
         self.close_cycle_random_overlay();
         self.bpm_input = None;
@@ -294,6 +300,15 @@ impl GridSequencerScreen {
             self.handle_bpm_input_key(key, now);
             return GridSequencerAction::Continue;
         }
+        if self.history_open() {
+            let action = self.handle_history_key(key, now);
+            if matches!(action, GridSequencerAction::StopDailyDawPreview)
+                && self.history.take_resume_requested()
+            {
+                self.resume_grid_playback(now, ctx);
+            }
+            return action;
+        }
         if self.chord_input.is_some() {
             self.handle_chord_input_key(key, now, ctx);
             return GridSequencerAction::Continue;
@@ -325,6 +340,23 @@ impl GridSequencerScreen {
             self.cancel_mouse_gesture();
             self.bpm_input = Some(cmrt_tui_core::bpm::BpmInput::default());
             return GridSequencerAction::Continue;
+        }
+        if key
+            .modifiers
+            .contains(crossterm::event::KeyModifiers::SHIFT)
+            && key.code == KeyCode::Char('H')
+        {
+            self.cancel_mouse_gesture();
+            let resume_on_close = self.is_playing();
+            if resume_on_close {
+                self.stop_playing();
+            }
+            self.history.open(resume_on_close);
+            log_line(&format!(
+                "grid-sequencer: history-open resume_on_close={resume_on_close}"
+            ));
+            cmrt_tui_core::memory::request_refresh();
+            return self.selected_history_preview_action(now);
         }
         match key.code {
             KeyCode::Char('q') => return GridSequencerAction::Quit,

@@ -18,6 +18,8 @@ mod chord_line;
 pub(crate) mod cycle_random;
 mod grid;
 mod help;
+mod history;
+mod history_preview_progress;
 pub mod layout;
 mod patch_load_progress;
 mod patch_notice;
@@ -79,6 +81,14 @@ pub fn draw(screen: &GridSequencerScreen, connection: &GridConnectionStatus, f: 
     }
     if screen.help_open {
         help::draw_overlay(f, screen.track_count());
+    }
+    if screen.history_open() {
+        history::draw_overlay(f, screen);
+        if let Some((completed, total, elapsed)) =
+            screen.history_render_progress(std::time::Instant::now())
+        {
+            history_preview_progress::draw_overlay(f, completed, total, elapsed);
+        }
     }
     if screen.bpm_input.is_some() {
         tempo::draw_overlay(f, screen);

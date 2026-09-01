@@ -371,6 +371,7 @@ mod auto_gain;
 mod chord;
 mod chord_input;
 mod help;
+mod history;
 mod layout;
 mod patch_load_progress;
 mod patch_notice;

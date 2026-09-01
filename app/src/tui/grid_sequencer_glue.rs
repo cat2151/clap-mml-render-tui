@@ -17,8 +17,9 @@ use cmrt_chord::ChordProgressionCatalog;
 
 use crate::realtime_play::PatchVoicing;
 use crate::tui::grid_sequencer::{
-    GridConnectionStatus, GridPatchLoad, GridSequencerAction, GridSequencerContext,
-    GridVoicingLookup,
+    GridConnectionStatus, GridDawChordBinding, GridDawChordSource, GridDawLane,
+    GridHistoryPreviewStatus, GridPatchLoad, GridSequencerAction, GridSequencerContext,
+    GridSongSnapshot, GridVoicingLookup, NoteStep,
 };
 
 use crate::tui::voicing::VoicingState;
@@ -76,7 +77,92 @@ fn grid_sequencer_context<'ctx>(parts: GridContextParts<'ctx>) -> GridSequencerC
     }
 }
 
+pub(in crate::tui) fn daily_daw_import(
+    snapshot: GridSongSnapshot,
+) -> crate::daw::DawGridImportSong {
+    let chord = snapshot.daw_chord_source().map(daily_daw_chord_source);
+    crate::daw::DawGridImportSong {
+        bpm: snapshot.bpm(),
+        chord,
+        tracks: snapshot
+            .daw_tracks()
+            .into_iter()
+            .map(|track| crate::daw::DawGridImportTrack {
+                patch: track.patch,
+                swing: track.swing,
+                measures: track.measures,
+                chord_binding: track.chord_binding.map(daily_daw_chord_binding),
+            })
+            .collect(),
+    }
+}
+
+fn daily_daw_chord_source(source: GridDawChordSource) -> crate::daw::DawGridChordSource {
+    crate::daw::DawGridChordSource {
+        init: source.init,
+        measures: source.measures,
+        voicings: source
+            .voicings
+            .into_iter()
+            .map(|voicing| crate::daw::DawGridChordVoicing {
+                bass: voicing.bass,
+                notes: voicing.notes,
+            })
+            .collect(),
+    }
+}
+
+fn daily_daw_chord_binding(binding: GridDawChordBinding) -> crate::daw::DawGridChordBinding {
+    match binding {
+        GridDawChordBinding::Chord => crate::daw::DawGridChordBinding::Chord,
+        GridDawChordBinding::Bass { lanes } => crate::daw::DawGridChordBinding::Bass {
+            lanes: lanes.into_iter().map(daily_daw_lane).collect(),
+        },
+        GridDawChordBinding::Arpeggio { rotation, lanes } => {
+            crate::daw::DawGridChordBinding::Arpeggio {
+                rotation,
+                lanes: lanes.into_iter().map(daily_daw_lane).collect(),
+            }
+        }
+        GridDawChordBinding::NearestChordTone { lanes } => {
+            crate::daw::DawGridChordBinding::NearestChordTone {
+                lanes: lanes.into_iter().map(daily_daw_lane).collect(),
+            }
+        }
+    }
+}
+
+fn daily_daw_lane(lane: GridDawLane) -> crate::daw::DawGridLane {
+    crate::daw::DawGridLane {
+        base_note: lane.base_note,
+        steps: lane
+            .steps
+            .into_iter()
+            .map(|step| match step {
+                NoteStep::Rest => crate::daw::DawGridNoteStep::Rest,
+                NoteStep::Attack => crate::daw::DawGridNoteStep::Attack,
+                NoteStep::Tie => crate::daw::DawGridNoteStep::Tie,
+            })
+            .collect(),
+    }
+}
+
 impl TuiApp<'_> {
+    pub(in crate::tui) fn sync_grid_history_preview_status(&mut self) {
+        let status = match self.grid_history_preview.status() {
+            crate::daw::DawGridPreviewStatus::Idle => GridHistoryPreviewStatus::Idle,
+            crate::daw::DawGridPreviewStatus::Rendering { completed, total } => {
+                GridHistoryPreviewStatus::Rendering { completed, total }
+            }
+            crate::daw::DawGridPreviewStatus::Playing => GridHistoryPreviewStatus::Playing,
+            crate::daw::DawGridPreviewStatus::Finished => GridHistoryPreviewStatus::Finished,
+            crate::daw::DawGridPreviewStatus::Error(error) => {
+                GridHistoryPreviewStatus::Error(error)
+            }
+        };
+        self.grid_sequencer.set_history_preview_status(status);
+    }
+
     /// 画面へ入る。初回はランダムな grid を作り、いずれも即座に再生を始める。
     pub(in crate::tui) fn enter_grid_sequencer(&mut self) {
         let session = self.playback_session.begin();
@@ -165,7 +251,16 @@ impl TuiApp<'_> {
     }
 
     pub(in crate::tui) fn finish_grid_sequencer(&mut self) {
+        self.grid_history_preview.stop();
         self.grid_sequencer.finish();
+    }
+
+    pub(in crate::tui) fn play_grid_history_preview(&self, snapshot: GridSongSnapshot) {
+        self.grid_history_preview.play(daily_daw_import(snapshot));
+    }
+
+    pub(in crate::tui) fn stop_grid_history_preview(&self) {
+        self.grid_history_preview.stop();
     }
 
     /// 画面に留まったまま演奏だけ止める（MML オーバーレイへ音源を明け渡すとき）。

@@ -13,7 +13,7 @@ use cmrt_runtime::RealtimeAudioBackend;
 
 mod play_server;
 mod prefetch;
-mod render;
+pub(crate) mod render;
 
 pub(super) use render::{begin_preview_output, PreviewOutputRequest, PreviewOutputState};
 use render::{

@@ -86,10 +86,10 @@ struct DawProjectCell {
 }
 
 pub(crate) struct DawProjectSnapshot {
-    data: Vec<Vec<String>>,
-    track_volumes_db: Vec<i32>,
-    tracks: usize,
-    measures: usize,
+    pub(crate) data: Vec<Vec<String>>,
+    pub(crate) track_volumes_db: Vec<i32>,
+    pub(crate) tracks: usize,
+    pub(crate) measures: usize,
 }
 
 pub(crate) struct DawProjectPreview {

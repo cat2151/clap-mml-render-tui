@@ -90,6 +90,8 @@ mod batch_logging;
 mod cache;
 mod daily;
 mod editor;
+mod grid_import;
+mod grid_preview;
 mod guide;
 mod http_server;
 mod init;
@@ -112,6 +114,12 @@ mod timing;
 mod tracks;
 mod types;
 mod ui;
+
+pub use grid_import::{
+    DawGridChordBinding, DawGridChordSource, DawGridChordVoicing, DawGridImportSong,
+    DawGridImportTrack, DawGridLane, DawGridNoteStep,
+};
+pub use grid_preview::{DawGridPreviewPlayer, DawGridPreviewStatus};
 
 use ratatui::backend::CrosstermBackend;
 use ratatui::{Frame, Terminal};

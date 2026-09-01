@@ -59,6 +59,10 @@ impl GridSequencerScreen {
             self.cancel_mouse_gesture();
             return;
         }
+        if self.history_open() {
+            self.cancel_mouse_gesture();
+            return;
+        }
         if self.cycle_random_open() {
             if let MouseEventKind::Down(MouseButton::Left) = event.kind {
                 self.handle_cycle_random_click(event.column, event.row, terminal_area);
@@ -123,6 +127,7 @@ impl GridSequencerScreen {
     pub(crate) fn patch_selector_input_enabled(&self) -> bool {
         let connection = self.connection_status();
         !self.help_open
+            && !self.history_open()
             && !self.restart_notice_open()
             && !self.waiting_for_patches
             && !connection.is_preparing()

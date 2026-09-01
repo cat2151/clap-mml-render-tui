@@ -5,11 +5,13 @@
 //!
 //! keyboard 画面の MML 入力と grid sequencer の chord mode の両方から使う。
 
+mod arrangement;
 mod auto_voicing;
 mod cursor;
 mod progression;
 mod timed;
 
+pub use arrangement::{bass_octave_note, rotated_chord_voice, snap_to_chord};
 pub use auto_voicing::{auto_voice, max_jumps, ChordVoicing};
 pub use cursor::cursor_sounding_unit;
 pub use progression::{

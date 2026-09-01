@@ -33,6 +33,7 @@ pub use instance::{
 pub use note_pattern::{NotePattern, NoteStep};
 pub use pattern_bag::PatternCombination;
 
+pub(crate) use chord::resolved_note_from;
 pub use chord::{ChordPlayback, ARPEGGIO_ROW, BASS_ROW, CHORD_ROW};
 use clock::StepClock;
 #[cfg(test)]
@@ -137,6 +138,8 @@ pub struct GridState {
     /// コード進行の新しい1周が実際に鳴り始めたことを画面側へ伝えるフラグ。
     /// 抽選はカタログと rng を持つ画面側の仕事なので、ここでは合図だけを立てる。
     preload_due: bool,
+    /// 実発音が周の先頭へ達したときに確定した、画面側へ渡す揮発履歴。
+    history_due: VecDeque<crate::GridSongSnapshot>,
     /// サイクルを鳴らしきったらクロックを止める（シングルバッファリング。詳細は
     /// [`crate::single_buffer`]）。
     stop_at_cycle_end: bool,
@@ -197,6 +200,7 @@ impl GridState {
             pending: None,
             pending_ready: false,
             preload_due: false,
+            history_due: VecDeque::new(),
             stop_at_cycle_end: false,
             cycle_wrapped: false,
             cycle_stopped_at: None,
@@ -286,6 +290,7 @@ impl GridState {
         self.sounding.clear();
         self.reset_lanes_for_start();
         self.pending_display.clear();
+        self.history_due.clear();
         self.display = None;
         self.last_scheduled = None;
         self.last_scheduled_timeline_seconds = None;
@@ -297,6 +302,10 @@ impl GridState {
         // サイクルをここから仕込み始める。
         self.request_cycle_preload();
         self.clock.start_at_bpm(now, bpm);
+    }
+
+    pub(crate) fn take_history_snapshots(&mut self) -> Vec<crate::GridSongSnapshot> {
+        self.history_due.drain(..).collect()
     }
 }
 

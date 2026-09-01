@@ -12,26 +12,26 @@ use super::super::{
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum PreviewRenderProgressPhase {
+pub(crate) enum PreviewRenderProgressPhase {
     Started,
     Done { elapsed_ms: u128 },
     Error { elapsed_ms: u128 },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) struct PreviewRenderProgress {
-    pub(super) track: usize,
-    pub(super) completed: usize,
-    pub(super) total: usize,
-    pub(super) phase: PreviewRenderProgressPhase,
+pub(crate) struct PreviewRenderProgress {
+    pub(crate) track: usize,
+    pub(crate) completed: usize,
+    pub(crate) total: usize,
+    pub(crate) phase: PreviewRenderProgressPhase,
 }
 
-pub(super) struct MixedPreviewRenderRequest<'a> {
-    pub(super) priority: RenderPriority,
-    pub(super) measure_samples: usize,
-    pub(super) active_tracks: &'a [usize],
-    pub(super) track_mmls: &'a [String],
-    pub(super) track_gains: &'a [f32],
+pub(crate) struct MixedPreviewRenderRequest<'a> {
+    pub(crate) priority: RenderPriority,
+    pub(crate) measure_samples: usize,
+    pub(crate) active_tracks: &'a [usize],
+    pub(crate) track_mmls: &'a [String],
+    pub(crate) track_gains: &'a [f32],
 }
 
 pub(crate) struct PreviewOutputState<'a> {
@@ -75,7 +75,7 @@ where
 /// `measure_index`、各 track の MML スナップショット、各 track gain をまとめてハッシュし、
 /// 同じ preview 条件のときだけ同一キーになるようにする。
 /// gain は `f32` の数値比較ではなく `to_bits()` を使ってビット列ごと区別する。
-pub(super) fn overlay_preview_cache_key(
+pub(crate) fn overlay_preview_cache_key(
     measure_index: usize,
     track_mmls: &[String],
     track_gains: &[f32],
@@ -93,7 +93,7 @@ pub(super) fn overlay_preview_cache_key(
 ///
 /// エントリ上限を超えて新規キーを入れるときは、古い preview 条件を一括破棄してから
 /// 新しい結果を入れる単純な eviction 戦略にしている。
-pub(super) fn insert_overlay_preview_cache(
+pub(crate) fn insert_overlay_preview_cache(
     cache: &mut HashMap<u64, Arc<Vec<f32>>>,
     key: u64,
     samples: Arc<Vec<f32>>,
@@ -110,7 +110,7 @@ pub(super) fn insert_overlay_preview_cache(
 /// 指定された preview 用 track MML 群をオフラインレンダリングし、track ごとの gain を掛けて
 /// 1 本のステレオバッファへ合成して返す。
 /// 各 track のレンダリング結果は `measure_samples` 未満なら末尾を埋めて長さを揃える。
-pub(super) fn render_mixed_preview_tracks<F, P>(
+pub(crate) fn render_mixed_preview_tracks<F, P>(
     render_queue: &RenderQueue,
     request: MixedPreviewRenderRequest<'_>,
     mut build_probe_context: F,
@@ -120,9 +120,10 @@ where
     F: FnMut(usize, &str) -> NativeRenderProbeContext,
     P: FnMut(PreviewRenderProgress),
 {
-    let mut mixed = vec![0.0f32; request.measure_samples];
     let total = request.active_tracks.len();
-    for (index, track) in request.active_tracks.iter().enumerate() {
+    let (response_tx, response_rx) = std::sync::mpsc::channel();
+    let mut pending = HashMap::new();
+    for track in request.active_tracks {
         let gain = request.track_gains.get(*track).copied().unwrap_or(1.0);
         let mml = request
             .track_mmls
@@ -131,19 +132,50 @@ where
             .unwrap_or_default();
         report_progress(PreviewRenderProgress {
             track: *track,
-            completed: index,
+            completed: 0,
             total,
             phase: PreviewRenderProgressPhase::Started,
         });
         let started = std::time::Instant::now();
         let probe_context = build_probe_context(*track, mml);
-        let result = render_queue.render_blocking(request.priority, mml, probe_context);
+        let request_id = render_queue.reserve_request_id();
+        if render_queue
+            .submit_with_id(
+                request_id,
+                request.priority,
+                mml.to_string(),
+                probe_context,
+                response_tx.clone(),
+            )
+            .is_err()
+        {
+            report_progress(PreviewRenderProgress {
+                track: *track,
+                completed: 1,
+                total,
+                phase: PreviewRenderProgressPhase::Error {
+                    elapsed_ms: started.elapsed().as_millis(),
+                },
+            });
+            return None;
+        }
+        pending.insert(request_id, (*track, gain, started));
+    }
+    drop(response_tx);
+
+    let mut completed = 0;
+    let mut rendered = HashMap::new();
+    let mut failed = false;
+    while !pending.is_empty() {
+        let result = response_rx.recv().ok()?;
+        let (track, gain, started) = pending.remove(&result.request_id)?;
+        completed += 1;
         let elapsed_ms = started.elapsed().as_millis();
-        let samples = match result {
+        let samples = match result.result {
             Ok(samples) => {
                 report_progress(PreviewRenderProgress {
-                    track: *track,
-                    completed: index + 1,
+                    track,
+                    completed,
                     total,
                     phase: PreviewRenderProgressPhase::Done { elapsed_ms },
                 });
@@ -151,14 +183,24 @@ where
             }
             Err(_) => {
                 report_progress(PreviewRenderProgress {
-                    track: *track,
-                    completed: index + 1,
+                    track,
+                    completed,
                     total,
                     phase: PreviewRenderProgressPhase::Error { elapsed_ms },
                 });
-                return None;
+                failed = true;
+                continue;
             }
         };
+        rendered.insert(track, (gain, samples));
+    }
+    if failed {
+        return None;
+    }
+
+    let mut mixed = vec![0.0f32; request.measure_samples];
+    for track in request.active_tracks {
+        let (gain, samples) = rendered.remove(track)?;
         if mixed.len() < samples.len() {
             mixed.resize(samples.len(), 0.0);
         }

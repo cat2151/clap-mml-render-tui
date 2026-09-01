@@ -150,6 +150,13 @@ impl ChordPlayback {
         }
     }
 
+    pub(crate) fn at_index(&self, index: usize) -> Option<Self> {
+        (index < self.chords.len()).then(|| Self {
+            index,
+            ..self.clone()
+        })
+    }
+
     /// 次のコードへ進める。進行を1周して先頭へ戻ったときだけ true。
     fn advance(&mut self) -> bool {
         self.index = (self.index + 1) % self.chords.len();
@@ -218,7 +225,7 @@ impl GridState {
     }
 }
 
-pub(super) fn resolved_note_from(
+pub(crate) fn resolved_note_from(
     instances: &[GridInstance],
     chord: Option<&ChordPlayback>,
     address: LaneAddress,
@@ -257,66 +264,21 @@ pub(super) fn resolved_note_from(
 /// [`super::BASS_OCTAVE_LANES`] を超える lane（旧セッションが残した余りの lane）と、
 /// MIDI note number の上限を越えるオクターブ上は鳴らさない。
 fn bass_octave_note(bass: Option<u8>, lane: usize) -> Option<u8> {
-    let bass = bass?;
-    match lane {
-        0 => Some(bass),
-        1 => bass.checked_add(12).filter(|note| *note <= 127),
-        _ => None,
-    }
+    cmrt_chord::bass_octave_note(bass, lane)
 }
 
 /// signedな`rotation`ぶん構成音を累積してずらす。正は上へ、負は下へ転回する。
 ///
 /// C-E-Gを例にすると、`1`はE-G-C5、`-1`はG3-C-E、`-3`はC3-E3-G3になる。
 pub(super) fn rotated_chord_voice(notes: &[u8], lane: usize, rotation: i8) -> Option<u8> {
-    let notes = &notes[..notes.len().min(super::CHORD_VOICE_LANES)];
-    let rendered_voice_count = if notes.len() == 3 {
-        super::CHORD_VOICE_LANES
-    } else {
-        notes.len()
-    };
-    if lane >= rendered_voice_count || notes.is_empty() {
-        return None;
-    }
-    let note_count = i16::try_from(notes.len()).ok()?;
-    let rotation = i16::from(rotation);
-    let mut previous = None;
-    for voice in 0..=lane {
-        let sequence = rotation + i16::try_from(voice).ok()?;
-        let note_index = usize::try_from(sequence.rem_euclid(note_count)).ok()?;
-        let mut note = i16::from(notes[note_index]) + 12 * sequence.div_euclid(note_count);
-        while previous.is_some_and(|previous| note <= previous) {
-            note += 12;
-        }
-        if !(0..=127).contains(&note) {
-            return None;
-        }
-        previous = Some(note);
-    }
-    previous.map(|note| note as u8)
+    cmrt_chord::rotated_chord_voice(notes, lane, rotation, super::CHORD_VOICE_LANES)
 }
 
 /// `base` に最も近い、ピッチクラスが `classes` に含まれる note number を返す。
 ///
 /// 同距離なら低いほうを選ぶ（上へ寄って音域が上ずるのを防ぐ）。
 pub(super) fn snap_to_chord(base: u8, classes: &[bool; 12]) -> u8 {
-    if !classes.iter().any(|on| *on) {
-        return base;
-    }
-    // 3和音以上ならピッチクラスの間隔は最大でも半音6個ぶんなので、距離6まで見れば必ず当たる。
-    for distance in 0..=6 {
-        if let Some(down) = base.checked_sub(distance) {
-            if classes[usize::from(down % 12)] {
-                return down;
-            }
-        }
-        if let Some(up) = base.checked_add(distance) {
-            if up <= 127 && classes[usize::from(up % 12)] {
-                return up;
-            }
-        }
-    }
-    base
+    cmrt_chord::snap_to_chord(base, classes)
 }
 
 #[cfg(test)]

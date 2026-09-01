@@ -32,6 +32,9 @@ pub(super) struct PendingDisplay {
     /// ロードし直すと、まだ耳に聞こえている旧 bank を壊してしまう。deadline まで
     /// 待ってから次の先読みを始めるための合図として持つ。
     pub(super) cycle_started: bool,
+    /// Grid song の新しい1周がこの step から実際に鳴り始める。
+    pub(super) history_started: bool,
+    pub(super) bpm: f64,
 }
 
 impl GridState {
@@ -107,5 +110,11 @@ impl GridState {
         if let Some(display) = &mut self.display {
             display.drawn.clear_drums();
         }
+    }
+}
+
+impl GridPresentation {
+    pub(super) fn song_snapshot(&self, bpm: f64) -> crate::GridSongSnapshot {
+        crate::GridSongSnapshot::new(bpm, self.instances.clone(), self.chord.clone())
     }
 }

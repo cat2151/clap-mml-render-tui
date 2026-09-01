@@ -5,6 +5,8 @@ use std::borrow::Cow;
 
 use cmrt_patches::{PatchRoleIndex, PatchRoleInput};
 
+mod history;
+
 fn press(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
 }

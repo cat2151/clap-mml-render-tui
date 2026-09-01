@@ -52,6 +52,7 @@ impl GridSequencerScreen {
             let scheduled = self.state.poll_steps_at(now, lookahead, display_now);
             // 周の頭を跨いだならテンポが乗り換わっている。表示を追従させる。
             self.absorb_applied_cycle_bpm();
+            self.absorb_history_snapshots();
             self.log_chord_schedule(&scheduled, bank_before, chord_before);
             self.send_scheduled_with_lateness(&scheduled, self.state.last_poll_lateness());
             self.check_measure_sync();

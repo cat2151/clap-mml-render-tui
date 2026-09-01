@@ -39,6 +39,8 @@ impl GridState {
             let timeline_seconds = self.clock.timeline_seconds(due.step);
             let mut messages = self.expire_sounding();
             let cycle_started = self.advance_schedule(due.step);
+            let history_started = due.step == 0
+                || (self.schedule_index == 0 && (cycle_started || self.chord.is_none()));
             let stopping = std::mem::take(&mut self.cycle_wrapped);
             if stopping {
                 // 鳴らしきった。次の小節は組み立てず、残っている音を止めてクロックを畳む。
@@ -61,6 +63,8 @@ impl GridState {
                 step: self.schedule_index,
                 presentation: self.capture_presentation(),
                 cycle_started,
+                history_started,
+                bpm: self.clock.bpm(),
             });
             self.last_scheduled = Some(deadline);
             self.last_scheduled_timeline_seconds = Some(timeline_seconds);
@@ -156,6 +160,7 @@ impl GridState {
         self.started = false;
         self.reset_lanes_for_start();
         self.pending_display.clear();
+        self.history_due.clear();
         self.display = None;
         self.last_scheduled = None;
         self.last_scheduled_timeline_seconds = None;
@@ -187,6 +192,10 @@ impl GridState {
                 // 前に鳴る旧 bank のイベントがまだ残っている。実発音が境界を越えた
                 // ここで初めて、空いた bank を次回の先読みに使ってよい。
                 self.preload_due = true;
+            }
+            if pending.history_started {
+                self.history_due
+                    .push_back(pending.presentation.song_snapshot(pending.bpm));
             }
             self.step_index = pending.step;
             self.displayed_ordinal = Some(pending.ordinal);

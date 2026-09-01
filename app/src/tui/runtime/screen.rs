@@ -67,7 +67,9 @@ impl<'a> TuiApp<'a> {
                     && !self.loop_browser.state.mixer_overlay_open
                     && self.loop_browser.state.category_overlay.is_none()
             }
-            PrimaryScreen::GridSequencer => !self.grid_sequencer.help_open,
+            PrimaryScreen::GridSequencer => {
+                !self.grid_sequencer.help_open && !self.grid_sequencer.history_open()
+            }
         }
     }
 
@@ -182,6 +184,7 @@ impl<'a> TuiApp<'a> {
         terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
         entry_route: DawEntryRoute,
         autoplay_on_entry: bool,
+        mut grid_import: Option<crate::daw::DawGridImportSong>,
     ) -> Result<DawRunOutcome> {
         let mut requested_screen = entry_route
             .screen()
@@ -216,6 +219,9 @@ impl<'a> TuiApp<'a> {
                     .map(|entry| entry.degrees.clone())
                     .collect()
             }));
+            if let Some(song) = grid_import.take() {
+                daw.replace_with_grid_song(song)?;
+            }
             daw.populate_blank_daily_workspace();
             let outcome = daw.run_with_terminal(terminal, autoplay);
             drop(daw);

@@ -86,6 +86,8 @@ pub struct TuiApp<'a> {
     pub(in crate::tui) keyboard: KeyboardScreen<'a>,
     pub(in crate::tui) loop_browser: LoopBrowserScreen,
     pub(in crate::tui) grid_sequencer: GridSequencerScreen,
+    /// Grid履歴をimport前に1小節だけoffline試聴する、揮発性のplayer/cache。
+    grid_history_preview: crate::daw::DawGridPreviewPlayer,
     /// どの画面からでも開ける MML 入力オーバーレイ。開くと現在の画面の演奏は止まり、
     /// keyboard 画面と同じ音源インスタンスを借りる。
     pub(in crate::tui) mml_overlay: MmlOverlay<'a>,

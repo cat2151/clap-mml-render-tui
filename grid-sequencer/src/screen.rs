@@ -70,6 +70,7 @@ pub struct GridSequencerScreen {
     /// サーバーが drop 中に止めた musical clock を表示へ反映する同期状態。
     pub(crate) playback_sync: PlaybackSync,
     pub help_open: bool,
+    pub(crate) history: crate::history::GridHistory,
     pub(crate) bpm_mode: BpmMode,
     /// 自動BPMを引く範囲。セッションへ保存するのはこちらで、引いた値ではない。
     pub(crate) bpm_range: BpmRange,
@@ -204,6 +205,7 @@ impl GridSequencerScreen {
             solo_tracks: vec![false; track_count],
             playback_sync: PlaybackSync::default(),
             help_open: false,
+            history: crate::history::GridHistory::default(),
             bpm_mode,
             bpm_range,
             bpm_input: None,

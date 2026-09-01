@@ -205,7 +205,7 @@ impl RenderQueue {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(super) fn disabled_for_tests() -> Self {
         Self {
             request_tx: None,

@@ -2,11 +2,10 @@ use anyhow::Result;
 use crossterm::{
     cursor::SetCursorStyle,
     event::{
-        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers,
-        KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+        self, Event, KeyCode, KeyModifiers, KeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
     },
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{enable_raw_mode, EnterAlternateScreen},
 };
 use ratatui::{backend::Backend, backend::CrosstermBackend, layout::Rect, Terminal};
 
@@ -17,54 +16,14 @@ use super::{NormalAction, PlayState, PrimaryScreen, TuiApp, TuiExitReason};
 
 mod line_wrap;
 mod screen;
+mod terminal;
 
 #[cfg(test)]
 mod tests;
 
 use screen::DawRunOutcome;
 pub(in crate::tui) use screen::{clear_terminal_for_new_screen, DawEntryRoute};
-
-struct TerminalCleanup {
-    raw_mode_enabled: bool,
-    alternate_screen_enabled: bool,
-    line_wrap_disabled: bool,
-    keyboard_enhancement_enabled: bool,
-    mouse_capture_enabled: bool,
-}
-
-impl Drop for TerminalCleanup {
-    fn drop(&mut self) {
-        if self.mouse_capture_enabled {
-            let _ = execute!(std::io::stdout(), DisableMouseCapture);
-        }
-        let _ = execute!(std::io::stdout(), SetCursorStyle::DefaultUserShape);
-        if self.keyboard_enhancement_enabled {
-            let _ = execute!(std::io::stdout(), PopKeyboardEnhancementFlags);
-        }
-        if self.line_wrap_disabled {
-            let _ = line_wrap::enable(&mut std::io::stdout());
-        }
-        if self.alternate_screen_enabled {
-            let _ = execute!(std::io::stdout(), LeaveAlternateScreen);
-        }
-        if self.raw_mode_enabled {
-            let _ = disable_raw_mode();
-        }
-    }
-}
-
-fn sync_mouse_capture(enabled: &mut bool, requested: bool) -> Result<()> {
-    if *enabled == requested {
-        return Ok(());
-    }
-    if requested {
-        execute!(std::io::stdout(), EnableMouseCapture)?;
-    } else {
-        execute!(std::io::stdout(), DisableMouseCapture)?;
-    }
-    *enabled = requested;
-    Ok(())
-}
+use terminal::{sync_mouse_capture, TerminalCleanup};
 
 impl<'a> TuiApp<'a> {
     pub(crate) fn uses_mouse_capture(&self) -> bool {
@@ -136,6 +95,7 @@ impl<'a> TuiApp<'a> {
                 &mut terminal,
                 DawEntryRoute::Restored(self.active_screen),
                 self.cfg.autoplay_on_startup,
+                None,
             )? {
                 DawRunOutcome::Continue => {}
                 DawRunOutcome::Quit => quit_from_startup_daw = true,
@@ -148,6 +108,8 @@ impl<'a> TuiApp<'a> {
             &mut cleanup.mouse_capture_enabled,
             self.uses_mouse_capture(),
         )?;
+        // History overlay を描画し終えるまで preview の準備すら開始しない。
+        let mut deferred_grid_history_preview = None;
 
         loop {
             if quit_from_startup_daw {
@@ -160,7 +122,7 @@ impl<'a> TuiApp<'a> {
             if crate::daw::take_http_mode_switch_request() {
                 sync_mouse_capture(&mut cleanup.mouse_capture_enabled, false)?;
                 rendered_screen = None;
-                match self.run_daw_screen(&mut terminal, DawEntryRoute::Http, false)? {
+                match self.run_daw_screen(&mut terminal, DawEntryRoute::Http, false, None)? {
                     DawRunOutcome::Continue => {}
                     DawRunOutcome::Quit => break,
                     DawRunOutcome::Restart => {
@@ -189,6 +151,11 @@ impl<'a> TuiApp<'a> {
             if self.active_screen == PrimaryScreen::Keyboard {
                 self.pump_keyboard_periodic();
             }
+            if self.active_screen == PrimaryScreen::GridSequencer
+                && deferred_grid_history_preview.is_none()
+            {
+                self.sync_grid_history_preview_status();
+            }
             if self.active_screen == PrimaryScreen::GridSequencer && self.pump_grid_sequencer_step()
             {
                 // コード進行データが更新されたので、アナウンス表示のあと再起動する。
@@ -205,6 +172,9 @@ impl<'a> TuiApp<'a> {
             let terminal_draw_started = std::time::Instant::now();
             terminal.draw(|f| self.draw(f))?;
             let terminal_draw_elapsed = terminal_draw_started.elapsed();
+            if let Some(snapshot) = deferred_grid_history_preview.take() {
+                self.play_grid_history_preview(snapshot);
+            }
             if self.active_screen == PrimaryScreen::LoopBrowser {
                 if let Some(metrics) = self.loop_browser.state.last_render_metrics.take() {
                     super::loop_browser::performance::log_render(metrics, terminal_draw_elapsed);
@@ -269,6 +239,7 @@ impl<'a> TuiApp<'a> {
                                         &mut terminal,
                                         DawEntryRoute::ScreenSwitch(target),
                                         false,
+                                        None,
                                     )? {
                                         DawRunOutcome::Continue => {}
                                         DawRunOutcome::Quit => break,
@@ -305,6 +276,7 @@ impl<'a> TuiApp<'a> {
                                     &mut terminal,
                                     DawEntryRoute::Keyboard,
                                     false,
+                                    None,
                                 )? {
                                     DawRunOutcome::Continue => {}
                                     DawRunOutcome::Quit => break,
@@ -337,6 +309,33 @@ impl<'a> TuiApp<'a> {
                                 debug_assert_eq!(self.grid_sequencer.track_count(), track_count);
                                 self.save_notepad_and_session_state();
                                 return Ok(TuiExitReason::RestartApp);
+                            }
+                            GridSequencerAction::PlayDailyDawPreview(snapshot) => {
+                                deferred_grid_history_preview = Some(snapshot);
+                            }
+                            GridSequencerAction::StopDailyDawPreview => {
+                                deferred_grid_history_preview = None;
+                                self.stop_grid_history_preview();
+                            }
+                            GridSequencerAction::ImportToDailyDaw(snapshot) => {
+                                deferred_grid_history_preview = None;
+                                self.stop_grid_history_preview();
+                                sync_mouse_capture(&mut cleanup.mouse_capture_enabled, false)?;
+                                rendered_screen = None;
+                                let song = super::grid_sequencer_glue::daily_daw_import(snapshot);
+                                match self.run_daw_screen(
+                                    &mut terminal,
+                                    DawEntryRoute::ScreenSwitch(PrimaryScreen::DailyDaw),
+                                    false,
+                                    Some(song),
+                                )? {
+                                    DawRunOutcome::Continue => {}
+                                    DawRunOutcome::Quit => break,
+                                    DawRunOutcome::Restart => {
+                                        self.save_notepad_and_session_state();
+                                        return Ok(TuiExitReason::RestartApp);
+                                    }
+                                }
                             }
                         }
                         continue;
@@ -410,6 +409,7 @@ impl<'a> TuiApp<'a> {
                                 &mut terminal,
                                 DawEntryRoute::Notepad,
                                 false,
+                                None,
                             )? {
                                 DawRunOutcome::Continue => {}
                                 DawRunOutcome::Quit => break,
