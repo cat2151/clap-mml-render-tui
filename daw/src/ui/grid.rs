@@ -15,6 +15,7 @@ use cmrt_tui_core::theme::cursor_highlight_style;
 
 mod init_cell;
 mod measure_cell;
+mod playhead;
 
 #[cfg(test)]
 mod tests;
@@ -54,6 +55,8 @@ pub(super) fn column_x_offset(measure_index: usize) -> u16 {
 pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &[Vec<CacheState>]) {
     let solo_mode_active = app.solo_mode_active();
     let ab_repeat_markers = app.ab_repeat_state().marker_indices();
+    // 演奏位置は 1 描画につき 1 回だけ lock を取る。停止中は None。
+    let playhead = playhead::playhead(app, MEASURE_CELL_WIDTH);
     // init 列の role 表示に使う catalog。1 描画につき 1 回だけ lock を取る。
     let catalog = app.catalog_snapshot();
 
@@ -95,10 +98,20 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &
                 _ => (format!("M{m}"), Style::default().fg(MONOKAI_GRAY)),
             }
         };
-        header_spans.push(Span::styled(
-            format!("{label:<width$}", width = column_width(m)),
-            style,
-        ));
+        // 演奏中の小節だけ、ラベルを `>` へ差し替えて背景を拍ぶん塗る。
+        let playhead_here = playhead.filter(|p| m > 0 && p.measure_index == m - 1);
+        match playhead_here {
+            Some(playhead) => header_spans.extend(playhead::header_spans(
+                &playhead::header_label(&label),
+                m,
+                playhead,
+                style,
+            )),
+            None => header_spans.push(Span::styled(
+                format!("{label:<width$}", width = column_width(m)),
+                style,
+            )),
+        }
     }
     if area.height > 0 {
         f.render_widget(

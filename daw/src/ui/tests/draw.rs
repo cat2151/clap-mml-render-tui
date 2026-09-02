@@ -17,4 +17,5 @@ mod help;
 mod layout;
 mod logs;
 mod mixer;
+mod playhead;
 mod solo_mute;
