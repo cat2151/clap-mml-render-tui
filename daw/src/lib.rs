@@ -86,6 +86,7 @@
 //!   Enter : path 入力を実行
 //!   ESC   : path 入力を戻る / overlay を閉じる
 
+mod auto_trim;
 mod batch_logging;
 mod cache;
 mod daily;
@@ -96,6 +97,7 @@ mod guide;
 mod http_server;
 mod init;
 mod input;
+mod live_instance;
 mod messages;
 mod mixer;
 mod mml;
@@ -272,6 +274,9 @@ pub struct DawApp {
     pub(crate) solo_tracks: Vec<bool>,
     /// playable track ごとの音量(dB)。
     pub(crate) track_volumes_db: Vec<i32>,
+    /// Grid history を preview 無しで import した直後だけ立つ。先頭小節の cache が
+    /// 出そろったら [`Self::pump_pending_auto_trim`] が初期音量を決めて下ろす。
+    pub(crate) pending_auto_trim: bool,
     pub(crate) overlays: DawOverlays,
     pub(crate) patch_phrase_store: cmrt_history::PatchPhraseStore,
     pub(crate) patch_phrase_store_dirty: bool,
@@ -315,8 +320,10 @@ impl DawApp {
     ///
     /// `realtime_play_supervisor` も同じく app の 1 本を渡す。MML オーバーレイは
     /// keyboard 画面と同じ音源 instance を借りるので、DAW 内で supervisor をもう 1 本
-    /// 作ると SHM 接続が二重になる。DAW 自身の演奏用 supervisor
-    /// （`realtime_audio_backend == PlayServer` のときだけ作る）とは別物。
+    /// 作ると SHM 接続が二重になる。DAW 自身の演奏用 supervisor をどこから得るかは
+    /// backend で変わる（`init::realtime_audio_wiring`）。`play_server` backend は
+    /// HTTP しか使わないので別に 1 本作り、`cache_player` backend は SHM の live 経路を
+    /// 使うので**この注入された 1 本をそのまま共有する**。
     pub fn new_for_workspace(
         cfg: Arc<Config>,
         plugin_entries: cmrt_offline_render::PluginEntries,

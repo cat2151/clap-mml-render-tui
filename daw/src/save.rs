@@ -228,7 +228,6 @@ impl DawApp {
             }
         }
         self.sync_cache_states();
-        *self.playback.track_gains.lock().unwrap() = self.playback_track_gains();
         self.editor.cursor_track = daw_state.cursor_track.min(self.editor.tracks - 1);
         self.editor.cursor_measure = daw_state.cursor_measure.min(self.editor.measures);
         self.restore_cache_from_metadata(&daw_state.cached_measures);

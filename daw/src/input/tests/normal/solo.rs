@@ -40,3 +40,28 @@ fn handle_normal_s_toggles_tracks_and_turns_off_solo_mode_when_all_false() {
     assert_eq!(app.solo_tracks, vec![false, false, false, false]);
     assert!(!app.solo_mode_active());
 }
+
+/// solo を入れると、可聴でなくなった track へ送る gain が無音相当へ変わる。
+///
+/// live 経路（`CachePlayer`）では mute も「小さい dB を送る」ことで表す。
+/// 実サーバー無しで「押した → 送る内容が変わる」までをここで固定する。
+#[test]
+fn handle_normal_s_turns_the_other_tracks_silent_in_the_live_mix() {
+    use crate::playback::live_gain::{changed_live_track_gains, SILENT_TRACK_GAIN_DB};
+
+    let (mut app, _cache_rx) = build_test_app();
+    app.editor.cursor_track = 3;
+    let before = app.desired_live_track_gains();
+
+    app.handle_normal(crossterm::event::KeyCode::Char('s'));
+
+    let changed = changed_live_track_gains(&before, &app.desired_live_track_gains());
+    assert_eq!(
+        changed
+            .iter()
+            .map(|gain| (gain.row, gain.gain_db))
+            .collect::<Vec<_>>(),
+        vec![(2, SILENT_TRACK_GAIN_DB)],
+        "solo で聞こえなくなった track だけへ無音相当が飛ぶ"
+    );
+}

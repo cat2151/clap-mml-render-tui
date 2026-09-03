@@ -59,6 +59,11 @@ impl PatchRole {
 }
 
 /// GridのDrum各行が要求する、明示的な語。互いの残り集合ではない。
+///
+/// Percussionは今も`\bperc`を明示的に要求する（残り物ではない）が、判定は排他的な
+/// cascadeで、より具体的な部位が先に取る。表示パスにはフォルダ名も含まれるので、
+/// `Percussion/Kick Clean.fxp`のように**部位語と`perc`が同時に当たる音色が実在する**。
+/// 多重所属を許すと、そのkick・snare・hatがまとめてPERC行の候補にも化ける。
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum DrumPatchRole {
     Kick,
@@ -68,14 +73,25 @@ pub enum DrumPatchRole {
 }
 
 impl DrumPatchRole {
+    /// 判定の優先順そのもの。具体的な部位から並べ、Percussionを最後に置く。
     pub const ALL: [Self; 4] = [Self::Kick, Self::Snare, Self::HiHat, Self::Percussion];
+
+    /// ログや抽選デッキの識別子に使う短い綴り。[`PatchRole::key`]と衝突しない語にすること。
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Kick => "kick",
+            Self::Snare => "snare",
+            Self::HiHat => "hat",
+            Self::Percussion => "perc",
+        }
+    }
 
     pub fn pattern(self) -> &'static str {
         match self {
-            Self::Kick => r"\bkick",
-            Self::Snare => r"\bsnare",
-            Self::HiHat => r"\bhat",
-            Self::Percussion => r"\bperc",
+            Self::Kick => KICK_PATTERN,
+            Self::Snare => SNARE_PATTERN,
+            Self::HiHat => HIHAT_PATTERN,
+            Self::Percussion => PERCUSSION_PATTERN,
         }
     }
 
@@ -93,6 +109,18 @@ pub struct PatchRolePreset {
     pub label: &'static str,
     pub pattern: &'static str,
 }
+
+/// バスドラムの綴り。`kick`と同義として扱う。
+///
+/// `bassdrum`（sfz側の綴り）と`Bass Drum`（Surge側の綴り）が実在するので、両方を1本で拾う。
+/// 略記の`bd`はカタログに1件も無いため、誤爆を避けて入れない。
+///
+/// **空白は`\s?`で書くこと。** [`compile_condition`]が条件を空白で分割してAND条件に
+/// するので、リテラルの空白を混ぜるとgroupが割れて正規表現として壊れる。
+const KICK_PATTERN: &str = r"\b(?:kick|bass\s?drum)";
+const SNARE_PATTERN: &str = r"\bsnare";
+const HIHAT_PATTERN: &str = r"\bhat";
+const PERCUSSION_PATTERN: &str = r"\bperc";
 
 /// 語頭境界はデータ側へ明示し、分類ロジックには音色名固有の補正を持ち込まない。
 const BUILTIN_PRESETS: &[PatchRolePreset] = &[
@@ -121,10 +149,10 @@ const BUILTIN_PRESETS: &[PatchRolePreset] = &[
     ),
     preset(PatchRole::Lead, "pizzicato", r"\bpizzicato"),
     preset(PatchRole::Lead, "bell", r"\bbell"),
-    preset(PatchRole::Drum, "kick", r"\bkick"),
-    preset(PatchRole::Drum, "snare", r"\bsnare"),
-    preset(PatchRole::Drum, "hat", r"\bhat"),
-    preset(PatchRole::Drum, "perc", r"\bperc"),
+    preset(PatchRole::Drum, "kick|bass drum", KICK_PATTERN),
+    preset(PatchRole::Drum, "snare", SNARE_PATTERN),
+    preset(PatchRole::Drum, "hat", HIHAT_PATTERN),
+    preset(PatchRole::Drum, "perc", PERCUSSION_PATTERN),
     preset(PatchRole::Drum, "drum", r"\bdrums?"),
     preset(PatchRole::Triggered, "chord", r"\bchord"),
     preset(
@@ -176,6 +204,7 @@ pub struct PatchRoleInput<'a> {
 #[derive(Clone, Default)]
 pub struct PatchRoleIndex {
     by_display: HashMap<String, PatchRole>,
+    drum_role_by_display: HashMap<String, DrumPatchRole>,
     by_role: [Vec<String>; PatchRole::ALL.len()],
     by_drum_role: [Vec<String>; DrumPatchRole::ALL.len()],
 }
@@ -194,10 +223,11 @@ impl PatchRoleIndex {
             index.by_display.insert(entry.display.to_string(), role);
             index.by_role[role.index()].push(entry.display.to_string());
             if role == PatchRole::Drum {
-                for (drum_role, condition) in DrumPatchRole::ALL.into_iter().zip(&drum_patterns) {
-                    if condition_matches(condition, entry) {
-                        index.by_drum_role[drum_role.index()].push(entry.display.to_string());
-                    }
+                if let Some(drum_role) = classify_drum_role(entry, &drum_patterns) {
+                    index
+                        .drum_role_by_display
+                        .insert(entry.display.to_string(), drum_role);
+                    index.by_drum_role[drum_role.index()].push(entry.display.to_string());
                 }
             }
         }
@@ -206,6 +236,14 @@ impl PatchRoleIndex {
 
     pub fn role_of(&self, display: &str) -> Option<PatchRole> {
         self.by_display.get(display).copied()
+    }
+
+    /// Drumの中の部位。Drum以外の音色と、部位語が当たらないDrumでは`None`。
+    ///
+    /// [`Self::role_of`]が`Drum`でも`None`になりうる（どの部位語にも当たらない
+    /// `drums`だけの音色）ので、`Some(PatchRole::Drum)`から部位の存在を推測しないこと。
+    pub fn drum_role_of(&self, display: &str) -> Option<DrumPatchRole> {
+        self.drum_role_by_display.get(display).copied()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -263,6 +301,21 @@ fn classify_role(entry: PatchRoleInput<'_>, cascade: &[CompiledRole]) -> PatchRo
         .iter()
         .find(|compiled| compiled.matches(entry))
         .map_or(PatchRole::Etc, |compiled| compiled.role)
+}
+
+/// Drum内の部位を1つだけ決める。[`DrumPatchRole::ALL`]の順で先勝ち。
+///
+/// どれにも当たらなければ`None`（＝どの行の候補にもしない）。Percussionを残り物に
+/// しないという方針は据え置きで、変えたのは「複数当たったときに誰が取るか」だけ。
+fn classify_drum_role(
+    entry: PatchRoleInput<'_>,
+    drum_patterns: &[Vec<Regex>; DrumPatchRole::ALL.len()],
+) -> Option<DrumPatchRole> {
+    DrumPatchRole::ALL
+        .into_iter()
+        .zip(drum_patterns)
+        .find(|(_, condition)| condition_matches(condition, entry))
+        .map(|(drum_role, _)| drum_role)
 }
 
 fn compile_role(role: PatchRole, user_presets: &[(String, String)]) -> CompiledRole {

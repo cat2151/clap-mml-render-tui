@@ -11,6 +11,10 @@ pub struct DawGridImportSong {
     pub bpm: f64,
     pub chord: Option<DawGridChordSource>,
     pub tracks: Vec<DawGridImportTrack>,
+    /// preview で先頭1小節を試聴済みなら、そのとき測った mixer 初期値（dB）。
+    /// 未試聴なら `None` で、mixer は一律 0dB から始まる。
+    /// 先頭に [`FIRST_PLAYABLE_TRACK`] ぶんの非演奏 track を含む DAW 側の並び。
+    pub track_volumes_db: Option<Vec<i32>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -110,10 +114,16 @@ impl DawApp {
             bail!("Grid history は Daily DAW にだけ import できます");
         }
         let bpm = song.bpm;
+        // preview を聴かずに import した場合は測定値が無い。先頭小節の cache が
+        // 出そろってから mixer 初期値を決め直す。
+        let needs_auto_trim = song.track_volumes_db.is_none();
         let snapshot = grid_song_snapshot(song)?;
         let tracks = snapshot.tracks;
         let measures = snapshot.measures;
         self.apply_project_snapshot_for_recovery(snapshot);
+        if needs_auto_trim {
+            self.request_auto_trim_from_first_measure();
+        }
         self.editor.cursor_track = FIRST_PLAYABLE_TRACK;
         self.editor.cursor_measure = 1;
         self.save();
@@ -140,6 +150,7 @@ pub(crate) fn grid_song_snapshot(song: DawGridImportSong) -> Result<DawProjectSn
         bpm,
         chord,
         tracks: imported_tracks,
+        track_volumes_db,
     } = song;
     if let Some(chord) = &chord {
         if chord.measures.is_empty() || chord.voicings.len() != chord.measures.len() {
@@ -181,9 +192,14 @@ pub(crate) fn grid_song_snapshot(song: DawGridImportSong) -> Result<DawProjectSn
         }
     }
 
+    // 長さが合わない測定値は、track 構成が変わったものとみなして捨てる。
+    let track_volumes_db = track_volumes_db
+        .filter(|volumes_db| volumes_db.len() == tracks)
+        .unwrap_or_else(|| vec![0; tracks]);
+
     Ok(DawProjectSnapshot {
         data,
-        track_volumes_db: vec![0; tracks],
+        track_volumes_db,
         tracks,
         measures,
     })

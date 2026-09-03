@@ -4,12 +4,13 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use cmrt_core::NativeRenderProbeContext;
+use cmrt_tui_core::mixer::auto_trim::{auto_trim_volumes_db, measure_track_level, TrackLevel};
 
-use super::super::playback::pad_playback_measure_samples;
 use super::super::render_queue::{RenderPriority, RenderQueue};
 use super::super::{
     DawPlayState, PlayPosition, MAX_CACHED_SAMPLES, OVERLAY_PREVIEW_CACHE_MAX_ENTRIES,
 };
+use super::cached_samples::pad_playback_measure_samples;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum PreviewRenderProgressPhase {
@@ -32,6 +33,24 @@ pub(crate) struct MixedPreviewRenderRequest<'a> {
     pub(crate) active_tracks: &'a [usize],
     pub(crate) track_mmls: &'a [String],
     pub(crate) track_gains: &'a [f32],
+    /// track ごとの音量差を測って mixer 初期値ぶんの補正を掛けるか。
+    /// 素の音量（gain 1.0）で render する Grid history preview だけが `true`。
+    /// ユーザーが調整済みの gain を持つ DAW の preview では二重補正になるため `false`。
+    pub(crate) auto_trim: bool,
+}
+
+impl MixedPreviewRenderRequest<'_> {
+    fn track_count(&self) -> usize {
+        self.track_mmls.len().max(self.track_gains.len())
+    }
+}
+
+/// 合成済みの preview 音声と、そのとき決まった mixer 初期値。
+pub(crate) struct MixedPreviewRender {
+    pub(crate) samples: Vec<f32>,
+    /// [`MixedPreviewRenderRequest::auto_trim`] が `true` のときだけ入る、track ごとの dB。
+    /// `samples` にはこの補正が既に掛かっている。
+    pub(crate) auto_trim_volumes_db: Option<Vec<i32>>,
 }
 
 pub(crate) struct PreviewOutputState<'a> {
@@ -89,22 +108,26 @@ pub(crate) fn overlay_preview_cache_key(
     hasher.finish()
 }
 
-/// Preview snapshot cache へサンプルを挿入する。
+/// Preview snapshot cache へエントリを挿入する。
 ///
 /// エントリ上限を超えて新規キーを入れるときは、古い preview 条件を一括破棄してから
 /// 新しい結果を入れる単純な eviction 戦略にしている。
-pub(crate) fn insert_overlay_preview_cache(
-    cache: &mut HashMap<u64, Arc<Vec<f32>>>,
+///
+/// 値の型は呼び出し側ごとに違う（音声だけ／音声と mixer 初期値の組）ため、
+/// サイズ上限の判定に使うサンプル数だけを別で受け取る。
+pub(crate) fn insert_overlay_preview_cache<T>(
+    cache: &mut HashMap<u64, T>,
     key: u64,
-    samples: Arc<Vec<f32>>,
+    sample_count: usize,
+    entry: T,
 ) {
-    if samples.len() > MAX_CACHED_SAMPLES {
+    if sample_count > MAX_CACHED_SAMPLES {
         return;
     }
     if cache.len() >= OVERLAY_PREVIEW_CACHE_MAX_ENTRIES && !cache.contains_key(&key) {
         cache.clear();
     }
-    cache.insert(key, samples);
+    cache.insert(key, entry);
 }
 
 /// 指定された preview 用 track MML 群をオフラインレンダリングし、track ごとの gain を掛けて
@@ -115,7 +138,7 @@ pub(crate) fn render_mixed_preview_tracks<F, P>(
     request: MixedPreviewRenderRequest<'_>,
     mut build_probe_context: F,
     mut report_progress: P,
-) -> Option<Vec<f32>>
+) -> Option<MixedPreviewRender>
 where
     F: FnMut(usize, &str) -> NativeRenderProbeContext,
     P: FnMut(PreviewRenderProgress),
@@ -198,9 +221,31 @@ where
         return None;
     }
 
+    let auto_trim_volumes_db = request.auto_trim.then(|| {
+        let levels: Vec<TrackLevel> = request
+            .active_tracks
+            .iter()
+            .filter_map(|track| {
+                let (_, samples) = rendered.get(track)?;
+                measure_track_level(*track, samples)
+            })
+            .collect();
+        auto_trim_volumes_db(&levels, request.track_count())
+    });
+
     let mut mixed = vec![0.0f32; request.measure_samples];
     for track in request.active_tracks {
         let (gain, samples) = rendered.remove(track)?;
+        // 測った補正は呼び出し側の gain へ掛け合わせる。これで preview から聞こえる
+        // バランスが、そのまま import 後の mixer 初期値のバランスになる。
+        let gain = match &auto_trim_volumes_db {
+            Some(volumes_db) => {
+                gain * cmrt_tui_core::mixer::volume_db_to_gain(
+                    volumes_db.get(*track).copied().unwrap_or(0),
+                )
+            }
+            None => gain,
+        };
         if mixed.len() < samples.len() {
             mixed.resize(samples.len(), 0.0);
         }
@@ -208,5 +253,8 @@ where
             mixed[index] += *sample * gain;
         }
     }
-    Some(mixed)
+    Some(MixedPreviewRender {
+        samples: mixed,
+        auto_trim_volumes_db,
+    })
 }

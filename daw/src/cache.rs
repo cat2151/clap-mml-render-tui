@@ -22,7 +22,15 @@ pub(super) fn ensure_workspace_cache_dir(workspace_kind: WorkspaceKind) -> anyho
     Ok(dir)
 }
 
-fn cache_wav_path(workspace_kind: WorkspaceKind, track: usize, measure: usize) -> Option<PathBuf> {
+/// セルの render キャッシュ WAV の絶対パス。`measure` は 1 始まり（0 はキャッシュを持たない）。
+///
+/// `track` は**グリッドの行 index** であって live instance id ではない。
+/// 行 0 は Tempo、行 1 は chord 行なので、実際にファイルが出来るのは行 2 以降だけ。
+pub(crate) fn cache_wav_path(
+    workspace_kind: WorkspaceKind,
+    track: usize,
+    measure: usize,
+) -> Option<PathBuf> {
     if measure == 0 {
         return None;
     }

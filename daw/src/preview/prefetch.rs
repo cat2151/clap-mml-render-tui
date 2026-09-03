@@ -79,6 +79,7 @@ impl DawApp {
             insert_overlay_preview_cache(
                 &mut self.playback.overlay_preview_cache.lock().unwrap(),
                 cache_key,
+                0,
                 Arc::new(Vec::new()),
             );
             return;
@@ -90,7 +91,7 @@ impl DawApp {
         std::thread::spawn(move || {
             let daw_cfg = (*cfg).clone();
             let offline_render_workers = daw_cfg.effective_offline_render_workers();
-            let Some(samples) = render_mixed_preview_tracks(
+            let Some(render) = render_mixed_preview_tracks(
                 &render_queue,
                 MixedPreviewRenderRequest {
                     priority: RenderPriority::Low,
@@ -98,6 +99,7 @@ impl DawApp {
                     active_tracks: &active_tracks,
                     track_mmls: &track_mmls,
                     track_gains: &track_gains,
+                    auto_trim: false,
                 },
                 |track, mml| {
                     NativeRenderProbeContext::preview_prefetch(
@@ -115,7 +117,8 @@ impl DawApp {
             insert_overlay_preview_cache(
                 &mut overlay_preview_cache.lock().unwrap(),
                 cache_key,
-                Arc::new(samples),
+                render.samples.len(),
+                Arc::new(render.samples),
             );
         });
     }

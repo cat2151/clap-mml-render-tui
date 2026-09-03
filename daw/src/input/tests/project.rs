@@ -379,7 +379,7 @@ fn open_resizes_all_project_dependent_buffers() {
         .unwrap()
         .iter()
         .all(|tracks| tracks.len() == 5));
-    assert_eq!(app.playback.track_gains.lock().unwrap().len(), 5);
+    assert_eq!(app.playback_track_gains().len(), 5);
 }
 
 // ─── chord 行 ────────────────────────────────────────────────

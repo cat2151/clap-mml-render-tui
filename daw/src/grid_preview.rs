@@ -33,6 +33,16 @@ pub enum DawGridPreviewStatus {
     Error(String),
 }
 
+/// render 済みの1小節と、そのとき測った mixer 初期値。
+#[derive(Clone)]
+struct RenderedPreview {
+    samples: Arc<Vec<f32>>,
+    /// 先頭1小節の track ごとの音量から決めた mixer 初期値（dB）。
+    /// `samples` にはこの補正が既に掛かっているので、preview で聞こえるバランスが
+    /// そのまま import 後の初期バランスになる。
+    track_volumes_db: Vec<i32>,
+}
+
 #[derive(Clone)]
 struct PreparedPreview {
     key: u64,
@@ -45,7 +55,7 @@ struct PreparedPreview {
 #[derive(Clone)]
 struct PreviewRenderRuntime {
     render_queue: RenderQueue,
-    cache: Arc<Mutex<HashMap<u64, Arc<Vec<f32>>>>>,
+    cache: Arc<Mutex<HashMap<u64, RenderedPreview>>>,
     in_flight: Arc<Mutex<Option<(u64, u64)>>>,
     pending: Arc<Mutex<Option<(PreparedPreview, RenderPriority, u64)>>>,
     output: PreviewOutput,
@@ -136,6 +146,22 @@ impl DawGridPreviewPlayer {
         self.runtime.output.status()
     }
 
+    /// preview 済みの曲なら、そのとき測った mixer 初期値を返す。
+    ///
+    /// preview を聴かずに import した場合や、まだ render が終わっていない場合は `None`。
+    /// 呼び出し側は DAW 側で meas1 の cache が揃ってから決め直すこと。
+    pub fn track_volumes_db(&self, song: &DawGridImportSong) -> Option<Vec<i32>> {
+        let prepared = prepare_first_measure(song.clone(), self.cfg.sample_rate).ok()?;
+        let rendered = self
+            .runtime
+            .cache
+            .lock()
+            .unwrap()
+            .get(&prepared.key)
+            .cloned()?;
+        Some(rendered.track_volumes_db)
+    }
+
     #[cfg(test)]
     fn ensure_render(&self, prepared: PreparedPreview, priority: RenderPriority) {
         let render_generation = self.runtime.render_generation.load(Ordering::Acquire);
@@ -154,14 +180,16 @@ fn ensure_render(
     if runtime.render_generation.load(Ordering::Acquire) != render_generation {
         return;
     }
-    if let Some(samples) = runtime.cache.lock().unwrap().get(&prepared.key).cloned() {
+    if let Some(rendered) = runtime.cache.lock().unwrap().get(&prepared.key).cloned() {
         let mut pending = runtime.pending.lock().unwrap();
         if runtime.render_generation.load(Ordering::Acquire) != render_generation {
             return;
         }
         pending.take();
         drop(pending);
-        runtime.output.start_if_desired(prepared.key, samples);
+        runtime
+            .output
+            .start_if_desired(prepared.key, rendered.samples);
         return;
     }
     {
@@ -202,7 +230,7 @@ fn start_render_worker(
             return;
         }
         let total = prepared.active_tracks.len();
-        let samples = render_mixed_preview_tracks(
+        let render = render_mixed_preview_tracks(
             &runtime.render_queue,
             MixedPreviewRenderRequest {
                 priority,
@@ -210,6 +238,9 @@ fn start_render_worker(
                 active_tracks: &prepared.active_tracks,
                 track_mmls: &prepared.track_mmls,
                 track_gains: &prepared.track_gains,
+                // Grid history は gain 1.0 の素の音量で render するので、ここで測った
+                // 音量差がそのまま mixer 初期値になる。
+                auto_trim: true,
             },
             |track, mml| {
                 NativeRenderProbeContext::preview(
@@ -230,14 +261,21 @@ fn start_render_worker(
             },
         );
 
-        if let Some(samples) = samples {
-            let samples = Arc::new(samples);
+        if let Some(render) = render {
+            let sample_count = render.samples.len();
+            let rendered = RenderedPreview {
+                samples: Arc::new(render.samples),
+                track_volumes_db: render
+                    .auto_trim_volumes_db
+                    .unwrap_or_else(|| vec![0; prepared.track_mmls.len()]),
+            };
             insert_overlay_preview_cache(
                 &mut runtime.cache.lock().unwrap(),
                 key,
-                Arc::clone(&samples),
+                sample_count,
+                rendered.clone(),
             );
-            runtime.output.start_if_desired(key, samples);
+            runtime.output.start_if_desired(key, rendered.samples);
         } else {
             runtime
                 .output
@@ -254,8 +292,8 @@ fn finish_render_slot(runtime: PreviewRenderRuntime) {
     let next = claim_pending_render(&runtime);
     if let Some((next, next_priority, next_generation)) = next {
         let cached = runtime.cache.lock().unwrap().get(&next.key).cloned();
-        if let Some(samples) = cached {
-            runtime.output.start_if_desired(next.key, samples);
+        if let Some(rendered) = cached {
+            runtime.output.start_if_desired(next.key, rendered.samples);
             finish_render_slot(runtime);
         } else {
             start_render_worker(runtime, next, next_priority, next_generation);

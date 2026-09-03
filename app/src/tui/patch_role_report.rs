@@ -17,14 +17,15 @@ use crate::config::Config;
 pub fn run_patch_role_report(cfg: &Config) -> Result<()> {
     let pairs = crate::patches::collect_patch_pairs(cfg)?;
     let patch_plugins = PatchPlugins::from_config(cfg);
+    let selector_categories = selector_categories(&pairs, &patch_plugins);
     let patch_roles = PatchRoleIndex::build(
-        pairs
-            .iter()
-            .map(|(display, normalized_display)| PatchRoleInput {
+        pairs.iter().zip(&selector_categories).map(
+            |((display, normalized_display), selector_category)| PatchRoleInput {
                 display,
                 normalized_display,
-                selector_category: None,
-            }),
+                selector_category: selector_category.as_deref(),
+            },
+        ),
         &crate::history::load_mml_patch_filter_presets(),
     );
 
@@ -69,6 +70,27 @@ pub fn run_patch_role_report(cfg: &Config) -> Result<()> {
     }
     println!("判定: すべての行に用途別候補があります。");
     Ok(())
+}
+
+/// 画面と同じ`selector_category`を、pluginのadapterから引き直す。
+///
+/// **ここを`None`で済ませてはいけない。** 実画面（[`cmrt_tui_core::patch_load::PatchCatalogSnapshot`]）は
+/// catalog cacheのcategoryを渡して分類しており、categoryは表示名より先に評価される。
+/// この診断だけcategory抜きで分類すると、`Basses/Hate.fxp`が`\bhat`に釣られてDrumへ
+/// 落ちるような、**画面では起きない誤分類を報告してしまう**。
+///
+/// categoryを持たないplugin（sfz・Dexed・Floe）は画面側でも`None`なので、そのまま`None`。
+fn selector_categories(
+    pairs: &[(String, String)],
+    patch_plugins: &PatchPlugins,
+) -> Vec<Option<String>> {
+    pairs
+        .iter()
+        .map(|(display, _)| {
+            let index = patch_plugins.index_for_patch(display).ok()?;
+            patch_plugins.audio_info(index)?.selector_category(display)
+        })
+        .collect()
 }
 
 fn print_plugin_section(cfg: &Config, patch_plugins: &PatchPlugins) {

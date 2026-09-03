@@ -52,12 +52,45 @@ pub enum OfflineRenderBackend {
     RenderServer,
 }
 
+/// リアルタイム再生の実体をどこに置くか。
+///
+/// - `CachePlayer`（既定）: render キャッシュの WAV を組み込みプラグイン cache-player
+///   （CLAP ID `org.cat2151.cmrt.cache-player`）へ載せ、play server の live mix で鳴らす。
+///   gain は mix の直前に掛かるので、演奏中の音量変更が即座に効く
+/// - `PlayServer`: 小節ごとに MML を play server へ投げ、サーバー側でプラグインを鳴らす
+///
+/// かつてあった `in_process`（rodio の sink へ小節ごとの render キャッシュを自前で mix して
+/// 流す）は撤去した。あちらは gain を mix 時に振幅へ焼き込むので、既に積んだチャンクが
+/// 鳴り終わるまで音量変更が反映されず、実測で 1 小節（約 2.4 秒）遅れていた。
+/// 綴りとしても受け付けない（[`Config::from_toml_str`] が理由つきで弾く）。
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum RealtimeAudioBackend {
     #[default]
-    InProcess,
+    CachePlayer,
     PlayServer,
+}
+
+/// 廃止した綴り `realtime_audio_backend = "in_process"` を、乗り換え先つきで弾く。
+///
+/// serde の既定の "unknown variant" メッセージでも起動は止まるが、**以前は正しかった設定が
+/// 何をすればよいか分からないまま app 全体の起動を止める**ことになる。ここで先に見て、
+/// 何が無くなって何を書けばよいかを日本語で返す。
+fn reject_retired_realtime_audio_backend(text: &str) -> anyhow::Result<()> {
+    // パースできない toml は本体側のエラーメッセージに任せる（ここで別の顔を出さない）。
+    let Ok(table) = text.parse::<toml::Table>() else {
+        return Ok(());
+    };
+    if table
+        .get("realtime_audio_backend")
+        .and_then(toml::Value::as_str)
+        == Some("in_process")
+    {
+        anyhow::bail!(
+            "realtime_audio_backend = \"in_process\" は廃止されました（rodio による自プロセス再生を撤去したため）。\"cache_player\"（既定）か \"play_server\" を指定してください"
+        );
+    }
+    Ok(())
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -287,6 +320,7 @@ impl Config {
     /// config 構文の検査と固定 Surge XT の解決を 1 経路にまとめ、診断・テストでも
     /// production と同じ順序を通す。
     pub(crate) fn from_toml_str(text: &str) -> anyhow::Result<Self> {
+        reject_retired_realtime_audio_backend(text)?;
         let mut cfg: Self =
             toml::from_str(text).map_err(|e| anyhow::anyhow!("config.toml のパースに失敗: {e}"))?;
         cmrt_server_config::reject_retired_top_level_plugin_keys(text)
@@ -354,8 +388,8 @@ impl OfflineRenderBackend {
 impl RealtimeAudioBackend {
     pub fn as_str(self) -> &'static str {
         match self {
-            RealtimeAudioBackend::InProcess => "in_process",
             RealtimeAudioBackend::PlayServer => "play_server",
+            RealtimeAudioBackend::CachePlayer => "cache_player",
         }
     }
 }

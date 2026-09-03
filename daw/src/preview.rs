@@ -5,12 +5,13 @@ use std::sync::Arc;
 
 use cmrt_core::NativeRenderProbeContext;
 
-use super::playback::try_get_cached_samples;
+use self::cached_samples::try_get_cached_samples;
 use super::render_queue::RenderPriority;
 use super::{DawApp, DawPlayState, FIRST_PLAYABLE_TRACK};
 use cmrt_history::daw_cache_mml_hash;
 use cmrt_runtime::RealtimeAudioBackend;
 
+mod cached_samples;
 mod play_server;
 mod prefetch;
 pub(crate) mod render;
@@ -217,6 +218,7 @@ impl DawApp {
                                 active_tracks: &active_tracks,
                                 track_mmls: &track_mmls,
                                 track_gains: &track_gains,
+                                auto_trim: false,
                             },
                             |track, mml| {
                                 NativeRenderProbeContext::preview(
@@ -234,7 +236,7 @@ impl DawApp {
                                 );
                             },
                         )
-                        .map(|samples| (Arc::new(samples), false))
+                        .map(|render| (Arc::new(render.samples), false))
                     } else {
                         crate::append_log_line(
                             &log_lines,
@@ -271,6 +273,7 @@ impl DawApp {
                             active_tracks: &active_tracks,
                             track_mmls: &track_mmls,
                             track_gains: &track_gains,
+                            auto_trim: false,
                         },
                         |track, mml| {
                             NativeRenderProbeContext::preview(
@@ -288,7 +291,7 @@ impl DawApp {
                             );
                         },
                     )
-                    .map(|samples| (Arc::new(samples), false))
+                    .map(|render| (Arc::new(render.samples), false))
                 }
             } else {
                 crate::append_log_line(&log_lines, format!("meas{}: render", measure_index + 1));
@@ -300,6 +303,7 @@ impl DawApp {
                         active_tracks: &active_tracks,
                         track_mmls: &track_mmls,
                         track_gains: &track_gains,
+                        auto_trim: false,
                     },
                     |track, mml| {
                         NativeRenderProbeContext::preview(
@@ -317,7 +321,7 @@ impl DawApp {
                         );
                     },
                 )
-                .map(|samples| (Arc::new(samples), false))
+                .map(|render| (Arc::new(render.samples), false))
             };
 
             if let Some((samples, cache_hit)) = samples_opt {
@@ -325,6 +329,7 @@ impl DawApp {
                     insert_overlay_preview_cache(
                         &mut overlay_preview_cache.lock().unwrap(),
                         overlay_cache_key,
+                        samples.len(),
                         Arc::clone(&samples),
                     );
                 }

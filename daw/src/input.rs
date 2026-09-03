@@ -367,11 +367,12 @@ impl DawApp {
         let new_mmls = self.build_measure_mmls();
         let new_track_mmls = self.build_measure_track_mmls();
         let new_samples = self.measure_duration_samples();
-        let new_track_gains = self.playback_track_gains();
         *self.playback.measure_mmls.lock().unwrap() = new_mmls;
         *self.playback.measure_track_mmls.lock().unwrap() = new_track_mmls;
         *self.playback.measure_samples.lock().unwrap() = new_samples;
-        *self.playback.track_gains.lock().unwrap() = new_track_gains;
+        // live 経路（`CachePlayer`）の音量は焼き込みではなくサーバー側の mix 直前で掛かる。
+        // mixer が変わりうる経路はすべてここを通るので、配線もここ 1 か所に置く。
+        self.sync_live_track_gains();
     }
 
     #[cfg(test)]

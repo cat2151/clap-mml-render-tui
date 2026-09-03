@@ -161,7 +161,7 @@ fn default_config_content_uses_offline_render_backend_keys() {
         content
     );
     assert!(
-        content.contains("realtime_audio_backend = \"in_process\""),
+        content.contains("realtime_audio_backend = \"cache_player\""),
         "default config は realtime audio backend を案内するべき: {}",
         content
     );

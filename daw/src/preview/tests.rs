@@ -143,6 +143,7 @@ fn preview_render_reports_started_and_error_progress() {
             active_tracks: &active_tracks,
             track_mmls: &track_mmls,
             track_gains: &track_gains,
+            auto_trim: false,
         },
         |track, _| NativeRenderProbeContext::preview(track, 0, 1, 1, 1),
         |event| progress.push(event),

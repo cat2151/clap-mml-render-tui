@@ -8,7 +8,6 @@ pub(super) struct DawGridBuffers {
     pub(super) track_rerender_batches: Vec<Option<TrackRerenderBatch>>,
     pub(super) play_measure_mmls: Vec<String>,
     pub(super) play_measure_track_mmls: Vec<Vec<String>>,
-    pub(super) play_track_gains: Vec<f32>,
     pub(super) solo_tracks: Vec<bool>,
     pub(super) track_volumes_db: Vec<i32>,
 }
@@ -75,7 +74,6 @@ pub(super) fn try_build_grid_buffers(tracks: usize, measures: usize) -> Option<D
         track_rerender_batches: try_build_none_vec(tracks)?,
         play_measure_mmls: try_build_string_row(measures)?,
         play_measure_track_mmls: try_build_string_grid(measures, tracks)?,
-        play_track_gains: try_build_default_vec(tracks, 0.0)?,
         solo_tracks: try_build_default_vec(tracks, false)?,
         track_volumes_db: try_build_default_vec(tracks, 0)?,
     })

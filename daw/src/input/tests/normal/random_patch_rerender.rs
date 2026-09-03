@@ -24,10 +24,9 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
         app.editor.data[2][2] = "gabc".to_string();
         app.track_volumes_db[2] = -6;
         // 共有 playback 状態を意図的に古い空データにしておき、
-        // random patch 更新が hot reload 時に全共有 state を同期することを検証する。
+        // random patch 更新が hot reload 時に共有 state を同期することを検証する。
         *app.playback.measure_track_mmls.lock().unwrap() =
             vec![vec![String::new(); app.editor.tracks]; app.editor.measures];
-        *app.playback.track_gains.lock().unwrap() = vec![0.0; app.editor.tracks];
 
         app.handle_normal(crossterm::event::KeyCode::Char('r'));
 
@@ -101,10 +100,12 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
             "hot reload should refresh per-track playback MMLs: {:?}",
             play_measure_track_mmls
         );
-        let play_track_gains = app.playback.track_gains.lock().unwrap().clone();
+        // gain は演奏スレッドへ焼き込まず mixer から都度引く形になったので、
+        // hot reload のあとも mixer の値がそのまま出ることだけを見る。
+        let play_track_gains = app.playback_track_gains();
         assert!(
             (play_track_gains[2] - track1_minus_6_db_gain()).abs() < f32::EPSILON,
-            "hot reload should refresh playback gains: {:?}",
+            "the mixer volume should still be the one the playback path reads: {:?}",
             play_track_gains
         );
     }

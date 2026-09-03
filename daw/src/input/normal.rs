@@ -4,7 +4,6 @@ use super::super::{
     AbRepeatState, DawApp, DawMode, DawNormalAction, DawPlayState, NormalCellUndo,
     DEFAULT_TRACK0_MML, FIRST_PLAYABLE_TRACK,
 };
-use super::track_patch::PatchUpdateReason;
 
 const TEMPO_TRACK: usize = 0;
 const INIT_MEASURE: usize = 0;
@@ -12,6 +11,7 @@ const INIT_MEASURE: usize = 0;
 mod chord_row;
 mod chord_wizard;
 mod playback;
+mod random_patch;
 
 pub(super) use playback::{
     format_patch_hot_reload_log, normal_playback_shortcut, preview_target_track,
@@ -19,37 +19,6 @@ pub(super) use playback::{
 };
 
 impl DawApp {
-    /// Applies the same random-patch update as pressing `r` on the target track.
-    ///
-    /// `Ok(false)` means no candidate patch was available, so the operation is a
-    /// no-op. This matches the existing `r` key behavior, and HTTP callers also
-    /// currently treat that case as a successful no-op.
-    pub(crate) fn apply_random_patch_to_track(&mut self, track: usize) -> Result<bool, String> {
-        if track < FIRST_PLAYABLE_TRACK {
-            return Err("ランダム音色は演奏トラックでのみ使用できます".to_string());
-        }
-        if track >= self.editor.tracks {
-            return Err(format!(
-                "track は {}..={} の範囲で指定してください",
-                FIRST_PLAYABLE_TRACK,
-                self.editor.tracks.saturating_sub(1)
-            ));
-        }
-        let patch_filter_query = self.track_patch_filter_query(track);
-        let Some(patch) = self.pick_random_patch_name_with_query(patch_filter_query.as_deref())
-        else {
-            return Ok(false);
-        };
-        self.apply_patch_name_to_track_init(
-            track,
-            &patch,
-            patch_filter_query.as_deref(),
-            PatchUpdateReason::RandomPatch,
-        );
-
-        Ok(true)
-    }
-
     fn apply_generate_to_current_measure(&mut self) {
         if self.editor.cursor_track < FIRST_PLAYABLE_TRACK {
             self.append_log_line("generate は演奏トラックでのみ使用できます");

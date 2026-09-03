@@ -25,6 +25,51 @@ fn realtime_audio_startup_log_line(cfg: &cmrt_runtime::Config) -> String {
     )
 }
 
+/// DAW が使う 2 本の play server supervisor の行き先。
+///
+/// - `live_play_server`: DAW 自身の演奏（`start_play_from_measure`）
+/// - `mml_overlay`: MML オーバーレイと chord wizard の即時試聴
+///
+/// **backend が `cache_player` のとき、この 2 つは同じ `Arc` を指す。**
+/// 2 つに分けて持つのは、`play_server` backend では別々になるから。
+struct RealtimeAudioWiring {
+    live_play_server: Option<Arc<cmrt_realtime_play::RealtimePlayServerSupervisor>>,
+    mml_overlay: Option<Arc<cmrt_realtime_play::RealtimePlayServerSupervisor>>,
+}
+
+/// app から注入された supervisor を、backend に応じて 2 つの行き先へ配る。
+///
+/// | backend | DAW の演奏 | MML オーバーレイ |
+/// |---|---|---|
+/// | `cache_player`（既定） | **注入されたものを共有** | 注入されたもの |
+/// | `play_server` | DAW 専用にもう 1 本作る | 注入されたもの |
+///
+/// `cache_player` だけ共有なのは、live 経路（SHM の `FastMidiClient`）が
+/// **1 プロセス 1 接続**だから。`claim_client()` は SHM リングの `client_pid` が
+/// 生きているプロセスなら `AlreadyConnected` を返す。自分自身の PID でも同じなので、
+/// DAW 内でもう 1 本 supervisor を作って live 接続すると、MML オーバーレイを一度でも
+/// 鳴らしたあとの演奏が無音になる。
+///
+/// `play_server` が別に 1 本でよいのは、そちらは HTTP の `/play-mml` しか使わず
+/// SHM を掴まないため。共有へ寄せる必要が無いので既存の振る舞いを変えない。
+///
+/// 配り先を 1 か所に閉じてあるので、「同じ `Arc` か」をテストで直接確かめられる。
+fn realtime_audio_wiring(
+    cfg: &cmrt_runtime::Config,
+    injected: Option<Arc<cmrt_realtime_play::RealtimePlayServerSupervisor>>,
+) -> RealtimeAudioWiring {
+    let live_play_server = match cfg.realtime_audio_backend {
+        cmrt_runtime::RealtimeAudioBackend::PlayServer => Some(Arc::new(
+            cmrt_realtime_play::RealtimePlayServerSupervisor::new(cfg),
+        )),
+        cmrt_runtime::RealtimeAudioBackend::CachePlayer => injected.clone(),
+    };
+    RealtimeAudioWiring {
+        live_play_server,
+        mml_overlay: injected,
+    }
+}
+
 pub(super) fn new(
     cfg: Arc<Config>,
     plugin_entries: cmrt_offline_render::PluginEntries,
@@ -61,7 +106,6 @@ fn new_with_entry_context(
         track_rerender_batches,
         play_measure_mmls,
         play_measure_track_mmls,
-        play_track_gains,
         solo_tracks,
         track_volumes_db,
     } = build_grid_buffers_or_default(match workspace_kind {
@@ -92,20 +136,15 @@ fn new_with_entry_context(
     let ab_repeat = Arc::new(Mutex::new(AbRepeatState::Off));
     let play_measure_mmls = Arc::new(Mutex::new(play_measure_mmls));
     let play_measure_track_mmls = Arc::new(Mutex::new(play_measure_track_mmls));
-    let play_track_gains = Arc::new(Mutex::new(play_track_gains));
     // MML オーバーレイと chord wizard の即時試聴は app から注入された supervisor を使う。
-    // DAW 自身の演奏用 supervisor（下の `realtime_play_server`）は backend が in_process
-    // だと `None` になるので、そちらを使うと既定構成で realtime 試聴が無音になる。
-    let mml_overlay_sender = realtime_play_supervisor
+    // DAW 自身の演奏用 supervisor は backend しだいで別物になる（`play_server` では
+    // DAW 専用のもう 1 本）ので、そちらを試聴に使うと backend によって鳴ったり鳴らなかったりする。
+    let RealtimeAudioWiring {
+        live_play_server: realtime_play_server,
+        mml_overlay,
+    } = realtime_audio_wiring(cfg.as_ref(), realtime_play_supervisor);
+    let mml_overlay_sender = mml_overlay
         .map(|supervisor| cmrt_mml_overlay::MmlOverlaySender::new(supervisor, cfg.sample_rate));
-    let realtime_play_server =
-        if cfg.realtime_audio_backend == cmrt_runtime::RealtimeAudioBackend::PlayServer {
-            Some(Arc::new(
-                cmrt_realtime_play::RealtimePlayServerSupervisor::new(cfg.as_ref()),
-            ))
-        } else {
-            None
-        };
 
     {
         let cache_dispatch = Arc::clone(&cache);
@@ -256,12 +295,12 @@ fn new_with_entry_context(
             ab_repeat,
             play_measure_mmls,
             play_measure_track_mmls,
-            play_track_gains,
         ),
         log_lines,
         track_rerender_batches,
         solo_tracks,
         track_volumes_db,
+        pending_auto_trim: false,
         overlays: DawOverlays::new(FIRST_PLAYABLE_TRACK.min(tracks - 1)),
         patch_phrase_store: cmrt_history::load_patch_phrase_store(),
         patch_phrase_store_dirty: false,

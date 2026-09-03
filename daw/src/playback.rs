@@ -1,4 +1,9 @@
 //! DawApp の演奏メソッド
+//!
+//! 音を出す先は play server だけ。かつてあった rodio 経路（`InProcess` backend、
+//! 小節ごとの render キャッシュを自プロセスで mix して sink へ append する）は撤去した。
+//! あちらは gain を mix 時に振幅へ焼き込むため、mixer の音量変更が
+//! 実測 1 小節（約 2.4 秒）遅れていた。
 
 use std::{
     sync::atomic::Ordering,
@@ -6,35 +11,27 @@ use std::{
     time::{Duration, Instant},
 };
 
-use cmrt_core::NativeRenderProbeContext;
-
-use cmrt_history::daw_cache_mml_hash;
 use cmrt_runtime::RealtimeAudioBackend;
 
-mod cache_mixer;
+mod live_cache;
+pub(crate) mod live_gain;
 mod measure_math;
-mod measure_mixer;
 mod play_server;
+#[cfg(test)]
+mod real_server;
 
 use super::playback_util::play_start_log_lines;
 pub(super) use super::playback_util::{effective_measure_count, loop_measure_summary_label};
-use super::render_queue::RenderPriority;
 use super::{DawApp, DawPlayState, PlayPosition, FIRST_PLAYABLE_TRACK};
-use cache_mixer::{build_playback_measure_samples, PlaybackMeasureRequest};
-pub(super) use cache_mixer::{pad_playback_measure_samples, try_get_cached_samples};
 pub(super) use measure_math::{current_play_measure_index, following_measure_index};
-use measure_math::{
-    format_playback_future_append_log, format_playback_measure_advance_log,
-    format_playback_measure_resolution_log, future_chunk_append_deadline,
-    resolved_measure_start_after_append,
-};
-use measure_mixer::{mix_measure_chunk, ActiveMeasureLayer, PlaybackMeasureAudio};
+use measure_math::{format_playback_measure_advance_log, format_playback_measure_resolution_log};
 
-#[derive(Clone)]
-struct QueuedMeasure {
-    measure_index: usize,
-    measure_start: std::time::Instant,
-    measure_duration: std::time::Duration,
+/// 演奏できる中身があるか（1 小節でも空でない MML があるか）。
+///
+/// 「鳴らすものが無い」と「音を出す先（play server）が用意できていない」は原因が別物で、
+/// HTTP API はこの 2 つを別のメッセージで返す。判定規則を 1 か所に置いて食い違いを防ぐ。
+fn measures_have_playable_mml(measure_mmls: &[String]) -> bool {
+    measure_mmls.iter().any(|mml| !mml.trim().is_empty())
 }
 
 fn measure_duration(sample_count: usize, sample_rate: u32) -> std::time::Duration {
@@ -43,20 +40,6 @@ fn measure_duration(sample_count: usize, sample_rate: u32) -> std::time::Duratio
     // sample_count / (sample_rate * 2) と等価になる。
     std::time::Duration::from_secs_f64(sample_count as f64 / (sample_rate as f64 * 2.0))
 }
-
-fn active_track_count(track_mmls: &[String], track_gains: &[f32], tracks: usize) -> usize {
-    (FIRST_PLAYABLE_TRACK..tracks)
-        .filter(|&track| {
-            track_gains.get(track).copied().unwrap_or(1.0) > 0.0
-                && track_mmls
-                    .get(track)
-                    .map(|mml| !mml.trim().is_empty())
-                    .unwrap_or(false)
-        })
-        .count()
-}
-
-const FUTURE_CHUNK_APPEND_MARGIN: Duration = Duration::from_millis(50);
 
 /// 指定時刻まで再生継続中なら待機し、deadline 到達で `true` を返す。
 ///
@@ -79,6 +62,11 @@ fn wait_until_or_stop(play_state: &Arc<std::sync::Mutex<DawPlayState>>, deadline
 impl DawApp {
     // ─── 演奏 ─────────────────────────────────────────────────
 
+    /// 演奏できる中身があるか。HTTP API が「鳴らすものが無い」を切り分けるのに使う。
+    pub(super) fn has_playable_measures(&self) -> bool {
+        measures_have_playable_mml(&self.build_measure_mmls())
+    }
+
     pub(super) fn start_play(&self) {
         self.start_play_from_measure(0);
     }
@@ -87,8 +75,7 @@ impl DawApp {
         self.stop_mml_overlay_sender();
         let measure_mmls = self.build_measure_mmls();
         let measure_track_mmls = self.build_measure_track_mmls();
-        let track_gains = self.playback_track_gains();
-        if measure_mmls.iter().all(|m| m.trim().is_empty()) {
+        if !measures_have_playable_mml(&measure_mmls) {
             return;
         }
 
@@ -96,294 +83,26 @@ impl DawApp {
         *self.playback.measure_mmls.lock().unwrap() = measure_mmls;
         *self.playback.measure_track_mmls.lock().unwrap() = measure_track_mmls;
         *self.playback.measure_samples.lock().unwrap() = self.measure_duration_samples();
-        *self.playback.track_gains.lock().unwrap() = track_gains;
 
-        let play_state = Arc::clone(&self.playback.play_state);
-        let play_position = Arc::clone(&self.playback.position);
-        let ab_repeat = Arc::clone(&self.playback.ab_repeat);
-        let play_measure_mmls = Arc::clone(&self.playback.measure_mmls);
-        let play_measure_track_mmls = Arc::clone(&self.playback.measure_track_mmls);
-        let play_measure_samples = Arc::clone(&self.playback.measure_samples);
-        let play_track_gains = Arc::clone(&self.playback.track_gains);
-        let cache = Arc::clone(&self.cache);
-        let cfg = Arc::clone(&self.cfg);
-        let log_lines = Arc::clone(&self.log_lines);
-        let render_queue = self.render_queue.clone();
-        let tracks = self.editor.tracks;
-
-        *play_state.lock().unwrap() = DawPlayState::Playing;
-        crate::append_log_line(&log_lines, "play: start");
+        *self.playback.play_state.lock().unwrap() = DawPlayState::Playing;
+        self.append_log_line("play: start");
         for line in play_start_log_lines(
             &self.playback.measure_mmls.lock().unwrap(),
             self.ab_repeat_state(),
         ) {
-            crate::append_log_line(&log_lines, line);
+            self.append_log_line(line);
         }
 
-        if self.cfg.realtime_audio_backend == RealtimeAudioBackend::PlayServer {
-            self.start_play_from_measure_via_play_server(start_measure_index);
-            return;
-        }
-
-        #[cfg(test)]
-        if !self.plugin_entries.is_available() {
-            return;
-        }
-
-        std::thread::spawn(move || {
-            let daw_cfg = (*cfg).clone();
-            let sample_rate = daw_cfg.sample_rate as u32;
-            let offline_render_workers = daw_cfg.effective_offline_render_workers();
-
-            let Some(rodio_sample_rate) = rodio::SampleRate::new(sample_rate) else {
-                crate::append_log_line(&log_lines, "play: sample rate is zero");
-                let mut state = play_state.lock().unwrap();
-                if *state == DawPlayState::Playing {
-                    *state = DawPlayState::Idle;
-                    drop(state);
-                    *play_position.lock().unwrap() = None;
-                }
-                return;
-            };
-
-            // device sink と Player をスレッドに 1 つだけ作成し、小節をまたいで再利用する。
-            // これにより小節ごとのオーディオ初期化オーバーヘッドとグリッチを防ぐ。
-            // device sink を drop すると再生が止まるため、スレッドが終わるまで保持する。
-            let Ok(device_sink) = cmrt_tui_core::audio_output::open_default_sink() else {
-                // Audio init failed: only reset to Idle if we are still the active Playing session.
-                crate::append_log_line(&log_lines, "play: audio init failed");
-                let mut state = play_state.lock().unwrap();
-                if *state == DawPlayState::Playing {
-                    *state = DawPlayState::Idle;
-                    drop(state);
-                    *play_position.lock().unwrap() = None;
-                }
-                return;
-            };
-            let sink = rodio::Player::connect_new(device_sink.mixer());
-
-            let mut measure_index = start_measure_index;
-            let mut current_measure = None::<QueuedMeasure>;
-            let mut active_layers = Vec::<ActiveMeasureLayer>::new();
-
-            'outer: loop {
-                if *play_state.lock().unwrap() != DawPlayState::Playing {
-                    break;
-                }
-
-                if current_measure.is_none() {
-                    // 初回の現在小節だけはすぐに解決して再生を開始する。
-                    let mmls = play_measure_mmls.lock().unwrap().clone();
-                    let measure_track_mmls = play_measure_track_mmls.lock().unwrap().clone();
-                    let track_gains = play_track_gains.lock().unwrap().clone();
-                    let measure_samples = *play_measure_samples.lock().unwrap();
-                    let effective_count = match effective_measure_count(&mmls) {
-                        Some(n) => n,
-                        None => break 'outer,
-                    };
-                    let ab_repeat_range =
-                        (*ab_repeat.lock().unwrap()).normalized_range(effective_count);
-                    let current_measure_index =
-                        current_play_measure_index(measure_index, effective_count, ab_repeat_range);
-                    crate::append_log_line(
-                        &log_lines,
-                        format_playback_measure_resolution_log(
-                            measure_index,
-                            current_measure_index,
-                            effective_count,
-                        ),
-                    );
-                    let track_mmls = &measure_track_mmls[current_measure_index];
-                    let current_active_track_count =
-                        active_track_count(track_mmls, &track_gains, tracks);
-                    let playback_audio = match build_playback_measure_samples(
-                        &cache,
-                        PlaybackMeasureRequest {
-                            measure_index: current_measure_index,
-                            track_mmls,
-                            measure_samples,
-                            tracks,
-                            track_gains: &track_gains,
-                        },
-                        &log_lines,
-                        |track, mml| {
-                            let probe_context = NativeRenderProbeContext::playback_current(
-                                track,
-                                current_measure_index,
-                                current_active_track_count,
-                                daw_cache_mml_hash(mml),
-                                offline_render_workers,
-                            );
-                            render_queue.render_blocking(RenderPriority::High, mml, probe_context)
-                        },
-                    ) {
-                        Ok(playback_audio) => playback_audio,
-                        Err(_) => {
-                            crate::append_log_line(
-                                &log_lines,
-                                format!("meas{}: render error", current_measure_index + 1),
-                            );
-                            break 'outer;
-                        }
-                    };
-                    let measure_start = std::time::Instant::now();
-                    let measure_duration = measure_duration(measure_samples, sample_rate);
-                    let PlaybackMeasureAudio { samples, source } = playback_audio;
-                    let chunk = mix_measure_chunk(&mut active_layers, samples, measure_samples);
-                    sink.append(rodio::buffer::SamplesBuffer::new(
-                        cmrt_tui_core::playback_session::STEREO,
-                        rodio_sample_rate,
-                        chunk,
-                    ));
-                    *play_position.lock().unwrap() = Some(PlayPosition {
-                        measure_index: current_measure_index,
-                        measure_start,
-                        measure_duration,
-                    });
-                    crate::append_log_line(
-                        &log_lines,
-                        source.build_log_line(current_measure_index + 1),
-                    );
-                    current_measure = Some(QueuedMeasure {
-                        measure_index: current_measure_index,
-                        measure_start,
-                        measure_duration,
-                    });
-                }
-
-                let current = current_measure.expect(
-                    "BUG: current_measure must be initialized before lookahead; this indicates a logic error in the playback loop initialization",
-                );
-
-                let expected_next_measure_start = current.measure_start + current.measure_duration;
-                let append_deadline = future_chunk_append_deadline(
-                    current.measure_start,
-                    current.measure_duration,
-                    FUTURE_CHUNK_APPEND_MARGIN,
-                );
-                if !wait_until_or_stop(&play_state, append_deadline) {
-                    break 'outer;
-                }
-
-                // 次小節の解決と append は境界直前まで遅らせ、再 render の反映余地を広げる。
-                // そのぶん render が間に合わないケースを観測しやすいよう、append 実績もログに残す。
-                let mmls = play_measure_mmls.lock().unwrap().clone();
-                let measure_track_mmls = play_measure_track_mmls.lock().unwrap().clone();
-                let track_gains = play_track_gains.lock().unwrap().clone();
-                let measure_samples = *play_measure_samples.lock().unwrap();
-                let effective_count = match effective_measure_count(&mmls) {
-                    Some(n) => n,
-                    None => break 'outer,
-                };
-                let ab_repeat_range =
-                    (*ab_repeat.lock().unwrap()).normalized_range(effective_count);
-                let lookahead_measure_index = following_measure_index(
-                    current.measure_index,
-                    effective_count,
-                    ab_repeat_range,
-                );
-                let next_track_mmls = &measure_track_mmls[lookahead_measure_index];
-                let lookahead_active_track_count =
-                    active_track_count(next_track_mmls, &track_gains, tracks);
-                let next_playback_audio = match build_playback_measure_samples(
-                    &cache,
-                    PlaybackMeasureRequest {
-                        measure_index: lookahead_measure_index,
-                        track_mmls: next_track_mmls,
-                        measure_samples,
-                        tracks,
-                        track_gains: &track_gains,
-                    },
-                    &log_lines,
-                    |track, mml| {
-                        let probe_context = NativeRenderProbeContext::playback_lookahead(
-                            track,
-                            lookahead_measure_index,
-                            lookahead_active_track_count,
-                            daw_cache_mml_hash(mml),
-                            offline_render_workers,
-                        );
-                        render_queue.render_blocking(RenderPriority::High, mml, probe_context)
-                    },
-                ) {
-                    Ok(playback_audio) => playback_audio,
-                    Err(_) => {
-                        crate::append_log_line(
-                            &log_lines,
-                            format!("meas{}: render error", lookahead_measure_index + 1),
-                        );
-                        break 'outer;
-                    }
-                };
-
-                let next_measure_duration = measure_duration(measure_samples, sample_rate);
-                let PlaybackMeasureAudio {
-                    samples: next_samples,
-                    source: next_source,
-                } = next_playback_audio;
-                let next_chunk =
-                    mix_measure_chunk(&mut active_layers, next_samples, measure_samples);
-                sink.append(rodio::buffer::SamplesBuffer::new(
-                    cmrt_tui_core::playback_session::STEREO,
-                    rodio_sample_rate,
-                    next_chunk,
-                ));
-                let append_time = Instant::now();
-                let next_measure_start =
-                    resolved_measure_start_after_append(expected_next_measure_start, append_time);
-                crate::append_log_line(
-                    &log_lines,
-                    format_playback_future_append_log(
-                        lookahead_measure_index,
-                        append_time,
-                        expected_next_measure_start,
-                        FUTURE_CHUNK_APPEND_MARGIN,
-                    ),
-                );
-
-                // 小節境界は期待再生開始時刻を基準にポーリングする。
-                // 50ms 前を目標に次小節チャンクを append したうえで、
-                // rodio::Player には「現在キュー先頭の小節だけの終了」を待つ API がないため、
-                // play_position / ログ更新だけを時間ベースで境界に同期する。
-                if !wait_until_or_stop(&play_state, next_measure_start) {
-                    break 'outer;
-                }
-
-                *play_position.lock().unwrap() = Some(PlayPosition {
-                    measure_index: lookahead_measure_index,
-                    measure_start: next_measure_start,
-                    measure_duration: next_measure_duration,
-                });
-                crate::append_log_line(
-                    &log_lines,
-                    format_playback_measure_advance_log(
-                        current.measure_index,
-                        lookahead_measure_index,
-                        effective_count,
-                    ),
-                );
-                crate::append_log_line(
-                    &log_lines,
-                    next_source.build_log_line(lookahead_measure_index + 1),
-                );
-                current_measure = Some(QueuedMeasure {
-                    measure_index: lookahead_measure_index,
-                    measure_start: next_measure_start,
-                    measure_duration: next_measure_duration,
-                });
-                measure_index = lookahead_measure_index;
+        // backend ごとに音を出す先が違う。どちらも play server 側で鳴らすので、
+        // mixer の gain は演奏スレッドではなく live mix の直前で掛かる。
+        match self.cfg.realtime_audio_backend {
+            RealtimeAudioBackend::PlayServer => {
+                self.start_play_from_measure_via_play_server(start_measure_index)
             }
-
-            // Only reset to Idle if we are still the active Playing session.
-            // An unconditional write would clobber a newer session started after stop.
-            let mut state = play_state.lock().unwrap();
-            if *state == DawPlayState::Playing {
-                *state = DawPlayState::Idle;
-                drop(state);
-                *play_position.lock().unwrap() = None;
-                crate::append_log_line(&log_lines, "play: finished");
+            RealtimeAudioBackend::CachePlayer => {
+                self.start_play_from_measure_via_cache_player(start_measure_index)
             }
-        });
+        }
     }
 
     pub(super) fn stop_play(&self) {

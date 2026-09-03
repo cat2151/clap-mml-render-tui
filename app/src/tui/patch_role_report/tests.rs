@@ -150,3 +150,56 @@ fn the_report_lists_skipped_plugins_even_when_there_are_none() {
         .notice_line()
     );
 }
+
+/// 診断が画面と同じ`selector_category`を通していることの番人。
+///
+/// ここが`None`に戻ると、`Basses/Hate.fxp`が`\bhat`に釣られてDrumへ落ちるような、
+/// **画面では起きない誤分類をこの診断だけが報告する**状態に逆戻りする。
+#[test]
+fn the_report_classifies_with_the_same_selector_category_as_the_screen() {
+    use cmrt_runtime::{DEXED_PLUGIN_ID, SURGE_XT_PLUGIN_ID, VAPORIZER2_PLUGIN_ID};
+
+    let plugin = |name: &str, plugin_id: &str| CatalogPlugin {
+        name: name.to_string(),
+        plugin_path: String::new(),
+        plugin_id: Some(plugin_id.to_string()),
+        base: None,
+        dirs: Vec::new(),
+        resolved_patches: None,
+        source_notices: Vec::new(),
+    };
+    let patch_plugins = PatchPlugins::from_catalog(vec![
+        plugin("Surge XT", SURGE_XT_PLUGIN_ID),
+        plugin("Dexed", DEXED_PLUGIN_ID),
+        plugin("Vaporizer2", VAPORIZER2_PLUGIN_ID),
+    ]);
+    let pairs = [
+        "patches_3rdparty/Altenberg/Basses/Hate.fxp",
+        "BA Admiral.vvp",
+        "Dexed_01.syx/00 Bell",
+    ]
+    .map(|display| (display.to_string(), display.to_lowercase()));
+
+    let categories = selector_categories(&pairs, &patch_plugins);
+
+    assert_eq!(categories[0].as_deref(), Some("Basses"));
+    assert_eq!(categories[1].as_deref(), Some("Bass"));
+    // categoryを持たないpluginは画面側も`None`。
+    assert_eq!(categories[2], None);
+
+    let index = cmrt_patches::PatchRoleIndex::build(
+        pairs
+            .iter()
+            .zip(&categories)
+            .map(|((display, normalized_display), category)| PatchRoleInput {
+                display,
+                normalized_display,
+                selector_category: category.as_deref(),
+            }),
+        &[],
+    );
+    assert_eq!(
+        index.role_of("patches_3rdparty/Altenberg/Basses/Hate.fxp"),
+        Some(PatchRole::Bass)
+    );
+}

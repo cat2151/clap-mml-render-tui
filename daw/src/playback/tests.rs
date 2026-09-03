@@ -9,17 +9,11 @@ pub(super) use ratatui_textarea::TextArea;
 pub(super) use cmrt_runtime::Config;
 
 pub(super) use super::{
-    super::{CacheState, CellCache, DawApp, DawMode, DawPlayState},
-    cache_mixer::{
-        build_playback_measure_samples, pad_playback_measure_samples, try_get_cached_samples,
-        PlaybackMeasureRequest,
-    },
+    super::{CellCache, DawApp, DawMode, DawPlayState},
     measure_math::{
-        current_play_measure_index, following_measure_index, format_playback_future_append_log,
-        format_playback_measure_advance_log, format_playback_measure_resolution_log,
-        future_chunk_append_deadline, resolved_measure_start_after_append,
+        current_play_measure_index, following_measure_index, format_playback_measure_advance_log,
+        format_playback_measure_resolution_log,
     },
-    measure_mixer::{mix_measure_chunk, ActiveMeasureLayer},
     wait_until_or_stop,
 };
 
@@ -59,7 +53,7 @@ fn build_test_app() -> DawApp {
             offline_render_backend: cmrt_runtime::OfflineRenderBackend::InProcess,
             offline_render_server_port: cmrt_runtime::DEFAULT_OFFLINE_RENDER_SERVER_PORT,
             offline_render_server_command: String::new(),
-            realtime_audio_backend: cmrt_runtime::RealtimeAudioBackend::InProcess,
+            realtime_audio_backend: cmrt_runtime::RealtimeAudioBackend::CachePlayer,
             realtime_play_server_port: cmrt_runtime::DEFAULT_REALTIME_PLAY_SERVER_PORT,
             realtime_play_server_command: String::new(),
             realtime_play_server_prewarm: false,
@@ -82,6 +76,7 @@ fn build_test_app() -> DawApp {
         track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),
         solo_tracks: vec![false; tracks],
         track_volumes_db: vec![0; tracks],
+        pending_auto_trim: false,
         overlays: crate::overlays::DawOverlays::new(crate::FIRST_PLAYABLE_TRACK),
         patch_phrase_store: cmrt_history::PatchPhraseStore::default(),
         patch_phrase_store_dirty: false,
@@ -96,16 +91,5 @@ fn build_test_app() -> DawApp {
     }
 }
 
-fn playback_track_mmls(track: usize, mml: &str) -> Vec<String> {
-    let mut track_mmls = vec![String::new(); crate::FIRST_PLAYABLE_TRACK + 2];
-    track_mmls[track] = mml.to_string();
-    track_mmls
-}
-
-fn playback_track_gains() -> Vec<f32> {
-    vec![0.0, 0.0, 1.0, 1.0]
-}
-
-mod cache_mixer;
 mod state;
 mod timing;

@@ -76,8 +76,8 @@ offline_render_server_workers = {DEFAULT_OFFLINE_RENDER_SERVER_WORKERS}
 offline_render_server_port = {DEFAULT_OFFLINE_RENDER_SERVER_PORT}
 offline_render_server_command = ""
 
-# 【省略可】リアルタイム再生 backend
-realtime_audio_backend = "in_process"
+# 【省略可】リアルタイム再生 backend（"cache_player" / "play_server"）
+realtime_audio_backend = "cache_player"
 realtime_play_server_port = {DEFAULT_REALTIME_PLAY_SERVER_PORT}
 realtime_play_server_command = ""
 

@@ -2,6 +2,8 @@
 //!
 //! DAW ミキサーと loop browser の両画面から共有される、UI に依存しない値ロジック。
 
+pub mod auto_trim;
+
 #[cfg(test)]
 mod tests;
 

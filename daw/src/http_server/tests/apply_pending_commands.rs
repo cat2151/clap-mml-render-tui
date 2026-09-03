@@ -48,10 +48,7 @@ fn apply_pending_http_commands_updates_mixer_gain() {
     app.apply_pending_http_commands();
 
     assert_eq!(app.track_volume_db(5), -6);
-    assert_eq!(
-        app.playback.track_gains.lock().unwrap()[5],
-        10.0f32.powf(-6.0 / 20.0)
-    );
+    assert_eq!(app.playback_track_gains()[5], 10.0f32.powf(-6.0 / 20.0));
     assert_eq!(state.lock().unwrap().grid_snapshot.len(), 6);
     assert_eq!(response_rx.try_recv().unwrap(), Ok(()));
 
@@ -164,23 +161,22 @@ fn apply_pending_http_commands_starts_play() {
     app.editor.data[2][1] = "l8c".to_string();
     app.apply_pending_http_commands();
 
-    assert!(matches!(
-        *app.playback.play_state.lock().unwrap(),
-        DawPlayState::Playing
-    ));
-    assert_eq!(response_rx.try_recv().unwrap(), Ok(()));
-    assert!(app
-        .log_lines
-        .lock()
-        .unwrap()
+    // 音を出すのは play server なので、supervisor を持たないテスト用 app では
+    // 演奏開始のあとすぐ Idle へ戻る（「サーバーが無い」ことがログに出る）。
+    // ここで見たいのは HTTP コマンドが演奏開始まで届いたかなので、ログで確かめる。
+    // 返り値は「鳴らすものが無い」とは別のメッセージになる。
+    assert_eq!(
+        response_rx.try_recv().unwrap(),
+        Err("演奏を開始できませんでした".to_string())
+    );
+    let log_lines: Vec<String> = app.log_lines.lock().unwrap().iter().cloned().collect();
+    assert!(log_lines.iter().any(|line| line == "play: start"));
+    assert!(log_lines
         .iter()
-        .any(|line| line == "play: start"));
-    assert!(app
-        .log_lines
-        .lock()
-        .unwrap()
+        .any(|line| line == "http: play start (could not start)"));
+    assert!(log_lines
         .iter()
-        .any(|line| line == "http: play start"));
+        .any(|line| line == "play: realtime play server is not initialized"));
 
     deactivate_daw_http_server();
 }

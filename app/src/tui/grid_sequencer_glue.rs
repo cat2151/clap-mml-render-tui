@@ -84,6 +84,8 @@ pub(in crate::tui) fn daily_daw_import(
     crate::daw::DawGridImportSong {
         bpm: snapshot.bpm(),
         chord,
+        // preview で測った mixer 初期値は import の直前に載せる。
+        track_volumes_db: None,
         tracks: snapshot
             .daw_tracks()
             .into_iter()
@@ -253,6 +255,19 @@ impl TuiApp<'_> {
     pub(in crate::tui) fn finish_grid_sequencer(&mut self) {
         self.grid_history_preview.stop();
         self.grid_sequencer.finish();
+    }
+
+    /// import 直前に、preview で測った mixer 初期値を曲へ載せる。
+    ///
+    /// preview を聴かずに import した場合は載らない。その場合は DAW 側が meas1 の
+    /// cache を render し終えてから決め直す。
+    pub(in crate::tui) fn daily_daw_import_with_preview_volumes(
+        &self,
+        snapshot: GridSongSnapshot,
+    ) -> crate::daw::DawGridImportSong {
+        let mut song = daily_daw_import(snapshot);
+        song.track_volumes_db = self.grid_history_preview.track_volumes_db(&song);
+        song
     }
 
     pub(in crate::tui) fn play_grid_history_preview(&self, snapshot: GridSongSnapshot) {

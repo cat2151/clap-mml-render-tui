@@ -4,6 +4,7 @@ use crate::DawGridImportTrack;
 fn song(measures: &[&str]) -> DawGridImportSong {
     DawGridImportSong {
         bpm: 120.0,
+        track_volumes_db: None,
         chord: None,
         tracks: vec![DawGridImportTrack {
             patch: Some("Keys/Piano.fxp".to_string()),
@@ -124,12 +125,13 @@ fn same_key_from_a_new_generation_waits_for_and_reuses_the_in_flight_render() {
         Some(1)
     );
 
-    player
-        .runtime
-        .cache
-        .lock()
-        .unwrap()
-        .insert(prepared.key, Arc::new(vec![0.0]));
+    player.runtime.cache.lock().unwrap().insert(
+        prepared.key,
+        RenderedPreview {
+            samples: Arc::new(vec![0.0]),
+            track_volumes_db: vec![0; prepared.track_mmls.len()],
+        },
+    );
     finish_render_slot(player.runtime.clone());
     assert!(player.runtime.pending.lock().unwrap().is_none());
     assert!(player.runtime.in_flight.lock().unwrap().is_none());
@@ -159,4 +161,36 @@ fn stale_preparation_cannot_replace_the_latest_preview_request() {
             total: 5,
         }
     );
+}
+
+#[test]
+fn preview_renders_tracks_at_unity_gain_so_levels_can_be_measured() {
+    let prepared = prepare_first_measure(song(&["o5c4"]), 48_000.0).unwrap();
+
+    // 素の音量で render するから、測った RMS がそのまま mixer 初期値の根拠になる。
+    assert!(prepared
+        .track_gains
+        .iter()
+        .all(|gain| (*gain - 1.0).abs() < f32::EPSILON));
+}
+
+#[test]
+fn measured_volumes_are_handed_over_to_the_import() {
+    let player =
+        DawGridPreviewPlayer::disabled_for_tests(Arc::new(cmrt_runtime::Config::default()));
+    let previewed = song(&["o5c4"]);
+    let prepared = prepare_first_measure(previewed.clone(), player.cfg.sample_rate).unwrap();
+    let mut track_volumes_db = vec![0; prepared.track_mmls.len()];
+    track_volumes_db[crate::FIRST_PLAYABLE_TRACK] = -9;
+    player.runtime.cache.lock().unwrap().insert(
+        prepared.key,
+        RenderedPreview {
+            samples: Arc::new(vec![0.0]),
+            track_volumes_db: track_volumes_db.clone(),
+        },
+    );
+
+    assert_eq!(player.track_volumes_db(&previewed), Some(track_volumes_db));
+    // 試聴していない曲は測定値を持たない。
+    assert_eq!(player.track_volumes_db(&song(&["o5d4"])), None);
 }

@@ -11,6 +11,7 @@ mod mode_switch;
 mod playback_shortcuts;
 mod preview_targets;
 mod random_patch_rerender;
+mod random_patch_same_role;
 mod random_patch_selection;
 mod random_patch_snapshot;
 mod solo;

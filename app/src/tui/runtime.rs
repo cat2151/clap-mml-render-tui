@@ -322,7 +322,7 @@ impl<'a> TuiApp<'a> {
                                 self.stop_grid_history_preview();
                                 sync_mouse_capture(&mut cleanup.mouse_capture_enabled, false)?;
                                 rendered_screen = None;
-                                let song = super::grid_sequencer_glue::daily_daw_import(snapshot);
+                                let song = self.daily_daw_import_with_preview_volumes(snapshot);
                                 match self.run_daw_screen(
                                     &mut terminal,
                                     DawEntryRoute::ScreenSwitch(PrimaryScreen::DailyDaw),

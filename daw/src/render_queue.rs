@@ -239,27 +239,6 @@ impl RenderQueue {
             })
             .map_err(|_| anyhow!("render queue is closed"))
     }
-
-    pub(super) fn render_blocking(
-        &self,
-        priority: RenderPriority,
-        mml: &str,
-        probe_context: NativeRenderProbeContext,
-    ) -> Result<Vec<f32>> {
-        let request_id = self.reserve_request_id();
-        let (response_tx, response_rx) = mpsc::channel();
-        self.submit_with_id(
-            request_id,
-            priority,
-            mml.to_string(),
-            probe_context,
-            response_tx,
-        )?;
-        response_rx
-            .recv()
-            .map_err(|_| anyhow!("render queue response channel is closed"))?
-            .result
-    }
 }
 
 #[cfg(test)]

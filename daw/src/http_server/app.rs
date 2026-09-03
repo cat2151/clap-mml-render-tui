@@ -40,11 +40,6 @@ impl DawApp {
             }
             self.solo_tracks.resize(required_tracks, false);
             self.track_volumes_db.resize(required_tracks, 0);
-            self.playback
-                .track_gains
-                .lock()
-                .unwrap()
-                .resize(required_tracks, 0.0);
             self.track_rerender_batches
                 .lock()
                 .unwrap()
@@ -151,13 +146,19 @@ impl DawApp {
         if play_state == DawPlayState::Preview {
             self.stop_play();
         }
+        if !self.has_playable_measures() {
+            self.append_log_line("http: play start (no playable data)");
+            return Err("再生可能なデータがありません".to_string());
+        }
         self.start_play();
         if *self.playback.play_state.lock().unwrap() == DawPlayState::Playing {
             self.append_log_line("http: play start");
             Ok(())
         } else {
-            self.append_log_line("http: play start (no playable data)");
-            Err("再生可能なデータがありません".to_string())
+            // 音を出す先は play server だけなので、鳴らすものがあっても
+            // サーバーへ繋げなければ演奏は始まらない。ログには理由が出ている。
+            self.append_log_line("http: play start (could not start)");
+            Err("演奏を開始できませんでした".to_string())
         }
     }
 

@@ -122,6 +122,7 @@ fn build_daily_app(config_app_dir: &Path) -> DawApp {
         track_rerender_batches: Arc::new(Mutex::new(vec![None; TRACKS])),
         solo_tracks: vec![false; TRACKS],
         track_volumes_db: vec![0; TRACKS],
+        pending_auto_trim: false,
         overlays: crate::overlays::DawOverlays::new(1),
         patch_phrase_store: cmrt_history::PatchPhraseStore::default(),
         patch_phrase_store_dirty: false,

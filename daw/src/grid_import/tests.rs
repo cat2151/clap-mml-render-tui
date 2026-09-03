@@ -3,6 +3,7 @@ use super::*;
 fn song() -> DawGridImportSong {
     DawGridImportSong {
         bpm: 137.0,
+        track_volumes_db: None,
         chord: None,
         tracks: vec![
             DawGridImportTrack {
@@ -46,6 +47,7 @@ fn lane(base_note: u8, attacks: &[(usize, usize)]) -> DawGridLane {
 fn chord_song() -> DawGridImportSong {
     DawGridImportSong {
         bpm: 120.0,
+        track_volumes_db: None,
         chord: Some(DawGridChordSource {
             init: "key:C".to_string(),
             measures: vec!["I".to_string(), "V".to_string()],

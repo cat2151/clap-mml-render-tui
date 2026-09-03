@@ -101,6 +101,92 @@ fn drum_parts_are_explicit_and_percussion_is_not_the_remainder() {
         index.drum_candidates(DrumPatchRole::Percussion),
         ["perc shaker"]
     );
+    // `drum tom` は Drum だが部位語が無いので、どの行の候補にもならない。
+    assert_eq!(index.role_of("drum tom"), Some(PatchRole::Drum));
+}
+
+/// `Percussion/` フォルダ配下の kick・snare・hat が、PERC行の候補にも化けないこと。
+#[test]
+fn specific_drum_parts_win_over_the_percussion_folder() {
+    let kick = "patches_factory/Percussion/Kick 909ish.fxp";
+    let snare = "patches_3rdparty/Kinsey Dulcet/Percussion/Deep Cut Snare.fxp";
+    let hat = "patches_3rdparty/Psiome Send Sound/Percussion/Hat Electro.fxp";
+    let perc = "patches_3rdparty/Slowboat/Percussion/Djembeish 1.fxp";
+    let index = PatchRoleIndex::build(
+        [
+            input(kick, None),
+            input(snare, None),
+            input(hat, None),
+            input(perc, None),
+        ],
+        &[],
+    );
+
+    assert_eq!(index.drum_candidates(DrumPatchRole::Kick), [kick]);
+    assert_eq!(index.drum_candidates(DrumPatchRole::Snare), [snare]);
+    assert_eq!(index.drum_candidates(DrumPatchRole::HiHat), [hat]);
+    assert_eq!(index.drum_candidates(DrumPatchRole::Percussion), [perc]);
+}
+
+/// bassdrum はバスドラムなので Kick 行。`Percussion/` 配下にあっても変わらない。
+#[test]
+fn bass_drum_is_a_kick_in_both_spellings() {
+    let spaced = "patches_3rdparty/John Valentine/Percussion/Orchestral Bass Drum.fxp";
+    let joined = "sfz/Virtual-Playing-Orchestra3/Percussion/bassdrum.sfz";
+    let plain = "patches_3rdparty/Giana Brotherz/Drums/Bass Drum.fxp";
+    let index = PatchRoleIndex::build(
+        [input(spaced, None), input(joined, None), input(plain, None)],
+        &[],
+    );
+
+    assert_eq!(index.role_of(plain), Some(PatchRole::Drum));
+    assert_eq!(
+        index.drum_candidates(DrumPatchRole::Kick),
+        [spaced, joined, plain]
+    );
+    assert!(index.drum_candidates(DrumPatchRole::Percussion).is_empty());
+}
+
+/// 表示名から部位を引き直せること。同じ用途の音色だけを抽選し直す側が使う。
+#[test]
+fn drum_role_of_answers_the_part_only_for_drums_with_a_part_word() {
+    let index = PatchRoleIndex::build(
+        [
+            input("Drums/Kick Clean.fxp", None),
+            input("Drums/Snare Tight.fxp", None),
+            input("Drums/Closed Hat.fxp", None),
+            input("Drums/Perc Shaker.fxp", None),
+            input("Drums/Drum Tom.fxp", None),
+            input("Pads/Warm Pad.fxp", None),
+        ],
+        &[],
+    );
+
+    assert_eq!(
+        index.drum_role_of("Drums/Kick Clean.fxp"),
+        Some(DrumPatchRole::Kick)
+    );
+    assert_eq!(
+        index.drum_role_of("Drums/Snare Tight.fxp"),
+        Some(DrumPatchRole::Snare)
+    );
+    assert_eq!(
+        index.drum_role_of("Drums/Closed Hat.fxp"),
+        Some(DrumPatchRole::HiHat)
+    );
+    assert_eq!(
+        index.drum_role_of("Drums/Perc Shaker.fxp"),
+        Some(DrumPatchRole::Percussion)
+    );
+    // Drum だが部位語が無い音色と、Drum 以外は、どちらも部位を持たない。
+    assert_eq!(
+        index.role_of("Drums/Drum Tom.fxp"),
+        Some(PatchRole::Drum),
+        "部位語が無くても role は Drum のまま"
+    );
+    assert_eq!(index.drum_role_of("Drums/Drum Tom.fxp"), None);
+    assert_eq!(index.drum_role_of("Pads/Warm Pad.fxp"), None);
+    assert_eq!(index.drum_role_of("Missing/Not In Catalog.fxp"), None);
 }
 
 #[test]

@@ -5,6 +5,7 @@ mod help;
 mod history;
 mod logs;
 mod mixer;
+mod patch_display;
 mod patch_select;
 mod project;
 mod status;

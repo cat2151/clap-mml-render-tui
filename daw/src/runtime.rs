@@ -107,6 +107,7 @@ impl DawApp {
             }
             self.pump_sound_check_guide();
             self.pump_mml_overlay();
+            self.pump_pending_auto_trim();
             terminal.draw(|f| self.draw(f))?;
 
             if event::poll(std::time::Duration::from_millis(50))? {

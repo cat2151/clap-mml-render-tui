@@ -133,6 +133,10 @@ fn draw_mixer_overlay(state: &LoopBrowser, frame: &mut Frame<'_>) {
             |(track, _)| cmrt_tui_core::mixer_overlay::MixerOverlayTrack {
                 label: format!("track{}", track + 1),
                 volume_db: state.track_volume_db(track),
+                // loop browser の track は音色ではなく loop file なので、
+                // mixer の role / 音色名の行は出さない（ヘッダは 1 行のまま）。
+                role: None,
+                patch: None,
             },
         )
         .collect::<Vec<_>>();

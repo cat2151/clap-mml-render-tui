@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use cmrt_realtime_play::RealtimePlayServerSupervisor;
 
+use super::playback::live_gain::LiveTrackGain;
 use super::{AbRepeatState, DawPlayState, PlayPosition};
 
 /// DAW の再生・preview セッションで共有される runtime 状態。
@@ -21,7 +22,12 @@ pub(crate) struct DawPlaybackRuntime {
     pub(crate) measure_mmls: Arc<Mutex<Vec<String>>>,
     pub(crate) measure_track_mmls: Arc<Mutex<Vec<Vec<String>>>>,
     pub(crate) measure_samples: Arc<Mutex<usize>>,
-    pub(crate) track_gains: Arc<Mutex<Vec<f32>>>,
+    /// live mix の instance へ**最後に送った** gain。
+    ///
+    /// 差分だけ送るための記録なので、送っていない状態（＝演奏していない）は空。
+    /// 演奏を止めるときに空へ戻すので、次の演奏では必ず全 track ぶん送り直す
+    /// （そのあいだにサーバーが再起動していても gain が食い違わない）。
+    pub(crate) live_track_gains: Arc<Mutex<Vec<LiveTrackGain>>>,
 }
 
 impl DawPlaybackRuntime {
@@ -31,7 +37,6 @@ impl DawPlaybackRuntime {
         ab_repeat: Arc<Mutex<AbRepeatState>>,
         measure_mmls: Arc<Mutex<Vec<String>>>,
         measure_track_mmls: Arc<Mutex<Vec<Vec<String>>>>,
-        track_gains: Arc<Mutex<Vec<f32>>>,
     ) -> Self {
         Self {
             play_state: Arc::new(Mutex::new(DawPlayState::Idle)),
@@ -45,7 +50,7 @@ impl DawPlaybackRuntime {
             measure_mmls,
             measure_track_mmls,
             measure_samples: Arc::new(Mutex::new(0)),
-            track_gains,
+            live_track_gains: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -57,7 +62,6 @@ impl DawPlaybackRuntime {
             Arc::new(Mutex::new(AbRepeatState::Off)),
             Arc::new(Mutex::new(vec![String::new(); measures])),
             Arc::new(Mutex::new(vec![vec![String::new(); tracks]; measures])),
-            Arc::new(Mutex::new(vec![0.0; tracks])),
         )
     }
 }

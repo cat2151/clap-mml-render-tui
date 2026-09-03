@@ -27,7 +27,10 @@ buffer_size = 512
         DEFAULT_OFFLINE_RENDER_SERVER_PORT
     );
     assert!(cfg.offline_render_server_command.is_empty());
-    assert_eq!(cfg.realtime_audio_backend, RealtimeAudioBackend::InProcess);
+    assert_eq!(
+        cfg.realtime_audio_backend,
+        RealtimeAudioBackend::CachePlayer
+    );
     assert_eq!(
         cfg.realtime_play_server_port,
         DEFAULT_REALTIME_PLAY_SERVER_PORT

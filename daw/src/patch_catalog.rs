@@ -11,7 +11,7 @@
 //! 走査経路は snapshot がまだ `Loading` / `Err` のときのフォールバックとしてだけ残す。
 
 use super::DawApp;
-use cmrt_patches::{PatchRole, PatchRoleIndex, PatchRoleInput};
+use cmrt_patches::{DrumPatchRole, PatchRole, PatchRoleIndex, PatchRoleInput};
 use cmrt_runtime::Config;
 use cmrt_tui_core::patch_load::{PatchCatalogSnapshot, PatchLoadState};
 use std::sync::{Arc, Mutex};
@@ -109,6 +109,80 @@ pub(crate) fn snapshot(patch_load: &Mutex<PatchLoadState>) -> Option<Arc<PatchCa
         PatchLoadState::Ready(snapshot) => Some(Arc::clone(snapshot)),
         PatchLoadState::Loading | PatchLoadState::Err(_) => None,
     }
+}
+
+/// 用途分類を引く索引の出どころ。
+///
+/// snapshot が `Ready` ならそれを借り、`Loading` / `Err` のときだけ走査結果から
+/// 同じ規則で組み直す。どちらを通っても分類規則は 1 つ。
+enum RoleIndexSource {
+    Snapshot(Arc<PatchCatalogSnapshot>),
+    /// 索引そのものが大きいので box へ逃がす（snapshot 側との差が 300 バイト超）。
+    Scanned(Box<PatchRoleIndex>),
+}
+
+impl RoleIndexSource {
+    fn index(&self) -> &PatchRoleIndex {
+        match self {
+            Self::Snapshot(snapshot) => snapshot.patch_roles(),
+            Self::Scanned(index) => index,
+        }
+    }
+}
+
+/// 用途分類を引く 1 回ぶんの材料（索引 + 表示名一覧）。
+///
+/// 表示名一覧も持つのは、init セルに短縮名で保存された音色を索引の表示名へ
+/// 突き合わせるため（[`Self::resolved_display`]）。
+pub(crate) struct PatchRoleLookup {
+    pairs: Vec<(String, String)>,
+    source: RoleIndexSource,
+}
+
+impl PatchRoleLookup {
+    fn index(&self) -> &PatchRoleIndex {
+        self.source.index()
+    }
+
+    /// 保存された patch 名を、索引が知っている表示名へ直す。
+    ///
+    /// 素通しで当たるならそのまま返し、当たらないときだけ突き合わせる
+    /// （当たる場合の線形走査を避ける）。`ui::patch_display::role_of_patch` と同じ手順。
+    fn resolved_display(&self, patch_name: &str) -> Option<String> {
+        if self.index().role_of(patch_name).is_some() {
+            return Some(patch_name.to_string());
+        }
+        cmrt_patches::resolve_display_patch_name(&self.pairs, patch_name)
+    }
+
+    /// `patch_name` と同じ用途の抽選候補と、その抽選デッキのキー。
+    ///
+    /// catalog がその音色を知らなければ `None`。呼び出し側はそこだけ
+    /// 「用途を問わない抽選」へ落とす。
+    ///
+    /// **drum は部位まで揃える。** role は同じ `drum` でも、kick の track で snare が
+    /// 出てきたら別の楽器へ化けたのと変わらない。部位語が当たらない drum
+    /// （`drums` だけの音色など）は部位候補が空になるので、role 全体へ広げる。
+    fn same_role_candidates(&self, patch_name: &str) -> Option<(String, Vec<String>)> {
+        let display = self.resolved_display(patch_name)?;
+        let index = self.index();
+        let role = index.role_of(&display)?;
+        if let Some(drum_role) = index.drum_role_of(&display) {
+            let candidates = index.drum_candidates(drum_role);
+            if !candidates.is_empty() {
+                return Some((drum_deck_key(drum_role), candidates.to_vec()));
+            }
+        }
+        Some((role_deck_key(role), index.candidates(role).to_vec()))
+    }
+}
+
+fn role_deck_key(role: PatchRole) -> String {
+    format!("role:{}", role.key())
+}
+
+fn drum_deck_key(role: DrumPatchRole) -> String {
+    format!("drum:{}", role.key())
 }
 
 impl DawApp {
@@ -216,20 +290,16 @@ impl DawApp {
         self.pick_random_patch_name_with_query(None)
     }
 
-    /// 共通の用途分類から、指定した Role の音色だけを抽選する。
-    ///
-    /// snapshot が Ready なら selector category とユーザー preset を反映済みの索引を使う。
-    /// 読み込み中の走査フォールバックでも同じ分類規則を適用し、別 Role の音色へは
-    /// フォールバックしない。
-    pub(crate) fn pick_random_patch_name_for_role(&mut self, role: PatchRole) -> Option<String> {
+    /// 用途分類を引く材料を、snapshot 優先・走査フォールバックで揃える。
+    pub(crate) fn patch_role_lookup(&self, reason: &str) -> Option<PatchRoleLookup> {
         let snapshot = self.catalog_snapshot();
-        let patches = self.patch_pairs_for_lookup(&format!("random-patch-role-{}", role.key()))?;
-        let candidates = match snapshot {
-            Some(snapshot) => snapshot.patch_roles().candidates(role).to_vec(),
+        let pairs = self.patch_pairs_for_lookup(reason)?;
+        let source = match snapshot {
+            Some(snapshot) => RoleIndexSource::Snapshot(snapshot),
             None => {
                 let presets = cmrt_history::load_mml_patch_filter_presets();
-                PatchRoleIndex::build(
-                    patches
+                RoleIndexSource::Scanned(Box::new(PatchRoleIndex::build(
+                    pairs
                         .iter()
                         .map(|(display, normalized_display)| PatchRoleInput {
                             display,
@@ -237,15 +307,41 @@ impl DawApp {
                             selector_category: None,
                         }),
                     &presets,
-                )
-                .candidates(role)
-                .to_vec()
+                )))
             }
         };
-        let deck_key = format!("role:{}", role.key());
+        Some(PatchRoleLookup { pairs, source })
+    }
+
+    /// 共通の用途分類から、指定した Role の音色だけを抽選する。
+    ///
+    /// snapshot が Ready なら selector category とユーザー preset を反映済みの索引を使う。
+    /// 読み込み中の走査フォールバックでも同じ分類規則を適用し、別 Role の音色へは
+    /// フォールバックしない。
+    pub(crate) fn pick_random_patch_name_for_role(&mut self, role: PatchRole) -> Option<String> {
+        let lookup = self.patch_role_lookup(&format!("random-patch-role-{}", role.key()))?;
+        let candidates = lookup.index().candidates(role).to_vec();
+        let deck_key = role_deck_key(role);
+        self.draw_from_patch_deck(&deck_key, &candidates)
+    }
+
+    /// いま鳴っている音色と同じ用途の音色だけを抽選する。
+    ///
+    /// catalog がその音色を知らないとき（分類できないとき）だけ `None`。
+    /// 呼び出し側はそこだけ「用途を問わない抽選」へ落とす。
+    pub(crate) fn pick_random_patch_name_for_same_role_as(
+        &mut self,
+        patch_name: &str,
+    ) -> Option<String> {
+        let lookup = self.patch_role_lookup("random-patch-same-role")?;
+        let (deck_key, candidates) = lookup.same_role_candidates(patch_name)?;
+        self.draw_from_patch_deck(&deck_key, &candidates)
+    }
+
+    fn draw_from_patch_deck(&mut self, deck_key: &str, candidates: &[String]) -> Option<String> {
         let idx = self
             .random_patch_decks
-            .next_index(Some(&deck_key), candidates.len())?;
+            .next_index(Some(deck_key), candidates.len())?;
         Some(candidates[idx].clone())
     }
 
