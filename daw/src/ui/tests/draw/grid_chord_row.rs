@@ -103,6 +103,37 @@ fn the_chord_row_init_column_shows_the_key() {
     assert_eq!(x_of_in_row(&buffer, chord_y, "key:G"), init_x);
 }
 
+#[test]
+fn the_status_line_shows_the_complete_selected_chord() {
+    let mut app = app_with_a_generated_track();
+    app.editor.data[crate::CHORD_TRACK][1] = "IIm7(b5)".to_string();
+    app.editor.cursor_track = crate::CHORD_TRACK;
+    app.editor.cursor_measure = 1;
+
+    let lines = render_lines(&app, 80, 24);
+
+    assert!(
+        lines.iter().any(|line| line.contains("Chord M1: IIm7(b5)")),
+        "lines: {lines:?}"
+    );
+}
+
+#[test]
+fn the_status_line_shows_the_effective_chord_for_a_generated_cell() {
+    let mut app = app_with_a_generated_track();
+    app.editor.data[crate::CHORD_TRACK][1] = "IIm7(b5)".to_string();
+    app.editor.cursor_track = crate::FIRST_PLAYABLE_TRACK;
+    app.editor.cursor_measure = 1;
+
+    let lines = render_lines(&app, 80, 24);
+
+    let status = lines
+        .iter()
+        .find(|line| line.contains("T1 M1: IIm7(b5)"))
+        .unwrap_or_else(|| panic!("effective chord is absent: {lines:?}"));
+    assert!(status.contains("Chord"), "source is absent: {status:?}");
+}
+
 // ─── `C` キーで画面上のカーソルが chord 行へ動くか ───────────────
 
 /// その track ラベルが「カーソル行」として強調されているか。

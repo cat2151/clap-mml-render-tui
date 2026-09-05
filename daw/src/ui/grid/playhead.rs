@@ -101,10 +101,11 @@ pub(super) fn header_label(label: &str) -> String {
 pub(super) fn header_spans(
     label: &str,
     measure_index_in_header: usize,
+    measure_width: usize,
     playhead: Playhead,
     base_style: Style,
 ) -> Vec<Span<'static>> {
-    let width = cell_width(measure_index_in_header);
+    let width = cell_width(measure_index_in_header, measure_width);
     // 桁あふれで隣の列をずらさないよう、ここで切る。
     let cell: String = label.chars().take(width).collect();
     let cell = format!("{cell:<width$}");

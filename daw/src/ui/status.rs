@@ -14,6 +14,46 @@ use super::{
 };
 use crate::messages::project as project_message;
 
+/// カーソルが指すセルの完全な内容。グリッド側で省略されてもここから実値を確認できる。
+///
+/// chord 行から生成される空セルは、保存値の空文字ではなく実際に鳴る chord を出す。
+fn selected_cell_label(app: &DawApp) -> String {
+    let track = app.editor.cursor_track;
+    let measure = app.editor.cursor_measure;
+    let track_label = crate::tracks::track_label(track);
+    let measure_label = if measure == 0 {
+        "Init".to_string()
+    } else {
+        format!("M{measure}")
+    };
+    let stored = app
+        .editor
+        .data
+        .get(track)
+        .and_then(|row| row.get(measure))
+        .map(String::as_str)
+        .unwrap_or_default();
+    let (text, source) = if stored.trim().is_empty()
+        && measure > 0
+        && crate::mml::cell_is_generated_from_chord_row(&app.editor.data, track, measure)
+    {
+        (
+            app.editor
+                .data
+                .get(crate::CHORD_TRACK)
+                .and_then(|row| row.get(measure))
+                .map(|text| text.trim())
+                .filter(|text| !text.is_empty())
+                .unwrap_or("(empty)"),
+            " (Chord行由来)",
+        )
+    } else {
+        let text = stored.trim();
+        (if text.is_empty() { "(empty)" } else { text }, "")
+    };
+    format!("選択 {track_label} {measure_label}: {text}{source}")
+}
+
 pub(super) fn daw_title(app: &DawApp) -> String {
     match app.workspace_kind {
         WorkspaceKind::Persistent => " [DAW] ".to_string(),
@@ -127,13 +167,18 @@ pub(super) fn draw_status(
     } else {
         MONOKAI_PURPLE
     };
+    let selected_cell = selected_cell_label(app);
+    let info_text = match loop_summary {
+        Some(loop_summary) => format!("{selected_cell}  |  {loop_summary}"),
+        None => selected_cell,
+    };
 
     f.render_widget(
         Paragraph::new(play_text).style(Style::default().fg(play_color)),
         play_area,
     );
     f.render_widget(
-        Paragraph::new(loop_summary.unwrap_or_default()).style(Style::default().fg(MONOKAI_YELLOW)),
+        Paragraph::new(info_text).style(Style::default().fg(MONOKAI_YELLOW)),
         info_area,
     );
     f.render_widget(

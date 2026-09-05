@@ -22,48 +22,83 @@ mod tests;
 
 /// init 列（meas 0）のセル桁数。音色名を `role:音色名` の形で出すため広く取る。
 pub(super) const INIT_CELL_WIDTH: usize = 13;
-/// meas 1 以降のセル桁数。
-pub(super) const MEASURE_CELL_WIDTH: usize = 4;
+/// 狭い画面でも維持する meas 1 以降の最小セル桁数。
+pub(super) const MIN_MEASURE_CELL_WIDTH: usize = 4;
+/// chord wizard が使う同梱カタログのコードを省略せず出せる最大セル桁数。
+pub(super) const MAX_MEASURE_CELL_WIDTH: usize = 8;
 /// 列と列の間に挟む区切り空白の桁数。
 const COLUMN_GAP: usize = 1;
 /// 行頭の track ラベル（`Tempo` / `T1`）の桁数。
 pub(super) const TRACK_LABEL_WIDTH: usize = 5;
 
+/// 画面幅と小節数から、meas 1 以降のセル桁数を決める。
+///
+/// 全小節を横に並べたまま余白をセルへ配る。80 桁端末（内側 78 桁）で既定の
+/// 8 小節なら 6 桁、93 桁以上なら上限の 8 桁になる。
+pub(super) fn measure_cell_width(area_width: u16, measure_count: usize) -> usize {
+    if measure_count == 0 {
+        return MAX_MEASURE_CELL_WIDTH;
+    }
+    let fixed_width = TRACK_LABEL_WIDTH + INIT_CELL_WIDTH + COLUMN_GAP;
+    let width_with_gap = (area_width as usize).saturating_sub(fixed_width) / measure_count;
+    width_with_gap
+        .saturating_sub(COLUMN_GAP)
+        .clamp(MIN_MEASURE_CELL_WIDTH, MAX_MEASURE_CELL_WIDTH)
+}
+
 /// その列のセル本体（区切り空白を含まない）の桁数。
-pub(super) fn cell_width(measure_index: usize) -> usize {
+pub(super) fn cell_width(measure_index: usize, measure_width: usize) -> usize {
     if measure_index == 0 {
         INIT_CELL_WIDTH
     } else {
-        MEASURE_CELL_WIDTH
+        measure_width
     }
 }
 
 /// その列が占める桁数（セル本体 + 区切り空白）。
-pub(super) fn column_width(measure_index: usize) -> usize {
-    cell_width(measure_index) + COLUMN_GAP
+pub(super) fn column_width(measure_index: usize, measure_width: usize) -> usize {
+    cell_width(measure_index, measure_width) + COLUMN_GAP
 }
 
 /// grid 領域の左端から数えた、その列の内容が始まる x オフセット。
 ///
 /// 列位置の計算はこの関数に閉じること。ヘッダ・セル・インジケータの 3 行が
 /// 縦に揃うかどうかは、すべてこの 1 か所に依存する。
-pub(super) fn column_x_offset(measure_index: usize) -> u16 {
-    let offset = TRACK_LABEL_WIDTH + (0..measure_index).map(column_width).sum::<usize>();
+pub(super) fn column_x_offset(measure_index: usize, measure_width: usize) -> u16 {
+    let offset = TRACK_LABEL_WIDTH
+        + (0..measure_index)
+            .map(|index| column_width(index, measure_width))
+            .sum::<usize>();
     offset as u16
+}
+
+/// セル幅へ収め、切り詰めが起きたことを必ず `…` で示す。
+fn fit_cell_text(text: &str, width: usize) -> String {
+    let char_count = text.chars().count();
+    if char_count <= width {
+        return format!("{text:<width$}");
+    }
+    if width == 0 {
+        return String::new();
+    }
+    let prefix: String = text.chars().take(width - 1).collect();
+    let shortened = format!("{}…", prefix.trim_end());
+    format!("{shortened:<width$}")
 }
 
 pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &[Vec<CacheState>]) {
     let solo_mode_active = app.solo_mode_active();
     let ab_repeat_markers = app.ab_repeat_state().marker_indices();
+    let measure_width = measure_cell_width(area.width, app.editor.measures);
     // 演奏位置は 1 描画につき 1 回だけ lock を取る。停止中は None。
-    let playhead = playhead::playhead(app, MEASURE_CELL_WIDTH);
+    let playhead = playhead::playhead(app, measure_width);
     // init 列の role 表示に使う catalog。1 描画につき 1 回だけ lock を取る。
     let catalog = app.catalog_snapshot();
 
     // ヘッダ行（列ラベル）
     // 行頭の空白は、init 列が始まる x までを埋める。
     let mut header_spans = vec![Span::styled(
-        " ".repeat(column_x_offset(0) as usize),
+        " ".repeat(column_x_offset(0, measure_width) as usize),
         Style::default(),
     )];
     for m in 0..=app.editor.measures {
@@ -104,11 +139,12 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &
             Some(playhead) => header_spans.extend(playhead::header_spans(
                 &playhead::header_label(&label),
                 m,
+                measure_width,
                 playhead,
                 style,
             )),
             None => header_spans.push(Span::styled(
-                format!("{label:<width$}", width = column_width(m)),
+                format!("{label:<width$}", width = column_width(m, measure_width)),
                 style,
             )),
         }
@@ -169,7 +205,7 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &
         let show_indicators = !(is_cursor_track && app.mode == DawMode::Insert);
         let mut row2: Vec<Span> = if show_indicators {
             vec![Span::styled(
-                " ".repeat(column_x_offset(0) as usize),
+                " ".repeat(column_x_offset(0, measure_width) as usize),
                 Style::default(),
             )]
         } else {
@@ -185,7 +221,7 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &
             let is_cursor = is_cursor_track && m == app.editor.cursor_measure;
 
             // セル表示（列ごとの桁数。init 列だけ広い）
-            let width = cell_width(m);
+            let width = cell_width(m, measure_width);
             // 手書きのセルが優先。空でも chord 行から生成されるセルは音が鳴るので、
             // 何が鳴るのかを chord 行から借りて出す（空セル = 無音ではない）。
             let text: Option<String> = if mml.trim().is_empty() {
@@ -200,10 +236,7 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &
             // 紫 = 手書きではなく chord 行に由来する表示。
             let borrowed_from_chord_row = mml.trim().is_empty() && text.is_some();
             let display: String = match &text {
-                Some(text) => {
-                    let s: String = text.chars().take(width).collect();
-                    format!("{s:<width$}")
-                }
+                Some(text) => fit_cell_text(text, width),
                 None => " ".repeat(width),
             };
 
@@ -222,7 +255,10 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &
                 Style::default().fg(fg).bg(MONOKAI_BG)
             };
 
-            row1.push(Span::styled(format!("{} ", display), style));
+            row1.push(Span::styled(
+                format!("{display}{}", " ".repeat(COLUMN_GAP)),
+                style,
+            ));
 
             // 状態インジケータ（列と同じ桁数）: INSERTモードのカーソルtrackはスキップ
             if show_indicators {
@@ -246,12 +282,8 @@ pub(super) fn draw_grid(app: &DawApp, f: &mut Frame, area: Rect, cache_states: &
                     cache_indicator(cs, anim_frame).to_string()
                 };
                 // 列幅を越える指定はここで切る（隣の列を侵食させない）。
-                let indicator: String = indicator_text
-                    .trim_end()
-                    .chars()
-                    .take(column_width(m))
-                    .collect();
-                let indicator = format!("{indicator:<width$}", width = column_width(m));
+                let indicator =
+                    fit_cell_text(indicator_text.trim_end(), column_width(m, measure_width));
                 let ind_fg = if solo_label {
                     if app.track_is_soloed(t) {
                         MONOKAI_FG

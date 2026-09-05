@@ -117,7 +117,7 @@ fn grid_header_cells_and_indicators_share_the_same_column_x() {
 }
 
 #[test]
-fn init_column_occupies_fourteen_columns_and_measures_keep_five() {
+fn init_column_occupies_fourteen_columns_and_measure_width_uses_available_space() {
     let buffer = render_buffer(&build_test_app(), 60, 15);
     let header_y = header_row(&buffer);
 
@@ -126,7 +126,7 @@ fn init_column_occupies_fourteen_columns_and_measures_keep_five() {
     let m2_x = x_of_in_row(&buffer, header_y, "M2");
 
     assert_eq!(m1_x - init_x, 14, "init column must be 14 columns wide");
-    assert_eq!(m2_x - m1_x, 5, "measure columns stay 5 columns wide");
+    assert_eq!(m2_x - m1_x, 9, "two measures can use the maximum width");
 }
 
 #[test]
@@ -148,7 +148,7 @@ fn ab_repeat_markers_do_not_shift_the_measure_columns() {
     let b2_x = x_of_in_row(&buffer, header_y, "B2");
 
     assert_eq!(a1_x - init_x, 14);
-    assert_eq!(b2_x - a1_x, 5);
+    assert_eq!(b2_x - a1_x, 9);
 }
 
 #[test]
@@ -160,10 +160,10 @@ fn init_cell_shows_more_than_four_characters() {
     let header_y = header_row(&buffer);
     let track1_y = header_y + 1 + 2 * crate::FIRST_PLAYABLE_TRACK as u16;
 
-    // 13 桁まで出て 14 桁目は切れる。
-    x_of_in_row(&buffer, track1_y, "0123456789abc");
+    // 12 桁 + 省略記号まで出て、続きが隠れていることが分かる。
+    x_of_in_row(&buffer, track1_y, "0123456789ab…");
     let row = row_symbols(&buffer, track1_y).concat();
-    assert!(!row.contains("0123456789abcd"), "row: {row:?}");
+    assert!(!row.contains("0123456789abc"), "row: {row:?}");
 }
 
 #[test]
@@ -181,6 +181,7 @@ fn every_measure_column_still_fits_in_an_80_column_terminal() {
         vec![CellCache::empty(); MEASURES + 1];
         tracks
     ]));
+    app.editor.data[crate::CHORD_TRACK][1] = "IIm7(b5)".to_string();
 
     let buffer = render_buffer(&app, 80, 20);
     let header_y = header_row(&buffer);
@@ -190,10 +191,21 @@ fn every_measure_column_still_fits_in_an_80_column_terminal() {
         let x = x_of_in_row(&buffer, header_y, &format!("M{m}"));
         assert_eq!(
             x as usize,
-            init_x as usize + 14 + (m - 1) * 5,
+            init_x as usize + 14 + (m - 1) * 7,
             "M{m} must sit at its own column"
         );
     }
+    let chord_y = header_y + 1 + 2 * crate::CHORD_TRACK as u16;
+    assert_eq!(x_of_in_row(&buffer, chord_y, "IIm7(…"), init_x + 14);
+
+    let wide_buffer = render_buffer(&app, 93, 20);
+    let wide_header_y = header_row(&wide_buffer);
+    let wide_chord_y = wide_header_y + 1 + 2 * crate::CHORD_TRACK as u16;
+    let wide_m1_x = x_of_in_row(&wide_buffer, wide_header_y, "M1");
+    assert_eq!(
+        x_of_in_row(&wide_buffer, wide_chord_y, "IIm7(b5)"),
+        wide_m1_x
+    );
 }
 
 // ─── init 列（meas 0）の role:音色名 表示 ───────────────────
@@ -231,11 +243,11 @@ fn init_column_shows_the_role_and_the_patch_name_per_track() {
     let lines = render_lines(&app, 60, 24);
 
     assert!(
-        lines.iter().any(|line| line.contains("bass:Wobble B")),
+        lines.iter().any(|line| line.contains("bass:Wobble…")),
         "lines: {lines:?}"
     );
     assert!(
-        lines.iter().any(|line| line.contains("lead:Screamin")),
+        lines.iter().any(|line| line.contains("lead:Screami…")),
         "lines: {lines:?}"
     );
     assert!(
@@ -290,13 +302,13 @@ fn init_column_truncates_a_long_role_and_patch_name_to_the_column_width() {
     let header_y = header_row(&buffer);
     let track1_y = header_y + 1 + 2 * crate::FIRST_PLAYABLE_TRACK as u16;
 
-    // `lead:Screaming Lead` は 13 桁で切られ、M1 列を侵食しない。
+    // `lead:Screaming Lead` は省略記号込みの 13 桁で切られ、M1 列を侵食しない。
     let init_x = x_of_in_row(&buffer, header_y, "Init");
     let m1_x = x_of_in_row(&buffer, header_y, "M1");
     let row = row_symbols(&buffer, track1_y);
     let init_cell: String = (init_x..m1_x).map(|x| row[x as usize].clone()).collect();
 
-    assert_eq!(init_cell, "lead:Screamin ");
+    assert_eq!(init_cell, "lead:Screami… ");
 }
 
 /// 実機の config.toml を渡したときだけ走る、実カタログでの init 列表示。

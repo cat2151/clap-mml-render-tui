@@ -1,7 +1,6 @@
-use super::super::MEASURE_CELL_WIDTH;
 use super::*;
 
-const WIDTH: usize = MEASURE_CELL_WIDTH;
+const WIDTH: usize = 4;
 
 /// 4/4・セル 4 桁は 1 拍 1 桁の 4 段階で進む。
 #[test]
@@ -70,6 +69,7 @@ fn spans_of(label: &str, filled_columns: usize, state: DawPlayState) -> Vec<Span
     header_spans(
         label,
         1,
+        WIDTH,
         Playhead {
             measure_index: 0,
             filled_columns,
@@ -85,11 +85,7 @@ fn header_spans_keep_the_column_width() {
     for filled_columns in 0..=4 {
         let spans = spans_of(">3", filled_columns, DawPlayState::Playing);
         let width: usize = spans.iter().map(|span| span.content.chars().count()).sum();
-        assert_eq!(
-            width,
-            MEASURE_CELL_WIDTH + COLUMN_GAP,
-            "filled={filled_columns}"
-        );
+        assert_eq!(width, WIDTH + COLUMN_GAP, "filled={filled_columns}");
     }
 }
 

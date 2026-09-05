@@ -31,7 +31,7 @@ fn idle_header_keeps_the_plain_measure_label() {
     let header_y = header_row(&buffer);
 
     let x = x_of_in_row(&buffer, header_y, "M2");
-    for bg in header_backgrounds(&buffer, x, 5) {
+    for bg in header_backgrounds(&buffer, x, 9) {
         assert_ne!(bg, MONOKAI_YELLOW, "idle header must not be painted");
         assert_ne!(bg, MONOKAI_CURSOR_BG, "idle header must not be painted");
     }
@@ -68,12 +68,16 @@ fn playhead_does_not_shift_the_measure_columns() {
     let playing_x = x_of_in_row(&buffer, header_y, ">2");
 
     assert_eq!(m1_x - init_x, 14, "init column stays 14 columns wide");
-    assert_eq!(playing_x - m1_x, 5, "measure columns stay 5 columns wide");
+    assert_eq!(
+        playing_x - m1_x,
+        9,
+        "measure columns use the available width"
+    );
 }
 
-/// 1 拍目は 1 桁だけ塗り、残り 3 桁は暗い背景。区切り空白は塗らない。
+/// 8 桁セルの 1 拍目は 2 桁塗り、残り 6 桁は暗い背景。区切り空白は塗らない。
 #[test]
-fn first_beat_paints_only_the_first_column() {
+fn first_beat_paints_the_first_quarter_of_the_cell() {
     let app = build_test_app();
     start_playing(&app, DawPlayState::Playing, 1, 0.0);
 
@@ -81,29 +85,29 @@ fn first_beat_paints_only_the_first_column() {
     let header_y = header_row(&buffer);
     let x = x_of_in_row(&buffer, header_y, ">2");
 
-    let backgrounds = header_backgrounds(&buffer, x, 5);
+    let backgrounds = header_backgrounds(&buffer, x, 9);
     assert_eq!(backgrounds[0], MONOKAI_YELLOW);
-    assert_eq!(backgrounds[1], MONOKAI_CURSOR_BG);
+    assert_eq!(backgrounds[1], MONOKAI_YELLOW);
     assert_eq!(backgrounds[2], MONOKAI_CURSOR_BG);
     assert_eq!(backgrounds[3], MONOKAI_CURSOR_BG);
-    assert_ne!(backgrounds[4], MONOKAI_YELLOW, "column gap stays unpainted");
+    assert_ne!(backgrounds[8], MONOKAI_YELLOW, "column gap stays unpainted");
     assert_ne!(
-        backgrounds[4], MONOKAI_CURSOR_BG,
+        backgrounds[8], MONOKAI_CURSOR_BG,
         "column gap stays unpainted"
     );
 }
 
-/// 拍が進むと塗りが 1 桁ずつ右へ伸びる。
+/// 拍が進むと 8 桁セルの塗りが 2 桁ずつ右へ伸びる。
 #[test]
-fn fill_grows_one_column_per_beat() {
-    for (elapsed_secs, expected_filled) in [(0.0, 1), (1.0, 2), (2.0, 3), (3.0, 4)] {
+fn fill_grows_one_quarter_per_beat() {
+    for (elapsed_secs, expected_filled) in [(0.0, 2), (1.0, 4), (2.0, 6), (3.0, 8)] {
         let app = build_test_app();
         start_playing(&app, DawPlayState::Playing, 1, elapsed_secs);
 
         let buffer = render_buffer(&app, 60, 19);
         let header_y = header_row(&buffer);
         let x = x_of_in_row(&buffer, header_y, ">2");
-        let filled = header_backgrounds(&buffer, x, 4)
+        let filled = header_backgrounds(&buffer, x, 8)
             .iter()
             .filter(|bg| **bg == MONOKAI_YELLOW)
             .count();
@@ -122,9 +126,10 @@ fn preview_paints_the_header_in_its_own_color() {
     let header_y = header_row(&buffer);
     let x = x_of_in_row(&buffer, header_y, ">2");
 
-    let backgrounds = header_backgrounds(&buffer, x, 4);
+    let backgrounds = header_backgrounds(&buffer, x, 8);
     assert_eq!(backgrounds[0], MONOKAI_PURPLE);
-    assert_eq!(backgrounds[1], MONOKAI_CURSOR_BG);
+    assert_eq!(backgrounds[1], MONOKAI_PURPLE);
+    assert_eq!(backgrounds[2], MONOKAI_CURSOR_BG);
 }
 
 /// A-B マーカーの小節を演奏中でも、A / B のラベルと色は残る。
@@ -144,11 +149,12 @@ fn ab_marker_keeps_its_label_and_color_under_the_playhead() {
     let header_y = header_row(&buffer);
     let x = x_of_in_row(&buffer, header_y, "B2");
 
-    // 塗り終えていない桁は B マーカーの色（紫）のまま。
-    let unfilled = buffer.cell((x + 1, header_y)).unwrap();
-    assert_eq!(unfilled.symbol(), "2");
+    // 8 桁セルでは 1 拍目にラベル 2 桁を塗り終える。残りは B マーカーの色（紫）のまま。
+    let unfilled = buffer.cell((x + 2, header_y)).unwrap();
+    assert_eq!(unfilled.symbol(), " ");
     assert_eq!(unfilled.fg, MONOKAI_PURPLE);
     assert_eq!(unfilled.bg, MONOKAI_CURSOR_BG);
     // 塗った桁は反転している。
     assert_eq!(buffer.cell((x, header_y)).unwrap().bg, MONOKAI_YELLOW);
+    assert_eq!(buffer.cell((x + 1, header_y)).unwrap().bg, MONOKAI_YELLOW);
 }
