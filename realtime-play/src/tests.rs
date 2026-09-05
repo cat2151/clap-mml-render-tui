@@ -32,7 +32,9 @@ pub(crate) fn cfg_for_port(port: u16) -> Config {
         offline_render_server_command: String::new(),
         realtime_audio_backend: cmrt_runtime::RealtimeAudioBackend::PlayServer,
         realtime_play_server_port: port,
-        realtime_play_server_command: "exit 0".to_string(),
+        play_server_launch_override: Some(cmrt_runtime::PlayServerLaunch::ShellCommand(
+            "exit 0".to_string(),
+        )),
         realtime_play_server_prewarm: false,
         autoplay_on_startup: true,
         voicing_shared_source: String::new(),

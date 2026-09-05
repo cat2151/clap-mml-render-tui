@@ -41,57 +41,89 @@ pub(crate) const EXIT_LATCH_RESET: Duration = Duration::from_secs(30);
 
 const NO_STDERR: &str = "(stderr に出力なし)";
 
-/// 直近に server が落ちた理由。エラー文と UI 表示の両方がこれを文字列化する。
+/// 直近に server を起こせなかった理由。エラー文と UI 表示の両方がこれを文字列化する。
+///
+/// 2 態あるのは、**打つ手がまったく違う**から。落ちたなら子の言い分を読む。
+/// 見つからないなら、探した場所のどこかへ実体を置く（ADR 0017）。
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ServerStartupFailure {
-    /// 起動しようとした実体。config 指定ならそのコマンド文字列。
-    /// **どの exe を掴んだか**が、この種の事故で最初に要る情報。
-    pub exe: String,
-    /// 終了コード。取れないときは `None`。
-    pub exit_code: Option<i32>,
-    /// 子の stderr の末尾。ここに落ちた理由が書いてある。
-    pub stderr_tail: Vec<String>,
+pub enum ServerStartupFailure {
+    /// 起動はしたが、待ち受ける前に終了した。
+    Exited {
+        /// 起動しようとした実体。**どの exe を掴んだか**が、この種の事故で最初に要る情報。
+        exe: String,
+        /// 終了コード。取れないときは `None`。
+        exit_code: Option<i32>,
+        /// 子の stderr の末尾。ここに落ちた理由が書いてある。
+        stderr_tail: Vec<String>,
+    },
+    /// 実体が見つからず、起動を試みることすらできなかった。
+    NotFound {
+        /// 探した場所。素の実行ファイル名で spawn して OS のエラーに任せると、
+        /// ここが誰にも分からなくなる。
+        searched: Vec<String>,
+    },
 }
 
 impl ServerStartupFailure {
     /// エラー文 1 行。`anyhow` に載せてログにも UI にも流れる。
     pub fn message(&self) -> String {
-        format!(
-            "realtime play server が起動できません (exe=\"{}\", exit={}): {}",
-            self.exe,
-            self.exit_code_text(),
-            self.detail_text()
-        )
+        match self {
+            ServerStartupFailure::Exited { exe, .. } => format!(
+                "realtime play server が起動できません (exe=\"{}\", exit={}): {}",
+                exe,
+                self.exit_code_text(),
+                self.detail_text()
+            ),
+            ServerStartupFailure::NotFound { searched } => format!(
+                "realtime play server の実体が見つかりません（探した場所: {}）",
+                searched.join(" / ")
+            ),
+        }
     }
 
-    /// UI 用の複数行。1 行目に「何が起きたか」、2 行目に掴んだ実体を置く。
-    /// 狭い端末で下が切れても、この 2 行が残れば切り分けられる。
+    /// UI 用の複数行。1 行目に「何が起きたか」、続けて切り分けに要る情報を置く。
+    /// 狭い端末で下が切れても、先頭の数行が残れば切り分けられる。
     pub fn lines(&self) -> Vec<String> {
-        let mut lines = vec![
-            "play server が起動できません".to_owned(),
-            format!("exe=\"{}\"", self.exe),
-            format!("exit={}", self.exit_code_text()),
-        ];
-        if self.stderr_tail.is_empty() {
-            lines.push(NO_STDERR.to_owned());
-        } else {
-            lines.extend(self.stderr_tail.iter().cloned());
+        match self {
+            ServerStartupFailure::Exited { exe, .. } => {
+                let mut lines = vec![
+                    "play server が起動できません".to_owned(),
+                    format!("exe=\"{exe}\""),
+                    format!("exit={}", self.exit_code_text()),
+                ];
+                match self.stderr_tail() {
+                    [] => lines.push(NO_STDERR.to_owned()),
+                    tail => lines.extend(tail.iter().cloned()),
+                }
+                lines
+            }
+            ServerStartupFailure::NotFound { searched } => {
+                crate::server_binary::ServerBinary::not_found_lines(searched)
+            }
         }
-        lines
+    }
+
+    fn stderr_tail(&self) -> &[String] {
+        match self {
+            ServerStartupFailure::Exited { stderr_tail, .. } => stderr_tail,
+            ServerStartupFailure::NotFound { .. } => &[],
+        }
     }
 
     fn exit_code_text(&self) -> String {
-        match self.exit_code {
-            Some(code) => code.to_string(),
-            None => "不明".to_owned(),
+        match self {
+            ServerStartupFailure::Exited {
+                exit_code: Some(code),
+                ..
+            } => code.to_string(),
+            _ => "不明".to_owned(),
         }
     }
 
     fn detail_text(&self) -> String {
-        if self.stderr_tail.is_empty() {
-            NO_STDERR.to_owned()
-        } else {
-            self.stderr_tail.join(" / ")
+        match self.stderr_tail() {
+            [] => NO_STDERR.to_owned(),
+            tail => tail.join(" / "),
         }
     }
 }

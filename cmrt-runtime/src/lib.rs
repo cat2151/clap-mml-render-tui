@@ -93,6 +93,23 @@ fn reject_retired_realtime_audio_backend(text: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// play server の実体の明示指定。[`Config::play_server_launch_override`] の中身。
+///
+/// これが無いときは探索（`cmrt.exe` と同じディレクトリ → 兄弟 repo の release）で決まる。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PlayServerLaunch {
+    /// サーバー実体のフルパス。`cmrt --play-server <PATH>` が作る。
+    ///
+    /// 存在しなければ探索へ落とさずエラーにする。明示した指定が黙って
+    /// 無視されるのは、この ADR が潰した事故と同じ手触りになるため。
+    Executable(std::path::PathBuf),
+    /// shell 経由で起動する任意コマンド。
+    ///
+    /// **テストが偽サーバー（即死する / 何もしない）を立てるためだけ**の経路で、
+    /// ユーザーがこれを設定する入口は無い。
+    ShellCommand(String),
+}
+
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
     /// 固定の既定プラグイン Surge XT のパス。load 時に profile から解決する runtime view。
@@ -138,9 +155,14 @@ pub struct Config {
     /// realtime play server backend が使う localhost port
     #[serde(default = "default_realtime_play_server_port")]
     pub realtime_play_server_port: u16,
-    /// realtime play server backend 起動コマンド。空なら sibling executable / PATH を探す。
-    #[serde(default)]
-    pub realtime_play_server_command: String,
+    /// play server の実体を明示指定するための注入口。
+    ///
+    /// **config.toml からは設定できない**（`#[serde(skip)]`）。入口は
+    /// `cmrt --play-server <PATH>` と、偽サーバーを立てるテストだけ。
+    /// 環境（PATH や toml）が黙って実体を決める経路を残さないための形で、
+    /// 経緯は `docs/adr/0017-play-server-binary-resolution.md` にある。
+    #[serde(skip)]
+    pub play_server_launch_override: Option<PlayServerLaunch>,
     /// app 起動直後に realtime play server を先行起動するかどうか。
     #[serde(default = "default_realtime_play_server_prewarm")]
     pub realtime_play_server_prewarm: bool,
@@ -184,7 +206,7 @@ impl Default for Config {
             offline_render_server_command: String::new(),
             realtime_audio_backend: RealtimeAudioBackend::default(),
             realtime_play_server_port: DEFAULT_REALTIME_PLAY_SERVER_PORT,
-            realtime_play_server_command: String::new(),
+            play_server_launch_override: None,
             realtime_play_server_prewarm: default_realtime_play_server_prewarm(),
             autoplay_on_startup: default_autoplay_on_startup(),
             voicing_shared_source: default_voicing_shared_source(),

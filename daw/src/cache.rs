@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use anyhow::Context;
 use cmrt_history::{daw_cache_mml_hash, DawCachedMeasure};
 
 use super::mml::{cell_has_content, cell_is_generated_from_chord_row};
@@ -20,6 +21,32 @@ pub(super) fn ensure_workspace_cache_dir(workspace_kind: WorkspaceKind) -> anyho
     let dir = workspace_cache_dir(&root, workspace_kind);
     std::fs::create_dir_all(&dir)?;
     Ok(dir)
+}
+
+/// 指定ワークスペースのキャッシュ WAV を**全部**捨てる。
+/// 戻り値は（掃除したディレクトリ, 消したファイル数）。
+///
+/// Daily の日付切り替えで前日の WAV が今日のセル名（`track{行}_meas{小節}.wav`。
+/// 日付も hash も入らない）を占め続けるのを断つために使う。
+///
+/// ディレクトリごと消さずに `*.wav` だけを消すのは、
+/// [`WorkspaceKind::Persistent`] の置き場が root（＝`daily/` の親）だからで、
+/// 取り違えても `daily/` サブディレクトリを巻き込まないようにするため。
+pub(super) fn clear_workspace_cache_wavs(
+    workspace_kind: WorkspaceKind,
+) -> anyhow::Result<(PathBuf, usize)> {
+    let dir = ensure_workspace_cache_dir(workspace_kind)?;
+    let mut removed = 0usize;
+    for entry in std::fs::read_dir(&dir)? {
+        let path = entry?.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("wav") {
+            continue;
+        }
+        std::fs::remove_file(&path)
+            .with_context(|| format!("キャッシュ WAV を削除できません: {}", path.display()))?;
+        removed += 1;
+    }
+    Ok((dir, removed))
 }
 
 /// セルの render キャッシュ WAV の絶対パス。`measure` は 1 始まり（0 はキャッシュを持たない）。

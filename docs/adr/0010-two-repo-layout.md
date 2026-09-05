@@ -65,6 +65,20 @@ Adding cmrt-server-config v0.1.0 (..\clap-mml-play-server\server-config)
 非 0 で終了する**（後述の 3 つの壊れ方をすべて機械的に検出する）。
 `[patch]` へ書く crate の表は Python 側 `PATCHED_CRATES` の 1 か所だけ。
 
+### 人手に頼らない：pre-commit hook
+
+`cross_repo_local_hooks.bat` が `core.hooksPath` を `.githooks` へ向け、`.githooks/pre-commit` が
+`status --no-fetch --staged` を走らせる。**cargo を呼ばないので 0.4 秒**、`git commit` の経路が
+人間でもエージェントでも IDE でも同じ門を通る。`core.hooksPath` は clone ごとのローカル設定なので
+**commit では配れない。clone したら一度実行が要る**（`on` は未設定を検出して警告する）。
+
+- 判定対象は worktree ではなく **index（= commit に載る中身）**。だから `--staged` を付ける。
+  これで「`cargo update` はしたが `git add Cargo.lock` を忘れた」という、
+  従来 `status` では見えなかった壊れ方も止まる
+- **ローカルモード ON それ自体では止めない**（実装中はほぼ常に ON で、止めると hook が
+  `--no-verify` で外される）。ON のときは警告だけ出し、危険な 2 つ
+  ——「index の lock が path 参照」「index の lock が origin/main より古い」——で止める
+
 ### なぜ .bat ではなく Python か
 
 - **`cargo xtask` は採れない。** このツールの仕事は「ビルド設定を直すこと」なので、
@@ -84,11 +98,18 @@ AGENTS.md の「古い lock を放置せず最新 HEAD へ追従」はこの経�
 
 ## 罠
 
-- **`cross_repo_local_off.bat` は `git checkout -- Cargo.lock` をする。** ローカルモード中に行った
+- **`cross_repo_local_off.bat` は `Cargo.lock` を HEAD へ戻す。** ローカルモード中に行った
   正当な `cargo update` の結果も、未 commit の lock 変更も巻き戻る。ローカルモード中の lock は
   `[patch]` で `source` 行が剥がれた別物なので「一部だけ残す」ことはできない。
   **lock を触る作業とローカル横断モードを混ぜないこと**（どうしても残すなら `off --keep-lock`）
 - **ローカルモード ON 中の `Cargo.lock` は commit してはいけない**
+- **復元は `git checkout -- <path>` ではなく `git restore --source=HEAD --staged --worktree` でなければならない。**
+  前者が復元するのは HEAD ではなく **index**。ローカルモード中に `git add -A` していると、
+  壊れた lock をそのまま書き戻したうえ index も壊れたまま残り、「HEAD の内容へ戻しました」と
+  成功表示したまま直後の `cargo update` が
+  `package ID specification 'cmrt-core' did not match any packages` で落ちる（2026-09-05 に発生）。
+  同じ理由で差分表示も `git diff HEAD --` でないと staged 時に空になる。
+  `status` が worktree だけでなく **index の lock** も見るのはこの事故を検出するため
 - **CI は main への直 push をビルドしない。** `call-rust-windows-cargo-check.yml` は
   `pull_request: types: [closed]` でしか動かない。直 push で壊れた lock を入れると、
   気づくのは翌朝の nightly workflow になる。**commit 前に `cross_repo_local_status.bat`**

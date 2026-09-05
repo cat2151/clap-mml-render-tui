@@ -35,7 +35,7 @@ buffer_size = 512
         cfg.realtime_play_server_port,
         DEFAULT_REALTIME_PLAY_SERVER_PORT
     );
-    assert!(cfg.realtime_play_server_command.is_empty());
+    assert!(cfg.play_server_launch_override.is_none());
     assert_eq!(cfg.voicing_shared_source, DEFAULT_VOICING_SHARED_SOURCE);
     assert_eq!(cfg.voicing_override_source, DEFAULT_VOICING_OVERRIDE_SOURCE);
     assert_eq!(

@@ -97,14 +97,16 @@ impl Drop for TestPlayServer {
 
 /// 既に起きているサーバーへ**繋ぐだけ**の設定。
 ///
-/// `realtime_play_server_command` を `exit 0` にしてあるので、supervisor が
+/// 実体の指定（注入口）を `exit 0` にしてあるので、supervisor が
 /// 自前でサーバーを起こすことはない。ポートを固定できるのが肝で、これが無いと
 /// config.toml の既定ポートを使い、起動中の TUI とサーバーを取り合う。
 pub(super) fn cfg_for_port(port: u16) -> Config {
     Config {
         realtime_audio_backend: RealtimeAudioBackend::PlayServer,
         realtime_play_server_port: port,
-        realtime_play_server_command: "exit 0".to_string(),
+        play_server_launch_override: Some(cmrt_runtime::PlayServerLaunch::ShellCommand(
+            "exit 0".to_string(),
+        )),
         realtime_play_server_prewarm: false,
         ..Default::default()
     }

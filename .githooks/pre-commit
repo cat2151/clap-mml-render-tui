@@ -1,0 +1,25 @@
+#!/bin/sh
+# cross-repo ローカルモードの取りこぼしで壊れた Cargo.lock が commit へ載るのを止める門番。
+#
+# 有効化: cross_repo_local_hooks.bat（= git config core.hooksPath .githooks）を一度実行する。
+# 判定の実体は scripts/cross_repo_local.py。cargo は呼ばないので 1 秒未満で終わる。
+# --staged を付けているのは、worktree ではなく「commit に載る index の中身」が判定対象だから。
+
+root=$(git rev-parse --show-toplevel) || exit 1
+
+if command -v python >/dev/null 2>&1; then
+    PY="python"
+elif command -v py >/dev/null 2>&1; then
+    PY="py -3"
+else
+    echo "[pre-commit] python が見つからないので cross-repo チェックを飛ばします。" >&2
+    exit 0
+fi
+
+if ! $PY "$root/scripts/cross_repo_local.py" status --no-fetch --staged; then
+    echo ""
+    echo "[pre-commit] 上記のため commit を中止しました。"
+    echo "[pre-commit] 直し方は表示されている [NG] 行のとおり。多くは cross_repo_local_off.bat で済みます。"
+    echo "[pre-commit] 承知のうえで通すなら git commit --no-verify。"
+    exit 1
+fi

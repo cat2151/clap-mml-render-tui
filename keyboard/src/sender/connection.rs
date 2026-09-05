@@ -22,6 +22,7 @@ pub(super) fn set_result(
         Err(error) => KeyboardConnectionPhase::Error(error.to_string()),
     };
     status.last_send = elapsed;
+    status.stage_started_at = None;
 }
 
 pub(super) fn set_prepare_result(
@@ -34,6 +35,8 @@ pub(super) fn set_prepare_result(
     let mut status = status.lock().unwrap();
     status.buffer_multiplier = buffer_multiplier;
     status.last_send = elapsed;
+    // 待ちは終わり（成功でも失敗でも）。overlay の経過秒を止める。
+    status.stage_started_at = None;
     status.voicing_patch = request.patch.map(str::to_string);
     match result {
         Ok(Some(report)) => {

@@ -19,12 +19,14 @@ mod measure_math;
 mod play_server;
 #[cfg(test)]
 mod real_server;
+mod startup;
 
 use super::playback_util::play_start_log_lines;
 pub(super) use super::playback_util::{effective_measure_count, loop_measure_summary_label};
-use super::{DawApp, DawPlayState, PlayPosition, FIRST_PLAYABLE_TRACK};
+use super::{DawApp, DawPlayState, PlayPosition};
 pub(super) use measure_math::{current_play_measure_index, following_measure_index};
 use measure_math::{format_playback_measure_advance_log, format_playback_measure_resolution_log};
+pub(crate) use startup::{DawPlaybackStartupStage, DawPlaybackStartupState};
 
 /// 演奏できる中身があるか（1 小節でも空でない MML があるか）。
 ///
@@ -93,6 +95,14 @@ impl DawApp {
             self.append_log_line(line);
         }
 
+        // 最初の音が出るまでの待ちを画面へ出す。**spawn の前にここで印を付ける。**
+        // 演奏スレッドは最初の IPC でそのまま数秒ブロックするので、あちらで
+        // 付けたのでは最初の 1 フレームに間に合わない。
+        self.playback.startup.begin(matches!(
+            self.cfg.realtime_audio_backend,
+            RealtimeAudioBackend::CachePlayer
+        ));
+
         // backend ごとに音を出す先が違う。どちらも play server 側で鳴らすので、
         // mixer の gain は演奏スレッドではなく live mix の直前で掛かる。
         match self.cfg.realtime_audio_backend {
@@ -107,6 +117,9 @@ impl DawApp {
 
     pub(super) fn stop_play(&self) {
         self.stop_mml_overlay_sender();
+        // 起動待ちの最中に止めたら overlay も消す（音は鳴らないのに
+        // 「読み込み中」が残り続けるため）。
+        self.playback.startup.finish();
         let _transition_guard = self.playback.transition_lock.lock().unwrap();
         let prev_state = {
             let mut play_state = self.playback.play_state.lock().unwrap();

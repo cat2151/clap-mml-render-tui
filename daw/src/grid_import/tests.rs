@@ -1,5 +1,7 @@
 use super::*;
 
+mod stale_cache;
+
 fn song() -> DawGridImportSong {
     DawGridImportSong {
         bpm: 137.0,
@@ -103,6 +105,7 @@ fn note_ons(snapshot: &DawProjectSnapshot, track: usize, measure: usize) -> Vec<
 
 #[test]
 fn daily_daw_is_fully_replaced_by_the_grid_song() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("grid_import_replace");
     let (mut app, _cache_rx) = crate::input::tests::build_test_app();
     app.workspace_kind = WorkspaceKind::Daily;
     app.editor.data[0][0] = "old tempo".to_string();
@@ -217,6 +220,7 @@ fn a_handwritten_measure_detaches_only_that_cell_from_the_chord_track() {
 
 #[test]
 fn project_recovery_keeps_the_chord_source_and_generation_recipe() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("grid_import_recovery");
     let (mut app, _cache_rx) = crate::input::tests::build_test_app();
     app.workspace_kind = WorkspaceKind::Daily;
     app.replace_with_grid_song(chord_song()).unwrap();

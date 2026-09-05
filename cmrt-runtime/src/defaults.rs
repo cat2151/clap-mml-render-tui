@@ -79,7 +79,6 @@ offline_render_server_command = ""
 # 【省略可】リアルタイム再生 backend（"cache_player" / "play_server"）
 realtime_audio_backend = "cache_player"
 realtime_play_server_port = {DEFAULT_REALTIME_PLAY_SERVER_PORT}
-realtime_play_server_command = ""
 
 # 【省略可】app 起動直後に realtime play server を先行起動するかどうか
 realtime_play_server_prewarm = true

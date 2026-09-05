@@ -1,4 +1,4 @@
-# ADR 0012: Sforzando は loadable program だけを共有 catalog へ載せる
+# ADR 0015: Sforzando は loadable program だけを共有 catalog へ載せる
 
 - 状態: 採用（2026-08-23、state adapter の実機確認後に訂正）
 - 関連: [0001](0001-patch-string-decides-the-plugin.md) / [0005](0005-mixed-catalog-on-by-default.md) /

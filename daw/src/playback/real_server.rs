@@ -27,15 +27,27 @@ const REAL_SERVER_WAV_ENV: &str = "CMRT_LIVE_CACHE_TEST_WAV";
 ///
 /// 環境変数が揃っていなければ `None`（＝呼び出し側のテストは何もせず green）。
 pub(super) fn real_server_from_env() -> Option<(RealtimePlayServerSupervisor, PathBuf)> {
-    let (Ok(port), Ok(wav)) = (
-        std::env::var(REAL_SERVER_PORT_ENV),
+    let (Some(server), Ok(wav)) = (
+        real_server_from_env_port(),
         std::env::var(REAL_SERVER_WAV_ENV),
     ) else {
         return None;
     };
-    let port: u16 = port.parse().expect("ポートは数値");
     let wav = PathBuf::from(wav);
     assert!(wav.is_file(), "キャッシュ WAV が見つからない: {wav:?}");
+    Some((server, wav))
+}
+
+/// 起動済みの実サーバーへ繋いだ supervisor だけを返す。
+///
+/// 鳴らす WAV を 1 本に決められないテスト（実キャッシュのディレクトリを丸ごと使う
+/// 録音ハーネスなど）はこちらを使う。ポートの受け取り方は [`real_server_from_env`]
+/// と同じ 1 か所。
+pub(super) fn real_server_from_env_port() -> Option<RealtimePlayServerSupervisor> {
+    let Ok(port) = std::env::var(REAL_SERVER_PORT_ENV) else {
+        return None;
+    };
+    let port: u16 = port.parse().expect("ポートは数値");
 
     let cfg: cmrt_runtime::Config = toml::from_str(&format!(
         r#"
@@ -49,5 +61,5 @@ realtime_audio_backend = "cache_player"
 "#
     ))
     .expect("テスト用 config");
-    Some((RealtimePlayServerSupervisor::new(&cfg), wav))
+    Some(RealtimePlayServerSupervisor::new(&cfg))
 }

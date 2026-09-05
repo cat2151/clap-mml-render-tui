@@ -6,7 +6,7 @@ use super::{
 };
 
 fn failure(stderr_tail: &[&str]) -> ServerStartupFailure {
-    ServerStartupFailure {
+    ServerStartupFailure::Exited {
         exe: r"C:\bin\clap-mml-realtime-play-server.exe".to_owned(),
         exit_code: Some(1),
         stderr_tail: stderr_tail.iter().map(|line| (*line).to_owned()).collect(),
@@ -36,8 +36,17 @@ fn message_joins_multiple_stderr_lines_into_one_line() {
 /// stderr が空でも「理由が残っていない」ことは言う。無言で消えるのが今回の問題だった。
 #[test]
 fn message_says_so_when_the_child_left_nothing_on_stderr() {
-    let mut failure = failure(&[]);
-    failure.exit_code = None;
+    let ServerStartupFailure::Exited {
+        exe, stderr_tail, ..
+    } = failure(&[])
+    else {
+        unreachable!()
+    };
+    let failure = ServerStartupFailure::Exited {
+        exe,
+        exit_code: None,
+        stderr_tail,
+    };
     assert_eq!(
         failure.message(),
         "realtime play server が起動できません \

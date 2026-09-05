@@ -58,7 +58,6 @@ fn build_test_app() -> DawApp {
             offline_render_server_command: String::new(),
             realtime_audio_backend: cmrt_runtime::RealtimeAudioBackend::CachePlayer,
             realtime_play_server_port: cmrt_runtime::DEFAULT_REALTIME_PLAY_SERVER_PORT,
-            realtime_play_server_command: String::new(),
             realtime_play_server_prewarm: false,
             autoplay_on_startup: true,
             voicing_shared_source: String::new(),
@@ -130,3 +129,4 @@ mod mml_overlay;
 mod overlay;
 mod screen_switch;
 mod sound_check_guide;
+mod startup_progress;

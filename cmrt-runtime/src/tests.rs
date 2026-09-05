@@ -34,7 +34,7 @@ buffer_size = 512
         cfg.realtime_play_server_port,
         DEFAULT_REALTIME_PLAY_SERVER_PORT
     );
-    assert!(cfg.realtime_play_server_command.is_empty());
+    assert!(cfg.play_server_launch_override.is_none());
     assert!(cfg.autoplay_on_startup);
     assert!(cfg.loop_dirs.is_empty());
     assert_eq!(cfg.loop_categories, default_loop_categories());
@@ -68,7 +68,12 @@ fn default_config_content_contains_render_server_keys() {
     assert!(content.contains("offline_render_server_command = \"\""));
     assert!(content.contains("realtime_audio_backend = \"cache_player\""));
     assert!(content.contains("realtime_play_server_port = 62154"));
-    assert!(content.contains("realtime_play_server_command = \"\""));
+    // play server の実体を config.toml から決める経路は廃止した。ひな形に書き戻すと
+    // 「環境が黙って実体を決める」経路が復活する（ADR 0017）。
+    assert!(
+        !content.contains("realtime_play_server_command"),
+        "廃止したキーをひな形へ書き戻さないこと: {content}"
+    );
     assert!(content.contains("autoplay_on_startup = true"));
     assert!(content.contains("loop_dirs = []"));
     assert!(content
@@ -165,17 +170,33 @@ sample_rate = 48000
 buffer_size = 512
 realtime_audio_backend = "play_server"
 realtime_play_server_port = 62154
-realtime_play_server_command = "clap-mml-realtime-play-server"
 "#;
 
     let cfg: Config = toml::from_str(toml_str).unwrap();
 
     assert_eq!(cfg.realtime_audio_backend, RealtimeAudioBackend::PlayServer);
     assert_eq!(cfg.realtime_play_server_port, 62154);
-    assert_eq!(
-        cfg.realtime_play_server_command,
-        "clap-mml-realtime-play-server"
-    );
+}
+
+/// play server の実体を config.toml から決める経路は廃止した
+/// （`docs/adr/0017-play-server-binary-resolution.md`）。
+///
+/// 古い config.toml にはこのキーが残っているので、読めなくなってはいけない。
+/// 同時に、**読んでも実体の決め方には一切効かない**ことをここで固定する。
+#[test]
+fn the_removed_play_server_command_key_is_ignored() {
+    let toml_str = r#"
+input_midi  = "input.mid"
+output_midi = "output.mid"
+output_wav  = "output.wav"
+sample_rate = 48000
+buffer_size = 512
+realtime_play_server_command = "clap-mml-realtime-play-server"
+"#;
+
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+
+    assert!(cfg.play_server_launch_override.is_none());
 }
 
 /// cache-player backend（render キャッシュの WAV を play server の live mix へ載せる経路）は

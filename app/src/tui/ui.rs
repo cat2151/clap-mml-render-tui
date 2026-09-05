@@ -51,6 +51,9 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
             .unwrap_or_default();
         cmrt_mml_overlay::ui::draw_with_status(&app.mml_overlay, &sender_status, f);
     }
+    // 通常運転ではない play server を掴んでいるときだけ右上に出る。DAW 画面は
+    // 自前の描画ループを持つので、あちらでも同じものを呼んでいる（ADR 0017）。
+    cmrt_tui_core::server_profile_badge::draw(f, app.play_server.server_binary());
     // 音が鳴らない理由なので、どの画面・どのオーバーレイよりも前に出す。
     if let Some(failure) = app.play_server_notice() {
         super::play_server_notice::draw(f, &failure);

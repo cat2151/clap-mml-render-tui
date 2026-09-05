@@ -39,7 +39,6 @@ pub(super) fn test_config() -> crate::config::Config {
         offline_render_server_command: String::new(),
         realtime_audio_backend: crate::config::RealtimeAudioBackend::CachePlayer,
         realtime_play_server_port: crate::config::DEFAULT_REALTIME_PLAY_SERVER_PORT,
-        realtime_play_server_command: String::new(),
         realtime_play_server_prewarm: false,
         autoplay_on_startup: true,
         voicing_shared_source: String::new(),

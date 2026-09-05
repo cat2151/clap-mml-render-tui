@@ -4,6 +4,12 @@
 //! 小節長（約 2.4 秒）に間に合うのかを、**演奏 track 数を変えながら**数字で出すための
 //! テスト。通常は skip され、実サーバーがあるときだけ走る。
 //!
+//! **先読みを入れてから、測る先が `prepare_ms` から `next_ms` へ移った。** state load は
+//! 小節境界ではなく「1 つ前の小節を鳴らしている最中」に出るようになったので、
+//! 小節長に対する占有率を決めるのは `next_ms` のほう。`prepare_ms` は
+//! 「小節境界で演奏スレッドが止まっていた時間」で、先読みが効いていれば
+//! 1 小節目以外は 0 になる。
+//!
 //! ```text
 //! CMRT_REALTIME_PLAY_SERVER_PORT=8712 CMRT_LIVE_INSTANCE_COUNT=8 \
 //!   ../clap-mml-play-server/target/debug/clap-mml-realtime-play-server.exe > server.log 2>&1 &
@@ -81,7 +87,7 @@ impl Drop for DistinctCacheWavs {
     }
 }
 
-/// 小節ログから `<key>=` の数値を拾う（`prepare_ms` / `note_on_ms`）。
+/// 小節ログから `<key>=` の数値を拾う（`prepare_ms` / `note_on_ms` / `next_ms`）。
 fn measure_millis(log_lines: &[String], key: &str) -> Vec<f64> {
     let needle = format!(" {key}=");
     log_lines
@@ -143,7 +149,8 @@ fn watch_dropouts(
 ///
 /// 判定材料は 3 つとも**サーバーログを読まずに**取れる:
 ///
-/// - `prepare_ms`: 演奏スレッドが state load の応答待ちで止まっていた時間（TUI 側の実測）
+/// - `next_ms`: 次の小節を先読みするのに掛かった時間（＝ state load の実測値）
+/// - `prepare_ms`: **小節境界で**演奏スレッドが止まっていた時間。先読みが効いていれば 0
 /// - `note_on_ms`: 全 track ぶんの note on を送り終えるまでの実時間
 ///   （= 最初と最後の note on の間隔の上限）
 /// - `timing_metrics().late_events_total`: サーバーが取りこぼしたイベント数
@@ -233,10 +240,13 @@ fn a_real_server_loads_every_measure_state_well_inside_one_measure() {
         measure_samples: Arc::new(Mutex::new(measure_samples)),
         log_lines: Arc::clone(&log_lines),
         sample_rate: SAMPLE_RATE,
+        tempo_bpm: 120.0,
+        beat_numerator: 4,
         tracks: grid_rows,
         ready_cache_wav: Arc::new(move |measure_index, row| Some(wavs.path(measure_index, row))),
         initial_track_gains: live_track_gains(grid_rows, |_| -3, |_| true),
         sent_track_gains: Arc::new(Mutex::new(Vec::new())),
+        startup: crate::playback::DawPlaybackStartupState::default(),
     };
 
     let started = std::time::Instant::now();
@@ -254,16 +264,21 @@ fn a_real_server_loads_every_measure_state_well_inside_one_measure() {
         .collect();
     assert!(failures.is_empty(), "送信に失敗した行がある: {failures:?}");
 
+    // `prepare_ms` は小節境界で止まっていた時間（先読みが効いていれば 1 小節目以外 0）、
+    // `next_ms` は小節の途中で出した先読みの時間。**state load の実測値は後者。**
     let prepare_millis = measure_millis(&logged, "prepare_ms");
     let note_on_millis = measure_millis(&logged, "note_on_ms");
-    let millis = totals(&prepare_millis, &note_on_millis);
+    let preload_millis = measure_millis(&logged, "next_ms");
+    let boundary_millis = totals(&prepare_millis, &note_on_millis);
     assert_eq!(
-        millis.len(),
+        boundary_millis.len(),
         MEASURES,
         "測れた小節数が想定と違う: {logged:?}"
     );
     assert_eq!(note_on_millis.len(), MEASURES, "note on の時間が欠けている");
-    let (first, steady) = millis.split_at(1);
+    assert_eq!(preload_millis.len(), MEASURES, "先読みの時間が欠けている");
+    // 1 小節目だけは先読みの元が無いので境界で載せる。定常状態は 2 小節目以降。
+    let (first, steady) = preload_millis.split_at(1);
     let after_timing = play_server.timing_metrics();
     let after_underrun = play_server.underrun_frames();
     let late = after_timing
@@ -282,21 +297,31 @@ fn a_real_server_loads_every_measure_state_well_inside_one_measure() {
 
     eprintln!(
         "live-cache state load: tracks={tracks} measures={MEASURES} measure_ms={budget_ms:.0} \
-         first_ms={:.1} steady_max_ms={:.1} steady_median_ms={:.1} steady_occupancy={:.1}% \
+         preload_first_ms={:.1} preload_steady_max_ms={:.1} preload_steady_median_ms={:.1} \
+         preload_steady_occupancy={:.1}% preload_all={preload_millis:?} \
+         boundary_all={boundary_millis:?} \
          note_on_max_ms={:.2} note_on_all={note_on_millis:?} \
-         late={late} underrun_frames={underrun} cpu_p95={:.0}% all={millis:?} \
-         after_first_measure_dropout_frames={after_first_measure} dropouts={dropouts:?}",
+         late={late} underrun_frames={underrun} cpu_p95={:.0}% \
+         after_first_measure_dropout_frames={after_first_measure} dropouts={dropouts:?}\n\
+         {}",
         first[0],
         max(steady),
         median(steady),
         max(steady) / budget_ms * 100.0,
         max(&note_on_millis),
         after_timing.process_load_p95,
+        logged
+            .iter()
+            .filter(|line| line.contains(": live-cache "))
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n"),
     );
 
     assert!(
         max(steady) < budget_ms * STEADY_BUDGET_RATIO,
-        "定常状態の state load が小節長の {:.0}% を超えた: {steady:?} (小節 {budget_ms:.0}ms)",
+        "先読みが小節長の {:.0}% を超えた（次の小節に間に合わない）: \
+         {steady:?} (小節 {budget_ms:.0}ms)",
         STEADY_BUDGET_RATIO * 100.0
     );
     assert!(
@@ -304,6 +329,19 @@ fn a_real_server_loads_every_measure_state_well_inside_one_measure() {
         "1 小節目の state load が小節長を超えた（演奏が丸ごと 1 小節止まる）: {:.1}ms",
         first[0]
     );
+    // **小節境界には state load が無い。** ここが 0 でなくなったら先読みが壊れている。
+    // 対策前はこの列が毎小節 98.6〜129.8ms（8 track の debug サーバーなら 520ms）で、
+    // それがそのまま小節の頭の無音になっていた。
+    for line in logged
+        .iter()
+        .filter(|line| line.contains(": live-cache "))
+        .skip(1)
+    {
+        assert!(
+            line.contains(" preload=hit ") && line.contains(" prepare_ms=0.0 "),
+            "小節境界で state load を出している: {line}"
+        );
+    }
     assert_eq!(late, 0, "サーバーがイベントを取りこぼしている");
     // 小節の頭のズレ。全 track の note on を 1 コマンドへまとめているので、
     // 「最初の track と最後の track の note on の間隔」の上限がこの値になる。
@@ -318,7 +356,7 @@ fn a_real_server_loads_every_measure_state_well_inside_one_measure() {
     // 実測した送信時間ぶんを上限にする。ここを超えたら state load 以外の原因
     // （演奏ループが audio thread を塞ぐ等）が混ざっている。
     let explained_frames =
-        (steady.iter().sum::<f64>() / 1_000.0 * f64::from(SAMPLE_RATE)).ceil() as u64;
+        (preload_millis.iter().sum::<f64>() / 1_000.0 * f64::from(SAMPLE_RATE)).ceil() as u64;
     assert!(
         after_first_measure <= explained_frames,
         "state load で説明できない音の途切れがある: {after_first_measure} frames \

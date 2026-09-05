@@ -1,3 +1,7 @@
+// DAW の演奏ループが、キャッシュ WAV を「どのスロットへ載せるか」まで指定した
+// patch 文字列を組み立てるために使う（`cache_wav_patch_with_slot` / `SLOT_COUNT`）。
+// 綴りの単一ソースは play server 側 `core-lib/src/cache_wav.rs` の module doc。
+pub use clap_mml_play_server_core::cache_wav;
 pub use clap_mml_play_server_core::patch_list::{collect_patches, to_relative};
 pub use clap_mml_play_server_core::pipeline;
 pub use clap_mml_play_server_core::pipeline::{

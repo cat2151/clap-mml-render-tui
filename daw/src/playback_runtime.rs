@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use cmrt_realtime_play::RealtimePlayServerSupervisor;
 
 use super::playback::live_gain::LiveTrackGain;
+use super::playback::DawPlaybackStartupState;
 use super::{AbRepeatState, DawPlayState, PlayPosition};
 
 /// DAW の再生・preview セッションで共有される runtime 状態。
@@ -28,6 +29,9 @@ pub(crate) struct DawPlaybackRuntime {
     /// 演奏を止めるときに空へ戻すので、次の演奏では必ず全 track ぶん送り直す
     /// （そのあいだにサーバーが再起動していても gain が食い違わない）。
     pub(crate) live_track_gains: Arc<Mutex<Vec<LiveTrackGain>>>,
+    /// 演奏を始めてから最初の音が出るまでの進み具合。演奏スレッドが書き、
+    /// 描画スレッドが中央 overlay として読む。待っていないあいだは空。
+    pub(crate) startup: DawPlaybackStartupState,
 }
 
 impl DawPlaybackRuntime {
@@ -51,6 +55,7 @@ impl DawPlaybackRuntime {
             measure_track_mmls,
             measure_samples: Arc::new(Mutex::new(0)),
             live_track_gains: Arc::new(Mutex::new(Vec::new())),
+            startup: DawPlaybackStartupState::default(),
         }
     }
 

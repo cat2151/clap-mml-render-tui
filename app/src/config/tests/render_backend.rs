@@ -56,16 +56,13 @@ sample_rate = 48000
 buffer_size = 512
 realtime_audio_backend = "play_server"
 realtime_play_server_port = 62154
-realtime_play_server_command = "clap-mml-realtime-play-server"
 "#;
     let cfg: Config = toml::from_str(toml_str).unwrap();
     cfg.validate().unwrap();
     assert_eq!(cfg.realtime_audio_backend, RealtimeAudioBackend::PlayServer);
     assert_eq!(cfg.realtime_play_server_port, 62154);
-    assert_eq!(
-        cfg.realtime_play_server_command,
-        "clap-mml-realtime-play-server"
-    );
+    // 実体の決め方は config.toml から外した（ADR 0017）。
+    assert!(cfg.play_server_launch_override.is_none());
 }
 
 #[test]

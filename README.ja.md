@@ -34,6 +34,21 @@ cmrt
 
 TUI画面でMML入力して遊べます
 
+#### play serverの実体
+
+音を鳴らすのは別プロセスの play server です。実体は次の順で決まり、最初に見つかったものを使います。
+
+1. `--play-server <PATH>` で指定したフルパス（指定したものが無ければ、探索へ移らずエラーで止まります）
+2. `cmrt` と同じディレクトリの `clap-mml-realtime-play-server`
+3. 兄弟リポジトリの release ビルド（`../clap-mml-play-server/target/release/`）
+
+PATHは見ません。debugビルドのサーバーは先読みが4〜5倍遅く、演奏が小節の頭で途切れます。
+debugビルドや素性の分からない実体を掴んでいるときは、画面の右上に警告が出ます。
+
+```
+cmrt --play-server "N:/projects/clap-mml-play-server/target/debug/clap-mml-realtime-play-server.exe"
+```
+
 ### 対応オーディオプラグイン
 - ※CLAP、Windows、アカウント登録なしで無料で入手できるもの、に絞っています
 - Surge XT
@@ -95,7 +110,6 @@ offline_render_server_command = ""
 # リアルタイム再生 backend
 realtime_audio_backend = "in_process"
 realtime_play_server_port = 62154
-realtime_play_server_command = ""
 
 # 起動時に自動再生するかどうか
 # notepad モード: 現在行を即座に再生します。DAW モード: 曲先頭（measure 0）から演奏開始します。
@@ -133,7 +147,6 @@ patches_dirs = [
 | `offline_render_server_command` | 空文字 | render_server の起動コマンドです。 |
 | `realtime_audio_backend` | `in_process` | リアルタイム再生の実行先です。 |
 | `realtime_play_server_port` | `62154` | play_server の localhost port です。 |
-| `realtime_play_server_command` | 空文字 | play_server の起動コマンドです。 |
 | `autoplay_on_startup` | `true` | 起動直後に自動再生するかどうかです。 |
 | `plugins."Surge XT".patches_dirs` | OSごとの Surge XT patches 標準ディレクトリ | Surge XT の音色選択で検索するディレクトリ一覧です。 |
 | `loop_dirs` | `[]` | WAV ループブラウザーで検索するディレクトリ一覧です。変更後は `cmrt scan-loops` を実行します。 |

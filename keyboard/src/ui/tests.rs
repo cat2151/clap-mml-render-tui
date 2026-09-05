@@ -18,15 +18,6 @@ fn buffer_to_string(terminal: &Terminal<TestBackend>) -> String {
         .join("\n")
 }
 
-fn render_overlay(phase: KeyboardConnectionPhase) -> String {
-    let backend = TestBackend::new(80, 12);
-    let mut terminal = Terminal::new(backend).unwrap();
-    terminal
-        .draw(|f| draw_connection_overlay(&phase, f, f.area()))
-        .unwrap();
-    buffer_to_string(&terminal)
-}
-
 fn render_numeric_overlay(state: &KeyboardState) -> String {
     let backend = TestBackend::new(80, 12);
     let mut terminal = Terminal::new(backend).unwrap();
@@ -269,30 +260,6 @@ fn cached_voicing_is_labeled_as_cached() {
 }
 
 #[test]
-fn connecting_overlay_explains_that_notes_are_unavailable() {
-    let screen = render_overlay(KeyboardConnectionPhase::Connecting);
-
-    assert!(screen.contains("connecting..."));
-    assert!(screen.contains("notes unavailable until ready"));
-}
-
-#[test]
-fn error_overlay_shows_retry_navigation() {
-    let screen = render_overlay(KeyboardConnectionPhase::Error("server failed".to_string()));
-
-    assert!(screen.contains("server error: server failed"));
-    assert!(screen.contains("r:retry"));
-}
-
-#[test]
-fn patch_setting_overlay_remains_until_patch_is_ready() {
-    let screen = render_overlay(KeyboardConnectionPhase::PatchSetting);
-
-    assert!(screen.contains("patch setting..."));
-    assert!(screen.contains("notes unavailable until ready"));
-}
-
-#[test]
 fn cc_number_input_overlay_shows_typed_digits_and_key_help() {
     let mut state = KeyboardState::default();
     state.begin_numeric_input(NumericInputTarget::CcNumber);
@@ -356,13 +323,6 @@ fn mml_input_overlay_shows_conversion_error() {
     assert!(screen
         .replace(' ', "")
         .contains("MMLに発音ノートがありません"));
-}
-
-#[test]
-fn ready_connection_does_not_draw_an_overlay() {
-    assert!(render_overlay(KeyboardConnectionPhase::Ready)
-        .chars()
-        .all(char::is_whitespace));
 }
 
 #[test]

@@ -27,6 +27,9 @@ fn song(track_volumes_db: Option<Vec<i32>>) -> DawGridImportSong {
 fn imported_daily_app(track_volumes_db: Option<Vec<i32>>) -> DawApp {
     let (mut app, _cache_rx) = crate::input::tests::build_test_app();
     app.workspace_kind = WorkspaceKind::Daily;
+    // 全置換は `daw_cache/<plugin>/daily/` の WAV を掃除する（`grid_import.rs`）。
+    // 実 `%LOCALAPPDATA%` のキャッシュを消さないよう temp へ逃がす。
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("auto_trim_import");
     app.replace_with_grid_song(song(track_volumes_db)).unwrap();
     app
 }

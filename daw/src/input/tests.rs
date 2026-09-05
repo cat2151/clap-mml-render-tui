@@ -22,18 +22,42 @@ fn track1_minus_6_db_gain() -> f32 {
     10.0f32.powf(-6.0 / 20.0)
 }
 
-struct TempDirGuard(std::path::PathBuf);
+pub(crate) struct TempDirGuard(std::path::PathBuf);
 
 impl TempDirGuard {
-    fn new(name: &str) -> Self {
+    pub(crate) fn new(name: &str) -> Self {
         let path = std::env::temp_dir().join(name);
         std::fs::remove_dir_all(&path).ok();
         Self(path)
     }
 
-    fn path(&self) -> &std::path::Path {
+    pub(crate) fn path(&self) -> &std::path::Path {
         &self.0
     }
+}
+
+/// 実 `%LOCALAPPDATA%` を触らせないための「一時ディレクトリ＋env guard」。
+///
+/// `daw_cache/<plugin>/daily/` を**読み書きする**経路（全置換 import の掃除・
+/// rollover の掃除・cache WAV の書き出し）を通るテストは**必ずこれを通すこと**。
+/// 通さないと実キャッシュのファイルを消してしまう。
+///
+/// 戻り値は両方とも生かしておくこと（drop で env が戻り、temp が消える）。
+/// `set_local_dir_envs` はプロセス全体の env lock を取るので、
+/// これを使うテストどうしは直列に走る。
+pub(crate) fn temp_local_dirs(
+    label: &str,
+) -> (TempDirGuard, cmrt_history::test_support::TestEnvGuard) {
+    let temp = TempDirGuard::new(&format!(
+        "cmrt_daw_{label}_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let env_guard = cmrt_history::test_support::set_local_dir_envs(temp.path());
+    (temp, env_guard)
 }
 
 impl Drop for TempDirGuard {
@@ -80,7 +104,6 @@ pub(crate) fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::supe
                 offline_render_server_command: String::new(),
                 realtime_audio_backend: cmrt_runtime::RealtimeAudioBackend::CachePlayer,
                 realtime_play_server_port: cmrt_runtime::DEFAULT_REALTIME_PLAY_SERVER_PORT,
-                realtime_play_server_command: String::new(),
                 realtime_play_server_prewarm: false,
                 autoplay_on_startup: true,
                 voicing_shared_source: String::new(),

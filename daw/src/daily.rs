@@ -301,11 +301,35 @@ impl DawApp {
                     "daily rollover: {previous_date} -> {current_date}; archive={}",
                     archive_path.display()
                 ));
+                self.clear_daily_cache_after_rollover();
             }
             Err(error) => {
                 self.keep_daily_after_rollover_failure(recovery, current_date, &archive_path, error)
             }
         }
+    }
+
+    /// rollover 成功後に、前日のキャッシュ WAV を捨てる。
+    ///
+    /// **呼んでよいのは archive の書き込みが `Ok` を返した腕だけ。**
+    /// rollover 後のページは空（[`Self::apply_daily_recovery`] を呼ばない）なので、
+    /// 掃除しないと前日の WAV が今日のセル名を占めたまま鳴り続ける。ファイル名に
+    /// 日付も hash も入らないうえ、演奏ループはファイルの存在しか見ないため。
+    ///
+    /// 逆に [`Self::keep_daily_after_rollover_failure`] は前日のページを**復元する**
+    /// 経路で、`restore_cache_from_metadata()` が前日の WAV を必要とする。
+    /// あちらで消すと「archive も書けていないのにキャッシュも無い」状態を作る。
+    fn clear_daily_cache_after_rollover(&mut self) {
+        let line = match crate::cache::clear_workspace_cache_wavs(crate::WorkspaceKind::Daily) {
+            Ok((dir, removed)) => {
+                format!(
+                    "daily cache cleared: dir={}; removed={removed} wav",
+                    dir.display()
+                )
+            }
+            Err(error) => format!("daily cache clear failed: {error}"),
+        };
+        self.append_log_line(line);
     }
 
     fn keep_daily_after_rollover_failure(

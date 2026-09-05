@@ -15,6 +15,7 @@ use anyhow::{anyhow, Context as _, Result};
 use crate::{
     logging::{log_realtime_play_event, truncate_for_log},
     process::{self, build_realtime_play_server_command, spawn_realtime_play_server, stop_child},
+    server_binary::{resolve_server_binary, ServerBinary},
     startup_failure::{self, ExitLatch, ServerStartupFailure, StderrCapture},
     RealtimePlayServerSupervisor, LIVE_INSTANCE_COUNT_ENV,
 };
@@ -193,19 +194,20 @@ impl RealtimePlayServerSupervisor {
             return Ok(());
         };
         // 落ちた理由は子の stderr にしかない。child を捨てる前にここで拾う。
-        let failure = ServerStartupFailure {
-            exe: running.exe.clone(),
-            exit_code: status.code(),
-            stderr_tail: running.stderr_capture.drain_snapshot(),
-        };
+        let stderr_tail = running.stderr_capture.drain_snapshot();
         log_realtime_play_event(format!(
             "action=server-exited exit={} exe={:?} stderr_tail={:?}",
-            failure
-                .exit_code
+            status
+                .code()
                 .map_or_else(|| "不明".to_owned(), |code| code.to_string()),
-            failure.exe,
-            truncate_for_log(&failure.stderr_tail.join(" / "), 1_000)
+            running.exe,
+            truncate_for_log(&stderr_tail.join(" / "), 1_000)
         ));
+        let failure = ServerStartupFailure::Exited {
+            exe: running.exe.clone(),
+            exit_code: status.code(),
+            stderr_tail,
+        };
         *self.last_startup_failure.lock().unwrap() = Some(failure);
         state.child = None;
         state.exit_latch.record_exit(Instant::now());
@@ -222,7 +224,7 @@ impl RealtimePlayServerSupervisor {
     }
 
     fn spawn_child(&self) -> Result<RunningChild> {
-        let launch = self.build_command();
+        let launch = self.build_command()?;
         let stderr_capture = StderrCapture::default();
         let child = spawn_realtime_play_server(
             launch.command,
@@ -234,18 +236,52 @@ impl RealtimePlayServerSupervisor {
         )?;
         Ok(RunningChild {
             child,
-            exe: launch.exe,
+            exe: launch.resolved.exe,
             stderr_capture,
         })
     }
 
-    fn build_command(&self) -> process::ServerLaunch {
-        let mut launch = build_realtime_play_server_command(&self.command);
+    /// 掴む実体。**起動時に 1 度決めて持ち回る。**
+    ///
+    /// 解決は起動のたびに走るのではなく、ここで 1 度だけ。supervisor がサーバーを
+    /// 起こし直しても同じ実体が選ばれる（途中で入れ替わると、画面に出した profile が嘘になる）。
+    pub fn server_binary(&self) -> &ServerBinary {
+        self.server_binary.get_or_init(|| {
+            let binary = resolve_server_binary(self.launch_override.as_ref());
+            match &binary {
+                ServerBinary::Resolved(resolved) => log_realtime_play_event(format!(
+                    "action=server-resolved {}",
+                    resolved.log_fields()
+                )),
+                ServerBinary::NotFound { searched } => log_realtime_play_event(format!(
+                    "action=server-not-found searched={:?}",
+                    searched.join(" / ")
+                )),
+            }
+            binary
+        })
+    }
+
+    fn build_command(&self) -> Result<process::ServerLaunch> {
+        let resolved = match self.server_binary() {
+            ServerBinary::Resolved(resolved) => resolved,
+            ServerBinary::NotFound { searched } => {
+                // 素の実行ファイル名で spawn して OS のエラーに任せると、
+                // 「どこを探したのか」が誰にも分からなくなる。
+                let failure = ServerStartupFailure::NotFound {
+                    searched: searched.clone(),
+                };
+                let message = failure.message();
+                *self.last_startup_failure.lock().unwrap() = Some(failure);
+                return Err(anyhow!(message));
+            }
+        };
+        let mut launch = build_realtime_play_server_command(resolved);
         launch.command.env(
             LIVE_INSTANCE_COUNT_ENV,
             self.live_instance_count.to_string(),
         );
-        launch
+        Ok(launch)
     }
 }
 

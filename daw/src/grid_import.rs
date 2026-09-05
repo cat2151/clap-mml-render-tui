@@ -121,6 +121,7 @@ impl DawApp {
         let tracks = snapshot.tracks;
         let measures = snapshot.measures;
         self.apply_project_snapshot_for_recovery(snapshot);
+        self.clear_daily_cache_after_full_replacement();
         if needs_auto_trim {
             self.request_auto_trim_from_first_measure();
         }
@@ -135,6 +136,37 @@ impl DawApp {
             bpm,
         ));
         Ok(())
+    }
+
+    /// 全置換のあとに、置換前の曲のキャッシュ WAV を捨てる。
+    ///
+    /// **呼んでよいのは [`Self::replace_with_grid_song`] からだけ。**
+    /// 共通の底（`apply_project_snapshot_state()`）へ置くと、もう 1 つの呼び出し元
+    /// `apply_daily_recovery()` が、直後の `restore_cache_from_metadata()` で
+    /// [`crate::CacheState::Ready`] として復元するはずの WAV を自分で消してしまう
+    /// （Resume と rollover 失敗の経路。番人は
+    /// `daily::tests::stale_cache::a_failed_rollover_keeps_yesterdays_page_and_its_cache_wav`）。
+    ///
+    /// キャッシュのファイル名は `track{行}_meas{小節}.wav` で**日付も hash も入らず**、
+    /// 演奏ループ（`playback::live_cache::ready_cache_wav_for_measure`）は
+    /// ファイルの存在しか見ない。だから置換で空になった行・小節の WAV を残すと、
+    /// 前の曲がその名前を占めたまま鳴り続ける。
+    /// メモリ上のキャッシュは `apply_project_snapshot_state()` が
+    /// [`crate::CacheState::Empty`] へ落とすが、**ディスクには触らない**。
+    ///
+    /// 呼ぶのは `apply_project_snapshot_for_recovery()` の**あと**、
+    /// `kick_all_pending()` の**前**。前者で `stop_play()` と generation の更新が済むので、
+    /// 走っている演奏も、飛んでいる render job（`init::cache_worker::store_cache_job_samples`
+    /// は generation 不一致なら WAV を書かずに戻る）も、消したそばから書き戻さない。
+    fn clear_daily_cache_after_full_replacement(&mut self) {
+        let line = match crate::cache::clear_workspace_cache_wavs(WorkspaceKind::Daily) {
+            Ok((dir, removed)) => format!(
+                "grid import cache cleared: dir={}; removed={removed} wav",
+                dir.display()
+            ),
+            Err(error) => format!("grid import cache clear failed: {error}"),
+        };
+        self.append_log_line(line);
     }
 }
 

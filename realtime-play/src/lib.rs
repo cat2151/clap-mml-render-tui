@@ -14,12 +14,13 @@ use std::{
 
 use anyhow::{anyhow, Result};
 
-use cmrt_runtime::Config;
+use cmrt_runtime::{Config, PlayServerLaunch};
 
 pub mod fast_midi_ipc;
 mod live_ipc;
 mod logging;
 mod process;
+pub mod server_binary;
 mod startup_failure;
 mod supervisor_process;
 
@@ -32,6 +33,10 @@ pub use fast_midi_ipc::{
     TimelineMidiEvent, TimingMetrics, INSTANCE_COUNT, MAX_MIDI_MESSAGES,
 };
 pub use live_ipc::{PatchVoicing, StandbyPatchRequest, VoicingReport, STANDBY_LOAD_TIMEOUT};
+pub use server_binary::{
+    default_realtime_play_server_executable_name, ResolvedServer, ServerBinary, ServerProfile,
+    ServerSource, StaleSource,
+};
 pub use startup_failure::ServerStartupFailure;
 
 use supervisor_process::PlayServerState;
@@ -78,7 +83,11 @@ const PLAY_CONTENT_TYPE_MML: &str = "text/plain; charset=utf-8";
 
 pub struct RealtimePlayServerSupervisor {
     port: u16,
-    command: String,
+    /// 実体の明示指定（`--play-server` / テストの偽サーバー）。無ければ探索で決まる。
+    launch_override: Option<PlayServerLaunch>,
+    /// 決まった実体。**起動時に 1 度決めて持ち回る**（サーバーを起こし直しても
+    /// 同じ実体が選ばれる）。画面もログもここを読む。
+    server_binary: std::sync::OnceLock<ServerBinary>,
     live_instance_count: usize,
     agent: ureq::Agent,
     state: Mutex<PlayServerState>,
@@ -128,7 +137,8 @@ impl RealtimePlayServerSupervisor {
         );
         Self {
             port: cfg.realtime_play_server_port,
-            command: cfg.realtime_play_server_command.clone(),
+            launch_override: cfg.play_server_launch_override.clone(),
+            server_binary: std::sync::OnceLock::new(),
             live_instance_count,
             agent,
             state: Mutex::new(PlayServerState::default()),

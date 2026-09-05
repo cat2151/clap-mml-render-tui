@@ -33,7 +33,9 @@ fn app_with_a_failing_play_server() -> TuiApp<'static> {
         .local_addr()
         .unwrap()
         .port();
-    cfg.realtime_play_server_command = immediately_failing_command().to_string();
+    cfg.play_server_launch_override = Some(cmrt_runtime::PlayServerLaunch::ShellCommand(
+        immediately_failing_command().to_string(),
+    ));
 
     let app = TuiApp::new_for_test(cfg);
     // 実際に起動を試みて失敗させる。理由はここで supervisor に記録される。

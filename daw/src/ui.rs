@@ -8,6 +8,7 @@ mod mixer;
 mod patch_display;
 mod patch_select;
 mod project;
+mod startup_progress;
 mod status;
 
 use ratatui::{
@@ -206,6 +207,17 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
             app.workspace_kind.primary_screen(),
         );
     }
+
+    // 通常運転ではない play server を掴んでいるときだけ右上に出る。debug サーバーは
+    // 先読みが 4〜5 倍遅く、ここ（DAW の演奏）がぶつ切りになる（ADR 0017）。
+    // `DawApp` は自前の描画ループなので、app 側の描画からは呼ばれない。
+    if let Some(play_server) = app.playback.realtime_play_server.as_ref() {
+        cmrt_tui_core::server_profile_badge::draw(f, play_server.server_binary());
+    }
+
+    // 「音が鳴るまで」は他の overlay より上。起動直後の自動再生（`autoplay_on_entry`）で
+    // 開いたままの overlay が上に重なると、何を待っているのかが見えなくなる。
+    startup_progress::draw_startup_progress(app, f, area);
 }
 
 #[cfg(test)]

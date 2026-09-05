@@ -8,18 +8,19 @@ use anyhow::{anyhow, Result};
 
 use super::{
     logging::{log_realtime_play_event, truncate_for_log},
+    server_binary::{ResolvedServer, ServerSource},
     startup_failure::StderrCapture,
     RealtimePlayServerStartupProgress,
 };
 
 /// 起動しようとしたコマンドと、その素性。
 ///
-/// `description` はログ 1 行ぶんの key=value 列で、`exe` は「どの実体を掴んだか」だけを
-/// 取り出したもの。落ちたときのエラー文と UI は後者だけを使う。
+/// `description` はログ 1 行ぶんの key=value 列で、`resolved` は「どの実体を掴んだか」。
+/// 落ちたときのエラー文と UI は後者だけを使う。
 pub(super) struct ServerLaunch {
     pub(super) command: Command,
     pub(super) description: String,
-    pub(super) exe: String,
+    pub(super) resolved: ResolvedServer,
 }
 
 const STARTUP_PROGRESS_PREFIX: &str = "cmrt-server-startup: instances=";
@@ -34,41 +35,6 @@ pub(super) fn stop_child(child: Option<Child>) {
     let _ = child.wait();
 }
 
-pub(super) fn sibling_realtime_play_server_path() -> Option<std::path::PathBuf> {
-    let current_exe = std::env::current_exe().ok()?;
-    let sibling = current_exe
-        .parent()?
-        .join(default_realtime_play_server_executable_name());
-    sibling.is_file().then_some(sibling)
-}
-
-pub(super) fn path_realtime_play_server_path() -> Option<std::path::PathBuf> {
-    let executable = default_realtime_play_server_executable_name();
-    executable_in_paths(
-        executable,
-        std::env::split_paths(&std::env::var_os("PATH")?),
-    )
-}
-
-fn executable_in_paths(
-    executable: &str,
-    mut paths: impl Iterator<Item = std::path::PathBuf>,
-) -> Option<std::path::PathBuf> {
-    paths.find_map(|directory| {
-        let candidate = directory.join(executable);
-        if !candidate.is_file() {
-            return None;
-        }
-        if candidate.is_absolute() {
-            Some(candidate)
-        } else {
-            std::env::current_dir()
-                .ok()
-                .map(|current_dir| current_dir.join(candidate))
-        }
-    })
-}
-
 pub(super) fn parse_server_startup_progress(line: &str) -> Option<(usize, usize)> {
     let progress = line.strip_prefix(STARTUP_PROGRESS_PREFIX)?;
     let (completed, total) = progress.split_once('/')?;
@@ -77,43 +43,21 @@ pub(super) fn parse_server_startup_progress(line: &str) -> Option<(usize, usize)
     (total > 0 && completed <= total).then_some((completed, total))
 }
 
-pub(super) fn default_realtime_play_server_executable_name() -> &'static str {
-    if cfg!(windows) {
-        "clap-mml-realtime-play-server.exe"
-    } else {
-        "clap-mml-realtime-play-server"
-    }
-}
-
-pub(super) fn build_realtime_play_server_command(configured: &str) -> ServerLaunch {
-    let trimmed = configured.trim();
-    if !trimmed.is_empty() {
-        return ServerLaunch {
-            command: shell_command(trimmed),
-            description: format!("source=config shell_command={trimmed:?}"),
-            exe: trimmed.to_owned(),
-        };
-    }
-
-    if let Some(path) = sibling_realtime_play_server_path() {
-        return ServerLaunch {
-            command: Command::new(&path),
-            description: format!("source=sibling fullpath=\"{}\"", path.display()),
-            exe: path.display().to_string(),
-        };
-    }
-    if let Some(path) = path_realtime_play_server_path() {
-        return ServerLaunch {
-            command: Command::new(&path),
-            description: format!("source=PATH fullpath=\"{}\"", path.display()),
-            exe: path.display().to_string(),
-        };
-    }
-    let executable = default_realtime_play_server_executable_name();
+/// 決まった実体から、実際に spawn するコマンドを組み立てる。
+///
+/// **どこを探すかは [`crate::server_binary`] の仕事**で、ここはその結果を
+/// `Command` にするだけ。PATH は見ない（ADR 0017）。
+pub(super) fn build_realtime_play_server_command(resolved: &ResolvedServer) -> ServerLaunch {
+    let command = match resolved.source {
+        // テストの偽サーバーだけが shell を通る。`echo ... & exit 3` のような
+        // 「即死するサーバー」は shell が無いと書けない。
+        ServerSource::ShellCommand => shell_command(&resolved.exe),
+        _ => Command::new(&resolved.exe),
+    };
     ServerLaunch {
-        command: Command::new(executable),
-        description: format!("source=unresolved-PATH executable={executable:?}"),
-        exe: executable.to_owned(),
+        command,
+        description: resolved.log_fields(),
+        resolved: resolved.clone(),
     }
 }
 

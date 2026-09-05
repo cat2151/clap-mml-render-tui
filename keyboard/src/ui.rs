@@ -16,10 +16,12 @@ use cmrt_tui_core::theme::{
     cursor_highlight_style, MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_PINK, MONOKAI_PURPLE,
 };
 
+mod connection_overlay;
 mod guide;
 mod mml_overlay;
 mod note;
 
+use connection_overlay::draw_connection_overlay;
 use guide::{draw_note_guide_overlay, keyboard_help_lines};
 use mml_overlay::draw_mml_input_overlay;
 use note::note_playback_status_text;
@@ -84,7 +86,7 @@ pub fn draw(screen: &mut KeyboardScreen<'_>, connection: &KeyboardConnectionStat
         screen.state.navigation_count.value(),
     ));
     f.render_widget(Paragraph::new(help_lines).style(base_style()), chunks[2]);
-    draw_connection_overlay(&connection.phase, f, panes[0]);
+    draw_connection_overlay(connection, f, panes[0]);
     draw_numeric_input_overlay(
         screen.state.numeric_input(),
         screen.state.cc_number(),
@@ -225,61 +227,6 @@ fn catalog_message(status: &KeyboardPatchCatalogStatus) -> String {
         KeyboardPatchCatalogStatus::Ready => "パッチが見つかりません".to_string(),
         KeyboardPatchCatalogStatus::Error(error) => format!("読み込み失敗: {error}"),
     }
-}
-
-fn draw_connection_overlay(
-    phase: &KeyboardConnectionPhase,
-    f: &mut Frame<'_>,
-    keyboard_area: Rect,
-) {
-    let (title, lines, border_color, height) = match phase {
-        KeyboardConnectionPhase::Ready => return,
-        KeyboardConnectionPhase::Idle | KeyboardConnectionPhase::Connecting => (
-            " server connection ",
-            vec![
-                Line::from("connecting..."),
-                Line::from("notes unavailable until ready"),
-            ],
-            MONOKAI_PURPLE,
-            5,
-        ),
-        KeyboardConnectionPhase::PatchSetting => (
-            " patch setting ",
-            vec![
-                Line::from("patch setting..."),
-                Line::from("notes unavailable until ready"),
-            ],
-            MONOKAI_PURPLE,
-            5,
-        ),
-        KeyboardConnectionPhase::Error(error) => (
-            " server connection error ",
-            vec![
-                Line::from(format!("server error: {error}")),
-                Line::from("r:retry  n:notepad  w:DAW  q:quit"),
-            ],
-            Color::Red,
-            7,
-        ),
-    };
-    let width = keyboard_area.width.saturating_sub(2).min(72);
-    let height = height.min(keyboard_area.height);
-    let area = cmrt_tui_core::ui::centered_rect_with_size(width, height, keyboard_area);
-    f.render_widget(Clear, area);
-    f.render_widget(
-        Paragraph::new(lines)
-            .alignment(Alignment::Center)
-            .wrap(Wrap { trim: true })
-            .style(base_style())
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(title)
-                    .style(base_style())
-                    .border_style(base_style().fg(border_color)),
-            ),
-        area,
-    );
 }
 
 fn draw_numeric_input_overlay(

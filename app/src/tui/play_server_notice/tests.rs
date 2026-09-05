@@ -3,7 +3,7 @@ use cmrt_realtime_play::ServerStartupFailure;
 use super::{notice_lines, notice_width, wrap_to_width, DISMISS_HINT, MAX_NOTICE_WIDTH};
 
 fn failure() -> ServerStartupFailure {
-    ServerStartupFailure {
+    ServerStartupFailure::Exited {
         exe: r"C:\bin\clap-mml-realtime-play-server.exe".to_owned(),
         exit_code: Some(1),
         stderr_tail: vec!["Error: config.toml のプラグイン設定が不正".to_owned()],
@@ -61,4 +61,29 @@ fn notice_width_is_capped_and_leaves_room_for_the_frame() {
     assert_eq!(notice_width(40), 34);
     assert_eq!(notice_width(1_000), MAX_NOTICE_WIDTH);
     assert_eq!(notice_width(2), 0);
+}
+
+/// 実体が見つからないときは、掴んだ exe ではなく**探した場所**を出す。
+/// 打つ手が「どこかへ実体を置く」なので、要る情報が別物になる。
+#[test]
+fn notice_shows_where_it_looked_when_the_binary_is_missing() {
+    let failure = ServerStartupFailure::NotFound {
+        searched: vec![
+            r"C:\bin\clap-mml-realtime-play-server.exe (cmrt と同じディレクトリ)".to_owned(),
+        ],
+    };
+
+    let lines: Vec<String> = notice_lines(&failure, 200)
+        .into_iter()
+        .map(|line| line.to_string())
+        .collect();
+
+    assert!(
+        lines[0].contains("実体が見つかりません"),
+        "何が起きたかを 1 行目に出すこと: {lines:?}"
+    );
+    assert!(
+        lines.iter().any(|line| line.contains("探した場所")),
+        "探した場所を出すこと: {lines:?}"
+    );
 }

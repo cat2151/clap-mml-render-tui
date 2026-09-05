@@ -43,6 +43,10 @@ enum KeyboardMidiCommand {
 pub struct KeyboardMidiSender {
     tx: mpsc::Sender<KeyboardMidiCommand>,
     status: Arc<Mutex<KeyboardConnectionStatus>>,
+    /// 起動進捗を読むためだけの参照。**worker と同じ 1 本**（`Arc` 共有）で、
+    /// ここから送信することはない。worker は patch load の同期待ちで数秒止まるので、
+    /// 進捗をコマンド経由で聞くと、まさに知りたい時間帯だけ返事が来ない。
+    supervisor: Arc<RealtimePlayServerSupervisor>,
     worker: Option<JoinHandle<()>>,
 }
 
@@ -51,13 +55,15 @@ impl KeyboardMidiSender {
         let (tx, rx) = mpsc::channel();
         let status = Arc::new(Mutex::new(KeyboardConnectionStatus::new(buffer_multiplier)));
         let worker_status = Arc::clone(&status);
+        let worker_supervisor = Arc::clone(&supervisor);
         let worker = std::thread::Builder::new()
             .name("keyboard-midi-sender".to_string())
-            .spawn(move || run_midi_sender(rx, supervisor, worker_status, buffer_multiplier))
+            .spawn(move || run_midi_sender(rx, worker_supervisor, worker_status, buffer_multiplier))
             .expect("keyboard MIDI sender thread should start");
         Self {
             tx,
             status,
+            supervisor,
             worker: Some(worker),
         }
     }
@@ -112,7 +118,16 @@ impl KeyboardMidiSender {
     }
 
     pub fn status(&self) -> KeyboardConnectionStatus {
-        self.status.lock().unwrap().clone()
+        let mut status = self.status.lock().unwrap().clone();
+        // 「何本目の instance か」は supervisor だけが知っている。二重に数えず、
+        // 起動待ちの最中だけここで詰め直す。
+        if status.phase == KeyboardConnectionPhase::Connecting {
+            status.server_startup = self
+                .supervisor
+                .startup_progress()
+                .map(|progress| (progress.initialized_instances, progress.total_instances));
+        }
+        status
     }
 }
 
@@ -166,10 +181,18 @@ fn run_midi_sender(
                 known_voicing,
             } => {
                 buffer_multiplier = requested_multiplier;
-                status.lock().unwrap().phase = KeyboardConnectionPhase::PatchSetting;
                 let started = Instant::now();
-                let result = supervisor
-                    .set_live_buffer_multiplier(u16::from(buffer_multiplier))
+                // **play server の起動待ちはここ。** 抜けるまで phase は
+                // `Connecting` のまま（＝ overlay は「play server 起動」を出す）。
+                // 以前はこの行の前に `PatchSetting` へ移していたので、実際には
+                // サーバーの起動（実測 1.7〜6.5 秒）を待っているあいだ
+                // 「patch setting...」と出ていた。
+                let server_started = supervisor.ensure_started_for_fast_midi();
+                status.lock().unwrap().phase = KeyboardConnectionPhase::PatchSetting;
+                let result = server_started
+                    .and_then(|()| {
+                        supervisor.set_live_buffer_multiplier(u16::from(buffer_multiplier))
+                    })
                     .and_then(|()| {
                         prepare_patch(
                             supervisor.as_ref(),

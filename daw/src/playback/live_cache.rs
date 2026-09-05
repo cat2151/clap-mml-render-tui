@@ -2,17 +2,53 @@
 //!
 //! セルの render キャッシュ（WAV）を、play server の組み込みプラグイン cache-player へ
 //! 載せて live mix で鳴らす。1 演奏 track = 1 live instance で、小節が変わるたびに
-//! その小節のキャッシュ WAV を差し替えて note on する。
+//! その小節のキャッシュ WAV を鳴らす。
 //!
 //! rodio 経路（`InProcess`）と違い、**gain は mix の直前にサーバー側で掛かる**ので
 //! mixer の音量変更が即座に効く。rodio 経路は「チャンクを append する瞬間」に
 //! 振幅を焼き込むため、実測 2.4 秒（＝ 1 小節）遅れていた。
+//!
+//! ## 先読み（小節 N を鳴らしている最中に小節 N+1 を載せる）
+//!
+//! cache-player は同時に `SLOT_COUNT` 本の WAV を持てる。小節 index `N` の WAV は
+//! スロット `N % SLOT_COUNT` へ載せ、その小節は note number `60 + (N % SLOT_COUNT)` で
+//! 鳴らす（対応は [`cues::measure_slot`] と [`cues::note_on_events`]）。隣り合う小節が
+//! 必ず別スロットになるので、**鳴っている音を壊さずに次の小節を載せておける。**
+//!
+//! こうする前は、小節境界に到達してから初めて state load を出していた。その応答待ち
+//! （7 track で 100〜130ms）がまるごと小節の頭の無音になり、しかも 1 track ずつ順に
+//! 返ってくるので track ごとにバラバラの時刻で前の小節の音が切れていた。
+//!
+//! **ループの長さが奇数のときは、末尾の小節と先頭の小節が同じスロットになる**
+//! （3 小節なら meas3 も meas1 もスロット 0）。それでも壊れないのは、鳴っている voice が
+//! 自分の握った音源を鳴らし続けるから（play server 側 Stage 2）。スロットを差し替えても
+//! meas3 の余韻は切れず、境界の note on はちょうど載せ替えた meas1 を鳴らす。
+//!
+//! ## 発音位置は timeline で決める（実時刻ではない）
+//!
+//! note on は「届いた瞬間のオーディオブロックで鳴らせ」ではなく、**演奏開始からの
+//! 絶対秒**で予約する（[`timeline::MeasureTimeline`]）。予約は先読みと同じ場所、
+//! つまり 1 つ前の小節の中で出す。順序は必ず
+//! **(a) スロットへロード → (b) その小節の note on を予約**。
+//!
+//! こうする前は小節境界で `send_live_events`（`offset_frames: 0`）を投げていたので、
+//! 発音位置が小節ごとに −42.7〜+21.3ms ずれていた（振れ幅 64ms = 3 オーディオブロック）。
+//!
+//! **先読みが外れた小節（AB リピートや小節数を演奏中に変えたとき）は、予約済みの
+//! note on を取り消せない。** 予約はサーバーのレンダークロックより先に届いていて、
+//! 食い違いに気づくのは境界に着いてからだから。その 1 小節だけ「予測していた小節の
+//! 頭が一瞬鳴り、その直後に本当の小節が始まる」形になる。ログの `preload=miss` が目印。
 //!
 //! ## 鳴らさないもの
 //!
 //! **キャッシュ WAV がまだ無い小節は無音のまま。** 直前のキャッシュを鳴らし続けたり、
 //! その場で live render したりはしない（承認済みの設計判断）。「まだ出来ていない」ことが
 //! 耳で分かるほうがよい、という判断で、`prepare_live_patch` も note on も送らない。
+
+mod cues;
+mod measure_log;
+mod send;
+mod timeline;
 
 use std::{
     collections::VecDeque,
@@ -21,205 +57,22 @@ use std::{
     time::{Duration, Instant},
 };
 
-use cmrt_realtime_play::{FastMidiEvent, InstanceId, RealtimePlayServerSupervisor};
+use cmrt_realtime_play::RealtimePlayServerSupervisor;
 
 use super::{
     current_play_measure_index, effective_measure_count, following_measure_index,
     format_playback_measure_advance_log, format_playback_measure_resolution_log,
     live_gain::{send_live_track_gains, LiveTrackGain},
-    measure_duration, wait_until_or_stop, DawApp, DawPlayState, PlayPosition, FIRST_PLAYABLE_TRACK,
+    measure_duration, wait_until_or_stop, DawApp, DawPlayState, DawPlaybackStartupState,
+    PlayPosition,
 };
-use crate::{
-    cache::cache_wav_path, live_instance::live_instance_for_grid_row, AbRepeatState, WorkspaceKind,
-};
+use crate::{cache::cache_wav_path, AbRepeatState, WorkspaceKind};
 
-/// cache-player へ「載っている WAV を先頭から鳴らせ」と伝える note on。
-///
-/// cache-player は音高を見ない（1 instance = 1 キャッシュ）ので値そのものに意味は無い。
-/// ログを読むときに紛れないよう C4 / velocity 100 に固定してある。
-const CACHE_PLAYER_NOTE_ON: [u8; 3] = [0x90, 60, 100];
-
-/// ある小節で、ある行のキャッシュを鳴らすために送る 1 組。
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct LiveCacheCue {
-    pub(crate) row: usize,
-    pub(crate) instance: InstanceId,
-    pub(crate) wav: PathBuf,
-}
-
-/// 1 小節ぶんの送信内容と、送らなかった行の内訳。
-///
-/// 送らなかった行を捨てずに持つのは、**無音が意図どおりか**をログで確かめるため。
-/// 「キャッシュがまだ無い（`silent_rows`）」と「instance が足りない
-/// （`rows_over_instance_limit`）」は原因が別物なので分けてある。
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub(crate) struct MeasureLiveCues {
-    pub(crate) cues: Vec<LiveCacheCue>,
-    pub(crate) silent_rows: Vec<usize>,
-    pub(crate) rows_over_instance_limit: Vec<usize>,
-}
-
-/// 1 小節ぶんの送信に掛かった実時間の内訳。
-///
-/// 2 つに分けてあるのは、**片方しか縮められない**ため。`prepare`（cache WAV の state load）
-/// は 1 件ずつ応答待ちで送るしかないので track 数に比例して伸びるが、`note_on` は
-/// 全 track を 1 コマンドへまとめられるので track 数に関係なく一定になる。
-/// 小節の頭で音がずれて聞こえるかを決めるのは後者だけなので、混ぜて 1 つの数字にすると
-/// 「ずれているのか、単に state load が重いだけなのか」が読めなくなる。
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) struct MeasureSendTiming {
-    /// 全 track ぶんの state load（cache WAV の差し替え）が終わるまでの実時間。
-    ///
-    /// `prepare_live_patch` は応答待ちでブロックするので、この値がそのまま
-    /// 「小節の頭で演奏スレッドが止まっていた時間」になる。小節長（約 2.4 秒）と
-    /// 並べれば占有率が読める（判断 3 の実測用）。
-    pub(crate) prepare: Duration,
-    /// 全 track ぶんの note on を送り終えるまでの実時間。
-    ///
-    /// 1 コマンドへまとめて投げるので、**最初の track と最後の track の note on の
-    /// 間隔の上限**がこの値になる（サーバー側は 1 つのコマンドを 1 オーディオブロックで
-    /// 処理するので、実際のずれは 0）。
-    pub(crate) note_on: Duration,
-}
-
-/// 1 小節ぶんに live 経路へ送るものを組み立てる。
-///
-/// `ready_cache_wav` は「その行のキャッシュ WAV が**存在するなら**その絶対パス」を返す。
-/// 実ファイルを見るのは呼び出し側の責務にしてあるので、この関数は実サーバーも
-/// ファイルシステムも無しで単体テストできる。
-pub(crate) fn measure_live_cues(
-    tracks: usize,
-    ready_cache_wav: impl Fn(usize) -> Option<PathBuf>,
-) -> MeasureLiveCues {
-    let mut cues = MeasureLiveCues::default();
-    for row in FIRST_PLAYABLE_TRACK..tracks {
-        let Some(instance) = live_instance_for_grid_row(row) else {
-            cues.rows_over_instance_limit.push(row);
-            continue;
-        };
-        match ready_cache_wav(row) {
-            Some(wav) => cues.cues.push(LiveCacheCue { row, instance, wav }),
-            None => cues.silent_rows.push(row),
-        }
-    }
-    cues
-}
-
-/// 小節ごとの送信内容を 1 行にまとめる。
-///
-/// 例:
-/// `meas3: live-cache sent=row2/i0,row4/i2 silent=row3 over_limit=- prepare_ms=1.5 note_on_ms=0.1`
-///
-/// `prepare_ms` と `note_on_ms` を分けて出すのは、**小節の頭の詰まり（state load）と
-/// track 間のずれ（note on）を別々に読むため**。前者は track 数に比例して伸びるのが正常で、
-/// 後者が伸びていたら「まとめて 1 コマンドで送る」形が壊れたということになる。
-pub(crate) fn format_live_cache_measure_log(
-    measure_index: usize,
-    cues: &MeasureLiveCues,
-    timing: MeasureSendTiming,
-) -> String {
-    let sent = join_or_dash(
-        cues.cues
-            .iter()
-            .map(|cue| format!("row{}/i{}", cue.row, cue.instance)),
-    );
-    let silent = join_or_dash(cues.silent_rows.iter().map(|row| format!("row{row}")));
-    let over_limit = join_or_dash(
-        cues.rows_over_instance_limit
-            .iter()
-            .map(|row| format!("row{row}")),
-    );
-    format!(
-        "meas{}: live-cache sent={sent} silent={silent} over_limit={over_limit} \
-         prepare_ms={:.1} note_on_ms={:.1}",
-        measure_index + 1,
-        timing.prepare.as_secs_f64() * 1_000.0,
-        timing.note_on.as_secs_f64() * 1_000.0,
-    )
-}
-
-fn join_or_dash(items: impl Iterator<Item = String>) -> String {
-    let joined = items.collect::<Vec<_>>().join(",");
-    if joined.is_empty() {
-        "-".to_string()
-    } else {
-        joined
-    }
-}
-
-/// 小節の頭で全 track を一斉に鳴らすための note on を 1 バッチに組み立てる。
-///
-/// `offset_frames` は全部 0。サーバーは 1 コマンドぶんのイベントを**同じオーディオ
-/// ブロックで**適用するので、これで track 間のずれが消える。
-///
-/// バッチの上限は `MAX_MIDI_MESSAGES`（128）で、cue は最大 16
-/// （[`crate::live_instance::MAX_LIVE_TRACKS`]）なので分割は要らない。
-pub(crate) fn note_on_events(cues: &[LiveCacheCue]) -> Vec<FastMidiEvent> {
-    cues.iter()
-        .map(|cue| FastMidiEvent {
-            instance_id: cue.instance,
-            offset_frames: 0,
-            message: CACHE_PLAYER_NOTE_ON,
-        })
-        .collect()
-}
-
-/// 1 小節ぶんの cue を実サーバーへ送る。戻り値は掛かった実時間の内訳。
-///
-/// **2 パスに分ける。** 先に全 track の `prepare_live_patch`（state load）を済ませ、
-/// そのあとで全 track の note on を**まとめて 1 コマンド**で投げる。
-/// 1 track ずつ「prepare → note on」と交互に送ると、`prepare` の応答待ち
-/// （1 件 10〜13ms・debug サーバーなら 60〜85ms）が note on のあいだに挟まるので、
-/// 8 track では最初と最後の note on が 250ms（debug で 650ms）離れて
-/// 小節の頭が「ジャラン」と崩れる。実測で見つかった問題（Stage 6）。
-///
-/// 時間を計って返すのは、**1 小節ごとの state load が小節の中に収まっているか**と
-/// **track 間のずれが 1 オーディオブロックに収まっているか**を、あとから数字で
-/// 確かめられるようにするため。prepare に失敗した行は note on の対象から外す
-/// （音源が載っていないので鳴らしても意味がなく、前の小節の音が出てしまう）。
-fn send_measure_cues(
-    play_server: &RealtimePlayServerSupervisor,
-    cues: &MeasureLiveCues,
-    log_lines: &Arc<Mutex<VecDeque<String>>>,
-) -> MeasureSendTiming {
-    let prepare_started = Instant::now();
-    let mut prepared: Vec<LiveCacheCue> = Vec::with_capacity(cues.cues.len());
-    for cue in &cues.cues {
-        let wav = cue.wav.to_string_lossy().to_string();
-        // patch 文字列が `.wav` なので、サーバーは cache-player を選んで instance を差し替える。
-        // state に入るのはパスであってファイルの中身ではない（1 ファイル約 1.6MB あるため）。
-        if let Err(error) = play_server.prepare_live_patch(cue.instance, Some(&wav)) {
-            crate::append_log_line(
-                log_lines,
-                format!(
-                    "live-cache: prepare failed row={} instance={} error=\"{error:#}\"",
-                    cue.row, cue.instance
-                ),
-            );
-            continue;
-        }
-        prepared.push(cue.clone());
-    }
-    let prepare = prepare_started.elapsed();
-
-    let note_on_started = Instant::now();
-    let events = note_on_events(&prepared);
-    // 空のバッチはサーバーが `InvalidPayload` で弾く（1..=128 件しか受けない）。
-    // 「鳴らすものが無い小節」は正常な状態なので、送らずに黙って抜ける。
-    if !events.is_empty() {
-        if let Err(error) = play_server.send_live_events(&events) {
-            let rows = join_or_dash(prepared.iter().map(|cue| format!("row{}", cue.row)));
-            crate::append_log_line(
-                log_lines,
-                format!("live-cache: note on failed rows={rows} error=\"{error:#}\""),
-            );
-        }
-    }
-    MeasureSendTiming {
-        prepare,
-        note_on: note_on_started.elapsed(),
-    }
-}
+pub(crate) use cues::{measure_live_cues, measure_slot};
+pub(crate) use measure_log::format_live_cache_measure_log;
+pub(crate) use send::MeasureSendTiming;
+use send::{prepare_measure_cues, send_measure_note_on, PreloadedMeasure};
+use timeline::MeasureTimeline;
 
 /// その小節で実際に鳴らせるキャッシュ WAV を行ごとに引く。
 fn ready_cache_wav_for_measure(
@@ -231,6 +84,33 @@ fn ready_cache_wav_for_measure(
     // `measure_index` は 0 始まりなので +1 する。
     let path = cache_wav_path(workspace_kind, row, measure_index + 1)?;
     path.is_file().then_some(path)
+}
+
+/// 1 つ前の小節の中で「スロットへ載せて・note on を予約して」おいた小節。
+///
+/// `at` を一緒に持ち回るのが要点。境界に着いてから位置を計算し直すと、
+/// **予約した位置と表示・待ちの基準がずれる**。
+struct ScheduledMeasure {
+    measure: PreloadedMeasure,
+    /// timeline 原点からのフレーム数。
+    at: u64,
+}
+
+/// 小節境界で演奏スレッドが止まっていた時間の内訳。
+///
+/// 予約が当たった小節では**両方 0**。つまり境界では 1 バイトも送っていない。
+/// ここが 0 でない小節は、その合計がそのまま小節の頭の遅れになる。
+#[derive(Clone, Copy, Debug, Default)]
+struct BoundaryWork {
+    prepare: Duration,
+    note_on: Duration,
+}
+
+impl BoundaryWork {
+    /// 境界で何もしなかった＝先読みと予約が当たっていた。
+    fn is_preloaded(self) -> bool {
+        self.prepare.is_zero() && self.note_on.is_zero()
+    }
 }
 
 /// 演奏ループが要るものだけを集めた実行単位。
@@ -249,6 +129,12 @@ pub(crate) struct LiveCachePlayLoop {
     pub(crate) measure_samples: Arc<Mutex<usize>>,
     pub(crate) log_lines: Arc<Mutex<VecDeque<String>>>,
     pub(crate) sample_rate: u32,
+    /// timeline へ載せるテンポ。cache-player は使わないが、**サーバーが CLAP の
+    /// transport として全 instance へ配る**ので、tempo-sync するプラグインを
+    /// 混ぜたときに効いてくる。
+    pub(crate) tempo_bpm: f64,
+    /// 1 小節の拍数（分母は 4 固定）。用途は `tempo_bpm` と同じ。
+    pub(crate) beat_numerator: u16,
     pub(crate) tracks: usize,
     /// `(0 始まりの小節 index, グリッドの行 index)` → いま鳴らせるキャッシュ WAV。
     #[allow(clippy::type_complexity)]
@@ -257,6 +143,9 @@ pub(crate) struct LiveCachePlayLoop {
     pub(crate) initial_track_gains: Vec<LiveTrackGain>,
     /// live mix へ最後に送った gain。演奏中の mixer 操作と共有する。
     pub(crate) sent_track_gains: Arc<Mutex<Vec<LiveTrackGain>>>,
+    /// 最初の音が出るまでの進み具合の置き場。ここへ書いた値を描画スレッドが
+    /// 中央 overlay として読む。演奏中は触らない（**1 小節目だけ**の話）。
+    pub(crate) startup: DawPlaybackStartupState,
 }
 
 impl LiveCachePlayLoop {
@@ -267,6 +156,10 @@ impl LiveCachePlayLoop {
         // なので、live 演奏のあいだは切っておく。
         // grid sequencer は自分の演奏開始時に必ず on へ戻す（`prepare_connection`）ので、
         // ここで off のまま終わっても grid sequencer 側の auto gain は壊れない。
+        // **ここが play server の起動待ちの実体。** `set_live_auto_gain_enabled` は
+        // `with_fast_client` 経由で `ensure_started_for_fast_midi` を通るので、
+        // サーバーがまだ立っていなければこの 1 行で数秒ブロックする
+        // （実測 1747ms / cold 6559ms）。抜けた時点でサーバーは立っている。
         if let Err(error) = self.play_server.set_live_auto_gain_enabled(false) {
             crate::append_log_line(
                 &self.log_lines,
@@ -275,7 +168,27 @@ impl LiveCachePlayLoop {
         }
         self.apply_initial_track_gains();
 
+        // 演奏 1 回につき 1 本。**演奏中に張り直してはいけない**（サーバー側は
+        // プラグインの状態もサンプルクロックの原点も戻すフルリセットになる）。
+        //
+        // ここではまだサーバーのクロックは動かない。動き出すのは 1 小節目のロードの
+        // あとに呼ぶ `start_clock`（下の `_ =>` の腕）。**逆に `begin` を後ろへ
+        // ずらしてはいけない**（`BeginLiveTimeline` は `banks.reset_all()` を伴うので、
+        // 先に載せた state load が消える）。
+        let mut timeline = MeasureTimeline::begin(
+            &self.play_server,
+            self.sample_rate,
+            self.tempo_bpm,
+            self.beat_numerator,
+            &self.log_lines,
+        );
+
         let mut measure_index = start_measure_index;
+        // 1 つ前の小節の中で「載せて・予約して」おいた小節。演奏開始の 1 小節目だけ空。
+        let mut scheduled: Option<ScheduledMeasure> = None;
+        // 「音が鳴るまで」overlay を出しているあいだだけ true。1 小節目を鳴らす
+        // 手配が済んだら下ろす。**先読みが外れた小節では出さない**（もう鳴っている）。
+        let mut waiting_for_first_sound = true;
 
         'outer: loop {
             if *self.play_state.lock().unwrap() != DawPlayState::Playing {
@@ -293,12 +206,9 @@ impl LiveCachePlayLoop {
             let current_measure_index =
                 current_play_measure_index(measure_index, effective_count, ab_repeat_range);
             let measure_duration = measure_duration(measure_samples, self.sample_rate);
-            let measure_start = Instant::now();
-            *self.play_position.lock().unwrap() = Some(PlayPosition {
-                measure_index: current_measure_index,
-                measure_start,
-                measure_duration,
-            });
+            // `measure_samples` はステレオのインターリーブ済み要素数なので、
+            // フレーム数はその半分。timeline はフレームで積む（`timeline.rs` の doc）。
+            let measure_frames = (measure_samples / 2) as u64;
             crate::append_log_line(
                 &self.log_lines,
                 format_playback_measure_resolution_log(
@@ -308,14 +218,91 @@ impl LiveCachePlayLoop {
                 ),
             );
 
-            let cues = measure_live_cues(self.tracks, |row| {
-                (self.ready_cache_wav)(current_measure_index, row)
+            // (a) この小節。予約が当たっていれば、境界では 1 バイトも送らない。
+            let (measure, at, boundary) = match scheduled.take() {
+                Some(ready) if ready.measure.measure_index == current_measure_index => {
+                    (ready.measure, ready.at, BoundaryWork::default())
+                }
+                // 演奏開始の 1 小節目か、演奏中に AB リピート・小節数が変わって
+                // 先読みした小節と食い違ったとき。ここだけは境界で載せて張り直す。
+                _ => {
+                    let measure =
+                        self.load_measure_reporting(current_measure_index, waiting_for_first_sound);
+                    let prepare = measure.elapsed;
+                    // **ロードが終わってからサーバーのクロックを起こす。** 起こすまで
+                    // サーバーは眠っていてクロックが 1 サンプルも進まないので、
+                    // ここが timeline の原点とサーバーの原点が揃う唯一の点。
+                    // 先に起こすと、1 小節目のロード（実測 3.10 秒）のあいだクロックは
+                    // 0.26 秒しか進まず、差の 2.7 秒ぶん演奏ループが先行する。
+                    // 先行したぶん先読みが**まだ鳴っていない小節のスロットを踏み潰し**、
+                    // 違う小節が鳴る
+                    // （`docs/adr/0012-live-clock-drift-is-absorbed-not-eliminated.md` の症状 B）。
+                    // 2 度目以降（先読みが外れた小節）は何もしない。
+                    timeline.start_clock(&self.play_server, &self.log_lines);
+                    let at = timeline.restart_at(Instant::now(), measure_frames);
+                    let note_on = send_measure_note_on(
+                        &self.play_server,
+                        &timeline,
+                        &measure,
+                        at,
+                        &self.log_lines,
+                    );
+                    (measure, at, BoundaryWork { prepare, note_on })
+                }
+            };
+
+            // 1 小節目の手配が済んだ＝これ以上は待たずに音が出る。overlay を消す。
+            if waiting_for_first_sound {
+                self.startup.finish();
+                waiting_for_first_sound = false;
+            }
+
+            // 表示も待ちも timeline の位置から引く。`Instant::now()` を基準にすると
+            // 待ちのオーバーシュートが毎小節積もり、音（＝timeline）とずれていく。
+            let measure_start = timeline.instant_of(at);
+            *self.play_position.lock().unwrap() = Some(PlayPosition {
+                measure_index: current_measure_index,
+                measure_start,
+                measure_duration,
             });
-            let timing = send_measure_cues(&self.play_server, &cues, &self.log_lines);
+
+            // (b) 鳴らしている最中に、次の小節を別スロットへ載せて note on を予約する。
+            //     **`+1` を自前で計算しないこと。** AB リピート・小節数変更・ループ端は
+            //     `following_measure_index` だけが正しく畳める。
+            let next_measure_index =
+                following_measure_index(current_measure_index, effective_count, ab_repeat_range);
+            // 位置はロードの**前**に取る。ロードは 100〜600ms 塞ぐので、後で取ると
+            // 「いまから」の下限に引っ掛かってグリッドを張り直してしまう。
+            let next_at = timeline.reserve(Instant::now(), measure_frames);
+            let ahead = self.load_measure(next_measure_index);
+            let next_note_on = send_measure_note_on(
+                &self.play_server,
+                &timeline,
+                &ahead,
+                next_at,
+                &self.log_lines,
+            );
+            let timing = MeasureSendTiming {
+                preloaded: boundary.is_preloaded(),
+                at_frames: at,
+                prepare: boundary.prepare,
+                note_on: boundary.note_on,
+                preload_next: ahead.elapsed,
+                note_on_next: next_note_on,
+            };
             crate::append_log_line(
                 &self.log_lines,
-                format_live_cache_measure_log(current_measure_index, &cues, timing),
+                format_live_cache_measure_log(
+                    current_measure_index,
+                    next_measure_index,
+                    &measure.cues,
+                    timing,
+                ),
             );
+            scheduled = Some(ScheduledMeasure {
+                measure: ahead,
+                at: next_at,
+            });
 
             let next_measure_start = measure_start + measure_duration;
             if !wait_until_or_stop(&self.play_state, next_measure_start) {
@@ -329,7 +316,7 @@ impl LiveCachePlayLoop {
             };
             let next_ab_repeat_range =
                 (*self.ab_repeat.lock().unwrap()).normalized_range(next_effective_count);
-            let next_measure_index = following_measure_index(
+            let advanced_measure_index = following_measure_index(
                 current_measure_index,
                 next_effective_count,
                 next_ab_repeat_range,
@@ -338,13 +325,16 @@ impl LiveCachePlayLoop {
                 &self.log_lines,
                 format_playback_measure_advance_log(
                     current_measure_index,
-                    next_measure_index,
+                    advanced_measure_index,
                     next_effective_count,
                 ),
             );
-            measure_index = next_measure_index;
+            measure_index = advanced_measure_index;
         }
 
+        // 1 音も鳴らずに抜けた場合（演奏する中身が無い・すぐ止められた）も
+        // overlay を残さない。
+        self.startup.finish();
         let _ = self.play_server.stop_live_all();
         // 次の演奏では全 track ぶん送り直す。サーバーが再起動していても食い違わない。
         self.sent_track_gains.lock().unwrap().clear();
@@ -355,6 +345,45 @@ impl LiveCachePlayLoop {
             *self.play_position.lock().unwrap() = None;
             crate::append_log_line(&self.log_lines, "play: finished");
         }
+    }
+
+    /// 1 小節ぶんのキャッシュ WAV を、その小節のスロットへ載せる。
+    ///
+    /// 載せ先は `measure_index % SLOT_COUNT` に決まっているので、**隣り合う小節は
+    /// 必ず別スロット**になる。鳴っている voice は自分が握った音源を鳴らし続けるので
+    /// （play server 側 Stage 2）、ここで差し替えても前の小節の余韻は切れない。
+    fn load_measure(&self, measure_index: usize) -> PreloadedMeasure {
+        self.load_measure_reporting(measure_index, false)
+    }
+
+    /// `report_startup` が true のときだけ、載せ終えた本数を
+    /// [`DawPlaybackStartupState`] へ報告する（＝「音が鳴るまで」overlay へ出す）。
+    ///
+    /// **報告するのは演奏開始の 1 小節目だけ。** 2 小節目以降は鳴っている最中の
+    /// 先読みなので、進捗を出すと「鳴っているのに読み込み中」に見える。
+    fn load_measure_reporting(
+        &self,
+        measure_index: usize,
+        report_startup: bool,
+    ) -> PreloadedMeasure {
+        let cues = measure_live_cues(self.tracks, |row| {
+            (self.ready_cache_wav)(measure_index, row)
+        });
+        if report_startup {
+            self.startup.begin_first_measure(cues.cues.len());
+        }
+        prepare_measure_cues(
+            &self.play_server,
+            measure_index,
+            measure_slot(measure_index),
+            cues,
+            &self.log_lines,
+            &mut |loaded| {
+                if report_startup {
+                    self.startup.note_measure_loaded(loaded);
+                }
+            },
+        )
     }
 
     /// 演奏開始時に mixer の gain をまとめて送る。
@@ -382,6 +411,7 @@ impl DawApp {
         let Some(play_server) = self.playback.realtime_play_server.as_ref().cloned() else {
             self.append_log_line("play: realtime play server is not initialized");
             *self.playback.play_state.lock().unwrap() = DawPlayState::Idle;
+            self.playback.startup.finish();
             return;
         };
 
@@ -395,12 +425,15 @@ impl DawApp {
             measure_samples: Arc::clone(&self.playback.measure_samples),
             log_lines: Arc::clone(&self.log_lines),
             sample_rate: self.cfg.sample_rate as u32,
+            tempo_bpm: self.tempo_bpm(),
+            beat_numerator: self.beat_numerator().clamp(1, u32::from(u16::MAX)) as u16,
             tracks: self.editor.tracks,
             ready_cache_wav: Arc::new(move |measure_index, row| {
                 ready_cache_wav_for_measure(workspace_kind, measure_index, row)
             }),
             initial_track_gains: self.desired_live_track_gains(),
             sent_track_gains: Arc::clone(&self.playback.live_track_gains),
+            startup: self.playback.startup.clone(),
         };
 
         std::thread::spawn(move || play_loop.run(start_measure_index));

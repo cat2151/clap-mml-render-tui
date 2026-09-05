@@ -170,9 +170,11 @@ fn default_config_content_uses_offline_render_backend_keys() {
         "default config は realtime play server port を案内するべき: {}",
         content
     );
+    // play server の実体を config.toml から決める経路は廃止した（ADR 0017）。
+    // ひな形に書き戻すと「環境が黙って実体を決める」経路が復活する。
     assert!(
-        content.contains("realtime_play_server_command = \"\""),
-        "default config は realtime play server command を案内するべき: {}",
+        !content.contains("realtime_play_server_command"),
+        "廃止したキーをひな形へ書き戻さないこと: {}",
         content
     );
 }
