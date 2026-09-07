@@ -85,3 +85,73 @@ fn random_replacement_keeps_every_tracks_following_repeat_populated() {
         .is_some_and(|(_, clip)| clip.is_previous()));
     let _ = std::fs::remove_dir_all(path.parent().unwrap().parent().unwrap());
 }
+
+/// `/loops/Pack/...` の wav を track の先頭セルへ置いた状態。
+fn browser_with_clip(relative: &str) -> LoopBrowser {
+    let mut browser = browser();
+    let wav = browser
+        .wav_analyses
+        .iter()
+        .map(|(wav, _)| wav.clone())
+        .find(|wav| wav.relative.replace('\\', "/") == relative)
+        .unwrap_or_else(|| panic!("{relative} がツリーにない"));
+    browser.track_grid[0][0] = Some(LoopTrackClip::explicit(wav, 1));
+    browser.focus = LoopBrowserPane::Tracks;
+    browser
+}
+
+#[test]
+fn syncing_to_a_wav_hidden_by_the_filter_releases_the_filter() {
+    let mut browser = browser_with_clip("Pack/Bass/a.wav");
+    browser.set_filter_query("kick");
+    assert!(browser.filter_active());
+
+    browser.sync_tree_to_current_cell();
+
+    assert_eq!(browser.filter_query(), "");
+    assert!(!browser.filter_active());
+    assert_eq!(browser.visible[browser.cursor].name, "a.wav");
+}
+
+#[test]
+fn syncing_to_a_wav_that_survives_the_filter_keeps_the_filter() {
+    let mut browser = browser_with_clip("Pack/Drums/Kick.wav");
+    browser.set_filter_query("kick");
+
+    browser.sync_tree_to_current_cell();
+
+    assert_eq!(browser.filter_query(), "kick");
+    assert!(browser.filter_active());
+    assert_eq!(browser.visible[browser.cursor].name, "Kick.wav");
+}
+
+/// 祖先ディレクトリがマッチしている wav は「消えていない」。
+#[test]
+fn a_wav_kept_only_by_its_directory_match_does_not_release_the_filter() {
+    let mut browser = browser_with_clip("Pack/Bass/a.wav");
+    browser.set_filter_query("bass");
+
+    browser.sync_tree_to_current_cell();
+
+    assert_eq!(browser.filter_query(), "bass");
+    assert_eq!(browser.visible[browser.cursor].name, "a.wav");
+}
+
+/// auto random はタイマ経由で `sync_tree_to_current_cell` まで来るので、
+/// 打鍵の途中でも呼ばれうる。そのときは絞り込みを消さない。
+#[test]
+fn the_filter_survives_a_sync_while_the_query_is_being_typed() {
+    let mut browser = browser_with_clip("Pack/Bass/a.wav");
+    browser.focus = LoopBrowserPane::Tree;
+    browser.handle_key(KeyCode::Char('/'));
+    for character in "kick".chars() {
+        browser.handle_key(KeyCode::Char(character));
+    }
+    assert!(browser.filter_input_active());
+
+    browser.sync_tree_to_current_cell();
+
+    assert!(browser.filter_input_active());
+    assert_eq!(browser.filter_query(), "kick");
+    assert!(browser.filter_active());
+}

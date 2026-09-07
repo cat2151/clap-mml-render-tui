@@ -30,6 +30,29 @@ fn ctrl_g_opens_menu_on_each_tui_primary_screen() {
     assert!(app.try_open_screen_switch_menu(ctrl_g()));
 }
 
+/// loop browser の `/` 絞り込み入力中は、すべてのキーが入力欄へ入る。
+/// Ctrl+G も例外ではない（notepad が `Mode::Normal` のときだけ開く形に揃えた）。
+#[test]
+fn the_loop_tree_filter_input_blocks_the_screen_switch_menu() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.begin_loop_browser_startup();
+    app.loop_browser.state.starting = false;
+    assert!(app.can_open_screen_switch_menu());
+
+    app.loop_browser.state.handle_key(KeyCode::Char('/'));
+    assert!(!app.try_open_screen_switch_menu(ctrl_g()));
+    assert!(!app.screen_switch_menu.is_open());
+
+    // Enter で確定すれば（絞り込みは効いたまま）また開く。
+    app.loop_browser.state.handle_key(KeyCode::Enter);
+    assert!(app.try_open_screen_switch_menu(ctrl_g()));
+    assert!(app.screen_switch_menu.is_open());
+
+    app.screen_switch_menu
+        .handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    app.stop_loop_browser();
+}
+
 /// grid sequencer は入った時点から常時再生する。help 表示中だけは Ctrl+G を塞ぐ。
 #[test]
 fn entering_grid_sequencer_starts_playing_and_help_blocks_the_menu() {

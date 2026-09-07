@@ -44,7 +44,9 @@ fn browser_with_spanning_wavs() -> LoopBrowser {
     )
 }
 
-fn browser() -> LoopBrowser {
+/// `/loops/Pack/{Bass/{B.wav,a.wav}, Drums/Kick.wav}`。
+/// 描画テスト（`crate::ui::tree::tests`）からも使うので `pub(crate)`。
+pub(crate) fn browser() -> LoopBrowser {
     LoopBrowser::from_index(
         LoopIndex {
             version: 2,
@@ -384,6 +386,7 @@ fn favorites_only_shift_a_saves_only_pad_metadata() {
 
 mod auto_random;
 mod batch_random;
+mod filter;
 mod grid;
 mod help;
 mod mixer;

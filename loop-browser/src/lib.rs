@@ -17,6 +17,8 @@ mod action;
 mod auto_random;
 mod batch_random;
 mod catalog;
+mod cursor;
+mod filter;
 mod grid;
 mod input;
 mod keybind;
@@ -27,6 +29,7 @@ pub mod playback;
 mod random_navigation;
 mod reload;
 mod screen;
+mod tagging;
 mod tempo;
 mod track_input;
 mod track_order;
@@ -36,7 +39,7 @@ pub use action::{LoopBrowserAction, LoopGridChange, LoopPlaybackClip, LoopPlayba
 pub use keybind::loop_browser_keybind_text;
 pub use logging::set_log_sinks;
 pub(crate) use logging::{log_line, perf_log_line};
-use tree::{collect_visible, find_favorite_node, insert_relative_path, node_path, sort_tree};
+use tree::{insert_relative_path, sort_tree};
 
 pub mod ui;
 
@@ -126,6 +129,14 @@ pub struct LoopBrowser {
     random_decks: PersistedDoc<LoopRandomDeckState>,
     track_grid_writable: bool,
     pub favorites_only: bool,
+    /// 確定済みの絞り込みクエリ。空なら絞り込みなし。永続化しない。
+    filter_query: String,
+    /// `filter_query` を正規表現へコンパイルした結果。不正な条件のときは
+    /// 直前の有効な条件を保つ（打鍵の途中で結果が消えないように）。
+    filter_condition: Vec<regex::Regex>,
+    /// `/` の絞り込み入力中の状態。`None` なら入力していない。
+    /// 入力中はすべてのキーを入力欄へ渡すので、これが最優先の分岐になる。
+    filter_input: Option<filter::FilterInput>,
     pub category_overlay: Option<LoopDirId>,
     pub mixer_overlay_open: bool,
     pub help_overlay: Option<LoopBrowserPane>,
@@ -179,6 +190,9 @@ impl Default for LoopBrowser {
             random_decks: PersistedDoc::in_memory(LoopRandomDeckState::default()),
             track_grid_writable: true,
             favorites_only: false,
+            filter_query: String::new(),
+            filter_condition: Vec::new(),
+            filter_input: None,
             category_overlay: None,
             mixer_overlay_open: false,
             help_overlay: None,
@@ -305,61 +319,6 @@ impl LoopBrowser {
             LoopBrowserAction::Preview(path)
         } else {
             LoopBrowserAction::Continue
-        }
-    }
-
-    fn rebuild_visible(&mut self, selected: Option<&NodeKey>) {
-        let mut visible = Vec::new();
-        if self.favorites_only {
-            for (anchor, favorite) in self.metadata.value.favorite_dirs.iter().enumerate() {
-                if let Some((root_index, root_path, node, components)) =
-                    find_favorite_node(&self.roots, favorite)
-                {
-                    collect_visible(
-                        root_index,
-                        root_path,
-                        node,
-                        &self.expanded,
-                        &self.metadata.value,
-                        &self.category_keys,
-                        components,
-                        Some(anchor),
-                        0,
-                        Some(node_path(root_path, node).to_string_lossy().into_owned()),
-                        &mut visible,
-                    );
-                }
-            }
-        } else {
-            for (root_index, (root_path, root)) in self.roots.iter().enumerate() {
-                collect_visible(
-                    root_index,
-                    root_path,
-                    root,
-                    &self.expanded,
-                    &self.metadata.value,
-                    &self.category_keys,
-                    Vec::new(),
-                    None,
-                    0,
-                    None,
-                    &mut visible,
-                );
-            }
-        }
-        self.visible = visible;
-        self.cursor = selected
-            .and_then(|key| self.visible.iter().position(|node| &node.key == key))
-            .unwrap_or_else(|| self.cursor.min(self.visible.len().saturating_sub(1)));
-        self.tree_scroll = self.tree_scroll.min(self.visible.len().saturating_sub(1));
-    }
-
-    fn rebuild_visible_for_path(&mut self, selected: Option<&Path>) {
-        self.rebuild_visible(None);
-        if let Some(path) = selected {
-            if let Some(index) = self.visible.iter().position(|node| node.path == path) {
-                self.cursor = index;
-            }
         }
     }
 

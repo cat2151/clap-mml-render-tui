@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::Color,
+    style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
     Frame,
@@ -11,19 +11,26 @@ use ratatui::{
 use super::focus_border_style;
 use crate::{LoopBrowser, LoopBrowserPane, VisibleLoopNode};
 use cmrt_tui_core::status::base_style;
+use cmrt_tui_core::text_filter::is_valid_condition;
+use cmrt_tui_core::text_input::{
+    build_query_textarea_widget, single_line_textarea_cursor_position, textarea_value,
+};
 use cmrt_tui_core::theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_YELLOW};
+
+/// `/` の絞り込み入力欄の高さ（枠2行 + 入力1行）。入力中だけツリーから縦を借りる。
+const FILTER_INPUT_HEIGHT: u16 = 3;
+const FILTER_INPUT_TITLE: &str = " 絞り込み Enter:確定 Esc:取消 ";
+/// 条件が正規表現として壊れているときに、枠の色と一緒に出す文言。
+const INVALID_CONDITION: &str = " 不正な条件 ";
+const FILTER_PLACEHOLDER: &str = "空白区切りAND・正規表現・大小無視";
+const NO_MATCH: &str = "該当なし";
 
 pub fn draw(state: &mut LoopBrowser, frame: &mut Frame<'_>, area: Rect) -> usize {
     let focused = state.focus == LoopBrowserPane::Tree;
     let border = focus_border_style(focused);
-    let title = if state.favorites_only {
-        " [LOOP TREE] Favorite dirs "
-    } else {
-        " [LOOP TREE] WAV loops "
-    };
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(title)
+        .title(tree_title(state, area.width))
         .border_style(border);
     if let Some(error) = &state.error {
         frame.render_widget(
@@ -41,9 +48,18 @@ pub fn draw(state: &mut LoopBrowser, frame: &mut Frame<'_>, area: Rect) -> usize
     if inner.height == 0 || inner.width == 0 {
         return 0;
     }
+    let input_height = if state.filter_input_active() {
+        FILTER_INPUT_HEIGHT
+    } else {
+        0
+    };
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(0)])
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(input_height),
+            Constraint::Min(0),
+        ])
         .split(inner);
     let breadcrumb_segments = state.selected_breadcrumb();
     let category = state.selected_direct_category();
@@ -56,9 +72,20 @@ pub fn draw(state: &mut LoopBrowser, frame: &mut Frame<'_>, area: Rect) -> usize
         ])),
         rows[0],
     );
+    draw_filter_input(state, frame, rows[1]);
 
-    let viewport_height = usize::from(rows[1].height);
-    if viewport_height == 0 || state.visible.is_empty() {
+    let list_area = rows[2];
+    let viewport_height = usize::from(list_area.height);
+    if viewport_height == 0 {
+        return 0;
+    }
+    if state.visible.is_empty() {
+        if filter_summary(state).is_some() {
+            frame.render_widget(
+                Paragraph::new(NO_MATCH).style(base_style().fg(MONOKAI_YELLOW)),
+                list_area,
+            );
+        }
         return 0;
     }
     let range = visible_range(
@@ -76,12 +103,99 @@ pub fn draw(state: &mut LoopBrowser, frame: &mut Frame<'_>, area: Rect) -> usize
     frame.render_stateful_widget(
         List::new(items)
             .style(base_style())
-            .highlight_style(cursor_highlight_style(base_style()))
+            .highlight_style(list_highlight_style(state))
             .highlight_symbol("▶ "),
-        rows[1],
+        list_area,
         &mut list_state,
     );
     range.len()
+}
+
+/// 現在行の強調。絞り込み入力中は bg 強調も BOLD も落とし、`▶ ` の行頭記号だけ残す。
+///
+/// 入力中に見えるカーソルを入力欄の 1 つだけにするため（issue #334）。
+/// 右ペイン（tracks / used wavs / waveform）の強調は `focus == Tracks` が条件で、
+/// 絞り込み入力は tree に focus があるときしか開けないので、こちらは元から消えている。
+fn list_highlight_style(state: &LoopBrowser) -> Style {
+    if state.filter_input_active() {
+        base_style()
+    } else {
+        cursor_highlight_style(base_style())
+    }
+}
+
+/// ペインのタイトル。絞り込み中は確定後もクエリとヒット件数を出し続ける
+/// （一覧が減っている理由が画面から分かるように）。
+///
+/// ツリーのペインは画面幅の 40% しかないので、そのままでは件数が枠の外へ出て消える。
+/// 入りきらないときは、消しても意味が変わらないもの（種別ラベル → 画面名）から順に落とす。
+fn tree_title(state: &LoopBrowser, width: u16) -> String {
+    let base = if state.favorites_only {
+        "Favorite dirs"
+    } else {
+        "WAV loops"
+    };
+    let Some(summary) = filter_summary(state) else {
+        return format!(" [LOOP TREE] {base} ");
+    };
+    // 枠線の左右 2 桁を除いた、タイトルに使える幅。
+    let width = usize::from(width).saturating_sub(2);
+    let candidates = [
+        format!(" [LOOP TREE] {base}  {summary} "),
+        format!(" [LOOP TREE] {summary} "),
+        format!(" {summary} "),
+    ];
+    for candidate in &candidates {
+        if text_width(candidate) <= width {
+            return candidate.clone();
+        }
+    }
+    truncate_to_width(&format!(" {summary} "), width)
+}
+
+/// 絞り込み中なら `filter: kick (12 wav)`。絞り込んでいなければ `None`。
+///
+/// 絞り込み中は残ったディレクトリが全部展開されているので、可視の wav 行数が
+/// そのままヒットした wav の本数になる。
+fn filter_summary(state: &LoopBrowser) -> Option<String> {
+    let query = state.filter_query();
+    if query.is_empty() && !state.filter_active() {
+        return None;
+    }
+    let hits = state.visible.iter().filter(|node| node.is_wav).count();
+    let invalid = if is_valid_condition(query) {
+        ""
+    } else {
+        INVALID_CONDITION
+    };
+    Some(format!("filter: {query} ({hits} wav){invalid}"))
+}
+
+/// `/` の入力中だけ、breadcrumb の下に枠つきの 1 行入力欄を出す。確定したら消す。
+///
+/// 条件が正規表現として壊れているときは、直前の有効な結果を消さずに枠だけ赤くする
+/// （打鍵の途中の `(` や `[` で一覧が消えないように）。
+fn draw_filter_input(state: &LoopBrowser, frame: &mut Frame<'_>, area: Rect) {
+    let Some(textarea) = state.filter_textarea() else {
+        return;
+    };
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
+    let value = textarea_value(textarea);
+    let (title, border) = if is_valid_condition(&value) {
+        (FILTER_INPUT_TITLE.to_string(), MONOKAI_YELLOW)
+    } else {
+        (
+            format!("{FILTER_INPUT_TITLE}{INVALID_CONDITION}"),
+            Color::Red,
+        )
+    };
+    frame.render_widget(
+        &build_query_textarea_widget(textarea, &value, title, FILTER_PLACEHOLDER, border),
+        area,
+    );
+    frame.set_cursor_position(single_line_textarea_cursor_position(area, textarea));
 }
 
 fn tree_item(node: &VisibleLoopNode) -> ListItem<'_> {
@@ -223,47 +337,4 @@ fn text_width(text: &str) -> usize {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn scrolling_keeps_cursor_inside_quarter_margins() {
-        let mut scroll = 0;
-        assert_eq!(visible_range(7, 100, 12, &mut scroll), 0..12);
-        assert_eq!(visible_range(9, 100, 12, &mut scroll), 1..13);
-        assert_eq!(visible_range(20, 100, 12, &mut scroll), 12..24);
-        assert_eq!(visible_range(13, 100, 12, &mut scroll), 10..22);
-    }
-
-    #[test]
-    fn scrolling_clamps_at_both_ends_without_blank_rows() {
-        let mut scroll = 40;
-        assert_eq!(visible_range(0, 50, 12, &mut scroll), 0..12);
-        assert_eq!(visible_range(49, 50, 12, &mut scroll), 38..50);
-    }
-
-    #[test]
-    fn breadcrumb_keeps_the_deepest_segments_when_narrow() {
-        let segments = ["loops", "Drums", "Kicks", "Acoustic"].map(str::to_string);
-        assert_eq!(
-            format_breadcrumb(&segments, 80),
-            "loops › Drums › Kicks › Acoustic"
-        );
-        assert_eq!(format_breadcrumb(&segments, 20), "… › Kicks › Acoustic");
-        assert_eq!(format_breadcrumb(&segments, 8), "…coustic");
-        assert_eq!(format_breadcrumb(&["ループ".to_string()], 5), "…ープ");
-    }
-
-    #[test]
-    fn breadcrumb_reserves_space_for_the_direct_category() {
-        let segments = ["loops", "Drums", "Acoustic"].map(str::to_string);
-        assert_eq!(
-            format_breadcrumb_with_category(&segments, Some("drum"), 24),
-            ("… › Acoustic".to_string(), " [drum]".to_string())
-        );
-        assert_eq!(
-            format_breadcrumb_with_category(&segments, Some("ドラム"), 7),
-            (String::new(), " [ドラ".to_string())
-        );
-    }
-}
+mod tests;

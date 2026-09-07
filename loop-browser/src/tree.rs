@@ -1,6 +1,86 @@
 use super::*;
 
+/// `collect_visible` へ渡す展開状態。
+///
+/// 絞り込み中は `LoopBrowser::expanded` を**書き換えずに**無視し、残ったディレクトリを
+/// 全部展開したものとして扱う。解除したときに絞り込み前の折り畳み状態がそのまま戻る。
+#[derive(Clone, Copy)]
+pub enum ExpandedNodes<'a> {
+    Saved(&'a HashSet<NodeKey>),
+    All,
+}
+
+impl ExpandedNodes<'_> {
+    fn contains(&self, key: &NodeKey) -> bool {
+        match self {
+            Self::Saved(expanded) => expanded.contains(key),
+            Self::All => true,
+        }
+    }
+}
+
 impl LoopBrowser {
+    pub(crate) fn rebuild_visible(&mut self, selected: Option<&NodeKey>) {
+        let filtered = self.filtered_roots();
+        let roots = filtered.as_deref().unwrap_or(&self.roots);
+        let expanded = match &filtered {
+            Some(_) => ExpandedNodes::All,
+            None => ExpandedNodes::Saved(&self.expanded),
+        };
+        let mut visible = Vec::new();
+        if self.favorites_only {
+            for (anchor, favorite) in self.metadata.value.favorite_dirs.iter().enumerate() {
+                if let Some((root_index, root_path, node, components)) =
+                    find_favorite_node(roots, favorite)
+                {
+                    collect_visible(
+                        root_index,
+                        root_path,
+                        node,
+                        expanded,
+                        &self.metadata.value,
+                        &self.category_keys,
+                        components,
+                        Some(anchor),
+                        0,
+                        Some(node_path(root_path, node).to_string_lossy().into_owned()),
+                        &mut visible,
+                    );
+                }
+            }
+        } else {
+            for (root_index, (root_path, root)) in roots.iter().enumerate() {
+                collect_visible(
+                    root_index,
+                    root_path,
+                    root,
+                    expanded,
+                    &self.metadata.value,
+                    &self.category_keys,
+                    Vec::new(),
+                    None,
+                    0,
+                    None,
+                    &mut visible,
+                );
+            }
+        }
+        self.visible = visible;
+        self.cursor = selected
+            .and_then(|key| self.visible.iter().position(|node| &node.key == key))
+            .unwrap_or_else(|| self.cursor.min(self.visible.len().saturating_sub(1)));
+        self.tree_scroll = self.tree_scroll.min(self.visible.len().saturating_sub(1));
+    }
+
+    pub(crate) fn rebuild_visible_for_path(&mut self, selected: Option<&Path>) {
+        self.rebuild_visible(None);
+        if let Some(path) = selected {
+            if let Some(index) = self.visible.iter().position(|node| node.path == path) {
+                self.cursor = index;
+            }
+        }
+    }
+
     pub fn selected_breadcrumb(&self) -> Vec<String> {
         let Some(node) = self.visible.get(self.cursor) else {
             return Vec::new();
@@ -104,7 +184,7 @@ pub fn collect_visible(
     root_index: usize,
     root_path: &Path,
     node: &TreeNode,
-    expanded: &HashSet<NodeKey>,
+    expanded: ExpandedNodes<'_>,
     metadata: &LoopBrowserMetadata,
     category_keys: &[(char, String)],
     components: Vec<String>,
@@ -118,7 +198,7 @@ pub fn collect_visible(
         components: components.clone(),
         anchor,
     };
-    let is_expanded = expanded.contains(&key);
+    let is_expanded = !node.is_wav && expanded.contains(&key);
     let dir_id = (!node.is_wav).then(|| LoopDirId::new(root_path, &node.relative_path));
     let favorite = dir_id.as_ref().is_some_and(|dir| metadata.is_favorite(dir));
     let category = dir_id.as_ref().and_then(|dir| {

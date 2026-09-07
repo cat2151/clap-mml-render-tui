@@ -20,6 +20,7 @@ crossterm = "0.29"
 hound = "3.5"
 rand = "0.10"
 ratatui = "0.30"
+regex = "1"
 rodio = "0.22"
 serde = { version = "1", features = ["derive"] }
 ratatui-textarea = { version = "0.9", features = ["crossterm"] }

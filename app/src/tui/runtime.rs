@@ -1,6 +1,5 @@
 use anyhow::Result;
 use crossterm::{
-    cursor::SetCursorStyle,
     event::{
         self, Event, KeyCode, KeyModifiers, KeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
     },
@@ -23,26 +22,9 @@ mod tests;
 
 use screen::DawRunOutcome;
 pub(in crate::tui) use screen::{clear_terminal_for_new_screen, DawEntryRoute};
-use terminal::{sync_mouse_capture, TerminalCleanup};
+use terminal::{sync_cursor_shape, sync_mouse_capture, TerminalCleanup};
 
 impl<'a> TuiApp<'a> {
-    pub(crate) fn uses_mouse_capture(&self) -> bool {
-        self.active_screen == PrimaryScreen::GridSequencer
-    }
-
-    pub(crate) fn uses_textarea_cursor(&self) -> bool {
-        if self.mml_overlay.is_open() {
-            return true;
-        }
-        match self.active_screen {
-            PrimaryScreen::Keyboard => self.keyboard.mml_input.is_active(),
-            PrimaryScreen::LoopBrowser | PrimaryScreen::GridSequencer => false,
-            PrimaryScreen::Notepad | PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {
-                self.notepad.uses_textarea_cursor()
-            }
-        }
-    }
-
     pub fn run(&mut self) -> Result<TuiExitReason> {
         crate::daw::ensure_http_server_for_mode_switch();
         enable_raw_mode()?;
@@ -73,15 +55,8 @@ impl<'a> TuiApp<'a> {
         // Terminal の初期bufferは空画面を前提にするが、実端末のalternate screenには
         // 前回内容が残る実装もある。初回と画面切替時だけ物理画面ごと消去する。
         let mut rendered_screen = None;
-        let mut uses_textarea_cursor = self.uses_textarea_cursor();
-        execute!(
-            std::io::stdout(),
-            if uses_textarea_cursor {
-                SetCursorStyle::BlinkingBar
-            } else {
-                SetCursorStyle::DefaultUserShape
-            }
-        )?;
+        let mut cursor_shape = None;
+        sync_cursor_shape(&mut cursor_shape, self.uses_textarea_cursor())?;
 
         // 真の cold start（プロセス起動直後）かどうか。DAW⇔notepad のモード切替では
         // 自動再生を再発火させたくないため、この判定は一度だけ行う。
@@ -136,18 +111,7 @@ impl<'a> TuiApp<'a> {
                 &mut cleanup.mouse_capture_enabled,
                 self.uses_mouse_capture(),
             )?;
-            let next_uses_textarea_cursor = self.uses_textarea_cursor();
-            if next_uses_textarea_cursor != uses_textarea_cursor {
-                execute!(
-                    std::io::stdout(),
-                    if next_uses_textarea_cursor {
-                        SetCursorStyle::BlinkingBar
-                    } else {
-                        SetCursorStyle::DefaultUserShape
-                    }
-                )?;
-                uses_textarea_cursor = next_uses_textarea_cursor;
-            }
+            sync_cursor_shape(&mut cursor_shape, self.uses_textarea_cursor())?;
             if self.active_screen == PrimaryScreen::Keyboard {
                 self.pump_keyboard_periodic();
             }

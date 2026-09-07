@@ -648,8 +648,11 @@ dependencies = [
  "crossterm",
  "rand 0.10.2",
  "ratatui",
+ "ratatui-textarea",
+ "regex",
  "rodio",
  "rubberband-ffi",
+ "serde_json",
  "windows-sys 0.61.2",
 ]
 
@@ -824,6 +827,7 @@ dependencies = [
  "rand 0.10.2",
  "ratatui",
  "ratatui-textarea",
+ "regex",
  "rodio",
  "serde",
  "serde_json",

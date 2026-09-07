@@ -4,6 +4,7 @@
 //! ここでは「どの画面を表示しているか」で切り替わることだけを確認する。
 
 use super::*;
+use crossterm::event::KeyCode;
 
 #[test]
 fn textarea_cursor_follows_the_active_screen() {
@@ -14,8 +15,13 @@ fn textarea_cursor_follows_the_active_screen() {
     app.notepad.mode = Mode::Insert;
     assert!(app.uses_textarea_cursor());
 
-    // loop browser は textarea を持たないので、notepad のサブモードに関わらず false。
+    // loop browser の textarea は loop tree の `/` 絞り込み入力欄だけ。
     app.active_screen = crate::screen_switch::PrimaryScreen::LoopBrowser;
+    assert!(!app.uses_textarea_cursor());
+
+    app.loop_browser.state.handle_key(KeyCode::Char('/'));
+    assert!(app.uses_textarea_cursor());
+    app.loop_browser.state.handle_key(KeyCode::Enter);
     assert!(!app.uses_textarea_cursor());
 
     // keyboard は MML 入力中だけ textarea カーソルになる。

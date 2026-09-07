@@ -10,6 +10,9 @@ use cmrt_tui_core::theme::{MONOKAI_CYAN, MONOKAI_GRAY, MONOKAI_YELLOW};
 
 use super::base_style;
 
+#[cfg(test)]
+mod tests;
+
 pub fn draw(frame: &mut Frame<'_>, pane: LoopBrowserPane) {
     let (title, lines) = match pane {
         LoopBrowserPane::Tree => tree_help(),
@@ -51,6 +54,7 @@ fn tree_help() -> (&'static str, Vec<Line<'static>>) {
             Line::from("  Enter / Space       : 選択WAVを再生"),
             Line::from("  t                   : dirカテゴリ設定"),
             Line::from("  v / V               : お気に入り切替 / 限定表示"),
+            Line::from("  /                   : 絞り込み（Enter:確定 Esc:取消、全消し+Enterで解除）"),
             Line::from("  Ctrl+G              : 画面切替"),
             Line::from("  q                   : 終了"),
             close_hint(),

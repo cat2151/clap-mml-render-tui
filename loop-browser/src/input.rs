@@ -7,6 +7,11 @@ impl LoopBrowser {
     }
 
     pub fn handle_key_event(&mut self, key: KeyEvent) -> LoopBrowserAction {
+        // 絞り込み入力中はすべてのキーが入力欄へ入る（`?` も数字も Tab も文字扱い）。
+        // navigation_count と focus の処理より前に返すこと。
+        if self.filter_input.is_some() {
+            return self.handle_filter_input_key(key);
+        }
         if self.bpm_input.is_some() {
             return self.handle_bpm_input_key(key);
         }
@@ -110,6 +115,12 @@ impl LoopBrowser {
             }
             KeyCode::Char('t') => {
                 self.open_category_overlay();
+                LoopBrowserAction::Continue
+            }
+            KeyCode::Char('/')
+                if key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT =>
+            {
+                self.open_filter_input();
                 LoopBrowserAction::Continue
             }
             KeyCode::Char('r') if key.modifiers == KeyModifiers::NONE => self.select_random_wav(),
@@ -230,221 +241,5 @@ impl LoopBrowser {
             }
             _ => LoopBrowserAction::Continue,
         }
-    }
-
-    fn handle_mixer_overlay_key(&mut self, key: KeyCode) -> LoopBrowserAction {
-        match key {
-            KeyCode::Esc => {
-                self.mixer_overlay_open = false;
-                LoopBrowserAction::Continue
-            }
-            KeyCode::Char('h') | KeyCode::Left if self.mixer_cursor_track > 0 => {
-                self.mixer_cursor_track -= 1;
-                LoopBrowserAction::Continue
-            }
-            KeyCode::Char('l') | KeyCode::Right
-                if self.mixer_cursor_track + 1 < self.track_grid.len() =>
-            {
-                self.mixer_cursor_track += 1;
-                LoopBrowserAction::Continue
-            }
-            KeyCode::Char('j') | KeyCode::Down => {
-                self.adjust_mixer_volume(-cmrt_tui_core::mixer::MIXER_STEP_DB)
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
-                self.adjust_mixer_volume(cmrt_tui_core::mixer::MIXER_STEP_DB)
-            }
-            _ => LoopBrowserAction::Continue,
-        }
-    }
-
-    fn handle_category_overlay_key(&mut self, key: KeyCode) -> LoopBrowserAction {
-        match key {
-            KeyCode::Esc => self.category_overlay = None,
-            KeyCode::Char(key) => {
-                let key = key.to_ascii_lowercase();
-                if let Some(category) = self
-                    .category_keys
-                    .iter()
-                    .find(|(candidate, _)| *candidate == key)
-                    .map(|(_, category)| category.clone())
-                {
-                    if self.assign_selected_category(category) {
-                        return LoopBrowserAction::GridRefresh {
-                            grid: self.playback_grid(),
-                            reason: LoopGridChange::Category,
-                        };
-                    }
-                }
-            }
-            _ => {}
-        }
-        LoopBrowserAction::Continue
-    }
-
-    fn move_cursor(&mut self, delta: isize) -> LoopBrowserAction {
-        let started_at = Instant::now();
-        if self.visible.is_empty() {
-            return LoopBrowserAction::Continue;
-        }
-        let previous = self.cursor;
-        let max = self.visible.len().saturating_sub(1) as isize;
-        let next = (self.cursor as isize).saturating_add(delta).clamp(0, max) as usize;
-        if next == self.cursor {
-            return LoopBrowserAction::Continue;
-        }
-        self.cursor = next;
-        let trace_id = super::performance::next_trace_id();
-        self.pending_render_trace = Some(trace_id);
-        let selected_is_wav = self.visible[next].is_wav;
-        let action = self.selected_play_action_with_trace(trace_id);
-        super::performance::log_cursor_move(
-            trace_id,
-            started_at.elapsed(),
-            previous,
-            next,
-            self.visible.len(),
-            if selected_is_wav { "wav" } else { "directory" },
-            selected_is_wav,
-        );
-        action
-    }
-
-    fn expand_or_play(&mut self) -> LoopBrowserAction {
-        let Some(node) = self.visible.get(self.cursor).cloned() else {
-            return LoopBrowserAction::Continue;
-        };
-        if node.is_wav {
-            let trace_id = super::performance::next_trace_id();
-            self.pending_preview_trace = Some(trace_id);
-            return LoopBrowserAction::Preview(node.path);
-        }
-        if self.expanded.insert(node.key.clone()) {
-            self.rebuild_visible(Some(&node.key));
-        }
-        LoopBrowserAction::Continue
-    }
-
-    fn collapse_or_select_parent(&mut self) -> bool {
-        let Some(node) = self.visible.get(self.cursor).cloned() else {
-            return false;
-        };
-        if !node.is_wav && self.expanded.remove(&node.key) {
-            self.rebuild_visible(Some(&node.key));
-            return true;
-        }
-        if node.depth == 0 || node.key.components.is_empty() {
-            return false;
-        }
-        let mut parent = node.key;
-        parent.components.pop();
-        self.rebuild_visible(Some(&parent));
-        true
-    }
-
-    fn selected_target_dir(&self) -> Option<LoopDirId> {
-        let node = self.visible.get(self.cursor)?;
-        let root_path = &self.roots.get(node.key.root)?.0;
-        let mut components = node.key.components.clone();
-        if node.is_wav {
-            components.pop();
-        }
-        let relative = components.iter().collect::<PathBuf>();
-        Some(LoopDirId::new(root_path, &relative))
-    }
-
-    fn toggle_selected_favorite(&mut self) {
-        let Some(dir) = self.selected_target_dir() else {
-            return;
-        };
-        if !self.metadata.writable {
-            return;
-        }
-        let selected_path = self.visible.get(self.cursor).map(|node| node.path.clone());
-        let Some(added) = self.metadata.try_mutate(
-            |metadata| metadata.toggle_favorite(&dir),
-            |path, metadata| metadata.save_to(path),
-            "お気に入りを保存できません",
-        ) else {
-            return;
-        };
-        self.rebuild_favorite_wav_keys();
-        if !added {
-            self.notice = Some(LoopBrowserNotice {
-                text: "お気に入りdirを解除しました".to_string(),
-                expires_at: Instant::now() + REMOVED_NOTICE_DURATION,
-            });
-        }
-        self.rebuild_visible_for_path(selected_path.as_deref());
-    }
-
-    fn toggle_favorites_only(&mut self) {
-        let selected_path = self.visible.get(self.cursor).map(|node| node.path.clone());
-        self.favorites_only = !self.favorites_only;
-        self.category_overlay = None;
-        self.rebuild_visible_for_path(selected_path.as_deref());
-    }
-
-    fn open_category_overlay(&mut self) {
-        if self.category_keys.is_empty() || !self.metadata.writable {
-            return;
-        }
-        self.category_overlay = self.selected_target_dir();
-    }
-
-    fn assign_selected_category(&mut self, category: String) -> bool {
-        let Some(dir) = self.category_overlay.take() else {
-            return false;
-        };
-        let selected_path = self.visible.get(self.cursor).map(|node| node.path.clone());
-        if self
-            .metadata
-            .try_mutate(
-                |metadata| metadata.toggle_category(&dir, &category),
-                |path, metadata| metadata.save_to(path),
-                "カテゴリを保存できません",
-            )
-            .is_none()
-        {
-            return false;
-        }
-        self.rebuild_wav_categories();
-        self.rebuild_visible_for_path(selected_path.as_deref());
-        true
-    }
-
-    fn selected_wav_id(&self) -> Option<LoopWavId> {
-        let node = self.visible.get(self.cursor)?;
-        if !node.is_wav {
-            return None;
-        }
-        let root = &self.roots.get(node.key.root)?.0;
-        let relative = node.key.components.iter().collect::<PathBuf>();
-        Some(LoopWavId::new(root, &relative))
-    }
-
-    fn toggle_selected_pad(&mut self, pad: char) -> LoopBrowserAction {
-        let Some(wav) = self.selected_wav_id() else {
-            return LoopBrowserAction::Continue;
-        };
-        if !self.metadata.writable {
-            return LoopBrowserAction::Continue;
-        }
-        let Some(assigned) = self.metadata.try_mutate(
-            |metadata| metadata.toggle_pad(pad, &wav),
-            |path, metadata| metadata.save_to(path),
-            "WAV padを保存できません",
-        ) else {
-            return LoopBrowserAction::Continue;
-        };
-        if !assigned {
-            self.notice = Some(LoopBrowserNotice {
-                text: format!("WAV pad {} を解除しました", pad.to_ascii_uppercase()),
-                expires_at: Instant::now() + REMOVED_NOTICE_DURATION,
-            });
-        } else {
-            self.notice = None;
-        }
-        LoopBrowserAction::Continue
     }
 }

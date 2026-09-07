@@ -73,6 +73,25 @@ pub fn log_preview_finished(metrics: PreviewMetrics<'_>) {
     ));
 }
 
+/// loop tree の `/` 絞り込みで、1 打鍵ぶんの再構築にかかった時間。
+///
+/// デバウンス禁止なので 1 文字ごとに「条件のコンパイル + ツリーの刈り取り + 可視ノードの再構築」が
+/// 丸ごと走る。その実測値をここへ出す。
+pub fn log_filter_query(
+    elapsed: Duration,
+    query: &str,
+    visible: usize,
+    library_wavs: usize,
+    outcome: &str,
+) {
+    log(format!(
+        "event=filter-query slow={} rebuild_ms={} outcome={outcome} visible={visible} library_wavs={library_wavs} query=\"{}\"",
+        elapsed >= SLOW_RENDER,
+        millis(elapsed),
+        query.replace('"', "\\\""),
+    ));
+}
+
 pub fn log_render(metrics: RenderMetrics, terminal_draw: Duration) {
     if metrics.trace_id.is_none() && terminal_draw < SLOW_RENDER {
         return;

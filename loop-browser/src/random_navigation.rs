@@ -189,6 +189,17 @@ impl LoopBrowser {
     }
 
     pub fn reveal_wav(&mut self, wav: &LoopWavId) {
+        // 絞り込みで消えている wav へ同期するときは絞り込みを自動解除する
+        // （すぐ下の favorites_only と同じ扱い。どちらも「選びたい wav が
+        // 表示条件の外にある」状況）。
+        //
+        // 入力中は解除しない。auto random がタイマ経由でここへ来る
+        // （app/src/tui/loop_browser_glue.rs:90 → auto_random.rs:83 →
+        // batch_random.rs:123 → grid.rs:106）ため、打鍵の途中で
+        // 絞り込みが消えてしまうのを避ける。
+        if !self.filter_input_active() && self.filter_hides_wav(wav) {
+            self.set_filter_query("");
+        }
         let favorite = self
             .metadata
             .value

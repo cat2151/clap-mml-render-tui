@@ -25,6 +25,7 @@ pub mod server_profile_badge;
 pub mod sound_check_guide;
 pub mod startup_progress;
 pub mod status;
+pub mod text_filter;
 pub mod text_input;
 pub mod theme;
 pub mod ui;

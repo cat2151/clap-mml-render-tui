@@ -66,6 +66,7 @@ impl<'a> TuiApp<'a> {
                 self.loop_browser.state.help_overlay.is_none()
                     && !self.loop_browser.state.mixer_overlay_open
                     && self.loop_browser.state.category_overlay.is_none()
+                    && !self.loop_browser.state.filter_input_active()
             }
             PrimaryScreen::GridSequencer => {
                 !self.grid_sequencer.help_open && !self.grid_sequencer.history_open()

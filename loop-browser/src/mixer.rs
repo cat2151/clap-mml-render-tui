@@ -53,4 +53,30 @@ impl LoopBrowser {
             solo_tracks: self.solo_tracks.clone(),
         }
     }
+
+    pub(crate) fn handle_mixer_overlay_key(&mut self, key: KeyCode) -> LoopBrowserAction {
+        match key {
+            KeyCode::Esc => {
+                self.mixer_overlay_open = false;
+                LoopBrowserAction::Continue
+            }
+            KeyCode::Char('h') | KeyCode::Left if self.mixer_cursor_track > 0 => {
+                self.mixer_cursor_track -= 1;
+                LoopBrowserAction::Continue
+            }
+            KeyCode::Char('l') | KeyCode::Right
+                if self.mixer_cursor_track + 1 < self.track_grid.len() =>
+            {
+                self.mixer_cursor_track += 1;
+                LoopBrowserAction::Continue
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                self.adjust_mixer_volume(-cmrt_tui_core::mixer::MIXER_STEP_DB)
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.adjust_mixer_volume(cmrt_tui_core::mixer::MIXER_STEP_DB)
+            }
+            _ => LoopBrowserAction::Continue,
+        }
+    }
 }
