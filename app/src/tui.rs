@@ -93,8 +93,15 @@ pub struct TuiApp<'a> {
     pub(in crate::tui) keyboard: KeyboardScreen<'a>,
     pub(in crate::tui) loop_browser: LoopBrowserScreen,
     pub(in crate::tui) grid_sequencer: GridSequencerScreen,
-    /// コード進行の「構成」画面。音を鳴らさないので、他の画面と共有するものは無い。
+    /// コード進行の「構成」画面。preview は MML オーバーレイと同じ経路を借りる。
     pub(in crate::tui) chord_chart: ChordChartScreen,
+    /// chord chart の preview がいつ鳴り終わるか。`None` は「鳴っていない」。
+    ///
+    /// **鳴っているかを知っているのはここだけ**（`MmlOverlaySenderStatus::sounding()`
+    /// は打鍵の生 MIDI 専用で、行の演奏では空のまま。2026-09-09 実測）。
+    /// `Shift+P` / `Space` のトグルはこの値の答えを画面へ書き戻して使う
+    /// （`chord_chart_glue::refresh_chord_chart_preview_sounding`）。
+    chord_chart_preview_ends_at: Option<std::time::Instant>,
     /// Grid履歴をimport前に1小節だけoffline試聴する、揮発性のplayer/cache。
     grid_history_preview: crate::daw::DawGridPreviewPlayer,
     /// どの画面からでも開ける MML 入力オーバーレイ。開くと現在の画面の演奏は止まり、

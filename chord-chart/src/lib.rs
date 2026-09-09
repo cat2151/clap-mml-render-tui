@@ -34,5 +34,5 @@ pub mod ui;
 
 pub use catalog::ChordProgressionSource;
 pub use persist::{load_song, save_song};
-pub use screen::{ChordChartAction, ChordChartScreen, Pane};
+pub use screen::{ChordChartAction, ChordChartScreen, Pane, PreviewRequest};
 pub use song::{Section, SectionId, Song};

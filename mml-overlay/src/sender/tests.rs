@@ -309,3 +309,56 @@ fn preparing_an_already_ready_patch_stops_the_previous_line() {
     );
     wait_until(|| sink.stops() == 1);
 }
+
+/// **行の演奏では `status.sounding` が埋まらない**（打鍵の生 MIDI 専用の欄）。
+///
+/// 2026-09-09 実測。行を借りて鳴らすホスト機能（chord chart の preview など）が
+/// 「いま鳴っているか」を [`MmlOverlaySenderStatus::sounding`] で判定できるか、を
+/// **実サーバー無しで**確かめるための固定。sink は全部成功する FakeSink なので、
+/// ここで埋まらないなら実サーバーでも埋まらない（成功側が上限）。
+///
+/// 打鍵（`PlayNotes`）を対照に置く。対照が無いと「まだ処理されていないから空」と
+/// 区別が付かない。
+#[test]
+fn a_line_performance_leaves_the_sounding_status_empty() {
+    let sink = Arc::new(FakeSink::default());
+    let harness = Harness::spawn(Arc::clone(&sink));
+
+    // 対照: 打鍵の 1 音なら埋まる。
+    harness.send(1, notes("ready.sfz", 60, Duration::from_secs(5)));
+    wait_until(|| !harness.status.lock().unwrap().sounding().is_empty());
+    assert_eq!(harness.status.lock().unwrap().sounding(), [60]);
+
+    harness.send(2, line(4.0, false));
+    wait_until(|| sink.begins() == 1);
+
+    assert!(
+        harness.status.lock().unwrap().sounding().is_empty(),
+        "行の演奏は sounding を埋めない: {:?}",
+        harness.status.lock().unwrap().sounding()
+    );
+}
+
+/// **空の行を積む指示は、鳴っている timeline を止める**（`Stop` と同じ経路）。
+///
+/// 行を借りて鳴らすホスト機能が「止める」を `play_line(空)` で表現してよいことの固定。
+/// 2026-09-09 実測（`stop_all` が 1 回飛ぶ）。
+#[test]
+fn an_empty_line_stops_the_running_timeline() {
+    let sink = Arc::new(FakeSink::default());
+    let harness = Harness::spawn(Arc::clone(&sink));
+    harness.send(1, line(4.0, false));
+    wait_until(|| sink.begins() == 1);
+    assert_eq!(sink.stops(), 0, "まだ止めていないこと（対照）");
+
+    harness.send(
+        2,
+        SenderCommandKind::PlayLine {
+            patch: Some("ready.sfz".to_string()),
+            program: LineProgram::silent(),
+        },
+    );
+
+    wait_until(|| sink.stops() == 1);
+    assert_eq!(sink.begins(), 1, "止めるだけで timeline は張り直さないこと");
+}

@@ -8,7 +8,9 @@
 ## 何の話か
 
 `Ctrl+G` → `C` で開く chord chart 画面は、1 曲ぶんのコード進行の「構成」だけを
-俯瞰・編集する。**音は鳴らさない。**
+俯瞰・編集する。**構成の画面であって、シーケンサではない。**
+（2026-09-09 に preview を足した。カーソル行の section 1 つを鳴らすだけで、
+曲全体は鳴らさない。下の「残っていた宿題」を参照）
 
 最初の実装（9 Stage）はユーザー発言 1 文
 「1 曲全体の構成を俯瞰できる、コード進行の構成のみに集中できる画面が欲しい」
@@ -64,10 +66,13 @@
 | `dd` | 共通 | カーソル行を削除 |
 | `Alt+↑` `Alt+↓` | 共通 | カーソル行を上 / 下へ移動 |
 | `b` | 共通 | `prefix`（Key / BPM）を 1 行入力 |
+| `Shift+P` `Space` | 共通 | カーソル行の section を試聴 / 停止（同じトグル） |
 | `q` | 共通 | アプリ終了 |
 | `?` | 共通 | ヘルプ overlay（`Esc` でも閉じる） |
 | `g` `r` `i` `n` | Sections | 抽選追加 / 引き直し / 進行入力 / 名前入力 |
 | `1`..`9` | Arrangement | その番号の section をカーソルの次に挿入 |
+
+小文字の `p` は割り当てていない（トグルは `Shift+P` と `Space` の 2 つだけ）。
 
 **キーの集合そのものをテストが等値比較で固定している**
 （`chord-chart/src/ui/tests/help.rs` の
@@ -89,10 +94,17 @@
 - overlay の中身を見る assert は `help_overlay_bounds` の矩形だけを読む。
   画面全体だと裏のヘッダ（`Key=C BPM120`）を拾って必ず落ちる。
 
-## 残っている宿題
+## 残っていた宿題 → preview（2026-09-09 に実装）
 
-演奏（プレビュー）。この画面の本命の出口だが、**削減の時点では一行も書いていない**。
-`cmrt_chord::parse_chord_progression` は Key とコード以外の directive を拒むので、
-`BPM120` も `|` も現状のラッパーは通らない（実測。chord2mml core 自体は通る）。
-鳴らすときに「ラッパーへ入口を足す」か「core を直に使う」かを決めること。
-先回りして直さない。
+演奏（プレビュー）はこの画面の本命の出口で、削減の時点では一行も書いていなかった。
+`HANDOFF-chord-chart-preview.md` の 4 Stage で実装した。**この ADR の 1.（文字列を
+解釈しない）は保ったまま**入った:
+
+- 鳴らす経路は `Ctrl+P` の MML overlay と同じ（`cmrt_mml_overlay::line_events` →
+  `MmlOverlaySender::play_line`）。`cmrt_chord::parse_chord_progression`（Key と
+  コード以外の directive を拒むラッパー）は通らないので、**ラッパーは直していない**。
+- `chord-chart` crate は文字列を解釈しないまま。`prefix` から Key トークンを抜くのも、
+  1 行を組み立てるのも **app 側の glue**（`app/src/tui/chord_chart_glue.rs`）。
+  crate から `cmrt-chord` への依存は復活していない。
+- 画面が持つのは「いま何を鳴らすべきか」の要求（`PreviewRequest`）と
+  「鳴っているか」の写しだけ。`!` 印も「読めない進行」の概念も戻していない。

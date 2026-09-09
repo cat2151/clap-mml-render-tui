@@ -14,13 +14,10 @@ const TITLE: &str = " Chord Chart ヘルプ(Keybinds)  Esc/?:close ";
 
 /// 画面下段に常に出す 1 行の要約。
 ///
-/// 80 桁端末（枠の内側 78 桁）に収まる長さで止めてある。溢れると末尾の `?:help`
-/// が切れ、「全キーの見方」への入口が画面から消える。全量はヘルプ overlay 側。
-///
-/// **入りきらないので `b`（Key / BPM）はここに載せていない。** 曲ごとに 1 回決めれば
-/// 済むうえ、現在値はヘッダに出ているので、キーだけが `?` 側にある。
-pub(super) const KEYBIND_TEXT: &str =
-    " hl:pane g:抽選 r:引直し i:進行 n:名前 dd:削除 Alt+↑↓:移動 q:終了 ?:help";
+/// **載せるのは `q` と `?` の 2 つだけ**（`[user]` 指示）。キーを並べても覚えられず、
+/// 溢れると末尾の `?:help`（全キーの見方への唯一の入口）が黙って切れる。
+/// 全量はヘルプ overlay 側にある。
+pub(super) const KEYBIND_TEXT: &str = " q:終了 ?:help";
 
 pub(super) fn draw_overlay(f: &mut Frame<'_>) {
     let lines = help_lines();
@@ -41,13 +38,15 @@ pub(super) fn draw_overlay(f: &mut Frame<'_>) {
 /// **キーを足す / 消すときはここだけを直す。** 教えるキーの集合そのものを
 /// `ui::tests::help::the_help_teaches_exactly_the_keys_that_survived_the_reduction` が
 /// 固定しているので、廃止したキーが 1 文字（`a` `e` `x` `d`）で戻ってきても落ちる。
-pub(super) const HELP_ROWS: [&str; 20] = [
+pub(super) const HELP_ROWS: [&str; 22] = [
     " h / l      pane 移動(h:Sections  l:Arrangement)",
     " j/k ↑↓     カーソル移動",
     " PgUp/PgDn  カーソルを 10 行移動",
     " dd         カーソル行を削除",
     " Alt+↑/↓    カーソル行を上 / 下へ移動",
     " b          Key / BPM を入力",
+    " Shift+P    カーソル行の section を試聴(鳴っていたら停止)",
+    " Space      Shift+P と同じ(試聴 / 停止)",
     " Ctrl+G     画面切替メニュー",
     " ? / Esc    このヘルプを開く / 閉じる",
     " q          アプリを終了",

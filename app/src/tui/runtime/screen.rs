@@ -119,8 +119,12 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::Keyboard => self.finish_keyboard(),
             PrimaryScreen::LoopBrowser => self.stop_loop_browser(),
             PrimaryScreen::GridSequencer => self.stop_grid_sequencer_playback(),
-            // chord chart は音を鳴らさない画面なので、止めるものが無い。
-            PrimaryScreen::ChordChart | PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {}
+            // chord chart の preview は 1 回鳴って終わる（note off まで積んである）ので、
+            // 止めるコマンドはこちらからは出さない。明け渡した先（MML オーバーレイの
+            // `prepare` など）が音源ごと止めるので、こちらは記録だけ捨てる
+            // （捨てないと、戻ってきたときの `Space` が「止める」に化けて空打ちになる）。
+            PrimaryScreen::ChordChart => self.forget_chord_chart_preview(),
+            PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {}
         }
     }
 
@@ -134,7 +138,8 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::LoopBrowser => self.begin_loop_browser_startup(),
             PrimaryScreen::GridSequencer => self.enter_grid_sequencer(),
             // notepad と DAW は明示的に再生する画面なので、勝手に鳴らし始めない。
-            // chord chart はそもそも音を鳴らさない。
+            // chord chart の preview はカーソルが動いたときだけ鳴るので、
+            // オーバーレイを閉じた時点では鳴らし直さない。
             PrimaryScreen::ChordChart
             | PrimaryScreen::Notepad
             | PrimaryScreen::DailyDaw

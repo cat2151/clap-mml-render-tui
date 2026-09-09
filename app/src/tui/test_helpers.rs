@@ -38,6 +38,7 @@ impl TuiApp<'static> {
             // カタログの抽選が走ってしまうため。自動抽選そのものを見るテストは
             // `tests/chord_chart_initial_song.rs` が明示的に組み立てる。
             chord_chart: chord_chart::ChordChartScreen::new(test_chord_chart_song()),
+            chord_chart_preview_ends_at: None,
             grid_history_preview: crate::daw::DawGridPreviewPlayer::disabled_for_tests(cfg),
             voicing: voicing::VoicingState::new(
                 crate::history::VoicingCache::default(),

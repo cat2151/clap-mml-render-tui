@@ -17,7 +17,10 @@ use self::line_input::{LineInput, LineInputTarget};
 mod arrangement_edit;
 // 描画（`crate::ui`）が overlay の中身を読むので、screen の外から見える必要がある。
 pub(crate) mod line_input;
+mod preview;
 mod section_edit;
+
+pub use self::preview::PreviewRequest;
 
 /// [`ChordChartScreen::handle_key_event`] の結果。
 ///
@@ -77,6 +80,20 @@ pub struct ChordChartScreen {
     /// ここで抽選せず「開いたとき」まで遅らせるのは、カタログが遅延取得で、
     /// キャッシュがまだ無い初回は最大 20 秒待つため（アプリ全体の起動を止めない）。
     pub(crate) pending_initial_generate: bool,
+    /// 立っている「鳴らせ」の要求。[`ChordChartScreen::take_preview`] が消費する。
+    ///
+    /// **音を出すのは app 側**（この crate は `MmlOverlaySender` を知らないし、
+    /// degrees を解釈もしない）。ここに置くのは「何を鳴らすべきか」だけ。
+    /// crate 内で見えているのは、描画テストが `..ChordChartScreen::default()` で
+    /// 組み立てられるようにするため（`line_input` と同じ理由）。
+    pub(crate) pending_preview: Option<PreviewRequest>,
+    /// 直前に投げた preview がまだ鳴っている、と app 側が判断していること。
+    ///
+    /// **真偽を決めるのは app 側**（実際に送れたか、何秒の演奏だったかを知っているのは
+    /// glue だけ）。ここはその答えを写しただけで、[`Self::toggle_preview`] が
+    /// 「止める」と「鳴らす」のどちらを要求するかを決めるためだけに読む。
+    /// 書き込みは [`ChordChartScreen::set_preview_sounding`] から。
+    pub(crate) preview_sounding: bool,
     /// 直前の操作が何もできなかった理由。画面下段に出す。
     pub error: Option<String>,
     /// コード進行カタログの供給元。注入されるまでは `None`（＝抽選は
@@ -106,6 +123,8 @@ impl ChordChartScreen {
             line_input: None,
             pending_delete: false,
             pending_initial_generate: false,
+            pending_preview: None,
+            preview_sounding: false,
             error: None,
             chord_progression_source: None,
         }
@@ -130,11 +149,16 @@ impl ChordChartScreen {
     /// （保存しないと、次の起動でまた別の進行が抽選される）。カタログが無くて抽選
     /// できなかったときは空のまま `Continue` を返し、理由を下段に出す。
     /// 失敗しても「1 回だけ」は使い切る（開き直すたびにカタログ取得を待たされない）。
+    /// **画面を開いた直後の preview 要求もここで立てる**（抽選が走った場合はその
+    /// section が対象になる。抽選は要求を立てるより先に済ませること）。
     pub fn enter(&mut self) -> ChordChartAction {
-        if !std::mem::take(&mut self.pending_initial_generate) {
-            return ChordChartAction::Continue;
-        }
-        self.generate_initial_section()
+        let action = if std::mem::take(&mut self.pending_initial_generate) {
+            self.generate_initial_section()
+        } else {
+            ChordChartAction::Continue
+        };
+        self.request_preview_on_enter();
+        action
     }
 
     /// コード進行カタログの供給元を注入する。
@@ -230,8 +254,8 @@ impl ChordChartScreen {
             KeyCode::Char('q') => return ChordChartAction::Quit,
             // pane 移動は `h` / `l` で左右そのもの（トグルではない）。押したキーと
             // 行き先が 1 対 1 なので、いまどちらにいるかを覚えていなくても迷わない。
-            KeyCode::Char('h') => self.focus = Pane::Sections,
-            KeyCode::Char('l') => self.focus = Pane::Arrangement,
+            KeyCode::Char('h') => self.focus_pane(Pane::Sections),
+            KeyCode::Char('l') => self.focus_pane(Pane::Arrangement),
             KeyCode::Char('j') | KeyCode::Down => self.move_cursor(CursorStep::Next(1)),
             KeyCode::Char('k') | KeyCode::Up => self.move_cursor(CursorStep::Previous(1)),
             KeyCode::PageDown => self.move_cursor(CursorStep::Next(PAGE_ROWS)),
@@ -240,6 +264,9 @@ impl ChordChartScreen {
             KeyCode::Char('d') => self.pending_delete = true,
             // `b` は pane に関係なく曲そのもの（prefix）を書き換えるので共通キー。
             KeyCode::Char('b') => return self.open_prefix_line_input(),
+            // `Shift+P` / `Space`: preview のトグル。両 pane 共通キー。
+            // `P` は SHIFT 付きで届くが、`is_plain` が SHIFT を許すのでここまで来る。
+            KeyCode::Char('P') | KeyCode::Char(' ') => self.toggle_preview(),
             // ここから下は pane ごとに意味が変わるキー。
             code => return self.handle_pane_key(code),
         }
@@ -287,7 +314,11 @@ impl ChordChartScreen {
     /// 動かす前に必ず丸めた値から数える。丸めずに足し引きすると、行が減ったあとの
     /// 溢れた index（例: 行 2 つに対し 99）から `k` を押しても画面上のカーソルが
     /// 何十回も動かないように見える。
+    ///
+    /// カーソルが実際に動いたときだけ preview 要求を立てる（端で止まったときは
+    /// 音を鳴らし直さない）。
     fn move_cursor(&mut self, step: CursorStep) {
+        let before = self.cursor_position();
         let (current, len) = match self.focus {
             Pane::Sections => (self.clamped_section_cursor(), self.song.sections.len()),
             Pane::Arrangement => (
@@ -303,6 +334,7 @@ impl ChordChartScreen {
             Pane::Sections => self.section_cursor = next,
             Pane::Arrangement => self.arrangement_cursor = next,
         }
+        self.request_preview_if_moved(before);
     }
 }
 

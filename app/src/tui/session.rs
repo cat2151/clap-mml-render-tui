@@ -284,6 +284,8 @@ impl<'a> TuiApp<'a> {
                 );
                 screen
             },
+            // preview はまだ 1 度も鳴らしていない。
+            chord_chart_preview_ends_at: None,
             grid_history_preview: crate::daw::DawGridPreviewPlayer::new(
                 Arc::clone(&cfg_arc),
                 plugin_entries,

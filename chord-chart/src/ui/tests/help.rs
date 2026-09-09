@@ -31,6 +31,8 @@ fn the_help_overlay_lists_every_key() {
         "n",
         "dd",
         "1..9",
+        "Shift+P",
+        "Space",
     ] {
         assert!(rendered.contains(key), "key {key:?} is absent: {rendered}");
     }
@@ -81,6 +83,8 @@ fn the_help_teaches_exactly_the_keys_that_survived_the_reduction() {
             "Alt+↑/↓",
             "Ctrl+G",
             "PgUp/PgDn",
+            "Shift+P",
+            "Space",
             "b",
             "dd",
             "g",
@@ -105,7 +109,7 @@ fn the_bottom_line_names_no_key_outside_that_set() {
         .filter_map(|item| item.split(':').next())
         .collect::<Vec<_>>();
 
-    assert_eq!(keys, ["hl", "g", "r", "i", "n", "dd", "Alt+↑↓", "q", "?"]);
+    assert_eq!(keys, ["q", "?"]);
 }
 
 /// ヘルプ 1 行の「キーの欄」。`キー` + 2 桁以上の空白 + `説明` という形なので、
@@ -139,20 +143,28 @@ fn the_help_overlay_is_hidden_until_it_is_opened() {
     assert!(!rendered.contains("ヘルプ"), "{rendered}");
 }
 
-/// 下段は常にキー要約。`?` があることが「ヘルプの開き方」の唯一の手掛かり。
+/// 下段は `q` と `?` だけ。`?` があることが「ヘルプの開き方」の唯一の手掛かり。
 #[test]
 fn the_bottom_line_summarises_the_keys() {
     let buffer = render(&ChordChartScreen::default());
     let bottom = row_text(&buffer, buffer.area.height - 2);
 
-    assert!(bottom.contains("hl:pane"), "{bottom:?}");
     // 全角はセル 2 つを占めるので、内容の照合は `squeeze` を通す。
-    assert!(squeeze(&bottom).contains("dd:削除"), "{bottom:?}");
     assert!(squeeze(&bottom).contains("q:終了"), "{bottom:?}");
-    // 78 桁に入りきらないので `b` は下段に載せない（全量は `?` 側）。
-    assert!(!bottom.contains("b:Key/BPM"), "{bottom:?}");
     // 末尾まで 80 桁に収まっていないと、ヘルプへの入口が切れて消える。
     assert!(bottom.contains("?:help"), "{bottom:?}");
+    // 他のキーは 1 つも載せない（`[user]` 指示。全量は `?` 側）。
+    for gone in [
+        "hl:pane",
+        "g:抽選",
+        "r:引直し",
+        "i:進行",
+        "n:名前",
+        "dd:",
+        "Alt+",
+    ] {
+        assert!(!squeeze(&bottom).contains(gone), "{bottom:?}");
+    }
 }
 
 /// 何もできなかった理由がある間は、キー要約より理由を優先する。
@@ -228,9 +240,15 @@ fn the_help_overlay_fits_inside_an_eighty_column_terminal() {
     assert!(bottom < TEST_HEIGHT, "枠の下端が画面の外: bottom={bottom}");
 
     // いちばん長い説明行。切り詰められていれば末尾の `)` が落ちる。
+    // **綴りを直書きせず、実際にいちばん長い行を計算して選ぶ**（行を足したときに
+    // 「もう最長ではない行」を見張り続けて素通しするのを防ぐ）。
+    let longest = crate::ui::help::HELP_ROWS
+        .iter()
+        .max_by_key(|row| ratatui::text::Span::raw(**row).width())
+        .unwrap();
     let inside = overlay_text(&buffer, left, top, right, bottom);
     assert!(
-        inside.contains("dd削除(arrangement上の参照も一緒に消える)"),
-        "いちばん長い行が切れている: {inside}"
+        inside.contains(&squeeze(longest)),
+        "いちばん長い行 {longest:?} が切れている: {inside}"
     );
 }
