@@ -84,3 +84,13 @@ pub fn daw_file_path() -> Option<PathBuf> {
 pub fn daw_file_load_path() -> Option<PathBuf> {
     resolved_history_file_path("daw.json")
 }
+
+/// Chord Chart 画面のデータファイル (`chord_chart.json`) のパスを返す。
+///
+/// `daw.json` と同じ扱いで、この crate はパスだけを決め、
+/// 読み書き（serde）は `cmrt-chord-chart` 側が持つ。
+/// 新規ファイルなので legacy ディレクトリからの migration は行わない。
+/// `dirs::config_local_dir()` が利用できない環境では `None` を返す。
+pub fn chord_chart_file_path() -> Option<PathBuf> {
+    history_file_path("chord_chart.json")
+}

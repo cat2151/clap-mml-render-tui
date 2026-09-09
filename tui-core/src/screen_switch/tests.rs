@@ -27,6 +27,7 @@ fn menu_accepts_all_screen_initials_case_insensitively() {
         ('k', PrimaryScreen::Keyboard),
         ('L', PrimaryScreen::LoopBrowser),
         ('g', PrimaryScreen::GridSequencer),
+        ('C', PrimaryScreen::ChordChart),
     ] {
         let mut menu = ScreenSwitchMenu::default();
         menu.open();
@@ -57,6 +58,20 @@ fn daily_daw_serializes_as_a_distinct_primary_screen() {
     assert!(!PrimaryScreen::Notepad.is_daw());
 }
 
+/// セッションの `active_screen` はこの綴りでファイルへ入る。変えると
+/// 「前回 chord chart で終了した」復元が黙って notepad へ落ちる。
+#[test]
+fn chord_chart_serializes_as_a_distinct_primary_screen() {
+    let encoded = serde_json::to_string(&PrimaryScreen::ChordChart).unwrap();
+
+    assert_eq!(encoded, r#""chord_chart""#);
+    assert_eq!(
+        serde_json::from_str::<PrimaryScreen>(&encoded).unwrap(),
+        PrimaryScreen::ChordChart
+    );
+    assert!(!PrimaryScreen::ChordChart.is_daw());
+}
+
 #[test]
 fn daily_daw_is_shown_and_highlighted_as_the_current_screen() {
     let mut terminal = Terminal::new(TestBackend::new(60, 16)).unwrap();
@@ -73,6 +88,43 @@ fn daily_daw_is_shown_and_highlighted_as_the_current_screen() {
         .collect::<String>();
 
     assert_eq!(highlighted, "[A] Daily DAW");
+}
+
+/// 画面が増えても menu の行が枠から溢れないこと（人間の入口はこの 1 行だけ）。
+#[test]
+fn the_menu_lists_every_screen_including_the_chord_chart() {
+    let mut terminal = Terminal::new(TestBackend::new(60, 16)).unwrap();
+    terminal
+        .draw(|frame| draw_screen_switch_menu(frame, PrimaryScreen::Notepad))
+        .unwrap();
+    let buffer = terminal.backend().buffer().clone();
+    let rendered = (0..buffer.area.height)
+        .map(|y| {
+            (0..buffer.area.width)
+                .map(|x| buffer.cell((x, y)).unwrap().symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join(
+            "
+",
+        );
+
+    for label in [
+        "[N] Notepad",
+        "[A] Daily DAW",
+        "[D] DAW",
+        "[K] Keyboard",
+        "[L] Loop Browser",
+        "[G] Grid Sequencer",
+        "[C] Chord Chart",
+    ] {
+        assert!(
+            rendered.contains(label),
+            "{label} missing from:
+{rendered}"
+        );
+    }
 }
 
 #[test]

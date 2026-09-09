@@ -3,6 +3,7 @@ members = [
     "app",
     "arpeggiator",
     "chord",
+    "chord-chart",
     "cmrt-runtime",
     "config-editor-lib",
     "core-lib",

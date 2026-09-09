@@ -10,26 +10,14 @@ use super::{PatchLoadState, TuiApp};
 use crate::config::Config;
 
 mod grid_sequencer;
+mod persist;
+mod restore;
 
-use grid_sequencer::{grid_session_from_history, grid_session_to_history};
-
-struct LoadedSessionState {
-    cursor: usize,
-    lines: Vec<String>,
-    active_screen: crate::screen_switch::PrimaryScreen,
-    keyboard: crate::history::KeyboardSessionState,
-    grid_sequencer_track_count: usize,
-    grid_sequencer_chord_mode: bool,
-    grid_sequencer: Option<crate::history::GridSequencerSessionState>,
-    grid_sequencer_bpm: Option<f64>,
-    loop_browser_bpm: Option<f64>,
-    grid_sequencer_bpm_range: Option<[f64; 2]>,
-    loop_browser_bpm_range: Option<[f64; 2]>,
-    keyboard_note_guide_overlay_date: Option<String>,
-    notepad_sound_check_guide_overlay_date: Option<String>,
-    mml_overlay_patch: Option<String>,
-    mml_overlay_play_settings: crate::history::MmlOverlayPlaySettings,
-}
+use grid_sequencer::grid_session_from_history;
+use restore::{
+    bpm_range_from_history, load_initial_session_state, play_settings_from_history,
+    restored_bpm_mode, LoadedSessionState,
+};
 
 /// 復元したセッションのカーソルを現在の行数に収まる範囲へ丸める。
 ///
@@ -37,97 +25,6 @@ struct LoadedSessionState {
 pub(super) fn clamp_session_cursor(cursor: usize, lines_len: usize) -> usize {
     debug_assert!(lines_len > 0, "session lines must not be empty");
     cursor.min(lines_len.saturating_sub(1))
-}
-
-fn load_initial_session_state() -> LoadedSessionState {
-    // `lines` は常に1行以上を保持する（不変条件）。
-    // load_session_state() は lines が空でないことを保証している。
-    let crate::history::SessionState {
-        cursor,
-        lines,
-        active_screen,
-        keyboard,
-        grid_sequencer_track_count,
-        grid_sequencer_chord_mode,
-        grid_sequencer,
-        grid_sequencer_bpm,
-        loop_browser_bpm,
-        grid_sequencer_bpm_range,
-        loop_browser_bpm_range,
-        keyboard_note_guide_overlay_date,
-        notepad_sound_check_guide_overlay_date,
-        mml_overlay_patch,
-        mml_overlay_play_settings,
-    } = crate::history::load_session_state();
-    let initial_cursor = clamp_session_cursor(cursor, lines.len());
-    LoadedSessionState {
-        cursor: initial_cursor,
-        lines,
-        active_screen,
-        keyboard,
-        grid_sequencer_track_count,
-        grid_sequencer_chord_mode,
-        grid_sequencer,
-        grid_sequencer_bpm,
-        loop_browser_bpm,
-        grid_sequencer_bpm_range,
-        loop_browser_bpm_range,
-        keyboard_note_guide_overlay_date,
-        notepad_sound_check_guide_overlay_date,
-        mml_overlay_patch,
-        mml_overlay_play_settings,
-    }
-}
-
-/// 保存済みの自動BPM範囲を復元する。未保存・不正なら `default_bpm` 固定の範囲。
-fn bpm_range_from_history(
-    saved: Option<[f64; 2]>,
-    default_bpm: f64,
-) -> cmrt_tui_core::bpm::BpmRange {
-    saved
-        .and_then(|[minimum, maximum]| cmrt_tui_core::bpm::BpmRange::new(minimum, maximum))
-        .unwrap_or_else(|| cmrt_tui_core::bpm::BpmRange::fixed(default_bpm))
-}
-
-/// 既定のままの範囲は保存しない（history.json にキーを増やさない）。
-fn bpm_range_to_history(range: cmrt_tui_core::bpm::BpmRange, default_bpm: f64) -> Option<[f64; 2]> {
-    (range != cmrt_tui_core::bpm::BpmRange::fixed(default_bpm))
-        .then(|| [range.minimum(), range.maximum()])
-}
-
-/// MML overlay の演奏設定を history の素の bool から起こす。
-///
-/// `cmrt-history` は overlay に依存しない（依存させると依存方向が逆流する）ので、
-/// 型の詰め替えは両方を知っているここが行う。3 値の対応はこの 2 関数だけが知っている。
-fn play_settings_from_history(
-    saved: crate::history::MmlOverlayPlaySettings,
-) -> super::mml_overlay::PlaySettings {
-    super::mml_overlay::PlaySettings {
-        repeat: saved.repeat,
-        filters: super::mml_overlay::line_play::FilterSettings {
-            modulation: saved.modulation,
-            velocity: saved.velocity,
-        },
-    }
-}
-
-/// [`play_settings_from_history`] の逆。
-fn play_settings_to_history(
-    settings: super::mml_overlay::PlaySettings,
-) -> crate::history::MmlOverlayPlaySettings {
-    crate::history::MmlOverlayPlaySettings {
-        repeat: settings.repeat,
-        modulation: settings.filters.modulation,
-        velocity: settings.filters.velocity,
-    }
-}
-
-/// 復元直後の BPM モード。手動値が残っていればそれを、無ければ範囲から1つ引く。
-fn restored_bpm_mode(
-    manual: Option<f64>,
-    range: cmrt_tui_core::bpm::BpmRange,
-) -> cmrt_tui_core::bpm::BpmMode {
-    cmrt_tui_core::bpm::BpmMode::from_saved(manual, range.sample())
 }
 
 /// パッチ一覧の非同期読み込みを開始し、共有状態ハンドルを返す。
@@ -370,6 +267,23 @@ impl<'a> TuiApp<'a> {
                     restored_session: grid_session_from_history(grid_sequencer),
                 },
             ),
+            // 保存済みの曲。ネットワークには触らないので起動時に読んでよい
+            // （この画面がネットワークを要するのはコード進行カタログだけ）。
+            // 読めなかったとき（初回 / 壊れている）に曲をでっち上げるのはここではない。
+            // 画面を最初に開いた時点で 1 つ抽選する（`ChordChartScreen::enter`）。
+            chord_chart: {
+                let mut screen =
+                    super::chord_chart::ChordChartScreen::restored(super::chord_chart::load_song());
+                // カタログは `g` / `r` を押した瞬間に初めて引く（DAW の chord wizard と
+                // 同じ遅延クロージャ。ここで `catalog()` を呼ぶと起動が待たされる）。
+                screen.set_chord_progression_source(
+                    super::chord_chart_glue::chord_chart_catalog_source_from(
+                        chord_progression_source.clone(),
+                        crate::logging::global_log_sink,
+                    ),
+                );
+                screen
+            },
             grid_history_preview: crate::daw::DawGridPreviewPlayer::new(
                 Arc::clone(&cfg_arc),
                 plugin_entries,
@@ -400,46 +314,6 @@ impl<'a> TuiApp<'a> {
             playback_session,
             play_server,
             dismissed_play_server_failure: None,
-        }
-    }
-
-    pub(super) fn save_history_state(&self) {
-        let _ = crate::history::save_session_state(&crate::history::SessionState {
-            cursor: self.notepad.session_cursor(),
-            lines: self.notepad.session_lines().to_vec(),
-            active_screen: self.active_screen,
-            keyboard: self.keyboard.state.session_state(),
-            grid_sequencer_track_count: self.grid_sequencer.track_count(),
-            grid_sequencer_chord_mode: self.grid_sequencer.chord_enabled(),
-            grid_sequencer: grid_session_to_history(self.grid_sequencer.session_state()),
-            grid_sequencer_bpm: self.grid_sequencer.bpm_mode().manual(),
-            loop_browser_bpm: self.loop_browser.state.bpm_mode().manual(),
-            grid_sequencer_bpm_range: bpm_range_to_history(
-                self.grid_sequencer.bpm_range(),
-                super::grid_sequencer::BPM,
-            ),
-            loop_browser_bpm_range: bpm_range_to_history(
-                self.loop_browser.state.bpm_range(),
-                crate::loop_browser::time_stretch::TARGET_BPM,
-            ),
-            keyboard_note_guide_overlay_date: self
-                .keyboard
-                .note_guide
-                .last_overlay_date()
-                .map(str::to_owned),
-            notepad_sound_check_guide_overlay_date: self
-                .notepad
-                .sound_check_guide()
-                .last_overlay_date()
-                .map(str::to_owned),
-            mml_overlay_patch: self.mml_overlay.patch().map(str::to_owned),
-            mml_overlay_play_settings: play_settings_to_history(self.mml_overlay.play_settings()),
-        });
-    }
-
-    pub(super) fn save_keyboard_note_guide_overlay_date(&self) {
-        if let Some(local_date) = self.keyboard.note_guide.last_overlay_date() {
-            let _ = crate::history::save_keyboard_note_guide_overlay_date(local_date);
         }
     }
 }

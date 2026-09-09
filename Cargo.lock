@@ -392,6 +392,7 @@ dependencies = [
  "clack-host",
  "clap",
  "cmrt-chord",
+ "cmrt-chord-chart",
  "cmrt-config-editor",
  "cmrt-daw",
  "cmrt-grid-sequencer",
@@ -500,6 +501,20 @@ dependencies = [
  "midly",
  "mmlabc-to-smf",
  "rand 0.10.2",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "cmrt-chord-chart"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cmrt-history",
+ "cmrt-tui-core",
+ "crossterm",
+ "ratatui",
+ "ratatui-textarea",
  "serde",
  "serde_json",
 ]

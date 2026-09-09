@@ -29,6 +29,8 @@ impl TuiApp<'_> {
             // loop browser の textarea は loop tree の `/` 絞り込み入力欄だけ。
             PrimaryScreen::LoopBrowser => self.loop_browser.state.filter_input_active(),
             PrimaryScreen::GridSequencer => false,
+            // chord chart の textarea は section の進行 / 名前を打つ `e` / `n` の欄だけ。
+            PrimaryScreen::ChordChart => self.chord_chart.line_input_open(),
             PrimaryScreen::Notepad | PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {
                 self.notepad.uses_textarea_cursor()
             }

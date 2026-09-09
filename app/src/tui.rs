@@ -1,4 +1,5 @@
-//! 5画面（notepad / DAW / keyboard / loop browser / grid sequencer）をホストする共有ランタイム。
+//! 6画面（notepad / DAW / keyboard / loop browser / grid sequencer / chord chart）を
+//! ホストする共有ランタイム。
 //!
 //! 各画面の実装本体は画面ごとの crate に閉じており、ここには
 //! 「どの画面か」「画面をまたいで共有するもの」と、各 crate と接続する glue だけを置く。
@@ -7,6 +8,7 @@
 //! - keyboard: `cmrt-keyboard` crate（`keyboard_glue`）
 //! - loop browser: `cmrt-loop-browser` crate（`loop_browser_glue`）
 //! - grid sequencer: `cmrt-grid-sequencer` crate（`grid_sequencer_glue`）
+//! - chord chart: `cmrt-chord-chart` crate（`chord_chart_glue`）
 //! - DAW     : `crate::daw`（`runtime::screen` から起動）
 
 // notepad 画面（状態・入力・描画・再生・レンダリングキュー）は `cmrt-notepad` crate へ
@@ -25,6 +27,10 @@ mod loop_browser_glue;
 // `cmrt-grid-sequencer` crate に閉じている。
 pub(crate) use cmrt_grid_sequencer as grid_sequencer;
 mod grid_sequencer_glue;
+// コード進行の構成画面（状態・キー処理・描画・保存）は `cmrt-chord-chart` crate に
+// 閉じている。音を鳴らさない画面なので、glue はキーの配送と保存だけ。
+pub(crate) use cmrt_chord_chart as chord_chart;
+mod chord_chart_glue;
 // MML 入力オーバーレイ（どの画面からでも Ctrl+P で開く）は `cmrt-mml-overlay` crate に
 // 閉じている。ここは開閉のきっかけと MIDI 送信をつなぐだけ。
 pub(crate) use cmrt_mml_overlay as mml_overlay;
@@ -48,6 +54,7 @@ use cmrt_tui_core::playback_session::PlaybackSession;
 
 use crate::chord_progression_source::ChordProgressionSource;
 
+use self::chord_chart::ChordChartScreen;
 use self::grid_sequencer::GridSequencerScreen;
 use self::keyboard::KeyboardScreen;
 use self::loop_browser::LoopBrowserScreen;
@@ -70,8 +77,8 @@ pub enum TuiExitReason {
     RestartApp,
 }
 
-/// 5つの主要画面（notepad / DAW / keyboard / loop browser / grid sequencer）を
-/// ホストする共有ランタイム。
+/// 6つの主要画面（notepad / DAW / keyboard / loop browser / grid sequencer /
+/// chord chart）をホストする共有ランタイム。
 ///
 /// 各画面の状態は画面ごとの構造体に閉じており、ここが持つのは
 /// 「どの画面か」「画面をまたいで共有するもの」だけ。
@@ -86,6 +93,8 @@ pub struct TuiApp<'a> {
     pub(in crate::tui) keyboard: KeyboardScreen<'a>,
     pub(in crate::tui) loop_browser: LoopBrowserScreen,
     pub(in crate::tui) grid_sequencer: GridSequencerScreen,
+    /// コード進行の「構成」画面。音を鳴らさないので、他の画面と共有するものは無い。
+    pub(in crate::tui) chord_chart: ChordChartScreen,
     /// Grid履歴をimport前に1小節だけoffline試聴する、揮発性のplayer/cache。
     grid_history_preview: crate::daw::DawGridPreviewPlayer,
     /// どの画面からでも開ける MML 入力オーバーレイ。開くと現在の画面の演奏は止まり、

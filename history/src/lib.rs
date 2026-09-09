@@ -37,7 +37,7 @@ pub use patch_phrase_store::{
     rename_patch_phrase_store_key, save_patch_phrase_store, sync_patch_favorite_order,
     touch_patch_favorite, PatchPhraseState, PatchPhraseStore,
 };
-pub use paths::{daw_file_load_path, daw_file_path};
+pub use paths::{chord_chart_file_path, daw_file_load_path, daw_file_path};
 pub use session_state::{
     load_session_state, save_keyboard_note_guide_overlay_date,
     save_notepad_sound_check_guide_overlay_date, save_session_state, KeyboardSessionState,

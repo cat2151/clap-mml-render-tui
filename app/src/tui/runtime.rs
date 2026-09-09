@@ -8,6 +8,7 @@ use crossterm::{
 };
 use ratatui::{backend::Backend, backend::CrosstermBackend, layout::Rect, Terminal};
 
+use super::chord_chart::ChordChartAction;
 use super::grid_sequencer::GridSequencerAction;
 use super::keyboard::KeyboardAction;
 use super::loop_browser::LoopBrowserAction;
@@ -79,6 +80,7 @@ impl<'a> TuiApp<'a> {
         }
         self.prepare_restored_keyboard_connection();
         self.enter_restored_grid_sequencer();
+        self.enter_restored_chord_chart();
         sync_mouse_capture(
             &mut cleanup.mouse_capture_enabled,
             self.uses_mouse_capture(),
@@ -301,6 +303,16 @@ impl<'a> TuiApp<'a> {
                                     }
                                 }
                             }
+                        }
+                        continue;
+                    }
+                    if self.active_screen == PrimaryScreen::ChordChart {
+                        // `q` はこの画面でもアプリ終了。離れるときの保存は
+                        // ループを抜けたあとの `save_notepad_and_session_state` ではなく、
+                        // 曲そのものを持つ chord chart 側で書く。
+                        if self.handle_chord_chart_key_event(key) == ChordChartAction::Quit {
+                            self.save_chord_chart();
+                            break;
                         }
                         continue;
                     }

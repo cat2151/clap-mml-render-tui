@@ -71,6 +71,9 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::GridSequencer => {
                 !self.grid_sequencer.help_open && !self.grid_sequencer.history_open()
             }
+            PrimaryScreen::ChordChart => {
+                !self.chord_chart.help_open && !self.chord_chart.line_input_open()
+            }
         }
     }
 
@@ -116,7 +119,8 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::Keyboard => self.finish_keyboard(),
             PrimaryScreen::LoopBrowser => self.stop_loop_browser(),
             PrimaryScreen::GridSequencer => self.stop_grid_sequencer_playback(),
-            PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {}
+            // chord chart は音を鳴らさない画面なので、止めるものが無い。
+            PrimaryScreen::ChordChart | PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {}
         }
     }
 
@@ -130,7 +134,11 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::LoopBrowser => self.begin_loop_browser_startup(),
             PrimaryScreen::GridSequencer => self.enter_grid_sequencer(),
             // notepad と DAW は明示的に再生する画面なので、勝手に鳴らし始めない。
-            PrimaryScreen::Notepad | PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {}
+            // chord chart はそもそも音を鳴らさない。
+            PrimaryScreen::ChordChart
+            | PrimaryScreen::Notepad
+            | PrimaryScreen::DailyDaw
+            | PrimaryScreen::Daw => {}
         }
     }
 
@@ -140,6 +148,8 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::Keyboard => self.finish_keyboard(),
             PrimaryScreen::LoopBrowser => self.stop_loop_browser(),
             PrimaryScreen::GridSequencer => self.finish_grid_sequencer(),
+            // 鳴っているものは無いが、キーごとの保存を取りこぼしていたらここで書く。
+            PrimaryScreen::ChordChart => self.save_chord_chart(),
             PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {}
         }
     }
@@ -177,6 +187,14 @@ impl<'a> TuiApp<'a> {
             }
             PrimaryScreen::LoopBrowser => self.begin_loop_browser_startup(),
             PrimaryScreen::GridSequencer => self.enter_grid_sequencer(),
+            // 鳴らすものは無い（曲は起動時に読んである）。読めなかったときだけ、
+            // ここで 1 回だけコード進行を抽選する（起動時に引かないのは、カタログの
+            // 初回取得を待つのが chord chart を開く人だけで済むようにするため）。
+            PrimaryScreen::ChordChart => {
+                self.notepad.mode = Mode::Normal;
+                self.active_screen = PrimaryScreen::ChordChart;
+                self.enter_chord_chart();
+            }
         }
     }
 

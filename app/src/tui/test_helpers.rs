@@ -31,6 +31,13 @@ impl TuiApp<'static> {
             mml_overlay: mml_overlay::MmlOverlay::default(),
             mml_overlay_sender: None,
             grid_sequencer: grid_sequencer::GridSequencerScreen::new(None),
+            // テストでは実 `%LOCALAPPDATA%` の chord_chart.json を読ませない
+            // （`load_song()` はファイルを読む）。代わりに section 1 つの曲を直に置く。
+            //
+            // `ChordChartScreen::restored(None)` にしないのは、画面へ入った瞬間に
+            // カタログの抽選が走ってしまうため。自動抽選そのものを見るテストは
+            // `tests/chord_chart_initial_song.rs` が明示的に組み立てる。
+            chord_chart: chord_chart::ChordChartScreen::new(test_chord_chart_song()),
             grid_history_preview: crate::daw::DawGridPreviewPlayer::disabled_for_tests(cfg),
             voicing: voicing::VoicingState::new(
                 crate::history::VoicingCache::default(),
@@ -45,4 +52,15 @@ impl TuiApp<'static> {
             dismissed_play_server_failure: None,
         }
     }
+}
+
+/// app のテストが使う chord chart の曲。section 1 つを 1 回だけ並べたもの。
+///
+/// 進行の文字列は**テスト用のダミー**（production はカタログから引くだけで、
+/// コード進行を 1 つも持たない）。
+pub(super) fn test_chord_chart_song() -> chord_chart::Song {
+    let mut song = chord_chart::Song::empty();
+    let id = song.push_section("A", "I-V-VIm-IV");
+    song.arrangement = vec![id];
+    song
 }

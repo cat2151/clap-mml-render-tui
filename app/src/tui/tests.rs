@@ -2,6 +2,8 @@ pub(super) use super::*;
 pub(super) use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 pub(super) use std::sync::atomic::{AtomicUsize, Ordering};
 
+mod chord_chart;
+mod chord_chart_initial_song;
 mod floe_screens;
 mod keyboard_mml;
 mod mml_overlay;
