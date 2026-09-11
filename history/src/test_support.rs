@@ -14,6 +14,10 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
+mod temp_dir;
+
+pub use temp_dir::{temp_local_dirs, unique_test_dir, LocalDirGuards, TempDirGuard};
+
 /// 環境変数を書き換えるテスト間の排他ロック（プロセス全体で1つ）。
 pub fn env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -37,15 +41,7 @@ pub fn set_app_dir_for_current_thread(path: Option<PathBuf>) -> Option<PathBuf> 
 fn default_test_app_dir_path() -> &'static PathBuf {
     static PATH: OnceLock<PathBuf> = OnceLock::new();
     PATH.get_or_init(|| {
-        let unique = format!(
-            "cmrt_test_process_{}_{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("system clock should be after unix epoch in tests")
-                .as_nanos()
-        );
-        let app_dir = std::env::temp_dir().join(unique).join(super::APP_DIR_NAME);
+        let app_dir = unique_test_dir("process").join(super::APP_DIR_NAME);
         std::fs::create_dir_all(app_dir.join(super::HISTORY_DIR_NAME)).ok();
         let _guard = env_lock()
             .lock()

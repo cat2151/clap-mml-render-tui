@@ -316,6 +316,9 @@ impl<'a> TuiApp<'a> {
             playback_session,
             play_server,
             dismissed_play_server_failure: None,
+            // まだ何も鳴らそうとしていないので待ってもいない。
+            sound_startup_wait: None,
+            reported_sound_prepare_error: None,
         }
     }
 }

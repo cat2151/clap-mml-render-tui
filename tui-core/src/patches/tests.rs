@@ -7,7 +7,10 @@ fn collect_patch_pairs_combines_factory_and_thirdparty_using_common_base() {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .unwrap_or(0);
-    let root = std::env::temp_dir().join(format!("cmrt_collect_patch_pairs_{suffix}"));
+    let root = std::env::temp_dir().join(format!(
+        "cmrt_collect_patch_pairs_{}_{suffix}",
+        std::process::id()
+    ));
     let factory = root.join("patches_factory");
     let thirdparty = root.join("patches_3rdparty");
     std::fs::create_dir_all(factory.join("Pads")).unwrap();
@@ -63,7 +66,10 @@ fn collect_patch_pairs_sorts_display_names_naturally() {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .unwrap_or(0);
-    let root = std::env::temp_dir().join(format!("cmrt_collect_patch_pairs_natural_{suffix}"));
+    let root = std::env::temp_dir().join(format!(
+        "cmrt_collect_patch_pairs_natural_{}_{suffix}",
+        std::process::id()
+    ));
     let factory = root.join("patches_factory");
     let pads = factory.join("Pads");
     std::fs::create_dir_all(&pads).unwrap();
@@ -183,7 +189,10 @@ fn extending_with_two_plugins_keeps_each_display_relative_to_its_own_base() {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .unwrap_or(0);
-    let root = std::env::temp_dir().join(format!("cmrt_patch_dir_groups_{suffix}"));
+    let root = std::env::temp_dir().join(format!(
+        "cmrt_patch_dir_groups_{}_{suffix}",
+        std::process::id()
+    ));
     let surge = root.join("surge-data").join("patches_factory");
     let cartridges = root.join("elsewhere").join("Cartridges");
     std::fs::create_dir_all(surge.join("Pads")).unwrap();

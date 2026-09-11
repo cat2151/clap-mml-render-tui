@@ -5,16 +5,21 @@
 //! [`ChordChartAction::SongChanged`] を返し、**保存は呼び出し側（app の glue）が行う**
 //! （この crate はログもファイル書き込みの失敗通知も持たないため）。
 
+use std::collections::BTreeMap;
+use std::ops::Range;
 use std::sync::Arc;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::catalog::ChordProgressionSource;
-use crate::Song;
+use crate::{SectionId, Song};
 
+use self::chord_cursor::ChordStep;
 use self::line_input::{LineInput, LineInputTarget};
 
 mod arrangement_edit;
+mod chord_cursor;
+mod chord_ranges;
 // 描画（`crate::ui`）が overlay の中身を読むので、screen の外から見える必要がある。
 pub(crate) mod line_input;
 mod preview;
@@ -94,6 +99,23 @@ pub struct ChordChartScreen {
     /// 「止める」と「鳴らす」のどちらを要求するかを決めるためだけに読む。
     /// 書き込みは [`ChordChartScreen::set_preview_sounding`] から。
     pub(crate) preview_sounding: bool,
+    /// 各 section の degrees の、chord 1 つぶんの範囲（**バイト位置**）の写し。
+    /// chord が何個あるかも、この写しの長さから引く（数と範囲を別々に持たない）。
+    ///
+    /// **切るのは app 側**（この crate は degrees を解釈しない。ADR 0020）。
+    /// 書き込みは [`ChordChartScreen::set_chord_ranges`] から。読むのは
+    /// `chord_ranges` モジュールの関数だけで、他は素通しする。
+    /// crate 内で見えているのは、描画テストが `..ChordChartScreen::default()` で
+    /// 組み立てられるようにするため（`line_input` と同じ理由）。
+    pub(crate) chord_ranges: BTreeMap<SectionId, Vec<Range<usize>>>,
+    /// 行内の何番目の chord をカーソルが指しているか（**0 始まり**）。
+    ///
+    /// **曲のデータではない**ので保存しない。行を移ると先頭へ戻る。範囲外のまま
+    /// 残りうる（degrees を打ち替えて chord が減ったとき）ので、読むときは
+    /// [`ChordChartScreen::chord_cursor`] を通すこと。
+    /// crate 内で見えているのは、描画テストが `..ChordChartScreen::default()` で
+    /// 組み立てられるようにするため（`line_input` と同じ理由）。
+    pub(crate) chord_cursor: usize,
     /// 直前の操作が何もできなかった理由。画面下段に出す。
     pub error: Option<String>,
     /// コード進行カタログの供給元。注入されるまでは `None`（＝抽選は
@@ -125,6 +147,8 @@ impl ChordChartScreen {
             pending_initial_generate: false,
             pending_preview: None,
             preview_sounding: false,
+            chord_ranges: BTreeMap::new(),
+            chord_cursor: 0,
             error: None,
             chord_progression_source: None,
         }
@@ -252,10 +276,12 @@ impl ChordChartScreen {
         match key.code {
             KeyCode::Char('?') => self.help_open = true,
             KeyCode::Char('q') => return ChordChartAction::Quit,
-            // pane 移動は `h` / `l` で左右そのもの（トグルではない）。押したキーと
-            // 行き先が 1 対 1 なので、いまどちらにいるかを覚えていなくても迷わない。
-            KeyCode::Char('h') => self.focus_pane(Pane::Sections),
-            KeyCode::Char('l') => self.focus_pane(Pane::Arrangement),
+            // pane 移動は `Tab` のトグル（2 pane しか無い）。`h` / `l` は行内の
+            // chord 移動へ譲った。`Shift+Tab`（`BackTab`）は割り当てない。
+            KeyCode::Tab => self.toggle_pane(),
+            // 行内の chord 移動。行の端では隣の行へ繰り上がる。
+            KeyCode::Char('h') | KeyCode::Left => self.move_chord_cursor(ChordStep::Previous),
+            KeyCode::Char('l') | KeyCode::Right => self.move_chord_cursor(ChordStep::Next),
             KeyCode::Char('j') | KeyCode::Down => self.move_cursor(CursorStep::Next(1)),
             KeyCode::Char('k') | KeyCode::Up => self.move_cursor(CursorStep::Previous(1)),
             KeyCode::PageDown => self.move_cursor(CursorStep::Next(PAGE_ROWS)),
@@ -282,11 +308,18 @@ impl ChordChartScreen {
     }
 
     /// `Alt+↑` `Alt+↓`: フォーカスしている pane のカーソル行を 1 つ動かす。
+    ///
+    /// 行が動いたら chord カーソルは先頭へ戻す（他の行移動キーと同じ）。**preview は
+    /// 立てない**（編集キーなので、中身が動いただけでは鳴らし直さない）。
     fn move_row(&mut self, direction: MoveDirection) -> ChordChartAction {
-        match self.focus {
+        let action = match self.focus {
             Pane::Sections => self.move_section(direction),
             Pane::Arrangement => self.move_arrangement_entry(direction),
+        };
+        if action == ChordChartAction::SongChanged {
+            self.reset_chord_cursor();
         }
+        action
     }
 
     /// pane によって意味が変わるキー。フォーカスしていない pane のキーは何もしない。
@@ -316,7 +349,7 @@ impl ChordChartScreen {
     /// 何十回も動かないように見える。
     ///
     /// カーソルが実際に動いたときだけ preview 要求を立てる（端で止まったときは
-    /// 音を鳴らし直さない）。
+    /// 音を鳴らし直さない）。鳴らすのは**行全体**（chord カーソルは先頭へ戻る）。
     fn move_cursor(&mut self, step: CursorStep) {
         let before = self.cursor_position();
         let (current, len) = match self.focus {
@@ -333,6 +366,11 @@ impl ChordChartScreen {
         match self.focus {
             Pane::Sections => self.section_cursor = next,
             Pane::Arrangement => self.arrangement_cursor = next,
+        }
+        // 行が変わったら chord カーソルは先頭へ。端で止まったときに戻すと、
+        // 「押しても行は動かないのに聴いている chord だけ変わる」1 回ができる。
+        if next != current {
+            self.reset_chord_cursor();
         }
         self.request_preview_if_moved(before);
     }

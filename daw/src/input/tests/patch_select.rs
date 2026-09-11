@@ -2,7 +2,8 @@ use super::*;
 
 #[test]
 fn handle_patch_select_enter_overwrites_current_track_init_patch() {
-    let tmp = TempDirGuard::new("cmrt_test_handle_patch_select_enter");
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
+    let tmp = TempDirGuard::new("handle_patch_select_enter");
     std::fs::create_dir_all(tmp.path().join("Pads")).unwrap();
     std::fs::create_dir_all(tmp.path().join("Bass")).unwrap();
     std::fs::write(tmp.path().join("Pads").join("Pad 1.fxp"), b"dummy").unwrap();
@@ -31,7 +32,8 @@ fn handle_patch_select_enter_overwrites_current_track_init_patch() {
 
 #[test]
 fn start_patch_select_overlay_migrates_prefixed_favorites_from_legacy_patch_name() {
-    let tmp = TempDirGuard::new("cmrt_test_daw_patch_select_patch_prefix");
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
+    let tmp = TempDirGuard::new("daw_patch_select_patch_prefix");
     let factory_patch = tmp
         .path()
         .join("patches_factory")
@@ -74,7 +76,8 @@ fn start_patch_select_overlay_migrates_prefixed_favorites_from_legacy_patch_name
 
 #[test]
 fn start_patch_select_overlay_keeps_favorites_in_registered_order() {
-    let tmp = TempDirGuard::new("cmrt_test_daw_patch_select_favorite_order");
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
+    let tmp = TempDirGuard::new("daw_patch_select_favorite_order");
     std::fs::create_dir_all(tmp.path()).unwrap();
     for path in ["Pad B.fxp", "Pad A.fxp", "Pad 2.fxp", "Pad 11.fxp"] {
         std::fs::write(tmp.path().join(path), b"dummy").unwrap();
@@ -116,6 +119,7 @@ fn start_patch_select_overlay_keeps_favorites_in_registered_order() {
 
 #[test]
 fn handle_patch_select_enter_saves_filter_query_in_track_init_json() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
@@ -150,6 +154,7 @@ fn handle_patch_select_enter_saves_filter_query_in_track_init_json() {
 
 #[test]
 fn handle_patch_select_filter_space_adds_and_term_instead_of_previewing() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
@@ -201,6 +206,7 @@ fn handle_patch_select_filter_space_adds_and_term_instead_of_previewing() {
 
 #[test]
 fn handle_patch_select_j_and_k_move_selection_until_slash_starts_filter_input() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
@@ -250,6 +256,7 @@ fn handle_patch_select_j_and_k_move_selection_until_slash_starts_filter_input() 
 
 #[test]
 fn handle_patch_select_j_prefetches_predicted_preview_cache() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
@@ -282,6 +289,7 @@ fn handle_patch_select_j_prefetches_predicted_preview_cache() {
 
 #[test]
 fn handle_patch_select_left_in_filter_query_does_not_repreview() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;

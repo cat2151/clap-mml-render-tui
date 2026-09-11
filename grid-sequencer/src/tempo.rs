@@ -5,6 +5,19 @@ use crossterm::event::KeyEvent;
 
 use crate::{AppliedTempo, GridSequencerScreen};
 
+/// テンポ適用が「ユーザーの明示的な確定」かどうか。
+///
+/// 停止中に同じ値を引き当てたときに走り出すかどうかが変わる。`BpmRange::sample()` は
+/// 範囲に既定 `BPM` を含むと一定の確率で同じ値を引くので、**値が動かないことを理由に
+/// 何もしないと、`Ctrl+B` で範囲を確定したのに演奏が始まらない**（80-160 なら 1/81）。
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TempoIntent {
+    /// ユーザーが `Ctrl+B` で確定した。引いた値が今と同じでも停止中なら走り出す。
+    Explicit,
+    /// 値が動いたときだけ意味がある適用。動かないなら何もしない。
+    ValueChange,
+}
+
 impl GridSequencerScreen {
     pub(crate) fn handle_bpm_input_key(&mut self, key: KeyEvent, now: Instant) {
         let Some(input) = self.bpm_input.as_mut() else {
@@ -13,12 +26,18 @@ impl GridSequencerScreen {
         match input.handle_key(key) {
             BpmInputAction::Continue => {}
             BpmInputAction::Cancel => self.bpm_input = None,
-            BpmInputAction::Apply(mode) => self.apply_bpm_mode(mode, now),
+            BpmInputAction::Apply(mode) => self.apply_bpm_mode(mode, now, TempoIntent::ValueChange),
             BpmInputAction::ApplyAuto(range) => {
                 if let Some(range) = range {
                     self.bpm_range = range;
                 }
-                self.apply_bpm_mode(BpmMode::Auto(self.bpm_range.sample()), now);
+                // 範囲を確定した／A で引き直したのは明示的な操作。抽選が今と同じ値を
+                // 引いても、停止中なら走り出させる。
+                self.apply_bpm_mode(
+                    BpmMode::Auto(self.bpm_range.sample()),
+                    now,
+                    TempoIntent::Explicit,
+                );
             }
         }
     }
@@ -87,9 +106,14 @@ impl GridSequencerScreen {
     /// 乗り換える。`restart_timeline`（＝ `BeginTimeline`）はサーバー側で
     /// `reset_all(renderers)` とサンプルクロックの原点戻しを伴うので、鳴っている音が
     /// 切れて演奏が先頭へ飛ぶ。停止中と画面入場時だけが張り直してよい場面。
-    fn apply_bpm_mode(&mut self, mode: BpmMode, now: Instant) {
+    ///
+    /// `intent` が `Explicit` のときは、**値が動かなくても停止中なら走り出す**。
+    /// 値の比較だけで「何もしない」を決めると、抽選が既定 `BPM` を引いた回にだけ
+    /// 演奏が始まらない当たり外れが生まれる。
+    fn apply_bpm_mode(&mut self, mode: BpmMode, now: Instant, intent: TempoIntent) {
         self.bpm_input = None;
-        if self.bpm_mode == mode {
+        let explicit = intent == TempoIntent::Explicit;
+        if self.bpm_mode == mode && !explicit {
             return;
         }
         self.cancel_mouse_gesture();
@@ -98,7 +122,8 @@ impl GridSequencerScreen {
         let running = self.state.is_running();
         // 表示 BPM が動かない切替（AUTO と同値の MANUAL など）で止まっている演奏を
         // 張り直しても、先頭へ飛ぶだけ損。判定は `bpm_mode` を差し替える前に取る。
-        let restart = !running && self.bpm() != mode.bpm();
+        // ただし `Explicit`（ユーザーが確定した引き直し）は値が同じでも走り出す。
+        let restart = !running && (explicit || self.bpm() != mode.bpm());
         self.bpm_mode = mode;
         // 演奏中は絶対に張り直さない。`retempo_from_next_step` は実 BPM が同じなら
         // None を返すので、動かない切替では何も起きない。

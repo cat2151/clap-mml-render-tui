@@ -3,8 +3,7 @@ use super::*;
 #[test]
 fn apply_pending_http_commands_updates_mml_and_expands_grid() {
     let _test_guard = lock_http_server_test_state();
-    let tmp = std::env::temp_dir().join("cmrt_test_http_server_updates_mml");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("http_server_updates_mml");
     let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
 
     let cfg = default_config();
@@ -35,8 +34,7 @@ fn apply_pending_http_commands_updates_mml_and_expands_grid() {
 #[test]
 fn apply_pending_http_commands_updates_mixer_gain() {
     let _test_guard = lock_http_server_test_state();
-    let tmp = std::env::temp_dir().join("cmrt_test_http_server_updates_mixer");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("http_server_updates_mixer");
     let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
 
     let cfg = default_config();
@@ -59,8 +57,7 @@ fn apply_pending_http_commands_updates_mixer_gain() {
 #[test]
 fn apply_pending_http_commands_updates_patch_init_cell() {
     let _test_guard = lock_http_server_test_state();
-    let tmp = std::env::temp_dir().join("cmrt_test_http_server_updates_patch");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("http_server_updates_patch");
     std::fs::create_dir_all(tmp.join("Pads")).unwrap();
     std::fs::write(tmp.join("Pads").join("Factory Pad.fxp"), b"dummy").unwrap();
     let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
@@ -97,8 +94,7 @@ fn apply_pending_http_commands_updates_patch_init_cell() {
 #[test]
 fn apply_pending_http_commands_updates_random_patch_init_cell() {
     let _test_guard = lock_http_server_test_state();
-    let tmp = std::env::temp_dir().join("cmrt_test_http_server_updates_random_patch");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("http_server_updates_random_patch");
     std::fs::create_dir_all(tmp.join("Pad")).unwrap();
     std::fs::write(tmp.join("Pad").join("Pad 1.fxp"), b"dummy").unwrap();
     let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);

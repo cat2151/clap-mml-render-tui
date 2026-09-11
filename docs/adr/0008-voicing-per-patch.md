@@ -82,7 +82,5 @@ chord カテゴリの Mono 全 14 件 + Poly 12 件を通した結果、**poly �
 
 | テスト | 落ちたら |
 |---|---|
-| `app/src/tui/voicing/vvp_voicings/tests.rs::an_unreadable_preset_stays_undecided` | 読めない `.vvp` が poly へ倒れる（Mono が和音行へ出る） |
-| 同 `::every_poly_mode_other_than_mono_is_poly` | 判定が綴りの一覧になっている（新しい Poly 値で壊れる） |
-| 同 `::every_installed_preset_reports_a_voicing`（`#[ignore]`） | 実プリセット 460 件のどれかが読めない |
+| play-server `core-lib/src/vvp/tests.rs::only_mono_reads_as_not_poly` | 判定が綴りの一覧になっている（新しい Poly 値で壊れる） |
 | `app/src/tui/voicing/tests.rs::a_three_plugin_catalog_reads_each_patch_form_its_own_way` | 3 方針の引き分けが壊れた |

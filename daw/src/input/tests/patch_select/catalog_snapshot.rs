@@ -9,8 +9,8 @@ use super::*;
 use cmrt_tui_core::patch_load::PatchLoadState;
 
 fn point_config_at_missing_patch_dir(app: &mut DawApp) {
-    let missing = std::env::temp_dir().join("cmrt_test_daw_patch_select_missing_dir_absent");
-    std::fs::remove_dir_all(&missing).ok();
+    let missing =
+        cmrt_history::test_support::unique_test_dir("daw_patch_select_missing_dir_absent");
     app.cfg = Arc::new(Config {
         patches_dirs: Some(vec![missing.to_string_lossy().into_owned()]),
         ..(*app.cfg).clone()

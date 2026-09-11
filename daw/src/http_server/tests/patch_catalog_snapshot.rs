@@ -8,8 +8,7 @@ use super::*;
 use cmrt_tui_core::patch_load::PatchLoadState;
 
 fn cfg_pointing_at_missing_patch_dir() -> Config {
-    let missing = std::env::temp_dir().join("cmrt_test_http_patch_missing_dir_absent");
-    std::fs::remove_dir_all(&missing).ok();
+    let missing = cmrt_history::test_support::unique_test_dir("http_patch_missing_dir_absent");
     Config {
         patches_dirs: Some(vec![missing.to_string_lossy().into_owned()]),
         ..default_config()
@@ -19,8 +18,7 @@ fn cfg_pointing_at_missing_patch_dir() -> Config {
 #[test]
 fn apply_pending_http_patch_command_uses_the_injected_snapshot() {
     let _test_guard = lock_http_server_test_state();
-    let tmp = std::env::temp_dir().join("cmrt_test_http_server_patch_snapshot");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("http_server_patch_snapshot");
     std::fs::create_dir_all(&tmp).unwrap();
     let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
 
@@ -71,8 +69,7 @@ fn apply_pending_http_patch_command_uses_the_injected_snapshot() {
 #[test]
 fn apply_pending_http_patch_command_falls_back_to_scan_while_catalog_is_loading() {
     let _test_guard = lock_http_server_test_state();
-    let tmp = std::env::temp_dir().join("cmrt_test_http_server_patch_scan_fallback");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("http_server_patch_scan_fallback");
     std::fs::create_dir_all(&tmp).unwrap();
     let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
 

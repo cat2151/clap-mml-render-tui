@@ -23,6 +23,13 @@ pub struct PreviewRequest {
     pub name: String,
     /// 鳴らす degrees。**解釈しない**（読めるかどうかを決めるのは演奏側）。
     pub degrees: String,
+    /// degrees の**行内の何番目の chord**を鳴らすか。`None` なら行全体。
+    ///
+    /// **添字は 0 始まり**（画面が持つ chord カーソルと同じ値をそのまま入れる）。
+    /// 何番目がどこからどこまでかを決めるのは app 側の glue で、この crate は
+    /// 数を数えることも切り出すこともしない（ADR 0020）。範囲外の番号や
+    /// 読めない degrees は glue が行全体へ倒す。
+    pub chord_index: Option<usize>,
 }
 
 impl PreviewRequest {
@@ -87,39 +94,60 @@ impl ChordChartScreen {
         }
     }
 
-    /// `h` / `l`: pane を指す。移った先のカーソル行を鳴らす。
+    /// `Tab`: pane を指す。移った先のカーソル行を**行全体で**鳴らし、
+    /// chord カーソルは先頭へ戻す（行が変わるので、番号を持ち越さない）。
     pub(super) fn focus_pane(&mut self, pane: Pane) {
         let before = self.cursor_position();
         self.focus = pane;
+        self.reset_chord_cursor();
         self.request_preview_if_moved(before);
     }
 
     /// カーソル位置が [`Self::cursor_position`] と違っていたら要求を立てる。
-    pub(super) fn request_preview_if_moved(&mut self, before: (Pane, usize)) {
+    pub(super) fn request_preview_if_moved(&mut self, before: (Pane, usize, usize)) {
         if self.cursor_position() != before {
             self.request_preview();
         }
     }
 
-    /// いまカーソルがどこを指しているか。preview を立てるかどうかの判定は
-    /// **この値が変わったかどうか**だけで決める（pane と行を 1 つの値にしておくと、
-    /// `j` と `h` で別々の判定を書かずに済む）。
+    /// いまカーソルがどこを指しているか（pane・行・行内の chord 番号）。
+    /// preview を立てるかどうかの判定は **この値が変わったかどうか**だけで決める
+    /// （3 つを 1 つの値にしておくと、`j` と `Tab` と `l` で別々の判定を書かずに済む）。
     ///
     /// 丸めた値で持つ。丸める前の溢れた index を使うと、行が減ったあとの `k` が
-    /// 「画面上のカーソルは動かないのに要求だけ立つ」1 回になる。
-    pub(super) fn cursor_position(&self) -> (Pane, usize) {
-        match self.focus {
+    /// 「画面上のカーソルは動かないのに要求だけ立つ」1 回になる。chord 番号も同じ理由で
+    /// [`ChordChartScreen::chord_cursor`]（丸めた値）から取る。
+    pub(super) fn cursor_position(&self) -> (Pane, usize, usize) {
+        let (pane, row) = match self.focus {
             Pane::Sections => (Pane::Sections, self.clamped_section_cursor()),
             Pane::Arrangement => (Pane::Arrangement, self.clamped_arrangement_cursor()),
-        }
+        };
+        (pane, row, self.chord_cursor())
     }
 
-    /// いまカーソルが指しているものを鳴らす要求を立てる。
+    /// いまカーソルが指している行を**行全体で**鳴らす要求を立てる。
+    ///
+    /// 行を移ったとき（`j` `k` `PgUp` `PgDn` `Tab`）と、画面へ入った直後と、
+    /// `Shift+P` / `Space` のトグルはこちら。chord 1 つに絞るのは
+    /// [`Self::request_chord_preview`] だけ。
     fn request_preview(&mut self) {
+        self.request_preview_of(None);
+    }
+
+    /// いまカーソルが指している **chord 1 つ**を鳴らす要求を立てる（`h` `l` `←` `→`）。
+    ///
+    /// 番号を切り出すのは app 側の glue。範囲外の番号や読めない degrees は
+    /// glue が行全体へ倒すので、この crate は丸めた番号をそのまま渡すだけでよい。
+    pub(super) fn request_chord_preview(&mut self) {
+        self.request_preview_of(Some(self.chord_cursor()));
+    }
+
+    fn request_preview_of(&mut self, chord_index: Option<usize>) {
         let request = match self.preview_target() {
             Some(section) => PreviewRequest {
                 name: section.name.clone(),
                 degrees: section.degrees.clone(),
+                chord_index,
             },
             None => PreviewRequest::silent(),
         };
@@ -128,7 +156,7 @@ impl ChordChartScreen {
 
     /// カーソルが指している section。右 pane では**参照先**の section
     /// （並びの行そのものは進行を持たない）。参照が壊れていれば `None`。
-    fn preview_target(&self) -> Option<&Section> {
+    pub(super) fn preview_target(&self) -> Option<&Section> {
         match self.focus {
             Pane::Sections => self.selected_section(),
             Pane::Arrangement => {

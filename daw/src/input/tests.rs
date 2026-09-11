@@ -22,49 +22,16 @@ fn track1_minus_6_db_gain() -> f32 {
     10.0f32.powf(-6.0 / 20.0)
 }
 
-pub(crate) struct TempDirGuard(std::path::PathBuf);
-
-impl TempDirGuard {
-    pub(crate) fn new(name: &str) -> Self {
-        let path = std::env::temp_dir().join(name);
-        std::fs::remove_dir_all(&path).ok();
-        Self(path)
-    }
-
-    pub(crate) fn path(&self) -> &std::path::Path {
-        &self.0
-    }
-}
-
-/// 実 `%LOCALAPPDATA%` を触らせないための「一時ディレクトリ＋env guard」。
+/// 一時ディレクトリと env guard は、`cmrt-history` の `test_support` が持つ共通実装を使う。
 ///
-/// `daw_cache/<plugin>/daily/` を**読み書きする**経路（全置換 import の掃除・
-/// rollover の掃除・cache WAV の書き出し）を通るテストは**必ずこれを通すこと**。
-/// 通さないと実キャッシュのファイルを消してしまう。
+/// 実 `%LOCALAPPDATA%` を触らせないための「一時ディレクトリ＋env guard」が
+/// [`temp_local_dirs`]。`daw_cache/<plugin>/daily/` を**読み書きする**経路
+/// （全置換 import の掃除・rollover の掃除・cache WAV の書き出し）を通るテストは
+/// **必ずこれを通すこと**。通さないと実キャッシュのファイルを消してしまう。
 ///
-/// 戻り値は両方とも生かしておくこと（drop で env が戻り、temp が消える）。
-/// `set_local_dir_envs` はプロセス全体の env lock を取るので、
-/// これを使うテストどうしは直列に走る。
-pub(crate) fn temp_local_dirs(
-    label: &str,
-) -> (TempDirGuard, cmrt_history::test_support::TestEnvGuard) {
-    let temp = TempDirGuard::new(&format!(
-        "cmrt_daw_{label}_{}_{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    let env_guard = cmrt_history::test_support::set_local_dir_envs(temp.path());
-    (temp, env_guard)
-}
-
-impl Drop for TempDirGuard {
-    fn drop(&mut self) {
-        std::fs::remove_dir_all(&self.0).ok();
-    }
-}
+/// **1 テスト = 1 guard、置き場所はテスト関数の先頭**（詳しい落とし穴は
+/// `cmrt_history::test_support::temp_local_dirs` の doc を見ること）。
+pub(crate) use cmrt_history::test_support::{temp_local_dirs, TempDirGuard};
 
 pub(crate) fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::super::CacheJob>) {
     // 0 = Tempo / 1 = chord 行 / 2..=3 = 演奏 track。

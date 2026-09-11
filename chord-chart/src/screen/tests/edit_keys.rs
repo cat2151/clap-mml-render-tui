@@ -26,8 +26,7 @@ fn the_retired_keys_do_nothing_at_all() {
         (KeyCode::Char('-'), KeyModifiers::NONE),
         (KeyCode::Char('J'), KeyModifiers::SHIFT),
         (KeyCode::Char('K'), KeyModifiers::SHIFT),
-        // pane 移動は `h` / `l` になったので、`Tab` はもう何もしない。
-        (KeyCode::Tab, KeyModifiers::NONE),
+        // pane 移動は `Tab` のトグル 1 つだけ。`Shift+Tab`（`BackTab`）は割り当てない。
         (KeyCode::BackTab, KeyModifiers::SHIFT),
     ] {
         assert_eq!(
@@ -36,7 +35,11 @@ fn the_retired_keys_do_nothing_at_all() {
             "{code:?} が曲を変えている"
         );
     }
-    assert_eq!(screen.focus, Pane::Sections, "Tab が pane を動かしている");
+    assert_eq!(
+        screen.focus,
+        Pane::Sections,
+        "Shift+Tab が pane を動かしている"
+    );
 
     assert_eq!(screen.song, before);
     // `e` が生き残っていると入力欄が開き、以降のキーを全部食う。
@@ -126,6 +129,7 @@ fn navigation_keys_do_not_ask_for_a_save() {
     let mut screen = three_section_screen();
 
     for code in [
+        KeyCode::Tab,
         KeyCode::Char('h'),
         KeyCode::Char('l'),
         KeyCode::Char('j'),

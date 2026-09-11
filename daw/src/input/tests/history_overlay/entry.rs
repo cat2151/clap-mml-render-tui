@@ -33,7 +33,7 @@ fn handle_normal_shift_h_opens_patch_history_overlay_for_track_patch() {
 
 #[test]
 fn handle_normal_shift_h_migrates_legacy_patch_name_to_factory_prefixed_patch_name() {
-    let tmp = TempDirGuard::new("cmrt_test_history_overlay_patch_prefix");
+    let tmp = TempDirGuard::new("history_overlay_patch_prefix");
     let factory_patch = tmp
         .path()
         .join("patches_factory")

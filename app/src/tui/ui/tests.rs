@@ -10,7 +10,7 @@ use cmrt_notepad::Mode;
 
 use super::draw;
 
-fn test_config() -> Config {
+pub(in crate::tui) fn test_config() -> Config {
     Config {
         plugin_path: "/tmp/Surge XT.clap".to_string(),
         input_midi: "input.mid".to_string(),
@@ -57,7 +57,7 @@ pub(in crate::tui) fn render_lines(
         .collect()
 }
 
-fn render_buffer(app: &mut TuiApp<'static>, width: u16, height: u16) -> Buffer {
+pub(in crate::tui) fn render_buffer(app: &mut TuiApp<'static>, width: u16, height: u16) -> Buffer {
     let backend = TestBackend::new(width, height);
     let mut terminal = Terminal::new(backend).unwrap();
     terminal.draw(|f| draw(app, f)).unwrap();
@@ -85,3 +85,4 @@ mod loop_browser_waveform;
 mod play_server_notice;
 mod render_contract;
 mod screen_switch;
+mod sound_startup_overlay;

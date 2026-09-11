@@ -10,8 +10,7 @@ use cmrt_tui_core::patch_load::PatchLoadState;
 /// 走査経路へ落ちないよう、実在しない patch dir を指す Config へ差し替える。
 /// 候補は注入した snapshot だけになるので、抽選結果が分類だけで決まる。
 fn point_config_at_missing_patch_dir(app: &mut DawApp) {
-    let missing = std::env::temp_dir().join("cmrt_test_daw_same_role_missing_patch_dir");
-    std::fs::remove_dir_all(&missing).ok();
+    let missing = cmrt_history::test_support::unique_test_dir("daw_same_role_missing_patch_dir");
     app.cfg = Arc::new(Config {
         patches_dirs: Some(vec![missing.to_string_lossy().into_owned()]),
         ..(*app.cfg).clone()
@@ -45,8 +44,7 @@ fn selected_patch(app: &DawApp) -> String {
 
 /// snapshot を注入した app で、track 2 の init セルを `patch` にしてから `r` を n 回押す。
 fn press_r_from(tmp_name: &str, patch: &str, times: usize) -> Vec<String> {
-    let tmp = std::env::temp_dir().join(tmp_name);
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir(tmp_name);
     std::fs::create_dir_all(&tmp).unwrap();
 
     let selected = {
@@ -161,8 +159,7 @@ fn real_catalog_kick_track_keeps_drawing_kicks() {
         .to_vec();
     assert!(!kicks.is_empty(), "実カタログに kick が 1 件も無い");
 
-    let tmp = std::env::temp_dir().join("cmrt_test_daw_real_catalog_kick");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("daw_real_catalog_kick");
     std::fs::create_dir_all(&tmp).unwrap();
     {
         let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);

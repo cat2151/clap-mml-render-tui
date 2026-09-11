@@ -5,8 +5,7 @@ use cmrt_realtime_play::PatchVoicing;
 
 #[test]
 fn save_and_load_voicing_cache_round_trips() {
-    let tmp = std::env::temp_dir().join("cmrt_test_voicing_cache_roundtrip");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("voicing_cache_roundtrip");
     let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
 
     let mut cache = VoicingCache::default();
@@ -34,8 +33,7 @@ fn assert_voicing_cache_file_path() {
 
 #[test]
 fn load_voicing_cache_falls_back_to_default_for_broken_file() {
-    let tmp = std::env::temp_dir().join("cmrt_test_voicing_cache_broken");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("voicing_cache_broken");
     let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
 
     let path = super::voicing_cache_path().unwrap();

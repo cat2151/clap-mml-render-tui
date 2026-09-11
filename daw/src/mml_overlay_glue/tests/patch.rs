@@ -55,6 +55,7 @@ fn opened_with_the_pad_patch() -> (DawApp, std::sync::mpsc::Receiver<crate::Cach
 
 #[test]
 fn confirming_a_patch_writes_it_into_the_init_cell() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = opened_with_the_pad_patch();
 
     confirm_patch_by_query(&mut app, "snapshot bass");
@@ -68,6 +69,7 @@ fn confirming_a_patch_writes_it_into_the_init_cell() {
 
 #[test]
 fn previewing_a_patch_does_not_touch_the_init_cell() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = opened_with_the_pad_patch();
 
     app.handle_mml_overlay_key_event(ctrl('t'));
@@ -91,6 +93,7 @@ fn previewing_a_patch_does_not_touch_the_init_cell() {
 
 #[test]
 fn confirming_a_patch_keeps_the_patch_filter_query() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = opened_with_the_pad_patch();
     app.editor.data[2][0] =
         r#"{"Surge XT patch": "Pads/Snapshot Pad.fxp", "Surge XT patch filter": "snapshot"}"#
@@ -107,6 +110,7 @@ fn confirming_a_patch_keeps_the_patch_filter_query() {
 
 #[test]
 fn the_tempo_track_init_cell_is_never_touched() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = build_test_app();
     *app.patch_load.lock().unwrap() = PatchLoadState::ready(catalog_pairs());
     app.editor.cursor_track = 0;
@@ -125,6 +129,7 @@ fn the_tempo_track_init_cell_is_never_touched() {
 /// 確定した音色は、閉じたあとも init セルに残る（＝ DAW で実際に鳴る音色になる）。
 #[test]
 fn the_confirmed_patch_survives_closing_the_overlay() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = opened_with_the_pad_patch();
     confirm_patch_by_query(&mut app, "snapshot bass");
 
@@ -141,6 +146,7 @@ fn the_confirmed_patch_survives_closing_the_overlay() {
 /// 作り直さないと init 列の `role:音色名` 表示（Stage 4）が追従しない。
 #[test]
 fn adding_a_patch_filter_preset_rebuilds_the_role_index() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = opened_with_the_pad_patch();
     // プリセットの保存先はテスト用の temp ディレクトリだが、プロセス内で共有される。
     // 他のテストへ漏らさないよう、最後に書き戻す。
@@ -173,6 +179,7 @@ fn adding_a_patch_filter_preset_rebuilds_the_role_index() {
 /// `r`（ランダム音色）と同じ 1 実装を通ることを、ログと予約されたジョブで確かめる。
 #[test]
 fn confirming_a_patch_rerenders_the_measures_of_the_track() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, cache_rx) = opened_with_the_pad_patch();
     app.editor.data[2][2] = "gab".to_string();
 

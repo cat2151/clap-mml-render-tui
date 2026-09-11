@@ -4,8 +4,7 @@ use super::*;
 
 #[test]
 fn handle_normal_r_uses_saved_patch_filter_query_for_random_selection() {
-    let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_uses_saved_filter");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("handle_normal_r_uses_saved_filter");
     std::fs::create_dir_all(tmp.join("Bass")).unwrap();
     std::fs::create_dir_all(tmp.join("Lead")).unwrap();
     std::fs::write(tmp.join("Bass").join("Bass 1.fxp"), b"dummy").unwrap();
@@ -43,8 +42,15 @@ fn handle_normal_r_uses_saved_patch_filter_query_for_random_selection() {
 
 #[test]
 fn handle_normal_r_keeps_filter_cycle_unique_for_160_candidates() {
-    let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_unique_cycle_160");
-    std::fs::remove_dir_all(&tmp).ok();
+    // このテストは `r` を 160 回押すたびに patches_dirs を実走査する（`patch_load` が
+    // `Loading` なので snapshot ではなくファイル走査へ落ちる）。固定パスにすると、
+    // 同じ workspace で `cargo test` が 2 つ走ったときに互いのディレクトリを
+    // `remove_dir_all` → 160 件書き直しており、走査が返す件数が一瞬ずれて
+    // `RandomIndexDecks` がデッキを引き直す＝同じ音色が 2 回出る。
+    // pid + nanos のユニークな temp を使うこと（実測: 固定パスだと 2 プロセス同時で 55/60 が赤）。
+    let (temp, _env_guard) =
+        crate::input::tests::temp_local_dirs("handle_normal_r_unique_cycle_160");
+    let tmp = temp.path().to_path_buf();
     std::fs::create_dir_all(tmp.join("Pads")).unwrap();
 
     for i in 1..=160 {
@@ -52,8 +58,6 @@ fn handle_normal_r_keeps_filter_cycle_unique_for_160_candidates() {
     }
 
     {
-        let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
-
         let (mut app, _cache_rx) = build_test_app();
         app.editor.cursor_track = 2;
         app.editor.cursor_measure = 0;
@@ -81,14 +85,12 @@ fn handle_normal_r_keeps_filter_cycle_unique_for_160_candidates() {
 
         assert_eq!(seen.len(), 160);
     }
-
-    std::fs::remove_dir_all(&tmp).ok();
 }
 
 #[test]
 fn handle_normal_r_keeps_independent_history_per_filter_query() {
-    let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_independent_filter_history");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp =
+        cmrt_history::test_support::unique_test_dir("handle_normal_r_independent_filter_history");
     std::fs::create_dir_all(tmp.join("Pads")).unwrap();
     std::fs::create_dir_all(tmp.join("Bass")).unwrap();
     std::fs::write(tmp.join("Pads").join("Pad 1.fxp"), b"dummy").unwrap();
@@ -141,8 +143,8 @@ fn handle_normal_r_keeps_independent_history_per_filter_query() {
 
 #[test]
 fn handle_normal_r_preserves_trailing_init_mml_when_updating_patch_json() {
-    let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_preserves_trailing_init_mml");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp =
+        cmrt_history::test_support::unique_test_dir("handle_normal_r_preserves_trailing_init_mml");
     std::fs::create_dir_all(tmp.join("Pad")).unwrap();
     std::fs::write(tmp.join("Pad").join("Pad 1.fxp"), b"dummy").unwrap();
 
@@ -179,8 +181,9 @@ fn handle_normal_r_preserves_trailing_init_mml_when_updating_patch_json() {
 
 #[test]
 fn handle_normal_r_preserves_init_json_formatting_and_whitespace() {
-    let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_preserves_init_json_formatting");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir(
+        "handle_normal_r_preserves_init_json_formatting",
+    );
     std::fs::create_dir_all(tmp.join("Pad")).unwrap();
     std::fs::write(tmp.join("Pad").join("Pad 1.fxp"), b"dummy").unwrap();
 

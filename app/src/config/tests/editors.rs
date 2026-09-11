@@ -2,7 +2,9 @@ struct TempFileGuard(std::path::PathBuf);
 
 impl TempFileGuard {
     fn new(name: &str) -> Self {
-        let path = std::env::temp_dir().join(name);
+        // 固定名だと、同じ workspace で `cargo test` を 2 つ走らせたとき
+        // 1 つのファイルを取り合う。pid + nanos で必ずプロセスごとに割る。
+        let path = crate::test_utils::unique_test_dir(name);
         if path.exists() {
             std::fs::remove_file(&path).unwrap();
         }

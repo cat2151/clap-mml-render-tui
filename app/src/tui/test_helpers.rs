@@ -51,6 +51,8 @@ impl TuiApp<'static> {
             chord_catalog: ChordProgressionCatalog::default(),
             play_server,
             dismissed_play_server_failure: None,
+            sound_startup_wait: None,
+            reported_sound_prepare_error: None,
         }
     }
 }

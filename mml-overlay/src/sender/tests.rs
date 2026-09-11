@@ -21,6 +21,8 @@ struct RecordedMidi {
 #[derive(Default)]
 struct FakeSink {
     prepare_delay: Duration,
+    /// 準備を失敗させる理由。`None` なら成功する。
+    prepare_error: Option<String>,
     prepared: Mutex<Vec<Option<String>>>,
     midi: Mutex<Vec<RecordedMidi>>,
     /// timeline を張った回数。repeat が張り直していないことを worker 越しに見る。
@@ -52,7 +54,10 @@ impl SoundSink for FakeSink {
             .lock()
             .unwrap()
             .push(patch.map(str::to_string));
-        Ok(())
+        match &self.prepare_error {
+            Some(error) => Err(error.clone()),
+            None => Ok(()),
+        }
     }
 
     fn send_midi(&self, messages: &[[u8; 3]]) -> sink::SinkResult {
@@ -361,4 +366,65 @@ fn an_empty_line_stops_the_running_timeline() {
 
     wait_until(|| sink.stops() == 1);
     assert_eq!(sink.begins(), 1, "止めるだけで timeline は張り直さないこと");
+}
+
+/// 準備に失敗したら、**`loading` は必ず下ろし、理由は status に残す。**
+///
+/// 画面はこの 2 つで「音が鳴るまで」の overlay を閉じ、消えた理由を出す
+/// （`app/src/tui/sound_startup_overlay.rs`）。理由を持ち帰れないと、
+/// overlay が黙って消えて音も鳴らない状態になる。
+#[test]
+fn a_failed_preparation_lowers_loading_and_keeps_its_reason() {
+    let sink = Arc::new(FakeSink {
+        prepare_error: Some("play server が起動できません".to_string()),
+        ..FakeSink::default()
+    });
+    let harness = Harness::spawn(Arc::clone(&sink));
+
+    harness.send(
+        1,
+        SenderCommandKind::Prepare {
+            patch: Some("lead.fxp".to_string()),
+        },
+    );
+    wait_until(|| harness.status.lock().unwrap().prepare_error().is_some());
+
+    let status = harness.status.lock().unwrap().clone();
+    assert!(
+        !status.is_loading(),
+        "失敗しても loading は下ろすこと（overlay が出っぱなしになる）"
+    );
+    assert_eq!(status.prepare_error(), Some("play server が起動できません"));
+}
+
+/// 成功したら理由は消える。古い失敗が居座ると、鳴っているのに理由が出続ける。
+#[test]
+fn a_successful_preparation_clears_the_previous_reason() {
+    let sink = Arc::new(FakeSink::default());
+    let harness = Harness::spawn(Arc::clone(&sink));
+    harness.status.lock().unwrap().prepare_error = Some("stale".to_string());
+
+    harness.send(1, SenderCommandKind::Prepare { patch: None });
+    wait_until(|| !sink.prepared.lock().unwrap().is_empty());
+    wait_until(|| harness.status.lock().unwrap().prepare_error().is_none());
+}
+
+/// 失敗の直後に別の command が来ても、理由は消えない。
+///
+/// 失敗すると画面はまず overlay を閉じ、そのあと理由を読む。読む前に
+/// `Stop` の 1 つでも挟まると理由が消える作りだと、「黙って消えて音も鳴らない」に戻る。
+#[test]
+fn the_reason_survives_the_next_command() {
+    let sink = Arc::new(FakeSink {
+        prepare_error: Some("boom".to_string()),
+        ..FakeSink::default()
+    });
+    let harness = Harness::spawn(Arc::clone(&sink));
+    harness.send(1, SenderCommandKind::Prepare { patch: None });
+    wait_until(|| harness.status.lock().unwrap().prepare_error().is_some());
+
+    harness.send(2, SenderCommandKind::Stop);
+    wait_until(|| harness.status.lock().unwrap().command_id() == 2);
+
+    assert_eq!(harness.status.lock().unwrap().prepare_error(), Some("boom"));
 }

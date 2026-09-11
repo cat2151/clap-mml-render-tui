@@ -143,7 +143,10 @@ fn cache_render_extracts_patch_from_embedded_json_with_factory_prefix_fallback()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .unwrap_or(0);
-    let root = std::env::temp_dir().join(format!("cmrt_core_patch_fallback_{suffix}"));
+    let root = std::env::temp_dir().join(format!(
+        "cmrt_core_patch_fallback_{}_{suffix}",
+        std::process::id()
+    ));
     let factory_patch = root.join("patches_factory").join("Pads").join("Pad 1.fxp");
     std::fs::create_dir_all(factory_patch.parent().unwrap()).unwrap();
     std::fs::write(&factory_patch, b"dummy").unwrap();
@@ -174,7 +177,10 @@ fn mml_with_resolved_embedded_patch_keeps_core_patch_value_relative_to_base() {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .unwrap_or(0);
-    let root = std::env::temp_dir().join(format!("cmrt_core_patch_rewrite_{suffix}"));
+    let root = std::env::temp_dir().join(format!(
+        "cmrt_core_patch_rewrite_{}_{suffix}",
+        std::process::id()
+    ));
     let factory_patch = root.join("patches_factory").join("Pads").join("Pad 1.fxp");
     std::fs::create_dir_all(factory_patch.parent().unwrap()).unwrap();
     std::fs::write(&factory_patch, b"dummy").unwrap();

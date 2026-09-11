@@ -67,6 +67,6 @@ Dexed は今すでにこの else 節を通り、`Dexed_01.syx` が category に�
 
 ## 壊れたら気づく場所
 
-- `patches/src/layout/tests.rs::a_prefixless_surge_name_reads_the_same_either_way`
+- `patches/src/layout/tests.rs::abstract_metadata_keeps_prefixless_categories`
   — この同値が崩れると保存済みの patch 名がカテゴリを失う
 - `tui-core/src/patches/tests.rs` — カタログにプラグインが増えても既存の音色の指し先が変わらないこと

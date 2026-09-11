@@ -4,8 +4,7 @@ use serde_json::Value;
 
 #[test]
 fn commit_insert_skips_cache_refresh_when_text_is_unchanged() {
-    let tmp = std::env::temp_dir().join("cmrt_test_commit_insert_skips_cache_refresh");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("commit_insert_skips_cache_refresh");
 
     {
         let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
@@ -56,8 +55,7 @@ fn handle_insert_ctrl_c_copies_selected_text() {
 
 #[test]
 fn commit_insert_triggers_cache_refresh_when_text_changes() {
-    let tmp = std::env::temp_dir().join("cmrt_test_commit_insert_refreshes_cache");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("commit_insert_refreshes_cache");
 
     {
         let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
@@ -95,8 +93,7 @@ fn commit_insert_triggers_cache_refresh_when_text_changes() {
 
 #[test]
 fn commit_insert_keeps_semicolon_text_in_same_measure() {
-    let tmp = std::env::temp_dir().join("cmrt_test_commit_insert_keeps_semicolon_text");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("commit_insert_keeps_semicolon_text");
 
     {
         let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);

@@ -10,7 +10,7 @@ use std::path::Path;
 
 pub(crate) use cmrt_history::test_support::{
     session_state_path_for_test, set_local_dir_envs, test_app_dir_for_current_thread_or_default,
-    TestEnvGuard,
+    unique_test_dir, TestEnvGuard,
 };
 pub(crate) use cmrt_tui_core::buffer_test::{find_text_ignoring_spaces, help_overlay_bounds};
 

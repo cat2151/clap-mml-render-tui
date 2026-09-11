@@ -104,9 +104,12 @@ fn strip_log_file_timestamp_prefix(line: &str) -> &str {
 }
 
 fn append_log_line_to_path(path: &Path, line: &str) -> std::io::Result<()> {
+    // poisonでpanicしないこと。ここはロガーなので、書き込みの失敗をアプリの停止へ
+    // 昇格させてはいけない。一度poisonすると以降のログが全部panicする連鎖になる。
+    // 下の`append_panic_report_to_path`も同じ理由でpoisonを吸収している。
     let _guard = log_file_lock()
         .lock()
-        .expect("log file lock should not be poisoned");
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     append_log_lines_without_lock(path, line)
 }
 

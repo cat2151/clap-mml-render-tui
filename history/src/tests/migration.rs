@@ -2,8 +2,7 @@ use super::*;
 
 #[test]
 fn load_daw_session_state_migrates_from_history_json() {
-    let tmp = std::env::temp_dir().join("cmrt_test_history_daw_migrate");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("history_daw_migrate");
     let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
 
     let history_dir = super::history_dir().unwrap();
@@ -56,8 +55,7 @@ fn load_daw_session_state_migrates_from_history_json() {
 
 #[test]
 fn load_session_state_migrates_from_legacy_data_local_history_json() {
-    let tmp = std::env::temp_dir().join("cmrt_test_legacy_history_json_migrate");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("legacy_history_json_migrate");
     let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
 
     let legacy_path = crate::test_support::legacy_session_state_path_for_test().unwrap();
@@ -93,8 +91,7 @@ fn load_session_state_migrates_from_legacy_data_local_history_json() {
 
 #[test]
 fn load_daw_session_state_migrates_from_legacy_history_daw_json() {
-    let tmp = std::env::temp_dir().join("cmrt_test_legacy_history_daw_json_migrate");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("legacy_history_daw_json_migrate");
     let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
 
     let legacy_path = crate::test_support::legacy_daw_session_state_path_for_test().unwrap();
@@ -128,8 +125,7 @@ fn load_daw_session_state_migrates_from_legacy_history_daw_json() {
 
 #[test]
 fn load_patch_phrase_store_migrates_from_legacy_patch_history_json() {
-    let tmp = std::env::temp_dir().join("cmrt_test_legacy_patch_history_json_migrate");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("legacy_patch_history_json_migrate");
     let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
 
     let legacy_path = crate::test_support::legacy_patch_phrase_store_path_for_test().unwrap();
@@ -171,8 +167,7 @@ fn load_patch_phrase_store_migrates_from_legacy_patch_history_json() {
 
 #[test]
 fn daw_file_load_path_migrates_from_legacy_daw_json() {
-    let tmp = std::env::temp_dir().join("cmrt_test_legacy_daw_json_migrate");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("legacy_daw_json_migrate");
     let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
 
     let legacy_path = crate::test_support::legacy_daw_file_path_for_test().unwrap();

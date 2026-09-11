@@ -2,6 +2,7 @@ use super::*;
 
 #[test]
 fn handle_history_overlay_enter_overwrites_measure_and_backs_up_old_phrase() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 2;
@@ -33,6 +34,7 @@ fn handle_history_overlay_enter_overwrites_measure_and_backs_up_old_phrase() {
 
 #[test]
 fn handle_history_overlay_enter_without_track_patch_sets_patch_and_backs_up_old_phrase() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 2;
@@ -61,6 +63,7 @@ fn handle_history_overlay_enter_without_track_patch_sets_patch_and_backs_up_old_
 
 #[test]
 fn handle_history_overlay_enter_from_favorites_uses_selected_favorite() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;

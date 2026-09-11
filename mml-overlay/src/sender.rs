@@ -91,6 +91,12 @@ pub struct MmlOverlaySenderStatus {
     pub(crate) loading: bool,
     pub(crate) loading_patch: Option<String>,
     pub(crate) sounding: Vec<u8>,
+    /// 直近の [`SenderCommandKind::Prepare`] 相当が失敗した理由。成功したら消える。
+    ///
+    /// **無音の理由を持っているのは worker だけ**。準備が終わるまで画面に出ている
+    /// 「音が鳴るまで」の overlay は `loading` が下りた瞬間に消えるので、
+    /// 消えた理由をここから持ち帰れないと「黙って消えて音も出ない」になる。
+    pub(crate) prepare_error: Option<String>,
 }
 
 impl MmlOverlaySenderStatus {
@@ -108,6 +114,11 @@ impl MmlOverlaySenderStatus {
 
     pub fn sounding(&self) -> &[u8] {
         &self.sounding
+    }
+
+    /// 直近の音源準備が失敗した理由。成功していれば `None`。
+    pub fn prepare_error(&self) -> Option<&str> {
+        self.prepare_error.as_deref()
     }
 }
 
@@ -328,9 +339,17 @@ fn newest_queued_command(
     command
 }
 
+/// command 1 つぶんの状態を作り直す。
+///
+/// **直近の失敗理由だけは持ち越す。** ここで捨てると、失敗の直後に届いた
+/// 次の command（`Stop` など）が理由を消してしまい、画面が「なぜ鳴らなかったか」を
+/// 一度も読めないまま終わる。理由を消すのは、次の準備が成功したときだけ。
 fn begin_status(status: &Mutex<MmlOverlaySenderStatus>, command_id: u64) {
-    *status.lock().unwrap() = MmlOverlaySenderStatus {
+    let mut status = status.lock().unwrap();
+    let prepare_error = status.prepare_error.take();
+    *status = MmlOverlaySenderStatus {
         command_id,
+        prepare_error,
         ..MmlOverlaySenderStatus::default()
     };
 }
@@ -350,11 +369,20 @@ fn prepare_if_needed(
         status.loading_patch = patch.map(str::to_string);
         status.sounding.clear();
     }
-    let ready = voice.prepare(sink, patch);
+    let result = voice.prepare(sink, patch);
     let mut status = status.lock().unwrap();
     status.loading = false;
     status.loading_patch = None;
-    ready
+    match result {
+        Ok(()) => {
+            status.prepare_error = None;
+            true
+        }
+        Err(error) => {
+            status.prepare_error = Some(error);
+            false
+        }
+    }
 }
 
 fn is_superseded(command_id: u64, latest_command_id: &AtomicU64) -> bool {

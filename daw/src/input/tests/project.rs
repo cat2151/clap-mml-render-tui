@@ -1,14 +1,8 @@
 use super::*;
 
 fn unique_temp_dir(name: &str) -> TempDirGuard {
-    TempDirGuard::new(&format!(
-        "cmrt_daw_project_{name}_{}_{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ))
+    // pid + nanos は `TempDirGuard::new` が付ける。
+    TempDirGuard::new(&format!("cmrt_daw_project_{name}"))
 }
 
 #[test]

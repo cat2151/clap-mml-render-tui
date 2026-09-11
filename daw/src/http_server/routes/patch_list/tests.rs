@@ -3,8 +3,8 @@ use super::*;
 use cmrt_tui_core::patch_load::PatchLoadState;
 
 fn cfg_pointing_at_missing_patch_dir() -> Config {
-    let missing = std::env::temp_dir().join("cmrt_test_http_patches_missing_dir_does_not_exist");
-    std::fs::remove_dir_all(&missing).ok();
+    let missing =
+        cmrt_history::test_support::unique_test_dir("http_patches_missing_dir_does_not_exist");
     Config {
         patches_dirs: Some(vec![missing.to_string_lossy().into_owned()]),
         ..Default::default()

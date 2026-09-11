@@ -2,8 +2,7 @@ use super::*;
 
 #[test]
 fn handle_normal_g_sets_random_patch_and_generated_phrase_then_previews() {
-    let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_g_generate");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("handle_normal_g_generate");
     std::fs::create_dir_all(&tmp).unwrap();
     let patch_path = tmp.join("Pad 1.fxp");
     std::fs::write(&patch_path, b"dummy").unwrap();

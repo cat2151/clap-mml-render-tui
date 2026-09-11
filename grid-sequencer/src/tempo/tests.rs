@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 use cmrt_tui_core::bpm::{BpmMode, BpmRange};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+use super::TempoIntent;
 use crate::{GridSequencerScreen, LOOKAHEAD, STEP_INTERVAL};
 
 /// テンポ乗り換えを何周ぶんも見るための擬似フレーム間隔と回数。
@@ -83,6 +84,53 @@ fn a_hyphen_pair_sets_the_range_and_draws_inside_it() {
     screen.handle_key(key(KeyCode::Char('a'), KeyModifiers::NONE), now, &ctx);
     assert_eq!(screen.bpm_range(), BpmRange::new(80.0, 160.0).unwrap());
     assert!((80.0..=160.0).contains(&screen.bpm()), "{}", screen.bpm());
+}
+
+/// 抽選が既定 `BPM` と同じ値を引いても、明示的な引き直し（`Ctrl+B` の確定）なら
+/// 停止中のクロックが走り出すこと。
+///
+/// `BpmRange::sample()` は `80-160` なら 1/81 で既定の 130 を引く。値の比較だけで
+/// 「変化なし」と判定していた頃は、その回だけ `restart_timeline` が呼ばれず演奏が
+/// 始まらなかった（本番の穴であり、`tempo::tests` の 4 本が確率で落ちる原因でもあった）。
+/// **ここでは乱数を引かず、当たりの値を直接渡して決定的に判定する。**
+#[test]
+fn an_explicit_auto_redraw_starts_the_stopped_clock_even_when_the_value_is_unchanged() {
+    let mut screen = GridSequencerScreen::new(None);
+    let now = Instant::now();
+    screen.bpm_range = BpmRange::new(80.0, 160.0).unwrap();
+    // 入場前の初期状態。BPM は既定値のまま、クロックは止まっている。
+    assert_eq!(screen.bpm_mode(), BpmMode::Auto(crate::BPM));
+    assert!(!screen.state.is_running());
+
+    // 抽選が既定値そのものを引いた回に相当する。
+    screen.apply_bpm_mode(BpmMode::Auto(crate::BPM), now, TempoIntent::Explicit);
+
+    assert_eq!(screen.bpm(), crate::BPM);
+    assert!(
+        screen.state.is_running(),
+        "同じ値を引き当てても、明示的な確定なら走り出すこと"
+    );
+}
+
+/// 上と同じことを、`Ctrl+B` → 入力 → Enter の**キー操作の経路そのもの**で確かめる。
+///
+/// 幅のない範囲（`130-130`）は `BpmRange::sample()` が必ず `130` を返すので、
+/// 「抽選が既定値を引いた回」を乱数なしで再現できる。実機で人間が `Ctrl+B` を
+/// 打つのと同じ経路（`handle_bpm_input_key` の `ApplyAuto` 分岐）を通る。
+#[test]
+fn confirming_a_range_with_the_current_bpm_starts_the_stopped_clock() {
+    let mut screen = GridSequencerScreen::new(None);
+    let now = Instant::now();
+    assert_eq!(screen.bpm_mode(), BpmMode::Auto(crate::BPM));
+    assert!(!screen.state.is_running());
+
+    enter_bpm(&mut screen, now, "130-130");
+
+    assert_eq!(screen.bpm(), crate::BPM);
+    assert!(
+        screen.state.is_running(),
+        "Ctrl+B で確定したのに演奏が始まっていない"
+    );
 }
 
 #[test]

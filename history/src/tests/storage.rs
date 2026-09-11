@@ -2,8 +2,7 @@ use super::*;
 
 #[test]
 fn load_daw_session_state_reads_history_daw_json() {
-    let tmp = std::env::temp_dir().join("cmrt_test_history_daw_load");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("history_daw_load");
     let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
 
     let state = DawSessionState {
@@ -30,8 +29,7 @@ fn load_daw_session_state_reads_history_daw_json() {
 
 #[test]
 fn save_daw_sound_check_date_preserves_other_daw_session_fields() {
-    let tmp = std::env::temp_dir().join("cmrt_test_history_daw_guide_date");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("history_daw_guide_date");
     let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
     let state = DawSessionState {
         cursor_track: 3,
@@ -85,8 +83,7 @@ fn patch_phrase_store_serialize_deserialize_roundtrip() {
 
 #[test]
 fn save_and_load_patch_phrase_store_roundtrip() {
-    let tmp = std::env::temp_dir().join("cmrt_test_patch_phrase_store_roundtrip");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("patch_phrase_store_roundtrip");
     let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
 
     let mut store = PatchPhraseStore {
@@ -113,8 +110,7 @@ fn save_and_load_patch_phrase_store_roundtrip() {
 
 #[test]
 fn load_session_state_normalizes_keyboard_restore_values() {
-    let tmp = std::env::temp_dir().join("cmrt_test_keyboard_history_normalize");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("keyboard_history_normalize");
     let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
 
     let path = super::session_state_path().unwrap();
@@ -158,8 +154,7 @@ fn load_session_state_normalizes_keyboard_restore_values() {
 
 #[test]
 fn session_state_round_trips_the_grid_sequencer_chord_mode() {
-    let tmp = std::env::temp_dir().join("cmrt_test_grid_chord_mode_round_trip");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("grid_chord_mode_round_trip");
     let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
 
     save_session_state(&SessionState {
@@ -175,8 +170,7 @@ fn session_state_round_trips_the_grid_sequencer_chord_mode() {
 
 #[test]
 fn session_state_round_trips_independent_manual_bpms() {
-    let tmp = std::env::temp_dir().join("cmrt_test_bpm_round_trip");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("bpm_round_trip");
     let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
 
     save_session_state(&SessionState {
@@ -204,8 +198,7 @@ fn invalid_saved_bpms_fall_back_to_auto() {
 
 #[test]
 fn session_state_round_trips_independent_automatic_bpm_ranges() {
-    let tmp = std::env::temp_dir().join("cmrt_test_bpm_range_round_trip");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("bpm_range_round_trip");
     let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
 
     save_session_state(&SessionState {
@@ -237,8 +230,7 @@ fn invalid_saved_bpm_ranges_fall_back_to_the_fixed_default() {
 
 #[test]
 fn session_state_round_trips_the_editable_grid() {
-    let tmp = std::env::temp_dir().join("cmrt_test_editable_grid_round_trip");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("editable_grid_round_trip");
     let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
     let grid = GridSequencerSessionState {
         fixed_chord: None,
@@ -278,8 +270,7 @@ fn session_state_round_trips_the_editable_grid() {
 
 #[test]
 fn load_session_state_normalizes_grid_sequencer_track_count() {
-    let tmp = std::env::temp_dir().join("cmrt_test_grid_track_count_normalize");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("grid_track_count_normalize");
     let _env_guards = crate::test_support::set_local_dir_envs(&tmp);
 
     let path = super::session_state_path().unwrap();

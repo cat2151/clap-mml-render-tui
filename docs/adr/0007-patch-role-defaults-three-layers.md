@@ -32,7 +32,9 @@ config の `plugin_path`（＝既定プラグインのパス）との一致比�
 
 Vaporizer2 のカテゴリは `.vvp` のファイル名先頭 2 文字のコードを展開した名前
 （`AR` → `Arpeggio`）。**Surge の複数形（`Pads` / `Organs` / `Basses`）とは綴りが違う**ので、
-「Surge のぶんをコピーした」間違いは `the_vaporizer2_categories_are_not_the_surge_ones` が落ちる。
+「Surge のぶんをコピーした」間違いを表全体で見る番人は無く、play-server
+`core-lib/src/audio_plugin/tests.rs::known_plugins_describe_selector_categories_without_client_branching`
+が `Pad` の 1 件だけ単数形であることを見る。
 ただし drum 3 役のキーワード（`kick` / `snare` / `hat`）だけは
 `crate::surge_xt` から `pub use` で共有している（太鼓の一般名でプラグインに依らないため。
 同じ語を 2 組書くと片方だけ直したときに役が食い違う）。
@@ -126,9 +128,4 @@ Free は何も避けない。
 
 | テスト | 落ちたら |
 |---|---|
-| `patches/src/selection/tests.rs::free_keeps_every_patch_when_the_chord_categories_are_empty` | **Dexed の Free 行（chord mode off の全行）が候補 0 件になる** |
-| `cmrt-runtime/src/plugin_profile/tests.rs::the_builtin_dexed_profile_does_not_narrow_the_patch_roles` | Dexed に Surge のカテゴリ名が復活する |
-| `cmrt-runtime/src/plugin_profile/tests.rs::the_surge_profile_keeps_the_top_level_patch_categories` | 既存 Surge ユーザーの挙動が変わる |
-| `cmrt-runtime/src/core_config/tests.rs::a_profile_for_the_default_plugin_still_contributes_its_patch_roles` | 末尾ブロックの編集案内が嘘になる |
-| `tests::the_default_config_parses_with_and_without_the_commented_profile` | 末尾ブロックのコメント解除で config が壊れる |
-| `config::tests::default_content::the_commented_profile_is_the_last_thing_in_the_default_config` | 同上 |
+| `cmrt-runtime/src/tests.rs::the_default_config_parses_with_and_without_the_commented_profile` | 末尾ブロックのコメント解除で config が壊れる |

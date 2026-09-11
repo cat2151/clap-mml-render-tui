@@ -57,7 +57,10 @@ impl Vaporizer2Presets {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|duration| duration.as_nanos())
             .unwrap_or(0);
-        let root = std::env::temp_dir().join(format!("cmrt_voicing_vvp_{label}_{suffix}"));
+        let root = std::env::temp_dir().join(format!(
+            "cmrt_voicing_vvp_{label}_{}_{suffix}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&root).unwrap();
         Self { root }
     }

@@ -23,7 +23,7 @@
 //! 実サーバー無しの fake backend で試験できる（[`tests`]）。
 
 use std::{
-    sync::{atomic::Ordering, mpsc, Arc, Mutex},
+    sync::{mpsc, Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -101,7 +101,12 @@ pub(super) fn run_command_loop<B: GridSenderBackend>(
     loop {
         // 完了通知を見るのは**毎周回の先頭**。「コマンドが来ない暇なときだけ」に
         // すると、イベント送信が続いている間ずっと先読みの完了に気づけない。
-        let outcomes = preload.advance(backend, preload_generation.load(Ordering::SeqCst));
+        //
+        // 世代は**渡さずに共有カウンタごと預ける**。ここで読んだ値を持ち回ると、
+        // 読んでから完了を観測するまでの隙間で UI スレッドがサイクルを畳んだ回だけ、
+        // 畳んだはずの完了を生きているものとして数えてしまう
+        // （`preload` モジュール冒頭の「世代」を見ること）。
+        let outcomes = preload.advance(backend, preload_generation);
         report_preload(backend, outcomes);
         let command = match rx.recv_timeout(METER_POLL_INTERVAL) {
             Ok(command) => command,
@@ -130,13 +135,8 @@ pub(super) fn run_command_loop<B: GridSenderBackend>(
                 // サーバー側の bank worker が続けている。厚くしても underrun は減らず、
                 // 発音の遅れが増えるだけ。実測（`realtime-play/src/live_ipc/tests/
                 // grid_cycle.rs`）でも倍率 2 と 16 の両方で underrun / late の増分は 0。
-                let outcomes = preload.submit(
-                    backend,
-                    generation,
-                    preload_generation.load(Ordering::SeqCst),
-                    instance_id,
-                    patch,
-                );
+                let outcomes =
+                    preload.submit(backend, generation, preload_generation, instance_id, patch);
                 report_preload(backend, outcomes);
             }
             GridMidiCommand::Stop => {

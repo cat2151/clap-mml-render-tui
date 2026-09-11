@@ -38,6 +38,7 @@ fn loading_patch_is_shown_in_the_center_above_the_mml_overlay() {
         loading: true,
         loading_patch: Some("Orchestra/slow.sfz".to_string()),
         sounding: Vec::new(),
+        prepare_error: None,
     };
 
     let rendered = render_with_status(&opened(), &status);

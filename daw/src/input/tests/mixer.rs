@@ -32,8 +32,7 @@ fn handle_mixer_keeps_cursor_within_playable_track_range() {
 
 #[test]
 fn handle_mixer_adjusts_volume_in_3db_steps() {
-    let tmp = std::env::temp_dir().join("cmrt_test_handle_mixer_adjusts_volume");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("handle_mixer_adjusts_volume");
 
     {
         let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
@@ -60,8 +59,7 @@ fn handle_mixer_adjusts_volume_in_3db_steps() {
 fn handle_mixer_volume_key_changes_exactly_one_live_gain() {
     use crate::playback::live_gain::changed_live_track_gains;
 
-    let tmp = std::env::temp_dir().join("cmrt_test_handle_mixer_live_gain");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("handle_mixer_live_gain");
 
     {
         let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);

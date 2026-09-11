@@ -42,6 +42,8 @@ pub mod patch_role_report;
 mod play_server_notice;
 mod runtime;
 mod session;
+// 「音が鳴るまで」の待ちを中央 overlay で見せる（画面共通）。
+mod sound_startup_overlay;
 mod ui;
 mod voicing;
 
@@ -134,6 +136,12 @@ pub struct TuiApp<'a> {
     play_server: Arc<cmrt_realtime_play::RealtimePlayServerSupervisor>,
     /// ユーザーが閉じた知らせ。同じ理由で出し直さないために覚えておく。
     dismissed_play_server_failure: Option<cmrt_realtime_play::ServerStartupFailure>,
+    /// 「音が鳴るまで」の待ちの写し。`None` は待っていない。
+    ///
+    /// 作るのはランタイムのループ（`sync_sound_startup_wait`）で、描画は読むだけ。
+    pub(in crate::tui) sound_startup_wait: Option<sound_startup_overlay::SoundStartupWait>,
+    /// 画面へ出し終えた「音源の準備に失敗した理由」。同じ理由を出し直さないために覚えておく。
+    reported_sound_prepare_error: Option<String>,
 }
 
 impl<'a> TuiApp<'a> {

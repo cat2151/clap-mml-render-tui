@@ -1,8 +1,15 @@
 use std::path::Path;
 
 use super::workspace_cache_dir;
+use crate::input::tests::temp_local_dirs;
 use crate::WorkspaceKind;
 
+/// **このモジュールで唯一 env guard を取らないテスト。**
+///
+/// [`workspace_cache_dir`]（`daw/src/cache.rs:12`）は root を引数で受け取るだけの
+/// 純粋なパス計算で、`CMRT_BASE_DIR` も読まないしファイルにも触らない。
+/// ここへ `temp_local_dirs` を足しても直列化が増えるだけで守るものが無い。
+/// **ファイルを触る処理を足すときは、同時に `temp_local_dirs` を取ること。**
 #[test]
 fn workspace_cache_directory_keeps_persistent_path_and_nests_daily() {
     let plugin_namespace = Path::new("daw_cache").join("Surge XT");
@@ -23,6 +30,7 @@ fn workspace_cache_directory_keeps_persistent_path_and_nests_daily() {
 /// 無音のセルを毎回レンダリングし続けることになる。
 #[test]
 fn the_chord_row_never_produces_a_cache_job() {
+    let (_temp, _env_guard) = temp_local_dirs("cache_chord_row_no_job");
     let (mut app, cache_rx) = crate::input::tests::build_test_app();
     app.editor.data[crate::CHORD_TRACK][1] = "I-IV-V-I".to_string();
     app.editor.data[crate::FIRST_PLAYABLE_TRACK][1] = "cde".to_string();
@@ -45,6 +53,7 @@ fn the_chord_row_never_produces_a_cache_job() {
 /// 生のセル文字列だけで空判定していると、生成されたセルが丸ごと無視されて音が出ない。
 #[test]
 fn a_cell_generated_from_the_chord_row_is_queued_even_though_the_cell_itself_is_empty() {
+    let (_temp, _env_guard) = temp_local_dirs("cache_chord_row_generated_job");
     let (mut app, cache_rx) = crate::input::tests::build_test_app();
     app.editor.data[crate::CHORD_TRACK][1] = "I-IV".to_string();
     app.editor.data[crate::FIRST_PLAYABLE_TRACK][0] =
@@ -74,6 +83,10 @@ fn a_cell_generated_from_the_chord_row_is_queued_even_though_the_cell_itself_is_
 /// 手書きのセルは chord 行に依存しないので巻き込まない。
 #[test]
 fn editing_the_chord_row_invalidates_only_the_cells_generated_from_it() {
+    // `invalidate_dependent_cells` は `remove_file(cache_wav_path(..))` で
+    // `track{行}_meas{小節}.wav` を**実際に消す**（`daw/src/cache.rs:203`）。
+    // guard 無しで走らせると、同時に走る隣のテストの WAV を消す。
+    let (_temp, _env_guard) = temp_local_dirs("cache_chord_row_invalidate");
     let (mut app, _cache_rx) = crate::input::tests::build_test_app();
     let generated = crate::FIRST_PLAYABLE_TRACK;
     let handwritten = crate::FIRST_PLAYABLE_TRACK + 1;
@@ -91,7 +104,8 @@ fn editing_the_chord_row_invalidates_only_the_cells_generated_from_it() {
 /// 「Resume の日」に通る復元経路 [`super::DawApp::restore_cache_from_metadata`] を
 /// 実際に通すための道具立て。
 ///
-/// - `set_local_dir_envs` で cache dir を temp へ逃がす（実 `%LOCALAPPDATA%` を汚さない）
+/// - `temp_local_dirs` で cache dir を pid + nanos のユニークな temp へ逃がす
+///   （実 `%LOCALAPPDATA%` を汚さない・隣のテストと `track{行}_meas{小節}.wav` を取り合わない）
 /// - WAV は hound で実際に書く。`read_wav_cache_info` が RIFF を読むので、
 ///   ダミーのバイト列では経路が変わってしまう
 mod restore_from_metadata {
@@ -124,49 +138,43 @@ mod restore_from_metadata {
     /// `restore_cache_from_metadata` を 1 度も通らない。混同しないこと）
     #[test]
     fn a_tempo_only_change_keeps_yesterdays_wav_out_of_the_restored_cache() {
-        let tmp = std::env::temp_dir().join("cmrt_test_daw_restore_tempo_change");
-        std::fs::remove_dir_all(&tmp).ok();
+        let (_temp, _env_guard) =
+            crate::input::tests::temp_local_dirs("cache_restore_tempo_change");
+        let (mut app, _cache_rx) = crate::input::tests::build_test_app();
+        let row = FIRST_PLAYABLE_TRACK;
 
-        {
-            let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
-            let (mut app, _cache_rx) = crate::input::tests::build_test_app();
-            let row = FIRST_PLAYABLE_TRACK;
+        // 前日（t113）に焼いたときの hash。
+        app.editor.data[0][0] = r#"{"beat": "4/4"}t113"#.to_string();
+        app.editor.data[row][1] = "cde".to_string();
+        let yesterday_hash = daw_cache_mml_hash(&app.build_cell_mml(row, 1));
+        let path = super::super::cache_wav_path(app.workspace_kind, row, 1).unwrap();
+        write_silent_stereo_wav(&path, app.measure_duration_samples());
 
-            // 前日（t113）に焼いたときの hash。
-            app.editor.data[0][0] = r#"{"beat": "4/4"}t113"#.to_string();
-            app.editor.data[row][1] = "cde".to_string();
-            let yesterday_hash = daw_cache_mml_hash(&app.build_cell_mml(row, 1));
-            let path = super::super::cache_wav_path(app.workspace_kind, row, 1).unwrap();
-            write_silent_stereo_wav(&path, app.measure_duration_samples());
+        // 今日はテンポだけ変えた（t113 -> t120）。ほかは 1 文字も変えていない。
+        app.editor.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
+        let today_hash = daw_cache_mml_hash(&app.build_cell_mml(row, 1));
+        assert_ne!(
+            yesterday_hash, today_hash,
+            "the tempo lives in track0 and is prefixed onto every cell, so it must move the hash"
+        );
 
-            // 今日はテンポだけ変えた（t113 -> t120）。ほかは 1 文字も変えていない。
-            app.editor.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
-            let today_hash = daw_cache_mml_hash(&app.build_cell_mml(row, 1));
-            assert_ne!(
-                yesterday_hash, today_hash,
-                "the tempo lives in track0 and is prefixed onto every cell, so it must move the hash"
-            );
+        app.restore_cache_from_metadata(&[DawCachedMeasure {
+            track: row,
+            measure: 1,
+            mml_hash: yesterday_hash,
+            legacy_mml: None,
+        }]);
 
-            app.restore_cache_from_metadata(&[DawCachedMeasure {
-                track: row,
-                measure: 1,
-                mml_hash: yesterday_hash,
-                legacy_mml: None,
-            }]);
-
-            let cell = &app.cache.lock().unwrap()[row][1];
-            assert!(
-                cell.state != CacheState::Ready,
-                "a hash mismatch must not be restored as Ready"
-            );
-            assert_eq!(cell.rendered_mml_hash, None);
-            assert!(
-                path.is_file(),
-                "the restore path does not delete the wav either; only the cache state is withheld"
-            );
-        }
-
-        std::fs::remove_dir_all(&tmp).ok();
+        let cell = &app.cache.lock().unwrap()[row][1];
+        assert!(
+            cell.state != CacheState::Ready,
+            "a hash mismatch must not be restored as Ready"
+        );
+        assert_eq!(cell.rendered_mml_hash, None);
+        assert!(
+            path.is_file(),
+            "the restore path does not delete the wav either; only the cache state is withheld"
+        );
     }
 
     /// **今の（穴のある）振る舞いを記録した緑。** 直したらここは赤くなる。
@@ -184,55 +192,49 @@ mod restore_from_metadata {
     /// 赤くなる。それが正しい向き。
     #[test]
     fn a_wav_whose_length_does_not_match_todays_measure_is_still_restored_as_ready() {
-        let tmp = std::env::temp_dir().join("cmrt_test_daw_restore_length_mismatch");
-        std::fs::remove_dir_all(&tmp).ok();
+        let (_temp, _env_guard) =
+            crate::input::tests::temp_local_dirs("cache_restore_length_mismatch");
+        let (mut app, _cache_rx) = crate::input::tests::build_test_app();
+        let row = FIRST_PLAYABLE_TRACK;
 
-        {
-            let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
-            let (mut app, _cache_rx) = crate::input::tests::build_test_app();
-            let row = FIRST_PLAYABLE_TRACK;
+        app.editor.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
+        app.editor.data[row][1] = "cde".to_string();
+        let hash = daw_cache_mml_hash(&app.build_cell_mml(row, 1));
 
-            app.editor.data[0][0] = r#"{"beat": "4/4"}t120"#.to_string();
-            app.editor.data[row][1] = "cde".to_string();
-            let hash = daw_cache_mml_hash(&app.build_cell_mml(row, 1));
+        // hash は今日のまま・長さだけ別世代（BPM 113 相当に伸びている）。
+        let todays_samples = app.measure_duration_samples();
+        let stale_length = todays_samples + 12_346;
+        let path = super::super::cache_wav_path(app.workspace_kind, row, 1).unwrap();
+        write_silent_stereo_wav(&path, stale_length);
+        assert_eq!(
+            cmrt_tui_core::wav_io::read_wav_cache_info(&path)
+                .unwrap()
+                .interleaved_sample_count,
+            stale_length,
+            "the file on disk really is a different length from today's measure"
+        );
 
-            // hash は今日のまま・長さだけ別世代（BPM 113 相当に伸びている）。
-            let todays_samples = app.measure_duration_samples();
-            let stale_length = todays_samples + 12_346;
-            let path = super::super::cache_wav_path(app.workspace_kind, row, 1).unwrap();
-            write_silent_stereo_wav(&path, stale_length);
-            assert_eq!(
-                cmrt_tui_core::wav_io::read_wav_cache_info(&path)
-                    .unwrap()
-                    .interleaved_sample_count,
-                stale_length,
-                "the file on disk really is a different length from today's measure"
-            );
+        app.restore_cache_from_metadata(&[DawCachedMeasure {
+            track: row,
+            measure: 1,
+            mml_hash: hash,
+            legacy_mml: None,
+        }]);
 
-            app.restore_cache_from_metadata(&[DawCachedMeasure {
-                track: row,
-                measure: 1,
-                mml_hash: hash,
-                legacy_mml: None,
-            }]);
-
-            let cell = &app.cache.lock().unwrap()[row][1];
-            assert!(
-                cell.state == CacheState::Ready,
-                "length is never checked, so the mismatched wav is accepted"
-            );
-            assert_eq!(
-                cell.rendered_measure_samples,
-                Some(todays_samples),
-                "and today's measure length is stamped on regardless of what was actually read"
-            );
-            assert_eq!(
-                cell.samples.as_ref().map(|samples| samples.len()),
-                Some(stale_length),
-                "the samples actually held are the stale ones, so the stamp above is a lie"
-            );
-        }
-
-        std::fs::remove_dir_all(&tmp).ok();
+        let cell = &app.cache.lock().unwrap()[row][1];
+        assert!(
+            cell.state == CacheState::Ready,
+            "length is never checked, so the mismatched wav is accepted"
+        );
+        assert_eq!(
+            cell.rendered_measure_samples,
+            Some(todays_samples),
+            "and today's measure length is stamped on regardless of what was actually read"
+        );
+        assert_eq!(
+            cell.samples.as_ref().map(|samples| samples.len()),
+            Some(stale_length),
+            "the samples actually held are the stale ones, so the stamp above is a lie"
+        );
     }
 }

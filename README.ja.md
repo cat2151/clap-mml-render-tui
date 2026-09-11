@@ -71,6 +71,7 @@ cmrt --play-server "N:/projects/clap-mml-play-server/target/debug/clap-mml-realt
 `Ctrl+G` → `C`キーで、chord chart画面へ移動します。
 
 1曲ぶんのコード進行の「構成」を俯瞰・編集する画面です。カーソルを動かすと、その行のコード進行が鳴ります。
+`h` `l`で行内のchordを1つずつたどると、指したchordだけが鳴ります。
 
 - 左pane（Sections）: 素材となるコード進行を名前つきで定義します
 - 右pane（Arrangement）: 定義したsectionの並びが曲になります。同じsectionを何度でも並べられます
@@ -78,6 +79,7 @@ cmrt --play-server "N:/projects/clap-mml-play-server/target/debug/clap-mml-realt
 - ヘッダの1行は、曲の頭に置くchord2mmlの指定（`Key=C BPM120` など）をそのまま出したものです
 - 進行もヘッダもこの画面は解釈しません。打った文字列をそのまま持ちます
 - 鳴るのはカーソル行のsection 1つだけです（曲全体は鳴りません）。音色は固定で、画面では選べません
+- `h` `l`で行内のchordを1つずつ試聴できます。いま指しているchordは進行の中で反転して見えます
 - ヘッダのKeyだけが試聴に渡ります（BPMは既定のままです）
 
 ```
@@ -97,8 +99,9 @@ cmrt --play-server "N:/projects/clap-mml-play-server/target/debug/clap-mml-realt
 
 | キー | pane | 動作 |
 |---|---|---|
-| `h` `l` | 共通 | pane移動（`h`:Sections `l`:Arrangement） |
-| `j` `k` `↓` `↑` | 共通 | カーソル移動 |
+| `Tab` | 共通 | pane移動（Sections ⇔ Arrangementのトグル） |
+| `j` `k` `↓` `↑` | 共通 | カーソル移動（行。移った先の行のコード進行が全部鳴ります） |
+| `h` `l` `←` `→` | 共通 | 行内のchord移動（指したchord 1つだけ鳴ります。行の端では隣の行へ繰り上がります） |
 | `PgUp` `PgDn` | 共通 | カーソルを10行移動します |
 | `dd` | 共通 | カーソル行を削除します（Sectionsで消すとArrangement上の参照も一緒に消えます） |
 | `Alt+↑` `Alt+↓` | 共通 | カーソル行を上 / 下へ移動します |

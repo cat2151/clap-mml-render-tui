@@ -19,7 +19,8 @@ fn the_help_overlay_lists_every_key() {
     assert!(left < right && top < bottom);
 
     for key in [
-        "h/l",
+        "h/l←→",
+        "Tab",
         "j/k",
         "PgUp/PgDn",
         "Alt+↑/↓",
@@ -37,7 +38,9 @@ fn the_help_overlay_lists_every_key() {
         assert!(rendered.contains(key), "key {key:?} is absent: {rendered}");
     }
     // 廃止したキーの説明が残っていると、押しても効かないキーを教える画面になる。
-    for retired in ["[/]", "</>", "+/-", "J/K", "小節数を1..8"] {
+    // `h/l` は pane 移動から行内の chord 移動へ役目が変わった。説明ごと名指しで拒む
+    // （キーの綴りだけを見ていると、`h/l` は生き残っているので素通しする）。
+    for retired in ["[/]", "</>", "+/-", "J/K", "小節数を1..8", "h/lpane移動"] {
         assert!(
             !rendered.contains(retired),
             "retired key {retired:?} is still listed: {rendered}"
@@ -83,12 +86,12 @@ fn the_help_teaches_exactly_the_keys_that_survived_the_reduction() {
             "Alt+↑/↓",
             "Ctrl+G",
             "PgUp/PgDn",
-            "Shift+P",
-            "Space",
+            "Shift+P/Space",
+            "Tab",
             "b",
             "dd",
             "g",
-            "h / l",
+            "h/l ←→",
             "i",
             "j/k ↑↓",
             "n",
@@ -250,5 +253,35 @@ fn the_help_overlay_fits_inside_an_eighty_column_terminal() {
     assert!(
         inside.contains(&squeeze(longest)),
         "いちばん長い行 {longest:?} が切れている: {inside}"
+    );
+}
+
+/// ヘルプ overlay の**行数**が 24 行端末に収まり、末尾の行まで出るか。
+///
+/// 幅は 1 つ上のテストが見ているが、高さは `centered_text_block_rect` が
+/// `area.height` へ**黙って切り詰める**（`min`）。行を 1 つ足すと末尾の行が
+/// 画面から消えるのに、枠は 24 行に収まったままなので他のテストは全部通る。
+///
+/// **中身を探す assert では足りない**。末尾は ` dd  カーソル行を削除` で、
+/// 同じ綴りが上の「共通」欄にもあるので、切れても `contains` は通ってしまう
+/// （キーを名指しする `the_help_overlay_lists_every_key` も同じ理由で素通しする）。
+/// なので枠の**内側の行数**そのものを見る。
+#[test]
+fn every_help_row_is_visible_in_an_eighty_by_twenty_four_terminal() {
+    let screen = ChordChartScreen {
+        help_open: true,
+        ..ChordChartScreen::default()
+    };
+
+    let buffer = render(&screen);
+    let (_, top, _, bottom) = help_overlay_bounds(&buffer);
+    let inner_rows = usize::from(bottom - top) - 1;
+
+    assert_eq!(
+        inner_rows,
+        crate::ui::help::HELP_ROWS.len(),
+        "ヘルプ {} 行に対し枠の内側が {inner_rows} 行しかない\
+         （24 行端末で末尾の行が黙って切れる）",
+        crate::ui::help::HELP_ROWS.len()
     );
 }

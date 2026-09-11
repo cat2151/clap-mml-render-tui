@@ -16,13 +16,30 @@
 //! 数えると、実際にはロードしていない bank へ切り替わってしまう。そこで要求を出した
 //! ときの世代を持ち回り、決着時の世代と違えば [`PreloadOutcome::stale`] を立てて
 //! 進捗を進めない（完了通知そのものは受け取って drain する）。
+//!
+//! **「今の世代」は判断の直前に読むこと。** ここが受け取るのは読んだ値（`u64`）では
+//! なく共有カウンタ [`PreloadGeneration`] そのもので、
+//!
+//! - 完了通知を観測した直後（[`PreloadTracker::poll_in_flight`]）
+//! - 順番待ちを取り出した直後（[`PreloadTracker::advance`]）
+//!
+//! の 2 か所でそれぞれ `load` する。コマンドループの周回の頭で 1 度だけ読んだ値を
+//! 持ち回ると、「世代を読む」と「完了を観測する」の間に UI スレッドの
+//! `fetch_add` が挟まった回だけ、**畳んだサイクルの完了を生きているものとして数えて
+//! しまう**（ロードしていない bank へ切り替わる）。世代を上げる側は必ず
+//! 完了通知の解放より先に `fetch_add` するので、完了を観測できた時点で
+//! happens-before が成立しており、そのあとの `load` は必ず新しい世代を読む。
 
 use std::{
     collections::VecDeque,
+    sync::atomic::Ordering,
     time::{Duration, Instant},
 };
 
-use super::GridSenderBackend;
+use super::{GridSenderBackend, PreloadGeneration};
+
+#[cfg(test)]
+mod tests;
 
 /// 先読み1件の決着。
 ///
@@ -69,13 +86,13 @@ impl<R> PreloadTracker<R> {
 
     /// 先読みを1件受け付ける。**ロードの完了を待たない。**
     ///
-    /// `generation` は要求を出した側（UI スレッド）の世代、`current` は今の世代。
-    /// 通常は同じで、サイクルが畳まれた後に届いたコマンドだけがずれる。
+    /// `generation` は要求を出した側（UI スレッド）の世代。今の世代は
+    /// `preload_generation` から**判断の直前に**読む（モジュール冒頭の「世代」を見ること）。
     pub(super) fn submit<B: GridSenderBackend<Standby = R>>(
         &mut self,
         backend: &mut B,
         generation: u64,
-        current: u64,
+        preload_generation: &PreloadGeneration,
         instance_id: u8,
         patch: Option<String>,
     ) -> Vec<PreloadOutcome> {
@@ -84,7 +101,7 @@ impl<R> PreloadTracker<R> {
             instance_id,
             patch,
         });
-        self.advance(backend, current)
+        self.advance(backend, preload_generation)
     }
 
     /// 完了通知を非 blocking に見て、席が空いたら次の1件を受付へ出す。
@@ -93,11 +110,11 @@ impl<R> PreloadTracker<R> {
     pub(super) fn advance<B: GridSenderBackend<Standby = R>>(
         &mut self,
         backend: &mut B,
-        current: u64,
+        preload_generation: &PreloadGeneration,
     ) -> Vec<PreloadOutcome> {
         let mut outcomes = Vec::new();
         loop {
-            if let Some(outcome) = self.poll_in_flight(backend, current) {
+            if let Some(outcome) = self.poll_in_flight(backend, preload_generation) {
                 outcomes.push(outcome);
             }
             if self.in_flight.is_some() {
@@ -106,7 +123,9 @@ impl<R> PreloadTracker<R> {
             let Some(next) = self.waiting.pop_front() else {
                 break;
             };
-            if next.generation != current {
+            // 取り出した「直後」に読む。ループの頭で読んだ値を使い回すと、
+            // 待っている間に畳まれたサイクルの1件を受付へ出してしまう。
+            if next.generation != preload_generation.load(Ordering::SeqCst) {
                 // 要求元のサイクルはもう畳まれている。受付にすら行かない。
                 outcomes.push(PreloadOutcome {
                     instance_id: next.instance_id,
@@ -180,7 +199,7 @@ impl<R> PreloadTracker<R> {
     fn poll_in_flight<B: GridSenderBackend<Standby = R>>(
         &mut self,
         backend: &mut B,
-        current: u64,
+        preload_generation: &PreloadGeneration,
     ) -> Option<PreloadOutcome> {
         let entry = self.in_flight.as_mut()?;
         let error = match backend.poll_standby(&mut entry.request) {
@@ -189,6 +208,9 @@ impl<R> PreloadTracker<R> {
             Ok(Some(())) => None,
             Err(error) => Some(format!("{error:#}")),
         };
+        // 完了を観測した「あと」に読む。先に読むと、その隙間で畳まれたサイクルの
+        // 完了通知を stale と判定できない。
+        let current = preload_generation.load(Ordering::SeqCst);
         let entry = self
             .in_flight
             .take()

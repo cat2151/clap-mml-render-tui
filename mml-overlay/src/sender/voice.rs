@@ -76,7 +76,14 @@ impl Voice {
     ///
     /// 音色の差し替えは音を出さないが、鳴っている最中に差し替えると前の音色の音が
     /// 残る。ここも「鳴らす前」と同じ扱いで止めてから通す。
-    pub(super) fn prepare(&mut self, sink: &impl SoundSink, patch: Option<&str>) -> bool {
+    /// **失敗した理由を `Err` で返す**（ログへ出すだけにしない）。この待ちの最中は
+    /// 画面へ「音が鳴るまで」の overlay が出ているので、失敗して overlay が消えたときに
+    /// 理由を出せるかどうかが、ここで理由を持ち帰れるかどうかで決まる。
+    pub(super) fn prepare(
+        &mut self,
+        sink: &impl SoundSink,
+        patch: Option<&str>,
+    ) -> Result<(), String> {
         self.stop(sink, "prepare");
         log_line(format!(
             "action=mml-overlay-prepare event=start command_id={} patch={patch:?}",
@@ -93,7 +100,7 @@ impl Voice {
                     self.command_id,
                     started_at.elapsed().as_millis()
                 ));
-                true
+                Ok(())
             }
             Err(error) => {
                 log_error(format!(
@@ -103,7 +110,7 @@ impl Voice {
                     started_at.elapsed().as_millis(),
                     self.current_patch
                 ));
-                false
+                Err(error)
             }
         }
     }

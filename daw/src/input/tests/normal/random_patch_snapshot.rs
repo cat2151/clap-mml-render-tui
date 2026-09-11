@@ -11,8 +11,8 @@ use cmrt_tui_core::patch_load::PatchLoadState;
 
 /// 実在しない patch dir を指す Config へ差し替える。
 fn point_config_at_missing_patch_dir(app: &mut DawApp) {
-    let missing = std::env::temp_dir().join("cmrt_test_daw_missing_patch_dir_does_not_exist");
-    std::fs::remove_dir_all(&missing).ok();
+    let missing =
+        cmrt_history::test_support::unique_test_dir("daw_missing_patch_dir_does_not_exist");
     app.cfg = Arc::new(Config {
         patches_dirs: Some(vec![missing.to_string_lossy().into_owned()]),
         ..(*app.cfg).clone()
@@ -32,8 +32,7 @@ fn log_lines(app: &DawApp) -> Vec<String> {
 
 #[test]
 fn apply_random_patch_to_track_uses_injected_snapshot_instead_of_scanning() {
-    let tmp = std::env::temp_dir().join("cmrt_test_daw_random_patch_snapshot");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("daw_random_patch_snapshot");
     std::fs::create_dir_all(&tmp).unwrap();
 
     {
@@ -76,8 +75,7 @@ fn apply_random_patch_to_track_uses_injected_snapshot_instead_of_scanning() {
 
 #[test]
 fn apply_random_patch_to_track_falls_back_to_scan_while_catalog_is_loading() {
-    let tmp = std::env::temp_dir().join("cmrt_test_daw_random_patch_loading_fallback");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("daw_random_patch_loading_fallback");
     std::fs::create_dir_all(&tmp).unwrap();
 
     {
@@ -145,8 +143,7 @@ fn real_catalog_snapshot_path_beats_the_scan_path() {
     let scan_elapsed = scan_started.elapsed();
     assert!(!pairs.is_empty(), "実機カタログが 0 件では比較にならない");
 
-    let tmp = std::env::temp_dir().join("cmrt_test_daw_real_catalog_snapshot");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("daw_real_catalog_snapshot");
     std::fs::create_dir_all(&tmp).unwrap();
     let (snapshot_elapsed, count) = {
         let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);

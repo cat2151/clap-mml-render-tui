@@ -2,6 +2,7 @@ use super::*;
 
 #[test]
 fn handle_normal_dd_yanks_current_measure_clears_it_and_records_patch_history() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
@@ -35,6 +36,7 @@ fn handle_normal_dd_yanks_current_measure_clears_it_and_records_patch_history() 
 
 #[test]
 fn handle_normal_p_overwrites_current_measure_from_yank_and_records_previous_phrase() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
@@ -59,6 +61,7 @@ fn handle_normal_p_overwrites_current_measure_from_yank_and_records_previous_phr
 
 #[test]
 fn handle_normal_p_logs_when_yank_buffer_is_empty() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
@@ -76,6 +79,7 @@ fn handle_normal_p_logs_when_yank_buffer_is_empty() {
 
 #[test]
 fn handle_normal_u_restores_previous_init_measure_after_paste() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 0;

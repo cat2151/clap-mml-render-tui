@@ -3,8 +3,7 @@ use std::collections::BTreeSet;
 
 #[test]
 fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() {
-    let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_rerender_logs");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("handle_normal_r_rerender_logs");
     std::fs::create_dir_all(&tmp).unwrap();
     let patch_path = tmp.join("Pad 1.fxp");
     std::fs::write(&patch_path, b"dummy").unwrap();
@@ -115,8 +114,8 @@ fn handle_normal_r_rerenders_playable_measures_without_rendering_measure_zero() 
 
 #[test]
 fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
-    let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_prioritizes_next_measure");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp =
+        cmrt_history::test_support::unique_test_dir("handle_normal_r_prioritizes_next_measure");
     std::fs::create_dir_all(&tmp).unwrap();
     let patch_path = tmp.join("Pad 1.fxp");
     std::fs::write(&patch_path, b"dummy").unwrap();
@@ -196,8 +195,7 @@ fn handle_normal_r_prioritizes_next_play_measure_when_playing() {
 
 #[test]
 fn handle_normal_r_restores_default_tempo_init_when_empty() {
-    let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_default_tempo_init");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("handle_normal_r_default_tempo_init");
     std::fs::create_dir_all(&tmp).unwrap();
 
     {
@@ -241,8 +239,8 @@ fn handle_normal_r_restores_default_tempo_init_when_empty() {
 
 #[test]
 fn handle_normal_r_ignores_non_playable_track_and_keeps_header_unchanged() {
-    let tmp = std::env::temp_dir().join("cmrt_test_handle_normal_r_ignores_non_playable_track");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp =
+        cmrt_history::test_support::unique_test_dir("handle_normal_r_ignores_non_playable_track");
     std::fs::create_dir_all(&tmp).unwrap();
     let patch_path = tmp.join("Pad 1.fxp");
     std::fs::write(&patch_path, b"dummy").unwrap();

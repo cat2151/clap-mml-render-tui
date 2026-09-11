@@ -1,6 +1,6 @@
 use std::{
     collections::HashSet,
-    sync::Arc,
+    sync::{Arc, Mutex, MutexGuard, OnceLock},
     thread,
     time::{Duration, UNIX_EPOCH},
 };
@@ -11,6 +11,20 @@ use super::{
     append_log_line_to_path, append_panic_report_to_path, format_log_file_line_at,
     load_log_lines_from_path, log_file_lock, strip_log_file_timestamp_prefix,
 };
+
+/// ログファイルを触るテストどうしをプロセス内で直列化する。
+///
+/// `super::log_file_lock()` はプロセスに1つのグローバル mutex で、
+/// `a_panic_while_the_main_log_is_locked_uses_the_fallback_file` はそれを意図的に握る。
+/// 握っている間に別テストの `append_panic_report_to_path` が走ると `try_lock` に失敗し、
+/// `log.txt` ではなく `panic.log` へ退避してしまう（それが本来の設計）。
+/// テスト側で直列化して、この巻き込みを起こさせない。
+fn serial_guard() -> MutexGuard<'static, ()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 fn split_log_file_line(line: &str) -> (&str, &str) {
     let (timestamp, message) = line.split_once("] ").expect("timestamp prefix");
@@ -83,6 +97,7 @@ fn strip_log_file_timestamp_prefix_returns_original_message() {
 
 #[test]
 fn append_log_line_to_path_keeps_concurrent_lines_intact() {
+    let _serial = serial_guard();
     let tmp = std::env::temp_dir().join(format!(
         "cmrt_test_logging_{}_{}",
         std::process::id(),
@@ -146,6 +161,7 @@ fn append_log_line_to_path_keeps_concurrent_lines_intact() {
 
 #[test]
 fn a_multiline_panic_report_flushes_each_line_with_a_timestamp() {
+    let _serial = serial_guard();
     let tmp = std::env::temp_dir().join(format!(
         "cmrt_test_panic_logging_{}_{}",
         std::process::id(),
@@ -169,6 +185,7 @@ fn a_multiline_panic_report_flushes_each_line_with_a_timestamp() {
 
 #[test]
 fn a_panic_while_the_main_log_is_locked_uses_the_fallback_file() {
+    let _serial = serial_guard();
     let tmp = std::env::temp_dir().join(format!(
         "cmrt_test_panic_log_fallback_{}_{}",
         std::process::id(),
@@ -178,13 +195,24 @@ fn a_panic_while_the_main_log_is_locked_uses_the_fallback_file() {
             .as_nanos()
     ));
     let path = tmp.join("log").join("log.txt");
-    let _guard = log_file_lock().lock().unwrap();
-
-    append_panic_report_to_path(&path, "panic: lock unavailable").unwrap();
-
-    assert!(!path.exists());
     let fallback = path.with_file_name("panic.log");
-    let line = std::fs::read_to_string(fallback).unwrap();
+
+    // グローバル mutex を握ったまま assert すると、落ちたときに mutex が毒され、
+    // 無関係なテストが `log file lock should not be poisoned` で連鎖して落ちる。
+    // guard の中では観測だけして、離してから assert する。
+    let (appended, main_log_exists, fallback_text) = {
+        let _guard = log_file_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let appended = append_panic_report_to_path(&path, "panic: lock unavailable");
+        let main_log_exists = path.exists();
+        let fallback_text = std::fs::read_to_string(&fallback);
+        (appended, main_log_exists, fallback_text)
+    };
+
+    appended.unwrap();
+    assert!(!main_log_exists);
+    let line = fallback_text.unwrap();
     assert_eq!(
         split_log_file_line(line.trim_end()).1,
         "panic: lock unavailable"
@@ -194,6 +222,7 @@ fn a_panic_while_the_main_log_is_locked_uses_the_fallback_file() {
 
 #[test]
 fn load_log_lines_from_path_keeps_probe_file_out_of_main_log_buffer() {
+    let _serial = serial_guard();
     let tmp = std::env::temp_dir().join(format!(
         "cmrt_test_native_probe_logging_{}_{}",
         std::process::id(),

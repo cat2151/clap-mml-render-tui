@@ -5,8 +5,7 @@ use super::*;
 /// `set_local_dir_envs` はプロセス全体の env lock を取るので、
 /// このテスト同士および他 crate のテストと直列化される。
 fn with_temp_history<T>(name: &str, body: impl FnOnce() -> T) -> T {
-    let tmp = std::env::temp_dir().join(format!("cmrt_test_chord_chart_{name}"));
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir(&format!("chord_chart_{name}"));
     let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
     let result = body();
     std::fs::remove_dir_all(&tmp).ok();

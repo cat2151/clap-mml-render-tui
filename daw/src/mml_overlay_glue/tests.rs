@@ -15,6 +15,19 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use super::super::{DawApp, DawMode, DawPlayState};
 use crate::input::tests::build_test_app;
 
+// **overlay の commit 経路は `invalidate_cell` を通り、キャッシュ WAV
+// `track{行}_meas{小節}.wav` を実際に消す**（`daw/src/cache.rs:87`）。
+// パスは**プロセス全体の環境変数 `CMRT_BASE_DIR`** から解決されるので、
+// guard を取らずに走らせると、**並列に走っている「guard を取っている」テストの
+// temp の中の WAV を消す**。
+//
+// そこでこのモジュールでは **`#[test]` の 1 行目で必ず
+// `crate::input::tests::temp_local_dirs("mml_overlay")` を握る**。
+//
+// **ヘルパ関数の中で握らないこと。** `env_lock()` は再入不可なので、
+// 1 つのテストが 2 回握ると**デッドロックする**。
+// **1 テスト = 1 guard、置き場所はテスト関数の先頭**が唯一の安全な形。
+
 mod chord_input;
 mod chord_transfer;
 mod commit;
@@ -38,8 +51,7 @@ fn log_lines(app: &DawApp) -> Vec<String> {
 
 /// 走査経路と snapshot 経路を区別するための、実在しない patch dir を指す Config。
 fn point_config_at_missing_patch_dir(app: &mut DawApp) {
-    let missing = std::env::temp_dir().join("cmrt_test_daw_mml_overlay_missing_dir_absent");
-    std::fs::remove_dir_all(&missing).ok();
+    let missing = cmrt_history::test_support::unique_test_dir("daw_mml_overlay_missing_dir_absent");
     app.cfg = Arc::new(Config {
         patches_dirs: Some(vec![missing.to_string_lossy().into_owned()]),
         ..(*app.cfg).clone()
@@ -61,6 +73,7 @@ fn snapshot_pairs() -> Vec<(String, String)> {
 
 #[test]
 fn ctrl_p_opens_the_overlay_with_the_current_cell_in_a_single_line_input() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
@@ -79,6 +92,7 @@ fn ctrl_p_opens_the_overlay_with_the_current_cell_in_a_single_line_input() {
 
 #[test]
 fn a_key_other_than_ctrl_p_does_not_open_the_overlay() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_measure = 1;
 
@@ -91,6 +105,7 @@ fn a_key_other_than_ctrl_p_does_not_open_the_overlay() {
 
 #[test]
 fn the_init_column_does_not_open_the_overlay() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 0;
@@ -109,6 +124,7 @@ fn the_init_column_does_not_open_the_overlay() {
 
 #[test]
 fn a_mode_other_than_normal_does_not_open_the_overlay() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_measure = 1;
     app.mode = DawMode::Insert;
@@ -121,6 +137,7 @@ fn a_mode_other_than_normal_does_not_open_the_overlay() {
 
 #[test]
 fn opening_the_overlay_stops_the_daw_playback() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_measure = 1;
     *app.playback.play_state.lock().unwrap() = DawPlayState::Playing;
@@ -135,6 +152,7 @@ fn opening_the_overlay_stops_the_daw_playback() {
 
 #[test]
 fn the_overlay_opens_with_the_patch_of_the_cursor_track() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 3;
     app.editor.cursor_measure = 1;
@@ -148,6 +166,7 @@ fn the_overlay_opens_with_the_patch_of_the_cursor_track() {
 
 #[test]
 fn esc_closes_the_overlay_and_returns_to_normal() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_measure = 1;
     assert!(app.try_open_mml_overlay(ctrl('p')));
@@ -160,6 +179,7 @@ fn esc_closes_the_overlay_and_returns_to_normal() {
 
 #[test]
 fn the_daw_keys_still_work_after_closing_the_overlay() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
@@ -175,6 +195,7 @@ fn the_daw_keys_still_work_after_closing_the_overlay() {
 /// 確定した中身とカーソルの動きは `commit` サブモジュールが見る。
 #[test]
 fn enter_never_inserts_a_newline() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_measure = 1;
     app.editor.data[2][1] = "cde".to_string();
@@ -190,6 +211,7 @@ fn enter_never_inserts_a_newline() {
 
 #[test]
 fn typing_edits_the_line_and_asks_for_a_note_even_without_a_sender() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     // sender が None（play server 無し）でも入力欄として成立すること。
     // 実際に音が出るかは play server が要るので §6 の確認リストへ回す。
     let (mut app, _cache_rx) = build_test_app();
@@ -211,6 +233,7 @@ fn typing_edits_the_line_and_asks_for_a_note_even_without_a_sender() {
 
 #[test]
 fn ctrl_t_opens_the_patch_select_from_the_injected_snapshot_without_scanning() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     // 一覧は Stage 1 で注入した snapshot 由来。走査できない Config でも開けること。
     let (mut app, _cache_rx) = build_test_app();
     point_config_at_missing_patch_dir(&mut app);
@@ -230,6 +253,7 @@ fn ctrl_t_opens_the_patch_select_from_the_injected_snapshot_without_scanning() {
 
 #[test]
 fn ctrl_t_waits_for_the_catalog_while_it_is_still_loading() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
@@ -256,6 +280,7 @@ fn ctrl_t_waits_for_the_catalog_while_it_is_still_loading() {
 /// chord 行も同じ1行overlayで編集する。言語だけをChordへ切り替える。
 #[test]
 fn the_chord_row_opens_the_overlay_in_chord_mode() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = crate::CHORD_TRACK;
     app.editor.cursor_measure = 1;

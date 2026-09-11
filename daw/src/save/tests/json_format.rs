@@ -137,8 +137,7 @@ fn required_grid_size_uses_largest_saved_track_and_measure() {
 
 #[test]
 fn load_saved_grid_size_reads_saved_session_from_history_dir() {
-    let tmp = std::env::temp_dir().join("cmrt_test_daw_load_saved_grid_size");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("daw_load_saved_grid_size");
     std::fs::create_dir_all(&tmp).unwrap();
     let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
     let path = cmrt_history::daw_file_path().unwrap();

@@ -28,6 +28,7 @@ fn the_toggle_asks_to_play_the_row_under_the_cursor_while_silent() {
             PreviewRequest {
                 name: "A".to_string(),
                 degrees: "I-V-VIm-IV".to_string(),
+                chord_index: None,
             },
             "{press:?} で鳴る要求が出ること"
         );
@@ -84,7 +85,7 @@ fn pressing_the_toggle_twice_while_silent_asks_twice() {
 #[test]
 fn the_toggle_works_in_the_arrangement_pane_too() {
     let mut screen = entered();
-    screen.handle_key_event(key(KeyCode::Char('l')));
+    screen.handle_key_event(key(KeyCode::Tab));
     screen.handle_key_event(key(KeyCode::Char('j')));
     screen.take_preview();
 

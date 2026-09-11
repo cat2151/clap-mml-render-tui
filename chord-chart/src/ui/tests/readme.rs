@@ -61,3 +61,29 @@ fn the_readme_no_longer_says_the_screen_is_silent() {
         "README が古いままになっている"
     );
 }
+
+/// キーの役目が変わったところを、README のキー表の**行ごと**名指しで固定する。
+///
+/// `h` `l` は pane 移動から行内の chord 移動へ移り、pane 移動は `Tab` になった。
+/// キーの綴り（`h` `l`）は両方の役目に出てくるので、**綴りの有無を見ても気づけない**。
+/// 動作の側を名指しする。
+///
+/// なお help overlay 側の集合との自動突き合わせはしていない。README は
+/// `` `Alt+↑` `Alt+↓` ``、実装は `Alt+↑/↓` のように**同じキーを別の綴りで書く**ので、
+/// 正規化を通しても等値にならず、例外表を書くほうが壊れやすくなる。
+#[test]
+fn the_readme_key_table_gives_h_and_l_their_new_job() {
+    assert!(
+        README.contains("| `Tab` | 共通 | pane移動"),
+        "README のキー表に `Tab` の pane 移動が無い"
+    );
+    assert!(
+        README.contains("| `h` `l` `←` `→` | 共通 | 行内のchord移動"),
+        "README のキー表に `h` `l` の chord 移動が無い"
+    );
+    // 古い役目が 1 行でも残っていると、押しても pane が動かないキーを教える README になる。
+    assert!(
+        !README.contains("pane移動（`h`"),
+        "README がまだ `h` `l` を pane 移動として教えている"
+    );
+}

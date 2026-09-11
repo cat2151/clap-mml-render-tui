@@ -47,6 +47,7 @@ fn a_cursor_move_raises_a_request_and_the_glue_consumes_it() {
         Some(PreviewRequest {
             name: "B".to_string(),
             degrees: "IIm-V-I-VIm".to_string(),
+            chord_index: None,
         }),
         "画面単体なら要求が立つこと（対照）"
     );
@@ -79,11 +80,12 @@ fn the_log_line_names_the_section_and_the_degrees() {
     let request = PreviewRequest {
         name: "A".to_string(),
         degrees: "I-V-VIm-IV".to_string(),
+        chord_index: None,
     };
 
     assert_eq!(
         preview_request_log_line(&request),
-        "chord-chart: event=preview-request name=\"A\" degrees=\"I-V-VIm-IV\""
+        "chord-chart: event=preview-request name=\"A\" degrees=\"I-V-VIm-IV\" chord=all"
     );
 }
 
@@ -93,7 +95,7 @@ fn the_log_line_names_the_section_and_the_degrees() {
 fn a_silent_request_is_logged_with_empty_fields() {
     assert_eq!(
         preview_request_log_line(&PreviewRequest::silent()),
-        "chord-chart: event=preview-request name=\"\" degrees=\"\""
+        "chord-chart: event=preview-request name=\"\" degrees=\"\" chord=all"
     );
 }
 
@@ -123,6 +125,7 @@ fn the_line_the_glue_sends_really_plays_as_a_chord_progression() {
     let preview = app.chord_chart_preview(&PreviewRequest {
         name: "A".to_string(),
         degrees: "I-V-VIm-IV".to_string(),
+        chord_index: None,
     });
 
     assert_eq!(
@@ -194,6 +197,7 @@ fn an_unreadable_progression_falls_silent_and_says_why() {
     let preview = app.chord_chart_preview(&PreviewRequest {
         name: "B".to_string(),
         degrees: "zzz".to_string(),
+        chord_index: None,
     });
     assert!(preview.program.is_silent(), "読めない行は無音を送ること");
 }
@@ -242,7 +246,7 @@ fn a_missing_sender_is_not_an_error() {
     );
 
     app.handle_chord_chart_key_event(plain(KeyCode::Char('j')));
-    app.handle_chord_chart_key_event(plain(KeyCode::Char('l')));
+    app.handle_chord_chart_key_event(plain(KeyCode::Tab));
     app.handle_chord_chart_key_event(plain(KeyCode::Char('k')));
 
     assert_eq!(app.chord_chart.error, None);
@@ -263,19 +267,20 @@ fn the_play_log_line_names_the_line_and_how_it_was_read() {
     let played = app.chord_chart_preview(&PreviewRequest {
         name: "A".to_string(),
         degrees: "I-V-VIm-IV".to_string(),
+        chord_index: None,
     });
     assert_eq!(
         preview_play_log_line(&played),
         concat!(
             "chord-chart: event=preview-play line=\"Key=C I-V-VIm-IV\"",
-            " result=played from_chord=true notes=12"
+            " chord=all result=played from_chord=true notes=12"
         )
     );
 
     let silent = app.chord_chart_preview(&PreviewRequest::silent());
     assert_eq!(
         preview_play_log_line(&silent),
-        "chord-chart: event=preview-play line=\"\" result=silent"
+        "chord-chart: event=preview-play line=\"\" chord=all result=silent"
     );
 
     let mut app = app;
@@ -283,12 +288,13 @@ fn the_play_log_line_names_the_line_and_how_it_was_read() {
     let failed = app.chord_chart_preview(&PreviewRequest {
         name: "B".to_string(),
         degrees: "zzz".to_string(),
+        chord_index: None,
     });
     assert_eq!(
         preview_play_log_line(&failed),
         concat!(
             "chord-chart: event=preview-play line=\"zzz\"",
-            " result=error detail=\"MMLに発音ノートがありません\""
+            " chord=all result=error detail=\"MMLに発音ノートがありません\""
         )
     );
 }
@@ -331,6 +337,7 @@ fn the_preview_really_sounds_the_progression_in_the_key_of_the_prefix() {
     let request = PreviewRequest {
         name: "A".to_string(),
         degrees: "I-V-VIm-IV".to_string(),
+        chord_index: None,
     };
 
     let in_c = chord_onsets(&app.chord_chart_preview(&request));
@@ -358,7 +365,9 @@ fn the_preview_really_sounds_the_progression_in_the_key_of_the_prefix() {
 }
 
 /// note on を時刻ごとにまとめて `(秒, 音高)` にする。和音は同じ時刻に固まる。
-fn chord_onsets(preview: &crate::tui::chord_chart_glue::ChordChartPreview) -> Vec<(f64, Vec<u8>)> {
+pub(super) fn chord_onsets(
+    preview: &crate::tui::chord_chart_glue::ChordChartPreview,
+) -> Vec<(f64, Vec<u8>)> {
     let mut onsets: Vec<(f64, Vec<u8>)> = Vec::new();
     for event in preview.program.events() {
         if event.message[0] & 0xf0 != 0x90 {

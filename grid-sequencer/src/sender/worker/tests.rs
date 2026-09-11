@@ -8,7 +8,7 @@ use std::{
     collections::HashMap,
     sync::{
         atomic::{AtomicU64, Ordering},
-        mpsc, Arc, Condvar, Mutex,
+        mpsc, Arc, Condvar, Mutex, MutexGuard,
     },
     thread::JoinHandle,
     time::{Duration, Instant},
@@ -156,7 +156,7 @@ fn stop_hands_a_pending_preload_back_without_waiting_for_the_load() {
 #[test]
 fn a_rejected_preload_is_reported_as_a_failure_of_the_current_cycle() {
     let loop_under_test = LoopUnderTest::start();
-    loop_under_test.observed.state.lock().unwrap().begin_error =
+    loop_under_test.observed.lock().begin_error =
         Some("standby patch load 7 is still in flight".to_string());
     loop_under_test.preload(1, 6);
     loop_under_test
@@ -273,8 +273,18 @@ struct Observed {
 }
 
 impl Observed {
+    /// 毒された lock も `into_inner()` で拾う。ここで `unwrap()` すると、
+    /// **先に落ちた誰か**の巻き添えで別スレッドが二次的に落ち、
+    /// 失敗メッセージが 2 本になって原因が読みにくくなる。
+    /// 手本は `history/src/test_support.rs` の `env_lock()`。
+    fn lock(&self) -> MutexGuard<'_, State> {
+        self.state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     fn snapshot(&self) -> State {
-        let state = self.state.lock().unwrap();
+        let state = self.lock();
         State {
             sends: state.sends,
             begun: state.begun.clone(),
@@ -289,25 +299,27 @@ impl Observed {
 
     fn wait_for(&self, mut condition: impl FnMut(&State) -> bool) {
         let deadline = Instant::now() + WAIT_LIMIT;
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.lock();
         while !condition(&state) {
             let remaining = deadline.saturating_duration_since(Instant::now());
-            assert!(
-                !remaining.is_zero(),
-                "コマンドループが期待した状態へ進まなかった（塞がっている疑い）"
-            );
-            let (next, _) = self.changed.wait_timeout(state, remaining).unwrap();
+            if remaining.is_zero() {
+                // guard を握ったまま panic すると mutex が毒され、ワーカースレッドの
+                // `lock()` が PoisonError で連鎖して落ちる。原因のメッセージが
+                // 二次被害に埋もれるので、**必ず guard を離してから** panic する。
+                drop(state);
+                panic!("コマンドループが期待した状態へ進まなかった（塞がっている疑い）");
+            }
+            let (next, _) = self
+                .changed
+                .wait_timeout(state, remaining)
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             state = next;
         }
     }
 
     /// ロードが終わったことにする。ここを呼ぶまで完了通知は返らない。
     fn release(&self, request_id: u32, result: Result<(), String>) {
-        self.state
-            .lock()
-            .unwrap()
-            .released
-            .insert(request_id, result);
+        self.lock().released.insert(request_id, result);
         self.changed.notify_all();
     }
 }
@@ -325,7 +337,7 @@ impl GridSenderBackend for FakeBackend {
         _queued_at: Instant,
         _pump_lateness: Duration,
     ) {
-        self.observed.state.lock().unwrap().sends += 1;
+        self.observed.lock().sends += 1;
         self.observed.changed.notify_all();
     }
 
@@ -334,7 +346,7 @@ impl GridSenderBackend for FakeBackend {
         _instance_id: u8,
         _patch: Option<&str>,
     ) -> anyhow::Result<Self::Standby> {
-        let mut state = self.observed.state.lock().unwrap();
+        let mut state = self.observed.lock();
         if let Some(error) = state.begin_error.clone() {
             return Err(anyhow::anyhow!(error));
         }
@@ -347,7 +359,7 @@ impl GridSenderBackend for FakeBackend {
     }
 
     fn poll_standby(&mut self, request: &mut Self::Standby) -> anyhow::Result<Option<()>> {
-        match self.observed.state.lock().unwrap().released.get(request) {
+        match self.observed.lock().released.get(request) {
             None => Ok(None),
             Some(Ok(())) => Ok(Some(())),
             Some(Err(error)) => Err(anyhow::anyhow!(error.clone())),
@@ -355,7 +367,7 @@ impl GridSenderBackend for FakeBackend {
     }
 
     fn abandon_standby(&mut self, request: Self::Standby) {
-        self.observed.state.lock().unwrap().abandoned.push(request);
+        self.observed.lock().abandoned.push(request);
         self.observed.changed.notify_all();
     }
 
@@ -364,17 +376,12 @@ impl GridSenderBackend for FakeBackend {
     }
 
     fn record_preload_outcome(&mut self, outcome: PreloadOutcome) {
-        self.observed
-            .state
-            .lock()
-            .unwrap()
-            .outcomes
-            .push(RecordedOutcome {
-                instance_id: outcome.instance_id,
-                request_id: outcome.request_id,
-                error: outcome.error,
-                stale: outcome.stale,
-            });
+        self.observed.lock().outcomes.push(RecordedOutcome {
+            instance_id: outcome.instance_id,
+            request_id: outcome.request_id,
+            error: outcome.error,
+            stale: outcome.stale,
+        });
         self.observed.changed.notify_all();
     }
 
@@ -392,7 +399,7 @@ impl GridSenderBackend for FakeBackend {
             | GridMidiCommand::Preload { .. }
             | GridMidiCommand::Shutdown => unreachable!("the loop handles these itself"),
         };
-        self.observed.state.lock().unwrap().slow_commands.push(name);
+        self.observed.lock().slow_commands.push(name);
         self.observed.changed.notify_all();
     }
 

@@ -9,6 +9,7 @@ mod arrangement;
 mod auto_voicing;
 mod cursor;
 mod progression;
+mod source_ranges;
 mod timed;
 
 pub use arrangement::{bass_octave_note, rotated_chord_voice, snap_to_chord};
@@ -18,6 +19,7 @@ pub use progression::{
     chord_notes, parse_chord_progression, ChordProgression, ChordProgressionCatalog,
     ChordProgressionPick, ParsedChordProgression, KEYS,
 };
+pub use source_ranges::chord_source_ranges;
 pub use timed::{
     chord_cell_input, parses_as_chord, resolve_chord_or_mml, timed_chord_cell_performance,
     timed_performance, ResolvedMml, TimedPerformance,

@@ -19,6 +19,7 @@ use cmrt_tui_core::{
 use crate::ChordChartScreen;
 
 mod arrangement;
+mod degrees;
 mod header;
 mod help;
 mod line_input;

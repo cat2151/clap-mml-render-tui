@@ -26,6 +26,7 @@ fn open_overlay_on_a_chord_cell(app: &mut DawApp) {
 
 #[test]
 fn draw_shows_the_input_box_with_the_cell_mml_and_the_track_patch() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let mut app = build_test_app();
     open_overlay_on_a_playable_cell(&mut app);
 
@@ -48,6 +49,7 @@ fn draw_shows_the_input_box_with_the_cell_mml_and_the_track_patch() {
 
 #[test]
 fn the_footer_switches_to_the_overlay_keys() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let mut app = build_test_app();
     let normal_footer = normalized_screen(&app, 240, 24);
     assert!(
@@ -70,6 +72,7 @@ fn the_footer_switches_to_the_overlay_keys() {
 /// これが無いと 1 行モードの `Enter` が改行に見える。
 #[test]
 fn the_overlay_footer_explains_the_two_commit_keys() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let mut app = build_test_app();
     open_overlay_on_a_playable_cell(&mut app);
 
@@ -87,6 +90,7 @@ fn the_overlay_footer_explains_the_two_commit_keys() {
 
 #[test]
 fn chord_input_shows_its_language_preview_track_and_patch() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let mut app = build_test_app();
     open_overlay_on_a_chord_cell(&mut app);
 
@@ -117,6 +121,7 @@ fn chord_input_shows_its_language_preview_track_and_patch() {
 /// `?` の help は NORMAL から開く。オーバーレイの操作もそこへ載せる。
 #[test]
 fn the_help_page_lists_the_overlay_keys() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let mut app = build_test_app();
     app.mode = DawMode::Help;
 
@@ -151,6 +156,7 @@ fn normalized_screen(app: &DawApp, width: u16, height: u16) -> String {
 
 #[test]
 fn ctrl_o_lists_the_phrase_history_of_the_track_patch() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let mut app = build_test_app();
     app.patch_phrase_store.patches.insert(
         "Bass/Overlay Bass.fxp".to_string(),
@@ -176,6 +182,7 @@ fn ctrl_o_lists_the_phrase_history_of_the_track_patch() {
 
 #[test]
 fn ctrl_t_lists_the_injected_catalog_patches() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let mut app = build_test_app();
     *app.patch_load.lock().unwrap() = cmrt_tui_core::patch_load::PatchLoadState::ready(vec![
         (
@@ -202,6 +209,7 @@ fn ctrl_t_lists_the_injected_catalog_patches() {
 /// 「そのセルが実際に鳴る音色」と表示が一致していることを、描画バッファで確かめる。
 #[test]
 fn confirming_a_patch_updates_the_init_column_of_the_grid() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let mut app = build_test_app();
     *app.patch_load.lock().unwrap() = cmrt_tui_core::patch_load::PatchLoadState::ready(vec![
         (

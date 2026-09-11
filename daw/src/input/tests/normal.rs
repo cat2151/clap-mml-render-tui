@@ -3,6 +3,7 @@ use super::*;
 mod ab_repeat;
 mod chord_row_jump;
 mod chord_wizard;
+mod chord_wizard_key_g;
 mod cursor_preview;
 mod generate;
 mod mixer_entry;

@@ -27,7 +27,7 @@ fn handle_history_overlay_question_mark_opens_help_and_esc_returns_to_history_ov
 
 #[test]
 fn handle_history_overlay_n_p_t_switch_to_corresponding_overlays() {
-    let tmp = TempDirGuard::new("cmrt_test_handle_history_overlay_n_p_t");
+    let tmp = TempDirGuard::new("handle_history_overlay_n_p_t");
     std::fs::create_dir_all(tmp.path().join("Pads")).unwrap();
     std::fs::create_dir_all(tmp.path().join("Bass")).unwrap();
     std::fs::write(tmp.path().join("Pads").join("Pad 1.fxp"), b"dummy").unwrap();

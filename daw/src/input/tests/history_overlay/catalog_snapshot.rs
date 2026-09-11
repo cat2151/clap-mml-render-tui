@@ -14,8 +14,8 @@ fn log_lines(app: &DawApp) -> Vec<String> {
 /// 解決できたこと自体が「snapshot を見た」証拠になる（走査経路なら 0 件で解決不能）。
 #[test]
 fn history_overlay_resolves_patch_name_from_the_injected_snapshot() {
-    let missing = std::env::temp_dir().join("cmrt_test_daw_history_missing_patch_dir_absent");
-    std::fs::remove_dir_all(&missing).ok();
+    let missing =
+        cmrt_history::test_support::unique_test_dir("daw_history_missing_patch_dir_absent");
 
     let (mut app, _cache_rx) = build_test_app();
     app.cfg = Arc::new(Config {

@@ -13,6 +13,7 @@ fn moving_the_cursor_down_asks_to_play_the_new_row() {
         PreviewRequest {
             name: "B".to_string(),
             degrees: "IIm-V-I-VIm".to_string(),
+            chord_index: None,
         }
     );
 }
@@ -62,13 +63,13 @@ fn paging_against_the_end_asks_for_nothing() {
     assert_eq!(screen.take_preview(), None);
 }
 
-/// `l` で右 pane へ移ったら、移った先の行が**参照している** section を鳴らす。
+/// `Tab` で右 pane へ移ったら、移った先の行が**参照している** section を鳴らす。
 /// 右 pane の行番号は左 pane の行番号ではない（1 行目の参照先は `A`）。
 #[test]
 fn moving_to_the_arrangement_pane_asks_for_the_referenced_section() {
     let mut screen = entered();
 
-    screen.handle_key_event(key(KeyCode::Char('l')));
+    screen.handle_key_event(key(KeyCode::Tab));
 
     assert_eq!(screen.focus, Pane::Arrangement);
     assert_eq!(
@@ -76,6 +77,7 @@ fn moving_to_the_arrangement_pane_asks_for_the_referenced_section() {
         PreviewRequest {
             name: "A".to_string(),
             degrees: "I-V-VIm-IV".to_string(),
+            chord_index: None,
         }
     );
 }
@@ -84,7 +86,7 @@ fn moving_to_the_arrangement_pane_asks_for_the_referenced_section() {
 #[test]
 fn the_arrangement_pane_follows_the_reference_not_the_row_number() {
     let mut screen = entered();
-    screen.handle_key_event(key(KeyCode::Char('l')));
+    screen.handle_key_event(key(KeyCode::Tab));
     screen.take_preview();
 
     screen.handle_key_event(key(KeyCode::Char('j')));
@@ -92,27 +94,17 @@ fn the_arrangement_pane_follows_the_reference_not_the_row_number() {
     assert_eq!(taken(&mut screen).name, "Sabi");
 }
 
-/// いる pane をもう一度指しても、カーソルはどこも動いていない。
-#[test]
-fn pointing_at_the_pane_already_focused_asks_for_nothing() {
-    let mut screen = entered();
-
-    screen.handle_key_event(key(KeyCode::Char('h')));
-
-    assert_eq!(screen.focus, Pane::Sections);
-    assert_eq!(screen.take_preview(), None);
-}
-
 /// 右から左へ戻ると、左のカーソル行を鳴らし直す（右で聴いていた音のままにしない）。
 #[test]
 fn moving_back_to_the_sections_pane_asks_for_the_row_it_left() {
     let mut screen = entered();
     screen.handle_key_event(key(KeyCode::Char('j')));
-    screen.handle_key_event(key(KeyCode::Char('l')));
+    screen.handle_key_event(key(KeyCode::Tab));
     screen.take_preview();
 
-    screen.handle_key_event(key(KeyCode::Char('h')));
+    screen.handle_key_event(key(KeyCode::Tab));
 
+    assert_eq!(screen.focus, Pane::Sections);
     assert_eq!(taken(&mut screen).name, "B");
 }
 
@@ -140,6 +132,7 @@ fn entering_after_the_initial_pick_asks_for_the_section_it_just_made() {
         PreviewRequest {
             name: "A".to_string(),
             degrees: "I-IV-V-I".to_string(),
+            chord_index: None,
         }
     );
 }
@@ -182,7 +175,7 @@ fn a_dangling_arrangement_row_asks_for_silence() {
     let ghost = song.issue_section_id();
     song.arrangement = vec![a, ghost];
     let mut screen = ChordChartScreen::new(song);
-    screen.handle_key_event(key(KeyCode::Char('l')));
+    screen.handle_key_event(key(KeyCode::Tab));
     screen.take_preview();
 
     screen.handle_key_event(key(KeyCode::Char('j')));
@@ -233,7 +226,7 @@ fn deleting_a_row_does_not_ask_for_a_preview() {
 #[test]
 fn inserting_into_the_arrangement_does_not_ask_for_a_preview() {
     let mut screen = entered();
-    screen.handle_key_event(key(KeyCode::Char('l')));
+    screen.handle_key_event(key(KeyCode::Tab));
     screen.take_preview();
 
     screen.handle_key_event(key(KeyCode::Char('2')));

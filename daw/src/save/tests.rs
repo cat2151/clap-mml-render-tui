@@ -91,7 +91,7 @@ fn build_test_app(tracks: usize, measures: usize) -> DawApp {
 #[test]
 fn ensure_cmrt_dir_is_idempotent() {
     // 複数回呼んでもエラーにならない（一時ディレクトリを使って設定ディレクトリを汚染しない）
-    let tmp = std::env::temp_dir().join("cmrt_test_daw_idempotent");
+    let tmp = cmrt_history::test_support::unique_test_dir("daw_idempotent");
     let _env_guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
     std::fs::remove_dir_all(&tmp).ok();
 
@@ -107,8 +107,7 @@ fn ensure_cmrt_dir_is_idempotent() {
 
 #[test]
 fn save_history_state_flushes_dirty_patch_phrase_store() {
-    let tmp = std::env::temp_dir().join("cmrt_test_daw_flush_patch_store");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("daw_flush_patch_store");
     std::fs::create_dir_all(&tmp).unwrap();
     let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);
 

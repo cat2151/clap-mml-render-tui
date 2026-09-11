@@ -145,7 +145,7 @@ fn gate_starts_after_slow_patch_prepare_and_keeps_the_full_note_length() {
     let gate = Duration::from_secs(2);
     let request_started = Instant::now();
 
-    assert!(voice.prepare(&sink, Some("slow.sfz")));
+    assert!(voice.prepare(&sink, Some("slow.sfz")).is_ok());
     assert!(voice.play_notes(&sink, &[note_on(60)], gate));
 
     assert!(request_started.elapsed() >= Duration::from_millis(40));
@@ -252,7 +252,7 @@ fn preparing_a_patch_stops_what_is_sounding() {
     voice.play_notes(&sink, &[note_on(60)], Duration::from_millis(250));
     sink.take();
 
-    voice.prepare(&sink, Some("lead.fxp"));
+    let _ = voice.prepare(&sink, Some("lead.fxp"));
 
     assert_eq!(
         sink.sent(),

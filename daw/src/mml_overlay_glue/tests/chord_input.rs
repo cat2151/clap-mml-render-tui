@@ -45,6 +45,7 @@ fn sent_pitches(action: MmlOverlayAction) -> Vec<u8> {
 
 #[test]
 fn chord_input_borrows_the_return_tracks_patch_and_generation_context() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (app, _cache_rx) = open_chord_overlay(Some(FIRST_GENERATED_TRACK));
 
     assert_eq!(app.mml_overlay.patch(), Some(PAD_PATCH));
@@ -59,6 +60,7 @@ fn chord_input_borrows_the_return_tracks_patch_and_generation_context() {
 
 #[test]
 fn typing_ii_previews_it_in_the_borrowed_tracks_key() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = open_chord_overlay(Some(FIRST_GENERATED_TRACK));
 
     app.mml_overlay.handle_key(plain('I'), Instant::now());
@@ -69,6 +71,7 @@ fn typing_ii_previews_it_in_the_borrowed_tracks_key() {
 
 #[test]
 fn preview_also_uses_the_borrowed_tracks_non_json_init_mml() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.data[CHORD_TRACK][0] = "key:G".to_string();
     app.editor.data[FIRST_GENERATED_TRACK][0] = format!("{}o4", generated_init(PAD_PATCH, "close"));
@@ -89,6 +92,7 @@ fn preview_also_uses_the_borrowed_tracks_non_json_init_mml() {
 
 #[test]
 fn enter_commits_to_the_chord_row_and_continues_with_the_next_measure() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = open_chord_overlay(Some(FIRST_GENERATED_TRACK));
 
     app.handle_mml_overlay_key_event(plain('I'));
@@ -106,6 +110,7 @@ fn enter_commits_to_the_chord_row_and_continues_with_the_next_measure() {
 
 #[test]
 fn ctrl_t_updates_the_borrowed_track_without_touching_chord_init_or_directive() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = open_chord_overlay(Some(FIRST_GENERATED_TRACK));
     *app.patch_load.lock().unwrap() = PatchLoadState::ready(
         [PAD_PATCH, BASS_PATCH]
@@ -134,6 +139,7 @@ fn ctrl_t_updates_the_borrowed_track_without_touching_chord_init_or_directive() 
 
 #[test]
 fn the_return_track_wins_when_several_tracks_generate_from_chords() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = open_chord_overlay(None);
     app.handle_mml_overlay_key_event(key(KeyCode::Esc));
     app.editor.data[SECOND_GENERATED_TRACK][0] = generated_init(BASS_PATCH, "drop2");
@@ -151,6 +157,7 @@ fn the_return_track_wins_when_several_tracks_generate_from_chords() {
 
 #[test]
 fn direct_navigation_falls_back_to_the_first_generated_track() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (app, _cache_rx) = open_chord_overlay(None);
 
     assert!(matches!(
@@ -161,6 +168,7 @@ fn direct_navigation_falls_back_to_the_first_generated_track() {
 
 #[test]
 fn no_generated_track_keeps_chord_editing_available_and_rejects_ctrl_t() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = CHORD_TRACK;
     app.editor.cursor_measure = 1;

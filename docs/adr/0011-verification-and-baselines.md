@@ -193,21 +193,12 @@ cargo test -p clap-mml-render-tui tui::voicing -- --include-ignored --nocapture
 
 | テスト | 場所 | 落ちたら |
 |---|---|---|
-| `free_keeps_every_patch_when_the_chord_categories_are_empty` | `patches/src/selection/tests.rs` | Dexed の Free 行（chord mode off の全行）が候補 0 件になる |
-| `the_builtin_dexed_profile_does_not_narrow_the_patch_roles` | `cmrt-runtime/src/plugin_profile/tests.rs` | Dexed に Surge のカテゴリ名が復活する |
-| `the_surge_profile_keeps_the_top_level_patch_categories` | 同上 | 既存 Surge ユーザーの挙動が変わる |
-| `a_profile_can_narrow_the_patch_roles_by_itself` | 同上 | `[plugins.*]` のカテゴリ指定が効かなくなる |
-| `a_profile_for_the_default_plugin_still_contributes_its_patch_roles` | `cmrt-runtime/src/core_config/tests.rs` | 既定 config 末尾の案内ブロックが嘘になる |
-| `a_prefixless_surge_name_reads_the_same_either_way` | `patches/src/layout/tests.rs` | 保存済みの patch 名がカテゴリを失う |
+| `abstract_metadata_keeps_prefixless_categories` | `patches/src/layout/tests.rs` | 保存済みの patch 名がカテゴリを失う |
 | `the_injected_log_sink_receives_the_line` | `daw/src/tests.rs` / `mml-overlay/src/tests.rs` | DAW / MML overlay のログがファイルに残らなくなる（表示は変わらないので気づきにくい） |
-| `legacy_cleanup_keeps_render_server_intermediate_files` | `core-lib/src/cache_dirs/tests.rs` | 旧キャッシュ掃除が render-server の中間ファイルを消す |
+| `legacy_migration_moves_namespaced_daw_cache_and_keeps_intermediate_files` | `core-lib/src/cache_dirs/tests.rs` | 旧キャッシュ掃除が render-server の中間ファイルを消す |
 | `every_row_role_appears_in_the_role_table` | `app/src/tui/patch_role_report/tests.rs` | `patch-roles` の `ALL_ROLES` 追加漏れを検出できなくなる |
 | `the_breakdown_counts_every_candidate_once_per_plugin` | 同上 | 候補数のプラグイン別内訳が過不足を出す（0 件のプラグインが消える） |
 | `a_vvp_patch_goes_to_vaporizer2_not_to_the_other_state_file_plugin` | `tui-core/src/patch_plugins/tests.rs` | `.vvp` が Surge の添字へ落ちる |
-| `the_vaporizer2_categories_are_not_the_surge_ones` | `cmrt-runtime/src/patch_roles/tests.rs` | 「Surge のぶんをコピーした」間違い |
-| `the_lowercased_form_lands_in_the_same_category` | `patches/src/vaporizer2/tests.rs` | 同じカテゴリが見出し 2 つに割れる（グループのキーは小文字側から作る） |
-| `every_installed_preset_lands_in_a_known_category` | 同上（`#[ignore]`） | コード表が実データから外れた（460 件） |
-| `an_unreadable_preset_stays_undecided` | `app/src/tui/voicing/vvp_voicings/tests.rs` | 読めない `.vvp` が poly へ倒れる（Mono が和音行へ出る） |
 | `each_patch_form_reports_its_own_plugin` | `app/src/render_mml/tests.rs` | オフライン経路の引き分けが壊れた |
 | `the_poly_check_notes_are_exactly_the_notes_of_the_chord` | 同上 | `--poly-check` の判定が黙って壊れる（和音と単音が 1 対 1 でなくなる） |
 | `a_patch_name_round_trips_through_the_mml_head_json` | 同上 | **アポストロフィ入りの音色名**で MML が壊れる |

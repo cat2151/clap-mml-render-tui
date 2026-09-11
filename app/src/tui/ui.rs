@@ -20,6 +20,10 @@ use cmrt_notepad::ui as notepad;
 use super::{PrimaryScreen, TuiApp};
 
 pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
+    let now = std::time::Instant::now();
+    // 「音が鳴るまで」の待ちの写しを作り直す。読むのは mutex 越しの値だけなので、
+    // ここで待たされることは無い（実際の待ちは sender の worker スレッドが持つ）。
+    app.sync_sound_startup_wait(now);
     cmrt_tui_core::ui::draw_frame_background(f);
     match app.active_screen {
         PrimaryScreen::Keyboard => {
@@ -54,6 +58,13 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
             .map(cmrt_mml_overlay::MmlOverlaySender::status)
             .unwrap_or_default();
         cmrt_mml_overlay::ui::draw_with_status(&app.mml_overlay, &sender_status, f);
+    }
+    // 音が鳴るまでの待ち（chord chart の preview など、共有 sender を通る経路）。
+    // MML オーバーレイが開いているあいだは出さない（あちらが自前の loading 表示を持つ）。
+    if !app.mml_overlay.is_open() {
+        if let Some(wait) = app.sound_startup_wait {
+            super::sound_startup_overlay::draw(f, &wait, now);
+        }
     }
     // 通常運転ではない play server を掴んでいるときだけ右上に出る。DAW 画面は
     // 自前の描画ループを持つので、あちらでも同じものを呼んでいる（ADR 0017）。

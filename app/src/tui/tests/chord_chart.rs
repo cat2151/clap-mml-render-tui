@@ -116,7 +116,7 @@ fn keys_reach_the_screen_through_the_glue() {
     app.handle_chord_chart_key_event(plain(KeyCode::Char('j')));
     assert_eq!(app.chord_chart.clamped_section_cursor(), 1);
 
-    app.handle_chord_chart_key_event(plain(KeyCode::Char('l')));
+    app.handle_chord_chart_key_event(plain(KeyCode::Tab));
     assert_eq!(app.chord_chart.focus, cmrt_chord_chart::Pane::Arrangement);
 
     app.handle_chord_chart_key_event(plain(KeyCode::Char('?')));

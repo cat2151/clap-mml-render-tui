@@ -1,26 +1,40 @@
 //! カーソルと pane フォーカスの移動。`q` もここ（どちらの pane からでも同じ）。
+//!
+//! pane 移動は `Tab` のトグル。`h` / `l` は行内の chord 移動なので、
+//! そちらは `screen/chord_cursor/tests.rs` が見る。
 
 use super::*;
 
-/// `h` / `l` は左右そのもの（トグルではない）。同じキーを 2 回押しても戻らない。
+/// `Tab` は 2 pane のトグル。押すたびに行き先が入れ替わる。
 #[test]
-fn h_and_l_move_the_focus_to_the_named_pane() {
+fn tab_toggles_the_focus_between_the_two_panes() {
     let mut screen = three_section_screen();
 
     assert_eq!(
-        screen.handle_key_event(key(KeyCode::Char('l'))),
+        screen.handle_key_event(key(KeyCode::Tab)),
         ChordChartAction::Continue
     );
     assert_eq!(screen.focus, Pane::Arrangement);
 
-    screen.handle_key_event(key(KeyCode::Char('l')));
+    screen.handle_key_event(key(KeyCode::Tab));
+    assert_eq!(screen.focus, Pane::Sections);
+
+    screen.handle_key_event(key(KeyCode::Tab));
     assert_eq!(screen.focus, Pane::Arrangement);
+}
 
-    screen.handle_key_event(key(KeyCode::Char('h')));
+/// `h` / `l` は pane を動かさない（行内の chord 移動へ役目が変わった）。
+#[test]
+fn h_and_l_no_longer_move_the_focus() {
+    let mut screen = three_section_screen();
+
+    screen.handle_key_event(key(KeyCode::Char('l')));
+    screen.handle_key_event(key(KeyCode::Char('l')));
     assert_eq!(screen.focus, Pane::Sections);
 
+    screen.handle_key_event(key(KeyCode::Tab));
     screen.handle_key_event(key(KeyCode::Char('h')));
-    assert_eq!(screen.focus, Pane::Sections);
+    assert_eq!(screen.focus, Pane::Arrangement);
 }
 
 /// `q` はどちらの pane からでもアプリ終了。曲は変えない。
@@ -71,7 +85,7 @@ fn the_page_keys_move_ten_rows_and_stop_at_the_ends() {
 fn the_page_keys_follow_the_focused_pane_only() {
     let mut screen = twenty_five_section_screen();
 
-    screen.handle_key_event(key(KeyCode::Char('l')));
+    screen.handle_key_event(key(KeyCode::Tab));
     screen.handle_key_event(key(KeyCode::PageDown));
 
     assert_eq!(screen.clamped_arrangement_cursor(), 10);
@@ -100,7 +114,7 @@ fn j_and_k_move_the_cursor_of_the_focused_pane_only() {
     assert_eq!(screen.clamped_section_cursor(), 1);
     assert_eq!(screen.clamped_arrangement_cursor(), 0);
 
-    screen.handle_key_event(key(KeyCode::Char('l')));
+    screen.handle_key_event(key(KeyCode::Tab));
     screen.handle_key_event(key(KeyCode::Char('j')));
     assert_eq!(screen.clamped_arrangement_cursor(), 1);
     assert_eq!(screen.clamped_section_cursor(), 1);
@@ -147,7 +161,7 @@ fn moving_the_cursor_in_an_empty_pane_does_nothing() {
     let mut screen = ChordChartScreen::new(Song::empty());
 
     screen.handle_key_event(key(KeyCode::Char('j')));
-    screen.handle_key_event(key(KeyCode::Char('l')));
+    screen.handle_key_event(key(KeyCode::Tab));
     screen.handle_key_event(key(KeyCode::Char('j')));
 
     assert_eq!(screen.section_cursor, 0);

@@ -2,8 +2,7 @@ use super::*;
 
 #[test]
 fn presets_round_trip_as_structured_json() {
-    let tmp = std::env::temp_dir().join("cmrt_test_mml_patch_filter_presets");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("mml_patch_filter_presets");
     let _env_guard = crate::test_support::set_local_dir_envs(&tmp);
     let presets = vec![
         ("lead".to_string(), r"\bviolin".to_string()),
@@ -24,8 +23,7 @@ fn presets_round_trip_as_structured_json() {
 
 #[test]
 fn load_ignores_a_malformed_file() {
-    let tmp = std::env::temp_dir().join("cmrt_test_bad_mml_patch_filter_presets");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("bad_mml_patch_filter_presets");
     let _env_guard = crate::test_support::set_local_dir_envs(&tmp);
     let path = crate::paths::mml_patch_filter_presets_path().unwrap();
     std::fs::write(path, "not json").unwrap();
@@ -36,8 +34,7 @@ fn load_ignores_a_malformed_file() {
 
 #[test]
 fn save_trims_and_deduplicates_entries() {
-    let tmp = std::env::temp_dir().join("cmrt_test_normalized_mml_patch_filter_presets");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("normalized_mml_patch_filter_presets");
     let _env_guard = crate::test_support::set_local_dir_envs(&tmp);
 
     save_mml_patch_filter_presets(&[

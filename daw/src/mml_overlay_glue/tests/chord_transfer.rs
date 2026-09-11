@@ -27,6 +27,7 @@ fn type_a_chord(app: &mut DawApp) {
 
 #[test]
 fn a_chord_notation_is_moved_to_the_chord_row_instead_of_the_cell() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = opened_on_a_playable_cell();
     type_a_chord(&mut app);
 
@@ -49,6 +50,7 @@ fn a_chord_notation_is_moved_to_the_chord_row_instead_of_the_cell() {
 /// 移送のあとの `C` は、移送元の track へ戻る（`C` と同じ跳び方を通しているため）。
 #[test]
 fn pressing_c_after_a_transfer_returns_to_the_track_it_came_from() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = FIRST_PLAYABLE_TRACK + 1;
     app.editor.cursor_measure = 1;
@@ -66,6 +68,7 @@ fn pressing_c_after_a_transfer_returns_to_the_track_it_came_from() {
 /// 「このまま MML として確定」を選べば、ダイアログが無かった場合と同じ確定。
 #[test]
 fn choosing_to_keep_it_as_mml_writes_the_cell_exactly_like_before() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = opened_on_a_playable_cell();
     type_a_chord(&mut app);
 
@@ -84,6 +87,7 @@ fn choosing_to_keep_it_as_mml_writes_the_cell_exactly_like_before() {
 /// ダイアログの `Esc` は確定そのものの取り消し。どちらのセルも書かれない。
 #[test]
 fn cancelling_the_dialog_writes_nothing_at_all() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = opened_on_a_playable_cell();
     type_a_chord(&mut app);
 
@@ -99,6 +103,7 @@ fn cancelling_the_dialog_writes_nothing_at_all() {
 /// 普通の MML はダイアログを通らない（従来の確定のまま）。
 #[test]
 fn plain_mml_still_commits_in_one_enter() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = opened_on_a_playable_cell();
     for code in "cde".chars() {
         app.handle_mml_overlay_key_event(plain(code));
@@ -115,6 +120,7 @@ fn plain_mml_still_commits_in_one_enter() {
 /// 直し方をログへ出す（出さないと「移したのに無音」で行き止まる）。
 #[test]
 fn transferring_from_a_track_that_does_not_generate_says_how_to_fix_it() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = opened_on_a_playable_cell();
     type_a_chord(&mut app);
     app.handle_mml_overlay_key_event(key(KeyCode::Enter));
@@ -131,6 +137,7 @@ fn transferring_from_a_track_that_does_not_generate_says_how_to_fix_it() {
 /// 既に生成対象なら、直し方の案内は出さない（移した時点で鳴るため）。
 #[test]
 fn transferring_from_a_generating_track_does_not_nag() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = FIRST_PLAYABLE_TRACK;
     app.editor.cursor_measure = 1;
@@ -162,6 +169,7 @@ fn transferring_from_a_generating_track_does_not_nag() {
 /// ```
 #[test]
 fn the_same_cm7_is_one_wrong_note_in_the_cell_but_a_chord_from_the_chord_row() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     // (a) 「このまま MML として確定」を選んだ場合。セルに `Cm7` が残る。
     let (mut app, _cache_rx) = opened_on_a_generating_cell();
     type_cm7(&mut app);

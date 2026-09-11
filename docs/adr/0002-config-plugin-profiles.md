@@ -66,5 +66,5 @@ Vaporizer2 の音色として一覧に出て、Vaporizer2 のインスタンス�
 
 ## 壊れたら気づく場所
 
-- `cmrt-runtime/src/core_config/tests.rs::a_profile_for_the_default_plugin_still_contributes_its_patch_roles`
-- `cmrt-runtime/src/plugin_profile/tests.rs::a_profile_can_narrow_the_patch_roles_by_itself`
+- `cmrt-runtime/src/plugin_profile/tests.rs::retired_patch_role_overrides_are_rejected`
+  — `[plugins.*]` の用途別カテゴリ指定は廃止済みで、書けば設定エラーになること

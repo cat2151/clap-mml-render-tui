@@ -18,7 +18,7 @@ use crossterm::event::KeyEvent;
 
 use cmrt_mml_overlay::line_play::{line_events, LineProgram, LineStatus};
 
-use crate::tui::chord_chart::{ChordChartAction, PreviewRequest};
+use crate::tui::chord_chart::{ChordChartAction, PreviewRequest, SectionId, Song};
 use crate::tui::TuiApp;
 
 /// preview を鳴らす音色。**`None` は realtime play server の既定音色**（init saw）。
@@ -50,11 +50,28 @@ impl TuiApp<'_> {
         self.refresh_chord_chart_preview_sounding();
         let action = self.chord_chart.handle_key_event(key);
         // デバウンス禁止。変更が起きたその場で書く（ファイルは数 KB）。
+        // 曲が変わった＝ degrees が変わりうるので、chord の範囲の写しもここで作り直す
+        // （preview を回収するより先に。要求の中の番号はこの写しから決まる）。
         if action == ChordChartAction::SongChanged {
             self.save_chord_chart();
+            self.refresh_chord_chart_chord_ranges();
         }
         self.drain_chord_chart_preview();
         action
+    }
+
+    /// 「各 section の行内で、どこからどこまでが 1 つの chord か」を画面へ書き戻す。
+    /// chord が何個あるかも、画面はこの写しの長さから引く。
+    ///
+    /// **画面 crate は degrees を解釈しないので自分では切れない**（ADR 0020）。
+    /// `preview_sounding` と同じで、答えを持っているのは glue だけ。
+    ///
+    /// 呼ぶのは**曲が変わったときと画面へ入ったときだけ**。カーソルを動かしても
+    /// degrees は変わらないので、キーごとに切り直す理由が無い
+    /// （1 section あたり 90 µs 未満だが、押すたびに全 section を切らない）。
+    fn refresh_chord_chart_chord_ranges(&mut self) {
+        let ranges = chord_ranges(&self.chord_chart.song);
+        self.chord_chart.set_chord_ranges(ranges);
     }
 
     /// 立っている preview 要求を回収し、鳴らす。
@@ -150,6 +167,9 @@ impl TuiApp<'_> {
         if self.chord_chart.enter() == ChordChartAction::SongChanged {
             self.save_chord_chart();
         }
+        // 抽選が走ったかどうかに関わらず切り直す。**画面を離れている間に曲が
+        // 変わっている**ことがある（起動直後の load、他画面から `song` を触る経路）。
+        self.refresh_chord_chart_chord_ranges();
         self.drain_chord_chart_preview();
     }
 
@@ -224,14 +244,40 @@ pub(in crate::tui) fn chord_chart_catalog_source_from(
     )
 }
 
+/// 曲の全 section について「行内のどこからどこまでが 1 つの chord か」を切る。
+///
+/// **切り方は chord 1 つを鳴らすときと同じ関数**（`chord_source_ranges`）。
+/// 画面が数を数えるのもこの写しの長さからで、`ChordProgression::chord_count()` は
+/// 使わない。あれはハイフンだけを見る別物で、ユーザーが `i` で打った任意の degrees
+/// では食い違いうる。
+///
+/// 読めない degrees は 0 件になる。ここでは 1 件へ丸めずそのまま渡し、
+/// 「1 個として扱う」判断は画面側（`cursor_chord_count`）へ寄せる。
+pub(in crate::tui) fn chord_ranges(song: &Song) -> Vec<(SectionId, Vec<std::ops::Range<usize>>)> {
+    song.sections
+        .iter()
+        .map(|section| {
+            (
+                section.id,
+                cmrt_chord::chord_source_ranges(&section.degrees),
+            )
+        })
+        .collect()
+}
+
 /// preview 要求 1 つを、ログ 1 行にする。
 ///
 /// **`global_log_sink` はテストでは no-op** なので、組み立てだけを名前のある関数へ
 /// 出しておく。こうしないと「何を鳴らそうとしたか」を機械で確かめる手段が無くなる。
 pub(in crate::tui) fn preview_request_log_line(request: &PreviewRequest) -> String {
     format!(
-        "chord-chart: event=preview-request name=\"{}\" degrees=\"{}\"",
-        request.name, request.degrees
+        "chord-chart: event=preview-request name=\"{}\" degrees=\"{}\" chord={}",
+        request.name,
+        request.degrees,
+        match request.chord_index {
+            Some(index) => index.to_string(),
+            None => "all".to_string(),
+        }
     )
 }
 
@@ -243,6 +289,13 @@ pub(in crate::tui) struct ChordChartPreview {
     pub status: LineStatus,
     /// sender へ渡すもの。**1 回鳴って終わる**（`repeat` しない）。
     pub program: LineProgram,
+    /// 行全体ではなく chord 1 つに絞ったなら `(0 始まりの番号, 行の chord 総数)`。
+    ///
+    /// **行全体を鳴らしたときは `None`**。要求が番号を指していても、読めない
+    /// degrees や範囲外で行全体へ倒れたときは `None` になる（ログを見るだけで
+    /// 「1 つに絞れたのか、倒れたのか」が分かるように、要求の番号をそのまま
+    /// 写さない）。
+    pub chord: Option<(usize, usize)>,
 }
 
 /// preview 要求と曲の prefix から、送る内容を組み立てる。
@@ -255,15 +308,43 @@ fn chord_chart_preview(prefix: &str, request: &PreviewRequest) -> ChordChartPrev
             line: String::new(),
             status: LineStatus::Idle,
             program: LineProgram::silent(),
+            chord: None,
         };
     }
-    let line = preview_line(prefix, &request.degrees);
+    let chord = request
+        .chord_index
+        .and_then(|index| chord_at(&request.degrees, index));
+    let degrees = match &chord {
+        Some((degrees, _)) => degrees.as_str(),
+        None => request.degrees.as_str(),
+    };
+    let line = preview_line(prefix, degrees);
     let (status, performance) = line_events(&line);
     ChordChartPreview {
         line,
         status,
         program: LineProgram::once(performance),
+        chord: chord.map(|(_, total)| (request.chord_index.unwrap_or(0), total)),
     }
+}
+
+/// 行の degrees から `index` 番目（0 始まり）の chord だけを切り出し、
+/// 切り出した綴りと**その行の chord 総数**を返す。
+///
+/// **切るのは `cmrt-chord`**（`chord_source_ranges` が chord2mml の CST から
+/// 元の文字列上の範囲を返す）。この画面のためのパーサは app 側にも 1 行も書かない。
+///
+/// `None`（＝行全体へ倒す）になるのは 3 つ:
+///
+/// - chord2mml が読めない degrees（範囲が 0 件）。「読めない行は chord 1 個」として
+///   扱う資料の決めごとに合わせて、行全体をそのまま鳴らす
+/// - 番号が範囲外（画面の写しが古いときに起きうる）
+/// - 範囲が文字境界で切れない（起きないはずだが、`get` で panic させない）
+fn chord_at(degrees: &str, index: usize) -> Option<(String, usize)> {
+    let ranges = cmrt_chord::chord_source_ranges(degrees);
+    let range = ranges.get(index)?.clone();
+    let chord = degrees.get(range)?;
+    Some((chord.to_string(), ranges.len()))
 }
 
 /// 鳴らす 1 行 `"<Key トークン> <degrees>"`。Key トークンが無ければ degrees だけ。
@@ -300,8 +381,12 @@ pub(in crate::tui) fn preview_play_log_line(preview: &ChordChartPreview) -> Stri
         } => format!("result=played from_chord={from_chord} notes={note_count}"),
         LineStatus::Error(error) => format!("result=error detail=\"{error}\""),
     };
+    let chord = match preview.chord {
+        Some((index, total)) => format!("{index}/{total}"),
+        None => "all".to_string(),
+    };
     format!(
-        "chord-chart: event=preview-play line=\"{}\" {result}",
+        "chord-chart: event=preview-play line=\"{}\" chord={chord} {result}",
         preview.line
     )
 }

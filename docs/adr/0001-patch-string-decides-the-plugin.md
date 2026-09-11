@@ -75,15 +75,16 @@ realtime-ipc が**すべて無改修**になった。当初「別次元の変更
 
 ## 壊れたら気づく場所
 
-- `patches/src/layout/tests.rs::a_prefixless_surge_name_reads_the_same_either_way`
-  — prefix 抜きで保存された Surge の名前が `PatchLayout::Cartridge` に落ちても
-  結果が変わらないこと。この同値が崩れると保存済みの patch 名がカテゴリを失う
+- `patches/src/layout/tests.rs::abstract_metadata_keeps_prefixless_categories`
+  — prefix 抜きで保存された Surge の名前でも先頭ディレクトリがカテゴリとして
+  読めること。この同値が崩れると保存済みの patch 名がカテゴリを失う
 - `tui-core/src/patches/tests.rs` — カタログにプラグインが増えても display がビット単位で同じこと
 - `tui-core/src/patch_plugins/tests.rs::a_vvp_patch_goes_to_vaporizer2_not_to_the_other_state_file_plugin`
   — **`.vvp` が Surge の添字へ落ちないこと。** ここが落ちると Vaporizer2 の音色が
   Surge のインスタンスへ送られる（play-server 側の照合で落ちるので静かには壊れないが、
   画面からは「選んだのに鳴らない」に見える）
-- `tui-core/src/patch_plugins/tests.rs::a_vvp_patch_falls_back_to_the_default_plugin_when_vaporizer2_is_absent`
-  — Vaporizer2 を積んでいない環境の倒れ方が変わっていないこと
+- `tui-core/src/patch_plugins/tests.rs::an_unsupported_patch_does_not_fall_back_to_the_first_plugin`
+  — Vaporizer2 を積んでいない環境で `.vvp` が既定プラグインへ黙って落ちないこと
+  （`RouteError::Unsupported` で止まる）
 - `tui-core/src/patch_plugins/tests.rs::five_plugin_catalog_routes_sfz_only_to_sforzando`
   — `.sfz` が state file の既定プラグインへ落ちないこと

@@ -77,8 +77,7 @@ fn history_files_use_test_temp_dir_under_tests() {
 /// app 側 config パスの差し替えは app crate の `config::tests` が検証する。
 #[test]
 fn set_local_dir_envs_redirects_history_paths_and_cmrt_base_dir() {
-    let tmp = std::env::temp_dir().join("cmrt_test_local_dir_redirects_all_paths");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = crate::test_support::unique_test_dir("local_dir_redirects_all_paths");
 
     {
         let _guard = crate::test_support::set_local_dir_envs(&tmp);

@@ -22,6 +22,7 @@ fn opened_on_the_first_measure() -> (DawApp, std::sync::mpsc::Receiver<crate::Ca
 
 #[test]
 fn enter_writes_the_line_back_and_opens_the_next_measure() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = opened_on_the_first_measure();
 
     // 1 行モードの入力欄はカーソルが行末にある（Stage 5）。
@@ -44,6 +45,7 @@ fn enter_writes_the_line_back_and_opens_the_next_measure() {
 
 #[test]
 fn enter_on_the_last_measure_keeps_the_cursor_in_range() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = app.editor.measures;
@@ -65,6 +67,7 @@ fn enter_on_the_last_measure_keeps_the_cursor_in_range() {
 
 #[test]
 fn esc_writes_the_line_back_and_closes() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = opened_on_the_first_measure();
 
     app.handle_mml_overlay_key_event(plain('f'));
@@ -78,6 +81,7 @@ fn esc_writes_the_line_back_and_closes() {
 
 #[test]
 fn an_emptied_line_clears_the_cell() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = opened_on_the_first_measure();
 
     for _ in 0.."cde".len() {
@@ -90,6 +94,7 @@ fn an_emptied_line_clears_the_cell() {
 
 #[test]
 fn the_daw_keys_still_work_after_committing_with_esc() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = opened_on_the_first_measure();
     app.handle_mml_overlay_key_event(key(KeyCode::Esc));
 
@@ -111,6 +116,7 @@ fn the_daw_keys_still_work_after_committing_with_esc() {
 /// ```
 #[test]
 fn real_catalog_commit_opens_the_next_measure_without_stalling() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let Some(config_path) = std::env::var_os("CMRT_TEST_DAW_REAL_CONFIG") else {
         eprintln!("skip: CMRT_TEST_DAW_REAL_CONFIG が未設定");
         return;
@@ -120,8 +126,7 @@ fn real_catalog_commit_opens_the_next_measure_without_stalling() {
     let pairs = cmrt_tui_core::patches::collect_patch_pairs(&cfg).expect("実カタログの走査");
     assert!(!pairs.is_empty(), "実機カタログが 0 件では比較にならない");
 
-    let tmp = std::env::temp_dir().join("cmrt_test_daw_mml_overlay_real_catalog_commit");
-    std::fs::remove_dir_all(&tmp).ok();
+    let tmp = cmrt_history::test_support::unique_test_dir("daw_mml_overlay_real_catalog_commit");
     std::fs::create_dir_all(&tmp).unwrap();
     let (open_elapsed, commit_elapsed) = {
         let _guard = cmrt_history::test_support::set_local_dir_envs(&tmp);

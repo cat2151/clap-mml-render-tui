@@ -259,7 +259,7 @@ fn session_state_json_empty_lines_passes_through_serde() {
 fn save_and_load_session_state_roundtrip() {
     // 実ユーザーデータディレクトリに影響しないよう、一時ファイルに直接書き込んで
     // JSON シリアライズ/デシリアライズの往復を検証する
-    let tmp_path = std::env::temp_dir().join("cmrt_test_history_roundtrip.json");
+    let tmp_path = crate::test_support::unique_test_dir("history_roundtrip_json");
 
     let state = SessionState {
         cursor: 7,
@@ -293,7 +293,7 @@ fn save_and_load_session_state_roundtrip() {
 #[test]
 fn save_and_load_session_state_roundtrip_daw_mode() {
     // DAW モードのセッション状態が正しく保存・復元されることを検証する
-    let tmp_path = std::env::temp_dir().join("cmrt_test_history_roundtrip_daw.json");
+    let tmp_path = crate::test_support::unique_test_dir("history_roundtrip_daw_json");
 
     let state = SessionState {
         cursor: 0,
@@ -326,7 +326,7 @@ fn save_and_load_session_state_roundtrip_daw_mode() {
 fn save_and_load_session_state_roundtrip_mml_overlay_play_settings() {
     // `Ctrl+L` の 3 値が、保存したファイルを読み直しても同じ組み合わせで戻ること。
     // 3 値のうち一部だけ ON にして、取り違え（別の項目へ入る）も検出する。
-    let tmp_path = std::env::temp_dir().join("cmrt_test_history_roundtrip_play_settings.json");
+    let tmp_path = crate::test_support::unique_test_dir("history_roundtrip_play_settings_json");
 
     let state = SessionState {
         mml_overlay_play_settings: MmlOverlayPlaySettings {

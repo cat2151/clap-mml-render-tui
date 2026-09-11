@@ -10,6 +10,7 @@ use crate::{DawPlayState, WorkspaceKind, CHORD_TRACK, DEFAULT_TRACK0_MML, FIRST_
 
 #[test]
 fn blank_daily_workspace_starts_with_the_chord_wizard_on_track1_meas1() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = build_test_app();
     app.workspace_kind = WorkspaceKind::Daily;
     app.editor.cursor_track = 0;
@@ -39,6 +40,7 @@ fn blank_daily_workspace_starts_with_the_chord_wizard_on_track1_meas1() {
 
 #[test]
 fn daily_workspace_with_existing_content_is_not_replaced_on_entry() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = build_test_app();
     app.workspace_kind = WorkspaceKind::Daily;
     app.editor.cursor_track = FIRST_PLAYABLE_TRACK + 1;
@@ -58,6 +60,7 @@ fn daily_workspace_with_existing_content_is_not_replaced_on_entry() {
 
 #[test]
 fn persistent_workspace_is_not_populated_on_entry() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = build_test_app();
     app.chord_progression_source = Some(Arc::new(|| vec!["I-IV".to_string()]));
 
@@ -69,6 +72,7 @@ fn persistent_workspace_is_not_populated_on_entry() {
 
 #[test]
 fn random_patch_logs_its_catalog_load_estimate_before_preview() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_track = FIRST_PLAYABLE_TRACK;
     app.editor.cursor_measure = 1;
@@ -101,6 +105,7 @@ fn random_patch_logs_its_catalog_load_estimate_before_preview() {
 
 #[test]
 fn missing_catalog_measurement_is_logged_as_unknown() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     assert_eq!(
         super::random_patch_load_estimate_log_line("Pads/Unknown.fxp", None),
         "chord wizard: random patch load estimate=unknown (catalog) patch=\"Pads/Unknown.fxp\""
@@ -109,6 +114,7 @@ fn missing_catalog_measurement_is_logged_as_unknown() {
 
 #[test]
 fn realtime_preview_uses_the_first_chord_patch_and_context_without_offline_preview() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, cache_rx) = build_test_app();
     let track = FIRST_PLAYABLE_TRACK;
     app.editor.cursor_track = track;

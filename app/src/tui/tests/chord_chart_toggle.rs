@@ -55,6 +55,7 @@ fn the_length_of_a_preview_is_measured_from_the_events_it_sends() {
     let played = app.chord_chart_preview(&PreviewRequest {
         name: "A".to_string(),
         degrees: "I-V-VIm-IV".to_string(),
+        chord_index: None,
     });
 
     assert_eq!(
@@ -139,6 +140,7 @@ fn the_toggle_asks_to_play_the_cursor_section_while_silent() {
             Some(PreviewRequest {
                 name: "A".to_string(),
                 degrees: "I-V-VIm-IV".to_string(),
+                chord_index: None,
             }),
             "{press:?} は鳴らす要求を立てること（対照）"
         );

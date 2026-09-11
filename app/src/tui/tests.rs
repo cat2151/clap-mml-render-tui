@@ -4,6 +4,8 @@ pub(super) use std::sync::atomic::{AtomicUsize, Ordering};
 
 mod chord_chart;
 mod chord_chart_catalog;
+mod chord_chart_chord_preview;
+mod chord_chart_chord_ranges;
 mod chord_chart_initial_song;
 mod chord_chart_preview;
 mod chord_chart_save;
