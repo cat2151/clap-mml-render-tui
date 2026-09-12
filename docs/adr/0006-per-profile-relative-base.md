@@ -13,7 +13,7 @@ Surge XT: base = C:\ProgramData\Surge XT
           → display = patches_factory/...  /  patches_3rdparty/...
 Dexed   : base = %APPDATA%\DigitalSuburban\Dexed\Cartridges
           → display = Dexed_01.syx/00 Say Again.
-Sforzando: base = N:\app4HDD（設定した 2 ルートの共通親）
+Sforzando: base = <設定した 2 ルートの共通親>
           → display = Plogue/Free Sounds/Programs/.../*.sfz / sfz/.../*.sfz
 ```
 
@@ -23,12 +23,12 @@ Sforzando: base = N:\app4HDD（設定した 2 ルートの共通親）
 shared_patch_root_dir([
   C:\ProgramData\Surge XT\patches_factory,
   C:\ProgramData\Surge XT\patches_3rdparty,
-  C:\Users\f\AppData\Roaming\DigitalSuburban\Dexed\Cartridges,
+  C:\Users\<user>\AppData\Roaming\DigitalSuburban\Dexed\Cartridges,
 ]) == "C:\"
 ```
 
 display が `ProgramData/Surge XT/patches_factory/...` と
-`Users/f/AppData/Roaming/DigitalSuburban/Dexed/Cartridges/Dexed_01.syx/...` になる。結果:
+`Users/<user>/AppData/Roaming/DigitalSuburban/Dexed/Cartridges/Dexed_01.syx/...` になる。結果:
 
 - category が `ProgramData` / `Users` になり、**用途別絞り込みが全滅する**
 - **display 文字列は永続 ID なので、保存済みの MML / history / DAW セル / grid session が
@@ -46,24 +46,27 @@ display が `ProgramData/Surge XT/patches_factory/...` と
 | Dexed | `Dexed_01.syx/00 Say Again.` | cartridge ファイル名 |
 | Sforzando | `sfz/<library>/<patch>.sfz` | 設定ルートを区別する先頭ディレクトリ |
 
-カテゴリ抽出（`patches/src/layout.rs` の `patch_category_sort_parts()`）は最初から両形式を
-1 本で扱っている: prefix を strip して次のセグメントを category にし、
+カテゴリ抽出（play-server `core-lib/src/audio_plugin.rs` の `patch_sort_metadata()`）は
+最初から両形式を 1 本で扱っている: prefix を strip して次のセグメントを category にし、
 **どちらの prefix でもなければ先頭ディレクトリを category にする**。
-Dexed は今すでにこの else 節を通り、`Dexed_01.syx` が category になっている。
+Dexed は今すでにこの枝を通り、`Dexed_01.syx` が category になっている。
 **したがって混在カタログにしてもカテゴリ分けは壊れない。**
 
 ## crate の分け方
 
-`cmrt-patches`（`patches/`）はプラグイン中立。Surge の知識は 1 module に隔離してある。
+`cmrt-patches`（`patches/`）はプラグイン中立。path の形をプラグインごとに読む知識は
+play-server の shared core（`patch_sort_metadata()`）が持ち、この crate はその結果だけを扱う。
 
-| module | 中身 |
+| module | 責務 |
 |---|---|
-| `patches/src/surge_xt.rs` + `surge_xt/{layout,defaults}.rs` | `patches_factory` / `patches_3rdparty` の prefix 解析と、用途別の既定カテゴリ名。**Surge の知識はここだけ** |
-| `patches/src/cartridge.rs` | `<cartridge>.syx/<voice>` の 1 階層。カートリッジ名がカテゴリ、供給元の優先度は常に 0 |
-| `patches/src/layout.rs` | 中立の入口。`PatchLayout::of(path)` が形から体系を選ぶ |
+| `patches/src/layout.rs` | shared core の metadata を包む facade。`patch_category` / `patch_matches_categories` |
+| `patches/src/grouping.rs` | 一覧の並び替えとカテゴリ別グルーピング |
+| `patches/src/naming.rs` | 名前の正規化・自然順比較・表示名の解決 |
+| `patches/src/roles.rs` | 正規表現 cascade による用途の排他的な割り当て |
 
-**`PatchLayout::Cartridge` には prefix 抜きで保存された Surge の名前も落ちる。** これは意図的で、
-どちらも先頭セグメントをカテゴリとして読み供給元の優先度も 0 なので結果が変わらない。
+**prefix の無い path は、cartridge 名も prefix 抜きで保存された Surge の名前も shared core の
+同じ枝に落ちる。** これは意図的で、どちらも先頭セグメントをカテゴリとして読み供給元の優先度も
+0 なので結果が変わらない。
 
 ## 壊れたら気づく場所
 

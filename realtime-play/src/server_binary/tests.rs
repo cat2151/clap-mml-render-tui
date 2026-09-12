@@ -213,7 +213,7 @@ fn the_repo_release_path_only_applies_to_a_cargo_build_layout() {
 #[test]
 fn the_profile_is_read_from_the_path_in_both_spellings() {
     for path in [
-        r"N:\projects\clap-mml-play-server\target\debug\server.exe",
+        r"X:\projects\clap-mml-play-server\target\debug\server.exe",
         "/home/x/clap-mml-play-server/target/debug/server",
     ] {
         assert_eq!(
@@ -223,7 +223,7 @@ fn the_profile_is_read_from_the_path_in_both_spellings() {
         );
     }
     for path in [
-        r"N:\projects\clap-mml-play-server\target\release\server.exe",
+        r"X:\projects\clap-mml-play-server\target\release\server.exe",
         "/home/x/clap-mml-play-server/target/release/server",
     ] {
         assert_eq!(
@@ -238,7 +238,7 @@ fn the_profile_is_read_from_the_path_in_both_spellings() {
 /// 「同梱」と名乗って静かになるのが一番まずい。パスの判定を先に見る理由。
 #[test]
 fn a_binary_copied_into_target_debug_is_still_reported_as_debug() {
-    let path = r"N:\projects\clap-mml-render-tui\target\debug\clap-mml-realtime-play-server.exe";
+    let path = r"X:\projects\clap-mml-render-tui\target\debug\clap-mml-realtime-play-server.exe";
 
     assert_eq!(
         classify(path, ServerSource::SiblingDirectory),
@@ -272,7 +272,7 @@ fn debug_and_unknown_are_the_ones_that_need_attention() {
 fn a_directory_that_merely_ends_with_target_is_not_a_cargo_target_dir() {
     assert_eq!(
         classify(
-            r"N:\projects\mytarget\debug\server.exe",
+            r"X:\projects\mytarget\debug\server.exe",
             ServerSource::Argument
         ),
         ServerProfile::Unknown

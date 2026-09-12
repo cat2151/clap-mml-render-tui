@@ -140,9 +140,11 @@ render patch='AR Accent Arp.vvp' plugin=Vaporizer2 frames=192000 duration_ms=400
 | `CMRT_TEST_DEXED_CLAP` | Dexed の `.clap` パス |
 | `CMRT_TEST_DEXED_CARTRIDGES` | cartridge ディレクトリ。**cartridge が 2 個以上あること**を要求する（1 個だと panic。黙って通さないための仕様） |
 | `CMRT_TEST_VAPORIZER2_CLAP` | Vaporizer2 の `.clap` パス |
-| `CMRT_TEST_VAPORIZER2_PRESETS` | `.vvp` の置き場（個人のパスなのでコードに書かない） |
 | `CMRT_TEST_WAV_OUT_DIR` | 耳で確かめるぶんの WAV 書き出し先。**未設定なら 1 バイトも書かない** |
 | `CMRT_TEST_PLAY_SERVER_EXE` | 実 play server の実行ファイル。共有メモリ IPC を**実サーバーへ繋いで**確かめる `#[ignore]` テストが使う（`realtime-play/src/live_ipc/tests.rs`） |
+
+Vaporizer2 の `.vvp` の置き場だけは環境変数ではなく、本番と同じ経路で config.toml の
+`[plugins.Vaporizer2] patches_dirs` から読む（無ければテストが落ちる。個人のパスなのでコードに書かない）。
 
 **SHM プロトコルは 2 repo に二重定義されている**（TUI の
 `realtime-play/src/fast_midi_ipc/windows/protocol.rs` と play-server の
@@ -161,15 +163,20 @@ play-server で `cargo test -p cmrt-core -- --include-ignored --test-threads=1`�
 **`--test-threads=1` は必須**（Vaporizer2 のテストが 2 本同時に走るとプロセスごと落ちる。
 play-server `docs/adr/0013-serial-instantiation.md`）。
 
-**TUI 側にも `CMRT_TEST_VAPORIZER2_PRESETS` を使う `#[ignore]` テストが 2 本ある。**
-どちらも実プラグインは要らず**プリセットのファイルしか見ない**ので並列でよい:
+**実プリセットのファイルしか見ない Vaporizer2 のテストは play-server の
+`core-lib/src/patch_list/tests/installed.rs` に 3 本ある。** 置き場は config.toml から読むので
+`#[ignore]` ではなく、通常の `cargo test -p cmrt-core` で走る（config に無ければ赤）。
+実プラグインを起動しないので並列でよい（`--test-threads=1` は不要）:
 
 ```
-cargo test -p cmrt-patches -- --include-ignored --nocapture
-    → ファイル名 → カテゴリの表が実データと合っているか（460 件）
-cargo test -p clap-mml-render-tui tui::voicing -- --include-ignored --nocapture
-    → 460 件すべてで m_uPolyMode が読めるか・先読みの実時間
+cargo test -p cmrt-core patch_list -- --nocapture
+    → installed_vaporizer2_presets_are_all_listed: 置き場が丸ごと列挙できるか（460 件）
+    → every_installed_vaporizer2_preset_header_is_readable: 460 件すべてでヘッダが読めるか
+    → every_installed_vaporizer2_preset_lands_in_a_known_category: 460 件すべてが表にあるカテゴリへ落ちるか
 ```
+
+同じファイルの Dexed 側 `installed_cartridges_all_parse` は `#[ignore]` のままで、
+`CMRT_TEST_DEXED_CARTRIDGES=<cartridge の置き場>` を渡して `--include-ignored` で起こす。
 
 **コード表と実データの食い違いは、実データを通さないと分からない。**
 表に無いコードは生の 2 文字で表示され、候補から静かに外れるだけで気づけない。

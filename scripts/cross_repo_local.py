@@ -137,9 +137,22 @@ def staged_lock_has_path_entries() -> bool:
         return False
 
 
+def global_hooks_path_set() -> bool:
+    """global の core.hooksPath が設定されているか。値は見ない（この repo の外の事情なので）。"""
+    proc = run(["git", "config", "--global", "--get", "core.hooksPath"], check=False)
+    return bool(proc.stdout.strip())
+
+
 def hooks_enabled() -> bool:
+    """local の core.hooksPath が .githooks か、global に core.hooksPath があれば有効。
+
+    global 側の hook は自分の処理のあと repo の .githooks/pre-commit を呼ぶ約束なので、
+    それがあれば local を向けなくても cross-repo 判定は走る。
+    """
     proc = run(["git", "config", "--get", "core.hooksPath"], check=False)
-    return proc.stdout.strip() == HOOKS_PATH_VALUE
+    if proc.stdout.strip() == HOOKS_PATH_VALUE:
+        return True
+    return global_hooks_path_set()
 
 
 def sibling_revs() -> tuple[str | None, str | None, bool]:
@@ -288,7 +301,10 @@ def cmd_hooks(_args: argparse.Namespace) -> int:
     hook = HOOKS_DIR / "pre-commit"
     if not hook.exists():
         fail(f"{hook} がありません。この repo を最新へ更新してください。")
-    if hooks_enabled():
+    if global_hooks_path_set():
+        info(f"global の core.hooksPath が設定済みです。その hook が {HOOKS_PATH_VALUE}/pre-commit を呼ぶので、")
+        info("local の core.hooksPath は設定しません（設定すると global の hook が呼ばれなくなる）。")
+    elif hooks_enabled():
         info(f"core.hooksPath は既に {HOOKS_PATH_VALUE} です。")
     else:
         run(["git", "config", "core.hooksPath", HOOKS_PATH_VALUE])

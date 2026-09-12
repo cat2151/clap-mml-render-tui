@@ -58,7 +58,7 @@ fn default_config_content_uses_empty_loop_dirs() {
     let content = default_config_content();
 
     assert!(content.contains("loop_dirs = []"));
-    assert!(!content.contains(r"N:\app4HDD\MAGIX"));
+    assert!(!content.contains("loop_dirs = ['"));
 }
 
 #[test]

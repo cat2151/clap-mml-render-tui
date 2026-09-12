@@ -235,24 +235,24 @@ fn check_subcommand_help_is_preserved() {
 #[test]
 fn play_server_can_be_given_in_any_mode() {
     let invocation =
-        parse_cli_invocation_from(["cmrt", "--play-server", "N:/x/server.exe"]).unwrap();
+        parse_cli_invocation_from(["cmrt", "--play-server", "X:/x/server.exe"]).unwrap();
     assert_eq!(invocation.action, CliAction::Tui);
     assert_eq!(
         invocation.play_server,
-        Some(PathBuf::from("N:/x/server.exe"))
+        Some(PathBuf::from("X:/x/server.exe"))
     );
 
     let with_subcommand = parse_cli_invocation_from([
         "cmrt",
         "render-mml",
         "--play-server",
-        "N:/x/server.exe",
+        "X:/x/server.exe",
         "cde",
     ])
     .unwrap();
     assert_eq!(
         with_subcommand.play_server,
-        Some(PathBuf::from("N:/x/server.exe"))
+        Some(PathBuf::from("X:/x/server.exe"))
     );
     assert!(matches!(with_subcommand.action, CliAction::RenderMml(_)));
 }
@@ -269,7 +269,7 @@ fn no_play_server_argument_leaves_the_search_to_decide() {
 /// 存在しないなら探索へ落とさず、その場で止める。
 #[test]
 fn a_play_server_path_that_does_not_exist_is_an_error() {
-    let error = play_server_launch(PathBuf::from("N:/no/such/server.exe")).unwrap_err();
+    let error = play_server_launch(PathBuf::from("X:/no/such/server.exe")).unwrap_err();
 
     let message = format!("{error:#}");
     assert!(message.contains("--play-server"), "{message}");

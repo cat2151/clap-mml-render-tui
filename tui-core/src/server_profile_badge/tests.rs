@@ -45,11 +45,11 @@ fn rendered(binary: &ServerBinary, width: u16) -> String {
 #[test]
 fn a_debug_server_changes_what_is_on_screen() {
     let debug = resolved(
-        r"N:\projects\clap-mml-play-server\target\debug\clap-mml-realtime-play-server.exe",
+        r"X:\projects\clap-mml-play-server\target\debug\clap-mml-realtime-play-server.exe",
         ServerProfile::Debug,
     );
     let release = resolved(
-        r"N:\projects\clap-mml-play-server\target\release\clap-mml-realtime-play-server.exe",
+        r"X:\projects\clap-mml-play-server\target\release\clap-mml-realtime-play-server.exe",
         ServerProfile::Release,
     );
 
@@ -118,7 +118,7 @@ fn a_narrow_terminal_gets_no_badge() {
 #[test]
 fn the_exe_tail_keeps_the_profile_directory_in_both_spellings() {
     assert_eq!(
-        exe_tail(r"N:\a\b\target\debug\clap-mml-realtime-play-server.exe"),
+        exe_tail(r"X:\a\b\target\debug\clap-mml-realtime-play-server.exe"),
         "debug/clap-mml-realtime-play-server.exe"
     );
     assert_eq!(
@@ -134,7 +134,7 @@ fn the_exe_tail_keeps_the_profile_directory_in_both_spellings() {
 #[test]
 fn a_release_binary_older_than_its_sources_still_lights_up() {
     let stale = stale_release(
-        r"N:\projects\clap-mml-play-server\target\release\clap-mml-realtime-play-server.exe",
+        r"X:\projects\clap-mml-play-server\target\release\clap-mml-realtime-play-server.exe",
     );
 
     let out = rendered(&stale, 80);
@@ -150,7 +150,7 @@ fn a_release_binary_older_than_its_sources_still_lights_up() {
 #[test]
 fn a_narrow_terminal_keeps_the_warning_and_drops_the_path() {
     let debug = resolved(
-        r"N:\projects\clap-mml-play-server\target\debug\clap-mml-realtime-play-server.exe",
+        r"X:\projects\clap-mml-play-server\target\debug\clap-mml-realtime-play-server.exe",
         ServerProfile::Debug,
     );
 

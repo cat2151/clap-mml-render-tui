@@ -109,7 +109,7 @@ fn catalog_plugins_relativize_each_plugin_against_its_own_base() {
         &cfg,
         vec![(
             "Dexed".to_string(),
-            profile("/usr/lib/clap/Dexed.clap", &["/home/f/dexed/Cartridges"]),
+            profile("/usr/lib/clap/Dexed.clap", &["/home/user/dexed/Cartridges"]),
         )],
     );
 
@@ -119,7 +119,10 @@ fn catalog_plugins_relativize_each_plugin_against_its_own_base() {
         Some("/tmp/surge-data/patches_factory")
     );
     assert_eq!(plugins[1].name, "Dexed");
-    assert_eq!(plugins[1].base.as_deref(), Some("/home/f/dexed/Cartridges"));
+    assert_eq!(
+        plugins[1].base.as_deref(),
+        Some("/home/user/dexed/Cartridges")
+    );
 }
 
 /// 音色置き場が 1 つも実在しないプラグインはカタログへ載せない。
@@ -175,13 +178,13 @@ fn a_vaporizer2_profile_becomes_a_third_catalog_plugin() {
         vec![
             (
                 "Dexed".to_string(),
-                profile("/usr/lib/clap/Dexed.clap", &["/home/f/dexed/Cartridges"]),
+                profile("/usr/lib/clap/Dexed.clap", &["/home/user/dexed/Cartridges"]),
             ),
             (
                 "Vaporizer2".to_string(),
                 profile(
                     "/usr/lib/clap/VASTvaporizer2.clap",
-                    &["/home/f/Vaporizer2/Presets"],
+                    &["/home/user/Vaporizer2/Presets"],
                 ),
             ),
         ],
@@ -191,7 +194,7 @@ fn a_vaporizer2_profile_becomes_a_third_catalog_plugin() {
     assert_eq!(plugins[2].name, "Vaporizer2");
     assert_eq!(
         plugins[2].base.as_deref(),
-        Some("/home/f/Vaporizer2/Presets")
+        Some("/home/user/Vaporizer2/Presets")
     );
 }
 

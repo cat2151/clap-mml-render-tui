@@ -46,7 +46,7 @@ PATHは見ません。debugビルドのサーバーは先読みが4〜5倍遅く
 debugビルドや素性の分からない実体を掴んでいるときは、画面の右上に警告が出ます。
 
 ```
-cmrt --play-server "N:/projects/clap-mml-play-server/target/debug/clap-mml-realtime-play-server.exe"
+cmrt --play-server "X:/projects/clap-mml-play-server/target/debug/clap-mml-realtime-play-server.exe"
 ```
 
 ### 対応オーディオプラグイン
