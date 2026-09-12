@@ -356,7 +356,7 @@ fn save_and_load_session_state_roundtrip_mml_overlay_play_settings() {
 #[test]
 fn a_history_file_written_before_the_play_settings_existed_loads_with_them_all_off() {
     // 既存ユーザーの history.json にはこのキーが無い。既定は「全部 OFF」＝
-    // Stage 7 までと同じ挙動でなければならない。
+    // 設定が無かったころと同じ挙動でなければならない。
     let json = r#"{ "cursor": 0, "lines": ["cde"] }"#;
     let loaded: SessionState = serde_json::from_str(json).unwrap();
     assert_eq!(

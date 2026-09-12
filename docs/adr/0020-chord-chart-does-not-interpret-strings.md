@@ -1,19 +1,15 @@
 # ADR 0020: chord chart 画面は文字列を解釈しない
 
-- 状態: 採用（2026-09-09。`HANDOFF-chord-chart-screen.md` 全 9 Stage と
-  `HANDOFF-chord-chart-reduction.md` 全 6 Stage の完了をもって両資料は削除。
-  ここはその結論だけを残す）
+- 状態: 採用
 - 関連: [0019](0019-investigation-stage-acceptance.md)
 
 ## 何の話か
 
 `Ctrl+G` → `C` で開く chord chart 画面は、1 曲ぶんのコード進行の「構成」だけを
-俯瞰・編集する。**構成の画面であって、シーケンサではない。**
-（2026-09-09 に preview を足した。カーソル行の section 1 つを鳴らすだけで、
-曲全体は鳴らさない。その後「行内の chord 1 つだけ」を足した。
-下の「残っていた宿題」と「chord 単位 preview」を参照）
+俯瞰・編集する。**構成の画面であって、シーケンサではない。** preview はカーソル行の
+section 1 つ（または行内の chord 1 つ）を鳴らすだけで、曲全体は鳴らさない。
 
-最初の実装（9 Stage）はユーザー発言 1 文
+最初の実装はユーザー発言 1 文
 「1 曲全体の構成を俯瞰できる、コード進行の構成のみに集中できる画面が欲しい」
 から出発したのに、AI が keybind 20 種・小節倍率・進行の検証と `!` 表示・
 既定曲のハードコードまで決め、それに**自分で「承認済み」ラベルを貼った**。
@@ -22,7 +18,7 @@
 > そんな機能いらない。小さく始めるのに邪魔。ジャッジメントに邪魔、というより、
 > いらない機能があるためジャッジメントはそもそもその時点で不合格
 
-削減の 6 Stage でそれを剥がした。**この ADR が残すのは「何を持たないか」**である。
+それを剥がした結果が現在の形。**この ADR が残すのは「何を持たないか」**である。
 
 ## 決定
 
@@ -32,7 +28,7 @@
   **検証せず、変換せず、そのまま保存して、そのまま描く。** 空文字も受ける。
 - したがって「読めない進行」の概念が無い。`!` 印も赤字も出さない。
 - 書式は chord2mml-rs の既存フォーマット。**この画面のためのパースを新規に書かない。**
-  結果として `chord-chart` crate は `cmrt-chord` に依存しない（`cargo tree` で 0 件）。
+  結果として `chord-chart` crate は `cmrt-chord` に依存しない（`cargo tree -p cmrt-chord-chart` で 0 件）。
 
 理由: 解釈を持った瞬間、この画面は「構成を俯瞰する」以外の責務を抱える。
 書式の正しさは、実際に鳴らす側（演奏スコープ）が鳴らせるかどうかで判る。
@@ -52,39 +48,37 @@
 - **進行をソースへ焼き込むことを禁ずる**（旧実装の `A = I-V-VIm-IV`）。
   画面が持つ進行は、カタログから引いたものか人間が打ったものだけ。
 - 抽選を**起動時ではなく画面を開いた時**に置くのは、カタログが遅延取得で、
-  キャッシュが無い初回は最大 20 秒待つため（実測 329ms）。chord chart を開かない人の
-  起動を止めない。
+  キャッシュが無い初回は最大 20 秒待つため。chord chart を開かない人の起動を止めない。
 
 ### 4. キーは小さく保つ。増やすときは人間の承認が要る
 
-現在のキー:
-
-| キー | pane | 動作 |
-|---|---|---|
-| `Tab` | 共通 | pane 移動（Sections ⇔ Arrangement のトグル。`Shift+Tab` は割り当てない） |
-| `j` `k` `↓` `↑` | 共通 | カーソル移動（行。行全体を試聴） |
-| `h` `l` `←` `→` | 共通 | 行内の chord 移動（その chord だけ試聴。端では隣の行へ繰り上がる） |
-| `PgUp` `PgDn` | 共通 | カーソルを 10 行移動 |
-| `dd` | 共通 | カーソル行を削除 |
-| `Alt+↑` `Alt+↓` | 共通 | カーソル行を上 / 下へ移動 |
-| `b` | 共通 | `prefix`（Key / BPM）を 1 行入力 |
-| `Shift+P` `Space` | 共通 | カーソル行の section を試聴 / 停止（同じトグル） |
-| `q` | 共通 | アプリ終了 |
-| `?` | 共通 | ヘルプ overlay（`Esc` でも閉じる） |
-| `g` `r` `i` `n` | Sections | 抽選追加 / 引き直し / 進行入力 / 名前入力 |
-| `1`..`9` | Arrangement | その番号の section をカーソルの次に挿入 |
-
-小文字の `p` は割り当てていない（トグルは `Shift+P` と `Space` の 2 つだけ）。
-`Shift+P` / `Space` は chord カーソルの位置ではなく**行全体**のトグル。
-
-`Tab` と `h` `l` `←` `→` は chord 単位 preview（下記）で足した。
-`h` `l` の pane 移動からの**役目替え**もそのとき。どちらもユーザーの承認済み。
+キーの一覧は `README.ja.md` の「chord chart画面」にある。ここには持たない。
+小文字の `p` は割り当てていない（試聴のトグルは `Shift+P` と `Space` の 2 つだけで、
+chord カーソルの位置ではなく**行全体**のトグル）。`Shift+Tab` も割り当てない。
 
 **キーの集合そのものをテストが等値比較で固定している**
 （`chord-chart/src/ui/tests/help.rs` の
 `the_help_teaches_exactly_the_keys_that_survived_the_reduction` と
 `the_bottom_line_names_no_key_outside_that_set`）。廃止キーが 1 文字で戻っても落ちる。
 **足すときはユーザーの承認を取ってから、この 2 つのテストを直す。**
+
+### 5. preview を足しても 1. は越えない
+
+鳴らす経路は `Ctrl+P` の MML overlay と同じ（`cmrt_mml_overlay::line_events` →
+`MmlOverlaySender::play_line`）。`cmrt_chord::parse_chord_progression`（Key と
+コード以外の directive を拒むラッパー）は通らない。
+
+- `prefix` から Key トークンを抜くのも、1 行を組み立てるのも **app 側の glue**
+  （`app/src/tui/chord_chart_glue.rs`）。crate から `cmrt-chord` への依存は復活していない。
+- 画面が持つのは「いま何を鳴らすべきか」の要求（`PreviewRequest`）と
+  「鳴っているか」の写しだけ。
+- chord 単位の preview で**切るのは `cmrt-chord`**（`cmrt_chord::chord_source_ranges()`。
+  `chord2mml_core::parse()` が返す `ParsedItem::Chord { source_range }` は元の文字列上の範囲）。
+  画面が持つのは「いま行内の何番目か」（`chord_cursor`）と、glue が書き戻す範囲の写し
+  （`set_chord_ranges`）だけで、degrees は一度も解釈しない。反転を描く `ui/degrees.rs` も、
+  degrees を**桁として測る**以上のことをしない。
+- 読めない degrees は範囲が 0 件になる。そのときは**その行を chord 1 個として扱う**
+  （鳴らすのは行全体・反転しない）。`!` 印も赤字も出さない。
 
 ## この画面で学んだ検証の手（次に画面を作るときも同じでよい）
 
@@ -95,44 +89,10 @@
 - 下段 1 行の要約は 80 桁端末で**桁数そのもの**を固定する（枠の内側 78 桁）。
   `?:help` の有無だけを見ていると、キーを 1 つ足した瞬間に末尾が黙って切れる。
 - README の食い違いも機械で見つかる（図の 1 行を実装の定数と等値比較し、
-  各行の表示幅を東アジア文字幅で数える）。実際に 2 桁はみ出しが出た。
+  各行の表示幅を東アジア文字幅で数える）。
 - 全角は buffer 上でセル 2 つ。照合は `ui/tests.rs` の `squeeze()` を通す。
 - overlay の中身を見る assert は `help_overlay_bounds` の矩形だけを読む。
   画面全体だと裏のヘッダ（`Key=C BPM120`）を拾って必ず落ちる。
 - overlay は**行数も**固定する。`centered_text_block_rect` は高さを `area.height` へ
   黙って `min` するので、ヘルプの行を 1 つ足すと 24 行端末で**末尾の行が消える**のに、
-  枠は画面内に収まったままで幅のテストは通る。しかも末尾は ` dd  カーソル行を削除` で、
-  同じ綴りが上の欄にもあるため「中身を探す」assert も素通しする
-  （枠の内側の行数と `HELP_ROWS.len()` の等値比較で塞いである）。
-
-## 残っていた宿題 → preview（2026-09-09 に実装）
-
-演奏（プレビュー）はこの画面の本命の出口で、削減の時点では一行も書いていなかった。
-`HANDOFF-chord-chart-preview.md` の 4 Stage で実装した。**この ADR の 1.（文字列を
-解釈しない）は保ったまま**入った:
-
-- 鳴らす経路は `Ctrl+P` の MML overlay と同じ（`cmrt_mml_overlay::line_events` →
-  `MmlOverlaySender::play_line`）。`cmrt_chord::parse_chord_progression`（Key と
-  コード以外の directive を拒むラッパー）は通らないので、**ラッパーは直していない**。
-- `chord-chart` crate は文字列を解釈しないまま。`prefix` から Key トークンを抜くのも、
-  1 行を組み立てるのも **app 側の glue**（`app/src/tui/chord_chart_glue.rs`）。
-  crate から `cmrt-chord` への依存は復活していない。
-- 画面が持つのは「いま何を鳴らすべきか」の要求（`PreviewRequest`）と
-  「鳴っているか」の写しだけ。`!` 印も「読めない進行」の概念も戻していない。
-
-## chord 単位 preview
-
-**1.（文字列を解釈しない）は
-今回も越えていない**（`cargo tree -p cmrt-chord-chart` の `cmrt-chord` は 0 件のまま）:
-
-- **切るのは `cmrt-chord`**。`chord2mml_core::parse()` が返す
-  `ParsedItem::Chord { source_range }` は元の文字列上の範囲なので、この画面のための
-  パーサは 1 行も書いていない（`cmrt_chord::chord_source_ranges()`）。
-- **切る場所は app の glue**（`app/src/tui/chord_chart_glue.rs`）。文字列を組み立てるのは
-  preview の 1 か所だけで、そこへ「chord 1 つに絞る」を足した。
-- **画面が持つのは index と写しだけ**。「いま行内の何番目か」（`chord_cursor`）と、
-  glue が書き戻す範囲の写し（`set_chord_ranges`）。degrees は一度も解釈しない。
-  反転を描く `ui/degrees.rs` も、degrees を**桁として測る**以上のことをしない。
-- 読めない degrees は範囲が 0 件になる。そのときは**その行を chord 1 個として扱う**
-  （鳴らすのは行全体・反転しない）。`!` 印も赤字も出さないので、
-  「読めない進行」の概念は戻っていない。
+  枠は画面内に収まったままで幅のテストは通る（枠の内側の行数と `HELP_ROWS.len()` の等値比較で塞いである）。

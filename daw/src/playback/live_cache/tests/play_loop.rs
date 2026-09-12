@@ -107,7 +107,7 @@ fn a_real_server_makes_sound_only_for_the_row_that_has_a_cached_wav() {
 /// **小節が進むこと・先読みが当たること・停止で止まること**まで見る。
 /// `DawApp` を組み立てずに済むのは、ループが `DawApp` ではなく Arc の束だけを持つため。
 ///
-/// **この Stage の受け入れ条件はここ。** 2 小節目以降が
+/// **先読みの合否はここ。** 2 小節目以降が
 /// `preload=hit prepare_ms=0.0` になっていれば、小節境界で `prepare_live_patch` を
 /// 1 件も出していないということ（`prepare_ms` は境界での state load だけを計っている）。
 /// サーバーログ側でも、`cmrt-bank-patch ... kind=prepare` が小節境界ではなく
@@ -190,7 +190,7 @@ fn a_real_server_gets_its_next_measure_preloaded_so_the_boundary_only_sends_note
         "空の小節まで進んでいる: {sent:?}"
     );
 
-    // ── この Stage の本題 ──────────────────────────────────────
+    // ── 本題 ──────────────────────────────────────
     // 1 小節目だけは先読みの元が無いので `miss`。2 小節目以降は必ず当たっていること。
     let (first, steady) = sent.split_at(1);
     assert!(

@@ -20,8 +20,8 @@
 //! - 送信キューの最大待ち時間（[`QUEUE_BUDGET_US`]）
 //! - サーバーが数えた late event の増分（発音時刻を過ぎて届いたイベント数）
 //!
-//! 実測（Stage 5）: 送信スレッドを一時的に v9 の同期待ちへ戻すと
-//! `sender_queue_max_us=1911919 late 0→58` で落ち、戻すと `1271` と `0→0` になった。
+//! 検算: 送信スレッドを一時的に v9 の同期待ちへ戻すと
+//! `sender_queue_max_us=1911919 late 0→58` で落ち、戻すと `1271` と `0→0` になる。
 //!
 //! ```text
 //! $env:CMRT_TEST_PLAY_SERVER_EXE = "...\clap-mml-realtime-play-server.exe"

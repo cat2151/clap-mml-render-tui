@@ -1,8 +1,6 @@
-# 0013: オーディオプラグインの具象知識をserver側へ置く
+# ADR 0013: オーディオプラグインの具象知識をserver側へ置く
 
-## Status
-
-Accepted
+- 状態: 採用
 
 ## Context
 
@@ -31,4 +29,3 @@ patch文字列から候補を一意に決められない場合、TUIは先頭ま
 
 新しいplugin adapterの追加ではserver側のprofile、patch form、metadata/voicing方針を追加する。
 TUI側にplugin名を使う分岐を追加しない。既存cacheはformat version不一致として再構築する。
-

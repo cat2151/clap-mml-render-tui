@@ -43,13 +43,13 @@ fn walk(timeline: &mut MeasureTimeline, measures: u64, measure_frames: u64) -> V
     positions
 }
 
-/// 小節が小節長ちょうどの間隔で並ぶ。**この Stage の本題。**
+/// 小節が小節長ちょうどの間隔で並ぶ。**timeline 化の本題。**
 ///
 /// `now` を毎回進めても位置は動かない。位置を決めているのはグリッドであって
 /// 「いつ予約したか」ではない、というのが timeline 化の中身。
 #[test]
 fn every_measure_lands_exactly_one_measure_after_the_previous_one() {
-    // BPM 130 の 4 拍 = 102400 フレーム（資料の実測ログと同じ小節長）。
+    // BPM 130 の 4 拍 = 102400 フレーム（実ログと同じ小節長）。
     const MEASURE_FRAMES: u64 = 102_400;
     let mut timeline = MeasureTimeline::for_test(Instant::now(), SAMPLE_RATE);
 

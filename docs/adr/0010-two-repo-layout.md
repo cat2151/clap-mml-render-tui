@@ -1,7 +1,7 @@
 # ADR 0010: 2 repo 構成は TUI → play-server の一方向。cross-repo はローカルモードで回す
 
-- 状態: 採用（2026-08-20）
-- 関連: [0007](0007-patch-role-defaults-three-layers.md)
+- 状態: 採用
+- 関連: [0007](0007-patch-role-defaults-three-layers.md) / [0017](0017-play-server-binary-resolution.md)
 
 ## 決定
 
@@ -28,8 +28,8 @@ crate の依存の辺は**すべて TUI → play-server の一方向**。逆向�
 ## push 往復が要っていた原因（3 つ別物）
 
 - **原因 A: package 名 `cmrt-core` の重複。** `[patch]` で兄弟 repo をローカル参照すると
-  `package collision in the lockfile` で止まる。**本当の原因はバージョンではなく名前の重複**だった
-  （過去は version を上げる回避策を取っていた）。TUI 側 core-lib を `cmrt-render-core` へ改名して解消。
+  `package collision in the lockfile` で止まる。**本当の原因はバージョンではなく名前の重複。**
+  TUI 側 core-lib を `cmrt-render-core` へ改名して解消。
   **`[lib] name = "cmrt_core"` は据え置いたので `.rs` の変更は 1 行も要らなかった**
 - **原因 B: 依存の向きが相互。** `play-server の servers → TUI の cmrt-runtime` が唯一の逆向き辺。
   `cmrt-server-config` を新設して解消
@@ -54,11 +54,6 @@ crate の依存の辺は**すべて TUI → play-server の一方向**。逆向�
 `cross_repo_local_on.bat` が `.cargo\config.toml` を生成し、TUI の git 依存 2 本を
 兄弟 repo の**作業ツリー**（未 commit を含む）へ向ける。
 **push を待たずに実装も検証も通る。push が要るのは TUI を commit する瞬間だけ。**
-
-```
-Adding cmrt-core          v0.1.0 (..\clap-mml-play-server\core-lib)
-Adding cmrt-server-config v0.1.0 (..\clap-mml-play-server\server-config)
-```
 
 **ロジックの実体は `scripts/cross_repo_local.py`。`.bat` は Windows 用の入口でしかない。**
 `on` / `off` に加えて `cross_repo_local_status.bat` があり、**commit して安全でなければ
@@ -93,7 +88,6 @@ Adding cmrt-server-config v0.1.0 (..\clap-mml-play-server\server-config)
 を走らせる**。checkout だけで止めると、lock は「ローカルモードに入る前」の古い rev へ戻る。
 その rev には兄弟 repo で今まさに足した API が無いので、
 **ローカルモードでは通っていたコードが、OFF にした瞬間ビルド不能になる**。
-実際に 2026-08-20 の commit `fa2daca` はこれで壊れた lock（`a6fd74d` を指したまま）を含んでいた。
 AGENTS.md の「古い lock を放置せず最新 HEAD へ追従」はこの経路にも効く。
 
 ## 罠
@@ -107,7 +101,7 @@ AGENTS.md の「古い lock を放置せず最新 HEAD へ追従」はこの経�
   前者が復元するのは HEAD ではなく **index**。ローカルモード中に `git add -A` していると、
   壊れた lock をそのまま書き戻したうえ index も壊れたまま残り、「HEAD の内容へ戻しました」と
   成功表示したまま直後の `cargo update` が
-  `package ID specification 'cmrt-core' did not match any packages` で落ちる（2026-09-05 に発生）。
+  `package ID specification 'cmrt-core' did not match any packages` で落ちる。
   同じ理由で差分表示も `git diff HEAD --` でないと staged 時に空になる。
   `status` が worktree だけでなく **index の lock** も見るのはこの事故を検出するため
 - **CI は main への直 push をビルドしない。** `call-rust-windows-cargo-check.yml` は
@@ -122,9 +116,8 @@ AGENTS.md の「古い lock を放置せず最新 HEAD へ追従」はこの経�
   エラーになる（ひな形は TUI 固有項目まで含むので TUI の責務）
 - **nightly workflow `update-cat2151-rust-deps.yml`（JST 01:00）が git 依存の lock を自動追従して
   commit する。**「push した直後は TUI が壊れている」状態を放置すると翌朝 CI が赤くなる
-- **実機で動かすには play server のバイナリが PATH 上に要る。** `for_local.bat` が
-  `./target/debug` と `../clap-mml-play-server/target/debug` を PATH に載せる。
-  play-server を変更したら**必ず `../clap-mml-play-server` のデバッグビルドを行うこと**
+- play server の実体（バイナリ）をどう見つけるかは [0017](0017-play-server-binary-resolution.md)。
+  play-server を変更したら**必ず `../clap-mml-play-server` の release ビルドを行うこと**
 - **`SURGE_XT_PLUGIN_ID` が play-server repo 内 2 か所にある**
   （`server-config/src/plugin_identity.rs` と `core-lib/src/surge_data.rs`）。統合するなら
   `core-lib` → `server-config` の依存を足す形になるので**未着手**

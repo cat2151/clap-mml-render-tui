@@ -1,6 +1,6 @@
 # ADR 0002: config はプラグインプロファイル方式
 
-- 状態: config 選択方式は [0014](0014-fixed-surge-primary-plugin.md) により廃止（2026-08-24）
+- 状態: config 選択方式は [0014](0014-fixed-surge-primary-plugin.md) により廃止
 - 関連: [0005](0005-mixed-catalog-on-by-default.md) / [0007](0007-patch-role-defaults-three-layers.md) / [0014](0014-fixed-surge-primary-plugin.md)
 
 > 以下は当時の決定記録。`active_plugin` とトップレベルの plugin 設定は現在の入力構文ではない。
@@ -43,25 +43,10 @@
   別宣言なのでコンパイラは教えてくれず、片方だけ増やしても**未知キーとして黙って無視される**
 - **プロファイルの焼き込みは無条件の代入。** `apply_active_plugin_profile()` の
   `self.patches_dirs = profile.patches_dirs;` は `None` でも代入するので、
-  **`patches_dirs` を持たない組み込みプロファイルを `active_plugin` にすると、
-  トップレベルに書いてある音色置き場が消える**
-
-## 3 つめのプラグインを足したときに、この罠がどう出たか（2026-08-22）
-
-上の罠の文面は「**項目**を足すと重複排除で捨てられる」だが、Vaporizer2 で足したのは
-項目ではなく**組み込みプロファイル 1 つ**なので、罠そのものには当たらなかった。
-
-代わりに**無条件の代入のほう**が効いた。Vaporizer2 の組み込みは `patches_dirs: None`
-（音色置き場の既定値を持たない。play-server 側 ADR 0014）なので、
-`active_plugin = 'Vaporizer2'` にすると Surge の音色置き場が消えて**音色 0 件**になる。
-
-**これが正しい倒れ方。** 消えないと `C:\ProgramData\Surge XT\...` の `.fxp` が
-Vaporizer2 の音色として一覧に出て、Vaporizer2 のインスタンスへ送られる
-（[0001](0001-patch-string-decides-the-plugin.md) の弱点の実害そのもの）。
-番人テストを 2 本置いてある:
-
-- play-server `server-config/src/tests.rs::making_vaporizer2_the_active_plugin_does_not_inherit_the_surge_patch_dirs`
-- 同 `::a_vaporizer2_profile_supplies_the_patch_dirs_the_builtin_lacks`（書けば効くこと）
+  **`patches_dirs` を持たない組み込みプロファイル（Vaporizer2）を `active_plugin` にすると、
+  トップレベルに書いてある音色置き場が消えて音色 0 件になる。** これは正しい倒れ方で、
+  消えないと Surge の `.fxp` が Vaporizer2 のインスタンスへ送られる
+  （[0001](0001-patch-string-decides-the-plugin.md) の弱点の実害）
 
 ## 壊れたら気づく場所
 

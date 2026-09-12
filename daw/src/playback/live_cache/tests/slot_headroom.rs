@@ -92,7 +92,7 @@ fn headroom_measures(loop_measures: usize) -> usize {
         .saturating_sub(1)
 }
 
-/// **これが Stage 5 の芯。** 実演奏のループ長では、先行 3 小節まで正しい小節が鳴る。
+/// 実演奏のループ長では、先行 3 小節まで正しい小節が鳴る。
 ///
 /// 実測の先行は 1.3 小節（BPM113 で 2.7 秒）だったので、3 小節ぶんの余裕は
 /// その 2 倍以上にあたる。
@@ -170,7 +170,7 @@ fn the_headroom_shrinks_when_the_loop_length_is_not_a_multiple_of_the_slot_count
 
 /// 実測の再現。**2 スロットで先行 2 小節だと、`meas1` の位置に `meas3` が鳴る。**
 ///
-/// 資料の事実 2 の表そのもの（meas1↔meas3 / meas2↔meas4 が入れ替わる）。
+/// 実ログで見えた形そのもの（meas1↔meas3 / meas2↔meas4 が入れ替わる）。
 /// スロット数を変数にせず 2 で書いてあるので、`SLOT_COUNT` を増やしても
 /// **「あのとき何が起きたか」は残る。**
 #[test]
@@ -207,7 +207,7 @@ fn two_slots_with_a_two_measure_drift_reproduce_the_measured_swap() {
     );
 }
 
-/// **Stage 6 の芯。実演奏のループ長 5 は余裕 0 で、先行 1 小節で必ず違う小節が鳴る。**
+/// **実演奏のループ長 5 は余裕 0 で、先行 1 小節で必ず違う小節が鳴る。**
 ///
 /// 実演奏がこの穴に当たっていることは実ログで確定している
 /// （`docs/adr/0018-page-replacement-clears-the-cache.md` の「塞いでいない穴」）
@@ -277,7 +277,7 @@ fn first_measure_after_a_miss(loop_measures: usize, start: usize) -> Sounded {
     }
 }
 
-/// **Stage 6 の実害。ループ長 5 の末尾の小節から演奏を始めると、meas1 が鳴る。**
+/// **ループ長 5 の末尾の小節から演奏を始めると、meas1 が鳴る。**
 ///
 /// 実アプリの入口は「カーソルの小節から演奏」（`input/normal.rs` の
 /// `start_play_from_cursor_measure`）。ループ長 5 でカーソルが meas5 に在るときの

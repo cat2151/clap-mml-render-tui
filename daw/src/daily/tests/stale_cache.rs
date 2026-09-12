@@ -10,17 +10,17 @@
 //!
 //! この 2 つが揃うと、前日のファイルが今日のセルの名前
 //! （`track{行}_meas{小節}.wav`。**日付も hash も入らない**）を占め続ける。
-//! 「見つかったら鳴る」ところは Stage 1 の
+//! 「見つかったら鳴る」ところは
 //! `playback::live_cache::tests::cache_lookup` が固定済みなので、ここでは扱わない。
 //!
-//! **Stage 7 の (a) が 1 段目を断った。** いまここに並ぶのは
+//! 直しは 1 段目を断った（rollover 成功時に前日の WAV を消す）。ここに並ぶのは
 //!
-//! - rollover 成功時は前日の WAV が**消えている**（(a) の本体）
+//! - rollover 成功時は前日の WAV が**消えている**
 //! - rollover **失敗**時は前日の WAV が**残っている**（前日のページを復元する経路なので必須。
 //!   掃除を `Err` の腕へ動かされないための番人）
-//! - 2 段目（空行は再レンダリングされない）は**まだそのまま**。ただし 1 段目が消えたので
+//! - 2 段目（空行は再レンダリングされない）は**そのまま**。ただし 1 段目が消えたので
 //!   「上書きされるのを待っている古い WAV」自体が存在しない
-//! - **Persistent 側の穴はまだ空いている**（候補 (b')）。その 1 本だけが直し漏れの番人
+//! - **Persistent 側の穴は空いたまま**。その 1 本だけが直し漏れの番人
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::TryRecvError;
@@ -95,8 +95,6 @@ fn cache_cleared_log_line(app: &DawApp) -> String {
         .clone()
 }
 
-/// **Stage 7 の (a) の本体。**
-///
 /// 日付が変わったら、前日のキャッシュ WAV は消える。
 /// ファイル名に日付も hash も入らないので、消さない限り前日のファイルが
 /// 今日のセルの名前を占め続け、演奏ループ（ファイルの存在しか見ない）がそれを鳴らす。
@@ -230,7 +228,7 @@ fn a_failed_rollover_keeps_yesterdays_page_and_its_cache_wav() {
 ///
 /// rollover 後のページは空なので、その行は今日 1 度も再レンダリングされない。
 /// 空セルは [`CacheState::Empty`] で `kick_all_pending()` に拾われないからで、
-/// これは Stage 7 の (a) では変わっていない。
+/// 直しでもここは変えていない。
 /// **変わったのは「上書きされるのを待っている古い WAV」がもう存在しないこと。**
 #[test]
 fn a_daily_rollover_leaves_empty_rows_unrendered_but_the_stale_wav_is_already_gone() {
@@ -281,8 +279,8 @@ fn a_daily_rollover_leaves_empty_rows_unrendered_but_the_stale_wav_is_already_go
 /// `daw_cache/` には触らない。保存ファイルに載っていない行の WAV は残り、
 /// その行は `Empty` なので再レンダリングもされない。
 ///
-/// **Stage 7 の (a) は Daily の rollover 経路だけを直したので、ここは緑のまま残る。**
-/// これは直し漏れの番人であって、候補 (b') を実装したときに赤くなるのが正しい。
+/// **直したのは Daily の rollover 経路だけなので、ここは緑のまま残る。**
+/// これは直し漏れの番人であって、Persistent 側を直したときに赤くなるのが正しい。
 #[test]
 fn a_persistent_load_also_keeps_a_cache_wav_for_a_row_missing_from_the_save_file() {
     let temp = TempDirectory::new("persistent-keeps-wav");

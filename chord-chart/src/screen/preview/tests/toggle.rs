@@ -1,4 +1,4 @@
-//! 手動キー `Shift+P` / `Space` のトグル（3.3）。
+//! 手動キー `Shift+P` / `Space` のトグル。
 //!
 //! 鳴っているかどうかを知っているのは app 側だけなので、「鳴っている」状態は
 //! glue と同じ [`ChordChartScreen::set_preview_sounding`] で作る。

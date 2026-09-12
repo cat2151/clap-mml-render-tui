@@ -1,34 +1,27 @@
-//! 「いま何を鳴らすべきか」の要求（preview）。**この crate は音を出さない。**
+//! 「いま何を鳴らすべきか」の要求（preview）。この crate は音を出さない。
 //!
-//! 鳴らすのは app 側の glue（`MmlOverlaySender` を持っているのは app）。ここは
-//! 「カーソルが動いた」「画面へ入った」を音の要求へ翻訳して置いておくだけで、
-//! degrees も prefix も**解釈しない**（ADR 0020）。
-//!
-//! 要求が立つのはカーソルの位置（pane と行）が**実際に変わったとき**だけ。
-//! 端で止まって行が変わらなかった `j`、いる pane をもう一度指した `h` では立たない
-//! （押すたびに鳴らし直すと、端で連打したときに同じ音が何度も鳴る）。
+//! 鳴らすのは app 側の glue（`MmlOverlaySender` を持っているのは app）。ここは「カーソルが
+//! 動いた」「画面へ入った」を音の要求へ翻訳して置くだけで、degrees も prefix も解釈しない
+//! （`docs/adr/0020`）。要求が立つのはカーソルの位置が実際に変わったときだけ。端で止まった
+//! `j` や、いる pane をもう一度指した `h` では立たない（端で連打すると同じ音が何度も鳴る）。
 
 use super::{ChordChartScreen, Pane};
 use crate::Section;
 
 /// 1 回ぶんの「鳴らせ」。中身は section の degrees と、ログに出す名前だけ。
 ///
-/// **`Option<PreviewRequest>` の `None` とは別物**。`None` は「何も起きていない」で、
-/// [`PreviewRequest::is_silent`] な要求は「前の音を止めろ」。行が無い / 参照が
-/// 壊れている / degrees が空のときは後者になる（無反応にすると、空の行へ降りても
-/// 前の section が鳴りっぱなしになる）。
+/// `Option<PreviewRequest>` の `None` は「何も起きていない」、[`PreviewRequest::is_silent`] な
+/// 要求は「前の音を止めろ」。行が無い / 参照が壊れている / degrees が空のときは後者になる
+/// （無反応にすると、空の行へ降りても前の section が鳴りっぱなしになる）。
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct PreviewRequest {
     /// 鳴らす section の名前。ログと、鳴らせなかったときの理由に使う。行が無ければ空。
     pub name: String,
-    /// 鳴らす degrees。**解釈しない**（読めるかどうかを決めるのは演奏側）。
+    /// 鳴らす degrees。解釈しない（読めるかどうかを決めるのは演奏側）。
     pub degrees: String,
-    /// degrees の**行内の何番目の chord**を鳴らすか。`None` なら行全体。
-    ///
-    /// **添字は 0 始まり**（画面が持つ chord カーソルと同じ値をそのまま入れる）。
-    /// 何番目がどこからどこまでかを決めるのは app 側の glue で、この crate は
-    /// 数を数えることも切り出すこともしない（ADR 0020）。範囲外の番号や
-    /// 読めない degrees は glue が行全体へ倒す。
+    /// degrees の行内の何番目（0 始まり。画面の chord カーソルと同じ値）の chord を鳴らすか。
+    /// `None` なら行全体。どこからどこまでかを決めるのは app 側の glue で、範囲外の番号や
+    /// 読めない degrees は glue が行全体へ倒す（`docs/adr/0020`）。
     pub chord_index: Option<usize>,
 }
 
@@ -60,16 +53,12 @@ impl ChordChartScreen {
         self.request_preview();
     }
 
-    /// **鳴っているかどうかの答えを app 側から受け取る。**
+    /// 鳴っているかどうかの答えを app 側から受け取る。
     ///
-    /// この crate は音を出さないので、鳴っているかを自分では知り得ない。判定材料を
-    /// 持っているのは glue だけ（sender があるか、何秒の演奏を投げたか）。
-    /// glue は preview を投げるたび・キーを渡す直前にこれを書き戻すこと。
-    ///
-    /// **`MmlOverlaySenderStatus::sounding()` は使えない**（2026-09-09 実測。
-    /// あれは打鍵の生 MIDI 専用の欄で、行の演奏では空のまま。
-    /// `mml-overlay/src/sender/tests.rs` の
-    /// `a_line_performance_leaves_the_sounding_status_empty` が固定している）。
+    /// この crate は音を出さないので自分では知り得ない。判定材料を持つ glue が、preview を
+    /// 投げるたび・キーを渡す直前に書き戻す。`MmlOverlaySenderStatus::sounding()` は打鍵の
+    /// 生 MIDI 専用で行の演奏では空のまま（`mml-overlay/src/sender/tests.rs` の
+    /// `a_line_performance_leaves_the_sounding_status_empty`）なので使えない。
     pub fn set_preview_sounding(&mut self, sounding: bool) {
         self.preview_sounding = sounding;
     }
@@ -81,11 +70,9 @@ impl ChordChartScreen {
 
     /// `Shift+P` / `Space`: 鳴っていたら止め、止まっていたらカーソル行を鳴らす。
     ///
-    /// 2 キーは同じ動作（3.3）。止めるほうも「無音を鳴らせ」という要求として立てる
-    /// ので、glue から見ると空の行へカーソルを移したときと同じ 1 本の経路になる
-    /// （`LineProgram::silent()` は sender の `Stop` と同じく音源を止める。
-    /// `mml-overlay/src/sender/tests.rs` の
-    /// `an_empty_line_stops_the_running_timeline` が固定している）。
+    /// 止めるほうも「無音を鳴らせ」の要求として立てるので、glue から見ると空の行へカーソルを
+    /// 移したときと同じ 1 本の経路になる（`LineProgram::silent()` は sender の `Stop` と同じく
+    /// 音源を止める。`mml-overlay/src/sender/tests.rs` の `an_empty_line_stops_the_running_timeline`）。
     pub(super) fn toggle_preview(&mut self) {
         if self.preview_sounding {
             self.pending_preview = Some(PreviewRequest::silent());
@@ -110,13 +97,11 @@ impl ChordChartScreen {
         }
     }
 
-    /// いまカーソルがどこを指しているか（pane・行・行内の chord 番号）。
-    /// preview を立てるかどうかの判定は **この値が変わったかどうか**だけで決める
-    /// （3 つを 1 つの値にしておくと、`j` と `Tab` と `l` で別々の判定を書かずに済む）。
+    /// いまカーソルがどこを指しているか（pane・行・行内の chord 番号）。preview を立てるかは
+    /// この値が変わったかどうかだけで決める（`j` と `Tab` と `l` で別々の判定を書かずに済む）。
     ///
     /// 丸めた値で持つ。丸める前の溢れた index を使うと、行が減ったあとの `k` が
-    /// 「画面上のカーソルは動かないのに要求だけ立つ」1 回になる。chord 番号も同じ理由で
-    /// [`ChordChartScreen::chord_cursor`]（丸めた値）から取る。
+    /// 「画面上のカーソルは動かないのに要求だけ立つ」1 回になる。
     pub(super) fn cursor_position(&self) -> (Pane, usize, usize) {
         let (pane, row) = match self.focus {
             Pane::Sections => (Pane::Sections, self.clamped_section_cursor()),
@@ -125,19 +110,14 @@ impl ChordChartScreen {
         (pane, row, self.chord_cursor())
     }
 
-    /// いまカーソルが指している行を**行全体で**鳴らす要求を立てる。
-    ///
-    /// 行を移ったとき（`j` `k` `PgUp` `PgDn` `Tab`）と、画面へ入った直後と、
-    /// `Shift+P` / `Space` のトグルはこちら。chord 1 つに絞るのは
-    /// [`Self::request_chord_preview`] だけ。
+    /// いまカーソルが指している行を行全体で鳴らす要求を立てる（行移動・画面へ入った直後・トグル）。
+    /// chord 1 つに絞るのは [`Self::request_chord_preview`] だけ。
     fn request_preview(&mut self) {
         self.request_preview_of(None);
     }
 
-    /// いまカーソルが指している **chord 1 つ**を鳴らす要求を立てる（`h` `l` `←` `→`）。
-    ///
-    /// 番号を切り出すのは app 側の glue。範囲外の番号や読めない degrees は
-    /// glue が行全体へ倒すので、この crate は丸めた番号をそのまま渡すだけでよい。
+    /// いまカーソルが指している chord 1 つを鳴らす要求を立てる（`h` `l` `←` `→`）。
+    /// 番号を切り出すのは app 側の glue なので、この crate は丸めた番号をそのまま渡すだけ。
     pub(super) fn request_chord_preview(&mut self) {
         self.request_preview_of(Some(self.chord_cursor()));
     }

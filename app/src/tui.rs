@@ -1,48 +1,28 @@
-//! 6画面（notepad / DAW / keyboard / loop browser / grid sequencer / chord chart）を
+//! 6 画面（notepad / DAW / keyboard / loop browser / grid sequencer / chord chart）を
 //! ホストする共有ランタイム。
 //!
-//! 各画面の実装本体は画面ごとの crate に閉じており、ここには
-//! 「どの画面か」「画面をまたいで共有するもの」と、各 crate と接続する glue だけを置く。
-//!
-//! - notepad : `cmrt-notepad` crate（`notepad_glue`）
-//! - keyboard: `cmrt-keyboard` crate（`keyboard_glue`）
-//! - loop browser: `cmrt-loop-browser` crate（`loop_browser_glue`）
-//! - grid sequencer: `cmrt-grid-sequencer` crate（`grid_sequencer_glue`）
-//! - chord chart: `cmrt-chord-chart` crate（`chord_chart_glue`）
-//! - DAW     : `crate::daw`（`runtime::screen` から起動）
+//! 各画面の実装本体は画面ごとの crate に閉じている（DAW は `crate::daw`）。ここに置くのは
+//! 「どの画面か」「画面をまたいで共有するもの」と、各 crate と接続する `*_glue` だけ。
 
-// notepad 画面（状態・入力・描画・再生・レンダリングキュー）は `cmrt-notepad` crate へ
-// 切り出した。従来の `crate::tui::notepad::*` パスは再エクスポートで維持する。
 pub(crate) use cmrt_notepad as notepad;
 mod notepad_glue;
-// keyboard 画面（状態・入力・MIDI 送信・描画）は `cmrt-keyboard` crate へ切り出した。
-// 従来の `crate::tui::keyboard::*` パスは再エクスポートで維持する。
 pub(crate) use cmrt_keyboard as keyboard;
 mod keyboard_glue;
-// loop browser 画面（状態・入力・再生エンジン・描画）は `cmrt-loop-browser` crate へ切り出した。
-// 従来の `crate::tui::loop_browser::*` パスは再エクスポートで維持する。
 pub(crate) use cmrt_loop_browser as loop_browser;
 mod loop_browser_glue;
-// grid sequencer 画面（状態・入力・ステップ進行・MIDI 送信・描画）は
-// `cmrt-grid-sequencer` crate に閉じている。
 pub(crate) use cmrt_grid_sequencer as grid_sequencer;
 mod grid_sequencer_glue;
-// コード進行の構成画面（状態・キー処理・描画・保存）は `cmrt-chord-chart` crate に
-// 閉じている。音を鳴らさない画面なので、glue はキーの配送と保存だけ。
+// chord chart は音を鳴らさない画面なので、glue はキーの配送と保存だけ。
 pub(crate) use cmrt_chord_chart as chord_chart;
 mod chord_chart_glue;
-// MML 入力オーバーレイ（どの画面からでも Ctrl+P で開く）は `cmrt-mml-overlay` crate に
-// 閉じている。ここは開閉のきっかけと MIDI 送信をつなぐだけ。
+// MML 入力オーバーレイ（どの画面からでも Ctrl+P）。glue は開閉のきっかけと MIDI 送信をつなぐだけ。
 pub(crate) use cmrt_mml_overlay as mml_overlay;
 mod mml_overlay_glue;
-// `cmrt patch-roles`（画面を起動せずに PATCH 欄の候補を数える診断）。voicing の解決を
-// TUI と同じ経路で行うため、画面ランタイム側に置いてある。
+// `cmrt patch-roles` 診断。voicing の解決を TUI と同じ経路で行うため、画面ランタイム側に置く。
 pub mod patch_role_report;
-// play server が起動できないことを画面へ出す知らせ。
 mod play_server_notice;
 mod runtime;
 mod session;
-// 「音が鳴るまで」の待ちを中央 overlay で見せる（画面共通）。
 mod sound_startup_overlay;
 mod ui;
 mod voicing;
@@ -65,12 +45,7 @@ use self::notepad::{Mode, NormalAction, NotepadScreen};
 use self::voicing::VoicingState;
 use crate::config::Config;
 use crate::screen_switch::{PrimaryScreen, ScreenSwitchMenu};
-// PatchLoadState（notepad の音色選択と keyboard の patch catalog が共有）は
-// `cmrt-tui-core` へ切り出した。
-// 従来の `crate::tui::PatchLoadState` パスは再エクスポートで維持する。
 pub(crate) use cmrt_tui_core::patch_load::PatchLoadState;
-// PlayState は画面横断（notepad / loop browser）で共有するため `cmrt-tui-core` にある。
-// 従来の `crate::tui::PlayState` パスは再エクスポートで維持する。
 pub(crate) use cmrt_tui_core::PlayState;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -79,11 +54,7 @@ pub enum TuiExitReason {
     RestartApp,
 }
 
-/// 6つの主要画面（notepad / DAW / keyboard / loop browser / grid sequencer /
-/// chord chart）をホストする共有ランタイム。
-///
-/// 各画面の状態は画面ごとの構造体に閉じており、ここが持つのは
-/// 「どの画面か」「画面をまたいで共有するもの」だけ。
+/// 画面ホスト。持つのは「どの画面か」と、画面をまたいで共有するものだけ。
 pub struct TuiApp<'a> {
     pub(super) active_screen: PrimaryScreen,
     pub(super) screen_switch_menu: ScreenSwitchMenu,
@@ -98,11 +69,8 @@ pub struct TuiApp<'a> {
     /// コード進行の「構成」画面。preview は MML オーバーレイと同じ経路を借りる。
     pub(in crate::tui) chord_chart: ChordChartScreen,
     /// chord chart の preview がいつ鳴り終わるか。`None` は「鳴っていない」。
-    ///
-    /// **鳴っているかを知っているのはここだけ**（`MmlOverlaySenderStatus::sounding()`
-    /// は打鍵の生 MIDI 専用で、行の演奏では空のまま。2026-09-09 実測）。
-    /// `Shift+P` / `Space` のトグルはこの値の答えを画面へ書き戻して使う
-    /// （`chord_chart_glue::refresh_chord_chart_preview_sounding`）。
+    /// 鳴っているかを知っているのはここだけ（`MmlOverlaySenderStatus::sounding()` は打鍵の
+    /// 生 MIDI 専用で、行の演奏では空のまま）。画面へは `chord_chart_glue` が書き戻す。
     chord_chart_preview_ends_at: Option<std::time::Instant>,
     /// Grid履歴をimport前に1小節だけoffline試聴する、揮発性のplayer/cache。
     grid_history_preview: crate::daw::DawGridPreviewPlayer,
@@ -111,8 +79,7 @@ pub struct TuiApp<'a> {
     pub(in crate::tui) mml_overlay: MmlOverlay<'a>,
     /// 送信先。テストでは `None`（音は鳴らさず状態遷移だけ確かめる）。
     mml_overlay_sender: Option<MmlOverlaySender>,
-    /// patch ごとの mono/poly 判定結果のキャッシュ。起動時に読み込み、
-    /// 新しく probe した patch を検出したら書き戻す。keyboard 画面と
+    /// patch ごとの mono/poly 判定結果のキャッシュ。keyboard 画面と
     /// grid sequencer の chord mode（poly patch 抽選）が読む。
     pub(in crate::tui) voicing: VoicingState,
     /// コード進行カタログの取得・キャッシュ。grid sequencer の chord mode 専用。
@@ -125,9 +92,7 @@ pub struct TuiApp<'a> {
     patch_load_state: Arc<Mutex<PatchLoadState>>,
     /// 設定不足でカタログから外れたプラグインの案内
     /// （[`cmrt_runtime::SkippedCatalogPlugin::notice_line`]）。音色選択を開く画面へ配る。
-    ///
-    /// 一覧に**出てこない**ものの話なので、`patch_load_state` をいくら見ても分からない。
-    /// config は起動中に変わらないので、起動時に 1 回だけ数えて持ち回る。
+    /// 一覧に出てこないものの話なので `patch_load_state` からは分からず、起動時に 1 回だけ数える。
     pub(in crate::tui) catalog_notes: Vec<String>,
     /// 再生セッションの世代管理。notepad・keyboard・loop browser で共有する。
     pub(in crate::tui) playback_session: PlaybackSession,
@@ -137,8 +102,7 @@ pub struct TuiApp<'a> {
     /// ユーザーが閉じた知らせ。同じ理由で出し直さないために覚えておく。
     dismissed_play_server_failure: Option<cmrt_realtime_play::ServerStartupFailure>,
     /// 「音が鳴るまで」の待ちの写し。`None` は待っていない。
-    ///
-    /// 作るのはランタイムのループ（`sync_sound_startup_wait`）で、描画は読むだけ。
+    /// 作るのは `sync_sound_startup_wait` で、描画は読むだけ。
     pub(in crate::tui) sound_startup_wait: Option<sound_startup_overlay::SoundStartupWait>,
     /// 画面へ出し終えた「音源の準備に失敗した理由」。同じ理由を出し直さないために覚えておく。
     reported_sound_prepare_error: Option<String>,

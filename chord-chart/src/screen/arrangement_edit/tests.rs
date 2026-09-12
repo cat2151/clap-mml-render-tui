@@ -97,7 +97,7 @@ fn a_digit_inserts_after_the_cursor_and_moves_the_cursor_onto_it() {
     assert_eq!(screen.clamped_arrangement_cursor(), 1);
 }
 
-/// section が 3 つのときの `5`。何も起きず、`error` にも出さない（資料 5 章 Stage 6）。
+/// section が 3 つのときの `5`。何も起きず、`error` にも出さない。
 #[test]
 fn a_digit_without_a_section_does_nothing_and_says_nothing() {
     let mut screen = screen_with_three_sections();

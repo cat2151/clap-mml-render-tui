@@ -317,7 +317,7 @@ fn preparing_an_already_ready_patch_stops_the_previous_line() {
 
 /// **行の演奏では `status.sounding` が埋まらない**（打鍵の生 MIDI 専用の欄）。
 ///
-/// 2026-09-09 実測。行を借りて鳴らすホスト機能（chord chart の preview など）が
+/// 行を借りて鳴らすホスト機能（chord chart の preview など）が
 /// 「いま鳴っているか」を [`MmlOverlaySenderStatus::sounding`] で判定できるか、を
 /// **実サーバー無しで**確かめるための固定。sink は全部成功する FakeSink なので、
 /// ここで埋まらないなら実サーバーでも埋まらない（成功側が上限）。
@@ -347,7 +347,7 @@ fn a_line_performance_leaves_the_sounding_status_empty() {
 /// **空の行を積む指示は、鳴っている timeline を止める**（`Stop` と同じ経路）。
 ///
 /// 行を借りて鳴らすホスト機能が「止める」を `play_line(空)` で表現してよいことの固定。
-/// 2026-09-09 実測（`stop_all` が 1 回飛ぶ）。
+/// `stop_all` が 1 回飛ぶことで見る。
 #[test]
 fn an_empty_line_stops_the_running_timeline() {
     let sink = Arc::new(FakeSink::default());

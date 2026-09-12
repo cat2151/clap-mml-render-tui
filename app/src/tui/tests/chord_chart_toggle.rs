@@ -1,9 +1,8 @@
-//! `Shift+P` / `Space` のトグル（3.3）が glue まで届くこと。
+//! `Shift+P` / `Space` のトグルが glue まで届くこと。
 //!
 //! **「鳴っているか」を知っているのは glue だけ**（`MmlOverlaySenderStatus::sounding()`
-//! は打鍵の生 MIDI 専用で、行の演奏では空のまま。2026-09-09 に
-//! `mml-overlay/src/sender/tests.rs` の
-//! `a_line_performance_leaves_the_sounding_status_empty` で実測）。ここで見るのは、
+//! は打鍵の生 MIDI 専用で、行の演奏では空のまま。番人は `mml-overlay/src/sender/tests.rs` の
+//! `a_line_performance_leaves_the_sounding_status_empty`）。ここで見るのは、
 //! glue が持つ「鳴り終わる時刻」が画面へ正しく写り、トグルの向きを変えること。
 //!
 //! テストの app は `mml_overlay_sender` が `None`（音は出ない）なので、
@@ -44,10 +43,8 @@ fn the_preview_stops_being_sounding_once_its_last_event_has_passed() {
     );
 }
 
-/// 何秒鳴るかは、送るイベント列そのものから測る。
-///
-/// 2026-09-09 実測: 既定 prefix の `I-V-VIm-IV` は 4 和音 × 2 秒 = 8 秒
-/// （最後の note off が 8.0 秒）。
+/// 何秒鳴るかは、送るイベント列そのものから測る
+/// （既定 prefix の `I-V-VIm-IV` は 4 和音 × 2 秒 = 8 秒）。
 #[test]
 fn the_length_of_a_preview_is_measured_from_the_events_it_sends() {
     let app = app_on_the_chord_chart();
@@ -189,7 +186,7 @@ fn handing_the_instrument_to_the_mml_overlay_forgets_the_sounding_preview() {
 /// 1 行入力欄が開いている間、`Space` は**文字**として入る（トグルにならない）。
 ///
 /// 画面 crate 側は `song` で見ている（`screen::preview::tests::toggle`）。ここでは
-/// **buffer に出た文字**まで確かめる（受け入れ条件どおり。song に入っていても
+/// **buffer に出た文字**まで確かめる（song に入っていても
 /// 描けていなければ打った本人には分からない）。
 #[test]
 fn a_space_typed_into_the_line_input_reaches_the_screen_as_a_character() {

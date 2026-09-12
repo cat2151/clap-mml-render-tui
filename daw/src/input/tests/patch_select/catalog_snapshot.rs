@@ -1,7 +1,7 @@
 //! 音色選択 overlay が、注入された patch catalog snapshot を使い
 //! **開くたびに音色 file を走査しない**ことの検証。
 //!
-//! 走査経路との区別は Stage 1 と同じ「実在しない patch dir を指す Config」で作る。
+//! 走査経路との区別は「実在しない patch dir を指す Config」で作る。
 //! 走査なら 0 件で開けないので、一覧が埋まること自体が走査していない証拠になる。
 
 use super::*;

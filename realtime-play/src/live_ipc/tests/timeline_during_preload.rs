@@ -1,7 +1,7 @@
 //! **先読みのロード中も timeline イベントが届き続けることを、実サーバーで固定する。**
 //!
 //! # 何の番人か
-//! 2026-08-31 の実障害そのもの。待機 bank へ重い音色を先読みすると、演奏 bank の
+//! 待機 bank へ重い音色を先読みすると、演奏 bank の
 //! render は続いているのに live timeline の MIDI 供給だけが止まり、先読み済み
 //! イベントを使い切った後の note off が遅れて「16 分音符が全音符まで伸びる」。
 //! 実ログでは `sender_queue_max_us=2928489`、直後の metrics が `late=260` だった。
@@ -19,7 +19,7 @@
 //! 2 は「行が出たか」では判定できない。ロード完了後にまとめて届いても同じ行が出る
 //! からで、区別できるのは順序だけ（[`count_lines_between`]）。
 //!
-//! 実測（Stage 5）: サーバーの受付を一時的に v9 の同期待ちへ戻すと
+//! 検算: サーバーの受付を一時的に v9 の同期待ちへ戻すと
 //! `accept=2.0183747s steps_during_load=1 timeline_midi_between=0` で落ちた。
 //! 直した後は `accept=1.0932ms steps_during_load=17 timeline_midi_between=16`。
 //!

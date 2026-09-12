@@ -1,8 +1,8 @@
 //! grid の 1 周ぶんの timeline を **TUI 無しで**流し、先読みの前後で
-//! underrun / late event が悪化しないことを見る（受け入れ条件 9 の機械化）。
+//! underrun / late event が悪化しないことを見る。
 //!
 //! # なぜ TUI を操作しなくてよいか
-//! 受け入れ条件 9 が見たいのは「preload 前後の metrics に退行がないこと」であって、
+//! ここで見たいのは「preload 前後の metrics に退行がないこと」であって、
 //! 画面でも耳でもない。metrics は SHM 越しにクライアントから読める
 //! （[`RealtimePlayServerSupervisor::underrun_frames`] /
 //! [`RealtimePlayServerSupervisor::timing_metrics`]）ので、grid sequencer が送るのと
@@ -16,15 +16,15 @@
 //!
 //! # 出力バッファの厚さを 2 通り走らせる理由
 //! grid sequencer は「先読み中はサーバーのレンダースレッドが止まる」前提で、
-//! preload のあいだだけ出力バッファ倍率を 16 まで厚くしていた（Stage 5 で外した
-//! 暫定回避）。倍率は**クライアントが決める値**なのでサーバーの環境変数では
+//! preload のあいだだけ出力バッファ倍率を 16 まで厚くしていた（いまは外した暫定回避）。
+//! 倍率は**クライアントが決める値**なのでサーバーの環境変数では
 //! 切り替えられず、ここから明示的に指定する。薄い側（[`THIN_BUFFER_MULTIPLIER`]）が
 //! 通ることが、暫定回避を外してよい根拠そのものになる。
 //!
 //! # これが**番人にならない**こと
 //! ここは 1 周ぶんのイベントを**先読みの前に全部**送ってしまう。ロード中に
 //! timeline の供給が止まっても、送り終わったイベントで演奏が続くので metrics は
-//! 悪化しない。2026-08-31 の supply starvation（ロード中に MIDI が届かず note off が
+//! 悪化しない。supply starvation（ロード中に MIDI が届かず note off が
 //! 遅れる）はここでは検出できない。その番人は `timeline_during_preload.rs`。
 //!
 //! late の読みについても同じ注意が要る。サーバーは timing metrics を 5 秒周期でしか
@@ -59,18 +59,18 @@ const WARMUP: Duration = Duration::from_millis(400);
 
 /// grid が実際に使う厚さ（`grid-sequencer` の `INITIAL_BUFFER_MULTIPLIER`）。
 /// 512 フレーム ÷ 48kHz × 2 ≒ 21ms しか余裕がないので、レンダーが 21ms でも
-/// 止まれば underrun になる。**Stage 5 で暫定回避を外したあとの実運用値。**
+/// 止まれば underrun になる。**暫定回避を外したあとの実運用値。**
 const THIN_BUFFER_MULTIPLIER: u16 = 2;
-/// Stage 5 で外した暫定回避の厚さ（≒170ms）。外す前との比較用に残してある。
+/// 外した暫定回避の厚さ（≒170ms）。外す前との比較用に残してある。
 const BOOSTED_BUFFER_MULTIPLIER: u16 = 16;
 
 /// **grid 1 周の演奏中に待機 bank を先読みしても、underrun と late event が増えないこと。**
 ///
-/// 受け入れ条件 9。ここが緑なら、実機で TUI を操作して確かめていた
+/// ここが緑なら、実機で TUI を操作して確かめていた
 /// 「preload 前後の metrics に退行がない」は機械で判定できている。
 ///
 /// 厚さは grid が実運用で使う薄い側。**暫定回避（倍率 16）が無くても通ることが、
-/// Stage 5 でそれを削除してよい根拠。**
+/// それを削除してよい根拠。**
 #[test]
 #[ignore = "実機の play server 実行ファイルが要る（CMRT_TEST_PLAY_SERVER_EXE）"]
 fn a_standby_preload_does_not_regress_the_metrics_of_a_running_grid_cycle() {
@@ -78,7 +78,7 @@ fn a_standby_preload_does_not_regress_the_metrics_of_a_running_grid_cycle() {
     run_grid_cycle_with_preload(port, THIN_BUFFER_MULTIPLIER).assert_no_regression();
 }
 
-/// 同じことを、**Stage 5 で外した暫定回避の厚さ**でも確かめる。
+/// 同じことを、**外した暫定回避の厚さ**でも確かめる。
 ///
 /// 薄い側だけが緑でも「厚くすると壊れる」ことは無いと言い切れないので、
 /// 削除の前後を同じ物差しで比べられるよう両方を残す。
@@ -90,7 +90,7 @@ fn a_standby_preload_does_not_regress_the_metrics_with_the_old_preload_buffer_bo
 }
 
 /// 先読みを挟んだ 1 周ぶんの実測値。数値は判定に使うだけでなく、
-/// `--nocapture` で見て資料へ残せるように stderr へも出す。
+/// `--nocapture` で読めるように stderr へも出す。
 struct CycleOutcome {
     buffer_multiplier: u16,
     underrun_before: u64,

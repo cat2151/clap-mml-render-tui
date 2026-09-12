@@ -1,6 +1,6 @@
 //! DAW から開く MML 入力オーバーレイの配線の検証。
 //!
-//! 実際に音が出るかは play server を要するのでここでは見ない（引き継ぎ資料 §6）。
+//! 実際に音が出るかは play server を要するのでここでは見ない。
 //! ここで押さえるのは「開く条件」「モード遷移」「オーバーレイへ渡した内容」
 //! 「sender が無くても壊れない」の 4 つ。
 
@@ -213,7 +213,7 @@ fn enter_never_inserts_a_newline() {
 fn typing_edits_the_line_and_asks_for_a_note_even_without_a_sender() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     // sender が None（play server 無し）でも入力欄として成立すること。
-    // 実際に音が出るかは play server が要るので §6 の確認リストへ回す。
+    // 実際に音が出るかは play server が要るのでここでは見ない。
     let (mut app, _cache_rx) = build_test_app();
     app.editor.cursor_measure = 1;
     assert!(app.mml_overlay_sender.is_none());
@@ -234,7 +234,7 @@ fn typing_edits_the_line_and_asks_for_a_note_even_without_a_sender() {
 #[test]
 fn ctrl_t_opens_the_patch_select_from_the_injected_snapshot_without_scanning() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
-    // 一覧は Stage 1 で注入した snapshot 由来。走査できない Config でも開けること。
+    // 一覧は注入した snapshot 由来。走査できない Config でも開けること。
     let (mut app, _cache_rx) = build_test_app();
     point_config_at_missing_patch_dir(&mut app);
     *app.patch_load.lock().unwrap() = PatchLoadState::ready(snapshot_pairs());

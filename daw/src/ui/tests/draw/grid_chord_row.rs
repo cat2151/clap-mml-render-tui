@@ -65,7 +65,7 @@ fn a_generated_cell_shows_the_chord_row_text_even_though_the_cell_is_empty() {
 #[test]
 fn a_handwritten_cell_keeps_its_own_text_and_color() {
     let mut app = app_with_a_generated_track();
-    // 生成対象 track でも、手で書いた小節は手書きが勝つ（4.5）。
+    // 生成対象 track でも、手で書いた小節は手書きが勝つ。
     app.editor.data[crate::FIRST_PLAYABLE_TRACK][1] = "cdef".to_string();
 
     let buffer = render_buffer(&app, 60, 24);

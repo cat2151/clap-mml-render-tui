@@ -1,8 +1,5 @@
-//! オーバーレイと呼び出し側の契約。
-//!
-//! 「開くときに何を渡すか」（[`MmlOverlayContext`]）と
-//! 「オーバーレイが何をしてほしいか」（[`MmlOverlayAction`]）だけを置く。
-//! 状態を持たない定義だけなので、判定を持つ [`super`] から分けてある。
+//! オーバーレイと呼び出し側の契約。「開くときに何を渡すか」（[`MmlOverlayContext`]）と
+//! 「オーバーレイが何をしてほしいか」（[`MmlOverlayAction`]）。
 
 use std::{collections::BTreeMap, time::Duration};
 
@@ -42,10 +39,9 @@ pub enum MmlOverlayAction {
         /// 絞り込み更新で新しい先頭候補へ移った場合は、保存と同時に試聴する。
         preview: Option<(String, Option<NoteRequest>)>,
     },
-    /// 鳴っているものを止めてから、この note on を送る。
+    /// この note on を送る。
     Send(NoteRequest),
-    /// 鳴っているものを止め、音源の音色を差し替えてから、この note on を送る。
-    /// `patch` が `None` なら realtime server の既定音色へ戻す。
+    /// 音源の音色を差し替えてから、この note on を送る。`None` なら既定音色へ戻す。
     SetPatch {
         patch: Option<String>,
         notes: Option<NoteRequest>,
@@ -67,9 +63,8 @@ pub enum MmlOverlayAction {
     },
     /// 打ちかけの 1 行を chord 行へ移す。overlay 側は既に閉じてある。
     ///
-    /// **破棄ではない。** MML のつもりで打った文字列がコード表記だったとき、
-    /// その文字列を捨てずに chord 行の同じ小節へ持っていく。編集中だったセルへは
-    /// 何も書かない（書くと 2 節のバグ＝無音のセルがそのまま残る）。
+    /// 破棄ではない。MML のつもりで打った文字列がコード表記だったとき、捨てずに chord 行の
+    /// 同じ小節へ持っていく。編集中だったセルへは何も書かない（書くと無音のセルが残る）。
     TransferToChordRow {
         line: String,
     },
@@ -77,11 +72,8 @@ pub enum MmlOverlayAction {
     Close,
 }
 
-/// 入力欄を何行で開くか。開くときに呼び出し側が決める。
-///
-/// [`Self::MultiLine`] が従来の挙動（1 行 1 フレーズを書き並べて聴き比べる）。
-/// [`Self::SingleLine`] は「1 か所へ書き戻すための入力欄」で、`Enter` が改行では
-/// なく確定になる（DAW の小節セル用）。
+/// 入力欄を何行で開くか。[`Self::MultiLine`] は 1 行 1 フレーズを書き並べて聴き比べる。
+/// [`Self::SingleLine`] は 1 か所へ書き戻すための入力欄で、`Enter` が確定になる（DAW の小節セル用）。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum MmlOverlayInputMode {
     #[default]
@@ -130,10 +122,8 @@ pub enum PatchCatalogSnapshot {
 pub struct MmlOverlayContext {
     /// 入力欄を何行で開くか。既定は従来どおり複数行。
     pub input_mode: MmlOverlayInputMode,
-    /// 開いた直後から入力欄に入れておく文字列。
-    ///
-    /// 複数行モードでは使わない（従来どおり常に空で開く）。1 行モードでは
-    /// 改行より後ろを捨てて先頭 1 行だけを入れる。
+    /// 開いた直後から入力欄に入れておく文字列。複数行モードでは使わない（常に空で開く）。
+    /// 1 行モードでは改行より後ろを捨てて先頭 1 行だけを入れる。
     pub initial_text: String,
     /// 入力欄に書く言語と、その試聴文脈。
     pub syntax: MmlOverlaySyntax,
@@ -147,15 +137,11 @@ pub struct MmlOverlayContext {
     pub favorites: Vec<String>,
     /// `(Grid Sequencer 上の役割 group, 正規表現)` のユーザー追加プリセット。
     pub patch_filter_presets: Vec<(String, String)>,
-    /// 打ちかけの 1 行を chord 行へ移せるか。**chord 行を持つ画面（DAW）だけ `true`。**
-    ///
-    /// notepad / keyboard / grid から開いた overlay には移送先が無いので、
-    /// chord のヒントも確認ダイアログも一切出さない（出しても行き先が無い）。
+    /// 打ちかけの 1 行を chord 行へ移せるか。chord 行を持つ画面（DAW）だけ `true`。
+    /// 移送先が無い画面では chord のヒントも確認ダイアログも出さない。
     pub chord_row_transfer: bool,
     /// 設定不足でカタログから外れたプラグインの案内（`SkippedCatalogPlugin::notice_line`）。
-    ///
-    /// 「音色一覧に出てこない」は一覧を見ているだけでは絶対に気づけない
-    /// （**出ていないものは見えない**）ので、音色選択を開いている間だけ枠の下へ出す。
-    /// 空なら 1 行も増えない。
+    /// 「音色一覧に出てこない」は一覧を見ているだけでは気づけないので、音色選択を開いている間だけ
+    /// 枠の下へ出す。空なら 1 行も増えない。
     pub catalog_notes: Vec<String>,
 }

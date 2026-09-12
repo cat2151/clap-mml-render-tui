@@ -177,7 +177,7 @@ fn a_silent_request_sends_a_program_that_only_stops_the_previous_sound() {
 ///
 /// **prefix から Key を外した曲で見る。** Key トークンが付いていると、演奏側は
 /// 読めなかった行を MML として読み直し、`Key=C` の `e` と `c` を音として鳴らして
-/// しまう（2026-09-09 実測）。エラーになるのは Key の無い行だけ。
+/// しまう。エラーになるのは Key の無い行だけ。
 #[test]
 fn an_unreadable_progression_falls_silent_and_says_why() {
     let mut app = TuiApp::new_for_test(test_config());
@@ -328,9 +328,6 @@ pub(super) fn sections_pane_rows(rows: &[String]) -> Vec<String> {
 
 /// **何の和音が鳴るか**まで機械で見る。音色や快適さは耳の話だが、
 /// 「調が効いているか」「進行の順に鳴るか」「1 和音がどれだけ伸びるか」は値で読める。
-///
-/// 2026-09-09 実測: `Key=C I-V-VIm-IV` は 0/2/4/6 秒に C(60,64,67) → G(67,71,74)
-/// → Am(69,72,76) → F(65,69,72)。各和音は 2 秒（BPM120 の全音符）。
 #[test]
 fn the_preview_really_sounds_the_progression_in_the_key_of_the_prefix() {
     let mut app = app_on_the_chord_chart();

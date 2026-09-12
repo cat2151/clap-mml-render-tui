@@ -169,7 +169,7 @@ fn the_wizard_keeps_an_existing_patch_and_only_adds_the_generate_key() {
     );
 }
 
-/// 手書きは chord 行より優先される（資料 4.5）。消さないと wizard を押しても
+/// 手書きは chord 行より優先される。消さないと wizard を押しても
 /// 音が変わらないので、patch history へ退避してから空にする。
 #[test]
 fn the_wizard_files_the_handwritten_cell_into_patch_history_before_clearing_it() {

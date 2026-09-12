@@ -22,7 +22,7 @@ fn analysis_lookup_is_indexed_for_a_realistic_library() {
 }
 
 // ---------------------------------------------------------------------------
-// `/` 絞り込みの 1 打鍵あたりの再構築コスト（Stage 7）
+// `/` 絞り込みの 1 打鍵あたりの再構築コスト
 //
 // デバウンスは禁止（AGENTS.md）なので、1 文字打つたびに
 // 「条件のコンパイル + ツリーの刈り取り（`retain_matching` の `clone`） + `collect_visible`」
@@ -33,8 +33,8 @@ fn analysis_lookup_is_indexed_for_a_realistic_library() {
 ///
 /// release は `performance.rs` の `SLOW_RENDER`（50ms）と同じ。これを超えると
 /// perf ログの `slow=true` が立ち、体感でも引っかかる。
-/// debug は同じ処理が実測で 2〜3 倍かかる（2026-09-07 実測: release 最大 10.5ms /
-/// debug 最大 27.0ms）ので、その比のぶんだけ緩める。
+/// debug は同じ処理が実測で 2〜3 倍かかる（release 最大 10.5ms / debug 最大 27.0ms）ので、
+/// その比のぶんだけ緩める。
 fn keystroke_budget() -> Duration {
     if cfg!(debug_assertions) {
         Duration::from_millis(150)
@@ -43,7 +43,7 @@ fn keystroke_budget() -> Duration {
     }
 }
 
-/// 2026-09-07 に実ライブラリのキャッシュ（`loop_index.json`）を数えた形。
+/// 実ライブラリのキャッシュ（`loop_index.json`）を数えた形。
 /// 6,914 wav / 156 ディレクトリ / 相対パスの深さ 3〜6 コンポーネント
 /// （深さごとの本数 3,649 / 2,397 / 587 / 281）。
 fn realistic_relative_paths() -> Vec<String> {

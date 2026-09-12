@@ -143,7 +143,7 @@ fn the_confirmed_patch_survives_closing_the_overlay() {
 }
 
 /// 音色フィルタのプリセット追加は保存され、role の索引も作り直される。
-/// 作り直さないと init 列の `role:音色名` 表示（Stage 4）が追従しない。
+/// 作り直さないと init 列の `role:音色名` 表示が追従しない。
 #[test]
 fn adding_a_patch_filter_preset_rebuilds_the_role_index() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");

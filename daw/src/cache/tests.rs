@@ -134,7 +134,7 @@ mod restore_from_metadata {
     /// **テンポは hash に効く**。つまり Resume 経路には「前日のテンポの WAV を今日の
     /// セルへ貼る」穴は無い。**ここは白。**
     ///
-    /// （2026-09-04 の事象で前日の音が鳴ったのは rollover 経路で、そちらは
+    /// （前日の音が鳴る穴は rollover 経路にあり、そちらは
     /// `restore_cache_from_metadata` を 1 度も通らない。混同しないこと）
     #[test]
     fn a_tempo_only_change_keeps_yesterdays_wav_out_of_the_restored_cache() {

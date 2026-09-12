@@ -8,7 +8,7 @@ use super::{ChordChartAction, ChordChartScreen, MoveDirection};
 use crate::SectionId;
 
 /// `1`..`9` で挿せる section の上限。左 pane の 10 行目以降は数字キーでは挿せない
-/// （資料どおり。届かないだけなので `error` にも出さない）。
+/// （届かないだけなので `error` にも出さない）。
 const MAX_INSERT_DIGIT: usize = 9;
 
 impl ChordChartScreen {

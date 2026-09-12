@@ -23,15 +23,14 @@ use crate::tui::TuiApp;
 
 /// preview を鳴らす音色。**`None` は realtime play server の既定音色**（init saw）。
 ///
-/// 3.4「音色は固定。画面では選べない」の実装。候補は 2 つあったが、2026-09-09 の
-/// 実測で**どちらも同じ値になる**ことが分かったので `None` に決めた:
+/// 音色は固定で、画面では選べない。候補は 2 つあったが**どちらも同じ値になる**ので `None` に決めた:
 ///
 /// - MML オーバーレイの既定音色は `None`（`mml-overlay/src/state.rs:108` が
 ///   `patch: None` で作り、`mml-overlay/src/ui.rs:146` がそれを `[既定音色]` と描く）。
 ///   つまり「オーバーレイと同じ既定 patch を渡す」は `None` を渡すのと同じ。
 /// - 名前つきの音色を渡すには patch カタログが要る。カタログの中身は開発機の
 ///   インストール状況で変わるので、名前を焼き込むとマシンによって鳴ったり鳴らなかったり
-///   する。chord chart に patch の概念を持ち込まない（3.4）方針とも合わない。
+///   する。chord chart に patch の概念を持ち込まない方針とも合わない。
 ///
 /// `None` なら音色の load が起きないので、カーソルを動かすたびの preview が
 /// patch load を待たされることもない。
@@ -337,7 +336,7 @@ fn chord_chart_preview(prefix: &str, request: &PreviewRequest) -> ChordChartPrev
 /// `None`（＝行全体へ倒す）になるのは 3 つ:
 ///
 /// - chord2mml が読めない degrees（範囲が 0 件）。「読めない行は chord 1 個」として
-///   扱う資料の決めごとに合わせて、行全体をそのまま鳴らす
+///   扱い、行全体をそのまま鳴らす
 /// - 番号が範囲外（画面の写しが古いときに起きうる）
 /// - 範囲が文字境界で切れない（起きないはずだが、`get` で panic させない）
 fn chord_at(degrees: &str, index: usize) -> Option<(String, usize)> {
@@ -357,7 +356,7 @@ pub(in crate::tui) fn preview_line(prefix: &str, degrees: &str) -> String {
 
 /// prefix（`"Key=C BPM120"`）から Key トークンを 1 つだけ取り出す。
 ///
-/// **BPM / TEMPO は捨てる**（3.5）。曲の prefix はそのまま持つ文字列で、
+/// **BPM / TEMPO は捨てる。**曲の prefix はそのまま持つ文字列で、
 /// 何が書いてあるかは保証されていないため、渡すものをここで絞る。
 ///
 /// 判定は「`key` で始まるトークン（大文字小文字を問わない）の最初の 1 つ」。

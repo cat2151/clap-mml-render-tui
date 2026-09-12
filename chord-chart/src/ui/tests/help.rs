@@ -210,7 +210,7 @@ fn pressing_g_without_a_catalog_puts_the_reason_on_the_bottom_line() {
 /// 下段要約が 80 桁端末に収まるか。**桁数そのもの**を固定する。
 ///
 /// `?:help` の有無だけを見ていると、キーを 1 つ足した瞬間に末尾が黙って切れて
-/// 「ヘルプの開き方」が画面から消える（前資料 Stage 3 で実際に起きた）。
+/// 「ヘルプの開き方」が画面から消える。
 /// 上限は 80 桁のときの下段の実幅から取るので、レイアウトを変えても追従する。
 #[test]
 fn the_bottom_line_fits_in_an_eighty_column_terminal() {

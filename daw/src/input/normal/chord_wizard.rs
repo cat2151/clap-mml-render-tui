@@ -17,7 +17,7 @@
 //!    既存のキー（音色・filter）は残す（[`crate::mml::init_cell_with_json_entries`]）。
 //!    音色がまだ無い track にはランダム音色も同時に入れる。
 //! 3. **カーソル行の meas.1〜N** ← 空にする。
-//!    手書きのセルは chord 行より優先される（資料 4.5）ので、消さないと
+//!    手書きのセルは chord 行より優先されるので、消さないと
 //!    1〜2 を書いても音が変わらず「押したのに何も起きない」になる。
 //!    消す前の内容は patch history へ退避する。
 //!    **meas.N+1 以降は消さない。** そこには置き換える和音が無いので、消せば
@@ -42,7 +42,7 @@
 //!
 //! # 入力欄は作らない
 //!
-//! 進行の手入力は意図的にスコープ外（資料 4.9）。wizard は抽選専用。
+//! 進行の手入力は意図的にスコープ外。wizard は抽選専用。
 
 use super::super::super::{DawApp, NormalCellUndo, CHORD_TRACK, FIRST_PLAYABLE_TRACK};
 use super::super::PATCH_JSON_KEY;
@@ -59,7 +59,7 @@ const FIRST_PLAY_MEASURE: usize = INIT_MEASURE + 1;
 /// wizard が init セルへ書く chord2mml の指定。
 ///
 /// `close`（密集ボイシング）を既定にしてある。ボイシングを変えたいときは
-/// init セルの JSON を `i` で直接書き換える（専用キーは作らない。資料 4.7）。
+/// init セルの JSON を `i` で直接書き換える（専用キーは作らない）。
 const WIZARD_DIRECTIVE: &str = "close";
 
 /// 鳴らない進行を引いたときの引き直し上限。

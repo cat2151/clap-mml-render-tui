@@ -52,7 +52,7 @@ fn the_readme_figure_shows_the_real_bottom_line() {
 
 /// 「音は鳴りません」という説明が残っていないか。
 ///
-/// preview を足した Stage 4 でいちばん古びる 1 文。綴りで名指ししておかないと、
+/// preview を足したときにいちばん古びた 1 文。綴りで名指ししておかないと、
 /// 図とキー表だけ直して本文が取り残される。
 #[test]
 fn the_readme_no_longer_says_the_screen_is_silent() {

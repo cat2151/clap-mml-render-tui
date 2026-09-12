@@ -158,7 +158,7 @@ fn a_line_played_once_still_gets_its_modulation() {
     assert_eq!(sink.count(&Sent::BeginTimeline), 1);
 }
 
-/// 両方 OFF なら Stage 5 までと 1 バイトも変わらない。
+/// 両方 OFF ならフィルタが無かったころと 1 バイトも変わらない。
 #[test]
 fn with_every_filter_off_the_wire_is_unchanged() {
     let sink = FakeSink::default();

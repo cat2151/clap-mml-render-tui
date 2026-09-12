@@ -25,7 +25,7 @@ fn enter_writes_the_line_back_and_opens_the_next_measure() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = opened_on_the_first_measure();
 
-    // 1 行モードの入力欄はカーソルが行末にある（Stage 5）。
+    // 1 行モードの入力欄はカーソルが行末にある。
     app.handle_mml_overlay_key_event(plain('f'));
     app.handle_mml_overlay_key_event(key(KeyCode::Enter));
 

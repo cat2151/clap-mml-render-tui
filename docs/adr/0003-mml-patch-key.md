@@ -1,6 +1,6 @@
 # ADR 0003: MML 先頭 JSON のキーは `"Surge XT patch"` を流用する
 
-- 状態: 採用（2026-08-20）
+- 状態: 採用
 - 関連: [0001](0001-patch-string-decides-the-plugin.md) / [0004](0004-default-plugin-owns-unspecified-patches.md)
 
 ## 決定
@@ -15,18 +15,14 @@
 ## 理由
 
 読み書きコードは変更なし。過去の MML / history / DAW 保存データもそのまま動く。
-Dexed 対応の初期に「1 プロセス 1 プラグインだからキーは実質『今のプラグインの音色』を意味する」
-という理由で流用したが、**混在を patch 文字列駆動（[0001](0001-patch-string-decides-the-plugin.md)）に
-した結果、混在後もこの流用が成立したまま**になった。
+混在を patch 文字列駆動（[0001](0001-patch-string-decides-the-plugin.md)）にしたので、
+1 プロセス 1 プラグインでなくなってもこの流用は成立する。
 
 ## 帰結: IPC / SHM / 永続データは無改修
 
-patch 文字列そのものがプラグインを決めるなら、IPC に足す情報は 0。したがって以下はすべて不要:
-
-- **SHM の VERSION 上げは不要**（新しいフィールドを足さないので古いサーバーとの不整合が起きない）
-- **`"CLAP preset"` JSON wire 形式は不要**
-- **`PresetRef` tagged enum は不要**
-- **DAW / history / notepad / mml-overlay / grid session の永続データは無改修**
+patch 文字列そのものがプラグインを決めるなら IPC に足す情報は 0。SHM の VERSION 上げ・
+`"CLAP preset"` JSON wire 形式・`PresetRef` tagged enum・永続データ（DAW / history / notepad /
+mml-overlay / grid session）の移行はいずれも不要。
 
 ## 承知している難点
 

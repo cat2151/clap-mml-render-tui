@@ -69,7 +69,7 @@ fn the_standby_preload_reaches_a_real_play_server() {
 
     // サーバー側でも「先読みとして」「bank 1 の要求として」扱われたこと。
     // クライアントが成功を受け取っただけでは、bank の判定までは確かめられない。
-    // Stage 2 で受信ログへ request= が入ったので、kind と instance は続けて書かない。
+    // 受信ログは kind の後に request= が挟まるので、kind と instance は続けて書かない。
     server.wait_for_stderr_line(|line| {
         line.starts_with("cmrt-ipc-recv: kind=prepare-standby-patch ")
             && line.contains(" instance=1 ")
@@ -89,7 +89,7 @@ fn the_standby_preload_reaches_a_real_play_server() {
 
 /// **受付と完了が本当に分かれていることを、実サーバーで確かめる。**
 ///
-/// Stage 3 の完了条件そのもの。人工に 2 秒止めたロードに対して、
+/// 人工に 2 秒止めたロードに対して、
 ///
 /// 1. `begin_standby_patch` がロード時間を待たずに戻る
 /// 2. 直後の `poll_standby_patch` は block せず `Ok(None)`（ロード中）を返す
@@ -177,7 +177,7 @@ fn the_async_standby_api_accepts_long_before_the_load_finishes() {
         began.elapsed()
     );
 
-    // 受付と完了が同じ request ID でログに残ること（Stage 3 の作業 4）。
+    // 受付と完了が同じ request ID でログに残ること。
     let request_id = request.request_id();
     server.wait_for_stderr_line(|line| {
         line == format!("cmrt-standby-patch: request={request_id} instance=1 event=accepted")
@@ -196,7 +196,7 @@ fn the_async_standby_api_accepts_long_before_the_load_finishes() {
 
 /// **先読みのロードが、演奏中の bank を回しているのとは別の OS thread で走ること。**
 ///
-/// bank worker 分離の合否そのもの（受け入れ条件 1）。サーバーが出す 2 種類の行の
+/// bank worker 分離の合否そのもの。サーバーが出す 2 種類の行の
 /// `thread=` を突き合わせて機械判定する。クライアント側からは「成功した」以上のことは
 /// 分からないので、ここはサーバーの stderr でしか確かめられない。
 ///
@@ -263,7 +263,7 @@ fn the_standby_load_runs_on_a_different_thread_than_the_active_bank_render() {
 
 /// **人工的に 500ms 止めた先読みロードの最中も、演奏 bank が render を続けること。**
 ///
-/// 受け入れ条件 2 そのもの。実プラグインのロード時間はマシン依存で、テストから
+/// 実プラグインのロード時間はマシン依存で、テストから
 /// 任意の長さ止めるのも不安定なので、サーバー側に唯一のテスト注入点
 /// （[`PATCH_LOAD_DELAY_ENV`]）を置いて、その環境変数を**子プロセスにだけ**渡す。
 ///
@@ -274,7 +274,7 @@ fn the_standby_load_runs_on_a_different_thread_than_the_active_bank_render() {
 /// ```
 ///
 /// `blocks_elsewhere` は「このロードの間に**対象 bank 以外**が render したブロック数」。
-/// coordinator がロードの返事を待って止まっていれば 0 になる（Stage 2 まではそうだった）。
+/// coordinator がロードの返事を待って止まっていれば 0 になる（bank worker 分離前はそうだった）。
 ///
 /// ```text
 /// $env:CMRT_TEST_PLAY_SERVER_EXE = "...\clap-mml-realtime-play-server.exe"
@@ -350,14 +350,14 @@ fn the_active_bank_keeps_rendering_during_a_slow_standby_load() {
 
 /// **プラグイン種別が変わる先読みでも、演奏 bank が回り続けること。**
 ///
-/// Stage 4 の中身そのもの。物理インスタンスの入れ替えも、予備の袋の出し入れも、
-/// 袋が尽きたときの背景生成待ちも、すべて対象 bank worker の中で起きるようになった。
+/// 物理インスタンスの入れ替えも、予備の袋の出し入れも、
+/// 袋が尽きたときの背景生成待ちも、すべて対象 bank worker の中で起きる。
 /// ここはその経路を**実プラグインで**通す。
 ///
 /// 予備を 1 個（`CMRT_SPARE_INSTANCES=1`）に絞ると、割り当ては bank 0 へ寄って
 /// **bank 1 の前払いは 0 になる**。つまりこの先読みは「袋が空 → その場で発注 →
 /// 背景生成を待つ」という最も待たされる経路を必ず通る。それでも演奏 bank は
-/// 止まってはならない（テスト計画の単体テスト 7）。
+/// 止まってはならない。
 ///
 /// 音色パスはマシンごとに違うので環境変数で受ける。渡さなければ skip する
 /// （既定音色ぶんの経路は他のテストが見ている）。

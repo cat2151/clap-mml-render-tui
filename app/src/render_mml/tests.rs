@@ -52,7 +52,7 @@ fn a_patch_with_json_metacharacters_is_escaped() {
 }
 
 /// **オフライン経路の本丸の番人。** `.vvp` が Surge の添字へ落ちると、
-/// Surge のインスタンスへ Vaporizer2 の state が渡って落ちる（Stage 3 の実測）。
+/// Surge のインスタンスへ Vaporizer2 の state が渡って落ちる。
 #[test]
 fn each_patch_form_reports_its_own_plugin() {
     let catalog = mixed_catalog();

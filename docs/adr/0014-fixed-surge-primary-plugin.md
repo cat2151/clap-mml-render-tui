@@ -1,6 +1,6 @@
 # ADR 0014: config の既定プラグインを Surge XT に固定する
 
-- 状態: 採用（2026-08-24）
+- 状態: 採用
 - 置換: [0002](0002-config-plugin-profiles.md) の `active_plugin` 選択方式
 - 関連: [0004](0004-default-plugin-owns-unspecified-patches.md) / [0005](0005-mixed-catalog-on-by-default.md) / [0007](0007-patch-role-defaults-three-layers.md)
 
@@ -21,18 +21,16 @@ Surge XT の標準値を変える場合は `[plugins."Surge XT"]` に差分を�
 - `chord_patch_categories`, `bass_patch_categories`, `arpeggio_patch_categories`, `drum_patch_categories`
 - `kick_patch_keywords`, `snare_patch_keywords`, `hihat_patch_keywords`
 
-Dexed、Vaporizer2、Floe、Sforzando など Surge XT 以外の profile は削除しない。
-これらは既定を切り替える設定ではなく、既存の混在 patch catalog へ載せる候補である。
+Dexed、Vaporizer2、Floe、Sforzando など Surge XT 以外の profile は削除しない
+（既定を切り替える設定ではなく、混在 patch catalog へ載せる候補）。
 
 ## 内部境界
 
 config の公開構文からトップレベル plugin 設定を削除しても、`Config` の
 `plugin_path` / `plugin_id` / `patches_dirs` と用途別 role 差分は、解決済みの
 runtime view として残す。ロード時に組み込み Surge XT と `[plugins."Surge XT"]` を merge し、
-その結果を既存 field へ焼き込む。
-
-この境界により、patch routing、catalog の先頭要素、cache 名前空間、render/play server への
-受け渡しは変更しない。config の構文変更を理由に下流 caller を一斉改修しない。
+その結果を既存 field へ焼き込むので、patch routing、catalog の先頭要素、cache 名前空間、
+render/play server への受け渡しは変更しない（構文変更を理由に下流 caller を一斉改修しない）。
 
 解決と旧トップレベルキー検査の単一ソースは sibling play-server repo の
 `cmrt-server-config` とする。TUI の `Config` と server の `ServerConfig` は同じ helper を通す。

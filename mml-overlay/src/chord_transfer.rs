@@ -17,7 +17,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// 入力欄の下に出す 1 行。
 ///
-/// 資料の原案は「`C` で chord 行へ」だったが、**overlay を開いている間の `C` は
+/// 原案は「`C` で chord 行へ」だったが、**overlay を開いている間の `C` は
 /// 入力欄への 1 文字**（`C` が chord 行ジャンプになるのは DAW の normal mode）。
 /// 実際に移せるのは確定キーなので、そう書く。
 pub(crate) const CHORD_HINT: &str = "chord として解釈できます。Enter で chord 行へ移せます";

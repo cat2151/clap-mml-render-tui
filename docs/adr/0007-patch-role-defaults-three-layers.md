@@ -1,6 +1,6 @@
 # ADR 0007: 用途別カテゴリの既定値は 3 層で解決する
 
-- 状態: 採用（2026-08-20）
+- 状態: 採用
 - 関連: [0002](0002-config-plugin-profiles.md) / [0005](0005-mixed-catalog-on-by-default.md) /
   [0010](0010-two-repo-layout.md) / [0014](0014-fixed-surge-primary-plugin.md)
 
@@ -23,7 +23,7 @@
 | プラグイン | 層 3 の中身 | 判定 |
 |---|---|---|
 | Surge XT | `cmrt_patches::surge_xt::DEFAULT_*` | `is_surge_xt_plugin`（`plugin_id`、無ければ**既定 `plugin_path` と同じファイル名か**） |
-| **Vaporizer2** | **`cmrt_patches::vaporizer2::DEFAULT_*`**（2026-08-22 追加） | `is_vaporizer2_plugin`（`plugin_id`、無ければ**ファイル名に `vaporizer` を含むか**） |
+| Vaporizer2 | `cmrt_patches::vaporizer2::DEFAULT_*` | `is_vaporizer2_plugin`（`plugin_id`、無ければ**ファイル名に `vaporizer` を含むか**） |
 | それ以外 | 空（＝絞らない） | — |
 
 **Vaporizer2 の判定だけ作りが違う**のは意図的。Surge は「既定プラグインかどうか」を
@@ -31,13 +31,12 @@
 config の `plugin_path`（＝既定プラグインのパス）との一致比較では当たらない。
 
 Vaporizer2 のカテゴリは `.vvp` のファイル名先頭 2 文字のコードを展開した名前
-（`AR` → `Arpeggio`）。**Surge の複数形（`Pads` / `Organs` / `Basses`）とは綴りが違う**ので、
+（`AR` → `Arpeggio`）。**Surge の複数形（`Pads` / `Organs` / `Basses`）とは綴りが違う**。
 「Surge のぶんをコピーした」間違いを表全体で見る番人は無く、play-server
 `core-lib/src/audio_plugin/tests.rs::known_plugins_describe_selector_categories_without_client_branching`
 が `Pad` の 1 件だけ単数形であることを見る。
-ただし drum 3 役のキーワード（`kick` / `snare` / `hat`）だけは
-`crate::surge_xt` から `pub use` で共有している（太鼓の一般名でプラグインに依らないため。
-同じ語を 2 組書くと片方だけ直したときに役が食い違う）。
+drum 3 役のキーワード（`kick` / `snare` / `hat`）だけは `crate::surge_xt` から `pub use` で共有する
+（太鼓の一般名でプラグインに依らない。同じ語を 2 組書くと片方だけ直したときに役が食い違う）。
 
 ## 解こうとした問題
 
@@ -62,7 +61,7 @@ config.toml のトップレベル 7 項目の既定値が **Surge XT のカテ�
 `builtin_plugin_profiles()` は play-server の `server-config` にあるが、
 Surge のカテゴリ名の実体は **TUI repo の `cmrt-patches`**。
 組み込みプロファイルへ値を書くと **play-server が TUI の crate を引く**ことになり、
-[0010](0010-two-repo-layout.md) で消したばかりの逆向きの辺が復活する。
+[0010](0010-two-repo-layout.md) で消した逆向きの辺が復活する。
 
 なお `patch_roles` は `server-config` に**宣言があるだけ**で、play-server のコードは 1 か所も
 読んでいない。**これは初めから TUI 専用のデータ。**
@@ -77,8 +76,8 @@ Surge のカテゴリ名の実体は **TUI repo の `cmrt-patches`**。
 この区別が要るので `Option` を剥がせない。組み込みプロファイルは
 `Surge XT` が `default()`（全部 `None`）、`Dexed` が `unfiltered()`（全部 `[]`）。
 
-`Config` 側も `Vec<String>` から `#[serde(flatten)] top_level_patch_roles: PatchRoleFilters` へ変えた。
-`Vec<String>` のままだと「書かれていない」と「`[]`」を区別できず、層 2 を狭める意味が出ない。
+`Config` 側も `Vec<String>` ではなく `#[serde(flatten)] top_level_patch_roles: PatchRoleFilters`。
+`Vec<String>` だと「書かれていない」と「`[]`」を区別できず、層 2 を狭める意味が出ない。
 （`Config` に `deny_unknown_fields` が無いので flatten を足せた。付いていたら serde の制約で使えない。）
 
 ## カテゴリを空にすると `Free` 行が全滅する論理
@@ -95,21 +94,18 @@ PatchRole::Free => filter.categories.is_empty() || !(in_category && voicing.is_p
 意味づけ: **カテゴリが空＝「どれを chord 行へ回すか」が定義されていない**のだから、
 Free は何も避けない。
 
-**逆に、層 3 を足したプラグインでは Free が減る。** Vaporizer2 を足したとき、
-`.vvp` 460 件は当初カテゴリが空だったので 460 件すべてが Free に居た。
-組み込み既定が入って chord カテゴリの 190 件が chord 側へ移り、**Free は 270 件になった**
-（合計で −190）。**この減り方が「層 3 が効いた」ことの機械的な確認になる**
-（`cmrt patch-roles` の Free 3773 → 3583）。
+**逆に、層 3 を足したプラグインでは Free が減る**（chord カテゴリぶんが chord 側へ移る。
+Vaporizer2 では 460 件中 190 件）。`cmrt patch-roles` の Free 件数が減ることが
+「層 3 が効いた」ことの機械的な確認になる。
 
 ## 生成する config.toml の形（ファイル末尾のコメント済みプロファイル）
 
-トップレベルの 7 項目は**値として書き出さなくなった**。代わりにファイル末尾へ
+トップレベルの 7 項目は**値として書き出さない**。代わりにファイル末尾へ
 **コメント済みの `[plugins."Surge XT"]` ブロック**を置き、Surge の既定値をそこに見せる。
 
 - **テーブル見出しは必ずファイル末尾。** TOML は見出しから下がすべてその中身になるので、
   途中に置くとコメントを外した瞬間に後続のトップレベル項目が吸い込まれる
-- ファイル中ほどにあった `[plugins.*]` の例は消した。同じ見出しの例が 2 つあると、
-  上の方をコメント解除して壊す
+- **同じ見出しの例を 2 か所に置かない。** 上の方をコメント解除して壊す
 - **罠: 説明文に ` = ` を書くと、機械的なコメント解除のテストが誤爆する**
 
 ## 罠

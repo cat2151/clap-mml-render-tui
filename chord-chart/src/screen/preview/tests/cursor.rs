@@ -1,4 +1,4 @@
-//! カーソルが動いたときに preview 要求が立つ / 立たない境目（3.2）。
+//! カーソルが動いたときに preview 要求が立つ / 立たない境目。
 
 use super::*;
 
@@ -184,7 +184,7 @@ fn a_dangling_arrangement_row_asks_for_silence() {
 }
 
 /// 編集キーは preview を起こさない。中身が変わっただけでは鳴らさない
-/// （聴きたければ手動キーを押す＝Stage 3）。
+/// （聴きたければ手動キーを押す）。
 #[test]
 fn the_editing_keys_do_not_ask_for_a_preview() {
     let editing_keys = [

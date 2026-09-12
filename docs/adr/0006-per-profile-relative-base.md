@@ -1,6 +1,6 @@
 # ADR 0006: display 文字列はプロファイルごとの base で相対化する
 
-- 状態: 採用（2026-08-20）
+- 状態: 採用
 - 関連: [0001](0001-patch-string-decides-the-plugin.md) / [0005](0005-mixed-catalog-on-by-default.md)
 
 ## 決定
@@ -47,22 +47,16 @@ display が `ProgramData/Surge XT/patches_factory/...` と
 | Sforzando | `sfz/<library>/<patch>.sfz` | 設定ルートを区別する先頭ディレクトリ |
 
 カテゴリ抽出（play-server `core-lib/src/audio_plugin.rs` の `patch_sort_metadata()`）は
-最初から両形式を 1 本で扱っている: prefix を strip して次のセグメントを category にし、
+prefix を strip して次のセグメントを category にし、
 **どちらの prefix でもなければ先頭ディレクトリを category にする**。
-Dexed は今すでにこの枝を通り、`Dexed_01.syx` が category になっている。
+Dexed はこの枝を通り `Dexed_01.syx` が category になる。
 **したがって混在カタログにしてもカテゴリ分けは壊れない。**
 
 ## crate の分け方
 
 `cmrt-patches`（`patches/`）はプラグイン中立。path の形をプラグインごとに読む知識は
-play-server の shared core（`patch_sort_metadata()`）が持ち、この crate はその結果だけを扱う。
-
-| module | 責務 |
-|---|---|
-| `patches/src/layout.rs` | shared core の metadata を包む facade。`patch_category` / `patch_matches_categories` |
-| `patches/src/grouping.rs` | 一覧の並び替えとカテゴリ別グルーピング |
-| `patches/src/naming.rs` | 名前の正規化・自然順比較・表示名の解決 |
-| `patches/src/roles.rs` | 正規表現 cascade による用途の排他的な割り当て |
+play-server の shared core（`patch_sort_metadata()`）が持ち、この crate はその結果だけを扱う
+（`layout.rs` がその facade）。
 
 **prefix の無い path は、cartridge 名も prefix 抜きで保存された Surge の名前も shared core の
 同じ枝に落ちる。** これは意図的で、どちらも先頭セグメントをカテゴリとして読み供給元の優先度も

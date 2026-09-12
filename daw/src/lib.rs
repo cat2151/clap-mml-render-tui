@@ -1,90 +1,14 @@
-//! DAW 風モード
+//! DAW 風モード。
 //!
-//! 初回起動時は 10 tracks × (0..=8 measures) の matrix で開始する
-//!   measure 0 = 音色 (timbre) / track ごとの共通ヘッダ
-//!   track   0 = 拍子JSON + テンポ (例: `{"beat": "4/4"}t120`) → render 時に全小節の先頭にくっつける
-//!   track   1 = chord 行（コード進行を書く専用行。音は鳴らさない。`tracks` モジュール参照）
+//! 初回起動時は [`TRACKS`] tracks × (0..=[`MEASURES`]) measures の matrix で開始する。
+//! measure 0 は音色（timbre）/ track ごとの共通ヘッダ、track 0 は拍子 JSON + テンポ
+//! （例: `{"beat": "4/4"}t120`。render 時に全小節の先頭へ前置される）、track 1 は chord 行
+//! （`tracks` モジュール）。
 //!
-//! user は track 数・measure 数に対して実質無制限を求めている。
-//! そのためアプリ側で 64 のような小さな固定上限を設けず、言語・OS・ライブラリが許す範囲で扱うこと。
-//! 保存済みセッションが初期サイズより大きい場合は、そのサイズをそのまま受け入れる。
+//! track 数・measure 数に 64 のような小さな固定上限を設けない。保存済みセッションが
+//! 初期サイズより大きければ、そのサイズをそのまま受け入れる。
 //!
-//! キー操作 (NORMAL):
-//!   Shift+H: history overlay を開く
-//!   h / ←  : 小節 (列) を左へ移動
-//!   l / →  : 小節 (列) を右へ移動
-//!   j/k    : track (行) 移動
-//!   M      : 中央 track へ移動
-//!   L      : 末尾 track へ移動
-//!   i      : MML 入力オーバーレイ（1 行モード）で現在セルを編集
-//!            （init 列だけは従来のインライン INSERT に落ちる）
-//!   Ctrl+P : 同上（`i` と同じ入口。init 列では開かない）
-//!   m      : mixer overlay を開く
-//!   dd     : 現在セルを yank して空にする
-//!   p      : yank 内容で現在セルを上書き
-//!   u      : 直前の paste を 1 回だけ取り消す
-//!   Enter / Space       : 非play時、現在 track の現在 meas を一発再生
-//!   Shift+Enter         : 非play時、現在 meas の全 track を一発再生
-//!   Shift+P             : 演奏 / 停止 toggle
-//!   Shift+Space         : 非play時、現在 meas から演奏開始して継続
-//!   s      : 現在 track の solo toggle
-//!   r      : measure 0 にランダム音色を設定
-//!   f      : Persistent で project file overlay を開く（a: Save As / o: Open / d: Open Daily Archive）
-//!   e      : config.toml を editor で開く
-//!   K / ?  : ヘルプ表示
-//!   q      : アプリ終了
-//!   n      : notepad へ切替
-//!   v      : keyboard へ切替
-//!   ESC    : 反応なし
-//!
-//! キー操作 (MIXER):
-//!   h/l    : track 移動
-//!   j/k    : volume -/+3dB
-//!   ESC    : overlay を閉じる → NORMAL
-//!
-//! キー操作 (HISTORY):
-//!   n        : global history へ切り替え
-//!   p        : current / selected patch history へ切り替え
-//!   t        : patch select overlay へ切り替え
-//!   h/l・←/→ : History/Favorites ペイン切り替え
-//!   j/k      : 行移動
-//!   Enter    : 選択内容を現在 track/meas に適用
-//!   ESC      : overlay を閉じる → NORMAL
-//!
-//! キー操作 (PATCH SELECT):
-//!   n        : global history へ切り替え
-//!   p        : current / selected patch history へ切り替え
-//!   t        : 現在選択 patch で開き直す
-//!   /        : 現在paneの絞り込み条件入力モード開始
-//!   h/l・←/→ : (通常) Patches/Favorites ペイン切り替えして preview / (検索入力中) 無効
-//!   j/k      : (通常) 行移動して preview / (検索入力中) 文字入力
-//!   Space    : (通常) preview / (検索入力中) AND 条件
-//!   Enter    : (通常) 選択 patch で現在 track の init meas を上書きして overlay を閉じる / (検索入力中) 絞り込みを確定（overlay 継続）
-//!   ESC      : (通常) overlay を閉じる / (検索入力中) 絞り込み入力を中断
-//!
-//! キー操作 (MML 入力オーバーレイ):
-//!   Enter      : 確定 → 次の小節の入力欄を開く
-//!   ESC        : 確定 → 閉じる → NORMAL
-//!   Ctrl+T     : 音色選択（確定するとその track の init 列へ反映）
-//!   Ctrl+O     : フレーズ履歴
-//!   Ctrl+L     : 演奏設定 (repeat / CC1 / velocity)
-//!   Ctrl+Space : 現在行を鳴らし直す
-//!
-//! キー操作 (INSERT: init 列専用):
-//!   ESC   : 確定 → NORMAL
-//!   Enter : 確定 → 次の小節へ移動 → INSERT 継続
-//!   Ctrl+C / Ctrl+X / Ctrl+V : コピー / カット / ペースト
-//!   (補足) MML 内で `;` を使うと、1 つの meas 内で複数フレーズを並べられる（再生時は各フレーズに音色/track0 を適用）
-//!
-//! キー操作 (HELP):
-//!   ESC   : キャンセル → NORMAL
-//!
-//! キー操作 (PROJECT):
-//!   a     : Save As path 入力
-//!   o     : Open path 入力
-//!   d     : managed Daily Archive を copy として Open
-//!   Enter : path 入力を実行
-//!   ESC   : path 入力を戻る / overlay を閉じる
+//! キー操作の一覧は help overlay（`ui::help`）が持つ。
 
 mod auto_trim;
 mod batch_logging;
@@ -133,12 +57,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 use cmrt_runtime::Config;
 
 // ─── config.toml 編集フック（app ポリシー注入）──────────────────
-//
-// terminal を suspend して外部 editor を起動する処理は app 側のポリシーのため、
-// crate は注入された関数を呼ぶだけにする（main.rs で `set_config_editor` を注入）。
-// log sink 注入と同型の依存性逆転。
 
-/// config.toml を editor で開くための注入フックの型。
+/// config.toml を editor で開くための注入フックの型。terminal を suspend して外部 editor を
+/// 起動する処理は app 側のポリシーなので、crate は注入された関数を呼ぶだけ（log sink と同型）。
 pub type ConfigEditorFn =
     fn(&mut Terminal<CrosstermBackend<std::io::Stdout>>) -> anyhow::Result<()>;
 
@@ -165,7 +86,7 @@ pub(crate) fn edit_config_toml(
 ///
 /// カタログの取得・ネットワーク・キャッシュは app 側の責務なので、DAW は
 /// 「一覧を返す関数」だけを受け取る。`cmrt-chord` へは依存しない
-/// （`parse_chord_progression` を DAW へ持ち込まないため。資料 3.4）。
+/// （`parse_chord_progression` を DAW へ持ち込まないため）。
 ///
 /// **遅延評価**にしてあるのは、カタログのキャッシュがまだ無い初回に app 側の
 /// 取得が最大 20 秒待つため。DAW 画面へ入るたびに待たされないよう、
@@ -197,13 +118,9 @@ pub(crate) use tracks::{CHORD_TRACK, FIRST_PLAYABLE_TRACK};
 /// セーブファイルが存在しない初回起動時に使用される。
 pub(crate) const DEFAULT_TRACK0_MML: &str = r#"{"beat": "4/4"}t120"#;
 
-/// インメモリキャッシュに保持するサンプル数の上限（ステレオ、インターリーブ）。
-///
-/// 2_000_000 サンプル / 2 ch = 1_000_000 samples per ch / 44100 Hz ≈ 22.7 秒 / 小節。
-/// 4/4 拍子では BPM ≈ 4 * 60 / 22.7 ≈ 10.6 以上の小節がキャッシュ対象となる。
-/// これを超えるサンプル数のセル（極端に低い BPM など）はキャッシュに保持せず、
-/// 再生時にフォールバックレンダリングする。
-/// ≈ 2_000_000 × 4 bytes ≈ 8 MB / cell。
+/// インメモリキャッシュに保持するサンプル数の上限（ステレオ、インターリーブ。44.1kHz で
+/// 約 22.7 秒 / 小節、約 8 MB / cell）。超えるセル（極端に低い BPM など）はキャッシュに
+/// 保持せず、再生時にフォールバックレンダリングする。
 pub(crate) const MAX_CACHED_SAMPLES: usize = 2_000_000;
 const OVERLAY_PREVIEW_CACHE_MAX_ENTRIES: usize = 64;
 pub(crate) const DAW_SOUND_CHECK_GUIDE_MESSAGE: &str =

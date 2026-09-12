@@ -21,7 +21,7 @@
 //!
 //! **ループの長さが奇数のときは、末尾の小節と先頭の小節が同じスロットになる**
 //! （3 小節なら meas3 も meas1 もスロット 0）。それでも壊れないのは、鳴っている voice が
-//! 自分の握った音源を鳴らし続けるから（play server 側 Stage 2）。スロットを差し替えても
+//! 自分の握った音源を鳴らし続けるから（`clap-mml-play-server` の `docs/adr/0018`）。スロットを差し替えても
 //! meas3 の余韻は切れず、境界の note on はちょうど載せ替えた meas1 を鳴らす。
 //!
 //! ## 発音位置は timeline で決める（実時刻ではない）
@@ -351,7 +351,7 @@ impl LiveCachePlayLoop {
     ///
     /// 載せ先は `measure_index % SLOT_COUNT` に決まっているので、**隣り合う小節は
     /// 必ず別スロット**になる。鳴っている voice は自分が握った音源を鳴らし続けるので
-    /// （play server 側 Stage 2）、ここで差し替えても前の小節の余韻は切れない。
+    /// （`clap-mml-play-server` の `docs/adr/0018`）、ここで差し替えても前の小節の余韻は切れない。
     fn load_measure(&self, measure_index: usize) -> PreloadedMeasure {
         self.load_measure_reporting(measure_index, false)
     }

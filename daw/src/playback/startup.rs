@@ -1,22 +1,10 @@
 //! 「演奏を始めてから最初の音が出るまで」の進み具合。
 //!
-//! ## なぜ持つか（実測）
+//! ## なぜ持つか
 //!
-//! release ビルド・ユーザーの実キャッシュで DAW を cold start したときの
-//! `log.txt`（2026-09-03 19:30:38〜19:30:42）:
-//!
-//! ```text
-//! 19:30:39 play: start
-//! 19:30:40 play-server: prewarm ms=1747 result=ok      ← ここまで play server の起動待ち
-//! 19:30:40 live-cache: timeline begin id=1 result=ok
-//! 19:30:41 shm-patch-prepare success instance=0 elapsed_ms=1229
-//! 19:30:42 shm-patch-prepare success instance=6 elapsed_ms=11
-//! 19:30:42 live-cache: timeline clock start id=1 result=ok   ← ここで初めて音が出る
-//! 19:30:42 meas1: ... prepare_ms=2101.9
-//! ```
-//!
-//! つまり待ちは 2 段階で、**どちらも数百 ms〜数秒**（play server は cold で 6559ms、
-//! 1 小節目のロードは OS のファイルキャッシュ次第で 72ms〜3614ms）。
+//! `play: start` から最初の音までの待ちは 2 段階（play server の起動待ち → 1 小節目の
+//! キャッシュ WAV ロード）で、**どちらも数百 ms〜数秒**（play server は cold で約 6.5 秒、
+//! 1 小節目のロードは OS のファイルキャッシュ次第で 72ms〜3.6 秒）。
 //! この間、画面には何も出ていなかった。
 //!
 //! ## 誰が書いて誰が読むか

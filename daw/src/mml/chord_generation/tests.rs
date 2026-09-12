@@ -2,7 +2,7 @@
 //!
 //! **期待値は推測で書かない。** すべて
 //! `chord2mml-rust/target/debug/chord2mml.exe "<組み立てた入力>"` を実際に走らせて
-//! 得た出力をそのまま置いてある（引き継ぎ資料 3.2 の表の、縦棒で囲んだ版）。
+//! 得た出力をそのまま置いてある。
 
 use super::{chord2mml_input, generate_mml_from_chord_cell};
 

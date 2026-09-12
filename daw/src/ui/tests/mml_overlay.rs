@@ -205,7 +205,7 @@ fn ctrl_t_lists_the_injected_catalog_patches() {
     );
 }
 
-/// オーバーレイで音色を確定すると、grid の init 列（Stage 4 の `role:音色名`）が変わる。
+/// オーバーレイで音色を確定すると、grid の init 列（`role:音色名`）が変わる。
 /// 「そのセルが実際に鳴る音色」と表示が一致していることを、描画バッファで確かめる。
 #[test]
 fn confirming_a_patch_updates_the_init_column_of_the_grid() {

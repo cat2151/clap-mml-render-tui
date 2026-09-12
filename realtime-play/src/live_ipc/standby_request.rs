@@ -186,7 +186,7 @@ impl RealtimePlayServerSupervisor {
     /// - `Err`: ロード失敗 / timeout / サーバー停止
     ///
     /// `fast_client` の錠は共有メモリを 1 回読む間しか握らない。ここが長く握ると、
-    /// 同じ錠で timeline event を送っている側が止まり、この Stage の目的が壊れる。
+    /// 同じ錠で timeline event を送っている側が止まり、「先読み中も演奏が止まらない」が壊れる。
     /// 未接続なら再接続せずその場で畳む（別の接続では先読みを引き継げない）。
     pub fn poll_standby_patch(&self, request: &mut StandbyPatchRequest) -> Result<Option<()>> {
         let snapshot = self.read_standby_completion(request);

@@ -204,7 +204,7 @@ impl ChordChartScreen {
 
     /// 実際に描くべき左 pane のカーソル行。行が無いときは 0。
     ///
-    /// 編集（Stage 5/6）で行が減ると保持した index が溢れる。**丸めるのは描画側の
+    /// 編集で行が減ると保持した index が溢れる。**丸めるのは描画側の
     /// 責任にせず、ここ 1 か所に閉じる。**
     pub fn clamped_section_cursor(&self) -> usize {
         clamp_cursor(self.section_cursor, self.song.sections.len())
@@ -392,7 +392,7 @@ pub(crate) enum MoveDirection {
 
 /// 修飾なし（`SHIFT` だけは付いていてよい）のキーか。
 ///
-/// `SHIFT` を許すのは、記号や大文字が SHIFT 付きで届くため（実測は前資料）。
+/// `SHIFT` を許すのは、記号や大文字が SHIFT 付きで届くため。
 fn is_plain(key: KeyEvent) -> bool {
     !key.modifiers
         .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)

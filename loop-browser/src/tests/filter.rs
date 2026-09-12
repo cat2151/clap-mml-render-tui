@@ -113,7 +113,7 @@ fn the_query_is_case_insensitive_and_accepts_a_regular_expression() {
     );
 }
 
-/// Stage 1 の実測（`kick|` は妥当な正規表現で全件にマッチする）が loop tree では
+/// `kick|` は妥当な正規表現で全件にマッチし、loop tree では
 /// 「root 自身の相対パス（空文字列）にマッチする＝ツリー全部が残る」として出る。
 #[test]
 fn a_condition_that_matches_the_empty_string_keeps_the_whole_tree_expanded() {

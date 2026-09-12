@@ -26,8 +26,8 @@ fn loaded() -> Song {
 
 /// JSON object のキーを sorted で取り出す。
 ///
-/// 「このキーが無いこと」を名前で書くと、その綴り自体が受け入れ条件の grep に
-/// 引っかかる（Stage 2 の罠）。集合の等値比較なら綴りを書かずに済む。
+/// 「このキーが無いこと」を名前で書くと、その綴り自体が「キーが残っていないか」の grep に
+/// 引っかかる。集合の等値比較なら綴りを書かずに済む。
 fn sorted_keys(value: &serde_json::Value) -> Vec<&str> {
     let mut keys: Vec<&str> = value
         .as_object()
@@ -123,7 +123,7 @@ fn an_unparsable_prefix_survives_the_round_trip_untouched() {
 
 /// 削減前の形式（`version` / `title` / `key` / `bpm` / 1 コードの小節数）。
 ///
-/// **移行コードは書かない**（資料 7 章 4）。消したフィールドは serde が黙って無視し、
+/// **移行コードは書かない。** 消したフィールドは serde が黙って無視し、
 /// 無かった prefix は既定値へ落ちる。panic せず section が読めれば十分。
 #[test]
 fn the_old_format_is_read_without_a_panic() {
@@ -228,7 +228,7 @@ fn the_saved_json_matches_the_documented_shape() {
         let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
         // Key / BPM は 1 本の文字列。旧形式の `key` / `bpm` はもう書き出さない。
         assert_eq!(value["prefix"], "Key=C BPM120");
-        // SectionId は newtype なので裸の数値で並ぶ（資料 4.3 の形）。
+        // SectionId は newtype なので裸の数値で並ぶ。
         assert_eq!(value["arrangement"], serde_json::json!([1, 1]));
         assert_eq!(value["sections"][0]["degrees"], "I-V-VIm-IV");
         // ルートが持つのはこの 3 つだけ。読む側が見ないバージョン番号も、曲名も、

@@ -19,7 +19,7 @@ pub(super) const LIVE_INSTANCE_COUNT_ENV: &str = "CMRT_LIVE_INSTANCE_COUNT";
 /// サーバー側の**テスト専用**の人工ロード遅延（ミリ秒）。
 /// 実体は play-server の `player/worker/bank/state.rs`。
 pub(super) const PATCH_LOAD_DELAY_ENV: &str = "CMRT_TEST_PATCH_LOAD_DELAY_MS";
-/// 人工ロードで止める長さ。受け入れ条件 2 の「500ms の人工 patch load」。
+/// 人工ロードで止める長さ。
 pub(super) const SLOW_PATCH_LOAD_MS: u64 = 500;
 /// サーバー全体で持つ予備インスタンスの数。
 pub(super) const SPARE_INSTANCES_ENV: &str = "CMRT_SPARE_INSTANCES";
