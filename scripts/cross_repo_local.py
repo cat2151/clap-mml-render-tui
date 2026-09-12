@@ -4,7 +4,8 @@
 サブコマンド:
   on      .cargo/config.toml を生成し、git 依存を兄弟 repo の作業ツリーへ向ける
   off     ローカルモードを解除し、Cargo.lock を「push 済みの最新 HEAD」へ張り直す
-  status  いまの状態を表示する。commit して安全でなければ非 0 で終了する
+  status  いまの状態を表示する。commit して安全でなければ非 0 で終了する。
+          --fix を付けると「Cargo.lock が origin/main より古い」だけは cargo update で追従する
   hooks   pre-commit hook を有効化する（core.hooksPath を .githooks へ向ける）
 
 背景と設計判断は docs/adr/0010-two-repo-layout.md を参照。
@@ -271,12 +272,8 @@ def cmd_off(args: argparse.Namespace) -> int:
     if SIBLING_DIR.exists():
         fetch_sibling()
     info("Cargo.lock を play-server の最新 HEAD へ張り直します（cargo update）…")
-    pkgs: list[str] = []
-    for name, _ in PATCHED_CRATES:
-        pkgs += ["-p", name]
-    proc = run(["cargo", "update", *pkgs], check=False)
-    output = (proc.stdout + proc.stderr).strip()
-    if proc.returncode != 0:
+    ok, output = cargo_update_ps_crates()
+    if not ok:
         hint = ""
         if lock_has_path_entries():
             # cargo は "did not match any packages" としか言わないので、こちらで原因を名指しする。
@@ -286,12 +283,26 @@ def cmd_off(args: argparse.Namespace) -> int:
                 "\n          git restore --source=HEAD --staged --worktree -- Cargo.lock"
             )
         fail(f"cargo update が失敗しました。\n{output}{hint}")
-    for line in output.splitlines():
-        if "clap-mml-play-server" in line:
-            info(f"  {line.strip()}")
 
     info("")
     return report_status(after_off=True)
+
+
+def cargo_update_ps_crates() -> tuple[bool, str]:
+    """play-server 由来の crate だけ cargo update し、(成功したか, cargo の出力) を返す。
+
+    成功時は play-server に関する行（Updating … -> #rev）だけ表示する。
+    """
+    pkgs: list[str] = []
+    for name, _ in PATCHED_CRATES:
+        pkgs += ["-p", name]
+    proc = run(["cargo", "update", *pkgs], check=False)
+    output = (proc.stdout + proc.stderr).strip()
+    if proc.returncode == 0:
+        for line in output.splitlines():
+            if "clap-mml-play-server" in line:
+                info(f"  {line.strip()}")
+    return proc.returncode == 0, output
 
 
 # --- hooks ----------------------------------------------------------------
@@ -309,7 +320,8 @@ def cmd_hooks(_args: argparse.Namespace) -> int:
     else:
         run(["git", "config", "core.hooksPath", HOOKS_PATH_VALUE])
         info(f"core.hooksPath を {HOOKS_PATH_VALUE} に設定しました。")
-    info("以後 git commit のたびに status --no-fetch --staged が走ります（cargo は呼ばない）。")
+    info("以後 git commit のたびに status --no-fetch --staged --fix が走ります。")
+    info("Cargo.lock が play-server の origin/main より古いときだけ cargo update で追従します。")
     info("どうしても通したいときだけ git commit --no-verify。")
     return 0
 
@@ -320,12 +332,18 @@ def cmd_hooks(_args: argparse.Namespace) -> int:
 def cmd_status(args: argparse.Namespace) -> int:
     if SIBLING_DIR.exists() and not args.no_fetch:
         fetch_sibling()
-    return report_status(after_off=False, staged=args.staged)
+    return report_status(after_off=False, staged=args.staged, fix=args.fix)
 
 
-def report_status(after_off: bool, staged: bool = False) -> int:
-    """staged=True なら worktree ではなく index（commit に載る中身）を判定する。"""
+def report_status(after_off: bool, staged: bool = False, fix: bool = False) -> int:
+    """staged=True なら worktree ではなく index（commit に載る中身）を判定する。
+
+    fix=True のとき、問題が「Cargo.lock が origin/main より古い」の 1 件だけなら cargo update で
+    追従し（staged なら git add も）、同じ判定をもう 1 回して結果を返す。他の問題は人の判断が
+    要るので直さない。
+    """
     problems: list[str] = []
+    stale = False
 
     on = local_mode_is_on()
     info(f"ローカル横断モード : {'ON' if on else 'OFF'}")
@@ -369,6 +387,7 @@ def report_status(after_off: bool, staged: bool = False) -> int:
                 "先に play-server を push しないと、ローカルモードを使わない環境でビルドが壊れる。"
             )
         elif lock_rev and remote and lock_rev != remote:
+            stale = True
             remedy = "`cargo update -p cmrt-core -p cmrt-server-config` で追従すること。"
             if staged:
                 remedy += " 追従済みなら git add Cargo.lock を忘れている。"
@@ -378,6 +397,24 @@ def report_status(after_off: bool, staged: bool = False) -> int:
             )
 
     info("")
+    if fix and stale and len(problems) == 1:
+        if on:
+            # ON のまま cargo update すると [patch] が効いて source 行が剥がれる。off は人が判断する。
+            warn("ローカルモードが ON なので自動追従しません。off で戻してから commit すること。")
+        else:
+            info(f"Cargo.lock の rev が古いので play-server の origin/{PS_BRANCH} へ追従します（cargo update）…")
+            ok, output = cargo_update_ps_crates()
+            if ok:
+                if staged:
+                    run(["git", "add", "--", "Cargo.lock"])
+                    info("  git add Cargo.lock")
+                # cargo update は GitHub の最新を取るので、比較相手の origin/main も揃えてから判定し直す。
+                if SIBLING_DIR.exists():
+                    fetch_sibling()
+                info("")
+                return report_status(after_off=after_off, staged=staged)
+            warn(f"cargo update が失敗しました。\n{output}")
+            info("")
     if problems:
         for p in problems:
             print(f"[NG] {p}")
@@ -418,6 +455,11 @@ def main() -> int:
         "--staged",
         action="store_true",
         help="worktree ではなく index（commit に載る中身）の Cargo.lock を判定する",
+    )
+    p_status.add_argument(
+        "--fix",
+        action="store_true",
+        help="Cargo.lock が play-server の origin/main より古いときだけ cargo update で追従する（--staged なら git add も）",
     )
     p_status.set_defaults(func=cmd_status)
 
