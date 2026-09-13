@@ -44,9 +44,8 @@ pub enum StartupStepState {
     Waiting,
     /// 実行中。件数が分かるときだけ `(完了数, 総数)` を持つ。
     ///
-    /// `None` になるのは「始まったが、まだ 1 件も報告が来ていない」とき。
-    /// たとえば play server は子プロセスを spawn した直後で、
-    /// `cmrt-server-startup: instances=N/M` がまだ 1 行も出ていない状態。
+    /// `None` になるのは件数を持たない処理、またはまだ 1 件も報告が来ていないとき。
+    /// たとえば play server の catalog 解決や CLAP 読み込みがこれに当たる。
     Running(Option<(usize, usize)>),
     /// 終わった。
     Done,

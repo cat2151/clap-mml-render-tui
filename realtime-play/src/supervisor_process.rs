@@ -151,6 +151,12 @@ impl RealtimePlayServerSupervisor {
     fn note_server_listening_locked(&self, state: &mut PlayServerState) {
         state.exit_latch.reset();
         *self.last_startup_failure.lock().unwrap() = None;
+        let mut startup_progress = self.startup_progress.lock().unwrap();
+        startup_progress
+            .get_or_insert_with(|| {
+                crate::RealtimePlayServerStartupProgress::listening(self.live_instance_count)
+            })
+            .mark_listening();
     }
 
     /// 直近に server が落ちた理由。UI が「無音の理由」を出すために読む。

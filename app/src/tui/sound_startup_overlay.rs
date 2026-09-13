@@ -1,8 +1,8 @@
 //! 「音が鳴るまで」の待ちを中央 overlay で見せる（`TuiApp` がホストする画面に共通）。
 //!
-//! 待ちの実体は音色ロードではなく play server プロセスの起動で、CLAP instance の生成が
-//! 支配的（数秒）。音色ロードはほぼ 0ms（preview は既定音色 `patch: None` で鳴らす。
-//! `chord_chart_glue::PREVIEW_PATCH`）。
+//! 待ちの大半は server exe の spawn そのものではなく、その後に子プロセスが行う
+//! catalog 解決・CLAP 読み込み・instance 生成である。それぞれを別の段階として見せ、
+//! 「server 起動」の 1 行へ数秒を押し込めない。
 //!
 //! chord chart 専用にせず `TuiApp` 共通にしたのは、待ちの実体が共有の
 //! [`cmrt_mml_overlay::MmlOverlaySender`] にあり、出す条件も画面ではなく sender の状態
@@ -20,12 +20,18 @@ use cmrt_tui_core::startup_progress::{
     draw_startup_progress_overlay, StartupStep, StartupStepState,
 };
 
-use crate::screen_switch::PrimaryScreen;
+use crate::{
+    realtime_play::{RealtimePlayServerStartupPhase, RealtimePlayServerStartupProgress},
+    screen_switch::PrimaryScreen,
+};
 
 use super::TuiApp;
 
-/// 1 段目。play server プロセスが listen するまで（keyboard 画面の overlay と同じ綴り）。
-const PLAY_SERVER_STEP: &str = "play server 起動";
+const SERVER_EXE_STEP: &str = "server exe 起動";
+const PLUGIN_CATALOG_STEP: &str = "音源カタログの確認";
+const LOAD_ENTRY_STEP: &str = "CLAP 音源の読み込み";
+const INSTANCES_STEP: &str = "音源 instance 生成";
+const AUDIO_STREAM_STEP: &str = "音声出力・待受";
 
 /// 2 段目。既定音色で鳴らすので実際に待つのは SHM の接続だが、名指しできないので
 /// まとめて「音源の準備」と呼ぶ。
@@ -33,15 +39,14 @@ const SOUND_PREPARE_STEP: &str = "音源の準備";
 
 /// 「音が鳴るまで」の待ち 1 回ぶんの写し。
 ///
-/// 持つのは実際に知り得ることだけ。アプリが知っているのは「sender が準備中か」と
-/// 「play server の instance が何本できたか」（stderr の `cmrt-server-startup: instances=N/M`
-/// を supervisor が拾う）の 2 つしかない。
+/// server 側の写しは stderr の `cmrt-server-startup:` と localhost の接続確認を
+/// supervisor がまとめたもの。描画側は process やファイルを直接調べない。
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::tui) struct SoundStartupWait {
     /// 待ち始めた時刻。待っている間は作り直さない（作り直すと経過秒数が 0.0s のままになる）。
     pub(in crate::tui) started_at: Instant,
-    /// play server の instance 生成の進み具合。spawn がまだ始まっていなければ `None`。
-    pub(in crate::tui) server_startup: Option<(usize, usize)>,
+    /// play server の起動段階。spawn がまだ始まっていなければ `None`。
+    pub(in crate::tui) server_startup: Option<RealtimePlayServerStartupProgress>,
 }
 
 /// 次のフレームの待ちの写し。出る条件と消える条件はここ 1 か所で決まる。
@@ -52,7 +57,7 @@ pub(in crate::tui) struct SoundStartupWait {
 pub(in crate::tui) fn next_wait(
     previous: Option<SoundStartupWait>,
     loading: bool,
-    server_startup: Option<(usize, usize)>,
+    server_startup: Option<RealtimePlayServerStartupProgress>,
     now: Instant,
 ) -> Option<SoundStartupWait> {
     if !loading {
@@ -64,33 +69,78 @@ pub(in crate::tui) fn next_wait(
     })
 }
 
-/// 待ちの写しを、共通ウィジェットの段階へ翻訳する。知り得ない段階をでっち上げない:
-/// 1 段目が終わったと言えるのは、instance が全部できたと play server 自身が言ってきたときだけ。
+/// 待ちの写しを、共通ウィジェットの段階へ翻訳する。
 fn startup_steps(wait: &SoundStartupWait) -> Vec<StartupStep> {
-    if server_instances_ready(wait.server_startup) {
-        vec![
-            StartupStep::new(PLAY_SERVER_STEP, StartupStepState::Done),
-            // SHM 接続も音色ロードも件数を持たないので、数えられるものが無い。
-            StartupStep::new(SOUND_PREPARE_STEP, StartupStepState::Running(None)),
-        ]
-    } else {
-        vec![
-            StartupStep::new(
-                PLAY_SERVER_STEP,
-                StartupStepState::Running(wait.server_startup),
-            ),
-            StartupStep::new(SOUND_PREPARE_STEP, StartupStepState::Waiting),
-        ]
+    let progress = wait.server_startup;
+    let exe_spawned = progress.is_some_and(|progress| progress.server_exe_spawned);
+    let server_listening = progress.is_some_and(|progress| progress.server_listening);
+    let phase = progress
+        .and_then(|progress| progress.phase)
+        .or_else(|| exe_spawned.then_some(RealtimePlayServerStartupPhase::PluginCatalog));
+    let instances =
+        progress.map(|progress| (progress.initialized_instances, progress.total_instances));
+
+    vec![
+        StartupStep::new(
+            SERVER_EXE_STEP,
+            if exe_spawned {
+                StartupStepState::Done
+            } else {
+                StartupStepState::Running(None)
+            },
+        ),
+        StartupStep::new(
+            PLUGIN_CATALOG_STEP,
+            phase_state(phase, RealtimePlayServerStartupPhase::PluginCatalog, None),
+        ),
+        StartupStep::new(
+            LOAD_ENTRY_STEP,
+            phase_state(phase, RealtimePlayServerStartupPhase::LoadEntry, None),
+        ),
+        StartupStep::new(
+            INSTANCES_STEP,
+            phase_state(phase, RealtimePlayServerStartupPhase::Instances, instances),
+        ),
+        StartupStep::new(
+            AUDIO_STREAM_STEP,
+            audio_stream_state(phase, server_listening),
+        ),
+        StartupStep::new(
+            SOUND_PREPARE_STEP,
+            if server_listening {
+                StartupStepState::Running(None)
+            } else {
+                StartupStepState::Waiting
+            },
+        ),
+    ]
+}
+
+fn phase_state(
+    current: Option<RealtimePlayServerStartupPhase>,
+    target: RealtimePlayServerStartupPhase,
+    count: Option<(usize, usize)>,
+) -> StartupStepState {
+    match current {
+        Some(current) if current > target => StartupStepState::Done,
+        Some(current) if current == target => StartupStepState::Running(count),
+        _ => StartupStepState::Waiting,
     }
 }
 
-/// play server の instance が全部そろったか。
-///
-/// `None`（spawn がまだ始まっていない）は「まだ」に倒す。押してから spawn までに
-/// 1 秒超（実体の解決と探索）掛かることがあり、「済んだ」に倒すとそのあいだ画面が嘘をつく。
-/// listen 済みのサーバーへ相乗りしたときは 1 段目が短く回り続けて見えるが、2 段目ごとすぐ終わる。
-fn server_instances_ready(progress: Option<(usize, usize)>) -> bool {
-    matches!(progress, Some((done, total)) if total > 0 && done >= total)
+/// audio stream と listen は短く、利用者からはどちらも「server が音を出せるまで」の
+/// 最終段階なので 1 行へまとめる。port の接続確認が取れるまでは完了にしない。
+fn audio_stream_state(
+    phase: Option<RealtimePlayServerStartupPhase>,
+    server_listening: bool,
+) -> StartupStepState {
+    if server_listening {
+        StartupStepState::Done
+    } else if phase.is_some_and(|phase| phase >= RealtimePlayServerStartupPhase::AudioStream) {
+        StartupStepState::Running(None)
+    } else {
+        StartupStepState::Waiting
+    }
 }
 
 /// overlay が出た／消えた瞬間のログ 1 行。変わっていなければ `None`。
@@ -131,10 +181,7 @@ impl TuiApp<'_> {
             return;
         };
         let status = sender.status();
-        let server_startup = self
-            .play_server
-            .startup_progress()
-            .map(|progress| (progress.initialized_instances, progress.total_instances));
+        let server_startup = self.play_server.startup_progress();
         let previous = self.sound_startup_wait;
         self.sound_startup_wait = next_wait(previous, status.is_loading(), server_startup, now);
         if let Some(line) = wait_transition_log_line(previous, self.sound_startup_wait, now) {

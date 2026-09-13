@@ -102,10 +102,61 @@ pub struct RealtimePlayServerSupervisor {
     last_startup_failure: Mutex<Option<ServerStartupFailure>>,
 }
 
+/// 子 server が現在実行している起動フェーズ。
+///
+/// variant の順序は実行順でもあり、中央 overlay が済んだ段階を判定するときに使う。
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum RealtimePlayServerStartupPhase {
+    PluginCatalog,
+    LoadEntry,
+    Instances,
+    AudioStream,
+    Listen,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RealtimePlayServerStartupProgress {
+    /// OS の process spawn が戻り、server exe が走り始めた。
+    pub server_exe_spawned: bool,
+    /// 子 server が stderr で通知した現在の起動フェーズ。
+    pub phase: Option<RealtimePlayServerStartupPhase>,
     pub initialized_instances: usize,
     pub total_instances: usize,
+    /// localhost port が接続を受け付けた。
+    pub server_listening: bool,
+}
+
+impl RealtimePlayServerStartupProgress {
+    fn starting(total_instances: usize) -> Self {
+        Self {
+            server_exe_spawned: false,
+            phase: None,
+            initialized_instances: 0,
+            total_instances,
+            server_listening: false,
+        }
+    }
+
+    fn listening(total_instances: usize) -> Self {
+        Self {
+            server_exe_spawned: true,
+            phase: Some(RealtimePlayServerStartupPhase::Listen),
+            initialized_instances: total_instances,
+            total_instances,
+            server_listening: true,
+        }
+    }
+
+    fn advance_to(&mut self, phase: RealtimePlayServerStartupPhase) {
+        self.phase = Some(self.phase.map_or(phase, |current| current.max(phase)));
+    }
+
+    fn mark_listening(&mut self) {
+        self.server_exe_spawned = true;
+        self.advance_to(RealtimePlayServerStartupPhase::Listen);
+        self.initialized_instances = self.total_instances;
+        self.server_listening = true;
+    }
 }
 
 enum PlayRequestError {

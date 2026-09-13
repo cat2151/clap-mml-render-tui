@@ -2,6 +2,7 @@ use std::{
     io::{BufRead as _, BufReader},
     process::{Child, Command, Stdio},
     sync::{Arc, Mutex},
+    time::Instant,
 };
 
 use anyhow::{anyhow, Result};
@@ -10,7 +11,7 @@ use super::{
     logging::{log_realtime_play_event, truncate_for_log},
     server_binary::{ResolvedServer, ServerSource},
     startup_failure::StderrCapture,
-    RealtimePlayServerStartupProgress,
+    RealtimePlayServerStartupPhase, RealtimePlayServerStartupProgress,
 };
 
 /// 起動しようとしたコマンドと、その素性。
@@ -24,6 +25,7 @@ pub(super) struct ServerLaunch {
 }
 
 const STARTUP_PROGRESS_PREFIX: &str = "cmrt-server-startup: instances=";
+const STARTUP_PHASE_PREFIX: &str = "cmrt-server-startup: phase=";
 
 pub(super) fn stop_child(child: Option<Child>) {
     let Some(mut child) = child else {
@@ -41,6 +43,43 @@ pub(super) fn parse_server_startup_progress(line: &str) -> Option<(usize, usize)
     let completed = completed.parse().ok()?;
     let total = total.parse().ok()?;
     (total > 0 && completed <= total).then_some((completed, total))
+}
+
+pub(super) fn parse_server_startup_phase(line: &str) -> Option<RealtimePlayServerStartupPhase> {
+    let phase = line
+        .strip_prefix(STARTUP_PHASE_PREFIX)?
+        .split_whitespace()
+        .next()?;
+    match phase {
+        "plugin_catalog" => Some(RealtimePlayServerStartupPhase::PluginCatalog),
+        "load_entry" => Some(RealtimePlayServerStartupPhase::LoadEntry),
+        "instances" => Some(RealtimePlayServerStartupPhase::Instances),
+        "audio_stream" => Some(RealtimePlayServerStartupPhase::AudioStream),
+        "listen" => Some(RealtimePlayServerStartupPhase::Listen),
+        _ => None,
+    }
+}
+
+fn apply_server_startup_line(progress: &mut RealtimePlayServerStartupProgress, line: &str) {
+    if let Some(phase) = parse_server_startup_phase(line) {
+        progress.advance_to(phase);
+    }
+    if let Some((initialized_instances, total_instances)) = parse_server_startup_progress(line) {
+        progress.advance_to(RealtimePlayServerStartupPhase::Instances);
+        progress.initialized_instances = initialized_instances;
+        progress.total_instances = total_instances;
+    }
+}
+
+fn server_spawned_log_line(
+    port: u16,
+    pid: u32,
+    launch_description: &str,
+    spawn_ms: u128,
+) -> String {
+    format!(
+        "action=server-spawned phase=server_exe_spawn ms={spawn_ms} port={port} pid={pid} {launch_description}"
+    )
 }
 
 /// 決まった実体から、実際に spawn するコマンドを組み立てる。
@@ -69,10 +108,9 @@ pub(super) fn spawn_realtime_play_server(
     startup_progress: Arc<Mutex<Option<RealtimePlayServerStartupProgress>>>,
     stderr_capture: StderrCapture,
 ) -> Result<Child> {
-    *startup_progress.lock().unwrap() = Some(RealtimePlayServerStartupProgress {
-        initialized_instances: 0,
-        total_instances: live_instance_count,
-    });
+    *startup_progress.lock().unwrap() = Some(RealtimePlayServerStartupProgress::starting(
+        live_instance_count,
+    ));
     log_realtime_play_event(format!(
         "action=server-spawn port={port} {launch_description}"
     ));
@@ -80,10 +118,23 @@ pub(super) fn spawn_realtime_play_server(
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
+    let spawn_started = Instant::now();
     let mut child = command.spawn().map_err(|error| {
         anyhow!("realtime play server の起動に失敗しました ({launch_description}): {error}")
     })?;
+    let spawn_ms = spawn_started.elapsed().as_millis();
     let pid = child.id();
+    if let Some(progress) = startup_progress.lock().unwrap().as_mut() {
+        progress.server_exe_spawned = true;
+    }
+    // 子の stderr reader より先に残し、exe 起動完了と子プロセス内フェーズの順序を
+    // log.txt 上でも保証する。
+    log_realtime_play_event(server_spawned_log_line(
+        port,
+        pid,
+        launch_description,
+        spawn_ms,
+    ));
     if let Some(stderr) = child.stderr.take() {
         let thread_progress = Arc::clone(&startup_progress);
         let thread_capture = stderr_capture.clone();
@@ -93,14 +144,8 @@ pub(super) fn spawn_realtime_play_server(
                 for line in BufReader::new(stderr).lines() {
                     match line {
                         Ok(line) => {
-                            if let Some((initialized_instances, total_instances)) =
-                                parse_server_startup_progress(&line)
-                            {
-                                *thread_progress.lock().unwrap() =
-                                    Some(RealtimePlayServerStartupProgress {
-                                        initialized_instances,
-                                        total_instances,
-                                    });
+                            if let Some(progress) = thread_progress.lock().unwrap().as_mut() {
+                                apply_server_startup_line(progress, &line);
                             }
                             log_realtime_play_event(format!(
                                 "action=server-stderr pid={pid} line=\"{}\"",
@@ -129,9 +174,6 @@ pub(super) fn spawn_realtime_play_server(
     } else {
         stderr_capture.mark_finished();
     }
-    log_realtime_play_event(format!(
-        "action=server-spawned port={port} pid={pid} {launch_description}"
-    ));
     Ok(child)
 }
 

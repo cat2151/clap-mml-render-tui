@@ -55,3 +55,66 @@ fn startup_progress_parser_accepts_only_valid_instance_counts() {
     );
     assert_eq!(parse_server_startup_progress("unrelated output"), None);
 }
+
+#[test]
+fn startup_phase_parser_accepts_the_server_protocol_and_ignores_unknown_phases() {
+    assert_eq!(
+        parse_server_startup_phase(
+            "cmrt-server-startup: phase=plugin_catalog event=begin since_boot_ms=37"
+        ),
+        Some(RealtimePlayServerStartupPhase::PluginCatalog)
+    );
+    assert_eq!(
+        parse_server_startup_phase("cmrt-server-startup: phase=load_entry event=begin"),
+        Some(RealtimePlayServerStartupPhase::LoadEntry)
+    );
+    assert_eq!(
+        parse_server_startup_phase("cmrt-server-startup: phase=instances event=begin"),
+        Some(RealtimePlayServerStartupPhase::Instances)
+    );
+    assert_eq!(
+        parse_server_startup_phase("cmrt-server-startup: phase=audio_stream event=begin"),
+        Some(RealtimePlayServerStartupPhase::AudioStream)
+    );
+    assert_eq!(
+        parse_server_startup_phase("cmrt-server-startup: phase=listen event=begin"),
+        Some(RealtimePlayServerStartupPhase::Listen)
+    );
+    assert_eq!(
+        parse_server_startup_phase("cmrt-server-startup: phase=future event=begin"),
+        None
+    );
+}
+
+#[test]
+fn startup_lines_advance_one_shared_snapshot_without_erasing_spawn_state() {
+    let mut progress = RealtimePlayServerStartupProgress::starting(14);
+    progress.server_exe_spawned = true;
+
+    apply_server_startup_line(
+        &mut progress,
+        "cmrt-server-startup: phase=plugin_catalog event=begin since_boot_ms=3",
+    );
+    assert_eq!(
+        progress.phase,
+        Some(RealtimePlayServerStartupPhase::PluginCatalog)
+    );
+    assert!(progress.server_exe_spawned);
+
+    apply_server_startup_line(&mut progress, "cmrt-server-startup: instances=5/14");
+    assert_eq!(
+        progress.phase,
+        Some(RealtimePlayServerStartupPhase::Instances)
+    );
+    assert_eq!(progress.initialized_instances, 5);
+    assert_eq!(progress.total_instances, 14);
+    assert!(progress.server_exe_spawned);
+}
+
+#[test]
+fn spawned_log_identifies_the_exe_boundary_and_its_elapsed_time() {
+    assert_eq!(
+        server_spawned_log_line(62_154, 4321, "source=sibling", 287),
+        "action=server-spawned phase=server_exe_spawn ms=287 port=62154 pid=4321 source=sibling"
+    );
+}
