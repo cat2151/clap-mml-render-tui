@@ -1,24 +1,6 @@
-//! `i` / `n` の 1 行入力を、実際のキーの並びから確かめる。
+//! `n` の section 名入力を、実際のキーの並びから確かめる。
 
 use super::*;
-
-#[test]
-fn i_opens_the_input_prefilled_with_the_current_progression() {
-    let mut screen = two_section_screen();
-
-    assert_eq!(
-        screen.handle_key_event(key('i')),
-        ChordChartAction::Continue
-    );
-
-    assert!(screen.line_input_open());
-    assert_eq!(
-        screen.line_input().unwrap().target(),
-        LineInputTarget::Degrees
-    );
-    // 既定値が入っていないと、少し直したいだけでも全部打ち直しになる。
-    assert_eq!(input_value(&screen), "I-V-VIm-IV");
-}
 
 #[test]
 fn n_opens_the_input_prefilled_with_the_current_name() {
@@ -29,26 +11,6 @@ fn n_opens_the_input_prefilled_with_the_current_name() {
 
     assert_eq!(screen.line_input().unwrap().target(), LineInputTarget::Name);
     assert_eq!(input_value(&screen), "B");
-}
-
-/// 進行を打ち直すと、その section の degrees だけが変わる。
-#[test]
-fn a_committed_progression_changes_only_the_section_under_the_cursor() {
-    let mut screen = two_section_screen();
-    assert_eq!(degrees_of(&screen, 0), "I-V-VIm-IV");
-
-    screen.handle_key_event(key('i'));
-    clear_input(&mut screen);
-    type_text(&mut screen, "I-IV-V-I-VIm-IV");
-
-    assert_eq!(
-        screen.handle_key_event(plain(KeyCode::Enter)),
-        ChordChartAction::SongChanged
-    );
-    assert!(!screen.line_input_open());
-    assert_eq!(degrees_of(&screen, 0), "I-IV-V-I-VIm-IV");
-    // 編集していない section は触らない。
-    assert_eq!(degrees_of(&screen, 1), "IIm-V-I-VIm");
 }
 
 /// 端末によっては `Enter` が `Ctrl+M` として届く。両方で確定できること。
@@ -67,44 +29,7 @@ fn control_m_commits_just_like_enter() {
     assert_eq!(screen.song.sections[0].name, "Sabi");
 }
 
-/// この画面は degrees を解釈しない。**読めない進行もそのまま確定する**
-/// （書式は chord2mml-rs のもので、読めるかどうかを決めるのは演奏側＝別スコープ）。
-#[test]
-fn a_progression_this_screen_cannot_read_is_committed_all_the_same() {
-    let mut screen = two_section_screen();
-    screen.handle_key_event(key('i'));
-    clear_input(&mut screen);
-    type_text(&mut screen, "zzz");
-
-    assert_eq!(
-        screen.handle_key_event(plain(KeyCode::Enter)),
-        ChordChartAction::SongChanged
-    );
-
-    assert!(!screen.line_input_open());
-    assert_eq!(degrees_of(&screen, 0), "zzz");
-    // 理由は 1 つも出ない（下段にも overlay にも）。
-    assert_eq!(screen.error, None);
-}
-
-/// 空の degrees も受ける（`b` の prefix と同じ扱い）。空を弾く相手は名前だけ。
-#[test]
-fn an_empty_progression_is_accepted_too() {
-    let mut screen = two_section_screen();
-    screen.handle_key_event(key('i'));
-    clear_input(&mut screen);
-
-    assert_eq!(
-        screen.handle_key_event(plain(KeyCode::Enter)),
-        ChordChartAction::SongChanged
-    );
-
-    assert!(!screen.line_input_open());
-    assert_eq!(degrees_of(&screen, 0), "");
-}
-
 /// 理由が出たあと文字を直したら、その場で理由は消える（古い理由が残らない）。
-/// 理由が出るのは名前が空のときだけになった。
 #[test]
 fn typing_after_a_rejected_commit_clears_the_reason() {
     let mut screen = two_section_screen();
@@ -185,9 +110,9 @@ fn the_committed_value_is_trimmed() {
 #[test]
 fn escape_closes_the_input_and_keeps_the_old_value() {
     let mut screen = two_section_screen();
-    screen.handle_key_event(key('i'));
+    screen.handle_key_event(key('n'));
     clear_input(&mut screen);
-    type_text(&mut screen, "I-IV");
+    type_text(&mut screen, "Intro");
 
     assert_eq!(
         screen.handle_key_event(plain(KeyCode::Esc)),
@@ -195,28 +120,28 @@ fn escape_closes_the_input_and_keeps_the_old_value() {
     );
 
     assert!(!screen.line_input_open());
-    assert_eq!(degrees_of(&screen, 0), "I-V-VIm-IV");
+    assert_eq!(screen.song.sections[0].name, "A");
 }
 
 /// 値が変わらない確定でファイルを書き直さない（`Continue` を返す）。
 #[test]
 fn committing_the_same_value_does_not_ask_for_a_save() {
     let mut screen = two_section_screen();
-    screen.handle_key_event(key('i'));
+    screen.handle_key_event(key('n'));
 
     assert_eq!(
         screen.handle_key_event(plain(KeyCode::Enter)),
         ChordChartAction::Continue
     );
     assert!(!screen.line_input_open());
-    assert_eq!(degrees_of(&screen, 0), "I-V-VIm-IV");
+    assert_eq!(screen.song.sections[0].name, "A");
 }
 
 /// 開いている間は他のキーが裏の画面に届かない。`?` も `Tab` も文字として入る。
 #[test]
 fn the_input_swallows_every_other_key() {
     let mut screen = two_section_screen();
-    screen.handle_key_event(key('i'));
+    screen.handle_key_event(key('n'));
     clear_input(&mut screen);
 
     screen.handle_key_event(key('?'));
@@ -230,43 +155,41 @@ fn the_input_swallows_every_other_key() {
 }
 
 /// `Ctrl+W`（単語削除）が効く＝自前の push/pop ではなく textarea を通している。
-/// ここが落ちたら「1 行入力なら当然効くべき keybind」が失われている。
 #[test]
 fn the_textarea_keybinds_such_as_control_w_are_available() {
     let mut screen = two_section_screen();
-    screen.handle_key_event(key('i'));
+    screen.handle_key_event(key('n'));
     clear_input(&mut screen);
-    type_text(&mut screen, "I-V VIm");
+    type_text(&mut screen, "Sabi Verse");
 
     screen.handle_key_event(ctrl('w'));
 
-    assert_eq!(input_value(&screen), "I-V ");
+    assert_eq!(input_value(&screen), "Sabi ");
 }
 
 /// section が 1 つも無いときは開かない（書き込む先が無い）。
 #[test]
-fn e_and_n_do_nothing_without_a_section() {
+fn n_does_nothing_without_a_section() {
     let mut screen = ChordChartScreen::new(Song::empty());
 
-    for code in ['e', 'n'] {
-        assert_eq!(
-            screen.handle_key_event(key(code)),
-            ChordChartAction::Continue
-        );
-        assert!(!screen.line_input_open());
-    }
+    assert_eq!(
+        screen.handle_key_event(key('n')),
+        ChordChartAction::Continue
+    );
+    assert!(!screen.line_input_open());
 }
 
-/// Arrangement pane では `e` / `n` が効かない（左 pane 専用のキー）。
+/// Arrangement pane では `n` が効かない（左 pane 専用のキー）。
 #[test]
-fn e_and_n_are_inert_while_the_arrangement_pane_has_focus() {
+fn n_is_inert_while_the_arrangement_pane_has_focus() {
     let mut screen = two_section_screen();
     screen.focus = Pane::Arrangement;
 
-    for code in ['e', 'n'] {
-        screen.handle_key_event(key(code));
-        assert!(!screen.line_input_open());
-    }
+    assert_eq!(
+        screen.handle_key_event(key('n')),
+        ChordChartAction::Continue
+    );
+    assert!(!screen.line_input_open());
 }
 
 /// カーソルを動かしてから開くと、その section が対象になる。
@@ -275,26 +198,11 @@ fn the_input_edits_the_section_under_the_cursor() {
     let mut screen = two_section_screen();
     screen.handle_key_event(key('j'));
 
-    screen.handle_key_event(key('i'));
+    screen.handle_key_event(key('n'));
     clear_input(&mut screen);
-    type_text(&mut screen, "I-IV");
+    type_text(&mut screen, "Sabi");
     screen.handle_key_event(plain(KeyCode::Enter));
 
-    assert_eq!(degrees_of(&screen, 0), "I-V-VIm-IV");
-    assert_eq!(degrees_of(&screen, 1), "I-IV");
-}
-
-/// 打った文字列は 1 文字も変えずに入る（`-` で割って組み直したりしない）。
-#[test]
-fn the_typed_text_is_stored_verbatim() {
-    for typed in ["C-7", "I-V | VIm-IV", "IIm7-V7-IMaj7"] {
-        let mut screen = two_section_screen();
-        screen.handle_key_event(key('i'));
-        clear_input(&mut screen);
-        type_text(&mut screen, typed);
-        screen.handle_key_event(plain(KeyCode::Enter));
-
-        assert!(!screen.line_input_open());
-        assert_eq!(degrees_of(&screen, 0), typed);
-    }
+    assert_eq!(screen.song.sections[0].name, "A");
+    assert_eq!(screen.song.sections[1].name, "Sabi");
 }

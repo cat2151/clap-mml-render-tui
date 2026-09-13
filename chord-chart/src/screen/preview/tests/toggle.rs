@@ -100,7 +100,7 @@ fn the_toggle_works_in_the_arrangement_pane_too() {
 fn a_space_typed_into_the_line_input_stays_a_character() {
     let mut screen = entered();
 
-    screen.handle_key_event(key(KeyCode::Char('i')));
+    screen.handle_key_event(key(KeyCode::Char('n')));
     for _ in 0..64 {
         screen.handle_key_event(key(KeyCode::Backspace));
     }
@@ -117,7 +117,7 @@ fn a_space_typed_into_the_line_input_stays_a_character() {
         screen.handle_key_event(key(KeyCode::Enter)),
         ChordChartAction::SongChanged
     );
-    assert_eq!(screen.song.sections[0].degrees, "I V");
+    assert_eq!(screen.song.sections[0].name, "I V");
 }
 
 /// `Shift+P` も入力欄では文字。

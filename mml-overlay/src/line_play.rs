@@ -127,6 +127,21 @@ pub fn chord_line_events(
     ))
 }
 
+/// Chord Chart の section 進行を、Key 文脈つきでそのまま演奏用イベント列へ変換する。
+///
+/// DAW chord cell の外側 bar は追加せず、変換失敗時も MML へ fallback しない。
+pub fn chord_chart_line_events(
+    line: &str,
+    key_token: Option<&str>,
+) -> (LineStatus, LinePerformance) {
+    if line.trim().is_empty() {
+        return (LineStatus::Idle, LinePerformance::silent());
+    }
+    performance_events(cmrt_chord::timed_chord_progression_performance(
+        key_token, line,
+    ))
+}
+
 fn performance_events(
     result: Result<cmrt_chord::TimedPerformance, String>,
 ) -> (LineStatus, LinePerformance) {

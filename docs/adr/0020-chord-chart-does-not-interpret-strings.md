@@ -30,6 +30,10 @@ section 1 つ（または行内の chord 1 つ）を鳴らすだけで、曲全�
 - 書式は chord2mml-rs の既存フォーマット。**この画面のためのパースを新規に書かない。**
   結果として `chord-chart` crate は `cmrt-chord` に依存しない（`cargo tree -p cmrt-chord-chart` で 0 件）。
 
+`i` の進行編集 UI と試聴は host の共有 MML overlay が受け持つ。そこでは入力途中の
+chord を演奏用に解釈するが、解釈結果や音色を `chord-chart` crate へ持ち込まない。
+解釈できない入力も編集・保存できるという、この節のデータ契約は変わらない。
+
 理由: 解釈を持った瞬間、この画面は「構成を俯瞰する」以外の責務を抱える。
 書式の正しさは、実際に鳴らす側（演奏スコープ）が鳴らせるかどうかで判る。
 
@@ -64,12 +68,15 @@ chord カーソルの位置ではなく**行全体**のトグル）。`Shift+Tab
 
 ### 5. preview を足しても 1. は越えない
 
-鳴らす経路は `Ctrl+P` の MML overlay と同じ（`cmrt_mml_overlay::line_events` →
-`MmlOverlaySender::play_line`）。`cmrt_chord::parse_chord_progression`（Key と
-コード以外の directive を拒むラッパー）は通らない。
+`chord-chart` crate が返すのは opaque な文字列と stable な section id、preview 要求だけで、
+編集 UI・文字列の解釈・音色・sender・永続化は host 側に置く。
 
 - `prefix` から Key トークンを抜くのも、1 行を組み立てるのも **app 側の glue**
   （`app/src/tui/chord_chart_glue.rs`）。crate から `cmrt-chord` への依存は復活していない。
+- Sections pane の `i` は `EditDegrees(SectionId)` を host へ返す。host は現在の degrees を
+  Chord Chart 専用 syntax・Modal 1 行の共有 MML overlay で開く。`Enter` は trim した値を
+  stable id の section へ確定・保存し、`Esc` は変更を破棄する。`n` と `b` は従来の
+  `chord-chart` 固有 1 行入力欄のままにする。
 - 画面が持つのは「いま何を鳴らすべきか」の要求（`PreviewRequest`）と
   「鳴っているか」の写しだけ。
 - chord 単位の preview で**切るのは `cmrt-chord`**（`cmrt_chord::chord_source_ranges()`。
@@ -79,6 +86,22 @@ chord カーソルの位置ではなく**行全体**のトグル）。`Shift+Tab
   degrees を**桁として測る**以上のことをしない。
 - 読めない degrees は範囲が 0 件になる。そのときは**その行を chord 1 個として扱う**
   （鳴らすのは行全体・反転しない）。`!` 印も赤字も出さない。
+- overlay の入力中 preview、`Ctrl+Space`、patch 候補の preview は、いずれも Key 文脈を
+  付けた chord progression 専用の厳密な変換を通す。読めない入力を MML として fallback
+  再生せず、DAW chord cell 用の外側の `| ... |` も足さない。これは試聴の可否だけを決め、
+  保存の可否は決めない。
+
+### 6. patch と編集内容の正本は host が owner ごとに持つ
+
+- 共有 MML overlay の owner は Global と Chord Chart を区別する。通常の `Ctrl+P` と
+  Chord Chart は canonical patch を別々に持ち、`history.json` へ独立して保存する。
+- Chord Chart の音色選択は進行編集 overlay 内の `Ctrl+T` から、既存と同じ patch catalog / selector
+  を使う。候補移動は試聴だけ、`Enter` で確定、`Esc` で元の音色へ戻す。確定済みの音色は、
+  その後 degrees 編集を `Esc` で破棄しても残る。
+- 通常画面の行全体・chord 単体 preview も Chord Chart の canonical patch を使う。
+  未選択の `None` は realtime play server の既定音色を意味する。
+- `Shift+P` / `Space` の停止判定は enqueue 時刻から推測しない。sender が準備と送信を終えて
+  公開した実演奏区間と、最後に送った command id が一致している間だけ「鳴っている」と扱う。
 
 ## この画面で学んだ検証の手（次に画面を作るときも同じでよい）
 

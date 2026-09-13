@@ -203,22 +203,29 @@ impl Voice {
     /// 出ていない）。最後に音を止めるのはサーバー側の renderer リセットで、そちらは
     /// All Sound Off を流すようにしてある。ここが note off を送るのはそれでも意味が
     /// あって、届いたときは release 付きで musical に切れる。
-    pub(super) fn play_line(&mut self, sink: &impl SoundSink, program: &LineProgram) {
+    pub(super) fn play_line(&mut self, sink: &impl SoundSink, program: &LineProgram) -> bool {
         self.stop(sink, "line");
         // 空行やエラー行はここで終わる。以前はこの経路でサーバーへ何も飛ばず、
         // 直前に打鍵した音が鳴り続けていた。いまは上の stop で必ず止まっている。
         if program.is_silent() {
-            return;
+            return false;
         }
         match self.line.play(sink, program) {
-            LineOutcome::Playing => self.sounding.begin_timeline(),
+            LineOutcome::Playing => {
+                self.sounding.begin_timeline();
+                true
+            }
             LineOutcome::Partial => {
                 // 積み終えた note on の note off だけ落ちた可能性がある。
                 self.sounding.begin_timeline();
                 self.sounding.mark_suspect("line-send-incomplete");
+                false
             }
             // timeline を張れていないので音は出ていない。記録は増やさない。
-            LineOutcome::Failed => self.sounding.mark_suspect("line-begin-failed"),
+            LineOutcome::Failed => {
+                self.sounding.mark_suspect("line-begin-failed");
+                false
+            }
         }
     }
 

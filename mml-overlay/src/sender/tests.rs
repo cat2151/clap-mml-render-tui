@@ -23,6 +23,9 @@ struct FakeSink {
     prepare_delay: Duration,
     /// 準備を失敗させる理由。`None` なら成功する。
     prepare_error: Option<String>,
+    /// timeline の開始を失敗させる理由。`None` なら成功する。
+    begin_error: Option<String>,
+    timeline_delay: Duration,
     prepared: Mutex<Vec<Option<String>>>,
     midi: Mutex<Vec<RecordedMidi>>,
     /// timeline を張った回数。repeat が張り直していないことを worker 越しに見る。
@@ -75,10 +78,14 @@ impl SoundSink for FakeSink {
 
     fn begin_timeline(&self, _config: LiveTimelineConfig) -> sink::SinkResult {
         self.begins.fetch_add(1, Ordering::AcqRel);
-        Ok(())
+        match &self.begin_error {
+            Some(error) => Err(error.clone()),
+            None => Ok(()),
+        }
     }
 
     fn send_timeline_events(&self, events: &[TimelineMidiEvent]) -> sink::SinkResult {
+        std::thread::sleep(self.timeline_delay);
         self.timeline_seconds
             .lock()
             .unwrap()
@@ -428,3 +435,5 @@ fn the_reason_survives_the_next_command() {
 
     assert_eq!(harness.status.lock().unwrap().prepare_error(), Some("boom"));
 }
+
+mod line_playback_status;

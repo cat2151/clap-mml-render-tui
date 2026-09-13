@@ -355,8 +355,8 @@ fn an_empty_song_does_not_panic() {
 
 /// degrees を打ち替えて chord が減っても、chord カーソルは行の外を指さない。
 ///
-/// `i` の確定では preview 要求が立たない（＝その場で丸め直す機会が無い）ので、
-/// 読むときに丸めるのがここの役目。
+/// host 側で degrees が更新されたとき、その場で丸め直す機会が無くても、読むときに
+/// 丸めるのがここの役目。
 #[test]
 fn shrinking_the_degrees_never_leaves_the_chord_cursor_outside_the_row() {
     let mut screen = screen();
@@ -366,7 +366,7 @@ fn shrinking_the_degrees_never_leaves_the_chord_cursor_outside_the_row() {
     screen.take_preview();
     assert_eq!(screen.chord_cursor(), 3);
 
-    // `i` で 2 chord へ打ち替えたのと同じ状態（写しも glue が書き戻す）。
+    // host editor で 2 chord へ打ち替えたのと同じ状態（写しも glue が書き戻す）。
     let a = section_id(&screen, "A");
     screen.song.sections[0].degrees = "I-V".to_string();
     screen.set_chord_ranges([(a, ranges(2))]);
@@ -376,11 +376,11 @@ fn shrinking_the_degrees_never_leaves_the_chord_cursor_outside_the_row() {
     assert_eq!(taken(&mut screen).chord_index, Some(0));
 }
 
-/// 1 行入力欄（`i` `n` `b`）が開いている間は、`h` `l` `Tab` は**入力欄へ行く**。
+/// 1 行入力欄（`n` / `b`）が開いている間は、`h` `l` `Tab` は**入力欄へ行く**。
 #[test]
 fn the_line_input_swallows_the_chord_keys() {
     let mut screen = screen();
-    screen.handle_key_event(key(KeyCode::Char('i')));
+    screen.handle_key_event(key(KeyCode::Char('n')));
     for _ in 0..64 {
         screen.handle_key_event(key(KeyCode::Backspace));
     }

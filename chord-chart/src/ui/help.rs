@@ -54,7 +54,7 @@ pub(super) const HELP_ROWS: [&str; 22] = [
     " ── Sections pane ──",
     " g              カタログから抽選して section 追加",
     " r              カーソル section の進行を抽選し直す",
-    " i              進行(degrees)を手入力",
+    " i              進行(degrees)を編集",
     " n              名前を手入力",
     " dd             削除(arrangement 上の参照も一緒に消える)",
     "",

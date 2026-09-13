@@ -1,3 +1,4 @@
+mod chord_chart;
 mod chord_input;
 mod chord_transfer;
 mod single_line;
@@ -38,6 +39,7 @@ fn loading_patch_is_shown_in_the_center_above_the_mml_overlay() {
         loading: true,
         loading_patch: Some("Orchestra/slow.sfz".to_string()),
         sounding: Vec::new(),
+        line_playback: None,
         prepare_error: None,
     };
 

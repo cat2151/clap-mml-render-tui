@@ -9,10 +9,11 @@ use std::time::Instant;
 use crossterm::event::KeyEvent;
 
 use super::mml_overlay::{
-    host_patch_catalog, is_mml_overlay_trigger, HostPatchCatalog, MmlOverlayAction,
-    MmlOverlayContext, MmlOverlayInputMode, PatchChange,
+    host_patch_catalog, is_mml_overlay_trigger, ChordChartPreviewContext, HostPatchCatalog,
+    MmlOverlayAction, MmlOverlayContext, MmlOverlayInputMode, MmlOverlaySyntax, PatchChange,
+    SingleLineFlow,
 };
-use super::{PatchLoadState, TuiApp};
+use super::{MmlOverlayOwner, PatchLoadState, TuiApp};
 
 impl TuiApp<'_> {
     /// Ctrl+P ならオーバーレイを開く。開いたら true。
@@ -25,14 +26,49 @@ impl TuiApp<'_> {
         }
         // オーバーレイは keyboard 画面と同じ音源インスタンスを借りるので、
         // 先にいまの画面の演奏を止めて明け渡してもらう。
-        self.stop_active_screen_playback();
         let context = self.mml_overlay_context();
+        self.open_owned_mml_overlay(MmlOverlayOwner::Global, context);
+        true
+    }
+
+    /// Chord Chart の `i` が返した stable id の section を、Modal 1 行 overlay で開く。
+    /// action 発生後に section が消えていても no-op にする。
+    pub(in crate::tui) fn open_chord_chart_degrees_overlay(
+        &mut self,
+        section_id: super::chord_chart::SectionId,
+    ) {
+        let Some(initial_text) = self
+            .chord_chart
+            .song
+            .section(section_id)
+            .map(|section| section.degrees.clone())
+        else {
+            return;
+        };
+        let key_token =
+            super::chord_chart_glue::key_token(&self.chord_chart.song.prefix).map(str::to_owned);
+        let mut context = self.mml_overlay_context();
+        context.input_mode = MmlOverlayInputMode::SingleLine;
+        context.single_line_flow = SingleLineFlow::Modal;
+        context.initial_text = initial_text;
+        context.syntax = MmlOverlaySyntax::ChordChart(ChordChartPreviewContext { key_token });
+        self.open_owned_mml_overlay(MmlOverlayOwner::ChordChart { section_id }, context);
+    }
+
+    /// owner の canonical patch を widget へ載せて、共有 overlay と sender を開く。
+    fn open_owned_mml_overlay(&mut self, owner: MmlOverlayOwner, context: MmlOverlayContext) {
+        self.stop_active_screen_playback();
+        let patch = match owner {
+            MmlOverlayOwner::Global => self.mml_overlay_patch.clone(),
+            MmlOverlayOwner::ChordChart { .. } => self.chord_chart_patch.clone(),
+        };
+        self.mml_overlay.set_restored_patch(patch);
+        self.mml_overlay_owner = Some(owner);
         self.mml_overlay.open(context);
         if let Some(sender) = &self.mml_overlay_sender {
             let command_id = sender.prepare(self.mml_overlay.patch());
             self.mml_overlay.expect_sender_command(command_id);
         }
-        true
     }
 
     /// 音色一覧の状態とフレーズ履歴を、開くたびに最新のスナップショットで渡す。
@@ -55,6 +91,7 @@ impl TuiApp<'_> {
             // app からの Ctrl+P は従来どおり複数行・空の入力欄で開く。
             // 1 行モードは DAW が明示的に指定したときだけ。
             input_mode: MmlOverlayInputMode::MultiLine,
+            single_line_flow: Default::default(),
             initial_text: String::new(),
             syntax: Default::default(),
             patch_catalog,
@@ -89,6 +126,7 @@ impl TuiApp<'_> {
         // loader 完了と Ctrl+T が同じ frame に来ても、古い Loading を見せない。
         self.sync_mml_overlay_patch_catalog();
         let action = self.mml_overlay.handle_key(key, Instant::now());
+        self.remember_owned_mml_overlay_patch();
         self.apply_mml_overlay_action(action);
     }
 
@@ -142,14 +180,20 @@ impl TuiApp<'_> {
         };
         // 閉じるときだけ sender の外へ用がある（音源を借りていた画面へ返す）ので、
         // sender を借りる前に片づける。
-        if action == MmlOverlayAction::Close {
-            if let Some(sender) = &self.mml_overlay_sender {
-                let command_id = sender.stop();
-                self.mml_overlay.expect_sender_command(command_id);
+        match action {
+            MmlOverlayAction::Close => {
+                self.finish_owned_mml_overlay();
+                return;
             }
-            // 借りていた音源を返す。開いたときに止めた演奏はここで戻る。
-            self.resume_active_screen_playback();
-            return;
+            MmlOverlayAction::Commit {
+                ref line,
+                close: true,
+            } => {
+                self.commit_owned_mml_overlay_line(line);
+                self.finish_owned_mml_overlay();
+                return;
+            }
+            _ => {}
         }
         let Some(sender) = &self.mml_overlay_sender else {
             return;
@@ -183,6 +227,53 @@ impl TuiApp<'_> {
         if let Some(command_id) = command_id {
             self.mml_overlay.expect_sender_command(command_id);
         }
+    }
+
+    /// Widget の patch は候補 preview では変わらず、selector の Enter 確定でだけ変わる。
+    /// その変化を現在 owner の canonical patch へ反映する。
+    fn remember_owned_mml_overlay_patch(&mut self) {
+        let patch = self.mml_overlay.patch().map(str::to_owned);
+        match self.mml_overlay_owner {
+            Some(MmlOverlayOwner::Global) => self.mml_overlay_patch = patch,
+            Some(MmlOverlayOwner::ChordChart { .. }) => self.chord_chart_patch = patch,
+            None => {}
+        }
+    }
+
+    /// Modal 1 行編集の確定先を owner で振り分ける。
+    fn commit_owned_mml_overlay_line(&mut self, line: &str) {
+        let Some(MmlOverlayOwner::ChordChart { section_id }) = self.mml_overlay_owner else {
+            return;
+        };
+        let line = line.trim();
+        let Some(section) = self.chord_chart.song.section_mut(section_id) else {
+            crate::logging::global_log_sink(&format!(
+                "chord-chart: event=degrees-commit result=stale-section section_id={}",
+                section_id.get()
+            ));
+            return;
+        };
+        if section.degrees == line {
+            return;
+        }
+        section.degrees = line.to_owned();
+        self.save_chord_chart();
+        self.refresh_chord_chart_chord_ranges();
+    }
+
+    /// 閉じる経路を owner に関係なく 1 か所で片づける。
+    fn finish_owned_mml_overlay(&mut self) {
+        if let Some(sender) = &self.mml_overlay_sender {
+            let command_id = sender.stop();
+            self.mml_overlay.expect_sender_command(command_id);
+        }
+        self.mml_overlay_owner = None;
+        // widget に Chord Chart patch を残さない。次の Global open でも再設定するが、
+        // 閉じている間に一時値を session 保存へ誤用されない状態に戻しておく。
+        self.mml_overlay
+            .set_restored_patch(self.mml_overlay_patch.clone());
+        // 借りていた音源を返す。Chord Chart はここで自動 preview しない。
+        self.resume_active_screen_playback();
     }
 }
 

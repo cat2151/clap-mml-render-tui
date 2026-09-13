@@ -1,4 +1,4 @@
-//! 1 行入力 overlay。`i` で進行(degrees)、`n` で名前(name)、`b` で曲頭の指定(prefix)。
+//! 1 行入力 overlay。`n` で名前(name)、`b` で曲頭の指定(prefix)。
 //!
 //! overlay は 1 個で、**対象だけを切り替える**（同時に 2 つ開くことは無い）。
 //! 対象が section とは限らない（`b` は曲そのものを書き換える）ので、モジュール名は
@@ -25,11 +25,6 @@ pub(crate) const EMPTY_NAME_MESSAGE: &str = "名前を入力してください";
 /// 入力欄が何を書き換えるのか。
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum LineInputTarget {
-    /// `i`: degree 表記の進行。
-    ///
-    /// **一切検証しない**（空文字も通す）。書式は chord2mml-rs のものをそのまま使うので、
-    /// ここでパースし直すのはムダ。読めない文字列を弾く責任は演奏側にある（別スコープ）。
-    Degrees,
     /// `n`: 画面に出す短い名前。空でなければ何でもよい。
     Name,
     /// `b`: 曲頭に置く chord2mml の指定（`Key=A BPM120`）。
@@ -43,7 +38,6 @@ impl LineInputTarget {
     /// overlay の枠のタイトル。
     pub(crate) fn title(self) -> &'static str {
         match self {
-            Self::Degrees => " 進行(degrees) ",
             Self::Name => " 名前(name) ",
             Self::Prefix => " Key / BPM ",
         }
@@ -51,11 +45,8 @@ impl LineInputTarget {
 
     /// 空のときに薄く出す案内。何を書く欄なのかを字で示す。
     ///
-    /// **進行そのものは例示しない**。この crate は曲の中身を 1 つも持たない
-    /// （持つと「既定の進行」をハードコードしたのと変わらない）。
     pub(crate) fn placeholder(self) -> &'static str {
         match self {
-            Self::Degrees => "degree 表記のコード進行",
             Self::Name => "Sabi",
             Self::Prefix => crate::song::DEFAULT_PREFIX,
         }
@@ -110,21 +101,15 @@ impl ChordChartScreen {
         self.line_input.as_ref()
     }
 
-    /// `i` / `n`: カーソル section の値を初期値にして入力欄を開く。
+    /// `n`: カーソル section の名前を初期値にして入力欄を開く。
     ///
     /// section が 1 つも無いときは開かない（書き込む先が無い）。`r` / `dd` が
     /// 同じ場面で黙って `Continue` を返すのに合わせてある。
-    pub(super) fn open_section_line_input(&mut self, target: LineInputTarget) -> ChordChartAction {
+    pub(super) fn open_name_line_input(&mut self) -> ChordChartAction {
         let Some(section) = self.selected_section() else {
             return ChordChartAction::Continue;
         };
-        let initial = match target {
-            LineInputTarget::Degrees => section.degrees.clone(),
-            LineInputTarget::Name => section.name.clone(),
-            // `b` は section を見ないので、この関数からは開かない。
-            LineInputTarget::Prefix => return ChordChartAction::Continue,
-        };
-        self.line_input = Some(LineInput::new(target, &initial));
+        self.line_input = Some(LineInput::new(LineInputTarget::Name, &section.name));
         ChordChartAction::Continue
     }
 
@@ -169,27 +154,18 @@ impl ChordChartScreen {
     /// 確定。`Err` は「閉じずに出す理由」、`Ok` は閉じたうえでの結果。
     fn commit_line_input(&mut self, input: &LineInput) -> Result<ChordChartAction, String> {
         let value = input.value().trim().to_string();
-        // prefix は曲そのものの持ち物なので、カーソル行の有無より先に片付ける。
-        if input.target() == LineInputTarget::Prefix {
-            if self.song.prefix == value {
-                return Ok(ChordChartAction::Continue);
-            }
-            // **検証しない**。打った文字列をそのまま持つ（空文字も含めて何でも受ける）。
-            self.song.prefix = value;
-            return Ok(ChordChartAction::SongChanged);
-        }
-        let Some(index) = self.selected_section_index() else {
-            return Ok(ChordChartAction::Continue);
-        };
         match input.target() {
-            LineInputTarget::Degrees => {
-                // **検証しない**。打った文字列をそのまま持つ（空文字も含めて何でも受ける）。
-                if self.song.sections[index].degrees == value {
+            LineInputTarget::Prefix => {
+                if self.song.prefix == value {
                     return Ok(ChordChartAction::Continue);
                 }
-                self.song.sections[index].degrees = value;
+                // **検証しない**。打った文字列をそのまま持つ（空文字も含めて何でも受ける）。
+                self.song.prefix = value;
             }
             LineInputTarget::Name => {
+                let Some(index) = self.selected_section_index() else {
+                    return Ok(ChordChartAction::Continue);
+                };
                 if value.is_empty() {
                     return Err(EMPTY_NAME_MESSAGE.to_string());
                 }
@@ -198,8 +174,6 @@ impl ChordChartScreen {
                 }
                 self.song.sections[index].name = value;
             }
-            // 上で先に返している。
-            LineInputTarget::Prefix => unreachable!("prefix は section を見ずに確定する"),
         }
         Ok(ChordChartAction::SongChanged)
     }

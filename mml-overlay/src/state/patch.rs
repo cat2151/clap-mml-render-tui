@@ -10,7 +10,6 @@ use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 use crossterm::event::KeyEvent;
 
 use crate::cursor_notes::{notes_at_prefix, CursorNotes, PREVIEW_MML};
-use crate::line_play::line_events;
 use crate::patch_select::{PatchSelect, PatchSelectAction};
 
 use super::{MmlOverlay, MmlOverlayAction, PatchCatalogNotice, PatchCatalogSnapshot, PatchChange};
@@ -155,7 +154,7 @@ impl MmlOverlay<'_> {
     /// ただし鳴らす行が無いとき（空行・解釈できない行）は repeat でも 1 音へ戻す。
     /// ループの代わりに無音になると、音色そのものを聴く手段が消えてしまうため。
     fn preview_patch(&mut self, patch: String, now: Instant) -> MmlOverlayAction {
-        if self.play_settings().repeat && !line_events(self.current_line()).1.is_silent() {
+        if self.play_settings().repeat && !self.current_line_performance().1.is_silent() {
             return self.play_current_line(PatchChange::Switch(Some(patch)));
         }
         MmlOverlayAction::SetPatch {
@@ -173,7 +172,11 @@ impl MmlOverlay<'_> {
         self.last_notes.clone_from(&notes);
         notes
             .map(|(_, notes)| notes)
-            .or_else(preview_note)
+            .or_else(|| {
+                (!matches!(self.syntax(), super::MmlOverlaySyntax::ChordChart(_)))
+                    .then(preview_note)
+                    .flatten()
+            })
             .map(|notes| self.start_notes(&notes))
     }
 }

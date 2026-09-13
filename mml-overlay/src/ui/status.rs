@@ -11,12 +11,17 @@ use cmrt_tui_core::theme::{
     MONOKAI_CYAN, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_PINK, MONOKAI_YELLOW,
 };
 
-use crate::{line_play::LineStatus, state::PatchCatalogNotice, MmlOverlay, MmlOverlaySyntax};
+use crate::{
+    line_play::LineStatus, state::PatchCatalogNotice, MmlOverlay, MmlOverlayInputMode,
+    MmlOverlaySyntax, SingleLineFlow,
+};
 
 const MML_KEY_HINTS: &str = "^T音色 ^O履歴 ^L演奏設定 ^Space再演奏 Esc閉じる ";
 const CHORD_KEY_HINTS: &str = "^T音色 ^L演奏設定 ^Space再演奏 Esc閉じる ";
+const MODAL_CHORD_KEY_HINTS: &str = "^T音色 Enter:確定 Esc:破棄 ";
 /// キー割り当ての表示に要る幅（全角は 2 桁ぶん）。
 const KEY_HINTS_WIDTH: u16 = 49;
+const MODAL_CHORD_KEY_HINTS_WIDTH: u16 = 27;
 
 pub(super) fn draw(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>, area: Rect) {
     if let Some((message, color)) = patch_catalog_notice(overlay) {
@@ -26,9 +31,22 @@ pub(super) fn draw(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>, area: Rect) 
         );
         return;
     }
+    let modal_chord = overlay.input_mode() == MmlOverlayInputMode::SingleLine
+        && overlay.single_line_flow() == SingleLineFlow::Modal
+        && matches!(
+            overlay.syntax(),
+            MmlOverlaySyntax::Chord(_) | MmlOverlaySyntax::ChordChart(_)
+        );
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(0), Constraint::Length(KEY_HINTS_WIDTH)])
+        .constraints([
+            Constraint::Min(0),
+            Constraint::Length(if modal_chord {
+                MODAL_CHORD_KEY_HINTS_WIDTH
+            } else {
+                KEY_HINTS_WIDTH
+            }),
+        ])
         .split(area);
 
     let (label, color) = sounding_label(overlay);
@@ -38,9 +56,13 @@ pub(super) fn draw(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>, area: Rect) 
     );
     if chunks.len() > 1 {
         frame.render_widget(
-            Paragraph::new(match overlay.syntax() {
-                MmlOverlaySyntax::Mml => MML_KEY_HINTS,
-                MmlOverlaySyntax::Chord(_) => CHORD_KEY_HINTS,
+            Paragraph::new(if modal_chord {
+                MODAL_CHORD_KEY_HINTS
+            } else {
+                match overlay.syntax() {
+                    MmlOverlaySyntax::Mml => MML_KEY_HINTS,
+                    MmlOverlaySyntax::Chord(_) | MmlOverlaySyntax::ChordChart(_) => CHORD_KEY_HINTS,
+                }
             })
             .style(Style::default().fg(MONOKAI_GRAY))
             .alignment(Alignment::Right),

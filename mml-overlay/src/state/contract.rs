@@ -73,12 +73,25 @@ pub enum MmlOverlayAction {
 }
 
 /// 入力欄を何行で開くか。[`Self::MultiLine`] は 1 行 1 フレーズを書き並べて聴き比べる。
-/// [`Self::SingleLine`] は 1 か所へ書き戻すための入力欄で、`Enter` が確定になる（DAW の小節セル用）。
+/// [`Self::SingleLine`] は host の 1 か所へ書き戻すための入力欄で、`Enter` が確定になる。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum MmlOverlayInputMode {
     #[default]
     MultiLine,
     SingleLine,
+}
+
+/// 1 行入力を完了するときの規約。
+///
+/// DAW のセル編集は確定後に次のセルへ進める [`Self::Advance`]、独立した編集画面は
+/// 確定・破棄のどちらでも閉じる [`Self::Modal`] を使う。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SingleLineFlow {
+    /// `Enter` / `Ctrl+M` は開いたまま確定し、`Esc` は確定して閉じる。
+    #[default]
+    Advance,
+    /// `Enter` / `Ctrl+M` は確定して閉じ、`Esc` は確定せずに閉じる。
+    Modal,
 }
 
 /// chord 行を試聴するときに借りる演奏 track の文脈。
@@ -95,6 +108,15 @@ pub struct ChordPreviewContext {
     pub target_label: String,
 }
 
+/// Chord Chart の section 進行を試聴するときの文脈。
+///
+/// `key_token` は host が `Song::prefix` から抽出した最初の Key token。overlay は
+/// prefix 全体を解釈せず、この token と表示中の進行だけを chord2mml へ渡す。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ChordChartPreviewContext {
+    pub key_token: Option<String>,
+}
+
 /// 入力欄に書く言語。見た目だけでなく、打鍵プレビューの変換経路も決める。
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum MmlOverlaySyntax {
@@ -103,6 +125,8 @@ pub enum MmlOverlaySyntax {
     Mml,
     /// chord 行専用。`None` は編集できるが、借りられる演奏 track が無く試聴できない。
     Chord(Option<ChordPreviewContext>),
+    /// Chord Chart の section 進行専用。DAW chord cell の 1 小節ラップを行わない。
+    ChordChart(ChordChartPreviewContext),
 }
 
 /// MML overlay が受け取る、plugin 非依存の音色一覧スナップショット。
@@ -122,6 +146,9 @@ pub enum PatchCatalogSnapshot {
 pub struct MmlOverlayContext {
     /// 入力欄を何行で開くか。既定は従来どおり複数行。
     pub input_mode: MmlOverlayInputMode,
+    /// 1 行入力の完了規約。既定は DAW と互換の [`SingleLineFlow::Advance`]。
+    /// 複数行入力では参照しない。
+    pub single_line_flow: SingleLineFlow,
     /// 開いた直後から入力欄に入れておく文字列。複数行モードでは使わない（常に空で開く）。
     /// 1 行モードでは改行より後ろを捨てて先頭 1 行だけを入れる。
     pub initial_text: String,

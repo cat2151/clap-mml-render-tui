@@ -52,7 +52,8 @@ impl TuiApp<'_> {
                 .sound_check_guide()
                 .last_overlay_date()
                 .map(str::to_owned),
-            mml_overlay_patch: self.mml_overlay.patch().map(str::to_owned),
+            mml_overlay_patch: self.mml_overlay_patch.clone(),
+            chord_chart_patch: self.chord_chart_patch.clone(),
             mml_overlay_play_settings: play_settings_to_history(self.mml_overlay.play_settings()),
         });
     }

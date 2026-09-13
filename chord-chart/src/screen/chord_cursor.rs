@@ -24,9 +24,9 @@ pub(super) enum ChordStep {
 impl ChordChartScreen {
     /// いま行内の何番目の chord を指しているか（**0 始まり**）。
     ///
-    /// 読むときは必ずここを通すこと。生のフィールドは、degrees を打ち替えて chord が
-    /// 減ったあと（`i` の確定では preview 要求が立たないので、その場では丸め直す
-    /// 機会が無い）に範囲外のまま残りうる。[`ChordChartScreen::cursor_chord_count`]
+    /// 読むときは必ずここを通すこと。生のフィールドは、host 側で degrees を打ち替えて
+    /// chord が減ったあとに範囲外のまま残りうる。
+    /// [`ChordChartScreen::cursor_chord_count`]
     /// が必ず 1 以上を返すので、戻り値は行に必ず存在する番号になる。
     pub fn chord_cursor(&self) -> usize {
         self.chord_cursor

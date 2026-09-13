@@ -54,6 +54,16 @@ pub enum TuiExitReason {
     RestartApp,
 }
 
+/// 共有 MML overlay を現在どの機能が借りているか。
+///
+/// patch の正本を owner ごとに分けるだけでなく、Chord Chart の確定先を行 index ではなく
+/// stable id で持つ。overlay が開いている間に section が消えても別の行へ誤って書かない。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::tui) enum MmlOverlayOwner {
+    Global,
+    ChordChart { section_id: chord_chart::SectionId },
+}
+
 /// 画面ホスト。持つのは「どの画面か」と、画面をまたいで共有するものだけ。
 pub struct TuiApp<'a> {
     pub(super) active_screen: PrimaryScreen,
@@ -68,15 +78,20 @@ pub struct TuiApp<'a> {
     pub(in crate::tui) grid_sequencer: GridSequencerScreen,
     /// コード進行の「構成」画面。preview は MML オーバーレイと同じ経路を借りる。
     pub(in crate::tui) chord_chart: ChordChartScreen,
-    /// chord chart の preview がいつ鳴り終わるか。`None` は「鳴っていない」。
-    /// 鳴っているかを知っているのはここだけ（`MmlOverlaySenderStatus::sounding()` は打鍵の
-    /// 生 MIDI 専用で、行の演奏では空のまま）。画面へは `chord_chart_glue` が書き戻す。
-    chord_chart_preview_ends_at: Option<std::time::Instant>,
+    /// 直近に Chord Chart の通常 preview として sender へ渡した command。
+    /// sender が公開する同じ command の実演奏区間だけを sounding として画面へ書き戻す。
+    chord_chart_preview_command_id: Option<u64>,
     /// Grid履歴をimport前に1小節だけoffline試聴する、揮発性のplayer/cache。
     grid_history_preview: crate::daw::DawGridPreviewPlayer,
     /// どの画面からでも開ける MML 入力オーバーレイ。開くと現在の画面の演奏は止まり、
     /// keyboard 画面と同じ音源インスタンスを借りる。
     pub(in crate::tui) mml_overlay: MmlOverlay<'a>,
+    /// 共有 overlay の現在の借り手。閉じているときは `None`。
+    pub(in crate::tui) mml_overlay_owner: Option<MmlOverlayOwner>,
+    /// 通常の `Ctrl+P` overlay が持つ canonical patch。
+    pub(in crate::tui) mml_overlay_patch: Option<String>,
+    /// Chord Chart の編集・通常 preview が持つ canonical patch。
+    pub(in crate::tui) chord_chart_patch: Option<String>,
     /// 送信先。テストでは `None`（音は鳴らさず状態遷移だけ確かめる）。
     mml_overlay_sender: Option<MmlOverlaySender>,
     /// patch ごとの mono/poly 判定結果のキャッシュ。keyboard 画面と

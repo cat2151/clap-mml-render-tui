@@ -1,7 +1,8 @@
 //! Chord Chart 画面と TuiApp を接続する glue。
 //!
 //! 画面ロジック（状態・キー処理・描画）は `cmrt-chord-chart` crate に閉じている。
-//! app 側に残るのは「キーを渡す」「変更されたら保存する」「preview 要求を回収する」だけ。
+//! app 側は「キーを渡す」「host editor を開く」「変更されたら保存する」「preview 要求を
+//! 回収する」に加え、Chord Chart の canonical patch と sender の実演奏状態を所有する。
 //!
 //! **保存も preview も app 側に置く理由**: crate 側はログを持たないし、音を鳴らす
 //! 手段（`MmlOverlaySender`）も知らない。保存の失敗をログ 1 行にとどめて画面を
@@ -12,7 +13,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use crossterm::event::KeyEvent;
 
@@ -21,23 +22,8 @@ use cmrt_mml_overlay::line_play::{line_events, LineProgram, LineStatus};
 use crate::tui::chord_chart::{ChordChartAction, PreviewRequest, SectionId, Song};
 use crate::tui::TuiApp;
 
-/// preview を鳴らす音色。**`None` は realtime play server の既定音色**（init saw）。
-///
-/// 音色は固定で、画面では選べない。候補は 2 つあったが**どちらも同じ値になる**ので `None` に決めた:
-///
-/// - MML オーバーレイの既定音色は `None`（`mml-overlay/src/state.rs:108` が
-///   `patch: None` で作り、`mml-overlay/src/ui.rs:146` がそれを `[既定音色]` と描く）。
-///   つまり「オーバーレイと同じ既定 patch を渡す」は `None` を渡すのと同じ。
-/// - 名前つきの音色を渡すには patch カタログが要る。カタログの中身は開発機の
-///   インストール状況で変わるので、名前を焼き込むとマシンによって鳴ったり鳴らなかったり
-///   する。chord chart に patch の概念を持ち込まない方針とも合わない。
-///
-/// `None` なら音色の load が起きないので、カーソルを動かすたびの preview が
-/// patch load を待たされることもない。
-pub(in crate::tui) const PREVIEW_PATCH: Option<&str> = None;
-
 impl TuiApp<'_> {
-    /// キー 1 つを画面へ渡し、保存だけをここで済ませる。
+    /// キー 1 つを画面へ渡し、host action の実行と保存をここで済ませる。
     /// [`ChordChartAction::Quit`]（`q`）はランタイムがループを抜けるので、そのまま返す。
     pub(in crate::tui) fn handle_chord_chart_key_event(
         &mut self,
@@ -51,9 +37,15 @@ impl TuiApp<'_> {
         // デバウンス禁止。変更が起きたその場で書く（ファイルは数 KB）。
         // 曲が変わった＝ degrees が変わりうるので、chord の範囲の写しもここで作り直す
         // （preview を回収するより先に。要求の中の番号はこの写しから決まる）。
-        if action == ChordChartAction::SongChanged {
-            self.save_chord_chart();
-            self.refresh_chord_chart_chord_ranges();
+        match action {
+            ChordChartAction::SongChanged => {
+                self.save_chord_chart();
+                self.refresh_chord_chart_chord_ranges();
+            }
+            ChordChartAction::EditDegrees(section_id) => {
+                self.open_chord_chart_degrees_overlay(section_id);
+            }
+            ChordChartAction::Continue | ChordChartAction::Quit => {}
         }
         self.drain_chord_chart_preview();
         action
@@ -68,7 +60,7 @@ impl TuiApp<'_> {
     /// 呼ぶのは**曲が変わったときと画面へ入ったときだけ**。カーソルを動かしても
     /// degrees は変わらないので、キーごとに切り直す理由が無い
     /// （1 section あたり 90 µs 未満だが、押すたびに全 section を切らない）。
-    fn refresh_chord_chart_chord_ranges(&mut self) {
+    pub(in crate::tui) fn refresh_chord_chart_chord_ranges(&mut self) {
         let ranges = chord_ranges(&self.chord_chart.song);
         self.chord_chart.set_chord_ranges(ranges);
     }
@@ -82,8 +74,7 @@ impl TuiApp<'_> {
     /// 2 回鳴る要求が溜まる。
     ///
     /// 前の音を止めるのは sender の責務（`play_line` は鳴っているものを止めてから
-    /// 積む）。無音要求も同じ経路の `LineProgram::silent()` として送るので、
-    /// 「止める」だけを別扱いしない。
+    /// 積む）。無音要求は patch load を起こさない `stop` として送る。
     fn drain_chord_chart_preview(&mut self) {
         let Some(request) = self.chord_chart.take_preview() else {
             return;
@@ -96,19 +87,14 @@ impl TuiApp<'_> {
         if let LineStatus::Error(reason) = &preview.status {
             self.chord_chart.error = Some(format!("鳴らせません: {reason}"));
         }
-        // 鳴らす前に、いつ鳴り終わるかを出しておく（`program` は送ると手放す）。
-        let ends_at = preview_ends_at(&preview.program, Instant::now());
         // play server が上がっていなければ sender が無い。落とさず、何もしない。
-        let sent = if let Some(sender) = &self.mml_overlay_sender {
-            sender.play_line(PREVIEW_PATCH, preview.program);
-            true
-        } else {
-            false
-        };
-        // 送っていないなら音も鳴っていない＝トグルは「鳴らす」のまま。
-        if sent {
-            self.chord_chart_preview_ends_at = ends_at;
-        }
+        self.chord_chart_preview_command_id = self.mml_overlay_sender.as_ref().map(|sender| {
+            if preview.program.is_silent() {
+                sender.stop()
+            } else {
+                sender.play_line(preview.patch.as_deref(), preview.program)
+            }
+        });
         self.refresh_chord_chart_preview_sounding();
     }
 
@@ -129,18 +115,21 @@ impl TuiApp<'_> {
     /// `preparing_an_already_ready_patch_stops_the_previous_line` が固定している）。
     /// 記録だけが残ると、戻ってきたときの `Space` が「止める」に化けて空打ちになる。
     pub(in crate::tui) fn forget_chord_chart_preview(&mut self) {
-        self.chord_chart_preview_ends_at = None;
+        self.chord_chart_preview_command_id = None;
         self.chord_chart.set_preview_sounding(false);
     }
 
     /// その時刻に preview がまだ鳴っているか。
     ///
-    /// preview は 1 回鳴って終わる演奏なので、**終わる時刻を過ぎたら鳴っていない**。
-    /// 貼りっぱなしのフラグにすると、鳴り終わったあとの `Space` が「止める」に化けて
-    /// 1 回空打ちになる。
+    /// command を渡した時刻から推測せず、sender が準備と timeline 送信を終えて公開した
+    /// 実演奏区間だけを見る。別 command に置き換わった区間は一致しないので鳴っていない。
     pub(in crate::tui) fn chord_chart_preview_sounding(&self, now: Instant) -> bool {
-        self.chord_chart_preview_ends_at
-            .is_some_and(|ends_at| now < ends_at)
+        let playback = self
+            .mml_overlay_sender
+            .as_ref()
+            .and_then(|sender| sender.status().line_playback())
+            .map(|playback| (playback.command_id(), playback.is_sounding_at(now)));
+        preview_command_sounding(self.chord_chart_preview_command_id, playback)
     }
     /// 要求 1 つを「送る内容」へ変換する。**曲の prefix をどこから取るかはここだけ**。
     ///
@@ -150,7 +139,11 @@ impl TuiApp<'_> {
         &self,
         request: &PreviewRequest,
     ) -> ChordChartPreview {
-        chord_chart_preview(&self.chord_chart.song.prefix, request)
+        chord_chart_preview(
+            &self.chord_chart.song.prefix,
+            self.chord_chart_patch.clone(),
+            request,
+        )
     }
 
     /// 画面へ入るときに 1 度だけ呼ぶ。保存ファイルが読めなかったときの自動抽選
@@ -288,6 +281,8 @@ pub(in crate::tui) struct ChordChartPreview {
     pub status: LineStatus,
     /// sender へ渡すもの。**1 回鳴って終わる**（`repeat` しない）。
     pub program: LineProgram,
+    /// この通常 preview に使う Chord Chart canonical patch。
+    pub patch: Option<String>,
     /// 行全体ではなく chord 1 つに絞ったなら `(0 始まりの番号, 行の chord 総数)`。
     ///
     /// **行全体を鳴らしたときは `None`**。要求が番号を指していても、読めない
@@ -301,12 +296,17 @@ pub(in crate::tui) struct ChordChartPreview {
 ///
 /// **この関数だけが文字列を組み立てる**（`chord-chart` crate は文字列を解釈しないし、
 /// 組み立てもしない。ADR 0020）。
-fn chord_chart_preview(prefix: &str, request: &PreviewRequest) -> ChordChartPreview {
+fn chord_chart_preview(
+    prefix: &str,
+    patch: Option<String>,
+    request: &PreviewRequest,
+) -> ChordChartPreview {
     if request.is_silent() {
         return ChordChartPreview {
             line: String::new(),
             status: LineStatus::Idle,
             program: LineProgram::silent(),
+            patch,
             chord: None,
         };
     }
@@ -323,8 +323,23 @@ fn chord_chart_preview(prefix: &str, request: &PreviewRequest) -> ChordChartPrev
         line,
         status,
         program: LineProgram::once(performance),
+        patch,
         chord: chord.map(|(_, total)| (request.chord_index.unwrap_or(0), total)),
     }
+}
+
+/// sender の実演奏区間が、Chord Chart が最後に送った command と一致して鳴っているか。
+///
+/// `None` は patch load / timeline 送信中、失敗、停止をまとめて silent とする。
+/// command id が違えば別 owner または後続 preview に置き換わっているため silent とする。
+pub(in crate::tui) fn preview_command_sounding(
+    expected_command_id: Option<u64>,
+    playback: Option<(u64, bool)>,
+) -> bool {
+    matches!(
+        (expected_command_id, playback),
+        (Some(expected), Some((actual, true))) if expected == actual
+    )
 }
 
 /// 行の degrees から `index` 番目（0 始まり）の chord だけを切り出し、
@@ -362,7 +377,7 @@ pub(in crate::tui) fn preview_line(prefix: &str, degrees: &str) -> String {
 /// 判定は「`key` で始まるトークン（大文字小文字を問わない）の最初の 1 つ」。
 /// chord2mml は `Key=A` / `Key:A` / `Key A` / `KeyA` を受けるが、`Key A` のように
 /// 空白で割れた書き方はトークンが 2 つになるので `Key` だけが渡る。
-fn key_token(prefix: &str) -> Option<&str> {
+pub(in crate::tui) fn key_token(prefix: &str) -> Option<&str> {
     prefix
         .split_whitespace()
         .find(|token| token.to_ascii_lowercase().starts_with("key"))
@@ -388,30 +403,4 @@ pub(in crate::tui) fn preview_play_log_line(preview: &ChordChartPreview) -> Stri
         "chord-chart: event=preview-play line=\"{}\" chord={chord} {result}",
         preview.line
     )
-}
-
-/// この演奏が鳴り終わる時刻。無音（止めるだけ）なら `None`。
-fn preview_ends_at(program: &LineProgram, started_at: Instant) -> Option<Instant> {
-    Some(started_at + preview_duration(program)?)
-}
-
-/// 演奏 1 回ぶんの長さ。**最後のイベント（note off）まで**を測る。
-///
-/// `loop_seconds` も同じ「最後のイベントまで」だが、行末の休符が落ちる値なので
-/// 大きいほうを採る。負や NaN のような値は「鳴らない」扱いにする
-/// （`Duration::from_secs_f64` は負で panic する）。
-pub(in crate::tui) fn preview_duration(program: &LineProgram) -> Option<Duration> {
-    if program.is_silent() {
-        return None;
-    }
-    let last_event = program
-        .events()
-        .iter()
-        .map(|event| event.seconds)
-        .fold(0.0_f64, f64::max);
-    let seconds = last_event.max(program.performance.loop_seconds);
-    if !seconds.is_finite() || seconds <= 0.0 {
-        return None;
-    }
-    Some(Duration::from_secs_f64(seconds))
 }

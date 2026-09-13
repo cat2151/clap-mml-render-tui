@@ -19,6 +19,7 @@ pub(super) struct LoadedSessionState {
     pub(super) keyboard_note_guide_overlay_date: Option<String>,
     pub(super) notepad_sound_check_guide_overlay_date: Option<String>,
     pub(super) mml_overlay_patch: Option<String>,
+    pub(super) chord_chart_patch: Option<String>,
     pub(super) mml_overlay_play_settings: crate::history::MmlOverlayPlaySettings,
 }
 
@@ -40,6 +41,7 @@ pub(super) fn load_initial_session_state() -> LoadedSessionState {
         keyboard_note_guide_overlay_date,
         notepad_sound_check_guide_overlay_date,
         mml_overlay_patch,
+        chord_chart_patch,
         mml_overlay_play_settings,
     } = crate::history::load_session_state();
     let initial_cursor = super::clamp_session_cursor(cursor, lines.len());
@@ -58,6 +60,7 @@ pub(super) fn load_initial_session_state() -> LoadedSessionState {
         keyboard_note_guide_overlay_date,
         notepad_sound_check_guide_overlay_date,
         mml_overlay_patch,
+        chord_chart_patch,
         mml_overlay_play_settings,
     }
 }

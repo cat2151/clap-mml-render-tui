@@ -3,7 +3,7 @@
 //! 複数行モードは「フレーズを書き並べて聴き比べる画面」だが、1 行モードは
 //! 「呼び出し側の 1 か所へ書き戻すための入力欄」で、`Enter` が改行ではなく確定になる。
 //! 確定は [`MmlOverlayAction::Commit`] としてホストへ渡すだけで、どこへどう書くかは
-//! ここでは決めない（DAW なら小節セル）。
+//! ここでは決めない（DAW なら小節セル、Chord Chart なら stable id の section）。
 //!
 //! **確定キーの判定は音色選択・フレーズ履歴・演奏設定への委譲より後。**
 //! それらのモーダルの `Enter` は候補の確定なので、横取りすると選べなくなる。
@@ -11,12 +11,17 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui_textarea::TextArea;
 
-use super::{MmlOverlay, MmlOverlayAction, MmlOverlayInputMode};
+use super::{MmlOverlay, MmlOverlayAction, MmlOverlayInputMode, SingleLineFlow};
 
 impl MmlOverlay<'_> {
     /// いまの入力モード。ホストが `Commit` の扱いを決めるのに使う。
     pub fn input_mode(&self) -> MmlOverlayInputMode {
         self.input_mode
+    }
+
+    /// 1 行入力の完了規約。複数行モードでは参照されない。
+    pub fn single_line_flow(&self) -> SingleLineFlow {
+        self.single_line_flow
     }
 
     /// 1 行モードが食べるキーなら、その結果を返す。
@@ -26,16 +31,21 @@ impl MmlOverlay<'_> {
         if self.input_mode != MmlOverlayInputMode::SingleLine {
             return None;
         }
-        if is_commit_key(key) {
-            return Some(self.commit_line(false));
+        match self.single_line_flow {
+            SingleLineFlow::Advance if is_commit_key(key) => Some(self.commit_advance_line(false)),
+            SingleLineFlow::Advance if key.code == KeyCode::Esc => {
+                Some(self.commit_advance_line(true))
+            }
+            SingleLineFlow::Modal if is_commit_key(key) => Some(self.commit_modal_line()),
+            SingleLineFlow::Modal if key.code == KeyCode::Esc => {
+                self.release_context();
+                Some(MmlOverlayAction::Close)
+            }
+            _ => None,
         }
-        if key.code == KeyCode::Esc {
-            return Some(self.commit_line(true));
-        }
-        None
     }
 
-    /// 1 行モードの確定。`close` なら閉じるところまでやる。
+    /// Advance 1 行モードの確定。`close` なら閉じるところまでやる。
     ///
     /// 閉じない確定でも入力欄は触らない。次に何を編集するかを決めるのはホストで、
     /// ホストは [`MmlOverlay::open`] を呼び直して次の対象の内容を入れる。
@@ -44,7 +54,7 @@ impl MmlOverlay<'_> {
     /// `Enter` でも `Esc` でも同じで、そこを素通しすると「MML のつもりで書いた
     /// コード表記が無音のセルとして残る」（発端のバグ）が確定の 2 経路のうち
     /// 片方だけ塞がれた状態になる。
-    fn commit_line(&mut self, close: bool) -> MmlOverlayAction {
+    fn commit_advance_line(&mut self, close: bool) -> MmlOverlayAction {
         let line = self.current_line().to_string();
         if self.intercept_commit_for_chord_transfer(&line, close) {
             return MmlOverlayAction::Continue;
@@ -53,6 +63,13 @@ impl MmlOverlay<'_> {
             self.release_context();
         }
         MmlOverlayAction::Commit { line, close }
+    }
+
+    /// Modal 1 行モードの確定。確定キーの種類によらず overlay も閉じる。
+    fn commit_modal_line(&mut self) -> MmlOverlayAction {
+        let line = self.current_line().to_string();
+        self.release_context();
+        MmlOverlayAction::Commit { line, close: true }
     }
 }
 

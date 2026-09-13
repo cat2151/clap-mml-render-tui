@@ -1,3 +1,4 @@
+mod chord_chart;
 mod chord_input;
 mod chord_transfer;
 mod history;
@@ -15,6 +16,7 @@ use super::*;
 // （子テストモジュールは `use super::*` でここから拾う）。
 use crate::line_play::LineProgram;
 use crate::PatchCatalogEntry;
+use crate::NOTE_ON;
 
 fn press(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)

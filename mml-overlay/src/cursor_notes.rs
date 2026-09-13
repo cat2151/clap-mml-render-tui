@@ -19,8 +19,8 @@ use std::ops::Range;
 use std::time::Duration;
 
 use cmrt_chord::{
-    cursor_sounding_unit, parses_as_chord, timed_chord_cell_performance, timed_performance,
-    TimedMidiEvent, TimedPerformance,
+    cursor_sounding_unit, parses_as_chord, timed_chord_cell_performance,
+    timed_chord_progression_performance, timed_performance, TimedMidiEvent, TimedPerformance,
 };
 
 use crate::{NOTE_OFF, NOTE_ON};
@@ -84,6 +84,24 @@ pub fn notes_at_cursor_with_chord_context(
     let performance =
         timed_chord_cell_performance(chord_init, track_directive, mml_prefix, &line[..span.end])
             .ok()?;
+    notes_from_performance(&performance, span)
+}
+
+/// Chord Chart の進行で、カーソル位置の chord を Key 文脈つきで鳴らす。
+///
+/// source span は表示中の `line` から求める。変換にはその chord の終端までの visible
+/// line を渡すため、別 token へ移ったことを span で区別しつつ、それ以前の `|` や
+/// directive が作る進行の形も保つ。変換失敗時は MML へ fallback しない。
+pub fn notes_at_cursor_with_chord_chart_context(
+    line: &str,
+    cursor_chars: usize,
+    key_token: Option<&str>,
+) -> Option<CursorNotes> {
+    if !parses_as_chord(line) {
+        return None;
+    }
+    let span = cursor_sounding_unit(line, cursor_byte_index(line, cursor_chars))?;
+    let performance = timed_chord_progression_performance(key_token, &line[..span.end]).ok()?;
     notes_from_performance(&performance, span)
 }
 

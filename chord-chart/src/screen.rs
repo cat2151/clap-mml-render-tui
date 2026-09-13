@@ -15,7 +15,7 @@ use crate::catalog::ChordProgressionSource;
 use crate::{SectionId, Song};
 
 use self::chord_cursor::ChordStep;
-use self::line_input::{LineInput, LineInputTarget};
+use self::line_input::LineInput;
 
 mod arrangement_edit;
 mod chord_cursor;
@@ -37,6 +37,10 @@ pub enum ChordChartAction {
     Continue,
     /// 曲が変わったので、呼び出し側は保存すること（デバウンス禁止＝そのまま即書き）。
     SongChanged,
+    /// `i`: 選択中の section の進行を host 側で編集する。
+    ///
+    /// この crate は編集 UI や degrees の解釈を持たず、安定した id だけを渡す。
+    EditDegrees(SectionId),
     /// `q`: アプリを終了する。他の画面（grid sequencer / loop browser / notepad）と
     /// 同じ意味の `q` なので、この画面だけ別の意味を持たせない。
     Quit,
@@ -69,7 +73,7 @@ pub struct ChordChartScreen {
     /// 右 pane のカーソル行。同上。
     pub arrangement_cursor: usize,
     pub help_open: bool,
-    /// `i` / `n` / `b` の 1 行入力欄。開いている間は**全部のキーをここへ渡す**。
+    /// `n` / `b` の 1 行入力欄。開いている間は**全部のキーをここへ渡す**。
     /// 中身を読むのは描画だけなので `pub` にしない（開いているかどうかは
     /// [`ChordChartScreen::line_input_open`]）。
     pub(crate) line_input: Option<LineInput>,
@@ -335,8 +339,12 @@ impl ChordChartScreen {
         match code {
             KeyCode::Char('g') => self.add_section_from_catalog(),
             KeyCode::Char('r') => self.reroll_selected_section(),
-            KeyCode::Char('i') => self.open_section_line_input(LineInputTarget::Degrees),
-            KeyCode::Char('n') => self.open_section_line_input(LineInputTarget::Name),
+            KeyCode::Char('i') => self
+                .selected_section()
+                .map_or(ChordChartAction::Continue, |section| {
+                    ChordChartAction::EditDegrees(section.id)
+                }),
+            KeyCode::Char('n') => self.open_name_line_input(),
             _ => ChordChartAction::Continue,
         }
     }

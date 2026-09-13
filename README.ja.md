@@ -78,7 +78,7 @@ cmrt --play-server "X:/projects/clap-mml-play-server/target/debug/clap-mml-realt
 - sectionの進行を直すと、曲中のその参照が全部まとめて変わります
 - ヘッダの1行は、曲の頭に置くchord2mmlの指定（`Key=C BPM120` など）をそのまま出したものです
 - 進行もヘッダもこの画面は解釈しません。打った文字列をそのまま持ちます
-- 鳴るのはカーソル行のsection 1つだけです（曲全体は鳴りません）。音色は固定で、画面では選べません
+- 鳴るのはカーソル行のsection 1つだけです（曲全体は鳴りません）。進行編集画面からChord Chart全体の音色を選べます
 - `h` `l`で行内のchordを1つずつ試聴できます。いま指しているchordは進行の中で反転して見えます
 - ヘッダのKeyだけが試聴に渡ります（BPMは既定のままです）
 
@@ -111,9 +111,19 @@ cmrt --play-server "X:/projects/clap-mml-play-server/target/debug/clap-mml-realt
 | `q` | 共通 | アプリを終了します |
 | `g` | Sections | コード進行カタログから抽選してsectionを追加します |
 | `r` | Sections | カーソル行の進行を、名前を保ったまま抽選し直します |
-| `i` | Sections | 進行を1行入力で編集します |
+| `i` | Sections | 進行をChord Chart用の1行MML overlayで編集します |
 | `n` | Sections | 名前を1行入力で編集します |
 | `1`〜`9` | Arrangement | その番号のsectionをカーソルの次に挿入します |
+
+Sectionsの`i`で開く編集画面は、現在の進行を初期値にしてカーソルを末尾へ置きます。
+入力中はカーソル位置のchordが成立・変化するたびにすぐ鳴り、`Ctrl+Space`で進行全体を
+鳴らせます。読めない入力はMMLとして代替再生しませんが、そのまま保存できます。
+`Enter`で前後の空白を除いた進行を確定・保存し、`Esc`では変更を破棄します。
+
+編集画面内の`Ctrl+T`で、通常のMML overlayと同じ音色一覧を開けます。候補を移動しただけでは
+音色は変わらず、`Enter`で確定、`Esc`で元の音色へ戻ります。Chord Chartの音色は画面全体で1つで、
+通常の`Ctrl+P` MML overlayの音色とは別に`history.json`へ保存されます。音色を確定したあとに
+進行編集を`Esc`で破棄しても、確定した音色は残ります。
 
 編集するたびに自動保存されます。保存先は設定ディレクトリ配下の
 `clap-mml-render-tui/history/chord_chart.json` です（Windowsなら

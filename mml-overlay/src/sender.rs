@@ -22,6 +22,7 @@
 mod line_playback;
 mod sink;
 mod sounding;
+mod status;
 mod voice;
 
 use std::{
@@ -39,6 +40,7 @@ use cmrt_realtime_play::RealtimePlayServerSupervisor;
 use crate::line_play::LineProgram;
 
 use sink::SoundSink;
+pub use status::{MmlOverlayLinePlayback, MmlOverlaySenderStatus};
 use voice::{Voice, Wake};
 
 /// オーバーレイが借りる音源インスタンス。
@@ -82,44 +84,6 @@ struct SenderCommand {
     id: u64,
     queued_at: Instant,
     kind: SenderCommandKind,
-}
-
-/// sender worker の現在状態。TUI は読み取りだけ行う。
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct MmlOverlaySenderStatus {
-    pub(crate) command_id: u64,
-    pub(crate) loading: bool,
-    pub(crate) loading_patch: Option<String>,
-    pub(crate) sounding: Vec<u8>,
-    /// 直近の [`SenderCommandKind::Prepare`] 相当が失敗した理由。成功したら消える。
-    ///
-    /// **無音の理由を持っているのは worker だけ**。準備が終わるまで画面に出ている
-    /// 「音が鳴るまで」の overlay は `loading` が下りた瞬間に消えるので、
-    /// 消えた理由をここから持ち帰れないと「黙って消えて音も出ない」になる。
-    pub(crate) prepare_error: Option<String>,
-}
-
-impl MmlOverlaySenderStatus {
-    pub fn command_id(&self) -> u64 {
-        self.command_id
-    }
-
-    pub fn is_loading(&self) -> bool {
-        self.loading
-    }
-
-    pub fn loading_patch(&self) -> Option<&str> {
-        self.loading_patch.as_deref()
-    }
-
-    pub fn sounding(&self) -> &[u8] {
-        &self.sounding
-    }
-
-    /// 直近の音源準備が失敗した理由。成功していれば `None`。
-    pub fn prepare_error(&self) -> Option<&str> {
-        self.prepare_error.as_deref()
-    }
 }
 
 pub struct MmlOverlaySender {
@@ -303,7 +267,12 @@ fn run_sender<S: SoundSink + Send + Sync + 'static>(
             SenderCommandKind::PlayLine { patch, program } => {
                 let ready = prepare_if_needed(&mut voice, &*sink, &status, patch.as_deref());
                 if ready && !is_superseded(command.id, &latest_command_id) {
-                    voice.play_line(&*sink, &program);
+                    let played = voice.play_line(&*sink, &program);
+                    if played && !is_superseded(command.id, &latest_command_id) {
+                        publish_line_playback(&status, command.id, &program);
+                    } else if played {
+                        log_superseded_after_load(command.id, &latest_command_id);
+                    }
                 } else if ready {
                     log_superseded_after_load(command.id, &latest_command_id);
                 }
@@ -323,6 +292,30 @@ fn run_sender<S: SoundSink + Send + Sync + 'static>(
             break;
         }
     }
+}
+
+fn publish_line_playback(
+    status: &Mutex<MmlOverlaySenderStatus>,
+    command_id: u64,
+    program: &LineProgram,
+) {
+    let started_at = Instant::now();
+    let ends_at = if program.repeat {
+        None
+    } else {
+        Duration::try_from_secs_f64(program.performance.loop_seconds)
+            .ok()
+            .and_then(|duration| started_at.checked_add(duration))
+    };
+    // 壊れた有限長を「終了しない演奏」として公開しない。
+    if !program.repeat && ends_at.is_none() {
+        return;
+    }
+    status.lock().unwrap().line_playback = Some(MmlOverlayLinePlayback {
+        command_id,
+        started_at,
+        ends_at,
+    });
 }
 
 fn newest_queued_command(

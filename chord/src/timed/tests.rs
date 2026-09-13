@@ -239,3 +239,28 @@ fn chord_cell_performance_applies_the_playback_tracks_mml_prefix() {
     assert_eq!(note_on_pitches(&default_octave), vec![69, 73, 76]);
     assert_eq!(note_on_pitches(&lower_octave), vec![57, 61, 64]);
 }
+
+#[test]
+fn chord_progression_performance_uses_the_key_without_cell_wrapping() {
+    let in_c = timed_chord_progression_performance(Some("Key=C"), "II").unwrap();
+    let in_g = timed_chord_progression_performance(Some("Key=G"), "II").unwrap();
+
+    assert_eq!(note_on_pitches(&in_c), vec![62, 66, 69]);
+    assert_eq!(note_on_pitches(&in_g), vec![69, 73, 76]);
+
+    let progression = timed_chord_progression_performance(Some("Key=C"), "I V").unwrap();
+    let wrapped = timed_chord_cell_performance("Key=C", "", "", "I V").unwrap();
+    assert!(
+        progression.duration_seconds > wrapped.duration_seconds,
+        "progression={} wrapped={}",
+        progression.duration_seconds,
+        wrapped.duration_seconds
+    );
+}
+
+#[test]
+fn chord_progression_performance_never_falls_back_to_mml() {
+    let error = timed_chord_progression_performance(Some("Key=G"), "cde").unwrap_err();
+
+    assert!(error.contains("コード変換に失敗"), "{error}");
+}

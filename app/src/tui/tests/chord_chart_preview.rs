@@ -7,9 +7,7 @@
 
 use super::*;
 use crate::screen_switch::PrimaryScreen;
-use crate::tui::chord_chart_glue::{
-    preview_line, preview_play_log_line, preview_request_log_line, PREVIEW_PATCH,
-};
+use crate::tui::chord_chart_glue::{preview_line, preview_play_log_line, preview_request_log_line};
 use cmrt_chord_chart::PreviewRequest;
 use cmrt_mml_overlay::line_play::LineStatus;
 
@@ -252,11 +250,28 @@ fn a_missing_sender_is_not_an_error() {
     assert_eq!(app.chord_chart.error, None);
 }
 
-/// 3.4 の「音色は固定」。`None` は realtime play server の既定音色で、
-/// MML オーバーレイが音色を選んでいないときに渡すものと同じ値。
+/// 行全体と chord 単体のどちらも Chord Chart の canonical patch を送信計画へ載せる。
+/// 未選択なら `None` のまま realtime play server の既定音色へ倒す。
 #[test]
-fn the_preview_uses_the_server_default_patch() {
-    assert_eq!(PREVIEW_PATCH, None);
+fn every_normal_preview_uses_the_chord_chart_patch() {
+    let mut app = app_on_the_chord_chart();
+    let request = |chord_index| PreviewRequest {
+        name: "A".to_string(),
+        degrees: "I-V-VIm-IV".to_string(),
+        chord_index,
+    };
+
+    assert_eq!(app.chord_chart_preview(&request(None)).patch, None);
+
+    app.chord_chart_patch = Some("Keys/Stage Piano.fxp".to_string());
+    assert_eq!(
+        app.chord_chart_preview(&request(None)).patch.as_deref(),
+        Some("Keys/Stage Piano.fxp")
+    );
+    assert_eq!(
+        app.chord_chart_preview(&request(Some(2))).patch.as_deref(),
+        Some("Keys/Stage Piano.fxp")
+    );
 }
 
 /// 送った 1 行のログ。要求のログと合わせて、鳴らなかった理由をログだけで切り分ける。

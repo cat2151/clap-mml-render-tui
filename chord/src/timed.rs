@@ -118,6 +118,27 @@ pub fn timed_chord_cell_performance(
     timed_mml_performance(&mml, true)
 }
 
+/// Chord Chart の進行を、Key 文脈つきで時刻つき MIDI イベント列へ厳密に変換する。
+///
+/// `progression` は section に保存される進行そのものなので、DAW の chord cell と違って
+/// 外側へ `| ... |` を追加しない。`key_token` は host が曲の prefix から抽出した最初の
+/// Key token だけを渡す。chord2mml が拒否した入力は MML へ fallback しない。
+pub fn timed_chord_progression_performance(
+    key_token: Option<&str>,
+    progression: &str,
+) -> Result<TimedPerformance, String> {
+    if progression.trim().is_empty() {
+        return Err("コードを入力してください".to_string());
+    }
+    let input = match key_token.filter(|key| !key.trim().is_empty()) {
+        Some(key) => format!("{} {progression}", key.trim()),
+        None => progression.to_string(),
+    };
+    let generated_mml = chord2mml_core::convert(&input)
+        .map_err(|error| format!("コード変換に失敗しました: {error}"))?;
+    timed_mml_performance(&generated_mml, true)
+}
+
 /// コード表記または MML を、時刻つきイベント列へ変換する。
 pub fn timed_performance(input: &str) -> Result<TimedPerformance, String> {
     if input.trim().is_empty() {

@@ -70,6 +70,11 @@ fn session_state_default_has_no_keyboard_note_guide_date() {
 }
 
 #[test]
+fn session_state_default_has_no_chord_chart_patch() {
+    assert_eq!(SessionState::default().chord_chart_patch, None);
+}
+
+#[test]
 fn keyboard_session_defaults_to_x4() {
     let keyboard = KeyboardSessionState::default();
     assert_eq!(keyboard.patch, None);
@@ -93,6 +98,7 @@ fn session_state_serialize_deserialize() {
         keyboard_note_guide_overlay_date: Some("2026-07-20".to_string()),
         notepad_sound_check_guide_overlay_date: Some("2026-07-19".to_string()),
         mml_overlay_patch: Some("Leads/Lead 1.fxp".to_string()),
+        chord_chart_patch: Some("Keys/Piano.fxp".to_string()),
         mml_overlay_play_settings: MmlOverlayPlaySettings {
             repeat: true,
             modulation: false,
@@ -116,6 +122,7 @@ fn session_state_serialize_deserialize() {
         loaded.mml_overlay_patch.as_deref(),
         Some("Leads/Lead 1.fxp")
     );
+    assert_eq!(loaded.chord_chart_patch.as_deref(), Some("Keys/Piano.fxp"));
     assert_eq!(
         loaded.mml_overlay_play_settings,
         MmlOverlayPlaySettings {
@@ -143,6 +150,7 @@ fn session_state_serialize_deserialize_zero() {
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
         mml_overlay_patch: None,
+        chord_chart_patch: None,
         mml_overlay_play_settings: MmlOverlayPlaySettings::default(),
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
@@ -150,6 +158,38 @@ fn session_state_serialize_deserialize_zero() {
     assert_eq!(loaded.cursor, 0);
     assert_eq!(loaded.lines, vec!["cde".to_string()]);
     assert_eq!(loaded.active_screen, PrimaryScreen::Notepad);
+}
+
+#[test]
+fn session_state_patch_fields_round_trip_independently() {
+    let state = SessionState {
+        mml_overlay_patch: Some("Global/Pad.fxp".to_string()),
+        chord_chart_patch: Some("Chord Chart/Piano.fxp".to_string()),
+        ..SessionState::default()
+    };
+
+    let json = serde_json::to_string(&state).unwrap();
+    let loaded: SessionState = serde_json::from_str(&json).unwrap();
+
+    assert_eq!(loaded.mml_overlay_patch.as_deref(), Some("Global/Pad.fxp"));
+    assert_eq!(
+        loaded.chord_chart_patch.as_deref(),
+        Some("Chord Chart/Piano.fxp")
+    );
+}
+
+#[test]
+fn history_without_chord_chart_patch_keeps_existing_patch_and_defaults_to_none() {
+    let json = r#"{
+        "cursor": 3,
+        "lines": ["cde"],
+        "mml_overlay_patch": "Global/Lead.fxp"
+    }"#;
+
+    let loaded: SessionState = serde_json::from_str(json).unwrap();
+
+    assert_eq!(loaded.mml_overlay_patch.as_deref(), Some("Global/Lead.fxp"));
+    assert_eq!(loaded.chord_chart_patch, None);
 }
 
 #[test]
@@ -169,6 +209,7 @@ fn session_state_serialize_deserialize_daw_screen() {
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
         mml_overlay_patch: None,
+        chord_chart_patch: None,
         mml_overlay_play_settings: MmlOverlayPlaySettings::default(),
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
@@ -276,6 +317,7 @@ fn save_and_load_session_state_roundtrip() {
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
         mml_overlay_patch: None,
+        chord_chart_patch: None,
         mml_overlay_play_settings: MmlOverlayPlaySettings::default(),
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
@@ -310,6 +352,7 @@ fn save_and_load_session_state_roundtrip_daw_mode() {
         keyboard_note_guide_overlay_date: None,
         notepad_sound_check_guide_overlay_date: None,
         mml_overlay_patch: None,
+        chord_chart_patch: None,
         mml_overlay_play_settings: MmlOverlayPlaySettings::default(),
     };
     let json = serde_json::to_string_pretty(&state).unwrap();

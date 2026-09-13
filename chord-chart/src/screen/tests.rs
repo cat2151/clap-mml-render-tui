@@ -5,6 +5,7 @@ use super::*;
 use crossterm::event::KeyEvent;
 
 mod cursor;
+mod edit_degrees;
 mod edit_keys;
 mod enter;
 mod help;

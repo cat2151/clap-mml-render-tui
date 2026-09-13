@@ -48,6 +48,51 @@ fn a_chord_line_uses_the_supplied_key_and_directive() {
     assert_eq!(pitches, vec![69, 73, 76]);
 }
 
+#[test]
+fn a_chord_chart_line_uses_the_supplied_key() {
+    let (_, in_c) = chord_chart_line_events("II", Some("Key=C"));
+    let (status, in_g) = chord_chart_line_events("II", Some("Key=G"));
+    let pitches = |performance: &LinePerformance| {
+        performance
+            .events
+            .iter()
+            .filter(|event| event.message[0] == NOTE_ON)
+            .map(|event| event.message[1])
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(pitches(&in_c), vec![62, 66, 69]);
+    assert_eq!(pitches(&in_g), vec![69, 73, 76]);
+    assert_eq!(
+        status,
+        LineStatus::Played {
+            from_chord: true,
+            note_count: 3,
+        }
+    );
+}
+
+#[test]
+fn a_chord_chart_progression_is_not_wrapped_like_a_daw_cell() {
+    let (_, progression) = chord_chart_line_events("I V", Some("Key=C"));
+    let (_, cell) = chord_line_events("I V", "Key=C", "", "");
+
+    assert!(
+        progression.loop_seconds > cell.loop_seconds,
+        "progression={} cell={}",
+        progression.loop_seconds,
+        cell.loop_seconds
+    );
+}
+
+#[test]
+fn a_broken_chord_chart_line_never_falls_back_to_mml() {
+    let (status, performance) = chord_chart_line_events("cde", Some("Key=G"));
+
+    assert!(matches!(status, LineStatus::Error(error) if error.contains("コード変換に失敗")));
+    assert!(performance.is_silent());
+}
+
 /// 空行を通るたびにエラーが出ると、上下でフレーズを見て回るのが煩わしい。
 /// 前の行を止めるためにイベントは空で返す。
 #[test]

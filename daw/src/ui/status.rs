@@ -128,7 +128,8 @@ pub(super) fn draw_status(
             cmrt_mml_overlay::MmlOverlaySyntax::Mml => {
                 "MML  Ctrl+T:音色  Ctrl+O:履歴  Ctrl+L:演奏設定  Ctrl+Space:鳴らし直す  Enter:確定→次小節  ESC:確定→閉じる"
             }
-            cmrt_mml_overlay::MmlOverlaySyntax::Chord(_) => {
+            cmrt_mml_overlay::MmlOverlaySyntax::Chord(_)
+            | cmrt_mml_overlay::MmlOverlaySyntax::ChordChart(_) => {
                 "CHORD  Ctrl+T:演奏track音色  Ctrl+L:演奏設定  Ctrl+Space:鳴らし直す  Enter:確定→次小節  ESC:確定→閉じる"
             }
         },

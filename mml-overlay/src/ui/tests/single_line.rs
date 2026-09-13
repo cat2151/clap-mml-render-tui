@@ -5,13 +5,25 @@
 
 use super::*;
 
-use crate::MmlOverlayInputMode;
+use crate::{MmlOverlayInputMode, MmlOverlaySyntax, SingleLineFlow};
 
 fn single_line_overlay(initial_text: &str) -> MmlOverlay<'static> {
     let mut overlay = MmlOverlay::default();
     overlay.open(MmlOverlayContext {
         input_mode: MmlOverlayInputMode::SingleLine,
         initial_text: initial_text.to_string(),
+        ..MmlOverlayContext::default()
+    });
+    overlay
+}
+
+fn modal_chord_overlay(initial_text: &str) -> MmlOverlay<'static> {
+    let mut overlay = MmlOverlay::default();
+    overlay.open(MmlOverlayContext {
+        input_mode: MmlOverlayInputMode::SingleLine,
+        single_line_flow: SingleLineFlow::Modal,
+        initial_text: initial_text.to_string(),
+        syntax: MmlOverlaySyntax::Chord(None),
         ..MmlOverlayContext::default()
     });
     overlay
@@ -58,6 +70,25 @@ fn the_status_row_sits_right_below_the_box() {
         lines[bottom + 1].contains("Esc"),
         "枠の真下が状態行のはず:\n{rendered}"
     );
+}
+
+#[test]
+fn modal_chord_status_distinguishes_confirm_from_discard() {
+    let rendered = render(&modal_chord_overlay("I IV V"));
+    let compact = rendered.replace(' ', "");
+
+    assert!(compact.contains("Enter:確定"), "{rendered}");
+    assert!(compact.contains("Esc:破棄"), "{rendered}");
+    assert!(compact.contains("^T音色"), "{rendered}");
+}
+
+#[test]
+fn advance_single_line_status_keeps_the_existing_close_hint() {
+    let rendered = render(&single_line_overlay("cde"));
+
+    assert!(rendered.contains("Esc"), "{rendered}");
+    assert!(!rendered.contains("Enter:"), "{rendered}");
+    assert!(!rendered.contains("Esc:"), "{rendered}");
 }
 
 #[test]

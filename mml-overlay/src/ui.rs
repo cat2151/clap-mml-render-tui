@@ -45,7 +45,10 @@ fn input_rows(input_mode: MmlOverlayInputMode) -> u16 {
 }
 
 fn placeholder(overlay: &MmlOverlay<'_>) -> &'static str {
-    if matches!(overlay.syntax(), MmlOverlaySyntax::Chord(_)) {
+    if matches!(
+        overlay.syntax(),
+        MmlOverlaySyntax::Chord(_) | MmlOverlaySyntax::ChordChart(_)
+    ) {
         return CHORD_PLACEHOLDER;
     }
     match overlay.input_mode() {
@@ -150,6 +153,10 @@ fn title(overlay: &MmlOverlay<'_>) -> String {
             None => format!(" CHORD → {} [既定音色] ", context.target_label),
         },
         MmlOverlaySyntax::Chord(None) => " CHORD [試聴trackなし] ".to_string(),
+        MmlOverlaySyntax::ChordChart(_) => match overlay.patch() {
+            Some(patch) => format!(" CHORD → Chord Chart [{patch}] "),
+            None => " CHORD → Chord Chart [既定音色] ".to_string(),
+        },
     }
 }
 

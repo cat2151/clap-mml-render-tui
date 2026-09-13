@@ -19,7 +19,7 @@ use crossterm::event::KeyEvent;
 use cmrt_mml_overlay::{
     host_patch_catalog, is_mml_overlay_trigger, is_patch_select_trigger, ChordPreviewContext,
     HostPatchCatalog, MmlOverlayAction, MmlOverlayContext, MmlOverlayInputMode, MmlOverlaySyntax,
-    PatchChange,
+    PatchChange, SingleLineFlow,
 };
 use cmrt_tui_core::patch_load::PatchLoadState;
 
@@ -109,6 +109,7 @@ impl DawApp {
         MmlOverlayContext {
             // DAW は 1 行モード。`Enter` は改行ではなく確定。
             input_mode: MmlOverlayInputMode::SingleLine,
+            single_line_flow: SingleLineFlow::Advance,
             initial_text: self.editor.data[self.editor.cursor_track][self.editor.cursor_measure]
                 .clone(),
             syntax: if chord_input {

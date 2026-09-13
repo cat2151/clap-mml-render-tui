@@ -77,7 +77,7 @@ fn the_chord_chart_asks_for_neither_mouse_capture_nor_a_textarea_cursor() {
     assert!(!app.uses_textarea_cursor());
 }
 
-/// `i` / `n` の 1 行入力欄を開いている間だけ、端末カーソルを入力欄の形にする。
+/// `i` の MML overlay / `n` の固有 1 行入力欄を開いている間だけ、端末カーソルを入力欄の形にする。
 /// ここが false のままだと「打っている場所」が画面に出ない。
 #[test]
 fn the_textarea_cursor_follows_the_line_input() {
@@ -85,11 +85,18 @@ fn the_textarea_cursor_follows_the_line_input() {
     app.switch_to_primary_screen(PrimaryScreen::ChordChart, None);
 
     app.handle_chord_chart_key_event(plain(KeyCode::Char('i')));
-    assert!(app.chord_chart.line_input_open());
+    assert!(app.mml_overlay.is_open());
+    assert!(!app.chord_chart.line_input_open());
     assert!(app.uses_textarea_cursor());
     // マウスは相変わらず要らない。
     assert!(!app.uses_mouse_capture());
 
+    app.handle_mml_overlay_key_event(plain(KeyCode::Esc));
+    assert!(!app.uses_textarea_cursor());
+
+    app.handle_chord_chart_key_event(plain(KeyCode::Char('n')));
+    assert!(app.chord_chart.line_input_open());
+    assert!(app.uses_textarea_cursor());
     app.handle_chord_chart_key_event(plain(KeyCode::Esc));
     assert!(!app.uses_textarea_cursor());
 }

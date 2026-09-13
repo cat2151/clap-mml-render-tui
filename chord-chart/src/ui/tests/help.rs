@@ -48,6 +48,9 @@ fn the_help_overlay_lists_every_key() {
     }
     // `b` は 1 文字なので単体では他の行にも当たる。説明ごと照合する。
     assert!(rendered.contains("bKey/BPMを入力"), "{rendered}");
+    // `i` は crate 内の手入力欄ではなく host editor を要求するキー。
+    assert!(rendered.contains("i進行(degrees)を編集"), "{rendered}");
+    assert!(!rendered.contains("i進行(degrees)を手入力"), "{rendered}");
     // 書式の詳細はヘルプに書かない（`[user]` 指示。覚えるものを増やさない）。
     // **枠の中だけを読む**。画面全体だと裏のヘッダ（`Key=C BPM120`）を拾って必ず落ちる。
     let inside = overlay_text(&buffer, left, top, right, bottom);

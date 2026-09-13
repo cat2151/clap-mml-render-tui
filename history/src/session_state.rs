@@ -67,6 +67,10 @@ pub struct SessionState {
     /// MML 本体は揮発だが、音色だけは開き直しても引き継ぐ。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mml_overlay_patch: Option<String>,
+    /// Chord Chart の preview で最後に選んだ音色。
+    /// 通常の MML 入力 overlay の音色とは独立して保持する。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chord_chart_patch: Option<String>,
     /// MML 入力 overlay の演奏設定（`Ctrl+L`）。MML 本体は揮発だが、
     /// 「どう鳴らすか」は音色と同じく開き直しても引き継ぐ。
     #[serde(default)]
@@ -90,6 +94,7 @@ impl Default for SessionState {
             keyboard_note_guide_overlay_date: None,
             notepad_sound_check_guide_overlay_date: None,
             mml_overlay_patch: None,
+            chord_chart_patch: None,
             mml_overlay_play_settings: MmlOverlayPlaySettings::default(),
         }
     }
@@ -128,6 +133,8 @@ struct SessionStateWire {
     #[serde(default)]
     mml_overlay_patch: Option<String>,
     #[serde(default)]
+    chord_chart_patch: Option<String>,
+    #[serde(default)]
     mml_overlay_play_settings: MmlOverlayPlaySettings,
 }
 
@@ -163,6 +170,7 @@ impl<'de> serde::Deserialize<'de> for SessionState {
             keyboard_note_guide_overlay_date: wire.keyboard_note_guide_overlay_date,
             notepad_sound_check_guide_overlay_date: wire.notepad_sound_check_guide_overlay_date,
             mml_overlay_patch: wire.mml_overlay_patch,
+            chord_chart_patch: wire.chord_chart_patch,
             mml_overlay_play_settings: wire.mml_overlay_play_settings,
         })
     }

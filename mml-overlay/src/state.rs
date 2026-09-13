@@ -13,6 +13,7 @@ mod contract;
 mod history;
 mod patch;
 mod play_settings;
+mod preview;
 mod single_line;
 
 use std::{collections::BTreeMap, time::Instant};
@@ -24,17 +25,17 @@ use ratatui_textarea::{DataCursor, TextArea};
 use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 
 use crate::chord_transfer::ChordTransferConfirm;
-use crate::cursor_notes::{notes_at_cursor, notes_at_cursor_with_chord_context, CursorNotes};
+use crate::cursor_notes::CursorNotes;
 use crate::history_select::{is_history_select_trigger, HistorySelect};
-use crate::line_play::{chord_line_events, is_replay_key, line_events, LineStatus};
+use crate::line_play::{is_replay_key, LineStatus};
 use crate::patch_select::{is_patch_select_trigger, PatchSelect};
 use crate::play_settings::{PlaySettings, PlaySettingsSelect};
 use crate::MmlOverlaySenderStatus;
-use crate::NOTE_ON;
 
 pub use contract::{
-    ChordPreviewContext, MmlOverlayAction, MmlOverlayContext, MmlOverlayInputMode,
-    MmlOverlaySyntax, NoteRequest, PatchCatalogSnapshot, PatchChange,
+    ChordChartPreviewContext, ChordPreviewContext, MmlOverlayAction, MmlOverlayContext,
+    MmlOverlayInputMode, MmlOverlaySyntax, NoteRequest, PatchCatalogSnapshot, PatchChange,
+    SingleLineFlow,
 };
 
 /// どの画面からでも開ける MML 入力オーバーレイ。
@@ -48,6 +49,8 @@ pub struct MmlOverlay<'a> {
     open: bool,
     /// 入力欄が 1 行か複数行か。`Enter` / `Esc` の意味がこれで変わる。
     input_mode: MmlOverlayInputMode,
+    /// 1 行入力を確定・破棄したときに閉じるかを決める。
+    single_line_flow: SingleLineFlow,
     /// MML セルか chord セルか。打鍵をどの変換経路へ流すかも決める。
     syntax: MmlOverlaySyntax,
     textarea: TextArea<'a>,
@@ -99,6 +102,7 @@ impl Default for MmlOverlay<'_> {
         Self {
             open: false,
             input_mode: MmlOverlayInputMode::MultiLine,
+            single_line_flow: SingleLineFlow::Advance,
             syntax: MmlOverlaySyntax::Mml,
             textarea: cmrt_tui_core::text_input::new_multi_line_textarea(Vec::new()),
             last_notes: None,
@@ -184,6 +188,7 @@ impl<'a> MmlOverlay<'a> {
     /// 「そのセルの MML を編集する」ために使う）。
     pub fn open(&mut self, context: MmlOverlayContext) {
         self.input_mode = context.input_mode;
+        self.single_line_flow = context.single_line_flow;
         self.syntax = context.syntax;
         self.textarea = single_line::new_textarea(context.input_mode, &context.initial_text);
         self.last_notes = None;
@@ -289,6 +294,7 @@ impl<'a> MmlOverlay<'a> {
 
     /// 開いている間だけ持っていたスナップショットを手放し、閉じた状態にする。
     pub(super) fn release_context(&mut self) {
+        self.single_line_flow = SingleLineFlow::Advance;
         self.syntax = MmlOverlaySyntax::Mml;
         self.patch_catalog = PatchCatalogSnapshot::Loading;
         self.patch_role_index = PatchRoleIndex::default();
@@ -305,117 +311,6 @@ impl<'a> MmlOverlay<'a> {
         self.chord_transfer_confirm = None;
         self.open = false;
         self.forget_sounding();
-    }
-
-    /// カーソルのある行をまるごと鳴らす。
-    ///
-    /// 打鍵の 1 音は行の演奏に飲み込まれるので、その記録は落とす。ここで note off を
-    /// 組み立てないのは、[`MmlOverlayAction::PlayLine`] 自体が「鳴っているものを
-    /// 止めてから積む」の意味だから。止めるのは受け取る側の 1 か所だけが行う。
-    fn play_current_line(&mut self, patch: PatchChange) -> MmlOverlayAction {
-        let (status, performance) = match &self.syntax {
-            MmlOverlaySyntax::Mml => line_events(self.current_line()),
-            MmlOverlaySyntax::Chord(Some(context)) => chord_line_events(
-                self.current_line(),
-                &context.chord_init,
-                &context.track_directive,
-                &context.mml_prefix,
-            ),
-            MmlOverlaySyntax::Chord(None) => (LineStatus::Idle, Default::default()),
-        };
-        self.line_status = status;
-        self.forget_cursor_unit();
-        MmlOverlayAction::PlayLine {
-            patch,
-            program: self.play_settings.program(performance),
-        }
-    }
-
-    /// カーソルのある発音単位を調べ、直前と別の単位になっていれば鳴らす。
-    ///
-    /// 文字を打ったときもカーソルを動かしたときも同じ判定を通るので、
-    /// 「← で戻ったらそこの音がまた鳴る」が特別扱いなしに成り立つ。同じ単位の
-    /// 内側で動くあいだは鳴らし直さないため、和音 `'ceg'` の中をカーソルが
-    /// 通っても 1 回しか鳴らない。単位が伸びれば別の単位なので、`c` に続けて
-    /// `1` を打てば全音符で鳴り直す。
-    ///
-    /// 休符やコマンドの上には鳴らす単位が無い。鳴っている音は gate に任せる。
-    fn refresh(&mut self, _now: Instant) -> MmlOverlayAction {
-        let notes = self.notes_at_cursor();
-        if notes == self.last_notes {
-            return MmlOverlayAction::Continue;
-        }
-        self.last_notes.clone_from(&notes);
-        let Some((_, notes)) = notes else {
-            return MmlOverlayAction::Continue;
-        };
-        MmlOverlayAction::Send(self.start_notes(&notes))
-    }
-
-    fn notes_at_cursor(&self) -> Option<(usize, CursorNotes)> {
-        let DataCursor(row, column) = self.textarea.cursor();
-        let notes = match &self.syntax {
-            MmlOverlaySyntax::Mml => notes_at_cursor(self.current_line(), column),
-            MmlOverlaySyntax::Chord(Some(context)) => notes_at_cursor_with_chord_context(
-                self.current_line(),
-                column,
-                &context.chord_init,
-                &context.track_directive,
-                &context.mml_prefix,
-            ),
-            MmlOverlaySyntax::Chord(None) => None,
-        };
-        notes.map(|notes| (row, notes))
-    }
-
-    /// この発音単位の note on。前の音を止めるのは受け取る側の仕事。
-    fn start_notes(&mut self, notes: &CursorNotes) -> NoteRequest {
-        // gate の長さは MML の音長そのもの。「打鍵をやめても鳴り続ける」を追うには、
-        // 何 ms 先に止める約束をしたのかが残っていないと判断できない。
-        crate::log_line(format!(
-            "action=mml-overlay-note-on pitches={:?} gate_ms={}",
-            notes.pitches,
-            notes.duration.as_millis()
-        ));
-        self.sounding.clone_from(&notes.pitches);
-        self.sounding_from_chord = notes.from_chord;
-        let messages = notes
-            .pitches
-            .iter()
-            .map(|pitch| [NOTE_ON, *pitch, notes.velocity])
-            .collect();
-        NoteRequest {
-            messages,
-            duration: notes.duration,
-        }
-    }
-
-    pub(super) fn current_line(&self) -> &str {
-        self.textarea
-            .lines()
-            .get(self.cursor_row())
-            .map_or("", String::as_str)
-    }
-
-    fn cursor_row(&self) -> usize {
-        let DataCursor(row, _) = self.textarea.cursor();
-        row
-    }
-
-    /// カーソル同一性の記録ごと捨てる。行の演奏で打鍵の音が飲み込まれるときに使う。
-    /// 同一性を残すと、行内へカーソルが戻ったときに同じ音が鳴り直さない。
-    pub(super) fn forget_cursor_unit(&mut self) {
-        self.last_notes = None;
-        self.forget_sounding();
-    }
-
-    /// 表示の記録を捨てる。
-    ///
-    /// **ここは音を止めない。** 音を止めるのは [`MmlOverlayAction`] を受け取った側で、
-    /// この関数を呼ぶ経路は必ず `Close` / `Send` / `PlayLine` のどれかを返す。
-    fn forget_sounding(&mut self) {
-        self.sounding.clear();
-        self.sounding_from_chord = false;
     }
 }
 

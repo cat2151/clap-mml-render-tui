@@ -6,12 +6,23 @@
 
 use super::*;
 
-use crate::state::MmlOverlayInputMode;
+use crate::state::{MmlOverlayInputMode, SingleLineFlow};
 
 fn single_line(initial_text: &str) -> MmlOverlay<'static> {
     let mut overlay = MmlOverlay::default();
     overlay.open(MmlOverlayContext {
         input_mode: MmlOverlayInputMode::SingleLine,
+        initial_text: initial_text.to_string(),
+        ..MmlOverlayContext::default()
+    });
+    overlay
+}
+
+fn modal_single_line(initial_text: &str) -> MmlOverlay<'static> {
+    let mut overlay = MmlOverlay::default();
+    overlay.open(MmlOverlayContext {
+        input_mode: MmlOverlayInputMode::SingleLine,
+        single_line_flow: SingleLineFlow::Modal,
         initial_text: initial_text.to_string(),
         ..MmlOverlayContext::default()
     });
@@ -66,6 +77,47 @@ fn esc_commits_and_closes() {
     assert_eq!(
         overlay.handle_key(press(KeyCode::Esc), now),
         commit("cde", true)
+    );
+    assert!(!overlay.is_open());
+    assert!(overlay.sounding().is_empty());
+}
+
+#[test]
+fn the_default_single_line_flow_is_advance() {
+    let overlay = single_line("cde");
+
+    assert_eq!(overlay.single_line_flow(), SingleLineFlow::Advance);
+}
+
+#[test]
+fn modal_enter_commits_and_closes() {
+    let mut overlay = modal_single_line("cde");
+
+    assert_eq!(
+        overlay.handle_key(press(KeyCode::Enter), Instant::now()),
+        commit("cde", true)
+    );
+    assert!(!overlay.is_open());
+}
+
+#[test]
+fn modal_ctrl_m_commits_and_closes_exactly_like_enter() {
+    let mut overlay = modal_single_line("cde");
+
+    assert_eq!(
+        overlay.handle_key(ctrl(KeyCode::Char('m')), Instant::now()),
+        commit("cde", true)
+    );
+    assert!(!overlay.is_open());
+}
+
+#[test]
+fn modal_esc_discards_and_closes_without_committing() {
+    let mut overlay = modal_single_line("cde");
+
+    assert_eq!(
+        overlay.handle_key(press(KeyCode::Esc), Instant::now()),
+        MmlOverlayAction::Close
     );
     assert!(!overlay.is_open());
     assert!(overlay.sounding().is_empty());

@@ -1,7 +1,7 @@
 //! 1 行入力のテストの共有ヘルパ。観点別のテストは `tests/*.rs` へ。
 //!
-//! degrees も prefix も**検証しない**ので、確定を止める理由が残っているのは
-//! 「名前が空」の 1 つだけ。理由の出し方・消え方はそこで見る。
+//! prefix は**検証しない**ので、確定を止める理由が残っているのは「名前が空」の
+//! 1 つだけ。理由の出し方・消え方はそこで見る。
 
 use super::*;
 
@@ -47,8 +47,4 @@ fn clear_input(screen: &mut ChordChartScreen) {
 
 fn input_value(screen: &ChordChartScreen) -> String {
     screen.line_input().expect("input is open").value()
-}
-
-fn degrees_of(screen: &ChordChartScreen, index: usize) -> &str {
-    screen.song.sections[index].degrees.as_str()
 }

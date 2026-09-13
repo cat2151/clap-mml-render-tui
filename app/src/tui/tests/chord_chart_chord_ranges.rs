@@ -72,12 +72,12 @@ fn the_counts_follow_a_hand_typed_degrees() {
     // `i` は今の degrees を入れて開く。消してから 2 chord ぶんを打ち直す。
     app.handle_chord_chart_key_event(plain(KeyCode::Char('i')));
     for _ in 0..20 {
-        app.handle_chord_chart_key_event(plain(KeyCode::Backspace));
+        app.handle_mml_overlay_key_event(plain(KeyCode::Backspace));
     }
     for ch in "IIm-V".chars() {
-        app.handle_chord_chart_key_event(plain(KeyCode::Char(ch)));
+        app.handle_mml_overlay_key_event(plain(KeyCode::Char(ch)));
     }
-    app.handle_chord_chart_key_event(plain(KeyCode::Enter));
+    app.handle_mml_overlay_key_event(plain(KeyCode::Enter));
 
     assert_eq!(app.chord_chart.song.sections[0].degrees, "IIm-V");
     assert_eq!(
@@ -97,12 +97,12 @@ fn an_unreadable_degrees_counts_zero_and_stays_a_single_chord() {
 
     app.handle_chord_chart_key_event(plain(KeyCode::Char('i')));
     for _ in 0..20 {
-        app.handle_chord_chart_key_event(plain(KeyCode::Backspace));
+        app.handle_mml_overlay_key_event(plain(KeyCode::Backspace));
     }
     for ch in "@@@".chars() {
-        app.handle_chord_chart_key_event(plain(KeyCode::Char(ch)));
+        app.handle_mml_overlay_key_event(plain(KeyCode::Char(ch)));
     }
-    app.handle_chord_chart_key_event(plain(KeyCode::Enter));
+    app.handle_mml_overlay_key_event(plain(KeyCode::Enter));
 
     assert_eq!(app.chord_chart.song.sections[0].degrees, "@@@");
     assert_eq!(counts(&app)[0].1, Some(0), "数えた結果の 0 は 0 のまま");
@@ -208,7 +208,7 @@ fn the_chord_cursor_walks_the_counted_chords_before_carrying_over() {
 /// `i` で chord を減らして確定しても、chord カーソルが行の外に残らないこと
 /// （確定では preview 要求が立たないので、丸めるのは読むときだけ）。
 #[test]
-fn shrinking_the_degrees_with_the_line_input_pulls_the_chord_cursor_back() {
+fn shrinking_the_degrees_with_the_mml_overlay_pulls_the_chord_cursor_back() {
     let (mut app, tmp, _guard) = app_with_isolated_save();
     app.switch_to_primary_screen(PrimaryScreen::ChordChart, None);
     for _ in 0..3 {
@@ -218,12 +218,12 @@ fn shrinking_the_degrees_with_the_line_input_pulls_the_chord_cursor_back() {
 
     app.handle_chord_chart_key_event(plain(KeyCode::Char('i')));
     for _ in 0..64 {
-        app.handle_chord_chart_key_event(plain(KeyCode::Backspace));
+        app.handle_mml_overlay_key_event(plain(KeyCode::Backspace));
     }
     for code in ['I', '-', 'V'] {
-        app.handle_chord_chart_key_event(plain(KeyCode::Char(code)));
+        app.handle_mml_overlay_key_event(plain(KeyCode::Char(code)));
     }
-    app.handle_chord_chart_key_event(plain(KeyCode::Enter));
+    app.handle_mml_overlay_key_event(plain(KeyCode::Enter));
 
     assert_eq!(app.chord_chart.song.sections[0].degrees, "I-V");
     assert_eq!(

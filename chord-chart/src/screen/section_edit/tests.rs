@@ -288,7 +288,7 @@ fn the_sections_keys_are_inert_while_the_arrangement_pane_has_focus() {
 
     assert_eq!(screen.song, before);
     assert_eq!(screen.error, None);
-    // `i` / `n` の入力欄も開かない（開くと以降のキーを全部食ってしまう）。
+    // `n` の入力欄も開かない（開くと以降のキーを全部食ってしまう）。
     assert!(!screen.line_input_open());
 }
 
