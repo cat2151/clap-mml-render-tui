@@ -150,6 +150,7 @@ fn adding_from_an_all_shortcut_uses_the_shortcuts_owning_role() {
     select.handle_key(press(KeyCode::Left));
     select.handle_key(press(KeyCode::Down));
     type_text(&mut select, "sub");
+    select.handle_key(press(KeyCode::Enter));
 
     assert!(matches!(
         select.handle_key(ctrl('a')),

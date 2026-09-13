@@ -5,13 +5,14 @@
 //! 音を鳴らす/JSON へ永続化する処理は [`crate::state`] と host app に任せる。
 
 mod filter;
+mod keys;
 mod prepared;
 mod presets;
 
 use std::{collections::BTreeMap, sync::Arc};
 
-use cmrt_patches::{PatchRoleIndex, PatchRoleInput};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use cmrt_patches::PatchRoleIndex;
+use crossterm::event::{KeyCode, KeyEvent};
 use ratatui_textarea::TextArea;
 
 use cmrt_tui_core::{patch_load::PatchLoadMeasurement, text_input};
@@ -20,8 +21,11 @@ use crate::line_play::is_replay_key;
 use crate::PatchCatalogEntry;
 
 use filter::{filter_candidates, is_valid_condition};
-use prepared::PreparedPresets;
+use keys::{is_add_preset_key, is_filter_edit_trigger, is_random_jump_key};
+use prepared::{build_role_index, PreparedPresets};
 use presets::{normalize_user_presets, patterns_for_role, FilterGroup, FilterPreset};
+
+pub use keys::is_patch_select_trigger;
 
 const PAGE_STEP: isize = 10;
 
@@ -60,7 +64,11 @@ pub(crate) struct PatchSelect<'a> {
     all: Vec<PatchCatalogEntry>,
     filtered: Arc<[usize]>,
     cursor: usize,
+    /// 表示中かつ、編集中なら未確定の値も入る。
     query: TextArea<'a>,
+    /// `Enter` で最後に確定した絞り込み。編集中の `Esc` はここへ戻す。
+    committed_query: String,
+    filter_editing: bool,
     filter_error: Option<String>,
     user_presets: Vec<(String, String)>,
     role_index: PatchRoleIndex,
@@ -113,6 +121,8 @@ impl<'a> PatchSelect<'a> {
             filtered,
             cursor,
             query: text_input::new_single_line_textarea(""),
+            committed_query: String::new(),
+            filter_editing: false,
             filter_error: None,
             user_presets,
             role_index,
@@ -129,6 +139,10 @@ impl<'a> PatchSelect<'a> {
 
     pub(crate) fn query_textarea(&self) -> &TextArea<'a> {
         &self.query
+    }
+
+    pub(crate) fn filter_editing(&self) -> bool {
+        self.filter_editing
     }
 
     pub(crate) fn filter_error(&self) -> Option<&str> {
@@ -196,6 +210,9 @@ impl<'a> PatchSelect<'a> {
     }
 
     pub(crate) fn handle_key(&mut self, key: KeyEvent) -> PatchSelectAction {
+        if self.filter_editing {
+            return self.handle_filter_key(key);
+        }
         match key.code {
             KeyCode::Esc => return PatchSelectAction::Cancel,
             KeyCode::Enter => {
@@ -205,6 +222,11 @@ impl<'a> PatchSelect<'a> {
                 };
             }
             _ => {}
+        }
+        if is_filter_edit_trigger(key) {
+            self.filter_editing = true;
+            self.query = text_input::new_single_line_textarea(&self.committed_query);
+            return PatchSelectAction::Continue;
         }
         if is_replay_key(key) {
             return self.play_selected_line();
@@ -240,7 +262,25 @@ impl<'a> PatchSelect<'a> {
             KeyCode::PageDown => return self.move_focused_page(1),
             _ => {}
         }
-        // 上記以外は絞り込み欄へ渡す。各空白区切り term を正規表現として扱う。
+        PatchSelectAction::Continue
+    }
+
+    /// 絞り込み編集中は selector のキーを動かさず、入力欄だけを操作する。
+    /// 候補は入力中にも更新するが、`Esc` なら編集開始時の確定値へ戻す。
+    fn handle_filter_key(&mut self, key: KeyEvent) -> PatchSelectAction {
+        match key.code {
+            KeyCode::Esc => {
+                self.filter_editing = false;
+                self.query = text_input::new_single_line_textarea(&self.committed_query);
+                return self.refilter();
+            }
+            KeyCode::Enter => {
+                self.filter_editing = false;
+                self.committed_query = text_input::textarea_value(&self.query);
+                return PatchSelectAction::Continue;
+            }
+            _ => {}
+        }
         if !text_input::apply_key_event_to_textarea(&mut self.query, key) {
             return PatchSelectAction::Continue;
         }
@@ -403,33 +443,6 @@ impl<'a> PatchSelect<'a> {
         self.previewed = Some(patch.clone());
         PatchSelectAction::Preview(patch)
     }
-}
-
-fn build_role_index(
-    all: &[PatchCatalogEntry],
-    user_presets: &[(String, String)],
-) -> PatchRoleIndex {
-    PatchRoleIndex::build(
-        all.iter().map(|patch| PatchRoleInput {
-            display: patch.display(),
-            normalized_display: patch.normalized_display(),
-            selector_category: patch.selector_category(),
-        }),
-        user_presets,
-    )
-}
-
-fn is_add_preset_key(key: KeyEvent) -> bool {
-    key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('a')
-}
-
-fn is_random_jump_key(key: KeyEvent) -> bool {
-    key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('r')
-}
-
-/// このキーは音色選択を開く。
-pub fn is_patch_select_trigger(key: KeyEvent) -> bool {
-    key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('t')
 }
 
 #[cfg(test)]

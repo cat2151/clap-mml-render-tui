@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use cmrt_patches::PatchRoleIndex;
+use cmrt_patches::{PatchRoleIndex, PatchRoleInput};
 
 use crate::PatchCatalogEntry;
 
@@ -59,4 +59,18 @@ impl PreparedPresets {
     pub(super) fn for_role(&self, role_index: usize) -> &[FilterPreset] {
         &self.by_role[role_index]
     }
+}
+
+pub(super) fn build_role_index(
+    all: &[PatchCatalogEntry],
+    user_presets: &[(String, String)],
+) -> PatchRoleIndex {
+    PatchRoleIndex::build(
+        all.iter().map(|patch| PatchRoleInput {
+            display: patch.display(),
+            normalized_display: patch.normalized_display(),
+            selector_category: patch.selector_category(),
+        }),
+        user_presets,
+    )
 }

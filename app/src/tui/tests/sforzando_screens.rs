@@ -59,6 +59,7 @@ fn selecting_sfz_requests_preview_without_changing_its_display_string() {
     );
 
     let mut preview = None;
+    overlay.handle_key(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE), now);
     for ch in "flute".chars() {
         if let MmlOverlayAction::SetPatch { patch, notes } =
             overlay.handle_key(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE), now)
@@ -69,6 +70,7 @@ fn selecting_sfz_requests_preview_without_changing_its_display_string() {
     }
     assert_eq!(preview.as_deref(), Some(SFZ_PATCH));
 
+    overlay.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), now);
     overlay.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), now);
     assert_eq!(overlay.patch(), Some(SFZ_PATCH));
 }

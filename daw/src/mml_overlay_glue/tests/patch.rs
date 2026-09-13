@@ -34,9 +34,12 @@ fn catalog_pairs() -> Vec<(String, String)> {
 fn confirm_patch_by_query(app: &mut DawApp, query: &str) {
     app.handle_mml_overlay_key_event(ctrl('t'));
     assert!(app.mml_overlay.is_patch_select_open());
+    app.handle_mml_overlay_key_event(plain('/'));
     for ch in query.chars() {
         app.handle_mml_overlay_key_event(plain(ch));
     }
+    // 1 回目は絞り込み、2 回目は音色の確定。
+    app.handle_mml_overlay_key_event(key(KeyCode::Enter));
     app.handle_mml_overlay_key_event(key(KeyCode::Enter));
 }
 

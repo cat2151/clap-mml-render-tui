@@ -58,6 +58,7 @@ fn selecting_floe_requests_a_preview_and_keeps_the_display_string() {
     );
 
     let mut preview = None;
+    overlay.handle_key(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE), now);
     for ch in "floe".chars() {
         let action = overlay.handle_key(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE), now);
         if let MmlOverlayAction::SetPatch { patch, notes } = action {
@@ -67,6 +68,7 @@ fn selecting_floe_requests_a_preview_and_keeps_the_display_string() {
     }
     assert_eq!(preview.as_deref(), Some(FLOE_PATCH));
 
+    overlay.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), now);
     overlay.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), now);
     assert_eq!(overlay.patch(), Some(FLOE_PATCH));
 }

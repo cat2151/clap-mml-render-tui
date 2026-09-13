@@ -1,6 +1,7 @@
 mod chord_chart;
 mod chord_input;
 mod chord_transfer;
+mod patch_select;
 mod single_line;
 
 use std::time::Instant;
@@ -163,6 +164,7 @@ fn draws_the_patch_select_over_the_input() {
     assert!(rendered.contains("0.2s"), "{rendered}");
     // 音色一覧の中でだけ効くキーは、ここに出さないと気づけない。
     // 全角は 2 セル目が空白になるので、見るのは ASCII の部分だけにする。
+    assert!(rendered.contains("/:"), "{rendered}");
     assert!(rendered.contains("^Space:"), "{rendered}");
     assert!(rendered.contains("^L:"), "{rendered}");
 }

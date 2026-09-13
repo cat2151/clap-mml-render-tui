@@ -19,7 +19,6 @@ use cmrt_tui_core::{
 
 use crate::patch_select::{PatchSelect, PatchSelectFocus};
 
-const QUERY_TITLE: &str = " Regex (空白=AND)  Enter:決定  Esc:取消  ^Space:試聴  ^L:演奏設定 ";
 const QUERY_PLACEHOLDER: &str = r"例: warm pad|strings";
 /// 絞り込み欄の高さ（枠2行 + 入力1行）。
 const QUERY_HEIGHT: u16 = 3;
@@ -98,19 +97,28 @@ fn draw_notes(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
 fn draw_query(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
     let textarea = select.query_textarea();
     let value = textarea_value(textarea);
-    frame.render_widget(
-        &build_query_textarea_widget(
-            textarea,
-            &value,
-            QUERY_TITLE,
+    let (title, placeholder, border_color) = if select.filter_editing() {
+        (
+            " Regex (空白=AND)  Enter:絞り込み確定  Esc:前回へ戻す ",
             QUERY_PLACEHOLDER,
             MONOKAI_YELLOW,
-        ),
+        )
+    } else {
+        (
+            " Regex (空白=AND)  /:編集  Enter:音色決定  Esc:取消  ^Space:試聴  ^L:演奏設定 ",
+            "/ で絞り込み",
+            MONOKAI_FG,
+        )
+    };
+    frame.render_widget(
+        &build_query_textarea_widget(textarea, &value, title, placeholder, border_color),
         area,
     );
-    // 音色選択が開いている間、端末のカーソルは絞り込み欄にある。
-    // MML 入力欄より後に描くので、こちらの指定が残る。
-    frame.set_cursor_position(single_line_textarea_cursor_position(area, textarea));
+    if select.filter_editing() {
+        // 編集中だけ端末カーソルを Regex 欄へ移す。通常時は pane 操作中だと分かるよう、
+        // 呼び出し元の MML カーソルを上書きしない。
+        frame.set_cursor_position(single_line_textarea_cursor_position(area, textarea));
+    }
 }
 
 fn pane_block(title: String, focused: bool) -> Block<'static> {

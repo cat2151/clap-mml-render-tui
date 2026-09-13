@@ -1,5 +1,7 @@
 use super::*;
+use crossterm::event::KeyModifiers;
 
+mod filter_edit;
 mod metadata;
 
 fn press(code: KeyCode) -> KeyEvent {
@@ -67,6 +69,9 @@ fn filtered<'a>(select: &'a PatchSelect<'_>) -> Vec<&'a str> {
 }
 
 fn type_text(select: &mut PatchSelect<'_>, text: &str) {
+    if !select.filter_editing() {
+        select.handle_key(press(KeyCode::Char('/')));
+    }
     for ch in text.chars() {
         select.handle_key(press(KeyCode::Char(ch)));
     }
@@ -269,7 +274,7 @@ fn typed_terms_are_case_insensitive_regular_expressions_with_and_between_spaces(
 fn an_invalid_regular_expression_is_reported_and_matches_nothing() {
     let mut select = opened(None);
 
-    select.handle_key(press(KeyCode::Char('[')));
+    type_text(&mut select, "[");
 
     assert!(filtered(&select).is_empty());
     assert!(select.filter_error().is_some());
@@ -287,6 +292,7 @@ fn ctrl_a_adds_the_query_to_the_selected_role_and_requests_persistence() {
     );
     select_group(&mut select, 3);
     type_text(&mut select, "violin");
+    select.handle_key(press(KeyCode::Enter));
 
     let action = select.handle_key(ctrl('a'));
 
@@ -307,6 +313,7 @@ fn ctrl_a_adds_the_query_to_the_selected_role_and_requests_persistence() {
 fn ctrl_a_in_the_all_group_puts_the_query_in_etc() {
     let mut select = opened(None);
     type_text(&mut select, "custom");
+    select.handle_key(press(KeyCode::Enter));
 
     assert!(matches!(
         select.handle_key(ctrl('a')),
@@ -323,6 +330,7 @@ fn ctrl_a_ignores_empty_invalid_and_builtin_duplicate_queries() {
         PatchSelectAction::Continue
     ));
     type_text(&mut select, "[");
+    select.handle_key(press(KeyCode::Enter));
     assert!(matches!(
         select.handle_key(ctrl('a')),
         PatchSelectAction::Continue
@@ -330,6 +338,7 @@ fn ctrl_a_ignores_empty_invalid_and_builtin_duplicate_queries() {
 
     let mut select = opened(None);
     type_text(&mut select, r"\bpad");
+    select.handle_key(press(KeyCode::Enter));
     assert!(matches!(
         select.handle_key(ctrl('a')),
         PatchSelectAction::Continue

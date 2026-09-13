@@ -59,9 +59,11 @@ fn adding_a_patch_filter_preset_is_forwarded_to_the_host_for_json_persistence() 
     for _ in 0..3 {
         overlay.handle_key(press(KeyCode::Down), now);
     }
+    overlay.handle_key(press(KeyCode::Char('/')), now);
     for ch in "violin".chars() {
         overlay.handle_key(press(KeyCode::Char(ch)), now);
     }
+    overlay.handle_key(press(KeyCode::Enter), now);
 
     assert_eq!(
         overlay.handle_key(ctrl(KeyCode::Char('a')), now),

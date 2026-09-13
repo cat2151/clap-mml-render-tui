@@ -229,9 +229,11 @@ fn confirming_a_patch_updates_the_init_column_of_the_grid() {
     );
 
     app.handle_mml_overlay_key_event(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL));
+    app.handle_mml_overlay_key_event(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE));
     for ch in "overlay lead".chars() {
         app.handle_mml_overlay_key_event(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE));
     }
+    app.handle_mml_overlay_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     app.handle_mml_overlay_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     app.handle_mml_overlay_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     let after = render_lines(&app, 120, 30).join("\n");

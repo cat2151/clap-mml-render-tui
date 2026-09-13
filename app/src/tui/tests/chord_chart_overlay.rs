@@ -122,6 +122,30 @@ fn escape_discards_degrees_but_keeps_a_confirmed_chord_chart_patch() {
 }
 
 #[test]
+fn chord_chart_patch_filter_is_committed_before_the_patch_itself() {
+    let mut app = TuiApp::new_for_test(test_config());
+    *app.patch_load_state.lock().unwrap() =
+        PatchLoadState::ready(make_patches(&["Chord/Lead.fxp", "Chord/Pad.fxp"]));
+    open_degrees(&mut app);
+    app.handle_mml_overlay_key_event(ctrl('t'));
+
+    app.handle_mml_overlay_key_event(plain(KeyCode::Char('/')));
+    for ch in "pad".chars() {
+        app.handle_mml_overlay_key_event(plain(KeyCode::Char(ch)));
+    }
+    app.handle_mml_overlay_key_event(plain(KeyCode::Enter));
+
+    assert!(app.mml_overlay.is_patch_select_open());
+    assert_eq!(app.chord_chart_patch, None);
+
+    app.handle_mml_overlay_key_event(plain(KeyCode::Enter));
+
+    assert!(!app.mml_overlay.is_patch_select_open());
+    assert_eq!(app.chord_chart_patch.as_deref(), Some("Chord/Pad.fxp"));
+    assert!(app.mml_overlay.is_open());
+}
+
+#[test]
 fn global_patch_confirmation_does_not_change_the_chord_chart_patch() {
     let mut app = TuiApp::new_for_test(test_config());
     app.chord_chart_patch = Some("Chord/Piano.fxp".to_string());

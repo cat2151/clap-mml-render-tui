@@ -120,9 +120,11 @@ fn ctrl_t_updates_the_borrowed_track_without_touching_chord_init_or_directive() 
     );
 
     app.handle_mml_overlay_key_event(ctrl('t'));
+    app.handle_mml_overlay_key_event(plain('/'));
     for ch in "snapshot bass".chars() {
         app.handle_mml_overlay_key_event(plain(ch));
     }
+    app.handle_mml_overlay_key_event(key(KeyCode::Enter));
     app.handle_mml_overlay_key_event(key(KeyCode::Enter));
 
     assert_eq!(
