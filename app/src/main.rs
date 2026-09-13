@@ -116,7 +116,7 @@ fn run() -> Result<()> {
         let summary = clap_mml_render_tui::patch_catalog_cache::build_and_save(&cfg)?;
         println!(
             "patch catalog cacheを構築しました: patches={} plugins={} measured_loads={} \
-             first_load_failures={} second_load_failures={} catalog_voicings={} catalog_unknown={} path={}",
+             first_load_failures={} second_load_failures={} catalog_voicings={} catalog_unknown={} path={} source_path={}",
             summary.patch_count,
             summary.plugin_names.join(","),
             summary.measured_load_count,
@@ -124,7 +124,8 @@ fn run() -> Result<()> {
             summary.second_load_failure_count,
             summary.catalog_voicing_count,
             summary.catalog_unknown_count,
-            summary.path.display()
+            summary.path.display(),
+            summary.source_path.display()
         );
         return Ok(());
     }

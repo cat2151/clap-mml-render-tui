@@ -14,6 +14,7 @@ use measurements::collect_patch_load_measurements;
 use measurements::{estimate_eta, format_eta, measure_patch_loads};
 
 mod measurements;
+mod source_cache;
 
 const CACHE_FORMAT_VERSION: u32 = 4;
 const CACHE_RELATIVE_PATH: &str = "patch-catalog/catalog.json";
@@ -22,6 +23,7 @@ pub const BUILD_COMMAND: &str = "cmrt build-patch-catalog-cache";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BuildSummary {
     pub path: PathBuf,
+    pub source_path: PathBuf,
     pub patch_count: usize,
     pub plugin_names: Vec<String>,
     pub catalog_voicing_count: usize,
@@ -113,7 +115,12 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
         anyhow::bail!("plugin_pathが空のためpatch catalog cacheを構築できません");
     }
     let path = cache_file_path().context("patch catalog cacheの保存先を取得できません")?;
+    let source_path =
+        source_cache::cache_file_path().context("catalog source cacheの保存先を取得できません")?;
     let (plugins, skipped) = cmrt_runtime::catalog_plugins_detailed(cfg);
+    // scanが終わった時点でserver用の小さい結果を確定する。後続の全patch load計測が
+    // 失敗しても、次のserver起動で同じcatalog scanを繰り返させない。
+    source_cache::write(&source_path, &plugins)?;
     let pairs = cmrt_tui_core::patches::collect_patch_pairs_from_catalog(&plugins)?;
     let audio_patches = describe_patches(&plugins, &pairs)?;
     let patch_voicings = collect_patch_voicings(&plugins, &audio_patches);
@@ -155,6 +162,7 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
     write_cache(&path, &cache)?;
     Ok(BuildSummary {
         path,
+        source_path,
         patch_count: cache.patches.len(),
         plugin_names: plugins.into_iter().map(|plugin| plugin.name).collect(),
         catalog_voicing_count: cache.patch_voicings.len(),
