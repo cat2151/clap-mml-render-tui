@@ -165,8 +165,11 @@ fn draws_the_patch_select_over_the_input() {
     // 音色一覧の中でだけ効くキーは、ここに出さないと気づけない。
     // 全角は 2 セル目が空白になるので、見るのは ASCII の部分だけにする。
     assert!(rendered.contains("/:"), "{rendered}");
-    assert!(rendered.contains("^Space:"), "{rendered}");
+    assert!(rendered.contains("Space:"), "{rendered}");
     assert!(rendered.contains("^L:"), "{rendered}");
+    assert!(rendered.contains("/hl"), "{rendered}");
+    assert!(rendered.contains("/jk"), "{rendered}");
+    assert!(rendered.contains("Home/End"), "{rendered}");
 }
 
 #[test]

@@ -107,7 +107,7 @@ fn draw_query(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
         )
     } else {
         (
-            " Regex (空白=AND)  /:編集  Enter:音色決定  Esc:取消  ^Space:試聴  ^L:演奏設定 ",
+            " Regex (空白=AND)  /:編集  Enter:音色決定  Esc:取消  Space:試聴  ^L:演奏設定 ",
             "/ で絞り込み",
             MONOKAI_FG,
         )
@@ -133,7 +133,7 @@ fn pane_block(title: String, focused: bool) -> Block<'static> {
 
 fn draw_groups(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
     let block = pane_block(
-        " Role  ←/→ ".to_string(),
+        " Role  ←→/hl ".to_string(),
         select.focus() == PatchSelectFocus::Groups,
     );
     let rows = select
@@ -297,10 +297,10 @@ fn format_load_time(milliseconds: u64) -> String {
 
 fn list_title(select: &PatchSelect<'_>) -> String {
     if select.filter_error().is_some() {
-        return " Regex error  Ctrl+R:random ".to_string();
+        return " Regex error  ↑↓/jk Home/End Ctrl+R:random ".to_string();
     }
     format!(
-        " 音色 ({}/{}) Ctrl+R:random ",
+        " 音色 ({}/{}) ↑↓/jk Home/End Ctrl+R:random ",
         select.filtered_len(),
         select.total()
     )

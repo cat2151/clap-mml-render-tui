@@ -229,18 +229,18 @@ fn reopening_restores_the_patch_but_not_the_mml() {
     assert_eq!(overlay.patch(), Some("Leads/Lead 1.fxp"));
 }
 
-/// 音色一覧を開いたまま `Ctrl+Space` を押すと、選択中の音色で入力欄の現在行が鳴る。
+/// 音色一覧を開いたまま `Space` を押すと、選択中の音色で入力欄の現在行が鳴る。
 ///
 /// 音色一覧の行は MML を持たないので、鳴らすのは「入力欄側のカーソル行」。
 #[test]
-fn ctrl_space_in_the_patch_select_plays_the_current_line_with_the_selected_patch() {
+fn space_in_the_patch_select_plays_the_current_line_with_the_selected_patch() {
     let mut overlay = opened_with_patches();
     let now = Instant::now();
     type_chars(&mut overlay, "cde", now);
     overlay.handle_key(ctrl(KeyCode::Char('t')), now);
     overlay.handle_key(press(KeyCode::Down), now);
 
-    let (patch, program) = played(overlay.handle_key(ctrl(KeyCode::Char(' ')), now));
+    let (patch, program) = played(overlay.handle_key(press(KeyCode::Char(' ')), now));
 
     assert_eq!(
         patch,
@@ -259,32 +259,30 @@ fn ctrl_space_in_the_patch_select_plays_the_current_line_with_the_selected_patch
     assert_eq!(overlay.value(), "cde");
 }
 
-/// 端末によっては `Ctrl+Space` が `Char('\0')` で届く。音色一覧でも同じに扱う。
+/// 音色一覧では `Ctrl+Space` を試聴キーとして扱わない。
 #[test]
-fn ctrl_space_in_the_patch_select_also_arrives_as_a_nul_char() {
+fn ctrl_space_in_the_patch_select_does_not_preview() {
     let mut overlay = opened_with_patches();
     let now = Instant::now();
     type_chars(&mut overlay, "cde", now);
     overlay.handle_key(ctrl(KeyCode::Char('t')), now);
 
-    let (patch, _) = played(overlay.handle_key(ctrl(KeyCode::Char('\0')), now));
-
     assert_eq!(
-        patch,
-        PatchChange::Switch(Some("Leads/Lead 1.fxp".to_string()))
+        overlay.handle_key(ctrl(KeyCode::Char(' ')), now),
+        MmlOverlayAction::Continue
     );
 }
 
-/// `Ctrl+Space` も音源へ音色を読み込ませるので、取り消しは元の音色へ戻す。
+/// `Space` も音源へ音色を読み込ませるので、取り消しは元の音色へ戻す。
 ///
 /// 試聴の記録を進め忘れると、Esc で「読み込ませたまま戻さない」が起きる。
 #[test]
-fn cancelling_after_ctrl_space_restores_the_patch_it_opened_with() {
+fn cancelling_after_space_restores_the_patch_it_opened_with() {
     let mut overlay = opened_with_patches();
     let now = Instant::now();
     type_chars(&mut overlay, "cde", now);
     overlay.handle_key(ctrl(KeyCode::Char('t')), now);
-    overlay.handle_key(ctrl(KeyCode::Char(' ')), now);
+    overlay.handle_key(press(KeyCode::Char(' ')), now);
 
     assert_eq!(
         overlay.handle_key(press(KeyCode::Esc), now),
@@ -295,16 +293,16 @@ fn cancelling_after_ctrl_space_restores_the_patch_it_opened_with() {
     );
 }
 
-/// 演奏設定は overlay 全体で共通。音色一覧からの `Ctrl+Space` にも載る。
+/// 演奏設定は overlay 全体で共通。音色一覧からの `Space` にも載る。
 #[test]
-fn ctrl_space_in_the_patch_select_carries_the_play_settings() {
+fn space_in_the_patch_select_carries_the_play_settings() {
     let mut overlay = opened_with_patches();
     let now = Instant::now();
     type_chars(&mut overlay, "cde", now);
     turn_on_repeat(&mut overlay, now);
     overlay.handle_key(ctrl(KeyCode::Char('t')), now);
 
-    let (_, program) = played(overlay.handle_key(ctrl(KeyCode::Char(' ')), now));
+    let (_, program) = played(overlay.handle_key(press(KeyCode::Char(' ')), now));
 
     assert!(program.repeat);
 }

@@ -3,6 +3,7 @@ use crossterm::event::KeyModifiers;
 
 mod filter_edit;
 mod metadata;
+mod navigation;
 
 fn press(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
@@ -112,35 +113,6 @@ fn it_starts_on_the_current_patch() {
     assert_eq!(
         opened(Some("gone.fxp")).selected(),
         Some("Basses/Bass 1.fxp")
-    );
-}
-
-#[test]
-fn left_and_right_move_between_the_three_panes() {
-    let mut select = opened(None);
-
-    assert_eq!(select.focus(), PatchSelectFocus::Patches);
-    select.handle_key(press(KeyCode::Left));
-    assert_eq!(select.focus(), PatchSelectFocus::Presets);
-    select.handle_key(press(KeyCode::Left));
-    assert_eq!(select.focus(), PatchSelectFocus::Groups);
-    select.handle_key(press(KeyCode::Right));
-    assert_eq!(select.focus(), PatchSelectFocus::Presets);
-    select.handle_key(press(KeyCode::Right));
-    assert_eq!(select.focus(), PatchSelectFocus::Patches);
-}
-
-#[test]
-fn moving_in_the_patch_pane_previews_the_new_patch() {
-    let mut select = opened(Some("Leads/Lead 1.fxp"));
-
-    assert_eq!(
-        previewed(select.handle_key(press(KeyCode::Down))).as_deref(),
-        Some("Leads/Lead 2.fxp")
-    );
-    assert_eq!(
-        previewed(select.handle_key(press(KeyCode::Up))).as_deref(),
-        Some("Leads/Lead 1.fxp")
     );
 }
 
@@ -377,23 +349,6 @@ fn ctrl_r_jumps_to_a_different_random_row_within_the_filter() {
         assert_ne!(select.selected(), Some(before.as_str()));
     }
     assert_eq!(select.focus(), PatchSelectFocus::Patches);
-}
-
-#[test]
-fn page_up_and_page_down_always_move_ten_rows() {
-    let patches = (0..12)
-        .map(|index| entry(&format!("Patch {index:02}.fxp"), "Plugin", None))
-        .collect();
-    let mut select = open_with(patches, None, Vec::new());
-
-    assert_eq!(
-        previewed(select.handle_key(press(KeyCode::PageDown))).as_deref(),
-        Some("Patch 10.fxp")
-    );
-    assert_eq!(
-        previewed(select.handle_key(press(KeyCode::PageUp))).as_deref(),
-        Some("Patch 00.fxp")
-    );
 }
 
 #[test]

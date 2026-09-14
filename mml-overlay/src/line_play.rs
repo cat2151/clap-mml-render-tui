@@ -172,9 +172,8 @@ fn performance_events(
 /// 行が変わったときは自動で鳴るが、同じ行を鳴らし直す手段が別に要る。
 /// `Ctrl+Space` は端末によって `Char(' ')` と `Char('\0')` のどちらでも届く。
 ///
-/// 音色選択（`Ctrl+T`）を開いている間も同じキーで同じ行を鳴らすので、判定は
-/// [`crate::state`] ではなくここに置く。二重定義にすると、端末差の `Char('\0')` を
-/// 片方だけ直す事故が起きる。
+/// 音色選択（`Ctrl+T`）を開いている間は `Space` が試聴キーになるため、この判定は
+/// 通常の入力欄だけで使う。
 pub(crate) fn is_replay_key(key: KeyEvent) -> bool {
     key.modifiers.contains(KeyModifiers::CONTROL)
         && matches!(key.code, KeyCode::Char(' ') | KeyCode::Char('\0'))

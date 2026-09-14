@@ -123,6 +123,21 @@ fn patch_cursor_previews_the_current_chord_with_the_candidate_patch() {
 }
 
 #[test]
+fn space_in_the_patch_selector_replays_the_progression_with_the_candidate_patch() {
+    let now = Instant::now();
+    let mut overlay = chord_chart_overlay("Key=G", "I V");
+    overlay.handle_key(ctrl(KeyCode::Char('t')), now);
+
+    let (patch, program) = played(overlay.handle_key(press(KeyCode::Char(' ')), now));
+
+    assert_eq!(
+        patch,
+        PatchChange::Switch(Some("Leads/Lead 1.fxp".to_string()))
+    );
+    assert_eq!(pitches(&program), vec![67, 71, 74, 74, 78, 81]);
+}
+
+#[test]
 fn invalid_chord_chart_input_does_not_use_the_patch_fallback_note() {
     let now = Instant::now();
     let mut overlay = chord_chart_overlay("Key=G", "cde");

@@ -145,9 +145,6 @@ fn a_trailing_rest_does_not_lengthen_the_cycle() {
 }
 
 /// `Ctrl+Space` は端末によって 2 通りの綴りで届く。どちらも同じ意味。
-///
-/// 判定を overlay 本体と音色選択で二重に書くと、片方だけ直す事故が起きる。
-/// ここが唯一の定義であることを固定する。
 #[test]
 fn ctrl_space_arrives_with_two_spellings() {
     assert!(is_replay_key(KeyEvent::new(

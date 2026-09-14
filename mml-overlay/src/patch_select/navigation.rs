@@ -35,6 +35,14 @@ impl PatchSelect<'_> {
         self.move_focused_cursor(direction * PAGE_STEP)
     }
 
+    pub(super) fn move_focused_to_start(&mut self) -> PatchSelectAction {
+        self.move_focused_cursor(isize::MIN)
+    }
+
+    pub(super) fn move_focused_to_end(&mut self) -> PatchSelectAction {
+        self.move_focused_cursor(isize::MAX)
+    }
+
     fn move_group_cursor(&mut self, delta: isize) -> PatchSelectAction {
         let last = FilterGroup::ALL.len() - 1;
         let next = self.group_cursor.saturating_add_signed(delta).min(last);

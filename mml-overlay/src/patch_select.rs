@@ -13,16 +13,15 @@ mod presets;
 use std::{cell::Cell, collections::BTreeMap, sync::Arc};
 
 use cmrt_patches::{PatchRole, PatchRoleIndex};
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui_textarea::TextArea;
 
 use cmrt_tui_core::{patch_load::PatchLoadMeasurement, text_input};
 
-use crate::line_play::is_replay_key;
 use crate::PatchCatalogEntry;
 
 use filter::{filter_candidates, is_valid_condition};
-use keys::{is_add_preset_key, is_filter_edit_trigger, is_random_jump_key};
+use keys::{is_add_preset_key, is_filter_edit_trigger, is_preview_key, is_random_jump_key};
 pub(crate) use navigation::PatchSelectFocus;
 use prepared::{build_role_index, PreparedPresets};
 use presets::{normalize_user_presets, patterns_for_role, FilterGroup, FilterPreset};
@@ -240,7 +239,7 @@ impl<'a> PatchSelect<'a> {
             self.query = text_input::new_single_line_textarea(&self.committed_query);
             return PatchSelectAction::Continue;
         }
-        if is_replay_key(key) {
+        if is_preview_key(key) {
             return self.play_selected_line();
         }
         if is_add_preset_key(key) {
@@ -249,7 +248,18 @@ impl<'a> PatchSelect<'a> {
         if is_random_jump_key(key) {
             return self.random_jump();
         }
-        match key.code {
+        let navigation_code = if key.modifiers == KeyModifiers::NONE {
+            match key.code {
+                KeyCode::Char('h') => KeyCode::Left,
+                KeyCode::Char('j') => KeyCode::Down,
+                KeyCode::Char('k') => KeyCode::Up,
+                KeyCode::Char('l') => KeyCode::Right,
+                code => code,
+            }
+        } else {
+            key.code
+        };
+        match navigation_code {
             KeyCode::Left => {
                 self.focus = match self.focus {
                     PatchSelectFocus::Groups | PatchSelectFocus::Presets => {
@@ -272,6 +282,8 @@ impl<'a> PatchSelect<'a> {
             KeyCode::Down => return self.move_focused_cursor(1),
             KeyCode::PageUp => return self.move_focused_page(-1),
             KeyCode::PageDown => return self.move_focused_page(1),
+            KeyCode::Home => return self.move_focused_to_start(),
+            KeyCode::End => return self.move_focused_to_end(),
             _ => {}
         }
         PatchSelectAction::Continue
