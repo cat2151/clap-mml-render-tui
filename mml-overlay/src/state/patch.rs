@@ -47,6 +47,7 @@ impl MmlOverlay<'_> {
                     self.patch.as_deref(),
                     self.patch_filter_presets.clone(),
                     self.patch_role_index.clone(),
+                    self.patch_select_initial_role,
                     self.catalog_notes.clone(),
                     self.load_measurements.clone(),
                 );

@@ -6,12 +6,13 @@
 
 mod filter;
 mod keys;
+mod navigation;
 mod prepared;
 mod presets;
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{cell::Cell, collections::BTreeMap, sync::Arc};
 
-use cmrt_patches::PatchRoleIndex;
+use cmrt_patches::{PatchRole, PatchRoleIndex};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui_textarea::TextArea;
 
@@ -22,20 +23,11 @@ use crate::PatchCatalogEntry;
 
 use filter::{filter_candidates, is_valid_condition};
 use keys::{is_add_preset_key, is_filter_edit_trigger, is_random_jump_key};
+pub(crate) use navigation::PatchSelectFocus;
 use prepared::{build_role_index, PreparedPresets};
 use presets::{normalize_user_presets, patterns_for_role, FilterGroup, FilterPreset};
 
 pub use keys::is_patch_select_trigger;
-
-const PAGE_STEP: isize = 10;
-
-/// 左右キーでどの pane のカーソルを上下移動するか。
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum PatchSelectFocus {
-    Groups,
-    Presets,
-    Patches,
-}
 
 /// 音色選択が呼び出し側へ求める処理。
 pub(crate) enum PatchSelectAction {
@@ -76,6 +68,9 @@ pub(crate) struct PatchSelect<'a> {
     group_cursor: usize,
     preset_cursor: usize,
     focus: PatchSelectFocus,
+    /// 各 pane の描画時 scroll。viewport の高さは描画時にしか分からないため、
+    /// UI が interior mutability で更新する。
+    scroll_offsets: [Cell<usize>; 3],
     /// 開いたときの音色。取り消しで戻す先。
     original: Option<String>,
     /// 直近に試聴した音色。同じ音色を続けて読み込ませないために持つ。
@@ -92,6 +87,7 @@ impl<'a> PatchSelect<'a> {
         current: Option<&str>,
         user_presets: Vec<(String, String)>,
         mut role_index: PatchRoleIndex,
+        initial_role: Option<PatchRole>,
         catalog_notes: Vec<String>,
         load_measurements: BTreeMap<String, PatchLoadMeasurement>,
     ) -> Option<Self> {
@@ -108,7 +104,14 @@ impl<'a> PatchSelect<'a> {
         }
         let prepared_presets = PreparedPresets::build(&all, &user_presets, &role_index)
             .expect("validated preset regular expressions must compile");
-        let filtered = Arc::clone(&prepared_presets.for_role(0)[0].matches);
+        let group_cursor = initial_role
+            .and_then(|role| {
+                FilterGroup::ALL
+                    .iter()
+                    .position(|group| group.role() == Some(role))
+            })
+            .unwrap_or(0);
+        let filtered = Arc::clone(&prepared_presets.for_role(group_cursor)[0].matches);
         let cursor = current
             .and_then(|current| {
                 filtered
@@ -127,9 +130,10 @@ impl<'a> PatchSelect<'a> {
             user_presets,
             role_index,
             prepared_presets,
-            group_cursor: 0,
+            group_cursor,
             preset_cursor: 0,
             focus: PatchSelectFocus::Patches,
+            scroll_offsets: [Cell::new(0), Cell::new(0), Cell::new(0)],
             original: current.map(str::to_string),
             previewed: current.map(str::to_string),
             catalog_notes,
@@ -167,6 +171,14 @@ impl<'a> PatchSelect<'a> {
 
     pub(crate) fn focus(&self) -> PatchSelectFocus {
         self.focus
+    }
+
+    pub(crate) fn scroll_offset(&self, pane: PatchSelectFocus) -> usize {
+        self.scroll_offsets[pane.index()].get()
+    }
+
+    pub(crate) fn set_scroll_offset(&self, pane: PatchSelectFocus, offset: usize) {
+        self.scroll_offsets[pane.index()].set(offset);
     }
 
     pub(crate) fn filtered(&self) -> impl ExactSizeIterator<Item = &PatchCatalogEntry> {
@@ -298,52 +310,6 @@ impl<'a> PatchSelect<'a> {
         let patch = patch.to_string();
         self.previewed = Some(patch.clone());
         PatchSelectAction::PlayLine(patch)
-    }
-
-    fn move_focused_cursor(&mut self, delta: isize) -> PatchSelectAction {
-        match self.focus {
-            PatchSelectFocus::Groups => self.move_group_cursor(delta),
-            PatchSelectFocus::Presets => self.move_preset_cursor(delta),
-            PatchSelectFocus::Patches => self.move_patch_cursor(delta),
-        }
-    }
-
-    fn move_focused_page(&mut self, direction: isize) -> PatchSelectAction {
-        self.move_focused_cursor(direction * PAGE_STEP)
-    }
-
-    fn move_group_cursor(&mut self, delta: isize) -> PatchSelectAction {
-        let last = FilterGroup::ALL.len() - 1;
-        let next = self.group_cursor.saturating_add_signed(delta).min(last);
-        if next == self.group_cursor {
-            return PatchSelectAction::Continue;
-        }
-        self.group_cursor = next;
-        self.preset_cursor = 0;
-        self.refilter()
-    }
-
-    fn move_preset_cursor(&mut self, delta: isize) -> PatchSelectAction {
-        let last = self.presets().len().saturating_sub(1);
-        let next = self.preset_cursor.saturating_add_signed(delta).min(last);
-        if next == self.preset_cursor {
-            return PatchSelectAction::Continue;
-        }
-        self.preset_cursor = next;
-        self.refilter()
-    }
-
-    fn move_patch_cursor(&mut self, delta: isize) -> PatchSelectAction {
-        if self.filtered.is_empty() {
-            return PatchSelectAction::Continue;
-        }
-        let last = self.filtered.len() - 1;
-        let next = self.cursor.saturating_add_signed(delta).min(last);
-        if next == self.cursor {
-            return PatchSelectAction::Continue;
-        }
-        self.cursor = next;
-        self.preview_selected()
     }
 
     fn random_jump(&mut self) -> PatchSelectAction {

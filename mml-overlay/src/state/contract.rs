@@ -3,7 +3,7 @@
 
 use std::{collections::BTreeMap, time::Duration};
 
-use cmrt_patches::PatchRoleIndex;
+use cmrt_patches::{PatchRole, PatchRoleIndex};
 
 use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 
@@ -157,6 +157,9 @@ pub struct MmlOverlayContext {
     pub patch_catalog: PatchCatalogSnapshot,
     /// MML selectorとGrid Sequencerが共有する、同じcatalog世代のRole索引。
     pub patch_role_index: PatchRoleIndex,
+    /// `Ctrl+T` で selector を開いた直後に選ぶ Role。`None` は従来どおり `ALL`。
+    /// catalog の Loading 完了待ちを挟んでも、この指定を使って開く。
+    pub patch_select_initial_role: Option<PatchRole>,
     /// catalog構築時に計測したpatch別のload結果。
     pub load_measurements: BTreeMap<String, PatchLoadMeasurement>,
     /// notepad 画面と共有しているフレーズ履歴。

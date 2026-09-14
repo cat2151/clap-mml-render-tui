@@ -64,7 +64,8 @@ impl PlaySettingsItem {
     pub(crate) fn detail(self) -> &'static str {
         match self {
             Self::Repeat => "行をつなげて鳴らし続ける",
-            Self::Modulation | Self::Velocity => "0→127→0 / 4秒",
+            Self::Modulation => "0→127→0 / 4秒",
+            Self::Velocity => "100→127→100 / 4秒",
         }
     }
 

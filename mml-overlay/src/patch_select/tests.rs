@@ -47,6 +47,7 @@ fn open_with(
         current,
         user_presets,
         Default::default(),
+        None,
         Vec::new(),
         Default::default(),
     )
@@ -94,6 +95,7 @@ fn an_empty_patch_list_does_not_open() {
         None,
         Vec::new(),
         Default::default(),
+        None,
         Vec::new(),
         Default::default()
     )

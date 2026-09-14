@@ -52,6 +52,7 @@ impl TuiApp<'_> {
         context.single_line_flow = SingleLineFlow::Modal;
         context.initial_text = initial_text;
         context.syntax = MmlOverlaySyntax::ChordChart(ChordChartPreviewContext { key_token });
+        context.patch_select_initial_role = Some(cmrt_patches::PatchRole::Chord);
         self.open_owned_mml_overlay(MmlOverlayOwner::ChordChart { section_id }, context);
     }
 
@@ -96,6 +97,7 @@ impl TuiApp<'_> {
             syntax: Default::default(),
             patch_catalog,
             patch_role_index,
+            patch_select_initial_role: None,
             load_measurements,
             history: history.to_vec(),
             favorites: favorites.to_vec(),

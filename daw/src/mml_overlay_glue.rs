@@ -131,6 +131,7 @@ impl DawApp {
             },
             patch_catalog: catalog,
             patch_role_index,
+            patch_select_initial_role: None,
             load_measurements,
             history,
             favorites,

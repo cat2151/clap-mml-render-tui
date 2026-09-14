@@ -24,12 +24,16 @@ mod tests;
 /// 1 周の長さ（`loop_seconds`）とは無関係。フレーズが 1 秒でも 4 秒かけて開閉する。
 const FILTER_PERIOD_SECONDS: f64 = 4.0;
 
-/// 振幅。CC も velocity も同じ波形を使う（velocity 側は 1 へ丸められる）。
-const FILTER_MIN: u8 = 0;
+const MODULATION_MIN: u8 = 0;
+const VELOCITY_MIN: u8 = 100;
 const FILTER_MAX: u8 = 127;
 
-fn filter_lfo() -> TriangleLfo {
-    TriangleLfo::new(FILTER_PERIOD_SECONDS, FILTER_MIN, FILTER_MAX)
+fn modulation_lfo() -> TriangleLfo {
+    TriangleLfo::new(FILTER_PERIOD_SECONDS, MODULATION_MIN, FILTER_MAX)
+}
+
+fn velocity_lfo() -> TriangleLfo {
+    TriangleLfo::new(FILTER_PERIOD_SECONDS, VELOCITY_MIN, FILTER_MAX)
 }
 
 /// 周回 k のイベント列を作る。ずらしてから filter を掛けるところまで。
@@ -75,11 +79,11 @@ pub(super) fn one_shot(
 /// （[`override_note_velocity`] は note on 以外に触らない）、単に走査するイベントを増やさないため。
 fn apply(events: &mut Vec<TimedMidiEvent>, filters: FilterSettings, span: Span) {
     if filters.velocity {
-        override_note_velocity(events, &filter_lfo());
+        override_note_velocity(events, &velocity_lfo());
     }
     if filters.modulation {
         // 差し込んだ後に並べ直すのは insert_control_change 側の責務。
         // CC は同時刻の note on より必ず前に来る（鳴り始めに modulation 値が乗る）。
-        insert_control_change(events, MODULATION_CC, &filter_lfo(), span);
+        insert_control_change(events, MODULATION_CC, &modulation_lfo(), span);
     }
 }

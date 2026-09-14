@@ -98,13 +98,14 @@ fn escape_discards_degrees_but_keeps_a_confirmed_chord_chart_patch() {
     let mut app = TuiApp::new_for_test(test_config());
     app.mml_overlay_patch = Some("Global/Pad.fxp".to_string());
     app.chord_chart_patch = Some("Chord/Old.fxp".to_string());
-    *app.patch_load_state.lock().unwrap() = PatchLoadState::ready(make_patches(&["Chord/New.fxp"]));
+    *app.patch_load_state.lock().unwrap() =
+        PatchLoadState::ready(make_patches(&["Pads/New Pad.fxp"]));
     let original = app.chord_chart.selected_section().unwrap().degrees.clone();
 
     open_degrees(&mut app);
     app.handle_mml_overlay_key_event(ctrl('t'));
     app.handle_mml_overlay_key_event(plain(KeyCode::Enter));
-    assert_eq!(app.chord_chart_patch.as_deref(), Some("Chord/New.fxp"));
+    assert_eq!(app.chord_chart_patch.as_deref(), Some("Pads/New Pad.fxp"));
     assert_eq!(app.mml_overlay_patch.as_deref(), Some("Global/Pad.fxp"));
     app.handle_mml_overlay_key_event(plain(KeyCode::Char('X')));
     app.handle_mml_overlay_key_event(plain(KeyCode::Esc));
@@ -113,7 +114,7 @@ fn escape_discards_degrees_but_keeps_a_confirmed_chord_chart_patch() {
         app.chord_chart.selected_section().unwrap().degrees,
         original
     );
-    assert_eq!(app.chord_chart_patch.as_deref(), Some("Chord/New.fxp"));
+    assert_eq!(app.chord_chart_patch.as_deref(), Some("Pads/New Pad.fxp"));
     assert_eq!(app.mml_overlay.patch(), Some("Global/Pad.fxp"));
 
     assert!(app.try_open_mml_overlay(ctrl('p')));
@@ -124,8 +125,10 @@ fn escape_discards_degrees_but_keeps_a_confirmed_chord_chart_patch() {
 #[test]
 fn chord_chart_patch_filter_is_committed_before_the_patch_itself() {
     let mut app = TuiApp::new_for_test(test_config());
-    *app.patch_load_state.lock().unwrap() =
-        PatchLoadState::ready(make_patches(&["Chord/Lead.fxp", "Chord/Pad.fxp"]));
+    *app.patch_load_state.lock().unwrap() = PatchLoadState::ready(make_patches(&[
+        "Leads/Bright Lead.fxp",
+        "Pads/Warm Pad.fxp",
+    ]));
     open_degrees(&mut app);
     app.handle_mml_overlay_key_event(ctrl('t'));
 
@@ -141,8 +144,21 @@ fn chord_chart_patch_filter_is_committed_before_the_patch_itself() {
     app.handle_mml_overlay_key_event(plain(KeyCode::Enter));
 
     assert!(!app.mml_overlay.is_patch_select_open());
-    assert_eq!(app.chord_chart_patch.as_deref(), Some("Chord/Pad.fxp"));
+    assert_eq!(app.chord_chart_patch.as_deref(), Some("Pads/Warm Pad.fxp"));
     assert!(app.mml_overlay.is_open());
+}
+
+#[test]
+fn chord_chart_patch_selector_starts_in_the_chord_track_role() {
+    let mut app = TuiApp::new_for_test(test_config());
+    *app.patch_load_state.lock().unwrap() =
+        PatchLoadState::ready(make_patches(&["Basses/Bass 1.fxp", "Pads/Warm Pad.fxp"]));
+
+    open_degrees(&mut app);
+    app.handle_mml_overlay_key_event(ctrl('t'));
+    app.handle_mml_overlay_key_event(plain(KeyCode::Enter));
+
+    assert_eq!(app.chord_chart_patch.as_deref(), Some("Pads/Warm Pad.fxp"));
 }
 
 #[test]
@@ -204,7 +220,7 @@ fn history_round_trip_restores_the_two_canonical_patches_independently() {
     let mut app = TuiApp::new_for_test(cfg.clone());
 
     *app.patch_load_state.lock().unwrap() =
-        PatchLoadState::ready(make_patches(&["Chord/Piano.fxp"]));
+        PatchLoadState::ready(make_patches(&["Keys/Piano.fxp"]));
     open_degrees(&mut app);
     app.handle_mml_overlay_key_event(ctrl('t'));
     app.handle_mml_overlay_key_event(plain(KeyCode::Enter));
@@ -222,7 +238,7 @@ fn history_round_trip_restores_the_two_canonical_patches_independently() {
 
     let saved = crate::history::load_session_state();
     assert_eq!(saved.mml_overlay_patch.as_deref(), Some("Global/Pad.fxp"));
-    assert_eq!(saved.chord_chart_patch.as_deref(), Some("Chord/Piano.fxp"));
+    assert_eq!(saved.chord_chart_patch.as_deref(), Some("Keys/Piano.fxp"));
 
     let restored = TuiApp::new(&cfg, cmrt_offline_render::PluginEntries::none());
     assert_eq!(
@@ -231,7 +247,7 @@ fn history_round_trip_restores_the_two_canonical_patches_independently() {
     );
     assert_eq!(
         restored.chord_chart_patch.as_deref(),
-        Some("Chord/Piano.fxp")
+        Some("Keys/Piano.fxp")
     );
     assert_eq!(restored.mml_overlay.patch(), Some("Global/Pad.fxp"));
     assert_eq!(restored.mml_overlay_owner, None);

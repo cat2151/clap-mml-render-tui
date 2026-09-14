@@ -67,7 +67,7 @@ fn control_changes_stay_inside_the_lap() {
 /// ループ長（1 秒）と LFO の周期（4 秒）が別物でも、位相は連続する。
 #[test]
 fn the_phase_follows_the_absolute_seconds_not_the_lap_number() {
-    let lfo = filter_lfo();
+    let lfo = modulation_lfo();
 
     for lap_index in 0..8 {
         let offset = f64::from(lap_index);
@@ -77,8 +77,8 @@ fn the_phase_follows_the_absolute_seconds_not_the_lap_number() {
         assert_eq!(control_changes(&lap)[0], (offset, lfo.value_at(offset)));
     }
     // 4 秒周期なので 0 秒と 4 秒は同じ値へ戻る。
-    assert_eq!(lfo.value_at(0.0), FILTER_MIN);
-    assert_eq!(lfo.value_at(4.0), FILTER_MIN);
+    assert_eq!(lfo.value_at(0.0), MODULATION_MIN);
+    assert_eq!(lfo.value_at(4.0), MODULATION_MIN);
     assert_eq!(lfo.value_at(2.0), FILTER_MAX);
 }
 
@@ -95,7 +95,7 @@ fn a_control_change_comes_before_the_note_on_at_the_same_time() {
 /// velocity は MML の指定ではなく、その音自身の時刻の LFO 値になる。
 #[test]
 fn the_velocity_is_taken_over_by_the_lfo() {
-    let lfo = filter_lfo();
+    let lfo = velocity_lfo();
     let lap = lap(&cycle(), both(), 1.0, 1.0);
 
     let velocities: Vec<(f64, u8)> = lap
@@ -105,10 +105,7 @@ fn the_velocity_is_taken_over_by_the_lfo() {
         .collect();
     assert_eq!(
         velocities,
-        vec![
-            (1.0, lfo.value_at(1.0).max(1)),
-            (1.5, lfo.value_at(1.5).max(1)),
-        ]
+        vec![(1.0, lfo.value_at(1.0)), (1.5, lfo.value_at(1.5)),]
     );
     // MML 由来の 127 が残っていない＝乗っ取れている。
     assert!(velocities.iter().all(|(_, value)| *value != 127));
@@ -122,7 +119,7 @@ fn a_line_played_once_still_gets_its_filters() {
     let once = one_shot(&cycle(), modulation(), 1.0);
 
     let ccs = control_changes(&once);
-    assert_eq!(ccs[0], (0.0, FILTER_MIN));
+    assert_eq!(ccs[0], (0.0, MODULATION_MIN));
     assert!(ccs.iter().all(|(seconds, _)| (0.0..1.0).contains(seconds)));
 }
 
@@ -143,6 +140,6 @@ fn a_line_with_no_length_is_left_alone() {
     let once = one_shot(&[note_on(0.0)], both(), 0.0);
 
     assert_eq!(control_changes(&once), Vec::new());
-    // velocity は時刻に依らず掛かる。0 秒の LFO 値は 0 だが、note off にしない下限 1 へ。
-    assert_eq!(once[0].message, [0x90, 60, 1]);
+    // velocity は時刻に依らず掛かる。0 秒は今回の実用下限100から始まる。
+    assert_eq!(once[0].message, [0x90, 60, 100]);
 }

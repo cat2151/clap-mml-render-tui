@@ -18,7 +18,7 @@ mod single_line;
 
 use std::{collections::BTreeMap, time::Instant};
 
-use cmrt_patches::PatchRoleIndex;
+use cmrt_patches::{PatchRole, PatchRoleIndex};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui_textarea::{DataCursor, TextArea};
 
@@ -68,6 +68,8 @@ pub struct MmlOverlay<'a> {
     /// 開いている間だけ持つ patch 一覧のスナップショット（表示名, 小文字化）。
     patch_catalog: PatchCatalogSnapshot,
     patch_role_index: PatchRoleIndex,
+    /// selector を開いた直後に選ぶ Role。呼び出し元が overlay を開くたびに指定する。
+    patch_select_initial_role: Option<PatchRole>,
     /// patch selectのLoad列へ渡す、開いているcatalogと同世代の計測結果。
     load_measurements: BTreeMap<String, PatchLoadMeasurement>,
     /// 開いている間だけ持つフレーズ履歴のスナップショット。
@@ -112,6 +114,7 @@ impl Default for MmlOverlay<'_> {
             patch: None,
             patch_catalog: PatchCatalogSnapshot::Loading,
             patch_role_index: PatchRoleIndex::default(),
+            patch_select_initial_role: None,
             load_measurements: BTreeMap::new(),
             history: Vec::new(),
             favorites: Vec::new(),
@@ -198,6 +201,7 @@ impl<'a> MmlOverlay<'a> {
         self.line_status = LineStatus::Idle;
         self.patch_catalog = context.patch_catalog;
         self.patch_role_index = context.patch_role_index;
+        self.patch_select_initial_role = context.patch_select_initial_role;
         self.load_measurements = context.load_measurements;
         self.history = context.history;
         self.favorites = context.favorites;

@@ -82,7 +82,11 @@ fn adding_a_patch_filter_preset_is_forwarded_to_the_host_for_json_persistence() 
 
 #[test]
 fn ctrl_t_waits_for_the_patch_list_and_opens_when_ready() {
-    let mut overlay = opened();
+    let mut overlay = MmlOverlay::default();
+    overlay.open(MmlOverlayContext {
+        patch_select_initial_role: Some(cmrt_patches::PatchRole::Chord),
+        ..MmlOverlayContext::default()
+    });
 
     overlay.handle_key(ctrl(KeyCode::Char('t')), Instant::now());
 
@@ -104,6 +108,11 @@ fn ctrl_t_waits_for_the_patch_list_and_opens_when_ready() {
 
     assert!(overlay.is_patch_select_open());
     assert!(!overlay.is_waiting_for_patch_catalog());
+    assert_eq!(overlay.patch_select().unwrap().group_cursor(), 2);
+    assert_eq!(
+        overlay.patch_select().unwrap().selected(),
+        Some("Pads/Pad 1.fxp")
+    );
     assert_eq!(
         overlay
             .patch_select()

@@ -132,7 +132,7 @@ fn the_sweep_does_not_jump_where_the_laps_are_stitched() {
     }
 }
 
-/// velocity は MML の指定（ここでは 127）ではなく LFO の値になる。1..=127 に収まる。
+/// velocity は MML の指定（ここでは 127）ではなく LFO の値になる。100..=127 に収まる。
 #[test]
 fn the_velocity_is_taken_over_by_the_lfo() {
     let sink = FakeSink::default();
@@ -140,8 +140,8 @@ fn the_velocity_is_taken_over_by_the_lfo() {
 
     voice.play_line(&sink, &program(false, false, true));
 
-    // 0 / 0.25 / 0.5 / 0.75 秒の 4 音。0 秒は LFO 値 0 だが、note off にしないため 1 へ。
-    assert_eq!(note_velocities(&sink), vec![1, 15, 31, 47]);
+    // 0 / 0.25 / 0.5 / 0.75 秒の4音。4秒周期で100から127へ上がる途中の値。
+    assert_eq!(note_velocities(&sink), vec![100, 103, 106, 110]);
 }
 
 /// **repeat OFF でも filter は効く。** repeat と CC1 は独立した設定。

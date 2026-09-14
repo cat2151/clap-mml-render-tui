@@ -349,6 +349,8 @@ fn draws_the_three_play_settings_with_their_on_off_marks() {
     assert!(rendered.contains("[*] repeat"), "{rendered}");
     assert!(rendered.contains("[ ] CC1 modulation"), "{rendered}");
     assert!(rendered.contains("[ ] velocity"), "{rendered}");
+    assert!(rendered.contains("0→127→0 / 4秒"), "{rendered}");
+    assert!(rendered.contains("100→127→100 / 4秒"), "{rendered}");
 }
 
 /// 音色選択の上へ重ねて描く。音色を選びながら設定を変えられることが要件のため。

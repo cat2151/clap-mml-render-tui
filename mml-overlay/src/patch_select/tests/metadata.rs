@@ -1,6 +1,25 @@
 use super::*;
 
 #[test]
+fn requested_initial_role_opens_its_all_preset_and_keeps_a_matching_current_patch() {
+    let select = PatchSelect::open(
+        pairs(&["Basses/Bass 1.fxp", "Pads/Pad 1.fxp", "Pads/Pad 2.fxp"]),
+        Some("Pads/Pad 2.fxp"),
+        Vec::new(),
+        Default::default(),
+        Some(PatchRole::Chord),
+        Vec::new(),
+        Default::default(),
+    )
+    .unwrap();
+
+    assert_eq!(select.group_cursor(), 2);
+    assert_eq!(select.preset_cursor(), 0);
+    assert_eq!(filtered(&select), ["Pads/Pad 1.fxp", "Pads/Pad 2.fxp"]);
+    assert_eq!(select.selected(), Some("Pads/Pad 2.fxp"));
+}
+
+#[test]
 fn patches_are_sorted_by_category_then_plugin_then_patch_name() {
     let select = open_with(
         vec![
