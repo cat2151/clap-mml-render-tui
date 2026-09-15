@@ -4,10 +4,6 @@ fn press(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
 }
 
-fn ctrl(code: KeyCode) -> KeyEvent {
-    KeyEvent::new(code, KeyModifiers::CONTROL)
-}
-
 fn settled(select: PlaySettingsAction) -> PlaySettings {
     match select {
         PlaySettingsAction::Confirm(settings) | PlaySettingsAction::Cancel(settings) => settings,
@@ -104,21 +100,12 @@ fn q_cancels_as_well() {
     );
 }
 
-/// 開くキーをもう一度押したら取り消して閉じる。
-#[test]
-fn ctrl_l_cancels_as_well() {
-    let mut select = PlaySettingsSelect::open(PlaySettings::default());
-    select.handle_key(press(KeyCode::Char(' ')));
-
-    assert_eq!(
-        settled(select.handle_key(ctrl(KeyCode::Char('l')))),
-        PlaySettings::default()
-    );
-}
-
 #[test]
 fn ctrl_l_is_the_trigger_and_a_bare_l_is_not() {
-    assert!(is_play_settings_trigger(ctrl(KeyCode::Char('l'))));
+    assert!(is_play_settings_trigger(KeyEvent::new(
+        KeyCode::Char('l'),
+        KeyModifiers::CONTROL
+    )));
     assert!(!is_play_settings_trigger(press(KeyCode::Char('l'))));
 }
 

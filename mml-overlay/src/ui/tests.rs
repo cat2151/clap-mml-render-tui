@@ -166,7 +166,11 @@ fn draws_the_patch_select_over_the_input() {
     // 全角は 2 セル目が空白になるので、見るのは ASCII の部分だけにする。
     assert!(rendered.contains("/:"), "{rendered}");
     assert!(rendered.contains("Space:"), "{rendered}");
-    assert!(rendered.contains("^L:"), "{rendered}");
+    assert!(rendered.contains("S:"), "{rendered}");
+    assert!(rendered.contains("A:add"), "{rendered}");
+    assert!(rendered.contains("R:random"), "{rendered}");
+    assert!(!rendered.contains("Ctrl+A"), "{rendered}");
+    assert!(!rendered.contains("Ctrl+R"), "{rendered}");
     assert!(rendered.contains("/hl"), "{rendered}");
     assert!(rendered.contains("/jk"), "{rendered}");
     assert!(rendered.contains("Home/End"), "{rendered}");
@@ -373,7 +377,7 @@ fn draws_the_play_settings_over_the_patch_select() {
     );
 
     let without = render(&overlay);
-    overlay.handle_key(ctrl_l(), now);
+    overlay.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE), now);
     let with = render(&overlay);
 
     assert!(

@@ -26,6 +26,7 @@ pub(crate) use navigation::PatchSelectFocus;
 use prepared::{build_role_index, PreparedPresets};
 use presets::{normalize_user_presets, patterns_for_role, FilterGroup, FilterPreset};
 
+pub(crate) use keys::is_patch_select_play_settings_trigger;
 pub use keys::is_patch_select_trigger;
 
 /// 音色選択が呼び出し側へ求める処理。

@@ -66,7 +66,7 @@ fn adding_a_patch_filter_preset_is_forwarded_to_the_host_for_json_persistence() 
     overlay.handle_key(press(KeyCode::Enter), now);
 
     assert_eq!(
-        overlay.handle_key(ctrl(KeyCode::Char('a')), now),
+        overlay.handle_key(press(KeyCode::Char('a')), now),
         MmlOverlayAction::SavePatchFilterPresets {
             presets: vec![("lead".to_string(), "violin".to_string())],
             preview: Some((

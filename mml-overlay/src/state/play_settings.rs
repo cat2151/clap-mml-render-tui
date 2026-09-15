@@ -1,4 +1,4 @@
-//! `Ctrl+L` の演奏設定。
+//! MML 入力中は `Ctrl+L`、patch selector 内は `S` で開く演奏設定。
 //!
 //! 設定は MML overlay 全体で共通なので、音色選択を開いている最中にも開けなければ
 //! ならない。そのため開閉のキー判定は [`MmlOverlay::handle_key`] の**先頭**、
@@ -9,6 +9,7 @@
 
 use crossterm::event::KeyEvent;
 
+use crate::patch_select::is_patch_select_play_settings_trigger;
 use crate::play_settings::{
     is_play_settings_trigger, PlaySettings, PlaySettingsAction, PlaySettingsSelect,
 };
@@ -38,10 +39,22 @@ impl MmlOverlay<'_> {
         &mut self,
         key: KeyEvent,
     ) -> Option<MmlOverlayAction> {
+        let trigger = match self.patch_select.as_ref() {
+            Some(select) => !select.filter_editing() && is_patch_select_play_settings_trigger(key),
+            None => is_play_settings_trigger(key),
+        };
         if self.play_settings_select.is_some() {
+            if trigger {
+                let original = self
+                    .play_settings_select
+                    .as_ref()
+                    .expect("checked above")
+                    .original();
+                return Some(self.close_play_settings(original, "cancel"));
+            }
             return Some(self.handle_play_settings_key(key));
         }
-        if is_play_settings_trigger(key) {
+        if trigger {
             self.open_play_settings();
             return Some(MmlOverlayAction::Continue);
         }

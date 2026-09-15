@@ -1,4 +1,4 @@
-//! `Ctrl+L` で開く演奏設定。
+//! MML 入力中は `Ctrl+L`、patch selector 内は `S` で開く演奏設定。
 //!
 //! repeat / CC1 modulation / velocity の 3 値を持つ。**設定は MML overlay 全体で共通**で、
 //! 音色選択を開いている最中にも同じ設定が効く。そのため開くキーは音色選択より手前で拾い、
@@ -124,12 +124,12 @@ impl PlaySettingsSelect {
         self.cursor
     }
 
+    /// 開いた時点の値。開くキーの再入力を状態側で取り消しにするとき使う。
+    pub(crate) fn original(&self) -> PlaySettings {
+        self.original
+    }
+
     pub(crate) fn handle_key(&mut self, key: KeyEvent) -> PlaySettingsAction {
-        // 開くキーをもう一度押したら閉じる。開閉が同じキーなら、開けたことに気づいて
-        // から抜ける手段を別に覚えずに済む。
-        if is_play_settings_trigger(key) {
-            return PlaySettingsAction::Cancel(self.original);
-        }
         if is_cancel_key(key) {
             return PlaySettingsAction::Cancel(self.original);
         }
@@ -175,7 +175,10 @@ fn is_cancel_key(key: KeyEvent) -> bool {
 
 /// このキーは演奏設定を開閉する。
 ///
-/// overlay 本体からも音色選択からも同じキーで開く（設定は overlay 全体で共通のため）。
+/// MML 入力中に演奏設定を開閉する。
+///
+/// patch selector 内は入力欄と競合しない `S` を使う。`Ctrl+L` は
+/// MML への `l` 入力を奪わない overlay 本体だけのフォールバック。
 /// `Ctrl` + a〜z のうち、入力欄の textarea と既存の overlay キーが取っていないのは
 /// `g` / `l` / `q` / `s` / `z` だけ。Loop の頭文字を取って `l` を使う。
 pub fn is_play_settings_trigger(key: KeyEvent) -> bool {

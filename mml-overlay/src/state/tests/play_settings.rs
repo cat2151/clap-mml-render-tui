@@ -1,4 +1,4 @@
-//! `Ctrl+L` の演奏設定は overlay 全体で共通（音色選択の最中にも開ける）。
+//! 演奏設定は overlay 全体で共通（音色選択の最中にも開ける）。
 
 use super::*;
 
@@ -34,13 +34,52 @@ fn ctrl_l_opens_the_play_settings() {
 
 /// 演奏設定は overlay 全体で共通なので、音色選択の最中にも開ける。
 #[test]
-fn ctrl_l_opens_the_play_settings_from_the_patch_select_too() {
+fn s_opens_the_play_settings_from_the_patch_select() {
+    let mut overlay = opened_with_patch_select();
+
+    overlay.handle_key(press(KeyCode::Char('s')), Instant::now());
+
+    assert!(overlay.play_settings_select().is_some());
+    // 音色選択は開いたまま。閉じてしまうと絞り込みのやり直しになる。
+    assert!(overlay.patch_select().is_some());
+}
+
+#[test]
+fn ctrl_l_does_not_open_the_play_settings_from_the_patch_select() {
     let mut overlay = opened_with_patch_select();
 
     overlay.handle_key(ctrl(KeyCode::Char('l')), Instant::now());
 
-    assert!(overlay.play_settings_select().is_some());
-    // 音色選択は開いたまま。閉じてしまうと絞り込みのやり直しになる。
+    assert!(overlay.play_settings_select().is_none());
+    assert!(overlay.patch_select().is_some());
+}
+
+#[test]
+fn s_is_typed_normally_while_the_patch_filter_is_being_edited() {
+    let mut overlay = opened_with_patch_select();
+    let now = Instant::now();
+    overlay.handle_key(press(KeyCode::Char('/')), now);
+
+    overlay.handle_key(press(KeyCode::Char('s')), now);
+
+    assert!(overlay.play_settings_select().is_none());
+    assert_eq!(
+        cmrt_tui_core::text_input::textarea_value(overlay.patch_select().unwrap().query_textarea()),
+        "s"
+    );
+}
+
+#[test]
+fn s_again_cancels_the_play_settings_opened_from_the_patch_select() {
+    let mut overlay = opened_with_patch_select();
+    let now = Instant::now();
+    overlay.handle_key(press(KeyCode::Char('s')), now);
+    overlay.handle_key(press(KeyCode::Char(' ')), now);
+
+    overlay.handle_key(press(KeyCode::Char('s')), now);
+
+    assert!(overlay.play_settings_select().is_none());
+    assert_eq!(overlay.play_settings(), PlaySettings::default());
     assert!(overlay.patch_select().is_some());
 }
 
@@ -49,7 +88,7 @@ fn ctrl_l_opens_the_play_settings_from_the_patch_select_too() {
 fn while_open_the_keys_do_not_reach_the_patch_select() {
     let mut overlay = opened_with_patch_select();
     let now = Instant::now();
-    overlay.handle_key(ctrl(KeyCode::Char('l')), now);
+    overlay.handle_key(press(KeyCode::Char('s')), now);
 
     let action = overlay.handle_key(press(KeyCode::Down), now);
 

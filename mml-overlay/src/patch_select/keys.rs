@@ -3,11 +3,20 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub(super) fn is_add_preset_key(key: KeyEvent) -> bool {
-    key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('a')
+    is_plain_char(key, 'a')
 }
 
 pub(super) fn is_random_jump_key(key: KeyEvent) -> bool {
-    key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('r')
+    is_plain_char(key, 'r')
+}
+
+/// selector 内から演奏設定を開閉する。
+pub(crate) fn is_patch_select_play_settings_trigger(key: KeyEvent) -> bool {
+    is_plain_char(key, 's')
+}
+
+fn is_plain_char(key: KeyEvent, character: char) -> bool {
+    key.modifiers == KeyModifiers::NONE && key.code == KeyCode::Char(character)
 }
 
 pub(super) fn is_filter_edit_trigger(key: KeyEvent) -> bool {

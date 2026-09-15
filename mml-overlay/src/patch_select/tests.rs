@@ -258,7 +258,7 @@ fn an_invalid_regular_expression_is_reported_and_matches_nothing() {
 }
 
 #[test]
-fn ctrl_a_adds_the_query_to_the_selected_role_and_requests_persistence() {
+fn a_adds_the_query_to_the_selected_role_and_requests_persistence() {
     let mut select = open_with(
         pairs(&["Instruments/Violin.fxp", "Pads/Warm Pad.fxp"]),
         None,
@@ -268,7 +268,7 @@ fn ctrl_a_adds_the_query_to_the_selected_role_and_requests_persistence() {
     type_text(&mut select, "violin");
     select.handle_key(press(KeyCode::Enter));
 
-    let action = select.handle_key(ctrl('a'));
+    let action = select.handle_key(press(KeyCode::Char('a')));
 
     assert!(matches!(
         action,
@@ -284,29 +284,29 @@ fn ctrl_a_adds_the_query_to_the_selected_role_and_requests_persistence() {
 }
 
 #[test]
-fn ctrl_a_in_the_all_group_puts_the_query_in_etc() {
+fn a_in_the_all_group_puts_the_query_in_etc() {
     let mut select = opened(None);
     type_text(&mut select, "custom");
     select.handle_key(press(KeyCode::Enter));
 
     assert!(matches!(
-        select.handle_key(ctrl('a')),
+        select.handle_key(press(KeyCode::Char('a'))),
         PatchSelectAction::SaveUserPresets { presets, preview: None }
             if presets == [("etc".to_string(), "custom".to_string())]
     ));
 }
 
 #[test]
-fn ctrl_a_ignores_empty_invalid_and_builtin_duplicate_queries() {
+fn a_ignores_empty_invalid_and_builtin_duplicate_queries() {
     let mut select = opened(None);
     assert!(matches!(
-        select.handle_key(ctrl('a')),
+        select.handle_key(press(KeyCode::Char('a'))),
         PatchSelectAction::Continue
     ));
     type_text(&mut select, "[");
     select.handle_key(press(KeyCode::Enter));
     assert!(matches!(
-        select.handle_key(ctrl('a')),
+        select.handle_key(press(KeyCode::Char('a'))),
         PatchSelectAction::Continue
     ));
 
@@ -314,7 +314,7 @@ fn ctrl_a_ignores_empty_invalid_and_builtin_duplicate_queries() {
     type_text(&mut select, r"\bpad");
     select.handle_key(press(KeyCode::Enter));
     assert!(matches!(
-        select.handle_key(ctrl('a')),
+        select.handle_key(press(KeyCode::Char('a'))),
         PatchSelectAction::Continue
     ));
 }
@@ -337,18 +337,38 @@ fn persisted_user_presets_are_loaded_into_their_role() {
 }
 
 #[test]
-fn ctrl_r_jumps_to_a_different_random_row_within_the_filter() {
+fn r_jumps_to_a_different_random_row_within_the_filter() {
     let mut select = opened(None);
 
     for _ in 0..32 {
         let before = select.selected().unwrap().to_string();
         assert!(matches!(
-            select.handle_key(ctrl('r')),
+            select.handle_key(press(KeyCode::Char('r'))),
             PatchSelectAction::Preview(_)
         ));
         assert_ne!(select.selected(), Some(before.as_str()));
     }
     assert_eq!(select.focus(), PatchSelectFocus::Patches);
+}
+
+#[test]
+fn ctrl_a_and_ctrl_r_are_not_selector_shortcuts() {
+    let mut add = opened(None);
+    type_text(&mut add, "custom");
+    add.handle_key(press(KeyCode::Enter));
+    assert!(matches!(
+        add.handle_key(ctrl('a')),
+        PatchSelectAction::Continue
+    ));
+    assert!(!add.presets().iter().any(|preset| preset.is_user));
+
+    let mut random = opened(None);
+    let before = random.selected().unwrap().to_string();
+    assert!(matches!(
+        random.handle_key(ctrl('r')),
+        PatchSelectAction::Continue
+    ));
+    assert_eq!(random.selected(), Some(before.as_str()));
 }
 
 #[test]
@@ -380,4 +400,12 @@ fn every_builtin_condition_has_an_explicit_leading_word_boundary() {
 fn ctrl_t_is_the_trigger() {
     assert!(is_patch_select_trigger(ctrl('t')));
     assert!(!is_patch_select_trigger(press(KeyCode::Char('t'))));
+}
+
+#[test]
+fn s_without_ctrl_is_the_play_settings_trigger_in_the_selector() {
+    assert!(is_patch_select_play_settings_trigger(press(KeyCode::Char(
+        's'
+    ))));
+    assert!(!is_patch_select_play_settings_trigger(ctrl('s')));
 }
