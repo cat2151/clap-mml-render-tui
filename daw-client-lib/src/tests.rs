@@ -124,7 +124,7 @@ fn local_default_uses_known_base_url() {
 
 #[test]
 fn new_trims_whitespace_and_trailing_slashes() {
-    let client = DawClient::new(" http://127.0.0.1:62151/// ").unwrap();
+    let client = DawClient::new(format!(" {DEFAULT_BASE_URL}/// ")).unwrap();
 
     assert_eq!(client.base_url(), DEFAULT_BASE_URL);
 }

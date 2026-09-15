@@ -17,10 +17,21 @@ use std::time::Instant;
 
 use crossterm::event::KeyEvent;
 
-use cmrt_mml_overlay::line_play::{line_events, LineProgram, LineStatus};
+use cmrt_mml_overlay::line_play::LineStatus;
 
 use crate::tui::chord_chart::{ChordChartAction, PreviewRequest, SectionId, Song};
 use crate::tui::TuiApp;
+
+mod bass_patch;
+mod preview;
+mod voicing;
+
+#[cfg(test)]
+pub(in crate::tui) use preview::preview_line;
+pub(in crate::tui) use preview::{
+    key_token, preview_command_log_line, preview_command_sounding, preview_play_log_line,
+    preview_request_log_line, ChordChartPreview,
+};
 
 impl TuiApp<'_> {
     /// キー 1 つを画面へ渡し、host action の実行と保存をここで済ませる。
@@ -45,7 +56,9 @@ impl TuiApp<'_> {
             ChordChartAction::EditDegrees(section_id) => {
                 self.open_chord_chart_degrees_overlay(section_id);
             }
-            ChordChartAction::Continue | ChordChartAction::Quit => {}
+            ChordChartAction::PreviewSettingChanged => self.save_history_state(),
+            ChordChartAction::Quit => self.stop_chord_chart_preview(),
+            ChordChartAction::Continue => {}
         }
         self.drain_chord_chart_preview();
         action
@@ -79,23 +92,75 @@ impl TuiApp<'_> {
         let Some(request) = self.chord_chart.take_preview() else {
             return;
         };
-        crate::logging::global_log_sink(&preview_request_log_line(&request));
-        let preview = self.chord_chart_preview(&request);
+        crate::logging::global_log_sink(&preview_request_log_line(
+            &request,
+            self.chord_chart.bass_enabled(),
+        ));
+        self.play_or_defer_chord_chart_preview(request);
+    }
+
+    /// Bass の既定音色がまだ分からない間は Chord だけを先行再生せず、最新要求を保留する。
+    fn play_or_defer_chord_chart_preview(&mut self, request: PreviewRequest) {
+        let bass_patch = self.resolve_chord_chart_bass_patch();
+        if self.chord_chart.bass_enabled()
+            && !request.is_silent()
+            && matches!(bass_patch, bass_patch::BassPatchResolution::Loading)
+        {
+            // 直前の preview が残っていれば止める。ただし、保留要求は stop のあとで載せる。
+            self.stop_chord_chart_preview();
+            self.deferred_chord_chart_preview = Some(request);
+            self.chord_chart.error = Some("Bass patch catalog を読み込み中です".to_string());
+            crate::logging::global_log_sink(
+                "chord-chart: event=preview-command status=deferred reason=bass-catalog-loading",
+            );
+            return;
+        }
+
+        self.deferred_chord_chart_preview = None;
+        let preview = self.chord_chart_preview_with_bass_patch(&request, bass_patch);
         crate::logging::global_log_sink(&preview_play_log_line(&preview));
         // 読めなかった理由は、鳴らせるかどうかに関係なく画面へ出す
         // （play server が上がっていないときも、理由は理由として見せる）。
         if let LineStatus::Error(reason) = &preview.status {
             self.chord_chart.error = Some(format!("鳴らせません: {reason}"));
+        } else if let Some(reason) = &preview.bass_reason {
+            self.chord_chart.error = Some(format!("Bassを鳴らせません: {reason}"));
         }
         // play server が上がっていなければ sender が無い。落とさず、何もしない。
-        self.chord_chart_preview_command_id = self.mml_overlay_sender.as_ref().map(|sender| {
-            if preview.program.is_silent() {
-                sender.stop()
-            } else {
-                sender.play_line(preview.patch.as_deref(), preview.program)
-            }
-        });
+        self.chord_chart_preview_command_id = self
+            .mml_overlay_sender
+            .as_ref()
+            .map(|sender| sender.play_layers(preview.layers.clone()));
+        crate::logging::global_log_sink(&preview_command_log_line(
+            &preview,
+            self.chord_chart_preview_command_id,
+        ));
         self.refresh_chord_chart_preview_sounding();
+    }
+
+    /// 初期 catalog load が終わった frame で、保留していた最新 preview を自動再生する。
+    pub(in crate::tui) fn pump_chord_chart_preview(&mut self) {
+        if self.active_screen != crate::screen_switch::PrimaryScreen::ChordChart
+            || self.mml_overlay.is_open()
+            || self.deferred_chord_chart_preview.is_none()
+        {
+            return;
+        }
+        if matches!(
+            self.resolve_chord_chart_bass_patch(),
+            bass_patch::BassPatchResolution::Loading
+        ) {
+            return;
+        }
+        let request = self
+            .deferred_chord_chart_preview
+            .take()
+            .expect("presence checked above");
+        if self.chord_chart.error.as_deref() == Some("Bass patch catalog を読み込み中です")
+        {
+            self.chord_chart.error = None;
+        }
+        self.play_or_defer_chord_chart_preview(request);
     }
 
     /// 「preview がまだ鳴っているか」の答えを画面へ書き戻す。
@@ -107,14 +172,16 @@ impl TuiApp<'_> {
         self.chord_chart.set_preview_sounding(sounding);
     }
 
-    /// 音源を他へ明け渡したので、「鳴っている」という記録を捨てる。
+    /// Chord Chart が所有している layered preview を止め、画面側の記録も捨てる。
     ///
-    /// **止めるコマンドはここからは出さない。** 明け渡した先が音源ごと止めるため
-    /// （MML オーバーレイを開くと `sender.prepare()` が走り、その中の `voice.stop` が
-    /// 走っている timeline を落とす。`mml-overlay/src/sender/tests.rs` の
-    /// `preparing_an_already_ready_patch_stops_the_previous_line` が固定している）。
-    /// 記録だけが残ると、戻ってきたときの `Space` が「止める」に化けて空打ちになる。
-    pub(in crate::tui) fn forget_chord_chart_preview(&mut self) {
+    /// layered timeline は Chord/Bass の両 instance を含むため、note off の済んだ
+    /// one-shot でも sender の `stop` へ通す。これにより画面離脱・overlay open・
+    /// `q` 終了のどの経路でも、server 側の共有 timeline と両 instance を止める。
+    pub(in crate::tui) fn stop_chord_chart_preview(&mut self) {
+        if let Some(sender) = &self.mml_overlay_sender {
+            sender.stop();
+        }
+        self.deferred_chord_chart_preview = None;
         self.chord_chart_preview_command_id = None;
         self.chord_chart.set_preview_sounding(false);
     }
@@ -135,14 +202,35 @@ impl TuiApp<'_> {
     ///
     /// 送る前に値として取り出せる形にしてあるのは、何を鳴らそうとしたかを
     /// テストで読むため（音そのものは機械で判定できないが、送った 1 行は読める）。
+    #[cfg(test)]
     pub(in crate::tui) fn chord_chart_preview(
         &self,
         request: &PreviewRequest,
     ) -> ChordChartPreview {
-        chord_chart_preview(
+        let bass_patch = self.resolve_chord_chart_bass_patch();
+        self.chord_chart_preview_with_bass_patch(request, bass_patch)
+    }
+
+    fn chord_chart_preview_with_bass_patch(
+        &self,
+        request: &PreviewRequest,
+        bass_patch: bass_patch::BassPatchResolution,
+    ) -> ChordChartPreview {
+        preview::build(
             &self.chord_chart.song.prefix,
             self.chord_chart_patch.clone(),
+            self.chord_chart.bass_enabled(),
+            bass_patch,
             request,
+        )
+    }
+
+    /// 保存済み値を優先し、無ければ共有 catalog の Bass role 先頭を同期的に読む。
+    /// catalog の読み込み完了を待たず、その時点の状態だけを返す。
+    pub(in crate::tui) fn resolve_chord_chart_bass_patch(&self) -> bass_patch::BassPatchResolution {
+        bass_patch::resolve(
+            self.chord_chart_bass_patch.as_deref(),
+            &self.patch_load_state.lock().unwrap(),
         )
     }
 
@@ -255,152 +343,4 @@ pub(in crate::tui) fn chord_ranges(song: &Song) -> Vec<(SectionId, Vec<std::ops:
             )
         })
         .collect()
-}
-
-/// preview 要求 1 つを、ログ 1 行にする。
-///
-/// **`global_log_sink` はテストでは no-op** なので、組み立てだけを名前のある関数へ
-/// 出しておく。こうしないと「何を鳴らそうとしたか」を機械で確かめる手段が無くなる。
-pub(in crate::tui) fn preview_request_log_line(request: &PreviewRequest) -> String {
-    format!(
-        "chord-chart: event=preview-request name=\"{}\" degrees=\"{}\" chord={}",
-        request.name,
-        request.degrees,
-        match request.chord_index {
-            Some(index) => index.to_string(),
-            None => "all".to_string(),
-        }
-    )
-}
-
-/// 1 回ぶんの preview を、実際に送る形まで組み立てたもの。
-pub(in crate::tui) struct ChordChartPreview {
-    /// 演奏側へ渡した 1 行。無音要求なら空。
-    pub line: String,
-    /// その 1 行がどう読まれたか。`Error` なら画面下段に理由を出す。
-    pub status: LineStatus,
-    /// sender へ渡すもの。**1 回鳴って終わる**（`repeat` しない）。
-    pub program: LineProgram,
-    /// この通常 preview に使う Chord Chart canonical patch。
-    pub patch: Option<String>,
-    /// 行全体ではなく chord 1 つに絞ったなら `(0 始まりの番号, 行の chord 総数)`。
-    ///
-    /// **行全体を鳴らしたときは `None`**。要求が番号を指していても、読めない
-    /// degrees や範囲外で行全体へ倒れたときは `None` になる（ログを見るだけで
-    /// 「1 つに絞れたのか、倒れたのか」が分かるように、要求の番号をそのまま
-    /// 写さない）。
-    pub chord: Option<(usize, usize)>,
-}
-
-/// preview 要求と曲の prefix から、送る内容を組み立てる。
-///
-/// **この関数だけが文字列を組み立てる**（`chord-chart` crate は文字列を解釈しないし、
-/// 組み立てもしない。ADR 0020）。
-fn chord_chart_preview(
-    prefix: &str,
-    patch: Option<String>,
-    request: &PreviewRequest,
-) -> ChordChartPreview {
-    if request.is_silent() {
-        return ChordChartPreview {
-            line: String::new(),
-            status: LineStatus::Idle,
-            program: LineProgram::silent(),
-            patch,
-            chord: None,
-        };
-    }
-    let chord = request
-        .chord_index
-        .and_then(|index| chord_at(&request.degrees, index));
-    let degrees = match &chord {
-        Some((degrees, _)) => degrees.as_str(),
-        None => request.degrees.as_str(),
-    };
-    let line = preview_line(prefix, degrees);
-    let (status, performance) = line_events(&line);
-    ChordChartPreview {
-        line,
-        status,
-        program: LineProgram::once(performance),
-        patch,
-        chord: chord.map(|(_, total)| (request.chord_index.unwrap_or(0), total)),
-    }
-}
-
-/// sender の実演奏区間が、Chord Chart が最後に送った command と一致して鳴っているか。
-///
-/// `None` は patch load / timeline 送信中、失敗、停止をまとめて silent とする。
-/// command id が違えば別 owner または後続 preview に置き換わっているため silent とする。
-pub(in crate::tui) fn preview_command_sounding(
-    expected_command_id: Option<u64>,
-    playback: Option<(u64, bool)>,
-) -> bool {
-    matches!(
-        (expected_command_id, playback),
-        (Some(expected), Some((actual, true))) if expected == actual
-    )
-}
-
-/// 行の degrees から `index` 番目（0 始まり）の chord だけを切り出し、
-/// 切り出した綴りと**その行の chord 総数**を返す。
-///
-/// **切るのは `cmrt-chord`**（`chord_source_ranges` が chord2mml の CST から
-/// 元の文字列上の範囲を返す）。この画面のためのパーサは app 側にも 1 行も書かない。
-///
-/// `None`（＝行全体へ倒す）になるのは 3 つ:
-///
-/// - chord2mml が読めない degrees（範囲が 0 件）。「読めない行は chord 1 個」として
-///   扱い、行全体をそのまま鳴らす
-/// - 番号が範囲外（画面の写しが古いときに起きうる）
-/// - 範囲が文字境界で切れない（起きないはずだが、`get` で panic させない）
-fn chord_at(degrees: &str, index: usize) -> Option<(String, usize)> {
-    let ranges = cmrt_chord::chord_source_ranges(degrees);
-    let range = ranges.get(index)?.clone();
-    let chord = degrees.get(range)?;
-    Some((chord.to_string(), ranges.len()))
-}
-
-/// 鳴らす 1 行 `"<Key トークン> <degrees>"`。Key トークンが無ければ degrees だけ。
-pub(in crate::tui) fn preview_line(prefix: &str, degrees: &str) -> String {
-    match key_token(prefix) {
-        Some(key) => format!("{key} {degrees}"),
-        None => degrees.to_string(),
-    }
-}
-
-/// prefix（`"Key=C BPM120"`）から Key トークンを 1 つだけ取り出す。
-///
-/// **BPM / TEMPO は捨てる。**曲の prefix はそのまま持つ文字列で、
-/// 何が書いてあるかは保証されていないため、渡すものをここで絞る。
-///
-/// 判定は「`key` で始まるトークン（大文字小文字を問わない）の最初の 1 つ」。
-/// chord2mml は `Key=A` / `Key:A` / `Key A` / `KeyA` を受けるが、`Key A` のように
-/// 空白で割れた書き方はトークンが 2 つになるので `Key` だけが渡る。
-pub(in crate::tui) fn key_token(prefix: &str) -> Option<&str> {
-    prefix
-        .split_whitespace()
-        .find(|token| token.to_ascii_lowercase().starts_with("key"))
-}
-
-/// 実際に何を送ったかのログ 1 行。要求のログ（[`preview_request_log_line`]）とは別に、
-/// **組み立てた 1 行とその読まれ方**を残す。鳴らなかったときに、要求が立たなかったのか
-/// 文字列が読めなかったのかをログだけで切り分けるため。
-pub(in crate::tui) fn preview_play_log_line(preview: &ChordChartPreview) -> String {
-    let result = match &preview.status {
-        LineStatus::Idle => "result=silent".to_string(),
-        LineStatus::Played {
-            from_chord,
-            note_count,
-        } => format!("result=played from_chord={from_chord} notes={note_count}"),
-        LineStatus::Error(error) => format!("result=error detail=\"{error}\""),
-    };
-    let chord = match preview.chord {
-        Some((index, total)) => format!("{index}/{total}"),
-        None => "all".to_string(),
-    };
-    format!(
-        "chord-chart: event=preview-play line=\"{}\" chord={chord} {result}",
-        preview.line
-    )
 }

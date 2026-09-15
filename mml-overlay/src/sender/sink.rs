@@ -5,23 +5,22 @@
 //! 鳴りっぱなしの正体は「サーバーへ 1 つもコマンドが飛ばない経路」だったので、
 //! 送ったコマンド列そのものを見ないと再発を止められない。
 //!
-//! instance はここで [`super::MML_OVERLAY_INSTANCE`] に固定する。上位に instance を
-//! 選ばせると「止めた instance と鳴らした instance が違う」が起こり得る。
+//! 通常の MML overlay は呼び出し側が [`super::MML_OVERLAY_INSTANCE`] を渡す。
+//! Chord Chart の layered preview だけは chord と bass を別 instance に載せるため、
+//! patch と MIDI の操作は instance を明示して受け取る。
 
 use cmrt_realtime_play::{
     LiveTimelineConfig, RealtimePlayServerSupervisor, TimelineMidiEvent, MAX_MIDI_MESSAGES,
 };
 
-use super::MML_OVERLAY_INSTANCE;
-
 /// 失敗の中身は log へ出すだけなので文字列で十分。
 pub(super) type SinkResult = Result<(), String>;
 
 pub(super) trait SoundSink {
-    fn prepare_patch(&self, patch: Option<&str>) -> SinkResult;
+    fn prepare_patch(&self, instance_id: u8, patch: Option<&str>) -> SinkResult;
     /// 生 MIDI を offset なしで即座に送る。
-    fn send_midi(&self, messages: &[[u8; 3]]) -> SinkResult;
-    /// 音源そのものをリセットして黙らせる。何が鳴っていたかを知らなくてよい。
+    fn send_midi(&self, instance_id: u8, messages: &[[u8; 3]]) -> SinkResult;
+    /// serverがprocess済みnoteをすべてNoteOffする。呼び出し側はnoteを知らなくてよい。
     fn stop_all(&self) -> SinkResult;
     fn begin_timeline(&self, config: LiveTimelineConfig) -> SinkResult;
     fn send_timeline_events(&self, events: &[TimelineMidiEvent]) -> SinkResult;
@@ -32,13 +31,13 @@ pub(super) trait SoundSink {
 }
 
 impl SoundSink for RealtimePlayServerSupervisor {
-    fn prepare_patch(&self, patch: Option<&str>) -> SinkResult {
-        self.prepare_live_patch(MML_OVERLAY_INSTANCE, patch)
+    fn prepare_patch(&self, instance_id: u8, patch: Option<&str>) -> SinkResult {
+        self.prepare_live_patch(instance_id, patch)
             .map_err(|error| format!("{error:#}"))
     }
 
-    fn send_midi(&self, messages: &[[u8; 3]]) -> SinkResult {
-        RealtimePlayServerSupervisor::send_midi(self, MML_OVERLAY_INSTANCE, messages)
+    fn send_midi(&self, instance_id: u8, messages: &[[u8; 3]]) -> SinkResult {
+        RealtimePlayServerSupervisor::send_midi(self, instance_id, messages)
             .map(|_| ())
             .map_err(|error| format!("{error:#}"))
     }

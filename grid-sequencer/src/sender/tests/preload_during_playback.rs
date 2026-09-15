@@ -77,7 +77,7 @@ fn the_sender_queue_does_not_back_up_while_a_preload_is_still_loading() {
     let exe = std::env::var(PLAY_SERVER_EXE_ENV).unwrap_or_else(|_| {
         panic!("{PLAY_SERVER_EXE_ENV} に play server の実行ファイルを渡すこと")
     });
-    // 起動中の TUI（既定 62154）とも、realtime-play 側のテスト（45_000〜53_999）とも
+    // 起動中の TUI の既定ポートとも、realtime-play 側のテスト（45_000〜53_999）とも
     // 衝突させない。
     let port = pick_port(54_000);
     let server = TestPlayServer::spawn(

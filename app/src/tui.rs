@@ -61,7 +61,13 @@ pub enum TuiExitReason {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::tui) enum MmlOverlayOwner {
     Global,
-    ChordChart { section_id: chord_chart::SectionId },
+    ChordChart {
+        section_id: chord_chart::SectionId,
+    },
+    /// Chord Chart から直接開いた、layer 別の音色選択。
+    ChordChartPatch {
+        role: cmrt_patches::PatchRole,
+    },
 }
 
 /// 画面ホスト。持つのは「どの画面か」と、画面をまたいで共有するものだけ。
@@ -81,6 +87,11 @@ pub struct TuiApp<'a> {
     /// 直近に Chord Chart の通常 preview として sender へ渡した command。
     /// sender が公開する同じ command の実演奏区間だけを sounding として画面へ書き戻す。
     chord_chart_preview_command_id: Option<u64>,
+    /// Bass patch catalog の初期ロードが終わるまで保留している最新の preview。
+    ///
+    /// Bass ON なのに Chord だけ先に鳴らすと、起動直後の 1 回だけ Bass が無音になる。
+    /// loader 完了後に同じ要求を自動で流すため、host 側で 1 件だけ持つ。
+    deferred_chord_chart_preview: Option<chord_chart::PreviewRequest>,
     /// Grid履歴をimport前に1小節だけoffline試聴する、揮発性のplayer/cache。
     grid_history_preview: crate::daw::DawGridPreviewPlayer,
     /// どの画面からでも開ける MML 入力オーバーレイ。開くと現在の画面の演奏は止まり、
@@ -92,6 +103,8 @@ pub struct TuiApp<'a> {
     pub(in crate::tui) mml_overlay_patch: Option<String>,
     /// Chord Chart の編集・通常 preview が持つ canonical patch。
     pub(in crate::tui) chord_chart_patch: Option<String>,
+    /// Chord Chart の Bass layer が持つ、Chord とは独立した canonical patch。
+    pub(in crate::tui) chord_chart_bass_patch: Option<String>,
     /// 送信先。テストでは `None`（音は鳴らさず状態遷移だけ確かめる）。
     mml_overlay_sender: Option<MmlOverlaySender>,
     /// patch ごとの mono/poly 判定結果のキャッシュ。keyboard 画面と

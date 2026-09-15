@@ -24,8 +24,8 @@ pub use plugin_profile::{apply_primary_plugin_profile, builtin_plugin_profiles, 
 
 // サーバー側の既定値（port と worker 数）は play server repo 側が単一ソース。
 pub use cmrt_server_config::{
-    DEFAULT_OFFLINE_RENDER_SERVER_PORT, DEFAULT_OFFLINE_RENDER_SERVER_WORKERS,
-    DEFAULT_REALTIME_PLAY_SERVER_PORT,
+    DEFAULT_APP_HTTP_BASE_URL, DEFAULT_APP_HTTP_SERVER_PORT, DEFAULT_OFFLINE_RENDER_SERVER_PORT,
+    DEFAULT_OFFLINE_RENDER_SERVER_WORKERS, DEFAULT_REALTIME_PLAY_SERVER_PORT,
 };
 
 use serde::Deserialize;
@@ -33,7 +33,8 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 /// app の HTTP サーバー（`--server` CLI モード / DAW HTTP サーバー）が listen する localhost port。
-pub const DEFAULT_PORT: u16 = 62151;
+/// 旧API名。既定値の単一ソースは play-server の `cmrt-server-config`。
+pub const DEFAULT_PORT: u16 = DEFAULT_APP_HTTP_SERVER_PORT;
 pub const DEFAULT_OFFLINE_RENDER_WORKERS: usize = 2;
 pub const DEFAULT_VOICING_SHARED_SOURCE: &str =
     "https://raw.githubusercontent.com/cat2151/cat-music-patterns/main/surge-xt-patch-voicing.json";

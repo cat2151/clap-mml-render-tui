@@ -15,22 +15,26 @@
 //!
 //! * 打鍵の生 MIDI だけ → 記録どおりの note off。release が付くのでクリックしない。
 //! * live timeline が絡む、または記録がずれている疑いがある → `stop_all`。
-//!   サーバー側は `StopAll` → `reset_all(renderers)` → CLAP `processor.reset()` まで
-//!   通るので、こちらが何を鳴らしたか覚えていなくても確実に黙る。
+//!   サーバー側が実際にprocessしたnoteを記録し、所有bank上で全NoteOffを処理する。
+//!   CLAP `processor.reset()` やpatch reloadは行わない。
 //!
 //! どちらの経路でも**コマンドは必ず 1 つ以上飛ぶ**。「鳴っていないはずだから何もしない」
 //! で早期 return してよいのは [`Sounding`] が「鳴っていない」と言うときだけで、その記録は
 //! 送信と同じ場所で更新している。以前はこの判断材料を 2 か所（state 側の `sounding` と
 //! line playback 側の `active`）が別々に持ち、互いに相手が止めると思い込んでいた。
 
-use std::time::{Duration, Instant};
+use std::{
+    collections::BTreeMap,
+    time::{Duration, Instant},
+};
 
 use crate::line_play::LineProgram;
 
+use super::layers::LineLayer;
 use super::line_playback::{LineOutcome, LinePlayback};
 use super::sink::SoundSink;
 use super::sounding::Sounding;
-use super::{log_error, log_line};
+use super::{log_error, log_line, MML_OVERLAY_INSTANCE};
 
 /// worker が待ちを打ち切って起きる理由。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -44,12 +48,17 @@ pub(super) enum Wake {
 pub(super) struct Voice {
     line: LinePlayback,
     sounding: Sounding,
-    current_patch: Option<String>,
-    patch_ready: bool,
+    patches: BTreeMap<u8, PatchState>,
     /// worker がいま処理している command。関連ログを他 thread の行と区別するために使う。
     command_id: u64,
     /// note on が server に受理されてから、MML が指定した音長だけ先の停止時刻。
     gate_deadline: Option<Instant>,
+}
+
+#[derive(Default)]
+struct PatchState {
+    current: Option<String>,
+    ready: bool,
 }
 
 impl Voice {
@@ -57,8 +66,7 @@ impl Voice {
         Self {
             line: LinePlayback::new(sample_rate_hz),
             sounding: Sounding::default(),
-            current_patch: None,
-            patch_ready: false,
+            patches: BTreeMap::new(),
             command_id: 0,
             gate_deadline: None,
         }
@@ -68,8 +76,10 @@ impl Voice {
         self.command_id = command_id;
     }
 
-    pub(super) fn is_patch_ready(&self, patch: Option<&str>) -> bool {
-        self.patch_ready && self.current_patch.as_deref() == patch
+    pub(super) fn is_patch_ready(&self, instance_id: u8, patch: Option<&str>) -> bool {
+        self.patches
+            .get(&instance_id)
+            .is_some_and(|state| state.ready && state.current.as_deref() == patch)
     }
 
     /// 音源をこの音色で使えるようにする。
@@ -82,20 +92,26 @@ impl Voice {
     pub(super) fn prepare(
         &mut self,
         sink: &impl SoundSink,
+        instance_id: u8,
         patch: Option<&str>,
     ) -> Result<(), String> {
         self.stop(sink, "prepare");
         log_line(format!(
-            "action=mml-overlay-prepare event=start command_id={} patch={patch:?}",
-            self.command_id
+            "action=mml-overlay-prepare event=start command_id={} instance={instance_id} patch={patch:?}",
+            self.command_id,
         ));
         let started_at = Instant::now();
-        match sink.prepare_patch(patch) {
+        match sink.prepare_patch(instance_id, patch) {
             Ok(()) => {
-                self.current_patch = patch.map(str::to_string);
-                self.patch_ready = true;
+                self.patches.insert(
+                    instance_id,
+                    PatchState {
+                        current: patch.map(str::to_string),
+                        ready: true,
+                    },
+                );
                 log_line(format!(
-                    "action=mml-overlay-prepare event=success command_id={} patch={patch:?} \
+                    "action=mml-overlay-prepare event=success command_id={} instance={instance_id} patch={patch:?} \
                      elapsed_ms={}",
                     self.command_id,
                     started_at.elapsed().as_millis()
@@ -104,11 +120,11 @@ impl Voice {
             }
             Err(error) => {
                 log_error(format!(
-                    "action=mml-overlay-prepare event=error command_id={} patch={patch:?} \
+                    "action=mml-overlay-prepare event=error command_id={} instance={instance_id} patch={patch:?} \
                      elapsed_ms={} active_patch={:?} error=\"{error}\"",
                     self.command_id,
                     started_at.elapsed().as_millis(),
-                    self.current_patch
+                    self.current_patch(instance_id)
                 ));
                 Err(error)
             }
@@ -131,7 +147,7 @@ impl Voice {
         // note off が出ずに鳴りっぱなしになる（届かなかった側へ余計な note off が
         // 出るのは無害）。
         self.sounding.record_sent(messages);
-        match sink.send_midi(messages) {
+        match sink.send_midi(MML_OVERLAY_INSTANCE, messages) {
             Ok(()) => {
                 let submitted_at = Instant::now();
                 self.sounding.mark_note_submitted(submitted_at);
@@ -140,7 +156,7 @@ impl Voice {
                     "action=mml-overlay-send event=success command_id={} patch={:?} pitches={:?} \
                      gate_ms={}",
                     self.command_id,
-                    self.current_patch,
+                    self.current_patch(MML_OVERLAY_INSTANCE),
                     note_on_pitches(messages),
                     gate.as_millis()
                 ));
@@ -153,7 +169,7 @@ impl Voice {
                     "action=mml-overlay-send event=error command_id={} patch={:?} pitches={:?} \
                      error=\"{error}\"",
                     self.command_id,
-                    self.current_patch,
+                    self.current_patch(MML_OVERLAY_INSTANCE),
                     note_on_pitches(messages)
                 ));
                 false
@@ -184,7 +200,7 @@ impl Voice {
     /// 走っているループの先読みを保つ。**止めない・張り直さない。**
     ///
     /// ループが無ければ何も送らない。継ぎ足しに失敗したらループを捨て、note off が
-    /// 落ちた恐れを記録して次の停止を音源リセットへ倒す。
+    /// 落ちた恐れを記録して次の停止をserver管理の全NoteOffへ倒す。
     pub(super) fn pump_repeat(&mut self, sink: &impl SoundSink, now: Instant) {
         match self.line.pump(sink, now) {
             None | Some(LineOutcome::Playing) => {}
@@ -229,6 +245,29 @@ impl Voice {
         }
     }
 
+    /// 複数 instance の one-shot を 1 本の live timeline へ積む。
+    pub(super) fn play_layers(&mut self, sink: &impl SoundSink, layers: &[LineLayer]) -> bool {
+        self.stop(sink, "layers");
+        if layers.is_empty() {
+            return false;
+        }
+        match self.line.play_layers(sink, layers) {
+            LineOutcome::Playing => {
+                self.sounding.begin_timeline();
+                true
+            }
+            LineOutcome::Partial => {
+                self.sounding.begin_timeline();
+                self.sounding.mark_suspect("layer-send-incomplete");
+                false
+            }
+            LineOutcome::Failed => {
+                self.sounding.mark_suspect("layer-begin-failed");
+                false
+            }
+        }
+    }
+
     /// 鳴っているものを全部止める。
     ///
     /// `reason` は log 用。どの操作が止めに来たのかが分からないと、鳴りっぱなしを
@@ -252,12 +291,12 @@ impl Voice {
              patch={:?} note_window_ms={} audibility={}",
             self.command_id,
             self.sounding.describe(),
-            self.current_patch,
+            self.current_patch(MML_OVERLAY_INSTANCE),
             optional_ms(note_window_ms),
             audibility(note_window_ms)
         ));
         if !hard && !note_offs.is_empty() {
-            if let Err(error) = sink.send_midi(&note_offs) {
+            if let Err(error) = sink.send_midi(MML_OVERLAY_INSTANCE, &note_offs) {
                 // note off が届いていない。音源ごと止めるほうへ倒す。
                 log_error(format!(
                     "action=mml-overlay-stop event=note-off-error error=\"{error}\""
@@ -280,10 +319,16 @@ impl Voice {
             "action=mml-overlay-stop event=success command_id={} reason={reason} patch={:?} \
              note_window_ms={} audibility={}",
             self.command_id,
-            self.current_patch,
+            self.current_patch(MML_OVERLAY_INSTANCE),
             optional_ms(note_window_ms),
             audibility(note_window_ms)
         ));
+    }
+
+    fn current_patch(&self, instance_id: u8) -> Option<&str> {
+        self.patches
+            .get(&instance_id)
+            .and_then(|state| state.current.as_deref())
     }
 }
 

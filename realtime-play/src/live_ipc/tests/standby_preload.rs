@@ -41,7 +41,7 @@ fn the_standby_preload_reaches_a_real_play_server() {
     let exe = std::env::var(PLAY_SERVER_EXE_ENV).unwrap_or_else(|_| {
         panic!("{PLAY_SERVER_EXE_ENV} に play server の実行ファイルを渡すこと")
     });
-    // 起動中の TUI の既定ポート（62154）から離す。
+    // 起動中の TUI の既定ポートから離す。
     let port = pick_port(45_000);
     // 2 instance = 1 instance ずつの 2 bank。起動を最小にしつつ bank 境界は成立する。
     let server = TestPlayServer::spawn(&exe, port, 2);
@@ -210,7 +210,7 @@ fn the_standby_load_runs_on_a_different_thread_than_the_active_bank_render() {
     let exe = std::env::var(PLAY_SERVER_EXE_ENV).unwrap_or_else(|_| {
         panic!("{PLAY_SERVER_EXE_ENV} に play server の実行ファイルを渡すこと")
     });
-    // 同時に走る別のテストのサーバーとも、起動中の TUI（既定 62154）とも衝突させない。
+    // 同時に走る別のテストのサーバーとも、起動中の TUI の既定ポートとも衝突させない。
     let port = pick_port(46_000);
     let server = TestPlayServer::spawn(&exe, port, 2);
 

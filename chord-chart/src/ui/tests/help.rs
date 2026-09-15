@@ -24,6 +24,7 @@ fn the_help_overlay_lists_every_key() {
         "j/k",
         "PgUp/PgDn",
         "Alt+↑/↓",
+        "B",
         "Ctrl+G",
         "?/Esc",
         "g",
@@ -48,6 +49,7 @@ fn the_help_overlay_lists_every_key() {
     }
     // `b` は 1 文字なので単体では他の行にも当たる。説明ごと照合する。
     assert!(rendered.contains("bKey/BPMを入力"), "{rendered}");
+    assert!(rendered.contains("BBasspreviewON/OFF"), "{rendered}");
     // `i` は crate 内の手入力欄ではなく host editor を要求するキー。
     assert!(rendered.contains("i進行(degrees)を編集"), "{rendered}");
     assert!(!rendered.contains("i進行(degrees)を手入力"), "{rendered}");
@@ -87,8 +89,8 @@ fn the_help_teaches_exactly_the_keys_that_survived_the_reduction() {
             "1..9",
             "? / Esc",
             "Alt+↑/↓",
+            "B",
             "Ctrl+G",
-            "PgUp/PgDn",
             "Shift+P/Space",
             "Tab",
             "b",
@@ -96,10 +98,11 @@ fn the_help_teaches_exactly_the_keys_that_survived_the_reduction() {
             "g",
             "h/l ←→",
             "i",
-            "j/k ↑↓",
+            "j/k ↑↓ PgUp/PgDn",
             "n",
             "q",
             "r",
+            "t / Shift+T",
         ]
     );
 }

@@ -3,6 +3,7 @@ pub(super) use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 pub(super) use std::sync::atomic::{AtomicUsize, Ordering};
 
 mod chord_chart;
+mod chord_chart_bass_preview;
 mod chord_chart_catalog;
 mod chord_chart_chord_preview;
 mod chord_chart_chord_ranges;
@@ -18,6 +19,7 @@ mod normal_mode;
 mod screen_switch;
 mod session;
 mod session_bpm;
+mod session_chord_chart;
 mod sforzando_screens;
 mod vaporizer2_screens;
 

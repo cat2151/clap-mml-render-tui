@@ -142,6 +142,60 @@ pub fn chord_chart_line_events(
     ))
 }
 
+/// Chord Chart の進行を auto voicing 済みの音高で鳴らす。
+///
+/// `voicings` は section 単独または Arrangement 全体から呼び出し側が選んだもの。
+/// `chord_index` があれば、全体内で決まった転回形を保ったままその chord だけを返す。
+pub fn auto_voiced_chord_chart_line_events(
+    line: &str,
+    key_token: Option<&str>,
+    voicings: &[cmrt_chord::ChordVoicing],
+    chord_index: Option<usize>,
+) -> (LineStatus, LinePerformance) {
+    if line.trim().is_empty() {
+        return (LineStatus::Idle, LinePerformance::silent());
+    }
+    let performance =
+        cmrt_chord::timed_chord_progression_performance(key_token, line).and_then(|performance| {
+            cmrt_chord::revoice_timed_progression(performance, voicings, chord_index)
+        });
+    performance_events(performance)
+}
+
+/// Chord Chart の section 単独で auto voicing した行を鳴らす。
+pub fn locally_auto_voiced_chord_chart_line_events(
+    line: &str,
+    key_token: Option<&str>,
+    chord_index: Option<usize>,
+) -> (LineStatus, LinePerformance) {
+    if line.trim().is_empty() {
+        return (LineStatus::Idle, LinePerformance::silent());
+    }
+    performance_events(cmrt_chord::timed_auto_voiced_chord_progression_performance(
+        key_token,
+        line,
+        chord_index,
+    ))
+}
+
+/// Chord Chart の section をローカルに auto voice し、Bass パートだけを鳴らす。
+pub fn locally_auto_voiced_bass_chord_chart_line_events(
+    line: &str,
+    key_token: Option<&str>,
+    chord_index: Option<usize>,
+) -> (LineStatus, LinePerformance) {
+    if line.trim().is_empty() {
+        return (LineStatus::Idle, LinePerformance::silent());
+    }
+    performance_events(
+        cmrt_chord::timed_auto_voiced_bass_chord_progression_performance(
+            key_token,
+            line,
+            chord_index,
+        ),
+    )
+}
+
 fn performance_events(
     result: Result<cmrt_chord::TimedPerformance, String>,
 ) -> (LineStatus, LinePerformance) {

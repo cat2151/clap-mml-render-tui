@@ -151,7 +151,9 @@ fn default_config_content_uses_offline_render_backend_keys() {
         content
     );
     assert!(
-        content.contains("offline_render_server_port = 62153"),
+        content.contains(&format!(
+            "offline_render_server_port = {DEFAULT_OFFLINE_RENDER_SERVER_PORT}"
+        )),
         "default config は render-server port を案内するべき: {}",
         content
     );
@@ -166,7 +168,9 @@ fn default_config_content_uses_offline_render_backend_keys() {
         content
     );
     assert!(
-        content.contains("realtime_play_server_port = 62154"),
+        content.contains(&format!(
+            "realtime_play_server_port = {DEFAULT_REALTIME_PLAY_SERVER_PORT}"
+        )),
         "default config は realtime play server port を案内するべき: {}",
         content
     );

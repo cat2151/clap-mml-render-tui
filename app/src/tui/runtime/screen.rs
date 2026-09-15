@@ -119,11 +119,9 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::Keyboard => self.finish_keyboard(),
             PrimaryScreen::LoopBrowser => self.stop_loop_browser(),
             PrimaryScreen::GridSequencer => self.stop_grid_sequencer_playback(),
-            // chord chart の preview は 1 回鳴って終わる（note off まで積んである）ので、
-            // 止めるコマンドはこちらからは出さない。明け渡した先（MML オーバーレイの
-            // `prepare` など）が音源ごと止めるので、こちらは記録だけ捨てる
-            // （捨てないと、戻ってきたときの `Space` が「止める」に化けて空打ちになる）。
-            PrimaryScreen::ChordChart => self.forget_chord_chart_preview(),
+            // Chord/Bass が共有する layered timeline を明示的に止めてから、
+            // MML overlay へ両 instance を明け渡す。
+            PrimaryScreen::ChordChart => self.stop_chord_chart_preview(),
             PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {}
         }
     }
@@ -153,8 +151,11 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::Keyboard => self.finish_keyboard(),
             PrimaryScreen::LoopBrowser => self.stop_loop_browser(),
             PrimaryScreen::GridSequencer => self.finish_grid_sequencer(),
-            // 鳴っているものは無いが、キーごとの保存を取りこぼしていたらここで書く。
-            PrimaryScreen::ChordChart => self.save_chord_chart(),
+            PrimaryScreen::ChordChart => {
+                self.stop_chord_chart_preview();
+                // キーごとの保存を取りこぼしていたらここで拾う。
+                self.save_chord_chart();
+            }
             PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {}
         }
     }

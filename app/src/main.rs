@@ -1,8 +1,9 @@
 use anyhow::Result;
 use clack_host::prelude::PluginEntry;
 use clap_mml_render_tui::{
-    config, config_editor, render_mml, render_mml::RenderMmlRequest, server, tui, updater,
-    voicing_cache_builder,
+    bass_voicing_inspect, config, config_editor, live_chord_check,
+    live_chord_check::LiveChordCheckRequest, render_mml, render_mml::RenderMmlRequest, server, tui,
+    updater, voicing_cache_builder,
 };
 use cmrt_core::{load_entry, mml_to_play};
 
@@ -89,11 +90,21 @@ fn run() -> Result<()> {
         return updater::run_check();
     }
 
+    // 音源・configを一切使わない純粋なvoicing診断。空のconfig環境でも実行できるよう、
+    // 通常起動の初期化より前に返す。
+    if let CliAction::InspectBassVoicing(request) = &action {
+        print!("{}", bass_voicing_inspect::report(request)?);
+        return Ok(());
+    }
+
     let mut cfg = match &action {
         // 診断コマンドだけは読む config を差し替えられる。既定の置き場を作りに行かないので、
         // 実ユーザーの config.toml には 1 バイトも触らない。
         CliAction::PatchRoles { config: Some(path) }
         | CliAction::RenderMml(RenderMmlRequest {
+            config: Some(path), ..
+        })
+        | CliAction::LiveChordCheck(LiveChordCheckRequest {
             config: Some(path), ..
         }) => cmrt_runtime::Config::load_from_path(path)?,
         _ => config::load()?,
@@ -153,11 +164,13 @@ fn run() -> Result<()> {
         CliAction::RenderMml(_) | CliAction::Tui => {
             cfg.offline_render_backend == config::OfflineRenderBackend::InProcess
         }
+        CliAction::LiveChordCheck(_) => false,
         CliAction::Help(_)
         | CliAction::Version(_)
         | CliAction::Shutdown(_)
         | CliAction::Update
         | CliAction::Check
+        | CliAction::InspectBassVoicing(_)
         | CliAction::ScanLoops => {
             unreachable!()
         }
@@ -217,6 +230,9 @@ fn run() -> Result<()> {
         CliAction::RenderMml(request) => {
             return render_mml::run(&cfg, &plugin_entries, &request);
         }
+        CliAction::LiveChordCheck(request) => {
+            return live_chord_check::run(&cfg, &request);
+        }
         CliAction::PatchRoles { .. } => {
             return tui::patch_role_report::run_patch_role_report(&cfg);
         }
@@ -226,6 +242,7 @@ fn run() -> Result<()> {
         | CliAction::Shutdown(_)
         | CliAction::Update
         | CliAction::Check
+        | CliAction::InspectBassVoicing(_)
         | CliAction::ScanLoops => {
             unreachable!()
         }

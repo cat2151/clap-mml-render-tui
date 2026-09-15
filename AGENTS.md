@@ -27,6 +27,7 @@ The setup script installs the Linux packages needed for this workspace's `rodio`
 # その他
 - デバウンス禁止
 - cat2151のライブラリは、「revision固定を禁止。さらに、古い lock を放置せず最新 HEAD へ追従すること」
+- `../clap-mml-play-server/` との横断開発は `python scripts/cross_repo_local.py on` で開始すること。offは人間が担当（server側push、のちTUI側commitでhookで自動off）
 - issue-notes/は更新を禁止
 - README.mdは更新禁止。README.ja.mdから生成されるので。
 - handoff資料を作るときは、project rootに書く（docs/ではなく）

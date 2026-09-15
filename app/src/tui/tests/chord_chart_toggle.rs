@@ -65,11 +65,7 @@ fn the_toggle_asks_to_play_the_cursor_section_while_silent() {
         unglued.handle_key_event(press);
         assert_eq!(
             unglued.take_preview(),
-            Some(PreviewRequest {
-                name: "A".to_string(),
-                degrees: "I-V-VIm-IV".to_string(),
-                chord_index: None,
-            }),
+            Some(PreviewRequest::section("A", "I-V-VIm-IV", None)),
             "{press:?} は鳴らす要求を立てること（対照）"
         );
 
@@ -98,9 +94,7 @@ fn without_a_sender_the_toggle_never_believes_it_is_sounding() {
 
 /// MML オーバーレイ（`Ctrl+P`）へ音源を明け渡したら、「鳴っている」の記録も捨てる。
 ///
-/// 音そのものは相手が止める（`sender.prepare()` の中の `voice.stop`。
-/// `mml-overlay/src/sender/tests.rs` の
-/// `preparing_an_already_ready_patch_stops_the_previous_line` が固定）。
+/// 音そのものも Chord Chart 側の所有を手放す時点で止める。
 /// 記録だけ残すと、閉じて戻ったあとの `Space` が空打ちになる。
 #[test]
 fn handing_the_instrument_to_the_mml_overlay_forgets_the_sounding_preview() {
@@ -113,6 +107,33 @@ fn handing_the_instrument_to_the_mml_overlay_forgets_the_sounding_preview() {
     assert!(app.mml_overlay.is_open());
     assert_eq!(app.chord_chart_preview_command_id, None);
     assert!(!app.chord_chart_preview_sounding(Instant::now()));
+    assert!(!app.chord_chart.preview_sounding());
+}
+
+#[test]
+fn leaving_the_chord_chart_clears_layered_preview_ownership() {
+    let mut app = app_on_the_chord_chart();
+    app.chord_chart_preview_command_id = Some(41);
+    app.chord_chart.set_preview_sounding(true);
+
+    app.switch_to_primary_screen(PrimaryScreen::Notepad, None);
+
+    assert_eq!(app.active_screen, PrimaryScreen::Notepad);
+    assert_eq!(app.chord_chart_preview_command_id, None);
+    assert!(!app.chord_chart.preview_sounding());
+}
+
+#[test]
+fn quitting_the_chord_chart_clears_layered_preview_ownership() {
+    let mut app = app_on_the_chord_chart();
+    app.chord_chart_preview_command_id = Some(41);
+    app.chord_chart.set_preview_sounding(true);
+
+    let action =
+        app.handle_chord_chart_key_event(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
+
+    assert_eq!(action, cmrt_chord_chart::ChordChartAction::Quit);
+    assert_eq!(app.chord_chart_preview_command_id, None);
     assert!(!app.chord_chart.preview_sounding());
 }
 

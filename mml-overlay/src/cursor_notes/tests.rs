@@ -194,6 +194,30 @@ fn chord_chart_context_uses_the_song_key_without_shifting_the_source_span() {
 }
 
 #[test]
+fn chord_chart_cursor_keeps_the_voicing_chosen_from_the_whole_section() {
+    let notes = notes_at_cursor_with_chord_chart_context("I-V-VIm-IV", 3, Some("Key=C")).unwrap();
+
+    assert_eq!(notes.span, 2..3);
+    assert_eq!(notes.pitches, vec![71, 74, 79]);
+    assert!(notes.from_chord);
+}
+
+#[test]
+fn chord_chart_bass_cursor_uses_the_bass_from_the_same_auto_voicing() {
+    let line = "I-V-VIm-IV";
+    let bass = bass_note_at_cursor_with_chord_chart_context(line, 3, Some("Key=C")).unwrap();
+    let parsed = cmrt_chord::parse_chord_progression(&format!("Key:C {line}")).unwrap();
+    let expected = cmrt_chord::auto_voice_with_key(parsed.chords(), parsed.key_pitch_class(), None)
+        [1]
+    .bass
+    .expect("auto voicing has a bass");
+
+    assert_eq!(bass.span, 2..3);
+    assert_eq!(bass.pitches, vec![expected]);
+    assert!(bass.from_chord);
+}
+
+#[test]
 fn chord_chart_context_does_not_treat_broken_chord_text_as_mml() {
     assert_eq!(
         notes_at_cursor_with_chord_chart_context("cde", 3, Some("Key=G")),

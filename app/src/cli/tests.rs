@@ -126,6 +126,57 @@ fn render_mml_can_verify_every_patch_for_one_plugin() {
 }
 
 #[test]
+fn live_chord_check_accepts_the_realtime_reproduction_options() {
+    assert_eq!(
+        parse_cli_from([
+            "cmrt",
+            "live-chord-check",
+            "--config",
+            "/tmp/try.toml",
+            "--patch",
+            "PD Dirty Layer Pad.vvp",
+            "--key",
+            "Key=G",
+            "--step-ms",
+            "750",
+            "--out",
+            "/tmp/chords.wav",
+            "--verify",
+            "I-IV-V-I",
+        ])
+        .unwrap(),
+        CliAction::LiveChordCheck(LiveChordCheckRequest {
+            config: Some(PathBuf::from("/tmp/try.toml")),
+            patch: "PD Dirty Layer Pad.vvp".to_string(),
+            key: "Key=G".to_string(),
+            degrees: "I-IV-V-I".to_string(),
+            step_ms: 750,
+            out: Some(PathBuf::from("/tmp/chords.wav")),
+            verify: true,
+        })
+    );
+}
+
+#[test]
+fn inspect_bass_voicing_collects_every_progression_set() {
+    assert_eq!(
+        parse_cli_from([
+            "cmrt",
+            "inspect-bass-voicing",
+            "--key",
+            "Key=G",
+            "I-IV-V-I",
+            "VIm-IV-I-V",
+        ])
+        .unwrap(),
+        CliAction::InspectBassVoicing(BassVoicingInspectRequest {
+            key: "Key=G".to_string(),
+            progressions: vec!["I-IV-V-I".to_string(), "VIm-IV-I-V".to_string()],
+        })
+    );
+}
+
+#[test]
 fn render_mml_rejects_plugin_with_explicit_patch() {
     assert!(parse_cli_from([
         "cmrt",

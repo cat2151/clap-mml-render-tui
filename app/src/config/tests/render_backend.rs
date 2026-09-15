@@ -27,7 +27,7 @@ sample_rate = 48000
 buffer_size = 512
 offline_render_backend = "render_server"
 offline_render_server_workers = 6
-offline_render_server_port = 62153
+offline_render_server_port = 43153
 offline_render_server_command = "cargo run -p clap-mml-render-server"
 "#;
     let cfg: Config = toml::from_str(toml_str).unwrap();
@@ -38,7 +38,7 @@ offline_render_server_command = "cargo run -p clap-mml-render-server"
     );
     assert_eq!(cfg.offline_render_server_workers, 6);
     assert_eq!(cfg.effective_offline_render_workers(), 6);
-    assert_eq!(cfg.offline_render_server_port, 62153);
+    assert_eq!(cfg.offline_render_server_port, 43153);
     assert_eq!(
         cfg.offline_render_server_command,
         "cargo run -p clap-mml-render-server"
@@ -55,12 +55,12 @@ output_wav  = "output.wav"
 sample_rate = 48000
 buffer_size = 512
 realtime_audio_backend = "play_server"
-realtime_play_server_port = 62154
+realtime_play_server_port = 43154
 "#;
     let cfg: Config = toml::from_str(toml_str).unwrap();
     cfg.validate().unwrap();
     assert_eq!(cfg.realtime_audio_backend, RealtimeAudioBackend::PlayServer);
-    assert_eq!(cfg.realtime_play_server_port, 62154);
+    assert_eq!(cfg.realtime_play_server_port, 43154);
     // 実体の決め方は config.toml から外した（ADR 0017）。
     assert!(cfg.play_server_launch_override.is_none());
 }

@@ -15,7 +15,11 @@ use crate::patch_select::{PatchSelect, PatchSelectAction};
 use super::{MmlOverlay, MmlOverlayAction, PatchCatalogNotice, PatchCatalogSnapshot, PatchChange};
 
 impl MmlOverlay<'_> {
-    pub(super) fn open_patch_select(&mut self) {
+    /// 音色 selector を直接開く。catalog が Loading なら完了後の open を予約する。
+    ///
+    /// 通常は `Ctrl+T` から呼ばれるが、host 画面が role を指定して直接開く場合も
+    /// 同じ経路を使う。
+    pub fn request_patch_select(&mut self) {
         self.patch_catalog_notice = None;
         self.patch_select_requested = false;
         match &self.patch_catalog {
@@ -84,7 +88,7 @@ impl MmlOverlay<'_> {
             "action=patch-catalog event=sync result={result} open_requested={requested}"
         ));
         if requested {
-            self.open_patch_select();
+            self.request_patch_select();
         }
     }
 
@@ -169,7 +173,7 @@ impl MmlOverlay<'_> {
     /// カーソル位置に音があればそれを鳴らし直す。まだ MML が空でも音色は聴きたいので、
     /// その場合だけ試聴用の音を1つ鳴らす。
     fn preview_notes(&mut self, _now: Instant) -> Option<super::NoteRequest> {
-        let notes = self.notes_at_cursor();
+        let notes = self.patch_preview_notes_at_cursor();
         self.last_notes.clone_from(&notes);
         notes
             .map(|(_, notes)| notes)

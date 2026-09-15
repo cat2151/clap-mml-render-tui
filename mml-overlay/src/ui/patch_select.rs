@@ -299,9 +299,14 @@ fn list_title(select: &PatchSelect<'_>) -> String {
     if select.filter_error().is_some() {
         return " Regex error  ↑↓/jk Home/End Ctrl+R:random ".to_string();
     }
+    let list_len = select.filtered_len();
+    let position = if list_len == 0 {
+        0
+    } else {
+        select.cursor() + 1
+    };
     format!(
-        " 音色 ({}/{}) ↑↓/jk Home/End Ctrl+R:random ",
-        select.filtered_len(),
+        " 音色 ({position}/{list_len}/{}) ↑↓/jk Home/End Ctrl+R:random ",
         select.total()
     )
 }

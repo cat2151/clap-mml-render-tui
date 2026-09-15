@@ -8,6 +8,17 @@
 use super::{ChordChartScreen, Pane};
 use crate::Section;
 
+/// auto voicing を決めるときに同じ並びとして扱う section 群。
+///
+/// Sections pane では選択 section だけ、Arrangement pane では曲順全体を入れる。
+/// この crate は文字列を解釈せず、どの進行同士が隣接するかだけを app 側へ渡す。
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct PreviewVoicingContext {
+    pub progressions: Vec<String>,
+    /// [`Self::progressions`] のうち、実際に preview する section の位置。
+    pub selected: usize,
+}
+
 /// 1 回ぶんの「鳴らせ」。中身は section の degrees と、ログに出す名前だけ。
 ///
 /// `Option<PreviewRequest>` の `None` は「何も起きていない」、[`PreviewRequest::is_silent`] な
@@ -23,9 +34,29 @@ pub struct PreviewRequest {
     /// `None` なら行全体。どこからどこまでかを決めるのは app 側の glue で、範囲外の番号や
     /// 読めない degrees は glue が行全体へ倒す（`docs/adr/0020`）。
     pub chord_index: Option<usize>,
+    /// section 単独または Arrangement 全体の auto voicing 文脈。
+    pub voicing_context: PreviewVoicingContext,
 }
 
 impl PreviewRequest {
+    /// 1 section の中だけで auto voicing する preview 要求。
+    pub fn section(
+        name: impl Into<String>,
+        degrees: impl Into<String>,
+        chord_index: Option<usize>,
+    ) -> Self {
+        let degrees = degrees.into();
+        Self {
+            name: name.into(),
+            voicing_context: PreviewVoicingContext {
+                progressions: vec![degrees.clone()],
+                selected: 0,
+            },
+            degrees,
+            chord_index,
+        }
+    }
+
     /// 「止めるだけ」の要求。
     pub fn silent() -> Self {
         Self::default()
@@ -41,6 +72,24 @@ impl PreviewRequest {
 }
 
 impl ChordChartScreen {
+    /// Chord Chart の section preview に Bass layer を重ねる設定か。
+    pub fn bass_enabled(&self) -> bool {
+        self.bass_enabled
+    }
+
+    /// Session state から Bass preview 設定を復元する。
+    ///
+    /// 復元時には音を鳴らさないため、preview request は立てない。
+    pub fn set_bass_enabled(&mut self, enabled: bool) {
+        self.bass_enabled = enabled;
+    }
+
+    /// Bass preview を切り替え、新しい状態で現在 section 全体を頭から要求する。
+    pub(super) fn toggle_bass_enabled(&mut self) {
+        self.bass_enabled = !self.bass_enabled;
+        self.request_preview();
+    }
+
     /// 立っている preview 要求を取り出す（取り出したら消える）。
     ///
     /// 呼ぶのは app の glue。1 回のキー処理で 2 回鳴らないよう、必ず消費すること。
@@ -123,15 +172,46 @@ impl ChordChartScreen {
     }
 
     fn request_preview_of(&mut self, chord_index: Option<usize>) {
+        let voicing_context = self.preview_voicing_context();
         let request = match self.preview_target() {
-            Some(section) => PreviewRequest {
-                name: section.name.clone(),
-                degrees: section.degrees.clone(),
-                chord_index,
-            },
+            Some(section) => {
+                let mut request = PreviewRequest::section(
+                    section.name.clone(),
+                    section.degrees.clone(),
+                    chord_index,
+                );
+                request.voicing_context = voicing_context;
+                request
+            }
             None => PreviewRequest::silent(),
         };
         self.pending_preview = Some(request);
+    }
+
+    fn preview_voicing_context(&self) -> PreviewVoicingContext {
+        match self.focus {
+            Pane::Sections => PreviewVoicingContext {
+                progressions: self
+                    .selected_section()
+                    .map(|section| vec![section.degrees.clone()])
+                    .unwrap_or_default(),
+                selected: 0,
+            },
+            Pane::Arrangement => PreviewVoicingContext {
+                progressions: self
+                    .song
+                    .arrangement
+                    .iter()
+                    .map(|id| {
+                        self.song
+                            .section(*id)
+                            .map(|section| section.degrees.clone())
+                            .unwrap_or_default()
+                    })
+                    .collect(),
+                selected: self.clamped_arrangement_cursor(),
+            },
+        }
     }
 
     /// カーソルが指している section。右 pane では**参照先**の section
@@ -147,6 +227,14 @@ impl ChordChartScreen {
                 self.song.section(id)
             }
         }
+    }
+
+    /// 現在の pane / cursor が試聴対象として指している section。
+    ///
+    /// host が Chord Chart から音色 selector を直接開くとき、同じ進行を候補音色で
+    /// 試聴するために使う。
+    pub fn selected_preview_section(&self) -> Option<&Section> {
+        self.preview_target()
     }
 }
 

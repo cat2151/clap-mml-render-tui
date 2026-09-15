@@ -13,6 +13,10 @@ fn ctrl(code: char) -> KeyEvent {
     KeyEvent::new(KeyCode::Char(code), KeyModifiers::CONTROL)
 }
 
+fn shift(code: char) -> KeyEvent {
+    KeyEvent::new(KeyCode::Char(code), KeyModifiers::SHIFT)
+}
+
 fn open_degrees(app: &mut TuiApp<'_>) -> cmrt_chord_chart::SectionId {
     app.switch_to_primary_screen(PrimaryScreen::ChordChart, None);
     let section_id = app.chord_chart.selected_section().unwrap().id;
@@ -159,6 +163,65 @@ fn chord_chart_patch_selector_starts_in_the_chord_track_role() {
     app.handle_mml_overlay_key_event(plain(KeyCode::Enter));
 
     assert_eq!(app.chord_chart_patch.as_deref(), Some("Pads/Warm Pad.fxp"));
+}
+
+#[test]
+fn t_opens_the_chord_role_selector_directly_and_returns_after_confirmation() {
+    let (_tmp, _env_guard) = temp_local_dirs("chord_direct_patch_selector");
+    let mut app = TuiApp::new_for_test(test_config());
+    app.chord_chart.set_bass_enabled(false);
+    *app.patch_load_state.lock().unwrap() =
+        PatchLoadState::ready(make_patches(&["Basses/Bass 1.fxp", "Pads/Warm Pad.fxp"]));
+    app.switch_to_primary_screen(PrimaryScreen::ChordChart, None);
+
+    assert!(app.try_open_mml_overlay(plain(KeyCode::Char('t'))));
+    assert_eq!(
+        app.mml_overlay_owner,
+        Some(MmlOverlayOwner::ChordChartPatch {
+            role: cmrt_patches::PatchRole::Chord,
+        })
+    );
+    assert!(app.mml_overlay.is_patch_select_open());
+    assert_eq!(app.mml_overlay.value(), "I-V-VIm-IV");
+
+    app.handle_mml_overlay_key_event(plain(KeyCode::Enter));
+
+    assert!(!app.mml_overlay.is_open());
+    assert_eq!(app.mml_overlay_owner, None);
+    assert_eq!(app.chord_chart_patch.as_deref(), Some("Pads/Warm Pad.fxp"));
+    assert_eq!(app.chord_chart_bass_patch, None);
+}
+
+#[test]
+fn shift_t_opens_the_bass_role_selector_without_changing_the_chord_patch() {
+    let (_tmp, _env_guard) = temp_local_dirs("bass_direct_patch_selector");
+    let mut app = TuiApp::new_for_test(test_config());
+    app.chord_chart.set_bass_enabled(false);
+    app.chord_chart_patch = Some("Pads/Existing Chord.fxp".to_string());
+    *app.patch_load_state.lock().unwrap() =
+        PatchLoadState::ready(make_patches(&["Basses/Bass 1.fxp", "Pads/Warm Pad.fxp"]));
+    app.switch_to_primary_screen(PrimaryScreen::ChordChart, None);
+
+    assert!(app.try_open_mml_overlay(shift('T')));
+    assert_eq!(
+        app.mml_overlay_owner,
+        Some(MmlOverlayOwner::ChordChartPatch {
+            role: cmrt_patches::PatchRole::Bass,
+        })
+    );
+    assert!(app.mml_overlay.is_patch_select_open());
+
+    app.handle_mml_overlay_key_event(plain(KeyCode::Enter));
+
+    assert!(!app.mml_overlay.is_open());
+    assert_eq!(
+        app.chord_chart_patch.as_deref(),
+        Some("Pads/Existing Chord.fxp")
+    );
+    assert_eq!(
+        app.chord_chart_bass_patch.as_deref(),
+        Some("Basses/Bass 1.fxp")
+    );
 }
 
 #[test]

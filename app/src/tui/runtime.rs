@@ -132,6 +132,7 @@ impl<'a> TuiApp<'a> {
             if self.active_screen == PrimaryScreen::LoopBrowser {
                 self.pump_loop_browser_step();
             }
+            self.pump_chord_chart_preview();
             self.pump_mml_overlay();
             self.pump_notepad_sound_check_guide();
             clear_terminal_for_new_screen(&mut terminal, &mut rendered_screen, self.active_screen)?;

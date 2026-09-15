@@ -6,7 +6,8 @@
 
 use std::time::Instant;
 
-use crossterm::event::KeyEvent;
+use cmrt_patches::PatchRole;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::mml_overlay::{
     host_patch_catalog, is_mml_overlay_trigger, ChordChartPreviewContext, HostPatchCatalog,
@@ -16,11 +17,21 @@ use super::mml_overlay::{
 use super::{MmlOverlayOwner, PatchLoadState, TuiApp};
 
 impl TuiApp<'_> {
-    /// Ctrl+P ならオーバーレイを開く。開いたら true。
+    /// Ctrl+P、または Chord Chart の `t` / `Shift+T` ならオーバーレイを開く。
+    /// 開いたら true。
     ///
     /// 開ける条件は画面切替メニューと同じにしてある。どちらも「いまの画面が
     /// モーダルな入力中でないこと」を求めるため。
     pub(in crate::tui) fn try_open_mml_overlay(&mut self, key: KeyEvent) -> bool {
+        if self.active_screen == crate::screen_switch::PrimaryScreen::ChordChart {
+            if let Some(role) = chord_chart_patch_selector_role(key) {
+                if !self.can_open_screen_switch_menu() {
+                    return false;
+                }
+                self.open_chord_chart_patch_selector(role);
+                return true;
+            }
+        }
         if !is_mml_overlay_trigger(key) || !self.can_open_screen_switch_menu() {
             return false;
         }
@@ -56,12 +67,37 @@ impl TuiApp<'_> {
         self.open_owned_mml_overlay(MmlOverlayOwner::ChordChart { section_id }, context);
     }
 
+    /// Chord Chart の現在行を試聴文脈に載せ、指定 role の selector を直接開く。
+    fn open_chord_chart_patch_selector(&mut self, role: PatchRole) {
+        let initial_text = self
+            .chord_chart
+            .selected_preview_section()
+            .map_or_else(String::new, |section| section.degrees.clone());
+        let key_token =
+            super::chord_chart_glue::key_token(&self.chord_chart.song.prefix).map(str::to_owned);
+        let mut context = self.mml_overlay_context();
+        context.input_mode = MmlOverlayInputMode::SingleLine;
+        context.single_line_flow = SingleLineFlow::Modal;
+        context.initial_text = initial_text;
+        context.syntax = MmlOverlaySyntax::ChordChart(ChordChartPreviewContext { key_token });
+        context.patch_select_initial_role = Some(role);
+        self.open_owned_mml_overlay(MmlOverlayOwner::ChordChartPatch { role }, context);
+        self.mml_overlay.request_patch_select();
+    }
+
     /// owner の canonical patch を widget へ載せて、共有 overlay と sender を開く。
     fn open_owned_mml_overlay(&mut self, owner: MmlOverlayOwner, context: MmlOverlayContext) {
         self.stop_active_screen_playback();
         let patch = match owner {
             MmlOverlayOwner::Global => self.mml_overlay_patch.clone(),
             MmlOverlayOwner::ChordChart { .. } => self.chord_chart_patch.clone(),
+            MmlOverlayOwner::ChordChartPatch {
+                role: PatchRole::Chord,
+            } => self.chord_chart_patch.clone(),
+            MmlOverlayOwner::ChordChartPatch {
+                role: PatchRole::Bass,
+            } => self.chord_chart_bass_patch.clone(),
+            MmlOverlayOwner::ChordChartPatch { .. } => None,
         };
         self.mml_overlay.set_restored_patch(patch);
         self.mml_overlay_owner = Some(owner);
@@ -127,9 +163,21 @@ impl TuiApp<'_> {
     pub(in crate::tui) fn handle_mml_overlay_key_event(&mut self, key: KeyEvent) {
         // loader 完了と Ctrl+T が同じ frame に来ても、古い Loading を見せない。
         self.sync_mml_overlay_patch_catalog();
+        let close_after_selector = matches!(
+            self.mml_overlay_owner,
+            Some(MmlOverlayOwner::ChordChartPatch { .. })
+        ) && self.mml_overlay.is_patch_select_open();
         let action = self.mml_overlay.handle_key(key, Instant::now());
         self.remember_owned_mml_overlay_patch();
         self.apply_mml_overlay_action(action);
+        // Chord Chart の直接 selector は、確定 / 取消後に空の MML editor を残さない。
+        if close_after_selector
+            && self.mml_overlay.is_open()
+            && !self.mml_overlay.is_patch_select_open()
+        {
+            self.save_history_state();
+            self.finish_owned_mml_overlay();
+        }
     }
 
     /// worker が実際に到達した一覧・loading・発音状態を表示へ反映する。毎フレーム呼ぶ。
@@ -238,6 +286,13 @@ impl TuiApp<'_> {
         match self.mml_overlay_owner {
             Some(MmlOverlayOwner::Global) => self.mml_overlay_patch = patch,
             Some(MmlOverlayOwner::ChordChart { .. }) => self.chord_chart_patch = patch,
+            Some(MmlOverlayOwner::ChordChartPatch {
+                role: PatchRole::Chord,
+            }) => self.chord_chart_patch = patch,
+            Some(MmlOverlayOwner::ChordChartPatch {
+                role: PatchRole::Bass,
+            }) => self.chord_chart_bass_patch = patch,
+            Some(MmlOverlayOwner::ChordChartPatch { .. }) => {}
             None => {}
         }
     }
@@ -265,6 +320,9 @@ impl TuiApp<'_> {
 
     /// 閉じる経路を owner に関係なく 1 か所で片づける。
     fn finish_owned_mml_overlay(&mut self) {
+        // 通常の Esc / Commit は widget 自身が既に閉じている。Chord Chart の直接
+        // selector 確定 / 取消では selector だけが閉じるため、host 側でも確実に畳む。
+        self.mml_overlay.dismiss();
         if let Some(sender) = &self.mml_overlay_sender {
             let command_id = sender.stop();
             self.mml_overlay.expect_sender_command(command_id);
@@ -276,6 +334,23 @@ impl TuiApp<'_> {
             .set_restored_patch(self.mml_overlay_patch.clone());
         // 借りていた音源を返す。Chord Chart はここで自動 preview しない。
         self.resume_active_screen_playback();
+    }
+}
+
+/// Chord Chart 専用の直接 selector キー。大文字は端末によって SHIFT の有無が揺れるため、
+/// `Char('T')` 自体を Bass として扱い、CONTROL / ALT 付きは共有 shortcut へ譲る。
+fn chord_chart_patch_selector_role(key: KeyEvent) -> Option<PatchRole> {
+    if key
+        .modifiers
+        .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+    {
+        return None;
+    }
+    match key.code {
+        KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::SHIFT) => Some(PatchRole::Bass),
+        KeyCode::Char('t') => Some(PatchRole::Chord),
+        KeyCode::Char('T') => Some(PatchRole::Bass),
+        _ => None,
     }
 }
 

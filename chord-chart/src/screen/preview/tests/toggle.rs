@@ -25,11 +25,7 @@ fn the_toggle_asks_to_play_the_row_under_the_cursor_while_silent() {
 
         assert_eq!(
             taken(&mut screen),
-            PreviewRequest {
-                name: "A".to_string(),
-                degrees: "I-V-VIm-IV".to_string(),
-                chord_index: None,
-            },
+            PreviewRequest::section("A", "I-V-VIm-IV", None),
             "{press:?} で鳴る要求が出ること"
         );
     }

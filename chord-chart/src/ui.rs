@@ -49,7 +49,8 @@ pub(crate) struct ChordChartLayout {
 }
 
 pub(crate) fn layout_for(area: Rect) -> ChordChartLayout {
-    let inner = screen_block().inner(area);
+    // title の内容は inner rect に影響しない。
+    let inner = screen_block(true).inner(area);
     let rows = Layout::vertical([
         Constraint::Length(1),
         Constraint::Min(1),
@@ -69,10 +70,13 @@ pub(crate) fn layout_for(area: Rect) -> ChordChartLayout {
     }
 }
 
-fn screen_block() -> Block<'static> {
+fn screen_block(bass_enabled: bool) -> Block<'static> {
     Block::default()
         .borders(Borders::ALL)
-        .title(" Chord Chart ")
+        .title(format!(
+            " Chord Chart  Bass:{} ",
+            if bass_enabled { "ON" } else { "OFF" }
+        ))
         .style(base_style())
         .border_style(base_style().fg(MONOKAI_GRAY))
 }
@@ -80,7 +84,7 @@ fn screen_block() -> Block<'static> {
 pub fn draw(screen: &ChordChartScreen, f: &mut Frame<'_>) {
     draw_frame_background(f);
     let layout = layout_for(f.area());
-    f.render_widget(screen_block(), f.area());
+    f.render_widget(screen_block(screen.bass_enabled()), f.area());
     f.render_widget(
         Paragraph::new(header::line(&screen.song)).style(base_style()),
         layout.header,

@@ -6,6 +6,7 @@ use super::*;
 use crate::{Pane, Section, SectionId, Song};
 
 mod arrangement;
+mod bass;
 mod chord_highlight;
 mod header;
 mod help;

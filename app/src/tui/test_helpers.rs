@@ -32,6 +32,7 @@ impl TuiApp<'static> {
             mml_overlay_owner: None,
             mml_overlay_patch: None,
             chord_chart_patch: None,
+            chord_chart_bass_patch: None,
             mml_overlay_sender: None,
             grid_sequencer: grid_sequencer::GridSequencerScreen::new(None),
             // テストでは実 `%LOCALAPPDATA%` の chord_chart.json を読ませない
@@ -42,6 +43,7 @@ impl TuiApp<'static> {
             // `tests/chord_chart_initial_song.rs` が明示的に組み立てる。
             chord_chart: chord_chart::ChordChartScreen::new(test_chord_chart_song()),
             chord_chart_preview_command_id: None,
+            deferred_chord_chart_preview: None,
             grid_history_preview: crate::daw::DawGridPreviewPlayer::disabled_for_tests(cfg),
             voicing: voicing::VoicingState::new(
                 crate::history::VoicingCache::default(),

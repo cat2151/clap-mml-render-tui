@@ -83,7 +83,11 @@ fn the_bass_is_a_separate_note_inside_its_own_range() {
 fn semitone_clusters_are_avoided_in_the_chosen_voicing() {
     // 転回すると 71-72 のぶつかりが出る IM7。penalty が効けば選ばれない。
     let voiced = auto_voice(&[vec![60, 64, 67, 71]], None);
-    assert_eq!(count_semitone_intervals(&voiced[0].notes), 0, "{voiced:?}");
+    assert_eq!(
+        upper::count_semitone_intervals(&voiced[0].notes),
+        0,
+        "{voiced:?}"
+    );
 }
 
 #[test]
@@ -103,6 +107,61 @@ fn a_seed_pulls_the_first_chord_toward_the_sounding_top_note() {
     assert!(
         low_top < high_top,
         "seed の top note に引き寄せられていない: low={low_top} high={high_top}"
+    );
+}
+
+#[test]
+fn upper_voice_selection_does_not_depend_on_the_seed_bass() {
+    let chords = chord_notes("IV-V-IIm7-V7", "C").unwrap();
+    let low_bass_seed = ChordVoicing {
+        bass: Some(36),
+        notes: vec![60, 64, 67],
+    };
+    let high_bass_seed = ChordVoicing {
+        bass: Some(60),
+        notes: low_bass_seed.notes.clone(),
+    };
+
+    let low = auto_voice(&chords, Some(&low_bass_seed));
+    let high = auto_voice(&chords, Some(&high_bass_seed));
+    assert_eq!(
+        low.iter().map(|voicing| &voicing.notes).collect::<Vec<_>>(),
+        high.iter()
+            .map(|voicing| &voicing.notes)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn public_wrapper_uses_the_same_upper_path_as_bassless_selection() {
+    let chords = chord_notes("IM7-IVM7-IIm7-V7", "C").unwrap();
+    let seed = ChordVoicing {
+        bass: Some(48),
+        notes: vec![64, 67, 72],
+    };
+
+    let upper_only = upper::select_path(&chords, Some(&seed.notes)).unwrap();
+    let with_legacy_bass = auto_voice(&chords, Some(&seed));
+    assert_eq!(
+        upper_only,
+        with_legacy_bass
+            .into_iter()
+            .map(|voicing| voicing.notes)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn key_aware_entry_uses_the_parsed_tonic_anchor() {
+    let parsed = crate::parse_chord_progression("Key:G I-IV-V-I").unwrap();
+    let voiced = auto_voice_with_key(parsed.chords(), parsed.key_pitch_class(), None);
+
+    assert_eq!(
+        voiced
+            .iter()
+            .map(|voicing| voicing.bass.unwrap())
+            .collect::<Vec<_>>(),
+        [55, 60, 62, 55]
     );
 }
 

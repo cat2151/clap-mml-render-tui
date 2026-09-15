@@ -8,7 +8,7 @@ use super::*;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::{ChordChartAction, PreviewRequest, SectionId, Song};
+use crate::{ChordChartAction, PreviewRequest, PreviewVoicingContext, SectionId, Song};
 
 /// chord が `count` 個ある行ぶんの、テスト用の写し。
 ///
@@ -58,6 +58,23 @@ fn taken(screen: &mut ChordChartScreen) -> PreviewRequest {
     screen.take_preview().expect("preview 要求が立つこと")
 }
 
+fn arrangement_request(
+    name: &str,
+    degrees: &str,
+    selected: usize,
+    chord_index: Option<usize>,
+) -> PreviewRequest {
+    PreviewRequest {
+        name: name.to_string(),
+        degrees: degrees.to_string(),
+        chord_index,
+        voicing_context: PreviewVoicingContext {
+            progressions: vec!["IV-V".to_string(), "I-V-VIm-IV".to_string()],
+            selected,
+        },
+    }
+}
+
 /// `l` で次の chord、`h` で戻る。鳴らすのは**その chord 1 つ**（`chord_index` が埋まる）。
 #[test]
 fn l_and_h_step_through_the_chords_of_the_row() {
@@ -68,11 +85,7 @@ fn l_and_h_step_through_the_chords_of_the_row() {
     assert_eq!(screen.chord_cursor(), 1);
     assert_eq!(
         taken(&mut screen),
-        PreviewRequest {
-            name: "A".to_string(),
-            degrees: "I-V-VIm-IV".to_string(),
-            chord_index: Some(1),
-        }
+        PreviewRequest::section("A", "I-V-VIm-IV", Some(1))
     );
 
     screen.handle_key_event(key(KeyCode::Char('h')));
@@ -109,11 +122,7 @@ fn l_at_the_end_of_a_row_carries_over_to_the_next_row() {
     assert_eq!(screen.clamped_section_cursor(), 1);
     assert_eq!(
         taken(&mut screen),
-        PreviewRequest {
-            name: "B".to_string(),
-            degrees: "IIm-V-I".to_string(),
-            chord_index: Some(0),
-        }
+        PreviewRequest::section("B", "IIm-V-I", Some(0))
     );
 }
 
@@ -132,11 +141,7 @@ fn h_at_the_start_of_a_row_carries_over_to_the_end_of_the_previous_row() {
     assert_eq!(screen.clamped_section_cursor(), 1);
     assert_eq!(
         taken(&mut screen),
-        PreviewRequest {
-            name: "B".to_string(),
-            degrees: "IIm-V-I".to_string(),
-            chord_index: Some(2),
-        },
+        PreviewRequest::section("B", "IIm-V-I", Some(2)),
         "3 chord の行の末尾は 2 番"
     );
 }
@@ -198,11 +203,7 @@ fn tab_toggles_the_pane_and_hl_does_not() {
     // 右 pane の 1 行目は参照先の `Sabi`（行番号ではない）。行全体を鳴らす。
     assert_eq!(
         taken(&mut screen),
-        PreviewRequest {
-            name: "Sabi".to_string(),
-            degrees: "IV-V".to_string(),
-            chord_index: None,
-        }
+        arrangement_request("Sabi", "IV-V", 0, None)
     );
 
     screen.handle_key_event(key(KeyCode::Char('l')));
@@ -301,22 +302,14 @@ fn the_arrangement_pane_steps_through_the_referenced_sections_chords() {
     screen.handle_key_event(key(KeyCode::Char('l')));
     assert_eq!(
         taken(&mut screen),
-        PreviewRequest {
-            name: "Sabi".to_string(),
-            degrees: "IV-V".to_string(),
-            chord_index: Some(1),
-        }
+        arrangement_request("Sabi", "IV-V", 0, Some(1))
     );
 
     screen.handle_key_event(key(KeyCode::Char('l')));
     assert_eq!(screen.clamped_arrangement_cursor(), 1);
     assert_eq!(
         taken(&mut screen),
-        PreviewRequest {
-            name: "A".to_string(),
-            degrees: "I-V-VIm-IV".to_string(),
-            chord_index: Some(0),
-        }
+        arrangement_request("A", "I-V-VIm-IV", 1, Some(0))
     );
 }
 

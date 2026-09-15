@@ -8,6 +8,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::{ChordChartAction, Song};
 
+mod bass;
 mod cursor;
 mod toggle;
 

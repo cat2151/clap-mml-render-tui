@@ -19,8 +19,10 @@ use std::ops::Range;
 use std::time::Duration;
 
 use cmrt_chord::{
-    cursor_sounding_unit, parses_as_chord, timed_chord_cell_performance,
-    timed_chord_progression_performance, timed_performance, TimedMidiEvent, TimedPerformance,
+    chord_source_ranges, cursor_sounding_unit, parses_as_chord,
+    timed_auto_voiced_bass_chord_progression_performance,
+    timed_auto_voiced_chord_progression_performance, timed_chord_cell_performance,
+    timed_performance, TimedMidiEvent, TimedPerformance,
 };
 
 use crate::{NOTE_OFF, NOTE_ON};
@@ -90,8 +92,8 @@ pub fn notes_at_cursor_with_chord_context(
 /// Chord Chart の進行で、カーソル位置の chord を Key 文脈つきで鳴らす。
 ///
 /// source span は表示中の `line` から求める。変換にはその chord の終端までの visible
-/// line を渡すため、別 token へ移ったことを span で区別しつつ、それ以前の `|` や
-/// directive が作る進行の形も保つ。変換失敗時は MML へ fallback しない。
+/// line 全体を auto voice してから選択 chord だけを取り出すため、カーソル試聴でも
+/// section 全体の中で決まった転回形を保つ。変換失敗時は MML へ fallback しない。
 pub fn notes_at_cursor_with_chord_chart_context(
     line: &str,
     cursor_chars: usize,
@@ -100,8 +102,36 @@ pub fn notes_at_cursor_with_chord_chart_context(
     if !parses_as_chord(line) {
         return None;
     }
-    let span = cursor_sounding_unit(line, cursor_byte_index(line, cursor_chars))?;
-    let performance = timed_chord_progression_performance(key_token, &line[..span.end]).ok()?;
+    let byte_index = cursor_byte_index(line, cursor_chars);
+    let span = cursor_sounding_unit(line, byte_index)?;
+    let chord_index = chord_source_ranges(line)
+        .iter()
+        .position(|candidate| candidate == &span)?;
+    let performance =
+        timed_auto_voiced_chord_progression_performance(key_token, line, Some(chord_index)).ok()?;
+    notes_from_performance(&performance, span)
+}
+
+/// Chord Chart の進行で、カーソル位置の chord に対応する Bass 1音を返す。
+///
+/// Chord preview と同じく section 全体を auto voice してから選択位置へ絞るため、Bass
+/// patch の試聴だけ root position の別 octave へ戻ることはない。
+pub fn bass_note_at_cursor_with_chord_chart_context(
+    line: &str,
+    cursor_chars: usize,
+    key_token: Option<&str>,
+) -> Option<CursorNotes> {
+    if !parses_as_chord(line) {
+        return None;
+    }
+    let byte_index = cursor_byte_index(line, cursor_chars);
+    let span = cursor_sounding_unit(line, byte_index)?;
+    let chord_index = chord_source_ranges(line)
+        .iter()
+        .position(|candidate| candidate == &span)?;
+    let performance =
+        timed_auto_voiced_bass_chord_progression_performance(key_token, line, Some(chord_index))
+            .ok()?;
     notes_from_performance(&performance, span)
 }
 

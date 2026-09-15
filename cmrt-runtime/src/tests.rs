@@ -64,10 +64,14 @@ fn default_config_content_contains_render_server_keys() {
     assert!(content.contains("offline_render_workers = 2"));
     assert!(content.contains("offline_render_backend = \"in_process\""));
     assert!(content.contains("offline_render_server_workers = 4"));
-    assert!(content.contains("offline_render_server_port = 62153"));
+    assert!(content.contains(&format!(
+        "offline_render_server_port = {DEFAULT_OFFLINE_RENDER_SERVER_PORT}"
+    )));
     assert!(content.contains("offline_render_server_command = \"\""));
     assert!(content.contains("realtime_audio_backend = \"cache_player\""));
-    assert!(content.contains("realtime_play_server_port = 62154"));
+    assert!(content.contains(&format!(
+        "realtime_play_server_port = {DEFAULT_REALTIME_PLAY_SERVER_PORT}"
+    )));
     // play server の実体を config.toml から決める経路は廃止した。ひな形に書き戻すと
     // 「環境が黙って実体を決める」経路が復活する（ADR 0017）。
     assert!(
@@ -169,13 +173,13 @@ output_wav  = "output.wav"
 sample_rate = 48000
 buffer_size = 512
 realtime_audio_backend = "play_server"
-realtime_play_server_port = 62154
+realtime_play_server_port = 43154
 "#;
 
     let cfg: Config = toml::from_str(toml_str).unwrap();
 
     assert_eq!(cfg.realtime_audio_backend, RealtimeAudioBackend::PlayServer);
-    assert_eq!(cfg.realtime_play_server_port, 62154);
+    assert_eq!(cfg.realtime_play_server_port, 43154);
 }
 
 /// play server の実体を config.toml から決める経路は廃止した

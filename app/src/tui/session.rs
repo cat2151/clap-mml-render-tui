@@ -163,6 +163,8 @@ impl<'a> TuiApp<'a> {
             notepad_sound_check_guide_overlay_date,
             mml_overlay_patch,
             chord_chart_patch,
+            chord_chart_bass_enabled,
+            chord_chart_bass_patch,
             mml_overlay_play_settings,
         } = load_initial_session_state();
         let play_server = Arc::new(
@@ -283,10 +285,12 @@ impl<'a> TuiApp<'a> {
                         crate::logging::global_log_sink,
                     ),
                 );
+                screen.set_bass_enabled(chord_chart_bass_enabled);
                 screen
             },
             // preview はまだ 1 度も鳴らしていない。
             chord_chart_preview_command_id: None,
+            deferred_chord_chart_preview: None,
             grid_history_preview: crate::daw::DawGridPreviewPlayer::new(
                 Arc::clone(&cfg_arc),
                 plugin_entries,
@@ -302,6 +306,7 @@ impl<'a> TuiApp<'a> {
             mml_overlay_owner: None,
             mml_overlay_patch,
             chord_chart_patch,
+            chord_chart_bass_patch,
             mml_overlay_sender,
             voicing: super::voicing::VoicingState::with_catalog_voicings(
                 crate::history::load_voicing_cache(),

@@ -22,6 +22,36 @@ fn chord_chart_overlay(key: &str, initial_text: &str) -> MmlOverlay<'static> {
     overlay
 }
 
+fn bass_patch_overlay(key: &str, initial_text: &str) -> MmlOverlay<'static> {
+    let mut overlay = MmlOverlay::default();
+    overlay.open(MmlOverlayContext {
+        input_mode: MmlOverlayInputMode::SingleLine,
+        single_line_flow: SingleLineFlow::Modal,
+        initial_text: initial_text.to_string(),
+        syntax: MmlOverlaySyntax::ChordChart(ChordChartPreviewContext {
+            key_token: Some(key.to_string()),
+        }),
+        patch_catalog: PatchCatalogSnapshot::Ready(
+            ["Basses/Bass 1.fxp", "Basses/Bass 2.fxp"]
+                .into_iter()
+                .map(|patch| PatchCatalogEntry::from_display(patch.to_string()))
+                .collect(),
+        ),
+        patch_select_initial_role: Some(cmrt_patches::PatchRole::Bass),
+        ..MmlOverlayContext::default()
+    });
+    overlay.request_patch_select();
+    overlay
+}
+
+fn auto_voiced_basses(key: &str, line: &str) -> Vec<u8> {
+    let parsed = cmrt_chord::parse_chord_progression(&format!("{key} {line}")).unwrap();
+    cmrt_chord::auto_voice_with_key(parsed.chords(), parsed.key_pitch_class(), None)
+        .into_iter()
+        .map(|voicing| voicing.bass.expect("auto voicing has a bass"))
+        .collect()
+}
+
 fn played(action: MmlOverlayAction) -> (PatchChange, crate::line_play::LineProgram) {
     let MmlOverlayAction::PlayLine { patch, program } = action else {
         panic!("expected line playback, got {action:?}");
@@ -93,7 +123,7 @@ fn ctrl_space_replays_the_unwrapped_progression_with_the_song_key() {
     let (_, daw_cell) = crate::line_play::chord_line_events("I V", "Key=G", "", "");
 
     assert_eq!(patch, PatchChange::Keep);
-    assert_eq!(pitches(&program), vec![67, 71, 74, 74, 78, 81]);
+    assert_eq!(pitches(&program), vec![67, 71, 74, 66, 69, 74]);
     assert!(program.performance.loop_seconds > daw_cell.loop_seconds);
 }
 
@@ -123,6 +153,31 @@ fn patch_cursor_previews_the_current_chord_with_the_candidate_patch() {
 }
 
 #[test]
+fn bass_patch_cursor_previews_the_current_bass_note_instead_of_chord_notes() {
+    let now = Instant::now();
+    let mut overlay = bass_patch_overlay("Key=G", "II");
+
+    let MmlOverlayAction::SetPatch {
+        patch,
+        notes: Some(notes),
+    } = overlay.handle_key(press(KeyCode::Down), now)
+    else {
+        panic!("expected candidate bass preview");
+    };
+    assert_eq!(patch.as_deref(), Some("Basses/Bass 2.fxp"));
+    assert_eq!(
+        notes
+            .messages
+            .iter()
+            .map(|message| message[1])
+            .collect::<Vec<_>>(),
+        auto_voiced_basses("Key=G", "II")
+    );
+    assert_eq!(notes.messages.len(), 1, "Bass preview must be monophonic");
+    assert!(notes.duration > Duration::ZERO);
+}
+
+#[test]
 fn space_in_the_patch_selector_replays_the_progression_with_the_candidate_patch() {
     let now = Instant::now();
     let mut overlay = chord_chart_overlay("Key=G", "I V");
@@ -134,7 +189,21 @@ fn space_in_the_patch_selector_replays_the_progression_with_the_candidate_patch(
         patch,
         PatchChange::Switch(Some("Leads/Lead 1.fxp".to_string()))
     );
-    assert_eq!(pitches(&program), vec![67, 71, 74, 74, 78, 81]);
+    assert_eq!(pitches(&program), vec![67, 71, 74, 66, 69, 74]);
+}
+
+#[test]
+fn space_in_the_bass_patch_selector_replays_only_the_progressions_bass_notes() {
+    let now = Instant::now();
+    let mut overlay = bass_patch_overlay("Key=G", "I V");
+
+    let (patch, program) = played(overlay.handle_key(press(KeyCode::Char(' ')), now));
+
+    assert_eq!(
+        patch,
+        PatchChange::Switch(Some("Basses/Bass 1.fxp".to_string()))
+    );
+    assert_eq!(pitches(&program), auto_voiced_basses("Key=G", "I V"));
 }
 
 #[test]
@@ -192,7 +261,7 @@ fn patch_selector_replay_keeps_the_progression_context_and_shape() {
         patch,
         PatchChange::Switch(Some("Pads/Pad 1.fxp".to_string()))
     );
-    assert_eq!(pitches(&program), vec![67, 71, 74, 74, 78, 81]);
+    assert_eq!(pitches(&program), vec![67, 71, 74, 66, 69, 74]);
     assert!(program.repeat);
     assert!(program.performance.loop_seconds > daw_cell.loop_seconds);
 }

@@ -1,3 +1,4 @@
+pub mod bass_voicing_inspect;
 pub(crate) mod cached_source;
 pub(crate) mod chord_progression_source;
 pub mod config;
@@ -9,6 +10,7 @@ pub use cmrt_daw as daw;
 // 共有するため `cmrt-history` crate へ切り出した。
 // 従来の `crate::history::*` パスは再エクスポートで維持する。
 pub use cmrt_history as history;
+pub mod live_chord_check;
 pub mod logging;
 pub use cmrt_loop_browser_domain as loop_browser;
 #[cfg(test)]

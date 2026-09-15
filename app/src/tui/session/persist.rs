@@ -54,6 +54,8 @@ impl TuiApp<'_> {
                 .map(str::to_owned),
             mml_overlay_patch: self.mml_overlay_patch.clone(),
             chord_chart_patch: self.chord_chart_patch.clone(),
+            chord_chart_bass_enabled: self.chord_chart.bass_enabled(),
+            chord_chart_bass_patch: self.chord_chart_bass_patch.clone(),
             mml_overlay_play_settings: play_settings_to_history(self.mml_overlay.play_settings()),
         });
     }

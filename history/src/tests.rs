@@ -71,7 +71,10 @@ fn session_state_default_has_no_keyboard_note_guide_date() {
 
 #[test]
 fn session_state_default_has_no_chord_chart_patch() {
-    assert_eq!(SessionState::default().chord_chart_patch, None);
+    let state = SessionState::default();
+    assert_eq!(state.chord_chart_patch, None);
+    assert!(state.chord_chart_bass_enabled);
+    assert_eq!(state.chord_chart_bass_patch, None);
 }
 
 #[test]
@@ -99,6 +102,8 @@ fn session_state_serialize_deserialize() {
         notepad_sound_check_guide_overlay_date: Some("2026-07-19".to_string()),
         mml_overlay_patch: Some("Leads/Lead 1.fxp".to_string()),
         chord_chart_patch: Some("Keys/Piano.fxp".to_string()),
+        chord_chart_bass_enabled: false,
+        chord_chart_bass_patch: Some("Bass/Finger Bass.fxp".to_string()),
         mml_overlay_play_settings: MmlOverlayPlaySettings {
             repeat: true,
             modulation: false,
@@ -123,6 +128,11 @@ fn session_state_serialize_deserialize() {
         Some("Leads/Lead 1.fxp")
     );
     assert_eq!(loaded.chord_chart_patch.as_deref(), Some("Keys/Piano.fxp"));
+    assert!(!loaded.chord_chart_bass_enabled);
+    assert_eq!(
+        loaded.chord_chart_bass_patch.as_deref(),
+        Some("Bass/Finger Bass.fxp")
+    );
     assert_eq!(
         loaded.mml_overlay_play_settings,
         MmlOverlayPlaySettings {
@@ -151,6 +161,8 @@ fn session_state_serialize_deserialize_zero() {
         notepad_sound_check_guide_overlay_date: None,
         mml_overlay_patch: None,
         chord_chart_patch: None,
+        chord_chart_bass_enabled: true,
+        chord_chart_bass_patch: None,
         mml_overlay_play_settings: MmlOverlayPlaySettings::default(),
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
@@ -165,6 +177,8 @@ fn session_state_patch_fields_round_trip_independently() {
     let state = SessionState {
         mml_overlay_patch: Some("Global/Pad.fxp".to_string()),
         chord_chart_patch: Some("Chord Chart/Piano.fxp".to_string()),
+        chord_chart_bass_enabled: false,
+        chord_chart_bass_patch: Some("Bass/Upright.fxp".to_string()),
         ..SessionState::default()
     };
 
@@ -175,6 +189,11 @@ fn session_state_patch_fields_round_trip_independently() {
     assert_eq!(
         loaded.chord_chart_patch.as_deref(),
         Some("Chord Chart/Piano.fxp")
+    );
+    assert!(!loaded.chord_chart_bass_enabled);
+    assert_eq!(
+        loaded.chord_chart_bass_patch.as_deref(),
+        Some("Bass/Upright.fxp")
     );
 }
 
@@ -190,6 +209,8 @@ fn history_without_chord_chart_patch_keeps_existing_patch_and_defaults_to_none()
 
     assert_eq!(loaded.mml_overlay_patch.as_deref(), Some("Global/Lead.fxp"));
     assert_eq!(loaded.chord_chart_patch, None);
+    assert!(loaded.chord_chart_bass_enabled);
+    assert_eq!(loaded.chord_chart_bass_patch, None);
 }
 
 #[test]
@@ -210,6 +231,8 @@ fn session_state_serialize_deserialize_daw_screen() {
         notepad_sound_check_guide_overlay_date: None,
         mml_overlay_patch: None,
         chord_chart_patch: None,
+        chord_chart_bass_enabled: true,
+        chord_chart_bass_patch: None,
         mml_overlay_play_settings: MmlOverlayPlaySettings::default(),
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
@@ -318,6 +341,8 @@ fn save_and_load_session_state_roundtrip() {
         notepad_sound_check_guide_overlay_date: None,
         mml_overlay_patch: None,
         chord_chart_patch: None,
+        chord_chart_bass_enabled: true,
+        chord_chart_bass_patch: None,
         mml_overlay_play_settings: MmlOverlayPlaySettings::default(),
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
@@ -353,6 +378,8 @@ fn save_and_load_session_state_roundtrip_daw_mode() {
         notepad_sound_check_guide_overlay_date: None,
         mml_overlay_patch: None,
         chord_chart_patch: None,
+        chord_chart_bass_enabled: true,
+        chord_chart_bass_patch: None,
         mml_overlay_play_settings: MmlOverlayPlaySettings::default(),
     };
     let json = serde_json::to_string_pretty(&state).unwrap();

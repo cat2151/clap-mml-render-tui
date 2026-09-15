@@ -1,9 +1,9 @@
 //! 1 行ぶんのフレーズを live timeline へ積む。
 //!
 //! **新しい行を演奏するたびに timeline を張り直す。** サーバーの `BeginLiveTimeline` は
-//! 全 renderer のリセットとスケジュール済みイベントの破棄を伴うので、これ 1 つで
-//! 「前の行を止める」と「新しい行を頭から鳴らす」が同時に片づく。patch は
-//! renderer が保持したままなので読み込み直しは起きない。
+//! process 済みの全 note への NoteOff とスケジュール済みイベントの破棄を伴うので、
+//! これ 1 つで「前の行を止める」と「新しい行を頭から鳴らす」が同時に片づく。
+//! processor と patch state は保持され、読み込み直しも reset も起きない。
 //!
 //! **repeat はその逆で、張り直さずに同じ timeline へ未来のイベントを継ぎ足す**
 //! （[`repeat`] を参照）。張り直すと上のリセットが毎周入り、必ず継ぎ目が出るため。
@@ -33,6 +33,7 @@ use cmrt_realtime_play::{LiveTimelineConfig, TimelineId, TimelineMidiEvent};
 
 use crate::line_play::LineProgram;
 
+use super::layers::LineLayer;
 use super::sink::SoundSink;
 use super::{log_error, log_line, MML_OVERLAY_INSTANCE};
 
@@ -139,6 +140,26 @@ impl LinePlayback {
         truncation_outcome(events.len())
     }
 
+    /// instance ごとの one-shot layer を、同じ timeline のイベント列として積む。
+    pub(super) fn play_layers(
+        &mut self,
+        sink: &impl SoundSink,
+        layers: &[LineLayer],
+    ) -> LineOutcome {
+        self.repeat = None;
+        let timeline_id = self.next_timeline_id;
+        self.next_timeline_id = advance_timeline_id(timeline_id);
+        if !begin_timeline(sink, timeline_id, self.sample_rate_hz) {
+            return LineOutcome::Failed;
+        }
+        let events = layered_timeline_events(layers, timeline_id);
+        let outcome = truncation_outcome(events.len());
+        if !send_timeline_cycle(sink, timeline_id, &events) {
+            return LineOutcome::Partial;
+        }
+        outcome
+    }
+
     /// 走っているループの先読みを保つ。**[`SoundSink::begin_timeline`] は呼ばない。**
     ///
     /// 返すのは何か積んだときだけ。`Partial` は継ぎ足しに失敗してループを捨てたことを表し、
@@ -183,7 +204,7 @@ fn send_laps(sink: &impl SoundSink, state: &mut RepeatState, now: Instant) -> bo
 }
 
 /// 上限を超えたぶんは送る前に切られる。note off が落ちていれば鳴りっぱなしになるので
-/// `Partial` として呼び出し側に「次の停止は音源リセットへ倒せ」と伝える。
+/// `Partial` として呼び出し側に「次の停止はserver管理の全NoteOffへ倒せ」と伝える。
 fn truncation_outcome(count: usize) -> LineOutcome {
     if count > MAX_LINE_EVENTS {
         log_error(format!(
@@ -205,6 +226,74 @@ fn send_cycle(sink: &impl SoundSink, timeline_id: TimelineId, events: &[TimedMid
         }
     }
     true
+}
+
+fn send_timeline_cycle(
+    sink: &impl SoundSink,
+    timeline_id: TimelineId,
+    events: &[TimelineMidiEvent],
+) -> bool {
+    for batch in events[..events.len().min(MAX_LINE_EVENTS)].chunks(sink.max_batch_events()) {
+        if let Err(error) = sink.send_timeline_events(batch) {
+            log_error(format!(
+                "action=mml-overlay-line-send event=error timeline={timeline_id} error=\"{error}\""
+            ));
+            return false;
+        }
+    }
+    true
+}
+
+fn begin_timeline(sink: &impl SoundSink, timeline_id: TimelineId, sample_rate_hz: f64) -> bool {
+    if let Err(error) = sink.begin_timeline(LiveTimelineConfig {
+        timeline_id,
+        sample_rate_hz,
+        tempo_bpm: TIMELINE_TEMPO_BPM,
+        time_signature_numerator: 4,
+        time_signature_denominator: 4,
+    }) {
+        log_error(format!(
+            "action=mml-overlay-line-begin event=error timeline={timeline_id} error=\"{error}\""
+        ));
+        return false;
+    }
+    true
+}
+
+fn layered_timeline_events(
+    layers: &[LineLayer],
+    timeline_id: TimelineId,
+) -> Vec<TimelineMidiEvent> {
+    let mut events = layers
+        .iter()
+        .flat_map(|layer| {
+            layer
+                .performance
+                .events
+                .iter()
+                .map(move |event| TimelineMidiEvent {
+                    timeline_id,
+                    instance_id: layer.instance_id,
+                    timeline_seconds: LOOKAHEAD_SECONDS + event.seconds.max(0.0),
+                    message: event.message,
+                })
+        })
+        .collect::<Vec<_>>();
+    events.sort_by(|left, right| {
+        left.timeline_seconds
+            .total_cmp(&right.timeline_seconds)
+            .then_with(|| event_order(left.message).cmp(&event_order(right.message)))
+    });
+    events
+}
+
+fn event_order(message: [u8; 3]) -> u8 {
+    match message[0] & 0xf0 {
+        0x80 => 0,
+        0x90 if message[2] == 0 => 0,
+        0x90 => 2,
+        _ => 1,
+    }
 }
 
 /// 次の timeline id。サーバーは 0 を無効値として弾くので、一周しても 0 は飛ばす。

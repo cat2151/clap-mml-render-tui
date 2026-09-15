@@ -93,6 +93,62 @@ fn a_broken_chord_chart_line_never_falls_back_to_mml() {
     assert!(performance.is_silent());
 }
 
+#[test]
+fn auto_voiced_chord_chart_line_uses_exact_voicings_without_the_bass() {
+    let parsed = cmrt_chord::parse_chord_progression("Key:C I-IV-V-I").unwrap();
+    let voicings = cmrt_chord::auto_voice(parsed.chords(), None);
+
+    let (status, performance) =
+        auto_voiced_chord_chart_line_events("I-IV-V-I", Some("Key=C"), &voicings, None);
+
+    assert_eq!(
+        status,
+        LineStatus::Played {
+            from_chord: true,
+            note_count: 12,
+        }
+    );
+    let pitches = performance
+        .events
+        .iter()
+        .filter(|event| event.message[0] == NOTE_ON)
+        .map(|event| event.message[1])
+        .collect::<Vec<_>>();
+    assert_eq!(
+        pitches,
+        voicings
+            .iter()
+            .flat_map(|voicing| voicing.notes.iter().copied())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(pitches.len(), 12, "bass は chord patch へ混ぜない");
+}
+
+#[test]
+fn one_chord_preview_keeps_the_voicing_from_its_progression_position() {
+    let parsed = cmrt_chord::parse_chord_progression("Key:C I-IV-V-I").unwrap();
+    let voicings = cmrt_chord::auto_voice(parsed.chords(), None);
+
+    let (status, performance) =
+        auto_voiced_chord_chart_line_events("I-IV-V-I", Some("Key=C"), &voicings, Some(2));
+
+    assert_eq!(
+        status,
+        LineStatus::Played {
+            from_chord: true,
+            note_count: voicings[2].notes.len(),
+        }
+    );
+    let pitches = performance
+        .events
+        .iter()
+        .filter(|event| event.message[0] == NOTE_ON)
+        .map(|event| event.message[1])
+        .collect::<Vec<_>>();
+    assert_eq!(pitches, voicings[2].notes);
+    assert_eq!(performance.loop_seconds, 2.0);
+}
+
 /// 空行を通るたびにエラーが出ると、上下でフレーズを見て回るのが煩わしい。
 /// 前の行を止めるためにイベントは空で返す。
 #[test]

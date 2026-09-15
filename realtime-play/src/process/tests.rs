@@ -113,8 +113,11 @@ fn startup_lines_advance_one_shared_snapshot_without_erasing_spawn_state() {
 
 #[test]
 fn spawned_log_identifies_the_exe_boundary_and_its_elapsed_time() {
+    let port = 42_154;
     assert_eq!(
-        server_spawned_log_line(62_154, 4321, "source=sibling", 287),
-        "action=server-spawned phase=server_exe_spawn ms=287 port=62154 pid=4321 source=sibling"
+        server_spawned_log_line(port, 4321, "source=sibling", 287),
+        format!(
+            "action=server-spawned phase=server_exe_spawn ms=287 port={port} pid=4321 source=sibling"
+        )
     );
 }

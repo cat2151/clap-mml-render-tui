@@ -11,7 +11,15 @@
 //! すべて root position（分数コードが無い）なので、chord2mml 出力の最低音を root と
 //! みなしてよい。カタログに分数コードが入ったらこの前提は崩れる。
 
-use std::collections::HashSet;
+mod bass;
+mod performance;
+mod upper;
+
+pub use performance::{
+    bass_timed_progression, revoice_timed_progression,
+    timed_auto_voiced_bass_chord_progression_performance,
+    timed_auto_voiced_chord_progression_performance,
+};
 
 /// コード1つぶんの、bass と和音を分けて持つ voicing。
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -22,30 +30,15 @@ pub struct ChordVoicing {
     pub notes: Vec<u8>,
 }
 
-/// 候補に使う転回数の上限。構成音数-1 で頭打ちにする。
-const MAX_INVERSION: usize = 3;
-/// 候補に使うオクターブ移動。和音側と bass 側で独立に選ぶ。
+/// 候補に使う bass のオクターブ移動。
 const OCTAVE_OFFSETS: [i16; 3] = [-1, 0, 1];
 
-/// 隣り合う半音（ぶつかり）1つあたりの penalty。他の項より桁違いに重い。
-const SEMITONE_INTERVAL_PENALTY: f64 = 24.0;
 /// bass の快適音域（playground の相対 -24..0 = MIDI 36..60）。
 const BASS_RANGE: (f64, f64) = (36.0, 60.0);
-/// top note の快適音域。playground（60..84）より広めに取る。
-const TOP_RANGE: (f64, f64) = (55.0, 88.0);
 
 #[derive(Clone, Copy, Debug)]
-struct Metrics {
-    bass: f64,
-    top: f64,
-    center: f64,
-    semitone_intervals: usize,
-}
-
-#[derive(Clone, Debug)]
-struct Candidate {
-    voicing: ChordVoicing,
-    metrics: Metrics,
+struct BassCandidate {
+    note: u8,
     notation_penalty: f64,
 }
 
@@ -59,17 +52,72 @@ pub fn auto_voice(chords: &[Vec<u8>], seed: Option<&ChordVoicing>) -> Vec<ChordV
     if chords.is_empty() || chords.iter().any(Vec::is_empty) {
         return chords.iter().map(|notes| passthrough(notes)).collect();
     }
-    let candidate_sets = chords
+    let Some(upper_path) = upper::select_path(chords, seed.map(|voicing| voicing.notes.as_slice()))
+    else {
+        // MIDI 範囲外へ振り切れて候補が作れない和音。voicing をあきらめて素通しする。
+        return chords.iter().map(|notes| passthrough(notes)).collect();
+    };
+    let bass_candidate_sets = chords
         .iter()
-        .map(|notes| build_candidates(notes))
+        .zip(&upper_path)
+        .map(|(notes, voiced)| build_bass_candidates(notes, voiced))
         .collect::<Vec<_>>();
-    if candidate_sets.iter().any(Vec::is_empty) {
+    if bass_candidate_sets.iter().any(Vec::is_empty) {
         // MIDI 範囲外へ振り切れて候補が作れない和音。voicing をあきらめて素通しする。
         return chords.iter().map(|notes| passthrough(notes)).collect();
     }
-    choose_best(&candidate_sets, seed.and_then(metrics_of))
+    let bass_path = choose_best_bass(&bass_candidate_sets, seed.and_then(|voicing| voicing.bass));
+    upper_path
         .into_iter()
-        .map(|candidate| candidate.voicing)
+        .zip(bass_path)
+        .map(|(notes, bass)| ChordVoicing {
+            bass: Some(bass.note),
+            notes,
+        })
+        .collect()
+}
+
+/// Key を使って進行全体の Bass octave lane を固定した auto voicing を返す。
+///
+/// Chord layer は [`auto_voice`] と同じ独立した候補選択を使う。Bass layer は
+/// `key_pitch_class` の tonic anchor を含む一続きの文脈として選択する。
+/// Key を構造化 parse 済みの呼び出し側はこの入口を使い、Key を持たない既存の
+/// 呼び出し側は互換 API の [`auto_voice`] を引き続き使用できる。
+pub fn auto_voice_with_key(
+    chords: &[Vec<u8>],
+    key_pitch_class: u8,
+    seed: Option<&ChordVoicing>,
+) -> Vec<ChordVoicing> {
+    if chords.is_empty() || chords.iter().any(Vec::is_empty) {
+        return chords.iter().map(|notes| passthrough(notes)).collect();
+    }
+    let Some(upper_path) = upper::select_path(chords, seed.map(|voicing| voicing.notes.as_slice()))
+    else {
+        return chords.iter().map(|notes| passthrough(notes)).collect();
+    };
+    let structural_roots = chords
+        .iter()
+        .map(|notes| *notes.iter().min().expect("source chord is not empty"))
+        .collect::<Vec<_>>();
+    let lowest_chord_notes = upper_path
+        .iter()
+        .map(|notes| *notes.iter().min().expect("voiced chord is not empty"))
+        .collect::<Vec<_>>();
+    let Some(bass_path) = bass::select_path(
+        key_pitch_class,
+        &structural_roots,
+        &lowest_chord_notes,
+        seed.and_then(|voicing| voicing.bass),
+    ) else {
+        return chords.iter().map(|notes| passthrough(notes)).collect();
+    };
+    upper_path
+        .into_iter()
+        .zip(bass_path)
+        .map(|(notes, bass)| ChordVoicing {
+            bass: Some(bass),
+            notes,
+        })
         .collect()
 }
 
@@ -99,108 +147,27 @@ fn passthrough(notes: &[u8]) -> ChordVoicing {
     }
 }
 
-fn metrics_of(voicing: &ChordVoicing) -> Option<Metrics> {
-    let bass = voicing.bass?;
-    metrics(f64::from(bass), &voicing.notes)
-}
-
-fn metrics(bass: f64, notes: &[u8]) -> Option<Metrics> {
-    if notes.is_empty() {
-        return None;
-    }
-    let sum = notes.iter().map(|note| f64::from(*note)).sum::<f64>();
-    Some(Metrics {
-        bass,
-        top: f64::from(*notes.iter().max().expect("notes is not empty")),
-        center: sum / notes.len() as f64,
-        semitone_intervals: count_semitone_intervals(notes),
-    })
-}
-
-/// 昇順に並んだ構成音の、隣接差がちょうど半音1つのペアの数。
-fn count_semitone_intervals(notes: &[u8]) -> usize {
-    notes
-        .windows(2)
-        .filter(|pair| pair[1].saturating_sub(pair[0]) == 1)
-        .count()
-}
-
-/// 1コードぶんの候補を、転回 × 和音オクターブ × bass オクターブで作る。
-///
-/// 昇順・重複除去した構成音を基準にする。root（最低音）の1オクターブ下が bass の基準値。
-fn build_candidates(notes: &[u8]) -> Vec<Candidate> {
+/// 構造上の root（最低音）の1オクターブ下を基準に Bass 候補を作る。
+fn build_bass_candidates(notes: &[u8], voiced: &[u8]) -> Vec<BassCandidate> {
     let mut sorted = notes.to_vec();
     sorted.sort_unstable();
     sorted.dedup();
     let base_bass = i16::from(sorted[0]) - 12;
 
     let mut candidates = Vec::new();
-    let mut seen = HashSet::new();
-    for inversion in 0..=MAX_INVERSION.min(sorted.len() - 1) {
-        let inverted = invert(&sorted, inversion);
-        for chord_octave in OCTAVE_OFFSETS {
-            let Some(voiced) = transpose(&inverted, chord_octave) else {
-                continue;
-            };
-            for bass_octave in OCTAVE_OFFSETS {
-                let Ok(bass) = u8::try_from(base_bass + 12 * bass_octave) else {
-                    continue;
-                };
-                if bass > 127 || !seen.insert((bass, voiced.clone())) {
-                    continue;
-                }
-                let Some(metrics) = metrics(f64::from(bass), &voiced) else {
-                    continue;
-                };
-                candidates.push(Candidate {
-                    voicing: ChordVoicing {
-                        bass: Some(bass),
-                        notes: voiced.clone(),
-                    },
-                    metrics,
-                    notation_penalty: notation_penalty(inversion, chord_octave, bass_octave),
-                });
-            }
+    let lowest_upper = *voiced.iter().min().expect("voiced chord is not empty");
+    for bass_octave in OCTAVE_OFFSETS {
+        let Ok(note) = u8::try_from(base_bass + 12 * bass_octave) else {
+            continue;
+        };
+        if note <= 127 && note < lowest_upper {
+            candidates.push(BassCandidate {
+                note,
+                notation_penalty: f64::from(bass_octave.abs()),
+            });
         }
     }
     candidates
-}
-
-/// 下から `inversion` 個の音を1オクターブ上へ上げ、昇順へ並べ直す。
-///
-/// MIDI 範囲の判定はオクターブ移動まで済ませてからでよいので、ここでは `i16` のまま返す。
-fn invert(sorted: &[u8], inversion: usize) -> Vec<i16> {
-    let mut inverted = sorted
-        .iter()
-        .enumerate()
-        .map(|(index, note)| i16::from(*note) + if index < inversion { 12 } else { 0 })
-        .collect::<Vec<_>>();
-    inverted.sort_unstable();
-    inverted
-}
-
-/// 全構成音を `octave` オクターブ動かす。1音でも MIDI 範囲外なら候補にしない。
-fn transpose(notes: &[i16], octave: i16) -> Option<Vec<u8>> {
-    notes
-        .iter()
-        .map(|note| {
-            u8::try_from(note + 12 * octave)
-                .ok()
-                .filter(|note| *note <= 127)
-        })
-        .collect()
-}
-
-/// playground の `notationPenalty` 相当。素直な root position から離れるほど重い。
-fn notation_penalty(inversion: usize, chord_octave: i16, bass_octave: i16) -> f64 {
-    f64::from(chord_octave.abs())
-        + f64::from(bass_octave.abs())
-        + inversion as f64 * 0.4
-        + if chord_octave == bass_octave {
-            0.0
-        } else {
-            0.15
-        }
 }
 
 fn range_penalty(value: f64, range: (f64, f64), weight: f64) -> f64 {
@@ -213,11 +180,8 @@ fn range_penalty(value: f64, range: (f64, f64), weight: f64) -> f64 {
     0.0
 }
 
-fn base_score(candidate: &Candidate) -> f64 {
-    candidate.notation_penalty
-        + candidate.metrics.semitone_intervals as f64 * SEMITONE_INTERVAL_PENALTY
-        + range_penalty(candidate.metrics.bass, BASS_RANGE, 4.0)
-        + range_penalty(candidate.metrics.top, TOP_RANGE, 3.0)
+fn bass_base_score(candidate: &BassCandidate) -> f64 {
+    candidate.notation_penalty + range_penalty(f64::from(candidate.note), BASS_RANGE, 4.0)
 }
 
 /// 跳躍 penalty。`free` 半音までは線形、そこを超えたぶんは二乗で効かせる。
@@ -227,14 +191,12 @@ fn jump_penalty(left: f64, right: f64, free: f64, weight: f64, extra_weight: f64
     jump * weight + extra * extra * extra_weight
 }
 
-fn transition_score(previous: &Metrics, next: &Metrics) -> f64 {
-    jump_penalty(previous.bass, next.bass, 5.0, 4.0, 1.5)
-        + jump_penalty(previous.top, next.top, 4.0, 3.0, 1.0)
-        + jump_penalty(previous.center, next.center, 4.0, 1.2, 0.3)
+fn bass_transition_score(previous: u8, next: u8) -> f64 {
+    jump_penalty(f64::from(previous), f64::from(next), 5.0, 4.0, 1.5)
 }
 
-/// playground の `chooseBestCandidates` と同型の Viterbi DP。
-fn choose_best(candidate_sets: &[Vec<Candidate>], seed: Option<Metrics>) -> Vec<Candidate> {
+/// 上声とは独立に、従来の Bass score で候補パスを選ぶ。
+fn choose_best_bass(candidate_sets: &[Vec<BassCandidate>], seed: Option<u8>) -> Vec<BassCandidate> {
     let mut costs: Vec<Vec<f64>> = Vec::with_capacity(candidate_sets.len());
     let mut previous_indexes: Vec<Vec<usize>> = Vec::with_capacity(candidate_sets.len());
 
@@ -242,8 +204,8 @@ fn choose_best(candidate_sets: &[Vec<Candidate>], seed: Option<Metrics>) -> Vec<
         candidate_sets[0]
             .iter()
             .map(|candidate| {
-                base_score(candidate)
-                    + seed.map_or(0.0, |seed| transition_score(&seed, &candidate.metrics))
+                bass_base_score(candidate)
+                    + seed.map_or(0.0, |seed| bass_transition_score(seed, candidate.note))
             })
             .collect(),
     );
@@ -257,8 +219,8 @@ fn choose_best(candidate_sets: &[Vec<Candidate>], seed: Option<Metrics>) -> Vec<
             let mut best_previous = 0;
             for (previous_index, previous) in candidate_sets[index - 1].iter().enumerate() {
                 let cost = costs[index - 1][previous_index]
-                    + transition_score(&previous.metrics, &candidate.metrics)
-                    + base_score(candidate);
+                    + bass_transition_score(previous.note, candidate.note)
+                    + bass_base_score(candidate);
                 if cost < best_cost {
                     best_cost = cost;
                     best_previous = previous_index;
@@ -274,7 +236,7 @@ fn choose_best(candidate_sets: &[Vec<Candidate>], seed: Option<Metrics>) -> Vec<
     let mut selected_index = best_index(costs.last().expect("costs has one row per chord"));
     let mut selected = Vec::with_capacity(candidate_sets.len());
     for index in (0..candidate_sets.len()).rev() {
-        selected.push(candidate_sets[index][selected_index].clone());
+        selected.push(candidate_sets[index][selected_index]);
         selected_index = previous_indexes[index][selected_index];
     }
     selected.reverse();

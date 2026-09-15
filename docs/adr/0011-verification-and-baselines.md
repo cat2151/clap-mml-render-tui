@@ -112,7 +112,7 @@ cargo test -p cmrt-realtime-play -- --include-ignored
 ```
 
 テストはサーバーを自分で起こす。ポートは play server 側の
-`CMRT_REALTIME_PLAY_SERVER_PORT`（config.toml より強い）で既定の 62154 から離すので、
+`CMRT_REALTIME_PLAY_SERVER_PORT`（config.toml より強い）で既定ポートから離すので、
 **TUI を起動したままでよい**。子プロセスはテストの `Drop` が必ず落とす。
 
 play-server で `cargo test -p cmrt-core -- --include-ignored --test-threads=1`。

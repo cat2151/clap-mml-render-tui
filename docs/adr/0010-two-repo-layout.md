@@ -63,16 +63,17 @@ crate の依存の辺は**すべて TUI → play-server の一方向**。逆向�
 ### 人手に頼らない：pre-commit hook
 
 `cross_repo_local_hooks.bat` が `core.hooksPath` を `.githooks` へ向け、`.githooks/pre-commit` が
-`status --no-fetch --staged` を走らせる。**cargo を呼ばないので 0.4 秒**、`git commit` の経路が
+`status --no-fetch --staged --fix` を走らせる。ローカルモードが ON なら play-server の作業ツリーが
+clean かつ HEAD が push 済みであることを確認し、**自動で off・Cargo.lock 更新・stage まで行う**。
+安全を確認できなければ何も変更せず commit を止める。`git commit` の経路が
 人間でもエージェントでも IDE でも同じ門を通る。`core.hooksPath` は clone ごとのローカル設定なので
 **commit では配れない。clone したら一度実行が要る**（`on` は未設定を検出して警告する）。
 
 - 判定対象は worktree ではなく **index（= commit に載る中身）**。だから `--staged` を付ける。
   これで「`cargo update` はしたが `git add Cargo.lock` を忘れた」という、
   従来 `status` では見えなかった壊れ方も止まる
-- **ローカルモード ON それ自体では止めない**（実装中はほぼ常に ON で、止めると hook が
-  `--no-verify` で外される）。ON のときは警告だけ出し、危険な 2 つ
-  ——「index の lock が path 参照」「index の lock が origin/main より古い」——で止める
+- ローカルモード ON なら、commit 直前に上記の安全条件を満たした場合だけ自動で OFF にする。
+  play-server が未 push、作業ツリーが dirty、または兄弟 repo が見つからない場合は commit を止める
 
 ### なぜ .bat ではなく Python か
 

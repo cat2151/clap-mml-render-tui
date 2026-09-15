@@ -81,6 +81,7 @@ cmrt --play-server "X:/projects/clap-mml-play-server/target/debug/clap-mml-realt
 - 鳴るのはカーソル行のsection 1つだけです（曲全体は鳴りません）。進行編集画面からChord Chart全体の音色を選べます
 - `h` `l`で行内のchordを1つずつ試聴できます。いま指しているchordは進行の中で反転して見えます
 - ヘッダのKeyだけが試聴に渡ります（BPMは既定のままです）
+- 試聴の転回とoctaveは常にauto voicingされます。Sectionsではsection内、Arrangementでは曲順全体のつながりから決まり、`h` `l`の単独試聴でも同じ転回形を保ちます
 
 ```
 ┌ Chord Chart ─────────────────────────────────────────────────────────────────┐
@@ -116,8 +117,8 @@ cmrt --play-server "X:/projects/clap-mml-play-server/target/debug/clap-mml-realt
 | `1`〜`9` | Arrangement | その番号のsectionをカーソルの次に挿入します |
 
 Sectionsの`i`で開く編集画面は、現在の進行を初期値にしてカーソルを末尾へ置きます。
-入力中はカーソル位置のchordが成立・変化するたびにすぐ鳴り、`Ctrl+Space`で進行全体を
-鳴らせます。読めない入力はMMLとして代替再生しませんが、そのまま保存できます。
+入力中はカーソル位置のchordが成立・変化するたびにauto voicingで鳴り、`Ctrl+Space`で進行全体を
+同じvoicingで鳴らせます。読めない入力はMMLとして代替再生しませんが、そのまま保存できます。
 `Enter`で前後の空白を除いた進行を確定・保存し、`Esc`では変更を破棄します。
 
 編集画面内の`Ctrl+T`で、通常のMML overlayと同じ音色一覧を開けます。候補を移動しただけでは
@@ -174,12 +175,12 @@ offline_render_workers = 2
 # render_server: render-server 子プロセスへ POST /render してレンダリングします。
 offline_render_backend = "in_process"
 offline_render_server_workers = 4
-offline_render_server_port = 62153
+offline_render_server_port = 42153
 offline_render_server_command = ""
 
 # リアルタイム再生 backend
 realtime_audio_backend = "in_process"
-realtime_play_server_port = 62154
+realtime_play_server_port = 42154
 
 # 起動時に自動再生するかどうか
 # notepad モード: 現在行を即座に再生します。DAW モード: 曲先頭（measure 0）から演奏開始します。
@@ -213,10 +214,10 @@ patches_dirs = [
 | `offline_render_workers` | `2` | in_process のレンダリング同時実行数です。 |
 | `offline_render_backend` | `in_process` | オフラインレンダリングの実行先です。 |
 | `offline_render_server_workers` | `4` | render_server の同時実行数です。 |
-| `offline_render_server_port` | `62153` | render_server の localhost port です。 |
+| `offline_render_server_port` | `42153` | render_server の localhost port です。 |
 | `offline_render_server_command` | 空文字 | render_server の起動コマンドです。 |
 | `realtime_audio_backend` | `in_process` | リアルタイム再生の実行先です。 |
-| `realtime_play_server_port` | `62154` | play_server の localhost port です。 |
+| `realtime_play_server_port` | `42154` | play_server の localhost port です。 |
 | `autoplay_on_startup` | `true` | 起動直後に自動再生するかどうかです。 |
 | `plugins."Surge XT".patches_dirs` | OSごとの Surge XT patches 標準ディレクトリ | Surge XT の音色選択で検索するディレクトリ一覧です。 |
 | `loop_dirs` | `[]` | WAV ループブラウザーで検索するディレクトリ一覧です。変更後は `cmrt scan-loops` を実行します。 |

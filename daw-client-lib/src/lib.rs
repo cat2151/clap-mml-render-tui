@@ -2,7 +2,8 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-pub const DEFAULT_BASE_URL: &str = "http://127.0.0.1:62151";
+/// 旧API名。既定値の単一ソースは play-server の `cmrt-server-config`。
+pub use cmrt_server_config::DEFAULT_APP_HTTP_BASE_URL as DEFAULT_BASE_URL;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const READ_WRITE_TIMEOUT: Duration = Duration::from_secs(10);
 

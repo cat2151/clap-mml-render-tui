@@ -5,7 +5,7 @@
   on      .cargo/config.toml を生成し、git 依存を兄弟 repo の作業ツリーへ向ける
   off     ローカルモードを解除し、Cargo.lock を「push 済みの最新 HEAD」へ張り直す
   status  いまの状態を表示する。commit して安全でなければ非 0 で終了する。
-          --fix を付けると「Cargo.lock が origin/main より古い」だけは cargo update で追従する
+          --staged --fix なら安全を確認してローカルモードを自動解除し、Cargo.lock を stage する
   hooks   pre-commit hook を有効化する（core.hooksPath を .githooks へ向ける）
 
 背景と設計判断は docs/adr/0010-two-repo-layout.md を参照。
@@ -169,6 +169,12 @@ def sibling_revs() -> tuple[str | None, str | None, bool]:
     return head, remote, pushed
 
 
+def sibling_worktree_is_clean() -> bool:
+    """兄弟 repo に commit されていない変更が無いか。取得失敗も安全側で dirty とみなす。"""
+    proc = run(["git", "status", "--porcelain"], cwd=SIBLING_DIR, check=False)
+    return proc.returncode == 0 and not proc.stdout.strip()
+
+
 def fetch_sibling() -> None:
     proc = run(["git", "fetch", "--quiet", "origin", PS_BRANCH], cwd=SIBLING_DIR, check=False)
     if proc.returncode != 0:
@@ -232,7 +238,7 @@ def generated_by_us() -> bool:
 # --- off ------------------------------------------------------------------
 
 
-def cmd_off(args: argparse.Namespace) -> int:
+def disable_local_mode(*, keep_lock: bool, refresh_sibling: bool) -> None:
     if CARGO_CONFIG.exists():
         if not generated_by_us():
             fail(f"{CARGO_CONFIG} は自動生成物ではありません。削除しないので手で確認してください。")
@@ -246,7 +252,7 @@ def cmd_off(args: argparse.Namespace) -> int:
     else:
         info("ローカル横断ビルドは OFF のままです。")
 
-    if args.keep_lock:
+    if keep_lock:
         info("--keep-lock 指定のため Cargo.lock の巻き戻しは行いません。")
     else:
         # HEAD 比較でないと、既に git add 済みの lock 差分を「差分なし」と報告してしまう。
@@ -269,7 +275,7 @@ def cmd_off(args: argparse.Namespace) -> int:
     # 古い rev を指しているので、そのまま commit すると兄弟 repo の新しい API を
     # 使ったコードがビルドできない。AGENTS.md の「古い lock を放置せず最新 HEAD へ
     # 追従」に従い、必ず張り直す。
-    if SIBLING_DIR.exists():
+    if refresh_sibling and SIBLING_DIR.exists():
         fetch_sibling()
     info("Cargo.lock を play-server の最新 HEAD へ張り直します（cargo update）…")
     ok, output = cargo_update_ps_crates()
@@ -285,6 +291,10 @@ def cmd_off(args: argparse.Namespace) -> int:
         fail(f"cargo update が失敗しました。\n{output}{hint}")
 
     info("")
+
+
+def cmd_off(args: argparse.Namespace) -> int:
+    disable_local_mode(keep_lock=args.keep_lock, refresh_sibling=True)
     return report_status(after_off=True)
 
 
@@ -321,7 +331,7 @@ def cmd_hooks(_args: argparse.Namespace) -> int:
         run(["git", "config", "core.hooksPath", HOOKS_PATH_VALUE])
         info(f"core.hooksPath を {HOOKS_PATH_VALUE} に設定しました。")
     info("以後 git commit のたびに status --no-fetch --staged --fix が走ります。")
-    info("Cargo.lock が play-server の origin/main より古いときだけ cargo update で追従します。")
+    info("play-server が push 済みならローカルモードを自動解除し、Cargo.lock を stage します。")
     info("どうしても通したいときだけ git commit --no-verify。")
     return 0
 
@@ -332,15 +342,36 @@ def cmd_hooks(_args: argparse.Namespace) -> int:
 def cmd_status(args: argparse.Namespace) -> int:
     if SIBLING_DIR.exists() and not args.no_fetch:
         fetch_sibling()
+    auto_off_result = auto_off_for_commit(staged=args.staged, fix=args.fix)
+    if auto_off_result is not None:
+        return auto_off_result
     return report_status(after_off=False, staged=args.staged, fix=args.fix)
+
+
+def auto_off_for_commit(*, staged: bool, fix: bool) -> int | None:
+    """pre-commit のときだけ、安全を確認してローカルモードを解除する。"""
+    if not (staged and fix and local_mode_is_on()):
+        return None
+
+    head, _remote, pushed = sibling_revs()
+    if head is None or not pushed or not sibling_worktree_is_clean():
+        # 詳細な理由は通常の status 表示へ任せる。危険な状態では一切変更しない。
+        return None
+
+    info("ローカル横断モードが ON なので、commit 前に自動で OFF にします。")
+    disable_local_mode(keep_lock=False, refresh_sibling=False)
+    run(["git", "add", "--", "Cargo.lock"])
+    info("Cargo.lock を commit 対象へ追加しました。")
+    info("")
+    return report_status(after_off=True, staged=True)
 
 
 def report_status(after_off: bool, staged: bool = False, fix: bool = False) -> int:
     """staged=True なら worktree ではなく index（commit に載る中身）を判定する。
 
-    fix=True のとき、問題が「Cargo.lock が origin/main より古い」の 1 件だけなら cargo update で
-    追従し（staged なら git add も）、同じ判定をもう 1 回して結果を返す。他の問題は人の判断が
-    要るので直さない。
+    ローカルモードの自動解除は、この関数へ来る前に auto_off_for_commit が処理する。
+    ここでの fix=True は、OFF の状態で問題が「Cargo.lock が origin/main より古い」の 1 件だけなら
+    cargo update で追従し（staged なら git add も）、同じ判定をもう 1 回して結果を返す。
     """
     problems: list[str] = []
     stale = False
@@ -378,9 +409,17 @@ def report_status(after_off: bool, staged: bool = False, fix: bool = False) -> i
     head, remote, pushed = sibling_revs()
     if head is None:
         info("兄弟 repo          : 見つからない（git 依存のみで運用中）")
+        if on:
+            problems.append("ローカルモードが ON だが兄弟 repo が見つからないため、自動で OFF にできない。")
     else:
+        clean = sibling_worktree_is_clean()
         info(f"play-server HEAD   : {short(head)}")
         info(f"play-server origin : {short(remote)}{'' if pushed else '  ← HEAD が未 push'}")
+        info(f"play-server tree   : {'clean' if clean else '未 commit の変更あり'}")
+        if on and not clean:
+            problems.append(
+                "play-server に未 commit の変更がある。ローカル参照中の内容を先に commit / push すること。"
+            )
         if not pushed:
             problems.append(
                 "play-server のローカル HEAD が push されていない。"
@@ -459,7 +498,7 @@ def main() -> int:
     p_status.add_argument(
         "--fix",
         action="store_true",
-        help="Cargo.lock が play-server の origin/main より古いときだけ cargo update で追従する（--staged なら git add も）",
+        help="--staged なら安全確認後にローカルモードを自動解除する。OFF 時は古い Cargo.lock を追従する",
     )
     p_status.set_defaults(func=cmd_status)
 

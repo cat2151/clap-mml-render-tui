@@ -44,7 +44,7 @@ fn a_zero_velocity_note_on_counts_as_a_note_off() {
 }
 
 /// 同じ note number へ 2 回 note on を出したら、note off 1 回では止まらない。
-/// これが状態機械の破れ。見つけたら以後の停止を音源リセットへ格上げする。
+/// これが状態機械の破れ。見つけたら以後の停止をserver管理の全NoteOffへ格上げする。
 #[test]
 fn a_duplicated_note_on_is_reported_and_forces_a_hard_stop() {
     let mut sounding = Sounding::default();
@@ -68,7 +68,7 @@ fn a_note_off_without_a_note_on_is_reported() {
     assert!(sounding.needs_hard_stop());
 }
 
-/// timeline の音は note off では止まらない。積んだら停止は音源リセットになる。
+/// timeline の音はclient側で追わない。積んだら停止はserver管理の全NoteOffになる。
 #[test]
 fn a_timeline_always_needs_a_hard_stop() {
     let mut sounding = Sounding::default();
@@ -80,7 +80,7 @@ fn a_timeline_always_needs_a_hard_stop() {
     assert!(sounding.note_offs().is_empty());
 }
 
-/// 音源リセットで止めたなら実態は確実に黙ったので、ずれの疑いも晴れる。
+/// server管理の全NoteOffなら実態を基準に止めるので、ずれの疑いも晴れる。
 #[test]
 fn a_hard_stop_clears_the_suspicion() {
     let mut sounding = Sounding::default();
@@ -92,7 +92,7 @@ fn a_hard_stop_clears_the_suspicion() {
     assert!(!sounding.needs_hard_stop());
 }
 
-/// note off で止めただけなら、ずれの疑いは晴れない。次も音源リセットで止める。
+/// client管理のnote offだけなら、ずれの疑いは晴れない。次もserver管理で止める。
 #[test]
 fn a_soft_stop_keeps_the_suspicion() {
     let mut sounding = Sounding::default();

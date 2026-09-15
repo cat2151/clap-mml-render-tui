@@ -5,7 +5,10 @@
 
 use anyhow::Result;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
-use clap_mml_render_tui::{render_mml::RenderMmlRequest, server};
+use clap_mml_render_tui::{
+    bass_voicing_inspect::BassVoicingInspectRequest, live_chord_check::LiveChordCheckRequest,
+    render_mml::RenderMmlRequest, server,
+};
 use std::path::PathBuf;
 
 use crate::cli_output;
@@ -25,6 +28,8 @@ pub(crate) enum CliAction {
     BuildPatchCatalogCache,
     PatchRoles { config: Option<PathBuf> },
     RenderMml(RenderMmlRequest),
+    LiveChordCheck(LiveChordCheckRequest),
+    InspectBassVoicing(BassVoicingInspectRequest),
 }
 
 #[derive(Debug, Parser)]
@@ -114,6 +119,39 @@ enum Commands {
         /// レンダリングする MML（省略時は 1 音だけ鳴らす既定 MML）
         #[arg(value_name = "MML")]
         mml: Option<String>,
+    },
+    /// Chord Chart の和音送りを realtime server で再現し、出音を測る
+    LiveChordCheck {
+        /// 既定の置き場ではなく、この config.toml を読む
+        #[arg(long, value_name = "PATH")]
+        config: Option<PathBuf>,
+        /// Chord Chart で使う音色の display 文字列
+        #[arg(long, value_name = "DISPLAY")]
+        patch: String,
+        /// chord2mml へ渡す Key トークン
+        #[arg(long, default_value = "Key=C", value_name = "TOKEN")]
+        key: String,
+        /// 次の和音へ送るまでの待機時間
+        #[arg(long, default_value_t = 1000, value_name = "MS")]
+        step_ms: u64,
+        /// server が取った live mix の WAV 保存先
+        #[arg(long, value_name = "PATH")]
+        out: Option<PathBuf>,
+        /// 無音の chord または短すぎる capture を失敗終了にする
+        #[arg(long)]
+        verify: bool,
+        /// Chord Chart と同じ degrees 文字列
+        #[arg(value_name = "DEGREES", default_value = "I-V-VIm-IV")]
+        degrees: String,
+    },
+    /// 複数のコード進行を連結してauto voiceし、Bass note numberを表示する
+    InspectBassVoicing {
+        /// chord2mmlへ渡すKeyトークン
+        #[arg(long, default_value = "Key=C", value_name = "TOKEN")]
+        key: String,
+        /// Chord Chartのsection順に並べたdegrees文字列（全引数を1進行としてvoiceする）
+        #[arg(value_name = "DEGREES", required = true, num_args = 1..)]
+        progressions: Vec<String>,
     },
     /// grid sequencer の各行に patch の候補が出るかを調べる（画面を起動しない動作確認）
     PatchRoles {
@@ -234,6 +272,34 @@ where
             out_dir,
             poly_check,
             verify,
+        }));
+    }
+
+    if let Some(Commands::LiveChordCheck {
+        config,
+        patch,
+        key,
+        step_ms,
+        out,
+        verify,
+        degrees,
+    }) = cli.command
+    {
+        return wrap(CliAction::LiveChordCheck(LiveChordCheckRequest {
+            config,
+            patch,
+            key,
+            degrees,
+            step_ms,
+            out,
+            verify,
+        }));
+    }
+
+    if let Some(Commands::InspectBassVoicing { key, progressions }) = cli.command {
+        return wrap(CliAction::InspectBassVoicing(BassVoicingInspectRequest {
+            key,
+            progressions,
         }));
     }
 

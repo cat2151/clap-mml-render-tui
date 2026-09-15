@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     sync::{
         atomic::{AtomicU64, AtomicUsize},
         mpsc, Arc, Mutex,
@@ -15,25 +16,23 @@ use crate::{NOTE_OFF, NOTE_ON};
 #[derive(Clone, Debug)]
 struct RecordedMidi {
     at: Instant,
+    instance_id: u8,
     messages: Vec<[u8; 3]>,
 }
 
 #[derive(Default)]
 struct FakeSink {
     prepare_delay: Duration,
-    /// 準備を失敗させる理由。`None` なら成功する。
     prepare_error: Option<String>,
-    /// timeline の開始を失敗させる理由。`None` なら成功する。
+    prepare_errors: BTreeMap<u8, String>,
     begin_error: Option<String>,
     timeline_delay: Duration,
-    prepared: Mutex<Vec<Option<String>>>,
+    prepared: Mutex<Vec<(u8, Option<String>)>>,
     midi: Mutex<Vec<RecordedMidi>>,
-    /// timeline を張った回数。repeat が張り直していないことを worker 越しに見る。
     begins: AtomicUsize,
-    /// timeline を含む realtime 音源を hard stop した回数。
     stops: AtomicUsize,
-    /// timeline へ積んだ秒。継ぎ足しが伸び続けることを見る。
     timeline_seconds: Mutex<Vec<f64>>,
+    timeline_events: Mutex<Vec<TimelineMidiEvent>>,
 }
 
 impl FakeSink {
@@ -51,21 +50,25 @@ impl FakeSink {
 }
 
 impl SoundSink for FakeSink {
-    fn prepare_patch(&self, patch: Option<&str>) -> sink::SinkResult {
+    fn prepare_patch(&self, instance_id: u8, patch: Option<&str>) -> sink::SinkResult {
         std::thread::sleep(self.prepare_delay);
         self.prepared
             .lock()
             .unwrap()
-            .push(patch.map(str::to_string));
+            .push((instance_id, patch.map(str::to_string)));
+        if let Some(error) = self.prepare_errors.get(&instance_id) {
+            return Err(error.clone());
+        }
         match &self.prepare_error {
             Some(error) => Err(error.clone()),
             None => Ok(()),
         }
     }
 
-    fn send_midi(&self, messages: &[[u8; 3]]) -> sink::SinkResult {
+    fn send_midi(&self, instance_id: u8, messages: &[[u8; 3]]) -> sink::SinkResult {
         self.midi.lock().unwrap().push(RecordedMidi {
             at: Instant::now(),
+            instance_id,
             messages: messages.to_vec(),
         });
         Ok(())
@@ -86,6 +89,10 @@ impl SoundSink for FakeSink {
 
     fn send_timeline_events(&self, events: &[TimelineMidiEvent]) -> sink::SinkResult {
         std::thread::sleep(self.timeline_delay);
+        self.timeline_events
+            .lock()
+            .unwrap()
+            .extend_from_slice(events);
         self.timeline_seconds
             .lock()
             .unwrap()
@@ -245,7 +252,10 @@ fn a_new_request_during_load_suppresses_the_stale_preview() {
     assert_eq!(event_time(&sink, NOTE_ON, 60), None);
     assert_eq!(
         *sink.prepared.lock().unwrap(),
-        vec![Some("old.sfz".to_string()), Some("new.sfz".to_string())]
+        vec![
+            (MML_OVERLAY_INSTANCE, Some("old.sfz".to_string())),
+            (MML_OVERLAY_INSTANCE, Some("new.sfz".to_string()))
+        ]
     );
 }
 
@@ -436,4 +446,5 @@ fn the_reason_survives_the_next_command() {
     assert_eq!(harness.status.lock().unwrap().prepare_error(), Some("boom"));
 }
 
+mod layers;
 mod line_playback_status;

@@ -9,7 +9,7 @@
 //!
 //! 記録が実態と合っているかは note number ごとの重なり数で監視する。同じ note number
 //! へ note on を 2 回出すと note off 1 回では止まらないので、深さが 2 以上になった時点で
-//! 状態機械が破れている。破れを見つけたら以後の停止を音源リセット
+//! 状態機械が破れている。破れを見つけたら以後の停止をserver管理の全NoteOff
 //! （`stop_live_all`）へ格上げして、耳に聞こえる被害を出さずに log だけ残す。
 
 use std::{collections::BTreeMap, time::Instant};
@@ -24,9 +24,9 @@ pub(super) struct Sounding {
     /// 正常なら値は必ず 1。2 以上は状態機械の破れ。
     typed: BTreeMap<u8, u32>,
     /// live timeline へ積んだ演奏が残っているか。
-    /// timeline の音は note off では止まらないので、真なら音源リセットが要る。
+    /// timeline の音はclient側の記録では追えないので、真ならserver管理の全NoteOffが要る。
     timeline: bool,
-    /// 記録と実態がずれた疑いがあるか。ずれたら次の停止を音源リセットへ格上げする。
+    /// 記録と実態がずれた疑いがあるか。ずれたら次の停止をserver管理の全NoteOffへ格上げする。
     suspect: bool,
     /// 生 MIDI の note on を server が受理した時刻。
     /// UI が gate を開始した時刻ではなく、実際の送信窓を測るための値。
@@ -39,7 +39,7 @@ impl Sounding {
         self.typed.is_empty() && !self.timeline
     }
 
-    /// 止めるのに音源リセットが要るか。
+    /// 止めるのにserver管理の全NoteOffが要るか。
     ///
     /// timeline の音は個別の note off では止まらない。記録がずれている疑いがあるときも、
     /// 記録から作った note off は当てにならないのでリセットへ倒す。
@@ -110,8 +110,8 @@ impl Sounding {
 
     /// 音源が黙っている前提へ戻す。停止コマンドを送った直後にだけ呼ぶ。
     ///
-    /// `hard` は音源リセット（`stop_live_all`）で止めたか。リセットなら実態が
-    /// 確実に黙ったので、ずれの疑いもここで晴れる。
+    /// `hard` はserver管理の全NoteOff（`stop_live_all`）で止めたか。その場合は
+    /// 実際にprocessされたnoteを基準に止めるので、ずれの疑いもここで晴れる。
     pub(super) fn clear(&mut self, hard: bool) {
         self.typed.clear();
         self.timeline = false;
@@ -121,7 +121,7 @@ impl Sounding {
         }
     }
 
-    /// 記録と実態がずれた疑いを立てる。以後の停止は音源リセットになる。
+    /// 記録と実態がずれた疑いを立てる。以後の停止はserver管理の全NoteOffになる。
     pub(super) fn mark_suspect(&mut self, reason: &str) {
         self.suspect = true;
         log_line(format!(

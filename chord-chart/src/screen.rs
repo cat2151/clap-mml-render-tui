@@ -25,7 +25,7 @@ pub(crate) mod line_input;
 mod preview;
 mod section_edit;
 
-pub use self::preview::PreviewRequest;
+pub use self::preview::{PreviewRequest, PreviewVoicingContext};
 
 /// [`ChordChartScreen::handle_key_event`] の結果。
 ///
@@ -37,6 +37,10 @@ pub enum ChordChartAction {
     Continue,
     /// 曲が変わったので、呼び出し側は保存すること（デバウンス禁止＝そのまま即書き）。
     SongChanged,
+    /// 試聴設定が変わったので、呼び出し側は session state を保存すること。
+    ///
+    /// 曲そのものは変わっていないため、`chord_chart.json` は保存しない。
+    PreviewSettingChanged,
     /// `i`: 選択中の section の進行を host 側で編集する。
     ///
     /// この crate は編集 UI や degrees の解釈を持たず、安定した id だけを渡す。
@@ -103,6 +107,11 @@ pub struct ChordChartScreen {
     /// 「止める」と「鳴らす」のどちらを要求するかを決めるためだけに読む。
     /// 書き込みは [`ChordChartScreen::set_preview_sounding`] から。
     pub(crate) preview_sounding: bool,
+    /// Chord Chart の section preview に Bass layer を重ねるか。
+    ///
+    /// 曲の内容ではなく session state。新規画面では ON で始め、復元値は
+    /// [`ChordChartScreen::set_bass_enabled`] から書き戻す。
+    pub(crate) bass_enabled: bool,
     /// 各 section の degrees の、chord 1 つぶんの範囲（**バイト位置**）の写し。
     /// chord が何個あるかも、この写しの長さから引く（数と範囲を別々に持たない）。
     ///
@@ -151,6 +160,7 @@ impl ChordChartScreen {
             pending_initial_generate: false,
             pending_preview: None,
             preview_sounding: false,
+            bass_enabled: true,
             chord_ranges: BTreeMap::new(),
             chord_cursor: 0,
             error: None,
@@ -294,6 +304,11 @@ impl ChordChartScreen {
             KeyCode::Char('d') => self.pending_delete = true,
             // `b` は pane に関係なく曲そのもの（prefix）を書き換えるので共通キー。
             KeyCode::Char('b') => return self.open_prefix_line_input(),
+            // `B`: Bass preview を切り替え、新しい状態で現在 section を頭から鳴らす。
+            KeyCode::Char('B') => {
+                self.toggle_bass_enabled();
+                return ChordChartAction::PreviewSettingChanged;
+            }
             // `Shift+P` / `Space`: preview のトグル。両 pane 共通キー。
             // `P` は SHIFT 付きで届くが、`is_plain` が SHIFT を許すのでここまで来る。
             KeyCode::Char('P') | KeyCode::Char(' ') => self.toggle_preview(),

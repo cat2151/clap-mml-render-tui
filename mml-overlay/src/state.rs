@@ -68,7 +68,8 @@ pub struct MmlOverlay<'a> {
     /// 開いている間だけ持つ patch 一覧のスナップショット（表示名, 小文字化）。
     patch_catalog: PatchCatalogSnapshot,
     patch_role_index: PatchRoleIndex,
-    /// selector を開いた直後に選ぶ Role。呼び出し元が overlay を開くたびに指定する。
+    /// selector を開いた直後に選ぶ Role。Chord Chart では候補の試聴パートも決める。
+    /// 呼び出し元が overlay を開くたびに指定する。
     patch_select_initial_role: Option<PatchRole>,
     /// patch selectのLoad列へ渡す、開いているcatalogと同世代の計測結果。
     load_measurements: BTreeMap<String, PatchLoadMeasurement>,
@@ -176,6 +177,11 @@ impl<'a> MmlOverlay<'a> {
         self.patch = patch;
     }
 
+    /// host 主導の一時 UI を閉じる。入力内容の commit は行わない。
+    pub fn dismiss(&mut self) {
+        self.release_context();
+    }
+
     pub(crate) fn patch_select(&self) -> Option<&PatchSelect<'a>> {
         self.patch_select.as_ref()
     }
@@ -256,7 +262,7 @@ impl<'a> MmlOverlay<'a> {
             return self.close();
         }
         if is_patch_select_trigger(key) {
-            self.open_patch_select();
+            self.request_patch_select();
             return MmlOverlayAction::Continue;
         }
         if is_history_select_trigger(key) && matches!(&self.syntax, MmlOverlaySyntax::Mml) {

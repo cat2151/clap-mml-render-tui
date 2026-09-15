@@ -143,7 +143,8 @@ fn resolve_voicings(
             return None;
         }
     };
-    let voicings = cmrt_chord::auto_voice(parsed.chords(), hint.as_ref());
+    let voicings =
+        cmrt_chord::auto_voice_with_key(parsed.chords(), parsed.key_pitch_class(), hint.as_ref());
     (!voicings.is_empty()).then_some(voicings)
 }
 

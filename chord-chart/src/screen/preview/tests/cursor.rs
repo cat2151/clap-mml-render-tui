@@ -10,11 +10,7 @@ fn moving_the_cursor_down_asks_to_play_the_new_row() {
 
     assert_eq!(
         taken(&mut screen),
-        PreviewRequest {
-            name: "B".to_string(),
-            degrees: "IIm-V-I-VIm".to_string(),
-            chord_index: None,
-        }
+        PreviewRequest::section("B", "IIm-V-I-VIm", None)
     );
 }
 
@@ -72,12 +68,15 @@ fn moving_to_the_arrangement_pane_asks_for_the_referenced_section() {
     screen.handle_key_event(key(KeyCode::Tab));
 
     assert_eq!(screen.focus, Pane::Arrangement);
+    let request = taken(&mut screen);
+    assert_eq!(request.name, "A");
+    assert_eq!(request.degrees, "I-V-VIm-IV");
+    assert_eq!(request.chord_index, None);
     assert_eq!(
-        taken(&mut screen),
-        PreviewRequest {
-            name: "A".to_string(),
-            degrees: "I-V-VIm-IV".to_string(),
-            chord_index: None,
+        request.voicing_context,
+        PreviewVoicingContext {
+            progressions: vec!["I-V-VIm-IV".to_string(), "IV-V-IIIm-VIm".to_string(),],
+            selected: 0,
         }
     );
 }
@@ -129,11 +128,7 @@ fn entering_after_the_initial_pick_asks_for_the_section_it_just_made() {
 
     assert_eq!(
         taken(&mut screen),
-        PreviewRequest {
-            name: "A".to_string(),
-            degrees: "I-IV-V-I".to_string(),
-            chord_index: None,
-        }
+        PreviewRequest::section("A", "I-IV-V-I", None)
     );
 }
 

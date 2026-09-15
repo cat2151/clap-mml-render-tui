@@ -298,10 +298,10 @@ fn pick_chord(
     ChordPlayback::from_voicings(pick.key, pick.degrees, voicings)
 }
 
-/// chord2mml-core の構造化parserから固定進行を作り、既存のauto voicingへ渡す。
+/// chord2mml-core の構造化parserから固定進行を作り、Key-aware auto voicingへ渡す。
 fn fixed_chord_playback(input: &str, seed: Option<&ChordVoicing>) -> Result<ChordPlayback, String> {
     let parsed = cmrt_chord::parse_chord_progression(input)?;
-    let voicings = cmrt_chord::auto_voice(parsed.chords(), seed);
+    let voicings = cmrt_chord::auto_voice_with_key(parsed.chords(), parsed.key_pitch_class(), seed);
     ChordPlayback::from_voicings(parsed.key_name(), parsed.chord_label(), voicings)
         .ok_or_else(|| "コード進行が空です".to_string())
 }

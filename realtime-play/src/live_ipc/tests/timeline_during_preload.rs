@@ -110,7 +110,7 @@ fn timeline_events_keep_reaching_the_server_while_a_standby_load_is_still_loadin
     let exe = std::env::var(PLAY_SERVER_EXE_ENV).unwrap_or_else(|_| {
         panic!("{PLAY_SERVER_EXE_ENV} に play server の実行ファイルを渡すこと")
     });
-    // 起動中の TUI（既定 62154）とも、他のテストのサーバーとも衝突させない。
+    // 起動中の TUI の既定ポートとも、他のテストのサーバーとも衝突させない。
     let port = pick_port(53_000);
     let server = TestPlayServer::spawn_with_env(
         &exe,

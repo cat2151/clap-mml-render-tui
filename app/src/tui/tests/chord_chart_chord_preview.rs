@@ -7,7 +7,7 @@
 
 use super::chord_chart_preview::{app_on_the_chord_chart, chord_onsets};
 use crate::tui::chord_chart_glue::{preview_line, preview_play_log_line, preview_request_log_line};
-use cmrt_chord_chart::PreviewRequest;
+use cmrt_chord_chart::{PreviewRequest, PreviewVoicingContext};
 use cmrt_mml_overlay::line_play::LineStatus;
 
 /// 行内の 1 つを指した要求は、**その chord 1 つだけ**の行になる。
@@ -18,11 +18,7 @@ use cmrt_mml_overlay::line_play::LineStatus;
 fn a_chord_index_narrows_the_line_to_that_single_chord() {
     let app = app_on_the_chord_chart();
 
-    let preview = app.chord_chart_preview(&PreviewRequest {
-        name: "A".to_string(),
-        degrees: "I-V-VIm-IV".to_string(),
-        chord_index: Some(1),
-    });
+    let preview = app.chord_chart_preview(&PreviewRequest::section("A", "I-V-VIm-IV", Some(1)));
 
     assert_eq!(
         preview.line, "Key=C V",
@@ -45,7 +41,7 @@ fn a_chord_index_narrows_the_line_to_that_single_chord() {
         "最後のイベントは note off であること（鳴らしっぱなしにしない）"
     );
     // 本当に V（G 和音）が鳴ること。行全体の 2 番目と同じ音高。
-    assert_eq!(chord_onsets(&preview), vec![(0.0, vec![67, 71, 74])]);
+    assert_eq!(chord_onsets(&preview), vec![(0.0, vec![71, 74, 79])]);
 }
 
 /// 全部の番号を順に指すと、行全体を 1 和音ずつ辿ったのと同じ音になる。
@@ -55,19 +51,12 @@ fn a_chord_index_narrows_the_line_to_that_single_chord() {
 #[test]
 fn every_index_sounds_the_same_chord_as_that_position_of_the_whole_line() {
     let app = app_on_the_chord_chart();
-    let whole = app.chord_chart_preview(&PreviewRequest {
-        name: "A".to_string(),
-        degrees: "I-V-VIm-IV".to_string(),
-        chord_index: None,
-    });
+    let whole = app.chord_chart_preview(&PreviewRequest::section("A", "I-V-VIm-IV", None));
 
     let one_by_one: Vec<Vec<u8>> = (0..4)
         .map(|index| {
-            let preview = app.chord_chart_preview(&PreviewRequest {
-                name: "A".to_string(),
-                degrees: "I-V-VIm-IV".to_string(),
-                chord_index: Some(index),
-            });
+            let preview =
+                app.chord_chart_preview(&PreviewRequest::section("A", "I-V-VIm-IV", Some(index)));
             chord_onsets(&preview)
                 .first()
                 .map(|(_, notes)| notes.clone())
@@ -82,16 +71,39 @@ fn every_index_sounds_the_same_chord_as_that_position_of_the_whole_line() {
     assert_eq!(one_by_one, from_whole);
 }
 
+#[test]
+fn an_arrangement_section_uses_the_voicing_chosen_across_section_boundaries() {
+    let app = app_on_the_chord_chart();
+    let preview = app.chord_chart_preview(&PreviewRequest {
+        name: "B".to_string(),
+        degrees: "V-I".to_string(),
+        chord_index: None,
+        voicing_context: PreviewVoicingContext {
+            progressions: vec!["I-IV".to_string(), "V-I".to_string()],
+            selected: 1,
+        },
+    });
+    let all = cmrt_chord::parse_chord_progression("Key:C I-IV-V-I").unwrap();
+    let expected = cmrt_chord::auto_voice_with_key(all.chords(), all.key_pitch_class(), None);
+
+    assert_eq!(
+        chord_onsets(&preview)
+            .into_iter()
+            .map(|(_, notes)| notes)
+            .collect::<Vec<_>>(),
+        expected[2..]
+            .iter()
+            .map(|voicing| voicing.notes.clone())
+            .collect::<Vec<_>>()
+    );
+}
+
 /// 行全体（`None`）の要求は、chord 1 つを足す前と**1 文字も変わらない**行を送る。
 #[test]
 fn a_whole_line_request_sends_the_very_same_line_as_before() {
     let app = app_on_the_chord_chart();
 
-    let preview = app.chord_chart_preview(&PreviewRequest {
-        name: "A".to_string(),
-        degrees: "I-V-VIm-IV".to_string(),
-        chord_index: None,
-    });
+    let preview = app.chord_chart_preview(&PreviewRequest::section("A", "I-V-VIm-IV", None));
 
     assert_eq!(preview.line, "Key=C I-V-VIm-IV");
     assert_eq!(
@@ -115,16 +127,8 @@ fn an_index_that_cannot_be_cut_falls_back_to_the_whole_line() {
         ("I-V-VIm-IV", 4),
         ("I-V-VIm-IV", 99),
     ] {
-        let narrowed = app.chord_chart_preview(&PreviewRequest {
-            name: "A".to_string(),
-            degrees: degrees.to_string(),
-            chord_index: Some(index),
-        });
-        let whole = app.chord_chart_preview(&PreviewRequest {
-            name: "A".to_string(),
-            degrees: degrees.to_string(),
-            chord_index: None,
-        });
+        let narrowed = app.chord_chart_preview(&PreviewRequest::section("A", degrees, Some(index)));
+        let whole = app.chord_chart_preview(&PreviewRequest::section("A", degrees, None));
 
         assert_eq!(
             narrowed.line, whole.line,
@@ -144,11 +148,7 @@ fn a_full_width_chord_name_is_cut_at_a_character_boundary() {
     let mut app = app_on_the_chord_chart();
     app.chord_chart.song.prefix = String::new();
 
-    let preview = app.chord_chart_preview(&PreviewRequest {
-        name: "A".to_string(),
-        degrees: "C♯m7-F♯7-BM7".to_string(),
-        chord_index: Some(1),
-    });
+    let preview = app.chord_chart_preview(&PreviewRequest::section("A", "C♯m7-F♯7-BM7", Some(1)));
 
     assert_eq!(preview.line, "F♯7");
     assert_eq!(preview.chord, Some((1, 3)));
@@ -164,39 +164,38 @@ fn a_full_width_chord_name_is_cut_at_a_character_boundary() {
 fn the_log_lines_tell_a_single_chord_from_the_whole_line() {
     let mut app = app_on_the_chord_chart();
 
-    let request = PreviewRequest {
-        name: "A".to_string(),
-        degrees: "I-V-VIm-IV".to_string(),
-        chord_index: Some(1),
-    };
+    let request = PreviewRequest::section("A", "I-V-VIm-IV", Some(1));
     assert_eq!(
-        preview_request_log_line(&request),
+        preview_request_log_line(&request, false),
         concat!(
             "chord-chart: event=preview-request name=\"A\"",
-            " degrees=\"I-V-VIm-IV\" chord=1"
+            " degrees=\"I-V-VIm-IV\" chord=1 bass=off"
         )
     );
     assert_eq!(
         preview_play_log_line(&app.chord_chart_preview(&request)),
         concat!(
             "chord-chart: event=preview-play line=\"Key=C V\"",
-            " chord=1/4 result=played from_chord=true notes=3"
+            " chord=1/4 result=played from_chord=true notes=3",
+            " bass=off chord_patch=\"default\" chord_notes=3",
+            " bass_patch=\"none\" bass_notes=0",
+            " bass_note_numbers=[] bass_note_range=none"
         ),
         "何番目 / 全何個が 1 行に出ること"
     );
 
     // 読めない degrees は番号を指しても行全体。ログも `all` になる。
     app.chord_chart.song.prefix = String::new();
-    let unreadable = PreviewRequest {
-        name: "B".to_string(),
-        degrees: "zzz".to_string(),
-        chord_index: Some(0),
-    };
+    let unreadable = PreviewRequest::section("B", "zzz", Some(0));
     assert_eq!(
         preview_play_log_line(&app.chord_chart_preview(&unreadable)),
         concat!(
             "chord-chart: event=preview-play line=\"zzz\" chord=all",
-            " result=error detail=\"MMLに発音ノートがありません\""
+            " result=error detail=\"コード変換に失敗しました: ",
+            "Syntax error in chord notation: zzz\"",
+            " bass=off chord_patch=\"default\" chord_notes=0",
+            " bass_patch=\"none\" bass_notes=0",
+            " bass_note_numbers=[] bass_note_range=none"
         ),
         "切り出せずに倒れたことがログで分かること"
     );

@@ -24,6 +24,8 @@ pub(super) fn app_on_the_chord_chart<'a>() -> TuiApp<'a> {
     song.push_section("B", "IIm-V-I-VIm");
     song.arrangement = vec![a];
     app.chord_chart = cmrt_chord_chart::ChordChartScreen::new(song);
+    // 既存 Chord-only のイベント列を固定するテスト群。Bass は専用テストで明示的に ON にする。
+    app.chord_chart.set_bass_enabled(false);
     app.switch_to_primary_screen(PrimaryScreen::ChordChart, None);
     app
 }
@@ -42,11 +44,7 @@ fn a_cursor_move_raises_a_request_and_the_glue_consumes_it() {
     unglued.handle_key_event(plain(KeyCode::Char('j')));
     assert_eq!(
         unglued.take_preview(),
-        Some(PreviewRequest {
-            name: "B".to_string(),
-            degrees: "IIm-V-I-VIm".to_string(),
-            chord_index: None,
-        }),
+        Some(PreviewRequest::section("B", "IIm-V-I-VIm", None)),
         "画面単体なら要求が立つこと（対照）"
     );
 
@@ -75,15 +73,11 @@ fn entering_the_screen_consumes_the_first_request() {
 /// ログ 1 行の綴り。`global_log_sink` はテストでは no-op なので、組み立てを直接見る。
 #[test]
 fn the_log_line_names_the_section_and_the_degrees() {
-    let request = PreviewRequest {
-        name: "A".to_string(),
-        degrees: "I-V-VIm-IV".to_string(),
-        chord_index: None,
-    };
+    let request = PreviewRequest::section("A", "I-V-VIm-IV", None);
 
     assert_eq!(
-        preview_request_log_line(&request),
-        "chord-chart: event=preview-request name=\"A\" degrees=\"I-V-VIm-IV\" chord=all"
+        preview_request_log_line(&request, false),
+        "chord-chart: event=preview-request name=\"A\" degrees=\"I-V-VIm-IV\" chord=all bass=off"
     );
 }
 
@@ -92,8 +86,8 @@ fn the_log_line_names_the_section_and_the_degrees() {
 #[test]
 fn a_silent_request_is_logged_with_empty_fields() {
     assert_eq!(
-        preview_request_log_line(&PreviewRequest::silent()),
-        "chord-chart: event=preview-request name=\"\" degrees=\"\" chord=all"
+        preview_request_log_line(&PreviewRequest::silent(), true),
+        "chord-chart: event=preview-request name=\"\" degrees=\"\" chord=all bass=on"
     );
 }
 
@@ -120,11 +114,7 @@ fn only_the_first_key_token_of_the_prefix_reaches_the_player() {
 fn the_line_the_glue_sends_really_plays_as_a_chord_progression() {
     let app = app_on_the_chord_chart();
 
-    let preview = app.chord_chart_preview(&PreviewRequest {
-        name: "A".to_string(),
-        degrees: "I-V-VIm-IV".to_string(),
-        chord_index: None,
-    });
+    let preview = app.chord_chart_preview(&PreviewRequest::section("A", "I-V-VIm-IV", None));
 
     assert_eq!(
         preview.line, "Key=C I-V-VIm-IV",
@@ -190,13 +180,9 @@ fn an_unreadable_progression_falls_silent_and_says_why() {
 
     assert_eq!(
         app.chord_chart.error.as_deref(),
-        Some("鳴らせません: MMLに発音ノートがありません")
+        Some("鳴らせません: コード変換に失敗しました: Syntax error in chord notation: zzz")
     );
-    let preview = app.chord_chart_preview(&PreviewRequest {
-        name: "B".to_string(),
-        degrees: "zzz".to_string(),
-        chord_index: None,
-    });
+    let preview = app.chord_chart_preview(&PreviewRequest::section("B", "zzz", None));
     assert!(preview.program.is_silent(), "読めない行は無音を送ること");
 }
 
@@ -228,7 +214,7 @@ fn an_unreadable_progression_puts_no_mark_on_the_section_row() {
     let status = &rows[rows.len() - 2];
     let squeezed: String = status.chars().filter(|ch| !ch.is_whitespace()).collect();
     assert!(
-        squeezed.contains("鳴らせません:MMLに発音ノートがありません"),
+        squeezed.contains("鳴らせません:コード変換に失敗しました:Syntaxerrorinchordnotation:zzz"),
         "理由は下段 1 行に出ること: {status:?}"
     );
 }
@@ -255,11 +241,7 @@ fn a_missing_sender_is_not_an_error() {
 #[test]
 fn every_normal_preview_uses_the_chord_chart_patch() {
     let mut app = app_on_the_chord_chart();
-    let request = |chord_index| PreviewRequest {
-        name: "A".to_string(),
-        degrees: "I-V-VIm-IV".to_string(),
-        chord_index,
-    };
+    let request = |chord_index| PreviewRequest::section("A", "I-V-VIm-IV", chord_index);
 
     assert_eq!(app.chord_chart_preview(&request(None)).patch, None);
 
@@ -279,37 +261,41 @@ fn every_normal_preview_uses_the_chord_chart_patch() {
 fn the_play_log_line_names_the_line_and_how_it_was_read() {
     let app = app_on_the_chord_chart();
 
-    let played = app.chord_chart_preview(&PreviewRequest {
-        name: "A".to_string(),
-        degrees: "I-V-VIm-IV".to_string(),
-        chord_index: None,
-    });
+    let played = app.chord_chart_preview(&PreviewRequest::section("A", "I-V-VIm-IV", None));
     assert_eq!(
         preview_play_log_line(&played),
         concat!(
             "chord-chart: event=preview-play line=\"Key=C I-V-VIm-IV\"",
-            " chord=all result=played from_chord=true notes=12"
+            " chord=all result=played from_chord=true notes=12",
+            " bass=off chord_patch=\"default\" chord_notes=12",
+            " bass_patch=\"none\" bass_notes=0",
+            " bass_note_numbers=[] bass_note_range=none"
         )
     );
 
     let silent = app.chord_chart_preview(&PreviewRequest::silent());
     assert_eq!(
         preview_play_log_line(&silent),
-        "chord-chart: event=preview-play line=\"\" chord=all result=silent"
+        concat!(
+            "chord-chart: event=preview-play line=\"\" chord=all result=silent",
+            " bass=off chord_patch=\"default\" chord_notes=0",
+            " bass_patch=\"none\" bass_notes=0",
+            " bass_note_numbers=[] bass_note_range=none"
+        )
     );
 
     let mut app = app;
     app.chord_chart.song.prefix = String::new();
-    let failed = app.chord_chart_preview(&PreviewRequest {
-        name: "B".to_string(),
-        degrees: "zzz".to_string(),
-        chord_index: None,
-    });
+    let failed = app.chord_chart_preview(&PreviewRequest::section("B", "zzz", None));
     assert_eq!(
         preview_play_log_line(&failed),
         concat!(
             "chord-chart: event=preview-play line=\"zzz\"",
-            " chord=all result=error detail=\"MMLに発音ノートがありません\""
+            " chord=all result=error detail=\"コード変換に失敗しました: ",
+            "Syntax error in chord notation: zzz\"",
+            " bass=off chord_patch=\"default\" chord_notes=0",
+            " bass_patch=\"none\" bass_notes=0",
+            " bass_note_numbers=[] bass_note_range=none"
         )
     );
 }
@@ -346,21 +332,17 @@ pub(super) fn sections_pane_rows(rows: &[String]) -> Vec<String> {
 #[test]
 fn the_preview_really_sounds_the_progression_in_the_key_of_the_prefix() {
     let mut app = app_on_the_chord_chart();
-    let request = PreviewRequest {
-        name: "A".to_string(),
-        degrees: "I-V-VIm-IV".to_string(),
-        chord_index: None,
-    };
+    let request = PreviewRequest::section("A", "I-V-VIm-IV", None);
 
     let in_c = chord_onsets(&app.chord_chart_preview(&request));
 
     assert_eq!(
         in_c,
         vec![
-            (0.0, vec![60, 64, 67]),
-            (2.0, vec![67, 71, 74]),
-            (4.0, vec![69, 72, 76]),
-            (6.0, vec![65, 69, 72]),
+            (0.0, vec![72, 76, 79]),
+            (2.0, vec![71, 74, 79]),
+            (4.0, vec![72, 76, 81]),
+            (6.0, vec![72, 77, 81]),
         ]
     );
 
@@ -369,9 +351,10 @@ fn the_preview_really_sounds_the_progression_in_the_key_of_the_prefix() {
     let in_d = chord_onsets(&app.chord_chart_preview(&request));
 
     assert_eq!(
-        in_d.first().map(|(_, notes)| notes.clone()),
-        Some(vec![62, 66, 69]),
-        "Key=D なら I は D 和音"
+        in_d.first()
+            .map(|(_, notes)| notes.iter().map(|note| note % 12).collect::<Vec<_>>()),
+        Some(vec![2, 6, 9]),
+        "Key=D なら octave や転回に関係なく I は D 和音"
     );
     assert_eq!(in_d.len(), 4);
 }

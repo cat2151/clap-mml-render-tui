@@ -13,7 +13,11 @@ mod source_ranges;
 mod timed;
 
 pub use arrangement::{bass_octave_note, rotated_chord_voice, snap_to_chord};
-pub use auto_voicing::{auto_voice, max_jumps, ChordVoicing};
+pub use auto_voicing::{
+    auto_voice, auto_voice_with_key, bass_timed_progression, max_jumps, revoice_timed_progression,
+    timed_auto_voiced_bass_chord_progression_performance,
+    timed_auto_voiced_chord_progression_performance, ChordVoicing,
+};
 pub use cursor::cursor_sounding_unit;
 pub use progression::{
     chord_notes, parse_chord_progression, ChordProgression, ChordProgressionCatalog,
