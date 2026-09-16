@@ -284,8 +284,9 @@ mod tests {
         assert!(output.len().abs_diff(expected_frames * 2) <= 4);
         assert!(output.iter().all(|sample| sample.is_finite()));
         assert!(output.len().is_multiple_of(2));
-        assert!(output.chunks_exact(2).any(|frame| frame[0] != 0.0));
-        assert!(output.chunks_exact(2).any(|frame| frame[1] != 0.0));
+        let (frames, _) = output.as_chunks::<2>();
+        assert!(frames.iter().any(|frame| frame[0] != 0.0));
+        assert!(frames.iter().any(|frame| frame[1] != 0.0));
     }
 
     #[test]

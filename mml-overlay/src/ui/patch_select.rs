@@ -9,6 +9,7 @@ use ratatui::{
 };
 
 use cmrt_tui_core::{
+    patch_load::PatchLoadMeasurement,
     status::{base_style, LIST_HIGHLIGHT_SYMBOL},
     text_input::{
         build_query_textarea_widget, single_line_textarea_cursor_position, textarea_value,
@@ -281,8 +282,12 @@ fn scroll_offset(cursor: usize, total: usize, visible_rows: usize, current_offse
 }
 
 fn load_label(select: &PatchSelect<'_>, patch: &str) -> String {
-    select
-        .load_measurement(patch)
+    load_time_label(select.load_measurement(patch))
+}
+
+/// Load 列の表記。2 回目の読み込み時間を短く出し、未計測なら `-`。
+pub fn load_time_label(measurement: Option<&PatchLoadMeasurement>) -> String {
+    measurement
         .and_then(|measurement| measurement.second_load_ms)
         .map_or_else(|| "-".to_string(), format_load_time)
 }

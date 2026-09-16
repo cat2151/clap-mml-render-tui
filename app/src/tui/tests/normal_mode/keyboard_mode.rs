@@ -63,21 +63,21 @@ fn keyboard_shift_h_cycles_buffer_without_releasing_held_notes() {
 }
 
 #[test]
-fn keyboard_patch_keys_navigate_categories_and_apply_the_selected_patch() {
+fn keyboard_patch_keys_navigate_the_list_and_apply_the_selected_patch() {
     let mut app = TuiApp::new_for_test(test_config());
     app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "patches_factory/Lead/Lead 1.fxp",
         "patches_factory/Lead/Lead 2.fxp",
-        "patches_factory/Pad/Pad 0.fxp",
-        "patches_factory/Pad/Pad 1.fxp",
-        "patches_factory/Pad/Pad 2.fxp",
-        "patches_factory/Pad/Pad 3.fxp",
-        "patches_factory/Pad/Pad 4.fxp",
-        "patches_factory/Pad/Pad 5.fxp",
-        "patches_factory/Pad/Pad 6.fxp",
-        "patches_factory/Pad/Pad 7.fxp",
-        "patches_factory/Pad/Pad 8.fxp",
-        "patches_factory/Pad/Pad 9.fxp",
+        "patches_factory/Pad/Pad 00.fxp",
+        "patches_factory/Pad/Pad 01.fxp",
+        "patches_factory/Pad/Pad 02.fxp",
+        "patches_factory/Pad/Pad 03.fxp",
+        "patches_factory/Pad/Pad 04.fxp",
+        "patches_factory/Pad/Pad 05.fxp",
+        "patches_factory/Pad/Pad 06.fxp",
+        "patches_factory/Pad/Pad 07.fxp",
+        "patches_factory/Pad/Pad 08.fxp",
+        "patches_factory/Pad/Pad 09.fxp",
         "patches_factory/Pad/Pad 10.fxp",
         "patches_factory/Pad/Pad 11.fxp",
     ]))));
@@ -98,19 +98,19 @@ fn keyboard_patch_keys_navigate_categories_and_apply_the_selected_patch() {
     app.handle_keyboard_key_event(KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
     assert_eq!(
         app.keyboard.state.patch(),
-        Some("patches_factory/Pad/Pad 0.fxp")
-    );
-
-    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE));
-    assert_eq!(
-        app.keyboard.state.patch(),
-        Some("patches_factory/Pad/Pad 10.fxp")
+        Some("patches_factory/Pad/Pad 11.fxp")
     );
 
     app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
     assert_eq!(
         app.keyboard.state.patch(),
         Some("patches_factory/Lead/Lead 1.fxp")
+    );
+
+    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE));
+    assert_eq!(
+        app.keyboard.state.patch(),
+        Some("patches_factory/Pad/Pad 08.fxp")
     );
 }
 
@@ -120,16 +120,16 @@ fn keyboard_vim_keys_and_ctrl_page_keys_navigate_patches() {
     app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "patches_factory/Lead/Lead 1.fxp",
         "patches_factory/Lead/Lead 2.fxp",
-        "patches_factory/Pad/Pad 0.fxp",
-        "patches_factory/Pad/Pad 1.fxp",
-        "patches_factory/Pad/Pad 2.fxp",
-        "patches_factory/Pad/Pad 3.fxp",
-        "patches_factory/Pad/Pad 4.fxp",
-        "patches_factory/Pad/Pad 5.fxp",
-        "patches_factory/Pad/Pad 6.fxp",
-        "patches_factory/Pad/Pad 7.fxp",
-        "patches_factory/Pad/Pad 8.fxp",
-        "patches_factory/Pad/Pad 9.fxp",
+        "patches_factory/Pad/Pad 00.fxp",
+        "patches_factory/Pad/Pad 01.fxp",
+        "patches_factory/Pad/Pad 02.fxp",
+        "patches_factory/Pad/Pad 03.fxp",
+        "patches_factory/Pad/Pad 04.fxp",
+        "patches_factory/Pad/Pad 05.fxp",
+        "patches_factory/Pad/Pad 06.fxp",
+        "patches_factory/Pad/Pad 07.fxp",
+        "patches_factory/Pad/Pad 08.fxp",
+        "patches_factory/Pad/Pad 09.fxp",
         "patches_factory/Pad/Pad 10.fxp",
     ]))));
     app.start_keyboard(Some("patches_factory/Lead/Lead 1.fxp".to_string()));
@@ -146,25 +146,13 @@ fn keyboard_vim_keys_and_ctrl_page_keys_navigate_patches() {
         Some("patches_factory/Lead/Lead 1.fxp")
     );
 
-    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE));
-    assert_eq!(
-        app.keyboard.state.patch(),
-        Some("patches_factory/Pad/Pad 0.fxp")
-    );
-
     app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL));
     assert_eq!(
         app.keyboard.state.patch(),
-        Some("patches_factory/Pad/Pad 10.fxp")
+        Some("patches_factory/Pad/Pad 08.fxp")
     );
 
     app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
-    assert_eq!(
-        app.keyboard.state.patch(),
-        Some("patches_factory/Pad/Pad 0.fxp")
-    );
-
-    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));
     assert_eq!(
         app.keyboard.state.patch(),
         Some("patches_factory/Lead/Lead 1.fxp")
@@ -177,7 +165,7 @@ fn keyboard_r_selects_each_other_patch_once_and_releases_held_notes() {
     app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "patches_factory/Lead/Lead 1.fxp",
         "patches_factory/Lead/Lead 2.fxp",
-        "patches_factory/Pad/Pad 1.fxp",
+        "patches_factory/Pad/Pad 01.fxp",
     ]))));
     app.start_keyboard(Some("patches_factory/Lead/Lead 1.fxp".to_string()));
     assert!(app
@@ -205,14 +193,14 @@ fn keyboard_keeps_an_unknown_patch_until_the_first_navigation_key() {
     let mut app = TuiApp::new_for_test(test_config());
     app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
         "patches_factory/Lead/Lead 1.fxp",
-        "patches_factory/Pad/Pad 1.fxp",
+        "patches_factory/Pad/Pad 01.fxp",
     ]))));
     app.start_keyboard(Some("custom/Unknown.fxp".to_string()));
 
     app.sync_keyboard_patch_catalog();
     assert_eq!(app.keyboard.state.patch(), Some("custom/Unknown.fxp"));
     assert_eq!(
-        app.keyboard.state.patch_catalog.selected_category_index(),
+        app.keyboard.state.patch_catalog.selected_patch_index(),
         None
     );
 

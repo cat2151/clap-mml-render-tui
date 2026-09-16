@@ -11,7 +11,7 @@ use crossterm::event::KeyEvent;
 use crate::realtime_play::PatchVoicing;
 use crate::tui::keyboard::{
     KeyboardAction, KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardContext,
-    KeyboardPatchLoad, KeyboardVoicingLookup, KeyboardVoicingStatus,
+    KeyboardVoicingLookup, KeyboardVoicingStatus,
 };
 use crate::tui::voicing::VoicingState;
 use crate::tui::{Mode, PatchLoadState, PlayState, PrimaryScreen, TuiApp};
@@ -28,17 +28,12 @@ fn keyboard_context<'ctx>(
     voicing: &'ctx VoicingState,
     fallback_catalog_notes: &'ctx [String],
 ) -> KeyboardContext<'ctx> {
-    let (patch_load, catalog_notes) = match patch_load {
-        PatchLoadState::Loading => (KeyboardPatchLoad::Loading, &[][..]),
-        PatchLoadState::Ready(snapshot) => {
-            let notes = if snapshot.catalog_notes().is_empty() {
-                fallback_catalog_notes
-            } else {
-                snapshot.catalog_notes()
-            };
-            (KeyboardPatchLoad::Ready(snapshot.pairs()), notes)
+    let catalog_notes = match patch_load {
+        PatchLoadState::Ready(snapshot) if snapshot.catalog_notes().is_empty() => {
+            fallback_catalog_notes
         }
-        PatchLoadState::Err(error) => (KeyboardPatchLoad::Err(error), &[][..]),
+        PatchLoadState::Ready(snapshot) => snapshot.catalog_notes(),
+        PatchLoadState::Loading | PatchLoadState::Err(_) => &[][..],
     };
     KeyboardContext {
         patch_dirs_configured,

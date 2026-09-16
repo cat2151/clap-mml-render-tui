@@ -39,11 +39,9 @@ pub(super) fn draw_overlay(
 }
 
 fn progress_lines(completed: usize, total: usize, elapsed: Duration) -> Vec<Line<'static>> {
-    let filled = if total == 0 {
-        0
-    } else {
-        completed.min(total) * BAR_WIDTH / total
-    };
+    let filled = (completed.min(total) * BAR_WIDTH)
+        .checked_div(total)
+        .unwrap_or(0);
     let bar = format!("{}{}", "█".repeat(filled), "░".repeat(BAR_WIDTH - filled));
     vec![
         Line::from(""),

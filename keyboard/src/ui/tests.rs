@@ -6,6 +6,8 @@ use crate::{
 use cmrt_tui_core::theme::MONOKAI_YELLOW;
 use ratatui::{backend::TestBackend, style::Modifier, Terminal};
 
+mod patch_panes;
+
 fn buffer_to_string(terminal: &Terminal<TestBackend>) -> String {
     let buffer = terminal.backend().buffer();
     (0..buffer.area.height)
@@ -358,7 +360,7 @@ fn same_day_footer_replaces_normal_key_guide_with_colored_message() {
         .replace(' ', "")
         .contains(KEYBOARD_NOTE_GUIDE_MESSAGE));
     assert!(!screen.contains("cdefgab:notes"));
-    assert!(!screen.contains("patch -/+1"));
+    assert!(!screen.contains("h/l:pane"));
     assert!(has_colored_message_start(&terminal));
 }
 

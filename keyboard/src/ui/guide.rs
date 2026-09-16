@@ -46,8 +46,8 @@ pub(super) fn keyboard_help_lines(
         ],
         None => vec![
             Line::from(concat!(
-                "k/j/Up/Down:patch -/+1  Ctrl+u/d/PgUp/PgDn:patch -/+10  ",
-                "h/l/Home/End:cat -/+1 r:random"
+                "h/l:pane  k/j/Up/Down:-/+1  Ctrl+u/d/PgUp/PgDn:-/+10  ",
+                "Home/End:first/last  r:random"
             )),
             Line::from(
                 "cdefgab:notes  Shift+H:buffer  t:off/repeat/arp/auto  n:notepad  w:DAW q:quit  Ctrl+G:screens",

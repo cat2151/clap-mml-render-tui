@@ -119,13 +119,9 @@ fn step_line(step: &StartupStep) -> Line<'static> {
 fn progress_bar(state: StartupStepState) -> String {
     let filled = match state {
         StartupStepState::Waiting | StartupStepState::Running(None) => 0,
-        StartupStepState::Running(Some((completed, total))) => {
-            if total == 0 {
-                0
-            } else {
-                completed.min(total) * BAR_WIDTH / total
-            }
-        }
+        StartupStepState::Running(Some((completed, total))) => (completed.min(total) * BAR_WIDTH)
+            .checked_div(total)
+            .unwrap_or(0),
         StartupStepState::Done => BAR_WIDTH,
     };
     format!("{}{}", "█".repeat(filled), "░".repeat(BAR_WIDTH - filled))

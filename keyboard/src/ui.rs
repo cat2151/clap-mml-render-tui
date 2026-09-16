@@ -2,29 +2,32 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Color,
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
 
 use crate::{
-    KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardPatchCatalog,
-    KeyboardPatchCatalogStatus, KeyboardScreen, KeyboardState, KeyboardVoicingStatus,
-    ModulationMode, NumericInput, NumericInputTarget, PitchBendMode, VelocityMode, KEYBOARD_NOTES,
+    KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardScreen, KeyboardState,
+    KeyboardVoicingStatus, ModulationMode, NumericInput, NumericInputTarget, PitchBendMode,
+    VelocityMode, KEYBOARD_NOTES,
 };
-use cmrt_tui_core::status::{base_style, visible_list_page_size, LIST_HIGHLIGHT_SYMBOL};
-use cmrt_tui_core::theme::{
-    cursor_highlight_style, MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_PINK, MONOKAI_PURPLE,
-};
+use cmrt_tui_core::status::base_style;
+use cmrt_tui_core::theme::{MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_PINK, MONOKAI_PURPLE};
 
 mod connection_overlay;
 mod guide;
 mod mml_overlay;
 mod note;
+mod patch_panes;
 
 use connection_overlay::draw_connection_overlay;
 use guide::{draw_note_guide_overlay, keyboard_help_lines};
 use mml_overlay::draw_mml_input_overlay;
 use note::note_playback_status_text;
+use patch_panes::{draw_patch_panes, pane_widths};
+
+/// keyboard pane の幅。中身の最長行と、上へ重ねる overlay の上限幅（72 + 枠 2）に合わせる。
+const KEYBOARD_PANE_WIDTH: u16 = 74;
 
 /// keyboard 画面を描画する。
 ///
@@ -43,17 +46,26 @@ pub fn draw(screen: &mut KeyboardScreen<'_>, connection: &KeyboardConnectionStat
             Constraint::Length(help_height),
         ])
         .split(f.area());
+    let [role_w, preset_w, patch_w] =
+        pane_widths(chunks[0].width.saturating_sub(KEYBOARD_PANE_WIDTH));
     let panes = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(45),
-            Constraint::Percentage(20),
-            Constraint::Percentage(35),
+            Constraint::Length(KEYBOARD_PANE_WIDTH),
+            role_w,
+            preset_w,
+            patch_w,
         ])
         .split(chunks[0]);
 
     draw_keyboard(&screen.state, f, panes[0]);
-    draw_patch_catalog(&mut screen.state.patch_catalog, f, panes[1], panes[2]);
+    draw_patch_panes(
+        &mut screen.state.patch_catalog,
+        f,
+        panes[1],
+        panes[2],
+        panes[3],
+    );
 
     let (state, color) = match &connection.phase {
         KeyboardConnectionPhase::Idle => ("server: idle".to_string(), MONOKAI_CYAN),
@@ -133,100 +145,6 @@ fn draw_keyboard(state: &KeyboardState, f: &mut Frame<'_>, area: Rect) {
         ),
         area,
     );
-}
-
-fn draw_patch_catalog(
-    catalog: &mut KeyboardPatchCatalog,
-    f: &mut Frame<'_>,
-    category_area: Rect,
-    patch_area: Rect,
-) {
-    let status = catalog.status().clone();
-    let categories = catalog.categories().to_vec();
-    let selected_category_index = catalog.selected_category_index();
-    let selected_patch_index = catalog.selected_patch_index();
-    let patches = catalog
-        .selected_category()
-        .map(|category| category.patches.clone())
-        .unwrap_or_default();
-
-    let category_items = if categories.is_empty() {
-        vec![ListItem::new(catalog_message(&status))]
-    } else {
-        categories
-            .iter()
-            .map(|category| {
-                ListItem::new(format!("{} ({})", category.name, category.patches.len()))
-            })
-            .collect()
-    };
-    let patch_items = if patches.is_empty() {
-        vec![ListItem::new(if categories.is_empty() {
-            catalog_message(&status)
-        } else {
-            "カテゴリー未選択".to_string()
-        })]
-    } else {
-        patches.iter().cloned().map(ListItem::new).collect()
-    };
-
-    catalog.sync_list_states(
-        visible_list_page_size(category_area),
-        visible_list_page_size(patch_area),
-    );
-    let category_title = format!(
-        " Categories ({}/{}) ",
-        selected_category_index.map(|index| index + 1).unwrap_or(0),
-        categories.len()
-    );
-    let patch_title = format!(
-        " Patches ({}/{}) ",
-        selected_patch_index.map(|index| index + 1).unwrap_or(0),
-        patches.len()
-    );
-    let highlight = cursor_highlight_style(base_style());
-
-    f.render_stateful_widget(
-        List::new(category_items)
-            .style(base_style())
-            .highlight_style(highlight)
-            .highlight_symbol(LIST_HIGHLIGHT_SYMBOL)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(category_title)
-                    .style(base_style())
-                    .border_style(base_style().fg(MONOKAI_CYAN)),
-            ),
-        category_area,
-        catalog.category_list_state_mut(),
-    );
-    f.render_stateful_widget(
-        List::new(patch_items)
-            .style(base_style())
-            .highlight_style(highlight)
-            .highlight_symbol(LIST_HIGHLIGHT_SYMBOL)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(patch_title)
-                    .style(base_style())
-                    .border_style(base_style().fg(MONOKAI_CYAN)),
-            ),
-        patch_area,
-        catalog.patch_list_state_mut(),
-    );
-}
-
-fn catalog_message(status: &KeyboardPatchCatalogStatus) -> String {
-    match status {
-        KeyboardPatchCatalogStatus::Loading => "パッチを読み込み中...".to_string(),
-        KeyboardPatchCatalogStatus::NotConfigured => {
-            "patches_dirs が設定されていません".to_string()
-        }
-        KeyboardPatchCatalogStatus::Ready => "パッチが見つかりません".to_string(),
-        KeyboardPatchCatalogStatus::Error(error) => format!("読み込み失敗: {error}"),
-    }
 }
 
 fn draw_numeric_input_overlay(

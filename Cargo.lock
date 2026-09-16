@@ -640,6 +640,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "cmrt-chord",
+ "cmrt-mml-overlay",
  "cmrt-patches",
  "cmrt-realtime-play",
  "cmrt-runtime",

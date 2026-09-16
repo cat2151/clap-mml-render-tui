@@ -30,6 +30,8 @@ pub struct PatchCatalogSnapshot {
     audio_patches: Vec<cmrt_core::AudioPatch>,
     plugins: PatchPlugins,
     patch_roles: PatchRoleIndex,
+    /// `patch_roles` を作ったときのユーザー正規表現。画面側が索引の世代を見分けるのに使う。
+    role_presets: Vec<(String, String)>,
     catalog_notes: Vec<String>,
     load_measurements: BTreeMap<String, PatchLoadMeasurement>,
 }
@@ -47,6 +49,7 @@ impl PatchCatalogSnapshot {
             audio_patches,
             plugins: PatchPlugins::from_catalog(plugins),
             patch_roles: PatchRoleIndex::default(),
+            role_presets: Vec::new(),
             catalog_notes,
             load_measurements,
         };
@@ -66,6 +69,11 @@ impl PatchCatalogSnapshot {
         &self.patch_roles
     }
 
+    /// `patch_roles()` の構築に使ったユーザー正規表現（`(role, pattern)`）。
+    pub fn role_presets(&self) -> &[(String, String)] {
+        &self.role_presets
+    }
+
     /// Roleへ追加したユーザー正規表現を含め、TUI共有の分類索引を作り直す。
     pub fn rebuild_patch_roles(&mut self, user_presets: &[(String, String)]) {
         self.patch_roles = PatchRoleIndex::build(
@@ -82,6 +90,7 @@ impl PatchCatalogSnapshot {
                 }),
             user_presets,
         );
+        self.role_presets = user_presets.to_vec();
     }
 
     /// server shared coreが解釈済みの、plugin key付きpatch情報。
@@ -134,3 +143,6 @@ impl PatchLoadState {
         Self::Ready(Arc::new(PatchCatalogSnapshot::from_pairs(pairs)))
     }
 }
+
+#[cfg(test)]
+mod tests;

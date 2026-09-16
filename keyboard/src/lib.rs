@@ -23,7 +23,7 @@ pub use cmrt_tui_core::keyboard_session_state as session_state;
 mod state;
 pub mod ui;
 
-pub use catalog::{KeyboardPatchCatalog, KeyboardPatchCatalogStatus};
+pub use catalog::{KeyboardPatchCatalog, KeyboardPatchCatalogStatus, PatchPaneFocus};
 pub use guide::KeyboardNoteGuide;
 pub use mml_input::KeyboardMmlInput;
 pub use navigation::NavigationCount;
@@ -36,6 +36,7 @@ pub use state::KeyboardState;
 pub use state::{ModulationMode, NotePlaybackMode, PitchBendMode, VelocityMode, KEYBOARD_NOTES};
 
 use cmrt_realtime_play::PatchVoicing;
+use cmrt_tui_core::patch_load::PatchLoadState;
 use state::note_for_key;
 
 impl KeyboardConnectionPhase {
@@ -52,14 +53,6 @@ pub enum KeyboardAction {
     Quit,
 }
 
-/// patch 一覧のバックグラウンド読み込み状態のスナップショット。
-/// 共有ランタイム側の `PatchLoadState` から glue が変換して渡す。
-pub enum KeyboardPatchLoad<'a> {
-    Loading,
-    Ready(&'a [(String, String)]),
-    Err(&'a str),
-}
-
 /// patch ごとの mono/poly 判定を、file cache などから解決する。
 pub trait KeyboardVoicingLookup {
     fn cached_voicing(&self, patch: &str) -> Option<PatchVoicing>;
@@ -68,7 +61,8 @@ pub trait KeyboardVoicingLookup {
 /// keyboard 画面が共有ランタイムから受け取る情報一式。
 pub struct KeyboardContext<'a> {
     pub patch_dirs_configured: bool,
-    pub patch_load: KeyboardPatchLoad<'a>,
+    /// patch 一覧のバックグラウンド読み込み状態。共有ランタイムの物をそのまま借りる。
+    pub patch_load: &'a PatchLoadState,
     pub voicing: &'a dyn KeyboardVoicingLookup,
     /// 設定不足でカタログから外れたプラグインの案内。help 行の上へ出す。
     ///
@@ -181,22 +175,22 @@ impl KeyboardScreen<'_> {
                 match key.code {
                     KeyCode::Char('j') => {
                         let delta = self.state.navigation_count.take_delta(1);
-                        self.move_patch_by(delta, ctx);
+                        self.move_focused_cursor(delta, ctx);
                         return KeyboardAction::Continue;
                     }
                     KeyCode::Char('k') => {
                         let delta = self.state.navigation_count.take_delta(-1);
-                        self.move_patch_by(delta, ctx);
+                        self.move_focused_cursor(delta, ctx);
                         return KeyboardAction::Continue;
                     }
                     KeyCode::Char('l') => {
                         let delta = self.state.navigation_count.take_delta(1);
-                        self.move_patch_category_by(delta, ctx);
+                        self.move_focus(delta, ctx);
                         return KeyboardAction::Continue;
                     }
                     KeyCode::Char('h') => {
                         let delta = self.state.navigation_count.take_delta(-1);
-                        self.move_patch_category_by(delta, ctx);
+                        self.move_focus(delta, ctx);
                         return KeyboardAction::Continue;
                     }
                     _ => {}
@@ -205,12 +199,12 @@ impl KeyboardScreen<'_> {
                 match key.code {
                     KeyCode::Char('d') => {
                         let delta = self.state.navigation_count.take_delta(10);
-                        self.move_patch_by(delta, ctx);
+                        self.move_focused_cursor(delta, ctx);
                         return KeyboardAction::Continue;
                     }
                     KeyCode::Char('u') => {
                         let delta = self.state.navigation_count.take_delta(-10);
-                        self.move_patch_by(delta, ctx);
+                        self.move_focused_cursor(delta, ctx);
                         return KeyboardAction::Continue;
                     }
                     _ => {}
@@ -243,27 +237,27 @@ impl KeyboardScreen<'_> {
         if key.kind == KeyEventKind::Press && key.modifiers == KeyModifiers::NONE {
             match key.code {
                 KeyCode::Down => {
-                    self.move_patch_by(1, ctx);
+                    self.move_focused_cursor(1, ctx);
                     return KeyboardAction::Continue;
                 }
                 KeyCode::Up => {
-                    self.move_patch_by(-1, ctx);
+                    self.move_focused_cursor(-1, ctx);
                     return KeyboardAction::Continue;
                 }
                 KeyCode::PageDown => {
-                    self.move_patch_by(10, ctx);
+                    self.move_focused_cursor(10, ctx);
                     return KeyboardAction::Continue;
                 }
                 KeyCode::PageUp => {
-                    self.move_patch_by(-10, ctx);
+                    self.move_focused_cursor(-10, ctx);
                     return KeyboardAction::Continue;
                 }
                 KeyCode::End => {
-                    self.move_patch_category_by(1, ctx);
+                    self.move_focused_to_end(ctx);
                     return KeyboardAction::Continue;
                 }
                 KeyCode::Home => {
-                    self.move_patch_category_by(-1, ctx);
+                    self.move_focused_to_start(ctx);
                     return KeyboardAction::Continue;
                 }
                 KeyCode::Char('v') => {

@@ -67,3 +67,8 @@ impl PatchCatalogEntry {
         self.normalized_selector_category.as_deref()
     }
 }
+
+/// selector が見せる順に整列する。Category 無しを末尾へ送り、残りを Category / plugin / patch 名の順にする。
+pub fn sort_for_selector(entries: &mut [PatchCatalogEntry]) {
+    entries.sort_by(|left, right| left.selector_sort_key().cmp(&right.selector_sort_key()));
+}

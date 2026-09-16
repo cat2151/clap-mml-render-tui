@@ -4,14 +4,16 @@ use std::sync::Arc;
 
 use cmrt_patches::{builtin_role_presets, normalize_user_role_presets, PatchRole, PatchRolePreset};
 
+use super::filter::is_valid_condition;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum FilterGroup {
+pub enum FilterGroup {
     All,
     Role(PatchRole),
 }
 
 impl FilterGroup {
-    pub(crate) const ALL: [Self; 7] = [
+    pub const ALL: [Self; 7] = [
         Self::All,
         Self::Role(PatchRole::Bass),
         Self::Role(PatchRole::Chord),
@@ -21,7 +23,7 @@ impl FilterGroup {
         Self::Role(PatchRole::Etc),
     ];
 
-    pub(crate) fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
             Self::All => "ALL",
             Self::Role(PatchRole::Bass) => "Bass track",
@@ -45,7 +47,7 @@ impl FilterGroup {
         }
     }
 
-    pub(super) fn role(self) -> Option<PatchRole> {
+    pub fn role(self) -> Option<PatchRole> {
         match self {
             Self::All => None,
             Self::Role(role) => Some(role),
@@ -57,13 +59,14 @@ impl FilterGroup {
     }
 }
 
+/// 1 つの Preset。`matches` は selector 整列済み一覧への index 列。
 #[derive(Clone)]
-pub(crate) struct FilterPreset {
-    pub(crate) label: String,
-    pub(crate) pattern: Option<String>,
-    pub(crate) is_user: bool,
-    pub(crate) group: FilterGroup,
-    pub(super) matches: Arc<[usize]>,
+pub struct FilterPreset {
+    pub label: String,
+    pub pattern: Option<String>,
+    pub is_user: bool,
+    pub group: FilterGroup,
+    pub matches: Arc<[usize]>,
 }
 
 impl FilterPreset {
@@ -120,6 +123,17 @@ fn from_builtin(group: FilterGroup, preset: &PatchRolePreset) -> FilterPreset {
 
 pub(super) fn normalize_user_presets(presets: Vec<(String, String)>) -> Vec<(String, String)> {
     normalize_user_role_presets(presets)
+}
+
+/// ユーザー追加 preset を、[`PreparedPresets`](super::PreparedPresets) へ渡せる形に整える。
+///
+/// 正規化（重複・空の除去）に加え、正規表現として compile できない条件を落とす。
+/// `PreparedPresets::build` はこの前処理を経た入力を前提にする。
+pub fn prepare_user_presets(presets: Vec<(String, String)>) -> Vec<(String, String)> {
+    normalize_user_presets(presets)
+        .into_iter()
+        .filter(|(_, pattern)| is_valid_condition(pattern))
+        .collect()
 }
 
 pub(super) fn patterns_for_role(role: PatchRole, user_presets: &[(String, String)]) -> Vec<String> {

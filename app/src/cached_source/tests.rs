@@ -1,8 +1,4 @@
-use std::{
-    io::{Read as _, Write as _},
-    net::TcpListener,
-    sync::mpsc,
-};
+use std::{io::Write as _, net::TcpListener, sync::mpsc};
 
 use super::*;
 

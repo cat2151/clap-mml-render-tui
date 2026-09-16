@@ -23,8 +23,12 @@ pub mod ui;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub use history_select::is_history_select_trigger;
-pub use patch_catalog::{host_patch_catalog, HostPatchCatalog, PatchCatalogEntry};
-pub use patch_select::is_patch_select_trigger;
+pub use patch_catalog::{
+    host_patch_catalog, sort_for_selector, HostPatchCatalog, PatchCatalogEntry,
+};
+pub use patch_select::{
+    is_patch_select_trigger, prepare_user_presets, FilterGroup, FilterPreset, PreparedPresets,
+};
 pub use play_settings::{is_play_settings_trigger, PlaySettings};
 pub use sender::{LineLayer, MmlOverlayLinePlayback, MmlOverlaySender, MmlOverlaySenderStatus};
 pub use state::{

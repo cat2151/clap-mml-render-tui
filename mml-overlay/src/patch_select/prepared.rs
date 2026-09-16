@@ -11,12 +11,13 @@ use super::{
     presets::{presets_for, FilterGroup, FilterPreset},
 };
 
-pub(super) struct PreparedPresets {
+/// Role ごとの Preset 一覧。Role=ALL の一覧には他 Role の Preset を qualify 表記で含める。
+pub struct PreparedPresets {
     by_role: Vec<Vec<FilterPreset>>,
 }
 
 impl PreparedPresets {
-    pub(super) fn build(
+    pub fn build(
         all: &[PatchCatalogEntry],
         user_presets: &[(String, String)],
         role_index: &PatchRoleIndex,
@@ -56,7 +57,7 @@ impl PreparedPresets {
         Ok(Self { by_role })
     }
 
-    pub(super) fn for_role(&self, role_index: usize) -> &[FilterPreset] {
+    pub fn for_role(&self, role_index: usize) -> &[FilterPreset] {
         &self.by_role[role_index]
     }
 }

@@ -18,13 +18,15 @@ use ratatui_textarea::TextArea;
 
 use cmrt_tui_core::{patch_load::PatchLoadMeasurement, text_input};
 
-use crate::PatchCatalogEntry;
+use crate::{patch_catalog::sort_for_selector, PatchCatalogEntry};
 
 use filter::{filter_candidates, is_valid_condition};
 use keys::{is_add_preset_key, is_filter_edit_trigger, is_preview_key, is_random_jump_key};
 pub(crate) use navigation::PatchSelectFocus;
-use prepared::{build_role_index, PreparedPresets};
-use presets::{normalize_user_presets, patterns_for_role, FilterGroup, FilterPreset};
+use prepared::build_role_index;
+pub use prepared::PreparedPresets;
+use presets::{normalize_user_presets, patterns_for_role};
+pub use presets::{prepare_user_presets, FilterGroup, FilterPreset};
 
 pub(crate) use keys::is_patch_select_play_settings_trigger;
 pub use keys::is_patch_select_trigger;
@@ -94,11 +96,8 @@ impl<'a> PatchSelect<'a> {
         if all.is_empty() {
             return None;
         }
-        all.sort_by(|left, right| left.selector_sort_key().cmp(&right.selector_sort_key()));
-        let user_presets = normalize_user_presets(user_presets)
-            .into_iter()
-            .filter(|(_, pattern)| is_valid_condition(pattern))
-            .collect::<Vec<_>>();
+        sort_for_selector(&mut all);
+        let user_presets = prepare_user_presets(user_presets);
         if role_index.is_empty() {
             role_index = build_role_index(&all, &user_presets);
         }
