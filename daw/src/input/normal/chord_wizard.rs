@@ -215,7 +215,7 @@ impl DawApp {
     /// chord 行を直接 MML として解釈せず、MML overlay の `Ctrl+Space` と同じ変換へ
     /// chord init・演奏 track の directive・init MML を渡す。本番と同じ voicing にした
     /// うえで、音色だけは realtime server へ別途指定する。
-    fn start_chord_wizard_realtime_preview(&self, track: usize, measure: usize) {
+    pub(super) fn start_chord_wizard_realtime_preview(&self, track: usize, measure: usize) {
         let request = match self.chord_wizard_realtime_preview(track, measure) {
             Ok(request) => request,
             Err(error) => {
@@ -274,7 +274,7 @@ impl DawApp {
     }
 
     /// コード進行を抽選する。実際に音になるものが出るまで引き直す。
-    fn pick_playable_chord_progression(&self) -> Result<String, String> {
+    pub(super) fn pick_playable_chord_progression(&self) -> Result<String, String> {
         let progressions = self.chord_progressions();
         if progressions.is_empty() {
             return Err("コード進行カタログが空です".to_string());

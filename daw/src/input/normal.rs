@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::super::{
-    AbRepeatState, DawApp, DawMode, DawNormalAction, DawPlayState, NormalCellUndo,
+    AbRepeatState, DawApp, DawMode, DawNormalAction, DawPlayState, NormalCellUndo, CHORD_TRACK,
     DEFAULT_TRACK0_MML, FIRST_PLAYABLE_TRACK,
 };
 
@@ -12,6 +12,7 @@ mod chord_row;
 mod chord_wizard;
 mod playback;
 mod random_patch;
+mod random_progression;
 
 pub(super) use playback::{
     format_patch_hot_reload_log, normal_playback_shortcut, preview_target_track,
@@ -392,6 +393,9 @@ impl DawApp {
 
             KeyCode::Char('g') => self.apply_generate_to_current_measure(),
             KeyCode::Char('G') => self.apply_chord_wizard_to_current_measure(),
+            KeyCode::Char('r') if self.editor.cursor_track == CHORD_TRACK => {
+                self.apply_random_chord_progression_to_chord_row();
+            }
             KeyCode::Char('r') => {
                 if self.restore_default_tempo_init_if_empty() {
                     return DawNormalAction::Continue;

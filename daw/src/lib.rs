@@ -22,6 +22,7 @@ mod http_server;
 mod init;
 mod input;
 mod live_instance;
+mod measure_count;
 mod messages;
 mod mixer;
 mod mml;

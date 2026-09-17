@@ -114,7 +114,7 @@ pub(super) fn draw_help(
             Line::from("  Shift+P : 演奏 / 停止"),
             Line::from("  Shift+Space : 非play時、現在measから演奏開始して継続"),
             Line::from("  s      : solo toggle"),
-            Line::from("  r      : random 音色設定"),
+            Line::from("  r      : random 音色設定（chord 行では random コード進行 + 小節数を合わせる）"),
             Line::from("  K / ?  : ヘルプ (このページ)"),
             Line::from("  n      : notepad へ切替"),
             Line::from("  Ctrl+G : 画面切替"),
