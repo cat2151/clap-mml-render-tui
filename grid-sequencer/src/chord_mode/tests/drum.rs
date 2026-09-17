@@ -1,5 +1,7 @@
 //! drum 行の patch 抽選。役割ごとのカテゴリ・キーワードから引き直す経路。
 
+use cmrt_tui_core::patch_load::PatchLoadState;
+
 use super::*;
 
 /// drum 4 役を分けられるだけの候補。カテゴリは1つで、役割はキーワードで分かれる。
@@ -32,7 +34,8 @@ fn drum_rows_get_their_own_patch_without_the_chord_mode() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = drum_patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllUnknown);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllUnknown);
     let mut screen = GridSequencerScreen::with_track_count(None, crate::FULL_DRUM_TRACK_COUNT);
 
     screen.start(now, &ctx);
@@ -64,7 +67,8 @@ fn randomizing_keeps_the_drum_rows_on_drum_patches() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = drum_patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllUnknown);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllUnknown);
     let mut screen = GridSequencerScreen::with_track_count(None, crate::FULL_DRUM_TRACK_COUNT);
     screen.start(now, &ctx);
 
@@ -88,7 +92,8 @@ fn the_staged_cycle_reassigns_the_drum_rows() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = drum_patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = GridSequencerScreen::with_track_count(None, crate::FULL_DRUM_TRACK_COUNT);
     screen.start(now, &ctx);
     screen.handle_key(press_c(), now, &ctx);

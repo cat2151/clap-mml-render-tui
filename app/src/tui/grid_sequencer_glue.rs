@@ -18,8 +18,8 @@ use cmrt_chord::ChordProgressionCatalog;
 use crate::realtime_play::PatchVoicing;
 use crate::tui::grid_sequencer::{
     GridConnectionStatus, GridDawChordBinding, GridDawChordSource, GridDawLane,
-    GridHistoryPreviewStatus, GridPatchLoad, GridSequencerAction, GridSequencerContext,
-    GridSongSnapshot, GridVoicingLookup, NoteStep,
+    GridHistoryPreviewStatus, GridSequencerAction, GridSequencerContext, GridSongSnapshot,
+    GridVoicingLookup, NoteStep,
 };
 
 use crate::tui::voicing::VoicingState;
@@ -41,15 +41,8 @@ struct GridContextParts<'ctx> {
 }
 
 fn grid_sequencer_context<'ctx>(parts: GridContextParts<'ctx>) -> GridSequencerContext<'ctx> {
-    let (patch_load, load_measurements, patch_roles, catalog_notes) = match parts.patch_load {
-        PatchLoadState::Loading => (
-            GridPatchLoad::Loading,
-            None,
-            Cow::Owned(Default::default()),
-            parts.catalog_notes,
-        ),
+    let (load_measurements, patch_roles, catalog_notes) = match parts.patch_load {
         PatchLoadState::Ready(snapshot) => (
-            GridPatchLoad::Ready(snapshot.pairs()),
             Some(snapshot.load_measurements()),
             Cow::Borrowed(snapshot.patch_roles()),
             if snapshot.catalog_notes().is_empty() {
@@ -58,16 +51,13 @@ fn grid_sequencer_context<'ctx>(parts: GridContextParts<'ctx>) -> GridSequencerC
                 snapshot.catalog_notes()
             },
         ),
-        PatchLoadState::Err(error) => (
-            GridPatchLoad::Err(error),
-            None,
-            Cow::Owned(Default::default()),
-            parts.catalog_notes,
-        ),
+        PatchLoadState::Loading | PatchLoadState::Err(_) => {
+            (None, Cow::Owned(Default::default()), parts.catalog_notes)
+        }
     };
     GridSequencerContext {
         patch_dirs_configured: parts.patch_dirs_configured,
-        patch_load,
+        patch_load: parts.patch_load,
         load_measurements,
         chord_catalog: parts.chord_catalog,
         voicing: parts.voicing,

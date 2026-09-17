@@ -3,8 +3,7 @@ use std::time::Instant;
 use super::*;
 use crate::{
     tests::{ctx_with, empty_catalog},
-    ChordPlayback, GridLane, GridLaneMode, GridPatchLoad, NoVoicingLookup, NotePattern, NoteStep,
-    GRID_STEPS,
+    ChordPlayback, GridLane, GridLaneMode, NoVoicingLookup, NotePattern, NoteStep, GRID_STEPS,
 };
 
 fn instance(index: usize, patch: &str, note: u8) -> GridInstance {
@@ -45,12 +44,11 @@ fn ready_patch_catalog_replaces_only_disappeared_saved_patches() {
         restored_session: Some(session),
         ..crate::GridSequencerParts::default()
     });
-    let patches = vec![("Still Here".to_string(), "a".to_string())];
-    let ctx = ctx_with(
-        GridPatchLoad::Ready(&patches),
-        empty_catalog(),
-        &NoVoicingLookup,
-    );
+    let patches = cmrt_tui_core::patch_load::PatchLoadState::ready(vec![(
+        "Still Here".to_string(),
+        "a".to_string(),
+    )]);
+    let ctx = ctx_with(&patches, empty_catalog(), &NoVoicingLookup);
     screen.enter(Instant::now(), &ctx);
     assert_eq!(
         screen.state.instances()[0].patch.as_deref(),

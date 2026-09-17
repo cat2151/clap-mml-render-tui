@@ -46,7 +46,7 @@ fn screen_with_one_history(now: Instant) -> GridSequencerScreen {
 fn opening_history_automatically_requests_the_first_measure_preview() {
     let now = Instant::now();
     let mut screen = screen_with_one_history(now);
-    let patches = Vec::new();
+    let patches = PatchLoadState::ready(Vec::new());
     let ctx = ready_ctx(&patches);
 
     let open = screen.handle_key(shift_press(KeyCode::Char('H')), now, &ctx);
@@ -71,7 +71,7 @@ fn opening_history_automatically_requests_the_first_measure_preview() {
 fn finished_preview_replays_from_cache_and_active_preview_can_be_stopped() {
     let now = Instant::now();
     let mut screen = screen_with_one_history(now);
-    let patches = Vec::new();
+    let patches = PatchLoadState::ready(Vec::new());
     let ctx = ready_ctx(&patches);
     screen.handle_key(shift_press(KeyCode::Char('H')), now, &ctx);
 
@@ -98,7 +98,7 @@ fn finished_preview_replays_from_cache_and_active_preview_can_be_stopped() {
 #[test]
 fn closing_history_restores_only_a_previously_playing_grid() {
     let now = Instant::now();
-    let patches = Vec::new();
+    let patches = PatchLoadState::ready(Vec::new());
     let ctx = ready_ctx(&patches);
     let mut playing = screen_with_one_history(now);
     let later = now + step_offset(2);
@@ -125,7 +125,7 @@ fn closing_history_restores_only_a_previously_playing_grid() {
 #[test]
 fn closing_history_and_resuming_does_not_duplicate_the_current_grid() {
     let now = Instant::now();
-    let patches = Vec::new();
+    let patches = PatchLoadState::ready(Vec::new());
     let ctx = ready_ctx(&patches);
     let mut screen = screen_with_one_history(now);
 
@@ -140,7 +140,7 @@ fn closing_history_and_resuming_does_not_duplicate_the_current_grid() {
 #[test]
 fn importing_history_does_not_resume_the_grid() {
     let now = Instant::now();
-    let patches = Vec::new();
+    let patches = PatchLoadState::ready(Vec::new());
     let ctx = ready_ctx(&patches);
     let mut screen = screen_with_one_history(now);
 

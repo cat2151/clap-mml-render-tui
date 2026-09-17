@@ -257,7 +257,12 @@ fn table_state(
 /// 選択行を viewport の上端・下端から30%離して保つ。
 ///
 /// 一覧の端では offset を clamp するので、先頭・末尾は余白を捏造せずそのまま見せる。
-fn scroll_offset(cursor: usize, total: usize, visible_rows: usize, current_offset: usize) -> usize {
+pub fn scroll_offset(
+    cursor: usize,
+    total: usize,
+    visible_rows: usize,
+    current_offset: usize,
+) -> usize {
     if total == 0 || visible_rows == 0 {
         return 0;
     }

@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent,
 use ratatui::layout::Rect;
 
 use super::*;
-use crate::{tests::ctx_with, ChordPlayback, GridPatchLoad, NoVoicingLookup, NotePattern};
+use crate::{tests::ctx_with, ChordPlayback, NoVoicingLookup, NotePattern};
 
 const AREA: Rect = Rect::new(0, 0, 90, 24);
 
@@ -99,7 +99,7 @@ fn press(character: char) -> KeyEvent {
 
 fn context() -> crate::GridSequencerContext<'static> {
     ctx_with(
-        GridPatchLoad::Ready(&[]),
+        crate::tests::empty_patch_load(),
         crate::tests::empty_catalog(),
         &NoVoicingLookup,
     )

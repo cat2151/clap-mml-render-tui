@@ -4,8 +4,10 @@ use super::*;
 use std::borrow::Cow;
 
 use cmrt_patches::{PatchRoleIndex, PatchRoleInput};
+use cmrt_tui_core::patch_load::PatchLoadState;
 
 mod history;
+mod patch_load;
 
 fn press(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
@@ -16,8 +18,23 @@ fn shift_press(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::SHIFT)
 }
 
-fn one_patch() -> Vec<(String, String)> {
-    vec![("Keys/Piano.fxp".to_string(), "keys/piano.fxp".to_string())]
+fn one_patch() -> PatchLoadState {
+    PatchLoadState::ready(vec![(
+        "Keys/Piano.fxp".to_string(),
+        "keys/piano.fxp".to_string(),
+    )])
+}
+
+/// patch が 0 件で読み込み済みの状態。`'static` な ctx を組むテスト用。
+pub(crate) fn empty_patch_load() -> &'static PatchLoadState {
+    static LOAD: std::sync::OnceLock<PatchLoadState> = std::sync::OnceLock::new();
+    LOAD.get_or_init(|| PatchLoadState::ready(Vec::new()))
+}
+
+/// 読み込み中の状態。`'static` な ctx を組むテスト用。
+pub(crate) fn loading_patch_load() -> &'static PatchLoadState {
+    static LOAD: std::sync::OnceLock<PatchLoadState> = std::sync::OnceLock::new();
+    LOAD.get_or_init(|| PatchLoadState::Loading)
 }
 
 /// chord mode を使わないテスト用の空カタログ。
@@ -44,13 +61,13 @@ pub(crate) fn patch_roles(
 }
 
 pub(crate) fn ctx_with<'a>(
-    patch_load: GridPatchLoad<'a>,
+    patch_load: &'a PatchLoadState,
     catalog: &'a cmrt_chord::ChordProgressionCatalog,
     voicing: &'a dyn GridVoicingLookup,
 ) -> GridSequencerContext<'a> {
-    let patch_roles = match &patch_load {
-        GridPatchLoad::Ready(patches) => patch_roles(patches, &[]),
-        GridPatchLoad::Loading | GridPatchLoad::Err(_) => PatchRoleIndex::default(),
+    let patch_roles = match patch_load {
+        PatchLoadState::Ready(snapshot) => patch_roles(snapshot.pairs(), &[]),
+        PatchLoadState::Loading | PatchLoadState::Err(_) => PatchRoleIndex::default(),
     };
     GridSequencerContext {
         patch_dirs_configured: true,
@@ -64,16 +81,12 @@ pub(crate) fn ctx_with<'a>(
     }
 }
 
-pub(crate) fn ready_ctx(patches: &[(String, String)]) -> GridSequencerContext<'_> {
-    ctx_with(
-        GridPatchLoad::Ready(patches),
-        empty_catalog(),
-        &NoVoicingLookup,
-    )
+pub(crate) fn ready_ctx(patch_load: &PatchLoadState) -> GridSequencerContext<'_> {
+    ctx_with(patch_load, empty_catalog(), &NoVoicingLookup)
 }
 
 fn loading_ctx() -> GridSequencerContext<'static> {
-    ctx_with(GridPatchLoad::Loading, empty_catalog(), &NoVoicingLookup)
+    ctx_with(loading_patch_load(), empty_catalog(), &NoVoicingLookup)
 }
 
 /// MIDI を送らないテスト用の画面。
@@ -97,13 +110,13 @@ fn q_quits_the_screen() {
 }
 
 #[test]
-fn t_cycles_track_count_and_requests_restart() {
+fn shift_t_cycles_track_count_and_requests_restart() {
     let patches = one_patch();
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
 
     for expected in [2, 3, 4, 7, 8, 16, 1] {
         let action = screen.handle_key(
-            press(KeyCode::Char('t')),
+            press(KeyCode::Char('T')),
             Instant::now(),
             &ready_ctx(&patches),
         );
@@ -117,10 +130,10 @@ fn t_cycles_track_count_and_requests_restart() {
 }
 
 #[test]
-fn t_release_does_not_change_track_count() {
+fn shift_t_release_does_not_change_track_count() {
     let patches = one_patch();
     let mut screen = GridSequencerScreen::with_track_count(None, 4);
-    let mut release = press(KeyCode::Char('t'));
+    let mut release = press(KeyCode::Char('T'));
     release.kind = KeyEventKind::Release;
 
     assert!(matches!(
@@ -167,88 +180,6 @@ fn esc_closes_the_help_overlay() {
     screen.handle_key(press(KeyCode::Esc), Instant::now(), &ready_ctx(&patches));
 
     assert!(!screen.help_open);
-}
-
-#[test]
-fn r_assigns_note_patches_but_does_not_fallback_for_empty_drum_pools() {
-    let patches = one_patch();
-    let mut screen = silent_screen();
-    assert!(screen.state.rows().iter().all(|row| row.patch.is_none()));
-
-    screen.handle_key(
-        press(KeyCode::Char('r')),
-        Instant::now(),
-        &ready_ctx(&patches),
-    );
-
-    for (index, row) in screen.state.rows().iter().enumerate() {
-        if screen.state.drum_role(index).is_some() {
-            assert_eq!(row.patch, None, "drum候補が空ならALLへfallbackしない");
-        } else {
-            assert_eq!(
-                row.patch.as_deref(),
-                Some("Keys/Piano.fxp"),
-                "non-drum row {index}"
-            );
-        }
-    }
-}
-
-#[test]
-fn r_keeps_the_patch_empty_while_the_list_is_still_loading() {
-    let mut screen = silent_screen();
-
-    screen.handle_key(press(KeyCode::Char('r')), Instant::now(), &loading_ctx());
-
-    assert!(screen.state.rows().iter().all(|row| row.patch.is_none()));
-}
-
-/// SHIFT+R は音色ロード（＝無音時間）を避けるため patch を引き直さない。
-#[test]
-fn shift_r_rerolls_the_grid_without_touching_patches() {
-    let patches = one_patch();
-    let now = Instant::now();
-    let mut screen = silent_screen();
-    screen.start(now, &ready_ctx(&patches));
-    for row in screen.state.rows_mut() {
-        row.patch = Some("Kept/Patch.fxp".to_string());
-        row.pattern = NotePattern::default();
-    }
-
-    screen.handle_key(shift_press(KeyCode::Char('R')), now, &ready_ctx(&patches));
-
-    assert!(screen
-        .state
-        .rows()
-        .iter()
-        .all(|row| row.patch.as_deref() == Some("Kept/Patch.fxp")));
-    assert!(
-        screen
-            .state
-            .rows()
-            .iter()
-            .any(|row| row.pattern.steps().contains(&NoteStep::Attack)),
-        "patch 以外は引き直すので、どこかにAttackが生成される"
-    );
-}
-
-#[test]
-fn ready_patch_list_fills_rows_that_started_while_loading() {
-    let mut screen = silent_screen();
-    screen.start(Instant::now(), &loading_ctx());
-    assert!(screen.state.rows().iter().all(|row| row.patch.is_none()));
-
-    let patches = one_patch();
-    screen.refresh_context(&ready_ctx(&patches));
-
-    for (index, row) in screen.state.rows().iter().enumerate() {
-        if screen.state.drum_role(index).is_some() {
-            assert_eq!(row.patch, None);
-        } else {
-            assert_eq!(row.patch.as_deref(), Some("Keys/Piano.fxp"));
-        }
-    }
-    assert_eq!(screen.patch_status, GridPatchStatus::Ready(1));
 }
 
 #[test]

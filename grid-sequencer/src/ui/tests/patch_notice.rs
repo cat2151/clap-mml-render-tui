@@ -69,7 +69,7 @@ fn the_notice_disappears_after_its_display_time() {
     let mut screen = GridSequencerScreen::new(None);
     screen.patch_notice = Some(PatchNotice::new(PatchUnavailable::NoPatches, now));
     let ctx = crate::tests::ctx_with(
-        crate::GridPatchLoad::Loading,
+        crate::tests::loading_patch_load(),
         crate::tests::empty_catalog(),
         &crate::NoVoicingLookup,
     );

@@ -4,13 +4,13 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent,
 use ratatui::layout::Rect;
 
 use super::*;
-use crate::{ChordPlayback, GridPatchLoad, GridSequencerContext, NoVoicingLookup};
+use crate::{ChordPlayback, GridSequencerContext, NoVoicingLookup};
 
 const AREA: Rect = Rect::new(0, 0, 100, 24);
 
 fn context() -> GridSequencerContext<'static> {
     crate::tests::ctx_with(
-        GridPatchLoad::Ready(&[]),
+        crate::tests::empty_patch_load(),
         crate::tests::empty_catalog(),
         &NoVoicingLookup,
     )

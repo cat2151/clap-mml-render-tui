@@ -11,7 +11,7 @@ const AREA: Rect = Rect::new(0, 0, 90, 24);
 
 fn context() -> crate::GridSequencerContext<'static> {
     crate::tests::ctx_with(
-        crate::GridPatchLoad::Ready(&[]),
+        crate::tests::empty_patch_load(),
         crate::tests::empty_catalog(),
         &crate::NoVoicingLookup,
     )

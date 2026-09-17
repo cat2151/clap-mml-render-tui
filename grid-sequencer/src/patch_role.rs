@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use cmrt_mml_overlay::FilterGroup;
 use cmrt_patches::{DrumPatchRole, PatchRole};
 use cmrt_realtime_play::PatchVoicing;
 use cmrt_rhythm::DrumRole;
@@ -81,6 +82,35 @@ pub fn candidates_for_purpose<'a>(
         GridPatchPurpose::Percussion => {
             string_refs(ctx.patch_roles.drum_candidates(DrumPatchRole::Percussion))
         }
+    }
+}
+
+/// patch selector を開いたときに合わせる Role と、Drum 行ならその部位の builtin preset。
+///
+/// 通常 NOTE 行だけは全 Role から選べる `ALL`。Drum 以外の専用行は Role だけ合わせ、
+/// Preset は `ALL` のまま（`None`）にする。
+pub(crate) fn selector_start(purpose: GridPatchPurpose) -> (FilterGroup, Option<DrumPatchRole>) {
+    match purpose {
+        GridPatchPurpose::Note => (FilterGroup::All, None),
+        GridPatchPurpose::Chord => (FilterGroup::Role(PatchRole::Chord), None),
+        GridPatchPurpose::Bass => (FilterGroup::Role(PatchRole::Bass), None),
+        GridPatchPurpose::Arpeggio => (FilterGroup::Role(PatchRole::Lead), None),
+        GridPatchPurpose::Kick => (
+            FilterGroup::Role(PatchRole::Drum),
+            Some(DrumPatchRole::Kick),
+        ),
+        GridPatchPurpose::Snare => (
+            FilterGroup::Role(PatchRole::Drum),
+            Some(DrumPatchRole::Snare),
+        ),
+        GridPatchPurpose::HiHat => (
+            FilterGroup::Role(PatchRole::Drum),
+            Some(DrumPatchRole::HiHat),
+        ),
+        GridPatchPurpose::Percussion => (
+            FilterGroup::Role(PatchRole::Drum),
+            Some(DrumPatchRole::Percussion),
+        ),
     }
 }
 

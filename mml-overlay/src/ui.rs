@@ -7,7 +7,7 @@ mod patch_select;
 mod play_settings;
 mod status;
 
-pub use patch_select::load_time_label;
+pub use patch_select::{load_time_label, scroll_offset};
 
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},

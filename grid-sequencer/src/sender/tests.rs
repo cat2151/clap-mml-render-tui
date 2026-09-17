@@ -1,8 +1,10 @@
 //! [`super::GridMidiSender`] のテスト。
 //!
 //! - `preload_during_playback`: 先読み中も送信キューが詰まらないこと（実サーバー / `#[ignore]`）
+//! - `patch_reload_reattack`: 行の patch 差し替え直後に積んだ note が鳴ること（実サーバー / `#[ignore]`）
 //! - `test_play_server`: 実サーバーを起こすためのハーネス（判定は書かない）
 
+mod patch_reload_reattack;
 mod preload_during_playback;
 mod test_play_server;
 

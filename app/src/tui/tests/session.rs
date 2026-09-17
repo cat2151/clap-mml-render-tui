@@ -218,8 +218,8 @@ fn grid_track_count_is_persisted_and_restored() {
     let mut app = TuiApp::new_for_test(test_config());
     app.active_screen = crate::screen_switch::PrimaryScreen::GridSequencer;
     let action = app.handle_grid_sequencer_key_event(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Char('t'),
-        crossterm::event::KeyModifiers::NONE,
+        crossterm::event::KeyCode::Char('T'),
+        crossterm::event::KeyModifiers::SHIFT,
     ));
     assert!(matches!(
         action,

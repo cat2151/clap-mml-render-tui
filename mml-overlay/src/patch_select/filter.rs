@@ -9,7 +9,7 @@ use regex::Regex;
 use crate::PatchCatalogEntry;
 
 /// 動的な手入力は、事前検索済みの候補内だけを絞り込む。
-pub(super) fn filter_candidates(
+pub fn filter_candidates(
     all: &[PatchCatalogEntry],
     candidates: &[usize],
     condition: &str,

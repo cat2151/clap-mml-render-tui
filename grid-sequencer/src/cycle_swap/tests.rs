@@ -1,10 +1,12 @@
 use cmrt_chord::ChordProgressionCatalog;
 
 use super::*;
+
 use crate::tests::ctx_with;
-use crate::{GridPatchLoad, GridVoicingLookup, GRID_STEPS, STEP_INTERVAL};
+use crate::{GridVoicingLookup, GRID_STEPS, STEP_INTERVAL};
 use cmrt_realtime_play::PatchVoicing;
 use cmrt_tui_core::patch_load::PatchLoadMeasurement;
+use cmrt_tui_core::patch_load::PatchLoadState;
 
 const CATALOG_JSON: &str = r#"[{"degrees":"I-IV-V-I","description":"test"}]"#;
 
@@ -74,7 +76,8 @@ fn the_preload_sends_one_instance_per_step() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen_in_chord_mode(now, &ctx);
 
     screen.advance_cycle_swap(now, &ctx);
@@ -104,7 +107,8 @@ fn keeping_the_patches_stages_the_next_progression_without_starting_a_bank_prelo
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen_in_chord_mode(now, &ctx);
     screen.cycle_random = crate::CycleRandom::HOLD;
     screen.state.stage_preload_due_for_test();
@@ -123,7 +127,8 @@ fn randomizing_only_the_patches_still_starts_the_bank_preload() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen_in_chord_mode(now, &ctx);
     screen.cycle_random = crate::CycleRandom {
         patch: true,
@@ -155,7 +160,8 @@ fn the_playing_grid_is_untouched_while_preloading() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen_in_chord_mode(now, &ctx);
     let playing = screen.state.rows().to_vec();
     screen.state.stage_preload_due_for_test();
@@ -174,7 +180,8 @@ fn staging_a_cycle_rerolls_the_score_too() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen_in_chord_mode(now, &ctx);
     // 引き直しが起きたことが分かるよう、全patternを空にしておく。
     for row in screen.state.rows_mut() {
@@ -199,7 +206,8 @@ fn a_second_preload_does_not_overtake_the_first() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen_in_chord_mode(now, &ctx);
     screen.state.stage_preload_due_for_test();
     screen.advance_cycle_swap(now, &ctx);
@@ -219,7 +227,8 @@ fn changing_cycle_random_restarts_the_early_preload() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen_in_chord_mode(now, &ctx);
     screen.advance_cycle_swap(now, &ctx);
     assert!(screen.state.has_pending_cycle());
@@ -242,7 +251,8 @@ fn cancelling_drops_the_staged_cycle() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen_in_chord_mode(now, &ctx);
     screen.state.stage_preload_due_for_test();
     screen.advance_cycle_swap(now, &ctx);
@@ -259,7 +269,8 @@ fn nothing_is_preloaded_without_the_chord_mode() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = crate::GridSequencerScreen::with_track_count(None, 4);
     screen.start(now, &ctx);
 

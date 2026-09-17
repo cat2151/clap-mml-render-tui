@@ -4,10 +4,12 @@ use cmrt_realtime_play::PatchVoicing;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::*;
+
 use crate::{
     tests::{ctx_with, empty_catalog},
-    GridPatchLoad, GridSequencerAction, GridVoicingLookup,
+    GridSequencerAction, GridVoicingLookup,
 };
+use cmrt_tui_core::patch_load::PatchLoadState;
 
 struct PolyPatch;
 
@@ -51,7 +53,8 @@ fn setup() -> (
 fn i_opens_a_single_line_input_and_enter_fixes_the_progression() {
     let now = Instant::now();
     let (mut screen, patches, catalog) = setup();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), catalog, &PolyPatch);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, catalog, &PolyPatch);
     screen.start(now, &ctx);
 
     screen.handle_key(key(KeyCode::Char('i')), now, &ctx);
@@ -73,7 +76,8 @@ fn i_opens_a_single_line_input_and_enter_fixes_the_progression() {
 fn invalid_input_stays_open_without_changing_playback() {
     let now = Instant::now();
     let (mut screen, patches, catalog) = setup();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), catalog, &PolyPatch);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, catalog, &PolyPatch);
     screen.start(now, &ctx);
     screen.handle_key(key(KeyCode::Char('i')), now, &ctx);
     type_text(&mut screen, "zzz", now, &ctx);
@@ -91,7 +95,11 @@ fn invalid_input_stays_open_without_changing_playback() {
 fn unavailable_poly_patch_rejects_atomically() {
     let now = Instant::now();
     let mut screen = GridSequencerScreen::new(None);
-    let ctx = ctx_with(GridPatchLoad::Ready(&[]), empty_catalog(), &PolyPatch);
+    let ctx = ctx_with(
+        crate::tests::empty_patch_load(),
+        empty_catalog(),
+        &PolyPatch,
+    );
     screen.start(now, &ctx);
     let before = screen.state.instances().to_vec();
     screen.handle_key(key(KeyCode::Char('i')), now, &ctx);
@@ -110,7 +118,8 @@ fn unavailable_poly_patch_rejects_atomically() {
 fn escape_cancels_without_applying_the_input() {
     let now = Instant::now();
     let (mut screen, patches, catalog) = setup();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), catalog, &PolyPatch);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, catalog, &PolyPatch);
     screen.start(now, &ctx);
     screen.handle_key(key(KeyCode::Char('i')), now, &ctx);
     type_text(&mut screen, "key:G I", now, &ctx);
@@ -126,7 +135,8 @@ fn escape_cancels_without_applying_the_input() {
 fn fixed_progression_survives_r_upper_r_and_chord_mode_toggle() {
     let now = Instant::now();
     let (mut screen, patches, catalog) = setup();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), catalog, &PolyPatch);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, catalog, &PolyPatch);
     screen.start(now, &ctx);
     screen.handle_key(key(KeyCode::Char('i')), now, &ctx);
     type_text(&mut screen, "key:G Isus4-I", now, &ctx);
@@ -150,7 +160,8 @@ fn fixed_progression_survives_r_upper_r_and_chord_mode_toggle() {
 fn enabling_cycle_random_chord_releases_the_fixed_input() {
     let now = Instant::now();
     let (mut screen, patches, catalog) = setup();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), catalog, &PolyPatch);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, catalog, &PolyPatch);
     screen.start(now, &ctx);
     screen.handle_key(key(KeyCode::Char('i')), now, &ctx);
     type_text(&mut screen, "key:G Isus4-I", now, &ctx);
@@ -169,7 +180,8 @@ fn enabling_cycle_random_chord_releases_the_fixed_input() {
 fn reopening_uses_the_original_fixed_text() {
     let now = Instant::now();
     let (mut screen, patches, catalog) = setup();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), catalog, &PolyPatch);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, catalog, &PolyPatch);
     screen.start(now, &ctx);
     screen.handle_key(key(KeyCode::Char('i')), now, &ctx);
     type_text(&mut screen, "KEY:G♭ I-IV", now, &ctx);

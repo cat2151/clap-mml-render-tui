@@ -27,7 +27,8 @@ pub use patch_catalog::{
     host_patch_catalog, sort_for_selector, HostPatchCatalog, PatchCatalogEntry,
 };
 pub use patch_select::{
-    is_patch_select_trigger, prepare_user_presets, FilterGroup, FilterPreset, PreparedPresets,
+    filter_candidates, is_patch_select_trigger, prepare_user_presets, FilterGroup, FilterPreset,
+    PreparedPresets,
 };
 pub use play_settings::{is_play_settings_trigger, PlaySettings};
 pub use sender::{LineLayer, MmlOverlayLinePlayback, MmlOverlaySender, MmlOverlaySenderStatus};

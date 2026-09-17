@@ -3,7 +3,7 @@
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
 
-use super::{contains, PatchSelectorLayout};
+use super::{contains, PatchPaneFocus, PatchSelectorLayout};
 use crate::{GridSequencerContext, GridSequencerScreen};
 
 impl GridSequencerScreen {
@@ -13,11 +13,11 @@ impl GridSequencerScreen {
         terminal_area: Rect,
         ctx: &GridSequencerContext<'_>,
     ) {
-        let name_search_visible = self
+        let query_visible = self
             .patch_selector
             .as_ref()
-            .is_some_and(super::PatchSelector::name_search_visible);
-        let layout = PatchSelectorLayout::new(terminal_area, name_search_visible);
+            .is_some_and(super::PatchSelector::filter_visible);
+        let layout = PatchSelectorLayout::new(terminal_area, query_visible);
         match event.kind {
             MouseEventKind::Down(MouseButton::Right | MouseButton::Middle) => {
                 self.cancel_patch_selector();
@@ -26,17 +26,24 @@ impl GridSequencerScreen {
                 let Some(selector) = self.patch_selector.as_mut() else {
                     return;
                 };
-                if let Some(index) = layout.category_at(selector, event.column, event.row) {
-                    selector.select_category(index);
+                if let Some(index) = layout.role_at(selector, event.column, event.row) {
+                    selector.select_role(index);
+                    selector.focus = PatchPaneFocus::Role;
+                    self.preview_patch_selection(ctx);
+                } else if let Some(index) = layout.preset_at(selector, event.column, event.row) {
+                    selector.select_preset(index);
+                    selector.focus = PatchPaneFocus::Preset;
                     self.preview_patch_selection(ctx);
                 } else if let Some(index) = layout.patch_at(selector, event.column, event.row) {
                     selector.select_patch(index);
                     self.apply_patch_selection(ctx);
-                } else if layout
-                    .name_search
-                    .is_some_and(|area| contains(area, event.column, event.row))
+                } else if contains(layout.patch_header, event.column, event.row)
+                    || layout
+                        .query
+                        .is_some_and(|area| contains(area, event.column, event.row))
                 {
-                    // textarea が keyboard focus を持ったままなので、clickでは状態を変えない。
+                    // header は選べる行ではない。Regex 欄は textarea が keyboard focus を
+                    // 持ったままなので、click では状態を変えない。
                 } else {
                     self.cancel_patch_selector();
                 }
@@ -50,10 +57,12 @@ impl GridSequencerScreen {
                 let Some(selector) = self.patch_selector.as_mut() else {
                     return;
                 };
-                if contains(layout.category_pane, event.column, event.row) {
-                    selector.move_category(delta);
+                if contains(layout.role_pane, event.column, event.row) {
+                    selector.move_role_cursor(delta);
+                } else if contains(layout.preset_pane, event.column, event.row) {
+                    selector.move_preset_cursor(delta);
                 } else if contains(layout.patch_pane, event.column, event.row) {
-                    selector.move_patch(delta);
+                    selector.move_patch_cursor(delta);
                 }
                 self.preview_patch_selection(ctx);
             }
@@ -70,42 +79,15 @@ impl GridSequencerScreen {
         key: KeyEvent,
         ctx: &GridSequencerContext<'_>,
     ) {
-        if self
-            .patch_selector
-            .as_ref()
-            .is_some_and(|selector| selector.name_search_active)
-        {
-            let preview = match key.code {
-                KeyCode::Esc => {
-                    self.patch_selector
-                        .as_mut()
-                        .expect("filter belongs to an open selector")
-                        .cancel_name_search_input();
-                    false
-                }
-                KeyCode::Enter => {
-                    self.patch_selector
-                        .as_mut()
-                        .expect("filter belongs to an open selector")
-                        .confirm_name_search_input();
-                    true
-                }
-                _ => {
-                    let selector = self
-                        .patch_selector
-                        .as_mut()
-                        .expect("filter belongs to an open selector");
-                    selector.sync_name_search_textarea();
-                    selector.apply_name_search_key(key);
-                    false
-                }
-            };
-            if preview {
+        let Some(selector) = self.patch_selector.as_mut() else {
+            return;
+        };
+        if selector.filter_editing() {
+            if selector.handle_filter_key(key) {
                 self.preview_patch_selection(ctx);
             }
             return;
         }
-
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => {
                 self.cancel_patch_selector();
@@ -116,48 +98,42 @@ impl GridSequencerScreen {
                 return;
             }
             KeyCode::Char('/') => {
-                if let Some(selector) = self.patch_selector.as_mut() {
-                    selector.start_name_search_input();
-                }
+                selector.start_filter_edit();
                 return;
             }
             _ => {}
         }
-        let Some(selector) = self.patch_selector.as_mut() else {
-            return;
-        };
         let navigated = match key.code {
             KeyCode::Left | KeyCode::Char('h') => {
-                selector.move_category(-1);
-                true
+                selector.move_focus(-1);
+                false
             }
             KeyCode::Right | KeyCode::Char('l') => {
-                selector.move_category(1);
-                true
+                selector.move_focus(1);
+                false
             }
             KeyCode::Up | KeyCode::Char('k') => {
-                selector.move_patch(-1);
+                selector.move_focused_cursor(-1);
                 true
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                selector.move_patch(1);
+                selector.move_focused_cursor(1);
                 true
             }
             KeyCode::PageUp => {
-                selector.move_patch(-10);
+                selector.move_focused_page(-1);
                 true
             }
             KeyCode::PageDown => {
-                selector.move_patch(10);
+                selector.move_focused_page(1);
                 true
             }
             KeyCode::Home => {
-                selector.patch_cursor = 0;
+                selector.move_focused_to_start();
                 true
             }
             KeyCode::End => {
-                selector.patch_cursor =
-                    selector.selected_category().patches.len().saturating_sub(1);
+                selector.move_focused_to_end();
                 true
             }
             KeyCode::Char('r') => {

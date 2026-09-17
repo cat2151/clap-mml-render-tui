@@ -9,7 +9,9 @@
 
 use std::time::{Duration, Instant};
 
-use crate::{GridPatchLoad, GridSequencerContext};
+use cmrt_tui_core::patch_load::PatchLoadState;
+
+use crate::GridSequencerContext;
 
 /// 読み切れるだけの長さ。再起動アナウンス（3 秒）と違い操作を塞がないので、
 /// 目を離していても拾えるよう少し長く出す。
@@ -42,11 +44,13 @@ pub(crate) fn catalog_unavailable(ctx: &GridSequencerContext<'_>) -> Option<Patc
     if !ctx.patch_dirs_configured {
         return Some(PatchUnavailable::NotConfigured);
     }
-    match &ctx.patch_load {
-        GridPatchLoad::Loading => Some(PatchUnavailable::Loading),
-        GridPatchLoad::Err(error) => Some(PatchUnavailable::LoadError((*error).to_string())),
-        GridPatchLoad::Ready([]) => Some(PatchUnavailable::NoPatches),
-        GridPatchLoad::Ready(_) => None,
+    match ctx.patch_load {
+        PatchLoadState::Loading => Some(PatchUnavailable::Loading),
+        PatchLoadState::Err(error) => Some(PatchUnavailable::LoadError(error.clone())),
+        PatchLoadState::Ready(snapshot) if snapshot.pairs().is_empty() => {
+            Some(PatchUnavailable::NoPatches)
+        }
+        PatchLoadState::Ready(_) => None,
     }
 }
 

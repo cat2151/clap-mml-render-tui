@@ -9,9 +9,9 @@ fn the_keybind_line_is_always_visible() {
     assert!(rendered.contains("mouse:edit"), "{rendered}");
     assert!(rendered.contains("a:rnd"), "{rendered}");
     assert!(rendered.contains("i:chord input"), "{rendered}");
-    assert!(rendered.contains("x:clear"), "{rendered}");
     assert!(rendered.contains("r/R:random"), "{rendered}");
-    assert!(rendered.contains("t:tracks"), "{rendered}");
+    assert!(rendered.contains("t:patch"), "{rendered}");
+    assert!(rendered.contains("T:tracks"), "{rendered}");
     assert!(rendered.contains("Ctrl+G:screen"), "{rendered}");
     assert!(rendered.contains("q:quit"), "{rendered}");
 }

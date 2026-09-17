@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 cmrt-arpeggiator = { path = "../arpeggiator" }
 cmrt-chord = { path = "../chord" }
+cmrt-mml-overlay = { path = "../mml-overlay" }
 cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-rhythm = { path = "../rhythm" }
 cmrt-patches = { path = "../patches" }
@@ -17,6 +18,8 @@ ratatui = "0.30"
 ratatui-textarea = { version = "0.9", features = ["crossterm"] }
 
 [dev-dependencies]
+# Regex 絞り込みのテストで、Category を持つ catalog（server 側が解釈済みの AudioPatch）を組む。
+cmrt-render-core = { path = "../core-lib" }
 cmrt-runtime = { path = "../cmrt-runtime" }
 # 描画テストで buffer_test（全角文字を含む文字列の探索）を使う。
 cmrt-tui-core = { path = "../tui-core", features = ["test-support"] }

@@ -18,7 +18,7 @@ fn key(code: KeyCode, modifiers: KeyModifiers) -> KeyEvent {
 
 /// Ctrl+B を開いて `input` を打ち、Enter で確定する。
 fn enter_bpm(screen: &mut GridSequencerScreen, now: Instant, input: &str) {
-    let ctx = crate::tests::ready_ctx(&[]);
+    let ctx = crate::tests::ready_ctx(crate::tests::empty_patch_load());
     screen.handle_key(key(KeyCode::Char('b'), KeyModifiers::CONTROL), now, &ctx);
     for character in input.chars() {
         screen.handle_key(key(KeyCode::Char(character), KeyModifiers::NONE), now, &ctx);
@@ -56,7 +56,7 @@ fn a_returns_to_auto_and_plain_b_keeps_its_existing_binding() {
     let mut screen = GridSequencerScreen::new(None);
     screen.bpm_mode = BpmMode::Manual(90.0);
     let now = Instant::now();
-    let ctx = crate::tests::ready_ctx(&[]);
+    let ctx = crate::tests::ready_ctx(crate::tests::empty_patch_load());
     screen.handle_key(key(KeyCode::Char('b'), KeyModifiers::NONE), now, &ctx);
     assert!(screen.single_buffering());
     assert!(screen.bpm_input.is_none());
@@ -79,7 +79,7 @@ fn a_hyphen_pair_sets_the_range_and_draws_inside_it() {
     assert!(screen.state.is_running());
 
     // 範囲を保ったまま A で引き直せる。
-    let ctx = crate::tests::ready_ctx(&[]);
+    let ctx = crate::tests::ready_ctx(crate::tests::empty_patch_load());
     screen.handle_key(key(KeyCode::Char('b'), KeyModifiers::CONTROL), now, &ctx);
     screen.handle_key(key(KeyCode::Char('a'), KeyModifiers::NONE), now, &ctx);
     assert_eq!(screen.bpm_range(), BpmRange::new(80.0, 160.0).unwrap());
@@ -246,7 +246,7 @@ fn every_wrap_reports_one_monotonic_tempo_change_point() {
 fn a_manual_bpm_change_while_playing_keeps_the_timeline_running() {
     let mut screen = GridSequencerScreen::new(None);
     let now = Instant::now();
-    let ctx = crate::tests::ready_ctx(&[]);
+    let ctx = crate::tests::ready_ctx(crate::tests::empty_patch_load());
     screen.start(now, &ctx);
 
     let mut last = f64::NEG_INFINITY;
@@ -283,7 +283,7 @@ fn a_manual_bpm_change_while_playing_keeps_the_timeline_running() {
 fn the_default_range_keeps_the_previous_fixed_tempo() {
     let mut screen = GridSequencerScreen::new(None);
     let now = Instant::now();
-    let ctx = crate::tests::ready_ctx(&[]);
+    let ctx = crate::tests::ready_ctx(crate::tests::empty_patch_load());
     assert_eq!(screen.bpm_range(), BpmRange::fixed(crate::BPM));
     screen.start(now, &ctx);
 
@@ -315,7 +315,7 @@ fn a_manual_bpm_is_never_redrawn_at_a_wrap() {
 #[test]
 fn entering_the_screen_draws_a_fresh_automatic_bpm() {
     let now = Instant::now();
-    let ctx = crate::tests::ready_ctx(&[]);
+    let ctx = crate::tests::ready_ctx(crate::tests::empty_patch_load());
     let mut screen = GridSequencerScreen::new(None);
     enter_bpm(&mut screen, now, "80-160");
     let first = screen.bpm();

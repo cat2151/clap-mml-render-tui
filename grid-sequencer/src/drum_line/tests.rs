@@ -17,7 +17,7 @@ const KICK_ROW: usize = FULL_DRUM_TRACK_COUNT - 1;
 
 fn context() -> crate::GridSequencerContext<'static> {
     crate::tests::ctx_with(
-        crate::GridPatchLoad::Ready(&[]),
+        crate::tests::empty_patch_load(),
         crate::tests::empty_catalog(),
         &crate::NoVoicingLookup,
     )

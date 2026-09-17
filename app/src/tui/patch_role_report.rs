@@ -4,11 +4,11 @@ use std::borrow::Cow;
 
 use anyhow::Result;
 use cmrt_patches::{PatchRole, PatchRoleIndex, PatchRoleInput};
-use cmrt_tui_core::patch_plugins::PatchPlugins;
+use cmrt_tui_core::{patch_load::PatchLoadState, patch_plugins::PatchPlugins};
 
 use super::grid_sequencer::{
-    candidates_for_purpose, row_patch_purpose, DrumRole, GridPatchLoad, GridPatchPurpose,
-    GridSequencerContext, ARPEGGIO_ROW, BASS_ROW, CHORD_ROW, FIRST_DRUM_ROW, FULL_DRUM_TRACK_COUNT,
+    candidates_for_purpose, row_patch_purpose, DrumRole, GridPatchPurpose, GridSequencerContext,
+    ARPEGGIO_ROW, BASS_ROW, CHORD_ROW, FIRST_DRUM_ROW, FULL_DRUM_TRACK_COUNT,
 };
 use super::voicing::{VoicingPolicies, VoicingPolicy, VoicingState};
 use crate::config::Config;
@@ -39,9 +39,10 @@ pub fn run_patch_role_report(cfg: &Config) -> Result<()> {
     );
     voicing.prefetch_catalog_voicings(&pairs);
     let chord_catalog = cmrt_chord::ChordProgressionCatalog::default();
+    let patch_load = PatchLoadState::ready(pairs.clone());
     let ctx = GridSequencerContext {
         patch_dirs_configured: crate::patches::has_configured_patch_dirs(cfg),
-        patch_load: GridPatchLoad::Ready(&pairs),
+        patch_load: &patch_load,
         load_measurements: None,
         chord_catalog: &chord_catalog,
         voicing: &voicing,

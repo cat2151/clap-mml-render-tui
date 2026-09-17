@@ -77,6 +77,7 @@ fn find_text(buffer: &Buffer, text: &str) -> (u16, u16) {
 }
 
 mod cursor_style;
+mod grid_patch_selector;
 mod help_screens;
 mod keyboard_screen;
 mod loop_browser;

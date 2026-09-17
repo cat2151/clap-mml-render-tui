@@ -132,6 +132,9 @@ pub struct GridSequencerScreen {
     /// instance ごとの、PATCH 欄の wheel が辿る patch list。詳細は [`crate::patch_bag`]。
     /// 適用した patch は `state` 側に入るので、セッションへは保存しない。
     pub(crate) patch_bags: HashMap<usize, PatchBag>,
+    /// テストで送信内容を観測する記録。`midi_sender` が `None` でも積む。
+    #[cfg(test)]
+    pub(crate) sent: std::cell::RefCell<Vec<super::GridScheduledMessage>>,
 }
 
 impl GridSequencerScreen {
@@ -235,6 +238,8 @@ impl GridSequencerScreen {
             bass_pattern: None,
             drum_patterns: HashMap::new(),
             patch_bags: HashMap::new(),
+            #[cfg(test)]
+            sent: std::cell::RefCell::new(Vec::new()),
         }
     }
 

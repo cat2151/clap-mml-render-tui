@@ -2,10 +2,12 @@ use super::*;
 
 #[test]
 fn patch_name_wheel_uses_chord_candidates_only_on_the_chord_instance() {
-    let patches = ["Bass/Mono.fxp", "Pads/Poly.fxp", "Leads/Mono.fxp"]
-        .into_iter()
-        .map(|patch| (patch.to_string(), patch.to_lowercase()))
-        .collect::<Vec<_>>();
+    let patches = PatchLoadState::ready(
+        ["Bass/Mono.fxp", "Pads/Poly.fxp", "Leads/Mono.fxp"]
+            .into_iter()
+            .map(|patch| (patch.to_string(), patch.to_lowercase()))
+            .collect(),
+    );
     let ctx = context(&patches);
     // chord ON の行は 3=和音、4=bass、5〜8が 4 voice。
     let mut screen = GridSequencerScreen::with_track_count(None, 4);
@@ -56,10 +58,12 @@ fn patch_name_wheel_uses_chord_candidates_only_on_the_chord_instance() {
 /// chord mode 中は「chord 用カテゴリ以外」ではなくなるので、打楽器は候補に入らない。
 #[test]
 fn patch_name_wheel_uses_arpeggio_candidates_on_the_arpeggio_instance() {
-    let patches = ["Percussion/Kick.fxp", "Leads/Mono.fxp", "Pads/Poly.fxp"]
-        .into_iter()
-        .map(|patch| (patch.to_string(), patch.to_lowercase()))
-        .collect::<Vec<_>>();
+    let patches = PatchLoadState::ready(
+        ["Percussion/Kick.fxp", "Leads/Mono.fxp", "Pads/Poly.fxp"]
+            .into_iter()
+            .map(|patch| (patch.to_string(), patch.to_lowercase()))
+            .collect(),
+    );
     let ctx = context(&patches);
     let mut screen = GridSequencerScreen::with_track_count(None, 4);
     screen.state.instances_mut()[crate::ARPEGGIO_ROW].patch =
@@ -180,10 +184,12 @@ fn current_patch(screen: &GridSequencerScreen) -> String {
 /// 用途の絞り込みで候補が 0 件になった wheel も、黙って何もしないのではなく理由を出す。
 #[test]
 fn a_wheel_with_no_candidates_for_the_role_reports_why_nothing_changed() {
-    let patches = ["Bass/Mono.fxp"]
-        .into_iter()
-        .map(|patch| (patch.to_string(), patch.to_lowercase()))
-        .collect::<Vec<_>>();
+    let patches = PatchLoadState::ready(
+        ["Bass/Mono.fxp"]
+            .into_iter()
+            .map(|patch| (patch.to_string(), patch.to_lowercase()))
+            .collect(),
+    );
     let ctx = context(&patches);
     let mut screen = GridSequencerScreen::with_track_count(None, 4);
     screen.state.set_chord(
@@ -204,7 +210,7 @@ fn a_wheel_with_no_candidates_for_the_role_reports_why_nothing_changed() {
 /// `patches_dirs` が無ければ一覧も空になるので、両方を欠いた状態で確かめる。
 #[test]
 fn a_wheel_without_a_catalog_reports_the_catalog_reason() {
-    let mut ctx = context(&[]);
+    let mut ctx = context(crate::tests::empty_patch_load());
     ctx.patch_dirs_configured = false;
     let mut screen = GridSequencerScreen::with_track_count(None, 2);
 

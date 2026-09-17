@@ -130,6 +130,8 @@ impl GridSequencerScreen {
         if scheduled.is_empty() {
             return;
         }
+        #[cfg(test)]
+        self.sent.borrow_mut().extend_from_slice(scheduled);
         let Some(sender) = &self.midi_sender else {
             return;
         };

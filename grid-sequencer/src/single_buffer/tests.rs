@@ -2,10 +2,10 @@ use cmrt_chord::ChordProgressionCatalog;
 use cmrt_realtime_play::PatchVoicing;
 
 use super::*;
+
 use crate::tests::ctx_with;
-use crate::{
-    step_offset, GridPatchLoad, GridScheduledMessage, GridVoicingLookup, GRID_STEPS, LOOKAHEAD,
-};
+use crate::{step_offset, GridScheduledMessage, GridVoicingLookup, GRID_STEPS, LOOKAHEAD};
+use cmrt_tui_core::patch_load::PatchLoadState;
 
 /// 4 コードの進行。1サイクル = 4 小節 = 64 ステップ。
 const CATALOG_JSON: &str = r#"[{"degrees":"I-IV-V-I","description":"test"}]"#;
@@ -59,7 +59,8 @@ fn the_clock_folds_up_once_the_cycle_has_been_played_out() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen_in_single_buffering(now, &ctx);
 
     let mut note_offs = 0;
@@ -86,7 +87,8 @@ fn the_patch_load_waits_for_the_output_ring_to_drain() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen_in_single_buffering(now, &ctx);
     let load_at = run_until_cycle_end(&mut screen, now, &ctx);
 
@@ -107,7 +109,8 @@ fn the_staged_cycle_is_committed_without_swapping_banks() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen_in_single_buffering(now, &ctx);
     let load_at = run_until_cycle_end(&mut screen, now, &ctx);
     let staged = screen.state.pending_rows_for_test();
@@ -126,7 +129,8 @@ fn nothing_happens_without_the_chord_mode() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = GridSequencerScreen::with_track_count(None, 4);
     screen.start(now, &ctx);
     screen.toggle_single_buffering();
@@ -147,7 +151,8 @@ fn switching_back_to_double_buffering_disarms_the_stop() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen_in_single_buffering(now, &ctx);
     pump(&mut screen, now, &ctx);
 
@@ -170,7 +175,8 @@ fn live_edit_during_the_drain_wait_keeps_the_clock_restart_deadline() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen_in_single_buffering(now, &ctx);
     let load_at = run_until_cycle_end(&mut screen, now, &ctx);
 
@@ -188,7 +194,8 @@ fn hold_keeps_the_score_when_a_single_buffered_cycle_is_committed() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen_in_single_buffering(now, &ctx);
     screen.cycle_random = crate::CycleRandom::HOLD;
     let before = screen.state.rows().to_vec();

@@ -1,10 +1,12 @@
-//! chord mode の永続化（セッションからの復元と、`t` キーをまたぐ持ち越し）。
+//! chord mode の永続化（セッションからの復元と、`T` キーをまたぐ持ち越し）。
 
 use super::*;
-use crate::{FixedChordProgression, GridInstance, GridSequencerParts, GridSequencerSession};
 
-fn press_t() -> KeyEvent {
-    KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE)
+use crate::{FixedChordProgression, GridInstance, GridSequencerParts, GridSequencerSession};
+use cmrt_tui_core::patch_load::PatchLoadState;
+
+fn press_shift_t() -> KeyEvent {
+    KeyEvent::new(KeyCode::Char('T'), KeyModifiers::SHIFT)
 }
 
 /// 前回 chord mode が on だったセッションから復元した画面。
@@ -32,7 +34,8 @@ fn the_saved_flag_follows_the_chord_mode() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &OnePolyPatch);
     let mut screen = screen();
     screen.start(now, &ctx);
     assert!(!screen.chord_enabled());
@@ -50,12 +53,13 @@ fn a_track_count_change_keeps_the_saved_chord_mode() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &OnePolyPatch);
     let mut screen = screen();
     screen.start(now, &ctx);
     screen.handle_key(press_c(), now, &ctx);
 
-    screen.handle_key(press_t(), now, &ctx);
+    screen.handle_key(press_shift_t(), now, &ctx);
 
     assert!(screen.state.chord().is_none(), "grid ごと作り直される");
     assert!(
@@ -68,7 +72,7 @@ fn a_track_count_change_keeps_the_saved_chord_mode() {
 fn a_restored_chord_mode_waits_for_the_patch_list_then_turns_on() {
     let catalog = catalog();
     let patches = patches();
-    let loading = ctx_with(GridPatchLoad::Loading, &catalog, &OnePolyPatch);
+    let loading = ctx_with(crate::tests::loading_patch_load(), &catalog, &OnePolyPatch);
     let mut screen = restored_screen();
     screen.start(Instant::now(), &loading);
 
@@ -76,7 +80,8 @@ fn a_restored_chord_mode_waits_for_the_patch_list_then_turns_on() {
     assert!(screen.state.chord().is_none(), "読み込み中は待つ");
     assert!(screen.chord_error().is_none(), "待ちは理由を出さない");
 
-    let ready = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
+    let ready_patch_load = PatchLoadState::ready(patches.to_vec());
+    let ready = ctx_with(&ready_patch_load, &catalog, &OnePolyPatch);
     screen.refresh_context(&ready);
 
     assert!(screen.state.chord().is_some());
@@ -92,7 +97,8 @@ fn a_restored_chord_mode_waits_for_the_patch_list_then_turns_on() {
 fn a_restored_chord_mode_is_not_retried_after_it_fails() {
     let empty = ChordProgressionCatalog::default();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &empty, &OnePolyPatch);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &empty, &OnePolyPatch);
     let mut screen = restored_screen();
     screen.start(Instant::now(), &ctx);
 
@@ -111,7 +117,8 @@ fn a_restored_chord_mode_is_not_retried_after_it_fails() {
 fn a_saved_fixed_progression_is_restored_without_the_catalog() {
     let empty = ChordProgressionCatalog::default();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &empty, &OnePolyPatch);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &empty, &OnePolyPatch);
     let mut screen = restored_fixed_screen("key:G Isus4-I");
 
     screen.start(Instant::now(), &ctx);
@@ -127,7 +134,8 @@ fn a_saved_fixed_progression_is_restored_without_the_catalog() {
 fn invalid_saved_fixed_text_is_preserved_as_an_editable_error() {
     let patches = patches();
     let empty = ChordProgressionCatalog::default();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &empty, &OnePolyPatch);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &empty, &OnePolyPatch);
     let mut screen = restored_fixed_screen("not valid yet");
 
     screen.start(Instant::now(), &ctx);

@@ -7,22 +7,15 @@ use std::{borrow::Cow, collections::BTreeMap};
 
 use cmrt_chord::ChordProgressionCatalog;
 use cmrt_patches::PatchRoleIndex;
-use cmrt_tui_core::patch_load::PatchLoadMeasurement;
+use cmrt_tui_core::patch_load::{PatchLoadMeasurement, PatchLoadState};
 
 use crate::GridVoicingLookup;
-
-/// patch 一覧のバックグラウンド読み込み状態のスナップショット。
-/// 共有ランタイム側の `PatchLoadState` から glue が変換して渡す。
-pub enum GridPatchLoad<'a> {
-    Loading,
-    Ready(&'a [(String, String)]),
-    Err(&'a str),
-}
 
 /// grid sequencer 画面が共有ランタイムから受け取る情報一式。
 pub struct GridSequencerContext<'a> {
     pub patch_dirs_configured: bool,
-    pub patch_load: GridPatchLoad<'a>,
+    /// patch 一覧のバックグラウンド読み込み状態。共有ランタイムの物をそのまま借りる。
+    pub patch_load: &'a PatchLoadState,
     /// catalog 構築時に計測した patch ごとのロード時間。auto random の ETA に使う。
     /// cache 読み込み前や cache を使わない診断では `None`。
     pub load_measurements: Option<&'a BTreeMap<String, PatchLoadMeasurement>>,
@@ -44,9 +37,9 @@ pub struct GridSequencerContext<'a> {
 impl GridSequencerContext<'_> {
     /// ランダム選択に使える patch 一覧。読み込み中・エラー時は空を返す。
     pub(crate) fn patches(&self) -> &[(String, String)] {
-        match &self.patch_load {
-            GridPatchLoad::Ready(pairs) => pairs,
-            GridPatchLoad::Loading | GridPatchLoad::Err(_) => &[],
+        match self.patch_load {
+            PatchLoadState::Ready(snapshot) => snapshot.pairs(),
+            PatchLoadState::Loading | PatchLoadState::Err(_) => &[],
         }
     }
 
@@ -54,19 +47,19 @@ impl GridSequencerContext<'_> {
         if !self.patch_dirs_configured {
             return GridPatchStatus::NotConfigured;
         }
-        match &self.patch_load {
-            GridPatchLoad::Ready(pairs) => GridPatchStatus::Ready(pairs.len()),
-            GridPatchLoad::Loading => GridPatchStatus::Loading,
-            GridPatchLoad::Err(error) => GridPatchStatus::Err((*error).to_string()),
+        match self.patch_load {
+            PatchLoadState::Ready(snapshot) => GridPatchStatus::Ready(snapshot.pairs().len()),
+            PatchLoadState::Loading => GridPatchStatus::Loading,
+            PatchLoadState::Err(error) => GridPatchStatus::Err(error.clone()),
         }
     }
 
     pub(crate) fn patches_are_loading(&self) -> bool {
-        matches!(self.patch_load, GridPatchLoad::Loading)
+        matches!(self.patch_load, PatchLoadState::Loading)
     }
 
     pub(crate) fn patches_are_ready(&self) -> bool {
-        matches!(self.patch_load, GridPatchLoad::Ready(_))
+        matches!(self.patch_load, PatchLoadState::Ready(_))
     }
 }
 

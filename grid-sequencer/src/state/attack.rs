@@ -115,6 +115,64 @@ impl GridState {
             .collect()
     }
 
+    /// `instance` で鳴っている音を、いまの bank の instance で鳴らし直す。
+    ///
+    /// patch のロードは行の plugin を差し替えるので、鳴っていた音はそこで消える。
+    /// 小節の途中で音色を選ぶと次の Attack まで無音になり、選んだ音色をその場で
+    /// 聴けない。鳴っていた音と同じ音を同じ残り長で鳴らし直し、次の小節頭で譜面
+    /// どおりの Attack へ繋げる。
+    ///
+    /// note off は鳴らし始めた instance（`SoundingNote::instance_id`）へ、note on は
+    /// [`GridState::instance_id`] へ送る。bank が切り替わった後でも、実際に鳴っている
+    /// 音を止めてから新しい bank で鳴らす。`ahead` を [`GridState::silence_ahead`] に
+    /// 合わせる理由は [`GridState::preview_lane_now`] と同じ。
+    pub fn reattack_instance_now(
+        &mut self,
+        instance: usize,
+        now: Instant,
+    ) -> Vec<GridScheduledMessage> {
+        if !self.is_running() {
+            return Vec::new();
+        }
+        let ahead = self.silence_ahead(now);
+        let timeline_seconds = self.silence_timeline_seconds();
+        let instance_id = self.instance_id(instance);
+        let step = self.schedule_index;
+
+        let mut released = Vec::new();
+        let mut attacked = Vec::new();
+        let mut sounding = std::mem::take(&mut self.sounding);
+        for note in &mut sounding {
+            let velocity_address = match note.owner {
+                SoundOwner::ChordInstance { instance: owner } if owner == instance => {
+                    LaneAddress::new(instance, 0)
+                }
+                SoundOwner::Lane(address) if address.instance == instance => address,
+                _ => continue,
+            };
+            let velocity_lane = self
+                .stored_lane_index(velocity_address)
+                .expect("a sounding note belongs to a stored lane");
+            let velocity = self.velocity.value_at(velocity_lane, step);
+            released.push((note.instance_id, note_off(note.midi_note)));
+            attacked.push((instance_id, note_on(note.midi_note, velocity)));
+            note.instance_id = instance_id;
+        }
+        self.sounding = sounding;
+
+        // 止めてから鳴らし直す。順序が逆だと消し合う（`attack_current_step` と同じ手順）。
+        released
+            .into_iter()
+            .chain(attacked)
+            .map(|(instance_id, message)| GridScheduledMessage {
+                instance_id,
+                ahead,
+                timeline_seconds,
+                message,
+            })
+            .collect()
+    }
+
     /// stored lane × step の発音表。Velocity の抽選・表示に使う。
     pub(super) fn lane_trigger_table(&self) -> TriggerTable {
         let mut table = Vec::with_capacity(self.stored_lane_count());

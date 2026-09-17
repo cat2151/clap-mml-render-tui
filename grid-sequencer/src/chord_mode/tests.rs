@@ -3,10 +3,12 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use cmrt_chord::ChordProgressionCatalog;
 use cmrt_realtime_play::PatchVoicing;
 
+use cmrt_tui_core::patch_load::PatchLoadState;
+
 use super::*;
 
 use crate::tests::ctx_with;
-use crate::{GridPatchLoad, GridVoicingLookup, NoVoicingLookup};
+use crate::{GridVoicingLookup, NoVoicingLookup};
 
 mod cycle;
 mod drum;
@@ -64,7 +66,8 @@ fn c_turns_the_chord_mode_on_with_a_poly_patch() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &OnePolyPatch);
     let mut screen = screen();
     screen.start(now, &ctx);
 
@@ -86,7 +89,8 @@ fn c_toggles_the_chord_mode_off_again() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &OnePolyPatch);
     let mut screen = screen();
     screen.start(now, &ctx);
     screen.handle_key(press_c(), now, &ctx);
@@ -102,7 +106,8 @@ fn chord_mode_is_refused_when_no_patch_is_known_to_be_poly() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllUnknown);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllUnknown);
     let mut screen = screen();
     screen.start(now, &ctx);
 
@@ -116,7 +121,7 @@ fn chord_mode_is_refused_when_no_patch_is_known_to_be_poly() {
 fn chord_mode_is_refused_while_the_patch_list_is_loading() {
     let now = Instant::now();
     let catalog = catalog();
-    let ctx = ctx_with(GridPatchLoad::Loading, &catalog, &OnePolyPatch);
+    let ctx = ctx_with(crate::tests::loading_patch_load(), &catalog, &OnePolyPatch);
     let mut screen = screen();
     screen.start(now, &ctx);
 
@@ -131,7 +136,8 @@ fn chord_mode_is_refused_without_a_progression_catalog() {
     let now = Instant::now();
     let empty = ChordProgressionCatalog::default();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &empty, &OnePolyPatch);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &empty, &OnePolyPatch);
     let mut screen = screen();
     screen.start(now, &ctx);
 
@@ -146,7 +152,8 @@ fn r_rerolls_the_progression_and_repicks_a_poly_patch() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &OnePolyPatch);
     let mut screen = screen();
     screen.start(now, &ctx);
     screen.handle_key(press_c(), now, &ctx);
@@ -170,7 +177,8 @@ fn shift_r_keeps_the_chord_patch_but_rerolls_the_progression() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &OnePolyPatch);
     let mut screen = screen();
     screen.start(now, &ctx);
     screen.handle_key(press_c(), now, &ctx);
@@ -283,7 +291,8 @@ fn a_picked_progression_always_comes_back_auto_voiced() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &OnePolyPatch);
     let mut screen = screen();
     screen.start(now, &ctx);
 
@@ -310,7 +319,8 @@ fn the_next_cycle_connects_to_the_last_chord_of_the_current_progression() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &OnePolyPatch);
     let mut screen = screen();
     screen.start(now, &ctx);
     screen.handle_key(press_c(), now, &ctx);

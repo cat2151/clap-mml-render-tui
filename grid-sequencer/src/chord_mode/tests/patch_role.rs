@@ -1,12 +1,15 @@
 //! 最新のcatalog RoleをGrid用途へ写す経路の検証。
 
+use cmrt_tui_core::patch_load::PatchLoadState;
+
 use super::*;
 
 #[test]
 fn chord_candidates_are_chord_role_and_poly_only() {
     let catalog = catalog();
     let patches = categorized_patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches);
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let screen = screen();
 
     let candidates = screen.patch_candidates_for_purpose(crate::GridPatchPurpose::Chord, &ctx);
@@ -26,7 +29,8 @@ fn a_catalog_without_a_chord_role_patch_rejects_chord_mode() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = vec![("Basses/Sub.fxp".to_string(), "basses/sub.fxp".to_string())];
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches);
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen();
     screen.start(now, &ctx);
 
@@ -45,7 +49,8 @@ fn bass_and_arpeggio_rows_use_bass_and_lead_roles() {
         ("Basses/Sub.fxp".to_string(), "basses/sub.fxp".to_string()),
         ("Leads/Mono.fxp".to_string(), "leads/mono.fxp".to_string()),
     ];
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
+    let patch_load = PatchLoadState::ready(patches);
+    let ctx = ctx_with(&patch_load, &catalog, &OnePolyPatch);
     let mut screen = screen();
     screen.start(now, &ctx);
 
@@ -73,7 +78,8 @@ fn staged_cycle_reassigns_all_rows_from_their_purpose_pools() {
         ("Leads/Mono.fxp".to_string(), "leads/mono.fxp".to_string()),
         ("Synth/Other.fxp".to_string(), "synth/other.fxp".to_string()),
     ];
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &OnePolyPatch);
+    let patch_load = PatchLoadState::ready(patches);
+    let ctx = ctx_with(&patch_load, &catalog, &OnePolyPatch);
     let mut screen = screen();
     screen.start(now, &ctx);
     screen.handle_key(press_c(), now, &ctx);

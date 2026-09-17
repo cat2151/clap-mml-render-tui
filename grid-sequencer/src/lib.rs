@@ -41,7 +41,7 @@ mod tempo;
 pub mod ui;
 mod undo;
 
-pub use context::{GridPatchLoad, GridPatchStatus, GridSequencerContext};
+pub use context::{GridPatchStatus, GridSequencerContext};
 pub use cycle_random::{CycleRandom, CycleRandomItem};
 pub use history::{
     GridDawChordBinding, GridDawChordSource, GridDawChordVoicing, GridDawLane, GridDawTrack,
@@ -360,7 +360,11 @@ impl GridSequencerScreen {
         }
         match key.code {
             KeyCode::Char('q') => return GridSequencerAction::Quit,
-            KeyCode::Char('t') => {
+            // 開ける条件は PATCH 欄の左click と同じ。
+            KeyCode::Char('t') if self.mouse_edit_enabled() => {
+                self.open_patch_selector(self.selected_track(), ctx);
+            }
+            KeyCode::Char('T') => {
                 let next = cmrt_realtime_play::next_live_instance_count(self.track_count());
                 self.resize_for_restart(next, ctx.patches());
                 return GridSequencerAction::RestartWithTrackCount(next);

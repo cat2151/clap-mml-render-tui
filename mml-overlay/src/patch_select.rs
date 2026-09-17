@@ -20,7 +20,8 @@ use cmrt_tui_core::{patch_load::PatchLoadMeasurement, text_input};
 
 use crate::{patch_catalog::sort_for_selector, PatchCatalogEntry};
 
-use filter::{filter_candidates, is_valid_condition};
+pub use filter::filter_candidates;
+use filter::is_valid_condition;
 use keys::{is_add_preset_key, is_filter_edit_trigger, is_preview_key, is_random_jump_key};
 pub(crate) use navigation::PatchSelectFocus;
 use prepared::build_role_index;

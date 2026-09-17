@@ -15,7 +15,7 @@ const TOP_VOICE_ROW: u16 = 6;
 
 fn context() -> crate::GridSequencerContext<'static> {
     crate::tests::ctx_with(
-        crate::GridPatchLoad::Ready(&[]),
+        crate::tests::empty_patch_load(),
         crate::tests::empty_catalog(),
         &crate::NoVoicingLookup,
     )

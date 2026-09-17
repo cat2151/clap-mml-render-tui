@@ -2,6 +2,8 @@
 //!
 //! 「何を引き直すか」を項目ごとに切り替えたとき、差し替え待ちへ何が載るかを見る。
 
+use cmrt_tui_core::patch_load::PatchLoadState;
+
 use super::*;
 
 /// DRUMとARPがONなら、drum 4role・bass・arpeggioを1つの組み合わせとしてbagから引く。
@@ -12,7 +14,8 @@ fn staging_cycles_through_every_drum_bass_and_arp_combination_once() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = categorized_patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen();
     screen.start(now, &ctx);
     screen.handle_key(press_c(), now, &ctx);
@@ -66,7 +69,8 @@ fn staging_the_next_cycle_rerolls_every_patch() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = categorized_patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen();
     screen.start(now, &ctx);
     screen.handle_key(press_c(), now, &ctx);
@@ -107,7 +111,8 @@ fn holding_the_score_stages_a_new_progression_without_replacing_it() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = categorized_patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen();
     screen.start(now, &ctx);
     screen.handle_key(press_c(), now, &ctx);
@@ -141,7 +146,8 @@ fn staging_with_only_the_patch_item_leaves_the_score_alone() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = categorized_patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen();
     screen.start(now, &ctx);
     screen.handle_key(press_c(), now, &ctx);
@@ -174,7 +180,8 @@ fn staging_without_the_chord_item_replays_the_same_progression_from_the_top() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = categorized_patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen();
     screen.start(now, &ctx);
     screen.handle_key(press_c(), now, &ctx);
@@ -201,7 +208,8 @@ fn staging_nothing_leaves_the_current_cycle_in_place() {
     let now = Instant::now();
     let catalog = catalog();
     let patches = categorized_patches();
-    let ctx = ctx_with(GridPatchLoad::Ready(&patches), &catalog, &AllPoly);
+    let patch_load = PatchLoadState::ready(patches.to_vec());
+    let ctx = ctx_with(&patch_load, &catalog, &AllPoly);
     let mut screen = screen();
     screen.start(now, &ctx);
     screen.handle_key(press_c(), now, &ctx);

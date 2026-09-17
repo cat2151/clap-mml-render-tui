@@ -17,9 +17,24 @@ fn ready_catalog_opens_at_the_rows_current_patch() {
         &ctx,
     );
 
-    let selector = screen.patch_selector.as_ref().unwrap();
+    let selector = selector(&screen);
     assert_eq!(selector.instance, 1);
-    assert_eq!(selector.selected_category().name, "Keys");
+    assert_eq!(selector.selected_patch(), Some("Keys/Beta.fxp"));
+}
+
+/// `t` は j/k で選んだ行を開く。click と同じ行が開くので、その後の操作は共通。
+#[test]
+fn t_opens_the_selected_tracks_patch_selector() {
+    let patches = patches();
+    let ctx = context(&patches);
+    let mut screen = GridSequencerScreen::with_track_count(None, 2);
+    screen.state.rows_mut()[1].patch = Some("Keys/Beta.fxp".to_string());
+    screen.select_track(1);
+
+    screen.handle_key(press(KeyCode::Char('t')), Instant::now(), &ctx);
+
+    let selector = selector(&screen);
+    assert_eq!(selector.instance, 1);
     assert_eq!(selector.selected_patch(), Some("Keys/Beta.fxp"));
 }
 
@@ -28,7 +43,7 @@ fn ready_catalog_opens_at_the_rows_current_patch() {
 fn loading_error_empty_and_unconfigured_catalogs_report_why_they_do_not_open() {
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
     let loading = ctx_with(
-        GridPatchLoad::Loading,
+        crate::tests::loading_patch_load(),
         crate::tests::empty_catalog(),
         &Voicing,
     );
@@ -36,11 +51,8 @@ fn loading_error_empty_and_unconfigured_catalogs_report_why_they_do_not_open() {
     assert!(screen.patch_selector.is_none());
     assert_eq!(notice_reason(&screen), PatchUnavailable::Loading);
 
-    let error = ctx_with(
-        GridPatchLoad::Err("catalog failed"),
-        crate::tests::empty_catalog(),
-        &Voicing,
-    );
+    let failed = PatchLoadState::Err("catalog failed".to_string());
+    let error = ctx_with(&failed, crate::tests::empty_catalog(), &Voicing);
     screen.open_patch_selector(0, &error);
     assert!(screen.patch_selector.is_none());
     assert_eq!(
@@ -48,7 +60,7 @@ fn loading_error_empty_and_unconfigured_catalogs_report_why_they_do_not_open() {
         PatchUnavailable::LoadError("catalog failed".to_string())
     );
 
-    let empty = context(&[]);
+    let empty = context(crate::tests::empty_patch_load());
     screen.open_patch_selector(0, &empty);
     assert!(screen.patch_selector.is_none());
     assert_eq!(notice_reason(&screen), PatchUnavailable::NoPatches);
@@ -65,7 +77,10 @@ fn loading_error_empty_and_unconfigured_catalogs_report_why_they_do_not_open() {
 /// 「一覧はあるが和音行の poly 絞りで消えた」は、一覧 0 件とは別の理由として出す。
 #[test]
 fn a_chord_row_without_poly_patches_reports_the_filter_as_the_reason() {
-    let patches = vec![("Bass/Mono.fxp".to_string(), "bass/mono.fxp".to_string())];
+    let patches = PatchLoadState::ready(vec![(
+        "Bass/Mono.fxp".to_string(),
+        "bass/mono.fxp".to_string(),
+    )]);
     let ctx = context(&patches);
     let mut screen = GridSequencerScreen::with_track_count(None, 2);
     screen.state.set_chord(
@@ -96,61 +111,6 @@ fn opening_the_selector_clears_a_previous_notice() {
 }
 
 #[test]
-fn clicking_a_patch_changes_only_that_row_enters_hold_and_cancels_pending_cycle() {
-    let patches = patches();
-    let ctx = context(&patches);
-    let mut screen = GridSequencerScreen::with_track_count(None, 2);
-    screen.state.rows_mut()[0].patch = Some("Keys/Alpha.fxp".to_string());
-    screen.state.rows_mut()[1].patch = Some("Bass/Mono.fxp".to_string());
-    screen.state.stage_next_cycle(
-        vec![GridRow::default(); 2],
-        ChordPlayback::new("C", "I".to_string(), vec![vec![60, 64, 67]]).unwrap(),
-    );
-    screen.open_patch_selector(0, &ctx);
-    assert!(!screen.cycle_random().patch);
-    assert!(!screen.state.has_pending_cycle());
-    let layout = PatchSelectorLayout::new(AREA, false);
-    let beta = screen
-        .patch_selector
-        .as_ref()
-        .unwrap()
-        .selected_category()
-        .patches
-        .iter()
-        .position(|patch| patch == "Keys/Beta.fxp")
-        .unwrap();
-
-    screen.handle_mouse(
-        mouse(
-            MouseEventKind::Down(MouseButton::Left),
-            layout.patch_list.x,
-            layout.patch_list.y + beta as u16,
-        ),
-        AREA,
-        &ctx,
-    );
-
-    assert_eq!(
-        screen.state.rows()[0].patch.as_deref(),
-        Some("Keys/Beta.fxp")
-    );
-    assert_eq!(
-        screen.state.rows()[1].patch.as_deref(),
-        Some("Bass/Mono.fxp")
-    );
-    assert!(!screen.cycle_random().patch);
-    assert!(!screen.state.has_pending_cycle());
-    assert!(screen.patch_selector.is_none());
-
-    screen.handle_key(press(KeyCode::Char('u')), Instant::now(), &ctx);
-    assert_eq!(
-        screen.state.rows()[0].patch.as_deref(),
-        Some("Keys/Alpha.fxp")
-    );
-    assert!(screen.cycle_random().patch);
-}
-
-#[test]
 fn chord_row_selector_contains_only_confirmed_poly_patches() {
     let patches = patches();
     let ctx = context(&patches);
@@ -162,16 +122,11 @@ fn chord_row_selector_contains_only_confirmed_poly_patches() {
 
     screen.open_patch_selector(CHORD_ROW, &ctx);
 
-    let selector = screen.patch_selector.as_ref().unwrap();
-    let candidates = selector
-        .categories
-        .iter()
-        .flat_map(|category| category.patches.iter())
-        .map(String::as_str)
-        .collect::<Vec<_>>();
+    let selector = selector(&screen);
+    assert_eq!(selector.total(), 3);
     assert_eq!(
-        candidates,
-        vec!["Keys/Alpha.fxp", "Keys/Beta.fxp", "Pads/Poly.fxp"]
+        filtered_patches(selector),
+        ["Keys/Alpha.fxp", "Keys/Beta.fxp", "Pads/Poly.fxp"]
     );
 }
 
@@ -196,19 +151,17 @@ fn child_lane_opens_its_shared_instance_selector_and_allows_a_mono_patch() {
         &ctx,
     );
 
-    let selector = screen.patch_selector.as_ref().unwrap();
-    assert_eq!(selector.instance, 2);
-    assert!(selector
-        .categories
+    assert_eq!(selector(&screen).instance, 2);
+    // arpeggio 行は Lead で開く。Role を ALL に戻せば mono の音色も選べる。
+    screen.handle_patch_selector_key(press(KeyCode::Char('h')), &ctx);
+    screen.handle_patch_selector_key(press(KeyCode::Char('h')), &ctx);
+    screen.handle_patch_selector_key(press(KeyCode::Home), &ctx);
+    let mono = filtered_patches(selector(&screen))
         .iter()
-        .flat_map(|category| &category.patches)
-        .any(|patch| patch == "Bass/Mono.fxp"));
-    screen.patch_selector.as_mut().unwrap().category_cursor = 0;
-    screen.patch_selector.as_mut().unwrap().patch_cursor = 0;
-    assert_eq!(
-        screen.patch_selector.as_ref().unwrap().selected_patch(),
-        Some("Bass/Mono.fxp")
-    );
+        .position(|patch| *patch == "Bass/Mono.fxp")
+        .unwrap();
+    screen.patch_selector.as_mut().unwrap().patch_cursor = mono;
+    assert_eq!(selector(&screen).selected_patch(), Some("Bass/Mono.fxp"));
     screen.handle_patch_selector_key(press(KeyCode::Enter), &ctx);
 
     assert_eq!(
@@ -226,11 +179,8 @@ fn selector_revalidates_the_catalog_before_applying() {
     screen.state.rows_mut()[0].patch = Some("Keys/Alpha.fxp".to_string());
     screen.open_patch_selector(0, &ready);
     screen.patch_selector.as_mut().unwrap().patch_cursor = 1;
-    let error = ctx_with(
-        GridPatchLoad::Err("catalog disappeared"),
-        crate::tests::empty_catalog(),
-        &Voicing,
-    );
+    let disappeared = PatchLoadState::Err("catalog disappeared".to_string());
+    let error = ctx_with(&disappeared, crate::tests::empty_catalog(), &Voicing);
 
     screen.handle_patch_selector_key(press(KeyCode::Enter), &error);
 
@@ -239,49 +189,6 @@ fn selector_revalidates_the_catalog_before_applying() {
         Some("Keys/Alpha.fxp")
     );
     assert!(screen.cycle_random().patch);
-}
-
-#[test]
-fn mouse_wheel_previews_the_cursor_patch_without_committing_until_enter() {
-    let patches = patches();
-    let ctx = context(&patches);
-    let mut screen = GridSequencerScreen::with_track_count(None, 1);
-    screen.state.rows_mut()[0].patch = Some("Keys/Alpha.fxp".to_string());
-    screen.open_patch_selector(0, &ctx);
-    let layout = PatchSelectorLayout::new(AREA, false);
-
-    screen.handle_patch_selector_mouse(
-        mouse(
-            MouseEventKind::ScrollDown,
-            layout.patch_list.x,
-            layout.patch_list.y,
-        ),
-        AREA,
-        &ctx,
-    );
-    assert_eq!(
-        screen.patch_selector.as_ref().unwrap().selected_patch(),
-        Some("Keys/Beta.fxp")
-    );
-    assert_eq!(
-        screen
-            .patch_selector
-            .as_ref()
-            .unwrap()
-            .previewed_patch
-            .as_deref(),
-        Some("Keys/Beta.fxp")
-    );
-    assert_eq!(
-        screen.state.rows()[0].patch.as_deref(),
-        Some("Keys/Alpha.fxp")
-    );
-
-    screen.handle_patch_selector_key(press(KeyCode::Enter), &ctx);
-    assert_eq!(
-        screen.state.rows()[0].patch.as_deref(),
-        Some("Keys/Beta.fxp")
-    );
 }
 
 #[test]
@@ -408,10 +315,10 @@ fn the_selector_carries_the_reason_a_plugin_is_missing_from_the_catalog() {
 
     screen.open_patch_selector(0, &ctx);
 
-    let selector = screen.patch_selector.as_ref().unwrap();
+    let selector = selector(&screen);
     assert_eq!(selector.catalog_notes(), notes.as_slice());
     // 一覧そのものは開けている（0 件の通知とは別の軸であることの担保）。
-    assert!(!selector.categories.is_empty());
+    assert!(selector.total() > 0);
 }
 
 /// 外れたプラグインが無ければ 1 文字も出さない。
