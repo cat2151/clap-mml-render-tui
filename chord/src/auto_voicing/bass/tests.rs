@@ -27,10 +27,20 @@ fn one_four_five_one_keeps_the_canonical_roots() {
 }
 
 #[test]
+fn a_bass_may_double_the_lowest_chord_note_in_unison() {
+    // B47 は chord layer の最低音と同音だが候補に残る。B35 へ落とすと続く D まで
+    // octave down に引きずられる。
+    assert_eq!(
+        select_path(0, &[60, 59, 62], &[72, 47, 72], None).unwrap(),
+        [48, 47, 50]
+    );
+}
+
+#[test]
 fn an_unavoidable_jump_over_seven_uses_the_lexicographic_optimum() {
-    // B47 は chord layer と同音なので使えず B35 が必須。続く D は canonical D50
+    // B47 が chord layer より上なので B35 が必須。続く D は canonical D50
     // より octave-down D38 の方が 7 超過量を減らすため、octave move 数より優先される。
-    let selected = select_path(0, &[60, 59, 62], &[72, 47, 72], None).unwrap();
+    let selected = select_path(0, &[60, 59, 62], &[72, 46, 72], None).unwrap();
     assert_eq!(selected, [48, 35, 38]);
     assert_eq!(selected[0].abs_diff(selected[1]), 13);
 }
@@ -38,7 +48,8 @@ fn an_unavoidable_jump_over_seven_uses_the_lexicographic_optimum() {
 #[test]
 fn tonic_anchor_and_hard_constraints_can_make_selection_impossible() {
     assert_eq!(select_path(0, &[72], &[80], None), Some(vec![48]));
-    assert_eq!(select_path(0, &[60], &[48], None), None);
+    assert_eq!(select_path(0, &[60], &[48], None), Some(vec![48]));
+    assert_eq!(select_path(0, &[60], &[47], None), None);
     assert_eq!(select_path(0, &[60, 62], &[72], None), None);
 }
 
@@ -86,7 +97,7 @@ fn the_full_catalog_obeys_bass_properties_in_all_twelve_keys() {
             first.iter().zip(&roots).zip(&lowest_upper).enumerate()
         {
             assert_eq!(bass % 12, root % 12, "Key={key} chord={index}");
-            assert!(bass < lowest_chord, "Key={key} chord={index}");
+            assert!(bass <= lowest_chord, "Key={key} chord={index}");
             if root % 12 == key_pitch_class as u8 {
                 assert_eq!(*bass, tonic_anchor, "Key={key} chord={index}");
             }

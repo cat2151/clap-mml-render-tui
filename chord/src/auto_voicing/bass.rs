@@ -74,6 +74,9 @@ pub(super) fn select_path(
 }
 
 /// tonic-containing window 内にある canonical / ±12 candidates を作る。
+///
+/// chord layer の最低音との unison は許す（`docs/adr/0021`）。`<` にすると canonical が
+/// 消えた 1 chord のために jump_excess が前後の chord まで octave down させる。
 fn candidates(
     key_pitch_class: u8,
     tonic_anchor: i16,
@@ -100,7 +103,7 @@ fn candidates(
                 return None;
             }
             let note = u8::try_from(note).ok().filter(|note| *note <= 127)?;
-            (note < lowest_chord_note).then_some((note, moved))
+            (note <= lowest_chord_note).then_some((note, moved))
         })
         .collect()
 }

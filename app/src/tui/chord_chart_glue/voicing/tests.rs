@@ -89,3 +89,21 @@ fn saved_arrangement_matches_the_golden_bass_path() {
         Some(7)
     );
 }
+
+#[test]
+fn a_repeated_chord_keeps_its_bass_octave_across_sections() {
+    // 2 つめの VIM9 は chord layer の最低音と同音の Bass になる。unison を拒むと
+    // その 1 音のために両 section の IVM7 が octave 違いになる。
+    let sections = ["IVM7-V6-IIIm7-VIm7", "IVM7-V6-VIM9"];
+    let basses = (0..sections.len())
+        .map(|selected| {
+            selected_voicings(Some("Key=C"), &context(&sections, selected))
+                .unwrap()
+                .into_iter()
+                .map(|voicing| voicing.bass.unwrap())
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(basses, [vec![53, 55, 52, 57], vec![53, 55, 57]]);
+}
