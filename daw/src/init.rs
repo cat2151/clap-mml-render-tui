@@ -1,7 +1,6 @@
 use super::render_queue;
 use super::save::load_saved_grid_size;
 use super::*;
-use cmrt_core::NativeRenderProbeContext;
 use std::collections::HashMap;
 
 mod cache_worker;
@@ -10,12 +9,8 @@ mod grid;
 use cache_worker::{mark_cache_job_error, reserve_cache_job_for_render, store_cache_job_samples};
 use grid::{build_grid_buffers_or_default, DawGridBuffers};
 
-fn offline_render_startup_log_line(cfg: &cmrt_runtime::Config, render_workers: usize) -> String {
-    format!(
-        "offline render: backend={} workers={}",
-        cfg.offline_render_backend.as_str(),
-        render_workers
-    )
+fn offline_render_startup_log_line(render_workers: usize) -> String {
+    format!("offline render: workers={render_workers}")
 }
 
 fn realtime_audio_startup_log_line(cfg: &cmrt_runtime::Config) -> String {
@@ -72,14 +67,14 @@ fn realtime_audio_wiring(
 
 pub(super) fn new(
     cfg: Arc<Config>,
-    plugin_entries: cmrt_offline_render::PluginEntries,
+    effect_plugins: cmrt_offline_render::EffectPlugins,
     patch_load: Arc<Mutex<cmrt_tui_core::patch_load::PatchLoadState>>,
     realtime_play_supervisor: Option<Arc<cmrt_realtime_play::RealtimePlayServerSupervisor>>,
     workspace_kind: WorkspaceKind,
 ) -> DawApp {
     new_with_entry_context(
         cfg,
-        plugin_entries,
+        effect_plugins,
         patch_load,
         realtime_play_supervisor,
         workspace_kind,
@@ -90,7 +85,7 @@ pub(super) fn new(
 
 fn new_with_entry_context(
     cfg: Arc<Config>,
-    plugin_entries: cmrt_offline_render::PluginEntries,
+    effect_plugins: cmrt_offline_render::EffectPlugins,
     patch_load: Arc<Mutex<cmrt_tui_core::patch_load::PatchLoadState>>,
     realtime_play_supervisor: Option<Arc<cmrt_realtime_play::RealtimePlayServerSupervisor>>,
     workspace_kind: WorkspaceKind,
@@ -115,13 +110,8 @@ fn new_with_entry_context(
 
     let cache = Arc::new(Mutex::new(cache));
 
-    let cache_render_workers = cfg.effective_offline_render_workers();
-    let render_queue = RenderQueue::new(
-        Arc::clone(&cfg),
-        plugin_entries.clone(),
-        cache_render_workers,
-    );
-    cmrt_tui_core::logging::install_native_probe_logger();
+    let cache_render_workers = cfg.offline_render_server_workers;
+    let render_queue = RenderQueue::new(Arc::clone(&cfg), cache_render_workers);
 
     // CacheJob は共通 RenderQueue に入り、MML -> SMF 前処理を 1 MML ずつ行う。
     // 準備済みジョブだけを render worker pool に流し、cache / preview / playback で
@@ -184,19 +174,11 @@ fn new_with_entry_context(
                     .lock()
                     .unwrap()
                     .insert(request_id, job.clone());
-                let probe_context = NativeRenderProbeContext::cache_worker(
-                    job.track,
-                    job.measure,
-                    job.generation,
-                    job.rendered_mml_hash,
-                    cache_render_workers,
-                );
                 if render_queue
                     .submit_with_id(
                         request_id,
                         render_queue::RenderPriority::Normal,
                         job.mml.clone(),
-                        probe_context,
                         cache_result_tx.clone(),
                     )
                     .is_err()
@@ -284,7 +266,7 @@ fn new_with_entry_context(
         sound_check_guide: cmrt_tui_core::sound_check_guide::SoundCheckGuide::new(None),
         textarea: cmrt_tui_core::text_input::new_single_line_textarea(""),
         cfg,
-        plugin_entries,
+        effect_plugins,
         cache,
         cache_tx,
         cache_render_workers,
@@ -314,10 +296,7 @@ fn new_with_entry_context(
     app.load(&current_date);
     app.sync_http_grid_snapshot();
     app.sync_http_status_snapshot();
-    app.append_log_line(offline_render_startup_log_line(
-        &app.cfg,
-        app.cache_render_workers,
-    ));
+    app.append_log_line(offline_render_startup_log_line(app.cache_render_workers));
     app.append_log_line(realtime_audio_startup_log_line(&app.cfg));
     app.append_log_line("=== DAW mode ready ===");
     app

@@ -155,7 +155,7 @@ instrument（音色）の後段に、TONE3000 / Surge XT Effects のfactory pres
 | `ESC` | 変更を捨てて閉じます |
 
 - chainはinit列のJSONの`"effects after instrument"`（配列の順＝信号の順）に保存されます。init列を直接編集しても同じです
-- effectはcache WAVに焼き込まれます。`offline_render_backend`が`in_process`・`render_server`のどちらでも効きます
+- effectはcache WAVに焼き込まれます（render-server側で掛かります）
 - 各effectのpresetは組み込みの既定の置き場（`%ProgramData%\TONE3000\Presets`、`%ProgramData%\Surge XT\fx_presets`）から読みます。pluginが無ければ候補に出ません
 - chainは音符と同じ長さだけ回すので、リバーブの尻尾はcellの末尾で切れます
 
@@ -189,19 +189,14 @@ output_wav  = "output.wav"
 sample_rate = 48000
 buffer_size = 512
 
-# DAW のオフラインレンダリング同時実行数（1〜16）
-offline_render_workers = 2
-
-# オフラインレンダリング backend
-# in_process: cmrt 本体プロセス内でレンダリングします。
-# render_server: render-server 子プロセスへ POST /render してレンダリングします。
-offline_render_backend = "in_process"
+# オフラインレンダリングは render-server 子プロセスで行います。
+# 同時実行数（1〜16）・port・起動コマンド（空なら実体を探索）
 offline_render_server_workers = 4
 offline_render_server_port = 42153
 offline_render_server_command = ""
 
-# リアルタイム再生 backend
-realtime_audio_backend = "in_process"
+# リアルタイム再生 backend（"cache_player" / "play_server"）
+realtime_audio_backend = "cache_player"
 realtime_play_server_port = 42154
 
 # 起動時に自動再生するかどうか
@@ -233,12 +228,10 @@ patches_dirs = [
 | `output_wav` | `output.wav` | 内部処理用の出力WAVファイル名です。 |
 | `sample_rate` | `48000` | レンダリング時のサンプルレートです。 |
 | `buffer_size` | `512` | レンダリング時のバッファサイズです。 |
-| `offline_render_workers` | `2` | in_process のレンダリング同時実行数です。 |
-| `offline_render_backend` | `in_process` | オフラインレンダリングの実行先です。 |
-| `offline_render_server_workers` | `4` | render_server の同時実行数です。 |
-| `offline_render_server_port` | `42153` | render_server の localhost port です。 |
-| `offline_render_server_command` | 空文字 | render_server の起動コマンドです。 |
-| `realtime_audio_backend` | `in_process` | リアルタイム再生の実行先です。 |
+| `offline_render_server_workers` | `4` | オフラインレンダリング（render-server）の同時実行数です。 |
+| `offline_render_server_port` | `42153` | render-server の localhost port です。 |
+| `offline_render_server_command` | 空文字 | render-server の起動コマンドです。空なら実体を探索します。 |
+| `realtime_audio_backend` | `cache_player` | リアルタイム再生の実行先です（`cache_player` / `play_server`）。 |
 | `realtime_play_server_port` | `42154` | play_server の localhost port です。 |
 | `autoplay_on_startup` | `true` | 起動直後に自動再生するかどうかです。 |
 | `plugins."Surge XT".patches_dirs` | OSごとの Surge XT patches 標準ディレクトリ | Surge XT の音色選択で検索するディレクトリ一覧です。 |
@@ -312,7 +305,7 @@ patches_dirs = ['D:\Vaporizer2\Presets']
   - `%LOCALAPPDATA%\clap-mml-render-tui\notepad_cache\<プラグイン>\*.wav`（notepad / MML入力overlay のキャッシュ）
   - `%LOCALAPPDATA%\clap-mml-render-tui\daw_cache\<プラグイン>\*.wav`（DAW のトラックWAV）
 
-`offline_render_backend = "render_server"` にすると、TUI側はCLAPプラグインを直接ロードせず、`127.0.0.1:<offline_render_server_port>/render` にMMLを送ってWAVを受け取ります。render-serverへの接続に失敗した場合、cmrtは子プロセスを起動し、通信エラー時は一度だけ再起動して再試行します。子プロセスの実体は`offline_render_server_command`が空なら「`cmrt.exe`と同じディレクトリ→兄弟repo `clap-mml-play-server`のreleaseビルド」の順で探し、**PATHは見ません**。
+オフラインレンダリングはすべてrender-server経由です。TUI側（`cmrt.exe`）はCLAPプラグインをロードせず、`127.0.0.1:<offline_render_server_port>/render` にMMLを送ってWAVを受け取ります。render-serverへの接続に失敗した場合、cmrtは子プロセスを起動し、通信エラー時は一度だけ再起動して再試行します。子プロセスの実体は`offline_render_server_command`が空なら「`cmrt.exe`と同じディレクトリ→兄弟repo `clap-mml-play-server`のreleaseビルド」の順で探し、**PATHは見ません**。
 
 ### updateコマンド
 

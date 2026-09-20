@@ -65,9 +65,8 @@ drum 行の表は track 7 固定（track 4 は drum 行が 1 つで役割が抽�
 - `--out-dir`（無ければ環境変数 `CMRT_TEST_WAV_OUT_DIR`）を渡したときだけ WAV を書く。
   渡さなければ 1 バイトも書かない
 - サンプル列は溜めない（1 本 4 秒ステレオで 1.5MB。数百音色を一度に流すと数百 MB になる）
-- `--config` の `offline_render_backend` で in-process / render server の両方を試せる。
-  **render server 側も `--config` を受ける**（play-server の `clap-mml-render-server --config <PATH>`）ので、
-  実ユーザーの config.toml に触らずに別プロセス経路まで通せる
+- `--config <PATH>` は子 render-server にもそのまま渡る（[0024](0024-offline-render-goes-through-the-render-server-only.md)）ので、
+  実ユーザーの config.toml に触らずに `[plugins]` / port まで含めて試せる
 - **罠: `offline_render_server_command` を引用符で始めないこと。**
   `cmd /C` が最初と最後の引用符を落とすので起動に失敗する（30 秒待って「listening しない」で落ちる）
 

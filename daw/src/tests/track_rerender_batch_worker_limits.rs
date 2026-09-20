@@ -24,7 +24,7 @@ fn complete_track_rerender_batch_uses_available_worker_slots_while_playing() {
         ab_repeat: Arc::new(Mutex::new(super::AbRepeatState::Off)),
         play_measure_mmls: Arc::clone(&play_measure_mmls),
         cache_tx,
-        cache_render_workers: cmrt_runtime::DEFAULT_OFFLINE_RENDER_WORKERS,
+        cache_render_workers: 2,
     };
     {
         let mut cache_guard = cache.lock().unwrap();

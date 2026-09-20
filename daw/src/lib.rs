@@ -167,9 +167,9 @@ pub struct DawApp {
     pub(crate) textarea: TextArea<'static>,
 
     cfg: Arc<Config>,
-    /// カタログのプラグインごとのロード済み CLAP entry。
-    /// render_server backend / テストでは空。
-    plugin_entries: cmrt_offline_render::PluginEntries,
+    /// EFFECT CHAIN overlay（`x`）が一覧する effect の catalog。
+    /// DLL はロードしない（render は render-server 側）。テストでは手で並べる。
+    effect_plugins: cmrt_offline_render::EffectPlugins,
 
     /// セルごとのキャッシュ [track][measure]
     pub(crate) cache: Arc<Mutex<Vec<Vec<CellCache>>>>,
@@ -220,13 +220,13 @@ pub struct DawApp {
 impl DawApp {
     pub fn new(
         cfg: Arc<Config>,
-        plugin_entries: cmrt_offline_render::PluginEntries,
+        effect_plugins: cmrt_offline_render::EffectPlugins,
         patch_load: Arc<Mutex<cmrt_tui_core::patch_load::PatchLoadState>>,
         realtime_play_supervisor: Option<Arc<cmrt_realtime_play::RealtimePlayServerSupervisor>>,
     ) -> Self {
         Self::new_for_workspace(
             cfg,
-            plugin_entries,
+            effect_plugins,
             patch_load,
             realtime_play_supervisor,
             WorkspaceKind::Persistent,
@@ -244,14 +244,14 @@ impl DawApp {
     /// 使うので**この注入された 1 本をそのまま共有する**。
     pub fn new_for_workspace(
         cfg: Arc<Config>,
-        plugin_entries: cmrt_offline_render::PluginEntries,
+        effect_plugins: cmrt_offline_render::EffectPlugins,
         patch_load: Arc<Mutex<cmrt_tui_core::patch_load::PatchLoadState>>,
         realtime_play_supervisor: Option<Arc<cmrt_realtime_play::RealtimePlayServerSupervisor>>,
         workspace_kind: WorkspaceKind,
     ) -> Self {
         init::new(
             cfg,
-            plugin_entries,
+            effect_plugins,
             patch_load,
             realtime_play_supervisor,
             workspace_kind,
@@ -275,8 +275,7 @@ impl DawApp {
     }
 
     fn offline_render_available(&self) -> bool {
-        self.plugin_entries.is_available()
-            || self.cfg.offline_render_backend == cmrt_runtime::OfflineRenderBackend::RenderServer
+        !self.render_queue.is_disabled()
     }
 
     pub(crate) fn ab_repeat_state(&self) -> AbRepeatState {

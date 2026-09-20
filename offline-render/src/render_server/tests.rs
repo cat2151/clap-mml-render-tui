@@ -14,7 +14,6 @@ output_midi = "output.mid"
 output_wav = "output.wav"
 sample_rate = 48000
 buffer_size = 512
-offline_render_backend = "render_server"
 offline_render_server_port = {port}
 offline_render_server_command = "exit 0"
 "#
@@ -73,6 +72,31 @@ fn never_kill_mode_still_reuses_a_newer_generation() {
 
     assert_eq!(generation, 2);
     assert_eq!(supervisor.restart_count_for_test(), 0);
+}
+
+/// `config=` は子へ実際に渡したときだけ出す。shell command のときに出すと、
+/// 子が読んでいない config を読んだように見える。
+#[test]
+fn the_resolved_log_line_names_the_config_path_only_when_it_is_forwarded() {
+    let binary = ResolvedRenderServerCommand::Binary {
+        path: PathBuf::from("render-server.exe"),
+        source: cmrt_runtime::SiblingBinarySource::SiblingDirectory,
+    };
+    let shell = ResolvedRenderServerCommand::Shell("exit 0".to_string());
+    let config_path = Path::new("alt-config.toml");
+
+    assert_eq!(
+        render_server_resolved_log_message(&binary, Some(config_path)),
+        "render-server: exe=render-server.exe (source=同じディレクトリ) config=alt-config.toml"
+    );
+    assert_eq!(
+        render_server_resolved_log_message(&binary, None),
+        "render-server: exe=render-server.exe (source=同じディレクトリ)"
+    );
+    assert_eq!(
+        render_server_resolved_log_message(&shell, Some(config_path)),
+        "render-server: exe=exit 0 (source=command)"
+    );
 }
 
 #[test]

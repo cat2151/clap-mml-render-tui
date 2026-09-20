@@ -20,8 +20,8 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};
-use cmrt_offline_render::{OfflineRenderer, PluginEntries};
-use cmrt_runtime::{Config, OfflineRenderBackend};
+use cmrt_offline_render::OfflineRenderer;
+use cmrt_runtime::Config;
 use cmrt_tui_core::patch_plugins::PatchPlugins;
 
 mod analysis;
@@ -79,7 +79,7 @@ const MONO_ENERGY_GAIN: f64 = 1.10;
 /// 同じ MML を 2 回鳴らしたときに許す RMS のぶれ。超えたら判定しない。
 const MAX_RMS_JITTER: f64 = 0.10;
 
-pub fn run(cfg: &Config, entries: &PluginEntries, request: &RenderMmlRequest) -> Result<()> {
+pub fn run(cfg: &Config, request: &RenderMmlRequest) -> Result<()> {
     let mml = request.mml.as_deref().unwrap_or(if request.verify {
         VERIFY_DEFAULT_MML
     } else {
@@ -88,11 +88,10 @@ pub fn run(cfg: &Config, entries: &PluginEntries, request: &RenderMmlRequest) ->
     let out_dir = resolve_out_dir(request)?;
     let catalog = PatchPlugins::from_catalog(cmrt_runtime::catalog_plugins(cfg));
     let patches = selection::requested_patches(cfg, &catalog, request)?;
-    let renderer = OfflineRenderer::new(std::sync::Arc::new(cfg.clone()), entries.clone());
+    let renderer = OfflineRenderer::new(std::sync::Arc::new(cfg.clone()));
 
     println!("[render-mml]");
     println!("  config        : {}", describe_config(request));
-    println!("  backend       : {}", backend_label(cfg));
     println!("  sample_rate   : {}", cfg.sample_rate);
     println!(
         "  out_dir       : {}",
@@ -301,7 +300,7 @@ fn render_one(
     let line = mml_with_patch(patch, mml);
     let started = std::time::Instant::now();
     let output = renderer
-        .render_phrase(&line, None)
+        .render_phrase(&line)
         .with_context(|| format!("オフラインレンダリングに失敗しました: mml={line}"))?;
     let elapsed_ms = started.elapsed().as_millis();
     let stats = RenderStats::of(&output.samples, cfg.sample_rate as u32, &output.patch_name);
@@ -395,13 +394,6 @@ fn describe_config(request: &RenderMmlRequest) -> String {
     match &request.config {
         Some(path) => path.display().to_string(),
         None => "(既定の置き場)".to_string(),
-    }
-}
-
-fn backend_label(cfg: &Config) -> &'static str {
-    match cfg.offline_render_backend {
-        OfflineRenderBackend::InProcess => "in_process(このプロセスで CLAP をホストする)",
-        OfflineRenderBackend::RenderServer => "render_server(別プロセスの render server へ投げる)",
     }
 }
 

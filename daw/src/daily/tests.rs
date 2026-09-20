@@ -122,13 +122,13 @@ fn build_daily_app_with_cache_jobs(config_app_dir: &Path) -> (DawApp, Receiver<C
             sample_rate: 44_100.0,
             ..Default::default()
         }),
-        plugin_entries: cmrt_offline_render::PluginEntries::none(),
+        effect_plugins: cmrt_offline_render::EffectPlugins::none(),
         cache: Arc::new(Mutex::new(vec![
             vec![CellCache::empty(); MEASURES + 1];
             TRACKS
         ])),
         cache_tx,
-        cache_render_workers: cmrt_runtime::DEFAULT_OFFLINE_RENDER_WORKERS,
+        cache_render_workers: 2,
         render_queue: crate::render_queue::RenderQueue::disabled_for_tests(),
         playback: crate::playback_runtime::DawPlaybackRuntime::for_test(TRACKS, MEASURES),
         log_lines: Arc::new(Mutex::new(VecDeque::new())),

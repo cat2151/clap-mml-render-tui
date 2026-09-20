@@ -1,14 +1,11 @@
 use std::sync::Arc;
 
-use cmrt_core::NativeRenderProbeContext;
-
 use super::{
     insert_overlay_preview_cache, overlay_preview_cache_key, render_mixed_preview_tracks,
     MixedPreviewRenderRequest,
 };
 use crate::render_queue::RenderPriority;
 use crate::{DawApp, FIRST_PLAYABLE_TRACK, MAX_CACHED_SAMPLES};
-use cmrt_history::daw_cache_mml_hash;
 
 impl DawApp {
     pub(crate) fn prefetch_preview_navigation_cache<F>(
@@ -75,7 +72,7 @@ impl DawApp {
         }
 
         #[cfg(test)]
-        if !self.plugin_entries.is_available() {
+        if self.render_queue.is_disabled() {
             insert_overlay_preview_cache(
                 &mut self.playback.overlay_preview_cache.lock().unwrap(),
                 cache_key,
@@ -84,13 +81,9 @@ impl DawApp {
             );
             return;
         }
-        let cfg = Arc::clone(&self.cfg);
         let render_queue = self.render_queue.clone();
         let overlay_preview_cache = Arc::clone(&self.playback.overlay_preview_cache);
-        let active_track_count = active_tracks.len();
         std::thread::spawn(move || {
-            let daw_cfg = (*cfg).clone();
-            let offline_render_workers = daw_cfg.effective_offline_render_workers();
             let Some(render) = render_mixed_preview_tracks(
                 &render_queue,
                 MixedPreviewRenderRequest {
@@ -100,15 +93,6 @@ impl DawApp {
                     track_mmls: &track_mmls,
                     track_gains: &track_gains,
                     auto_trim: false,
-                },
-                |track, mml| {
-                    NativeRenderProbeContext::preview_prefetch(
-                        track,
-                        measure_index,
-                        active_track_count,
-                        daw_cache_mml_hash(mml),
-                        offline_render_workers,
-                    )
                 },
                 |_| {},
             ) else {

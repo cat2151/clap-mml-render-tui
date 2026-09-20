@@ -170,10 +170,6 @@ pub fn append_panic_report_to_file(report: &str) -> std::io::Result<()> {
     append_panic_report_to_path(&path, report)
 }
 
-fn append_native_probe_log_line_to_file(line: &str) -> std::io::Result<()> {
-    append_log_line_to_optional_path(cmrt_runtime::native_probe_log_file_path(), line)
-}
-
 /// UI 表示用のインメモリバッファへだけ 1 行 push する。
 ///
 /// ログファイルの書き先は実ユーザーの `log/log.txt` 固定なので、テストからは
@@ -194,17 +190,6 @@ pub fn append_log_line(log_lines: &Arc<Mutex<VecDeque<String>>>, line: impl Into
         append_log_line_in_memory(log_lines, format!("[log write error] {err}"));
     }
     append_log_line_in_memory(log_lines, line);
-}
-
-fn append_native_probe_log_line(line: impl AsRef<str>) {
-    let _ = append_native_probe_log_line_to_file(line.as_ref());
-}
-
-/// cmrt-core の native render probe ログを、専用ログファイルへ流すロガーを登録する。
-pub fn install_native_probe_logger() {
-    let logger: cmrt_core::NativeProbeLogger =
-        Arc::new(|line: &str| append_native_probe_log_line(line));
-    cmrt_core::set_native_probe_logger(Some(logger));
 }
 
 fn load_log_lines_from_path(path: &Path) -> VecDeque<String> {

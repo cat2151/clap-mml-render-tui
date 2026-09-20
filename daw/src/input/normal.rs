@@ -237,7 +237,7 @@ impl DawApp {
         self.start_preview_on_resolved_tracks(&[target_track]);
     }
 
-    // `new_for_test()` の DAW は PluginEntry を持たないため、
+    // テストの DAW は render queue が無効（worker を持たない）ため、
     // 実オーディオ preview を起動せず状態更新だけを検証する。
     #[cfg(test)]
     fn try_start_preview_for_test(&mut self) -> bool {

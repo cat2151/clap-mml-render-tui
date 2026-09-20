@@ -382,7 +382,7 @@ impl DawApp {
         measure_index: usize,
         track_mmls: Option<Vec<String>>,
     ) -> bool {
-        if self.plugin_entries.is_available() {
+        if !self.render_queue.is_disabled() {
             return false;
         }
         if *self.playback.play_state.lock().unwrap() == super::DawPlayState::Preview {

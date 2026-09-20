@@ -1,5 +1,5 @@
 //! 同一プロセス内の複数スレッドが **1 つの `RenderServerSupervisor` を共有**して、
-//! effect chain 付きの MML を並列に render する（DAW の `offline_render_workers` と同じ形）。
+//! effect chain 付きの MML を並列に render する（DAW の `offline_render_server_workers` と同じ形）。
 //!
 //! 実 render-server と実 plugin（TONE3000）が要るので `#[ignore]`。render-server の実体は
 //! 環境変数で受ける（テストバイナリは `target/debug/deps/` に居るので兄弟 repo の探索が効かない）:
@@ -50,7 +50,6 @@ output_midi = "output.mid"
 output_wav = "output.wav"
 sample_rate = 48000
 buffer_size = 512
-offline_render_backend = "render_server"
 offline_render_server_command = {exe:?}
 "#
     ))

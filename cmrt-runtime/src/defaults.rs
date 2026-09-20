@@ -11,9 +11,8 @@ use cmrt_server_config::VAPORIZER2_CATEGORY_CODES as VAPORIZER2_PATCH_CATEGORY_C
 
 use crate::{
     DEFAULT_CHORD_PROGRESSION_SOURCE, DEFAULT_OFFLINE_RENDER_SERVER_PORT,
-    DEFAULT_OFFLINE_RENDER_SERVER_WORKERS, DEFAULT_OFFLINE_RENDER_WORKERS,
-    DEFAULT_REALTIME_PLAY_SERVER_PORT, DEFAULT_VOICING_OVERRIDE_SOURCE,
-    DEFAULT_VOICING_SHARED_SOURCE,
+    DEFAULT_OFFLINE_RENDER_SERVER_WORKERS, DEFAULT_REALTIME_PLAY_SERVER_PORT,
+    DEFAULT_VOICING_OVERRIDE_SOURCE, DEFAULT_VOICING_SHARED_SOURCE,
 };
 
 #[derive(Serialize)]
@@ -67,11 +66,8 @@ output_wav  = "output.wav"
 sample_rate = 48000
 buffer_size = 512
 
-# 【省略可】オフラインレンダリング同時実行数（1〜16）
-offline_render_workers = {DEFAULT_OFFLINE_RENDER_WORKERS}
-
-# 【省略可】オフラインレンダリング backend
-offline_render_backend = "in_process"
+# 【省略可】オフラインレンダリングは render-server 子プロセスで行います。
+# 同時実行数（1〜16）・port・起動コマンド（空なら実体を探索）。3 キーとも省略できます。
 offline_render_server_workers = {DEFAULT_OFFLINE_RENDER_SERVER_WORKERS}
 offline_render_server_port = {DEFAULT_OFFLINE_RENDER_SERVER_PORT}
 offline_render_server_command = ""

@@ -137,7 +137,7 @@ fn the_mml_overlay_play_settings_survive_a_restart() {
         }
     );
 
-    let restarted = TuiApp::new(&cfg, cmrt_offline_render::PluginEntries::none());
+    let restarted = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
     assert_eq!(restarted.mml_overlay.play_settings(), confirmed);
 
     std::fs::remove_dir_all(&tmp).ok();
@@ -178,7 +178,7 @@ fn keyboard_q_persists_and_restores_patch_and_buffer() {
     );
 
     let cfg = test_config();
-    let mut restored = TuiApp::new(&cfg, cmrt_offline_render::PluginEntries::none());
+    let mut restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
     assert_eq!(
         restored.active_screen,
         crate::screen_switch::PrimaryScreen::Keyboard
@@ -231,7 +231,7 @@ fn grid_track_count_is_persisted_and_restored() {
     assert_eq!(saved.grid_sequencer_track_count, 1);
 
     let cfg = test_config();
-    let restored = TuiApp::new(&cfg, cmrt_offline_render::PluginEntries::none());
+    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
     assert_eq!(restored.grid_sequencer.track_count(), 1);
 
     std::fs::remove_dir_all(&tmp).ok();
@@ -311,7 +311,7 @@ fn edited_grid_is_persisted_and_restored_without_persisting_derived_note() {
     assert!(!json.contains("\"duration\""));
     assert!(!json.contains("\"cells\""));
     let cfg = test_config();
-    let restored = TuiApp::new(&cfg, cmrt_offline_render::PluginEntries::none());
+    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
     let session = restored.grid_sequencer.session_state().unwrap();
     assert_eq!(
         session.cycle_random,
@@ -364,7 +364,7 @@ fn loop_browser_screen_is_saved_and_restored_as_the_startup_screen() {
     );
 
     let cfg = test_config();
-    let restored = TuiApp::new(&cfg, cmrt_offline_render::PluginEntries::none());
+    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
     assert_eq!(
         restored.active_screen,
         crate::history::PrimaryScreen::LoopBrowser

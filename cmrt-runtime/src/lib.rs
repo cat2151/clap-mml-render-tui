@@ -16,7 +16,7 @@ pub use defaults::{
     default_dexed_plugin_path, default_floe_plugin_path, default_patches_dirs, default_plugin_path,
     default_sforzando_plugin_path, default_vaporizer2_plugin_path, serialize_patches_dirs_line,
 };
-pub use paths::{config_app_dir, config_file_path, log_file_path, native_probe_log_file_path};
+pub use paths::{config_app_dir, config_file_path, log_file_path};
 pub use plugin_identity::{
     plugin_file_stem, DEXED_PLUGIN_ID, FLOE_PLUGIN_ID, SFORZANDO_PLUGIN_ID, SURGE_XT_PLUGIN_ID,
     VAPORIZER2_PLUGIN_ID,
@@ -40,7 +40,6 @@ use std::path::Path;
 /// app の HTTP サーバー（`--server` CLI モード / DAW HTTP サーバー）が listen する localhost port。
 /// 旧API名。既定値の単一ソースは play-server の `cmrt-server-config`。
 pub const DEFAULT_PORT: u16 = DEFAULT_APP_HTTP_SERVER_PORT;
-pub const DEFAULT_OFFLINE_RENDER_WORKERS: usize = 2;
 pub const DEFAULT_VOICING_SHARED_SOURCE: &str =
     "https://raw.githubusercontent.com/cat2151/cat-music-patterns/main/surge-xt-patch-voicing.json";
 pub const DEFAULT_VOICING_OVERRIDE_SOURCE: &str = "https://raw.githubusercontent.com/cat2151/cat-music-patterns/main/surge-xt-patch-voicing-overrides.json";
@@ -49,14 +48,6 @@ pub const DEFAULT_CHORD_PROGRESSION_SOURCE: &str =
 pub const DEFAULT_LOOP_CATEGORY_NAMES: [&str; 5] = ["guitar", "drum", "bass", "spoken", "sequence"];
 const MIN_OFFLINE_RENDER_WORKERS: usize = 1;
 const MAX_OFFLINE_RENDER_WORKERS: usize = 16;
-
-#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum OfflineRenderBackend {
-    #[default]
-    InProcess,
-    RenderServer,
-}
 
 /// リアルタイム再生の実体をどこに置くか。
 ///
@@ -140,19 +131,13 @@ pub struct Config {
     /// WAV ループディレクトリへ付与できるカテゴリ一覧
     #[serde(default = "default_loop_categories")]
     pub loop_categories: Vec<String>,
-    /// DAW のオフラインレンダリング同時実行数
-    #[serde(default = "default_offline_render_workers")]
-    pub offline_render_workers: usize,
-    /// render-server backend のオフラインレンダリング同時実行数
+    /// オフラインレンダリング（render-server 子プロセス）の同時実行数
     #[serde(default = "default_offline_render_server_workers")]
     pub offline_render_server_workers: usize,
-    /// オフラインレンダリング backend
-    #[serde(default)]
-    pub offline_render_backend: OfflineRenderBackend,
-    /// render-server backend が使う localhost port
+    /// render-server が使う localhost port
     #[serde(default = "default_offline_render_server_port")]
     pub offline_render_server_port: u16,
-    /// render-server backend 起動コマンド。空なら sibling executable / PATH を探す。
+    /// render-server 起動コマンド。空なら実体を探索する。
     #[serde(default)]
     pub offline_render_server_command: String,
     /// リアルタイム audio backend
@@ -169,6 +154,13 @@ pub struct Config {
     /// 経緯は `docs/adr/0017-play-server-binary-resolution.md` にある。
     #[serde(skip)]
     pub play_server_launch_override: Option<PlayServerLaunch>,
+    /// この `Config` を読んだ config.toml のパス。**既定の置き場から読んだときは `None`**。
+    ///
+    /// `--config <path>` の分岐だけが埋める。render-server を子として起こすときに
+    /// 同じ `--config` を渡すためのもので、これが無いと子は user config を読み、
+    /// `--config` に書いた port や `[plugins]` が render には効かない。
+    #[serde(skip)]
+    pub source_path: Option<std::path::PathBuf>,
     /// app 起動直後に realtime play server を先行起動するかどうか。
     #[serde(default = "default_realtime_play_server_prewarm")]
     pub realtime_play_server_prewarm: bool,
@@ -205,14 +197,13 @@ impl Default for Config {
             patches_dirs: None,
             loop_dirs: Vec::new(),
             loop_categories: default_loop_categories(),
-            offline_render_workers: DEFAULT_OFFLINE_RENDER_WORKERS,
             offline_render_server_workers: DEFAULT_OFFLINE_RENDER_SERVER_WORKERS,
-            offline_render_backend: OfflineRenderBackend::default(),
             offline_render_server_port: DEFAULT_OFFLINE_RENDER_SERVER_PORT,
             offline_render_server_command: String::new(),
             realtime_audio_backend: RealtimeAudioBackend::default(),
             realtime_play_server_port: DEFAULT_REALTIME_PLAY_SERVER_PORT,
             play_server_launch_override: None,
+            source_path: None,
             realtime_play_server_prewarm: default_realtime_play_server_prewarm(),
             autoplay_on_startup: default_autoplay_on_startup(),
             voicing_shared_source: default_voicing_shared_source(),
@@ -220,10 +211,6 @@ impl Default for Config {
             chord_progression_source: default_chord_progression_source(),
         }
     }
-}
-
-fn default_offline_render_workers() -> usize {
-    DEFAULT_OFFLINE_RENDER_WORKERS
 }
 
 fn default_offline_render_server_workers() -> usize {
@@ -382,8 +369,7 @@ impl Config {
         {
             anyhow::bail!("loop_categories に重複したカテゴリは指定できません");
         }
-        validate_offline_render_workers("offline_render_workers", self.offline_render_workers)?;
-        validate_offline_render_workers(
+        validate_render_worker_count(
             "offline_render_server_workers",
             self.offline_render_server_workers,
         )?;
@@ -394,22 +380,6 @@ impl Config {
             anyhow::bail!("realtime_play_server_port は 1〜65535 の範囲で設定してください");
         }
         Ok(())
-    }
-
-    pub fn effective_offline_render_workers(&self) -> usize {
-        match self.offline_render_backend {
-            OfflineRenderBackend::InProcess => self.offline_render_workers,
-            OfflineRenderBackend::RenderServer => self.offline_render_server_workers,
-        }
-    }
-}
-
-impl OfflineRenderBackend {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            OfflineRenderBackend::InProcess => "in_process",
-            OfflineRenderBackend::RenderServer => "render_server",
-        }
     }
 }
 
@@ -422,7 +392,7 @@ impl RealtimeAudioBackend {
     }
 }
 
-fn validate_offline_render_workers(name: &str, workers: usize) -> anyhow::Result<()> {
+fn validate_render_worker_count(name: &str, workers: usize) -> anyhow::Result<()> {
     if !(MIN_OFFLINE_RENDER_WORKERS..=MAX_OFFLINE_RENDER_WORKERS).contains(&workers) {
         anyhow::bail!(
             "{} は {}〜{} の範囲で設定してください（現在値: {}）",

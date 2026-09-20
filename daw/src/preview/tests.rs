@@ -11,7 +11,6 @@ use super::{
 use crate::preview::render::{PreviewRenderProgress, PreviewRenderProgressPhase};
 use crate::render_queue::{RenderPriority, RenderQueue};
 use crate::PlayPosition;
-use cmrt_core::NativeRenderProbeContext;
 
 #[test]
 fn begin_preview_output_skips_enqueue_when_preview_stopped() {
@@ -145,7 +144,6 @@ fn preview_render_reports_started_and_error_progress() {
             track_gains: &track_gains,
             auto_trim: false,
         },
-        |track, _| NativeRenderProbeContext::preview(track, 0, 1, 1, 1),
         |event| progress.push(event),
     );
 

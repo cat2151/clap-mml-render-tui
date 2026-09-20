@@ -19,7 +19,7 @@ fn daily_daw_is_saved_and_restored_as_the_cold_start_screen() {
     let saved = crate::history::load_session_state();
     assert_eq!(saved.active_screen, crate::history::PrimaryScreen::DailyDaw);
     let cfg = crate::tui::tests::test_config();
-    let restored = TuiApp::new(&cfg, cmrt_offline_render::PluginEntries::none());
+    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
     assert_eq!(
         restored.active_screen,
         crate::screen_switch::PrimaryScreen::DailyDaw

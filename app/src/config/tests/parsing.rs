@@ -16,12 +16,10 @@ buffer_size = 512
     assert_eq!(cfg.output_wav, "output.wav");
     assert!((cfg.sample_rate - 44100.0).abs() < f64::EPSILON);
     assert_eq!(cfg.buffer_size, 512);
-    assert_eq!(cfg.offline_render_workers, DEFAULT_OFFLINE_RENDER_WORKERS);
     assert_eq!(
         cfg.offline_render_server_workers,
         DEFAULT_OFFLINE_RENDER_SERVER_WORKERS
     );
-    assert_eq!(cfg.offline_render_backend, OfflineRenderBackend::InProcess);
     assert_eq!(
         cfg.offline_render_server_port,
         DEFAULT_OFFLINE_RENDER_SERVER_PORT

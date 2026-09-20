@@ -15,7 +15,7 @@ impl TuiApp<'static> {
             active_screen: crate::screen_switch::PrimaryScreen::Notepad,
             screen_switch_menu: crate::screen_switch::ScreenSwitchMenu::default(),
             cfg: Arc::clone(&cfg),
-            plugin_entries: cmrt_offline_render::PluginEntries::none(),
+            effect_plugins: cmrt_offline_render::EffectPlugins::none(),
             playback_session: notepad.playback_session().clone(),
             patch_load_state,
             // 実マシンのインストール状況を読ませない。案内を見るテストは自分で入れる。

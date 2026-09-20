@@ -1,4 +1,4 @@
-use cmrt_offline_render::PluginEntries;
+use cmrt_offline_render::EffectPlugins;
 
 use std::sync::{Arc, Mutex};
 
@@ -32,14 +32,12 @@ pub(super) fn clamp_session_cursor(cursor: usize, lines_len: usize) -> usize {
 /// adapterが生成したvoicingも同じfile cacheから復元し、一覧より先にmemoへ公開する。
 /// TUI起動中に音色fileは走査しない。
 fn spawn_patch_loader(
-    cfg: &Config,
     catalog_voicings: CatalogVoicings,
-    plugin_entries: PluginEntries,
+    effect_plugins: EffectPlugins,
 ) -> Arc<Mutex<PatchLoadState>> {
     // TUIはfile cacheを読むだけ。catalog走査とcache更新は明示的CLIだけが行う。
     let patch_load_state = Arc::new(Mutex::new(PatchLoadState::Loading));
     let state_bg = Arc::clone(&patch_load_state);
-    let cfg = cfg.clone();
     std::thread::spawn(move || {
         let loading_started = std::time::Instant::now();
         match crate::patch_catalog_cache::load() {
@@ -53,33 +51,7 @@ fn spawn_patch_loader(
                 let snapshot = Arc::new(snapshot);
                 log_patch_load(&snapshot, loading_started.elapsed());
                 *state_bg.lock().unwrap() = PatchLoadState::Ready(Arc::clone(&snapshot));
-
-                if cfg.offline_render_backend == crate::config::OfflineRenderBackend::InProcess {
-                    let loaded = snapshot
-                        .catalog_plugins()
-                        .iter()
-                        .map(|plugin| cmrt_core::load_entry(&plugin.plugin_path))
-                        .collect::<anyhow::Result<Vec<_>>>();
-                    match loaded {
-                        Ok(entries) => {
-                            if let Err(error) = plugin_entries
-                                .publish_owned(snapshot.catalog_plugins().to_vec(), entries)
-                            {
-                                crate::logging::global_log_sink(&format!(
-                                    "patch-load: event=entry-publish-failed error=\"{error}\""
-                                ));
-                            }
-                        }
-                        Err(error) => {
-                            let message = format!("PluginEntryの読み込みに失敗: {error:#}");
-                            plugin_entries.publish_error(message.clone());
-                            crate::logging::global_log_sink(&format!(
-                                "patch-load: event=entry-load-failed error=\"{message}\""
-                            ));
-                        }
-                    }
-                    log_effect_catalog(&plugin_entries);
-                }
+                log_effect_catalog(&effect_plugins);
             }
             Err(e) => {
                 let message = format!(
@@ -89,7 +61,6 @@ fn spawn_patch_loader(
                 crate::logging::global_log_sink(&format!(
                     "patch-load: event=cache-error error=\"{message}\""
                 ));
-                plugin_entries.publish_error(message.clone());
                 *state_bg.lock().unwrap() = PatchLoadState::Err(message);
             }
         }
@@ -98,9 +69,9 @@ fn spawn_patch_loader(
 }
 
 /// effect の catalog を先に走査しておき、件数を log.txt へ残す。
-/// ここで走査しないと最初のセル render がその分だけ遅れる。
-fn log_effect_catalog(plugin_entries: &PluginEntries) {
-    let Some(catalog) = plugin_entries.effects().catalog() else {
+/// ここで走査しないと DAW の EFFECT CHAIN overlay を最初に開くときにその分だけ待つ。
+fn log_effect_catalog(effect_plugins: &EffectPlugins) {
+    let Some(catalog) = effect_plugins.catalog() else {
         return;
     };
     crate::logging::global_log_sink(&format!(
@@ -159,8 +130,7 @@ fn spawn_play_server_prewarm(
 }
 
 impl<'a> TuiApp<'a> {
-    pub fn new(cfg: &'a Config, plugin_entries: PluginEntries) -> Self {
-        crate::logging::install_native_probe_logger();
+    pub fn new(cfg: &'a Config, effect_plugins: EffectPlugins) -> Self {
         let cfg_arc = Arc::new(cfg.clone());
         let LoadedSessionState {
             cursor,
@@ -229,8 +199,7 @@ impl<'a> TuiApp<'a> {
         let playback_session = PlaybackSession::new(realtime_play_server);
         // memo は一覧読み込みスレッドと `VoicingState` の両方が持つ（`Arc` 共有）。
         let catalog_voicings = CatalogVoicings::default();
-        let patch_load_state =
-            spawn_patch_loader(cfg, catalog_voicings.clone(), plugin_entries.clone());
+        let patch_load_state = spawn_patch_loader(catalog_voicings.clone(), effect_plugins.clone());
         let grid_bpm_range =
             bpm_range_from_history(grid_sequencer_bpm_range, super::grid_sequencer::BPM);
         // 設定不足でカタログから外れたプラグインの案内。config は起動中に変わらないので
@@ -241,7 +210,7 @@ impl<'a> TuiApp<'a> {
             active_screen,
             screen_switch_menu: crate::screen_switch::ScreenSwitchMenu::default(),
             cfg: Arc::clone(&cfg_arc),
-            plugin_entries: plugin_entries.clone(),
+            effect_plugins,
             notepad: NotepadScreen::new(NotepadScreenParts {
                 lines,
                 cursor,
@@ -250,7 +219,6 @@ impl<'a> TuiApp<'a> {
                 patch_load_state: Arc::clone(&patch_load_state),
                 patch_phrase_store: crate::history::load_patch_phrase_store(),
                 cfg: Arc::clone(&cfg_arc),
-                plugin_entries: plugin_entries.clone(),
                 catalog_notes: catalog_notes.clone(),
             }),
             keyboard: super::keyboard::KeyboardScreen::new(
@@ -306,10 +274,7 @@ impl<'a> TuiApp<'a> {
             // preview はまだ 1 度も鳴らしていない。
             chord_chart_preview_command_id: None,
             deferred_chord_chart_preview: None,
-            grid_history_preview: crate::daw::DawGridPreviewPlayer::new(
-                Arc::clone(&cfg_arc),
-                plugin_entries,
-            ),
+            grid_history_preview: crate::daw::DawGridPreviewPlayer::new(Arc::clone(&cfg_arc)),
             mml_overlay: {
                 let mut overlay = super::mml_overlay::MmlOverlay::default();
                 overlay.set_restored_patch(mml_overlay_patch.clone());

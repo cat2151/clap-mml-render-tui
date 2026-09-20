@@ -14,7 +14,7 @@ fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
         .unwrap();
     let render_row = normalized_lines
         .iter()
-        .position(|line| line.contains("render:実行0/2予約0"))
+        .position(|line| line.contains("render:実行0/4予約0"))
         .unwrap();
     let keybind_row = lines
         .iter()
@@ -27,7 +27,7 @@ fn normal_screen_splits_status_and_keybinds_without_line_numbers() {
     assert!(!screen.contains("▶   1 abc"));
     assert_eq!(render_row, status_row + 1);
     assert_eq!(keybind_row, render_row + 1);
-    assert!(normalized_lines[render_row].contains("render:実行0/2予約0"));
+    assert!(normalized_lines[render_row].contains("render:実行0/4予約0"));
     assert!(screen.contains("q ?:help e:config b:loops"));
     assert!(screen.contains("b:loops"));
     assert!(screen.contains("dd/Del:cut"));

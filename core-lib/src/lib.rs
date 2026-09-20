@@ -6,8 +6,7 @@ pub use clap_mml_play_server_core::patch_list::{collect_patches, to_relative};
 pub use clap_mml_play_server_core::pipeline;
 pub use clap_mml_play_server_core::pipeline::{
     embedded_patch_ref, ensure_cmrt_dir, ensure_daw_dir, ensure_phrase_dir, mml_str_to_smf_bytes,
-    mml_to_smf_bytes, play_samples, write_wav, EffectEntryLoader, RenderEffects, RenderOptions,
-    RenderPreroll,
+    mml_to_smf_bytes, play_samples, write_wav,
 };
 pub use clap_mml_play_server_core::EffectPlugins;
 pub use clap_mml_play_server_core::PatchVoicing as AdapterPatchVoicing;
@@ -16,7 +15,7 @@ pub use clap_mml_play_server_core::{
     AudioEffectCatalog, AudioEffectPluginInfo, AudioEffectPreset, EffectChainSpec, EffectStageSpec,
     EFFECT_CHAIN_JSON_KEY,
 };
-pub use clap_mml_play_server_core::{host, load_entry, midi, patch_list, render, CoreConfig};
+pub use clap_mml_play_server_core::{midi, patch_list, CoreConfig};
 pub use clap_mml_play_server_core::{
     patch_lookup_candidates, patch_sort_metadata, plugin_voicing_source, AudioPatch,
     AudioPluginCatalog, AudioPluginInfo, PatchRef, PatchSortMetadata, PatchVoicingHint, PluginKey,
@@ -24,179 +23,19 @@ pub use clap_mml_play_server_core::{
 };
 pub use clap_mml_play_server_core::{set_log_sink, LogSink};
 
-use anyhow::Result;
-use clack_host::prelude::PluginEntry;
 use mmlabc_to_smf::mml_preprocessor;
-use std::{
-    borrow::Cow,
-    sync::{mpsc, OnceLock},
-};
+use std::borrow::Cow;
 
 const PATCH_DIR_PREFIXES: [&str; 2] = ["patches_factory", "patches_3rdparty"];
-const RENDER_PREROLL_MS: u64 = 100;
-static CACHE_RENDER_PREPARE_QUEUE: OnceLock<CacheRenderPrepareQueue> = OnceLock::new();
 
 mod cache_dirs;
 mod core_config;
-mod native_render_probe;
 
 pub use cache_dirs::{
     cache_plugin_namespace, ensure_daw_cache_dir, ensure_notepad_cache_dir,
     init_cache_plugin_namespace, migrate_legacy_caches, DEFAULT_CACHE_PLUGIN_NAMESPACE,
 };
 pub use core_config::{core_config_for_plugin, core_config_from_config};
-
-#[cfg(test)]
-use native_render_probe::clear_native_render_probe_state_for_tests;
-#[cfg(test)]
-use native_render_probe::with_native_render_probe;
-use native_render_probe::with_requested_native_render_probe;
-pub use native_render_probe::{
-    set_native_probe_logger, NativeProbeLogger, NativeRenderProbeContext,
-};
-
-pub struct CacheRenderInputs {
-    mml: String,
-    cfg: CoreConfig,
-}
-
-struct CacheRenderPrepareRequest {
-    mml: String,
-    cfg: CoreConfig,
-    response_tx: mpsc::Sender<Result<CacheRenderInputs>>,
-}
-
-struct CacheRenderPrepareQueue {
-    tx: mpsc::Sender<CacheRenderPrepareRequest>,
-}
-
-impl CacheRenderPrepareQueue {
-    fn start() -> Self {
-        let (tx, rx) = mpsc::channel::<CacheRenderPrepareRequest>();
-        std::thread::spawn(move || {
-            while let Ok(request) = rx.recv() {
-                let result = prepare_cache_render(&request.mml, &request.cfg);
-                let _ = request.response_tx.send(result);
-            }
-        });
-        Self { tx }
-    }
-
-    fn prepare(&self, mml: &str, cfg: &CoreConfig) -> Result<CacheRenderInputs> {
-        let (response_tx, response_rx) = mpsc::channel();
-        let request = CacheRenderPrepareRequest {
-            mml: mml.to_string(),
-            cfg: cfg.clone(),
-            response_tx,
-        };
-        if self.tx.send(request).is_err() {
-            return prepare_cache_render(mml, cfg);
-        }
-        response_rx
-            .recv()
-            .unwrap_or_else(|_| prepare_cache_render(mml, cfg))
-    }
-}
-
-fn cache_render_prepare_queue() -> &'static CacheRenderPrepareQueue {
-    CACHE_RENDER_PREPARE_QUEUE.get_or_init(CacheRenderPrepareQueue::start)
-}
-
-fn prepare_cache_render_via_queue(mml: &str, cfg: &CoreConfig) -> Result<CacheRenderInputs> {
-    cache_render_prepare_queue().prepare(mml, cfg)
-}
-
-/// DAW モードのプレビューキャッシュ構築専用の MML → レンダリング。
-/// - `patch_history.txt` への追記は core 側で行わない
-/// - ランダムパッチ選択は core 側で無効化する
-/// - 100ms preroll は core 側の `RenderOptions` で指定する
-///
-/// 先頭 JSON の effect chain は受け付けない（chain 付きはエラー）。chain を鳴らす経路は
-/// [`mml_render_for_cache_with_probe`] に `RenderEffects` を渡す。
-///
-/// # Parameters
-/// - `mml`: レンダリング対象の MML 文字列。先頭 JSON によるパッチ指定も受け付ける。
-/// - `cfg`: レンダリング設定。JSON にパッチ指定がない場合は `cfg.patch_path` を使う。
-/// - `entry`: 読み込み済み CLAP プラグインエントリ。
-///
-/// # Returns
-/// インターリーブされたステレオ PCM サンプル列を `Vec<f32>` で返す。
-pub fn mml_render_for_cache(mml: &str, cfg: &CoreConfig, entry: &PluginEntry) -> Result<Vec<f32>> {
-    mml_render_for_cache_with_probe(mml, cfg, entry, None, RenderEffects::unsupported())
-}
-
-pub fn mml_render(mml: &str, cfg: &CoreConfig, entry: &PluginEntry) -> Result<(Vec<f32>, String)> {
-    mml_render_with_probe(mml, cfg, entry, None, RenderEffects::unsupported())
-}
-
-pub fn mml_to_play(mml: &str, cfg: &CoreConfig, entry: &PluginEntry) -> Result<String> {
-    let (samples, patch_display) = mml_render(mml, cfg, entry)?;
-    play_samples(samples, cfg.sample_rate as u32)?;
-    Ok(patch_display)
-}
-
-/// `effects` が chain を扱える経路なら、先頭 JSON の effect chain を instrument の後段に通す。
-pub fn mml_render_with_probe(
-    mml: &str,
-    cfg: &CoreConfig,
-    entry: &PluginEntry,
-    probe_context: Option<&NativeRenderProbeContext>,
-    effects: RenderEffects<'_>,
-) -> Result<(Vec<f32>, String)> {
-    let mml = mml_with_resolved_embedded_patch(mml, cfg);
-    let requested_patch_path = requested_patch_path_for_render(mml.as_ref(), cfg);
-    with_requested_native_render_probe(probe_context, requested_patch_path.as_deref(), || {
-        pipeline::mml_render_with_effects(mml.as_ref(), cfg, entry, render_options(), effects)
-    })
-}
-
-pub fn mml_render_for_cache_with_probe(
-    mml: &str,
-    cfg: &CoreConfig,
-    entry: &PluginEntry,
-    probe_context: Option<&NativeRenderProbeContext>,
-    effects: RenderEffects<'_>,
-) -> Result<Vec<f32>> {
-    let prepared = prepare_cache_render_via_queue(mml, cfg)?;
-    render_prepared_cache_with_probe(prepared, entry, probe_context, effects)
-}
-
-pub fn prepare_cache_render_inputs(mml: &str, cfg: &CoreConfig) -> Result<CacheRenderInputs> {
-    prepare_cache_render(mml, cfg)
-}
-
-/// `effects` が chain を扱える経路なら、先頭 JSON の effect chain を instrument の後段に通す。
-pub fn render_prepared_cache_with_probe(
-    prepared: CacheRenderInputs,
-    entry: &PluginEntry,
-    probe_context: Option<&NativeRenderProbeContext>,
-    effects: RenderEffects<'_>,
-) -> Result<Vec<f32>> {
-    let CacheRenderInputs { mml, cfg } = prepared;
-    let requested_patch_path = requested_patch_path_for_render(&mml, &cfg);
-    with_requested_native_render_probe(probe_context, requested_patch_path.as_deref(), || {
-        pipeline::mml_render_for_cache_with_effects(&mml, &cfg, entry, render_options(), effects)
-    })
-}
-
-/// キャッシュレンダリングの事前入力を組み立てる。
-/// preroll の適用はレンダー時に core 側へ `RenderOptions` として渡す。
-fn prepare_cache_render(mml: &str, cfg: &CoreConfig) -> Result<CacheRenderInputs> {
-    Ok(CacheRenderInputs {
-        mml: mml_with_resolved_embedded_patch(mml, cfg).into_owned(),
-        cfg: cfg.clone(),
-    })
-}
-
-fn render_options() -> RenderOptions {
-    RenderOptions::new().with_preroll_ms(RENDER_PREROLL_MS)
-}
-
-fn requested_patch_path_for_render(mml: &str, cfg: &CoreConfig) -> Option<String> {
-    let preprocessed = mml_preprocessor::extract_embedded_json(mml);
-    extract_patch_from_json(preprocessed.embedded_json.as_deref(), cfg)
-        .or_else(|| cfg.patch_path.clone())
-}
 
 /// MML 先頭 JSON の `"Surge XT patch"` を解決済みのパス
 /// （`patches_factory` 等のプレフィックス補完込み）に書き換えた MML を返す。

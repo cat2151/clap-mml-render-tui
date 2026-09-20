@@ -36,9 +36,7 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
             patches_dirs: None,
             loop_dirs: Vec::new(),
             loop_categories: cmrt_runtime::default_loop_categories(),
-            offline_render_workers: cache_render_workers,
             offline_render_server_workers: cmrt_runtime::DEFAULT_OFFLINE_RENDER_SERVER_WORKERS,
-            offline_render_backend: cmrt_runtime::OfflineRenderBackend::InProcess,
             offline_render_server_port: cmrt_runtime::DEFAULT_OFFLINE_RENDER_SERVER_PORT,
             offline_render_server_command: String::new(),
             realtime_audio_backend: cmrt_runtime::RealtimeAudioBackend::CachePlayer,
@@ -50,7 +48,7 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
             chord_progression_source: String::new(),
             ..Default::default()
         }),
-        plugin_entries: cmrt_offline_render::PluginEntries::none(),
+        effect_plugins: cmrt_offline_render::EffectPlugins::none(),
         cache: Arc::new(Mutex::new(vec![
             vec![
                 CellCache {

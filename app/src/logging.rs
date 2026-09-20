@@ -1,9 +1,8 @@
 //! app 側のログ sink ポリシー。
 //!
-//! ログファイルへの書き込み / UI バッファ読み込み / native probe ロガー登録といった
-//! 画面横断の純粋なファイル I/O は `cmrt-tui-core` の `logging` へ切り出した。
-//! 従来の `crate::logging::{append_log_line, load_log_lines, install_native_probe_logger}`
-//! パスは再エクスポートで維持する。
+//! ログファイルへの書き込み / UI バッファ読み込みといった画面横断の純粋な
+//! ファイル I/O は `cmrt-tui-core` の `logging` へ切り出した。
+//! 従来の `crate::logging::{append_log_line, load_log_lines}` パスは再エクスポートで維持する。
 //!
 //! ここに残すのは「app が各画面 crate（`cmrt-loop-browser` / `cmrt-realtime-play` 等）へ
 //! 注入する sink」と、その sink が使う非同期ログ経路だけ。sink ポリシーは app が持つ。
@@ -23,7 +22,6 @@ use std::{
 #[cfg(not(test))]
 use cmrt_tui_core::logging::append_log_line_to_file;
 use cmrt_tui_core::logging::append_panic_report_to_file;
-pub(crate) use cmrt_tui_core::logging::install_native_probe_logger;
 
 #[cfg(not(test))]
 const ASYNC_LOG_CAPACITY: usize = 1_024;

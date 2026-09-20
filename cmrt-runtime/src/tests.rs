@@ -13,12 +13,10 @@ buffer_size = 512
 
     let cfg: Config = toml::from_str(toml_str).unwrap();
 
-    assert_eq!(cfg.offline_render_workers, DEFAULT_OFFLINE_RENDER_WORKERS);
     assert_eq!(
         cfg.offline_render_server_workers,
         DEFAULT_OFFLINE_RENDER_SERVER_WORKERS
     );
-    assert_eq!(cfg.offline_render_backend, OfflineRenderBackend::InProcess);
     assert_eq!(
         cfg.offline_render_server_port,
         DEFAULT_OFFLINE_RENDER_SERVER_PORT
@@ -61,8 +59,6 @@ autoplay_on_startup = false
 fn default_config_content_contains_render_server_keys() {
     let content = default_config_content();
 
-    assert!(content.contains("offline_render_workers = 2"));
-    assert!(content.contains("offline_render_backend = \"in_process\""));
     assert!(content.contains("offline_render_server_workers = 4"));
     assert!(content.contains(&format!(
         "offline_render_server_port = {DEFAULT_OFFLINE_RENDER_SERVER_PORT}"
@@ -201,6 +197,28 @@ realtime_play_server_command = "clap-mml-realtime-play-server"
     let cfg: Config = toml::from_str(toml_str).unwrap();
 
     assert!(cfg.play_server_launch_override.is_none());
+}
+
+/// offline render の backend 選択は廃止した（render-server 1 経路）。既定のひな形が
+/// この 2 キーを明示で書き出していたので、生成済みの config には残っている。
+/// 読み飛ばして起動できること、`in_process` と書いてあっても止めないことを固定する。
+#[test]
+fn the_removed_offline_render_backend_keys_are_ignored() {
+    let toml_str = r#"
+input_midi  = "input.mid"
+output_midi = "output.mid"
+output_wav  = "output.wav"
+sample_rate = 48000
+buffer_size = 512
+offline_render_workers = 2
+offline_render_backend = "in_process"
+offline_render_server_workers = 6
+"#;
+
+    let cfg: Config = toml::from_str(toml_str).unwrap();
+
+    assert_eq!(cfg.offline_render_server_workers, 6);
+    cfg.validate().unwrap();
 }
 
 /// cache-player backend（render キャッシュの WAV を play server の live mix へ載せる経路）は

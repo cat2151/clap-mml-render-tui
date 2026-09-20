@@ -23,7 +23,7 @@ impl DawApp {
             self.append_log_line(message::PLAYABLE_TRACK_ONLY);
             return;
         }
-        if self.plugin_entries.effects().catalog().is_none() {
+        if self.effect_plugins.catalog().is_none() {
             self.append_log_line(message::NOT_AVAILABLE_ON_THIS_BACKEND);
             return;
         }
@@ -35,8 +35,7 @@ impl DawApp {
     }
 
     pub(crate) fn effect_preset_count(&self) -> usize {
-        self.plugin_entries
-            .effects()
+        self.effect_plugins
             .catalog()
             .map_or(0, |catalog| catalog.presets().len())
     }
@@ -84,8 +83,7 @@ impl DawApp {
             }
             KeyCode::Enter => {
                 let stage = self
-                    .plugin_entries
-                    .effects()
+                    .effect_plugins
                     .catalog()
                     .and_then(|catalog| {
                         catalog.presets().get(self.overlays.effect_chain.add_cursor)

@@ -176,9 +176,6 @@ pub struct NotepadScreenParts {
     pub patch_load_state: Arc<Mutex<PatchLoadState>>,
     pub patch_phrase_store: cmrt_history::PatchPhraseStore,
     pub cfg: Arc<Config>,
-    /// カタログのプラグインごとのロード済み CLAP entry。
-    /// render_server backend / テストでは空。
-    pub plugin_entries: cmrt_offline_render::PluginEntries,
     /// 設定不足でカタログから外れたプラグインの案内
     /// （`cmrt_runtime::catalog_notice_lines`）。
     ///
@@ -197,15 +194,11 @@ impl NotepadScreen<'static> {
             patch_load_state,
             patch_phrase_store,
             cfg,
-            plugin_entries,
             catalog_notes,
         } = parts;
         let active_offline_render_count = Arc::new(AtomicUsize::new(0));
-        let render_queue = TuiRenderQueue::new(
-            Arc::clone(&cfg),
-            plugin_entries,
-            Arc::clone(&active_offline_render_count),
-        );
+        let render_queue =
+            TuiRenderQueue::new(Arc::clone(&cfg), Arc::clone(&active_offline_render_count));
         Self::from_parts(
             NotepadEditorState::restored(lines, cursor),
             TuiPlaybackRuntime::new(playback_session, render_queue, active_offline_render_count),
@@ -220,10 +213,7 @@ impl NotepadScreen<'static> {
     /// レンダリングワーカーを起動しないテスト用の構築。
     #[cfg(any(test, feature = "test-support"))]
     pub fn new_for_test(cfg: Config) -> Self {
-        let render_queue = TuiRenderQueue::disabled_for_tests(
-            cfg.offline_render_backend,
-            cfg.effective_offline_render_workers(),
-        );
+        let render_queue = TuiRenderQueue::disabled_for_tests(cfg.offline_render_server_workers);
         Self::from_parts(
             NotepadEditorState::restored(vec![String::new()], 0),
             TuiPlaybackRuntime::new(

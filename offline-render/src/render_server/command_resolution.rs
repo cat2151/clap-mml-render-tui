@@ -48,11 +48,28 @@ impl ResolvedRenderServerCommand {
         }
     }
 
-    pub(super) fn build_command(&self) -> Command {
+    /// `config_path`（`cmrt --config <path>` の path）のうち、子へ `--config` として
+    /// 実際に渡す分。探索で決めた実体にはそのまま渡し、子も同じ config（port・`[plugins]`）
+    /// を読む。明示の shell command には渡さない（書かれたとおりに起動する）。
+    pub(super) fn forwarded_config_path<'a>(
+        &self,
+        config_path: Option<&'a Path>,
+    ) -> Option<&'a Path> {
         match self {
+            ResolvedRenderServerCommand::Shell(_) => None,
+            ResolvedRenderServerCommand::Binary { .. } => config_path,
+        }
+    }
+
+    pub(super) fn build_command(&self, config_path: Option<&Path>) -> Command {
+        let mut cmd = match self {
             ResolvedRenderServerCommand::Shell(command) => shell_command(command),
             ResolvedRenderServerCommand::Binary { path, .. } => Command::new(path),
+        };
+        if let Some(config_path) = self.forwarded_config_path(config_path) {
+            cmd.arg("--config").arg(config_path);
         }
+        cmd
     }
 }
 

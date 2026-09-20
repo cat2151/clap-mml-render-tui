@@ -1,6 +1,7 @@
 use std::{
     io::{BufRead as _, BufReader, Read},
     net::{SocketAddr, TcpStream},
+    path::{Path, PathBuf},
     process::{Child, ExitStatus, Stdio},
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -31,6 +32,8 @@ pub(super) struct RenderServerSupervisor {
     /// 起こし直しで実体が変わらない）。見つからなければ `Err`（探した場所の説明）を持ち、
     /// spawn のたびにそれを返す。PATH へは絶対に落ちない。
     resolved_command: Result<ResolvedRenderServerCommand, String>,
+    /// 子へ `--config` として渡す path（`Config::source_path`）。
+    config_path: Option<PathBuf>,
     expected_sample_rate: u32,
     agent: ureq::Agent,
     state: Mutex<RenderServerState>,
@@ -67,15 +70,15 @@ impl RenderServerSupervisor {
         );
         let resolved_command = resolve_render_server_command(&cfg.offline_render_server_command);
         if let Ok(resolved) = &resolved_command {
-            log_offline_render_event(format!(
-                "render-server: exe={} (source={})",
-                resolved.describe(),
-                resolved.source_label()
+            log_offline_render_event(render_server_resolved_log_message(
+                resolved,
+                cfg.source_path.as_deref(),
             ));
         }
         Self {
             port: cfg.offline_render_server_port,
             resolved_command,
+            config_path: cfg.source_path.clone(),
             expected_sample_rate: cfg.sample_rate as u32,
             agent,
             state: Mutex::new(RenderServerState::default()),
@@ -290,7 +293,7 @@ impl RenderServerSupervisor {
             Ok(resolved) => resolved,
             Err(message) => return Err(anyhow!(message.clone())),
         };
-        let mut command = resolved.build_command();
+        let mut command = resolved.build_command(self.config_path.as_deref());
         command
             .env(EXIT_ON_STDIN_CLOSE_ENV, "1")
             .stdin(Stdio::piped())
@@ -336,6 +339,21 @@ impl RenderServerSupervisor {
         let mut state = self.state.lock().unwrap();
         let _ = self.drop_exited_child_locked(&mut state);
     }
+}
+
+fn render_server_resolved_log_message(
+    resolved: &ResolvedRenderServerCommand,
+    config_path: Option<&Path>,
+) -> String {
+    let mut message = format!(
+        "render-server: exe={} (source={})",
+        resolved.describe(),
+        resolved.source_label()
+    );
+    if let Some(config_path) = resolved.forwarded_config_path(config_path) {
+        message.push_str(&format!(" config={}", config_path.display()));
+    }
+    message
 }
 
 fn never_kill_requested() -> bool {

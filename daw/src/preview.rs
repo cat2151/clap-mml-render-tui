@@ -3,12 +3,9 @@
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use cmrt_core::NativeRenderProbeContext;
-
 use self::cached_samples::try_get_cached_samples;
 use super::render_queue::RenderPriority;
 use super::{DawApp, DawPlayState, FIRST_PLAYABLE_TRACK};
-use cmrt_history::daw_cache_mml_hash;
 use cmrt_runtime::RealtimeAudioBackend;
 
 mod cached_samples;
@@ -134,11 +131,10 @@ impl DawApp {
         let play_position = Arc::clone(&self.playback.position);
         let cache = Arc::clone(&self.cache);
         let overlay_preview_cache = Arc::clone(&self.playback.overlay_preview_cache);
-        let cfg = Arc::clone(&self.cfg);
+        let sample_rate = self.cfg.sample_rate as u32;
         let log_lines = Arc::clone(&self.log_lines);
         let render_queue = self.render_queue.clone();
         let overlay_cache_key = overlay_preview_cache_key(measure_index, &track_mmls, &track_gains);
-        let active_track_count = active_tracks.len();
 
         let session = {
             let _transition_guard = play_transition_lock.lock().unwrap();
@@ -153,10 +149,6 @@ impl DawApp {
         crate::append_log_line(&log_lines, format!("preview: meas{}", measure_index + 1));
 
         std::thread::spawn(move || {
-            let daw_cfg = (*cfg).clone();
-            let sample_rate = daw_cfg.sample_rate as u32;
-            let offline_render_workers = daw_cfg.effective_offline_render_workers();
-
             let Some(rodio_sample_rate) = rodio::SampleRate::new(sample_rate) else {
                 crate::append_log_line(&log_lines, "preview: sample rate is zero");
                 let mut state = play_state.lock().unwrap();
@@ -220,15 +212,6 @@ impl DawApp {
                                 track_gains: &track_gains,
                                 auto_trim: false,
                             },
-                            |track, mml| {
-                                NativeRenderProbeContext::preview(
-                                    track,
-                                    measure_index,
-                                    active_track_count,
-                                    daw_cache_mml_hash(mml),
-                                    offline_render_workers,
-                                )
-                            },
                             |progress| {
                                 crate::append_log_line(
                                     &log_lines,
@@ -275,15 +258,6 @@ impl DawApp {
                             track_gains: &track_gains,
                             auto_trim: false,
                         },
-                        |track, mml| {
-                            NativeRenderProbeContext::preview(
-                                track,
-                                measure_index,
-                                active_track_count,
-                                daw_cache_mml_hash(mml),
-                                offline_render_workers,
-                            )
-                        },
                         |progress| {
                             crate::append_log_line(
                                 &log_lines,
@@ -304,15 +278,6 @@ impl DawApp {
                         track_mmls: &track_mmls,
                         track_gains: &track_gains,
                         auto_trim: false,
-                    },
-                    |track, mml| {
-                        NativeRenderProbeContext::preview(
-                            track,
-                            measure_index,
-                            active_track_count,
-                            daw_cache_mml_hash(mml),
-                            offline_render_workers,
-                        )
                     },
                     |progress| {
                         crate::append_log_line(

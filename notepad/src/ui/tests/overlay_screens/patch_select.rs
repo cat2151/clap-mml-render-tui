@@ -321,7 +321,7 @@ fn patch_select_screen_splits_status_and_keybinds() {
     assert_eq!(render_row, status_row + 1);
     assert_eq!(keybind_row, render_row + 1);
     assert!(normalized_lines[status_row].contains("sort:path"));
-    assert!(normalized_lines[render_row].contains("render:実行2/2予約0"));
+    assert!(normalized_lines[render_row].contains("render:実行2/4予約0"));
     assert!(normalized_lines[keybind_row].contains("/:現在pane検索"));
     assert!(normalized_lines[keybind_row].contains("Ctrl+S:sort順切替"));
     assert!(normalized_lines[keybind_row].contains("n/p/t:overlay切替"));

@@ -5,7 +5,7 @@
 
 0001〜0015 は CLAP プラグイン抽象化と Surge XT / Dexed / Vaporizer2 / Sforzando の混在、
 0016〜0019 は DAW の live 演奏と daily キャッシュ、0020〜0021 は chord chart 画面と auto voicing、
-0022 は DAW の effect chain。
+0022 は DAW の effect chain、0023〜0024 は offline render の経路（render-server の実体と 1 経路化）。
 利用者向けの現行仕様は `README.ja.md` にある。
 
 ここに載っている実装はすべて完了済み。
@@ -24,7 +24,7 @@ play-server 側（プラグインの実測仕様・実行時の設計）は
 | [0006](0006-per-profile-relative-base.md) | display 文字列はプロファイルごとの base で相対化する |
 | [0007](0007-patch-role-defaults-three-layers.md) | 用途別カテゴリの既定値は 3 層で解決する |
 | [0008](0008-voicing-per-patch.md) | voicing は patch ごとに引く / 未知プラグインは poly とみなす |
-| [0009](0009-offline-entry-map.md) | オフラインレンダリングは MML ごとに entry を引き分ける |
+| [0009](0009-offline-entry-map.md) | オフラインレンダリングは MML ごとに entry を引き分ける（[0024](0024-offline-render-goes-through-the-render-server-only.md) で廃止） |
 | [0010](0010-two-repo-layout.md) | 2 repo 構成は TUI → play-server の一方向 |
 | [0011](0011-verification-and-baselines.md) | 検証手段と実測ベースライン |
 | [0012](0012-live-clock-drift-is-absorbed-not-eliminated.md) | live クロックの先行は、消さずに吸収する |
@@ -39,6 +39,7 @@ play-server 側（プラグインの実測仕様・実行時の設計）は
 | [0021](0021-bass-may-double-the-lowest-chord-note.md) | auto voicing の Bass は chord layer の最低音と unison になってよい |
 | [0022](0022-effect-chain-in-init-json.md) | effect chain は init JSON の `"effects after instrument"` に持ち、TUI は解釈しない |
 | [0023](0023-render-server-binary-resolution.md) | render-server の実体も play server と同じ順で探し、PATH を見ない |
+| [0024](0024-offline-render-goes-through-the-render-server-only.md) | offline render は render-server の 1 経路だけ。`cmrt.exe` は CLAP をロードしない |
 
 ## 未解決として残している論点
 

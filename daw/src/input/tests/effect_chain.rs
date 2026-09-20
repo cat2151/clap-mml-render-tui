@@ -1,6 +1,6 @@
 use super::*;
 use cmrt_core::{AudioEffectCatalog, AudioEffectPluginInfo, AudioEffectPreset};
-use cmrt_offline_render::{EffectPlugins, PluginEntries};
+use cmrt_offline_render::EffectPlugins;
 use serde_json::json;
 
 const INIT_WITH_PATCH: &str = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#;
@@ -26,8 +26,7 @@ fn test_catalog() -> AudioEffectCatalog {
 
 fn app_with_catalog() -> (DawApp, std::sync::mpsc::Receiver<crate::CacheJob>) {
     let (mut app, cache_rx) = build_test_app();
-    app.plugin_entries =
-        PluginEntries::none().with_effects(EffectPlugins::with_catalog(test_catalog()));
+    app.effect_plugins = EffectPlugins::with_catalog(test_catalog());
     app.editor.cursor_track = 2;
     app.editor.cursor_measure = 1;
     app.editor.data[2][0] = INIT_WITH_PATCH.to_string();
@@ -203,8 +202,7 @@ fn x_does_not_open_on_a_route_without_effects() {
 #[test]
 fn a_with_an_empty_catalog_stays_in_the_chain_overlay() {
     let (mut app, _cache_rx) = build_test_app();
-    app.plugin_entries = PluginEntries::none()
-        .with_effects(EffectPlugins::with_catalog(AudioEffectCatalog::default()));
+    app.effect_plugins = EffectPlugins::with_catalog(AudioEffectCatalog::default());
     app.editor.cursor_track = 2;
 
     press(&mut app, &[KeyCode::Char('x'), KeyCode::Char('a')]);
@@ -233,7 +231,7 @@ fn the_overlay_shows_the_instrument_and_the_existing_chain_in_order() {
             json!({"Unknown preset": "x"})
         ]
     );
-    let catalog = app.plugin_entries.effects().catalog();
+    let catalog = app.effect_plugins.catalog();
     assert_eq!(
         crate::overlays::effect_stage_label(&state.chain[0], catalog),
         "Test FX: Room"

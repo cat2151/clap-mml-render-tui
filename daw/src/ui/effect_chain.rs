@@ -51,7 +51,7 @@ pub(super) fn draw_effect_chain(f: &mut Frame, app: &DawApp, area: Rect) {
         chunks[0],
     );
 
-    let catalog = app.plugin_entries.effects().catalog();
+    let catalog = app.effect_plugins.catalog();
     let (items, selected): (Vec<ListItem<'static>>, Option<usize>) = if app.mode
         == DawMode::EffectChainAdd
     {

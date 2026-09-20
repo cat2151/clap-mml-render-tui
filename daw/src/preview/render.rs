@@ -3,7 +3,6 @@ use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use cmrt_core::NativeRenderProbeContext;
 use cmrt_tui_core::mixer::auto_trim::{auto_trim_volumes_db, measure_track_level, TrackLevel};
 
 use super::super::render_queue::{RenderPriority, RenderQueue};
@@ -133,14 +132,12 @@ pub(crate) fn insert_overlay_preview_cache<T>(
 /// 指定された preview 用 track MML 群をオフラインレンダリングし、track ごとの gain を掛けて
 /// 1 本のステレオバッファへ合成して返す。
 /// 各 track のレンダリング結果は `measure_samples` 未満なら末尾を埋めて長さを揃える。
-pub(crate) fn render_mixed_preview_tracks<F, P>(
+pub(crate) fn render_mixed_preview_tracks<P>(
     render_queue: &RenderQueue,
     request: MixedPreviewRenderRequest<'_>,
-    mut build_probe_context: F,
     mut report_progress: P,
 ) -> Option<MixedPreviewRender>
 where
-    F: FnMut(usize, &str) -> NativeRenderProbeContext,
     P: FnMut(PreviewRenderProgress),
 {
     let total = request.active_tracks.len();
@@ -160,14 +157,12 @@ where
             phase: PreviewRenderProgressPhase::Started,
         });
         let started = std::time::Instant::now();
-        let probe_context = build_probe_context(*track, mml);
         let request_id = render_queue.reserve_request_id();
         if render_queue
             .submit_with_id(
                 request_id,
                 request.priority,
                 mml.to_string(),
-                probe_context,
                 response_tx.clone(),
             )
             .is_err()

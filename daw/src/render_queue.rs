@@ -8,7 +8,6 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use cmrt_core::NativeRenderProbeContext;
 
 use cmrt_offline_render::{OfflineRenderer, PreparedOfflineRender};
 
@@ -35,7 +34,6 @@ struct RenderRequest {
     sequence: u64,
     priority: RenderPriority,
     mml: String,
-    probe_context: NativeRenderProbeContext,
     response_tx: mpsc::Sender<RenderResult>,
 }
 
@@ -138,14 +136,10 @@ impl PreparedRenderQueue {
 }
 
 impl RenderQueue {
-    pub(super) fn new(
-        cfg: Arc<cmrt_runtime::Config>,
-        plugin_entries: cmrt_offline_render::PluginEntries,
-        render_workers: usize,
-    ) -> Self {
+    pub(super) fn new(cfg: Arc<cmrt_runtime::Config>, render_workers: usize) -> Self {
         let (request_tx, request_rx) = mpsc::channel::<RenderRequest>();
         let prepared_queue = Arc::new(PreparedRenderQueue::default());
-        let renderer = OfflineRenderer::new(Arc::clone(&cfg), plugin_entries);
+        let renderer = OfflineRenderer::new(cfg);
 
         {
             let prepared_queue = Arc::clone(&prepared_queue);
@@ -188,10 +182,7 @@ impl RenderQueue {
                 let Some(prepared) = prepared_queue.pop() else {
                     break;
                 };
-                let result = renderer.render_prepared_cache(
-                    prepared.prepared,
-                    Some(&prepared.request.probe_context),
-                );
+                let result = renderer.render_prepared_cache(prepared.prepared);
                 let _ = prepared.request.response_tx.send(RenderResult {
                     request_id: prepared.request.request_id,
                     result,
@@ -213,6 +204,12 @@ impl RenderQueue {
         }
     }
 
+    /// レンダリングワーカーを持たない（`disabled_for_tests` で作られた）キューか。
+    /// 実レンダリングを避けたい経路の分岐に使う。
+    pub(super) fn is_disabled(&self) -> bool {
+        self.request_tx.is_none()
+    }
+
     pub(super) fn reserve_request_id(&self) -> u64 {
         self.next_request_id.fetch_add(1, Ordering::Relaxed)
     }
@@ -222,7 +219,6 @@ impl RenderQueue {
         request_id: u64,
         priority: RenderPriority,
         mml: String,
-        probe_context: NativeRenderProbeContext,
         response_tx: mpsc::Sender<RenderResult>,
     ) -> Result<()> {
         let Some(request_tx) = &self.request_tx else {
@@ -234,7 +230,6 @@ impl RenderQueue {
                 sequence: request_id,
                 priority,
                 mml,
-                probe_context,
                 response_tx,
             })
             .map_err(|_| anyhow!("render queue is closed"))
@@ -252,7 +247,6 @@ mod tests {
             sequence: request_id,
             priority,
             mml: String::new(),
-            probe_context: NativeRenderProbeContext::tui_prefetch(0, request_id, 1),
             response_tx,
         })
     }

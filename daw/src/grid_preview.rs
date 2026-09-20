@@ -4,8 +4,6 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use cmrt_core::NativeRenderProbeContext;
-
 use crate::grid_import::{grid_song_snapshot, DawGridImportSong};
 use crate::mml::{build_cell_mml_from_data, cell_has_content, measure_duration_samples_from_data};
 use crate::preview::render::{
@@ -60,7 +58,6 @@ struct PreviewRenderRuntime {
     pending: Arc<Mutex<Option<(PreparedPreview, RenderPriority, u64)>>>,
     output: PreviewOutput,
     render_generation: Arc<AtomicU64>,
-    offline_render_workers: usize,
 }
 
 /// Grid画面の間だけ生存する、保存処理を持たないoffline preview player。
@@ -70,15 +67,8 @@ pub struct DawGridPreviewPlayer {
 }
 
 impl DawGridPreviewPlayer {
-    pub fn new(
-        cfg: Arc<cmrt_runtime::Config>,
-        plugin_entries: cmrt_offline_render::PluginEntries,
-    ) -> Self {
-        let render_queue = RenderQueue::new(
-            Arc::clone(&cfg),
-            plugin_entries,
-            cfg.effective_offline_render_workers(),
-        );
+    pub fn new(cfg: Arc<cmrt_runtime::Config>) -> Self {
+        let render_queue = RenderQueue::new(Arc::clone(&cfg), cfg.offline_render_server_workers);
         Self::with_render_queue(cfg, render_queue)
     }
 
@@ -95,7 +85,6 @@ impl DawGridPreviewPlayer {
             pending: Arc::new(Mutex::new(None)),
             output: PreviewOutput::new(cfg.sample_rate as u32),
             render_generation: Arc::new(AtomicU64::new(0)),
-            offline_render_workers: cfg.effective_offline_render_workers(),
         };
         Self { cfg, runtime }
     }
@@ -241,15 +230,6 @@ fn start_render_worker(
                 // Grid history は gain 1.0 の素の音量で render するので、ここで測った
                 // 音量差がそのまま mixer 初期値になる。
                 auto_trim: true,
-            },
-            |track, mml| {
-                NativeRenderProbeContext::preview(
-                    track,
-                    0,
-                    total,
-                    cmrt_history::daw_cache_mml_hash(mml),
-                    runtime.offline_render_workers,
-                )
             },
             |progress| {
                 let completed = match progress.phase {

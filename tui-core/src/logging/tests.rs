@@ -5,11 +5,9 @@ use std::{
     time::{Duration, UNIX_EPOCH},
 };
 
-use std::collections::VecDeque;
-
 use super::{
-    append_log_line_to_path, append_panic_report_to_path, format_log_file_line_at,
-    load_log_lines_from_path, log_file_lock, strip_log_file_timestamp_prefix,
+    append_log_line_to_path, append_panic_report_to_path, format_log_file_line_at, log_file_lock,
+    strip_log_file_timestamp_prefix,
 };
 
 /// ログファイルを触るテストどうしをプロセス内で直列化する。
@@ -217,34 +215,5 @@ fn a_panic_while_the_main_log_is_locked_uses_the_fallback_file() {
         split_log_file_line(line.trim_end()).1,
         "panic: lock unavailable"
     );
-    std::fs::remove_dir_all(&tmp).ok();
-}
-
-#[test]
-fn load_log_lines_from_path_keeps_probe_file_out_of_main_log_buffer() {
-    let _serial = serial_guard();
-    let tmp = std::env::temp_dir().join(format!(
-        "cmrt_test_native_probe_logging_{}_{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    let main_log_path = tmp.join("log").join("log.txt");
-    let probe_log_path = tmp.join("log").join("native_probe.log");
-
-    append_log_line_to_path(&main_log_path, "play: start").unwrap();
-    append_log_line_to_path(&probe_log_path, "native-probe before probe_id=7").unwrap();
-
-    let lines = load_log_lines_from_path(&main_log_path);
-
-    assert_eq!(lines, VecDeque::from(["play: start".to_string()]));
-    assert!(
-        lines.iter().all(|line| !line.contains("native-probe")),
-        "probe log should stay out of the UI/main log buffer: {:?}",
-        lines
-    );
-
     std::fs::remove_dir_all(&tmp).ok();
 }

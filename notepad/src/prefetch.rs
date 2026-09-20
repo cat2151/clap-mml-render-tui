@@ -141,63 +141,24 @@ impl<'a> NotepadScreen<'a> {
         }
     }
 
+    /// idle prefetch で埋められる空き worker 数。render-server は worker ぶん並列に
+    /// 受けられるので、走っている・待っている job を引いた残りを全部使う。
     fn idle_prefetch_available_slots_for_stats(
         stats: TuiRenderQueueStats,
         active_render_count: usize,
-        fill_to_worker_count: bool,
     ) -> usize {
         let outstanding_jobs = active_render_count.saturating_add(stats.pending_jobs);
-        if fill_to_worker_count {
-            stats.workers.saturating_sub(outstanding_jobs)
-        } else if outstanding_jobs <= 1 {
-            1
-        } else {
-            0
-        }
+        stats.workers.saturating_sub(outstanding_jobs)
     }
 
     fn idle_prefetch_available_slots(
         render_queue: &TuiRenderQueue,
         active_offline_render_count: &AtomicUsize,
-        fill_to_worker_count: bool,
     ) -> usize {
         let stats = render_queue.stats();
         Self::idle_prefetch_available_slots_for_stats(
             stats,
             active_offline_render_count.load(Ordering::Relaxed),
-            fill_to_worker_count,
-        )
-    }
-
-    fn initial_idle_prefetch_available_slots_for_stats(
-        stats: TuiRenderQueueStats,
-        active_render_count: usize,
-        has_immediate_responses: bool,
-        fill_to_worker_count: bool,
-    ) -> usize {
-        if fill_to_worker_count || !has_immediate_responses {
-            Self::idle_prefetch_available_slots_for_stats(
-                stats,
-                active_render_count,
-                fill_to_worker_count,
-            )
-        } else {
-            0
-        }
-    }
-
-    fn initial_idle_prefetch_available_slots(
-        render_queue: &TuiRenderQueue,
-        active_offline_render_count: &AtomicUsize,
-        has_immediate_responses: bool,
-        fill_to_worker_count: bool,
-    ) -> usize {
-        let stats = render_queue.stats();
-        Self::initial_idle_prefetch_available_slots_for_stats(
-            stats,
-            active_offline_render_count.load(Ordering::Relaxed),
-            has_immediate_responses,
-            fill_to_worker_count,
         )
     }
 
@@ -228,8 +189,6 @@ impl<'a> NotepadScreen<'a> {
         let render_queue = self.playback.render_queue.clone();
         let active_offline_render_count = Arc::clone(&self.playback.active_offline_render_count);
         let prefetch_generation = render_queue.reserve_prefetch_generation();
-        let fill_to_worker_count =
-            self.cfg.offline_render_backend == cmrt_runtime::OfflineRenderBackend::RenderServer;
         let immediate_response_rxs = Self::queue_prefetch_targets(
             &cache,
             &render_queue,
@@ -245,12 +204,8 @@ impl<'a> NotepadScreen<'a> {
             let mut idle_targets = VecDeque::from(idle_targets);
             let mut response_rxs = VecDeque::from(immediate_response_rxs);
 
-            let available_slots = Self::initial_idle_prefetch_available_slots(
-                &render_queue,
-                &active_offline_render_count,
-                !response_rxs.is_empty(),
-                fill_to_worker_count,
-            );
+            let available_slots =
+                Self::idle_prefetch_available_slots(&render_queue, &active_offline_render_count);
             if !idle_targets.is_empty() && available_slots > 0 {
                 response_rxs.extend(Self::queue_idle_prefetch_targets(
                     &cache,
@@ -266,7 +221,6 @@ impl<'a> NotepadScreen<'a> {
                 let available_slots = Self::idle_prefetch_available_slots(
                     &render_queue,
                     &active_offline_render_count,
-                    fill_to_worker_count,
                 );
                 if !idle_targets.is_empty() && available_slots > 0 {
                     response_rxs.extend(Self::queue_idle_prefetch_targets(
@@ -363,69 +317,18 @@ mod tests {
     }
 
     #[test]
-    fn in_process_idle_prefetch_keeps_existing_relaxed_single_slot_policy() {
+    fn idle_prefetch_fills_to_worker_count() {
         assert_eq!(
-            NotepadScreen::idle_prefetch_available_slots_for_stats(stats(2, 0), 0, false),
-            1
-        );
-        assert_eq!(
-            NotepadScreen::idle_prefetch_available_slots_for_stats(stats(2, 0), 1, false),
-            1
-        );
-        assert_eq!(
-            NotepadScreen::idle_prefetch_available_slots_for_stats(stats(2, 1), 1, false),
-            0
-        );
-    }
-
-    #[test]
-    fn in_process_initial_idle_prefetch_waits_while_immediate_jobs_are_active() {
-        assert_eq!(
-            NotepadScreen::initial_idle_prefetch_available_slots_for_stats(
-                stats(2, 0),
-                0,
-                true,
-                false
-            ),
-            0
-        );
-        assert_eq!(
-            NotepadScreen::initial_idle_prefetch_available_slots_for_stats(
-                stats(2, 0),
-                0,
-                false,
-                false
-            ),
-            1
-        );
-    }
-
-    #[test]
-    fn render_server_idle_prefetch_fills_to_worker_count() {
-        assert_eq!(
-            NotepadScreen::idle_prefetch_available_slots_for_stats(stats(4, 2), 0, true),
+            NotepadScreen::idle_prefetch_available_slots_for_stats(stats(4, 2), 0),
             2
         );
         assert_eq!(
-            NotepadScreen::idle_prefetch_available_slots_for_stats(stats(4, 0), 2, true),
+            NotepadScreen::idle_prefetch_available_slots_for_stats(stats(4, 0), 2),
             2
         );
         assert_eq!(
-            NotepadScreen::idle_prefetch_available_slots_for_stats(stats(4, 3), 1, true),
+            NotepadScreen::idle_prefetch_available_slots_for_stats(stats(4, 3), 1),
             0
-        );
-    }
-
-    #[test]
-    fn render_server_initial_idle_prefetch_fills_even_after_immediate_jobs() {
-        assert_eq!(
-            NotepadScreen::initial_idle_prefetch_available_slots_for_stats(
-                stats(4, 2),
-                0,
-                true,
-                true
-            ),
-            2
         );
     }
 }

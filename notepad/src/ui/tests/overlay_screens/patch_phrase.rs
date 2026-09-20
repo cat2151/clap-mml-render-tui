@@ -147,7 +147,7 @@ fn patch_phrase_screen_keeps_status_below_overlay_panes() {
         .unwrap() as u16;
     let render_row = normalized_lines
         .iter()
-        .rposition(|line| line.contains("render:実行2/2予約0"))
+        .rposition(|line| line.contains("render:実行2/4予約0"))
         .unwrap() as u16;
 
     assert!(status_row > history_row);

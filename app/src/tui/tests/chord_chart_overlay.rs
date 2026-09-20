@@ -303,7 +303,7 @@ fn history_round_trip_restores_the_two_canonical_patches_independently() {
     assert_eq!(saved.mml_overlay_patch.as_deref(), Some("Global/Pad.fxp"));
     assert_eq!(saved.chord_chart_patch.as_deref(), Some("Keys/Piano.fxp"));
 
-    let restored = TuiApp::new(&cfg, cmrt_offline_render::PluginEntries::none());
+    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
     assert_eq!(
         restored.mml_overlay_patch.as_deref(),
         Some("Global/Pad.fxp")

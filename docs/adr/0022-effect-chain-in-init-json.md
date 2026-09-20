@@ -38,15 +38,13 @@ DAW の track に挿す CLAP effect（TONE3000 / Surge XT Effects）は、その
 
 ## offline render 側の置き方
 
-- effect plugin の entry は instrument の entry 表（[0009](0009-offline-entry-map.md)）と**別の表**
+- effect plugin の entry は instrument の entry 表と**別の表**
   （play-server `core-lib/src/effect_plugins.rs` の `EffectPlugins`。TUI はそれをそのまま使う）。
   instrument の「音色無指定なら先頭」の規則を effect に効かせないため
 - catalog の走査も DLL のロードも、**最初に要るときまで遅らせて以後は保持**する。effect が無い環境で
   起動を待たせないため
-- `render_server` backend では play server が同じ `EffectPlugins` を持ち、chain 付きの cell も
-  `in_process` と同じく鳴る（TUI `docs/adr/0023-render-server-binary-resolution.md`）。TUI は
-  `x` overlay の一覧表示のために `EffectPlugins::discover()` を呼ぶだけで、render 自体は
-  play server 側に委ねる
+- render は render-server 側が同じ `EffectPlugins` を持って行う（[0024](0024-offline-render-goes-through-the-render-server-only.md)）。
+  TUI は `x` overlay の一覧表示のために `EffectPlugins::discover()` を呼ぶだけで、DLL はロードしない
 
 ## 残している論点
 
@@ -61,5 +59,5 @@ DAW の track に挿す CLAP effect（TONE3000 / Surge XT Effects）は、その
 | `cmrt-daw` `mml::effect_chain::tests::writing_an_empty_chain_removes_the_key` | 空配列が残り、`{}` の init セルが増える |
 | `cmrt-daw` `mml::tests::build_cell_mml_keeps_the_effect_chain_array_from_the_init_cell` | render に渡る cell MML から chain が落ちた |
 | `cmrt-daw` `input::tests::effect_chain::x_does_not_open_on_a_route_without_effects` | effect を持たない経路（テスト用）で書けてしまう |
-| `cmrt-offline-render` `tests::effect_chain::a_chain_is_rejected_on_a_route_without_effects` | effect を持たない経路が chain を黙って dry で通した |
+| play-server `cmrt-core` `pipeline::tests::effects::unsupported_route_rejects_a_chain_before_rendering` | effect を持たない経路が chain を黙って dry で通した |
 | `cmrt-render-core` `mml_with_resolved_embedded_patch_keeps_the_effect_chain` | 音色の解決で chain のキーが落ちた |

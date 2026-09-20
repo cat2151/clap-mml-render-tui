@@ -44,9 +44,7 @@ fn build_test_app(tracks: usize, measures: usize) -> DawApp {
             patches_dirs: None,
             loop_dirs: Vec::new(),
             loop_categories: cmrt_runtime::default_loop_categories(),
-            offline_render_workers: cmrt_runtime::DEFAULT_OFFLINE_RENDER_WORKERS,
             offline_render_server_workers: cmrt_runtime::DEFAULT_OFFLINE_RENDER_SERVER_WORKERS,
-            offline_render_backend: cmrt_runtime::OfflineRenderBackend::InProcess,
             offline_render_server_port: cmrt_runtime::DEFAULT_OFFLINE_RENDER_SERVER_PORT,
             offline_render_server_command: String::new(),
             realtime_audio_backend: cmrt_runtime::RealtimeAudioBackend::CachePlayer,
@@ -58,13 +56,13 @@ fn build_test_app(tracks: usize, measures: usize) -> DawApp {
             chord_progression_source: String::new(),
             ..Default::default()
         }),
-        plugin_entries: cmrt_offline_render::PluginEntries::none(),
+        effect_plugins: cmrt_offline_render::EffectPlugins::none(),
         cache: Arc::new(Mutex::new(vec![
             vec![CellCache::empty(); measures + 1];
             tracks
         ])),
         cache_tx,
-        cache_render_workers: cmrt_runtime::DEFAULT_OFFLINE_RENDER_WORKERS,
+        cache_render_workers: 2,
         render_queue: crate::render_queue::RenderQueue::disabled_for_tests(),
         playback: crate::playback_runtime::DawPlaybackRuntime::for_test(tracks, measures),
         log_lines: Arc::new(Mutex::new(VecDeque::new())),

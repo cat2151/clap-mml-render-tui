@@ -34,7 +34,7 @@ fn bass_preview_settings_survive_a_restart_independently() {
         Some("Bass/Finger Bass.fxp")
     );
 
-    let restored = TuiApp::new(&cfg, cmrt_offline_render::PluginEntries::none());
+    let restored = TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::none());
     assert!(!restored.chord_chart.bass_enabled());
     assert_eq!(
         restored.chord_chart_bass_patch.as_deref(),

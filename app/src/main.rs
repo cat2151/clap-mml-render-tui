@@ -1,11 +1,10 @@
 use anyhow::Result;
-use clack_host::prelude::PluginEntry;
 use clap_mml_render_tui::{
     bass_voicing_inspect, config, config_editor, live_chord_check,
     live_chord_check::LiveChordCheckRequest, render_mml, render_mml::RenderMmlRequest, server, tui,
     updater, voicing_cache_builder,
 };
-use cmrt_core::{load_entry, mml_to_play};
+use cmrt_core::play_samples;
 
 mod cli;
 mod cli_output;
@@ -13,6 +12,8 @@ mod cli_playback;
 mod process_restart;
 mod scan_loops;
 mod scan_progress_log;
+
+use std::sync::Arc;
 
 use cli::{parse_cli_invocation_from, play_server_launch, CliAction, CliInvocation};
 use cli_playback::{cli_playback_mml, CliPlaybackMml};
@@ -106,7 +107,11 @@ fn run() -> Result<()> {
         })
         | CliAction::LiveChordCheck(LiveChordCheckRequest {
             config: Some(path), ..
-        }) => cmrt_runtime::Config::load_from_path(path)?,
+        }) => {
+            let mut cfg = cmrt_runtime::Config::load_from_path(path)?;
+            cfg.source_path = Some(path.clone());
+            cfg
+        }
         _ => config::load()?,
     };
     // 明示指定は探索より強い。存在しなければここで止める（探索へ落とさない）。
@@ -153,69 +158,13 @@ fn run() -> Result<()> {
         );
     }
 
-    let needs_plugin_entry = match action {
-        CliAction::Server(_) | CliAction::CliMml(_) => true,
-        // 判定は play-server 側プロセスがプラグインをロードして行う。
-        CliAction::BuildVoicingCache { .. } => false,
-        CliAction::BuildPatchCatalogCache => false,
-        // config と patch 一覧だけを見る診断なので、プラグインはロードしない。
-        CliAction::PatchRoles { .. } => false,
-        // in-process バックエンドのときだけ、この プロセスが CLAP をホストする。
-        CliAction::RenderMml(_) | CliAction::Tui => {
-            cfg.offline_render_backend == config::OfflineRenderBackend::InProcess
-        }
-        CliAction::LiveChordCheck(_) => false,
-        CliAction::Help(_)
-        | CliAction::Version(_)
-        | CliAction::Shutdown(_)
-        | CliAction::Update
-        | CliAction::Check
-        | CliAction::InspectBassVoicing(_)
-        | CliAction::ScanLoops => {
-            unreachable!()
-        }
-    };
-    // カタログに音色を載せるプラグインぶんの entry をロードする。並びは
-    // `catalog_plugins` と同じで、先頭が既定プラグイン。オフラインレンダリングは
-    // MML が指す音色でこの中から引き分ける（`docs/adr/0009-offline-entry-map.md`）。
-    // server / CLI 経路が使うのは先頭の 1 本だけ。
-    let catalog = if needs_plugin_entry && !matches!(action, CliAction::Tui) {
-        config::catalog_plugins(&cfg)
-    } else {
-        Vec::new()
-    };
-    let entries: Vec<PluginEntry> = if !catalog.is_empty() {
-        catalog
-            .iter()
-            .map(|plugin| load_entry(&plugin.plugin_path))
-            .collect::<Result<Vec<_>>>()?
-    } else {
-        Vec::new()
-    };
-    let plugin_entries = if matches!(action, CliAction::Tui) {
-        match cfg.offline_render_backend {
-            // in-process バックエンドは cache worker が entry をロードするまで未完成のまま渡す。
-            config::OfflineRenderBackend::InProcess => {
-                cmrt_offline_render::PluginEntries::pending()
-            }
-            // render server backend は instrument の entry を持たないが、EFFECT CHAIN overlay
-            // （`x`）が catalog を一覧できるよう effect だけは discover する。
-            config::OfflineRenderBackend::RenderServer => {
-                cmrt_offline_render::PluginEntries::none()
-                    .with_effects(cmrt_offline_render::EffectPlugins::discover())
-            }
-        }
-    } else if !catalog.is_empty() {
-        cmrt_offline_render::PluginEntries::from_loaded(catalog, &entries)
-    } else {
-        cmrt_offline_render::PluginEntries::none()
-    };
-    // MML 1 本ごとに「その音色のプラグイン」を引く表。server / CLI もこれを通す。
-    let in_process_plugins = cmrt_offline_render::InProcessPlugins::new(&cfg, &plugin_entries);
+    // オフラインレンダリングはすべて render-server 子プロセスへ投げる。このプロセスは
+    // CLAP をロードしない。
+    let offline_renderer = || cmrt_offline_render::OfflineRenderer::new(Arc::new(cfg.clone()));
 
     match action {
         CliAction::Server(port) => {
-            return server::run_server(&cfg, &in_process_plugins, port);
+            return server::run_server(&cfg, &offline_renderer(), port);
         }
         CliAction::CliMml(mml) => {
             let playback_mml = cli_playback_mml(&mml);
@@ -227,9 +176,9 @@ fn run() -> Result<()> {
                     println!("CLI モード: MML = {mml}");
                 }
             }
-            let (entry, core_cfg) = in_process_plugins.for_mml(playback_mml.mml())?;
-            let patch = mml_to_play(playback_mml.mml(), &core_cfg, &entry)?;
-            println!("patch: {}", patch);
+            let rendered = offline_renderer().render_phrase(playback_mml.mml())?;
+            play_samples(rendered.samples, cfg.sample_rate as u32)?;
+            println!("patch: {}", rendered.patch_name);
             return Ok(());
         }
         CliAction::BuildVoicingCache { force } => {
@@ -237,7 +186,7 @@ fn run() -> Result<()> {
         }
         CliAction::BuildPatchCatalogCache => unreachable!(),
         CliAction::RenderMml(request) => {
-            return render_mml::run(&cfg, &plugin_entries, &request);
+            return render_mml::run(&cfg, &request);
         }
         CliAction::LiveChordCheck(request) => {
             return live_chord_check::run(&cfg, &request);
@@ -257,8 +206,9 @@ fn run() -> Result<()> {
         }
     }
 
-    // TUI モード
-    let mut app = tui::TuiApp::new(&cfg, plugin_entries);
+    // TUI モード。EFFECT CHAIN overlay（`x`）が catalog を一覧できるよう effect を discover
+    // する（preset ファイルの走査だけで、DLL はロードしない）。
+    let mut app = tui::TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::discover());
 
     let exit_reason = app.run()?;
     drop(app);

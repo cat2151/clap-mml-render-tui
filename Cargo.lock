@@ -389,7 +389,6 @@ dependencies = [
  "cat-self-update-lib",
  "chord2mml-core",
  "chrono",
- "clack-host",
  "clap",
  "cmrt-chord",
  "cmrt-chord-chart",
@@ -750,11 +749,9 @@ name = "cmrt-offline-render"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clack-host",
  "cmrt-history",
  "cmrt-render-core",
  "cmrt-runtime",
- "cmrt-tui-core",
  "hound",
  "toml",
  "ureq",
@@ -785,7 +782,6 @@ name = "cmrt-render-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clack-host",
  "cmrt-core",
  "cmrt-runtime",
  "mmlabc-to-smf",

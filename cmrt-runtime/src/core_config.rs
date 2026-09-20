@@ -141,10 +141,9 @@ impl SkippedCatalogPlugin {
 /// **このマシンに実際にインストールされていて音色置き場も実在する**プロファイルを
 /// 並べる。config への opt-in は要らない（`docs/adr/0005-mixed-catalog-on-by-default.md`）。
 ///
-/// これが複数返すと、カタログ収集・用途別絞り込み・voicing 判定・オフライン
-/// レンダリングの entry がまとめて混在対応になる。並びは決まった順（組み込み
-/// プロファイル名の昇順 → config で足した名前）なので、`PluginEntries` のような
-/// 「添字で対応づける表」と揃う。
+/// これが複数返すと、カタログ収集・用途別絞り込み・voicing 判定がまとめて
+/// 混在対応になる。並びは決まった順（組み込みプロファイル名の昇順 → config で
+/// 足した名前）なので、添字で対応づける表と揃う。
 pub fn catalog_plugins(cfg: &Config) -> Vec<CatalogPlugin> {
     catalog_plugins_detailed(cfg).0
 }
@@ -286,8 +285,8 @@ fn primary_catalog_plugin(cfg: &Config) -> CatalogPlugin {
 ///   （`docs/adr/0005-mixed-catalog-on-by-default.md`）。サーバー側は音色置き場を実在チェックの材料に
 ///   しない（インスタンスを作れるかだけを見る）ので、ここは TUI 固有
 ///
-/// 並びはプロファイル名の昇順（`BTreeMap` の順）。`PluginEntries` のような
-/// 「添字で対応づける表」と揃えるため、決まった順であることだけが要件。
+/// 並びはプロファイル名の昇順（`BTreeMap` の順）。添字で対応づける表と
+/// 揃えるため、決まった順であることだけが要件。
 fn installed_plugin_profiles(cfg: &Config) -> Vec<InstalledProfile> {
     // 既定プラグインが定まらない config では混在させない。`plugin_path` が空なのは
     // 「どのプラグインも指していない」ということで、そもそも entry をロードできない

@@ -75,9 +75,9 @@ pub struct TuiApp<'a> {
     pub(super) active_screen: PrimaryScreen,
     pub(super) screen_switch_menu: ScreenSwitchMenu,
     cfg: Arc<Config>,
-    /// カタログのプラグインごとのロード済み CLAP entry。
-    /// render_server backend / テストでは空。
-    plugin_entries: cmrt_offline_render::PluginEntries,
+    /// DAW の EFFECT CHAIN overlay（`x`）が一覧する effect の catalog。
+    /// DLL はロードしない（render は render-server 側）。テストでは `none()`。
+    effect_plugins: cmrt_offline_render::EffectPlugins,
     pub(in crate::tui) notepad: NotepadScreen<'a>,
     pub(in crate::tui) keyboard: KeyboardScreen<'a>,
     pub(in crate::tui) loop_browser: LoopBrowserScreen,

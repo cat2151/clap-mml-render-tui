@@ -7,11 +7,9 @@ edition = "2021"
 cmrt-history = { path = "../history" }
 cmrt-render-core = { path = "../core-lib" }
 cmrt-runtime = { path = "../cmrt-runtime" }
-cmrt-tui-core = { path = "../tui-core" }
 anyhow = "1"
 hound = "3.5"
 ureq = { version = "3", features = ["json"] }
-clack-host = { git = "https://github.com/prokopyl/clack.git", package = "clack-host" }
 
 [dev-dependencies]
 toml = "1"

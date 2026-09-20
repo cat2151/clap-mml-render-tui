@@ -18,11 +18,8 @@ fn draw_shows_effect_chain_overlay_with_instrument_stages_and_add_list() {
         path: std::path::PathBuf::from("/presets/does-not-exist/Hall"),
     };
     let mut app = build_test_app();
-    app.plugin_entries = cmrt_offline_render::PluginEntries::none().with_effects(
-        cmrt_offline_render::EffectPlugins::with_catalog(AudioEffectCatalog::with_entries(
-            vec![plugin],
-            vec![preset],
-        )),
+    app.effect_plugins = cmrt_offline_render::EffectPlugins::with_catalog(
+        AudioEffectCatalog::with_entries(vec![plugin], vec![preset]),
     );
     app.mode = DawMode::EffectChain;
     app.overlays.effect_chain = crate::overlays::DawEffectChainOverlayState::open(

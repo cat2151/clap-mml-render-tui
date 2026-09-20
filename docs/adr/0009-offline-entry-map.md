@@ -1,6 +1,6 @@
 # ADR 0009: オフラインレンダリングは MML ごとに entry を引き分ける
 
-- 状態: 採用
+- 状態: 廃止（[0024](0024-offline-render-goes-through-the-render-server-only.md) で上書き。引き分けは render-server 側で行い、TUI は entry を持たない）
 - 関連: [0001](0001-patch-string-decides-the-plugin.md) / [0005](0005-mixed-catalog-on-by-default.md)
 
 ## 決定

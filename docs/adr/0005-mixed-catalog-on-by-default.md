@@ -12,7 +12,7 @@
 - **wheel も Cycle Random（1 周ごとの自動抽選）もプラグインをまたぐ。制限なし**
 
 `catalog_plugins()`（`cmrt-runtime/src/core_config.rs`）が唯一の分岐点。
-`PatchPlugins` / `InProcessPlugins` / `collect_patch_pairs` / `GridRoleFilters` は
+`PatchPlugins` / `collect_patch_pairs` / `GridRoleFilters` は
 すべてこの並びに従う。
 
 ## 実在チェックの掛け方

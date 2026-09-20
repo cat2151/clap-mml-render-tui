@@ -126,28 +126,12 @@ fn default_config_content_uses_config_editor_key() {
 }
 
 #[test]
-fn default_config_content_uses_offline_render_workers_key() {
+fn default_config_content_uses_offline_render_server_keys() {
     let content = default_config_content();
 
-    assert!(
-        content.contains("offline_render_workers = 2"),
-        "default config は offline_render_workers を案内するべき: {}",
-        content
-    );
     assert!(
         content.contains("offline_render_server_workers = 4"),
         "default config は offline_render_server_workers を案内するべき: {}",
-        content
-    );
-}
-
-#[test]
-fn default_config_content_uses_offline_render_backend_keys() {
-    let content = default_config_content();
-
-    assert!(
-        content.contains("offline_render_backend = \"in_process\""),
-        "default config は backend 既定値を案内するべき: {}",
         content
     );
     assert!(
