@@ -22,7 +22,7 @@
 //! `start_clock` を呼ぶまでサーバーは眠っていて（play server 側 `worker.rs` の
 //! `waiting_for_timeline_events`）クロックは 1 サンプルも進まないので、起こした瞬間を原点に
 //! すれば両者が揃う。`begin` のほうを後ろへずらしてはいけない。`BeginLiveTimeline` は
-//! `banks.reset_all()` を伴うので、先に載せておいた state load が消える。
+//! 全 instance の音を切る（cache-player は鳴っている voice ごと）ので、演奏中に呼べば音が途切れる。
 
 use std::{
     collections::VecDeque,

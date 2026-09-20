@@ -106,6 +106,8 @@ grid sequencer は 2 bank の standby（`begin_standby` / `poll_standby`）を�
   サーバーログではなく、小節ログの `at_frames` の差と `timing_metrics().late_events_total == 0` で行う
 - **サーバーのサンプルクロックは、最初の timeline イベントまで動かない**
   （[0012](0012-live-clock-drift-is-absorbed-not-eliminated.md) の原点合わせがこれに乗っている）
-- **`set_patch` は同じ綴りなら何もしない。** スロットを変えずに WAV だけ変えたつもりでも効かない
+- **`set_patch` は同じ綴りなら何もしないが、キャッシュ WAV だけは読み直す**（play server
+  `core-lib/src/render/patch_switch.rs`）。同じパスへ焼き直した WAV が、停止→再開や 1 小節ループで
+  古い中身のまま鳴ることを防ぐため。ログでは `cmrt-bank-patch ... elapsed_ms=0` が読み直していない印
 - **「予約が揃っている」ことと「そのとおり鳴った」ことは別。** 帳簿が全部 0 でも違う小節が鳴りうる
   （[0012](0012-live-clock-drift-is-absorbed-not-eliminated.md) の「再発したら最初に見るもの」）

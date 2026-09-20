@@ -169,12 +169,12 @@ impl LiveCachePlayLoop {
         self.apply_initial_track_gains();
 
         // 演奏 1 回につき 1 本。**演奏中に張り直してはいけない**（サーバー側は
-        // プラグインの状態もサンプルクロックの原点も戻すフルリセットになる）。
+        // 全 instance の音を切りサンプルクロックの原点も戻す）。
         //
         // ここではまだサーバーのクロックは動かない。動き出すのは 1 小節目のロードの
         // あとに呼ぶ `start_clock`（下の `_ =>` の腕）。**逆に `begin` を後ろへ
-        // ずらしてはいけない**（`BeginLiveTimeline` は `banks.reset_all()` を伴うので、
-        // 先に載せた state load が消える）。
+        // ずらしてはいけない**（原点合わせは `begin` → 1 小節目のロード → `start_clock`
+        // の順で成り立っている）。
         let mut timeline = MeasureTimeline::begin(
             &self.play_server,
             self.sample_rate,
