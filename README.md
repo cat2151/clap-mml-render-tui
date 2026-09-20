@@ -1,12 +1,12 @@
 # clap-mml-render-tui
 
 ### Overview
-An MML TUI DAW (or similar). Easily enjoy rich sounds from Surge XT / Dexed / Vaporizer2 / Floe / Sforzando using MML. Written in Rust.
+An MML TUI DAW (of sorts). Easily enjoy the rich sounds of Surge XT / Dexed / Vaporizer2 / Floe / Sforzando with MML. Written in Rust.
 
 ### Usage
 
-- For playing around and having fun with MML sounds
-- For casual installation. Just having Rust is enough.
+- For playing around with MML sounds
+- For casual installation. Just having Rust installed is enough.
 
 ### Technology Stack
 - Plugin host library
@@ -14,7 +14,7 @@ An MML TUI DAW (or similar). Easily enjoy rich sounds from Surge XT / Dexed / Va
 
 ### Preparation
 
-Please install [Surge XT](https://surge-synthesizer.github.io/).
+Please install [Surge XT](https://surge-synthesizer.github.io/)
 
 ```
 winget install "Surge XT"
@@ -26,30 +26,31 @@ winget install "Surge XT"
 cargo install --force --git https://github.com/cat2151/clap-mml-render-tui
 ```
 
-### Execution
+### Run
 
 ```
 cmrt
 ```
 
-You can enter MML and play around on the TUI screen.
+You can input MML and play in the TUI screen.
 
-#### Play Server Details
+#### Play Server Implementation
 
-Sound playback is handled by a separate process, the play server. Its executable is determined in the following order, using the first one found:
+Sound playback is handled by a separate process, the play server. Its executable is determined in the following order, and the first one found is used:
 
-1.  The full path specified by `--play-server <PATH>` (if the specified path does not exist, it will stop with an error without searching further).
-2.  `clap-mml-realtime-play-server` in the same directory as `cmrt`.
-3.  The release build of a sibling repository (`../clap-mml-play-server/target/release/`).
+1. The full path specified by `--play-server <PATH>` (if not found, it stops with an error without searching further)
+2. `clap-mml-realtime-play-server` in the same directory as `cmrt`
+3. The release build from the sibling repository (`../clap-mml-play-server/target/release/`)
 
-PATH is not checked. Debug build servers are 4-5 times slower at pre-loading, causing playback to cut off at the beginning of measures. A warning will appear in the top-right corner of the screen if a debug build or an unknown executable is being used.
+PATH is not consulted. Debug build servers have a 4-5 times slower pre-fetch, causing playback to cut off at the beginning of measures.
+A warning appears in the top right of the screen when a debug build or an unknown executable is being used.
 
 ```
 cmrt --play-server "X:/projects/clap-mml-play-server/target/debug/clap-mml-realtime-play-server.exe"
 ```
 
 ### Supported Audio Plugins
-- ※Limited to CLAP plugins available for Windows, free of charge, and without account registration.
+- * Limited to plugins that are CLAP, Windows-compatible, and freely available without account registration.
 - Surge XT
 - Dexed
 - Vaporizer2
@@ -59,30 +60,31 @@ cmrt --play-server "X:/projects/clap-mml-play-server/target/debug/clap-mml-realt
   - TONE3000
   - Surge XT Effects
 
-### AI-Generated Documentation
-- Sections added by AI might be hard to read. These will be maintained periodically.
+### AI Generated Documentation
+- The sections appended by AI below may be difficult to read. They will be maintained periodically.
 
 ### Keyboard Screen
 
 Press the `v` key to navigate to the keyboard screen.
 
-- `c d e f g a b` keys: Play C D E F G A B.
+- `c d e f g a b` keys: Play the musical notes C D E F G A B.
 
 ### Chord Chart Screen
 
 Press `Ctrl+G` then `C` to navigate to the chord chart screen.
 
-This screen allows you to overview and edit the "structure" of a song's chord progression. Moving the cursor will play the chord progression on that line. Moving through chords within a line with `h` or `l` will play only the pointed chord.
+This screen allows you to view and edit the "structure" of chord progressions for an entire song. Moving the cursor will play the chord progression on that line.
+Use `h` `l` to step through chords within a line; only the pointed chord will play.
 
-- Left pane (Sections): Define named chord progressions as building blocks.
+- Left pane (Sections): Define named chord progressions that serve as building blocks.
 - Right pane (Arrangement): The sequence of defined sections forms the song. The same section can be arranged multiple times.
-- Correcting a section's progression will simultaneously change all its references throughout the song.
-- The header's first line directly displays the `chord2mml` specification for the song's beginning (e.g., `Key=C BPM120`).
-- Neither the progression nor the header are interpreted by this screen; they are held as raw strings.
-- Only the section on the cursor line will play (not the entire song). You can select the timbre for the entire Chord Chart from the progression editing screen.
-- You can audition chords one by one within a line using `h` and `l`. The currently pointed chord is highlighted in the progression.
-- Only the Key from the header is passed to the audition (BPM remains at default).
-- Audition inversions and octaves are always auto-voiced. These are determined by the connection within the section for "Sections" and by the overall song order for "Arrangement"; the same inversion is maintained even during single chord audition with `h` and `l`.
+- If you correct a section's progression, all its references in the song will change collectively.
+- The first line in the header displays the `chord2mml` specification (e.g., `Key=C BPM120`) to be placed at the beginning of the song as is.
+- Neither the progressions nor the header are interpreted by this screen. It retains the typed strings as-is.
+- Only the section on the cursor's line will play (not the entire song). The overall timbre for the Chord Chart can be selected from the progression editing screen.
+- Use `h` `l` to preview chords one by one within a line. The currently pointed chord will appear inverted within the progression.
+- Only the Key from the header is passed for preview (BPM remains at its default).
+- Chord inversions and octaves during preview are always auto-voiced. In Sections, they are determined within the section; in Arrangement, they are determined by the overall song sequence, and `h` `l` single chord previews maintain the same inversion.
 
 ```
 ┌ Chord Chart ─────────────────────────────────────────────────────────────────┐
@@ -93,67 +95,71 @@ This screen allows you to overview and edit the "structure" of a song's chord pr
 ││  3 B        IIm-V-I-VIm         ││> 3 A        I-V-VIm-IV                  ││
 ││                                 ││  4 B        IIm-V-I-VIm                 ││
 │└─────────────────────────────────┘└─────────────────────────────────────────┘│
-│ q:quit ?:help                                                                │
+│ q:Exit ?:Help                                                                │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Here are the key bindings. Only `q` and `?` are displayed on the bottom line of the screen. The full list appears on the screen when you press `?`.
+These are the key bindings. Only `q` and `?` are displayed on the bottom line of the screen. The full list appears on screen by pressing the `?` key.
 
 | Key | Pane | Action |
 |---|---|---|
-| `Tab` | Common | Move pane (toggle between Sections ⇔ Arrangement) |
-| `j` `k` `↓` `↑` | Common | Move cursor (line. The chord progression of the new line will play entirely) |
-| `h` `l` `←` `→` | Common | Move chord within line (Only the pointed chord will play. Moves to the adjacent line at the end of a line) |
-| `PgUp` `PgDn` | Common | Move cursor 10 lines |
-| `dd` | Common | Delete cursor line (Deleting in Sections also deletes its references in Arrangement) |
+| `Tab` | Common | Move pane (toggle Sections ⇔ Arrangement) |
+| `j` `k` `↓` `↑` | Common | Move cursor (line. All chord progressions in the new line will play) |
+| `h` `l` `←` `→` | Common | Move chord within line (only the pointed chord plays. At the end of a line, it wraps to the next line) |
+| `PgUp` `PgDn` | Common | Move cursor by 10 lines |
+| `dd` | Common | Delete cursor line (deleting in Sections also deletes its references in Arrangement) |
 | `Alt+↑` `Alt+↓` | Common | Move cursor line up / down |
-| `b` | Common | Rewrite header's Key / BPM via single-line input |
-| `Shift+P` `Space` | Common | Audition the section on the cursor line (stops if already playing) |
-| `?` | Common | Toggle help (also closes with `Esc`) |
-| `q` | Common | Quit application |
-| `g` | Sections | Add a section by lottery from the chord progression catalog |
-| `r` | Sections | Reroll the progression of the cursor line, keeping its name |
-| `i` | Sections | Edit progression with a single-line MML overlay for Chord Chart |
-| `n` | Sections | Edit name via single-line input |
-| `1`〜`9` | Arrangement | Insert the section with that number after the cursor |
+| `b` | Common | Rewrite header Key / BPM with single line input |
+| `Shift+P` `Space` | Common | Preview cursor line's section (stops if already playing) |
+| `?` | Common | Toggle help (`Esc` also closes it) |
+| `q` | Common | Exit application |
+| `g` | Sections | Add section by drawing from the chord progression catalog |
+| `r` | Sections | Redraw progression for cursor line, preserving its name |
+| `i` | Sections | Edit progression using single-line MML overlay for Chord Chart |
+| `n` | Sections | Edit name with single line input |
+| `1`〜`9` | Arrangement | Insert section with that number after the cursor |
 
-The editing screen opened with `i` in Sections initializes with the current progression and places the cursor at the end. While typing, the chord at the cursor position will auto-voice and play as it becomes valid or changes. `Ctrl+Space` can play the entire progression with the same voicing. Unreadable input will not be played back as MML, but can still be saved as is. `Enter` confirms and saves the progression, removing leading/trailing spaces, while `Esc` discards changes.
+The editing screen opened with `i` in Sections initializes with the current progression and places the cursor at the end.
+During input, the chord at the cursor position will auto-voice and play whenever it's formed or changed. `Ctrl+Space` plays the entire progression with the same voicing. Unreadable input is not substituted for MML playback but can still be saved.
+Press `Enter` to confirm and save the progression (whitespace trimmed from both ends), and `Esc` to discard changes.
 
-Inside the editing screen, `Ctrl+T` opens the timbre list, similar to a regular MML overlay. The timbre doesn't change by simply navigating candidates; `Enter` confirms the selection, and `Esc` reverts to the original timbre. The Chord Chart's timbre is global for the entire screen and is saved to `history.json` separately from the regular `Ctrl+P` MML overlay timbre. Even if you discard progression edits with `Esc` after confirming a timbre, the confirmed timbre remains.
+From within the editing screen, `Ctrl+T` opens the same patch list as the regular MML overlay. Moving through candidates does not change the patch; `Enter` confirms it, and `Esc` reverts to the original patch. The Chord Chart's patch is global to the entire screen and saved to `history.json` separately from the regular `Ctrl+P` MML overlay's patch. If you discard progression edits with `Esc` after confirming a patch, the confirmed patch remains.
 
-Changes are automatically saved. The save location is `clap-mml-render-tui/history/chord_chart.json` within the configuration directory (on Windows, it's `%LOCALAPPDATA%\clap-mml-render-tui\history\chord_chart.json`). Only one song is saved at a time. If the save file is missing or unreadable, the screen will perform a single lottery draw (same as `g`) when first opened, starting with one section (or remaining empty if the draw fails).
+It is automatically saved with every edit. The save location is `clap-mml-render-tui/history/chord_chart.json` within the configuration directory (on Windows, this is `%LOCALAPPDATA%\clap-mml-render-tui\history\chord_chart.json`). Only one song is saved at a time.
+If the save file is missing or unreadable, when the screen is first opened, it performs a single `g`-like drawing to start with one section (if drawing fails, it remains empty).
 
-The chord progression catalog used for `g` / `r` lottery is fetched from the network. Only the first time, when the cache is empty, will there be a wait (the wait time is recorded in `log.txt` as `chord-chart: event=catalog-first-load elapsed_ms=...`). If the data cannot be fetched, "Chord progression data not available" will appear at the bottom of the screen.
+The chord progression catalog used for `g` / `r` drawing is retrieved from the network. It will only wait on the first access when the cache is not yet available (wait time is logged in `log.txt` under `chord-chart: event=catalog-first-load elapsed_ms=...`). If it cannot be retrieved, "Chord progression data is not available" will appear at the bottom of the screen.
 
 ### DAW Screen Effect Chain
 
-In NORMAL mode on the DAW screen, placing the cursor on a performance track and pressing `x` opens the EFFECT CHAIN overlay for that track. You can insert any number of TONE3000 / Surge XT Effects factory presets in series after the instrument (timbre).
+In NORMAL mode of the DAW screen, place the cursor on a performance track and press `x` to open that track's EFFECT CHAIN overlay.
+You can insert any number of TONE3000 / Surge XT Effects factory presets in series after the instrument (patch).
 
 | Key | Action |
 |---|---|
-| `x` | Opens the EFFECT CHAIN overlay for the cursor track (invalid on chord or conductor lines) |
-| `j` `k` | Move through the effect chain stages |
-| `a` | Opens an "Add" overlay. All factory presets from all effects are listed in a single column. Select one with `j` `k`, press `Enter` to add it to the end, `ESC` to go back. |
-| `dd` | Delete the cursor stage |
-| `Enter` | Writes back to the JSON in the 'init' column and closes (the track's cache WAV is re-rendered) |
+| `x` | Open EFFECT CHAIN overlay for the cursor track (invalid on chord or conductor lines) |
+| `j` `k` | Move through effect chain stages |
+| `a` | Open add overlay. All factory presets for all effects are listed in one column; select with `j` `k`, add to end with `Enter`, `ESC` to return |
+| `dd` | Delete the cursor's stage |
+| `Enter` | Write back to init column JSON and close (the track's cached WAV is re-rendered) |
 | `ESC` | Discard changes and close |
 
-- The chain is saved in the `"effects after instrument"` JSON array in the `init` column (array order = signal order). Direct editing of the `init` column works the same way.
-- Effects are baked into the cache WAV. This only works when `offline_render_backend` is `in_process` (cells with effects will result in a rendering error with `render_server`).
+- The chain is saved in the `"effects after instrument"` (array order = signal order) within the init column's JSON. Editing the init column directly has the same effect.
+- Effects are baked into the cached WAV. This works regardless of whether `offline_render_backend` is `in_process` or `render_server`.
 - Each effect's preset is read from its built-in default location (`%ProgramData%\TONE3000\Presets`, `%ProgramData%\Surge XT\fx_presets`). If a plugin is not available, it won't appear as a candidate.
-- The chain runs for the duration of the notes, so reverb tails are cut off at the end of the cell.
+- The chain runs for the same duration as the notes, so reverb tails will be cut off at the end of the cell.
 
 ### Configuration
 
-A `config.toml` file is automatically created on first launch. Its location is in the OS standard configuration directory:
+`config.toml` is automatically created on first launch. Its location is within the OS standard configuration directory:
 
 - Windows: `%LOCALAPPDATA%\clap-mml-render-tui\config.toml`
 - Linux: `~/.config/clap-mml-render-tui/config.toml`
 - macOS: `~/Library/Application Support/clap-mml-render-tui/config.toml`
 
-You can open `config.toml` with an editor by pressing `e` in NORMAL mode in TUI / DAW. The application will restart after closing the editor.
+In TUI / DAW NORMAL mode, press `e` to open `config.toml` in an editor. Restart the application after closing the editor.
 
-Here is an example of the current configuration:
+Current configuration example:
 
 ```toml
 # [REQUIRED] CLAP plugin to use
@@ -164,9 +170,8 @@ editors = ["fresh", "zed", "code", "edit", "nano", "vim"]
 
 input_midi  = "input.mid"
 
-# output_midi and output_wav are automatically saved to
-# clap-mml-render-tui/phrase/ or clap-mml-render-tui/daw/
-# within the configuration directory.
+# output_midi, output_wav are automatically saved under
+# clap-mml-render-tui/phrase/ or clap-mml-render-tui/daw/ in the config directory.
 # The following values are used internally.
 output_midi = "output.mid"
 output_wav  = "output.wav"
@@ -174,7 +179,7 @@ output_wav  = "output.wav"
 sample_rate = 48000
 buffer_size = 512
 
-# Number of concurrent offline renders for DAW (1-16)
+# Number of concurrent offline rendering workers for DAW (1-16)
 offline_render_workers = 2
 
 # Offline rendering backend
@@ -189,17 +194,17 @@ offline_render_server_command = ""
 realtime_audio_backend = "in_process"
 realtime_play_server_port = 42154
 
-# Whether to auto-play on startup
-# Notepad mode: Plays the current line immediately. DAW mode: Starts playback from the beginning of the song (measure 0).
+# Whether to autoplay on startup
+# Notepad mode: Plays current line immediately. DAW mode: Starts playback from the beginning of the song (measure 0).
 autoplay_on_startup = true
 
-# List of directories to search for in the WAV loop browser
+# List of directories to search for WAV loops in the WAV loop browser
 loop_dirs = []
 
 # List of categories that can be assigned to WAV loop directories
 loop_categories = ["guitar", "drum", "bass", "spoken", "sequence"]
 
-# Only write this section if you want to change Surge XT's default values
+# Only write if changing Surge XT's default values
 [plugins."Surge XT"]
 patches_dirs = [
   'C:\ProgramData\Surge XT\patches_factory',
@@ -211,23 +216,23 @@ The configuration items are as follows:
 
 | Item | Default Value | Description |
 | --- | --- | --- |
-| `plugins."Surge XT".plugin_path` | OS-specific standard Surge XT CLAP path | Path if Surge XT is installed in a non-standard location. |
-| `editors` | `["fresh", "zed", "code", "edit", "nano", "vim"]` | Editor candidates tried in order from left. |
-| `input_midi` | `input.mid` | Internal input MIDI file name. |
-| `output_midi` | `output.mid` | Internal output MIDI file name. |
-| `output_wav` | `output.wav` | Internal output WAV file name. |
+| `plugins."Surge XT".plugin_path` | OS-specific default Surge XT CLAP path | Path if Surge XT is installed in a non-standard location. |
+| `editors` | `["fresh", "zed", "code", "edit", "nano", "vim"]` | Editor candidates, tried in order from left. |
+| `input_midi` | `input.mid` | Input MIDI filename for internal processing. |
+| `output_midi` | `output.mid` | Output MIDI filename for internal processing. |
+| `output_wav` | `output.wav` | Output WAV filename for internal processing. |
 | `sample_rate` | `48000` | Sample rate for rendering. |
 | `buffer_size` | `512` | Buffer size for rendering. |
-| `offline_render_workers` | `2` | Number of concurrent renders for `in_process`. |
-| `offline_render_backend` | `in_process` | Destination for offline rendering execution. |
-| `offline_render_server_workers` | `4` | Number of concurrent workers for `render_server`. |
-| `offline_render_server_port` | `42153` | `render_server`'s localhost port. |
-| `offline_render_server_command` | Empty string | Command to launch `render_server`. |
-| `realtime_audio_backend` | `in_process` | Destination for real-time playback execution. |
-| `realtime_play_server_port` | `42154` | `play_server`'s localhost port. |
-| `autoplay_on_startup` | `true` | Whether to auto-play immediately after startup. |
-| `plugins."Surge XT".patches_dirs` | OS-specific standard Surge XT patches directories | List of directories to search for Surge XT timbres. |
-| `loop_dirs` | `[]` | List of directories to search for in the WAV loop browser. Run `cmrt scan-loops` after changing. |
+| `offline_render_workers` | `2` | Number of concurrent renders for in_process. |
+| `offline_render_backend` | `in_process` | Target for offline rendering. |
+| `offline_render_server_workers` | `4` | Number of concurrent render_server workers. |
+| `offline_render_server_port` | `42153` | localhost port for render_server. |
+| `offline_render_server_command` | Empty string | Command to start render_server. |
+| `realtime_audio_backend` | `in_process` | Target for real-time playback. |
+| `realtime_play_server_port` | `42154` | localhost port for play_server. |
+| `autoplay_on_startup` | `true` | Whether to autoplay immediately after startup. |
+| `plugins."Surge XT".patches_dirs` | OS-specific Surge XT patches default directories | List of directories to search for Surge XT patches. |
+| `loop_dirs` | `[]` | List of directories to search for WAV loops in the WAV loop browser. Run `cmrt scan-loops` after making changes. |
 | `loop_categories` | `["guitar", "drum", "bass", "spoken", "sequence"]` | List of categories to assign to loop directories. Keys for the category overlay are determined from unused English letters within the category names. |
 
 OS-specific default `plugin_path` values are as follows:
@@ -244,26 +249,26 @@ OS-specific default `patches_dirs` values are as follows:
 
 #### Fixed Default Plugin and Multiple Plugins
 
-The default plugin that plays lines where no timbre is specified is **fixed to Surge XT**. There is no switching via `active_plugin`. Other plugins like Dexed are added to a mixed catalog from `[plugins.<Name>]` and used for lines where the timbre is explicitly stated.
+The default plugin for lines without a specified patch is **fixed to Surge XT**. There is no switching via `active_plugin`. Other plugins like Dexed are added to the mixed catalog via `[plugins.<name>]` and used on lines where the patch is explicitly specified.
 
-The built-in profiles are as follows, with paths set to the standard installation location for each OS:
+The contents of the built-in profiles are as follows, with paths being the standard installation locations for each OS:
 
-| Name | `plugin_id` | `patches_dirs` | Category for specific use |
+| Name | `plugin_id` | `patches_dirs` | Category for usage |
 | --- | --- | --- | --- |
-| `Surge XT` | `org.surge-synth-team.surge-xt` | OS-specific defaults from the table above | Surge XT's category names |
-| `Dexed` | `com.digital-suburban.dexed` | Dexed's cartridge location (Windows: `%APPDATA%\DigitalSuburban\Dexed\Cartridges`) | All empty (= no filtering) |
-| `Vaporizer2` | `com.vastdynamics.VAST2` | **No default. Please specify `patches_dirs`** | Vaporizer2's category names (e.g., `Pad` / `Bass` / `Arpeggio`) |
+| `Surge XT` | `org.surge-synth-team.surge-xt` | OS-specific default values from the table above | Surge XT's category names |
+| `Dexed` | `com.digital-suburban.dexed` | Dexed cartridge location (Windows: `%APPDATA%\DigitalSuburban\Dexed\Cartridges`) | All empty (= no filtering) |
+| `Vaporizer2` | `com.vastdynamics.VAST2` | **No default. Please specify `patches_dirs`** | Vaporizer2 category names (e.g., `Pad` / `Bass` / `Arpeggio`) |
 
-Names are matched ignoring differences in case, spaces, and underscores (`Dexed` / `dexed`, `Surge XT` / `surge_xt` / `SurgeXT` are all treated as the same).
+Names are matched ignoring differences in case, spaces, and underscores (`Dexed` / `dexed`, `Surge XT` / `surge_xt` / `SurgeXT` are all treated the same).
 
-You should only write `[plugins.<Name>]` if you have installed a plugin in a non-standard location, need to supplement timbre locations, or want to use a plugin not included in the built-in profiles. **Only the specified items will override the built-in values**, so if you only want to change Surge XT's path, a single `plugin_path` line within that table is sufficient.
+You only need to write `[plugins.<name>]` if you've installed a plugin in a non-standard location, need to specify a patch location, or are using a plugin not included by default. **Only the specified items will override built-in values**, so if you only want to change Surge XT's path, a single `plugin_path` line within that table is sufficient.
 
 ```toml
 # Replace only the path. plugin_id and patches_dirs remain built-in values.
 [plugins."Surge XT"]
 plugin_path = 'D:\my\clap\Surge XT.clap'
 
-# For plugins not built-in, specify all details.
+# For plugins not built-in, specify all fields.
 [plugins.my_synth]
 plugin_path  = 'D:\my\clap\MySynth.clap'
 patches_dirs = ['D:\my\patches']
@@ -271,33 +276,33 @@ patches_dirs = ['D:\my\patches']
 
 | Item | Description |
 | --- | --- |
-| `plugins.<Name>.plugin_path` | The path to that plugin. |
-| `plugins.<Name>.plugin_id` | The expected CLAP plugin ID. Can be omitted. |
-| `plugins.<Name>.patches_dirs` | The timbre location for that plugin. To clear built-in values, write `patches_dirs = []`. |
-| `plugins.<Name>.<Use>_patch_categories` / `<Role>_patch_keywords` | Filtering for automatic patch selection by use. Seven key names can be specified (`chord_patch_categories` / `bass_patch_categories` / `arpeggio_patch_categories` / `drum_patch_categories` / `kick_patch_keywords` / `snare_patch_keywords` / `hihat_patch_keywords`). Only the specified items will be effective for that plugin. If not specified, the plugin's default value will be used (Surge XT uses Surge's category names; others use "no filtering"). |
+| `plugins.<name>.plugin_path` | Path to the plugin. |
+| `plugins.<name>.plugin_id` | Expected CLAP plugin ID. Can be omitted. |
+| `plugins.<name>.patches_dirs` | Patch locations for the plugin. Write `patches_dirs = []` if you want to clear built-in values. |
+| `plugins.<name>.<usage>_patch_categories` / `<role>_patch_keywords` | Filtering for automatic patch selection by usage. Seven key names (`chord_patch_categories` / `bass_patch_categories` / `arpeggio_patch_categories` / `drum_patch_categories` / `kick_patch_keywords` / `snare_patch_keywords` / `hihat_patch_keywords`) can be specified. Only the specified items take effect for that plugin. If not specified, the plugin's default value (Surge XT uses its category names, others use "no filtering") is used. |
 
-- `active_plugin` has been deprecated. Also, writing `plugin_path` / `plugin_id` / `patches_dirs` and the 7 use-specific categories at the top level will result in a configuration error rather than being silently ignored. Please remove `active_plugin` and move other values to `[plugins."Surge XT"]`.
-- Adding `[plugins.<Name>]` does not change the default plugin. Only a profile with the same name as Surge XT will override the fixed default; others become candidates in the mixed catalog.
-- For Dexed, one cartridge `.syx` file contains 32 programs. In the list, cartridges are treated as directories, displaying one program at a time, e.g., `SynprezFM/SynprezFM_01.syx/00 Say Again.` (numbers are 0-indexed, two digits). If `patches_dirs` specifies the cartridge location, you can select them just like Surge's `.fxp` files.
-- Dexed's mono/poly setting is an instance configuration (`MonoMode`), not a timbre property, and its default is POLY. Therefore, in the grid sequencer's chord lines, all Dexed timbres are treated as suitable for chords.
-- For Vaporizer2, one `.vvp` file equals one timbre, selectable like Surge's `.fxp` files. The category displayed in the list header is the **first two characters of the filename** (e.g., `AR` = `Arpeggio` for `AR Accent Arp.vvp`).
-- Only Vaporizer2 does not have a default `patches_dirs`. This is because the preset location is an environment-dependent value determined by the plugin's global settings (e.g., `%APPDATA%\Vaporizer2\VASTvaporizerSettings.xml`), and cmrt would risk corrupting your DAW environment by automatically reading/writing it. Please add one line as shown below. Until you do, it will not appear in the catalog as having 0 timbres.
+- `active_plugin` is deprecated. Also, specifying `plugin_path` / `plugin_id` / `patches_dirs` and the seven usage-specific categories at the top level will result in a configuration error, rather than silently ignoring them. Please remove `active_plugin` and move other values to `[plugins."Surge XT"]`.
+- Adding `[plugins.<name>]` does not change the default plugin. Only a profile with the same name as Surge XT will override the fixed default value; others become candidates in the mixed catalog.
+- Dexed patches are "1 `.syx` cartridge = 32 programs", so in the list, cartridges are treated as directories, and programs are listed one by one like `SynprezFM/SynprezFM_01.syx/00 Say Again.` (numbers are 2-digit, starting from 0). If you specify the cartridge location in `patches_dirs`, you can select them just like Surge's `.fxp` files.
+- Dexed's mono/poly is an instance setting (`MonoMode`), not a patch property, and its default is POLY. Therefore, all Dexed patches are treated as suitable for chords in the grid sequencer's chord lines.
+- Vaporizer2 patches are 1 `.vvp` file = 1 patch, and can be selected just like Surge's `.fxp` files. The category that appears in the list heading is determined by the **first two characters of the filename** (e.g., `AR` = `Arpeggio` for `AR Accent Arp.vvp`).
+- Only Vaporizer2 does not have a default `patches_dirs` value. This is because preset locations are environment-dependent values determined by the plugin's global settings (e.g., `%APPDATA%\Vaporizer2\VASTvaporizerSettings.xml`), and `cmrt` automatically reading/writing there could corrupt your DAW environment. Please add a line as shown below. Until you do, it will not appear in the catalog with 0 patches.
 
 ```toml
 [plugins.Vaporizer2]
 patches_dirs = ['D:\Vaporizer2\Presets']
 ```
 
-- Vaporizer2's mono/poly setting varies per timbre and is read from the `.vvp` file's content (`m_uPolyMode`). Therefore, in the grid sequencer's chord lines, only timbres that play chords will appear as candidates (timbres that could not be read are not offered as candidates for chord lines).
-- Among Vaporizer2's factory presets, those with "MPE" in their name will not produce sound in cmrt. These timbres are designed for MPE (note-per-note pitch and pressure) performance data, which cmrt does not send.
-- The default category settings for filtering candidates by line usage (chord / bass / arpeggio / 4 drum roles / other) **differ per plugin**. Surge XT uses Surge's category names, Vaporizer2 uses Vaporizer2's category names, and Dexed and non-built-in plugins use "no filtering" (meaning all programs are candidates for all lines). This is because Dexed cartridges do not follow a "directory name = use" structure, and the timbre organization for non-built-in plugins is unknown, so filtering is not applied. If you wish to change this, specify the 7 items in `[plugins.<Name>]` (Surge XT's default values are included as comments at the end of the generated `config.toml`).
-- The 7 use-specific category items should also only be written within the plugin profile. For Surge XT, place them in `[plugins."Surge XT"]`; for other plugins, place them in their respective plugin table.
-- Shared judgment data for mono/poly determination used in automatic use-specific selection (`voicing_shared_source` / `voicing_override_source`) is only used for Surge XT's timbre determination.
-- The rendering cache is stored in separate directories for each plugin, preventing misuses of sounds from different plugins even when mixed (no manual deletion is needed). The locations are as follows, where `<PLUGIN>` is the filename of the resolved `plugin_path` without extension (for Windows):
-  - `%LOCALAPPDATA%\clap-mml-render-tui\notepad_cache\<PLUGIN>\*.wav` (notepad / MML input overlay cache)
-  - `%LOCALAPPDATA%\clap-mml-render-tui\daw_cache\<PLUGIN>\*.wav` (DAW track WAVs)
+- Vaporizer2's mono/poly differs per patch, read from the `.vvp` file content (`m_uPolyMode`). Therefore, only patches that play chords will appear as candidates in the grid sequencer's chord lines (unreadable patches are not offered as candidates for chord lines).
+- Among Vaporizer2's factory presets, those with `MPE` in their name will not produce sound in `cmrt`. These patches are designed to use MPE (per-note pitch and pressure) performance information, which `cmrt` does not send.
+- The default category settings for filtering candidates by line usage (chord / bass / arpeggio / drum) **differ per plugin**. Surge XT uses Surge's category names, Vaporizer2 uses Vaporizer2's category names, and Dexed and non-built-in plugins use "no filtering" (meaning all programs are candidates for all lines). This is because Dexed cartridges do not follow a "directory name = usage" scheme, and the patch organization of non-built-in plugins is unknown, so no filtering is applied. If you want to change this, specify the 7 items in `[plugins.<name>]` (the generated `config.toml` includes Surge XT's default values as comments at the end).
+- The 7 usage-specific category items should also only be written within the plugin profile. For Surge XT, place them in `[plugins."Surge XT"]`; for other plugins, place them in the plugin's own table.
+- The shared mono/poly determination data (`voicing_shared_source` / `voicing_override_source`) used for usage-specific auto-selection is only applied to Surge XT patch determination.
+- Rendering result caches are stored in separate directories per plugin, so mixing them will not lead to incorrect use of sounds from different plugins (no manual deletion is needed). The two locations are as follows, where `<plugin>` is the filename (without extension) of the resolved `plugin_path` (for Windows):
+  - `%LOCALAPPDATA%\clap-mml-render-tui\notepad_cache\<plugin>\*.wav` (notepad / MML input overlay cache)
+  - `%LOCALAPPDATA%\clap-mml-render-tui\daw_cache\<plugin>\*.wav` (DAW track WAV)
 
-If `offline_render_backend = "render_server"`, the TUI side will not directly load CLAP plugins, but instead send MML to `127.0.0.1:<offline_render_server_port>/render` and receive WAVs. If the connection to the render-server fails, cmrt will launch a child process and, in case of communication errors, will restart once and retry.
+If `offline_render_backend = "render_server"`, the TUI side does not directly load CLAP plugins, but instead sends MML to `127.0.0.1:<offline_render_server_port>/render` and receives WAVs. If the connection to the render-server fails, `cmrt` will launch a child process and, in case of a communication error, restart and retry once. If `offline_render_server_command` is empty, the child process executable is searched in the order of "same directory as `cmrt.exe` → release build of sibling repo `clap-mml-play-server`", and **PATH is not consulted**.
 
 ### Update Command
 
@@ -311,8 +316,8 @@ cmrt update
 cmrt --server
 ```
 
-- Works in conjunction with the bluesky-text-to-audio Chrome extension.
-  - When an MML is found in a Bluesky post, it can be played using Surge XT.
+- Integrates with the bluesky-text-to-audio Chrome extension.
+  - When an MML snippet is found in a Bluesky post, it can be played with Surge XT.
 
 ### CLI Mode
 
@@ -326,37 +331,37 @@ cmrt cde
 cmrt CM7
 ```
 
-- Typing `CM7` will play C Major Seventh.
-- It supports various chord progression notations (some are not yet supported).
+- Typing `CM7` will play a C major seventh chord.
+- Also supports various chord progression notations (some are not yet supported).
 
-### patch-roles Command
+### patch-roles command
 
 ```
 cmrt patch-roles
 ```
 
-- Displays how many timbre candidates are available for each line (chord / bass / arpeggio / 4 drum roles / other) in the grid sequencer's PATCH wheel. The screen does not launch.
-- Use this after changing plugins, `patches_dirs`, or use-specific categories (`chord_patch_categories`, etc.), to check if the wheel is unresponsive.
-- If any line has 0 candidates, it will list that line and exit with error code 1.
-- Adding `--config <PATH>` will read from that `config.toml`. This allows you to test how configuration changes affect things without modifying your active `config.toml`.
-- When timbres from multiple plugins are listed, the output also includes a breakdown by plugin for the candidate count per use. This is to help notice if a particular plugin has no timbres available for a given line, which might not be obvious from the total count alone.
+- Displays how many patch candidates are available for selection with the PATCH column's wheel for each row of the grid sequencer (chord / bass / arpeggio / 4 drum roles / others). The screen does not launch.
+- Used to check if the wheel is unresponsive after changing plugins, `patches_dirs`, or usage-specific categories (e.g., `chord_patch_categories`).
+- If any row has 0 candidates, it will list that row and exit with code 1.
+- If `--config <path>` is specified, it reads that `config.toml`. This allows you to test how changes to settings would behave without modifying your current `config.toml`.
+- When patches from multiple plugins are available, the breakdown by plugin will also be shown for the number of candidates per usage. This is to ensure you notice if "a particular plugin has no patches available for that row," which might be missed by just the total.
 
 ```
 cmrt patch-roles --config C:\tmp\try.toml
 ```
 
-### render-mml Command
+### render-mml command
 
 ```
 cmrt render-mml --patch "AR Accent Arp.vvp"
 ```
 
-- Offline renders MML with the specified timbre and displays length, volume (`peak` / `rms`), whether it's silent, and an audio digest value on a single line. The screen does not launch.
-- While `patch-roles` counts whether a timbre appears in the list, this command checks if that timbre actually produces sound.
-- You can specify multiple `--patch` arguments. The summary line will show "different sounds N / M", allowing you to check if the sound remains the same despite changing the timbre.
-- Adding `--out-dir <DIRECTORY>` will write WAV files (otherwise, no bytes are written). Use this when you want to audition the sound.
-- Adding `--poly-check` compares playing a chord and a single note to determine if the timbre plays chords.
-- `--config <PATH>` works the same as with `patch-roles`.
+- Offline renders MML with the specified patch and displays length, volume (`peak` / `rms`), whether it's silent, and a digest value of the output sound on a single line. The screen does not launch.
+- While `patch-roles` counts whether a patch appears in the list, this command checks whether that patch actually produces sound.
+- Any number of `--patch` arguments can be specified. A summary line showing "N / M different sounds" helps you determine if the **patch was changed but the sound remained the same as before**.
+- Specifying `--out-dir <directory>` writes WAV files (otherwise, no bytes are written). Use this when you want to confirm by ear.
+- Specifying `--poly-check` compares playing chords and single notes to determine if the patch can play polyphonically.
+- `--config <path>` is the same as for `patch-roles`.
 
 ```
 cmrt render-mml --config C:\tmp\try.toml --out-dir C:\tmp\wav --patch "PD Juno Dream Pad.vvp" --poly-check
@@ -366,17 +371,17 @@ cmrt render-mml --config C:\tmp\try.toml --out-dir C:\tmp\wav --patch "PD Juno D
 - Frequent breaking changes are made daily.
 
 # Future Plans
-- It is more logical to obtain Surge XT patches via API, so this will be implemented (currently, they are inefficiently searched via toml specification. Implementation timing is deferred, prioritizing other features).
+- It is more appropriate to retrieve Surge XT patches via API, so that will be implemented (currently, they are inefficiently searched via toml specification. Implementation timing is deferred; other priorities come first).
 
 # Concept Notes
-- アトミック小節 (Atomic Measure)
+- Atomic Measure
     - Inspired by Obsidian's atomic notes.
-    - By making the unit of all processing "one-measure offline rendering,"
-    - While imposing constraints,
-    - It offers various benefits.
-    - This approach is suitable for sketching and rapid editing cycles.
-    - For more serious editing, existing feature-rich DAWs would be more suitable.
-    - ※ Note: As "atomic measure" is a term in physics, for now, the Japanese term "アトミック小節" will be retained without direct English translation.
+    - By making the unit of all processing 'offline rendering of a single measure',
+    - while accepting constraints,
+    - various benefits can be gained.
+    - This is suitable for sketching and rapid editing cycles.
+    - For more serious editing, existing feature-rich DAWs would be more appropriate.
+    - * `atomic measure` could be misinterpreted as a term in physics, so for now, I will keep it as 'アトミック小節' (Atomic Measure) without directly translating it.
 
 # Out of Scope
-- Effects, requiring mandatory editing, are deliberately treated as out of scope and deferred to a much later stage. One reason for this is that in Surge XT, patches inherently include effects (effects are derived from patches).
+- Effects, being essential for editing, are intentionally deemed out of scope and pushed far back in priority. One reason for this is that Surge XT's patches include effects (effects are derived from patches).
