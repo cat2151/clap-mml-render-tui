@@ -11,8 +11,8 @@
 //! 境界にだけ残す。
 //!
 //! instrument の後段に挿す effect の catalog と entry（[`EffectPlugins`]）も同じ手元で
-//! 持ち回る。in-process でレンダリングできる経路なら effect も鳴らせ、そうでない経路
-//! （render server backend / テスト）では chain 付きの MML をエラーにする。
+//! 持ち回る。in-process / render server のどちらのバックエンドでも effect は鳴らせ、
+//! そうでない経路（テスト）だけ chain 付きの MML をエラーにする。
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};

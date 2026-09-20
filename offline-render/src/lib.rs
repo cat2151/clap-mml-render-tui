@@ -18,12 +18,11 @@ use hound::SampleFormat;
 
 use render_server::RenderServerSupervisor;
 
-mod effect_plugins;
 mod in_process;
 mod plugin_entries;
 mod render_server;
 
-pub use effect_plugins::EffectPlugins;
+pub use cmrt_core::EffectPlugins;
 pub use in_process::InProcessPlugins;
 pub use plugin_entries::PluginEntries;
 

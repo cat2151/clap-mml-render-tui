@@ -131,5 +131,5 @@ PATH 解決があったころの罠は「debug が静かに選ばれる」だっ
 - supervisor はサーバーが落ちたら起こし直す。**解決は起動時の 1 度だけ**なので、
   起こし直しでも同じ実体が選ばれる（途中で入れ替わると、画面に出した profile が嘘になる）
 - 2 repo 横断のローカルビルド（`scripts/cross_repo_local.py`）とは**別の話**。あれは Rust の依存解決、これは実行するバイナリの選択
-- **`offline_render_server_command`（render server 側）は今回の対象外。**
-  あちらは同じ形の PATH 解決を残している。直すなら別 ADR
+- **`offline_render_server_command`（render server 側）は [0023](0023-render-server-binary-resolution.md) で
+  同じ探索本体（`cmrt-runtime::resolve_sibling_binary`）を使う形に揃えた。** PATH は見ない

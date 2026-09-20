@@ -39,17 +39,17 @@ DAW の track に挿す CLAP effect（TONE3000 / Surge XT Effects）は、その
 ## offline render 側の置き方
 
 - effect plugin の entry は instrument の entry 表（[0009](0009-offline-entry-map.md)）と**別の表**
-  （`offline-render/src/effect_plugins.rs`）。instrument の「音色無指定なら先頭」の規則を effect に
-  効かせないため
+  （play-server `core-lib/src/effect_plugins.rs` の `EffectPlugins`。TUI はそれをそのまま使う）。
+  instrument の「音色無指定なら先頭」の規則を effect に効かせないため
 - catalog の走査も DLL のロードも、**最初に要るときまで遅らせて以後は保持**する。effect が無い環境で
   起動を待たせないため
-- render-server backend（`offline_render_backend = "render_server"`）は effect を持たない。その経路に
-  chain 付きの cell が来たら render は**エラー**で止まり、overlay は開かず log に 1 行出す。
-  DAW で effect を使うには `in_process` にする
+- `render_server` backend では play server が同じ `EffectPlugins` を持ち、chain 付きの cell も
+  `in_process` と同じく鳴る（TUI `docs/adr/0023-render-server-binary-resolution.md`）。TUI は
+  `x` overlay の一覧表示のために `EffectPlugins::discover()` を呼ぶだけで、render 自体は
+  play server 側に委ねる
 
 ## 残している論点
 
-- render-server backend への effect（足すなら別途）
 - keyboard / grid sequencer / MML overlay での effect。データの形はこの ADR のままでよい
 - リバーブの尻尾は cell の長さで切れる（render を延長していない）
 
@@ -60,6 +60,6 @@ DAW の track に挿す CLAP effect（TONE3000 / Surge XT Effects）は、その
 | `cmrt-daw` `mml::effect_chain::tests::reads_the_chain_in_order_without_interpreting_it` | TUI が要素を解釈し始めた |
 | `cmrt-daw` `mml::effect_chain::tests::writing_an_empty_chain_removes_the_key` | 空配列が残り、`{}` の init セルが増える |
 | `cmrt-daw` `mml::tests::build_cell_mml_keeps_the_effect_chain_array_from_the_init_cell` | render に渡る cell MML から chain が落ちた |
-| `cmrt-daw` `input::tests::effect_chain::x_does_not_open_on_a_route_without_effects` | render-server backend で書けてしまい、render がエラーになる |
+| `cmrt-daw` `input::tests::effect_chain::x_does_not_open_on_a_route_without_effects` | effect を持たない経路（テスト用）で書けてしまう |
 | `cmrt-offline-render` `tests::effect_chain::a_chain_is_rejected_on_a_route_without_effects` | effect を持たない経路が chain を黙って dry で通した |
 | `cmrt-render-core` `mml_with_resolved_embedded_patch_keeps_the_effect_chain` | 音色の解決で chain のキーが落ちた |

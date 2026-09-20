@@ -155,7 +155,7 @@ instrument（音色）の後段に、TONE3000 / Surge XT Effects のfactory pres
 | `ESC` | 変更を捨てて閉じます |
 
 - chainはinit列のJSONの`"effects after instrument"`（配列の順＝信号の順）に保存されます。init列を直接編集しても同じです
-- effectはcache WAVに焼き込まれます。`offline_render_backend`が`in_process`のときだけ効きます（`render_server`ではeffect付きのcellがレンダリングエラーになります）
+- effectはcache WAVに焼き込まれます。`offline_render_backend`が`in_process`・`render_server`のどちらでも効きます
 - 各effectのpresetは組み込みの既定の置き場（`%ProgramData%\TONE3000\Presets`、`%ProgramData%\Surge XT\fx_presets`）から読みます。pluginが無ければ候補に出ません
 - chainは音符と同じ長さだけ回すので、リバーブの尻尾はcellの末尾で切れます
 
@@ -312,7 +312,7 @@ patches_dirs = ['D:\Vaporizer2\Presets']
   - `%LOCALAPPDATA%\clap-mml-render-tui\notepad_cache\<プラグイン>\*.wav`（notepad / MML入力overlay のキャッシュ）
   - `%LOCALAPPDATA%\clap-mml-render-tui\daw_cache\<プラグイン>\*.wav`（DAW のトラックWAV）
 
-`offline_render_backend = "render_server"` にすると、TUI側はCLAPプラグインを直接ロードせず、`127.0.0.1:<offline_render_server_port>/render` にMMLを送ってWAVを受け取ります。render-serverへの接続に失敗した場合、cmrtは子プロセスを起動し、通信エラー時は一度だけ再起動して再試行します。
+`offline_render_backend = "render_server"` にすると、TUI側はCLAPプラグインを直接ロードせず、`127.0.0.1:<offline_render_server_port>/render` にMMLを送ってWAVを受け取ります。render-serverへの接続に失敗した場合、cmrtは子プロセスを起動し、通信エラー時は一度だけ再起動して再試行します。子プロセスの実体は`offline_render_server_command`が空なら「`cmrt.exe`と同じディレクトリ→兄弟repo `clap-mml-play-server`のreleaseビルド」の順で探し、**PATHは見ません**。
 
 ### updateコマンド
 

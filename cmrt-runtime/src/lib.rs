@@ -3,6 +3,7 @@ mod defaults;
 mod paths;
 mod plugin_identity;
 mod plugin_profile;
+mod sibling_binary;
 
 pub use cmrt_server_config::PRIMARY_PLUGIN_PROFILE_NAME;
 pub use core_config::{
@@ -21,6 +22,10 @@ pub use plugin_identity::{
     VAPORIZER2_PLUGIN_ID,
 };
 pub use plugin_profile::{apply_primary_plugin_profile, builtin_plugin_profiles, PluginProfile};
+pub use sibling_binary::{
+    not_found_lines, resolve_sibling_binary, ResolvedSiblingBinary, SiblingBinarySource,
+    PLAY_SERVER_REPO_DIR_NAME,
+};
 
 // サーバー側の既定値（port と worker 数）は play server repo 側が単一ソース。
 pub use cmrt_server_config::{

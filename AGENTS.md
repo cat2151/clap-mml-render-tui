@@ -25,14 +25,15 @@ The setup script installs the Linux packages needed for this workspace's `rodio`
 - テストサブモジュールの下にさらにサブモジュールを掘る「分割の分割」を避け、親のtestsディレクトリ直下へフラットに置く
 
 # その他
+- `../clap-mml-play-server/` との横断開発は `python scripts/cross_repo_local.py on` で開始すること。offは人間が担当（server側push、のちTUI側commitでhookで自動off）
+- logは %LOCALAPPDATA%\clap-mml-render-tui\log にある
+- 意図しない実行中serverを検出したらtaskkillすること
 - デバウンス禁止
 - cat2151のライブラリは、「revision固定を禁止。さらに、古い lock を放置せず最新 HEAD へ追従すること」
-- `../clap-mml-play-server/` との横断開発は `python scripts/cross_repo_local.py on` で開始すること。offは人間が担当（server側push、のちTUI側commitでhookで自動off）
 - issue-notes/は更新を禁止
 - README.mdは更新禁止。README.ja.mdから生成されるので。
 - handoff資料を作るときは、project rootに書く（docs/ではなく）
 - ./target/release に clap-mml-realtime-play-server.exe をアドホックにcpすることを禁止（根が深いトラブルの温床になった）。
-- 意図しない実行中serverを検出したらtaskkillすること
 - ビルドロック回避を含め、`--target-dir`等で既定以外のtargetディレクトリを作成・使用することを禁止
 
 # 完了時

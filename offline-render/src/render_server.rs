@@ -1,7 +1,7 @@
 use std::{
     io::{BufRead as _, BufReader, Read},
     net::{SocketAddr, TcpStream},
-    process::{Child, Command, Stdio},
+    process::{Child, ExitStatus, Stdio},
     sync::{
         atomic::{AtomicU64, Ordering},
         Mutex,
@@ -16,18 +16,30 @@ use super::{
     RENDER_SERVER_CONNECT_TIMEOUT, RENDER_SERVER_PATCH_NAME, RENDER_SERVER_PATH,
     RENDER_SERVER_START_POLL_INTERVAL, RENDER_SERVER_START_TIMEOUT,
 };
+use command_resolution::{resolve_render_server_command, ResolvedRenderServerCommand};
+
+mod command_resolution;
 
 const EXIT_ON_STDIN_CLOSE_ENV: &str = "CMRT_RENDER_SERVER_EXIT_ON_STDIN_CLOSE";
+/// `1` なら transport error でも render-server を kill せず、その render を失敗させて
+/// プロセスを生かしたままにする（診断用。生かした pid にデバッガやダンプツールを当てる）。
+const NEVER_KILL_ENV: &str = "CMRT_RENDER_SERVER_NEVER_KILL";
 
 pub(super) struct RenderServerSupervisor {
     port: u16,
-    command: String,
+    /// 起動コマンドの解決結果。**supervisor 生成時の 1 度だけ**決める（ADR 0017 と同じ。
+    /// 起こし直しで実体が変わらない）。見つからなければ `Err`（探した場所の説明）を持ち、
+    /// spawn のたびにそれを返す。PATH へは絶対に落ちない。
+    resolved_command: Result<ResolvedRenderServerCommand, String>,
     expected_sample_rate: u32,
     agent: ureq::Agent,
     state: Mutex<RenderServerState>,
     next_request_id: AtomicU64,
+    never_kill: bool,
     #[cfg(test)]
     spawn_count: AtomicU64,
+    #[cfg(test)]
+    restart_count: AtomicU64,
 }
 
 #[derive(Default)]
@@ -53,15 +65,26 @@ impl RenderServerSupervisor {
                 .http_status_as_error(false)
                 .build(),
         );
+        let resolved_command = resolve_render_server_command(&cfg.offline_render_server_command);
+        if let Ok(resolved) = &resolved_command {
+            log_offline_render_event(format!(
+                "render-server: exe={} (source={})",
+                resolved.describe(),
+                resolved.source_label()
+            ));
+        }
         Self {
             port: cfg.offline_render_server_port,
-            command: cfg.offline_render_server_command.clone(),
+            resolved_command,
             expected_sample_rate: cfg.sample_rate as u32,
             agent,
             state: Mutex::new(RenderServerState::default()),
             next_request_id: AtomicU64::new(1),
+            never_kill: never_kill_requested(),
             #[cfg(test)]
             spawn_count: AtomicU64::new(0),
+            #[cfg(test)]
+            restart_count: AtomicU64::new(0),
         }
     }
 
@@ -75,6 +98,7 @@ impl RenderServerSupervisor {
         let mut retry = 0;
         loop {
             let server_generation = self.ensure_started()?;
+            let sent_at = Instant::now();
             match self.send_once(mml) {
                 Ok(samples) => {
                     return Ok(OfflineRenderOutput {
@@ -86,7 +110,8 @@ impl RenderServerSupervisor {
                 Err(RenderRequestError::Transport(message)) => {
                     retry += 1;
                     log_offline_render_event(format!(
-                        "backend=render_server request_id={request_id} retry={retry} transport_error=\"{}\"",
+                        "backend=render_server request_id={request_id} retry={retry} generation={server_generation} elapsed_ms={} transport_error=\"{}\"",
+                        sent_at.elapsed().as_millis(),
                         truncate_for_log(&message, 160)
                     ));
                     self.recover_after_transport_failure(server_generation)?;
@@ -112,6 +137,18 @@ impl RenderServerSupervisor {
         self.drop_exited_child_locked(&mut state)?;
 
         if state.generation == failed_generation {
+            if self.never_kill {
+                let pid = state.child.as_ref().map(Child::id);
+                log_offline_render_event(format!(
+                    "backend=render_server event=never-kill-hold pid={} generation={}",
+                    pid.map_or_else(|| "none".to_string(), |pid| pid.to_string()),
+                    state.generation
+                ));
+                anyhow::bail!(
+                    "render-server との通信に失敗しましたが {NEVER_KILL_ENV}=1 のため kill せず生かしています (pid={})",
+                    pid.map_or_else(|| "none".to_string(), |pid| pid.to_string())
+                );
+            }
             self.restart_locked(&mut state)?;
         } else if state.child.is_none() && !self.port_accepts_connections() {
             self.spawn_child_locked(&mut state)?;
@@ -121,6 +158,8 @@ impl RenderServerSupervisor {
     }
 
     fn restart_locked(&self, state: &mut RenderServerState) -> Result<()> {
+        #[cfg(test)]
+        self.restart_count.fetch_add(1, Ordering::Relaxed);
         stop_child(state.child.take());
         self.bump_generation_locked(state);
         self.spawn_child_locked(state)
@@ -164,11 +203,18 @@ impl RenderServerSupervisor {
         let Some(child) = state.child.as_mut() else {
             return Ok(());
         };
-        if child
+        let pid = child.id();
+        if let Some(status) = child
             .try_wait()
             .with_context(|| "render-server child status check failed")?
-            .is_some()
         {
+            // 通常終了（コード 0）以外は、クラッシュの直接証拠（exit code）として残す。
+            // Windows では access violation 等の NTSTATUS がそのまま code に反映されることが多い
+            // （例: STATUS_ACCESS_VIOLATION = 0xC0000005 → code=-1073741819）。
+            log_offline_render_event(format!(
+                "backend=render_server event=server-exited pid={pid} {}",
+                exit_status_log_fields(&status)
+            ));
             state.child = None;
             self.bump_generation_locked(state);
         }
@@ -240,7 +286,11 @@ impl RenderServerSupervisor {
         #[cfg(test)]
         self.spawn_count.fetch_add(1, Ordering::Relaxed);
 
-        let mut command = self.build_command();
+        let resolved = match &self.resolved_command {
+            Ok(resolved) => resolved,
+            Err(message) => return Err(anyhow!(message.clone())),
+        };
+        let mut command = resolved.build_command();
         command
             .env(EXIT_ON_STDIN_CLOSE_ENV, "1")
             .stdin(Stdio::piped())
@@ -249,7 +299,7 @@ impl RenderServerSupervisor {
         let mut child = command.spawn().map_err(|error| {
             anyhow!(
                 "render-server の起動に失敗しました (command: {}): {}",
-                self.command_description(),
+                resolved.describe(),
                 error
             )
         })?;
@@ -258,27 +308,6 @@ impl RenderServerSupervisor {
             spawn_render_server_stderr_logger(stderr, pid);
         }
         Ok(child)
-    }
-
-    fn build_command(&self) -> Command {
-        let trimmed = self.command.trim();
-        if !trimmed.is_empty() {
-            return shell_command(trimmed);
-        }
-
-        if let Some(path) = sibling_render_server_path() {
-            return Command::new(path);
-        }
-        Command::new(default_render_server_executable_name())
-    }
-
-    fn command_description(&self) -> String {
-        let trimmed = self.command.trim();
-        if trimmed.is_empty() {
-            default_render_server_executable_name().to_string()
-        } else {
-            trimmed.to_string()
-        }
     }
 
     #[cfg(test)]
@@ -290,6 +319,27 @@ impl RenderServerSupervisor {
     fn spawn_count_for_test(&self) -> u64 {
         self.spawn_count.load(Ordering::Relaxed)
     }
+
+    #[cfg(test)]
+    fn restart_count_for_test(&self) -> u64 {
+        self.restart_count.load(Ordering::Relaxed)
+    }
+
+    #[cfg(test)]
+    fn set_never_kill_for_test(&mut self, never_kill: bool) {
+        self.never_kill = never_kill;
+    }
+
+    /// 子が終了していれば `server-exited` を exit code つきでログに出す。
+    #[cfg(test)]
+    fn log_child_status_for_test(&self) {
+        let mut state = self.state.lock().unwrap();
+        let _ = self.drop_exited_child_locked(&mut state);
+    }
+}
+
+fn never_kill_requested() -> bool {
+    std::env::var_os(NEVER_KILL_ENV).as_deref() == Some(std::ffi::OsStr::new("1"))
 }
 
 fn spawn_render_server_stderr_logger(stderr: impl Read + Send + 'static, pid: u32) {
@@ -317,6 +367,20 @@ fn spawn_render_server_stderr_logger(stderr: impl Read + Send + 'static, pid: u3
     }
 }
 
+/// exit status を人が読める形（成功可否・code・16進）にする。
+/// Windows の異常終了は code に NTSTATUS がそのまま入ることが多く、16進のほうが
+/// STATUS_ACCESS_VIOLATION (0xC0000005) 等の既知の値と照合しやすい。
+fn exit_status_log_fields(status: &ExitStatus) -> String {
+    match status.code() {
+        Some(code) => format!(
+            "success={} code={code} code_hex=0x{:08X}",
+            status.success(),
+            code as u32
+        ),
+        None => format!("success={} code=none", status.success()),
+    }
+}
+
 fn render_server_stderr_log_message(pid: u32, line: &str) -> String {
     format!(
         "backend=render_server event=server-stderr pid={pid} line=\"{}\"",
@@ -332,100 +396,28 @@ impl Drop for RenderServerSupervisor {
     }
 }
 
+/// 子を止め、回収した exit status を残す。
+///
+/// `exited_before_kill=true` なら、こちらが kill する前にプロセスは既に終わっていた
+/// （`server-exited` のログを出す前に transport error 側が先に走った）ということで、
+/// その `code` はクラッシュの exit code そのもの。`false` なら kill によるもの。
 fn stop_child(child: Option<Child>) {
     let Some(mut child) = child else {
         return;
     };
-    if child.try_wait().ok().flatten().is_none() {
+    let pid = child.id();
+    let exited_before_kill = child.try_wait().ok().flatten().is_some();
+    if !exited_before_kill {
         let _ = child.kill();
     }
-    let _ = child.wait();
-}
-
-fn sibling_render_server_path() -> Option<std::path::PathBuf> {
-    let current_exe = std::env::current_exe().ok()?;
-    let sibling = current_exe
-        .parent()?
-        .join(default_render_server_executable_name());
-    sibling.is_file().then_some(sibling)
-}
-
-fn default_render_server_executable_name() -> &'static str {
-    if cfg!(windows) {
-        "clap-mml-render-server.exe"
-    } else {
-        "clap-mml-render-server"
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn shell_command(command: &str) -> Command {
-    let mut cmd = Command::new("cmd");
-    cmd.arg("/C").arg(command);
-    cmd
-}
-
-#[cfg(not(target_os = "windows"))]
-fn shell_command(command: &str) -> Command {
-    let mut cmd = Command::new("sh");
-    cmd.arg("-c").arg(command);
-    cmd
+    let status = child
+        .wait()
+        .map(|status| exit_status_log_fields(&status))
+        .unwrap_or_else(|error| format!("wait_error={error:?}"));
+    log_offline_render_event(format!(
+        "backend=render_server event=server-stopped pid={pid} exited_before_kill={exited_before_kill} {status}"
+    ));
 }
 
 #[cfg(test)]
-mod tests {
-    use std::net::TcpListener;
-
-    use super::*;
-
-    fn supervisor_for_listening_port(listener: &TcpListener) -> RenderServerSupervisor {
-        let port = listener.local_addr().unwrap().port();
-        let cfg: Config = toml::from_str(&format!(
-            r#"
-plugin_path = "dummy.clap"
-input_midi = "input.mid"
-output_midi = "output.mid"
-output_wav = "output.wav"
-sample_rate = 48000
-buffer_size = 512
-offline_render_backend = "render_server"
-offline_render_server_port = {port}
-offline_render_server_command = "exit 0"
-"#
-        ))
-        .unwrap();
-        RenderServerSupervisor::new(&cfg)
-    }
-
-    #[test]
-    fn stale_transport_failure_reuses_newer_generation_without_restart() {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let supervisor = supervisor_for_listening_port(&listener);
-        supervisor.set_generation_for_test(2);
-
-        let generation = supervisor.recover_after_transport_failure(1).unwrap();
-
-        assert_eq!(generation, 2);
-        assert_eq!(supervisor.spawn_count_for_test(), 0);
-    }
-
-    #[test]
-    fn current_generation_transport_failure_restarts_server() {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let supervisor = supervisor_for_listening_port(&listener);
-        supervisor.set_generation_for_test(7);
-
-        let generation = supervisor.recover_after_transport_failure(7).unwrap();
-
-        assert!(generation > 7);
-        assert_eq!(supervisor.spawn_count_for_test(), 1);
-    }
-
-    #[test]
-    fn render_server_stderr_is_formatted_for_the_app_log() {
-        assert_eq!(
-            render_server_stderr_log_message(42, "11 helper files excluded"),
-            "backend=render_server event=server-stderr pid=42 line=\"11 helper files excluded\""
-        );
-    }
-}
+mod tests;

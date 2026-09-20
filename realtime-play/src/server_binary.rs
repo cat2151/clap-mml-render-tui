@@ -16,13 +16,7 @@ use std::{
     time::SystemTime,
 };
 
-use cmrt_runtime::PlayServerLaunch;
-
-/// 兄弟 repo（play server 側）のディレクトリ名。
-///
-/// 既存の python スクリプト（`scripts/capture_daw_live_mix.py` の `PLAY_SERVER_ROOT`）と
-/// 同じ規則。綴りを変えるときは両方を揃えること。
-const PLAY_SERVER_REPO_DIR_NAME: &str = "clap-mml-play-server";
+use cmrt_runtime::{PlayServerLaunch, PLAY_SERVER_REPO_DIR_NAME};
 
 /// 新しさの判定で見るファイル数の上限。
 ///
@@ -170,12 +164,11 @@ impl ServerBinary {
 
     /// 見つからなかったことを説明する行。エラー文にも UI にもこれを流す。
     pub fn not_found_lines(searched: &[String]) -> Vec<String> {
-        let mut lines = vec![format!(
-            "play server の実体が見つかりません（{}）",
-            default_realtime_play_server_executable_name()
-        )];
-        lines.extend(searched.iter().map(|place| format!("探した場所: {place}")));
-        lines
+        cmrt_runtime::not_found_lines(
+            "play server",
+            default_realtime_play_server_executable_name(),
+            searched,
+        )
     }
 }
 
@@ -227,31 +220,24 @@ pub(crate) fn resolve_with(
         None => {}
     }
 
-    let mut searched = Vec::new();
-
-    let sibling = current_exe.and_then(sibling_server_path);
-    if let Some(path) = sibling {
-        if path.is_file() {
-            return ServerBinary::Resolved(resolved_path(&path, ServerSource::SiblingDirectory));
+    match cmrt_runtime::resolve_sibling_binary(
+        current_exe,
+        default_realtime_play_server_executable_name(),
+        PLAY_SERVER_REPO_DIR_NAME,
+    ) {
+        Ok(resolved) => {
+            let source = match resolved.source {
+                cmrt_runtime::SiblingBinarySource::SiblingDirectory => {
+                    ServerSource::SiblingDirectory
+                }
+                cmrt_runtime::SiblingBinarySource::SiblingRepoRelease => {
+                    ServerSource::PlayServerRepoRelease
+                }
+            };
+            ServerBinary::Resolved(resolved_path(&resolved.path, source))
         }
-        searched.push(format!("{} (cmrt と同じディレクトリ)", path.display()));
+        Err(searched) => ServerBinary::NotFound { searched },
     }
-
-    let repo_release = current_exe.and_then(play_server_repo_release_path);
-    if let Some(path) = repo_release {
-        if path.is_file() {
-            return ServerBinary::Resolved(resolved_path(
-                &path,
-                ServerSource::PlayServerRepoRelease,
-            ));
-        }
-        searched.push(format!("{} (兄弟 repo の release)", path.display()));
-    }
-
-    if searched.is_empty() {
-        searched.push("(cmrt 自身の場所が取れませんでした)".to_owned());
-    }
-    ServerBinary::NotFound { searched }
 }
 
 fn resolved_path(path: &Path, source: ServerSource) -> ResolvedServer {
@@ -357,39 +343,6 @@ fn is_source_file(path: &Path) -> bool {
         return false;
     };
     name == "Cargo.toml" || name == "Cargo.lock" || name.ends_with(".rs")
-}
-
-fn sibling_server_path(current_exe: &Path) -> Option<PathBuf> {
-    Some(
-        current_exe
-            .parent()?
-            .join(default_realtime_play_server_executable_name()),
-    )
-}
-
-/// 兄弟 repo の release ビルドのパス。
-///
-/// 「この repo の親 / clap-mml-play-server」。repo root は `cmrt.exe` の場所から求めるが、
-/// **`target/debug` か `target/release` に置かれているときだけ**遡る。
-/// つまりこの経路は開発ビルドのときにしか効かず、配布物では必ず 2 番（同じディレクトリ）で決まる。
-fn play_server_repo_release_path(current_exe: &Path) -> Option<PathBuf> {
-    let profile_dir = current_exe.parent()?;
-    if !matches!(profile_dir.file_name()?.to_str()?, "debug" | "release") {
-        return None;
-    }
-    let target_dir = profile_dir.parent()?;
-    if target_dir.file_name()?.to_str()? != "target" {
-        return None;
-    }
-    let repo_root = target_dir.parent()?;
-    Some(
-        repo_root
-            .parent()?
-            .join(PLAY_SERVER_REPO_DIR_NAME)
-            .join("target")
-            .join("release")
-            .join(default_realtime_play_server_executable_name()),
-    )
 }
 
 /// パスと経路から profile を決める。**画面もログもここだけを通る。**

@@ -192,10 +192,19 @@ fn run() -> Result<()> {
     } else {
         Vec::new()
     };
-    let plugin_entries = if matches!(action, CliAction::Tui)
-        && cfg.offline_render_backend == config::OfflineRenderBackend::InProcess
-    {
-        cmrt_offline_render::PluginEntries::pending()
+    let plugin_entries = if matches!(action, CliAction::Tui) {
+        match cfg.offline_render_backend {
+            // in-process バックエンドは cache worker が entry をロードするまで未完成のまま渡す。
+            config::OfflineRenderBackend::InProcess => {
+                cmrt_offline_render::PluginEntries::pending()
+            }
+            // render server backend は instrument の entry を持たないが、EFFECT CHAIN overlay
+            // （`x`）が catalog を一覧できるよう effect だけは discover する。
+            config::OfflineRenderBackend::RenderServer => {
+                cmrt_offline_render::PluginEntries::none()
+                    .with_effects(cmrt_offline_render::EffectPlugins::discover())
+            }
+        }
     } else if !catalog.is_empty() {
         cmrt_offline_render::PluginEntries::from_loaded(catalog, &entries)
     } else {

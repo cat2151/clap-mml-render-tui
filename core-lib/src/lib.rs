@@ -9,6 +9,7 @@ pub use clap_mml_play_server_core::pipeline::{
     mml_to_smf_bytes, play_samples, write_wav, EffectEntryLoader, RenderEffects, RenderOptions,
     RenderPreroll,
 };
+pub use clap_mml_play_server_core::EffectPlugins;
 pub use clap_mml_play_server_core::PatchVoicing as AdapterPatchVoicing;
 pub use clap_mml_play_server_core::{
     builtin_effect_plugins, effect_chain_spec_from_embedded_json, embedded_json_has_effect_chain,

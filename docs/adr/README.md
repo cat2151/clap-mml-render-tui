@@ -38,6 +38,7 @@ play-server 側（プラグインの実測仕様・実行時の設計）は
 | [0020](0020-chord-chart-does-not-interpret-strings.md) | chord chart 画面は文字列を解釈しない |
 | [0021](0021-bass-may-double-the-lowest-chord-note.md) | auto voicing の Bass は chord layer の最低音と unison になってよい |
 | [0022](0022-effect-chain-in-init-json.md) | effect chain は init JSON の `"effects after instrument"` に持ち、TUI は解釈しない |
+| [0023](0023-render-server-binary-resolution.md) | render-server の実体も play server と同じ順で探し、PATH を見ない |
 
 ## 未解決として残している論点
 
