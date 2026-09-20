@@ -165,10 +165,32 @@ pub(super) fn draw_help(
                     .add_modifier(Modifier::BOLD),
             )),
             Line::from("  j/k, ↓/↑ : 段の移動"),
-            Line::from("  a        : preset 一覧から chain 末尾へ追加（j/k で選び Enter、ESC で戻る）"),
-            Line::from("  dd       : 現在の段を削除"),
+            Line::from("  PageUp/PageDown : 段を10移動、Home/End : 先頭/末尾"),
+            Line::from(
+                "  a        : preset 一覧から chain 末尾へ追加（role/list 2 pane、Enter、ESC で戻る）",
+            ),
+            Line::from("  dd       : 現在の段を削除して preview"),
+            Line::from("  b        : 現在の段の bypass を切り替えて preview"),
+            Line::from("  Alt+↑/↓  : 現在の段を上下に並べ替えて preview"),
+            Line::from("  Space    : 編集中 chain（bypass 反映）で現在 meas. を preview"),
             Line::from("  Enter    : init 列へ書き戻して閉じる（cache を再 render）"),
             Line::from("  ESC      : 破棄して閉じる"),
+            Line::from(""),
+            Line::from(Span::styled(
+                "EFFECT CHAIN add overlay (x → a)",
+                Style::default()
+                    .fg(MONOKAI_YELLOW)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from("  h/l, ←/→ : role pane / list pane"),
+            Line::from("  j/k, ↓/↑ : focus 中の pane を移動して preview"),
+            Line::from("  PageUp/PageDown/Home/End : focus 中の pane を大移動して preview"),
+            Line::from("  /        : list を絞り込み（Enter=確定、ESC=編集前へ戻す）"),
+            Line::from(
+                "  Space    : 編集中 chain + list カーソルの preset を末尾に足して preview（移動時も自動）",
+            ),
+            Line::from("  Enter    : list カーソルの preset を chain 末尾へ追加して戻る"),
+            Line::from("  ESC      : 追加せず chain 一覧へ戻る"),
             Line::from(""),
             Line::from(Span::styled(
                 "  [ESC] でキャンセル",

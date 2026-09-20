@@ -1,13 +1,16 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::Style,
+    style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
     Frame,
 };
 
 use super::{
-    super::{overlays::effect_stage_label, DawApp, DawMode},
+    super::{
+        overlays::{effect_stage_label, EffectAddPane},
+        DawApp, DawMode,
+    },
     MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY,
 };
 use crate::messages::effect_chain as message;
@@ -51,20 +54,23 @@ pub(super) fn draw_effect_chain(f: &mut Frame, app: &DawApp, area: Rect) {
         chunks[0],
     );
 
+    if app.mode == DawMode::EffectChainAdd {
+        draw_add_panes(f, app, chunks[1]);
+    } else {
+        draw_chain_list(f, app, chunks[1]);
+    }
+
+    f.render_widget(
+        Paragraph::new(footer).style(Style::default().fg(MONOKAI_CYAN)),
+        chunks[2],
+    );
+}
+
+/// chain 一覧（mode `EffectChain`）の 1 列 List。
+fn draw_chain_list(f: &mut Frame, app: &DawApp, area: Rect) {
+    let state = &app.overlays.effect_chain;
     let catalog = app.effect_plugins.catalog();
-    let (items, selected): (Vec<ListItem<'static>>, Option<usize>) = if app.mode
-        == DawMode::EffectChainAdd
-    {
-        let presets = catalog.map(|catalog| catalog.presets()).unwrap_or_default();
-        (
-            presets
-                .iter()
-                .enumerate()
-                .map(|(index, preset)| list_item(preset.display.clone(), index == state.add_cursor))
-                .collect(),
-            (!presets.is_empty()).then_some(state.add_cursor),
-        )
-    } else if state.chain.is_empty() {
+    let (items, selected): (Vec<ListItem<'static>>, Option<usize>) = if state.chain.is_empty() {
         let notice = if app.effect_preset_count() == 0 {
             message::NO_PRESETS
         } else {
@@ -92,12 +98,122 @@ pub(super) fn draw_effect_chain(f: &mut Frame, app: &DawApp, area: Rect) {
     };
     let mut list_state = ListState::default();
     list_state.select(selected);
-    f.render_stateful_widget(List::new(items), chunks[1], &mut list_state);
+    f.render_stateful_widget(List::new(items), area, &mut list_state);
+}
 
-    f.render_widget(
-        Paragraph::new(footer).style(Style::default().fg(MONOKAI_CYAN)),
-        chunks[2],
+/// 追加 overlay（mode `EffectChainAdd`）の query 欄 + role / list 2 pane。
+fn draw_add_panes(f: &mut Frame, app: &DawApp, area: Rect) {
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(1)])
+        .split(area);
+
+    let add = &app.overlays.effect_chain.add;
+    let catalog = app.effect_plugins.catalog();
+
+    let query_title = if add.filter_active {
+        message::ADD_QUERY_TITLE_EDITING
+    } else {
+        message::ADD_QUERY_TITLE
+    };
+    let query_border = if add.filter_active {
+        MONOKAI_CYAN
+    } else {
+        MONOKAI_FG
+    };
+    let query_widget = cmrt_tui_core::text_input::build_query_textarea_widget(
+        &add.query_textarea,
+        &add.query,
+        query_title,
+        message::ADD_QUERY_PLACEHOLDER,
+        query_border,
     );
+    f.render_widget(&query_widget, sections[0]);
+    if add.filter_active {
+        f.set_cursor_position(
+            cmrt_tui_core::text_input::single_line_textarea_cursor_position(
+                sections[0],
+                &query_widget,
+            ),
+        );
+    }
+
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
+        .split(sections[1]);
+
+    let role_items: Vec<ListItem<'static>> = add
+        .roles
+        .iter()
+        .enumerate()
+        .map(|(index, role)| list_item(role.clone(), index == add.role_cursor))
+        .collect();
+    let mut role_state = ListState::default();
+    role_state.select((!add.roles.is_empty()).then_some(add.role_cursor));
+    f.render_stateful_widget(
+        List::new(role_items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" role ")
+                .border_style(
+                    Style::default().fg(pane_border_color(add.focus, EffectAddPane::Roles)),
+                ),
+        ),
+        panes[0],
+        &mut role_state,
+    );
+
+    // 左列 plugin 名の幅は catalog 内の最長 plugin 名に揃える。
+    let plugin_name_width = catalog
+        .map(|catalog| {
+            catalog
+                .plugins()
+                .iter()
+                .map(|plugin| plugin.name.chars().count())
+                .max()
+                .unwrap_or(0)
+        })
+        .unwrap_or(0);
+    let list_items: Vec<ListItem<'static>> = add
+        .list
+        .iter()
+        .enumerate()
+        .map(|(index, &preset_index)| {
+            let text = catalog
+                .and_then(|catalog| catalog.presets().get(preset_index))
+                .map(|preset| {
+                    let plugin_name = catalog
+                        .and_then(|catalog| catalog.plugin(&preset.plugin).ok())
+                        .map_or("", |plugin| plugin.name.as_str());
+                    format!("{plugin_name:<plugin_name_width$}  {}", preset.name)
+                })
+                .unwrap_or_default();
+            list_item(text, index == add.list_cursor)
+        })
+        .collect();
+    let mut list_state = ListState::default();
+    list_state.select((!add.list.is_empty()).then_some(add.list_cursor));
+    f.render_stateful_widget(
+        List::new(list_items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" list ")
+                .border_style(
+                    Style::default().fg(pane_border_color(add.focus, EffectAddPane::List)),
+                ),
+        ),
+        panes[1],
+        &mut list_state,
+    );
+}
+
+fn pane_border_color(focus: EffectAddPane, pane: EffectAddPane) -> Color {
+    if focus == pane {
+        MONOKAI_CYAN
+    } else {
+        MONOKAI_FG
+    }
 }
 
 fn list_item(text: String, is_selected: bool) -> ListItem<'static> {

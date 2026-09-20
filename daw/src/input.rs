@@ -99,6 +99,29 @@ impl DawApp {
         Self::build_patch_json_with_filter_query(patch_name, None)
     }
 
+    /// `init_cell` の音色を差し替えた init セル。
+    ///
+    /// 音色以外のキー（chord 行からの生成、effect chain）と JSON の後ろの MML は残す。
+    /// init を丸ごと `{"Surge XT patch": ...}` に書き換えると、それらが音色変更で消える。
+    ///
+    /// `filter_query` が `None` なら filter キーは触らない（preview 用。打鍵ごとに MML が
+    /// 変わると preview cache に当たらない）。`Some` なら書き換え、空なら消す
+    /// （[`Self::build_patch_json_with_filter_query`] と同じ）。
+    fn init_cell_with_patch(
+        init_cell: &str,
+        patch_name: &str,
+        filter_query: Option<&str>,
+    ) -> String {
+        let mut entries = vec![(PATCH_JSON_KEY, Some(Value::String(patch_name.to_string())))];
+        if let Some(filter_query) = filter_query {
+            let filter_query = Some(filter_query.trim())
+                .filter(|query| !query.is_empty())
+                .map(|query| Value::String(query.to_string()));
+            entries.push((PATCH_FILTER_QUERY_JSON_KEY, filter_query));
+        }
+        crate::mml::init_cell_with_json_values(init_cell, &entries)
+    }
+
     fn build_patch_json_with_filter_query(patch_name: &str, filter_query: Option<&str>) -> String {
         let mut patch_json = serde_json::json!({ PATCH_JSON_KEY: patch_name });
         if let Some(filter_query) = filter_query

@@ -324,3 +324,58 @@ fn handle_patch_select_left_in_filter_query_does_not_repreview() {
 
 mod catalog_snapshot;
 mod filter_input;
+
+/// 音色以外のキー（chord 行からの生成、effect chain）と JSON の後ろの MML は、
+/// 音色を変えても preview・確定の両方で残る。
+#[test]
+fn handle_patch_select_keeps_other_init_keys_in_preview_and_on_enter() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
+    let (mut app, _cache_rx) = build_test_app();
+    app.editor.cursor_track = 2;
+    app.editor.cursor_measure = 1;
+    app.editor.data[crate::CHORD_TRACK][1] = "IIm7".to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","generate from chord track":"close","effects after instrument":[{"Test FX preset":"Hall"}]}v100"#.to_string();
+    app.editor.data[2][1] = String::new();
+    app.overlays.patch_select.all = vec![
+        ("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string()),
+        ("Bass Soft 1.fxp".to_string(), "bass soft 1.fxp".to_string()),
+    ];
+    app.overlays.patch_select.filtered = app
+        .overlays
+        .patch_select
+        .all
+        .iter()
+        .map(|(name, _)| name.clone())
+        .collect();
+    app.mode = DawMode::PatchSelect;
+
+    app.handle_patch_select(KeyCode::Char('j'));
+
+    let preview_mml = app.playback.measure_track_mmls.lock().unwrap()[0][2].clone();
+    let (preview_json, preview_phrase) =
+        DawApp::extract_patch_json_and_phrase(&preview_mml).unwrap();
+    assert_eq!(preview_json["Surge XT patch"], "Bass Soft 1.fxp");
+    assert_eq!(preview_json["generate from chord track"], "close");
+    assert_eq!(
+        preview_json["effects after instrument"],
+        serde_json::json!([{"Test FX preset": "Hall"}])
+    );
+    assert_ne!(
+        preview_phrase, "c",
+        "chord 行から生成される小節を fallback で潰してはいけない"
+    );
+    assert!(preview_phrase.starts_with("v100"), "{preview_phrase:?}");
+
+    app.handle_patch_select(KeyCode::Enter);
+
+    assert!(matches!(app.mode, DawMode::Normal));
+    let (init_json, init_body) =
+        DawApp::extract_patch_json_and_phrase(&app.editor.data[2][0]).unwrap();
+    assert_eq!(init_json["Surge XT patch"], "Bass Soft 1.fxp");
+    assert_eq!(init_json["generate from chord track"], "close");
+    assert_eq!(
+        init_json["effects after instrument"],
+        serde_json::json!([{"Test FX preset": "Hall"}])
+    );
+    assert_eq!(init_body, "v100");
+}

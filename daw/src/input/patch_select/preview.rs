@@ -2,8 +2,6 @@ use super::{
     build_cell_mml_from_data, DawApp, DawPatchSelectPane, DawPlayState, FIRST_PLAYABLE_TRACK,
 };
 
-const PATCH_SELECT_PREVIEW_FALLBACK_PHRASE: &str = "c";
-
 impl DawApp {
     fn patch_select_patch_name_for_selection(
         &self,
@@ -30,11 +28,18 @@ impl DawApp {
         self.editor.cursor_measure.max(1).min(self.editor.measures)
     }
 
-    fn patch_select_preview_phrase(&self, target_measure: usize) -> String {
-        match self.editor.data[self.editor.cursor_track][target_measure].trim() {
-            "" => PATCH_SELECT_PREVIEW_FALLBACK_PHRASE.to_string(),
-            phrase => phrase.to_string(),
-        }
+    /// cursor track の init セルの音色を `patch_name` に差し替えたもの。
+    /// `filter_query` は Enter の確定だけ渡す（[`DawApp::init_cell_with_patch`]）。
+    pub(super) fn patch_select_init_with_patch(
+        &self,
+        patch_name: &str,
+        filter_query: Option<&str>,
+    ) -> String {
+        Self::init_cell_with_patch(
+            &self.editor.data[self.editor.cursor_track][0],
+            patch_name,
+            filter_query,
+        )
     }
 
     fn patch_select_preview_track_mmls(
@@ -51,9 +56,13 @@ impl DawApp {
         let measure_index = target_measure.checked_sub(1)?;
 
         let mut preview_data = self.preview_grid_for_cursor_track();
-        preview_data[FIRST_PLAYABLE_TRACK][0] = Self::build_patch_json(&selected_patch_name);
-        preview_data[FIRST_PLAYABLE_TRACK][target_measure] =
-            self.patch_select_preview_phrase(target_measure);
+        preview_data[FIRST_PLAYABLE_TRACK][0] =
+            self.patch_select_init_with_patch(&selected_patch_name, None);
+        crate::mml::fill_preview_fallback_phrase(
+            &mut preview_data,
+            FIRST_PLAYABLE_TRACK,
+            target_measure,
+        );
 
         let mut track_mmls = self.build_measure_track_mmls_for_measure(target_measure);
         track_mmls[self.editor.cursor_track] = build_cell_mml_from_data(

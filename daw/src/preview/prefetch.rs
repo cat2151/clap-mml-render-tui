@@ -14,11 +14,33 @@ impl DawApp {
         item_count: usize,
         page_size: usize,
         preferred_delta: Option<isize>,
+        preview_for_index: F,
+    ) where
+        F: FnMut(usize) -> Option<(usize, Vec<String>)>,
+    {
+        self.prefetch_preview_navigation_cache_with_gains(
+            self.playback_track_gains(),
+            current,
+            item_count,
+            page_size,
+            preferred_delta,
+            preview_for_index,
+        );
+    }
+
+    /// `track_gains` は overlay preview cache のキーに入るので、実際に再生するときと
+    /// 同じものを渡すこと（違うと prefetch した結果が使われない）。
+    pub(crate) fn prefetch_preview_navigation_cache_with_gains<F>(
+        &self,
+        track_gains: Vec<f32>,
+        current: usize,
+        item_count: usize,
+        page_size: usize,
+        preferred_delta: Option<isize>,
         mut preview_for_index: F,
     ) where
         F: FnMut(usize) -> Option<(usize, Vec<String>)>,
     {
-        let track_gains = self.playback_track_gains();
         let predicted_indices = match preferred_delta {
             Some(delta) if delta == 1 || delta == -1 => {
                 cmrt_tui_core::navigation::predicted_navigation_indices_with_direction_bias(

@@ -1,6 +1,13 @@
 use cmrt_core::AudioEffectCatalog;
 use serde_json::Value;
 
+mod add;
+
+pub(crate) use add::{DawEffectAddState, EffectAddPane};
+
+/// `PageDown`/`PageUp` の 1 回あたりの移動段数。chain 一覧・追加 overlay の両方で使う。
+pub(crate) const PAGE_STEP: isize = 10;
+
 /// EFFECT CHAIN overlay の編集中の状態。Enter まで init セルには書かない。
 #[derive(Default)]
 pub(crate) struct DawEffectChainOverlayState {
@@ -15,8 +22,8 @@ pub(crate) struct DawEffectChainOverlayState {
     pub(crate) cursor: usize,
     /// `dd` の 1 打目を受けた。
     pub(crate) pending_delete: bool,
-    /// 追加 overlay で選んでいる catalog の preset。
-    pub(crate) add_cursor: usize,
+    /// 追加 overlay（`a`）の role/list 2 pane 状態。
+    pub(crate) add: DawEffectAddState,
 }
 
 impl DawEffectChainOverlayState {
@@ -27,7 +34,7 @@ impl DawEffectChainOverlayState {
             chain,
             cursor: 0,
             pending_delete: false,
-            add_cursor: 0,
+            add: DawEffectAddState::default(),
         }
     }
 
@@ -48,6 +55,35 @@ impl DawEffectChainOverlayState {
         self.cursor = self.cursor.min(self.chain.len().saturating_sub(1));
         true
     }
+
+    /// カーソル段の bypass を toggle する。chain が空なら何もせず `false` を返す。
+    pub(crate) fn toggle_bypass_at_cursor(&mut self) -> bool {
+        let Some(stage) = self.chain.get(self.cursor) else {
+            return false;
+        };
+        let bypassed = crate::mml::effect_chain::stage_is_bypassed(stage);
+        let next = crate::mml::effect_chain::stage_with_bypass(stage, !bypassed);
+        self.chain[self.cursor] = next;
+        true
+    }
+
+    /// カーソル段を `delta` 段だけ動かす（swap）。カーソルも付いていく。
+    /// 端を越える移動は何もせず `false` を返す。
+    pub(crate) fn move_stage(&mut self, delta: isize) -> bool {
+        let len = self.chain.len();
+        if len == 0 {
+            return false;
+        }
+        let Some(target) = self.cursor.checked_add_signed(delta) else {
+            return false;
+        };
+        if target >= len {
+            return false;
+        }
+        self.chain.swap(self.cursor, target);
+        self.cursor = target;
+        true
+    }
 }
 
 pub(crate) fn clamped_index(index: usize, delta: isize, len: usize) -> usize {
@@ -58,16 +94,24 @@ pub(crate) fn clamped_index(index: usize, delta: isize, len: usize) -> usize {
 }
 
 /// chain の 1 段を overlay に出す語。catalog にあれば `display`、無ければ JSON のまま
-/// （何が書かれているか見えないと消す判断ができない）。
+/// （何が書かれているか見えないと消す判断ができない）。bypass 段は前に `[bypass] ` を付ける。
 pub(crate) fn effect_stage_label(stage: &Value, catalog: Option<&AudioEffectCatalog>) -> String {
     let known = stage.as_object().and_then(|object| {
-        if object.len() != 1 {
+        let mut plugin_keys = object
+            .iter()
+            .filter(|(key, _)| key.as_str() != cmrt_core::EFFECT_STAGE_BYPASS_JSON_KEY);
+        let (json_key, value) = plugin_keys.next()?;
+        if plugin_keys.next().is_some() {
             return None;
         }
-        let (json_key, value) = object.iter().next()?;
         let value = value.as_str()?;
         let preset = catalog?.find(json_key, value).ok()?;
         Some(preset.display.clone())
     });
-    known.unwrap_or_else(|| stage.to_string())
+    let label = known.unwrap_or_else(|| stage.to_string());
+    if crate::mml::effect_chain::stage_is_bypassed(stage) {
+        format!("[bypass] {label}")
+    } else {
+        label
+    }
 }

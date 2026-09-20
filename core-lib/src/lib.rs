@@ -13,7 +13,7 @@ pub use clap_mml_play_server_core::PatchVoicing as AdapterPatchVoicing;
 pub use clap_mml_play_server_core::{
     builtin_effect_plugins, effect_chain_spec_from_embedded_json, embedded_json_has_effect_chain,
     AudioEffectCatalog, AudioEffectPluginInfo, AudioEffectPreset, EffectChainSpec, EffectStageSpec,
-    EFFECT_CHAIN_JSON_KEY,
+    EFFECT_CHAIN_JSON_KEY, EFFECT_STAGE_BYPASS_JSON_KEY,
 };
 pub use clap_mml_play_server_core::{midi, patch_list, CoreConfig};
 pub use clap_mml_play_server_core::{

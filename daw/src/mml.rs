@@ -8,6 +8,9 @@ use serde_json::{Map, Value};
 pub(super) mod chord_generation;
 pub(super) mod effect_chain;
 mod fragment;
+mod preview_grid;
+
+pub(crate) use preview_grid::fill_preview_fallback_phrase;
 
 // ─── 純粋関数（テスト用） ──────────────────────────────────────
 
@@ -332,20 +335,6 @@ pub(super) fn build_measure_mml_from_data(
 
 impl DawApp {
     // ─── MML 構築 ─────────────────────────────────────────────
-
-    /// overlay の preview 用に、conductor 行・chord 行・カーソル track だけを抜き出した
-    /// 縮小グリッドを作る。
-    ///
-    /// **行の並びは本物のグリッドと同じにすること。** `build_cell_mml_from_data` は
-    /// 行 index で行の役割（conductor / chord 行 / 演奏 track）を判断するので、
-    /// 詰めて並べると別の役割の行として解釈される。
-    pub(super) fn preview_grid_for_cursor_track(&self) -> Vec<Vec<String>> {
-        let mut grid: Vec<Vec<String>> = (0..FIRST_PLAYABLE_TRACK)
-            .map(|track| self.editor.data[track].clone())
-            .collect();
-        grid.push(self.editor.data[self.editor.cursor_track].clone());
-        grid
-    }
 
     pub(super) fn build_measure_track_mmls_for_measure(&self, measure: usize) -> Vec<String> {
         (0..self.editor.tracks)

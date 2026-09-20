@@ -1,27 +1,53 @@
 use super::*;
+use crate::overlays::EffectAddPane;
 use cmrt_core::{AudioEffectCatalog, AudioEffectPluginInfo, AudioEffectPreset};
 use cmrt_offline_render::EffectPlugins;
 use serde_json::json;
 
 const INIT_WITH_PATCH: &str = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#;
 
-/// マシンに依存しない、手で並べた catalog（plugin 1 つ、preset 2 つ）。
+/// マシンに依存しない、手で並べた catalog（plugin 2 つ、role 付き）。
+///
+/// `Hall`（role `Reverb 1`）は追加 overlay の selector から外れる（`EXCLUDED_ROLES`）。
+/// 残る候補は catalog 登録順で `Echo`（Delay）、`Room`（Reverb 2）、`Clean`（Amp Simulator）。
 fn test_catalog() -> AudioEffectCatalog {
-    let plugin = AudioEffectPluginInfo::new(
+    let fx_plugin = AudioEffectPluginInfo::new(
         "Test FX",
         "/clap/does-not-exist.clap",
         "org.example.fx",
         "/presets/does-not-exist",
     );
-    let preset = |value: &str| AudioEffectPreset {
-        plugin: plugin.key.clone(),
-        json_key: plugin.json_key.clone(),
+    let amp_plugin = AudioEffectPluginInfo::new(
+        "Test Amp",
+        "/clap/does-not-exist-amp.clap",
+        "org.example.amp",
+        "/presets/does-not-exist-amp",
+    );
+    let fx_preset = |value: &str, role: &str| AudioEffectPreset {
+        plugin: fx_plugin.key.clone(),
+        json_key: fx_plugin.json_key.clone(),
         value: value.to_string(),
         display: format!("Test FX: {value}"),
+        name: value.to_string(),
+        role: role.to_string(),
         path: std::path::PathBuf::from(format!("/presets/does-not-exist/{value}")),
     };
-    let presets = vec![preset("Hall"), preset("Room")];
-    AudioEffectCatalog::with_entries(vec![plugin], presets)
+    let amp_preset = |value: &str| AudioEffectPreset {
+        plugin: amp_plugin.key.clone(),
+        json_key: amp_plugin.json_key.clone(),
+        value: value.to_string(),
+        display: format!("Test Amp: {value}"),
+        name: value.to_string(),
+        role: "Amp Simulator".to_string(),
+        path: std::path::PathBuf::from(format!("/presets/does-not-exist-amp/{value}")),
+    };
+    let presets = vec![
+        fx_preset("Hall", "Reverb 1"),
+        fx_preset("Echo", "Delay"),
+        fx_preset("Room", "Reverb 2"),
+        amp_preset("Clean"),
+    ];
+    AudioEffectCatalog::with_entries(vec![fx_plugin, amp_plugin], presets)
 }
 
 fn app_with_catalog() -> (DawApp, std::sync::mpsc::Receiver<crate::CacheJob>) {
@@ -40,8 +66,12 @@ fn press(app: &mut DawApp, keys: &[KeyCode]) {
             DawMode::Normal => {
                 app.handle_normal(key);
             }
-            DawMode::EffectChain => app.handle_effect_chain(key),
-            DawMode::EffectChainAdd => app.handle_effect_chain_add(key),
+            DawMode::EffectChain => {
+                app.handle_effect_chain(KeyEvent::new(key, KeyModifiers::NONE));
+            }
+            DawMode::EffectChainAdd => {
+                app.handle_effect_chain_add(KeyEvent::new(key, KeyModifiers::NONE));
+            }
             other => panic!("unexpected mode {other:?} before {key:?}"),
         }
     }
@@ -241,3 +271,8 @@ fn the_overlay_shows_the_instrument_and_the_existing_chain_in_order() {
         r#"{"Unknown preset":"x"}"#
     );
 }
+
+mod add;
+mod filter;
+mod preview;
+mod reorder;

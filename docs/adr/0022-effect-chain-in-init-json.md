@@ -14,12 +14,14 @@ DAW の track に挿す CLAP effect（TONE3000 / Surge XT Effects）は、その
 {"Surge XT patch": "patches_factory/Pads/Pad 1.fxp",
  "effects after instrument": [
    {"TONE3000 preset": "Bogner Fullstack"},
-   {"Surge XT Effects preset": "Reverb 1/Cathedral 2.srgfx"}
+   {"Surge XT Effects preset": "Reverb 1/Cathedral 2.srgfx", "bypass": true}
  ]}
 ```
 
 - 配列の順 = 信号の順（instrument → 先頭 → … → 末尾）
-- 各要素は**キー 1 つのオブジェクト**。キーが plugin を、値が preset を決める
+- 各要素は**plugin を決めるキー 1 つ＋任意の `bypass`** を持つオブジェクト。キーが plugin を、値が
+  preset を決める。`bypass` が `true` の段は render に渡す前に chain から落ちる（`apply` 自体は
+  無変更のまま）。TUI が読み書きするのは `bypass` キーだけで、他のキーの意味は解釈しない
 - キーの綴りも値の形も play server の catalog（`AudioEffectCatalog`）が持つ。TUI は catalog が返した
   `(json_key, value)` をそのまま書き、読むときも要素を値のまま出し入れする（`daw/src/mml/effect_chain.rs`）。
   **TUI に plugin 名で分岐するコードを置かない**（[0013](0013-server-owned-audio-plugin-abstraction.md)）

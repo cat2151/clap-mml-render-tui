@@ -305,7 +305,7 @@ impl DawApp {
             }
             KeyCode::Enter => {
                 if let Some(selected_patch_name) = self.patch_select_selected_patch_name() {
-                    let patch_json = Self::build_patch_json_with_filter_query(
+                    let patch_json = self.patch_select_init_with_patch(
                         &selected_patch_name,
                         Some(&self.overlays.patch_select.query),
                     );
