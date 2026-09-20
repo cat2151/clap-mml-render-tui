@@ -78,6 +78,7 @@ fn spawn_patch_loader(
                             ));
                         }
                     }
+                    log_effect_catalog(&plugin_entries);
                 }
             }
             Err(e) => {
@@ -94,6 +95,20 @@ fn spawn_patch_loader(
         }
     });
     patch_load_state
+}
+
+/// effect の catalog を先に走査しておき、件数を log.txt へ残す。
+/// ここで走査しないと最初のセル render がその分だけ遅れる。
+fn log_effect_catalog(plugin_entries: &PluginEntries) {
+    let Some(catalog) = plugin_entries.effects().catalog() else {
+        return;
+    };
+    crate::logging::global_log_sink(&format!(
+        "effect-catalog: plugins={} presets={} skipped={}",
+        catalog.plugins().len(),
+        catalog.presets().len(),
+        catalog.skipped().len()
+    ));
 }
 
 /// cache読み込み結果と、cache構築時に保存されたcatalog注記をlog.txtへ残す。

@@ -4,7 +4,8 @@
 「なぜそうしなかったのか」が残っていないと将来復元できないものだけを置いている。
 
 0001〜0015 は CLAP プラグイン抽象化と Surge XT / Dexed / Vaporizer2 / Sforzando の混在、
-0016〜0019 は DAW の live 演奏と daily キャッシュ、0020〜0021 は chord chart 画面と auto voicing。
+0016〜0019 は DAW の live 演奏と daily キャッシュ、0020〜0021 は chord chart 画面と auto voicing、
+0022 は DAW の effect chain。
 利用者向けの現行仕様は `README.ja.md` にある。
 
 ここに載っている実装はすべて完了済み。
@@ -36,6 +37,7 @@ play-server 側（プラグインの実測仕様・実行時の設計）は
 | [0019](0019-investigation-stage-acceptance.md) | 調査 Stage は受け入れ条件の外に主張を置かない |
 | [0020](0020-chord-chart-does-not-interpret-strings.md) | chord chart 画面は文字列を解釈しない |
 | [0021](0021-bass-may-double-the-lowest-chord-note.md) | auto voicing の Bass は chord layer の最低音と unison になってよい |
+| [0022](0022-effect-chain-in-init-json.md) | effect chain は init JSON の `"effects after instrument"` に持ち、TUI は解釈しない |
 
 ## 未解決として残している論点
 

@@ -18,10 +18,12 @@ use hound::SampleFormat;
 
 use render_server::RenderServerSupervisor;
 
+mod effect_plugins;
 mod in_process;
 mod plugin_entries;
 mod render_server;
 
+pub use effect_plugins::EffectPlugins;
 pub use in_process::InProcessPlugins;
 pub use plugin_entries::PluginEntries;
 
@@ -80,8 +82,9 @@ impl OfflineRenderer {
         match self.backend.as_ref() {
             OfflineRendererBackend::InProcess(plugins) => {
                 let (entry, core_cfg) = plugins.for_mml(mml)?;
-                let (samples, patch_name) =
-                    mml_render_with_probe(mml, &core_cfg, &entry, probe_context)?;
+                let (samples, patch_name) = plugins.effects().with_render_effects(|effects| {
+                    mml_render_with_probe(mml, &core_cfg, &entry, probe_context, effects)
+                })?;
                 Ok(OfflineRenderOutput {
                     samples,
                     patch_name,
@@ -116,7 +119,9 @@ impl OfflineRenderer {
                 PreparedOfflineRender::InProcess { prepared, plugin },
             ) => {
                 let entry = plugins.entry(&plugin)?;
-                render_prepared_cache_with_probe(prepared, &entry, probe_context)
+                plugins.effects().with_render_effects(|effects| {
+                    render_prepared_cache_with_probe(prepared, &entry, probe_context, effects)
+                })
             }
             (
                 OfflineRendererBackend::RenderServer { supervisor },

@@ -87,6 +87,7 @@ pub(super) fn draw_help(
             Line::from("  i / Ctrl+P : MML / chord 入力オーバーレイ（1 行モード）"),
             Line::from("  a      : off → start固定/end追従 → end固定 → off"),
             Line::from("  m      : mixer overlay"),
+            Line::from("  x      : effect chain overlay（演奏 track の init に effect を直列で挿す）"),
             Line::from("  dd     : 現在セルを yank して空にする（patch history 保存）"),
             Line::from("  p      : yank 内容で現在セルを上書き（上書き前は patch history 保存）"),
             Line::from("  u      : 直前の p / G を 1 回だけ取り消す"),
@@ -156,6 +157,18 @@ pub(super) fn draw_help(
             Line::from("  h/l, ←/→ : track 移動"),
             Line::from("  j/k, ↓/↑ : volume -/+3dB"),
             Line::from("  ESC      : 閉じる"),
+            Line::from(""),
+            Line::from(Span::styled(
+                "EFFECT CHAIN overlay (x)",
+                Style::default()
+                    .fg(MONOKAI_YELLOW)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from("  j/k, ↓/↑ : 段の移動"),
+            Line::from("  a        : preset 一覧から chain 末尾へ追加（j/k で選び Enter、ESC で戻る）"),
+            Line::from("  dd       : 現在の段を削除"),
+            Line::from("  Enter    : init 列へ書き戻して閉じる（cache を再 render）"),
+            Line::from("  ESC      : 破棄して閉じる"),
             Line::from(""),
             Line::from(Span::styled(
                 "  [ESC] でキャンセル",

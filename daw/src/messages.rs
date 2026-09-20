@@ -3,4 +3,5 @@
 //! スキーマ識別子、MML、内部ログ、検証条件に密着したエラーは対象外とし、
 //! UI で直接表示する文言とその組み立てだけを責務別にまとめる。
 
+pub(crate) mod effect_chain;
 pub(crate) mod project;

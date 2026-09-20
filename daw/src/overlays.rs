@@ -1,8 +1,10 @@
+mod effect_chain;
 mod history;
 mod mixer;
 mod patch_select;
 mod project;
 
+pub(crate) use effect_chain::{clamped_index, effect_stage_label, DawEffectChainOverlayState};
 pub(crate) use history::DawHistoryOverlayState;
 pub(crate) use mixer::DawMixerOverlayState;
 pub(crate) use patch_select::DawPatchSelectOverlayState;
@@ -10,6 +12,7 @@ pub(crate) use project::DawProjectOverlayState;
 
 pub(crate) struct DawOverlays {
     pub(crate) mixer: DawMixerOverlayState,
+    pub(crate) effect_chain: DawEffectChainOverlayState,
     pub(crate) history: DawHistoryOverlayState,
     pub(crate) patch_select: DawPatchSelectOverlayState,
     pub(crate) project: DawProjectOverlayState,
@@ -20,6 +23,7 @@ impl DawOverlays {
     pub(crate) fn new(mixer_cursor_track: usize) -> Self {
         Self {
             mixer: DawMixerOverlayState::new(mixer_cursor_track),
+            effect_chain: DawEffectChainOverlayState::default(),
             history: DawHistoryOverlayState::new(),
             patch_select: DawPatchSelectOverlayState::new(),
             project: DawProjectOverlayState::new(),

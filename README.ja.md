@@ -56,6 +56,9 @@ cmrt --play-server "X:/projects/clap-mml-play-server/target/debug/clap-mml-realt
 - Vaporizer2
 - Floe
 - Sforzando
+- effect（DAW の track に直列で挿せます）
+  - TONE3000
+  - Surge XT Effects
 
 ### AI生成ドキュメント
 - 以降、AIが追記した部分が読みづらいです。ときどきメンテしていきます
@@ -136,6 +139,25 @@ section 1つから始めます（抽選できなければ空のままです）�
 待たされます（待ち時間は log.txt の
 `chord-chart: event=catalog-first-load elapsed_ms=...` に残ります）。取得できていないときは
 画面下段に「コード進行データがありません」と出ます。
+
+### DAW画面のeffect chain
+
+DAW画面のNORMALモードで、演奏trackにカーソルを置いて`x`を押すと、そのtrackのEFFECT CHAIN overlayが開きます。
+instrument（音色）の後段に、TONE3000 / Surge XT Effects のfactory presetを直列で何段でも挿せます。
+
+| キー | 動作 |
+|---|---|
+| `x` | カーソルtrackのEFFECT CHAIN overlayを開きます（chord行・conductor行では無効） |
+| `j` `k` | chainの段を移動します |
+| `a` | 追加overlayを開きます。全effectの全factory presetが1列に並ぶので`j` `k`で選び、`Enter`で末尾へ追加、`ESC`で戻ります |
+| `dd` | カーソルの段を削除します |
+| `Enter` | init列のJSONへ書き戻して閉じます（そのtrackのcache WAVが再レンダリングされます） |
+| `ESC` | 変更を捨てて閉じます |
+
+- chainはinit列のJSONの`"effects after instrument"`（配列の順＝信号の順）に保存されます。init列を直接編集しても同じです
+- effectはcache WAVに焼き込まれます。`offline_render_backend`が`in_process`のときだけ効きます（`render_server`ではeffect付きのcellがレンダリングエラーになります）
+- 各effectのpresetは組み込みの既定の置き場（`%ProgramData%\TONE3000\Presets`、`%ProgramData%\Surge XT\fx_presets`）から読みます。pluginが無ければ候補に出ません
+- chainは音符と同じ長さだけ回すので、リバーブの尻尾はcellの末尾で切れます
 
 ### 設定
 

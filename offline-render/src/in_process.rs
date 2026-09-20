@@ -112,6 +112,11 @@ impl InProcessPlugins {
         self.entries.entry(key)
     }
 
+    /// instrument の後段に挿す effect の catalog と entry。
+    pub(crate) fn effects(&self) -> &crate::EffectPlugins {
+        self.entries.effects()
+    }
+
     fn loaded_catalog(&self) -> Result<&crate::plugin_entries::LoadedPluginEntries> {
         #[cfg(test)]
         if let Some(catalog) = &self.catalog_override {

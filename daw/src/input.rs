@@ -5,6 +5,7 @@ use serde_json::Value;
 #[cfg(test)]
 use std::time::Instant;
 
+mod effect_chain;
 mod history;
 mod insert;
 mod mixer;

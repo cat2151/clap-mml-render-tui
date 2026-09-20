@@ -1,5 +1,6 @@
 //! DAW モードの描画
 
+mod effect_chain;
 mod grid;
 mod help;
 mod history;
@@ -163,6 +164,9 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
     if app.mode == DawMode::Help {
         match app.help_origin {
             DawMode::Mixer => mixer::draw_mixer(f, app, inner),
+            DawMode::EffectChain | DawMode::EffectChainAdd => {
+                effect_chain::draw_effect_chain(f, app, inner)
+            }
             DawMode::History => history::draw_history(f, app, inner),
             DawMode::PatchSelect => patch_select::draw_patch_select(f, app, inner),
             DawMode::Project if app.workspace_kind == WorkspaceKind::Persistent => {
@@ -173,6 +177,8 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
         help::draw_help(f, inner, app.help_origin, app.workspace_kind);
     } else if app.mode == DawMode::Mixer {
         mixer::draw_mixer(f, app, inner);
+    } else if matches!(app.mode, DawMode::EffectChain | DawMode::EffectChainAdd) {
+        effect_chain::draw_effect_chain(f, app, inner);
     } else if app.mode == DawMode::History {
         history::draw_history(f, app, inner);
     } else if app.mode == DawMode::PatchSelect {

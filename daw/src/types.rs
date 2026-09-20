@@ -157,6 +157,10 @@ pub enum DawMode {
     History,
     PatchSelect,
     Project,
+    /// cursor track の effect chain（init 列 JSON の `"effects after instrument"`）の編集（`x`）。
+    EffectChain,
+    /// `EffectChain` から `a` で開く、chain 末尾へ足す preset の選択。
+    EffectChainAdd,
 }
 
 /// DAW editor が使用する永続化・WAV cache の領域。

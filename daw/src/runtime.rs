@@ -42,7 +42,11 @@ impl DawApp {
                 self.overlays.project.action == Some(super::DawProjectFileAction::SaveAs)
                     || self.overlays.project.filter_active
             }
-            DawMode::Normal | DawMode::Help | DawMode::Mixer => false,
+            DawMode::Normal
+            | DawMode::Help
+            | DawMode::Mixer
+            | DawMode::EffectChain
+            | DawMode::EffectChainAdd => false,
         }
     }
 
@@ -191,6 +195,8 @@ impl DawApp {
                         DawMode::Insert => self.handle_insert(key),
                         DawMode::Help => self.handle_help(key.code),
                         DawMode::Mixer => self.handle_mixer(key.code),
+                        DawMode::EffectChain => self.handle_effect_chain(key.code),
+                        DawMode::EffectChainAdd => self.handle_effect_chain_add(key.code),
                         DawMode::History => self.handle_history_overlay_key_event(key),
                         DawMode::PatchSelect => self.handle_patch_select_key_event(key),
                         DawMode::Project => self.handle_project_key_event(key),

@@ -6,9 +6,15 @@ pub use clap_mml_play_server_core::patch_list::{collect_patches, to_relative};
 pub use clap_mml_play_server_core::pipeline;
 pub use clap_mml_play_server_core::pipeline::{
     embedded_patch_ref, ensure_cmrt_dir, ensure_daw_dir, ensure_phrase_dir, mml_str_to_smf_bytes,
-    mml_to_smf_bytes, play_samples, write_wav, RenderOptions, RenderPreroll,
+    mml_to_smf_bytes, play_samples, write_wav, EffectEntryLoader, RenderEffects, RenderOptions,
+    RenderPreroll,
 };
 pub use clap_mml_play_server_core::PatchVoicing as AdapterPatchVoicing;
+pub use clap_mml_play_server_core::{
+    builtin_effect_plugins, effect_chain_spec_from_embedded_json, embedded_json_has_effect_chain,
+    AudioEffectCatalog, AudioEffectPluginInfo, AudioEffectPreset, EffectChainSpec, EffectStageSpec,
+    EFFECT_CHAIN_JSON_KEY,
+};
 pub use clap_mml_play_server_core::{host, load_entry, midi, patch_list, render, CoreConfig};
 pub use clap_mml_play_server_core::{
     patch_lookup_candidates, patch_sort_metadata, plugin_voicing_source, AudioPatch,
@@ -104,6 +110,9 @@ fn prepare_cache_render_via_queue(mml: &str, cfg: &CoreConfig) -> Result<CacheRe
 /// - ランダムパッチ選択は core 側で無効化する
 /// - 100ms preroll は core 側の `RenderOptions` で指定する
 ///
+/// 先頭 JSON の effect chain は受け付けない（chain 付きはエラー）。chain を鳴らす経路は
+/// [`mml_render_for_cache_with_probe`] に `RenderEffects` を渡す。
+///
 /// # Parameters
 /// - `mml`: レンダリング対象の MML 文字列。先頭 JSON によるパッチ指定も受け付ける。
 /// - `cfg`: レンダリング設定。JSON にパッチ指定がない場合は `cfg.patch_path` を使う。
@@ -112,11 +121,11 @@ fn prepare_cache_render_via_queue(mml: &str, cfg: &CoreConfig) -> Result<CacheRe
 /// # Returns
 /// インターリーブされたステレオ PCM サンプル列を `Vec<f32>` で返す。
 pub fn mml_render_for_cache(mml: &str, cfg: &CoreConfig, entry: &PluginEntry) -> Result<Vec<f32>> {
-    mml_render_for_cache_with_probe(mml, cfg, entry, None)
+    mml_render_for_cache_with_probe(mml, cfg, entry, None, RenderEffects::unsupported())
 }
 
 pub fn mml_render(mml: &str, cfg: &CoreConfig, entry: &PluginEntry) -> Result<(Vec<f32>, String)> {
-    mml_render_with_probe(mml, cfg, entry, None)
+    mml_render_with_probe(mml, cfg, entry, None, RenderEffects::unsupported())
 }
 
 pub fn mml_to_play(mml: &str, cfg: &CoreConfig, entry: &PluginEntry) -> Result<String> {
@@ -125,16 +134,18 @@ pub fn mml_to_play(mml: &str, cfg: &CoreConfig, entry: &PluginEntry) -> Result<S
     Ok(patch_display)
 }
 
+/// `effects` が chain を扱える経路なら、先頭 JSON の effect chain を instrument の後段に通す。
 pub fn mml_render_with_probe(
     mml: &str,
     cfg: &CoreConfig,
     entry: &PluginEntry,
     probe_context: Option<&NativeRenderProbeContext>,
+    effects: RenderEffects<'_>,
 ) -> Result<(Vec<f32>, String)> {
     let mml = mml_with_resolved_embedded_patch(mml, cfg);
     let requested_patch_path = requested_patch_path_for_render(mml.as_ref(), cfg);
     with_requested_native_render_probe(probe_context, requested_patch_path.as_deref(), || {
-        pipeline::mml_render_with_options(mml.as_ref(), cfg, entry, render_options())
+        pipeline::mml_render_with_effects(mml.as_ref(), cfg, entry, render_options(), effects)
     })
 }
 
@@ -143,24 +154,27 @@ pub fn mml_render_for_cache_with_probe(
     cfg: &CoreConfig,
     entry: &PluginEntry,
     probe_context: Option<&NativeRenderProbeContext>,
+    effects: RenderEffects<'_>,
 ) -> Result<Vec<f32>> {
     let prepared = prepare_cache_render_via_queue(mml, cfg)?;
-    render_prepared_cache_with_probe(prepared, entry, probe_context)
+    render_prepared_cache_with_probe(prepared, entry, probe_context, effects)
 }
 
 pub fn prepare_cache_render_inputs(mml: &str, cfg: &CoreConfig) -> Result<CacheRenderInputs> {
     prepare_cache_render(mml, cfg)
 }
 
+/// `effects` が chain を扱える経路なら、先頭 JSON の effect chain を instrument の後段に通す。
 pub fn render_prepared_cache_with_probe(
     prepared: CacheRenderInputs,
     entry: &PluginEntry,
     probe_context: Option<&NativeRenderProbeContext>,
+    effects: RenderEffects<'_>,
 ) -> Result<Vec<f32>> {
     let CacheRenderInputs { mml, cfg } = prepared;
     let requested_patch_path = requested_patch_path_for_render(&mml, &cfg);
     with_requested_native_render_probe(probe_context, requested_patch_path.as_deref(), || {
-        pipeline::mml_render_for_cache_with_options(&mml, &cfg, entry, render_options())
+        pipeline::mml_render_for_cache_with_effects(&mml, &cfg, entry, render_options(), effects)
     })
 }
 
@@ -186,6 +200,7 @@ fn requested_patch_path_for_render(mml: &str, cfg: &CoreConfig) -> Option<String
 /// MML 先頭 JSON の `"Surge XT patch"` を解決済みのパス
 /// （`patches_factory` 等のプレフィックス補完込み）に書き換えた MML を返す。
 /// play server など JSON 込み MML を受け取る外部プロセスへ渡す前の正規化に使う。
+/// 他のキー（effect chain など）はそのまま残す。
 pub fn mml_with_resolved_embedded_patch<'a>(mml: &'a str, cfg: &CoreConfig) -> Cow<'a, str> {
     let preprocessed = mml_preprocessor::extract_embedded_json(mml);
     let Some(resolved_patch) = extract_patch_from_json(preprocessed.embedded_json.as_deref(), cfg)

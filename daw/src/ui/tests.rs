@@ -124,6 +124,7 @@ fn render_cursor_position(app: &DawApp, width: u16, height: u16) -> Position {
 }
 
 mod draw;
+mod effect_chain;
 mod helpers;
 mod mml_overlay;
 mod overlay;

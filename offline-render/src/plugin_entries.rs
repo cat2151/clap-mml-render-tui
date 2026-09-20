@@ -9,6 +9,10 @@
 //! entry列を受け取る境界で[`cmrt_core::PluginKey`]へ変換し、レンダー中はcatalogの
 //! 並び順ではなくkeyで参照する。先頭という規則は「音色無指定時の既定」を決める
 //! 境界にだけ残す。
+//!
+//! instrument の後段に挿す effect の catalog と entry（[`EffectPlugins`]）も同じ手元で
+//! 持ち回る。in-process でレンダリングできる経路なら effect も鳴らせ、そうでない経路
+//! （render server backend / テスト）では chain 付きの MML をエラーにする。
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
@@ -17,6 +21,8 @@ use clack_host::prelude::PluginEntry;
 use cmrt_runtime::CatalogPlugin;
 use cmrt_tui_core::patch_plugins::PatchPlugins;
 
+use crate::EffectPlugins;
+
 /// ロード済み `PluginEntry` への参照をカタログの並びで持つ表。
 ///
 /// 実体を`Arc`で所有し、TUIのcache workerから一度だけ公開した後はrender worker間で
@@ -24,6 +30,7 @@ use cmrt_tui_core::patch_plugins::PatchPlugins;
 #[derive(Clone, Default)]
 pub struct PluginEntries {
     inner: Arc<PluginEntriesInner>,
+    effects: EffectPlugins,
 }
 
 #[derive(Default)]
@@ -52,6 +59,7 @@ impl PluginEntries {
         let _ = inner.set(Ok(loaded_entries(catalog, entries.to_vec())));
         Self {
             inner: Arc::new(PluginEntriesInner::Deferred(inner)),
+            effects: EffectPlugins::discover(),
         }
     }
 
@@ -59,7 +67,18 @@ impl PluginEntries {
     pub fn pending() -> Self {
         Self {
             inner: Arc::new(PluginEntriesInner::Deferred(OnceLock::new())),
+            effects: EffectPlugins::discover(),
         }
+    }
+
+    /// effect の catalog と entry を差し替える。catalog を手で並べたいテスト用。
+    pub fn with_effects(self, effects: EffectPlugins) -> Self {
+        Self { effects, ..self }
+    }
+
+    /// instrument の後段に挿す effect の catalog と entry。
+    pub fn effects(&self) -> &EffectPlugins {
+        &self.effects
     }
 
     /// workerが所有するentryを共有状態へ一度だけ公開する。

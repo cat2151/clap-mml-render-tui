@@ -370,6 +370,7 @@ impl DawApp {
                 self.mode = DawMode::Mixer;
             }
 
+            KeyCode::Char('x') => self.start_effect_chain_overlay(),
             KeyCode::Char('K') | KeyCode::Char('?') => self.enter_help(),
 
             KeyCode::Char('p') if !self.paste_yanked_measure() => {

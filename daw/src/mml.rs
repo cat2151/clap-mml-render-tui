@@ -6,6 +6,7 @@ use fragment::{append_fragment_json_values, merged_json_prefix, split_mml_fragme
 use serde_json::{Map, Value};
 
 pub(super) mod chord_generation;
+pub(super) mod effect_chain;
 mod fragment;
 
 // ─── 純粋関数（テスト用） ──────────────────────────────────────
@@ -80,6 +81,21 @@ pub(super) fn init_cell_mml_body(init_cell: &str) -> String {
 ///
 /// キー名の綴りを呼び出し側が直書きしなくて済むよう、値は `&str` で受ける。
 pub(super) fn init_cell_with_json_entries(init_cell: &str, entries: &[(&str, &str)]) -> String {
+    let values: Vec<(&str, Option<Value>)> = entries
+        .iter()
+        .map(|(key, value)| (*key, Some(Value::String((*value).to_string()))))
+        .collect();
+    init_cell_with_json_values(init_cell, &values)
+}
+
+/// [`init_cell_with_json_entries`] の、文字列以外の値（配列など）も書ける形。
+///
+/// 値が `None` のキーは消す。キーが 1 つも残らなければ JSON ごと消して body だけにする
+/// （`{}` を残すと、init 列に「音色無し」の空 JSON が見え続ける）。
+pub(super) fn init_cell_with_json_values(
+    init_cell: &str,
+    entries: &[(&str, Option<Value>)],
+) -> String {
     let fragment = split_mml_fragment(init_cell);
     let mut object = match fragment.json {
         Some(Value::Object(object)) => object,
@@ -88,7 +104,17 @@ pub(super) fn init_cell_with_json_entries(init_cell: &str, entries: &[(&str, &st
         _ => Map::new(),
     };
     for (key, value) in entries {
-        object.insert((*key).to_string(), Value::String((*value).to_string()));
+        match value {
+            Some(value) => {
+                object.insert((*key).to_string(), value.clone());
+            }
+            None => {
+                object.remove(*key);
+            }
+        }
+    }
+    if object.is_empty() {
+        return fragment.body;
     }
     format!("{}{}", Value::Object(object), fragment.body)
 }

@@ -317,3 +317,22 @@ fn the_chord_row_is_left_out_of_the_measure_mml() {
         "chord 行の init が演奏 MML に混ざっている: {mml}"
     );
 }
+
+/// overlay が init セルへ書いた chain が、render に渡す cell MML の JSON にそのまま残る。
+/// chain の解釈は play server 側なので、ここでは配列が順序ごと透過することだけを見る。
+#[test]
+fn build_cell_mml_keeps_the_effect_chain_array_from_the_init_cell() {
+    let mut data = empty_data(TRACKS, MEASURES);
+    data[0][0] = DEFAULT_TRACK0_MML.to_string();
+    data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"A preset":"1"},{"B preset":"2"}]}"#.to_string();
+    data[2][1] = "cdef".to_string();
+
+    let mml = build_cell_mml_from_data(&data, MEASURES, 2, 1);
+
+    let json = final_json(&mml);
+    assert_eq!(json["Surge XT patch"], "Pads/Pad 1.fxp");
+    assert_eq!(
+        json["effects after instrument"],
+        serde_json::json!([{"A preset": "1"}, {"B preset": "2"}])
+    );
+}

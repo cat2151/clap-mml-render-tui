@@ -2,6 +2,8 @@ use std::sync::Mutex;
 
 use super::*;
 
+mod effect_chain;
+
 fn wav_bytes_i16(sample_rate: u32, channels: u16, samples: &[i16]) -> Vec<u8> {
     let mut bytes = Vec::new();
     {

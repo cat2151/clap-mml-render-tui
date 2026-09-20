@@ -109,6 +109,7 @@ pub(crate) fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::supe
 }
 
 mod daily_project;
+mod effect_chain;
 mod history_overlay;
 mod insert;
 mod mixer;

@@ -214,6 +214,37 @@ fn mml_with_resolved_embedded_patch_keeps_core_patch_value_relative_to_base() {
     std::fs::remove_dir_all(root).ok();
 }
 
+/// 音色の書き換えは `"Surge XT patch"` だけを触り、effect chain などの他のキーは残す。
+#[test]
+fn mml_with_resolved_embedded_patch_keeps_the_effect_chain() {
+    let config = CoreConfig {
+        output_midi: "out.mid".into(),
+        output_wav: "out.wav".into(),
+        sample_rate: 44_100.0,
+        buffer_size: 512,
+        patch_path: None,
+        patches_dir: Some("/patches".into()),
+        random_patch: false,
+        ..Default::default()
+    };
+    let chain = serde_json::json!([
+        { "TONE3000 preset": "Bogner Fullstack" },
+        { "Surge XT Effects preset": "Reverb 1/Cathedral 2.srgfx" }
+    ]);
+    let mml = format!(
+        r#"{{"Surge XT patch":"Pads/Pad 1.fxp","{EFFECT_CHAIN_JSON_KEY}":{chain}}}t120o4c"#
+    );
+
+    let rewritten = mml_with_resolved_embedded_patch(&mml, &config);
+    let preprocessed = mml_preprocessor::extract_embedded_json(rewritten.as_ref());
+    let value: serde_json::Value =
+        serde_json::from_str(preprocessed.embedded_json.as_deref().unwrap()).unwrap();
+
+    assert_eq!(value.get(EFFECT_CHAIN_JSON_KEY), Some(&chain));
+    assert!(value.get("Surge XT patch").is_some());
+    assert_eq!(preprocessed.remaining_mml, "t120o4c");
+}
+
 fn native_probe_test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
