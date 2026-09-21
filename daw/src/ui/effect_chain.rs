@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
@@ -14,6 +16,7 @@ use super::{
     MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY,
 };
 use crate::messages::effect_chain as message;
+use cmrt_mml_overlay::ui::scroll_offset;
 use cmrt_tui_core::theme::cursor_highlight_style;
 
 pub(super) fn draw_effect_chain(f: &mut Frame, app: &DawApp, area: Rect) {
@@ -96,8 +99,12 @@ fn draw_chain_list(f: &mut Frame, app: &DawApp, area: Rect) {
             Some(state.cursor),
         )
     };
-    let mut list_state = ListState::default();
-    list_state.select(selected);
+    let mut list_state = scrolled_list_state(
+        selected,
+        state.chain.len(),
+        usize::from(area.height),
+        &state.scroll_offset,
+    );
     f.render_stateful_widget(List::new(items), area, &mut list_state);
 }
 
@@ -149,17 +156,15 @@ fn draw_add_panes(f: &mut Frame, app: &DawApp, area: Rect) {
         .enumerate()
         .map(|(index, role)| list_item(role.clone(), index == add.role_cursor))
         .collect();
-    let mut role_state = ListState::default();
-    role_state.select((!add.roles.is_empty()).then_some(add.role_cursor));
+    let role_block = pane_block(" role ", add.focus, EffectAddPane::Roles);
+    let mut role_state = scrolled_list_state(
+        (!add.roles.is_empty()).then_some(add.role_cursor),
+        add.roles.len(),
+        usize::from(role_block.inner(panes[0]).height),
+        add.scroll_offset(EffectAddPane::Roles),
+    );
     f.render_stateful_widget(
-        List::new(role_items).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" role ")
-                .border_style(
-                    Style::default().fg(pane_border_color(add.focus, EffectAddPane::Roles)),
-                ),
-        ),
+        List::new(role_items).block(role_block),
         panes[0],
         &mut role_state,
     );
@@ -192,20 +197,25 @@ fn draw_add_panes(f: &mut Frame, app: &DawApp, area: Rect) {
             list_item(text, index == add.list_cursor)
         })
         .collect();
-    let mut list_state = ListState::default();
-    list_state.select((!add.list.is_empty()).then_some(add.list_cursor));
+    let list_block = pane_block(" list ", add.focus, EffectAddPane::List);
+    let mut list_state = scrolled_list_state(
+        (!add.list.is_empty()).then_some(add.list_cursor),
+        add.list.len(),
+        usize::from(list_block.inner(panes[1]).height),
+        add.scroll_offset(EffectAddPane::List),
+    );
     f.render_stateful_widget(
-        List::new(list_items).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" list ")
-                .border_style(
-                    Style::default().fg(pane_border_color(add.focus, EffectAddPane::List)),
-                ),
-        ),
+        List::new(list_items).block(list_block),
         panes[1],
         &mut list_state,
     );
+}
+
+fn pane_block(title: &'static str, focus: EffectAddPane, pane: EffectAddPane) -> Block<'static> {
+    Block::default()
+        .borders(Borders::ALL)
+        .title(title)
+        .border_style(Style::default().fg(pane_border_color(focus, pane)))
 }
 
 fn pane_border_color(focus: EffectAddPane, pane: EffectAddPane) -> Color {
@@ -214,6 +224,23 @@ fn pane_border_color(focus: EffectAddPane, pane: EffectAddPane) -> Color {
     } else {
         MONOKAI_FG
     }
+}
+
+/// カーソルを上下 30% の余白の内側に保つ `ListState`。余白の規則は MML overlay と同じ。
+/// 表示先頭は `current` に覚えておき、余白に入るまで scroll しない。
+fn scrolled_list_state(
+    selected: Option<usize>,
+    total: usize,
+    visible_rows: usize,
+    current: &Cell<usize>,
+) -> ListState {
+    let offset = selected.map_or(0, |cursor| {
+        scroll_offset(cursor, total, visible_rows, current.get())
+    });
+    current.set(offset);
+    ListState::default()
+        .with_offset(offset)
+        .with_selected(selected)
 }
 
 fn list_item(text: String, is_selected: bool) -> ListItem<'static> {

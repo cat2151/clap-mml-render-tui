@@ -114,3 +114,62 @@ fn draw_shows_the_query_editing_hint_and_uses_the_textarea_cursor_while_filterin
     );
     assert!(app.uses_textarea_cursor());
 }
+
+#[test]
+fn add_list_keeps_the_cursor_inside_the_scroll_margin_and_remembers_the_offset() {
+    use cmrt_core::{AudioEffectCatalog, AudioEffectPluginInfo, AudioEffectPreset};
+
+    let plugin = AudioEffectPluginInfo::new(
+        "Test FX",
+        "/clap/does-not-exist.clap",
+        "org.example.fx",
+        "/presets/does-not-exist",
+    );
+    let presets: Vec<AudioEffectPreset> = (0..60)
+        .map(|n| AudioEffectPreset {
+            plugin: plugin.key.clone(),
+            json_key: plugin.json_key.clone(),
+            value: format!("p{n:02}"),
+            display: format!("Test FX: p{n:02}"),
+            name: format!("p{n:02}"),
+            role: "Reverb 2".to_string(),
+            path: std::path::PathBuf::from(format!("/presets/does-not-exist/p{n:02}")),
+        })
+        .collect();
+    let mut app = build_test_app();
+    app.effect_plugins = cmrt_offline_render::EffectPlugins::with_catalog(
+        AudioEffectCatalog::with_entries(vec![plugin], presets),
+    );
+    app.mode = DawMode::EffectChainAdd;
+    app.overlays.effect_chain.add =
+        crate::overlays::DawEffectAddState::open(app.effect_plugins.catalog().unwrap());
+
+    let visible_range = |app: &DawApp| {
+        let screen = render_lines(app, 120, 30).join("\n");
+        let visible: Vec<usize> = (0..60)
+            .filter(|n| screen.contains(&format!("p{n:02}")))
+            .collect();
+        (
+            *visible.first().expect("list is visible"),
+            *visible.last().expect("list is visible"),
+        )
+    };
+
+    // 下へ大きく動かすと、カーソルの下に余白ぶんの行が残る位置まで scroll する。
+    app.overlays.effect_chain.add.list_cursor = 40;
+    let (first, last) = visible_range(&app);
+    assert!(first <= 40 && 40 <= last, "visible {first}..={last}");
+    let rows = last - first + 1;
+    let margin = rows * 30 / 100;
+    assert!(margin >= 1, "rows={rows}");
+    assert_eq!(last - 40, margin, "visible {first}..={last}");
+
+    // 余白の内側へ戻るだけの移動では表示先頭を動かさない。
+    app.overlays.effect_chain.add.list_cursor = 38;
+    assert_eq!(visible_range(&app), (first, last));
+
+    // 上の余白を越えると、カーソルの上に余白ぶんの行が残る位置まで scroll する。
+    app.overlays.effect_chain.add.list_cursor = 20;
+    let (first, _) = visible_range(&app);
+    assert_eq!(20 - first, margin);
+}

@@ -65,6 +65,7 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
         cache_tx,
         cache_render_workers,
         render_queue: crate::render_queue::RenderQueue::disabled_for_tests(),
+        render_queue_status_log: crate::render_queue::RenderQueueStatusLog::default(),
         playback: crate::playback_runtime::DawPlaybackRuntime::for_test(tracks, measures),
         log_lines: Arc::new(Mutex::new(VecDeque::new())),
         track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),

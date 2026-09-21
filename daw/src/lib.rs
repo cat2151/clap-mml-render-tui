@@ -100,7 +100,7 @@ use batch_logging::{TrackRerenderBatch, TrackRerenderBatchCompletionContext};
 use editor::DawEditorState;
 use overlays::DawOverlays;
 use playback_runtime::DawPlaybackRuntime;
-use render_queue::RenderQueue;
+use render_queue::{RenderQueue, RenderQueueStatusLog};
 pub(crate) use types::{
     AbRepeatState, CacheState, CellCache, DawHistoryPane, DawMode, DawNormalAction,
     DawPatchSelectPane, DawPlayState, DawProjectFileAction, PlayPosition,
@@ -179,6 +179,8 @@ pub struct DawApp {
     cache_tx: std::sync::mpsc::Sender<CacheJob>,
     cache_render_workers: usize,
     render_queue: RenderQueue,
+    /// render queue の件数を 1 秒ごとに log へ出す状態。
+    render_queue_status_log: RenderQueueStatusLog,
 
     pub(crate) playback: DawPlaybackRuntime,
 

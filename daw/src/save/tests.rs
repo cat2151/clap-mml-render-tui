@@ -64,6 +64,7 @@ fn build_test_app(tracks: usize, measures: usize) -> DawApp {
         cache_tx,
         cache_render_workers: 2,
         render_queue: crate::render_queue::RenderQueue::disabled_for_tests(),
+        render_queue_status_log: crate::render_queue::RenderQueueStatusLog::default(),
         playback: crate::playback_runtime::DawPlaybackRuntime::for_test(tracks, measures),
         log_lines: Arc::new(Mutex::new(VecDeque::new())),
         track_rerender_batches: Arc::new(Mutex::new(vec![None; tracks])),

@@ -2,7 +2,7 @@ use std::{
     cmp::Ordering as CmpOrdering,
     collections::BinaryHeap,
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
         mpsc, Arc, Condvar, Mutex,
     },
 };
@@ -11,10 +11,66 @@ use anyhow::{anyhow, Result};
 
 use cmrt_offline_render::{OfflineRenderer, PreparedOfflineRender};
 
+mod status_log;
+
+pub(crate) use status_log::RenderQueueStatusLog;
+
 #[derive(Clone)]
 pub(super) struct RenderQueue {
     request_tx: Option<mpsc::Sender<RenderRequest>>,
     next_request_id: Arc<AtomicU64>,
+    stats: Arc<RenderQueueStats>,
+}
+
+/// submit から結果送信までの各段の件数。ログで queue の詰まり具合を見る用。
+#[derive(Default)]
+struct RenderQueueStats {
+    /// submit 済みでまだ worker が取っていない件数（`RenderPriority` の順）。
+    waiting: [AtomicUsize; 3],
+    /// worker が render 中の件数。
+    rendering: AtomicUsize,
+    completed: AtomicU64,
+    failed: AtomicU64,
+}
+
+impl RenderQueueStats {
+    fn waiting_slot(&self, priority: RenderPriority) -> &AtomicUsize {
+        &self.waiting[priority as usize]
+    }
+
+    fn snapshot(&self) -> RenderQueueSnapshot {
+        RenderQueueSnapshot {
+            waiting_high: self
+                .waiting_slot(RenderPriority::High)
+                .load(Ordering::Relaxed),
+            waiting_normal: self
+                .waiting_slot(RenderPriority::Normal)
+                .load(Ordering::Relaxed),
+            waiting_low: self
+                .waiting_slot(RenderPriority::Low)
+                .load(Ordering::Relaxed),
+            rendering: self.rendering.load(Ordering::Relaxed),
+            completed: self.completed.load(Ordering::Relaxed),
+            failed: self.failed.load(Ordering::Relaxed),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct RenderQueueSnapshot {
+    pub(super) waiting_high: usize,
+    pub(super) waiting_normal: usize,
+    pub(super) waiting_low: usize,
+    pub(super) rendering: usize,
+    pub(super) completed: u64,
+    pub(super) failed: u64,
+}
+
+impl RenderQueueSnapshot {
+    /// submit 済みで結果がまだ返っていない件数。
+    pub(super) fn in_flight(&self) -> usize {
+        self.waiting_high + self.waiting_normal + self.waiting_low + self.rendering
+    }
 }
 
 pub(super) struct RenderResult {
@@ -140,10 +196,12 @@ impl RenderQueue {
         let (request_tx, request_rx) = mpsc::channel::<RenderRequest>();
         let prepared_queue = Arc::new(PreparedRenderQueue::default());
         let renderer = OfflineRenderer::new(cfg);
+        let stats = Arc::new(RenderQueueStats::default());
 
         {
             let prepared_queue = Arc::clone(&prepared_queue);
             let renderer = renderer.clone();
+            let stats = Arc::clone(&stats);
             std::thread::spawn(move || {
                 let mut pending = BinaryHeap::<QueuedRenderRequest>::new();
                 loop {
@@ -165,6 +223,10 @@ impl RenderQueue {
                             prepared_queue.push(PreparedRenderRequest { request, prepared });
                         }
                         Err(error) => {
+                            stats
+                                .waiting_slot(request.priority)
+                                .fetch_sub(1, Ordering::Relaxed);
+                            stats.failed.fetch_add(1, Ordering::Relaxed);
                             let _ = request.response_tx.send(RenderResult {
                                 request_id: request.request_id,
                                 result: Err(error),
@@ -178,11 +240,22 @@ impl RenderQueue {
         for _ in 0..render_workers {
             let prepared_queue = Arc::clone(&prepared_queue);
             let renderer = renderer.clone();
+            let stats = Arc::clone(&stats);
             std::thread::spawn(move || loop {
                 let Some(prepared) = prepared_queue.pop() else {
                     break;
                 };
+                stats
+                    .waiting_slot(prepared.request.priority)
+                    .fetch_sub(1, Ordering::Relaxed);
+                stats.rendering.fetch_add(1, Ordering::Relaxed);
                 let result = renderer.render_prepared_cache(prepared.prepared);
+                stats.rendering.fetch_sub(1, Ordering::Relaxed);
+                if result.is_ok() {
+                    stats.completed.fetch_add(1, Ordering::Relaxed);
+                } else {
+                    stats.failed.fetch_add(1, Ordering::Relaxed);
+                }
                 let _ = prepared.request.response_tx.send(RenderResult {
                     request_id: prepared.request.request_id,
                     result,
@@ -193,7 +266,12 @@ impl RenderQueue {
         Self {
             request_tx: Some(request_tx),
             next_request_id: Arc::new(AtomicU64::new(1)),
+            stats,
         }
+    }
+
+    pub(super) fn snapshot(&self) -> RenderQueueSnapshot {
+        self.stats.snapshot()
     }
 
     #[cfg(any(test, feature = "test-support"))]
@@ -201,6 +279,7 @@ impl RenderQueue {
         Self {
             request_tx: None,
             next_request_id: Arc::new(AtomicU64::new(1)),
+            stats: Arc::new(RenderQueueStats::default()),
         }
     }
 
@@ -224,6 +303,9 @@ impl RenderQueue {
         let Some(request_tx) = &self.request_tx else {
             return Err(anyhow!("render queue is disabled"));
         };
+        self.stats
+            .waiting_slot(priority)
+            .fetch_add(1, Ordering::Relaxed);
         request_tx
             .send(RenderRequest {
                 request_id,
@@ -232,7 +314,12 @@ impl RenderQueue {
                 mml,
                 response_tx,
             })
-            .map_err(|_| anyhow!("render queue is closed"))
+            .map_err(|_| {
+                self.stats
+                    .waiting_slot(priority)
+                    .fetch_sub(1, Ordering::Relaxed);
+                anyhow!("render queue is closed")
+            })
     }
 }
 

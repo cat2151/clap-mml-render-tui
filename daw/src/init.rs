@@ -271,6 +271,7 @@ fn new_with_entry_context(
         cache_tx,
         cache_render_workers,
         render_queue,
+        render_queue_status_log: super::RenderQueueStatusLog::default(),
         playback: super::DawPlaybackRuntime::new(
             realtime_play_server,
             play_position,

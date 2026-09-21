@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use cmrt_core::AudioEffectCatalog;
 use serde_json::Value;
 
@@ -20,6 +22,8 @@ pub(crate) struct DawEffectChainOverlayState {
     /// 表示（`effect_stage_label`）と削除はできるようにしておく。
     pub(crate) chain: Vec<Value>,
     pub(crate) cursor: usize,
+    /// chain 一覧の表示先頭。描画側が上下 30% の余白の規則で更新する。
+    pub(crate) scroll_offset: Cell<usize>,
     /// `dd` の 1 打目を受けた。
     pub(crate) pending_delete: bool,
     /// 追加 overlay（`a`）の role/list 2 pane 状態。
@@ -33,6 +37,7 @@ impl DawEffectChainOverlayState {
             instrument,
             chain,
             cursor: 0,
+            scroll_offset: Cell::new(0),
             pending_delete: false,
             add: DawEffectAddState::default(),
         }

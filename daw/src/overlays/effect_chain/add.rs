@@ -1,5 +1,7 @@
 //! EFFECT CHAIN 追加 overlay（`x` → `a`）の role/list 2 pane 状態。
 
+use std::cell::Cell;
+
 use cmrt_core::AudioEffectCatalog;
 use cmrt_tui_core::text_filter;
 use ratatui_textarea::TextArea;
@@ -15,6 +17,15 @@ pub(crate) enum EffectAddPane {
     List,
 }
 
+impl EffectAddPane {
+    fn index(self) -> usize {
+        match self {
+            Self::Roles => 0,
+            Self::List => 1,
+        }
+    }
+}
+
 /// 追加 overlay（`EffectChainAdd`）の状態。開くたびに catalog から組み直す。
 pub(crate) struct DawEffectAddState {
     /// catalog の preset index。`EXCLUDED_ROLES` を除いたもの。
@@ -26,6 +37,8 @@ pub(crate) struct DawEffectAddState {
     pub(crate) list: Vec<usize>,
     pub(crate) list_cursor: usize,
     pub(crate) focus: EffectAddPane,
+    /// 各 pane の表示先頭。描画側が上下 30% の余白の規則で更新する。
+    scroll_offsets: [Cell<usize>; 2],
     /// list の絞り込み条件（空なら絞り込みなし）。
     pub(crate) query: String,
     pub(crate) query_textarea: TextArea<'static>,
@@ -42,6 +55,7 @@ impl Default for DawEffectAddState {
             list: Vec::new(),
             list_cursor: 0,
             focus: EffectAddPane::List,
+            scroll_offsets: [Cell::new(0), Cell::new(0)],
             query: String::new(),
             query_textarea: cmrt_tui_core::text_input::new_single_line_textarea(""),
             query_before_input: String::new(),
@@ -51,6 +65,10 @@ impl Default for DawEffectAddState {
 }
 
 impl DawEffectAddState {
+    pub(crate) fn scroll_offset(&self, pane: EffectAddPane) -> &Cell<usize> {
+        &self.scroll_offsets[pane.index()]
+    }
+
     pub(crate) fn open(catalog: &AudioEffectCatalog) -> Self {
         let candidates: Vec<usize> = catalog
             .presets()
