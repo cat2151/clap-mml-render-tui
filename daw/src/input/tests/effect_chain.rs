@@ -6,10 +6,12 @@ use serde_json::json;
 
 const INIT_WITH_PATCH: &str = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#;
 
-/// マシンに依存しない、手で並べた catalog（plugin 2 つ、role 付き）。
+/// マシンに依存しない、手で並べた catalog（plugin 2 つ、category/kind 付き）。
 ///
-/// `Hall`（role `Reverb 1`）は追加 overlay の selector から外れる（`EXCLUDED_ROLES`）。
-/// 残る候補は catalog 登録順で `Echo`（Delay）、`Room`（Reverb 2）、`Clean`（Amp Simulator）。
+/// `Reverb 1/Hall`（`Space / Imaging` / `Reverb`）は追加 overlay の selector から外れる
+/// （`EXCLUDED_VALUE_PREFIXES`）。残る候補は catalog 登録順で `Delay/Echo`
+/// （`Space / Imaging` / `Delay`）、`Reverb 2/Room`（`Space / Imaging` / `Reverb`）、
+/// `Clean`（`Distortion / Saturation` / `Amp Simulator`）。
 fn test_catalog() -> AudioEffectCatalog {
     let fx_plugin = AudioEffectPluginInfo::new(
         "Test FX",
@@ -23,13 +25,14 @@ fn test_catalog() -> AudioEffectCatalog {
         "org.example.amp",
         "/presets/does-not-exist-amp",
     );
-    let fx_preset = |value: &str, role: &str| AudioEffectPreset {
+    let fx_preset = |value: &str, category: &str, kind: &str| AudioEffectPreset {
         plugin: fx_plugin.key.clone(),
         json_key: fx_plugin.json_key.clone(),
         value: value.to_string(),
         display: format!("Test FX: {value}"),
         name: value.to_string(),
-        role: role.to_string(),
+        category: category.to_string(),
+        kind: kind.to_string(),
         path: std::path::PathBuf::from(format!("/presets/does-not-exist/{value}")),
     };
     let amp_preset = |value: &str| AudioEffectPreset {
@@ -38,13 +41,14 @@ fn test_catalog() -> AudioEffectCatalog {
         value: value.to_string(),
         display: format!("Test Amp: {value}"),
         name: value.to_string(),
-        role: "Amp Simulator".to_string(),
+        category: "Distortion / Saturation".to_string(),
+        kind: "Amp Simulator".to_string(),
         path: std::path::PathBuf::from(format!("/presets/does-not-exist-amp/{value}")),
     };
     let presets = vec![
-        fx_preset("Hall", "Reverb 1"),
-        fx_preset("Echo", "Delay"),
-        fx_preset("Room", "Reverb 2"),
+        fx_preset("Reverb 1/Hall", "Space / Imaging", "Reverb"),
+        fx_preset("Delay/Echo", "Space / Imaging", "Delay"),
+        fx_preset("Reverb 2/Room", "Space / Imaging", "Reverb"),
         amp_preset("Clean"),
     ];
     AudioEffectCatalog::with_entries(vec![fx_plugin, amp_plugin], presets)
@@ -103,7 +107,7 @@ fn x_a_j_enter_enter_writes_a_one_element_chain_and_keeps_the_patch() {
         init_json(&app),
         json!({
             "Surge XT patch": "Pads/Pad 1.fxp",
-            "effects after instrument": [{"Test FX preset": "Room"}],
+            "effects after instrument": [{"Test FX preset": "Reverb 2/Room"}],
         })
     );
     // 依存セル（meas1）の cache が再 render に回る。
@@ -118,7 +122,7 @@ fn x_a_j_enter_enter_writes_a_one_element_chain_and_keeps_the_patch() {
 fn dd_deletes_the_stage_under_the_cursor_and_an_empty_chain_drops_the_key() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = app_with_catalog();
-    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Hall"},{"Test FX preset":"Room"}]}"#.to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Reverb 1/Hall"},{"Test FX preset":"Reverb 2/Room"}]}"#.to_string();
 
     press(
         &mut app,
@@ -133,7 +137,7 @@ fn dd_deletes_the_stage_under_the_cursor_and_an_empty_chain_drops_the_key() {
         init_json(&app),
         json!({
             "Surge XT patch": "Pads/Pad 1.fxp",
-            "effects after instrument": [{"Test FX preset": "Room"}],
+            "effects after instrument": [{"Test FX preset": "Reverb 2/Room"}],
         })
     );
 
@@ -153,7 +157,7 @@ fn dd_deletes_the_stage_under_the_cursor_and_an_empty_chain_drops_the_key() {
 fn a_single_d_followed_by_another_key_does_not_delete() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("daw_cache");
     let (mut app, _cache_rx) = app_with_catalog();
-    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Hall"}]}"#.to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Reverb 1/Hall"}]}"#.to_string();
     let before = app.editor.data[2][0].clone();
 
     press(
@@ -247,7 +251,7 @@ fn a_with_an_empty_catalog_stays_in_the_chain_overlay() {
 #[test]
 fn the_overlay_shows_the_instrument_and_the_existing_chain_in_order() {
     let (mut app, _cache_rx) = app_with_catalog();
-    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Room"},{"Unknown preset":"x"}]}"#.to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Reverb 2/Room"},{"Unknown preset":"x"}]}"#.to_string();
 
     app.handle_normal(KeyCode::Char('x'));
 
@@ -257,14 +261,14 @@ fn the_overlay_shows_the_instrument_and_the_existing_chain_in_order() {
     assert_eq!(
         state.chain,
         vec![
-            json!({"Test FX preset": "Room"}),
+            json!({"Test FX preset": "Reverb 2/Room"}),
             json!({"Unknown preset": "x"})
         ]
     );
     let catalog = app.effect_plugins.catalog();
     assert_eq!(
         crate::overlays::effect_stage_label(&state.chain[0], catalog),
-        "Test FX: Room"
+        "Test FX: Reverb 2/Room"
     );
     assert_eq!(
         crate::overlays::effect_stage_label(&state.chain[1], catalog),

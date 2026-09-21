@@ -26,7 +26,7 @@ pub(crate) struct DawEffectChainOverlayState {
     pub(crate) scroll_offset: Cell<usize>,
     /// `dd` の 1 打目を受けた。
     pub(crate) pending_delete: bool,
-    /// 追加 overlay（`a`）の role/list 2 pane 状態。
+    /// 追加 overlay（`a`）の category/kind/list 3 pane 状態。
     pub(crate) add: DawEffectAddState,
 }
 

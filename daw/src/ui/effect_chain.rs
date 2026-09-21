@@ -108,7 +108,7 @@ fn draw_chain_list(f: &mut Frame, app: &DawApp, area: Rect) {
     f.render_stateful_widget(List::new(items), area, &mut list_state);
 }
 
-/// 追加 overlay（mode `EffectChainAdd`）の query 欄 + role / list 2 pane。
+/// 追加 overlay（mode `EffectChainAdd`）の query 欄 + category / kind / list 3 pane。
 fn draw_add_panes(f: &mut Frame, app: &DawApp, area: Rect) {
     let sections = Layout::default()
         .direction(Direction::Vertical)
@@ -147,26 +147,49 @@ fn draw_add_panes(f: &mut Frame, app: &DawApp, area: Rect) {
 
     let panes = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
+        .constraints([
+            Constraint::Length(pane_width(&add.categories)),
+            Constraint::Length(pane_width(&add.kinds)),
+            Constraint::Min(1),
+        ])
         .split(sections[1]);
 
-    let role_items: Vec<ListItem<'static>> = add
-        .roles
+    let category_items: Vec<ListItem<'static>> = add
+        .categories
         .iter()
         .enumerate()
-        .map(|(index, role)| list_item(role.clone(), index == add.role_cursor))
+        .map(|(index, category)| list_item(category.clone(), index == add.category_cursor))
         .collect();
-    let role_block = pane_block(" role ", add.focus, EffectAddPane::Roles);
-    let mut role_state = scrolled_list_state(
-        (!add.roles.is_empty()).then_some(add.role_cursor),
-        add.roles.len(),
-        usize::from(role_block.inner(panes[0]).height),
-        add.scroll_offset(EffectAddPane::Roles),
+    let category_block = pane_block(" category ", add.focus, EffectAddPane::Categories);
+    let mut category_state = scrolled_list_state(
+        (!add.categories.is_empty()).then_some(add.category_cursor),
+        add.categories.len(),
+        usize::from(category_block.inner(panes[0]).height),
+        add.scroll_offset(EffectAddPane::Categories),
     );
     f.render_stateful_widget(
-        List::new(role_items).block(role_block),
+        List::new(category_items).block(category_block),
         panes[0],
-        &mut role_state,
+        &mut category_state,
+    );
+
+    let kind_items: Vec<ListItem<'static>> = add
+        .kinds
+        .iter()
+        .enumerate()
+        .map(|(index, kind)| list_item(kind.clone(), index == add.kind_cursor))
+        .collect();
+    let kind_block = pane_block(" kind ", add.focus, EffectAddPane::Kinds);
+    let mut kind_state = scrolled_list_state(
+        (!add.kinds.is_empty()).then_some(add.kind_cursor),
+        add.kinds.len(),
+        usize::from(kind_block.inner(panes[1]).height),
+        add.scroll_offset(EffectAddPane::Kinds),
+    );
+    f.render_stateful_widget(
+        List::new(kind_items).block(kind_block),
+        panes[1],
+        &mut kind_state,
     );
 
     // 左列 plugin 名の幅は catalog 内の最長 plugin 名に揃える。
@@ -201,14 +224,24 @@ fn draw_add_panes(f: &mut Frame, app: &DawApp, area: Rect) {
     let mut list_state = scrolled_list_state(
         (!add.list.is_empty()).then_some(add.list_cursor),
         add.list.len(),
-        usize::from(list_block.inner(panes[1]).height),
+        usize::from(list_block.inner(panes[2]).height),
         add.scroll_offset(EffectAddPane::List),
     );
     f.render_stateful_widget(
         List::new(list_items).block(list_block),
-        panes[1],
+        panes[2],
         &mut list_state,
     );
+}
+
+/// category / kind pane の幅。最長の名前の文字数 + 4（枠 2 + `▶ ` 2）。
+fn pane_width(items: &[String]) -> u16 {
+    let longest = items
+        .iter()
+        .map(|item| item.chars().count())
+        .max()
+        .unwrap_or(0);
+    u16::try_from(longest + 4).unwrap_or(u16::MAX)
 }
 
 fn pane_block(title: &'static str, focus: EffectAddPane, pane: EffectAddPane) -> Block<'static> {

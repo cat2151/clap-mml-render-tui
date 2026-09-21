@@ -167,7 +167,7 @@ pub(super) fn draw_help(
             Line::from("  j/k, ↓/↑ : 段の移動"),
             Line::from("  PageUp/PageDown : 段を10移動、Home/End : 先頭/末尾"),
             Line::from(
-                "  a        : preset 一覧から chain 末尾へ追加（role/list 2 pane、Enter、ESC で戻る）",
+                "  a        : preset 一覧から chain 末尾へ追加（category/kind/list 3 pane、Enter、ESC で戻る）",
             ),
             Line::from("  dd       : 現在の段を削除して preview"),
             Line::from("  b        : 現在の段の bypass を切り替えて preview"),
@@ -182,7 +182,7 @@ pub(super) fn draw_help(
                     .fg(MONOKAI_YELLOW)
                     .add_modifier(Modifier::BOLD),
             )),
-            Line::from("  h/l, ←/→ : role pane / list pane"),
+            Line::from("  h/l, ←/→ : category pane / kind pane / list pane"),
             Line::from("  j/k, ↓/↑ : focus 中の pane を移動して preview"),
             Line::from("  PageUp/PageDown/Home/End : focus 中の pane を大移動して preview"),
             Line::from("  /        : list を絞り込み（Enter=確定、ESC=編集前へ戻す）"),

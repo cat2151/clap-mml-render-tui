@@ -8,7 +8,7 @@ fn preview_json_and_phrase(app: &DawApp, track: usize) -> (serde_json::Value, St
 #[test]
 fn space_previews_the_bypass_reflecting_chain_on_the_overlay_track_only() {
     let (mut app, _cache_rx) = app_with_catalog();
-    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Hall"}]}"#.to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Reverb 1/Hall"}]}"#.to_string();
 
     press(
         &mut app,
@@ -25,7 +25,7 @@ fn space_previews_the_bypass_reflecting_chain_on_the_overlay_track_only() {
         json,
         json!({
             "Surge XT patch": "Pads/Pad 1.fxp",
-            "effects after instrument": [{"Test FX preset": "Hall", "bypass": true}],
+            "effects after instrument": [{"Test FX preset": "Reverb 1/Hall", "bypass": true}],
         })
     );
     assert_eq!(phrase, "cdef");
@@ -38,14 +38,14 @@ fn space_previews_the_bypass_reflecting_chain_on_the_overlay_track_only() {
     // Enter していないので init セルはまだ書き換わっていない（bypass 無しのまま）。
     assert_eq!(
         app.editor.data[2][0],
-        r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Hall"}]}"#
+        r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Reverb 1/Hall"}]}"#
     );
 }
 
 #[test]
 fn space_in_the_add_overlay_previews_chain_plus_cursor_preset_without_committing() {
     let (mut app, _cache_rx) = app_with_catalog();
-    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Hall"}]}"#.to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Reverb 1/Hall"}]}"#.to_string();
 
     press(&mut app, &[KeyCode::Char('x'), KeyCode::Char('a')]);
     assert_eq!(app.overlays.effect_chain.add.list_cursor, 0);
@@ -69,7 +69,7 @@ fn space_in_the_add_overlay_previews_chain_plus_cursor_preset_without_committing
 #[test]
 fn space_does_nothing_while_playing() {
     let (mut app, _cache_rx) = app_with_catalog();
-    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Hall"}]}"#.to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Reverb 1/Hall"}]}"#.to_string();
     app.handle_normal(KeyCode::Char('x'));
     *app.playback.play_state.lock().unwrap() = DawPlayState::Playing;
     let before = app.playback.measure_track_mmls.lock().unwrap().clone();
@@ -87,7 +87,7 @@ fn space_does_nothing_while_playing() {
 fn space_previews_the_chord_generated_phrase_when_the_cell_is_empty() {
     let (mut app, _cache_rx) = app_with_catalog();
     app.editor.data[crate::CHORD_TRACK][1] = "IIm7".to_string();
-    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","generate from chord track":"close","effects after instrument":[{"Test FX preset":"Hall"}]}"#.to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","generate from chord track":"close","effects after instrument":[{"Test FX preset":"Reverb 1/Hall"}]}"#.to_string();
     app.editor.data[2][1] = String::new();
 
     press(&mut app, &[KeyCode::Char('x'), KeyCode::Char(' ')]);
@@ -112,11 +112,11 @@ fn preview_chain(app: &DawApp) -> Vec<serde_json::Value> {
 }
 
 /// 追加 overlay は開いた時点と、候補が変わるカーソル移動のたびに自動で preview する。
-/// 候補は `Echo`、`Room`、`Clean` の順（`app_with_catalog` の catalog）。
+/// 候補は `Delay/Echo`、`Reverb 2/Room`、`Clean` の順（`app_with_catalog` の catalog）。
 #[test]
 fn add_overlay_previews_on_open_and_when_the_cursor_changes_the_candidate() {
     let (mut app, _cache_rx) = app_with_catalog();
-    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Hall"}]}"#.to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Reverb 1/Hall"}]}"#.to_string();
 
     press(&mut app, &[KeyCode::Char('x'), KeyCode::Char('a')]);
     assert!(matches!(
@@ -126,8 +126,8 @@ fn add_overlay_previews_on_open_and_when_the_cursor_changes_the_candidate() {
     assert_eq!(
         preview_chain(&app),
         vec![
-            json!({"Test FX preset": "Hall"}),
-            json!({"Test FX preset": "Echo"})
+            json!({"Test FX preset": "Reverb 1/Hall"}),
+            json!({"Test FX preset": "Delay/Echo"})
         ]
     );
 
@@ -135,8 +135,8 @@ fn add_overlay_previews_on_open_and_when_the_cursor_changes_the_candidate() {
     assert_eq!(
         preview_chain(&app),
         vec![
-            json!({"Test FX preset": "Hall"}),
-            json!({"Test FX preset": "Room"})
+            json!({"Test FX preset": "Reverb 1/Hall"}),
+            json!({"Test FX preset": "Reverb 2/Room"})
         ]
     );
 
@@ -174,14 +174,15 @@ fn add_overlay_does_not_repreview_when_the_candidate_stays() {
     ));
 }
 
-/// role pane の移動で list が絞り直されて候補が変われば、その候補で preview する。
+/// kind pane の移動で list が絞り直されて候補が変われば、その候補で preview する。
 #[test]
-fn add_overlay_previews_after_a_role_change_rebuilds_the_list() {
+fn add_overlay_previews_after_a_kind_change_rebuilds_the_list() {
     let (mut app, _cache_rx) = app_with_catalog();
     press(&mut app, &[KeyCode::Char('x'), KeyCode::Char('a')]);
     app.stop_play();
 
-    // roles は `all`, `Amp Simulator`, `Delay`, `Reverb 2`（sort 済み）。`Amp Simulator` へ。
+    // kinds は `all`, `Amp Simulator`, `Delay`, `Reverb`（sort 済み）。`h` で kind pane へ
+    // focus し、`j` で `Amp Simulator` へ。
     press(&mut app, &[KeyCode::Char('h'), KeyCode::Char('j')]);
 
     assert!(matches!(
@@ -213,7 +214,7 @@ fn assert_previewing(app: &DawApp) {
 #[test]
 fn chain_list_previews_after_bypass_delete_and_reorder() {
     let (mut app, _cache_rx) = app_with_catalog();
-    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Hall"},{"Test FX preset":"Echo"}]}"#.to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Reverb 1/Hall"},{"Test FX preset":"Delay/Echo"}]}"#.to_string();
     press(&mut app, &[KeyCode::Char('x')]);
 
     press(&mut app, &[KeyCode::Char('b')]);
@@ -221,8 +222,8 @@ fn chain_list_previews_after_bypass_delete_and_reorder() {
     assert_eq!(
         preview_chain(&app),
         vec![
-            json!({"Test FX preset": "Hall", "bypass": true}),
-            json!({"Test FX preset": "Echo"}),
+            json!({"Test FX preset": "Reverb 1/Hall", "bypass": true}),
+            json!({"Test FX preset": "Delay/Echo"}),
         ]
     );
 
@@ -232,22 +233,25 @@ fn chain_list_previews_after_bypass_delete_and_reorder() {
     assert_eq!(
         preview_chain(&app),
         vec![
-            json!({"Test FX preset": "Echo"}),
-            json!({"Test FX preset": "Hall", "bypass": true}),
+            json!({"Test FX preset": "Delay/Echo"}),
+            json!({"Test FX preset": "Reverb 1/Hall", "bypass": true}),
         ]
     );
 
     stop_and_assert_idle(&mut app);
     press(&mut app, &[KeyCode::Char('d'), KeyCode::Char('d')]);
     assert_previewing(&app);
-    assert_eq!(preview_chain(&app), vec![json!({"Test FX preset": "Echo"})]);
+    assert_eq!(
+        preview_chain(&app),
+        vec![json!({"Test FX preset": "Delay/Echo"})]
+    );
 }
 
 /// chain を変えない操作（`j`/`k`、端で止まる `Alt+↑`、空 chain の `b`/`dd`）は鳴らさない。
 #[test]
 fn chain_list_does_not_preview_when_the_chain_stays() {
     let (mut app, _cache_rx) = app_with_catalog();
-    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Hall"}]}"#.to_string();
+    app.editor.data[2][0] = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Test FX preset":"Reverb 1/Hall"}]}"#.to_string();
     press(
         &mut app,
         &[KeyCode::Char('x'), KeyCode::Char('j'), KeyCode::Char('k')],

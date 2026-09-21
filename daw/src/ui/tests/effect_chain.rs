@@ -16,7 +16,8 @@ fn draw_shows_effect_chain_overlay_with_instrument_stages_and_add_list() {
         value: "Hall".to_string(),
         display: "Test FX: Hall".to_string(),
         name: "Hall".to_string(),
-        role: "Reverb 2".to_string(),
+        category: "Test Category".to_string(),
+        kind: "Reverb 2".to_string(),
         path: std::path::PathBuf::from("/presets/does-not-exist/Hall"),
     };
     let mut app = build_test_app();
@@ -61,8 +62,10 @@ fn draw_shows_effect_chain_overlay_with_instrument_stages_and_add_list() {
         crate::overlays::DawEffectAddState::open(app.effect_plugins.catalog().unwrap());
     let add = render_lines(&app, 120, 30).join("\n");
     assert!(add.contains("add preset"), "screen:\n{add}");
-    assert!(add.contains("role"), "screen:\n{add}");
+    assert!(add.contains("category"), "screen:\n{add}");
+    assert!(add.contains("kind"), "screen:\n{add}");
     assert!(add.contains("list"), "screen:\n{add}");
+    assert!(!add.contains("role"), "screen:\n{add}");
     assert!(add.contains("all"), "screen:\n{add}");
     // list の行に plugin 名の列がある(preset.name だけでなく plugin 名も出る)。
     assert!(add.contains("Test FX"), "screen:\n{add}");
@@ -71,7 +74,7 @@ fn draw_shows_effect_chain_overlay_with_instrument_stages_and_add_list() {
         add.replace(' ', "").contains("Enter:末尾へ追加"),
         "screen:\n{add}"
     );
-    // query 欄が role/list の上に描かれる（placeholder は編集していないときだけ出る）。
+    // query 欄が category/kind/list の上に描かれる（placeholder は編集していないときだけ出る）。
     assert!(
         add.replace(' ', "").contains("listを絞り込み"),
         "screen:\n{add}"
@@ -95,7 +98,8 @@ fn draw_shows_the_query_editing_hint_and_uses_the_textarea_cursor_while_filterin
         value: "Hall".to_string(),
         display: "Test FX: Hall".to_string(),
         name: "Hall".to_string(),
-        role: "Reverb 2".to_string(),
+        category: "Test Category".to_string(),
+        kind: "Reverb 2".to_string(),
         path: std::path::PathBuf::from("/presets/does-not-exist/Hall"),
     };
     let mut app = build_test_app();
@@ -132,7 +136,8 @@ fn add_list_keeps_the_cursor_inside_the_scroll_margin_and_remembers_the_offset()
             value: format!("p{n:02}"),
             display: format!("Test FX: p{n:02}"),
             name: format!("p{n:02}"),
-            role: "Reverb 2".to_string(),
+            category: "Test Category".to_string(),
+            kind: "Reverb 2".to_string(),
             path: std::path::PathBuf::from(format!("/presets/does-not-exist/p{n:02}")),
         })
         .collect();

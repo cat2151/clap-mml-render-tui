@@ -12,7 +12,7 @@ fn add_list_names(app: &DawApp) -> Vec<String> {
 }
 
 #[test]
-fn slash_query_filters_the_list_by_role_and_enter_confirms() {
+fn slash_query_filters_the_list_by_kind_and_enter_confirms() {
     let (mut app, _cache_rx) = app_with_catalog();
     press(&mut app, &[KeyCode::Char('x'), KeyCode::Char('a')]);
     assert_eq!(add_list_names(&app).len(), 3);
@@ -29,7 +29,29 @@ fn slash_query_filters_the_list_by_role_and_enter_confirms() {
     );
 
     assert!(!app.overlays.effect_chain.add.filter_active);
-    assert_eq!(add_list_names(&app), vec!["Room"]);
+    assert_eq!(add_list_names(&app), vec!["Reverb 2/Room"]);
+}
+
+#[test]
+fn slash_query_matches_the_kind_name() {
+    let (mut app, _cache_rx) = app_with_catalog();
+    press(&mut app, &[KeyCode::Char('x'), KeyCode::Char('a')]);
+
+    press(
+        &mut app,
+        &[
+            KeyCode::Char('/'),
+            KeyCode::Char('d'),
+            KeyCode::Char('e'),
+            KeyCode::Char('l'),
+            KeyCode::Char('a'),
+            KeyCode::Char('y'),
+            KeyCode::Enter,
+        ],
+    );
+
+    assert!(!app.overlays.effect_chain.add.filter_active);
+    assert_eq!(add_list_names(&app), vec!["Delay/Echo"]);
 }
 
 #[test]

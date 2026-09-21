@@ -104,9 +104,11 @@ impl DawApp {
         }
     }
 
-    /// `x` → `a` の role/list 2 pane。role を動かした後は list を絞り直しカーソルを 0 へ戻す
-    /// （[`DawEffectAddState::rebuild_list`]）。list が 0 件の `Enter` は何もしない。
-    /// `/` は focus がどちらのペインでも list の絞り込みを開始する。
+    /// `x` → `a` の category/kind/list 3 pane。category を動かした後は kind pane を組み直し
+    /// （[`DawEffectAddState::rebuild_kinds`]）、kind を動かした後は list を絞り直す
+    /// （[`DawEffectAddState::rebuild_list`]）。いずれも list カーソルは 0 へ戻る。
+    /// list が 0 件の `Enter` は何もしない。`/` はどの pane に focus していても
+    /// list の絞り込みを開始する。
     ///
     /// 候補（list カーソルの preset）が変わる操作のあとは自動で preview する。
     /// `h`/`l` は候補を変えないので鳴らし直さない。
@@ -122,11 +124,11 @@ impl DawApp {
                 return;
             }
             KeyCode::Char('h') | KeyCode::Left => {
-                self.overlays.effect_chain.add.focus = EffectAddPane::Roles;
+                self.overlays.effect_chain.add.focus = self.overlays.effect_chain.add.focus.prev();
                 return;
             }
             KeyCode::Char('l') | KeyCode::Right => {
-                self.overlays.effect_chain.add.focus = EffectAddPane::List;
+                self.overlays.effect_chain.add.focus = self.overlays.effect_chain.add.focus.next();
                 return;
             }
             KeyCode::Char('/') => {
@@ -153,10 +155,18 @@ impl DawApp {
             let add = &self.overlays.effect_chain.add;
             let candidate_before = add.list.get(add.list_cursor).copied();
             match self.overlays.effect_chain.add.focus {
-                EffectAddPane::Roles => {
-                    let len = self.overlays.effect_chain.add.roles.len();
-                    self.overlays.effect_chain.add.role_cursor =
-                        clamped_index(self.overlays.effect_chain.add.role_cursor, delta, len);
+                EffectAddPane::Categories => {
+                    let len = self.overlays.effect_chain.add.categories.len();
+                    self.overlays.effect_chain.add.category_cursor =
+                        clamped_index(self.overlays.effect_chain.add.category_cursor, delta, len);
+                    if let Some(catalog) = self.effect_plugins.catalog() {
+                        self.overlays.effect_chain.add.rebuild_kinds(catalog);
+                    }
+                }
+                EffectAddPane::Kinds => {
+                    let len = self.overlays.effect_chain.add.kinds.len();
+                    self.overlays.effect_chain.add.kind_cursor =
+                        clamped_index(self.overlays.effect_chain.add.kind_cursor, delta, len);
                     if let Some(catalog) = self.effect_plugins.catalog() {
                         self.overlays.effect_chain.add.rebuild_list(catalog);
                     }
