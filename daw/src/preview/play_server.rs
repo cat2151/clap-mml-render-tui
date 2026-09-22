@@ -1,10 +1,6 @@
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use super::{
-    begin_preview_output, wait_preview_duration, PreviewOutputRequest, PreviewOutputState,
-};
-use crate::{DawApp, DawPlayState};
+use crate::DawApp;
 
 impl DawApp {
     pub(super) fn start_preview_with_snapshot_via_play_server(
@@ -19,25 +15,13 @@ impl DawApp {
             return;
         };
 
-        let play_state = Arc::clone(&self.playback.play_state);
-        let play_transition_lock = Arc::clone(&self.playback.transition_lock);
-        let preview_session = Arc::clone(&self.playback.preview_session);
-        let preview_sink = Arc::clone(&self.playback.preview_sink);
-        let play_position = Arc::clone(&self.playback.position);
+        let preview_output = self.playback.preview_output.clone();
         let log_lines = Arc::clone(&self.log_lines);
         let sample_rate = self.cfg.sample_rate as u32;
 
-        let session = {
-            let _transition_guard = play_transition_lock.lock().unwrap();
-            if let Some(sink) = preview_sink.lock().unwrap().take() {
-                sink.stop();
-            }
+        let session = preview_output.start_session_with(|| {
             let _ = play_server.stop();
-            *play_position.lock().unwrap() = None;
-            let session = preview_session.fetch_add(1, Ordering::AcqRel) + 1;
-            *play_state.lock().unwrap() = DawPlayState::Preview;
-            session
-        };
+        });
         crate::append_log_line(&log_lines, format!("preview: meas{}", measure_index + 1));
 
         std::thread::spawn(move || {
@@ -59,32 +43,21 @@ impl DawApp {
                 let measure_duration = std::time::Duration::from_secs_f64(
                     measure_samples as f64 / (sample_rate as f64 * 2.0),
                 );
-                let preview_active = begin_preview_output(
-                    PreviewOutputState {
-                        play_transition_lock: &play_transition_lock,
-                        play_state: &play_state,
-                        play_position: &play_position,
-                        preview_session: &preview_session,
-                    },
-                    PreviewOutputRequest {
-                        session,
-                        measure_index,
-                        measure_duration,
-                    },
+                let preview_active = preview_output.enqueue_if_current(
+                    session,
+                    measure_index,
+                    measure_duration,
+                    None,
                     || {},
                 );
                 if preview_active {
-                    wait_preview_duration(&play_state, &preview_session, session, measure_duration);
+                    preview_output.wait_until_end(session, measure_duration);
                 }
             }
 
-            let mut state = play_state.lock().unwrap();
-            if *state == DawPlayState::Preview && preview_session.load(Ordering::Acquire) == session
-            {
+            if preview_output.finish_session_with(session, || {
                 let _ = play_server.stop();
-                *state = DawPlayState::Idle;
-                drop(state);
-                *play_position.lock().unwrap() = None;
+            }) {
                 crate::append_log_line(&log_lines, "preview: finished");
             }
         });

@@ -111,7 +111,8 @@ fn new_with_entry_context(
     let cache = Arc::new(Mutex::new(cache));
 
     let cache_render_workers = cfg.offline_render_server_workers;
-    let render_queue = RenderQueue::new(Arc::clone(&cfg), cache_render_workers);
+    let render = DawRenderRuntime::new(Arc::clone(&cfg), cache_render_workers);
+    let render_queue = render.queue_handle();
 
     // CacheJob は共通 RenderQueue に入り、MML -> SMF 前処理を 1 MML ずつ行う。
     // 準備済みジョブだけを render worker pool に流し、cache / preview / playback で
@@ -270,8 +271,7 @@ fn new_with_entry_context(
         cache,
         cache_tx,
         cache_render_workers,
-        render_queue,
-        render_queue_status_log: super::RenderQueueStatusLog::default(),
+        render,
         playback: super::DawPlaybackRuntime::new(
             realtime_play_server,
             play_position,

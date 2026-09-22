@@ -3,7 +3,7 @@
 use std::time::{Duration, Instant};
 
 use super::RenderQueueSnapshot;
-use crate::{DawApp, OVERLAY_PREVIEW_CACHE_MAX_ENTRIES};
+use crate::OVERLAY_PREVIEW_CACHE_MAX_ENTRIES;
 
 const LOG_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -55,24 +55,6 @@ fn status_line(snapshot: RenderQueueSnapshot, overlay_cache_entries: usize) -> S
         overlay_cache_entries,
         OVERLAY_PREVIEW_CACHE_MAX_ENTRIES,
     )
-}
-
-impl DawApp {
-    /// メインループが毎 tick 呼ぶ。
-    pub(crate) fn pump_render_queue_status_log(&mut self) {
-        let snapshot = self.render_queue.snapshot();
-        let cache_lock_wait =
-            crate::performance_log::SlowOperation::new("render-status-preview-cache-lock");
-        let overlay_cache_entries = self.playback.overlay_preview_cache.lock().unwrap().len();
-        drop(cache_lock_wait);
-        if let Some(line) = self.render_queue_status_log.line_if_due(
-            Instant::now(),
-            snapshot,
-            overlay_cache_entries,
-        ) {
-            self.append_log_line(line);
-        }
-    }
 }
 
 #[cfg(test)]

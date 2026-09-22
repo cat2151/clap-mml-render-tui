@@ -1,36 +1,21 @@
 //! DawApp のプレビュー再生
 
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use self::cached_samples::try_get_cached_samples;
-use super::render_queue::RenderPriority;
-use super::{DawApp, DawPlayState, FIRST_PLAYABLE_TRACK};
+use self::service::OfflinePreviewRequest;
+use super::{DawApp, FIRST_PLAYABLE_TRACK};
 use cmrt_runtime::RealtimeAudioBackend;
 
 mod cached_samples;
+pub(crate) mod output;
+pub(crate) mod overlay_cache;
 mod play_server;
 mod prefetch;
 pub(crate) mod render;
+pub(crate) mod service;
 
-pub(super) use render::{begin_preview_output, PreviewOutputRequest, PreviewOutputState};
-use render::{
-    insert_overlay_preview_cache, overlay_preview_cache_key, render_mixed_preview_tracks,
-    MixedPreviewRenderRequest, PreviewRenderProgress, PreviewRenderProgressPhase,
-};
-
-fn cached_overlay_preview_samples(
-    cache: &std::sync::Mutex<std::collections::HashMap<u64, Arc<Vec<f32>>>>,
-    key: u64,
-) -> Option<Arc<Vec<f32>>> {
-    let lock_wait = crate::performance_log::SlowOperation::with_context(
-        "preview-cache-lookup-lock",
-        format!("cache_key={key}"),
-    );
-    let samples = cache.lock().unwrap().get(&key).cloned();
-    drop(lock_wait);
-    samples
-}
+use render::{PreviewRenderProgress, PreviewRenderProgressPhase};
 
 fn preview_render_progress_log_line(
     measure_index: usize,
@@ -49,27 +34,6 @@ fn preview_render_progress_log_line(
         progress.total,
         track,
     )
-}
-
-fn wait_preview_duration(
-    play_state: &Arc<std::sync::Mutex<DawPlayState>>,
-    preview_session: &std::sync::atomic::AtomicU64,
-    session: u64,
-    duration: std::time::Duration,
-) {
-    let deadline = std::time::Instant::now() + duration;
-    loop {
-        if *play_state.lock().unwrap() != DawPlayState::Preview
-            || preview_session.load(Ordering::Acquire) != session
-        {
-            return;
-        }
-        let now = std::time::Instant::now();
-        if now >= deadline {
-            return;
-        }
-        std::thread::sleep((deadline - now).min(std::time::Duration::from_millis(10)));
-    }
 }
 
 impl DawApp {
@@ -145,83 +109,48 @@ impl DawApp {
             return;
         }
 
-        let play_state = Arc::clone(&self.playback.play_state);
-        let play_transition_lock = Arc::clone(&self.playback.transition_lock);
-        let preview_session = Arc::clone(&self.playback.preview_session);
-        let preview_sink = Arc::clone(&self.playback.preview_sink);
-        let play_position = Arc::clone(&self.playback.position);
+        let preview_output = self.playback.preview_output.clone();
         let cache = Arc::clone(&self.cache);
-        let overlay_preview_cache = Arc::clone(&self.playback.overlay_preview_cache);
+        let preview_service = self.render.preview_service();
         let sample_rate = self.cfg.sample_rate as u32;
         let log_lines = Arc::clone(&self.log_lines);
-        let render_queue = self.render_queue.clone();
-        let overlay_cache_key = overlay_preview_cache_key(measure_index, &track_mmls, &track_gains);
+        let preview_request = OfflinePreviewRequest::current(
+            measure_index,
+            measure_samples,
+            active_tracks,
+            track_mmls,
+            track_gains,
+        );
 
-        let session = {
-            let transition_lock_wait =
-                crate::performance_log::SlowOperation::new("preview-transition-lock");
-            let _transition_guard = play_transition_lock.lock().unwrap();
-            drop(transition_lock_wait);
-            let sink_lock_wait = crate::performance_log::SlowOperation::new("preview-sink-lock");
-            let previous_sink = preview_sink.lock().unwrap().take();
-            drop(sink_lock_wait);
-            if let Some(sink) = previous_sink {
-                let _slow =
-                    crate::performance_log::SlowOperation::new("preview-stop-previous-sink");
-                sink.stop();
-            }
-            {
-                let position_lock_wait =
-                    crate::performance_log::SlowOperation::new("preview-position-lock");
-                *play_position.lock().unwrap() = None;
-                drop(position_lock_wait);
-            }
-            let session = preview_session.fetch_add(1, Ordering::AcqRel) + 1;
-            {
-                let state_lock_wait =
-                    crate::performance_log::SlowOperation::new("preview-state-lock");
-                *play_state.lock().unwrap() = DawPlayState::Preview;
-                drop(state_lock_wait);
-            }
-            session
-        };
+        let session = preview_output.start_session();
         crate::append_log_line(&log_lines, format!("preview: meas{}", measure_index + 1));
 
         std::thread::spawn(move || {
             let Some(rodio_sample_rate) = rodio::SampleRate::new(sample_rate) else {
                 crate::append_log_line(&log_lines, "preview: sample rate is zero");
-                let mut state = play_state.lock().unwrap();
-                if *state == DawPlayState::Preview
-                    && preview_session.load(Ordering::Acquire) == session
-                {
-                    *state = DawPlayState::Idle;
-                    drop(state);
-                    *preview_sink.lock().unwrap() = None;
-                    *play_position.lock().unwrap() = None;
-                }
+                preview_output.finish_session(session);
                 return;
             };
             // device sink を drop すると再生が止まるため、スレッドが終わるまで保持する。
             let Ok(device_sink) = cmrt_tui_core::audio_output::open_default_sink() else {
                 crate::append_log_line(&log_lines, "preview: audio init failed");
-                let mut state = play_state.lock().unwrap();
-                if *state == DawPlayState::Preview
-                    && preview_session.load(Ordering::Acquire) == session
-                {
-                    *state = DawPlayState::Idle;
-                    drop(state);
-                    *preview_sink.lock().unwrap() = None;
-                    *play_position.lock().unwrap() = None;
-                }
+                preview_output.finish_session(session);
                 return;
             };
             let shared_sink = Arc::new(rodio::Player::connect_new(device_sink.mixer()));
 
-            // 関数境界で cache の MutexGuard を確実に破棄してから render へ進む。
-            // `if let cache.lock()... { } else { render }` と直接書くと、cache miss 時も
-            // guard が else 全体で生存し、UI の status 描画まで render 完了待ちになる。
-            let cached_samples =
-                cached_overlay_preview_samples(&overlay_preview_cache, overlay_cache_key);
+            let render_preview = || {
+                crate::append_log_line(&log_lines, format!("meas{}: render", measure_index + 1));
+                preview_service
+                    .render_blocking(&preview_request, |progress| {
+                        crate::append_log_line(
+                            &log_lines,
+                            preview_render_progress_log_line(measure_index, progress),
+                        );
+                    })
+                    .map(|render| (Arc::new(render.samples), false))
+            };
+            let cached_samples = preview_service.cached(&preview_request);
             let samples_opt = if let Some(samples) = cached_samples {
                 crate::append_log_line(
                     &log_lines,
@@ -234,31 +163,10 @@ impl DawApp {
                     measure_index + 1,
                     measure_samples,
                     tracks,
-                    &track_gains,
+                    &preview_request.track_gains,
                 ) {
-                    if cached.cached_tracks.len() != active_tracks.len() {
-                        crate::append_log_line(
-                            &log_lines,
-                            format!("meas{}: render", measure_index + 1),
-                        );
-                        render_mixed_preview_tracks(
-                            &render_queue,
-                            MixedPreviewRenderRequest {
-                                priority: RenderPriority::High,
-                                measure_samples,
-                                active_tracks: &active_tracks,
-                                track_mmls: &track_mmls,
-                                track_gains: &track_gains,
-                                auto_trim: false,
-                            },
-                            |progress| {
-                                crate::append_log_line(
-                                    &log_lines,
-                                    preview_render_progress_log_line(measure_index, progress),
-                                );
-                            },
-                        )
-                        .map(|render| (Arc::new(render.samples), false))
+                    if cached.cached_tracks.len() != preview_request.active_tracks.len() {
+                        render_preview()
                     } else {
                         crate::append_log_line(
                             &log_lines,
@@ -283,82 +191,30 @@ impl DawApp {
                         Some((Arc::new(cached.samples), false))
                     }
                 } else {
-                    crate::append_log_line(
-                        &log_lines,
-                        format!("meas{}: render", measure_index + 1),
-                    );
-                    render_mixed_preview_tracks(
-                        &render_queue,
-                        MixedPreviewRenderRequest {
-                            priority: RenderPriority::High,
-                            measure_samples,
-                            active_tracks: &active_tracks,
-                            track_mmls: &track_mmls,
-                            track_gains: &track_gains,
-                            auto_trim: false,
-                        },
-                        |progress| {
-                            crate::append_log_line(
-                                &log_lines,
-                                preview_render_progress_log_line(measure_index, progress),
-                            );
-                        },
-                    )
-                    .map(|render| (Arc::new(render.samples), false))
+                    render_preview()
                 }
             } else {
-                crate::append_log_line(&log_lines, format!("meas{}: render", measure_index + 1));
-                render_mixed_preview_tracks(
-                    &render_queue,
-                    MixedPreviewRenderRequest {
-                        priority: RenderPriority::High,
-                        measure_samples,
-                        active_tracks: &active_tracks,
-                        track_mmls: &track_mmls,
-                        track_gains: &track_gains,
-                        auto_trim: false,
-                    },
-                    |progress| {
-                        crate::append_log_line(
-                            &log_lines,
-                            preview_render_progress_log_line(measure_index, progress),
-                        );
-                    },
-                )
-                .map(|render| (Arc::new(render.samples), false))
+                render_preview()
             };
 
             if let Some((samples, cache_hit)) = samples_opt {
                 if !cache_hit {
-                    insert_overlay_preview_cache(
-                        &mut overlay_preview_cache.lock().unwrap(),
-                        overlay_cache_key,
-                        samples.len(),
-                        Arc::clone(&samples),
-                    );
+                    preview_service.store(&preview_request, Arc::clone(&samples));
                 }
                 let measure_duration = std::time::Duration::from_secs_f64(
                     measure_samples as f64 / (sample_rate as f64 * 2.0),
                 );
-                let preview_active = begin_preview_output(
-                    PreviewOutputState {
-                        play_transition_lock: &play_transition_lock,
-                        play_state: &play_state,
-                        play_position: &play_position,
-                        preview_session: &preview_session,
-                    },
-                    PreviewOutputRequest {
-                        session,
-                        measure_index,
-                        measure_duration,
-                    },
+                let preview_active = preview_output.enqueue_if_current(
+                    session,
+                    measure_index,
+                    measure_duration,
+                    Some(Arc::clone(&shared_sink)),
                     || {
                         let source = rodio::buffer::SamplesBuffer::new(
                             cmrt_tui_core::playback_session::STEREO,
                             rodio_sample_rate,
                             samples.as_ref().clone(),
                         );
-                        *preview_sink.lock().unwrap() = Some(Arc::clone(&shared_sink));
                         shared_sink.append(source);
                     },
                 );
@@ -372,13 +228,7 @@ impl DawApp {
                 );
             }
 
-            let mut state = play_state.lock().unwrap();
-            if *state == DawPlayState::Preview && preview_session.load(Ordering::Acquire) == session
-            {
-                *state = DawPlayState::Idle;
-                drop(state);
-                preview_sink.lock().unwrap().take();
-                *play_position.lock().unwrap() = None;
+            if preview_output.finish_session(session) {
                 crate::append_log_line(&log_lines, "preview: finished");
             }
         });

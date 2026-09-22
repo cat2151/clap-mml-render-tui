@@ -3,11 +3,7 @@ use super::*;
 #[test]
 fn stop_play_logs_preview_stop_for_preview_state() {
     let app = build_test_app();
-    *app.playback.play_state.lock().unwrap() = DawPlayState::Preview;
-    let initial_session = app
-        .playback
-        .preview_session
-        .load(std::sync::atomic::Ordering::Acquire);
+    let session = app.playback.preview_output.start_session();
 
     app.stop_play();
 
@@ -15,12 +11,7 @@ fn stop_play_logs_preview_stop_for_preview_state() {
         *app.playback.play_state.lock().unwrap(),
         DawPlayState::Idle
     ));
-    assert_eq!(
-        app.playback
-            .preview_session
-            .load(std::sync::atomic::Ordering::Acquire),
-        initial_session + 1
-    );
+    assert!(!app.playback.preview_output.is_current(session));
     assert_eq!(
         app.log_lines.lock().unwrap().back().map(String::as_str),
         Some("preview: stop")

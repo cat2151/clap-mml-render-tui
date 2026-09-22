@@ -141,12 +141,7 @@ fn add_overlay_previews_on_open_and_when_the_cursor_changes_the_candidate() {
     );
 
     // 隣の候補は先読みされて overlay preview cache に入る。
-    assert!(!app
-        .playback
-        .overlay_preview_cache
-        .lock()
-        .unwrap()
-        .is_empty());
+    assert_ne!(app.render.preview_cache().entry_count(), 0);
 
     // state.chain は Enter まで変わらない。
     assert_eq!(app.overlays.effect_chain.chain.len(), 1);

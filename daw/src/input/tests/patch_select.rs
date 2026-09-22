@@ -284,7 +284,7 @@ fn handle_patch_select_j_prefetches_predicted_preview_cache() {
     app.handle_patch_select(KeyCode::Char('j'));
 
     assert_eq!(app.overlays.patch_select.cursor, 1);
-    assert_eq!(app.playback.overlay_preview_cache.lock().unwrap().len(), 5);
+    assert_eq!(app.render.preview_cache().entry_count(), 5);
 }
 
 #[test]

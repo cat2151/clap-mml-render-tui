@@ -36,6 +36,7 @@ mod playback_util;
 mod preview;
 mod project;
 mod render_queue;
+mod render_runtime;
 mod runtime;
 mod save;
 mod timing;
@@ -101,7 +102,7 @@ use batch_logging::{TrackRerenderBatch, TrackRerenderBatchCompletionContext};
 use editor::DawEditorState;
 use overlays::DawOverlays;
 use playback_runtime::DawPlaybackRuntime;
-use render_queue::{RenderQueue, RenderQueueStatusLog};
+use render_runtime::DawRenderRuntime;
 pub(crate) use types::{
     AbRepeatState, CacheState, CellCache, DawHistoryPane, DawMode, DawNormalAction,
     DawPatchSelectPane, DawPlayState, DawProjectFileAction, PlayPosition,
@@ -179,9 +180,7 @@ pub struct DawApp {
     /// 設定数ワーカーで処理し、prepare 段階の排他は core-lib 側で行う
     cache_tx: std::sync::mpsc::Sender<CacheJob>,
     cache_render_workers: usize,
-    render_queue: RenderQueue,
-    /// render queue の件数を 1 秒ごとに log へ出す状態。
-    render_queue_status_log: RenderQueueStatusLog,
+    pub(crate) render: DawRenderRuntime,
 
     pub(crate) playback: DawPlaybackRuntime,
 
@@ -278,7 +277,7 @@ impl DawApp {
     }
 
     fn offline_render_available(&self) -> bool {
-        !self.render_queue.is_disabled()
+        !self.render.is_disabled()
     }
 
     pub(crate) fn ab_repeat_state(&self) -> AbRepeatState {

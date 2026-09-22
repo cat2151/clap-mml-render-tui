@@ -21,7 +21,7 @@ fn handle_history_overlay_j_prefetches_predicted_preview_cache() {
 
     app.handle_history_overlay(KeyCode::Char('j'));
 
-    assert_eq!(app.playback.overlay_preview_cache.lock().unwrap().len(), 2);
+    assert_eq!(app.render.preview_cache().entry_count(), 2);
 }
 
 #[test]
@@ -37,10 +37,5 @@ fn prefetch_preview_snapshot_skips_overlay_cache_for_large_measure_buffers() {
         vec![0.0, 1.0, 0.0],
     );
 
-    assert!(app
-        .playback
-        .overlay_preview_cache
-        .lock()
-        .unwrap()
-        .is_empty());
+    assert_eq!(app.render.preview_cache().entry_count(), 0);
 }

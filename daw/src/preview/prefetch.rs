@@ -1,11 +1,5 @@
-use std::sync::Arc;
-
-use super::{
-    insert_overlay_preview_cache, overlay_preview_cache_key, render_mixed_preview_tracks,
-    MixedPreviewRenderRequest,
-};
-use crate::render_queue::RenderPriority;
-use crate::{DawApp, FIRST_PLAYABLE_TRACK, MAX_CACHED_SAMPLES};
+use super::service::OfflinePreviewRequest;
+use crate::{DawApp, FIRST_PLAYABLE_TRACK};
 
 impl DawApp {
     pub(crate) fn prefetch_preview_navigation_cache<F>(
@@ -83,58 +77,15 @@ impl DawApp {
             return;
         }
 
-        let cache_key = overlay_preview_cache_key(measure_index, &track_mmls, &track_gains);
-        let cache_contains_key = {
-            let lock_wait = crate::performance_log::SlowOperation::with_context(
-                "preview-prefetch-cache-lock",
-                format!("cache_key={cache_key}"),
-            );
-            let cache = self.playback.overlay_preview_cache.lock().unwrap();
-            drop(lock_wait);
-            cache.contains_key(&cache_key)
-        };
-        if cache_contains_key {
-            return;
-        }
-
         let measure_samples = self.measure_duration_samples();
-        if measure_samples > MAX_CACHED_SAMPLES {
-            return;
-        }
-
-        #[cfg(test)]
-        if self.render_queue.is_disabled() {
-            insert_overlay_preview_cache(
-                &mut self.playback.overlay_preview_cache.lock().unwrap(),
-                cache_key,
-                0,
-                Arc::new(Vec::new()),
-            );
-            return;
-        }
-        let render_queue = self.render_queue.clone();
-        let overlay_preview_cache = Arc::clone(&self.playback.overlay_preview_cache);
-        std::thread::spawn(move || {
-            let Some(render) = render_mixed_preview_tracks(
-                &render_queue,
-                MixedPreviewRenderRequest {
-                    priority: RenderPriority::Low,
-                    measure_samples,
-                    active_tracks: &active_tracks,
-                    track_mmls: &track_mmls,
-                    track_gains: &track_gains,
-                    auto_trim: false,
-                },
-                |_| {},
-            ) else {
-                return;
-            };
-            insert_overlay_preview_cache(
-                &mut overlay_preview_cache.lock().unwrap(),
-                cache_key,
-                render.samples.len(),
-                Arc::new(render.samples),
-            );
-        });
+        self.render
+            .preview_service()
+            .prefetch(OfflinePreviewRequest::prefetch(
+                measure_index,
+                measure_samples,
+                active_tracks,
+                track_mmls,
+                track_gains,
+            ));
     }
 }

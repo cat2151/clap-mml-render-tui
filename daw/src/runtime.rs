@@ -19,6 +19,13 @@ fn target_leaves_workspace(workspace_kind: super::WorkspaceKind, target: Primary
 }
 
 impl DawApp {
+    /// メインループが毎 tick 呼ぶ。
+    fn pump_render_queue_status_log(&mut self) {
+        if let Some(line) = self.render.status_line_if_due(std::time::Instant::now()) {
+            self.append_log_line(line);
+        }
+    }
+
     fn leave_for_primary_screen(&mut self, target: PrimaryScreen) -> Option<DawExitReason> {
         if !target_leaves_workspace(self.workspace_kind, target) {
             return None;

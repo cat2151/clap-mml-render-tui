@@ -1,14 +1,10 @@
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 
 use cmrt_tui_core::mixer::auto_trim::{auto_trim_volumes_db, measure_track_level, TrackLevel};
 
 use super::super::render_queue::{RenderPriority, RenderQueue};
-use super::super::{
-    DawPlayState, PlayPosition, MAX_CACHED_SAMPLES, OVERLAY_PREVIEW_CACHE_MAX_ENTRIES,
-};
+use super::super::{MAX_CACHED_SAMPLES, OVERLAY_PREVIEW_CACHE_MAX_ENTRIES};
 use super::cached_samples::pad_playback_measure_samples;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -50,42 +46,6 @@ pub(crate) struct MixedPreviewRender {
     /// [`MixedPreviewRenderRequest::auto_trim`] が `true` のときだけ入る、track ごとの dB。
     /// `samples` にはこの補正が既に掛かっている。
     pub(crate) auto_trim_volumes_db: Option<Vec<i32>>,
-}
-
-pub(crate) struct PreviewOutputState<'a> {
-    pub(crate) play_transition_lock: &'a Arc<Mutex<()>>,
-    pub(crate) play_state: &'a Arc<Mutex<DawPlayState>>,
-    pub(crate) play_position: &'a Arc<Mutex<Option<PlayPosition>>>,
-    pub(crate) preview_session: &'a AtomicU64,
-}
-
-pub(crate) struct PreviewOutputRequest {
-    pub(crate) session: u64,
-    pub(crate) measure_index: usize,
-    pub(crate) measure_duration: std::time::Duration,
-}
-
-pub(crate) fn begin_preview_output<F>(
-    state: PreviewOutputState<'_>,
-    request: PreviewOutputRequest,
-    enqueue_audio: F,
-) -> bool
-where
-    F: FnOnce(),
-{
-    let _transition_guard = state.play_transition_lock.lock().unwrap();
-    if *state.play_state.lock().unwrap() != DawPlayState::Preview
-        || state.preview_session.load(Ordering::Acquire) != request.session
-    {
-        return false;
-    }
-    *state.play_position.lock().unwrap() = Some(PlayPosition {
-        measure_index: request.measure_index,
-        measure_start: std::time::Instant::now(),
-        measure_duration: request.measure_duration,
-    });
-    enqueue_audio();
-    true
 }
 
 /// Preview snapshot cache 用のキーを作る。

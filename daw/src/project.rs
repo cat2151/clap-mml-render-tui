@@ -318,7 +318,7 @@ impl DawApp {
         self.solo_tracks = vec![false; snapshot.tracks];
         *self.track_rerender_batches.lock().unwrap() = (0..snapshot.tracks).map(|_| None).collect();
         *self.playback.ab_repeat.lock().unwrap() = AbRepeatState::Off;
-        self.playback.overlay_preview_cache.lock().unwrap().clear();
+        self.render.clear_preview_cache();
         self.overlays.mixer.cursor_track = self
             .overlays
             .mixer

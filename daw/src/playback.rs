@@ -6,7 +6,6 @@
 //! 実測 1 小節（約 2.4 秒）遅れていた。
 
 use std::{
-    sync::atomic::Ordering,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -86,7 +85,7 @@ impl DawApp {
         *self.playback.measure_track_mmls.lock().unwrap() = measure_track_mmls;
         *self.playback.measure_samples.lock().unwrap() = self.measure_duration_samples();
 
-        *self.playback.play_state.lock().unwrap() = DawPlayState::Playing;
+        self.playback.preview_output.mark_playing();
         self.append_log_line("play: start");
         for line in play_start_log_lines(
             &self.playback.measure_mmls.lock().unwrap(),
@@ -120,20 +119,10 @@ impl DawApp {
         // 起動待ちの最中に止めたら overlay も消す（音は鳴らないのに
         // 「読み込み中」が残り続けるため）。
         self.playback.startup.finish();
-        let _transition_guard = self.playback.transition_lock.lock().unwrap();
-        let prev_state = {
-            let mut play_state = self.playback.play_state.lock().unwrap();
-            let prev_state = *play_state;
-            *play_state = DawPlayState::Idle;
-            prev_state
-        };
+        let prev_state = self.playback.preview_output.stop_playback();
         match prev_state {
             DawPlayState::Idle => {}
             DawPlayState::Preview => {
-                self.playback.preview_session.fetch_add(1, Ordering::AcqRel);
-                if let Some(sink) = self.playback.preview_sink.lock().unwrap().take() {
-                    sink.stop();
-                }
                 if let Some(play_server) = &self.playback.realtime_play_server {
                     let _ = play_server.stop();
                 }
@@ -146,7 +135,6 @@ impl DawApp {
                 self.append_log_line("play: stop");
             }
         }
-        *self.playback.position.lock().unwrap() = None;
     }
 }
 
