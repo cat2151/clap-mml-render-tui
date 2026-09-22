@@ -41,6 +41,12 @@ impl DawApp {
     ) where
         F: FnMut(usize) -> Option<(usize, Vec<String>)>,
     {
+        let _slow = crate::performance_log::SlowOperation::with_context(
+            "preview-navigation-prefetch",
+            format!(
+                "current={current} item_count={item_count} page_size={page_size} preferred_delta={preferred_delta:?}"
+            ),
+        );
         let predicted_indices = match preferred_delta {
             Some(delta) if delta == 1 || delta == -1 => {
                 cmrt_tui_core::navigation::predicted_navigation_indices_with_direction_bias(
@@ -78,13 +84,16 @@ impl DawApp {
         }
 
         let cache_key = overlay_preview_cache_key(measure_index, &track_mmls, &track_gains);
-        if self
-            .playback
-            .overlay_preview_cache
-            .lock()
-            .unwrap()
-            .contains_key(&cache_key)
-        {
+        let cache_contains_key = {
+            let lock_wait = crate::performance_log::SlowOperation::with_context(
+                "preview-prefetch-cache-lock",
+                format!("cache_key={cache_key}"),
+            );
+            let cache = self.playback.overlay_preview_cache.lock().unwrap();
+            drop(lock_wait);
+            cache.contains_key(&cache_key)
+        };
+        if cache_contains_key {
             return;
         }
 

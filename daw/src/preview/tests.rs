@@ -5,12 +5,40 @@ use std::sync::{
 };
 
 use super::{
-    begin_preview_output, preview_render_progress_log_line, render_mixed_preview_tracks,
-    DawPlayState, MixedPreviewRenderRequest, PreviewOutputRequest, PreviewOutputState,
+    begin_preview_output, cached_overlay_preview_samples, preview_render_progress_log_line,
+    render_mixed_preview_tracks, DawPlayState, MixedPreviewRenderRequest, PreviewOutputRequest,
+    PreviewOutputState,
 };
 use crate::preview::render::{PreviewRenderProgress, PreviewRenderProgressPhase};
 use crate::render_queue::{RenderPriority, RenderQueue};
 use crate::PlayPosition;
+
+#[test]
+fn overlay_preview_cache_miss_releases_lock_before_caller_fallback() {
+    let cache = Mutex::new(std::collections::HashMap::new());
+
+    assert!(cached_overlay_preview_samples(&cache, 42).is_none());
+
+    let _guard = cache
+        .try_lock()
+        .expect("cache miss must not retain the mutex guard");
+}
+
+#[test]
+fn overlay_preview_cache_hit_returns_owned_samples_and_releases_lock() {
+    let samples = Arc::new(vec![0.25, -0.25]);
+    let cache = Mutex::new(std::collections::HashMap::from([(
+        42,
+        Arc::clone(&samples),
+    )]));
+
+    let cached = cached_overlay_preview_samples(&cache, 42).unwrap();
+
+    assert!(Arc::ptr_eq(&cached, &samples));
+    let _guard = cache
+        .try_lock()
+        .expect("cache hit must not retain the mutex guard");
+}
 
 #[test]
 fn begin_preview_output_skips_enqueue_when_preview_stopped() {

@@ -19,6 +19,19 @@ use render::{
     MixedPreviewRenderRequest, PreviewRenderProgress, PreviewRenderProgressPhase,
 };
 
+fn cached_overlay_preview_samples(
+    cache: &std::sync::Mutex<std::collections::HashMap<u64, Arc<Vec<f32>>>>,
+    key: u64,
+) -> Option<Arc<Vec<f32>>> {
+    let lock_wait = crate::performance_log::SlowOperation::with_context(
+        "preview-cache-lookup-lock",
+        format!("cache_key={key}"),
+    );
+    let samples = cache.lock().unwrap().get(&key).cloned();
+    drop(lock_wait);
+    samples
+}
+
 fn preview_render_progress_log_line(
     measure_index: usize,
     progress: PreviewRenderProgress,
@@ -99,6 +112,14 @@ impl DawApp {
         measure_samples: usize,
         allow_cell_cache: bool,
     ) {
+        let _slow = crate::performance_log::SlowOperation::with_context(
+            "preview-start",
+            format!(
+                "measure={} track_count={} allow_cell_cache={allow_cell_cache}",
+                measure_index + 1,
+                track_mmls.len().max(track_gains.len())
+            ),
+        );
         self.stop_mml_overlay_sender();
         let tracks = track_mmls.len().max(track_gains.len());
         let active_tracks: Vec<usize> = (FIRST_PLAYABLE_TRACK..tracks)
@@ -137,13 +158,31 @@ impl DawApp {
         let overlay_cache_key = overlay_preview_cache_key(measure_index, &track_mmls, &track_gains);
 
         let session = {
+            let transition_lock_wait =
+                crate::performance_log::SlowOperation::new("preview-transition-lock");
             let _transition_guard = play_transition_lock.lock().unwrap();
-            if let Some(sink) = preview_sink.lock().unwrap().take() {
+            drop(transition_lock_wait);
+            let sink_lock_wait = crate::performance_log::SlowOperation::new("preview-sink-lock");
+            let previous_sink = preview_sink.lock().unwrap().take();
+            drop(sink_lock_wait);
+            if let Some(sink) = previous_sink {
+                let _slow =
+                    crate::performance_log::SlowOperation::new("preview-stop-previous-sink");
                 sink.stop();
             }
-            *play_position.lock().unwrap() = None;
+            {
+                let position_lock_wait =
+                    crate::performance_log::SlowOperation::new("preview-position-lock");
+                *play_position.lock().unwrap() = None;
+                drop(position_lock_wait);
+            }
             let session = preview_session.fetch_add(1, Ordering::AcqRel) + 1;
-            *play_state.lock().unwrap() = DawPlayState::Preview;
+            {
+                let state_lock_wait =
+                    crate::performance_log::SlowOperation::new("preview-state-lock");
+                *play_state.lock().unwrap() = DawPlayState::Preview;
+                drop(state_lock_wait);
+            }
             session
         };
         crate::append_log_line(&log_lines, format!("preview: meas{}", measure_index + 1));
@@ -178,12 +217,12 @@ impl DawApp {
             };
             let shared_sink = Arc::new(rodio::Player::connect_new(device_sink.mixer()));
 
-            let samples_opt = if let Some(samples) = overlay_preview_cache
-                .lock()
-                .unwrap()
-                .get(&overlay_cache_key)
-                .cloned()
-            {
+            // 関数境界で cache の MutexGuard を確実に破棄してから render へ進む。
+            // `if let cache.lock()... { } else { render }` と直接書くと、cache miss 時も
+            // guard が else 全体で生存し、UI の status 描画まで render 完了待ちになる。
+            let cached_samples =
+                cached_overlay_preview_samples(&overlay_preview_cache, overlay_cache_key);
+            let samples_opt = if let Some(samples) = cached_samples {
                 crate::append_log_line(
                     &log_lines,
                     format!("meas{}: overlay cache hit", measure_index + 1),

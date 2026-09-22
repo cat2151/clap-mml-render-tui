@@ -29,6 +29,7 @@ mod mml;
 mod mml_overlay_glue;
 mod overlays;
 mod patch_catalog;
+mod performance_log;
 mod playback;
 mod playback_runtime;
 mod playback_util;
@@ -281,7 +282,10 @@ impl DawApp {
     }
 
     pub(crate) fn ab_repeat_state(&self) -> AbRepeatState {
-        *self.playback.ab_repeat.lock().unwrap()
+        let lock_wait = performance_log::SlowOperation::new("ab-repeat-state-lock");
+        let state = *self.playback.ab_repeat.lock().unwrap();
+        drop(lock_wait);
+        state
     }
 
     // ─── 描画 ─────────────────────────────────────────────────
@@ -297,6 +301,7 @@ impl DawApp {
 
 type LogSink = fn(&str);
 static LOG_SINK: OnceLock<LogSink> = OnceLock::new();
+static PERFORMANCE_LOG_SINK: OnceLock<LogSink> = OnceLock::new();
 
 /// app 起動時に、グローバルログ（`log/log.txt`）への書き込み関数を注入する。
 /// 未注入の場合、この crate のログはファイルへ残らない（画面下部の表示は変わらない）。
@@ -307,10 +312,27 @@ pub fn set_log_sink(log: LogSink) {
     let _ = LOG_SINK.set(log);
 }
 
+/// UI 停止箇所を調べる低頻度の performance log sink を注入する。
+///
+/// 呼び出し元は、診断ログ自身が UI を止めない非同期 sink を渡すこと。
+pub fn set_performance_log_sink(log: LogSink) {
+    let _ = PERFORMANCE_LOG_SINK.set(log);
+}
+
 /// 注入されたログ sink へ 1 行流す。画面表示用バッファを持たない場所（HTTP サーバー
 /// スレッドや、まだ `DawApp` が組み上がっていない初期化中）はこちらを使う。
 pub(crate) fn log_line(line: &str) {
     if let Some(sink) = LOG_SINK.get() {
+        let _slow = performance_log::SlowOperation::with_context(
+            "daw-sync-log-sink",
+            line.chars().take(120).collect(),
+        );
+        sink(line);
+    }
+}
+
+pub(crate) fn performance_log_line(line: &str) {
+    if let Some(sink) = PERFORMANCE_LOG_SINK.get() {
         sink(line);
     }
 }
@@ -322,6 +344,7 @@ pub(crate) fn append_log_line(
 ) {
     let line = message.into();
     log_line(&line);
+    let _slow = performance_log::SlowOperation::new("daw-log-lines-append");
     cmrt_tui_core::logging::append_log_line_in_memory(log_lines, line);
 }
 

@@ -103,6 +103,13 @@ impl DawApp {
     pub(crate) fn preview_effect_chain_add_candidate(&mut self, preferred_delta: Option<isize>) {
         let add = &self.overlays.effect_chain.add;
         let (cursor, item_count) = (add.list_cursor, add.list.len());
+        let candidate_preview = crate::performance_log::SlowOperation::with_context(
+            "effect-chain-preview-candidate",
+            format!(
+                "focus={:?} cursor={cursor} item_count={item_count} preferred_delta={preferred_delta:?}",
+                add.focus
+            ),
+        );
         let Some(chain) = self.effect_chain_add_candidate_chain(cursor) else {
             return;
         };
@@ -110,17 +117,26 @@ impl DawApp {
             return;
         }
 
-        self.prefetch_preview_navigation_cache_with_gains(
-            self.effect_chain_preview_track_gains(),
-            cursor,
-            item_count,
-            crate::overlays::PAGE_STEP.unsigned_abs(),
-            preferred_delta,
-            |index| {
-                self.effect_chain_add_candidate_chain(index)
-                    .map(|chain| self.effect_chain_preview_track_mmls(&chain))
-            },
-        );
-        self.preview_effect_chain(&chain);
+        {
+            let _slow = crate::performance_log::SlowOperation::new("effect-chain-preview-prefetch");
+            self.prefetch_preview_navigation_cache_with_gains(
+                self.effect_chain_preview_track_gains(),
+                cursor,
+                item_count,
+                crate::overlays::PAGE_STEP.unsigned_abs(),
+                preferred_delta,
+                |index| {
+                    self.effect_chain_add_candidate_chain(index)
+                        .map(|chain| self.effect_chain_preview_track_mmls(&chain))
+                },
+            );
+        }
+        {
+            let _slow = crate::performance_log::SlowOperation::new(
+                "effect-chain-preview-current-candidate",
+            );
+            self.preview_effect_chain(&chain);
+        }
+        drop(candidate_preview);
     }
 }

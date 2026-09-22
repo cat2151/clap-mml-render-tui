@@ -61,7 +61,10 @@ impl DawApp {
     /// メインループが毎 tick 呼ぶ。
     pub(crate) fn pump_render_queue_status_log(&mut self) {
         let snapshot = self.render_queue.snapshot();
+        let cache_lock_wait =
+            crate::performance_log::SlowOperation::new("render-status-preview-cache-lock");
         let overlay_cache_entries = self.playback.overlay_preview_cache.lock().unwrap().len();
+        drop(cache_lock_wait);
         if let Some(line) = self.render_queue_status_log.line_if_due(
             Instant::now(),
             snapshot,

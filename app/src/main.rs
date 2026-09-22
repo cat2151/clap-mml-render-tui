@@ -48,6 +48,7 @@ fn run() -> Result<()> {
     cmrt_grid_sequencer::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
     // DAW 画面 crate / MML 入力オーバーレイ crate にグローバルログ sink を注入する。
     cmrt_daw::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
+    cmrt_daw::set_performance_log_sink(clap_mml_render_tui::logging::nonblocking_log_sink);
     cmrt_mml_overlay::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
     // DAW 画面 crate に config.toml 編集関数を注入する（terminal suspend は app ポリシー）。
     cmrt_daw::set_config_editor(config_editor::edit_config_toml);

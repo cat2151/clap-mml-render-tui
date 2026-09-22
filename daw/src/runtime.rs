@@ -86,16 +86,33 @@ impl DawApp {
         // DAW は共有runtimeとは別の描画loopを持つため、entry時に自前で再同期する。
         terminal.clear()?;
         let mut redraw_invalidated = false;
+        let mut pending_key_redraw: Option<(std::time::Instant, String)> = None;
 
         loop {
+            if let Some((started_at, context)) = pending_key_redraw.as_ref() {
+                crate::performance_log::log_slow_since(
+                    "daw-key-to-next-loop",
+                    *started_at,
+                    Some(context),
+                );
+            }
+            let frame_before_draw = crate::performance_log::SlowOperation::new("daw-before-draw");
             if redraw_invalidated {
+                let _slow = crate::performance_log::SlowOperation::new("daw-terminal-clear");
                 terminal.clear()?;
                 redraw_invalidated = false;
             }
-            self.apply_pending_http_commands();
-            self.sync_http_status_snapshot();
+            {
+                let _slow = crate::performance_log::SlowOperation::new("daw-apply-http-commands");
+                self.apply_pending_http_commands();
+            }
+            {
+                let _slow = crate::performance_log::SlowOperation::new("daw-sync-http-status");
+                self.sync_http_status_snapshot();
+            }
             let next_uses_textarea_cursor = self.uses_textarea_cursor();
             if next_uses_textarea_cursor != uses_textarea_cursor {
+                let _slow = crate::performance_log::SlowOperation::new("daw-sync-terminal-cursor");
                 execute!(
                     std::io::stdout(),
                     if next_uses_textarea_cursor {
@@ -106,14 +123,45 @@ impl DawApp {
                 )?;
                 uses_textarea_cursor = next_uses_textarea_cursor;
             }
-            self.pump_sound_check_guide();
-            self.pump_mml_overlay();
-            self.pump_pending_auto_trim();
-            self.pump_render_queue_status_log();
-            terminal.draw(|f| self.draw(f))?;
+            {
+                let _slow =
+                    crate::performance_log::SlowOperation::new("daw-pump-sound-check-guide");
+                self.pump_sound_check_guide();
+            }
+            {
+                let _slow = crate::performance_log::SlowOperation::new("daw-pump-mml-overlay");
+                self.pump_mml_overlay();
+            }
+            {
+                let _slow = crate::performance_log::SlowOperation::new("daw-pump-auto-trim");
+                self.pump_pending_auto_trim();
+            }
+            {
+                let _slow = crate::performance_log::SlowOperation::new("daw-pump-render-status");
+                self.pump_render_queue_status_log();
+            }
+            drop(frame_before_draw);
+            {
+                let _slow = crate::performance_log::SlowOperation::new("daw-terminal-draw");
+                terminal.draw(|f| self.draw(f))?;
+            }
+            if let Some((started_at, context)) = pending_key_redraw.take() {
+                crate::performance_log::log_slow_since(
+                    "daw-key-to-draw",
+                    started_at,
+                    Some(&context),
+                );
+            }
 
-            if event::poll(std::time::Duration::from_millis(50))? {
-                let input = event::read()?;
+            let input_ready = {
+                let _slow = crate::performance_log::SlowOperation::new("daw-event-poll");
+                event::poll(std::time::Duration::from_millis(50))?
+            };
+            if input_ready {
+                let input = {
+                    let _slow = crate::performance_log::SlowOperation::new("daw-event-read");
+                    event::read()?
+                };
                 if matches!(input, Event::Resize(_, _)) {
                     redraw_invalidated = true;
                     continue;
@@ -123,6 +171,15 @@ impl DawApp {
                     if key.kind != KeyEventKind::Press {
                         continue;
                     }
+                    let key_context = format!(
+                        "mode={:?} code={:?} modifiers={:?}",
+                        self.mode, key.code, key.modifiers
+                    );
+                    pending_key_redraw = Some((std::time::Instant::now(), key_context.clone()));
+                    let _key_handler = crate::performance_log::SlowOperation::with_context(
+                        "daw-key-handler",
+                        key_context,
+                    );
                     if self.overlays.screen_switch.is_open() {
                         if let ScreenSwitchMenuAction::SwitchTo(target) =
                             self.overlays.screen_switch.handle_key(key)

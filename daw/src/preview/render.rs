@@ -120,6 +120,13 @@ pub(crate) fn insert_overlay_preview_cache<T>(
     sample_count: usize,
     entry: T,
 ) {
+    let _slow = crate::performance_log::SlowOperation::with_context(
+        "overlay-preview-cache-insert-held",
+        format!(
+            "cache_key={key} entries_before={} sample_count={sample_count}",
+            cache.len()
+        ),
+    );
     if sample_count > MAX_CACHED_SAMPLES {
         return;
     }

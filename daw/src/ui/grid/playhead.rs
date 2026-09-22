@@ -37,11 +37,16 @@ pub(super) struct Playhead {
 /// app 側の tempo から計算すると、hot reload 直後にテンポがずれている間だけ
 /// 塗りが小節末尾とずれてしまうため。
 pub(super) fn playhead(app: &DawApp, measure_index_width: usize) -> Option<Playhead> {
+    let state_lock_wait = crate::performance_log::SlowOperation::new("draw-grid-state-lock");
     let state = *app.playback.play_state.lock().unwrap();
+    drop(state_lock_wait);
     if state == DawPlayState::Idle {
         return None;
     }
-    let position = app.playback.position.lock().unwrap().clone()?;
+    let position_lock_wait = crate::performance_log::SlowOperation::new("draw-grid-position-lock");
+    let position = app.playback.position.lock().unwrap().clone();
+    drop(position_lock_wait);
+    let position = position?;
     Some(Playhead {
         measure_index: position.measure_index,
         filled_columns: filled_columns(

@@ -98,7 +98,9 @@ fn loop_measure_summary_label(mmls: &[String], ab_repeat_state: AbRepeatState) -
 }
 
 fn cache_render_snapshot(app: &DawApp) -> CacheRenderSnapshot {
+    let lock_wait = crate::performance_log::SlowOperation::new("draw-cell-cache-lock");
     let cache = app.cache.lock().unwrap();
+    drop(lock_wait);
     let mut active_render_count = 0;
     let states = (0..app.editor.tracks)
         .map(|t| {
@@ -147,19 +149,31 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[0]);
 
-    let cache_render_snapshot = cache_render_snapshot(app);
+    let cache_render_snapshot = {
+        let _slow = crate::performance_log::SlowOperation::new("draw-cache-snapshot");
+        cache_render_snapshot(app)
+    };
 
-    grid::draw_grid(app, f, body_chunks[0], &cache_render_snapshot.states);
-    logs::draw_logs(app, f, body_chunks[1]);
-    status::draw_status(
-        app,
-        f,
-        chunks[1],
-        chunks[2],
-        chunks[3],
-        chunks[4],
-        cache_render_snapshot.active_render_count,
-    );
+    {
+        let _slow = crate::performance_log::SlowOperation::new("draw-grid");
+        grid::draw_grid(app, f, body_chunks[0], &cache_render_snapshot.states);
+    }
+    {
+        let _slow = crate::performance_log::SlowOperation::new("draw-logs");
+        logs::draw_logs(app, f, body_chunks[1]);
+    }
+    {
+        let _slow = crate::performance_log::SlowOperation::new("draw-status");
+        status::draw_status(
+            app,
+            f,
+            chunks[1],
+            chunks[2],
+            chunks[3],
+            chunks[4],
+            cache_render_snapshot.active_render_count,
+        );
+    }
 
     if app.mode == DawMode::Help {
         match app.help_origin {
@@ -178,6 +192,7 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
     } else if app.mode == DawMode::Mixer {
         mixer::draw_mixer(f, app, inner);
     } else if matches!(app.mode, DawMode::EffectChain | DawMode::EffectChainAdd) {
+        let _slow = crate::performance_log::SlowOperation::new("draw-effect-chain");
         effect_chain::draw_effect_chain(f, app, inner);
     } else if app.mode == DawMode::History {
         history::draw_history(f, app, inner);

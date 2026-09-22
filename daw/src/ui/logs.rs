@@ -38,7 +38,9 @@ pub(super) fn draw_logs(app: &DawApp, f: &mut Frame, area: Rect) {
 
     let visible_height = area.height.saturating_sub(LOG_BLOCK_DECORATION_HEIGHT) as usize;
     let mut visible_lines: Vec<Line> = {
+        let lock_wait = crate::performance_log::SlowOperation::new("draw-log-lines-lock");
         let log_lines = app.log_lines.lock().unwrap();
+        drop(lock_wait);
         log_lines
             .iter()
             .rev()
