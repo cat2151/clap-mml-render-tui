@@ -86,7 +86,20 @@ impl FastMidiClient {
         instance_id: InstanceId,
         patch: Option<&str>,
     ) -> Result<(), FastIpcError> {
-        self.patch_request(KIND_PREPARE_PATCH, instance_id, patch)
+        self.prepare_patch_with_effect_chain(instance_id, patch, "")
+    }
+
+    /// 音色と、その instance の出力に掛ける effect chain を同じ時点で差し替える。
+    ///
+    /// `effect_chain` は MML 先頭 JSON の `"effects after instrument"` の値を JSON 文字列に
+    /// したもの。空なら chain を外す（[`Self::prepare_patch`] と同じ）。
+    pub fn prepare_patch_with_effect_chain(
+        &mut self,
+        instance_id: InstanceId,
+        patch: Option<&str>,
+        effect_chain: &str,
+    ) -> Result<(), FastIpcError> {
+        self.patch_request(KIND_PREPARE_PATCH, instance_id, patch, effect_chain)
             .map(|_| ())
     }
 
@@ -95,7 +108,7 @@ impl FastMidiClient {
         instance_id: InstanceId,
         patch: Option<&str>,
     ) -> Result<Vec<u8>, FastIpcError> {
-        self.patch_request(KIND_PROBE_PATCH, instance_id, patch)
+        self.patch_request(KIND_PROBE_PATCH, instance_id, patch, "")
     }
 
     pub fn stop(&mut self, instance_id: InstanceId) -> Result<(), FastIpcError> {
@@ -109,6 +122,35 @@ impl FastMidiClient {
     pub fn stop_all(&mut self) -> Result<(), FastIpcError> {
         let mut slot = zeroed_slot();
         slot.kind = KIND_STOP_ALL;
+        self.push(slot)
+    }
+
+    /// 指定した live instance 群を、今の音量から 0 まで `fade_ms` ミリ秒で絞る。応答は待たない。
+    ///
+    /// 0 に達した instance は鳴っている voice と effect chain の余韻を捨てる。
+    pub fn fade_out_instances(
+        &mut self,
+        instance_ids: &[InstanceId],
+        fade_ms: u32,
+    ) -> Result<(), FastIpcError> {
+        if instance_ids.is_empty() || instance_ids.len() > INSTANCE_COUNT {
+            return Err(FastIpcError::InvalidPayload(format!(
+                "fade out needs 1..={INSTANCE_COUNT} instances"
+            )));
+        }
+        for &instance_id in instance_ids {
+            validate_instance(instance_id)?;
+        }
+        if fade_ms == 0 || fade_ms > MAX_FADE_OUT_MS {
+            return Err(FastIpcError::InvalidPayload(format!(
+                "fade out length must be 1..={MAX_FADE_OUT_MS} ms"
+            )));
+        }
+        let mut slot = zeroed_slot();
+        slot.kind = KIND_FADE_OUT_INSTANCES;
+        slot.message_count = instance_ids.len() as u32;
+        slot.instance_ids[..instance_ids.len()].copy_from_slice(instance_ids);
+        slot.buffer_multiplier = fade_ms;
         self.push(slot)
     }
 
@@ -207,8 +249,9 @@ impl FastMidiClient {
         kind: u32,
         instance_id: InstanceId,
         patch: Option<&str>,
+        effect_chain: &str,
     ) -> Result<Vec<u8>, FastIpcError> {
-        self.patch_request_with_id(kind, instance_id, patch)
+        self.patch_request_with_id(kind, instance_id, patch, effect_chain)
             .map(|(_, payload)| payload)
     }
 
@@ -222,6 +265,7 @@ impl FastMidiClient {
         kind: u32,
         instance_id: InstanceId,
         patch: Option<&str>,
+        effect_chain: &str,
     ) -> Result<(u32, Vec<u8>), FastIpcError> {
         validate_instance(instance_id)?;
         let patch_bytes = patch.map(str::as_bytes).unwrap_or_default();
@@ -229,6 +273,13 @@ impl FastMidiClient {
             return Err(FastIpcError::InvalidPayload(format!(
                 "patch path is too long ({} bytes; max {MAX_PATCH_BYTES})",
                 patch_bytes.len()
+            )));
+        }
+        let chain_bytes = effect_chain.as_bytes();
+        if chain_bytes.len() > MAX_EFFECT_CHAIN_BYTES {
+            return Err(FastIpcError::InvalidPayload(format!(
+                "effect chain is too long ({} bytes; max {MAX_EFFECT_CHAIN_BYTES})",
+                chain_bytes.len()
             )));
         }
         let request_id = self.next_request_id;
@@ -242,6 +293,8 @@ impl FastMidiClient {
             slot.patch_len = patch_bytes.len() as u32;
             slot.patch[..patch_bytes.len()].copy_from_slice(patch_bytes);
         }
+        slot.effect_chain_len = chain_bytes.len() as u32;
+        slot.effect_chain[..chain_bytes.len()].copy_from_slice(chain_bytes);
         self.push(slot)?;
         let payload = self.wait_for_response(request_id)?;
         Ok((request_id, payload))

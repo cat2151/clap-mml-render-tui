@@ -33,6 +33,8 @@ mmlabc-to-smf = { git = "https://github.com/cat2151/mmlabc-to-smf-rust.git", pac
 [dev-dependencies]
 # crate 内テストから history パスをテスト専用ディレクトリへ差し替えるためのフラグ。
 cmrt-history = { path = "../history", features = ["test-support"] }
+# crate 内テストで、LIVE へ送った内容を server 無しで数える sender を使うためのフラグ。
+cmrt-mml-overlay = { path = "../mml-overlay", features = ["test-support"] }
 # crate 内テストで、実クリップボードに触れないスタブ実装を使うためのフラグ。
 cmrt-tui-core = { path = "../tui-core", features = ["test-support"] }
 hound = "3.5"

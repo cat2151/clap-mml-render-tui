@@ -33,6 +33,9 @@ struct FakeSink {
     stops: AtomicUsize,
     timeline_seconds: Mutex<Vec<f64>>,
     timeline_events: Mutex<Vec<TimelineMidiEvent>>,
+    /// 真なら instance 0 と 1 を別の bank の組として扱う（先読みの準備を受け付ける）。
+    standby_pair: bool,
+    fade_outs: Mutex<Vec<(Vec<u8>, u32)>>,
 }
 
 impl FakeSink {
@@ -50,12 +53,12 @@ impl FakeSink {
 }
 
 impl SoundSink for FakeSink {
-    fn prepare_patch(&self, instance_id: u8, patch: Option<&str>) -> sink::SinkResult {
+    fn prepare_patch(&self, instance_id: u8, patch: &LivePatch) -> sink::SinkResult {
         std::thread::sleep(self.prepare_delay);
         self.prepared
             .lock()
             .unwrap()
-            .push((instance_id, patch.map(str::to_string)));
+            .push((instance_id, patch.patch().map(str::to_string)));
         if let Some(error) = self.prepare_errors.get(&instance_id) {
             return Err(error.clone());
         }
@@ -63,6 +66,22 @@ impl SoundSink for FakeSink {
             Some(error) => Err(error.clone()),
             None => Ok(()),
         }
+    }
+
+    fn standby_instance_of(&self, instance_id: u8) -> Option<u8> {
+        self.standby_pair.then_some(1 - instance_id.min(1))
+    }
+
+    fn prepare_standby_patch(&self, instance_id: u8, patch: &LivePatch) -> sink::SinkResult {
+        self.prepare_patch(instance_id, patch)
+    }
+
+    fn fade_out_instances(&self, instance_ids: &[u8], fade_ms: u32) -> sink::SinkResult {
+        self.fade_outs
+            .lock()
+            .unwrap()
+            .push((instance_ids.to_vec(), fade_ms));
+        Ok(())
     }
 
     fn send_midi(&self, instance_id: u8, messages: &[[u8; 3]]) -> sink::SinkResult {
@@ -116,7 +135,14 @@ impl Harness {
         let worker_latest = Arc::clone(&latest);
         let worker_status = Arc::clone(&status);
         let worker = std::thread::spawn(move || {
-            run_sender(rx, sink, 48_000.0, worker_latest, worker_status);
+            run_sender(
+                rx,
+                sink,
+                48_000.0,
+                worker_latest,
+                worker_status,
+                SoundingLines::default(),
+            );
         });
         Self {
             tx,
@@ -150,7 +176,7 @@ impl Drop for Harness {
 
 fn notes(patch: &str, pitch: u8, gate: Duration) -> SenderCommandKind {
     SenderCommandKind::PlayNotes {
-        patch: Some(patch.to_string()),
+        patch: LivePatch::new(Some(patch)),
         messages: vec![[NOTE_ON, pitch, 127]],
         gate,
     }
@@ -159,7 +185,7 @@ fn notes(patch: &str, pitch: u8, gate: Duration) -> SenderCommandKind {
 /// 1 周 `loop_seconds` の行を鳴らす指示。`repeat` が worker の待ちに効く。
 fn line(loop_seconds: f64, repeat: bool) -> SenderCommandKind {
     SenderCommandKind::PlayLine {
-        patch: Some("ready.sfz".to_string()),
+        patch: LivePatch::new(Some("ready.sfz")),
         program: LineProgram {
             performance: LinePerformance {
                 events: vec![cmrt_chord::TimedMidiEvent {
@@ -326,7 +352,7 @@ fn preparing_an_already_ready_patch_stops_the_previous_line() {
     harness.send(
         2,
         SenderCommandKind::Prepare {
-            patch: Some("ready.sfz".to_string()),
+            patch: LivePatch::new(Some("ready.sfz")),
         },
     );
     wait_until(|| sink.stops() == 1);
@@ -376,7 +402,7 @@ fn an_empty_line_stops_the_running_timeline() {
     harness.send(
         2,
         SenderCommandKind::PlayLine {
-            patch: Some("ready.sfz".to_string()),
+            patch: LivePatch::new(Some("ready.sfz")),
             program: LineProgram::silent(),
         },
     );
@@ -385,66 +411,7 @@ fn an_empty_line_stops_the_running_timeline() {
     assert_eq!(sink.begins(), 1, "止めるだけで timeline は張り直さないこと");
 }
 
-/// 準備に失敗したら、**`loading` は必ず下ろし、理由は status に残す。**
-///
-/// 画面はこの 2 つで「音が鳴るまで」の overlay を閉じ、消えた理由を出す
-/// （`app/src/tui/sound_startup_overlay.rs`）。理由を持ち帰れないと、
-/// overlay が黙って消えて音も鳴らない状態になる。
-#[test]
-fn a_failed_preparation_lowers_loading_and_keeps_its_reason() {
-    let sink = Arc::new(FakeSink {
-        prepare_error: Some("play server が起動できません".to_string()),
-        ..FakeSink::default()
-    });
-    let harness = Harness::spawn(Arc::clone(&sink));
-
-    harness.send(
-        1,
-        SenderCommandKind::Prepare {
-            patch: Some("lead.fxp".to_string()),
-        },
-    );
-    wait_until(|| harness.status.lock().unwrap().prepare_error().is_some());
-
-    let status = harness.status.lock().unwrap().clone();
-    assert!(
-        !status.is_loading(),
-        "失敗しても loading は下ろすこと（overlay が出っぱなしになる）"
-    );
-    assert_eq!(status.prepare_error(), Some("play server が起動できません"));
-}
-
-/// 成功したら理由は消える。古い失敗が居座ると、鳴っているのに理由が出続ける。
-#[test]
-fn a_successful_preparation_clears_the_previous_reason() {
-    let sink = Arc::new(FakeSink::default());
-    let harness = Harness::spawn(Arc::clone(&sink));
-    harness.status.lock().unwrap().prepare_error = Some("stale".to_string());
-
-    harness.send(1, SenderCommandKind::Prepare { patch: None });
-    wait_until(|| !sink.prepared.lock().unwrap().is_empty());
-    wait_until(|| harness.status.lock().unwrap().prepare_error().is_none());
-}
-
-/// 失敗の直後に別の command が来ても、理由は消えない。
-///
-/// 失敗すると画面はまず overlay を閉じ、そのあと理由を読む。読む前に
-/// `Stop` の 1 つでも挟まると理由が消える作りだと、「黙って消えて音も鳴らない」に戻る。
-#[test]
-fn the_reason_survives_the_next_command() {
-    let sink = Arc::new(FakeSink {
-        prepare_error: Some("boom".to_string()),
-        ..FakeSink::default()
-    });
-    let harness = Harness::spawn(Arc::clone(&sink));
-    harness.send(1, SenderCommandKind::Prepare { patch: None });
-    wait_until(|| harness.status.lock().unwrap().prepare_error().is_some());
-
-    harness.send(2, SenderCommandKind::Stop);
-    wait_until(|| harness.status.lock().unwrap().command_id() == 2);
-
-    assert_eq!(harness.status.lock().unwrap().prepare_error(), Some("boom"));
-}
-
+mod fade_out;
 mod layers;
 mod line_playback_status;
+mod prepare_error;

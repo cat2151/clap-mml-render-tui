@@ -39,6 +39,11 @@ impl Sounding {
         self.typed.is_empty() && !self.timeline
     }
 
+    /// 記録と実態がずれた疑いがあるか。
+    pub(super) fn is_suspect(&self) -> bool {
+        self.suspect
+    }
+
     /// 止めるのにserver管理の全NoteOffが要るか。
     ///
     /// timeline の音は個別の note off では止まらない。記録がずれている疑いがあるときも、

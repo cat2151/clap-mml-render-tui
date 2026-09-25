@@ -85,16 +85,7 @@ impl DawApp {
             ),
         );
         self.stop_mml_overlay_sender();
-        let tracks = track_mmls.len().max(track_gains.len());
-        let active_tracks: Vec<usize> = (FIRST_PLAYABLE_TRACK..tracks)
-            .filter(|&track| {
-                track_gains.get(track).copied().unwrap_or(1.0) > 0.0
-                    && track_mmls
-                        .get(track)
-                        .map(|mml| !mml.trim().is_empty())
-                        .unwrap_or(false)
-            })
-            .collect();
+        let active_tracks = active_preview_tracks(&track_mmls, &track_gains);
         if active_tracks.is_empty() {
             return;
         }
@@ -109,18 +100,49 @@ impl DawApp {
             return;
         }
 
+        self.start_offline_preview(
+            OfflinePreviewRequest::current(
+                measure_index,
+                measure_samples,
+                active_tracks,
+                track_mmls,
+                track_gains,
+            ),
+            allow_cell_cache,
+        );
+    }
+
+    /// overlay preview cache に `request` の音があるときだけ、それを鳴らす。backend に関係なく
+    /// rodio で鳴らす（cache の音は offline render が作ったもの）。鳴らしたら `true`。
+    /// MML overlay sender（LIVE）の音は止めない。止めるかどうかは呼び出し側が決める。
+    pub(super) fn start_overlay_cached_preview(&self, request: &OfflinePreviewRequest) -> bool {
+        if request.active_tracks.is_empty()
+            || self.render.preview_service().cached(request).is_none()
+        {
+            return false;
+        }
+        self.start_offline_preview(request.clone(), false);
+        true
+    }
+
+    /// 別スレッドで overlay preview cache（`allow_cell_cache` なら cell cache も）を引き、
+    /// 無ければ offline render を待って rodio で鳴らす。
+    fn start_offline_preview(
+        &self,
+        preview_request: OfflinePreviewRequest,
+        allow_cell_cache: bool,
+    ) {
+        let measure_index = preview_request.measure_index;
+        let measure_samples = preview_request.measure_samples;
+        let tracks = preview_request
+            .track_mmls
+            .len()
+            .max(preview_request.track_gains.len());
         let preview_output = self.playback.preview_output.clone();
         let cache = Arc::clone(&self.cache);
         let preview_service = self.render.preview_service();
         let sample_rate = self.cfg.sample_rate as u32;
         let log_lines = Arc::clone(&self.log_lines);
-        let preview_request = OfflinePreviewRequest::current(
-            measure_index,
-            measure_samples,
-            active_tracks,
-            track_mmls,
-            track_gains,
-        );
 
         let session = preview_output.start_session();
         crate::append_log_line(&log_lines, format!("preview: meas{}", measure_index + 1));
@@ -261,6 +283,20 @@ impl DawApp {
         }
         self.start_preview_with_snapshot(measure_index, track_mmls, track_gains);
     }
+}
+
+/// preview で鳴らす track。音量が 0 でなく、MML が空でないもの。
+pub(crate) fn active_preview_tracks(track_mmls: &[String], track_gains: &[f32]) -> Vec<usize> {
+    let tracks = track_mmls.len().max(track_gains.len());
+    (FIRST_PLAYABLE_TRACK..tracks)
+        .filter(|&track| {
+            track_gains.get(track).copied().unwrap_or(1.0) > 0.0
+                && track_mmls
+                    .get(track)
+                    .map(|mml| !mml.trim().is_empty())
+                    .unwrap_or(false)
+        })
+        .collect()
 }
 
 #[cfg(test)]

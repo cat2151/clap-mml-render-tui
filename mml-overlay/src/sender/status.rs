@@ -15,6 +15,8 @@ pub struct MmlOverlaySenderStatus {
     /// 「音が鳴るまで」の overlay は `loading` が下りた瞬間に消えるので、
     /// 消えた理由をここから持ち帰れないと「黙って消えて音も出ない」になる。
     pub(crate) prepare_error: Option<String>,
+    /// `prepare_error` を出した command。別の command の失敗を取り違えないために持つ。
+    pub(crate) prepare_error_command_id: u64,
 }
 
 impl MmlOverlaySenderStatus {
@@ -45,6 +47,13 @@ impl MmlOverlaySenderStatus {
     /// 直近の音源準備が失敗した理由。成功していれば `None`。
     pub fn prepare_error(&self) -> Option<&str> {
         self.prepare_error.as_deref()
+    }
+
+    /// command `command_id` の音源準備が失敗した理由。その command が失敗していなければ `None`。
+    pub fn prepare_error_for(&self, command_id: u64) -> Option<&str> {
+        (self.prepare_error_command_id == command_id)
+            .then_some(self.prepare_error.as_deref())
+            .flatten()
     }
 }
 

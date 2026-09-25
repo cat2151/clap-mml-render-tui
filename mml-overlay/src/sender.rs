@@ -19,10 +19,16 @@
 //! 早いほうまで待ち、時間切れならその片方だけを片づけてまた待つ。**repeat の周回は
 //! この worker のタイマーで積むが、積む中身は絶対秒なので鳴る位置は時計に左右されない。**
 
+mod fade_out;
 mod layers;
 mod line_playback;
+mod live_patch;
+mod prepare;
+#[cfg(any(test, feature = "test-support"))]
+mod recording;
 mod sink;
 mod sounding;
+mod sounding_lines;
 mod status;
 mod voice;
 
@@ -41,7 +47,12 @@ use cmrt_realtime_play::RealtimePlayServerSupervisor;
 use crate::line_play::LineProgram;
 
 pub use layers::LineLayer;
+pub use live_patch::LivePatch;
+use prepare::{prepare_if_needed, prepare_line_if_needed};
+#[cfg(any(test, feature = "test-support"))]
+pub use recording::{RecordingSink, SinkOperation};
 use sink::SoundSink;
+use sounding_lines::SoundingLines;
 pub use status::{MmlOverlayLinePlayback, MmlOverlaySenderStatus};
 use voice::{Voice, Wake};
 
@@ -49,20 +60,20 @@ use voice::{Voice, Wake};
 pub(crate) const MML_OVERLAY_INSTANCE: u8 = 0;
 
 enum SenderCommandKind {
-    /// 音源をこの音色で使えるようにする。`None` なら既定音色。
+    /// 音源をこの音色で使えるようにする。音色が `None` なら既定音色。
     /// オーバーレイを開いた時点と、音色を選び直したときに走らせる。
     Prepare {
-        patch: Option<String>,
+        patch: LivePatch,
     },
     /// 必要なら音色を読み込み、鳴っているものを止めてから note on を送る。
     PlayNotes {
-        patch: Option<String>,
+        patch: LivePatch,
         messages: Vec<[u8; 3]>,
         gate: Duration,
     },
     /// 鳴っているものを止めてから、この行を頭から積む。空なら止めるだけ。
     PlayLine {
-        patch: Option<String>,
+        patch: LivePatch,
         program: LineProgram,
     },
     /// 複数 instance の one-shot を 1 本の timeline として鳴らす。
@@ -71,6 +82,9 @@ enum SenderCommandKind {
     },
     /// 鳴っているものを止める。
     Stop,
+    /// 何もしない。列で待っている前の command（準備待ちの行など）を鳴らさずに終わらせる。
+    /// 鳴っている音には触れない。
+    Supersede,
     Shutdown,
 }
 
@@ -82,6 +96,7 @@ impl SenderCommandKind {
             Self::PlayLine { .. } => "line",
             Self::PlayLayers { .. } => "layers",
             Self::Stop => "stop",
+            Self::Supersede => "supersede",
             Self::Shutdown => "shutdown",
         }
     }
@@ -95,6 +110,9 @@ struct SenderCommand {
 
 pub struct MmlOverlaySender {
     tx: mpsc::Sender<SenderCommand>,
+    /// fadeout だけは worker を通さず、呼び出し側のスレッドからこれへ送る。
+    fader: Arc<dyn SoundSink + Send + Sync>,
+    sounding_lines: SoundingLines,
     next_command_id: AtomicU64,
     latest_command_id: Arc<AtomicU64>,
     status: Arc<Mutex<MmlOverlaySenderStatus>>,
@@ -104,25 +122,41 @@ pub struct MmlOverlaySender {
 impl MmlOverlaySender {
     /// `sample_rate_hz` は live timeline を張るときにサーバーへ渡す。
     pub fn new(supervisor: Arc<RealtimePlayServerSupervisor>, sample_rate_hz: f64) -> Self {
+        Self::spawn(supervisor, sample_rate_hz)
+    }
+
+    /// server の代わりに `sink` へ送る sender。他 crate のテストが、送った内容を数えるために使う。
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn with_recording_sink(sink: Arc<RecordingSink>, sample_rate_hz: f64) -> Self {
+        Self::spawn(sink, sample_rate_hz)
+    }
+
+    fn spawn<S: SoundSink + Send + Sync + 'static>(sink: Arc<S>, sample_rate_hz: f64) -> Self {
         let (tx, rx) = mpsc::channel();
         let latest_command_id = Arc::new(AtomicU64::new(0));
         let status = Arc::new(Mutex::new(MmlOverlaySenderStatus::default()));
         let worker_latest_command_id = Arc::clone(&latest_command_id);
         let worker_status = Arc::clone(&status);
+        let sounding_lines = SoundingLines::default();
+        let worker_sounding_lines = sounding_lines.clone();
+        let fader: Arc<dyn SoundSink + Send + Sync> = Arc::clone(&sink) as _;
         let worker = std::thread::Builder::new()
             .name("mml-overlay-midi-sender".to_string())
             .spawn(move || {
                 run_sender(
                     rx,
-                    supervisor,
+                    sink,
                     sample_rate_hz,
                     worker_latest_command_id,
                     worker_status,
+                    worker_sounding_lines,
                 )
             })
             .expect("MML overlay MIDI sender thread should start");
         Self {
             tx,
+            fader,
+            sounding_lines,
             next_command_id: AtomicU64::new(1),
             latest_command_id,
             status,
@@ -130,20 +164,20 @@ impl MmlOverlaySender {
         }
     }
 
-    pub fn prepare(&self, patch: Option<&str>) -> u64 {
+    pub fn prepare(&self, patch: impl Into<LivePatch>) -> u64 {
         self.enqueue(SenderCommandKind::Prepare {
-            patch: patch.map(str::to_string),
+            patch: patch.into(),
         })
     }
 
     /// 打鍵の 1 音を鳴らす。渡すのは note on だけでよい。
     /// 前に鳴っていたものは受け取った側が止める。
-    pub fn send(&self, patch: Option<&str>, messages: Vec<[u8; 3]>, gate: Duration) -> u64 {
+    pub fn send(&self, patch: impl Into<LivePatch>, messages: Vec<[u8; 3]>, gate: Duration) -> u64 {
         if messages.is_empty() {
             return self.stop();
         }
         self.enqueue(SenderCommandKind::PlayNotes {
-            patch: patch.map(str::to_string),
+            patch: patch.into(),
             messages,
             gate,
         })
@@ -151,9 +185,9 @@ impl MmlOverlaySender {
 
     /// 1 行ぶんのフレーズを、書かれた音長のまま演奏する。
     /// 空で呼ぶと、鳴っているものを止めるだけになる。
-    pub fn play_line(&self, patch: Option<&str>, program: LineProgram) -> u64 {
+    pub fn play_line(&self, patch: impl Into<LivePatch>, program: LineProgram) -> u64 {
         self.enqueue(SenderCommandKind::PlayLine {
-            patch: patch.map(str::to_string),
+            patch: patch.into(),
             program,
         })
     }
@@ -214,8 +248,9 @@ fn run_sender<S: SoundSink + Send + Sync + 'static>(
     sample_rate_hz: f64,
     latest_command_id: Arc<AtomicU64>,
     status: Arc<Mutex<MmlOverlaySenderStatus>>,
+    sounding_lines: SoundingLines,
 ) {
-    let mut voice = Voice::new(sample_rate_hz);
+    let mut voice = Voice::new(sample_rate_hz, sounding_lines);
     loop {
         let received = match voice.next_wake(Instant::now()) {
             Some((wake, wait)) => match rx.recv_timeout(wait) {
@@ -261,26 +296,15 @@ fn run_sender<S: SoundSink + Send + Sync + 'static>(
                 // newest_queued_command でこの Prepare に畳み込まれうるため、ここ自身が
                 // stop の意味を持つ必要がある。
                 voice.stop(&*sink, "prepare");
-                prepare_if_needed(
-                    &mut voice,
-                    &*sink,
-                    &status,
-                    MML_OVERLAY_INSTANCE,
-                    patch.as_deref(),
-                );
+                prepare_if_needed(&mut voice, &*sink, &status, MML_OVERLAY_INSTANCE, &patch);
             }
             SenderCommandKind::PlayNotes {
                 patch,
                 messages,
                 gate,
             } => {
-                let ready = prepare_if_needed(
-                    &mut voice,
-                    &*sink,
-                    &status,
-                    MML_OVERLAY_INSTANCE,
-                    patch.as_deref(),
-                );
+                let ready =
+                    prepare_if_needed(&mut voice, &*sink, &status, MML_OVERLAY_INSTANCE, &patch);
                 if ready && !is_superseded(command.id, &latest_command_id) {
                     if voice.play_notes(&*sink, &messages, gate) {
                         status.lock().unwrap().sounding = note_on_pitches(&messages);
@@ -290,13 +314,7 @@ fn run_sender<S: SoundSink + Send + Sync + 'static>(
                 }
             }
             SenderCommandKind::PlayLine { patch, program } => {
-                let ready = prepare_if_needed(
-                    &mut voice,
-                    &*sink,
-                    &status,
-                    MML_OVERLAY_INSTANCE,
-                    patch.as_deref(),
-                );
+                let ready = prepare_line_if_needed(&mut voice, &*sink, &status, &patch);
                 if ready && !is_superseded(command.id, &latest_command_id) {
                     let played = voice.play_line(&*sink, &program);
                     if played && !is_superseded(command.id, &latest_command_id) {
@@ -317,6 +335,7 @@ fn run_sender<S: SoundSink + Send + Sync + 'static>(
                 layers,
             ),
             SenderCommandKind::Stop => voice.stop(&*sink, "stop"),
+            SenderCommandKind::Supersede => {}
             SenderCommandKind::Shutdown => {
                 voice.stop(&*sink, "shutdown");
             }
@@ -379,43 +398,13 @@ fn newest_queued_command(
 fn begin_status(status: &Mutex<MmlOverlaySenderStatus>, command_id: u64) {
     let mut status = status.lock().unwrap();
     let prepare_error = status.prepare_error.take();
+    let prepare_error_command_id = status.prepare_error_command_id;
     *status = MmlOverlaySenderStatus {
         command_id,
         prepare_error,
+        prepare_error_command_id,
         ..MmlOverlaySenderStatus::default()
     };
-}
-
-fn prepare_if_needed(
-    voice: &mut Voice,
-    sink: &impl SoundSink,
-    status: &Mutex<MmlOverlaySenderStatus>,
-    instance_id: u8,
-    patch: Option<&str>,
-) -> bool {
-    if voice.is_patch_ready(instance_id, patch) {
-        return true;
-    }
-    {
-        let mut status = status.lock().unwrap();
-        status.loading = true;
-        status.loading_patch = patch.map(str::to_string);
-        status.sounding.clear();
-    }
-    let result = voice.prepare(sink, instance_id, patch);
-    let mut status = status.lock().unwrap();
-    status.loading = false;
-    status.loading_patch = None;
-    match result {
-        Ok(()) => {
-            status.prepare_error = None;
-            true
-        }
-        Err(error) => {
-            status.prepare_error = Some(error);
-            false
-        }
-    }
 }
 
 fn is_superseded(command_id: u64, latest_command_id: &AtomicU64) -> bool {

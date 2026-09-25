@@ -35,16 +35,18 @@ pub(super) fn draw_effect_chain(f: &mut Frame, app: &DawApp, area: Rect) {
     let inner = block.inner(popup);
     f.render_widget(block, popup);
 
+    let state = &app.overlays.effect_chain;
+    let error_rows = u16::from(state.preview_error.is_some());
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1),
             Constraint::Min(1),
+            Constraint::Length(error_rows),
             Constraint::Length(1),
         ])
         .split(inner);
 
-    let state = &app.overlays.effect_chain;
     f.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled(
@@ -63,9 +65,15 @@ pub(super) fn draw_effect_chain(f: &mut Frame, app: &DawApp, area: Rect) {
         draw_chain_list(f, app, chunks[1]);
     }
 
+    if let Some(error) = &state.preview_error {
+        f.render_widget(
+            Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red)),
+            chunks[2],
+        );
+    }
     f.render_widget(
         Paragraph::new(footer).style(Style::default().fg(MONOKAI_CYAN)),
-        chunks[2],
+        chunks[3],
     );
 }
 

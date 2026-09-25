@@ -158,6 +158,75 @@ fn live_chord_check_accepts_the_realtime_reproduction_options() {
 }
 
 #[test]
+fn live_line_check_collects_every_line_in_order() {
+    assert_eq!(
+        parse_cli_from([
+            "cmrt",
+            "live-line-check",
+            "--step-ms",
+            "300",
+            "--offline",
+            "--out",
+            "/tmp/lines.wav",
+            "{\"Surge XT patch\": \"a.fxp\"} c1",
+            "d1",
+        ])
+        .unwrap(),
+        CliAction::LiveLineCheck(LiveLineCheckRequest {
+            config: None,
+            lines: vec![
+                "{\"Surge XT patch\": \"a.fxp\"} c1".to_string(),
+                "d1".to_string()
+            ],
+            step_ms: 300,
+            out: Some(PathBuf::from("/tmp/lines.wav")),
+            offline: true,
+            fade_previous_ms: None,
+            residual: None,
+        })
+    );
+}
+
+#[test]
+fn live_line_check_takes_the_fadeout_and_the_residual_reference() {
+    assert_eq!(
+        parse_cli_from([
+            "cmrt",
+            "live-line-check",
+            "--fade-previous-ms",
+            "50",
+            "--residual-reference",
+            "/tmp/alone.wav",
+            "--residual-notch-note",
+            "84",
+            "c1",
+            "d1",
+        ])
+        .unwrap(),
+        CliAction::LiveLineCheck(LiveLineCheckRequest {
+            config: None,
+            lines: vec!["c1".to_string(), "d1".to_string()],
+            step_ms: 1000,
+            out: None,
+            offline: false,
+            fade_previous_ms: Some(50),
+            residual: Some(ResidualRequest {
+                reference: PathBuf::from("/tmp/alone.wav"),
+                notch_note: 84,
+            }),
+        })
+    );
+    assert!(parse_cli_from([
+        "cmrt",
+        "live-line-check",
+        "--residual-reference",
+        "/tmp/alone.wav",
+        "c1",
+    ])
+    .is_err());
+}
+
+#[test]
 fn inspect_bass_voicing_collects_every_progression_set() {
     assert_eq!(
         parse_cli_from([

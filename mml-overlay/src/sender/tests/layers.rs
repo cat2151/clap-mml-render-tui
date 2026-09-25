@@ -127,7 +127,9 @@ fn normal_line_and_layers_supersede_each_other_in_both_orders() {
             .is_some_and(|playback| playback.command_id() == 3)
     });
 
-    assert_eq!(sink.stops(), 2);
+    // layers へ移るときは stop_all、行へ移るときは timeline の張り直しが前の音を止める。
+    assert_eq!(sink.stops(), 1);
+    assert_eq!(sink.begins(), 3);
     assert_eq!(
         *sink.prepared.lock().unwrap(),
         vec![
@@ -202,7 +204,14 @@ fn shutdown_hard_stops_a_layered_timeline() {
     let worker_status = Arc::clone(&status);
     let worker_sink = Arc::clone(&sink);
     let worker = std::thread::spawn(move || {
-        run_sender(rx, worker_sink, 48_000.0, worker_latest, worker_status);
+        run_sender(
+            rx,
+            worker_sink,
+            48_000.0,
+            worker_latest,
+            worker_status,
+            SoundingLines::default(),
+        );
     });
     tx.send(SenderCommand {
         id: 1,

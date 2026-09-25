@@ -8,8 +8,9 @@ use std::{
 use crate::line_play::LinePerformance;
 
 use super::{
-    is_superseded, log_superseded_after_load, sink::SoundSink, status::MmlOverlayLinePlayback,
-    status::MmlOverlaySenderStatus, voice::Voice, MML_OVERLAY_INSTANCE,
+    is_superseded, live_patch::LivePatch, log_superseded_after_load, sink::SoundSink,
+    status::MmlOverlayLinePlayback, status::MmlOverlaySenderStatus, voice::Voice,
+    MML_OVERLAY_INSTANCE,
 };
 
 /// 1 本の live timeline に載せる、instance ごとの one-shot performance。
@@ -42,12 +43,13 @@ pub(super) fn play_layered_command(
             log_superseded_after_load(command_id, latest_command_id);
             return;
         }
-        if voice.is_patch_ready(layer.instance_id, layer.patch.as_deref()) {
+        let patch = LivePatch::new(layer.patch.as_deref());
+        if voice.is_patch_ready(layer.instance_id, &patch) {
             playable.push(layer);
             continue;
         }
         set_loading(status, &layer);
-        let result = voice.prepare(sink, layer.instance_id, layer.patch.as_deref());
+        let result = voice.prepare(sink, layer.instance_id, &patch);
         clear_loading(status);
         match result {
             Ok(()) => playable.push(layer),
@@ -61,7 +63,11 @@ pub(super) fn play_layered_command(
             }
         }
     }
-    status.lock().unwrap().prepare_error = prepare_error;
+    {
+        let mut status = status.lock().unwrap();
+        status.prepare_error = prepare_error;
+        status.prepare_error_command_id = command_id;
+    }
 
     if is_superseded(command_id, latest_command_id) {
         log_superseded_after_load(command_id, latest_command_id);

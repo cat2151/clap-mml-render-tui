@@ -6,10 +6,16 @@ use std::{
 };
 
 use super::{
-    INSTANCE_COUNT, MAX_MIDI_MESSAGES, MAX_PATCH_BYTES, MAX_RESPONSE_BYTES, MAX_STANDBY_ERROR_BYTES,
+    INSTANCE_COUNT, MAX_EFFECT_CHAIN_BYTES, MAX_MIDI_MESSAGES, MAX_PATCH_BYTES, MAX_RESPONSE_BYTES,
+    MAX_STANDBY_ERROR_BYTES,
 };
 
 pub(super) const MAGIC: [u8; 8] = *b"CMRTMIDI";
+/// v12 adds [`KIND_FADE_OUT_INSTANCES`]. The layout is unchanged, but an old server would
+/// reject the kind and leave the previous line ringing, so the version is bumped.
+///
+/// v11 adds [`CommandSlot::effect_chain`]; an old server would ignore it and play dry.
+///
 /// v10 splits [`KIND_PREPARE_STANDBY_PATCH`] into "accept" and "complete".
 ///
 /// The generic [`ResponseSlot`] now carries only the **acceptance** of a standby
@@ -22,7 +28,7 @@ pub(super) const MAGIC: [u8; 8] = *b"CMRTMIDI";
 /// v9 added standby-bank patch preload ([`KIND_PREPARE_STANDBY_PATCH`]).
 ///
 /// v8 was live tempo-map changes ([`KIND_SET_LIVE_TEMPO`]).
-pub(super) const VERSION: u32 = 10;
+pub(super) const VERSION: u32 = 12;
 pub(super) const SLOT_COUNT: usize = 64;
 pub(super) const KIND_MIDI: u32 = 1;
 pub(super) const KIND_STOP: u32 = 2;
@@ -61,6 +67,9 @@ pub(super) const KIND_SET_LIVE_TEMPO: u32 = 11;
 /// VERSION を上げて繋がらないようにしてある。サーバー側の
 /// `realtime-ipc/src/windows/protocol.rs` と必ず揃えること。
 pub(super) const KIND_PREPARE_STANDBY_PATCH: u32 = 12;
+/// 指定した instance 群の fadeout。`message_count` 個の `instance_ids` と、
+/// `buffer_multiplier` を fadeout の長さ（ミリ秒）として流用する。応答は無い。
+pub(super) const KIND_FADE_OUT_INSTANCES: u32 = 13;
 /// instance ゲインの上限（+12dB 相当）。サーバー側の検証値と一致させること。
 pub(super) const MAX_INSTANCE_GAIN: f32 = 4.0;
 /// 汎用応答の status。
@@ -89,6 +98,7 @@ pub(super) struct CommandSlot {
     pub(super) buffer_multiplier: u32,
     pub(super) time_signature_numerator: u32,
     pub(super) time_signature_denominator: u32,
+    pub(super) effect_chain_len: u32,
     pub(super) timeline_id: u64,
     pub(super) sample_rate_bits: u64,
     pub(super) tempo_bits: u64,
@@ -97,6 +107,8 @@ pub(super) struct CommandSlot {
     pub(super) timeline_seconds_bits: [u64; MAX_MIDI_MESSAGES],
     pub(super) instance_ids: [u8; MAX_MIDI_MESSAGES],
     pub(super) patch: [u8; MAX_PATCH_BYTES],
+    /// patch 系要求に同梱する effect chain（`"effects after instrument"` の値の JSON 文字列）。
+    pub(super) effect_chain: [u8; MAX_EFFECT_CHAIN_BYTES],
 }
 
 #[repr(C)]
@@ -172,10 +184,13 @@ pub(super) struct SharedRing {
 
 unsafe impl Sync for SharedRing {}
 
-const _: () = assert!(size_of::<CommandSlot>() == 6208);
+const _: () = assert!(size_of::<CommandSlot>() == 10_304);
+// chain の長さは u64 の手前の詰め物だった 4 byte に入れてある。両 repository で同じ位置にする。
+const _: () = assert!(offset_of!(CommandSlot, effect_chain_len) == 36);
+const _: () = assert!(offset_of!(CommandSlot, effect_chain) == 6208);
 const _: () = assert!(size_of::<StandbyCompletionSlot>() == 1036);
 const _: () = assert!(size_of::<ResponseSlot>() == 16_396);
-const _: () = assert!(size_of::<SharedRing>() == 415_040);
+const _: () = assert!(size_of::<SharedRing>() == 677_184);
 // standby 用フィールドは auto gain と汎用応答の間へ挿し込んである。ここがずれても
 // magic と version は一致してしまうので、接続時には気づけない。両 repository で
 // 同じオフセットになることを const で固定する。

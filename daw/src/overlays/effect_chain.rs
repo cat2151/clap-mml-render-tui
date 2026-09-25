@@ -28,6 +28,10 @@ pub(crate) struct DawEffectChainOverlayState {
     pub(crate) pending_delete: bool,
     /// 追加 overlay（`a`）の category/kind/list 3 pane 状態。
     pub(crate) add: DawEffectAddState,
+    /// LIVE で鳴らした試聴の sender command。準備の成否が分かるまで持つ。
+    pub(crate) live_preview_command: Option<u64>,
+    /// 直近の試聴を鳴らせなかった理由。overlay に 1 行出し、次の試聴で消す。
+    pub(crate) preview_error: Option<String>,
 }
 
 impl DawEffectChainOverlayState {
@@ -40,6 +44,8 @@ impl DawEffectChainOverlayState {
             scroll_offset: Cell::new(0),
             pending_delete: false,
             add: DawEffectAddState::default(),
+            live_preview_command: None,
+            preview_error: None,
         }
     }
 

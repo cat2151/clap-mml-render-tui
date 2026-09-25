@@ -105,7 +105,21 @@ impl RealtimePlayServerSupervisor {
     /// 起動時の全 instance prepare・行音色変更・MML overlay・keyboard がこれを使う。
     /// 非演奏 bank への先読みには [`Self::prepare_standby_patch`] を使うこと。
     pub fn prepare_live_patch(&self, instance_id: InstanceId, patch: Option<&str>) -> Result<()> {
-        self.prepare_patch_logged("shm-patch-prepare", instance_id, patch)
+        self.prepare_patch_logged("shm-patch-prepare", instance_id, patch, "")
+    }
+
+    /// [`Self::prepare_live_patch`] に、その instance の出力に掛ける effect chain を同梱する。
+    ///
+    /// `effect_chain` は MML 先頭 JSON の `"effects after instrument"` の値の JSON 文字列で、
+    /// 空なら chain を外す。音色が今と同じで chain だけが違うなら、サーバーは音色を読み直さない。
+    /// chain を作れなければ音色も載せずに失敗する。
+    pub fn prepare_live_patch_with_effect_chain(
+        &self,
+        instance_id: InstanceId,
+        patch: Option<&str>,
+        effect_chain: &str,
+    ) -> Result<()> {
+        self.prepare_patch_logged("shm-patch-prepare", instance_id, patch, effect_chain)
     }
 
     fn prepare_patch_logged(
@@ -113,12 +127,16 @@ impl RealtimePlayServerSupervisor {
         action: &str,
         instance_id: InstanceId,
         patch: Option<&str>,
+        effect_chain: &str,
     ) -> Result<()> {
         let started = Instant::now();
         log_realtime_play_event(format!(
-            "action={action} event=start instance={instance_id} patch={patch:?}"
+            "action={action} event=start instance={instance_id} patch={patch:?} \
+             effect_chain={effect_chain:?}"
         ));
-        let result = self.with_fast_client(|client| client.prepare_patch(instance_id, patch));
+        let result = self.with_fast_client(|client| {
+            client.prepare_patch_with_effect_chain(instance_id, patch, effect_chain)
+        });
         let elapsed_ms = started.elapsed().as_millis();
         match &result {
             Ok(()) => log_realtime_play_event(format!(
@@ -164,6 +182,12 @@ impl RealtimePlayServerSupervisor {
 
     pub fn stop_live_instance(&self, instance_id: InstanceId) -> Result<()> {
         self.with_fast_client(|client| client.stop(instance_id))
+    }
+
+    /// live instance 群の出力を、今の音量から 0 まで `fade_ms` ミリ秒で絞る（応答は待たない）。
+    /// 0 に達した instance は鳴っている voice と effect chain の余韻を捨てる。
+    pub fn fade_out_live_instances(&self, instance_ids: &[InstanceId], fade_ms: u32) -> Result<()> {
+        self.with_fast_client(|client| client.fade_out_instances(instance_ids, fade_ms))
     }
 
     pub fn stop_live_all(&self) -> Result<()> {

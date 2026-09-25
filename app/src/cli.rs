@@ -6,8 +6,11 @@
 use anyhow::Result;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use clap_mml_render_tui::{
-    bass_voicing_inspect::BassVoicingInspectRequest, live_chord_check::LiveChordCheckRequest,
-    render_mml::RenderMmlRequest, server,
+    bass_voicing_inspect::BassVoicingInspectRequest,
+    live_chord_check::LiveChordCheckRequest,
+    live_line_check::{LiveLineCheckRequest, ResidualRequest},
+    render_mml::RenderMmlRequest,
+    server,
 };
 use std::path::PathBuf;
 
@@ -29,6 +32,7 @@ pub(crate) enum CliAction {
     PatchRoles { config: Option<PathBuf> },
     RenderMml(RenderMmlRequest),
     LiveChordCheck(LiveChordCheckRequest),
+    LiveLineCheck(LiveLineCheckRequest),
     InspectBassVoicing(BassVoicingInspectRequest),
 }
 
@@ -143,6 +147,33 @@ enum Commands {
         /// Chord Chart と同じ degrees 文字列
         #[arg(value_name = "DEGREES", default_value = "I-V-VIm-IV")]
         degrees: String,
+    },
+    /// MML の行を LIVE で順に鳴らし、device へ出た波形のクリック・途切れ・頭を測る
+    LiveLineCheck {
+        /// 既定の置き場ではなく、この config.toml を読む
+        #[arg(long, value_name = "PATH")]
+        config: Option<PathBuf>,
+        /// 次の行へ送るまでの間隔
+        #[arg(long, default_value_t = 1000, value_name = "MS")]
+        step_ms: u64,
+        /// server が device へ出した波形の WAV 保存先
+        #[arg(long, value_name = "PATH")]
+        out: Option<PathBuf>,
+        /// 同じ行を offline render した対照も解析する
+        #[arg(long)]
+        offline: bool,
+        /// 2 行目以降を送る直前に、鳴っている前の行をこの長さで fadeout する（EFFECT CHAIN の試聴と同じ）
+        #[arg(long, value_name = "MS", value_parser = clap::value_parser!(u32).range(1..=10_000))]
+        fade_previous_ms: Option<u32>,
+        /// 1 行目だけを鳴らした録音。2 行目の送信の後に残る 1 行目の音をこれと比べる
+        #[arg(long, value_name = "PATH", requires = "residual_notch_note")]
+        residual_reference: Option<PathBuf>,
+        /// 前の行の残りを測るときに除く、2 行目の音の MIDI note number（12 平均律 A4=440 Hz）
+        #[arg(long, value_name = "NOTE", requires = "residual_reference", value_parser = clap::value_parser!(u8).range(0..=127))]
+        residual_notch_note: Option<u8>,
+        /// 先頭 JSON 込みの MML の行。この順に送る
+        #[arg(value_name = "LINE", required = true, num_args = 1..)]
+        lines: Vec<String>,
     },
     /// 複数のコード進行を連結してauto voiceし、Bass note numberを表示する
     InspectBassVoicing {
@@ -293,6 +324,33 @@ where
             step_ms,
             out,
             verify,
+        }));
+    }
+
+    if let Some(Commands::LiveLineCheck {
+        config,
+        step_ms,
+        out,
+        offline,
+        fade_previous_ms,
+        residual_reference,
+        residual_notch_note,
+        lines,
+    }) = cli.command
+    {
+        return wrap(CliAction::LiveLineCheck(LiveLineCheckRequest {
+            config,
+            lines,
+            step_ms,
+            out,
+            offline,
+            fade_previous_ms,
+            residual: residual_reference
+                .zip(residual_notch_note)
+                .map(|(reference, notch_note)| ResidualRequest {
+                    reference,
+                    notch_note,
+                }),
         }));
     }
 

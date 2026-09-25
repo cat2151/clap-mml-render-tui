@@ -116,6 +116,11 @@ impl DawApp {
 
     pub(super) fn stop_play(&self) {
         self.stop_mml_overlay_sender();
+        self.stop_offline_playback();
+    }
+
+    /// DAW の演奏と、offline の音を鳴らす preview を止める。MML overlay sender（LIVE）は止めない。
+    pub(super) fn stop_offline_playback(&self) {
         // 起動待ちの最中に止めたら overlay も消す（音は鳴らないのに
         // 「読み込み中」が残り続けるため）。
         self.playback.startup.finish();

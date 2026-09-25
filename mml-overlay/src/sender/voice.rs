@@ -17,8 +17,11 @@
 //! * live timeline が絡む、または記録がずれている疑いがある → `stop_all`。
 //!   サーバー側が実際にprocessしたnoteを記録し、所有bank上で全NoteOffを処理する。
 //!   CLAP `processor.reset()` やpatch reloadは行わない。
+//! * 次の行の timeline を張る直前で、疑いが無い → `stop_all` を送らない。張り直し
+//!   （`begin_timeline`）自体が server 側で全NoteOffをするので、それを停止コマンドとする。
+//!   `stop_all` は出力リングを捨てるので、前の音が release を待たずに段差で切れる。
 //!
-//! どちらの経路でも**コマンドは必ず 1 つ以上飛ぶ**。「鳴っていないはずだから何もしない」
+//! どの経路でも**コマンドは必ず 1 つ以上飛ぶ**。「鳴っていないはずだから何もしない」
 //! で早期 return してよいのは [`Sounding`] が「鳴っていない」と言うときだけで、その記録は
 //! 送信と同じ場所で更新している。以前はこの判断材料を 2 か所（state 側の `sounding` と
 //! line playback 側の `active`）が別々に持ち、互いに相手が止めると思い込んでいた。
@@ -32,8 +35,10 @@ use crate::line_play::LineProgram;
 
 use super::layers::LineLayer;
 use super::line_playback::{LineOutcome, LinePlayback};
+use super::live_patch::LivePatch;
 use super::sink::SoundSink;
 use super::sounding::Sounding;
+use super::sounding_lines::SoundingLines;
 use super::{log_error, log_line, MML_OVERLAY_INSTANCE};
 
 /// worker が待ちを打ち切って起きる理由。
@@ -53,22 +58,28 @@ pub(super) struct Voice {
     command_id: u64,
     /// note on が server に受理されてから、MML が指定した音長だけ先の停止時刻。
     gate_deadline: Option<Instant>,
+    /// 行の演奏を鳴らす instance。音色を変える行は、もう一方の bank の instance へ移る。
+    line_instance: u8,
+    /// 行を鳴らした instance。呼び出し側のスレッドが fadeout の宛先に読む。
+    sounding_lines: SoundingLines,
 }
 
 #[derive(Default)]
 struct PatchState {
-    current: Option<String>,
+    current: LivePatch,
     ready: bool,
 }
 
 impl Voice {
-    pub(super) fn new(sample_rate_hz: f64) -> Self {
+    pub(super) fn new(sample_rate_hz: f64, sounding_lines: SoundingLines) -> Self {
         Self {
             line: LinePlayback::new(sample_rate_hz),
             sounding: Sounding::default(),
             patches: BTreeMap::new(),
             command_id: 0,
             gate_deadline: None,
+            line_instance: MML_OVERLAY_INSTANCE,
+            sounding_lines,
         }
     }
 
@@ -76,10 +87,11 @@ impl Voice {
         self.command_id = command_id;
     }
 
-    pub(super) fn is_patch_ready(&self, instance_id: u8, patch: Option<&str>) -> bool {
+    /// 音色と effect chain の両方が一致したときだけ準備済み。
+    pub(super) fn is_patch_ready(&self, instance_id: u8, patch: &LivePatch) -> bool {
         self.patches
             .get(&instance_id)
-            .is_some_and(|state| state.ready && state.current.as_deref() == patch)
+            .is_some_and(|state| state.ready && state.current == *patch)
     }
 
     /// 音源をこの音色で使えるようにする。
@@ -93,11 +105,12 @@ impl Voice {
         &mut self,
         sink: &impl SoundSink,
         instance_id: u8,
-        patch: Option<&str>,
+        patch: &LivePatch,
     ) -> Result<(), String> {
         self.stop(sink, "prepare");
+        let fields = patch.log_fields();
         log_line(format!(
-            "action=mml-overlay-prepare event=start command_id={} instance={instance_id} patch={patch:?}",
+            "action=mml-overlay-prepare event=start command_id={} instance={instance_id} {fields}",
             self.command_id,
         ));
         let started_at = Instant::now();
@@ -106,12 +119,12 @@ impl Voice {
                 self.patches.insert(
                     instance_id,
                     PatchState {
-                        current: patch.map(str::to_string),
+                        current: patch.clone(),
                         ready: true,
                     },
                 );
                 log_line(format!(
-                    "action=mml-overlay-prepare event=success command_id={} instance={instance_id} patch={patch:?} \
+                    "action=mml-overlay-prepare event=success command_id={} instance={instance_id} {fields} \
                      elapsed_ms={}",
                     self.command_id,
                     started_at.elapsed().as_millis()
@@ -120,7 +133,7 @@ impl Voice {
             }
             Err(error) => {
                 log_error(format!(
-                    "action=mml-overlay-prepare event=error command_id={} instance={instance_id} patch={patch:?} \
+                    "action=mml-overlay-prepare event=error command_id={} instance={instance_id} {fields} \
                      elapsed_ms={} active_patch={:?} error=\"{error}\"",
                     self.command_id,
                     started_at.elapsed().as_millis(),
@@ -220,13 +233,17 @@ impl Voice {
     /// All Sound Off を流すようにしてある。ここが note off を送るのはそれでも意味が
     /// あって、届いたときは release 付きで musical に切れる。
     pub(super) fn play_line(&mut self, sink: &impl SoundSink, program: &LineProgram) -> bool {
-        self.stop(sink, "line");
         // 空行やエラー行はここで終わる。以前はこの経路でサーバーへ何も飛ばず、
-        // 直前に打鍵した音が鳴り続けていた。いまは上の stop で必ず止まっている。
+        // 直前に打鍵した音が鳴り続けていた。いまはこの stop で必ず止まっている。
         if program.is_silent() {
+            self.stop(sink, "line");
             return false;
         }
-        match self.line.play(sink, program) {
+        // 鳴っている timeline は、これから張り直す timeline が NoteOff する。ここで
+        // `stop_all` を送ると server が出力リングを捨て、前の音が段差で 0 へ落ちる。
+        self.stop_before_timeline(sink, "line");
+        self.sounding_lines.record(self.line_instance);
+        match self.line.play(sink, self.line_instance, program) {
             LineOutcome::Playing => {
                 self.sounding.begin_timeline();
                 true
@@ -274,6 +291,16 @@ impl Voice {
     /// 追うときに「そもそも止めに来ていない」のか「止めたのに鳴っている」のかを
     /// 切り分けられない。
     pub(super) fn stop(&mut self, sink: &impl SoundSink, reason: &str) {
+        self.stop_sounding(sink, reason, false);
+    }
+
+    /// 新しい timeline を張る直前の停止。timeline の音は server の張り直しが NoteOff
+    /// するので、記録がずれている疑いが無い限り server 管理の全NoteOff（`stop_all`）を送らない。
+    fn stop_before_timeline(&mut self, sink: &impl SoundSink, reason: &str) {
+        self.stop_sounding(sink, reason, true);
+    }
+
+    fn stop_sounding(&mut self, sink: &impl SoundSink, reason: &str, timeline_follows: bool) {
         self.gate_deadline = None;
         // 「鳴っていないから何もしない」で早期 return する前に捨てる。ループが残ると
         // 誰も鳴らしていないつもりのまま継ぎ足しが続く。
@@ -281,7 +308,11 @@ impl Voice {
         if self.sounding.is_silent() && !self.sounding.needs_hard_stop() {
             return;
         }
-        let mut hard = self.sounding.needs_hard_stop();
+        let mut hard = if timeline_follows {
+            self.sounding.is_suspect()
+        } else {
+            self.sounding.needs_hard_stop()
+        };
         let note_offs = self.sounding.note_offs();
         // ここで測るのは音声波形ではなく、note on の送信成功から停止処理開始までの窓。
         // stop のログ書き込み時間を窓へ混ぜないため、ログより先に時刻を確定する。
@@ -315,6 +346,9 @@ impl Voice {
             }
         }
         self.sounding.clear(hard);
+        if hard {
+            self.sounding_lines.clear();
+        }
         log_line(format!(
             "action=mml-overlay-stop event=success command_id={} reason={reason} patch={:?} \
              note_window_ms={} audibility={}",
@@ -328,7 +362,7 @@ impl Voice {
     fn current_patch(&self, instance_id: u8) -> Option<&str> {
         self.patches
             .get(&instance_id)
-            .and_then(|state| state.current.as_deref())
+            .and_then(|state| state.current.patch())
     }
 }
 
@@ -357,5 +391,6 @@ fn optional_ms(value: Option<u128>) -> String {
     value.map_or_else(|| "unknown".to_string(), |value| value.to_string())
 }
 
+mod line_instance;
 #[cfg(test)]
 mod tests;

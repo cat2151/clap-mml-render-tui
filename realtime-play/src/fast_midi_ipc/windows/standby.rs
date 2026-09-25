@@ -141,10 +141,25 @@ impl FastMidiClient {
         instance_id: InstanceId,
         patch: Option<&str>,
     ) -> Result<(u32, u64), FastIpcError> {
+        self.begin_standby_patch_with_effect_chain(instance_id, patch, "")
+    }
+
+    /// [`Self::begin_standby_patch`] に effect chain を同梱する形
+    /// （chain の意味は [`Self::prepare_patch_with_effect_chain`] と同じ）。
+    pub fn begin_standby_patch_with_effect_chain(
+        &mut self,
+        instance_id: InstanceId,
+        patch: Option<&str>,
+        effect_chain: &str,
+    ) -> Result<(u32, u64), FastIpcError> {
         self.standby.claim(self.mapping.ring())?;
         let since_sequence = standby_watermark(self.mapping.ring());
-        let (request_id, _) =
-            self.patch_request_with_id(KIND_PREPARE_STANDBY_PATCH, instance_id, patch)?;
+        let (request_id, _) = self.patch_request_with_id(
+            KIND_PREPARE_STANDBY_PATCH,
+            instance_id,
+            patch,
+            effect_chain,
+        )?;
         self.standby.started(request_id, since_sequence);
         Ok((request_id, since_sequence))
     }

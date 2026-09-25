@@ -11,6 +11,10 @@ use std::fmt;
 pub const INSTANCE_COUNT: usize = 32;
 pub const MAX_MIDI_MESSAGES: usize = 128;
 pub const MAX_PATCH_BYTES: usize = 4096;
+/// 音色の準備に同梱する effect chain（MML 先頭 JSON の `"effects after instrument"` の値を
+/// JSON 文字列にしたもの）の最大バイト数。サーバー側の
+/// `cmrt_realtime_ipc::MAX_EFFECT_CHAIN_BYTES` と必ず揃えること。
+pub const MAX_EFFECT_CHAIN_BYTES: usize = 4096;
 pub const MAX_RESPONSE_BYTES: usize = 16 * 1024;
 /// standby 完了通知が運べるエラーメッセージの最大バイト数。
 ///
@@ -20,6 +24,9 @@ pub const MAX_RESPONSE_BYTES: usize = 16 * 1024;
 /// publish を失敗させない。サーバー側の
 /// `cmrt_realtime_ipc::MAX_STANDBY_ERROR_BYTES` と必ず揃えること。
 pub const MAX_STANDBY_ERROR_BYTES: usize = 1024;
+/// fadeout の長さとして受け付ける最大値（ミリ秒）。サーバー側の
+/// `cmrt_realtime_ipc::MAX_FADE_OUT_MS` と必ず揃えること。
+pub const MAX_FADE_OUT_MS: u32 = 10_000;
 pub type InstanceId = u8;
 pub type TimelineId = u64;
 
@@ -175,10 +182,28 @@ impl FastMidiClient {
         Err(FastIpcError::UnsupportedPlatform)
     }
 
+    pub fn prepare_patch_with_effect_chain(
+        &mut self,
+        _instance_id: InstanceId,
+        _patch: Option<&str>,
+        _effect_chain: &str,
+    ) -> Result<(), FastIpcError> {
+        Err(FastIpcError::UnsupportedPlatform)
+    }
+
     pub fn begin_standby_patch(
         &mut self,
         _instance_id: InstanceId,
         _patch: Option<&str>,
+    ) -> Result<(u32, u64), FastIpcError> {
+        Err(FastIpcError::UnsupportedPlatform)
+    }
+
+    pub fn begin_standby_patch_with_effect_chain(
+        &mut self,
+        _instance_id: InstanceId,
+        _patch: Option<&str>,
+        _effect_chain: &str,
     ) -> Result<(u32, u64), FastIpcError> {
         Err(FastIpcError::UnsupportedPlatform)
     }
@@ -196,6 +221,14 @@ impl FastMidiClient {
     }
 
     pub fn stop_all(&mut self) -> Result<(), FastIpcError> {
+        Err(FastIpcError::UnsupportedPlatform)
+    }
+
+    pub fn fade_out_instances(
+        &mut self,
+        _instance_ids: &[InstanceId],
+        _fade_ms: u32,
+    ) -> Result<(), FastIpcError> {
         Err(FastIpcError::UnsupportedPlatform)
     }
 

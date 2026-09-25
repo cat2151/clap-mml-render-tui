@@ -48,9 +48,36 @@ DAW の track に挿す CLAP effect（TONE3000 / Surge XT Effects）は、その
 - render は render-server 側が同じ `EffectPlugins` を持って行う（[0024](0024-offline-render-goes-through-the-render-server-only.md)）。
   TUI は `x` overlay の一覧表示のために `EffectPlugins::discover()` を呼ぶだけで、DLL はロードしない
 
+## EFFECT CHAIN の試聴の経路（cache → LIVE）
+
+`x` overlay の試聴（`daw/src/input/effect_chain/preview.rs`）は、対象 track だけの MML を作り、
+
+1. overlay preview cache に一致する音があれば、backend に関係なくそれを鳴らす
+2. 無ければ MML overlay sender（`cmrt_mml_overlay::MmlOverlaySender`）で LIVE へ送る。live instance が
+   音色と chain を同じ準備で受け取り、effect 付きで鳴らす（play-server ADR 0020「live instance の chain」）
+
+周辺候補の先読み render は続けるので、操作しているうちに cache が埋まり、cache から鳴る割合が増える。
+
+- 試聴の MML → 音色 + chain + 演奏の変換は `cmrt_mml_overlay::live_line` の 1 か所。CLI
+  `cmrt live-line-check` も同じ関数を通す（CLI と画面で入力が食い違うと、CLI の計測が画面の音を表さない）
+- cache miss で offline render へ切り替えない。LIVE の準備が失敗したら log と overlay に 1 行出して鳴らさない。
+  play server が無い構成でも同じ欄に出す。切り替えると、失敗が「遅れて鳴る」に化けて見えない
+- 移動を受けた時点で、LIVE で鳴っている前の候補（音色の release と effect の余韻）を 50 ms で fadeout してから
+  次の候補を鳴らす（`MmlOverlaySender::fade_out_line`。長さは固定値）。fadeout は sender の command 列に並べず
+  呼び出したスレッドから送る。列の前に次の候補の準備（chain 付きで数百 ms）があっても待たないため。
+  このため前の候補が消えてから次の候補が鳴るまでは無音になる
+- `stop_all`（server の全NoteOff）は挟まない。出力リングを捨てるので、fadeout も release も段差で切れる。
+  通常の preview と演奏の開始では LIVE の試聴を止める
+- 移動先が cache の候補でも LIVE の前の候補は fadeout する。cache の音（rodio）は次の試聴で即断のまま（高速さを優先）。
+  fadeout は EFFECT CHAIN の試聴だけで、grid sequencer・Chord Chart・MML overlay の行の切り替えは release のまま消える
+- 音色の違う候補はもう一方の bank の instance へ先読みの経路で準備する（鳴っている bank を止めないため）。
+  準備は同じ instance の effect の余韻を切るが、2 つ前の候補はその時点で fadeout 済みなので段差にならない
+- LIVE の試聴には track の音量（mixer の dB）を掛けていない。cache から鳴る音（焼き込み）とは音量が違いうる
+
 ## 残している論点
 
-- keyboard / grid sequencer / MML overlay での effect。データの形はこの ADR のままでよい
+- keyboard / grid sequencer / MML overlay（notepad の行）での effect。live instance は chain を持てるので、
+  送る側が `LivePatch` に chain を入れれば足りる
 - リバーブの尻尾は cell の長さで切れる（render を延長していない）
 
 ## 壊れたら気づく場所
@@ -63,3 +90,9 @@ DAW の track に挿す CLAP effect（TONE3000 / Surge XT Effects）は、その
 | `cmrt-daw` `input::tests::effect_chain::x_does_not_open_on_a_route_without_effects` | effect を持たない経路（テスト用）で書けてしまう |
 | play-server `cmrt-core` `pipeline::tests::effects::unsupported_route_rejects_a_chain_before_rendering` | effect を持たない経路が chain を黙って dry で通した |
 | `cmrt-render-core` `mml_with_resolved_embedded_patch_keeps_the_effect_chain` | 音色の解決で chain のキーが落ちた |
+| `cmrt-daw` `input::tests::effect_chain::preview::add_overlay_previews_on_open_and_when_the_cursor_changes_the_candidate` | cache hit でも LIVE へ送る、または miss で送らない |
+| `cmrt-daw` `input::tests::effect_chain::preview::a_failed_live_preparation_is_shown_until_the_next_preview` | LIVE の準備の失敗が表示されない、または前の失敗が残る |
+| `cmrt-daw` `input::tests::effect_chain::preview::a_normal_preview_and_play_stop_the_live_preview` | 通常の preview・演奏で LIVE の試聴が残る、または fadeout する |
+| `cmrt-daw` `input::tests::effect_chain::preview::moving_between_live_candidates_fades_out_the_previous_one_before_preparing` / `moving_from_a_live_candidate_to_a_cached_one_fades_out_the_live_one` | 移動で前の候補が fadeout されない、または準備の後ろに並ぶ |
+| `cmrt-mml-overlay` `sender::tests::fade_out::the_fadeout_does_not_wait_for_the_next_line_to_load` / `playing_lines_alone_never_fades` | fadeout が準備を待つ、または行の切り替えだけで fadeout する |
+| `cmrt-mml-overlay` `live_line::tests::the_patch_and_the_chain_come_from_the_leading_json` | 試聴の MML から音色か chain が落ちた |

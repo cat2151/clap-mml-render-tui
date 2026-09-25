@@ -12,6 +12,7 @@ pub(crate) mod chord_transfer;
 pub mod cursor_notes;
 pub(crate) mod history_select;
 pub mod line_play;
+mod live_line;
 mod patch_catalog;
 pub mod patch_json;
 pub(crate) mod patch_select;
@@ -23,6 +24,7 @@ pub mod ui;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub use history_select::is_history_select_trigger;
+pub use live_line::{live_line, LiveLine};
 pub use patch_catalog::{
     host_patch_catalog, sort_for_selector, HostPatchCatalog, PatchCatalogEntry,
 };
@@ -31,7 +33,11 @@ pub use patch_select::{
     PreparedPresets,
 };
 pub use play_settings::{is_play_settings_trigger, PlaySettings};
-pub use sender::{LineLayer, MmlOverlayLinePlayback, MmlOverlaySender, MmlOverlaySenderStatus};
+pub use sender::{
+    LineLayer, LivePatch, MmlOverlayLinePlayback, MmlOverlaySender, MmlOverlaySenderStatus,
+};
+#[cfg(any(test, feature = "test-support"))]
+pub use sender::{RecordingSink, SinkOperation};
 pub use state::{
     ChordChartPreviewContext, ChordPreviewContext, MmlOverlay, MmlOverlayAction, MmlOverlayContext,
     MmlOverlayInputMode, MmlOverlaySyntax, NoteRequest, PatchCatalogSnapshot, PatchChange,

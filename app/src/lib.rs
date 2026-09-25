@@ -11,6 +11,7 @@ pub use cmrt_daw as daw;
 // 従来の `crate::history::*` パスは再エクスポートで維持する。
 pub use cmrt_history as history;
 pub mod live_chord_check;
+pub mod live_line_check;
 pub mod logging;
 pub use cmrt_loop_browser_domain as loop_browser;
 #[cfg(test)]

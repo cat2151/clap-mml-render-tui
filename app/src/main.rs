@@ -1,7 +1,8 @@
 use anyhow::Result;
 use clap_mml_render_tui::{
     bass_voicing_inspect, config, config_editor, live_chord_check,
-    live_chord_check::LiveChordCheckRequest, render_mml, render_mml::RenderMmlRequest, server, tui,
+    live_chord_check::LiveChordCheckRequest, live_line_check,
+    live_line_check::LiveLineCheckRequest, render_mml, render_mml::RenderMmlRequest, server, tui,
     updater, voicing_cache_builder,
 };
 use cmrt_core::play_samples;
@@ -108,6 +109,9 @@ fn run() -> Result<()> {
         })
         | CliAction::LiveChordCheck(LiveChordCheckRequest {
             config: Some(path), ..
+        })
+        | CliAction::LiveLineCheck(LiveLineCheckRequest {
+            config: Some(path), ..
         }) => {
             let mut cfg = cmrt_runtime::Config::load_from_path(path)?;
             cfg.source_path = Some(path.clone());
@@ -191,6 +195,9 @@ fn run() -> Result<()> {
         }
         CliAction::LiveChordCheck(request) => {
             return live_chord_check::run(&cfg, &request);
+        }
+        CliAction::LiveLineCheck(request) => {
+            return live_line_check::run(&cfg, &request);
         }
         CliAction::PatchRoles { .. } => {
             return tui::patch_role_report::run_patch_role_report(&cfg);

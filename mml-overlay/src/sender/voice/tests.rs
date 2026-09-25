@@ -10,6 +10,7 @@ use cmrt_realtime_play::{LiveTimelineConfig, TimelineMidiEvent};
 
 use super::*;
 use crate::line_play::{FilterSettings, LinePerformance};
+use crate::sender::live_patch::LivePatch;
 use crate::sender::sink::SinkResult;
 use crate::{NOTE_OFF, NOTE_ON};
 
@@ -17,6 +18,7 @@ use crate::{NOTE_OFF, NOTE_ON};
 #[derive(Clone, Debug, PartialEq)]
 enum Sent {
     Prepare(u8, Option<String>),
+    StandbyPrepare(u8, Option<String>),
     Midi(u8, Vec<[u8; 3]>),
     StopAll,
     BeginTimeline,
@@ -35,6 +37,10 @@ struct FakeSink {
     /// timeline を張るのを失敗させる。
     begin_fails: bool,
     midi_delay: Duration,
+    /// bank を 2 つ持つ（instance 0 と 1 が互いのもう一方の bank）。
+    two_banks: bool,
+    /// 準備で受け取った effect chain（[`Sent::Prepare`] / [`Sent::StandbyPrepare`] と同じ順）。
+    prepared_chains: RefCell<Vec<String>>,
 }
 
 impl FakeSink {
@@ -48,6 +54,16 @@ impl FakeSink {
 
     fn push(&self, sent: Sent) {
         self.sent.borrow_mut().push(sent);
+    }
+
+    fn record_chain(&self, patch: &LivePatch) {
+        self.prepared_chains
+            .borrow_mut()
+            .push(patch.effect_chain().to_string());
+    }
+
+    fn prepared_chains(&self) -> Vec<String> {
+        self.prepared_chains.borrow().clone()
     }
 
     fn timeline_events(&self) -> Vec<TimelineMidiEvent> {
@@ -64,9 +80,26 @@ impl FakeSink {
 }
 
 impl SoundSink for FakeSink {
-    fn prepare_patch(&self, instance_id: u8, patch: Option<&str>) -> SinkResult {
+    fn prepare_patch(&self, instance_id: u8, patch: &LivePatch) -> SinkResult {
         std::thread::sleep(self.prepare_delay);
-        self.push(Sent::Prepare(instance_id, patch.map(str::to_string)));
+        self.push(Sent::Prepare(
+            instance_id,
+            patch.patch().map(str::to_string),
+        ));
+        self.record_chain(patch);
+        Ok(())
+    }
+
+    fn standby_instance_of(&self, instance_id: u8) -> Option<u8> {
+        self.two_banks.then_some(instance_id ^ 1)
+    }
+
+    fn prepare_standby_patch(&self, instance_id: u8, patch: &LivePatch) -> SinkResult {
+        self.push(Sent::StandbyPrepare(
+            instance_id,
+            patch.patch().map(str::to_string),
+        ));
+        self.record_chain(patch);
         Ok(())
     }
 
@@ -100,7 +133,12 @@ impl SoundSink for FakeSink {
 }
 
 fn voice() -> Voice {
-    Voice::new(48_000.0)
+    Voice::new(48_000.0, SoundingLines::default())
+}
+
+/// chain 無しの音色。
+fn patch(name: &str) -> LivePatch {
+    LivePatch::new(Some(name))
 }
 
 fn note_on(pitch: u8) -> [u8; 3] {
@@ -146,7 +184,7 @@ fn gate_starts_after_slow_patch_prepare_and_keeps_the_full_note_length() {
     let request_started = Instant::now();
 
     assert!(voice
-        .prepare(&sink, MML_OVERLAY_INSTANCE, Some("slow.sfz"))
+        .prepare(&sink, MML_OVERLAY_INSTANCE, &patch("slow.sfz"))
         .is_ok());
     assert!(voice.play_notes(&sink, &[note_on(60)], gate));
 
@@ -260,7 +298,7 @@ fn preparing_a_patch_stops_what_is_sounding() {
     voice.play_notes(&sink, &[note_on(60)], Duration::from_millis(250));
     sink.take();
 
-    let _ = voice.prepare(&sink, MML_OVERLAY_INSTANCE, Some("lead.fxp"));
+    let _ = voice.prepare(&sink, MML_OVERLAY_INSTANCE, &patch("lead.fxp"));
 
     assert_eq!(
         sink.sent(),
@@ -336,5 +374,60 @@ fn a_hard_stop_leaves_nothing_to_stop() {
 }
 
 #[cfg(test)]
+mod effect_chain;
 mod filters;
 mod repeat;
+
+/// 次の行は、張り直す timeline に前の行の停止を任せる。`stop_all` を挟むと server が
+/// 出力リングを捨て、前の行の音が release を待たずに段差で切れる。
+#[test]
+fn the_next_line_is_stopped_by_the_new_timeline_not_by_stop_all() {
+    let sink = FakeSink::default();
+    let mut voice = voice();
+    voice.play_line(&sink, &line(3));
+    sink.take();
+
+    voice.play_line(&sink, &line(2));
+
+    assert_eq!(
+        sink.sent(),
+        vec![Sent::BeginTimeline, Sent::TimelineEvents(2)]
+    );
+}
+
+/// 音色を変える行は、鳴っている bank を止めずにもう一方の bank へ読み込み、そちらで鳴らす。
+/// 同じ instance で読み直すと、読み込みの間 bank の render が止まって無音が挟まる。
+#[test]
+fn a_line_with_another_patch_loads_on_the_other_bank_while_the_old_one_sounds() {
+    let sink = FakeSink {
+        two_banks: true,
+        ..FakeSink::default()
+    };
+    let mut voice = voice();
+    // 何も鳴っていなければ、その場で読み込む。
+    voice.prepare_line(&sink, &patch("a.fxp")).unwrap();
+    voice.play_line(&sink, &line(1));
+    assert_eq!(sink.take()[0], Sent::Prepare(0, Some("a.fxp".to_string())));
+
+    voice.prepare_line(&sink, &patch("b.fxp")).unwrap();
+    voice.play_line(&sink, &line(1));
+
+    assert_eq!(
+        sink.take(),
+        vec![
+            Sent::StandbyPrepare(1, Some("b.fxp".to_string())),
+            Sent::BeginTimeline,
+            Sent::TimelineEvents(1),
+        ]
+    );
+    assert_eq!(sink.timeline_events().last().unwrap().instance_id, 1);
+
+    // 前の音色は元の bank に残っているので、戻るときは読み込まない。
+    voice.prepare_line(&sink, &patch("a.fxp")).unwrap();
+    voice.play_line(&sink, &line(1));
+    assert_eq!(
+        sink.take(),
+        vec![Sent::BeginTimeline, Sent::TimelineEvents(1)]
+    );
+    assert_eq!(sink.timeline_events().last().unwrap().instance_id, 0);
+}

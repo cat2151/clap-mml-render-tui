@@ -3,6 +3,10 @@ name = "cmrt-mml-overlay"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+# 他 crate のテストから、server の代わりに送った内容を記録する sender を使うためのフラグ。
+test-support = []
+
 [dependencies]
 cmrt-chord = { path = "../chord" }
 # 時刻つき MIDI イベント列の変換（repeat のずらし・CC1・velocity）はここへ寄せる。
@@ -10,6 +14,8 @@ cmrt-midi-filter = { path = "../midi-filter" }
 cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-tui-core = { path = "../tui-core" }
 cmrt-patches = { path = "../patches" }
+# 行頭 JSON の effect chain のキー（`EFFECT_CHAIN_JSON_KEY`）を server と同じ綴りで読むため。
+clap-mml-play-server-core = { git = "https://github.com/cat2151/clap-mml-play-server", package = "cmrt-core" }
 # MML のパースは cmrt-chord 経由で本家へ通す。ここが直に使うのは行頭 JSON を
 # 剥がす mml_preprocessor だけなので、tree-sitter を引く parser feature は要らない。
 mmlabc-to-smf = { git = "https://github.com/cat2151/mmlabc-to-smf-rust.git", package = "mmlabc-to-smf", default-features = false }

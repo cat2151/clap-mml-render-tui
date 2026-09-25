@@ -65,7 +65,7 @@ pub fn run(cfg: &Config, request: &LiveChordCheckRequest) -> Result<()> {
     let sender = MmlOverlaySender::new(Arc::clone(&supervisor), cfg.sample_rate);
 
     for (index, ((label, program), chord)) in programs.into_iter().zip(&chords).enumerate() {
-        let command_id = sender.play_line(Some(&request.patch), program);
+        let command_id = sender.play_line(Some(request.patch.as_str()), program);
         wait_for_line(&sender, command_id)?;
         println!(
             "  send chord={}/{} label='{}' source='{}' command_id={command_id}",
@@ -202,7 +202,7 @@ fn chord_programs(
         .collect()
 }
 
-fn wait_for_line(sender: &MmlOverlaySender, command_id: u64) -> Result<()> {
+pub(crate) fn wait_for_line(sender: &MmlOverlaySender, command_id: u64) -> Result<()> {
     let deadline = Instant::now() + COMMAND_TIMEOUT;
     loop {
         let status = sender.status();
@@ -222,7 +222,7 @@ fn wait_for_line(sender: &MmlOverlaySender, command_id: u64) -> Result<()> {
     }
 }
 
-fn wait_for_command(sender: &MmlOverlaySender, command_id: u64) -> Result<()> {
+pub(crate) fn wait_for_command(sender: &MmlOverlaySender, command_id: u64) -> Result<()> {
     let deadline = Instant::now() + COMMAND_TIMEOUT;
     while sender.status().command_id() != command_id {
         if Instant::now() >= deadline {
@@ -298,7 +298,7 @@ impl Drop for CaptureEnvironment {
     }
 }
 
-fn restore_env(name: &str, value: Option<std::ffi::OsString>) {
+pub(crate) fn restore_env(name: &str, value: Option<std::ffi::OsString>) {
     match value {
         Some(value) => std::env::set_var(name, value),
         None => std::env::remove_var(name),
@@ -332,13 +332,13 @@ fn wait_for_capture(path: &Path) -> Result<()> {
     }
 }
 
-struct Capture {
-    samples: Vec<f32>,
-    sample_rate: u32,
-    channels: u16,
+pub(crate) struct Capture {
+    pub(crate) samples: Vec<f32>,
+    pub(crate) sample_rate: u32,
+    pub(crate) channels: u16,
 }
 
-fn read_capture(path: &Path) -> Result<Capture> {
+pub(crate) fn read_capture(path: &Path) -> Result<Capture> {
     let mut reader = hound::WavReader::open(path)
         .with_context(|| format!("live capture WAV を読めません: {}", path.display()))?;
     let spec = reader.spec();

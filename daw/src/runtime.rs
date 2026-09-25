@@ -140,6 +140,12 @@ impl DawApp {
                 self.pump_mml_overlay();
             }
             {
+                let _slow = crate::performance_log::SlowOperation::new(
+                    "daw-pump-effect-chain-live-preview",
+                );
+                self.pump_effect_chain_live_preview();
+            }
+            {
                 let _slow = crate::performance_log::SlowOperation::new("daw-pump-auto-trim");
                 self.pump_pending_auto_trim();
             }

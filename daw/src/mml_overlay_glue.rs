@@ -340,8 +340,10 @@ impl DawApp {
                 };
                 if let Some(sender) = &self.mml_overlay_sender {
                     let command_id = match notes {
-                        Some(notes) => sender.send(Some(&patch), notes.messages, notes.duration),
-                        None => sender.prepare(Some(&patch)),
+                        Some(notes) => {
+                            sender.send(Some(patch.as_str()), notes.messages, notes.duration)
+                        }
+                        None => sender.prepare(Some(patch.as_str())),
                     };
                     self.mml_overlay.expect_sender_command(command_id);
                 }

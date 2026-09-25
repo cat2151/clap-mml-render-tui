@@ -178,3 +178,27 @@ fn add_list_keeps_the_cursor_inside_the_scroll_margin_and_remembers_the_offset()
     let (first, _) = visible_range(&app);
     assert_eq!(20 - first, margin);
 }
+
+/// 試聴を鳴らせなかった理由は overlay に 1 行出る。footer は消さない。
+#[test]
+fn draw_shows_the_preview_error_line() {
+    let mut app = build_test_app();
+    app.mode = DawMode::EffectChain;
+    app.overlays.effect_chain = crate::overlays::DawEffectChainOverlayState::open(
+        2,
+        "Pads/Pad 1.fxp".to_string(),
+        Vec::new(),
+    );
+    let without = render_lines(&app, 120, 30).join("\n").replace(' ', "");
+    assert!(!without.contains("試聴の準備に失敗"), "screen:\n{without}");
+
+    app.overlays.effect_chain.preview_error =
+        Some("試聴の準備に失敗しました: chain を作れません".to_string());
+
+    let screen = render_lines(&app, 120, 30).join("\n").replace(' ', "");
+    assert!(
+        screen.contains("試聴の準備に失敗しました:chainを作れません"),
+        "screen:\n{screen}"
+    );
+    assert!(screen.contains("dd:削除"), "screen:\n{screen}");
+}

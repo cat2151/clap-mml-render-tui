@@ -80,7 +80,7 @@ fn failed_or_silent_lines_do_not_publish_an_interval() {
     harness.send(
         2,
         SenderCommandKind::PlayLine {
-            patch: Some("ready.sfz".to_string()),
+            patch: LivePatch::new(Some("ready.sfz")),
             program: LineProgram::silent(),
         },
     );

@@ -42,6 +42,7 @@ fn loading_patch_is_shown_in_the_center_above_the_mml_overlay() {
         sounding: Vec::new(),
         line_playback: None,
         prepare_error: None,
+        prepare_error_command_id: 0,
     };
 
     let rendered = render_with_status(&opened(), &status);

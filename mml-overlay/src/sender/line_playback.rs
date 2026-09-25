@@ -35,7 +35,7 @@ use crate::line_play::LineProgram;
 
 use super::layers::LineLayer;
 use super::sink::SoundSink;
-use super::{log_error, log_line, MML_OVERLAY_INSTANCE};
+use super::{log_error, log_line};
 
 use repeat::RepeatState;
 
@@ -72,6 +72,8 @@ pub(super) struct LinePlayback {
     next_timeline_id: TimelineId,
     /// 走っているループ。repeat OFF の演奏でも [`Self::stop_repeat`] でも捨てる。
     repeat: Option<RepeatState>,
+    /// 行を鳴らしている instance。ループの継ぎ足しも同じ instance へ積む。
+    instance_id: u8,
 }
 
 impl LinePlayback {
@@ -80,6 +82,7 @@ impl LinePlayback {
             sample_rate_hz,
             next_timeline_id: 1,
             repeat: None,
+            instance_id: 0,
         }
     }
 
@@ -87,8 +90,14 @@ impl LinePlayback {
     ///
     /// repeat 指定なら 1 周目だけでなく先読み ぶんの周回まで積み、以降は
     /// [`Self::pump`] が同じ timeline へ継ぎ足す。
-    pub(super) fn play(&mut self, sink: &impl SoundSink, program: &LineProgram) -> LineOutcome {
+    pub(super) fn play(
+        &mut self,
+        sink: &impl SoundSink,
+        instance_id: u8,
+        program: &LineProgram,
+    ) -> LineOutcome {
         self.repeat = None;
+        self.instance_id = instance_id;
         let timeline_id = self.next_timeline_id;
         self.next_timeline_id = advance_timeline_id(timeline_id);
         if let Err(error) = sink.begin_timeline(LiveTimelineConfig {
@@ -116,7 +125,7 @@ impl LinePlayback {
             // 「repeat OFF だと modulation も効かない」になってはいけない。
             let lap = filters::one_shot(events, program.filters, loop_seconds);
             let outcome = truncation_outcome(lap.len());
-            if !send_cycle(sink, timeline_id, &lap) {
+            if !send_cycle(sink, timeline_id, instance_id, &lap) {
                 return LineOutcome::Partial;
             }
             return outcome;
@@ -133,7 +142,7 @@ impl LinePlayback {
             "action=mml-overlay-line-repeat event=start timeline={timeline_id} loop_seconds={loop_seconds:.3} events={}",
             events.len()
         ));
-        if !send_laps(sink, &mut state, now) {
+        if !send_laps(sink, &mut state, instance_id, now) {
             return LineOutcome::Partial;
         }
         self.repeat = Some(state);
@@ -166,7 +175,7 @@ impl LinePlayback {
     /// 積んだ note on の note off が落ちている恐れがある。
     pub(super) fn pump(&mut self, sink: &impl SoundSink, now: Instant) -> Option<LineOutcome> {
         let state = self.repeat.as_mut()?;
-        if !send_laps(sink, state, now) {
+        if !send_laps(sink, state, self.instance_id, now) {
             self.repeat = None;
             return Some(LineOutcome::Partial);
         }
@@ -188,7 +197,12 @@ impl LinePlayback {
 }
 
 /// 積むべき周を全部積む。1 つでも送信に失敗したら `false`。
-fn send_laps(sink: &impl SoundSink, state: &mut RepeatState, now: Instant) -> bool {
+fn send_laps(
+    sink: &impl SoundSink,
+    state: &mut RepeatState,
+    instance_id: u8,
+    now: Instant,
+) -> bool {
     let timeline_id = state.timeline_id();
     let filters = state.filters();
     let loop_seconds = state.loop_seconds();
@@ -196,7 +210,7 @@ fn send_laps(sink: &impl SoundSink, state: &mut RepeatState, now: Instant) -> bo
         // 1 周ぶんを k 周目の絶対秒へずらし、**そのずらした絶対秒のまま** filter を掛ける。
         // 周の絶対秒がそのまま LFO の位相なので、継ぎ足しの境目で位相が飛ばない。
         let lap = filters::lap(state.cycle(), filters, offset, loop_seconds);
-        if !send_cycle(sink, timeline_id, &lap) {
+        if !send_cycle(sink, timeline_id, instance_id, &lap) {
             return false;
         }
     }
@@ -216,8 +230,13 @@ fn truncation_outcome(count: usize) -> LineOutcome {
 }
 
 /// 1 周ぶんを共有メモリ 1 回ぶんずつに切って送る。
-fn send_cycle(sink: &impl SoundSink, timeline_id: TimelineId, events: &[TimedMidiEvent]) -> bool {
-    for batch in timeline_batches(events, timeline_id, sink.max_batch_events()) {
+fn send_cycle(
+    sink: &impl SoundSink,
+    timeline_id: TimelineId,
+    instance_id: u8,
+    events: &[TimedMidiEvent],
+) -> bool {
+    for batch in timeline_batches(events, timeline_id, instance_id, sink.max_batch_events()) {
         if let Err(error) = sink.send_timeline_events(&batch) {
             log_error(format!(
                 "action=mml-overlay-line-send event=error timeline={timeline_id} error=\"{error}\""
@@ -308,6 +327,7 @@ fn advance_timeline_id(current: TimelineId) -> TimelineId {
 fn timeline_batches(
     events: &[TimedMidiEvent],
     timeline_id: TimelineId,
+    instance_id: u8,
     batch_size: usize,
 ) -> Vec<Vec<TimelineMidiEvent>> {
     let count = events.len().min(MAX_LINE_EVENTS);
@@ -318,7 +338,7 @@ fn timeline_batches(
                 .iter()
                 .map(|event| TimelineMidiEvent {
                     timeline_id,
-                    instance_id: MML_OVERLAY_INSTANCE,
+                    instance_id,
                     timeline_seconds: LOOKAHEAD_SECONDS + event.seconds.max(0.0),
                     message: event.message,
                 })

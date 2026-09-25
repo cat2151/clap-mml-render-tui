@@ -1,9 +1,10 @@
 use cmrt_realtime_play::MAX_MIDI_MESSAGES;
 
+use super::super::MML_OVERLAY_INSTANCE;
 use super::*;
 
 fn batches(events: &[TimedMidiEvent], timeline_id: TimelineId) -> Vec<Vec<TimelineMidiEvent>> {
-    timeline_batches(events, timeline_id, MAX_MIDI_MESSAGES)
+    timeline_batches(events, timeline_id, MML_OVERLAY_INSTANCE, MAX_MIDI_MESSAGES)
 }
 
 fn events(count: usize) -> Vec<TimedMidiEvent> {

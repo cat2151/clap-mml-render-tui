@@ -148,11 +148,25 @@ impl RealtimePlayServerSupervisor {
         instance_id: InstanceId,
         patch: Option<&str>,
     ) -> Result<StandbyPatchRequest> {
+        self.begin_standby_patch_with_effect_chain(instance_id, patch, "")
+    }
+
+    /// [`Self::begin_standby_patch`] に、その instance の出力に掛ける effect chain を同梱する
+    /// （chain の意味は [`Self::prepare_live_patch_with_effect_chain`] と同じ）。
+    pub fn begin_standby_patch_with_effect_chain(
+        &self,
+        instance_id: InstanceId,
+        patch: Option<&str>,
+        effect_chain: &str,
+    ) -> Result<StandbyPatchRequest> {
         log_realtime_play_event(format!(
-            "action={STANDBY_ACTION} event=start instance={instance_id} patch={patch:?}"
+            "action={STANDBY_ACTION} event=start instance={instance_id} patch={patch:?} \
+             effect_chain={effect_chain:?}"
         ));
         let started = Instant::now();
-        match self.with_fast_client(|client| client.begin_standby_patch(instance_id, patch)) {
+        match self.with_fast_client(|client| {
+            client.begin_standby_patch_with_effect_chain(instance_id, patch, effect_chain)
+        }) {
             Ok((request_id, since_sequence)) => {
                 log_realtime_play_event(format!(
                     "action={STANDBY_ACTION} event=accepted request={request_id} \
@@ -252,7 +266,18 @@ impl RealtimePlayServerSupervisor {
         instance_id: InstanceId,
         patch: Option<&str>,
     ) -> Result<()> {
-        let mut request = self.begin_standby_patch(instance_id, patch)?;
+        self.prepare_standby_patch_with_effect_chain(instance_id, patch, "")
+    }
+
+    /// [`Self::prepare_standby_patch`] に effect chain を同梱する形。
+    pub fn prepare_standby_patch_with_effect_chain(
+        &self,
+        instance_id: InstanceId,
+        patch: Option<&str>,
+        effect_chain: &str,
+    ) -> Result<()> {
+        let mut request =
+            self.begin_standby_patch_with_effect_chain(instance_id, patch, effect_chain)?;
         loop {
             if self.poll_standby_patch(&mut request)?.is_some() {
                 return Ok(());
