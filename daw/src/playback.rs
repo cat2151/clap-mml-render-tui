@@ -19,6 +19,7 @@ mod play_server;
 #[cfg(test)]
 mod real_server;
 mod startup;
+mod startup_audition;
 
 use super::playback_util::play_start_log_lines;
 pub(super) use super::playback_util::{effective_measure_count, loop_measure_summary_label};
@@ -26,6 +27,7 @@ use super::{DawApp, DawPlayState, PlayPosition};
 pub(super) use measure_math::{current_play_measure_index, following_measure_index};
 use measure_math::{format_playback_measure_advance_log, format_playback_measure_resolution_log};
 pub(crate) use startup::{DawPlaybackStartupStage, DawPlaybackStartupState};
+pub(crate) use startup_audition::StartupAudition;
 
 /// 演奏できる中身があるか（1 小節でも空でない MML があるか）。
 ///
@@ -124,6 +126,7 @@ impl DawApp {
         // 起動待ちの最中に止めたら overlay も消す（音は鳴らないのに
         // 「読み込み中」が残り続けるため）。
         self.playback.startup.finish();
+        self.cancel_startup_audition();
         let prev_state = self.playback.preview_output.stop_playback();
         match prev_state {
             DawPlayState::Idle => {}

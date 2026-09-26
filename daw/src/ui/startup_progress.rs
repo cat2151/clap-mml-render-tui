@@ -28,6 +28,9 @@ pub(super) fn draw_startup_progress(app: &DawApp, f: &mut Frame<'_>, area: Rect)
     let Some(startup) = app.playback.startup.snapshot() else {
         return;
     };
+    if app.startup_audition_is_sounding() {
+        return;
+    }
     let server_progress = app
         .playback
         .realtime_play_server

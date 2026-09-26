@@ -7,7 +7,7 @@ use self::service::OfflinePreviewRequest;
 use super::{DawApp, FIRST_PLAYABLE_TRACK};
 use cmrt_runtime::RealtimeAudioBackend;
 
-mod cached_samples;
+pub(crate) mod cached_samples;
 pub(crate) mod output;
 pub(crate) mod overlay_cache;
 mod play_server;

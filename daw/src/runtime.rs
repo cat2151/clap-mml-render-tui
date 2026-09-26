@@ -60,7 +60,7 @@ impl DawApp {
     ///   - `QuitApp`     : q キーでアプリを終了する
     ///
     /// `autoplay_on_entry` が true の場合、`kick_all_pending()` の直後に
-    /// 曲先頭（measure 0）から自動再生を開始する（Shift+P 相当）。
+    /// カーソルの小節から自動再生を開始する（[`DawApp::start_autoplay_on_entry`]）。
     /// notepad からの `w` 切替や HTTP モード切替では再発火させたくないため、
     /// 真の cold start 呼び出し元のみ true を渡すこと。
     pub fn run_with_terminal(
@@ -79,7 +79,7 @@ impl DawApp {
         let _deactivate_daw_http_server_guard = DeactivateDawHttpServerGuard;
         self.kick_all_pending();
         if autoplay_on_entry {
-            self.start_play();
+            self.start_autoplay_on_entry();
         }
         let mut uses_textarea_cursor = self.uses_textarea_cursor();
         execute!(
@@ -144,6 +144,10 @@ impl DawApp {
                     "daw-pump-effect-chain-live-preview",
                 );
                 self.pump_effect_chain_live_preview();
+            }
+            {
+                let _slow = crate::performance_log::SlowOperation::new("daw-pump-startup-audition");
+                self.pump_startup_audition();
             }
             {
                 let _slow = crate::performance_log::SlowOperation::new("daw-pump-auto-trim");

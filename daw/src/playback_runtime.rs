@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use cmrt_realtime_play::RealtimePlayServerSupervisor;
 
 use super::playback::live_gain::LiveTrackGain;
-use super::playback::DawPlaybackStartupState;
+use super::playback::{DawPlaybackStartupState, StartupAudition};
 use super::preview::output::PreviewOutputHandle;
 use super::{AbRepeatState, DawPlayState, PlayPosition};
 
@@ -28,6 +28,8 @@ pub(crate) struct DawPlaybackRuntime {
     /// 演奏を始めてから最初の音が出るまでの進み具合。演奏スレッドが書き、
     /// 描画スレッドが中央 overlay として読む。待っていないあいだは空。
     pub(crate) startup: DawPlaybackStartupState,
+    /// 起動直後の自動再生で、本演奏が鳴るまでの間を埋める試聴ループ。
+    pub(crate) startup_audition: Mutex<Option<StartupAudition>>,
 }
 
 impl DawPlaybackRuntime {
@@ -56,6 +58,7 @@ impl DawPlaybackRuntime {
             measure_samples: Arc::new(Mutex::new(0)),
             live_track_gains: Arc::new(Mutex::new(Vec::new())),
             startup: DawPlaybackStartupState::default(),
+            startup_audition: Mutex::new(None),
         }
     }
 

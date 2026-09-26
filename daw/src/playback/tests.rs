@@ -18,7 +18,7 @@ pub(super) use super::{
 };
 
 /// stop_play のログ出力を検証するための最小構成の DawApp を作る。
-fn build_test_app() -> DawApp {
+pub(in crate::playback) fn build_test_app() -> DawApp {
     // 0 = Tempo / 1 = chord 行 / 2..=3 = 演奏 track。
     let tracks = crate::FIRST_PLAYABLE_TRACK + 2;
     let measures = 2;

@@ -282,7 +282,17 @@ impl DawApp {
         }
         self.editor.pending_delete = false;
 
-        match normal_playback_shortcut(key_event) {
+        let playback_shortcut = normal_playback_shortcut(key_event);
+        if playback_shortcut.is_some()
+            && self.cancel_startup_audition()
+            && matches!(
+                playback_shortcut,
+                Some(NormalPlaybackShortcut::PlayFromCursor | NormalPlaybackShortcut::TogglePlay)
+            )
+        {
+            return DawNormalAction::Continue;
+        }
+        match playback_shortcut {
             Some(NormalPlaybackShortcut::PreviewCurrentTrack) => {
                 self.toggle_preview_for_target_tracks(false);
                 return DawNormalAction::Continue;
