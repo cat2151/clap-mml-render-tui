@@ -93,30 +93,42 @@ impl DawApp {
                 }
             }
             KeyCode::Char(' ') => self.preview_editing_effect_chain(),
-            KeyCode::Char('a') => {
-                if self.effect_preset_count() == 0 {
-                    self.append_log_line(message::NO_PRESETS);
-                    return;
+            KeyCode::Char('a') => self.open_effect_chain_add(None),
+            KeyCode::Char('r') => {
+                let state = &self.overlays.effect_chain;
+                if state.cursor < state.chain.len() {
+                    self.open_effect_chain_add(Some(state.cursor));
                 }
-                if let Some(catalog) = self.effect_plugins.catalog() {
-                    self.overlays.effect_chain.add = DawEffectAddState::open(catalog);
-                }
-                self.mode = DawMode::EffectChainAdd;
-                self.preview_effect_chain_add_candidate(None);
             }
             KeyCode::Enter => self.commit_effect_chain(),
             _ => {}
         }
     }
 
-    /// `x` → `a` の category/kind/list 3 pane。category を動かした後は kind pane を組み直し
+    /// 追加 overlay を開いて list カーソルの候補を preview する。`replace_target` は
+    /// [`DawEffectAddState::replace_target`]（`a` は `None`、`r` はカーソル段）。
+    fn open_effect_chain_add(&mut self, replace_target: Option<usize>) {
+        if self.effect_preset_count() == 0 {
+            self.append_log_line(message::NO_PRESETS);
+            return;
+        }
+        if let Some(catalog) = self.effect_plugins.catalog() {
+            self.overlays.effect_chain.add = DawEffectAddState::open(catalog);
+            self.overlays.effect_chain.add.replace_target = replace_target;
+        }
+        self.mode = DawMode::EffectChainAdd;
+        self.preview_effect_chain_add_candidate(None);
+    }
+
+    /// `x` → `a`（または `r`）の category/kind/list 3 pane。category を動かした後は kind pane を組み直し
     /// （[`DawEffectAddState::rebuild_kinds`]）、kind を動かした後は list を絞り直す
     /// （[`DawEffectAddState::rebuild_list`]）。いずれも list カーソルは 0 へ戻る。
     /// list が 0 件の `Enter` は何もしない。`/` はどの pane に focus していても
     /// list の絞り込みを開始する。
     ///
     /// 候補（list カーソルの preset）が変わる操作のあとは自動で preview する。
-    /// `h`/`l` は候補を変えないので鳴らし直さない。
+    /// `h`/`l` は候補を変えないので鳴らし直さない。`b` は候補の段だけ bypass して鳴らす
+    /// （効き具合を比べる基準の音）。
     pub(crate) fn handle_effect_chain_add(&mut self, key: KeyEvent) {
         if self.overlays.effect_chain.add.filter_active {
             self.handle_effect_chain_add_filter_input(key);
@@ -146,6 +158,10 @@ impl DawApp {
             }
             KeyCode::Char(' ') => {
                 self.preview_effect_chain_add_candidate(None);
+                return;
+            }
+            KeyCode::Char('b') => {
+                self.preview_effect_chain_add_candidate_bypassed();
                 return;
             }
             _ => {}
@@ -204,7 +220,10 @@ impl DawApp {
                 .and_then(|catalog| catalog.presets().get(preset_index))
                 .map(cmrt_core::AudioEffectPreset::json_element);
             if let Some(stage) = stage {
-                self.overlays.effect_chain.push_stage(stage);
+                match self.overlays.effect_chain.add.replace_target {
+                    Some(index) => self.overlays.effect_chain.replace_stage(index, stage),
+                    None => self.overlays.effect_chain.push_stage(stage),
+                }
             }
             self.mode = DawMode::EffectChain;
         }

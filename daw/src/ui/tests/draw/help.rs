@@ -413,7 +413,7 @@ fn effect_chain_keys_are_only_in_the_effect_chain_help() {
     add.help_origin = DawMode::EffectChainAdd;
     let add_help = normalized(&add);
     assert!(
-        add_help.contains("EFFECTCHAINaddoverlay(x→a)"),
+        add_help.contains("EFFECTCHAINadd/replaceoverlay(x→a/r)"),
         "{add_help}"
     );
     assert!(add_help.contains("?:ヘルプ(このページ)"), "{add_help}");

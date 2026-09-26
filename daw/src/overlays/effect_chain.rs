@@ -58,6 +58,14 @@ impl DawEffectChainOverlayState {
         self.cursor = self.chain.len() - 1;
     }
 
+    /// `index` 段を `stage` に差し替え、カーソルをその段へ置く。範囲外なら何もしない。
+    pub(crate) fn replace_stage(&mut self, index: usize, stage: Value) {
+        if let Some(slot) = self.chain.get_mut(index) {
+            *slot = stage;
+            self.cursor = index;
+        }
+    }
+
     pub(crate) fn delete_at_cursor(&mut self) -> bool {
         if self.cursor >= self.chain.len() {
             return false;

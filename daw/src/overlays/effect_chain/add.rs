@@ -67,6 +67,8 @@ pub(crate) struct DawEffectAddState {
     pub(crate) query_textarea: TextArea<'static>,
     pub(crate) query_before_input: String,
     pub(crate) filter_active: bool,
+    /// `Some(i)` なら chain の `i` 段目を差し替える（`r`）。`None` なら末尾へ追加する（`a`）。
+    pub(crate) replace_target: Option<usize>,
 }
 
 impl Default for DawEffectAddState {
@@ -85,6 +87,7 @@ impl Default for DawEffectAddState {
             query_textarea: cmrt_tui_core::text_input::new_single_line_textarea(""),
             query_before_input: String::new(),
             filter_active: false,
+            replace_target: None,
         }
     }
 }

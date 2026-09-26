@@ -1,4 +1,4 @@
-//! `x`（chain 一覧）/ `x` → `a`（追加 overlay）の preview。
+//! `x`（chain 一覧）/ `x` → `a`・`r`（追加・差し替え overlay）の preview。
 //!
 //! overlay の track だけを鳴らし、他 track は無音にする（patch select preview の
 //! 全 track 版とは異なる）。overlay preview cache に同じ内容の音があればそれを鳴らし、
@@ -178,18 +178,41 @@ impl DawApp {
         self.preview_effect_chain(&chain);
     }
 
-    /// 追加 overlay の list `index` の preset を編集中 chain の末尾に足した chain。
+    /// 追加 overlay の list `index` の preset を編集中 chain へ入れた chain。
+    /// 差し替え（`replace_target`）ならその段を置き換え、そうでなければ末尾に足す。
     /// list が空、または index が範囲外なら `None`。
     pub(crate) fn effect_chain_add_candidate_chain(&self, index: usize) -> Option<Vec<Value>> {
+        self.effect_chain_add_candidate_chain_with_bypass(index, false)
+    }
+
+    /// [`Self::effect_chain_add_candidate_chain`] の候補の段に `bypass` を付けた chain。
+    fn effect_chain_add_candidate_chain_with_bypass(
+        &self,
+        index: usize,
+        bypass: bool,
+    ) -> Option<Vec<Value>> {
         let preset_index = *self.overlays.effect_chain.add.list.get(index)?;
         let stage = self
             .effect_plugins
             .catalog()
             .and_then(|catalog| catalog.presets().get(preset_index))
             .map(cmrt_core::AudioEffectPreset::json_element)?;
+        let stage = crate::mml::effect_chain::stage_with_bypass(&stage, bypass);
         let mut chain = self.overlays.effect_chain.chain.clone();
-        chain.push(stage);
+        match self.overlays.effect_chain.add.replace_target {
+            Some(target) if target < chain.len() => chain[target] = stage,
+            _ => chain.push(stage),
+        }
         Some(chain)
+    }
+
+    /// `b`: list カーソルの候補の段だけ bypass した chain を preview する。
+    /// chain の他の段はそのまま効かせる。list が空なら何もしない。
+    pub(crate) fn preview_effect_chain_add_candidate_bypassed(&mut self) {
+        let cursor = self.overlays.effect_chain.add.list_cursor;
+        if let Some(chain) = self.effect_chain_add_candidate_chain_with_bypass(cursor, true) {
+            self.preview_effect_chain(&chain);
+        }
     }
 
     /// 追加 overlay の list カーソルの候補を preview する。list が空なら何もしない。

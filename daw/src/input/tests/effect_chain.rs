@@ -3,6 +3,10 @@ use crate::overlays::EffectAddPane;
 use cmrt_core::{AudioEffectCatalog, AudioEffectPluginInfo, AudioEffectPreset};
 use cmrt_offline_render::EffectPlugins;
 use serde_json::json;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use cmrt_mml_overlay::{LivePatch, MmlOverlaySender, RecordingSink, SinkOperation};
 
 const INIT_WITH_PATCH: &str = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#;
 
@@ -80,6 +84,62 @@ fn press(app: &mut DawApp, keys: &[KeyCode]) {
             other => panic!("unexpected mode {other:?} before {key:?}"),
         }
     }
+}
+
+/// cache hit で鳴った preview（offline の音）の MML。テストでは render しないので、
+/// `try_start_preview_with_track_mmls_for_test` が残した MML を読む。
+fn preview_json_and_phrase(app: &DawApp, track: usize) -> (serde_json::Value, String) {
+    let track_mmls = app.playback.measure_track_mmls.lock().unwrap()[0].clone();
+    DawApp::extract_patch_json_and_phrase(&track_mmls[track]).unwrap()
+}
+
+/// server の代わりに送った内容を記録する sender を app へ差す。
+fn attach_live(app: &mut DawApp, sink: RecordingSink) -> Arc<RecordingSink> {
+    let sink = Arc::new(sink);
+    app.mml_overlay_sender = Some(MmlOverlaySender::with_recording_sink(
+        Arc::clone(&sink),
+        48_000.0,
+    ));
+    sink
+}
+
+fn wait_until(what: &str, mut done: impl FnMut() -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !done() {
+        assert!(Instant::now() < deadline, "待ちきれなかった: {what}");
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
+
+/// LIVE へ `count` 本目の行が送られるまで待ち、最後に準備した音色と chain を返す。
+fn wait_for_live_line(sink: &RecordingSink, count: usize) -> LivePatch {
+    wait_until("LIVE の行", || sink.timelines() >= count);
+    assert_eq!(sink.timelines(), count, "LIVE へ送った行の数");
+    sink.prepared().last().cloned().expect("音色の準備")
+}
+
+fn live_chain(patch: &LivePatch) -> serde_json::Value {
+    serde_json::from_str(patch.effect_chain()).expect("chain は JSON 文字列")
+}
+
+/// 少し待っても LIVE へ送った行の数が `count` のままであること。
+fn assert_no_more_live_lines(sink: &RecordingSink, count: usize) {
+    std::thread::sleep(Duration::from_millis(50));
+    assert_eq!(sink.timelines(), count, "LIVE へ送った行の数");
+}
+
+fn assert_idle(app: &DawApp) {
+    assert!(matches!(
+        *app.playback.play_state.lock().unwrap(),
+        DawPlayState::Idle
+    ));
+}
+
+fn assert_previewing(app: &DawApp) {
+    assert!(matches!(
+        *app.playback.play_state.lock().unwrap(),
+        DawPlayState::Preview
+    ));
 }
 
 fn init_json(app: &DawApp) -> serde_json::Value {
@@ -298,3 +358,4 @@ mod add;
 mod filter;
 mod preview;
 mod reorder;
+mod replace;

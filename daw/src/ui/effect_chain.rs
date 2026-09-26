@@ -23,9 +23,13 @@ pub(super) fn draw_effect_chain(f: &mut Frame, app: &DawApp, area: Rect) {
     let popup = cmrt_tui_core::ui::centered_rect(70, 70, area);
     f.render_widget(Clear, popup);
     // ヘルプを重ねている間も、ヘルプを開いた側の画面を下に描く。
+    let state = &app.overlays.effect_chain;
     let adding = app.mode == DawMode::EffectChainAdd
         || (app.mode == DawMode::Help && app.help_origin == DawMode::EffectChainAdd);
-    let (title, footer) = if adding {
+    let replacing = state.add.replace_target.is_some();
+    let (title, footer) = if adding && replacing {
+        (message::REPLACE_OVERLAY_TITLE, message::REPLACE_FOOTER)
+    } else if adding {
         (message::ADD_OVERLAY_TITLE, message::ADD_FOOTER)
     } else {
         (message::OVERLAY_TITLE, message::FOOTER)
@@ -38,7 +42,6 @@ pub(super) fn draw_effect_chain(f: &mut Frame, app: &DawApp, area: Rect) {
     let inner = block.inner(popup);
     f.render_widget(block, popup);
 
-    let state = &app.overlays.effect_chain;
     let error_rows = u16::from(state.preview_error.is_some());
     let chunks = Layout::default()
         .direction(Direction::Vertical)

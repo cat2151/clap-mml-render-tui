@@ -83,6 +83,9 @@ pub(super) fn draw_help(
             Line::from(
                 "  a        : preset 一覧から chain 末尾へ追加（category/kind/list 3 pane、Enter、ESC で戻る）",
             ),
+            Line::from(
+                "  r        : 現在の段を preset 一覧から差し替え（add と同じ 3 pane、Enter で差し替え、ESC で戻る）",
+            ),
             Line::from("  dd       : 現在の段を削除して preview"),
             Line::from("  b        : 現在の段の bypass を切り替えて preview"),
             Line::from("  Alt+↑/↓  : 現在の段を上下に並べ替えて preview"),
@@ -97,7 +100,7 @@ pub(super) fn draw_help(
         ],
         super::super::DawMode::EffectChainAdd => vec![
             Line::from(Span::styled(
-                "EFFECT CHAIN add overlay (x → a)",
+                "EFFECT CHAIN add / replace overlay (x → a / r)",
                 Style::default()
                     .fg(MONOKAI_YELLOW)
                     .add_modifier(Modifier::BOLD),
@@ -108,10 +111,13 @@ pub(super) fn draw_help(
             Line::from("  PageUp/PageDown/Home/End : focus 中の pane を大移動して preview"),
             Line::from("  /        : list を絞り込み（Enter=確定、ESC=編集前へ戻す）"),
             Line::from(
-                "  Space    : 編集中 chain + list カーソルの preset を末尾に足して preview（移動時も自動）",
+                "  Space    : 編集中 chain + list カーソルの preset を末尾に足して（r は差し替えて）preview（移動時も自動）",
             ),
-            Line::from("  Enter    : list カーソルの preset を chain 末尾へ追加して戻る"),
-            Line::from("  ESC      : 追加せず chain 一覧へ戻る"),
+            Line::from(
+                "  b        : list カーソルの候補の段だけ bypass して preview（chain の他の段は効かせる。効き具合の比較用）",
+            ),
+            Line::from("  Enter    : list カーソルの preset を chain 末尾へ追加して戻る（r で開いたときは現在の段と差し替え）"),
+            Line::from("  ESC      : 追加・差し替えせず chain 一覧へ戻る"),
             Line::from(""),
             Line::from(Span::styled(
                 "  [ESC] で戻る",
