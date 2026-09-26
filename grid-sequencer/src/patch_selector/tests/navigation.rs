@@ -58,11 +58,12 @@ fn moving_the_role_resets_the_preset_and_previews_the_first_patch_of_the_new_lis
     let ctx = context(&patches);
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
     screen.state.rows_mut()[0].patch = Some("Pads/Pad 01.fxp".to_string());
+    // 今の音色が Pad なので Chord track で開く。1 つ上が Bass track。
     screen.open_patch_selector(0, &ctx);
     screen.handle_patch_selector_key(press(KeyCode::Char('h')), &ctx);
     screen.handle_patch_selector_key(press(KeyCode::Char('h')), &ctx);
 
-    screen.handle_patch_selector_key(press(KeyCode::Char('j')), &ctx);
+    screen.handle_patch_selector_key(press(KeyCode::Char('k')), &ctx);
 
     let selector = selector(&screen);
     assert_eq!(role_label(selector), "Bass track");
@@ -84,14 +85,15 @@ fn moving_the_role_keeps_the_current_patch_when_the_new_list_still_has_it() {
     let ctx = context(&patches);
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
     screen.state.rows_mut()[0].patch = Some("Basses/Bass 02.fxp".to_string());
+    // 今の音色が Bass なので Bass track で開く。1 つ上の ALL にも同じ音色がある。
     screen.open_patch_selector(0, &ctx);
     screen.handle_patch_selector_key(press(KeyCode::Char('h')), &ctx);
     screen.handle_patch_selector_key(press(KeyCode::Char('h')), &ctx);
 
-    screen.handle_patch_selector_key(press(KeyCode::Char('j')), &ctx);
+    screen.handle_patch_selector_key(press(KeyCode::Char('k')), &ctx);
 
     let selector = selector(&screen);
-    assert_eq!(role_label(selector), "Bass track");
+    assert_eq!(role_label(selector), "ALL");
     assert_eq!(selector.selected_patch(), Some("Basses/Bass 02.fxp"));
     assert_eq!(
         selector.previewed_patch.as_deref(),
@@ -160,12 +162,8 @@ fn r_does_nothing_when_the_list_has_fewer_than_two_patches() {
     let ctx = context(&patches);
     let mut screen = GridSequencerScreen::with_track_count(None, 1);
     screen.state.rows_mut()[0].patch = Some("Leads/Lead 01.fxp".to_string());
+    // 今の音色が Lead なので Lead / melody で開く。
     screen.open_patch_selector(0, &ctx);
-    screen.handle_patch_selector_key(press(KeyCode::Char('h')), &ctx);
-    screen.handle_patch_selector_key(press(KeyCode::Char('h')), &ctx);
-    for _ in 0..3 {
-        screen.handle_patch_selector_key(press(KeyCode::Char('j')), &ctx);
-    }
     assert_eq!(filtered_patches(selector(&screen)), ["Leads/Lead 01.fxp"]);
 
     screen.handle_patch_selector_key(press(KeyCode::Char('r')), &ctx);
@@ -394,4 +392,30 @@ fn the_patch_list_scrolls_only_when_the_cursor_enters_the_lower_margin() {
     assert_eq!(selector(&screen).patch_range(&layout).start, 1);
     screen.handle_patch_selector_key(press(KeyCode::Char('k')), &ctx);
     assert_eq!(selector(&screen).patch_range(&layout).start, 0);
+}
+
+#[test]
+fn a_note_row_opens_in_the_role_and_drum_preset_of_its_current_patch() {
+    let patches = role_patches();
+    let ctx = context(&patches);
+    let mut screen = GridSequencerScreen::with_track_count(None, 1);
+    screen.state.rows_mut()[0].patch = Some("Drums/Kick 01.wav".to_string());
+
+    screen.open_patch_selector(0, &ctx);
+
+    let selector = selector(&screen);
+    assert_eq!(role_label(selector), "Drum tracks");
+    assert_eq!(preset_label(selector), "kick|bass drum");
+    assert_eq!(filtered_patches(selector), ["Drums/Kick 01.wav"]);
+}
+
+#[test]
+fn a_note_row_without_a_patch_opens_in_all() {
+    let patches = role_patches();
+    let ctx = context(&patches);
+    let mut screen = GridSequencerScreen::with_track_count(None, 1);
+
+    screen.open_patch_selector(0, &ctx);
+
+    assert_eq!(role_label(selector(&screen)), "ALL");
 }

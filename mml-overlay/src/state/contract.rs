@@ -157,7 +157,7 @@ pub struct MmlOverlayContext {
     pub patch_catalog: PatchCatalogSnapshot,
     /// MML selectorとGrid Sequencerが共有する、同じcatalog世代のRole索引。
     pub patch_role_index: PatchRoleIndex,
-    /// `Ctrl+T` で selector を開いた直後に選ぶ Role。`None` は従来どおり `ALL`。
+    /// `Ctrl+T` で selector を開いた直後に選ぶ Role。`None` は今の音色の Role（分類できなければ `ALL`）。
     /// catalog の Loading 完了待ちを挟んでも、この指定を使って開く。Chord Chart の
     /// Bass 指定では、候補の試聴音も対応する Bass note へ切り替える。
     pub patch_select_initial_role: Option<PatchRole>,

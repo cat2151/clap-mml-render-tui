@@ -104,14 +104,13 @@ impl<'a> PatchSelect<'a> {
         }
         let prepared_presets = PreparedPresets::build(&all, &user_presets, &role_index)
             .expect("validated preset regular expressions must compile");
-        let group_cursor = initial_role
-            .and_then(|role| {
-                FilterGroup::ALL
-                    .iter()
-                    .position(|group| group.role() == Some(role))
-            })
-            .unwrap_or(0);
-        let filtered = Arc::clone(&prepared_presets.for_role(group_cursor)[0].matches);
+        // host が Role を指定しなければ、今の音色の Role で開く。Drum は部位の Preset まで合わせる。
+        let role = initial_role.or_else(|| current.and_then(|patch| role_index.role_of(patch)));
+        let drum = current
+            .and_then(|patch| role_index.drum_role_of(patch))
+            .filter(|_| role == Some(PatchRole::Drum));
+        let (group_cursor, preset_cursor) = prepared_presets.start_cursors(role, drum);
+        let filtered = Arc::clone(&prepared_presets.for_role(group_cursor)[preset_cursor].matches);
         let cursor = current
             .and_then(|current| {
                 filtered
@@ -131,7 +130,7 @@ impl<'a> PatchSelect<'a> {
             role_index,
             prepared_presets,
             group_cursor,
-            preset_cursor: 0,
+            preset_cursor,
             focus: PatchSelectFocus::Patches,
             scroll_offsets: [Cell::new(0), Cell::new(0), Cell::new(0)],
             original: current.map(str::to_string),

@@ -177,3 +177,21 @@ fn adding_from_an_all_shortcut_uses_the_shortcuts_owning_role() {
             if presets == [("bass".to_string(), "sub".to_string())]
     ));
 }
+
+#[test]
+fn without_a_requested_role_the_current_patch_decides_the_role_and_drum_preset() {
+    let select = PatchSelect::open(
+        pairs(&["Drums/Kick 1.fxp", "Drums/Kick 2.fxp", "Drums/Snare 1.fxp"]),
+        Some("Drums/Kick 2.fxp"),
+        Vec::new(),
+        Default::default(),
+        None,
+        Vec::new(),
+        Default::default(),
+    )
+    .unwrap();
+
+    assert_eq!(select.group_cursor(), 4);
+    assert_eq!(filtered(&select), ["Drums/Kick 1.fxp", "Drums/Kick 2.fxp"]);
+    assert_eq!(select.selected(), Some("Drums/Kick 2.fxp"));
+}

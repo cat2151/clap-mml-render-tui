@@ -190,8 +190,8 @@ fn ctrl_t_lists_the_injected_catalog_patches() {
             "bass/overlay bass.fxp".to_string(),
         ),
         (
-            "Pads/Overlay Pad.fxp".to_string(),
-            "pads/overlay pad.fxp".to_string(),
+            "Bass/Overlay Sub Bass.fxp".to_string(),
+            "bass/overlay sub bass.fxp".to_string(),
         ),
     ]);
     open_overlay_on_a_playable_cell(&mut app);
@@ -200,7 +200,7 @@ fn ctrl_t_lists_the_injected_catalog_patches() {
     let screen = render_lines(&app, 120, 30).join("\n");
 
     assert!(
-        screen.contains("Pads/Overlay Pad.fxp"),
+        screen.contains("Bass/Overlay Sub Bass.fxp"),
         "注入 snapshot の音色が一覧に出るはず:\n{screen}"
     );
 }
@@ -217,8 +217,8 @@ fn confirming_a_patch_updates_the_init_column_of_the_grid() {
             "bass/overlay bass.fxp".to_string(),
         ),
         (
-            "Leads/Overlay Lead.fxp".to_string(),
-            "leads/overlay lead.fxp".to_string(),
+            "Bass/Other Bass.fxp".to_string(),
+            "bass/other bass.fxp".to_string(),
         ),
     ]);
     open_overlay_on_a_playable_cell(&mut app);
@@ -230,7 +230,7 @@ fn confirming_a_patch_updates_the_init_column_of_the_grid() {
 
     app.handle_mml_overlay_key_event(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL));
     app.handle_mml_overlay_key_event(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE));
-    for ch in "overlay lead".chars() {
+    for ch in "other bass".chars() {
         app.handle_mml_overlay_key_event(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE));
     }
     app.handle_mml_overlay_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
@@ -239,7 +239,7 @@ fn confirming_a_patch_updates_the_init_column_of_the_grid() {
     let after = render_lines(&app, 120, 30).join("\n");
 
     assert!(
-        after.contains("lead:Overlay"),
+        after.contains("bass:Other"),
         "確定した音色が init 列へ出るはず:\n{after}"
     );
     assert!(

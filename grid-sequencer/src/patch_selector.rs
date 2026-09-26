@@ -97,19 +97,16 @@ impl PatchSelector {
         let user_presets = prepare_user_presets(snapshot.role_presets().to_vec());
         let presets = PreparedPresets::build(&entries, &user_presets, &ctx.patch_roles)
             .expect("prepared user presets compile");
-        let (group, drum) = selector_start(purpose);
-        let role_cursor = FilterGroup::ALL
-            .iter()
-            .position(|candidate| *candidate == group)
-            .expect("FilterGroup::ALL contains every group");
-        let preset_cursor = drum
-            .and_then(|drum| {
-                presets
-                    .for_role(role_cursor)
-                    .iter()
-                    .position(|preset| preset.pattern.as_deref() == Some(drum.pattern()))
-            })
-            .unwrap_or(0);
+        let (role, drum) = selector_start(purpose).map_or_else(
+            || {
+                (
+                    current_patch.and_then(|patch| ctx.patch_roles.role_of(patch)),
+                    current_patch.and_then(|patch| ctx.patch_roles.drum_role_of(patch)),
+                )
+            },
+            |(role, drum)| (Some(role), drum),
+        );
+        let (role_cursor, preset_cursor) = presets.start_cursors(role, drum);
         let filtered = Arc::clone(&presets.for_role(role_cursor)[preset_cursor].matches);
         let patch_cursor = current_patch
             .and_then(|current| {

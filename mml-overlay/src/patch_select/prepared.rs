@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use cmrt_patches::{PatchRoleIndex, PatchRoleInput};
+use cmrt_patches::{DrumPatchRole, PatchRole, PatchRoleIndex, PatchRoleInput};
 
 use crate::PatchCatalogEntry;
 
@@ -59,6 +59,30 @@ impl PreparedPresets {
 
     pub fn for_role(&self, role_index: usize) -> &[FilterPreset] {
         &self.by_role[role_index]
+    }
+
+    /// 開いた直後に選ぶ `(Role, Preset)` の位置。`role` が無ければ `ALL`。
+    /// `drum` はその部位の Preset を選び、見つからなければ Role の `ALL`。
+    pub fn start_cursors(
+        &self,
+        role: Option<PatchRole>,
+        drum: Option<DrumPatchRole>,
+    ) -> (usize, usize) {
+        let group = role
+            .and_then(|role| {
+                FilterGroup::ALL
+                    .iter()
+                    .position(|group| group.role() == Some(role))
+            })
+            .unwrap_or(0);
+        let preset = drum
+            .and_then(|drum| {
+                self.for_role(group)
+                    .iter()
+                    .position(|preset| preset.pattern.as_deref() == Some(drum.pattern()))
+            })
+            .unwrap_or(0);
+        (group, preset)
     }
 }
 

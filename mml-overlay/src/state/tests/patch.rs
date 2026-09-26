@@ -25,9 +25,21 @@ fn played(action: MmlOverlayAction) -> (PatchChange, crate::line_play::LineProgr
 }
 
 fn opened_with_patches() -> MmlOverlay<'static> {
+    opened_with(patches())
+}
+
+/// 今の音色の Role（Lead）で開いた selector の中で、別の候補へ動けるように Lead を 2 つ置く。
+fn patches_with_two_leads() -> Vec<PatchCatalogEntry> {
+    ["Leads/Lead 1.fxp", "Leads/Lead 2.fxp", "Pads/Pad 1.fxp"]
+        .into_iter()
+        .map(|patch| PatchCatalogEntry::from_display(patch.to_string()))
+        .collect()
+}
+
+fn opened_with(patches: Vec<PatchCatalogEntry>) -> MmlOverlay<'static> {
     let mut overlay = MmlOverlay::default();
     overlay.open(MmlOverlayContext {
-        patch_catalog: PatchCatalogSnapshot::Ready(patches()),
+        patch_catalog: PatchCatalogSnapshot::Ready(patches),
         ..MmlOverlayContext::default()
     });
     overlay
@@ -179,7 +191,7 @@ fn confirming_keeps_the_input_untouched() {
 
 #[test]
 fn cancelling_restores_the_patch_that_was_current_when_it_opened() {
-    let mut overlay = opened_with_patches();
+    let mut overlay = opened_with(patches_with_two_leads());
     let now = Instant::now();
     overlay.handle_key(ctrl(KeyCode::Char('t')), now);
     overlay.handle_key(press(KeyCode::Enter), now);

@@ -40,7 +40,8 @@ fn hjkl_move_like_the_arrow_keys() {
 
 #[test]
 fn home_and_end_move_to_the_edges_of_the_focused_pane() {
-    let mut select = opened(Some("Leads/Lead 1.fxp"));
+    // 今の音色が無いので ALL で開き、カーソルは先頭。
+    let mut select = opened(None);
 
     assert_eq!(
         previewed(select.handle_key(press(KeyCode::End))).as_deref(),

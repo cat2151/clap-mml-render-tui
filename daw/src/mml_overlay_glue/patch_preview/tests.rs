@@ -15,7 +15,7 @@ fn moving_to_the_next_candidate_fades_out_the_previous_line_first() {
     app.handle_normal_key_event(plain('t'));
     wait_until("開いた時点の試聴", || sink.timelines() >= 1);
 
-    // 一覧は Bass, Pad の順でカーソルは Pad にあるので、上へ動かす。
+    // 一覧は Keys, Pad の順でカーソルは Pad にあるので、上へ動かす。
     app.handle_mml_overlay_key_event(key(KeyCode::Up));
     wait_until("次の候補の試聴", || sink.timelines() >= 2);
 

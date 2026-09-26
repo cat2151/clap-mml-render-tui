@@ -15,7 +15,7 @@ use super::super::super::{DawApp, DawMode};
 use crate::input::tests::build_test_app;
 
 const PAD_INIT_CELL: &str = r#"{"Surge XT patch": "Pads/Snapshot Pad.fxp"}"#;
-const BASS_INIT_CELL: &str = r#"{"Surge XT patch": "Bass/Snapshot Bass.fxp"}"#;
+const KEYS_INIT_CELL: &str = r#"{"Surge XT patch": "Keys/Snapshot Keys.fxp"}"#;
 
 pub(in crate::mml_overlay_glue) fn plain(code: char) -> KeyEvent {
     KeyEvent::new(KeyCode::Char(code), KeyModifiers::NONE)
@@ -25,8 +25,9 @@ pub(in crate::mml_overlay_glue) fn key(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
 }
 
+/// 2 つとも Chord 用途にして、pad の track で開いた selector（Chord で開く）の中で行き来できるようにする。
 fn catalog_pairs() -> Vec<(String, String)> {
-    ["Bass/Snapshot Bass.fxp", "Pads/Snapshot Pad.fxp"]
+    ["Keys/Snapshot Keys.fxp", "Pads/Snapshot Pad.fxp"]
         .into_iter()
         .map(|display| (display.to_string(), display.to_lowercase()))
         .collect()
@@ -61,14 +62,14 @@ fn confirming_writes_the_init_cell_and_returns_to_normal() {
     app.handle_normal_key_event(plain('t'));
 
     app.handle_mml_overlay_key_event(plain('/'));
-    for ch in "snapshot bass".chars() {
+    for ch in "snapshot keys".chars() {
         app.handle_mml_overlay_key_event(plain(ch));
     }
     // 1 回目は絞り込み、2 回目は音色の確定。
     app.handle_mml_overlay_key_event(key(KeyCode::Enter));
     app.handle_mml_overlay_key_event(key(KeyCode::Enter));
 
-    assert_eq!(app.editor.data[2][0], BASS_INIT_CELL);
+    assert_eq!(app.editor.data[2][0], KEYS_INIT_CELL);
     assert_eq!(app.mode, DawMode::Normal);
     assert!(!app.mml_overlay.is_open());
     assert!(!app.mml_overlay_patch_select_only);
@@ -191,7 +192,7 @@ fn moving_in_the_selector_plays_the_generated_chord_not_a_single_note() {
     app.handle_normal_key_event(plain('t'));
 
     // 生成行は `/*|*/` で終わるので、行末のカーソルはどの発音単位にも触れていない。
-    // 一覧は Bass, Pad の順でカーソルは Pad にあるので、上へ動かす。
+    // 一覧は Keys, Pad の順でカーソルは Pad にあるので、上へ動かす。
     app.handle_mml_overlay_key_event(key(KeyCode::Up));
 
     // 行全体を鳴らした（C の 3 和音）。試聴用の単音へ落ちると sounding が [60] になる。
@@ -266,7 +267,7 @@ fn the_preview_goes_through_the_track_effect_chain() {
     wait_until("前の候補の試聴", || {
         sink.prepared()
             .iter()
-            .any(|patch| patch.patch() == Some("Bass/Snapshot Bass.fxp"))
+            .any(|patch| patch.patch() == Some("Keys/Snapshot Keys.fxp"))
     });
     let prepared = sink.prepared();
     assert!(!prepared.is_empty());
@@ -276,4 +277,58 @@ fn the_preview_goes_through_the_track_effect_chain() {
             r#"[{"Surge XT Effects preset":"Reverb 1/Cathedral 2.srgfx"}]"#
         );
     }
+}
+
+fn app_with_drum_catalog(init_cell: &str) -> (DawApp, std::sync::mpsc::Receiver<crate::CacheJob>) {
+    let (mut app, cache_rx) = build_test_app();
+    let pairs = [
+        "Drums/Kick A.fxp",
+        "Drums/Kick B.fxp",
+        "Drums/Snare Z.fxp",
+        "Pads/Snapshot Pad.fxp",
+    ]
+    .into_iter()
+    .map(|display| (display.to_string(), display.to_lowercase()))
+    .collect();
+    *app.patch_load.lock().unwrap() = PatchLoadState::ready(pairs);
+    app.editor.cursor_track = 2;
+    app.editor.cursor_measure = 1;
+    app.editor.data[2][0] = init_cell.to_string();
+    app.editor.data[2][1] = "c".to_string();
+    (app, cache_rx)
+}
+
+/// `End` で一覧の末尾を確定し、開いた直後の候補がどこまで絞られていたかを見る。
+fn confirm_last_candidate(app: &mut DawApp) {
+    app.handle_normal_key_event(plain('t'));
+    app.handle_mml_overlay_key_event(key(KeyCode::End));
+    app.handle_mml_overlay_key_event(key(KeyCode::Enter));
+}
+
+#[test]
+fn a_kick_track_opens_the_selector_on_the_kick_preset() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
+    let (mut app, _cache_rx) = app_with_drum_catalog(r#"{"Surge XT patch": "Drums/Kick A.fxp"}"#);
+
+    confirm_last_candidate(&mut app);
+
+    assert!(
+        app.editor.data[2][0].contains("Drums/Kick B.fxp"),
+        "{}",
+        app.editor.data[2][0]
+    );
+}
+
+#[test]
+fn a_track_without_a_patch_opens_the_selector_on_all() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
+    let (mut app, _cache_rx) = app_with_drum_catalog("");
+
+    confirm_last_candidate(&mut app);
+
+    assert!(
+        app.editor.data[2][0].contains("Pads/Snapshot Pad.fxp"),
+        "{}",
+        app.editor.data[2][0]
+    );
 }

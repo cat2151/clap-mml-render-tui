@@ -50,10 +50,13 @@ fn the_patch_selector_overlay_shows_the_three_panes_and_the_patches() {
             .any(|line| line.contains("▶ ")),
         "{rendered}"
     );
+    // 同じ画面行に Role pane の `▶ Chord track` が並ぶので、Patches pane の枠内だけを見る。
     assert!(
-        patch_lines("Keys/Beta.fxp")
-            .iter()
-            .all(|line| !line.contains('▶')),
+        patch_lines("Keys/Beta.fxp").iter().all(|line| {
+            let patch = line.find("Keys/Beta.fxp").unwrap();
+            let pane = line[..patch].rfind('│').unwrap();
+            !line[pane..patch].contains('▶')
+        }),
         "{rendered}"
     );
     assert!(rendered.contains("h/l:pane"), "{rendered}");

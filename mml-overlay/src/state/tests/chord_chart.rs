@@ -8,6 +8,22 @@ fn patches() -> Vec<PatchCatalogEntry> {
 }
 
 fn chord_chart_overlay(key: &str, initial_text: &str) -> MmlOverlay<'static> {
+    chord_chart_overlay_with(key, initial_text, patches())
+}
+
+/// 今の音色の Role（Lead）で開いた selector の中で、別の候補へ動けるように Lead を 2 つ置く。
+fn patches_with_two_leads() -> Vec<PatchCatalogEntry> {
+    ["Leads/Lead 1.fxp", "Leads/Lead 2.fxp", "Pads/Pad 1.fxp"]
+        .into_iter()
+        .map(|patch| PatchCatalogEntry::from_display(patch.to_string()))
+        .collect()
+}
+
+fn chord_chart_overlay_with(
+    key: &str,
+    initial_text: &str,
+    patches: Vec<PatchCatalogEntry>,
+) -> MmlOverlay<'static> {
     let mut overlay = MmlOverlay::default();
     overlay.open(MmlOverlayContext {
         input_mode: MmlOverlayInputMode::SingleLine,
@@ -16,7 +32,7 @@ fn chord_chart_overlay(key: &str, initial_text: &str) -> MmlOverlay<'static> {
         syntax: MmlOverlaySyntax::ChordChart(ChordChartPreviewContext {
             key_token: Some(key.to_string()),
         }),
-        patch_catalog: PatchCatalogSnapshot::Ready(patches()),
+        patch_catalog: PatchCatalogSnapshot::Ready(patches),
         ..MmlOverlayContext::default()
     });
     overlay
@@ -224,7 +240,7 @@ fn invalid_chord_chart_input_does_not_use_the_patch_fallback_note() {
 #[test]
 fn only_confirm_changes_the_chord_chart_patch_and_cancel_restores_it() {
     let now = Instant::now();
-    let mut overlay = chord_chart_overlay("Key=C", "I");
+    let mut overlay = chord_chart_overlay_with("Key=C", "I", patches_with_two_leads());
     overlay.set_restored_patch(Some("Leads/Lead 1.fxp".to_string()));
 
     overlay.handle_key(ctrl(KeyCode::Char('t')), now);
@@ -244,7 +260,7 @@ fn only_confirm_changes_the_chord_chart_patch_and_cancel_restores_it() {
         overlay.handle_key(press(KeyCode::Enter), now),
         MmlOverlayAction::Continue
     );
-    assert_eq!(overlay.patch(), Some("Pads/Pad 1.fxp"));
+    assert_eq!(overlay.patch(), Some("Leads/Lead 2.fxp"));
 }
 
 #[test]

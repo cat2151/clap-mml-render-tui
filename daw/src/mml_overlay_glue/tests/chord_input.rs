@@ -12,6 +12,8 @@ const FIRST_GENERATED_TRACK: usize = 2;
 const SECOND_GENERATED_TRACK: usize = 3;
 const PAD_PATCH: &str = "Pads/Snapshot Pad.fxp";
 const BASS_PATCH: &str = "Bass/Snapshot Bass.fxp";
+/// Pad と同じ Chord 用途。pad の音色で開いた selector（Chord で開く）から確定できる。
+const KEYS_PATCH: &str = "Keys/Snapshot Keys.fxp";
 
 fn generated_init(patch: &str, directive: &str) -> String {
     format!(r#"{{"Surge XT patch":"{patch}","generate from chord track":"{directive}"}}"#)
@@ -113,7 +115,7 @@ fn ctrl_t_updates_the_borrowed_track_without_touching_chord_init_or_directive() 
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = open_chord_overlay(Some(FIRST_GENERATED_TRACK));
     *app.patch_load.lock().unwrap() = PatchLoadState::ready(
-        [PAD_PATCH, BASS_PATCH]
+        [PAD_PATCH, KEYS_PATCH]
             .into_iter()
             .map(|patch| (patch.to_string(), patch.to_lowercase()))
             .collect(),
@@ -121,7 +123,7 @@ fn ctrl_t_updates_the_borrowed_track_without_touching_chord_init_or_directive() 
 
     app.handle_mml_overlay_key_event(ctrl('t'));
     app.handle_mml_overlay_key_event(plain('/'));
-    for ch in "snapshot bass".chars() {
+    for ch in "snapshot keys".chars() {
         app.handle_mml_overlay_key_event(plain(ch));
     }
     app.handle_mml_overlay_key_event(key(KeyCode::Enter));
@@ -129,7 +131,7 @@ fn ctrl_t_updates_the_borrowed_track_without_touching_chord_init_or_directive() 
 
     assert_eq!(
         app.track_patch_name(FIRST_GENERATED_TRACK).as_deref(),
-        Some(BASS_PATCH)
+        Some(KEYS_PATCH)
     );
     assert_eq!(
         crate::mml::init_cell_chord_directive(&app.editor.data[FIRST_GENERATED_TRACK][0])
