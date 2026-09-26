@@ -19,6 +19,7 @@ members = [
     "mml-overlay",
     "notepad",
     "offline-render",
+    "patch-select",
     "realtime-play",
     "rhythm",
     "rubberband-ffi",

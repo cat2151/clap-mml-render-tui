@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 
 use ratatui::widgets::{ListState, TableState};
 
-use cmrt_mml_overlay::{
+use cmrt_patch_select::{
     host_patch_catalog, prepare_user_presets, sort_for_selector, FilterGroup, FilterPreset,
     HostPatchCatalog, PatchCatalogEntry, PatchCatalogSnapshot, PreparedPresets,
 };

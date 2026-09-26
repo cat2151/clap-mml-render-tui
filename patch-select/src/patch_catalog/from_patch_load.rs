@@ -1,28 +1,27 @@
-//! ホストが持つ file cache 由来の patch catalog から、overlay へ渡す一式を作る。
+//! ホストが持つ file cache 由来の patch catalog から、音色 selector を開く側へ渡す一式を作る。
 //!
-//! overlay を開ける画面は app（notepad / keyboard / grid sequencer）と DAW の 2 系統あり、
+//! 音色 selector を開ける画面は app（notepad / keyboard / grid sequencer）と DAW の 2 系統あり、
 //! どちらも `cmrt_tui_core::patch_load::PatchLoadState` を共有している。**変換をここ 1 か所に
 //! 置く**のは、`Loading` / `Err` のときに何を渡すか（空の一覧か、既定の Role 索引か）が
-//! 画面ごとに食い違うと、同じ overlay が画面によって違う一覧を出すため。
+//! 画面ごとに食い違うと、同じ selector が画面によって違う一覧を出すため。
 
 use std::collections::BTreeMap;
 
 use cmrt_patches::PatchRoleIndex;
 use cmrt_tui_core::patch_load::{PatchLoadMeasurement, PatchLoadState};
 
-use super::PatchCatalogEntry;
-use crate::PatchCatalogSnapshot;
+use super::{PatchCatalogEntry, PatchCatalogSnapshot};
 
-/// overlay を開くときに渡す、音色一覧まわりの 3 点セット。
+/// selector を開くときに渡す、音色一覧まわりの 3 点セット。
 pub struct HostPatchCatalog {
     pub catalog: PatchCatalogSnapshot,
     pub patch_role_index: PatchRoleIndex,
     pub load_measurements: BTreeMap<String, PatchLoadMeasurement>,
 }
 
-/// ホストの `PatchLoadState` を overlay 向けへ変換する。
+/// ホストの `PatchLoadState` を selector 向けへ変換する。
 ///
-/// `Loading` / `Err` はそのまま overlay 側の同名の状態になり、overlay は
+/// `Loading` / `Err` はそのまま selector 側の同名の状態になり、selector は
 /// 「一覧が来たら開き直す」予約として扱う（`Ctrl+T` の Loading 予約）。
 pub fn host_patch_catalog(state: &PatchLoadState) -> HostPatchCatalog {
     match state {

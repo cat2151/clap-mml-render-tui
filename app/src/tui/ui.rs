@@ -59,9 +59,19 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
             .unwrap_or_default();
         cmrt_mml_overlay::ui::draw_with_status(&app.mml_overlay, &sender_status, f);
     }
+    // Chord Chart の `t` / `Shift+T` は入力欄を描かず、音色 selector だけを重ねる。
+    if let Some((_, select)) = &app.chord_chart_patch_select {
+        cmrt_patch_select::ui::draw_direct_patch_select(select, f);
+        let sender_status = app
+            .mml_overlay_sender
+            .as_ref()
+            .map(cmrt_mml_overlay::MmlOverlaySender::status)
+            .unwrap_or_default();
+        cmrt_mml_overlay::ui::draw_sender_loading(&sender_status, f);
+    }
     // 音が鳴るまでの待ち（chord chart の preview など、共有 sender を通る経路）。
-    // MML オーバーレイが開いているあいだは出さない（あちらが自前の loading 表示を持つ）。
-    if !app.mml_overlay.is_open() {
+    // MML オーバーレイと音色 selector が開いているあいだは出さない（自前の loading 表示を持つ）。
+    if !app.mml_overlay.is_open() && app.chord_chart_patch_select.is_none() {
         if let Some(wait) = app.sound_startup_wait {
             super::sound_startup_overlay::draw(f, &wait, now);
         }

@@ -12,6 +12,7 @@ test-support = []
 cmrt-chord = { path = "../chord" }
 cmrt-history = { path = "../history" }
 cmrt-mml-overlay = { path = "../mml-overlay" }
+cmrt-patch-select = { path = "../patch-select" }
 cmrt-offline-render = { path = "../offline-render" }
 cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-render-core = { path = "../core-lib" }

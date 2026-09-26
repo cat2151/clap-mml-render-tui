@@ -3,11 +3,7 @@
 mod chord_transfer;
 mod history_select;
 mod loading;
-mod patch_select;
-mod play_settings;
 mod status;
-
-pub use patch_select::{load_time_label, scroll_offset};
 
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -92,21 +88,23 @@ pub fn draw_with_status(
     }
 
     // 音色選択と履歴は入力欄へ重ねて出す。入力欄より後に描くこと。
-    if let Some(select) = overlay.patch_select() {
-        patch_select::draw(select, frame);
-    }
+    cmrt_patch_select::ui::draw_patch_select(overlay.patch_audition_select(), frame);
     if let Some(select) = overlay.history_select() {
         history_select::draw(select, frame);
     }
     // 演奏設定は音色選択の最中にも開ける最も手前のモーダルなので、最後に描く。
-    if let Some(select) = overlay.play_settings_select() {
-        play_settings::draw(select, frame);
-    }
+    cmrt_patch_select::ui::draw_play_settings(overlay.patch_audition_select(), frame);
     // 確定ダイアログはさらに手前。開いている間は他のモーダルが開くことは無いが、
     // 描く順としては最後に置く（最後の砦なので何にも隠されない）。
     if let Some(confirm) = overlay.chord_transfer_confirm() {
         chord_transfer::draw(confirm, frame);
     }
+    loading::draw(sender_status, frame);
+}
+
+/// 音源の patch load が長引いているときの中央表示。overlay を開かずに同じ sender で
+/// 鳴らす画面（入力欄なしの音色 selector 等）が使う。
+pub fn draw_sender_loading(sender_status: &MmlOverlaySenderStatus, frame: &mut Frame<'_>) {
     loading::draw(sender_status, frame);
 }
 

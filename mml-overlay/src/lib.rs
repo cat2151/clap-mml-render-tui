@@ -13,10 +13,7 @@ pub mod cursor_notes;
 pub(crate) mod history_select;
 pub mod line_play;
 mod live_line;
-mod patch_catalog;
 pub mod patch_json;
-pub(crate) mod patch_select;
-pub mod play_settings;
 mod sender;
 mod state;
 pub mod ui;
@@ -25,14 +22,9 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub use history_select::is_history_select_trigger;
 pub use live_line::{live_line, LiveLine};
-pub use patch_catalog::{
-    host_patch_catalog, sort_for_selector, HostPatchCatalog, PatchCatalogEntry,
-};
-pub use patch_select::{
-    filter_candidates, is_patch_select_trigger, prepare_user_presets, FilterGroup, FilterPreset,
-    PreparedPresets,
-};
-pub use play_settings::{is_play_settings_trigger, PlaySettings};
+// `MmlOverlay` の公開 API に現れる型。catalog を扱う関数（`host_patch_catalog` 等）は
+// `cmrt_patch_select` から直接使う。
+pub use cmrt_patch_select::{PatchAudition, PatchCatalogEntry, PlaySettings};
 pub use sender::{
     LineLayer, LivePatch, MmlOverlayLinePlayback, MmlOverlaySender, MmlOverlaySenderStatus,
 };
@@ -72,4 +64,9 @@ mod tests;
 /// このキーはどの画面からでも MML オーバーレイを開く。
 pub fn is_mml_overlay_trigger(key: KeyEvent) -> bool {
     key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('p')
+}
+
+/// このキーは入力欄から音色選択を開く。
+pub fn is_patch_select_trigger(key: KeyEvent) -> bool {
+    key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('t')
 }

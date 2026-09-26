@@ -1,4 +1,4 @@
-//! MML オーバーレイから開く音色選択の描画。
+//! 音色選択の描画。
 
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},

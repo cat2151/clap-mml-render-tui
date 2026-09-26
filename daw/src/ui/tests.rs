@@ -88,7 +88,7 @@ fn build_test_app() -> DawApp {
         )),
         mml_overlay: cmrt_mml_overlay::MmlOverlay::default(),
         mml_overlay_sender: None,
-        mml_overlay_patch_select_only: false,
+        direct_patch_select: None,
     }
 }
 
@@ -122,6 +122,7 @@ fn render_cursor_position(app: &DawApp, width: u16, height: u16) -> Position {
     terminal.get_cursor_position().unwrap()
 }
 
+mod direct_patch_select;
 mod draw;
 mod effect_chain;
 mod helpers;

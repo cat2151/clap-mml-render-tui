@@ -30,6 +30,7 @@ impl TuiApp<'static> {
             loop_browser: loop_browser::LoopBrowserScreen::default(),
             mml_overlay: mml_overlay::MmlOverlay::default(),
             mml_overlay_owner: None,
+            chord_chart_patch_select: None,
             mml_overlay_patch: None,
             chord_chart_patch: None,
             chord_chart_bass_patch: None,

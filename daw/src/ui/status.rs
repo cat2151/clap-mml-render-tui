@@ -145,6 +145,7 @@ pub(super) fn draw_status(
                 "CHORD  Ctrl+T:演奏track音色  Ctrl+L:演奏設定  Ctrl+Space:鳴らし直す  Enter:確定→次小節  ESC:確定→閉じる"
             }
         },
+        DawMode::DirectPatchSelect => "音色  ↑↓:候補を試聴  Enter:確定→init セルへ  ESC:取消",
         DawMode::Help => "HELP  ESC:キャンセル",
         DawMode::Mixer => "MIXER  h/l:track移動  j/k:-/+3dB  ESC:閉じる  ?:help",
         DawMode::EffectChain => crate::messages::effect_chain::STATUS,

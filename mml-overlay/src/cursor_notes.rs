@@ -20,36 +20,18 @@ use std::time::Duration;
 
 use cmrt_chord::{
     chord_source_ranges, cursor_sounding_unit, parses_as_chord,
-    timed_auto_voiced_bass_chord_progression_performance,
     timed_auto_voiced_chord_progression_performance, timed_chord_cell_performance,
     timed_performance, TimedMidiEvent, TimedPerformance,
 };
 
 use crate::{NOTE_OFF, NOTE_ON};
+pub use cmrt_patch_select::CursorNotes;
 
 /// MML がまだ空のときに、音色の試聴だけを目的に鳴らす音。
 ///
 /// 音高も velocity も音長も、既定値のまま鳴らした 1 音がほしいだけなので
 /// MML で書いて本家に解かせる。
 pub(crate) const PREVIEW_MML: &str = "c";
-
-/// カーソルのある発音単位と、そこで鳴らすべき同時発音。
-///
-/// 発音するかどうかは「前回と違うか」だけで決める。[`CursorNotes::span`] を
-/// 同一性に含めるので、同じ単位の内側でカーソルが動くあいだは鳴らし直さず、
-/// 別の単位へ移れば同じ音高でも鳴り直す。
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CursorNotes {
-    /// 行の中での発音単位の範囲。
-    pub span: Range<usize>,
-    /// 同時発音。単音なら 1 要素、和音 `'ceg'` なら複数。
-    pub pitches: Vec<u8>,
-    pub velocity: u8,
-    /// 単位が chord 表記として解釈されたか。表示だけに使う。
-    pub from_chord: bool,
-    /// 書かれたとおりの音長。本家 SMF の note on から note off までの時間。
-    pub duration: Duration,
-}
 
 /// 文字単位のカーソル位置をバイト位置へ直す。
 ///
@@ -112,27 +94,12 @@ pub fn notes_at_cursor_with_chord_chart_context(
     notes_from_performance(&performance, span)
 }
 
-/// Chord Chart の進行で、カーソル位置の chord に対応する Bass 1音を返す。
+/// MML が空のときに音色の試聴だけを目的に鳴らす 1 音（[`PREVIEW_MML`]）。
 ///
-/// Chord preview と同じく section 全体を auto voice してから選択位置へ絞るため、Bass
-/// patch の試聴だけ root position の別 octave へ戻ることはない。
-pub fn bass_note_at_cursor_with_chord_chart_context(
-    line: &str,
-    cursor_chars: usize,
-    key_token: Option<&str>,
-) -> Option<CursorNotes> {
-    if !parses_as_chord(line) {
-        return None;
-    }
-    let byte_index = cursor_byte_index(line, cursor_chars);
-    let span = cursor_sounding_unit(line, byte_index)?;
-    let chord_index = chord_source_ranges(line)
-        .iter()
-        .position(|candidate| candidate == &span)?;
-    let performance =
-        timed_auto_voiced_bass_chord_progression_performance(key_token, line, Some(chord_index))
-            .ok()?;
-    notes_from_performance(&performance, span)
+/// 音高も velocity も音長も既定値のまま鳴らしたいだけなので、MML を書いて
+/// 本家に解かせる。ここで組み立てると本家の既定値と二重に持つことになる。
+pub fn preview_note() -> Option<CursorNotes> {
+    notes_at_prefix(PREVIEW_MML)
 }
 
 /// MML の末尾の音を、prefix ぜんぶを 1 単位として求める。

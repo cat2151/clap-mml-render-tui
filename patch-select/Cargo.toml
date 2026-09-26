@@ -1,0 +1,14 @@
+[package]
+name = "cmrt-patch-select"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# 行の演奏内容（`LinePerformance`）が運ぶイベントの型だけを使う。
+cmrt-chord = { path = "../chord" }
+cmrt-patches = { path = "../patches" }
+cmrt-tui-core = { path = "../tui-core" }
+crossterm = "0.29"
+ratatui = "0.30"
+ratatui-textarea = { version = "0.9", features = ["crossterm"] }
+regex = "1"

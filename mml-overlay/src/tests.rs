@@ -23,3 +23,17 @@ fn the_injected_log_sink_receives_the_line() {
         "注入した sink がログ行を受け取っていない"
     );
 }
+
+#[test]
+fn ctrl_t_is_the_trigger() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    assert!(super::is_patch_select_trigger(KeyEvent::new(
+        KeyCode::Char('t'),
+        KeyModifiers::CONTROL
+    )));
+    assert!(!super::is_patch_select_trigger(KeyEvent::new(
+        KeyCode::Char('t'),
+        KeyModifiers::NONE
+    )));
+}

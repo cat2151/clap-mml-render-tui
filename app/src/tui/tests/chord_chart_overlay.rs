@@ -175,19 +175,18 @@ fn t_opens_the_chord_role_selector_directly_and_returns_after_confirmation() {
     app.switch_to_primary_screen(PrimaryScreen::ChordChart, None);
 
     assert!(app.try_open_mml_overlay(plain(KeyCode::Char('t'))));
-    assert_eq!(
-        app.mml_overlay_owner,
-        Some(MmlOverlayOwner::ChordChartPatch {
-            role: cmrt_patches::PatchRole::Chord,
-        })
-    );
-    assert!(app.mml_overlay.is_patch_select_open());
-    assert_eq!(app.mml_overlay.value(), "I-V-VIm-IV");
-
-    app.handle_mml_overlay_key_event(plain(KeyCode::Enter));
-
+    // MML 入力欄は開かず、selector だけが開く。
     assert!(!app.mml_overlay.is_open());
     assert_eq!(app.mml_overlay_owner, None);
+    assert!(matches!(
+        &app.chord_chart_patch_select,
+        Some((cmrt_patches::PatchRole::Chord, select)) if select.is_select_open()
+    ));
+
+    app.handle_chord_chart_patch_select_key_event(plain(KeyCode::Enter));
+
+    assert!(app.chord_chart_patch_select.is_none());
+    assert!(!app.mml_overlay.is_open());
     assert_eq!(app.chord_chart_patch.as_deref(), Some("Pads/Warm Pad.fxp"));
     assert_eq!(app.chord_chart_bass_patch, None);
 }
@@ -203,17 +202,15 @@ fn shift_t_opens_the_bass_role_selector_without_changing_the_chord_patch() {
     app.switch_to_primary_screen(PrimaryScreen::ChordChart, None);
 
     assert!(app.try_open_mml_overlay(shift('T')));
-    assert_eq!(
-        app.mml_overlay_owner,
-        Some(MmlOverlayOwner::ChordChartPatch {
-            role: cmrt_patches::PatchRole::Bass,
-        })
-    );
-    assert!(app.mml_overlay.is_patch_select_open());
-
-    app.handle_mml_overlay_key_event(plain(KeyCode::Enter));
-
     assert!(!app.mml_overlay.is_open());
+    assert!(matches!(
+        &app.chord_chart_patch_select,
+        Some((cmrt_patches::PatchRole::Bass, select)) if select.is_select_open()
+    ));
+
+    app.handle_chord_chart_patch_select_key_event(plain(KeyCode::Enter));
+
+    assert!(app.chord_chart_patch_select.is_none());
     assert_eq!(
         app.chord_chart_patch.as_deref(),
         Some("Pads/Existing Chord.fxp")

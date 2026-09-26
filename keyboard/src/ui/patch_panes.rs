@@ -7,7 +7,7 @@ use ratatui::{
     Frame,
 };
 
-use cmrt_mml_overlay::ui::load_time_label;
+use cmrt_patch_select::ui::load_time_label;
 use cmrt_tui_core::status::{base_style, visible_list_page_size, LIST_HIGHLIGHT_SYMBOL};
 use cmrt_tui_core::theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_YELLOW};
 

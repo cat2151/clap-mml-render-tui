@@ -142,6 +142,7 @@ impl TuiApp<'_> {
     pub(in crate::tui) fn pump_chord_chart_preview(&mut self) {
         if self.active_screen != crate::screen_switch::PrimaryScreen::ChordChart
             || self.mml_overlay.is_open()
+            || self.chord_chart_patch_select.is_some()
             || self.deferred_chord_chart_preview.is_none()
         {
             return;

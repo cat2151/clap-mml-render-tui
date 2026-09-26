@@ -284,6 +284,7 @@ impl<'a> TuiApp<'a> {
                 overlay
             },
             mml_overlay_owner: None,
+            chord_chart_patch_select: None,
             mml_overlay_patch,
             chord_chart_patch,
             chord_chart_bass_patch,

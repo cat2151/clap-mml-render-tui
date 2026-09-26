@@ -397,12 +397,6 @@ fn every_builtin_condition_has_an_explicit_leading_word_boundary() {
 }
 
 #[test]
-fn ctrl_t_is_the_trigger() {
-    assert!(is_patch_select_trigger(ctrl('t')));
-    assert!(!is_patch_select_trigger(press(KeyCode::Char('t'))));
-}
-
-#[test]
 fn s_without_ctrl_is_the_play_settings_trigger_in_the_selector() {
     assert!(is_patch_select_play_settings_trigger(press(KeyCode::Char(
         's'

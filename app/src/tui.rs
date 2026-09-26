@@ -61,13 +61,7 @@ pub enum TuiExitReason {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::tui) enum MmlOverlayOwner {
     Global,
-    ChordChart {
-        section_id: chord_chart::SectionId,
-    },
-    /// Chord Chart から直接開いた、layer 別の音色選択。
-    ChordChartPatch {
-        role: cmrt_patches::PatchRole,
-    },
+    ChordChart { section_id: chord_chart::SectionId },
 }
 
 /// 画面ホスト。持つのは「どの画面か」と、画面をまたいで共有するものだけ。
@@ -99,6 +93,12 @@ pub struct TuiApp<'a> {
     pub(in crate::tui) mml_overlay: MmlOverlay<'a>,
     /// 共有 overlay の現在の借り手。閉じているときは `None`。
     pub(in crate::tui) mml_overlay_owner: Option<MmlOverlayOwner>,
+    /// Chord Chart の `t` / `Shift+T` で開いている入力欄なしの音色 selector と、その Role。
+    /// 試聴は `mml_overlay_sender` で鳴らす。
+    pub(in crate::tui) chord_chart_patch_select: Option<(
+        cmrt_patches::PatchRole,
+        cmrt_patch_select::DirectPatchSelect<'a>,
+    )>,
     /// 通常の `Ctrl+P` overlay が持つ canonical patch。
     pub(in crate::tui) mml_overlay_patch: Option<String>,
     /// Chord Chart の編集・通常 preview が持つ canonical patch。

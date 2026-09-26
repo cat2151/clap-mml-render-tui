@@ -10,11 +10,11 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::line_play::{FilterSettings, LinePerformance, LineProgram};
+use crate::line_program::{FilterSettings, LinePerformance, LineProgram};
 
 /// MML overlay 全体で共通の演奏設定。
 ///
-/// [`crate::line_play::LineProgram`] へそのまま載る形にしてある（`repeat` と `filters` が
+/// [`LineProgram`] へそのまま載る形にしてある（`repeat` と `filters` が
 /// `LineProgram` の同名フィールドに対応する）。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PlaySettings {
@@ -31,7 +31,7 @@ impl PlaySettings {
     /// 履歴の試聴）はどれもここを通すので、「設定は overlay 全体で共通」が
     /// 経路ごとの取りこぼしなしに成り立つ。設定を持たない呼び出し側だけが
     /// [`LineProgram::once`] を使う。
-    pub(crate) fn program(self, performance: LinePerformance) -> LineProgram {
+    pub fn program(self, performance: LinePerformance) -> LineProgram {
         LineProgram {
             performance,
             repeat: self.repeat,
@@ -97,7 +97,7 @@ pub(crate) enum PlaySettingsAction {
 }
 
 /// 編集中の演奏設定モーダル。
-pub(crate) struct PlaySettingsSelect {
+pub struct PlaySettingsSelect {
     /// 開いた時点の値。取り消しで戻す先。
     original: PlaySettings,
     /// 編集中の値。確定するとこれが採用される。
@@ -115,12 +115,12 @@ impl PlaySettingsSelect {
     }
 
     /// 編集中の値（描画用）。
-    pub(crate) fn settings(&self) -> &PlaySettings {
+    pub fn settings(&self) -> &PlaySettings {
         &self.current
     }
 
     /// 選択中の項目（描画用）。
-    pub(crate) fn cursor(&self) -> usize {
+    pub fn cursor(&self) -> usize {
         self.cursor
     }
 

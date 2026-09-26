@@ -82,7 +82,7 @@ fn start_track_rerender_batch_logs_only_targeted_measures() {
         )),
         mml_overlay: cmrt_mml_overlay::MmlOverlay::default(),
         mml_overlay_sender: None,
-        mml_overlay_patch_select_only: false,
+        direct_patch_select: None,
     };
     app.editor.data[2][1] = "c".to_string();
     app.editor.data[2][3] = "e".to_string();

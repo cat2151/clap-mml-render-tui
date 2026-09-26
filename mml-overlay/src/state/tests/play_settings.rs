@@ -3,7 +3,7 @@
 use super::*;
 
 use crate::line_play::FilterSettings;
-use crate::play_settings::PlaySettings;
+use crate::PlaySettings;
 
 fn patches() -> Vec<PatchCatalogEntry> {
     vec![PatchCatalogEntry::from_display(

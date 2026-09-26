@@ -11,9 +11,10 @@ use cmrt_tui_core::theme::{
     MONOKAI_CYAN, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_PINK, MONOKAI_YELLOW,
 };
 
+use cmrt_patch_select::PatchCatalogNotice;
+
 use crate::{
-    line_play::LineStatus, state::PatchCatalogNotice, MmlOverlay, MmlOverlayInputMode,
-    MmlOverlaySyntax, SingleLineFlow,
+    line_play::LineStatus, MmlOverlay, MmlOverlayInputMode, MmlOverlaySyntax, SingleLineFlow,
 };
 
 const MML_KEY_HINTS: &str = "^T音色 ^O履歴 ^L演奏設定 ^Space再演奏 Esc閉じる ";
@@ -72,16 +73,12 @@ pub(super) fn draw(overlay: &MmlOverlay<'_>, frame: &mut Frame<'_>, area: Rect) 
 }
 
 fn patch_catalog_notice(overlay: &MmlOverlay<'_>) -> Option<(String, Color)> {
-    match overlay.patch_catalog_notice()? {
-        PatchCatalogNotice::Loading => Some((
-            "音色一覧を読み込み中です。完了後に自動で開きます".to_string(),
-            MONOKAI_YELLOW,
-        )),
-        PatchCatalogNotice::Empty => Some(("選択できる音色がありません".to_string(), MONOKAI_PINK)),
-        PatchCatalogNotice::Error(error) => {
-            Some((format!("音色一覧の読み込みに失敗: {error}"), MONOKAI_PINK))
-        }
-    }
+    let notice = overlay.patch_catalog_notice()?;
+    let color = match notice {
+        PatchCatalogNotice::Loading => MONOKAI_YELLOW,
+        PatchCatalogNotice::Empty | PatchCatalogNotice::Error(_) => MONOKAI_PINK,
+    };
+    Some((notice.message(), color))
 }
 
 /// 打鍵で鳴らした音が優先。鳴っていなければ直近の行演奏の結果を出す。

@@ -403,6 +403,7 @@ dependencies = [
  "cmrt-mml-overlay",
  "cmrt-notepad",
  "cmrt-offline-render",
+ "cmrt-patch-select",
  "cmrt-patches",
  "cmrt-realtime-play",
  "cmrt-render-core",
@@ -572,6 +573,7 @@ dependencies = [
  "cmrt-history",
  "cmrt-mml-overlay",
  "cmrt-offline-render",
+ "cmrt-patch-select",
  "cmrt-patches",
  "cmrt-realtime-play",
  "cmrt-render-core",
@@ -608,7 +610,7 @@ dependencies = [
  "anyhow",
  "cmrt-arpeggiator",
  "cmrt-chord",
- "cmrt-mml-overlay",
+ "cmrt-patch-select",
  "cmrt-patches",
  "cmrt-realtime-play",
  "cmrt-render-core",
@@ -641,7 +643,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "cmrt-chord",
- "cmrt-mml-overlay",
+ "cmrt-patch-select",
  "cmrt-patches",
  "cmrt-realtime-play",
  "cmrt-runtime",
@@ -713,6 +715,7 @@ dependencies = [
  "cmrt-chord",
  "cmrt-core",
  "cmrt-midi-filter",
+ "cmrt-patch-select",
  "cmrt-patches",
  "cmrt-realtime-play",
  "cmrt-tui-core",
@@ -756,6 +759,19 @@ dependencies = [
  "hound",
  "toml",
  "ureq",
+]
+
+[[package]]
+name = "cmrt-patch-select"
+version = "0.1.0"
+dependencies = [
+ "cmrt-chord",
+ "cmrt-patches",
+ "cmrt-tui-core",
+ "crossterm",
+ "ratatui",
+ "ratatui-textarea",
+ "regex",
 ]
 
 [[package]]

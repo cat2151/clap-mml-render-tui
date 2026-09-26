@@ -1,11 +1,11 @@
 //! Regex 欄。選択中の Preset の一覧に、手入力の条件を AND で重ねる。
 //!
 //! 条件の規則（表示パス + Category が対象、空白区切り AND、正規表現）は
-//! `cmrt_mml_overlay::filter_candidates` が単一ソース。
+//! `cmrt_patch_select::filter_candidates` が単一ソース。
 
 use std::sync::Arc;
 
-use cmrt_mml_overlay::filter_candidates;
+use cmrt_patch_select::filter_candidates;
 use cmrt_tui_core::text_input;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui_textarea::TextArea;

@@ -3,9 +3,12 @@
 //! sender の外（画面 crate）のテストが「この操作で LIVE へ何を送ったか」を数えるためのもの。
 //! 本番の server と同じく bank は 2 つ（instance 0 と 1 が組）で、音色を変える行は先読みで準備する。
 
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Mutex,
+use std::{
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Mutex,
+    },
+    time::Instant,
 };
 
 use cmrt_realtime_play::{LiveTimelineConfig, TimelineMidiEvent};
@@ -27,6 +30,8 @@ pub struct RecordingSink {
     prepare_error: Option<String>,
     prepared: Mutex<Vec<LivePatch>>,
     operations: Mutex<Vec<SinkOperation>>,
+    midi: Mutex<Vec<(Instant, [u8; 3])>>,
+    timeline_events: Mutex<Vec<TimelineMidiEvent>>,
     timelines: AtomicUsize,
     stops: AtomicUsize,
 }
@@ -48,6 +53,16 @@ impl RecordingSink {
     /// 張った live timeline の数。行を 1 回鳴らすと 1 増える。
     pub fn timelines(&self) -> usize {
         self.timelines.load(Ordering::Acquire)
+    }
+
+    /// 生 MIDI で送られた message と、sink が受けた時刻（受けた順に）。
+    pub fn midi(&self) -> Vec<(Instant, [u8; 3])> {
+        self.midi.lock().unwrap().clone()
+    }
+
+    /// live timeline へ積まれた event（受けた順に。張り直しをまたいで溜まる）。
+    pub fn timeline_events(&self) -> Vec<TimelineMidiEvent> {
+        self.timeline_events.lock().unwrap().clone()
     }
 
     /// 受けた操作を受けた順に。
@@ -93,7 +108,12 @@ impl SoundSink for RecordingSink {
         self.prepare_patch(instance_id, patch)
     }
 
-    fn send_midi(&self, _instance_id: u8, _messages: &[[u8; 3]]) -> SinkResult {
+    fn send_midi(&self, _instance_id: u8, messages: &[[u8; 3]]) -> SinkResult {
+        let now = Instant::now();
+        self.midi
+            .lock()
+            .unwrap()
+            .extend(messages.iter().map(|message| (now, *message)));
         Ok(())
     }
 
@@ -117,7 +137,11 @@ impl SoundSink for RecordingSink {
         Ok(())
     }
 
-    fn send_timeline_events(&self, _events: &[TimelineMidiEvent]) -> SinkResult {
+    fn send_timeline_events(&self, events: &[TimelineMidiEvent]) -> SinkResult {
+        self.timeline_events
+            .lock()
+            .unwrap()
+            .extend_from_slice(events);
         Ok(())
     }
 }

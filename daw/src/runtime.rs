@@ -42,7 +42,7 @@ impl DawApp {
 
     pub(crate) fn uses_textarea_cursor(&self) -> bool {
         match self.mode {
-            DawMode::Insert | DawMode::MmlOverlay => true,
+            DawMode::Insert | DawMode::MmlOverlay | DawMode::DirectPatchSelect => true,
             DawMode::History => self.overlays.history.filter_active,
             DawMode::PatchSelect => self.overlays.patch_select.filter_active,
             DawMode::Project => {
@@ -212,10 +212,14 @@ impl DawApp {
                         }
                         continue;
                     }
-                    // MML オーバーレイは開いている間キーを総取りする（Ctrl+C も含む）。
+                    // MML オーバーレイと `t` の音色 selector は開いている間キーを総取りする（Ctrl+C も含む）。
                     // 画面切替メニューや Ctrl+C の分岐より先に判定すること。
                     if self.mode == DawMode::MmlOverlay {
                         self.handle_mml_overlay_key_event(key);
+                        continue;
+                    }
+                    if self.mode == DawMode::DirectPatchSelect {
+                        self.handle_direct_patch_select_key_event(key);
                         continue;
                     }
                     if self.mode == DawMode::Normal && is_mml_overlay_trigger(key) {
@@ -278,7 +282,7 @@ impl DawApp {
                         DawMode::PatchSelect => self.handle_patch_select_key_event(key),
                         DawMode::Project => self.handle_project_key_event(key),
                         // 開いている間は上で総取りしているのでここへは来ない。
-                        DawMode::MmlOverlay => {}
+                        DawMode::MmlOverlay | DawMode::DirectPatchSelect => {}
                     }
                 }
             }

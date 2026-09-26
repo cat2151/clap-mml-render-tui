@@ -4,76 +4,18 @@
 //! なって邪魔になるうえ、聴き比べたいのはフレーズのほうで音色は共通、という使い方が
 //! 前提のため。選んだ音色は枠のタイトルにだけ出る。
 
-use std::{collections::BTreeMap, time::Instant};
+use std::collections::BTreeMap;
 
+use cmrt_patch_select::{AuditionMoment, PatchAudition, PatchCatalogNotice, PatchSelectOutcome};
 use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 use crossterm::event::KeyEvent;
 
-use crate::cursor_notes::{notes_at_prefix, CursorNotes, PREVIEW_MML};
-use crate::patch_select::{PatchSelect, PatchSelectAction};
-
-use super::{MmlOverlay, MmlOverlayAction, PatchCatalogNotice, PatchCatalogSnapshot, PatchChange};
+use super::{MmlOverlay, MmlOverlayAction, PatchCatalogSnapshot, PatchChange};
 
 impl MmlOverlay<'_> {
-    /// 音色 selector を直接開く。catalog が Loading なら完了後の open を予約する。
-    ///
-    /// 通常は `Ctrl+T` から呼ばれるが、host 画面が role を指定して直接開く場合も
-    /// 同じ経路を使う。
-    pub fn request_patch_select(&mut self) {
-        self.patch_catalog_notice = None;
-        self.patch_select_requested = false;
-        match &self.patch_catalog {
-            PatchCatalogSnapshot::Loading => {
-                self.patch_catalog_notice = Some(PatchCatalogNotice::Loading);
-                self.patch_select_requested = true;
-                crate::log_line(
-                    "action=patch-select event=open result=waiting reason=catalog-loading"
-                        .to_string(),
-                );
-            }
-            PatchCatalogSnapshot::Error(error) => {
-                self.patch_catalog_notice = Some(PatchCatalogNotice::Error(error.clone()));
-                crate::log_line(format!(
-                    "action=patch-select event=open result=blocked reason=catalog-error detail={error:?}"
-                ));
-            }
-            PatchCatalogSnapshot::Ready(patches) if patches.is_empty() => {
-                self.patch_catalog_notice = Some(PatchCatalogNotice::Empty);
-                crate::log_line(
-                    "action=patch-select event=open result=blocked reason=catalog-empty"
-                        .to_string(),
-                );
-            }
-            PatchCatalogSnapshot::Ready(patches) => {
-                let count = patches.len();
-                self.patch_select = PatchSelect::open(
-                    patches.clone(),
-                    self.patch.as_deref(),
-                    self.patch_filter_presets.clone(),
-                    self.patch_role_index.clone(),
-                    self.patch_select_initial_role,
-                    self.catalog_notes.clone(),
-                    self.load_measurements.clone(),
-                );
-                crate::log_line(format!(
-                    "action=patch-select event=open result=success count={count}"
-                ));
-            }
-        }
-    }
-
-    /// 今の音色で現在行を鳴らす。行が無音なら試聴用の 1 音。
-    ///
-    /// host が selector を直接開いた直後の試聴に使う。候補を動かす前から今の音色を聴けないと、
-    /// 比べる基準が無い。
-    pub fn preview_current_patch(&mut self, now: Instant) -> MmlOverlayAction {
-        if !self.current_line_performance().1.is_silent() {
-            return self.play_current_line(PatchChange::Keep);
-        }
-        MmlOverlayAction::SetPatch {
-            patch: self.patch.clone(),
-            notes: self.preview_notes(now),
-        }
+    /// `Ctrl+T` で音色 selector を開く。catalog が Loading なら完了後の open を予約する。
+    pub(crate) fn request_patch_select(&mut self) {
+        self.patch_audition_select.request_select();
     }
 
     /// 開いた時点で Loading だった一覧を、host app の loader 完了時に差し替える。
@@ -86,130 +28,56 @@ impl MmlOverlay<'_> {
         patch_role_index: cmrt_patches::PatchRoleIndex,
         load_measurements: BTreeMap<String, PatchLoadMeasurement>,
     ) {
-        if !self.open || !matches!(&self.patch_catalog, PatchCatalogSnapshot::Loading) {
+        if !self.open {
             return;
         }
-        let requested = self.patch_select_requested;
-        let result = match &catalog {
-            PatchCatalogSnapshot::Loading => return,
-            PatchCatalogSnapshot::Ready(patches) => format!("ready count={}", patches.len()),
-            PatchCatalogSnapshot::Error(error) => format!("error detail={error:?}"),
-        };
-        self.patch_catalog = catalog;
-        self.patch_role_index = patch_role_index;
-        self.load_measurements = load_measurements;
-        crate::log_line(format!(
-            "action=patch-catalog event=sync result={result} open_requested={requested}"
-        ));
-        if requested {
-            self.request_patch_select();
-        }
+        self.patch_audition_select
+            .sync_catalog(catalog, patch_role_index, load_measurements);
     }
 
     /// host app が毎 frame の loader polling を Loading 中だけに絞るための問い合わせ。
     pub fn is_waiting_for_patch_catalog(&self) -> bool {
-        self.open && matches!(&self.patch_catalog, PatchCatalogSnapshot::Loading)
+        self.open && self.patch_audition_select.is_waiting_for_catalog()
     }
 
     pub fn is_patch_select_open(&self) -> bool {
-        self.patch_select.is_some()
+        self.patch_audition_select.is_select_open()
     }
 
     pub(crate) fn patch_catalog_notice(&self) -> Option<&PatchCatalogNotice> {
-        self.patch_catalog_notice.as_ref()
+        self.patch_audition_select.notice()
     }
 
-    pub(super) fn handle_patch_select_key(
-        &mut self,
-        key: KeyEvent,
-        now: Instant,
-    ) -> MmlOverlayAction {
-        let Some(select) = self.patch_select.as_mut() else {
-            return MmlOverlayAction::Continue;
-        };
-        match select.handle_key(key) {
-            PatchSelectAction::Continue => MmlOverlayAction::Continue,
-            PatchSelectAction::Preview(patch) => self.preview_patch(patch, now),
-            PatchSelectAction::PlayLine(patch) => {
-                self.play_current_line(PatchChange::Switch(Some(patch)))
+    pub(super) fn handle_patch_select_key(&mut self, key: KeyEvent) -> MmlOverlayAction {
+        match self.patch_audition_select.handle_select_key(key) {
+            PatchSelectOutcome::Continue => MmlOverlayAction::Continue,
+            PatchSelectOutcome::Audition {
+                moment: AuditionMoment::Candidate,
+                patch,
+            } => {
+                let audition = self.candidate_audition();
+                self.audition(audition, patch)
             }
-            PatchSelectAction::Confirm(patch) => {
-                // 試聴で読み込み済みの音色がそのまま残るので、ここでは積み直さない。
-                self.patch_select = None;
-                self.patch = Some(patch);
-                MmlOverlayAction::Continue
-            }
-            PatchSelectAction::SaveUserPresets { presets, preview } => {
-                self.patch_filter_presets.clone_from(&presets);
+            PatchSelectOutcome::Audition {
+                moment: AuditionMoment::Replay,
+                patch,
+            } => self.play_current_line(patch),
+            PatchSelectOutcome::SavePresets { presets, preview } => {
                 let preview = preview.map(|patch| {
-                    let notes = self.preview_notes(now);
-                    (patch, notes)
+                    let audition = self.preset_audition();
+                    Box::new(self.audition(audition, PatchChange::Switch(Some(patch))))
                 });
                 MmlOverlayAction::SavePatchFilterPresets { presets, preview }
             }
-            PatchSelectAction::Cancel => self.cancel_patch_select(),
+            PatchSelectOutcome::Closed { restore, .. } => {
+                restore.map_or(MmlOverlayAction::Continue, Into::into)
+            }
         }
     }
 
-    fn cancel_patch_select(&mut self) -> MmlOverlayAction {
-        let Some(select) = self.patch_select.take() else {
-            return MmlOverlayAction::Continue;
-        };
-        if select.previewed() == select.original() {
-            return MmlOverlayAction::Continue;
-        }
-        MmlOverlayAction::SetPatch {
-            patch: select.original().map(str::to_string),
-            notes: None,
-        }
+    fn audition(&self, audition: Option<PatchAudition>, patch: PatchChange) -> MmlOverlayAction {
+        self.patch_audition_select
+            .audition_action(audition, patch)
+            .into()
     }
-
-    /// 音色一覧のカーソルが動いたときの試聴。
-    ///
-    /// repeat が ON なら、鳴っているループを音色ごと張り直す。音色を↑↓で流しながら
-    /// 同じフレーズを聴き比べるのが repeat の目的なので、ここで 1 音へ落とすと
-    /// ループが途切れて目的を果たさない。
-    ///
-    /// ただし鳴らす行が無いとき（空行・解釈できない行）は repeat でも 1 音へ戻す。
-    /// ループの代わりに無音になると、音色そのものを聴く手段が消えてしまうため。
-    ///
-    /// カーソルがどの発音単位にも触れていない（行末のコメントの後ろ等）ときは行を鳴らす。
-    /// 試聴用の 1 音へ落とすと、DAW が生成した行のように音がある行でも単音になる。
-    fn preview_patch(&mut self, patch: String, now: Instant) -> MmlOverlayAction {
-        let line_has_sound = !self.current_line_performance().1.is_silent();
-        if line_has_sound
-            && (self.play_settings().repeat || self.patch_preview_notes_at_cursor().is_none())
-        {
-            return self.play_current_line(PatchChange::Switch(Some(patch)));
-        }
-        MmlOverlayAction::SetPatch {
-            patch: Some(patch),
-            notes: self.preview_notes(now),
-        }
-    }
-
-    /// 音色を切り替えた直後に鳴らす音。
-    ///
-    /// カーソル位置に音があればそれを鳴らし直す。まだ MML が空でも音色は聴きたいので、
-    /// その場合だけ試聴用の音を1つ鳴らす。
-    fn preview_notes(&mut self, _now: Instant) -> Option<super::NoteRequest> {
-        let notes = self.patch_preview_notes_at_cursor();
-        self.last_notes.clone_from(&notes);
-        notes
-            .map(|(_, notes)| notes)
-            .or_else(|| {
-                (!matches!(self.syntax(), super::MmlOverlaySyntax::ChordChart(_)))
-                    .then(preview_note)
-                    .flatten()
-            })
-            .map(|notes| self.start_notes(&notes))
-    }
-}
-
-/// MML が空のときに音色の試聴だけを目的に鳴らす 1 音。
-///
-/// 音高も velocity も音長も既定値のまま鳴らしたいだけなので、MML を書いて
-/// 本家に解かせる。ここで組み立てると本家の既定値と二重に持つことになる。
-fn preview_note() -> Option<CursorNotes> {
-    notes_at_prefix(PREVIEW_MML)
 }

@@ -211,6 +211,18 @@ pub(super) fn draw(app: &DawApp, f: &mut Frame) {
             .unwrap_or_default();
         cmrt_mml_overlay::ui::draw_with_status(&app.mml_overlay, &sender_status, f);
     }
+    // `t` の音色 selector は入力欄を描かず、selector だけを grid の上へ重ねる。
+    if app.mode == DawMode::DirectPatchSelect {
+        if let Some(select) = &app.direct_patch_select {
+            cmrt_patch_select::ui::draw_direct_patch_select(select, f);
+        }
+        let sender_status = app
+            .mml_overlay_sender
+            .as_ref()
+            .map(cmrt_mml_overlay::MmlOverlaySender::status)
+            .unwrap_or_default();
+        cmrt_mml_overlay::ui::draw_sender_loading(&sender_status, f);
+    }
 
     if app.mode == DawMode::Normal
         && app.sound_check_guide.presentation() == SoundCheckGuidePresentation::Overlay

@@ -16,7 +16,7 @@ use super::{
     MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY,
 };
 use crate::messages::effect_chain as message;
-use cmrt_mml_overlay::ui::scroll_offset;
+use cmrt_patch_select::ui::scroll_offset;
 use cmrt_tui_core::theme::cursor_highlight_style;
 
 pub(super) fn draw_effect_chain(f: &mut Frame, app: &DawApp, area: Rect) {

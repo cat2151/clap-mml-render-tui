@@ -2,7 +2,7 @@
 
 use std::ops::Range;
 
-use cmrt_mml_overlay::ui::scroll_offset;
+use cmrt_patch_select::ui::scroll_offset;
 
 use super::{PatchPaneFocus, PatchSelector, PatchSelectorLayout};
 

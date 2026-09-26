@@ -162,6 +162,7 @@ impl<'a> TuiApp<'a> {
                     if self.active_screen == PrimaryScreen::GridSequencer
                         && !self.screen_switch_menu.is_open()
                         && !self.mml_overlay.is_open()
+                        && self.chord_chart_patch_select.is_none()
                     {
                         let size = terminal.backend().size()?;
                         self.handle_grid_sequencer_mouse_event(
@@ -189,6 +190,13 @@ impl<'a> TuiApp<'a> {
                     if self.mml_overlay.is_open() {
                         if key.kind == KeyEventKind::Press {
                             self.handle_mml_overlay_key_event(key);
+                        }
+                        continue;
+                    }
+                    // Chord Chart の `t` / `Shift+T` の音色 selector も、開いている間キーを総取りする。
+                    if self.chord_chart_patch_select.is_some() {
+                        if key.kind == KeyEventKind::Press {
+                            self.handle_chord_chart_patch_select_key_event(key);
                         }
                         continue;
                     }

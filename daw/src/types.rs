@@ -152,6 +152,8 @@ pub enum DawMode {
     Insert,
     /// 1 行モードの MML 入力オーバーレイ（`Ctrl+P`）。
     MmlOverlay,
+    /// NORMAL の `t` で開く、入力欄なしの音色 selector。
+    DirectPatchSelect,
     Help,
     Mixer,
     History,

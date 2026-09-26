@@ -1,8 +1,8 @@
-//! MML オーバーレイから開く音色選択。
+//! 音色選択の一覧。
 //!
 //! 左から「Grid Sequencer 上の大分類」「正規表現プリセット」「音色」の 3 pane。
 //! 手入力した正規表現とプリセットを AND で組み合わせる。選択そのものはここに閉じ、
-//! 音を鳴らす/JSON へ永続化する処理は [`crate::state`] と host app に任せる。
+//! 音を鳴らす処理は [`crate::PatchAuditionSelect`]、JSON へ永続化する処理は host app に任せる。
 
 mod filter;
 mod keys;
@@ -30,7 +30,6 @@ use presets::{normalize_user_presets, patterns_for_role};
 pub use presets::{prepare_user_presets, FilterGroup, FilterPreset};
 
 pub(crate) use keys::is_patch_select_play_settings_trigger;
-pub use keys::is_patch_select_trigger;
 
 /// 音色選択が呼び出し側へ求める処理。
 pub(crate) enum PatchSelectAction {
@@ -38,10 +37,10 @@ pub(crate) enum PatchSelectAction {
     Continue,
     /// この音色を試聴する。
     Preview(String),
-    /// この音色へ差し替えて、入力欄の現在行をまるごと演奏する。
+    /// この音色へ差し替えて、行をまるごと演奏する。
     ///
     /// 音色一覧の行は MML を持たない（[`PatchCatalogEntry`] は音色名・カテゴリ・
-    /// load 時間だけ）ので、何を鳴らすかは呼び出し側が入力欄から決める。ここは
+    /// load 時間だけ）ので、何を鳴らすかは selector を持つ側が決める。ここは
     /// 「どの音色で」だけを言う。
     PlayLine(String),
     /// この音色で確定して閉じる。
@@ -55,7 +54,7 @@ pub(crate) enum PatchSelectAction {
     Cancel,
 }
 
-pub(crate) struct PatchSelect<'a> {
+pub struct PatchSelect<'a> {
     all: Vec<PatchCatalogEntry>,
     filtered: Arc<[usize]>,
     cursor: usize,
@@ -140,7 +139,7 @@ impl<'a> PatchSelect<'a> {
         })
     }
 
-    pub(crate) fn query_textarea(&self) -> &TextArea<'a> {
+    pub fn query_textarea(&self) -> &TextArea<'a> {
         &self.query
     }
 
@@ -156,7 +155,7 @@ impl<'a> PatchSelect<'a> {
         &FilterGroup::ALL
     }
 
-    pub(crate) fn group_cursor(&self) -> usize {
+    pub fn group_cursor(&self) -> usize {
         self.group_cursor
     }
 
@@ -184,7 +183,7 @@ impl<'a> PatchSelect<'a> {
         self.filtered.iter().map(|index| &self.all[*index])
     }
 
-    pub(crate) fn filtered_len(&self) -> usize {
+    pub fn filtered_len(&self) -> usize {
         self.filtered.len()
     }
 
@@ -201,7 +200,7 @@ impl<'a> PatchSelect<'a> {
         &self.catalog_notes
     }
 
-    pub(crate) fn load_measurement(&self, patch: &str) -> Option<&PatchLoadMeasurement> {
+    pub fn load_measurement(&self, patch: &str) -> Option<&PatchLoadMeasurement> {
         self.load_measurements.get(patch)
     }
 
@@ -214,7 +213,7 @@ impl<'a> PatchSelect<'a> {
         self.previewed.as_deref()
     }
 
-    pub(crate) fn selected(&self) -> Option<&str> {
+    pub fn selected(&self) -> Option<&str> {
         self.filtered
             .get(self.cursor)
             .map(|index| self.all[*index].display())

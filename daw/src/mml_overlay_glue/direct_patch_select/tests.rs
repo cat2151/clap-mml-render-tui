@@ -6,8 +6,8 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use cmrt_mml_overlay::line_play::LineStatus;
-use cmrt_mml_overlay::{MmlOverlaySender, RecordingSink};
+use cmrt_mml_overlay::line_play::line_events;
+use cmrt_mml_overlay::{MmlOverlaySender, PatchAudition, RecordingSink};
 use cmrt_tui_core::patch_load::PatchLoadState;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -33,6 +33,27 @@ fn catalog_pairs() -> Vec<(String, String)> {
         .collect()
 }
 
+/// `t` の selector が開いている（一覧の Loading 待ちではない）。
+pub(in crate::mml_overlay_glue) fn selector_is_open(app: &DawApp) -> bool {
+    app.direct_patch_select
+        .as_ref()
+        .is_some_and(|select| select.is_select_open())
+}
+
+fn selector_patch(app: &DawApp) -> Option<&str> {
+    app.direct_patch_select.as_ref()?.patch()
+}
+
+/// `t` が試聴に渡したもの。
+fn audition(app: &DawApp) -> Option<&PatchAudition> {
+    app.direct_patch_select.as_ref()?.audition()
+}
+
+/// その MML を行として試聴する、という試聴。
+fn line_audition(line: &str) -> PatchAudition {
+    PatchAudition::Line(line_events(line).1)
+}
+
 fn app_with_pad_track() -> (DawApp, std::sync::mpsc::Receiver<crate::CacheJob>) {
     let (mut app, cache_rx) = build_test_app();
     *app.patch_load.lock().unwrap() = PatchLoadState::ready(catalog_pairs());
@@ -50,9 +71,11 @@ fn t_opens_the_patch_selector_without_the_mml_input_step() {
 
     app.handle_normal_key_event(plain('t'));
 
-    assert_eq!(app.mode, DawMode::MmlOverlay);
-    assert!(app.mml_overlay.is_patch_select_open());
-    assert_eq!(app.mml_overlay.patch(), Some("Pads/Snapshot Pad.fxp"));
+    assert_eq!(app.mode, DawMode::DirectPatchSelect);
+    assert!(selector_is_open(&app));
+    // MML 入力欄は開かない。
+    assert!(!app.mml_overlay.is_open());
+    assert_eq!(selector_patch(&app), Some("Pads/Snapshot Pad.fxp"));
 }
 
 #[test]
@@ -61,19 +84,19 @@ fn confirming_writes_the_init_cell_and_returns_to_normal() {
     let (mut app, _cache_rx) = app_with_pad_track();
     app.handle_normal_key_event(plain('t'));
 
-    app.handle_mml_overlay_key_event(plain('/'));
+    app.handle_direct_patch_select_key_event(plain('/'));
     for ch in "snapshot keys".chars() {
-        app.handle_mml_overlay_key_event(plain(ch));
+        app.handle_direct_patch_select_key_event(plain(ch));
     }
     // 1 回目は絞り込み、2 回目は音色の確定。
-    app.handle_mml_overlay_key_event(key(KeyCode::Enter));
-    app.handle_mml_overlay_key_event(key(KeyCode::Enter));
+    app.handle_direct_patch_select_key_event(key(KeyCode::Enter));
+    app.handle_direct_patch_select_key_event(key(KeyCode::Enter));
 
     assert_eq!(app.editor.data[2][0], KEYS_INIT_CELL);
     assert_eq!(app.mode, DawMode::Normal);
+    assert!(app.direct_patch_select.is_none());
     assert!(!app.mml_overlay.is_open());
-    assert!(!app.mml_overlay_patch_select_only);
-    // 下敷きの入力欄の中身をセルへ書き戻していないこと。
+    // meas のセルには触れないこと。
     assert_eq!(app.editor.data[2][1], "cde");
     assert_eq!(app.editor.cursor_measure, 1);
     assert_eq!(*app.playback.auto_play_reservation.lock().unwrap(), Some(1));
@@ -85,7 +108,7 @@ fn cancelling_keeps_the_init_cell_and_returns_to_normal() {
     let (mut app, _cache_rx) = app_with_pad_track();
     app.handle_normal_key_event(plain('t'));
 
-    app.handle_mml_overlay_key_event(key(KeyCode::Esc));
+    app.handle_direct_patch_select_key_event(key(KeyCode::Esc));
 
     assert_eq!(app.editor.data[2][0], PAD_INIT_CELL);
     assert_eq!(app.mode, DawMode::Normal);
@@ -94,15 +117,19 @@ fn cancelling_keeps_the_init_cell_and_returns_to_normal() {
 }
 
 #[test]
-fn the_init_column_opens_the_selector_with_an_empty_preview_line() {
+fn the_init_column_opens_the_selector_with_the_single_preview_note() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = app_with_pad_track();
     app.editor.cursor_measure = 0;
 
     app.handle_normal_key_event(plain('t'));
 
-    assert!(app.mml_overlay.is_patch_select_open());
-    assert_eq!(app.mml_overlay.value(), "");
+    assert!(selector_is_open(&app));
+    assert!(
+        matches!(audition(&app), Some(PatchAudition::Notes(_))),
+        "{:?}",
+        audition(&app)
+    );
 }
 
 #[test]
@@ -124,16 +151,33 @@ fn loading_catalog_waits_and_esc_closes_without_touching_cells() {
     *app.patch_load.lock().unwrap() = PatchLoadState::Loading;
 
     app.handle_normal_key_event(plain('t'));
-    assert_eq!(app.mode, DawMode::MmlOverlay);
-    assert!(app.mml_overlay.is_waiting_for_patch_catalog());
+    assert_eq!(app.mode, DawMode::DirectPatchSelect);
+    assert!(app
+        .direct_patch_select
+        .as_ref()
+        .is_some_and(|select| select.is_waiting_for_catalog()));
 
-    // 待っている間の文字キーは入力欄へ通さない。
-    app.handle_mml_overlay_key_event(plain('x'));
-    assert_eq!(app.mml_overlay.value(), "cde");
+    // 待っている間の文字キーは何もしない。
+    app.handle_direct_patch_select_key_event(plain('x'));
+    assert_eq!(app.mode, DawMode::DirectPatchSelect);
 
-    app.handle_mml_overlay_key_event(key(KeyCode::Esc));
+    app.handle_direct_patch_select_key_event(key(KeyCode::Esc));
     assert_eq!(app.mode, DawMode::Normal);
+    assert!(app.direct_patch_select.is_none());
     assert_eq!(app.editor.data[2][1], "cde");
+}
+
+#[test]
+fn the_catalog_arriving_while_waiting_opens_the_selector() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
+    let (mut app, _cache_rx) = app_with_pad_track();
+    *app.patch_load.lock().unwrap() = PatchLoadState::Loading;
+    app.handle_normal_key_event(plain('t'));
+
+    *app.patch_load.lock().unwrap() = PatchLoadState::ready(catalog_pairs());
+    app.pump_mml_overlay();
+
+    assert!(selector_is_open(&app));
 }
 
 #[test]
@@ -146,6 +190,7 @@ fn an_empty_catalog_does_not_leave_the_overlay_open() {
 
     assert_eq!(app.mode, DawMode::Normal);
     assert!(!app.mml_overlay.is_open());
+    assert!(app.direct_patch_select.is_none());
 }
 
 #[test]
@@ -167,10 +212,8 @@ fn an_empty_cell_generated_from_the_chord_row_previews_the_generated_notes() {
         .map(|part| format!("o3{}", part.trim()))
         .collect::<Vec<_>>()
         .join(";");
-    assert!(app.mml_overlay.is_patch_select_open());
-    assert_eq!(app.mml_overlay.value(), expected);
-    // overlay の解釈で音符になること（無音行なら Space の試聴が鳴らない）。
-    assert!(cmrt_mml_overlay::live_line(&expected).is_ok());
+    assert!(selector_is_open(&app));
+    assert_eq!(audition(&app), Some(&line_audition(&expected)));
 }
 
 /// chord 行 `I` から `"close"` で生成される track2 の meas1（セルは空）。
@@ -186,28 +229,6 @@ pub(in crate::mml_overlay_glue) fn app_with_generated_empty_cell(
 }
 
 #[test]
-fn moving_in_the_selector_plays_the_generated_chord_not_a_single_note() {
-    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
-    let (mut app, _cache_rx) = app_with_generated_empty_cell();
-    app.handle_normal_key_event(plain('t'));
-
-    // 生成行は `/*|*/` で終わるので、行末のカーソルはどの発音単位にも触れていない。
-    // 一覧は Keys, Pad の順でカーソルは Pad にあるので、上へ動かす。
-    app.handle_mml_overlay_key_event(key(KeyCode::Up));
-
-    // 行全体を鳴らした（C の 3 和音）。試聴用の単音へ落ちると sounding が [60] になる。
-    assert!(
-        matches!(
-            app.mml_overlay.line_status(),
-            LineStatus::Played { note_count: 3, .. }
-        ),
-        "{:?}",
-        app.mml_overlay.line_status()
-    );
-    assert!(app.mml_overlay.sounding().is_empty());
-}
-
-#[test]
 fn t_on_the_chord_row_previews_what_the_generated_track_plays() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = app_with_generated_empty_cell();
@@ -215,12 +236,16 @@ fn t_on_the_chord_row_previews_what_the_generated_track_plays() {
 
     app.handle_normal_key_event(plain('t'));
 
-    assert!(app.mml_overlay.is_patch_select_open());
+    assert!(selector_is_open(&app));
     assert_eq!(
-        app.mml_overlay.value(),
-        crate::mml::cell_preview_line(&app.editor.data, 2, 1)
+        audition(&app),
+        Some(&line_audition(&crate::mml::cell_preview_line(
+            &app.editor.data,
+            2,
+            1
+        )))
     );
-    assert_eq!(app.mml_overlay.patch(), Some("Pads/Snapshot Pad.fxp"));
+    assert_eq!(selector_patch(&app), Some("Pads/Snapshot Pad.fxp"));
 }
 
 /// server の代わりに送った内容を記録する sender を app へ差す。
@@ -262,7 +287,7 @@ fn the_preview_goes_through_the_track_effect_chain() {
     let sink = attach_recording_sink(&mut app);
 
     app.handle_normal_key_event(plain('t'));
-    app.handle_mml_overlay_key_event(key(KeyCode::Up));
+    app.handle_direct_patch_select_key_event(key(KeyCode::Up));
 
     wait_until("前の候補の試聴", || {
         sink.prepared()
@@ -301,8 +326,8 @@ fn app_with_drum_catalog(init_cell: &str) -> (DawApp, std::sync::mpsc::Receiver<
 /// `End` で一覧の末尾を確定し、開いた直後の候補がどこまで絞られていたかを見る。
 fn confirm_last_candidate(app: &mut DawApp) {
     app.handle_normal_key_event(plain('t'));
-    app.handle_mml_overlay_key_event(key(KeyCode::End));
-    app.handle_mml_overlay_key_event(key(KeyCode::Enter));
+    app.handle_direct_patch_select_key_event(key(KeyCode::End));
+    app.handle_direct_patch_select_key_event(key(KeyCode::Enter));
 }
 
 #[test]
@@ -332,3 +357,5 @@ fn a_track_without_a_patch_opens_the_selector_on_all() {
         app.editor.data[2][0]
     );
 }
+
+mod audition;

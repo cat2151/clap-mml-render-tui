@@ -2,7 +2,7 @@
 
 use rand::seq::SliceRandom;
 
-use cmrt_mml_overlay::FilterGroup;
+use cmrt_patch_select::FilterGroup;
 
 use super::KeyboardPatchCatalog;
 

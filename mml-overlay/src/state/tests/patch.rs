@@ -81,13 +81,13 @@ fn adding_a_patch_filter_preset_is_forwarded_to_the_host_for_json_persistence() 
         overlay.handle_key(press(KeyCode::Char('a')), now),
         MmlOverlayAction::SavePatchFilterPresets {
             presets: vec![("lead".to_string(), "violin".to_string())],
-            preview: Some((
-                patch.to_string(),
-                Some(NoteRequest {
+            preview: Some(Box::new(MmlOverlayAction::SetPatch {
+                patch: Some(patch.to_string()),
+                notes: Some(NoteRequest {
                     messages: vec![[0x90, 60, 127]],
                     duration: Duration::from_millis(250),
-                })
-            )),
+                }),
+            })),
         }
     );
 }

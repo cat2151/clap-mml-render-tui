@@ -8,6 +8,7 @@
 //! なった。止める役と gate の計時は sender worker へ寄せ、ここが持つ
 //! [`MmlOverlay::sounding`] は表示専用とする。
 
+mod audition;
 mod chord_transfer;
 mod contract;
 mod history;
@@ -16,21 +17,17 @@ mod play_settings;
 mod preview;
 mod single_line;
 
-use std::{collections::BTreeMap, time::Instant};
+use std::time::Instant;
 
-use cmrt_patches::{PatchRole, PatchRoleIndex};
+use cmrt_patch_select::{PatchAuditionContext, PatchAuditionSelect};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui_textarea::{DataCursor, TextArea};
-
-use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 
 use crate::chord_transfer::ChordTransferConfirm;
 use crate::cursor_notes::CursorNotes;
 use crate::history_select::{is_history_select_trigger, HistorySelect};
 use crate::line_play::{is_replay_key, LineStatus};
-use crate::patch_select::{is_patch_select_trigger, PatchSelect};
-use crate::play_settings::{PlaySettings, PlaySettingsSelect};
-use crate::MmlOverlaySenderStatus;
+use crate::{is_patch_select_trigger, MmlOverlaySenderStatus};
 
 pub use contract::{
     ChordChartPreviewContext, ChordPreviewContext, MmlOverlayAction, MmlOverlayContext,
@@ -63,33 +60,13 @@ pub struct MmlOverlay<'a> {
     sounding_from_chord: bool,
     /// senderへ最後に依頼したcommand。古いworker状態で表示を巻き戻さないための世代。
     sender_command_id: u64,
-    /// 入力欄とは別に持つ音色。`Ctrl+T` と履歴の取り込みだけが書き換える。
-    patch: Option<String>,
-    /// 開いている間だけ持つ patch 一覧のスナップショット（表示名, 小文字化）。
-    patch_catalog: PatchCatalogSnapshot,
-    patch_role_index: PatchRoleIndex,
-    /// selector を開いた直後に選ぶ Role。Chord Chart では候補の試聴パートも決める。
-    /// 呼び出し元が overlay を開くたびに指定する。
-    patch_select_initial_role: Option<PatchRole>,
-    /// patch selectのLoad列へ渡す、開いているcatalogと同世代の計測結果。
-    load_measurements: BTreeMap<String, PatchLoadMeasurement>,
+    /// 入力欄とは別に持つ音色（`Ctrl+T`）と演奏設定（`Ctrl+L`）。どちらも開き直しでは
+    /// 消えず、呼び出し側がセッションへ保存する。
+    patch_audition_select: PatchAuditionSelect<'a>,
     /// 開いている間だけ持つフレーズ履歴のスナップショット。
     history: Vec<String>,
     favorites: Vec<String>,
-    /// 開いている間だけ持つユーザー追加の patch filter preset。
-    patch_filter_presets: Vec<(String, String)>,
-    /// 開いている間だけ持つ「カタログから外れたプラグイン」の案内。
-    catalog_notes: Vec<String>,
-    /// Ctrl+T を処理できなかった理由。標準 stream ではなく overlay 内へ出す。
-    patch_catalog_notice: Option<PatchCatalogNotice>,
-    /// Loading 中の Ctrl+T を、一覧完成後に自動で実行する予約。
-    patch_select_requested: bool,
-    patch_select: Option<PatchSelect<'a>>,
     history_select: Option<HistorySelect<'a>>,
-    /// `Ctrl+L` で決める、この overlay 全体で共通の演奏設定。開き直しでは消えない
-    /// （音色と同じく、呼び出し側がセッションへ保存する）。
-    play_settings: PlaySettings,
-    play_settings_select: Option<PlaySettingsSelect>,
     /// 直近に行を演奏した結果。
     line_status: LineStatus,
     /// 打ちかけの 1 行を chord 行へ移せる画面か。開くときに呼び出し側が決める。
@@ -112,21 +89,10 @@ impl Default for MmlOverlay<'_> {
             sounding: Vec::new(),
             sounding_from_chord: false,
             sender_command_id: 0,
-            patch: None,
-            patch_catalog: PatchCatalogSnapshot::Loading,
-            patch_role_index: PatchRoleIndex::default(),
-            patch_select_initial_role: None,
-            load_measurements: BTreeMap::new(),
+            patch_audition_select: PatchAuditionSelect::default(),
             history: Vec::new(),
             favorites: Vec::new(),
-            patch_filter_presets: Vec::new(),
-            catalog_notes: Vec::new(),
-            patch_catalog_notice: None,
-            patch_select_requested: false,
-            patch_select: None,
             history_select: None,
-            play_settings: PlaySettings::default(),
-            play_settings_select: None,
             line_status: LineStatus::Idle,
             chord_row_transfer: false,
             chord_hint: false,
@@ -161,7 +127,7 @@ impl<'a> MmlOverlay<'a> {
 
     /// いまの音色。セッション保存はこれを見る。
     pub fn patch(&self) -> Option<&str> {
-        self.patch.as_deref()
+        self.patch_audition_select.patch()
     }
 
     pub fn line_status(&self) -> &LineStatus {
@@ -174,7 +140,7 @@ impl<'a> MmlOverlay<'a> {
 
     /// セッションから復元した音色を入れる。起動時に1度だけ呼ぶ。
     pub fn set_restored_patch(&mut self, patch: Option<String>) {
-        self.patch = patch;
+        self.patch_audition_select.set_patch(patch);
     }
 
     /// host 主導の一時 UI を閉じる。入力内容の commit は行わない。
@@ -182,8 +148,13 @@ impl<'a> MmlOverlay<'a> {
         self.release_context();
     }
 
-    pub(crate) fn patch_select(&self) -> Option<&PatchSelect<'a>> {
-        self.patch_select.as_ref()
+    pub(crate) fn patch_audition_select(&self) -> &PatchAuditionSelect<'a> {
+        &self.patch_audition_select
+    }
+
+    #[cfg(test)]
+    pub(crate) fn patch_select(&self) -> Option<&cmrt_patch_select::PatchSelect<'a>> {
+        self.patch_audition_select.select()
     }
 
     pub(crate) fn history_select(&self) -> Option<&HistorySelect<'a>> {
@@ -205,19 +176,17 @@ impl<'a> MmlOverlay<'a> {
         self.sounding_from_chord = false;
         self.sender_command_id = 0;
         self.line_status = LineStatus::Idle;
-        self.patch_catalog = context.patch_catalog;
-        self.patch_role_index = context.patch_role_index;
-        self.patch_select_initial_role = context.patch_select_initial_role;
-        self.load_measurements = context.load_measurements;
+        self.patch_audition_select.open(PatchAuditionContext {
+            catalog: context.patch_catalog,
+            patch_role_index: context.patch_role_index,
+            initial_role: context.patch_select_initial_role,
+            load_measurements: context.load_measurements,
+            filter_presets: context.patch_filter_presets,
+            catalog_notes: context.catalog_notes,
+        });
         self.history = context.history;
         self.favorites = context.favorites;
-        self.patch_filter_presets = context.patch_filter_presets;
-        self.catalog_notes = context.catalog_notes;
-        self.patch_catalog_notice = None;
-        self.patch_select_requested = false;
-        self.patch_select = None;
         self.history_select = None;
-        self.play_settings_select = None;
         self.chord_row_transfer = context.chord_row_transfer;
         self.chord_transfer_confirm = None;
         self.open = true;
@@ -244,11 +213,11 @@ impl<'a> MmlOverlay<'a> {
     fn handle_key_inner(&mut self, key: KeyEvent, now: Instant) -> MmlOverlayAction {
         // 演奏設定は最も手前のモーダル。音色選択の最中にも開ける必要があるので、
         // どの委譲よりも先に判定する。
-        if let Some(action) = self.intercept_play_settings_key(key) {
-            return action;
+        if self.patch_audition_select.intercept_play_settings_key(key) {
+            return MmlOverlayAction::Continue;
         }
-        if self.patch_select.is_some() {
-            return self.handle_patch_select_key(key, now);
+        if self.patch_audition_select.is_select_open() {
+            return self.handle_patch_select_key(key);
         }
         if self.history_select.is_some() {
             return self.handle_history_select_key(key);
@@ -306,29 +275,16 @@ impl<'a> MmlOverlay<'a> {
     pub(super) fn release_context(&mut self) {
         self.single_line_flow = SingleLineFlow::Advance;
         self.syntax = MmlOverlaySyntax::Mml;
-        self.patch_catalog = PatchCatalogSnapshot::Loading;
-        self.patch_role_index = PatchRoleIndex::default();
+        self.patch_audition_select.release();
         self.history = Vec::new();
         self.favorites = Vec::new();
-        self.patch_filter_presets = Vec::new();
-        self.patch_select = None;
-        self.patch_catalog_notice = None;
-        self.patch_select_requested = false;
         self.history_select = None;
-        self.play_settings_select = None;
         self.chord_row_transfer = false;
         self.chord_hint = false;
         self.chord_transfer_confirm = None;
         self.open = false;
         self.forget_sounding();
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum PatchCatalogNotice {
-    Loading,
-    Empty,
-    Error(String),
 }
 
 #[cfg(test)]

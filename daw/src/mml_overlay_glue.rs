@@ -17,10 +17,10 @@ use std::time::Instant;
 use crossterm::event::KeyEvent;
 
 use cmrt_mml_overlay::{
-    host_patch_catalog, is_mml_overlay_trigger, is_patch_select_trigger, ChordPreviewContext,
-    HostPatchCatalog, MmlOverlayAction, MmlOverlayContext, MmlOverlayInputMode, MmlOverlaySyntax,
-    PatchChange, SingleLineFlow,
+    is_mml_overlay_trigger, is_patch_select_trigger, ChordPreviewContext, MmlOverlayAction,
+    MmlOverlayContext, MmlOverlayInputMode, MmlOverlaySyntax, PatchChange, SingleLineFlow,
 };
+use cmrt_patch_select::{host_patch_catalog, HostPatchCatalog};
 use cmrt_tui_core::patch_load::PatchLoadState;
 
 use super::input::track_patch::PatchUpdateReason;
@@ -74,17 +74,15 @@ impl DawApp {
             return false;
         }
         let context = self.mml_overlay_context();
-        self.open_mml_overlay_with(context, false);
+        self.open_mml_overlay_with(context);
         true
     }
 
     /// 演奏を止め、track の音色を載せて overlay と sender を開く。
-    /// `patch_select_only` は [`DawApp::mml_overlay_patch_select_only`] へ入れる値。
-    fn open_mml_overlay_with(&mut self, context: MmlOverlayContext, patch_select_only: bool) {
+    fn open_mml_overlay_with(&mut self, context: MmlOverlayContext) {
         // オーバーレイは keyboard 画面と同じ音源 instance を借りる。
         // 先に DAW の演奏を止めて明け渡す。閉じても自動では再開しない。
         self.stop_play();
-        self.mml_overlay_patch_select_only = patch_select_only;
         self.mml_overlay.open(context);
         // そのセルが DAW で実際に鳴る音色を、オーバーレイの音色として渡す。
         // 渡さないと別の音色で鳴り、書いた音と grid の音が食い違う。
@@ -176,14 +174,6 @@ impl DawApp {
 
     /// 開いている間、キーはすべてオーバーレイが取る。
     pub(crate) fn handle_mml_overlay_key_event(&mut self, key: KeyEvent) {
-        if self.mml_overlay_patch_select_only {
-            self.handle_direct_patch_select_key_event(key);
-            return;
-        }
-        self.forward_key_to_mml_overlay(key);
-    }
-
-    fn forward_key_to_mml_overlay(&mut self, key: KeyEvent) {
         if self.editor.cursor_track == super::CHORD_TRACK
             && self.mml_overlay_target_track().is_none()
             && is_patch_select_trigger(key)
@@ -201,15 +191,15 @@ impl DawApp {
         let patch_before = self.mml_overlay.patch().map(str::to_string);
         let action = self.mml_overlay.handle_key(key, Instant::now());
         self.apply_mml_overlay_action(action);
-        self.reflect_mml_overlay_patch_change(patch_before);
+        let patch_after = self.mml_overlay.patch().map(str::to_string);
+        self.write_confirmed_patch(patch_before, patch_after);
     }
 
-    /// オーバーレイで音色が確定したら、その track の init セルへ書き戻す。
+    /// 音色 selector で確定した音色を、その track の init セルへ書き戻す。
     ///
-    /// DAW にとって「オーバーレイの音色」はその track の init meas の音色そのもの。
+    /// DAW にとって「selector の音色」はその track の init meas の音色そのもの。
     /// preview で暴発しないよう、**変化したときだけ**書く。
-    fn reflect_mml_overlay_patch_change(&mut self, patch_before: Option<String>) {
-        let patch_after = self.mml_overlay.patch().map(str::to_string);
+    fn write_confirmed_patch(&mut self, patch_before: Option<String>, patch_after: Option<String>) {
         if patch_after == patch_before {
             return;
         }
@@ -305,6 +295,7 @@ impl DawApp {
 
     /// worker が実際に到達した一覧・発音状態を表示へ反映する。毎フレーム呼ぶ。
     pub(crate) fn pump_mml_overlay(&mut self) {
+        self.sync_direct_patch_select_catalog();
         if !self.mml_overlay.is_open() {
             return;
         }
@@ -350,16 +341,8 @@ impl DawApp {
             }
             MmlOverlayAction::SavePatchFilterPresets { presets, preview } => {
                 self.save_mml_overlay_patch_filter_presets(&presets);
-                let Some((patch, notes)) = preview else {
-                    return;
-                };
-                if let Some(sender) = &self.mml_overlay_sender {
-                    let patch = self.mml_overlay_live_patch(Some(patch.as_str()));
-                    let command_id = match notes {
-                        Some(notes) => sender.send(patch, notes.messages, notes.duration),
-                        None => sender.prepare(patch),
-                    };
-                    self.mml_overlay.expect_sender_command(command_id);
+                if let Some(preview) = preview {
+                    self.apply_mml_overlay_action(*preview);
                 }
                 return;
             }
@@ -407,7 +390,6 @@ impl DawApp {
             let command_id = sender.stop();
             self.mml_overlay.expect_sender_command(command_id);
         }
-        self.mml_overlay_patch_select_only = false;
         self.mode = DawMode::Normal;
     }
 

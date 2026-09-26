@@ -21,7 +21,7 @@ impl TuiApp<'_> {
     /// true のときだけ点滅する縦線カーソルにする（issue #334: 入力中に見えるカーソルは
     /// 入力欄の 1 つだけにする。list 側の bg 強調を落とすのは各画面の描画の役目）。
     pub(crate) fn uses_textarea_cursor(&self) -> bool {
-        if self.mml_overlay.is_open() {
+        if self.mml_overlay.is_open() || self.chord_chart_patch_select.is_some() {
             return true;
         }
         match self.active_screen {

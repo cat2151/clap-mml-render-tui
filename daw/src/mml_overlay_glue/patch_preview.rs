@@ -18,7 +18,7 @@ impl DawApp {
             action,
             MmlOverlayAction::PlayLine { .. } | MmlOverlayAction::SetPatch { notes: Some(_), .. }
         );
-        if !sounds || !self.mml_overlay.is_patch_select_open() {
+        if !sounds || !self.is_patch_selector_open() {
             return;
         }
         let Some(sender) = &self.mml_overlay_sender else {

@@ -24,7 +24,7 @@ fn the_screen_draws_role_preset_and_patch_panes_next_to_the_keyboard() {
         crate::KeyboardNoteGuide::new(None),
     );
     screen.state.patch_catalog.load(
-        cmrt_mml_overlay::host_patch_catalog(&state),
+        cmrt_patch_select::host_patch_catalog(&state),
         snapshot.role_presets(),
         Some("Basses/Sub Bass.fxp"),
     );

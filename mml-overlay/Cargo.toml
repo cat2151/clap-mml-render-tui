@@ -13,6 +13,8 @@ cmrt-chord = { path = "../chord" }
 cmrt-midi-filter = { path = "../midi-filter" }
 cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-tui-core = { path = "../tui-core" }
+# 音色 selector（catalog・一覧・演奏設定・試聴の action 化）と、試聴で運ぶ型。
+cmrt-patch-select = { path = "../patch-select" }
 cmrt-patches = { path = "../patches" }
 # 行頭 JSON の effect chain のキー（`EFFECT_CHAIN_JSON_KEY`）を server と同じ綴りで読むため。
 clap-mml-play-server-core = { git = "https://github.com/cat2151/clap-mml-play-server", package = "cmrt-core" }

@@ -1,3 +1,4 @@
+mod audition;
 mod chord_chart;
 mod chord_input;
 mod chord_transfer;

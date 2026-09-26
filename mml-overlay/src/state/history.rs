@@ -26,7 +26,7 @@ impl MmlOverlay<'_> {
                 self.history_select = None;
                 self.replace_text(&pick.mml);
                 if let Some(patch) = &pick.patch {
-                    self.patch = Some(patch.clone());
+                    self.patch_audition_select.set_patch(Some(patch.clone()));
                 }
                 // 試聴で鳴っているものと同じなので、ここでは積み直さない。
                 MmlOverlayAction::Continue
@@ -44,7 +44,7 @@ impl MmlOverlay<'_> {
         }
         // 試聴で差し替えた音色を戻し、鳴っている演奏も止める。
         MmlOverlayAction::PlayLine {
-            patch: PatchChange::Switch(self.patch.clone()),
+            patch: PatchChange::Switch(self.patch().map(str::to_string)),
             program: LineProgram::silent(),
         }
     }
@@ -62,7 +62,7 @@ impl MmlOverlay<'_> {
         };
         MmlOverlayAction::PlayLine {
             patch,
-            program: self.play_settings.program(performance),
+            program: self.play_settings().program(performance),
         }
     }
 

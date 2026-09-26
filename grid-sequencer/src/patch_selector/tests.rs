@@ -83,7 +83,7 @@ fn selector(screen: &GridSequencerScreen) -> &PatchSelector {
 fn filtered_patches(selector: &PatchSelector) -> Vec<&str> {
     (0..selector.filtered_len())
         .filter_map(|index| selector.filtered_entry(index))
-        .map(cmrt_mml_overlay::PatchCatalogEntry::display)
+        .map(cmrt_patch_select::PatchCatalogEntry::display)
         .collect()
 }
 

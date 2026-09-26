@@ -35,7 +35,7 @@ fn server_selector_metadata_reaches_the_overlay_entry() {
         BTreeMap::new(),
     );
 
-    // 変換は DAW と共有の 1 実装（`cmrt_mml_overlay::host_patch_catalog`）を通る。
+    // 変換は DAW と共有の 1 実装（`cmrt_patch_select::host_patch_catalog`）を通る。
     let host = host_patch_catalog(&PatchLoadState::Ready(Arc::new(snapshot)));
 
     let OverlayCatalogSnapshot::Ready(entries) = host.catalog else {

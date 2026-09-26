@@ -219,9 +219,9 @@ pub struct DawApp {
     /// オーバーレイの打鍵と chord wizard の即時試聴を鳴らす先。
     /// play server が無い構成では `None`（音が鳴らないだけで、編集は動く）。
     pub(crate) mml_overlay_sender: Option<cmrt_mml_overlay::MmlOverlaySender>,
-    /// NORMAL の `t` で音色 selector だけを開いている間 true。
-    /// selector を閉じたら MML 入力欄を残さず overlay ごと閉じる。
-    pub(crate) mml_overlay_patch_select_only: bool,
+    /// NORMAL の `t` で開いている音色 selector。開いている間だけ `Some`。
+    /// 試聴は `mml_overlay_sender` で鳴らす。
+    pub(crate) direct_patch_select: Option<cmrt_patch_select::DirectPatchSelect<'static>>,
 }
 
 impl DawApp {

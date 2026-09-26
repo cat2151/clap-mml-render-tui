@@ -1,8 +1,20 @@
-//! MML patch selector が表示・検索・整列に使うcatalogの1行。
+//! 音色 selector が表示・検索・整列に使う catalog。
 
 mod from_patch_load;
 
 pub use from_patch_load::{host_patch_catalog, HostPatchCatalog};
+
+/// selector が受け取る、plugin 非依存の音色一覧スナップショット。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum PatchCatalogSnapshot {
+    /// バックグラウンド収集中。selector を開く要求は完了後の open 予約になる。
+    #[default]
+    Loading,
+    /// 収集済みのselector行。空なら選べる音色がない。
+    Ready(Vec<PatchCatalogEntry>),
+    /// 収集に失敗した理由。selector を開こうとしたときに表示する。
+    Error(String),
+}
 
 /// plugin固有情報をserver側で解釈済みにした、selector向けの中立な表現。
 #[derive(Clone, Debug, PartialEq, Eq)]

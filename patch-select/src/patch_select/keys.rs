@@ -27,8 +27,3 @@ pub(super) fn is_filter_edit_trigger(key: KeyEvent) -> bool {
 pub(super) fn is_preview_key(key: KeyEvent) -> bool {
     key.modifiers == KeyModifiers::NONE && key.code == KeyCode::Char(' ')
 }
-
-/// このキーは音色選択を開く。
-pub fn is_patch_select_trigger(key: KeyEvent) -> bool {
-    key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('t')
-}

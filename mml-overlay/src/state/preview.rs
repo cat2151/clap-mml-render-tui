@@ -5,14 +5,13 @@ use std::time::Instant;
 use ratatui_textarea::DataCursor;
 
 use crate::cursor_notes::{
-    bass_note_at_cursor_with_chord_chart_context, notes_at_cursor,
-    notes_at_cursor_with_chord_chart_context, notes_at_cursor_with_chord_context, CursorNotes,
+    notes_at_cursor, notes_at_cursor_with_chord_chart_context, notes_at_cursor_with_chord_context,
+    CursorNotes,
 };
 use crate::line_play::{
-    chord_line_events, line_events, locally_auto_voiced_bass_chord_chart_line_events,
-    locally_auto_voiced_chord_chart_line_events, LinePerformance, LineStatus,
+    chord_line_events, line_events, locally_auto_voiced_chord_chart_line_events, LinePerformance,
+    LineStatus,
 };
-use crate::NOTE_ON;
 
 use super::{MmlOverlay, MmlOverlayAction, MmlOverlaySyntax, NoteRequest, PatchChange};
 
@@ -28,7 +27,7 @@ impl MmlOverlay<'_> {
         self.forget_cursor_unit();
         MmlOverlayAction::PlayLine {
             patch,
-            program: self.play_settings.program(performance),
+            program: self.play_settings().program(performance),
         }
     }
 
@@ -44,16 +43,6 @@ impl MmlOverlay<'_> {
                 &context.mml_prefix,
             ),
             MmlOverlaySyntax::Chord(None) => (LineStatus::Idle, LinePerformance::silent()),
-            MmlOverlaySyntax::ChordChart(context)
-                if self.patch_select.is_some()
-                    && self.patch_select_initial_role == Some(cmrt_patches::PatchRole::Bass) =>
-            {
-                locally_auto_voiced_bass_chord_chart_line_events(
-                    self.current_line(),
-                    context.key_token.as_deref(),
-                    None,
-                )
-            }
             MmlOverlaySyntax::ChordChart(context) => locally_auto_voiced_chord_chart_line_events(
                 self.current_line(),
                 context.key_token.as_deref(),
@@ -100,42 +89,21 @@ impl MmlOverlay<'_> {
         notes.map(|notes| (row, notes))
     }
 
-    /// patch selector の候補移動で鳴らす音。Bass 用に直接開いた selector だけは、
-    /// 同じ chord の和音ではなく auto voicing が決めた Bass 1音へ差し替える。
-    pub(super) fn patch_preview_notes_at_cursor(&self) -> Option<(usize, CursorNotes)> {
-        if self.patch_select_initial_role != Some(cmrt_patches::PatchRole::Bass) {
-            return self.notes_at_cursor();
-        }
-        let MmlOverlaySyntax::ChordChart(context) = &self.syntax else {
-            return self.notes_at_cursor();
-        };
-        let DataCursor(row, column) = self.textarea.cursor();
-        bass_note_at_cursor_with_chord_chart_context(
-            self.current_line(),
-            column,
-            context.key_token.as_deref(),
-        )
-        .map(|notes| (row, notes))
-    }
-
     /// この発音単位の note on。前の音を止めるのは受け取る側の仕事。
     pub(super) fn start_notes(&mut self, notes: &CursorNotes) -> NoteRequest {
+        self.show_sounding(notes);
         crate::log_line(format!(
             "action=mml-overlay-note-on pitches={:?} gate_ms={}",
             notes.pitches,
             notes.duration.as_millis()
         ));
+        NoteRequest::from_notes(notes)
+    }
+
+    /// 鳴らす音を表示へ記録する。
+    pub(super) fn show_sounding(&mut self, notes: &CursorNotes) {
         self.sounding.clone_from(&notes.pitches);
         self.sounding_from_chord = notes.from_chord;
-        let messages = notes
-            .pitches
-            .iter()
-            .map(|pitch| [NOTE_ON, *pitch, notes.velocity])
-            .collect();
-        NoteRequest {
-            messages,
-            duration: notes.duration,
-        }
     }
 
     pub(super) fn current_line(&self) -> &str {

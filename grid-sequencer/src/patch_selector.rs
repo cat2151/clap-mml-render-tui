@@ -8,7 +8,7 @@
 
 use std::{cell::Cell, collections::BTreeMap, sync::Arc, time::Instant};
 
-use cmrt_mml_overlay::{
+use cmrt_patch_select::{
     host_patch_catalog, prepare_user_presets, sort_for_selector, FilterGroup, FilterPreset,
     PatchCatalogEntry, PatchCatalogSnapshot, PreparedPresets,
 };

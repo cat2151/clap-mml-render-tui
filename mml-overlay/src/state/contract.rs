@@ -1,30 +1,15 @@
 //! オーバーレイと呼び出し側の契約。「開くときに何を渡すか」（[`MmlOverlayContext`]）と
 //! 「オーバーレイが何をしてほしいか」（[`MmlOverlayAction`]）。
 
-use std::{collections::BTreeMap, time::Duration};
+use std::collections::BTreeMap;
 
 use cmrt_patches::{PatchRole, PatchRoleIndex};
 
 use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 
 use crate::line_play::LineProgram;
-use crate::PatchCatalogEntry;
-
-/// 生 MIDI の note on と、送信成功後に保つべき音長。
-#[derive(Clone, Debug, PartialEq)]
-pub struct NoteRequest {
-    pub messages: Vec<[u8; 3]>,
-    pub duration: Duration,
-}
-
-/// 行を鳴らす前に音源の音色を差し替えるか。
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PatchChange {
-    /// いまの音色のまま鳴らす。
-    Keep,
-    /// 鳴らす前にこの音色へ差し替える（`None` は realtime server の既定音色へ戻す）。
-    Switch(Option<String>),
-}
+use cmrt_patch_select::PatchAuditionAction;
+pub use cmrt_patch_select::{NoteRequest, PatchCatalogSnapshot, PatchChange};
 
 /// オーバーレイが呼び出し側へ求める処理。
 ///
@@ -36,8 +21,8 @@ pub enum MmlOverlayAction {
     /// MML patch selector で追加した正規表現プリセットを host app に保存させる。
     SavePatchFilterPresets {
         presets: Vec<(String, String)>,
-        /// 絞り込み更新で新しい先頭候補へ移った場合は、保存と同時に試聴する。
-        preview: Option<(String, Option<NoteRequest>)>,
+        /// 絞り込み更新で新しい先頭候補へ移った場合は、保存に続けてこの試聴を流す。
+        preview: Option<Box<MmlOverlayAction>>,
     },
     /// この note on を送る。
     Send(NoteRequest),
@@ -70,6 +55,15 @@ pub enum MmlOverlayAction {
     },
     /// オーバーレイを閉じる。鳴っているものを止めるのも含む。
     Close,
+}
+
+impl From<PatchAuditionAction> for MmlOverlayAction {
+    fn from(action: PatchAuditionAction) -> Self {
+        match action {
+            PatchAuditionAction::SetPatch { patch, notes } => Self::SetPatch { patch, notes },
+            PatchAuditionAction::PlayLine { patch, program } => Self::PlayLine { patch, program },
+        }
+    }
 }
 
 /// 入力欄を何行で開くか。[`Self::MultiLine`] は 1 行 1 フレーズを書き並べて聴き比べる。
@@ -129,18 +123,6 @@ pub enum MmlOverlaySyntax {
     ChordChart(ChordChartPreviewContext),
 }
 
-/// MML overlay が受け取る、plugin 非依存の音色一覧スナップショット。
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub enum PatchCatalogSnapshot {
-    /// バックグラウンド収集中。Ctrl+T は完了後の open 予約になる。
-    #[default]
-    Loading,
-    /// 収集済みのselector行。空なら選べる音色がない。
-    Ready(Vec<PatchCatalogEntry>),
-    /// 収集に失敗した理由。Ctrl+T 時に overlay 内へ表示する。
-    Error(String),
-}
-
 /// オーバーレイを開くときに呼び出し側から渡すスナップショット。
 #[derive(Default)]
 pub struct MmlOverlayContext {
@@ -158,8 +140,7 @@ pub struct MmlOverlayContext {
     /// MML selectorとGrid Sequencerが共有する、同じcatalog世代のRole索引。
     pub patch_role_index: PatchRoleIndex,
     /// `Ctrl+T` で selector を開いた直後に選ぶ Role。`None` は今の音色の Role（分類できなければ `ALL`）。
-    /// catalog の Loading 完了待ちを挟んでも、この指定を使って開く。Chord Chart の
-    /// Bass 指定では、候補の試聴音も対応する Bass note へ切り替える。
+    /// catalog の Loading 完了待ちを挟んでも、この指定を使って開く。
     pub patch_select_initial_role: Option<PatchRole>,
     /// catalog構築時に計測したpatch別のload結果。
     pub load_measurements: BTreeMap<String, PatchLoadMeasurement>,

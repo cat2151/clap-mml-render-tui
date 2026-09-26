@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 cmrt-arpeggiator = { path = "../arpeggiator" }
 cmrt-chord = { path = "../chord" }
-cmrt-mml-overlay = { path = "../mml-overlay" }
+cmrt-patch-select = { path = "../patch-select" }
 cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-rhythm = { path = "../rhythm" }
 cmrt-patches = { path = "../patches" }
