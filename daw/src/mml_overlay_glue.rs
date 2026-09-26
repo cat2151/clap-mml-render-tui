@@ -73,10 +73,17 @@ impl DawApp {
             );
             return false;
         }
+        let context = self.mml_overlay_context();
+        self.open_mml_overlay_with(context);
+        true
+    }
+
+    /// 演奏を止め、track の音色を載せて overlay と sender を開く。
+    fn open_mml_overlay_with(&mut self, context: MmlOverlayContext) {
         // オーバーレイは keyboard 画面と同じ音源 instance を借りる。
         // 先に DAW の演奏を止めて明け渡す。閉じても自動では再開しない。
         self.stop_play();
-        let context = self.mml_overlay_context();
+        self.mml_overlay_patch_select_only = false;
         self.mml_overlay.open(context);
         // そのセルが DAW で実際に鳴る音色を、オーバーレイの音色として渡す。
         // 渡さないと別の音色で鳴り、書いた音と grid の音が食い違う。
@@ -89,7 +96,6 @@ impl DawApp {
             self.mml_overlay.expect_sender_command(command_id);
         }
         self.mode = DawMode::MmlOverlay;
-        true
     }
 
     /// 開くたびに、音色一覧とフレーズ履歴の最新スナップショットを渡す。
@@ -169,6 +175,14 @@ impl DawApp {
 
     /// 開いている間、キーはすべてオーバーレイが取る。
     pub(crate) fn handle_mml_overlay_key_event(&mut self, key: KeyEvent) {
+        if self.mml_overlay_patch_select_only {
+            self.handle_direct_patch_select_key_event(key);
+            return;
+        }
+        self.forward_key_to_mml_overlay(key);
+    }
+
+    fn forward_key_to_mml_overlay(&mut self, key: KeyEvent) {
         if self.editor.cursor_track == super::CHORD_TRACK
             && self.mml_overlay_target_track().is_none()
             && is_patch_select_trigger(key)
@@ -351,6 +365,7 @@ impl DawApp {
             }
             action => action,
         };
+        self.fade_out_before_patch_preview(&action);
         let Some(sender) = &self.mml_overlay_sender else {
             return;
         };
@@ -387,6 +402,7 @@ impl DawApp {
             let command_id = sender.stop();
             self.mml_overlay.expect_sender_command(command_id);
         }
+        self.mml_overlay_patch_select_only = false;
         self.mode = DawMode::Normal;
     }
 
@@ -409,6 +425,9 @@ impl DawApp {
             })
     }
 }
+
+mod direct_patch_select;
+mod patch_preview;
 
 #[cfg(test)]
 mod tests;

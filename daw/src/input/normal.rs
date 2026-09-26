@@ -372,6 +372,9 @@ impl DawApp {
             }
 
             KeyCode::Char('i') => self.open_mml_overlay_or_insert(),
+            KeyCode::Char('t') => {
+                self.open_direct_patch_select();
+            }
             KeyCode::Char('m') => {
                 self.overlays.mixer.cursor_track = self
                     .editor

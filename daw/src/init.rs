@@ -292,6 +292,7 @@ fn new_with_entry_context(
         patch_load,
         mml_overlay: cmrt_mml_overlay::MmlOverlay::default(),
         mml_overlay_sender,
+        mml_overlay_patch_select_only: false,
     };
 
     app.load(&current_date);

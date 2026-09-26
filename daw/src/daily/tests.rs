@@ -146,6 +146,7 @@ fn build_daily_app_with_cache_jobs(config_app_dir: &Path) -> (DawApp, Receiver<C
         )),
         mml_overlay: cmrt_mml_overlay::MmlOverlay::default(),
         mml_overlay_sender: None,
+        mml_overlay_patch_select_only: false,
     };
     (app, cache_rx)
 }

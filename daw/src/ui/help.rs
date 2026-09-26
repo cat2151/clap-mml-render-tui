@@ -85,6 +85,7 @@ pub(super) fn draw_help(
             Line::from("  L      : 末尾 track へ移動"),
             Line::from("  C      : chord 行へ移動 / もう一度押すと元の track へ戻る"),
             Line::from("  i / Ctrl+P : MML / chord 入力オーバーレイ（1 行モード）"),
+            Line::from("  t      : 音色選択（MML overlay の Ctrl+T と同じ。確定で現在 track の init に反映）"),
             Line::from("  a      : off → start固定/end追従 → end固定 → off"),
             Line::from("  m      : mixer overlay"),
             Line::from("  x      : effect chain overlay（演奏 track の init に effect を直列で挿す）"),

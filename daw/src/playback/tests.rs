@@ -85,6 +85,7 @@ pub(in crate::playback) fn build_test_app() -> DawApp {
         )),
         mml_overlay: cmrt_mml_overlay::MmlOverlay::default(),
         mml_overlay_sender: None,
+        mml_overlay_patch_select_only: false,
     }
 }
 

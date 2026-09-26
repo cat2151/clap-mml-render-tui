@@ -200,6 +200,19 @@ pub(super) fn cell_has_content(data: &[Vec<String>], track: usize, measure: usiz
     resolve_notes_fragment(data, track, measure, &init) != MmlFragment::empty()
 }
 
+/// セル (track, measure) が鳴らす MML から、JSON と Tempo 行を除いたもの。
+///
+/// 音色 selector の試聴行に使う。生のセル文字列では、chord 行から生成される空セルが
+/// 無音になり、init の MML（オクターブ等）も抜けて DAW の音と食い違う。
+pub(super) fn cell_preview_line(data: &[Vec<String>], track: usize, measure: usize) -> String {
+    let init = split_mml_fragment(cell_text(data, track, 0));
+    let notes = resolve_notes_fragment(data, track, measure, &init);
+    if notes.body.trim().is_empty() {
+        return String::new();
+    }
+    track_non_json_branches("", &init.body, &notes.body).join(";")
+}
+
 fn conductor_fragments(data: &[Vec<String>], num_measures: usize) -> Vec<MmlFragment> {
     (0..=num_measures)
         .filter_map(|measure| data[0].get(measure))

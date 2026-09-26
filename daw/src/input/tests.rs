@@ -101,6 +101,7 @@ pub(crate) fn build_test_app() -> (DawApp, std::sync::mpsc::Receiver<super::supe
             )),
             mml_overlay: cmrt_mml_overlay::MmlOverlay::default(),
             mml_overlay_sender: None,
+            mml_overlay_patch_select_only: false,
         },
         cache_rx,
     )

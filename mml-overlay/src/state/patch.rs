@@ -62,6 +62,20 @@ impl MmlOverlay<'_> {
         }
     }
 
+    /// 今の音色で現在行を鳴らす。行が無音なら試聴用の 1 音。
+    ///
+    /// host が selector を直接開いた直後の試聴に使う。候補を動かす前から今の音色を聴けないと、
+    /// 比べる基準が無い。
+    pub fn preview_current_patch(&mut self, now: Instant) -> MmlOverlayAction {
+        if !self.current_line_performance().1.is_silent() {
+            return self.play_current_line(PatchChange::Keep);
+        }
+        MmlOverlayAction::SetPatch {
+            patch: self.patch.clone(),
+            notes: self.preview_notes(now),
+        }
+    }
+
     /// 開いた時点で Loading だった一覧を、host app の loader 完了時に差し替える。
     ///
     /// Loading 中に Ctrl+T が押されていれば、Ready になった同じタイミングで selector を
@@ -158,8 +172,14 @@ impl MmlOverlay<'_> {
     ///
     /// ただし鳴らす行が無いとき（空行・解釈できない行）は repeat でも 1 音へ戻す。
     /// ループの代わりに無音になると、音色そのものを聴く手段が消えてしまうため。
+    ///
+    /// カーソルがどの発音単位にも触れていない（行末のコメントの後ろ等）ときは行を鳴らす。
+    /// 試聴用の 1 音へ落とすと、DAW が生成した行のように音がある行でも単音になる。
     fn preview_patch(&mut self, patch: String, now: Instant) -> MmlOverlayAction {
-        if self.play_settings().repeat && !self.current_line_performance().1.is_silent() {
+        let line_has_sound = !self.current_line_performance().1.is_silent();
+        if line_has_sound
+            && (self.play_settings().repeat || self.patch_preview_notes_at_cursor().is_none())
+        {
             return self.play_current_line(PatchChange::Switch(Some(patch)));
         }
         MmlOverlayAction::SetPatch {
