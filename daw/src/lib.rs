@@ -13,6 +13,7 @@
 mod auto_trim;
 mod batch_logging;
 mod cache;
+mod cache_inspection;
 mod daily;
 mod editor;
 mod grid_import;
@@ -44,6 +45,7 @@ mod tracks;
 mod types;
 mod ui;
 
+pub use cache_inspection::{daily_render_plan, DawCellRenderPlan, DawDailyRenderPlan};
 pub use grid_import::{
     DawGridChordBinding, DawGridChordSource, DawGridChordVoicing, DawGridImportSong,
     DawGridImportTrack, DawGridLane, DawGridNoteStep,

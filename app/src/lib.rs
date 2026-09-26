@@ -10,6 +10,7 @@ pub use cmrt_daw as daw;
 // 共有するため `cmrt-history` crate へ切り出した。
 // 従来の `crate::history::*` パスは再エクスポートで維持する。
 pub use cmrt_history as history;
+pub mod inspect_daw_cache;
 pub mod live_chord_check;
 pub mod live_line_check;
 pub mod logging;

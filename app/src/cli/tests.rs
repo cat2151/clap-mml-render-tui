@@ -126,6 +126,28 @@ fn render_mml_can_verify_every_patch_for_one_plugin() {
 }
 
 #[test]
+fn inspect_daw_cache_accepts_optional_out_dir() {
+    assert_eq!(
+        parse_cli_from(["cmrt", "inspect-daw-cache"]).unwrap(),
+        CliAction::InspectDawCache(InspectDawCacheRequest::default())
+    );
+    assert_eq!(
+        parse_cli_from(["cmrt", "inspect-daw-cache", "--out-dir", "out"]).unwrap(),
+        CliAction::InspectDawCache(InspectDawCacheRequest {
+            out_dir: Some(PathBuf::from("out")),
+            delete_broken: false,
+        })
+    );
+    assert_eq!(
+        parse_cli_from(["cmrt", "inspect-daw-cache", "--delete-broken"]).unwrap(),
+        CliAction::InspectDawCache(InspectDawCacheRequest {
+            out_dir: None,
+            delete_broken: true,
+        })
+    );
+}
+
+#[test]
 fn live_chord_check_accepts_the_realtime_reproduction_options() {
     assert_eq!(
         parse_cli_from([

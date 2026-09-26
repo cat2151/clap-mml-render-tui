@@ -7,6 +7,7 @@ use anyhow::Result;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use clap_mml_render_tui::{
     bass_voicing_inspect::BassVoicingInspectRequest,
+    inspect_daw_cache::InspectDawCacheRequest,
     live_chord_check::LiveChordCheckRequest,
     live_line_check::{LiveLineCheckRequest, ResidualRequest},
     render_mml::RenderMmlRequest,
@@ -31,6 +32,7 @@ pub(crate) enum CliAction {
     BuildPatchCatalogCache,
     PatchRoles { config: Option<PathBuf> },
     RenderMml(RenderMmlRequest),
+    InspectDawCache(InspectDawCacheRequest),
     LiveChordCheck(LiveChordCheckRequest),
     LiveLineCheck(LiveLineCheckRequest),
     InspectBassVoicing(BassVoicingInspectRequest),
@@ -123,6 +125,15 @@ enum Commands {
         /// レンダリングする MML（省略時は 1 音だけ鳴らす既定 MML）
         #[arg(value_name = "MML")]
         mml: Option<String>,
+    },
+    /// daily DAW の全セルを画面と同じ MML で render し直し、今ある cache WAV と比べる
+    InspectDawCache {
+        /// 新しく render した WAV の書き出し先（省略時は書かない）
+        #[arg(long, value_name = "DIR")]
+        out_dir: Option<PathBuf>,
+        /// 「早く鳴り止む」と判定したセルの cache WAV を消す（次に DAW を開くと render し直される）
+        #[arg(long)]
+        delete_broken: bool,
     },
     /// Chord Chart の和音送りを realtime server で再現し、出音を測る
     LiveChordCheck {
@@ -303,6 +314,17 @@ where
             out_dir,
             poly_check,
             verify,
+        }));
+    }
+
+    if let Some(Commands::InspectDawCache {
+        out_dir,
+        delete_broken,
+    }) = cli.command
+    {
+        return wrap(CliAction::InspectDawCache(InspectDawCacheRequest {
+            out_dir,
+            delete_broken,
         }));
     }
 

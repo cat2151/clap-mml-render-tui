@@ -193,6 +193,9 @@ fn run() -> Result<()> {
         CliAction::RenderMml(request) => {
             return render_mml::run(&cfg, &request);
         }
+        CliAction::InspectDawCache(request) => {
+            return clap_mml_render_tui::inspect_daw_cache::run(&cfg, &request);
+        }
         CliAction::LiveChordCheck(request) => {
             return live_chord_check::run(&cfg, &request);
         }
