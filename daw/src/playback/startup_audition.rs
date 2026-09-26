@@ -17,6 +17,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+pub(crate) mod progress;
+
 use cmrt_runtime::RealtimeAudioBackend;
 use rodio::Source;
 
@@ -33,15 +35,23 @@ pub(crate) struct StartupAudition {
     server_settled: Arc<AtomicBool>,
     looper: Option<Arc<LooperControl>>,
     handed_off: bool,
+    progress: Arc<progress::Progress>,
+    render_settled_logged: bool,
 }
 
 impl StartupAudition {
+    pub(crate) fn playback_progress(&self) -> Option<Arc<progress::Progress>> {
+        self.handed_off.then(|| Arc::clone(&self.progress))
+    }
+
     pub(crate) fn new(measure_index: usize, server_settled: Arc<AtomicBool>) -> Self {
         Self {
             measure_index,
             server_settled,
             looper: None,
             handed_off: false,
+            progress: Arc::new(progress::Progress::default()),
+            render_settled_logged: false,
         }
     }
 }
@@ -144,21 +154,33 @@ impl DawApp {
         );
 
         let server_settled = Arc::new(AtomicBool::new(false));
+        let audition = StartupAudition::new(measure_index, Arc::clone(&server_settled));
+        let progress = Arc::clone(&audition.progress);
+        progress.log(&self.log_lines, format!("準備を開始しました。開始小節=M{}。演奏サーバーの起動と開始小節のキャッシュ生成を待ち、準備が整うと自動で演奏します。", measure_index + 1));
+        progress.log(
+            &self.log_lines,
+            "キャッシュWAVが利用可能になれば、待機中に簡易ループ演奏します。",
+        );
         let settled = Arc::clone(&server_settled);
         let log_lines = Arc::clone(&self.log_lines);
         std::thread::spawn(move || {
             if let Err(error) = play_server.ensure_started_for_fast_midi() {
+                progress.log(
+                    &log_lines,
+                    format!("演奏サーバーの起動に失敗しました。詳細={error:#}"),
+                );
                 crate::append_log_line(
                     &log_lines,
                     format!("startup-audition: server start failed error=\"{error:#}\""),
                 );
+            } else {
+                progress.log(&log_lines, "演奏サーバーの起動が完了しました。");
             }
             settled.store(true, Ordering::Release);
         });
 
         self.append_log_line(format!("startup-audition: begin meas{}", measure_index + 1));
-        *self.playback.startup_audition.lock().unwrap() =
-            Some(StartupAudition::new(measure_index, server_settled));
+        *self.playback.startup_audition.lock().unwrap() = Some(audition);
     }
 
     /// メインループが毎 tick 呼ぶ。ループの開始と、本演奏への切り替えを進める。
@@ -168,10 +190,16 @@ impl DawApp {
             return;
         };
         if audition.handed_off {
-            if audition
-                .looper
-                .as_ref()
-                .is_none_or(|looper| looper.finished.load(Ordering::Acquire))
+            let finished = audition.progress.poll(
+                &self.log_lines,
+                *self.playback.play_state.lock().unwrap() == DawPlayState::Playing,
+                Instant::now(),
+            );
+            if finished
+                && audition
+                    .looper
+                    .as_ref()
+                    .is_none_or(|looper| looper.finished.load(Ordering::Acquire))
             {
                 *slot = None;
             }
@@ -179,6 +207,9 @@ impl DawApp {
         }
         // HTTP など別経路で演奏・preview が始まった。そちらの音を優先する。
         if *self.playback.play_state.lock().unwrap() != DawPlayState::Idle {
+            audition
+                .progress
+                .cancel(&self.log_lines, "別の演奏・プレビューが開始されました");
             *slot = None;
             drop(slot);
             self.append_log_line("startup-audition: cancel reason=other-playback");
@@ -205,10 +236,34 @@ impl DawApp {
             }
         }
 
-        if !audition.server_settled.load(Ordering::Acquire)
-            || !measure_render_settled(&self.cache.lock().unwrap(), measure, &track_gains)
-        {
+        let cache = self.cache.lock().unwrap();
+        let render_settled = measure_render_settled(&cache, measure, &track_gains);
+        if render_settled && !audition.render_settled_logged {
+            let errors = (FIRST_PLAYABLE_TRACK..cache.len())
+                .filter(|&track| track_gains.get(track).copied().unwrap_or(1.0) != 0.0)
+                .filter(|&track| cache[track][measure].state == CacheState::Error)
+                .count();
+            audition.progress.log(
+                &self.log_lines,
+                format!(
+                    "開始小節 M{measure} のキャッシュ生成待ちが終了しました。生成エラー={errors}"
+                ),
+            );
+        }
+        audition.render_settled_logged = render_settled;
+        drop(cache);
+        if !audition.server_settled.load(Ordering::Acquire) || !render_settled {
             return;
+        }
+        audition.progress.log(
+            &self.log_lines,
+            "本演奏への切り替えを開始します。開始小節のWAVロードと演奏開始を待っています。",
+        );
+        if audition.looper.is_none() {
+            audition.progress.log(
+                &self.log_lines,
+                "利用可能なキャッシュWAVがないため、簡易ループ演奏なしで切り替えます。",
+            );
         }
         audition.handed_off = true;
         let looper = audition.looper.clone();
@@ -231,6 +286,7 @@ impl DawApp {
         let Some(audition) = self.playback.startup_audition.lock().unwrap().take() else {
             return false;
         };
+        audition.progress.cancel(&self.log_lines, "停止・取消操作");
         if audition.handed_off {
             return false;
         }
@@ -280,11 +336,16 @@ fn run_looper(
     log_lines: &Arc<Mutex<VecDeque<String>>>,
 ) {
     let Some(rodio_sample_rate) = rodio::SampleRate::new(sample_rate) else {
+        crate::append_log_line(
+            log_lines,
+            "起動時自動演奏: 簡易ループ演奏を開始できません。サンプルレートが0です。",
+        );
         crate::append_log_line(log_lines, "startup-audition: sample rate is zero");
         return;
     };
     // device sink を drop すると音が止まるので、ループが終わるまで持つ。
     let Ok(device_sink) = cmrt_tui_core::audio_output::open_default_sink() else {
+        crate::append_log_line(log_lines, "起動時自動演奏: 音声出力の初期化に失敗したため、簡易ループ演奏を開始できません。本演奏の準備を続けます。");
         crate::append_log_line(log_lines, "startup-audition: audio init failed");
         return;
     };
@@ -297,10 +358,15 @@ fn run_looper(
         )
         .repeat_infinite(),
     );
+    crate::append_log_line(
+        log_lines,
+        "起動時自動演奏: キャッシュWAVの簡易ループ演奏を開始しました。",
+    );
     while !control.should_stop(play_state, position) {
         std::thread::sleep(Duration::from_millis(5));
     }
     player.stop();
+    crate::append_log_line(log_lines, "起動時自動演奏: 簡易ループ演奏を停止しました。");
     crate::append_log_line(log_lines, "startup-audition: loop stop");
 }
 

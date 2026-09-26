@@ -226,6 +226,7 @@ fn a_real_server_loads_every_measure_state_well_inside_one_measure() {
         initial_track_gains: live_track_gains(grid_rows, |_| -3, |_| true),
         sent_track_gains: Arc::new(Mutex::new(Vec::new())),
         startup: crate::playback::DawPlaybackStartupState::default(),
+        autoplay_progress: None,
     };
 
     let started = std::time::Instant::now();

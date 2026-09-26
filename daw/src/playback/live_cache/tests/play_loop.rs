@@ -146,6 +146,7 @@ fn a_real_server_gets_its_next_measure_preloaded_so_the_boundary_only_sends_note
         initial_track_gains: crate::playback::live_gain::live_track_gains(4, |_| -3, |_| true),
         sent_track_gains: Arc::clone(&sent_track_gains),
         startup: crate::playback::DawPlaybackStartupState::default(),
+        autoplay_progress: None,
     };
 
     let handle = std::thread::spawn(move || play_loop.run(0));

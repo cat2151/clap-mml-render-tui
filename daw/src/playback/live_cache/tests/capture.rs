@@ -165,6 +165,7 @@ fn a_real_server_plays_the_real_cache_so_the_mix_can_be_captured() {
         ),
         sent_track_gains: Arc::new(Mutex::new(Vec::new())),
         startup: crate::playback::DawPlaybackStartupState::default(),
+        autoplay_progress: None,
     };
 
     // 1 始まりで受けて 0 始まりへ直す。範囲外はループ長で畳む（実アプリと同じ扱い）。

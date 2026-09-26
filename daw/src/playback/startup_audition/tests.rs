@@ -156,3 +156,40 @@ fn dropping_audition_stops_its_looper() {
 
     assert!(control.stop.load(Ordering::Acquire));
 }
+
+#[test]
+fn render_completion_logs_errors_once_while_server_is_pending() {
+    let app = build_test_app();
+    insert_audition(&app, false);
+    app.cache.lock().unwrap()[FIRST_PLAYABLE_TRACK][1] = cell(CacheState::Error);
+
+    app.pump_startup_audition();
+    app.pump_startup_audition();
+
+    let logs = app.log_lines.lock().unwrap();
+    let completion: Vec<_> = logs
+        .iter()
+        .filter(|line| line.contains("キャッシュ生成待ちが終了"))
+        .collect();
+    assert_eq!(completion.len(), 1);
+    assert!(completion[0].contains("生成エラー=1"));
+    assert!(!logs
+        .iter()
+        .any(|line| line.contains("本演奏への切り替えを開始")));
+}
+
+#[test]
+fn handoff_without_cache_explains_no_audition_and_does_not_claim_sound() {
+    let app = build_test_app();
+    insert_audition(&app, true);
+    app.pump_startup_audition();
+
+    let logs = app.log_lines.lock().unwrap();
+    assert!(logs
+        .iter()
+        .any(|line| line.contains("簡易ループ演奏なしで切り替え")));
+    assert!(logs
+        .iter()
+        .any(|line| line.contains("本演奏への切り替えを開始")));
+    assert!(!logs.iter().any(|line| line.contains("開始時刻に到達")));
+}

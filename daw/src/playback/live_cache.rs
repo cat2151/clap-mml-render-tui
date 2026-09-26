@@ -46,6 +46,7 @@
 //! 耳で分かるほうがよい、という判断で、`prepare_live_patch` も note on も送らない。
 
 mod cues;
+mod loading;
 mod measure_log;
 mod send;
 mod timeline;
@@ -146,6 +147,7 @@ pub(crate) struct LiveCachePlayLoop {
     /// 最初の音が出るまでの進み具合の置き場。ここへ書いた値を描画スレッドが
     /// 中央 overlay として読む。演奏中は触らない（**1 小節目だけ**の話）。
     pub(crate) startup: DawPlaybackStartupState,
+    pub(crate) autoplay_progress: Option<Arc<super::startup_audition::progress::Progress>>,
 }
 
 impl LiveCachePlayLoop {
@@ -253,6 +255,9 @@ impl LiveCachePlayLoop {
 
             // 1 小節目の手配が済んだ＝これ以上は待たずに音が出る。overlay を消す。
             if waiting_for_first_sound {
+                if let Some(progress) = &self.autoplay_progress {
+                    progress.schedule(timeline.instant_of(at));
+                }
                 self.startup.finish();
                 waiting_for_first_sound = false;
             }
@@ -347,45 +352,6 @@ impl LiveCachePlayLoop {
         }
     }
 
-    /// 1 小節ぶんのキャッシュ WAV を、その小節のスロットへ載せる。
-    ///
-    /// 載せ先は `measure_index % SLOT_COUNT` に決まっているので、**隣り合う小節は
-    /// 必ず別スロット**になる。鳴っている voice は自分が握った音源を鳴らし続けるので
-    /// （`clap-mml-play-server` の `docs/adr/0018`）、ここで差し替えても前の小節の余韻は切れない。
-    fn load_measure(&self, measure_index: usize) -> PreloadedMeasure {
-        self.load_measure_reporting(measure_index, false)
-    }
-
-    /// `report_startup` が true のときだけ、載せ終えた本数を
-    /// [`DawPlaybackStartupState`] へ報告する（＝「音が鳴るまで」overlay へ出す）。
-    ///
-    /// **報告するのは演奏開始の 1 小節目だけ。** 2 小節目以降は鳴っている最中の
-    /// 先読みなので、進捗を出すと「鳴っているのに読み込み中」に見える。
-    fn load_measure_reporting(
-        &self,
-        measure_index: usize,
-        report_startup: bool,
-    ) -> PreloadedMeasure {
-        let cues = measure_live_cues(self.tracks, |row| {
-            (self.ready_cache_wav)(measure_index, row)
-        });
-        if report_startup {
-            self.startup.begin_first_measure(cues.cues.len());
-        }
-        prepare_measure_cues(
-            &self.play_server,
-            measure_index,
-            measure_slot(measure_index),
-            cues,
-            &self.log_lines,
-            &mut |loaded| {
-                if report_startup {
-                    self.startup.note_measure_loaded(loaded);
-                }
-            },
-        )
-    }
-
     /// 演奏開始時に mixer の gain をまとめて送る。
     ///
     /// 記録が空でないときは**何もしない**。演奏開始と同時に mixer が触られていて、
@@ -434,6 +400,13 @@ impl DawApp {
             initial_track_gains: self.desired_live_track_gains(),
             sent_track_gains: Arc::clone(&self.playback.live_track_gains),
             startup: self.playback.startup.clone(),
+            autoplay_progress: self
+                .playback
+                .startup_audition
+                .lock()
+                .unwrap()
+                .as_ref()
+                .and_then(|audition| audition.playback_progress()),
         };
 
         std::thread::spawn(move || play_loop.run(start_measure_index));

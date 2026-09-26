@@ -103,6 +103,7 @@ fn a_real_server_sounds_every_measure_exactly_one_measure_apart() {
         ),
         sent_track_gains: Arc::new(Mutex::new(Vec::new())),
         startup: crate::playback::DawPlaybackStartupState::default(),
+        autoplay_progress: None,
     };
 
     let handle = std::thread::spawn(move || play_loop.run(0));
