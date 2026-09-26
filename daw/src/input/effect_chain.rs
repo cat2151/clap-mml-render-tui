@@ -22,6 +22,7 @@ const INIT_MEASURE: usize = 0;
 
 impl DawApp {
     /// `x`: cursor track の EFFECT CHAIN overlay を開く。演奏 track 以外では開かない。
+    /// 演奏中なら止める（演奏中の preview は鳴らさないため）。
     pub(crate) fn start_effect_chain_overlay(&mut self) {
         let track = self.editor.cursor_track;
         if track < FIRST_PLAYABLE_TRACK {
@@ -31,6 +32,9 @@ impl DawApp {
         if self.effect_plugins.catalog().is_none() {
             self.append_log_line(message::NOT_AVAILABLE_ON_THIS_BACKEND);
             return;
+        }
+        if *self.playback.play_state.lock().unwrap() == DawPlayState::Playing {
+            self.stop_play();
         }
         let init_cell = self.editor.data[track][INIT_MEASURE].clone();
         let instrument = self.track_patch_name(track).unwrap_or_default();

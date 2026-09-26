@@ -120,6 +120,27 @@ fn space_in_the_add_overlay_previews_chain_plus_cursor_preset_without_committing
 }
 
 #[test]
+fn opening_overlay_stops_playing_so_space_previews() {
+    let (mut app, _cache_rx) = app_with_catalog();
+    let sink = attach_live(&mut app, RecordingSink::default());
+    app.editor.data[2][0] = INIT_WITH_HALL.to_string();
+    *app.playback.play_state.lock().unwrap() = DawPlayState::Playing;
+
+    app.handle_normal(KeyCode::Char('x'));
+
+    assert!(matches!(app.mode, DawMode::EffectChain));
+    assert!(matches!(
+        *app.playback.play_state.lock().unwrap(),
+        DawPlayState::Idle
+    ));
+    app.handle_effect_chain(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
+    assert_eq!(
+        live_chain(&wait_for_live_line(&sink, 1)),
+        json!([{"Test FX preset": "Reverb 1/Hall"}])
+    );
+}
+
+#[test]
 fn space_does_nothing_while_playing() {
     let (mut app, _cache_rx) = app_with_catalog();
     let sink = attach_live(&mut app, RecordingSink::default());

@@ -27,4 +27,11 @@ fn main() {
         // 個々のファイルではなく packed-refs に格納される場合もある
         println!("cargo:rerun-if-changed=../.git/packed-refs");
     }
+
+    // RubberBandLiveShifter と tree-sitter grammar が dllexport 付きでリンクされるため、
+    // MSVC link.exe が exe 用の .lib/.exp を作って linker_messages 警告を出す。exe に不要なので作らせない。
+    if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
+        println!("cargo:rustc-link-arg-bins=/NOIMPLIB");
+        println!("cargo:rustc-link-arg-bins=/NOEXP");
+    }
 }
