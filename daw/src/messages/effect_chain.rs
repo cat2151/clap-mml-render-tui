@@ -17,12 +17,12 @@ pub(crate) const ADD_QUERY_PLACEHOLDER: &str = "/ で list を絞り込み";
 pub(crate) const FOOTER: &str =
     "j/k:移動  PgUp/PgDn/Home/End:大移動  a:追加  r:差替  dd:削除  b:bypass  Alt+↑↓:並替(いずれも自動preview)  Space:preview  Enter:確定(再render)  ESC:破棄  ?:help";
 pub(crate) const ADD_FOOTER: &str =
-    "h/l:pane  j/k:移動(自動preview)  /:絞り込み  PgUp/PgDn/Home/End:大移動  Space:preview  b:候補だけbypassでpreview  Enter:末尾へ追加  ESC:戻る  ?:help";
+    "h/l:pane  j/k:移動(自動preview)  /:絞り込み  PgUp/PgDn/Home/End:大移動  r:random  Space:preview  b:bypass preview  Enter:末尾へ追加  ESC:戻る  ?:help";
 pub(crate) const REPLACE_FOOTER: &str =
-    "h/l:pane  j/k:移動(自動preview)  /:絞り込み  PgUp/PgDn/Home/End:大移動  Space:preview  b:候補だけbypassでpreview  Enter:差し替え  ESC:戻る  ?:help";
+    "h/l:pane  j/k:移動(自動preview)  /:絞り込み  PgUp/PgDn/Home/End:大移動  r:random  Space:preview  b:bypass preview  Enter:差し替え  ESC:戻る  ?:help";
 pub(crate) const STATUS: &str =
     "EFFECT CHAIN  j/k:移動  a:追加  r:差替  dd:削除  b:bypass  Alt+↑↓:並替(自動preview)  Space:preview  Enter:確定  ESC:破棄  ?:help";
 pub(crate) const ADD_STATUS: &str =
-    "EFFECT CHAIN ADD  h/l:pane  j/k:移動(自動preview)  /:絞り込み  Space:preview  b:bypass preview  Enter:末尾へ追加  ESC:戻る  ?:help";
+    "EFFECT CHAIN ADD  h/l:pane  j/k:移動(自動preview)  /:絞り込み  Space:preview  b:bypass  Enter:末尾へ追加  r:random  ESC:戻る  ?:help";
 pub(crate) const REPLACE_STATUS: &str =
-    "EFFECT CHAIN REPLACE  h/l:pane  j/k:移動(自動preview)  /:絞り込み  Space:preview  b:bypass preview  Enter:差し替え  ESC:戻る  ?:help";
+    "EFFECT CHAIN REPLACE  h/l:pane  j/k:移動(自動preview)  /:絞り込み  Space:preview  b:bypass  Enter:差し替え  r:random  ESC:戻る  ?:help";

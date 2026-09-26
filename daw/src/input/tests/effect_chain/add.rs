@@ -104,3 +104,33 @@ fn enter_on_an_empty_list_does_nothing() {
     assert!(matches!(app.mode, DawMode::EffectChainAdd));
     assert!(app.overlays.effect_chain.chain.is_empty());
 }
+
+#[test]
+fn r_jumps_to_another_list_candidate_and_focuses_the_list_pane() {
+    let (mut app, _cache_rx) = app_with_catalog();
+    press(&mut app, &[KeyCode::Char('x'), KeyCode::Char('a')]);
+    let len = app.overlays.effect_chain.add.list.len();
+    assert!(len >= 2, "list が 2 件以上ある catalog で確かめる");
+
+    press(&mut app, &[KeyCode::Char('h'), KeyCode::Char('h')]);
+    for _ in 0..20 {
+        let before = app.overlays.effect_chain.add.list_cursor;
+        press(&mut app, &[KeyCode::Char('r')]);
+        let add = &app.overlays.effect_chain.add;
+        assert_eq!(add.focus, EffectAddPane::List);
+        assert_ne!(add.list_cursor, before, "今の候補とは別の候補へ動く");
+        assert!(add.list_cursor < len);
+    }
+    assert!(matches!(app.mode, DawMode::EffectChainAdd));
+}
+
+#[test]
+fn r_keeps_the_cursor_when_the_list_has_one_candidate() {
+    let (mut app, _cache_rx) = app_with_catalog();
+    press(&mut app, &[KeyCode::Char('x'), KeyCode::Char('a')]);
+    app.overlays.effect_chain.add.list.truncate(1);
+
+    press(&mut app, &[KeyCode::Char('r')]);
+
+    assert_eq!(app.overlays.effect_chain.add.list_cursor, 0);
+}

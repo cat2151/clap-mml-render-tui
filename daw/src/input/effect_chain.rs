@@ -164,6 +164,12 @@ impl DawApp {
                 self.preview_effect_chain_add_candidate_bypassed();
                 return;
             }
+            KeyCode::Char('r') => {
+                if self.overlays.effect_chain.add.random_jump_list() {
+                    self.preview_effect_chain_add_candidate(None);
+                }
+                return;
+            }
             _ => {}
         }
 

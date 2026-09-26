@@ -202,6 +202,23 @@ impl DawEffectAddState {
         self.list_cursor = 0;
     }
 
+    /// `r`: list pane へ focus し、list カーソルを今の位置以外のランダムな候補へ動かす。
+    /// 動いたら `true`。list が 1 件以下なら動かさない。
+    pub(crate) fn random_jump_list(&mut self) -> bool {
+        self.focus = EffectAddPane::List;
+        let Some(candidate) =
+            cmrt_tui_core::random::random_index(self.list.len().saturating_sub(1))
+        else {
+            return false;
+        };
+        self.list_cursor = if candidate >= self.list_cursor {
+            candidate + 1
+        } else {
+            candidate
+        };
+        true
+    }
+
     /// `/`: 絞り込み編集を開始する。編集開始前の `query` を覚えておく（`Esc` で戻す用）。
     pub(crate) fn begin_filter(&mut self) {
         self.query_before_input = self.query.clone();

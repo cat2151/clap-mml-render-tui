@@ -110,6 +110,7 @@ pub(super) fn draw_help(
             Line::from("  j/k, ↓/↑ : focus 中の pane を移動して preview"),
             Line::from("  PageUp/PageDown/Home/End : focus 中の pane を大移動して preview"),
             Line::from("  /        : list を絞り込み（Enter=確定、ESC=編集前へ戻す）"),
+            Line::from("  r        : list のランダムな候補へ移動して preview"),
             Line::from(
                 "  Space    : 編集中 chain + list カーソルの preset を末尾に足して（r は差し替えて）preview（移動時も自動）",
             ),
