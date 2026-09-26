@@ -30,6 +30,8 @@ pub(crate) struct DawPlaybackRuntime {
     pub(crate) startup: DawPlaybackStartupState,
     /// 起動直後の自動再生で、本演奏が鳴るまでの間を埋める試聴ループ。
     pub(crate) startup_audition: Mutex<Option<StartupAudition>>,
+    /// `t` / `x` の確定後に自動演奏を待っている小節（1 始まり）。予約が無ければ空。
+    pub(crate) auto_play_reservation: Mutex<Option<usize>>,
 }
 
 impl DawPlaybackRuntime {
@@ -59,6 +61,7 @@ impl DawPlaybackRuntime {
             live_track_gains: Arc::new(Mutex::new(Vec::new())),
             startup: DawPlaybackStartupState::default(),
             startup_audition: Mutex::new(None),
+            auto_play_reservation: Mutex::new(None),
         }
     }
 

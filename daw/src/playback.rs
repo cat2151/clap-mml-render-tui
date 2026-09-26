@@ -12,6 +12,7 @@ use std::{
 
 use cmrt_runtime::RealtimeAudioBackend;
 
+mod auto_play_reservation;
 mod live_cache;
 pub(crate) mod live_gain;
 mod measure_math;
@@ -117,6 +118,7 @@ impl DawApp {
     }
 
     pub(super) fn stop_play(&self) {
+        self.cancel_auto_play_reservation();
         self.stop_mml_overlay_sender();
         self.stop_offline_playback();
     }

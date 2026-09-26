@@ -2,7 +2,7 @@
 //!
 //! MML 入力欄は selector の土台として裏で開くだけで、selector を確定 / 取消したら
 //! overlay ごと閉じて NORMAL へ戻る。確定した音色は `Ctrl+T` と同じ経路で
-//! その track の init セルへ書き戻される。
+//! その track の init セルへ書き戻され、確定後は自動演奏を予約する。
 
 use std::time::Instant;
 
@@ -61,7 +61,7 @@ impl DawApp {
         true
     }
 
-    /// selector を閉じた時点で overlay ごと閉じる。
+    /// selector を閉じた時点で overlay ごと閉じる。`Enter` で確定して閉じたら自動演奏を予約する。
     ///
     /// 一覧の Loading 中は selector がまだ無いので、`Esc` だけを受けて閉じ、
     /// 他のキーは入力欄へ通さない。
@@ -75,6 +75,9 @@ impl DawApp {
         self.forward_key_to_mml_overlay(key);
         if self.mode == DawMode::MmlOverlay && !self.mml_overlay.is_patch_select_open() {
             self.dismiss_direct_patch_select();
+            if key.code == KeyCode::Enter {
+                self.reserve_auto_play_after_render();
+            }
         }
     }
 

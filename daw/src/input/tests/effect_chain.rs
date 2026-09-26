@@ -116,6 +116,7 @@ fn x_a_j_enter_enter_writes_a_one_element_chain_and_keeps_the_patch() {
         .map(|job| (job.track, job.measure))
         .collect();
     assert!(kicked.contains(&(2, 1)), "kicked: {kicked:?}");
+    assert_eq!(*app.playback.auto_play_reservation.lock().unwrap(), Some(1));
 }
 
 #[test]
@@ -192,6 +193,7 @@ fn esc_discards_the_edit_and_keeps_the_init_cell() {
     assert!(matches!(app.mode, DawMode::Normal));
     assert_eq!(app.editor.data[2][0], INIT_WITH_PATCH);
     assert_eq!(cache_rx.try_iter().count(), 0);
+    assert_eq!(*app.playback.auto_play_reservation.lock().unwrap(), None);
 }
 
 #[test]

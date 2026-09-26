@@ -150,6 +150,11 @@ impl DawApp {
                 self.pump_startup_audition();
             }
             {
+                let _slow =
+                    crate::performance_log::SlowOperation::new("daw-pump-auto-play-reservation");
+                self.pump_auto_play_reservation();
+            }
+            {
                 let _slow = crate::performance_log::SlowOperation::new("daw-pump-auto-trim");
                 self.pump_pending_auto_trim();
             }

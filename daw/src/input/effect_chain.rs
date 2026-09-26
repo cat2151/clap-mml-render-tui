@@ -246,7 +246,8 @@ impl DawApp {
         }
     }
 
-    /// Enter: 編集した chain を init セルへ書き戻して閉じる。変わっていなければ書かない。
+    /// Enter: 編集した chain を init セルへ書き戻して閉じ、自動演奏を予約する。
+    /// 変わっていなければ書かない。
     fn commit_effect_chain(&mut self) {
         let track = self.overlays.effect_chain.track;
         let next_init = crate::mml::effect_chain::init_cell_with_effect_chain(
@@ -263,5 +264,6 @@ impl DawApp {
             ));
         }
         self.mode = DawMode::Normal;
+        self.reserve_auto_play_after_render();
     }
 }

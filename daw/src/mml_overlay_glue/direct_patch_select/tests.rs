@@ -75,6 +75,7 @@ fn confirming_writes_the_init_cell_and_returns_to_normal() {
     // 下敷きの入力欄の中身をセルへ書き戻していないこと。
     assert_eq!(app.editor.data[2][1], "cde");
     assert_eq!(app.editor.cursor_measure, 1);
+    assert_eq!(*app.playback.auto_play_reservation.lock().unwrap(), Some(1));
 }
 
 #[test]
@@ -88,6 +89,7 @@ fn cancelling_keeps_the_init_cell_and_returns_to_normal() {
     assert_eq!(app.editor.data[2][0], PAD_INIT_CELL);
     assert_eq!(app.mode, DawMode::Normal);
     assert!(!app.mml_overlay.is_open());
+    assert_eq!(*app.playback.auto_play_reservation.lock().unwrap(), None);
 }
 
 #[test]
