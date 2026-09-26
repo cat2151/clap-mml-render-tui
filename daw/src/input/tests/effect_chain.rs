@@ -76,6 +76,7 @@ fn press(app: &mut DawApp, keys: &[KeyCode]) {
             DawMode::EffectChainAdd => {
                 app.handle_effect_chain_add(KeyEvent::new(key, KeyModifiers::NONE));
             }
+            DawMode::Help => app.handle_help(key),
             other => panic!("unexpected mode {other:?} before {key:?}"),
         }
     }
@@ -207,6 +208,21 @@ fn esc_in_the_add_overlay_returns_to_the_chain_without_adding() {
 
     assert!(matches!(app.mode, DawMode::EffectChain));
     assert!(app.overlays.effect_chain.chain.is_empty());
+}
+
+#[test]
+fn question_opens_the_help_and_esc_returns_to_the_same_effect_chain_overlay() {
+    let (mut app, _cache_rx) = app_with_catalog();
+
+    press(&mut app, &[KeyCode::Char('x'), KeyCode::Char('?')]);
+    assert!(matches!(app.mode, DawMode::Help));
+    press(&mut app, &[KeyCode::Esc]);
+    assert!(matches!(app.mode, DawMode::EffectChain));
+
+    press(&mut app, &[KeyCode::Char('a'), KeyCode::Char('?')]);
+    assert!(matches!(app.mode, DawMode::Help));
+    press(&mut app, &[KeyCode::Esc]);
+    assert!(matches!(app.mode, DawMode::EffectChainAdd));
 }
 
 #[test]

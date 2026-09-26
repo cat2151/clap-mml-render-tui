@@ -371,3 +371,51 @@ fn help_shows_the_chord_wizard_and_that_undo_covers_it() {
         "lines: {normalized_lines:?}"
     );
 }
+
+/// EFFECT CHAIN のキーは専用ヘルプにだけ載せ、DAW のヘルプには混ぜない。
+#[test]
+fn effect_chain_keys_are_only_in_the_effect_chain_help() {
+    let normalized = |app: &DawApp| -> String {
+        render_lines(app, 160, 52)
+            .into_iter()
+            .map(|line| line.replace(' ', ""))
+            .collect::<Vec<_>>()
+            .join(
+                "
+",
+            )
+    };
+
+    let mut normal = build_test_app();
+    normal.mode = DawMode::Help;
+    let normal_help = normalized(&normal);
+    assert!(
+        !normal_help.contains("EFFECTCHAINoverlay(x)"),
+        "{normal_help}"
+    );
+    assert!(!normal_help.contains("段の移動"), "{normal_help}");
+    assert!(!normal_help.contains("categorypane"), "{normal_help}");
+
+    let mut chain = build_test_app();
+    chain.mode = DawMode::Help;
+    chain.help_origin = DawMode::EffectChain;
+    let chain_help = normalized(&chain);
+    assert!(chain_help.contains("EFFECTCHAINoverlay(x)"), "{chain_help}");
+    assert!(chain_help.contains("?:ヘルプ(このページ)"), "{chain_help}");
+    assert!(chain_help.contains("dd:現在の段を削除"), "{chain_help}");
+    assert!(
+        !chain_help.contains("Shift+H:historyoverlay"),
+        "{chain_help}"
+    );
+
+    let mut add = build_test_app();
+    add.mode = DawMode::Help;
+    add.help_origin = DawMode::EffectChainAdd;
+    let add_help = normalized(&add);
+    assert!(
+        add_help.contains("EFFECTCHAINaddoverlay(x→a)"),
+        "{add_help}"
+    );
+    assert!(add_help.contains("?:ヘルプ(このページ)"), "{add_help}");
+    assert!(add_help.contains("/:listを絞り込み"), "{add_help}");
+}

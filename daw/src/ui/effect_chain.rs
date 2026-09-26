@@ -22,7 +22,10 @@ use cmrt_tui_core::theme::cursor_highlight_style;
 pub(super) fn draw_effect_chain(f: &mut Frame, app: &DawApp, area: Rect) {
     let popup = cmrt_tui_core::ui::centered_rect(70, 70, area);
     f.render_widget(Clear, popup);
-    let (title, footer) = if app.mode == DawMode::EffectChainAdd {
+    // ヘルプを重ねている間も、ヘルプを開いた側の画面を下に描く。
+    let adding = app.mode == DawMode::EffectChainAdd
+        || (app.mode == DawMode::Help && app.help_origin == DawMode::EffectChainAdd);
+    let (title, footer) = if adding {
         (message::ADD_OVERLAY_TITLE, message::ADD_FOOTER)
     } else {
         (message::OVERLAY_TITLE, message::FOOTER)
@@ -59,7 +62,7 @@ pub(super) fn draw_effect_chain(f: &mut Frame, app: &DawApp, area: Rect) {
         chunks[0],
     );
 
-    if app.mode == DawMode::EffectChainAdd {
+    if adding {
         draw_add_panes(f, app, chunks[1]);
     } else {
         draw_chain_list(f, app, chunks[1]);

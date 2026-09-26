@@ -80,6 +80,7 @@ impl DawApp {
 
         match key.code {
             KeyCode::Esc => self.mode = DawMode::Normal,
+            KeyCode::Char('?') => self.enter_help(),
             KeyCode::Char('j') | KeyCode::Down => self.overlays.effect_chain.move_cursor(1),
             KeyCode::Char('k') | KeyCode::Up => self.overlays.effect_chain.move_cursor(-1),
             KeyCode::PageDown => self.overlays.effect_chain.move_cursor(PAGE_STEP),
@@ -125,6 +126,10 @@ impl DawApp {
         match key.code {
             KeyCode::Esc => {
                 self.mode = DawMode::EffectChain;
+                return;
+            }
+            KeyCode::Char('?') => {
+                self.enter_help();
                 return;
             }
             KeyCode::Char('h') | KeyCode::Left => {
