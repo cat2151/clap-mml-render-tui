@@ -74,16 +74,17 @@ impl DawApp {
             return false;
         }
         let context = self.mml_overlay_context();
-        self.open_mml_overlay_with(context);
+        self.open_mml_overlay_with(context, false);
         true
     }
 
     /// 演奏を止め、track の音色を載せて overlay と sender を開く。
-    fn open_mml_overlay_with(&mut self, context: MmlOverlayContext) {
+    /// `patch_select_only` は [`DawApp::mml_overlay_patch_select_only`] へ入れる値。
+    fn open_mml_overlay_with(&mut self, context: MmlOverlayContext, patch_select_only: bool) {
         // オーバーレイは keyboard 画面と同じ音源 instance を借りる。
         // 先に DAW の演奏を止めて明け渡す。閉じても自動では再開しない。
         self.stop_play();
-        self.mml_overlay_patch_select_only = false;
+        self.mml_overlay_patch_select_only = patch_select_only;
         self.mml_overlay.open(context);
         // そのセルが DAW で実際に鳴る音色を、オーバーレイの音色として渡す。
         // 渡さないと別の音色で鳴り、書いた音と grid の音が食い違う。
@@ -92,7 +93,7 @@ impl DawApp {
             .and_then(|track| self.track_patch_name(track));
         self.mml_overlay.set_restored_patch(patch);
         if let Some(sender) = &self.mml_overlay_sender {
-            let command_id = sender.prepare(self.mml_overlay.patch());
+            let command_id = sender.prepare(self.mml_overlay_live_patch(self.mml_overlay.patch()));
             self.mml_overlay.expect_sender_command(command_id);
         }
         self.mode = DawMode::MmlOverlay;
@@ -353,11 +354,10 @@ impl DawApp {
                     return;
                 };
                 if let Some(sender) = &self.mml_overlay_sender {
+                    let patch = self.mml_overlay_live_patch(Some(patch.as_str()));
                     let command_id = match notes {
-                        Some(notes) => {
-                            sender.send(Some(patch.as_str()), notes.messages, notes.duration)
-                        }
-                        None => sender.prepare(Some(patch.as_str())),
+                        Some(notes) => sender.send(patch, notes.messages, notes.duration),
+                        None => sender.prepare(patch),
                     };
                     self.mml_overlay.expect_sender_command(command_id);
                 }
@@ -376,19 +376,24 @@ impl DawApp {
             | MmlOverlayAction::Commit { .. }
             | MmlOverlayAction::TransferToChordRow { .. }
             | MmlOverlayAction::SavePatchFilterPresets { .. } => None,
-            MmlOverlayAction::Send(notes) => {
-                Some(sender.send(self.mml_overlay.patch(), notes.messages, notes.duration))
+            MmlOverlayAction::Send(notes) => Some(sender.send(
+                self.mml_overlay_live_patch(self.mml_overlay.patch()),
+                notes.messages,
+                notes.duration,
+            )),
+            MmlOverlayAction::SetPatch { patch, notes } => {
+                let patch = self.mml_overlay_live_patch(patch.as_deref());
+                Some(match notes {
+                    Some(notes) => sender.send(patch, notes.messages, notes.duration),
+                    None => sender.prepare(patch),
+                })
             }
-            MmlOverlayAction::SetPatch { patch, notes } => Some(match notes {
-                Some(notes) => sender.send(patch.as_deref(), notes.messages, notes.duration),
-                None => sender.prepare(patch.as_deref()),
-            }),
             MmlOverlayAction::PlayLine { patch, program } => {
                 let patch = match &patch {
                     PatchChange::Keep => self.mml_overlay.patch(),
                     PatchChange::Switch(patch) => patch.as_deref(),
                 };
-                Some(sender.play_line(patch, program))
+                Some(sender.play_line(self.mml_overlay_live_patch(patch), program))
             }
         };
         if let Some(command_id) = command_id {

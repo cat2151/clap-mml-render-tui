@@ -3,13 +3,16 @@
 //! MML 入力欄は selector の土台として裏で開くだけで、selector を確定 / 取消したら
 //! overlay ごと閉じて NORMAL へ戻る。確定した音色は `Ctrl+T` と同じ経路で
 //! その track の init セルへ書き戻され、確定後は自動演奏を予約する。
+//!
+//! 試聴は、その track の init セルの effect chain を通して鳴らす。DAW で鳴る音と
+//! 同じ文脈で音色を比べるため。
 
 use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent};
 
 use super::super::{DawApp, DawMode, CHORD_TRACK, FIRST_PLAYABLE_TRACK};
-use cmrt_mml_overlay::MmlOverlaySyntax;
+use cmrt_mml_overlay::{LivePatch, MmlOverlaySyntax};
 
 use super::INIT_MEASURE;
 
@@ -45,8 +48,7 @@ impl DawApp {
                 self.editor.cursor_measure,
             )
         };
-        self.open_mml_overlay_with(context);
-        self.mml_overlay_patch_select_only = true;
+        self.open_mml_overlay_with(context, true);
         self.mml_overlay.request_patch_select();
         // 一覧が Error / 空なら selector は開かない。入力欄だけを残さず閉じる。
         if !self.mml_overlay.is_patch_select_open()
@@ -79,6 +81,25 @@ impl DawApp {
                 self.reserve_auto_play_after_render();
             }
         }
+    }
+
+    /// sender へ渡す音色。`t` で開いている間だけ、track の effect chain を載せる。
+    pub(super) fn mml_overlay_live_patch(&self, patch: Option<&str>) -> LivePatch {
+        if !self.mml_overlay_patch_select_only {
+            return LivePatch::new(patch);
+        }
+        let chain = self
+            .mml_overlay_target_track()
+            .map(|track| {
+                crate::mml::effect_chain::init_cell_effect_chain(
+                    &self.editor.data[track][INIT_MEASURE],
+                )
+            })
+            .unwrap_or_default();
+        if chain.is_empty() {
+            return LivePatch::new(patch);
+        }
+        LivePatch::with_effect_chain(patch, &serde_json::Value::Array(chain).to_string())
     }
 
     fn dismiss_direct_patch_select(&mut self) {

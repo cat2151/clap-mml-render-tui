@@ -252,3 +252,28 @@ fn opening_plays_the_line_with_the_current_patch() {
     let patch = sink.prepared().last().cloned().expect("音色の準備");
     assert_eq!(patch.patch(), Some("Pads/Snapshot Pad.fxp"));
 }
+
+#[test]
+fn the_preview_goes_through_the_track_effect_chain() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
+    let (mut app, _cache_rx) = app_with_pad_track();
+    app.editor.data[2][0] = r#"{"Surge XT patch": "Pads/Snapshot Pad.fxp", "effects after instrument": [{"Surge XT Effects preset": "Reverb 1/Cathedral 2.srgfx"}]}"#.to_string();
+    let sink = attach_recording_sink(&mut app);
+
+    app.handle_normal_key_event(plain('t'));
+    app.handle_mml_overlay_key_event(key(KeyCode::Up));
+
+    wait_until("前の候補の試聴", || {
+        sink.prepared()
+            .iter()
+            .any(|patch| patch.patch() == Some("Bass/Snapshot Bass.fxp"))
+    });
+    let prepared = sink.prepared();
+    assert!(!prepared.is_empty());
+    for patch in prepared {
+        assert_eq!(
+            patch.effect_chain(),
+            r#"[{"Surge XT Effects preset":"Reverb 1/Cathedral 2.srgfx"}]"#
+        );
+    }
+}
