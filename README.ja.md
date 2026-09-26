@@ -59,6 +59,7 @@ cmrt --play-server "X:/projects/clap-mml-play-server/target/debug/clap-mml-realt
 - effect（DAW の track に直列で挿せます）
   - TONE3000
   - Surge XT Effects
+  - Dragonfly Reverb（Hall / Room / Plate / Early Reflections）
 
 ### AI生成ドキュメント
 - 以降、AIが追記した部分が読みづらいです。ときどきメンテしていきます
@@ -143,7 +144,7 @@ section 1つから始めます（抽選できなければ空のままです）�
 ### DAW画面のeffect chain
 
 DAW画面のNORMALモードで、演奏trackにカーソルを置いて`x`を押すと、そのtrackのEFFECT CHAIN overlayが開きます。
-instrument（音色）の後段に、TONE3000 / Surge XT Effects のfactory presetを直列で何段でも挿せます。
+instrument（音色）の後段に、TONE3000 / Surge XT Effects / Dragonfly Reverb のfactory presetを直列で何段でも挿せます。
 
 | キー | 動作 |
 |---|---|
@@ -156,7 +157,7 @@ instrument（音色）の後段に、TONE3000 / Surge XT Effects のfactory pres
 
 - chainはinit列のJSONの`"effects after instrument"`（配列の順＝信号の順）に保存されます。init列を直接編集しても同じです
 - effectはcache WAVに焼き込まれます（render-server側で掛かります）
-- 各effectのpresetは組み込みの既定の置き場（`%ProgramData%\TONE3000\Presets`、`%ProgramData%\Surge XT\fx_presets`）から読みます。pluginが無ければ候補に出ません
+- 各effectのpresetは組み込みの既定の置き場（`%ProgramData%\TONE3000\Presets`、`%ProgramData%\Surge XT\fx_presets`）から読みます。Dragonfly Reverbのpresetはplugin本体に組み込まれているので、`C:\Program Files\Common Files\CLAP\dragonfly-reverb\`にpluginがあれば候補に出ます。pluginが無ければ候補に出ません
 - chainは音符と同じ長さだけ回すので、リバーブの尻尾はcellの末尾で切れます
 
 ### 設定
