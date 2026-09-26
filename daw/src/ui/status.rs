@@ -146,7 +146,7 @@ pub(super) fn draw_status(
             }
         },
         DawMode::Help => "HELP  ESC:キャンセル",
-        DawMode::Mixer => "MIXER  h/l:track移動  j/k:-/+3dB  ESC:閉じる",
+        DawMode::Mixer => "MIXER  h/l:track移動  j/k:-/+3dB  ESC:閉じる  ?:help",
         DawMode::EffectChain => crate::messages::effect_chain::STATUS,
         DawMode::EffectChainAdd => crate::messages::effect_chain::ADD_STATUS,
         DawMode::History => {

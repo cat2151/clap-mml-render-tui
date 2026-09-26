@@ -17,6 +17,18 @@ fn handle_mixer_supports_track_navigation_and_escape() {
 }
 
 #[test]
+fn question_opens_the_help_and_esc_returns_to_the_mixer() {
+    let (mut app, _cache_rx) = build_test_app();
+    app.mode = DawMode::Mixer;
+
+    app.handle_mixer(crossterm::event::KeyCode::Char('?'));
+    assert!(matches!(app.mode, DawMode::Help));
+
+    app.handle_help(crossterm::event::KeyCode::Esc);
+    assert!(matches!(app.mode, DawMode::Mixer));
+}
+
+#[test]
 fn handle_mixer_keeps_cursor_within_playable_track_range() {
     let (mut app, _cache_rx) = build_test_app();
     app.mode = DawMode::Mixer;

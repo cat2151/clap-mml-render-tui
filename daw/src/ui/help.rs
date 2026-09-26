@@ -118,6 +118,23 @@ pub(super) fn draw_help(
                 Style::default().fg(MONOKAI_GRAY),
             )),
         ],
+        super::super::DawMode::Mixer => vec![
+            Line::from(Span::styled(
+                "MIXER overlay (m)",
+                Style::default()
+                    .fg(MONOKAI_YELLOW)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from("  ?        : ヘルプ (このページ)"),
+            Line::from("  h/l, ←/→ : track 移動"),
+            Line::from("  j/k, ↓/↑ : volume -/+3dB"),
+            Line::from("  ESC      : 閉じる"),
+            Line::from(""),
+            Line::from(Span::styled(
+                "  [ESC] で戻る",
+                Style::default().fg(MONOKAI_GRAY),
+            )),
+        ],
         _ => vec![
             Line::from(Span::styled(
                 "NORMAL モード",
@@ -197,15 +214,6 @@ pub(super) fn draw_help(
             Line::from("  ESC   : 確定 → NORMAL"),
             Line::from("  Enter : 確定 → 次小節 → INSERT 継続"),
             Line::from("  Ctrl+C/X/V: コピー / カット / ペースト"),
-            Line::from(Span::styled(
-                "MIXER overlay",
-                Style::default()
-                    .fg(MONOKAI_YELLOW)
-                    .add_modifier(Modifier::BOLD),
-            )),
-            Line::from("  h/l, ←/→ : track 移動"),
-            Line::from("  j/k, ↓/↑ : volume -/+3dB"),
-            Line::from("  ESC      : 閉じる"),
             Line::from(""),
             Line::from(Span::styled(
                 "  [ESC] でキャンセル",

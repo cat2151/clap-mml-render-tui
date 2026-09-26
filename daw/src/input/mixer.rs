@@ -14,6 +14,7 @@ impl DawApp {
             KeyCode::Esc => {
                 self.mode = DawMode::Normal;
             }
+            KeyCode::Char('?') => self.enter_help(),
             KeyCode::Char('h') | KeyCode::Left
                 if self.overlays.mixer.cursor_track > FIRST_PLAYABLE_TRACK =>
             {
