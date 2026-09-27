@@ -7,8 +7,14 @@ edition = "2021"
 # 行の演奏内容（`LinePerformance`）が運ぶイベントの型だけを使う。
 cmrt-chord = { path = "../chord" }
 cmrt-patches = { path = "../patches" }
+# auto reverb が選ぶ effect の catalog（`AudioEffectCatalog`）。
+cmrt-render-core = { path = "../core-lib" }
 cmrt-tui-core = { path = "../tui-core" }
 crossterm = "0.29"
 ratatui = "0.30"
 ratatui-textarea = { version = "0.9", features = ["crossterm"] }
 regex = "1"
+serde_json = "1"
+
+[dev-dependencies]
+cmrt-runtime = { path = "../cmrt-runtime" }

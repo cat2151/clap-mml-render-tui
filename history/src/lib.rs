@@ -9,6 +9,7 @@
 
 use std::path::PathBuf;
 
+mod auto_reverb_rules;
 mod daw;
 mod grid_sequencer_session;
 mod helpers;
@@ -21,6 +22,9 @@ mod voicing_cache;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 
+pub use auto_reverb_rules::{
+    load_auto_reverb_settings, save_auto_reverb_settings, AutoReverbSettings,
+};
 pub use cmrt_tui_core::screen_switch::PrimaryScreen;
 pub use daw::{
     daw_cache_mml_hash, load_daw_session_state, save_daw_session_state,

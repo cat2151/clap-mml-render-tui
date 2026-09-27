@@ -21,7 +21,7 @@ impl<'a> NotepadScreen<'a> {
             self.mode = Mode::Normal;
             return;
         };
-        if select.filter_editing() {
+        if select.captures_all_keys() {
             self.forward_key_to_patch_select(key_event);
             return;
         }
@@ -74,7 +74,11 @@ impl<'a> NotepadScreen<'a> {
                 self.preview_selected_patch_with_navigation_hint(delta);
             }
             PatchSelectAction::Confirm(patch_name) => {
-                self.replace_current_line_patch(&patch_name);
+                let auto_reverb = self
+                    .patch_select
+                    .as_ref()
+                    .and_then(|select| select.auto_reverb_stage(&patch_name));
+                self.replace_current_line_patch(&patch_name, auto_reverb);
                 let line = self.editor.lines[self.editor.cursor].clone();
                 self.record_notepad_history(&line);
                 self.close_patch_select();
@@ -82,6 +86,20 @@ impl<'a> NotepadScreen<'a> {
             }
             // notepad は selector に音色を読み込ませていないので、戻す音色は無い。
             PatchSelectAction::Cancel => self.close_patch_select(),
+            PatchSelectAction::SaveAutoReverb { rules, preview } => {
+                let settings = cmrt_history::AutoReverbSettings {
+                    enabled: rules.enabled(),
+                    rules: rules.to_saved(),
+                };
+                if let Err(error) = cmrt_history::save_auto_reverb_settings(&settings) {
+                    *self.playback.session.play_state().lock().unwrap() =
+                        crate::PlayState::Err(format!("auto reverb の保存に失敗: {error}"));
+                }
+                // 同じ音色でも、掛ける reverb が変わったので鳴らし直す。
+                if preview.is_some() {
+                    self.preview_selected_patch();
+                }
+            }
             PatchSelectAction::SaveUserPresets { presets, preview } => {
                 if let Err(error) = cmrt_history::save_mml_patch_filter_presets(&presets) {
                     *self.playback.session.play_state().lock().unwrap() =

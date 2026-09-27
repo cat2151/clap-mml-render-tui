@@ -69,6 +69,8 @@ impl MmlOverlay<'_> {
                 });
                 MmlOverlayAction::SavePatchFilterPresets { presets, preview }
             }
+            // `Ctrl+T` の selector は auto reverb を渡さずに開くので、この outcome は来ない。
+            PatchSelectOutcome::SaveAutoReverb { .. } => MmlOverlayAction::Continue,
             PatchSelectOutcome::Closed { restore, .. } => {
                 restore.map_or(MmlOverlayAction::Continue, Into::into)
             }

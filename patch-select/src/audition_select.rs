@@ -9,9 +9,11 @@ use std::collections::BTreeMap;
 use cmrt_patches::{PatchRole, PatchRoleIndex};
 use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 use crossterm::event::KeyEvent;
+use serde_json::Value;
 
+use crate::auto_reverb::AutoReverbRules;
 use crate::patch_audition::{audition_action, PatchAudition, PatchAuditionAction, PatchChange};
-use crate::patch_select::{PatchSelect, PatchSelectAction, PatchSelectRequest};
+use crate::patch_select::{AutoReverbHost, PatchSelect, PatchSelectAction, PatchSelectRequest};
 use crate::play_settings::{PlaySettings, PlaySettingsSelect};
 use crate::PatchCatalogSnapshot;
 
@@ -58,6 +60,12 @@ pub enum PatchSelectOutcome {
         presets: Vec<(String, String)>,
         preview: Option<String>,
     },
+    /// auto reverb の設定を保存させる。`preview` はカーソルの音色で、掛ける reverb が
+    /// 変わったので同じ音色でも鳴らし直す。
+    SaveAutoReverb {
+        rules: AutoReverbRules,
+        preview: Option<String>,
+    },
     /// selector が閉じた。`confirmed` は `Enter` で確定したか。`restore` は取り消しで
     /// 開いたときの音色へ戻す action（試聴で音色を動かしていなければ `None`）。
     Closed {
@@ -102,6 +110,10 @@ pub struct PatchAuditionSelect<'a> {
     favorites: Vec<String>,
     /// selector を開けなかった理由。標準 stream ではなく持つ側の画面へ出す。
     notice: Option<PatchCatalogNotice>,
+    /// selector を開くときに渡す auto reverb。`None` の host では扱わない。
+    auto_reverb: Option<AutoReverbHost>,
+    /// 最後に確定した音色に掛かっていた auto reverb の 1 段。
+    confirmed_auto_reverb: Option<Value>,
     /// Loading 中の open 要求を、一覧完成後に自動で実行する予約。
     requested: bool,
     select: Option<PatchSelect<'a>>,
@@ -120,9 +132,26 @@ impl<'a> PatchAuditionSelect<'a> {
         self.catalog_notes = context.catalog_notes;
         self.favorites = context.favorites;
         self.notice = None;
+        self.auto_reverb = None;
+        self.confirmed_auto_reverb = None;
         self.requested = false;
         self.select = None;
         self.play_settings_select = None;
+    }
+
+    /// 次に開く selector で auto reverb を扱わせる。[`Self::open`] の後に呼ぶ。
+    pub fn set_auto_reverb(&mut self, host: Option<AutoReverbHost>) {
+        self.auto_reverb = host;
+    }
+
+    /// 開いている selector で `display` を試聴するときに chain へ足す 1 段。
+    pub fn auto_reverb_stage(&self, display: &str) -> Option<Value> {
+        self.select.as_ref()?.auto_reverb_stage(display)
+    }
+
+    /// 最後に `Enter` で確定した音色に掛かっていた auto reverb の 1 段。
+    pub fn confirmed_auto_reverb_stage(&self) -> Option<&Value> {
+        self.confirmed_auto_reverb.as_ref()
     }
 
     /// 開いている間だけ持っていたスナップショットを手放す。音色と演奏設定は残す。
@@ -197,6 +226,7 @@ impl<'a> PatchAuditionSelect<'a> {
                     load_measurements: self.load_measurements.clone(),
                     favorites: self.favorites.clone(),
                     initial_query: String::new(),
+                    auto_reverb: self.auto_reverb.clone(),
                 });
                 crate::log_line(format!(
                     "action=patch-select event=open result=success count={count}"
@@ -250,6 +280,7 @@ impl<'a> PatchAuditionSelect<'a> {
             PatchSelectAction::Preview(patch) => audition(AuditionMoment::Candidate, patch),
             PatchSelectAction::PlayLine(patch) => audition(AuditionMoment::Replay, patch),
             PatchSelectAction::Confirm(patch) => {
+                self.confirmed_auto_reverb = select.auto_reverb_stage(&patch);
                 // 試聴で読み込み済みの音色がそのまま残るので、ここでは積み直さない。
                 self.select = None;
                 self.patch = Some(patch);
@@ -261,6 +292,12 @@ impl<'a> PatchAuditionSelect<'a> {
             PatchSelectAction::SaveUserPresets { presets, preview } => {
                 self.filter_presets.clone_from(&presets);
                 PatchSelectOutcome::SavePresets { presets, preview }
+            }
+            PatchSelectAction::SaveAutoReverb { rules, preview } => {
+                if let Some(host) = self.auto_reverb.as_mut() {
+                    host.rules.clone_from(&rules);
+                }
+                PatchSelectOutcome::SaveAutoReverb { rules, preview }
             }
             PatchSelectAction::Cancel => self.cancel_select(),
         }

@@ -205,6 +205,7 @@ pub struct PatchRoleInput<'a> {
 pub struct PatchRoleIndex {
     by_display: HashMap<String, PatchRole>,
     drum_role_by_display: HashMap<String, DrumPatchRole>,
+    preset_label_by_display: HashMap<String, &'static str>,
     by_role: [Vec<String>; PatchRole::ALL.len()],
     by_drum_role: [Vec<String>; DrumPatchRole::ALL.len()],
 }
@@ -217,10 +218,19 @@ impl PatchRoleIndex {
         let user_presets = normalize_user_role_presets(user_presets.to_vec());
         let cascade = CASCADE.map(|role| compile_role(role, &user_presets));
         let drum_patterns = DrumPatchRole::ALL.map(|role| compile_condition(role.pattern()));
+        let builtin_conditions: Vec<(&PatchRolePreset, Vec<Regex>)> = BUILTIN_PRESETS
+            .iter()
+            .map(|preset| (preset, compile_condition(preset.pattern)))
+            .collect();
         let mut index = Self::default();
         for entry in entries {
             let role = classify_role(entry, &cascade);
             index.by_display.insert(entry.display.to_string(), role);
+            if let Some(label) = builtin_label_within_role(entry, role, &builtin_conditions) {
+                index
+                    .preset_label_by_display
+                    .insert(entry.display.to_string(), label);
+            }
             index.by_role[role.index()].push(entry.display.to_string());
             if role == PatchRole::Drum {
                 if let Some(drum_role) = classify_drum_role(entry, &drum_patterns) {
@@ -244,6 +254,14 @@ impl PatchRoleIndex {
     /// `drums`だけの音色）ので、`Some(PatchRole::Drum)`から部位の存在を推測しないこと。
     pub fn drum_role_of(&self, display: &str) -> Option<DrumPatchRole> {
         self.drum_role_by_display.get(display).copied()
+    }
+
+    /// 決まったRoleのbuiltin presetのうち、[`builtin_role_presets`]の並び順で最初に当たったものの`label`。
+    ///
+    /// Roleはcascadeで先に決まり、labelはそのRoleの中だけで探す。Roleがユーザー定義presetだけで
+    /// 決まった音色と、Etcのうちどのpresetにも当たらない音色では`None`。
+    pub fn preset_label_of(&self, display: &str) -> Option<&'static str> {
+        self.preset_label_by_display.get(display).copied()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -316,6 +334,17 @@ fn classify_drum_role(
         .zip(drum_patterns)
         .find(|(_, condition)| condition_matches(condition, entry))
         .map(|(drum_role, _)| drum_role)
+}
+
+fn builtin_label_within_role(
+    entry: PatchRoleInput<'_>,
+    role: PatchRole,
+    builtin_conditions: &[(&PatchRolePreset, Vec<Regex>)],
+) -> Option<&'static str> {
+    builtin_conditions
+        .iter()
+        .find(|(preset, condition)| preset.role == role && condition_matches(condition, entry))
+        .map(|(preset, _)| preset.label)
 }
 
 fn compile_role(role: PatchRole, user_presets: &[(String, String)]) -> CompiledRole {

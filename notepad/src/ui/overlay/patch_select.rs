@@ -52,7 +52,7 @@ pub(crate) fn draw_patch_select(
         let marker = |patch_name: &str| {
             let Some(mml) = preview_mml
                 .as_ref()
-                .map(|preview_mml| preview_mml.for_patch(patch_name))
+                .map(|preview_mml| preview_mml.for_selector_patch(select, patch_name))
             else {
                 return cache_marker(false, None);
             };

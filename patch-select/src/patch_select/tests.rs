@@ -2,6 +2,7 @@ use super::*;
 use cmrt_patches::PatchRole;
 use crossterm::event::KeyModifiers;
 
+mod auto_reverb;
 mod favorites;
 mod filter_edit;
 mod metadata;

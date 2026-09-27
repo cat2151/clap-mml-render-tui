@@ -74,6 +74,7 @@ fn find_text(buffer: &Buffer, text: &str) -> (u16, u16) {
     panic!("text not found in buffer: {text}");
 }
 
+mod auto_reverb_row;
 mod cursor_style;
 mod grid_patch_selector;
 mod help_screens;

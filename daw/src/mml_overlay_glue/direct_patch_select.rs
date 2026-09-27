@@ -5,19 +5,27 @@
 //!
 //! 試聴は、その track の init セルの effect chain を通して鳴らす。DAW で鳴る音と
 //! 同じ文脈で音色を比べるため。鳴らすのはその meas のフレーズ全体。
+//!
+//! track の chain が空なら、候補の音色に auto reverb を掛けて試聴する。掛かった状態で
+//! 確定したら、その 1 段を init セルの chain へ書く（確定後の再生が試聴と同じ音になる）。
 
 use crossterm::event::KeyEvent;
+use serde_json::Value;
 
 use super::super::{DawApp, DawMode, CHORD_TRACK, FIRST_PLAYABLE_TRACK};
 use cmrt_mml_overlay::cursor_notes::preview_note;
 use cmrt_mml_overlay::line_play::line_events;
 use cmrt_mml_overlay::{LivePatch, MmlOverlayAction, PatchAudition};
+use cmrt_offline_render::EffectPlugins;
+use cmrt_patch_select::auto_reverb::AutoReverbRules;
 use cmrt_patch_select::{
-    host_patch_catalog, DirectPatchSelect, DirectPatchSelectRequest, DirectSelectOutcome,
-    HostPatchCatalog, PatchAuditionAction, PatchAuditionContext, PatchCatalogNotice,
+    host_patch_catalog, AutoReverbHost, DirectPatchSelect, DirectPatchSelectRequest,
+    DirectSelectOutcome, HostPatchCatalog, PatchAuditionAction, PatchAuditionContext,
+    PatchCatalogNotice,
 };
 
 use super::INIT_MEASURE;
+use crate::input::track_patch::PatchUpdateReason;
 
 impl DawApp {
     /// カーソル track の音色 selector を開く。キーを消費したら true。
@@ -55,6 +63,7 @@ impl DawApp {
             load_measurements,
         } = host_patch_catalog(&self.patch_load.lock().unwrap());
         let patch = self.track_patch_name(target_track);
+        let existing_chain = !self.track_effect_chain(target_track).is_empty();
         let request = DirectPatchSelectRequest {
             context: PatchAuditionContext {
                 catalog,
@@ -69,6 +78,11 @@ impl DawApp {
             // 演奏設定は `i` の入力欄と共通。閉じたら書き戻す。
             play_settings: self.mml_overlay.play_settings(),
             audition: measure_audition(&preview_line),
+            auto_reverb: Some(AutoReverbHost {
+                rules: load_auto_reverb_rules(&self.effect_plugins),
+                effect_plugins: self.effect_plugins.clone(),
+                existing_chain,
+            }),
         };
         let (select, opening) = DirectPatchSelect::open(request);
         // 一覧が Error / 空なら開かず、理由を log 行へ出す。
@@ -112,6 +126,18 @@ impl DawApp {
                     preview: preview.map(|action| Box::new(action.into())),
                 });
             }
+            DirectSelectOutcome::SaveAutoReverb { rules, preview } => {
+                let settings = cmrt_history::AutoReverbSettings {
+                    enabled: rules.enabled(),
+                    rules: rules.to_saved(),
+                };
+                if let Err(error) = cmrt_history::save_auto_reverb_settings(&settings) {
+                    self.append_log_line(format!("auto reverb の保存に失敗: {error}"));
+                }
+                if let Some(preview) = preview {
+                    self.apply_mml_overlay_action(preview.into());
+                }
+            }
             DirectSelectOutcome::Closed { confirmed, restore } => {
                 self.close_direct_patch_select(patch_before, confirmed, restore);
             }
@@ -139,9 +165,46 @@ impl DawApp {
         }
         self.mode = DawMode::Normal;
         if confirmed {
-            self.write_confirmed_patch(patch_before, select.patch().map(str::to_string));
+            let patch_after = select.patch().map(str::to_string);
+            let auto_reverb = select.confirmed_auto_reverb_stage().cloned();
+            self.write_direct_confirmed_patch(patch_before, patch_after, auto_reverb);
             self.reserve_auto_play_after_render();
         }
+    }
+
+    /// 確定した音色を init セルへ書く。auto reverb が掛かっていて track の chain が空なら、
+    /// その 1 段を chain へも書く（`x` の overlay で足したのと同じ形）。
+    fn write_direct_confirmed_patch(
+        &mut self,
+        patch_before: Option<String>,
+        patch_after: Option<String>,
+        auto_reverb: Option<Value>,
+    ) {
+        let target = self
+            .mml_overlay_target_track()
+            .filter(|&track| self.track_effect_chain(track).is_empty());
+        let (Some(stage), Some(track), Some(patch_name)) = (auto_reverb, target, &patch_after)
+        else {
+            self.write_confirmed_patch(patch_before, patch_after);
+            return;
+        };
+        let patch_filter_query = self.track_patch_filter_query(track);
+        self.apply_patch_name_and_effect_chain_to_track_init(
+            track,
+            patch_name,
+            patch_filter_query.as_deref(),
+            std::slice::from_ref(&stage),
+            PatchUpdateReason::MmlOverlay,
+        );
+        self.append_log_line(format!(
+            "auto reverb: {} の effect chain に {stage} を書いた",
+            crate::tracks::track_label(track)
+        ));
+    }
+
+    /// track の init セルの effect chain。
+    fn track_effect_chain(&self, track: usize) -> Vec<Value> {
+        crate::mml::effect_chain::init_cell_effect_chain(&self.editor.data[track][INIT_MEASURE])
     }
 
     /// 一覧が Loading のまま開いていれば、loader の結果で差し替える。毎フレーム呼ぶ。
@@ -174,22 +237,22 @@ impl DawApp {
     }
 
     /// sender へ渡す音色。`t` で開いている間だけ、track の effect chain を載せる。
+    /// chain が空なら、その音色に掛かる auto reverb の 1 段を載せる。
     pub(super) fn mml_overlay_live_patch(&self, patch: Option<&str>) -> LivePatch {
-        if self.direct_patch_select.is_none() {
+        let Some(select) = self.direct_patch_select.as_ref() else {
             return LivePatch::new(patch);
-        }
-        let chain = self
+        };
+        let mut chain = self
             .mml_overlay_target_track()
-            .map(|track| {
-                crate::mml::effect_chain::init_cell_effect_chain(
-                    &self.editor.data[track][INIT_MEASURE],
-                )
-            })
+            .map(|track| self.track_effect_chain(track))
             .unwrap_or_default();
+        if chain.is_empty() {
+            chain.extend(patch.and_then(|patch| select.auto_reverb_stage(patch)));
+        }
         if chain.is_empty() {
             return LivePatch::new(patch);
         }
-        LivePatch::with_effect_chain(patch, &serde_json::Value::Array(chain).to_string())
+        LivePatch::with_effect_chain(patch, &Value::Array(chain).to_string())
     }
 }
 
@@ -201,6 +264,15 @@ fn measure_audition(preview_line: &str) -> Option<PatchAudition> {
         return Some(PatchAudition::Line(performance));
     }
     preview_note().map(PatchAudition::Notes)
+}
+
+/// 保存済みの auto reverb の設定。保存が無い・読めないときは既定のルール。
+fn load_auto_reverb_rules(effect_plugins: &EffectPlugins) -> AutoReverbRules {
+    cmrt_history::load_auto_reverb_settings()
+        .map(|settings| {
+            AutoReverbRules::from_saved(settings.enabled, &settings.rules, effect_plugins.catalog())
+        })
+        .unwrap_or_default()
 }
 
 #[cfg(test)]

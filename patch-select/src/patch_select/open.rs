@@ -25,6 +25,8 @@ pub struct PatchSelectRequest {
     pub favorites: Vec<String>,
     /// Regex 欄の初期値。空なら絞り込まない。
     pub initial_query: String,
+    /// auto reverb を扱う host だけが渡す。`None` なら表示行も `e`/`E` も出さない。
+    pub auto_reverb: Option<AutoReverbHost>,
 }
 
 impl PatchSelect<'_> {
@@ -40,6 +42,7 @@ impl PatchSelect<'_> {
             load_measurements,
             favorites,
             initial_query,
+            auto_reverb,
         } = request;
         if all.is_empty() {
             return None;
@@ -84,6 +87,7 @@ impl PatchSelect<'_> {
             catalog_notes,
             load_measurements,
             favorites,
+            auto_reverb: auto_reverb.map(AutoReverbState::new),
         };
         select.update_filter();
         Some(select)

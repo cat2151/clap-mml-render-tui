@@ -61,17 +61,20 @@ fn catalog_entries(
         .audio_patches()
         .iter()
         .map(|patch| {
-            let plugin_sort_key = snapshot
+            let plugin = snapshot
                 .patch_plugins()
                 .audio_info_for_ref(&patch.reference)
+                .ok();
+            let plugin_sort_key = plugin
                 .map(|plugin| plugin.name.clone())
-                .unwrap_or_else(|_| patch.reference.plugin.to_string());
+                .unwrap_or_else(|| patch.reference.plugin.to_string());
             let entry = PatchCatalogEntry::new(
                 patch.reference.display.clone(),
                 patch.normalized_display.clone(),
                 plugin_sort_key,
                 patch.selector_category.clone(),
-            );
+            )
+            .with_builtin_effects(plugin.is_none_or(|plugin| plugin.has_builtin_effects()));
             match &patch.merged {
                 Some(merged) => entry.with_merged(merged.count, merged.names.clone()),
                 None => entry,

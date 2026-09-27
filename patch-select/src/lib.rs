@@ -5,6 +5,7 @@
 //! そのため、ここにあるのは試聴で運ぶ型（[`LinePerformance`]・[`CursorNotes`] 等）だけ。
 
 mod audition_select;
+pub mod auto_reverb;
 mod direct_select;
 pub mod line_program;
 pub mod notes;
@@ -27,8 +28,8 @@ pub use patch_catalog::{
     PatchCatalogSnapshot,
 };
 pub use patch_select::{
-    filter_candidates, prepare_user_presets, FilterGroup, FilterPreset, PatchSelect,
-    PatchSelectAction, PatchSelectRequest, PreparedPresets, PAGE_STEP,
+    filter_candidates, prepare_user_presets, AutoReverbHost, FilterGroup, FilterPreset,
+    PatchSelect, PatchSelectAction, PatchSelectRequest, PreparedPresets, PAGE_STEP,
 };
 pub use play_settings::{is_play_settings_trigger, PlaySettings, PlaySettingsSelect};
 

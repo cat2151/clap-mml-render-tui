@@ -36,7 +36,9 @@ impl PatchAuditionSelect<'_> {
     /// ときは開くキーだけを拾い、それ以外は `false` を返して後段の判定へ流す。
     pub fn intercept_play_settings_key(&mut self, key: KeyEvent) -> bool {
         let trigger = match self.select.as_ref() {
-            Some(select) => !select.filter_editing() && is_patch_select_play_settings_trigger(key),
+            Some(select) => {
+                !select.captures_all_keys() && is_patch_select_play_settings_trigger(key)
+            }
             None => is_play_settings_trigger(key),
         };
         if let Some(select) = self.play_settings_select.as_mut() {

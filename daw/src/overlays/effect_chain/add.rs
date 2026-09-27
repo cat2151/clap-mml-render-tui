@@ -3,12 +3,9 @@
 use std::cell::Cell;
 
 use cmrt_core::AudioEffectCatalog;
+use cmrt_patch_select::auto_reverb::is_selectable_effect_preset;
 use cmrt_tui_core::text_filter;
 use ratatui_textarea::TextArea;
-
-/// 追加 overlay の selector から外す preset の値の前方一致。既存 chain の段はそのまま扱う
-/// （selector から外すだけで catalog そのものからは外さない）。
-const EXCLUDED_VALUE_PREFIXES: [&str; 1] = ["Reverb 1/"];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
 pub(crate) enum EffectAddPane {
@@ -48,7 +45,7 @@ impl EffectAddPane {
 
 /// 追加 overlay（`EffectChainAdd`）の状態。開くたびに catalog から組み直す。
 pub(crate) struct DawEffectAddState {
-    /// catalog の preset index。`EXCLUDED_VALUE_PREFIXES` を除いたもの。
+    /// catalog の preset index。`is_selectable_effect_preset` が外すものを除いたもの。
     candidates: Vec<usize>,
     /// category pane の一覧（先頭は `all`）。
     pub(crate) categories: Vec<String>,
@@ -102,11 +99,7 @@ impl DawEffectAddState {
             .presets()
             .iter()
             .enumerate()
-            .filter(|(_, preset)| {
-                !EXCLUDED_VALUE_PREFIXES
-                    .iter()
-                    .any(|prefix| preset.value.starts_with(prefix))
-            })
+            .filter(|(_, preset)| is_selectable_effect_preset(preset))
             .map(|(index, _)| index)
             .collect();
         let mut categories: Vec<String> = candidates

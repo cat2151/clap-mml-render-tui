@@ -15,6 +15,17 @@ pub(crate) fn is_patch_select_play_settings_trigger(key: KeyEvent) -> bool {
     is_plain_char(key, 's')
 }
 
+/// auto reverb のルール overlay を開く。
+pub(super) fn is_auto_reverb_rules_key(key: KeyEvent) -> bool {
+    is_plain_char(key, 'e')
+}
+
+/// auto reverb の on/off。端末によって Shift が修飾に載るので、どちらも受ける。
+pub(super) fn is_auto_reverb_toggle_key(key: KeyEvent) -> bool {
+    key.code == KeyCode::Char('E')
+        && (key.modifiers == KeyModifiers::NONE || key.modifiers == KeyModifiers::SHIFT)
+}
+
 fn is_plain_char(key: KeyEvent, character: char) -> bool {
     key.modifiers == KeyModifiers::NONE && key.code == KeyCode::Char(character)
 }

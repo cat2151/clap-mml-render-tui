@@ -53,12 +53,48 @@ impl DawApp {
         if track < FIRST_PLAYABLE_TRACK || track >= self.editor.tracks {
             return;
         }
+        let next_init = Self::replace_patch_name_in_mml(
+            &self.editor.data[track][INIT_MEASURE],
+            patch_name,
+            patch_filter_query,
+        );
+        self.apply_track_init_cell(track, next_init, reason);
+    }
+
+    /// 音色名の差し替えと同時に、init セルの effect chain を `chain` にする。
+    /// 再レンダリングは 1 回で済む。init セルが変わらなければ何もしない。
+    pub(crate) fn apply_patch_name_and_effect_chain_to_track_init(
+        &mut self,
+        track: usize,
+        patch_name: &str,
+        patch_filter_query: Option<&str>,
+        chain: &[serde_json::Value],
+        reason: PatchUpdateReason,
+    ) {
+        if track < FIRST_PLAYABLE_TRACK || track >= self.editor.tracks {
+            return;
+        }
+        let current_init = &self.editor.data[track][INIT_MEASURE];
+        let next_init = crate::mml::effect_chain::init_cell_with_effect_chain(
+            &Self::replace_patch_name_in_mml(current_init, patch_name, patch_filter_query),
+            chain,
+        );
+        if next_init == *current_init {
+            return;
+        }
+        self.apply_track_init_cell(track, next_init, reason);
+    }
+
+    fn apply_track_init_cell(
+        &mut self,
+        track: usize,
+        next_init: String,
+        reason: PatchUpdateReason,
+    ) {
         let affected_measures: Vec<usize> = (1..=self.editor.measures)
             .filter(|&measure| crate::mml::cell_has_content(&self.editor.data, track, measure))
             .collect();
-        let current_init_mml = self.editor.data[track][INIT_MEASURE].clone();
-        self.editor.data[track][INIT_MEASURE] =
-            Self::replace_patch_name_in_mml(&current_init_mml, patch_name, patch_filter_query);
+        self.editor.data[track][INIT_MEASURE] = next_init;
         self.invalidate_cell(track, INIT_MEASURE);
         self.invalidate_dependent_cells(track, INIT_MEASURE);
         self.start_track_rerender_batch(track, &affected_measures, reason.rerender_reason());

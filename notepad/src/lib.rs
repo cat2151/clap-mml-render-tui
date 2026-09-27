@@ -22,6 +22,8 @@ mod playback;
 mod playback_runtime;
 mod prefetch;
 mod render_queue;
+#[cfg(any(test, feature = "test-support"))]
+mod test_hooks;
 pub mod ui;
 
 use std::collections::{HashMap, HashSet};
@@ -150,6 +152,8 @@ pub struct NotepadScreen<'a> {
     /// 一覧に**出てこない**ものの話なので、`patch_load_state` をいくら見ても分からない。
     /// config は起動中に変わらないので、組み立てのときに 1 回だけ数える。
     pub(crate) catalog_notes: Vec<String>,
+    /// 音色選択の auto reverb が選ぶ reverb の catalog。
+    pub(crate) effect_plugins: cmrt_offline_render::EffectPlugins,
 }
 
 /// [`NotepadScreen::new`] の引数一式。
@@ -175,6 +179,8 @@ pub struct NotepadScreenParts {
     /// **画面側では数えない。** 数えると実マシンのインストール状況を読むことになり、
     /// 画面のテストがマシン依存になる（`docs/adr/0005-mixed-catalog-on-by-default.md`）。
     pub catalog_notes: Vec<String>,
+    /// 音色選択の auto reverb が選ぶ reverb の catalog。
+    pub effect_plugins: cmrt_offline_render::EffectPlugins,
 }
 
 impl NotepadScreen<'static> {
@@ -188,11 +194,12 @@ impl NotepadScreen<'static> {
             patch_phrase_store,
             cfg,
             catalog_notes,
+            effect_plugins,
         } = parts;
         let active_offline_render_count = Arc::new(AtomicUsize::new(0));
         let render_queue =
             TuiRenderQueue::new(Arc::clone(&cfg), Arc::clone(&active_offline_render_count));
-        Self::from_parts(
+        let screen = Self::from_parts(
             NotepadEditorState::restored(lines, cursor),
             TuiPlaybackRuntime::new(playback_session, render_queue, active_offline_render_count),
             SoundCheckGuide::new(sound_check_guide_overlay_date),
@@ -200,7 +207,11 @@ impl NotepadScreen<'static> {
             patch_phrase_store,
             cfg,
             catalog_notes,
-        )
+        );
+        Self {
+            effect_plugins,
+            ..screen
+        }
     }
 
     /// レンダリングワーカーを起動しないテスト用の構築。
@@ -250,6 +261,7 @@ impl<'a> NotepadScreen<'a> {
             startup_normal_cache_primed: false,
             catalog_notes,
             cfg,
+            effect_plugins: cmrt_offline_render::EffectPlugins::none(),
         }
     }
 
@@ -340,41 +352,6 @@ impl<'a> NotepadScreen<'a> {
     /// 画面横断で共有している再生セッション。
     pub fn playback_session(&self) -> &PlaybackSession {
         &self.playback.session
-    }
-
-    /// 編集行を差し替える（テスト用）。
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn set_session_lines_for_test(&mut self, lines: Vec<String>) {
-        self.editor.lines = lines;
-    }
-
-    /// カーソル行を差し替える（テスト用）。リスト選択も追従させる。
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn set_session_cursor_for_test(&mut self, cursor: usize) {
-        self.editor.cursor = cursor;
-        self.editor.list_state.select(Some(cursor));
-    }
-
-    /// 音色×フレーズの履歴・favorite を差し替える（テスト用）。
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn set_patch_phrase_store_for_test(&mut self, store: cmrt_history::PatchPhraseStore) {
-        self.patch_phrase_store = store;
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn test_set_active_parallel_render_count(&self, count: usize) {
-        self.playback
-            .active_offline_render_count
-            .store(count, Ordering::Relaxed);
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn test_set_render_job_status(
-        &self,
-        mml: impl Into<String>,
-        status: Option<TuiRenderJobStatus>,
-    ) {
-        self.playback.render_queue.set_test_job_status(mml, status);
     }
 
     /// 起動時キャッシュの温めを済ませたか。

@@ -4,6 +4,7 @@
 //! 手入力した正規表現とプリセットを AND で組み合わせる。選択そのものはここに閉じ、
 //! 音を鳴らす処理は [`crate::PatchAuditionSelect`]、JSON へ永続化する処理は host app に任せる。
 
+mod auto_reverb;
 mod favorites;
 mod filter;
 mod keys;
@@ -20,8 +21,11 @@ use ratatui_textarea::TextArea;
 
 use cmrt_tui_core::{patch_load::PatchLoadMeasurement, text_input};
 
-use crate::PatchCatalogEntry;
+use crate::{auto_reverb::AutoReverbRules, PatchCatalogEntry};
 
+pub use auto_reverb::AutoReverbHost;
+use auto_reverb::AutoReverbState;
+pub(crate) use auto_reverb::{AutoReverbStatus, EffectList};
 pub use filter::filter_candidates;
 use filter::is_valid_condition;
 use keys::{is_add_preset_key, is_filter_edit_trigger, is_preview_key, is_random_jump_key};
@@ -56,6 +60,13 @@ pub enum PatchSelectAction {
         presets: Vec<(String, String)>,
         preview: Option<String>,
     },
+    /// auto reverb のルール（on/off を含む）を保存し、`preview` の音色を今の設定で鳴らし直す。
+    ///
+    /// 同じ音色でも鳴らし直す（掛ける reverb が変わったため）。
+    SaveAutoReverb {
+        rules: AutoReverbRules,
+        preview: Option<String>,
+    },
     /// 取り消して閉じる。開いたときの音色へ戻す。
     Cancel,
 }
@@ -88,6 +99,8 @@ pub struct PatchSelect<'a> {
     load_measurements: BTreeMap<String, PatchLoadMeasurement>,
     /// 音色 favorite。登録が新しい順。
     favorites: Vec<String>,
+    /// host が auto reverb を扱うときだけ `Some`。
+    auto_reverb: Option<AutoReverbState>,
 }
 
 impl<'a> PatchSelect<'a> {
@@ -183,6 +196,9 @@ impl<'a> PatchSelect<'a> {
     pub fn handle_key(&mut self, key: KeyEvent) -> PatchSelectAction {
         if self.filter_editing {
             return self.handle_filter_key(key);
+        }
+        if let Some(action) = self.handle_auto_reverb_key(key) {
+            return action;
         }
         match key.code {
             KeyCode::Esc => return PatchSelectAction::Cancel,

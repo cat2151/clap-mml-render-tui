@@ -14,6 +14,7 @@ mod footer;
 mod grid;
 mod grid_chord_row;
 mod help;
+mod help_auto_reverb;
 mod layout;
 mod logs;
 mod mixer;

@@ -28,6 +28,8 @@ pub struct PatchCatalogEntry {
     merged_count: usize,
     /// まとめた patch の名前。別名でも検索できるよう、絞り込みの対象にする。
     merged_names: Vec<String>,
+    /// 音色そのものに reverb などの effect が入っているか。分からない音色は `true`（勝手に effect を足さない側）。
+    has_builtin_effects: bool,
 }
 
 impl PatchCatalogEntry {
@@ -52,7 +54,18 @@ impl PatchCatalogEntry {
             normalized_selector_category,
             merged_count: 1,
             merged_names: Vec::new(),
+            has_builtin_effects: true,
         }
+    }
+
+    /// 音色そのものが effect を持つかを付ける。値の由来は play server の判定で、ここでは解釈しない。
+    pub fn with_builtin_effects(mut self, has_builtin_effects: bool) -> Self {
+        self.has_builtin_effects = has_builtin_effects;
+        self
+    }
+
+    pub fn has_builtin_effects(&self) -> bool {
+        self.has_builtin_effects
     }
 
     /// 同じ音の patch をこの行へまとめた件数と名前を付ける。

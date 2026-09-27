@@ -386,3 +386,4 @@ fn a_track_without_a_patch_opens_the_selector_on_all() {
 }
 
 mod audition;
+mod auto_reverb;

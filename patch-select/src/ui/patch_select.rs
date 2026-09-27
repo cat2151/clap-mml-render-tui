@@ -18,6 +18,7 @@ use cmrt_tui_core::{
     ui::centered_rect,
 };
 
+use super::auto_reverb;
 use crate::patch_select::{PatchSelect, PatchSelectFocus};
 use crate::PatchCatalogEntry;
 
@@ -65,19 +66,26 @@ pub(super) fn draw_in(
 
     // 案内が無いときは 1 行も取らない。ふだんの見え方を変えないため。
     let notes_height = notes_height(select, area.width);
+    // auto reverb を扱わない host では表示行を取らない。
+    let status_height = u16::from(select.auto_reverb_status().is_some());
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(QUERY_HEIGHT),
             Constraint::Min(1),
+            Constraint::Length(status_height),
             Constraint::Length(notes_height),
         ])
         .split(area);
     draw_query(select, frame, chunks[0], options);
     draw_panes(select, frame, chunks[1], options);
-    if notes_height > 0 {
-        draw_notes(select, frame, chunks[2]);
+    if status_height > 0 {
+        auto_reverb::draw_status(select, frame, chunks[2]);
     }
+    if notes_height > 0 {
+        draw_notes(select, frame, chunks[3]);
+    }
+    auto_reverb::draw_rules_overlay(select, frame, area);
 }
 
 fn draw_panes(

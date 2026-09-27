@@ -1,6 +1,8 @@
+use cmrt_offline_render::EffectPlugins;
+use cmrt_patch_select::auto_reverb::AutoReverbRules;
 use cmrt_patch_select::{
-    host_patch_catalog, FilterGroup, HostPatchCatalog, PatchCatalogSnapshot, PatchSelect,
-    PatchSelectRequest,
+    host_patch_catalog, AutoReverbHost, FilterGroup, HostPatchCatalog, PatchCatalogSnapshot,
+    PatchSelect, PatchSelectRequest,
 };
 
 use crate::NotepadScreen;
@@ -45,6 +47,7 @@ impl<'a> NotepadScreen<'a> {
             .or_else(|| self.current_line_patch_name());
         let favorites = cmrt_history::favorite_patch_names(&self.patch_phrase_store);
         let favorite_count = favorites.len();
+        let existing_chain = self.current_line_effect_chain().is_some();
         let Some(select) = PatchSelect::open(PatchSelectRequest {
             patches,
             current,
@@ -55,11 +58,16 @@ impl<'a> NotepadScreen<'a> {
             load_measurements,
             favorites,
             initial_query: self.current_line_patch_filter_query().unwrap_or_default(),
+            auto_reverb: Some(AutoReverbHost {
+                rules: load_auto_reverb_rules(&self.effect_plugins),
+                effect_plugins: self.effect_plugins.clone(),
+                existing_chain,
+            }),
         }) else {
             return;
         };
         Self::log_notepad_event(format!(
-            "tone-select open patches={} favorites={favorite_count} role={} preset={:?} cursor={} selected={:?}",
+            "tone-select open patches={} favorites={favorite_count} role={} preset={:?} cursor={} selected={:?} existing_chain={existing_chain}",
             select.filtered_len(),
             FilterGroup::ALL[select.group_cursor()].label(),
             select.presets()[select.preset_cursor()].label,
@@ -86,4 +94,13 @@ impl<'a> NotepadScreen<'a> {
         }
         self.preview_selected_patch();
     }
+}
+
+/// 保存済みの auto reverb の設定。保存が無い・読めないときは既定のルール。
+fn load_auto_reverb_rules(effect_plugins: &EffectPlugins) -> AutoReverbRules {
+    cmrt_history::load_auto_reverb_settings()
+        .map(|settings| {
+            AutoReverbRules::from_saved(settings.enabled, &settings.rules, effect_plugins.catalog())
+        })
+        .unwrap_or_default()
 }

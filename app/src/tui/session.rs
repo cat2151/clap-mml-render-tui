@@ -205,6 +205,7 @@ impl<'a> TuiApp<'a> {
         // 設定不足でカタログから外れたプラグインの案内。config は起動中に変わらないので
         // ここで 1 回だけ数え、音色選択を持つ画面すべてへ同じものを配る。
         let catalog_notes = Vec::new();
+        let notepad_effect_plugins = effect_plugins.clone();
 
         Self {
             active_screen,
@@ -220,6 +221,7 @@ impl<'a> TuiApp<'a> {
                 patch_phrase_store: crate::history::load_patch_phrase_store(),
                 cfg: Arc::clone(&cfg_arc),
                 catalog_notes: catalog_notes.clone(),
+                effect_plugins: notepad_effect_plugins,
             }),
             keyboard: super::keyboard::KeyboardScreen::new(
                 keyboard_midi_sender,

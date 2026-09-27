@@ -97,6 +97,10 @@ fn patch_select_help_screen_shows_patch_select_shortcuts() {
     assert!(normalized_screen.contains("PgUp/PgDn・Home/End:10行/先頭・末尾へ移動して再生"));
     assert!(normalized_screen.contains("r:ランダムな音色へ移動して再生"));
     assert!(normalized_screen.contains("a:RegexをPresetに追加"));
+    assert!(normalized_screen.contains("E:autoreverbon/off"));
+    assert!(normalized_screen.contains("e:autoreverbルール編集"));
+    assert!(normalized_screen.contains("x:(ルール編集中)reverb一覧(Enter:決定/ESC:戻る)"));
+    assert!(normalized_screen.contains("ESC:(ルール編集中)保存して閉じる"));
     assert!(!normalized_screen.contains("Ctrl+C:コピー"));
 }
 
@@ -221,7 +225,7 @@ fn help_overlay_size_follows_tui_help_content() {
         (patch_left, patch_top, patch_right, patch_bottom)
     );
     assert!(patch_width < 100, "patch={patch_width}");
-    assert!(patch_height < 20, "patch={patch_height}");
+    assert!(patch_height < 30, "patch={patch_height}");
     assert_ne!(
         normal_width, patch_width,
         "normal={normal_width} patch={patch_width}"

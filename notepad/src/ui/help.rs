@@ -28,6 +28,11 @@ pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
             Line::from("  Space              : 現在行を再生"),
             Line::from("  Enter              : 音色決定"),
             Line::from("  f                  : 現在音色とMMLをFavorites追加 (★ Favorite)"),
+            Line::from("  E                  : auto reverb on / off"),
+            Line::from("  e                  : auto reverb ルール編集"),
+            Line::from("    j / k ・ ↑ / ↓   : (ルール編集中) 行を選ぶ"),
+            Line::from("    x                : (ルール編集中) reverb 一覧 (Enter:決定 / ESC:戻る)"),
+            Line::from("    ESC              : (ルール編集中) 保存して閉じる"),
             escape_hint(),
         ],
         Mode::NotepadHistory => vec![

@@ -149,6 +149,7 @@ impl<'a> NotepadScreen<'a> {
                                 self.replace_current_line_patch_with_filter(
                                     &patch_name,
                                     filter_query.as_deref(),
+                                    None,
                                 );
                                 self.play_current_line();
                             }

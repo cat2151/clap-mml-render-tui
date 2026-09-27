@@ -1,5 +1,6 @@
 //! 音色 selector と演奏設定の描画。持つ側は自分の画面の上へ、この順で重ねて描く。
 
+mod auto_reverb;
 mod notice;
 mod patch_select;
 mod play_settings;

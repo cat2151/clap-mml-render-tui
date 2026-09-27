@@ -13,7 +13,7 @@ const INIT_WITH_PATCH: &str = r#"{"Surge XT patch":"Pads/Pad 1.fxp"}"#;
 /// マシンに依存しない、手で並べた catalog（plugin 2 つ、category/kind 付き）。
 ///
 /// `Reverb 1/Hall`（`Space / Imaging` / `Reverb`）は追加 overlay の selector から外れる
-/// （`EXCLUDED_VALUE_PREFIXES`）。残る候補は catalog 登録順で `Delay/Echo`
+/// （`is_selectable_effect_preset`）。残る候補は catalog 登録順で `Delay/Echo`
 /// （`Space / Imaging` / `Delay`）、`Reverb 2/Room`（`Space / Imaging` / `Reverb`）、
 /// `Clean`（`Distortion / Saturation` / `Amp Simulator`）。
 fn test_catalog() -> AudioEffectCatalog {

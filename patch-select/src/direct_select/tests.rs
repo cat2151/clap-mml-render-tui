@@ -35,6 +35,7 @@ fn request(catalog: PatchCatalogSnapshot) -> DirectPatchSelectRequest {
         patch: Some("A.fxp".to_string()),
         play_settings: PlaySettings::default(),
         audition: Some(note()),
+        auto_reverb: None,
     }
 }
 

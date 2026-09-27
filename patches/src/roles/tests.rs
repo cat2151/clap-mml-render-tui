@@ -196,3 +196,31 @@ fn every_builtin_condition_has_an_explicit_leading_word_boundary() {
         assert!(is_valid_condition(preset.pattern), "{}", preset.pattern);
     }
 }
+
+#[test]
+fn preset_label_is_the_first_builtin_preset_within_the_decided_role() {
+    let user = vec![("lead".to_string(), r"\bviolin".to_string())];
+    let index = PatchRoleIndex::build(
+        [
+            input("DX Snare 1", None),
+            input("Percussion/Kick Clean.fxp", None),
+            input("String Pad", Some("Pads")),
+            input("violin solo", None),
+            input("synth thing", None),
+            input("plain", None),
+        ],
+        &user,
+    );
+
+    assert_eq!(index.preset_label_of("DX Snare 1"), Some("snare"));
+    assert_eq!(
+        index.preset_label_of("Percussion/Kick Clean.fxp"),
+        Some("kick|bass drum")
+    );
+    assert_eq!(index.preset_label_of("String Pad"), Some("strings"));
+    assert_eq!(index.role_of("violin solo"), Some(PatchRole::Lead));
+    assert_eq!(index.preset_label_of("violin solo"), None);
+    assert_eq!(index.role_of("synth thing"), Some(PatchRole::Etc));
+    assert_eq!(index.preset_label_of("synth thing"), Some("synth"));
+    assert_eq!(index.preset_label_of("plain"), None);
+}
