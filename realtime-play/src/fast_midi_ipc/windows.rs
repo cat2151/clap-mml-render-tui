@@ -5,7 +5,9 @@ use windows_sys::Win32::{
     System::{
         Memory::{OpenFileMappingW, FILE_MAP_ALL_ACCESS},
         SystemInformation::GetTickCount64,
-        Threading::{GetCurrentProcessId, SetEvent, WaitForSingleObject, EVENT_MODIFY_STATE},
+        Threading::{
+            GetCurrentProcessId, OpenProcess, SetEvent, WaitForMultipleObjects, EVENT_MODIFY_STATE,
+        },
     },
 };
 
@@ -21,12 +23,17 @@ mod underrun;
 use connection::{claim_client, map_handle, open_event, validate_ring, Mapping};
 use platform::{last_os_error, wide_name, OwnedHandle};
 use protocol::*;
+
+/// `WaitForMultipleObjects` で server プロセスの終了が先に来たときの戻り値。
+const SERVER_EXITED: u32 = WAIT_OBJECT_0 + 1;
 pub use underrun::FastMidiUnderrunReader;
 
 pub struct FastMidiClient {
     mapping: Arc<Mapping>,
     command_event: OwnedHandle,
     response_event: OwnedHandle,
+    /// 応答待ちの間に server が落ちたら、timeout を待たずに畳むためのハンドル。
+    server_process: OwnedHandle,
     pid: u32,
     next_request_id: u32,
     /// 「standby request は同時に 1 件だけ」をクライアント側でも守る見張り。
@@ -50,6 +57,12 @@ impl FastMidiClient {
         validate_ring(mapping.ring())?;
         let command_event = open_event(&command_event_name, EVENT_MODIFY_STATE)?;
         let response_event = open_event(&response_event_name, SYNCHRONIZE_ACCESS)?;
+        let server_pid = mapping.ring().server_pid.load(Ordering::Acquire);
+        let server_process = unsafe { OpenProcess(SYNCHRONIZE_ACCESS, 0, server_pid) };
+        if server_process.is_null() {
+            return Err(last_os_error("OpenProcess"));
+        }
+        let server_process = OwnedHandle::new(server_process);
         let pid = unsafe { GetCurrentProcessId() };
         claim_client(mapping.ring(), pid)?;
         let write = mapping.ring().write_index.load(Ordering::Acquire);
@@ -58,6 +71,7 @@ impl FastMidiClient {
             mapping,
             command_event,
             response_event,
+            server_process,
             pid,
             next_request_id: 1,
             standby: standby::StandbyInFlight::default(),
@@ -300,6 +314,7 @@ impl FastMidiClient {
         Ok((request_id, payload))
     }
 
+    /// 受付応答を待つ。server が落ちたら応答は永久に来ないので、その場で `ServerStopped`。
     fn wait_for_response(&self, request_id: u32) -> Result<Vec<u8>, FastIpcError> {
         let deadline = Instant::now() + RESPONSE_TIMEOUT;
         loop {
@@ -311,8 +326,10 @@ impl FastMidiClient {
                 return Err(FastIpcError::ResponseTimeout);
             }
             let wait_ms = (deadline - now).as_millis().min(u32::MAX as u128) as u32;
-            match unsafe { WaitForSingleObject(self.response_event.raw(), wait_ms) } {
+            let handles = [self.response_event.raw(), self.server_process.raw()];
+            match unsafe { WaitForMultipleObjects(2, handles.as_ptr(), 0, wait_ms) } {
                 WAIT_OBJECT_0 => {}
+                SERVER_EXITED => return Err(FastIpcError::ServerStopped),
                 WAIT_TIMEOUT => return Err(FastIpcError::ResponseTimeout),
                 _ => return Err(last_os_error("WaitForSingleObject")),
             }
