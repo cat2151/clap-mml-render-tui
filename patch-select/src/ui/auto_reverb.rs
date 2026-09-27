@@ -15,14 +15,19 @@ use cmrt_tui_core::{
 };
 
 use crate::auto_reverb::AutoReverb;
-use crate::patch_select::{AutoReverbStatus, EffectList, PatchSelect};
+use crate::patch_select::{AutoReverbPanel, AutoReverbStatus, EffectList, PatchSelect};
 
 const KEY_HINT: &str = "  e:ルール  E:on/off";
 const RULE_NAME_COLUMN_WIDTH: u16 = 24;
 
 /// 表示行の文言。host が auto reverb を扱わなければ `None`（行を取らない）。
 pub(super) fn status_line(select: &PatchSelect<'_>) -> Option<String> {
-    let state = match select.auto_reverb_status()? {
+    Some(status_text(&select.auto_reverb_status()?))
+}
+
+/// `status` の表示行の文言（キーの案内を含む）。
+pub(super) fn status_text(status: &AutoReverbStatus) -> String {
+    let state = match status {
         AutoReverbStatus::Resolved(AutoReverb::Apply {
             effect_name, row, ..
         }) => format!("{effect_name} ({row})"),
@@ -33,7 +38,7 @@ pub(super) fn status_line(select: &PatchSelect<'_>) -> Option<String> {
         AutoReverbStatus::ExistingChain => "-（track の effect を優先）".to_string(),
         AutoReverbStatus::NoPatch => "-".to_string(),
     };
-    Some(format!("auto reverb: {state}{KEY_HINT}"))
+    format!("auto reverb: {state}{KEY_HINT}")
 }
 
 pub(super) fn draw_status(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
@@ -55,11 +60,11 @@ fn effect_label(effect: Option<&Value>) -> String {
 }
 
 /// ルール overlay が開いていれば `area` の中央へ描き、effect list が開いていればさらに手前へ描く。
-pub(super) fn draw_rules_overlay(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
-    let (Some(overlay), Some(rules)) = (select.auto_reverb_overlay(), select.auto_reverb_rules())
-    else {
+pub(super) fn draw_rules_overlay(panel: &AutoReverbPanel, frame: &mut Frame<'_>, area: Rect) {
+    let Some(overlay) = panel.overlay() else {
         return;
     };
+    let rules = panel.rules();
     let overlay_area = centered_rect(70, 90, area);
     let rows = rules
         .rows()

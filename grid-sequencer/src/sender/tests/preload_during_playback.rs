@@ -149,7 +149,7 @@ fn run_load_window(
             late_before = supervisor.timing_metrics().late_events_total;
             // 先読みサイクルを 1 件ぶん開ける。重みは人工ロードの長さ。
             sender.begin_preload_cycle(vec![LOAD_DELAY_MS]);
-            sender.preload(STANDBY_INSTANCE, None);
+            sender.preload(STANDBY_INSTANCE, crate::GridPatch::default());
             load_started = Some(Instant::now());
             continue;
         }

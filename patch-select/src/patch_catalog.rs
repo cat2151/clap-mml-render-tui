@@ -2,6 +2,7 @@
 
 mod from_patch_load;
 
+pub(crate) use from_patch_load::patch_has_builtin_effects;
 pub use from_patch_load::{host_patch_catalog, HostPatchCatalog};
 
 /// selector が受け取る、plugin 非依存の音色一覧スナップショット。

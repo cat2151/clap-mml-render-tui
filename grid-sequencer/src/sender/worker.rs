@@ -29,7 +29,7 @@ use std::{
 
 use cmrt_realtime_play::{RealtimePlayServerSupervisor, TimelineMidiEvent};
 
-use super::{GridConnectionStatus, GridMidiCommand, PreloadGeneration};
+use super::{GridConnectionStatus, GridMidiCommand, GridPatch, PreloadGeneration};
 
 mod preload;
 mod runtime_poll;
@@ -61,7 +61,7 @@ pub(super) trait GridSenderBackend {
     fn begin_standby(
         &mut self,
         instance_id: u8,
-        patch: Option<&str>,
+        patch: &GridPatch,
     ) -> anyhow::Result<Self::Standby>;
 
     /// 完了通知を非 blocking に読む。`Ok(None)` はまだロード中。

@@ -211,7 +211,7 @@ impl LoopUnderTest {
         self.send(GridMidiCommand::Preload {
             generation,
             instance_id,
-            patch: Some(format!("patch-{instance_id}")),
+            patch: crate::GridPatch::new(Some(&format!("patch-{instance_id}"))),
         });
     }
 
@@ -344,7 +344,7 @@ impl GridSenderBackend for FakeBackend {
     fn begin_standby(
         &mut self,
         _instance_id: u8,
-        _patch: Option<&str>,
+        _patch: &crate::GridPatch,
     ) -> anyhow::Result<Self::Standby> {
         let mut state = self.observed.lock();
         if let Some(error) = state.begin_error.clone() {

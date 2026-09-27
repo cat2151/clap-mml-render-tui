@@ -15,6 +15,7 @@ use cmrt_realtime_play::PatchVoicing;
 pub use cmrt_rhythm::{DrumPattern, DrumRole};
 
 mod arpeggio;
+mod auto_reverb;
 mod bass_line;
 mod chord_input;
 mod chord_mode;
@@ -28,7 +29,9 @@ mod patch_bag;
 mod patch_notice;
 mod patch_role;
 mod patch_selector;
+mod patch_send;
 mod playback_sync;
+mod regenerate;
 mod screen;
 mod screen_runtime;
 mod sender;
@@ -51,8 +54,8 @@ pub(crate) use input::ListDirection;
 pub use patch_role::{candidates_for_purpose, row_patch_purpose, GridPatchPurpose};
 pub use screen::{GridSequencerParts, GridSequencerScreen};
 pub use sender::{
-    GridConnectionPhase, GridConnectionStatus, GridMidiSender, GridPreloadEstimate, GridProgress,
-    GridRowPatchPhase, GridRowPatchStatus, GridRowReadiness,
+    GridConnectionPhase, GridConnectionStatus, GridMidiSender, GridPatch, GridPreloadEstimate,
+    GridProgress, GridRowPatchPhase, GridRowPatchStatus, GridRowReadiness,
 };
 pub use session::{FixedChordProgression, GridSequencerSession};
 pub use solo::{chord_gains_db, CHORD_GAIN_DB};
@@ -109,6 +112,9 @@ pub enum GridSequencerAction {
     PlayDailyDawPreview(GridSongSnapshot),
     StopDailyDawPreview,
     ImportToDailyDaw(GridSongSnapshot),
+    /// patch selector で auto reverb のルール（on/off を含む）が変わった。保存する。
+    /// grid の準備には既に効いている。
+    SaveAutoReverb(cmrt_patch_select::auto_reverb::AutoReverbRules),
 }
 
 impl GridSequencerScreen {
@@ -126,6 +132,7 @@ impl GridSequencerScreen {
     /// 全 rest のままだと入った瞬間が無音になってしまうため、ここで一度ランダム化
     /// してからクロックを走らせる（`r` を押す前から演奏が始まっているのが仕様）。
     pub fn start(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
+        self.auto_reverb.observe(ctx.patch_load);
         self.cancel_mouse_gesture();
         self.help_open = false;
         self.close_history();
@@ -152,6 +159,7 @@ impl GridSequencerScreen {
 
     /// 直前の grid を保ったまま画面へ戻るときの初期化。
     pub fn resume(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
+        self.auto_reverb.observe(ctx.patch_load);
         self.cancel_mouse_gesture();
         self.help_open = false;
         self.close_history();
@@ -227,8 +235,8 @@ impl GridSequencerScreen {
     /// （[`GridSequencerScreen::advance_cycle_swap`]）とは別経路。
     fn prepare_connection(&mut self) {
         self.cancel_mouse_gesture();
+        self.send_prepare_all();
         if let Some(sender) = &self.midi_sender {
-            sender.prepare(self.state.patches());
             sender.set_auto_gain_enabled(true);
         }
         self.apply_playback_gains();
@@ -260,6 +268,7 @@ impl GridSequencerScreen {
     /// セッションから復元した chord mode も、patch 一覧が揃うここで on にする。割り当てと
     /// 同じ prepare に相乗りさせるので、音色ロードは1回で済む。
     pub fn refresh_context(&mut self, ctx: &GridSequencerContext<'_>) {
+        self.auto_reverb.observe(ctx.patch_load);
         self.patch_status = ctx.patch_status();
         if ctx.chord_source_updated && self.restart_notice.is_none() {
             self.restart_notice = Some(Instant::now());
@@ -296,6 +305,7 @@ impl GridSequencerScreen {
         if key.kind != KeyEventKind::Press {
             return GridSequencerAction::Continue;
         }
+        self.auto_reverb.observe(ctx.patch_load);
         if self.bpm_input.is_some() {
             self.handle_bpm_input_key(key, now);
             return GridSequencerAction::Continue;
@@ -319,10 +329,9 @@ impl GridSequencerScreen {
         }
         if self.patch_selector.is_some() {
             if self.patch_selector_input_enabled() {
-                self.handle_patch_selector_key(key, ctx);
-            } else {
-                self.cancel_mouse_gesture();
+                return self.handle_patch_selector_key(key, ctx);
             }
+            self.cancel_mouse_gesture();
             return GridSequencerAction::Continue;
         }
         if self.help_open {
@@ -393,55 +402,6 @@ impl GridSequencerScreen {
             _ => {}
         }
         GridSequencerAction::Continue
-    }
-
-    /// grid を丸ごと引き直し、全 instance の patch を差し替える。
-    fn randomize(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
-        let undo = self.capture_undo();
-        self.patch_status = ctx.patch_status();
-        // 全 instance を差し替えるので、走っている先読みは意味を失う。
-        self.cancel_cycle_swap();
-        let _note_offs = self.state.randomize_all(now, &[]);
-        self.absorb_drawn_phrases(self.state.drawn_phrases());
-        // chord mode 中は和音の行だけ poly patch を当て直す（無差別抽選で mono を
-        // 引くと和音が潰れるため）。
-        self.rechord_after_randomize(now, ctx, true);
-        log_line(&format!(
-            "grid-sequencer: randomize instances={}",
-            self.track_count()
-        ));
-        self.prepare_connection();
-        self.commit_undo(undo);
-    }
-
-    /// patch を据え置き、note / patternだけを引き直す。
-    ///
-    /// 音色ロード（`sender.prepare()`）を走らせないので再生が途切れない。その代わり
-    /// `prepare_instances()` の `stop_live_all()` による消音も無いため、鳴っていた音の
-    /// note off はここで自分で送る必要がある。
-    fn randomize_keeping_patches(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) {
-        let undo = self.capture_undo();
-        // 譜面が変わるので、抽選済みの次サイクルは古くなる。走っている先読みごと捨てる。
-        self.cancel_cycle_swap_preserving_drain();
-        let note_offs = self.state.randomize_keeping_patches(now);
-        self.absorb_drawn_phrases(self.state.drawn_phrases());
-        log_line(&format!(
-            "grid-sequencer: randomize-keep-patch instances={} note_offs={}",
-            self.track_count(),
-            note_offs.len(),
-        ));
-        self.send_scheduled(&note_offs);
-        self.rechord_after_randomize(now, ctx, false);
-        self.commit_undo(undo);
-    }
-
-    fn clear_notes(&mut self) {
-        let undo = self.capture_undo();
-        // `x` は白紙の pattern を保持するという明示操作なので、すでに空でも
-        // NOTE の引き直しを止める。
-        self.begin_manual_edit(CycleRandomItem::Note);
-        self.state.clear_notes();
-        self.commit_undo(undo);
     }
 }
 

@@ -15,7 +15,7 @@ use cmrt_realtime_play::{
 use super::{
     super::{
         adaptive_buffer::AdaptiveBuffer, overload::OverloadDetector, GridConnectionStatus,
-        GridMidiCommand,
+        GridMidiCommand, GridPatch,
     },
     preload::PreloadOutcome,
     runtime_poll::{poll_runtime_status, RuntimePollContext},
@@ -73,9 +73,13 @@ impl GridSenderBackend for SupervisorBackend {
     fn begin_standby(
         &mut self,
         instance_id: u8,
-        patch: Option<&str>,
+        patch: &GridPatch,
     ) -> anyhow::Result<Self::Standby> {
-        self.supervisor.begin_standby_patch(instance_id, patch)
+        self.supervisor.begin_standby_patch_with_effect_chain(
+            instance_id,
+            patch.patch.as_deref(),
+            &patch.effect_chain,
+        )
     }
 
     fn poll_standby(&mut self, request: &mut Self::Standby) -> anyhow::Result<Option<()>> {

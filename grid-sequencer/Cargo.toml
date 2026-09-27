@@ -10,6 +10,8 @@ cmrt-patch-select = { path = "../patch-select" }
 cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-rhythm = { path = "../rhythm" }
 cmrt-patches = { path = "../patches" }
+# auto reverb が選ぶ effect の catalog（`EffectPlugins`）。
+cmrt-render-core = { path = "../core-lib" }
 cmrt-tui-core = { path = "../tui-core" }
 anyhow = "1"
 crossterm = "0.29"
@@ -18,8 +20,6 @@ ratatui = "0.30"
 ratatui-textarea = { version = "0.9", features = ["crossterm"] }
 
 [dev-dependencies]
-# Regex 絞り込みのテストで、Category を持つ catalog（server 側が解釈済みの AudioPatch）を組む。
-cmrt-render-core = { path = "../core-lib" }
 cmrt-runtime = { path = "../cmrt-runtime" }
 # 描画テストで buffer_test（全角文字を含む文字列の探索）を使う。
 cmrt-tui-core = { path = "../tui-core", features = ["test-support"] }

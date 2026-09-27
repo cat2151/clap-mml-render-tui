@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKin
 use ratatui::layout::Rect;
 
 use super::{contains, PatchPaneFocus, PatchSelectorLayout};
-use crate::{GridSequencerContext, GridSequencerScreen};
+use crate::{GridSequencerAction, GridSequencerContext, GridSequencerScreen};
 
 impl GridSequencerScreen {
     pub(crate) fn handle_patch_selector_mouse(
@@ -13,6 +13,14 @@ impl GridSequencerScreen {
         terminal_area: Rect,
         ctx: &GridSequencerContext<'_>,
     ) {
+        // ルール overlay の操作はキーだけ。開いている間の mouse は下の selector へ通さない。
+        if self
+            .patch_selector
+            .as_ref()
+            .is_some_and(|selector| selector.auto_reverb.overlay_open())
+        {
+            return;
+        }
         let query_visible = self
             .patch_selector
             .as_ref()
@@ -78,28 +86,34 @@ impl GridSequencerScreen {
         &mut self,
         key: KeyEvent,
         ctx: &GridSequencerContext<'_>,
-    ) {
+    ) -> GridSequencerAction {
         let Some(selector) = self.patch_selector.as_mut() else {
-            return;
+            return GridSequencerAction::Continue;
         };
         if selector.filter_editing() {
             if selector.handle_filter_key(key) {
                 self.preview_patch_selection(ctx);
             }
-            return;
+            return GridSequencerAction::Continue;
         }
+        if let Some(action) = self.handle_patch_selector_auto_reverb_key(key) {
+            return action;
+        }
+        let Some(selector) = self.patch_selector.as_mut() else {
+            return GridSequencerAction::Continue;
+        };
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => {
                 self.cancel_patch_selector();
-                return;
+                return GridSequencerAction::Continue;
             }
             KeyCode::Enter => {
                 self.apply_patch_selection(ctx);
-                return;
+                return GridSequencerAction::Continue;
             }
             KeyCode::Char('/') => {
                 selector.start_filter_edit();
-                return;
+                return GridSequencerAction::Continue;
             }
             _ => {}
         }
@@ -145,5 +159,6 @@ impl GridSequencerScreen {
         if navigated {
             self.preview_patch_selection(ctx);
         }
+        GridSequencerAction::Continue
     }
 }

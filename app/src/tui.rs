@@ -18,6 +18,8 @@ mod chord_chart_glue;
 // MML 入力オーバーレイ（どの画面からでも Ctrl+P）。glue は開閉のきっかけと MIDI 送信をつなぐだけ。
 pub(crate) use cmrt_mml_overlay as mml_overlay;
 mod mml_overlay_glue;
+// grid と chord chart の auto reverb の保存値。
+mod auto_reverb_settings;
 // `cmrt patch-roles` 診断。voicing の解決を TUI と同じ経路で行うため、画面ランタイム側に置く。
 pub mod patch_role_report;
 mod play_server_notice;
@@ -105,6 +107,8 @@ pub struct TuiApp<'a> {
     pub(in crate::tui) chord_chart_patch: Option<String>,
     /// Chord Chart の Bass layer が持つ、Chord とは独立した canonical patch。
     pub(in crate::tui) chord_chart_bass_patch: Option<String>,
+    /// Chord Chart の試聴・演奏の音色に当てる auto reverb のルール。画面へ入るたびに保存値を読む。
+    chord_chart_auto_reverb_rules: cmrt_patch_select::auto_reverb::AutoReverbRules,
     /// 送信先。テストでは `None`（音は鳴らさず状態遷移だけ確かめる）。
     mml_overlay_sender: Option<MmlOverlaySender>,
     /// patch ごとの mono/poly 判定結果のキャッシュ。keyboard 画面と

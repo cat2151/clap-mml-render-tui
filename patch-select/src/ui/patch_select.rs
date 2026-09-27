@@ -85,7 +85,9 @@ pub(super) fn draw_in(
     if notes_height > 0 {
         draw_notes(select, frame, chunks[3]);
     }
-    auto_reverb::draw_rules_overlay(select, frame, area);
+    if let Some(panel) = select.auto_reverb_panel() {
+        auto_reverb::draw_rules_overlay(panel, frame, area);
+    }
 }
 
 fn draw_panes(

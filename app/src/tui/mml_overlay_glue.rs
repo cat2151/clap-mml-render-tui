@@ -14,6 +14,7 @@ use super::mml_overlay::{
     MmlOverlayInputMode, MmlOverlaySyntax, PatchChange, SingleLineFlow,
 };
 use super::{MmlOverlayOwner, PatchLoadState, TuiApp};
+use cmrt_mml_overlay::LivePatch;
 use cmrt_patch_select::{host_patch_catalog, HostPatchCatalog};
 
 impl TuiApp<'_> {
@@ -78,7 +79,7 @@ impl TuiApp<'_> {
         self.mml_overlay_owner = Some(owner);
         self.mml_overlay.open(context);
         if let Some(sender) = &self.mml_overlay_sender {
-            let command_id = sender.prepare(self.mml_overlay.patch());
+            let command_id = sender.prepare(self.mml_overlay_live_patch(self.mml_overlay.patch()));
             self.mml_overlay.expect_sender_command(command_id);
         }
     }
@@ -225,23 +226,42 @@ impl TuiApp<'_> {
             | MmlOverlayAction::TransferToChordRow { .. }
             | MmlOverlayAction::SavePatchFilterPresets { .. } => None,
             MmlOverlayAction::Send(notes) => {
-                let id = sender.send(self.mml_overlay.patch(), notes.messages, notes.duration);
+                let patch = self.mml_overlay_live_patch(self.mml_overlay.patch());
+                let id = sender.send(patch, notes.messages, notes.duration);
                 Some(id)
             }
-            MmlOverlayAction::SetPatch { patch, notes } => Some(match notes {
-                Some(notes) => sender.send(patch.as_deref(), notes.messages, notes.duration),
-                None => sender.prepare(patch.as_deref()),
-            }),
+            MmlOverlayAction::SetPatch { patch, notes } => {
+                let patch = self.mml_overlay_live_patch(patch.as_deref());
+                Some(match notes {
+                    Some(notes) => sender.send(patch, notes.messages, notes.duration),
+                    None => sender.prepare(patch),
+                })
+            }
             MmlOverlayAction::PlayLine { patch, program } => {
                 let patch = match &patch {
                     PatchChange::Keep => self.mml_overlay.patch(),
                     PatchChange::Switch(patch) => patch.as_deref(),
                 };
-                Some(sender.play_line(patch, program))
+                Some(sender.play_line(self.mml_overlay_live_patch(patch), program))
             }
         };
         if let Some(command_id) = command_id {
             self.mml_overlay.expect_sender_command(command_id);
+        }
+    }
+
+    /// sender へ渡す音色。Chord Chart が借りている間（`t` selector・degrees 編集 overlay）だけ、
+    /// Chord Chart の演奏と同じ auto reverb の chain を載せる。
+    fn mml_overlay_live_patch(&self, patch: Option<&str>) -> LivePatch {
+        let chord_chart_owns = self.chord_chart_patch_select.is_some()
+            || matches!(
+                self.mml_overlay_owner,
+                Some(MmlOverlayOwner::ChordChart { .. })
+            );
+        if chord_chart_owns {
+            self.chord_chart_live_patch(patch)
+        } else {
+            LivePatch::new(patch)
         }
     }
 

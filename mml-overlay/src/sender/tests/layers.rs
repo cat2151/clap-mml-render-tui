@@ -17,6 +17,7 @@ fn layer(
     LineLayer {
         instance_id,
         patch: Some(patch.to_string()),
+        effect_chain: String::new(),
         performance: LinePerformance {
             events,
             loop_seconds,

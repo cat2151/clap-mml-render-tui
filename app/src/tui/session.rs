@@ -206,6 +206,7 @@ impl<'a> TuiApp<'a> {
         // ここで 1 回だけ数え、音色選択を持つ画面すべてへ同じものを配る。
         let catalog_notes = Vec::new();
         let notepad_effect_plugins = effect_plugins.clone();
+        let grid_effect_plugins = effect_plugins.clone();
 
         Self {
             active_screen,
@@ -253,6 +254,7 @@ impl<'a> TuiApp<'a> {
                     bpm_mode: restored_bpm_mode(grid_sequencer_bpm, grid_bpm_range),
                     bpm_range: grid_bpm_range,
                     restored_session: grid_session_from_history(grid_sequencer),
+                    effect_plugins: grid_effect_plugins,
                 },
             ),
             // 保存済みの曲。ネットワークには触らないので起動時に読んでよい
@@ -290,6 +292,7 @@ impl<'a> TuiApp<'a> {
             mml_overlay_patch,
             chord_chart_patch,
             chord_chart_bass_patch,
+            chord_chart_auto_reverb_rules: Default::default(),
             mml_overlay_sender,
             voicing: super::voicing::VoicingState::with_catalog_voicings(
                 crate::history::load_voicing_cache(),

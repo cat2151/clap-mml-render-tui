@@ -74,13 +74,40 @@ fn catalog_entries(
                 plugin_sort_key,
                 patch.selector_category.clone(),
             )
-            .with_builtin_effects(plugin.is_none_or(|plugin| plugin.has_builtin_effects()));
+            .with_builtin_effects(builtin_effects_of(snapshot, patch));
             match &patch.merged {
                 Some(merged) => entry.with_merged(merged.count, merged.names.clone()),
                 None => entry,
             }
         })
         .collect()
+}
+
+/// snapshot にある音色 1 つが effect を内蔵しているか。selector 行（[`host_patch_catalog`]）と
+/// 同じ判定で、plugin を引けない音色・行を作れない snapshot・無い音色は内蔵として扱う。
+pub(crate) fn patch_has_builtin_effects(
+    snapshot: &cmrt_tui_core::patch_load::PatchCatalogSnapshot,
+    display: &str,
+) -> bool {
+    if snapshot.audio_patches().len() != snapshot.pairs().len() {
+        return true;
+    }
+    snapshot
+        .audio_patches()
+        .iter()
+        .find(|patch| patch.reference.display == display)
+        .is_none_or(|patch| builtin_effects_of(snapshot, patch))
+}
+
+fn builtin_effects_of(
+    snapshot: &cmrt_tui_core::patch_load::PatchCatalogSnapshot,
+    patch: &cmrt_core::AudioPatch,
+) -> bool {
+    snapshot
+        .patch_plugins()
+        .audio_info_for_ref(&patch.reference)
+        .ok()
+        .is_none_or(|plugin| plugin.has_builtin_effects())
 }
 
 #[cfg(test)]

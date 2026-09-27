@@ -47,14 +47,13 @@ impl TuiApp<'_> {
             // 演奏設定は `Ctrl+P` の入力欄と共通。閉じたら書き戻す。
             play_settings: self.mml_overlay.play_settings(),
             audition: chord_chart_section_audition(&degrees, key_token.as_deref(), role),
-            // canonical patch には effect を保存する欄が無いので、試聴にも掛けない。
-            auto_reverb: None,
+            auto_reverb: Some(self.chord_chart_auto_reverb_host()),
         });
         // 音源は MML overlay と同じ instance を借りるので、いまの画面の演奏を止めて明け渡す。
         self.stop_active_screen_playback();
         self.chord_chart_patch_select = Some((role, select));
         if let Some(sender) = &self.mml_overlay_sender {
-            let command_id = sender.prepare(patch.as_deref());
+            let command_id = sender.prepare(self.chord_chart_live_patch(patch.as_deref()));
             self.mml_overlay.expect_sender_command(command_id);
         }
         if let Some(opening) = opening {
@@ -78,8 +77,12 @@ impl TuiApp<'_> {
                     preview: preview.map(|action| Box::new(action.into())),
                 });
             }
-            // auto reverb を渡さずに開くので来ない。
-            DirectSelectOutcome::SaveAutoReverb { .. } => {}
+            DirectSelectOutcome::SaveAutoReverb { rules, preview } => {
+                self.set_chord_chart_auto_reverb_rules(rules);
+                if let Some(preview) = preview {
+                    self.apply_mml_overlay_action(preview.into());
+                }
+            }
             DirectSelectOutcome::Closed { confirmed, restore } => {
                 self.close_chord_chart_patch_select(confirmed, restore);
             }

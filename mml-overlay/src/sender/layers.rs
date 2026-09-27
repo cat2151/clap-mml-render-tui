@@ -18,6 +18,9 @@ use super::{
 pub struct LineLayer {
     pub instance_id: u8,
     pub patch: Option<String>,
+    /// `patch` の instance の出力に掛ける effect chain（[`LivePatch::with_effect_chain`] と同じ形）。
+    /// 空なら chain 無し。
+    pub effect_chain: String,
     pub performance: LinePerformance,
 }
 
@@ -43,7 +46,7 @@ pub(super) fn play_layered_command(
             log_superseded_after_load(command_id, latest_command_id);
             return;
         }
-        let patch = LivePatch::new(layer.patch.as_deref());
+        let patch = LivePatch::with_effect_chain(layer.patch.as_deref(), &layer.effect_chain);
         if voice.is_patch_ready(layer.instance_id, &patch) {
             playable.push(layer);
             continue;

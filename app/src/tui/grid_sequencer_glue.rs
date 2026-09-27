@@ -163,6 +163,10 @@ impl TuiApp<'_> {
 
         // コード進行カタログはここで読む（キャッシュがまだ無い初回だけ待たされる）。
         self.chord_catalog = self.chord_progression_source.catalog();
+        // 他の画面の selector で変えたルールも、入った時点の準備から効かせる。
+        self.grid_sequencer.set_auto_reverb_rules(
+            super::auto_reverb_settings::load_auto_reverb_rules(&self.effect_plugins),
+        );
 
         let patch_dirs_configured = crate::patches::has_configured_patch_dirs(&self.cfg);
         // voicing 解決も同じ共有状態を読む。MutexGuard を画面側へ持ち込むと、

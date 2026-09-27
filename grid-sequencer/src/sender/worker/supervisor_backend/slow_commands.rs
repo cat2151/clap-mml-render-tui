@@ -18,7 +18,7 @@ use super::{
         adaptive_buffer::{AdaptiveBuffer, INITIAL_BUFFER_MULTIPLIER, RESTORE_BUFFER_MULTIPLIER},
         gain_summary::describe_adjusted,
         overload::OverloadDetector,
-        GridMidiCommand,
+        GridMidiCommand, GridPatch,
     },
     apply, SupervisorBackend,
 };
@@ -118,7 +118,7 @@ impl SupervisorBackend {
         ));
     }
 
-    fn prepare(&mut self, patches: Vec<(u8, Option<String>)>) {
+    fn prepare(&mut self, patches: Vec<(u8, GridPatch)>) {
         self.adaptive_buffer = None;
         // サーバー起動（CLAP インスタンス生成）と音色ロードは所要時間の桁が
         // 違うので、別々に計測してどちらが支配的かを切り分けられるようにする。
@@ -175,7 +175,7 @@ impl SupervisorBackend {
         reason: &'static str,
         row: usize,
         instance_id: u8,
-        patch: Option<String>,
+        patch: GridPatch,
     ) {
         let queue_ms = queued_at.elapsed().as_millis();
         let current = self
@@ -186,17 +186,22 @@ impl SupervisorBackend {
             .supervisor
             .set_connected_live_buffer_multiplier(current.max(ROW_PATCH_BUFFER_MULTIPLIER));
         let started = Instant::now();
-        let result = self
-            .supervisor
-            .prepare_live_patch(instance_id, patch.as_deref());
+        let result = self.supervisor.prepare_live_patch_with_effect_chain(
+            instance_id,
+            patch.patch.as_deref(),
+            &patch.effect_chain,
+        );
         let _ = self
             .supervisor
             .set_connected_live_buffer_multiplier(current);
         let error = result.as_ref().err().map(|error| format!("{error:#}"));
         crate::log_line(&format!(
             "grid-sequencer: instance-patch request={request_id} reason={reason} logical_instance={} \
-             server_instance={instance_id} patch={patch:?} queue_ms={queue_ms} load_ms={} result={}",
+             server_instance={instance_id} patch={:?} effect_chain={:?} queue_ms={queue_ms} \
+             load_ms={} result={}",
             row + 1,
+            patch.patch,
+            patch.effect_chain,
             started.elapsed().as_millis(),
             if result.is_ok() { "ok" } else { "error" },
         ));
@@ -290,7 +295,7 @@ fn log_startup_summary(
 /// [`GridMidiCommand::Preload`] が演奏中に裏で仕込む）。
 fn prepare_instances(
     supervisor: &RealtimePlayServerSupervisor,
-    patches: &[(u8, Option<String>)],
+    patches: &[(u8, GridPatch)],
     mut report_progress: impl FnMut(usize, usize),
 ) -> anyhow::Result<()> {
     let available = supervisor.live_instance_count();
@@ -305,11 +310,15 @@ fn prepare_instances(
     report_progress(0, patches.len());
     for (completed, (instance_id, patch)) in patches.iter().enumerate() {
         if let Err(error) = supervisor
-            .prepare_live_patch(*instance_id, patch.as_deref())
+            .prepare_live_patch_with_effect_chain(
+                *instance_id,
+                patch.patch.as_deref(),
+                &patch.effect_chain,
+            )
             .with_context(|| {
                 format!(
-                    "grid instance {instance_id} patch prepare failed (patch={:?})",
-                    patch.as_deref()
+                    "grid instance {instance_id} patch prepare failed (patch={:?} effect_chain={:?})",
+                    patch.patch, patch.effect_chain
                 )
             })
         {

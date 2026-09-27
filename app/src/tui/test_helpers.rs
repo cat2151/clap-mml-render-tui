@@ -34,6 +34,7 @@ impl TuiApp<'static> {
             mml_overlay_patch: None,
             chord_chart_patch: None,
             chord_chart_bass_patch: None,
+            chord_chart_auto_reverb_rules: Default::default(),
             mml_overlay_sender: None,
             grid_sequencer: grid_sequencer::GridSequencerScreen::new(None),
             // テストでは実 `%LOCALAPPDATA%` の chord_chart.json を読ませない

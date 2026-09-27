@@ -87,7 +87,7 @@ impl PatchSelect<'_> {
             catalog_notes,
             load_measurements,
             favorites,
-            auto_reverb: auto_reverb.map(AutoReverbState::new),
+            auto_reverb: auto_reverb.map(AutoReverbPanel::new),
         };
         select.update_filter();
         Some(select)

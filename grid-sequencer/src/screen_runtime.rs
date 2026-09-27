@@ -29,6 +29,7 @@ impl GridSequencerScreen {
     /// コード進行データの更新アナウンスを出し終えたら true を返す。共有ランタイムは
     /// これを受けてアプリを再起動する。
     pub fn pump_step(&mut self, now: Instant, ctx: &GridSequencerContext<'_>) -> bool {
+        self.auto_reverb.observe(ctx.patch_load);
         let status = self.connection_status();
         // 上限バッファでもフレームドロップが止まらない環境では、裏読みが成立しない。
         if status.overloaded && !self.overload_applied {

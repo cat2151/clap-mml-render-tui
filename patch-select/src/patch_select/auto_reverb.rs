@@ -1,6 +1,8 @@
-//! host が渡したときだけ有効になる auto reverb の状態と、ルール overlay のキー操作。
+//! auto reverb のルール overlay（`e`）と on/off（`E`）の状態とキー操作。
 //!
-//! ルールを変えたら、保存と鳴らし直しを action で host へ頼む。selector は保存も送信もしない。
+//! [`AutoReverbPanel`] は selector の実装に依らないので、自前の selector を持つ host も
+//! 同じ操作と描画を使える。ルールを変えたら、保存と鳴らし直しを host へ頼む。
+//! panel も selector も保存・送信はしない。
 
 use super::*;
 
@@ -22,17 +24,110 @@ pub struct AutoReverbHost {
     pub existing_chain: bool,
 }
 
-pub(super) struct AutoReverbState {
+/// ルール overlay と on/off の状態。ルールは閉じるまで panel の中だけで変わる。
+pub struct AutoReverbPanel {
     host: AutoReverbHost,
     overlay: Option<RulesOverlay>,
 }
 
-impl AutoReverbState {
-    pub(super) fn new(host: AutoReverbHost) -> Self {
+/// [`AutoReverbPanel::handle_key`] が拾ったキーの結果。
+#[derive(Debug, PartialEq, Eq)]
+pub enum AutoReverbKey {
+    /// 表示が変わっただけ。
+    Handled,
+    /// ルール（on/off を含む）が変わった。host は [`AutoReverbPanel::rules`] を保存し、
+    /// カーソルの音色を今の設定で鳴らし直す。
+    RulesChanged,
+}
+
+impl AutoReverbPanel {
+    pub fn new(host: AutoReverbHost) -> Self {
         Self {
             host,
             overlay: None,
         }
+    }
+
+    pub fn rules(&self) -> &AutoReverbRules {
+        &self.host.rules
+    }
+
+    /// ルール overlay が開いているか。開いている間、host は全キーを [`Self::handle_key`] へ渡す。
+    pub fn overlay_open(&self) -> bool {
+        self.overlay.is_some()
+    }
+
+    pub(crate) fn host(&self) -> &AutoReverbHost {
+        &self.host
+    }
+
+    pub(crate) fn overlay(&self) -> Option<&RulesOverlay> {
+        self.overlay.as_ref()
+    }
+
+    /// auto reverb のキーなら処理して結果を返す。overlay が開いている間は全キーを食う。
+    pub fn handle_key(&mut self, key: KeyEvent) -> Option<AutoReverbKey> {
+        if self.overlay.is_some() {
+            return Some(self.handle_overlay_key(key));
+        }
+        if is_auto_reverb_rules_key(key) {
+            self.overlay = Some(RulesOverlay {
+                cursor: 0,
+                opened_with: self.host.rules.clone(),
+                effect_list: None,
+            });
+            return Some(AutoReverbKey::Handled);
+        }
+        if is_auto_reverb_toggle_key(key) {
+            let enabled = self.host.rules.enabled();
+            self.host.rules.set_enabled(!enabled);
+            return Some(AutoReverbKey::RulesChanged);
+        }
+        None
+    }
+
+    fn handle_overlay_key(&mut self, key: KeyEvent) -> AutoReverbKey {
+        let catalog = self.host.effect_plugins.catalog();
+        let rules = &mut self.host.rules;
+        let overlay = self
+            .overlay
+            .as_mut()
+            .expect("called only while the rules overlay is open");
+        if let Some(list) = overlay.effect_list.as_mut() {
+            match key.code {
+                KeyCode::Esc => overlay.effect_list = None,
+                KeyCode::Enter => {
+                    let effect = list.choices[list.cursor].effect.clone();
+                    rules.set_effect(overlay.cursor, effect);
+                    overlay.effect_list = None;
+                }
+                _ => {
+                    if let Some(delta) = vertical_delta(key) {
+                        list.cursor = move_cursor(list.cursor, list.choices.len(), delta);
+                    }
+                }
+            }
+            return AutoReverbKey::Handled;
+        }
+        match key.code {
+            KeyCode::Esc => {
+                let changed = overlay.opened_with != *rules;
+                self.overlay = None;
+                if changed {
+                    return AutoReverbKey::RulesChanged;
+                }
+            }
+            KeyCode::Char('x') if key.modifiers == KeyModifiers::NONE => {
+                let current = rules.rows()[overlay.cursor].1.as_ref();
+                overlay.effect_list = Some(EffectList::open(catalog, current));
+            }
+            _ => {
+                if let Some(delta) = vertical_delta(key) {
+                    overlay.cursor = move_cursor(overlay.cursor, rules.rows().len(), delta);
+                }
+            }
+        }
+        AutoReverbKey::Handled
     }
 }
 
@@ -98,7 +193,7 @@ pub(crate) struct EffectChoice {
 
 /// 表示行に出す、選択中の音色に対する auto reverb の状態。
 #[derive(Debug, PartialEq)]
-pub(crate) enum AutoReverbStatus {
+pub enum AutoReverbStatus {
     Resolved(AutoReverb),
     /// 試聴先の effect chain を優先して掛けない。
     ExistingChain,
@@ -125,7 +220,7 @@ impl PatchSelect<'_> {
     pub fn auto_reverb_overlay_open(&self) -> bool {
         self.auto_reverb
             .as_ref()
-            .is_some_and(|state| state.overlay.is_some())
+            .is_some_and(AutoReverbPanel::overlay_open)
     }
 
     /// host が selector の外のキー（演奏設定など）を拾わず、全キーを [`Self::handle_key`] へ渡すべきか。
@@ -135,123 +230,66 @@ impl PatchSelect<'_> {
 
     /// `display` の試聴・確定で chain に足す 1 段。掛けないとき（host 非対応・chain あり・dry・内蔵・off）は `None`。
     pub fn auto_reverb_stage(&self, display: &str) -> Option<Value> {
-        let state = self.auto_reverb.as_ref()?;
-        if state.host.existing_chain {
+        let panel = self.auto_reverb.as_ref()?;
+        if panel.host().existing_chain {
             return None;
         }
         let entry = self.all.iter().find(|entry| entry.display() == display)?;
-        match self.resolve_auto_reverb(state, entry) {
+        match self.resolve_auto_reverb(panel, entry) {
             AutoReverb::Apply { stage, .. } => Some(stage),
             _ => None,
         }
     }
 
     pub(crate) fn auto_reverb_status(&self) -> Option<AutoReverbStatus> {
-        let state = self.auto_reverb.as_ref()?;
-        if !state.host.rules.enabled() {
+        let panel = self.auto_reverb.as_ref()?;
+        if !panel.rules().enabled() {
             return Some(AutoReverbStatus::Resolved(AutoReverb::Off));
         }
-        if state.host.existing_chain {
+        if panel.host().existing_chain {
             return Some(AutoReverbStatus::ExistingChain);
         }
         let Some(index) = self.filtered.get(self.cursor) else {
             return Some(AutoReverbStatus::NoPatch);
         };
         Some(AutoReverbStatus::Resolved(
-            self.resolve_auto_reverb(state, &self.all[*index]),
+            self.resolve_auto_reverb(panel, &self.all[*index]),
         ))
     }
 
-    pub(crate) fn auto_reverb_rules(&self) -> Option<&AutoReverbRules> {
-        self.auto_reverb.as_ref().map(|state| &state.host.rules)
+    pub(crate) fn auto_reverb_panel(&self) -> Option<&AutoReverbPanel> {
+        self.auto_reverb.as_ref()
     }
 
+    pub(crate) fn auto_reverb_rules(&self) -> Option<&AutoReverbRules> {
+        self.auto_reverb.as_ref().map(AutoReverbPanel::rules)
+    }
+
+    #[cfg(test)]
     pub(crate) fn auto_reverb_overlay(&self) -> Option<&RulesOverlay> {
-        self.auto_reverb.as_ref()?.overlay.as_ref()
+        self.auto_reverb.as_ref()?.overlay()
     }
 
     fn resolve_auto_reverb(
         &self,
-        state: &AutoReverbState,
+        panel: &AutoReverbPanel,
         entry: &PatchCatalogEntry,
     ) -> AutoReverb {
         resolve(
             entry.display(),
             entry.has_builtin_effects(),
             &self.role_index,
-            state.host.effect_plugins.catalog(),
-            &state.host.rules,
+            panel.host().effect_plugins.catalog(),
+            panel.rules(),
         )
     }
 
     /// auto reverb のキーなら処理して action を返す。overlay が開いている間は全キーを食う。
     pub(super) fn handle_auto_reverb_key(&mut self, key: KeyEvent) -> Option<PatchSelectAction> {
-        let state = self.auto_reverb.as_mut()?;
-        if state.overlay.is_some() {
-            return Some(self.handle_rules_overlay_key(key));
+        match self.auto_reverb.as_mut()?.handle_key(key)? {
+            AutoReverbKey::Handled => Some(PatchSelectAction::Continue),
+            AutoReverbKey::RulesChanged => Some(self.save_auto_reverb()),
         }
-        if is_auto_reverb_rules_key(key) {
-            state.overlay = Some(RulesOverlay {
-                cursor: 0,
-                opened_with: state.host.rules.clone(),
-                effect_list: None,
-            });
-            return Some(PatchSelectAction::Continue);
-        }
-        if is_auto_reverb_toggle_key(key) {
-            let enabled = state.host.rules.enabled();
-            state.host.rules.set_enabled(!enabled);
-            return Some(self.save_auto_reverb());
-        }
-        None
-    }
-
-    fn handle_rules_overlay_key(&mut self, key: KeyEvent) -> PatchSelectAction {
-        let state = self
-            .auto_reverb
-            .as_mut()
-            .expect("the rules overlay exists only with auto reverb");
-        let catalog = state.host.effect_plugins.catalog();
-        let rules = &mut state.host.rules;
-        let overlay = state
-            .overlay
-            .as_mut()
-            .expect("called only while the rules overlay is open");
-        if let Some(list) = overlay.effect_list.as_mut() {
-            match key.code {
-                KeyCode::Esc => overlay.effect_list = None,
-                KeyCode::Enter => {
-                    let effect = list.choices[list.cursor].effect.clone();
-                    rules.set_effect(overlay.cursor, effect);
-                    overlay.effect_list = None;
-                }
-                _ => {
-                    if let Some(delta) = vertical_delta(key) {
-                        list.cursor = move_cursor(list.cursor, list.choices.len(), delta);
-                    }
-                }
-            }
-            return PatchSelectAction::Continue;
-        }
-        match key.code {
-            KeyCode::Esc => {
-                let changed = overlay.opened_with != *rules;
-                state.overlay = None;
-                if changed {
-                    return self.save_auto_reverb();
-                }
-            }
-            KeyCode::Char('x') if key.modifiers == KeyModifiers::NONE => {
-                let current = rules.rows()[overlay.cursor].1.as_ref();
-                overlay.effect_list = Some(EffectList::open(catalog, current));
-            }
-            _ => {
-                if let Some(delta) = vertical_delta(key) {
-                    overlay.cursor = move_cursor(overlay.cursor, rules.rows().len(), delta);
-                }
-            }
-        }
-        PatchSelectAction::Continue
     }
 
     /// 今のルールの保存と、カーソルの音色の鳴らし直しを頼む。

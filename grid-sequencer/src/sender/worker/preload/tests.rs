@@ -49,7 +49,7 @@ impl GridSenderBackend for FoldingBackend {
     fn begin_standby(
         &mut self,
         instance_id: u8,
-        _patch: Option<&str>,
+        _patch: &crate::GridPatch,
     ) -> anyhow::Result<Self::Standby> {
         self.next_request_id += 1;
         self.begun.push(instance_id);
@@ -93,7 +93,7 @@ fn tracker_with_one_in_flight(
     // `submit` は完了まで見に行ってしまうので、受付だけを手で組み立てる。
     // （`fold_on_poll` を立てるのは「受付が済んだあと」でなければ隙間を再現できない）
     let request = backend
-        .begin_standby(instance_id, None)
+        .begin_standby(instance_id, &crate::GridPatch::default())
         .expect("the fake accepts");
     let request_id = backend.standby_request_id(&request);
     tracker.in_flight = Some(InFlight {
@@ -131,7 +131,7 @@ fn a_waiting_preload_is_dropped_when_the_cycle_is_folded_while_it_waits() {
     tracker.waiting.push_back(Waiting {
         generation: 1,
         instance_id: 5,
-        patch: None,
+        patch: crate::GridPatch::default(),
     });
 
     backend.fold_on_poll = true;

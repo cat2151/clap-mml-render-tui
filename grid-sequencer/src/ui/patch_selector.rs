@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use cmrt_patch_select::ui::load_time_label;
+use cmrt_patch_select::ui::{auto_reverb_status_line, draw_auto_reverb_rules, load_time_label};
 use cmrt_tui_core::{
     status::{base_style, LIST_HIGHLIGHT_SYMBOL},
     theme::{
@@ -92,6 +92,12 @@ pub(super) fn draw(f: &mut Frame<'_>, screen: &GridSequencerScreen) {
         Paragraph::new(hint).style(base_style().fg(MONOKAI_CYAN)),
         layout.hint,
     );
+    let status = screen.auto_reverb.status(selector.selected_patch());
+    f.render_widget(
+        Paragraph::new(auto_reverb_status_line(&status)).style(base_style().fg(MONOKAI_FG)),
+        layout.auto_reverb,
+    );
+    draw_auto_reverb_rules(&selector.auto_reverb, f, layout.popup);
 }
 
 fn draw_query(f: &mut Frame<'_>, selector: &PatchSelector, area: Rect) {

@@ -4,13 +4,14 @@
 //! （`PatchRoleIndex` と Preset 一覧）は overlay と共有し、開いたときの Role / Preset は
 //! 行の用途に合わせる。ここは選択状態と、preview / 確定 / 取り消しの適用まで。
 //! pane の移動は [`navigation`]、Regex 絞り込みは [`filter`]、入力のさばきは
-//! [`input`]、画面上の当たり判定は [`layout`]、各 pane の表示範囲は [`scroll`] にある。
+//! [`input`]、画面上の当たり判定は [`layout`]、各 pane の表示範囲は [`scroll`]、
+//! auto reverb のルール操作は [`auto_reverb`] にある。
 
 use std::{cell::Cell, collections::BTreeMap, sync::Arc, time::Instant};
 
 use cmrt_patch_select::{
-    host_patch_catalog, prepare_user_presets, sort_for_selector, FilterGroup, FilterPreset,
-    PatchCatalogEntry, PatchCatalogSnapshot, PreparedPresets,
+    host_patch_catalog, prepare_user_presets, sort_for_selector, AutoReverbPanel, FilterGroup,
+    FilterPreset, PatchCatalogEntry, PatchCatalogSnapshot, PreparedPresets,
 };
 use cmrt_realtime_play::PatchVoicing;
 use cmrt_tui_core::{
@@ -26,6 +27,7 @@ use crate::{
     GridSequencerContext, GridSequencerScreen, ListDirection, CHORD_ROW,
 };
 
+mod auto_reverb;
 mod filter;
 mod input;
 mod layout;
@@ -61,10 +63,17 @@ pub(crate) struct PatchSelector {
     poly_only: bool,
     original_patch: Option<String>,
     previewed_patch: Option<String>,
-    patch_random_before_open: bool,
-    undo_before_open: crate::undo::UndoSnapshot,
+    before_open: BeforeOpen,
     /// 設定不足でカタログから外れたプラグインの案内。開いている間ずっと枠下に出す。
     catalog_notes: Vec<String>,
+    /// `e` のルール overlay と `E` の on/off。
+    pub(crate) auto_reverb: AutoReverbPanel,
+}
+
+/// 取り消しで戻す、開く前の状態。
+struct BeforeOpen {
+    patch_random: bool,
+    undo: crate::undo::UndoSnapshot,
 }
 
 impl PatchSelector {
@@ -74,8 +83,8 @@ impl PatchSelector {
         current_patch: Option<&str>,
         ctx: &GridSequencerContext<'_>,
         poly_only: bool,
-        patch_random_before_open: bool,
-        undo_before_open: crate::undo::UndoSnapshot,
+        before_open: BeforeOpen,
+        auto_reverb: AutoReverbPanel,
     ) -> Result<Self, PatchUnavailable> {
         if let Some(reason) = catalog_unavailable(ctx) {
             return Err(reason);
@@ -133,9 +142,9 @@ impl PatchSelector {
             poly_only,
             original_patch: current_patch.map(str::to_string),
             previewed_patch: current_patch.map(str::to_string),
-            patch_random_before_open,
-            undo_before_open,
+            before_open,
             catalog_notes: ctx.catalog_notes.to_vec(),
+            auto_reverb,
         })
     }
 
@@ -246,8 +255,10 @@ impl GridSequencerScreen {
     }
 
     pub(crate) fn open_patch_selector(&mut self, instance: usize, ctx: &GridSequencerContext<'_>) {
-        let undo_before_open = self.capture_undo();
-        let patch_random_before_open = self.cycle_random.patch;
+        let before_open = BeforeOpen {
+            patch_random: self.cycle_random.patch,
+            undo: self.capture_undo(),
+        };
         let Some(current) = self
             .state
             .instances()
@@ -263,8 +274,8 @@ impl GridSequencerScreen {
             current,
             ctx,
             poly_only,
-            patch_random_before_open,
-            undo_before_open,
+            before_open,
+            AutoReverbPanel::new(self.auto_reverb.host()),
         ) {
             Ok(selector) => selector,
             // 開けないときに黙って戻ると、押しても無反応にしか見えない。理由を出す。
@@ -320,7 +331,7 @@ impl GridSequencerScreen {
         }
         self.set_cycle_random(
             crate::CycleRandomItem::Patch,
-            selector.patch_random_before_open,
+            selector.before_open.patch_random,
         );
     }
 
@@ -347,7 +358,7 @@ impl GridSequencerScreen {
             }
             self.set_cycle_random(
                 crate::CycleRandomItem::Patch,
-                selector.patch_random_before_open,
+                selector.before_open.patch_random,
             );
             return;
         }
@@ -359,7 +370,7 @@ impl GridSequencerScreen {
         }
         // selector を開く操作から確定までを1操作として扱う。同じ patch を確定して
         // 音色だけ据え置いた場合も、PATCH random を OFF にした差分を undo 可能にする。
-        self.commit_undo(selector.undo_before_open);
+        self.commit_undo(selector.before_open.undo);
     }
 
     pub(crate) fn prepare_instance_patch(&mut self, instance: usize) {
@@ -383,10 +394,7 @@ impl GridSequencerScreen {
             return;
         }
         let instance_id = self.state.instance_id(instance);
-        let request_id = self
-            .midi_sender
-            .as_ref()
-            .map(|sender| sender.set_row_patch(instance, instance_id, patch, reason));
+        let request_id = self.send_row_patch(instance, instance_id, patch, reason);
         let reattack = self.state.reattack_instance_now(instance, Instant::now());
         self.send_scheduled(&reattack);
         if let Some(request_id) = request_id {

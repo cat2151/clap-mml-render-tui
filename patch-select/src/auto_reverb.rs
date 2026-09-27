@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 
 use cmrt_core::{AudioEffectCatalog, AudioEffectPreset};
 use cmrt_patches::{builtin_role_presets, PatchRole, PatchRoleIndex};
+use cmrt_tui_core::patch_load::PatchCatalogSnapshot;
 use serde_json::Value;
 
 /// effect 追加の selector から外す preset の値の前方一致。catalog そのものからは外さない。
@@ -252,6 +253,34 @@ pub fn resolve(
         },
         None => AutoReverb::Dry { row: row.name() },
     }
+}
+
+impl AutoReverb {
+    /// server の準備へ載せる effect chain（`"effects after instrument"` の値の JSON 文字列）。
+    /// 掛けないときは空（chain を外す）。
+    pub fn effect_chain(&self) -> String {
+        match self {
+            Self::Apply { stage, .. } => Value::Array(vec![stage.clone()]).to_string(),
+            Self::Dry { .. } | Self::Builtin | Self::Off | Self::NoCatalog => String::new(),
+        }
+    }
+}
+
+/// host の patch catalog にある音色 1 つに掛ける auto reverb を決める。内蔵判定と Role の行は
+/// selector を開いたときと同じ源（[`crate::host_patch_catalog`]）から引く。
+pub fn resolve_in_catalog(
+    display: &str,
+    snapshot: &PatchCatalogSnapshot,
+    catalog: Option<&AudioEffectCatalog>,
+    rules: &AutoReverbRules,
+) -> AutoReverb {
+    resolve(
+        display,
+        crate::patch_catalog::patch_has_builtin_effects(snapshot, display),
+        snapshot.patch_roles(),
+        catalog,
+        rules,
+    )
 }
 
 #[cfg(test)]

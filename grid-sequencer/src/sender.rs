@@ -41,6 +41,26 @@ const TIME_SIGNATURE_DENOMINATOR: u16 = 4;
 type PreloadGeneration = Arc<AtomicU64>;
 
 pub use preload_estimate::GridPreloadEstimate;
+
+/// instance に載せる音色と、その出力に掛ける effect chain。
+///
+/// `effect_chain` は MML 先頭 JSON の `"effects after instrument"` の値の JSON 文字列で、空なら
+/// chain を外す。server は音色が今と同じで chain だけが違う準備では音色を読み直さない。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GridPatch {
+    pub patch: Option<String>,
+    pub effect_chain: String,
+}
+
+impl GridPatch {
+    /// chain 無しの音色。`None` なら server の既定音色。
+    pub fn new(patch: Option<&str>) -> Self {
+        Self {
+            patch: patch.map(str::to_string),
+            effect_chain: String::new(),
+        }
+    }
+}
 pub use status::{
     GridConnectionPhase, GridConnectionStatus, GridProgress, GridRowPatchPhase, GridRowPatchStatus,
     GridRowReadiness,
@@ -63,7 +83,7 @@ enum GridMidiCommand {
     /// 鳴っている bank の音色を丸ごと差し替える。`stop_live_all()` を伴うので
     /// ロード中は無音になる。起動時と `r` キー用。
     Prepare {
-        patches: Vec<(u8, Option<String>)>,
+        patches: Vec<(u8, GridPatch)>,
     },
     /// 待機 bank への先読みロード1件。**演奏中に走る**ので `stop_live_all()` を
     /// 呼ばず、phase も動かさない（`accepts_notes()` を落とすと演奏が止まる）。
@@ -74,7 +94,7 @@ enum GridMidiCommand {
         /// 要求を出した時点の先読みサイクル世代（[`PreloadGeneration`]）。
         generation: u64,
         instance_id: u8,
-        patch: Option<String>,
+        patch: GridPatch,
     },
     /// 演奏中の bank にある1行だけを差し替える。ほかの行は止めない。
     SetRowPatch {
@@ -83,7 +103,7 @@ enum GridMidiCommand {
         reason: &'static str,
         row: usize,
         instance_id: u8,
-        patch: Option<String>,
+        patch: GridPatch,
     },
     SetGains {
         gains: Vec<f32>,
@@ -183,11 +203,8 @@ impl GridMidiSender {
         });
     }
 
-    pub fn prepare<'a>(&self, patches: impl Iterator<Item = (u8, Option<&'a str>)>) {
+    pub fn prepare(&self, patches: Vec<(u8, GridPatch)>) {
         self.status.lock().unwrap().begin_connecting();
-        let patches = patches
-            .map(|(instance_id, patch)| (instance_id, patch.map(str::to_string)))
-            .collect::<Vec<_>>();
         let _ = self.tx.send(GridMidiCommand::Prepare { patches });
     }
 
@@ -206,14 +223,14 @@ impl GridMidiSender {
     /// 止まらない**（受付だけして完了は状態として待つ）。それでも1ステップにつき1件
     /// ずつ呼ぶこと。完了通知 slot は共有メモリ上に1件ぶんしか無いので、まとめて
     /// 投げても受付は順番待ちになるだけで早くならない。
-    pub fn preload(&self, instance_id: u8, patch: Option<&str>) {
+    pub fn preload(&self, instance_id: u8, patch: GridPatch) {
         self.status.lock().unwrap().begin_preload_step();
         if self
             .tx
             .send(GridMidiCommand::Preload {
                 generation: self.preload_generation.load(Ordering::SeqCst),
                 instance_id,
-                patch: patch.map(str::to_string),
+                patch,
             })
             .is_err()
         {
@@ -230,7 +247,7 @@ impl GridMidiSender {
         &self,
         row: usize,
         instance_id: u8,
-        patch: Option<&str>,
+        patch: GridPatch,
         reason: &'static str,
     ) -> u64 {
         let request_id = NEXT_ROW_PATCH_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
@@ -243,7 +260,7 @@ impl GridMidiSender {
                 reason,
                 row,
                 instance_id,
-                patch: patch.map(str::to_string),
+                patch,
             })
             .is_err()
         {

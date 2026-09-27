@@ -36,7 +36,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use super::{GridSenderBackend, PreloadGeneration};
+use super::{GridPatch, GridSenderBackend, PreloadGeneration};
 
 #[cfg(test)]
 mod tests;
@@ -68,7 +68,7 @@ struct InFlight<R> {
 struct Waiting {
     generation: u64,
     instance_id: u8,
-    patch: Option<String>,
+    patch: GridPatch,
 }
 
 pub(super) struct PreloadTracker<R> {
@@ -94,7 +94,7 @@ impl<R> PreloadTracker<R> {
         generation: u64,
         preload_generation: &PreloadGeneration,
         instance_id: u8,
-        patch: Option<String>,
+        patch: GridPatch,
     ) -> Vec<PreloadOutcome> {
         self.waiting.push_back(Waiting {
             generation,
@@ -137,7 +137,7 @@ impl<R> PreloadTracker<R> {
                 continue;
             }
             let started = Instant::now();
-            match backend.begin_standby(next.instance_id, next.patch.as_deref()) {
+            match backend.begin_standby(next.instance_id, &next.patch) {
                 Ok(request) => {
                     let request_id = backend.standby_request_id(&request);
                     self.in_flight = Some(InFlight {

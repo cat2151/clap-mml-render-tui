@@ -23,9 +23,8 @@ use cmrt_tui_core::{patch_load::PatchLoadMeasurement, text_input};
 
 use crate::{auto_reverb::AutoReverbRules, PatchCatalogEntry};
 
-pub use auto_reverb::AutoReverbHost;
-use auto_reverb::AutoReverbState;
-pub(crate) use auto_reverb::{AutoReverbStatus, EffectList};
+pub(crate) use auto_reverb::EffectList;
+pub use auto_reverb::{AutoReverbHost, AutoReverbKey, AutoReverbPanel, AutoReverbStatus};
 pub use filter::filter_candidates;
 use filter::is_valid_condition;
 use keys::{is_add_preset_key, is_filter_edit_trigger, is_preview_key, is_random_jump_key};
@@ -100,7 +99,7 @@ pub struct PatchSelect<'a> {
     /// 音色 favorite。登録が新しい順。
     favorites: Vec<String>,
     /// host が auto reverb を扱うときだけ `Some`。
-    auto_reverb: Option<AutoReverbState>,
+    auto_reverb: Option<AutoReverbPanel>,
 }
 
 impl<'a> PatchSelect<'a> {

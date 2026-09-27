@@ -1,6 +1,7 @@
 use std::{collections::HashMap, time::Instant};
 
 use cmrt_arpeggiator::{ArpPattern, BassPattern};
+use cmrt_core::EffectPlugins;
 use cmrt_rhythm::DrumPattern;
 use cmrt_tui_core::bpm::{BpmInput, BpmMode, BpmRange};
 
@@ -34,6 +35,8 @@ pub struct GridSequencerParts {
     pub bpm_range: BpmRange,
     /// 前回終了時に保存した手入力 grid。`None` なら初回入場時にランダム生成する。
     pub restored_session: Option<crate::GridSequencerSession>,
+    /// auto reverb が選ぶ effect の catalog。ルールは [`GridSequencerScreen::set_auto_reverb_rules`]。
+    pub effect_plugins: EffectPlugins,
 }
 
 impl Default for GridSequencerParts {
@@ -47,6 +50,7 @@ impl Default for GridSequencerParts {
             bpm_mode: BpmMode::Auto(crate::BPM),
             bpm_range: BpmRange::fixed(crate::BPM),
             restored_session: None,
+            effect_plugins: EffectPlugins::none(),
         }
     }
 }
@@ -132,9 +136,14 @@ pub struct GridSequencerScreen {
     /// instance ごとの、PATCH 欄の wheel が辿る patch list。詳細は [`crate::patch_bag`]。
     /// 適用した patch は `state` 側に入るので、セッションへは保存しない。
     pub(crate) patch_bags: HashMap<usize, PatchBag>,
+    /// 音色の準備に載せる auto reverb。詳細は [`crate::auto_reverb`]。
+    pub(crate) auto_reverb: crate::auto_reverb::GridAutoReverb,
     /// テストで送信内容を観測する記録。`midi_sender` が `None` でも積む。
     #[cfg(test)]
     pub(crate) sent: std::cell::RefCell<Vec<super::GridScheduledMessage>>,
+    /// テストで音色の準備を観測する記録。`midi_sender` が `None` でも積む。
+    #[cfg(test)]
+    pub(crate) sent_patches: std::cell::RefCell<Vec<crate::patch_send::SentPatch>>,
 }
 
 impl GridSequencerScreen {
@@ -165,6 +174,7 @@ impl GridSequencerScreen {
             bpm_mode,
             bpm_range,
             restored_session,
+            effect_plugins,
         } = parts;
         let track_count = cmrt_realtime_play::normalize_live_instance_count(track_count);
         let restored_session = restored_session.filter(|session| !session.instances.is_empty());
@@ -238,8 +248,11 @@ impl GridSequencerScreen {
             bass_pattern: None,
             drum_patterns: HashMap::new(),
             patch_bags: HashMap::new(),
+            auto_reverb: crate::auto_reverb::GridAutoReverb::new(effect_plugins),
             #[cfg(test)]
             sent: std::cell::RefCell::new(Vec::new()),
+            #[cfg(test)]
+            sent_patches: std::cell::RefCell::new(Vec::new()),
         }
     }
 
@@ -322,5 +335,13 @@ impl GridSequencerScreen {
 
     pub fn track_count(&self) -> usize {
         self.state.instance_count()
+    }
+
+    /// auto reverb のルール（on/off を含む）。以後の音色の準備から効く。
+    pub fn set_auto_reverb_rules(
+        &mut self,
+        rules: cmrt_patch_select::auto_reverb::AutoReverbRules,
+    ) {
+        self.auto_reverb.set_rules(rules);
     }
 }

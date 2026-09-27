@@ -292,6 +292,9 @@ impl<'a> TuiApp<'a> {
                                 deferred_grid_history_preview = None;
                                 self.stop_grid_history_preview();
                             }
+                            GridSequencerAction::SaveAutoReverb(rules) => {
+                                super::auto_reverb_settings::save_auto_reverb_rules(&rules);
+                            }
                             GridSequencerAction::ImportToDailyDaw(snapshot) => {
                                 deferred_grid_history_preview = None;
                                 self.stop_grid_history_preview();

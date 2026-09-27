@@ -106,6 +106,8 @@ fn role_patches() -> PatchLoadState {
     )
 }
 
+/// `e`/`E` と、ルールを当てた chain で送る音色の準備。
+mod auto_reverb;
 /// `/` で開く Regex 絞り込み。
 mod filter;
 /// popup 上の click / wheel。

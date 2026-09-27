@@ -22,6 +22,7 @@ use cmrt_mml_overlay::line_play::LineStatus;
 use crate::tui::chord_chart::{ChordChartAction, PreviewRequest, SectionId, Song};
 use crate::tui::TuiApp;
 
+mod auto_reverb;
 mod bass_patch;
 mod preview;
 mod voicing;
@@ -217,13 +218,18 @@ impl TuiApp<'_> {
         request: &PreviewRequest,
         bass_patch: bass_patch::BassPatchResolution,
     ) -> ChordChartPreview {
-        preview::build(
+        let mut preview = preview::build(
             &self.chord_chart.song.prefix,
             self.chord_chart_patch.clone(),
             self.chord_chart.bass_enabled(),
             bass_patch,
             request,
-        )
+        );
+        // selector の試聴と同じ解決（`chord_chart_live_patch`）で、layer ごとに chain を載せる。
+        for layer in &mut preview.layers {
+            layer.effect_chain = self.chord_chart_effect_chain(layer.patch.as_deref());
+        }
+        preview
     }
 
     /// 保存済み値を優先し、無ければ共有 catalog の Bass role 先頭を同期的に読む。
@@ -245,6 +251,8 @@ impl TuiApp<'_> {
     /// 抽選できた曲はその場で保存する。保存しないと、次の起動でまた別の進行が出る。
     /// 入った直後の preview 要求（3.2 の 4 つめのきっかけ）もここで回収する。
     pub(in crate::tui) fn enter_chord_chart(&mut self) {
+        // 他の画面の selector で変えたルールも、入った時点の演奏から効かせる。
+        self.reload_chord_chart_auto_reverb_rules();
         if self.chord_chart.enter() == ChordChartAction::SongChanged {
             self.save_chord_chart();
         }

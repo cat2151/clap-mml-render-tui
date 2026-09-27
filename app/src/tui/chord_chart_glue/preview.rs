@@ -81,6 +81,7 @@ pub(super) fn build(
         layers.push(LineLayer {
             instance_id: CHORD_INSTANCE,
             patch: chord_patch.clone(),
+            effect_chain: String::new(),
             performance: chord_performance,
         });
     }
@@ -156,6 +157,7 @@ fn build_bass_layer(
     layers.push(LineLayer {
         instance_id: BASS_INSTANCE,
         patch: Some(patch.clone()),
+        effect_chain: String::new(),
         performance: bass,
     });
     (Some(patch), None)

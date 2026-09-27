@@ -9,7 +9,9 @@ pub use patch_select::{load_time_label, scroll_offset, PatchSelectDrawOptions};
 
 use ratatui::{layout::Rect, Frame};
 
-use crate::{DirectPatchSelect, PatchAuditionSelect, PatchSelect};
+use crate::{
+    AutoReverbPanel, AutoReverbStatus, DirectPatchSelect, PatchAuditionSelect, PatchSelect,
+};
 
 /// selector が開いていれば描く。
 pub fn draw_patch_select(select: &PatchAuditionSelect<'_>, frame: &mut Frame<'_>) {
@@ -44,4 +46,15 @@ pub fn draw_direct_patch_select(select: &DirectPatchSelect<'_>, frame: &mut Fram
     }
     draw_patch_select(select, frame);
     draw_play_settings(select, frame);
+}
+
+/// 自前の selector を持つ host が、auto reverb の表示行へ出す文言。
+pub fn auto_reverb_status_line(status: &AutoReverbStatus) -> String {
+    auto_reverb::status_text(status)
+}
+
+/// 自前の selector を持つ host が、ルール overlay を `area` の中央へ描く。閉じていれば何もしない。
+/// selector より後に描くこと。
+pub fn draw_auto_reverb_rules(panel: &AutoReverbPanel, frame: &mut Frame<'_>, area: Rect) {
+    auto_reverb::draw_rules_overlay(panel, frame, area);
 }

@@ -3,6 +3,7 @@ pub(super) use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 pub(super) use std::sync::atomic::{AtomicUsize, Ordering};
 
 mod chord_chart;
+mod chord_chart_auto_reverb;
 mod chord_chart_bass_preview;
 mod chord_chart_catalog;
 mod chord_chart_chord_preview;

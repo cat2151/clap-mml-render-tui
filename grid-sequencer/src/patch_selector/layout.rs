@@ -23,6 +23,8 @@ pub(crate) struct PatchSelectorLayout {
     pub(super) patch_header: Rect,
     /// 音色 pane の内側のうち、header を除いて音色の行が並ぶ矩形。
     pub(crate) patch_rows: Rect,
+    /// auto reverb の表示行。
+    pub(crate) auto_reverb: Rect,
     pub(crate) hint: Rect,
 }
 
@@ -35,18 +37,23 @@ impl PatchSelectorLayout {
                 Constraint::Length(QUERY_HEIGHT),
                 Constraint::Min(1),
                 Constraint::Length(1),
+                Constraint::Length(1),
             ]
         } else {
-            vec![Constraint::Min(1), Constraint::Length(1)]
+            vec![
+                Constraint::Min(1),
+                Constraint::Length(1),
+                Constraint::Length(1),
+            ]
         };
         let vertical = Layout::default()
             .direction(Direction::Vertical)
             .constraints(constraints)
             .split(inner);
-        let (query, panes_index, hint_index) = if query_visible {
-            (Some(vertical[0]), 1, 2)
+        let (query, panes_index) = if query_visible {
+            (Some(vertical[0]), 1)
         } else {
-            (None, 0, 1)
+            (None, 0)
         };
         let middle = vertical[panes_index];
         let role_width = (middle.width / 5).clamp(12, 22);
@@ -82,7 +89,8 @@ impl PatchSelectorLayout {
             preset_list: Block::default().borders(Borders::ALL).inner(preset_pane),
             patch_header,
             patch_rows,
-            hint: vertical[hint_index],
+            auto_reverb: vertical[panes_index + 1],
+            hint: vertical[panes_index + 2],
         }
     }
 

@@ -85,7 +85,7 @@ fn a_note_queued_right_after_a_row_patch_reload_sounds_once_the_load_is_done() {
     );
 
     // 2. 差し替えるだけ。音が消え、物差しも 0 のまま動かないことを見る。
-    sender.set_row_patch(ROW, INSTANCE_ID, None, "reload-only");
+    sender.set_row_patch(ROW, INSTANCE_ID, crate::GridPatch::default(), "reload-only");
     wait_until_loaded(&sender);
     std::thread::sleep(SOUND_WINDOW);
     let after_reload = gain_db(&supervisor);
@@ -97,7 +97,12 @@ fn a_note_queued_right_after_a_row_patch_reload_sounds_once_the_load_is_done() {
 
     // 3. 差し替え、直後に note off / on を積む。screen 層の `prepare_patch` と同じ順。
     let at = started.elapsed().as_secs_f64();
-    sender.set_row_patch(ROW, INSTANCE_ID, None, "reload-then-reattack");
+    sender.set_row_patch(
+        ROW,
+        INSTANCE_ID,
+        crate::GridPatch::default(),
+        "reload-then-reattack",
+    );
     sender.send_scheduled(
         vec![note(timeline_id, 0x80, at), note(timeline_id, 0x90, at)],
         Duration::ZERO,

@@ -106,9 +106,7 @@ impl GridSequencerScreen {
             .get(instance)
             .cloned()
             .unwrap_or((self.state.standby_instance_id(instance), None));
-        if let Some(sender) = &self.midi_sender {
-            sender.preload(instance_id, patch.as_deref());
-        }
+        self.send_preload(instance_id, patch.as_deref());
         if let Some(swap) = self.cycle_swap.as_mut() {
             swap.next_instance += 1;
             swap.sent += 1;

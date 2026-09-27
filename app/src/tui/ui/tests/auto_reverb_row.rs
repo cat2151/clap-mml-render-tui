@@ -1,4 +1,4 @@
-//! auto reverb を扱わない selector（Chord Chart の `t`・grid の PATCH 欄）には、表示行が出ない。
+//! selector の auto reverb の表示行。grid の PATCH 欄にも Chord Chart の `t` にも出る。
 
 use super::*;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
@@ -23,7 +23,7 @@ fn screen(app: &mut TuiApp<'static>) -> String {
 }
 
 #[test]
-fn the_chord_chart_t_selector_has_no_auto_reverb_row() {
+fn the_chord_chart_t_selector_shows_the_auto_reverb_row() {
     let (_tmp, _env_guard) = cmrt_history::test_support::temp_local_dirs("chord_auto_reverb_row");
     let mut app = TuiApp::new_for_test(test_config());
     app.chord_chart.set_bass_enabled(false);
@@ -34,11 +34,12 @@ fn the_chord_chart_t_selector_has_no_auto_reverb_row() {
 
     let screen = screen(&mut app);
     assert!(screen.contains("Pads/Warm Pad.fxp"), "{screen}");
-    assert!(!screen.contains("auto reverb"), "{screen}");
+    assert!(screen.contains("auto reverb:"), "{screen}");
+    assert!(screen.contains("E:on/off"), "{screen}");
 }
 
 #[test]
-fn the_grid_patch_selector_has_no_auto_reverb_row() {
+fn the_grid_patch_selector_shows_the_auto_reverb_row() {
     let mut app = TuiApp::new_for_test(test_config());
     *app.patch_load_state.lock().unwrap() = ready_patches(&["Keys/Alpha.fxp", "Keys/Beta.fxp"]);
     app.active_screen = PrimaryScreen::GridSequencer;
@@ -57,5 +58,6 @@ fn the_grid_patch_selector_has_no_auto_reverb_row() {
 
     let screen = screen(&mut app);
     assert!(screen.contains("instance 1 patch select"), "{screen}");
-    assert!(!screen.contains("auto reverb"), "{screen}");
+    assert!(screen.contains("auto reverb:"), "{screen}");
+    assert!(screen.contains("E:on/off"), "{screen}");
 }
