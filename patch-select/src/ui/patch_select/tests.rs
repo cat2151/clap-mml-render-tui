@@ -1,4 +1,4 @@
-use super::{format_load_time, list_title, scroll_offset};
+use super::{format_load_time, list_title, patch_label, scroll_offset};
 use crate::{patch_select::PatchSelect, PatchCatalogEntry};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -80,4 +80,14 @@ fn empty_filtered_list_shows_zero_position_and_length() {
     }
 
     assert!(list_title(&select).contains("(0/0/2)"));
+}
+
+#[test]
+fn merged_patch_label_shows_the_merged_count() {
+    let merged = PatchCatalogEntry::from_display("A.syx/00 BELL".to_string())
+        .with_merged(10, vec!["BELL".to_string()]);
+    let single = PatchCatalogEntry::from_display("A.syx/01 PAD".to_string());
+
+    assert_eq!(patch_label(&merged), "A.syx/00 BELL ×10");
+    assert_eq!(patch_label(&single), "A.syx/01 PAD");
 }

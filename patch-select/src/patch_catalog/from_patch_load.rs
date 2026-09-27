@@ -66,12 +66,16 @@ fn catalog_entries(
                 .audio_info_for_ref(&patch.reference)
                 .map(|plugin| plugin.name.clone())
                 .unwrap_or_else(|_| patch.reference.plugin.to_string());
-            PatchCatalogEntry::new(
+            let entry = PatchCatalogEntry::new(
                 patch.reference.display.clone(),
                 patch.normalized_display.clone(),
                 plugin_sort_key,
                 patch.selector_category.clone(),
-            )
+            );
+            match &patch.merged {
+                Some(merged) => entry.with_merged(merged.count, merged.names.clone()),
+                None => entry,
+            }
         })
         .collect()
 }

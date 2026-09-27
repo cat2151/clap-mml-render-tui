@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap_mml_render_tui::{
-    bass_voicing_inspect, config, config_editor, live_chord_check,
+    bass_voicing_inspect, config, config_editor, dexed_duplicates,
+    dexed_duplicates::DexedDuplicatesRequest, live_chord_check,
     live_chord_check::LiveChordCheckRequest, live_line_check,
     live_line_check::LiveLineCheckRequest, render_mml, render_mml::RenderMmlRequest, server, tui,
     updater, voicing_cache_builder,
@@ -105,6 +106,9 @@ fn run() -> Result<()> {
         // 診断コマンドだけは読む config を差し替えられる。既定の置き場を作りに行かないので、
         // 実ユーザーの config.toml には 1 バイトも触らない。
         CliAction::PatchRoles { config: Some(path) }
+        | CliAction::DexedDuplicates(DexedDuplicatesRequest {
+            config: Some(path), ..
+        })
         | CliAction::RenderMml(RenderMmlRequest {
             config: Some(path), ..
         })
@@ -206,6 +210,9 @@ fn run() -> Result<()> {
         }
         CliAction::PatchRoles { .. } => {
             return tui::patch_role_report::run_patch_role_report(&cfg);
+        }
+        CliAction::DexedDuplicates(request) => {
+            return dexed_duplicates::run(&cfg, &request);
         }
         CliAction::Tui => {}
         CliAction::Help(_)

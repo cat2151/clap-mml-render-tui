@@ -124,8 +124,12 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
     // scanが終わった時点でserver用の小さい結果を確定する。後続の全patch load計測が
     // 失敗しても、次のserver起動で同じcatalog scanを繰り返させない。
     source_cache::write(&source_path, &plugins)?;
-    let pairs = cmrt_tui_core::patches::collect_patch_pairs_from_catalog(&plugins)?;
-    let audio_patches = describe_patches(&plugins, &pairs)?;
+    let listing = cmrt_tui_core::patches::collect_patch_listing_from_catalog(&plugins)?;
+    let pairs = listing.pairs;
+    let mut audio_patches = describe_patches(&plugins, &pairs)?;
+    for audio in &mut audio_patches {
+        audio.merged = listing.merged.get(&audio.reference.display).cloned();
+    }
     let patch_voicings = collect_patch_voicings(&plugins, &audio_patches);
     let catalog_unknown_count = patch_voicings
         .values()

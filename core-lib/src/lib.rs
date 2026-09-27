@@ -2,7 +2,11 @@
 // patch 文字列を組み立てるために使う（`cache_wav_patch_with_slot` / `SLOT_COUNT`）。
 // 綴りの単一ソースは play server 側 `core-lib/src/cache_wav.rs` の module doc。
 pub use clap_mml_play_server_core::cache_wav;
-pub use clap_mml_play_server_core::patch_list::{collect_patches, to_relative};
+// Dexed の cartridge を読み、play server が送るのと同じ single voice SysEx を組むために使う。
+pub use clap_mml_play_server_core::dx7;
+pub use clap_mml_play_server_core::patch_list::{
+    collect_patch_listing, collect_patches, to_relative, MergedPatches,
+};
 pub use clap_mml_play_server_core::pipeline;
 pub use clap_mml_play_server_core::pipeline::{
     embedded_patch_ref, ensure_cmrt_dir, ensure_daw_dir, ensure_phrase_dir, mml_str_to_smf_bytes,

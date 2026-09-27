@@ -7,6 +7,7 @@ use anyhow::Result;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use clap_mml_render_tui::{
     bass_voicing_inspect::BassVoicingInspectRequest,
+    dexed_duplicates::DexedDuplicatesRequest,
     inspect_daw_cache::InspectDawCacheRequest,
     live_chord_check::LiveChordCheckRequest,
     live_line_check::{LiveLineCheckRequest, ResidualRequest},
@@ -31,6 +32,7 @@ pub(crate) enum CliAction {
     BuildVoicingCache { force: bool },
     BuildPatchCatalogCache,
     PatchRoles { config: Option<PathBuf> },
+    DexedDuplicates(DexedDuplicatesRequest),
     RenderMml(RenderMmlRequest),
     InspectDawCache(InspectDawCacheRequest),
     LiveChordCheck(LiveChordCheckRequest),
@@ -202,6 +204,15 @@ enum Commands {
         #[arg(long, value_name = "PATH")]
         config: Option<PathBuf>,
     },
+    /// Dexed の program のうち、送る SysEx が同じ（＝同じ音色）ものの重複を数える
+    DexedDuplicates {
+        /// 既定の置き場ではなく、この config.toml を読む
+        #[arg(long, value_name = "PATH")]
+        config: Option<PathBuf>,
+        /// patch 選択画面と同じ絞り込み条件（空白区切りの正規表現を AND）。省略時は Dexed の全 program
+        #[arg(value_name = "CONDITION", num_args = 0..)]
+        condition: Vec<String>,
+    },
 }
 
 fn cli_command() -> clap::Command {
@@ -294,6 +305,13 @@ where
 
     if let Some(Commands::PatchRoles { config }) = cli.command {
         return wrap(CliAction::PatchRoles { config });
+    }
+
+    if let Some(Commands::DexedDuplicates { config, condition }) = cli.command {
+        return wrap(CliAction::DexedDuplicates(DexedDuplicatesRequest {
+            config,
+            condition: condition.join(" "),
+        }));
     }
 
     if let Some(Commands::RenderMml {

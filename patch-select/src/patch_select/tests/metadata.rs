@@ -195,3 +195,17 @@ fn without_a_requested_role_the_current_patch_decides_the_role_and_drum_preset()
     assert_eq!(filtered(&select), ["Drums/Kick 1.fxp", "Drums/Kick 2.fxp"]);
     assert_eq!(select.selected(), Some("Drums/Kick 2.fxp"));
 }
+
+#[test]
+fn merged_names_participate_in_regex_matching() {
+    let catalog = vec![
+        entry("Aminet/106.syx/00 GUNSHOT", "Dexed", None)
+            .with_merged(3, vec!["GUNSHOT".to_string(), "BANG!".to_string()]),
+        entry("Aminet/106.syx/01 PIANO", "Dexed", None),
+    ];
+    let mut select = open_with(catalog, None, Vec::new());
+
+    type_text(&mut select, "bang");
+
+    assert_eq!(filtered(&select), ["Aminet/106.syx/00 GUNSHOT"]);
+}

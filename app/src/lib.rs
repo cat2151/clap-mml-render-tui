@@ -3,6 +3,7 @@ pub(crate) mod cached_source;
 pub(crate) mod chord_progression_source;
 pub mod config;
 pub mod config_editor;
+pub mod dexed_duplicates;
 // DAW 画面本体は独立 crate へ切り出した。
 // 従来の `crate::daw::*` パスは再エクスポートで維持する。
 pub use cmrt_daw as daw;

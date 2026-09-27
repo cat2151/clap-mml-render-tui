@@ -5,10 +5,11 @@
 //! （`cmrt_core::collect_patches`）を繋ぐ層に徹する。
 
 use anyhow::Result;
+use cmrt_core::MergedPatches;
 use cmrt_patches::{sort_patch_pairs, PatchSortOrder};
 use cmrt_runtime::{catalog_plugins, configured_patch_dirs, CatalogPlugin, Config};
-use std::collections::HashSet;
-use std::path::Path;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 pub fn has_configured_patch_dirs(cfg: &Config) -> bool {
     !configured_patch_dirs(cfg).is_empty()
@@ -29,49 +30,77 @@ pub fn collect_patch_pairs(cfg: &Config) -> Result<Vec<(String, String)>> {
 pub fn collect_patch_pairs_from_catalog(
     plugins: &[CatalogPlugin],
 ) -> Result<Vec<(String, String)>> {
-    let mut pairs = Vec::new();
+    Ok(collect_patch_listing_from_catalog(plugins)?.pairs)
+}
+
+/// [`collect_patch_pairs_from_catalog`] の一覧と、同じ音をまとめた patch の情報。
+pub struct PatchListing {
+    pub pairs: Vec<(String, String)>,
+    /// display → その patch へまとめた件数と名前。まとめていない patch は載らない。
+    pub merged: HashMap<String, MergedPatches>,
+}
+
+/// 同じ音を鳴らす patch を play server 側でまとめた一覧を集める。
+pub fn collect_patch_listing_from_catalog(plugins: &[CatalogPlugin]) -> Result<PatchListing> {
+    let mut listing = PatchListing {
+        pairs: Vec::new(),
+        merged: HashMap::new(),
+    };
     let mut seen = HashSet::new();
     for plugin in plugins {
-        extend_with_plugin(&mut pairs, &mut seen, plugin)?;
+        extend_with_plugin(&mut listing, &mut seen, plugin)?;
     }
-    sort_patch_pairs(&mut pairs, PatchSortOrder::Path);
-    Ok(pairs)
+    sort_patch_pairs(&mut listing.pairs, PatchSortOrder::Path);
+    Ok(listing)
 }
 
 fn extend_with_plugin(
-    pairs: &mut Vec<(String, String)>,
+    listing: &mut PatchListing,
     seen: &mut HashSet<String>,
     plugin: &CatalogPlugin,
 ) -> Result<()> {
     if let Some(paths) = &plugin.resolved_patches {
-        extend_with_paths(pairs, seen, plugin, paths.iter().cloned());
+        extend_with_paths(
+            listing,
+            seen,
+            plugin,
+            paths.iter().map(|path| (path.clone(), None)),
+        );
     } else {
         for dir in &plugin.dirs {
-            let paths = cmrt_core::collect_patches(dir)?;
-            extend_with_paths(pairs, seen, plugin, paths);
+            let patches = cmrt_core::collect_patch_listing(dir)?;
+            extend_with_paths(
+                listing,
+                seen,
+                plugin,
+                patches.into_iter().map(|patch| (patch.path, patch.merged)),
+            );
         }
     }
     Ok(())
 }
 
 fn extend_with_paths(
-    pairs: &mut Vec<(String, String)>,
+    listing: &mut PatchListing,
     seen: &mut HashSet<String>,
     plugin: &CatalogPlugin,
-    paths: impl IntoIterator<Item = std::path::PathBuf>,
+    patches: impl IntoIterator<Item = (PathBuf, Option<MergedPatches>)>,
 ) {
-    pairs.extend(paths.into_iter().filter_map(|path| {
+    for (path, merged) in patches {
         let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
         if !seen.insert(canonical_key(&canonical)) {
-            return None;
+            continue;
         }
         let display = match plugin.base.as_deref() {
             Some(base) => relative_display(base, &path),
             None => path.to_string_lossy().into_owned(),
         };
+        if let Some(merged) = merged {
+            listing.merged.insert(display.clone(), merged);
+        }
         let lower = display.to_lowercase();
-        Some((display, lower))
-    }));
+        listing.pairs.push((display, lower));
+    }
 }
 
 fn relative_display(base: &str, path: &Path) -> String {

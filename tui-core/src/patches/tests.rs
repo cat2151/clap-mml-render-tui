@@ -207,12 +207,7 @@ fn extending_with_two_plugins_keeps_each_display_relative_to_its_own_base() {
         ),
     ];
 
-    let mut pairs = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    for plugin in &catalog {
-        extend_with_plugin(&mut pairs, &mut seen, plugin).unwrap();
-    }
-    sort_patch_pairs(&mut pairs, PatchSortOrder::Path);
+    let pairs = collect_patch_pairs_from_catalog(&catalog).unwrap();
 
     assert_eq!(
         pairs
@@ -249,10 +244,7 @@ fn adapter_resolved_paths_are_used_without_rescanning_vendor_files() {
         resolved_patches: Some(vec![piano]),
         source_notices: Vec::new(),
     };
-    let mut pairs = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-
-    extend_with_plugin(&mut pairs, &mut seen, &plugin).unwrap();
+    let pairs = collect_patch_pairs_from_catalog(std::slice::from_ref(&plugin)).unwrap();
 
     assert_eq!(pairs.len(), 1);
     assert_eq!(pairs[0].0, "Bank/Piano.sfz");

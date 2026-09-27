@@ -24,6 +24,10 @@ pub struct PatchCatalogEntry {
     plugin_sort_key: String,
     selector_category: Option<String>,
     normalized_selector_category: Option<String>,
+    /// この行へまとめた同じ音の patch の件数（自身を含む）。まとめていなければ 1。
+    merged_count: usize,
+    /// まとめた patch の名前。別名でも検索できるよう、絞り込みの対象にする。
+    merged_names: Vec<String>,
 }
 
 impl PatchCatalogEntry {
@@ -46,7 +50,24 @@ impl PatchCatalogEntry {
             plugin_sort_key: plugin_sort_key.to_lowercase(),
             selector_category,
             normalized_selector_category,
+            merged_count: 1,
+            merged_names: Vec::new(),
         }
+    }
+
+    /// 同じ音の patch をこの行へまとめた件数と名前を付ける。
+    pub fn with_merged(mut self, count: usize, names: Vec<String>) -> Self {
+        self.merged_count = count;
+        self.merged_names = names;
+        self
+    }
+
+    pub fn merged_count(&self) -> usize {
+        self.merged_count
+    }
+
+    pub(crate) fn merged_names(&self) -> &[String] {
+        &self.merged_names
     }
 
     pub fn display(&self) -> &str {

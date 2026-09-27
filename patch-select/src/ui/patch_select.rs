@@ -19,6 +19,7 @@ use cmrt_tui_core::{
 };
 
 use crate::patch_select::{PatchSelect, PatchSelectFocus};
+use crate::PatchCatalogEntry;
 
 const QUERY_PLACEHOLDER: &str = r"例: warm pad|strings";
 /// 絞り込み欄の高さ（枠2行 + 入力1行）。
@@ -191,6 +192,14 @@ fn draw_presets(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
     );
 }
 
+/// 同じ音をまとめた行には件数を添える。
+fn patch_label(patch: &PatchCatalogEntry) -> String {
+    match patch.merged_count() {
+        count if count > 1 => format!("{} ×{count}", patch.display()),
+        _ => patch.display().to_string(),
+    }
+}
+
 fn draw_list(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
     let block = pane_block(
         list_title(select),
@@ -201,7 +210,7 @@ fn draw_list(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
         .map(|patch| {
             Row::new([
                 Cell::from(patch.selector_category().unwrap_or("")),
-                Cell::from(patch.display()),
+                Cell::from(patch_label(patch)),
                 Cell::from(
                     Line::from(load_label(select, patch.display())).alignment(Alignment::Right),
                 ),

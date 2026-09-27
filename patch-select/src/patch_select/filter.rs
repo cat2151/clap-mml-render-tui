@@ -27,6 +27,7 @@ fn condition_matches(condition: &[Regex], patch: &PatchCatalogEntry) -> bool {
     if let Some(category) = patch.normalized_selector_category() {
         fields.push(category);
     }
+    fields.extend(patch.merged_names().iter().map(String::as_str));
     text_filter::matches_any_field(condition, &fields)
 }
 
