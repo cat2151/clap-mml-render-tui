@@ -1,7 +1,7 @@
 # clap-mml-render-tui
 
 ### 概要
-MML TUI DAW（のようなもの）。Surge XT / Dexed / Vaporizer2 / Floe / Sforzando のリッチな音をMMLで手軽に楽しめます。Rustで書かれています。
+MML TUI DAW（のようなもの）。[Surge XT](https://surge-synthesizer.github.io/) / [Dexed](https://asb2m10.github.io/dexed/) / [Vaporizer2](https://www.vast-dynamics.com/?q=Vaporizer2) / [Floe](https://floe.audio/) / [Sforzando](https://www.plogue.com/products/sforzando.html) / [TONE3000](https://www.tone3000.com/) / [Dragonfly Reverb](https://michaelwillis.github.io/dragonfly-reverb/) のリッチな音をMMLで手軽に楽しめます。Rustで書かれています。
 
 ### 用途
 
@@ -51,15 +51,23 @@ cmrt --play-server "X:/projects/clap-mml-play-server/target/debug/clap-mml-realt
 
 ### 対応オーディオプラグイン
 - ※CLAP、Windows、アカウント登録なしで無料で入手できるもの、に絞っています
-- Surge XT
-- Dexed
-- Vaporizer2
-- Floe
-- Sforzando
-- effect（DAW の track に直列で挿せます）
-  - TONE3000
-  - Surge XT Effects
-  - Dragonfly Reverb（Hall / Room / Plate / Early Reflections）
+- [Surge XT](https://surge-synthesizer.github.io/)
+- [Dexed](https://asb2m10.github.io/dexed/)
+- [Vaporizer2](https://www.vast-dynamics.com/?q=Vaporizer2)
+- [Floe](https://floe.audio/)
+- [Sforzando](https://www.plogue.com/products/sforzando.html)
+- effect（DAWモード の track に直列で挿せます）
+  - [TONE3000](https://www.tone3000.com/)
+  - Surge XT Effects（Surge XTに同梱）
+  - [Dragonfly Reverb](https://michaelwillis.github.io/dragonfly-reverb/)
+- それぞれのダウンロード画面（迷子になった人向け）
+  - Surge XT : wingetで入手が楽です : [最速！猫でもインストールできるDAWとオーディオプラグイン（仮想MIDI鍵盤で音を鳴らすまで）](https://cat2151.hatenadiary.jp/entry/2026/03/12/225148)
+  - [Dexed（studiorack-siteでの紹介ページ）](https://studiorack.github.io/studiorack-site/plugins/asb2m10/dexed)
+  - [Vaporizer2（studiorack-siteでの紹介ページ）](https://studiorack.github.io/studiorack-site/plugins/vastdynamics/vaporizer2)
+  - [Floe ダウンロード画面](https://floe.audio/download/)
+  - [Sforzando ダウンロード画面](https://www.plogue.com/downloads.html#sforzando)
+  - [TONE3000 ダウンロード画面](https://www.tone3000.com/plugin/download)
+  - [Dragonfly Reverb GitHub releases画面](https://github.com/michaelwillis/dragonfly-reverb/releases) 
 
 ### AI生成ドキュメント
 - 以降、AIが追記した部分が読みづらいです。ときどきメンテしていきます
