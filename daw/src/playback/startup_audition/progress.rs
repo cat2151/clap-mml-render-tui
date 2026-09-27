@@ -39,7 +39,7 @@ impl Progress {
             let message = if !playing {
                 Some("本演奏の開始前に停止しました。")
             } else if state.deadline.is_some_and(|deadline| now >= deadline) {
-                Some("本演奏（Shift+Space相当）の開始時刻に到達しました。")
+                Some("本演奏（Shift+Space相当）を開始しました。")
             } else {
                 None
             };

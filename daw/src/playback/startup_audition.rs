@@ -132,6 +132,7 @@ impl DawApp {
     ///
     /// 試聴ループが使えるのは `CachePlayer` backend だけ（鳴らす素材が cell cache なので）。
     pub(crate) fn start_autoplay_on_entry(&self) {
+        self.append_log_line("起動時自動演奏: 自動演奏を要求しました。");
         let Some(play_server) = self
             .playback
             .realtime_play_server

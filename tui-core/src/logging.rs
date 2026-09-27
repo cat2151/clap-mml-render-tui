@@ -43,7 +43,8 @@ fn unix_seconds_floor(now: SystemTime) -> i64 {
     }
 }
 
-fn format_jst_timestamp(now: SystemTime) -> String {
+/// 日時を秒まで含む日本時間で整形する（ログファイル・画面表示共通）。
+pub fn format_jst_timestamp(now: SystemTime) -> String {
     let unix_seconds = unix_seconds_floor(now).saturating_add(JST_OFFSET_SECONDS);
     let days = unix_seconds.div_euclid(86_400);
     let seconds_of_day = unix_seconds.rem_euclid(86_400);

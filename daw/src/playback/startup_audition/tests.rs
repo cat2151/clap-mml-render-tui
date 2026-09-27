@@ -134,6 +134,23 @@ fn shift_space_while_waiting_stops_audition_without_starting_play() {
     assert_eq!(audition_state(&app), None);
     assert!(*app.playback.play_state.lock().unwrap() == DawPlayState::Idle);
     assert!(log_contains(&app, "startup-audition: cancel reason=user"));
+    assert_eq!(
+        app.log_lines.lock().unwrap().front().map(String::as_str),
+        Some(crate::logging::SHIFT_SPACE_LOG_LINE)
+    );
+}
+
+#[test]
+fn autoplay_request_on_empty_song_does_not_claim_playback_started() {
+    let app = build_test_app();
+
+    app.start_autoplay_on_entry();
+
+    assert_eq!(audition_state(&app), None);
+    assert!(*app.playback.play_state.lock().unwrap() == DawPlayState::Idle);
+    let logs = app.log_lines.lock().unwrap();
+    assert!(logs.iter().any(|line| line.contains("自動演奏を要求")));
+    assert!(!logs.iter().any(|line| line.contains("自動演奏を開始")));
 }
 
 #[test]
@@ -191,5 +208,7 @@ fn handoff_without_cache_explains_no_audition_and_does_not_claim_sound() {
     assert!(logs
         .iter()
         .any(|line| line.contains("本演奏への切り替えを開始")));
-    assert!(!logs.iter().any(|line| line.contains("開始時刻に到達")));
+    assert!(!logs
+        .iter()
+        .any(|line| line.contains("本演奏（Shift+Space相当）を開始しました")));
 }

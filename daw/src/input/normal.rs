@@ -282,43 +282,9 @@ impl DawApp {
         }
         self.editor.pending_delete = false;
 
-        let playback_shortcut = normal_playback_shortcut(key_event);
-        if playback_shortcut.is_some()
-            && self.cancel_startup_audition()
-            && matches!(
-                playback_shortcut,
-                Some(NormalPlaybackShortcut::PlayFromCursor | NormalPlaybackShortcut::TogglePlay)
-            )
-        {
+        if let Some(shortcut) = normal_playback_shortcut(key_event) {
+            self.handle_normal_playback_shortcut(shortcut);
             return DawNormalAction::Continue;
-        }
-        match playback_shortcut {
-            Some(NormalPlaybackShortcut::PreviewCurrentTrack) => {
-                self.toggle_preview_for_target_tracks(false);
-                return DawNormalAction::Continue;
-            }
-            Some(NormalPlaybackShortcut::PreviewAllTracks) => {
-                self.toggle_preview_for_target_tracks(true);
-                return DawNormalAction::Continue;
-            }
-            Some(NormalPlaybackShortcut::PlayFromCursor) => {
-                let play_state = *self.playback.play_state.lock().unwrap();
-                match play_state {
-                    DawPlayState::Idle => self.start_play_from_cursor_measure(),
-                    DawPlayState::Preview | DawPlayState::Playing => self.stop_play(),
-                }
-                return DawNormalAction::Continue;
-            }
-            Some(NormalPlaybackShortcut::TogglePlay) => {
-                let state = *self.playback.play_state.lock().unwrap();
-                if state == DawPlayState::Playing || state == DawPlayState::Preview {
-                    self.stop_play();
-                } else {
-                    self.start_play();
-                }
-                return DawNormalAction::Continue;
-            }
-            None => {}
         }
 
         match key_event.code {

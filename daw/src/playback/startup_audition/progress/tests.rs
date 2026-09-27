@@ -14,7 +14,10 @@ fn reports_start_once_only_after_scheduled_time() {
     assert!(progress.poll(&logs, true, now + Duration::from_secs(2)));
     let logs = logs.lock().unwrap();
     assert_eq!(logs.len(), 1);
-    assert!(logs[0].contains("開始時刻に到達"));
+    assert_eq!(
+        logs[0],
+        "起動時自動演奏: 本演奏（Shift+Space相当）を開始しました。"
+    );
 }
 
 #[test]

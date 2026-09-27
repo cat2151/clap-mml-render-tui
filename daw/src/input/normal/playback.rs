@@ -1,6 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::super::super::{CHORD_TRACK, FIRST_PLAYABLE_TRACK};
+use crate::{logging::SHIFT_SPACE_LOG_LINE, DawApp, DawPlayState};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::input) enum NormalPlaybackShortcut {
@@ -35,6 +36,45 @@ pub(in crate::input) fn preview_target_tracks(
         return None;
     }
     Some(vec![cursor_track])
+}
+
+impl DawApp {
+    pub(super) fn handle_normal_playback_shortcut(&mut self, shortcut: NormalPlaybackShortcut) {
+        if shortcut == NormalPlaybackShortcut::PlayFromCursor {
+            self.append_log_line(SHIFT_SPACE_LOG_LINE);
+        }
+        if self.cancel_startup_audition()
+            && matches!(
+                shortcut,
+                NormalPlaybackShortcut::PlayFromCursor | NormalPlaybackShortcut::TogglePlay
+            )
+        {
+            return;
+        }
+        match shortcut {
+            NormalPlaybackShortcut::PreviewCurrentTrack => {
+                self.toggle_preview_for_target_tracks(false);
+            }
+            NormalPlaybackShortcut::PreviewAllTracks => {
+                self.toggle_preview_for_target_tracks(true);
+            }
+            NormalPlaybackShortcut::PlayFromCursor => {
+                let play_state = *self.playback.play_state.lock().unwrap();
+                match play_state {
+                    DawPlayState::Idle => self.start_play_from_cursor_measure(),
+                    DawPlayState::Preview | DawPlayState::Playing => self.stop_play(),
+                }
+            }
+            NormalPlaybackShortcut::TogglePlay => {
+                let state = *self.playback.play_state.lock().unwrap();
+                if state == DawPlayState::Playing || state == DawPlayState::Preview {
+                    self.stop_play();
+                } else {
+                    self.start_play();
+                }
+            }
+        }
+    }
 }
 
 /// カーソル位置の単一 track preview 対象。

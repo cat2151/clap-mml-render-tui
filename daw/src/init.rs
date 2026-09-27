@@ -122,6 +122,10 @@ fn new_with_entry_context(
         std::sync::mpsc::channel::<render_queue::RenderResult>();
     let pending_cache_jobs = Arc::new(Mutex::new(HashMap::<u64, CacheJob>::new()));
     let log_lines = Arc::new(Mutex::new(cmrt_tui_core::logging::load_log_lines()));
+    crate::append_log_line(
+        &log_lines,
+        crate::logging::startup_log_line(std::time::SystemTime::now()),
+    );
     let track_rerender_batches = Arc::new(Mutex::new(track_rerender_batches));
     let play_position = Arc::new(Mutex::new(None));
     let ab_repeat = Arc::new(Mutex::new(AbRepeatState::Off));
