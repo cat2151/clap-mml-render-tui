@@ -13,7 +13,9 @@ use measurements::collect_patch_load_measurements;
 #[cfg(test)]
 use measurements::{estimate_eta, format_eta, measure_patch_loads};
 
+mod measurement_log;
 mod measurements;
+mod previous_measurements;
 mod source_cache;
 
 const CACHE_FORMAT_VERSION: u32 = 4;
@@ -29,6 +31,7 @@ pub struct BuildSummary {
     pub catalog_voicing_count: usize,
     pub catalog_unknown_count: usize,
     pub measured_load_count: usize,
+    pub reused_load_count: usize,
     pub first_load_failure_count: usize,
     pub second_load_failure_count: usize,
 }
@@ -128,7 +131,22 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
         .values()
         .filter(|voicing| **voicing == cmrt_realtime_play::PatchVoicing::Unknown)
         .count();
-    let load_measurements = collect_patch_load_measurements(cfg, &pairs)?;
+    let log_path = measurement_log::path_next_to(&path);
+    let mut previous = previous_measurements::read(&path);
+    previous.extend(measurement_log::read(&log_path));
+    let (mut load_measurements, unmeasured) = previous_measurements::partition(&pairs, previous);
+    let reused_load_count = load_measurements.len();
+    println!(
+        "patch全件={} 計測済み(再利用)={} 未計測={}",
+        pairs.len(),
+        reused_load_count,
+        unmeasured.len()
+    );
+    for (display, _) in &unmeasured {
+        println!("  未計測: {display}");
+    }
+    let mut log = measurement_log::Writer::open(&log_path)?;
+    load_measurements.extend(collect_patch_load_measurements(cfg, &unmeasured, &mut log)?);
     let measured_load_count = load_measurements
         .values()
         .filter(|measurement| measurement.second_load_ms.is_some())
@@ -160,6 +178,8 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
         catalog_notes,
     };
     write_cache(&path, &cache)?;
+    // 残っても次回の構築で同じ結果として読まれるだけなので、消せなくても失敗にしない。
+    let _ = fs::remove_file(&log_path);
     Ok(BuildSummary {
         path,
         source_path,
@@ -168,6 +188,7 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
         catalog_voicing_count: cache.patch_voicings.len(),
         catalog_unknown_count,
         measured_load_count,
+        reused_load_count,
         first_load_failure_count,
         second_load_failure_count,
     })

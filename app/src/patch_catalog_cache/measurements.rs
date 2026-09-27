@@ -8,9 +8,12 @@ use anyhow::{Context, Result};
 use cmrt_runtime::Config;
 use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 
+use super::measurement_log;
+
 pub(super) fn collect_patch_load_measurements(
     cfg: &Config,
     pairs: &[(String, String)],
+    log: &mut measurement_log::Writer,
 ) -> Result<BTreeMap<String, PatchLoadMeasurement>> {
     if pairs.is_empty() {
         return Ok(BTreeMap::new());
@@ -30,7 +33,10 @@ pub(super) fn collect_patch_load_measurements(
             print!("[{index}/{total}] {patch} ... ");
             let _ = std::io::stdout().flush();
         },
-        |index, _patch, measurement| {
+        |index, patch, measurement| {
+            if let Err(error) = log.append(patch, measurement) {
+                eprintln!("計測logへ書けません: {patch}: {error:#}");
+            }
             let eta = estimate_eta(progress_started.elapsed(), index, total);
             println!(
                 "first={} second={} ETA={}",
