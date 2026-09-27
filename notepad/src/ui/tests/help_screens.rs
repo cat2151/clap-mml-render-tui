@@ -80,10 +80,7 @@ fn normal_help_screen_mentions_ctrl_clipboard_shortcuts_without_overlay_keybinds
 #[test]
 fn patch_select_help_screen_shows_patch_select_shortcuts() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec!["abc".to_string()];
-    app.patch_select.patch_all = vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
-    app.patch_select.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
-    app.patch_select.patch_list_state.select(Some(0));
+    crate::tests::open_patch_select_for_test(&mut app, "abc", &["Pads/Pad 1.fxp"]);
     app.mode = Mode::Help;
     app.help_origin = Mode::PatchSelect;
 
@@ -91,21 +88,22 @@ fn patch_select_help_screen_shows_patch_select_shortcuts() {
     let normalized_screen = lines.join("\n").replace([' ', '\n'], "");
 
     assert!(normalized_screen.contains("音色選択モード"));
-    assert!(normalized_screen.contains("/:現在paneのpatchname絞り込み開始"));
+    assert!(normalized_screen.contains("/:Regex絞り込み開始"));
     assert!(normalized_screen.contains("n/p/t:notepadhistory/patchhistory/音色選択"));
-    assert!(normalized_screen.contains("Ctrl+S:sort順切替(path/category)"));
-    assert!(normalized_screen.contains("f:現在音色とMMLをFavorites追加"));
-    assert!(normalized_screen.contains("h/l・←/→:ペイン切替して再生"));
+    assert!(!normalized_screen.contains("Ctrl+S"));
+    assert!(!normalized_screen.contains("sort"));
+    assert!(normalized_screen.contains("f:現在音色とMMLをFavorites追加(★Favorite)"));
+    assert!(normalized_screen.contains("h/l・←/→:ペイン移動(Role/Preset/音色)"));
+    assert!(normalized_screen.contains("PgUp/PgDn・Home/End:10行/先頭・末尾へ移動して再生"));
+    assert!(normalized_screen.contains("r:ランダムな音色へ移動して再生"));
+    assert!(normalized_screen.contains("a:RegexをPresetに追加"));
     assert!(!normalized_screen.contains("Ctrl+C:コピー"));
 }
 
 #[test]
 fn patch_select_help_screen_keeps_patch_select_base_title_and_keybinds() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec!["abc".to_string()];
-    app.patch_select.patch_all = vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
-    app.patch_select.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
-    app.patch_select.patch_list_state.select(Some(0));
+    crate::tests::open_patch_select_for_test(&mut app, "abc", &["Pads/Pad 1.fxp"]);
     app.mode = Mode::Help;
     app.help_origin = Mode::PatchSelect;
 
@@ -191,11 +189,7 @@ fn help_overlay_size_follows_tui_help_content() {
     normal.help_origin = Mode::Normal;
 
     let mut patch_select = NotepadScreen::new_for_test(test_config());
-    patch_select.editor.lines = vec!["abc".to_string()];
-    patch_select.patch_select.patch_all =
-        vec![("Pads/Pad 1.fxp".to_string(), "pads/pad 1.fxp".to_string())];
-    patch_select.patch_select.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
-    patch_select.patch_select.patch_list_state.select(Some(0));
+    crate::tests::open_patch_select_for_test(&mut patch_select, "abc", &["Pads/Pad 1.fxp"]);
     patch_select.mode = Mode::Help;
     patch_select.help_origin = Mode::PatchSelect;
 

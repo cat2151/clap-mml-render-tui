@@ -11,6 +11,7 @@ test-support = []
 [dependencies]
 cmrt-history = { path = "../history" }
 cmrt-offline-render = { path = "../offline-render" }
+cmrt-patch-select = { path = "../patch-select" }
 cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-render-core = { path = "../core-lib" }
 cmrt-runtime = { path = "../cmrt-runtime" }

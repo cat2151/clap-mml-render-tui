@@ -1,11 +1,11 @@
 use super::*;
 
 #[test]
-fn handle_patch_select_question_mark_enters_help_and_esc_returns_to_patch_select() {
+fn question_mark_enters_help_and_esc_returns_to_patch_select() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.mode = Mode::PatchSelect;
+    open_tones(&mut app, 2, "Tone 00");
 
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE));
+    press(&mut app, KeyCode::Char('?'));
 
     assert!(matches!(app.mode, Mode::Help));
     assert!(matches!(app.help_origin, Mode::PatchSelect));
@@ -13,16 +13,17 @@ fn handle_patch_select_question_mark_enters_help_and_esc_returns_to_patch_select
     app.handle_help(KeyCode::Esc);
 
     assert!(matches!(app.mode, Mode::PatchSelect));
+    assert!(app.patch_select.is_some());
 }
 
 #[test]
-fn handle_patch_select_n_p_t_switch_to_corresponding_overlays() {
+fn n_p_t_switch_to_corresponding_overlays() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
-        "Pads/Pad 1.fxp",
-        "Leads/Lead 1.fxp",
-    ]))));
+    open_patch_select_for_test(
+        &mut app,
+        r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#,
+        &["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"],
+    );
     app.patch_phrase_store.notepad.history = vec!["line history".to_string()];
     app.patch_phrase_store.patches.insert(
         "Leads/Lead 1.fxp".to_string(),
@@ -31,30 +32,34 @@ fn handle_patch_select_n_p_t_switch_to_corresponding_overlays() {
             favorites: vec!["lead favorite".to_string()],
         },
     );
-    app.open_patch_select_overlay(None);
-    app.patch_select.patch_cursor = 1;
-    app.patch_select.patch_list_state.select(Some(1));
 
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+    app.open_patch_select_overlay(Some("Leads/Lead 1.fxp"));
+    press(&mut app, KeyCode::Char('n'));
     assert!(matches!(app.mode, Mode::NotepadHistory));
+    assert!(app.patch_select.is_none());
 
-    app.open_patch_select_overlay(None);
-    app.patch_select.patch_cursor = 1;
-    app.patch_select.patch_list_state.select(Some(1));
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
+    app.open_patch_select_overlay(Some("Leads/Lead 1.fxp"));
+    press(&mut app, KeyCode::Char('p'));
     assert!(matches!(app.mode, Mode::PatchPhrase));
     assert_eq!(
         app.patch_phrase.patch_name.as_deref(),
         Some("Leads/Lead 1.fxp")
     );
 
-    app.open_patch_select_overlay(None);
-    app.patch_select.patch_cursor = 1;
-    app.patch_select.patch_list_state.select(Some(1));
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE));
+    app.open_patch_select_overlay(Some("Leads/Lead 1.fxp"));
+    press(&mut app, KeyCode::Char('t'));
     assert!(matches!(app.mode, Mode::PatchSelect));
-    assert_eq!(
-        app.patch_select.patch_filtered[app.patch_select.patch_cursor],
-        "Leads/Lead 1.fxp"
-    );
+    assert_eq!(selected(&app).as_deref(), Some("Leads/Lead 1.fxp"));
+}
+
+#[test]
+fn n_p_t_are_typed_into_the_regex_while_editing() {
+    let mut app = NotepadScreen::new_for_test(test_config());
+    open_tones(&mut app, 2, "Tone 00");
+
+    press(&mut app, KeyCode::Char('/'));
+    type_text(&mut app, "npt?");
+
+    assert!(matches!(app.mode, Mode::PatchSelect));
+    assert_eq!(regex_text(&app), "npt?");
 }

@@ -82,7 +82,7 @@ fn a_measure_generated_from_the_chord_row_is_auditioned_as_the_whole_phrase() {
     assert_both_auditions_play_the_measure(&mut app, &sink, KeyCode::Up);
     assert_eq!(
         sink.prepared().last().and_then(|patch| patch.patch()),
-        Some("Keys/Snapshot Keys.fxp")
+        Some("Pads/Snapshot Keys.fxp")
     );
 }
 

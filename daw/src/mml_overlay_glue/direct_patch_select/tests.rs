@@ -15,7 +15,7 @@ use super::super::super::{DawApp, DawMode};
 use crate::input::tests::build_test_app;
 
 const PAD_INIT_CELL: &str = r#"{"Surge XT patch": "Pads/Snapshot Pad.fxp"}"#;
-const KEYS_INIT_CELL: &str = r#"{"Surge XT patch": "Keys/Snapshot Keys.fxp"}"#;
+const KEYS_INIT_CELL: &str = r#"{"Surge XT patch": "Pads/Snapshot Keys.fxp"}"#;
 
 pub(in crate::mml_overlay_glue) fn plain(code: char) -> KeyEvent {
     KeyEvent::new(KeyCode::Char(code), KeyModifiers::NONE)
@@ -25,9 +25,9 @@ pub(in crate::mml_overlay_glue) fn key(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
 }
 
-/// 2 つとも Chord 用途にして、pad の track で開いた selector（Chord で開く）の中で行き来できるようにする。
+/// 2 つとも Chord の `pad` Preset に入れて、pad の track で開いた selector（Chord の `pad` で開く）の中で行き来できるようにする。
 fn catalog_pairs() -> Vec<(String, String)> {
-    ["Keys/Snapshot Keys.fxp", "Pads/Snapshot Pad.fxp"]
+    ["Pads/Snapshot Keys.fxp", "Pads/Snapshot Pad.fxp"]
         .into_iter()
         .map(|display| (display.to_string(), display.to_lowercase()))
         .collect()
@@ -100,6 +100,33 @@ fn confirming_writes_the_init_cell_and_returns_to_normal() {
     assert_eq!(app.editor.data[2][1], "cde");
     assert_eq!(app.editor.cursor_measure, 1);
     assert_eq!(*app.playback.auto_play_reservation.lock().unwrap(), Some(1));
+}
+
+/// `patch` を音色 favorite として store へ登録する（notepad の `f` と同じ形）。
+fn add_patch_favorite(app: &mut DawApp, patch: &str) {
+    app.patch_phrase_store
+        .patches
+        .entry(patch.to_string())
+        .or_default()
+        .favorites
+        .push("cde".to_string());
+    cmrt_history::touch_patch_favorite(&mut app.patch_phrase_store, patch);
+}
+
+#[test]
+fn the_favorite_preset_lists_the_patch_favorites_of_the_store() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
+    let (mut app, _cache_rx) = app_with_pad_track();
+    add_patch_favorite(&mut app, "Pads/Snapshot Keys.fxp");
+    app.handle_normal_key_event(plain('t'));
+
+    // Preset pane の先頭（ALL）の 1 つ下が `★ Favorite`。その一覧の先頭を確定する。
+    app.handle_direct_patch_select_key_event(key(KeyCode::Left));
+    app.handle_direct_patch_select_key_event(key(KeyCode::Home));
+    app.handle_direct_patch_select_key_event(key(KeyCode::Down));
+    app.handle_direct_patch_select_key_event(key(KeyCode::Enter));
+
+    assert_eq!(app.editor.data[2][0], KEYS_INIT_CELL);
 }
 
 #[test]
@@ -292,7 +319,7 @@ fn the_preview_goes_through_the_track_effect_chain() {
     wait_until("前の候補の試聴", || {
         sink.prepared()
             .iter()
-            .any(|patch| patch.patch() == Some("Keys/Snapshot Keys.fxp"))
+            .any(|patch| patch.patch() == Some("Pads/Snapshot Keys.fxp"))
     });
     let prepared = sink.prepared();
     assert!(!prepared.is_empty());

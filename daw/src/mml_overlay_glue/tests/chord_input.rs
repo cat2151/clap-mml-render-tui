@@ -13,7 +13,7 @@ const SECOND_GENERATED_TRACK: usize = 3;
 const PAD_PATCH: &str = "Pads/Snapshot Pad.fxp";
 const BASS_PATCH: &str = "Bass/Snapshot Bass.fxp";
 /// Pad と同じ Chord 用途。pad の音色で開いた selector（Chord で開く）から確定できる。
-const KEYS_PATCH: &str = "Keys/Snapshot Keys.fxp";
+const KEYS_PATCH: &str = "Pads/Snapshot Keys.fxp";
 
 fn generated_init(patch: &str, directive: &str) -> String {
     format!(r#"{{"Surge XT patch":"{patch}","generate from chord track":"{directive}"}}"#)

@@ -147,6 +147,9 @@ pub struct MmlOverlayContext {
     /// notepad 画面と共有しているフレーズ履歴。
     pub history: Vec<String>,
     pub favorites: Vec<String>,
+    /// 音色 selector の `★ Favorite` に出す音色名（登録が新しい順）。
+    /// [`Self::favorites`]（フレーズの favorite）とは別物。
+    pub patch_favorites: Vec<String>,
     /// `(Grid Sequencer 上の役割 group, 正規表現)` のユーザー追加プリセット。
     pub patch_filter_presets: Vec<(String, String)>,
     /// 打ちかけの 1 行を chord 行へ移せるか。chord 行を持つ画面（DAW）だけ `true`。

@@ -65,11 +65,24 @@ pub struct FilterPreset {
     pub label: String,
     pub pattern: Option<String>,
     pub is_user: bool,
+    /// `★ Favorite`。`matches` は host が渡した favorite の順に並ぶ。
+    pub is_favorite: bool,
     pub group: FilterGroup,
     pub matches: Arc<[usize]>,
 }
 
 impl FilterPreset {
+    pub(super) fn favorite(group: FilterGroup, matches: Arc<[usize]>) -> Self {
+        Self {
+            label: "★ Favorite".to_string(),
+            pattern: None,
+            is_user: false,
+            is_favorite: true,
+            group,
+            matches,
+        }
+    }
+
     pub(super) fn qualify_label(mut self) -> Self {
         self.label = format!("{} › {}", self.group.preset_prefix(), self.label);
         self
@@ -84,6 +97,7 @@ pub(super) fn presets_for(
         label: "ALL".to_string(),
         pattern: None,
         is_user: false,
+        is_favorite: false,
         group,
         matches: Arc::default(),
     }];
@@ -104,6 +118,7 @@ pub(super) fn presets_for(
                 label: pattern.clone(),
                 pattern: Some(pattern.clone()),
                 is_user: true,
+                is_favorite: false,
                 group,
                 matches: Arc::default(),
             }),
@@ -116,6 +131,7 @@ fn from_builtin(group: FilterGroup, preset: &PatchRolePreset) -> FilterPreset {
         label: preset.label.to_string(),
         pattern: Some(preset.pattern.to_string()),
         is_user: false,
+        is_favorite: false,
         group,
         matches: Arc::default(),
     }

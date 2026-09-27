@@ -11,7 +11,7 @@ use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 use crossterm::event::KeyEvent;
 
 use crate::patch_audition::{audition_action, PatchAudition, PatchAuditionAction, PatchChange};
-use crate::patch_select::{PatchSelect, PatchSelectAction};
+use crate::patch_select::{PatchSelect, PatchSelectAction, PatchSelectRequest};
 use crate::play_settings::{PlaySettings, PlaySettingsSelect};
 use crate::PatchCatalogSnapshot;
 
@@ -81,6 +81,8 @@ pub struct PatchAuditionContext {
     pub filter_presets: Vec<(String, String)>,
     /// 設定不足でカタログから外れたプラグインの案内。selector の枠の下へ出す。
     pub catalog_notes: Vec<String>,
+    /// 音色 favorite。登録が新しい順。`★ Favorite` の Preset と ★ 列に出す。
+    pub favorites: Vec<String>,
 }
 
 /// 音色 selector ＋ 演奏設定 ＋ 試聴の action 化。
@@ -97,6 +99,7 @@ pub struct PatchAuditionSelect<'a> {
     load_measurements: BTreeMap<String, PatchLoadMeasurement>,
     filter_presets: Vec<(String, String)>,
     catalog_notes: Vec<String>,
+    favorites: Vec<String>,
     /// selector を開けなかった理由。標準 stream ではなく持つ側の画面へ出す。
     notice: Option<PatchCatalogNotice>,
     /// Loading 中の open 要求を、一覧完成後に自動で実行する予約。
@@ -115,6 +118,7 @@ impl<'a> PatchAuditionSelect<'a> {
         self.load_measurements = context.load_measurements;
         self.filter_presets = context.filter_presets;
         self.catalog_notes = context.catalog_notes;
+        self.favorites = context.favorites;
         self.notice = None;
         self.requested = false;
         self.select = None;
@@ -126,6 +130,7 @@ impl<'a> PatchAuditionSelect<'a> {
         self.catalog = PatchCatalogSnapshot::Loading;
         self.role_index = PatchRoleIndex::default();
         self.filter_presets = Vec::new();
+        self.favorites = Vec::new();
         self.select = None;
         self.notice = None;
         self.requested = false;
@@ -182,15 +187,17 @@ impl<'a> PatchAuditionSelect<'a> {
             }
             PatchCatalogSnapshot::Ready(patches) => {
                 let count = patches.len();
-                self.select = PatchSelect::open(
-                    patches.clone(),
-                    self.patch.as_deref(),
-                    self.filter_presets.clone(),
-                    self.role_index.clone(),
-                    self.initial_role,
-                    self.catalog_notes.clone(),
-                    self.load_measurements.clone(),
-                );
+                self.select = PatchSelect::open(PatchSelectRequest {
+                    patches: patches.clone(),
+                    current: self.patch.clone(),
+                    user_presets: self.filter_presets.clone(),
+                    role_index: self.role_index.clone(),
+                    initial_role: self.initial_role,
+                    catalog_notes: self.catalog_notes.clone(),
+                    load_measurements: self.load_measurements.clone(),
+                    favorites: self.favorites.clone(),
+                    initial_query: String::new(),
+                });
                 crate::log_line(format!(
                     "action=patch-select event=open result=success count={count}"
                 ));

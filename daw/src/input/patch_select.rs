@@ -40,18 +40,8 @@ impl DawApp {
             self.mark_patch_phrase_store_dirty();
         }
 
-        self.overlays.patch_select.favorite_items = self
-            .patch_phrase_store
-            .favorite_patches
-            .iter()
-            .filter_map(|patch_name| {
-                self.patch_phrase_store
-                    .patches
-                    .get(patch_name)
-                    .is_some_and(|state| !state.favorites.is_empty())
-                    .then_some(patch_name.clone())
-            })
-            .collect::<Vec<_>>();
+        self.overlays.patch_select.favorite_items =
+            cmrt_history::favorite_patch_names(&self.patch_phrase_store);
     }
 
     fn sync_patch_select_cursors(&mut self) {

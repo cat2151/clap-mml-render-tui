@@ -23,239 +23,92 @@ fn parent_dir_supplies_the_default_generic_display_path_query() {
 }
 
 #[test]
-fn handle_patch_select_slash_then_chars_filter_and_preview_first_result() {
+fn slash_then_chars_filter_and_preview_the_first_result() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
-    app.patch_select.patch_all = make_patches(&["Pads/Pad 1.fxp", "JK Brass/Bass 1.fxp"]);
-    app.patch_select.patch_filtered = vec![
-        "Pads/Pad 1.fxp".to_string(),
-        "JK Brass/Bass 1.fxp".to_string(),
-    ];
-    app.patch_select.patch_list_state.select(Some(0));
-    app.mode = Mode::PatchSelect;
+    open_tones(&mut app, 12, "Tone 00");
 
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE));
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
+    press(&mut app, KeyCode::Char('/'));
+    type_text(&mut app, "1");
 
-    assert_eq!(app.patch_select.patch_query, "jk");
-    assert_eq!(app.patch_select.patch_cursor, 0);
-    assert_eq!(app.patch_select.patch_list_state.selected(), Some(0));
     assert_eq!(
-        app.patch_select.patch_filtered,
-        vec!["JK Brass/Bass 1.fxp".to_string()]
+        patch_select_list(&app),
+        vec!["Tone 01", "Tone 10", "Tone 11"]
     );
-    assert!(matches!(
-        &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "JK Brass/Bass 1.fxp", "Surge XT patch filter": "jk"} l8cdef"#
-    ));
+    assert_eq!(selected(&app).as_deref(), Some("Tone 01"));
+    assert_eq!(
+        playing(&app).as_deref(),
+        Some(r#"{"Surge XT patch": "Tone 01"} l8cdef"#)
+    );
 }
 
 #[test]
-fn handle_patch_select_enter_exits_filter_input_and_keeps_filtered_results() {
+fn enter_ends_editing_and_keeps_the_filtered_results() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
-    app.patch_select.patch_all =
-        make_patches(&["Pads/Pad 1.fxp", "JK Brass/Bass 1.fxp", "JK Lead.fxp"]);
-    app.patch_select.patch_filtered = app
-        .patch_select
-        .patch_all
-        .iter()
-        .map(|(name, _)| name.clone())
-        .collect();
-    app.patch_select.patch_list_state.select(Some(0));
-    app.mode = Mode::PatchSelect;
+    open_tones(&mut app, 12, "Tone 00");
 
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE));
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
-    app.handle_patch_select(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
+    press(&mut app, KeyCode::Char('/'));
+    type_text(&mut app, "1");
+    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('j'));
 
-    assert!(!app.patch_select.patch_select_filter_active);
-    assert_eq!(app.patch_select.patch_query, "jk");
-    assert_eq!(
-        app.patch_select.patch_filtered,
-        vec!["JK Brass/Bass 1.fxp".to_string(), "JK Lead.fxp".to_string()]
-    );
-    assert_eq!(app.patch_select.patch_cursor, 1);
-    assert_eq!(app.patch_select.patch_list_state.selected(), Some(1));
-    assert!(matches!(
-        &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "JK Lead.fxp", "Surge XT patch filter": "jk"} l8cdef"#
-    ));
+    assert!(!app.patch_select.as_ref().unwrap().filter_editing());
+    assert_eq!(regex_text(&app), "1");
+    assert_eq!(selected(&app).as_deref(), Some("Tone 10"));
 }
 
 #[test]
-fn handle_patch_select_backspace_with_empty_query_keeps_filter_input_active() {
+fn backspace_on_an_empty_regex_keeps_editing() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.mode = Mode::PatchSelect;
-    app.patch_select.patch_select_filter_active = true;
+    open_tones(&mut app, 2, "Tone 00");
 
-    app.handle_patch_select(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+    press(&mut app, KeyCode::Char('/'));
+    press(&mut app, KeyCode::Backspace);
 
-    assert!(app.patch_select.patch_select_filter_active);
-    assert_eq!(app.patch_select.patch_query, "");
+    assert!(app.patch_select.as_ref().unwrap().filter_editing());
+    assert_eq!(regex_text(&app), "");
 }
 
 #[test]
-fn handle_patch_select_char_filters_and_previews_first_result_after_slash() {
+fn regex_editing_uses_the_textarea_default_bindings() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
-    app.patch_select.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
-    app.patch_select.patch_filtered =
-        vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()];
-    app.patch_select.patch_cursor = 1;
-    app.patch_select.patch_list_state.select(Some(1));
-    app.mode = Mode::PatchSelect;
+    open_tones(&mut app, 2, "Tone 00");
 
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE));
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('L'), KeyModifiers::NONE));
+    press(&mut app, KeyCode::Char('/'));
+    type_text(&mut app, "pad");
+    press_ctrl(&mut app, 'a');
+    type_text(&mut app, "X");
 
-    assert_eq!(app.patch_select.patch_query, "L");
-    assert_eq!(
-        app.patch_select.patch_filtered,
-        vec!["Leads/Lead 1.fxp".to_string()]
-    );
-    assert_eq!(app.patch_select.patch_cursor, 0);
-    assert_eq!(app.patch_select.patch_list_state.selected(), Some(0));
-    assert!(matches!(
-        &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Leads/Lead 1.fxp", "Surge XT patch filter": "L"} l8cdef"#
-    ));
+    assert!(app.patch_select.as_ref().unwrap().filter_editing());
+    assert_eq!(regex_text(&app), "Xpad");
 }
 
 #[test]
-fn handle_patch_select_backspace_to_empty_keeps_filter_input_active() {
+fn opening_prefills_the_regex_with_the_line_filter_word() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
-    app.patch_select.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
-    app.patch_select.patch_filtered = vec!["Leads/Lead 1.fxp".to_string()];
-    app.patch_select.patch_query = "L".to_string();
-    app.patch_select.patch_select_filter_active = true;
-    app.patch_select.patch_list_state.select(Some(0));
-    app.mode = Mode::PatchSelect;
 
-    app.handle_patch_select(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
-
-    assert_eq!(app.patch_select.patch_query, "");
-    assert_eq!(
-        app.patch_select.patch_filtered,
-        vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()]
+    open_patch_select_for_test(
+        &mut app,
+        r#"{"Surge XT patch":"Tone 02","Surge XT patch filter":"0[12]"} l8cdef"#,
+        &["Tone 00", "Tone 01", "Tone 02"],
     );
-    assert!(app.patch_select.patch_select_filter_active);
-    assert_eq!(app.patch_select.patch_cursor, 0);
-    assert_eq!(app.patch_select.patch_list_state.selected(), Some(0));
-    assert!(matches!(
-        &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Pads/Pad 1.fxp"} l8cdef"#
-    ));
 
-    app.handle_patch_select(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+    assert_eq!(regex_text(&app), "0[12]");
+    assert!(!app.patch_select.as_ref().unwrap().filter_editing());
+    assert_eq!(patch_select_list(&app), vec!["Tone 01", "Tone 02"]);
+    assert_eq!(selected(&app).as_deref(), Some("Tone 02"));
+}
 
-    assert!(app.patch_select.patch_select_filter_active);
-    assert_eq!(app.patch_select.patch_query, "");
+#[test]
+fn an_invalid_line_filter_word_still_opens_with_an_empty_list() {
+    let mut app = NotepadScreen::new_for_test(test_config());
 
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
+    open_patch_select_for_test(
+        &mut app,
+        r#"{"Surge XT patch":"Tone 00","Surge XT patch filter":"["} l8cdef"#,
+        &["Tone 00", "Tone 01"],
+    );
 
     assert!(matches!(app.mode, Mode::PatchSelect));
-    assert!(app.patch_select.patch_select_filter_active);
-    assert_eq!(app.patch_select.patch_query, "p");
-    assert_eq!(
-        app.patch_select.patch_filtered,
-        vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()]
-    );
-}
-
-#[test]
-fn handle_patch_select_filter_ctrl_a_uses_tui_textarea_default_binding() {
-    let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
-    app.patch_select.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
-    app.patch_select.patch_filtered = app
-        .patch_select
-        .patch_all
-        .iter()
-        .map(|(name, _)| name.clone())
-        .collect();
-    app.mode = Mode::PatchSelect;
-
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE));
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('X'), KeyModifiers::NONE));
-
-    assert!(app.patch_select.patch_select_filter_active);
-    assert_eq!(app.patch_select.patch_query, "Xpad");
-}
-
-#[test]
-fn open_patch_select_overlay_prefills_saved_patch_filter_from_current_line() {
-    let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![
-        r#"{"Surge XT patch":"Pads/Pad 2.fxp","Surge XT patch filter":"pads"} l8cdef"#.to_string(),
-    ];
-    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(&[
-        "Pads/Pad 1.fxp",
-        "Pads/Pad 2.fxp",
-        "Leads/Lead 1.fxp",
-    ]))));
-
-    app.open_patch_select_overlay(None);
-
-    assert!(matches!(app.mode, Mode::PatchSelect));
-    assert_eq!(app.patch_select.patch_query, "pads");
-    assert_eq!(
-        cmrt_tui_core::text_input::textarea_value(&app.patch_select.patch_query_textarea),
-        "pads"
-    );
-    assert!(!app.patch_select.patch_select_filter_active);
-    assert_eq!(
-        app.patch_select.patch_filtered,
-        vec!["Pads/Pad 1.fxp".to_string(), "Pads/Pad 2.fxp".to_string()]
-    );
-    assert_eq!(app.patch_select.patch_cursor, 1);
-    assert_eq!(app.patch_select.patch_list_state.selected(), Some(1));
-}
-
-#[test]
-fn handle_patch_select_slash_on_favorites_filters_favorites_query_independently() {
-    let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
-    app.patch_select.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
-    app.patch_select.patch_filtered = app
-        .patch_select
-        .patch_all
-        .iter()
-        .map(|(name, _)| name.clone())
-        .collect();
-    app.patch_select.patch_favorite_items =
-        vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()];
-    app.patch_select.patch_select_focus = PatchSelectPane::Favorites;
-    app.patch_select.patch_favorites_state.select(Some(0));
-    app.mode = Mode::PatchSelect;
-
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE));
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE));
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE));
-
-    assert!(app.patch_select.patch_select_filter_active);
-    assert_eq!(
-        app.patch_select.patch_select_focus,
-        PatchSelectPane::Favorites
-    );
-    assert_eq!(app.patch_select.patch_query, "");
-    assert_eq!(app.patch_select.patch_favorites_query, "le");
-    assert_eq!(
-        app.patch_select_favorite_items(),
-        vec!["Leads/Lead 1.fxp".to_string()]
-    );
-    assert_eq!(app.patch_select.patch_favorites_cursor, 0);
-    assert_eq!(app.patch_select.patch_favorites_state.selected(), Some(0));
-    assert!(matches!(
-        &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Leads/Lead 1.fxp"} l8cdef"#
-    ));
+    assert_eq!(regex_text(&app), "[");
+    assert!(patch_select_list(&app).is_empty());
 }

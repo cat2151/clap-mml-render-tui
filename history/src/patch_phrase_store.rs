@@ -110,6 +110,23 @@ pub fn touch_patch_favorite(store: &mut PatchPhraseStore, patch_name: &str) {
     store.favorite_patches.insert(0, patch_name.to_string());
 }
 
+/// 音色 favorite の一覧。登録が新しい順で、フレーズの favorite が 1 つも無い音色と重複を除く。
+pub fn favorite_patch_names(store: &PatchPhraseStore) -> Vec<String> {
+    let mut seen = HashSet::new();
+    store
+        .favorite_patches
+        .iter()
+        .filter(|patch_name| {
+            store
+                .patches
+                .get(*patch_name)
+                .is_some_and(|state| !state.favorites.is_empty())
+        })
+        .filter(|patch_name| seen.insert(patch_name.as_str()))
+        .cloned()
+        .collect()
+}
+
 pub fn sync_patch_favorite_order(store: &mut PatchPhraseStore, patch_order: &[String]) -> bool {
     let mut ordered = Vec::new();
     let mut seen = HashSet::new();
@@ -159,3 +176,6 @@ pub fn sync_patch_favorite_order(store: &mut PatchPhraseStore, patch_order: &[St
     store.favorite_patches = ordered;
     true
 }
+
+#[cfg(test)]
+mod tests;

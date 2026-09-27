@@ -64,6 +64,34 @@ fn the_degrees_editor_does_draw_the_mml_input_box() {
 }
 
 #[test]
+fn the_favorite_preset_lists_the_patch_favorites_of_the_notepad_store() {
+    let favorite = "Pads/Other Pad.fxp";
+    let mut app = app_with_patches(PatchLoadState::ready(make_patches(&[
+        "Basses/Bass 1.fxp",
+        favorite,
+        "Pads/Warm Pad.fxp",
+    ])));
+    let mut store = crate::history::PatchPhraseStore::default();
+    store
+        .patches
+        .entry(favorite.to_string())
+        .or_default()
+        .favorites
+        .push("cde".to_string());
+    store.favorite_patches.push(favorite.to_string());
+    app.notepad.set_patch_phrase_store_for_test(store);
+    assert!(app.try_open_mml_overlay(plain(KeyCode::Char('t'))));
+
+    // Preset pane の先頭（ALL）の 1 つ下が `★ Favorite`。その一覧の先頭を確定する。
+    for code in [KeyCode::Left, KeyCode::Home, KeyCode::Down, KeyCode::Enter] {
+        app.handle_chord_chart_patch_select_key_event(plain(code));
+    }
+
+    assert!(app.chord_chart_patch_select.is_none());
+    assert_eq!(app.chord_chart_patch.as_deref(), Some(favorite));
+}
+
+#[test]
 fn a_failed_catalog_shows_the_reason_until_esc() {
     let mut app = app_with_patches(PatchLoadState::Err("catalog failed".to_string()));
 

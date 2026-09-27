@@ -106,6 +106,7 @@ impl TuiApp<'_> {
             load_measurements,
             history: history.to_vec(),
             favorites: favorites.to_vec(),
+            patch_favorites: self.notepad.patch_favorites(),
             patch_filter_presets: crate::history::load_mml_patch_filter_presets(),
             // notepad / keyboard / grid には chord 行が無い。移送先が無いので
             // chord のヒントも確認ダイアログも出さない。

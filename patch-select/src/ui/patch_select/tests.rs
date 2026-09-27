@@ -1,20 +1,83 @@
-use super::{format_load_time, list_title, patch_label, scroll_offset};
-use crate::{patch_select::PatchSelect, PatchCatalogEntry};
+use super::{
+    draw_in, format_load_time, list_title, patch_label, scroll_offset, PatchSelectDrawOptions,
+};
+use crate::{patch_select::PatchSelect, PatchCatalogEntry, PatchSelectRequest};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::{backend::TestBackend, buffer::Buffer, layout::Rect, text::Span, Terminal};
 
-fn patch_select(patches: &[&str]) -> PatchSelect<'static> {
-    PatchSelect::open(
-        patches
+const SCREEN: Rect = Rect::new(0, 0, 120, 30);
+
+fn patch_select_with_favorites(patches: &[&str], favorites: &[&str]) -> PatchSelect<'static> {
+    PatchSelect::open(PatchSelectRequest {
+        patches: patches
             .iter()
             .map(|patch| PatchCatalogEntry::from_display((*patch).to_string()))
             .collect(),
-        None,
-        Vec::new(),
-        Default::default(),
-        None,
-        Vec::new(),
-        Default::default(),
-    )
+        favorites: favorites.iter().map(|patch| patch.to_string()).collect(),
+        ..Default::default()
+    })
+    .expect("patch list is not empty")
+}
+
+fn render(select: &PatchSelect<'_>, area: Rect, options: &PatchSelectDrawOptions<'_>) -> Buffer {
+    let mut terminal =
+        Terminal::new(TestBackend::new(SCREEN.width, SCREEN.height)).expect("test terminal");
+    terminal
+        .draw(|frame| draw_in(select, frame, area, options))
+        .expect("draw");
+    terminal.backend().buffer().clone()
+}
+
+/// 画面の文字列。全角文字の後ろの継続セルは読み飛ばし、見えるとおりの並びにする。
+fn lines(buffer: &Buffer) -> Vec<String> {
+    (0..buffer.area.height)
+        .map(|y| {
+            let mut line = String::new();
+            let mut x = 0;
+            while x < buffer.area.width {
+                let symbol = buffer[(x, y)].symbol();
+                line.push_str(symbol);
+                x += (Span::raw(symbol).width() as u16).max(1);
+            }
+            line
+        })
+        .collect()
+}
+
+fn line_with<'a>(lines: &'a [String], text: &str) -> &'a str {
+    lines
+        .iter()
+        .find(|line| line.contains(text))
+        .unwrap_or_else(|| {
+            panic!(
+                "{text} is not drawn:
+{}",
+                lines.join(
+                    "
+"
+                )
+            )
+        })
+}
+
+/// 音色 pane の中の、`patch` の行の左側（音色名より前）だけを返す。
+fn patch_row_prefix<'a>(lines: &'a [String], patch: &str) -> &'a str {
+    let line = line_with(lines, patch);
+    let patch_column = line.find(patch).expect("patch is on the line");
+    let pane_start = line[..patch_column]
+        .rfind('│')
+        .map_or(0, |index| index + '│'.len_utf8());
+    &line[pane_start..patch_column]
+}
+
+fn patch_select(patches: &[&str]) -> PatchSelect<'static> {
+    PatchSelect::open(PatchSelectRequest {
+        patches: patches
+            .iter()
+            .map(|patch| PatchCatalogEntry::from_display((*patch).to_string()))
+            .collect(),
+        ..Default::default()
+    })
     .expect("patch list is not empty")
 }
 
@@ -90,4 +153,86 @@ fn merged_patch_label_shows_the_merged_count() {
 
     assert_eq!(patch_label(&merged), "A.syx/00 BELL ×10");
     assert_eq!(patch_label(&single), "A.syx/01 PAD");
+}
+
+#[test]
+fn favorite_column_marks_only_favorite_patches() {
+    let select = patch_select_with_favorites(&["Bass 1.fxp", "Lead 1.fxp"], &["Lead 1.fxp"]);
+
+    let lines = lines(&render(&select, SCREEN, &PatchSelectDrawOptions::default()));
+
+    assert!(patch_row_prefix(&lines, "Lead 1.fxp").contains('★'));
+    assert!(!patch_row_prefix(&lines, "Bass 1.fxp").contains('★'));
+}
+
+#[test]
+fn preset_pane_lists_the_favorite_preset() {
+    let select = patch_select_with_favorites(&["Bass 1.fxp"], &[]);
+
+    let lines = lines(&render(&select, SCREEN, &PatchSelectDrawOptions::default()));
+
+    line_with(&lines, "★ Favorite");
+}
+
+#[test]
+fn patch_marker_is_drawn_at_the_row_start_only_when_given() {
+    let select = patch_select_with_favorites(&["Bass 1.fxp", "Lead 1.fxp"], &[]);
+    let marker = |patch: &str| if patch == "Lead 1.fxp" { "♪ " } else { ". " };
+    let with_marker = PatchSelectDrawOptions {
+        patch_marker: Some(&marker),
+        ..Default::default()
+    };
+
+    let marked = lines(&render(&select, SCREEN, &with_marker));
+    let plain = lines(&render(&select, SCREEN, &PatchSelectDrawOptions::default()));
+
+    assert!(patch_row_prefix(&marked, "Lead 1.fxp").contains('♪'));
+    assert!(patch_row_prefix(&marked, "Bass 1.fxp").contains('.'));
+    assert!(!patch_row_prefix(&plain, "Lead 1.fxp").contains('♪'));
+    assert!(!patch_row_prefix(&plain, "Bass 1.fxp").contains('.'));
+}
+
+#[test]
+fn play_settings_hint_can_be_hidden_from_the_regex_title() {
+    let select = patch_select_with_favorites(&["Bass 1.fxp"], &[]);
+    let hidden = PatchSelectDrawOptions {
+        show_play_settings_hint: false,
+        ..Default::default()
+    };
+
+    let shown = lines(&render(&select, SCREEN, &PatchSelectDrawOptions::default())).join(
+        "
+",
+    );
+    let hidden = lines(&render(&select, SCREEN, &hidden)).join(
+        "
+",
+    );
+
+    assert!(shown.contains("S:演奏設定"));
+    assert!(hidden.contains("Space:試聴"));
+    assert!(!hidden.contains("S:演奏設定"));
+}
+
+#[test]
+fn draw_in_stays_inside_the_given_area() {
+    let select = patch_select_with_favorites(&["Bass 1.fxp", "Lead 1.fxp"], &["Lead 1.fxp"]);
+    let area = Rect::new(5, 3, 100, 20);
+
+    let buffer = render(&select, area, &PatchSelectDrawOptions::default());
+
+    let blank = Buffer::empty(SCREEN);
+    for y in 0..SCREEN.height {
+        for x in 0..SCREEN.width {
+            if !area.contains((x, y).into()) {
+                assert_eq!(buffer[(x, y)], blank[(x, y)], "drawn outside at ({x}, {y})");
+            }
+        }
+    }
+    assert!(lines(&buffer)
+        .join(
+            "
+"
+        )
+        .contains("Lead 1.fxp"));
 }

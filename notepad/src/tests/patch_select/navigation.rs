@@ -1,151 +1,87 @@
 use super::*;
 
-#[test]
-fn handle_patch_select_ctrl_j_moves_cursor_and_previews_destination_patch() {
-    let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
-    app.patch_select.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
-    app.patch_select.patch_filtered =
-        vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()];
-    app.patch_select.patch_list_state.select(Some(0));
-    app.mode = Mode::PatchSelect;
-
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::CONTROL));
-
-    assert_eq!(app.patch_select.patch_cursor, 1);
-    assert_eq!(app.patch_select.patch_list_state.selected(), Some(1));
-    assert!(matches!(
-        &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Leads/Lead 1.fxp"} l8cdef"#
-    ));
+fn tone_mml(patch: &str) -> String {
+    format!(r#"{{"Surge XT patch": "{patch}"}} l8cdef"#)
 }
 
 #[test]
-fn handle_patch_select_j_and_k_move_cursor_and_preview_destination_patch() {
+fn j_and_k_move_the_patch_cursor_and_preview_the_destination() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
-    app.patch_select.patch_all =
-        make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp", "Bass/Bass 1.fxp"]);
-    app.patch_select.patch_filtered = app
-        .patch_select
-        .patch_all
-        .iter()
-        .map(|(name, _)| name.clone())
-        .collect();
-    app.patch_select.patch_cursor = 1;
-    app.patch_select.patch_list_state.select(Some(1));
-    app.mode = Mode::PatchSelect;
+    open_tones(&mut app, 3, "Tone 01");
 
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
+    press(&mut app, KeyCode::Char('j'));
+    assert_eq!(selected(&app).as_deref(), Some("Tone 02"));
+    assert_eq!(playing(&app), Some(tone_mml("Tone 02")));
 
-    assert_eq!(app.patch_select.patch_query, "");
-    assert_eq!(app.patch_select.patch_cursor, 1);
-    assert_eq!(app.patch_select.patch_list_state.selected(), Some(1));
-    assert!(matches!(
-        &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Leads/Lead 1.fxp"} l8cdef"#
-    ));
+    press(&mut app, KeyCode::Char('k'));
+    assert_eq!(selected(&app).as_deref(), Some("Tone 01"));
+    assert_eq!(playing(&app), Some(tone_mml("Tone 01")));
 }
 
 #[test]
-fn handle_patch_select_ctrl_p_moves_cursor_up() {
+fn ctrl_j_n_move_down_and_ctrl_k_p_move_up() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
-    app.patch_select.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
-    app.patch_select.patch_filtered =
-        vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()];
-    app.patch_select.patch_cursor = 1;
-    app.patch_select.patch_list_state.select(Some(1));
-    app.mode = Mode::PatchSelect;
+    open_tones(&mut app, 4, "Tone 01");
 
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
-
-    assert_eq!(app.patch_select.patch_cursor, 0);
-    assert_eq!(app.patch_select.patch_list_state.selected(), Some(0));
-    assert!(matches!(
-        &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Pads/Pad 1.fxp"} l8cdef"#
-    ));
+    press_ctrl(&mut app, 'j');
+    assert_eq!(selected(&app).as_deref(), Some("Tone 02"));
+    press_ctrl(&mut app, 'n');
+    assert_eq!(selected(&app).as_deref(), Some("Tone 03"));
+    assert_eq!(playing(&app), Some(tone_mml("Tone 03")));
+    press_ctrl(&mut app, 'k');
+    assert_eq!(selected(&app).as_deref(), Some("Tone 02"));
+    press_ctrl(&mut app, 'p');
+    assert_eq!(selected(&app).as_deref(), Some("Tone 01"));
 }
 
 #[test]
-fn handle_patch_select_ctrl_n_and_ctrl_k_move_cursor() {
+fn page_keys_move_by_the_shared_page_step_and_home_end_jump_to_the_ends() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pad 1"} l8cdef"#.to_string()];
-    app.patch_select.patch_all = make_patches(&["Pad 0", "Pad 1", "Pad 2"]);
-    app.patch_select.patch_filtered = app
-        .patch_select
-        .patch_all
-        .iter()
-        .map(|(name, _)| name.clone())
-        .collect();
-    app.patch_select.patch_cursor = 1;
-    app.patch_select.patch_list_state.select(Some(1));
-    app.mode = Mode::PatchSelect;
+    open_tones(&mut app, 12, "Tone 00");
 
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL));
-    assert_eq!(app.patch_select.patch_cursor, 2);
-    assert_eq!(app.patch_select.patch_list_state.selected(), Some(2));
-
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL));
-    assert_eq!(app.patch_select.patch_cursor, 1);
-    assert_eq!(app.patch_select.patch_list_state.selected(), Some(1));
+    press(&mut app, KeyCode::PageDown);
+    assert_eq!(selected(&app).as_deref(), Some("Tone 10"));
+    press(&mut app, KeyCode::PageUp);
+    assert_eq!(selected(&app).as_deref(), Some("Tone 00"));
+    press(&mut app, KeyCode::End);
+    assert_eq!(selected(&app).as_deref(), Some("Tone 11"));
+    press(&mut app, KeyCode::Home);
+    assert_eq!(selected(&app).as_deref(), Some("Tone 00"));
 }
 
 #[test]
-fn handle_patch_select_page_down_and_page_up_move_by_visible_page() {
+fn ctrl_s_changes_nothing() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pad 0"} l8cdef"#.to_string()];
-    app.patch_select.patch_all = make_patches(&[
-        "Pad 0", "Pad 1", "Pad 2", "Pad 3", "Pad 4", "Pad 5", "Pad 6",
-    ]);
-    app.patch_select.patch_filtered = app
-        .patch_select
-        .patch_all
-        .iter()
-        .map(|(name, _)| name.clone())
-        .collect();
-    app.patch_select.patch_select_page_size = 3;
-    app.patch_select.patch_cursor = 1;
-    app.patch_select.patch_list_state.select(Some(1));
-    app.mode = Mode::PatchSelect;
+    open_tones(&mut app, 3, "Tone 01");
+    let list = patch_select_list(&app);
+    let played = playing(&app);
 
-    app.handle_patch_select(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE));
-    assert_eq!(app.patch_select.patch_cursor, 4);
-    assert_eq!(app.patch_select.patch_list_state.selected(), Some(4));
+    press_ctrl(&mut app, 's');
 
-    app.handle_patch_select(KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE));
-    assert_eq!(app.patch_select.patch_cursor, 1);
-    assert_eq!(app.patch_select.patch_list_state.selected(), Some(1));
+    assert!(matches!(app.mode, Mode::PatchSelect));
+    assert_eq!(patch_select_list(&app), list);
+    assert_eq!(selected(&app).as_deref(), Some("Tone 01"));
+    assert_eq!(playing(&app), played);
 }
 
 #[test]
-fn handle_patch_select_starts_scrolling_before_cursor_reaches_view_edge() {
+fn h_moves_to_the_preset_and_role_panes_that_change_the_list() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pad 0"} l8cdef"#.to_string()];
-    app.patch_select.patch_all = make_patches(&[
-        "Pad 0", "Pad 1", "Pad 2", "Pad 3", "Pad 4", "Pad 5", "Pad 6", "Pad 7",
-    ]);
-    app.patch_select.patch_filtered = app
-        .patch_select
-        .patch_all
-        .iter()
-        .map(|(name, _)| name.clone())
-        .collect();
-    app.patch_select.patch_select_page_size = 6;
-    app.patch_select.patch_list_state.select(Some(0));
-    app.mode = Mode::PatchSelect;
+    open_patch_select_for_test(
+        &mut app,
+        r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#,
+        &["Pads/Pad 1.fxp", "Pads/Pad 2.fxp", "Leads/Lead 1.fxp"],
+    );
 
-    for _ in 0..4 {
-        app.handle_patch_select(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
-    }
-    assert_eq!(app.patch_select.patch_cursor, 4);
-    assert_eq!(app.patch_select.patch_list_state.offset(), 1);
+    press(&mut app, KeyCode::Char('h'));
+    press(&mut app, KeyCode::Home);
+    assert_eq!(preset_label(&app), "ALL");
+    assert_eq!(
+        patch_select_list(&app),
+        vec!["Pads/Pad 1.fxp", "Pads/Pad 2.fxp"]
+    );
 
-    for _ in 0..2 {
-        app.handle_patch_select(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
-    }
-    assert_eq!(app.patch_select.patch_cursor, 2);
-    assert_eq!(app.patch_select.patch_list_state.offset(), 0);
+    press(&mut app, KeyCode::Char('h'));
+    press(&mut app, KeyCode::Home);
+    assert_eq!(patch_select_list(&app).len(), 3);
 }

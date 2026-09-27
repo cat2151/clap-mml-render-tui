@@ -1,5 +1,5 @@
 use super::*;
-use crate::{PatchPhrasePane, PatchSelectPane};
+use crate::PatchPhrasePane;
 
 fn pane_contains_cursor_highlight(buffer: &Buffer, pane: ratatui::layout::Rect) -> bool {
     (pane.y..pane.y + pane.height).any(|y| {

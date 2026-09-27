@@ -25,11 +25,15 @@ fn insert_and_filter_modes_use_terminal_bar_cursor() {
     app.mode = Mode::Insert;
     assert!(app.uses_textarea_cursor());
 
-    app.mode = Mode::PatchSelect;
-    app.patch_select.patch_select_filter_active = true;
+    app.mode = Mode::Normal;
+    crate::tests::open_patch_select_for_test(&mut app, "c", &["Pads/Pad 1.fxp"]);
+    assert!(!app.uses_textarea_cursor());
+    app.handle_patch_select(crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::Char('/'),
+        crossterm::event::KeyModifiers::NONE,
+    ));
     assert!(app.uses_textarea_cursor());
 
-    app.patch_select.patch_select_filter_active = false;
     app.mode = Mode::NotepadHistory;
     app.notepad_history.filter_active = true;
     assert!(app.uses_textarea_cursor());

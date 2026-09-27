@@ -41,6 +41,7 @@ impl TuiApp<'_> {
                 load_measurements,
                 filter_presets: crate::history::load_mml_patch_filter_presets(),
                 catalog_notes: self.mml_overlay_catalog_notes(),
+                favorites: self.notepad.patch_favorites(),
             },
             patch: patch.clone(),
             // 演奏設定は `Ctrl+P` の入力欄と共通。閉じたら書き戻す。

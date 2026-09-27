@@ -33,9 +33,10 @@ pub use grid_sequencer_session::{
 };
 pub use mml_patch_filter_presets::{load_mml_patch_filter_presets, save_mml_patch_filter_presets};
 pub use patch_phrase_store::{
-    load_patch_phrase_store, normalize_patch_phrase_store_for_available_patches,
-    rename_patch_phrase_store_key, save_patch_phrase_store, sync_patch_favorite_order,
-    touch_patch_favorite, PatchPhraseState, PatchPhraseStore,
+    favorite_patch_names, load_patch_phrase_store,
+    normalize_patch_phrase_store_for_available_patches, rename_patch_phrase_store_key,
+    save_patch_phrase_store, sync_patch_favorite_order, touch_patch_favorite, PatchPhraseState,
+    PatchPhraseStore,
 };
 pub use paths::{chord_chart_file_path, daw_file_load_path, daw_file_path};
 pub use session_state::{

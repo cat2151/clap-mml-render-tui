@@ -140,6 +140,7 @@ impl DawApp {
             load_measurements,
             history,
             favorites,
+            patch_favorites: cmrt_history::favorite_patch_names(&self.patch_phrase_store),
             patch_filter_presets: cmrt_history::load_mml_patch_filter_presets(),
             // DAW にだけ chord 行がある。MML のつもりで打った文字列がコード表記
             // だったとき、その場で chord 行へ移せる。

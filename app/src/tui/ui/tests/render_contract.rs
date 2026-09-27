@@ -57,14 +57,24 @@ fn patch_overlay_close_and_notepad_to_grid_redraw_leave_no_old_labels() {
     let mut app = TuiApp::new_for_test(test_config());
     let mut terminal = Terminal::new(TestBackend::new(90, 24)).unwrap();
 
-    app.notepad.mode = Mode::PatchSelect;
+    *app.notepad.patch_load_state.lock().unwrap() =
+        cmrt_tui_core::patch_load::PatchLoadState::ready(vec![(
+            "Pads/Pad 1.fxp".to_string(),
+            "pads/pad 1.fxp".to_string(),
+        )]);
+    app.notepad
+        .handle_key_event(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('t'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+    assert_eq!(app.notepad.mode, Mode::PatchSelect);
     terminal.draw(|frame| draw(&mut app, frame)).unwrap();
-    assert!(text(terminal.backend().buffer()).contains("Patches query"));
+    assert!(text(terminal.backend().buffer()).contains("Preset"));
 
     app.notepad.mode = Mode::Normal;
     terminal.draw(|frame| draw(&mut app, frame)).unwrap();
     let normal = text(terminal.backend().buffer());
-    assert!(!normal.contains("Patches query"));
+    assert!(!normal.contains("Preset"));
     assert!(normal.contains("notepad mode"));
 
     app.active_screen = PrimaryScreen::GridSequencer;

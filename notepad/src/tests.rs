@@ -11,7 +11,6 @@ mod notepad_history_persistence;
 mod patch_phrase;
 mod patch_phrase_history;
 mod patch_select;
-mod patch_select_favorites;
 
 static NEXT_TEST_ID: AtomicUsize = AtomicUsize::new(0);
 
@@ -19,6 +18,25 @@ fn make_patches(items: &[&str]) -> Vec<(String, String)> {
     items
         .iter()
         .map(|&s| (s.to_string(), s.to_lowercase()))
+        .collect()
+}
+
+/// 音色一覧を `patches`、現在行を `line` にして音色選択を開く。
+pub(crate) fn open_patch_select_for_test(
+    app: &mut NotepadScreen<'_>,
+    line: &str,
+    patches: &[&str],
+) {
+    app.editor.lines = vec![line.to_string()];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::ready(make_patches(patches))));
+    app.open_patch_select_overlay(None);
+}
+
+/// 音色選択の音色 pane に今出ている一覧。
+pub(crate) fn patch_select_list(app: &NotepadScreen<'_>) -> Vec<String> {
+    let select = app.patch_select.as_ref().expect("patch select is open");
+    (0..select.filtered_len())
+        .filter_map(|index| select.filtered_display(index).map(str::to_string))
         .collect()
 }
 

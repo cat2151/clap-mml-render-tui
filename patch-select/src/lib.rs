@@ -28,7 +28,7 @@ pub use patch_catalog::{
 };
 pub use patch_select::{
     filter_candidates, prepare_user_presets, FilterGroup, FilterPreset, PatchSelect,
-    PreparedPresets,
+    PatchSelectAction, PatchSelectRequest, PreparedPresets, PAGE_STEP,
 };
 pub use play_settings::{is_play_settings_trigger, PlaySettings, PlaySettingsSelect};
 

@@ -33,8 +33,8 @@ fn handle_patch_phrase_n_p_t_switch_to_corresponding_overlays() {
     app.handle_patch_phrase(KeyCode::Char('t'));
     assert!(matches!(app.mode, Mode::PatchSelect));
     assert_eq!(
-        app.patch_select.patch_filtered[app.patch_select.patch_cursor],
-        "Pads/Pad 1.fxp"
+        app.patch_select_selected_patch_name().as_deref(),
+        Some("Pads/Pad 1.fxp")
     );
 }
 

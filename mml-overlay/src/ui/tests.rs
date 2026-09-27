@@ -18,7 +18,7 @@ fn render(overlay: &MmlOverlay<'_>) -> String {
 }
 
 fn render_with_status(overlay: &MmlOverlay<'_>, status: &MmlOverlaySenderStatus) -> String {
-    let mut terminal = Terminal::new(TestBackend::new(80, 16)).unwrap();
+    let mut terminal = Terminal::new(TestBackend::new(100, 16)).unwrap();
     terminal
         .draw(|frame| draw_with_status(overlay, status, frame))
         .unwrap();

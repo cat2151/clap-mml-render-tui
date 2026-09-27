@@ -183,6 +183,7 @@ impl<'a> MmlOverlay<'a> {
             load_measurements: context.load_measurements,
             filter_presets: context.patch_filter_presets,
             catalog_notes: context.catalog_notes,
+            favorites: context.patch_favorites,
         });
         self.history = context.history;
         self.favorites = context.favorites;

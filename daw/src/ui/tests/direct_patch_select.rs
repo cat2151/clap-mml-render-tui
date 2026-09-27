@@ -7,7 +7,7 @@ use cmrt_tui_core::patch_load::PatchLoadState;
 fn app_with_selector_open() -> DawApp {
     let mut app = build_test_app();
     *app.patch_load.lock().unwrap() = PatchLoadState::ready(
-        ["Keys/Snapshot Keys.fxp", "Pads/Snapshot Pad.fxp"]
+        ["Pads/Snapshot Keys.fxp", "Pads/Snapshot Pad.fxp"]
             .into_iter()
             .map(|display| (display.to_string(), display.to_lowercase()))
             .collect(),

@@ -26,11 +26,41 @@ const QUERY_PLACEHOLDER: &str = r"例: warm pad|strings";
 const QUERY_HEIGHT: u16 = 3;
 const CATEGORY_COLUMN_WIDTH: u16 = 12;
 const LOAD_COLUMN_WIDTH: u16 = 7;
+const FAVORITE_COLUMN_WIDTH: u16 = 2;
+const FAVORITE_MARK: &str = "★";
+const MARKER_COLUMN_WIDTH: u16 = 2;
 /// 選択行の上下に残す viewport の割合。10行なら上下3行を見せる。
 const SCROLL_MARGIN_PERCENT: usize = 30;
 
+/// 描画の出し分け。既定は画面中央のモーダルとして描くときの見え方。
+pub struct PatchSelectDrawOptions<'f> {
+    /// 音色行の先頭に付ける印を音色名から返す。`None` なら印の列を作らない。
+    pub patch_marker: Option<&'f dyn Fn(&str) -> &'static str>,
+    /// Regex 欄の title に `S:演奏設定` を出すか。演奏設定を開けない host は `false`。
+    pub show_play_settings_hint: bool,
+}
+
+impl Default for PatchSelectDrawOptions<'_> {
+    fn default() -> Self {
+        Self {
+            patch_marker: None,
+            show_play_settings_hint: true,
+        }
+    }
+}
+
 pub(super) fn draw(select: &PatchSelect<'_>, frame: &mut Frame<'_>) {
     let area = centered_rect(94, 78, frame.area());
+    draw_in(select, frame, area, &PatchSelectDrawOptions::default());
+}
+
+/// `area` の中だけに描く。枠の外側（status 行など）は持つ側が描く。
+pub(super) fn draw_in(
+    select: &PatchSelect<'_>,
+    frame: &mut Frame<'_>,
+    area: Rect,
+    options: &PatchSelectDrawOptions<'_>,
+) {
     frame.render_widget(Clear, area);
 
     // 案内が無いときは 1 行も取らない。ふだんの見え方を変えないため。
@@ -43,14 +73,19 @@ pub(super) fn draw(select: &PatchSelect<'_>, frame: &mut Frame<'_>) {
             Constraint::Length(notes_height),
         ])
         .split(area);
-    draw_query(select, frame, chunks[0]);
-    draw_panes(select, frame, chunks[1]);
+    draw_query(select, frame, chunks[0], options);
+    draw_panes(select, frame, chunks[1], options);
     if notes_height > 0 {
         draw_notes(select, frame, chunks[2]);
     }
 }
 
-fn draw_panes(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
+fn draw_panes(
+    select: &PatchSelect<'_>,
+    frame: &mut Frame<'_>,
+    area: Rect,
+    options: &PatchSelectDrawOptions<'_>,
+) {
     let group_width = (area.width / 5).clamp(12, 22);
     let preset_width = (area.width / 4).clamp(14, 30);
     let panes = Layout::default()
@@ -63,7 +98,7 @@ fn draw_panes(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
         .split(area);
     draw_groups(select, frame, panes[0]);
     draw_presets(select, frame, panes[1]);
-    draw_list(select, frame, panes[2]);
+    draw_list(select, frame, panes[2], options);
 }
 
 /// 案内に要る行数。折り返しぶんも数える（1 行に収まらないと尻切れになる）。
@@ -98,24 +133,29 @@ fn draw_notes(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
     );
 }
 
-fn draw_query(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
+fn draw_query(
+    select: &PatchSelect<'_>,
+    frame: &mut Frame<'_>,
+    area: Rect,
+    options: &PatchSelectDrawOptions<'_>,
+) {
     let textarea = select.query_textarea();
     let value = textarea_value(textarea);
     let (title, placeholder, border_color) = if select.filter_editing() {
         (
-            " Regex (空白=AND)  Enter:絞り込み確定  Esc:前回へ戻す ",
+            " Regex (空白=AND)  Enter:絞り込み確定  Esc:前回へ戻す ".to_string(),
             QUERY_PLACEHOLDER,
             MONOKAI_YELLOW,
         )
     } else {
         (
-            " Regex (空白=AND)  /:編集  Enter:音色決定  Esc:取消  Space:試聴  S:演奏設定 ",
+            query_title(options.show_play_settings_hint),
             "/ で絞り込み",
             MONOKAI_FG,
         )
     };
     frame.render_widget(
-        &build_query_textarea_widget(textarea, &value, title, placeholder, border_color),
+        &build_query_textarea_widget(textarea, &value, &title, placeholder, border_color),
         area,
     );
     if select.filter_editing() {
@@ -123,6 +163,15 @@ fn draw_query(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
         // 呼び出し元の MML カーソルを上書きしない。
         frame.set_cursor_position(single_line_textarea_cursor_position(area, textarea));
     }
+}
+
+fn query_title(show_play_settings_hint: bool) -> String {
+    let play_settings = if show_play_settings_hint {
+        "  S:演奏設定"
+    } else {
+        ""
+    };
+    format!(" Regex (空白=AND)  /:編集  Enter:音色決定  Esc:取消  Space:試聴{play_settings} ")
 }
 
 fn pane_block(title: String, focused: bool) -> Block<'static> {
@@ -200,21 +249,31 @@ fn patch_label(patch: &PatchCatalogEntry) -> String {
     }
 }
 
-fn draw_list(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
+fn draw_list(
+    select: &PatchSelect<'_>,
+    frame: &mut Frame<'_>,
+    area: Rect,
+    options: &PatchSelectDrawOptions<'_>,
+) {
     let block = pane_block(
         list_title(select),
         select.focus() == PatchSelectFocus::Patches,
     );
+    let marker = options.patch_marker;
     let rows = select
         .filtered()
         .map(|patch| {
-            Row::new([
-                Cell::from(patch.selector_category().unwrap_or("")),
-                Cell::from(patch_label(patch)),
-                Cell::from(
-                    Line::from(load_label(select, patch.display())).alignment(Alignment::Right),
-                ),
-            ])
+            let mut cells = Vec::with_capacity(5);
+            if let Some(marker) = marker {
+                cells.push(Cell::from(marker(patch.display())));
+            }
+            cells.push(Cell::from(favorite_mark(select, patch.display())));
+            cells.push(Cell::from(patch.selector_category().unwrap_or("")));
+            cells.push(Cell::from(patch_label(patch)));
+            cells.push(Cell::from(
+                Line::from(load_label(select, patch.display())).alignment(Alignment::Right),
+            ));
+            Row::new(cells)
         })
         .collect::<Vec<_>>();
     // 枠内の1行は header が使うので、候補に使える高さだけで margin を計算する。
@@ -227,26 +286,41 @@ fn draw_list(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
         visible_rows,
     );
     state.select((!rows.is_empty()).then_some(select.cursor()));
+    let mut widths = Vec::with_capacity(5);
+    let mut header = Vec::with_capacity(5);
+    if marker.is_some() {
+        widths.push(Constraint::Length(MARKER_COLUMN_WIDTH));
+        header.push(Cell::from(""));
+    }
+    widths.extend([
+        Constraint::Length(FAVORITE_COLUMN_WIDTH),
+        Constraint::Length(CATEGORY_COLUMN_WIDTH),
+        Constraint::Fill(1),
+        Constraint::Length(LOAD_COLUMN_WIDTH),
+    ]);
+    header.extend([
+        Cell::from(FAVORITE_MARK),
+        Cell::from("Category"),
+        Cell::from("Patch"),
+        Cell::from(Line::from("Load").alignment(Alignment::Right)),
+    ]);
     frame.render_stateful_widget(
-        Table::new(
-            rows,
-            [
-                Constraint::Length(CATEGORY_COLUMN_WIDTH),
-                Constraint::Fill(1),
-                Constraint::Length(LOAD_COLUMN_WIDTH),
-            ],
-        )
-        .header(Row::new([
-            Cell::from("Category"),
-            Cell::from("Patch"),
-            Cell::from(Line::from("Load").alignment(Alignment::Right)),
-        ]))
-        .block(block)
-        .row_highlight_style(cursor_highlight_style(Style::default().fg(MONOKAI_FG)))
-        .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
+        Table::new(rows, widths)
+            .header(Row::new(header))
+            .block(block)
+            .row_highlight_style(cursor_highlight_style(Style::default().fg(MONOKAI_FG)))
+            .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
         area,
         &mut state,
     );
+}
+
+fn favorite_mark(select: &PatchSelect<'_>, patch: &str) -> &'static str {
+    if select.is_favorite(patch) {
+        FAVORITE_MARK
+    } else {
+        ""
+    }
 }
 
 fn table_state(

@@ -1,9 +1,12 @@
 use super::*;
+use cmrt_patches::PatchRole;
 use crossterm::event::KeyModifiers;
 
+mod favorites;
 mod filter_edit;
 mod metadata;
 mod navigation;
+mod start_cursor;
 
 fn press(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
@@ -43,15 +46,12 @@ fn open_with(
     current: Option<&str>,
     user_presets: Vec<(String, String)>,
 ) -> PatchSelect<'static> {
-    PatchSelect::open(
+    PatchSelect::open(PatchSelectRequest {
         patches,
-        current,
+        current: current.map(str::to_string),
         user_presets,
-        Default::default(),
-        None,
-        Vec::new(),
-        Default::default(),
-    )
+        ..Default::default()
+    })
     .expect("patch list is not empty")
 }
 
@@ -91,16 +91,7 @@ fn select_group(select: &mut PatchSelect<'_>, index: usize) {
 
 #[test]
 fn an_empty_patch_list_does_not_open() {
-    assert!(PatchSelect::open(
-        Vec::new(),
-        None,
-        Vec::new(),
-        Default::default(),
-        None,
-        Vec::new(),
-        Default::default()
-    )
-    .is_none());
+    assert!(PatchSelect::open(PatchSelectRequest::default()).is_none());
 }
 
 #[test]
@@ -192,7 +183,7 @@ fn hat_is_the_only_builtin_hi_hat_spelling() {
 
     select_group(&mut select, 4);
     select.handle_key(press(KeyCode::Right));
-    for _ in 0..3 {
+    for _ in 0..4 {
         select.handle_key(press(KeyCode::Down));
     }
 
@@ -228,8 +219,9 @@ fn a_preset_and_the_typed_regex_are_combined_with_and() {
     );
     select_group(&mut select, 2);
     select.handle_key(press(KeyCode::Right));
-    select.handle_key(press(KeyCode::Down));
-    select.handle_key(press(KeyCode::Down));
+    for _ in 0..3 {
+        select.handle_key(press(KeyCode::Down));
+    }
 
     type_text(&mut select, "warm");
 

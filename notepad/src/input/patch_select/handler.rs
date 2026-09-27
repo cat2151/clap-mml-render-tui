@@ -1,158 +1,101 @@
+use cmrt_patch_select::{PatchSelectAction, PAGE_STEP};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+use crate::Mode;
 use crate::NotepadScreen;
-use crate::{Mode, PatchSelectPane};
+
+/// 試聴後の先読みで優先する向き。音色一覧を上下に動かすキーだけが向きを持つ。
+fn navigation_delta(key_event: KeyEvent) -> Option<isize> {
+    match key_event.code {
+        KeyCode::Down | KeyCode::Char('j') => Some(1),
+        KeyCode::Up | KeyCode::Char('k') => Some(-1),
+        KeyCode::PageDown => Some(PAGE_STEP),
+        KeyCode::PageUp => Some(-PAGE_STEP),
+        _ => None,
+    }
+}
 
 impl<'a> NotepadScreen<'a> {
-    fn add_selected_patch_phrase_favorite(&mut self) {
-        let Some(patch_name) = self.patch_select_selected_patch_name() else {
-            return;
-        };
-        let Some(phrase) = self.patch_select_current_phrase() else {
-            return;
-        };
-        self.add_patch_phrase_favorite(patch_name, phrase);
-        self.refresh_patch_select_favorites();
-        self.sync_patch_select_states();
-        self.preview_selected_patch();
-    }
-
-    fn handle_patch_select_with_ctrl(&mut self, key_event: KeyEvent) {
-        if let KeyCode::Char(c) = key_event.code {
-            match c.to_ascii_lowercase() {
-                'f' => self.add_selected_patch_phrase_favorite(),
-                'j' | 'n' => self.move_patch_select_selection_by(1),
-                'k' | 'p' => self.move_patch_select_selection_by(-1),
-                's' => self.toggle_patch_select_sort_order(),
-                _ => {}
-            }
-        }
-    }
-
-    fn handle_patch_select_filter_input(&mut self, key_event: KeyEvent) {
-        match self.patch_select.patch_select_focus {
-            PatchSelectPane::Patches => cmrt_tui_core::text_input::sync_single_line_textarea(
-                &mut self.patch_select.patch_query_textarea,
-                &self.patch_select.patch_query,
-            ),
-            PatchSelectPane::Favorites => cmrt_tui_core::text_input::sync_single_line_textarea(
-                &mut self.patch_select.patch_favorites_query_textarea,
-                &self.patch_select.patch_favorites_query,
-            ),
-        }
-
-        match key_event.code {
-            KeyCode::Esc => {
-                self.mode = Mode::Normal;
-            }
-            KeyCode::Enter => {
-                self.patch_select.patch_select_filter_active = false;
-                self.sync_patch_select_states();
-            }
-            KeyCode::Char('?') => self.enter_help(),
-            _ => match self.patch_select.patch_select_focus {
-                PatchSelectPane::Patches => {
-                    if cmrt_tui_core::text_input::apply_key_event_to_textarea(
-                        &mut self.patch_select.patch_query_textarea,
-                        key_event,
-                    ) {
-                        self.patch_select.patch_query = cmrt_tui_core::text_input::textarea_value(
-                            &self.patch_select.patch_query_textarea,
-                        );
-                        self.update_patch_filter();
-                    }
-                }
-                PatchSelectPane::Favorites => {
-                    if cmrt_tui_core::text_input::apply_key_event_to_textarea(
-                        &mut self.patch_select.patch_favorites_query_textarea,
-                        key_event,
-                    ) {
-                        self.patch_select.patch_favorites_query =
-                            cmrt_tui_core::text_input::textarea_value(
-                                &self.patch_select.patch_favorites_query_textarea,
-                            );
-                        self.update_patch_favorites_filter();
-                    }
-                }
-            },
-        }
-    }
-
-    fn set_patch_select_focus(&mut self, focus: PatchSelectPane) {
-        self.patch_select.patch_select_focus = focus;
-        self.sync_patch_select_states();
-        self.preview_selected_patch();
-    }
-
     pub(crate) fn handle_patch_select(&mut self, key_event: KeyEvent) {
-        if self.patch_select.patch_select_filter_active {
-            self.handle_patch_select_filter_input(key_event);
+        let Some(select) = self.patch_select.as_ref() else {
+            self.mode = Mode::Normal;
+            return;
+        };
+        if select.filter_editing() {
+            self.forward_key_to_patch_select(key_event);
             return;
         }
 
         if key_event.modifiers.contains(KeyModifiers::CONTROL) {
-            self.handle_patch_select_with_ctrl(key_event);
+            if let KeyCode::Char(c) = key_event.code {
+                let code = match c.to_ascii_lowercase() {
+                    'f' => return self.add_selected_patch_phrase_favorite(),
+                    'j' | 'n' => KeyCode::Down,
+                    'k' | 'p' => KeyCode::Up,
+                    _ => return,
+                };
+                self.forward_key_to_patch_select(KeyEvent::new(code, KeyModifiers::NONE));
+            }
             return;
         }
 
         match key_event.code {
-            KeyCode::Esc => {
-                self.mode = Mode::Normal;
-            }
             KeyCode::Char('n') => {
+                self.patch_select = None;
                 self.start_notepad_history();
             }
             KeyCode::Char('p') => {
-                self.start_patch_phrase_for_patch_name(self.patch_select_selected_patch_name());
+                let selected_patch_name = self.patch_select_selected_patch_name();
+                self.patch_select = None;
+                self.start_patch_phrase_for_patch_name(selected_patch_name);
             }
             KeyCode::Char('t') => {
                 let selected_patch_name = self.patch_select_selected_patch_name();
                 self.open_patch_select_overlay(selected_patch_name.as_deref());
             }
-            KeyCode::Enter => {
-                if let Some(selected) = self.patch_select_selected_patch_name() {
-                    self.replace_current_line_patch(&selected);
-                    let line = self.editor.lines[self.editor.cursor].clone();
-                    self.record_notepad_history(&line);
-                }
-                self.mode = Mode::Normal;
+            KeyCode::Char('f') => self.add_selected_patch_phrase_favorite(),
+            KeyCode::Char('?') => self.enter_help(),
+            _ => self.forward_key_to_patch_select(key_event),
+        }
+    }
+
+    fn forward_key_to_patch_select(&mut self, key_event: KeyEvent) {
+        let Some(select) = self.patch_select.as_mut() else {
+            return;
+        };
+        let action = select.handle_key(key_event);
+        self.apply_patch_select_action(action, navigation_delta(key_event));
+    }
+
+    fn apply_patch_select_action(&mut self, action: PatchSelectAction, delta: Option<isize>) {
+        match action {
+            PatchSelectAction::Continue => {}
+            PatchSelectAction::Preview(_) | PatchSelectAction::PlayLine(_) => {
+                self.preview_selected_patch_with_navigation_hint(delta);
+            }
+            PatchSelectAction::Confirm(patch_name) => {
+                self.replace_current_line_patch(&patch_name);
+                let line = self.editor.lines[self.editor.cursor].clone();
+                self.record_notepad_history(&line);
+                self.close_patch_select();
                 self.prime_normal_mode_startup_cache();
             }
-            KeyCode::Left | KeyCode::Char('h') => {
-                self.set_patch_select_focus(PatchSelectPane::Patches);
-            }
-            KeyCode::Right | KeyCode::Char('l') => {
-                self.set_patch_select_focus(PatchSelectPane::Favorites);
-            }
-            KeyCode::Char('j') | KeyCode::Down => self.move_patch_select_selection_by(1),
-            KeyCode::Char('k') | KeyCode::Up => self.move_patch_select_selection_by(-1),
-            KeyCode::PageDown => self
-                .move_patch_select_selection_by(self.patch_select.patch_select_page_size as isize),
-            KeyCode::PageUp => self.move_patch_select_selection_by(
-                -(self.patch_select.patch_select_page_size as isize),
-            ),
-            KeyCode::Char(' ') => self.preview_selected_patch(),
-            KeyCode::Char('f') => self.add_selected_patch_phrase_favorite(),
-            KeyCode::Char('/') => {
-                self.patch_select.patch_select_filter_active = true;
-                match self.patch_select.patch_select_focus {
-                    PatchSelectPane::Patches => {
-                        self.patch_select.patch_query_textarea =
-                            cmrt_tui_core::text_input::new_single_line_textarea(
-                                &self.patch_select.patch_query,
-                            );
-                    }
-                    PatchSelectPane::Favorites => {
-                        self.patch_select.patch_favorites_query_textarea =
-                            cmrt_tui_core::text_input::new_single_line_textarea(
-                                &self.patch_select.patch_favorites_query,
-                            );
-                    }
+            // notepad は selector に音色を読み込ませていないので、戻す音色は無い。
+            PatchSelectAction::Cancel => self.close_patch_select(),
+            PatchSelectAction::SaveUserPresets { presets, preview } => {
+                if let Err(error) = cmrt_history::save_mml_patch_filter_presets(&presets) {
+                    *self.playback.session.play_state().lock().unwrap() =
+                        crate::PlayState::Err(format!("preset の保存に失敗: {error}"));
                 }
-                self.sync_patch_select_states();
+                if preview.is_some() {
+                    self.preview_selected_patch();
+                }
             }
-            KeyCode::Char('?') => self.enter_help(),
-            _ => {}
         }
+    }
+
+    fn close_patch_select(&mut self) {
+        self.patch_select = None;
+        self.mode = Mode::Normal;
     }
 }

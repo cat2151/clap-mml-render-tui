@@ -17,11 +17,11 @@ const PAD_INIT_CELL: &str = r#"{"Surge XT patch": "Pads/Snapshot Pad.fxp"}"#;
 /// builtin の分類にどれも当たらない音色。ユーザープリセットの効果だけを見るため。
 const UNCLASSIFIED_PATCH: &str = "Misc/Zzq Item.fxp";
 
-/// Pad と Keys はどちらも Chord 用途。pad の track で開いた selector（Chord で開く）の中で
+/// Pad と Keys はどちらも Chord の `pad` Preset に入る。pad の track で開いた selector（Chord の `pad` で開く）の中で
 /// 確定先を選べるようにする。
 fn catalog_pairs() -> Vec<(String, String)> {
     [
-        "Keys/Snapshot Keys.fxp",
+        "Pads/Snapshot Keys.fxp",
         "Pads/Snapshot Pad.fxp",
         UNCLASSIFIED_PATCH,
     ]
@@ -65,10 +65,10 @@ fn confirming_a_patch_writes_it_into_the_init_cell() {
 
     confirm_patch_by_query(&mut app, "snapshot keys");
 
-    assert_eq!(app.mml_overlay.patch(), Some("Keys/Snapshot Keys.fxp"));
+    assert_eq!(app.mml_overlay.patch(), Some("Pads/Snapshot Keys.fxp"));
     assert_eq!(
         app.editor.data[2][0],
-        r#"{"Surge XT patch": "Keys/Snapshot Keys.fxp"}"#
+        r#"{"Surge XT patch": "Pads/Snapshot Keys.fxp"}"#
     );
 }
 
@@ -108,7 +108,7 @@ fn confirming_a_patch_keeps_the_patch_filter_query() {
 
     assert_eq!(
         app.editor.data[2][0],
-        r#"{"Surge XT patch": "Keys/Snapshot Keys.fxp", "Surge XT patch filter": "snapshot"}"#,
+        r#"{"Surge XT patch": "Pads/Snapshot Keys.fxp", "Surge XT patch filter": "snapshot"}"#,
         "音色名だけを差し替え、付随メタデータは壊さないこと"
     );
 }
@@ -143,7 +143,7 @@ fn the_confirmed_patch_survives_closing_the_overlay() {
     assert_eq!(app.mode, DawMode::Normal);
     assert_eq!(
         app.editor.data[2][0],
-        r#"{"Surge XT patch": "Keys/Snapshot Keys.fxp"}"#
+        r#"{"Surge XT patch": "Pads/Snapshot Keys.fxp"}"#
     );
 }
 

@@ -2,7 +2,8 @@
 
 use super::*;
 
-const PAGE_STEP: isize = 10;
+/// PgUp / PgDn で動く行数。
+pub const PAGE_STEP: isize = 10;
 
 /// 左右キーでどの pane のカーソルを上下移動するか。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -4,26 +4,31 @@
 //! 手入力した正規表現とプリセットを AND で組み合わせる。選択そのものはここに閉じ、
 //! 音を鳴らす処理は [`crate::PatchAuditionSelect`]、JSON へ永続化する処理は host app に任せる。
 
+mod favorites;
 mod filter;
 mod keys;
 mod navigation;
+mod open;
 mod prepared;
 mod presets;
 
 use std::{cell::Cell, collections::BTreeMap, sync::Arc};
 
-use cmrt_patches::{PatchRole, PatchRoleIndex};
+use cmrt_patches::PatchRoleIndex;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui_textarea::TextArea;
 
 use cmrt_tui_core::{patch_load::PatchLoadMeasurement, text_input};
 
-use crate::{patch_catalog::sort_for_selector, PatchCatalogEntry};
+use crate::PatchCatalogEntry;
 
 pub use filter::filter_candidates;
 use filter::is_valid_condition;
 use keys::{is_add_preset_key, is_filter_edit_trigger, is_preview_key, is_random_jump_key};
 pub(crate) use navigation::PatchSelectFocus;
+pub use navigation::PAGE_STEP;
+use open::prepare_presets;
+pub use open::PatchSelectRequest;
 use prepared::build_role_index;
 pub use prepared::PreparedPresets;
 use presets::{normalize_user_presets, patterns_for_role};
@@ -32,7 +37,8 @@ pub use presets::{prepare_user_presets, FilterGroup, FilterPreset};
 pub(crate) use keys::is_patch_select_play_settings_trigger;
 
 /// 音色選択が呼び出し側へ求める処理。
-pub(crate) enum PatchSelectAction {
+#[derive(Debug, PartialEq, Eq)]
+pub enum PatchSelectAction {
     /// 表示が変わっただけ。
     Continue,
     /// この音色を試聴する。
@@ -80,70 +86,17 @@ pub struct PatchSelect<'a> {
     /// 設定不足でカタログから外れたプラグインの案内。枠の下へそのまま出す。
     catalog_notes: Vec<String>,
     load_measurements: BTreeMap<String, PatchLoadMeasurement>,
+    /// 音色 favorite。登録が新しい順。
+    favorites: Vec<String>,
 }
 
 impl<'a> PatchSelect<'a> {
-    /// 音色が 1 つも無ければ開かない（`None` を返す）。
-    pub(crate) fn open(
-        mut all: Vec<PatchCatalogEntry>,
-        current: Option<&str>,
-        user_presets: Vec<(String, String)>,
-        mut role_index: PatchRoleIndex,
-        initial_role: Option<PatchRole>,
-        catalog_notes: Vec<String>,
-        load_measurements: BTreeMap<String, PatchLoadMeasurement>,
-    ) -> Option<Self> {
-        if all.is_empty() {
-            return None;
-        }
-        sort_for_selector(&mut all);
-        let user_presets = prepare_user_presets(user_presets);
-        if role_index.is_empty() {
-            role_index = build_role_index(&all, &user_presets);
-        }
-        let prepared_presets = PreparedPresets::build(&all, &user_presets, &role_index)
-            .expect("validated preset regular expressions must compile");
-        // host が Role を指定しなければ、今の音色の Role で開く。Drum は部位の Preset まで合わせる。
-        let role = initial_role.or_else(|| current.and_then(|patch| role_index.role_of(patch)));
-        let drum = current
-            .and_then(|patch| role_index.drum_role_of(patch))
-            .filter(|_| role == Some(PatchRole::Drum));
-        let (group_cursor, preset_cursor) = prepared_presets.start_cursors(role, drum);
-        let filtered = Arc::clone(&prepared_presets.for_role(group_cursor)[preset_cursor].matches);
-        let cursor = current
-            .and_then(|current| {
-                filtered
-                    .iter()
-                    .position(|index| all[*index].display() == current)
-            })
-            .unwrap_or(0);
-        Some(Self {
-            all,
-            filtered,
-            cursor,
-            query: text_input::new_single_line_textarea(""),
-            committed_query: String::new(),
-            filter_editing: false,
-            filter_error: None,
-            user_presets,
-            role_index,
-            prepared_presets,
-            group_cursor,
-            preset_cursor,
-            focus: PatchSelectFocus::Patches,
-            scroll_offsets: [Cell::new(0), Cell::new(0), Cell::new(0)],
-            original: current.map(str::to_string),
-            previewed: current.map(str::to_string),
-            catalog_notes,
-            load_measurements,
-        })
-    }
-
     pub fn query_textarea(&self) -> &TextArea<'a> {
         &self.query
     }
 
-    pub(crate) fn filter_editing(&self) -> bool {
+    /// Regex 欄を編集中か。編集中は全キーを [`Self::handle_key`] へ渡すこと。
+    pub fn filter_editing(&self) -> bool {
         self.filter_editing
     }
 
@@ -159,11 +112,11 @@ impl<'a> PatchSelect<'a> {
         self.group_cursor
     }
 
-    pub(crate) fn presets(&self) -> &[FilterPreset] {
+    pub fn presets(&self) -> &[FilterPreset] {
         self.prepared_presets.for_role(self.group_cursor)
     }
 
-    pub(crate) fn preset_cursor(&self) -> usize {
+    pub fn preset_cursor(&self) -> usize {
         self.preset_cursor
     }
 
@@ -187,8 +140,16 @@ impl<'a> PatchSelect<'a> {
         self.filtered.len()
     }
 
-    pub(crate) fn cursor(&self) -> usize {
+    /// 音色 pane のカーソル（絞り込み後の一覧での位置）。
+    pub fn cursor(&self) -> usize {
         self.cursor
+    }
+
+    /// 絞り込み後の一覧で `index` 番目の音色名。
+    pub fn filtered_display(&self, index: usize) -> Option<&str> {
+        self.filtered
+            .get(index)
+            .map(|index| self.all[*index].display())
     }
 
     pub(crate) fn total(&self) -> usize {
@@ -219,7 +180,7 @@ impl<'a> PatchSelect<'a> {
             .map(|index| self.all[*index].display())
     }
 
-    pub(crate) fn handle_key(&mut self, key: KeyEvent) -> PatchSelectAction {
+    pub fn handle_key(&mut self, key: KeyEvent) -> PatchSelectAction {
         if self.filter_editing {
             return self.handle_filter_key(key);
         }
@@ -358,9 +319,12 @@ impl<'a> PatchSelect<'a> {
             return PatchSelectAction::Continue;
         }
         self.role_index = build_role_index(&self.all, &self.user_presets);
-        self.prepared_presets =
-            PreparedPresets::build(&self.all, &self.user_presets, &self.role_index)
-                .expect("validated preset regular expressions must compile");
+        self.prepared_presets = prepare_presets(
+            &self.all,
+            &self.user_presets,
+            &self.role_index,
+            &self.favorites,
+        );
         let preview = match self.refilter() {
             PatchSelectAction::Preview(patch) => Some(patch),
             _ => None,

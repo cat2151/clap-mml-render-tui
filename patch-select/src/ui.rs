@@ -4,17 +4,27 @@ mod notice;
 mod patch_select;
 mod play_settings;
 
-pub use patch_select::{load_time_label, scroll_offset};
+pub use patch_select::{load_time_label, scroll_offset, PatchSelectDrawOptions};
 
-use ratatui::Frame;
+use ratatui::{layout::Rect, Frame};
 
-use crate::{DirectPatchSelect, PatchAuditionSelect};
+use crate::{DirectPatchSelect, PatchAuditionSelect, PatchSelect};
 
 /// selector が開いていれば描く。
 pub fn draw_patch_select(select: &PatchAuditionSelect<'_>, frame: &mut Frame<'_>) {
     if let Some(select) = select.select() {
         patch_select::draw(select, frame);
     }
+}
+
+/// [`PatchSelect`] を直接持つ host が、自分の枠の中の `area` へ描く。
+pub fn draw_patch_select_in(
+    select: &PatchSelect<'_>,
+    frame: &mut Frame<'_>,
+    area: Rect,
+    options: &PatchSelectDrawOptions<'_>,
+) {
+    patch_select::draw_in(select, frame, area, options);
 }
 
 /// 演奏設定が開いていれば描く。音色選択の最中にも開ける手前のモーダルなので、

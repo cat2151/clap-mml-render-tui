@@ -1,75 +1,65 @@
 use super::*;
 
 #[test]
-fn handle_patch_select_l_moves_focus_to_favorites_and_previews_selected_patch() {
+fn f_adds_the_selected_patch_and_line_phrase_to_favorites() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Pads/Pad 1.fxp"} l8cdef"#.to_string()];
-    app.patch_select.patch_all = make_patches(&["Pads/Pad 1.fxp", "Leads/Lead 1.fxp"]);
-    app.patch_select.patch_filtered =
-        vec!["Pads/Pad 1.fxp".to_string(), "Leads/Lead 1.fxp".to_string()];
-    app.patch_phrase_store.patches.insert(
-        "Leads/Lead 1.fxp".to_string(),
-        cmrt_history::PatchPhraseState {
-            history: vec![],
-            favorites: vec!["l8cdef".to_string()],
-        },
-    );
-    app.patch_select.patch_favorite_items = vec!["Leads/Lead 1.fxp".to_string()];
-    app.patch_select.patch_list_state.select(Some(0));
-    app.patch_select.patch_favorites_state.select(Some(0));
-    app.mode = Mode::PatchSelect;
+    open_tones(&mut app, 3, "Tone 00");
+    press(&mut app, KeyCode::Char('j'));
+    *app.playback.session.play_state().lock().unwrap() = PlayState::Idle;
 
-    app.handle_patch_select(KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE));
+    press(&mut app, KeyCode::Char('f'));
 
+    let stored = app
+        .patch_phrase_store
+        .patches
+        .get("Tone 01")
+        .expect("favorite should be stored for selected patch");
+    assert_eq!(stored.favorites, vec!["l8cdef".to_string()]);
+    assert!(app.patch_phrase_store_dirty);
+    assert!(matches!(app.mode, Mode::PatchSelect));
+    assert!(app.patch_select.as_ref().unwrap().is_favorite("Tone 01"));
     assert_eq!(
-        app.patch_select.patch_select_focus,
-        PatchSelectPane::Favorites
+        playing(&app).as_deref(),
+        Some(r#"{"Surge XT patch": "Tone 01"} l8cdef"#)
     );
-    assert_eq!(app.patch_select.patch_favorites_state.selected(), Some(0));
-    assert!(matches!(
-        &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Leads/Lead 1.fxp"} l8cdef"#
-    ));
+    choose_favorite_preset(&mut app);
+    assert_eq!(patch_select_list(&app), vec!["Tone 01"]);
 }
 
 #[test]
-fn handle_patch_select_page_down_moves_favorites_when_favorites_pane_is_focused() {
+fn f_on_the_favorite_preset_puts_the_new_favorite_at_the_top() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec![r#"{"Surge XT patch":"Fav 0"} l8cdef"#.to_string()];
-    app.patch_select.patch_all = make_patches(&["Fav 0", "Fav 1", "Fav 2", "Fav 3"]);
-    app.patch_select.patch_filtered = app
-        .patch_select
-        .patch_all
-        .iter()
-        .map(|(name, _)| name.clone())
-        .collect();
-    for patch in ["Fav 0", "Fav 1", "Fav 2", "Fav 3"] {
-        app.patch_phrase_store.patches.insert(
-            patch.to_string(),
-            cmrt_history::PatchPhraseState {
-                history: vec![],
-                favorites: vec!["l8cdef".to_string()],
-            },
-        );
-    }
-    app.patch_select.patch_favorite_items = vec![
-        "Fav 0".to_string(),
-        "Fav 1".to_string(),
-        "Fav 2".to_string(),
-        "Fav 3".to_string(),
-    ];
-    app.patch_select.patch_select_focus = PatchSelectPane::Favorites;
-    app.patch_select.patch_select_page_size = 2;
-    app.patch_select.patch_favorites_cursor = 0;
-    app.patch_select.patch_favorites_state.select(Some(0));
-    app.mode = Mode::PatchSelect;
+    app.patch_phrase_store.favorite_patches = vec!["Tone 00".to_string()];
+    add_favorite(&mut app, "Tone 00", "o5g");
+    open_tones(&mut app, 3, "Tone 00");
+    choose_favorite_preset(&mut app);
+    assert_eq!(patch_select_list(&app), vec!["Tone 00"]);
 
-    app.handle_patch_select(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE));
+    // favorite 一覧の外の音色は ALL から選ぶ。
+    press(&mut app, KeyCode::Left);
+    press(&mut app, KeyCode::Home);
+    press(&mut app, KeyCode::Right);
+    press(&mut app, KeyCode::End);
+    assert_eq!(selected(&app).as_deref(), Some("Tone 02"));
+    press(&mut app, KeyCode::Char('f'));
+    choose_favorite_preset(&mut app);
 
-    assert_eq!(app.patch_select.patch_favorites_cursor, 2);
-    assert_eq!(app.patch_select.patch_favorites_state.selected(), Some(2));
-    assert!(matches!(
-        &*app.playback.session.play_state().lock().unwrap(),
-        PlayState::Running(msg) if msg == r#"{"Surge XT patch": "Fav 2"} l8cdef"#
-    ));
+    assert_eq!(patch_select_list(&app), vec!["Tone 02", "Tone 00"]);
+}
+
+#[test]
+fn ctrl_f_also_adds_a_favorite_and_keeps_the_cursor_on_it() {
+    let mut app = NotepadScreen::new_for_test(test_config());
+    app.patch_phrase_store.favorite_patches = vec!["Tone 00".to_string()];
+    add_favorite(&mut app, "Tone 00", "o5g");
+    open_tones(&mut app, 3, "Tone 00");
+    choose_favorite_preset(&mut app);
+
+    press_ctrl(&mut app, 'f');
+
+    assert_eq!(selected(&app).as_deref(), Some("Tone 00"));
+    assert_eq!(
+        app.patch_phrase_store.patches["Tone 00"].favorites,
+        vec!["l8cdef".to_string(), "o5g".to_string()]
+    );
 }

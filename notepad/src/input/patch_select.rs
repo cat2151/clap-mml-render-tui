@@ -1,6 +1,6 @@
 mod handler;
 mod normal;
-mod state;
+mod open;
 
 use crate::{
     filter_patches_by_display_path, PatchLoadState, PATCH_FILTER_QUERY_JSON_KEY, PATCH_JSON_KEY,
@@ -11,6 +11,24 @@ use serde_json::Value;
 use crate::NotepadScreen;
 
 const PATCH_SELECT_PREVIEW_FALLBACK_PHRASE: &str = "c";
+
+/// 現在行のフレーズと filter 語。音色名を差し込むと試聴 MML になる。
+pub(crate) struct PatchSelectPreviewMml {
+    phrase: String,
+    filter_query: Option<String>,
+}
+
+impl PatchSelectPreviewMml {
+    /// filter 語は行のものを入れる。`Enter` 後の行と JSON 文字列が一致し、
+    /// 確定直後の再生が試聴で作ったキャッシュに当たる。
+    pub(crate) fn for_patch(&self, patch_name: &str) -> String {
+        let json = NotepadScreen::build_patch_json_with_filter_query(
+            patch_name,
+            self.filter_query.as_deref(),
+        );
+        format!("{json} {}", self.phrase)
+    }
+}
 
 impl<'a> NotepadScreen<'a> {
     fn resolve_loaded_patch_name(&self, patch_name: &str) -> Option<String> {
@@ -164,28 +182,52 @@ impl<'a> NotepadScreen<'a> {
         };
     }
 
+    /// 試聴で鳴らすフレーズ。現在行の MML 部分で、空なら既定の 1 音。
+    pub(super) fn patch_select_current_phrase(&self) -> Option<String> {
+        let line = self.editor.lines.get(self.editor.cursor)?;
+        let preprocessed = mml_preprocessor::extract_embedded_json(line);
+        Some(match preprocessed.remaining_mml.trim() {
+            "" => PATCH_SELECT_PREVIEW_FALLBACK_PHRASE.to_string(),
+            remaining => remaining.to_string(),
+        })
+    }
+
+    /// 音色選択の試聴 MML の材料。行の解析を 1 回で済ませ、音色ごとの MML はここから作る。
+    pub(crate) fn patch_select_preview_mml_builder(&self) -> Option<PatchSelectPreviewMml> {
+        Some(PatchSelectPreviewMml {
+            phrase: self.patch_select_current_phrase()?,
+            filter_query: self.current_line_patch_filter_query(),
+        })
+    }
+
+    pub(crate) fn patch_select_selected_patch_name(&self) -> Option<String> {
+        self.patch_select
+            .as_ref()
+            .and_then(|select| select.selected())
+            .map(str::to_string)
+    }
+
     fn prefetch_patch_select_navigation_audio_cache(&self, preferred_delta: Option<isize>) {
-        let (item_count, cursor) = match self.patch_select.patch_select_focus {
-            crate::PatchSelectPane::Patches => (
-                self.patch_select.patch_filtered.len(),
-                self.patch_select.patch_cursor,
-            ),
-            crate::PatchSelectPane::Favorites => (
-                self.patch_select_favorite_items().len(),
-                self.patch_select.patch_favorites_cursor,
-            ),
+        let Some(select) = self.patch_select.as_ref() else {
+            return;
         };
-        let focus = self.patch_select.patch_select_focus;
+        let Some(preview_mml) = self.patch_select_preview_mml_builder() else {
+            return;
+        };
         self.prefetch_navigation_audio_cache(
-            cursor,
-            item_count,
-            self.patch_select.patch_select_page_size,
+            select.cursor(),
+            select.filtered_len(),
+            cmrt_patch_select::PAGE_STEP.unsigned_abs(),
             preferred_delta,
-            |index| self.patch_select_preview_mml_for_selection(focus, index),
+            |index| {
+                select
+                    .filtered_display(index)
+                    .map(|patch_name| preview_mml.for_patch(patch_name))
+            },
         );
     }
 
-    fn preview_selected_patch(&mut self) {
+    pub(super) fn preview_selected_patch(&mut self) {
         self.preview_selected_patch_with_navigation_hint(None);
     }
 
@@ -193,25 +235,18 @@ impl<'a> NotepadScreen<'a> {
         &mut self,
         preferred_delta: Option<isize>,
     ) {
-        if let Some(mml) = self.patch_select_preview_mml() {
-            Self::log_notepad_event(format!(
-                "tone-select preview focus={:?} patch={:?}",
-                self.patch_select.patch_select_focus,
-                self.patch_select_selected_patch_name()
-            ));
-            self.record_notepad_history(&mml);
-            self.play_mml(mml);
-            self.prefetch_patch_select_navigation_audio_cache(preferred_delta);
-        }
-    }
-
-    pub(super) fn update_patch_filter(&mut self) {
-        self.patch_select.patch_filtered = filter_patches_by_display_path(
-            &self.patch_select.patch_all,
-            &self.patch_select.patch_query,
-        );
-        self.patch_select.patch_cursor = 0;
-        self.sync_patch_select_states();
-        self.preview_selected_patch();
+        let Some(patch_name) = self.patch_select_selected_patch_name() else {
+            return;
+        };
+        let Some(mml) = self
+            .patch_select_preview_mml_builder()
+            .map(|preview_mml| preview_mml.for_patch(&patch_name))
+        else {
+            return;
+        };
+        Self::log_notepad_event(format!("tone-select preview patch={patch_name:?}"));
+        self.record_notepad_history(&mml);
+        self.play_mml(mml);
+        self.prefetch_patch_select_navigation_audio_cache(preferred_delta);
     }
 }

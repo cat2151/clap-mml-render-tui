@@ -29,7 +29,12 @@ impl<'a> NotepadScreen<'a> {
     pub fn handle_ctrl_c(&mut self, key: crossterm::event::KeyEvent) {
         match self.mode {
             Mode::Insert => self.handle_insert(key),
-            Mode::PatchSelect if self.patch_select.patch_select_filter_active => {
+            Mode::PatchSelect
+                if self
+                    .patch_select
+                    .as_ref()
+                    .is_some_and(|select| select.filter_editing()) =>
+            {
                 self.handle_patch_select(key)
             }
             Mode::NotepadHistory if self.notepad_history.filter_active => {

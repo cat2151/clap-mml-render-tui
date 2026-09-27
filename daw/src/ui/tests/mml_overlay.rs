@@ -205,6 +205,44 @@ fn ctrl_t_lists_the_injected_catalog_patches() {
     );
 }
 
+#[test]
+fn ctrl_t_favorite_preset_lists_the_patch_favorites_of_the_store() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
+    let mut app = build_test_app();
+    *app.patch_load.lock().unwrap() = cmrt_tui_core::patch_load::PatchLoadState::ready(vec![
+        (
+            "Bass/Overlay Bass.fxp".to_string(),
+            "bass/overlay bass.fxp".to_string(),
+        ),
+        (
+            "Bass/Overlay Sub Bass.fxp".to_string(),
+            "bass/overlay sub bass.fxp".to_string(),
+        ),
+    ]);
+    app.patch_phrase_store.patches.insert(
+        "Bass/Overlay Sub Bass.fxp".to_string(),
+        cmrt_history::PatchPhraseState {
+            history: Vec::new(),
+            favorites: vec!["o3l4gg".to_string()],
+        },
+    );
+    app.patch_phrase_store.favorite_patches = vec!["Bass/Overlay Sub Bass.fxp".to_string()];
+    open_overlay_on_a_playable_cell(&mut app);
+
+    app.handle_mml_overlay_key_event(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL));
+    // Preset pane の先頭（ALL）の 1 つ下が `★ Favorite`。その一覧の先頭を確定する。
+    for code in [KeyCode::Left, KeyCode::Home, KeyCode::Down, KeyCode::Enter] {
+        app.handle_mml_overlay_key_event(KeyEvent::new(code, KeyModifiers::NONE));
+    }
+    app.handle_mml_overlay_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+    assert!(
+        app.editor.data[2][0].contains("Bass/Overlay Sub Bass.fxp"),
+        "{}",
+        app.editor.data[2][0]
+    );
+}
+
 /// オーバーレイで音色を確定すると、grid の init 列（`role:音色名`）が変わる。
 /// 「そのセルが実際に鳴る音色」と表示が一致していることを、描画バッファで確かめる。
 #[test]

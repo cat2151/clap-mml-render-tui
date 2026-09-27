@@ -137,3 +137,29 @@ fn the_overlay_starts_empty_every_time_it_opens() {
     app.try_open_mml_overlay(ctrl_p());
     assert_eq!(app.mml_overlay.value(), "");
 }
+
+#[test]
+fn ctrl_t_favorite_preset_lists_the_patch_favorites_of_the_notepad_store() {
+    let favorite = "Pads/Other Pad.fxp";
+    let mut app = TuiApp::new_for_test(test_config());
+    *app.patch_load_state.lock().unwrap() =
+        PatchLoadState::ready(make_patches(&["Pads/Warm Pad.fxp", favorite]));
+    let mut store = crate::history::PatchPhraseStore::default();
+    store
+        .patches
+        .entry(favorite.to_string())
+        .or_default()
+        .favorites
+        .push("cde".to_string());
+    store.favorite_patches.push(favorite.to_string());
+    app.notepad.set_patch_phrase_store_for_test(store);
+    assert!(app.try_open_mml_overlay(ctrl_p()));
+    app.handle_mml_overlay_key_event(ctrl_t());
+
+    // Preset pane の先頭（ALL）の 1 つ下が `★ Favorite`。その一覧の先頭を確定する。
+    for code in [KeyCode::Left, KeyCode::Home, KeyCode::Down, KeyCode::Enter] {
+        app.handle_mml_overlay_key_event(press(code));
+    }
+
+    assert_eq!(app.mml_overlay.patch(), Some(favorite));
+}

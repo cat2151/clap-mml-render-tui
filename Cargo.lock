@@ -734,6 +734,7 @@ dependencies = [
  "anyhow",
  "cmrt-history",
  "cmrt-offline-render",
+ "cmrt-patch-select",
  "cmrt-patches",
  "cmrt-realtime-play",
  "cmrt-render-core",

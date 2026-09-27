@@ -63,6 +63,7 @@ impl DawApp {
                 load_measurements,
                 filter_presets: cmrt_history::load_mml_patch_filter_presets(),
                 catalog_notes: self.mml_overlay_catalog_notes(),
+                favorites: cmrt_history::favorite_patch_names(&self.patch_phrase_store),
             },
             patch: patch.clone(),
             // 演奏設定は `i` の入力欄と共通。閉じたら書き戻す。

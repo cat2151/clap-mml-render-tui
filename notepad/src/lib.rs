@@ -18,7 +18,6 @@ mod logging;
 mod notepad_editor;
 mod notepad_history;
 mod patch_phrase;
-mod patch_select;
 mod playback;
 mod playback_runtime;
 mod prefetch;
@@ -40,7 +39,6 @@ pub use logging::set_log_sink;
 use notepad_editor::NotepadEditorState;
 use notepad_history::NotepadHistoryState;
 use patch_phrase::PatchPhraseState;
-use patch_select::PatchSelectState;
 use playback_runtime::TuiPlaybackRuntime;
 pub use render_queue::TuiRenderJobStatus;
 use render_queue::TuiRenderQueue;
@@ -87,12 +85,6 @@ pub enum NormalAction {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PatchPhrasePane {
     History,
-    Favorites,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum PatchSelectPane {
-    Patches,
     Favorites,
 }
 
@@ -145,7 +137,8 @@ pub struct NotepadScreen<'a> {
     /// バックグラウンド読み込みの共有ハンドルで、keyboard 画面とも同じ実体を見る。
     pub patch_load_state: Arc<Mutex<PatchLoadState>>,
     pub(crate) random_patch_decks: cmrt_tui_core::random::RandomIndexDecks,
-    pub(crate) patch_select: PatchSelectState<'a>,
+    /// 音色選択 overlay。開いている間だけ `Some`。
+    pub(crate) patch_select: Option<cmrt_patch_select::PatchSelect<'a>>,
     pub(crate) notepad_history: NotepadHistoryState<'a>,
     pub(crate) patch_phrase: PatchPhraseState<'a>,
     pub(crate) patch_phrase_store: cmrt_history::PatchPhraseStore,
@@ -249,7 +242,7 @@ impl<'a> NotepadScreen<'a> {
             sound_check_guide,
             patch_load_state,
             random_patch_decks: cmrt_tui_core::random::RandomIndexDecks::default(),
-            patch_select: PatchSelectState::new(),
+            patch_select: None,
             notepad_history: NotepadHistoryState::new(),
             patch_phrase: PatchPhraseState::new(),
             patch_phrase_store,
@@ -286,6 +279,11 @@ impl<'a> NotepadScreen<'a> {
             &self.patch_phrase_store.notepad.history,
             &self.patch_phrase_store.notepad.favorites,
         )
+    }
+
+    /// favorite 登録のある音色名（登録が新しい順）。音色 selector の `★ Favorite` に渡す。
+    pub fn patch_favorites(&self) -> Vec<String> {
+        cmrt_history::favorite_patch_names(&self.patch_phrase_store)
     }
 
     pub fn set_play_state_if_current(&self, session: u64, next_state: PlayState) {
@@ -357,6 +355,12 @@ impl<'a> NotepadScreen<'a> {
         self.editor.list_state.select(Some(cursor));
     }
 
+    /// 音色×フレーズの履歴・favorite を差し替える（テスト用）。
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn set_patch_phrase_store_for_test(&mut self, store: cmrt_history::PatchPhraseStore) {
+        self.patch_phrase_store = store;
+    }
+
     #[cfg(any(test, feature = "test-support"))]
     pub fn test_set_active_parallel_render_count(&self, count: usize) {
         self.playback
@@ -404,7 +408,10 @@ impl<'a> NotepadScreen<'a> {
     pub fn uses_textarea_cursor(&self) -> bool {
         match self.mode {
             Mode::Insert => true,
-            Mode::PatchSelect => self.patch_select.patch_select_filter_active,
+            Mode::PatchSelect => self
+                .patch_select
+                .as_ref()
+                .is_some_and(|select| select.filter_editing()),
             Mode::NotepadHistory => self.notepad_history.filter_active,
             Mode::PatchPhrase => self.patch_phrase.filter_active,
             Mode::Normal | Mode::NotepadHistoryGuide | Mode::Help => false,

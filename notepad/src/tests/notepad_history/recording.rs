@@ -16,8 +16,7 @@ fn handle_normal_enter_records_notepad_history() {
 #[test]
 fn handle_patch_select_enter_records_notepad_history() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec!["cde".to_string()];
-    app.patch_select.patch_filtered = vec!["Pads/Pad 1.fxp".to_string()];
+    open_patch_select_for_test(&mut app, "cde", &["Pads/Pad 1.fxp"]);
 
     app.handle_patch_select(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 

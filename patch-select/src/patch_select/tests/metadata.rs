@@ -1,20 +1,17 @@
 use super::*;
 
 #[test]
-fn requested_initial_role_opens_its_all_preset_and_keeps_a_matching_current_patch() {
-    let select = PatchSelect::open(
-        pairs(&["Basses/Bass 1.fxp", "Pads/Pad 1.fxp", "Pads/Pad 2.fxp"]),
-        Some("Pads/Pad 2.fxp"),
-        Vec::new(),
-        Default::default(),
-        Some(PatchRole::Chord),
-        Vec::new(),
-        Default::default(),
-    )
+fn requested_initial_role_opens_the_preset_matching_the_current_patch() {
+    let select = PatchSelect::open(PatchSelectRequest {
+        patches: pairs(&["Basses/Bass 1.fxp", "Pads/Pad 1.fxp", "Pads/Pad 2.fxp"]),
+        current: Some("Pads/Pad 2.fxp".to_string()),
+        initial_role: Some(PatchRole::Chord),
+        ..Default::default()
+    })
     .unwrap();
 
     assert_eq!(select.group_cursor(), 2);
-    assert_eq!(select.preset_cursor(), 0);
+    assert_eq!(select.presets()[select.preset_cursor()].label, "pad");
     assert_eq!(filtered(&select), ["Pads/Pad 1.fxp", "Pads/Pad 2.fxp"]);
     assert_eq!(select.selected(), Some("Pads/Pad 2.fxp"));
 }
@@ -126,10 +123,12 @@ fn preset_selected_from_all_uses_its_owning_roles_cascade() {
     let mut from_all = open_with(catalog.clone(), None, Vec::new());
     from_all.handle_key(press(KeyCode::Left));
     from_all.handle_key(press(KeyCode::Down));
+    from_all.handle_key(press(KeyCode::Down));
 
     let mut from_bass = open_with(catalog, None, Vec::new());
     select_group(&mut from_bass, 1);
     from_bass.handle_key(press(KeyCode::Right));
+    from_bass.handle_key(press(KeyCode::Down));
     from_bass.handle_key(press(KeyCode::Down));
 
     assert_eq!(
@@ -153,8 +152,8 @@ fn preset_selected_from_all_uses_its_owning_roles_cascade() {
 #[test]
 fn all_role_shortcuts_share_the_owning_roles_precomputed_matches() {
     let select = opened(None);
-    let all_bass = &select.prepared_presets.for_role(0)[1];
-    let role_bass = &select.prepared_presets.for_role(1)[1];
+    let all_bass = &select.prepared_presets.for_role(0)[2];
+    let role_bass = &select.prepared_presets.for_role(1)[2];
 
     assert_eq!(all_bass.label, "Bass › bass|bs");
     assert!(std::sync::Arc::ptr_eq(
@@ -168,6 +167,7 @@ fn adding_from_an_all_shortcut_uses_the_shortcuts_owning_role() {
     let mut select = opened(None);
     select.handle_key(press(KeyCode::Left));
     select.handle_key(press(KeyCode::Down));
+    select.handle_key(press(KeyCode::Down));
     type_text(&mut select, "sub");
     select.handle_key(press(KeyCode::Enter));
 
@@ -180,15 +180,11 @@ fn adding_from_an_all_shortcut_uses_the_shortcuts_owning_role() {
 
 #[test]
 fn without_a_requested_role_the_current_patch_decides_the_role_and_drum_preset() {
-    let select = PatchSelect::open(
-        pairs(&["Drums/Kick 1.fxp", "Drums/Kick 2.fxp", "Drums/Snare 1.fxp"]),
-        Some("Drums/Kick 2.fxp"),
-        Vec::new(),
-        Default::default(),
-        None,
-        Vec::new(),
-        Default::default(),
-    )
+    let select = PatchSelect::open(PatchSelectRequest {
+        patches: pairs(&["Drums/Kick 1.fxp", "Drums/Kick 2.fxp", "Drums/Snare 1.fxp"]),
+        current: Some("Drums/Kick 2.fxp".to_string()),
+        ..Default::default()
+    })
     .unwrap();
 
     assert_eq!(select.group_cursor(), 4);
