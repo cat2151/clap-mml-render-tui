@@ -32,7 +32,7 @@ pub(super) const MISSING: &str = "---";
 /// **末尾のドット以降を無条件に落としてはいけない。** Dexed の音色名には
 /// `05 T.BL-EXPA` や `14 P.ICE 25.1` のようにドットを含むものが実在し、
 /// 無条件に落とすと名前が欠ける。既知の拡張子だけを対象にする。
-const PATCH_FILE_EXTENSIONS: [&str; 5] = ["fxp", "sfz", "vvp", "syx", "floe-preset"];
+const PATCH_FILE_EXTENSIONS: [&str; 6] = ["fxp", "sfz", "ariax", "vvp", "syx", "floe-preset"];
 
 /// 表示パスの末尾要素から、既知の拡張子だけを落とした音色名。
 ///

@@ -10,10 +10,14 @@
 - TUI は ARIA registry、bank ID/version、`*.bank.xml`、CEGP state を知らない。play-server の
   plugin-neutral な patch-source resolver から `dirs`, `resolved_patches`, diagnostics だけを受け取る
 - `resolved_patches` がある plugin は directory を再走査せず、その canonical file list だけを表示する
-- Sforzando adapter は registry `user_files_dir` の user bank と、configured root 周辺の installed bank
-  manifest を解決する。canonical path が検証済み program に対応する SFZ だけを返す
-- display value は plugin ごとの共有 base から相対化した従来の `.sfz` path。MML の
-  `"Surge XT patch"`、history、DAW/grid session、realtime wire は変更しない
+- Sforzando adapter の走査 root は ARIA の registry だけで決める。`user_files_dir` の user bank と、
+  `Aria\Products` から辿る installed bank（`bank_path` の `*.bank.xml` のあるディレクトリ）。
+  `[plugins.Sforzando] patches_dirs` は使わない。state の `Slot` は bank 座標しか持たず、ARIA に
+  登録されていない場所の SFZ は一覧に出せても鳴らせないため。canonical path が検証済み program に
+  対応する SFZ だけを返す
+- display value は音色置き場ごとの親から相対化した `.sfz` path（先頭要素が置き場のフォルダ名。
+  [0006](0006-per-profile-relative-base.md) の「Sforzando は置き場ごと」）。基点は resolver が
+  `PatchCatalogResolution.base` で返し、TUI は plugin 名で分岐しない
 
 `.sfz` という patch form の routing は共有ドメイン知識として TUI に残る。ARIA program 座標と state
 構築は表示責務ではないため play-server 内に閉じ込める。
@@ -26,7 +30,8 @@ factory discovery と user/installed SFZ catalog は別機能として扱う。
 
 ## 実測 catalog
 
-開発環境では user bank 529 件 + Free Sounds manifest 登録 54 件 = **583 件**（番人テストの期待値）。
+開発環境では installed bank が Free Sounds 54 件 + TableWarp2 1 件 = **55 件**（番人テストの期待値）。
+user bank は `.sfz` を置くだけで増えるので、番人テストはその場で数えた `.sfz` の件数と比べる。
 manifest に無い `.sfz` は directory に実在しても選べるだけで鳴らせないため除外する。
 除外件数と source の部分的な破損は `source_notices` と `patch-load: event=source-notice` に残し、使える
 source は catalog に維持する。source が全く解決できなければ generic な `PatchSourceUnavailable` とする。
@@ -39,8 +44,10 @@ process）では stderr、TUI process では app が注入した非同期 sink �
 
 ## 番人テスト
 
-- play-server `server-config/src/sforzando_programs/tests.rs::installed_catalog_contains_583_loadable_programs`
+- play-server `server-config/src/sforzando_programs/tests.rs::installed_catalog_lists_every_registered_program`
 - `tui-core/src/patches/tests.rs::adapter_resolved_paths_are_used_without_rescanning_vendor_files`
 - `tui-core/src/patch_plugins/tests.rs::five_plugin_catalog_routes_sfz_only_to_sforzando`
 - `app/src/tui/tests/sforzando_screens.rs`
+- `app/src/patch_catalog_cache/tests/installed_sforzando.rs`（ignored、`CMRT_TEST_SFORZANDO_CLAP`）
+  — 実機の全 Sforzando display が置き場のフォルダ名で始まり、実在ファイルへ解決される
 - `cmrt-runtime/src/core_config/tests.rs::adapter_reports_config_and_program_source_failures_together`

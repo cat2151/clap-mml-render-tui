@@ -52,9 +52,11 @@ pub fn run(cfg: &Config, request: &DexedDuplicatesRequest) -> Result<()> {
     let mut programs = Vec::new();
     for plugin in &plugins {
         for dir in &plugin.dirs {
-            let base = plugin.base.as_deref().unwrap_or(dir);
             for path in cmrt_core::collect_patches(dir)? {
-                let display = cmrt_core::to_relative(base, &path);
+                let display = match &plugin.base {
+                    cmrt_runtime::PatchBase::None => cmrt_core::to_relative(dir, &path),
+                    base => base.display(&path),
+                };
                 if !text_filter::matches_any_field(&condition, &[display.to_lowercase().as_str()]) {
                     continue;
                 }

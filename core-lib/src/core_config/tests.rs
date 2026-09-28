@@ -31,7 +31,7 @@ patches_dirs = ["/tmp/surge-data/patches_factory", "/tmp/surge-data/patches_3rdp
         !core_cfg.random_patch,
         "Config から生成した CoreConfig は常に random_patch=false にする"
     );
-    assert_eq!(core_cfg.patches_dir.as_deref(), Some("/tmp/surge-data"));
+    assert_eq!(core_cfg.patch_base.scan_dir(), Some("/tmp/surge-data"));
     assert_eq!(core_cfg.output_wav, "output.wav");
     assert_eq!(core_cfg.buffer_size, 512);
 }
@@ -57,7 +57,7 @@ fn core_config_for_plugin_carries_that_plugins_identity() {
         name: "Dexed".to_string(),
         plugin_path: "/usr/lib/clap/Dexed.clap".to_string(),
         plugin_id: Some(cmrt_runtime::DEXED_PLUGIN_ID.to_string()),
-        base: Some("/dexed/cartridges".to_string()),
+        base: cmrt_runtime::PatchBase::Shared("/dexed/cartridges".to_string()),
         dirs: vec!["/dexed/cartridges".to_string()],
         resolved_patches: None,
         source_notices: Vec::new(),
@@ -69,5 +69,5 @@ fn core_config_for_plugin_carries_that_plugins_identity() {
         core_cfg.plugin_id.as_deref(),
         Some(cmrt_runtime::DEXED_PLUGIN_ID)
     );
-    assert_eq!(core_cfg.patches_dir.as_deref(), Some("/dexed/cartridges"));
+    assert_eq!(core_cfg.patch_base.scan_dir(), Some("/dexed/cartridges"));
 }

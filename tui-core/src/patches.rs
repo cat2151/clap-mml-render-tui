@@ -7,7 +7,7 @@
 use anyhow::Result;
 use cmrt_core::MergedPatches;
 use cmrt_patches::{sort_patch_pairs, PatchSortOrder};
-use cmrt_runtime::{catalog_plugins, configured_patch_dirs, CatalogPlugin, Config};
+use cmrt_runtime::{catalog_plugins, configured_patch_dirs, CatalogPlugin, Config, PatchBase};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -91,9 +91,10 @@ fn extend_with_paths(
         if !seen.insert(canonical_key(&canonical)) {
             continue;
         }
-        let display = match plugin.base.as_deref() {
-            Some(base) => relative_display(base, &path),
-            None => path.to_string_lossy().into_owned(),
+        let display = match &plugin.base {
+            PatchBase::Shared(base) => relative_display(base, &path),
+            PatchBase::PerRoot(_) => plugin.base.display(&canonical),
+            PatchBase::None => path.to_string_lossy().into_owned(),
         };
         if let Some(merged) = merged {
             listing.merged.insert(display.clone(), merged);

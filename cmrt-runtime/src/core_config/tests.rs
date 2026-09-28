@@ -16,6 +16,9 @@ fn installed(profiles: Vec<(String, PluginProfile)>) -> Vec<InstalledProfile> {
     profiles
         .into_iter()
         .map(|(name, profile)| InstalledProfile {
+            base: PatchBase::shared(&cmrt_server_config::configured_patch_dirs(
+                profile.patches_dirs.as_deref(),
+            )),
             name,
             profile,
             missing_dirs: Vec::new(),
@@ -55,7 +58,7 @@ fn catalog_plugins_has_no_dirs_when_none_are_configured() {
 
     assert_eq!(plugins.len(), 1);
     assert!(plugins[0].dirs.is_empty());
-    assert_eq!(plugins[0].base, None);
+    assert_eq!(plugins[0].base, PatchBase::None);
 }
 
 #[test]
@@ -64,7 +67,7 @@ fn catalog_plugins_uses_a_single_dir_as_its_own_base() {
 
     let plugins = listed(&cfg, Vec::new());
 
-    assert_eq!(plugins[0].base.as_deref(), Some("/tmp/patches_factory"));
+    assert_eq!(plugins[0].base.scan_dir(), Some("/tmp/patches_factory"));
     assert_eq!(plugins[0].dirs, vec!["/tmp/patches_factory".to_string()]);
 }
 
@@ -78,7 +81,7 @@ fn catalog_plugins_share_one_base_across_dirs_of_the_same_plugin() {
 
     let plugins = listed(&cfg, Vec::new());
 
-    assert_eq!(plugins[0].base.as_deref(), Some("/tmp/surge-data"));
+    assert_eq!(plugins[0].base.scan_dir(), Some("/tmp/surge-data"));
     assert_eq!(
         plugins[0].dirs,
         vec![
@@ -96,7 +99,7 @@ fn catalog_plugins_have_no_base_when_dirs_share_no_parent() {
     let plugins = listed(&cfg, Vec::new());
 
     assert_eq!(plugins.len(), 1);
-    assert_eq!(plugins[0].base, None);
+    assert_eq!(plugins[0].base, PatchBase::None);
 }
 
 /// 2 つめのプラグインは**自分の dir を基点に**相対化する。プラグインを跨いだ共通の親を
@@ -115,12 +118,12 @@ fn catalog_plugins_relativize_each_plugin_against_its_own_base() {
 
     assert_eq!(plugins.len(), 2);
     assert_eq!(
-        plugins[0].base.as_deref(),
+        plugins[0].base.scan_dir(),
         Some("/tmp/surge-data/patches_factory")
     );
     assert_eq!(plugins[1].name, "Dexed");
     assert_eq!(
-        plugins[1].base.as_deref(),
+        plugins[1].base.scan_dir(),
         Some("/home/user/dexed/Cartridges")
     );
 }
@@ -193,7 +196,7 @@ fn a_vaporizer2_profile_becomes_a_third_catalog_plugin() {
     assert_eq!(plugins.len(), 3);
     assert_eq!(plugins[2].name, "Vaporizer2");
     assert_eq!(
-        plugins[2].base.as_deref(),
+        plugins[2].base.scan_dir(),
         Some("/home/user/Vaporizer2/Presets")
     );
 }
@@ -237,6 +240,7 @@ fn a_plugin_whose_patch_dirs_all_vanished_is_reported_as_missing() {
             name: "Vaporizer2".to_string(),
             profile: vaporizer2,
             missing_dirs: vec!["/typo/Vaporizer2/Presets".to_string()],
+            base: PatchBase::None,
             resolved_patches: None,
             source_notices: Vec::new(),
             source_error: None,
@@ -271,6 +275,7 @@ fn adapter_reports_config_and_program_source_failures_together() {
             name: "Sforzando".to_string(),
             profile: sforzando,
             missing_dirs: vec!["/typo/sfz".to_string()],
+            base: PatchBase::None,
             resolved_patches: Some(Vec::new()),
             source_notices: Vec::new(),
             source_error: Some("no registered programs".to_string()),
@@ -280,6 +285,32 @@ fn adapter_reports_config_and_program_source_failures_together() {
     assert_eq!(skipped[0].reason_code(), "patch-source-unavailable");
     let notice = skipped[0].notice_line();
     assert!(notice.contains("/typo/sfz"), "{notice}");
+    assert!(notice.contains("no registered programs"), "{notice}");
+}
+
+#[test]
+fn source_failure_without_configured_dirs_does_not_mention_config() {
+    let cfg = config_with_patch_dirs(r#"patches_dirs = ["/opt/surge/patches_factory"]"#);
+    let sforzando = PluginProfile {
+        plugin_id: Some(crate::SFORZANDO_PLUGIN_ID.to_string()),
+        ..profile("/usr/lib/clap/sforzando.clap", &[])
+    };
+
+    let (_, skipped) = catalog_plugins_with(
+        &cfg,
+        vec![InstalledProfile {
+            name: "Sforzando".to_string(),
+            profile: sforzando,
+            missing_dirs: Vec::new(),
+            base: PatchBase::None,
+            resolved_patches: Some(Vec::new()),
+            source_notices: Vec::new(),
+            source_error: Some("no registered programs".to_string()),
+        }],
+    );
+
+    let notice = skipped[0].notice_line();
+    assert!(!notice.contains("config"), "{notice}");
     assert!(notice.contains("no registered programs"), "{notice}");
 }
 
@@ -294,6 +325,7 @@ fn adapter_source_failure_skips_a_plugin_even_when_its_directory_exists() {
             name: "adapter".to_string(),
             profile: adapter,
             missing_dirs: Vec::new(),
+            base: PatchBase::None,
             resolved_patches: Some(Vec::new()),
             source_notices: Vec::new(),
             source_error: Some("no loadable programs".to_string()),
@@ -316,6 +348,7 @@ fn adapter_source_notice_is_retained_as_catalog_data() {
             name: "adapter".to_string(),
             profile: adapter,
             missing_dirs: Vec::new(),
+            base: PatchBase::None,
             resolved_patches: Some(vec!["/existing/programs/voice.patch".into()]),
             source_notices: vec!["11 helper files excluded".to_string()],
             source_error: None,
@@ -353,4 +386,30 @@ fn the_default_plugin_is_never_reported_as_skipped() {
 
     assert_eq!(plugins.len(), 1);
     assert!(skipped.is_empty());
+}
+
+/// 基点は play server の catalog 解決が決めた物をそのまま使う（plugin 名で分岐しない）。
+#[test]
+fn installed_plugin_keeps_the_base_decided_by_the_catalog_resolver() {
+    let cfg = config_with_patch_dirs(r#"patches_dirs = ["/opt/surge/patches_factory"]"#);
+    let dirs = vec!["C:/Banks/TableWarp2".to_string(), "D:/libs/sfz".to_string()];
+    let base = PatchBase::per_root(&dirs);
+    let (plugins, skipped) = catalog_plugins_with(
+        &cfg,
+        vec![InstalledProfile {
+            name: "Sforzando".to_string(),
+            profile: profile(
+                "/usr/lib/clap/sforzando.clap",
+                &["C:/Banks/TableWarp2", "D:/libs/sfz"],
+            ),
+            missing_dirs: Vec::new(),
+            base: base.clone(),
+            resolved_patches: Some(Vec::new()),
+            source_notices: Vec::new(),
+            source_error: None,
+        }],
+    );
+
+    assert!(skipped.is_empty());
+    assert_eq!(plugins[1].base, base);
 }

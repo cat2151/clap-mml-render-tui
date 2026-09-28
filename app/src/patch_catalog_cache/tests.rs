@@ -9,7 +9,7 @@ fn plugin() -> CachedPlugin {
         name: "Surge XT".to_string(),
         plugin_path: "C:/Surge XT.clap".to_string(),
         plugin_id: Some(cmrt_runtime::SURGE_XT_PLUGIN_ID.to_string()),
-        base: Some("C:/patches".to_string()),
+        base: cmrt_runtime::PatchBase::Shared("C:/patches".to_string()),
         dirs: vec!["C:/patches".to_string()],
         source_notices: Vec::new(),
     }
@@ -286,7 +286,7 @@ fn cache_build_reads_vvp_poly_mode_once() {
         name: "Vaporizer2".to_string(),
         plugin_path: "VASTvaporizer2.clap".to_string(),
         plugin_id: Some(cmrt_runtime::VAPORIZER2_PLUGIN_ID.to_string()),
-        base: Some(root.to_string_lossy().into_owned()),
+        base: cmrt_runtime::PatchBase::Shared(root.to_string_lossy().into_owned()),
         dirs: vec![root.to_string_lossy().into_owned()],
         resolved_patches: None,
         source_notices: Vec::new(),
@@ -411,3 +411,6 @@ fn eta_format_uses_total_minutes_and_two_digit_seconds() {
     assert_eq!(format_eta(Duration::from_secs(754)), "12分34秒");
     assert_eq!(format_eta(Duration::from_secs(7_445)), "124分05秒");
 }
+
+#[cfg(windows)]
+mod installed_sforzando;

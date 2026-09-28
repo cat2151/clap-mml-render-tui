@@ -13,9 +13,12 @@ Surge XT: base = C:\ProgramData\Surge XT
           → display = patches_factory/...  /  patches_3rdparty/...
 Dexed   : base = %APPDATA%\DigitalSuburban\Dexed\Cartridges
           → display = Dexed_01.syx/00 Say Again.
-Sforzando: base = <設定した 2 ルートの共通親>
-          → display = Plogue/Free Sounds/Programs/.../*.sfz / sfz/.../*.sfz
+Sforzando: base = 音色置き場ごとの親（下の「Sforzando は置き場ごと」）
+          → display = sfz/.../*.sfz / Free Sounds/Programs/.../*.sfz / TableWarp2/Programs/*.sfz
 ```
+
+base は play-server の catalog 解決（`PatchCatalogResolution.base`、型は `PatchBase`）が決め、
+TUI は plugin 名で分岐せずそれを使う。
 
 ## 理由: 素朴に union すると壊れる
 
@@ -37,6 +40,14 @@ display が `ProgramData/Surge XT/patches_factory/...` と
 プロファイルごとの base なら **display は今日とビット単位で同一**になる。
 **後方互換が完全に保たれるのが決め手。**
 
+## Sforzando は置き場ごと
+
+Sforzando の音色置き場（user bank の `user_files_dir`、installer が決める Free Sounds、
+アプリ固定の TableWarp2）は互いに独立して決まり、別ドライブにもなる。共通の親は偶然の産物で、
+無ければ display が絶対パスになる。そこで Sforzando だけ置き場ごとに基点を持ち（`PatchBase::PerRoot`）、
+display は各置き場の**親**からの相対にする。先頭要素が置き場のフォルダ名になり、解決はその名前で置き場を選ぶ。
+先頭要素がどの置き場とも一致しない display（共通の親を基点にしていた頃の形を含む）は解決せず、別の置き場を推測しない。
+
 ## 先頭コンポーネントが既にプラグインの識別子になっている
 
 | プラグイン | display の形 | 先頭コンポーネント |
@@ -44,7 +55,7 @@ display が `ProgramData/Surge XT/patches_factory/...` と
 | Surge XT | `patches_factory/<category>/<patch>.fxp` | `patches_factory` |
 | Surge XT | `patches_3rdparty/<vendor>/<category>/<patch>.fxp` | `patches_3rdparty` |
 | Dexed | `Dexed_01.syx/00 Say Again.` | cartridge ファイル名 |
-| Sforzando | `sfz/<library>/<patch>.sfz` | 設定ルートを区別する先頭ディレクトリ |
+| Sforzando | `sfz/<library>/<patch>.sfz` | 音色置き場のフォルダ名 |
 
 カテゴリ抽出（play-server `core-lib/src/audio_plugin.rs` の `patch_sort_metadata()`）は
 prefix を strip して次のセグメントを category にし、
@@ -66,4 +77,5 @@ play-server の shared core（`patch_sort_metadata()`）が持ち、この crate
 
 - `patches/src/layout/tests.rs::abstract_metadata_keeps_prefixless_categories`
   — この同値が崩れると保存済みの patch 名がカテゴリを失う
-- `tui-core/src/patches/tests.rs` — カタログにプラグインが増えても既存の音色の指し先が変わらないこと
+- `tui-core/src/patches/tests.rs` — カタログにプラグインが増えても既存の音色の指し先が変わらないこと。
+  `per_root_display_starts_with_each_root_folder_name` は共通の親の無い置き場の display

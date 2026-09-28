@@ -34,7 +34,7 @@ fn catalog_plugin(plugin_id: &str, plugin_path: &str) -> CatalogPlugin {
         name: String::new(),
         plugin_path: plugin_path.to_string(),
         plugin_id: Some(plugin_id.to_string()),
-        base: None,
+        base: cmrt_runtime::PatchBase::None,
         dirs: Vec::new(),
         resolved_patches: None,
         source_notices: Vec::new(),

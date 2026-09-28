@@ -17,7 +17,7 @@ fn catalog_plugin(plugin_id: &str, plugin_path: &str) -> CatalogPlugin {
         name: String::new(),
         plugin_path: plugin_path.to_string(),
         plugin_id: Some(plugin_id.to_string()),
-        base: None,
+        base: cmrt_runtime::PatchBase::None,
         dirs: Vec::new(),
         resolved_patches: None,
         source_notices: Vec::new(),
@@ -77,7 +77,7 @@ impl Vaporizer2Presets {
 
     fn plugin(&self) -> CatalogPlugin {
         CatalogPlugin {
-            base: Some(self.root.to_string_lossy().into_owned()),
+            base: cmrt_runtime::PatchBase::Shared(self.root.to_string_lossy().into_owned()),
             dirs: vec![self.root.to_string_lossy().into_owned()],
             ..catalog_plugin(
                 cmrt_runtime::VAPORIZER2_PLUGIN_ID,

@@ -13,7 +13,7 @@ fn reexports_core_config() {
         sample_rate: 44_100.0,
         buffer_size: 512,
         patch_path: Some("/patches/Pad 1.fxp".into()),
-        patches_dir: Some("/patches".into()),
+        patch_base: Some("/patches".into()).into(),
         random_patch: false,
         ..Default::default()
     };
@@ -23,7 +23,7 @@ fn reexports_core_config() {
     assert_eq!(config.sample_rate, 44_100.0);
     assert_eq!(config.buffer_size, 512);
     assert_eq!(config.patch_path.as_deref(), Some("/patches/Pad 1.fxp"));
-    assert_eq!(config.patches_dir.as_deref(), Some("/patches"));
+    assert_eq!(config.patch_base.scan_dir(), Some("/patches"));
     assert!(!config.random_patch);
 }
 
@@ -44,7 +44,7 @@ fn cache_render_extracts_patch_from_embedded_json() {
         sample_rate: 44_100.0,
         buffer_size: 512,
         patch_path: Some("/patches/Default.fxp".into()),
-        patches_dir: Some(patches_dir.to_string_lossy().into_owned()),
+        patch_base: Some(patches_dir.to_string_lossy().into_owned()).into(),
         random_patch: true,
         ..Default::default()
     };
@@ -63,7 +63,7 @@ fn cache_render_returns_none_when_json_patch_is_missing() {
         sample_rate: 44_100.0,
         buffer_size: 512,
         patch_path: Some("/patches/Default.fxp".into()),
-        patches_dir: Some("/patches".into()),
+        patch_base: Some("/patches".into()).into(),
         random_patch: true,
         ..Default::default()
     };
@@ -93,7 +93,7 @@ fn cache_render_extracts_patch_from_embedded_json_with_factory_prefix_fallback()
         sample_rate: 44_100.0,
         buffer_size: 512,
         patch_path: Some("/patches/Default.fxp".into()),
-        patches_dir: Some(root.to_string_lossy().into_owned()),
+        patch_base: Some(root.to_string_lossy().into_owned()).into(),
         random_patch: false,
         ..Default::default()
     };
@@ -126,7 +126,7 @@ fn mml_with_resolved_embedded_patch_keeps_core_patch_value_relative_to_base() {
         sample_rate: 44_100.0,
         buffer_size: 512,
         patch_path: Some("/patches/Default.fxp".into()),
-        patches_dir: Some(root.to_string_lossy().into_owned()),
+        patch_base: Some(root.to_string_lossy().into_owned()).into(),
         random_patch: false,
         ..Default::default()
     };
@@ -159,7 +159,7 @@ fn mml_with_resolved_embedded_patch_keeps_the_effect_chain() {
         sample_rate: 44_100.0,
         buffer_size: 512,
         patch_path: None,
-        patches_dir: Some("/patches".into()),
+        patch_base: Some("/patches".into()).into(),
         random_patch: false,
         ..Default::default()
     };

@@ -9,7 +9,7 @@ fn plugin(name: &str, plugin_id: &str) -> CatalogPlugin {
         name: name.to_string(),
         plugin_path: format!("/clap/{name}.clap"),
         plugin_id: Some(plugin_id.to_string()),
-        base: None,
+        base: cmrt_runtime::PatchBase::None,
         dirs: Vec::new(),
         resolved_patches: None,
         source_notices: Vec::new(),

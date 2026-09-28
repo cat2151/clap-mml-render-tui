@@ -176,7 +176,7 @@ fn fallback_plugins(cfg: &Config) -> PatchPlugins {
         name: cmrt_runtime::PRIMARY_PLUGIN_PROFILE_NAME.to_string(),
         plugin_path: cfg.plugin_path.clone(),
         plugin_id: cfg.plugin_id.clone(),
-        base: cmrt_runtime::shared_patch_root_dir(&dirs),
+        base: cmrt_runtime::PatchBase::shared(&dirs),
         dirs,
         resolved_patches: None,
         source_notices: Vec::new(),

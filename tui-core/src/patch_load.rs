@@ -124,7 +124,7 @@ impl PatchCatalogSnapshot {
                 name: String::new(),
                 plugin_path: String::new(),
                 plugin_id: None,
-                base: None,
+                base: cmrt_runtime::PatchBase::None,
                 dirs: Vec::new(),
                 resolved_patches: None,
                 source_notices: Vec::new(),

@@ -236,7 +236,7 @@ fn adapter_resolved_paths_are_used_without_rescanning_vendor_files() {
         name: "adapter fixture".to_string(),
         plugin_path: "adapter.clap".to_string(),
         plugin_id: Some("org.example.adapter".to_string()),
-        base: Some(root.to_string_lossy().into_owned()),
+        base: PatchBase::Shared(root.to_string_lossy().into_owned()),
         dirs: vec![
             root.to_string_lossy().into_owned(),
             bank.to_string_lossy().into_owned(),
@@ -251,12 +251,62 @@ fn adapter_resolved_paths_are_used_without_rescanning_vendor_files() {
     let _ = std::fs::remove_dir_all(root);
 }
 
+/// 置き場どうしに共通の親が無い（別ドライブ相当）ときも、display は置き場のフォルダ名で始まる。
+#[test]
+fn per_root_display_starts_with_each_root_folder_name() {
+    let root = std::env::temp_dir().join(format!("cmrt_per_root_display_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let user_bank = root.join("drive_a").join("sfz");
+    let installed = root.join("drive_b").join("Plogue").join("Free Sounds");
+    std::fs::create_dir_all(user_bank.join("VSCO")).unwrap();
+    std::fs::create_dir_all(installed.join("Programs")).unwrap();
+    std::fs::write(user_bank.join("VSCO").join("Harp.sfz"), b"<region>").unwrap();
+    std::fs::write(installed.join("Programs").join("Piano.sfz"), b"<region>").unwrap();
+    let dirs: Vec<String> = [&user_bank, &installed]
+        .iter()
+        .map(|dir| {
+            std::fs::canonicalize(dir)
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    let harp = std::fs::canonicalize(user_bank.join("VSCO").join("Harp.sfz")).unwrap();
+    let piano = std::fs::canonicalize(installed.join("Programs").join("Piano.sfz")).unwrap();
+    let plugin = CatalogPlugin {
+        name: "per-root fixture".to_string(),
+        plugin_path: "adapter.clap".to_string(),
+        plugin_id: Some("org.example.adapter".to_string()),
+        base: PatchBase::per_root(&dirs),
+        dirs,
+        resolved_patches: Some(vec![harp.clone(), piano.clone()]),
+        source_notices: Vec::new(),
+    };
+
+    let displays: Vec<String> = collect_patch_pairs_from_catalog(std::slice::from_ref(&plugin))
+        .unwrap()
+        .into_iter()
+        .map(|(display, _)| display)
+        .collect();
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(
+        displays,
+        vec![
+            "Free Sounds/Programs/Piano.sfz".to_string(),
+            "sfz/VSCO/Harp.sfz".to_string(),
+        ]
+    );
+    assert_eq!(plugin.base.resolve(&displays[0]), piano.to_string_lossy());
+    assert_eq!(plugin.base.resolve(&displays[1]), harp.to_string_lossy());
+}
+
 fn catalog_plugin(base: String, dir: String) -> CatalogPlugin {
     CatalogPlugin {
         name: "test".to_string(),
         plugin_path: String::new(),
         plugin_id: None,
-        base: Some(base),
+        base: PatchBase::Shared(base),
         dirs: vec![dir],
         resolved_patches: None,
         source_notices: Vec::new(),

@@ -11,7 +11,7 @@
 //! stdout/stderr へ直接書くと alternate screen 中の TUI 描画を壊すため、表示とログ保存は
 //! app 側の overlay / 注入済み log sink に任せる。
 
-pub use cmrt_server_config::shared_patch_root_dir;
+pub use cmrt_server_config::{shared_patch_root_dir, PatchBase};
 
 use std::path::PathBuf;
 
@@ -45,9 +45,9 @@ pub struct CatalogPlugin {
     pub name: String,
     pub plugin_path: String,
     pub plugin_id: Option<String>,
-    /// このプラグインの音色の display 文字列を作る基点。
-    /// 共通の親が取れないときは `None`（＝相対化せず絶対パスをそのまま display にする）。
-    pub base: Option<String>,
+    /// このプラグインの音色の display 文字列を作る基点。play server の catalog 解決が決める
+    /// （Sforzando は置き場ごと、ほかは `dirs` の共通の親）。
+    pub base: PatchBase,
     /// このプラグインの音色置き場。
     pub dirs: Vec<String>,
     /// Adapter が「実際にロード可能」と解決済みの file。`None` は通常の directory scan。
@@ -112,12 +112,12 @@ impl SkippedCatalogPlugin {
                 source_error,
             } => {
                 let configured = if configured_missing.is_empty() {
-                    "未設定".to_string()
+                    String::new()
                 } else {
-                    format!("実在しない: {}", configured_missing.join(" / "))
+                    format!("config 実在しない: {} / ", configured_missing.join(" / "))
                 };
                 format!(
-                    "{} はロード可能な音色 source が無いため一覧に出ません: config {configured} / resolver {source_error}",
+                    "{} はロード可能な音色 source が無いため一覧に出ません: {configured}resolver {source_error}",
                     self.name
                 )
             }
@@ -194,6 +194,7 @@ fn catalog_plugins_with(
         name,
         profile,
         missing_dirs,
+        base,
         resolved_patches,
         source_notices,
         source_error,
@@ -224,7 +225,7 @@ fn catalog_plugins_with(
             name,
             plugin_path: profile.plugin_path,
             plugin_id: profile.plugin_id,
-            base: shared_patch_root_dir(&dirs),
+            base,
             dirs,
             resolved_patches,
             source_notices,
@@ -255,6 +256,7 @@ fn primary_catalog_plugin(cfg: &Config) -> CatalogPlugin {
     // collection error. Adapter-resolved catalogs keep their stricter loadable-source result.
     if resolved.resolved_patches.is_none() {
         resolved.dirs = configured_patch_dirs(cfg);
+        resolved.base = PatchBase::shared(&resolved.dirs);
         resolved.configured_missing.clear();
     }
     if let Some(source_error) = resolved.source_error.take() {
@@ -267,7 +269,7 @@ fn primary_catalog_plugin(cfg: &Config) -> CatalogPlugin {
         name: crate::PRIMARY_PLUGIN_PROFILE_NAME.to_string(),
         plugin_path: cfg.plugin_path.clone(),
         plugin_id: cfg.plugin_id.clone(),
-        base: shared_patch_root_dir(&dirs),
+        base: resolved.base,
         dirs,
         resolved_patches: resolved.resolved_patches,
         source_notices: resolved.notices,
@@ -310,6 +312,7 @@ fn installed_plugin_profiles(cfg: &Config) -> Vec<InstalledProfile> {
                     ..profile
                 },
                 missing_dirs: resolved.configured_missing,
+                base: resolved.base,
                 resolved_patches: resolved.resolved_patches,
                 source_notices: resolved.notices,
                 source_error: resolved.source_error,
@@ -329,6 +332,7 @@ struct InstalledProfile {
     profile: PluginProfile,
     /// 書かれていたが実在しなかった dir。
     missing_dirs: Vec<String>,
+    base: PatchBase,
     /// Adapter が解決済みの file paths。通常 scanner を使う plugin は `None`。
     resolved_patches: Option<Vec<PathBuf>>,
     /// Partial source failures and exclusions.

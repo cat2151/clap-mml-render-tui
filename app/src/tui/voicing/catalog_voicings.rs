@@ -1,7 +1,7 @@
 //! Memoized voicing values produced by server-side plugin adapters.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use cmrt_tui_core::patch_plugins::{CatalogPlugin, PatchPlugins};
@@ -84,8 +84,5 @@ impl CatalogVoicings {
 }
 
 fn patch_file_path(plugin: &CatalogPlugin, patch: &str) -> PathBuf {
-    match plugin.base.as_deref() {
-        Some(base) => Path::new(base).join(patch),
-        None => PathBuf::from(patch),
-    }
+    PathBuf::from(plugin.base.resolve(patch))
 }

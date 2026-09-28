@@ -162,11 +162,11 @@ fn floe_profile_block() -> String {
 
 fn sforzando_profile_block() -> String {
     r#"
-# 【省略可】sforzandoのSFZ音色置き場。
+# sforzando の音色置き場は ARIA の登録（registry）から自動で決まります。
+# 【省略可】標準外の場所へ入れた sforzando 本体。
 #
 # [plugins.Sforzando]
-# patches_dirs = ['D:\my\sfz']
-# plugin_path  = 'D:\my\clap\sforzando_x64.clap'
+# plugin_path = 'D:\my\clap\sforzando_x64.clap'
 "#
     .to_string()
 }

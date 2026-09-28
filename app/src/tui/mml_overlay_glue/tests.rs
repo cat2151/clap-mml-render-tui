@@ -12,7 +12,7 @@ fn server_selector_metadata_reaches_the_overlay_entry() {
         name: "Surge XT".to_string(),
         plugin_path: "C:/Surge XT.clap".to_string(),
         plugin_id: Some(cmrt_runtime::SURGE_XT_PLUGIN_ID.to_string()),
-        base: Some("C:/patches".to_string()),
+        base: cmrt_runtime::PatchBase::Shared("C:/patches".to_string()),
         dirs: Vec::new(),
         resolved_patches: None,
         source_notices: Vec::new(),

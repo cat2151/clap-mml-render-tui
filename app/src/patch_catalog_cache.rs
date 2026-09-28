@@ -18,7 +18,7 @@ mod measurements;
 mod previous_measurements;
 mod source_cache;
 
-const CACHE_FORMAT_VERSION: u32 = 4;
+const CACHE_FORMAT_VERSION: u32 = 5;
 const CACHE_RELATIVE_PATH: &str = "patch-catalog/catalog.json";
 pub const BUILD_COMMAND: &str = "cmrt build-patch-catalog-cache";
 
@@ -76,7 +76,7 @@ struct CachedPlugin {
     name: String,
     plugin_path: String,
     plugin_id: Option<String>,
-    base: Option<String>,
+    base: cmrt_runtime::PatchBase,
     dirs: Vec<String>,
     #[serde(default)]
     source_notices: Vec<String>,

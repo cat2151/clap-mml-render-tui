@@ -19,7 +19,7 @@ pub use clap_mml_play_server_core::{
     AudioEffectCatalog, AudioEffectPluginInfo, AudioEffectPreset, EffectChainSpec, EffectStageSpec,
     EFFECT_CHAIN_JSON_KEY, EFFECT_STAGE_BYPASS_JSON_KEY,
 };
-pub use clap_mml_play_server_core::{midi, patch_list, CoreConfig};
+pub use clap_mml_play_server_core::{midi, patch_list, CoreConfig, PatchBase};
 pub use clap_mml_play_server_core::{
     patch_lookup_candidates, patch_sort_metadata, plugin_voicing_source, AudioPatch,
     AudioPluginCatalog, AudioPluginInfo, PatchRef, PatchSortMetadata, PatchVoicingHint, PluginKey,
@@ -72,30 +72,31 @@ pub fn mml_with_resolved_embedded_patch<'a>(mml: &'a str, cfg: &CoreConfig) -> C
 
 fn patch_value_for_core_embedded_json(resolved_patch: &str, cfg: &CoreConfig) -> String {
     let resolved_path = std::path::Path::new(resolved_patch);
-    if let Some(base) = cfg.patches_dir.as_deref() {
-        if let Ok(relative_path) = resolved_path.strip_prefix(std::path::Path::new(base)) {
-            return relative_path.to_string_lossy().into_owned();
-        }
+    match &cfg.patch_base {
+        PatchBase::Shared(base) => resolved_path
+            .strip_prefix(std::path::Path::new(base))
+            .map(|relative_path| relative_path.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| resolved_patch.to_string()),
+        base => base.display(resolved_path),
     }
-    resolved_patch.to_string()
 }
 
 /// MML 先頭 JSON から `"Surge XT patch"` を取り出してパッチパスに解決する。
 ///
-/// JSON に相対パスが入っていて `cfg.patches_dir` がある場合はその配下のパスに変換し、
-/// `cfg.patches_dir` がない場合は JSON の文字列をそのまま返す。
+/// JSON に相対パスが入っていて `cfg.patch_base` がある場合はその配下のパスに変換し、
+/// 無い場合は JSON の文字列をそのまま返す。
 fn extract_patch_from_json(json_str: Option<&str>, cfg: &CoreConfig) -> Option<String> {
     let json_str = json_str?;
     let value: serde_json::Value = serde_json::from_str(json_str).ok()?;
     let rel = value.get("Surge XT patch")?.as_str()?;
     let rel_path = normalize_patch_path(rel);
 
-    if let Some(ref base) = cfg.patches_dir {
-        let base = std::path::Path::new(base);
-        let abs = resolve_patch_path_from_base(base, &rel_path);
-        Some(abs.to_string_lossy().into_owned())
-    } else {
-        Some(rel_path.to_string_lossy().into_owned())
+    match &cfg.patch_base {
+        PatchBase::Shared(base) => {
+            let abs = resolve_patch_path_from_base(std::path::Path::new(base), &rel_path);
+            Some(abs.to_string_lossy().into_owned())
+        }
+        base => Some(base.resolve(&rel_path.to_string_lossy())),
     }
 }
 

@@ -15,7 +15,7 @@ pub fn core_config_from_config(cfg: &Config) -> CoreConfig {
     core_config_for_plugin(cfg, &catalog_plugins(cfg)[0])
 }
 
-/// カタログ上の 1 プラグインぶんの `CoreConfig`。`plugin_id` と `patches_dir`（display 文字列の
+/// カタログ上の 1 プラグインぶんの `CoreConfig`。`plugin_id` と `patch_base`（display 文字列の
 /// 相対化 base）はプラグインごとに違い、別プラグインの base で MML 先頭 JSON のパスを解決すると
 /// 存在しないファイルを掴むか、相対パスが絶対パス扱いになって音色が当たらない。
 pub fn core_config_for_plugin(cfg: &Config, plugin: &CatalogPlugin) -> CoreConfig {
@@ -26,7 +26,7 @@ pub fn core_config_for_plugin(cfg: &Config, plugin: &CatalogPlugin) -> CoreConfi
         sample_rate: cfg.sample_rate,
         buffer_size: cfg.buffer_size,
         patch_path: None,
-        patches_dir: plugin.base.clone(),
+        patch_base: plugin.base.clone(),
         random_patch: false,
     }
 }

@@ -38,6 +38,11 @@ fn patch_stem_drops_only_known_patch_file_extensions() {
         patch_stem("sfz/Virtual-Playing-Orchestra3/Brass/trombone-SOLO.sfz"),
         "trombone-SOLO"
     );
+    assert_eq!(
+        patch_stem("TableWarp2/Presets/com.Plogue.Aria/Keys/Airy Bells.ariax"),
+        "Airy Bells"
+    );
+    assert_eq!(patch_stem("Keys/Airy Bells.ARIAX"), "Airy Bells");
     // Dexed のカートリッジ内音色は拡張子を持たない。ドットを含む名前を欠けさせないこと。
     assert_eq!(
         patch_stem("SynprezFM/SynprezFM_22.syx/05 SampleSqr2"),

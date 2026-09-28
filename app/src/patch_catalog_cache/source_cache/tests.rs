@@ -14,7 +14,7 @@ fn writes_the_server_startup_projection_without_patch_rows() {
         name: "Sforzando".to_string(),
         plugin_path: "C:/CLAP/sforzando.clap".to_string(),
         plugin_id: Some("com.example.sforzando".to_string()),
-        base: Some("C:/SFZ".to_string()),
+        base: cmrt_runtime::PatchBase::Shared("C:/SFZ".to_string()),
         dirs: vec!["C:/SFZ/User".to_string(), "C:/SFZ/Banks".to_string()],
         resolved_patches: Some(vec![PathBuf::from("C:/SFZ/User/Piano.sfz")]),
         source_notices: vec!["12 files excluded".to_string()],

@@ -24,7 +24,7 @@ struct CachedSource<'a> {
     name: &'a str,
     plugin_path: &'a str,
     plugin_id: Option<&'a str>,
-    base: Option<&'a str>,
+    base: &'a cmrt_runtime::PatchBase,
     dirs: &'a [String],
     source_notices: &'a [String],
 }
@@ -42,7 +42,7 @@ pub(super) fn write(path: &Path, plugins: &[CatalogPlugin]) -> Result<()> {
                 name: &plugin.name,
                 plugin_path: &plugin.plugin_path,
                 plugin_id: plugin.plugin_id.as_deref(),
-                base: plugin.base.as_deref(),
+                base: &plugin.base,
                 dirs: &plugin.dirs,
                 source_notices: &plugin.source_notices,
             })

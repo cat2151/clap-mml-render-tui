@@ -16,7 +16,7 @@ fn categorized_patches() -> PatchLoadState {
         name: "Vaporizer2".to_string(),
         plugin_path: "C:/Vaporizer2.clap".to_string(),
         plugin_id: Some(cmrt_runtime::VAPORIZER2_PLUGIN_ID.to_string()),
-        base: Some("C:/presets".to_string()),
+        base: cmrt_runtime::PatchBase::Shared("C:/presets".to_string()),
         dirs: Vec::new(),
         resolved_patches: None,
         source_notices: Vec::new(),
