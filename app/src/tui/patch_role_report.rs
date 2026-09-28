@@ -24,6 +24,10 @@ pub fn run_patch_role_report(cfg: &Config) -> Result<()> {
                 display,
                 normalized_display,
                 selector_category: selector_category.as_deref(),
+                plugin: patch_plugins
+                    .for_patch(display)
+                    .ok()
+                    .map(|plugin| plugin.name.as_str()),
             },
         ),
         &crate::history::load_mml_patch_filter_presets(),

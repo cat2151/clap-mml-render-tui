@@ -1,6 +1,6 @@
 //! effect を持たない音色の試聴に自動で掛ける reverb（auto reverb）の、ルールと解決。
 //!
-//! ルールは「Role の builtin preset ごと」と「Role ごとのその他」の行に、reverb を 1 つ
+//! ルールは「Role の builtin preset ごと」と「Role ごとのユーザー追加（etc は未分類）」の行に、reverb を 1 つ
 //! （または dry）を紐付けたもの。音色がどの行に当たるかは [`PatchRoleIndex`] の分類をそのまま使う。
 //! ここは純粋な解決だけを持ち、保存（history）と送信（host）は持たない。
 
@@ -20,13 +20,47 @@ const EXCLUDED_VALUE_PREFIXES: [&str; 1] = ["Reverb 1/"];
 /// ルールで選べる effect の分類。
 const REVERB_KIND: &str = "Reverb";
 
-const DRUM_ROOM_JSON_KEY: &str = "Dragonfly Room Reverb preset";
-const DRUM_ROOM_VALUE: &str = "Small Drum Room";
-const HALL_JSON_KEY: &str = "Dragonfly Hall Reverb preset";
-const HALL_VALUE: &str = "Medium Clear Hall";
+const ROOM: &str = "Dragonfly Room Reverb preset";
+const HALL: &str = "Dragonfly Hall Reverb preset";
 
-/// 既定で dry にする builtin preset の label。
-const DRY_BY_DEFAULT: [&str; 2] = ["bass|bs", "kick|bass drum"];
+/// 行名ごとの既定の effect（`None` は dry）。全行を並べる。
+const DEFAULT_EFFECTS: &[(&str, Option<(&str, &str)>)] = &[
+    ("trigger ユーザー追加", Some((HALL, "Medium Clear Hall"))),
+    ("chord", Some((ROOM, "Large Dark Room"))),
+    ("arp|sequence", Some((ROOM, "Large Bright Room"))),
+    ("drum ユーザー追加", Some((ROOM, "Small Drum Room"))),
+    ("kick|bass drum", None),
+    ("snare", Some((ROOM, "Small Drum Room"))),
+    ("hat", Some((ROOM, "Small Drum Room"))),
+    ("perc", Some((HALL, "Percussion Studio"))),
+    ("drum", Some((ROOM, "Small Drum Room"))),
+    ("bass|bs", None),
+    ("FM Bass", None),
+    ("bass ユーザー追加", None),
+    ("strings", Some((HALL, "Medium Clear Hall"))),
+    ("FM Strings", Some((HALL, "Medium Clear Hall"))),
+    ("pad", Some((HALL, "Dark Room"))),
+    ("keyboard|keys|piano", Some((HALL, "Piano Studio"))),
+    ("FM Piano", Some((HALL, "Piano Studio"))),
+    ("organ", Some((HALL, "Large Clear Hall"))),
+    ("guitar|gtr", Some((HALL, "Electric Studio"))),
+    ("choir|vocal", Some((HALL, "Large Vocal Hall"))),
+    ("brass", Some((HALL, "Medium Clear Hall"))),
+    ("FM Brass", Some((HALL, "Medium Clear Hall"))),
+    ("chord ユーザー追加", Some((HALL, "Medium Clear Hall"))),
+    ("lead", Some((ROOM, "Large Clear Room"))),
+    ("pluck", Some((HALL, "Acoustic Studio"))),
+    ("woodwind", Some((HALL, "Small Dark Hall"))),
+    ("sax", Some((ROOM, "Medium Clear Room"))),
+    ("pizzicato", Some((HALL, "Medium Clear Hall"))),
+    ("bell", Some((HALL, "Medium Clear Hall"))),
+    ("mallet", Some((HALL, "Medium Clear Hall"))),
+    ("lead ユーザー追加", Some((HALL, "Medium Clear Hall"))),
+    ("synth", Some((ROOM, "Large Clear Room"))),
+    ("atmosphere", Some((HALL, "Large Clear Hall"))),
+    ("fx|effects", Some((HALL, "Large Clear Hall"))),
+    ("etc 未分類", Some((HALL, "Large Clear Hall"))),
+];
 
 /// effect を選ぶ selector に出してよい preset か。既存 chain の段の扱いには使わない。
 pub fn is_selectable_effect_preset(preset: &AudioEffectPreset) -> bool {
@@ -45,6 +79,7 @@ pub fn reverb_candidates(catalog: &AudioEffectCatalog) -> Vec<&AudioEffectPreset
 }
 
 /// ルールの 1 行。`label` が `None` なら、その Role のどの builtin preset にも当たらない音色の行。
+/// etc 以外の Role でそこに当たるのは、ユーザー追加 preset で Role が決まった音色だけ。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AutoReverbRow {
     role: PatchRole,
@@ -60,25 +95,33 @@ impl AutoReverbRow {
     pub fn name(&self) -> String {
         match self.label {
             Some(label) => label.to_string(),
-            None => format!("{} その他", self.role.key()),
+            None if self.role == PatchRole::Etc => format!("{} 未分類", self.role.key()),
+            None => format!("{} ユーザー追加", self.role.key()),
         }
     }
 
+    /// ルール overlay に出すか。ユーザー追加の行は、その Role のユーザー追加 preset が無ければ
+    /// 当たる音色も無いので出さない。
+    pub fn is_shown(&self, user_presets: &[(String, String)]) -> bool {
+        self.label.is_some()
+            || self.role == PatchRole::Etc
+            || user_presets
+                .iter()
+                .any(|(key, _)| PatchRole::from_key(key) == self.role)
+    }
+
+    /// [`DEFAULT_EFFECTS`] に無い行は dry。
     fn default_effect(&self) -> Option<Value> {
-        match self.label {
-            Some(label) if DRY_BY_DEFAULT.contains(&label) => None,
-            None if self.role == PatchRole::Bass => None,
-            _ if self.role == PatchRole::Drum => Some(stage(DRUM_ROOM_JSON_KEY, DRUM_ROOM_VALUE)),
-            _ => Some(stage(HALL_JSON_KEY, HALL_VALUE)),
-        }
+        let name = self.name();
+        DEFAULT_EFFECTS
+            .iter()
+            .find(|(row, _)| *row == name)
+            .and_then(|(_, effect)| *effect)
+            .map(|(json_key, value)| serde_json::json!({ json_key: value }))
     }
 }
 
-fn stage(json_key: &str, value: &str) -> Value {
-    serde_json::json!({ json_key: value })
-}
-
-/// 全行。Role は selector の並び順、各 Role の中は builtin preset の順で、末尾にその他。
+/// 全行。Role は selector の並び順、各 Role の中は builtin preset の順で、末尾にユーザー追加（etc は未分類）。
 pub fn auto_reverb_rows() -> Vec<AutoReverbRow> {
     PatchRole::ALL
         .into_iter()
@@ -95,7 +138,7 @@ pub fn auto_reverb_rows() -> Vec<AutoReverbRow> {
         .collect()
 }
 
-/// 音色が当たる行。索引に無い音色は Etc のその他。
+/// 音色が当たる行。索引に無い音色は etc 未分類。
 fn row_of(display: &str, role_index: &PatchRoleIndex) -> AutoReverbRow {
     AutoReverbRow {
         role: role_index.role_of(display).unwrap_or(PatchRole::Etc),

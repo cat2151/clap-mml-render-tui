@@ -10,6 +10,7 @@ mod filter;
 mod keys;
 mod navigation;
 mod open;
+mod plugin_menu;
 mod prepared;
 mod presets;
 
@@ -27,11 +28,15 @@ pub(crate) use auto_reverb::EffectList;
 pub use auto_reverb::{AutoReverbHost, AutoReverbKey, AutoReverbPanel, AutoReverbStatus};
 pub use filter::filter_candidates;
 use filter::is_valid_condition;
-use keys::{is_add_preset_key, is_filter_edit_trigger, is_preview_key, is_random_jump_key};
+use keys::{
+    is_add_preset_key, is_filter_edit_trigger, is_plugin_menu_key, is_preview_key,
+    is_random_jump_key,
+};
 pub(crate) use navigation::PatchSelectFocus;
 pub use navigation::PAGE_STEP;
 use open::prepare_presets;
 pub use open::PatchSelectRequest;
+pub(crate) use plugin_menu::{PluginMenu, PluginMode};
 use prepared::build_role_index;
 pub use prepared::PreparedPresets;
 use presets::{normalize_user_presets, patterns_for_role};
@@ -100,6 +105,8 @@ pub struct PatchSelect<'a> {
     favorites: Vec<String>,
     /// host が auto reverb を扱うときだけ `Some`。
     auto_reverb: Option<AutoReverbPanel>,
+    /// plugin の solo / mute menu。開いている間だけ `Some`。
+    plugin_menu: Option<PluginMenu>,
 }
 
 impl<'a> PatchSelect<'a> {
@@ -196,6 +203,9 @@ impl<'a> PatchSelect<'a> {
         if self.filter_editing {
             return self.handle_filter_key(key);
         }
+        if self.plugin_menu.is_some() {
+            return self.handle_plugin_menu_key(key);
+        }
         if let Some(action) = self.handle_auto_reverb_key(key) {
             return action;
         }
@@ -213,6 +223,9 @@ impl<'a> PatchSelect<'a> {
             self.filter_editing = true;
             self.query = text_input::new_single_line_textarea(&self.committed_query);
             return PatchSelectAction::Continue;
+        }
+        if is_plugin_menu_key(key) {
+            return self.open_plugin_menu();
         }
         if is_preview_key(key) {
             return self.play_selected_line();
@@ -334,6 +347,9 @@ impl<'a> PatchSelect<'a> {
             return PatchSelectAction::Continue;
         }
         self.role_index = build_role_index(&self.all, &self.user_presets);
+        if let Some(panel) = self.auto_reverb.as_mut() {
+            panel.set_user_presets(&self.user_presets);
+        }
         self.prepared_presets = prepare_presets(
             &self.all,
             &self.user_presets,

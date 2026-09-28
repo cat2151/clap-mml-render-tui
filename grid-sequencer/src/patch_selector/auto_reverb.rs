@@ -17,14 +17,36 @@ impl GridSequencerScreen {
             AutoReverbKey::Handled => Some(GridSequencerAction::Continue),
             AutoReverbKey::RulesChanged => {
                 let rules = selector.auto_reverb.rules().clone();
-                self.apply_auto_reverb_rules(rules.clone());
+                self.apply_auto_reverb_rules(rules.clone(), None);
                 Some(GridSequencerAction::SaveAutoReverb(rules))
+            }
+            // overlay の Esc で必ず保存されるルールなので、保存を待たずに鳴らす側へ入れる。
+            AutoReverbKey::Audition => {
+                let rules = selector.auto_reverb.rules().clone();
+                let audition = selector
+                    .previewed_patch
+                    .clone()
+                    .zip(selector.auto_reverb.audition_effect())
+                    // `[stage]` は `AutoReverb::effect_chain` と同じ JSON。
+                    .map(|(patch, effect)| {
+                        (
+                            patch,
+                            effect.map(|stage| format!("[{stage}]")).unwrap_or_default(),
+                        )
+                    });
+                self.apply_auto_reverb_rules(rules, audition);
+                Some(GridSequencerAction::Continue)
             }
         }
     }
 
-    /// ルールを差し替え、chain が変わる行だけ準備し直す。selector の行は試聴中の音色で比べる。
-    fn apply_auto_reverb_rules(&mut self, rules: AutoReverbRules) {
+    /// ルールと試聴中の effect を差し替え、chain が変わる行だけ準備し直す。selector の行は
+    /// 試聴中の音色で比べる。
+    fn apply_auto_reverb_rules(
+        &mut self,
+        rules: AutoReverbRules,
+        audition: Option<(String, String)>,
+    ) {
         let loaded = (0..self.state.instance_count())
             .map(|instance| self.loaded_patch(instance))
             .collect::<Vec<_>>();
@@ -33,6 +55,7 @@ impl GridSequencerScreen {
             .map(|patch| self.auto_reverb.patch(patch.as_deref()))
             .collect::<Vec<_>>();
         self.auto_reverb.set_rules(rules);
+        self.auto_reverb.set_audition(audition);
         for (instance, (patch, before)) in loaded.iter().zip(before).enumerate() {
             if self.auto_reverb.patch(patch.as_deref()) != before {
                 self.prepare_patch(instance, patch.as_deref(), "auto-reverb");

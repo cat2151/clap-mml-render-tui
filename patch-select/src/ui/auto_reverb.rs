@@ -71,10 +71,11 @@ pub(super) fn draw_rules_overlay(panel: &AutoReverbPanel, frame: &mut Frame<'_>,
     };
     let rules = panel.rules();
     let overlay_area = centered_rect(70, 90, area);
-    let rows = rules
-        .rows()
+    let rows = overlay
+        .shown_rows()
         .iter()
-        .map(|(row, effect)| {
+        .map(|index| {
+            let (row, effect) = &rules.rows()[*index];
             Row::new([
                 Cell::from(row.name()),
                 Cell::from(effect_label(effect.as_ref())),
@@ -84,7 +85,7 @@ pub(super) fn draw_rules_overlay(panel: &AutoReverbPanel, frame: &mut Frame<'_>,
     draw_list_table(
         frame,
         overlay_area,
-        " auto reverb ルール  j/k:行  x:effect  Esc:保存して閉じる ",
+        " auto reverb ルール  j/k:行  Enter:effect  Esc:保存して閉じる ",
         rows,
         &[
             Constraint::Length(RULE_NAME_COLUMN_WIDTH),
@@ -107,7 +108,7 @@ fn draw_effect_list(list: &EffectList, frame: &mut Frame<'_>, area: Rect) {
     draw_list_table(
         frame,
         area,
-        " effect  j/k:選ぶ  Enter:決定  Esc:戻る ",
+        " effect  j/k PgUp/PgDn Home/End:選ぶ  Enter:決定  Esc:戻る ",
         rows,
         &[Constraint::Fill(1)],
         list.cursor(),

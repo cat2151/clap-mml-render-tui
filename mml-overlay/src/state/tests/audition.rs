@@ -233,7 +233,7 @@ fn moving_the_candidate_off_every_unit_sounds_the_whole_line() {
 
 #[test]
 fn saving_a_filter_preset_sounds_the_note_at_the_cursor_even_with_repeat_on() {
-    let patch = "Instruments/Violin.fxp";
+    let patch = "Instruments/Theremin.fxp";
     let mut overlay = MmlOverlay::default();
     overlay.open(MmlOverlayContext {
         patch_catalog: PatchCatalogSnapshot::Ready(vec![PatchCatalogEntry::from_display(
@@ -251,7 +251,7 @@ fn saving_a_filter_preset_sounds_the_note_at_the_cursor_even_with_repeat_on() {
         overlay.handle_key(press(KeyCode::Down), now);
     }
     overlay.handle_key(press(KeyCode::Char('/')), now);
-    for ch in "violin".chars() {
+    for ch in "theremin".chars() {
         overlay.handle_key(press(KeyCode::Char(ch)), now);
     }
     overlay.handle_key(press(KeyCode::Enter), now);

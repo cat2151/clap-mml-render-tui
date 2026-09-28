@@ -56,7 +56,7 @@ fn ctrl_t_opens_the_patch_select() {
 
 #[test]
 fn adding_a_patch_filter_preset_is_forwarded_to_the_host_for_json_persistence() {
-    let patch = "Instruments/Violin.fxp";
+    let patch = "Instruments/Theremin.fxp";
     let mut overlay = MmlOverlay::default();
     overlay.open(MmlOverlayContext {
         patch_catalog: PatchCatalogSnapshot::Ready(vec![PatchCatalogEntry::from_display(
@@ -72,7 +72,7 @@ fn adding_a_patch_filter_preset_is_forwarded_to_the_host_for_json_persistence() 
         overlay.handle_key(press(KeyCode::Down), now);
     }
     overlay.handle_key(press(KeyCode::Char('/')), now);
-    for ch in "violin".chars() {
+    for ch in "theremin".chars() {
         overlay.handle_key(press(KeyCode::Char(ch)), now);
     }
     overlay.handle_key(press(KeyCode::Enter), now);
@@ -80,7 +80,7 @@ fn adding_a_patch_filter_preset_is_forwarded_to_the_host_for_json_persistence() 
     assert_eq!(
         overlay.handle_key(press(KeyCode::Char('a')), now),
         MmlOverlayAction::SavePatchFilterPresets {
-            presets: vec![("lead".to_string(), "violin".to_string())],
+            presets: vec![("lead".to_string(), "theremin".to_string())],
             preview: Some(Box::new(MmlOverlayAction::SetPatch {
                 patch: Some(patch.to_string()),
                 notes: Some(NoteRequest {

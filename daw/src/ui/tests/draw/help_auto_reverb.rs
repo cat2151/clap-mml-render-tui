@@ -15,6 +15,6 @@ fn help_shows_auto_reverb_keys_of_the_patch_selector() {
         .iter()
         .find(|line| line.contains("（音色選択中）e:autoreverbon/off"))
         .unwrap_or_else(|| panic!("lines: {normalized_lines:?}"));
-    assert!(line.contains("E:ルール編集"), "line: {line:?}");
-    assert!(line.contains("ESCで保存して閉じる"), "line: {line:?}");
+    assert!(line.contains("E:autoreverbルール編集"), "line: {line:?}");
+    assert!(line.contains("m:pluginsolo/mute"), "line: {line:?}");
 }

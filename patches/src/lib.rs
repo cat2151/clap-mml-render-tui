@@ -20,6 +20,6 @@ pub use naming::{
     normalize_patch_lookup_key, resolve_display_patch_name,
 };
 pub use roles::{
-    builtin_role_presets, normalize_user_role_presets, DrumPatchRole, PatchRole, PatchRoleIndex,
-    PatchRoleInput, PatchRolePreset,
+    builtin_role_presets, normalize_user_role_presets, plugin_slug, DrumPatchRole, PatchRole,
+    PatchRoleIndex, PatchRoleInput, PatchRolePreset, PluginTerm,
 };

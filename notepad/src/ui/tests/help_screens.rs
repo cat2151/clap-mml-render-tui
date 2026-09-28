@@ -88,19 +88,19 @@ fn patch_select_help_screen_shows_patch_select_shortcuts() {
     let normalized_screen = lines.join("\n").replace([' ', '\n'], "");
 
     assert!(normalized_screen.contains("音色選択モード"));
-    assert!(normalized_screen.contains("/:Regex絞り込み開始"));
+    assert!(normalized_screen.contains("/:Regex絞り込み(Role・PresetとAND)"));
     assert!(normalized_screen.contains("n/p/t:notepadhistory/patchhistory/音色選択"));
     assert!(!normalized_screen.contains("Ctrl+S"));
     assert!(!normalized_screen.contains("sort"));
-    assert!(normalized_screen.contains("f:現在音色とMMLをFavorites追加(★Favorite)"));
+    assert!(normalized_screen.contains("f:現在音色とMMLをFavorites追加"));
     assert!(normalized_screen.contains("h/l・←/→:ペイン移動(Role/Preset/音色)"));
     assert!(normalized_screen.contains("PgUp/PgDn・Home/End:10行/先頭・末尾へ移動して再生"));
     assert!(normalized_screen.contains("r:ランダムな音色へ移動して再生"));
     assert!(normalized_screen.contains("a:RegexをPresetに追加"));
-    assert!(normalized_screen.contains("e:autoreverbon/off"));
-    assert!(normalized_screen.contains("E:autoreverbルール編集"));
-    assert!(normalized_screen.contains("x:(ルール編集中)reverb一覧(Enter:決定/ESC:戻る)"));
-    assert!(normalized_screen.contains("ESC:(ルール編集中)保存して閉じる"));
+    assert!(normalized_screen.contains("m:pluginsolo/mute"));
+    assert!(normalized_screen.contains("e/E:autoreverbon/off/ルール編集"));
+    // overlay の中のキーは overlay 側に出すので、ここには書かない。
+    assert!(!normalized_screen.contains("ルール編集中"));
     assert!(!normalized_screen.contains("Ctrl+C:コピー"));
 }
 

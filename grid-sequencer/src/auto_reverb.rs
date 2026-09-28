@@ -22,6 +22,9 @@ pub(crate) struct GridAutoReverb {
     effect_plugins: EffectPlugins,
     /// 直近の ctx の patch catalog。Ready でなければ `None`。
     catalog: Option<Arc<PatchCatalogSnapshot>>,
+    /// ルール overlay の effect list で試聴中の `(音色, effect chain)`。その音色にはルールに
+    /// 代えてこの chain を載せる（空は dry）。
+    audition: Option<(String, String)>,
 }
 
 impl GridAutoReverb {
@@ -42,6 +45,10 @@ impl GridAutoReverb {
 
     pub(crate) fn set_rules(&mut self, rules: AutoReverbRules) {
         self.rules = rules;
+    }
+
+    pub(crate) fn set_audition(&mut self, audition: Option<(String, String)>) {
+        self.audition = audition;
     }
 
     /// selector のルール overlay へ渡すもの。grid の行には chain の欄が無いので、chain は空。
@@ -73,7 +80,10 @@ impl GridAutoReverb {
         GridPatch {
             patch: patch.map(str::to_string),
             effect_chain: patch
-                .map(|patch| self.resolve(patch).effect_chain())
+                .map(|patch| match &self.audition {
+                    Some((auditioned, chain)) if auditioned == patch => chain.clone(),
+                    _ => self.resolve(patch).effect_chain(),
+                })
                 .unwrap_or_default(),
         }
     }

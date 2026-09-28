@@ -305,6 +305,7 @@ impl DawApp {
                             display,
                             normalized_display,
                             selector_category: None,
+                            plugin: None,
                         }),
                     &presets,
                 )))

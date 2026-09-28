@@ -3,10 +3,12 @@ use cmrt_patches::PatchRole;
 use crossterm::event::KeyModifiers;
 
 mod auto_reverb;
+mod auto_reverb_effect_list;
 mod favorites;
 mod filter_edit;
 mod metadata;
 mod navigation;
+mod plugin_menu;
 mod start_cursor;
 
 fn press(code: KeyCode) -> KeyEvent {
@@ -220,9 +222,10 @@ fn a_preset_and_the_typed_regex_are_combined_with_and() {
     );
     select_group(&mut select, 2);
     select.handle_key(press(KeyCode::Right));
-    for _ in 0..3 {
+    for _ in 0..4 {
         select.handle_key(press(KeyCode::Down));
     }
+    assert_eq!(select.presets()[select.preset_cursor()].label, "pad");
 
     type_text(&mut select, "warm");
 
@@ -253,12 +256,12 @@ fn an_invalid_regular_expression_is_reported_and_matches_nothing() {
 #[test]
 fn a_adds_the_query_to_the_selected_role_and_requests_persistence() {
     let mut select = open_with(
-        pairs(&["Instruments/Violin.fxp", "Pads/Warm Pad.fxp"]),
+        pairs(&["Instruments/Theremin.fxp", "Pads/Warm Pad.fxp"]),
         None,
         Vec::new(),
     );
     select_group(&mut select, 3);
-    type_text(&mut select, "violin");
+    type_text(&mut select, "theremin");
     select.handle_key(press(KeyCode::Enter));
 
     let action = select.handle_key(press(KeyCode::Char('a')));
@@ -266,14 +269,14 @@ fn a_adds_the_query_to_the_selected_role_and_requests_persistence() {
     assert!(matches!(
         action,
         PatchSelectAction::SaveUserPresets { presets, preview }
-            if presets == [("lead".to_string(), "violin".to_string())]
-                && preview.as_deref() == Some("Instruments/Violin.fxp")
+            if presets == [("lead".to_string(), "theremin".to_string())]
+                && preview.as_deref() == Some("Instruments/Theremin.fxp")
     ));
-    assert_eq!(filtered(&select), ["Instruments/Violin.fxp"]);
+    assert_eq!(filtered(&select), ["Instruments/Theremin.fxp"]);
     assert!(select
         .presets()
         .iter()
-        .any(|preset| preset.is_user && preset.label == "violin"));
+        .any(|preset| preset.is_user && preset.label == "theremin"));
 }
 
 #[test]
@@ -315,18 +318,18 @@ fn a_ignores_empty_invalid_and_builtin_duplicate_queries() {
 #[test]
 fn persisted_user_presets_are_loaded_into_their_role() {
     let mut select = open_with(
-        pairs(&["Instruments/Violin.fxp", "Other/Noise.fxp"]),
+        pairs(&["Instruments/Theremin.fxp", "Other/Noise.fxp"]),
         None,
-        vec![("lead".to_string(), "violin".to_string())],
+        vec![("lead".to_string(), "theremin".to_string())],
     );
 
     select_group(&mut select, 3);
 
-    assert_eq!(filtered(&select), ["Instruments/Violin.fxp"]);
+    assert_eq!(filtered(&select), ["Instruments/Theremin.fxp"]);
     assert!(select
         .presets()
         .iter()
-        .any(|preset| preset.label == "violin"));
+        .any(|preset| preset.label == "theremin"));
 }
 
 #[test]

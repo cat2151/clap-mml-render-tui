@@ -22,7 +22,7 @@ pub(crate) const DEXED_SNARE: &str = "Drums.syx/01 Snare Tight";
 const DEXED_PAD: &str = "Factory.syx/10 Warm Pad";
 const SURGE_PAD: &str = "Pads/Pad 1.fxp";
 const DRUM_ROOM_CHAIN: &str = r#"[{"Dragonfly Room Reverb preset":"Small Drum Room"}]"#;
-const CLEAR_HALL_CHAIN: &str = r#"[{"Dragonfly Hall Reverb preset":"Medium Clear Hall"}]"#;
+const PAD_HALL_CHAIN: &str = r#"[{"Dragonfly Hall Reverb preset":"Dark Room"}]"#;
 
 /// Dexed（effect 無し）の snare と pad、Surge XT（effect 内蔵）の pad を持つ patch catalog。
 pub(crate) fn patch_load() -> PatchLoadState {
@@ -98,6 +98,7 @@ pub(crate) fn effect_plugins() -> EffectPlugins {
     let presets = vec![
         preset(&room, "Small Drum Room"),
         preset(&hall, "Medium Clear Hall"),
+        preset(&hall, "Dark Room"),
     ];
     EffectPlugins::with_catalog(AudioEffectCatalog::with_entries(vec![room, hall], presets))
 }
@@ -161,7 +162,7 @@ fn the_chord_and_bass_layers_each_get_the_chain_of_their_own_patch() {
     );
     assert_eq!(
         playback_patch(&app, 1),
-        LivePatch::with_effect_chain(Some(DEXED_PAD), CLEAR_HALL_CHAIN)
+        LivePatch::with_effect_chain(Some(DEXED_PAD), PAD_HALL_CHAIN)
     );
 }
 
@@ -180,7 +181,7 @@ fn playing_a_section_prepares_both_layers_with_their_chains() {
         wait_for_prepared(&sink, 2),
         vec![
             LivePatch::with_effect_chain(Some(DEXED_SNARE), DRUM_ROOM_CHAIN),
-            LivePatch::with_effect_chain(Some(DEXED_PAD), CLEAR_HALL_CHAIN),
+            LivePatch::with_effect_chain(Some(DEXED_PAD), PAD_HALL_CHAIN),
         ]
     );
 }
@@ -246,7 +247,7 @@ fn the_shift_t_audition_prepares_the_same_chain_as_the_bass_playback() {
     let audition = wait_for_prepared(&sink, 1)[0].clone();
     assert_eq!(
         audition,
-        LivePatch::with_effect_chain(Some(DEXED_PAD), CLEAR_HALL_CHAIN)
+        LivePatch::with_effect_chain(Some(DEXED_PAD), PAD_HALL_CHAIN)
     );
     assert_eq!(audition, playback_patch(&app, 1));
 }

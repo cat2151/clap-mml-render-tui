@@ -18,7 +18,7 @@ use cmrt_tui_core::{
     ui::centered_rect,
 };
 
-use super::auto_reverb;
+use super::{auto_reverb, plugin_menu};
 use crate::patch_select::{PatchSelect, PatchSelectFocus};
 use crate::PatchCatalogEntry;
 
@@ -88,6 +88,7 @@ pub(super) fn draw_in(
     if let Some(panel) = select.auto_reverb_panel() {
         auto_reverb::draw_rules_overlay(panel, frame, area);
     }
+    plugin_menu::draw(select, frame, area);
 }
 
 fn draw_panes(
@@ -181,7 +182,9 @@ fn query_title(show_play_settings_hint: bool) -> String {
     } else {
         ""
     };
-    format!(" Regex (空白=AND)  /:編集  Enter:音色決定  Esc:取消  Space:試聴{play_settings} ")
+    format!(
+        " Regex (空白=AND)  /:編集  Enter:音色決定  Esc:取消  Space:試聴  m:plugin solo/mute{play_settings} "
+    )
 }
 
 fn pane_block(title: String, focused: bool) -> Block<'static> {

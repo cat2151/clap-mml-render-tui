@@ -87,6 +87,11 @@ impl PatchCatalogSnapshot {
                         .audio_patches
                         .get(index)
                         .and_then(|patch| patch.selector_category.as_deref()),
+                    plugin: self
+                        .audio_patches
+                        .get(index)
+                        .and_then(|patch| self.plugins.audio_info_for_ref(&patch.reference).ok())
+                        .map(|plugin| plugin.name.as_str()),
                 }),
             user_presets,
         );

@@ -53,6 +53,28 @@ fn a_pad_opens_on_the_first_chord_preset_that_contains_it() {
 }
 
 #[test]
+fn a_dexed_piano_opens_on_fm_piano_and_leaves_the_piano_preset() {
+    let dexed_piano = "rom1a.syx/10 E.PIANO 1";
+    let select = PatchSelect::open(PatchSelectRequest {
+        patches: vec![
+            entry(dexed_piano, "Dexed", None),
+            entry("Keys/Grand Piano.fxp", "Surge XT", None),
+        ],
+        current: Some(dexed_piano.to_string()),
+        ..Default::default()
+    })
+    .expect("patch list is not empty");
+
+    assert_eq!(start(&select), ("Chord track", "FM Piano".to_string()));
+    let piano = select
+        .presets()
+        .iter()
+        .find(|preset| preset.label == "keyboard|keys|piano")
+        .expect("piano preset");
+    assert_eq!(piano.matches.len(), 1, "Surge XTのpianoだけ");
+}
+
+#[test]
 fn a_patch_that_no_preset_of_the_role_contains_opens_on_the_roles_all() {
     let select = open_on(
         &CATALOG,

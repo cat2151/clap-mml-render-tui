@@ -27,6 +27,8 @@ pub struct AutoReverbHost {
 /// ルール overlay と on/off の状態。ルールは閉じるまで panel の中だけで変わる。
 pub struct AutoReverbPanel {
     host: AutoReverbHost,
+    /// ルール overlay に出す行を決める。
+    user_presets: Vec<(String, String)>,
     overlay: Option<RulesOverlay>,
 }
 
@@ -38,14 +40,24 @@ pub enum AutoReverbKey {
     /// ルール（on/off を含む）が変わった。host は [`AutoReverbPanel::rules`] を保存し、
     /// カーソルの音色を今の設定で鳴らし直す。
     RulesChanged,
+    /// effect list で試聴する effect が変わった（開いた・候補を動かした・閉じた）。host は
+    /// 保存せず、カーソルの音色を [`AutoReverbPanel::audition_effect`] があればその effect で、
+    /// 無ければ [`AutoReverbPanel::rules`] で鳴らし直す。
+    Audition,
 }
 
 impl AutoReverbPanel {
     pub fn new(host: AutoReverbHost) -> Self {
         Self {
             host,
+            user_presets: Vec::new(),
             overlay: None,
         }
+    }
+
+    /// selector の今のユーザー追加 preset。次に開くルール overlay から効く。
+    pub fn set_user_presets(&mut self, user_presets: &[(String, String)]) {
+        self.user_presets = user_presets.to_vec();
     }
 
     pub fn rules(&self) -> &AutoReverbRules {
@@ -69,13 +81,30 @@ impl AutoReverbPanel {
         self.overlay.as_ref()
     }
 
+    /// effect list を開いている間、カーソルの音色の試聴に掛ける effect（`None` は dry）。
+    /// 行・on/off・内蔵 effect に関わらず、選んでいる候補そのものを聴かせる。
+    pub fn audition_effect(&self) -> Option<Option<&Value>> {
+        let list = self.overlay.as_ref()?.effect_list.as_ref()?;
+        Some(list.choices[list.cursor].effect.as_ref())
+    }
+
     /// auto reverb のキーなら処理して結果を返す。overlay が開いている間は全キーを食う。
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<AutoReverbKey> {
         if self.overlay.is_some() {
             return Some(self.handle_overlay_key(key));
         }
         if is_auto_reverb_rules_key(key) {
+            let shown_rows = self
+                .host
+                .rules
+                .rows()
+                .iter()
+                .enumerate()
+                .filter(|(_, (row, _))| row.is_shown(&self.user_presets))
+                .map(|(index, _)| index)
+                .collect();
             self.overlay = Some(RulesOverlay {
+                shown_rows,
                 cursor: 0,
                 opened_with: self.host.rules.clone(),
                 effect_list: None,
@@ -102,16 +131,21 @@ impl AutoReverbPanel {
                 KeyCode::Esc => overlay.effect_list = None,
                 KeyCode::Enter => {
                     let effect = list.choices[list.cursor].effect.clone();
-                    rules.set_effect(overlay.cursor, effect);
+                    rules.set_effect(overlay.shown_rows[overlay.cursor], effect);
                     overlay.effect_list = None;
                 }
                 _ => {
-                    if let Some(delta) = vertical_delta(key) {
-                        list.cursor = move_cursor(list.cursor, list.choices.len(), delta);
+                    let Some(delta) = vertical_delta(key) else {
+                        return AutoReverbKey::Handled;
+                    };
+                    let cursor = move_cursor(list.cursor, list.choices.len(), delta);
+                    if cursor == list.cursor {
+                        return AutoReverbKey::Handled;
                     }
+                    list.cursor = cursor;
                 }
             }
-            return AutoReverbKey::Handled;
+            return AutoReverbKey::Audition;
         }
         match key.code {
             KeyCode::Esc => {
@@ -121,13 +155,14 @@ impl AutoReverbPanel {
                     return AutoReverbKey::RulesChanged;
                 }
             }
-            KeyCode::Char('x') if key.modifiers == KeyModifiers::NONE => {
-                let current = rules.rows()[overlay.cursor].1.as_ref();
+            _ if is_open_effect_list_key(key) => {
+                let current = rules.rows()[overlay.shown_rows[overlay.cursor]].1.as_ref();
                 overlay.effect_list = Some(EffectList::open(catalog, current));
+                return AutoReverbKey::Audition;
             }
             _ => {
                 if let Some(delta) = vertical_delta(key) {
-                    overlay.cursor = move_cursor(overlay.cursor, rules.rows().len(), delta);
+                    overlay.cursor = move_cursor(overlay.cursor, overlay.shown_rows.len(), delta);
                 }
             }
         }
@@ -137,12 +172,18 @@ impl AutoReverbPanel {
 
 /// ルール overlay。`opened_with` は閉じるときに変更の有無を比べるためのもの。
 pub(crate) struct RulesOverlay {
+    /// 出す行の、[`AutoReverbRules::rows`] での位置。`cursor` はこの並びの位置。
+    shown_rows: Vec<usize>,
     cursor: usize,
     opened_with: AutoReverbRules,
     effect_list: Option<EffectList>,
 }
 
 impl RulesOverlay {
+    pub(crate) fn shown_rows(&self) -> &[usize] {
+        &self.shown_rows
+    }
+
     pub(crate) fn cursor(&self) -> usize {
         self.cursor
     }
@@ -213,10 +254,23 @@ fn move_cursor(cursor: usize, len: usize, delta: isize) -> usize {
         .min(len.saturating_sub(1))
 }
 
+/// ルールの行から effect list を開く。`x` のほか、決定・左右に見えるキーでも開く。
+fn is_open_effect_list_key(key: KeyEvent) -> bool {
+    key.modifiers == KeyModifiers::NONE
+        && matches!(
+            key.code,
+            KeyCode::Char('x' | ' ' | 'h' | 'l') | KeyCode::Enter | KeyCode::Left | KeyCode::Right
+        )
+}
+
 fn vertical_delta(key: KeyEvent) -> Option<isize> {
     match (key.code, key.modifiers) {
         (KeyCode::Up, _) | (KeyCode::Char('k'), KeyModifiers::NONE) => Some(-1),
         (KeyCode::Down, _) | (KeyCode::Char('j'), KeyModifiers::NONE) => Some(1),
+        (KeyCode::PageUp, _) => Some(-PAGE_STEP),
+        (KeyCode::PageDown, _) => Some(PAGE_STEP),
+        (KeyCode::Home, _) => Some(isize::MIN),
+        (KeyCode::End, _) => Some(isize::MAX),
         _ => None,
     }
 }
@@ -231,15 +285,21 @@ impl PatchSelect<'_> {
 
     /// host が selector の外のキー（演奏設定など）を拾わず、全キーを [`Self::handle_key`] へ渡すべきか。
     pub fn captures_all_keys(&self) -> bool {
-        self.filter_editing || self.auto_reverb_overlay_open()
+        self.filter_editing || self.auto_reverb_overlay_open() || self.plugin_menu.is_some()
     }
 
     /// `display` の試聴・確定で chain に入れる auto reverb の 1 段。掛けないとき
-    /// （host 非対応・手動 reverb・dry・内蔵・off）は `None`。
+    /// （host 非対応・手動 reverb・dry・内蔵・off）は `None`。effect list を開いている間、
+    /// カーソルの音色にはルールに代えて [`AutoReverbPanel::audition_effect`] を掛ける。
     pub fn auto_reverb_stage(&self, display: &str) -> Option<Value> {
         let panel = self.auto_reverb.as_ref()?;
         if panel.has_manual_reverb() {
             return None;
+        }
+        if let Some(effect) = panel.audition_effect() {
+            if self.selected() == Some(display) {
+                return effect.cloned();
+            }
         }
         let entry = self.all.iter().find(|entry| entry.display() == display)?;
         match self.resolve_auto_reverb(panel, entry) {
@@ -301,6 +361,13 @@ impl PatchSelect<'_> {
         match self.auto_reverb.as_mut()?.handle_key(key)? {
             AutoReverbKey::Handled => Some(PatchSelectAction::Continue),
             AutoReverbKey::RulesChanged => Some(self.save_auto_reverb()),
+            // 同じ音色でも、掛ける effect が変わったので鳴らし直す。
+            AutoReverbKey::Audition => Some(
+                self.selected()
+                    .map_or(PatchSelectAction::Continue, |patch| {
+                        PatchSelectAction::Preview(patch.to_string())
+                    }),
+            ),
         }
     }
 

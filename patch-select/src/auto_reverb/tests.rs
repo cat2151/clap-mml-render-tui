@@ -42,6 +42,7 @@ pub(crate) fn test_catalog() -> AudioEffectCatalog {
     let presets = vec![
         preset(&room, "Small Drum Room", "Reverb"),
         preset(&room, "Large Drum Room", "Reverb"),
+        preset(&room, "Medium Clear Room", "Reverb"),
         preset(&hall, "Medium Clear Hall", "Reverb"),
         preset(&surge, "Reverb 1/Hall", "Reverb"),
         preset(&surge, "Reverb 2/Room", "Reverb"),
@@ -61,6 +62,7 @@ fn role_index() -> PatchRoleIndex {
                 display,
                 normalized_display: normalized,
                 selector_category: None,
+                plugin: None,
             }),
         &[],
     )
@@ -101,21 +103,13 @@ fn default_rules_leave_bass_and_kick_dry() {
 }
 
 #[test]
-fn default_rules_put_a_drum_room_on_snare_and_a_hall_on_pad() {
+fn default_rules_put_a_drum_room_on_snare() {
     assert_eq!(
         resolve_default(DEXED_SNARE, false),
         AutoReverb::Apply {
             stage: serde_json::json!({"Dragonfly Room Reverb preset": "Small Drum Room"}),
             effect_name: "Dragonfly Room Reverb: Small Drum Room".to_string(),
             row: "snare".to_string(),
-        }
-    );
-    assert_eq!(
-        resolve_default(DEXED_PAD, false),
-        AutoReverb::Apply {
-            stage: serde_json::json!({"Dragonfly Hall Reverb preset": "Medium Clear Hall"}),
-            effect_name: "Dragonfly Hall Reverb: Medium Clear Hall".to_string(),
-            row: "pad".to_string(),
         }
     );
 }
@@ -208,14 +202,14 @@ fn saved_rules_round_trip() {
     let snare = row_index(&rules, "snare");
     rules.set_effect(snare, None);
 
-    let catalog = test_catalog();
-    let restored = AutoReverbRules::from_saved(rules.enabled(), &rules.to_saved(), Some(&catalog));
+    // 既定値には test_catalog に無い reverb があるので、catalog 無しで往復させる。
+    let restored = AutoReverbRules::from_saved(rules.enabled(), &rules.to_saved(), None);
 
     assert_eq!(restored, rules);
 }
 
 #[test]
-fn rows_cover_every_builtin_preset_and_one_other_row_per_role() {
+fn rows_cover_every_builtin_preset_and_one_leftover_row_per_role() {
     let rows = auto_reverb_rows();
     assert_eq!(
         rows.len(),
@@ -226,8 +220,8 @@ fn rows_cover_every_builtin_preset_and_one_other_row_per_role() {
         "bass|bs",
         "snare",
         "fx|effects",
-        "bass その他",
-        "etc その他",
+        "bass ユーザー追加",
+        "etc 未分類",
     ] {
         assert!(names.contains(&name.to_string()), "{name} is missing");
     }
@@ -238,18 +232,43 @@ fn rows_cover_every_builtin_preset_and_one_other_row_per_role() {
 }
 
 #[test]
-fn bass_and_kick_default_dry_drum_rows_the_drum_room_and_the_rest_the_hall() {
+fn user_added_rows_are_shown_only_for_roles_with_user_presets() {
+    let user_presets = [("bass".to_string(), "sub".to_string())];
+    let shown: Vec<String> = auto_reverb_rows()
+        .iter()
+        .filter(|row| row.is_shown(&user_presets))
+        .map(AutoReverbRow::name)
+        .collect();
+    assert!(shown.contains(&"bass ユーザー追加".to_string()));
+    assert!(!shown.contains(&"lead ユーザー追加".to_string()));
+    assert!(shown.contains(&"etc 未分類".to_string()));
+    assert!(shown.contains(&"lead".to_string()));
+}
+
+#[test]
+fn every_row_has_a_default_effect_entry() {
+    for row in auto_reverb_rows() {
+        let name = row.name();
+        assert!(
+            DEFAULT_EFFECTS.iter().any(|(entry, _)| *entry == name),
+            "{name} is missing"
+        );
+    }
+    assert_eq!(DEFAULT_EFFECTS.len(), auto_reverb_rows().len());
+}
+
+#[test]
+fn default_rules_mix_rooms_halls_and_dry_rows() {
     let rules = AutoReverbRules::default();
     let saved = rules.to_saved();
-    let room = serde_json::json!({"Dragonfly Room Reverb preset": "Small Drum Room"});
-    let hall = serde_json::json!({"Dragonfly Hall Reverb preset": "Medium Clear Hall"});
-    for name in ["snare", "hat", "perc", "drum", "drum その他"] {
-        assert_eq!(saved[name], room, "{name}");
-    }
-    for name in ["strings", "lead", "fx|effects", "etc その他"] {
-        assert_eq!(saved[name], hall, "{name}");
-    }
-    for name in ["bass|bs", "bass その他", "kick|bass drum"] {
+    let room = |value: &str| serde_json::json!({"Dragonfly Room Reverb preset": value});
+    let hall = |value: &str| serde_json::json!({"Dragonfly Hall Reverb preset": value});
+    assert_eq!(saved["snare"], room("Small Drum Room"));
+    assert_eq!(saved["lead"], room("Large Clear Room"));
+    assert_eq!(saved["sax"], room("Medium Clear Room"));
+    assert_eq!(saved["keyboard|keys|piano"], hall("Piano Studio"));
+    assert_eq!(saved["etc 未分類"], hall("Large Clear Hall"));
+    for name in ["bass|bs", "bass ユーザー追加", "kick|bass drum"] {
         assert_eq!(saved[name], Value::Null, "{name}");
     }
     assert!(rules.enabled());
@@ -266,6 +285,7 @@ fn reverb_candidates_are_reverbs_outside_the_excluded_prefix() {
         vec![
             "Small Drum Room",
             "Large Drum Room",
+            "Medium Clear Room",
             "Medium Clear Hall",
             "Reverb 2/Room"
         ]

@@ -55,6 +55,7 @@ pub(crate) fn patch_roles(
                 display,
                 normalized_display,
                 selector_category: None,
+                plugin: None,
             }),
         user_presets,
     )

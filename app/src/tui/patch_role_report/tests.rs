@@ -195,6 +195,7 @@ fn the_report_classifies_with_the_same_selector_category_as_the_screen() {
                 display,
                 normalized_display,
                 selector_category: category.as_deref(),
+                plugin: None,
             }),
         &[],
     );

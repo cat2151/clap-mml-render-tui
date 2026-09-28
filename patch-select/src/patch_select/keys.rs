@@ -30,6 +30,11 @@ fn is_plain_char(key: KeyEvent, character: char) -> bool {
     key.modifiers == KeyModifiers::NONE && key.code == KeyCode::Char(character)
 }
 
+/// plugin の solo / mute menu を開く。
+pub(super) fn is_plugin_menu_key(key: KeyEvent) -> bool {
+    is_plain_char(key, 'm')
+}
+
 pub(super) fn is_filter_edit_trigger(key: KeyEvent) -> bool {
     key.modifiers == KeyModifiers::NONE && key.code == KeyCode::Char('/')
 }

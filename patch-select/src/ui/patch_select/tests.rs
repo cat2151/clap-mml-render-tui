@@ -260,3 +260,35 @@ fn draw_in_stays_inside_the_given_area() {
         )
         .contains("Lead 1.fxp"));
 }
+
+#[test]
+fn plugin_menu_lists_keys_and_marks_the_muted_plugin() {
+    let mut select = PatchSelect::open(PatchSelectRequest {
+        patches: vec![
+            PatchCatalogEntry::new(
+                "Bell.syx/00".into(),
+                "bell.syx/00".into(),
+                "Dexed".into(),
+                None,
+            ),
+            PatchCatalogEntry::new(
+                "Harp.floe-preset".into(),
+                "harp.floe-preset".into(),
+                "Floe".into(),
+                None,
+            ),
+        ],
+        ..Default::default()
+    })
+    .expect("patch list is not empty");
+    let press = |ch| KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE);
+    select.handle_key(press('m'));
+    select.handle_key(KeyEvent::new(KeyCode::Char('D'), KeyModifiers::SHIFT));
+    select.handle_key(press('m'));
+
+    let lines = lines(&render(&select, SCREEN, &PatchSelectDrawOptions::default()));
+
+    assert!(line_with(&lines, " d  dexed").contains("mute"));
+    assert!(!line_with(&lines, " f  floe").contains("mute"));
+    line_with(&lines, "a-z:solo  A-Z:mute");
+}

@@ -5,7 +5,7 @@ use cmrt_history::PatchPhraseState;
 use cmrt_runtime::Config;
 use cmrt_tui_core::theme::{
     cursor_highlight_bg, MONOKAI_BG, MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_GREEN,
-    MONOKAI_PURPLE, MONOKAI_YELLOW,
+    MONOKAI_PINK, MONOKAI_PURPLE, MONOKAI_YELLOW,
 };
 
 use crate::NotepadScreen;

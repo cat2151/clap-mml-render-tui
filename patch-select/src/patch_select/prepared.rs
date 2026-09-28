@@ -149,6 +149,7 @@ pub(super) fn build_role_index(
             display: patch.display(),
             normalized_display: patch.normalized_display(),
             selector_category: patch.selector_category(),
+            plugin: Some(patch.plugin_sort_key()),
         }),
         user_presets,
     )

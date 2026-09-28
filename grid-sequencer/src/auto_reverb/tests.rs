@@ -10,8 +10,7 @@ pub(crate) const DEXED_SNARE: &str = "Drums.syx/01 Snare Tight";
 pub(crate) const DEXED_PAD: &str = "Factory.syx/10 Warm Pad";
 pub(crate) const SURGE_PAD: &str = "Pads/Pad 1.fxp";
 pub(crate) const DRUM_ROOM_CHAIN: &str = r#"[{"Dragonfly Room Reverb preset":"Small Drum Room"}]"#;
-pub(crate) const CLEAR_HALL_CHAIN: &str =
-    r#"[{"Dragonfly Hall Reverb preset":"Medium Clear Hall"}]"#;
+pub(crate) const PAD_HALL_CHAIN: &str = r#"[{"Dragonfly Hall Reverb preset":"Dark Room"}]"#;
 
 /// Dexed（effect 無し）の snare と pad、Surge XT（effect 内蔵）の pad を持つ patch catalog。
 pub(crate) fn patch_load() -> PatchLoadState {
@@ -87,6 +86,7 @@ pub(crate) fn effect_plugins() -> EffectPlugins {
     let presets = vec![
         preset(&room, "Small Drum Room"),
         preset(&hall, "Medium Clear Hall"),
+        preset(&hall, "Dark Room"),
     ];
     EffectPlugins::with_catalog(AudioEffectCatalog::with_entries(vec![room, hall], presets))
 }
@@ -107,8 +107,8 @@ fn a_dexed_snare_gets_the_small_drum_room() {
 }
 
 #[test]
-fn a_dexed_pad_gets_the_clear_hall() {
-    assert_eq!(chain(&ready_auto_reverb(), DEXED_PAD), CLEAR_HALL_CHAIN);
+fn a_dexed_pad_gets_the_pad_hall() {
+    assert_eq!(chain(&ready_auto_reverb(), DEXED_PAD), PAD_HALL_CHAIN);
 }
 
 #[test]

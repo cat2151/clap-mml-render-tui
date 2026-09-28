@@ -67,6 +67,11 @@ impl PatchSelect<'_> {
         let cursor = current_index
             .and_then(|current| filtered.iter().position(|index| *index == current))
             .unwrap_or(0);
+        let auto_reverb = auto_reverb.map(|host| {
+            let mut panel = AutoReverbPanel::new(host);
+            panel.set_user_presets(&user_presets);
+            panel
+        });
         let mut select = Self {
             all,
             filtered,
@@ -87,7 +92,8 @@ impl PatchSelect<'_> {
             catalog_notes,
             load_measurements,
             favorites,
-            auto_reverb: auto_reverb.map(AutoReverbPanel::new),
+            auto_reverb,
+            plugin_menu: None,
         };
         select.update_filter();
         Some(select)

@@ -2,7 +2,7 @@ use cmrt_patch_select::auto_reverb::AutoReverbRules;
 
 use super::*;
 use crate::auto_reverb::tests::{
-    effect_plugins, patch_load, DEXED_SNARE, DRUM_ROOM_CHAIN, SURGE_PAD,
+    effect_plugins, patch_load, DEXED_SNARE, DRUM_ROOM_CHAIN, PAD_HALL_CHAIN, SURGE_PAD,
 };
 use crate::{GridSequencerAction, GridSequencerParts, NoVoicingLookup};
 
@@ -143,4 +143,32 @@ fn rules_set_by_the_app_apply_to_the_next_prepare() {
     screen.prepare_connection();
 
     assert_eq!(sent_chains(&screen, "prepare", 1), [""]);
+}
+
+#[test]
+fn the_effect_list_auditions_the_candidate_on_the_previewed_patch_until_it_closes() {
+    let patch_load = patch_load();
+    let ctx = ctx(&patch_load);
+    let mut screen = screen_with_auto_reverb();
+    screen.open_patch_selector(0, &ctx);
+    preview(&mut screen, DEXED_SNARE, &ctx);
+    screen.handle_key(
+        KeyEvent::new(KeyCode::Char('E'), KeyModifiers::SHIFT),
+        Instant::now(),
+        &ctx,
+    );
+    screen.handle_key(press(KeyCode::Char('x')), Instant::now(), &ctx);
+    screen.sent_patches.borrow_mut().clear();
+
+    let action = screen.handle_key(press(KeyCode::End), Instant::now(), &ctx);
+
+    // 保存はせず、試聴中の snare に候補の hall を載せる。
+    assert!(matches!(action, GridSequencerAction::Continue));
+    assert_eq!(sent_chains(&screen, "auto-reverb", 0), [PAD_HALL_CHAIN]);
+
+    screen.handle_key(press(KeyCode::Esc), Instant::now(), &ctx);
+    assert_eq!(
+        sent_chains(&screen, "auto-reverb", 0),
+        [PAD_HALL_CHAIN, DRUM_ROOM_CHAIN]
+    );
 }

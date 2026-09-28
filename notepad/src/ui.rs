@@ -6,10 +6,11 @@
 mod help;
 mod overlay;
 mod status;
+mod syntax;
 
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
     Frame,
@@ -125,6 +126,20 @@ pub fn draw(app: &mut NotepadScreen<'_>, f: &mut Frame) {
     }
 }
 
+fn highlighted_spans(line: &str, style: Style, is_cursor: bool) -> Vec<Span<'static>> {
+    syntax::highlight(line)
+        .into_iter()
+        .map(|(range, kind)| {
+            let style = match kind {
+                Some(kind) if is_cursor => cursor_highlight_style(base_style().fg(kind.color())),
+                Some(kind) => style.fg(kind.color()),
+                None => style,
+            };
+            Span::styled(line[range].to_string(), style)
+        })
+        .collect()
+}
+
 fn status_color(play_state: &PlayState) -> Color {
     status::status_color(play_state)
 }
@@ -155,6 +170,7 @@ fn draw_normal(
         .split(f.area());
     let list_area = chunks[0];
     app.editor.page_size = visible_list_page_size(list_area);
+    let visible_height = usize::from(list_area.height.saturating_sub(2));
     let cache = app.audio.cache.lock().unwrap();
     let disk_hashes = app.audio.known_disk_hashes.lock().unwrap();
 
@@ -180,17 +196,22 @@ fn draw_normal(
             } else {
                 line.clone()
             };
-            ListItem::new(Line::from(vec![
-                Span::styled(cache_marker(cached, render_status), style),
-                Span::styled(content, style),
-            ]))
+            let mut spans = vec![Span::styled(cache_marker(cached, render_status), style)];
+            // 選択行は必ず表示されるので、表示中の行はカーソルから表示高さ未満の距離にある。
+            if i.abs_diff(cursor) < visible_height {
+                spans.extend(highlighted_spans(&content, style, i == cursor));
+            } else {
+                spans.push(Span::styled(content, style));
+            }
+            ListItem::new(Line::from(spans))
         })
         .collect();
 
     f.render_stateful_widget(
         List::new(items)
             .style(base_style())
-            .highlight_style(cursor_highlight_style(base_style()))
+            // fg を持たせると、選択行の span ごとのシンタックスハイライトを上書きしてしまう。
+            .highlight_style(cursor_highlight_style(Style::default()))
             .block(
                 Block::default()
                     .borders(Borders::ALL)

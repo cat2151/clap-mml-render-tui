@@ -46,7 +46,7 @@ pub(crate) fn open_with_auto_reverb(
     .expect("patch list is not empty")
 }
 
-fn shift(ch: char) -> KeyEvent {
+pub(super) fn shift(ch: char) -> KeyEvent {
     KeyEvent::new(KeyCode::Char(ch), KeyModifiers::SHIFT)
 }
 
@@ -60,15 +60,27 @@ fn row_index(select: &PatchSelect<'_>, name: &str) -> usize {
         .unwrap()
 }
 
-fn move_overlay_to(select: &mut PatchSelect<'_>, name: &str) {
-    let target = row_index(select, name);
+/// ルール overlay に出ている行での位置。
+fn shown_index(select: &PatchSelect<'_>, name: &str) -> usize {
+    let row = row_index(select, name);
+    select
+        .auto_reverb_overlay()
+        .unwrap()
+        .shown_rows()
+        .iter()
+        .position(|index| *index == row)
+        .unwrap()
+}
+
+pub(super) fn move_overlay_to(select: &mut PatchSelect<'_>, name: &str) {
+    let target = shown_index(select, name);
     while select.auto_reverb_overlay().unwrap().cursor() < target {
         select.handle_key(press(KeyCode::Char('j')));
     }
     assert_eq!(select.auto_reverb_overlay().unwrap().cursor(), target);
 }
 
-fn effect_list_labels(select: &PatchSelect<'_>) -> Vec<String> {
+pub(super) fn effect_list_labels(select: &PatchSelect<'_>) -> Vec<String> {
     select
         .auto_reverb_overlay()
         .unwrap()
@@ -80,7 +92,7 @@ fn effect_list_labels(select: &PatchSelect<'_>) -> Vec<String> {
         .collect()
 }
 
-fn row_effect(select: &PatchSelect<'_>, name: &str) -> Option<serde_json::Value> {
+pub(super) fn row_effect(select: &PatchSelect<'_>, name: &str) -> Option<serde_json::Value> {
     select.auto_reverb_rules().unwrap().rows()[row_index(select, name)]
         .1
         .clone()
@@ -124,128 +136,16 @@ fn shift_e_opens_the_rules_overlay_and_it_captures_every_key() {
     select.handle_key(press(KeyCode::Char('k')));
     select.handle_key(press(KeyCode::Up));
     assert_eq!(select.auto_reverb_overlay().unwrap().cursor(), 0);
-    // overlay の Enter は音色を確定しない。
+    // overlay の Enter は音色を確定せず、effect list を開いて試聴する。
     assert_eq!(
         select.handle_key(press(KeyCode::Enter)),
-        PatchSelectAction::Continue
+        PatchSelectAction::Preview(DEXED_SNARE.to_string())
     );
-}
-
-#[test]
-fn x_lists_dry_first_then_selectable_reverbs_only() {
-    let mut select = open_with_auto_reverb(
-        DEXED_SNARE,
-        AutoReverbRules::default(),
-        HostChain::default(),
-    );
-    select.handle_key(shift('E'));
-    move_overlay_to(&mut select, "snare");
-
-    select.handle_key(press(KeyCode::Char('x')));
-
-    assert_eq!(
-        effect_list_labels(&select),
-        [
-            "なし(dry)",
-            "Dragonfly Room Reverb: Small Drum Room",
-            "Dragonfly Room Reverb: Large Drum Room",
-            "Dragonfly Hall Reverb: Medium Clear Hall",
-            "Surge XT Effects: Reverb 2/Room",
-        ]
-    );
-    // 行の今の effect（snare の既定 Small Drum Room）から始まる。
-    assert_eq!(
-        select
-            .auto_reverb_overlay()
-            .unwrap()
-            .effect_list()
-            .unwrap()
-            .cursor(),
-        1
-    );
-}
-
-#[test]
-fn enter_in_the_effect_list_sets_the_row_and_esc_saves_and_replays() {
-    let mut select = open_with_auto_reverb(
-        DEXED_SNARE,
-        AutoReverbRules::default(),
-        HostChain::default(),
-    );
-    select.handle_key(shift('E'));
-    move_overlay_to(&mut select, "snare");
-    select.handle_key(press(KeyCode::Char('x')));
-    select.handle_key(press(KeyCode::Char('j')));
-
-    assert_eq!(
-        select.handle_key(press(KeyCode::Enter)),
-        PatchSelectAction::Continue
-    );
-
-    let large = json!({"Dragonfly Room Reverb preset": "Large Drum Room"});
-    assert_eq!(row_effect(&select, "snare"), Some(large.clone()));
     assert!(select
         .auto_reverb_overlay()
         .unwrap()
         .effect_list()
-        .is_none());
-    assert_eq!(select.auto_reverb_stage(DEXED_SNARE), Some(large.clone()));
-
-    let PatchSelectAction::SaveAutoReverb { rules, preview } =
-        select.handle_key(press(KeyCode::Esc))
-    else {
-        panic!("closing a changed overlay must ask the host to save");
-    };
-    assert_eq!(preview.as_deref(), Some(DEXED_SNARE));
-    assert_eq!(&rules, select.auto_reverb_rules().unwrap());
-    assert!(!select.auto_reverb_overlay_open());
-}
-
-#[test]
-fn choosing_dry_clears_the_row() {
-    let mut select =
-        open_with_auto_reverb(DEXED_PAD, AutoReverbRules::default(), HostChain::default());
-    select.handle_key(shift('E'));
-    move_overlay_to(&mut select, "pad");
-    select.handle_key(press(KeyCode::Char('x')));
-    while select
-        .auto_reverb_overlay()
-        .unwrap()
-        .effect_list()
-        .unwrap()
-        .cursor()
-        > 0
-    {
-        select.handle_key(press(KeyCode::Char('k')));
-    }
-    select.handle_key(press(KeyCode::Enter));
-
-    assert_eq!(row_effect(&select, "pad"), None);
-    assert_eq!(select.auto_reverb_stage(DEXED_PAD), None);
-}
-
-#[test]
-fn esc_in_the_effect_list_goes_back_without_changing_the_row() {
-    let mut select = open_with_auto_reverb(
-        DEXED_SNARE,
-        AutoReverbRules::default(),
-        HostChain::default(),
-    );
-    select.handle_key(shift('E'));
-    move_overlay_to(&mut select, "snare");
-    let before = row_effect(&select, "snare");
-    select.handle_key(press(KeyCode::Char('x')));
-    select.handle_key(press(KeyCode::Char('j')));
-
-    select.handle_key(press(KeyCode::Esc));
-
-    assert!(select.auto_reverb_overlay_open());
-    assert!(select
-        .auto_reverb_overlay()
-        .unwrap()
-        .effect_list()
-        .is_none());
-    assert_eq!(row_effect(&select, "snare"), before);
+        .is_some());
 }
 
 #[test]
@@ -312,4 +212,38 @@ fn the_stage_follows_the_rules_and_is_withheld_for_builtin_effects_and_manual_re
         manual_reverb_chain(),
     );
     assert_eq!(with_chain.auto_reverb_stage(DEXED_SNARE), None);
+}
+
+#[test]
+fn the_overlay_shows_a_user_added_row_only_for_roles_with_user_presets() {
+    let shown_names = |user_presets: Vec<(String, String)>| {
+        let mut select = PatchSelect::open(PatchSelectRequest {
+            patches: auto_reverb_patches(),
+            current: Some(DEXED_SNARE.to_string()),
+            user_presets,
+            auto_reverb: Some(AutoReverbHost {
+                rules: AutoReverbRules::default(),
+                effect_plugins: EffectPlugins::with_catalog(test_catalog()),
+                chain: HostChain::default(),
+            }),
+            ..Default::default()
+        })
+        .unwrap();
+        select.handle_key(shift('E'));
+        let rows = select.auto_reverb_rules().unwrap().rows();
+        select
+            .auto_reverb_overlay()
+            .unwrap()
+            .shown_rows()
+            .iter()
+            .map(|index| rows[*index].0.name())
+            .collect::<Vec<_>>()
+    };
+
+    let without = shown_names(Vec::new());
+    assert!(!without.contains(&"lead ユーザー追加".to_string()));
+    assert!(without.contains(&"etc 未分類".to_string()));
+    let with = shown_names(vec![("lead".to_string(), "sync".to_string())]);
+    assert!(with.contains(&"lead ユーザー追加".to_string()));
+    assert!(!with.contains(&"bass ユーザー追加".to_string()));
 }

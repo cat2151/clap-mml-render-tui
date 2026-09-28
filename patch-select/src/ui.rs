@@ -4,6 +4,7 @@ mod auto_reverb;
 mod notice;
 mod patch_select;
 mod play_settings;
+mod plugin_menu;
 
 pub use patch_select::{load_time_label, scroll_offset, PatchSelectDrawOptions};
 

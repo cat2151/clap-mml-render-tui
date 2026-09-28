@@ -84,7 +84,7 @@ impl PatchSelector {
         ctx: &GridSequencerContext<'_>,
         poly_only: bool,
         before_open: BeforeOpen,
-        auto_reverb: AutoReverbPanel,
+        mut auto_reverb: AutoReverbPanel,
     ) -> Result<Self, PatchUnavailable> {
         if let Some(reason) = catalog_unavailable(ctx) {
             return Err(reason);
@@ -104,6 +104,7 @@ impl PatchSelector {
         }
         sort_for_selector(&mut entries);
         let user_presets = prepare_user_presets(snapshot.role_presets().to_vec());
+        auto_reverb.set_user_presets(&user_presets);
         let presets = PreparedPresets::build(&entries, &user_presets, &ctx.patch_roles)
             .expect("prepared user presets compile");
         let (role, drum) = selector_start(purpose).map_or_else(
