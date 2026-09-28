@@ -18,14 +18,14 @@ use super::chord_chart_preview::app_on_the_chord_chart;
 use super::*;
 use cmrt_chord_chart::PreviewRequest;
 
-const DEXED_SNARE: &str = "Drums.syx/01 Snare Tight";
+pub(crate) const DEXED_SNARE: &str = "Drums.syx/01 Snare Tight";
 const DEXED_PAD: &str = "Factory.syx/10 Warm Pad";
 const SURGE_PAD: &str = "Pads/Pad 1.fxp";
 const DRUM_ROOM_CHAIN: &str = r#"[{"Dragonfly Room Reverb preset":"Small Drum Room"}]"#;
 const CLEAR_HALL_CHAIN: &str = r#"[{"Dragonfly Hall Reverb preset":"Medium Clear Hall"}]"#;
 
 /// Dexed（effect 無し）の snare と pad、Surge XT（effect 内蔵）の pad を持つ patch catalog。
-fn patch_load() -> PatchLoadState {
+pub(crate) fn patch_load() -> PatchLoadState {
     let catalog_plugin = |name: &str, plugin_id: &str| CatalogPlugin {
         name: name.to_string(),
         plugin_path: format!("/clap/{name}.clap"),
@@ -72,7 +72,7 @@ fn patch_load() -> PatchLoadState {
 }
 
 /// マシンに依存しない effect catalog。既定のルールが使う Dragonfly の 2 つだけ。
-fn effect_plugins() -> EffectPlugins {
+pub(crate) fn effect_plugins() -> EffectPlugins {
     let room = AudioEffectPluginInfo::new(
         "Dragonfly Room Reverb",
         "/clap/room.clap",
@@ -260,8 +260,8 @@ fn toggling_off_in_the_t_selector_makes_the_audition_and_the_playback_dry() {
     wait_for_prepared(&sink, 1);
 
     app.handle_chord_chart_patch_select_key_event(KeyEvent::new(
-        KeyCode::Char('E'),
-        KeyModifiers::SHIFT,
+        KeyCode::Char('e'),
+        KeyModifiers::NONE,
     ));
 
     // カーソルの候補（Chord role の Dexed pad）を chain 無しで鳴らし直す。

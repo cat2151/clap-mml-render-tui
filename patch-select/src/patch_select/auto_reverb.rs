@@ -1,4 +1,4 @@
-//! auto reverb のルール overlay（`e`）と on/off（`E`）の状態とキー操作。
+//! auto reverb の on/off（`e`）とルール overlay（`E`）の状態とキー操作。
 //!
 //! [`AutoReverbPanel`] は selector の実装に依らないので、自前の selector を持つ host も
 //! 同じ操作と描画を使える。ルールを変えたら、保存と鳴らし直しを host へ頼む。
@@ -9,7 +9,7 @@ use super::*;
 use cmrt_core::EffectPlugins;
 use serde_json::Value;
 
-use crate::auto_reverb::{resolve, reverb_candidates, AutoReverb, AutoReverbRules};
+use crate::auto_reverb::{resolve, reverb_candidates, AutoReverb, AutoReverbRules, HostChain};
 use keys::{is_auto_reverb_rules_key, is_auto_reverb_toggle_key};
 
 /// effect list の先頭に置く「掛けない」の表示。
@@ -20,8 +20,8 @@ const DRY_CHOICE_LABEL: &str = "なし(dry)";
 pub struct AutoReverbHost {
     pub rules: AutoReverbRules,
     pub effect_plugins: EffectPlugins,
-    /// 試聴する先（track・行）に effect chain が既にある。あれば auto reverb は掛けない。
-    pub existing_chain: bool,
+    /// 試聴する先（track・行）の effect chain。手動 reverb なら auto reverb は掛けない。
+    pub chain: HostChain,
 }
 
 /// ルール overlay と on/off の状態。ルールは閉じるまで panel の中だけで変わる。
@@ -59,6 +59,10 @@ impl AutoReverbPanel {
 
     pub(crate) fn host(&self) -> &AutoReverbHost {
         &self.host
+    }
+
+    fn has_manual_reverb(&self) -> bool {
+        self.host.chain.is_manual_reverb()
     }
 
     pub(crate) fn overlay(&self) -> Option<&RulesOverlay> {
@@ -195,8 +199,10 @@ pub(crate) struct EffectChoice {
 #[derive(Debug, PartialEq)]
 pub enum AutoReverbStatus {
     Resolved(AutoReverb),
-    /// 試聴先の effect chain を優先して掛けない。
-    ExistingChain,
+    /// 試聴先の chain が手動 reverb なので掛けない。`reverbs` は chain にある reverb の表示名。
+    ManualReverb {
+        reverbs: Vec<String>,
+    },
     /// 絞り込みで音色が 1 つも無い。
     NoPatch,
 }
@@ -228,10 +234,11 @@ impl PatchSelect<'_> {
         self.filter_editing || self.auto_reverb_overlay_open()
     }
 
-    /// `display` の試聴・確定で chain に足す 1 段。掛けないとき（host 非対応・chain あり・dry・内蔵・off）は `None`。
+    /// `display` の試聴・確定で chain に入れる auto reverb の 1 段。掛けないとき
+    /// （host 非対応・手動 reverb・dry・内蔵・off）は `None`。
     pub fn auto_reverb_stage(&self, display: &str) -> Option<Value> {
         let panel = self.auto_reverb.as_ref()?;
-        if panel.host().existing_chain {
+        if panel.has_manual_reverb() {
             return None;
         }
         let entry = self.all.iter().find(|entry| entry.display() == display)?;
@@ -243,11 +250,16 @@ impl PatchSelect<'_> {
 
     pub(crate) fn auto_reverb_status(&self) -> Option<AutoReverbStatus> {
         let panel = self.auto_reverb.as_ref()?;
+        if panel.has_manual_reverb() {
+            return Some(AutoReverbStatus::ManualReverb {
+                reverbs: panel
+                    .host()
+                    .chain
+                    .reverb_labels(panel.host().effect_plugins.catalog()),
+            });
+        }
         if !panel.rules().enabled() {
             return Some(AutoReverbStatus::Resolved(AutoReverb::Off));
-        }
-        if panel.host().existing_chain {
-            return Some(AutoReverbStatus::ExistingChain);
         }
         let Some(index) = self.filtered.get(self.cursor) else {
             return Some(AutoReverbStatus::NoPatch);

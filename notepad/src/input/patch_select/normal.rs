@@ -16,7 +16,8 @@ impl<'a> NotepadScreen<'a> {
             return;
         };
         if current_patch_name != raw_patch_name {
-            self.replace_current_line_patch(&current_patch_name, None);
+            let effects = self.current_line_effect_keys();
+            self.replace_current_line_patch(&current_patch_name, &effects);
         }
     }
 

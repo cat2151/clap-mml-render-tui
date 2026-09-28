@@ -61,23 +61,26 @@ impl DawApp {
         self.apply_track_init_cell(track, next_init, reason);
     }
 
-    /// 音色名の差し替えと同時に、init セルの effect chain を `chain` にする。
-    /// 再レンダリングは 1 回で済む。init セルが変わらなければ何もしない。
-    pub(crate) fn apply_patch_name_and_effect_chain_to_track_init(
+    /// 音色名の差し替えと同時に、init セルの effect chain と auto/manual reverb の印を
+    /// `chain` と `auto_reverb` から書き直す。再レンダリングは 1 回で済む。
+    /// init セルが変わらなければ何もしない。
+    pub(crate) fn apply_patch_name_and_host_chain_to_track_init(
         &mut self,
         track: usize,
         patch_name: &str,
         patch_filter_query: Option<&str>,
-        chain: &[serde_json::Value],
+        chain: &cmrt_patch_select::auto_reverb::HostChain,
+        auto_reverb: Option<&serde_json::Value>,
         reason: PatchUpdateReason,
     ) {
         if track < FIRST_PLAYABLE_TRACK || track >= self.editor.tracks {
             return;
         }
         let current_init = &self.editor.data[track][INIT_MEASURE];
-        let next_init = crate::mml::effect_chain::init_cell_with_effect_chain(
+        let next_init = crate::mml::effect_chain::init_cell_with_host_chain(
             &Self::replace_patch_name_in_mml(current_init, patch_name, patch_filter_query),
             chain,
+            auto_reverb,
         );
         if next_init == *current_init {
             return;
@@ -85,7 +88,7 @@ impl DawApp {
         self.apply_track_init_cell(track, next_init, reason);
     }
 
-    fn apply_track_init_cell(
+    pub(crate) fn apply_track_init_cell(
         &mut self,
         track: usize,
         next_init: String,

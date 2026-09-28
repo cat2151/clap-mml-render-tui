@@ -78,7 +78,9 @@ impl<'a> NotepadScreen<'a> {
                     .patch_select
                     .as_ref()
                     .and_then(|select| select.auto_reverb_stage(&patch_name));
-                self.replace_current_line_patch(&patch_name, auto_reverb);
+                let effects =
+                    super::effect_keys(&self.current_line_host_chain(), auto_reverb.as_ref());
+                self.replace_current_line_patch(&patch_name, &effects);
                 let line = self.editor.lines[self.editor.cursor].clone();
                 self.record_notepad_history(&line);
                 self.close_patch_select();

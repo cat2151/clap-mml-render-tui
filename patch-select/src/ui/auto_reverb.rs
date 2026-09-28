@@ -17,7 +17,6 @@ use cmrt_tui_core::{
 use crate::auto_reverb::AutoReverb;
 use crate::patch_select::{AutoReverbPanel, AutoReverbStatus, EffectList, PatchSelect};
 
-const KEY_HINT: &str = "  e:ルール  E:on/off";
 const RULE_NAME_COLUMN_WIDTH: u16 = 24;
 
 /// 表示行の文言。host が auto reverb を扱わなければ `None`（行を取らない）。
@@ -25,20 +24,26 @@ pub(super) fn status_line(select: &PatchSelect<'_>) -> Option<String> {
     Some(status_text(&select.auto_reverb_status()?))
 }
 
-/// `status` の表示行の文言（キーの案内を含む）。
+/// `status` の表示行の文言。
 pub(super) fn status_text(status: &AutoReverbStatus) -> String {
-    let state = match status {
+    match status {
+        AutoReverbStatus::ManualReverb { reverbs } if reverbs.is_empty() => {
+            "manual reverb: dry".to_string()
+        }
+        AutoReverbStatus::ManualReverb { reverbs } => {
+            format!("manual reverb: {}", reverbs.join(" + "))
+        }
         AutoReverbStatus::Resolved(AutoReverb::Apply {
             effect_name, row, ..
-        }) => format!("{effect_name} ({row})"),
-        AutoReverbStatus::Resolved(AutoReverb::Dry { row }) => format!("dry ({row})"),
-        AutoReverbStatus::Resolved(AutoReverb::Builtin) => "-（音色に effect 内蔵）".to_string(),
-        AutoReverbStatus::Resolved(AutoReverb::Off) => "off".to_string(),
-        AutoReverbStatus::Resolved(AutoReverb::NoCatalog) => "-（effect catalog 無し）".to_string(),
-        AutoReverbStatus::ExistingChain => "-（track の effect を優先）".to_string(),
-        AutoReverbStatus::NoPatch => "-".to_string(),
-    };
-    format!("auto reverb: {state}{KEY_HINT}")
+        }) => format!("auto reverb: {effect_name} ({row})"),
+        AutoReverbStatus::Resolved(AutoReverb::Dry { row }) => format!("auto reverb: dry ({row})"),
+        AutoReverbStatus::Resolved(AutoReverb::Builtin) => String::new(),
+        AutoReverbStatus::Resolved(AutoReverb::Off) => "auto reverb: off(dry)".to_string(),
+        AutoReverbStatus::Resolved(AutoReverb::NoCatalog) => {
+            "auto reverb: -（effect catalog 無し）".to_string()
+        }
+        AutoReverbStatus::NoPatch => "auto reverb: -".to_string(),
+    }
 }
 
 pub(super) fn draw_status(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {

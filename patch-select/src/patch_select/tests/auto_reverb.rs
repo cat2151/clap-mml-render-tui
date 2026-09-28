@@ -6,7 +6,17 @@ use serde_json::json;
 use crate::auto_reverb::tests::{
     test_catalog, DEXED_BASS, DEXED_KICK, DEXED_PAD, DEXED_SNARE, SURGE_PAD,
 };
-use crate::auto_reverb::AutoReverbRules;
+use crate::auto_reverb::{AutoReverbRules, HostChain};
+
+/// 控えの無い reverb が 1 段ある（手動 reverb の）chain。
+fn manual_reverb_chain() -> HostChain {
+    HostChain::from_json(
+        Some(&json!({
+            cmrt_core::EFFECT_CHAIN_JSON_KEY: [{"Dragonfly Hall Reverb preset": "Medium Clear Hall"}],
+        })),
+        Some(&test_catalog()),
+    )
+}
 
 pub(crate) fn auto_reverb_patches() -> Vec<PatchCatalogEntry> {
     [DEXED_BASS, DEXED_KICK, DEXED_SNARE, DEXED_PAD]
@@ -21,7 +31,7 @@ pub(crate) fn auto_reverb_patches() -> Vec<PatchCatalogEntry> {
 pub(crate) fn open_with_auto_reverb(
     current: &str,
     rules: AutoReverbRules,
-    existing_chain: bool,
+    chain: HostChain,
 ) -> PatchSelect<'static> {
     PatchSelect::open(PatchSelectRequest {
         patches: auto_reverb_patches(),
@@ -29,7 +39,7 @@ pub(crate) fn open_with_auto_reverb(
         auto_reverb: Some(AutoReverbHost {
             rules,
             effect_plugins: EffectPlugins::with_catalog(test_catalog()),
-            existing_chain,
+            chain,
         }),
         ..Default::default()
     })
@@ -85,21 +95,25 @@ fn a_host_without_auto_reverb_ignores_e_and_shift_e() {
     })
     .unwrap();
 
+    assert_eq!(select.handle_key(shift('E')), PatchSelectAction::Continue);
     assert_eq!(
         select.handle_key(press(KeyCode::Char('e'))),
         PatchSelectAction::Continue
     );
-    assert_eq!(select.handle_key(shift('E')), PatchSelectAction::Continue);
     assert!(!select.auto_reverb_overlay_open());
     assert_eq!(select.auto_reverb_status(), None);
     assert_eq!(select.auto_reverb_stage(DEXED_SNARE), None);
 }
 
 #[test]
-fn e_opens_the_rules_overlay_and_it_captures_every_key() {
-    let mut select = open_with_auto_reverb(DEXED_SNARE, AutoReverbRules::default(), false);
+fn shift_e_opens_the_rules_overlay_and_it_captures_every_key() {
+    let mut select = open_with_auto_reverb(
+        DEXED_SNARE,
+        AutoReverbRules::default(),
+        HostChain::default(),
+    );
 
-    select.handle_key(press(KeyCode::Char('e')));
+    select.handle_key(shift('E'));
 
     assert!(select.auto_reverb_overlay_open());
     assert!(select.captures_all_keys());
@@ -119,8 +133,12 @@ fn e_opens_the_rules_overlay_and_it_captures_every_key() {
 
 #[test]
 fn x_lists_dry_first_then_selectable_reverbs_only() {
-    let mut select = open_with_auto_reverb(DEXED_SNARE, AutoReverbRules::default(), false);
-    select.handle_key(press(KeyCode::Char('e')));
+    let mut select = open_with_auto_reverb(
+        DEXED_SNARE,
+        AutoReverbRules::default(),
+        HostChain::default(),
+    );
+    select.handle_key(shift('E'));
     move_overlay_to(&mut select, "snare");
 
     select.handle_key(press(KeyCode::Char('x')));
@@ -149,8 +167,12 @@ fn x_lists_dry_first_then_selectable_reverbs_only() {
 
 #[test]
 fn enter_in_the_effect_list_sets_the_row_and_esc_saves_and_replays() {
-    let mut select = open_with_auto_reverb(DEXED_SNARE, AutoReverbRules::default(), false);
-    select.handle_key(press(KeyCode::Char('e')));
+    let mut select = open_with_auto_reverb(
+        DEXED_SNARE,
+        AutoReverbRules::default(),
+        HostChain::default(),
+    );
+    select.handle_key(shift('E'));
     move_overlay_to(&mut select, "snare");
     select.handle_key(press(KeyCode::Char('x')));
     select.handle_key(press(KeyCode::Char('j')));
@@ -181,8 +203,9 @@ fn enter_in_the_effect_list_sets_the_row_and_esc_saves_and_replays() {
 
 #[test]
 fn choosing_dry_clears_the_row() {
-    let mut select = open_with_auto_reverb(DEXED_PAD, AutoReverbRules::default(), false);
-    select.handle_key(press(KeyCode::Char('e')));
+    let mut select =
+        open_with_auto_reverb(DEXED_PAD, AutoReverbRules::default(), HostChain::default());
+    select.handle_key(shift('E'));
     move_overlay_to(&mut select, "pad");
     select.handle_key(press(KeyCode::Char('x')));
     while select
@@ -203,8 +226,12 @@ fn choosing_dry_clears_the_row() {
 
 #[test]
 fn esc_in_the_effect_list_goes_back_without_changing_the_row() {
-    let mut select = open_with_auto_reverb(DEXED_SNARE, AutoReverbRules::default(), false);
-    select.handle_key(press(KeyCode::Char('e')));
+    let mut select = open_with_auto_reverb(
+        DEXED_SNARE,
+        AutoReverbRules::default(),
+        HostChain::default(),
+    );
+    select.handle_key(shift('E'));
     move_overlay_to(&mut select, "snare");
     let before = row_effect(&select, "snare");
     select.handle_key(press(KeyCode::Char('x')));
@@ -223,8 +250,12 @@ fn esc_in_the_effect_list_goes_back_without_changing_the_row() {
 
 #[test]
 fn closing_an_unchanged_overlay_neither_saves_nor_replays() {
-    let mut select = open_with_auto_reverb(DEXED_SNARE, AutoReverbRules::default(), false);
-    select.handle_key(press(KeyCode::Char('e')));
+    let mut select = open_with_auto_reverb(
+        DEXED_SNARE,
+        AutoReverbRules::default(),
+        HostChain::default(),
+    );
+    select.handle_key(shift('E'));
     select.handle_key(press(KeyCode::Char('j')));
 
     assert_eq!(
@@ -236,29 +267,38 @@ fn closing_an_unchanged_overlay_neither_saves_nor_replays() {
 }
 
 #[test]
-fn shift_e_toggles_auto_reverb_and_asks_to_save_and_replay() {
-    let mut select = open_with_auto_reverb(DEXED_SNARE, AutoReverbRules::default(), false);
+fn e_toggles_auto_reverb_and_asks_to_save_and_replay() {
+    let mut select = open_with_auto_reverb(
+        DEXED_SNARE,
+        AutoReverbRules::default(),
+        HostChain::default(),
+    );
 
-    let PatchSelectAction::SaveAutoReverb { rules, preview } = select.handle_key(shift('E')) else {
-        panic!("E must ask the host to save");
+    let PatchSelectAction::SaveAutoReverb { rules, preview } =
+        select.handle_key(press(KeyCode::Char('e')))
+    else {
+        panic!("e must ask the host to save");
     };
     assert!(!rules.enabled());
     assert_eq!(preview.as_deref(), Some(DEXED_SNARE));
     assert_eq!(select.auto_reverb_stage(DEXED_SNARE), None);
 
-    // Shift が修飾に載らない端末の `E` でも戻る。
     let PatchSelectAction::SaveAutoReverb { rules, .. } =
-        select.handle_key(press(KeyCode::Char('E')))
+        select.handle_key(press(KeyCode::Char('e')))
     else {
-        panic!("E must ask the host to save");
+        panic!("e must ask the host to save");
     };
     assert!(rules.enabled());
     assert!(select.auto_reverb_stage(DEXED_SNARE).is_some());
 }
 
 #[test]
-fn the_stage_follows_the_rules_and_is_withheld_for_builtin_effects_and_existing_chains() {
-    let select = open_with_auto_reverb(DEXED_SNARE, AutoReverbRules::default(), false);
+fn the_stage_follows_the_rules_and_is_withheld_for_builtin_effects_and_manual_reverbs() {
+    let select = open_with_auto_reverb(
+        DEXED_SNARE,
+        AutoReverbRules::default(),
+        HostChain::default(),
+    );
     assert_eq!(
         select.auto_reverb_stage(DEXED_SNARE),
         Some(json!({"Dragonfly Room Reverb preset": "Small Drum Room"}))
@@ -266,6 +306,10 @@ fn the_stage_follows_the_rules_and_is_withheld_for_builtin_effects_and_existing_
     assert_eq!(select.auto_reverb_stage(DEXED_BASS), None);
     assert_eq!(select.auto_reverb_stage(SURGE_PAD), None);
 
-    let with_chain = open_with_auto_reverb(DEXED_SNARE, AutoReverbRules::default(), true);
+    let with_chain = open_with_auto_reverb(
+        DEXED_SNARE,
+        AutoReverbRules::default(),
+        manual_reverb_chain(),
+    );
     assert_eq!(with_chain.auto_reverb_stage(DEXED_SNARE), None);
 }

@@ -14,6 +14,7 @@ use super::keyboard::KeyboardAction;
 use super::loop_browser::LoopBrowserAction;
 use super::{NormalAction, PlayState, PrimaryScreen, TuiApp, TuiExitReason};
 
+mod input_timing;
 mod line_wrap;
 mod screen;
 mod terminal;
@@ -87,8 +88,10 @@ impl<'a> TuiApp<'a> {
         )?;
         // History overlay を描画し終えるまで preview の準備すら開始しない。
         let mut deferred_grid_history_preview = None;
+        let mut input_timing = input_timing::InputTiming::default();
 
         loop {
+            input_timing.frame_started();
             if quit_from_startup_daw {
                 break;
             }
@@ -137,7 +140,9 @@ impl<'a> TuiApp<'a> {
             self.pump_notepad_sound_check_guide();
             clear_terminal_for_new_screen(&mut terminal, &mut rendered_screen, self.active_screen)?;
             let terminal_draw_started = std::time::Instant::now();
+            input_timing.draw_started();
             terminal.draw(|f| self.draw(f))?;
+            input_timing.draw_finished();
             let terminal_draw_elapsed = terminal_draw_started.elapsed();
             if let Some(snapshot) = deferred_grid_history_preview.take() {
                 self.play_grid_history_preview(snapshot);
@@ -185,6 +190,9 @@ impl<'a> TuiApp<'a> {
                 }
                 if let Event::Key(key) = input {
                     use crossterm::event::KeyEventKind;
+                    if key.kind == KeyEventKind::Press {
+                        input_timing.key_received(&key, self.active_screen);
+                    }
                     // MML オーバーレイは開いている間キーを総取りする。keyboard 画面だけは
                     // Release も届くので、文字が二重に入らないよう Press だけ渡す。
                     if self.mml_overlay.is_open() {

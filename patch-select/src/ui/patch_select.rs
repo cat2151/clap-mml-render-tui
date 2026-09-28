@@ -270,12 +270,29 @@ fn draw_list(
         select.focus() == PatchSelectFocus::Patches,
     );
     let marker = options.patch_marker;
+    // 枠内の1行は header が使うので、候補に使える高さだけで margin を計算する。
+    let visible_rows = usize::from(block.inner(area).height.saturating_sub(1));
+    let mut state = table_state(
+        select,
+        PatchSelectFocus::Patches,
+        select.cursor(),
+        select.filtered_len(),
+        visible_rows,
+    );
+    // 印は host の計算が重いことがあるので、見えている行だけに付ける。
+    let marked_rows = state.offset()..state.offset().saturating_add(visible_rows);
     let rows = select
         .filtered()
-        .map(|patch| {
+        .enumerate()
+        .map(|(index, patch)| {
             let mut cells = Vec::with_capacity(5);
             if let Some(marker) = marker {
-                cells.push(Cell::from(marker(patch.display())));
+                let mark = if marked_rows.contains(&index) {
+                    marker(patch.display())
+                } else {
+                    ""
+                };
+                cells.push(Cell::from(mark));
             }
             cells.push(Cell::from(favorite_mark(select, patch.display())));
             cells.push(Cell::from(patch.selector_category().unwrap_or("")));
@@ -286,15 +303,6 @@ fn draw_list(
             Row::new(cells)
         })
         .collect::<Vec<_>>();
-    // 枠内の1行は header が使うので、候補に使える高さだけで margin を計算する。
-    let visible_rows = usize::from(block.inner(area).height.saturating_sub(1));
-    let mut state = table_state(
-        select,
-        PatchSelectFocus::Patches,
-        select.cursor(),
-        rows.len(),
-        visible_rows,
-    );
     state.select((!rows.is_empty()).then_some(select.cursor()));
     let mut widths = Vec::with_capacity(5);
     let mut header = Vec::with_capacity(5);

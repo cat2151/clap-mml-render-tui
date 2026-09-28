@@ -1,5 +1,5 @@
 use cmrt_offline_render::EffectPlugins;
-use cmrt_patch_select::auto_reverb::AutoReverbRules;
+use cmrt_patch_select::auto_reverb::{AutoReverbRules, HostChain};
 use cmrt_patch_select::{
     host_patch_catalog, AutoReverbHost, FilterGroup, HostPatchCatalog, PatchCatalogSnapshot,
     PatchSelect, PatchSelectRequest,
@@ -47,7 +47,8 @@ impl<'a> NotepadScreen<'a> {
             .or_else(|| self.current_line_patch_name());
         let favorites = cmrt_history::favorite_patch_names(&self.patch_phrase_store);
         let favorite_count = favorites.len();
-        let existing_chain = self.current_line_effect_chain().is_some();
+        let chain = self.mark_current_line_manual_reverb_if_detected();
+        let manual_reverb = chain.is_manual_reverb();
         let Some(select) = PatchSelect::open(PatchSelectRequest {
             patches,
             current,
@@ -61,13 +62,13 @@ impl<'a> NotepadScreen<'a> {
             auto_reverb: Some(AutoReverbHost {
                 rules: load_auto_reverb_rules(&self.effect_plugins),
                 effect_plugins: self.effect_plugins.clone(),
-                existing_chain,
+                chain,
             }),
         }) else {
             return;
         };
         Self::log_notepad_event(format!(
-            "tone-select open patches={} favorites={favorite_count} role={} preset={:?} cursor={} selected={:?} existing_chain={existing_chain}",
+            "tone-select open patches={} favorites={favorite_count} role={} preset={:?} cursor={} selected={:?} manual_reverb={manual_reverb}",
             select.filtered_len(),
             FilterGroup::ALL[select.group_cursor()].label(),
             select.presets()[select.preset_cursor()].label,
@@ -77,6 +78,30 @@ impl<'a> NotepadScreen<'a> {
         self.patch_select = Some(select);
         self.mode = Mode::PatchSelect;
         self.preview_selected_patch();
+    }
+
+    /// 現在行の chain に手動 reverb を見つけたら、行頭 JSON の auto reverb の控えを
+    /// 手動 reverb の印に替える。返すのは現在行の chain。
+    fn mark_current_line_manual_reverb_if_detected(&mut self) -> HostChain {
+        let chain = self.current_line_host_chain();
+        if !chain.newly_detected_manual_reverb() {
+            return chain;
+        }
+        let Some(patch_name) = self
+            .editor
+            .lines
+            .get(self.editor.cursor)
+            .and_then(|line| Self::extract_patch_phrase(line))
+            .map(|(patch_name, _)| patch_name)
+        else {
+            return chain;
+        };
+        let effects = super::effect_keys(&chain, None);
+        self.replace_current_line_patch(&patch_name, &effects);
+        Self::log_notepad_event(format!(
+            "auto-reverb: 手動 reverb を検出したので manual reverb の印を書いた patch={patch_name:?}"
+        ));
+        self.current_line_host_chain()
     }
 
     /// 選択中の音色 × 現在行のフレーズを favorite へ登録し、`★ Favorite` を作り直す。

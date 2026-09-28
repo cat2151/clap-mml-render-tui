@@ -6,32 +6,39 @@ use crate::{
     filter_patches_by_display_path, PatchLoadState, PATCH_FILTER_QUERY_JSON_KEY, PATCH_JSON_KEY,
 };
 use cmrt_core::EFFECT_CHAIN_JSON_KEY;
+use cmrt_patch_select::auto_reverb::{HostChain, AUTO_REVERB_JSON_KEY, MANUAL_REVERB_JSON_KEY};
 use cmrt_patch_select::PatchSelect;
 use mmlabc_to_smf::mml_preprocessor;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::NotepadScreen;
 
 const PATCH_SELECT_PREVIEW_FALLBACK_PHRASE: &str = "c";
 
+/// 行頭 JSON のうち effect に関わる key。書き出す順でもある。
+const EFFECT_JSON_KEYS: [&str; 3] = [
+    EFFECT_CHAIN_JSON_KEY,
+    AUTO_REVERB_JSON_KEY,
+    MANUAL_REVERB_JSON_KEY,
+];
+
 /// 現在行のフレーズ・filter 語・effect chain。音色名を差し込むと試聴 MML になる。
 pub(crate) struct PatchSelectPreviewMml {
     phrase: String,
     filter_query: Option<String>,
-    effect_chain: Option<Value>,
+    chain: HostChain,
 }
 
 impl PatchSelectPreviewMml {
     /// filter 語と chain は行のものを入れる。`Enter` 後の行と JSON 文字列が一致し、
     /// 確定直後の再生が試聴で作ったキャッシュに当たる。
     ///
-    /// `auto_reverb` は行に chain が無いときだけ、chain の 1 段として入れる。
+    /// `auto_reverb` は行の chain の auto reverb の段として入れる。
     pub(crate) fn for_patch(&self, patch_name: &str, auto_reverb: Option<Value>) -> String {
-        let chain = effect_chain_with_auto_reverb(self.effect_chain.clone(), auto_reverb);
         let json = NotepadScreen::build_patch_json_with_filter_query(
             patch_name,
             self.filter_query.as_deref(),
-            chain.as_ref(),
+            &effect_keys(&self.chain, auto_reverb.as_ref()),
         );
         format!("{json} {}", self.phrase)
     }
@@ -42,12 +49,11 @@ impl PatchSelectPreviewMml {
     }
 }
 
-/// 行の chain があればそれ、無ければ auto reverb の 1 段だけの chain。
-fn effect_chain_with_auto_reverb(
-    existing: Option<Value>,
-    auto_reverb: Option<Value>,
-) -> Option<Value> {
-    existing.or_else(|| auto_reverb.map(|stage| Value::Array(vec![stage])))
+/// `chain` に `auto_reverb` を入れたときの、行頭 JSON の effect の key。
+pub(crate) fn effect_keys(chain: &HostChain, auto_reverb: Option<&Value>) -> Map<String, Value> {
+    let mut keys = Map::new();
+    chain.write_into(&mut keys, auto_reverb);
+    keys
 }
 
 impl<'a> NotepadScreen<'a> {
@@ -90,13 +96,14 @@ impl<'a> NotepadScreen<'a> {
     }
 
     fn build_patch_json(patch_name: &str) -> String {
-        Self::build_patch_json_with_filter_query(patch_name, None, None)
+        Self::build_patch_json_with_filter_query(patch_name, None, &Map::new())
     }
 
+    /// `effects` は [`EFFECT_JSON_KEYS`] の key だけを見る。
     fn build_patch_json_with_filter_query(
         patch_name: &str,
         filter_query: Option<&str>,
-        effect_chain: Option<&Value>,
+        effects: &Map<String, Value>,
     ) -> String {
         let patch_name =
             serde_json::to_string(patch_name).unwrap_or_else(|_| format!("\"{}\"", patch_name));
@@ -111,8 +118,10 @@ impl<'a> NotepadScreen<'a> {
                 r#", "{PATCH_FILTER_QUERY_JSON_KEY}": {filter_query}"#
             ));
         }
-        if let Some(effect_chain) = effect_chain {
-            json.push_str(&format!(r#", "{EFFECT_CHAIN_JSON_KEY}": {effect_chain}"#));
+        for key in EFFECT_JSON_KEYS {
+            if let Some(value) = effects.get(key) {
+                json.push_str(&format!(r#", "{key}": {value}"#));
+            }
         }
         json.push('}');
         json
@@ -153,13 +162,26 @@ impl<'a> NotepadScreen<'a> {
         })
     }
 
-    /// 現在行の行頭 JSON にある、空でない effect chain。
-    pub(crate) fn current_line_effect_chain(&self) -> Option<Value> {
+    fn current_line_patch_json(&self) -> Option<Value> {
         let line = self.editor.lines.get(self.editor.cursor)?;
-        Self::extract_patch_json_value(line)?
-            .get(EFFECT_CHAIN_JSON_KEY)
-            .filter(|chain| chain.as_array().is_some_and(|stages| !stages.is_empty()))
-            .cloned()
+        Self::extract_patch_json_value(line)
+    }
+
+    /// 現在行の行頭 JSON の effect chain と、auto reverb の扱い。
+    pub(crate) fn current_line_host_chain(&self) -> HostChain {
+        HostChain::from_json(
+            self.current_line_patch_json().as_ref(),
+            self.effect_plugins.catalog(),
+        )
+    }
+
+    /// 現在行の行頭 JSON にある effect の key をそのまま写したもの。音色だけを差し替えるときに使う。
+    pub(super) fn current_line_effect_keys(&self) -> Map<String, Value> {
+        let json = self.current_line_patch_json();
+        EFFECT_JSON_KEYS
+            .into_iter()
+            .filter_map(|key| Some((key.to_string(), json.as_ref()?.get(key)?.clone())))
+            .collect()
     }
 
     fn has_matching_patches_for_query(&self, query: &str) -> bool {
@@ -184,31 +206,23 @@ impl<'a> NotepadScreen<'a> {
             })
     }
 
-    /// 行頭 JSON の音色を差し替える。filter 語と effect chain は行のものを残す。
-    ///
-    /// 行に chain が無いときだけ、`auto_reverb` を chain の 1 段として書く。
+    /// 行頭 JSON の音色と effect の key を差し替える。filter 語は行のものを残す。
     pub(super) fn replace_current_line_patch(
         &mut self,
         patch_name: &str,
-        auto_reverb: Option<Value>,
+        effects: &Map<String, Value>,
     ) {
         let filter_query = self.current_line_patch_filter_query();
-        self.replace_current_line_patch_with_filter(
-            patch_name,
-            filter_query.as_deref(),
-            auto_reverb,
-        );
+        self.replace_current_line_patch_with_filter(patch_name, filter_query.as_deref(), effects);
     }
 
     pub(super) fn replace_current_line_patch_with_filter(
         &mut self,
         patch_name: &str,
         filter_query: Option<&str>,
-        auto_reverb: Option<Value>,
+        effects: &Map<String, Value>,
     ) {
-        let chain = effect_chain_with_auto_reverb(self.current_line_effect_chain(), auto_reverb);
-        let json =
-            Self::build_patch_json_with_filter_query(patch_name, filter_query, chain.as_ref());
+        let json = Self::build_patch_json_with_filter_query(patch_name, filter_query, effects);
         let current = self.editor.lines[self.editor.cursor].clone();
         let replaced_parts = current
             .split(';')
@@ -247,7 +261,7 @@ impl<'a> NotepadScreen<'a> {
         Some(PatchSelectPreviewMml {
             phrase: self.patch_select_current_phrase()?,
             filter_query: self.current_line_patch_filter_query(),
-            effect_chain: self.current_line_effect_chain(),
+            chain: self.current_line_host_chain(),
         })
     }
 

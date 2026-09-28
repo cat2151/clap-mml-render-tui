@@ -159,7 +159,7 @@ pub(super) fn draw_help(
             Line::from("  i / Ctrl+P : MML / chord 入力オーバーレイ（1 行モード）"),
             Line::from("  t      : 音色選択（MML overlay の Ctrl+T と同じ。確定で現在 track の init に反映）"),
             Line::from(
-                "         （音色選択中）E: auto reverb on/off  e: ルール編集（j/k 行選択、x で reverb 一覧、ESC で保存して閉じる）",
+                "         （音色選択中）e: auto reverb on/off  E: ルール編集（j/k 行選択、x で reverb 一覧、ESC で保存して閉じる）",
             ),
             Line::from("  a      : off → start固定/end追従 → end固定 → off"),
             Line::from("  m      : mixer overlay"),

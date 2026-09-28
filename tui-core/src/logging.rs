@@ -70,11 +70,39 @@ fn civil_from_days(days_since_unix_epoch: i64) -> (i32, u32, u32) {
     (year as i32, month as u32, day as u32)
 }
 
+/// ログファイルの行頭。操作と音の出た瞬間の差を測れるよう、ミリ秒まで書く。
 fn format_log_file_line_at(line: &str, now: SystemTime) -> String {
-    format!("[{}] {line}", format_jst_timestamp(now))
+    let timestamp = format_jst_timestamp(now);
+    let (date_time, zone) = timestamp.split_at(timestamp.len() - " JST".len());
+    format!("[{date_time}.{:03}{zone}] {line}", subsec_millis_floor(now))
 }
 
+fn subsec_millis_floor(now: SystemTime) -> u32 {
+    match now.duration_since(UNIX_EPOCH) {
+        Ok(duration) => duration.subsec_millis(),
+        Err(err) => match err.duration().subsec_nanos() {
+            0 => 0,
+            nanos => (1_000_000_000 - nanos) / 1_000_000,
+        },
+    }
+}
+
+/// 行頭の `[YYYY-MM-DD HH:MM:SS JST] ` か `[YYYY-MM-DD HH:MM:SS.mmm JST] ` を外す。
 fn strip_log_file_timestamp_prefix(line: &str) -> &str {
+    strip_millis_timestamp_prefix(line).unwrap_or_else(|| strip_seconds_timestamp_prefix(line))
+}
+
+fn strip_millis_timestamp_prefix(line: &str) -> Option<&str> {
+    let bytes = line.as_bytes();
+    if bytes.len() < 30 || bytes[20] != b'.' || !bytes[21..24].iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    let seconds_form = format!("{}{}", line.get(..20)?, line.get(24..30)?);
+    let stripped = strip_seconds_timestamp_prefix(&seconds_form);
+    (stripped.len() != seconds_form.len()).then(|| &line[30..])
+}
+
+fn strip_seconds_timestamp_prefix(line: &str) -> &str {
     let bytes = line.as_bytes();
     if bytes.len() < 26
         || bytes[0] != b'['

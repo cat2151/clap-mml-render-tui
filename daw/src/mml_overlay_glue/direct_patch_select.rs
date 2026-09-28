@@ -6,8 +6,9 @@
 //! 試聴は、その track の init セルの effect chain を通して鳴らす。DAW で鳴る音と
 //! 同じ文脈で音色を比べるため。鳴らすのはその meas のフレーズ全体。
 //!
-//! track の chain が空なら、候補の音色に auto reverb を掛けて試聴する。掛かった状態で
-//! 確定したら、その 1 段を init セルの chain へ書く（確定後の再生が試聴と同じ音になる）。
+//! track の chain が手動 reverb でなければ、候補の音色に auto reverb を掛けて試聴する。
+//! 確定したら、その 1 段を init セルの chain の auto reverb の段として書く（確定後の再生が
+//! 試聴と同じ音になる）。chain のほかの段は残す。
 
 use crossterm::event::KeyEvent;
 use serde_json::Value;
@@ -17,7 +18,7 @@ use cmrt_mml_overlay::cursor_notes::preview_note;
 use cmrt_mml_overlay::line_play::line_events;
 use cmrt_mml_overlay::{LivePatch, MmlOverlayAction, PatchAudition};
 use cmrt_offline_render::EffectPlugins;
-use cmrt_patch_select::auto_reverb::AutoReverbRules;
+use cmrt_patch_select::auto_reverb::{AutoReverbRules, HostChain};
 use cmrt_patch_select::{
     host_patch_catalog, AutoReverbHost, DirectPatchSelect, DirectPatchSelectRequest,
     DirectSelectOutcome, HostPatchCatalog, PatchAuditionAction, PatchAuditionContext,
@@ -63,7 +64,7 @@ impl DawApp {
             load_measurements,
         } = host_patch_catalog(&self.patch_load.lock().unwrap());
         let patch = self.track_patch_name(target_track);
-        let existing_chain = !self.track_effect_chain(target_track).is_empty();
+        let chain = self.mark_track_manual_reverb_if_detected(target_track);
         let request = DirectPatchSelectRequest {
             context: PatchAuditionContext {
                 catalog,
@@ -81,7 +82,7 @@ impl DawApp {
             auto_reverb: Some(AutoReverbHost {
                 rules: load_auto_reverb_rules(&self.effect_plugins),
                 effect_plugins: self.effect_plugins.clone(),
-                existing_chain,
+                chain,
             }),
         };
         let (select, opening) = DirectPatchSelect::open(request);
@@ -172,39 +173,59 @@ impl DawApp {
         }
     }
 
-    /// 確定した音色を init セルへ書く。auto reverb が掛かっていて track の chain が空なら、
-    /// その 1 段を chain へも書く（`x` の overlay で足したのと同じ形）。
+    /// 確定した音色を init セルへ書く。chain の auto reverb の段も `auto_reverb` に書き直す
+    /// （dry・off なら外す）。手動 reverb の chain は触らない。
     fn write_direct_confirmed_patch(
         &mut self,
         patch_before: Option<String>,
         patch_after: Option<String>,
         auto_reverb: Option<Value>,
     ) {
-        let target = self
-            .mml_overlay_target_track()
-            .filter(|&track| self.track_effect_chain(track).is_empty());
-        let (Some(stage), Some(track), Some(patch_name)) = (auto_reverb, target, &patch_after)
+        let (Some(track), Some(patch_name)) = (self.mml_overlay_target_track(), &patch_after)
         else {
             self.write_confirmed_patch(patch_before, patch_after);
             return;
         };
+        let chain = self.track_host_chain(track);
+        if chain.is_manual_reverb() {
+            self.write_confirmed_patch(patch_before, patch_after);
+            return;
+        }
         let patch_filter_query = self.track_patch_filter_query(track);
-        self.apply_patch_name_and_effect_chain_to_track_init(
+        self.apply_patch_name_and_host_chain_to_track_init(
             track,
             patch_name,
             patch_filter_query.as_deref(),
-            std::slice::from_ref(&stage),
+            &chain,
+            auto_reverb.as_ref(),
             PatchUpdateReason::MmlOverlay,
         );
-        self.append_log_line(format!(
-            "auto reverb: {} の effect chain に {stage} を書いた",
-            crate::tracks::track_label(track)
-        ));
     }
 
-    /// track の init セルの effect chain。
-    fn track_effect_chain(&self, track: usize) -> Vec<Value> {
-        crate::mml::effect_chain::init_cell_effect_chain(&self.editor.data[track][INIT_MEASURE])
+    /// track の init セルの effect chain と、auto reverb の扱い。
+    fn track_host_chain(&self, track: usize) -> HostChain {
+        crate::mml::effect_chain::init_cell_host_chain(
+            &self.editor.data[track][INIT_MEASURE],
+            self.effect_plugins.catalog(),
+        )
+    }
+
+    /// track の chain に手動 reverb を見つけたら、init セルの auto reverb の控えを手動 reverb の
+    /// 印に替える。返すのは track の chain。
+    fn mark_track_manual_reverb_if_detected(&mut self, track: usize) -> HostChain {
+        let chain = self.track_host_chain(track);
+        if !chain.newly_detected_manual_reverb() {
+            return chain;
+        }
+        let current_init = &self.editor.data[track][INIT_MEASURE];
+        let next_init =
+            crate::mml::effect_chain::init_cell_with_host_chain(current_init, &chain, None);
+        self.apply_track_init_cell(track, next_init, PatchUpdateReason::MmlOverlay);
+        self.append_log_line(format!(
+            "auto reverb: {} の chain に手動 reverb を見つけたので manual reverb の印を書いた",
+            crate::tracks::track_label(track)
+        ));
+        self.track_host_chain(track)
     }
 
     /// 一覧が Loading のまま開いていれば、loader の結果で差し替える。毎フレーム呼ぶ。
@@ -237,18 +258,19 @@ impl DawApp {
     }
 
     /// sender へ渡す音色。`t` で開いている間だけ、track の effect chain を載せる。
-    /// chain が空なら、その音色に掛かる auto reverb の 1 段を載せる。
+    /// chain の auto reverb の段は、その音色に掛かる auto reverb に入れ替える。
     pub(super) fn mml_overlay_live_patch(&self, patch: Option<&str>) -> LivePatch {
         let Some(select) = self.direct_patch_select.as_ref() else {
             return LivePatch::new(patch);
         };
-        let mut chain = self
+        let auto_reverb = patch.and_then(|patch| select.auto_reverb_stage(patch));
+        let chain = self
             .mml_overlay_target_track()
-            .map(|track| self.track_effect_chain(track))
-            .unwrap_or_default();
-        if chain.is_empty() {
-            chain.extend(patch.and_then(|patch| select.auto_reverb_stage(patch)));
-        }
+            .map(|track| {
+                self.track_host_chain(track)
+                    .with_auto_reverb(auto_reverb.as_ref())
+            })
+            .unwrap_or_else(|| auto_reverb.into_iter().collect());
         if chain.is_empty() {
             return LivePatch::new(patch);
         }

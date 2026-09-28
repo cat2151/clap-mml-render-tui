@@ -30,43 +30,44 @@ fn split_log_file_line(line: &str) -> (&str, &str) {
         .strip_prefix('[')
         .expect("opening bracket in timestamp prefix");
     assert!(timestamp.ends_with(" JST"));
-    assert_eq!(timestamp.len(), 23);
+    assert_eq!(timestamp.len(), 27);
     let bytes = timestamp.as_bytes();
     assert_eq!(bytes[4], b'-');
     assert_eq!(bytes[7], b'-');
     assert_eq!(bytes[10], b' ');
     assert_eq!(bytes[13], b':');
     assert_eq!(bytes[16], b':');
-    assert_eq!(bytes[19], b' ');
+    assert_eq!(bytes[19], b'.');
+    assert_eq!(bytes[23], b' ');
     (timestamp, message)
 }
 
 #[test]
 fn format_log_file_line_at_prefixes_human_readable_jst_timestamp() {
     assert_eq!(
-        format_log_file_line_at("play: start", UNIX_EPOCH + Duration::from_secs(0)),
-        "[1970-01-01 09:00:00 JST] play: start"
+        format_log_file_line_at("play: start", UNIX_EPOCH + Duration::from_millis(1_234)),
+        "[1970-01-01 09:00:01.234 JST] play: start"
     );
 }
 
 #[test]
-fn format_log_file_line_at_floors_pre_epoch_subsecond_to_previous_second() {
+fn format_log_file_line_at_floors_pre_epoch_subsecond_to_previous_millisecond() {
     assert_eq!(
         format_log_file_line_at(
             "play: start",
             UNIX_EPOCH.checked_sub(Duration::from_millis(1)).unwrap()
         ),
-        "[1970-01-01 08:59:59 JST] play: start"
+        "[1970-01-01 08:59:59.999 JST] play: start"
     );
 }
 
 #[test]
 fn format_log_file_line_at_handles_date_boundaries() {
     let cases = [
-        (86_399, "1970-01-02 08:59:59 JST"),
-        (951_827_696, "2000-02-29 21:34:56 JST"),
-        (983_404_800, "2001-03-01 09:00:00 JST"),
-        (4_107_542_400, "2100-03-01 09:00:00 JST"),
+        (86_399, "1970-01-02 08:59:59.000 JST"),
+        (951_827_696, "2000-02-29 21:34:56.000 JST"),
+        (983_404_800, "2001-03-01 09:00:00.000 JST"),
+        (4_107_542_400, "2100-03-01 09:00:00.000 JST"),
     ];
 
     for (seconds, expected_timestamp) in cases {
@@ -86,6 +87,14 @@ fn strip_log_file_timestamp_prefix_returns_original_message() {
     assert_eq!(
         strip_log_file_timestamp_prefix("[2000-02-29 12:34:56 UTC] play: start"),
         "play: start"
+    );
+    assert_eq!(
+        strip_log_file_timestamp_prefix("[2000-02-29 12:34:56.789 JST] play: start"),
+        "play: start"
+    );
+    assert_eq!(
+        strip_log_file_timestamp_prefix("[2000-02-29 12:34:56.7x9 JST] play: start"),
+        "[2000-02-29 12:34:56.7x9 JST] play: start"
     );
     assert_eq!(
         strip_log_file_timestamp_prefix("play: start"),

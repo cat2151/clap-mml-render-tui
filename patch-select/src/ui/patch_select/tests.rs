@@ -193,6 +193,30 @@ fn patch_marker_is_drawn_at_the_row_start_only_when_given() {
 }
 
 #[test]
+fn patch_marker_is_asked_only_for_the_rows_on_screen() {
+    let names: Vec<String> = (0..500).map(|i| format!("Lead {i:03}.fxp")).collect();
+    let names: Vec<&str> = names.iter().map(String::as_str).collect();
+    let select = patch_select_with_favorites(&names, &[]);
+    let asked = std::cell::RefCell::new(Vec::new());
+    let marker = |patch: &str| {
+        asked.borrow_mut().push(patch.to_string());
+        "♪ "
+    };
+    let options = PatchSelectDrawOptions {
+        patch_marker: Some(&marker),
+        ..Default::default()
+    };
+
+    let drawn = lines(&render(&select, SCREEN, &options));
+
+    let asked = asked.into_inner();
+    assert!(asked.len() < usize::from(SCREEN.height), "{}", asked.len());
+    for patch in &asked {
+        assert!(patch_row_prefix(&drawn, patch).contains('♪'), "{patch}");
+    }
+}
+
+#[test]
 fn play_settings_hint_can_be_hidden_from_the_regex_title() {
     let select = patch_select_with_favorites(&["Bass 1.fxp"], &[]);
     let hidden = PatchSelectDrawOptions {

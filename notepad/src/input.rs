@@ -146,10 +146,11 @@ impl<'a> NotepadScreen<'a> {
                         let filter_query = self.current_line_random_patch_filter_query();
                         match self.pick_random_patch_name_with_query(filter_query.as_deref()) {
                             Ok(Some(patch_name)) => {
+                                let effects = self.current_line_effect_keys();
                                 self.replace_current_line_patch_with_filter(
                                     &patch_name,
                                     filter_query.as_deref(),
-                                    None,
+                                    &effects,
                                 );
                                 self.play_current_line();
                             }

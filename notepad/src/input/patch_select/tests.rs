@@ -182,15 +182,63 @@ fn confirming_a_surge_patch_writes_no_chain() {
 }
 
 #[test]
-fn a_line_with_a_chain_keeps_it_in_the_preview_and_after_confirming() {
+fn a_reverb_without_the_record_is_marked_manual_and_kept() {
     let _history = HistoryDirGuard::isolated();
     let app = open_on(EXISTING_CHAIN_LINE, DEXED_SNARE);
     let original = chain(EXISTING_CHAIN_LINE);
+    assert_eq!(
+        head_json(&app.editor.lines[0])["manual reverb"],
+        json!(true)
+    );
 
     let (preview, line) = preview_and_confirm(app);
 
     assert_eq!(chain(&line), original);
     assert_eq!(head_json(&line)["Surge XT patch"], DEXED_SNARE);
+    assert_eq!(head_json(&line)["manual reverb"], json!(true));
+    assert_eq!(preview, line);
+}
+
+/// delay の後ろに auto reverb が書いた Hall がある行。
+fn delay_and_auto_hall_line() -> String {
+    let hall = json!({"Dragonfly Hall Reverb preset": "Medium Clear Hall"});
+    format!(
+        "{} l8cdef",
+        json!({
+            "Surge XT patch": SURGE_PAD,
+            "effects after instrument": [{"Delay preset": "Echo"}, hall.clone()],
+            "auto reverb": hall,
+        })
+    )
+}
+
+#[test]
+fn only_the_auto_reverb_stage_is_replaced_and_the_other_stages_stay() {
+    let _history = HistoryDirGuard::isolated();
+    let app = open_on(&delay_and_auto_hall_line(), DEXED_SNARE);
+    let room = json!({"Dragonfly Room Reverb preset": "Small Drum Room"});
+
+    let (preview, line) = preview_and_confirm(app);
+
+    assert_eq!(
+        chain(&line),
+        Some(json!([{"Delay preset": "Echo"}, room.clone()]))
+    );
+    assert_eq!(head_json(&line)["auto reverb"], room);
+    assert_eq!(preview, line);
+}
+
+#[test]
+fn turning_auto_reverb_off_removes_only_its_stage_and_its_record() {
+    let _history = HistoryDirGuard::isolated();
+    let mut app = open_on(&delay_and_auto_hall_line(), DEXED_SNARE);
+    press(&mut app, KeyCode::Char('e'), KeyModifiers::NONE);
+
+    let (preview, line) = preview_and_confirm(app);
+
+    assert_eq!(chain(&line), Some(json!([{"Delay preset": "Echo"}])));
+    assert!(head_json(&line).get("auto reverb").is_none());
+    assert!(head_json(&line).get("manual reverb").is_none());
     assert_eq!(preview, line);
 }
 
@@ -214,7 +262,7 @@ fn saved_off_setting_writes_no_chain() {
 }
 
 #[test]
-fn shift_e_saves_off_and_replays_the_same_patch_dry() {
+fn e_saves_off_and_replays_the_same_patch_dry() {
     let _history = HistoryDirGuard::isolated();
     let mut app = open_on(
         &format!(r#"{{"Surge XT patch":"{SURGE_PAD}"}} l8cdef"#),
@@ -222,11 +270,11 @@ fn shift_e_saves_off_and_replays_the_same_patch_dry() {
     );
     assert!(chain(&playing(&app)).is_some());
 
-    press(&mut app, KeyCode::Char('E'), KeyModifiers::SHIFT);
+    press(&mut app, KeyCode::Char('e'), KeyModifiers::NONE);
 
     assert_eq!(chain(&playing(&app)), None);
     assert_eq!(head_json(&playing(&app))["Surge XT patch"], DEXED_SNARE);
-    let saved = cmrt_history::load_auto_reverb_settings().expect("saved by E");
+    let saved = cmrt_history::load_auto_reverb_settings().expect("saved by e");
     assert!(!saved.enabled);
 }
 
@@ -238,7 +286,7 @@ fn the_rules_overlay_takes_the_keys_notepad_otherwise_handles_itself() {
         DEXED_SNARE,
     );
 
-    press(&mut app, KeyCode::Char('e'), KeyModifiers::NONE);
+    press(&mut app, KeyCode::Char('E'), KeyModifiers::SHIFT);
     // overlay 中の `t`・`p`・`n` は notepad の画面遷移に使われず、selector に残る。
     for ch in ['t', 'p', 'n'] {
         press(&mut app, KeyCode::Char(ch), KeyModifiers::NONE);

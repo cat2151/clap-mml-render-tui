@@ -13,8 +13,8 @@ fn help_shows_auto_reverb_keys_of_the_patch_selector() {
 
     let line = normalized_lines
         .iter()
-        .find(|line| line.contains("（音色選択中）E:autoreverbon/off"))
+        .find(|line| line.contains("（音色選択中）e:autoreverbon/off"))
         .unwrap_or_else(|| panic!("lines: {normalized_lines:?}"));
-    assert!(line.contains("e:ルール編集"), "line: {line:?}");
+    assert!(line.contains("E:ルール編集"), "line: {line:?}");
     assert!(line.contains("ESCで保存して閉じる"), "line: {line:?}");
 }

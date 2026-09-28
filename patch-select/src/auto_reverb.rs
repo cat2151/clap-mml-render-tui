@@ -11,6 +11,9 @@ use cmrt_patches::{builtin_role_presets, PatchRole, PatchRoleIndex};
 use cmrt_tui_core::patch_load::PatchCatalogSnapshot;
 use serde_json::Value;
 
+mod host_chain;
+pub use host_chain::{HostChain, AUTO_REVERB_JSON_KEY, MANUAL_REVERB_JSON_KEY};
+
 /// effect 追加の selector から外す preset の値の前方一致。catalog そのものからは外さない。
 const EXCLUDED_VALUE_PREFIXES: [&str; 1] = ["Reverb 1/"];
 
@@ -64,6 +67,7 @@ impl AutoReverbRow {
     fn default_effect(&self) -> Option<Value> {
         match self.label {
             Some(label) if DRY_BY_DEFAULT.contains(&label) => None,
+            None if self.role == PatchRole::Bass => None,
             _ if self.role == PatchRole::Drum => Some(stage(DRUM_ROOM_JSON_KEY, DRUM_ROOM_VALUE)),
             _ => Some(stage(HALL_JSON_KEY, HALL_VALUE)),
         }
@@ -208,7 +212,7 @@ fn find_reverb<'a>(
 /// 音色 1 つに対する auto reverb の結果。
 #[derive(Clone, Debug, PartialEq)]
 pub enum AutoReverb {
-    /// `stage` を chain の 1 段として掛ける。`effect_name` は preset 名、`row` は当たった行の名前。
+    /// `stage` を chain の 1 段として掛ける。`effect_name` は表示名（plugin 名と preset 名）、`row` は当たった行の名前。
     Apply {
         stage: Value,
         effect_name: String,
@@ -248,7 +252,7 @@ pub fn resolve(
     {
         Some(preset) => AutoReverb::Apply {
             stage: preset.json_element(),
-            effect_name: preset.name.clone(),
+            effect_name: preset.display.clone(),
             row: row.name(),
         },
         None => AutoReverb::Dry { row: row.name() },

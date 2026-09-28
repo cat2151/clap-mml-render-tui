@@ -44,12 +44,12 @@ impl GridAutoReverb {
         self.rules = rules;
     }
 
-    /// selector のルール overlay へ渡すもの。grid の行には chain の欄が無いので `existing_chain` は無い。
+    /// selector のルール overlay へ渡すもの。grid の行には chain の欄が無いので、chain は空。
     pub(crate) fn host(&self) -> AutoReverbHost {
         AutoReverbHost {
             rules: self.rules.clone(),
             effect_plugins: self.effect_plugins.clone(),
-            existing_chain: false,
+            chain: Default::default(),
         }
     }
 

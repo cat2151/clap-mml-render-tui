@@ -3,7 +3,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{backend::TestBackend, layout::Rect, text::Span, Terminal};
 
 use crate::auto_reverb::tests::{test_catalog, DEXED_BASS, DEXED_SNARE, SURGE_PAD};
-use crate::auto_reverb::AutoReverbRules;
+use crate::auto_reverb::{AutoReverbRules, HostChain};
 use crate::ui::patch_select::{draw_in, PatchSelectDrawOptions};
 use crate::{AutoReverbHost, PatchCatalogEntry, PatchSelect, PatchSelectRequest};
 
@@ -29,11 +29,18 @@ fn open(current: &str, auto_reverb: Option<AutoReverbHost>) -> PatchSelect<'stat
     .expect("patch list is not empty")
 }
 
-fn host(rules: AutoReverbRules, existing_chain: bool) -> Option<AutoReverbHost> {
+fn manual_reverb_chain() -> HostChain {
+    HostChain::from_json(
+        Some(&serde_json::json!({ crate::auto_reverb::MANUAL_REVERB_JSON_KEY: true })),
+        None,
+    )
+}
+
+fn host(rules: AutoReverbRules, chain: HostChain) -> Option<AutoReverbHost> {
     Some(AutoReverbHost {
         rules,
         effect_plugins: EffectPlugins::with_catalog(test_catalog()),
-        existing_chain,
+        chain,
     })
 }
 
@@ -63,7 +70,7 @@ fn status_line(select: &PatchSelect<'_>) -> String {
     let lines = screen(select);
     lines
         .iter()
-        .find(|line| line.starts_with("auto reverb: "))
+        .find(|line| line.starts_with("auto reverb:") || line.starts_with("manual reverb:"))
         .unwrap_or_else(|| panic!("status line is not drawn:\n{}", lines.join("\n")))
         .trim_end()
         .to_string()
@@ -75,46 +82,71 @@ fn press(select: &mut PatchSelect<'_>, code: KeyCode) {
 
 #[test]
 fn the_status_line_names_the_applied_reverb_and_its_row() {
-    let select = open(DEXED_SNARE, host(AutoReverbRules::default(), false));
+    let select = open(
+        DEXED_SNARE,
+        host(AutoReverbRules::default(), HostChain::default()),
+    );
     assert_eq!(
         status_line(&select),
-        "auto reverb: Small Drum Room (snare)  e:ルール  E:on/off"
+        "auto reverb: Dragonfly Room Reverb: Small Drum Room (snare)"
     );
 }
 
 #[test]
 fn the_status_line_shows_a_dry_row() {
-    let select = open(DEXED_BASS, host(AutoReverbRules::default(), false));
-    assert_eq!(
-        status_line(&select),
-        "auto reverb: dry (bass|bs)  e:ルール  E:on/off"
+    let select = open(
+        DEXED_BASS,
+        host(AutoReverbRules::default(), HostChain::default()),
+    );
+    assert_eq!(status_line(&select), "auto reverb: dry (bass|bs)");
+}
+
+#[test]
+fn the_status_line_is_blank_for_builtin_effects() {
+    let select = open(
+        SURGE_PAD,
+        host(AutoReverbRules::default(), HostChain::default()),
+    );
+    let lines = screen(&select);
+    assert!(
+        lines.iter().all(|line| !line.contains("reverb")),
+        "{}",
+        lines.join("\n")
     );
 }
 
 #[test]
-fn the_status_line_shows_builtin_effects() {
-    let select = open(SURGE_PAD, host(AutoReverbRules::default(), false));
+fn the_status_line_names_the_manual_reverb_even_when_auto_reverb_is_off() {
+    let chain = HostChain::from_json(
+        Some(&serde_json::json!({
+            cmrt_core::EFFECT_CHAIN_JSON_KEY: [{"Surge XT Effects preset": "Reverb 1/Hall"}],
+        })),
+        Some(&test_catalog()),
+    );
+    let mut rules = AutoReverbRules::default();
+    rules.set_enabled(false);
+    let select = open(DEXED_SNARE, host(rules, chain));
     assert_eq!(
         status_line(&select),
-        "auto reverb: -（音色に effect 内蔵）  e:ルール  E:on/off"
+        "manual reverb: Surge XT Effects: Reverb 1/Hall"
     );
 }
 
 #[test]
-fn the_status_line_shows_that_the_existing_chain_wins() {
-    let select = open(DEXED_SNARE, host(AutoReverbRules::default(), true));
-    assert_eq!(
-        status_line(&select),
-        "auto reverb: -（track の effect を優先）  e:ルール  E:on/off"
+fn the_status_line_shows_that_the_manual_reverb_wins() {
+    let select = open(
+        DEXED_SNARE,
+        host(AutoReverbRules::default(), manual_reverb_chain()),
     );
+    assert_eq!(status_line(&select), "manual reverb: dry");
 }
 
 #[test]
 fn the_status_line_shows_off() {
     let mut rules = AutoReverbRules::default();
     rules.set_enabled(false);
-    let select = open(DEXED_SNARE, host(rules, false));
-    assert_eq!(status_line(&select), "auto reverb: off  e:ルール  E:on/off");
+    let select = open(DEXED_SNARE, host(rules, HostChain::default()));
+    assert_eq!(status_line(&select), "auto reverb: off(dry)");
 }
 
 #[test]
@@ -130,8 +162,11 @@ fn a_host_without_auto_reverb_draws_no_status_line() {
 
 #[test]
 fn the_rules_overlay_lists_rows_with_their_effects_and_the_effect_list_draws_on_top() {
-    let mut select = open(DEXED_SNARE, host(AutoReverbRules::default(), false));
-    press(&mut select, KeyCode::Char('e'));
+    let mut select = open(
+        DEXED_SNARE,
+        host(AutoReverbRules::default(), HostChain::default()),
+    );
+    press(&mut select, KeyCode::Char('E'));
 
     let lines = screen(&select);
     let text = lines.join("\n");

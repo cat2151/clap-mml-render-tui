@@ -77,20 +77,16 @@ fn a_surge_row_is_prepared_without_a_chain() {
 }
 
 #[test]
-fn shift_e_turns_auto_reverb_off_and_reprepares_only_rows_whose_chain_changes() {
+fn e_turns_auto_reverb_off_and_reprepares_only_rows_whose_chain_changes() {
     let patch_load = patch_load();
     let ctx = ctx(&patch_load);
     let mut screen = screen_with_auto_reverb();
     screen.open_patch_selector(0, &ctx);
 
-    let action = screen.handle_key(
-        KeyEvent::new(KeyCode::Char('E'), KeyModifiers::SHIFT),
-        Instant::now(),
-        &ctx,
-    );
+    let action = screen.handle_key(press(KeyCode::Char('e')), Instant::now(), &ctx);
 
     let GridSequencerAction::SaveAutoReverb(rules) = action else {
-        panic!("E asks the app to save the rules");
+        panic!("e asks the app to save the rules");
     };
     assert!(!rules.enabled());
     // Surge の行は chain が変わらないので送り直さない。snare の行は chain を外す。
@@ -108,24 +104,24 @@ fn the_selector_row_is_compared_with_the_patch_being_previewed() {
     screen.open_patch_selector(0, &ctx);
     preview(&mut screen, DEXED_SNARE, &ctx);
 
-    screen.handle_key(
-        KeyEvent::new(KeyCode::Char('E'), KeyModifiers::SHIFT),
-        Instant::now(),
-        &ctx,
-    );
+    screen.handle_key(press(KeyCode::Char('e')), Instant::now(), &ctx);
 
     // 0 行目の確定値は Surge のままだが、鳴っているのは試聴中の snare。
     assert_eq!(sent_chains(&screen, "auto-reverb", 0), [""]);
 }
 
 #[test]
-fn e_opens_the_rules_overlay_which_takes_every_key_until_esc() {
+fn shift_e_opens_the_rules_overlay_which_takes_every_key_until_esc() {
     let patch_load = patch_load();
     let ctx = ctx(&patch_load);
     let mut screen = screen_with_auto_reverb();
     screen.open_patch_selector(0, &ctx);
 
-    screen.handle_key(press(KeyCode::Char('e')), Instant::now(), &ctx);
+    screen.handle_key(
+        KeyEvent::new(KeyCode::Char('E'), KeyModifiers::SHIFT),
+        Instant::now(),
+        &ctx,
+    );
     assert!(selector(&screen).auto_reverb.overlay_open());
     // selector の `q`（取り消して閉じる）には届かない。
     screen.handle_key(press(KeyCode::Char('q')), Instant::now(), &ctx);

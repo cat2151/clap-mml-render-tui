@@ -106,7 +106,7 @@ fn default_rules_put_a_drum_room_on_snare_and_a_hall_on_pad() {
         resolve_default(DEXED_SNARE, false),
         AutoReverb::Apply {
             stage: serde_json::json!({"Dragonfly Room Reverb preset": "Small Drum Room"}),
-            effect_name: "Small Drum Room".to_string(),
+            effect_name: "Dragonfly Room Reverb: Small Drum Room".to_string(),
             row: "snare".to_string(),
         }
     );
@@ -114,7 +114,7 @@ fn default_rules_put_a_drum_room_on_snare_and_a_hall_on_pad() {
         resolve_default(DEXED_PAD, false),
         AutoReverb::Apply {
             stage: serde_json::json!({"Dragonfly Hall Reverb preset": "Medium Clear Hall"}),
-            effect_name: "Medium Clear Hall".to_string(),
+            effect_name: "Dragonfly Hall Reverb: Medium Clear Hall".to_string(),
             row: "pad".to_string(),
         }
     );
@@ -238,7 +238,7 @@ fn rows_cover_every_builtin_preset_and_one_other_row_per_role() {
 }
 
 #[test]
-fn drum_rows_default_to_the_drum_room_and_the_rest_to_the_hall() {
+fn bass_and_kick_default_dry_drum_rows_the_drum_room_and_the_rest_the_hall() {
     let rules = AutoReverbRules::default();
     let saved = rules.to_saved();
     let room = serde_json::json!({"Dragonfly Room Reverb preset": "Small Drum Room"});
@@ -246,8 +246,11 @@ fn drum_rows_default_to_the_drum_room_and_the_rest_to_the_hall() {
     for name in ["snare", "hat", "perc", "drum", "drum その他"] {
         assert_eq!(saved[name], room, "{name}");
     }
-    for name in ["strings", "lead", "fx|effects", "bass その他", "etc その他"] {
+    for name in ["strings", "lead", "fx|effects", "etc その他"] {
         assert_eq!(saved[name], hall, "{name}");
+    }
+    for name in ["bass|bs", "bass その他", "kick|bass drum"] {
+        assert_eq!(saved[name], Value::Null, "{name}");
     }
     assert!(rules.enabled());
 }

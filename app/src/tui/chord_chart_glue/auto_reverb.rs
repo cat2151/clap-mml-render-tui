@@ -25,13 +25,13 @@ impl TuiApp<'_> {
         self.chord_chart_auto_reverb_rules = rules;
     }
 
-    /// selector のルール overlay へ渡すもの。Chord Chart の音色には chain の欄が無いので
-    /// `existing_chain` は無い。
+    /// selector のルール overlay へ渡すもの。Chord Chart の音色には chain の欄が無いので、
+    /// chain は空。
     pub(in crate::tui) fn chord_chart_auto_reverb_host(&self) -> AutoReverbHost {
         AutoReverbHost {
             rules: self.chord_chart_auto_reverb_rules.clone(),
             effect_plugins: self.effect_plugins.clone(),
-            existing_chain: false,
+            chain: Default::default(),
         }
     }
 

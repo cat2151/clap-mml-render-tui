@@ -175,14 +175,19 @@ fn a_dexed_snare_on_a_track_without_a_chain_previews_and_confirms_the_drum_room(
         chains_prepared_for(&sink, DEXED_SNARE),
         vec![DRUM_ROOM_CHAIN]
     );
-    assert!(render_selector(&app).contains("auto reverb: Small Drum Room (snare)"));
+    assert!(render_selector(&app)
+        .contains("auto reverb: Dragonfly Room Reverb: Small Drum Room (snare)"));
 
-    // 音色は変えずに確定しても、掛かっていた reverb は chain へ書く。
+    // 音色は変えずに確定しても、掛かっていた reverb は chain へ書き、控えにも書く。
     app.handle_direct_patch_select_key_event(key(KeyCode::Enter));
 
     assert_eq!(
         init_chain(&app),
         json!([{"Dragonfly Room Reverb preset": "Small Drum Room"}])
+    );
+    assert_eq!(
+        head_json(&app)["auto reverb"],
+        json!({"Dragonfly Room Reverb preset": "Small Drum Room"})
     );
     assert_eq!(head_json(&app)["Surge XT patch"], DEXED_SNARE);
     assert_eq!(app.editor.data[2][1], "c");
@@ -210,7 +215,7 @@ fn switching_to_a_dexed_snare_writes_the_patch_and_the_chain_together() {
 }
 
 #[test]
-fn a_track_with_a_chain_keeps_it_in_the_preview_and_after_confirming() {
+fn a_reverb_without_the_record_is_marked_manual_and_kept() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let init_cell = format!(
         r#"{{"Surge XT patch": "{DEXED_SNARE}", "effects after instrument": {HALL_CHAIN}}}"#
@@ -221,11 +226,47 @@ fn a_track_with_a_chain_keeps_it_in_the_preview_and_after_confirming() {
     app.handle_normal_key_event(plain('t'));
 
     assert_eq!(chains_prepared_for(&sink, DEXED_SNARE), vec![HALL_CHAIN]);
-    assert!(render_selector(&app).contains("auto reverb: -（track の effect を優先）"));
+    assert!(
+        render_selector(&app).contains("manual reverb: Dragonfly Hall Reverb: Medium Clear Hall")
+    );
+    assert_eq!(head_json(&app)["manual reverb"], json!(true));
 
     app.handle_direct_patch_select_key_event(key(KeyCode::Enter));
 
-    assert_eq!(app.editor.data[2][0], init_cell);
+    assert_eq!(
+        init_chain(&app),
+        serde_json::from_str::<Value>(HALL_CHAIN).unwrap()
+    );
+    assert_eq!(head_json(&app)["manual reverb"], json!(true));
+    assert!(head_json(&app).get("auto reverb").is_none());
+}
+
+#[test]
+fn only_the_auto_reverb_stage_is_replaced_and_the_other_stages_stay() {
+    let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
+    let delay = json!({"Delay preset": "Echo"});
+    let hall = json!({"Dragonfly Hall Reverb preset": "Medium Clear Hall"});
+    let room = json!({"Dragonfly Room Reverb preset": "Small Drum Room"});
+    let init_cell = json!({
+        "Surge XT patch": DEXED_SNARE,
+        "effects after instrument": [delay.clone(), hall.clone()],
+        "auto reverb": hall,
+    })
+    .to_string();
+    let (mut app, _cache_rx) = app_with_init_cell(&init_cell);
+    let sink = attach_recording_sink(&mut app);
+
+    app.handle_normal_key_event(plain('t'));
+
+    assert_eq!(
+        chains_prepared_for(&sink, DEXED_SNARE),
+        vec![Value::Array(vec![delay.clone(), room.clone()]).to_string()]
+    );
+
+    app.handle_direct_patch_select_key_event(key(KeyCode::Enter));
+
+    assert_eq!(init_chain(&app), json!([delay, room.clone()]));
+    assert_eq!(head_json(&app)["auto reverb"], room);
 }
 
 #[test]
@@ -237,7 +278,7 @@ fn a_surge_patch_previews_and_confirms_without_a_chain() {
     app.handle_normal_key_event(plain('t'));
 
     assert_eq!(chains_prepared_for(&sink, SURGE_PAD), vec![String::new()]);
-    assert!(render_selector(&app).contains("auto reverb: -（音色に effect 内蔵）"));
+    assert!(!render_selector(&app).contains("auto reverb"));
 
     app.handle_direct_patch_select_key_event(key(KeyCode::Enter));
 
@@ -246,7 +287,7 @@ fn a_surge_patch_previews_and_confirms_without_a_chain() {
 }
 
 #[test]
-fn shift_e_saves_off_and_replays_the_same_patch_dry() {
+fn e_saves_off_and_replays_the_same_patch_dry() {
     let (_temp, _env_guard) = crate::input::tests::temp_local_dirs("mml_overlay");
     let (mut app, _cache_rx) = app_with_init_cell(&patch_cell(DEXED_SNARE));
     let sink = attach_recording_sink(&mut app);
@@ -256,10 +297,7 @@ fn shift_e_saves_off_and_replays_the_same_patch_dry() {
         vec![DRUM_ROOM_CHAIN]
     );
 
-    app.handle_direct_patch_select_key_event(KeyEvent::new(
-        KeyCode::Char('E'),
-        KeyModifiers::SHIFT,
-    ));
+    app.handle_direct_patch_select_key_event(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE));
 
     wait_until("off での鳴らし直し", || {
         chains_prepared_for(&sink, DEXED_SNARE).len() >= 2

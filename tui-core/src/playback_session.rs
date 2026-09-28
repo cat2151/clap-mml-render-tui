@@ -144,6 +144,7 @@ pub fn play_samples_for_session(
         }
     };
     // device sink を drop すると再生が止まるため、sleep_until_end まで保持する。
+    let device_open_started = std::time::Instant::now();
     let device_sink = match crate::audio_output::open_default_sink() {
         Ok(device_sink) => device_sink,
         Err(e) => {
@@ -171,6 +172,10 @@ pub fn play_samples_for_session(
         }
         *active_sink_guard = Some(Arc::clone(&sink));
     }
+    let _ = crate::logging::append_log_line_to_file(&format!(
+        "playback: event=audio-start session={session} device_open_ms={}",
+        device_open_started.elapsed().as_millis()
+    ));
     sink.sleep_until_end();
 
     clear_active_sink_for_session(active_sink, session_token, session);

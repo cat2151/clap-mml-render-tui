@@ -97,8 +97,8 @@ fn patch_select_help_screen_shows_patch_select_shortcuts() {
     assert!(normalized_screen.contains("PgUp/PgDn・Home/End:10行/先頭・末尾へ移動して再生"));
     assert!(normalized_screen.contains("r:ランダムな音色へ移動して再生"));
     assert!(normalized_screen.contains("a:RegexをPresetに追加"));
-    assert!(normalized_screen.contains("E:autoreverbon/off"));
-    assert!(normalized_screen.contains("e:autoreverbルール編集"));
+    assert!(normalized_screen.contains("e:autoreverbon/off"));
+    assert!(normalized_screen.contains("E:autoreverbルール編集"));
     assert!(normalized_screen.contains("x:(ルール編集中)reverb一覧(Enter:決定/ESC:戻る)"));
     assert!(normalized_screen.contains("ESC:(ルール編集中)保存して閉じる"));
     assert!(!normalized_screen.contains("Ctrl+C:コピー"));
