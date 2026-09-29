@@ -51,8 +51,8 @@ pub fn default_config_content_with_app_settings(app_settings: &str) -> String {
 # 組み込みなので、標準の場所へインストールしてあれば plugin_path は記述不要です。
 # 標準値を変更するときだけ、ファイル末尾の [plugins.<名前>] に差分を書きます。
 #
-# Vaporizer2 と Floe は音色置き場の既定値を持ちません。末尾の各 [plugins.*] に
-# patches_dirs を書いてください。書かないプラグインの音色は一覧に出ません。
+# Vaporizer2 と Floe の音色置き場は本体の設定から自動で決まります
+# （patches_dirs を書いても無視します）。
 #
 # 標準以外の場所に入れている場合や、組み込みに無いプラグインを使う場合だけ、
 # [plugins.<名前>] を書きます。書いた項目だけが組み込みの値を上書きします。
@@ -114,16 +114,15 @@ fn surge_xt_profile_block() -> String {
     .to_string()
 }
 
-/// Vaporizer2の音色置き場と、selectorに表示するカテゴリコード表。
+/// Vaporizer2の音色置き場の出どころと、selectorに表示するカテゴリコード表。
 fn vaporizer2_profile_block() -> String {
     let category_codes = vaporizer2_category_code_lines();
     format!(
         r#"
-# 【省略可】Vaporizer2（VAST Dynamics）の音色置き場。
-# Vaporizer2を使うときはpatches_dirsを指定してください。
+# Vaporizer2（VAST Dynamics）の音色置き場は registry の InstallPath\Presets です。
+# 【省略可】標準外の場所へ入れた Vaporizer2 本体。
 #
 # [plugins.Vaporizer2]
-# patches_dirs = ['D:\my\Vaporizer2\Presets']
 # plugin_path  = 'D:\my\clap\VASTvaporizer2.clap'
 #
 # .vvpファイル名先頭2文字をselectorのCategory列では次の名前へ展開します。
@@ -150,11 +149,11 @@ fn vaporizer2_category_code_lines() -> String {
 
 fn floe_profile_block() -> String {
     r#"
-# 【省略可】Floeの音色置き場。Floeを使うときはpatches_dirsを指定してください。
+# Floeの音色置き場は floe.ini の extra-presets-folder です（無ければ Floe の既定置き場）。
 # `.floe-preset` の先頭ディレクトリがselectorのCategory列になります。
+# 【省略可】標準外の場所へ入れた Floe 本体。
 #
 # [plugins.Floe]
-# patches_dirs = ['D:\my\Floe\presets']
 # plugin_path  = 'D:\my\clap\Floe.clap'
 "#
     .to_string()

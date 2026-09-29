@@ -78,10 +78,10 @@ pub struct SkippedCatalogPlugin {
 /// カタログから外した理由。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CatalogSkipReason {
-    /// `patches_dirs` が書かれていない。**Vaporizer2 の組み込みプロファイルがこれ**
-    /// （プリセット置き場がインストールごとに違うので既定値を持たない）。
+    /// 音色置き場が無い。config で足したプラグインなら `patches_dirs` 未記入、
+    /// Vaporizer2 / Floe なら本体の設定（registry / floe.ini）から読めなかった。
     NoPatchDirs,
-    /// `patches_dirs` は書かれているが、1 つも実在しない。
+    /// 音色置き場はあるが、1 つも実在しない。
     /// 書いた dir を持って回るのは、綴り間違いを名指しで返すため。
     PatchDirsMissing(Vec<String>),
     /// Plugin adapter がロード可能な patch source を解決できなかった。
@@ -97,13 +97,11 @@ impl SkippedCatalogPlugin {
     /// **文言をここ以外に持たない。** 3 経路で書き分けると、直すときに片方だけ古くなる。
     pub fn notice_line(&self) -> String {
         match &self.reason {
-            CatalogSkipReason::NoPatchDirs => format!(
-                "{} は config.toml の [plugins.{}] に patches_dirs が無いため一覧に出ません",
-                self.name, self.name
-            ),
+            CatalogSkipReason::NoPatchDirs => {
+                format!("{} は音色置き場が無いため一覧に出ません", self.name)
+            }
             CatalogSkipReason::PatchDirsMissing(dirs) => format!(
-                "{} は [plugins.{}] の patches_dirs が実在しないため一覧に出ません: {}",
-                self.name,
+                "{} は音色置き場が実在しないため一覧に出ません: {}",
                 self.name,
                 dirs.join(" / ")
             ),

@@ -269,7 +269,7 @@ OS別の `patches_dirs` 既定値は次のとおりです。
 | --- | --- | --- | --- |
 | `Surge XT` | `org.surge-synth-team.surge-xt` | 上の表の OS 別既定値 | Surge XT のカテゴリ名 |
 | `Dexed` | `com.digital-suburban.dexed` | Dexed の cartridge 置き場（Windows: `%APPDATA%\DigitalSuburban\Dexed\Cartridges`） | 全て空（＝絞らない） |
-| `Vaporizer2` | `com.vastdynamics.VAST2` | **既定値なし。`patches_dirs` を書いてください** | Vaporizer2 のカテゴリ名（`Pad` / `Bass` / `Arpeggio` など） |
+| `Vaporizer2` | `com.vastdynamics.VAST2` | registry（`HKLM\SOFTWARE\VAST Dynamics\Vaporizer2\Settings` の `InstallPath`）の下の `Presets`。config の `patches_dirs` は無視します | Vaporizer2 のカテゴリ名（`Pad` / `Bass` / `Arpeggio` など） |
 
 名前は大文字小文字・空白・アンダースコアの違いを無視して照合します（`Dexed` / `dexed`、`Surge XT` / `surge_xt` / `SurgeXT` はすべて同じ）。
 
@@ -298,12 +298,7 @@ patches_dirs = ['D:\my\patches']
 - Dexed の音色は「cartridge の `.syx` 1個 = 32 program」なので、一覧では cartridge をディレクトリに見立てて `SynprezFM/SynprezFM_01.syx/00 Say Again.` のように 1 program ずつ並びます（番号は 0 始まりの2桁）。`patches_dirs` に cartridge の置き場を指定すれば、Surge の `.fxp` と同じように選べます。
 - Dexed の mono/poly は音色ではなくインスタンスの設定（`MonoMode`）で、その既定値は POLY です。そのため grid sequencer の和音行では Dexed の音色をすべて和音向きとして扱います。
 - Vaporizer2 の音色は `.vvp` ファイル1個 = 1音色で、Surge の `.fxp` と同じように選べます。一覧の見出しに出るカテゴリは**ファイル名の先頭2文字**（`AR Accent Arp.vvp` なら `AR` = `Arpeggio`）です。
-- Vaporizer2 だけは `patches_dirs` の既定値を持ちません。プリセットの置き場がプラグイン側のグローバル設定（`%APPDATA%\Vaporizer2\VASTvaporizerSettings.xml` など）で決まる環境依存の値で、そこを cmrt が勝手に読み書きするとお使いのDAW環境を壊すためです。次のように1行書いてください。書くまでは音色0件としてカタログに載りません。
-
-```toml
-[plugins.Vaporizer2]
-patches_dirs = ['D:\Vaporizer2\Presets']
-```
+- Vaporizer2 と Floe の音色置き場は、プラグイン本体の設定から読みます（Vaporizer2 は registry の `InstallPath\Presets`、Floe は `%PUBLIC%\Floe\Preferences\floe.ini` の `extra-presets-folder`。Floe で未設定なら `%PUBLIC%\Floe\Presets`）。再インストールや本体側の設定変更に config.toml の書き直しは要りません。`[plugins.Vaporizer2]` / `[plugins.Floe]` に `patches_dirs` を書いても無視します。
 
 - Vaporizer2 の mono/poly は音色ごとに違い、`.vvp` の中身（`m_uPolyMode`）から読みます。そのため grid sequencer の和音行には、和音の鳴る音色だけが候補として出ます（読めなかった音色は和音行の候補に出しません）。
 - Vaporizer2 の出荷プリセットのうち、名前に `MPE` が付くものは cmrt では音が出ません。MPE（ノートごとのピッチ・プレッシャー）の演奏情報を前提にした音色で、cmrt はそれを送らないためです。

@@ -130,10 +130,6 @@ fn catalog_plugins_relativize_each_plugin_against_its_own_base() {
 
 /// 音色置き場が 1 つも実在しないプラグインはカタログへ載せない。
 /// 載せると `read_dir` の `Err` で一覧の収集そのものが失敗する。
-///
-/// Vaporizer2 の組み込みプロファイルは `patches_dirs` を持たない（プリセット置き場は
-/// ユーザーが決めるものなので config に書いてもらう）。config に書かなければ、
-/// **インストール済みでもカタログには載らない**という倒れ方をここが決めている。
 #[test]
 fn catalog_plugins_skip_a_plugin_without_patch_dirs() {
     let cfg = config_with_patch_dirs(r#"patches_dirs = ["/tmp/patches_factory"]"#);
@@ -201,9 +197,8 @@ fn a_vaporizer2_profile_becomes_a_third_catalog_plugin() {
     );
 }
 
-/// 音色置き場を書いていないプラグインは、カタログから外れたことが理由つきで残る。
-/// **Vaporizer2 の組み込みプロファイルがまさにこれ**で、この 1 件が見えないと
-/// 「インストールしたのに音色が 1 件も出ない」の原因に誰も辿り着けない。
+/// 音色置き場の無いプラグインは、カタログから外れたことが理由つきで残る。
+/// この 1 件が見えないと「インストールしたのに音色が 1 件も出ない」の原因に誰も辿り着けない。
 #[test]
 fn a_plugin_without_patch_dirs_is_reported_as_skipped() {
     let cfg = config_with_patch_dirs(r#"patches_dirs = ["/opt/surge/patches_factory"]"#);
@@ -220,11 +215,10 @@ fn a_plugin_without_patch_dirs_is_reported_as_skipped() {
     assert_eq!(skipped[0].name, "Vaporizer2");
     assert_eq!(skipped[0].reason, CatalogSkipReason::NoPatchDirs);
     assert_eq!(skipped[0].reason_code(), "no-patches-dirs");
-    // 案内は「どこへ何を書くか」まで言う。
     let notice = skipped[0].notice_line();
     assert!(notice.contains("Vaporizer2"), "{notice}");
-    assert!(notice.contains("[plugins.Vaporizer2]"), "{notice}");
-    assert!(notice.contains("patches_dirs"), "{notice}");
+    // Vaporizer2 の置き場は config では直せないので、config へ誘導しない。
+    assert!(!notice.contains("patches_dirs"), "{notice}");
 }
 
 /// 書いてあるが 1 つも実在しない場合は「未設定」と言わない。綴りを間違えた dir を

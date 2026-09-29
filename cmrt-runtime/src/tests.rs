@@ -365,15 +365,12 @@ patches_dirs = ["/tmp/surge-data/patches_factory", "/tmp/surge-data/patches_3rdp
     );
 }
 
-/// Vaporizer2 は**音色置き場の既定値を持たない**（プリセットの置き場所がインストールごとに
-/// 違う）ので、patches_dirs を書く場所をひな形が案内していないと、インストール済みでも
-/// 音色が 1 件も一覧に出ない。
 #[test]
 fn the_default_config_shows_a_commented_vaporizer2_profile() {
     let content = default_config_content();
 
     assert!(content.contains("# [plugins.Vaporizer2]"), "{content}");
-    assert!(content.contains("# patches_dirs = "), "{content}");
+    assert!(content.contains("registry"), "{content}");
     assert!(content.contains("Vaporizer2"), "{content}");
     assert!(!content.contains("chord_patch_categories"), "{content}");
 }

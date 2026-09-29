@@ -98,8 +98,8 @@ poly と読み違えた mono は 0 件。
 | `CMRT_TEST_WAV_OUT_DIR` | 耳で確かめるぶんの WAV 書き出し先。**未設定なら 1 バイトも書かない** |
 | `CMRT_TEST_PLAY_SERVER_EXE` | 実 play server の実行ファイル。共有メモリ IPC を**実サーバーへ繋いで**確かめる `#[ignore]` テストが使う（`realtime-play/src/live_ipc/tests.rs`） |
 
-Vaporizer2 の `.vvp` の置き場だけは環境変数ではなく、本番と同じ経路で config.toml の
-`[plugins.Vaporizer2] patches_dirs` から読む（無ければテストが落ちる。環境依存のパスなのでコードに書かない）。
+Vaporizer2 の `.vvp` の置き場だけは環境変数ではなく、本番と同じ経路で registry から読む
+（無ければテストが落ちる。環境依存のパスなのでコードに書かない）。
 
 **SHM プロトコルは 2 repo に二重定義されている**（TUI の
 `realtime-play/src/fast_midi_ipc/windows/protocol.rs` と play-server の

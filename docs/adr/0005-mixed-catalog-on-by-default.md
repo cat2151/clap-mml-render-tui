@@ -78,7 +78,7 @@ grid sequencer / DAW が同じ `Arc<Mutex<PatchLoadState>>` を読む。番人�
 理由は分ける。**「書いていない」と「書いたが実在しない」は次の一手が違う**
 （後者に「未設定です」と案内すると、書いた本人には直しようがない）:
 
-- `NoPatchDirs` — `patches_dirs` が無い。Vaporizer2 の組み込みがこれ
+- `NoPatchDirs` — 音色置き場が無い（`patches_dirs` 未記入、または Vaporizer2 / Floe の本体設定から読めない）
 - `PatchDirsMissing(dirs)` — 書いてあるが 1 つも実在しない。**綴りを間違えた dir を名指しで返す**
 - `PatchSourceUnavailable` — plugin adapter がロード可能な source を解決できない。
   config の欠落場所と resolver の診断を同じ行へ出す
