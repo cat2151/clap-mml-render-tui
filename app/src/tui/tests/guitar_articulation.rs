@@ -284,3 +284,73 @@ fn the_app_draws_the_screen_with_both_takes() {
     assert!(screen.contains("KSSus_Down"), "{screen}");
     assert!(screen.contains("F#2"), "{screen}");
 }
+
+/// effect の catalog を持たせて MML を確定した画面。
+fn app_with_mml_and_effects<'a>() -> (TuiApp<'a>, Arc<RecordingSink>) {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.guitar_articulation =
+        crate::tui::guitar_articulation::GuitarArticulationScreen::with_effect_plugins(
+            crate::tui::tests::chord_chart_auto_reverb::effect_plugins(),
+        );
+    app.switch_to_primary_screen(PrimaryScreen::GuitarArticulation, None);
+    type_mml(&mut app);
+    let sink = attach_recording_sender(&mut app);
+    (app, sink)
+}
+
+/// 追加 overlay の先頭の候補（catalog 登録順）を 1 段だけ持つ chain の綴り。
+fn first_candidate_chain() -> String {
+    r#"[{"Dragonfly Room Reverb preset":"Small Drum Room"}]"#.to_string()
+}
+
+#[test]
+fn choosing_an_effect_previews_the_converted_take_through_it() {
+    let (mut app, sink) = app_with_mml_and_effects();
+    let converted = convert(&flat_events(), &RuleTable::default());
+
+    for code in [KeyCode::Char('x'), KeyCode::Char('a')] {
+        app.handle_guitar_articulation_key_event(plain(code));
+    }
+    wait_until("試聴が積まれる", || {
+        sink.timeline_events().len() >= converted.len()
+    });
+
+    assert_eq!(sent_messages(&sink, 0), messages(&converted));
+    assert_eq!(
+        sink.prepared(),
+        vec![LivePatch::with_effect_chain(
+            Some(PATCH),
+            &first_candidate_chain()
+        )]
+    );
+}
+
+#[test]
+fn the_committed_effect_chain_is_used_by_b() {
+    let (mut app, _preview_sink) = app_with_mml_and_effects();
+    for code in [
+        KeyCode::Char('x'),
+        KeyCode::Char('a'),
+        KeyCode::Enter,
+        KeyCode::Enter,
+    ] {
+        app.handle_guitar_articulation_key_event(plain(code));
+    }
+    // 試聴と確定の演奏を数えないよう、確定の後で記録 sender を付け直す。
+    let sink = attach_recording_sender(&mut app);
+    let flat = flat_events();
+
+    app.handle_guitar_articulation_key_event(plain(KeyCode::Char('b')));
+    wait_until("rawが積まれる", || {
+        sink.timeline_events().len() >= flat.len()
+    });
+
+    assert_eq!(sent_messages(&sink, 0), messages(&flat));
+    assert_eq!(
+        sink.prepared(),
+        vec![LivePatch::with_effect_chain(
+            Some(PATCH),
+            &first_candidate_chain()
+        )]
+    );
+}

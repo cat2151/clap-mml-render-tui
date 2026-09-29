@@ -1,6 +1,6 @@
 use super::*;
-use crate::overlays::EffectAddPane;
 use cmrt_core::{AudioEffectCatalog, AudioEffectPluginInfo, AudioEffectPreset};
+use cmrt_effect_chain_select::EffectAddPane;
 use cmrt_offline_render::EffectPlugins;
 use serde_json::json;
 use std::sync::Arc;
@@ -267,7 +267,7 @@ fn esc_in_the_add_overlay_returns_to_the_chain_without_adding() {
     );
 
     assert!(matches!(app.mode, DawMode::EffectChain));
-    assert!(app.overlays.effect_chain.chain.is_empty());
+    assert!(app.overlays.effect_chain.editor.chain.is_empty());
 }
 
 #[test]
@@ -307,7 +307,7 @@ fn x_does_not_open_on_a_route_without_effects() {
     assert!(matches!(app.mode, DawMode::Normal));
     assert_eq!(
         app.log_lines.lock().unwrap().back().map(String::as_str),
-        Some(crate::messages::effect_chain::NOT_AVAILABLE_ON_THIS_BACKEND)
+        Some(cmrt_effect_chain_select::messages::NOT_AVAILABLE_ON_THIS_BACKEND)
     );
 }
 
@@ -322,7 +322,7 @@ fn a_with_an_empty_catalog_stays_in_the_chain_overlay() {
     assert!(matches!(app.mode, DawMode::EffectChain));
     assert_eq!(
         app.log_lines.lock().unwrap().back().map(String::as_str),
-        Some(crate::messages::effect_chain::NO_PRESETS)
+        Some(cmrt_effect_chain_select::messages::NO_PRESETS)
     );
 }
 
@@ -337,7 +337,7 @@ fn the_overlay_shows_the_instrument_and_the_existing_chain_in_order() {
     assert_eq!(state.track, 2);
     assert_eq!(state.instrument, "Pads/Pad 1.fxp");
     assert_eq!(
-        state.chain,
+        state.editor.chain,
         vec![
             json!({"Test FX preset": "Reverb 2/Room"}),
             json!({"Unknown preset": "x"})
@@ -345,11 +345,11 @@ fn the_overlay_shows_the_instrument_and_the_existing_chain_in_order() {
     );
     let catalog = app.effect_plugins.catalog();
     assert_eq!(
-        crate::overlays::effect_stage_label(&state.chain[0], catalog),
+        cmrt_effect_chain_select::stage_label(&state.editor.chain[0], catalog),
         "Test FX: Reverb 2/Room"
     );
     assert_eq!(
-        crate::overlays::effect_stage_label(&state.chain[1], catalog),
+        cmrt_effect_chain_select::stage_label(&state.editor.chain[1], catalog),
         r#"{"Unknown preset":"x"}"#
     );
 }

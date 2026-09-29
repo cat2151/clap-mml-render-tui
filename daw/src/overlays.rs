@@ -4,10 +4,7 @@ mod mixer;
 mod patch_select;
 mod project;
 
-pub(crate) use effect_chain::{
-    clamped_index, effect_stage_label, DawEffectAddState, DawEffectChainOverlayState,
-    EffectAddPane, PAGE_STEP,
-};
+pub(crate) use effect_chain::DawEffectChainOverlayState;
 pub(crate) use history::DawHistoryOverlayState;
 pub(crate) use mixer::DawMixerOverlayState;
 pub(crate) use patch_select::DawPatchSelectOverlayState;

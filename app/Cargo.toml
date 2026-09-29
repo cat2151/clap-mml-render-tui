@@ -11,6 +11,7 @@ path = "src/main.rs"
 cmrt-chord = { path = "../chord" }
 cmrt-chord-chart = { path = "../chord-chart" }
 cmrt-guitar-articulation = { path = "../guitar-articulation" }
+cmrt-effect-chain-select = { path = "../effect-chain-select" }
 cmrt-config-editor = { path = "../config-editor-lib" }
 cmrt-daw = { path = "../daw" }
 cmrt-grid-sequencer = { path = "../grid-sequencer" }

@@ -87,8 +87,8 @@ pub(super) const SERVER_STALE_MS: u64 = 1_000;
 /// 受付だけを返す要求（[`KIND_PREPARE_STANDBY_PATCH`]）の応答待ち上限。
 pub(super) const ACCEPT_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 /// 応答がロード完了を兼ねる要求（[`KIND_PREPARE_PATCH`] / [`KIND_PROBE_PATCH`]）の応答待ち上限。
-/// file cache が冷えた大型 SFZ の初回ロードは 30 秒を超える。
-pub(super) const PATCH_LOAD_RESPONSE_TIMEOUT: Duration = Duration::from_secs(60);
+/// HDD 上の大型 SFZ は、file cache が冷えていると初回ロードが 60 秒を超える。
+pub(super) const PATCH_LOAD_RESPONSE_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub(super) fn response_timeout(kind: u32) -> Duration {
     match kind {

@@ -9,20 +9,20 @@ fn r_enter_replaces_the_cursor_stage_and_keeps_the_other_stages() {
 
     press(&mut app, &[KeyCode::Char('x'), KeyCode::Char('r')]);
     assert!(matches!(app.mode, DawMode::EffectChainAdd));
-    assert_eq!(app.overlays.effect_chain.add.replace_target, Some(0));
+    assert_eq!(app.overlays.effect_chain.editor.add.replace_target, Some(0));
 
     // list 先頭は Delay/Echo。
     press(&mut app, &[KeyCode::Enter]);
 
     assert!(matches!(app.mode, DawMode::EffectChain));
     assert_eq!(
-        app.overlays.effect_chain.chain,
+        app.overlays.effect_chain.editor.chain,
         vec![
             json!({"Test FX preset": "Delay/Echo"}),
             json!({"Test Amp preset": "Clean"}),
         ]
     );
-    assert_eq!(app.overlays.effect_chain.cursor, 0);
+    assert_eq!(app.overlays.effect_chain.editor.cursor, 0);
 }
 
 #[test]
@@ -50,9 +50,9 @@ fn a_after_r_appends_again() {
         ],
     );
 
-    assert_eq!(app.overlays.effect_chain.chain.len(), 3);
+    assert_eq!(app.overlays.effect_chain.editor.chain.len(), 3);
     assert_eq!(
-        app.overlays.effect_chain.chain[2],
+        app.overlays.effect_chain.editor.chain[2],
         json!({"Test FX preset": "Delay/Echo"})
     );
 }
@@ -94,7 +94,7 @@ fn b_in_the_replace_overlay_previews_with_only_the_candidate_stage_bypassed() {
     );
     // b は preview だけで、編集中の chain は変えない。
     assert_eq!(
-        app.overlays.effect_chain.chain[0],
+        app.overlays.effect_chain.editor.chain[0],
         json!({"Test FX preset": "Reverb 2/Room"})
     );
 }
@@ -117,5 +117,5 @@ fn b_in_the_add_overlay_previews_with_only_the_appended_candidate_bypassed() {
             {"Test FX preset": "Delay/Echo", "bypass": true}
         ])
     );
-    assert_eq!(app.overlays.effect_chain.chain.len(), 2);
+    assert_eq!(app.overlays.effect_chain.editor.chain.len(), 2);
 }

@@ -174,43 +174,26 @@ impl DawApp {
 
     /// 編集中の chain（bypass 反映済み）をそのまま preview する。
     pub(crate) fn preview_editing_effect_chain(&mut self) {
-        let chain = self.overlays.effect_chain.chain.clone();
+        let chain = self.overlays.effect_chain.editor.chain.clone();
         self.preview_effect_chain(&chain);
     }
 
     /// 追加 overlay の list `index` の preset を編集中 chain へ入れた chain。
-    /// 差し替え（`replace_target`）ならその段を置き換え、そうでなければ末尾に足す。
-    /// list が空、または index が範囲外なら `None`。
     pub(crate) fn effect_chain_add_candidate_chain(&self, index: usize) -> Option<Vec<Value>> {
-        self.effect_chain_add_candidate_chain_with_bypass(index, false)
-    }
-
-    /// [`Self::effect_chain_add_candidate_chain`] の候補の段に `bypass` を付けた chain。
-    fn effect_chain_add_candidate_chain_with_bypass(
-        &self,
-        index: usize,
-        bypass: bool,
-    ) -> Option<Vec<Value>> {
-        let preset_index = *self.overlays.effect_chain.add.list.get(index)?;
-        let stage = self
-            .effect_plugins
-            .catalog()
-            .and_then(|catalog| catalog.presets().get(preset_index))
-            .map(cmrt_core::AudioEffectPreset::json_element)?;
-        let stage = crate::mml::effect_chain::stage_with_bypass(&stage, bypass);
-        let mut chain = self.overlays.effect_chain.chain.clone();
-        match self.overlays.effect_chain.add.replace_target {
-            Some(target) if target < chain.len() => chain[target] = stage,
-            _ => chain.push(stage),
-        }
-        Some(chain)
+        self.overlays.effect_chain.editor.candidate_chain(
+            self.effect_plugins.catalog(),
+            index,
+            false,
+        )
     }
 
     /// `b`: list カーソルの候補の段だけ bypass した chain を preview する。
     /// chain の他の段はそのまま効かせる。list が空なら何もしない。
     pub(crate) fn preview_effect_chain_add_candidate_bypassed(&mut self) {
-        let cursor = self.overlays.effect_chain.add.list_cursor;
-        if let Some(chain) = self.effect_chain_add_candidate_chain_with_bypass(cursor, true) {
+        let editor = &self.overlays.effect_chain.editor;
+        let chain =
+            editor.candidate_chain(self.effect_plugins.catalog(), editor.add.list_cursor, true);
+        if let Some(chain) = chain {
             self.preview_effect_chain(&chain);
         }
     }
@@ -218,7 +201,7 @@ impl DawApp {
     /// 追加 overlay の list カーソルの候補を preview する。list が空なら何もしない。
     /// `preferred_delta` は直前のカーソル移動の向き（先読みの偏らせ方に使う）。
     pub(crate) fn preview_effect_chain_add_candidate(&mut self, preferred_delta: Option<isize>) {
-        let add = &self.overlays.effect_chain.add;
+        let add = &self.overlays.effect_chain.editor.add;
         let (cursor, item_count) = (add.list_cursor, add.list.len());
         let candidate_preview = crate::performance_log::SlowOperation::with_context(
             "effect-chain-preview-candidate",
@@ -242,7 +225,7 @@ impl DawApp {
                 self.effect_chain_preview_track_gains(),
                 cursor,
                 item_count,
-                crate::overlays::PAGE_STEP.unsigned_abs(),
+                cmrt_effect_chain_select::PAGE_STEP.unsigned_abs(),
                 preferred_delta,
                 |index| {
                     self.effect_chain_add_candidate_chain(index)

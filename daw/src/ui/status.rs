@@ -149,7 +149,7 @@ pub(super) fn draw_status(
         DawMode::Help => "HELP  ESC:キャンセル",
         DawMode::Mixer => "MIXER  h/l:track移動  j/k:-/+3dB  ESC:閉じる  ?:help",
         DawMode::EffectChain => crate::messages::effect_chain::STATUS,
-        DawMode::EffectChainAdd if app.overlays.effect_chain.add.replace_target.is_some() => {
+        DawMode::EffectChainAdd if app.overlays.effect_chain.editor.add.replace_target.is_some() => {
             crate::messages::effect_chain::REPLACE_STATUS
         }
         DawMode::EffectChainAdd => crate::messages::effect_chain::ADD_STATUS,

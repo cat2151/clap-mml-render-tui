@@ -172,6 +172,10 @@ instrument（音色）の後段に、TONE3000 / Surge XT Effects / Dragonfly Rev
 - 各effectのpresetは組み込みの既定の置き場（`%ProgramData%\TONE3000\Presets`、`%ProgramData%\Surge XT\fx_presets`）から読みます。Dragonfly Reverbのpresetはplugin本体に組み込まれているので、`C:\Program Files\Common Files\CLAP\dragonfly-reverb\`にpluginがあれば候補に出ます。pluginが無ければ候補に出ません
 - chainは音符と同じ長さだけ回すので、リバーブの尻尾はcellの末尾で切れます
 
+Guitar Articulation画面（`Ctrl+G` → `E`）でも、`x`で同じEFFECT CHAIN overlayが開きます。
+METAL-GTXの後段にギターアンプ（`a`→kindの`Amp Simulator`、TONE3000）や他のeffectを挿し、段を変えるたびにArticulatedの演奏で試聴できます。
+`Enter`で確定すると、以後の`b`・`space`の演奏にもそのchainが掛かります。chainはアプリを終了すると消えます。
+
 ### 設定
 
 初回起動時に `config.toml` が自動作成されます。場所はOS標準の設定ディレクトリ配下です。

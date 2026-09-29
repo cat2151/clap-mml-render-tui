@@ -49,7 +49,7 @@ impl DawApp {
                 self.overlays.project.action == Some(super::DawProjectFileAction::SaveAs)
                     || self.overlays.project.filter_active
             }
-            DawMode::EffectChainAdd => self.overlays.effect_chain.add.filter_active,
+            DawMode::EffectChainAdd => self.overlays.effect_chain.editor.add.filter_active,
             DawMode::Normal | DawMode::Help | DawMode::Mixer | DawMode::EffectChain => false,
         }
     }

@@ -4,8 +4,10 @@
 //! 音は鳴らさない。移動・入力の取り消し・ヘルプ以外の操作では、鳴らしてほしい版を
 //! [`GuitarArticulationAction::Play`] で host へ返す（MML の確定・ルールの toggle はArticulated）。
 
+use cmrt_core::EffectPlugins;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui_textarea::TextArea;
+use serde_json::Value;
 
 use crate::ui::{ROW_RULE_ROWS, RULE_ROWS};
 use crate::{
@@ -35,15 +37,20 @@ impl Take {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+mod effect_chain;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GuitarArticulationAction {
     Continue,
     Quit,
-    /// その版のイベント列（[`GuitarArticulationScreen::events`]）を鳴らしてほしい。
+    /// その版のイベント列（[`GuitarArticulationScreen::events`]）を、確定済みの chain
+    /// （[`GuitarArticulationScreen::effect_chain`]）を掛けて鳴らしてほしい。
     Play(Take),
+    /// Articulated を、この chain を掛けて試聴してほしい（effect chain overlay の編集中）。
+    PreviewEffectChain(Vec<Value>),
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Default)]
 pub struct GuitarArticulationScreen {
     mml: String,
     /// MML を編集している間だけ `Some`。英字キーを入力欄とルールのどちらへ渡すかをこれで分ける。
@@ -56,17 +63,34 @@ pub struct GuitarArticulationScreen {
     converted: Vec<TimedMidiEvent>,
     cursor: usize,
     help_open: bool,
+    effect_plugins: EffectPlugins,
+    effect_chain: Vec<Value>,
+    /// effect chain overlay（`x`）を開いている間だけ `Some`。
+    effect_overlay: Option<effect_chain::EffectOverlay>,
     /// 直前の操作ができなかった理由。次のキーで消える。
     pub error: Option<String>,
 }
 
 impl GuitarArticulationScreen {
+    /// `effect_plugins` の catalog から、effect chain overlay（`x`）の候補を出す。
+    pub fn with_effect_plugins(effect_plugins: EffectPlugins) -> Self {
+        Self {
+            effect_plugins,
+            ..Self::default()
+        }
+    }
+
     pub fn mml(&self) -> &str {
         &self.mml
     }
 
     pub fn input_open(&self) -> bool {
         self.input.is_some()
+    }
+
+    /// 点滅する縦線カーソルを置く入力欄（MML 欄か、effect の list の絞り込み欄）にキーが入る状態か。
+    pub fn uses_textarea_cursor(&self) -> bool {
+        self.input_open() || self.effect_filter_active()
     }
 
     pub fn help_open(&self) -> bool {
@@ -139,6 +163,10 @@ impl GuitarArticulationScreen {
             }
             return GuitarArticulationAction::Continue;
         }
+        // overlay の絞り込みは正規表現で `?` を打てるので、`?` の扱いも overlay に任せる。
+        if self.effect_overlay.is_some() {
+            return self.handle_effect_key(key);
+        }
         // MML は `?` を使わないので、入力欄を開いていても `?` はヘルプへ回す。
         if is_help_key(key) {
             self.help_open = true;
@@ -163,6 +191,7 @@ impl GuitarArticulationScreen {
                 }
                 GuitarArticulationAction::Continue
             }
+            KeyCode::Char('x') => self.open_effect_overlay(),
             KeyCode::Char('b') => self.play(Take::Plain),
             KeyCode::Char(' ') => self.play(Take::Converted),
             KeyCode::Char('q') => GuitarArticulationAction::Quit,

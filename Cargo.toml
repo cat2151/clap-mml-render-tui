@@ -9,6 +9,7 @@ members = [
     "core-lib",
     "daw",
     "daw-client-lib",
+    "effect-chain-select",
     "grid-sequencer",
     "guitar-articulation",
     "history",

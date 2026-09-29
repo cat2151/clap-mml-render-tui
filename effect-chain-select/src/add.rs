@@ -1,4 +1,4 @@
-//! EFFECT CHAIN 追加 overlay（`x` → `a`）の category/kind/list 3 pane 状態。
+//! 追加・差し替え overlay の category/kind/list 3 pane 状態。
 
 use std::cell::Cell;
 
@@ -6,9 +6,14 @@ use cmrt_core::AudioEffectCatalog;
 use cmrt_patch_select::auto_reverb::is_selectable_effect_preset;
 use cmrt_tui_core::text_filter;
 use ratatui_textarea::TextArea;
+use serde_json::Value;
+
+mod input;
+
+pub use input::AddKeyAction;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
-pub(crate) enum EffectAddPane {
+pub enum EffectAddPane {
     Categories,
     Kinds,
     #[default]
@@ -25,7 +30,7 @@ impl EffectAddPane {
     }
 
     /// 1 つ左の pane（端では止まる）。
-    pub(crate) fn prev(self) -> Self {
+    pub fn prev(self) -> Self {
         match self {
             Self::Categories => Self::Categories,
             Self::Kinds => Self::Categories,
@@ -34,7 +39,7 @@ impl EffectAddPane {
     }
 
     /// 1 つ右の pane（端では止まる）。
-    pub(crate) fn next(self) -> Self {
+    pub fn next(self) -> Self {
         match self {
             Self::Categories => Self::Kinds,
             Self::Kinds => Self::List,
@@ -43,32 +48,32 @@ impl EffectAddPane {
     }
 }
 
-/// 追加 overlay（`EffectChainAdd`）の状態。開くたびに catalog から組み直す。
-pub(crate) struct DawEffectAddState {
+/// 追加・差し替え overlay の状態。開くたびに catalog から組み直す。
+pub struct EffectAddState {
     /// catalog の preset index。`is_selectable_effect_preset` が外すものを除いたもの。
     candidates: Vec<usize>,
     /// category pane の一覧（先頭は `all`）。
-    pub(crate) categories: Vec<String>,
-    pub(crate) category_cursor: usize,
+    pub categories: Vec<String>,
+    pub category_cursor: usize,
     /// kind pane の一覧（先頭は `all`）。category pane の選択に合わせて組み直す。
-    pub(crate) kinds: Vec<String>,
-    pub(crate) kind_cursor: usize,
+    pub kinds: Vec<String>,
+    pub kind_cursor: usize,
     /// list pane に出す catalog の preset index（`candidates` を category / kind / `query` で絞ったもの）。
-    pub(crate) list: Vec<usize>,
-    pub(crate) list_cursor: usize,
-    pub(crate) focus: EffectAddPane,
+    pub list: Vec<usize>,
+    pub list_cursor: usize,
+    pub focus: EffectAddPane,
     /// 各 pane の表示先頭。描画側が上下 30% の余白の規則で更新する。
     scroll_offsets: [Cell<usize>; 3],
     /// list の絞り込み条件（空なら絞り込みなし）。
-    pub(crate) query: String,
-    pub(crate) query_textarea: TextArea<'static>,
-    pub(crate) query_before_input: String,
-    pub(crate) filter_active: bool,
+    pub query: String,
+    pub query_textarea: TextArea<'static>,
+    pub query_before_input: String,
+    pub filter_active: bool,
     /// `Some(i)` なら chain の `i` 段目を差し替える（`r`）。`None` なら末尾へ追加する（`a`）。
-    pub(crate) replace_target: Option<usize>,
+    pub replace_target: Option<usize>,
 }
 
-impl Default for DawEffectAddState {
+impl Default for EffectAddState {
     fn default() -> Self {
         Self {
             candidates: Vec::new(),
@@ -89,12 +94,12 @@ impl Default for DawEffectAddState {
     }
 }
 
-impl DawEffectAddState {
-    pub(crate) fn scroll_offset(&self, pane: EffectAddPane) -> &Cell<usize> {
+impl EffectAddState {
+    pub fn scroll_offset(&self, pane: EffectAddPane) -> &Cell<usize> {
         &self.scroll_offsets[pane.index()]
     }
 
-    pub(crate) fn open(catalog: &AudioEffectCatalog) -> Self {
+    pub fn open(catalog: &AudioEffectCatalog) -> Self {
         let candidates: Vec<usize> = catalog
             .presets()
             .iter()
@@ -137,7 +142,7 @@ impl DawEffectAddState {
 
     /// category pane の選択に合わせて kind pane を組み直し、kind カーソルを 0（`all`）へ戻す。
     /// 続けて list も組み直す。
-    pub(crate) fn rebuild_kinds(&mut self, catalog: &AudioEffectCatalog) {
+    pub fn rebuild_kinds(&mut self, catalog: &AudioEffectCatalog) {
         let category = self.selected_category();
         let mut kinds: Vec<String> = self
             .candidates
@@ -158,7 +163,7 @@ impl DawEffectAddState {
     ///
     /// `query` が正規表現としてコンパイルできない（打鍵途中の `(` など）場合は、
     /// list・list カーソルとも直前の状態のまま何もしない（全消えにしない）。
-    pub(crate) fn rebuild_list(&mut self, catalog: &AudioEffectCatalog) {
+    pub fn rebuild_list(&mut self, catalog: &AudioEffectCatalog) {
         let condition = match text_filter::compile_condition(&self.query) {
             Ok(condition) => condition,
             Err(_) => return,
@@ -197,7 +202,7 @@ impl DawEffectAddState {
 
     /// `r`: list pane へ focus し、list カーソルを今の位置以外のランダムな候補へ動かす。
     /// 動いたら `true`。list が 1 件以下なら動かさない。
-    pub(crate) fn random_jump_list(&mut self) -> bool {
+    pub fn random_jump_list(&mut self) -> bool {
         self.focus = EffectAddPane::List;
         let Some(candidate) =
             cmrt_tui_core::random::random_index(self.list.len().saturating_sub(1))
@@ -213,14 +218,32 @@ impl DawEffectAddState {
     }
 
     /// `/`: 絞り込み編集を開始する。編集開始前の `query` を覚えておく（`Esc` で戻す用）。
-    pub(crate) fn begin_filter(&mut self) {
+    pub fn begin_filter(&mut self) {
         self.query_before_input = self.query.clone();
         self.query_textarea = cmrt_tui_core::text_input::new_single_line_textarea(&self.query);
         self.filter_active = true;
     }
 
+    /// list `index` の preset を chain の 1 段にした値。
+    pub fn preset_stage(
+        &self,
+        catalog: Option<&AudioEffectCatalog>,
+        index: usize,
+    ) -> Option<Value> {
+        let preset_index = *self.list.get(index)?;
+        catalog?
+            .presets()
+            .get(preset_index)
+            .map(cmrt_core::AudioEffectPreset::json_element)
+    }
+
+    /// list カーソルの preset（catalog の index）。list が空なら `None`。
+    pub fn candidate(&self) -> Option<usize> {
+        self.list.get(self.list_cursor).copied()
+    }
+
     /// `Esc`: 編集開始前の `query` へ戻して編集を終える。
-    pub(crate) fn cancel_filter(&mut self, catalog: &AudioEffectCatalog) {
+    pub fn cancel_filter(&mut self, catalog: &AudioEffectCatalog) {
         self.filter_active = false;
         if self.query == self.query_before_input {
             return;
@@ -230,3 +253,6 @@ impl DawEffectAddState {
         self.rebuild_list(catalog);
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -394,6 +394,7 @@ dependencies = [
  "cmrt-chord-chart",
  "cmrt-config-editor",
  "cmrt-daw",
+ "cmrt-effect-chain-select",
  "cmrt-grid-sequencer",
  "cmrt-guitar-articulation",
  "cmrt-history",
@@ -572,6 +573,7 @@ dependencies = [
  "anyhow",
  "chord2mml-core",
  "cmrt-chord",
+ "cmrt-effect-chain-select",
  "cmrt-history",
  "cmrt-mml-overlay",
  "cmrt-offline-render",
@@ -606,6 +608,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmrt-effect-chain-select"
+version = "0.1.0"
+dependencies = [
+ "cmrt-patch-select",
+ "cmrt-render-core",
+ "cmrt-tui-core",
+ "crossterm",
+ "ratatui",
+ "ratatui-textarea",
+ "serde_json",
+]
+
+[[package]]
 name = "cmrt-grid-sequencer"
 version = "0.1.0"
 dependencies = [
@@ -630,7 +645,9 @@ name = "cmrt-guitar-articulation"
 version = "0.1.0"
 dependencies = [
  "cmrt-chord",
+ "cmrt-effect-chain-select",
  "cmrt-midi-filter",
+ "cmrt-render-core",
  "cmrt-tui-core",
  "crossterm",
  "ratatui",

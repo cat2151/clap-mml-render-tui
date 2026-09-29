@@ -232,3 +232,47 @@ fn economy_row_sits_on_top_of_the_rule_rows_and_shows_the_strokes() {
     // 4 音目は次の弦で下行なので、スイープせずオルタネイトのまま U。
     assert_eq!(marks, "DUDU", "{rows:#?}");
 }
+
+#[test]
+fn the_committed_effect_chain_follows_the_instrument_in_the_title() {
+    let mut screen =
+        GuitarArticulationScreen::with_effect_plugins(crate::test_effects::amp_plugins());
+    screen.enter();
+    screen.handle_key_event(key(KeyCode::Esc));
+    let top = |screen: &GuitarArticulationScreen| {
+        squeezed(&rows_in(&render(screen), Rect::new(0, 0, WIDTH, 1)))
+    };
+    assert!(top(&screen).contains("METAL-GTXFull─"), "{}", top(&screen));
+
+    for code in [
+        KeyCode::Char('x'),
+        KeyCode::Char('a'),
+        KeyCode::Enter,
+        KeyCode::Enter,
+    ] {
+        screen.handle_key_event(key(code));
+    }
+
+    assert!(
+        top(&screen).contains("METAL-GTXFull→TestAmp:Clean"),
+        "{}",
+        top(&screen)
+    );
+}
+
+#[test]
+fn x_draws_the_effect_chain_overlay_over_the_screen() {
+    let mut screen =
+        GuitarArticulationScreen::with_effect_plugins(crate::test_effects::amp_plugins());
+    screen.enter();
+    screen.handle_key_event(key(KeyCode::Esc));
+
+    screen.handle_key_event(key(KeyCode::Char('x')));
+    let chain = squeezed(&rows_in(&render(&screen), Rect::new(0, 0, WIDTH, HEIGHT)));
+    assert!(chain.contains("EFFECTCHAIN"), "{chain}");
+    assert!(chain.contains("instrument:METAL-GTXFull"), "{chain}");
+
+    screen.handle_key_event(key(KeyCode::Char('a')));
+    let add = squeezed(&rows_in(&render(&screen), Rect::new(0, 0, WIDTH, HEIGHT)));
+    assert!(add.contains("AmpSimulator"), "{add}");
+}

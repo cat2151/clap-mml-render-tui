@@ -4,15 +4,12 @@
 //! 音色変更と同じ [`DawApp::commit_insert_cell`] を通すので、依存セルの cache 無効化と
 //! 再 render もそこに任せる（chain は cache key（MML の hash）に入っている）。
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use cmrt_effect_chain_select::{messages as select_message, AddKeyAction, ChainKeyAction};
+use crossterm::event::KeyEvent;
 
 use super::super::{
-    messages::effect_chain as message,
-    mml::build_cell_mml_from_data,
-    overlays::{
-        clamped_index, DawEffectAddState, DawEffectChainOverlayState, EffectAddPane, PAGE_STEP,
-    },
-    DawApp, DawMode, DawPlayState, FIRST_PLAYABLE_TRACK,
+    messages::effect_chain as message, mml::build_cell_mml_from_data,
+    overlays::DawEffectChainOverlayState, DawApp, DawMode, DawPlayState, FIRST_PLAYABLE_TRACK,
 };
 
 mod preview;
@@ -30,7 +27,7 @@ impl DawApp {
             return;
         }
         if self.effect_plugins.catalog().is_none() {
-            self.append_log_line(message::NOT_AVAILABLE_ON_THIS_BACKEND);
+            self.append_log_line(select_message::NOT_AVAILABLE_ON_THIS_BACKEND);
             return;
         }
         if *self.playback.play_state.lock().unwrap() == DawPlayState::Playing {
@@ -49,230 +46,52 @@ impl DawApp {
             .map_or(0, |catalog| catalog.presets().len())
     }
 
-    /// chain 一覧のキー処理。chain が変わる操作（`dd`・`b`・`Alt+↑↓`）の直後は
-    /// 自動で preview する。`j`/`k` は chain を変えないので鳴らし直さない。
+    /// chain 一覧のキー処理。chain が変わる操作の直後は自動で preview する。
     pub(crate) fn handle_effect_chain(&mut self, key: KeyEvent) {
-        if key.code == KeyCode::Char('d') {
-            let state = &mut self.overlays.effect_chain;
-            if state.pending_delete {
-                state.pending_delete = false;
-                if state.delete_at_cursor() {
-                    self.preview_editing_effect_chain();
-                }
-            } else {
-                state.pending_delete = true;
+        match self.overlays.effect_chain.editor.handle_chain_key(key) {
+            ChainKeyAction::None => {}
+            ChainKeyAction::Preview => self.preview_editing_effect_chain(),
+            ChainKeyAction::OpenAdd { replace_target } => {
+                self.open_effect_chain_add(replace_target)
             }
-            return;
-        }
-        self.overlays.effect_chain.pending_delete = false;
-
-        if key.modifiers.contains(KeyModifiers::ALT) {
-            let moved = match key.code {
-                KeyCode::Down => self.overlays.effect_chain.move_stage(1),
-                KeyCode::Up => self.overlays.effect_chain.move_stage(-1),
-                _ => false,
-            };
-            if moved {
-                self.preview_editing_effect_chain();
-            }
-            return;
-        }
-
-        match key.code {
-            KeyCode::Esc => self.mode = DawMode::Normal,
-            KeyCode::Char('?') => self.enter_help(),
-            KeyCode::Char('j') | KeyCode::Down => self.overlays.effect_chain.move_cursor(1),
-            KeyCode::Char('k') | KeyCode::Up => self.overlays.effect_chain.move_cursor(-1),
-            KeyCode::PageDown => self.overlays.effect_chain.move_cursor(PAGE_STEP),
-            KeyCode::PageUp => self.overlays.effect_chain.move_cursor(-PAGE_STEP),
-            KeyCode::Home => self.overlays.effect_chain.move_cursor(isize::MIN),
-            KeyCode::End => self.overlays.effect_chain.move_cursor(isize::MAX),
-            KeyCode::Char('b') => {
-                if self.overlays.effect_chain.toggle_bypass_at_cursor() {
-                    self.preview_editing_effect_chain();
-                }
-            }
-            KeyCode::Char(' ') => self.preview_editing_effect_chain(),
-            KeyCode::Char('a') => self.open_effect_chain_add(None),
-            KeyCode::Char('r') => {
-                let state = &self.overlays.effect_chain;
-                if state.cursor < state.chain.len() {
-                    self.open_effect_chain_add(Some(state.cursor));
-                }
-            }
-            KeyCode::Enter => self.commit_effect_chain(),
-            _ => {}
+            ChainKeyAction::Commit => self.commit_effect_chain(),
+            ChainKeyAction::Close => self.mode = DawMode::Normal,
+            ChainKeyAction::Help => self.enter_help(),
         }
     }
 
     /// 追加 overlay を開いて list カーソルの候補を preview する。`replace_target` は
-    /// [`DawEffectAddState::replace_target`]（`a` は `None`、`r` はカーソル段）。
+    /// `EffectAddState::replace_target`（`a` は `None`、`r` はカーソル段）。
     fn open_effect_chain_add(&mut self, replace_target: Option<usize>) {
         if self.effect_preset_count() == 0 {
-            self.append_log_line(message::NO_PRESETS);
+            self.append_log_line(select_message::NO_PRESETS);
             return;
         }
         if let Some(catalog) = self.effect_plugins.catalog() {
-            self.overlays.effect_chain.add = DawEffectAddState::open(catalog);
-            self.overlays.effect_chain.add.replace_target = replace_target;
+            self.overlays
+                .effect_chain
+                .editor
+                .open_add(catalog, replace_target);
         }
         self.mode = DawMode::EffectChainAdd;
         self.preview_effect_chain_add_candidate(None);
     }
 
-    /// `x` → `a`（または `r`）の category/kind/list 3 pane。category を動かした後は kind pane を組み直し
-    /// （[`DawEffectAddState::rebuild_kinds`]）、kind を動かした後は list を絞り直す
-    /// （[`DawEffectAddState::rebuild_list`]）。いずれも list カーソルは 0 へ戻る。
-    /// list が 0 件の `Enter` は何もしない。`/` はどの pane に focus していても
-    /// list の絞り込みを開始する。
-    ///
-    /// 候補（list カーソルの preset）が変わる操作のあとは自動で preview する。
-    /// `h`/`l` は候補を変えないので鳴らし直さない。`b` は候補の段だけ bypass して鳴らす
-    /// （効き具合を比べる基準の音）。
+    /// `x` → `a`（または `r`）の category/kind/list 3 pane。候補が変わる操作のあとは自動で preview する。
     pub(crate) fn handle_effect_chain_add(&mut self, key: KeyEvent) {
-        if self.overlays.effect_chain.add.filter_active {
-            self.handle_effect_chain_add_filter_input(key);
-            return;
-        }
-
-        match key.code {
-            KeyCode::Esc => {
-                self.mode = DawMode::EffectChain;
-                return;
+        let action = self
+            .overlays
+            .effect_chain
+            .editor
+            .handle_add_key(self.effect_plugins.catalog(), key);
+        match action {
+            AddKeyAction::None => {}
+            AddKeyAction::Back | AddKeyAction::Committed => self.mode = DawMode::EffectChain,
+            AddKeyAction::Help => self.enter_help(),
+            AddKeyAction::Preview { preferred_delta } => {
+                self.preview_effect_chain_add_candidate(preferred_delta)
             }
-            KeyCode::Char('?') => {
-                self.enter_help();
-                return;
-            }
-            KeyCode::Char('h') | KeyCode::Left => {
-                self.overlays.effect_chain.add.focus = self.overlays.effect_chain.add.focus.prev();
-                return;
-            }
-            KeyCode::Char('l') | KeyCode::Right => {
-                self.overlays.effect_chain.add.focus = self.overlays.effect_chain.add.focus.next();
-                return;
-            }
-            KeyCode::Char('/') => {
-                self.overlays.effect_chain.add.begin_filter();
-                return;
-            }
-            KeyCode::Char(' ') => {
-                self.preview_effect_chain_add_candidate(None);
-                return;
-            }
-            KeyCode::Char('b') => {
-                self.preview_effect_chain_add_candidate_bypassed();
-                return;
-            }
-            KeyCode::Char('r') => {
-                if self.overlays.effect_chain.add.random_jump_list() {
-                    self.preview_effect_chain_add_candidate(None);
-                }
-                return;
-            }
-            _ => {}
-        }
-
-        let delta = match key.code {
-            KeyCode::Char('j') | KeyCode::Down => Some(1),
-            KeyCode::Char('k') | KeyCode::Up => Some(-1),
-            KeyCode::PageDown => Some(PAGE_STEP),
-            KeyCode::PageUp => Some(-PAGE_STEP),
-            KeyCode::Home => Some(isize::MIN),
-            KeyCode::End => Some(isize::MAX),
-            _ => None,
-        };
-        if let Some(delta) = delta {
-            let add = &self.overlays.effect_chain.add;
-            let candidate_before = add.list.get(add.list_cursor).copied();
-            match self.overlays.effect_chain.add.focus {
-                EffectAddPane::Categories => {
-                    let len = self.overlays.effect_chain.add.categories.len();
-                    self.overlays.effect_chain.add.category_cursor =
-                        clamped_index(self.overlays.effect_chain.add.category_cursor, delta, len);
-                    if let Some(catalog) = self.effect_plugins.catalog() {
-                        self.overlays.effect_chain.add.rebuild_kinds(catalog);
-                    }
-                }
-                EffectAddPane::Kinds => {
-                    let len = self.overlays.effect_chain.add.kinds.len();
-                    self.overlays.effect_chain.add.kind_cursor =
-                        clamped_index(self.overlays.effect_chain.add.kind_cursor, delta, len);
-                    if let Some(catalog) = self.effect_plugins.catalog() {
-                        self.overlays.effect_chain.add.rebuild_list(catalog);
-                    }
-                }
-                EffectAddPane::List => {
-                    let len = self.overlays.effect_chain.add.list.len();
-                    self.overlays.effect_chain.add.list_cursor =
-                        clamped_index(self.overlays.effect_chain.add.list_cursor, delta, len);
-                }
-            }
-            let add = &self.overlays.effect_chain.add;
-            if add.list.get(add.list_cursor).copied() != candidate_before {
-                self.preview_effect_chain_add_candidate(Some(delta));
-            }
-            return;
-        }
-
-        if key.code == KeyCode::Enter {
-            let add = &self.overlays.effect_chain.add;
-            let Some(preset_index) = add.list.get(add.list_cursor).copied() else {
-                return;
-            };
-            let stage = self
-                .effect_plugins
-                .catalog()
-                .and_then(|catalog| catalog.presets().get(preset_index))
-                .map(cmrt_core::AudioEffectPreset::json_element);
-            if let Some(stage) = stage {
-                match self.overlays.effect_chain.add.replace_target {
-                    Some(index) => self.overlays.effect_chain.replace_stage(index, stage),
-                    None => self.overlays.effect_chain.push_stage(stage),
-                }
-            }
-            self.mode = DawMode::EffectChain;
-        }
-    }
-
-    /// list の絞り込み編集中のキー処理。`Esc` で編集前の query へ戻す、`Enter` で確定、
-    /// それ以外は textarea へ渡して list を更新する（他のキーは selector に渡さない）。
-    fn handle_effect_chain_add_filter_input(&mut self, key: KeyEvent) {
-        cmrt_tui_core::text_input::sync_single_line_textarea(
-            &mut self.overlays.effect_chain.add.query_textarea,
-            &self.overlays.effect_chain.add.query,
-        );
-        match key.code {
-            KeyCode::Esc => {
-                if let Some(catalog) = self.effect_plugins.catalog() {
-                    self.overlays.effect_chain.add.cancel_filter(catalog);
-                } else {
-                    self.overlays.effect_chain.add.filter_active = false;
-                }
-            }
-            KeyCode::Enter => {
-                self.overlays.effect_chain.add.filter_active = false;
-            }
-            _ => {
-                if cmrt_tui_core::text_input::apply_key_event_to_textarea(
-                    &mut self.overlays.effect_chain.add.query_textarea,
-                    key,
-                ) {
-                    self.overlays.effect_chain.add.query =
-                        cmrt_tui_core::text_input::textarea_value(
-                            &self.overlays.effect_chain.add.query_textarea,
-                        );
-                    let add = &self.overlays.effect_chain.add;
-                    let candidate_before = add.list.get(add.list_cursor).copied();
-                    if let Some(catalog) = self.effect_plugins.catalog() {
-                        self.overlays.effect_chain.add.rebuild_list(catalog);
-                    }
-                    let add = &self.overlays.effect_chain.add;
-                    if add.list.get(add.list_cursor).copied() != candidate_before {
-                        self.preview_effect_chain_add_candidate(None);
-                    }
-                }
-            }
+            AddKeyAction::PreviewBypassed => self.preview_effect_chain_add_candidate_bypassed(),
         }
     }
 
@@ -282,7 +101,7 @@ impl DawApp {
         let track = self.overlays.effect_chain.track;
         let next_init = crate::mml::effect_chain::init_cell_with_effect_chain(
             &self.editor.data[track][INIT_MEASURE],
-            &self.overlays.effect_chain.chain,
+            &self.overlays.effect_chain.editor.chain,
         );
         if self.commit_insert_cell(track, INIT_MEASURE, &next_init) {
             self.save();
@@ -290,7 +109,7 @@ impl DawApp {
             self.append_log_line(format!(
                 "effect chain: {} を {} 段にした",
                 crate::tracks::track_label(track),
-                self.overlays.effect_chain.chain.len()
+                self.overlays.effect_chain.editor.chain.len()
             ));
         }
         self.mode = DawMode::Normal;

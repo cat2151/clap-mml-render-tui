@@ -33,8 +33,8 @@ pub(crate) const HELP_ROWS: [&str; 24] = [
     "                 弦は、1 本で押さえる幅が 4 半音を超えたら次の弦へ移るとみなす",
     " b              raw(KS なし) を演奏",
     " space          Articulated(KS あり) を演奏",
-    " i              MML 入力開始",
-    " q              アプリを終了",
+    " x              effect chain を編集(ギターアンプは a → kind の Amp Simulator)",
+    " i / q          MML 入力開始 / アプリを終了",
     "",
     " ? / Esc        このヘルプを開く / 閉じる   Ctrl+G  画面切替メニュー",
 ];

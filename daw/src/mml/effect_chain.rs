@@ -3,7 +3,7 @@
 //! chain の中身は解釈しない（キーの意味は play server の catalog が持つ）。
 //! DAW は配列の要素を値のまま出し入れするだけ。
 
-use cmrt_core::{AudioEffectCatalog, EFFECT_CHAIN_JSON_KEY, EFFECT_STAGE_BYPASS_JSON_KEY};
+use cmrt_core::{AudioEffectCatalog, EFFECT_CHAIN_JSON_KEY};
 use cmrt_patch_select::auto_reverb::{HostChain, AUTO_REVERB_JSON_KEY, MANUAL_REVERB_JSON_KEY};
 use serde_json::{Map, Value};
 
@@ -57,27 +57,6 @@ pub(crate) fn init_cell_with_host_chain(
         return init_cell.to_string();
     }
     init_cell_with_json_values(init_cell, &entries)
-}
-
-/// chain の 1 段が bypass されているか（`EFFECT_STAGE_BYPASS_JSON_KEY` が `true`）。
-pub(crate) fn stage_is_bypassed(stage: &Value) -> bool {
-    stage
-        .as_object()
-        .and_then(|object| object.get(EFFECT_STAGE_BYPASS_JSON_KEY))
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-}
-
-/// chain の 1 段に bypass を付け外しした値を返す。plugin を決めるキーは触らない。
-/// `bypass` は `false` にするとキーごと消す（付いていないのと同じ形に戻す）。
-pub(crate) fn stage_with_bypass(stage: &Value, bypass: bool) -> Value {
-    let mut object = stage.as_object().cloned().unwrap_or_default();
-    if bypass {
-        object.insert(EFFECT_STAGE_BYPASS_JSON_KEY.to_string(), Value::Bool(true));
-    } else {
-        object.remove(EFFECT_STAGE_BYPASS_JSON_KEY);
-    }
-    Value::Object(object)
 }
 
 #[cfg(test)]

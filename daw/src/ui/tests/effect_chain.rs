@@ -58,8 +58,8 @@ fn draw_shows_effect_chain_overlay_with_instrument_stages_and_add_list() {
     assert!(!app.uses_textarea_cursor());
 
     app.mode = DawMode::EffectChainAdd;
-    app.overlays.effect_chain.add =
-        crate::overlays::DawEffectAddState::open(app.effect_plugins.catalog().unwrap());
+    app.overlays.effect_chain.editor.add =
+        cmrt_effect_chain_select::EffectAddState::open(app.effect_plugins.catalog().unwrap());
     let add = render_lines(&app, 120, 30).join("\n");
     assert!(add.contains("add preset"), "screen:\n{add}");
     assert!(add.contains("category"), "screen:\n{add}");
@@ -107,9 +107,9 @@ fn draw_shows_the_query_editing_hint_and_uses_the_textarea_cursor_while_filterin
         AudioEffectCatalog::with_entries(vec![plugin], vec![preset]),
     );
     app.mode = DawMode::EffectChainAdd;
-    app.overlays.effect_chain.add =
-        crate::overlays::DawEffectAddState::open(app.effect_plugins.catalog().unwrap());
-    app.overlays.effect_chain.add.begin_filter();
+    app.overlays.effect_chain.editor.add =
+        cmrt_effect_chain_select::EffectAddState::open(app.effect_plugins.catalog().unwrap());
+    app.overlays.effect_chain.editor.add.begin_filter();
 
     let screen = render_lines(&app, 120, 30).join("\n");
     assert!(
@@ -146,8 +146,8 @@ fn add_list_keeps_the_cursor_inside_the_scroll_margin_and_remembers_the_offset()
         AudioEffectCatalog::with_entries(vec![plugin], presets),
     );
     app.mode = DawMode::EffectChainAdd;
-    app.overlays.effect_chain.add =
-        crate::overlays::DawEffectAddState::open(app.effect_plugins.catalog().unwrap());
+    app.overlays.effect_chain.editor.add =
+        cmrt_effect_chain_select::EffectAddState::open(app.effect_plugins.catalog().unwrap());
 
     let visible_range = |app: &DawApp| {
         let screen = render_lines(app, 120, 30).join("\n");
@@ -161,7 +161,7 @@ fn add_list_keeps_the_cursor_inside_the_scroll_margin_and_remembers_the_offset()
     };
 
     // 下へ大きく動かすと、カーソルの下に余白ぶんの行が残る位置まで scroll する。
-    app.overlays.effect_chain.add.list_cursor = 40;
+    app.overlays.effect_chain.editor.add.list_cursor = 40;
     let (first, last) = visible_range(&app);
     assert!(first <= 40 && 40 <= last, "visible {first}..={last}");
     let rows = last - first + 1;
@@ -170,11 +170,11 @@ fn add_list_keeps_the_cursor_inside_the_scroll_margin_and_remembers_the_offset()
     assert_eq!(last - 40, margin, "visible {first}..={last}");
 
     // 余白の内側へ戻るだけの移動では表示先頭を動かさない。
-    app.overlays.effect_chain.add.list_cursor = 38;
+    app.overlays.effect_chain.editor.add.list_cursor = 38;
     assert_eq!(visible_range(&app), (first, last));
 
     // 上の余白を越えると、カーソルの上に余白ぶんの行が残る位置まで scroll する。
-    app.overlays.effect_chain.add.list_cursor = 20;
+    app.overlays.effect_chain.editor.add.list_cursor = 20;
     let (first, _) = visible_range(&app);
     assert_eq!(20 - first, margin);
 }

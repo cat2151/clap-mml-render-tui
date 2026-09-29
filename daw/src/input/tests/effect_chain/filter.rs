@@ -4,6 +4,7 @@ fn add_list_names(app: &DawApp) -> Vec<String> {
     let catalog = app.effect_plugins.catalog().unwrap();
     app.overlays
         .effect_chain
+        .editor
         .add
         .list
         .iter()
@@ -28,7 +29,7 @@ fn slash_query_filters_the_list_by_kind_and_enter_confirms() {
         ],
     );
 
-    assert!(!app.overlays.effect_chain.add.filter_active);
+    assert!(!app.overlays.effect_chain.editor.add.filter_active);
     assert_eq!(add_list_names(&app), vec!["Reverb 2/Room"]);
 }
 
@@ -50,7 +51,7 @@ fn slash_query_matches_the_kind_name() {
         ],
     );
 
-    assert!(!app.overlays.effect_chain.add.filter_active);
+    assert!(!app.overlays.effect_chain.editor.add.filter_active);
     assert_eq!(add_list_names(&app), vec!["Delay/Echo"]);
 }
 
@@ -73,7 +74,7 @@ fn clearing_the_query_and_enter_restores_the_full_list() {
         ],
     );
 
-    assert_eq!(app.overlays.effect_chain.add.query, "");
+    assert_eq!(app.overlays.effect_chain.editor.add.query, "");
     assert_eq!(add_list_names(&app).len(), 3);
 }
 
@@ -81,7 +82,7 @@ fn clearing_the_query_and_enter_restores_the_full_list() {
 fn esc_while_editing_the_query_restores_the_list_from_before_editing() {
     let (mut app, _cache_rx) = app_with_catalog();
     press(&mut app, &[KeyCode::Char('x'), KeyCode::Char('a')]);
-    let before = app.overlays.effect_chain.add.list.clone();
+    let before = app.overlays.effect_chain.editor.add.list.clone();
 
     press(
         &mut app,
@@ -94,31 +95,31 @@ fn esc_while_editing_the_query_restores_the_list_from_before_editing() {
         ],
     );
 
-    assert!(!app.overlays.effect_chain.add.filter_active);
-    assert_eq!(app.overlays.effect_chain.add.query, "");
-    assert_eq!(app.overlays.effect_chain.add.list, before);
+    assert!(!app.overlays.effect_chain.editor.add.filter_active);
+    assert_eq!(app.overlays.effect_chain.editor.add.query, "");
+    assert_eq!(app.overlays.effect_chain.editor.add.list, before);
 }
 
 #[test]
 fn typing_j_while_editing_the_query_goes_to_the_textarea_and_the_list_cursor_stays() {
     let (mut app, _cache_rx) = app_with_catalog();
     press(&mut app, &[KeyCode::Char('x'), KeyCode::Char('a')]);
-    app.overlays.effect_chain.add.list_cursor = 0;
+    app.overlays.effect_chain.editor.add.list_cursor = 0;
 
     press(&mut app, &[KeyCode::Char('/'), KeyCode::Char('j')]);
 
-    assert_eq!(app.overlays.effect_chain.add.list_cursor, 0);
-    assert_eq!(app.overlays.effect_chain.add.query, "j");
+    assert_eq!(app.overlays.effect_chain.editor.add.list_cursor, 0);
+    assert_eq!(app.overlays.effect_chain.editor.add.query, "j");
 }
 
 #[test]
 fn an_invalid_regex_query_keeps_the_previous_list_instead_of_emptying_it() {
     let (mut app, _cache_rx) = app_with_catalog();
     press(&mut app, &[KeyCode::Char('x'), KeyCode::Char('a')]);
-    let before = app.overlays.effect_chain.add.list.clone();
+    let before = app.overlays.effect_chain.editor.add.list.clone();
 
     press(&mut app, &[KeyCode::Char('/'), KeyCode::Char('(')]);
 
-    assert_eq!(app.overlays.effect_chain.add.query, "(");
-    assert_eq!(app.overlays.effect_chain.add.list, before);
+    assert_eq!(app.overlays.effect_chain.editor.add.query, "(");
+    assert_eq!(app.overlays.effect_chain.editor.add.list, before);
 }

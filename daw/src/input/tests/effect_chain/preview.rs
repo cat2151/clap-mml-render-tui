@@ -22,7 +22,7 @@ fn space_previews_the_bypass_reflecting_chain_on_the_overlay_track_only() {
         json!([{"Test FX preset": "Reverb 1/Hall", "bypass": true}])
     );
 
-    let chain = app.overlays.effect_chain.chain.clone();
+    let chain = app.overlays.effect_chain.editor.chain.clone();
     let (_, track_mmls) = app.effect_chain_preview_track_mmls(&chain);
     let (_, phrase) = DawApp::extract_patch_json_and_phrase(&track_mmls[2]).unwrap();
     assert_eq!(phrase, "cdef");
@@ -42,13 +42,13 @@ fn space_in_the_add_overlay_previews_chain_plus_cursor_preset_without_committing
     app.editor.data[2][0] = INIT_WITH_HALL.to_string();
 
     press(&mut app, &[KeyCode::Char('x'), KeyCode::Char('a')]);
-    assert_eq!(app.overlays.effect_chain.add.list_cursor, 0);
+    assert_eq!(app.overlays.effect_chain.editor.add.list_cursor, 0);
     wait_for_live_line(&sink, 1);
     press(&mut app, &[KeyCode::Char(' ')]);
 
     assert!(matches!(app.mode, DawMode::EffectChainAdd));
     // 追加 overlay の Space は state.chain を変えない。
-    assert_eq!(app.overlays.effect_chain.chain.len(), 1);
+    assert_eq!(app.overlays.effect_chain.editor.chain.len(), 1);
     assert_eq!(
         live_chain(&wait_for_live_line(&sink, 2)),
         json!([
@@ -106,7 +106,7 @@ fn space_previews_the_chord_generated_phrase_when_the_cell_is_empty() {
     app.editor.data[2][1] = String::new();
 
     press(&mut app, &[KeyCode::Char('x')]);
-    let chain = app.overlays.effect_chain.chain.clone();
+    let chain = app.overlays.effect_chain.editor.chain.clone();
     let (_, track_mmls) = app.effect_chain_preview_track_mmls(&chain);
 
     let expected =
@@ -180,7 +180,7 @@ fn add_overlay_previews_on_open_and_when_the_cursor_changes_the_candidate() {
     assert_no_more_live_lines(&sink, 1);
 
     // state.chain は Enter まで変わらない。
-    assert_eq!(app.overlays.effect_chain.chain.len(), 1);
+    assert_eq!(app.overlays.effect_chain.editor.chain.len(), 1);
 }
 
 /// `h`/`l`（pane 切替）と、端で止まる `k` は候補を変えないので鳴らし直さない。

@@ -26,11 +26,12 @@ mod matrix;
 mod tests;
 
 const KEYBIND_TEXT: &str =
-    " h/l:列移動  a:H/P切替  e:eco  s:auto  b:raw  space:Articulated  i:MML入力  q:終了  ?:help";
+    " h/l:列移動  a:H/P切替  e:eco  s:auto  b:raw  space:Articulated  x:effect  i:MML  q:終了  ?:help";
 const INPUT_HINT_TEXT: &str = " MML を編集中  Enter:確定して演奏  Esc:matrix 操作へ  ?:help";
 const MML_TITLE: &str = " MML ";
 const MML_PLACEHOLDER: &str = "o3 l8 e f+ g";
 const MATRIX_TITLE: &str = " 音 / ルール ";
+const INSTRUMENT: &str = "METAL-GTX Full";
 /// 入力欄（枠込み）の高さ。
 const INPUT_HEIGHT: u16 = 3;
 /// イベント列の pane に最低限残す高さ（枠込み）。matrix が高くてもこれだけは残す。
@@ -49,7 +50,7 @@ pub(crate) fn layout_for(
     area: Rect,
     screen: &GuitarArticulationScreen,
 ) -> GuitarArticulationLayout {
-    let inner = screen_block().inner(area);
+    let inner = screen_block(String::new()).inner(area);
     let matrix_height = matrix::height(screen) + 2;
     let rows = Layout::vertical([
         Constraint::Length(INPUT_HEIGHT),
@@ -69,10 +70,10 @@ pub(crate) fn layout_for(
     }
 }
 
-fn screen_block() -> Block<'static> {
+fn screen_block(title: String) -> Block<'static> {
     Block::default()
         .borders(Borders::ALL)
-        .title(" Guitar Articulation  METAL-GTX Full ")
+        .title(title)
         .style(base_style())
         .border_style(base_style().fg(MONOKAI_GRAY))
 }
@@ -93,7 +94,7 @@ fn focused_pane_block(title: &'static str) -> Block<'static> {
 pub fn draw(screen: &GuitarArticulationScreen, f: &mut Frame<'_>) {
     draw_frame_background(f);
     let layout = layout_for(f.area(), screen);
-    f.render_widget(screen_block(), f.area());
+    f.render_widget(screen_block(screen_title(screen)), f.area());
     draw_input(f, layout.input, screen);
     let matrix_block = if screen.input_open() {
         pane_block(MATRIX_TITLE)
@@ -117,9 +118,37 @@ pub fn draw(screen: &GuitarArticulationScreen, f: &mut Frame<'_>) {
         Paragraph::new(status_line(screen)).style(base_style()),
         layout.status,
     );
+    if let Some((editor, adding)) = screen.effect_overlay() {
+        cmrt_effect_chain_select::draw(
+            f,
+            f.area(),
+            editor,
+            screen.effect_catalog(),
+            cmrt_effect_chain_select::EffectChainView {
+                adding,
+                header: Line::from(format!("instrument: {INSTRUMENT}")),
+                error: None,
+            },
+        );
+    }
     if screen.help_open() {
         help::draw_overlay(f);
     }
+}
+
+/// 音色の後ろに、確定済みの chain を信号の順に並べる。
+fn screen_title(screen: &GuitarArticulationScreen) -> String {
+    let mut title = format!(" Guitar Articulation  {INSTRUMENT}");
+    // 空の chain で catalog を引くと、未走査のときに描画が走査を待ってしまう。
+    if !screen.effect_chain().is_empty() {
+        let catalog = screen.effect_catalog();
+        for stage in screen.effect_chain() {
+            title.push_str(" → ");
+            title.push_str(&cmrt_effect_chain_select::stage_label(stage, catalog));
+        }
+    }
+    title.push(' ');
+    title
 }
 
 fn draw_input(f: &mut Frame<'_>, area: Rect, screen: &GuitarArticulationScreen) {

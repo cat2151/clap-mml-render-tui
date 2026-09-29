@@ -10,6 +10,7 @@ test-support = []
 
 [dependencies]
 cmrt-chord = { path = "../chord" }
+cmrt-effect-chain-select = { path = "../effect-chain-select" }
 cmrt-history = { path = "../history" }
 cmrt-mml-overlay = { path = "../mml-overlay" }
 cmrt-patch-select = { path = "../patch-select" }

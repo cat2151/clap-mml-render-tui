@@ -14,6 +14,8 @@ mod strings;
 pub mod ui;
 
 #[cfg(test)]
+mod test_effects;
+#[cfg(test)]
 mod tests;
 
 use std::collections::{BTreeMap, BTreeSet};

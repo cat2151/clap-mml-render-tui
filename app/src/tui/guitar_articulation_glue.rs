@@ -2,10 +2,11 @@
 //!
 //! 画面ロジック（状態・キー処理・描画・変換）は `cmrt-guitar-articulation` crate に閉じている。
 //! 音を鳴らす手段（`MmlOverlaySender`）を持つのは app 側なので、画面が返した
-//! 「この版を鳴らしてほしい」をここで `play_line` へ渡す。
+//! 「この版を・この effect chain で鳴らしてほしい」をここで `play_line` へ渡す。
 
 use crossterm::event::KeyEvent;
 
+use cmrt_effect_chain_select::chain_json;
 use cmrt_mml_overlay::line_play::{LinePerformance, LineProgram};
 use cmrt_mml_overlay::LivePatch;
 
@@ -21,17 +22,23 @@ impl TuiApp<'_> {
         key: KeyEvent,
     ) -> GuitarArticulationAction {
         let action = self.guitar_articulation.handle_key_event(key);
-        match action {
-            GuitarArticulationAction::Play(take) => self.play_guitar_articulation(take),
+        match &action {
+            GuitarArticulationAction::Play(take) => {
+                let effect_chain = chain_json(self.guitar_articulation.effect_chain());
+                self.play_guitar_articulation(*take, &effect_chain);
+            }
+            GuitarArticulationAction::PreviewEffectChain(chain) => {
+                self.play_guitar_articulation(Take::Converted, &chain_json(chain));
+            }
             GuitarArticulationAction::Quit => self.stop_guitar_articulation(),
             GuitarArticulationAction::Continue => {}
         }
         action
     }
 
-    /// その版のイベント列を、MIDI filter を通さず 1 回だけ鳴らす。
+    /// その版のイベント列を、MIDI filter を通さず `effect_chain` を掛けて 1 回だけ鳴らす。
     /// 前の演奏を止めるのは sender の責務（`play_line` は鳴っているものを止めてから積む）。
-    fn play_guitar_articulation(&mut self, take: Take) {
+    fn play_guitar_articulation(&mut self, take: Take, effect_chain: &str) {
         let events = self.guitar_articulation.events(take).to_vec();
         crate::logging::global_log_sink(&play_log_line(
             take,
@@ -43,7 +50,7 @@ impl TuiApp<'_> {
         if let Some(sender) = &self.mml_overlay_sender {
             let loop_seconds = events.last().map_or(0.0, |event| event.seconds);
             sender.play_line(
-                LivePatch::new(Some(PATCH)),
+                LivePatch::with_effect_chain(Some(PATCH), effect_chain),
                 LineProgram::once(LinePerformance {
                     events,
                     loop_seconds,
@@ -59,11 +66,12 @@ impl TuiApp<'_> {
         crate::logging::global_log_sink(&format!(
             "guitar-articulation: event=prepare patch={PATCH:?}"
         ));
+        let effect_chain = chain_json(self.guitar_articulation.effect_chain());
         if let Some(sender) = &self.mml_overlay_sender {
-            sender.prepare(LivePatch::new(Some(PATCH)));
+            sender.prepare(LivePatch::with_effect_chain(Some(PATCH), &effect_chain));
         }
         if let GuitarArticulationAction::Play(take) = self.guitar_articulation.enter() {
-            self.play_guitar_articulation(take);
+            self.play_guitar_articulation(take, &effect_chain);
         }
     }
 

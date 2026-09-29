@@ -42,25 +42,25 @@ fn alt_down_swaps_the_stage_with_the_next_one_and_the_cursor_follows() {
     app.handle_effect_chain(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT));
 
     assert_eq!(
-        app.overlays.effect_chain.chain,
+        app.overlays.effect_chain.editor.chain,
         vec![
             json!({"Test FX preset": "Reverb 2/Room"}),
             json!({"Test FX preset": "Reverb 1/Hall"}),
         ]
     );
-    assert_eq!(app.overlays.effect_chain.cursor, 1);
+    assert_eq!(app.overlays.effect_chain.editor.cursor, 1);
 
     // 末尾での Alt+Down は無変化。
     app.handle_effect_chain(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT));
 
     assert_eq!(
-        app.overlays.effect_chain.chain,
+        app.overlays.effect_chain.editor.chain,
         vec![
             json!({"Test FX preset": "Reverb 2/Room"}),
             json!({"Test FX preset": "Reverb 1/Hall"}),
         ]
     );
-    assert_eq!(app.overlays.effect_chain.cursor, 1);
+    assert_eq!(app.overlays.effect_chain.editor.cursor, 1);
 }
 
 #[test]
@@ -70,11 +70,11 @@ fn page_down_home_end_move_the_cursor_across_three_stages() {
     app.handle_normal(KeyCode::Char('x'));
 
     app.handle_effect_chain(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE));
-    assert_eq!(app.overlays.effect_chain.cursor, 2);
+    assert_eq!(app.overlays.effect_chain.editor.cursor, 2);
 
     app.handle_effect_chain(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
-    assert_eq!(app.overlays.effect_chain.cursor, 0);
+    assert_eq!(app.overlays.effect_chain.editor.cursor, 0);
 
     app.handle_effect_chain(KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
-    assert_eq!(app.overlays.effect_chain.cursor, 2);
+    assert_eq!(app.overlays.effect_chain.editor.cursor, 2);
 }

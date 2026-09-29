@@ -33,12 +33,11 @@ const STANDBY_ACTION: &str = "shm-standby-patch-prepare";
 
 /// 完了通知を諦めるまでの時間。
 ///
-/// 実測の重い patch load は 3 秒前後（Surge の cold は 3.2 秒）。プラグインを
-/// またぐ差し替えや予備インスタンスの背景生成待ちが重なるともう少し伸びる。
+/// HDD 上の大型 SFZ は、file cache が冷えていると load が 60 秒を超える。
 /// **ここで待ちたいのではなく、サーバーが黙って死んだときに Loading 表示を
 /// 畳むための最後の安全弁**なので、実運用より充分長く取る。
 /// サーバーが落ちたと分かる場合は timeout を待たず `ServerStopped` で畳まれる。
-pub const STANDBY_LOAD_TIMEOUT: Duration = Duration::from_secs(60);
+pub const STANDBY_LOAD_TIMEOUT: Duration = Duration::from_secs(300);
 
 /// 先読み 1 件の受付票。
 ///

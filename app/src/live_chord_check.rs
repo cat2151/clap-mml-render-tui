@@ -23,7 +23,8 @@ use cmrt_runtime::Config;
 const CAPTURE_PATH_ENV: &str = "CMRT_LIVE_CAPTURE_WAV";
 const CAPTURE_SECONDS_ENV: &str = "CMRT_LIVE_CAPTURE_SECONDS";
 const CAPTURE_MIN_SECONDS_ENV: &str = "CMRT_LIVE_CAPTURE_MIN_SECONDS";
-const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
+/// 音色の準備を兼ねる送信を待つので、IPC の音色ロードの上限（300 秒）より短くしない。
+const COMMAND_TIMEOUT: Duration = Duration::from_secs(300);
 const CAPTURE_TIMEOUT: Duration = Duration::from_secs(10);
 const SILENCE_PEAK: f32 = 1.0e-6;
 

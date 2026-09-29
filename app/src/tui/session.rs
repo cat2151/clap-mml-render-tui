@@ -207,6 +207,7 @@ impl<'a> TuiApp<'a> {
         let catalog_notes = Vec::new();
         let notepad_effect_plugins = effect_plugins.clone();
         let grid_effect_plugins = effect_plugins.clone();
+        let guitar_effect_plugins = effect_plugins.clone();
 
         Self {
             active_screen,
@@ -278,7 +279,10 @@ impl<'a> TuiApp<'a> {
             // preview はまだ 1 度も鳴らしていない。
             chord_chart_preview_command_id: None,
             deferred_chord_chart_preview: None,
-            guitar_articulation: Default::default(),
+            guitar_articulation:
+                super::guitar_articulation::GuitarArticulationScreen::with_effect_plugins(
+                    guitar_effect_plugins,
+                ),
             grid_history_preview: crate::daw::DawGridPreviewPlayer::new(Arc::clone(&cfg_arc)),
             mml_overlay: {
                 let mut overlay = super::mml_overlay::MmlOverlay::default();
