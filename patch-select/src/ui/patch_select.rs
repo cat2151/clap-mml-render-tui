@@ -3,13 +3,12 @@
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Style,
-    text::Line,
+    text::{Line, Span},
     widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Table, TableState, Wrap},
     Frame,
 };
 
 use cmrt_tui_core::{
-    patch_load::PatchLoadMeasurement,
     status::{base_style, LIST_HIGHLIGHT_SYMBOL},
     text_input::{
         build_query_textarea_widget, single_line_textarea_cursor_position, textarea_value,
@@ -21,22 +20,29 @@ use cmrt_tui_core::{
 use super::{auto_reverb, plugin_menu};
 use crate::patch_select::{PatchSelect, PatchSelectFocus};
 use crate::PatchCatalogEntry;
+pub use measurement_columns::load_time_label;
+use measurement_columns::sample_size_cell;
+#[cfg(test)]
+use measurement_columns::{format_load_time, sample_size_label};
+
+mod measurement_columns;
 
 const QUERY_PLACEHOLDER: &str = r"例: warm pad|strings";
 /// 絞り込み欄の高さ（枠2行 + 入力1行）。
 const QUERY_HEIGHT: u16 = 3;
 const CATEGORY_COLUMN_WIDTH: u16 = 12;
+const SIZE_COLUMN_WIDTH: u16 = 6;
 const LOAD_COLUMN_WIDTH: u16 = 7;
 const FAVORITE_COLUMN_WIDTH: u16 = 2;
 const FAVORITE_MARK: &str = "★";
-const MARKER_COLUMN_WIDTH: u16 = 2;
+const MARKER_COLUMN_WIDTH: u16 = 4;
 /// 選択行の上下に残す viewport の割合。10行なら上下3行を見せる。
 const SCROLL_MARGIN_PERCENT: usize = 30;
 
 /// 描画の出し分け。既定は画面中央のモーダルとして描くときの見え方。
 pub struct PatchSelectDrawOptions<'f> {
     /// 音色行の先頭に付ける印を音色名から返す。`None` なら印の列を作らない。
-    pub patch_marker: Option<&'f dyn Fn(&str) -> &'static str>,
+    pub patch_marker: Option<&'f dyn Fn(&str) -> Span<'static>>,
     /// Regex 欄の title に `S:演奏設定` を出すか。演奏設定を開けない host は `false`。
     pub show_play_settings_hint: bool,
 }
@@ -288,18 +294,19 @@ fn draw_list(
         .filtered()
         .enumerate()
         .map(|(index, patch)| {
-            let mut cells = Vec::with_capacity(5);
+            let mut cells = Vec::with_capacity(6);
             if let Some(marker) = marker {
                 let mark = if marked_rows.contains(&index) {
                     marker(patch.display())
                 } else {
-                    ""
+                    Span::raw("")
                 };
                 cells.push(Cell::from(mark));
             }
             cells.push(Cell::from(favorite_mark(select, patch.display())));
             cells.push(Cell::from(patch.selector_category().unwrap_or("")));
             cells.push(Cell::from(patch_label(patch)));
+            cells.push(sample_size_cell(select.load_measurement(patch.display())));
             cells.push(Cell::from(
                 Line::from(load_label(select, patch.display())).alignment(Alignment::Right),
             ));
@@ -307,8 +314,8 @@ fn draw_list(
         })
         .collect::<Vec<_>>();
     state.select((!rows.is_empty()).then_some(select.cursor()));
-    let mut widths = Vec::with_capacity(5);
-    let mut header = Vec::with_capacity(5);
+    let mut widths = Vec::with_capacity(6);
+    let mut header = Vec::with_capacity(6);
     if marker.is_some() {
         widths.push(Constraint::Length(MARKER_COLUMN_WIDTH));
         header.push(Cell::from(""));
@@ -317,19 +324,22 @@ fn draw_list(
         Constraint::Length(FAVORITE_COLUMN_WIDTH),
         Constraint::Length(CATEGORY_COLUMN_WIDTH),
         Constraint::Fill(1),
+        Constraint::Length(SIZE_COLUMN_WIDTH),
         Constraint::Length(LOAD_COLUMN_WIDTH),
     ]);
     header.extend([
         Cell::from(FAVORITE_MARK),
         Cell::from("Category"),
         Cell::from("Patch"),
+        Cell::from(Line::from("Size").alignment(Alignment::Right)),
         Cell::from(Line::from("Load").alignment(Alignment::Right)),
     ]);
     frame.render_stateful_widget(
         Table::new(rows, widths)
             .header(Row::new(header))
             .block(block)
-            .row_highlight_style(cursor_highlight_style(Style::default().fg(MONOKAI_FG)))
+            // 文字色は上書きしない。カーソル行でも重い音色の Size 列の色を残すため。
+            .row_highlight_style(cursor_highlight_style(Style::default()))
             .highlight_symbol(LIST_HIGHLIGHT_SYMBOL),
         area,
         &mut state,
@@ -392,21 +402,6 @@ pub fn scroll_offset(
 
 fn load_label(select: &PatchSelect<'_>, patch: &str) -> String {
     load_time_label(select.load_measurement(patch))
-}
-
-/// Load 列の表記。2 回目の読み込み時間を短く出し、未計測なら `-`。
-pub fn load_time_label(measurement: Option<&PatchLoadMeasurement>) -> String {
-    measurement
-        .and_then(|measurement| measurement.second_load_ms)
-        .map_or_else(|| "-".to_string(), format_load_time)
-}
-
-fn format_load_time(milliseconds: u64) -> String {
-    match milliseconds {
-        0..=99 => format!("{milliseconds}ms"),
-        100..=999 => format!("0.{}s", milliseconds / 100),
-        _ => format!("{}s", milliseconds / 1_000),
-    }
 }
 
 fn list_title(select: &PatchSelect<'_>) -> String {

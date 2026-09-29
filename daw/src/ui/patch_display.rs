@@ -8,6 +8,7 @@
 
 use cmrt_patches::PatchRole;
 use cmrt_tui_core::patch_load::PatchCatalogSnapshot;
+use cmrt_tui_core::patches::patch_stem;
 
 use super::super::DawApp;
 
@@ -26,32 +27,6 @@ pub(super) const GENERATED_WITHOUT_DIRECTIVE: &str = "chord";
 /// 音色や role が読み取れないときに出す語。空欄にすると
 /// 「まだ読み込み中」なのか「列がずれている」のか見分けが付かない。
 pub(super) const MISSING: &str = "---";
-
-/// 表示パスの末尾要素から落とす拡張子。
-///
-/// **末尾のドット以降を無条件に落としてはいけない。** Dexed の音色名には
-/// `05 T.BL-EXPA` や `14 P.ICE 25.1` のようにドットを含むものが実在し、
-/// 無条件に落とすと名前が欠ける。既知の拡張子だけを対象にする。
-const PATCH_FILE_EXTENSIONS: [&str; 6] = ["fxp", "sfz", "ariax", "vvp", "syx", "floe-preset"];
-
-/// 表示パスの末尾要素から、既知の拡張子だけを落とした音色名。
-///
-/// - `patches_3rdparty/Dan Maurer/Winds/Reed To Pipe Morph.fxp` → `Reed To Pipe Morph`
-/// - `SynprezFM/SynprezFM_22.syx/05 SampleSqr2` → `05 SampleSqr2`
-pub(super) fn patch_stem(display: &str) -> &str {
-    let last = display.rsplit(['/', '\\']).next().unwrap_or(display).trim();
-    match last.rsplit_once('.') {
-        Some((stem, extension))
-            if !stem.is_empty()
-                && PATCH_FILE_EXTENSIONS
-                    .iter()
-                    .any(|known| known.eq_ignore_ascii_case(extension)) =>
-        {
-            stem
-        }
-        _ => last,
-    }
-}
 
 /// 保存された patch 名を、snapshot の表示名へ突き合わせてから role を引く。
 ///

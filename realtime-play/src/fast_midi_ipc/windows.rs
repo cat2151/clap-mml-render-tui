@@ -1,4 +1,9 @@
-use std::{ptr, sync::atomic::Ordering, sync::Arc, time::Instant};
+use std::{
+    ptr,
+    sync::atomic::Ordering,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use windows_sys::Win32::{
     Foundation::{WAIT_OBJECT_0, WAIT_TIMEOUT},
@@ -310,13 +315,17 @@ impl FastMidiClient {
         slot.effect_chain_len = chain_bytes.len() as u32;
         slot.effect_chain[..chain_bytes.len()].copy_from_slice(chain_bytes);
         self.push(slot)?;
-        let payload = self.wait_for_response(request_id)?;
+        let payload = self.wait_for_response(request_id, response_timeout(kind))?;
         Ok((request_id, payload))
     }
 
     /// 受付応答を待つ。server が落ちたら応答は永久に来ないので、その場で `ServerStopped`。
-    fn wait_for_response(&self, request_id: u32) -> Result<Vec<u8>, FastIpcError> {
-        let deadline = Instant::now() + RESPONSE_TIMEOUT;
+    fn wait_for_response(
+        &self,
+        request_id: u32,
+        timeout: Duration,
+    ) -> Result<Vec<u8>, FastIpcError> {
+        let deadline = Instant::now() + timeout;
         loop {
             if let Some(result) = self.read_response(request_id)? {
                 return result;

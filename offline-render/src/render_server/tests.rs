@@ -74,6 +74,46 @@ fn never_kill_mode_still_reuses_a_newer_generation() {
     assert_eq!(supervisor.restart_count_for_test(), 0);
 }
 
+fn drain_accepted_connections(listener: &TcpListener) -> usize {
+    let mut count = 0;
+    loop {
+        match listener.accept() {
+            Ok(_) => count += 1,
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => return count,
+            Err(error) => panic!("accept failed: {error}"),
+        }
+    }
+}
+
+#[test]
+fn ensure_started_probes_the_port_once_per_generation() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let supervisor = supervisor_for_listening_port(&listener);
+
+    let first = supervisor.ensure_started().unwrap();
+    let second = supervisor.ensure_started().unwrap();
+
+    assert_eq!(first, second);
+    assert_eq!(drain_accepted_connections(&listener), 1);
+    assert_eq!(supervisor.spawn_count_for_test(), 0);
+}
+
+#[test]
+fn ensure_started_probes_again_after_the_generation_changes() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let supervisor = supervisor_for_listening_port(&listener);
+    let generation = supervisor.ensure_started().unwrap();
+    assert_eq!(drain_accepted_connections(&listener), 1);
+
+    supervisor.set_generation_for_test(generation + 1);
+    let next = supervisor.ensure_started().unwrap();
+
+    assert_eq!(next, generation + 1);
+    assert_eq!(drain_accepted_connections(&listener), 1);
+}
+
 /// `config=` は子へ実際に渡したときだけ出す。shell command のときに出すと、
 /// 子が読んでいない config を読んだように見える。
 #[test]

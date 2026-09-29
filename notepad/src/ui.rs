@@ -15,7 +15,6 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
     Frame,
 };
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use cmrt_tui_core::sound_check_guide::SoundCheckGuidePresentation;
 use cmrt_tui_core::theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_YELLOW};
@@ -32,32 +31,20 @@ use status::{
 use cmrt_tui_core::status::LIST_HIGHLIGHT_SYMBOL;
 
 const LIST_HIGHLIGHT_WIDTH: u16 = 2;
-const TUI_RENDER_ANIM_FRAME_MS: u128 = 250;
-const TUI_RENDER_ANIM_FRAME_COUNT: u128 = 2;
+/// 経過秒の表示上限。印の幅（4 セル）に収める。
+const MAX_SHOWN_RENDER_SECS: u64 = 999;
 
-fn render_anim_frame() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        / TUI_RENDER_ANIM_FRAME_MS
-        % TUI_RENDER_ANIM_FRAME_COUNT
-}
-
-pub(crate) fn cache_marker(
-    cached: bool,
-    render_status: Option<TuiRenderJobStatus>,
-) -> &'static str {
+/// 行頭の印（幅 4 セル）。順番待ちは `待ち`、render 中は開始からの経過秒。
+pub(crate) fn cache_marker(cached: bool, render_status: Option<TuiRenderJobStatus>) -> String {
     if cached {
-        return "♪ ";
+        return "♪   ".to_string();
     }
     match render_status {
-        Some(TuiRenderJobStatus::Pending) => ". ",
-        Some(TuiRenderJobStatus::Running) => match render_anim_frame() {
-            0 => ". ",
-            _ => "..",
-        },
-        None => "  ",
+        Some(TuiRenderJobStatus::Pending) => "待ち".to_string(),
+        Some(TuiRenderJobStatus::Running { elapsed }) => {
+            format!("{:>3}s", elapsed.as_secs().min(MAX_SHOWN_RENDER_SECS))
+        }
+        None => "    ".to_string(),
     }
 }
 
@@ -153,10 +140,13 @@ fn draw_normal(
 ) {
     let is_insert = mode == Mode::Insert;
     let cursor = app.editor.cursor;
-    let status = normal_status_text(&mode, play_state);
+    let mut status = normal_status_text(&mode, play_state);
+    if app.patch_select_open_pending() {
+        status.push_str("  ⏳ 音色一覧を読み込み中（終わったら音色選択を開きます）");
+    }
     let render_status_snapshot = app.render_status_snapshot();
-    let render_status = render_status_text(render_status_snapshot);
-    let render_status_color = render_status_color(render_status_snapshot);
+    let render_status = render_status_text(&render_status_snapshot);
+    let render_status_color = render_status_color(&render_status_snapshot);
     let keybinds = keybind_text(&mode);
 
     let chunks = Layout::default()

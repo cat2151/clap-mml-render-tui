@@ -89,6 +89,7 @@ where
             second_load_ms,
             first_load_error,
             second_load_error,
+            ..PatchLoadMeasurement::default()
         };
         report(offset + 1, display, &measurement);
         measurements.insert(display.clone(), measurement);

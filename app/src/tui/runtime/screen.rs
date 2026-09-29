@@ -74,6 +74,8 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::ChordChart => {
                 !self.chord_chart.help_open && !self.chord_chart.line_input_open()
             }
+            // 入ると MML 欄が開いた状態で始まるので、入力中でも `Ctrl+G` で出られるようにする。
+            PrimaryScreen::GuitarArticulation => !self.guitar_articulation.help_open(),
         }
     }
 
@@ -122,6 +124,7 @@ impl<'a> TuiApp<'a> {
             // Chord/Bass が共有する layered timeline を明示的に止めてから、
             // MML overlay へ両 instance を明け渡す。
             PrimaryScreen::ChordChart => self.stop_chord_chart_preview(),
+            PrimaryScreen::GuitarArticulation => self.stop_guitar_articulation(),
             PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {}
         }
     }
@@ -138,7 +141,9 @@ impl<'a> TuiApp<'a> {
             // notepad と DAW は明示的に再生する画面なので、勝手に鳴らし始めない。
             // chord chart の preview はカーソルが動いたときだけ鳴るので、
             // オーバーレイを閉じた時点では鳴らし直さない。
+            // guitar articulation も `b` / `space` を押したときだけ鳴る。
             PrimaryScreen::ChordChart
+            | PrimaryScreen::GuitarArticulation
             | PrimaryScreen::Notepad
             | PrimaryScreen::DailyDaw
             | PrimaryScreen::Daw => {}
@@ -156,6 +161,7 @@ impl<'a> TuiApp<'a> {
                 // キーごとの保存を取りこぼしていたらここで拾う。
                 self.save_chord_chart();
             }
+            PrimaryScreen::GuitarArticulation => self.stop_guitar_articulation(),
             PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {}
         }
     }
@@ -200,6 +206,12 @@ impl<'a> TuiApp<'a> {
                 self.notepad.mode = Mode::Normal;
                 self.active_screen = PrimaryScreen::ChordChart;
                 self.enter_chord_chart();
+            }
+            // MML 欄を開いた状態で入る。MML が空（初回）なら既定の MML を入れて鳴らす。
+            PrimaryScreen::GuitarArticulation => {
+                self.notepad.mode = Mode::Normal;
+                self.active_screen = PrimaryScreen::GuitarArticulation;
+                self.enter_guitar_articulation();
             }
         }
     }

@@ -1,12 +1,21 @@
 use super::*;
 
 #[test]
-fn normal_screen_shows_active_parallel_render_count_in_purple() {
+fn normal_screen_shows_running_renders_in_purple() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.test_set_active_parallel_render_count(2);
+    app.test_set_render_job_status(
+        r#"{"Surge XT patch":"Brass/Brass 1.fxp"} c"#,
+        Some(crate::TuiRenderJobStatus::Running {
+            elapsed: std::time::Duration::ZERO,
+        }),
+    );
+    app.test_set_render_job_status(
+        r#"{"Surge XT patch":"sfz/Guitar/04-Guitar.sfz"} c"#,
+        Some(crate::TuiRenderJobStatus::Pending),
+    );
 
     let buffer = render_buffer(&mut app, 120, 9);
-    let (x, y) = find_text(&buffer, "render:");
+    let (x, y) = find_text(&buffer, "render");
 
     assert_eq!(buffer.cell((x, y)).unwrap().fg, MONOKAI_PURPLE);
 }
@@ -23,7 +32,7 @@ fn normal_screen_marks_cached_lines_with_music_note() {
 
     let screen = render_lines(&mut app, 80, 8).join("\n");
 
-    assert!(screen.contains("▶ ♪ abc"));
+    assert!(screen.contains("▶ ♪   abc"));
     assert!(screen.contains("  def"));
 }
 
@@ -41,7 +50,7 @@ fn normal_screen_marks_disk_only_cached_lines_with_music_note() {
 
     let screen = render_lines(&mut app, 80, 8).join("\n");
 
-    assert!(screen.contains("▶ ♪ abc"));
+    assert!(screen.contains("▶ ♪   abc"));
     assert!(screen.contains("  def"));
 }
 
@@ -67,16 +76,24 @@ fn normal_mode_startup_prime_caches_current_line_and_navigation_targets() {
     assert!(cache.contains_key("m3"));
 }
 
+/// 順番待ちと render 中を見分けられること。render 中は開始からの経過秒を出す。
 #[test]
-fn normal_screen_marks_rendering_lines_with_dots_before_music_note() {
+fn normal_screen_tells_waiting_lines_from_rendering_lines() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.editor.lines = vec!["abc".to_string()];
+    app.editor.lines = vec!["abc".to_string(), "def".to_string()];
     app.test_set_render_job_status(
         "abc",
         Some(crate::render_queue::TuiRenderJobStatus::Pending),
     );
+    app.test_set_render_job_status(
+        "def",
+        Some(crate::render_queue::TuiRenderJobStatus::Running {
+            elapsed: std::time::Duration::from_millis(12_900),
+        }),
+    );
 
     let screen = render_lines(&mut app, 80, 8).join("\n");
 
-    assert!(screen.contains("▶ . abc"));
+    assert!(screen.contains("▶ 待 ち abc"), "{screen}");
+    assert!(screen.contains("   12sdef"), "{screen}");
 }

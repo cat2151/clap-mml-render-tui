@@ -1,4 +1,5 @@
 mod handler;
+mod heavy_preview;
 mod normal;
 mod open;
 
@@ -12,6 +13,7 @@ use mmlabc_to_smf::mml_preprocessor;
 use serde_json::{Map, Value};
 
 use crate::NotepadScreen;
+pub(crate) use heavy_preview::HeavyPreview;
 
 const PATCH_SELECT_PREVIEW_FALLBACK_PHRASE: &str = "c";
 
@@ -285,8 +287,14 @@ impl<'a> NotepadScreen<'a> {
             cmrt_patch_select::PAGE_STEP.unsigned_abs(),
             preferred_delta,
             |index| {
+                // 重い patch の先読みは render worker を長く塞ぎ、今の試聴を待たせる。選んだときだけ鳴らす。
                 select
                     .filtered_display(index)
+                    .filter(|patch_name| {
+                        !select
+                            .load_measurement(patch_name)
+                            .is_some_and(|measurement| measurement.is_heavy_offline_load())
+                    })
                     .map(|patch_name| preview_mml.for_selector_patch(select, patch_name))
             },
         );
@@ -300,6 +308,12 @@ impl<'a> NotepadScreen<'a> {
         &mut self,
         preferred_delta: Option<isize>,
     ) {
+        if self.selected_heavy_sample_bytes().is_some() {
+            // cache に無い重い音色は Space で確認してから鳴らす（heavy_preview）。
+            self.stop_preview_for_heavy_patch();
+            self.prefetch_patch_select_navigation_audio_cache(preferred_delta);
+            return;
+        }
         let Some(patch_name) = self.patch_select_selected_patch_name() else {
             return;
         };

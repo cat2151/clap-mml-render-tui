@@ -30,3 +30,14 @@ fn rebuild_patch_roles_keeps_the_user_presets_it_was_given() {
     snapshot.rebuild_patch_roles(&[]);
     assert!(snapshot.role_presets().is_empty());
 }
+
+#[test]
+fn heavy_offline_load_starts_at_the_byte_threshold_and_ignores_unknown_weight() {
+    let with_bytes = |bytes| PatchLoadMeasurement {
+        sfz_sample_bytes: bytes,
+        ..PatchLoadMeasurement::default()
+    };
+    assert!(!with_bytes(None).is_heavy_offline_load());
+    assert!(!with_bytes(Some(HEAVY_OFFLINE_LOAD_BYTES - 1)).is_heavy_offline_load());
+    assert!(with_bytes(Some(HEAVY_OFFLINE_LOAD_BYTES)).is_heavy_offline_load());
+}

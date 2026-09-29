@@ -278,6 +278,7 @@ impl<'a> TuiApp<'a> {
             // preview はまだ 1 度も鳴らしていない。
             chord_chart_preview_command_id: None,
             deferred_chord_chart_preview: None,
+            guitar_articulation: Default::default(),
             grid_history_preview: crate::daw::DawGridPreviewPlayer::new(Arc::clone(&cfg_arc)),
             mml_overlay: {
                 let mut overlay = super::mml_overlay::MmlOverlay::default();

@@ -31,6 +31,8 @@ impl TuiApp<'_> {
             PrimaryScreen::GridSequencer => false,
             // chord chart の textarea は section の進行 / 名前を打つ `e` / `n` の欄だけ。
             PrimaryScreen::ChordChart => self.chord_chart.line_input_open(),
+            // guitar articulation の textarea は MML 入力欄だけ。
+            PrimaryScreen::GuitarArticulation => self.guitar_articulation.input_open(),
             PrimaryScreen::Notepad | PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {
                 self.notepad.uses_textarea_cursor()
             }

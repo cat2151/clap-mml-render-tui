@@ -2,6 +2,8 @@
 
 mod patch_select;
 
+pub(crate) use patch_select::HeavyPreview;
+
 use super::{Mode, NormalAction, PlayState};
 use crate::NotepadScreen;
 use crossterm::event::{KeyCode, KeyModifiers};

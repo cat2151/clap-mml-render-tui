@@ -2,6 +2,7 @@ use super::*;
 
 mod favorites;
 mod filter;
+mod heavy_preview;
 mod navigation;
 mod overlay_switch;
 mod prefetch;
@@ -22,6 +23,34 @@ fn open_tones(app: &mut NotepadScreen<'_>, count: usize, current: &str) {
     let names = tones(count);
     let names = names.iter().map(String::as_str).collect::<Vec<_>>();
     open_patch_select_for_test(app, &tone_line(current), &names);
+}
+
+/// `heavy` の音色だけ sample 総容量を重い判定に当たる値にした catalog で開く。
+fn open_tones_with_heavy(app: &mut NotepadScreen<'_>, count: usize, current: &str, heavy: &str) {
+    use cmrt_tui_core::patch_load::{
+        PatchCatalogSnapshot, PatchLoadMeasurement, HEAVY_OFFLINE_LOAD_BYTES,
+    };
+    let pairs = tones(count)
+        .into_iter()
+        .map(|name| {
+            let normalized = name.to_lowercase();
+            (name, normalized)
+        })
+        .collect();
+    let measurements = [(
+        heavy.to_string(),
+        PatchLoadMeasurement {
+            sfz_sample_bytes: Some(HEAVY_OFFLINE_LOAD_BYTES),
+            ..Default::default()
+        },
+    )]
+    .into_iter()
+    .collect();
+    let snapshot =
+        PatchCatalogSnapshot::new(pairs, Vec::new(), Vec::new(), Vec::new(), measurements);
+    app.editor.lines = vec![tone_line(current)];
+    app.patch_load_state = Arc::new(Mutex::new(PatchLoadState::Ready(Arc::new(snapshot))));
+    app.open_patch_select_overlay(None);
 }
 
 fn press(app: &mut NotepadScreen<'_>, code: KeyCode) {

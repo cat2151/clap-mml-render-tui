@@ -30,10 +30,16 @@ pub(super) struct TuiRenderQueueStats {
     pub(super) pending_playback_jobs: usize,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(super) struct TuiRenderJobMmls {
+    pub(super) running: Vec<String>,
+    pub(super) pending: Vec<String>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TuiRenderJobStatus {
     Pending,
-    Running,
+    Running { elapsed: std::time::Duration },
 }
 
 pub(super) struct TuiRenderResponse {
@@ -121,6 +127,23 @@ impl TuiRenderQueue {
             return self.disabled_stats;
         };
         inner.state.lock().unwrap().stats(inner.render_workers)
+    }
+
+    pub(super) fn job_mmls(&self) -> TuiRenderJobMmls {
+        let Some(inner) = &self.inner else {
+            let statuses = self.disabled_job_statuses.lock().unwrap();
+            let mut mmls = TuiRenderJobMmls::default();
+            for (mml, status) in statuses.iter() {
+                match status {
+                    TuiRenderJobStatus::Running { .. } => mmls.running.push(mml.clone()),
+                    TuiRenderJobStatus::Pending => mmls.pending.push(mml.clone()),
+                }
+            }
+            mmls.running.sort();
+            mmls.pending.sort();
+            return mmls;
+        };
+        inner.state.lock().unwrap().job_mmls()
     }
 
     pub(super) fn job_status(&self, mml: &str) -> Option<TuiRenderJobStatus> {
@@ -356,6 +379,29 @@ mod tests {
         assert_eq!(
             job.effective_priority_sequence(),
             Some((TuiRenderPriority::Playback, 3))
+        );
+    }
+
+    #[test]
+    fn job_mmls_list_pending_jobs_in_the_order_workers_take_them() {
+        let playback_session = Arc::new(AtomicU64::new(1));
+        let mut state = TuiRenderQueueState::default();
+        state.push_waiter("running".to_string(), prefetch_waiter(1));
+        state.jobs.get_mut("running").unwrap().state = state::TuiRenderJobState::Running {
+            started: std::time::Instant::now(),
+        };
+        state.push_waiter("old prefetch".to_string(), prefetch_waiter(2));
+        state.push_waiter(
+            "playback".to_string(),
+            playback_waiter(3, 1, Arc::clone(&playback_session)),
+        );
+
+        assert_eq!(
+            state.job_mmls(),
+            TuiRenderJobMmls {
+                running: vec!["running".to_string()],
+                pending: vec!["playback".to_string(), "old prefetch".to_string()],
+            }
         );
     }
 

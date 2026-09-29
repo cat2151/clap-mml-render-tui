@@ -1,4 +1,4 @@
-use super::{patch_stem, track_patch_display};
+use super::track_patch_display;
 use cmrt_tui_core::patch_load::PatchCatalogSnapshot;
 
 /// role が引ける音色を持つ snapshot。`PatchRoleIndex` は表示パスから分類する。
@@ -26,33 +26,6 @@ fn generated_patch_cell(display: &str, directive: &str) -> String {
 }
 
 const BASS: &str = "patches_factory/Basses/Wobble Bass.fxp";
-
-#[test]
-fn patch_stem_drops_only_known_patch_file_extensions() {
-    assert_eq!(
-        patch_stem("patches_3rdparty/Dan Maurer/Winds/Reed To Pipe Morph.fxp"),
-        "Reed To Pipe Morph"
-    );
-    assert_eq!(patch_stem("OR Organ Rotary 2.vvp"), "OR Organ Rotary 2");
-    assert_eq!(
-        patch_stem("sfz/Virtual-Playing-Orchestra3/Brass/trombone-SOLO.sfz"),
-        "trombone-SOLO"
-    );
-    assert_eq!(
-        patch_stem("TableWarp2/Presets/com.Plogue.Aria/Keys/Airy Bells.ariax"),
-        "Airy Bells"
-    );
-    assert_eq!(patch_stem("Keys/Airy Bells.ARIAX"), "Airy Bells");
-    // Dexed のカートリッジ内音色は拡張子を持たない。ドットを含む名前を欠けさせないこと。
-    assert_eq!(
-        patch_stem("SynprezFM/SynprezFM_22.syx/05 SampleSqr2"),
-        "05 SampleSqr2"
-    );
-    assert_eq!(
-        patch_stem("SynprezFM/SynprezFM_01.syx/05 T.BL-EXPA"),
-        "05 T.BL-EXPA"
-    );
-}
 
 #[test]
 fn a_patch_track_reports_its_role_and_patch_name_separately() {

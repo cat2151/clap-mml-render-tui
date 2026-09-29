@@ -33,20 +33,22 @@ const LOAD_ENTRY_STEP: &str = "CLAP 音源の読み込み";
 const INSTANCES_STEP: &str = "音源 instance 生成";
 const AUDIO_STREAM_STEP: &str = "音声出力・待受";
 
-/// 2 段目。既定音色で鳴らすので実際に待つのは SHM の接続だが、名指しできないので
-/// まとめて「音源の準備」と呼ぶ。
+/// 最終段。読み込む音色を worker が名指ししないとき（既定音色・SHM の接続待ち）の呼び名。
+/// 名指しがあれば [`sound_prepare_label`] が音色名で呼ぶ。
 const SOUND_PREPARE_STEP: &str = "音源の準備";
 
 /// 「音が鳴るまで」の待ち 1 回ぶんの写し。
 ///
 /// server 側の写しは stderr の `cmrt-server-startup:` と localhost の接続確認を
 /// supervisor がまとめたもの。描画側は process やファイルを直接調べない。
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(in crate::tui) struct SoundStartupWait {
     /// 待ち始めた時刻。待っている間は作り直さない（作り直すと経過秒数が 0.0s のままになる）。
     pub(in crate::tui) started_at: Instant,
     /// play server の起動段階。spawn がまだ始まっていなければ `None`。
     pub(in crate::tui) server_startup: Option<RealtimePlayServerStartupProgress>,
+    /// worker がいま読み込んでいる音色（`MmlOverlaySenderStatus::loading_patch`）。
+    pub(in crate::tui) loading_patch: Option<String>,
 }
 
 /// 次のフレームの待ちの写し。出る条件と消える条件はここ 1 か所で決まる。
@@ -55,9 +57,10 @@ pub(in crate::tui) struct SoundStartupWait {
 /// 成功か失敗かを問わない（失敗しても `loading` は必ず下りる）。失敗の理由を出すのは
 /// [`TuiApp::report_sound_prepare_failure`]。
 pub(in crate::tui) fn next_wait(
-    previous: Option<SoundStartupWait>,
+    previous: Option<&SoundStartupWait>,
     loading: bool,
     server_startup: Option<RealtimePlayServerStartupProgress>,
+    loading_patch: Option<&str>,
     now: Instant,
 ) -> Option<SoundStartupWait> {
     if !loading {
@@ -66,7 +69,21 @@ pub(in crate::tui) fn next_wait(
     Some(SoundStartupWait {
         started_at: previous.map_or(now, |wait| wait.started_at),
         server_startup,
+        loading_patch: loading_patch.map(str::to_string),
     })
+}
+
+/// 最終段の呼び名。音色が分かれば、何を読んでいるのかをファイル名（拡張子抜き）で出す。
+fn sound_prepare_label(loading_patch: Option<&str>) -> String {
+    let name = loading_patch.and_then(|patch| {
+        std::path::Path::new(patch)
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+    });
+    match name {
+        Some(name) => format!("音色 {name} の読み込み"),
+        None => SOUND_PREPARE_STEP.to_string(),
+    }
 }
 
 /// 待ちの写しを、共通ウィジェットの段階へ翻訳する。
@@ -106,7 +123,7 @@ fn startup_steps(wait: &SoundStartupWait) -> Vec<StartupStep> {
             audio_stream_state(phase, server_listening),
         ),
         StartupStep::new(
-            SOUND_PREPARE_STEP,
+            sound_prepare_label(wait.loading_patch.as_deref()),
             if server_listening {
                 StartupStepState::Running(None)
             } else {
@@ -147,12 +164,15 @@ fn audio_stream_state(
 /// `global_log_sink` はテストでは no-op なので、組み立てだけを名前のある関数へ出してある。
 /// 実機で「overlay が何秒出ていたか」を残す唯一の証跡。
 fn wait_transition_log_line(
-    previous: Option<SoundStartupWait>,
-    next: Option<SoundStartupWait>,
+    previous: Option<&SoundStartupWait>,
+    next: Option<&SoundStartupWait>,
     now: Instant,
 ) -> Option<String> {
     match (previous, next) {
-        (None, Some(_)) => Some("sound-startup: event=wait-begin".to_string()),
+        (None, Some(wait)) => Some(match &wait.loading_patch {
+            Some(patch) => format!("sound-startup: event=wait-begin patch={patch:?}"),
+            None => "sound-startup: event=wait-begin".to_string(),
+        }),
         (Some(wait), None) => Some(format!(
             "sound-startup: event=wait-end elapsed_ms={}",
             now.saturating_duration_since(wait.started_at).as_millis()
@@ -182,9 +202,17 @@ impl TuiApp<'_> {
         };
         let status = sender.status();
         let server_startup = self.play_server.startup_progress();
-        let previous = self.sound_startup_wait;
-        self.sound_startup_wait = next_wait(previous, status.is_loading(), server_startup, now);
-        if let Some(line) = wait_transition_log_line(previous, self.sound_startup_wait, now) {
+        let previous = self.sound_startup_wait.take();
+        self.sound_startup_wait = next_wait(
+            previous.as_ref(),
+            status.is_loading(),
+            server_startup,
+            status.loading_patch(),
+            now,
+        );
+        if let Some(line) =
+            wait_transition_log_line(previous.as_ref(), self.sound_startup_wait.as_ref(), now)
+        {
             crate::logging::global_log_sink(&line);
         }
         let prepare_error = status.prepare_error().map(str::to_string);

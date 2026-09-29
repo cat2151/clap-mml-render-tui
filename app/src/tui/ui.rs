@@ -41,6 +41,9 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
             grid_sequencer::draw(&app.grid_sequencer, &connection, f);
         }
         PrimaryScreen::ChordChart => chord_chart::draw(&app.chord_chart, f),
+        PrimaryScreen::GuitarArticulation => {
+            cmrt_guitar_articulation::ui::draw(&app.guitar_articulation, f)
+        }
         // DAW 画面は `DawApp` が自前の描画ループを持つ。ここへ来るのは
         // DAW から戻る途中の一瞬だけなので notepad として描く。
         PrimaryScreen::Notepad | PrimaryScreen::DailyDaw | PrimaryScreen::Daw => {
@@ -72,8 +75,8 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
     // 音が鳴るまでの待ち（chord chart の preview など、共有 sender を通る経路）。
     // MML オーバーレイと音色 selector が開いているあいだは出さない（自前の loading 表示を持つ）。
     if !app.mml_overlay.is_open() && app.chord_chart_patch_select.is_none() {
-        if let Some(wait) = app.sound_startup_wait {
-            super::sound_startup_overlay::draw(f, &wait, now);
+        if let Some(wait) = &app.sound_startup_wait {
+            super::sound_startup_overlay::draw(f, wait, now);
         }
     }
     // 通常運転ではない play server を掴んでいるときだけ右上に出る。DAW 画面は

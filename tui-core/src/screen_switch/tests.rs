@@ -28,6 +28,7 @@ fn menu_accepts_all_screen_initials_case_insensitively() {
         ('L', PrimaryScreen::LoopBrowser),
         ('g', PrimaryScreen::GridSequencer),
         ('C', PrimaryScreen::ChordChart),
+        ('e', PrimaryScreen::GuitarArticulation),
     ] {
         let mut menu = ScreenSwitchMenu::default();
         menu.open();

@@ -26,6 +26,10 @@ pub use clap_mml_play_server_core::{
     PluginVoicingSource, RouteError,
 };
 pub use clap_mml_play_server_core::{set_log_sink, LogSink};
+// catalog 構築の前に、ディスクに無い音色（plugin 埋め込みの factory 音色）を取得する。
+pub use clap_mml_play_server_core::{prepare_downloaded_patches, PatchDownload};
+// catalog 構築が `.sfz` の sample 総容量を記録し、重い patch を先読みから外すために使う。
+pub use clap_mml_play_server_core::{is_sfz_patch_path, sfz_sample_weight, SfzSampleWeight};
 
 use mmlabc_to_smf::mml_preprocessor;
 use std::borrow::Cow;

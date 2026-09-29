@@ -73,7 +73,7 @@ fn notepad_history_overlay_marks_cached_items_with_music_note() {
 
     let screen = render_lines(&mut app, 100, 16).join("\n");
 
-    assert!(screen.contains("♪ l8cdef"));
+    assert!(screen.contains("♪   l8cdef"));
     assert!(screen.contains("  o5g"));
 }
 

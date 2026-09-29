@@ -1,4 +1,5 @@
 mod guide;
+mod heavy_preview;
 mod notepad_history;
 mod patch_phrase;
 mod patch_select;

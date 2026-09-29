@@ -29,3 +29,5 @@ fn renders_are_summed_at_their_send_frames() {
     mix_at(&mut mixed, &[0.5, 0.5, 0.5, 0.5], 1);
     assert_eq!(mixed, vec![1.0, 1.0, 1.5, 1.5, 0.5, 0.5]);
 }
+
+mod keyswitch_capture;

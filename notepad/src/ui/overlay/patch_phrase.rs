@@ -198,8 +198,8 @@ pub(crate) fn draw_patch_phrase(
         );
     }
     let render_status_snapshot = app.render_status_snapshot();
-    let render_status = render_status_text(render_status_snapshot);
-    let render_color = render_status_color(render_status_snapshot);
+    let render_status = render_status_text(&render_status_snapshot);
+    let render_color = render_status_color(&render_status_snapshot);
 
     f.render_widget(
         Paragraph::new(format!("{status}  {selection_status}"))

@@ -426,3 +426,45 @@ fn an_existing_play_server_path_becomes_an_explicit_executable() {
 
     assert_eq!(launch, cmrt_runtime::PlayServerLaunch::Executable(path));
 }
+
+#[test]
+fn guitar_articulation_events_takes_an_mml_with_rules_or_the_last_played() {
+    assert_eq!(
+        parse_cli_from([
+            "cmrt",
+            "guitar-articulation-events",
+            "--rules",
+            r#"{"rows":["economy_picking"]}"#,
+            "l16cde",
+        ])
+        .unwrap(),
+        CliAction::GuitarArticulationEvents(GuitarArticulationEventsRequest {
+            last_played: false,
+            compare_previous: false,
+            rules: Some(r#"{"rows":["economy_picking"]}"#.to_string()),
+            mml: Some("l16cde".to_string()),
+        })
+    );
+    assert_eq!(
+        parse_cli_from(["cmrt", "guitar-articulation-events", "--last-played"]).unwrap(),
+        CliAction::GuitarArticulationEvents(GuitarArticulationEventsRequest {
+            last_played: true,
+            compare_previous: false,
+            rules: None,
+            mml: None,
+        })
+    );
+    assert_eq!(
+        parse_cli_from(["cmrt", "guitar-articulation-events", "--compare-previous"]).unwrap(),
+        CliAction::GuitarArticulationEvents(GuitarArticulationEventsRequest {
+            last_played: false,
+            compare_previous: true,
+            rules: None,
+            mml: None,
+        })
+    );
+    assert!(parse_cli_from(["cmrt", "guitar-articulation-events"]).is_err());
+    assert!(
+        parse_cli_from(["cmrt", "guitar-articulation-events", "--last-played", "cde"]).is_err()
+    );
+}

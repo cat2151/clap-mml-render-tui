@@ -25,6 +25,7 @@ fn chord_chart_app_waiting_for_sound(
     app.sound_startup_wait = Some(SoundStartupWait {
         started_at: Instant::now() - Duration::from_secs(3),
         server_startup,
+        loading_patch: None,
     });
     app
 }
@@ -102,5 +103,34 @@ fn the_overlay_stays_out_of_the_mml_overlay() {
     assert!(
         !contains_ignoring_spaces(&lines, "音が鳴るまで"),
         "MML オーバーレイの loading 表示と二重に出さないこと: {lines:?}"
+    );
+}
+
+/// Guitar Articulation 画面でも出て、何を読んでいるか（METAL-GTX）を名指しする。
+#[test]
+fn the_guitar_articulation_screen_names_the_patch_being_loaded() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.active_screen = crate::screen_switch::PrimaryScreen::GuitarArticulation;
+    app.sound_startup_wait = Some(SoundStartupWait {
+        started_at: Instant::now() - Duration::from_secs(4),
+        server_startup: Some(RealtimePlayServerStartupProgress {
+            server_exe_spawned: true,
+            phase: Some(RealtimePlayServerStartupPhase::Listen),
+            initialized_instances: 14,
+            total_instances: 14,
+            server_listening: true,
+        }),
+        loading_patch: Some(crate::tui::guitar_articulation::PATCH.to_string()),
+    });
+
+    let lines = render_lines(&mut app, 120, 30);
+
+    assert!(
+        contains_ignoring_spaces(&lines, "音色01-METAL-GTXFullの読み込み"),
+        "何を読んでいるのかを出すこと: {lines:?}"
+    );
+    assert!(
+        contains_ignoring_spaces(&lines, "経過4."),
+        "何秒待っているのかを出すこと: {lines:?}"
     );
 }

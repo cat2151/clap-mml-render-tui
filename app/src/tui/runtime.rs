@@ -10,12 +10,13 @@ use ratatui::{backend::Backend, backend::CrosstermBackend, layout::Rect, Termina
 
 use super::chord_chart::ChordChartAction;
 use super::grid_sequencer::GridSequencerAction;
+use super::guitar_articulation::GuitarArticulationAction;
 use super::keyboard::KeyboardAction;
-use super::loop_browser::LoopBrowserAction;
 use super::{NormalAction, PlayState, PrimaryScreen, TuiApp, TuiExitReason};
 
 mod input_timing;
 mod line_wrap;
+mod loop_browser_action;
 mod screen;
 mod terminal;
 
@@ -82,6 +83,7 @@ impl<'a> TuiApp<'a> {
         self.prepare_restored_keyboard_connection();
         self.enter_restored_grid_sequencer();
         self.enter_restored_chord_chart();
+        self.enter_restored_guitar_articulation();
         sync_mouse_capture(
             &mut cleanup.mouse_capture_enabled,
             self.uses_mouse_capture(),
@@ -138,6 +140,7 @@ impl<'a> TuiApp<'a> {
             self.pump_chord_chart_preview();
             self.pump_mml_overlay();
             self.pump_notepad_sound_check_guide();
+            self.pump_notepad_waits();
             clear_terminal_for_new_screen(&mut terminal, &mut rendered_screen, self.active_screen)?;
             let terminal_draw_started = std::time::Instant::now();
             input_timing.draw_started();
@@ -336,63 +339,18 @@ impl<'a> TuiApp<'a> {
                         }
                         continue;
                     }
+                    if self.active_screen == PrimaryScreen::GuitarArticulation {
+                        if self.handle_guitar_articulation_key_event(key)
+                            == GuitarArticulationAction::Quit
+                        {
+                            break;
+                        }
+                        continue;
+                    }
                     if self.active_screen == PrimaryScreen::LoopBrowser {
-                        match self.loop_browser.state.handle_key_event(key) {
-                            LoopBrowserAction::Continue => {}
-                            LoopBrowserAction::Preview(path) => {
-                                let trace_id =
-                                    self.loop_browser.state.take_preview_trace().unwrap_or_else(
-                                        super::loop_browser::performance::next_trace_id,
-                                    );
-                                self.preview_loop_file(path, trace_id);
-                            }
-                            LoopBrowserAction::Trigger { pad, path } => {
-                                self.trigger_loop_pad(pad, path)
-                            }
-                            LoopBrowserAction::GridReplaced {
-                                start_measure,
-                                grid,
-                                reason,
-                            } => {
-                                self.restart_loop_grid_at(grid, start_measure, reason);
-                            }
-                            LoopBrowserAction::GridRefresh { grid, reason } => {
-                                self.update_loop_grid(grid, reason)
-                            }
-                            LoopBrowserAction::GridPreload {
-                                grid,
-                                token,
-                                mode,
-                                reason,
-                            } => self.preload_loop_grid(grid, token, mode, reason),
-                            LoopBrowserAction::TrackLayoutChanged {
-                                start_measure,
-                                grid,
-                                track_volumes_db,
-                                solo_tracks,
-                            } => self.replace_loop_track_layout(
-                                grid,
-                                start_measure,
-                                track_volumes_db,
-                                solo_tracks,
-                            ),
-                            LoopBrowserAction::TrackVolumeChanged { track, volume_db } => {
-                                self.update_loop_track_volume(track, volume_db)
-                            }
-                            LoopBrowserAction::TrackSoloChanged { solo_tracks } => {
-                                self.update_loop_track_solo(solo_tracks)
-                            }
-                            LoopBrowserAction::SetPlaybackPaused {
-                                paused,
-                                start_measure,
-                            } => self.set_loop_playback_paused(paused, start_measure),
-                            LoopBrowserAction::BpmChanged { mode, grid } => {
-                                self.set_loop_bpm_mode(mode, grid)
-                            }
-                            LoopBrowserAction::Quit => {
-                                self.stop_loop_browser();
-                                break;
-                            }
+                        let action = self.loop_browser.state.handle_key_event(key);
+                        if self.apply_loop_browser_action(action) {
+                            break;
                         }
                         continue;
                     }

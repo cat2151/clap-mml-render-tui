@@ -9,30 +9,28 @@ pub(super) use cmrt_tui_core::status::{
     base_style, play_status_suffix, status_color, visible_list_page_size,
 };
 
-pub(super) fn render_status_color(render_status: TuiRenderStatus) -> Color {
-    if render_status.active == 0 && render_status.pending == 0 {
+pub(super) fn render_status_color(render_status: &TuiRenderStatus) -> Color {
+    if render_status.running.is_empty() && render_status.pending.is_empty() {
         MONOKAI_GREEN
     } else {
         MONOKAI_PURPLE
     }
 }
 
-pub(super) fn render_status_text(render_status: TuiRenderStatus) -> String {
-    let mut text = if render_status.workers == 0 {
-        format!(
-            "render: 実行 {} 予約 {}",
-            render_status.active, render_status.pending
-        )
-    } else {
-        format!(
-            "render: 実行 {}/{} 予約 {}",
-            render_status.active, render_status.workers, render_status.pending
-        )
+/// 例: `render実行: brass/strings  render順番待ち: guitar`。空なら `-`。
+pub(super) fn render_status_text(render_status: &TuiRenderStatus) -> String {
+    let names = |names: &[String]| {
+        if names.is_empty() {
+            "-".to_string()
+        } else {
+            names.join("/")
+        }
     };
-    if render_status.pending_playback > 0 {
-        text.push_str(&format!(" preview待ち {}", render_status.pending_playback));
-    }
-    text
+    format!(
+        "render実行: {}  render順番待ち: {}",
+        names(&render_status.running),
+        names(&render_status.pending)
+    )
 }
 
 pub(super) fn normal_status_text(mode: &Mode, play_state: &PlayState) -> String {

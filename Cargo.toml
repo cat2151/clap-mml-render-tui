@@ -10,6 +10,7 @@ members = [
     "daw",
     "daw-client-lib",
     "grid-sequencer",
+    "guitar-articulation",
     "history",
     "keyboard",
     "loop-browser",

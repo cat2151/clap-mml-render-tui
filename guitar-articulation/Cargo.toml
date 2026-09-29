@@ -1,0 +1,18 @@
+[package]
+name = "cmrt-guitar-articulation"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# 入力 MML → 時刻つきイベント列（`timed_performance`）。
+cmrt-chord = { path = "../chord" }
+cmrt-midi-filter = { path = "../midi-filter" }
+cmrt-tui-core = { path = "../tui-core" }
+# キー入力。ratatui / app 側と同じ版に揃えること。
+crossterm = "0.29"
+ratatui = "0.30"
+# MML の 1 行入力欄。自前で String へ push/pop しない（プロジェクト共通の作法）。
+ratatui-textarea = { version = "0.9", features = ["crossterm"] }
+# ルール表を 1 行の JSON でログへ残し、CLI で読み戻す。
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

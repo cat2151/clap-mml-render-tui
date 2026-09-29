@@ -112,6 +112,36 @@ fn cache_round_trip_rebuilds_lowercase_search_value() {
 }
 
 #[test]
+fn cache_round_trip_keeps_sfz_sample_weight() {
+    let path = temp_path("sfz_sample_weight");
+    let mut patch = cached_patch("patches_factory/Leads/LOUD Lead.fxp", 234);
+    patch.measurement.sfz_sample_files = Some(1882);
+    patch.measurement.sfz_sample_bytes = Some(780_700_000);
+    let cache = CacheFile {
+        format_version: CACHE_FORMAT_VERSION,
+        patches: vec![patch, cached_patch("patches_factory/Leads/Light.fxp", 5)],
+        plugins: vec![plugin()],
+        patch_voicings: BTreeMap::new(),
+        catalog_notes: Vec::new(),
+    };
+    write_cache(&path, &cache).unwrap();
+    let written: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+
+    let (loaded, _) = load_from(&path).unwrap().into_parts();
+
+    let heavy = &loaded.load_measurements()["patches_factory/Leads/LOUD Lead.fxp"];
+    assert_eq!(heavy.sfz_sample_files, Some(1882));
+    assert_eq!(heavy.sfz_sample_bytes, Some(780_700_000));
+    let light = &loaded.load_measurements()["patches_factory/Leads/Light.fxp"];
+    assert_eq!(light.sfz_sample_bytes, None);
+    assert!(
+        written["patches"][1].get("sfz_sample_bytes").is_none(),
+        "値の無い patch は旧 catalog と同じ形で書く"
+    );
+    let _ = fs::remove_file(path);
+}
+
+#[test]
 fn cache_load_backfills_selector_category_without_remeasuring_patches() {
     let path = temp_path("selector_category_backfill");
     let cache = CacheFile {

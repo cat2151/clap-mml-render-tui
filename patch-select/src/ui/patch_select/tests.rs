@@ -1,5 +1,6 @@
 use super::{
-    draw_in, format_load_time, list_title, patch_label, scroll_offset, PatchSelectDrawOptions,
+    draw_in, format_load_time, list_title, patch_label, sample_size_label, scroll_offset,
+    PatchSelectDrawOptions,
 };
 use crate::{patch_select::PatchSelect, PatchCatalogEntry, PatchSelectRequest};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -93,6 +94,64 @@ fn load_time_format_uses_readable_truncated_units() {
     assert_eq!(format_load_time(9_000), "9s");
 }
 
+fn weighed(bytes: u64) -> cmrt_tui_core::patch_load::PatchLoadMeasurement {
+    cmrt_tui_core::patch_load::PatchLoadMeasurement {
+        sfz_sample_bytes: Some(bytes),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn sample_size_is_blank_without_a_weight_and_rounds_down_to_megabytes() {
+    assert_eq!(sample_size_label(None), "");
+    assert_eq!(
+        sample_size_label(Some(
+            &cmrt_tui_core::patch_load::PatchLoadMeasurement::default()
+        )),
+        ""
+    );
+    assert_eq!(sample_size_label(Some(&weighed(999_999))), "<1MB");
+    assert_eq!(sample_size_label(Some(&weighed(780_731_839))), "780MB");
+}
+
+/// 色が付くのは先読みしない重い音色だけ。軽い sfz は容量だけ見せて色を付けない。
+#[test]
+fn only_heavy_patches_get_a_colored_size() {
+    use cmrt_tui_core::patch_load::HEAVY_OFFLINE_LOAD_BYTES;
+    use cmrt_tui_core::theme::MONOKAI_PINK;
+    let select = PatchSelect::open(PatchSelectRequest {
+        patches: ["Heavy.sfz", "Light.sfz"]
+            .iter()
+            .map(|patch| PatchCatalogEntry::from_display((*patch).to_string()))
+            .collect(),
+        load_measurements: [
+            ("Heavy.sfz".to_string(), weighed(HEAVY_OFFLINE_LOAD_BYTES)),
+            (
+                "Light.sfz".to_string(),
+                weighed(HEAVY_OFFLINE_LOAD_BYTES - 1_000_000),
+            ),
+        ]
+        .into(),
+        ..Default::default()
+    })
+    .expect("patch list is not empty");
+
+    let buffer = render(&select, SCREEN, &PatchSelectDrawOptions::default());
+    let drawn = lines(&buffer);
+
+    let size_color = |text: &str| {
+        let y = drawn.iter().position(|line| line.contains(text)).unwrap() as u16;
+        let x = (0..SCREEN.width)
+            .find(|&x| buffer[(x, y)].symbol() == "M" && buffer[(x + 1, y)].symbol() == "B")
+            .expect("size is drawn");
+        buffer[(x, y)].fg
+    };
+    line_with(&drawn, "64MB");
+    line_with(&drawn, "63MB");
+    assert_eq!(size_color("Heavy.sfz"), MONOKAI_PINK);
+    assert_ne!(size_color("Light.sfz"), MONOKAI_PINK);
+}
+
 #[test]
 fn scrolling_down_keeps_a_thirty_percent_lower_margin() {
     // 10行中、index 0..=6 までは表示したまま。index 7 へ来たら1行scrollし、
@@ -177,7 +236,7 @@ fn preset_pane_lists_the_favorite_preset() {
 #[test]
 fn patch_marker_is_drawn_at_the_row_start_only_when_given() {
     let select = patch_select_with_favorites(&["Bass 1.fxp", "Lead 1.fxp"], &[]);
-    let marker = |patch: &str| if patch == "Lead 1.fxp" { "♪ " } else { ". " };
+    let marker = |patch: &str| Span::raw(if patch == "Lead 1.fxp" { "♪ " } else { ". " });
     let with_marker = PatchSelectDrawOptions {
         patch_marker: Some(&marker),
         ..Default::default()
@@ -200,7 +259,7 @@ fn patch_marker_is_asked_only_for_the_rows_on_screen() {
     let asked = std::cell::RefCell::new(Vec::new());
     let marker = |patch: &str| {
         asked.borrow_mut().push(patch.to_string());
-        "♪ "
+        Span::raw("♪ ")
     };
     let options = PatchSelectDrawOptions {
         patch_marker: Some(&marker),

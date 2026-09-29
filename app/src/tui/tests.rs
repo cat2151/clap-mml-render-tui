@@ -16,6 +16,7 @@ mod chord_chart_preview;
 mod chord_chart_save;
 mod chord_chart_toggle;
 mod floe_screens;
+mod guitar_articulation;
 mod keyboard_mml;
 mod mml_overlay;
 mod normal_mode;

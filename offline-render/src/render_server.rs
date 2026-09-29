@@ -49,6 +49,8 @@ pub(super) struct RenderServerSupervisor {
 struct RenderServerState {
     child: Option<Child>,
     generation: u64,
+    /// port の listen を確認済みの generation。一致する間は `ensure_started` が接続を張らない。
+    listening_generation: Option<u64>,
 }
 
 enum RenderRequestError {
@@ -126,7 +128,11 @@ impl RenderServerSupervisor {
     fn ensure_started(&self) -> Result<u64> {
         let mut state = self.state.lock().unwrap();
         self.drop_exited_child_locked(&mut state)?;
+        if state.listening_generation == Some(state.generation) {
+            return Ok(state.generation);
+        }
         if self.port_accepts_connections() {
+            state.listening_generation = Some(state.generation);
             return Ok(state.generation);
         }
         if state.child.is_none() {
@@ -186,6 +192,7 @@ impl RenderServerSupervisor {
         loop {
             self.drop_exited_child_locked(state)?;
             if self.port_accepts_connections() {
+                state.listening_generation = Some(state.generation);
                 return Ok(state.generation);
             }
             if state.child.is_none() {

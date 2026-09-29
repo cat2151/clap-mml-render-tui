@@ -4,9 +4,13 @@ use std::{
         atomic::{AtomicU64, Ordering},
         mpsc, Arc,
     },
+    time::Instant,
 };
 
-use super::{TuiRenderJobStatus, TuiRenderQueueInner, TuiRenderQueueStats, TuiRenderResponse};
+use super::{
+    TuiRenderJobMmls, TuiRenderJobStatus, TuiRenderQueueInner, TuiRenderQueueStats,
+    TuiRenderResponse,
+};
 
 #[derive(Default)]
 pub(super) struct TuiRenderQueueState {
@@ -15,14 +19,14 @@ pub(super) struct TuiRenderQueueState {
 
 pub(super) struct TuiRenderJob {
     mml: String,
-    state: TuiRenderJobState,
+    pub(super) state: TuiRenderJobState,
     pub(super) waiters: Vec<TuiRenderWaiter>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum TuiRenderJobState {
     Pending,
-    Running,
+    Running { started: Instant },
 }
 
 pub(super) struct TuiRenderWaiter {
@@ -211,10 +215,33 @@ impl TuiRenderQueueState {
         best.map(|(mml, _, _)| mml.to_string())
     }
 
+    /// 実行中と順番待ちの job の MML。順番待ちは worker が次に取り出す順。
+    pub(super) fn job_mmls(&self) -> TuiRenderJobMmls {
+        let mut running = Vec::new();
+        let mut pending = Vec::new();
+        for (mml, job) in &self.jobs {
+            let Some((priority, sequence)) = job.effective_priority_sequence() else {
+                continue;
+            };
+            match job.state {
+                TuiRenderJobState::Running { .. } => running.push((sequence, mml.clone())),
+                TuiRenderJobState::Pending => pending.push((priority, sequence, mml.clone())),
+            }
+        }
+        running.sort();
+        pending.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+        TuiRenderJobMmls {
+            running: running.into_iter().map(|(_, mml)| mml).collect(),
+            pending: pending.into_iter().map(|(_, _, mml)| mml).collect(),
+        }
+    }
+
     pub(super) fn job_status(&self, mml: &str) -> Option<TuiRenderJobStatus> {
         self.jobs.get(mml).map(|job| match job.state {
             TuiRenderJobState::Pending => TuiRenderJobStatus::Pending,
-            TuiRenderJobState::Running => TuiRenderJobStatus::Running,
+            TuiRenderJobState::Running { started } => TuiRenderJobStatus::Running {
+                elapsed: started.elapsed(),
+            },
         })
     }
 }
@@ -229,7 +256,9 @@ impl TuiRenderQueueInner {
                     .jobs
                     .get_mut(&mml)
                     .expect("selected render job must exist");
-                job.state = TuiRenderJobState::Running;
+                job.state = TuiRenderJobState::Running {
+                    started: Instant::now(),
+                };
                 let caller = job
                     .render_caller()
                     .expect("selected render job must have a caller");

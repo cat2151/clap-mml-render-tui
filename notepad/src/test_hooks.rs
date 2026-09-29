@@ -1,7 +1,5 @@
 //! app 側・crate 内のテストが、画面の内部状態を直接差し替えるための口。
 
-use std::sync::atomic::Ordering;
-
 use crate::{NotepadScreen, TuiRenderJobStatus};
 
 impl NotepadScreen<'_> {
@@ -19,12 +17,6 @@ impl NotepadScreen<'_> {
     /// 音色×フレーズの履歴・favorite を差し替える（テスト用）。
     pub fn set_patch_phrase_store_for_test(&mut self, store: cmrt_history::PatchPhraseStore) {
         self.patch_phrase_store = store;
-    }
-
-    pub fn test_set_active_parallel_render_count(&self, count: usize) {
-        self.playback
-            .active_offline_render_count
-            .store(count, Ordering::Relaxed);
     }
 
     pub fn test_set_render_job_status(

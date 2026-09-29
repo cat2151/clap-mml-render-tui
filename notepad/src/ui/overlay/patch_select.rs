@@ -1,12 +1,13 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout},
-    style::Color,
+    style::{Color, Style},
+    text::Span,
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 
 use cmrt_patch_select::ui::{draw_patch_select_in, PatchSelectDrawOptions};
-use cmrt_tui_core::theme::MONOKAI_YELLOW;
+use cmrt_tui_core::theme::{MONOKAI_DARK_GRAY, MONOKAI_YELLOW};
 
 use crate::NotepadScreen;
 
@@ -15,6 +16,32 @@ use super::super::{
     status::{base_style, keybind_text, render_status_color, render_status_text},
     Mode,
 };
+
+/// これ以下の振幅しか出ない preview は無音とみなす（-80 dBFS）。
+const SILENT_PEAK: f32 = 1.0e-4;
+const SILENT_MARK: &str = "無音";
+
+fn is_silent(samples: &[f32]) -> bool {
+    samples.iter().all(|sample| sample.abs() <= SILENT_PEAK)
+}
+
+/// render 済みでも無音の preview は、印を「無音」にして鳴らない理由を切り分けられるようにする。
+/// サンプルがメモリに無いディスク上の wav は読まずに通常の印で出す。
+fn preview_marker(
+    cache: &std::collections::HashMap<String, Vec<f32>>,
+    cached: bool,
+    render_status: Option<crate::render_queue::TuiRenderJobStatus>,
+    mml: &str,
+) -> Span<'static> {
+    let silent = cached
+        && cache
+            .get(mml.trim())
+            .is_some_and(|samples| is_silent(samples));
+    if silent {
+        return Span::styled(SILENT_MARK, Style::default().fg(MONOKAI_DARK_GRAY));
+    }
+    Span::raw(cache_marker(cached, render_status))
+}
 
 /// 共有の音色選択を枠の中へ描き、枠の下 3 行（status・render status・keybind）を notepad が描く。
 pub(crate) fn draw_patch_select(
@@ -54,13 +81,13 @@ pub(crate) fn draw_patch_select(
                 .as_ref()
                 .map(|preview_mml| preview_mml.for_selector_patch(select, patch_name))
             else {
-                return cache_marker(false, None);
+                return Span::raw(cache_marker(false, None));
             };
             let cached = mml_cache_hit(&cache, &disk_hashes, &mml);
             let render_status = (!cached)
                 .then(|| app.render_job_status_for_mml(&mml))
                 .flatten();
-            cache_marker(cached, render_status)
+            preview_marker(&cache, cached, render_status, &mml)
         };
         draw_patch_select_in(
             select,
@@ -74,19 +101,27 @@ pub(crate) fn draw_patch_select(
     }
 
     let selection_status = super::selection_status_text(select.cursor(), select.filtered_len());
+    let heavy_note = if app.selected_heavy_sample_bytes().is_some() {
+        super::heavy_preview::AUTO_PREVIEW_SKIPPED_NOTE
+    } else {
+        ""
+    };
     let render_status_snapshot = app.render_status_snapshot();
     f.render_widget(
-        Paragraph::new(format!("{status}  {selection_status}"))
+        Paragraph::new(format!("{status}  {selection_status}{heavy_note}"))
             .style(base_style().fg(status_color)),
         chunks[1],
     );
     f.render_widget(
-        Paragraph::new(render_status_text(render_status_snapshot))
-            .style(base_style().fg(render_status_color(render_status_snapshot))),
+        Paragraph::new(render_status_text(&render_status_snapshot))
+            .style(base_style().fg(render_status_color(&render_status_snapshot))),
         chunks[2],
     );
     f.render_widget(
         Paragraph::new(keybind_text(&mode)).style(base_style()),
         chunks[3],
     );
+    if let Some(preview) = &app.heavy_preview {
+        super::heavy_preview::draw(preview, f);
+    }
 }

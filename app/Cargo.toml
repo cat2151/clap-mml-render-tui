@@ -10,6 +10,7 @@ path = "src/main.rs"
 [dependencies]
 cmrt-chord = { path = "../chord" }
 cmrt-chord-chart = { path = "../chord-chart" }
+cmrt-guitar-articulation = { path = "../guitar-articulation" }
 cmrt-config-editor = { path = "../config-editor-lib" }
 cmrt-daw = { path = "../daw" }
 cmrt-grid-sequencer = { path = "../grid-sequencer" }

@@ -16,6 +16,7 @@ use measurements::{estimate_eta, format_eta, measure_patch_loads};
 mod measurement_log;
 mod measurements;
 mod previous_measurements;
+mod sfz_weights;
 mod source_cache;
 
 const CACHE_FORMAT_VERSION: u32 = 5;
@@ -151,6 +152,7 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
     }
     let mut log = measurement_log::Writer::open(&log_path)?;
     load_measurements.extend(collect_patch_load_measurements(cfg, &unmeasured, &mut log)?);
+    let sfz_weight_failures = sfz_weights::record(&plugins, &mut load_measurements);
     let measured_load_count = load_measurements
         .values()
         .filter(|measurement| measurement.second_load_ms.is_some())
@@ -184,6 +186,9 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
     write_cache(&path, &cache)?;
     // 残っても次回の構築で同じ結果として読まれるだけなので、消せなくても失敗にしない。
     let _ = fs::remove_file(&log_path);
+    for line in sfz_weights::distribution_lines(&load_measurements, &sfz_weight_failures) {
+        println!("{line}");
+    }
     Ok(BuildSummary {
         path,
         source_path,

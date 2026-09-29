@@ -1,7 +1,7 @@
 # clap-mml-render-tui
 
 ### 概要
-MML TUI DAW（のようなもの）。[Surge XT](https://surge-synthesizer.github.io/) / [Dexed](https://asb2m10.github.io/dexed/) / [Vaporizer2](https://www.vast-dynamics.com/?q=Vaporizer2) / [Floe](https://floe.audio/) / [Sforzando](https://www.plogue.com/products/sforzando.html) / [TONE3000](https://www.tone3000.com/) / [Dragonfly Reverb](https://michaelwillis.github.io/dragonfly-reverb/) のリッチな音をMMLで手軽に楽しめます。Rustで書かれています。
+MML TUI DAW（のようなもの）。[Surge XT](https://surge-synthesizer.github.io/) / [Dexed](https://asb2m10.github.io/dexed/) / [Vaporizer2](https://www.vast-dynamics.com/?q=Vaporizer2) / [Floe](https://floe.audio/) / [Sforzando](https://www.plogue.com/products/sforzando.html) / [Six Sines](https://github.com/baconpaul/six-sines) / [TyrellN6](https://u-he.com/products/tyrelln6/) / [TONE3000](https://www.tone3000.com/) / [Dragonfly Reverb](https://michaelwillis.github.io/dragonfly-reverb/) のリッチな音をMMLで手軽に楽しめます。Rustで書かれています。
 
 ### 用途
 
@@ -56,6 +56,8 @@ cmrt --play-server "X:/projects/clap-mml-play-server/target/debug/clap-mml-realt
 - [Vaporizer2](https://www.vast-dynamics.com/?q=Vaporizer2)
 - [Floe](https://floe.audio/)
 - [Sforzando](https://www.plogue.com/products/sforzando.html)
+- [Six Sines](https://github.com/baconpaul/six-sines)
+- [TyrellN6](https://u-he.com/products/tyrelln6/)
 - effect（DAWモード の track に直列で挿せます）
   - [TONE3000](https://www.tone3000.com/)
   - Surge XT Effects（Surge XTに同梱）
@@ -66,6 +68,8 @@ cmrt --play-server "X:/projects/clap-mml-play-server/target/debug/clap-mml-realt
   - [Vaporizer2（studiorack-siteでの紹介ページ）](https://studiorack.github.io/studiorack-site/plugins/vastdynamics/vaporizer2)
   - [Floe ダウンロード画面](https://floe.audio/download/)
   - [Sforzando ダウンロード画面](https://www.plogue.com/downloads.html#sforzando)
+  - [Six Sines GitHub releases画面](https://github.com/baconpaul/six-sines/releases)
+  - [TyrellN6 ダウンロード画面](https://u-he.com/products/tyrelln6/)
   - [TONE3000 ダウンロード画面](https://www.tone3000.com/plugin/download)
   - [Dragonfly Reverb GitHub releases画面](https://github.com/michaelwillis/dragonfly-reverb/releases) 
 
@@ -270,6 +274,8 @@ OS別の `patches_dirs` 既定値は次のとおりです。
 | `Surge XT` | `org.surge-synth-team.surge-xt` | 上の表の OS 別既定値 | Surge XT のカテゴリ名 |
 | `Dexed` | `com.digital-suburban.dexed` | Dexed の cartridge 置き場（Windows: `%APPDATA%\DigitalSuburban\Dexed\Cartridges`） | 全て空（＝絞らない） |
 | `Vaporizer2` | `com.vastdynamics.VAST2` | registry（`HKLM\SOFTWARE\VAST Dynamics\Vaporizer2\Settings` の `InstallPath`）の下の `Presets`。config の `patches_dirs` は無視します | Vaporizer2 のカテゴリ名（`Pad` / `Bass` / `Arpeggio` など） |
+| `Six Sines` | `org.baconpaul.six-sines` | `%LOCALAPPDATA%\clap-mml-render-tui\vendor-patches\six-sines-factory`（factory 音色の取得先）。config の `patches_dirs` は無視します | 全て空（＝絞らない） |
+| `TyrellN6` | `com.u-he.TyrellN6` | registry（`HKCU\Software\u-he\TyrellN6` の `DataPath`）の下の `Presets\TyrellN6`。config の `patches_dirs` は無視します | 全て空（＝絞らない） |
 
 名前は大文字小文字・空白・アンダースコアの違いを無視して照合します（`Dexed` / `dexed`、`Surge XT` / `surge_xt` / `SurgeXT` はすべて同じ）。
 
@@ -299,6 +305,8 @@ patches_dirs = ['D:\my\patches']
 - Dexed の mono/poly は音色ではなくインスタンスの設定（`MonoMode`）で、その既定値は POLY です。そのため grid sequencer の和音行では Dexed の音色をすべて和音向きとして扱います。
 - Vaporizer2 の音色は `.vvp` ファイル1個 = 1音色で、Surge の `.fxp` と同じように選べます。一覧の見出しに出るカテゴリは**ファイル名の先頭2文字**（`AR Accent Arp.vvp` なら `AR` = `Arpeggio`）です。
 - Vaporizer2 と Floe の音色置き場は、プラグイン本体の設定から読みます（Vaporizer2 は registry の `InstallPath\Presets`、Floe は `%PUBLIC%\Floe\Preferences\floe.ini` の `extra-presets-folder`。Floe で未設定なら `%PUBLIC%\Floe\Presets`）。再インストールや本体側の設定変更に config.toml の書き直しは要りません。`[plugins.Vaporizer2]` / `[plugins.Floe]` に `patches_dirs` を書いても無視します。
+- Six Sines の factory 音色は plugin 本体に埋め込まれていてディスク上に無いため、`cmrt build-patch-catalog-cache` のときに、インストール済みの Six Sines と同じ版のものを GitHub から取得します（取得済みで版が同じなら通信しません）。mono/poly は `.sxsnp` の中身（play mode）から読みます。
+- TyrellN6 の音色は `.h2p` ファイル1個 = 1音色で、置き場の下のフォルダ（`01 Basses` など）が一覧のカテゴリになります。`UserPresets` は列挙しません。mono/poly は音色から読まず、grid sequencer の和音行ではすべて和音向きとして扱います。
 
 - Vaporizer2 の mono/poly は音色ごとに違い、`.vvp` の中身（`m_uPolyMode`）から読みます。そのため grid sequencer の和音行には、和音の鳴る音色だけが候補として出ます（読めなかった音色は和音行の候補に出しません）。
 - Vaporizer2 の出荷プリセットのうち、名前に `MPE` が付くものは cmrt では音が出ません。MPE（ノートごとのピッチ・プレッシャー）の演奏情報を前提にした音色で、cmrt はそれを送らないためです。

@@ -30,6 +30,14 @@ impl<'a> TuiApp<'a> {
         }
     }
 
+    /// 待ちが明けたら進める。読み込み中に押した `t` を開き、重い音色の試聴の待機を閉じる。
+    pub(in crate::tui) fn pump_notepad_waits(&mut self) {
+        if self.active_screen == crate::screen_switch::PrimaryScreen::Notepad {
+            self.notepad.open_pending_patch_select_if_loaded();
+            self.notepad.pump_heavy_preview_wait();
+        }
+    }
+
     /// 起動後に notepad 画面を初めて表示したときの1回だけ、ディスクキャッシュを温める。
     pub(in crate::tui) fn prime_notepad_startup_cache_if_needed(&mut self, autoplay: bool) {
         if self.notepad.startup_cache_primed() || !self.notepad_normal_mode_active() {

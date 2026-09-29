@@ -266,7 +266,10 @@ impl<'a> NotepadScreen<'a> {
         let action = {
             let state = self.patch_load_state.lock().unwrap();
             match &*state {
-                PatchLoadState::Loading => Err("パッチを読み込み中です...".to_string()),
+                PatchLoadState::Loading => {
+                    self.pending_patch_select_open = Some(initial_patch_name.map(str::to_string));
+                    return;
+                }
                 PatchLoadState::Err(e) => Err(format!("パッチの読み込みに失敗: {}", e)),
                 PatchLoadState::Ready(snapshot) if snapshot.pairs().is_empty() => {
                     Err("patches_dirs にパッチが見つかりません".to_string())
@@ -283,6 +286,32 @@ impl<'a> NotepadScreen<'a> {
                 }
                 None => self.start_patch_select(),
             },
+        }
+    }
+
+    /// 音色一覧の読み込み待ちで保留した音色選択があるか。
+    pub fn patch_select_open_pending(&self) -> bool {
+        self.pending_patch_select_open.is_some()
+    }
+
+    /// 読み込みが終わっていれば、保留した音色選択を開く。毎フレーム呼んでよい。
+    ///
+    /// 保留中に別の入力モードへ移っていたら、その操作を優先して開かない。
+    pub fn open_pending_patch_select_if_loaded(&mut self) {
+        if self.pending_patch_select_open.is_none()
+            || matches!(
+                *self.patch_load_state.lock().unwrap(),
+                PatchLoadState::Loading
+            )
+        {
+            return;
+        }
+        let initial_patch_name = self.pending_patch_select_open.take().flatten();
+        if matches!(
+            self.mode,
+            Mode::Normal | Mode::NotepadHistory | Mode::PatchPhrase
+        ) {
+            self.open_patch_select_overlay(initial_patch_name.as_deref());
         }
     }
 

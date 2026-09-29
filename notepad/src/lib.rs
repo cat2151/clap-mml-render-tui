@@ -90,12 +90,19 @@ pub(crate) enum PatchPhrasePane {
     Favorites,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// render キューの今の中身を、音色名（patch stem）で表したもの。
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct TuiRenderStatus {
-    pub(crate) active: usize,
-    pub(crate) workers: usize,
-    pub(crate) pending: usize,
-    pub(crate) pending_playback: usize,
+    pub(crate) running: Vec<String>,
+    pub(crate) pending: Vec<String>,
+}
+
+/// render job を status 行で見分けるための最小限の名前。音色を指定していない MML もある。
+fn render_job_name(mml: &str) -> String {
+    NotepadScreen::extract_patch_phrase(mml).map_or_else(
+        || "音色指定なし".to_string(),
+        |(patch_name, _)| cmrt_tui_core::patches::patch_stem(&patch_name).to_string(),
+    )
 }
 
 /// 並列レンダリング中の本数を数えるガード。生存期間中だけカウントを +1 する。
@@ -141,6 +148,10 @@ pub struct NotepadScreen<'a> {
     pub(crate) random_patch_decks: cmrt_tui_core::random::RandomIndexDecks,
     /// 音色選択 overlay。開いている間だけ `Some`。
     pub(crate) patch_select: Option<cmrt_patch_select::PatchSelect<'a>>,
+    /// 音色一覧の読み込み中に要求された音色選択。中身は開いたときに選ぶ音色。
+    pub(crate) pending_patch_select_open: Option<Option<String>>,
+    /// 重い音色の試聴の確認・待機。出ている間は音色選択のキーを奪う。
+    pub(crate) heavy_preview: Option<input::HeavyPreview>,
     pub(crate) notepad_history: NotepadHistoryState<'a>,
     pub(crate) patch_phrase: PatchPhraseState<'a>,
     pub(crate) patch_phrase_store: cmrt_history::PatchPhraseStore,
@@ -254,6 +265,8 @@ impl<'a> NotepadScreen<'a> {
             patch_load_state,
             random_patch_decks: cmrt_tui_core::random::RandomIndexDecks::default(),
             patch_select: None,
+            pending_patch_select_open: None,
+            heavy_preview: None,
             notepad_history: NotepadHistoryState::new(),
             patch_phrase: PatchPhraseState::new(),
             patch_phrase_store,
@@ -304,19 +317,12 @@ impl<'a> NotepadScreen<'a> {
             .set_play_state_if_current(session, next_state);
     }
 
-    pub(crate) fn active_parallel_render_count(&self) -> usize {
-        self.playback
-            .active_offline_render_count
-            .load(Ordering::Relaxed)
-    }
-
     pub(crate) fn render_status_snapshot(&self) -> TuiRenderStatus {
-        let queue_stats = self.playback.render_queue.stats();
+        let mmls = self.playback.render_queue.job_mmls();
+        let names = |mmls: Vec<String>| mmls.iter().map(|mml| render_job_name(mml)).collect();
         TuiRenderStatus {
-            active: self.active_parallel_render_count(),
-            workers: queue_stats.workers,
-            pending: queue_stats.pending_jobs,
-            pending_playback: queue_stats.pending_playback_jobs,
+            running: names(mmls.running),
+            pending: names(mmls.pending),
         }
     }
 

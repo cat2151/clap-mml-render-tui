@@ -93,6 +93,48 @@ fn patch_select_screen_marks_memory_cached_preview_items() {
 }
 
 #[test]
+fn patch_select_screen_marks_silent_previews_in_dark_gray() {
+    let mut app = NotepadScreen::new_for_test(test_config());
+    open_pads(&mut app);
+    {
+        let mut cache = app.audio.cache.lock().unwrap();
+        cache.clear();
+        cache.insert(PAD_LINE.to_string(), vec![0.0, 0.1]);
+        cache.insert(
+            r#"{"Surge XT patch": "Pads/Pad 2.fxp"} abc"#.to_string(),
+            vec![0.0; 4],
+        );
+    }
+
+    let buffer = render_buffer(&mut app, 120, 24);
+    let row_cells = |patch: &str| {
+        let y = (0..buffer.area.height)
+            .find(|&y| {
+                (0..buffer.area.width)
+                    .map(|x| buffer.cell((x, y)).unwrap().symbol())
+                    .collect::<String>()
+                    .contains(patch)
+            })
+            .unwrap_or_else(|| panic!("{patch} row"));
+        (0..buffer.area.width)
+            .map(|x| buffer.cell((x, y)).unwrap().clone())
+            .collect::<Vec<_>>()
+    };
+
+    let silent = row_cells("Pads/Pad 2.fxp");
+    let silent_mark = silent
+        .iter()
+        .find(|cell| cell.symbol() == "無")
+        .expect("silent mark");
+    assert_eq!(silent_mark.fg, cmrt_tui_core::theme::MONOKAI_DARK_GRAY);
+    assert!(!silent.iter().any(|cell| cell.symbol() == "♪"));
+
+    let sounding = row_cells("Pads/Pad 1.fxp");
+    assert!(sounding.iter().any(|cell| cell.symbol() == "♪"));
+    assert!(!sounding.iter().any(|cell| cell.symbol() == "無"));
+}
+
+#[test]
 fn patch_select_screen_hides_the_play_settings_hint() {
     let mut app = NotepadScreen::new_for_test(test_config());
     open_pads(&mut app);
@@ -157,7 +199,16 @@ fn patch_select_overlay_uses_yellow_outer_border() {
 #[test]
 fn patch_select_screen_splits_status_and_keybinds() {
     let mut app = NotepadScreen::new_for_test(test_config());
-    app.test_set_active_parallel_render_count(2);
+    app.test_set_render_job_status(
+        r#"{"Surge XT patch":"Brass/Brass 1.fxp"} c"#,
+        Some(crate::TuiRenderJobStatus::Running {
+            elapsed: std::time::Duration::ZERO,
+        }),
+    );
+    app.test_set_render_job_status(
+        r#"{"Surge XT patch":"sfz/Guitar/04-Guitar.sfz"} c"#,
+        Some(crate::TuiRenderJobStatus::Pending),
+    );
     open_pads(&mut app);
 
     let lines = render_lines(&mut app, 200, 24);
@@ -171,7 +222,7 @@ fn patch_select_screen_splits_status_and_keybinds() {
 
     assert!(normalized_lines[status_row].contains("音色選択"));
     assert!(!normalized_lines[status_row].contains("sort:"));
-    assert!(normalized_lines[render_row].contains("render:実行2/4予約0"));
+    assert!(normalized_lines[render_row].contains("render実行:Brass1render順番待ち:04-Guitar"));
     assert!(!normalized_lines[keybind_row].contains("Ctrl+S"));
     assert!(normalized_lines[keybind_row].contains("n/p/t:overlay切替"));
     assert!(normalized_lines[keybind_row].contains("f:お気に入り"));
@@ -199,4 +250,27 @@ fn patch_select_screen_shows_no_catalog_note_when_nothing_was_skipped() {
     let lines = render_lines(&mut app, 120, 24).join("\n");
 
     assert!(!lines.contains("Vaporizer2"), "{lines}");
+}
+
+#[test]
+fn heavy_preview_confirm_dialog_is_drawn_over_patch_select() {
+    let mut app = NotepadScreen::new_for_test(test_config());
+    open_pads(&mut app);
+    app.heavy_preview = Some(crate::input::HeavyPreview::Confirm {
+        patch_name: "sfz/Guitar/04-Standard Guitar VSOP XTracking.sfz".to_string(),
+        sample_bytes: 296_700_000,
+    });
+
+    let screen = render_lines(&mut app, 200, 30)
+        .iter()
+        .map(|line| line.replace(' ', ""))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(
+        screen.contains("04-StandardGuitarVSOPXTracking"),
+        "{screen}"
+    );
+    assert!(screen.contains("sample296MB"), "{screen}");
+    assert!(screen.contains("y/Enter:試聴する"), "{screen}");
 }

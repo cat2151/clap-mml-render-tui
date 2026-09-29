@@ -84,7 +84,18 @@ pub(super) const RESPONSE_ERROR: u32 = 2;
 pub(super) const STANDBY_STATUS_SUCCESS: u32 = 1;
 pub(super) const STANDBY_STATUS_ERROR: u32 = 2;
 pub(super) const SERVER_STALE_MS: u64 = 1_000;
-pub(super) const RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
+/// 受付だけを返す要求（[`KIND_PREPARE_STANDBY_PATCH`]）の応答待ち上限。
+pub(super) const ACCEPT_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
+/// 応答がロード完了を兼ねる要求（[`KIND_PREPARE_PATCH`] / [`KIND_PROBE_PATCH`]）の応答待ち上限。
+/// file cache が冷えた大型 SFZ の初回ロードは 30 秒を超える。
+pub(super) const PATCH_LOAD_RESPONSE_TIMEOUT: Duration = Duration::from_secs(60);
+
+pub(super) fn response_timeout(kind: u32) -> Duration {
+    match kind {
+        KIND_PREPARE_PATCH | KIND_PROBE_PATCH => PATCH_LOAD_RESPONSE_TIMEOUT,
+        _ => ACCEPT_RESPONSE_TIMEOUT,
+    }
+}
 pub(super) const SYNCHRONIZE_ACCESS: u32 = 0x0010_0000;
 
 #[repr(C)]
@@ -198,3 +209,6 @@ const _: () = assert!(offset_of!(SharedRing, standby_sequence) == 264);
 const _: () = assert!(offset_of!(SharedRing, standby) == 272);
 const _: () = assert!(offset_of!(SharedRing, response) == 1308);
 const _: () = assert!(offset_of!(SharedRing, slots) == 17_704);
+
+#[cfg(test)]
+mod tests;

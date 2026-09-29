@@ -1,4 +1,5 @@
-//! 6 画面（notepad / DAW / keyboard / loop browser / grid sequencer / chord chart）を
+//! 7 画面（notepad / DAW / keyboard / loop browser / grid sequencer / chord chart /
+//! guitar articulation）を
 //! ホストする共有ランタイム。
 //!
 //! 各画面の実装本体は画面ごとの crate に閉じている（DAW は `crate::daw`）。ここに置くのは
@@ -15,6 +16,9 @@ mod grid_sequencer_glue;
 // chord chart は音を鳴らさない画面なので、glue はキーの配送と保存だけ。
 pub(crate) use cmrt_chord_chart as chord_chart;
 mod chord_chart_glue;
+// METAL-GTX の KS でrawを「弾いた」演奏へ変える画面。glue はキーの配送と演奏だけ。
+pub(crate) use cmrt_guitar_articulation as guitar_articulation;
+mod guitar_articulation_glue;
 // MML 入力オーバーレイ（どの画面からでも Ctrl+P）。glue は開閉のきっかけと MIDI 送信をつなぐだけ。
 pub(crate) use cmrt_mml_overlay as mml_overlay;
 mod mml_overlay_glue;
@@ -88,6 +92,8 @@ pub struct TuiApp<'a> {
     /// Bass ON なのに Chord だけ先に鳴らすと、起動直後の 1 回だけ Bass が無音になる。
     /// loader 完了後に同じ要求を自動で流すため、host 側で 1 件だけ持つ。
     deferred_chord_chart_preview: Option<chord_chart::PreviewRequest>,
+    /// rawの MML を KS 入りへ変換して聴き比べる画面。演奏は `mml_overlay_sender` を借りる。
+    pub(in crate::tui) guitar_articulation: guitar_articulation::GuitarArticulationScreen,
     /// Grid履歴をimport前に1小節だけoffline試聴する、揮発性のplayer/cache。
     grid_history_preview: crate::daw::DawGridPreviewPlayer,
     /// どの画面からでも開ける MML 入力オーバーレイ。開くと現在の画面の演奏は止まり、

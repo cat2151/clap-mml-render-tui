@@ -152,5 +152,40 @@ pub fn filter_items(items: &[String], query: &str) -> Vec<String> {
         .collect()
 }
 
+/// 表示パスの末尾要素から落とす拡張子。
+///
+/// **末尾のドット以降を無条件に落としてはいけない。** Dexed の音色名には
+/// `05 T.BL-EXPA` や `14 P.ICE 25.1` のようにドットを含むものが実在し、
+/// 無条件に落とすと名前が欠ける。既知の拡張子だけを対象にする。
+const PATCH_FILE_EXTENSIONS: [&str; 8] = [
+    "fxp",
+    "sfz",
+    "ariax",
+    "vvp",
+    "syx",
+    "floe-preset",
+    "sxsnp",
+    "h2p",
+];
+
+/// 表示パスの末尾要素から、既知の拡張子だけを落とした音色名。
+///
+/// - `patches_3rdparty/Dan Maurer/Winds/Reed To Pipe Morph.fxp` → `Reed To Pipe Morph`
+/// - `SynprezFM/SynprezFM_22.syx/05 SampleSqr2` → `05 SampleSqr2`
+pub fn patch_stem(display: &str) -> &str {
+    let last = display.rsplit(['/', '\\']).next().unwrap_or(display).trim();
+    match last.rsplit_once('.') {
+        Some((stem, extension))
+            if !stem.is_empty()
+                && PATCH_FILE_EXTENSIONS
+                    .iter()
+                    .any(|known| known.eq_ignore_ascii_case(extension)) =>
+        {
+            stem
+        }
+        _ => last,
+    }
+}
+
 #[cfg(test)]
 mod tests;

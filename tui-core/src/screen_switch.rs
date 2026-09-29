@@ -1,4 +1,5 @@
-//! 主要画面（notepad / DAW / keyboard / loop browser / grid sequencer / chord chart）の
+//! 主要画面（notepad / DAW / keyboard / loop browser / grid sequencer / chord chart /
+//! guitar articulation）の
 //! 切替メニュー。
 //!
 //! 画面横断で共有するため `cmrt-tui-core` に置く。
@@ -26,10 +27,11 @@ pub enum PrimaryScreen {
     LoopBrowser,
     GridSequencer,
     ChordChart,
+    GuitarArticulation,
 }
 
 impl PrimaryScreen {
-    const ALL: [(char, Self, &'static str); 7] = [
+    const ALL: [(char, Self, &'static str); 8] = [
         ('N', Self::Notepad, "Notepad"),
         ('A', Self::DailyDaw, "Daily DAW"),
         ('D', Self::Daw, "DAW"),
@@ -37,6 +39,7 @@ impl PrimaryScreen {
         ('L', Self::LoopBrowser, "Loop Browser"),
         ('G', Self::GridSequencer, "Grid Sequencer"),
         ('C', Self::ChordChart, "Chord Chart"),
+        ('E', Self::GuitarArticulation, "Guitar Articulation"),
     ];
 
     pub const fn is_daw(self) -> bool {

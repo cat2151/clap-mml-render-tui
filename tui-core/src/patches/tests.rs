@@ -312,3 +312,32 @@ fn catalog_plugin(base: String, dir: String) -> CatalogPlugin {
         source_notices: Vec::new(),
     }
 }
+
+#[test]
+fn patch_stem_drops_only_known_patch_file_extensions() {
+    assert_eq!(
+        patch_stem("patches_3rdparty/Dan Maurer/Winds/Reed To Pipe Morph.fxp"),
+        "Reed To Pipe Morph"
+    );
+    assert_eq!(patch_stem("OR Organ Rotary 2.vvp"), "OR Organ Rotary 2");
+    assert_eq!(
+        patch_stem("sfz/Virtual-Playing-Orchestra3/Brass/trombone-SOLO.sfz"),
+        "trombone-SOLO"
+    );
+    assert_eq!(
+        patch_stem("TableWarp2/Presets/com.Plogue.Aria/Keys/Airy Bells.ariax"),
+        "Airy Bells"
+    );
+    assert_eq!(patch_stem("Keys/Airy Bells.ARIAX"), "Airy Bells");
+    assert_eq!(patch_stem("Bass/Bass 1.sxsnp"), "Bass 1");
+    assert_eq!(patch_stem("01 Basses/Abgrund.h2p"), "Abgrund");
+    // Dexed のカートリッジ内音色は拡張子を持たない。ドットを含む名前を欠けさせないこと。
+    assert_eq!(
+        patch_stem("SynprezFM/SynprezFM_22.syx/05 SampleSqr2"),
+        "05 SampleSqr2"
+    );
+    assert_eq!(
+        patch_stem("SynprezFM/SynprezFM_01.syx/05 T.BL-EXPA"),
+        "05 T.BL-EXPA"
+    );
+}

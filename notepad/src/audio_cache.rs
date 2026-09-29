@@ -24,4 +24,13 @@ impl NotepadAudioCache {
             known_disk_hashes: Arc::new(Mutex::new(HashSet::new())),
         }
     }
+
+    /// `mml` をオンメモリかディスクのどちらかから、render せずに鳴らせるか。
+    pub(crate) fn contains(&self, mml: &str) -> bool {
+        crate::ui::mml_cache_hit(
+            &self.cache.lock().unwrap(),
+            &self.known_disk_hashes.lock().unwrap(),
+            mml,
+        )
+    }
 }

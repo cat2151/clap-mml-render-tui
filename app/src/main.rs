@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap_mml_render_tui::{
     bass_voicing_inspect, config, config_editor, dexed_duplicates,
-    dexed_duplicates::DexedDuplicatesRequest, live_chord_check,
+    dexed_duplicates::DexedDuplicatesRequest, guitar_articulation_events, live_chord_check,
     live_chord_check::LiveChordCheckRequest, live_line_check,
     live_line_check::LiveLineCheckRequest, render_mml, render_mml::RenderMmlRequest, server, tui,
     updater, voicing_cache_builder,
@@ -61,6 +61,11 @@ fn run() -> Result<()> {
         play_server,
     } = parse_cli_invocation_from(std::env::args_os())?;
 
+    // config 読込とキャッシュ移行は数秒かかりうるので、それより前に反応を返す。
+    if matches!(&action, CliAction::BuildPatchCatalogCache) {
+        println!("patch catalog cacheの構築を開始します…");
+    }
+
     if let CliAction::Help(help) = &action {
         cli_output::print_help(help);
         return Ok(());
@@ -102,6 +107,12 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
+    // 変換は MML とルール表だけで決まる。音源も config も使わない。
+    if let CliAction::GuitarArticulationEvents(request) = &action {
+        print!("{}", guitar_articulation_events::report(request)?);
+        return Ok(());
+    }
+
     let mut cfg = match &action {
         // 診断コマンドだけは読む config を差し替えられる。既定の置き場を作りに行かないので、
         // 実ユーザーの config.toml には 1 バイトも触らない。
@@ -139,6 +150,10 @@ fn run() -> Result<()> {
     }
 
     if matches!(&action, CliAction::BuildPatchCatalogCache) {
+        // 取得に失敗しても、他の plugin の catalog 構築は続ける。
+        for download in cmrt_core::prepare_downloaded_patches(&cfg.plugins) {
+            println!("{download}");
+        }
         let summary = clap_mml_render_tui::patch_catalog_cache::build_and_save(&cfg)?;
         println!(
             "patch catalog cacheを構築しました: patches={} plugins={} measured_loads={} reused_loads={} \
@@ -221,6 +236,7 @@ fn run() -> Result<()> {
         | CliAction::Update
         | CliAction::Check
         | CliAction::InspectBassVoicing(_)
+        | CliAction::GuitarArticulationEvents(_)
         | CliAction::ScanLoops => {
             unreachable!()
         }

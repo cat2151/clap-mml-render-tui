@@ -412,6 +412,7 @@ fn an_empty_line_stops_the_running_timeline() {
 }
 
 mod fade_out;
+mod keyswitch_order;
 mod layers;
 mod line_playback_status;
 mod prepare_error;

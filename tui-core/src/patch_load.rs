@@ -21,6 +21,23 @@ pub struct PatchLoadMeasurement {
     pub second_load_ms: Option<u64>,
     pub first_load_error: Option<String>,
     pub second_load_error: Option<String>,
+    /// `.sfz` が参照する sample の数（重複除外、欠損を含む）。`.sfz` 以外と集計失敗は `None`。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sfz_sample_files: Option<u32>,
+    /// `.sfz` が参照する、存在する sample の総バイト数。`.sfz` 以外と集計失敗は `None`。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sfz_sample_bytes: Option<u64>,
+}
+
+/// これ以上の sample 総容量を持つ `.sfz` は、offline render の全量ロードが数秒を超える。
+pub const HEAVY_OFFLINE_LOAD_BYTES: u64 = 64_000_000;
+
+impl PatchLoadMeasurement {
+    /// offline render で sample の全量ロードが重い patch か。総容量が不明なら重くない扱い。
+    pub fn is_heavy_offline_load(&self) -> bool {
+        self.sfz_sample_bytes
+            .is_some_and(|bytes| bytes >= HEAVY_OFFLINE_LOAD_BYTES)
+    }
 }
 
 /// file cacheから復元した、画面横断のpatch catalog一式。

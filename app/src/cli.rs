@@ -8,6 +8,7 @@ use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use clap_mml_render_tui::{
     bass_voicing_inspect::BassVoicingInspectRequest,
     dexed_duplicates::DexedDuplicatesRequest,
+    guitar_articulation_events::GuitarArticulationEventsRequest,
     inspect_daw_cache::InspectDawCacheRequest,
     live_chord_check::LiveChordCheckRequest,
     live_line_check::{LiveLineCheckRequest, ResidualRequest},
@@ -38,6 +39,7 @@ pub(crate) enum CliAction {
     LiveChordCheck(LiveChordCheckRequest),
     LiveLineCheck(LiveLineCheckRequest),
     InspectBassVoicing(BassVoicingInspectRequest),
+    GuitarArticulationEvents(GuitarArticulationEventsRequest),
 }
 
 #[derive(Debug, Parser)]
@@ -196,6 +198,21 @@ enum Commands {
         /// Chord Chartのsection順に並べたdegrees文字列（全引数を1進行としてvoiceする）
         #[arg(value_name = "DEGREES", required = true, num_args = 1..)]
         progressions: Vec<String>,
+    },
+    /// Guitar Articulation 画面と同じ変換で、音ごとの奏法とイベント列を出す（画面を起動しない分析）
+    GuitarArticulationEvents {
+        /// ログの最後の演奏（画面で鳴らした MML とルール表）から作り直す
+        #[arg(long, conflicts_with_all = ["rules", "mml", "compare_previous"])]
+        last_played: bool,
+        /// ログの最後の演奏と、同じ MML でルールが違う直前の演奏を、音ごとに並べて比べる
+        #[arg(long, conflicts_with_all = ["rules", "mml"])]
+        compare_previous: bool,
+        /// ルール表の JSON。例: {"columns":{"3":["hammer_pull"]},"rows":["economy_picking"]}
+        #[arg(long, value_name = "JSON")]
+        rules: Option<String>,
+        /// 変換する MML
+        #[arg(value_name = "MML", required_unless_present_any = ["last_played", "compare_previous"])]
+        mml: Option<String>,
     },
     /// grid sequencer の各行に patch の候補が出るかを調べる（画面を起動しない動作確認）
     PatchRoles {
@@ -399,6 +416,23 @@ where
             key,
             progressions,
         }));
+    }
+
+    if let Some(Commands::GuitarArticulationEvents {
+        last_played,
+        compare_previous,
+        rules,
+        mml,
+    }) = cli.command
+    {
+        return wrap(CliAction::GuitarArticulationEvents(
+            GuitarArticulationEventsRequest {
+                last_played,
+                compare_previous,
+                rules,
+                mml,
+            },
+        ));
     }
 
     if let Some(Commands::BuildVoicingCache { force }) = cli.command {

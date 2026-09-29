@@ -17,6 +17,10 @@ fn navigation_delta(key_event: KeyEvent) -> Option<isize> {
 
 impl<'a> NotepadScreen<'a> {
     pub(crate) fn handle_patch_select(&mut self, key_event: KeyEvent) {
+        if self.heavy_preview.is_some() {
+            self.handle_heavy_preview_key(key_event.code);
+            return;
+        }
         let Some(select) = self.patch_select.as_ref() else {
             self.mode = Mode::Normal;
             return;
@@ -70,9 +74,10 @@ impl<'a> NotepadScreen<'a> {
     fn apply_patch_select_action(&mut self, action: PatchSelectAction, delta: Option<isize>) {
         match action {
             PatchSelectAction::Continue => {}
-            PatchSelectAction::Preview(_) | PatchSelectAction::PlayLine(_) => {
+            PatchSelectAction::Preview(_) => {
                 self.preview_selected_patch_with_navigation_hint(delta);
             }
+            PatchSelectAction::PlayLine(_) => self.request_selected_patch_preview(),
             PatchSelectAction::Confirm(patch_name) => {
                 let auto_reverb = self
                     .patch_select

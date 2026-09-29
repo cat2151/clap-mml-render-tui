@@ -125,7 +125,16 @@ fn patch_phrase_overlay_is_centered_like_other_overlays() {
 fn patch_phrase_screen_keeps_status_below_overlay_panes() {
     let mut app = NotepadScreen::new_for_test(test_config());
     app.mode = Mode::PatchPhrase;
-    app.test_set_active_parallel_render_count(2);
+    app.test_set_render_job_status(
+        r#"{"Surge XT patch":"Brass/Brass 1.fxp"} c"#,
+        Some(crate::TuiRenderJobStatus::Running {
+            elapsed: std::time::Duration::ZERO,
+        }),
+    );
+    app.test_set_render_job_status(
+        r#"{"Surge XT patch":"sfz/Guitar/04-Guitar.sfz"} c"#,
+        Some(crate::TuiRenderJobStatus::Pending),
+    );
     app.patch_phrase.patch_name = Some("Pads/Pad 1.fxp".to_string());
     app.patch_phrase_store.patches.insert(
         "Pads/Pad 1.fxp".to_string(),
@@ -147,7 +156,7 @@ fn patch_phrase_screen_keeps_status_below_overlay_panes() {
         .unwrap() as u16;
     let render_row = normalized_lines
         .iter()
-        .rposition(|line| line.contains("render:実行2/4予約0"))
+        .rposition(|line| line.contains("render実行:Brass1render順番待ち:04-Guitar"))
         .unwrap() as u16;
 
     assert!(status_row > history_row);
@@ -198,7 +207,7 @@ fn patch_phrase_overlay_marks_cached_preview_items_with_music_note() {
 
     let screen = render_lines(&mut app, 100, 16).join("\n");
 
-    assert!(screen.contains("♪ l8cdef"));
+    assert!(screen.contains("♪   l8cdef"));
     assert!(screen.contains("  o5g"));
 }
 
@@ -272,5 +281,5 @@ fn patch_phrase_screen_uses_c_as_fallback_for_empty_lists() {
 
     let lines = render_lines(&mut app, 80, 10).join("\n");
 
-    assert!(lines.contains("▶   c"));
+    assert!(lines.contains("▶     c"));
 }

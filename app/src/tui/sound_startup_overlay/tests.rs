@@ -37,6 +37,7 @@ fn wait_at(
     SoundStartupWait {
         started_at: now,
         server_startup,
+        loading_patch: None,
     }
 }
 
@@ -51,7 +52,7 @@ fn the_wait_appears_while_the_shared_sender_is_preparing() {
         3,
         false,
     );
-    let wait = next_wait(None, true, Some(server), now).expect("準備中なら待ちが立つこと");
+    let wait = next_wait(None, true, Some(server), None, now).expect("準備中なら待ちが立つこと");
 
     assert_eq!(wait.started_at, now);
     assert_eq!(wait.server_startup, Some(server));
@@ -70,7 +71,7 @@ fn the_elapsed_clock_keeps_running_across_frames() {
         false,
     );
 
-    let wait = next_wait(Some(previous), true, Some(server), later).expect("まだ準備中");
+    let wait = next_wait(Some(&previous), true, Some(server), None, later).expect("まだ準備中");
 
     assert_eq!(
         wait.started_at, started,
@@ -86,7 +87,10 @@ fn the_wait_disappears_once_the_preparation_finishes() {
     let server = progress(true, Some(RealtimePlayServerStartupPhase::Listen), 14, true);
     let previous = wait_at(now, Some(server));
 
-    assert_eq!(next_wait(Some(previous), false, Some(server), now), None);
+    assert_eq!(
+        next_wait(Some(&previous), false, Some(server), None, now),
+        None
+    );
 }
 
 /// 失敗したときも同じ経路で消える。**出っぱなしにならない。**
@@ -98,7 +102,7 @@ fn a_failed_preparation_closes_the_wait_too() {
     let previous = wait_at(now, None);
 
     assert_eq!(
-        next_wait(Some(previous), false, None, now),
+        next_wait(Some(&previous), false, None, None, now),
         None,
         "失敗しても loading は必ず下りる。出っぱなしにする経路を作らないこと"
     );
@@ -160,6 +164,24 @@ fn sound_preparation_starts_only_after_the_server_listens() {
     assert_eq!(steps[5].state, StartupStepState::Running(None));
 }
 
+/// worker が読み込み中の音色を名指ししたら、最終段はその音色名で呼ぶ（何を待っているかを出す）。
+#[test]
+fn the_last_step_names_the_patch_being_loaded() {
+    let server = progress(true, Some(RealtimePlayServerStartupPhase::Listen), 14, true);
+    let patch = "sfz/UI_METAL-GTX/Programs/01-METAL-GTX Full.sfz";
+
+    let wait = next_wait(None, true, Some(server), Some(patch), Instant::now())
+        .expect("準備中なら待ちが立つこと");
+    let steps = startup_steps(&wait);
+
+    assert_eq!(steps[5].label, "音色 01-METAL-GTX Full の読み込み");
+    assert_eq!(steps[5].state, StartupStepState::Running(None));
+    assert_eq!(
+        wait_transition_log_line(None, Some(&wait), wait.started_at).as_deref(),
+        Some("sound-startup: event=wait-begin patch=\"sfz/UI_METAL-GTX/Programs/01-METAL-GTX Full.sfz\"")
+    );
+}
+
 /// 失敗して overlay が消えたとき、理由が chord chart の下段へ出る。
 #[test]
 fn the_failure_reason_reaches_the_chord_chart_bottom_line() {
@@ -208,15 +230,15 @@ fn the_log_records_when_the_overlay_opened_and_how_long_it_stayed() {
     let later = started + Duration::from_millis(1699);
 
     assert_eq!(
-        wait_transition_log_line(None, waiting, started).as_deref(),
+        wait_transition_log_line(None, waiting.as_ref(), started).as_deref(),
         Some("sound-startup: event=wait-begin")
     );
     assert_eq!(
-        wait_transition_log_line(waiting, None, later).as_deref(),
+        wait_transition_log_line(waiting.as_ref(), None, later).as_deref(),
         Some("sound-startup: event=wait-end elapsed_ms=1699")
     );
     assert_eq!(
-        wait_transition_log_line(waiting, waiting, later),
+        wait_transition_log_line(waiting.as_ref(), waiting.as_ref(), later),
         None,
         "待っている間は毎フレーム書かないこと"
     );
