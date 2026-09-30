@@ -118,6 +118,138 @@ fn a_phrase_without_notes_is_rejected() {
     );
 }
 
+/// 120 BPM で 1 拍 → 60 BPM へ切り替え。CC と pitch bend の秒も tempo map に従う。
+#[test]
+fn smf_events_keep_controls_and_pitch_bend_on_the_tempo_map() {
+    let performance = timed_smf_events(&smf_bytes(vec![
+        note_on(0, 60, 100),
+        control(QUARTER, 20, 64),
+        tempo(0, 1_000_000),
+        pitch_bend(QUARTER, 8192 + 100),
+        note_on(0, 60, 0),
+        end_of_track(0),
+    ]))
+    .unwrap();
+
+    assert!(!performance.from_chord);
+    let events: Vec<(f64, [u8; 3])> = performance
+        .events
+        .iter()
+        .map(|event| (event.seconds, event.message))
+        .collect();
+    assert_eq!(
+        events,
+        vec![
+            (0.0, [NOTE_ON, 60, 100]),
+            (0.5, [CONTROL_CHANGE, 20, 64]),
+            // 8192 + 100 = 0x2064 → LSB 0x64, MSB 0x40。同じ tick の note off とは積んだ順。
+            (1.5, [PITCH_BEND, 0x64, 0x40]),
+            (1.5, [NOTE_OFF, 60, 0]),
+        ]
+    );
+    assert_eq!(performance.duration_seconds, 1.5);
+}
+
+#[test]
+fn smf_events_put_a_control_before_a_note_on_at_the_same_tick() {
+    let performance = timed_smf_events(&smf_bytes(vec![
+        note_on(0, 60, 100),
+        control(0, 22, 10),
+        note_on(QUARTER, 60, 0),
+        end_of_track(0),
+    ]))
+    .unwrap();
+
+    assert_eq!(performance.events[0].message, [CONTROL_CHANGE, 22, 10]);
+    assert_eq!(performance.events[1].message, [NOTE_ON, 60, 100]);
+}
+
+#[test]
+fn smf_events_turn_a_zero_velocity_note_on_into_a_note_off_and_drop_program_changes() {
+    let performance = timed_smf_events(&smf_bytes(vec![
+        program_change(0, 5),
+        note_on(0, 60, 100),
+        note_on(QUARTER, 60, 0),
+        end_of_track(0),
+    ]))
+    .unwrap();
+
+    let messages: Vec<[u8; 3]> = performance.events.iter().map(|e| e.message).collect();
+    assert_eq!(messages, vec![[NOTE_ON, 60, 100], [NOTE_OFF, 60, 0]]);
+}
+
+#[test]
+fn smf_events_keep_the_channel_of_every_message() {
+    let performance = timed_smf_events(&smf_bytes(vec![
+        on_channel(3, control(0, 20, 1)),
+        on_channel(3, note_on(0, 60, 100)),
+        on_channel(3, note_on(QUARTER, 60, 0)),
+        end_of_track(0),
+    ]))
+    .unwrap();
+
+    let statuses: Vec<u8> = performance.events.iter().map(|e| e.message[0]).collect();
+    assert_eq!(statuses, vec![0xB3, 0x93, 0x83]);
+}
+
+#[test]
+fn smf_events_without_a_note_on_are_rejected() {
+    assert_eq!(
+        timed_smf_events(&smf_bytes(vec![control(0, 20, 1), end_of_track(QUARTER)])).unwrap_err(),
+        "MMLに発音ノートがありません"
+    );
+}
+
+fn control(delta: u32, controller: u8, value: u8) -> TrackEvent<'static> {
+    TrackEvent {
+        delta: delta.into(),
+        kind: TrackEventKind::Midi {
+            channel: 0.into(),
+            message: MidiMessage::Controller {
+                controller: controller.into(),
+                value: value.into(),
+            },
+        },
+    }
+}
+
+fn pitch_bend(delta: u32, value: u16) -> TrackEvent<'static> {
+    TrackEvent {
+        delta: delta.into(),
+        kind: TrackEventKind::Midi {
+            channel: 0.into(),
+            message: MidiMessage::PitchBend {
+                bend: midly::PitchBend(value.into()),
+            },
+        },
+    }
+}
+
+fn program_change(delta: u32, program: u8) -> TrackEvent<'static> {
+    TrackEvent {
+        delta: delta.into(),
+        kind: TrackEventKind::Midi {
+            channel: 0.into(),
+            message: MidiMessage::ProgramChange {
+                program: program.into(),
+            },
+        },
+    }
+}
+
+fn on_channel(channel: u8, event: TrackEvent<'static>) -> TrackEvent<'static> {
+    match event.kind {
+        TrackEventKind::Midi { message, .. } => TrackEvent {
+            delta: event.delta,
+            kind: TrackEventKind::Midi {
+                channel: channel.into(),
+                message,
+            },
+        },
+        _ => event,
+    }
+}
+
 fn note_on_pitches(performance: &TimedPerformance) -> Vec<u8> {
     performance
         .events

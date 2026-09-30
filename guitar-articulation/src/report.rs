@@ -1,6 +1,6 @@
 use std::fmt::Write as _;
 
-use crate::ui::{event_text, note_name};
+use crate::ui::{name_width, note_name, EventRow};
 use crate::{
     articulate, convert, notes_from_events, strings_by_column, Articulated, RuleTable, PATCH,
 };
@@ -42,8 +42,13 @@ pub fn report(mml: &str, rules: &RuleTable) -> Result<String, String> {
     }
     let _ = writeln!(out);
     let _ = writeln!(out, "# converted events ({})", converted.len());
-    for event in &converted {
-        let _ = writeln!(out, "{}", event_text(event, true));
+    let rows: Vec<EventRow> = converted
+        .iter()
+        .map(|event| EventRow::new(event, true))
+        .collect();
+    let width = name_width(&rows);
+    for row in &rows {
+        let _ = writeln!(out, "{}", row.text(width));
     }
     Ok(out)
 }

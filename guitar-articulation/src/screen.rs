@@ -3,16 +3,19 @@
 //! 持つのは入力 MML・そこから作ったrawの列・ルール表・Articulatedの列・カーソル列。
 //! 音は鳴らさない。移動・入力の取り消し・ヘルプ以外の操作では、鳴らしてほしい版を
 //! [`GuitarArticulationAction::Play`] で host へ返す（MML の確定・ルールの toggle はArticulated）。
+//! 1 音モード（`n`）の間は、ルールの toggle と `b` / `space` がカーソル列の音だけ
+//! （[`GuitarArticulationAction::PlayNote`]）になる。
 
 use cmrt_core::EffectPlugins;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui_textarea::TextArea;
 use serde_json::Value;
 
+use crate::humanize::{self, Humanized};
 use crate::ui::{ROW_RULE_ROWS, RULE_ROWS};
 use crate::{
-    articulate, convert, notes_from_events, Articulated, Note, RowRule, Rule, RuleTable,
-    TimedMidiEvent,
+    articulate, convert, Articulated, ColumnRuleAnchor, Instrument, Note, RowRule, Rule, RuleTable,
+    StartupInstrument, TimedMidiEvent,
 };
 
 /// 画面に入ったとき MML が空なら入れておく MML。何を触れば何が変わるかを、打つ前から見せる。
@@ -38,16 +41,36 @@ impl Take {
 }
 
 mod effect_chain;
+mod history;
+mod input;
+mod sample_midi;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GuitarArticulationAction {
     Continue,
     Quit,
     /// その版のイベント列（[`GuitarArticulationScreen::events`]）を、確定済みの chain
-    /// （[`GuitarArticulationScreen::effect_chain`]）を掛けて鳴らしてほしい。
+    /// （[`GuitarArticulationScreen::sounding_effect_chain`]）を掛けて鳴らしてほしい。
     Play(Take),
+    /// その版のカーソル列の 1 音（[`crate::column_events`]）を、確定済みの chain で鳴らしてほしい。
+    PlayNote {
+        take: Take,
+        column: usize,
+    },
     /// Articulated を、この chain を掛けて試聴してほしい（effect chain overlay の編集中）。
     PreviewEffectChain(Vec<Value>),
+    /// 履歴（[`GuitarArticulationScreen::history`]）を file へ書いてほしい。
+    SaveHistory,
+    /// 起動時の版（[`GuitarArticulationScreen::startup_instrument`]）を設定 file へ書いてほしい。
+    SaveSettings,
+    /// サンプル MID の一覧を [`GuitarArticulationScreen::open_sample_midi_list`] へ渡してほしい。
+    OpenSampleMidiList,
+    /// この file を読み、[`GuitarArticulationScreen::load_sample_midi`] へ渡してほしい。
+    LoadSampleMidi(std::path::PathBuf),
+    /// サンプル MID の全体（`None`）か 1 音（[`GuitarArticulationScreen::sample_midi_events`]）を鳴らしてほしい。
+    PlaySampleMidi {
+        note: Option<usize>,
+    },
 }
 
 #[derive(Default)]
@@ -58,15 +81,37 @@ pub struct GuitarArticulationScreen {
     plain: Vec<TimedMidiEvent>,
     notes: Vec<Note>,
     rules: RuleTable,
+    /// 列ルールを最後に手で切り替えた直後の MML と列ルール。MML の確定で列ルールを付け替える元。
+    anchor: Option<ColumnRuleAnchor>,
     /// `notes` と同じ並びの、音ごとの奏法と強さ。
     articulated: Vec<Articulated>,
     converted: Vec<TimedMidiEvent>,
+    /// 汚し（[`RowRule::Humanize`]）が ON の間だけ、`notes` と同じ並びの汚しの値（`convert` と同じ計算）。
+    humanized: Vec<Humanized>,
     cursor: usize,
+    /// 1 音モード。ON の間は演奏の要求がカーソル列の音だけになる。
+    note_preview: bool,
     help_open: bool,
     effect_plugins: EffectPlugins,
     effect_chain: Vec<Value>,
+    /// dry（`w`）。ON の間は `effect_chain` を残したまま、掛けずに鳴らす。
+    effect_dry: bool,
     /// effect chain overlay（`x`）を開いている間だけ `Some`。
     effect_overlay: Option<effect_chain::EffectOverlay>,
+    /// 状態が変わるたびに今の状態を積む、新しい順の履歴。
+    history: crate::history::GuitarArticulationHistory,
+    /// history overlay（`Shift+H`）を開いている間だけ `Some`。
+    history_overlay: Option<history::HistoryOverlay>,
+    /// いま鳴らす音色の段階。host が音源の状態から決める。
+    instrument: Instrument,
+    /// 画面に入ったとき最初に読む版（`f`）。次に入ったときから効く。
+    startup_instrument: StartupInstrument,
+    /// 音色を読み込み中か（先読みを含む）。host が音源の状態から決める。
+    sound_loading: bool,
+    /// サンプル MID を開いている間だけ `Some`。MML 側の状態には触らない。
+    sample_midi: Option<sample_midi::SampleMidiState>,
+    /// サンプル MID の一覧 overlay（`o`）を開いている間だけ `Some`。
+    sample_midi_list: Option<sample_midi::SampleMidiList>,
     /// 直前の操作ができなかった理由。次のキーで消える。
     pub error: Option<String>,
 }
@@ -118,6 +163,59 @@ impl GuitarArticulationScreen {
         self.cursor
     }
 
+    /// 1 音モードか。
+    pub fn note_preview(&self) -> bool {
+        self.note_preview
+    }
+
+    pub fn instrument(&self) -> Instrument {
+        self.instrument
+    }
+
+    pub fn set_instrument(&mut self, instrument: Instrument) {
+        self.instrument = instrument;
+    }
+
+    /// 保存済みの起動時の版を持たせる。
+    pub fn with_startup_instrument(mut self, startup_instrument: StartupInstrument) -> Self {
+        self.startup_instrument = startup_instrument;
+        self
+    }
+
+    pub fn startup_instrument(&self) -> StartupInstrument {
+        self.startup_instrument
+    }
+
+    pub fn set_sound_loading(&mut self, loading: bool) {
+        self.sound_loading = loading;
+    }
+
+    /// その版で、列の音がいちばん早く鳴る秒。汚しが ON なら Articulated はずらした後の秒。
+    pub(crate) fn column_on_seconds(&self, column: usize, take: Take) -> Option<f64> {
+        let mut in_column = self
+            .notes
+            .iter()
+            .enumerate()
+            .filter(|(_, note)| note.column == column);
+        if take == Take::Plain || self.humanized.is_empty() {
+            return in_column.next().map(|(_, note)| note.on_seconds);
+        }
+        in_column
+            .map(|(i, _)| self.humanized[i].on_seconds)
+            .reduce(f64::min)
+    }
+
+    /// カーソル列の音だけを 0 秒から鳴らすイベント列。
+    pub fn column_events(&self, take: Take) -> Vec<TimedMidiEvent> {
+        crate::column_events(
+            &self.notes,
+            &self.articulated,
+            &self.rules,
+            self.cursor,
+            take,
+        )
+    }
+
     /// 列の数（同時刻の note on のまとまりの数）。
     pub fn column_count(&self) -> usize {
         self.notes.last().map_or(0, |note| note.column + 1)
@@ -127,31 +225,6 @@ impl GuitarArticulationScreen {
         match take {
             Take::Plain => &self.plain,
             Take::Converted => &self.converted,
-        }
-    }
-
-    /// 画面に入ったときに呼ぶ。MML 入力欄を開き、MML が空なら [`DEFAULT_MML`] を確定して鳴らす。
-    pub fn enter(&mut self) -> GuitarArticulationAction {
-        let action = if self.mml.is_empty() {
-            match self.commit_mml(DEFAULT_MML) {
-                Ok(()) => GuitarArticulationAction::Play(Take::Converted),
-                Err(reason) => {
-                    self.error = Some(reason);
-                    GuitarArticulationAction::Continue
-                }
-            }
-        } else {
-            GuitarArticulationAction::Continue
-        };
-        self.open_input();
-        action
-    }
-
-    fn open_input(&mut self) {
-        if self.input.is_none() {
-            self.input = Some(cmrt_tui_core::text_input::new_single_line_textarea(
-                &self.mml,
-            ));
         }
     }
 
@@ -167,6 +240,12 @@ impl GuitarArticulationScreen {
         if self.effect_overlay.is_some() {
             return self.handle_effect_key(key);
         }
+        if self.history_overlay.is_some() {
+            return self.handle_history_key(key);
+        }
+        if self.sample_midi_list.is_some() {
+            return self.handle_sample_midi_list_key(key);
+        }
         // MML は `?` を使わないので、入力欄を開いていても `?` はヘルプへ回す。
         if is_help_key(key) {
             self.help_open = true;
@@ -176,6 +255,12 @@ impl GuitarArticulationScreen {
             return self.handle_input_key(key);
         }
         self.error = None;
+        if self.sample_midi.is_some() {
+            return self.handle_sample_midi_key(key);
+        }
+        if history::is_history_key(key) {
+            return self.open_history_overlay();
+        }
         match key.code {
             KeyCode::Char('i') => {
                 self.open_input();
@@ -191,7 +276,17 @@ impl GuitarArticulationScreen {
                 }
                 GuitarArticulationAction::Continue
             }
+            KeyCode::Char('o') => GuitarArticulationAction::OpenSampleMidiList,
             KeyCode::Char('x') => self.open_effect_overlay(),
+            KeyCode::Char('w') => self.toggle_effect_dry(),
+            KeyCode::Char('n') => {
+                self.note_preview = !self.note_preview;
+                GuitarArticulationAction::Continue
+            }
+            KeyCode::Char('f') => {
+                self.startup_instrument = self.startup_instrument.toggled();
+                GuitarArticulationAction::SaveSettings
+            }
             KeyCode::Char('b') => self.play(Take::Plain),
             KeyCode::Char(' ') => self.play(Take::Converted),
             KeyCode::Char('q') => GuitarArticulationAction::Quit,
@@ -217,74 +312,55 @@ impl GuitarArticulationScreen {
             return GuitarArticulationAction::Continue;
         }
         self.rules.toggle(self.cursor, rule);
+        self.anchor = Some(ColumnRuleAnchor::new(&self.mml, &self.rules));
         self.rebuild_converted();
-        GuitarArticulationAction::Play(Take::Converted)
+        self.record_history();
+        self.play(Take::Converted)
     }
 
     /// 行全体のルールを切り替え、Articulatedを作り直して鳴らす。
     fn toggle_row_rule(&mut self, rule: RowRule) -> GuitarArticulationAction {
         self.rules.toggle_row(rule);
         self.rebuild_converted();
+        self.record_history();
         self.play(Take::Converted)
     }
 
+    /// dry と wet を入れ替えて鳴らす。chain を替えた音は、server が読み込み中の音色を
+    /// 読み終えるまで用意できないので、読み込み中は入れ替えずに理由を出す。
+    fn toggle_effect_dry(&mut self) -> GuitarArticulationAction {
+        if self.sound_loading {
+            self.error = Some("音色の読み込み中は dry/wet を切り替えられません".to_string());
+            return GuitarArticulationAction::Continue;
+        }
+        self.effect_dry = !self.effect_dry;
+        self.play(Take::Converted)
+    }
+
+    /// 1 音モードならカーソル列の音だけ、でなければフレーズ全体の演奏を求める。
     fn play(&mut self, take: Take) -> GuitarArticulationAction {
         if self.plain.is_empty() {
             self.error = Some("i で MML を入力してください".to_string());
             return GuitarArticulationAction::Continue;
         }
-        GuitarArticulationAction::Play(take)
-    }
-
-    fn handle_input_key(&mut self, key: KeyEvent) -> GuitarArticulationAction {
-        let Some(mut input) = self.input.take() else {
-            return GuitarArticulationAction::Continue;
-        };
-        if key.code == KeyCode::Esc {
-            self.error = None;
-            return GuitarArticulationAction::Continue;
-        }
-        if is_commit_key(key) {
-            let value = cmrt_tui_core::text_input::textarea_value(&input);
-            return match self.commit_mml(value.trim()) {
-                Ok(()) if !self.plain.is_empty() => GuitarArticulationAction::Play(Take::Converted),
-                Ok(()) => GuitarArticulationAction::Continue,
-                Err(reason) => {
-                    // 閉じると打った文字列ごと消えるので、開いたまま理由を出す。
-                    self.error = Some(reason);
-                    self.input = Some(input);
-                    GuitarArticulationAction::Continue
-                }
-            };
-        }
-        if cmrt_tui_core::text_input::apply_key_event_to_textarea(&mut input, key) {
-            self.error = None;
-        }
-        self.input = Some(input);
-        GuitarArticulationAction::Continue
-    }
-
-    /// MML を確定し、raw・Articulated・matrix を作り直す。列の数が変わると列ごとのルールの位置が
-    /// 意味を失うので、それは全部消す。列に依らない行全体のルールは残す。空の MML は音を全部空にする。
-    fn commit_mml(&mut self, mml: &str) -> Result<(), String> {
-        let plain = if mml.is_empty() {
-            Vec::new()
+        if self.note_preview {
+            GuitarArticulationAction::PlayNote {
+                take,
+                column: self.cursor,
+            }
         } else {
-            cmrt_chord::timed_performance(mml)?.events
-        };
-        self.mml = mml.to_string();
-        self.notes = notes_from_events(&plain);
-        self.plain = plain;
-        self.rules = self.rules.without_column_rules();
-        self.cursor = 0;
-        self.error = None;
-        self.rebuild_converted();
-        Ok(())
+            GuitarArticulationAction::Play(take)
+        }
     }
 
     fn rebuild_converted(&mut self) {
         self.articulated = articulate(&self.notes, &self.rules);
         self.converted = convert(&self.plain, &self.rules);
+        self.humanized = if self.rules.is_row_on(RowRule::Humanize) {
+            humanize::seeded(&self.notes, &self.articulated)
+        } else {
+            Vec::new()
+        };
     }
 }
 
@@ -293,15 +369,6 @@ fn is_help_key(key: KeyEvent) -> bool {
         && !key
             .modifiers
             .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
-}
-
-/// 1 行入力欄の確定キー。crossterm は `Ctrl+M` を `Enter` とは別に渡してくることがある。
-fn is_commit_key(key: KeyEvent) -> bool {
-    match key.code {
-        KeyCode::Enter => true,
-        KeyCode::Char('m') => key.modifiers.contains(KeyModifiers::CONTROL),
-        _ => false,
-    }
 }
 
 #[cfg(test)]

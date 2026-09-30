@@ -50,6 +50,7 @@ impl<'a> TuiApp<'a> {
     pub(in crate::tui) fn save_notepad_and_session_state(&mut self) {
         self.notepad.flush_patch_phrase_store_if_dirty();
         self.save_history_state();
+        self.save_guitar_articulation_history();
         self.notepad.flush_disk_cache();
     }
 }

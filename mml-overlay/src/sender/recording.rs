@@ -14,15 +14,22 @@ use std::{
 use cmrt_realtime_play::{LiveTimelineConfig, TimelineMidiEvent};
 
 use super::live_patch::LivePatch;
-use super::sink::{SinkResult, SoundSink};
+use super::sink::{PreloadTicket, SinkResult, SoundSink};
 
 /// sink が受けた操作（受けた順）。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SinkOperation {
     Prepare,
+    /// 鳴っていない bank への先読みを受け付けた（完了は待っていない）。
+    Preload {
+        instance_id: u8,
+    },
     Timeline,
     Stop,
-    FadeOut { instance_ids: Vec<u8>, fade_ms: u32 },
+    FadeOut {
+        instance_ids: Vec<u8>,
+        fade_ms: u32,
+    },
 }
 
 #[derive(Default)]
@@ -32,6 +39,9 @@ pub struct RecordingSink {
     operations: Mutex<Vec<SinkOperation>>,
     midi: Mutex<Vec<(Instant, [u8; 3])>>,
     timeline_events: Mutex<Vec<TimelineMidiEvent>>,
+    preloads: Mutex<Vec<LivePatch>>,
+    /// 先頭からこの件数までの先読みを、完了したものとして返す。
+    finished_preloads: AtomicUsize,
     timelines: AtomicUsize,
     stops: AtomicUsize,
 }
@@ -48,6 +58,18 @@ impl RecordingSink {
     /// 準備を頼まれた音色と chain（順に）。
     pub fn prepared(&self) -> Vec<LivePatch> {
         self.prepared.lock().unwrap().clone()
+    }
+
+    /// 先読みを頼まれた音色と chain（受け付けた順に）。
+    pub fn preloads(&self) -> Vec<LivePatch> {
+        self.preloads.lock().unwrap().clone()
+    }
+
+    /// まだ完了していない先読みのうち、いちばん古い 1 件を完了させる。
+    ///
+    /// 先読みは、これを呼ぶまで読み込み中のまま残る。
+    pub fn finish_preload(&self) {
+        self.finished_preloads.fetch_add(1, Ordering::AcqRel);
     }
 
     /// 張った live timeline の数。行を 1 回鳴らすと 1 増える。
@@ -106,6 +128,22 @@ impl SoundSink for RecordingSink {
 
     fn prepare_standby_patch(&self, instance_id: u8, patch: &LivePatch) -> SinkResult {
         self.prepare_patch(instance_id, patch)
+    }
+
+    fn begin_preload(&self, instance_id: u8, patch: &LivePatch) -> Result<PreloadTicket, String> {
+        let mut preloads = self.preloads.lock().unwrap();
+        preloads.push(patch.clone());
+        self.push(SinkOperation::Preload { instance_id });
+        Ok(PreloadTicket::Recorded(preloads.len() - 1))
+    }
+
+    fn poll_preload(&self, ticket: &mut PreloadTicket) -> Result<bool, String> {
+        match ticket {
+            PreloadTicket::Recorded(index) => {
+                Ok(*index < self.finished_preloads.load(Ordering::Acquire))
+            }
+            PreloadTicket::Server(_) => Err("recording sink has no server request".to_string()),
+        }
     }
 
     fn send_midi(&self, _instance_id: u8, messages: &[[u8; 3]]) -> SinkResult {

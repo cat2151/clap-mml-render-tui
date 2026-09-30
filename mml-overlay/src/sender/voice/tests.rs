@@ -133,7 +133,7 @@ impl SoundSink for FakeSink {
 }
 
 fn voice() -> Voice {
-    Voice::new(48_000.0, SoundingLines::default())
+    Voice::new(48_000.0, SoundingLines::default(), Arc::default())
 }
 
 /// chain 無しの音色。

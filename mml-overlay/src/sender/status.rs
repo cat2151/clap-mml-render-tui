@@ -1,4 +1,11 @@
-use std::time::Instant;
+use std::{
+    sync::Mutex,
+    time::{Duration, Instant},
+};
+
+use crate::line_play::LineProgram;
+
+use super::live_patch::LivePatch;
 
 /// sender worker の現在状態。TUI は読み取りだけ行う。
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -17,6 +24,19 @@ pub struct MmlOverlaySenderStatus {
     pub(crate) prepare_error: Option<String>,
     /// `prepare_error` を出した command。別の command の失敗を取り違えないために持つ。
     pub(crate) prepare_error_command_id: u64,
+    /// 裏で読んでいる、または読み終えて使える先読み。
+    pub(crate) preload: Option<MmlOverlayPreload>,
+}
+
+/// [`super::MmlOverlaySender::preload`] で頼んだ音色の状態。
+///
+/// 読み込み中でも [`MmlOverlaySenderStatus::is_loading`] は立たない（画面を塞がない）。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MmlOverlayPreload {
+    /// 鳴っていない bank へ読み込んでいる。
+    Loading(LivePatch),
+    /// 読み終えた。この音色の行は読み込み無しで鳴る。
+    Ready(LivePatch),
 }
 
 impl MmlOverlaySenderStatus {
@@ -47,6 +67,11 @@ impl MmlOverlaySenderStatus {
     /// 直近の音源準備が失敗した理由。成功していれば `None`。
     pub fn prepare_error(&self) -> Option<&str> {
         self.prepare_error.as_deref()
+    }
+
+    /// 先読みの状態。頼んでいない・失敗した・読んだ bank を別の音色が使った、のときは `None`。
+    pub fn preload(&self) -> Option<&MmlOverlayPreload> {
+        self.preload.as_ref()
     }
 
     /// command `command_id` の音源準備が失敗した理由。その command が失敗していなければ `None`。
@@ -82,4 +107,52 @@ impl MmlOverlayLinePlayback {
     pub fn is_sounding_at(self, now: Instant) -> bool {
         now >= self.started_at && self.ends_at.is_none_or(|ends_at| now < ends_at)
     }
+}
+
+pub(super) fn publish_line_playback(
+    status: &Mutex<MmlOverlaySenderStatus>,
+    command_id: u64,
+    program: &LineProgram,
+) {
+    let started_at = Instant::now();
+    let ends_at = if program.repeat {
+        None
+    } else {
+        Duration::try_from_secs_f64(program.performance.loop_seconds)
+            .ok()
+            .and_then(|duration| started_at.checked_add(duration))
+    };
+    // 壊れた有限長を「終了しない演奏」として公開しない。
+    if !program.repeat && ends_at.is_none() {
+        return;
+    }
+    status.lock().unwrap().line_playback = Some(MmlOverlayLinePlayback {
+        command_id,
+        started_at,
+        ends_at,
+    });
+}
+
+pub(super) fn publish_preload(status: &Mutex<MmlOverlaySenderStatus>, voice: &super::voice::Voice) {
+    status.lock().unwrap().preload = voice.preload_state();
+}
+
+/// command 1 つぶんの状態を作り直す。
+///
+/// **直近の失敗理由だけは持ち越す。** ここで捨てると、失敗の直後に届いた
+/// 次の command（`Stop` など）が理由を消してしまい、画面が「なぜ鳴らなかったか」を
+/// 一度も読めないまま終わる。理由を消すのは、次の準備が成功したときだけ。
+/// 先読みの状態も command をまたぐので持ち越す。
+pub(super) fn begin_status(status: &Mutex<MmlOverlaySenderStatus>, command_id: u64) {
+    let mut status = status.lock().unwrap();
+    let prepare_error = status.prepare_error.take();
+    let prepare_error_command_id = status.prepare_error_command_id;
+    let preload = status.preload.take();
+    *status = MmlOverlaySenderStatus {
+        command_id,
+        prepare_error,
+        prepare_error_command_id,
+        preload,
+        ..MmlOverlaySenderStatus::default()
+    };
 }

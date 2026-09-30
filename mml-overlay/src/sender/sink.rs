@@ -10,14 +10,22 @@
 //! patch と MIDI の操作は instance を明示して受け取る。
 
 use cmrt_realtime_play::{
-    LiveTimelineConfig, RealtimePlayServerSupervisor, TimelineMidiEvent, BANK_COUNT,
-    MAX_MIDI_MESSAGES,
+    LiveTimelineConfig, RealtimePlayServerSupervisor, StandbyPatchRequest, TimelineMidiEvent,
+    BANK_COUNT, MAX_MIDI_MESSAGES,
 };
 
 use super::live_patch::LivePatch;
 
 /// 失敗の中身は log へ出すだけなので文字列で十分。
 pub(super) type SinkResult = Result<(), String>;
+
+/// 受け付けた先読み 1 件。完了は [`SoundSink::poll_preload`] で見る。
+pub(super) enum PreloadTicket {
+    Server(StandbyPatchRequest),
+    /// server を使わない sink の、何件目の先読みか。
+    #[cfg(any(test, feature = "test-support"))]
+    Recorded(usize),
+}
 
 pub(super) trait SoundSink {
     fn prepare_patch(&self, instance_id: u8, patch: &LivePatch) -> SinkResult;
@@ -32,6 +40,19 @@ pub(super) trait SoundSink {
     fn prepare_standby_patch(&self, instance_id: u8, _patch: &LivePatch) -> SinkResult {
         Err(format!("instance {instance_id} has no standby bank"))
     }
+    /// 鳴っていない bank の instance へ音色の読み込みを頼み、**完了を待たずに**戻る。
+    ///
+    /// 完了通知の枠は 1 件ぶんしか無い。前の 1 件を [`Self::poll_preload`] で決着させるか
+    /// [`Self::abandon_preload`] で手放してから次を頼むこと。
+    fn begin_preload(&self, instance_id: u8, _patch: &LivePatch) -> Result<PreloadTicket, String> {
+        Err(format!("instance {instance_id} has no standby bank"))
+    }
+    /// 先読みの完了を 1 回だけ見る。block しない。`Ok(false)` はまだ読み込み中。
+    fn poll_preload(&self, _ticket: &mut PreloadTicket) -> Result<bool, String> {
+        Err("preload is not supported".to_string())
+    }
+    /// 結果を待たずに手放す。wire 上の要求は取り消せないので、server は読み込みを続ける。
+    fn abandon_preload(&self, _ticket: PreloadTicket) {}
     /// 生 MIDI を offset なしで即座に送る。
     fn send_midi(&self, instance_id: u8, messages: &[[u8; 3]]) -> SinkResult;
     /// serverがprocess済みnoteをすべてNoteOffする。呼び出し側はnoteを知らなくてよい。
@@ -71,6 +92,31 @@ impl SoundSink for RealtimePlayServerSupervisor {
             patch.effect_chain(),
         )
         .map_err(|error| format!("{error:#}"))
+    }
+
+    fn begin_preload(&self, instance_id: u8, patch: &LivePatch) -> Result<PreloadTicket, String> {
+        self.begin_standby_patch_with_effect_chain(instance_id, patch.patch(), patch.effect_chain())
+            .map(PreloadTicket::Server)
+            .map_err(|error| format!("{error:#}"))
+    }
+
+    fn poll_preload(&self, ticket: &mut PreloadTicket) -> Result<bool, String> {
+        match ticket {
+            PreloadTicket::Server(request) => self
+                .poll_standby_patch(request)
+                .map(|done| done.is_some())
+                .map_err(|error| format!("{error:#}")),
+            #[cfg(any(test, feature = "test-support"))]
+            PreloadTicket::Recorded(_) => Err("preload ticket has no server request".to_string()),
+        }
+    }
+
+    fn abandon_preload(&self, ticket: PreloadTicket) {
+        match ticket {
+            PreloadTicket::Server(request) => self.abandon_standby_patch(request),
+            #[cfg(any(test, feature = "test-support"))]
+            PreloadTicket::Recorded(_) => {}
+        }
     }
 
     fn send_midi(&self, instance_id: u8, messages: &[[u8; 3]]) -> SinkResult {

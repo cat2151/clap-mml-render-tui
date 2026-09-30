@@ -13,25 +13,33 @@ use ratatui::{
 
 use cmrt_tui_core::{
     status::base_style,
-    theme::{MONOKAI_CYAN, MONOKAI_GRAY, MONOKAI_PINK, MONOKAI_YELLOW},
+    theme::{MONOKAI_CYAN, MONOKAI_GRAY, MONOKAI_PINK},
     ui::draw_frame_background,
 };
 
-use crate::{Articulation, GuitarArticulationScreen, RowRule, Rule, Take, TimedMidiEvent};
+use crate::{GuitarArticulationScreen, RowRule, Rule, Take};
 
+mod event_list;
 mod help;
+mod history;
 mod matrix;
+mod sample_midi;
+
+pub(crate) use event_list::{name_width, EventRow};
 
 #[cfg(test)]
 mod tests;
 
+/// `b` / `space` / `i` は raw / Articulated / MML の pane の見出しに出ているので、ここには載せない（幅が足りない）。
+/// 幅 100 の端末で `?:help` まで収まる長さに保つ（枠の内側 98 桁ちょうど）。
 const KEYBIND_TEXT: &str =
-    " h/l:列移動  a:H/P切替  e:eco  s:auto  b:raw  space:Articulated  x:effect  i:MML  q:終了  ?:help";
+    "h/l:移動 a:H/P mp/cvg:奏法 e:eco s:auto d:汚し r:汚しrel n:1音 x:fx w:dry H:履歴 o:MID q:終 ?:help";
+const MID_KEYBIND_TEXT: &str = " o:MID選択 space:演奏 n:1音 h/l:移動 Esc:MIDを閉じる q:終了 ?:help";
 const INPUT_HINT_TEXT: &str = " MML を編集中  Enter:確定して演奏  Esc:matrix 操作へ  ?:help";
-const MML_TITLE: &str = " MML ";
+const MML_TITLE: &str = " MML (i) ";
 const MML_PLACEHOLDER: &str = "o3 l8 e f+ g";
 const MATRIX_TITLE: &str = " 音 / ルール ";
-const INSTRUMENT: &str = "METAL-GTX Full";
+const PLAIN_TITLE: &str = " raw (b) ";
 /// 入力欄（枠込み）の高さ。
 const INPUT_HEIGHT: u16 = 3;
 /// イベント列の pane に最低限残す高さ（枠込み）。matrix が高くてもこれだけは残す。
@@ -78,7 +86,7 @@ fn screen_block(title: String) -> Block<'static> {
         .border_style(base_style().fg(MONOKAI_GRAY))
 }
 
-fn pane_block(title: &'static str) -> Block<'static> {
+fn pane_block(title: impl Into<Line<'static>>) -> Block<'static> {
     Block::default()
         .borders(Borders::ALL)
         .title(title)
@@ -87,7 +95,7 @@ fn pane_block(title: &'static str) -> Block<'static> {
 }
 
 /// キーを受けている pane の枠。
-fn focused_pane_block(title: &'static str) -> Block<'static> {
+fn focused_pane_block(title: impl Into<Line<'static>>) -> Block<'static> {
     pane_block(title).border_style(base_style().fg(MONOKAI_CYAN))
 }
 
@@ -95,25 +103,11 @@ pub fn draw(screen: &GuitarArticulationScreen, f: &mut Frame<'_>) {
     draw_frame_background(f);
     let layout = layout_for(f.area(), screen);
     f.render_widget(screen_block(screen_title(screen)), f.area());
-    draw_input(f, layout.input, screen);
-    let matrix_block = if screen.input_open() {
-        pane_block(MATRIX_TITLE)
+    if screen.sample_midi().is_some() {
+        sample_midi::draw_panes(f, &layout, screen);
     } else {
-        focused_pane_block(MATRIX_TITLE)
-    };
-    let matrix_inner = matrix_block.inner(layout.matrix);
-    f.render_widget(
-        Paragraph::new(matrix::lines(screen, matrix_inner.width)).block(matrix_block),
-        layout.matrix,
-    );
-    draw_events(f, layout.plain, " raw (b) ", screen, Take::Plain);
-    draw_events(
-        f,
-        layout.converted,
-        " Articulated (space) ",
-        screen,
-        Take::Converted,
-    );
+        draw_mml_panes(f, &layout, screen);
+    }
     f.render_widget(
         Paragraph::new(status_line(screen)).style(base_style()),
         layout.status,
@@ -126,19 +120,56 @@ pub fn draw(screen: &GuitarArticulationScreen, f: &mut Frame<'_>) {
             screen.effect_catalog(),
             cmrt_effect_chain_select::EffectChainView {
                 adding,
-                header: Line::from(format!("instrument: {INSTRUMENT}")),
+                header: Line::from(format!("instrument: {}", screen.instrument().label())),
                 error: None,
             },
         );
     }
+    history::draw_overlay(f, screen);
+    sample_midi::draw_list_overlay(f, screen);
     if screen.help_open() {
         help::draw_overlay(f);
     }
 }
 
-/// 音色の後ろに、確定済みの chain を信号の順に並べる。
+/// MML 欄・matrix・raw と Articulated のイベント列。
+fn draw_mml_panes(
+    f: &mut Frame<'_>,
+    layout: &GuitarArticulationLayout,
+    screen: &GuitarArticulationScreen,
+) {
+    draw_input(f, layout.input, screen);
+    let matrix_block = if screen.input_open() {
+        pane_block(MATRIX_TITLE)
+    } else {
+        focused_pane_block(MATRIX_TITLE)
+    };
+    let matrix_inner = matrix_block.inner(layout.matrix);
+    f.render_widget(
+        Paragraph::new(matrix::lines(screen, matrix_inner.width)).block(matrix_block),
+        layout.matrix,
+    );
+    event_list::draw(f, layout.plain, PLAIN_TITLE, screen, Take::Plain);
+    event_list::draw(
+        f,
+        layout.converted,
+        " Articulated (space) ",
+        screen,
+        Take::Converted,
+    );
+}
+
+/// 音色の後ろに、確定済みの chain を信号の順に並べる。dry の間も chain は出したまま ` [dry]` を足す。
 fn screen_title(screen: &GuitarArticulationScreen) -> String {
-    let mut title = format!(" Guitar Articulation  {INSTRUMENT}");
+    let mode = if screen.sample_midi().is_some() {
+        " [MID]"
+    } else {
+        ""
+    };
+    let mut title = format!(
+        " Guitar Articulation{mode}  {}",
+        screen.instrument().label()
+    );
     // 空の chain で catalog を引くと、未走査のときに描画が走査を待ってしまう。
     if !screen.effect_chain().is_empty() {
         let catalog = screen.effect_catalog();
@@ -147,6 +178,13 @@ fn screen_title(screen: &GuitarArticulationScreen) -> String {
             title.push_str(&cmrt_effect_chain_select::stage_label(stage, catalog));
         }
     }
+    if screen.effect_dry() {
+        title.push_str(" [dry]");
+    }
+    if screen.note_preview() {
+        title.push_str(" [1音]");
+    }
+    title.push_str(&format!(" [起動:{}]", screen.startup_instrument().label()));
     title.push(' ');
     title
 }
@@ -187,73 +225,6 @@ fn draw_input(f: &mut Frame<'_>, area: Rect, screen: &GuitarArticulationScreen) 
     }
 }
 
-fn draw_events(
-    f: &mut Frame<'_>,
-    area: Rect,
-    title: &'static str,
-    screen: &GuitarArticulationScreen,
-    take: Take,
-) {
-    let block = pane_block(title);
-    let height = block.inner(area).height as usize;
-    let events = screen.events(take);
-    let target = cursor_event_index(screen, events);
-    let first = target.map_or(0, |index| index.saturating_sub(height / 3));
-    let lines: Vec<Line> = events
-        .iter()
-        .skip(first)
-        .take(height)
-        .enumerate()
-        .map(|(offset, event)| {
-            let line = Line::from(event_text(event, take == Take::Converted));
-            if Some(first + offset) == target {
-                line.style(base_style().fg(MONOKAI_YELLOW))
-            } else {
-                line
-            }
-        })
-        .collect();
-    f.render_widget(Paragraph::new(lines).block(block), area);
-}
-
-/// カーソル列の最初の note on（同時刻の KS を含む）の位置。
-fn cursor_event_index(
-    screen: &GuitarArticulationScreen,
-    events: &[TimedMidiEvent],
-) -> Option<usize> {
-    let seconds = screen
-        .notes()
-        .iter()
-        .find(|note| note.column == screen.cursor())?
-        .on_seconds;
-    events
-        .iter()
-        .position(|event| is_note_on(event) && (event.seconds - seconds).abs() < 1e-9)
-}
-
-fn is_note_on(event: &TimedMidiEvent) -> bool {
-    event.message[0] & 0xF0 == 0x90 && event.message[2] != 0
-}
-
-/// 1 行 1 イベント: 秒・種類・音名 or KS 名・velocity。
-pub(crate) fn event_text(event: &TimedMidiEvent, name_keyswitches: bool) -> String {
-    let [status, data1, data2] = event.message;
-    let (kind, name) = match status & 0xF0 {
-        0x90 if data2 != 0 => ("on", note_label(data1, name_keyswitches)),
-        0x80 | 0x90 => ("off", note_label(data1, name_keyswitches)),
-        0xB0 => ("cc", format!("CC{data1}")),
-        _ => ("?", format!("{status:02X} {data1:02X}")),
-    };
-    format!("{:>7.3} {kind:<3} {name:<14} {data2:>3}", event.seconds)
-}
-
-fn note_label(pitch: u8, name_keyswitches: bool) -> String {
-    match Articulation::from_keyswitch(pitch).filter(|_| name_keyswitches) {
-        Some(articulation) => format!("KS {}", articulation.name()),
-        None => note_name(pitch),
-    }
-}
-
 /// `60` = `C4`。
 pub(crate) fn note_name(pitch: u8) -> String {
     const NAMES: [&str; 12] = [
@@ -264,12 +235,23 @@ pub(crate) fn note_name(pitch: u8) -> String {
 }
 
 /// ルール行の見出しとトグルのキー。
-pub(crate) const RULE_ROWS: [(Rule, char, &str); 1] = [(Rule::HammerPull, 'a', "H/P")];
+pub(crate) const RULE_ROWS: [(Rule, char, &str); 7] = [
+    (Rule::HammerPull, 'a', "hammer/pull"),
+    (Rule::PalmMute, 'm', "palm mute"),
+    (Rule::PinchHarmonic, 'p', "pinch harmonic"),
+    (Rule::Slide, '/', "slide"),
+    (Rule::Choke, 'c', "bend"),
+    (Rule::Vibrato, 'v', "vibrato"),
+    (Rule::PickScratch, 'g', "pick scratch"),
+];
 
 /// 行全体で ON/OFF するルールの段の見出しとトグルのキー。上の段から並べる（H/P の段の上）。
-pub(crate) const ROW_RULE_ROWS: [(RowRule, char, &str); 2] = [
-    (RowRule::EconomyPicking, 'e', "eco"),
-    (RowRule::AutoHammerPull, 's', "auto"),
+/// 汚し 2 つは並べる。自動 H/P は H/P の段のすぐ上に置く（どちらも列の H/P を示す）。
+pub(crate) const ROW_RULE_ROWS: [(RowRule, char, &str); 4] = [
+    (RowRule::Humanize, 'd', "humanize"),
+    (RowRule::HumanizeRelease, 'r', "humanize release"),
+    (RowRule::EconomyPicking, 'e', "economy picking"),
+    (RowRule::AutoHammerPull, 's', "auto hammer/pull"),
 ];
 
 fn status_line(screen: &GuitarArticulationScreen) -> Line<'static> {
@@ -281,6 +263,8 @@ fn status_line(screen: &GuitarArticulationScreen) -> Line<'static> {
     }
     let text = if screen.input_open() {
         INPUT_HINT_TEXT
+    } else if screen.sample_midi().is_some() {
+        MID_KEYBIND_TEXT
     } else {
         KEYBIND_TEXT
     };

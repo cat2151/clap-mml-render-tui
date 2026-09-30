@@ -10,18 +10,24 @@ pub const KEYSWITCH_RESET_SECONDS: f64 = 0.05;
 ///
 /// KS は `sw_last` のラッチ式で演奏を跨いで残るので、先頭で必ず既定の奏法を押し、
 /// 最後が既定以外なら末尾で既定へ戻す。途中は奏法が変わる音の前にだけ置く。
-/// KS の長さはその音と同じ。
+/// KS はその音の列でいちばん早い note on の時刻に置き（和音の音がずれていても、列のどの音より前に効く）、
+/// その音の note off で離す。
 pub fn keyswitch_events(notes: &[Note], articulations: &[Articulation]) -> Vec<TimedMidiEvent> {
     let mut out = Vec::new();
     let mut latched: Option<Articulation> = None;
     for (note, &articulation) in notes.iter().zip(articulations) {
+        let on_seconds = notes
+            .iter()
+            .filter(|other| other.column == note.column)
+            .map(|other| other.on_seconds)
+            .fold(note.on_seconds, f64::min);
         if latched.is_none() {
             // 先頭の音の奏法に関わらず、まず既定へ揃えてから変える。
             push_keyswitch(
                 &mut out,
                 note.channel,
                 Articulation::SusDown,
-                note.on_seconds,
+                on_seconds,
                 note.off_seconds,
             );
             latched = Some(Articulation::SusDown);
@@ -31,7 +37,7 @@ pub fn keyswitch_events(notes: &[Note], articulations: &[Articulation]) -> Vec<T
                 &mut out,
                 note.channel,
                 articulation,
-                note.on_seconds,
+                on_seconds,
                 note.off_seconds,
             );
         }

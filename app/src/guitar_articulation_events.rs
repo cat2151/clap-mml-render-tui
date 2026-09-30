@@ -6,7 +6,7 @@
 use anyhow::{anyhow, bail, Context, Result};
 use serde::Deserialize;
 
-use cmrt_guitar_articulation::{Articulation, RuleTable, Take, TimedMidiEvent, PATCH};
+use cmrt_guitar_articulation::{Articulation, RuleTable, Take, TimedMidiEvent};
 
 const PLAY_LOG_PREFIX: &str = "guitar-articulation: event=play ";
 /// raw の演奏はルール表を使わないので、作り直す対象は Articulated の演奏だけ。
@@ -25,14 +25,55 @@ pub struct GuitarArticulationEventsRequest {
     pub mml: Option<String>,
 }
 
-/// 送った演奏のログ 1 行。音は機械で判定できないので、何をどの音色へ送ったかを残す。
+/// 送った演奏のログ 1 行。音は機械で判定できないので、何をどの音色（`patch`）へ送ったかを残す。
 /// 末尾の `mml` と `rules` は JSON で、[`logged_plays`] がここから演奏を作り直す。
 pub(crate) fn play_log_line(
+    patch: &str,
     take: Take,
     events: &[TimedMidiEvent],
     mml: &str,
     rules: &RuleTable,
 ) -> String {
+    format!(
+        "{PLAY_LOG_PREFIX}{}{MML_KEY}{}{RULES_KEY}{}",
+        take_summary(patch, take, events),
+        serde_json::Value::from(mml),
+        rules.to_json(),
+    )
+}
+
+/// カーソル列の 1 音だけを送った演奏のログ 1 行。作り直しの対象ではないので MML とルール表は書かず、
+/// `event=play-note` にして [`logged_plays`] に拾わせない。
+pub(crate) fn play_note_log_line(
+    patch: &str,
+    take: Take,
+    column: usize,
+    events: &[TimedMidiEvent],
+) -> String {
+    format!(
+        "guitar-articulation: event=play-note column={column} {}",
+        take_summary(patch, take, events)
+    )
+}
+
+/// サンプル MID を送った演奏のログ 1 行。`note` は全体なら `all`、1 音ならまとまりの番号。
+/// MML から作り直せないので `event=play-sample-midi` にして [`logged_plays`] に拾わせない。
+pub(crate) fn play_sample_midi_log_line(
+    file: &str,
+    note: Option<usize>,
+    events: &[TimedMidiEvent],
+    patch: &str,
+) -> String {
+    let note = note.map_or_else(|| "all".to_string(), |note| note.to_string());
+    let seconds = events.last().map_or(0.0, |event| event.seconds);
+    format!(
+        "guitar-articulation: event=play-sample-midi file={file:?} note={note} events={} seconds={seconds:.3} patch={patch:?}",
+        events.len()
+    )
+}
+
+/// `take=... events=... keyswitch_note_ons=... seconds=... patch=...`
+fn take_summary(patch: &str, take: Take, events: &[TimedMidiEvent]) -> String {
     let keyswitches = events
         .iter()
         .filter(|event| {
@@ -43,11 +84,9 @@ pub(crate) fn play_log_line(
         .count();
     let seconds = events.last().map_or(0.0, |event| event.seconds);
     format!(
-        "{PLAY_LOG_PREFIX}take={} events={} keyswitch_note_ons={keyswitches} seconds={seconds:.3} patch={PATCH:?}{MML_KEY}{}{RULES_KEY}{}",
+        "take={} events={} keyswitch_note_ons={keyswitches} seconds={seconds:.3} patch={patch:?}",
         take.label(),
         events.len(),
-        serde_json::Value::from(mml),
-        rules.to_json(),
     )
 }
 

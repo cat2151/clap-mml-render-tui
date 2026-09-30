@@ -210,26 +210,27 @@ fn shutdown_hard_stops_a_layered_timeline() {
             worker_sink,
             48_000.0,
             worker_latest,
+            Arc::default(),
             worker_status,
             SoundingLines::default(),
         );
     });
-    tx.send(SenderCommand {
+    tx.send(WorkerMessage::Command(SenderCommand {
         id: 1,
         queued_at: Instant::now(),
         kind: SenderCommandKind::PlayLayers {
             layers: chord_and_bass(),
         },
-    })
+    }))
     .unwrap();
     wait_until(|| sink.begins() == 1);
 
     latest.store(2, Ordering::Release);
-    tx.send(SenderCommand {
+    tx.send(WorkerMessage::Command(SenderCommand {
         id: 2,
         queued_at: Instant::now(),
         kind: SenderCommandKind::Shutdown,
-    })
+    }))
     .unwrap();
     worker.join().unwrap();
 

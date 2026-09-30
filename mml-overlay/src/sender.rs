@@ -15,8 +15,9 @@
 //! note gate もこの worker が「note on の送信成功後」から数える。gate 待ちには
 //! `recv_timeout` を使い、次の操作が来たら待ちを即座に打ち切って前の音を止める。
 //!
-//! 待ちの相手は 2 つある（[`voice::Wake`]）。gate の期限と、repeat の次の周を積む時刻の
-//! 早いほうまで待ち、時間切れならその片方だけを片づけてまた待つ。**repeat の周回は
+//! 待ちの相手は 3 つある（[`voice::Wake`]）。gate の期限、repeat の次の周を積む時刻、
+//! 裏で読んでいる音色の完了確認のいちばん早いものまで待ち、時間切れならそれだけを
+//! 片づけてまた待つ。**repeat の周回は
 //! この worker のタイマーで積むが、積む中身は絶対秒なので鳴る位置は時計に左右されない。**
 
 mod fade_out;
@@ -24,6 +25,7 @@ mod layers;
 mod line_playback;
 mod live_patch;
 mod prepare;
+mod queue;
 #[cfg(any(test, feature = "test-support"))]
 mod recording;
 mod sink;
@@ -34,7 +36,7 @@ mod voice;
 
 use std::{
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc::{self, RecvTimeoutError},
         Arc, Mutex,
     },
@@ -49,11 +51,13 @@ use crate::line_play::LineProgram;
 pub use layers::LineLayer;
 pub use live_patch::LivePatch;
 use prepare::{prepare_if_needed, prepare_line_if_needed};
+use queue::{drain_queue, WorkerMessage};
 #[cfg(any(test, feature = "test-support"))]
 pub use recording::{RecordingSink, SinkOperation};
 use sink::SoundSink;
 use sounding_lines::SoundingLines;
-pub use status::{MmlOverlayLinePlayback, MmlOverlaySenderStatus};
+use status::{begin_status, publish_line_playback, publish_preload};
+pub use status::{MmlOverlayLinePlayback, MmlOverlayPreload, MmlOverlaySenderStatus};
 use voice::{Voice, Wake};
 
 /// オーバーレイが借りる音源インスタンス。
@@ -109,12 +113,14 @@ struct SenderCommand {
 }
 
 pub struct MmlOverlaySender {
-    tx: mpsc::Sender<SenderCommand>,
+    tx: mpsc::Sender<WorkerMessage>,
     /// fadeout だけは worker を通さず、呼び出し側のスレッドからこれへ送る。
     fader: Arc<dyn SoundSink + Send + Sync>,
     sounding_lines: SoundingLines,
     next_command_id: AtomicU64,
     latest_command_id: Arc<AtomicU64>,
+    /// `Drop` が立てる。worker は先読みの決着を待っている最中でもこれを見て抜ける。
+    shutting_down: Arc<AtomicBool>,
     status: Arc<Mutex<MmlOverlaySenderStatus>>,
     worker: Option<JoinHandle<()>>,
 }
@@ -136,6 +142,8 @@ impl MmlOverlaySender {
         let latest_command_id = Arc::new(AtomicU64::new(0));
         let status = Arc::new(Mutex::new(MmlOverlaySenderStatus::default()));
         let worker_latest_command_id = Arc::clone(&latest_command_id);
+        let shutting_down = Arc::new(AtomicBool::new(false));
+        let worker_shutting_down = Arc::clone(&shutting_down);
         let worker_status = Arc::clone(&status);
         let sounding_lines = SoundingLines::default();
         let worker_sounding_lines = sounding_lines.clone();
@@ -148,6 +156,7 @@ impl MmlOverlaySender {
                     sink,
                     sample_rate_hz,
                     worker_latest_command_id,
+                    worker_shutting_down,
                     worker_status,
                     worker_sounding_lines,
                 )
@@ -159,6 +168,7 @@ impl MmlOverlaySender {
             sounding_lines,
             next_command_id: AtomicU64::new(1),
             latest_command_id,
+            shutting_down,
             status,
             worker: Some(worker),
         }
@@ -198,6 +208,16 @@ impl MmlOverlaySender {
         self.enqueue(SenderCommandKind::PlayLayers { layers })
     }
 
+    /// 鳴っていない bank へ `patch` を裏で読んでおく。以後この音色の行は読み込み無しで鳴る。
+    ///
+    /// 列に積んだ前の操作を捨てず、読み込みの間も「読み込み中」を出さず、次の操作を
+    /// 塞がない。状態は [`MmlOverlaySenderStatus::preload`] で見る。
+    pub fn preload(&self, patch: impl Into<LivePatch>) {
+        if self.tx.send(WorkerMessage::Preload(patch.into())).is_err() {
+            log_error("action=mml-overlay-preload event=enqueue-error".to_string());
+        }
+    }
+
     /// 鳴っているものを止める。打鍵の音か行の演奏かは呼び出し側が気にしなくてよい。
     pub fn stop(&self) -> u64 {
         self.enqueue(SenderCommandKind::Stop)
@@ -212,11 +232,11 @@ impl MmlOverlaySender {
         self.latest_command_id.store(id, Ordering::Release);
         if self
             .tx
-            .send(SenderCommand {
+            .send(WorkerMessage::Command(SenderCommand {
                 id,
                 queued_at: Instant::now(),
                 kind,
-            })
+            }))
             .is_err()
         {
             log_error(format!(
@@ -229,6 +249,7 @@ impl MmlOverlaySender {
 
 impl Drop for MmlOverlaySender {
     fn drop(&mut self) {
+        self.shutting_down.store(true, Ordering::Release);
         self.enqueue(SenderCommandKind::Shutdown);
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
@@ -243,14 +264,15 @@ pub(crate) fn log_error(message: String) {
 }
 
 fn run_sender<S: SoundSink + Send + Sync + 'static>(
-    rx: mpsc::Receiver<SenderCommand>,
+    rx: mpsc::Receiver<WorkerMessage>,
     sink: Arc<S>,
     sample_rate_hz: f64,
     latest_command_id: Arc<AtomicU64>,
+    shutting_down: Arc<AtomicBool>,
     status: Arc<Mutex<MmlOverlaySenderStatus>>,
     sounding_lines: SoundingLines,
 ) {
-    let mut voice = Voice::new(sample_rate_hz, sounding_lines);
+    let mut voice = Voice::new(sample_rate_hz, sounding_lines, shutting_down);
     loop {
         let received = match voice.next_wake(Instant::now()) {
             Some((wake, wait)) => match rx.recv_timeout(wait) {
@@ -268,6 +290,10 @@ fn run_sender<S: SoundSink + Send + Sync + 'static>(
                         }
                         // 継ぎ足しは止めない。ここで stop を通すと毎周継ぎ目が出る。
                         Wake::Repeat => voice.pump_repeat(&*sink, Instant::now()),
+                        Wake::Preload => {
+                            voice.poll_preload(&*sink);
+                            publish_preload(&status, &voice);
+                        }
                     }
                     continue;
                 }
@@ -278,7 +304,12 @@ fn run_sender<S: SoundSink + Send + Sync + 'static>(
                 Err(_) => break,
             },
         };
-        let command = newest_queued_command(received, &rx);
+        let (command, preloads) = drain_queue(received, &rx);
+        voice.poll_preload(&*sink);
+        let Some(command) = command else {
+            request_preloads(&mut voice, &*sink, &status, preloads);
+            continue;
+        };
         let name = command.kind.name();
         let queue_ms = command.queued_at.elapsed().as_millis();
         let started_at = Instant::now();
@@ -338,7 +369,12 @@ fn run_sender<S: SoundSink + Send + Sync + 'static>(
             SenderCommandKind::Supersede => {}
             SenderCommandKind::Shutdown => {
                 voice.stop(&*sink, "shutdown");
+                voice.abandon_preload(&*sink);
             }
+        }
+        // 先読みは同じ列でその前に積まれた command の後に出す。
+        if !shutdown {
+            request_preloads(&mut voice, &*sink, &status, preloads);
         }
         log_line(format!(
             "action=mml-overlay-command event=finished command_id={} command={name} \
@@ -352,59 +388,16 @@ fn run_sender<S: SoundSink + Send + Sync + 'static>(
     }
 }
 
-fn publish_line_playback(
+fn request_preloads(
+    voice: &mut Voice,
+    sink: &impl SoundSink,
     status: &Mutex<MmlOverlaySenderStatus>,
-    command_id: u64,
-    program: &LineProgram,
+    preloads: Vec<LivePatch>,
 ) {
-    let started_at = Instant::now();
-    let ends_at = if program.repeat {
-        None
-    } else {
-        Duration::try_from_secs_f64(program.performance.loop_seconds)
-            .ok()
-            .and_then(|duration| started_at.checked_add(duration))
-    };
-    // 壊れた有限長を「終了しない演奏」として公開しない。
-    if !program.repeat && ends_at.is_none() {
-        return;
+    for patch in preloads {
+        voice.request_preload(sink, patch);
     }
-    status.lock().unwrap().line_playback = Some(MmlOverlayLinePlayback {
-        command_id,
-        started_at,
-        ends_at,
-    });
-}
-
-fn newest_queued_command(
-    mut command: SenderCommand,
-    rx: &mpsc::Receiver<SenderCommand>,
-) -> SenderCommand {
-    while let Ok(newer) = rx.try_recv() {
-        log_line(format!(
-            "action=mml-overlay-command event=superseded command_id={} by_command_id={}",
-            command.id, newer.id
-        ));
-        command = newer;
-    }
-    command
-}
-
-/// command 1 つぶんの状態を作り直す。
-///
-/// **直近の失敗理由だけは持ち越す。** ここで捨てると、失敗の直後に届いた
-/// 次の command（`Stop` など）が理由を消してしまい、画面が「なぜ鳴らなかったか」を
-/// 一度も読めないまま終わる。理由を消すのは、次の準備が成功したときだけ。
-fn begin_status(status: &Mutex<MmlOverlaySenderStatus>, command_id: u64) {
-    let mut status = status.lock().unwrap();
-    let prepare_error = status.prepare_error.take();
-    let prepare_error_command_id = status.prepare_error_command_id;
-    *status = MmlOverlaySenderStatus {
-        command_id,
-        prepare_error,
-        prepare_error_command_id,
-        ..MmlOverlaySenderStatus::default()
-    };
+    publish_preload(status, voice);
 }
 
 fn is_superseded(command_id: u64, latest_command_id: &AtomicU64) -> bool {

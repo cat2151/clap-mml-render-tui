@@ -18,9 +18,23 @@ pub(super) struct EffectOverlay {
 }
 
 impl GuitarArticulationScreen {
-    /// 確定済みの chain。`b` / `space` の演奏はこれを掛けて鳴らす。
+    /// 確定済みの chain。dry の間も持ったまま。
     pub fn effect_chain(&self) -> &[Value] {
         &self.effect_chain
+    }
+
+    /// `b` / `space` の演奏に掛ける chain。dry の間は空。
+    pub fn sounding_effect_chain(&self) -> &[Value] {
+        if self.effect_dry {
+            &[]
+        } else {
+            &self.effect_chain
+        }
+    }
+
+    /// effect を掛けずに鳴らしているか（`w`）。
+    pub fn effect_dry(&self) -> bool {
+        self.effect_dry
     }
 
     pub fn effect_overlay_open(&self) -> bool {
@@ -101,7 +115,10 @@ impl GuitarArticulationScreen {
                     }
                 },
                 ChainKeyAction::Commit => {
+                    // 選んだ chain を聴くために確定したので、dry なら wet へ戻す。
                     self.effect_chain = overlay.editor.chain;
+                    self.effect_dry = false;
+                    self.record_history();
                     return self.play(Take::Converted);
                 }
                 ChainKeyAction::Close => return GuitarArticulationAction::Continue,

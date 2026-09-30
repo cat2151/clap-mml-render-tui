@@ -109,3 +109,54 @@ fn previewing_without_mml_explains_instead_of_playing() {
     assert_eq!(action, GuitarArticulationAction::Continue);
     assert!(screen.error.is_some());
 }
+
+/// amp を確定した画面。
+fn screen_with_amp_chain() -> GuitarArticulationScreen {
+    let mut screen = screen_with_amps();
+    screen.handle_key_event(key(KeyCode::Char('x')));
+    screen.handle_key_event(key(KeyCode::Char('a')));
+    screen.handle_key_event(key(KeyCode::Enter));
+    screen.handle_key_event(key(KeyCode::Enter));
+    screen
+}
+
+#[test]
+fn w_toggles_between_dry_and_wet_and_plays_the_articulated_take() {
+    let mut screen = screen_with_amp_chain();
+
+    let action = screen.handle_key_event(key(KeyCode::Char('w')));
+
+    assert_eq!(action, GuitarArticulationAction::Play(Take::Converted));
+    assert!(screen.effect_dry());
+    assert!(screen.sounding_effect_chain().is_empty());
+    assert_eq!(screen.effect_chain(), [amp_stage()]);
+
+    screen.handle_key_event(key(KeyCode::Char('w')));
+
+    assert!(!screen.effect_dry());
+    assert_eq!(screen.sounding_effect_chain(), [amp_stage()]);
+}
+
+#[test]
+fn committing_a_chain_while_dry_turns_it_wet() {
+    let mut screen = screen_with_amp_chain();
+    screen.handle_key_event(key(KeyCode::Char('w')));
+
+    screen.handle_key_event(key(KeyCode::Char('x')));
+    screen.handle_key_event(key(KeyCode::Enter));
+
+    assert!(!screen.effect_dry());
+    assert_eq!(screen.sounding_effect_chain(), [amp_stage()]);
+}
+
+#[test]
+fn w_while_a_patch_loads_explains_instead_of_switching() {
+    let mut screen = screen_with_amp_chain();
+    screen.set_sound_loading(true);
+
+    let action = screen.handle_key_event(key(KeyCode::Char('w')));
+
+    assert_eq!(action, GuitarArticulationAction::Continue);
+    assert!(!screen.effect_dry());
+    assert!(screen.error.is_some());
+}

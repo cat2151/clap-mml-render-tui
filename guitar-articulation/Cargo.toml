@@ -4,10 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+# 履歴ファイルの保存失敗を呼び出し側（app）へ返す。
+anyhow = "1"
 # 入力 MML → 時刻つきイベント列（`timed_performance`）。
 cmrt-chord = { path = "../chord" }
 # 演奏の後ろに掛ける effect chain（ギターアンプなど）を選ぶ overlay。
 cmrt-effect-chain-select = { path = "../effect-chain-select" }
+# 履歴ファイルの保存先（パスだけ。serde はこの crate が持つ）。
+cmrt-history = { path = "../history" }
 cmrt-midi-filter = { path = "../midi-filter" }
 # effect の catalog（`EffectPlugins`）。
 cmrt-render-core = { path = "../core-lib" }
@@ -17,6 +21,11 @@ crossterm = "0.29"
 ratatui = "0.30"
 # MML の 1 行入力欄。自前で String へ push/pop しない（プロジェクト共通の作法）。
 ratatui-textarea = { version = "0.9", features = ["crossterm"] }
+# 汚しの揺れ。seed を固定し、ログのルール表から同じ演奏を作り直せるようにする。
+rand = "0.10"
 # ルール表を 1 行の JSON でログへ残し、CLI で読み戻す。
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+[dev-dependencies]
+cmrt-history = { path = "../history", features = ["test-support"] }

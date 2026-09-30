@@ -98,3 +98,20 @@ pub fn daw_file_load_path() -> Option<PathBuf> {
 pub fn chord_chart_file_path() -> Option<PathBuf> {
     history_file_path("chord_chart.json")
 }
+
+/// Guitar Articulation 画面の履歴ファイル (`guitar_articulation_history.json`) のパスを返す。
+///
+/// この crate はパスだけを決め、読み書き（serde）は `cmrt-guitar-articulation` 側が持つ。
+/// 新規ファイルなので legacy ディレクトリからの migration は行わない。
+/// `dirs::config_local_dir()` が利用できない環境では `None` を返す。
+pub fn guitar_articulation_history_file_path() -> Option<PathBuf> {
+    history_file_path("guitar_articulation_history.json")
+}
+
+/// Guitar Articulation 画面の設定ファイル (`guitar_articulation_settings.json`) のパスを返す。
+///
+/// この crate はパスだけを決め、読み書き（serde）は `cmrt-guitar-articulation` 側が持つ。
+/// `dirs::config_local_dir()` が利用できない環境では `None` を返す。
+pub fn guitar_articulation_settings_file_path() -> Option<PathBuf> {
+    history_file_path("guitar_articulation_settings.json")
+}

@@ -3,6 +3,11 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use super::*;
 use crate::KEYSWITCH_VELOCITY;
 
+mod articulation_keys;
+mod column_rule_follow;
+mod humanize_keys;
+mod startup_instrument_keys;
+
 fn key(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
 }
@@ -199,7 +204,7 @@ fn toggling_without_mml_explains_instead_of_playing() {
 }
 
 #[test]
-fn recommitting_mml_clears_the_rules_and_the_cursor() {
+fn recommitting_the_same_mml_keeps_the_column_rules_and_resets_the_cursor() {
     let mut screen = screen_with_mml("o3 l8 e f+ g");
     screen.handle_key_event(key(KeyCode::Char('l')));
     screen.handle_key_event(key(KeyCode::Char('a')));
@@ -207,7 +212,8 @@ fn recommitting_mml_clears_the_rules_and_the_cursor() {
     screen.handle_key_event(key(KeyCode::Char('i')));
     screen.handle_key_event(key(KeyCode::Enter));
 
-    assert!(screen.rules().is_empty());
+    assert!(screen.rules().is_on(1, Rule::HammerPull));
+    assert_eq!(screen.rules().column_count_of(Rule::HammerPull), 1);
     assert_eq!(screen.cursor(), 0);
 }
 
@@ -308,14 +314,120 @@ fn s_toggles_auto_hammer_pull_for_the_whole_row_and_plays_the_new_take() {
 }
 
 #[test]
-fn auto_hammer_pull_survives_a_new_mml_but_column_rules_do_not() {
+fn auto_hammer_pull_survives_a_new_mml() {
     let mut screen = screen_with_mml("o3 l8 e f+ g");
     screen.handle_key_event(key(KeyCode::Char('s')));
-    screen.handle_key_event(key(KeyCode::Char('a')));
     screen.handle_key_event(key(KeyCode::Char('i')));
     screen.handle_key_event(key(KeyCode::Char('a')));
     screen.handle_key_event(key(KeyCode::Enter));
 
+    assert_eq!(screen.mml(), "o3 l8 e f+ ga");
     assert!(screen.rules().is_row_on(RowRule::AutoHammerPull));
     assert!(screen.rules().is_empty());
+}
+
+#[test]
+fn n_toggles_the_note_preview_without_playing() {
+    let mut screen = screen_with_mml("o3 l8 e f+ g");
+    assert!(!screen.note_preview());
+    assert_eq!(
+        screen.handle_key_event(key(KeyCode::Char(' '))),
+        GuitarArticulationAction::Play(Take::Converted)
+    );
+
+    assert_eq!(
+        screen.handle_key_event(key(KeyCode::Char('n'))),
+        GuitarArticulationAction::Continue
+    );
+    assert!(screen.note_preview());
+    assert_eq!(
+        screen.handle_key_event(key(KeyCode::Char(' '))),
+        GuitarArticulationAction::PlayNote {
+            take: Take::Converted,
+            column: screen.cursor(),
+        }
+    );
+
+    screen.handle_key_event(key(KeyCode::Char('n')));
+    assert!(!screen.note_preview());
+    assert_eq!(
+        screen.handle_key_event(key(KeyCode::Char(' '))),
+        GuitarArticulationAction::Play(Take::Converted)
+    );
+}
+
+#[test]
+fn rule_toggles_and_b_play_only_the_cursor_column_in_the_note_preview() {
+    let mut screen = screen_with_mml("o3 l8 e f+ g");
+    screen.handle_key_event(key(KeyCode::Char('n')));
+    screen.handle_key_event(key(KeyCode::Char('l')));
+
+    assert_eq!(
+        screen.handle_key_event(key(KeyCode::Char('a'))),
+        GuitarArticulationAction::PlayNote {
+            take: Take::Converted,
+            column: 1,
+        }
+    );
+    assert!(screen.rules().is_on(1, Rule::HammerPull));
+    for (ch, take) in [
+        ('e', Take::Converted),
+        ('s', Take::Converted),
+        ('b', Take::Plain),
+    ] {
+        assert_eq!(
+            screen.handle_key_event(key(KeyCode::Char(ch))),
+            GuitarArticulationAction::PlayNote { take, column: 1 },
+            "{ch}"
+        );
+    }
+}
+
+#[test]
+fn committing_mml_plays_the_whole_phrase_even_in_the_note_preview() {
+    let mut screen = screen_with_mml("o3 l8 e f+ g");
+    screen.handle_key_event(key(KeyCode::Char('n')));
+    screen.handle_key_event(key(KeyCode::Char('i')));
+    screen.handle_key_event(key(KeyCode::End));
+    screen.handle_key_event(key(KeyCode::Char(' ')));
+    screen.handle_key_event(key(KeyCode::Char('a')));
+
+    assert_eq!(
+        screen.handle_key_event(key(KeyCode::Enter)),
+        GuitarArticulationAction::Play(Take::Converted)
+    );
+    assert!(screen.note_preview());
+}
+
+#[test]
+fn n_goes_to_the_input_while_editing() {
+    let mut screen = screen_with_mml("o3 l8 e f+ g");
+    screen.handle_key_event(key(KeyCode::Char('i')));
+    screen.handle_key_event(key(KeyCode::End));
+    screen.handle_key_event(key(KeyCode::Char('n')));
+
+    assert!(!screen.note_preview());
+    assert_eq!(
+        cmrt_tui_core::text_input::textarea_value(screen.input().unwrap()),
+        "o3 l8 e f+ gn"
+    );
+}
+
+#[test]
+fn column_events_are_the_cursor_column_of_the_articulated_notes() {
+    let mut screen = screen_with_mml("o3 l8 e f+ g");
+    screen.handle_key_event(key(KeyCode::Char('l')));
+    screen.handle_key_event(key(KeyCode::Char('a')));
+
+    assert_eq!(
+        screen.column_events(Take::Converted),
+        crate::column_events(
+            screen.notes(),
+            screen.articulated(),
+            screen.rules(),
+            screen.cursor(),
+            Take::Converted
+        )
+    );
+    assert!(!screen.column_events(Take::Converted).is_empty());
 }

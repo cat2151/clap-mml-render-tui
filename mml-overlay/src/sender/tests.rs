@@ -121,7 +121,7 @@ impl SoundSink for FakeSink {
 }
 
 struct Harness {
-    tx: mpsc::Sender<SenderCommand>,
+    tx: mpsc::Sender<WorkerMessage>,
     latest: Arc<AtomicU64>,
     status: Arc<Mutex<MmlOverlaySenderStatus>>,
     worker: Option<std::thread::JoinHandle<()>>,
@@ -140,6 +140,7 @@ impl Harness {
                 sink,
                 48_000.0,
                 worker_latest,
+                Arc::default(),
                 worker_status,
                 SoundingLines::default(),
             );
@@ -155,11 +156,11 @@ impl Harness {
     fn send(&self, id: u64, kind: SenderCommandKind) {
         self.latest.store(id, Ordering::Release);
         self.tx
-            .send(SenderCommand {
+            .send(WorkerMessage::Command(SenderCommand {
                 id,
                 queued_at: Instant::now(),
                 kind,
-            })
+            }))
             .unwrap();
     }
 }
@@ -415,4 +416,5 @@ mod fade_out;
 mod keyswitch_order;
 mod layers;
 mod line_playback_status;
+mod preload;
 mod prepare_error;

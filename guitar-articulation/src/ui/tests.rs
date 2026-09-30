@@ -2,9 +2,18 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{backend::TestBackend, buffer::Buffer, layout::Rect, Terminal};
 
 use super::*;
+use crate::TimedMidiEvent;
+
+mod column_rule_rows;
+mod event_list;
+mod help;
+mod history_overlay;
+mod humanize_row;
+mod instrument_title;
+mod sample_midi;
 
 const WIDTH: u16 = 100;
-const HEIGHT: u16 = 30;
+const HEIGHT: u16 = 31;
 
 fn key(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
@@ -80,7 +89,7 @@ fn three_rising_notes_fill_three_columns_on_three_rows_and_both_event_lists() {
         "{cells:?}"
     );
     let matrix = squeezed(&rows_in(&buffer, layout.matrix));
-    for name in ["G2", "F#2", "E2", "s:auto", "a:H/P"] {
+    for name in ["G2", "F#2", "E2", "s:autohammer/pull", "a:hammer/pull"] {
         assert!(matrix.contains(name), "{name} が matrix に無い: {matrix}");
     }
     assert!(!matrix.contains("F2"), "音の無い段は出さない: {matrix}");
@@ -109,14 +118,62 @@ fn an_empty_screen_says_how_to_start() {
 }
 
 #[test]
-fn event_text_names_the_keyswitch_only_where_asked() {
+fn event_rows_name_the_keyswitch_only_where_asked() {
     let event = TimedMidiEvent {
         seconds: 0.25,
         message: [0x90, 26, 127],
     };
 
-    assert_eq!(event_text(&event, true), "  0.250 on  KS Hammer-On   127");
-    assert_eq!(event_text(&event, false), "  0.250 on  D1             127");
+    assert_eq!(
+        EventRow::new(&event, true).text(12),
+        "  0.250 on  KS Hammer-On     127"
+    );
+    assert_eq!(
+        EventRow::new(&event, false).text(12),
+        "  0.250 on  D1               127"
+    );
+}
+
+#[test]
+fn event_rows_name_the_control_and_show_note_off_as_off() {
+    let cc = TimedMidiEvent {
+        seconds: 0.5,
+        message: [0xB0, 30, 75],
+    };
+    let off = TimedMidiEvent {
+        seconds: 0.5,
+        message: [0x80, 40, 0],
+    };
+
+    assert_eq!(
+        EventRow::new(&cc, true).text(13),
+        "  0.500 cc  picking noise      75"
+    );
+    assert_eq!(
+        EventRow::new(&off, true).text(13),
+        "  0.500 off E2                off"
+    );
+}
+
+#[test]
+fn event_rows_name_the_release_type_and_volume() {
+    let shape = TimedMidiEvent {
+        seconds: 0.5,
+        message: [0xB0, 24, 20],
+    };
+    let level = TimedMidiEvent {
+        seconds: 0.5,
+        message: [0xB0, 25, 100],
+    };
+
+    assert_eq!(
+        EventRow::new(&shape, true).text(14),
+        "  0.500 cc  release type       Hard 20"
+    );
+    assert_eq!(
+        EventRow::new(&level, true).text(14),
+        "  0.500 cc  release volume     100"
+    );
 }
 
 #[test]
@@ -151,8 +208,8 @@ fn a_toggled_rule_shows_under_its_column_and_the_converted_take_names_the_keyswi
     let converted = squeezed(&rows_in(&buffer, layout.converted));
     assert!(converted.contains("KSHammer-On"), "{converted}");
     let status = squeezed(&rows_in(&buffer, layout.status));
-    assert!(status.contains("h/l:列移動"), "{status}");
-    assert!(status.contains("a:H/P切替"), "{status}");
+    assert!(status.contains("h/l:移動"), "{status}");
+    assert!(status.contains("a:H/P"), "{status}");
 }
 
 /// 枠の左上の角の色。
@@ -179,19 +236,6 @@ fn the_pane_that_takes_the_keys_has_the_cyan_border() {
 }
 
 #[test]
-fn question_mark_draws_the_help_over_the_screen() {
-    let mut screen = screen_with_mml("o3 l8 e f+ g");
-    screen.handle_key_event(key(KeyCode::Char('?')));
-    let buffer = render(&screen);
-
-    let all = squeezed(&rows_in(&buffer, buffer.area));
-    assert!(all.contains("ヘルプ(Keybinds)"), "{all}");
-    assert!(all.contains("Hammer-On"), "{all}");
-    let status = squeezed(&rows_in(&buffer, layout_for(buffer.area, &screen).status));
-    assert!(status.contains("?:help"), "{status}");
-}
-
-#[test]
 fn auto_row_sits_above_the_hammer_pull_row_and_marks_picks_and_legatos() {
     // a+ で 1 本の弦の幅（5 半音）を超え、次の弦をピッキングする。
     let mut screen = screen_with_mml("o3 l8 e f+ g a+");
@@ -200,16 +244,17 @@ fn auto_row_sits_above_the_hammer_pull_row_and_marks_picks_and_legatos() {
     let layout = layout_for(buffer.area, &screen);
 
     let rows = rows_in(&buffer, layout.matrix);
-    let auto = rows.iter().position(|r| r.contains("s:auto")).unwrap();
-    let hammer = rows.iter().position(|r| r.contains("a:H/P")).unwrap();
+    let auto = rows
+        .iter()
+        .position(|r| r.contains("s:auto hammer/pull"))
+        .unwrap();
+    let hammer = rows
+        .iter()
+        .position(|r| r.contains("a:hammer/pull"))
+        .unwrap();
     assert_eq!(auto + 1, hammer, "{rows:#?}");
-    let marks: String = rows[auto]
-        .chars()
-        .skip_while(|ch| *ch != 'o')
-        .skip(1)
-        .filter(|ch| !ch.is_whitespace() && *ch != '│')
-        .collect();
-    assert_eq!(marks, "p●●p", "{rows:#?}");
+    let marks = row_marks(&buffer, layout.matrix, "s:auto hammer/pull");
+    assert_eq!(marks, "D●●U", "{rows:#?}");
 }
 
 #[test]
@@ -220,17 +265,40 @@ fn economy_row_sits_on_top_of_the_rule_rows_and_shows_the_strokes() {
     let layout = layout_for(buffer.area, &screen);
 
     let rows = rows_in(&buffer, layout.matrix);
-    let eco = rows.iter().position(|r| r.contains("e:eco")).unwrap();
-    let auto = rows.iter().position(|r| r.contains("s:auto")).unwrap();
+    let eco = rows
+        .iter()
+        .position(|r| r.contains("e:economy picking"))
+        .unwrap();
+    let auto = rows
+        .iter()
+        .position(|r| r.contains("s:auto hammer/pull"))
+        .unwrap();
     assert_eq!(eco + 1, auto, "{rows:#?}");
-    let marks: String = rows[eco]
-        .chars()
-        .skip_while(|ch| *ch != 'o')
-        .skip(1)
-        .filter(|ch| !ch.is_whitespace() && *ch != '│')
-        .collect();
+    let marks = row_marks(&buffer, layout.matrix, "e:economy picking");
     // 4 音目は次の弦で下行なので、スイープせずオルタネイトのまま U。
     assert_eq!(marks, "DUDU", "{rows:#?}");
+}
+
+#[test]
+fn the_economy_row_shows_its_pull_offs_and_never_shares_a_column_with_the_auto_row() {
+    // 低い弦へ移る前の音（f）がプリングになる。
+    let mut screen = screen_with_mml("l16 a g f e d c");
+    screen.handle_key_event(key(KeyCode::Char('e')));
+    let buffer = render(&screen);
+    let layout = layout_for(buffer.area, &screen);
+    assert_eq!(
+        row_marks(&buffer, layout.matrix, "e:economy picking"),
+        "DUPDUD"
+    );
+    assert_eq!(row_marks(&buffer, layout.matrix, "s:auto hammer/pull"), "");
+
+    screen.handle_key_event(key(KeyCode::Char('s')));
+    let buffer = render(&screen);
+    assert_eq!(row_marks(&buffer, layout.matrix, "e:economy picking"), "");
+    assert_eq!(
+        row_marks(&buffer, layout.matrix, "s:auto hammer/pull"),
+        "D●●U●D"
+    );
 }
 
 #[test]
@@ -242,7 +310,11 @@ fn the_committed_effect_chain_follows_the_instrument_in_the_title() {
     let top = |screen: &GuitarArticulationScreen| {
         squeezed(&rows_in(&render(screen), Rect::new(0, 0, WIDTH, 1)))
     };
-    assert!(top(&screen).contains("METAL-GTXFull─"), "{}", top(&screen));
+    assert!(
+        top(&screen).contains("METAL-GTXLite[起動:"),
+        "{}",
+        top(&screen)
+    );
 
     for code in [
         KeyCode::Char('x'),
@@ -254,7 +326,7 @@ fn the_committed_effect_chain_follows_the_instrument_in_the_title() {
     }
 
     assert!(
-        top(&screen).contains("METAL-GTXFull→TestAmp:Clean"),
+        top(&screen).contains("METAL-GTXLite→TestAmp:Clean"),
         "{}",
         top(&screen)
     );
@@ -270,9 +342,37 @@ fn x_draws_the_effect_chain_overlay_over_the_screen() {
     screen.handle_key_event(key(KeyCode::Char('x')));
     let chain = squeezed(&rows_in(&render(&screen), Rect::new(0, 0, WIDTH, HEIGHT)));
     assert!(chain.contains("EFFECTCHAIN"), "{chain}");
-    assert!(chain.contains("instrument:METAL-GTXFull"), "{chain}");
+    assert!(chain.contains("instrument:METAL-GTXLite"), "{chain}");
 
     screen.handle_key_event(key(KeyCode::Char('a')));
     let add = squeezed(&rows_in(&render(&screen), Rect::new(0, 0, WIDTH, HEIGHT)));
     assert!(add.contains("AmpSimulator"), "{add}");
+}
+
+#[test]
+fn the_note_preview_shows_in_the_title_and_n_in_the_keybinds() {
+    let mut screen = screen_with_mml("o3 l8 e f+ g");
+    let top = |screen: &GuitarArticulationScreen| {
+        squeezed(&rows_in(&render(screen), Rect::new(0, 0, WIDTH, 1)))
+    };
+    assert!(!top(&screen).contains("[1音]"), "{}", top(&screen));
+    let buffer = render(&screen);
+    let status = squeezed(&rows_in(&buffer, layout_for(buffer.area, &screen).status));
+    assert!(status.contains("n:1音"), "{status}");
+
+    screen.handle_key_event(key(KeyCode::Char('n')));
+    assert!(top(&screen).contains("[1音]"), "{}", top(&screen));
+}
+
+/// 見出しが `label` の段の記号（空白と枠を落とす）。
+fn row_marks(buffer: &Buffer, area: Rect, label: &str) -> String {
+    let rows = rows_in(buffer, area);
+    let row = rows
+        .iter()
+        .find(|r| r.contains(label))
+        .unwrap_or_else(|| panic!("{label} の段が無い: {rows:#?}"));
+    row[row.find(label).unwrap() + label.len()..]
+        .chars()
+        .filter(|ch| !ch.is_whitespace() && *ch != '│')
+        .collect()
 }

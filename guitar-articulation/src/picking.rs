@@ -1,57 +1,104 @@
+use crate::scratch::sounding_pitches;
 use crate::{
-    apply_hammer_pull, strings_by_column, Articulation, Note, RowRule, RuleTable, TimedMidiEvent,
+    apply_glide_rules, apply_hammer_pull, apply_pick_scratch, apply_voicing_rules,
+    strings_by_column, Articulation, Note, RowRule, RuleTable, TimedMidiEvent,
 };
 
-/// エコノミーピッキングで、アクセントでない音の velocity を元の何 % にするか。
-/// MML の既定 velocity は上限の 127 なので、頂点を上げる代わりに他を下げて差を付ける。
-pub const ECONOMY_UNACCENTED_VELOCITY_PERCENT: u16 = 75;
+/// 強弱を付けるとき、アクセントでないピッキングの音の velocity を元の何 % にするか。
+/// MML の既定 velocity は上限の 127 なので、アクセントを上げる代わりに他を下げて差を付ける。
+/// METAL-GTX Lite の実測で、Sus の 95 は H-On / P-Off の 127 とほぼ同じ音量（どちらも Sus 127 の約 −4 dB）。
+pub const UNACCENTED_PICK_VELOCITY_PERCENT: u16 = 75;
 
 /// 1 音の奏法と強さ。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Articulated {
     pub articulation: Articulation,
-    /// 上行→下行の頂点の音か。エコノミーピッキングが ON のときだけ付く。
+    /// アクセントの音（[`accents`]）か。強弱を付けるとき（[`articulate`]）だけ付く。
     pub accent: bool,
     pub velocity: u8,
+    /// 鳴らす音高。`None` はその音を鳴らさない（[`crate::apply_pick_scratch`] の和音の列の、最低音以外）。
+    pub pitch: Option<u8>,
 }
 
 /// 音ごとの奏法と強さを、ルール表から決める。
 ///
 /// [`RowRule::EconomyPicking`] が ON なら、ピッキングする音をイングヴェイ流の
-/// エコノミーピッキングでダウン/アップへ振り分け、頂点の音だけ元の velocity のまま残す。
+/// エコノミーピッキングでダウン/アップへ振り分ける。
 /// - 同じ弦（[`strings_by_column`]）の中はオルタネイト。
 /// - 高い音の弦へ移るときはダウン。直前もダウンならスイープになる。
 /// - 低い音の弦へ移るときは、移る前の弦の最後の音をプリングオフにし、次の弦をダウンで入る
 ///   （2 音の弦は D P → D、3 音の弦は D U P → D）。プリングの間にピックを次の弦の上へ戻せる。
 ///   最後の音がプリングにできない（弦に 1 音だけ・上行で終わる）ならオルタネイトのまま。
 /// - 先頭と、和音の列の直後はダウンから始める。和音の列はダウンのまま。
+///
+/// [`RowRule::AutoHammerPull`] が ON なら、ピッキングする単音だけを数えてダウン/アップを交互にする
+/// （振り出しはエコノミーピッキングと同じ）。
+///
+/// エコノミーピッキングの前に、列ごとのスライド・チョーキング（[`apply_glide_rules`]）を決める。
+/// これらの音はピッキングとして数えない。
+/// 最後に、列ごとの「どう鳴らすか」のルール（[`apply_voicing_rules`]）でピッキングする音の奏法を写し替え、
+/// ピックスクレイプの列（[`apply_pick_scratch`]）はどの奏法でも上書きする。
+///
+/// エコノミーピッキングか汚し（[`RowRule::Humanize`]）が ON なら強弱を付ける。velocity はここで 1 回だけ
+/// 決め、汚しは散らすだけ（割合を重ねると H-On / P-Off が聞こえないほど小さくなる）。
+/// アクセントでないピッキングの音だけ [`UNACCENTED_PICK_VELOCITY_PERCENT`] へ下げ、H-On / P-Off・
+/// ミュート・PH は元のまま残す（サンプル自体が小さい）。
 pub fn articulate(notes: &[Note], rules: &RuleTable) -> Vec<Articulated> {
     let mut articulations = apply_hammer_pull(notes, rules);
-    let economy = rules.is_row_on(RowRule::EconomyPicking);
-    let accents = if economy {
+    apply_glide_rules(notes, rules, &mut articulations);
+    if rules.is_row_on(RowRule::EconomyPicking) {
         apply_economy_picking(notes, &mut articulations);
-        apexes(notes)
+    } else if rules.is_row_on(RowRule::AutoHammerPull) {
+        apply_alternate_picking(notes, &mut articulations);
+    }
+    let dynamics = rules.is_row_on(RowRule::EconomyPicking) || rules.is_row_on(RowRule::Humanize);
+    let accents = if dynamics {
+        accents(notes)
     } else {
         vec![false; notes.len()]
     };
+    apply_voicing_rules(notes, rules, &mut articulations);
+    apply_pick_scratch(notes, rules, &mut articulations);
+    let pitches = sounding_pitches(notes, &articulations);
     notes
         .iter()
         .zip(articulations)
         .zip(accents)
-        .map(|((note, articulation), accent)| Articulated {
+        .zip(pitches)
+        .map(|(((note, articulation), accent), pitch)| Articulated {
             articulation,
             accent,
-            velocity: if !economy || accent {
-                note.velocity
-            } else {
+            pitch,
+            velocity: if dynamics && !accent && is_plain_pick(articulation) {
                 unaccented_velocity(note.velocity)
+            } else {
+                note.velocity
             },
         })
         .collect()
 }
 
+/// ピッキングして、サンプルが Sus と同じ大きさで鳴る奏法。
+fn is_plain_pick(articulation: Articulation) -> bool {
+    match articulation {
+        Articulation::SusDown
+        | Articulation::SusUp
+        | Articulation::SlideUp
+        | Articulation::SlideDown
+        | Articulation::BendHalf
+        | Articulation::BendWhole
+        | Articulation::BendWholeHalf => true,
+        Articulation::HammerOn
+        | Articulation::PullOff
+        | Articulation::MuteDown
+        | Articulation::MuteUp
+        | Articulation::PinchHarmonic
+        | Articulation::PickScratch => false,
+    }
+}
+
 fn unaccented_velocity(velocity: u8) -> u8 {
-    let scaled = u16::from(velocity) * ECONOMY_UNACCENTED_VELOCITY_PERCENT / 100;
+    let scaled = u16::from(velocity) * UNACCENTED_PICK_VELOCITY_PERCENT / 100;
     u8::try_from(scaled).unwrap_or(u8::MAX).max(1)
 }
 
@@ -121,6 +168,21 @@ fn apply_economy_picking(notes: &[Note], articulations: &mut [Articulation]) {
     }
 }
 
+fn apply_alternate_picking(notes: &[Note], articulations: &mut [Articulation]) {
+    let mut stroke = Articulation::SusDown;
+    for range in columns(notes) {
+        if range.len() != 1 {
+            stroke = Articulation::SusDown;
+            continue;
+        }
+        let i = range.start;
+        if articulations[i] == Articulation::SusDown {
+            articulations[i] = stroke;
+            stroke = opposite(stroke);
+        }
+    }
+}
+
 /// `p` を、同じ弦の 1 つ前の音からのプリングオフにできるか。
 fn can_pull_off(notes: &[Note], strings: &[usize], p: usize) -> bool {
     p > 0
@@ -137,7 +199,16 @@ fn opposite(stroke: Articulation) -> Articulation {
     }
 }
 
-/// 前後の単音の列より高い単音（上行から下行へ折り返す頂点）。
+/// アクセントの音。フレーズの頭（先頭の列の音）と、上行から下行へ折り返す頂点。
+pub(crate) fn accents(notes: &[Note]) -> Vec<bool> {
+    let mut out = apexes(notes);
+    for (accent, note) in out.iter_mut().zip(notes) {
+        *accent |= note.column == 0;
+    }
+    out
+}
+
+/// 前後の単音の列より高い単音。
 fn apexes(notes: &[Note]) -> Vec<bool> {
     let mut out = vec![false; notes.len()];
     let columns = columns(notes);

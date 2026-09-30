@@ -15,11 +15,11 @@ pub struct Note {
     pub column: usize,
 }
 
-fn is_note_on(message: &[u8; 3]) -> bool {
+pub(crate) fn is_note_on(message: &[u8; 3]) -> bool {
     message[0] & 0xF0 == 0x90 && message[2] != 0
 }
 
-fn is_note_off(message: &[u8; 3]) -> bool {
+pub(crate) fn is_note_off(message: &[u8; 3]) -> bool {
     message[0] & 0xF0 == 0x80 || (message[0] & 0xF0 == 0x90 && message[2] == 0)
 }
 

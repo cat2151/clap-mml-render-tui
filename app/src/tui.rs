@@ -19,6 +19,7 @@ mod chord_chart_glue;
 // METAL-GTX の KS でrawを「弾いた」演奏へ変える画面。glue はキーの配送と演奏だけ。
 pub(crate) use cmrt_guitar_articulation as guitar_articulation;
 mod guitar_articulation_glue;
+mod guitar_articulation_sample_midi;
 // MML 入力オーバーレイ（どの画面からでも Ctrl+P）。glue は開閉のきっかけと MIDI 送信をつなぐだけ。
 pub(crate) use cmrt_mml_overlay as mml_overlay;
 mod mml_overlay_glue;

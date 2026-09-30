@@ -42,6 +42,10 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
         }
         PrimaryScreen::ChordChart => chord_chart::draw(&app.chord_chart, f),
         PrimaryScreen::GuitarArticulation => {
+            let effect_chain = cmrt_effect_chain_select::chain_json(
+                app.guitar_articulation.sounding_effect_chain(),
+            );
+            app.sync_guitar_articulation_instrument(&effect_chain);
             cmrt_guitar_articulation::ui::draw(&app.guitar_articulation, f)
         }
         // DAW 画面は `DawApp` が自前の描画ループを持つ。ここへ来るのは

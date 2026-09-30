@@ -282,6 +282,10 @@ impl<'a> TuiApp<'a> {
             guitar_articulation:
                 super::guitar_articulation::GuitarArticulationScreen::with_effect_plugins(
                     guitar_effect_plugins,
+                )
+                .with_history(super::guitar_articulation::load_history())
+                .with_startup_instrument(
+                    super::guitar_articulation::load_settings().startup_instrument,
                 ),
             grid_history_preview: crate::daw::DawGridPreviewPlayer::new(Arc::clone(&cfg_arc)),
             mml_overlay: {

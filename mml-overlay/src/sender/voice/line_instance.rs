@@ -27,6 +27,8 @@ impl Voice {
         if self.is_patch_ready(self.line_instance, patch) {
             return Ok(());
         }
+        // 先読みが読み込み中なら、それが決着してから決める（読み終えた音色なら読まずに済む）。
+        self.settle_preload(sink)?;
         let standby = sink.standby_instance_of(self.line_instance);
         if let Some(standby) = standby.filter(|&standby| self.is_patch_ready(standby, patch)) {
             self.line_instance = standby;

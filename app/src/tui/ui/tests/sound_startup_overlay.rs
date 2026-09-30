@@ -126,7 +126,7 @@ fn the_guitar_articulation_screen_names_the_patch_being_loaded() {
     let lines = render_lines(&mut app, 120, 30);
 
     assert!(
-        contains_ignoring_spaces(&lines, "音色01-METAL-GTXFullの読み込み"),
+        contains_ignoring_spaces(&lines, "音色02-METAL-GTXLiteの読み込み"),
         "何を読んでいるのかを出すこと: {lines:?}"
     );
     assert!(

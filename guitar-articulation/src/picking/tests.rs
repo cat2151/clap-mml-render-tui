@@ -73,27 +73,14 @@ fn descending_stays_alternate_when_the_string_has_no_note_to_pull_off_from() {
 }
 
 #[test]
-fn with_auto_hammer_pull_only_the_first_note_of_each_string_is_picked() {
-    // 弦の頭だけピッキング。上行はダウンのスイープ、下行は H/P の後なのでダウンで入る。
-    let n = melody(&[40, 42, 44, 46, 44, 42, 40]);
-    assert_eq!(
-        strokes(
-            &n,
-            &rules(&[RowRule::EconomyPicking, RowRule::AutoHammerPull])
-        ),
-        vec![SusDown, HammerOn, HammerOn, SusDown, PullOff, PullOff, SusDown]
-    );
-}
-
-#[test]
-fn only_the_apex_keeps_its_velocity_while_economy_picking_is_on() {
+fn only_the_head_and_the_apex_keep_their_velocity_while_economy_picking_is_on() {
     let n = melody(&[40, 42, 44, 42, 40, 42]);
     let out = articulate(&n, &rules(&[RowRule::EconomyPicking]));
 
     let accents: Vec<bool> = out.iter().map(|a| a.accent).collect();
-    assert_eq!(accents, vec![false, false, true, false, false, false]);
+    assert_eq!(accents, vec![true, false, true, false, false, false]);
     let velocities: Vec<u8> = out.iter().map(|a| a.velocity).collect();
-    assert_eq!(velocities, vec![75, 75, 100, 75, 75, 75]);
+    assert_eq!(velocities, vec![100, 75, 100, 75, 75, 75]);
 }
 
 #[test]
@@ -115,5 +102,60 @@ fn a_chord_column_stays_down_and_restarts_the_strokes() {
     assert_eq!(
         strokes(&n, &rules(&[RowRule::EconomyPicking])),
         vec![SusDown, SusDown, SusDown, SusDown]
+    );
+}
+
+#[test]
+fn humanize_alone_also_lowers_the_unaccented_picks() {
+    let n = melody(&[40, 42, 44, 42, 40, 42]);
+    let out = articulate(&n, &rules(&[RowRule::Humanize]));
+
+    let velocities: Vec<u8> = out.iter().map(|a| a.velocity).collect();
+    assert_eq!(velocities, vec![100, 75, 100, 75, 75, 75]);
+}
+
+#[test]
+fn legato_mute_and_pinch_keep_their_velocity_under_dynamics() {
+    let n = melody(&[40, 42, 44, 42, 40, 42]);
+    let mut table = rules(&[RowRule::EconomyPicking, RowRule::Humanize]);
+    table.toggle(1, crate::Rule::HammerPull);
+    table.toggle(3, crate::Rule::PalmMute);
+    table.toggle(4, crate::Rule::PinchHarmonic);
+    let out = articulate(&n, &table);
+
+    let got: Vec<(Articulation, u8)> = out.iter().map(|a| (a.articulation, a.velocity)).collect();
+    assert_eq!(got[1], (HammerOn, 100));
+    assert!(
+        matches!(got[3].0, Articulation::MuteDown | Articulation::MuteUp),
+        "{got:?}"
+    );
+    assert_eq!(got[3].1, 100);
+    assert_eq!(got[4], (Articulation::PinchHarmonic, 100));
+    assert_eq!(got[5].1, 75, "{got:?}");
+}
+
+#[test]
+fn auto_hammer_pull_alternates_only_the_picked_notes() {
+    // C D E F G A G F E D C
+    let n = melody(&[60, 62, 64, 65, 67, 69, 67, 65, 64, 62, 60]);
+    assert_eq!(
+        strokes(&n, &rules(&[RowRule::AutoHammerPull])),
+        vec![
+            SusDown, HammerOn, HammerOn, SusUp, HammerOn, SusDown, PullOff, PullOff, SusUp,
+            PullOff, SusDown
+        ]
+    );
+}
+
+#[test]
+fn auto_hammer_pull_restarts_down_after_a_chord() {
+    let mut n = melody(&[40, 45, 42, 45, 50]);
+    // 3 列目を 42 + 45 の和音にし、以降の列を詰める。
+    n[3].on_seconds = n[2].on_seconds;
+    n[3].column = 2;
+    n[4].column = 3;
+    assert_eq!(
+        strokes(&n, &rules(&[RowRule::AutoHammerPull])),
+        vec![SusDown, SusUp, SusDown, SusDown, SusDown]
     );
 }

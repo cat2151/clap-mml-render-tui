@@ -8,16 +8,16 @@ use std::time::{Duration, Instant};
 
 use super::*;
 use crate::screen_switch::PrimaryScreen;
-use crate::tui::guitar_articulation::{convert, Rule, RuleTable, DEFAULT_MML, PATCH};
+use crate::tui::guitar_articulation::{convert, Rule, RuleTable, Take, DEFAULT_MML, PATCH};
 use cmrt_mml_overlay::{LivePatch, MmlOverlaySender, RecordingSink};
 
 const MML: &str = "o3 l8 e f+ g";
 
-fn plain(code: KeyCode) -> KeyEvent {
+pub(super) fn plain(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
 }
 
-fn wait_until(what: &str, mut done: impl FnMut() -> bool) {
+pub(super) fn wait_until(what: &str, mut done: impl FnMut() -> bool) {
     let deadline = Instant::now() + Duration::from_secs(5);
     while !done() {
         assert!(Instant::now() < deadline, "待ちきれなかった: {what}");
@@ -25,7 +25,7 @@ fn wait_until(what: &str, mut done: impl FnMut() -> bool) {
     }
 }
 
-fn attach_recording_sender(app: &mut TuiApp<'_>) -> Arc<RecordingSink> {
+pub(super) fn attach_recording_sender(app: &mut TuiApp<'_>) -> Arc<RecordingSink> {
     let sink = Arc::new(RecordingSink::default());
     app.mml_overlay_sender = Some(MmlOverlaySender::with_recording_sink(
         Arc::clone(&sink),
@@ -50,7 +50,7 @@ fn type_mml(app: &mut TuiApp<'_>) {
 
 /// MML を確定した Guitar Articulation 画面。確定でも鳴るので、記録 sender は確定の後で付け、
 /// 各テストが見る記録を「その後の操作」の分だけにする。
-fn app_with_mml<'a>() -> (TuiApp<'a>, Arc<RecordingSink>) {
+pub(super) fn app_with_mml<'a>() -> (TuiApp<'a>, Arc<RecordingSink>) {
     let mut app = TuiApp::new_for_test(test_config());
     app.switch_to_primary_screen(PrimaryScreen::GuitarArticulation, None);
     type_mml(&mut app);
@@ -58,19 +58,19 @@ fn app_with_mml<'a>() -> (TuiApp<'a>, Arc<RecordingSink>) {
     (app, sink)
 }
 
-fn flat_events() -> Vec<cmrt_chord::TimedMidiEvent> {
+pub(super) fn flat_events() -> Vec<cmrt_chord::TimedMidiEvent> {
     cmrt_chord::timed_performance(MML).unwrap().events
 }
 
 /// 受けた順の timeline の message のうち、`from` 番目以降。
-fn sent_messages(sink: &RecordingSink, from: usize) -> Vec<[u8; 3]> {
+pub(super) fn sent_messages(sink: &RecordingSink, from: usize) -> Vec<[u8; 3]> {
     sink.timeline_events()[from..]
         .iter()
         .map(|event| event.message)
         .collect()
 }
 
-fn messages(events: &[cmrt_chord::TimedMidiEvent]) -> Vec<[u8; 3]> {
+pub(super) fn messages(events: &[cmrt_chord::TimedMidiEvent]) -> Vec<[u8; 3]> {
     events.iter().map(|event| event.message).collect()
 }
 
@@ -286,7 +286,7 @@ fn the_app_draws_the_screen_with_both_takes() {
 }
 
 /// effect の catalog を持たせて MML を確定した画面。
-fn app_with_mml_and_effects<'a>() -> (TuiApp<'a>, Arc<RecordingSink>) {
+pub(super) fn app_with_mml_and_effects<'a>() -> (TuiApp<'a>, Arc<RecordingSink>) {
     let mut app = TuiApp::new_for_test(test_config());
     app.guitar_articulation =
         crate::tui::guitar_articulation::GuitarArticulationScreen::with_effect_plugins(
@@ -299,7 +299,7 @@ fn app_with_mml_and_effects<'a>() -> (TuiApp<'a>, Arc<RecordingSink>) {
 }
 
 /// 追加 overlay の先頭の候補（catalog 登録順）を 1 段だけ持つ chain の綴り。
-fn first_candidate_chain() -> String {
+pub(super) fn first_candidate_chain() -> String {
     r#"[{"Dragonfly Room Reverb preset":"Small Drum Room"}]"#.to_string()
 }
 
@@ -346,6 +346,85 @@ fn the_committed_effect_chain_is_used_by_b() {
     });
 
     assert_eq!(sent_messages(&sink, 0), messages(&flat));
+    assert_eq!(
+        sink.prepared(),
+        vec![LivePatch::with_effect_chain(
+            Some(PATCH),
+            &first_candidate_chain()
+        )]
+    );
+}
+
+fn is_keyswitch_note_on(message: &[u8; 3]) -> bool {
+    message[0] & 0xF0 == 0x90
+        && message[2] != 0
+        && crate::tui::guitar_articulation::Articulation::from_keyswitch(message[1]).is_some()
+}
+
+#[test]
+fn in_note_mode_toggling_a_rule_plays_only_the_cursor_column() {
+    let (mut app, sink) = app_with_mml();
+
+    for code in ['n', 'l', 'a'] {
+        app.handle_guitar_articulation_key_event(plain(KeyCode::Char(code)));
+    }
+    let note = app.guitar_articulation.column_events(Take::Converted);
+    wait_until("1 音が積まれる", || {
+        sink.timeline_events().len() >= note.len()
+    });
+
+    assert_eq!(sent_messages(&sink, 0), messages(&note));
+    assert!(sent_messages(&sink, 0).contains(&[0x90, 26, 127]));
+    let whole = convert(&flat_events(), app.guitar_articulation.rules());
+    assert_ne!(sent_messages(&sink, 0), messages(&whole));
+    assert_eq!(sink.timelines(), 1);
+}
+
+#[test]
+fn in_note_mode_b_plays_the_cursor_note_without_keyswitches() {
+    let (mut app, sink) = app_with_mml();
+
+    for code in ['n', 'l', 'b'] {
+        app.handle_guitar_articulation_key_event(plain(KeyCode::Char(code)));
+    }
+    let note = app.guitar_articulation.column_events(Take::Plain);
+    wait_until("1 音が積まれる", || {
+        sink.timeline_events().len() >= note.len()
+    });
+
+    let sent = sent_messages(&sink, 0);
+    assert_eq!(sent, messages(&note));
+    assert_eq!(sent.len(), 2, "{sent:?}");
+    assert!(!sent.iter().any(is_keyswitch_note_on), "{sent:?}");
+}
+
+/// 1 音の演奏も全体と同じ音色・chain で送るので、sender は音色を読み直さない。
+#[test]
+fn a_note_is_sent_to_the_same_patch_and_chain_as_the_whole_take() {
+    let (mut app, _preview_sink) = app_with_mml_and_effects();
+    for code in [
+        KeyCode::Char('x'),
+        KeyCode::Char('a'),
+        KeyCode::Enter,
+        KeyCode::Enter,
+    ] {
+        app.handle_guitar_articulation_key_event(plain(code));
+    }
+    let sink = attach_recording_sender(&mut app);
+    let whole = convert(&flat_events(), &RuleTable::default());
+
+    app.handle_guitar_articulation_key_event(plain(KeyCode::Char(' ')));
+    wait_until("全体", || sink.timeline_events().len() >= whole.len());
+    for code in ['n', 'l', ' '] {
+        app.handle_guitar_articulation_key_event(plain(KeyCode::Char(code)));
+    }
+    let note = app.guitar_articulation.column_events(Take::Converted);
+    wait_until("1 音", || {
+        sink.timeline_events().len() >= whole.len() + note.len()
+    });
+
+    assert_eq!(sent_messages(&sink, whole.len()), messages(&note));
+    assert_eq!(sink.timelines(), 2);
     assert_eq!(
         sink.prepared(),
         vec![LivePatch::with_effect_chain(

@@ -28,6 +28,7 @@
 
 use std::{
     collections::BTreeMap,
+    sync::{atomic::AtomicBool, Arc},
     time::{Duration, Instant},
 };
 
@@ -48,6 +49,8 @@ pub(super) enum Wake {
     Gate,
     /// 走っているループの先読みが減った。次の周を継ぎ足す。
     Repeat,
+    /// 鳴っていない bank へ読んでいる音色の完了を見に行く。
+    Preload,
 }
 
 pub(super) struct Voice {
@@ -62,6 +65,14 @@ pub(super) struct Voice {
     line_instance: u8,
     /// 行を鳴らした instance。呼び出し側のスレッドが fadeout の宛先に読む。
     sounding_lines: SoundingLines,
+    /// 裏で読み込み中の音色（[`preload`]）。
+    preload: Option<preload::InFlightPreload>,
+    /// 読み込み中に頼まれた次の先読み。いまの 1 件が決着したら読む。
+    queued_preload: Option<LivePatch>,
+    /// 先読みを読み終えた instance と音色。
+    preloaded: Option<(u8, LivePatch)>,
+    /// sender が畳まれ始めたか。立ったら先読みの決着を待たない。
+    shutting_down: Arc<AtomicBool>,
 }
 
 #[derive(Default)]
@@ -71,7 +82,11 @@ struct PatchState {
 }
 
 impl Voice {
-    pub(super) fn new(sample_rate_hz: f64, sounding_lines: SoundingLines) -> Self {
+    pub(super) fn new(
+        sample_rate_hz: f64,
+        sounding_lines: SoundingLines,
+        shutting_down: Arc<AtomicBool>,
+    ) -> Self {
         Self {
             line: LinePlayback::new(sample_rate_hz),
             sounding: Sounding::default(),
@@ -80,6 +95,10 @@ impl Voice {
             gate_deadline: None,
             line_instance: MML_OVERLAY_INSTANCE,
             sounding_lines,
+            preload: None,
+            queued_preload: None,
+            preloaded: None,
+            shutting_down,
         }
     }
 
@@ -107,6 +126,10 @@ impl Voice {
         instance_id: u8,
         patch: &LivePatch,
     ) -> Result<(), String> {
+        self.settle_preload(sink)?;
+        if self.is_patch_ready(instance_id, patch) {
+            return Ok(());
+        }
         self.stop(sink, "prepare");
         let fields = patch.log_fields();
         log_line(format!(
@@ -197,17 +220,17 @@ impl Voice {
 
     /// 次に worker が起きるべき理由と、そこまでの待ち。
     ///
-    /// gate（打鍵の音長）と repeat（次の周の積み込み）の早いほうを返す。同時なら gate を
-    /// 優先する。**行の演奏では gate は立たない**（gate は打鍵の生 MIDI 専用）ので、
-    /// 実際にこの 2 つが競合することは無い。
+    /// gate（打鍵の音長）・repeat（次の周の積み込み）・先読みの完了確認のうち、いちばん
+    /// 早いものを返す。同時なら gate、repeat、先読みの順に優先する。**行の演奏では gate は
+    /// 立たない**（gate は打鍵の生 MIDI 専用）ので、gate と repeat が競合することは無い。
     pub(super) fn next_wake(&self, now: Instant) -> Option<(Wake, Duration)> {
         let gate = self.gate_wait(now).map(|wait| (Wake::Gate, wait));
         let repeat = self.line.repeat_wait(now).map(|wait| (Wake::Repeat, wait));
-        match (gate, repeat) {
-            (Some(gate), Some(repeat)) => Some(if gate.1 <= repeat.1 { gate } else { repeat }),
-            (Some(only), None) | (None, Some(only)) => Some(only),
-            (None, None) => None,
-        }
+        let preload = self.preload_wait().map(|wait| (Wake::Preload, wait));
+        [gate, repeat, preload]
+            .into_iter()
+            .flatten()
+            .min_by_key(|(_, wait)| *wait)
     }
 
     /// 走っているループの先読みを保つ。**止めない・張り直さない。**
@@ -392,5 +415,6 @@ fn optional_ms(value: Option<u128>) -> String {
 }
 
 mod line_instance;
+mod preload;
 #[cfg(test)]
 mod tests;

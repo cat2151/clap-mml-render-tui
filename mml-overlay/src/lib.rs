@@ -26,7 +26,8 @@ pub use live_line::{live_line, LiveLine};
 // `cmrt_patch_select` から直接使う。
 pub use cmrt_patch_select::{PatchAudition, PatchCatalogEntry, PlaySettings};
 pub use sender::{
-    LineLayer, LivePatch, MmlOverlayLinePlayback, MmlOverlaySender, MmlOverlaySenderStatus,
+    LineLayer, LivePatch, MmlOverlayLinePlayback, MmlOverlayPreload, MmlOverlaySender,
+    MmlOverlaySenderStatus,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub use sender::{RecordingSink, SinkOperation};

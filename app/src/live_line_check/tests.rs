@@ -30,4 +30,12 @@ fn renders_are_summed_at_their_send_frames() {
     assert_eq!(mixed, vec![1.0, 1.0, 1.5, 1.5, 0.5, 0.5]);
 }
 
+mod articulation_capture;
+mod capture_support;
+mod humanize_capture;
 mod keyswitch_capture;
+mod lite_full_swap_capture;
+mod pick_scratch_capture;
+mod release_capture;
+mod sample_midi_capture;
+mod single_note_capture;

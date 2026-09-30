@@ -124,3 +124,23 @@ fn a_column_rule_still_applies_on_an_auto_picking_column() {
         vec![SusDown, HammerOn, HammerOn, HammerOn]
     );
 }
+
+#[test]
+fn auto_picks_the_turns_of_long_runs_within_one_string() {
+    // C C# D D# D C# C は 1 本に収まるが、4 音の上行・下行の端をピッキングする。
+    let n = notes(&[
+        (0.0, 60),
+        (0.5, 61),
+        (1.0, 62),
+        (1.5, 63),
+        (2.0, 62),
+        (2.5, 61),
+        (3.0, 60),
+    ]);
+    let mut rules = RuleTable::default();
+    rules.toggle_row(crate::RowRule::AutoHammerPull);
+    assert_eq!(
+        apply_hammer_pull(&n, &rules),
+        vec![SusDown, HammerOn, HammerOn, SusDown, PullOff, PullOff, SusDown]
+    );
+}

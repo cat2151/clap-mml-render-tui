@@ -12,6 +12,8 @@ use midly::{MetaMessage, MidiMessage, Smf, Timing, TrackEventKind};
 
 const NOTE_ON: u8 = 0x90;
 const NOTE_OFF: u8 = 0x80;
+const CONTROL_CHANGE: u8 = 0xB0;
+const PITCH_BEND: u8 = 0xE0;
 
 /// SMF に tempo 指定が無いときの既定（MIDI の規定値 = 120 BPM）。
 const DEFAULT_MICROS_PER_BEAT: f64 = 500_000.0;
@@ -159,10 +161,32 @@ fn timed_mml_performance(mml: &str, from_chord: bool) -> Result<TimedPerformance
     })
 }
 
+/// SMF を、note に加えて CC と pitch bend も残した時刻つきイベント列へ変換する。
+///
+/// 完成品の SMF（音色付属のサンプルなど）を、keyswitch と CC の効きごと鳴らす用途。
+/// channel は SMF の値を保つ。program change など、それ以外のメッセージは落とす。
+/// note on が 1 つも無い SMF は `Err`。
+pub fn timed_smf_events(bytes: &[u8]) -> Result<TimedPerformance, String> {
+    let (events, duration_seconds) = timed_events_from_smf_with(bytes, performance_bytes)?;
+    Ok(TimedPerformance {
+        events,
+        duration_seconds,
+        from_chord: false,
+    })
+}
+
 /// tempo map の折れ点。`(tick, その tick の秒, そこからの micros per beat)`。
 type TempoPoint = (u64, f64, f64);
 
 fn timed_events_from_smf(bytes: &[u8]) -> Result<(Vec<TimedMidiEvent>, f64), String> {
+    timed_events_from_smf_with(bytes, |_, message| midi_bytes(message))
+}
+
+/// `convert` が `Some` を返したメッセージだけを残す。
+fn timed_events_from_smf_with(
+    bytes: &[u8],
+    convert: impl Fn(u8, MidiMessage) -> Option<[u8; 3]>,
+) -> Result<(Vec<TimedMidiEvent>, f64), String> {
     let smf = Smf::parse(bytes).map_err(|error| format!("SMF解析に失敗しました: {error}"))?;
     let ticks_per_beat = match smf.header.timing {
         Timing::Metrical(ticks) => f64::from(ticks.as_int()),
@@ -185,8 +209,8 @@ fn timed_events_from_smf(bytes: &[u8]) -> Result<(Vec<TimedMidiEvent>, f64), Str
                 TrackEventKind::Meta(MetaMessage::Tempo(micros)) => {
                     tempo_changes.push((tick, f64::from(micros.as_int())));
                 }
-                TrackEventKind::Midi { message, .. } => {
-                    if let Some(message) = midi_bytes(message) {
+                TrackEventKind::Midi { channel, message } => {
+                    if let Some(message) = convert(channel.as_int(), message) {
                         messages.push((tick, message, track_index, event_index));
                     }
                 }
@@ -194,14 +218,17 @@ fn timed_events_from_smf(bytes: &[u8]) -> Result<(Vec<TimedMidiEvent>, f64), Str
             }
         }
     }
-    if messages.is_empty() {
+    if !messages
+        .iter()
+        .any(|&(_, message, _, _)| is_status(message, NOTE_ON))
+    {
         return Err("MMLに発音ノートがありません".to_string());
     }
 
     // 同じ時刻では note off を先に出す。同じ音高を続けて鳴らすとき、後から届いた
     // note off が新しい note on を消してしまうのを防ぐ。
     messages.sort_by_key(|&(tick, message, track_index, event_index)| {
-        (tick, message[0] == NOTE_ON, track_index, event_index)
+        (tick, is_status(message, NOTE_ON), track_index, event_index)
     });
 
     let tempo_map = build_tempo_map(tempo_changes, ticks_per_beat);
@@ -227,6 +254,26 @@ fn midi_bytes(message: MidiMessage) -> Option<[u8; 3]> {
         }
         _ => None,
     }
+}
+
+/// [`midi_bytes`] の変換に、channel の保持と CC・pitch bend を足したもの。
+fn performance_bytes(channel: u8, message: MidiMessage) -> Option<[u8; 3]> {
+    let bytes = match message {
+        MidiMessage::Controller { controller, value } => {
+            [CONTROL_CHANGE, controller.as_int(), value.as_int()]
+        }
+        MidiMessage::PitchBend { bend } => {
+            let value = bend.0.as_int();
+            [PITCH_BEND, (value & 0x7F) as u8, (value >> 7) as u8]
+        }
+        _ => midi_bytes(message)?,
+    };
+    Some([bytes[0] | (channel & 0x0F), bytes[1], bytes[2]])
+}
+
+/// status byte の上位 4 bit（channel を除いた種類）が `kind` か。
+fn is_status(message: [u8; 3], kind: u8) -> bool {
+    message[0] & 0xF0 == kind
 }
 
 fn build_tempo_map(mut changes: Vec<(u64, f64)>, ticks_per_beat: f64) -> Vec<TempoPoint> {
