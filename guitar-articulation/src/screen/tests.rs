@@ -6,6 +6,8 @@ use crate::KEYSWITCH_VELOCITY;
 mod articulation_keys;
 mod column_rule_follow;
 mod humanize_keys;
+mod param_list_keys;
+mod rule_list_keys;
 mod startup_instrument_keys;
 
 fn key(code: KeyCode) -> KeyEvent {

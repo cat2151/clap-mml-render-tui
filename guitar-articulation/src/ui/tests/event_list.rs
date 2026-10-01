@@ -57,8 +57,8 @@ fn row_text(message: [u8; 3], name_keyswitches: bool) -> String {
 #[test]
 fn keyswitches_outside_the_articulations_take_their_ks_map_names() {
     assert_eq!(
-        row_text([0x90, 14, 127], true),
-        "  0.500 on  KS Mute_Fret_D     127"
+        row_text([0x90, 13, 127], true),
+        "  0.500 on  KS Brush_Alt      127"
     );
     assert_eq!(
         row_text([0x80, 27, 0], true),
@@ -66,8 +66,8 @@ fn keyswitches_outside_the_articulations_take_their_ks_map_names() {
     );
     // raw は今までどおり音名。
     assert_eq!(
-        row_text([0x90, 14, 127], false),
-        "  0.500 on  D0                127"
+        row_text([0x90, 13, 127], false),
+        "  0.500 on  C#0               127"
     );
 }
 

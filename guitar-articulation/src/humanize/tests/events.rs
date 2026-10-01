@@ -165,9 +165,7 @@ fn picked_notes_get_picking_noise_just_before_their_attack() {
             let cc30: Vec<usize> = (0..out.len())
                 .filter(|&k| is_cc(&out[k], PICKING_CC))
                 .collect();
-            let cc31 = out.iter().filter(|e| is_cc(e, PICKING_MICRO_CC)).count();
             assert_eq!(cc30.len(), picked + 1, "{mml} {}", rules.to_json());
-            assert_eq!(cc31, picked + 1);
 
             let (reset, sent) = cc30.split_last().unwrap();
             assert_eq!(out[*reset].message[2], PICKING_CC_DEFAULT);
@@ -185,12 +183,7 @@ fn picked_notes_get_picking_noise_just_before_their_attack() {
         }
     }
     let (out, _, _, _) = seeded_performance(OCTAVE_RUN, &RuleTable::default(), 0);
-    let last_cc31 = out
-        .iter()
-        .rev()
-        .find(|e| is_cc(e, PICKING_MICRO_CC))
-        .unwrap();
-    assert_eq!(last_cc31.message[2], PICKING_MICRO_CC_DEFAULT);
+    assert!(out.iter().all(|e| !is_cc(e, 31)));
 }
 
 #[test]

@@ -115,7 +115,7 @@ fn the_release_key_is_in_the_keybinds_and_the_help() {
     let mut screen = screen_with_mml(MML);
     let buffer = render(&screen);
     let status = squeezed(&rows_in(&buffer, layout_for(buffer.area, &screen).status));
-    assert!(status.contains("r:汚しrel"), "{status}");
+    assert!(status.contains("r:rel"), "{status}");
     assert!(status.contains("?:help"), "{status}");
     // status から外した `i` は MML の pane の見出しに在る。
     let input = squeezed(&rows_in(&buffer, layout_for(buffer.area, &screen).input));

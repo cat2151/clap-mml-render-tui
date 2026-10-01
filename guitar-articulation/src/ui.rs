@@ -23,6 +23,8 @@ mod event_list;
 mod help;
 mod history;
 mod matrix;
+mod param_list;
+mod rule_list;
 mod sample_midi;
 
 pub(crate) use event_list::{name_width, EventRow};
@@ -31,9 +33,9 @@ pub(crate) use event_list::{name_width, EventRow};
 mod tests;
 
 /// `b` / `space` / `i` は raw / Articulated / MML の pane の見出しに出ているので、ここには載せない（幅が足りない）。
-/// 幅 100 の端末で `?:help` まで収まる長さに保つ（枠の内側 98 桁ちょうど）。
+/// 幅 100 の端末で `?:help` まで収まる長さに保つ（枠の内側 98 桁）。
 const KEYBIND_TEXT: &str =
-    "h/l:移動 a:H/P mp/cvg:奏法 e:eco s:auto d:汚し r:汚しrel n:1音 x:fx w:dry H:履歴 o:MID q:終 ?:help";
+    "h/l:移動 a:H/P mp/cvg/t:奏法 u:値 e:eco s:auto d:汚し r:rel n:1音 x/w:fx H:履歴 o:MID q:終 ?:help";
 const MID_KEYBIND_TEXT: &str = " o:MID選択 space:演奏 n:1音 h/l:移動 Esc:MIDを閉じる q:終了 ?:help";
 const INPUT_HINT_TEXT: &str = " MML を編集中  Enter:確定して演奏  Esc:matrix 操作へ  ?:help";
 const MML_TITLE: &str = " MML (i) ";
@@ -127,6 +129,8 @@ pub fn draw(screen: &GuitarArticulationScreen, f: &mut Frame<'_>) {
     }
     history::draw_overlay(f, screen);
     sample_midi::draw_list_overlay(f, screen);
+    rule_list::draw_overlay(f, screen);
+    param_list::draw_overlay(f, screen);
     if screen.help_open() {
         help::draw_overlay(f);
     }
@@ -234,8 +238,14 @@ pub(crate) fn note_name(pitch: u8) -> String {
     format!("{}{octave}", NAMES[usize::from(pitch % 12)])
 }
 
-/// ルール行の見出しとトグルのキー。
-pub(crate) const RULE_ROWS: [(Rule, char, &str); 7] = [
+/// 奏法リスト overlay を開くキー。専用のキーを持たないルールの見出しにも付ける。
+pub(crate) const RULE_LIST_KEY: char = 't';
+
+/// パラメータ overlay を開くキー。
+pub(crate) const PARAM_LIST_KEY: char = 'u';
+
+/// ルール行の見出しとトグルのキー。キーが [`RULE_LIST_KEY`] のルールは奏法リストからだけ切り替える。
+pub(crate) const RULE_ROWS: [(Rule, char, &str); 31] = [
     (Rule::HammerPull, 'a', "hammer/pull"),
     (Rule::PalmMute, 'm', "palm mute"),
     (Rule::PinchHarmonic, 'p', "pinch harmonic"),
@@ -243,6 +253,30 @@ pub(crate) const RULE_ROWS: [(Rule, char, &str); 7] = [
     (Rule::Choke, 'c', "bend"),
     (Rule::Vibrato, 'v', "vibrato"),
     (Rule::PickScratch, 'g', "pick scratch"),
+    (Rule::NaturalHarmonics, RULE_LIST_KEY, "harmonics"),
+    (Rule::Brushing, RULE_LIST_KEY, "brush"),
+    (Rule::FretMute, RULE_LIST_KEY, "fret mute"),
+    (Rule::SlideOut, RULE_LIST_KEY, "slide out"),
+    (Rule::PseudoLegato, RULE_LIST_KEY, "pseudo legato"),
+    (Rule::Portamento, RULE_LIST_KEY, "portamento"),
+    (Rule::SlideIn, RULE_LIST_KEY, "slide in"),
+    (Rule::TrillHalf, RULE_LIST_KEY, "trill half"),
+    (Rule::TrillWhole, RULE_LIST_KEY, "trill whole"),
+    (Rule::TrillMinorThird, RULE_LIST_KEY, "trill min3"),
+    (Rule::TrillMajorThird, RULE_LIST_KEY, "trill maj3"),
+    (Rule::UnisonBendAuto, RULE_LIST_KEY, "unison bend"),
+    (Rule::UnisonBendManual, RULE_LIST_KEY, "unison manual"),
+    (Rule::ChromaticRun, RULE_LIST_KEY, "chromatic run"),
+    (Rule::SlideFxDown, RULE_LIST_KEY, "slide fx down"),
+    (Rule::SlideFxUp, RULE_LIST_KEY, "slide fx up"),
+    (Rule::SlideFxWow, RULE_LIST_KEY, "slide fx wow"),
+    (Rule::EffectHello, RULE_LIST_KEY, "fx hello"),
+    (Rule::EffectResonance, RULE_LIST_KEY, "fx resonance"),
+    (Rule::EffectSlideNoise, RULE_LIST_KEY, "fx slide noise"),
+    (Rule::EffectHardStop, RULE_LIST_KEY, "fx hard stop"),
+    (Rule::LongExtra, RULE_LIST_KEY, "long/extra"),
+    (Rule::PowerChord, RULE_LIST_KEY, "power chord"),
+    (Rule::PositionRelease, RULE_LIST_KEY, "position rel"),
 ];
 
 /// 行全体で ON/OFF するルールの段の見出しとトグルのキー。上の段から並べる（H/P の段の上）。

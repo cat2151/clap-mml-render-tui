@@ -58,6 +58,7 @@ fn a_row_names_the_row_rules_the_column_rule_counts_and_the_chain_length() {
     rules.toggle_row(RowRule::EconomyPicking);
     rules.toggle_row(RowRule::Humanize);
     rules.toggle_row(RowRule::HumanizeRelease);
+    rules.step_param(22, -51);
     let entry = GuitarArticulationHistoryEntry {
         mml: "o3 l8 e g a".to_string(),
         rules,
@@ -67,7 +68,7 @@ fn a_row_names_the_row_rules_the_column_rule_counts_and_the_chain_length() {
 
     assert_eq!(
         history::row_text(0, &entry),
-        "#01  o3 l8 e g a  eco 汚し 汚しrel H/P:2 vib:1  fx:2"
+        "#01  o3 l8 e g a  eco 汚し 汚しrel H/P:2 vib:1 cc22=0  fx:2"
     );
     assert_eq!(
         history::row_text(9, &GuitarArticulationHistoryEntry::default()),

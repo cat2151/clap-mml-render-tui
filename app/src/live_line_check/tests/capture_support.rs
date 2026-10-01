@@ -215,6 +215,16 @@ impl Segment {
             .fold(f64::MIN, f64::max)
     }
 
+    /// onset を、いま見つかっている onset から `head_seconds` までの最大振幅の 5% で探し直す。
+    /// 後の音が頭の音よりずっと大きいと、全体の最大振幅で決まる閾値が頭の音のピッキングノイズを越え、
+    /// onset が頭の音の立ち上がりまで遅れる。
+    pub(super) fn with_head_onset(self, head_seconds: f64) -> Segment {
+        let head = (head_seconds * f64::from(self.sample_rate)) as usize;
+        let end = (self.onset + head).min(self.samples.len());
+        let onset = onset(&self.samples[..end]);
+        Segment { onset, ..self }
+    }
+
     /// `onset` から `start_seconds` 進めた所の `seconds` の長さ。
     pub(super) fn window(&self, start_seconds: f64, seconds: f64) -> &[f32] {
         let sample_rate = f64::from(self.sample_rate);

@@ -41,7 +41,7 @@ fn column_count(notes: &[Note]) -> usize {
 #[test]
 fn each_column_gets_one_pair_and_the_end_resets_to_the_defaults() {
     let notes = notes(OCTAVE_RUN);
-    let out = release_events(&notes, &mut StdRng::seed_from_u64(1));
+    let out = release_events(&notes, &BTreeSet::new(), &mut StdRng::seed_from_u64(1));
     let shape = values(&out, RELEASE_SHAPE_CC);
     let level = values(&out, RELEASE_LEVEL_CC);
     assert_eq!(column_count(&notes), 32);
@@ -61,7 +61,7 @@ fn each_column_gets_one_pair_and_the_end_resets_to_the_defaults() {
 #[test]
 fn values_stay_in_the_ranges_and_spread_over_the_bands() {
     let notes = notes(OCTAVE_RUN);
-    let out = release_events(&notes, &mut StdRng::seed_from_u64(1));
+    let out = release_events(&notes, &BTreeSet::new(), &mut StdRng::seed_from_u64(1));
     let shape = values(&out, RELEASE_SHAPE_CC);
     let level = values(&out, RELEASE_LEVEL_CC);
     let shape = &shape[..shape.len() - 1];
@@ -78,7 +78,7 @@ fn values_stay_in_the_ranges_and_spread_over_the_bands() {
 #[test]
 fn a_chord_column_gets_one_pair_at_its_earliest_note_on() {
     let notes = notes(CHORDS);
-    let out = release_events(&notes, &mut StdRng::seed_from_u64(1));
+    let out = release_events(&notes, &BTreeSet::new(), &mut StdRng::seed_from_u64(1));
     let shape = values(&out, RELEASE_SHAPE_CC);
     let level = values(&out, RELEASE_LEVEL_CC);
     assert_eq!(column_count(&notes), 5);
@@ -99,16 +99,16 @@ fn a_chord_column_gets_one_pair_at_its_earliest_note_on() {
 #[test]
 fn the_same_seed_gives_the_same_result_and_another_seed_differs() {
     let notes = notes(OCTAVE_RUN);
-    let a = release_events(&notes, &mut StdRng::seed_from_u64(1));
-    let b = release_events(&notes, &mut StdRng::seed_from_u64(1));
-    let c = release_events(&notes, &mut StdRng::seed_from_u64(2));
+    let a = release_events(&notes, &BTreeSet::new(), &mut StdRng::seed_from_u64(1));
+    let b = release_events(&notes, &BTreeSet::new(), &mut StdRng::seed_from_u64(1));
+    let c = release_events(&notes, &BTreeSet::new(), &mut StdRng::seed_from_u64(2));
     assert_eq!(a, b);
     assert_ne!(a, c);
 }
 
 #[test]
 fn no_notes_give_no_events() {
-    assert!(seeded_release_events(&[]).is_empty());
+    assert!(seeded_release_events(&[], &BTreeSet::new()).is_empty());
 }
 
 /// なし / eco / auto / 列の H/P / 汚し / 汚し + eco + 列の H/P / 汚し + auto + 列の H/P

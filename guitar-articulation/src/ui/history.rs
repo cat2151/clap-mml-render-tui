@@ -26,7 +26,7 @@ const ROW_RULE_LABELS: [(RowRule, &str); 4] = [
 ];
 
 /// 列ごとのルールの、1 行に載せる短い名前。
-const RULE_LABELS: [(Rule, &str); 7] = [
+const RULE_LABELS: [(Rule, &str); 31] = [
     (Rule::HammerPull, "H/P"),
     (Rule::PalmMute, "mute"),
     (Rule::PinchHarmonic, "PH"),
@@ -34,6 +34,30 @@ const RULE_LABELS: [(Rule, &str); 7] = [
     (Rule::Choke, "bend"),
     (Rule::Vibrato, "vib"),
     (Rule::PickScratch, "scratch"),
+    (Rule::NaturalHarmonics, "NH"),
+    (Rule::Brushing, "brush"),
+    (Rule::FretMute, "fretmute"),
+    (Rule::SlideOut, "slideout"),
+    (Rule::PseudoLegato, "legato"),
+    (Rule::Portamento, "porta"),
+    (Rule::SlideIn, "slidein"),
+    (Rule::TrillHalf, "trill1"),
+    (Rule::TrillWhole, "trill2"),
+    (Rule::TrillMinorThird, "trill3"),
+    (Rule::TrillMajorThird, "trill4"),
+    (Rule::UnisonBendAuto, "unison"),
+    (Rule::UnisonBendManual, "unisonpb"),
+    (Rule::ChromaticRun, "chrun"),
+    (Rule::SlideFxDown, "fxdown"),
+    (Rule::SlideFxUp, "fxup"),
+    (Rule::SlideFxWow, "fxwow"),
+    (Rule::EffectHello, "hello"),
+    (Rule::EffectResonance, "reso"),
+    (Rule::EffectSlideNoise, "slidenoise"),
+    (Rule::EffectHardStop, "hardstop"),
+    (Rule::LongExtra, "long"),
+    (Rule::PowerChord, "p5"),
+    (Rule::PositionRelease, "posrel"),
 ];
 
 pub(super) fn draw_overlay(f: &mut Frame<'_>, screen: &GuitarArticulationScreen) {
@@ -61,8 +85,8 @@ pub(super) fn draw_overlay(f: &mut Frame<'_>, screen: &GuitarArticulationScreen)
     f.render_stateful_widget(list, area, &mut state);
 }
 
-/// `#01  <MML>  eco auto H/P:3  fx:2`。MML が同じで設定だけ違う履歴を見分けられるよう、
-/// ON の行ルール・列ルールごとの列数・chain の段数を後ろに付ける。
+/// `#01  <MML>  eco auto H/P:3 cc22=0  fx:2`。MML が同じで設定だけ違う履歴を見分けられるよう、
+/// ON の行ルール・列ルールごとの列数・既定と違うパラメータ・chain の段数を後ろに付ける。
 pub(super) fn row_text(index: usize, entry: &GuitarArticulationHistoryEntry) -> String {
     let mut settings: Vec<String> = ROW_RULE_LABELS
         .iter()
@@ -73,6 +97,12 @@ pub(super) fn row_text(index: usize, entry: &GuitarArticulationHistoryEntry) -> 
         let count = entry.rules.column_count_of(*rule);
         (count > 0).then(|| format!("{label}:{count}"))
     }));
+    settings.extend(
+        entry
+            .rules
+            .changed_params()
+            .map(|(cc, value)| format!("cc{cc}={value}")),
+    );
     let mut text = format!("#{:02}  {}", index + 1, entry.mml);
     if !settings.is_empty() {
         text.push_str("  ");

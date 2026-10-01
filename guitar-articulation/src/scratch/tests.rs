@@ -1,5 +1,9 @@
 use super::*;
-use crate::{articulate, column_events, convert, notes_from_events, RowRule, Take};
+use crate::notes::{is_note_off, is_note_on};
+use crate::{
+    articulate, column_events, convert, notes_from_events, Articulation, RowRule, Rule, RuleTable,
+    Take, TimedMidiEvent,
+};
 
 fn raw(mml: &str) -> Vec<TimedMidiEvent> {
     cmrt_chord::timed_performance(mml).unwrap().events

@@ -30,7 +30,7 @@ pub(crate) fn column_map(old: &[Note], new: &[Note]) -> Vec<Option<usize>> {
 }
 
 impl RuleTable {
-    /// 列ごとのルールを [`column_map`] の対応先の列へ付け替えた表。行ルールは持たない。
+    /// 列ごとのルールを [`column_map`] の対応先の列へ付け替えた表。行ルールとパラメータは持たない。
     /// 同じ列へ移る複数の列のルールは合わせ、排他のルールは前の列のものを残す。
     /// 対応先の無い列（範囲外・`None`）のルールは落とす。
     pub(crate) fn remap_columns(&self, map: &[Option<usize>]) -> RuleTable {
@@ -48,7 +48,7 @@ impl RuleTable {
         }
         RuleTable {
             on,
-            rows: Default::default(),
+            ..Default::default()
         }
     }
 }

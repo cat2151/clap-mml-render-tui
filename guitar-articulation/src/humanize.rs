@@ -20,16 +20,10 @@ pub(crate) const VELOCITY_SPREAD: i32 = 8;
 pub(crate) const ACCENT_VELOCITY_DROP: i32 = 8;
 /// ピッキングノイズ層の音量（CC30）。sfz の既定 75 の周り。
 pub(crate) const PICKING_CC30_RANGE: RangeInclusive<u8> = 50..=100;
-/// 微小ノイズ層の音量（CC31）。sfz の既定 0 では鳴らない層を足す。
-pub(crate) const PICKING_CC31_RANGE: RangeInclusive<u8> = 0..=60;
 /// ピッキングノイズ層の音量を決める CC（METAL-GTX の `Picking`）。
 pub(crate) const PICKING_CC: u8 = 30;
-/// 微小ノイズ層の音量を決める CC（METAL-GTX の `Picking_Micro`）。
-pub(crate) const PICKING_MICRO_CC: u8 = 31;
 /// sfz の `set_cc30`。演奏の終わりにこの値へ戻す。
 pub(crate) const PICKING_CC_DEFAULT: u8 = 75;
-/// sfz の `set_cc31`。演奏の終わりにこの値へ戻す。
-pub(crate) const PICKING_MICRO_CC_DEFAULT: u8 = 0;
 /// on のずれを、隣の列の on との間隔の何割までに抑えるか。0.5 未満なら隣の列を追い越さない。
 pub(crate) const NEIGHBOR_GAP_FRACTION: f64 = 0.4;
 /// off をずらした後も残す、最短の音長（秒）。
@@ -41,8 +35,8 @@ pub(crate) struct Humanized {
     pub on_seconds: f64,
     pub off_seconds: f64,
     pub velocity: u8,
-    /// ピッキングする音だけ、直前に送る CC30 と CC31 の値。
-    pub picking: Option<[u8; 2]>,
+    /// ピッキングする音だけ、直前に送る CC30 の値。
+    pub picking: Option<u8>,
 }
 
 /// 音ごとに on/off の時刻・velocity・ピッキングノイズの量をばらつかせる。
@@ -78,7 +72,6 @@ pub(crate) fn humanize(
                     rng.random_range(-VELOCITY_SPREAD..=VELOCITY_SPREAD)
                 };
             let cc30 = rng.random_range(PICKING_CC30_RANGE);
-            let cc31 = rng.random_range(PICKING_CC31_RANGE);
             let picks = matches!(
                 articulated.articulation,
                 Articulation::SusDown | Articulation::SusUp
@@ -87,7 +80,7 @@ pub(crate) fn humanize(
                 on_seconds: ons[i],
                 off_seconds: off_seconds(notes, all, &ons, i, note.off_seconds + off_shift),
                 velocity: u8::try_from(velocity.clamp(1, 127)).expect("clamped to 1..=127"),
-                picking: picks.then_some([cc30, cc31]),
+                picking: picks.then_some(cc30),
             }
         })
         .collect()
@@ -106,7 +99,7 @@ pub(crate) fn seeded(notes: &[Note], articulated: &[Articulated]) -> Vec<Humaniz
 ///
 /// 演奏音の note on/off は [`humanize`] の時刻・velocity と [`Articulated::pitch`] で作り直し、note 以外のイベントはそのまま残す。
 /// KS と CC はずらした後の音から作るので、KS は列でいちばん早い note on に付いていく。
-/// ピッキングする音の note on と同時刻に CC30 / CC31 を置き、演奏の終わりで sfz の既定値へ戻す
+/// ピッキングする音の note on と同時刻に CC30 を置き、演奏の終わりで sfz の既定値へ戻す
 /// （CC は演奏を跨いで残る）。同時刻では並べ替えで note off → CC → KS → 演奏音の順になる。
 /// `humanized` は `notes` と同じ並び（[`humanize`] の出力）。
 pub(crate) fn humanized_events(
@@ -164,18 +157,12 @@ fn picking_noise_events(notes: &[Note], humanized: &[Humanized]) -> Vec<TimedMid
     };
     let mut out = Vec::new();
     for (note, h) in notes.iter().zip(humanized) {
-        if let Some([cc30, cc31]) = h.picking {
+        if let Some(cc30) = h.picking {
             out.push(control_change(
                 note.on_seconds,
                 note.channel,
                 PICKING_CC,
                 cc30,
-            ));
-            out.push(control_change(
-                note.on_seconds,
-                note.channel,
-                PICKING_MICRO_CC,
-                cc31,
             ));
         }
     }
@@ -185,12 +172,6 @@ fn picking_noise_events(notes: &[Note], humanized: &[Humanized]) -> Vec<TimedMid
         first.channel,
         PICKING_CC,
         PICKING_CC_DEFAULT,
-    ));
-    out.push(control_change(
-        end,
-        first.channel,
-        PICKING_MICRO_CC,
-        PICKING_MICRO_CC_DEFAULT,
     ));
     out
 }

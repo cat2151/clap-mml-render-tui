@@ -130,10 +130,9 @@ fn only_picked_notes_carry_picking_noise_values_within_range() {
         match a.articulation {
             Articulation::HammerOn | Articulation::PullOff => assert_eq!(h.picking, None),
             Articulation::SusDown | Articulation::SusUp => {
-                let [cc30, cc31] = h.picking.expect("picked note has CC values");
+                let cc30 = h.picking.expect("picked note has CC values");
                 assert!(PICKING_CC30_RANGE.contains(&cc30));
-                assert!(PICKING_CC31_RANGE.contains(&cc31));
-                picked.push([cc30, cc31]);
+                picked.push(cc30);
             }
             _ => {}
         }

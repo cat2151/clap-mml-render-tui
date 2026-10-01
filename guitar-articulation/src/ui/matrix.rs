@@ -14,6 +14,7 @@ use cmrt_tui_core::{
 };
 
 use super::{note_name, ROW_RULE_ROWS, RULE_ROWS};
+use crate::control::control_rule_affects;
 use crate::{auto_pick_columns, Articulation, GuitarArticulationScreen, RowRule, Rule, Take};
 
 /// 1 列の桁（記号 1 つ + 空白）。
@@ -98,16 +99,9 @@ pub(super) fn lines(screen: &GuitarArticulationScreen, width: u16) -> Vec<Line<'
         ));
     }
     for (rule, key, name) in RULE_ROWS {
-        let cells = columns.clone().map(|column| {
-            match (
-                screen.rules().is_on(column, rule),
-                applies(screen, column, rule),
-            ) {
-                (false, _) => (" ", base_style()),
-                (true, true) => (RULE_ON_MARK, base_style().fg(MONOKAI_GREEN)),
-                (true, false) => (RULE_IDLE_MARK, base_style().fg(MONOKAI_GRAY)),
-            }
-        });
+        let cells = columns
+            .clone()
+            .map(|column| rule_cell(screen, column, rule));
         out.push(row(
             &format!("{key}:{name}"),
             cells,
@@ -127,11 +121,9 @@ fn auto_hammer_pull_cell(
     if !auto_picks[column] {
         return (RULE_ON_MARK, base_style().fg(MONOKAI_GREEN));
     }
-    let mark = match first_articulation(screen, column) {
-        Some(Articulation::SusDown | Articulation::MuteDown) => DOWN_STROKE_MARK,
-        Some(Articulation::SusUp | Articulation::MuteUp) => UP_STROKE_MARK,
-        _ => AUTO_PICK_MARK,
-    };
+    let mark = first_articulation(screen, column)
+        .and_then(stroke_mark)
+        .unwrap_or(AUTO_PICK_MARK);
     (mark, base_style().fg(MONOKAI_GRAY))
 }
 
@@ -154,13 +146,13 @@ fn economy_picking_cell(screen: &GuitarArticulationScreen, column: usize) -> (&'
     else {
         return (" ", base_style());
     };
-    let mark = match (articulated.articulation, articulated.accent) {
-        (Articulation::SusDown | Articulation::MuteDown, _) => DOWN_STROKE_MARK,
-        (Articulation::SusUp | Articulation::MuteUp, _) => UP_STROKE_MARK,
-        (Articulation::HammerOn, _) => HAMMER_ON_MARK,
-        (Articulation::PullOff, _) => PULL_OFF_MARK,
-        (_, true) => OTHER_ACCENT_MARK,
-        (_, false) => " ",
+    let articulation = articulated.articulation;
+    let mark = match (stroke_mark(articulation), articulation, articulated.accent) {
+        (Some(stroke), _, _) => stroke,
+        (None, Articulation::HammerOn, _) => HAMMER_ON_MARK,
+        (None, Articulation::PullOff, _) => PULL_OFF_MARK,
+        (None, _, true) => OTHER_ACCENT_MARK,
+        (None, _, false) => " ",
     };
     let style = if articulated.accent {
         base_style().fg(MONOKAI_PINK).add_modifier(Modifier::BOLD)
@@ -168,6 +160,21 @@ fn economy_picking_cell(screen: &GuitarArticulationScreen, column: usize) -> (&'
         base_style().fg(MONOKAI_GREEN)
     };
     (mark, style)
+}
+
+/// ストロークを保つ奏法の D/U。
+fn stroke_mark(articulation: Articulation) -> Option<&'static str> {
+    match articulation {
+        Articulation::SusDown
+        | Articulation::MuteDown
+        | Articulation::BrushDown
+        | Articulation::MuteFretDown => Some(DOWN_STROKE_MARK),
+        Articulation::SusUp
+        | Articulation::MuteUp
+        | Articulation::BrushUp
+        | Articulation::MuteFretUp => Some(UP_STROKE_MARK),
+        _ => None,
+    }
 }
 
 /// 列でいちばん早く鳴る音の、汚しによる発音のずれ。
@@ -188,16 +195,44 @@ fn humanize_cell(screen: &GuitarArticulationScreen, column: usize) -> (&'static 
     }
 }
 
-/// 列の音の奏法に、そのルールが効いているか。ビブラートは奏法を変えないので、列に音が在れば効く。
+/// 列ルールの ON/OFF と効き方の記号。OFF は空白、効いていれば ●、効かない列は灰色の -。
+pub(super) fn rule_cell(
+    screen: &GuitarArticulationScreen,
+    column: usize,
+    rule: Rule,
+) -> (&'static str, Style) {
+    match (
+        screen.rules().is_on(column, rule),
+        applies(screen, column, rule),
+    ) {
+        (false, _) => (" ", base_style()),
+        (true, true) => (RULE_ON_MARK, base_style().fg(MONOKAI_GREEN)),
+        (true, false) => (RULE_IDLE_MARK, base_style().fg(MONOKAI_GRAY)),
+    }
+}
+
+/// 列の音の奏法に、そのルールが効いているか。ビブラートと効果音は奏法を変えないので、列に音が在れば効く。
+/// CC23 / CC32 / CC24 のルールは、効く奏法と音高の音（[`control_rule_affects`]）が列に在れば効く。
 fn applies(screen: &GuitarArticulationScreen, column: usize, rule: Rule) -> bool {
-    let mut in_column = screen
+    let mut notes_in_column = screen
         .notes()
         .iter()
         .zip(screen.articulated())
-        .filter(|(note, _)| note.column == column)
-        .map(|(_, articulated)| articulated.articulation);
+        .filter(|(note, _)| note.column == column);
+    if matches!(
+        rule,
+        Rule::LongExtra | Rule::PowerChord | Rule::PositionRelease
+    ) {
+        return notes_in_column
+            .any(|(note, a)| control_rule_affects(rule, a.articulation, note.pitch));
+    }
+    let mut in_column = notes_in_column.map(|(_, articulated)| articulated.articulation);
     match rule {
-        Rule::Vibrato => in_column.next().is_some(),
+        Rule::Vibrato
+        | Rule::EffectHello
+        | Rule::EffectResonance
+        | Rule::EffectSlideNoise
+        | Rule::EffectHardStop => in_column.next().is_some(),
         Rule::HammerPull => {
             in_column.any(|a| matches!(a, Articulation::HammerOn | Articulation::PullOff))
         }
@@ -215,6 +250,28 @@ fn applies(screen: &GuitarArticulationScreen, column: usize, rule: Rule) -> bool
                 Articulation::BendHalf | Articulation::BendWhole | Articulation::BendWholeHalf
             )
         }),
+        Rule::NaturalHarmonics => in_column.any(|a| a == Articulation::NaturalHarmonics),
+        Rule::Brushing => {
+            in_column.any(|a| matches!(a, Articulation::BrushDown | Articulation::BrushUp))
+        }
+        Rule::FretMute => {
+            in_column.any(|a| matches!(a, Articulation::MuteFretDown | Articulation::MuteFretUp))
+        }
+        Rule::SlideOut => in_column.any(|a| a == Articulation::SlideOut),
+        Rule::PseudoLegato => in_column.any(|a| a == Articulation::PseudoLegato),
+        Rule::Portamento => in_column.any(|a| a == Articulation::Portamento),
+        Rule::SlideIn => in_column.any(|a| a == Articulation::SlideIn),
+        Rule::TrillHalf => in_column.any(|a| a == Articulation::TrillHalf),
+        Rule::TrillWhole => in_column.any(|a| a == Articulation::TrillWhole),
+        Rule::TrillMinorThird => in_column.any(|a| a == Articulation::TrillMinorThird),
+        Rule::TrillMajorThird => in_column.any(|a| a == Articulation::TrillMajorThird),
+        Rule::UnisonBendAuto => in_column.any(|a| a == Articulation::UnisonBendAuto),
+        Rule::UnisonBendManual => in_column.any(|a| a == Articulation::UnisonBendManual),
+        Rule::ChromaticRun => in_column.any(|a| a == Articulation::ChromaticRun),
+        Rule::SlideFxDown => in_column.any(|a| a == Articulation::SlideFxDown),
+        Rule::SlideFxUp => in_column.any(|a| a == Articulation::SlideFxUp),
+        Rule::SlideFxWow => in_column.any(|a| a == Articulation::SlideFxWow),
+        Rule::LongExtra | Rule::PowerChord | Rule::PositionRelease => false,
     }
 }
 

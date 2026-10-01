@@ -13,7 +13,7 @@ use crate::{notes_from_events, Note, RuleTable};
 pub struct ColumnRuleAnchor {
     #[serde(default)]
     pub mml: String,
-    /// 列ごとのルールだけ。行全体のルールは持たない。
+    /// 列ごとのルールだけ。行全体のルールとパラメータは持たない。
     #[serde(default)]
     pub rules: RuleTable,
 }
@@ -25,12 +25,12 @@ impl ColumnRuleAnchor {
             mml: mml.to_string(),
             rules: RuleTable {
                 on: rules.on.clone(),
-                rows: Default::default(),
+                ..Default::default()
             },
         }
     }
 
-    /// `notes` の列へ列ルールを付け替え、行全体のルールは `current` のものにした表。
+    /// `notes` の列へ列ルールを付け替え、行全体のルールとパラメータは `current` のものにした表。
     /// この MML を解釈できなければ、列ルールは空。
     pub(crate) fn rules_for(&self, notes: &[Note], current: &RuleTable) -> RuleTable {
         let mut rules = match cmrt_chord::timed_performance(&self.mml) {
@@ -41,6 +41,7 @@ impl ColumnRuleAnchor {
             Err(_) => RuleTable::default(),
         };
         rules.rows = current.rows.clone();
+        rules.params = current.params.clone();
         rules
     }
 }

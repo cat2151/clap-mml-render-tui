@@ -14,12 +14,13 @@
 //! ポジション移動の音で、移動していない所で鳴らすと汚しにならない。80〜127 はアクションリリース
 //! （自動スライドアウト / 自動オルタネイト）で、別の奏法になる。
 
+use std::collections::BTreeSet;
 use std::ops::RangeInclusive;
 
 use rand::{rngs::StdRng, Rng, RngExt, SeedableRng};
 
 use crate::humanize::control_change;
-use crate::{Note, TimedMidiEvent};
+use crate::{Note, TimedMidiEvent, POSITION_RELEASE_VALUE};
 
 /// 汚し（リリース）の乱数の seed。汚し（[`HUMANIZE_SEED`](crate::humanize::HUMANIZE_SEED)）とは別の乱数列にして、
 /// 片方の ON/OFF がもう片方の揺れを変えないようにする。
@@ -44,7 +45,13 @@ pub(crate) const RELEASE_LEVEL_DEFAULT: u8 = 108;
 /// 同時刻の CC は最後の 1 組しか効かないので、和音の列も 1 組だけ。channel は列の最初の音。
 /// CC は演奏を跨いで残るので、演奏の終わり（全音の off の最大）で sfz の既定値へ戻す。
 /// `notes` は列の順（[`notes_from_events`](crate::notes_from_events) の並び）。
-pub(crate) fn release_events(notes: &[Note], rng: &mut impl Rng) -> Vec<TimedMidiEvent> {
+/// `positions` の列の CC24 は、乱数を引いた上で [`POSITION_RELEASE_VALUE`] に置き換える
+/// （乱数の引き順を変えないので、他の列の値は変わらない）。
+pub(crate) fn release_events(
+    notes: &[Note],
+    positions: &BTreeSet<usize>,
+    rng: &mut impl Rng,
+) -> Vec<TimedMidiEvent> {
     let Some(first) = notes.first() else {
         return Vec::new();
     };
@@ -63,6 +70,11 @@ pub(crate) fn release_events(notes: &[Note], rng: &mut impl Rng) -> Vec<TimedMid
             .fold(f64::INFINITY, f64::min);
         let channel = members[0].channel;
         let shape = rng.random_range(RELEASE_SHAPE_RANGE);
+        let shape = if positions.contains(&column) {
+            POSITION_RELEASE_VALUE
+        } else {
+            shape
+        };
         let level = rng.random_range(RELEASE_LEVEL_RANGE);
         out.push(control_change(on, channel, RELEASE_SHAPE_CC, shape));
         out.push(control_change(on, channel, RELEASE_LEVEL_CC, level));
@@ -98,8 +110,11 @@ pub(crate) fn release_shape_name(value: u8) -> &'static str {
 }
 
 /// [`RELEASE_SEED`] で引いた [`release_events`]。演奏に使う汚し（リリース）はいつもこれ。
-pub(crate) fn seeded_release_events(notes: &[Note]) -> Vec<TimedMidiEvent> {
-    release_events(notes, &mut StdRng::seed_from_u64(RELEASE_SEED))
+pub(crate) fn seeded_release_events(
+    notes: &[Note],
+    positions: &BTreeSet<usize>,
+) -> Vec<TimedMidiEvent> {
+    release_events(notes, positions, &mut StdRng::seed_from_u64(RELEASE_SEED))
 }
 
 #[cfg(test)]

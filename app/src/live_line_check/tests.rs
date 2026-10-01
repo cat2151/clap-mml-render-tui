@@ -32,9 +32,14 @@ fn renders_are_summed_at_their_send_frames() {
 
 mod articulation_capture;
 mod capture_support;
+mod column_sound_capture;
+mod control_change_capture;
 mod humanize_capture;
 mod keyswitch_capture;
 mod lite_full_swap_capture;
+mod metal_gtx_survey_capture;
+mod metal_gtx_survey_probes;
+mod param_capture;
 mod pick_scratch_capture;
 mod release_capture;
 mod sample_midi_capture;

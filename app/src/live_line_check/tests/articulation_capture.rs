@@ -1,4 +1,4 @@
-//! Guitar Articulation の列ルール（ミュート・PH・スライド・チョーキング・ビブラート）を ON にすると、
+//! Guitar Articulation の列ルール（ミュート・PH・スライド・チョーキング・ビブラート・奏法リストのルール）を ON にすると、
 //! 行の LIVE 演奏経路で実際に音が変わるかを、live mix の出力で確かめる。
 //!
 //! 同じ 3 音を「全ルール OFF」と「2 音目の列にだけ 1 つのルール」で [`convert`] して鳴らし、
@@ -17,12 +17,21 @@ use super::capture_support::{peak, rms, CaptureSetup, Segment, DIFFERENT, SAME};
 /// E2 → G2（+3 半音。スライドは 3 半音、チョーキングは 1 音半）→ A2。
 /// 2 音目はビブラートの揺れが見える長さ（1 秒）にする。
 const MML: &str = "o3 l4 e g2 a";
+/// [`MML`] の 2 オクターブ上。ユニゾンチョーキング（音域 C4〜C6）の 2 音目 G4 が音域に入る。
+const HIGH_MML: &str = "o5 l4 e g2 a";
+/// スライドインの幅 1（F#2 → G2）と幅 7（C2 → G2）。音の長さは [`MML`] と同じ。
+const SLIDE_IN_NARROW_MML: &str = "o3 l4 f+ g2 a";
+const SLIDE_IN_WIDE_MML: &str = "o3 l4 c g2 a";
 const COLUMN: usize = 1;
+const PITCH_BEND: u8 = 0xE0;
 /// 各音の頭の秒と長さ（`MML` のテンポ 120 の値）。
 const NOTES: [(f64, f64); 3] = [(0.0, 0.5), (0.5, 1.0), (1.5, 0.5)];
 /// 比べる窓を次の音の頭より手前で切る幅。onset は音の頭より数 ms 遅れて見つかるので、
 /// 音の長さいっぱいに取ると次の音（レガートのスライドは頭から大きい）の頭が混ざる。
 const NEXT_NOTE_GUARD_SECONDS: f64 = 0.020;
+/// onset を探し直すときに最大振幅を取る、1 音目の頭からの長さ（[`Segment::with_head_onset`]）。
+/// 2 音目（0.5 秒）の頭を含まない長さ。トリルは 2 音目が 1 音目の数倍大きい。
+const HEAD_ONSET_SECONDS: f64 = 0.3;
 /// 周期の揺れを測る 2 音目の区間。頭の立ち上がりを外す。
 const PITCH_FROM_SECONDS: f64 = 0.15;
 const PITCH_TO_SECONDS: f64 = 1.0;
@@ -35,13 +44,44 @@ const PITCH_MAX_HZ: f64 = 200.0;
 /// 平均周期のずれを報告する閾値（音程が上がっていないか。assert はしない）。
 const PITCH_SHIFT_REPORT: f64 = 0.03;
 
-const CONDITIONS: [(&str, Rule); 5] = [
-    ("palm-mute", Rule::PalmMute),
-    ("pinch-harmonic", Rule::PinchHarmonic),
-    ("slide", Rule::Slide),
-    ("choke", Rule::Choke),
-    ("vibrato", Rule::Vibrato),
+/// (label, 2 音目の列に ON にするルール, 鳴らす MML)。基準は同じ MML の全ルール OFF。
+const CONDITIONS: [(&str, Rule, &str); 17] = [
+    ("palm-mute", Rule::PalmMute, MML),
+    ("pinch-harmonic", Rule::PinchHarmonic, MML),
+    ("slide", Rule::Slide, MML),
+    ("choke", Rule::Choke, MML),
+    ("vibrato", Rule::Vibrato, MML),
+    ("natural-harmonics", Rule::NaturalHarmonics, MML),
+    ("brushing", Rule::Brushing, MML),
+    ("fret-mute", Rule::FretMute, MML),
+    ("slide-out", Rule::SlideOut, MML),
+    ("pseudo-legato", Rule::PseudoLegato, MML),
+    ("portamento", Rule::Portamento, MML),
+    ("slide-in", Rule::SlideIn, MML),
+    ("trill-half", Rule::TrillHalf, MML),
+    ("trill-whole", Rule::TrillWhole, MML),
+    ("trill-min3", Rule::TrillMinorThird, MML),
+    ("trill-maj3", Rule::TrillMajorThird, MML),
+    ("unison-bend-auto", Rule::UnisonBendAuto, HIGH_MML),
 ];
+
+/// server を起こし直して `events` を 1 回鳴らし、onset を 1 音目の大きさで探し直した録音。
+fn record(setup: &CaptureSetup, label: &str, events: Vec<cmrt_chord::TimedMidiEvent>) -> Segment {
+    let mut segments = setup.record(label, &[events]);
+    segments.remove(0).with_head_onset(HEAD_ONSET_SECONDS)
+}
+
+/// `mml` の 2 音目の列にだけ `rule` を ON にして変換する（`None` は全ルール OFF）。
+fn phrase(mml: &str, rule: Option<Rule>) -> Vec<cmrt_chord::TimedMidiEvent> {
+    let raw = cmrt_chord::timed_performance(mml)
+        .expect("MML を解釈できない")
+        .events;
+    let mut rules = RuleTable::default();
+    if let Some(rule) = rule {
+        rules.toggle(COLUMN, rule);
+    }
+    convert(&raw, &rules)
+}
 
 #[test]
 #[ignore = "実機の sampler 音色が要る（CMRT_TEST_KEYSWITCH_PATCH）"]
@@ -49,27 +89,26 @@ fn each_articulation_rule_changes_the_sound_of_its_column() {
     let Some(setup) = CaptureSetup::from_env("articulation-capture") else {
         return;
     };
-    let raw = cmrt_chord::timed_performance(MML)
-        .expect("MML を解釈できない")
-        .events;
-    let phrase = |rule: Option<Rule>| {
-        let mut rules = RuleTable::default();
-        if let Some(rule) = rule {
-            rules.toggle(COLUMN, rule);
-        }
-        convert(&raw, &rules)
-    };
-    let plain = setup.record("plain", &[phrase(None)]);
+    let plain = record(&setup, "plain", phrase(MML, None));
+    let high_plain = record(&setup, "plain-high", phrase(HIGH_MML, None));
     let recorded = CONDITIONS
         .iter()
-        .map(|(label, rule)| (*label, *rule, setup.record(label, &[phrase(Some(*rule))])))
+        .map(|(label, rule, mml)| {
+            let segment = record(&setup, label, phrase(mml, Some(*rule)));
+            (*label, *rule, *mml, segment)
+        })
         .collect::<Vec<_>>();
     drop(setup);
 
-    let (plain_spread, plain_mean) = period_stats("plain", &plain[0]);
+    let (plain_spread, plain_mean) = period_stats("plain", &plain);
     let mut failures = Vec::new();
-    for (label, rule, segments) in &recorded {
-        let ncc = compare(label, &plain[0], &segments[0]);
+    for (label, rule, mml, segment) in &recorded {
+        let base = if *mml == HIGH_MML {
+            &high_plain
+        } else {
+            &plain
+        };
+        let ncc = compare(label, base, segment);
         if ncc[0] <= SAME {
             failures.push(format!("{label}: 1 音目が基準と違う（ncc={:.4}）", ncc[0]));
         }
@@ -80,7 +119,7 @@ fn each_articulation_rule_changes_the_sound_of_its_column() {
             ));
         }
         if *rule == Rule::Vibrato {
-            let (spread, mean) = period_stats(label, &segments[0]);
+            let (spread, mean) = period_stats(label, segment);
             if spread <= plain_spread {
                 failures.push(format!(
                     "{label}: 周期の揺れ {spread:.5} が基準 {plain_spread:.5} 以下"
@@ -96,6 +135,62 @@ fn each_articulation_rule_changes_the_sound_of_its_column() {
         }
     }
     assert!(failures.is_empty(), "{failures:#?}");
+}
+
+/// スライドインの幅（CC27）で滑り込む音が変わるか。同じ G2 へ幅 1 と幅 7 で滑り込み、2 音目を比べる。
+#[test]
+#[ignore = "実機の sampler 音色が要る（CMRT_TEST_KEYSWITCH_PATCH）"]
+fn slide_in_width_changes_the_sound() {
+    let Some(setup) = CaptureSetup::from_env("articulation-capture") else {
+        return;
+    };
+    let narrow = record(
+        &setup,
+        "slide-in-width1",
+        phrase(SLIDE_IN_NARROW_MML, Some(Rule::SlideIn)),
+    );
+    let wide = record(
+        &setup,
+        "slide-in-width7",
+        phrase(SLIDE_IN_WIDE_MML, Some(Rule::SlideIn)),
+    );
+    drop(setup);
+    let ncc = compare("slide-in width1 vs width7", &narrow, &wide);
+    assert!(
+        ncc[1] < DIFFERENT,
+        "幅 1 と幅 7 の 2 音目が同じ音（ncc={:.4}）",
+        ncc[1]
+    );
+}
+
+/// ユニゾンチョーキング（手動）の pitch bend で音が変わるか。同じ変換結果から pitch bend だけを抜いた列と、2 音目を比べる。
+#[test]
+#[ignore = "実機の sampler 音色が要る（CMRT_TEST_KEYSWITCH_PATCH）"]
+fn unison_bend_manual_pitch_bend_changes_the_sound() {
+    let Some(setup) = CaptureSetup::from_env("articulation-capture") else {
+        return;
+    };
+    let bent = phrase(HIGH_MML, Some(Rule::UnisonBendManual));
+    assert!(
+        bent.iter()
+            .any(|event| event.message[0] & 0xF0 == PITCH_BEND),
+        "pitch bend が無い"
+    );
+    let unbent = bent
+        .iter()
+        .copied()
+        .filter(|event| event.message[0] & 0xF0 != PITCH_BEND)
+        .collect();
+    let without = record(&setup, "unison-manual-no-bend", unbent);
+    let with = record(&setup, "unison-manual-bend", bent);
+    drop(setup);
+    let ncc = compare("unison manual no bend vs bend", &without, &with);
+    assert!(ncc[0] > SAME, "1 音目が違う（ncc={:.4}）", ncc[0]);
+    assert!(
+        ncc[1] < DIFFERENT,
+        "pitch bend の有無で 2 音目が同じ音（ncc={:.4}）",
+        ncc[1]
+    );
 }
 
 /// 音ごとに、ずれを探した最大の正規化相関を出して返す。RMS と頭 30ms の peak も並べる。

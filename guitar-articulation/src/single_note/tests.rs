@@ -1,5 +1,5 @@
 use super::*;
-use crate::ui::{ROW_RULE_ROWS, RULE_ROWS};
+use crate::ui::{ROW_RULE_ROWS, RULE_LIST_KEY, RULE_ROWS};
 use crate::{
     articulate, convert, notes_from_events, RowRule, Rule, RuleTable, DEFAULT_MML,
     KEYSWITCH_VELOCITY,
@@ -114,11 +114,13 @@ fn out_of_range_column_is_empty() {
 /// 汚しは 2 つとも 1 音の試聴に掛からない（時刻と velocity がフレーズの演奏と一致しない。
 /// リリースの CC はフレーズの列ごとの値で、1 音の試聴には送らない）ので外す。
 /// ピックスクレイプは列の全部の音を上書きして他の列ルールが効かなくなるので外す（`scratch/tests.rs` で見る）。
+/// 奏法リストだけのルールも外す。排他なルールは後に ON にしたものが残るので、外さないと
+/// チョーキングの代わりにそれが残る（奏法リストのルールは `voicing/tests.rs` で見る）。
 fn all_rules_on(columns: usize) -> RuleTable {
     let mut rules = RuleTable::default();
     for column in 0..columns {
-        for (rule, _, _) in RULE_ROWS {
-            if rule == Rule::PickScratch {
+        for (rule, key, _) in RULE_ROWS {
+            if rule == Rule::PickScratch || key == RULE_LIST_KEY {
                 continue;
             }
             rules.toggle(column, rule);

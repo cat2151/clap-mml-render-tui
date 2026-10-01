@@ -12,7 +12,7 @@ use ratatui_textarea::TextArea;
 use serde_json::Value;
 
 use crate::humanize::{self, Humanized};
-use crate::ui::{ROW_RULE_ROWS, RULE_ROWS};
+use crate::ui::{PARAM_LIST_KEY, ROW_RULE_ROWS, RULE_LIST_KEY, RULE_ROWS};
 use crate::{
     articulate, convert, Articulated, ColumnRuleAnchor, Instrument, Note, RowRule, Rule, RuleTable,
     StartupInstrument, TimedMidiEvent,
@@ -43,6 +43,8 @@ impl Take {
 mod effect_chain;
 mod history;
 mod input;
+mod param_list;
+mod rule_list;
 mod sample_midi;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -112,6 +114,10 @@ pub struct GuitarArticulationScreen {
     sample_midi: Option<sample_midi::SampleMidiState>,
     /// サンプル MID の一覧 overlay（`o`）を開いている間だけ `Some`。
     sample_midi_list: Option<sample_midi::SampleMidiList>,
+    /// 奏法リスト overlay（`t`）を開いている間だけ、選んでいる行。
+    rule_list: Option<usize>,
+    /// パラメータ overlay（`u`）を開いている間だけ、選んでいる行。
+    param_list: Option<usize>,
     /// 直前の操作ができなかった理由。次のキーで消える。
     pub error: Option<String>,
 }
@@ -246,6 +252,12 @@ impl GuitarArticulationScreen {
         if self.sample_midi_list.is_some() {
             return self.handle_sample_midi_list_key(key);
         }
+        if self.rule_list.is_some() {
+            return self.handle_rule_list_key(key);
+        }
+        if self.param_list.is_some() {
+            return self.handle_param_list_key(key);
+        }
         // MML は `?` を使わないので、入力欄を開いていても `?` はヘルプへ回す。
         if is_help_key(key) {
             self.help_open = true;
@@ -290,6 +302,8 @@ impl GuitarArticulationScreen {
             KeyCode::Char('b') => self.play(Take::Plain),
             KeyCode::Char(' ') => self.play(Take::Converted),
             KeyCode::Char('q') => GuitarArticulationAction::Quit,
+            KeyCode::Char(RULE_LIST_KEY) => self.open_rule_list(),
+            KeyCode::Char(PARAM_LIST_KEY) => self.open_param_list(),
             KeyCode::Char(ch) => {
                 if let Some((rule, _, _)) = RULE_ROWS.iter().find(|(_, key, _)| *key == ch) {
                     self.toggle_rule(*rule)

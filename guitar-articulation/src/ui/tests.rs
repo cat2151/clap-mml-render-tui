@@ -13,7 +13,7 @@ mod instrument_title;
 mod sample_midi;
 
 const WIDTH: u16 = 100;
-const HEIGHT: u16 = 31;
+const HEIGHT: u16 = 55;
 
 fn key(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)

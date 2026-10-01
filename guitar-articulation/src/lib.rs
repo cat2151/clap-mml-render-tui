@@ -4,9 +4,11 @@
 //! KS 番号は METAL-GTX 固有なので、汎用の `cmrt-midi-filter` には置かない。
 //! 変換を試す画面（[`GuitarArticulationScreen`] と [`ui`]）も同じ crate に置く。
 
+mod articulation;
 mod auto_pick;
 mod column_map;
 mod column_rule_anchor;
+mod column_sound;
 mod control;
 mod glide;
 mod hammer_pull;
@@ -15,6 +17,7 @@ mod humanize;
 mod instrument;
 mod keyswitch;
 mod notes;
+mod params;
 mod picking;
 mod release;
 mod report;
@@ -25,6 +28,7 @@ mod settings;
 mod single_note;
 mod strings;
 pub mod ui;
+mod unison_bend;
 mod voicing;
 
 #[cfg(test)]
@@ -36,11 +40,18 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
+pub use articulation::Articulation;
 pub use auto_pick::{auto_pick_columns, RUN_MIN_NOTES, RUN_PICK_EVERY};
 pub use cmrt_midi_filter::TimedMidiEvent;
 pub use column_rule_anchor::ColumnRuleAnchor;
+pub use column_sound::{
+    fold_pitch, CHROMATIC_RUN_PITCHES, EFFECT_HARD_STOP_PITCH, EFFECT_HELLO_PITCH,
+    EFFECT_RESONANCE_PITCH, EFFECT_SLIDE_NOISE_PITCH, SLIDE_FX_DOWN_PITCHES, SLIDE_FX_UP_PITCHES,
+};
 pub use control::{
-    control_events, SLIDE_WIDTH_CC, SLIDE_WIDTH_CC_DEFAULT, VIBRATO_DEPTH, VIBRATO_DEPTH_CC,
+    control_events, LONG_EXTRA_CC, POSITION_RELEASE_PITCHES, POSITION_RELEASE_VALUE,
+    POWER_CHORD_CC, SLIDE_IN_WIDTH_CC, SLIDE_IN_WIDTH_CC_DEFAULT, SLIDE_WIDTH_CC,
+    SLIDE_WIDTH_CC_DEFAULT, VIBRATO_DEPTH, VIBRATO_DEPTH_CC,
 };
 pub use glide::{apply_glide_rules, slide_semitones, BEND_PITCHES, SLIDE_MAX_SEMITONES};
 pub use hammer_pull::apply_hammer_pull;
@@ -51,111 +62,26 @@ pub use history::{
 pub use instrument::{Instrument, StartupInstrument, FULL_PATCH};
 pub use keyswitch::{keyswitch_events, KEYSWITCH_RESET_SECONDS, KEYSWITCH_VELOCITY};
 pub use notes::{notes_from_events, Note};
+pub use params::{param_of, Param, PARAMS, PARAM_STEP};
 pub use picking::{articulate, Articulated, UNACCENTED_PICK_VELOCITY_PERCENT};
 pub use report::{compare, report};
 pub use sample_midi::{is_keyswitch_pitch, keyswitch_name, SampleMidi, SAMPLE_MIDI_DIR};
-pub use scratch::{apply_pick_scratch, pick_scratch_pitch, PICK_SCRATCH_PITCHES};
+pub use scratch::{pick_scratch_pitch, PICK_SCRATCH_PITCHES};
 pub use screen::{GuitarArticulationAction, GuitarArticulationScreen, Take, DEFAULT_MML};
 pub use settings::{load_settings, save_settings, GuitarArticulationSettings};
 pub use single_note::column_events;
 pub use strings::{picks_string, strings_by_column, REACH_SEMITONES};
-pub use voicing::{apply_voicing_rules, MUTE_PITCHES, PINCH_HARMONIC_PITCHES};
+pub use unison_bend::{
+    UNISON_BEND_FALL_SECONDS, UNISON_BEND_RISE_SECONDS, UNISON_BEND_STEP_SECONDS,
+};
+pub use voicing::{
+    apply_voicing_rules, slide_in_pitches, slide_in_width, BRUSH_PITCHES, FRET_MUTE_PITCHES,
+    GLIDE_IN_PITCHES, MUTE_PITCHES, NATURAL_HARMONICS_PITCHES, PINCH_HARMONIC_PITCHES,
+    SLIDE_OUT_PITCHES, TRILL_PITCHES, UNISON_BEND_PITCHES,
+};
 
 /// 画面に入ったときに読む音色（sforzando の `patches_dirs` からの相対）。KS 番号が METAL-GTX に固有なので固定する。
 pub const PATCH: &str = "sfz/UI_METAL-GTX/Programs/02-METAL-GTX Lite.sfz";
-
-/// 音ごとの奏法。METAL-GTX の KS（`sw_last` のラッチ式）1 つに対応する。
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Articulation {
-    /// sfz の `sw_default`。ピッキングした音。
-    SusDown,
-    /// アップストロークでピッキングした音。
-    SusUp,
-    HammerOn,
-    PullOff,
-    /// パームミュートしてダウンストロークでピッキングした音。
-    MuteDown,
-    /// パームミュートしてアップストロークでピッキングした音。
-    MuteUp,
-    /// ピッキングハーモニクス（ピンチ）。
-    PinchHarmonic,
-    /// 低い音から滑り上がって着く音。幅は CC26（[`SLIDE_WIDTH_CC`]）で選ぶ。
-    SlideUp,
-    /// 高い音から滑り下りて着く音。幅は CC26 で選ぶ。
-    SlideDown,
-    /// 半音下から持ち上げて着くチョーキング。
-    BendHalf,
-    /// 1 音下から持ち上げて着くチョーキング。
-    BendWhole,
-    /// 1 音半下から持ち上げて着くチョーキング。
-    BendWholeHalf,
-    /// ピックの縁で弦を擦る効果音（ピックスクレイプ）。音高は擦りの速さ（[`PICK_SCRATCH_PITCHES`]）。
-    PickScratch,
-}
-
-impl Articulation {
-    /// 全 variant。KS 番号から奏法を引く候補。
-    pub const ALL: [Articulation; 13] = [
-        Articulation::SusDown,
-        Articulation::SusUp,
-        Articulation::HammerOn,
-        Articulation::PullOff,
-        Articulation::MuteDown,
-        Articulation::MuteUp,
-        Articulation::PinchHarmonic,
-        Articulation::SlideUp,
-        Articulation::SlideDown,
-        Articulation::BendHalf,
-        Articulation::BendWhole,
-        Articulation::BendWholeHalf,
-        Articulation::PickScratch,
-    ];
-
-    /// この奏法を選ぶ KS の note number。
-    pub fn keyswitch(self) -> u8 {
-        match self {
-            Articulation::SusDown => 17,
-            Articulation::SusUp => 18,
-            Articulation::HammerOn => 26,
-            Articulation::PullOff => 25,
-            Articulation::MuteDown => 20,
-            Articulation::MuteUp => 21,
-            Articulation::PinchHarmonic => 10,
-            Articulation::SlideUp => 24,
-            Articulation::SlideDown => 23,
-            Articulation::BendHalf => 91,
-            Articulation::BendWhole => 92,
-            Articulation::BendWholeHalf => 93,
-            Articulation::PickScratch => 8,
-        }
-    }
-
-    /// METAL-GTX の KS 一覧（`METAL-GTX_KSMap.txt`）での名前。
-    pub fn name(self) -> &'static str {
-        match self {
-            Articulation::SusDown => "Sus_Down",
-            Articulation::SusUp => "Sus_Up",
-            Articulation::HammerOn => "Hammer-On",
-            Articulation::PullOff => "Pull-Off",
-            Articulation::MuteDown => "Mute_Down",
-            Articulation::MuteUp => "Mute_Up",
-            Articulation::PinchHarmonic => "PH",
-            Articulation::SlideUp => "Slide_Up",
-            Articulation::SlideDown => "Slide_Down",
-            Articulation::BendHalf => "Bending_HT",
-            Articulation::BendWhole => "Bending_WH",
-            Articulation::BendWholeHalf => "Bending_1HT",
-            Articulation::PickScratch => "Pick_Scratch",
-        }
-    }
-
-    /// KS の note number から奏法を引く。KS でない音高なら `None`。
-    pub fn from_keyswitch(key: u8) -> Option<Self> {
-        Articulation::ALL
-            .into_iter()
-            .find(|articulation| articulation.keyswitch() == key)
-    }
-}
 
 /// 列ごとに ON/OFF するルール。次のルールはここへ variant を足す。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -173,8 +99,63 @@ pub enum Rule {
     Choke,
     /// 音を伸ばしている間、音程を揺らす（CC20、[`VIBRATO_DEPTH_CC`]）。他のルールと重ねられる。
     Vibrato,
-    /// 列を、音の長さだけ擦るピックスクレイプにする（[`apply_pick_scratch`]）。
+    /// 列を、音の長さだけ擦るピックスクレイプにする（[`pick_scratch_pitch`]）。
+    ///
+    /// ここから下の列ルールは、列のいちばん低い音 1 つだけを鳴らし（擦る音や効果音は和音にならない）、
+    /// 列の他の奏法を上書きする。
     PickScratch,
+    /// ピッキングする音をナチュラルハーモニクスにする。
+    NaturalHarmonics,
+    /// ピッキングする音をブラッシングにする（ストロークの D/U は保つ）。
+    Brushing,
+    /// ピッキングする音をフレットミュートにする（ストロークの D/U は保つ）。
+    FretMute,
+    /// ピッキングする音を、伸ばした後に滑り下りて離す音にする。
+    SlideOut,
+    /// ピッキングする音と H/P の音を、前の音から滑らせる擬似レガートにする。
+    PseudoLegato,
+    /// ピッキングする音と H/P の音を、前の音から滑るポルタメントにする。
+    Portamento,
+    /// ピッキングする音を、前の列からの音程の幅で下から滑り込むスライドインにする（[`slide_in_width`]）。
+    SlideIn,
+    /// ピッキングする音を、半音上とのトリルにする。
+    TrillHalf,
+    /// ピッキングする音を、全音上とのトリルにする。
+    TrillWhole,
+    /// ピッキングする音を、短 3 度上とのトリルにする。
+    TrillMinorThird,
+    /// ピッキングする音を、長 3 度上とのトリルにする。
+    TrillMajorThird,
+    /// ピッキングする音を、ユニゾンチョーキング（自動）にする。
+    UnisonBendAuto,
+    /// ピッキングする音を、pitch bend で持ち上げるユニゾンチョーキング（手動）にする
+    /// （[`UNISON_BEND_RISE_SECONDS`]）。列の音が鳴っている間に他の列の音が重なる列では効かない。
+    UnisonBendManual,
+    /// 列を、クロマチックランのフレーズ 1 つにする（[`CHROMATIC_RUN_PITCHES`]）。
+    ChromaticRun,
+    /// 列を、滑り下りる効果音にする。
+    SlideFxDown,
+    /// 列を、滑り上がる効果音にする。
+    SlideFxUp,
+    /// 列を、上下に滑る効果音にする。
+    SlideFxWow,
+    /// 列を、効果音 `Hello!`（[`EFFECT_HELLO_PITCH`]）にする。
+    EffectHello,
+    /// 列を、弦の共鳴の効果音（[`EFFECT_RESONANCE_PITCH`]）にする。
+    EffectResonance,
+    /// 列を、スライドノイズの効果音（[`EFFECT_SLIDE_NOISE_PITCH`]）にする。
+    EffectSlideNoise,
+    /// 列を、ハードストップの効果音（[`EFFECT_HARD_STOP_PITCH`]）にする。
+    EffectHardStop,
+    /// Sus_Down / Mute_Down の列を、長め・強めの sample（Sus_LT / Sus_EX / Mute_EX）にする
+    /// （CC23、[`LONG_EXTRA_CC`]）。他のルールと重ねられる。
+    LongExtra,
+    /// Sus_Down / Sus_Up の列に、5 度上の音を重ねてパワーコードにする（CC32、[`POWER_CHORD_CC`]）。
+    /// 他のルールと重ねられる。
+    PowerChord,
+    /// 列の音を離したときに、手のポジション移動の音を鳴らす（CC24 = [`POSITION_RELEASE_VALUE`]）。
+    /// 他のルールと重ねられ、汚し（リリース）より優先する。
+    PositionRelease,
 }
 
 impl Rule {
@@ -186,8 +167,29 @@ impl Rule {
             | Rule::PinchHarmonic
             | Rule::Slide
             | Rule::Choke
-            | Rule::PickScratch => true,
-            Rule::Vibrato => false,
+            | Rule::PickScratch
+            | Rule::NaturalHarmonics
+            | Rule::Brushing
+            | Rule::FretMute
+            | Rule::SlideOut
+            | Rule::PseudoLegato
+            | Rule::Portamento
+            | Rule::SlideIn
+            | Rule::TrillHalf
+            | Rule::TrillWhole
+            | Rule::TrillMinorThird
+            | Rule::TrillMajorThird
+            | Rule::UnisonBendAuto
+            | Rule::UnisonBendManual
+            | Rule::ChromaticRun
+            | Rule::SlideFxDown
+            | Rule::SlideFxUp
+            | Rule::SlideFxWow
+            | Rule::EffectHello
+            | Rule::EffectResonance
+            | Rule::EffectSlideNoise
+            | Rule::EffectHardStop => true,
+            Rule::Vibrato | Rule::LongExtra | Rule::PowerChord | Rule::PositionRelease => false,
         }
     }
 }
@@ -218,9 +220,10 @@ impl RowRule {
     }
 }
 
-/// 列番号 → その列で ON のルールと、行全体で ON のルール。
+/// 列番号 → その列で ON のルールと、行全体で ON のルールと、行全体のパラメータ（[`PARAMS`]）。
 ///
-/// JSON では `{"columns":{"3":["hammer_pull"]},"rows":["economy_picking"]}`。
+/// JSON では `{"columns":{"3":["hammer_pull"]},"rows":["economy_picking"],"params":{"22":0}}`。
+/// `params` は既定と違う値だけで、無ければ省く。
 /// 排他な行ルール（[`RowRule::excluded`]）が両方 ON の JSON は、エコノミーピッキングだけ残して読む。
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "RuleTableFields")]
@@ -228,6 +231,8 @@ pub struct RuleTable {
     #[serde(rename = "columns")]
     on: BTreeMap<usize, BTreeSet<Rule>>,
     rows: BTreeSet<RowRule>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    params: BTreeMap<u8, u8>,
 }
 
 #[derive(Deserialize)]
@@ -237,6 +242,8 @@ struct RuleTableFields {
     columns: BTreeMap<usize, BTreeSet<Rule>>,
     #[serde(default)]
     rows: BTreeSet<RowRule>,
+    #[serde(default)]
+    params: BTreeMap<u8, u8>,
 }
 
 impl From<RuleTableFields> for RuleTable {
@@ -248,6 +255,7 @@ impl From<RuleTableFields> for RuleTable {
         RuleTable {
             on: fields.columns,
             rows,
+            params: params::sanitized(fields.params),
         }
     }
 }
@@ -309,11 +317,11 @@ impl RuleTable {
         }
     }
 
-    /// 列ごとのルールだけを消した表。MML を確定し直すと列の位置が意味を失うので使う。
+    /// 列ごとのルールだけを消した表（行ルールとパラメータは残す）。MML を確定し直すと列の位置が意味を失うので使う。
     pub fn without_column_rules(&self) -> RuleTable {
         RuleTable {
             on: BTreeMap::new(),
-            rows: self.rows.clone(),
+            ..self.clone()
         }
     }
 
@@ -336,23 +344,24 @@ impl RuleTable {
 /// ずらした時刻から作る（音ごとの結果は固定の seed で決まる）。
 ///
 /// [`RowRule::HumanizeRelease`] が ON なら、演奏音と同じ時刻の音から列ごとの CC24 / CC25 を足す
-/// （他のイベントは ON/OFF で変わらない）。
+/// （他のイベントは ON/OFF で変わらない）。[`Rule::PositionRelease`] の列の CC24 は乱数の代わりに
+/// [`POSITION_RELEASE_VALUE`]。
 pub fn convert(events: &[TimedMidiEvent], rules: &RuleTable) -> Vec<TimedMidiEvent> {
     let notes = notes_from_events(events);
     let articulated = articulate(&notes, rules);
     let release = rules.is_row_on(RowRule::HumanizeRelease);
+    let articulations: Vec<Articulation> = articulated.iter().map(|a| a.articulation).collect();
     if rules.is_row_on(RowRule::Humanize) {
         let humanized = humanize::seeded(&notes, &articulated);
         let mut out = humanize::humanized_events(events, &notes, &articulated, &humanized, rules);
         if release {
-            out.extend(release::seeded_release_events(&humanize::shifted_notes(
-                &notes, &humanized,
-            )));
+            let shifted = humanize::shifted_notes(&notes, &humanized);
+            let positions = control::position_release_columns(&shifted, &articulations, rules);
+            out.extend(release::seeded_release_events(&shifted, &positions));
         }
         cmrt_midi_filter::sort_for_playback(&mut out);
         return out;
     }
-    let articulations: Vec<Articulation> = articulated.iter().map(|a| a.articulation).collect();
     let mut out = keyswitch_events(&notes, &articulations);
     out.extend(control_events(&notes, &articulations, rules));
     out.extend(events.iter().filter_map(|event| {
@@ -360,10 +369,11 @@ pub fn convert(events: &[TimedMidiEvent], rules: &RuleTable) -> Vec<TimedMidiEve
         if let Some(velocity) = picking::velocity_for(&event, &notes, &articulated) {
             event.message[2] = velocity;
         }
-        scratch::sounding_event(&event, &notes, &articulated)
+        column_sound::sounding_event(&event, &notes, &articulated)
     }));
     if release {
-        out.extend(release::seeded_release_events(&notes));
+        let positions = control::position_release_columns(&notes, &articulations, rules);
+        out.extend(release::seeded_release_events(&notes, &positions));
     }
     cmrt_midi_filter::sort_for_playback(&mut out);
     out

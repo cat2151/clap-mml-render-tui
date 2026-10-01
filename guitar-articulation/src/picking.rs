@@ -1,7 +1,7 @@
-use crate::scratch::sounding_pitches;
+use crate::column_sound::apply_column_sounds;
 use crate::{
-    apply_glide_rules, apply_hammer_pull, apply_pick_scratch, apply_voicing_rules,
-    strings_by_column, Articulation, Note, RowRule, RuleTable, TimedMidiEvent,
+    apply_glide_rules, apply_hammer_pull, apply_voicing_rules, strings_by_column, Articulation,
+    Note, RowRule, RuleTable, TimedMidiEvent,
 };
 
 /// 強弱を付けるとき、アクセントでないピッキングの音の velocity を元の何 % にするか。
@@ -16,7 +16,7 @@ pub struct Articulated {
     /// アクセントの音（[`accents`]）か。強弱を付けるとき（[`articulate`]）だけ付く。
     pub accent: bool,
     pub velocity: u8,
-    /// 鳴らす音高。`None` はその音を鳴らさない（[`crate::apply_pick_scratch`] の和音の列の、最低音以外）。
+    /// 鳴らす音高。`None` はその音を鳴らさない（ピックスクレイプや効果音の列の、最低音以外）。
     pub pitch: Option<u8>,
 }
 
@@ -37,12 +37,14 @@ pub struct Articulated {
 /// エコノミーピッキングの前に、列ごとのスライド・チョーキング（[`apply_glide_rules`]）を決める。
 /// これらの音はピッキングとして数えない。
 /// 最後に、列ごとの「どう鳴らすか」のルール（[`apply_voicing_rules`]）でピッキングする音の奏法を写し替え、
-/// ピックスクレイプの列（[`apply_pick_scratch`]）はどの奏法でも上書きする。
+/// 列の最低音 1 つだけを鳴らすルール（ピックスクレイプ・クロマチックラン・スライドエフェクト・効果音）の列は
+/// どの奏法でも上書きする。
 ///
 /// エコノミーピッキングか汚し（[`RowRule::Humanize`]）が ON なら強弱を付ける。velocity はここで 1 回だけ
 /// 決め、汚しは散らすだけ（割合を重ねると H-On / P-Off が聞こえないほど小さくなる）。
 /// アクセントでないピッキングの音だけ [`UNACCENTED_PICK_VELOCITY_PERCENT`] へ下げ、H-On / P-Off・
-/// ミュート・PH は元のまま残す（サンプル自体が小さい）。
+/// ミュート・PH などは元のまま残す（サンプル自体が小さい）。効果音など音高を差し替えた音も元のまま
+/// （スライドエフェクト Down は velocity で層を選ぶので、MML の値をそのまま使う）。
 pub fn articulate(notes: &[Note], rules: &RuleTable) -> Vec<Articulated> {
     let mut articulations = apply_hammer_pull(notes, rules);
     apply_glide_rules(notes, rules, &mut articulations);
@@ -58,8 +60,7 @@ pub fn articulate(notes: &[Note], rules: &RuleTable) -> Vec<Articulated> {
         vec![false; notes.len()]
     };
     apply_voicing_rules(notes, rules, &mut articulations);
-    apply_pick_scratch(notes, rules, &mut articulations);
-    let pitches = sounding_pitches(notes, &articulations);
+    let pitches = apply_column_sounds(notes, rules, &mut articulations);
     notes
         .iter()
         .zip(articulations)
@@ -69,7 +70,11 @@ pub fn articulate(notes: &[Note], rules: &RuleTable) -> Vec<Articulated> {
             articulation,
             accent,
             pitch,
-            velocity: if dynamics && !accent && is_plain_pick(articulation) {
+            velocity: if dynamics
+                && !accent
+                && is_plain_pick(articulation)
+                && pitch == Some(note.pitch)
+            {
                 unaccented_velocity(note.velocity)
             } else {
                 note.velocity
@@ -87,13 +92,32 @@ fn is_plain_pick(articulation: Articulation) -> bool {
         | Articulation::SlideDown
         | Articulation::BendHalf
         | Articulation::BendWhole
-        | Articulation::BendWholeHalf => true,
+        | Articulation::BendWholeHalf
+        | Articulation::SlideOut
+        | Articulation::SlideIn
+        | Articulation::TrillHalf
+        | Articulation::TrillWhole
+        | Articulation::TrillMinorThird
+        | Articulation::TrillMajorThird
+        | Articulation::UnisonBendAuto
+        | Articulation::UnisonBendManual => true,
         Articulation::HammerOn
         | Articulation::PullOff
         | Articulation::MuteDown
         | Articulation::MuteUp
         | Articulation::PinchHarmonic
-        | Articulation::PickScratch => false,
+        | Articulation::PickScratch
+        | Articulation::NaturalHarmonics
+        | Articulation::BrushDown
+        | Articulation::BrushUp
+        | Articulation::MuteFretDown
+        | Articulation::MuteFretUp
+        | Articulation::PseudoLegato
+        | Articulation::Portamento
+        | Articulation::ChromaticRun
+        | Articulation::SlideFxDown
+        | Articulation::SlideFxUp
+        | Articulation::SlideFxWow => false,
     }
 }
 

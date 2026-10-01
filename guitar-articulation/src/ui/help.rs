@@ -16,7 +16,7 @@ use cmrt_tui_core::{
 /// 「ヘルプ(Keybinds)」の並びは他画面と揃えたまま変えない。
 const TITLE: &str = " Guitar Articulation ヘルプ(Keybinds)  Esc/?:close ";
 
-pub(crate) const KEY_ROWS: [&str; 30] = [
+pub(crate) const KEY_ROWS: [&str; 32] = [
     " ── MML 欄 ──",
     " 文字    MML を編集",
     " Enter   確定して演奏",
@@ -30,11 +30,13 @@ pub(crate) const KEY_ROWS: [&str; 30] = [
     " c       チョーキング",
     " v       ビブラート",
     " g       ピックスクレイプ",
+    " t       奏法リスト(他の奏法も)",
     " ── 行のルール ──",
     " e       エコノミーピッキング",
     " s       自動H/P",
     " d       汚し(humanize 行)",
     " r       汚し(リリース音)",
+    " u       パラメータ(CC21 など)",
     " ── 演奏・effect ──",
     " b       raw を演奏",
     " space   Articulated を演奏",
@@ -49,7 +51,7 @@ pub(crate) const KEY_ROWS: [&str; 30] = [
     " Ctrl+G  画面切替メニュー",
 ];
 
-pub(crate) const DETAIL_ROWS: [&str; 36] = [
+pub(crate) const DETAIL_ROWS: [&str; 49] = [
     " MML の音へ列ごとに奏法(KS)を足し、raw と聴き比べる。",
     " 反転した列がカーソル。ルールの切替で Articulated を演奏。",
     " ── 列のルール(カーソル列を ON/OFF) ──",
@@ -60,7 +62,20 @@ pub(crate) const DETAIL_ROWS: [&str; 36] = [
     " c  前の列から上行 1/2/3 半音→Bending_HT/WH/1HT",
     " v  CC20。a m p / c g は同じ列で 1 つだけ、v は重ねられる",
     " g  Pick_Scratch。音高は F#1〜F#2 へ畳み、和音は最低音だけ",
-    "",
+    " t  全部の列ルールを並べる。j/k で選び Enter で ON/OFF、Esc で閉じる",
+    "    harmonics=NH(ナチュラルハーモニクス)  slide out=Slide_Out",
+    "    brush=Brush_Down/Up  fret mute=Mute_Fret_D/U(D/U を保つ)",
+    "    pseudo legato=Pseudo_Legato  portamento=Portament",
+    "    (この 2 つは H/P の音も写す)。matrix では t:<名前> の段",
+    "    slide in=Slide_In。幅は前の列からの音程(1〜7 半音)で CC27",
+    "    trill half/whole/min3/maj3=Trill_HT/WT/min3/Maj3",
+    "    unison bend/manual=Unison_Bend_Auto/Manual(C4〜C6)。manual は",
+    "    pitch bend で持ち上げる。他の列と重なる列は効かない",
+    "    chromatic run=Chromatic_Run。F#1〜F2 へ畳み、D#2〜F2 は効かない",
+    "    slide fx down/up/wow=Slide_FX_D/U/Wow。音域へ畳む。down は",
+    "    velocity で 3 層  fx hello/resonance/slide noise/hard stop=",
+    "    note 0〜3 の効果音。g とこの 3 行は和音でも最低音だけ鳴らす",
+    "    long/extra=CC23 power chord=CC32 position rel=CC24=72(重ね可)",
     " ── 行のルール(行全体を ON/OFF。e と s は排他) ──",
     " e  イングヴェイ流。同じ弦はオルタネイト、高い弦へは",
     "    ダウン(スイープ)、低い弦へは弦の最後をプリングにして",
@@ -73,7 +88,7 @@ pub(crate) const DETAIL_ROWS: [&str; 36] = [
     "    列の記号は発音のずれ: < 早い / · ほぼジャスト / > 遅い",
     " r  列ごとに離した音の種類(Basic/Hard/Agressive/",
     "    Agressive2)と音量を乱数で。d とは独立。ON の列は ~",
-    "",
+    " u  CC21/22/28/29/46/48/52/53/112 を h/l で ±8。既定以外を頭で送る",
     " ── 演奏・effect ──",
     " n  ON の間は a/e/s/b/space がカーソル列の音だけ鳴らす",
     " x  ギターアンプは a → kind の Amp Simulator。",

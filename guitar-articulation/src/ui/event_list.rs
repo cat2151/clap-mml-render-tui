@@ -14,11 +14,11 @@ use cmrt_tui_core::{
 };
 
 use super::{note_name, pane_block};
-use crate::humanize::{PICKING_CC, PICKING_MICRO_CC};
+use crate::humanize::PICKING_CC;
 use crate::release::{release_shape_name, RELEASE_LEVEL_CC, RELEASE_SHAPE_CC};
 use crate::{
-    keyswitch_name, Articulation, GuitarArticulationScreen, Take, TimedMidiEvent, SLIDE_WIDTH_CC,
-    VIBRATO_DEPTH_CC,
+    keyswitch_name, Articulation, GuitarArticulationScreen, Take, TimedMidiEvent, LONG_EXTRA_CC,
+    POWER_CHORD_CC, SLIDE_IN_WIDTH_CC, SLIDE_WIDTH_CC, VIBRATO_DEPTH_CC,
 };
 
 const PITCH_BEND: u8 = 0xE0;
@@ -135,21 +135,16 @@ fn control_name(controller: u8) -> String {
         VIBRATO_DEPTH_CC => "vibrato depth",
         SLIDE_WIDTH_CC => "slide range",
         PICKING_CC => "picking noise",
-        PICKING_MICRO_CC => "picking micro noise",
+        31 => "picking micro noise",
         RELEASE_SHAPE_CC => "release type",
         RELEASE_LEVEL_CC => "release volume",
-        21 => "vibrato speed",
-        22 => "mute length",
-        23 => "sustain",
-        27 => "slide-in range",
-        28 => "unison speed",
-        29 => "resonance",
-        46 => "tension",
-        48 => "magnet",
-        52 => "bend start",
-        53 => "bend speed",
-        112 => "trill speed",
-        _ => return format!("CC{controller}"),
+        LONG_EXTRA_CC => "long/extra",
+        POWER_CHORD_CC => "power chord",
+        SLIDE_IN_WIDTH_CC => "slide-in range",
+        _ => match crate::param_of(controller) {
+            Some(param) => param.name,
+            None => return format!("CC{controller}"),
+        },
     };
     name.to_string()
 }
