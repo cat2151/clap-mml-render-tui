@@ -1,28 +1,30 @@
 //! 音とルールの matrix。横 = 列（同時刻の note on のまとまり）、縦 = 使われている音高（高い音が上）。
-//! 音の段の下に、行全体のルールの段と、列ごとのルールの段を並べる。
+//! 音の段の上に全体の演奏でいま鳴っている列の段、下に行全体のルールの段と、列ごとのルールの段を並べる。
 
 use std::collections::BTreeSet;
 
 use ratatui::{
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
 };
 
 use cmrt_tui_core::{
     status::base_style,
-    theme::{MONOKAI_CYAN, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_PINK},
+    theme::{MONOKAI_CYAN, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_PINK, MONOKAI_YELLOW},
 };
 
-use super::{note_name, ROW_RULE_ROWS, RULE_ROWS};
+use super::rule_rows::RuleRow;
+use super::{note_name, RuleGroup, RuleLane, ROW_RULE_ROWS, RULE_LANES, RULE_LIST_KEY, RULE_ROWS};
+use crate::auto_pick::picked_columns;
 use crate::control::control_rule_affects;
-use crate::{auto_pick_columns, Articulation, GuitarArticulationScreen, RowRule, Rule, Take};
+use crate::{Articulation, GuitarArticulationScreen, RowRule, Rule, Take};
 
 /// 1 列の桁（記号 1 つ + 空白）。
 const COLUMN_WIDTH: usize = 2;
-const NOTE_MARK: &str = "■";
-const NO_NOTE_MARK: &str = "·";
-const RULE_ON_MARK: &str = "●";
-/// 列ごとのルールが ON だが、音高や前の列との音程が合わず奏法が変わっていない列。
+pub(super) const NOTE_MARK: &str = "■";
+pub(super) const NO_NOTE_MARK: &str = "·";
+pub(super) const RULE_ON_MARK: &str = "●";
+/// 列ルールが ON だが効かない列の記号。
 const RULE_IDLE_MARK: &str = "-";
 /// 自動ハンマリングが ON で、ピッキングのまま残すがストロークでない（スライド・チョーキング・PH の）列。
 const AUTO_PICK_MARK: &str = "p";
@@ -40,13 +42,20 @@ const LATE_MARK: &str = ">";
 const RELEASE_MARK: &str = "~";
 /// 汚しのずれを「ほぼジャスト」とみなす幅（±秒）。
 const ON_TIME_SECONDS: f64 = 0.002;
+/// 全体の演奏でいま鳴っている列の記号と、その段の見出し。
+const PLAYHEAD_MARK: &str = "▼";
+const PLAYHEAD_LABEL: &str = "play";
 const EMPTY_TEXT: &str = "(MML を入れると音が並びます)";
 
-/// 枠の内側に要る行数。使われている音高の段と、ルールの段。
+/// 枠の内側に要る行数。演奏位置の段・使われている音高の段・ルールの段。MID モードでは MID の段。
+/// 演奏位置の段は鳴っていない間も空けておく。演奏のたびに matrix の高さが変わると下の pane が上下に揺れる。
 pub(super) fn height(screen: &GuitarArticulationScreen) -> u16 {
+    if let Some(midi) = screen.sample_midi() {
+        return super::midi_matrix::height(midi);
+    }
     match used_pitches(screen).len() {
         0 => 1,
-        pitches => (pitches + ROW_RULE_ROWS.len() + RULE_ROWS.len()) as u16,
+        pitches => (1 + pitches + ROW_RULE_ROWS.len() + RULE_LANES.len()) as u16,
     }
 }
 
@@ -60,8 +69,30 @@ pub(super) fn lines(screen: &GuitarArticulationScreen, width: u16) -> Vec<Line<'
     if pitches.is_empty() {
         return vec![Line::styled(EMPTY_TEXT, base_style().fg(MONOKAI_GRAY))];
     }
-    let columns = visible_columns(screen, width);
-    let mut out = Vec::new();
+    let label_width = label_width();
+    let playhead = screen.playhead_column();
+    // 鳴っている間は、鳴っている列が見えるように送る。
+    let columns = visible_columns(
+        playhead.unwrap_or(screen.cursor()),
+        screen.column_count(),
+        width,
+        label_width,
+    );
+    let playhead_cells = columns.clone().map(|column| {
+        if Some(column) == playhead {
+            (PLAYHEAD_MARK, base_style().fg(MONOKAI_YELLOW))
+        } else {
+            (" ", base_style())
+        }
+    });
+    let mut out = vec![row(
+        PLAYHEAD_LABEL,
+        MONOKAI_GRAY,
+        playhead_cells,
+        label_width,
+        screen.cursor(),
+        columns.start,
+    )];
     for &pitch in pitches.iter().rev() {
         let cells = columns.clone().map(|column| {
             let sounding = screen
@@ -76,12 +107,14 @@ pub(super) fn lines(screen: &GuitarArticulationScreen, width: u16) -> Vec<Line<'
         });
         out.push(row(
             &note_name(pitch),
+            MONOKAI_GRAY,
             cells,
+            label_width,
             screen.cursor(),
             columns.start,
         ));
     }
-    let auto_picks = auto_pick_columns(screen.notes());
+    let auto_picks = picked_columns(screen.notes(), screen.rules());
     for (rule, key, name) in ROW_RULE_ROWS {
         let on = screen.rules().is_row_on(rule);
         let cells = columns.clone().map(|column| match (on, rule) {
@@ -93,23 +126,65 @@ pub(super) fn lines(screen: &GuitarArticulationScreen, width: u16) -> Vec<Line<'
         });
         out.push(row(
             &format!("{key}:{name}"),
+            RuleGroup::Row.color(),
             cells,
+            label_width,
             screen.cursor(),
             columns.start,
         ));
     }
-    for (rule, key, name) in RULE_ROWS {
+    for lane in RULE_LANES {
         let cells = columns
             .clone()
-            .map(|column| rule_cell(screen, column, rule));
+            .map(|column| lane_cell(screen, column, lane));
+        let (label, color) = lane_label(screen, lane);
         out.push(row(
-            &format!("{key}:{name}"),
+            &label,
+            color,
             cells,
+            label_width,
             screen.cursor(),
             columns.start,
         ));
     }
     out
+}
+
+/// 段のルールのうち、列で ON のもの。段の中は排他なので多くて 1 つ。
+fn on_in_lane(
+    screen: &GuitarArticulationScreen,
+    column: usize,
+    lane: RuleLane,
+) -> Option<&'static RuleRow> {
+    lane.rule_rows()
+        .find(|rule_row| screen.rules().is_on(column, rule_row.rule))
+}
+
+fn lane_cell(
+    screen: &GuitarArticulationScreen,
+    column: usize,
+    lane: RuleLane,
+) -> (&'static str, Style) {
+    match on_in_lane(screen, column, lane) {
+        Some(rule_row) => rule_cell(screen, column, rule_row),
+        None => (" ", base_style()),
+    }
+}
+
+/// 段の見出しと色。複数のルールが入る段は、カーソル列で ON のルールの名前を出す。どれも OFF なら段の名前を灰色で。
+fn lane_label(screen: &GuitarArticulationScreen, lane: RuleLane) -> (String, Color) {
+    let rule_row = match (lane.idle_name(), on_in_lane(screen, screen.cursor(), lane)) {
+        (_, Some(rule_row)) => rule_row,
+        (Some(idle_name), None) => return (format!("{RULE_LIST_KEY}:{idle_name}"), MONOKAI_GRAY),
+        (None, None) => lane
+            .rule_rows()
+            .next()
+            .expect("1 つしか入らない段にもルールが在る"),
+    };
+    (
+        format!("{}:{}", rule_row.key, rule_row.name),
+        rule_row.group.color(),
+    )
 }
 
 /// ピッキングする列はストローク（D/U）、レガートの列は ●。和音の列は先頭の音で代表する。
@@ -195,20 +270,59 @@ fn humanize_cell(screen: &GuitarArticulationScreen, column: usize) -> (&'static 
     }
 }
 
-/// 列ルールの ON/OFF と効き方の記号。OFF は空白、効いていれば ●、効かない列は灰色の -。
+/// 列ルールの ON/OFF と効き方の記号。効いていれば overlay の文字をグループの色で、効かない列は灰色の `-`。OFF は空白。
 pub(super) fn rule_cell(
     screen: &GuitarArticulationScreen,
     column: usize,
-    rule: Rule,
+    rule_row: &RuleRow,
 ) -> (&'static str, Style) {
-    match (
-        screen.rules().is_on(column, rule),
-        applies(screen, column, rule),
-    ) {
-        (false, _) => (" ", base_style()),
-        (true, true) => (RULE_ON_MARK, base_style().fg(MONOKAI_GREEN)),
-        (true, false) => (RULE_IDLE_MARK, base_style().fg(MONOKAI_GRAY)),
+    let rule = rule_row.rule;
+    if !screen.rules().is_on(column, rule) {
+        return (" ", base_style());
     }
+    if applies(screen, column, rule) {
+        (
+            letter(rule_row.overlay_key),
+            base_style().fg(rule_row.group.color()),
+        )
+    } else {
+        (RULE_IDLE_MARK, base_style().fg(MONOKAI_GRAY))
+    }
+}
+
+/// overlay の文字（a-zA-Z）を、セルに置ける `&'static str` にする。
+fn letter(ch: char) -> &'static str {
+    const LETTERS: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    LETTERS.find(ch).map_or("?", |i| &LETTERS[i..i + 1])
+}
+
+/// 列で ON なのに効いていないルールと、その列の音の奏法と音高。全部効いていれば `None`。
+pub(super) fn ineffective_notice(
+    screen: &GuitarArticulationScreen,
+    column: usize,
+) -> Option<String> {
+    let rules: Vec<String> = RULE_ROWS
+        .iter()
+        .filter(|rule_row| {
+            screen.rules().is_on(column, rule_row.rule) && !applies(screen, column, rule_row.rule)
+        })
+        .map(|rule_row| format!("{}:{}", rule_row.overlay_key, rule_row.name))
+        .collect();
+    if rules.is_empty() {
+        return None;
+    }
+    let notes: Vec<String> = screen
+        .notes()
+        .iter()
+        .zip(screen.articulated())
+        .filter(|(note, _)| note.column == column)
+        .map(|(note, a)| format!("{} {}", a.articulation.name(), note_name(note.pitch)))
+        .collect();
+    Some(format!(
+        " ! {} は効いていない（この列: {}） ",
+        rules.join(", "),
+        notes.join(", ")
+    ))
 }
 
 /// 列の音の奏法に、そのルールが効いているか。ビブラートと効果音は奏法を変えないので、列に音が在れば効く。
@@ -221,7 +335,7 @@ fn applies(screen: &GuitarArticulationScreen, column: usize, rule: Rule) -> bool
         .filter(|(note, _)| note.column == column);
     if matches!(
         rule,
-        Rule::LongExtra | Rule::PowerChord | Rule::PositionRelease
+        Rule::LongExtra | Rule::PowerChord | Rule::PositionRelease | Rule::AutoSlideOut
     ) {
         return notes_in_column
             .any(|(note, a)| control_rule_affects(rule, a.articulation, note.pitch));
@@ -271,36 +385,44 @@ fn applies(screen: &GuitarArticulationScreen, column: usize, rule: Rule) -> bool
         Rule::SlideFxDown => in_column.any(|a| a == Articulation::SlideFxDown),
         Rule::SlideFxUp => in_column.any(|a| a == Articulation::SlideFxUp),
         Rule::SlideFxWow => in_column.any(|a| a == Articulation::SlideFxWow),
-        Rule::LongExtra | Rule::PowerChord | Rule::PositionRelease => false,
+        Rule::LongExtra | Rule::PowerChord | Rule::PositionRelease | Rule::AutoSlideOut => false,
     }
 }
 
 /// 段の見出しの桁（`F#3` や `a:hammer/pull`）。いちばん長いルールの見出しと、区切りの空白 1 つ。
 fn label_width() -> usize {
     let rows = ROW_RULE_ROWS.iter().map(|(_, _, name)| name);
-    let rules = RULE_ROWS.iter().map(|(_, _, name)| name);
+    let rules = RULE_ROWS.iter().map(|rule_row| &rule_row.name);
     rows.chain(rules)
         .map(|name| "k:".len() + name.len() + 1)
         .max()
         .unwrap_or_default()
 }
 
-/// カーソル列が必ず見えるように横へずらした、描く列の範囲。
-fn visible_columns(screen: &GuitarArticulationScreen, width: u16) -> std::ops::Range<usize> {
-    let fit = (usize::from(width).saturating_sub(label_width()) / COLUMN_WIDTH).max(1);
-    let first = (screen.cursor() + 1).saturating_sub(fit);
-    first..screen.column_count().min(first + fit)
+/// `anchor` の列が必ず見えるように横へずらした、描く列の範囲。
+pub(super) fn visible_columns(
+    anchor: usize,
+    column_count: usize,
+    width: u16,
+    label_width: usize,
+) -> std::ops::Range<usize> {
+    let fit = (usize::from(width).saturating_sub(label_width) / COLUMN_WIDTH).max(1);
+    let first = (anchor + 1).saturating_sub(fit);
+    first..column_count.min(first + fit)
 }
 
-fn row(
+/// `label_color` は見出しの色。音高の段は灰色、ルールの段はグループの色（[`RuleGroup::color`]）。
+pub(super) fn row(
     label: &str,
+    label_color: Color,
     cells: impl Iterator<Item = (&'static str, Style)>,
+    label_width: usize,
     cursor: usize,
     first_column: usize,
 ) -> Line<'static> {
     let mut spans = vec![Span::styled(
-        format!("{label:<width$}", width = label_width()),
-        base_style().fg(MONOKAI_GRAY),
+        format!("{label:<label_width$}"),
+        base_style().fg(label_color),
     )];
     for (offset, (mark, style)) in cells.enumerate() {
         let style = if first_column + offset == cursor {

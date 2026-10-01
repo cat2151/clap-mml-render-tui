@@ -28,7 +28,7 @@ fn question_mark_draws_the_help_over_the_screen() {
 fn help_shows_every_row_of_both_panes_on_a_tall_terminal() {
     let mut screen = screen_with_mml("o3 l8 e f+ g");
     screen.handle_key_event(key(KeyCode::Char('?')));
-    let mut terminal = Terminal::new(TestBackend::new(160, 51)).unwrap();
+    let mut terminal = Terminal::new(TestBackend::new(160, 66)).unwrap();
     terminal.draw(|f| draw(&screen, f)).unwrap();
     let buffer = terminal.backend().buffer().clone();
 

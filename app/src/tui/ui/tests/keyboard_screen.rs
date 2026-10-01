@@ -7,8 +7,9 @@ fn keyboard_screen_shows_connecting_status_and_navigation() {
     let mut app = TuiApp::new_for_test(test_config());
     app.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
 
-    let screen = render_lines(&mut app, 90, 14).join("\n");
+    let screen = render_lines(&mut app, 90, 17).join("\n");
 
+    assert!(screen.contains("t: repeat: off  auto  repeat  arp"));
     assert!(screen.contains("[KEYBOARD] keyboard mode"));
     assert!(screen.contains("transport: SHM"));
     assert!(screen.contains("buffer: x4"));
@@ -24,8 +25,8 @@ fn keyboard_screen_shows_connecting_status_and_navigation() {
     assert!(screen.contains("v:velocity"));
     assert!(screen.contains("m:mod(CC1)"));
     assert!(screen.contains("p:pitch bend"));
-    assert!(screen.contains("t:off/repeat/arp/auto"));
-    assert!(screen.contains("Note mode: off"));
+    assert!(screen.contains("t:off/auto/repeat/arp"));
+    assert!(screen.contains("Target: -"));
     assert!(screen.contains("x:CC#"));
     assert!(screen.contains("z:CC value"));
     assert!(screen.contains("Shift+Z:CC cycle"));
@@ -91,7 +92,8 @@ fn keyboard_screen_shows_role_preset_and_patch_panes_while_connecting() {
     ));
     app.start_keyboard(Some("patches_factory/Pad/Factory Pad.fxp".to_string()));
 
-    let screen = render_lines(&mut app, 200, 14).join("\n");
+    // 右端に Effect pane が並んでも音色名が切れずに見える幅。
+    let screen = render_lines(&mut app, 240, 14).join("\n");
 
     assert!(screen.contains("Role (1/7)"), "{screen}");
     assert!(screen.contains("Bass track"), "{screen}");
@@ -117,7 +119,7 @@ fn keyboard_patch_panes_show_loading_error_and_empty_states() {
     loading.patch_load_state =
         std::sync::Arc::new(std::sync::Mutex::new(crate::tui::PatchLoadState::Loading));
     loading.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
-    let screen = render_lines(&mut loading, 140, 12).join("\n");
+    let screen = render_lines(&mut loading, 160, 12).join("\n");
     assert!(screen.replace(' ', "").contains("パッチを読み込み中..."));
 
     let mut error = TuiApp::new_for_test(test_config());
@@ -125,12 +127,12 @@ fn keyboard_patch_panes_show_loading_error_and_empty_states() {
         crate::tui::PatchLoadState::Err("boom".to_string()),
     ));
     error.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
-    let screen = render_lines(&mut error, 140, 12).join("\n");
+    let screen = render_lines(&mut error, 160, 12).join("\n");
     assert!(screen.replace(' ', "").contains("読み込み失敗:boom"));
 
     let mut empty = TuiApp::new_for_test(test_config());
     empty.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
-    let screen = render_lines(&mut empty, 140, 12).join("\n");
+    let screen = render_lines(&mut empty, 160, 12).join("\n");
     assert!(screen.replace(' ', "").contains("パッチが見つかりません"));
 }
 
@@ -138,7 +140,7 @@ fn keyboard_patch_panes_show_loading_error_and_empty_states() {
 const REAL_CATALOG_ENV: &str = "CMRT_TEST_PATCH_CATALOG_JSON";
 
 /// 実 catalog は preset label に `›` のような幅 1 の非 ASCII を含み、件数も合成データより
-/// 3 桁多い。200 桁で 4 pane の枠が崩れず、件数が共有の Role 索引と一致することを見る。
+/// 3 桁多い。200 桁で 5 pane の枠が崩れず、件数が共有の Role 索引と一致することを見る。
 #[test]
 fn keyboard_panes_render_the_real_catalog_cache_at_200_columns() {
     let Some(path) = std::env::var_os(REAL_CATALOG_ENV) else {
@@ -163,15 +165,21 @@ fn keyboard_panes_render_the_real_catalog_cache_at_200_columns() {
         let buffer = render_buffer(app, 200, 30);
         let symbol = |x: u16, y: u16| buffer.cell((x, y)).unwrap().symbol().to_string();
         assert_eq!(symbol(73, 0), "┐");
-        for x in [74, 96, 126] {
+        for x in [74, 96, 126, 175] {
             assert_eq!(symbol(x, 0), "┌", "x={x}");
         }
         assert_eq!(symbol(199, 0), "┐");
         let body_rows = (1..30)
             .take_while(|&y| symbol(199, y) == "│")
             .inspect(|&y| {
-                for x in [0, 73, 74, 96, 126] {
+                for x in [74, 96, 126, 174, 175] {
                     assert_eq!(symbol(x, y), "│", "x={x} y={y}");
+                }
+                // 左の列は上 3 行が t の欄、その下が [KEYBOARD] pane。
+                if y >= 4 {
+                    for x in [0, 73] {
+                        assert_eq!(symbol(x, y), "│", "x={x} y={y}");
+                    }
                 }
             })
             .count();

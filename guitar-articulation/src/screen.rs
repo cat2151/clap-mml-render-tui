@@ -1,8 +1,9 @@
 //! Guitar Articulation 画面の状態とキー処理。
 //!
 //! 持つのは入力 MML・そこから作ったrawの列・ルール表・Articulatedの列・カーソル列。
-//! 音は鳴らさない。移動・入力の取り消し・ヘルプ以外の操作では、鳴らしてほしい版を
+//! 音は鳴らさない。入力の取り消し・ヘルプ以外の操作では、鳴らしてほしい版を
 //! [`GuitarArticulationAction::Play`] で host へ返す（MML の確定・ルールの toggle はArticulated）。
+//! `h` / `l` の移動は、1 音モードに依らずカーソル列の音（[`GuitarArticulationAction::PlayNote`]）を返す。
 //! 1 音モード（`n`）の間は、ルールの toggle と `b` / `space` がカーソル列の音だけ
 //! （[`GuitarArticulationAction::PlayNote`]）になる。
 
@@ -40,6 +41,7 @@ impl Take {
     }
 }
 
+mod columns;
 mod effect_chain;
 mod history;
 mod input;
@@ -69,10 +71,14 @@ pub enum GuitarArticulationAction {
     OpenSampleMidiList,
     /// この file を読み、[`GuitarArticulationScreen::load_sample_midi`] へ渡してほしい。
     LoadSampleMidi(std::path::PathBuf),
+    /// この file を読み、MID モードへは入らずに全体を鳴らしてほしい（一覧で選び直すたびの試聴）。
+    PreviewSampleMidi(std::path::PathBuf),
     /// サンプル MID の全体（`None`）か 1 音（[`GuitarArticulationScreen::sample_midi_events`]）を鳴らしてほしい。
     PlaySampleMidi {
         note: Option<usize>,
     },
+    /// repeat（`Shift+R`）を OFF にしたので、繰り返している演奏を止めてほしい。
+    StopRepeat,
 }
 
 #[derive(Default)]
@@ -93,6 +99,10 @@ pub struct GuitarArticulationScreen {
     cursor: usize,
     /// 1 音モード。ON の間は演奏の要求がカーソル列の音だけになる。
     note_preview: bool,
+    /// repeat（`Shift+R`）。ON の間、host は演奏を鳴らし終わるたびに同じものを鳴らし直す。
+    repeat: bool,
+    /// 全体の演奏が鳴っている間だけ、その版と演奏の頭からの秒。host が音源の状態から決める。
+    playhead: Option<(Take, f64)>,
     help_open: bool,
     effect_plugins: EffectPlugins,
     effect_chain: Vec<Value>,
@@ -114,8 +124,8 @@ pub struct GuitarArticulationScreen {
     sample_midi: Option<sample_midi::SampleMidiState>,
     /// サンプル MID の一覧 overlay（`o`）を開いている間だけ `Some`。
     sample_midi_list: Option<sample_midi::SampleMidiList>,
-    /// 奏法リスト overlay（`t`）を開いている間だけ、選んでいる行。
-    rule_list: Option<usize>,
+    /// 奏法リスト overlay（`t`）を開いている間だけ `Some`。
+    rule_list: Option<rule_list::RuleList>,
     /// パラメータ overlay（`u`）を開いている間だけ、選んでいる行。
     param_list: Option<usize>,
     /// 直前の操作ができなかった理由。次のキーで消える。
@@ -141,7 +151,7 @@ impl GuitarArticulationScreen {
 
     /// 点滅する縦線カーソルを置く入力欄（MML 欄か、effect の list の絞り込み欄）にキーが入る状態か。
     pub fn uses_textarea_cursor(&self) -> bool {
-        self.input_open() || self.effect_filter_active()
+        self.input_open() || self.effect_filter_active() || self.rule_list_filter_input_active()
     }
 
     pub fn help_open(&self) -> bool {
@@ -174,6 +184,11 @@ impl GuitarArticulationScreen {
         self.note_preview
     }
 
+    /// repeat（`Shift+R`）が ON か。
+    pub fn repeat(&self) -> bool {
+        self.repeat
+    }
+
     pub fn instrument(&self) -> Instrument {
         self.instrument
     }
@@ -194,37 +209,6 @@ impl GuitarArticulationScreen {
 
     pub fn set_sound_loading(&mut self, loading: bool) {
         self.sound_loading = loading;
-    }
-
-    /// その版で、列の音がいちばん早く鳴る秒。汚しが ON なら Articulated はずらした後の秒。
-    pub(crate) fn column_on_seconds(&self, column: usize, take: Take) -> Option<f64> {
-        let mut in_column = self
-            .notes
-            .iter()
-            .enumerate()
-            .filter(|(_, note)| note.column == column);
-        if take == Take::Plain || self.humanized.is_empty() {
-            return in_column.next().map(|(_, note)| note.on_seconds);
-        }
-        in_column
-            .map(|(i, _)| self.humanized[i].on_seconds)
-            .reduce(f64::min)
-    }
-
-    /// カーソル列の音だけを 0 秒から鳴らすイベント列。
-    pub fn column_events(&self, take: Take) -> Vec<TimedMidiEvent> {
-        crate::column_events(
-            &self.notes,
-            &self.articulated,
-            &self.rules,
-            self.cursor,
-            take,
-        )
-    }
-
-    /// 列の数（同時刻の note on のまとまりの数）。
-    pub fn column_count(&self) -> usize {
-        self.notes.last().map_or(0, |note| note.column + 1)
     }
 
     pub fn events(&self, take: Take) -> &[TimedMidiEvent] {
@@ -273,6 +257,12 @@ impl GuitarArticulationScreen {
         if history::is_history_key(key) {
             return self.open_history_overlay();
         }
+        if is_shift_key(key, 'R') {
+            return self.toggle_repeat();
+        }
+        if is_shift_key(key, 'A') {
+            return self.cycle_accent_pattern();
+        }
         match key.code {
             KeyCode::Char('i') => {
                 self.open_input();
@@ -280,13 +270,13 @@ impl GuitarArticulationScreen {
             }
             KeyCode::Char('h') | KeyCode::Left => {
                 self.cursor = self.cursor.saturating_sub(1);
-                GuitarArticulationAction::Continue
+                self.play_cursor_note()
             }
             KeyCode::Char('l') | KeyCode::Right => {
                 if self.cursor + 1 < self.column_count() {
                     self.cursor += 1;
                 }
-                GuitarArticulationAction::Continue
+                self.play_cursor_note()
             }
             KeyCode::Char('o') => GuitarArticulationAction::OpenSampleMidiList,
             KeyCode::Char('x') => self.open_effect_overlay(),
@@ -305,8 +295,8 @@ impl GuitarArticulationScreen {
             KeyCode::Char(RULE_LIST_KEY) => self.open_rule_list(),
             KeyCode::Char(PARAM_LIST_KEY) => self.open_param_list(),
             KeyCode::Char(ch) => {
-                if let Some((rule, _, _)) = RULE_ROWS.iter().find(|(_, key, _)| *key == ch) {
-                    self.toggle_rule(*rule)
+                if let Some(rule_row) = RULE_ROWS.iter().find(|rule_row| rule_row.key == ch) {
+                    self.toggle_rule(rule_row.rule)
                 } else if let Some((rule, _, _)) =
                     ROW_RULE_ROWS.iter().find(|(_, key, _)| *key == ch)
                 {
@@ -333,8 +323,31 @@ impl GuitarArticulationScreen {
     }
 
     /// 行全体のルールを切り替え、Articulatedを作り直して鳴らす。
+    /// 自動ハンマリング（`s`）だけは off → on1 → on2 と回す。
     fn toggle_row_rule(&mut self, rule: RowRule) -> GuitarArticulationAction {
-        self.rules.toggle_row(rule);
+        if rule == RowRule::AutoHammerPull {
+            self.rules.cycle_auto_hammer_pull();
+        } else {
+            self.rules.toggle_row(rule);
+        }
+        self.rebuild_converted();
+        self.record_history();
+        self.play(Take::Converted)
+    }
+
+    /// repeat を切り替える。ON にしたら繰り返し始め、OFF にしたら止める。
+    fn toggle_repeat(&mut self) -> GuitarArticulationAction {
+        self.repeat = !self.repeat;
+        if self.repeat {
+            self.play(Take::Converted)
+        } else {
+            GuitarArticulationAction::StopRepeat
+        }
+    }
+
+    /// アクセントの選び方（上だけ → 下だけ → 両方）を回し、Articulatedを作り直して鳴らす。
+    fn cycle_accent_pattern(&mut self) -> GuitarArticulationAction {
+        self.rules.cycle_accent_pattern();
         self.rebuild_converted();
         self.record_history();
         self.play(Take::Converted)
@@ -367,6 +380,17 @@ impl GuitarArticulationScreen {
         }
     }
 
+    /// 1 音モードに依らず、カーソル列の音を Articulated で鳴らす（`h` / `l` の移動のたび）。
+    fn play_cursor_note(&self) -> GuitarArticulationAction {
+        if self.plain.is_empty() {
+            return GuitarArticulationAction::Continue;
+        }
+        GuitarArticulationAction::PlayNote {
+            take: Take::Converted,
+            column: self.cursor,
+        }
+    }
+
     fn rebuild_converted(&mut self) {
         self.articulated = articulate(&self.notes, &self.rules);
         self.converted = convert(&self.plain, &self.rules);
@@ -376,6 +400,13 @@ impl GuitarArticulationScreen {
             Vec::new()
         };
     }
+}
+
+fn is_shift_key(key: KeyEvent, upper: char) -> bool {
+    key.code == KeyCode::Char(upper)
+        && !key
+            .modifiers
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
 }
 
 fn is_help_key(key: KeyEvent) -> bool {

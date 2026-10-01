@@ -149,10 +149,21 @@ fn the_rule_only_adds_cc24_and_cc25() {
         for rules in rule_sets() {
             let without = convert(&raw(mml), &rules);
             let with = convert(&raw(mml), &with_release(&rules));
-            assert!(!without.iter().any(is_release_cc), "{mml} {rules:?}");
-            let stripped: Vec<TimedMidiEvent> =
-                with.iter().filter(|e| !is_release_cc(e)).copied().collect();
-            assert_eq!(stripped, without, "{mml} {rules:?}");
+            // OFF でも、列で送る CC の既定値として頭で CC24 を 1 回だけ送る。
+            let head: Vec<u8> = without
+                .iter()
+                .filter(|e| is_release_cc(e))
+                .map(|e| e.message[2])
+                .collect();
+            assert_eq!(head, vec![RELEASE_SHAPE_DEFAULT], "{mml} {rules:?}");
+            let strip = |events: &[TimedMidiEvent]| -> Vec<TimedMidiEvent> {
+                events
+                    .iter()
+                    .filter(|e| !is_release_cc(e))
+                    .copied()
+                    .collect()
+            };
+            assert_eq!(strip(&with), strip(&without), "{mml} {rules:?}");
             let columns = column_count(&notes(mml));
             assert_eq!(
                 values(&with, RELEASE_SHAPE_CC).len(),
@@ -235,5 +246,13 @@ fn shape_names_follow_the_four_bands() {
             "Agressive2",
             "Agressive2"
         ]
+    );
+    let actions: Vec<&str> = [80, 95, 96, 127]
+        .into_iter()
+        .map(release_shape_name)
+        .collect();
+    assert_eq!(
+        actions,
+        ["slide out", "slide out", "alternate", "alternate"]
     );
 }

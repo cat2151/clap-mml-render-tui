@@ -174,6 +174,7 @@ fn keyboard_q_persists_and_restores_patch_and_buffer() {
         crate::history::KeyboardSessionState {
             patch: Some("patches_factory/Keys/Piano.fxp".to_string()),
             buffer_multiplier: 8,
+            ..Default::default()
         }
     );
 

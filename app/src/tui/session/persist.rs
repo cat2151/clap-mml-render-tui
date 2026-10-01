@@ -28,7 +28,7 @@ impl TuiApp<'_> {
             cursor: self.notepad.session_cursor(),
             lines: self.notepad.session_lines().to_vec(),
             active_screen: self.active_screen,
-            keyboard: self.keyboard.state.session_state(),
+            keyboard: self.keyboard.session_state(),
             grid_sequencer_track_count: self.grid_sequencer.track_count(),
             grid_sequencer_chord_mode: self.grid_sequencer.chord_enabled(),
             grid_sequencer: grid_session_to_history(self.grid_sequencer.session_state()),

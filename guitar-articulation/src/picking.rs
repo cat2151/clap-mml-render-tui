@@ -1,3 +1,4 @@
+use crate::accent;
 use crate::column_sound::apply_column_sounds;
 use crate::{
     apply_glide_rules, apply_hammer_pull, apply_voicing_rules, strings_by_column, Articulation,
@@ -13,7 +14,7 @@ pub const UNACCENTED_PICK_VELOCITY_PERCENT: u16 = 75;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Articulated {
     pub articulation: Articulation,
-    /// アクセントの音（[`accents`]）か。強弱を付けるとき（[`articulate`]）だけ付く。
+    /// アクセントの音（[`crate::AccentPattern`] の選び方）か。強弱を付けるとき（[`articulate`]）だけ付く。
     pub accent: bool,
     pub velocity: u8,
     /// 鳴らす音高。`None` はその音を鳴らさない（ピックスクレイプや効果音の列の、最低音以外）。
@@ -55,7 +56,7 @@ pub fn articulate(notes: &[Note], rules: &RuleTable) -> Vec<Articulated> {
     }
     let dynamics = rules.is_row_on(RowRule::EconomyPicking) || rules.is_row_on(RowRule::Humanize);
     let accents = if dynamics {
-        accents(notes)
+        accent::accents(notes, rules.accent_pattern())
     } else {
         vec![false; notes.len()]
     };
@@ -148,7 +149,7 @@ pub(crate) fn velocity_for(
 }
 
 /// 列ごとの `notes` の添字の範囲。`notes` は列順を前提にする。
-fn columns(notes: &[Note]) -> Vec<std::ops::Range<usize>> {
+pub(crate) fn columns(notes: &[Note]) -> Vec<std::ops::Range<usize>> {
     let mut out = Vec::new();
     let mut start = 0;
     for chunk in notes.chunk_by(|a, b| a.column == b.column) {
@@ -221,31 +222,6 @@ fn opposite(stroke: Articulation) -> Articulation {
     } else {
         Articulation::SusDown
     }
-}
-
-/// アクセントの音。フレーズの頭（先頭の列の音）と、上行から下行へ折り返す頂点。
-pub(crate) fn accents(notes: &[Note]) -> Vec<bool> {
-    let mut out = apexes(notes);
-    for (accent, note) in out.iter_mut().zip(notes) {
-        *accent |= note.column == 0;
-    }
-    out
-}
-
-/// 前後の単音の列より高い単音。
-fn apexes(notes: &[Note]) -> Vec<bool> {
-    let mut out = vec![false; notes.len()];
-    let columns = columns(notes);
-    for window in columns.windows(3) {
-        if window.iter().any(|range| range.len() != 1) {
-            continue;
-        }
-        let [before, apex, after] = [0, 1, 2].map(|k| notes[window[k].start].pitch);
-        if apex > before && apex > after {
-            out[window[1].start] = true;
-        }
-    }
-    out
 }
 
 #[cfg(test)]

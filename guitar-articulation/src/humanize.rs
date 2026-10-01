@@ -214,8 +214,11 @@ fn on_limit(column_on: &[f64], column: usize) -> f64 {
         })
 }
 
-/// 最短の音長を守り、同じ channel・鳴らす音高（[`Articulated::pitch`]）の次の on を越えない off
-/// （越えると off が次の音を止める）。
+/// 最短の音長を守り、次の on を越えない off。
+///
+/// - 同じ channel・鳴らす音高（[`Articulated::pitch`]）の次の on（越えると off が次の音を止める）。
+/// - 元の MML で次の列の on までに離れている音は、同じ channel の次の列の on（越えると、次の列の頭で
+///   送る CC24 などの値で前の音の離し音が鳴る）。元から次の列に重なって鳴る音は重なったまま。
 fn off_seconds(
     notes: &[Note],
     articulated: &[Articulated],
@@ -225,14 +228,31 @@ fn off_seconds(
 ) -> f64 {
     let (note, pitch) = (&notes[i], articulated[i].pitch);
     let off = wanted.max(ons[i] + MIN_NOTE_SECONDS);
-    notes[i + 1..]
-        .iter()
-        .zip(&articulated[i + 1..])
-        .zip(&ons[i + 1..])
-        .find(|((next, a), _)| {
-            next.column > note.column && next.channel == note.channel && a.pitch == pitch
+    let later = || {
+        notes[i + 1..]
+            .iter()
+            .zip(&articulated[i + 1..])
+            .zip(&ons[i + 1..])
+            .filter(|((next, _), _)| next.column > note.column && next.channel == note.channel)
+    };
+    let same_pitch = later()
+        .find(|((_, a), _)| a.pitch == pitch)
+        .map(|(_, &next_on)| next_on);
+    let next_column = later().next().map(|((next, _), _)| next.column);
+    let next_column = next_column
+        .map(|column| later().filter(move |((next, _), _)| next.column == column))
+        .filter(|members| {
+            let raw_on = members
+                .clone()
+                .map(|((next, _), _)| next.on_seconds)
+                .fold(f64::INFINITY, f64::min);
+            note.off_seconds <= raw_on
         })
-        .map_or(off, |(_, &next_on)| off.min(next_on))
+        .map(|members| members.map(|(_, &on)| on).fold(f64::INFINITY, f64::min));
+    [same_pitch, next_column]
+        .into_iter()
+        .flatten()
+        .fold(off, f64::min)
 }
 
 #[cfg(test)]

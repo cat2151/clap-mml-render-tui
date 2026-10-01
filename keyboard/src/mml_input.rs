@@ -20,6 +20,18 @@ impl Default for KeyboardMmlInput<'_> {
 }
 
 impl<'a> KeyboardMmlInput<'a> {
+    /// 保存しておいた確定済みの MML を、次に `i` を開いたときの初期値として戻す。
+    pub fn restored(last_confirmed: String) -> Self {
+        Self {
+            last_confirmed,
+            ..Self::default()
+        }
+    }
+
+    pub fn last_confirmed(&self) -> &str {
+        &self.last_confirmed
+    }
+
     pub fn is_active(&self) -> bool {
         self.active
     }

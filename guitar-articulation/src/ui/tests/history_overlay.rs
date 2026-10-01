@@ -75,3 +75,20 @@ fn a_row_names_the_row_rules_the_column_rule_counts_and_the_chain_length() {
         "#10  "
     );
 }
+
+#[test]
+fn slide_up_down_and_slide_out_have_different_short_names() {
+    let mut rules = RuleTable::default();
+    rules.toggle(1, Rule::Slide);
+    rules.toggle(2, Rule::SlideOut);
+    let entry = GuitarArticulationHistoryEntry {
+        mml: "o3 l8 e g a".to_string(),
+        rules,
+        ..Default::default()
+    };
+
+    assert_eq!(
+        history::row_text(0, &entry),
+        "#01  o3 l8 e g a  slideU/D:1 slideout:1"
+    );
+}

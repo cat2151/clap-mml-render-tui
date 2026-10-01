@@ -137,6 +137,7 @@ fn load_session_state_normalizes_keyboard_restore_values() {
         KeyboardSessionState {
             patch: None,
             buffer_multiplier: 4,
+            ..Default::default()
         }
     );
     assert_eq!(state.grid_sequencer_track_count, 16);

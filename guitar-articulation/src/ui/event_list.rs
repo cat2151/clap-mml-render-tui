@@ -133,7 +133,7 @@ pub(crate) fn name_width(rows: &[EventRow]) -> usize {
 fn control_name(controller: u8) -> String {
     let name = match controller {
         VIBRATO_DEPTH_CC => "vibrato depth",
-        SLIDE_WIDTH_CC => "slide range",
+        SLIDE_WIDTH_CC => "slide up/down range",
         PICKING_CC => "picking noise",
         31 => "picking micro noise",
         RELEASE_SHAPE_CC => "release type",

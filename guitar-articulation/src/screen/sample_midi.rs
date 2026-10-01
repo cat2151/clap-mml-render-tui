@@ -2,6 +2,7 @@
 //!
 //! file の一覧と読み込みは host が行い（[`GuitarArticulationAction::OpenSampleMidiList`] /
 //! [`GuitarArticulationAction::LoadSampleMidi`]）、画面は結果を受け取るだけ。
+//! `h` / `l` は 1 音モードに依らず移動先の 1 音を求める。
 //! MID モードの間も MML・ルール・カーソルはそのまま残し、`Esc` で抜けるとそのまま戻る。
 
 use std::path::{Path, PathBuf};
@@ -91,6 +92,7 @@ impl GuitarArticulationScreen {
     }
 
     /// 一覧 overlay を開いている間のキー。ここで全部受け、画面のキーへは渡さない。
+    /// `j` / `k` は選び直すたびに、その file の試聴（[`GuitarArticulationAction::PreviewSampleMidi`]）を求める。
     pub(super) fn handle_sample_midi_list_key(
         &mut self,
         key: KeyEvent,
@@ -108,8 +110,16 @@ impl GuitarArticulationScreen {
             }
             KeyCode::Char('j') | KeyCode::Down => {
                 list.selected = (list.selected + 1).min(list.files.len() - 1);
+                return GuitarArticulationAction::PreviewSampleMidi(
+                    list.files[list.selected].clone(),
+                );
             }
-            KeyCode::Char('k') | KeyCode::Up => list.selected = list.selected.saturating_sub(1),
+            KeyCode::Char('k') | KeyCode::Up => {
+                list.selected = list.selected.saturating_sub(1);
+                return GuitarArticulationAction::PreviewSampleMidi(
+                    list.files[list.selected].clone(),
+                );
+            }
             _ => {}
         }
         GuitarArticulationAction::Continue
@@ -122,9 +132,9 @@ impl GuitarArticulationScreen {
             return GuitarArticulationAction::Continue;
         };
         let moved = match key.code {
-            KeyCode::Char('h') | KeyCode::Left => state.cursor.checked_sub(1),
+            KeyCode::Char('h') | KeyCode::Left => state.cursor.saturating_sub(1),
             KeyCode::Char('l') | KeyCode::Right => {
-                Some(state.cursor + 1).filter(|&next| next < state.midi.group_count())
+                (state.cursor + 1).min(state.midi.group_count().saturating_sub(1))
             }
             KeyCode::Char(' ') => {
                 return match (note_preview, state.midi.group_count()) {
@@ -147,17 +157,12 @@ impl GuitarArticulationScreen {
             KeyCode::Char('q') => return GuitarArticulationAction::Quit,
             _ => return GuitarArticulationAction::Continue,
         };
-        match moved {
-            Some(next) => {
-                state.cursor = next;
-                if note_preview {
-                    GuitarArticulationAction::PlaySampleMidi { note: Some(next) }
-                } else {
-                    GuitarArticulationAction::Continue
-                }
-            }
-            None => GuitarArticulationAction::Continue,
+        // `h` / `l` は 1 音モードに依らず、移動先（端なら今）のまとまりを鳴らす。
+        if state.midi.group_count() == 0 {
+            return GuitarArticulationAction::Continue;
         }
+        state.cursor = moved;
+        GuitarArticulationAction::PlaySampleMidi { note: Some(moved) }
     }
 }
 

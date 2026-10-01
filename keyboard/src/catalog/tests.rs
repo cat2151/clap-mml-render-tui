@@ -97,11 +97,11 @@ fn patch_navigation_clamps_and_moves_by_ten() {
         Some("Pads/Pad 01.fxp")
     );
     assert_eq!(
-        catalog.move_focused_to_start().as_deref(),
+        catalog.move_focused_cursor(isize::MIN).as_deref(),
         Some("Leads/Lead 1.fxp")
     );
     assert_eq!(
-        catalog.move_focused_to_end().as_deref(),
+        catalog.move_focused_cursor(isize::MAX).as_deref(),
         Some("Pads/Pad 11.fxp")
     );
 }
@@ -118,11 +118,15 @@ fn first_navigation_from_an_unknown_patch_selects_the_first_patch() {
 }
 
 #[test]
-fn focus_moves_between_the_three_panes_and_stops_at_both_ends() {
+fn focus_moves_between_the_four_panes_and_stops_at_both_ends() {
     let mut catalog = loaded(Some("Leads/Lead 1.fxp"));
     assert_eq!(catalog.focus(), PatchPaneFocus::Patches);
 
     catalog.move_focus(1);
+    assert_eq!(catalog.focus(), PatchPaneFocus::Effect);
+    catalog.move_focus(1);
+    assert_eq!(catalog.focus(), PatchPaneFocus::Effect);
+    catalog.move_focus(-1);
     assert_eq!(catalog.focus(), PatchPaneFocus::Patches);
     catalog.move_focus(-1);
     assert_eq!(catalog.focus(), PatchPaneFocus::Preset);
@@ -162,7 +166,7 @@ fn moving_the_role_resets_the_preset_and_keeps_the_patch_when_it_is_listed() {
     assert_eq!(catalog.patches().len(), 2);
 
     // 端で止まる。
-    assert_eq!(catalog.move_focused_to_end(), None);
+    assert_eq!(catalog.move_focused_cursor(isize::MAX), None);
     assert_eq!(catalog.role_cursor(), FilterGroup::ALL.len() - 1);
     assert_eq!(catalog.patches().len(), 0);
     assert_eq!(catalog.selected_patch(), None);
@@ -262,7 +266,7 @@ fn role_counts_match_the_shared_role_index() {
     let mut catalog = loaded(Some("Leads/Lead 1.fxp"));
     focus_role(&mut catalog);
     for role in PatchRole::ALL {
-        catalog.move_focused_to_start();
+        catalog.move_focused_cursor(isize::MIN);
         catalog.move_focused_cursor(role_index(role) as isize);
         assert_eq!(
             catalog.patches().len(),

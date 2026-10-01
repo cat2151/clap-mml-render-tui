@@ -6,6 +6,8 @@ use crate::{
 use cmrt_tui_core::theme::MONOKAI_YELLOW;
 use ratatui::{backend::TestBackend, style::Modifier, Terminal};
 
+mod effect_pane;
+mod note_mode_bar;
 mod patch_panes;
 
 fn buffer_to_string(terminal: &Terminal<TestBackend>) -> String {
@@ -53,7 +55,7 @@ fn render_keyboard_help(presentation: KeyboardNoteGuidePresentation) -> Terminal
     terminal
         .draw(|f| {
             f.render_widget(
-                Paragraph::new(keyboard_help_lines(presentation, None)).style(base_style()),
+                Paragraph::new(keyboard_help_lines(presentation, None, false)).style(base_style()),
                 f.area(),
             );
         })
@@ -150,35 +152,21 @@ fn controller_status_text_shows_fixed_pitch_bend_values() {
 }
 
 #[test]
-fn note_playback_status_text_shows_all_four_modes() {
+fn note_playback_status_text_shows_only_the_target() {
     let mut state = KeyboardState::default();
-    assert_eq!(
-        note_playback_status_text(&state),
-        "Note mode: off | Target: -"
-    );
+    assert_eq!(note_playback_status_text(&state), "Target: -");
 
     assert!(state.press(KEYBOARD_NOTES[4]).is_some());
     assert!(state.press(KEYBOARD_NOTES[0]).is_some());
     assert!(state.press(KEYBOARD_NOTES[2]).is_some());
     let now = std::time::Instant::now();
+    assert_eq!(note_playback_status_text(&state), "Target: G4 C4 E4");
     let _ = state.cycle_note_playback(now);
-    assert_eq!(
-        note_playback_status_text(&state),
-        "Note mode: repeat G4 C4 E4"
-    );
-
+    assert_eq!(note_playback_status_text(&state), "Target: G4 C4 E4");
     let _ = state.cycle_note_playback(now);
-    assert_eq!(note_playback_status_text(&state), "Note mode: arp C4 E4 G4");
     let _ = state.cycle_note_playback(now);
-    assert_eq!(
-        note_playback_status_text(&state),
-        "Note mode: auto→repeat G4 C4 E4"
-    );
-    let _ = state.cycle_note_playback(now);
-    assert_eq!(
-        note_playback_status_text(&state),
-        "Note mode: off | Target: G4 C4 E4"
-    );
+    assert_eq!(state.note_playback_mode(), crate::NotePlaybackMode::Arp);
+    assert_eq!(note_playback_status_text(&state), "Target: C4 E4 G4");
 }
 
 #[test]
@@ -190,10 +178,7 @@ fn note_playback_status_formats_arbitrary_midi_notes() {
         false,
     );
 
-    assert_eq!(
-        note_playback_status_text(&state),
-        "Note mode: off | Target: C-1 C#4 | G9"
-    );
+    assert_eq!(note_playback_status_text(&state), "Target: C-1 C#4 | G9");
 }
 
 #[test]
@@ -201,13 +186,11 @@ fn note_playback_status_sorts_each_arp_chord_without_reordering_the_progression(
     let mut state = KeyboardState::default();
     let now = std::time::Instant::now();
     state.replace_repeat_chords(vec![vec![67, 60], vec![69, 65]], now, false);
-    let _ = state.cycle_note_playback(now);
-    let _ = state.cycle_note_playback(now);
+    for _ in 0..3 {
+        let _ = state.cycle_note_playback(now);
+    }
 
-    assert_eq!(
-        note_playback_status_text(&state),
-        "Note mode: arp C4 G4 | F4 A4"
-    );
+    assert_eq!(note_playback_status_text(&state), "Target: C4 G4 | F4 A4");
 }
 
 #[test]

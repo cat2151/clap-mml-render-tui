@@ -4,6 +4,7 @@ use crate::hammer_pull::single_in_column;
 use crate::{Articulation, Note, Rule, RuleTable};
 
 /// スライドの幅の上限（半音）。`Slide_Up_8ST` / `Slide_Down_8ST` が 3 音半。
+/// これより広い音程は、この幅で滑って着く（そこまでは跳ぶ）。
 pub const SLIDE_MAX_SEMITONES: u8 = 7;
 
 /// スライドの sample が在る最低音と最高音。幅 w の `Slide_Up` は `SLIDE_UP_LOWEST_START + w` から、
@@ -19,7 +20,7 @@ pub const BEND_PITCHES: RangeInclusive<u8> = 30..=90;
 ///
 /// 対象は単音の列から単音の列へ移る所だけ。音程と音高が sample の範囲に在れば、
 /// それまでの奏法（自動ハンマリングの H/P を含む）を上書きする。範囲外ならそのまま残す。
-/// - [`Rule::Slide`]: 上行 1〜7 半音で `Slide_Up`、下行 1〜7 半音で `Slide_Down`。
+/// - [`Rule::Slide`]: 上行で `Slide_Up`、下行で `Slide_Down`。8 半音以上は 7 半音の幅として扱う。
 /// - [`Rule::Choke`]: 上行 1 / 2 / 3 半音で `Bending_HT` / `_WH` / `_1HT`。
 ///
 /// 鳴らす音高はどちらも行き先の音（sfz が下や前の音高から滑らせる）。
@@ -54,10 +55,12 @@ fn interval_from_previous(notes: &[Note], i: usize) -> Option<i16> {
 }
 
 fn slide(pitch: u8, d: i16) -> Option<Articulation> {
-    let width = u8::try_from(d.unsigned_abs()).ok()?;
-    if !(1..=SLIDE_MAX_SEMITONES).contains(&width) {
+    if d == 0 {
         return None;
     }
+    let width = u8::try_from(d.unsigned_abs())
+        .unwrap_or(u8::MAX)
+        .min(SLIDE_MAX_SEMITONES);
     if d > 0 {
         (SLIDE_UP_LOWEST_START + width..=SLIDE_HIGHEST_PITCH)
             .contains(&pitch)

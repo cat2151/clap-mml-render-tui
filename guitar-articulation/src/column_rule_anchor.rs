@@ -30,7 +30,7 @@ impl ColumnRuleAnchor {
         }
     }
 
-    /// `notes` の列へ列ルールを付け替え、行全体のルールとパラメータは `current` のものにした表。
+    /// `notes` の列へ列ルールを付け替え、行全体のルール・パラメータ・アクセントと自動ハンマリングの選び方は `current` のものにした表。
     /// この MML を解釈できなければ、列ルールは空。
     pub(crate) fn rules_for(&self, notes: &[Note], current: &RuleTable) -> RuleTable {
         let mut rules = match cmrt_chord::timed_performance(&self.mml) {
@@ -42,6 +42,8 @@ impl ColumnRuleAnchor {
         };
         rules.rows = current.rows.clone();
         rules.params = current.params.clone();
+        rules.accent = current.accent;
+        rules.auto_pick = current.auto_pick;
         rules
     }
 }

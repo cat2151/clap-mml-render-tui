@@ -12,11 +12,14 @@ fn note_repeat_retriggers_last_chord_every_eight_master_ticks() {
     assert!(state.release(KEYBOARD_NOTES[2]).is_some());
     assert!(state.release(KEYBOARD_NOTES[4]).is_some());
 
-    // ON: 即座に和音を発音
+    // auto(voicing未判定はrepeat扱い): 即座に和音を発音
     assert_eq!(
         state.cycle_note_playback(now),
         vec![[0x90, 60, 100], [0x90, 64, 100], [0x90, 67, 100]]
     );
+    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Auto);
+    // repeatへ移っても同じ和音を鳴らし続ける
+    assert!(state.cycle_note_playback(now).is_empty());
     assert_eq!(state.note_playback_mode(), NotePlaybackMode::Repeat);
     // 1～7tick目は鳴らし続け、8tick目にoff+onを同時送信
     for tick in 1..8 {
@@ -41,8 +44,6 @@ fn note_repeat_retriggers_last_chord_every_eight_master_ticks() {
         vec![[0x80, 60, 0], [0x80, 64, 0], [0x80, 67, 0], [0x90, 60, 100],]
     );
     assert_eq!(state.note_playback_mode(), NotePlaybackMode::Arp);
-    let _ = state.cycle_note_playback(now);
-    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Auto);
     let _ = state.cycle_note_playback(now);
     assert_eq!(state.note_playback_mode(), NotePlaybackMode::Off);
     assert!(state

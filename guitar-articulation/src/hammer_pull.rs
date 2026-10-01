@@ -1,4 +1,5 @@
-use crate::{auto_pick_columns, Articulation, Note, RuleTable};
+use crate::auto_pick::picked_columns;
+use crate::{Articulation, Note, RuleTable};
 
 /// H/P が効く列（[`RuleTable::hammer_pull_applies`]）の音を、前の列からの上下でハンマリング/プリングオフにする。
 ///
@@ -6,7 +7,7 @@ use crate::{auto_pick_columns, Articulation, Note, RuleTable};
 /// `notes` は [`crate::notes_from_events`] の出力（列順）を前提にする。
 pub fn apply_hammer_pull(notes: &[Note], rules: &RuleTable) -> Vec<Articulation> {
     let mut out = vec![Articulation::SusDown; notes.len()];
-    let auto_picks = auto_pick_columns(notes);
+    let auto_picks = picked_columns(notes, rules);
     for (i, note) in notes.iter().enumerate() {
         if note.column == 0 || !rules.hammer_pull_applies(note.column, &auto_picks) {
             continue;

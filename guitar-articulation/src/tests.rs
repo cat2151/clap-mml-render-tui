@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use super::*;
 
 fn event(seconds: f64, message: [u8; 3]) -> TimedMidiEvent {
@@ -16,6 +18,14 @@ fn flat() -> Vec<TimedMidiEvent> {
     ]
 }
 
+/// 列で送る CC（CC20 / CC23 / CC32 / CC24）の既定値。演奏のいちばん早い note on の時刻に送る。
+fn column_cc_defaults(seconds: f64) -> Vec<TimedMidiEvent> {
+    [[0xB0, 20, 0], [0xB0, 23, 0], [0xB0, 32, 0], [0xB0, 24, 13]]
+        .into_iter()
+        .map(|message| event(seconds, message))
+        .collect()
+}
+
 fn is_keyswitch(e: &TimedMidiEvent) -> bool {
     e.message[1] < 30 && matches!(e.message[0] & 0xF0, 0x80 | 0x90)
 }
@@ -27,6 +37,7 @@ fn empty_rules_add_only_the_head_sus_down() {
     let mut expected = flat();
     expected.insert(0, event(0.0, [0x90, 17, KEYSWITCH_VELOCITY]));
     expected.insert(2, event(0.5, [0x80, 17, 0]));
+    expected.splice(0..0, column_cc_defaults(0.0));
     assert_eq!(out, expected);
 }
 
@@ -53,7 +64,11 @@ fn rules_do_not_move_the_played_notes() {
     rules.toggle(2, Rule::HammerPull);
     let out = convert(&flat(), &rules);
 
-    let played: Vec<TimedMidiEvent> = out.iter().copied().filter(|e| !is_keyswitch(e)).collect();
+    let played: Vec<TimedMidiEvent> = out
+        .iter()
+        .copied()
+        .filter(|e| !is_keyswitch(e) && e.message[0] & 0xF0 != 0xB0)
+        .collect();
     assert_eq!(played, flat());
     let keyswitch_on: Vec<(f64, u8)> = out
         .iter()
@@ -231,7 +246,8 @@ fn existing_rules_keep_their_output() {
     rules.toggle_row(RowRule::EconomyPicking);
     let out = convert(&from_mml("o3 l8 e f+ g a b a g f+ e"), &rules);
 
-    assert_eq!(out.len(), 38);
+    // 38 音ぶんのイベントと、頭の列 CC の既定値 4 つ。
+    assert_eq!(out.len(), 42);
     let keyswitch_on: Vec<(f64, u8)> = out
         .iter()
         .filter(|e| is_keyswitch(e) && e.message[0] & 0xF0 == 0x90)
@@ -389,7 +405,10 @@ fn vibrato_stacks_with_palm_mute_in_the_same_column() {
     let out = convert(&from_mml("o3 l8 e g a"), &rules);
 
     assert!(out.contains(&event(0.25, [0x90, 20, KEYSWITCH_VELOCITY])));
-    assert_eq!(cc20(&out), vec![(0.25, VIBRATO_DEPTH), (0.5, 0), (0.75, 0)]);
+    assert_eq!(
+        cc20(&out),
+        vec![(0.0, 0), (0.25, VIBRATO_DEPTH), (0.5, 0), (0.75, 0)]
+    );
 }
 
 #[test]

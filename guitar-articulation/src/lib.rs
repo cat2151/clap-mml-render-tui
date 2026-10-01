@@ -4,6 +4,7 @@
 //! KS 番号は METAL-GTX 固有なので、汎用の `cmrt-midi-filter` には置かない。
 //! 変換を試す画面（[`GuitarArticulationScreen`] と [`ui`]）も同じ crate に置く。
 
+mod accent;
 mod articulation;
 mod auto_pick;
 mod column_map;
@@ -21,6 +22,7 @@ mod params;
 mod picking;
 mod release;
 mod report;
+mod rule_table;
 mod sample_midi;
 mod scratch;
 mod screen;
@@ -36,12 +38,11 @@ mod test_effects;
 #[cfg(test)]
 mod tests;
 
-use std::collections::{BTreeMap, BTreeSet};
-
 use serde::{Deserialize, Serialize};
 
+pub use accent::AccentPattern;
 pub use articulation::Articulation;
-pub use auto_pick::{auto_pick_columns, RUN_MIN_NOTES, RUN_PICK_EVERY};
+pub use auto_pick::{auto_pick_columns, AutoPick, RUN_MIN_NOTES, RUN_PICK_EVERY};
 pub use cmrt_midi_filter::TimedMidiEvent;
 pub use column_rule_anchor::ColumnRuleAnchor;
 pub use column_sound::{
@@ -49,9 +50,10 @@ pub use column_sound::{
     EFFECT_RESONANCE_PITCH, EFFECT_SLIDE_NOISE_PITCH, SLIDE_FX_DOWN_PITCHES, SLIDE_FX_UP_PITCHES,
 };
 pub use control::{
-    control_events, LONG_EXTRA_CC, POSITION_RELEASE_PITCHES, POSITION_RELEASE_VALUE,
-    POWER_CHORD_CC, SLIDE_IN_WIDTH_CC, SLIDE_IN_WIDTH_CC_DEFAULT, SLIDE_WIDTH_CC,
-    SLIDE_WIDTH_CC_DEFAULT, VIBRATO_DEPTH, VIBRATO_DEPTH_CC,
+    control_events, AUTO_SLIDE_OUT_PITCHES, AUTO_SLIDE_OUT_VALUE, LONG_EXTRA_CC,
+    POSITION_RELEASE_PITCHES, POSITION_RELEASE_VALUE, POWER_CHORD_CC, POWER_CHORD_PITCHES,
+    SLIDE_IN_WIDTH_CC, SLIDE_IN_WIDTH_CC_DEFAULT, SLIDE_WIDTH_CC, SLIDE_WIDTH_CC_DEFAULT,
+    VIBRATO_DEPTH, VIBRATO_DEPTH_CC,
 };
 pub use glide::{apply_glide_rules, slide_semitones, BEND_PITCHES, SLIDE_MAX_SEMITONES};
 pub use hammer_pull::apply_hammer_pull;
@@ -65,7 +67,10 @@ pub use notes::{notes_from_events, Note};
 pub use params::{param_of, Param, PARAMS, PARAM_STEP};
 pub use picking::{articulate, Articulated, UNACCENTED_PICK_VELOCITY_PERCENT};
 pub use report::{compare, report};
-pub use sample_midi::{is_keyswitch_pitch, keyswitch_name, SampleMidi, SAMPLE_MIDI_DIR};
+pub use rule_table::RuleTable;
+pub use sample_midi::{
+    is_keyswitch_pitch, keyswitch_name, SampleMidi, SampleMidiGroup, SAMPLE_MIDI_DIR,
+};
 pub use scratch::{pick_scratch_pitch, PICK_SCRATCH_PITCHES};
 pub use screen::{GuitarArticulationAction, GuitarArticulationScreen, Take, DEFAULT_MML};
 pub use settings::{load_settings, save_settings, GuitarArticulationSettings};
@@ -94,6 +99,7 @@ pub enum Rule {
     /// ピッキングする音をピッキングハーモニクスにする。
     PinchHarmonic,
     /// 前の列から滑って着く（上行なら `Slide_Up`、下行なら `Slide_Down`）。
+    /// 幅は最大 7 半音で、それより広い音程は 7 半音手前まで跳んでから滑る。
     Slide,
     /// 前の列より上の音へ、下から持ち上げて着く。
     Choke,
@@ -151,11 +157,15 @@ pub enum Rule {
     /// （CC23、[`LONG_EXTRA_CC`]）。他のルールと重ねられる。
     LongExtra,
     /// Sus_Down / Sus_Up の列に、5 度上の音を重ねてパワーコードにする（CC32、[`POWER_CHORD_CC`]）。
-    /// 他のルールと重ねられる。
+    /// 音高は [`POWER_CHORD_PITCHES`] の中だけ。他のルールと重ねられる。
     PowerChord,
     /// 列の音を離したときに、手のポジション移動の音を鳴らす（CC24 = [`POSITION_RELEASE_VALUE`]）。
     /// 他のルールと重ねられ、汚し（リリース）より優先する。
     PositionRelease,
+    /// 列の音を離したときに、滑り下りる音を鳴らす（自動スライドアウト、CC24 = [`AUTO_SLIDE_OUT_VALUE`]）。
+    /// 列の音の奏法は変えない。[`Rule::SlideOut`] は列の音そのものを滑り下りる音に置き換える。
+    /// 他のルールと重ねられ、汚し（リリース）より優先する。[`Rule::PositionRelease`] とは同じ列で 1 つだけ。
+    AutoSlideOut,
 }
 
 impl Rule {
@@ -189,8 +199,23 @@ impl Rule {
             | Rule::EffectResonance
             | Rule::EffectSlideNoise
             | Rule::EffectHardStop => true,
-            Rule::Vibrato | Rule::LongExtra | Rule::PowerChord | Rule::PositionRelease => false,
+            Rule::Vibrato
+            | Rule::LongExtra
+            | Rule::PowerChord
+            | Rule::PositionRelease
+            | Rule::AutoSlideOut => false,
         }
+    }
+
+    /// 離したときのリリース層を CC24 で選ぶルールか。1 列で効く CC24 は 1 つなので、同じ列ではこのうち 1 つだけ ON にできる。
+    pub fn selects_release_shape(self) -> bool {
+        matches!(self, Rule::PositionRelease | Rule::AutoSlideOut)
+    }
+
+    /// 同じ列で一緒に ON にできないか（[`Rule::is_exclusive`] どうし、[`Rule::selects_release_shape`] どうし）。
+    fn conflicts_with(self, other: Rule) -> bool {
+        (self.is_exclusive() && other.is_exclusive())
+            || (self.selects_release_shape() && other.selects_release_shape())
     }
 }
 
@@ -198,7 +223,7 @@ impl Rule {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RowRule {
-    /// [`auto_pick_columns`] の列だけピッキングし、残りを H/P にする。
+    /// [`RuleTable::auto_pick`] の列だけピッキングし、残りを H/P にする。
     AutoHammerPull,
     /// イングヴェイ流のエコノミーピッキング（[`articulate`]）。
     EconomyPicking,
@@ -220,119 +245,6 @@ impl RowRule {
     }
 }
 
-/// 列番号 → その列で ON のルールと、行全体で ON のルールと、行全体のパラメータ（[`PARAMS`]）。
-///
-/// JSON では `{"columns":{"3":["hammer_pull"]},"rows":["economy_picking"],"params":{"22":0}}`。
-/// `params` は既定と違う値だけで、無ければ省く。
-/// 排他な行ルール（[`RowRule::excluded`]）が両方 ON の JSON は、エコノミーピッキングだけ残して読む。
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(from = "RuleTableFields")]
-pub struct RuleTable {
-    #[serde(rename = "columns")]
-    on: BTreeMap<usize, BTreeSet<Rule>>,
-    rows: BTreeSet<RowRule>,
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    params: BTreeMap<u8, u8>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RuleTableFields {
-    #[serde(default)]
-    columns: BTreeMap<usize, BTreeSet<Rule>>,
-    #[serde(default)]
-    rows: BTreeSet<RowRule>,
-    #[serde(default)]
-    params: BTreeMap<u8, u8>,
-}
-
-impl From<RuleTableFields> for RuleTable {
-    fn from(fields: RuleTableFields) -> Self {
-        let mut rows = fields.rows;
-        if rows.contains(&RowRule::EconomyPicking) {
-            rows.remove(&RowRule::AutoHammerPull);
-        }
-        RuleTable {
-            on: fields.columns,
-            rows,
-            params: params::sanitized(fields.params),
-        }
-    }
-}
-
-impl RuleTable {
-    /// 1 行の JSON。ログから演奏を作り直すための綴り。
-    pub fn to_json(&self) -> String {
-        serde_json::to_string(self).expect("RuleTable is always serializable")
-    }
-
-    pub fn from_json(json: &str) -> Result<RuleTable, String> {
-        serde_json::from_str(json).map_err(|err| format!("ルールの JSON を読めません: {err}"))
-    }
-
-    pub fn is_on(&self, column: usize, rule: Rule) -> bool {
-        self.on
-            .get(&column)
-            .is_some_and(|rules| rules.contains(&rule))
-    }
-
-    /// ON/OFF を切り替える。[`Rule::is_exclusive`] なルールを ON にすると、同じ列の他の排他なルールは OFF になる。
-    pub fn toggle(&mut self, column: usize, rule: Rule) {
-        let rules = self.on.entry(column).or_default();
-        if !rules.remove(&rule) {
-            if rule.is_exclusive() {
-                rules.retain(|other| !other.is_exclusive());
-            }
-            rules.insert(rule);
-        }
-        if rules.is_empty() {
-            self.on.remove(&column);
-        }
-    }
-
-    /// 列ごとのルールが 1 つも ON でないか。行全体のルールは見ない。
-    pub fn is_empty(&self) -> bool {
-        self.on.is_empty()
-    }
-
-    /// そのルールが ON の列の数。
-    pub fn column_count_of(&self, rule: Rule) -> usize {
-        self.on
-            .values()
-            .filter(|rules| rules.contains(&rule))
-            .count()
-    }
-
-    pub fn is_row_on(&self, rule: RowRule) -> bool {
-        self.rows.contains(&rule)
-    }
-
-    /// ON/OFF を切り替える。ON にすると、排他な相手（[`RowRule::excluded`]）は OFF になる。
-    pub fn toggle_row(&mut self, rule: RowRule) {
-        if !self.rows.remove(&rule) {
-            if let Some(other) = rule.excluded() {
-                self.rows.remove(&other);
-            }
-            self.rows.insert(rule);
-        }
-    }
-
-    /// 列ごとのルールだけを消した表（行ルールとパラメータは残す）。MML を確定し直すと列の位置が意味を失うので使う。
-    pub fn without_column_rules(&self) -> RuleTable {
-        RuleTable {
-            on: BTreeMap::new(),
-            ..self.clone()
-        }
-    }
-
-    /// その列で H/P を効かせるか（列ごとの ON か、自動ハンマリングがレガートにする列）。
-    /// `auto_picks` は [`auto_pick_columns`] の出力。
-    pub fn hammer_pull_applies(&self, column: usize, auto_picks: &[bool]) -> bool {
-        self.is_on(column, Rule::HammerPull)
-            || (self.is_row_on(RowRule::AutoHammerPull) && !auto_picks[column])
-    }
-}
-
 /// rawの列に、ルール表から作った KS と CC を足した演奏用の列を返す。
 ///
 /// 元のイベントは時刻を変えずに残し、note on の velocity だけ [`articulate`] の値へ差し替える。
@@ -345,7 +257,9 @@ impl RuleTable {
 ///
 /// [`RowRule::HumanizeRelease`] が ON なら、演奏音と同じ時刻の音から列ごとの CC24 / CC25 を足す
 /// （他のイベントは ON/OFF で変わらない）。[`Rule::PositionRelease`] の列の CC24 は乱数の代わりに
-/// [`POSITION_RELEASE_VALUE`]。
+/// 列のルールが送る値（[`POSITION_RELEASE_VALUE`] / [`AUTO_SLIDE_OUT_VALUE`]）。
+///
+/// 最後に、演奏の頭で列 CC の既定値を足す（[`control::add_column_cc_defaults`]）。
 pub fn convert(events: &[TimedMidiEvent], rules: &RuleTable) -> Vec<TimedMidiEvent> {
     let notes = notes_from_events(events);
     let articulated = articulate(&notes, rules);
@@ -354,11 +268,12 @@ pub fn convert(events: &[TimedMidiEvent], rules: &RuleTable) -> Vec<TimedMidiEve
     if rules.is_row_on(RowRule::Humanize) {
         let humanized = humanize::seeded(&notes, &articulated);
         let mut out = humanize::humanized_events(events, &notes, &articulated, &humanized, rules);
+        let shifted = humanize::shifted_notes(&notes, &humanized);
         if release {
-            let shifted = humanize::shifted_notes(&notes, &humanized);
-            let positions = control::position_release_columns(&shifted, &articulations, rules);
+            let positions = control::release_shape_columns(&shifted, &articulations, rules);
             out.extend(release::seeded_release_events(&shifted, &positions));
         }
+        control::add_column_cc_defaults(&mut out, &shifted);
         cmrt_midi_filter::sort_for_playback(&mut out);
         return out;
     }
@@ -372,9 +287,10 @@ pub fn convert(events: &[TimedMidiEvent], rules: &RuleTable) -> Vec<TimedMidiEve
         column_sound::sounding_event(&event, &notes, &articulated)
     }));
     if release {
-        let positions = control::position_release_columns(&notes, &articulations, rules);
+        let positions = control::release_shape_columns(&notes, &articulations, rules);
         out.extend(release::seeded_release_events(&notes, &positions));
     }
+    control::add_column_cc_defaults(&mut out, &notes);
     cmrt_midi_filter::sort_for_playback(&mut out);
     out
 }

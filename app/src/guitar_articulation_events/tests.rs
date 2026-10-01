@@ -19,6 +19,7 @@ fn the_play_log_line_names_the_take_the_keyswitches_the_patch_and_the_inputs() {
     let flat = flat_events();
     let converted = convert(&flat, &RuleTable::default());
 
+    // 6 イベントの演奏に、頭の KS の on/off と、頭の列 CC の既定値 4 つ。
     assert_eq!(
         play_log_line(
             FULL_PATCH,
@@ -28,7 +29,7 @@ fn the_play_log_line_names_the_take_the_keyswitches_the_patch_and_the_inputs() {
             &RuleTable::default()
         ),
         format!(
-            "guitar-articulation: event=play take=converted events=8 keyswitch_note_ons=1 seconds={:.3} patch={FULL_PATCH:?} mml=\"o3 l8 e f+ g\" rules={{\"columns\":{{}},\"rows\":[]}}",
+            "guitar-articulation: event=play take=converted events=12 keyswitch_note_ons=1 seconds={:.3} patch={FULL_PATCH:?} mml=\"o3 l8 e f+ g\" rules={{\"columns\":{{}},\"rows\":[]}}",
             converted.last().unwrap().seconds
         )
     );
@@ -86,7 +87,7 @@ fn the_previous_play_is_the_latest_one_with_the_same_mml_and_other_rules() {
 
 #[test]
 fn lines_written_before_the_mml_was_logged_are_skipped() {
-    let old = "[t0] guitar-articulation: event=play take=converted events=8 keyswitch_note_ons=1 seconds=0.750 patch=\"x\"";
+    let old = "[t0] guitar-articulation: event=play take=converted events=12 keyswitch_note_ons=1 seconds=0.750 patch=\"x\"";
     let new = play_log_line(
         PATCH,
         Take::Converted,

@@ -13,20 +13,25 @@ use cmrt_tui_core::{
     ui::centered_text_block_rect,
 };
 
-use crate::patch_select::{PatchSelect, PluginMode};
+use crate::patch_select::PatchSelect;
+use crate::plugin_menu::{plugin_mode, PluginMenu, PluginMode};
 
 const TITLE: &str = " plugin solo/mute  a-z:solo  A-Z:mute  同じキー:解除  Esc:閉じる ";
 
-/// menu が開いていれば `area` の中央へ描く。
+/// selector の menu が開いていれば `area` の中央へ描く。
 pub(super) fn draw(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
-    let Some(menu) = select.plugin_menu() else {
-        return;
-    };
+    if let Some(menu) = select.plugin_menu() {
+        draw_plugin_menu(menu, select.committed_query(), frame, area);
+    }
+}
+
+/// `menu` を `area` の中央へ描く。各 plugin の solo / mute の印は `condition` から読む。
+pub fn draw_plugin_menu(menu: &PluginMenu, condition: &str, frame: &mut Frame<'_>, area: Rect) {
     let lines: Vec<Line<'_>> = menu
         .items()
         .iter()
         .map(|item| {
-            let (mark, color) = match select.plugin_mode(&item.slug) {
+            let (mark, color) = match plugin_mode(condition, &item.slug) {
                 Some(PluginMode::Solo) => ("solo", MONOKAI_YELLOW),
                 Some(PluginMode::Mute) => ("mute", MONOKAI_YELLOW),
                 None => ("", MONOKAI_FG),

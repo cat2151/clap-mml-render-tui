@@ -19,7 +19,7 @@ pub use clap_mml_play_server_core::{
     AudioEffectCatalog, AudioEffectPluginInfo, AudioEffectPreset, EffectChainSpec, EffectStageSpec,
     EFFECT_CHAIN_JSON_KEY, EFFECT_STAGE_BYPASS_JSON_KEY,
 };
-pub use clap_mml_play_server_core::{midi, patch_list, CoreConfig, PatchBase};
+pub use clap_mml_play_server_core::{lexical_absolute, midi, patch_list, CoreConfig, PatchBase};
 pub use clap_mml_play_server_core::{
     patch_lookup_candidates, patch_sort_metadata, plugin_voicing_source, AudioPatch,
     AudioPluginCatalog, AudioPluginInfo, PatchRef, PatchSortMetadata, PatchVoicingHint, PluginKey,

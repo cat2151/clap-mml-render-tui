@@ -90,7 +90,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -101,7 +101,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -486,7 +486,7 @@ dependencies = [
 [[package]]
 name = "cmrt-cache-player"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#336c35e8aa598797a104f414c9ced38c8679a07e"
+source = "git+https://github.com/cat2151/clap-mml-play-server#2a2a04dd188c74296a2b8dc3487a1cc9a94c0b35"
 dependencies = [
  "clack-extensions",
  "clack-plugin",
@@ -524,7 +524,7 @@ dependencies = [
 [[package]]
 name = "cmrt-clack-timeline"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#336c35e8aa598797a104f414c9ced38c8679a07e"
+source = "git+https://github.com/cat2151/clap-mml-play-server#2a2a04dd188c74296a2b8dc3487a1cc9a94c0b35"
 dependencies = [
  "clack-host",
  "cmrt-timeline",
@@ -542,7 +542,7 @@ dependencies = [
 [[package]]
 name = "cmrt-core"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#336c35e8aa598797a104f414c9ced38c8679a07e"
+source = "git+https://github.com/cat2151/clap-mml-play-server#2a2a04dd188c74296a2b8dc3487a1cc9a94c0b35"
 dependencies = [
  "anyhow",
  "cat-self-update-lib",
@@ -679,9 +679,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "cmrt-chord",
+ "cmrt-effect-chain-select",
  "cmrt-patch-select",
  "cmrt-patches",
  "cmrt-realtime-play",
+ "cmrt-render-core",
  "cmrt-runtime",
  "cmrt-tui-core",
  "crossterm",
@@ -867,10 +869,11 @@ dependencies = [
 [[package]]
 name = "cmrt-server-config"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#336c35e8aa598797a104f414c9ced38c8679a07e"
+source = "git+https://github.com/cat2151/clap-mml-play-server#2a2a04dd188c74296a2b8dc3487a1cc9a94c0b35"
 dependencies = [
  "anyhow",
  "dirs",
+ "dunce",
  "serde",
  "toml",
  "winreg",
@@ -880,7 +883,7 @@ dependencies = [
 [[package]]
 name = "cmrt-timeline"
 version = "0.1.0"
-source = "git+https://github.com/cat2151/clap-mml-play-server#336c35e8aa598797a104f414c9ced38c8679a07e"
+source = "git+https://github.com/cat2151/clap-mml-play-server#2a2a04dd188c74296a2b8dc3487a1cc9a94c0b35"
 
 [[package]]
 name = "cmrt-tui-core"
@@ -1236,7 +1239,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1268,6 +1271,12 @@ checksum = "d4b8a88685455ed29a21542a33abd9cb6510b6b129abadabdcef0f4c55bc8f61"
 dependencies = [
  "litrs",
 ]
+
+[[package]]
+name = "dunce"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
 name = "educe"
@@ -1329,7 +1338,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2927,7 +2936,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3381,7 +3390,7 @@ dependencies = [
  "parking_lot",
  "rustix",
  "signal-hook",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3980,7 +3989,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -4,7 +4,12 @@ use super::*;
 use crate::{convert, Rule};
 
 /// 汚しが OFF のときの [`convert`] の出力。1 行 1 イベントで `秒 status note value`（16 進）。
+/// 頭の 4 行は列で送る CC（CC20 / CC23 / CC32 / CC24）の既定値。
 const ECO_MELODY: &str = "\
+    0.0 b01400\n\
+    0.0 b01700\n\
+    0.0 b02000\n\
+    0.0 b0180d\n\
     0.0 90117f\n\
     0.0 90287f\n\
     0.25 801100\n\
@@ -30,6 +35,10 @@ const ECO_MELODY: &str = "\
 ";
 
 const CHORD_WITH_ECO: &str = "\
+    0.0 b01400\n\
+    0.0 b01700\n\
+    0.0 b02000\n\
+    0.0 b0180d\n\
     0.0 90117f\n\
     0.0 90307f\n\
     0.125 801100\n\
@@ -59,6 +68,10 @@ const CHORD_WITH_ECO: &str = "\
 ";
 
 const COLUMN_RULES: &str = "\
+    0.0 b01400\n\
+    0.0 b01700\n\
+    0.0 b02000\n\
+    0.0 b0180d\n\
     0.0 90117f\n\
     0.0 90287f\n\
     0.25 801100\n\
@@ -83,6 +96,10 @@ const COLUMN_RULES: &str = "\
 ";
 
 const REPEATED_PITCH: &str = "\
+    0.0 b01400\n\
+    0.0 b01700\n\
+    0.0 b02000\n\
+    0.0 b0180d\n\
     0.0 90117f\n\
     0.0 90307f\n\
     0.125 801100\n\

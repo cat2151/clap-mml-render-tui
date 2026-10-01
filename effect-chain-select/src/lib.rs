@@ -16,7 +16,7 @@ mod test_catalog;
 pub use add::{AddKeyAction, EffectAddPane, EffectAddState};
 pub use editor::{ChainKeyAction, EffectChainEditor};
 pub use stage::{chain_json, stage_is_bypassed, stage_label, stage_with_bypass};
-pub use ui::{draw, EffectChainView};
+pub use ui::{draw, draw_chain_pane, EffectChainView};
 
 /// `PageDown`/`PageUp` の 1 回あたりの移動段数。chain 一覧・追加 overlay の両方で使う。
 pub const PAGE_STEP: isize = 10;

@@ -3,6 +3,7 @@
 //! 分類の源（`PatchRoleIndex` と Preset 一覧）は overlay と共有する。ここは
 //! 「今どの一覧を見ていて、その中のどれが現在の音色か」だけを持つ。
 
+mod filter;
 mod navigation;
 
 use std::collections::BTreeMap;
@@ -41,10 +42,14 @@ pub struct KeyboardPatchCatalog {
     preset_cursor: usize,
     /// 現在の一覧内での位置。現在の音色が一覧に無ければ `None`。
     patch_cursor: Option<usize>,
+    /// Patches pane の絞り込み条件。コンパイルできるものだけを持つ。
+    filter: String,
+    /// 選択中の Preset が指す音色に `filter` を掛けた一覧（`entries` への index 列）。
+    list: Vec<usize>,
     /// random 抽選の残り（現在の一覧内の index）。
     random_remaining: Vec<usize>,
-    /// `random_remaining` を作ったときの `(role_cursor, preset_cursor)`。
-    random_deck_key: Option<(usize, usize)>,
+    /// `random_remaining` を作ったときの `(role_cursor, preset_cursor, filter)`。
+    random_deck_key: Option<(usize, usize, String)>,
     role_list_state: ListState,
     preset_list_state: ListState,
     patch_table_state: TableState,
@@ -64,6 +69,8 @@ impl Default for KeyboardPatchCatalog {
             role_cursor: 0,
             preset_cursor: 0,
             patch_cursor: None,
+            filter: String::new(),
+            list: Vec::new(),
             random_remaining: Vec::new(),
             random_deck_key: None,
             role_list_state: ListState::default(),
@@ -110,6 +117,7 @@ impl KeyboardPatchCatalog {
         self.role_cursor = 0;
         self.preset_cursor = 0;
         self.patch_cursor = None;
+        self.list.clear();
         self.clear_random_deck();
         self.role_list_state.select(None);
         self.preset_list_state.select(None);
@@ -129,6 +137,7 @@ impl KeyboardPatchCatalog {
         self.focus = PatchPaneFocus::Patches;
         self.role_cursor = 0;
         self.preset_cursor = 0;
+        self.rebuild_list();
         self.patch_cursor = self.position_of(current_patch);
     }
 
@@ -144,6 +153,7 @@ impl KeyboardPatchCatalog {
         }
         let last = self.presets().len().saturating_sub(1);
         self.preset_cursor = self.preset_cursor.min(last);
+        self.rebuild_list();
         self.patch_cursor = self.position_of(current_patch);
     }
 
@@ -209,15 +219,12 @@ impl KeyboardPatchCatalog {
         self.preset_cursor
     }
 
-    /// 選択中の Preset が指す音色（`entries` への index 列）。
+    /// Patches pane に出ている音色（`entries` への index 列）。
     fn list(&self) -> &[usize] {
-        self.presets()
-            .get(self.preset_cursor)
-            .map(|preset| &*preset.matches)
-            .unwrap_or(&[])
+        &self.list
     }
 
-    /// 選択中の Preset の音色一覧。
+    /// Patches pane に出ている音色一覧。
     pub fn patches(&self) -> impl ExactSizeIterator<Item = &PatchCatalogEntry> {
         self.list().iter().map(|index| &self.entries[*index])
     }
@@ -358,22 +365,23 @@ impl KeyboardScreen<'_> {
         self.state.patch_catalog.move_focus(delta);
     }
 
+    /// focus 中の pane のカーソルを動かす。Effect pane なら chain 一覧のカーソル。
     pub(super) fn move_focused_cursor(&mut self, delta: isize, ctx: &KeyboardContext<'_>) {
+        if self.state.patch_catalog.focus() == PatchPaneFocus::Effect {
+            self.effect.move_cursor(delta);
+            return;
+        }
         self.sync_patch_catalog(ctx);
         let selected = self.state.patch_catalog.move_focused_cursor(delta);
         self.apply_patch_selection(selected, ctx);
     }
 
     pub(super) fn move_focused_to_start(&mut self, ctx: &KeyboardContext<'_>) {
-        self.sync_patch_catalog(ctx);
-        let selected = self.state.patch_catalog.move_focused_to_start();
-        self.apply_patch_selection(selected, ctx);
+        self.move_focused_cursor(isize::MIN, ctx);
     }
 
     pub(super) fn move_focused_to_end(&mut self, ctx: &KeyboardContext<'_>) {
-        self.sync_patch_catalog(ctx);
-        let selected = self.state.patch_catalog.move_focused_to_end();
-        self.apply_patch_selection(selected, ctx);
+        self.move_focused_cursor(isize::MAX, ctx);
     }
 
     pub(super) fn select_random_patch(&mut self, ctx: &KeyboardContext<'_>) {
@@ -382,7 +390,11 @@ impl KeyboardScreen<'_> {
         self.apply_patch_selection(selected, ctx);
     }
 
-    fn apply_patch_selection(&mut self, selected: Option<String>, ctx: &KeyboardContext<'_>) {
+    pub(super) fn apply_patch_selection(
+        &mut self,
+        selected: Option<String>,
+        ctx: &KeyboardContext<'_>,
+    ) {
         let Some(patch) = selected else {
             return;
         };

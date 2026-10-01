@@ -13,6 +13,7 @@ mod patch_audition;
 mod patch_catalog;
 mod patch_select;
 pub mod play_settings;
+pub mod plugin_menu;
 pub mod ui;
 
 pub use audition_select::{

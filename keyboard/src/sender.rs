@@ -4,13 +4,14 @@ use std::{
     time::Instant,
 };
 
-use anyhow::Result;
-use cmrt_realtime_play::{PatchVoicing, RealtimePlayServerSupervisor, VoicingReport};
+use cmrt_realtime_play::{PatchVoicing, RealtimePlayServerSupervisor};
 
 mod connection;
+mod patch_prepare;
 mod status;
 
-use connection::{set_prepare_result, set_result};
+use connection::{set_effect_chain_result, set_prepare_result, set_result};
+use patch_prepare::{run_plan, LivePatchState};
 pub use status::{KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardVoicingStatus};
 
 const KEYBOARD_INSTANCE: u8 = 0;
@@ -30,6 +31,7 @@ enum KeyboardMidiCommand {
         buffer_multiplier: u8,
         patch: Option<String>,
         known_voicing: Option<PatchVoicing>,
+        effect_chain: String,
     },
     SetBufferMultiplier(u8),
     SetPatch {
@@ -37,6 +39,8 @@ enum KeyboardMidiCommand {
         patch: Option<String>,
         known_voicing: Option<PatchVoicing>,
     },
+    /// 音色はそのままで、鳴っている音へ掛ける chain だけを差し替える。
+    SetEffectChain(String),
     Shutdown,
 }
 
@@ -81,6 +85,7 @@ impl KeyboardMidiSender {
         buffer_multiplier: u8,
         patch: Option<&str>,
         known_voicing: Option<PatchVoicing>,
+        effect_chain: &str,
     ) {
         self.status
             .lock()
@@ -90,7 +95,16 @@ impl KeyboardMidiSender {
             buffer_multiplier,
             patch: patch.map(str::to_string),
             known_voicing,
+            effect_chain: effect_chain.to_string(),
         });
+    }
+
+    /// 鳴っている音へ掛ける chain を差し替える（`chain_json` の綴り。空で外す）。
+    /// 以後の音色の差し替えにも、この chain が載り続ける。
+    pub fn set_effect_chain(&self, chain_json: &str) {
+        let _ = self
+            .tx
+            .send(KeyboardMidiCommand::SetEffectChain(chain_json.to_string()));
     }
 
     pub fn set_buffer_multiplier(&self, multiplier: u8) {
@@ -148,6 +162,7 @@ fn run_midi_sender(
     initial_buffer_multiplier: u8,
 ) {
     let mut buffer_multiplier = initial_buffer_multiplier;
+    let mut live_patch = LivePatchState::default();
     let _ = supervisor.remember_live_buffer_multiplier(u16::from(buffer_multiplier));
     while let Ok(command) = rx.recv() {
         match command {
@@ -179,8 +194,10 @@ fn run_midi_sender(
                 buffer_multiplier: requested_multiplier,
                 patch,
                 known_voicing,
+                effect_chain,
             } => {
                 buffer_multiplier = requested_multiplier;
+                let plan = live_patch.plan_patch(patch.clone(), known_voicing, Some(effect_chain));
                 let started = Instant::now();
                 // **play server の起動待ちはここ。** 抜けるまで phase は
                 // `Connecting` のまま（＝ overlay は「play server 起動」を出す）。
@@ -193,15 +210,8 @@ fn run_midi_sender(
                     .and_then(|()| {
                         supervisor.set_live_buffer_multiplier(u16::from(buffer_multiplier))
                     })
-                    .and_then(|()| {
-                        prepare_patch(
-                            supervisor.as_ref(),
-                            PatchRequest {
-                                patch: patch.as_deref(),
-                                known_voicing,
-                            },
-                        )
-                    });
+                    .and_then(|()| run_plan(supervisor.as_ref(), &plan));
+                live_patch.finish_patch(result.is_ok());
                 set_prepare_result(
                     &status,
                     buffer_multiplier,
@@ -242,8 +252,9 @@ fn run_midi_sender(
                     patch: patch.as_deref(),
                     known_voicing,
                 };
-                let result =
-                    note_off_result.and_then(|()| prepare_patch(supervisor.as_ref(), request));
+                let plan = live_patch.plan_patch(patch.clone(), known_voicing, None);
+                let result = note_off_result.and_then(|()| run_plan(supervisor.as_ref(), &plan));
+                live_patch.finish_patch(result.is_ok());
                 set_prepare_result(
                     &status,
                     buffer_multiplier,
@@ -252,21 +263,17 @@ fn run_midi_sender(
                     Some(started.elapsed()),
                 );
             }
+            KeyboardMidiCommand::SetEffectChain(effect_chain) => {
+                let plan = live_patch.plan_effect_chain(effect_chain);
+                if plan.steps.is_empty() {
+                    continue;
+                }
+                let started = Instant::now();
+                let result = run_plan(supervisor.as_ref(), &plan).map(|_| ());
+                set_effect_chain_result(&status, result, started.elapsed());
+            }
             KeyboardMidiCommand::Shutdown => break,
         }
-    }
-}
-
-fn prepare_patch(
-    supervisor: &RealtimePlayServerSupervisor,
-    request: PatchRequest<'_>,
-) -> Result<Option<VoicingReport>> {
-    if request.known_voicing.is_some() {
-        supervisor
-            .prepare_live_patch(KEYBOARD_INSTANCE, request.patch)
-            .map(|()| None)
-    } else {
-        supervisor.prepare_live_patch_with_voicing(KEYBOARD_INSTANCE, request.patch)
     }
 }
 

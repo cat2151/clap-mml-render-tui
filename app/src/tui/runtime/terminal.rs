@@ -25,7 +25,7 @@ impl TuiApp<'_> {
             return true;
         }
         match self.active_screen {
-            PrimaryScreen::Keyboard => self.keyboard.mml_input.is_active(),
+            PrimaryScreen::Keyboard => self.keyboard.is_typing(),
             // loop browser の textarea は loop tree の `/` 絞り込み入力欄だけ。
             PrimaryScreen::LoopBrowser => self.loop_browser.state.filter_input_active(),
             PrimaryScreen::GridSequencer => false,

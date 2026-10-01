@@ -8,7 +8,11 @@ cmrt-chord = { path = "../chord" }
 cmrt-realtime-play = { path = "../realtime-play" }
 cmrt-runtime = { path = "../cmrt-runtime" }
 cmrt-patch-select = { path = "../patch-select" }
+# 右端の Effect pane（chain 一覧と追加・差し替え overlay）。
+cmrt-effect-chain-select = { path = "../effect-chain-select" }
 cmrt-patches = { path = "../patches" }
+# effect の catalog（`EffectPlugins`）。
+cmrt-render-core = { path = "../core-lib" }
 cmrt-tui-core = { path = "../tui-core" }
 anyhow = "1"
 crossterm = "0.29"
@@ -16,6 +20,4 @@ rand = "0.10"
 ratatui = "0.30"
 serde = { version = "1", features = ["derive"] }
 ratatui-textarea = { version = "0.9", features = ["crossterm"] }
-
-[dev-dependencies]
 serde_json = "1"

@@ -17,8 +17,10 @@ mod chord_chart_save;
 mod chord_chart_toggle;
 mod floe_screens;
 mod guitar_articulation;
+mod guitar_articulation_cursor_note;
 mod guitar_articulation_full_swap;
 mod guitar_articulation_history;
+mod guitar_articulation_repeat;
 mod guitar_articulation_sample_midi;
 mod keyboard_mml;
 mod mml_overlay;
@@ -27,6 +29,7 @@ mod screen_switch;
 mod session;
 mod session_bpm;
 mod session_chord_chart;
+mod session_keyboard;
 mod sforzando_screens;
 mod vaporizer2_screens;
 

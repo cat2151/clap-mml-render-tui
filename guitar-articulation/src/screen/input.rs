@@ -89,7 +89,7 @@ impl GuitarArticulationScreen {
 }
 
 /// 1 行入力欄の確定キー。crossterm は `Ctrl+M` を `Enter` とは別に渡してくることがある。
-fn is_commit_key(key: KeyEvent) -> bool {
+pub(super) fn is_commit_key(key: KeyEvent) -> bool {
     match key.code {
         KeyCode::Enter => true,
         KeyCode::Char('m') => key.modifiers.contains(KeyModifiers::CONTROL),

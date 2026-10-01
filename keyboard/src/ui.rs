@@ -8,26 +8,31 @@ use ratatui::{
 
 use crate::{
     KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardScreen, KeyboardState,
-    KeyboardVoicingStatus, ModulationMode, NumericInput, NumericInputTarget, PitchBendMode,
-    VelocityMode, KEYBOARD_NOTES,
+    KeyboardVoicingStatus, ModulationMode, NumericInput, NumericInputTarget, PatchPaneFocus,
+    PitchBendMode, VelocityMode, KEYBOARD_NOTES,
 };
+use cmrt_patch_select::ui::draw_plugin_menu;
 use cmrt_tui_core::status::base_style;
 use cmrt_tui_core::theme::{MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_PINK, MONOKAI_PURPLE};
 
 mod connection_overlay;
+mod effect;
 mod guide;
 mod mml_overlay;
 mod note;
 mod patch_panes;
 
 use connection_overlay::draw_connection_overlay;
+use effect::{draw_effect_add_overlay, draw_effect_pane};
 use guide::{draw_note_guide_overlay, keyboard_help_lines};
 use mml_overlay::draw_mml_input_overlay;
-use note::note_playback_status_text;
+use note::{note_playback_mode_line, note_playback_status_text};
 use patch_panes::{draw_patch_panes, pane_widths};
 
 /// keyboard pane の幅。中身の最長行と、上へ重ねる overlay の上限幅（72 + 枠 2）に合わせる。
 const KEYBOARD_PANE_WIDTH: u16 = 74;
+/// 左の列の一番上に置く `t` の欄の高さ（枠 + 中身 1 行）。
+const NOTE_MODE_BAR_HEIGHT: u16 = 3;
 
 /// keyboard 画面を描画する。
 ///
@@ -46,7 +51,7 @@ pub fn draw(screen: &mut KeyboardScreen<'_>, connection: &KeyboardConnectionStat
             Constraint::Length(help_height),
         ])
         .split(f.area());
-    let [role_w, preset_w, patch_w] =
+    let [role_w, preset_w, patch_w, effect_w] =
         pane_widths(chunks[0].width.saturating_sub(KEYBOARD_PANE_WIDTH));
     let panes = Layout::default()
         .direction(Direction::Horizontal)
@@ -55,17 +60,26 @@ pub fn draw(screen: &mut KeyboardScreen<'_>, connection: &KeyboardConnectionStat
             role_w,
             preset_w,
             patch_w,
+            effect_w,
         ])
         .split(chunks[0]);
 
-    draw_keyboard(&screen.state, f, panes[0]);
+    let left = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(NOTE_MODE_BAR_HEIGHT), Constraint::Min(0)])
+        .split(panes[0]);
+    let keyboard_area = left[1];
+    draw_note_mode_bar(&screen.state, f, left[0]);
+    draw_keyboard(&screen.state, f, keyboard_area);
     draw_patch_panes(
         &mut screen.state.patch_catalog,
+        &screen.patch_filter,
         f,
         panes[1],
         panes[2],
         panes[3],
     );
+    draw_effect_pane(screen, f, panes[4]);
 
     let (state, color) = match &connection.phase {
         KeyboardConnectionPhase::Idle => ("server: idle".to_string(), MONOKAI_CYAN),
@@ -96,17 +110,36 @@ pub fn draw(screen: &mut KeyboardScreen<'_>, connection: &KeyboardConnectionStat
     help_lines.extend(keyboard_help_lines(
         screen.note_guide.presentation(),
         screen.state.navigation_count.value(),
+        screen.state.patch_catalog.focus() == PatchPaneFocus::Effect,
     ));
     f.render_widget(Paragraph::new(help_lines).style(base_style()), chunks[2]);
-    draw_connection_overlay(connection, f, panes[0]);
+    draw_connection_overlay(connection, f, keyboard_area);
     draw_numeric_input_overlay(
         screen.state.numeric_input(),
         screen.state.cc_number(),
         f,
-        panes[0],
+        keyboard_area,
     );
-    draw_mml_input_overlay(&screen.mml_input, f, panes[0]);
+    draw_mml_input_overlay(&screen.mml_input, f, keyboard_area);
+    if let Some(menu) = screen.plugin_menu() {
+        draw_plugin_menu(menu, screen.state.patch_catalog.filter(), f, chunks[0]);
+    }
+    draw_effect_add_overlay(screen, f, chunks[0]);
     draw_note_guide_overlay(screen.note_guide.presentation(), f, f.area());
+}
+
+fn draw_note_mode_bar(state: &KeyboardState, f: &mut Frame<'_>, area: Rect) {
+    f.render_widget(
+        Paragraph::new(note_playback_mode_line(state))
+            .style(base_style())
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .style(base_style())
+                    .border_style(base_style().fg(MONOKAI_CYAN)),
+            ),
+        area,
+    );
 }
 
 fn draw_keyboard(state: &KeyboardState, f: &mut Frame<'_>, area: Rect) {

@@ -1,4 +1,4 @@
-//! 3 pane の focus と、focus 中の pane のカーソル移動・random 抽選。
+//! 4 pane の focus と、focus 中の pane のカーソル移動・random 抽選。
 
 use rand::seq::SliceRandom;
 
@@ -12,10 +12,12 @@ pub enum PatchPaneFocus {
     Role,
     Preset,
     Patches,
+    /// 右端の effect chain pane。カーソルは画面の `KeyboardEffectPane` が持つ。
+    Effect,
 }
 
 impl PatchPaneFocus {
-    const ORDER: [Self; 3] = [Self::Role, Self::Preset, Self::Patches];
+    const ORDER: [Self; 4] = [Self::Role, Self::Preset, Self::Patches, Self::Effect];
 
     fn index(self) -> usize {
         Self::ORDER
@@ -39,15 +41,8 @@ impl KeyboardPatchCatalog {
             PatchPaneFocus::Role => self.move_role_cursor(delta),
             PatchPaneFocus::Preset => self.move_preset_cursor(delta),
             PatchPaneFocus::Patches => self.move_patch_cursor(delta),
+            PatchPaneFocus::Effect => None,
         }
-    }
-
-    pub(crate) fn move_focused_to_start(&mut self) -> Option<String> {
-        self.move_focused_cursor(isize::MIN)
-    }
-
-    pub(crate) fn move_focused_to_end(&mut self) -> Option<String> {
-        self.move_focused_cursor(isize::MAX)
     }
 
     fn move_role_cursor(&mut self, delta: isize) -> Option<String> {
@@ -59,6 +54,7 @@ impl KeyboardPatchCatalog {
         let previous = self.selected_patch().map(str::to_string);
         self.role_cursor = next;
         self.preset_cursor = 0;
+        self.rebuild_list();
         self.refilter(previous)
     }
 
@@ -70,6 +66,7 @@ impl KeyboardPatchCatalog {
         }
         let previous = self.selected_patch().map(str::to_string);
         self.preset_cursor = next;
+        self.rebuild_list();
         self.refilter(previous)
     }
 
@@ -89,7 +86,7 @@ impl KeyboardPatchCatalog {
     }
 
     /// 一覧が変わった後の音色。元の音色が新しい一覧に残っていればそこに留まり、無ければ先頭。
-    fn refilter(&mut self, previous: Option<String>) -> Option<String> {
+    pub(super) fn refilter(&mut self, previous: Option<String>) -> Option<String> {
         let position = self.position_of(previous.as_deref());
         if self.list().is_empty() {
             self.patch_cursor = None;
@@ -105,8 +102,8 @@ impl KeyboardPatchCatalog {
     /// 同じ音色を続けて引かないよう、一覧を 1 周するまで抽選済みを除く。
     pub(crate) fn select_random_patch(&mut self) -> Option<String> {
         self.focus = PatchPaneFocus::Patches;
-        let deck_key = (self.role_cursor, self.preset_cursor);
-        if self.random_deck_key != Some(deck_key) {
+        let deck_key = (self.role_cursor, self.preset_cursor, self.filter.clone());
+        if self.random_deck_key.as_ref() != Some(&deck_key) {
             self.clear_random_deck();
             self.random_deck_key = Some(deck_key);
         }

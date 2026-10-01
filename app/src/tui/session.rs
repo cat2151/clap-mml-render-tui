@@ -169,6 +169,8 @@ impl<'a> TuiApp<'a> {
             } else {
                 None
             };
+        let keyboard_mml_input = super::keyboard::KeyboardMmlInput::restored(keyboard.mml.clone());
+        let keyboard_effect_chain = keyboard.effect_chain.clone();
         let keyboard_state = super::keyboard::KeyboardState::from_session(keyboard);
         // keyboard と grid sequencer は supervisor が所有する1本のSHM接続を共有する。
         let grid_midi_sender = Some(super::grid_sequencer::GridMidiSender::new(Arc::clone(
@@ -208,6 +210,7 @@ impl<'a> TuiApp<'a> {
         let notepad_effect_plugins = effect_plugins.clone();
         let grid_effect_plugins = effect_plugins.clone();
         let guitar_effect_plugins = effect_plugins.clone();
+        let keyboard_effect_plugins = effect_plugins.clone();
 
         Self {
             active_screen,
@@ -228,9 +231,11 @@ impl<'a> TuiApp<'a> {
             keyboard: super::keyboard::KeyboardScreen::new(
                 keyboard_midi_sender,
                 keyboard_state,
-                super::keyboard::KeyboardMmlInput::default(),
+                keyboard_mml_input,
                 super::keyboard::KeyboardNoteGuide::new(keyboard_note_guide_overlay_date),
-            ),
+            )
+            .with_effect_plugins(keyboard_effect_plugins)
+            .with_effect_chain(keyboard_effect_chain),
             loop_browser: {
                 let mut screen = super::loop_browser::LoopBrowserScreen::default();
                 let range = bpm_range_from_history(
@@ -287,6 +292,7 @@ impl<'a> TuiApp<'a> {
                 .with_startup_instrument(
                     super::guitar_articulation::load_settings().startup_instrument,
                 ),
+            guitar_articulation_playback: None,
             grid_history_preview: crate::daw::DawGridPreviewPlayer::new(Arc::clone(&cfg_arc)),
             mml_overlay: {
                 let mut overlay = super::mml_overlay::MmlOverlay::default();

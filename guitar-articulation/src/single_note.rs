@@ -1,4 +1,4 @@
-use crate::control::control_events_with_widths;
+use crate::control::{add_column_cc_defaults, control_events_with_widths};
 use crate::{
     keyswitch_events, slide_semitones, Articulated, Articulation, Note, RuleTable, Take,
     TimedMidiEvent,
@@ -49,6 +49,7 @@ pub fn column_events(
                 &widths,
                 rules,
             ));
+            add_column_cc_defaults(&mut out, &shifted);
             out
         }
         Take::Plain => Vec::new(),

@@ -322,7 +322,7 @@ fn take_note_off_messages_keeps_auto_send_modes_and_schedules_refresh() {
     assert_eq!(state.modulation_mode(), ModulationMode::On);
     assert_eq!(state.pitch_bend_mode(), PitchBendMode::Max);
     assert!(state.cc_periodic_on());
-    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Repeat);
+    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Auto);
 
     // Ready復帰時に現在値+リトリガー和音を再送
     assert_eq!(

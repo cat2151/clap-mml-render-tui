@@ -66,11 +66,11 @@ fn bend_width_follows_the_interval() {
 }
 
 #[test]
-fn intervals_wider_than_seven_semitones_or_unisons_do_not_slide() {
-    // C3 → B3 は +11。
+fn intervals_wider_than_seven_semitones_slide_but_unisons_do_not() {
+    // C3 → B3 は +11。7 半音の幅で滑る。
     assert_eq!(
         articulations("o3 l8 c b", &on(Rule::Slide, &[1])),
-        vec![SusDown, SusDown]
+        vec![SusDown, SlideUp]
     );
     assert_eq!(
         articulations("o3 l8 e e", &on(Rule::Slide, &[1])),
@@ -80,6 +80,51 @@ fn intervals_wider_than_seven_semitones_or_unisons_do_not_slide() {
     assert_eq!(
         articulations("o3 l8 c g", &on(Rule::Slide, &[1])),
         vec![SusDown, SlideUp]
+    );
+}
+
+#[test]
+fn an_octave_slides_up_and_down() {
+    assert_eq!(
+        articulations("o3 l8 c < c", &on(Rule::Slide, &[1])),
+        vec![SusDown, SlideUp]
+    );
+    assert_eq!(
+        articulations("o4 l8 c > c", &on(Rule::Slide, &[1])),
+        vec![SusDown, SlideDown]
+    );
+}
+
+#[test]
+fn wide_slides_use_the_range_of_the_seven_semitone_sample() {
+    // Slide_Down の 7 半音は 81 まで。
+    assert_eq!(notes("o6 a")[0].pitch, 81);
+    assert_eq!(
+        articulations("o7 l8 a > a", &on(Rule::Slide, &[1])),
+        vec![SusDown, SlideDown]
+    );
+    assert_eq!(
+        articulations("o7 l8 a+ > a+", &on(Rule::Slide, &[1])),
+        vec![SusDown, SusDown]
+    );
+    // Slide_Up の 7 半音は 38 から。
+    assert_eq!(notes("o3 d")[0].pitch, 38);
+    assert_eq!(
+        articulations("o2 l8 d < d", &on(Rule::Slide, &[1])),
+        vec![SusDown, SlideUp]
+    );
+    assert_eq!(
+        articulations("o2 l8 c+ < c+", &on(Rule::Slide, &[1])),
+        vec![SusDown, SusDown]
+    );
+}
+
+#[test]
+fn bend_ignores_wide_intervals() {
+    // C3 → G3 は +7。bend は 1〜3 半音だけ。
+    assert_eq!(
+        articulations("o3 l8 c g", &on(Rule::Choke, &[1])),
+        vec![SusDown, SusDown]
     );
 }
 

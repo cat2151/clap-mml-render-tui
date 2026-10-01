@@ -4,9 +4,13 @@ use super::*;
 use crate::KEYSWITCH_VELOCITY;
 
 mod articulation_keys;
+mod auto_pick_keys;
 mod column_rule_follow;
+mod cursor_keys;
 mod humanize_keys;
 mod param_list_keys;
+mod repeat_accent_keys;
+mod rule_list_filter;
 mod rule_list_keys;
 mod startup_instrument_keys;
 
@@ -41,7 +45,12 @@ fn committing_mml_builds_the_plain_and_converted_events() {
         convert(&expected, &RuleTable::default()).as_slice()
     );
     assert_eq!(
-        screen.events(Take::Converted)[0].message,
+        screen
+            .events(Take::Converted)
+            .iter()
+            .find(|e| e.message[0] & 0xF0 == 0x90)
+            .unwrap()
+            .message,
         [0x90, 17, KEYSWITCH_VELOCITY]
     );
 }
@@ -139,26 +148,6 @@ fn committing_mml_plays_the_converted_take_and_an_empty_one_does_not() {
         screen.handle_key_event(key(KeyCode::Enter)),
         GuitarArticulationAction::Continue
     );
-}
-
-#[test]
-fn h_and_l_move_the_cursor_within_the_columns_without_playing() {
-    let mut screen = screen_with_mml("o3 l8 e f+ g");
-
-    assert_eq!(
-        screen.handle_key_event(key(KeyCode::Char('h'))),
-        GuitarArticulationAction::Continue
-    );
-    assert_eq!(screen.cursor(), 0, "左端で止まる");
-    for expected in [1, 2, 2] {
-        assert_eq!(
-            screen.handle_key_event(key(KeyCode::Char('l'))),
-            GuitarArticulationAction::Continue
-        );
-        assert_eq!(screen.cursor(), expected);
-    }
-    screen.handle_key_event(key(KeyCode::Char('h')));
-    assert_eq!(screen.cursor(), 1);
 }
 
 #[test]
@@ -291,7 +280,7 @@ fn i_opens_the_input_and_enter_does_not() {
 }
 
 #[test]
-fn s_toggles_auto_hammer_pull_for_the_whole_row_and_plays_the_new_take() {
+fn s_cycles_auto_hammer_pull_for_the_whole_row_and_plays_the_new_take() {
     let mut screen = screen_with_mml("o3 l8 e f+ g");
     let before = screen.events(Take::Converted).to_vec();
 
@@ -310,8 +299,16 @@ fn s_toggles_auto_hammer_pull_for_the_whole_row_and_plays_the_new_take() {
         "2 列目から Hammer-On、3 列目は KS が同じなので送らない: {auto:?}"
     );
 
+    assert_eq!(
+        screen.handle_key_event(key(KeyCode::Char('s'))),
+        GuitarArticulationAction::Play(Take::Converted)
+    );
+    assert!(screen.rules().is_row_on(RowRule::AutoHammerPull));
+    assert_eq!(screen.rules().auto_pick(), crate::AutoPick::Accent);
+
     screen.handle_key_event(key(KeyCode::Char('s')));
     assert!(!screen.rules().is_row_on(RowRule::AutoHammerPull));
+    assert_eq!(screen.rules().auto_pick(), crate::AutoPick::Run);
     assert_eq!(screen.events(Take::Converted), before.as_slice());
 }
 

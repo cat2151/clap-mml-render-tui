@@ -1,5 +1,6 @@
-//! サンプル MID モードの描画。MML 欄・matrix・左 pane は中身を灰色の `-` にし、
-//! 右 pane に MID の全イベントを出す。一覧 overlay（`o`）は history overlay と同じ形。
+//! サンプル MID モードの描画。MML 欄・左 pane は中身を灰色の `-` にし、matrix に MID の音と
+//! KS・CC・pitch bend（[`super::midi_matrix`]）、右 pane に MID の全イベントを出す。
+//! 一覧 overlay（`o`）は history overlay と同じ形。
 
 use ratatui::{
     layout::Rect,
@@ -18,7 +19,7 @@ use super::event_list::{visible_lines, EventRow};
 use super::{focused_pane_block, pane_block, GuitarArticulationLayout, MATRIX_TITLE, MML_TITLE};
 use crate::GuitarArticulationScreen;
 
-const LIST_TITLE: &str = " Sample MIDI  j/k:選ぶ  Enter:読み込み  Esc:閉じる ";
+const LIST_TITLE: &str = " Sample MIDI  j/k:選んで試聴  Enter:読み込み  Esc:閉じる ";
 /// MID モードで使えない欄の中身。
 const UNUSED_TEXT: &str = "-";
 
@@ -33,7 +34,6 @@ pub(super) fn draw_panes(
     };
     for (area, title) in [
         (layout.input, MML_TITLE),
-        (layout.matrix, MATRIX_TITLE),
         (layout.plain, super::PLAIN_TITLE),
     ] {
         f.render_widget(
@@ -42,6 +42,17 @@ pub(super) fn draw_panes(
             area,
         );
     }
+    let matrix_block = focused_pane_block(MATRIX_TITLE);
+    let matrix_width = matrix_block.inner(layout.matrix).width;
+    f.render_widget(
+        Paragraph::new(super::midi_matrix::lines(
+            midi,
+            screen.sample_midi_cursor(),
+            matrix_width,
+        ))
+        .block(matrix_block),
+        layout.matrix,
+    );
     let block = focused_pane_block(format!(" MID: {} (space) ", midi.name()));
     let height = block.inner(layout.converted).height as usize;
     let rows: Vec<EventRow> = midi

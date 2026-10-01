@@ -55,18 +55,37 @@ impl KeyboardState {
         messages
     }
 
-    // tキーで off → repeat → arp → auto → off を循環する。和音未確定時はoffを維持する。
+    // tキーで off → auto → repeat → arp → off を循環する。和音未確定時はoffを維持する。
     pub fn cycle_note_playback(&mut self, now: Instant) -> Vec<[u8; 3]> {
         match self.note_playback_mode {
             NotePlaybackMode::Off => {
                 if self.repeat_chords.is_empty() {
                     return Vec::new();
                 }
-                self.note_playback_mode = NotePlaybackMode::Repeat;
+                self.note_playback_mode = NotePlaybackMode::Auto;
+                if self.note_playback_uses_arp() {
+                    return self.restart_arp(now);
+                }
                 self.reset_progression_position();
                 self.repeat_elapsed_ticks = 0;
                 self.periodic_next_at = Some(now + PERIODIC_INTERVAL);
                 self.attack_repeat_chord()
+            }
+            NotePlaybackMode::Auto => {
+                let was_arp = self.note_playback_uses_arp();
+                self.note_playback_mode = NotePlaybackMode::Repeat;
+                if !was_arp {
+                    return Vec::new();
+                }
+                self.repeat_elapsed_ticks = 0;
+                let mut messages: Vec<[u8; 3]> = self
+                    .arp_sounding
+                    .take()
+                    .map(|note| note_off(note.midi_note))
+                    .into_iter()
+                    .collect();
+                messages.extend(self.attack_repeat_chord());
+                messages
             }
             NotePlaybackMode::Repeat => {
                 self.note_playback_mode = NotePlaybackMode::Arp;
@@ -80,23 +99,6 @@ impl KeyboardState {
                 messages
             }
             NotePlaybackMode::Arp => {
-                self.note_playback_mode = NotePlaybackMode::Auto;
-                if self.note_playback_uses_arp() {
-                    self.repeat_elapsed_ticks = 0;
-                    Vec::new()
-                } else {
-                    self.repeat_elapsed_ticks = 0;
-                    let mut messages: Vec<[u8; 3]> = self
-                        .arp_sounding
-                        .take()
-                        .map(|note| note_off(note.midi_note))
-                        .into_iter()
-                        .collect();
-                    messages.extend(self.attack_repeat_chord());
-                    messages
-                }
-            }
-            NotePlaybackMode::Auto => {
                 self.note_playback_mode = NotePlaybackMode::Off;
                 self.reset_progression_position();
                 self.repeat_elapsed_ticks = 0;

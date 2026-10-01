@@ -25,6 +25,19 @@ pub(super) fn set_result(
     status.stage_started_at = None;
 }
 
+/// chain だけの差し替えは接続の段階を進めない（停止後の `Idle` を `Ready` へ戻さない）。
+pub(super) fn set_effect_chain_result(
+    status: &Mutex<KeyboardConnectionStatus>,
+    result: Result<()>,
+    elapsed: Duration,
+) {
+    let mut status = status.lock().unwrap();
+    status.last_send = Some(elapsed);
+    if let Err(error) = result {
+        status.phase = KeyboardConnectionPhase::Error(error.to_string());
+    }
+}
+
 pub(super) fn set_prepare_result(
     status: &Mutex<KeyboardConnectionStatus>,
     buffer_multiplier: u8,

@@ -92,9 +92,11 @@ fn keyboard_counted_h_and_l_move_the_pane_focus_and_stop_at_both_ends() {
     assert_eq!(focus(&app), PatchPaneFocus::Patches);
 
     press(&mut app, KeyCode::Char('l'), KeyModifiers::NONE);
-    assert_eq!(focus(&app), PatchPaneFocus::Patches);
+    assert_eq!(focus(&app), PatchPaneFocus::Effect);
+    press(&mut app, KeyCode::Char('l'), KeyModifiers::NONE);
+    assert_eq!(focus(&app), PatchPaneFocus::Effect);
 
-    press(&mut app, KeyCode::Char('2'), KeyModifiers::NONE);
+    press(&mut app, KeyCode::Char('3'), KeyModifiers::NONE);
     press(&mut app, KeyCode::Char('h'), KeyModifiers::NONE);
     assert_eq!(focus(&app), PatchPaneFocus::Role);
 

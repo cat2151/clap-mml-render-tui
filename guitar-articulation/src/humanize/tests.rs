@@ -152,3 +152,53 @@ fn chord_notes_do_not_overtake_the_neighbouring_columns() {
         assert!(columns_stay_in_order(&notes, &humanized), "seed {seed}");
     }
 }
+
+#[test]
+fn notes_that_do_not_overlap_before_humanize_do_not_overlap_after() {
+    // 2 つ目は実機で前の音の off が最後の c2 の on より後へずれ、前の音の離し音が c2 の CC24 で鳴った行。
+    for mml in [
+        OCTAVE_RUN,
+        "t130l24 c2 r cdefgfedcdefgfedc2",
+        "t120 o3 l16 'eg' a 'gb' < c",
+    ] {
+        for seed in 0..50 {
+            let (notes, _, humanized) = run(mml, &[RowRule::EconomyPicking], seed);
+            for (i, (a, ha)) in notes.iter().zip(&humanized).enumerate() {
+                for (b, hb) in notes[i + 1..].iter().zip(&humanized[i + 1..]) {
+                    if b.column > a.column && a.off_seconds <= b.on_seconds {
+                        assert!(
+                            ha.off_seconds <= hb.on_seconds,
+                            "{mml} seed {seed}: 列 {} の off {} > 列 {} の on {}",
+                            a.column,
+                            ha.off_seconds,
+                            b.column,
+                            hb.on_seconds
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn notes_that_overlap_before_humanize_may_still_overlap_after() {
+    // 列 0 の音が列 1 の on より後まで鳴る（元から重なる）なら、off を列 1 の on で切らない。
+    let note = |column, on_seconds, off_seconds, pitch| Note {
+        column,
+        on_seconds,
+        off_seconds,
+        pitch,
+        velocity: 100,
+        channel: 0,
+    };
+    let notes = [note(0, 0.0, 0.5, 52), note(1, 0.25, 0.5, 55)];
+    let articulated = articulate(&notes, &rules(&[RowRule::Humanize]));
+    for seed in 0..20 {
+        let humanized = humanize(&notes, &articulated, &mut StdRng::seed_from_u64(seed));
+        assert!(
+            humanized[0].off_seconds > humanized[1].on_seconds + 0.2,
+            "seed {seed}"
+        );
+    }
+}

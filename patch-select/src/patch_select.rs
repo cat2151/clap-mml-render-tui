@@ -24,6 +24,9 @@ use cmrt_tui_core::{patch_load::PatchLoadMeasurement, text_input};
 
 use crate::{auto_reverb::AutoReverbRules, PatchCatalogEntry};
 
+pub(crate) use crate::plugin_menu::PluginMenu;
+#[cfg(test)]
+pub(crate) use crate::plugin_menu::PluginMode;
 pub(crate) use auto_reverb::EffectList;
 pub use auto_reverb::{AutoReverbHost, AutoReverbKey, AutoReverbPanel, AutoReverbStatus};
 pub use filter::filter_candidates;
@@ -36,7 +39,6 @@ pub(crate) use navigation::PatchSelectFocus;
 pub use navigation::PAGE_STEP;
 use open::prepare_presets;
 pub use open::PatchSelectRequest;
-pub(crate) use plugin_menu::{PluginMenu, PluginMode};
 use prepared::build_role_index;
 pub use prepared::PreparedPresets;
 use presets::{normalize_user_presets, patterns_for_role};

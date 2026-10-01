@@ -87,7 +87,7 @@ fn extend_with_paths(
     patches: impl IntoIterator<Item = (PathBuf, Option<MergedPatches>)>,
 ) {
     for (path, merged) in patches {
-        let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+        let canonical = cmrt_core::lexical_absolute(&path).unwrap_or_else(|_| path.clone());
         if !seen.insert(canonical_key(&canonical)) {
             continue;
         }
@@ -105,7 +105,10 @@ fn extend_with_paths(
 }
 
 fn relative_display(base: &str, path: &Path) -> String {
-    match (std::fs::canonicalize(base), std::fs::canonicalize(path)) {
+    match (
+        cmrt_core::lexical_absolute(Path::new(base)),
+        cmrt_core::lexical_absolute(path),
+    ) {
         (Ok(base), Ok(path)) => cmrt_core::to_relative(&base.to_string_lossy(), &path),
         _ => cmrt_core::to_relative(base, path),
     }

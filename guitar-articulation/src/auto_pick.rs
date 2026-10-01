@@ -1,4 +1,40 @@
-use crate::{picks_string, strings_by_column, Note};
+use serde::{Deserialize, Serialize};
+
+use crate::{accent, picks_string, strings_by_column, Note, RuleTable};
+
+/// 自動ハンマリング（[`crate::RowRule::AutoHammerPull`]）が、どの列をピッキングするか。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AutoPick {
+    /// on1。[`auto_pick_columns`] の列。
+    #[default]
+    Run,
+    /// on2。アクセント（[`crate::AccentPattern`]）の列だけ。
+    Accent,
+}
+
+impl AutoPick {
+    pub(crate) fn is_default(&self) -> bool {
+        *self == AutoPick::default()
+    }
+}
+
+/// 列ごとの、自動ハンマリングでピッキングする列か（[`RuleTable::auto_pick`] に従う）。
+pub(crate) fn picked_columns(notes: &[Note], rules: &RuleTable) -> Vec<bool> {
+    match rules.auto_pick() {
+        AutoPick::Run => auto_pick_columns(notes),
+        AutoPick::Accent => {
+            let mut out = vec![false; notes.last().map_or(0, |note| note.column + 1)];
+            for (note, accent) in notes
+                .iter()
+                .zip(accent::accents(notes, rules.accent_pattern()))
+            {
+                out[note.column] |= accent;
+            }
+            out
+        }
+    }
+}
 
 /// この音数以上続く上行・下行だけを、[`RUN_PICK_EVERY`] 音ごとにピッキングする。
 /// 短い上下（トリルなど）は折り返すたびに頂点と谷になるので、数えるとレガートが消える。

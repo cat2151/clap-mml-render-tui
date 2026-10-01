@@ -52,6 +52,10 @@ fn latched_hammer_on_column_presses_its_own_keyswitch() {
     assert_events(
         &out,
         &[
+            (0.0, [0xB0, 20, 0]),
+            (0.0, [0xB0, 23, 0]),
+            (0.0, [0xB0, 32, 0]),
+            (0.0, [0xB0, 24, 13]),
             (0.0, [0x90, SUS_DOWN, KEYSWITCH_VELOCITY]),
             (0.0, [0x90, HAMMER_ON, KEYSWITCH_VELOCITY]),
             (0.0, [0x90, E4, 127]),
@@ -71,6 +75,10 @@ fn default_articulation_column_has_only_the_head_sus_down() {
     assert_events(
         &out,
         &[
+            (0.0, [0xB0, 20, 0]),
+            (0.0, [0xB0, 23, 0]),
+            (0.0, [0xB0, 32, 0]),
+            (0.0, [0xB0, 24, 13]),
             (0.0, [0x90, SUS_DOWN, KEYSWITCH_VELOCITY]),
             (0.0, [0x90, C4, 127]),
             (0.125, [0x80, SUS_DOWN, 0]),
@@ -119,11 +127,11 @@ fn out_of_range_column_is_empty() {
 fn all_rules_on(columns: usize) -> RuleTable {
     let mut rules = RuleTable::default();
     for column in 0..columns {
-        for (rule, key, _) in RULE_ROWS {
-            if rule == Rule::PickScratch || key == RULE_LIST_KEY {
+        for rule_row in RULE_ROWS {
+            if rule_row.rule == Rule::PickScratch || rule_row.key == RULE_LIST_KEY {
                 continue;
             }
-            rules.toggle(column, rule);
+            rules.toggle(column, rule_row.rule);
         }
     }
     for (rule, _, _) in ROW_RULE_ROWS {

@@ -11,7 +11,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::Line,
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
     Frame,
 };
 
@@ -69,7 +69,12 @@ pub fn draw(
     if view.adding {
         draw_add_panes(f, editor, catalog, chunks[1]);
     } else {
-        draw_chain_list(f, editor, catalog, chunks[1]);
+        let notice = if catalog.is_none_or(|catalog| catalog.presets().is_empty()) {
+            message::NO_PRESETS
+        } else {
+            message::EMPTY_CHAIN
+        };
+        draw_chain_pane(f, chunks[1], Block::default(), editor, catalog, notice);
     }
 
     if let Some(error) = view.error {
@@ -84,46 +89,45 @@ pub fn draw(
     );
 }
 
-/// chain 一覧の 1 列 List。
-fn draw_chain_list(
+/// chain 一覧の 1 列 List を `block` の内側へ描く。chain が空なら `empty_notice` を灰色で
+/// 折り返して出す（幅の狭い pane でも読めるように）。
+pub fn draw_chain_pane(
     f: &mut Frame,
-    state: &EffectChainEditor,
-    catalog: Option<&AudioEffectCatalog>,
     area: Rect,
+    block: Block<'_>,
+    editor: &EffectChainEditor,
+    catalog: Option<&AudioEffectCatalog>,
+    empty_notice: &str,
 ) {
-    let (items, selected): (Vec<ListItem<'static>>, Option<usize>) = if state.chain.is_empty() {
-        let notice = if catalog.is_none_or(|catalog| catalog.presets().is_empty()) {
-            message::NO_PRESETS
-        } else {
-            message::EMPTY_CHAIN
-        };
-        (
-            vec![ListItem::new(notice).style(Style::default().fg(MONOKAI_GRAY))],
-            None,
-        )
-    } else {
-        (
-            state
-                .chain
-                .iter()
-                .enumerate()
-                .map(|(index, stage)| {
-                    list_item(
-                        format!("{}. {}", index + 1, stage_label(stage, catalog)),
-                        index == state.cursor,
-                    )
-                })
-                .collect(),
-            Some(state.cursor),
-        )
-    };
+    if editor.chain.is_empty() {
+        editor.scroll_offset.set(0);
+        f.render_widget(
+            Paragraph::new(empty_notice)
+                .style(Style::default().fg(MONOKAI_GRAY))
+                .wrap(Wrap { trim: false })
+                .block(block),
+            area,
+        );
+        return;
+    }
+    let items: Vec<ListItem<'_>> = editor
+        .chain
+        .iter()
+        .enumerate()
+        .map(|(index, stage)| {
+            list_item(
+                format!("{}. {}", index + 1, stage_label(stage, catalog)),
+                index == editor.cursor,
+            )
+        })
+        .collect();
     let mut list_state = scrolled_list_state(
-        selected,
-        state.chain.len(),
-        usize::from(area.height),
-        &state.scroll_offset,
+        Some(editor.cursor),
+        editor.chain.len(),
+        usize::from(block.inner(area).height),
+        &editor.scroll_offset,
     );
-    f.render_stateful_widget(List::new(items), area, &mut list_state);
+    f.render_stateful_widget(List::new(items).block(block), area, &mut list_state);
 }
 
 /// 追加・差し替え overlay の query 欄 + category / kind / list 3 pane。

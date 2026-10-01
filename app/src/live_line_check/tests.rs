@@ -32,6 +32,7 @@ fn renders_are_summed_at_their_send_frames() {
 
 mod articulation_capture;
 mod capture_support;
+mod column_cc_reset_capture;
 mod column_sound_capture;
 mod control_change_capture;
 mod humanize_capture;

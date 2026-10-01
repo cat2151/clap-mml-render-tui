@@ -74,6 +74,19 @@ pub fn is_keyswitch_pitch(pitch: u8) -> bool {
     keyswitch_name(pitch).is_some()
 }
 
+/// 音のまとまり 1 つを、イベントから読み取った中身。matrix の 1 列に当たる。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SampleMidiGroup {
+    /// 鳴る音高（低い順、重複なし）。
+    pub pitches: Vec<u8>,
+    /// 鳴り始めに効いている KS の音高（`sw_last` のラッチなので、それまでで最後の KS）。
+    pub keyswitch: Option<u8>,
+    /// 鳴っている区間（note on 〜 最も遅い note off の手前）に送られる CC の番号（小さい順、重複なし）。
+    pub controllers: Vec<u8>,
+    /// 鳴っている区間に pitch bend が送られるか。
+    pub bend: bool,
+}
+
 /// 読み込んだサンプル MID。「音」は KS でない note on の、同じ時刻のまとまり。
 #[derive(Clone, Debug, PartialEq)]
 pub struct SampleMidi {
@@ -127,6 +140,48 @@ impl SampleMidi {
     pub fn group_on_seconds(&self, group: usize) -> Option<f64> {
         self.group_event_index(group)
             .map(|index| self.events[index].seconds)
+    }
+
+    /// まとまり `group` の中身。範囲外なら `None`。
+    pub fn group(&self, group: usize) -> Option<SampleMidiGroup> {
+        let start = self.group_on_seconds(group)?;
+        let (members, end) = self.group_members(start);
+        let mut pitches: Vec<u8> = members
+            .iter()
+            .map(|&index| self.events[index].message)
+            .filter(is_note_on)
+            .map(|message| message[1])
+            .collect();
+        pitches.sort_unstable();
+        pitches.dedup();
+        let keyswitch = self
+            .events
+            .iter()
+            .rev()
+            .filter(|event| event.seconds <= start)
+            .find(|event| is_keyswitch_event(event) && is_note_on(&event.message))
+            .map(|event| event.message[1]);
+        let during = self
+            .events
+            .iter()
+            .filter(|event| event.seconds >= start && event.seconds < end);
+        let mut controllers = Vec::new();
+        let mut bend = false;
+        for event in during {
+            match event.message[0] & 0xF0 {
+                CONTROL_CHANGE => controllers.push(event.message[1]),
+                PITCH_BEND => bend = true,
+                _ => {}
+            }
+        }
+        controllers.sort_unstable();
+        controllers.dedup();
+        Some(SampleMidiGroup {
+            pitches,
+            keyswitch,
+            controllers,
+            bend,
+        })
     }
 
     /// まとまり `group` だけを 0 秒から鳴らすイベント列。範囲外なら空。

@@ -17,17 +17,22 @@ use cmrt_tui_core::{
     ui::draw_frame_background,
 };
 
-use crate::{GuitarArticulationScreen, RowRule, Rule, Take};
+use crate::{AutoPick, GuitarArticulationScreen, RowRule, Take};
 
 mod event_list;
 mod help;
 mod history;
 mod matrix;
+mod midi_matrix;
 mod param_list;
 mod rule_list;
+mod rule_rows;
 mod sample_midi;
 
 pub(crate) use event_list::{name_width, EventRow};
+pub(crate) use rule_rows::{
+    RuleGroup, RuleLane, RuleRow, ROW_RULE_ROWS, RULE_LANES, RULE_LIST_KEY, RULE_ROWS,
+};
 
 #[cfg(test)]
 mod tests;
@@ -36,7 +41,8 @@ mod tests;
 /// 幅 100 の端末で `?:help` まで収まる長さに保つ（枠の内側 98 桁）。
 const KEYBIND_TEXT: &str =
     "h/l:移動 a:H/P mp/cvg/t:奏法 u:値 e:eco s:auto d:汚し r:rel n:1音 x/w:fx H:履歴 o:MID q:終 ?:help";
-const MID_KEYBIND_TEXT: &str = " o:MID選択 space:演奏 n:1音 h/l:移動 Esc:MIDを閉じる q:終了 ?:help";
+const MID_KEYBIND_TEXT: &str =
+    " o:MID選択 space:演奏 n:1音 h/l:1音ずつ Esc:MIDを閉じる q:終了 ?:help";
 const INPUT_HINT_TEXT: &str = " MML を編集中  Enter:確定して演奏  Esc:matrix 操作へ  ?:help";
 const MML_TITLE: &str = " MML (i) ";
 const MML_PLACEHOLDER: &str = "o3 l8 e f+ g";
@@ -144,9 +150,9 @@ fn draw_mml_panes(
 ) {
     draw_input(f, layout.input, screen);
     let matrix_block = if screen.input_open() {
-        pane_block(MATRIX_TITLE)
+        pane_block(matrix_title(screen))
     } else {
-        focused_pane_block(MATRIX_TITLE)
+        focused_pane_block(matrix_title(screen))
     };
     let matrix_inner = matrix_block.inner(layout.matrix);
     f.render_widget(
@@ -161,6 +167,15 @@ fn draw_mml_panes(
         screen,
         Take::Converted,
     );
+}
+
+/// カーソル列に効いていないルールがあれば、見出しの後ろにピンクで足す。
+fn matrix_title(screen: &GuitarArticulationScreen) -> Line<'static> {
+    let mut spans = vec![Span::raw(MATRIX_TITLE)];
+    if let Some(notice) = matrix::ineffective_notice(screen, screen.cursor()) {
+        spans.push(Span::styled(notice, base_style().fg(MONOKAI_PINK)));
+    }
+    Line::from(spans)
 }
 
 /// 音色の後ろに、確定済みの chain を信号の順に並べる。dry の間も chain は出したまま ` [dry]` を足す。
@@ -187,6 +202,18 @@ fn screen_title(screen: &GuitarArticulationScreen) -> String {
     }
     if screen.note_preview() {
         title.push_str(" [1音]");
+    }
+    if screen.repeat() {
+        title.push_str(" [repeat]");
+    }
+    let rules = screen.rules();
+    let auto2 = rules.is_row_on(RowRule::AutoHammerPull) && rules.auto_pick() == AutoPick::Accent;
+    if auto2 {
+        title.push_str(" [auto2]");
+    }
+    // アクセントは強弱を付ける行ルール（e / d）か、自動ハンマリングの on2 の間だけ効く。
+    if auto2 || rules.is_row_on(RowRule::EconomyPicking) || rules.is_row_on(RowRule::Humanize) {
+        title.push_str(&format!(" [accent:{}]", rules.accent_pattern().label()));
     }
     title.push_str(&format!(" [起動:{}]", screen.startup_instrument().label()));
     title.push(' ');
@@ -238,55 +265,8 @@ pub(crate) fn note_name(pitch: u8) -> String {
     format!("{}{octave}", NAMES[usize::from(pitch % 12)])
 }
 
-/// 奏法リスト overlay を開くキー。専用のキーを持たないルールの見出しにも付ける。
-pub(crate) const RULE_LIST_KEY: char = 't';
-
 /// パラメータ overlay を開くキー。
 pub(crate) const PARAM_LIST_KEY: char = 'u';
-
-/// ルール行の見出しとトグルのキー。キーが [`RULE_LIST_KEY`] のルールは奏法リストからだけ切り替える。
-pub(crate) const RULE_ROWS: [(Rule, char, &str); 31] = [
-    (Rule::HammerPull, 'a', "hammer/pull"),
-    (Rule::PalmMute, 'm', "palm mute"),
-    (Rule::PinchHarmonic, 'p', "pinch harmonic"),
-    (Rule::Slide, '/', "slide"),
-    (Rule::Choke, 'c', "bend"),
-    (Rule::Vibrato, 'v', "vibrato"),
-    (Rule::PickScratch, 'g', "pick scratch"),
-    (Rule::NaturalHarmonics, RULE_LIST_KEY, "harmonics"),
-    (Rule::Brushing, RULE_LIST_KEY, "brush"),
-    (Rule::FretMute, RULE_LIST_KEY, "fret mute"),
-    (Rule::SlideOut, RULE_LIST_KEY, "slide out"),
-    (Rule::PseudoLegato, RULE_LIST_KEY, "pseudo legato"),
-    (Rule::Portamento, RULE_LIST_KEY, "portamento"),
-    (Rule::SlideIn, RULE_LIST_KEY, "slide in"),
-    (Rule::TrillHalf, RULE_LIST_KEY, "trill half"),
-    (Rule::TrillWhole, RULE_LIST_KEY, "trill whole"),
-    (Rule::TrillMinorThird, RULE_LIST_KEY, "trill min3"),
-    (Rule::TrillMajorThird, RULE_LIST_KEY, "trill maj3"),
-    (Rule::UnisonBendAuto, RULE_LIST_KEY, "unison bend"),
-    (Rule::UnisonBendManual, RULE_LIST_KEY, "unison manual"),
-    (Rule::ChromaticRun, RULE_LIST_KEY, "chromatic run"),
-    (Rule::SlideFxDown, RULE_LIST_KEY, "slide fx down"),
-    (Rule::SlideFxUp, RULE_LIST_KEY, "slide fx up"),
-    (Rule::SlideFxWow, RULE_LIST_KEY, "slide fx wow"),
-    (Rule::EffectHello, RULE_LIST_KEY, "fx hello"),
-    (Rule::EffectResonance, RULE_LIST_KEY, "fx resonance"),
-    (Rule::EffectSlideNoise, RULE_LIST_KEY, "fx slide noise"),
-    (Rule::EffectHardStop, RULE_LIST_KEY, "fx hard stop"),
-    (Rule::LongExtra, RULE_LIST_KEY, "long/extra"),
-    (Rule::PowerChord, RULE_LIST_KEY, "power chord"),
-    (Rule::PositionRelease, RULE_LIST_KEY, "position rel"),
-];
-
-/// 行全体で ON/OFF するルールの段の見出しとトグルのキー。上の段から並べる（H/P の段の上）。
-/// 汚し 2 つは並べる。自動 H/P は H/P の段のすぐ上に置く（どちらも列の H/P を示す）。
-pub(crate) const ROW_RULE_ROWS: [(RowRule, char, &str); 4] = [
-    (RowRule::Humanize, 'd', "humanize"),
-    (RowRule::HumanizeRelease, 'r', "humanize release"),
-    (RowRule::EconomyPicking, 'e', "economy picking"),
-    (RowRule::AutoHammerPull, 's', "auto hammer/pull"),
-];
 
 fn status_line(screen: &GuitarArticulationScreen) -> Line<'static> {
     if let Some(error) = &screen.error {

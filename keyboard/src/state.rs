@@ -9,6 +9,7 @@ use cmrt_tui_core::random::RandomIndexDeck;
 
 mod arp;
 mod periodic;
+mod session;
 
 pub const KEYBOARD_NOTES: [KeyboardNote; 7] = [
     KeyboardNote::new('c', "C4", 60),
@@ -80,14 +81,7 @@ pub enum PitchBendMode {
     CenterAfterCycle,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum NotePlaybackMode {
-    #[default]
-    Off,
-    Repeat,
-    Arp,
-    Auto,
-}
+pub use crate::session_state::NotePlaybackMode;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KeyboardNote {
@@ -162,51 +156,6 @@ impl Default for KeyboardState {
 }
 
 impl KeyboardState {
-    pub(super) fn new(patch: Option<String>) -> Self {
-        Self::from_session(KeyboardSessionState {
-            patch,
-            ..KeyboardSessionState::default()
-        })
-    }
-
-    pub fn from_session(session: KeyboardSessionState) -> Self {
-        Self {
-            held: Vec::new(),
-            patch: session
-                .patch
-                .and_then(|patch| (!patch.trim().is_empty()).then_some(patch)),
-            buffer_multiplier: session.buffer_multiplier,
-            velocity: DEFAULT_VELOCITY,
-            velocity_mode: VelocityMode::default(),
-            modulation_mode: ModulationMode::default(),
-            pitch_bend_mode: PitchBendMode::default(),
-            cc_number: DEFAULT_CC_NUMBER,
-            cc_periodic_on: false,
-            note_playback_mode: NotePlaybackMode::Off,
-            detected_voicing: PatchVoicing::Unknown,
-            repeat_chords: Vec::new(),
-            repeat_chord_index: 0,
-            repeat_sounding: Vec::new(),
-            arp_sounding: None,
-            arp_next_index: 0,
-            periodic_next_at: None,
-            repeat_elapsed_ticks: 0,
-            combo_bag: None,
-            current_combo: 0,
-            refresh_pending: false,
-            numeric_input: None,
-            navigation_count: NavigationCount::default(),
-            patch_catalog: KeyboardPatchCatalog::default(),
-        }
-    }
-
-    pub fn session_state(&self) -> KeyboardSessionState {
-        KeyboardSessionState {
-            patch: self.patch.clone(),
-            buffer_multiplier: self.buffer_multiplier,
-        }
-    }
-
     pub fn held(&self) -> &[KeyboardNote] {
         &self.held
     }
@@ -355,6 +304,15 @@ impl KeyboardState {
                 .map(|note| note_off(note.midi_note)),
         );
         self.refresh_pending = true;
+        messages
+    }
+
+    /// 画面を出るときの消音。`t` のモードは保存と次の入場のために残し、次の Ready で鳴らし直す。
+    pub(super) fn take_leave_messages(&mut self) -> Vec<[u8; 3]> {
+        let mode = self.note_playback_mode;
+        let messages = self.take_reset_messages();
+        self.note_playback_mode = mode;
+        self.refresh_pending = mode != NotePlaybackMode::Off;
         messages
     }
 

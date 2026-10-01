@@ -95,6 +95,8 @@ pub struct TuiApp<'a> {
     deferred_chord_chart_preview: Option<chord_chart::PreviewRequest>,
     /// rawの MML を KS 入りへ変換して聴き比べる画面。演奏は `mml_overlay_sender` を借りる。
     pub(in crate::tui) guitar_articulation: guitar_articulation::GuitarArticulationScreen,
+    /// 直近にフレーズ全体として鳴らした Guitar Articulation の演奏。1 音や MID の演奏では `None`。
+    guitar_articulation_playback: Option<guitar_articulation_glue::GuitarArticulationPlayback>,
     /// Grid履歴をimport前に1小節だけoffline試聴する、揮発性のplayer/cache。
     grid_history_preview: crate::daw::DawGridPreviewPlayer,
     /// どの画面からでも開ける MML 入力オーバーレイ。開くと現在の画面の演奏は止まり、

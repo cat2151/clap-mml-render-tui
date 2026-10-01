@@ -12,7 +12,7 @@ use cmrt_tui_core::{
     ui::centered_rect_with_size,
 };
 
-use crate::{GuitarArticulationHistoryEntry, GuitarArticulationScreen, RowRule, Rule};
+use crate::{AutoPick, GuitarArticulationHistoryEntry, GuitarArticulationScreen, RowRule, Rule};
 
 const TITLE: &str =
     " Guitar Articulation History  j/k,↑/↓:選んで演奏  Enter:確定  Esc/Shift+H:取り消し ";
@@ -26,11 +26,11 @@ const ROW_RULE_LABELS: [(RowRule, &str); 4] = [
 ];
 
 /// 列ごとのルールの、1 行に載せる短い名前。
-const RULE_LABELS: [(Rule, &str); 31] = [
+const RULE_LABELS: [(Rule, &str); 32] = [
     (Rule::HammerPull, "H/P"),
     (Rule::PalmMute, "mute"),
     (Rule::PinchHarmonic, "PH"),
-    (Rule::Slide, "slide"),
+    (Rule::Slide, "slideU/D"),
     (Rule::Choke, "bend"),
     (Rule::Vibrato, "vib"),
     (Rule::PickScratch, "scratch"),
@@ -58,6 +58,7 @@ const RULE_LABELS: [(Rule, &str); 31] = [
     (Rule::LongExtra, "long"),
     (Rule::PowerChord, "p5"),
     (Rule::PositionRelease, "posrel"),
+    (Rule::AutoSlideOut, "autoslideout"),
 ];
 
 pub(super) fn draw_overlay(f: &mut Frame<'_>, screen: &GuitarArticulationScreen) {
@@ -91,8 +92,14 @@ pub(super) fn row_text(index: usize, entry: &GuitarArticulationHistoryEntry) -> 
     let mut settings: Vec<String> = ROW_RULE_LABELS
         .iter()
         .filter(|(rule, _)| entry.rules.is_row_on(*rule))
-        .map(|(_, label)| label.to_string())
+        .map(|(rule, label)| match (rule, entry.rules.auto_pick()) {
+            (RowRule::AutoHammerPull, AutoPick::Accent) => format!("{label}2"),
+            _ => label.to_string(),
+        })
         .collect();
+    if !entry.rules.accent_pattern().is_default() {
+        settings.push(format!("accent:{}", entry.rules.accent_pattern().label()));
+    }
     settings.extend(RULE_LABELS.iter().filter_map(|(rule, label)| {
         let count = entry.rules.column_count_of(*rule);
         (count > 0).then(|| format!("{label}:{count}"))

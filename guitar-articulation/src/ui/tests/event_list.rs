@@ -85,6 +85,10 @@ fn the_manual_controls_have_names() {
         row_text([0xB0, 27, 3], true),
         "  0.500 cc  slide-in range       3"
     );
+    assert_eq!(
+        row_text([0xB0, 26, 104], true),
+        "  0.500 cc  slide up/down range     104"
+    );
 }
 
 #[test]

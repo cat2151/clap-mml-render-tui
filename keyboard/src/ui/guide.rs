@@ -12,6 +12,7 @@ use cmrt_tui_core::theme::{MONOKAI_CYAN, MONOKAI_YELLOW};
 pub(super) fn keyboard_help_lines(
     presentation: KeyboardNoteGuidePresentation,
     navigation_count: Option<usize>,
+    effect_focused: bool,
 ) -> Vec<Line<'static>> {
     if presentation == KeyboardNoteGuidePresentation::Footer {
         return vec![
@@ -44,13 +45,25 @@ pub(super) fn keyboard_help_lines(
             Line::default(),
             Line::default(),
         ],
+        None if effect_focused => vec![
+            Line::from(concat!(
+                "h/l:pane  k/j/Up/Down:-/+1  PgUp/PgDn:-/+10  Home/End:first/last  ",
+                "a:add  r:replace  dd:del  b:bypass  Alt+Up/Down:move  /:filter  M:plugin solo/mute"
+            )),
+            Line::from(
+                "cefg:notes  Shift+H:buffer  t:off/auto/repeat/arp  n:notepad  w:DAW q:quit  Ctrl+G:screens",
+            ),
+            Line::from(
+                "i:MML notes  v:velocity  m:mod(CC1)  p:pitch bend  x:CC#  z:CC value  Shift+Z:CC cycle",
+            ),
+        ],
         None => vec![
             Line::from(concat!(
                 "h/l:pane  k/j/Up/Down:-/+1  Ctrl+u/d/PgUp/PgDn:-/+10  ",
-                "Home/End:first/last  r:random"
+                "Home/End:first/last  r:random  /:filter  M:plugin solo/mute"
             )),
             Line::from(
-                "cdefgab:notes  Shift+H:buffer  t:off/repeat/arp/auto  n:notepad  w:DAW q:quit  Ctrl+G:screens",
+                "cdefgab:notes  Shift+H:buffer  t:off/auto/repeat/arp  n:notepad  w:DAW q:quit  Ctrl+G:screens",
             ),
             Line::from(
                 "i:MML notes  v:velocity  m:mod(CC1)  p:pitch bend  x:CC#  z:CC value  Shift+Z:CC cycle",

@@ -139,3 +139,52 @@ fn keyswitch_names_follow_the_ks_map() {
     assert!(is_keyswitch_pitch(22));
     assert!(!is_keyswitch_pitch(35));
 }
+
+#[test]
+fn each_group_reads_its_pitches_latched_keyswitch_controllers_and_bend() {
+    let sample = midi(three_notes(true));
+
+    assert_eq!(
+        sample.group(0),
+        Some(SampleMidiGroup {
+            pitches: vec![60],
+            keyswitch: Some(20),
+            controllers: vec![20],
+            bend: false,
+        })
+    );
+    assert_eq!(
+        sample.group(1),
+        Some(SampleMidiGroup {
+            pitches: vec![62],
+            keyswitch: Some(20),
+            controllers: vec![20],
+            bend: true,
+        })
+    );
+    // 3 つ目の区間には CC も bend も無いが、KS 20 はラッチで効いたまま。
+    assert_eq!(
+        sample.group(2),
+        Some(SampleMidiGroup {
+            pitches: vec![64],
+            keyswitch: Some(20),
+            controllers: vec![],
+            bend: false,
+        })
+    );
+    assert_eq!(sample.group(3), None);
+}
+
+#[test]
+fn a_chord_group_lists_every_pitch_and_no_keyswitch_before_any() {
+    let sample = midi(vec![
+        at(0.0, [0x90, 47, 100]),
+        at(0.0, [0x90, 40, 100]),
+        at(0.5, [0x80, 40, 0]),
+        at(0.5, [0x80, 47, 0]),
+    ]);
+
+    let group = sample.group(0).unwrap();
+    assert_eq!(group.pitches, vec![40, 47]);
+    assert_eq!(group.keyswitch, None);
+}

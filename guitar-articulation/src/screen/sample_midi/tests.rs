@@ -74,15 +74,16 @@ fn o_asks_for_the_list_in_the_matrix_and_types_in_the_mml_input() {
 }
 
 #[test]
-fn the_list_stops_at_its_end_and_enter_asks_for_the_selected_file() {
+fn j_k_preview_the_selected_file_and_enter_asks_for_it() {
     let mut screen = screen_with_mml("o3 e");
     screen.open_sample_midi_list(Ok(files()));
     assert_eq!(screen.sample_midi_list().unwrap().1, 0);
 
-    for _ in 0..3 {
+    for expected in [1, 2, 2] {
         assert_eq!(
             screen.handle_key_event(key(KeyCode::Char('j'))),
-            GuitarArticulationAction::Continue
+            GuitarArticulationAction::PreviewSampleMidi(files()[expected].clone()),
+            "末尾で止まり、そのまま試聴する"
         );
     }
     assert_eq!(screen.sample_midi_list().unwrap().1, 2);
@@ -90,8 +91,15 @@ fn the_list_stops_at_its_end_and_enter_asks_for_the_selected_file() {
         screen.handle_key_event(key(KeyCode::Enter)),
         GuitarArticulationAction::LoadSampleMidi(files()[2].clone())
     );
-    screen.handle_key_event(key(KeyCode::Char('k')));
+    assert_eq!(
+        screen.handle_key_event(key(KeyCode::Up)),
+        GuitarArticulationAction::PreviewSampleMidi(files()[1].clone())
+    );
     assert_eq!(screen.sample_midi_list().unwrap().1, 1);
+    assert!(
+        screen.sample_midi().is_none(),
+        "試聴では MID モードへ入らない"
+    );
 }
 
 #[test]
@@ -147,44 +155,42 @@ fn loading_enters_the_midi_mode_and_space_plays_the_whole_file() {
 }
 
 #[test]
-fn the_note_preview_plays_one_note_and_h_l_move_between_notes() {
+fn h_l_play_one_note_regardless_of_the_note_preview() {
     let mut screen = screen_in_midi_mode();
+    assert!(!screen.note_preview());
+    let note = |group| GuitarArticulationAction::PlaySampleMidi { note: Some(group) };
 
-    // n OFF の移動は鳴らさない。
+    assert_eq!(screen.handle_key_event(key(KeyCode::Char('l'))), note(1));
+    assert_eq!(screen.handle_key_event(key(KeyCode::Char('h'))), note(0));
     assert_eq!(
-        screen.handle_key_event(key(KeyCode::Char('l'))),
-        GuitarArticulationAction::Continue
+        screen.handle_key_event(key(KeyCode::Char('h'))),
+        note(0),
+        "先頭で止まり、そのまとまりを鳴らす"
     );
-    screen.handle_key_event(key(KeyCode::Char('h')));
-    assert_eq!(screen.sample_midi_cursor(), 0);
 
     screen.handle_key_event(key(KeyCode::Char('n')));
-    assert!(screen.note_preview());
-    assert_eq!(
-        screen.handle_key_event(key(KeyCode::Char(' '))),
-        GuitarArticulationAction::PlaySampleMidi { note: Some(0) }
-    );
-    assert_eq!(
-        screen.handle_key_event(key(KeyCode::Char('l'))),
-        GuitarArticulationAction::PlaySampleMidi { note: Some(1) }
-    );
-    assert_eq!(
-        screen.handle_key_event(key(KeyCode::Right)),
-        GuitarArticulationAction::PlaySampleMidi { note: Some(2) }
-    );
-    // 最後のまとまりでは動かず鳴らさない。
-    assert_eq!(
-        screen.handle_key_event(key(KeyCode::Char('l'))),
-        GuitarArticulationAction::Continue
-    );
+    assert_eq!(screen.handle_key_event(key(KeyCode::Right)), note(1));
+    assert_eq!(screen.handle_key_event(key(KeyCode::Char('l'))), note(2));
+    assert_eq!(screen.handle_key_event(key(KeyCode::Char('l'))), note(2));
     assert_eq!(screen.sample_midi_cursor(), 2);
-    assert_eq!(
-        screen.handle_key_event(key(KeyCode::Left)),
-        GuitarArticulationAction::PlaySampleMidi { note: Some(1) }
-    );
     assert_eq!(
         screen.sample_midi_events(Some(1)),
         screen.sample_midi().unwrap().note_events(1)
+    );
+}
+
+#[test]
+fn space_plays_the_cursor_note_only_in_the_note_preview() {
+    let mut screen = screen_in_midi_mode();
+    screen.handle_key_event(key(KeyCode::Char('l')));
+    assert_eq!(
+        screen.handle_key_event(key(KeyCode::Char(' '))),
+        GuitarArticulationAction::PlaySampleMidi { note: None }
+    );
+    screen.handle_key_event(key(KeyCode::Char('n')));
+    assert_eq!(
+        screen.handle_key_event(key(KeyCode::Char(' '))),
+        GuitarArticulationAction::PlaySampleMidi { note: Some(1) }
     );
 }
 

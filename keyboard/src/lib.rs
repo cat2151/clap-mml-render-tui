@@ -9,10 +9,14 @@ use std::time::Instant;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 mod catalog;
+mod effect_pane;
 pub mod guide;
 mod mml_input;
 mod navigation;
+mod note_key;
 mod numeric_input;
+mod patch_filter_input;
+mod plugin_menu;
 mod screen;
 mod screen_runtime;
 mod sender;
@@ -24,10 +28,12 @@ mod state;
 pub mod ui;
 
 pub use catalog::{KeyboardPatchCatalog, KeyboardPatchCatalogStatus, PatchPaneFocus};
+pub use effect_pane::KeyboardEffectPane;
 pub use guide::KeyboardNoteGuide;
 pub use mml_input::KeyboardMmlInput;
 pub use navigation::NavigationCount;
 pub use numeric_input::{NumericInput, NumericInputTarget};
+pub use patch_filter_input::KeyboardPatchFilterInput;
 pub use screen::KeyboardScreen;
 pub use sender::{
     KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardMidiSender, KeyboardVoicingStatus,
@@ -37,7 +43,6 @@ pub use state::{ModulationMode, NotePlaybackMode, PitchBendMode, VelocityMode, K
 
 use cmrt_realtime_play::PatchVoicing;
 use cmrt_tui_core::patch_load::PatchLoadState;
-use state::note_for_key;
 
 impl KeyboardConnectionPhase {
     fn accepts_notes(&self) -> bool {
@@ -82,16 +87,32 @@ impl KeyboardScreen<'_> {
     /// 画面へ入るときの初期化。`patch` で選択音色を差し替える。
     pub fn start(&mut self, patch: Option<String>, ctx: &KeyboardContext<'_>) {
         self.mml_input.cancel();
+        self.patch_filter.close();
+        self.plugin_menu = None;
+        self.effect.close_overlay();
         self.note_guide.reset_for_screen();
-        self.state = KeyboardState::new(patch);
+        self.state = self.state.restart_with_patch(patch);
         self.prepare_connection(ctx);
     }
 
     /// 直前の状態を保ったまま画面へ戻るときの初期化。
     pub fn resume(&mut self, ctx: &KeyboardContext<'_>) {
         self.mml_input.cancel();
+        self.patch_filter.close();
+        self.plugin_menu = None;
+        self.effect.close_overlay();
         self.note_guide.reset_for_screen();
         self.prepare_connection(ctx);
+    }
+
+    /// 1 行入力欄（MML・絞り込み・effect の list 絞り込み）に打鍵している最中か。
+    pub fn is_typing(&self) -> bool {
+        self.mml_input.is_active() || self.patch_filter.is_active() || self.effect.is_typing()
+    }
+
+    /// 入力欄か overlay を開いていて、Ctrl+G の画面切替を開かない状態か。
+    pub fn blocks_screen_switch(&self) -> bool {
+        self.is_typing() || self.plugin_menu.is_some() || self.effect.is_adding()
     }
 
     pub fn prepare_connection(&self, ctx: &KeyboardContext<'_>) {
@@ -101,6 +122,7 @@ impl KeyboardScreen<'_> {
                 self.state.buffer_multiplier(),
                 patch,
                 ctx.cached_voicing(patch),
+                &cmrt_effect_chain_select::chain_json(self.effect.sounding()),
             );
         }
     }
@@ -121,8 +143,18 @@ impl KeyboardScreen<'_> {
         status
     }
 
+    /// アプリ終了で保存する状態。
+    pub fn session_state(&self) -> session_state::KeyboardSessionState {
+        session_state::KeyboardSessionState {
+            effect_chain: self.effect.chain().to_vec(),
+            ..self
+                .state
+                .session_state(self.mml_input.last_confirmed().to_string())
+        }
+    }
+
     pub fn finish(&mut self) {
-        let note_offs = self.state.take_reset_messages();
+        let note_offs = self.state.take_leave_messages();
         if let Some(sender) = &self.midi_sender {
             if !note_offs.is_empty() {
                 sender.send(note_offs, self.state.patch());
@@ -134,6 +166,15 @@ impl KeyboardScreen<'_> {
     pub fn handle_key(&mut self, key: KeyEvent, ctx: &KeyboardContext<'_>) -> KeyboardAction {
         if self.mml_input.is_active() {
             return self.handle_mml_input_key(key);
+        }
+        if self.patch_filter.is_active() {
+            return self.handle_patch_filter_key(key, ctx);
+        }
+        if self.plugin_menu.is_some() {
+            return self.handle_plugin_menu_key(key, ctx);
+        }
+        if self.effect.is_adding() {
+            return self.handle_effect_add_key(key);
         }
         if key.kind == KeyEventKind::Repeat {
             return KeyboardAction::Continue;
@@ -164,6 +205,9 @@ impl KeyboardScreen<'_> {
                 _ => {}
             }
             return KeyboardAction::Continue;
+        }
+        if let Some(action) = self.handle_effect_pane_key(key) {
+            return action;
         }
         if key.kind == KeyEventKind::Press {
             if key.modifiers == KeyModifiers::NONE {
@@ -211,6 +255,17 @@ impl KeyboardScreen<'_> {
                 }
             }
             self.state.navigation_count.clear();
+        }
+        if key.kind == KeyEventKind::Press
+            && matches!(key.modifiers, KeyModifiers::NONE | KeyModifiers::SHIFT)
+            && key.code == KeyCode::Char('/')
+        {
+            self.open_patch_filter(ctx);
+            return KeyboardAction::Continue;
+        }
+        if plugin_menu::is_plugin_menu_key(key) {
+            self.open_plugin_menu(ctx);
+            return KeyboardAction::Continue;
         }
         if key.kind == KeyEventKind::Press
             && key.modifiers == KeyModifiers::SHIFT
@@ -334,45 +389,12 @@ impl KeyboardScreen<'_> {
                 _ => {}
             }
         }
-        if key.modifiers != KeyModifiers::NONE {
-            return KeyboardAction::Continue;
-        }
-        let Some(note) = note_for_key(key.code) else {
-            return KeyboardAction::Continue;
-        };
-        if !self.connection_status().phase.accepts_notes() {
-            self.state.take_reset_messages();
-            return KeyboardAction::Continue;
-        }
-        let messages = match key.kind {
-            KeyEventKind::Press => self.state.press(note),
-            KeyEventKind::Release => self.state.release(note),
-            KeyEventKind::Repeat => None,
-        };
-        if let (Some(messages), Some(sender)) = (messages, &self.midi_sender) {
-            sender.send(messages, self.state.patch());
-            if key.kind == KeyEventKind::Press {
-                self.note_guide.complete();
-            }
-        }
-        KeyboardAction::Continue
+        self.handle_note_key(key)
     }
 
     fn handle_mml_input_key(&mut self, key: KeyEvent) -> KeyboardAction {
         if key.kind == KeyEventKind::Release {
-            if key.modifiers != KeyModifiers::NONE {
-                return KeyboardAction::Continue;
-            }
-            let Some(note) = note_for_key(key.code) else {
-                return KeyboardAction::Continue;
-            };
-            if !self.connection_status().phase.accepts_notes() {
-                self.state.take_reset_messages();
-                return KeyboardAction::Continue;
-            }
-            if let (Some(messages), Some(sender)) = (self.state.release(note), &self.midi_sender) {
-                sender.send(messages, self.state.patch());
-            }
+            self.release_note_while_typing(key);
             return KeyboardAction::Continue;
         }
 

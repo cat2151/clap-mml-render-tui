@@ -1,6 +1,9 @@
 use super::*;
 use crate::{articulate, notes_from_events, Rule, RuleTable};
 
+mod auto_slide_out;
+mod head_defaults;
+
 fn events_for(mml: &str, rules: &RuleTable) -> Vec<TimedMidiEvent> {
     let notes = notes_from_events(&cmrt_chord::timed_performance(mml).unwrap().events);
     let articulations: Vec<Articulation> = articulate(&notes, rules)
@@ -39,10 +42,16 @@ fn width_values_are_the_middle_of_each_sfz_range() {
 }
 
 #[test]
+fn an_octave_slide_sends_the_seven_semitone_width() {
+    let out = events_for("o3 l8 c < c", &slide_on(&[1]));
+    assert_eq!(out[0], control_change(0.25, 0, SLIDE_WIDTH_CC, 104));
+}
+
+#[test]
 fn no_slide_no_control_change() {
     assert!(events_for("o3 l8 e g a", &RuleTable::default()).is_empty());
-    // 範囲外（+11）で滑らなければ戻しも送らない。
-    assert!(events_for("o3 l8 c b", &slide_on(&[1])).is_empty());
+    // 同音で滑らなければ戻しも送らない。
+    assert!(events_for("o3 l8 e e", &slide_on(&[1])).is_empty());
     let mut choke = RuleTable::default();
     choke.toggle(1, Rule::Choke);
     assert!(events_for("o3 l8 e g", &choke).is_empty());
@@ -219,6 +228,19 @@ fn long_extra_skips_an_up_stroke_but_power_chord_keeps_it() {
     assert!(events_for("o3 l8 e g a", &rules).is_empty());
     let power = events_for("o3 l8 e g a", &rules_on(&[(1, Rule::PowerChord)], &eco));
     assert_eq!(values_of(&power, POWER_CHORD_CC).len(), 3);
+}
+
+#[test]
+fn power_chord_is_sent_only_inside_its_pitches() {
+    // E6（88）は Sus_P5 の音域の上端、F6（89）は外。
+    let out = events_for(
+        "o7 l8 e f",
+        &rules_on(&[(0, Rule::PowerChord), (1, Rule::PowerChord)], &[]),
+    );
+    assert_eq!(
+        values_of(&out, POWER_CHORD_CC),
+        vec![(0.0, 127), (0.25, 0), (0.5, 0)]
+    );
 }
 
 #[test]

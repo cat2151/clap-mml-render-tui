@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use cmrt_effect_chain_select::chain_json;
+use cmrt_guitar_articulation::TimedMidiEvent;
 use cmrt_tui_core::patch_load::PatchLoadState;
 use cmrt_tui_core::patch_plugins::PatchPlugins;
 
@@ -52,6 +53,13 @@ pub(crate) fn sample_midi_dir_in(plugins: &PatchPlugins) -> Result<PathBuf, Stri
     Ok(PathBuf::from(plugin.base.resolve(SAMPLE_MIDI_DIR)))
 }
 
+/// SMF を読み、CC と pitch bend も残した時刻つきイベント列にする。
+fn read_sample_midi(path: &Path) -> Result<Vec<TimedMidiEvent>, String> {
+    std::fs::read(path)
+        .map_err(|error| error.to_string())
+        .and_then(|bytes| cmrt_chord::timed_smf_events(&bytes).map(|timed| timed.events))
+}
+
 fn file_name(path: &Path) -> String {
     path.file_name()
         .map(|name| name.to_string_lossy().into_owned())
@@ -68,11 +76,17 @@ impl TuiApp<'_> {
 
     /// 一覧で選んだ file を読み、CC と pitch bend も残したイベント列を画面へ渡す。
     pub(in crate::tui) fn load_guitar_articulation_sample_midi(&mut self, path: &Path) {
-        let events = std::fs::read(path)
-            .map_err(|error| error.to_string())
-            .and_then(|bytes| cmrt_chord::timed_smf_events(&bytes).map(|timed| timed.events));
         self.guitar_articulation
-            .load_sample_midi(file_name(path), events);
+            .load_sample_midi(file_name(path), read_sample_midi(path));
+    }
+
+    /// 一覧で選び直した file を、MID モードへは入らずに全体を鳴らす。読めなければ理由を画面へ出す。
+    pub(in crate::tui) fn preview_guitar_articulation_sample_midi(&mut self, path: &Path) {
+        let file = file_name(path);
+        match read_sample_midi(path) {
+            Ok(events) => self.play_sample_midi_events(&file, None, events),
+            Err(reason) => self.guitar_articulation.error = Some(format!("{file}: {reason}")),
+        }
     }
 
     /// MID の全体（`None`）か 1 音（`Some(i)`）を、MML の演奏と同じ音色・chain で鳴らす。
@@ -85,11 +99,20 @@ impl TuiApp<'_> {
             return;
         };
         let events = self.guitar_articulation.sample_midi_events(note);
+        self.play_sample_midi_events(&file, note, events);
+    }
+
+    fn play_sample_midi_events(
+        &mut self,
+        file: &str,
+        note: Option<usize>,
+        events: Vec<TimedMidiEvent>,
+    ) {
         let effect_chain = chain_json(self.guitar_articulation.sounding_effect_chain());
         let patch = self
             .sync_guitar_articulation_instrument(&effect_chain)
             .patch();
-        crate::logging::global_log_sink(&play_sample_midi_log_line(&file, note, &events, patch));
+        crate::logging::global_log_sink(&play_sample_midi_log_line(file, note, &events, patch));
         self.play_guitar_articulation_events(events, &effect_chain, patch);
         self.preload_full_guitar(&effect_chain);
     }

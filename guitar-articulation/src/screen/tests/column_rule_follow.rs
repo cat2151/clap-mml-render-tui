@@ -20,7 +20,7 @@ fn recommit(screen: &mut GuitarArticulationScreen, mml: &str) {
 fn column_rules(screen: &GuitarArticulationScreen) -> Vec<(usize, Rule)> {
     let mut on = Vec::new();
     for column in 0..screen.column_count() {
-        for (rule, _, _) in crate::ui::RULE_ROWS {
+        for rule in crate::ui::RULE_ROWS.map(|rule_row| rule_row.rule) {
             if screen.rules().is_on(column, rule) {
                 on.push((column, rule));
             }

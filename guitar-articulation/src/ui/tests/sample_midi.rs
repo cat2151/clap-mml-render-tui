@@ -35,7 +35,7 @@ fn the_midi_mode_greys_out_the_mml_side_and_lists_the_midi_on_the_right() {
     let buffer = render(&screen);
     let layout = layout_for(buffer.area, &screen);
 
-    for area in [layout.input, layout.matrix, layout.plain] {
+    for area in [layout.input, layout.plain] {
         assert_eq!(inner_text(&buffer, area), "-");
         let dash = rows_in(&buffer, area)
             .iter()
@@ -66,6 +66,46 @@ fn the_midi_mode_greys_out_the_mml_side_and_lists_the_midi_on_the_right() {
     let status = squeezed(&rows_in(&buffer, layout.status));
     assert!(status.contains("Esc:MIDを閉じる"), "{status}");
     assert!(status.contains("?:help"), "{status}");
+}
+
+#[test]
+fn the_midi_mode_matrix_shows_the_notes_and_the_ks_cc_and_bend_of_each_group() {
+    let mut screen = screen_with_mml("o3 l8 e f+ g");
+    screen.load_sample_midi(
+        "CC26_Action_Slide.mid".to_string(),
+        Ok(vec![
+            at(0.0, [0x90, 17, 100]),
+            at(0.0, [0x90, 60, 100]),
+            at(0.5, [0x80, 60, 0]),
+            at(0.5, [0x80, 17, 0]),
+            at(0.5, [0x90, 24, 100]),
+            at(0.5, [0xB0, 26, 40]),
+            at(0.5, [0x90, 64, 100]),
+            at(0.7, [0xE0, 0, 0x50]),
+            at(1.0, [0x80, 64, 0]),
+            at(1.0, [0x80, 24, 0]),
+        ]),
+    );
+    let buffer = render(&screen);
+    let layout = layout_for(buffer.area, &screen);
+    let rows = rows_in(&buffer, layout.matrix);
+    // 段の印と、その桁。
+    let marks = |label: &str| -> Vec<(usize, char)> {
+        let row = rows.iter().find(|row| row.contains(label)).unwrap();
+        row.chars()
+            .enumerate()
+            .filter(|(_, ch)| "■·●".contains(*ch))
+            .collect()
+    };
+    let e4 = marks("E4");
+    let (first, second) = (e4[0].0, e4[1].0);
+
+    assert_eq!(e4, vec![(first, '·'), (second, '■')]);
+    assert_eq!(marks("C4"), vec![(first, '■'), (second, '·')]);
+    assert_eq!(marks("KS Sus_Down"), vec![(first, '●')]);
+    assert_eq!(marks("KS Slide_Up"), vec![(second, '●')]);
+    assert_eq!(marks("CC26"), vec![(second, '●')]);
+    assert_eq!(marks("pitch bend"), vec![(second, '●')]);
 }
 
 #[test]

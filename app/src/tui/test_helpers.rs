@@ -48,6 +48,7 @@ impl TuiApp<'static> {
             deferred_chord_chart_preview: None,
             guitar_articulation: guitar_articulation::GuitarArticulationScreen::default()
                 .with_history(guitar_articulation::load_history()),
+            guitar_articulation_playback: None,
             grid_history_preview: crate::daw::DawGridPreviewPlayer::disabled_for_tests(cfg),
             voicing: voicing::VoicingState::new(
                 crate::history::VoicingCache::default(),

@@ -9,11 +9,18 @@ mod event_list;
 mod help;
 mod history_overlay;
 mod humanize_row;
+mod ineffective_notice;
 mod instrument_title;
+mod playhead_row;
+mod rule_groups;
+mod rule_lanes;
+mod rule_list_filter;
+mod rule_list_overlay;
 mod sample_midi;
+mod title_flags;
 
 const WIDTH: u16 = 100;
-const HEIGHT: u16 = 55;
+const HEIGHT: u16 = 56;
 
 fn key(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
@@ -89,7 +96,7 @@ fn three_rising_notes_fill_three_columns_on_three_rows_and_both_event_lists() {
         "{cells:?}"
     );
     let matrix = squeezed(&rows_in(&buffer, layout.matrix));
-    for name in ["G2", "F#2", "E2", "s:autohammer/pull", "a:hammer/pull"] {
+    for name in ["G2", "F#2", "E2", "s:autohammer/pull", "t:KS"] {
         assert!(matrix.contains(name), "{name} が matrix に無い: {matrix}");
     }
     assert!(!matrix.contains("F2"), "音の無い段は出さない: {matrix}");
@@ -98,12 +105,18 @@ fn three_rising_notes_fill_three_columns_on_three_rows_and_both_event_lists() {
     let converted = squeezed(&rows_in(&buffer, layout.converted));
     for name in ["E2", "F#2", "G2"] {
         assert!(plain.contains(name), "rawに {name} が無い: {plain}");
+    }
+    assert!(converted.contains("KSSus_Down"), "{converted}");
+    // Articulated は頭に列 CC の既定値が積まれるので、カーソル列の音を 1 列ずつ見る。
+    let mut screen = screen;
+    for name in ["E2", "F#2", "G2"] {
+        let converted = squeezed(&rows_in(&render(&screen), layout.converted));
         assert!(
             converted.contains(name),
             "Articulatedに {name} が無い: {converted}"
         );
+        screen.handle_key_event(key(KeyCode::Char('l')));
     }
-    assert!(converted.contains("KSSus_Down"), "{converted}");
     assert!(!plain.contains("KS"), "rawに KS は無い: {plain}");
 }
 
@@ -191,11 +204,9 @@ fn a_toggled_rule_shows_under_its_column_and_the_converted_take_names_the_keyswi
     let buffer = render(&screen);
     let layout = layout_for(buffer.area, &screen);
 
-    let marks: Vec<(u16, u16)> = (layout.matrix.y..layout.matrix.y + layout.matrix.height)
-        .flat_map(|y| (layout.matrix.x..layout.matrix.x + layout.matrix.width).map(move |x| (x, y)))
-        .filter(|&(x, y)| buffer.cell((x, y)).unwrap().symbol() == "●")
-        .collect();
+    let marks = mark_cells(&buffer, layout.matrix, "a:hammer/pull");
     assert_eq!(marks.len(), 1, "{marks:?}");
+    assert_eq!(buffer.cell(marks[0]).unwrap().symbol(), "a");
     // 2 列目（F#2）の音の升と同じ x。
     let f_sharp = note_cells(&buffer, layout.matrix)[1];
     assert_eq!(marks[0].0, f_sharp.0);
@@ -236,7 +247,7 @@ fn the_pane_that_takes_the_keys_has_the_cyan_border() {
 }
 
 #[test]
-fn auto_row_sits_above_the_hammer_pull_row_and_marks_picks_and_legatos() {
+fn auto_row_sits_above_the_ks_row_and_marks_picks_and_legatos() {
     // a+ で 1 本の弦の幅（5 半音）を超え、次の弦をピッキングする。
     let mut screen = screen_with_mml("o3 l8 e f+ g a+");
     screen.handle_key_event(key(KeyCode::Char('s')));
@@ -248,11 +259,8 @@ fn auto_row_sits_above_the_hammer_pull_row_and_marks_picks_and_legatos() {
         .iter()
         .position(|r| r.contains("s:auto hammer/pull"))
         .unwrap();
-    let hammer = rows
-        .iter()
-        .position(|r| r.contains("a:hammer/pull"))
-        .unwrap();
-    assert_eq!(auto + 1, hammer, "{rows:#?}");
+    let ks = rows.iter().position(|r| r.contains("t:KS")).unwrap();
+    assert_eq!(auto + 1, ks, "{rows:#?}");
     let marks = row_marks(&buffer, layout.matrix, "s:auto hammer/pull");
     assert_eq!(marks, "D●●U", "{rows:#?}");
 }
@@ -364,15 +372,56 @@ fn the_note_preview_shows_in_the_title_and_n_in_the_keybinds() {
     assert!(top(&screen).contains("[1音]"), "{}", top(&screen));
 }
 
+/// 枠の見出しや下の枠の行。効いていないルールの知らせが段の見出しと同じ文字列を含むので、段を探すときは飛ばす。
+fn is_border_row(row: &str) -> bool {
+    row.contains('┌') || row.contains('└')
+}
+
 /// 見出しが `label` の段の記号（空白と枠を落とす）。
 fn row_marks(buffer: &Buffer, area: Rect, label: &str) -> String {
     let rows = rows_in(buffer, area);
     let row = rows
         .iter()
-        .find(|r| r.contains(label))
+        .find(|r| !is_border_row(r) && r.contains(label))
         .unwrap_or_else(|| panic!("{label} の段が無い: {rows:#?}"));
     row[row.find(label).unwrap() + label.len()..]
         .chars()
         .filter(|ch| !ch.is_whitespace() && *ch != '│')
         .collect()
+}
+
+/// 見出しが `label` の段で、記号の在るセル（空白と枠を除く）の `(x, y)`。
+fn mark_cells(buffer: &Buffer, area: Rect, label: &str) -> Vec<(u16, u16)> {
+    let rows = rows_in(buffer, area);
+    let (offset, row) = rows
+        .iter()
+        .enumerate()
+        .find(|(_, r)| !is_border_row(r) && r.contains(label))
+        .unwrap_or_else(|| panic!("{label} の段が無い: {rows:#?}"));
+    let start = row[..row.find(label).unwrap() + label.len()]
+        .chars()
+        .count() as u16;
+    let y = area.y + offset as u16;
+    (area.x + start..area.x + area.width)
+        .filter(|&x| {
+            let symbol = buffer.cell((x, y)).unwrap().symbol();
+            !symbol.trim().is_empty() && symbol != "│"
+        })
+        .map(|x| (x, y))
+        .collect()
+}
+
+/// `area` の中で `label` が始まるセルの文字色。
+fn label_fg(buffer: &Buffer, area: Rect, label: &str) -> ratatui::style::Color {
+    let rows = rows_in(buffer, area);
+    let (offset, row) = rows
+        .iter()
+        .enumerate()
+        .find(|(_, row)| !is_border_row(row) && row.contains(label))
+        .unwrap_or_else(|| panic!("{label} の行が無い: {rows:#?}"));
+    let column = row[..row.find(label).unwrap()].chars().count() as u16;
+    buffer
+        .cell((area.x + column, area.y + offset as u16))
+        .unwrap()
+        .fg
 }

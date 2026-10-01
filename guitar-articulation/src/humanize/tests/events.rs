@@ -55,6 +55,7 @@ fn performance(
     let articulated = articulate(&notes, rules);
     let humanized = humanize(&notes, &articulated, rng);
     let mut out = humanized_events(&raw(mml), &notes, &articulated, &humanized, rules);
+    crate::control::add_column_cc_defaults(&mut out, &shifted_notes(&notes, &humanized));
     cmrt_midi_filter::sort_for_playback(&mut out);
     (out, notes, articulated, humanized)
 }

@@ -59,7 +59,7 @@ impl<'a> TuiApp<'a> {
             PrimaryScreen::Notepad => self.notepad.mode == Mode::Normal,
             PrimaryScreen::DailyDaw | PrimaryScreen::Daw => false,
             PrimaryScreen::Keyboard => {
-                !self.keyboard.mml_input.is_active()
+                !self.keyboard.blocks_screen_switch()
                     && self.keyboard.state.numeric_input().is_none()
             }
             PrimaryScreen::LoopBrowser => {

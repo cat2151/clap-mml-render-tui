@@ -9,13 +9,22 @@ fn press_and_release(state: &mut KeyboardState, notes: &[KeyboardNote]) {
     }
 }
 
+fn chord_notes(state: &KeyboardState) -> Vec<Vec<u8>> {
+    state
+        .repeat_chords()
+        .iter()
+        .map(|chord| chord.iter().map(|note| note.midi_note).collect())
+        .collect()
+}
+
 fn enter_arp(state: &mut KeyboardState, now: Instant) -> Vec<[u8; 3]> {
+    let _ = state.cycle_note_playback(now);
     let _ = state.cycle_note_playback(now);
     state.cycle_note_playback(now)
 }
 
 #[test]
-fn note_playback_cycles_off_repeat_arp_auto_off_with_unknown_fallback() {
+fn note_playback_cycles_off_auto_repeat_arp_off_with_unknown_fallback() {
     let mut state = KeyboardState::default();
     let now = Instant::now();
     press_and_release(&mut state, &[KEYBOARD_NOTES[0], KEYBOARD_NOTES[2]]);
@@ -25,21 +34,15 @@ fn note_playback_cycles_off_repeat_arp_auto_off_with_unknown_fallback() {
         state.cycle_note_playback(now),
         vec![[0x90, 60, 100], [0x90, 64, 100]]
     );
+    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Auto);
+    assert!(state.cycle_note_playback(now).is_empty());
     assert_eq!(state.note_playback_mode(), NotePlaybackMode::Repeat);
     assert_eq!(
         state.cycle_note_playback(now),
         vec![[0x80, 60, 0], [0x80, 64, 0], [0x90, 60, 100]]
     );
     assert_eq!(state.note_playback_mode(), NotePlaybackMode::Arp);
-    assert_eq!(
-        state.cycle_note_playback(now),
-        vec![[0x80, 60, 0], [0x90, 60, 100], [0x90, 64, 100]]
-    );
-    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Auto);
-    assert_eq!(
-        state.cycle_note_playback(now),
-        vec![[0x80, 60, 0], [0x80, 64, 0]]
-    );
+    assert_eq!(state.cycle_note_playback(now), vec![[0x80, 60, 0]]);
     assert_eq!(state.note_playback_mode(), NotePlaybackMode::Off);
 }
 
@@ -49,15 +52,20 @@ fn auto_uses_arp_for_a_mono_detection() {
     let now = Instant::now();
     state.set_detected_voicing(cmrt_realtime_play::PatchVoicing::Mono);
     press_and_release(&mut state, &[KEYBOARD_NOTES[0], KEYBOARD_NOTES[2]]);
-    let _ = enter_arp(&mut state, now);
 
-    assert!(state.cycle_note_playback(now).is_empty());
+    assert_eq!(state.cycle_note_playback(now), vec![[0x90, 60, 100]]);
     assert_eq!(state.note_playback_mode(), NotePlaybackMode::Auto);
     assert!(state.note_playback_uses_arp());
     assert_eq!(
         state.poll_periodic(now + Duration::from_millis(250)),
         vec![[0x80, 60, 0], [0x90, 64, 100]]
     );
+    // repeatへ移るとarpの音を止めて和音を鳴らす
+    assert_eq!(
+        state.cycle_note_playback(now + Duration::from_millis(300)),
+        vec![[0x80, 64, 0], [0x90, 60, 100], [0x90, 64, 100]]
+    );
+    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Repeat);
 }
 
 #[test]
@@ -66,12 +74,12 @@ fn auto_uses_repeat_for_a_poly_detection() {
     let now = Instant::now();
     state.set_detected_voicing(cmrt_realtime_play::PatchVoicing::Poly);
     press_and_release(&mut state, &[KEYBOARD_NOTES[0], KEYBOARD_NOTES[2]]);
-    let _ = enter_arp(&mut state, now);
 
     assert_eq!(
         state.cycle_note_playback(now),
-        vec![[0x80, 60, 0], [0x90, 60, 100], [0x90, 64, 100]]
+        vec![[0x90, 60, 100], [0x90, 64, 100]]
     );
+    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Auto);
     assert!(!state.note_playback_uses_arp());
     for tick in 1..8 {
         assert!(state
@@ -87,6 +95,24 @@ fn auto_uses_repeat_for_a_poly_detection() {
             [0x90, 64, 100],
         ]
     );
+}
+
+#[test]
+fn a_played_chord_stays_the_target_in_every_mode() {
+    let mut state = KeyboardState::default();
+    let now = Instant::now();
+    press_and_release(&mut state, &[KEYBOARD_NOTES[1], KEYBOARD_NOTES[5]]);
+
+    for expected in [
+        NotePlaybackMode::Auto,
+        NotePlaybackMode::Repeat,
+        NotePlaybackMode::Arp,
+        NotePlaybackMode::Off,
+    ] {
+        let _ = state.cycle_note_playback(now);
+        assert_eq!(state.note_playback_mode(), expected);
+        assert_eq!(chord_notes(&state), vec![vec![62, 69]]);
+    }
 }
 
 #[test]
@@ -149,7 +175,7 @@ fn replacing_target_restarts_repeat_immediately() {
             [0x90, 71, 100],
         ]
     );
-    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Repeat);
+    assert_eq!(state.note_playback_mode(), NotePlaybackMode::Auto);
 }
 
 #[test]
@@ -172,8 +198,8 @@ fn replacing_target_restarts_auto_using_the_detected_voicing() {
     let mut mono = KeyboardState::default();
     mono.set_detected_voicing(cmrt_realtime_play::PatchVoicing::Mono);
     press_and_release(&mut mono, &[KEYBOARD_NOTES[0], KEYBOARD_NOTES[2]]);
-    let _ = enter_arp(&mut mono, now);
-    assert!(mono.cycle_note_playback(now).is_empty());
+    let _ = mono.cycle_note_playback(now);
+    assert_eq!(mono.note_playback_mode(), NotePlaybackMode::Auto);
     assert_eq!(
         mono.replace_repeat_chords(vec![vec![71, 65]], now, true),
         vec![[0x80, 60, 0], [0x90, 65, 100]]
@@ -182,8 +208,8 @@ fn replacing_target_restarts_auto_using_the_detected_voicing() {
     let mut poly = KeyboardState::default();
     poly.set_detected_voicing(cmrt_realtime_play::PatchVoicing::Poly);
     press_and_release(&mut poly, &[KEYBOARD_NOTES[0], KEYBOARD_NOTES[2]]);
-    let _ = enter_arp(&mut poly, now);
     let _ = poly.cycle_note_playback(now);
+    assert_eq!(poly.note_playback_mode(), NotePlaybackMode::Auto);
     assert_eq!(
         poly.replace_repeat_chords(vec![vec![71, 65]], now, true),
         vec![

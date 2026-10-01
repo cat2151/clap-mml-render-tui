@@ -7,6 +7,7 @@ mod play_settings;
 mod plugin_menu;
 
 pub use patch_select::{load_time_label, scroll_offset, PatchSelectDrawOptions};
+pub use plugin_menu::draw_plugin_menu;
 
 use ratatui::{layout::Rect, Frame};
 

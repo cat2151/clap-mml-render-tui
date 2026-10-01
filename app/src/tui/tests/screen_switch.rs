@@ -201,3 +201,50 @@ fn external_screen_switch_closes_an_open_menu() {
     assert_eq!(app.active_screen, PrimaryScreen::Daw);
     assert!(!app.screen_switch_menu.is_open());
 }
+
+/// keyboard の `M`（plugin solo/mute）を開いている間は、キーが overlay へ入るので Ctrl+G を塞ぐ。
+#[test]
+fn the_keyboard_plugin_menu_blocks_the_screen_switch_menu() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.start_keyboard(None);
+
+    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('M'), KeyModifiers::SHIFT));
+    assert!(app.keyboard.plugin_menu().is_some());
+    assert!(!app.try_open_screen_switch_menu(ctrl_g()));
+
+    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert!(app.try_open_screen_switch_menu(ctrl_g()));
+    app.screen_switch_menu
+        .handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    app.finish_keyboard();
+}
+
+#[test]
+fn the_keyboard_effect_add_overlay_blocks_the_screen_switch_menu() {
+    let mut app = TuiApp::new_for_test(test_config());
+    // keyboard だけ effect の catalog を持たせ直す。
+    app.keyboard = std::mem::replace(
+        &mut app.keyboard,
+        crate::tui::keyboard::KeyboardScreen::new(
+            None,
+            crate::tui::keyboard::KeyboardState::from_session(Default::default()),
+            Default::default(),
+            crate::tui::keyboard::KeyboardNoteGuide::new(None),
+        ),
+    )
+    .with_effect_plugins(super::chord_chart_auto_reverb::effect_plugins());
+    app.start_keyboard(None);
+
+    for ch in ['l', 'a'] {
+        app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE));
+    }
+    assert!(app.keyboard.effect_pane().is_adding());
+    assert!(!app.try_open_screen_switch_menu(ctrl_g()));
+
+    app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert!(!app.keyboard.effect_pane().is_adding());
+    assert!(app.try_open_screen_switch_menu(ctrl_g()));
+    app.screen_switch_menu
+        .handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    app.finish_keyboard();
+}

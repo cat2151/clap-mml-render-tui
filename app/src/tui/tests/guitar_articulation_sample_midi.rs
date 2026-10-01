@@ -142,19 +142,35 @@ fn space_sends_every_event_of_the_file() {
 }
 
 #[test]
-fn in_note_mode_l_sends_the_next_note_with_its_leading_state() {
+fn l_sends_the_next_note_with_its_leading_state_without_the_note_mode() {
     let (mut app, sink) = app_in_sample_midi("ga_sample_midi_note");
     let note = app.guitar_articulation.sample_midi_events(Some(1));
 
-    for code in ['n', 'l'] {
-        app.handle_guitar_articulation_key_event(plain(KeyCode::Char(code)));
-    }
+    app.handle_guitar_articulation_key_event(plain(KeyCode::Char('l')));
 
     wait_until("2 音目", || sink.timeline_events().len() >= note.len());
     assert_eq!(sent_messages(&sink, 0), messages(&note));
     assert!(note.iter().any(|event| event.message == [0x90, 62, 100]));
     assert!(!note.iter().any(|event| event.message == [0x90, 60, 100]));
     assert_eq!(sink.timelines(), 1);
+}
+
+#[test]
+fn j_in_the_list_previews_the_whole_file_without_entering_the_midi_mode() {
+    let (mut app, sink) = app_with_mml();
+    let dir = temp_dir_with("ga_sample_midi_preview", &["a.mid", "b.mid"]);
+    app.guitar_articulation
+        .open_sample_midi_list(sample_midi_files(&dir));
+    let all = cmrt_chord::timed_smf_events(&sample_smf()).unwrap().events;
+
+    app.handle_guitar_articulation_key_event(plain(KeyCode::Char('j')));
+
+    std::fs::remove_dir_all(&dir).ok();
+    wait_until("試聴", || sink.timeline_events().len() >= all.len());
+    assert_eq!(sent_messages(&sink, 0), messages(&all));
+    assert_eq!(sink.timelines(), 1);
+    assert!(app.guitar_articulation.sample_midi().is_none());
+    assert_eq!(app.guitar_articulation.sample_midi_list().unwrap().1, 1);
 }
 
 /// MID の演奏も MML の演奏と同じ音色・chain で送るので、sender は音色を読み直さない。

@@ -20,7 +20,7 @@ use std::ops::RangeInclusive;
 use rand::{rngs::StdRng, Rng, RngExt, SeedableRng};
 
 use crate::humanize::control_change;
-use crate::{Note, TimedMidiEvent, POSITION_RELEASE_VALUE};
+use crate::{Note, TimedMidiEvent};
 
 /// 汚し（リリース）の乱数の seed。汚し（[`HUMANIZE_SEED`](crate::humanize::HUMANIZE_SEED)）とは別の乱数列にして、
 /// 片方の ON/OFF がもう片方の揺れを変えないようにする。
@@ -45,8 +45,9 @@ pub(crate) const RELEASE_LEVEL_DEFAULT: u8 = 108;
 /// 同時刻の CC は最後の 1 組しか効かないので、和音の列も 1 組だけ。channel は列の最初の音。
 /// CC は演奏を跨いで残るので、演奏の終わり（全音の off の最大）で sfz の既定値へ戻す。
 /// `notes` は列の順（[`notes_from_events`](crate::notes_from_events) の並び）。
-/// `positions` の列の CC24 は、乱数を引いた上で [`POSITION_RELEASE_VALUE`] に置き換える
-/// （乱数の引き順を変えないので、他の列の値は変わらない）。
+/// `positions` の列は CC25 だけ置き、CC24 は置かない。その列の CC24 は CC24 を選ぶ列のルール
+/// （[`crate::Rule::selects_release_shape`]）が同じ時刻に送るので、置くと同時刻に CC24 が 2 つ並ぶ。
+/// 乱数は引いてから捨てる（引き順を変えないので、他の列の値は変わらない）。
 pub(crate) fn release_events(
     notes: &[Note],
     positions: &BTreeSet<usize>,
@@ -70,13 +71,10 @@ pub(crate) fn release_events(
             .fold(f64::INFINITY, f64::min);
         let channel = members[0].channel;
         let shape = rng.random_range(RELEASE_SHAPE_RANGE);
-        let shape = if positions.contains(&column) {
-            POSITION_RELEASE_VALUE
-        } else {
-            shape
-        };
         let level = rng.random_range(RELEASE_LEVEL_RANGE);
-        out.push(control_change(on, channel, RELEASE_SHAPE_CC, shape));
+        if !positions.contains(&column) {
+            out.push(control_change(on, channel, RELEASE_SHAPE_CC, shape));
+        }
         out.push(control_change(on, channel, RELEASE_LEVEL_CC, level));
         start += len;
     }
@@ -105,7 +103,9 @@ pub(crate) fn release_shape_name(value: u8) -> &'static str {
         32..=47 => "Agressive",
         48..=63 => "Agressive2",
         64..=79 => "position",
-        _ => "action",
+        80..=95 => "slide out",
+        // Sus_Down / Mute_Down などはアップストローク、他はスライドアウト。
+        _ => "alternate",
     }
 }
 
