@@ -1,7 +1,9 @@
 use cmrt_tui_core::theme::{MONOKAI_DARK_GRAY, MONOKAI_PINK};
 use ratatui::{buffer::Buffer, layout::Rect, style::Color};
 
-use super::{render, rows_in, screen_with_mml};
+use crossterm::event::KeyCode;
+
+use super::{key, render, rows_in, screen_with_mml};
 use crate::ui::event_list::EventRow;
 use crate::ui::layout_for;
 use crate::TimedMidiEvent;
@@ -106,4 +108,28 @@ fn pitch_bends_show_the_signed_offset_from_the_center() {
         row_text([0xE0, 0, 0x40], true),
         "  0.500 pb                      0"
     );
+}
+
+#[test]
+fn the_note_preview_lists_only_the_cursor_column_on_the_right() {
+    let mut screen = screen_with_mml("o3 l8 e f+ g");
+    screen.handle_key_event(key(KeyCode::Char('n')));
+    screen.handle_key_event(key(KeyCode::Char('l')));
+    let buffer = render(&screen);
+    let layout = layout_for(buffer.area, &screen);
+
+    let right = rows_in(&buffer, layout.converted).join(
+        "
+",
+    );
+    assert!(right.contains(" on  F#2 "), "{right}");
+    assert!(!right.contains("E2 "), "{right}");
+    assert!(!right.contains("G2 "), "{right}");
+    let left = rows_in(&buffer, layout.plain).join(
+        "
+",
+    );
+    for pitch in [" on  E2 ", " on  F#2 ", " on  G2 "] {
+        assert!(left.contains(pitch), "左 pane は全体のまま: {left}");
+    }
 }

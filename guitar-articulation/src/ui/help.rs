@@ -42,7 +42,7 @@ pub(crate) const KEY_ROWS: [&str; 35] = [
     " ── 演奏・effect ──",
     " b       raw を演奏",
     " space   Articulated を演奏",
-    " n       1 音モード",
+    " n       1 音モード(右 pane もその音だけ)",
     " Shift+R repeat 演奏",
     " x       effect chain を編集",
     " w       effect の dry/wet",
@@ -54,7 +54,7 @@ pub(crate) const KEY_ROWS: [&str; 35] = [
     " Ctrl+G  画面切替メニュー",
 ];
 
-pub(crate) const DETAIL_ROWS: [&str; 67] = [
+pub(crate) const DETAIL_ROWS: [&str; 66] = [
     " MML の音へ列ごとに奏法(KS)を足し、raw と聴き比べる。",
     " 反転した列がカーソル。ルールの切替で Articulated を演奏。",
     " ルールの段の文字は t の overlay の文字。灰色の - は効かない列(理由は枠の見出しに)",
@@ -105,8 +105,7 @@ pub(crate) const DETAIL_ROWS: [&str; 67] = [
     "    Agressive2)と音量を乱数で。d とは独立。ON の列は ~",
     " u  CC21/22/28/29/46/48/52/53/112 を h/l で ±8。既定以外を頭で送る",
     " z  MML 欄はそのまま、音を低い順に並べて音型で鳴らす(変えるたびに演奏)。",
-    "    開いている間は repeat(隙間なく繋げる)。キーの効き方は overlay の下に出る",
-    "    (u/d/p/P/h/t:音型 1/2/3:oct n/N:回数 b/B:UpTurn の戻り幅 0:OFF)",
+    "    開いている間は隙間なく repeat。各項目の説明は overlay の中の ?",
     " ── 演奏・effect ──",
     " n  ON の間は a/e/s/b/space がカーソル列の音だけ鳴らす",
     " Shift+R  ON の間、鳴らし終わるたびに同じ演奏を繰り返す(title に",

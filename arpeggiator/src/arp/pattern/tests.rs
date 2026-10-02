@@ -1,4 +1,4 @@
-use super::{up_turn_sequence, ArpPattern, UP_TURN_DEFAULT};
+use super::{up_down_sequence, ArpPattern};
 
 fn sequence(pattern: ArpPattern, voice_count: usize) -> Vec<usize> {
     pattern
@@ -115,36 +115,40 @@ fn labels_are_unique() {
 }
 
 #[test]
-fn up_turn_climbs_to_the_top_and_turns_back_by_the_given_width() {
-    assert_eq!(up_turn_sequence(7, 2), [0, 1, 2, 3, 4, 5, 6, 5, 4]);
-    assert_eq!(up_turn_sequence(4, 1), [0, 1, 2, 3, 2]);
-    assert_eq!(up_turn_sequence(4, 3), [0, 1, 2, 3, 2, 1, 0]);
+fn up_down_sequence_descends_by_the_given_width() {
+    assert_eq!(up_down_sequence(6, None), [0, 1, 2, 3, 4, 5, 4, 3, 2, 1]);
+    assert_eq!(up_down_sequence(6, Some(2)), [0, 1, 2, 3, 4, 5, 4, 3]);
+    assert_eq!(up_down_sequence(6, Some(1)), [0, 1, 2, 3, 4, 5, 4]);
+    assert_eq!(up_down_sequence(6, Some(0)), [0, 1, 2, 3, 4, 5]);
 }
 
 #[test]
-fn up_turn_width_is_capped_below_the_voice_count() {
-    assert_eq!(up_turn_sequence(2, 3), [0, 1, 0]);
-    assert_eq!(up_turn_sequence(1, 2), [0]);
-    assert_eq!(up_turn_sequence(0, 2), Vec::<usize>::new());
+fn up_down_width_is_capped_at_the_full_descent() {
+    assert_eq!(up_down_sequence(6, Some(4)), up_down_sequence(6, None));
+    assert_eq!(up_down_sequence(6, Some(99)), up_down_sequence(6, None));
 }
 
 #[test]
-fn up_turn_voice_sequence_uses_the_default_width() {
-    assert_eq!(
-        sequence(ArpPattern::UpTurn, 7),
-        up_turn_sequence(7, UP_TURN_DEFAULT)
-    );
-    assert_eq!(UP_TURN_DEFAULT, 2);
+fn up_down_sequence_edges() {
+    assert_eq!(up_down_sequence(0, None), Vec::<usize>::new());
+    assert_eq!(up_down_sequence(0, Some(2)), Vec::<usize>::new());
+    assert_eq!(up_down_sequence(1, None), [0]);
+    assert_eq!(up_down_sequence(1, Some(2)), [0]);
+    assert_eq!(up_down_sequence(2, None), [0, 1]);
+    assert_eq!(up_down_sequence(2, Some(2)), [0, 1]);
 }
 
 #[test]
-fn up_turn_sits_between_octave_and_random() {
-    let index = |target| {
-        ArpPattern::ALL
-            .iter()
-            .position(|pattern| *pattern == target)
-            .expect("listed")
-    };
-    assert_eq!(index(ArpPattern::UpTurn), index(ArpPattern::Octave) + 1);
-    assert_eq!(index(ArpPattern::Random), index(ArpPattern::UpTurn) + 1);
+fn up_down_voice_sequence_descends_all_the_way() {
+    for voice_count in 0..8 {
+        assert_eq!(
+            sequence(ArpPattern::UpDown, voice_count),
+            up_down_sequence(voice_count, None)
+        );
+    }
+}
+
+#[test]
+fn up_turn_is_not_a_pattern() {
+    assert!(ArpPattern::ALL.iter().all(|p| p.label() != "UpTurn"));
 }

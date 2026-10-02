@@ -117,6 +117,11 @@ impl RuleTable {
         self.accent = self.accent.next();
     }
 
+    /// アクセントの選び方を置く。
+    pub fn set_accent_pattern(&mut self, pattern: AccentPattern) {
+        self.accent = pattern;
+    }
+
     /// 自動ハンマリングがピッキングする列の選び方。OFF の間は既定（[`AutoPick::Run`]）。
     pub fn auto_pick(&self) -> AutoPick {
         self.auto_pick
@@ -143,6 +148,21 @@ impl RuleTable {
         }
         if !self.is_row_on(RowRule::AutoHammerPull) {
             self.auto_pick = AutoPick::default();
+        }
+    }
+
+    /// 行全体のルールを `on` にする。今と同じなら何もしない。排他と [`AutoPick`] の既定化は [`Self::toggle_row`] に従う。
+    pub fn set_row(&mut self, rule: RowRule, on: bool) {
+        if self.is_row_on(rule) != on {
+            self.toggle_row(rule);
+        }
+    }
+
+    /// 自動ハンマリングを置く。`None` で OFF、`Some` で ON にしてその選び方にする（エコノミーピッキングは OFF になる）。
+    pub fn set_auto_hammer_pull(&mut self, pick: Option<AutoPick>) {
+        self.set_row(RowRule::AutoHammerPull, pick.is_some());
+        if let Some(pick) = pick {
+            self.auto_pick = pick;
         }
     }
 

@@ -43,7 +43,8 @@ use serde::{Deserialize, Serialize};
 
 pub use accent::AccentPattern;
 pub use arp::{
-    arpeggiate, performance_events, ArpSettings, ARP_CYCLES, ARP_OCTAVES, ARP_PATTERNS, ARP_TURN,
+    arpeggiate, material_performance, performance_events, ArpRate, ArpSettings,
+    MaterialPerformance, ARP_BPM, ARP_DOWN, ARP_OCTAVES, ARP_PATTERNS, ARP_SHIFT,
 };
 pub use articulation::Articulation;
 pub use auto_pick::{auto_pick_columns, AutoPick, RUN_MIN_NOTES, RUN_PICK_EVERY};
@@ -76,7 +77,7 @@ pub use sample_midi::{
     is_keyswitch_pitch, keyswitch_name, SampleMidi, SampleMidiGroup, SAMPLE_MIDI_DIR,
 };
 pub use scratch::{pick_scratch_pitch, PICK_SCRATCH_PITCHES};
-pub use screen::{GuitarArticulationAction, GuitarArticulationScreen, Take, DEFAULT_MML};
+pub use screen::{ArpRow, GuitarArticulationAction, GuitarArticulationScreen, Take, DEFAULT_MML};
 pub use settings::{load_settings, save_settings, GuitarArticulationSettings};
 pub use single_note::column_events;
 pub use strings::{picks_string, strings_by_column, REACH_SEMITONES};

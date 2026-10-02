@@ -11,7 +11,7 @@ fn new_keeps_only_the_column_rules() {
     rules.toggle(1, Rule::PickScratch);
     rules.toggle_row(RowRule::EconomyPicking);
 
-    let anchor = ColumnRuleAnchor::new("c e g", &Default::default(), &rules);
+    let anchor = ColumnRuleAnchor::new("c e g", &rules);
 
     assert!(anchor.rules.is_on(1, Rule::PickScratch));
     assert!(!anchor.rules.is_row_on(RowRule::EconomyPicking));
@@ -21,7 +21,7 @@ fn new_keeps_only_the_column_rules() {
 fn rules_for_keeps_the_column_rules_at_their_time_and_takes_the_row_rules_from_current() {
     let mut rules = RuleTable::default();
     rules.toggle(1, Rule::PickScratch);
-    let anchor = ColumnRuleAnchor::new("c e g", &Default::default(), &rules);
+    let anchor = ColumnRuleAnchor::new("c e g", &rules);
     let mut current = RuleTable::default();
     current.toggle(0, Rule::PalmMute);
     current.toggle_row(RowRule::Humanize);
@@ -38,7 +38,7 @@ fn rules_for_keeps_the_column_rules_at_their_time_and_takes_the_row_rules_from_c
 fn an_unparsable_anchor_gives_no_column_rules() {
     let mut rules = RuleTable::default();
     rules.toggle(0, Rule::PickScratch);
-    let anchor = ColumnRuleAnchor::new("[[[", &Default::default(), &rules);
+    let anchor = ColumnRuleAnchor::new("[[[", &rules);
     let mut current = RuleTable::default();
     current.toggle_row(RowRule::Humanize);
 
@@ -46,4 +46,16 @@ fn an_unparsable_anchor_gives_no_column_rules() {
 
     assert!(result.is_empty());
     assert!(result.is_row_on(RowRule::Humanize));
+}
+
+#[test]
+fn an_anchor_saved_with_an_arp_field_reads_without_it() {
+    let mut rules = RuleTable::default();
+    rules.toggle(1, Rule::PickScratch);
+    let saved: ColumnRuleAnchor = serde_json::from_str(
+        r#"{"mml":"c e g","arp":{"pattern":"UpDown"},"rules":{"columns":{"1":["pick_scratch"]},"rows":[]}}"#,
+    )
+    .unwrap();
+
+    assert_eq!(saved, ColumnRuleAnchor::new("c e g", &rules));
 }

@@ -20,6 +20,7 @@ mod guitar_articulation;
 mod guitar_articulation_cursor_note;
 mod guitar_articulation_full_swap;
 mod guitar_articulation_history;
+mod guitar_articulation_materials;
 mod guitar_articulation_repeat;
 mod guitar_articulation_sample_midi;
 mod keyboard_mml;

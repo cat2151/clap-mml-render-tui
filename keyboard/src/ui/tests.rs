@@ -344,7 +344,7 @@ fn same_day_footer_replaces_normal_key_guide_with_colored_message() {
         .replace(' ', "")
         .contains(KEYBOARD_NOTE_GUIDE_MESSAGE));
     assert!(!screen.contains("cdefgab:notes"));
-    assert!(!screen.contains("h/l:pane"));
+    assert!(!screen.contains("h/l/Left/Right:pane"));
     assert!(has_colored_message_start(&terminal));
 }
 

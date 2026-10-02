@@ -1,21 +1,18 @@
-//! 列ごとのルールを手で切り替えた直後の MML・アルペジエーターの設定と列ルール。
+//! 列ごとのルールを手で切り替えた直後の MML と列ルール。
 //!
-//! MML を確定し直したときやアルペジエーターの設定を変えたとき、この MML と設定で鳴らした列から新しい列へ [`column_map`] で列ルールを付け替える元にする。
+//! MML を確定し直したとき、この MML で鳴らした列から新しい列へ [`column_map`] で列ルールを付け替える元にする。
 //! 更新するのは列ルールを手で切り替えたときだけで、MML を確定しても変えない。そのため、ある列を
 //! 一時的に消して確定しても、足し直して確定すればその列のルールが戻る。
 
 use serde::{Deserialize, Serialize};
 
 use crate::column_map::column_map;
-use crate::{notes_from_events, performance_events, ArpSettings, Note, RuleTable};
+use crate::{notes_from_events, performance_events, Note, RuleTable};
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ColumnRuleAnchor {
     #[serde(default)]
     pub mml: String,
-    /// `mml` を鳴らしたときのアルペジエーターの設定。列は `mml` にこれを当てた演奏の列。
-    #[serde(default)]
-    pub arp: ArpSettings,
     /// 列ごとのルールだけ。行全体のルールとパラメータは持たない。
     #[serde(default)]
     pub rules: RuleTable,
@@ -23,10 +20,9 @@ pub struct ColumnRuleAnchor {
 
 impl ColumnRuleAnchor {
     /// `rules` の列ごとのルールだけを持つ。
-    pub fn new(mml: &str, arp: &ArpSettings, rules: &RuleTable) -> Self {
+    pub fn new(mml: &str, rules: &RuleTable) -> Self {
         ColumnRuleAnchor {
             mml: mml.to_string(),
-            arp: *arp,
             rules: RuleTable {
                 on: rules.on.clone(),
                 ..Default::default()
@@ -37,7 +33,7 @@ impl ColumnRuleAnchor {
     /// `notes` の列へ列ルールを付け替え、行全体のルール・パラメータ・アクセントと自動ハンマリングの選び方は `current` のものにした表。
     /// この MML を解釈できなければ、列ルールは空。
     pub(crate) fn rules_for(&self, notes: &[Note], current: &RuleTable) -> RuleTable {
-        let mut rules = match performance_events(&self.mml, &self.arp) {
+        let mut rules = match performance_events(&self.mml, None) {
             Ok(events) => {
                 let map = column_map(&notes_from_events(&events), notes);
                 self.rules.remap_columns(&map)

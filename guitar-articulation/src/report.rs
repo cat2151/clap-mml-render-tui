@@ -8,7 +8,7 @@ use crate::{
 
 /// 画面と同じ経路（`timed_performance` → [`arpeggiate`] → [`convert`]）で作った演奏を、音ごとの表と
 /// Articulated のイベント列の文字列にする。画面を開かずに変換の結果を読むためのもの。
-pub fn report(mml: &str, arp: &ArpSettings, rules: &RuleTable) -> Result<String, String> {
+pub fn report(mml: &str, arp: Option<&ArpSettings>, rules: &RuleTable) -> Result<String, String> {
     let plain = plain_events(mml, arp)?;
     let notes = notes_from_events(&plain);
     let strings = strings_by_column(&notes);
@@ -58,7 +58,7 @@ pub fn report(mml: &str, arp: &ArpSettings, rules: &RuleTable) -> Result<String,
 /// 同じ MML・同じ arp を 2 つのルール表で変換し、音ごとの奏法と velocity を左右に並べる。違う行に `<>` を付ける。
 pub fn compare(
     mml: &str,
-    arp: &ArpSettings,
+    arp: Option<&ArpSettings>,
     before: &RuleTable,
     after: &RuleTable,
 ) -> Result<String, String> {
@@ -98,14 +98,17 @@ pub fn compare(
 }
 
 /// 空の MML は解釈できない MML として Err にする（[`crate::performance_events`] は空を Ok で返す）。
-fn plain_events(mml: &str, arp: &ArpSettings) -> Result<Vec<TimedMidiEvent>, String> {
-    let plain = cmrt_chord::timed_performance(mml)?.events;
-    Ok(arpeggiate(&plain, arp))
+fn plain_events(mml: &str, arp: Option<&ArpSettings>) -> Result<Vec<TimedMidiEvent>, String> {
+    let performance = cmrt_chord::timed_performance(mml)?;
+    Ok(match arp {
+        Some(arp) => arpeggiate(&performance.events, arp, performance.from_chord),
+        None => performance.events,
+    })
 }
 
-/// arp OFF のときは何も書かない。
-fn write_arp(out: &mut String, arp: &ArpSettings) {
-    if arp.enabled {
+/// arp を当てていないときは何も書かない。
+fn write_arp(out: &mut String, arp: Option<&ArpSettings>) {
+    if let Some(arp) = arp {
         let json = serde_json::to_string(arp).unwrap_or_default();
         let _ = writeln!(out, "arp: {json}");
     }

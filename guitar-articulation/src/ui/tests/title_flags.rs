@@ -52,42 +52,106 @@ fn the_title_shows_auto2_and_its_accent_pattern_only_in_on2() {
 }
 
 #[test]
-fn the_title_shows_the_arp_only_while_it_is_on() {
+fn the_title_shows_the_arp_only_while_the_overlay_is_open() {
     use cmrt_arpeggiator::ArpPattern;
 
     let mut screen = screen_with_mml("l16cdef");
     assert!(!top(&screen).contains("[arp:"), "{}", top(&screen));
+    screen.handle_key_event(key(KeyCode::Char('z')));
+    assert!(top(&screen).contains("[arp:Upx1]"), "{}", top(&screen));
 
-    let up_turn = crate::ArpSettings {
-        enabled: true,
-        pattern: ArpPattern::UpTurn,
+    let short_down = crate::ArpSettings {
+        pattern: ArpPattern::UpDown,
         octaves: 2,
+        down: Some(2),
         ..crate::ArpSettings::default()
     };
-    screen.set_arp(up_turn);
+    screen.set_arp(short_down);
     assert_eq!(
-        crate::ui::arp_flag(&up_turn).as_deref(),
-        Some(" [arp:UpTurn x2 N2 b2]")
+        crate::ui::arp_flag(Some(&short_down), false).as_deref(),
+        Some(" [arp:UpDown x2 b2]")
     );
     assert!(
-        top(&screen).contains("[arp:UpTurnx2N2b2]"),
+        top(&screen).contains("[arp:UpDownx2b2]"),
         "{}",
         top(&screen)
     );
 
     screen.set_arp(crate::ArpSettings {
-        pattern: ArpPattern::UpDown,
-        ..up_turn
+        down: None,
+        ..short_down
     });
+    assert!(top(&screen).contains("[arp:UpDownx2]"), "{}", top(&screen));
+
+    let lowered = crate::ArpSettings {
+        shift: -1,
+        ..short_down
+    };
+    assert_eq!(
+        crate::ui::arp_flag(Some(&lowered), false).as_deref(),
+        Some(" [arp:UpDown x2 o-1 b2]")
+    );
+    assert_eq!(
+        crate::ui::arp_flag(
+            Some(&crate::ArpSettings {
+                shift: 2,
+                ..short_down
+            }),
+            false
+        )
+        .as_deref(),
+        Some(" [arp:UpDown x2 o+2 b2]")
+    );
+    screen.set_arp(lowered);
     assert!(
-        top(&screen).contains("[arp:UpDownx2N2]"),
+        top(&screen).contains("[arp:UpDownx2o-1b2]"),
         "{}",
         top(&screen)
     );
 
     screen.set_arp(crate::ArpSettings {
-        enabled: false,
-        ..up_turn
+        pattern: ArpPattern::DownUp,
+        ..short_down
     });
+    assert!(
+        top(&screen).contains("[arp:DownUpx2]"),
+        "下り幅は UpDown のときだけ: {}",
+        top(&screen)
+    );
+
+    screen.handle_key_event(key(KeyCode::Esc));
     assert!(!top(&screen).contains("[arp:"), "{}", top(&screen));
+}
+
+#[test]
+fn the_title_shows_the_bpm_and_rate_only_for_a_chord_material() {
+    use cmrt_arpeggiator::ArpPattern;
+
+    let arp = crate::ArpSettings {
+        pattern: ArpPattern::Up,
+        bpm: 90,
+        rate: crate::ArpRate::EighthTriplet,
+        ..crate::ArpSettings::default()
+    };
+    assert_eq!(
+        crate::ui::arp_flag(Some(&arp), true).as_deref(),
+        Some(" [arp:Up x1 90bpm/8t]")
+    );
+    assert_eq!(
+        crate::ui::arp_flag(Some(&arp), false).as_deref(),
+        Some(" [arp:Up x1]")
+    );
+
+    let mut chord = screen_with_mml("Am7");
+    chord.handle_key_event(key(KeyCode::Char('z')));
+    chord.set_arp(arp);
+    assert!(
+        top(&chord).contains("[arp:Upx190bpm/8t]"),
+        "{}",
+        top(&chord)
+    );
+    let mut mml = screen_with_mml("l16cdef");
+    mml.handle_key_event(key(KeyCode::Char('z')));
+    mml.set_arp(arp);
+    assert!(top(&mml).contains("[arp:Upx1]"), "{}", top(&mml));
 }

@@ -31,7 +31,6 @@ mod rule_list;
 mod rule_rows;
 mod sample_midi;
 
-pub(crate) use arp::ARP_PATTERN_KEYS;
 pub(crate) use event_list::{name_width, EventRow};
 pub(crate) use rule_rows::{
     RuleGroup, RuleLane, RuleRow, ROW_RULE_ROWS, RULE_LANES, RULE_LIST_KEY, RULE_ROWS,
@@ -210,7 +209,7 @@ fn screen_title(screen: &GuitarArticulationScreen) -> String {
     if screen.repeat() {
         title.push_str(" [repeat]");
     }
-    if let Some(arp) = arp_flag(screen.arp()) {
+    if let Some(arp) = arp_flag(screen.applied_arp(), screen.material_from_chord()) {
         title.push_str(&arp);
     }
     let rules = screen.rules();
@@ -227,21 +226,27 @@ fn screen_title(screen: &GuitarArticulationScreen) -> String {
     title
 }
 
-/// アルペジエーターが ON の間だけ ` [arp:音型 xオクターブ N回数 b戻り幅]`。戻り幅は UpTurn のときだけ。
-fn arp_flag(arp: &ArpSettings) -> Option<String> {
-    if !arp.enabled {
-        return None;
-    }
-    let turn = if arp.pattern == ArpPattern::UpTurn {
-        format!(" b{}", arp.turn)
+/// アルペジエーターを当てている（overlay を開いている）間だけ ` [arp:音型 xオクターブ oシフト b下り幅 BPMbpm/音価]`。シフトは 0 以外、
+/// 下り幅は UpDown で「全部」以外、BPM と音価は chord 素材のときだけ。
+fn arp_flag(arp: Option<&ArpSettings>, from_chord: bool) -> Option<String> {
+    let arp = arp?;
+    let turn = match (arp.pattern, arp.down) {
+        (ArpPattern::UpDown, Some(down)) => format!(" b{down}"),
+        _ => String::new(),
+    };
+    let shift = match arp.shift {
+        0 => String::new(),
+        shift => format!(" o{shift:+}"),
+    };
+    let tempo = if from_chord {
+        format!(" {}bpm/{}", arp.bpm, arp.rate.label())
     } else {
         String::new()
     };
     Some(format!(
-        " [arp:{} x{} N{}{turn}]",
+        " [arp:{} x{}{shift}{turn}{tempo}]",
         arp.pattern.label(),
-        arp.octaves,
-        arp.cycles
+        arp.octaves
     ))
 }
 

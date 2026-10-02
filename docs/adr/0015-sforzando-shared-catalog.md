@@ -44,7 +44,7 @@ process）では stderr、TUI process では app が注入した非同期 sink �
 
 ## 番人テスト
 
-- play-server `server-config/src/sforzando_programs/tests.rs::installed_catalog_lists_every_registered_program`
+- play-server `plugin-presets/src/sforzando/tests/installed.rs::installed_catalog_explains_every_unlisted_user_program`
 - `tui-core/src/patches/tests.rs::adapter_resolved_paths_are_used_without_rescanning_vendor_files`
 - `tui-core/src/patch_plugins/tests.rs::five_plugin_catalog_routes_sfz_only_to_sforzando`
 - `app/src/tui/tests/sforzando_screens.rs`

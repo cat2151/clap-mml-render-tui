@@ -106,7 +106,7 @@ fn keyboard_screen_shows_role_preset_and_patch_panes_while_connecting() {
         "{screen}"
     );
     assert!(screen.contains("connecting..."));
-    assert!(screen.contains("h/l:pane"));
+    assert!(screen.contains("h/l/Left/Right:pane"));
     assert!(screen.contains("k/j/Up/Down:-/+1"));
     assert!(screen.contains("Ctrl+u/d/PgUp/PgDn:-/+10"));
     assert!(screen.contains("Home/End:first/last"));

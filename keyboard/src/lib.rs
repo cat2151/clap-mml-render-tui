@@ -308,6 +308,14 @@ impl KeyboardScreen<'_> {
                     self.move_focused_cursor(-1, ctx);
                     return KeyboardAction::Continue;
                 }
+                KeyCode::Right => {
+                    self.move_focus(1, ctx);
+                    return KeyboardAction::Continue;
+                }
+                KeyCode::Left => {
+                    self.move_focus(-1, ctx);
+                    return KeyboardAction::Continue;
+                }
                 KeyCode::PageDown => {
                     self.move_focused_cursor(10, ctx);
                     return KeyboardAction::Continue;

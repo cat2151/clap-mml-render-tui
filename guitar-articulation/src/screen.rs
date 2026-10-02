@@ -12,11 +12,11 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui_textarea::TextArea;
 use serde_json::Value;
 
-use crate::humanize::{self, Humanized};
+use crate::humanize::Humanized;
 use crate::ui::{PARAM_LIST_KEY, ROW_RULE_ROWS, RULE_LIST_KEY, RULE_ROWS};
 use crate::{
-    articulate, convert, ArpSettings, Articulated, ColumnRuleAnchor, Instrument, Note, RowRule,
-    Rule, RuleTable, StartupInstrument, TimedMidiEvent,
+    ArpSettings, Articulated, ColumnRuleAnchor, Instrument, Note, RowRule, Rule, RuleTable,
+    StartupInstrument, TimedMidiEvent,
 };
 
 /// 画面に入ったとき MML が空なら入れておく MML。何を触れば何が変わるかを、打つ前から見せる。
@@ -42,6 +42,8 @@ impl Take {
 }
 
 mod arp;
+mod arp_materials;
+mod arp_rules;
 mod columns;
 mod effect_chain;
 mod history;
@@ -49,6 +51,9 @@ mod input;
 mod param_list;
 mod rule_list;
 mod sample_midi;
+mod sounding;
+
+pub use arp::ArpRow;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GuitarArticulationAction {
@@ -66,7 +71,7 @@ pub enum GuitarArticulationAction {
     PreviewEffectChain(Vec<Value>),
     /// 履歴（[`GuitarArticulationScreen::history`]）を file へ書いてほしい。
     SaveHistory,
-    /// 起動時の版（[`GuitarArticulationScreen::startup_instrument`]）を設定 file へ書いてほしい。
+    /// 画面の設定（[`GuitarArticulationScreen::settings`]）を設定 file へ書いてほしい。
     SaveSettings,
     /// サンプル MID の一覧を [`GuitarArticulationScreen::open_sample_midi_list`] へ渡してほしい。
     OpenSampleMidiList,
@@ -86,8 +91,16 @@ pub enum GuitarArticulationAction {
 #[derive(Default)]
 pub struct GuitarArticulationScreen {
     mml: String,
-    /// `mml` に当てて鳴らすアルペジエーターの設定。OFF の間も値は保つ。
+    /// `mml` が chord 表記として解釈されたか。
+    material_from_chord: bool,
+    /// アルペジエーターの設定。当てるのは overlay を開いている間だけで、閉じても値は保つ。
     arp: ArpSettings,
+    /// アルペジエーター overlay で選ぶ素材（MML / chord）。
+    arp_materials: Vec<String>,
+    /// overlay で最後に選んだ素材。空ならまだ選んでいない（overlay は `mml` を素材にする）。
+    arp_material: String,
+    /// 設定 file へ書く値（[`GuitarArticulationScreen::settings`]）を変えてから、まだ書いていないか。
+    settings_unsaved: bool,
     /// MML を編集している間だけ `Some`。英字キーを入力欄とルールのどちらへ渡すかをこれで分ける。
     input: Option<TextArea<'static>>,
     plain: Vec<TimedMidiEvent>,
@@ -114,6 +127,8 @@ pub struct GuitarArticulationScreen {
     effect_dry: bool,
     /// effect chain overlay（`x`）を開いている間だけ `Some`。
     effect_overlay: Option<effect_chain::EffectOverlay>,
+    /// アルペジエーター overlay を閉じたとき履歴へ積んでから、まだ file へ書いていないか。
+    history_unsaved: bool,
     /// 状態が変わるたびに今の状態を積む、新しい順の履歴。
     history: crate::history::GuitarArticulationHistory,
     /// history overlay（`Shift+H`）を開いている間だけ `Some`。
@@ -132,8 +147,8 @@ pub struct GuitarArticulationScreen {
     rule_list: Option<rule_list::RuleList>,
     /// パラメータ overlay（`u`）を開いている間だけ、選んでいる行。
     param_list: Option<usize>,
-    /// アルペジエーター overlay（`z`）を開いているか。
-    arp_overlay: bool,
+    /// アルペジエーター overlay（`z`）を開いている間だけ `Some`。
+    arp_overlay: Option<arp::ArpOverlay>,
     /// 直前の操作ができなかった理由。次のキーで消える。
     pub error: Option<String>,
 }
@@ -192,7 +207,7 @@ impl GuitarArticulationScreen {
 
     /// repeat が ON か。`Shift+R` の ON に加え、アルペジエーター overlay（`z`）を開いている間も ON。
     pub fn repeat(&self) -> bool {
-        self.repeat || self.arp_overlay
+        self.repeat || self.arp_overlay.is_some()
     }
 
     pub fn instrument(&self) -> Instrument {
@@ -248,7 +263,7 @@ impl GuitarArticulationScreen {
         if self.param_list.is_some() {
             return self.handle_param_list_key(key);
         }
-        if self.arp_overlay {
+        if self.arp_overlay.is_some() {
             return self.handle_arp_overlay_key(key);
         }
         // MML は `?` を使わないので、入力欄を開いていても `?` はヘルプへ回す。
@@ -326,7 +341,7 @@ impl GuitarArticulationScreen {
             return GuitarArticulationAction::Continue;
         }
         self.rules.toggle(self.cursor, rule);
-        self.anchor = Some(ColumnRuleAnchor::new(&self.mml, &self.arp, &self.rules));
+        self.anchor = Some(ColumnRuleAnchor::new(&self.mml, &self.rules));
         self.rebuild_converted();
         self.record_history();
         self.play(Take::Converted)
@@ -399,16 +414,6 @@ impl GuitarArticulationScreen {
             take: Take::Converted,
             column: self.cursor,
         }
-    }
-
-    fn rebuild_converted(&mut self) {
-        self.articulated = articulate(&self.notes, &self.rules);
-        self.converted = convert(&self.plain, &self.rules);
-        self.humanized = if self.rules.is_row_on(RowRule::Humanize) {
-            humanize::seeded(&self.notes, &self.articulated)
-        } else {
-            Vec::new()
-        };
     }
 }
 

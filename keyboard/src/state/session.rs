@@ -10,12 +10,10 @@ impl KeyboardState {
 
     /// 音色を差し替えて作り直す。`t` のモードと対象、Patches pane の絞り込み条件は引き継ぐ。
     pub(crate) fn restart_with_patch(&self, patch: Option<String>) -> Self {
-        let mut state = Self::from_session(KeyboardSessionState {
+        Self::from_session(KeyboardSessionState {
             patch,
             ..self.session_state(String::new())
-        });
-        state.patch_catalog.carry_filter_from(&self.patch_catalog);
-        state
+        })
     }
 
     /// 保存された状態から作る。`t` が off 以外なら、次の Ready で鳴り始める。
@@ -63,7 +61,7 @@ impl KeyboardState {
             refresh_pending: false,
             numeric_input: None,
             navigation_count: NavigationCount::default(),
-            patch_catalog: KeyboardPatchCatalog::default(),
+            patch_catalog: KeyboardPatchCatalog::with_filter(&session.patch_filter),
         }
     }
 
@@ -81,6 +79,7 @@ impl KeyboardState {
                 .collect(),
             mml,
             effect_chain: Vec::new(),
+            patch_filter: self.patch_catalog.filter().to_string(),
         }
     }
 }

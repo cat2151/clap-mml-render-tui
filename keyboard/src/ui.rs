@@ -13,7 +13,7 @@ use crate::{
 };
 use cmrt_patch_select::ui::draw_plugin_menu;
 use cmrt_tui_core::status::base_style;
-use cmrt_tui_core::theme::{MONOKAI_CYAN, MONOKAI_GREEN, MONOKAI_PINK, MONOKAI_PURPLE};
+use cmrt_tui_core::theme::{MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GREEN, MONOKAI_PINK, MONOKAI_PURPLE};
 
 mod connection_overlay;
 mod effect;
@@ -139,7 +139,7 @@ fn draw_note_mode_bar(state: &KeyboardState, f: &mut Frame<'_>, area: Rect) {
                 Block::default()
                     .borders(Borders::ALL)
                     .style(base_style())
-                    .border_style(base_style().fg(MONOKAI_CYAN)),
+                    .border_style(base_style().fg(MONOKAI_FG)),
             ),
         area,
     );
@@ -177,7 +177,7 @@ fn draw_keyboard(state: &KeyboardState, f: &mut Frame<'_>, area: Rect) {
                 .borders(Borders::ALL)
                 .title(" [KEYBOARD] keyboard mode  1-9:count ")
                 .style(base_style())
-                .border_style(base_style().fg(MONOKAI_CYAN)),
+                .border_style(base_style().fg(MONOKAI_FG)),
         ),
         area,
     );

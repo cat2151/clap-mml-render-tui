@@ -131,3 +131,26 @@ fn the_matrix_keybinds_name_o_and_still_fit_help() {
     assert!(status.contains("o:MID"), "{status}");
     assert!(status.ends_with("?:help"), "{status}");
 }
+
+#[test]
+fn the_note_preview_lists_only_the_cursor_group_of_the_midi() {
+    let mut screen = screen_with_mml("o3 l8 e f+ g");
+    screen.load_sample_midi(
+        "two.mid".to_string(),
+        Ok(vec![
+            at(0.0, [0x90, 60, 100]),
+            at(0.5, [0x80, 60, 0]),
+            at(1.0, [0x90, 64, 100]),
+            at(1.5, [0x80, 64, 0]),
+        ]),
+    );
+    screen.handle_key_event(key(KeyCode::Char('n')));
+    screen.handle_key_event(key(KeyCode::Char('l')));
+    let buffer = render(&screen);
+    let right = rows_in(&buffer, layout_for(buffer.area, &screen).converted).join(
+        "
+",
+    );
+    assert!(right.contains(" on  E4 "), "{right}");
+    assert!(!right.contains("C4 "), "{right}");
+}

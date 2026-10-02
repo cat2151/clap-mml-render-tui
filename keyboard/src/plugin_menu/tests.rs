@@ -47,9 +47,17 @@ fn context(patch_load: &PatchLoadState) -> KeyboardContext<'_> {
 /// plugin 名つきの一覧を読んだ画面。`patch_load()` の一覧は plugin 名を持たないので、
 /// catalog だけ plugin 名つきで読み直す（Role の索引は同じ空なので、以後の同期で読み直されない）。
 fn screen(ctx: &KeyboardContext<'_>) -> KeyboardScreen<'static> {
+    screen_with_state(
+        ctx,
+        KeyboardState::new(Some("Harp.floe-preset".to_string())),
+    )
+}
+
+fn screen_with_state(ctx: &KeyboardContext<'_>, state: KeyboardState) -> KeyboardScreen<'static> {
+    let patch = state.patch().map(str::to_string);
     let mut screen = KeyboardScreen::new(
         None,
-        KeyboardState::new(Some("Harp.floe-preset".to_string())),
+        state,
         KeyboardMmlInput::default(),
         KeyboardNoteGuide::new(None),
     );
@@ -72,7 +80,7 @@ fn screen(ctx: &KeyboardContext<'_>) -> KeyboardScreen<'static> {
             load_measurements: BTreeMap::new(),
         },
         &[],
-        Some("Harp.floe-preset"),
+        patch.as_deref(),
     );
     screen.sync_patch_catalog(ctx);
     screen
@@ -181,9 +189,9 @@ fn lowercase_solos_and_the_condition_narrows_the_patches_pane() {
     // 今の音色（Floe）が消えたので、残った先頭の音色を鳴らせる状態にする。
     assert_eq!(screen.state.patch(), Some("Warm Pad.vvp"));
 
-    // `/` の欄は menu が書いた条件から始まる。
+    // `/` の欄は menu が書いた条件に空白を1つ足して始まる。
     press(&mut screen, '/', &ctx);
-    assert_eq!(screen.patch_filter.value(), "plugin:vaporizer2");
+    assert_eq!(screen.patch_filter.value(), "plugin:vaporizer2 ");
 }
 
 #[test]
@@ -298,4 +306,26 @@ fn reentering_the_screen_closes_the_menu() {
     screen.resume(&ctx);
 
     assert!(screen.plugin_menu().is_none());
+}
+
+#[test]
+fn solo_and_mute_survive_saving_and_restoring_the_session() {
+    let load = patch_load();
+    let ctx = context(&load);
+    let mut screen = screen(&ctx);
+    choose(&mut screen, shift('D'), &ctx);
+    choose(
+        &mut screen,
+        KeyEvent::new(KeyCode::Char('S'), KeyModifiers::NONE),
+        &ctx,
+    );
+    let condition = screen.state.patch_catalog.filter().to_string();
+    let before = listed(&screen);
+
+    let saved = screen.session_state();
+    assert_eq!(saved.patch_filter, condition);
+    let restored = screen_with_state(&ctx, KeyboardState::from_session(saved));
+
+    assert_eq!(restored.state.patch_catalog.filter(), condition);
+    assert_eq!(listed(&restored), before);
 }

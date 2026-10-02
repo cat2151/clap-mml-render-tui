@@ -7,7 +7,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::history::{GuitarArticulationHistory, GuitarArticulationHistoryEntry};
-use crate::{notes_from_events, performance_events, ColumnRuleAnchor};
+use crate::ColumnRuleAnchor;
 
 use super::{GuitarArticulationAction, GuitarArticulationScreen, Take};
 
@@ -37,37 +37,29 @@ impl GuitarArticulationScreen {
         &self.history
     }
 
-    /// 今の状態（MML・ルール・確定済みの chain・アルペジエーターの設定・列ルールの付け替え元）を履歴 1 件にする。
+    /// 今の状態（MML・ルール・確定済みの chain・列ルールの付け替え元）を履歴 1 件にする。
     pub fn history_entry(&self) -> GuitarArticulationHistoryEntry {
         GuitarArticulationHistoryEntry {
             mml: self.mml.clone(),
             rules: self.rules.clone(),
             effect_chain: self.effect_chain.clone(),
-            arp: self.arp,
             anchor: self.anchor.clone(),
         }
     }
 
     /// 履歴 1 件を画面の状態にする。列ルールは同じ MML の列番号なので消さずに当てる。
-    /// 付け替え元の無い entry は、entry の MML・アルペジエーターの設定と列ルールを付け替え元にする（列ルールが無ければ持たない）。
+    /// 付け替え元の無い entry は、entry の MML と列ルールを付け替え元にする（列ルールが無ければ持たない）。
     /// MML を解釈できなければ状態を変えず、理由を `error` に出す。
     pub fn apply_history_entry(&mut self, entry: &GuitarArticulationHistoryEntry) {
-        let plain = match performance_events(&entry.mml, &entry.arp) {
-            Ok(events) => events,
-            Err(reason) => {
-                self.error = Some(reason);
-                return;
-            }
-        };
+        if let Err(reason) = self.set_performance(&entry.mml, None) {
+            self.error = Some(reason);
+            return;
+        }
         self.mml = entry.mml.clone();
-        self.arp = entry.arp;
-        self.notes = notes_from_events(&plain);
-        self.plain = plain;
         self.rules = entry.rules.clone();
         self.effect_chain = entry.effect_chain.clone();
         self.anchor = entry.anchor.clone().or_else(|| {
-            (!entry.rules.is_empty())
-                .then(|| ColumnRuleAnchor::new(&entry.mml, &entry.arp, &entry.rules))
+            (!entry.rules.is_empty()).then(|| ColumnRuleAnchor::new(&entry.mml, &entry.rules))
         });
         self.cursor = self.cursor.min(self.column_count().saturating_sub(1));
         self.error = None;

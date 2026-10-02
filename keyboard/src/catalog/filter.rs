@@ -25,9 +25,18 @@ impl KeyboardPatchCatalog {
         Ok(self.refilter(previous))
     }
 
-    /// 一覧がまだ読めていない catalog へ条件だけ引き継ぐ。次の `load` で掛かる。
-    pub(crate) fn carry_filter_from(&mut self, other: &KeyboardPatchCatalog) {
-        self.filter = other.filter.clone();
+    /// 条件だけを持った、一覧がまだ読めていない catalog。条件は次の `load` で掛かる。
+    /// コンパイルできない条件は捨てる。
+    pub(crate) fn with_filter(condition: &str) -> Self {
+        let filter = if filter_candidates(&[], &[], condition).is_ok() {
+            condition.to_string()
+        } else {
+            String::new()
+        };
+        Self {
+            filter,
+            ..Self::default()
+        }
     }
 
     /// Role / Preset / 条件で絞る前の全音色。

@@ -6,8 +6,7 @@
 //! plugin 条件（`plugin:floe` / `-plugin:dexed`）の文法は Role 分類と共有する（[`PluginTerm`]）。
 //! solo 同士は OR（AND では 1 音色が複数 plugin に属さないので必ず空になる）、mute は全部を除く。
 
-use cmrt_tui_core::text_filter;
-use regex::Regex;
+use cmrt_tui_core::text_filter::{self, FilterTerm};
 
 use crate::PatchCatalogEntry;
 
@@ -19,7 +18,7 @@ fn plugin_is(patch: &PatchCatalogEntry, slug: &str) -> bool {
 
 struct Condition<'a> {
     plugins: Vec<PluginTerm<'a>>,
-    regexes: Vec<Regex>,
+    regexes: Vec<FilterTerm>,
 }
 
 fn compile(condition: &str) -> Result<Condition<'_>, String> {

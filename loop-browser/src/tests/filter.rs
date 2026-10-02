@@ -78,6 +78,34 @@ fn a_directory_query_keeps_the_whole_subtree_even_when_no_wav_name_matches() {
 }
 
 #[test]
+fn an_exclude_term_drops_matching_wavs_even_under_a_matching_directory() {
+    let mut browser = browser_with_pack_expanded();
+
+    browser.set_filter_query("pack -bass");
+    assert_eq!(
+        rows(&browser),
+        vec![
+            (0, "/loops".to_string(), false),
+            (1, "Pack".to_string(), false),
+            (2, "Drums".to_string(), false),
+            (3, "Kick.wav".to_string(), true),
+        ]
+    );
+
+    browser.set_filter_query("-kick");
+    assert_eq!(
+        rows(&browser),
+        vec![
+            (0, "/loops".to_string(), false),
+            (1, "Pack".to_string(), false),
+            (2, "Bass".to_string(), false),
+            (3, "a.wav".to_string(), true),
+            (3, "B.wav".to_string(), true),
+        ]
+    );
+}
+
+#[test]
 fn terms_are_anded_and_matched_against_the_whole_relative_path() {
     let mut browser = browser_with_pack_expanded();
 

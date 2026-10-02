@@ -24,7 +24,7 @@ impl GuitarArticulationScreen {
         crate::column_events(
             &self.notes,
             &self.articulated,
-            &self.rules,
+            &self.sounding_rules(),
             self.cursor,
             take,
         )

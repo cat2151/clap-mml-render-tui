@@ -13,7 +13,7 @@ use cmrt_tui_core::status::{base_style, visible_list_page_size, LIST_HIGHLIGHT_S
 use cmrt_tui_core::text_input::{
     build_query_textarea_widget, single_line_textarea_cursor_position,
 };
-use cmrt_tui_core::theme::{cursor_highlight_style, MONOKAI_CYAN, MONOKAI_YELLOW};
+use cmrt_tui_core::theme::{cursor_highlight_style, MONOKAI_FG, MONOKAI_YELLOW};
 
 use crate::{
     KeyboardPatchCatalog, KeyboardPatchCatalogStatus, KeyboardPatchFilterInput, PatchPaneFocus,
@@ -87,7 +87,7 @@ fn draw_filter_input(input: &KeyboardPatchFilterInput<'_>, f: &mut Frame<'_>, pa
             input.textarea(),
             &value,
             " /filter  Enter:確定  Esc:戻す ",
-            "Regex (空白=AND)  plugin:名前",
+            "Regex (空白=AND  -語:除外)  plugin:名前",
             border_color,
         ),
         area,
@@ -100,11 +100,7 @@ pub(super) fn pane_block(title: String, focused: bool) -> Block<'static> {
         .borders(Borders::ALL)
         .title(title)
         .style(base_style())
-        .border_style(base_style().fg(if focused {
-            MONOKAI_YELLOW
-        } else {
-            MONOKAI_CYAN
-        }))
+        .border_style(base_style().fg(if focused { MONOKAI_YELLOW } else { MONOKAI_FG }))
 }
 
 fn draw_roles(catalog: &mut KeyboardPatchCatalog, f: &mut Frame<'_>, area: Rect) {

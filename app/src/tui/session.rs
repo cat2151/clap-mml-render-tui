@@ -221,6 +221,7 @@ impl<'a> TuiApp<'a> {
         let notepad_effect_plugins = effect_plugins.clone();
         let grid_effect_plugins = effect_plugins.clone();
         let guitar_effect_plugins = effect_plugins.clone();
+        let guitar_settings = super::guitar_articulation::load_settings();
         let keyboard_effect_plugins = effect_plugins.clone();
 
         Self {
@@ -300,9 +301,10 @@ impl<'a> TuiApp<'a> {
                     guitar_effect_plugins,
                 )
                 .with_history(super::guitar_articulation::load_history())
-                .with_startup_instrument(
-                    super::guitar_articulation::load_settings().startup_instrument,
-                ),
+                .with_startup_instrument(guitar_settings.startup_instrument)
+                .with_arp_materials(guitar_settings.arp_materials)
+                .with_arp_material(guitar_settings.arp_material)
+                .with_arp(guitar_settings.arp),
             guitar_articulation_playback: None,
             grid_history_preview: crate::daw::DawGridPreviewPlayer::new(Arc::clone(&cfg_arc)),
             mml_overlay: {

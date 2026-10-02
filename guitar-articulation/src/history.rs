@@ -5,12 +5,13 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{ArpSettings, ColumnRuleAnchor, RuleTable};
+use crate::{ColumnRuleAnchor, RuleTable};
 
 /// 履歴に残す件数の上限。notepad / DAW の履歴と揃える。
 pub const HISTORY_MAX_LEN: usize = 100;
 
-/// 履歴 1 件。音を決める状態と、MML を確定し直したときに列ルールを付け替える元を持つ（演奏結果は `mml`・`arp`・`rules` から作り直せる）。
+/// 履歴 1 件。音を決める状態と、MML を確定し直したときに列ルールを付け替える元を持つ（演奏結果は `mml` と `rules` から作り直せる）。
+/// アルペジエーター overlay の素材と設定は持たない（知らない field は読み捨てる）。
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct GuitarArticulationHistoryEntry {
     #[serde(default)]
@@ -19,10 +20,7 @@ pub struct GuitarArticulationHistoryEntry {
     pub rules: RuleTable,
     #[serde(default)]
     pub effect_chain: Vec<Value>,
-    /// `mml` に当てるアルペジエーターの設定。無い entry は OFF。
-    #[serde(default)]
-    pub arp: ArpSettings,
-    /// MML を確定し直したときに列ルールを付け替える元。無い entry は `mml`・`arp` と `rules` の列ルールを元とみなす。
+    /// MML を確定し直したときに列ルールを付け替える元。無い entry は `mml` と `rules` の列ルールを元とみなす。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub anchor: Option<ColumnRuleAnchor>,
 }

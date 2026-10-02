@@ -2,8 +2,6 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::{notes_from_events, performance_events};
-
 use super::{GuitarArticulationAction, GuitarArticulationScreen, Take, DEFAULT_MML};
 
 impl GuitarArticulationScreen {
@@ -64,14 +62,12 @@ impl GuitarArticulationScreen {
         GuitarArticulationAction::Continue
     }
 
-    /// MML を確定し、今のアルペジエーターの設定を当てた raw・Articulated・matrix を作り直して履歴へ積む。列ごとのルールは、付け替え元
+    /// MML を確定し、raw・Articulated・matrix を作り直して履歴へ積む。列ごとのルールは、付け替え元
     /// （[`crate::ColumnRuleAnchor`]）の列から新しい列へ付け替えたものにする（元が無ければ空）。付け替え元は変えない。
     /// 列に依らない行全体のルールは残す。空の MML は音を全部空にする。
     pub(super) fn commit_mml(&mut self, mml: &str) -> Result<(), String> {
-        let plain = performance_events(mml, &self.arp)?;
+        self.set_performance(mml, None)?;
         self.mml = mml.to_string();
-        self.notes = notes_from_events(&plain);
-        self.plain = plain;
         self.rules = match &self.anchor {
             Some(anchor) => anchor.rules_for(&self.notes, &self.rules),
             None => self.rules.without_column_rules(),

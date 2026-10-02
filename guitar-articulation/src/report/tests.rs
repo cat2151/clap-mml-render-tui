@@ -10,7 +10,7 @@ fn economy() -> RuleTable {
 
 #[test]
 fn the_report_lists_each_note_with_its_stroke_and_the_converted_events() {
-    let text = report("l16cdefgab<c", &ArpSettings::default(), &economy()).unwrap();
+    let text = report("l16cdefgab<c", None, &economy()).unwrap();
 
     assert!(text.starts_with(
         "mml: \"l16cdefgab<c\"\nrules: {\"columns\":{},\"rows\":[\"economy_picking\"]}\n"
@@ -36,18 +36,12 @@ fn the_report_lists_each_note_with_its_stroke_and_the_converted_events() {
 
 #[test]
 fn the_report_rejects_an_unreadable_mml() {
-    assert!(report("", &ArpSettings::default(), &RuleTable::default()).is_err());
+    assert!(report("", None, &RuleTable::default()).is_err());
 }
 
 #[test]
 fn compare_marks_only_the_notes_whose_stroke_or_velocity_changed() {
-    let text = compare(
-        "l16cdefgab<c",
-        &ArpSettings::default(),
-        &RuleTable::default(),
-        &economy(),
-    )
-    .unwrap();
+    let text = compare("l16cdefgab<c", None, &RuleTable::default(), &economy()).unwrap();
 
     assert!(
         text.contains("before: {\"columns\":{},\"rows\":[]}"),
@@ -56,13 +50,7 @@ fn compare_marks_only_the_notes_whose_stroke_or_velocity_changed() {
     assert!(text.contains("after:  {\"columns\":{},\"rows\":[\"economy_picking\"]}"));
     // 全音の velocity が 127 → 95 に下がる。頂点が無いので全行が違う。
     assert!(text.contains("changed: 8 / 8 notes"), "{text}");
-    let same = compare(
-        "l16cdefgab<c",
-        &ArpSettings::default(),
-        &economy(),
-        &economy(),
-    )
-    .unwrap();
+    let same = compare("l16cdefgab<c", None, &economy(), &economy()).unwrap();
     assert!(same.contains("changed: 0 / 8 notes"));
     assert!(!same.contains("<>"));
 }
@@ -70,21 +58,17 @@ fn compare_marks_only_the_notes_whose_stroke_or_velocity_changed() {
 #[test]
 fn the_report_converts_the_arpeggiated_performance_and_names_the_arp() {
     let arp = ArpSettings {
-        enabled: true,
         pattern: ArpPattern::UpDown,
         ..ArpSettings::default()
     };
 
-    let text = report("l16cdef", &arp, &RuleTable::default()).unwrap();
+    let text = report("l16cdef", Some(&arp), &RuleTable::default()).unwrap();
 
-    assert!(text.contains("# notes (12)"), "{text}");
-    assert!(
-        text.contains("arp: {\"enabled\":true,\"pattern\":\"UpDown\""),
-        "{text}"
-    );
-    let off = report("l16cdef", &ArpSettings::default(), &RuleTable::default()).unwrap();
+    assert!(text.contains("# notes (6)"), "{text}");
+    assert!(text.contains("arp: {\"pattern\":\"UpDown\""), "{text}");
+    let off = report("l16cdef", None, &RuleTable::default()).unwrap();
     assert!(off.contains("# notes (4)"));
     assert!(!off.contains("arp:"));
-    let compared = compare("l16cdef", &arp, &RuleTable::default(), &economy()).unwrap();
-    assert!(compared.contains("/ 12 notes"), "{compared}");
+    let compared = compare("l16cdef", Some(&arp), &RuleTable::default(), &economy()).unwrap();
+    assert!(compared.contains("/ 6 notes"), "{compared}");
 }

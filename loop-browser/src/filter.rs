@@ -6,7 +6,8 @@
 //! 残す規則:
 //! - wav 行: root からの相対パス全体（`/` 区切り）が条件にマッチしたら残す
 //! - ディレクトリ行: 自分自身のパスがマッチしたらサブツリーごと全部残す。
-//!   そうでなければ、子孫に残る wav があるときだけ残す
+//!   そうでなければ、子孫に残る wav があるときだけ残す。除外 term（`-kick`）を含む条件では
+//!   子孫を除外できなくなるので、サブツリーごと残すことはせず子孫の wav で決める
 //!
 //! 絞り込み中は `LoopBrowser::expanded` を書き換えず、残ったディレクトリを
 //! 全部展開したものとして描く（[`crate::tree::ExpandedNodes::All`]）。
@@ -17,9 +18,8 @@ use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui_textarea::TextArea;
-use regex::Regex;
 
-use cmrt_tui_core::text_filter::{compile_condition, matches_any_field};
+use cmrt_tui_core::text_filter::{compile_condition, matches_any_field, FilterTerm};
 use cmrt_tui_core::text_input::{
     apply_key_event_to_textarea, new_single_line_textarea, textarea_value,
 };
@@ -188,9 +188,9 @@ impl LoopBrowser {
 }
 
 /// `relative` は root からこのノードまでの `/` 区切りの相対パス（root 自身は空文字列）。
-fn retain_matching(node: &TreeNode, relative: &str, condition: &[Regex]) -> Option<TreeNode> {
-    if matches_any_field(condition, &[relative]) {
-        // 自分自身がマッチしたらサブツリーごと残す。
+fn retain_matching(node: &TreeNode, relative: &str, condition: &[FilterTerm]) -> Option<TreeNode> {
+    let keeps_subtree = node.is_wav || !condition.iter().any(FilterTerm::is_exclude);
+    if keeps_subtree && matches_any_field(condition, &[relative]) {
         return Some(node.clone());
     }
     if node.is_wav {

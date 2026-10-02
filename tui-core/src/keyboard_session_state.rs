@@ -32,6 +32,9 @@ pub struct KeyboardSessionState {
     /// 鳴っている音へ掛ける effect chain。段は catalog が返した JSON 値のまま。
     #[serde(default)]
     pub effect_chain: Vec<serde_json::Value>,
+    /// Patches pane の絞り込み条件。plugin solo/mute もこの条件の plugin term として入る。
+    #[serde(default)]
+    pub patch_filter: String,
 }
 
 impl Default for KeyboardSessionState {
@@ -43,6 +46,7 @@ impl Default for KeyboardSessionState {
             repeat_chords: Vec::new(),
             mml: String::new(),
             effect_chain: Vec::new(),
+            patch_filter: String::new(),
         }
     }
 }

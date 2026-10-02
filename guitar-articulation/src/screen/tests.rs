@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::*;
-use crate::KEYSWITCH_VELOCITY;
+use crate::{convert, KEYSWITCH_VELOCITY};
 
 mod articulation_keys;
 mod auto_pick_keys;

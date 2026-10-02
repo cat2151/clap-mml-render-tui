@@ -36,6 +36,7 @@ fn session() -> KeyboardSessionState {
         effect_chain: vec![
             serde_json::json!({"Surge XT Effects preset": "Delay/Rhythmic 1.srgfx"}),
         ],
+        patch_filter: String::new(),
     }
 }
 

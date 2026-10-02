@@ -223,7 +223,9 @@ impl<'a> PatchSelect<'a> {
         }
         if is_filter_edit_trigger(key) {
             self.filter_editing = true;
-            self.query = text_input::new_single_line_textarea(&self.committed_query);
+            self.query = text_input::new_single_line_textarea(
+                &crate::plugin_menu::condition_to_edit(&self.committed_query),
+            );
             return PatchSelectAction::Continue;
         }
         if is_plugin_menu_key(key) {

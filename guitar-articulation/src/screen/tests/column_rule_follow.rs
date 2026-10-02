@@ -84,7 +84,7 @@ fn only_toggling_a_column_rule_updates_the_anchor() {
     screen.handle_key_event(key(KeyCode::Char('g')));
     let mut rules = RuleTable::default();
     rules.toggle(1, Rule::PickScratch);
-    let anchor = Some(ColumnRuleAnchor::new("c e g", &Default::default(), &rules));
+    let anchor = Some(ColumnRuleAnchor::new("c e g", &rules));
     assert_eq!(screen.anchor, anchor);
 
     screen.handle_key_event(key(KeyCode::Char('e')));

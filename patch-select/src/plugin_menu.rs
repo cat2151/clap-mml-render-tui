@@ -115,6 +115,22 @@ pub fn toggle_plugin_term(condition: &str, slug: &str, mode: PluginMode) -> Stri
     kept.join(" ")
 }
 
+/// 絞り込み欄で編集を始めるときの文字列。末尾が plugin term（solo / mute）なら空白を1つ足す。
+/// 続けて打った語が `-plugin:dexedabc` のように plugin 名へくっつかないように。
+pub fn condition_to_edit(condition: &str) -> String {
+    let ends_with_plugin_term = condition
+        .split_whitespace()
+        .next_back()
+        .and_then(PluginTerm::parse)
+        .is_some()
+        && !condition.ends_with(char::is_whitespace);
+    if ends_with_plugin_term {
+        format!("{condition} ")
+    } else {
+        condition.to_string()
+    }
+}
+
 /// `condition` で `slug` が solo / mute されているか。
 pub fn plugin_mode(condition: &str, slug: &str) -> Option<PluginMode> {
     condition

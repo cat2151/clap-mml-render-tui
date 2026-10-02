@@ -130,3 +130,27 @@ fn leaving_the_screen_silences_but_keeps_the_mode_for_the_next_ready() {
         vec![[0x90, 60, 100]]
     );
 }
+
+#[test]
+fn a_saved_patch_filter_is_restored_and_saved_again() {
+    let state = KeyboardState::from_session(KeyboardSessionState {
+        patch_filter: "lead -plugin:surgext".to_string(),
+        ..KeyboardSessionState::default()
+    });
+
+    assert_eq!(state.patch_catalog.filter(), "lead -plugin:surgext");
+    assert_eq!(
+        state.session_state(String::new()).patch_filter,
+        "lead -plugin:surgext"
+    );
+}
+
+#[test]
+fn a_saved_patch_filter_that_does_not_compile_is_dropped() {
+    let state = KeyboardState::from_session(KeyboardSessionState {
+        patch_filter: "lead(".to_string(),
+        ..KeyboardSessionState::default()
+    });
+
+    assert_eq!(state.patch_catalog.filter(), "");
+}

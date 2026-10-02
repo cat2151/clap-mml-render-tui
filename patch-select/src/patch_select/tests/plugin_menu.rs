@@ -131,9 +131,9 @@ fn regex_terms_are_kept_and_combined_with_plugin_terms() {
 
     assert_eq!(query(&select), "warm -plugin:surgext");
     assert_eq!(filtered(&select), ["Warm Pad.vvp"]);
-    // `/` の編集は、menu が書いた条件から始まる。
+    // `/` の編集は、menu が書いた条件に空白を1つ足して始まる。
     select.handle_key(press(KeyCode::Char('/')));
-    assert_eq!(query(&select), "warm -plugin:surgext");
+    assert_eq!(query(&select), "warm -plugin:surgext ");
 }
 
 #[test]
@@ -165,4 +165,19 @@ fn menu_marks_follow_the_committed_filter() {
 
     assert_eq!(select.plugin_mode("dexed"), Some(PluginMode::Mute));
     assert_eq!(select.plugin_mode("floe"), None);
+}
+
+#[test]
+fn slash_after_a_plugin_term_starts_a_new_term() {
+    let mut select = opened_plugins();
+    choose(&mut select, shift('D'));
+
+    select.handle_key(press(KeyCode::Char('/')));
+    assert_eq!(query(&select), "-plugin:dexed ");
+    for ch in "warm".chars() {
+        select.handle_key(press(KeyCode::Char(ch)));
+    }
+
+    assert_eq!(query(&select), "-plugin:dexed warm");
+    assert_eq!(filtered(&select), ["Pads/Warm.fxp", "Warm Pad.vvp"]);
 }

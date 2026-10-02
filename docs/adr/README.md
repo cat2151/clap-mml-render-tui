@@ -6,7 +6,7 @@
 0001〜0015 は CLAP プラグイン抽象化と Surge XT / Dexed / Vaporizer2 / Sforzando の混在、
 0016〜0019 は DAW の live 演奏と daily キャッシュ、0020〜0021 は chord chart 画面と auto voicing、
 0022 は DAW の effect chain、0023〜0024 は offline render の経路（render-server の実体と 1 経路化）、
-0025 は Guitar Articulation 画面で METAL-GTX の効かない操作を出さないこと。
+0025 は Guitar Articulation 画面で METAL-GTX の効かない操作を出さないこと、0026 はそのアルペジエーター overlay とメイン画面の線引き。
 利用者向けの現行仕様は `README.ja.md` にある。
 
 ここに載っている実装はすべて完了済み。
@@ -42,6 +42,7 @@ play-server 側（プラグインの実測仕様・実行時の設計）は
 | [0023](0023-render-server-binary-resolution.md) | render-server の実体も play server と同じ順で探し、PATH を見ない |
 | [0024](0024-offline-render-goes-through-the-render-server-only.md) | offline render は render-server の 1 経路だけ。`cmrt.exe` は CLAP をロードしない |
 | [0025](0025-metal-gtx-unused-controls.md) | METAL-GTX の Stop_Key・「C0 を短く」・CC31・トリルへの CC28 は効かないので画面に出さない |
+| [0026](0026-arp-overlay-owns-what-to-play.md) | アルペジエーター overlay は素材とアルペジエーターの設定を自分で持ち、行全体のルール・アクセントはメイン画面と共有する |
 
 ## 未解決として残している論点
 

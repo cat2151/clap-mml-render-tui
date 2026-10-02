@@ -1,5 +1,5 @@
 use super::*;
-use cmrt_tui_core::theme::MONOKAI_CYAN;
+use cmrt_tui_core::theme::MONOKAI_FG;
 
 /// 200 桁では keyboard pane が 74 桁で終わり、右に Role / Preset / Patches が並ぶ。
 /// focus 中（初期は Patches）の枠だけが黄色。
@@ -56,9 +56,9 @@ fn the_screen_draws_role_preset_and_patch_panes_next_to_the_keyboard() {
 
     let buffer = terminal.backend().buffer();
     let border_color = |x: u16| buffer.cell((x, 0)).unwrap().fg;
-    assert_eq!(border_color(0), MONOKAI_CYAN);
-    assert_eq!(border_color(74), MONOKAI_CYAN);
-    assert_eq!(border_color(96), MONOKAI_CYAN);
+    assert_eq!(border_color(0), MONOKAI_FG);
+    assert_eq!(border_color(74), MONOKAI_FG);
+    assert_eq!(border_color(96), MONOKAI_FG);
     assert_eq!(border_color(126), MONOKAI_YELLOW);
 }
 

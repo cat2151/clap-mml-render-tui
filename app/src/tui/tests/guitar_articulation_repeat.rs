@@ -59,13 +59,7 @@ fn without_the_repeat_the_take_is_played_once() {
 #[test]
 fn the_arp_overlay_repeats_the_arpeggio_without_a_gap() {
     let (mut app, sink) = app_with_mml();
-    // `o3 l8 e f+ g` の Up 1 周 = 3 step × 0.25 秒。画面へ直に入れるので鳴らさない。
-    app.guitar_articulation
-        .set_arp(crate::tui::guitar_articulation::ArpSettings {
-            enabled: true,
-            cycles: 1,
-            ..Default::default()
-        });
+    // `o3 l8 e f+ g` の Up 1 周 = 3 step × 0.25 秒。
     // 最後の列を H/P にすると、末尾に KS の戻しが付いて最後のイベントが 1 周より後ろになる。
     app.handle_guitar_articulation_key_event(plain(KeyCode::Char('l')));
     app.handle_guitar_articulation_key_event(plain(KeyCode::Char('l')));

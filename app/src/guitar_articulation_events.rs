@@ -13,7 +13,7 @@ const PLAY_LOG_PREFIX: &str = "guitar-articulation: event=play ";
 const CONVERTED_TAKE: &str = "take=converted ";
 const MML_KEY: &str = " mml=";
 const RULES_KEY: &str = " rules=";
-/// arp OFF の演奏の行には書かない（OFF として読み戻す）。
+/// arp を当てていない演奏の行には書かない（当てていないものとして読み戻す）。
 const ARP_KEY: &str = " arp=";
 
 /// 1 回の出力の入力。`last_played` なら MML とルール表をログの最後の演奏から拾う。
@@ -35,15 +35,14 @@ pub(crate) fn play_log_line(
     events: &[TimedMidiEvent],
     mml: &str,
     rules: &RuleTable,
-    arp: &ArpSettings,
+    arp: Option<&ArpSettings>,
 ) -> String {
-    let arp = if arp.enabled {
-        format!(
+    let arp = match arp {
+        Some(arp) => format!(
             "{ARP_KEY}{}",
             serde_json::to_string(arp).unwrap_or_default()
-        )
-    } else {
-        String::new()
+        ),
+        None => String::new(),
     };
     format!(
         "{PLAY_LOG_PREFIX}{}{MML_KEY}{}{RULES_KEY}{}{arp}",
@@ -107,7 +106,7 @@ pub(crate) struct LoggedPlay<'a> {
     pub(crate) line: &'a str,
     pub(crate) mml: String,
     pub(crate) rules: RuleTable,
-    pub(crate) arp: ArpSettings,
+    pub(crate) arp: Option<ArpSettings>,
 }
 
 /// 新しい順の Articulated の演奏。MML を残す前のログの行は飛ばす。
@@ -145,14 +144,14 @@ fn no_play_error() -> anyhow::Error {
     anyhow!("ログに MML 付きの guitar-articulation の Articulated の演奏がありません（画面で一度鳴らしてください）")
 }
 
-fn parse_play_log_line(line: &str) -> Option<(String, RuleTable, ArpSettings)> {
+fn parse_play_log_line(line: &str) -> Option<(String, RuleTable, Option<ArpSettings>)> {
     let rest = &line[line.find(MML_KEY)? + MML_KEY.len()..];
     let (mml, rest) = leading_json::<String>(rest)?;
     let rules_json = rest.strip_prefix(RULES_KEY)?;
     let (rules, rest) = leading_json::<RuleTable>(rules_json)?;
     let arp = match rest.strip_prefix(ARP_KEY) {
-        Some(arp_json) => leading_json::<ArpSettings>(arp_json)?.0,
-        None => ArpSettings::default(),
+        Some(arp_json) => Some(leading_json::<ArpSettings>(arp_json)?.0),
+        None => None,
     };
     Some((mml, rules, arp))
 }
@@ -169,9 +168,13 @@ pub fn report(request: &GuitarArticulationEventsRequest) -> Result<String> {
     if request.compare_previous {
         let log = read_log()?;
         let (previous, last) = last_two_distinct(&log)?;
-        let body =
-            cmrt_guitar_articulation::compare(&last.mml, &last.arp, &previous.rules, &last.rules)
-                .map_err(anyhow::Error::msg)?;
+        let body = cmrt_guitar_articulation::compare(
+            &last.mml,
+            last.arp.as_ref(),
+            &previous.rules,
+            &last.rules,
+        )
+        .map_err(anyhow::Error::msg)?;
         return Ok(format!(
             "before log: {}\nafter log:  {}\n{body}",
             previous.line, last.line
@@ -180,7 +183,7 @@ pub fn report(request: &GuitarArticulationEventsRequest) -> Result<String> {
     if request.last_played {
         let log = read_log()?;
         let play = last_played(&log)?;
-        let body = cmrt_guitar_articulation::report(&play.mml, &play.arp, &play.rules)
+        let body = cmrt_guitar_articulation::report(&play.mml, play.arp.as_ref(), &play.rules)
             .map_err(anyhow::Error::msg)?;
         return Ok(format!("log: {}\n{body}", play.line));
     }
@@ -191,8 +194,7 @@ pub fn report(request: &GuitarArticulationEventsRequest) -> Result<String> {
         Some(json) => RuleTable::from_json(json).map_err(anyhow::Error::msg)?,
         None => RuleTable::default(),
     };
-    cmrt_guitar_articulation::report(mml, &ArpSettings::default(), &rules)
-        .map_err(anyhow::Error::msg)
+    cmrt_guitar_articulation::report(mml, None, &rules).map_err(anyhow::Error::msg)
 }
 
 fn read_log() -> Result<String> {

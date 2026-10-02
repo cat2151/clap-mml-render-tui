@@ -11,6 +11,7 @@ fn saved_keyboard() -> KeyboardSessionState {
         repeat_chords: vec![vec![62]],
         mml: "d".to_string(),
         effect_chain: vec![serde_json::json!({"TONE3000 preset": "x"})],
+        patch_filter: "p:surge".to_string(),
     }
 }
 

@@ -171,12 +171,20 @@ pub(super) fn draw(
 ) {
     let block = pane_block(title);
     let height = block.inner(area).height as usize;
-    let events = screen.events(take);
+    // 1 音モードの右 pane は、鳴らすカーソル列のイベント列だけを出す。
+    let column_events;
+    let (events, target) = if take == Take::Converted && screen.note_preview() {
+        column_events = screen.column_events(take);
+        let target = first_note_on(&column_events);
+        (column_events.as_slice(), target)
+    } else {
+        let events = screen.events(take);
+        (events, cursor_event_index(screen, events, take))
+    };
     let rows: Vec<EventRow> = events
         .iter()
         .map(|event| EventRow::new(event, take == Take::Converted))
         .collect();
-    let target = cursor_event_index(screen, events, take);
     f.render_widget(
         Paragraph::new(visible_lines(&rows, height, target)).block(block),
         area,
@@ -216,6 +224,11 @@ fn cursor_event_index(
     events
         .iter()
         .position(|event| is_note_on(event) && (event.seconds - seconds).abs() < 1e-9)
+}
+
+/// いちばん早い note on の位置。
+pub(super) fn first_note_on(events: &[TimedMidiEvent]) -> Option<usize> {
+    events.iter().position(is_note_on)
 }
 
 fn is_note_on(event: &TimedMidiEvent) -> bool {

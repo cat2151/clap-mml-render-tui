@@ -29,15 +29,13 @@ pub enum ArpPattern {
     Diverge,
     /// 0,3,1,3,2,3 — 最高音と交互。三和音なら最高音が root のオクターブ上になる
     Octave,
-    /// 0,1,2,3,4,5,6,5,4 — 最高音まで上がり、戻り幅ぶん下がってから頭へ（声部7・戻り幅2の例）
-    UpTurn,
     /// 周期を持たず、1音ごとに声部を引き直す
     Random,
 }
 
 impl ArpPattern {
     /// wheel の種別送りで巡回する順序。
-    pub const ALL: [ArpPattern; 10] = [
+    pub const ALL: [ArpPattern; 9] = [
         Self::Up,
         Self::Down,
         Self::UpDown,
@@ -46,7 +44,6 @@ impl ArpPattern {
         Self::Converge,
         Self::Diverge,
         Self::Octave,
-        Self::UpTurn,
         Self::Random,
     ];
 
@@ -60,7 +57,6 @@ impl ArpPattern {
             Self::Converge => "Converge",
             Self::Diverge => "Diverge",
             Self::Octave => "Octave",
-            Self::UpTurn => "UpTurn",
             Self::Random => "Random",
         }
     }
@@ -89,13 +85,12 @@ impl ArpPattern {
         Some(match self {
             Self::Up => (0..voice_count).collect(),
             Self::Down => (0..voice_count).rev().collect(),
-            Self::UpDown => (0..voice_count).chain((1..top).rev()).collect(),
+            Self::UpDown => up_down_sequence(voice_count, None),
             Self::DownUp => (0..voice_count).rev().chain(1..top).collect(),
             Self::UpDownHold => (0..voice_count).chain((0..voice_count).rev()).collect(),
             Self::Converge => converge(voice_count),
             Self::Diverge => diverge(voice_count),
             Self::Octave => octave(voice_count),
-            Self::UpTurn => up_turn_sequence(voice_count, UP_TURN_DEFAULT),
             Self::Random => unreachable!("Random returned early"),
         })
     }
@@ -108,19 +103,17 @@ impl ArpPattern {
     }
 }
 
-/// [`ArpPattern::UpTurn`] を [`ArpPattern::voice_sequence`] で引いたときの戻り幅。
-pub const UP_TURN_DEFAULT: usize = 2;
-
-/// 最高音まで上がり、最高音から `turn` 声部ぶん下がる1周期。
+/// 最高音まで上がり、最高音から `down` 声部ぶん下りてから頭へ戻る1周期。
 ///
-/// 戻り幅は `voice_count - 1` で頭打ちにする。`voice_count` が 0 なら空。
-pub fn up_turn_sequence(voice_count: usize, turn: usize) -> Vec<usize> {
-    if voice_count == 0 {
+/// `None` は 1 番の声部まで下りる（[`ArpPattern::UpDown`]）。下り幅は頭の声部を
+/// 含めない数で頭打ちにするので、周期の継ぎ目で同じ声部が続かない。
+pub fn up_down_sequence(voice_count: usize, down: Option<usize>) -> Vec<usize> {
+    let Some(top) = voice_count.checked_sub(1) else {
         return Vec::new();
-    }
-    let top = voice_count - 1;
-    let turn = turn.min(top);
-    (0..voice_count).chain((top - turn..top).rev()).collect()
+    };
+    let full = top.saturating_sub(1);
+    let down = down.map_or(full, |down| down.min(full));
+    (0..voice_count).chain((top - down..top).rev()).collect()
 }
 
 /// 外側から内側へ。奇数個なら中央が最後に1回だけ出る。

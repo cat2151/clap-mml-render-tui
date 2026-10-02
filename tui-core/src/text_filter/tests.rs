@@ -45,6 +45,25 @@ fn a_term_may_match_any_of_the_given_fields() {
 }
 
 #[test]
+fn a_minus_prefixed_term_excludes_entries_matching_any_field() {
+    assert!(matches("-snare", &["drum/kick 01.wav"]));
+    assert!(!matches("-snare", &["drum/snare 01.wav"]));
+    assert!(matches("drum -snare", &["drum/kick 01.wav"]));
+    assert!(!matches("drum -snare", &["drum/snare 01.wav"]));
+    // display に無くても category にあれば除く。
+    assert!(!matches("-bass", &["lead 1.fxp", "bass"]));
+    assert!(!matches("-KICK|hat", &["drum/hat 01.wav"]));
+}
+
+#[test]
+fn a_lone_minus_or_an_escaped_minus_is_a_plain_regular_expression() {
+    assert!(matches("-", &["lead-1.fxp"]));
+    assert!(!matches("-", &["lead 1.fxp"]));
+    assert!(matches(r"\-1", &["lead-1.fxp"]));
+    assert!(!is_valid_condition("-("));
+}
+
+#[test]
 fn no_fields_means_a_non_empty_condition_never_matches() {
     let compiled = compile_condition("kick").expect("valid");
     assert!(!matches_any_field(&compiled, &[]));

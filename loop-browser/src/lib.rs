@@ -133,7 +133,7 @@ pub struct LoopBrowser {
     filter_query: String,
     /// `filter_query` を正規表現へコンパイルした結果。不正な条件のときは
     /// 直前の有効な条件を保つ（打鍵の途中で結果が消えないように）。
-    filter_condition: Vec<regex::Regex>,
+    filter_condition: Vec<cmrt_tui_core::text_filter::FilterTerm>,
     /// `/` の絞り込み入力中の状態。`None` なら入力していない。
     /// 入力中はすべてのキーを入力欄へ渡すので、これが最優先の分岐になる。
     filter_input: Option<filter::FilterInput>,

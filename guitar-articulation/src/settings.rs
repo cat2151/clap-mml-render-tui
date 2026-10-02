@@ -4,12 +4,21 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::StartupInstrument;
+use crate::{ArpSettings, StartupInstrument};
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct GuitarArticulationSettings {
     #[serde(default)]
     pub startup_instrument: StartupInstrument,
+    /// アルペジエーター overlay で巡回する素材（MML / chord）。無い file は空。
+    #[serde(default)]
+    pub arp_materials: Vec<String>,
+    /// アルペジエーター overlay の素材。空は「まだ選んでいない」で、overlay は MML 欄の MML から始まる。
+    #[serde(default)]
+    pub arp_material: String,
+    /// アルペジエーターの設定。無い file は既定値。
+    #[serde(default)]
+    pub arp: ArpSettings,
 }
 
 /// 保存済みの設定を読む。file が無い・壊れている・保存先が決まらないときは既定値。

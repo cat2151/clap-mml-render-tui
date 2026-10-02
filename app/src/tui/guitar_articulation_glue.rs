@@ -19,8 +19,7 @@ use cmrt_mml_overlay::{LivePatch, MmlOverlayPreload};
 
 use crate::guitar_articulation_events::{play_log_line, play_note_log_line};
 use crate::tui::guitar_articulation::{
-    GuitarArticulationAction, GuitarArticulationSettings, Instrument, StartupInstrument, Take,
-    FULL_PATCH,
+    GuitarArticulationAction, Instrument, StartupInstrument, Take, FULL_PATCH,
 };
 use crate::tui::TuiApp;
 
@@ -85,6 +84,14 @@ impl TuiApp<'_> {
             }
             GuitarArticulationAction::Continue => {}
         }
+        // 素材リスト・overlay の素材・アルペジエーターの設定は演奏の要求と同じキーで変わるので、action とは別に見る。
+        if self.guitar_articulation.take_unsaved_settings() {
+            self.save_guitar_articulation_settings();
+        }
+        // アルペジエーター overlay を閉じたキーは repeat の止めと履歴の保存が重なるので、action とは別に見る。
+        if self.guitar_articulation.take_unsaved_history() {
+            self.save_guitar_articulation_history();
+        }
         action
     }
 
@@ -101,9 +108,7 @@ impl TuiApp<'_> {
 
     /// 画面の設定を専用 file へ書く。失敗してもログ 1 行に留め、画面は落とさない。
     fn save_guitar_articulation_settings(&self) {
-        let settings = GuitarArticulationSettings {
-            startup_instrument: self.guitar_articulation.startup_instrument(),
-        };
+        let settings = self.guitar_articulation.settings();
         if let Err(error) = crate::tui::guitar_articulation::save_settings(&settings) {
             crate::logging::global_log_sink(&format!(
                 "guitar-articulation: event=settings-save-failed error=\"{error}\""
@@ -112,7 +117,7 @@ impl TuiApp<'_> {
     }
 
     /// その版のフレーズ全体を、MIDI filter を通さず `effect_chain` を掛けて 1 回だけ鳴らす。
-    /// アルペジエーターが ON なら、repeat の 1 周はアルペジオの長さちょうどにして隙間なく繋げる。
+    /// アルペジエーターを当てていれば、repeat の 1 周はアルペジオの長さちょうどにして隙間なく繋げる。
     fn play_guitar_articulation(&mut self, take: Take, effect_chain: &str) {
         let events = self.guitar_articulation.events(take).to_vec();
         let patch = self
@@ -122,9 +127,9 @@ impl TuiApp<'_> {
             patch,
             take,
             &events,
-            self.guitar_articulation.mml(),
-            self.guitar_articulation.rules(),
-            self.guitar_articulation.arp(),
+            self.guitar_articulation.sounding_mml(),
+            &self.guitar_articulation.sounding_rules(),
+            self.guitar_articulation.applied_arp(),
         ));
         let arp_loop_seconds = self.guitar_articulation.arp_loop_seconds();
         if let Some((command_id, loop_seconds)) =

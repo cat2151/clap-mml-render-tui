@@ -128,6 +128,7 @@ fn share_command_round_trips_through_kb_parse() {
                 repeat_chords: vec![vec![60, 64, 67], vec![62, 65, 69]],
                 mml: String::new(),
                 effect_chain: vec![effect.clone(), bypassed.clone()],
+                patch_filter: String::new(),
             },
             None,
         ),

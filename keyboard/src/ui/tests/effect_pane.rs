@@ -1,7 +1,7 @@
 use super::*;
 use cmrt_core::EffectPlugins;
 use cmrt_effect_chain_select::messages;
-use cmrt_tui_core::theme::MONOKAI_CYAN;
+use cmrt_tui_core::theme::MONOKAI_FG;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::effect_pane::tests::catalog;
@@ -96,7 +96,7 @@ fn the_effect_pane_sits_at_the_right_end_and_turns_yellow_when_focused() {
     let buffer = terminal.backend().buffer();
     assert_eq!(buffer.cell((159, 0)).unwrap().symbol(), "┐");
     assert_eq!(buffer.cell((effect_x, 0)).unwrap().fg, MONOKAI_YELLOW);
-    assert_eq!(buffer.cell((patches_x, 0)).unwrap().fg, MONOKAI_CYAN);
+    assert_eq!(buffer.cell((patches_x, 0)).unwrap().fg, MONOKAI_FG);
 }
 
 #[test]

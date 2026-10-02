@@ -6,6 +6,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui_textarea::TextArea;
 
+use cmrt_patch_select::plugin_menu::condition_to_edit;
 use cmrt_tui_core::text_input::{
     apply_key_event_to_textarea, new_single_line_textarea, textarea_value,
 };
@@ -50,7 +51,7 @@ impl<'a> KeyboardPatchFilterInput<'a> {
     }
 
     fn open(&mut self, current: &str) {
-        self.textarea = new_single_line_textarea(current);
+        self.textarea = new_single_line_textarea(&condition_to_edit(current));
         self.before = current.to_string();
         self.invalid = false;
         self.active = true;

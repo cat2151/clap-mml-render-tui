@@ -105,6 +105,19 @@ fn each_keystroke_refilters_and_a_vanished_patch_moves_to_the_first() {
 }
 
 #[test]
+fn a_minus_prefixed_term_excludes_matching_patches() {
+    let load = patch_load();
+    let ctx = context(&load);
+    let mut screen = screen("Leads/Lead 1.fxp", &ctx);
+
+    press(&mut screen, KeyCode::Char('/'), &ctx);
+    type_text(&mut screen, "lead -2", &ctx);
+
+    assert!(!screen.patch_filter.is_invalid());
+    assert_eq!(listed(&screen), ["Leads/Lead 1.fxp"]);
+}
+
+#[test]
 fn escape_restores_the_condition_from_before_typing() {
     let load = patch_load();
     let ctx = context(&load);
@@ -124,6 +137,35 @@ fn escape_restores_the_condition_from_before_typing() {
     assert_eq!(listed(&screen).len(), 2);
     // 戻した一覧にも今の音色（Lead 2）が残っているので、先頭へは跳ばない。
     assert_eq!(screen.state.patch(), Some("Leads/Lead 2.fxp"));
+}
+
+#[test]
+fn a_trailing_mute_term_is_followed_by_a_space_so_typing_starts_a_new_term() {
+    let load = patch_load();
+    let ctx = context(&load);
+    let mut screen = screen("Leads/Lead 1.fxp", &ctx);
+    screen.apply_patch_filter("-plugin:dexed", &ctx);
+
+    press(&mut screen, KeyCode::Char('/'), &ctx);
+    assert_eq!(screen.patch_filter.value(), "-plugin:dexed ");
+    type_text(&mut screen, "lead", &ctx);
+    assert_eq!(screen.state.patch_catalog.filter(), "-plugin:dexed lead");
+    assert_eq!(listed(&screen).len(), 2);
+
+    press(&mut screen, KeyCode::Esc, &ctx);
+    assert_eq!(screen.state.patch_catalog.filter(), "-plugin:dexed");
+}
+
+#[test]
+fn a_trailing_solo_term_is_followed_by_a_space_too() {
+    let load = patch_load();
+    let ctx = context(&load);
+    let mut screen = screen("Leads/Lead 1.fxp", &ctx);
+    screen.apply_patch_filter("plugin:dexed", &ctx);
+
+    press(&mut screen, KeyCode::Char('/'), &ctx);
+
+    assert_eq!(screen.patch_filter.value(), "plugin:dexed ");
 }
 
 #[test]

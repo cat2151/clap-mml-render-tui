@@ -63,7 +63,6 @@ fn a_row_names_the_row_rules_the_column_rule_counts_and_the_chain_length() {
         mml: "o3 l8 e g a".to_string(),
         rules,
         effect_chain: vec![serde_json::json!({}), serde_json::json!({})],
-        arp: Default::default(),
         anchor: None,
     };
 

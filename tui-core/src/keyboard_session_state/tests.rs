@@ -49,3 +49,23 @@ fn a_two_stage_effect_chain_round_trips_through_json() {
     let restored: KeyboardSessionState = serde_json::from_str(&json).unwrap();
     assert_eq!(restored.effect_chain, state.effect_chain);
 }
+
+#[test]
+fn old_json_without_a_patch_filter_reads_as_unfiltered() {
+    let state: KeyboardSessionState =
+        serde_json::from_str(r#"{"patch":"a.fxp","buffer_multiplier":2}"#).unwrap();
+
+    assert!(state.patch_filter.is_empty());
+}
+
+#[test]
+fn a_patch_filter_round_trips_through_json() {
+    let state = KeyboardSessionState {
+        patch_filter: "pad plugin:vaporizer2 -plugin:dexed".to_string(),
+        ..KeyboardSessionState::default()
+    };
+
+    let json = serde_json::to_string(&state).unwrap();
+    let restored: KeyboardSessionState = serde_json::from_str(&json).unwrap();
+    assert_eq!(restored.patch_filter, state.patch_filter);
+}

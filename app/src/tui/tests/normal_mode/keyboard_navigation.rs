@@ -112,6 +112,19 @@ fn keyboard_counted_h_and_l_move_the_pane_focus_and_stop_at_both_ends() {
 }
 
 #[test]
+fn keyboard_left_and_right_move_the_pane_focus_like_h_and_l() {
+    let mut app = keyboard_app(&[("Lead", 1)], "patches_factory/Lead/Lead 00.fxp");
+    let focus = |app: &TuiApp<'_>| app.keyboard.state.patch_catalog.focus();
+
+    press(&mut app, KeyCode::Right, KeyModifiers::NONE);
+    assert_eq!(focus(&app), PatchPaneFocus::Effect);
+    press(&mut app, KeyCode::Left, KeyModifiers::NONE);
+    assert_eq!(focus(&app), PatchPaneFocus::Patches);
+    press(&mut app, KeyCode::Left, KeyModifiers::NONE);
+    assert_eq!(focus(&app), PatchPaneFocus::Preset);
+}
+
+#[test]
 fn keyboard_j_and_k_move_the_focused_pane() {
     let mut app = keyboard_app(
         &[("Leads", 2), ("Pads", 2), ("Strings", 2), ("Basses", 2)],

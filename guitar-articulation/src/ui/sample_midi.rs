@@ -1,5 +1,5 @@
 //! サンプル MID モードの描画。MML 欄・左 pane は中身を灰色の `-` にし、matrix に MID の音と
-//! KS・CC・pitch bend（[`super::midi_matrix`]）、右 pane に MID の全イベントを出す。
+//! KS・CC・pitch bend（[`super::midi_matrix`]）、右 pane に MID の全イベント（1 音モードはカーソルのまとまりだけ）を出す。
 //! 一覧 overlay（`o`）は history overlay と同じ形。
 
 use ratatui::{
@@ -15,7 +15,7 @@ use cmrt_tui_core::{
     ui::centered_rect_with_size,
 };
 
-use super::event_list::{visible_lines, EventRow};
+use super::event_list::{first_note_on, visible_lines, EventRow};
 use super::{focused_pane_block, pane_block, GuitarArticulationLayout, MATRIX_TITLE, MML_TITLE};
 use crate::GuitarArticulationScreen;
 
@@ -55,12 +55,22 @@ pub(super) fn draw_panes(
     );
     let block = focused_pane_block(format!(" MID: {} (space) ", midi.name()));
     let height = block.inner(layout.converted).height as usize;
-    let rows: Vec<EventRow> = midi
-        .events()
+    // 1 音モードは、鳴らすカーソルのまとまりのイベント列だけを出す。
+    let note_events;
+    let (events, target) = if screen.note_preview() {
+        note_events = midi.note_events(screen.sample_midi_cursor());
+        let target = first_note_on(&note_events);
+        (note_events.as_slice(), target)
+    } else {
+        (
+            midi.events(),
+            midi.group_event_index(screen.sample_midi_cursor()),
+        )
+    };
+    let rows: Vec<EventRow> = events
         .iter()
         .map(|event| EventRow::new(event, true))
         .collect();
-    let target = midi.group_event_index(screen.sample_midi_cursor());
     f.render_widget(
         Paragraph::new(visible_lines(&rows, height, target)).block(block),
         layout.converted,
