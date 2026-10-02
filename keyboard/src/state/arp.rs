@@ -49,7 +49,7 @@ impl KeyboardState {
         if self.note_playback_uses_arp() {
             messages.extend(self.restart_arp(now));
         } else {
-            self.periodic_next_at = Some(now + PERIODIC_INTERVAL);
+            self.restart_periodic_clock(now);
             messages.extend(self.attack_repeat_chord());
         }
         messages
@@ -68,7 +68,7 @@ impl KeyboardState {
                 }
                 self.reset_progression_position();
                 self.repeat_elapsed_ticks = 0;
-                self.periodic_next_at = Some(now + PERIODIC_INTERVAL);
+                self.restart_periodic_clock(now);
                 self.attack_repeat_chord()
             }
             NotePlaybackMode::Auto => {
@@ -102,9 +102,11 @@ impl KeyboardState {
                 self.note_playback_mode = NotePlaybackMode::Off;
                 self.reset_progression_position();
                 self.repeat_elapsed_ticks = 0;
-                self.periodic_next_at = self
-                    .periodic_digits_active()
-                    .then(|| now + PERIODIC_INTERVAL);
+                if self.periodic_digits_active() {
+                    self.restart_periodic_clock(now);
+                } else {
+                    self.stop_periodic_clock();
+                }
                 let mut messages: Vec<[u8; 3]> = self
                     .repeat_sounding
                     .drain(..)
@@ -124,7 +126,7 @@ impl KeyboardState {
     pub(super) fn restart_arp(&mut self, now: Instant) -> Vec<[u8; 3]> {
         self.reset_progression_position();
         self.repeat_elapsed_ticks = 0;
-        self.periodic_next_at = Some(now + PERIODIC_INTERVAL);
+        self.restart_periodic_clock(now);
         self.attack_next_arp().into_iter().collect()
     }
 

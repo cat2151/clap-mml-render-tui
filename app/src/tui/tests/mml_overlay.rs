@@ -73,6 +73,22 @@ fn closing_the_overlay_restarts_the_loop_browser() {
     assert!(app.loop_browser.state.starting);
 }
 
+/// keyboard 画面は開いている間は周期送信（arp 等）を止め、閉じたら再開を許す。
+#[test]
+fn the_overlay_stops_keyboard_periodic_sending_until_it_closes() {
+    let mut app = TuiApp::new_for_test(test_config());
+    app.start_keyboard(None);
+    assert!(!app.keyboard.periodic_sending_stopped());
+
+    assert!(app.try_open_mml_overlay(ctrl_p()));
+    assert!(app.keyboard.periodic_sending_stopped());
+    assert_eq!(app.active_screen, PrimaryScreen::Keyboard);
+
+    app.handle_mml_overlay_key_event(press(KeyCode::Esc));
+    assert!(!app.mml_overlay.is_open());
+    assert!(!app.keyboard.periodic_sending_stopped());
+}
+
 #[test]
 fn a_modal_screen_state_blocks_the_overlay() {
     let mut app = TuiApp::new_for_test(test_config());

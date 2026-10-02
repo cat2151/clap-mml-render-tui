@@ -25,8 +25,12 @@ pub(super) fn set_result(
     status.stage_started_at = None;
 }
 
-/// chain だけの差し替えは接続の段階を進めない（停止後の `Idle` を `Ready` へ戻さない）。
-pub(super) fn set_effect_chain_result(
+/// 接続の段階を進めない送信の結果（失敗だけ `Error` にする）。
+///
+/// chain だけの差し替えは停止後の `Idle` を `Ready` へ戻さない。timeline の Begin・予約は
+/// 音色の差し替え中（`PatchSetting`）に worker へ届くことがあり、そこで `Ready` にすると
+/// 準備が終わる前に周期送信が走る。
+pub(super) fn set_result_keeping_phase(
     status: &Mutex<KeyboardConnectionStatus>,
     result: Result<()>,
     elapsed: Duration,

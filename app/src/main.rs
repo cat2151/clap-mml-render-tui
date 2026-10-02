@@ -48,6 +48,8 @@ fn run() -> Result<()> {
     cmrt_notepad::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
     // grid sequencer 画面 crate にグローバルログ sink を注入する。
     cmrt_grid_sequencer::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
+    // keyboard 画面 crate にグローバルログ sink を注入する。
+    cmrt_keyboard::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
     // DAW 画面 crate / MML 入力オーバーレイ crate / 音色 selector crate にグローバルログ sink を注入する。
     cmrt_daw::set_log_sink(clap_mml_render_tui::logging::global_log_sink);
     cmrt_daw::set_performance_log_sink(clap_mml_render_tui::logging::nonblocking_log_sink);

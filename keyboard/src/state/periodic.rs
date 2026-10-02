@@ -9,7 +9,39 @@ struct ComboDigits {
     cc: usize,
 }
 
+/// マスタークロックの1 tick。`at` はそのtickのdeadline(pollした時刻ではない)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PeriodicTick {
+    pub at: Instant,
+    pub messages: Vec<[u8; 3]>,
+}
+
 impl KeyboardState {
+    /// 動いているマスタークロックの原点。止まっているときは `None`。
+    pub fn periodic_anchor(&self) -> Option<Instant> {
+        self.periodic_anchor
+    }
+
+    /// マスタークロックを張り直す・止めるたびに増える。
+    pub fn periodic_generation(&self) -> u64 {
+        self.periodic_generation
+    }
+
+    pub(super) fn restart_periodic_clock(&mut self, now: Instant) {
+        self.periodic_next_at = Some(now + PERIODIC_INTERVAL);
+        self.periodic_anchor = Some(now);
+        self.periodic_generation += 1;
+    }
+
+    pub(super) fn stop_periodic_clock(&mut self) {
+        if self.periodic_next_at.is_none() && self.periodic_anchor.is_none() {
+            return;
+        }
+        self.periodic_next_at = None;
+        self.periodic_anchor = None;
+        self.periodic_generation += 1;
+    }
+
     pub fn cycle_velocity(&mut self, now: Instant) -> VelocityMode {
         match self.velocity_mode {
             VelocityMode::Normal => {
@@ -112,9 +144,14 @@ impl KeyboardState {
     }
 
     pub fn poll_periodic(&mut self, now: Instant) -> Vec<[u8; 3]> {
-        if !deadline_elapsed(&mut self.periodic_next_at, now) {
-            return Vec::new();
-        }
+        self.poll_periodic_tick(now)
+            .map(|tick| tick.messages)
+            .unwrap_or_default()
+    }
+
+    /// `now` までにdeadlineを迎えたtickを高々1つ進める。
+    pub fn poll_periodic_tick(&mut self, now: Instant) -> Option<PeriodicTick> {
+        let at = deadline_elapsed(&mut self.periodic_next_at, now)?;
         self.draw_next_combo();
         let digits = self.combo_digits();
         let mut messages = Vec::new();
@@ -152,7 +189,7 @@ impl KeyboardState {
             NotePlaybackMode::Arp | NotePlaybackMode::Auto => messages.extend(self.advance_arp()),
             NotePlaybackMode::Repeat => unreachable!(),
         }
-        messages
+        Some(PeriodicTick { at, messages })
     }
 
     // patch切替完了(Ready復帰)後に、自動送信系の現在値を新patchへ再送する
@@ -189,7 +226,7 @@ impl KeyboardState {
         match self.note_playback_mode {
             NotePlaybackMode::Off => {}
             NotePlaybackMode::Repeat | NotePlaybackMode::Auto if !self.note_playback_uses_arp() => {
-                self.periodic_next_at = Some(now + PERIODIC_INTERVAL);
+                self.restart_periodic_clock(now);
                 self.repeat_elapsed_ticks = 0;
                 self.reset_progression_position();
                 messages.extend(self.attack_repeat_chord());
@@ -232,7 +269,11 @@ impl KeyboardState {
         if self.velocity_mode == VelocityMode::Periodic {
             self.velocity = VELOCITY_SEQ[0];
         }
-        self.periodic_next_at = self.periodic_active().then(|| now + PERIODIC_INTERVAL);
+        if self.periodic_active() {
+            self.restart_periodic_clock(now);
+        } else {
+            self.stop_periodic_clock();
+        }
     }
 
     // tick毎に山札から次の組み合わせIDを引く。山札が空/桁構成変更後は再シャッフルして作り直す
@@ -295,14 +336,12 @@ impl KeyboardState {
     }
 }
 
-// deadline到達なら次回を1周期後へ進めてtrue。大幅遅延時(非Ready停滞など)は
+// deadline到達なら次回を1周期後へ進め、消費したdeadlineを返す。大幅遅延時(非Ready停滞など)は
 // now基準へスナップし、復帰直後のバースト送信を防ぐ(欠落サイクルはスキップ)。
-fn deadline_elapsed(next_at: &mut Option<Instant>, now: Instant) -> bool {
-    let Some(deadline) = *next_at else {
-        return false;
-    };
+fn deadline_elapsed(next_at: &mut Option<Instant>, now: Instant) -> Option<Instant> {
+    let deadline = (*next_at)?;
     if now < deadline {
-        return false;
+        return None;
     }
     let scheduled = deadline + PERIODIC_INTERVAL;
     *next_at = Some(if scheduled <= now {
@@ -310,7 +349,7 @@ fn deadline_elapsed(next_at: &mut Option<Instant>, now: Instant) -> bool {
     } else {
         scheduled
     });
-    true
+    Some(deadline)
 }
 
 #[cfg(test)]

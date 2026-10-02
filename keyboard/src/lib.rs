@@ -11,11 +11,13 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 mod catalog;
 mod effect_pane;
 pub mod guide;
+mod logging;
 mod mml_input;
 mod navigation;
 mod note_key;
 mod numeric_input;
 mod patch_filter_input;
+mod periodic_timeline;
 mod plugin_menu;
 mod screen;
 mod screen_runtime;
@@ -32,6 +34,7 @@ pub mod ui;
 pub use catalog::{KeyboardPatchCatalog, KeyboardPatchCatalogStatus, PatchPaneFocus};
 pub use effect_pane::KeyboardEffectPane;
 pub use guide::KeyboardNoteGuide;
+pub use logging::set_log_sink;
 pub use mml_input::KeyboardMmlInput;
 pub use navigation::NavigationCount;
 pub use numeric_input::{NumericInput, NumericInputTarget};
@@ -41,7 +44,7 @@ pub use sender::{
     KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardMidiSender, KeyboardVoicingStatus,
 };
 pub use share_command::share_command;
-pub use state::KeyboardState;
+pub use state::{KeyboardState, PeriodicTick};
 pub use state::{ModulationMode, NotePlaybackMode, PitchBendMode, VelocityMode, KEYBOARD_NOTES};
 
 use cmrt_realtime_play::PatchVoicing;
@@ -95,6 +98,7 @@ impl KeyboardScreen<'_> {
         self.effect.close_overlay();
         self.share_notice = None;
         self.note_guide.reset_for_screen();
+        self.periodic_timeline.restart();
         self.state = self.state.restart_with_patch(patch);
         self.prepare_connection(ctx);
     }
@@ -107,6 +111,7 @@ impl KeyboardScreen<'_> {
         self.effect.close_overlay();
         self.share_notice = None;
         self.note_guide.reset_for_screen();
+        self.periodic_timeline.restart();
         self.prepare_connection(ctx);
     }
 
@@ -160,12 +165,7 @@ impl KeyboardScreen<'_> {
 
     pub fn finish(&mut self) {
         let note_offs = self.state.take_leave_messages();
-        if let Some(sender) = &self.midi_sender {
-            if !note_offs.is_empty() {
-                sender.send(note_offs, self.state.patch());
-            }
-            sender.stop();
-        }
+        self.stop_sending(note_offs);
     }
 
     pub fn handle_key(&mut self, key: KeyEvent, ctx: &KeyboardContext<'_>) -> KeyboardAction {
@@ -357,11 +357,7 @@ impl KeyboardScreen<'_> {
                 KeyCode::Char('t') => {
                     if self.connection_status().phase.accepts_notes() {
                         let messages = self.state.cycle_note_playback(Instant::now());
-                        if !messages.is_empty() {
-                            if let Some(sender) = &self.midi_sender {
-                                sender.send(messages, self.state.patch());
-                            }
-                        }
+                        self.send_after_cancel(messages);
                     }
                     return KeyboardAction::Continue;
                 }
@@ -427,10 +423,8 @@ impl KeyboardScreen<'_> {
                     let messages =
                         self.state
                             .replace_repeat_chords(progression, Instant::now(), ready);
-                    if ready && !messages.is_empty() {
-                        if let Some(sender) = &self.midi_sender {
-                            sender.send(messages, self.state.patch());
-                        }
+                    if ready {
+                        self.send_after_cancel(messages);
                     }
                 }
             }

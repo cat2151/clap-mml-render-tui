@@ -11,6 +11,7 @@ mod arp;
 mod periodic;
 mod session;
 
+pub use periodic::PeriodicTick;
 pub(crate) use session::default_repeat_chords;
 
 pub const KEYBOARD_NOTES: [KeyboardNote; 7] = [
@@ -138,6 +139,10 @@ pub struct KeyboardState {
     arp_next_index: usize,
     // 全周期系統(桁、repeat、arp)が共有する250msマスタークロック
     periodic_next_at: Option<Instant>,
+    // マスタークロックを張り直した時刻。tickのdeadlineはここから250ms刻みで並ぶ
+    periodic_anchor: Option<Instant>,
+    // マスタークロックを張り直す・止めるたびに増える。呼び出し側が張り直しを検出するのに使う
+    periodic_generation: u64,
     // repeatが現在の和音を鳴らしてから経過したマスタークロックのtick数
     repeat_elapsed_ticks: u8,
     // 周期modeがONの系統を桁とみなした組み合わせIDの山札(bag)。桁構成変更で作り直す
@@ -355,7 +360,7 @@ impl KeyboardState {
         if std::mem::take(&mut self.cc_periodic_on) {
             messages.push([CONTROL_CHANGE, self.cc_number, 0]);
         }
-        self.periodic_next_at = None;
+        self.stop_periodic_clock();
         self.repeat_elapsed_ticks = 0;
         self.combo_bag = None;
         self.current_combo = 0;

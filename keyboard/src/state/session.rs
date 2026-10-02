@@ -55,6 +55,8 @@ impl KeyboardState {
             arp_sounding: None,
             arp_next_index: 0,
             periodic_next_at: None,
+            periodic_anchor: None,
+            periodic_generation: 0,
             repeat_elapsed_ticks: 0,
             combo_bag: None,
             current_combo: 0,

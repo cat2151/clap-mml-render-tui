@@ -1,20 +1,27 @@
 use std::{
     sync::{mpsc, Arc, Mutex},
     thread::JoinHandle,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
-use cmrt_realtime_play::{PatchVoicing, RealtimePlayServerSupervisor};
+use cmrt_realtime_play::{
+    PatchVoicing, RealtimePlayServerSupervisor, TimelineId, TimelineMidiEvent,
+};
 
 mod connection;
 mod patch_prepare;
 mod status;
+mod timeline;
 
-use connection::{set_effect_chain_result, set_prepare_result, set_result};
+use connection::{set_prepare_result, set_result, set_result_keeping_phase};
 use patch_prepare::{run_plan, LivePatchState};
 pub use status::{KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardVoicingStatus};
+pub(crate) use timeline::next_timeline_id;
+use timeline::{timeline_config, TimelineWorker};
 
-const KEYBOARD_INSTANCE: u8 = 0;
+pub(crate) const KEYBOARD_INSTANCE: u8 = 0;
+/// コマンドが来ないときに timing 統計を見に行く間隔。
+const IDLE_POLL_INTERVAL: Duration = Duration::from_millis(500);
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct PatchRequest<'a> {
@@ -26,6 +33,10 @@ enum KeyboardMidiCommand {
     Send {
         messages: Vec<[u8; 3]>,
     },
+    /// 新しい id で timeline を張る。予約済みの音は捨てられ、鳴っている音は離される。
+    BeginTimeline(TimelineId),
+    /// 張った timeline 上の絶対秒で予約する。
+    SendTimeline(Vec<TimelineMidiEvent>),
     Stop,
     Prepare {
         buffer_multiplier: u8,
@@ -54,15 +65,31 @@ pub struct KeyboardMidiSender {
     worker: Option<JoinHandle<()>>,
 }
 
+/// worker が起動時に受け取る設定。
+struct WorkerConfig {
+    buffer_multiplier: u8,
+    /// play server の `sample_rate`（config.toml）。timeline を張るのに要る。
+    sample_rate_hz: f64,
+}
+
 impl KeyboardMidiSender {
-    pub fn new(supervisor: Arc<RealtimePlayServerSupervisor>, buffer_multiplier: u8) -> Self {
+    /// `sample_rate_hz` は play server が使う config.toml の `sample_rate` と一致させること。
+    pub fn new(
+        supervisor: Arc<RealtimePlayServerSupervisor>,
+        buffer_multiplier: u8,
+        sample_rate_hz: f64,
+    ) -> Self {
         let (tx, rx) = mpsc::channel();
         let status = Arc::new(Mutex::new(KeyboardConnectionStatus::new(buffer_multiplier)));
         let worker_status = Arc::clone(&status);
         let worker_supervisor = Arc::clone(&supervisor);
+        let config = WorkerConfig {
+            buffer_multiplier,
+            sample_rate_hz,
+        };
         let worker = std::thread::Builder::new()
             .name("keyboard-midi-sender".to_string())
-            .spawn(move || run_midi_sender(rx, worker_supervisor, worker_status, buffer_multiplier))
+            .spawn(move || run_midi_sender(rx, worker_supervisor, worker_status, config))
             .expect("keyboard MIDI sender thread should start");
         Self {
             tx,
@@ -78,6 +105,16 @@ impl KeyboardMidiSender {
 
     pub fn stop(&self) {
         let _ = self.tx.send(KeyboardMidiCommand::Stop);
+    }
+
+    pub(crate) fn begin_timeline(&self, timeline_id: TimelineId) {
+        let _ = self
+            .tx
+            .send(KeyboardMidiCommand::BeginTimeline(timeline_id));
+    }
+
+    pub(crate) fn send_timeline(&self, events: Vec<TimelineMidiEvent>) {
+        let _ = self.tx.send(KeyboardMidiCommand::SendTimeline(events));
     }
 
     pub fn prepare(
@@ -159,12 +196,19 @@ fn run_midi_sender(
     rx: mpsc::Receiver<KeyboardMidiCommand>,
     supervisor: Arc<RealtimePlayServerSupervisor>,
     status: Arc<Mutex<KeyboardConnectionStatus>>,
-    initial_buffer_multiplier: u8,
+    config: WorkerConfig,
 ) {
-    let mut buffer_multiplier = initial_buffer_multiplier;
+    let mut buffer_multiplier = config.buffer_multiplier;
     let mut live_patch = LivePatchState::default();
+    let mut timeline = TimelineWorker::default();
     let _ = supervisor.remember_live_buffer_multiplier(u16::from(buffer_multiplier));
-    while let Ok(command) = rx.recv() {
+    loop {
+        timeline.poll(&supervisor, Instant::now());
+        let command = match rx.recv_timeout(IDLE_POLL_INTERVAL) {
+            Ok(command) => command,
+            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        };
         match command {
             KeyboardMidiCommand::Send { messages } => {
                 let started = Instant::now();
@@ -179,7 +223,21 @@ fn run_midi_sender(
                     false,
                 );
             }
+            KeyboardMidiCommand::BeginTimeline(timeline_id) => {
+                let started = Instant::now();
+                let result = timeline.begin(
+                    &supervisor,
+                    timeline_config(timeline_id, config.sample_rate_hz),
+                );
+                set_result_keeping_phase(&status, result, started.elapsed());
+            }
+            KeyboardMidiCommand::SendTimeline(events) => {
+                let started = Instant::now();
+                let result = timeline.send(&supervisor, &events, started);
+                set_result_keeping_phase(&status, result, started.elapsed());
+            }
             KeyboardMidiCommand::Stop => {
+                timeline.stop();
                 let started = Instant::now();
                 let result = supervisor.stop_live_instance(KEYBOARD_INSTANCE);
                 set_result(
@@ -270,7 +328,7 @@ fn run_midi_sender(
                 }
                 let started = Instant::now();
                 let result = run_plan(supervisor.as_ref(), &plan).map(|_| ());
-                set_effect_chain_result(&status, result, started.elapsed());
+                set_result_keeping_phase(&status, result, started.elapsed());
             }
             KeyboardMidiCommand::Shutdown => break,
         }

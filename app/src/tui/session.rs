@@ -196,6 +196,7 @@ impl<'a> TuiApp<'a> {
         let keyboard_midi_sender = Some(super::keyboard::KeyboardMidiSender::new(
             Arc::clone(&play_server),
             keyboard_state.buffer_multiplier(),
+            cfg.sample_rate,
         ));
         let restore_keyboard = active_screen == crate::screen_switch::PrimaryScreen::Keyboard;
         let voicing_source_refresh = crate::voicing_sources::VoicingSourceRefresh::spawn(cfg);

@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use super::*;
 
+mod clock;
 mod repeat;
 
 fn set_cc_number_74(state: &mut KeyboardState) {

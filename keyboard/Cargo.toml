@@ -3,6 +3,10 @@ name = "cmrt-keyboard"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+# app のテストから「周期送信を止めているか」を読むためのフラグ。
+test-support = []
+
 [dependencies]
 cmrt-chord = { path = "../chord" }
 cmrt-realtime-play = { path = "../realtime-play" }

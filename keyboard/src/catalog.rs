@@ -405,6 +405,10 @@ impl KeyboardScreen<'_> {
         // 自動送信系(周期modeやON状態)はpatch変更をまたいで維持する。
         // note offのみ送り、Ready復帰後にrefreshで現在値を新patchへ再送する。
         let note_offs = self.state.take_note_off_messages();
+        // 予約済みの周期送信が新しい音色の準備中に鳴らないよう、先に捨てる
+        if self.connection_status().phase.accepts_notes() {
+            self.send_after_cancel(Vec::new());
+        }
         self.state.patch = Some(patch.clone());
         let known_voicing = ctx.cached_voicing(Some(&patch));
         if let Some(sender) = &self.midi_sender {
