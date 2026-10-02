@@ -1,7 +1,7 @@
 # clap-mml-render-tui
 
 ### 概要
-MML TUI DAW（のようなもの）。[Surge XT](https://surge-synthesizer.github.io/) / [Dexed](https://asb2m10.github.io/dexed/) / [Vaporizer2](https://www.vast-dynamics.com/?q=Vaporizer2) / [Floe](https://floe.audio/) / [Sforzando](https://www.plogue.com/products/sforzando.html) / [Six Sines](https://github.com/baconpaul/six-sines) / [TyrellN6](https://u-he.com/products/tyrelln6/) / [TONE3000](https://www.tone3000.com/) / [Dragonfly Reverb](https://michaelwillis.github.io/dragonfly-reverb/) / [METAL-GTX](https://unreal-instruments.wixsite.com/unreal-instruments/metal-gtx) のリッチな音をMMLで手軽に楽しめます。Rustで書かれています。
+MML TUI DAW（のようなもの）。[Surge XT](https://surge-synthesizer.github.io/) / [Dexed](https://asb2m10.github.io/dexed/) / [Vaporizer2](https://www.vast-dynamics.com/?q=Vaporizer2) / [Floe](https://floe.audio/) / [Sforzando](https://www.plogue.com/products/sforzando.html) / [Six Sines](https://github.com/baconpaul/six-sines) / [TyrellN6](https://u-he.com/products/tyrelln6/) / [TONE3000](https://www.tone3000.com/) / [Dragonfly Reverb](https://michaelwillis.github.io/dragonfly-reverb/) / [Voyage Voyage](https://www.musicalentropy.com/VoyageVoyage.html) / [Shu](https://mikey.audio/shu) / [METAL-GTX](https://unreal-instruments.wixsite.com/unreal-instruments/metal-gtx) のリッチな音をMMLで手軽に楽しめます。Rustで書かれています。
 
 ### 用途
 
@@ -62,6 +62,8 @@ cmrt --play-server "X:/projects/clap-mml-play-server/target/debug/clap-mml-realt
   - [TONE3000](https://www.tone3000.com/)
   - Surge XT Effects（Surge XTに同梱）
   - [Dragonfly Reverb](https://michaelwillis.github.io/dragonfly-reverb/)
+  - [Voyage Voyage](https://www.musicalentropy.com/VoyageVoyage.html)
+  - [Shu](https://mikey.audio/shu)
 - sfz（のうち、専用画面でキースイッチとコントロールチェンジを試せるもの）
   - [METAL-GTX](https://unreal-instruments.wixsite.com/unreal-instruments/metal-gtx) 
 - それぞれのダウンロード画面（迷子になった人向け）
@@ -74,6 +76,8 @@ cmrt --play-server "X:/projects/clap-mml-play-server/target/debug/clap-mml-realt
   - [TyrellN6 ダウンロード画面](https://u-he.com/products/tyrelln6/)
   - [TONE3000 ダウンロード画面](https://www.tone3000.com/plugin/download)
   - [Dragonfly Reverb GitHub releases画面](https://github.com/michaelwillis/dragonfly-reverb/releases)
+  - [Voyage Voyage](https://www.musicalentropy.com/VoyageVoyage.html)
+  - [Shu](https://mikey.audio/shu)
   - [METAL-GTX](https://unreal-instruments.wixsite.com/unreal-instruments/metal-gtx) 
 
 ### AI生成ドキュメント
