@@ -5,6 +5,7 @@
 //! 変換を試す画面（[`GuitarArticulationScreen`] と [`ui`]）も同じ crate に置く。
 
 mod accent;
+mod arp;
 mod articulation;
 mod auto_pick;
 mod column_map;
@@ -41,6 +42,9 @@ mod tests;
 use serde::{Deserialize, Serialize};
 
 pub use accent::AccentPattern;
+pub use arp::{
+    arpeggiate, performance_events, ArpSettings, ARP_CYCLES, ARP_OCTAVES, ARP_PATTERNS, ARP_TURN,
+};
 pub use articulation::Articulation;
 pub use auto_pick::{auto_pick_columns, AutoPick, RUN_MIN_NOTES, RUN_PICK_EVERY};
 pub use cmrt_midi_filter::TimedMidiEvent;

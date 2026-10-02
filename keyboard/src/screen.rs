@@ -16,6 +16,8 @@ pub struct KeyboardScreen<'a> {
     pub(crate) plugin_menu: Option<PluginMenu>,
     effect_plugins: EffectPlugins,
     pub(crate) effect: KeyboardEffectPane,
+    /// `y` でコピーした共有コマンド。`Some` の間は中央に通知を出す。
+    pub(crate) share_notice: Option<String>,
 }
 
 impl<'a> KeyboardScreen<'a> {
@@ -34,6 +36,7 @@ impl<'a> KeyboardScreen<'a> {
             plugin_menu: None,
             effect_plugins: EffectPlugins::none(),
             effect: KeyboardEffectPane::default(),
+            share_notice: None,
         }
     }
 

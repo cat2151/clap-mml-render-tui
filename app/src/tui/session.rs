@@ -15,8 +15,8 @@ mod restore;
 
 use grid_sequencer::grid_session_from_history;
 use restore::{
-    bpm_range_from_history, load_initial_session_state, play_settings_from_history,
-    restored_bpm_mode, LoadedSessionState,
+    apply_startup_keyboard, bpm_range_from_history, load_initial_session_state,
+    play_settings_from_history, restored_bpm_mode, LoadedSessionState,
 };
 
 /// 復元したセッションのカーソルを現在の行数に収まる範囲へ丸める。
@@ -131,12 +131,22 @@ fn spawn_play_server_prewarm(
 
 impl<'a> TuiApp<'a> {
     pub fn new(cfg: &'a Config, effect_plugins: EffectPlugins) -> Self {
+        Self::with_startup_keyboard(cfg, effect_plugins, None)
+    }
+
+    /// `startup_keyboard` が `Some` なら、保存済みの keyboard 状態をそれで置き換えて
+    /// keyboard 画面で起動する（`cmrt kb`）。他の画面の復元は変わらない。
+    pub fn with_startup_keyboard(
+        cfg: &'a Config,
+        effect_plugins: EffectPlugins,
+        startup_keyboard: Option<crate::history::KeyboardSessionState>,
+    ) -> Self {
         let cfg_arc = Arc::new(cfg.clone());
         let LoadedSessionState {
             cursor,
             lines,
-            active_screen,
-            keyboard,
+            mut active_screen,
+            mut keyboard,
             grid_sequencer_track_count,
             grid_sequencer_chord_mode,
             grid_sequencer,
@@ -152,6 +162,7 @@ impl<'a> TuiApp<'a> {
             chord_chart_bass_patch,
             mml_overlay_play_settings,
         } = load_initial_session_state();
+        apply_startup_keyboard(&mut active_screen, &mut keyboard, startup_keyboard);
         let play_server = Arc::new(
             crate::realtime_play::RealtimePlayServerSupervisor::with_live_instance_count(
                 cfg_arc.as_ref(),

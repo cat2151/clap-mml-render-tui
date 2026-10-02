@@ -51,7 +51,7 @@ pub(super) fn keyboard_help_lines(
                 "a:add  r:replace  dd:del  b:bypass  Alt+Up/Down:move  /:filter  M:plugin solo/mute"
             )),
             Line::from(
-                "cefg:notes  Shift+H:buffer  t:off/auto/repeat/arp  n:notepad  w:DAW q:quit  Ctrl+G:screens",
+                "cefg:notes  Shift+H:buffer  t:off/auto/repeat/arp  y:share  n:notepad  w:DAW q:quit  Ctrl+G:screens",
             ),
             Line::from(
                 "i:MML notes  v:velocity  m:mod(CC1)  p:pitch bend  x:CC#  z:CC value  Shift+Z:CC cycle",
@@ -63,7 +63,7 @@ pub(super) fn keyboard_help_lines(
                 "Home/End:first/last  r:random  /:filter  M:plugin solo/mute"
             )),
             Line::from(
-                "cdefgab:notes  Shift+H:buffer  t:off/auto/repeat/arp  n:notepad  w:DAW q:quit  Ctrl+G:screens",
+                "cdefgab:notes  Shift+H:buffer  t:off/auto/repeat/arp  y:share  n:notepad  w:DAW q:quit  Ctrl+G:screens",
             ),
             Line::from(
                 "i:MML notes  v:velocity  m:mod(CC1)  p:pitch bend  x:CC#  z:CC value  Shift+Z:CC cycle",

@@ -4,6 +4,7 @@ use ratatui::{backend::TestBackend, buffer::Buffer, layout::Rect, Terminal};
 use super::*;
 use crate::TimedMidiEvent;
 
+mod arp_overlay;
 mod column_rule_rows;
 mod event_list;
 mod help;

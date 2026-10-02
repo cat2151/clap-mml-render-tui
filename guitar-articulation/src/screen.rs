@@ -15,8 +15,8 @@ use serde_json::Value;
 use crate::humanize::{self, Humanized};
 use crate::ui::{PARAM_LIST_KEY, ROW_RULE_ROWS, RULE_LIST_KEY, RULE_ROWS};
 use crate::{
-    articulate, convert, Articulated, ColumnRuleAnchor, Instrument, Note, RowRule, Rule, RuleTable,
-    StartupInstrument, TimedMidiEvent,
+    articulate, convert, ArpSettings, Articulated, ColumnRuleAnchor, Instrument, Note, RowRule,
+    Rule, RuleTable, StartupInstrument, TimedMidiEvent,
 };
 
 /// 画面に入ったとき MML が空なら入れておく MML。何を触れば何が変わるかを、打つ前から見せる。
@@ -41,6 +41,7 @@ impl Take {
     }
 }
 
+mod arp;
 mod columns;
 mod effect_chain;
 mod history;
@@ -77,13 +78,16 @@ pub enum GuitarArticulationAction {
     PlaySampleMidi {
         note: Option<usize>,
     },
-    /// repeat（`Shift+R`）を OFF にしたので、繰り返している演奏を止めてほしい。
+    /// repeat を OFF にしたので（`Shift+R`、`Shift+R` が OFF のままアルペジエーター overlay を閉じた）、
+    /// 繰り返している演奏を止めてほしい。
     StopRepeat,
 }
 
 #[derive(Default)]
 pub struct GuitarArticulationScreen {
     mml: String,
+    /// `mml` に当てて鳴らすアルペジエーターの設定。OFF の間も値は保つ。
+    arp: ArpSettings,
     /// MML を編集している間だけ `Some`。英字キーを入力欄とルールのどちらへ渡すかをこれで分ける。
     input: Option<TextArea<'static>>,
     plain: Vec<TimedMidiEvent>,
@@ -128,6 +132,8 @@ pub struct GuitarArticulationScreen {
     rule_list: Option<rule_list::RuleList>,
     /// パラメータ overlay（`u`）を開いている間だけ、選んでいる行。
     param_list: Option<usize>,
+    /// アルペジエーター overlay（`z`）を開いているか。
+    arp_overlay: bool,
     /// 直前の操作ができなかった理由。次のキーで消える。
     pub error: Option<String>,
 }
@@ -184,9 +190,9 @@ impl GuitarArticulationScreen {
         self.note_preview
     }
 
-    /// repeat（`Shift+R`）が ON か。
+    /// repeat が ON か。`Shift+R` の ON に加え、アルペジエーター overlay（`z`）を開いている間も ON。
     pub fn repeat(&self) -> bool {
-        self.repeat
+        self.repeat || self.arp_overlay
     }
 
     pub fn instrument(&self) -> Instrument {
@@ -242,6 +248,9 @@ impl GuitarArticulationScreen {
         if self.param_list.is_some() {
             return self.handle_param_list_key(key);
         }
+        if self.arp_overlay {
+            return self.handle_arp_overlay_key(key);
+        }
         // MML は `?` を使わないので、入力欄を開いていても `?` はヘルプへ回す。
         if is_help_key(key) {
             self.help_open = true;
@@ -294,6 +303,7 @@ impl GuitarArticulationScreen {
             KeyCode::Char('q') => GuitarArticulationAction::Quit,
             KeyCode::Char(RULE_LIST_KEY) => self.open_rule_list(),
             KeyCode::Char(PARAM_LIST_KEY) => self.open_param_list(),
+            KeyCode::Char('z') => self.open_arp_overlay(),
             KeyCode::Char(ch) => {
                 if let Some(rule_row) = RULE_ROWS.iter().find(|rule_row| rule_row.key == ch) {
                     self.toggle_rule(rule_row.rule)
@@ -316,7 +326,7 @@ impl GuitarArticulationScreen {
             return GuitarArticulationAction::Continue;
         }
         self.rules.toggle(self.cursor, rule);
-        self.anchor = Some(ColumnRuleAnchor::new(&self.mml, &self.rules));
+        self.anchor = Some(ColumnRuleAnchor::new(&self.mml, &self.arp, &self.rules));
         self.rebuild_converted();
         self.record_history();
         self.play(Take::Converted)

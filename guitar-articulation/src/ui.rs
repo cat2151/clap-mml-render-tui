@@ -11,14 +11,16 @@ use ratatui::{
     Frame,
 };
 
+use cmrt_arpeggiator::ArpPattern;
 use cmrt_tui_core::{
     status::base_style,
     theme::{MONOKAI_CYAN, MONOKAI_GRAY, MONOKAI_PINK},
     ui::draw_frame_background,
 };
 
-use crate::{AutoPick, GuitarArticulationScreen, RowRule, Take};
+use crate::{ArpSettings, AutoPick, GuitarArticulationScreen, RowRule, Take};
 
+mod arp;
 mod event_list;
 mod help;
 mod history;
@@ -29,6 +31,7 @@ mod rule_list;
 mod rule_rows;
 mod sample_midi;
 
+pub(crate) use arp::ARP_PATTERN_KEYS;
 pub(crate) use event_list::{name_width, EventRow};
 pub(crate) use rule_rows::{
     RuleGroup, RuleLane, RuleRow, ROW_RULE_ROWS, RULE_LANES, RULE_LIST_KEY, RULE_ROWS,
@@ -137,6 +140,7 @@ pub fn draw(screen: &GuitarArticulationScreen, f: &mut Frame<'_>) {
     sample_midi::draw_list_overlay(f, screen);
     rule_list::draw_overlay(f, screen);
     param_list::draw_overlay(f, screen);
+    arp::draw_overlay(f, screen);
     if screen.help_open() {
         help::draw_overlay(f);
     }
@@ -206,6 +210,9 @@ fn screen_title(screen: &GuitarArticulationScreen) -> String {
     if screen.repeat() {
         title.push_str(" [repeat]");
     }
+    if let Some(arp) = arp_flag(screen.arp()) {
+        title.push_str(&arp);
+    }
     let rules = screen.rules();
     let auto2 = rules.is_row_on(RowRule::AutoHammerPull) && rules.auto_pick() == AutoPick::Accent;
     if auto2 {
@@ -218,6 +225,24 @@ fn screen_title(screen: &GuitarArticulationScreen) -> String {
     title.push_str(&format!(" [起動:{}]", screen.startup_instrument().label()));
     title.push(' ');
     title
+}
+
+/// アルペジエーターが ON の間だけ ` [arp:音型 xオクターブ N回数 b戻り幅]`。戻り幅は UpTurn のときだけ。
+fn arp_flag(arp: &ArpSettings) -> Option<String> {
+    if !arp.enabled {
+        return None;
+    }
+    let turn = if arp.pattern == ArpPattern::UpTurn {
+        format!(" b{}", arp.turn)
+    } else {
+        String::new()
+    };
+    Some(format!(
+        " [arp:{} x{} N{}{turn}]",
+        arp.pattern.label(),
+        arp.octaves,
+        arp.cycles
+    ))
 }
 
 fn draw_input(f: &mut Frame<'_>, area: Rect, screen: &GuitarArticulationScreen) {

@@ -22,5 +22,8 @@
 mod arp;
 mod bass;
 
-pub use arp::{clamp_durations, generate_arpeggio, ArpNote, ArpPattern, ARP_DURATION_CHOICES};
+pub use arp::{
+    clamp_durations, generate_arpeggio, up_turn_sequence, ArpNote, ArpPattern,
+    ARP_DURATION_CHOICES, UP_TURN_DEFAULT,
+};
 pub use bass::{generate_bass_line, BassNote, BassPattern, BASS_OCTAVE_VOICE, BASS_ROOT_VOICE};

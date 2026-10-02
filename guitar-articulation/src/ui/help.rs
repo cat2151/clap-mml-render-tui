@@ -16,7 +16,7 @@ use cmrt_tui_core::{
 /// 「ヘルプ(Keybinds)」の並びは他画面と揃えたまま変えない。
 const TITLE: &str = " Guitar Articulation ヘルプ(Keybinds)  Esc/?:close ";
 
-pub(crate) const KEY_ROWS: [&str; 34] = [
+pub(crate) const KEY_ROWS: [&str; 35] = [
     " ── MML 欄 ──",
     " 文字    MML を編集",
     " Enter   確定して演奏",
@@ -38,6 +38,7 @@ pub(crate) const KEY_ROWS: [&str; 34] = [
     " Shift+A アクセント 上/下/上下",
     " r       汚し(リリース音)",
     " u       パラメータ(CC21 など)",
+    " z       アルペジエーター",
     " ── 演奏・effect ──",
     " b       raw を演奏",
     " space   Articulated を演奏",
@@ -53,7 +54,7 @@ pub(crate) const KEY_ROWS: [&str; 34] = [
     " Ctrl+G  画面切替メニュー",
 ];
 
-pub(crate) const DETAIL_ROWS: [&str; 63] = [
+pub(crate) const DETAIL_ROWS: [&str; 67] = [
     " MML の音へ列ごとに奏法(KS)を足し、raw と聴き比べる。",
     " 反転した列がカーソル。ルールの切替で Articulated を演奏。",
     " ルールの段の文字は t の overlay の文字。灰色の - は効かない列(理由は枠の見出しに)",
@@ -103,10 +104,14 @@ pub(crate) const DETAIL_ROWS: [&str; 63] = [
     " r  列ごとに離した音の種類(Basic/Hard/Agressive/",
     "    Agressive2)と音量を乱数で。d とは独立。ON の列は ~",
     " u  CC21/22/28/29/46/48/52/53/112 を h/l で ±8。既定以外を頭で送る",
+    " z  MML 欄はそのまま、音を低い順に並べて音型で鳴らす(変えるたびに演奏)。",
+    "    開いている間は repeat(隙間なく繋げる)。キーの効き方は overlay の下に出る",
+    "    (u/d/p/P/h/t:音型 1/2/3:oct n/N:回数 b/B:UpTurn の戻り幅 0:OFF)",
     " ── 演奏・effect ──",
     " n  ON の間は a/e/s/b/space がカーソル列の音だけ鳴らす",
     " Shift+R  ON の間、鳴らし終わるたびに同じ演奏を繰り返す(title に",
-    "    [repeat])。0.5 秒未満の演奏は 1 周 0.5 秒まで待つ。OFF で止める",
+    "    [repeat])。0.5 秒未満の演奏は 1 周 0.5 秒まで待つ(z が ON なら待たず",
+    "    アルペジオを隙間なく繋げる)。OFF で止める",
     " x  ギターアンプは a → kind の Amp Simulator。",
     "    Enter で確定すると wet に戻る",
     " w  chain を残して掛けずに鳴らす(title に [dry])。演奏する",

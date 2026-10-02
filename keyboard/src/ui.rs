@@ -21,6 +21,7 @@ mod guide;
 mod mml_overlay;
 mod note;
 mod patch_panes;
+mod share_notice;
 
 use connection_overlay::draw_connection_overlay;
 use effect::{draw_effect_add_overlay, draw_effect_pane};
@@ -28,6 +29,7 @@ use guide::{draw_note_guide_overlay, keyboard_help_lines};
 use mml_overlay::draw_mml_input_overlay;
 use note::{note_playback_mode_line, note_playback_status_text};
 use patch_panes::{draw_patch_panes, pane_widths};
+use share_notice::draw_share_notice_overlay;
 
 /// keyboard pane の幅。中身の最長行と、上へ重ねる overlay の上限幅（72 + 枠 2）に合わせる。
 const KEYBOARD_PANE_WIDTH: u16 = 74;
@@ -121,6 +123,7 @@ pub fn draw(screen: &mut KeyboardScreen<'_>, connection: &KeyboardConnectionStat
         keyboard_area,
     );
     draw_mml_input_overlay(&screen.mml_input, f, keyboard_area);
+    draw_share_notice_overlay(screen.share_notice(), f, keyboard_area);
     if let Some(menu) = screen.plugin_menu() {
         draw_plugin_menu(menu, screen.state.patch_catalog.filter(), f, chunks[0]);
     }

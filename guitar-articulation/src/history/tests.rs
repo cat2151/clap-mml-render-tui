@@ -28,13 +28,14 @@ fn save_then_load_returns_same_entries() {
         let mut rules = RuleTable::default();
         rules.toggle(2, Rule::HammerPull);
         rules.toggle_row(RowRule::EconomyPicking);
-        let anchor = ColumnRuleAnchor::new("e", &rules);
+        let anchor = ColumnRuleAnchor::new("e", &Default::default(), &rules);
         let mut history = GuitarArticulationHistory::default();
         history.push_front(entry("cde"));
         history.push_front(GuitarArticulationHistoryEntry {
             mml: "efg".to_string(),
             rules,
             effect_chain: vec![json!({"name": "amp", "params": {"gain": 0.5}})],
+            arp: Default::default(),
             anchor: Some(anchor),
         });
 
@@ -83,7 +84,12 @@ fn saved_file_has_documented_shape() {
         let value: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         assert_eq!(
             value,
-            json!({"entries":[{"mml":"cde","rules":{"columns":{},"rows":[]},"effect_chain":[]}]})
+            json!({"entries":[{
+                "mml":"cde",
+                "rules":{"columns":{},"rows":[]},
+                "effect_chain":[],
+                "arp":{"enabled":false,"pattern":"Up","octaves":1,"cycles":2,"turn":2}
+            }]})
         );
     });
 }

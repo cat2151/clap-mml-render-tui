@@ -2,13 +2,14 @@ use std::fmt::Write as _;
 
 use crate::ui::{name_width, note_name, EventRow};
 use crate::{
-    articulate, convert, notes_from_events, strings_by_column, Articulated, RuleTable, PATCH,
+    arpeggiate, articulate, convert, notes_from_events, strings_by_column, ArpSettings,
+    Articulated, RuleTable, TimedMidiEvent, PATCH,
 };
 
-/// 画面と同じ経路（`timed_performance` → [`convert`]）で作った演奏を、音ごとの表と
+/// 画面と同じ経路（`timed_performance` → [`arpeggiate`] → [`convert`]）で作った演奏を、音ごとの表と
 /// Articulated のイベント列の文字列にする。画面を開かずに変換の結果を読むためのもの。
-pub fn report(mml: &str, rules: &RuleTable) -> Result<String, String> {
-    let plain = cmrt_chord::timed_performance(mml)?.events;
+pub fn report(mml: &str, arp: &ArpSettings, rules: &RuleTable) -> Result<String, String> {
+    let plain = plain_events(mml, arp)?;
     let notes = notes_from_events(&plain);
     let strings = strings_by_column(&notes);
     let articulated = articulate(&notes, rules);
@@ -16,6 +17,7 @@ pub fn report(mml: &str, rules: &RuleTable) -> Result<String, String> {
 
     let mut out = String::new();
     let _ = writeln!(out, "mml: {mml:?}");
+    write_arp(&mut out, arp);
     let _ = writeln!(out, "rules: {}", rules.to_json());
     let _ = writeln!(out, "patch: {PATCH:?}");
     let _ = writeln!(out);
@@ -53,9 +55,14 @@ pub fn report(mml: &str, rules: &RuleTable) -> Result<String, String> {
     Ok(out)
 }
 
-/// 同じ MML を 2 つのルール表で変換し、音ごとの奏法と velocity を左右に並べる。違う行に `<>` を付ける。
-pub fn compare(mml: &str, before: &RuleTable, after: &RuleTable) -> Result<String, String> {
-    let plain = cmrt_chord::timed_performance(mml)?.events;
+/// 同じ MML・同じ arp を 2 つのルール表で変換し、音ごとの奏法と velocity を左右に並べる。違う行に `<>` を付ける。
+pub fn compare(
+    mml: &str,
+    arp: &ArpSettings,
+    before: &RuleTable,
+    after: &RuleTable,
+) -> Result<String, String> {
+    let plain = plain_events(mml, arp)?;
     let notes = notes_from_events(&plain);
     let strings = strings_by_column(&notes);
     let left = articulate(&notes, before);
@@ -63,6 +70,7 @@ pub fn compare(mml: &str, before: &RuleTable, after: &RuleTable) -> Result<Strin
 
     let mut out = String::new();
     let _ = writeln!(out, "mml: {mml:?}");
+    write_arp(&mut out, arp);
     let _ = writeln!(out, "before: {}", before.to_json());
     let _ = writeln!(out, "after:  {}", after.to_json());
     let _ = writeln!(out);
@@ -87,6 +95,20 @@ pub fn compare(mml: &str, before: &RuleTable, after: &RuleTable) -> Result<Strin
     let _ = writeln!(out);
     let _ = writeln!(out, "changed: {changed} / {} notes", notes.len());
     Ok(out)
+}
+
+/// 空の MML は解釈できない MML として Err にする（[`crate::performance_events`] は空を Ok で返す）。
+fn plain_events(mml: &str, arp: &ArpSettings) -> Result<Vec<TimedMidiEvent>, String> {
+    let plain = cmrt_chord::timed_performance(mml)?.events;
+    Ok(arpeggiate(&plain, arp))
+}
+
+/// arp OFF のときは何も書かない。
+fn write_arp(out: &mut String, arp: &ArpSettings) {
+    if arp.enabled {
+        let json = serde_json::to_string(arp).unwrap_or_default();
+        let _ = writeln!(out, "arp: {json}");
+    }
 }
 
 fn side(a: &Articulated) -> String {

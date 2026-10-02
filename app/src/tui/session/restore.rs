@@ -71,6 +71,24 @@ pub(super) fn load_initial_session_state() -> LoadedSessionState {
     }
 }
 
+/// 起動引数で keyboard の状態が指定されていれば、保存済みの keyboard 状態をそれで置き換え、
+/// 起動画面を keyboard にする。`buffer_multiplier` だけは保存済みの値を残す
+/// （実現できる値が環境ごとに違うため、引数では指定しない）。
+pub(super) fn apply_startup_keyboard(
+    active_screen: &mut crate::screen_switch::PrimaryScreen,
+    keyboard: &mut crate::history::KeyboardSessionState,
+    startup: Option<crate::history::KeyboardSessionState>,
+) {
+    let Some(startup) = startup else {
+        return;
+    };
+    *keyboard = crate::history::KeyboardSessionState {
+        buffer_multiplier: keyboard.buffer_multiplier,
+        ..startup
+    };
+    *active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
+}
+
 /// 保存済みの自動BPM範囲を復元する。未保存・不正なら `default_bpm` 固定の範囲。
 pub(super) fn bpm_range_from_history(
     saved: Option<[f64; 2]>,
@@ -104,3 +122,6 @@ pub(super) fn play_settings_from_history(
         },
     }
 }
+
+#[cfg(test)]
+mod tests;

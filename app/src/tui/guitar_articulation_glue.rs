@@ -63,7 +63,7 @@ impl TuiApp<'_> {
                 crate::logging::global_log_sink(&play_note_log_line(
                     patch, *take, *column, &events,
                 ));
-                self.play_guitar_articulation_events(events, &effect_chain, patch);
+                self.play_guitar_articulation_events(events, &effect_chain, patch, None);
                 self.preload_full_guitar(&effect_chain);
             }
             GuitarArticulationAction::Quit | GuitarArticulationAction::StopRepeat => {
@@ -112,6 +112,7 @@ impl TuiApp<'_> {
     }
 
     /// その版のフレーズ全体を、MIDI filter を通さず `effect_chain` を掛けて 1 回だけ鳴らす。
+    /// アルペジエーターが ON なら、repeat の 1 周はアルペジオの長さちょうどにして隙間なく繋げる。
     fn play_guitar_articulation(&mut self, take: Take, effect_chain: &str) {
         let events = self.guitar_articulation.events(take).to_vec();
         let patch = self
@@ -123,9 +124,11 @@ impl TuiApp<'_> {
             &events,
             self.guitar_articulation.mml(),
             self.guitar_articulation.rules(),
+            self.guitar_articulation.arp(),
         ));
+        let arp_loop_seconds = self.guitar_articulation.arp_loop_seconds();
         if let Some((command_id, loop_seconds)) =
-            self.play_guitar_articulation_events(events, effect_chain, patch)
+            self.play_guitar_articulation_events(events, effect_chain, patch, arp_loop_seconds)
         {
             self.guitar_articulation_playback = Some(GuitarArticulationPlayback {
                 command_id,
@@ -163,7 +166,8 @@ impl TuiApp<'_> {
     }
 
     /// イベント列を `patch` に `effect_chain` を掛けて鳴らす。画面の repeat が ON なら繰り返し、
-    /// 1 周は [`REPEAT_MIN_CYCLE_SECONDS`] まで後ろに待ちを足す。
+    /// 1 周は `seamless_loop_seconds` があればその秒ちょうど、無ければ [`REPEAT_MIN_CYCLE_SECONDS`]
+    /// まで後ろに待ちを足す。
     /// 前の演奏を止めるのは sender の責務（`play_line` は鳴っているものを止めてから積む）。
     /// 渡した command と 1 周の秒を返す。sender が無ければ `None`。
     pub(in crate::tui) fn play_guitar_articulation_events(
@@ -171,16 +175,19 @@ impl TuiApp<'_> {
         events: Vec<TimedMidiEvent>,
         effect_chain: &str,
         patch: &str,
+        seamless_loop_seconds: Option<f64>,
     ) -> Option<(u64, f64)> {
         // フレーズ全体の演奏なら、呼び出し側が積み直す。
         self.guitar_articulation_playback = None;
         // play server が上がっていなければ sender が無い。落とさず、何もしない。
         let sender = self.mml_overlay_sender.as_ref()?;
         let repeat = self.guitar_articulation.repeat();
-        let mut loop_seconds = events.last().map_or(0.0, |event| event.seconds);
-        if repeat {
-            loop_seconds = loop_seconds.max(REPEAT_MIN_CYCLE_SECONDS);
-        }
+        let last_seconds = events.last().map_or(0.0, |event| event.seconds);
+        let loop_seconds = match (repeat, seamless_loop_seconds) {
+            (true, Some(seconds)) => seconds,
+            (true, None) => last_seconds.max(REPEAT_MIN_CYCLE_SECONDS),
+            (false, _) => last_seconds,
+        };
         let command_id = sender.play_line(
             LivePatch::with_effect_chain(Some(patch), effect_chain),
             LineProgram {

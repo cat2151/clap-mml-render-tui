@@ -645,6 +645,7 @@ name = "cmrt-guitar-articulation"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cmrt-arpeggiator",
  "cmrt-chord",
  "cmrt-effect-chain-select",
  "cmrt-history",

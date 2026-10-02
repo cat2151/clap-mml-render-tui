@@ -1,4 +1,4 @@
-use super::ArpPattern;
+use super::{up_turn_sequence, ArpPattern, UP_TURN_DEFAULT};
 
 fn sequence(pattern: ArpPattern, voice_count: usize) -> Vec<usize> {
     pattern
@@ -112,4 +112,39 @@ fn labels_are_unique() {
     let count = labels.len();
     labels.dedup();
     assert_eq!(labels.len(), count);
+}
+
+#[test]
+fn up_turn_climbs_to_the_top_and_turns_back_by_the_given_width() {
+    assert_eq!(up_turn_sequence(7, 2), [0, 1, 2, 3, 4, 5, 6, 5, 4]);
+    assert_eq!(up_turn_sequence(4, 1), [0, 1, 2, 3, 2]);
+    assert_eq!(up_turn_sequence(4, 3), [0, 1, 2, 3, 2, 1, 0]);
+}
+
+#[test]
+fn up_turn_width_is_capped_below_the_voice_count() {
+    assert_eq!(up_turn_sequence(2, 3), [0, 1, 0]);
+    assert_eq!(up_turn_sequence(1, 2), [0]);
+    assert_eq!(up_turn_sequence(0, 2), Vec::<usize>::new());
+}
+
+#[test]
+fn up_turn_voice_sequence_uses_the_default_width() {
+    assert_eq!(
+        sequence(ArpPattern::UpTurn, 7),
+        up_turn_sequence(7, UP_TURN_DEFAULT)
+    );
+    assert_eq!(UP_TURN_DEFAULT, 2);
+}
+
+#[test]
+fn up_turn_sits_between_octave_and_random() {
+    let index = |target| {
+        ArpPattern::ALL
+            .iter()
+            .position(|pattern| *pattern == target)
+            .expect("listed")
+    };
+    assert_eq!(index(ArpPattern::UpTurn), index(ArpPattern::Octave) + 1);
+    assert_eq!(index(ArpPattern::Random), index(ArpPattern::UpTurn) + 1);
 }

@@ -9,6 +9,7 @@ use ratatui::{backend::TestBackend, style::Modifier, Terminal};
 mod effect_pane;
 mod note_mode_bar;
 mod patch_panes;
+mod share_notice;
 
 fn buffer_to_string(terminal: &Terminal<TestBackend>) -> String {
     let buffer = terminal.backend().buffer();

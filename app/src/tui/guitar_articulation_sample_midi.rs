@@ -113,7 +113,7 @@ impl TuiApp<'_> {
             .sync_guitar_articulation_instrument(&effect_chain)
             .patch();
         crate::logging::global_log_sink(&play_sample_midi_log_line(file, note, &events, patch));
-        self.play_guitar_articulation_events(events, &effect_chain, patch);
+        self.play_guitar_articulation_events(events, &effect_chain, patch, None);
         self.preload_full_guitar(&effect_chain);
     }
 }

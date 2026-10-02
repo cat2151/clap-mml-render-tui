@@ -20,9 +20,9 @@ fn assert_one_bag_is_complete(drums: bool, bass: bool, arpeggio: bool, expected_
 fn target_specific_bags_cover_every_combination_once() {
     assert_one_bag_is_complete(true, false, false, 6);
     assert_one_bag_is_complete(false, true, false, 6);
-    assert_one_bag_is_complete(false, false, true, 9);
-    assert_one_bag_is_complete(false, true, true, 54);
-    assert_one_bag_is_complete(true, true, true, 324);
+    assert_one_bag_is_complete(false, false, true, 10);
+    assert_one_bag_is_complete(false, true, true, 60);
+    assert_one_bag_is_complete(true, true, true, 360);
 }
 
 #[test]

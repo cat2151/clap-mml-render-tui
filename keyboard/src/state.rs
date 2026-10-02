@@ -11,6 +11,8 @@ mod arp;
 mod periodic;
 mod session;
 
+pub(crate) use session::default_repeat_chords;
+
 pub const KEYBOARD_NOTES: [KeyboardNote; 7] = [
     KeyboardNote::new('c', "C4", 60),
     KeyboardNote::new('d', "D4", 62),

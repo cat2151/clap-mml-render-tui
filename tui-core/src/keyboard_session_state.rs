@@ -15,7 +15,7 @@ pub enum NotePlaybackMode {
     Auto,
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct KeyboardSessionState {
     #[serde(default)]
     pub patch: Option<String>,

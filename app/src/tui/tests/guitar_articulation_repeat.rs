@@ -1,4 +1,4 @@
-//! repeat（`Shift+R`）の演奏を、どの周期で `play_line` へ積むか。
+//! repeat（`Shift+R`・アルペジエーター overlay）の演奏を、どの周期で `play_line` へ積むか。
 
 use super::guitar_articulation::{app_with_mml, plain, wait_until};
 use super::*;
@@ -54,4 +54,39 @@ fn without_the_repeat_the_take_is_played_once() {
         !note_on_seconds(&sink, FIRST_PITCH).is_empty()
     });
     assert_eq!(note_on_seconds(&sink, FIRST_PITCH).len(), 1);
+}
+
+#[test]
+fn the_arp_overlay_repeats_the_arpeggio_without_a_gap() {
+    let (mut app, sink) = app_with_mml();
+    // `o3 l8 e f+ g` の Up 1 周 = 3 step × 0.25 秒。画面へ直に入れるので鳴らさない。
+    app.guitar_articulation
+        .set_arp(crate::tui::guitar_articulation::ArpSettings {
+            enabled: true,
+            cycles: 1,
+            ..Default::default()
+        });
+    // 最後の列を H/P にすると、末尾に KS の戻しが付いて最後のイベントが 1 周より後ろになる。
+    app.handle_guitar_articulation_key_event(plain(KeyCode::Char('l')));
+    app.handle_guitar_articulation_key_event(plain(KeyCode::Char('l')));
+    app.handle_guitar_articulation_key_event(plain(KeyCode::Char('a')));
+    let last_event = app
+        .guitar_articulation
+        .events(crate::tui::guitar_articulation::Take::Converted)
+        .last()
+        .unwrap()
+        .seconds;
+    assert!(last_event > 0.75 + 0.01, "{last_event}");
+
+    // a の演奏が記録されてから数える。
+    wait_until("a の演奏が積まれる", || {
+        !note_on_seconds(&sink, FIRST_PITCH).is_empty()
+    });
+    let before = note_on_seconds(&sink, FIRST_PITCH).len();
+    app.handle_guitar_articulation_key_event(plain(KeyCode::Char('z')));
+    wait_until("2 周目が積まれる", || {
+        note_on_seconds(&sink, FIRST_PITCH).len() >= before + 2
+    });
+    let on = note_on_seconds(&sink, FIRST_PITCH);
+    assert!((on[before + 1] - on[before] - 0.75).abs() < 1e-6, "{on:?}");
 }

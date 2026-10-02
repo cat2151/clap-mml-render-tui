@@ -8,7 +8,7 @@ mod duration;
 mod pattern;
 
 pub use duration::clamp_durations;
-pub use pattern::ArpPattern;
+pub use pattern::{up_turn_sequence, ArpPattern, UP_TURN_DEFAULT};
 
 /// duration の候補（step 数）。1 step を軸に、2/4 step の伸びを混ぜる。
 pub const ARP_DURATION_CHOICES: [usize; 3] = [1, 2, 4];

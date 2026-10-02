@@ -1,4 +1,4 @@
-//! 見出しの [repeat] と [accent:] が、画面の状態に従う。
+//! 見出しの [repeat]・[accent:]・[arp:] が、画面の状態に従う。
 
 use super::*;
 
@@ -49,4 +49,45 @@ fn the_title_shows_auto2_and_its_accent_pattern_only_in_on2() {
 
     screen.handle_key_event(key(KeyCode::Char('s')));
     assert!(!top(&screen).contains("[auto2]"), "{}", top(&screen));
+}
+
+#[test]
+fn the_title_shows_the_arp_only_while_it_is_on() {
+    use cmrt_arpeggiator::ArpPattern;
+
+    let mut screen = screen_with_mml("l16cdef");
+    assert!(!top(&screen).contains("[arp:"), "{}", top(&screen));
+
+    let up_turn = crate::ArpSettings {
+        enabled: true,
+        pattern: ArpPattern::UpTurn,
+        octaves: 2,
+        ..crate::ArpSettings::default()
+    };
+    screen.set_arp(up_turn);
+    assert_eq!(
+        crate::ui::arp_flag(&up_turn).as_deref(),
+        Some(" [arp:UpTurn x2 N2 b2]")
+    );
+    assert!(
+        top(&screen).contains("[arp:UpTurnx2N2b2]"),
+        "{}",
+        top(&screen)
+    );
+
+    screen.set_arp(crate::ArpSettings {
+        pattern: ArpPattern::UpDown,
+        ..up_turn
+    });
+    assert!(
+        top(&screen).contains("[arp:UpDownx2N2]"),
+        "{}",
+        top(&screen)
+    );
+
+    screen.set_arp(crate::ArpSettings {
+        enabled: false,
+        ..up_turn
+    });
+    assert!(!top(&screen).contains("[arp:"), "{}", top(&screen));
 }

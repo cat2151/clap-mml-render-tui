@@ -21,3 +21,7 @@ ratatui = "0.30"
 serde = { version = "1", features = ["derive"] }
 ratatui-textarea = { version = "0.9", features = ["crossterm"] }
 serde_json = "1"
+
+[dev-dependencies]
+# `clipboard::take_text_for_test()` で `y` のコピー内容を確かめる。
+cmrt-tui-core = { path = "../tui-core", features = ["test-support"] }

@@ -188,6 +188,7 @@ fn run() -> Result<()> {
     // CLAP をロードしない。
     let offline_renderer = || cmrt_offline_render::OfflineRenderer::new(Arc::new(cfg.clone()));
 
+    let mut startup_keyboard = None;
     match action {
         CliAction::Server(port) => {
             return server::run_server(&cfg, &offline_renderer(), port);
@@ -230,6 +231,7 @@ fn run() -> Result<()> {
             return dexed_duplicates::run(&cfg, &request);
         }
         CliAction::Tui => {}
+        CliAction::Keyboard(keyboard) => startup_keyboard = Some(keyboard),
         CliAction::Help(_)
         | CliAction::Version(_)
         | CliAction::Shutdown(_)
@@ -244,7 +246,11 @@ fn run() -> Result<()> {
 
     // TUI モード。EFFECT CHAIN overlay（`x`）が catalog を一覧できるよう effect を discover
     // する（preset ファイルの走査だけで、DLL はロードしない）。
-    let mut app = tui::TuiApp::new(&cfg, cmrt_offline_render::EffectPlugins::discover());
+    let mut app = tui::TuiApp::with_startup_keyboard(
+        &cfg,
+        cmrt_offline_render::EffectPlugins::discover(),
+        startup_keyboard,
+    );
 
     let exit_reason = app.run()?;
     drop(app);

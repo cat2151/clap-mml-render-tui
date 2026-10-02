@@ -6,6 +6,8 @@ edition = "2021"
 [dependencies]
 # 履歴ファイルの保存失敗を呼び出し側（app）へ返す。
 anyhow = "1"
+# 素材の音から作るアルペジオの声部の並び（`ArpPattern`）。
+cmrt-arpeggiator = { path = "../arpeggiator" }
 # 入力 MML → 時刻つきイベント列（`timed_performance`）。
 cmrt-chord = { path = "../chord" }
 # 演奏の後ろに掛ける effect chain（ギターアンプなど）を選ぶ overlay。

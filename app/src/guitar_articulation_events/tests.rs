@@ -26,17 +26,21 @@ fn the_play_log_line_names_the_take_the_keyswitches_the_patch_and_the_inputs() {
             Take::Converted,
             &converted,
             "o3 l8 e f+ g",
-            &RuleTable::default()
-        ),
+            &RuleTable::default(), &ArpSettings::default()),
         format!(
             "guitar-articulation: event=play take=converted events=12 keyswitch_note_ons=1 seconds={:.3} patch={FULL_PATCH:?} mml=\"o3 l8 e f+ g\" rules={{\"columns\":{{}},\"rows\":[]}}",
             converted.last().unwrap().seconds
         )
     );
-    assert!(
-        play_log_line(PATCH, Take::Plain, &flat, "", &RuleTable::default())
-            .contains("take=plain events=6 keyswitch_note_ons=0")
-    );
+    assert!(play_log_line(
+        PATCH,
+        Take::Plain,
+        &flat,
+        "",
+        &RuleTable::default(),
+        &ArpSettings::default()
+    )
+    .contains("take=plain events=6 keyswitch_note_ons=0"));
 }
 
 #[test]
@@ -48,8 +52,16 @@ fn the_last_played_line_gives_back_the_mml_and_the_rules() {
         &flat_events(),
         "c",
         &RuleTable::default(),
+        &ArpSettings::default(),
     );
-    let last = play_log_line(PATCH, Take::Converted, &flat_events(), mml, &rules());
+    let last = play_log_line(
+        PATCH,
+        Take::Converted,
+        &flat_events(),
+        mml,
+        &rules(),
+        &ArpSettings::default(),
+    );
     // raw の演奏はルール表を使わないので飛ばす。
     let plain = play_log_line(
         PATCH,
@@ -57,6 +69,7 @@ fn the_last_played_line_gives_back_the_mml_and_the_rules() {
         &flat_events(),
         "d",
         &RuleTable::default(),
+        &ArpSettings::default(),
     );
     let log = format!("[t1] {first}\n[t2] {last}\n[t3] {plain}\n[t4] other: event=x\n");
 
@@ -70,7 +83,14 @@ fn the_last_played_line_gives_back_the_mml_and_the_rules() {
 #[test]
 fn the_previous_play_is_the_latest_one_with_the_same_mml_and_other_rules() {
     let line = |mml: &str, rules: &RuleTable| {
-        play_log_line(PATCH, Take::Converted, &flat_events(), mml, rules)
+        play_log_line(
+            PATCH,
+            Take::Converted,
+            &flat_events(),
+            mml,
+            rules,
+            &ArpSettings::default(),
+        )
     };
     let older = line("cde", &RuleTable::default());
     let other_mml = line("efg", &RuleTable::default());
@@ -94,6 +114,7 @@ fn lines_written_before_the_mml_was_logged_are_skipped() {
         &flat_events(),
         "cde",
         &RuleTable::default(),
+        &ArpSettings::default(),
     );
 
     assert_eq!(last_played(&format!("{new}\n{old}\n")).unwrap().mml, "cde");
@@ -129,6 +150,7 @@ fn a_note_play_after_the_whole_take_does_not_replace_the_last_played() {
         &convert(&flat, &rules()),
         "o3 l8 e f+ g",
         &rules(),
+        &ArpSettings::default(),
     );
     let note = play_note_log_line(PATCH, Take::Converted, 1, &flat[2..4]);
     assert!(
@@ -146,7 +168,14 @@ fn a_note_play_after_the_whole_take_does_not_replace_the_last_played() {
 
 #[test]
 fn a_sample_midi_play_is_logged_but_not_taken_as_the_last_played() {
-    let mml_line = play_log_line(PATCH, Take::Converted, &flat_events(), "cde", &rules());
+    let mml_line = play_log_line(
+        PATCH,
+        Take::Converted,
+        &flat_events(),
+        "cde",
+        &rules(),
+        &ArpSettings::default(),
+    );
     let events = flat_events();
     let whole = play_sample_midi_log_line("CC22_Mute_Control.mid", None, &events, PATCH);
     let note = play_sample_midi_log_line("CC22_Mute_Control.mid", Some(3), &events, PATCH);
@@ -166,4 +195,35 @@ fn a_sample_midi_play_is_logged_but_not_taken_as_the_last_played() {
     );
     assert!(note.contains(" note=3 events=6 "), "{note}");
     assert_eq!(last_played(&log).unwrap().line, mml_line);
+}
+
+#[test]
+fn an_arpeggiated_play_is_rebuilt_with_its_arp() {
+    use cmrt_guitar_articulation::performance_events;
+    let arp: ArpSettings = serde_json::from_str(r#"{"enabled":true,"pattern":"UpDown"}"#).unwrap();
+    let events = convert(&performance_events("l16cdef", &arp).unwrap(), &rules());
+    let off = play_log_line(
+        PATCH,
+        Take::Converted,
+        &flat_events(),
+        "l16cdef",
+        &RuleTable::default(),
+        &ArpSettings::default(),
+    );
+    let on = play_log_line(PATCH, Take::Converted, &events, "l16cdef", &rules(), &arp);
+
+    assert!(!off.contains(" arp="), "{off}");
+    assert!(on.ends_with("\"turn\":2}"), "{on}");
+    let log = format!("{off}\n{on}\n");
+    let play = last_played(&log).unwrap();
+    assert_eq!(play.arp, arp);
+    assert_eq!(play.rules, rules());
+    assert_eq!(last_played(&off).unwrap().arp, ArpSettings::default());
+    // arp が違う演奏は比べる相手にしない（列の数が違う）。
+    assert!(last_two_distinct(&log).is_err());
+    let body = cmrt_guitar_articulation::report(&play.mml, &play.arp, &play.rules).unwrap();
+    assert!(
+        body.contains(&format!("# converted events ({})", events.len())),
+        "{body}"
+    );
 }

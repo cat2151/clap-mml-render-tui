@@ -24,6 +24,7 @@ fn entry(mml: &str, rules: RuleTable) -> GuitarArticulationHistoryEntry {
         mml: mml.to_string(),
         rules,
         effect_chain: Vec::new(),
+        arp: Default::default(),
         anchor: None,
     }
 }
@@ -39,7 +40,11 @@ fn committing_mml_then_toggling_rules_stacks_each_state_newest_first() {
     after_a.toggle(1, Rule::HammerPull);
     let mut after_e = after_a.clone();
     after_e.toggle_row(RowRule::EconomyPicking);
-    let anchor = Some(ColumnRuleAnchor::new("o3 l8 e g a", &after_a));
+    let anchor = Some(ColumnRuleAnchor::new(
+        "o3 l8 e g a",
+        &Default::default(),
+        &after_a,
+    ));
     assert_eq!(
         screen.history().entries,
         vec![
@@ -103,7 +108,12 @@ fn applying_an_entry_rebuilds_the_takes_and_keeps_the_column_rules() {
         mml: "o3 l8 e g a".to_string(),
         rules: rules.clone(),
         effect_chain: vec![amp_stage()],
-        anchor: Some(ColumnRuleAnchor::new("o3 l8 e g a", &rules)),
+        arp: Default::default(),
+        anchor: Some(ColumnRuleAnchor::new(
+            "o3 l8 e g a",
+            &Default::default(),
+            &rules,
+        )),
     };
     let mut screen = screen_with_mml("o4 c");
 

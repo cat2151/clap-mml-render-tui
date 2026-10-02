@@ -20,6 +20,8 @@ mod plugin_menu;
 mod screen;
 mod screen_runtime;
 mod sender;
+mod share_command;
+mod share_notice;
 // keyboard セッション状態の値型は、永続化層（`cmrt-history`）とも共有するため
 // `cmrt-tui-core` が所有する。従来の `cmrt_keyboard::session_state::*` パスは
 // 再エクスポートで維持する。
@@ -38,6 +40,7 @@ pub use screen::KeyboardScreen;
 pub use sender::{
     KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardMidiSender, KeyboardVoicingStatus,
 };
+pub use share_command::share_command;
 pub use state::KeyboardState;
 pub use state::{ModulationMode, NotePlaybackMode, PitchBendMode, VelocityMode, KEYBOARD_NOTES};
 
@@ -90,6 +93,7 @@ impl KeyboardScreen<'_> {
         self.patch_filter.close();
         self.plugin_menu = None;
         self.effect.close_overlay();
+        self.share_notice = None;
         self.note_guide.reset_for_screen();
         self.state = self.state.restart_with_patch(patch);
         self.prepare_connection(ctx);
@@ -101,6 +105,7 @@ impl KeyboardScreen<'_> {
         self.patch_filter.close();
         self.plugin_menu = None;
         self.effect.close_overlay();
+        self.share_notice = None;
         self.note_guide.reset_for_screen();
         self.prepare_connection(ctx);
     }
@@ -164,6 +169,10 @@ impl KeyboardScreen<'_> {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent, ctx: &KeyboardContext<'_>) -> KeyboardAction {
+        // 共有の通知は次の Press で閉じる。そのキーは食わずに以下の通常処理へ流す。
+        if key.kind == KeyEventKind::Press {
+            self.share_notice = None;
+        }
         if self.mml_input.is_active() {
             return self.handle_mml_input_key(key);
         }
@@ -346,6 +355,10 @@ impl KeyboardScreen<'_> {
                             }
                         }
                     }
+                    return KeyboardAction::Continue;
+                }
+                KeyCode::Char('y') => {
+                    self.copy_share_command();
                     return KeyboardAction::Continue;
                 }
                 KeyCode::Char('i') => {

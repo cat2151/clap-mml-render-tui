@@ -86,7 +86,7 @@ impl KeyboardState {
 }
 
 /// 保存された対象が無いときの既定。auto / arp はドファソ、repeat はド、off は無し。
-fn default_repeat_chords(mode: NotePlaybackMode) -> Vec<Vec<u8>> {
+pub(crate) fn default_repeat_chords(mode: NotePlaybackMode) -> Vec<Vec<u8>> {
     match mode {
         NotePlaybackMode::Auto | NotePlaybackMode::Arp => vec![vec![60, 65, 67]],
         NotePlaybackMode::Repeat => vec![vec![60]],

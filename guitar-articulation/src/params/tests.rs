@@ -124,7 +124,7 @@ fn params_survive_rewriting_the_mml() {
     assert!(kept.is_empty());
     assert_eq!(kept.param(MUTE_LENGTH), 43);
 
-    let anchor = crate::ColumnRuleAnchor::new("o3 e g", &rules);
+    let anchor = crate::ColumnRuleAnchor::new("o3 e g", &Default::default(), &rules);
     assert_eq!(anchor.rules.param(MUTE_LENGTH), 51);
     let notes = crate::notes_from_events(&raw("o3 e g a"));
     let remapped = anchor.rules_for(&notes, &rules);
