@@ -4,6 +4,7 @@ use crossterm::event::KeyModifiers;
 
 mod auto_reverb;
 mod auto_reverb_effect_list;
+mod drum_kits;
 mod favorites;
 mod filter_edit;
 mod metadata;
@@ -186,9 +187,10 @@ fn hat_is_the_only_builtin_hi_hat_spelling() {
 
     select_group(&mut select, 4);
     select.handle_key(press(KeyCode::Right));
-    for _ in 0..4 {
+    for _ in 0..5 {
         select.handle_key(press(KeyCode::Down));
     }
+    assert_eq!(select.presets()[select.preset_cursor()].label, "hat");
 
     assert_eq!(
         filtered(&select),

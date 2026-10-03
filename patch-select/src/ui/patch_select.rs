@@ -35,6 +35,7 @@ const SIZE_COLUMN_WIDTH: u16 = 6;
 const LOAD_COLUMN_WIDTH: u16 = 7;
 const FAVORITE_COLUMN_WIDTH: u16 = 2;
 const FAVORITE_MARK: &str = "★";
+const DRUM_KIT_MARK: &str = " [kit]";
 const MARKER_COLUMN_WIDTH: u16 = 4;
 /// 選択行の上下に残す viewport の割合。10行なら上下3行を見せる。
 const SCROLL_MARGIN_PERCENT: usize = 30;
@@ -260,12 +261,16 @@ fn draw_presets(select: &PatchSelect<'_>, frame: &mut Frame<'_>, area: Rect) {
     );
 }
 
-/// 同じ音をまとめた行には件数を添える。
-fn patch_label(patch: &PatchCatalogEntry) -> String {
-    match patch.merged_count() {
+/// 同じ音をまとめた行には件数を、鍵ごとに別の音が鳴る kit には印を添える。
+fn patch_label(patch: &PatchCatalogEntry, drum_kit: bool) -> String {
+    let mut label = match patch.merged_count() {
         count if count > 1 => format!("{} ×{count}", patch.display()),
         _ => patch.display().to_string(),
+    };
+    if drum_kit {
+        label.push_str(DRUM_KIT_MARK);
     }
+    label
 }
 
 fn draw_list(
@@ -305,8 +310,10 @@ fn draw_list(
             }
             cells.push(Cell::from(favorite_mark(select, patch.display())));
             cells.push(Cell::from(patch.selector_category().unwrap_or("")));
-            cells.push(Cell::from(patch_label(patch)));
-            cells.push(sample_size_cell(select.load_measurement(patch.display())));
+            let measurement = select.load_measurement(patch.display());
+            let drum_kit = measurement.is_some_and(|measurement| measurement.drum_kit);
+            cells.push(Cell::from(patch_label(patch, drum_kit)));
+            cells.push(sample_size_cell(measurement));
             cells.push(Cell::from(
                 Line::from(load_label(select, patch.display())).alignment(Alignment::Right),
             ));

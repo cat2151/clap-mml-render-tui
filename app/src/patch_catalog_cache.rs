@@ -13,6 +13,7 @@ use measurements::collect_patch_load_measurements;
 #[cfg(test)]
 use measurements::{estimate_eta, format_eta, measure_patch_loads};
 
+mod drum_kits;
 mod measurement_log;
 mod measurements;
 mod previous_measurements;
@@ -153,6 +154,7 @@ pub fn build_and_save(cfg: &Config) -> Result<BuildSummary> {
     let mut log = measurement_log::Writer::open(&log_path)?;
     load_measurements.extend(collect_patch_load_measurements(cfg, &unmeasured, &mut log)?);
     let sfz_weight_failures = sfz_weights::record(&plugins, &mut load_measurements);
+    drum_kits::record(&plugins, &mut load_measurements);
     let measured_load_count = load_measurements
         .values()
         .filter(|measurement| measurement.second_load_ms.is_some())

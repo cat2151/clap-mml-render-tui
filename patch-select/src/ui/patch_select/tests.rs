@@ -210,8 +210,15 @@ fn merged_patch_label_shows_the_merged_count() {
         .with_merged(10, vec!["BELL".to_string()]);
     let single = PatchCatalogEntry::from_display("A.syx/01 PAD".to_string());
 
-    assert_eq!(patch_label(&merged), "A.syx/00 BELL ×10");
-    assert_eq!(patch_label(&single), "A.syx/01 PAD");
+    assert_eq!(patch_label(&merged, false), "A.syx/00 BELL ×10");
+    assert_eq!(patch_label(&single, false), "A.syx/01 PAD");
+}
+
+#[test]
+fn drum_kit_patch_label_has_a_kit_mark() {
+    let kit = PatchCatalogEntry::from_display("Kits/909.sfz".to_string());
+
+    assert_eq!(patch_label(&kit, true), "Kits/909.sfz [kit]");
 }
 
 #[test]

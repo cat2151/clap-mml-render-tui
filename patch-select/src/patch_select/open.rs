@@ -52,7 +52,13 @@ impl PatchSelect<'_> {
         if role_index.is_empty() {
             role_index = build_role_index(&all, &user_presets);
         }
-        let prepared_presets = prepare_presets(&all, &user_presets, &role_index, &favorites);
+        let prepared_presets = prepare_presets(
+            &all,
+            &user_presets,
+            &role_index,
+            &favorites,
+            &load_measurements,
+        );
         let current = current.as_deref();
         // host が Role を指定しなければ、今の音色の Role で開く。
         let role = initial_role.or_else(|| current.and_then(|patch| role_index.role_of(patch)));
@@ -100,15 +106,17 @@ impl PatchSelect<'_> {
     }
 }
 
-/// Preset を事前計算し、各 Role の preset 1 に `★ Favorite` を入れる。
+/// Preset を事前計算し、各 Role の preset 1 に `★ Favorite` を、Drum には `Drum kit` を入れる。
 pub(super) fn prepare_presets(
     all: &[PatchCatalogEntry],
     user_presets: &[(String, String)],
     role_index: &PatchRoleIndex,
     favorites: &[String],
+    load_measurements: &BTreeMap<String, PatchLoadMeasurement>,
 ) -> PreparedPresets {
     let mut presets = PreparedPresets::build(all, user_presets, role_index)
         .expect("validated preset regular expressions must compile");
     presets.set_favorites(all, favorites);
+    presets.set_drum_kits(all, load_measurements);
     presets
 }

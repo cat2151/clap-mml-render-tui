@@ -1,11 +1,12 @@
 //! 共通PatchRoleIndexから、各Presetの検索済みindex列を一度だけ準備する。
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     sync::Arc,
 };
 
 use cmrt_patches::{DrumPatchRole, PatchRole, PatchRoleIndex, PatchRoleInput};
+use cmrt_tui_core::patch_load::PatchLoadMeasurement;
 
 use crate::PatchCatalogEntry;
 
@@ -95,6 +96,37 @@ impl PreparedPresets {
         }
     }
 
+    /// Role=`Drum tracks` の `★ Favorite` の直後へ `Drum kit` を置く。
+    ///
+    /// kit は catalog 構築時の判定で決まり、音色名の Role とは独立なので、Drum 以外へ
+    /// 分類された kit も含める。Role=`ALL` 群へは連結しない。
+    pub fn set_drum_kits(
+        &mut self,
+        all: &[PatchCatalogEntry],
+        measurements: &BTreeMap<String, PatchLoadMeasurement>,
+    ) {
+        let matches = all
+            .iter()
+            .enumerate()
+            .filter(|(_, patch)| {
+                measurements
+                    .get(patch.display())
+                    .is_some_and(|measurement| measurement.drum_kit)
+            })
+            .map(|(index, _)| index)
+            .collect::<Arc<[usize]>>();
+        let drum = FilterGroup::ALL
+            .iter()
+            .position(|group| *group == FilterGroup::Role(PatchRole::Drum))
+            .expect("FilterGroup::ALL contains Drum");
+        let presets = &mut self.by_role[drum];
+        let at = presets
+            .iter()
+            .position(|preset| !preset.is_favorite && preset.pattern.is_some())
+            .unwrap_or(presets.len());
+        presets.insert(at, FilterPreset::drum_kit(matches));
+    }
+
     /// 開いた直後に選ぶ `(Role, Preset)` の位置。`role` が無ければ `ALL`。
     /// `drum` はその部位の Preset を選び、見つからなければ Role の `ALL`。
     pub fn start_cursors(
@@ -106,7 +138,7 @@ impl PreparedPresets {
     }
 
     /// [`Self::start_cursors`] に加え、部位で決まらなければ `patch`（`all` への index）を
-    /// matches に含む最初の Preset を選ぶ。`ALL` と `★ Favorite` はその候補にしない。
+    /// matches に含む最初の Preset を選ぶ。`ALL`・`★ Favorite`・`Drum kit` はその候補にしない。
     pub fn start_cursors_for_patch(
         &self,
         role: Option<PatchRole>,

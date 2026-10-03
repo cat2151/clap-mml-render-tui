@@ -67,6 +67,8 @@ pub struct FilterPreset {
     pub is_user: bool,
     /// `★ Favorite`。`matches` は host が渡した favorite の順に並ぶ。
     pub is_favorite: bool,
+    /// `Drum kit`。`matches` は catalog 構築時に kit と判定した音色。
+    pub is_drum_kit: bool,
     pub group: FilterGroup,
     pub matches: Arc<[usize]>,
 }
@@ -78,7 +80,20 @@ impl FilterPreset {
             pattern: None,
             is_user: false,
             is_favorite: true,
+            is_drum_kit: false,
             group,
+            matches,
+        }
+    }
+
+    pub(super) fn drum_kit(matches: Arc<[usize]>) -> Self {
+        Self {
+            label: "Drum kit".to_string(),
+            pattern: None,
+            is_user: false,
+            is_favorite: false,
+            is_drum_kit: true,
+            group: FilterGroup::Role(PatchRole::Drum),
             matches,
         }
     }
@@ -98,6 +113,7 @@ pub(super) fn presets_for(
         pattern: None,
         is_user: false,
         is_favorite: false,
+        is_drum_kit: false,
         group,
         matches: Arc::default(),
     }];
@@ -119,6 +135,7 @@ pub(super) fn presets_for(
                 pattern: Some(pattern.clone()),
                 is_user: true,
                 is_favorite: false,
+                is_drum_kit: false,
                 group,
                 matches: Arc::default(),
             }),
@@ -132,6 +149,7 @@ fn from_builtin(group: FilterGroup, preset: &PatchRolePreset) -> FilterPreset {
         pattern: Some(preset.pattern.to_string()),
         is_user: false,
         is_favorite: false,
+        is_drum_kit: false,
         group,
         matches: Arc::default(),
     }

@@ -359,6 +359,7 @@ impl<'a> PatchSelect<'a> {
             &self.user_presets,
             &self.role_index,
             &self.favorites,
+            &self.load_measurements,
         );
         let preview = match self.refilter() {
             PatchSelectAction::Preview(patch) => Some(patch),

@@ -27,6 +27,9 @@ pub struct PatchLoadMeasurement {
     /// `.sfz` が参照する、存在する sample の総バイト数。`.sfz` 以外と集計失敗は `None`。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sfz_sample_bytes: Option<u64>,
+    /// 鍵ごとに別の音を割り当てた kit（drum kit・効果音 kit）か。`.sfz` と Floe preset だけを判定する。
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub drum_kit: bool,
 }
 
 /// これ以上の sample 総容量を持つ `.sfz` は、offline render の全量ロードが数秒を超える。

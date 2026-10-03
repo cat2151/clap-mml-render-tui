@@ -30,6 +30,10 @@ pub use clap_mml_play_server_core::{set_log_sink, LogSink};
 pub use clap_mml_play_server_core::{prepare_downloaded_patches, PatchDownload};
 // catalog 構築が `.sfz` の sample 総容量を記録し、重い patch を先読みから外すために使う。
 pub use clap_mml_play_server_core::{is_sfz_patch_path, sfz_sample_weight, SfzSampleWeight};
+// catalog 構築が、鍵ごとに別の音を割り当てた kit を patch select で見分けられるよう記録する。
+pub use clap_mml_play_server_core::{
+    floe_preset_is_percussion, is_floe_preset_path, sfz_is_drum_kit,
+};
 
 use mmlabc_to_smf::mml_preprocessor;
 use std::borrow::Cow;
