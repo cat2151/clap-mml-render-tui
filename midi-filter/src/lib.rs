@@ -3,12 +3,13 @@
 //! ウォールクロックも I/O も持たない。入力も出力も **フレーズ先頭を 0 秒とした絶対秒**で、
 //! いつ実際に鳴らすか（先読み・スケジューリング）は呼び出し側の責務。
 //!
-//! 用意してあるのは 4 つだけ:
+//! 用意してあるのは 5 つだけ:
 //!
 //! - [`TriangleLfo`] … `min → max → min` を 1 周する三角波。**値が変わる点だけ**を列挙する
 //! - [`insert_control_change`] … LFO を CC イベント列にして差し込む（modulation は [`MODULATION_CC`]）
 //! - [`override_note_velocity`] … note on の velocity を、その音自身の時刻の LFO 値で乗っ取る
 //! - [`shift`] … 1 周ぶんを k 周目の絶対秒へずらす（repeat 用）
+//! - [`keep_top_notes`] … 重なった音のうち、いちばん高い音だけを残す（単音化）
 //!
 //! ```
 //! use cmrt_midi_filter::{
@@ -30,6 +31,7 @@
 mod control_change;
 mod lfo;
 mod repeat;
+mod top_note;
 mod velocity;
 
 #[cfg(test)]
@@ -38,6 +40,7 @@ mod tests;
 pub use control_change::{insert_control_change, MODULATION_CC};
 pub use lfo::TriangleLfo;
 pub use repeat::shift;
+pub use top_note::keep_top_notes;
 pub use velocity::override_note_velocity;
 
 /// フレーズ先頭を 0 秒とした MIDI イベント。

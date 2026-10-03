@@ -16,7 +16,7 @@ use cmrt_tui_core::{
 /// 「ヘルプ(Keybinds)」の並びは他画面と揃えたまま変えない。
 const TITLE: &str = " Guitar Articulation ヘルプ(Keybinds)  Esc/?:close ";
 
-pub(crate) const KEY_ROWS: [&str; 35] = [
+pub(crate) const KEY_ROWS: [&str; 37] = [
     " ── MML 欄 ──",
     " 文字    MML を編集",
     " Enter   確定して演奏",
@@ -49,12 +49,14 @@ pub(crate) const KEY_ROWS: [&str; 35] = [
     " f       起動時の版 Lite→Full/Full",
     " Shift+H 履歴",
     " o       サンプル MID を開く",
+    " Shift+O SMF を素材に読む",
+    " Shift+M SMF を単音化",
     " i / q   MML 入力 / 終了",
     " ?       ヘルプを閉じる",
     " Ctrl+G  画面切替メニュー",
 ];
 
-pub(crate) const DETAIL_ROWS: [&str; 66] = [
+pub(crate) const DETAIL_ROWS: [&str; 68] = [
     " MML の音へ列ごとに奏法(KS)を足し、raw と聴き比べる。",
     " 反転した列がカーソル。ルールの切替で Articulated を演奏。",
     " ルールの段の文字は t の overlay の文字。灰色の - は効かない列(理由は枠の見出しに)",
@@ -121,6 +123,8 @@ pub(crate) const DETAIL_ROWS: [&str; 66] = [
     " o  サンプル MID を選ぶ(j/k で試聴)。matrix に音と KS/CC/bend、",
     "    右 pane に全イベント。h/l で 1 音ずつ、space で全体を演奏。",
     "    Esc で MML へ戻る(MML・ルールはそのまま)",
+    " O  SMF のパスを入れて Enter で読み、MML の代わりの素材に(note だけ・全 ch を ch1)",
+    " M  SMF の高い音だけ残す(下の音は切り詰め)。i で MML を確定すると MML 素材へ戻る",
 ];
 
 /// 左 pane の幅。枠の内側の区切り線を含まない。

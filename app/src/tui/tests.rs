@@ -23,6 +23,7 @@ mod guitar_articulation_history;
 mod guitar_articulation_materials;
 mod guitar_articulation_repeat;
 mod guitar_articulation_sample_midi;
+mod guitar_articulation_smf_material;
 mod keyboard_mml;
 mod mml_overlay;
 mod normal_mode;

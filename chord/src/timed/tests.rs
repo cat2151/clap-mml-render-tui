@@ -200,6 +200,43 @@ fn smf_events_without_a_note_on_are_rejected() {
     );
 }
 
+#[test]
+fn smf_notes_keep_only_notes_and_put_every_channel_on_ch1() {
+    let performance = timed_smf_notes(&smf_bytes(vec![
+        program_change(0, 5),
+        control(0, 1, 64),
+        pitch_bend(0, 0x2100),
+        on_channel(1, note_on(0, 64, 90)),
+        note_on(0, 60, 100),
+        note_on(QUARTER, 60, 0),
+        on_channel(1, note_on(0, 64, 0)),
+        end_of_track(0),
+    ]))
+    .unwrap();
+
+    let messages: Vec<[u8; 3]> = performance.events.iter().map(|e| e.message).collect();
+    assert_eq!(
+        messages,
+        vec![
+            [NOTE_ON, 64, 90],
+            [NOTE_ON, 60, 100],
+            [NOTE_OFF, 60, 0],
+            [NOTE_OFF, 64, 0],
+        ]
+    );
+    assert_eq!(performance.events[2].seconds, 0.5);
+    assert_eq!(performance.duration_seconds, 0.5);
+    assert!(!performance.from_chord);
+}
+
+#[test]
+fn smf_notes_without_a_note_on_are_rejected() {
+    assert_eq!(
+        timed_smf_notes(&smf_bytes(vec![control(0, 20, 1), end_of_track(QUARTER)])).unwrap_err(),
+        "MMLに発音ノートがありません"
+    );
+}
+
 fn control(delta: u32, controller: u8, value: u8) -> TrackEvent<'static> {
     TrackEvent {
         delta: delta.into(),

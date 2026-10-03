@@ -52,6 +52,23 @@ pub(crate) fn play_log_line(
     )
 }
 
+/// SMF 素材の演奏のログ 1 行。MML から作り直せないので `event=play-smf` にして [`logged_plays`] に拾わせず、
+/// `mml` の代わりに file 名と単音化の on/off を書く。
+pub(crate) fn play_smf_log_line(
+    patch: &str,
+    take: Take,
+    events: &[TimedMidiEvent],
+    file: &str,
+    top_note: bool,
+    rules: &RuleTable,
+) -> String {
+    format!(
+        "guitar-articulation: event=play-smf file={file:?} top_note={top_note} {}{RULES_KEY}{}",
+        take_summary(patch, take, events),
+        rules.to_json(),
+    )
+}
+
 /// カーソル列の 1 音だけを送った演奏のログ 1 行。作り直しの対象ではないので MML とルール表は書かず、
 /// `event=play-note` にして [`logged_plays`] に拾わせない。
 pub(crate) fn play_note_log_line(

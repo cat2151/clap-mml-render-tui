@@ -26,8 +26,8 @@ pub use progression::{
 pub use source_ranges::chord_source_ranges;
 pub use timed::{
     chord_cell_input, parses_as_chord, resolve_chord_or_mml, timed_chord_cell_performance,
-    timed_chord_progression_performance, timed_performance, timed_smf_events, ResolvedMml,
-    TimedPerformance,
+    timed_chord_progression_performance, timed_performance, timed_smf_events, timed_smf_notes,
+    ResolvedMml, TimedPerformance,
 };
 
 /// 時刻つき MIDI イベントの型は [`cmrt_midi_filter`] が持つ。

@@ -51,6 +51,7 @@ mod input;
 mod param_list;
 mod rule_list;
 mod sample_midi;
+mod smf_material;
 mod sounding;
 
 pub use arp::ArpRow;
@@ -83,6 +84,8 @@ pub enum GuitarArticulationAction {
     PlaySampleMidi {
         note: Option<usize>,
     },
+    /// この SMF を読み、note だけのイベント列を [`GuitarArticulationScreen::load_smf`] へ渡してほしい。
+    LoadSmf(std::path::PathBuf),
     /// repeat を OFF にしたので（`Shift+R`、`Shift+R` が OFF のままアルペジエーター overlay を閉じた）、
     /// 繰り返している演奏を止めてほしい。
     StopRepeat,
@@ -143,6 +146,8 @@ pub struct GuitarArticulationScreen {
     sample_midi: Option<sample_midi::SampleMidiState>,
     /// サンプル MID の一覧 overlay（`o`）を開いている間だけ `Some`。
     sample_midi_list: Option<sample_midi::SampleMidiList>,
+    /// SMF 素材と、その読み込み overlay（`O`）。
+    smf: smf_material::SmfState,
     /// 奏法リスト overlay（`t`）を開いている間だけ `Some`。
     rule_list: Option<rule_list::RuleList>,
     /// パラメータ overlay（`u`）を開いている間だけ、選んでいる行。
@@ -172,7 +177,10 @@ impl GuitarArticulationScreen {
 
     /// 点滅する縦線カーソルを置く入力欄（MML 欄か、effect の list の絞り込み欄）にキーが入る状態か。
     pub fn uses_textarea_cursor(&self) -> bool {
-        self.input_open() || self.effect_filter_active() || self.rule_list_filter_input_active()
+        self.input_open()
+            || self.smf.input_open()
+            || self.effect_filter_active()
+            || self.rule_list_filter_input_active()
     }
 
     pub fn help_open(&self) -> bool {
@@ -266,6 +274,9 @@ impl GuitarArticulationScreen {
         if self.arp_overlay.is_some() {
             return self.handle_arp_overlay_key(key);
         }
+        if self.smf.input_open() {
+            return self.handle_smf_input_key(key);
+        }
         // MML は `?` を使わないので、入力欄を開いていても `?` はヘルプへ回す。
         if is_help_key(key) {
             self.help_open = true;
@@ -277,6 +288,9 @@ impl GuitarArticulationScreen {
         self.error = None;
         if self.sample_midi.is_some() {
             return self.handle_sample_midi_key(key);
+        }
+        if let Some(action) = self.handle_smf_key(key) {
+            return action;
         }
         if history::is_history_key(key) {
             return self.open_history_overlay();
@@ -341,7 +355,10 @@ impl GuitarArticulationScreen {
             return GuitarArticulationAction::Continue;
         }
         self.rules.toggle(self.cursor, rule);
-        self.anchor = Some(ColumnRuleAnchor::new(&self.mml, &self.rules));
+        // SMF 素材の列は MML の列ではないので、付け替え元は MML 素材のときのものを残す。
+        if !self.smf.is_material() {
+            self.anchor = Some(ColumnRuleAnchor::new(&self.mml, &self.rules));
+        }
         self.rebuild_converted();
         self.record_history();
         self.play(Take::Converted)
@@ -375,17 +392,6 @@ impl GuitarArticulationScreen {
         self.rules.cycle_accent_pattern();
         self.rebuild_converted();
         self.record_history();
-        self.play(Take::Converted)
-    }
-
-    /// dry と wet を入れ替えて鳴らす。chain を替えた音は、server が読み込み中の音色を
-    /// 読み終えるまで用意できないので、読み込み中は入れ替えずに理由を出す。
-    fn toggle_effect_dry(&mut self) -> GuitarArticulationAction {
-        if self.sound_loading {
-            self.error = Some("音色の読み込み中は dry/wet を切り替えられません".to_string());
-            return GuitarArticulationAction::Continue;
-        }
-        self.effect_dry = !self.effect_dry;
         self.play(Take::Converted)
     }
 

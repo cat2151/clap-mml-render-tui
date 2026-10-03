@@ -221,3 +221,37 @@ fn an_arpeggiated_play_is_rebuilt_with_its_arp() {
         "{body}"
     );
 }
+
+#[test]
+fn an_smf_play_names_the_file_and_the_top_note_and_is_not_taken_as_the_last_played() {
+    let mml_line = play_log_line(
+        PATCH,
+        Take::Converted,
+        &flat_events(),
+        "cde",
+        &rules(),
+        None,
+    );
+    let events = convert(&flat_events(), &rules());
+    // file 名に ` mml=` が入っていても、MML の演奏としては読まない。
+    let smf = play_smf_log_line(
+        PATCH,
+        Take::Converted,
+        &events,
+        "a mml=\"x\".mid",
+        true,
+        &rules(),
+    );
+    let log = format!("{mml_line}\n{smf}\n");
+
+    assert_eq!(
+        smf,
+        format!(
+            "guitar-articulation: event=play-smf file=\"a mml=\\\"x\\\".mid\" top_note=true {} rules={}",
+            take_summary(PATCH, Take::Converted, &events),
+            rules().to_json()
+        )
+    );
+    assert!(!smf.contains("event=play "), "{smf}");
+    assert_eq!(last_played(&log).unwrap().line, mml_line);
+}

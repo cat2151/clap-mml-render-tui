@@ -20,6 +20,7 @@ mod chord_chart_glue;
 pub(crate) use cmrt_guitar_articulation as guitar_articulation;
 mod guitar_articulation_glue;
 mod guitar_articulation_sample_midi;
+mod guitar_articulation_smf_material;
 // MML 入力オーバーレイ（どの画面からでも Ctrl+P）。glue は開閉のきっかけと MIDI 送信をつなぐだけ。
 pub(crate) use cmrt_mml_overlay as mml_overlay;
 mod mml_overlay_glue;

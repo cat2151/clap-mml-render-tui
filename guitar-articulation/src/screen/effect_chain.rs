@@ -72,6 +72,17 @@ impl GuitarArticulationScreen {
         GuitarArticulationAction::Continue
     }
 
+    /// dry と wet を入れ替えて鳴らす。chain を替えた音は、server が読み込み中の音色を
+    /// 読み終えるまで用意できないので、読み込み中は入れ替えずに理由を出す。
+    pub(super) fn toggle_effect_dry(&mut self) -> GuitarArticulationAction {
+        if self.sound_loading {
+            self.error = Some("音色の読み込み中は dry/wet を切り替えられません".to_string());
+            return GuitarArticulationAction::Continue;
+        }
+        self.effect_dry = !self.effect_dry;
+        self.play(Take::Converted)
+    }
+
     pub(super) fn handle_effect_key(&mut self, key: KeyEvent) -> GuitarArticulationAction {
         let Some(mut overlay) = self.effect_overlay.take() else {
             return GuitarArticulationAction::Continue;

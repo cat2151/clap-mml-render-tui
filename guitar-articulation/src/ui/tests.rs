@@ -18,6 +18,7 @@ mod rule_lanes;
 mod rule_list_filter;
 mod rule_list_overlay;
 mod sample_midi;
+mod smf_material;
 mod title_flags;
 
 const WIDTH: u16 = 100;

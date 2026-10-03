@@ -7,8 +7,9 @@ use super::{GuitarArticulationAction, GuitarArticulationScreen, Take, DEFAULT_MM
 impl GuitarArticulationScreen {
     /// 画面に入ったときに呼ぶ。MML 入力欄を開き、MML が空なら [`DEFAULT_MML`] を確定して鳴らす。
     /// サンプル MID を開いている間は何もしない（MID のキーを入力欄に取られないように）。
+    /// SMF 素材の間も何もしない（MML 欄は素材を表していないので）。
     pub fn enter(&mut self) -> GuitarArticulationAction {
-        if self.sample_midi.is_some() {
+        if self.sample_midi.is_some() || self.smf.is_material() {
             return GuitarArticulationAction::Continue;
         }
         let action = if self.mml.is_empty() {
@@ -64,9 +65,10 @@ impl GuitarArticulationScreen {
 
     /// MML を確定し、raw・Articulated・matrix を作り直して履歴へ積む。列ごとのルールは、付け替え元
     /// （[`crate::ColumnRuleAnchor`]）の列から新しい列へ付け替えたものにする（元が無ければ空）。付け替え元は変えない。
-    /// 列に依らない行全体のルールは残す。空の MML は音を全部空にする。
+    /// 列に依らない行全体のルールは残す。空の MML は音を全部空にする。SMF 素材は捨てる。
     pub(super) fn commit_mml(&mut self, mml: &str) -> Result<(), String> {
         self.set_performance(mml, None)?;
+        self.smf.discard_material();
         self.mml = mml.to_string();
         self.rules = match &self.anchor {
             Some(anchor) => anchor.rules_for(&self.notes, &self.rules),

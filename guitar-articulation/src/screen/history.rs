@@ -118,7 +118,11 @@ impl GuitarArticulationScreen {
     }
 
     /// 今の状態を履歴の先頭へ積む。
+    /// SMF 素材の間は積まない（履歴は素材を MML 文字列でしか表せない）。
     pub(super) fn record_history(&mut self) {
+        if self.smf.is_material() {
+            return;
+        }
         let entry = self.history_entry();
         self.history.push_front(entry);
     }

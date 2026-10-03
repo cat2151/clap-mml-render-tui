@@ -30,6 +30,7 @@ mod param_list;
 mod rule_list;
 mod rule_rows;
 mod sample_midi;
+mod smf_material;
 
 pub(crate) use event_list::{name_width, EventRow};
 pub(crate) use rule_rows::{
@@ -42,7 +43,10 @@ mod tests;
 /// `b` / `space` / `i` は raw / Articulated / MML の pane の見出しに出ているので、ここには載せない（幅が足りない）。
 /// 幅 100 の端末で `?:help` まで収まる長さに保つ（枠の内側 98 桁）。
 const KEYBIND_TEXT: &str =
-    "h/l:移動 a:H/P mp/cvg/t:奏法 u:値 e:eco s:auto d:汚し r:rel n:1音 x/w:fx H:履歴 o:MID q:終 ?:help";
+    "h/l:移動 a:H/P mp/cvg/t:奏法 e:eco s:auto d:汚し r:rel n:1音 x/w:fx H:履歴 o:MID O:SMF q:終 ?:help";
+/// SMF 素材の間の下段。開けない `H` の代わりに単音化の `M` を出す。
+const SMF_KEYBIND_TEXT: &str =
+    "h/l:移動 a:H/P mp/cvg/t:奏法 u:値 e:eco s:auto d:汚し r:rel n:1音 x/w:fx O:SMF M:top q:終 ?:help";
 const MID_KEYBIND_TEXT: &str =
     " o:MID選択 space:演奏 n:1音 h/l:1音ずつ Esc:MIDを閉じる q:終了 ?:help";
 const INPUT_HINT_TEXT: &str = " MML を編集中  Enter:確定して演奏  Esc:matrix 操作へ  ?:help";
@@ -137,6 +141,7 @@ pub fn draw(screen: &GuitarArticulationScreen, f: &mut Frame<'_>) {
     }
     history::draw_overlay(f, screen);
     sample_midi::draw_list_overlay(f, screen);
+    smf_material::draw_input_overlay(f, screen);
     rule_list::draw_overlay(f, screen);
     param_list::draw_overlay(f, screen);
     arp::draw_overlay(f, screen);
@@ -184,9 +189,9 @@ fn matrix_title(screen: &GuitarArticulationScreen) -> Line<'static> {
 /// 音色の後ろに、確定済みの chain を信号の順に並べる。dry の間も chain は出したまま ` [dry]` を足す。
 fn screen_title(screen: &GuitarArticulationScreen) -> String {
     let mode = if screen.sample_midi().is_some() {
-        " [MID]"
+        " [MID]".to_string()
     } else {
-        ""
+        smf_material::title_flags(screen)
     };
     let mut title = format!(
         " Guitar Articulation{mode}  {}",
@@ -273,13 +278,8 @@ fn draw_input(f: &mut Frame<'_>, area: Rect, screen: &GuitarArticulationScreen) 
             );
         }
         None => {
-            let text = if screen.mml().is_empty() {
-                Span::styled("(i キーで MML 入力開始)", base_style().fg(MONOKAI_GRAY))
-            } else {
-                Span::raw(screen.mml().to_string())
-            };
             f.render_widget(
-                Paragraph::new(Line::from(text)).block(pane_block(MML_TITLE)),
+                Paragraph::new(smf_material::mml_field_line(screen)).block(pane_block(MML_TITLE)),
                 area,
             );
         }
@@ -309,6 +309,8 @@ fn status_line(screen: &GuitarArticulationScreen) -> Line<'static> {
         INPUT_HINT_TEXT
     } else if screen.sample_midi().is_some() {
         MID_KEYBIND_TEXT
+    } else if screen.smf_material_name().is_some() {
+        SMF_KEYBIND_TEXT
     } else {
         KEYBIND_TEXT
     };

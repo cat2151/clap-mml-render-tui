@@ -17,7 +17,7 @@ use cmrt_guitar_articulation::TimedMidiEvent;
 use cmrt_mml_overlay::line_play::{LinePerformance, LineProgram};
 use cmrt_mml_overlay::{LivePatch, MmlOverlayPreload};
 
-use crate::guitar_articulation_events::{play_log_line, play_note_log_line};
+use crate::guitar_articulation_events::{play_log_line, play_note_log_line, play_smf_log_line};
 use crate::tui::guitar_articulation::{
     GuitarArticulationAction, Instrument, StartupInstrument, Take, FULL_PATCH,
 };
@@ -43,7 +43,12 @@ impl TuiApp<'_> {
         key: KeyEvent,
     ) -> GuitarArticulationAction {
         let action = self.guitar_articulation.handle_key_event(key);
-        match &action {
+        // SMF の読み込みは、読めたら画面が Articulated の演奏を求めるので、その要求を下の match で鳴らす。
+        let request = match &action {
+            GuitarArticulationAction::LoadSmf(path) => self.load_guitar_articulation_smf(path),
+            _ => action.clone(),
+        };
+        match &request {
             GuitarArticulationAction::Play(take) => {
                 let effect_chain = chain_json(self.guitar_articulation.sounding_effect_chain());
                 self.play_guitar_articulation(*take, &effect_chain);
@@ -82,7 +87,8 @@ impl TuiApp<'_> {
             GuitarArticulationAction::PlaySampleMidi { note } => {
                 self.play_guitar_articulation_sample_midi(*note);
             }
-            GuitarArticulationAction::Continue => {}
+            // 読み込みは上で済ませ、`request` は読み込んだ結果の要求に置き換わっている。
+            GuitarArticulationAction::LoadSmf(_) | GuitarArticulationAction::Continue => {}
         }
         // 素材リスト・overlay の素材・アルペジエーターの設定は演奏の要求と同じキーで変わるので、action とは別に見る。
         if self.guitar_articulation.take_unsaved_settings() {
@@ -123,14 +129,25 @@ impl TuiApp<'_> {
         let patch = self
             .sync_guitar_articulation_instrument(effect_chain)
             .patch();
-        crate::logging::global_log_sink(&play_log_line(
-            patch,
-            take,
-            &events,
-            self.guitar_articulation.sounding_mml(),
-            &self.guitar_articulation.sounding_rules(),
-            self.guitar_articulation.applied_arp(),
-        ));
+        let line = match self.guitar_articulation.smf_material_name() {
+            Some(file) => play_smf_log_line(
+                patch,
+                take,
+                &events,
+                file,
+                self.guitar_articulation.smf_top_note(),
+                &self.guitar_articulation.sounding_rules(),
+            ),
+            None => play_log_line(
+                patch,
+                take,
+                &events,
+                self.guitar_articulation.sounding_mml(),
+                &self.guitar_articulation.sounding_rules(),
+                self.guitar_articulation.applied_arp(),
+            ),
+        };
+        crate::logging::global_log_sink(&line);
         let arp_loop_seconds = self.guitar_articulation.arp_loop_seconds();
         if let Some((command_id, loop_seconds)) =
             self.play_guitar_articulation_events(events, effect_chain, patch, arp_loop_seconds)

@@ -175,6 +175,19 @@ pub fn timed_smf_events(bytes: &[u8]) -> Result<TimedPerformance, String> {
     })
 }
 
+/// SMF を、note on / note off だけの時刻つきイベント列へ変換する。
+///
+/// MML から作る演奏と同じ形にそろえる。CC・pitch bend・program change などは落とし、
+/// channel はすべて ch1 の status にまとめる。note on が 1 つも無い SMF は `Err`。
+pub fn timed_smf_notes(bytes: &[u8]) -> Result<TimedPerformance, String> {
+    let (events, duration_seconds) = timed_events_from_smf(bytes)?;
+    Ok(TimedPerformance {
+        events,
+        duration_seconds,
+        from_chord: false,
+    })
+}
+
 /// tempo map の折れ点。`(tick, その tick の秒, そこからの micros per beat)`。
 type TempoPoint = (u64, f64, f64);
 
