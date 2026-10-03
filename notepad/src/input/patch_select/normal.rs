@@ -247,7 +247,7 @@ impl<'a> NotepadScreen<'a> {
             Some(patch_name) => self.start_patch_phrase(patch_name),
             None => {
                 *self.playback.session.play_state().lock().unwrap() =
-                    PlayState::Err("patch name JSON が見つかりません".to_string());
+                    PlayState::Err(crate::PATCH_NAME_JSON_NOT_FOUND.to_string());
             }
         }
     }

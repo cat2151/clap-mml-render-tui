@@ -9,6 +9,7 @@ edition = "2021"
 test-support = []
 
 [dependencies]
+cmrt-effect-chain-select = { path = "../effect-chain-select" }
 cmrt-history = { path = "../history" }
 cmrt-offline-render = { path = "../offline-render" }
 cmrt-patch-select = { path = "../patch-select" }

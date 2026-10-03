@@ -1,52 +1,19 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use cmrt_core::{
-    AudioEffectCatalog, AudioEffectPluginInfo, AudioEffectPreset, AudioPluginInfo, EffectPlugins,
-};
+use cmrt_core::AudioPluginInfo;
 use cmrt_runtime::{DEXED_PLUGIN_ID, SURGE_XT_PLUGIN_ID};
 use cmrt_tui_core::patch_load::PatchCatalogSnapshot;
 use cmrt_tui_core::patch_plugins::CatalogPlugin;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde_json::{json, Value};
 
-use crate::tests::test_config;
+use crate::tests::{test_config, test_effect_plugins};
 use crate::{Mode, NotepadScreen, PatchLoadState, PlayState};
 
 const DEXED_SNARE: &str = "Drums.syx/01 Snare Tight";
 const SURGE_PAD: &str = "Pads/Pad 1.fxp";
 const EXISTING_CHAIN_LINE: &str = r#"{"Surge XT patch":"Pads/Pad 1.fxp","effects after instrument":[{"Dragonfly Hall Reverb preset":"Medium Clear Hall"}]} l8cdef"#;
-
-/// マシンに依存しない effect catalog。ルール既定値の 2 つの reverb だけを持つ。
-fn test_effect_plugins() -> EffectPlugins {
-    let room = AudioEffectPluginInfo::new(
-        "Dragonfly Room Reverb",
-        "/clap/room.clap",
-        "org.example.room",
-        "/clap/room.clap",
-    );
-    let hall = AudioEffectPluginInfo::new(
-        "Dragonfly Hall Reverb",
-        "/clap/hall.clap",
-        "org.example.hall",
-        "/clap/hall.clap",
-    );
-    let preset = |plugin: &AudioEffectPluginInfo, value: &str| AudioEffectPreset {
-        plugin: plugin.key.clone(),
-        json_key: plugin.json_key.clone(),
-        value: value.to_string(),
-        display: format!("{}: {value}", plugin.name),
-        name: value.to_string(),
-        category: "Space / Imaging".to_string(),
-        kind: "Reverb".to_string(),
-        path: std::path::PathBuf::from(format!("/presets/{value}")),
-    };
-    let presets = vec![
-        preset(&room, "Small Drum Room"),
-        preset(&hall, "Medium Clear Hall"),
-    ];
-    EffectPlugins::with_catalog(AudioEffectCatalog::with_entries(vec![room, hall], presets))
-}
 
 /// Dexed の snare（effect 無し）と Surge XT の pad（effect 内蔵）の 2 音色。
 fn dexed_and_surge_state() -> PatchLoadState {

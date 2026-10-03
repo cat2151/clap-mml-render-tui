@@ -49,6 +49,8 @@ use render_queue::TuiRenderQueue;
 const AUDIO_CACHE_MAX_ENTRIES: usize = 64;
 pub(crate) const PATCH_JSON_KEY: &str = "Surge XT patch";
 pub(crate) const PATCH_FILTER_QUERY_JSON_KEY: &str = "Surge XT patch filter";
+/// カーソル行に音色の行頭 JSON が無いため、音色を前提にした操作ができないときの文言。
+pub(crate) const PATCH_NAME_JSON_NOT_FOUND: &str = "patch name JSON が見つかりません";
 
 pub const NOTEPAD_SOUND_CHECK_GUIDE_MESSAGE: &str = "j,kキーを押して音が鳴ることを確認してください";
 
@@ -71,6 +73,10 @@ pub enum Mode {
     NotepadHistory,
     NotepadHistoryGuide,
     PatchPhrase,
+    /// EFFECT CHAIN overlay（`x`）の chain 一覧。
+    EffectChain,
+    /// EFFECT CHAIN overlay の追加・差し替えの 3 pane（`x` → `a`・`r`）。
+    EffectChainAdd,
     Help,
 }
 
@@ -165,6 +171,8 @@ pub struct NotepadScreen<'a> {
     pub(crate) catalog_notes: Vec<String>,
     /// 音色選択の auto reverb が選ぶ reverb の catalog。
     pub(crate) effect_plugins: cmrt_offline_render::EffectPlugins,
+    /// EFFECT CHAIN overlay が編集しているカーソル行の chain の写し。
+    pub(crate) effect_chain: cmrt_effect_chain_select::EffectChainEditor,
 }
 
 /// [`NotepadScreen::new`] の引数一式。
@@ -275,6 +283,7 @@ impl<'a> NotepadScreen<'a> {
             catalog_notes,
             cfg,
             effect_plugins: cmrt_offline_render::EffectPlugins::none(),
+            effect_chain: Default::default(),
         }
     }
 
@@ -397,7 +406,8 @@ impl<'a> NotepadScreen<'a> {
                 .is_some_and(|select| select.filter_editing()),
             Mode::NotepadHistory => self.notepad_history.filter_active,
             Mode::PatchPhrase => self.patch_phrase.filter_active,
-            Mode::Normal | Mode::NotepadHistoryGuide | Mode::Help => false,
+            Mode::EffectChainAdd => self.effect_chain.add.filter_active,
+            Mode::Normal | Mode::NotepadHistoryGuide | Mode::EffectChain | Mode::Help => false,
         }
     }
 

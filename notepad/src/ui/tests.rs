@@ -15,6 +15,7 @@ use super::{draw, status_color, Mode, PlayState};
 mod cache_indicators;
 mod colors;
 mod cursor_style;
+mod effect_chain;
 mod footer;
 mod help_screens;
 mod insert_screen;

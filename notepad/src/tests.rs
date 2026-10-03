@@ -65,6 +65,39 @@ pub(crate) fn test_config() -> Config {
     }
 }
 
+/// マシンに依存しない effect catalog。ルール既定値の 2 つの reverb だけを持つ。
+pub(crate) fn test_effect_plugins() -> cmrt_core::EffectPlugins {
+    use cmrt_core::{AudioEffectCatalog, AudioEffectPluginInfo, AudioEffectPreset, EffectPlugins};
+
+    let room = AudioEffectPluginInfo::new(
+        "Dragonfly Room Reverb",
+        "/clap/room.clap",
+        "org.example.room",
+        "/clap/room.clap",
+    );
+    let hall = AudioEffectPluginInfo::new(
+        "Dragonfly Hall Reverb",
+        "/clap/hall.clap",
+        "org.example.hall",
+        "/clap/hall.clap",
+    );
+    let preset = |plugin: &AudioEffectPluginInfo, value: &str| AudioEffectPreset {
+        plugin: plugin.key.clone(),
+        json_key: plugin.json_key.clone(),
+        value: value.to_string(),
+        display: format!("{}: {value}", plugin.name),
+        name: value.to_string(),
+        category: "Space / Imaging".to_string(),
+        kind: "Reverb".to_string(),
+        path: std::path::PathBuf::from(format!("/presets/{value}")),
+    };
+    let presets = vec![
+        preset(&room, "Small Drum Room"),
+        preset(&hall, "Medium Clear Hall"),
+    ];
+    EffectPlugins::with_catalog(AudioEffectCatalog::with_entries(vec![room, hall], presets))
+}
+
 /// 注入された sink が受け取った行。sink は `fn` ポインタなのでキャプチャできず、static で受ける。
 static CAPTURED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 

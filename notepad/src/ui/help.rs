@@ -61,6 +61,45 @@ pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
             Line::from("  f                 : 現在行をお気に入りに追加"),
             escape_hint(),
         ],
+        Mode::EffectChain => vec![
+            section_title("EFFECT CHAIN overlay (x)"),
+            Line::from("  ?        : ヘルプ (このページ)"),
+            Line::from("  j/k, ↓/↑ : 段の移動"),
+            Line::from("  PageUp/PageDown : 段を10移動、Home/End : 先頭/末尾"),
+            Line::from(
+                "  a        : preset 一覧から chain 末尾へ追加（category/kind/list 3 pane、Enter、ESC で戻る）",
+            ),
+            Line::from(
+                "  r        : 現在の段を preset 一覧から差し替え（add と同じ 3 pane、Enter で差し替え、ESC で戻る）",
+            ),
+            Line::from("  dd       : 現在の段を削除して preview"),
+            Line::from("  b        : 現在の段の bypass を切り替えて preview"),
+            Line::from("  Alt+↑/↓  : 現在の段を上下に並べ替えて preview"),
+            Line::from("  Space    : 編集中 chain（bypass 反映）で現在行を preview"),
+            Line::from("  Enter    : 行へ書き戻して閉じ、その行を再生"),
+            Line::from("  ESC      : 破棄して閉じる"),
+            escape_hint(),
+        ],
+        Mode::EffectChainAdd => vec![
+            section_title("EFFECT CHAIN add / replace overlay (x → a / r)"),
+            Line::from("  ?        : ヘルプ (このページ)"),
+            Line::from("  h/l, ←/→ : category pane / kind pane / list pane"),
+            Line::from("  j/k, ↓/↑ : focus 中の pane を移動して preview"),
+            Line::from("  PageUp/PageDown/Home/End : focus 中の pane を大移動して preview"),
+            Line::from("  /        : list を絞り込み（Enter=確定、ESC=編集前へ戻す）"),
+            Line::from("  r        : list のランダムな候補へ移動して preview"),
+            Line::from(
+                "  Space    : 編集中 chain + list カーソルの preset を末尾に足して（r は差し替えて）preview（移動時も自動）",
+            ),
+            Line::from(
+                "  b        : list カーソルの候補の段だけ bypass して preview（chain の他の段は効かせる。効き具合の比較用）",
+            ),
+            Line::from(
+                "  Enter    : list カーソルの preset を chain 末尾へ追加して戻る（r で開いたときは現在の段と差し替え）",
+            ),
+            Line::from("  ESC      : 追加・差し替えせず chain 一覧へ戻る"),
+            escape_hint(),
+        ],
         _ => vec![
             section_title("NORMAL モード"),
             Line::from("  j / ↓       : 下へ移動して再生"),
@@ -77,6 +116,7 @@ pub(super) fn draw_help(f: &mut Frame, mode: Mode) {
             Line::from("  g           : generate を上に挿入して再生"),
             Line::from("  r           : ランダム音色を挿入/置換して再生"),
             Line::from("  t           : 音色選択"),
+            Line::from("  x           : effect chain"),
             Line::from("  Shift+H     : patch history"),
             Line::from("  f           : patch phrase 画面"),
             Line::from("  e           : config.toml 編集 → 再起動"),

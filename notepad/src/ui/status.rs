@@ -50,6 +50,7 @@ pub(super) fn notepad_mode_title(mode: &Mode) -> &'static str {
         Mode::NotepadHistory => " [HISTORY] notepad mode ",
         Mode::NotepadHistoryGuide => " [NORMAL] notepad mode ",
         Mode::PatchPhrase => " [PATCH PHRASE] notepad mode ",
+        Mode::EffectChain | Mode::EffectChainAdd => " [EFFECT CHAIN] notepad mode ",
         Mode::Help => " [HELP] notepad mode ",
     }
 }
@@ -57,7 +58,7 @@ pub(super) fn notepad_mode_title(mode: &Mode) -> &'static str {
 pub(super) fn keybind_text(mode: &Mode) -> &'static str {
     match mode {
         Mode::Normal => {
-            "q ?:help e:config b:loops i:insert o/O:挿入 dd/Del:cut p/P:貼付 f:phrase g:generate r:ランダム音色 t:音色 Shift+H:patch history j/k・↑↓・PgUp/PgDn・Home/M:再生移動 Enter/Space w:DAW v:keyboard Ctrl+G:screens"
+            "q ?:help e:config b:loops i:insert o/O:挿入 dd/Del:cut p/P:貼付 f:phrase g:generate r:ランダム音色 t:音色 x:effect Shift+H:patch history j/k・↑↓・PgUp/PgDn・Home/M:再生移動 Enter/Space w:DAW v:keyboard Ctrl+G:screens"
         }
         Mode::Insert => "ESC:確定→NORMAL  Enter:確定→次行",
         Mode::PatchSelect => {
@@ -70,6 +71,8 @@ pub(super) fn keybind_text(mode: &Mode) -> &'static str {
         Mode::PatchPhrase => {
             "/:検索入力  Enter:検索確定/現在行の上に挿入  n/p/t:overlay切替  j/k・↑↓:再生移動  PgUp/PgDn:1画面移動  h/l・←/→:ペイン移動  Space:再生  i:編集  f:お気に入り  ESC:戻る"
         }
+        Mode::EffectChain => cmrt_effect_chain_select::messages::FOOTER,
+        Mode::EffectChainAdd => cmrt_effect_chain_select::messages::ADD_FOOTER,
         Mode::Help => "ESC:キャンセル",
     }
 }
@@ -83,5 +86,6 @@ pub(super) fn status_text(mode: &Mode, play_state: &PlayState) -> String {
         Mode::PatchSelect => format!("音色選択{}", play_str),
         Mode::NotepadHistory => format!("notepad history{}", play_str),
         Mode::PatchPhrase => format!("patch phrase{}", play_str),
+        Mode::EffectChain | Mode::EffectChainAdd => format!("effect chain{}", play_str),
     }
 }

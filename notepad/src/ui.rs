@@ -3,6 +3,7 @@
 //! どの主要画面を描くかの振り分けは app 側（`tui::ui`）が行い、ここは
 //! notepad 画面ひとつだけを描く。
 
+mod effect_chain;
 mod help;
 mod overlay;
 mod status;
@@ -84,6 +85,10 @@ pub fn draw(app: &mut NotepadScreen<'_>, f: &mut Frame) {
                 let overlay_status = status_text(&help_origin, &play_state);
                 overlay::draw_patch_phrase(app, f, &overlay_status, status_color, help_origin);
             }
+            Mode::EffectChain | Mode::EffectChainAdd => {
+                draw_normal(app, f, &play_state, status_color, help_origin);
+                effect_chain::draw_effect_chain(app, f, help_origin);
+            }
             _ => draw_normal(app, f, &play_state, status_color, mode),
         }
         help::draw_help(f, help_origin);
@@ -99,6 +104,9 @@ pub fn draw(app: &mut NotepadScreen<'_>, f: &mut Frame) {
     } else if mode == Mode::PatchPhrase {
         draw_normal(app, f, &play_state, status_color, mode);
         overlay::draw_patch_phrase(app, f, &status, status_color, mode);
+    } else if matches!(mode, Mode::EffectChain | Mode::EffectChainAdd) {
+        draw_normal(app, f, &play_state, status_color, mode);
+        effect_chain::draw_effect_chain(app, f, mode);
     } else {
         draw_normal(app, f, &play_state, status_color, mode);
         if mode == Mode::Normal
@@ -147,7 +155,12 @@ fn draw_normal(
     let render_status_snapshot = app.render_status_snapshot();
     let render_status = render_status_text(&render_status_snapshot);
     let render_status_color = render_status_color(&render_status_snapshot);
-    let keybinds = keybind_text(&mode);
+    let keybinds = if mode == Mode::EffectChainAdd && app.effect_chain.add.replace_target.is_some()
+    {
+        cmrt_effect_chain_select::messages::REPLACE_FOOTER
+    } else {
+        keybind_text(&mode)
+    };
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)

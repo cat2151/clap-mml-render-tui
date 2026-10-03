@@ -1,5 +1,6 @@
 //! TUI のキー入力処理
 
+mod effect_chain;
 mod patch_select;
 
 pub(crate) use patch_select::HeavyPreview;
@@ -21,6 +22,8 @@ impl<'a> NotepadScreen<'a> {
             Mode::NotepadHistory => self.handle_notepad_history_key_event(key),
             Mode::PatchPhrase => self.handle_patch_phrase_key_event(key),
             Mode::NotepadHistoryGuide => self.handle_notepad_history_guide(key.code),
+            Mode::EffectChain => self.handle_effect_chain(key),
+            Mode::EffectChainAdd => self.handle_effect_chain_add(key),
             Mode::Help => self.handle_help(key.code),
         }
         NormalAction::Continue
@@ -44,6 +47,9 @@ impl<'a> NotepadScreen<'a> {
             }
             Mode::PatchPhrase if self.patch_phrase.filter_active => {
                 self.handle_patch_phrase_key_event(key)
+            }
+            Mode::EffectChainAdd if self.effect_chain.add.filter_active => {
+                self.handle_effect_chain_add(key)
             }
             _ => {}
         }
@@ -173,6 +179,7 @@ impl<'a> NotepadScreen<'a> {
                         self.set_empty_yank_error();
                     }
                     KeyCode::Char('f') => self.start_patch_phrase_for_current_line(),
+                    KeyCode::Char('x') => self.open_effect_chain_overlay(),
                     KeyCode::Char('o') => {
                         self.insert_empty_line_and_start_insert(self.editor.cursor + 1);
                     }

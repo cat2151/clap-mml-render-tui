@@ -772,6 +772,7 @@ name = "cmrt-notepad"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cmrt-effect-chain-select",
  "cmrt-history",
  "cmrt-offline-render",
  "cmrt-patch-select",

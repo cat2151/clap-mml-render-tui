@@ -58,6 +58,30 @@ pub(crate) fn effect_keys(chain: &HostChain, auto_reverb: Option<&Value>) -> Map
     keys
 }
 
+/// `line` の `;` で区切った全パートの行頭 JSON を `json` に差し替えた行。
+/// MML 本体の無いパートは空にし、どのパートにも MML が無ければ既定の 1 音を付ける。
+pub(super) fn line_with_patch_json(line: &str, json: &str) -> String {
+    let replaced_parts = line
+        .split(';')
+        .map(|part| {
+            let part = part.trim_start();
+            let preprocessed = mml_preprocessor::extract_embedded_json(part);
+            let remaining = preprocessed.remaining_mml.trim();
+            if remaining.is_empty() {
+                String::new()
+            } else {
+                format!("{json} {remaining}")
+            }
+        })
+        .collect::<Vec<_>>();
+    let has_content = replaced_parts.iter().any(|part| !part.trim().is_empty());
+    if has_content {
+        replaced_parts.join(";")
+    } else {
+        format!("{json} {PATCH_SELECT_PREVIEW_FALLBACK_PHRASE}")
+    }
+}
+
 impl<'a> NotepadScreen<'a> {
     fn resolve_loaded_patch_name(&self, patch_name: &str) -> Option<String> {
         let state = self.patch_load_state.lock().unwrap();
@@ -102,7 +126,7 @@ impl<'a> NotepadScreen<'a> {
     }
 
     /// `effects` は [`EFFECT_JSON_KEYS`] の key だけを見る。
-    fn build_patch_json_with_filter_query(
+    pub(super) fn build_patch_json_with_filter_query(
         patch_name: &str,
         filter_query: Option<&str>,
         effects: &Map<String, Value>,
@@ -153,7 +177,7 @@ impl<'a> NotepadScreen<'a> {
         }
     }
 
-    fn current_line_patch_filter_query(&self) -> Option<String> {
+    pub(super) fn current_line_patch_filter_query(&self) -> Option<String> {
         self.editor.lines.get(self.editor.cursor).and_then(|line| {
             Self::extract_patch_json_value(line).and_then(|value| {
                 value
@@ -225,27 +249,8 @@ impl<'a> NotepadScreen<'a> {
         effects: &Map<String, Value>,
     ) {
         let json = Self::build_patch_json_with_filter_query(patch_name, filter_query, effects);
-        let current = self.editor.lines[self.editor.cursor].clone();
-        let replaced_parts = current
-            .split(';')
-            .map(|part| {
-                let part = part.trim_start();
-                let preprocessed = mml_preprocessor::extract_embedded_json(part);
-                let remaining = preprocessed.remaining_mml.trim();
-                if remaining.is_empty() {
-                    String::new()
-                } else {
-                    format!("{json} {remaining}")
-                }
-            })
-            .collect::<Vec<_>>();
-        let replaced = replaced_parts.join(";");
-        let has_content = replaced_parts.iter().any(|part| !part.trim().is_empty());
-        self.editor.lines[self.editor.cursor] = if has_content {
-            replaced
-        } else {
-            format!("{json} c")
-        };
+        self.editor.lines[self.editor.cursor] =
+            line_with_patch_json(&self.editor.lines[self.editor.cursor], &json);
     }
 
     /// 試聴で鳴らすフレーズ。現在行の MML 部分で、空なら既定の 1 音。
