@@ -1,14 +1,17 @@
 use super::*;
 use crate::{
     guide::{KeyboardNoteGuidePresentation, KEYBOARD_NOTE_GUIDE_MESSAGE},
-    KeyboardState,
+    KeyboardState, KEYBOARD_NOTES,
 };
 use cmrt_tui_core::theme::MONOKAI_YELLOW;
 use ratatui::{backend::TestBackend, style::Modifier, Terminal};
 
+mod controller;
 mod effect_pane;
+mod note_columns;
 mod note_mode_bar;
 mod patch_panes;
+mod playback_status;
 mod share_notice;
 
 fn buffer_to_string(terminal: &Terminal<TestBackend>) -> String {
@@ -76,98 +79,43 @@ fn has_colored_message_start(terminal: &Terminal<TestBackend>) -> bool {
     })
 }
 
+fn status_text(state: &KeyboardState) -> String {
+    note_playback_status_line(state, std::time::Instant::now())
+        .spans
+        .iter()
+        .map(|span| span.content.as_ref())
+        .collect()
+}
+
 #[test]
-fn active_notes_text_lists_every_held_note_in_press_order() {
+fn the_playback_status_label_follows_the_effective_mode() {
     let mut state = KeyboardState::default();
-    assert!(state.press(KEYBOARD_NOTES[0]).is_some());
-    assert!(state.press(KEYBOARD_NOTES[2]).is_some());
-    assert!(state.press(KEYBOARD_NOTES[4]).is_some());
-
-    assert_eq!(active_notes_text(&state), "Active: C4 E4 G4");
-}
-
-#[test]
-fn active_notes_text_shows_dash_when_no_notes_are_held() {
-    assert_eq!(active_notes_text(&KeyboardState::default()), "Active: -");
-}
-
-#[test]
-fn controller_status_text_shows_defaults() {
-    assert_eq!(
-        controller_status_text(&KeyboardState::default()),
-        "Vel: 100  Mod: OFF  PB: -  CC#: 1"
-    );
-}
-
-#[test]
-fn controller_status_text_shows_periodic_modes() {
-    let mut state = KeyboardState::default();
-    let now = std::time::Instant::now();
-    state.cycle_velocity(now);
-    state.cycle_velocity(now); // Periodic(velocity=100)
-    state.cycle_modulation(now);
-    state.cycle_modulation(now); // Periodic
-    for _ in 0..5 {
-        state.cycle_pitch_bend(now); // Periodicまで進める
-    }
-    state.toggle_cc_periodic(now);
-
-    // vel2 × mod2 × PB4 × CC2 = 32通り。tick前なので消化数は0
-    assert_eq!(
-        controller_status_text(&state),
-        "Vel: cyc(100)  Mod: CYC  PB: CYC  CC#: 1 cyc  Combo: 0/32"
-    );
-}
-
-#[test]
-fn controller_status_text_shows_combo_progress_only_with_periodic_digits() {
-    let mut state = KeyboardState::default();
-    let now = std::time::Instant::now();
-    assert!(!controller_status_text(&state).contains("Combo:"));
-    state.cycle_modulation(now);
-    state.cycle_modulation(now); // Periodic
-    state.toggle_cc_periodic(now);
-    assert!(controller_status_text(&state).contains("Combo: 0/4"));
-    let _ = state.poll_periodic(now + std::time::Duration::from_millis(250));
-    assert!(controller_status_text(&state).contains("Combo: 1/4"));
-}
-
-#[test]
-fn controller_status_text_shows_fixed_pitch_bend_values() {
-    let mut state = KeyboardState::default();
-    let now = std::time::Instant::now();
-    state.cycle_pitch_bend(now);
-    assert!(controller_status_text(&state).contains("PB: +8191"));
-    state.cycle_pitch_bend(now);
-    assert!(controller_status_text(&state).contains("PB: 0"));
-    state.cycle_pitch_bend(now);
-    assert!(controller_status_text(&state).contains("PB: -8192"));
-    state.cycle_pitch_bend(now);
-    assert!(controller_status_text(&state).contains("PB: 0"));
-    state.cycle_pitch_bend(now);
-    assert!(controller_status_text(&state).contains("PB: CYC"));
-    state.cycle_pitch_bend(now);
-    assert!(controller_status_text(&state).contains("PB: 0"));
-    state.cycle_pitch_bend(now);
-    assert!(controller_status_text(&state).contains("PB: +8191"));
-}
-
-#[test]
-fn note_playback_status_text_shows_only_the_target() {
-    let mut state = KeyboardState::default();
-    assert_eq!(note_playback_status_text(&state), "Target: -");
+    assert_eq!(status_text(&state), "Chord: -");
 
     assert!(state.press(KEYBOARD_NOTES[4]).is_some());
     assert!(state.press(KEYBOARD_NOTES[0]).is_some());
     assert!(state.press(KEYBOARD_NOTES[2]).is_some());
     let now = std::time::Instant::now();
-    assert_eq!(note_playback_status_text(&state), "Target: G4 C4 E4");
+    assert_eq!(status_text(&state), "Chord: G4 C4 E4");
     let _ = state.cycle_note_playback(now);
-    assert_eq!(note_playback_status_text(&state), "Target: G4 C4 E4");
+    assert_eq!(state.note_playback_mode(), crate::NotePlaybackMode::Auto);
+    assert_eq!(status_text(&state), "Repeat: G4 C4 E4");
     let _ = state.cycle_note_playback(now);
+    assert_eq!(status_text(&state), "Repeat: G4 C4 E4");
     let _ = state.cycle_note_playback(now);
     assert_eq!(state.note_playback_mode(), crate::NotePlaybackMode::Arp);
-    assert_eq!(note_playback_status_text(&state), "Target: C4 E4 G4");
+    assert_eq!(status_text(&state), "Arp: C4 E4 G4 C5 E5 G5");
+}
+
+#[test]
+fn auto_on_a_mono_patch_is_labeled_arp() {
+    let mut state = KeyboardState::default();
+    state.set_detected_voicing(cmrt_realtime_play::PatchVoicing::Mono);
+    state.replace_repeat_chords(vec![vec![67, 60]], std::time::Instant::now(), false);
+    let _ = state.cycle_note_playback(std::time::Instant::now());
+
+    assert_eq!(state.note_playback_mode(), crate::NotePlaybackMode::Auto);
+    assert_eq!(status_text(&state), "Arp: C4 G4 C5 G5");
 }
 
 #[test]
@@ -179,11 +127,11 @@ fn note_playback_status_formats_arbitrary_midi_notes() {
         false,
     );
 
-    assert_eq!(note_playback_status_text(&state), "Target: C-1 C#4 | G9");
+    assert_eq!(status_text(&state), "Chord: C-1 C#4 | G9");
 }
 
 #[test]
-fn note_playback_status_sorts_each_arp_chord_without_reordering_the_progression() {
+fn note_playback_status_shows_each_arp_chord_as_its_arp_sequence_in_progression_order() {
     let mut state = KeyboardState::default();
     let now = std::time::Instant::now();
     state.replace_repeat_chords(vec![vec![67, 60], vec![69, 65]], now, false);
@@ -191,7 +139,7 @@ fn note_playback_status_sorts_each_arp_chord_without_reordering_the_progression(
         let _ = state.cycle_note_playback(now);
     }
 
-    assert_eq!(note_playback_status_text(&state), "Target: C4 G4 | F4 A4");
+    assert_eq!(status_text(&state), "Arp: C4 G4 C5 G5 | F4 A4 F5 A5");
 }
 
 #[test]
@@ -364,7 +312,14 @@ fn the_screen_shows_why_a_plugin_is_missing_from_the_catalog() {
         screen.state.patch_catalog.set_catalog_notes(notes);
         let mut terminal = Terminal::new(TestBackend::new(90, 16)).unwrap();
         terminal
-            .draw(|f| draw(&mut screen, &crate::KeyboardConnectionStatus::default(), f))
+            .draw(|f| {
+                draw(
+                    &mut screen,
+                    &crate::KeyboardConnectionStatus::default(),
+                    std::time::Instant::now(),
+                    f,
+                )
+            })
             .unwrap();
         buffer_to_string(&terminal)
     };

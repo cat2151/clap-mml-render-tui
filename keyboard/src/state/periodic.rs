@@ -125,8 +125,19 @@ impl KeyboardState {
         [CONTROL_CHANGE, self.cc_number, value]
     }
 
-    pub(super) fn attack_repeat_chord(&mut self) -> Vec<[u8; 3]> {
+    pub(super) fn attack_repeat_chord(&mut self, at: Instant) -> Vec<[u8; 3]> {
         self.repeat_sounding = self.current_repeat_chord().to_vec();
+        if self.repeat_sounding.is_empty() {
+            self.sounding.clear();
+        } else {
+            self.sounding.record(
+                at,
+                SoundingPosition {
+                    chord_index: self.repeat_chord_index,
+                    arp: None,
+                },
+            );
+        }
         let velocity = self.velocity;
         self.repeat_sounding
             .iter()
@@ -183,10 +194,10 @@ impl KeyboardState {
                             .map(|note| note_off(note.midi_note)),
                     );
                     self.advance_repeat_chord();
-                    messages.extend(self.attack_repeat_chord());
+                    messages.extend(self.attack_repeat_chord(at));
                 }
             }
-            NotePlaybackMode::Arp | NotePlaybackMode::Auto => messages.extend(self.advance_arp()),
+            NotePlaybackMode::Arp | NotePlaybackMode::Auto => messages.extend(self.advance_arp(at)),
             NotePlaybackMode::Repeat => unreachable!(),
         }
         Some(PeriodicTick { at, messages })
@@ -229,7 +240,7 @@ impl KeyboardState {
                 self.restart_periodic_clock(now);
                 self.repeat_elapsed_ticks = 0;
                 self.reset_progression_position();
-                messages.extend(self.attack_repeat_chord());
+                messages.extend(self.attack_repeat_chord(now));
             }
             NotePlaybackMode::Arp | NotePlaybackMode::Auto => {
                 messages.extend(self.restart_arp(now))

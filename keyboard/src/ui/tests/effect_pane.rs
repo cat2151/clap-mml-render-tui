@@ -53,16 +53,23 @@ fn context(load: &cmrt_tui_core::patch_load::PatchLoadState) -> crate::KeyboardC
 fn render(screen: &mut crate::KeyboardScreen<'_>, width: u16) -> Terminal<TestBackend> {
     let mut terminal = Terminal::new(TestBackend::new(width, 30)).unwrap();
     terminal
-        .draw(|f| draw(screen, &crate::KeyboardConnectionStatus::default(), f))
+        .draw(|f| {
+            draw(
+                screen,
+                &crate::KeyboardConnectionStatus::default(),
+                std::time::Instant::now(),
+                f,
+            )
+        })
         .unwrap();
     terminal
 }
 
 /// 1 行目で pane の左上の角がある桁。左から t の欄・Role・Preset・Patches・Effect。
-fn pane_corners(terminal: &Terminal<TestBackend>) -> Vec<u16> {
+fn pane_corners(terminal: &Terminal<TestBackend>, y: u16) -> Vec<u16> {
     let buffer = terminal.backend().buffer();
     (0..buffer.area.width)
-        .filter(|&x| buffer.cell((x, 0)).unwrap().symbol() == "┌")
+        .filter(|&x| buffer.cell((x, y)).unwrap().symbol() == "┌")
         .collect()
 }
 
@@ -88,15 +95,18 @@ fn the_effect_pane_sits_at_the_right_end_and_turns_yellow_when_focused() {
         "{text}"
     );
 
-    let corners = pane_corners(&terminal);
-    assert_eq!(corners.len(), 5, "{corners:?}\n{text}");
-    let (patches_x, effect_x) = (corners[3], corners[4]);
-    assert!(effect_x - patches_x >= 12, "{corners:?}");
+    // 0 行目は keyboard / Patch selector の外枠 / Effect。Patches は外枠の内側（1 行目）。
+    let corners = pane_corners(&terminal, 0);
+    assert_eq!(corners.len(), 3, "{corners:?}\n{text}");
+    let effect_x = corners[2];
+    let inner_corners = pane_corners(&terminal, 1);
+    let patches_x = *inner_corners.last().unwrap();
+    assert!(effect_x - patches_x >= 12, "{inner_corners:?} {effect_x}");
     // Effect pane は右端まで。
     let buffer = terminal.backend().buffer();
     assert_eq!(buffer.cell((159, 0)).unwrap().symbol(), "┐");
     assert_eq!(buffer.cell((effect_x, 0)).unwrap().fg, MONOKAI_YELLOW);
-    assert_eq!(buffer.cell((patches_x, 0)).unwrap().fg, MONOKAI_FG);
+    assert_eq!(buffer.cell((patches_x, 1)).unwrap().fg, MONOKAI_FG);
 }
 
 #[test]

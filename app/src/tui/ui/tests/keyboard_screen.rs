@@ -7,10 +7,14 @@ fn keyboard_screen_shows_connecting_status_and_navigation() {
     let mut app = TuiApp::new_for_test(test_config());
     app.active_screen = crate::screen_switch::PrimaryScreen::Keyboard;
 
-    let screen = render_lines(&mut app, 90, 17).join("\n");
+    // 接続中の overlay は pane の中央に重なる。overlay より上に controller 行と和音の行が収まる高さ。
+    let screen = render_lines(&mut app, 90, 34).join("\n");
 
-    assert!(screen.contains("t: repeat: off  auto  repeat  arp"));
-    assert!(screen.contains("[KEYBOARD] keyboard mode"));
+    assert!(screen.contains("t: off  auto  repeat  arp"));
+    assert!(screen.contains("[KEYBOARD]"));
+    for gone in ["keyboard mode", "1-9:count", "Active:", "Patch:"] {
+        assert!(!screen.contains(gone), "{gone}: {screen}");
+    }
     assert!(screen.contains("transport: SHM"));
     assert!(screen.contains("buffer: x4"));
     assert!(screen.contains("server: idle"));
@@ -26,15 +30,19 @@ fn keyboard_screen_shows_connecting_status_and_navigation() {
     assert!(screen.contains("m:mod(CC1)"));
     assert!(screen.contains("p:pitch bend"));
     assert!(screen.contains("t:off/auto/repeat/arp"));
-    assert!(screen.contains("Target: -"));
+    assert!(screen.contains("Chord: -"), "{screen}");
+    assert!(!screen.contains("Target:"), "{screen}");
     assert!(screen.contains("x:CC#"));
     assert!(screen.contains("z:CC value"));
     assert!(screen.contains("Shift+Z:CC cycle"));
     assert!(screen.contains("r:random"));
-    assert!(screen.contains("Vel: 100"));
-    assert!(screen.contains("Mod: OFF"));
-    assert!(screen.contains("PB: -"));
-    assert!(screen.contains("CC#: 1"));
+    assert!(screen.contains("vel: 100  127  cyc"), "{screen}");
+    assert!(screen.contains("mod: off  on  cyc"), "{screen}");
+    assert!(
+        screen.contains("pb: +8191  0  -8192  0  cyc  0"),
+        "{screen}"
+    );
+    assert!(screen.contains("cc#(x): 1  Z: off  cyc"), "{screen}");
 }
 
 #[test]
@@ -65,14 +73,13 @@ fn keyboard_screen_shows_count_input_guide_until_navigation() {
     assert!(screen
         .replace(' ', "")
         .contains("0-9またはh/j/k/l/Ctrl+u/Ctrl+dを押してください"));
-    assert!(screen.contains("1-9:count"));
+    assert!(!screen.contains("1-9:count"));
     assert!(!screen.contains("k/j/Up/Down:patch"));
     assert!(!screen.contains("s:transport"));
     assert!(!screen.contains("i:MML notes"));
 
     app.handle_keyboard_key_event(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
     let screen = render_lines(&mut app, 140, 14).join("\n");
-    assert!(screen.contains("1-9:count"));
     assert!(!screen.contains("Count: 11_"));
 }
 
@@ -164,32 +171,47 @@ fn keyboard_panes_render_the_real_catalog_cache_at_200_columns() {
     let assert_frames_intact = |app: &mut TuiApp<'static>| {
         let buffer = render_buffer(app, 200, 30);
         let symbol = |x: u16, y: u16| buffer.cell((x, y)).unwrap().symbol().to_string();
-        assert_eq!(symbol(73, 0), "┐");
-        for x in [74, 96, 126, 175] {
+        // 0 行目: keyboard / Patch selector の外枠 / Effect。
+        for x in [0, 74, 175] {
             assert_eq!(symbol(x, 0), "┌", "x={x}");
         }
-        assert_eq!(symbol(199, 0), "┐");
+        for x in [73, 174, 199] {
+            assert_eq!(symbol(x, 0), "┐", "x={x}");
+        }
+        // 1 行目: Patch selector の内側の Role / Preset / Patches。
+        for x in [75, 94, 118] {
+            assert_eq!(symbol(x, 1), "┌", "x={x}");
+        }
+        assert_eq!(symbol(173, 1), "┐");
         let body_rows = (1..30)
             .take_while(|&y| symbol(199, y) == "│")
             .inspect(|&y| {
-                for x in [74, 96, 126, 174, 175] {
+                for x in [0, 73, 74, 174, 175, 199] {
                     assert_eq!(symbol(x, y), "│", "x={x} y={y}");
-                }
-                // 左の列は上 3 行が t の欄、その下が [KEYBOARD] pane。
-                if y >= 4 {
-                    for x in [0, 73] {
-                        assert_eq!(symbol(x, y), "│", "x={x} y={y}");
-                    }
                 }
             })
             .count();
         assert!(body_rows >= 5, "{body_rows}");
+        // 内側 3 pane は外枠の 1 行内側で始まり 1 行内側で終わる。
+        let inner_last = u16::try_from(body_rows).unwrap();
+        for y in 2..inner_last {
+            for x in [75, 93, 94, 117, 118, 173] {
+                assert_eq!(symbol(x, y), "│", "x={x} y={y}");
+            }
+        }
+        for x in [75, 94, 118] {
+            assert_eq!(symbol(x, inner_last), "└", "x={x} y={inner_last}");
+        }
     };
 
     assert_frames_intact(&mut app);
     let screen = render_lines(&mut app, 200, 30).join(
         "
 ",
+    );
+    assert!(
+        screen.lines().next().unwrap().contains("Patch selector"),
+        "{screen}"
     );
     assert!(screen.contains("Role (1/7)"), "{screen}");
     assert!(screen.contains(&format!("/{total})")), "{screen}");

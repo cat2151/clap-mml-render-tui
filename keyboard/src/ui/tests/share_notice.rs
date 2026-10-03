@@ -48,7 +48,14 @@ fn the_keyboard_screen_draws_the_share_notice_while_it_is_open() {
     screen.share_notice = Some("cmrt kb -t auto".to_string());
     let mut terminal = Terminal::new(TestBackend::new(160, 30)).unwrap();
     terminal
-        .draw(|f| draw(&mut screen, &crate::KeyboardConnectionStatus::default(), f))
+        .draw(|f| {
+            draw(
+                &mut screen,
+                &crate::KeyboardConnectionStatus::default(),
+                std::time::Instant::now(),
+                f,
+            )
+        })
         .unwrap();
     let rendered = buffer_to_string(&terminal);
 

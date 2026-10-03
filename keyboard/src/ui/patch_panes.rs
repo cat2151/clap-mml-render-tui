@@ -1,7 +1,7 @@
 //! Role / Preset / 音色 の 3 pane。MML overlay の patch selector と同じ見た目。
 
 use ratatui::{
-    layout::{Alignment, Constraint, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Color,
     text::Line,
     widgets::{Block, Borders, Cell, List, ListItem, Paragraph, Row, Table},
@@ -25,18 +25,43 @@ const FILTER_INPUT_HEIGHT: u16 = 3;
 const CATEGORY_COLUMN_WIDTH: u16 = 12;
 const LOAD_COLUMN_WIDTH: u16 = 7;
 
-/// keyboard pane の右に残った幅を Role / Preset / Patches / Effect に割る。
-/// 最初の 3 つは overlay と同じ式で、Effect は残り幅の 1/5 を 16〜28 に収める。
-pub(super) fn pane_widths(remaining: u16) -> [Constraint; 4] {
+/// keyboard pane の右に残った幅のうち Effect pane が取る幅。残り幅の 1/5 を 16〜28 に収める。
+pub(super) fn effect_pane_width(remaining: u16) -> u16 {
+    (remaining / 5).clamp(16, 28)
+}
+
+/// Patch selector の枠の内側の幅を Role / Preset / Patches に割る。overlay と同じ式。
+fn selector_pane_widths(inner_width: u16) -> [Constraint; 3] {
     [
-        Constraint::Length((remaining / 5).clamp(12, 22)),
-        Constraint::Length((remaining / 4).clamp(14, 30)),
+        Constraint::Length((inner_width / 5).clamp(12, 22)),
+        Constraint::Length((inner_width / 4).clamp(14, 30)),
         Constraint::Min(12),
-        Constraint::Length((remaining / 5).clamp(16, 28)),
     ]
 }
 
-pub(super) fn draw_patch_panes(
+/// Role / Preset / Patches を 1 つの「Patch selector」の枠で囲んで描く。
+/// focus は内側の各 pane の枠の色が示すので、外枠は常に `MONOKAI_FG`。
+pub(super) fn draw_patch_selector(
+    catalog: &mut KeyboardPatchCatalog,
+    filter_input: &KeyboardPatchFilterInput<'_>,
+    f: &mut Frame<'_>,
+    area: Rect,
+) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Patch selector ")
+        .style(base_style())
+        .border_style(base_style().fg(MONOKAI_FG));
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(selector_pane_widths(inner.width))
+        .split(inner);
+    draw_patch_panes(catalog, filter_input, f, panes[0], panes[1], panes[2]);
+}
+
+fn draw_patch_panes(
     catalog: &mut KeyboardPatchCatalog,
     filter_input: &KeyboardPatchFilterInput<'_>,
     f: &mut Frame<'_>,

@@ -30,7 +30,7 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
             app.sync_keyboard_patch_catalog();
             app.sync_keyboard_voicing_detection();
             let connection = app.keyboard_connection_status();
-            keyboard::draw(&mut app.keyboard, &connection, f);
+            keyboard::draw(&mut app.keyboard, &connection, now, f);
         }
         PrimaryScreen::LoopBrowser => {
             let play_state = app.playback_session.play_state_snapshot();

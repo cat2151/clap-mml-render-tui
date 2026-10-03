@@ -54,6 +54,7 @@ impl KeyboardState {
             repeat_sounding: Vec::new(),
             arp_sounding: None,
             arp_next_index: 0,
+            sounding: SoundingTimeline::default(),
             periodic_next_at: None,
             periodic_anchor: None,
             periodic_generation: 0,

@@ -44,7 +44,7 @@ pub use sender::{
     KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardMidiSender, KeyboardVoicingStatus,
 };
 pub use share_command::share_command;
-pub use state::{KeyboardState, PeriodicTick};
+pub use state::{ArpStep, KeyboardState, PeriodicTick, SoundingPosition};
 pub use state::{ModulationMode, NotePlaybackMode, PitchBendMode, VelocityMode, KEYBOARD_NOTES};
 
 use cmrt_realtime_play::PatchVoicing;

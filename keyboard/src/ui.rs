@@ -1,6 +1,8 @@
+use std::time::Instant;
+
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::Color,
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
@@ -8,39 +10,47 @@ use ratatui::{
 
 use crate::{
     KeyboardConnectionPhase, KeyboardConnectionStatus, KeyboardScreen, KeyboardState,
-    KeyboardVoicingStatus, ModulationMode, NumericInput, NumericInputTarget, PatchPaneFocus,
-    PitchBendMode, VelocityMode, KEYBOARD_NOTES,
+    KeyboardVoicingStatus, NumericInput, NumericInputTarget, PatchPaneFocus,
 };
 use cmrt_patch_select::ui::draw_plugin_menu;
 use cmrt_tui_core::status::base_style;
-use cmrt_tui_core::theme::{MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GREEN, MONOKAI_PINK, MONOKAI_PURPLE};
+use cmrt_tui_core::theme::{
+    MONOKAI_CYAN, MONOKAI_FG, MONOKAI_GRAY, MONOKAI_GREEN, MONOKAI_PINK, MONOKAI_PURPLE,
+};
 
 mod connection_overlay;
+mod controller;
 mod effect;
 mod guide;
 mod mml_overlay;
 mod note;
+mod note_columns;
 mod patch_panes;
 mod share_notice;
 
 use connection_overlay::draw_connection_overlay;
+use controller::controller_status_lines;
 use effect::{draw_effect_add_overlay, draw_effect_pane};
 use guide::{draw_note_guide_overlay, keyboard_help_lines};
 use mml_overlay::draw_mml_input_overlay;
-use note::{note_playback_mode_line, note_playback_status_text};
-use patch_panes::{draw_patch_panes, pane_widths};
+use note::{note_playback_mode_line, note_playback_status_line};
+use note_columns::note_column_lines;
+use patch_panes::{draw_patch_selector, effect_pane_width};
 use share_notice::draw_share_notice_overlay;
 
 /// keyboard pane の幅。中身の最長行と、上へ重ねる overlay の上限幅（72 + 枠 2）に合わせる。
 const KEYBOARD_PANE_WIDTH: u16 = 74;
-/// 左の列の一番上に置く `t` の欄の高さ（枠 + 中身 1 行）。
-const NOTE_MODE_BAR_HEIGHT: u16 = 3;
 
 /// keyboard 画面を描画する。
 ///
 /// patch catalog / voicing 判定の同期は共有ランタイム（`TuiApp`）側の責務なので、
-/// 呼び出し前に済ませておくこと。
-pub fn draw(screen: &mut KeyboardScreen<'_>, connection: &KeyboardConnectionStatus, f: &mut Frame) {
+/// 呼び出し前に済ませておくこと。`now` は発音中の音の色付けを実音の時刻に合わせるのに使う。
+pub fn draw(
+    screen: &mut KeyboardScreen<'_>,
+    connection: &KeyboardConnectionStatus,
+    now: Instant,
+    f: &mut Frame,
+) {
     // 「一覧に出ていない音色がある」ことの案内。help 行の上へ、行数ぶんだけ場所を取る。
     // 案内が無いときは 1 行も増えないので、ふだんの見え方は変わらない。
     let catalog_notes = screen.state.patch_catalog.catalog_notes().to_vec();
@@ -53,35 +63,25 @@ pub fn draw(screen: &mut KeyboardScreen<'_>, connection: &KeyboardConnectionStat
             Constraint::Length(help_height),
         ])
         .split(f.area());
-    let [role_w, preset_w, patch_w, effect_w] =
-        pane_widths(chunks[0].width.saturating_sub(KEYBOARD_PANE_WIDTH));
+    let effect_w = effect_pane_width(chunks[0].width.saturating_sub(KEYBOARD_PANE_WIDTH));
     let panes = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Length(KEYBOARD_PANE_WIDTH),
-            role_w,
-            preset_w,
-            patch_w,
-            effect_w,
+            Constraint::Min(0),
+            Constraint::Length(effect_w),
         ])
         .split(chunks[0]);
 
-    let left = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(NOTE_MODE_BAR_HEIGHT), Constraint::Min(0)])
-        .split(panes[0]);
-    let keyboard_area = left[1];
-    draw_note_mode_bar(&screen.state, f, left[0]);
-    draw_keyboard(&screen.state, f, keyboard_area);
-    draw_patch_panes(
+    let keyboard_area = panes[0];
+    draw_keyboard(&screen.state, now, f, keyboard_area);
+    draw_patch_selector(
         &mut screen.state.patch_catalog,
         &screen.patch_filter,
         f,
         panes[1],
-        panes[2],
-        panes[3],
     );
-    draw_effect_pane(screen, f, panes[4]);
+    draw_effect_pane(screen, f, panes[2]);
 
     let (state, color) = match &connection.phase {
         KeyboardConnectionPhase::Idle => ("server: idle".to_string(), MONOKAI_CYAN),
@@ -131,51 +131,28 @@ pub fn draw(screen: &mut KeyboardScreen<'_>, connection: &KeyboardConnectionStat
     draw_note_guide_overlay(screen.note_guide.presentation(), f, f.area());
 }
 
-fn draw_note_mode_bar(state: &KeyboardState, f: &mut Frame<'_>, area: Rect) {
-    f.render_widget(
-        Paragraph::new(note_playback_mode_line(state))
-            .style(base_style())
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .style(base_style())
-                    .border_style(base_style().fg(MONOKAI_FG)),
-            ),
-        area,
-    );
-}
-
-fn draw_keyboard(state: &KeyboardState, f: &mut Frame<'_>, area: Rect) {
+fn draw_keyboard(state: &KeyboardState, now: Instant, f: &mut Frame<'_>, area: Rect) {
+    let [pc_key_line, note_line] = note_column_lines(state, now);
     let mut lines = vec![
+        note_playback_mode_line(state),
         Line::from(""),
-        Line::from(Span::styled(
-            "PC key:  c   d   e   f   g   a   b",
-            base_style(),
-        )),
-        Line::from(Span::styled(
-            "Note:    C4  D4  E4  F4  G4  A4  B4",
-            base_style(),
-        )),
+        pc_key_line,
+        note_line,
         Line::from(""),
-        Line::from(Span::styled(active_notes_text(state), base_style())),
-        Line::from(Span::styled(
-            format!("Patch: {}", state.patch().unwrap_or("init saw")),
-            base_style(),
-        )),
-        Line::from(Span::styled(controller_status_text(state), base_style())),
-        Line::from(Span::styled(note_playback_status_text(state), base_style())),
     ];
-    if area.height < 8 {
-        lines.remove(0);
-        lines.remove(2);
+    lines.extend(controller_status_lines(state));
+    lines.push(note_playback_status_line(state, now));
+    // 枠の内側に全行が入らないときは、区切りの空行から削る。
+    if usize::from(area.height.saturating_sub(2)) < lines.len() {
+        lines.remove(4);
+        lines.remove(1);
     }
-    debug_assert_eq!(KEYBOARD_NOTES.len(), 7);
 
     f.render_widget(
         Paragraph::new(lines).style(base_style()).block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(" [KEYBOARD] keyboard mode  1-9:count ")
+                .title(" [KEYBOARD] ")
                 .style(base_style())
                 .border_style(base_style().fg(MONOKAI_FG)),
         ),
@@ -231,35 +208,34 @@ fn format_send_duration(duration: std::time::Duration) -> String {
     }
 }
 
-fn controller_status_text(state: &KeyboardState) -> String {
-    let velocity = match state.velocity_mode() {
-        VelocityMode::Periodic => format!("cyc({})", state.velocity()),
-        VelocityMode::Normal | VelocityMode::Accent => state.velocity().to_string(),
-    };
-    let modulation = match state.modulation_mode() {
-        ModulationMode::Off => "OFF",
-        ModulationMode::On => "ON",
-        ModulationMode::Periodic => "CYC",
-    };
-    let pitch_bend = match state.pitch_bend_mode() {
-        PitchBendMode::Idle => "-",
-        PitchBendMode::Max => "+8191",
-        PitchBendMode::Min => "-8192",
-        PitchBendMode::CenterAfterMax
-        | PitchBendMode::CenterAfterMin
-        | PitchBendMode::CenterAfterCycle => "0",
-        PitchBendMode::Periodic => "CYC",
-    };
-    let cc = if state.cc_periodic_on() {
-        format!("{} cyc", state.cc_number())
+/// ショートカットキーの文字の色。発音中のハイライト（緑）と区別する。
+fn shortcut_style() -> Style {
+    base_style().fg(MONOKAI_CYAN)
+}
+
+/// 巡回する選択肢の色。今の選択肢だけを目立たせる。
+fn choice_style(selected: bool) -> Style {
+    if selected {
+        base_style().fg(MONOKAI_GREEN).add_modifier(Modifier::BOLD)
     } else {
-        state.cc_number().to_string()
-    };
-    let mut text = format!("Vel: {velocity}  Mod: {modulation}  PB: {pitch_bend}  CC#: {cc}");
-    if let Some((drawn, total)) = state.combo_progress() {
-        text.push_str(&format!("  Combo: {drawn}/{total}"));
+        base_style().fg(MONOKAI_GRAY)
     }
-    text
+}
+
+/// `label` の中の `key` の文字だけをショートカット色にした span 列。
+fn shortcut_label(label: &'static str, key: char) -> Vec<Span<'static>> {
+    let Some(at) = label.find(key) else {
+        return vec![Span::styled(label, base_style())];
+    };
+    let end = at + key.len_utf8();
+    [
+        Span::styled(&label[..at], base_style()),
+        Span::styled(&label[at..end], shortcut_style()),
+        Span::styled(&label[end..], base_style()),
+    ]
+    .into_iter()
+    .filter(|span| !span.content.is_empty())
+    .collect()
 }
 
 fn voicing_status_text(status: &KeyboardVoicingStatus) -> String {
@@ -294,19 +270,6 @@ fn voicing_label(voicing: cmrt_realtime_play::PatchVoicing) -> &'static str {
         cmrt_realtime_play::PatchVoicing::Poly => "poly",
         cmrt_realtime_play::PatchVoicing::Unknown => "unknown",
     }
-}
-
-fn active_notes_text(state: &KeyboardState) -> String {
-    if state.held().is_empty() {
-        return "Active: -".to_string();
-    }
-    let names = state
-        .held()
-        .iter()
-        .map(|note| note.name)
-        .collect::<Vec<_>>()
-        .join(" ");
-    format!("Active: {names}")
 }
 
 #[cfg(test)]

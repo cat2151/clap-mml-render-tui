@@ -27,6 +27,7 @@ impl KeyboardState {
             .collect();
         self.reset_progression_position();
         self.repeat_elapsed_ticks = 0;
+        self.sounding.clear();
 
         let mut messages: Vec<[u8; 3]> = self
             .repeat_sounding
@@ -50,7 +51,7 @@ impl KeyboardState {
             messages.extend(self.restart_arp(now));
         } else {
             self.restart_periodic_clock(now);
-            messages.extend(self.attack_repeat_chord());
+            messages.extend(self.attack_repeat_chord(now));
         }
         messages
     }
@@ -69,7 +70,7 @@ impl KeyboardState {
                 self.reset_progression_position();
                 self.repeat_elapsed_ticks = 0;
                 self.restart_periodic_clock(now);
-                self.attack_repeat_chord()
+                self.attack_repeat_chord(now)
             }
             NotePlaybackMode::Auto => {
                 let was_arp = self.note_playback_uses_arp();
@@ -84,7 +85,7 @@ impl KeyboardState {
                     .map(|note| note_off(note.midi_note))
                     .into_iter()
                     .collect();
-                messages.extend(self.attack_repeat_chord());
+                messages.extend(self.attack_repeat_chord(now));
                 messages
             }
             NotePlaybackMode::Repeat => {
@@ -102,6 +103,7 @@ impl KeyboardState {
                 self.note_playback_mode = NotePlaybackMode::Off;
                 self.reset_progression_position();
                 self.repeat_elapsed_ticks = 0;
+                self.sounding.clear();
                 if self.periodic_digits_active() {
                     self.restart_periodic_clock(now);
                 } else {
@@ -127,52 +129,48 @@ impl KeyboardState {
         self.reset_progression_position();
         self.repeat_elapsed_ticks = 0;
         self.restart_periodic_clock(now);
-        self.attack_next_arp().into_iter().collect()
+        self.attack_next_arp(now).into_iter().collect()
     }
 
-    pub(super) fn advance_arp(&mut self) -> Vec<[u8; 3]> {
+    pub(super) fn advance_arp(&mut self, at: Instant) -> Vec<[u8; 3]> {
         let mut messages: Vec<[u8; 3]> = self
             .arp_sounding
             .take()
             .map(|note| note_off(note.midi_note))
             .into_iter()
             .collect();
-        if let Some(attack) = self.attack_next_arp() {
+        if let Some(attack) = self.attack_next_arp(at) {
             messages.push(attack);
         } else {
+            self.sounding.clear();
             self.note_playback_mode = NotePlaybackMode::Off;
             self.repeat_elapsed_ticks = 0;
         }
         messages
     }
 
-    fn attack_next_arp(&mut self) -> Option<[u8; 3]> {
-        let mut sequence = self.arp_sequence();
+    fn attack_next_arp(&mut self, at: Instant) -> Option<[u8; 3]> {
+        let mut sequence = arp_sequence(self.current_repeat_chord());
         if sequence.is_empty() {
             return None;
         }
         if self.arp_next_index >= sequence.len() {
             self.advance_repeat_chord();
             self.arp_next_index = 0;
-            sequence = self.arp_sequence();
+            sequence = arp_sequence(self.current_repeat_chord());
         }
-        let note = sequence[self.arp_next_index];
+        let index = self.arp_next_index;
+        let note = sequence[index];
         self.arp_next_index += 1;
         self.arp_sounding = Some(note);
+        self.sounding.record(
+            at,
+            SoundingPosition {
+                chord_index: self.repeat_chord_index,
+                arp: Some(ArpStep { index, note }),
+            },
+        );
         Some(note_on(note.midi_note, self.velocity))
-    }
-
-    fn arp_sequence(&self) -> Vec<PlaybackNote> {
-        let mut base = self.current_repeat_chord().to_vec();
-        base.sort_unstable_by_key(|note| note.midi_note);
-        let mut sequence = Vec::with_capacity(base.len() * 2);
-        sequence.extend(base.iter().copied());
-        sequence.extend(base.into_iter().filter_map(|note| {
-            note.midi_note
-                .checked_add(OCTAVE)
-                .map(|midi_note| PlaybackNote { midi_note })
-        }));
-        sequence
     }
 
     pub(super) fn current_repeat_chord(&self) -> &[PlaybackNote] {
@@ -192,6 +190,20 @@ impl KeyboardState {
         self.repeat_chord_index = 0;
         self.arp_next_index = 0;
     }
+}
+
+/// 和音を arp で鳴らす順: 昇順に並べ、続けて同じ音を 1 octave 上で繰り返す。
+pub(crate) fn arp_sequence(chord: &[PlaybackNote]) -> Vec<PlaybackNote> {
+    let mut base = chord.to_vec();
+    base.sort_unstable_by_key(|note| note.midi_note);
+    let mut sequence = Vec::with_capacity(base.len() * 2);
+    sequence.extend(base.iter().copied());
+    sequence.extend(base.into_iter().filter_map(|note| {
+        note.midi_note
+            .checked_add(OCTAVE)
+            .map(|midi_note| PlaybackNote { midi_note })
+    }));
+    sequence
 }
 
 #[cfg(test)]

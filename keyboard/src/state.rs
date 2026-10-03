@@ -10,9 +10,13 @@ use cmrt_tui_core::random::RandomIndexDeck;
 mod arp;
 mod periodic;
 mod session;
+mod sounding;
 
+pub(crate) use arp::arp_sequence;
 pub use periodic::PeriodicTick;
 pub(crate) use session::default_repeat_chords;
+use sounding::SoundingTimeline;
+pub use sounding::{ArpStep, SoundingPosition};
 
 pub const KEYBOARD_NOTES: [KeyboardNote; 7] = [
     KeyboardNote::new('c', "C4", 60),
@@ -137,6 +141,8 @@ pub struct KeyboardState {
     // arpで現在発音中のノートと、次に発音するシーケンス位置
     arp_sounding: Option<PlaybackNote>,
     arp_next_index: usize,
+    // repeat/arpの発音位置を、実際に鳴る時刻つきで保持する(描画用)
+    sounding: SoundingTimeline,
     // 全周期系統(桁、repeat、arp)が共有する250msマスタークロック
     periodic_next_at: Option<Instant>,
     // マスタークロックを張り直した時刻。tickのdeadlineはここから250ms刻みで並ぶ
@@ -211,6 +217,11 @@ impl KeyboardState {
 
     pub fn repeat_chords(&self) -> &[Vec<PlaybackNote>] {
         &self.repeat_chords
+    }
+
+    /// `now` の時点で実際に鳴っている repeat/arp の位置。鳴っていなければ `None`。
+    pub fn sounding_position(&self, now: Instant) -> Option<SoundingPosition> {
+        self.sounding.at(now)
     }
 
     pub fn cc_number(&self) -> u8 {
@@ -310,6 +321,7 @@ impl KeyboardState {
                 .take()
                 .map(|note| note_off(note.midi_note)),
         );
+        self.sounding.clear();
         self.refresh_pending = true;
         messages
     }
@@ -341,6 +353,7 @@ impl KeyboardState {
                 .map(|note| note_off(note.midi_note)),
         );
         self.reset_progression_position();
+        self.sounding.clear();
         if self.velocity_mode == VelocityMode::Periodic {
             // 周期を止め、現在値に対応する固定modeへ降格(velocityは送信対象外)
             self.velocity_mode = if self.velocity == ACCENT_VELOCITY {
