@@ -14,7 +14,7 @@ use std::{
 use cmrt_realtime_play::{LiveTimelineConfig, TimelineMidiEvent};
 
 use super::live_patch::LivePatch;
-use super::sink::{PreloadTicket, SinkResult, SoundSink};
+use super::sink::{PreloadTicket, SinkResult, SoundSink, TimelineSendError};
 
 /// sink が受けた操作（受けた順）。
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -175,7 +175,7 @@ impl SoundSink for RecordingSink {
         Ok(())
     }
 
-    fn send_timeline_events(&self, events: &[TimelineMidiEvent]) -> SinkResult {
+    fn send_timeline_events(&self, events: &[TimelineMidiEvent]) -> Result<(), TimelineSendError> {
         self.timeline_events
             .lock()
             .unwrap()

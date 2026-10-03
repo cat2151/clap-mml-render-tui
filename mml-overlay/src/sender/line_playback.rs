@@ -34,7 +34,7 @@ use cmrt_realtime_play::{LiveTimelineConfig, TimelineId, TimelineMidiEvent};
 use crate::line_play::LineProgram;
 
 use super::layers::LineLayer;
-use super::sink::SoundSink;
+use super::sink::{SoundSink, TimelineSendError};
 use super::{log_error, log_line};
 
 use repeat::RepeatState;
@@ -62,9 +62,17 @@ const TIMELINE_TEMPO_BPM: f64 = 120.0;
 
 /// 1 行として受け付けるイベント数の上限。
 ///
-/// サーバー側のキューは 8192 で、あふれた分は黙って捨てられる。捨てられた note off が
-/// 混ざると音が鳴りっぱなしになるため、送る前にこちらで切る。
-const MAX_LINE_EVENTS: usize = 4096;
+/// サーバー側の待ち行列の上限（`MAX_LIVE_QUEUE_EVENTS` = 65536）の半分。あふれた分は
+/// サーバーが捨てる。捨てられた note off が混ざると音が鳴りっぱなしになるため、送る前に
+/// こちらで切り、前の行の残りや repeat の継ぎ足しが同じ待ち行列に載る余地を残す。
+pub(super) const MAX_LINE_EVENTS: usize = 32768;
+
+/// 共有メモリのコマンド枠が満杯のとき、送り直すまでの待ち。
+const QUEUE_FULL_RETRY_INTERVAL: Duration = Duration::from_millis(2);
+
+/// 1 バッチの送り直しを諦めるまでの待ちの合計。サーバーが止まっていれば、
+/// それより先に満杯以外のエラーが返る。
+pub(super) const QUEUE_FULL_WAIT_LIMIT: Duration = Duration::from_secs(1);
 
 pub(super) struct LinePlayback {
     sample_rate_hz: f64,
@@ -236,15 +244,8 @@ fn send_cycle(
     instance_id: u8,
     events: &[TimedMidiEvent],
 ) -> bool {
-    for batch in timeline_batches(events, timeline_id, instance_id, sink.max_batch_events()) {
-        if let Err(error) = sink.send_timeline_events(&batch) {
-            log_error(format!(
-                "action=mml-overlay-line-send event=error timeline={timeline_id} error=\"{error}\""
-            ));
-            return false;
-        }
-    }
-    true
+    let batches = timeline_batches(events, timeline_id, instance_id, sink.max_batch_events());
+    send_batches(sink, timeline_id, batches.iter().map(Vec::as_slice))
 }
 
 fn send_timeline_cycle(
@@ -252,15 +253,57 @@ fn send_timeline_cycle(
     timeline_id: TimelineId,
     events: &[TimelineMidiEvent],
 ) -> bool {
-    for batch in events[..events.len().min(MAX_LINE_EVENTS)].chunks(sink.max_batch_events()) {
-        if let Err(error) = sink.send_timeline_events(batch) {
-            log_error(format!(
-                "action=mml-overlay-line-send event=error timeline={timeline_id} error=\"{error}\""
-            ));
-            return false;
+    let kept = &events[..events.len().min(MAX_LINE_EVENTS)];
+    send_batches(sink, timeline_id, kept.chunks(sink.max_batch_events()))
+}
+
+/// バッチを順に送る。1 つでも送れなければ、そこで止めて `false`。
+///
+/// コマンド枠が満杯なら、空くまで待って同じバッチを送り直す（1 バッチにつき
+/// [`QUEUE_FULL_WAIT_LIMIT`] まで）。1 行で枠の数を超えるバッチを送るので、サーバーの
+/// 読み出しより速く積むと満杯になる。
+fn send_batches<'a>(
+    sink: &impl SoundSink,
+    timeline_id: TimelineId,
+    batches: impl Iterator<Item = &'a [TimelineMidiEvent]>,
+) -> bool {
+    let mut retries = 0_usize;
+    let mut sent = true;
+    for batch in batches {
+        match send_batch(sink, batch, &mut retries) {
+            Ok(()) => {}
+            Err(error) => {
+                log_error(format!(
+                    "action=mml-overlay-line-send event=error timeline={timeline_id}                      queue_full_retries={retries} error=\"{error}\""
+                ));
+                sent = false;
+                break;
+            }
         }
     }
-    true
+    if sent && retries > 0 {
+        log_line(format!(
+            "action=mml-overlay-line-send event=queue-full-retried timeline={timeline_id}              queue_full_retries={retries}"
+        ));
+    }
+    sent
+}
+
+fn send_batch(
+    sink: &impl SoundSink,
+    batch: &[TimelineMidiEvent],
+    retries: &mut usize,
+) -> Result<(), TimelineSendError> {
+    let started_at = Instant::now();
+    loop {
+        match sink.send_timeline_events(batch) {
+            Err(TimelineSendError::QueueFull) if started_at.elapsed() < QUEUE_FULL_WAIT_LIMIT => {
+                *retries += 1;
+                std::thread::sleep(QUEUE_FULL_RETRY_INTERVAL);
+            }
+            result => return result,
+        }
+    }
 }
 
 fn begin_timeline(sink: &impl SoundSink, timeline_id: TimelineId, sample_rate_hz: f64) -> bool {

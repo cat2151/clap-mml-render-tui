@@ -60,6 +60,8 @@ pub(crate) fn log_line(message: String) {
 }
 
 #[cfg(test)]
+mod test_log;
+#[cfg(test)]
 mod tests;
 
 /// このキーはどの画面からでも MML オーバーレイを開く。

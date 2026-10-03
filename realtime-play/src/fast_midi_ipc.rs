@@ -143,6 +143,10 @@ impl FastMidiUnderrunReader {
     pub fn underrun_frames(&self) -> u64 {
         0
     }
+
+    pub fn dropped_live_events_total(&self) -> u64 {
+        0
+    }
 }
 
 #[cfg(not(windows))]

@@ -14,5 +14,6 @@ mod effect_chain;
 mod fade_out;
 mod grid_cycle;
 mod harness;
+mod long_timeline;
 mod standby_preload;
 mod timeline_during_preload;

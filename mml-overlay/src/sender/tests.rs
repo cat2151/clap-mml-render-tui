@@ -106,7 +106,10 @@ impl SoundSink for FakeSink {
         }
     }
 
-    fn send_timeline_events(&self, events: &[TimelineMidiEvent]) -> sink::SinkResult {
+    fn send_timeline_events(
+        &self,
+        events: &[TimelineMidiEvent],
+    ) -> Result<(), sink::TimelineSendError> {
         std::thread::sleep(self.timeline_delay);
         self.timeline_events
             .lock()

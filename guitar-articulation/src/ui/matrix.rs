@@ -19,8 +19,11 @@ use crate::auto_pick::picked_columns;
 use crate::control::control_rule_affects;
 use crate::{Articulation, GuitarArticulationScreen, RowRule, Rule, Take};
 
-/// 1 列の桁（記号 1 つ + 空白）。
-const COLUMN_WIDTH: usize = 2;
+mod scroll;
+
+use scroll::centered_columns;
+pub(super) use scroll::visible_columns;
+
 pub(super) const NOTE_MARK: &str = "■";
 pub(super) const NO_NOTE_MARK: &str = "·";
 pub(super) const RULE_ON_MARK: &str = "●";
@@ -71,13 +74,10 @@ pub(super) fn lines(screen: &GuitarArticulationScreen, width: u16) -> Vec<Line<'
     }
     let label_width = label_width();
     let playhead = screen.playhead_column();
-    // 鳴っている間は、鳴っている列が見えるように送る。
-    let columns = visible_columns(
-        playhead.unwrap_or(screen.cursor()),
-        screen.column_count(),
-        width,
-        label_width,
-    );
+    let columns = match playhead {
+        Some(playhead) => centered_columns(playhead, screen.column_count(), width, label_width),
+        None => visible_columns(screen.cursor(), screen.column_count(), width, label_width),
+    };
     let playhead_cells = columns.clone().map(|column| {
         if Some(column) == playhead {
             (PLAYHEAD_MARK, base_style().fg(MONOKAI_YELLOW))
@@ -397,18 +397,6 @@ fn label_width() -> usize {
         .map(|name| "k:".len() + name.len() + 1)
         .max()
         .unwrap_or_default()
-}
-
-/// `anchor` の列が必ず見えるように横へずらした、描く列の範囲。
-pub(super) fn visible_columns(
-    anchor: usize,
-    column_count: usize,
-    width: u16,
-    label_width: usize,
-) -> std::ops::Range<usize> {
-    let fit = (usize::from(width).saturating_sub(label_width) / COLUMN_WIDTH).max(1);
-    let first = (anchor + 1).saturating_sub(fit);
-    first..column_count.min(first + fit)
 }
 
 /// `label_color` は見出しの色。音高の段は灰色、ルールの段はグループの色（[`RuleGroup::color`]）。

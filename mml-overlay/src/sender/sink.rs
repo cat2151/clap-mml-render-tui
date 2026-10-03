@@ -9,15 +9,34 @@
 //! Chord Chart の layered preview だけは chord と bass を別 instance に載せるため、
 //! patch と MIDI の操作は instance を明示して受け取る。
 
+use std::fmt;
+
 use cmrt_realtime_play::{
-    LiveTimelineConfig, RealtimePlayServerSupervisor, StandbyPatchRequest, TimelineMidiEvent,
-    BANK_COUNT, MAX_MIDI_MESSAGES,
+    fast_midi_ipc::FastIpcError, LiveTimelineConfig, RealtimePlayServerSupervisor,
+    StandbyPatchRequest, TimelineMidiEvent, BANK_COUNT, MAX_MIDI_MESSAGES,
 };
 
 use super::live_patch::LivePatch;
 
 /// 失敗の中身は log へ出すだけなので文字列で十分。
 pub(super) type SinkResult = Result<(), String>;
+
+/// timeline へ積めなかった理由。共有メモリのコマンド枠が満杯なだけなら、待てば送れる。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum TimelineSendError {
+    /// コマンド枠が満杯。サーバーが読み出せば空く。
+    QueueFull,
+    Failed(String),
+}
+
+impl fmt::Display for TimelineSendError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::QueueFull => write!(f, "{}", FastIpcError::QueueFull),
+            Self::Failed(message) => write!(f, "{message}"),
+        }
+    }
+}
 
 /// 受け付けた先読み 1 件。完了は [`SoundSink::poll_preload`] で見る。
 pub(super) enum PreloadTicket {
@@ -62,7 +81,11 @@ pub(super) trait SoundSink {
         Err("fadeout is not supported".to_string())
     }
     fn begin_timeline(&self, config: LiveTimelineConfig) -> SinkResult;
-    fn send_timeline_events(&self, events: &[TimelineMidiEvent]) -> SinkResult;
+    fn send_timeline_events(&self, events: &[TimelineMidiEvent]) -> Result<(), TimelineSendError>;
+    /// サーバーが待ち行列満杯で捨てたイベントの累計。捨てたことを報告できない sink は 0。
+    fn dropped_events_total(&self) -> u64 {
+        0
+    }
     /// 1 バッチに載せられるイベント数。超えるとサーバーがバッチごと弾く。
     fn max_batch_events(&self) -> usize {
         MAX_MIDI_MESSAGES
@@ -139,9 +162,16 @@ impl SoundSink for RealtimePlayServerSupervisor {
             .map_err(|error| format!("{error:#}"))
     }
 
-    fn send_timeline_events(&self, events: &[TimelineMidiEvent]) -> SinkResult {
+    fn send_timeline_events(&self, events: &[TimelineMidiEvent]) -> Result<(), TimelineSendError> {
         RealtimePlayServerSupervisor::send_timeline_events(self, events)
             .map(|_| ())
-            .map_err(|error| format!("{error:#}"))
+            .map_err(|error| match error.downcast_ref::<FastIpcError>() {
+                Some(FastIpcError::QueueFull) => TimelineSendError::QueueFull,
+                _ => TimelineSendError::Failed(format!("{error:#}")),
+            })
+    }
+
+    fn dropped_events_total(&self) -> u64 {
+        self.dropped_live_events_total()
     }
 }

@@ -260,6 +260,19 @@ impl RealtimePlayServerSupervisor {
             .unwrap_or(0)
     }
 
+    /// サーバーが待ち行列満杯で捨てた MIDI イベントの累計。未接続なら 0。
+    ///
+    /// 捨てた中に note off があれば音が鳴り残るので、送り手はこの値の増加を見て
+    /// 次の停止を全音停止にする。サーバーを起動し直すと 0 から数え直す。
+    pub fn dropped_live_events_total(&self) -> u64 {
+        self.fast_underrun_reader
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|reader| reader.dropped_live_events_total())
+            .unwrap_or(0)
+    }
+
     pub fn timing_metrics(&self) -> TimingMetrics {
         self.fast_client
             .lock()

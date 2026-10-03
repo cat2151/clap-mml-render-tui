@@ -3,7 +3,7 @@
 //! 鳴りっぱなしの正体は「サーバーへ 1 つもコマンドが飛ばない経路」だった。
 //! `Voice` の内部状態ではなく**送信の記録**を見ないと、その穴は塞げたか分からない。
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use cmrt_chord::TimedMidiEvent;
 use cmrt_realtime_play::{LiveTimelineConfig, TimelineMidiEvent};
@@ -11,7 +11,7 @@ use cmrt_realtime_play::{LiveTimelineConfig, TimelineMidiEvent};
 use super::*;
 use crate::line_play::{FilterSettings, LinePerformance};
 use crate::sender::live_patch::LivePatch;
-use crate::sender::sink::SinkResult;
+use crate::sender::sink::{SinkResult, TimelineSendError};
 use crate::{NOTE_OFF, NOTE_ON};
 
 /// サーバーへ飛んだコマンド。
@@ -41,6 +41,10 @@ struct FakeSink {
     two_banks: bool,
     /// 準備で受け取った effect chain（[`Sent::Prepare`] / [`Sent::StandbyPrepare`] と同じ順）。
     prepared_chains: RefCell<Vec<String>>,
+    /// timeline の送信に、あと何回「コマンド枠が満杯」を返すか。
+    queue_full_replies: Cell<usize>,
+    /// サーバーが捨てたイベントの累計として返す値。
+    dropped_total: Cell<u64>,
 }
 
 impl FakeSink {
@@ -125,10 +129,19 @@ impl SoundSink for FakeSink {
         Ok(())
     }
 
-    fn send_timeline_events(&self, events: &[TimelineMidiEvent]) -> SinkResult {
+    fn send_timeline_events(&self, events: &[TimelineMidiEvent]) -> Result<(), TimelineSendError> {
+        if self.queue_full_replies.get() > 0 {
+            self.queue_full_replies
+                .set(self.queue_full_replies.get() - 1);
+            return Err(TimelineSendError::QueueFull);
+        }
         self.push(Sent::TimelineEvents(events.len()));
         self.timeline.borrow_mut().extend_from_slice(events);
         Ok(())
+    }
+
+    fn dropped_events_total(&self) -> u64 {
+        self.dropped_total.get()
     }
 }
 
@@ -377,6 +390,7 @@ fn a_hard_stop_leaves_nothing_to_stop() {
 mod effect_chain;
 mod filters;
 mod repeat;
+mod server_queue;
 
 /// 次の行は、張り直す timeline に前の行の停止を任せる。`stop_all` を挟むと server が
 /// 出力リングを捨て、前の行の音が release を待たずに段差で切れる。

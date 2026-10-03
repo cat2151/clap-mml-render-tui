@@ -41,6 +41,7 @@ use super::sink::SoundSink;
 use super::sounding::Sounding;
 use super::sounding_lines::SoundingLines;
 use super::{log_error, log_line, MML_OVERLAY_INSTANCE};
+use server_drops::ServerDrops;
 
 /// worker が待ちを打ち切って起きる理由。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -73,6 +74,8 @@ pub(super) struct Voice {
     preloaded: Option<(u8, LivePatch)>,
     /// sender が畳まれ始めたか。立ったら先読みの決着を待たない。
     shutting_down: Arc<AtomicBool>,
+    /// 張った timeline のイベントをサーバーが捨てたかの見張り。
+    server_drops: ServerDrops,
 }
 
 #[derive(Default)]
@@ -99,6 +102,7 @@ impl Voice {
             queued_preload: None,
             preloaded: None,
             shutting_down,
+            server_drops: ServerDrops::default(),
         }
     }
 
@@ -266,6 +270,7 @@ impl Voice {
         // `stop_all` を送ると server が出力リングを捨て、前の音が段差で 0 へ落ちる。
         self.stop_before_timeline(sink, "line");
         self.sounding_lines.record(self.line_instance);
+        self.server_drops.watch(sink);
         match self.line.play(sink, self.line_instance, program) {
             LineOutcome::Playing => {
                 self.sounding.begin_timeline();
@@ -291,6 +296,7 @@ impl Voice {
         if layers.is_empty() {
             return false;
         }
+        self.server_drops.watch(sink);
         match self.line.play_layers(sink, layers) {
             LineOutcome::Playing => {
                 self.sounding.begin_timeline();
@@ -328,6 +334,14 @@ impl Voice {
         // 「鳴っていないから何もしない」で早期 return する前に捨てる。ループが残ると
         // 誰も鳴らしていないつもりのまま継ぎ足しが続く。
         self.line.stop_repeat();
+        if let Some(count) = self.server_drops.take_increase(sink) {
+            log_error(format!(
+                "action=mml-overlay-line-send event=server-dropped command_id={} count={count}",
+                self.command_id
+            ));
+            self.sounding
+                .mark_suspect(&format!("server-dropped count={count}"));
+        }
         if self.sounding.is_silent() && !self.sounding.needs_hard_stop() {
             return;
         }
@@ -416,5 +430,6 @@ fn optional_ms(value: Option<u128>) -> String {
 
 mod line_instance;
 mod preload;
+mod server_drops;
 #[cfg(test)]
 mod tests;

@@ -117,3 +117,45 @@ fn a_line_superseded_during_load_never_publishes_an_interval() {
     assert_eq!(sink.begins(), 0, "supersede された行を timeline へ積まない");
     assert_eq!(playback(&harness), None);
 }
+
+/// `solo_violin.mid` と同じ 16469 件。上限が 4096 だった頃は先頭だけを積んで止まり、
+/// 演奏区間も公開されなかった。
+#[test]
+fn a_long_smf_line_is_sent_whole_and_publishes_an_interval() {
+    const EVENTS: usize = 16_469;
+    let sink = Arc::new(FakeSink::default());
+    let harness = Harness::spawn(Arc::clone(&sink));
+    let events = (0..EVENTS)
+        .map(|index| cmrt_chord::TimedMidiEvent {
+            seconds: index as f64 * 0.023,
+            message: [NOTE_ON, (index % 40) as u8 + 40, 100],
+        })
+        .collect::<Vec<_>>();
+    let loop_seconds = EVENTS as f64 * 0.023;
+
+    harness.send(
+        1,
+        SenderCommandKind::PlayLine {
+            patch: LivePatch::new(Some("ready.sfz")),
+            program: LineProgram::once(LinePerformance {
+                events: events.clone(),
+                loop_seconds,
+            }),
+        },
+    );
+    wait_until(|| playback(&harness).is_some());
+
+    let sent = sink.timeline_events.lock().unwrap().clone();
+    assert_eq!(sent.len(), EVENTS);
+    for (sent, original) in sent.iter().zip(&events) {
+        assert_eq!(sent.message, original.message);
+    }
+    assert!(sent
+        .windows(2)
+        .all(|pair| pair[0].timeline_seconds < pair[1].timeline_seconds));
+    let playback = playback(&harness).unwrap();
+    assert_eq!(
+        playback.ends_at().unwrap() - playback.started_at(),
+        Duration::from_secs_f64(loop_seconds)
+    );
+}
