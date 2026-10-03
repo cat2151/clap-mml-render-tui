@@ -49,6 +49,7 @@ mod effect_chain;
 mod history;
 mod input;
 mod param_list;
+mod playhead_map;
 mod rule_list;
 mod sample_midi;
 mod smf_material;
@@ -123,6 +124,8 @@ pub struct GuitarArticulationScreen {
     repeat: bool,
     /// 全体の演奏が鳴っている間だけ、その版と演奏の頭からの秒。host が音源の状態から決める。
     playhead: Option<(Take, f64)>,
+    /// `playhead` から鳴っている列とイベント列の行を引く表。[`Self::rebuild_converted`] で作り直す。
+    playhead_map: playhead_map::PlayheadMap,
     help_open: bool,
     effect_plugins: EffectPlugins,
     effect_chain: Vec<Value>,

@@ -173,32 +173,37 @@ pub(super) fn draw(
     let height = block.inner(area).height as usize;
     // 1 音モードの右 pane は、鳴らすカーソル列のイベント列だけを出す。
     let column_events;
-    let (events, target) = if take == Take::Converted && screen.note_preview() {
+    // 全体の演奏中は鳴っている列を真ん中に、それ以外はカーソル列を上から 1/3 に置く。
+    let (events, target, lead) = if take == Take::Converted && screen.note_preview() {
         column_events = screen.column_events(take);
         let target = first_note_on(&column_events);
-        (column_events.as_slice(), target)
+        (column_events.as_slice(), target, height / 3)
     } else {
         let events = screen.events(take);
-        (events, cursor_event_index(screen, events, take))
+        match screen.playhead_row(take) {
+            Some(row) => (events, Some(row), height / 2),
+            None => (events, cursor_event_index(screen, events, take), height / 3),
+        }
     };
     let rows: Vec<EventRow> = events
         .iter()
         .map(|event| EventRow::new(event, take == Take::Converted))
         .collect();
     f.render_widget(
-        Paragraph::new(visible_lines(&rows, height, target)).block(block),
+        Paragraph::new(visible_lines(&rows, height, target, lead)).block(block),
         area,
     );
 }
 
-/// `height` 行に収まる分の行。`target` の行を黄色にし、上から 1/3 あたりに来るよう送る。
+/// `height` 行に収まる分の行。`target` の行を黄色にし、その上に `lead` 行が来るよう送る。
 pub(super) fn visible_lines(
     rows: &[EventRow],
     height: usize,
     target: Option<usize>,
+    lead: usize,
 ) -> Vec<Line<'static>> {
     let width = name_width(rows);
-    let first = target.map_or(0, |index| index.saturating_sub(height / 3));
+    let first = target.map_or(0, |index| index.saturating_sub(lead));
     rows.iter()
         .enumerate()
         .skip(first)

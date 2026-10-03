@@ -43,11 +43,27 @@ impl GuitarArticulationScreen {
     /// 全体の演奏でいま鳴っている列。最初の音より前と、鳴っていない間は `None`。
     pub(crate) fn playhead_column(&self) -> Option<usize> {
         let (take, seconds) = self.playhead?;
-        (0..self.column_count())
-            .filter(|&column| {
-                self.column_on_seconds(column, take)
-                    .is_some_and(|on| on <= seconds)
-            })
-            .max()
+        self.playhead_map.column(take, seconds)
+    }
+
+    /// 全体の演奏でいま鳴っている列の、`take` のイベント列での note on の行。鳴っている列が無ければ `None`。
+    pub(crate) fn playhead_row(&self, take: Take) -> Option<usize> {
+        self.playhead_map.row(take, self.playhead_column()?)
+    }
+
+    /// 列ごとの [`Self::column_on_seconds`]。音を 1 回なめて求める。
+    pub(super) fn column_starts(&self, take: Take) -> Vec<Option<f64>> {
+        let mut starts = vec![None; self.column_count()];
+        let written = take == Take::Plain || self.humanized.is_empty();
+        for (i, note) in self.notes.iter().enumerate() {
+            let slot: &mut Option<f64> = &mut starts[note.column];
+            if written {
+                slot.get_or_insert(note.on_seconds);
+            } else {
+                let on = self.humanized[i].on_seconds;
+                *slot = Some(slot.map_or(on, |earliest| earliest.min(on)));
+            }
+        }
+        starts
     }
 }

@@ -7,7 +7,8 @@ use crate::{
     articulate, convert, material_performance, notes_from_events, ArpSettings, RowRule, RuleTable,
 };
 
-use super::GuitarArticulationScreen;
+use super::playhead_map::PlayheadMap;
+use super::{GuitarArticulationScreen, Take};
 
 impl GuitarArticulationScreen {
     /// 素材に `arp` を当てた raw の列と音を作り、素材が chord 表記かを覚える。Articulated は作り直さない。
@@ -33,6 +34,7 @@ impl GuitarArticulationScreen {
         }
     }
 
+    /// Articulated・汚し・演奏位置の表（[`PlayheadMap`]）を、今の raw・音・ルールから作り直す。
     pub(super) fn rebuild_converted(&mut self) {
         let rules = self.sounding_rules();
         let articulated = articulate(&self.notes, &rules);
@@ -45,5 +47,11 @@ impl GuitarArticulationScreen {
         self.articulated = articulated;
         self.converted = converted;
         self.humanized = humanized;
+        self.playhead_map = PlayheadMap::new(
+            &self.column_starts(Take::Plain),
+            &self.plain,
+            &self.column_starts(Take::Converted),
+            &self.converted,
+        );
     }
 }

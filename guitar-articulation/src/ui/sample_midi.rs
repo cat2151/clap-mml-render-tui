@@ -72,7 +72,7 @@ pub(super) fn draw_panes(
         .map(|event| EventRow::new(event, true))
         .collect();
     f.render_widget(
-        Paragraph::new(visible_lines(&rows, height, target)).block(block),
+        Paragraph::new(visible_lines(&rows, height, target, height / 3)).block(block),
         layout.converted,
     );
 }

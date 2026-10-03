@@ -12,6 +12,8 @@ mod history_overlay;
 mod humanize_row;
 mod ineffective_notice;
 mod instrument_title;
+mod long_material;
+mod playhead_event_list;
 mod playhead_row;
 mod rule_groups;
 mod rule_lanes;

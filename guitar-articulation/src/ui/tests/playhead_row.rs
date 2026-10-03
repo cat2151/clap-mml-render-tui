@@ -1,12 +1,11 @@
 use cmrt_tui_core::theme::MONOKAI_YELLOW;
 
-use std::path::PathBuf;
-
 use ratatui::buffer::Buffer;
 
+use super::long_material::{long_mml_screen, long_smf_screen, render_playing};
 use super::{mark_cells, render, rows_in, screen_with_mml};
 use crate::ui::layout_for;
-use crate::{GuitarArticulationScreen, Take, TimedMidiEvent};
+use crate::{GuitarArticulationScreen, Take};
 
 #[test]
 fn the_playhead_row_sits_on_top_and_marks_the_column_being_played() {
@@ -49,42 +48,6 @@ fn the_matrix_scrolls_to_keep_the_playhead_in_sight() {
 
     assert_eq!(screen.playhead_column(), Some(last));
     assert_eq!(mark_cells(&buffer, matrix, "play").len(), 1);
-}
-
-/// 7 音を 20 回繰り返した 140 列。matrix に入る列数よりずっと多い。
-fn long_mml_screen() -> GuitarArticulationScreen {
-    screen_with_mml(&format!("o3 l16 {}", "cdefgab".repeat(20)))
-}
-
-/// 0.1 秒おきに C4〜F#4 を順に鳴らす `count` 音の SMF 素材。
-fn long_smf_screen(count: usize) -> GuitarArticulationScreen {
-    let mut screen = screen_with_mml("o3 l8 e g a");
-    let events = (0..count)
-        .flat_map(|i| {
-            let seconds = i as f64 * 0.1;
-            let pitch = 60 + (i % 7) as u8;
-            [
-                TimedMidiEvent {
-                    seconds,
-                    message: [0x90, pitch, 100],
-                },
-                TimedMidiEvent {
-                    seconds: seconds + 0.05,
-                    message: [0x80, pitch, 0],
-                },
-            ]
-        })
-        .collect();
-    screen.load_smf(PathBuf::from("long.mid"), Ok(events));
-    screen
-}
-
-/// 列 `column` が鳴っている最中に止めて描く。
-fn render_playing(screen: &mut GuitarArticulationScreen, take: Take, column: usize) -> Buffer {
-    let on = screen.column_on_seconds(column, take).unwrap();
-    screen.set_playhead(Some((take, on + 0.01)));
-    assert_eq!(screen.playhead_column(), Some(column));
-    render(screen)
 }
 
 /// 見えている列の数と、`▼` が左から何列目か。列は音高の段 `pitch_label` の升（■ か ·）で数える。
