@@ -56,6 +56,9 @@ impl TuiApp<'_> {
             chord_chart_patch: self.chord_chart_patch.clone(),
             chord_chart_bass_enabled: self.chord_chart.bass_enabled(),
             chord_chart_bass_patch: self.chord_chart_bass_patch.clone(),
+            chord_chart_query: self.chord_chart_query.clone(),
+            chord_chart_bass_query: self.chord_chart_bass_query.clone(),
+            chord_chart_effect_chain: self.chord_chart_effect_chain_stages.clone(),
             mml_overlay_play_settings: play_settings_to_history(self.mml_overlay.play_settings()),
         });
     }

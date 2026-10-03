@@ -24,6 +24,10 @@ fn bass_preview_settings_survive_a_restart_independently() {
     app.chord_chart.set_bass_enabled(false);
     app.chord_chart_patch = Some("Chord/Piano.fxp".to_string());
     app.chord_chart_bass_patch = Some("Bass/Finger Bass.fxp".to_string());
+    app.chord_chart_query = "plugin:floe".to_string();
+    app.chord_chart_bass_query = "-plugin:surge-xt".to_string();
+    app.chord_chart_effect_chain_stages =
+        vec![serde_json::json!({"Dragonfly Hall Reverb preset": "Dark Room"})];
     app.save_history_state();
     drop(app);
 
@@ -43,6 +47,12 @@ fn bass_preview_settings_survive_a_restart_independently() {
     assert_eq!(
         restored.chord_chart_patch.as_deref(),
         Some("Chord/Piano.fxp")
+    );
+    assert_eq!(restored.chord_chart_query, "plugin:floe");
+    assert_eq!(restored.chord_chart_bass_query, "-plugin:surge-xt");
+    assert_eq!(
+        restored.chord_chart_effect_chain_stages,
+        vec![serde_json::json!({"Dragonfly Hall Reverb preset": "Dark Room"})]
     );
 
     std::fs::remove_dir_all(&tmp).ok();

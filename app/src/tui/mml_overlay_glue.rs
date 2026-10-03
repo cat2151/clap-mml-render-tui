@@ -18,7 +18,7 @@ use cmrt_mml_overlay::LivePatch;
 use cmrt_patch_select::{host_patch_catalog, HostPatchCatalog};
 
 impl TuiApp<'_> {
-    /// Ctrl+P、または Chord Chart の `t` / `Shift+T` ならオーバーレイを開く。
+    /// Ctrl+P、または Chord Chart の `t` / `Shift+T` / `x` ならオーバーレイを開く。
     /// 開いたら true。
     ///
     /// 開ける条件は画面切替メニューと同じにしてある。どちらも「いまの画面が
@@ -30,6 +30,13 @@ impl TuiApp<'_> {
                     return false;
                 }
                 self.open_chord_chart_patch_selector(role);
+                return true;
+            }
+            if chord_chart_effect_chain::is_chord_chart_effect_chain_trigger(key) {
+                if !self.can_open_screen_switch_menu() {
+                    return false;
+                }
+                self.open_chord_chart_effect_chain();
                 return true;
             }
         }
@@ -251,17 +258,16 @@ impl TuiApp<'_> {
     }
 
     /// sender へ渡す音色。Chord Chart が借りている間（`t` selector・degrees 編集 overlay）だけ、
-    /// Chord Chart の演奏と同じ auto reverb の chain を載せる。
+    /// Chord Chart の演奏と同じ chain を載せる。degrees 編集 overlay は Chord role の音色を鳴らす。
     fn mml_overlay_live_patch(&self, patch: Option<&str>) -> LivePatch {
-        let chord_chart_owns = self.chord_chart_patch_select.is_some()
-            || matches!(
-                self.mml_overlay_owner,
-                Some(MmlOverlayOwner::ChordChart { .. })
-            );
-        if chord_chart_owns {
-            self.chord_chart_live_patch(patch)
-        } else {
-            LivePatch::new(patch)
+        let chord_chart_role = match (&self.chord_chart_patch_select, &self.mml_overlay_owner) {
+            (Some((role, _)), _) => Some(*role),
+            (None, Some(MmlOverlayOwner::ChordChart { .. })) => Some(PatchRole::Chord),
+            (None, _) => None,
+        };
+        match chord_chart_role {
+            Some(role) => self.chord_chart_live_patch(role, patch),
+            None => LivePatch::new(patch),
         }
     }
 
@@ -333,6 +339,7 @@ fn chord_chart_patch_selector_role(key: KeyEvent) -> Option<PatchRole> {
     }
 }
 
+pub(in crate::tui) mod chord_chart_effect_chain;
 mod chord_chart_patch_select;
 
 #[cfg(test)]

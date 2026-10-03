@@ -111,12 +111,21 @@ pub struct TuiApp<'a> {
         cmrt_patches::PatchRole,
         cmrt_patch_select::DirectPatchSelect<'a>,
     )>,
+    /// Chord Chart の `x` で開いている effect chain overlay。試聴は `mml_overlay_sender` で鳴らす。
+    pub(in crate::tui) chord_chart_effect_overlay:
+        Option<mml_overlay_glue::chord_chart_effect_chain::ChordChartEffectOverlay>,
     /// 通常の `Ctrl+P` overlay が持つ canonical patch。
     pub(in crate::tui) mml_overlay_patch: Option<String>,
     /// Chord Chart の編集・通常 preview が持つ canonical patch。
     pub(in crate::tui) chord_chart_patch: Option<String>,
     /// Chord Chart の Bass layer が持つ、Chord とは独立した canonical patch。
     pub(in crate::tui) chord_chart_bass_patch: Option<String>,
+    /// Chord Chart の `t` で最後に確定した絞り込み（plugin solo/mute を含む）。
+    pub(in crate::tui) chord_chart_query: String,
+    /// Chord Chart の `Shift+T` で最後に確定した絞り込み。`t` とは独立して持つ。
+    pub(in crate::tui) chord_chart_bass_query: String,
+    /// Chord Chart の Chord 音色に掛ける effect chain。auto reverb の段は含めず、鳴らすときに合成する。
+    pub(in crate::tui) chord_chart_effect_chain_stages: Vec<serde_json::Value>,
     /// Chord Chart の試聴・演奏の音色に当てる auto reverb のルール。画面へ入るたびに保存値を読む。
     chord_chart_auto_reverb_rules: cmrt_patch_select::auto_reverb::AutoReverbRules,
     /// 送信先。テストでは `None`（音は鳴らさず状態遷移だけ確かめる）。

@@ -22,6 +22,9 @@ pub(super) struct LoadedSessionState {
     pub(super) chord_chart_patch: Option<String>,
     pub(super) chord_chart_bass_enabled: bool,
     pub(super) chord_chart_bass_patch: Option<String>,
+    pub(super) chord_chart_query: String,
+    pub(super) chord_chart_bass_query: String,
+    pub(super) chord_chart_effect_chain: Vec<serde_json::Value>,
     pub(super) mml_overlay_play_settings: crate::history::MmlOverlayPlaySettings,
 }
 
@@ -46,6 +49,9 @@ pub(super) fn load_initial_session_state() -> LoadedSessionState {
         chord_chart_patch,
         chord_chart_bass_enabled,
         chord_chart_bass_patch,
+        chord_chart_query,
+        chord_chart_bass_query,
+        chord_chart_effect_chain,
         mml_overlay_play_settings,
     } = crate::history::load_session_state();
     let initial_cursor = super::clamp_session_cursor(cursor, lines.len());
@@ -67,6 +73,9 @@ pub(super) fn load_initial_session_state() -> LoadedSessionState {
         chord_chart_patch,
         chord_chart_bass_enabled,
         chord_chart_bass_patch,
+        chord_chart_query,
+        chord_chart_bass_query,
+        chord_chart_effect_chain,
         mml_overlay_play_settings,
     }
 }

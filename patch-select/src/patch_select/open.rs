@@ -16,7 +16,7 @@ pub struct PatchSelectRequest {
     pub user_presets: Vec<(String, String)>,
     /// 空なら `patches` から作る。
     pub role_index: PatchRoleIndex,
-    /// 開いた直後に選ぶ Role。`None` は今の音色の Role（分類できなければ `ALL`）。
+    /// 今の音色の Role が分からないときに開く Role。`None` なら `ALL`。
     pub initial_role: Option<PatchRole>,
     /// 設定不足でカタログから外れたプラグインの案内。
     pub catalog_notes: Vec<String>,
@@ -60,8 +60,10 @@ impl PatchSelect<'_> {
             &load_measurements,
         );
         let current = current.as_deref();
-        // host が Role を指定しなければ、今の音色の Role で開く。
-        let role = initial_role.or_else(|| current.and_then(|patch| role_index.role_of(patch)));
+        // 今の音色の Role で開く。分からなければ host が指定した Role。
+        let role = current
+            .and_then(|patch| role_index.role_of(patch))
+            .or(initial_role);
         let drum = current
             .and_then(|patch| role_index.drum_role_of(patch))
             .filter(|_| role == Some(PatchRole::Drum));

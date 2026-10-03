@@ -131,6 +131,7 @@ cmrt --play-server "X:/projects/clap-mml-play-server/target/debug/clap-mml-realt
 | `Alt+↑` `Alt+↓` | 共通 | カーソル行を上 / 下へ移動します |
 | `b` | 共通 | ヘッダのKey / BPMを1行入力で書き換えます |
 | `Shift+P` `Space` | 共通 | カーソル行のsectionを試聴します（鳴っていたら停止します） |
+| `x` | 共通 | Chord音色に掛けるeffect chainを選びます（`Enter`で確定、`Esc`で破棄。Bass音色には掛かりません） |
 | `?` | 共通 | ヘルプ開閉（`Esc`でも閉じます） |
 | `q` | 共通 | アプリを終了します |
 | `g` | Sections | コード進行カタログから抽選してsectionを追加します |

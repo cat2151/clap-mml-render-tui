@@ -75,7 +75,7 @@ fn a_dexed_piano_opens_on_fm_piano_and_leaves_the_piano_preset() {
 }
 
 #[test]
-fn a_patch_that_no_preset_of_the_role_contains_opens_on_the_roles_all() {
+fn the_patchs_own_role_wins_over_the_role_the_host_asks_for() {
     let select = open_on(
         &CATALOG,
         Some("Leads/Lead 1.fxp"),
@@ -83,7 +83,21 @@ fn a_patch_that_no_preset_of_the_role_contains_opens_on_the_roles_all() {
         &[],
     );
 
-    assert_eq!(start(&select), ("Bass track", "ALL".to_string()));
+    assert_eq!(start(&select), ("Lead / melody", "lead".to_string()));
+    assert_eq!(select.selected(), Some("Leads/Lead 1.fxp"));
+}
+
+#[test]
+fn without_a_classified_patch_the_host_role_opens_on_its_all() {
+    for current in [None, Some("gone.fxp")] {
+        let select = open_on(&CATALOG, current, Some(PatchRole::Bass), &[]);
+
+        assert_eq!(
+            start(&select),
+            ("Bass track", "ALL".to_string()),
+            "{current:?}"
+        );
+    }
 }
 
 #[test]
@@ -111,7 +125,7 @@ fn a_favorite_patch_does_not_open_on_the_favorite_preset() {
         Some(PatchRole::Bass),
         &favorites,
     );
-    assert_eq!(start(&lead_as_bass), ("Bass track", "ALL".to_string()));
+    assert_eq!(start(&lead_as_bass), ("Lead / melody", "lead".to_string()));
 }
 
 #[test]

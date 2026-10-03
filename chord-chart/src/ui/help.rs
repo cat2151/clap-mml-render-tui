@@ -37,7 +37,7 @@ pub(super) fn draw_overlay(f: &mut Frame<'_>) {
 ///
 /// **キーを足す / 消すときはここだけを直す。** 教えるキーの集合そのものを
 /// `ui::tests::help::the_help_teaches_exactly_the_keys_that_survived_the_reduction` が
-/// 固定しているので、廃止したキーが 1 文字（`a` `e` `x` `d`）で戻ってきても落ちる。
+/// 固定しているので、廃止したキーが 1 文字（`a` `e` `d`）で戻ってきても落ちる。
 pub(super) const HELP_ROWS: [&str; 22] = [
     " Tab            pane 移動(Sections / Arrangement)",
     " j/k ↑↓ PgUp/PgDn  カーソル移動(1 / 10 行、行全体を試聴)",
@@ -47,6 +47,7 @@ pub(super) const HELP_ROWS: [&str; 22] = [
     " b              Key / BPM を入力",
     " B              Bass preview ON/OFF",
     " t / Shift+T    Chord / Bass 音色を選択",
+    " x              Chord 音色の effect を選択",
     " Shift+P/Space  section を auto voicing で試聴/停止",
     " Ctrl+G         画面切替メニュー",
     " ? / Esc        このヘルプを開く / 閉じる",
@@ -57,7 +58,6 @@ pub(super) const HELP_ROWS: [&str; 22] = [
     " i              進行(degrees)を編集",
     " n              名前を手入力",
     " dd             削除(arrangement 上の参照も一緒に消える)",
-    "",
     " ── Arrangement pane ──",
     " 1..9           その番号の section をカーソルの次に挿入",
     " dd             カーソル行を削除",

@@ -77,6 +77,24 @@ pub(super) fn draw(app: &mut TuiApp<'_>, f: &mut Frame) {
             .unwrap_or_default();
         cmrt_mml_overlay::ui::draw_sender_loading(&sender_status, f);
     }
+    // Chord Chart の `x` は effect chain overlay を重ねる。
+    if let Some(overlay) = &app.chord_chart_effect_overlay {
+        let header =
+            super::mml_overlay_glue::chord_chart_effect_chain::chord_chart_effect_chain_header(
+                app.chord_chart_patch.as_deref(),
+            );
+        cmrt_effect_chain_select::draw(
+            f,
+            f.area(),
+            &overlay.editor,
+            app.effect_plugins.catalog(),
+            cmrt_effect_chain_select::EffectChainView {
+                adding: overlay.adding,
+                header: ratatui::text::Line::from(header),
+                error: overlay.error.as_deref(),
+            },
+        );
+    }
     // 音が鳴るまでの待ち（chord chart の preview など、共有 sender を通る経路）。
     // MML オーバーレイと音色 selector が開いているあいだは出さない（自前の loading 表示を持つ）。
     if !app.mml_overlay.is_open() && app.chord_chart_patch_select.is_none() {

@@ -19,10 +19,10 @@ use super::*;
 use cmrt_chord_chart::PreviewRequest;
 
 pub(crate) const DEXED_SNARE: &str = "Drums.syx/01 Snare Tight";
-const DEXED_PAD: &str = "Factory.syx/10 Warm Pad";
+pub(super) const DEXED_PAD: &str = "Factory.syx/10 Warm Pad";
 const SURGE_PAD: &str = "Pads/Pad 1.fxp";
-const DRUM_ROOM_CHAIN: &str = r#"[{"Dragonfly Room Reverb preset":"Small Drum Room"}]"#;
-const PAD_HALL_CHAIN: &str = r#"[{"Dragonfly Hall Reverb preset":"Dark Room"}]"#;
+pub(super) const DRUM_ROOM_CHAIN: &str = r#"[{"Dragonfly Room Reverb preset":"Small Drum Room"}]"#;
+pub(super) const PAD_HALL_CHAIN: &str = r#"[{"Dragonfly Hall Reverb preset":"Dark Room"}]"#;
 
 /// Dexed（effect 無し）の snare と pad、Surge XT（effect 内蔵）の pad を持つ patch catalog。
 pub(crate) fn patch_load() -> PatchLoadState {
@@ -104,7 +104,9 @@ pub(crate) fn effect_plugins() -> EffectPlugins {
 }
 
 /// 保存先を一時 dir にした Chord Chart。保存済みのルールは無い（既定のルール）。
-fn app_with_catalogs(tag: &str) -> (cmrt_history::test_support::LocalDirGuards, TuiApp<'static>) {
+pub(super) fn app_with_catalogs(
+    tag: &str,
+) -> (cmrt_history::test_support::LocalDirGuards, TuiApp<'static>) {
     let dirs = cmrt_history::test_support::temp_local_dirs(tag);
     let mut app = app_on_the_chord_chart();
     app.effect_plugins = effect_plugins();
@@ -112,7 +114,7 @@ fn app_with_catalogs(tag: &str) -> (cmrt_history::test_support::LocalDirGuards, 
     (dirs, app)
 }
 
-fn attach_recording_sink(app: &mut TuiApp<'_>) -> Arc<RecordingSink> {
+pub(super) fn attach_recording_sink(app: &mut TuiApp<'_>) -> Arc<RecordingSink> {
     let sink = Arc::new(RecordingSink::default());
     app.mml_overlay_sender = Some(MmlOverlaySender::with_recording_sink(
         Arc::clone(&sink),
@@ -121,7 +123,7 @@ fn attach_recording_sink(app: &mut TuiApp<'_>) -> Arc<RecordingSink> {
     sink
 }
 
-fn wait_for_prepared(sink: &RecordingSink, count: usize) -> Vec<LivePatch> {
+pub(super) fn wait_for_prepared(sink: &RecordingSink, count: usize) -> Vec<LivePatch> {
     let deadline = Instant::now() + Duration::from_secs(5);
     while sink.prepared().len() < count {
         assert!(
@@ -139,7 +141,7 @@ fn section_request() -> PreviewRequest {
 }
 
 /// 演奏の layer が server へ準備させる音色と chain（instance ごと）。
-fn playback_patch(app: &TuiApp<'_>, instance: u8) -> LivePatch {
+pub(super) fn playback_patch(app: &TuiApp<'_>, instance: u8) -> LivePatch {
     let preview = app.chord_chart_preview(&section_request());
     let layer = preview
         .layers
@@ -265,9 +267,9 @@ fn toggling_off_in_the_t_selector_makes_the_audition_and_the_playback_dry() {
         KeyModifiers::NONE,
     ));
 
-    // カーソルの候補（Chord role の Dexed pad）を chain 無しで鳴らし直す。
+    // カーソルの候補（音色の Role で開くので snare そのもの）を chain 無しで鳴らし直す。
     let prepared = wait_for_prepared(&sink, 2);
-    assert_eq!(prepared[1], LivePatch::new(Some(DEXED_PAD)));
+    assert_eq!(prepared[1], LivePatch::new(Some(DEXED_SNARE)));
     assert_eq!(playback_patch(&app, 0), LivePatch::new(Some(DEXED_SNARE)));
     // 保存もされている。入り直しても dry のまま。
     app.handle_chord_chart_patch_select_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));

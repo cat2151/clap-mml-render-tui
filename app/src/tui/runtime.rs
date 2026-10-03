@@ -211,6 +211,13 @@ impl<'a> TuiApp<'a> {
                         }
                         continue;
                     }
+                    // Chord Chart の `x` の effect chain overlay も同じ。
+                    if self.chord_chart_effect_overlay.is_some() {
+                        if key.kind == KeyEventKind::Press {
+                            self.handle_chord_chart_effect_chain_key_event(key);
+                        }
+                        continue;
+                    }
                     if self.screen_switch_menu.is_open() {
                         if self.active_screen == PrimaryScreen::Keyboard
                             && key.kind == KeyEventKind::Release

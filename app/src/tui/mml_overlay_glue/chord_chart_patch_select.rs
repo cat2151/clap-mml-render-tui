@@ -44,16 +44,17 @@ impl TuiApp<'_> {
                 favorites: self.notepad.patch_favorites(),
             },
             patch: patch.clone(),
+            query: self.chord_chart_role_query(role).to_owned(),
             // 演奏設定は `Ctrl+P` の入力欄と共通。閉じたら書き戻す。
             play_settings: self.mml_overlay.play_settings(),
             audition: chord_chart_section_audition(&degrees, key_token.as_deref(), role),
-            auto_reverb: Some(self.chord_chart_auto_reverb_host()),
+            auto_reverb: Some(self.chord_chart_auto_reverb_host(role)),
         });
         // 音源は MML overlay と同じ instance を借りるので、いまの画面の演奏を止めて明け渡す。
         self.stop_active_screen_playback();
         self.chord_chart_patch_select = Some((role, select));
         if let Some(sender) = &self.mml_overlay_sender {
-            let command_id = sender.prepare(self.chord_chart_live_patch(patch.as_deref()));
+            let command_id = sender.prepare(self.chord_chart_live_patch(role, patch.as_deref()));
             self.mml_overlay.expect_sender_command(command_id);
         }
         if let Some(opening) = opening {
@@ -89,7 +90,7 @@ impl TuiApp<'_> {
         }
     }
 
-    /// 確定なら音色を role の canonical patch へ入れ、借りていた音源を画面へ返す。
+    /// 確定なら音色を role の canonical patch へ、絞り込みを role の query へ入れ、借りていた音源を画面へ返す。
     fn close_chord_chart_patch_select(
         &mut self,
         confirmed: bool,
@@ -105,9 +106,16 @@ impl TuiApp<'_> {
             .set_restored_play_settings(select.play_settings());
         if confirmed {
             let patch = select.patch().map(str::to_owned);
+            let query = select.query().to_owned();
             match role {
-                PatchRole::Chord => self.chord_chart_patch = patch,
-                PatchRole::Bass => self.chord_chart_bass_patch = patch,
+                PatchRole::Chord => {
+                    self.chord_chart_patch = patch;
+                    self.chord_chart_query = query;
+                }
+                PatchRole::Bass => {
+                    self.chord_chart_bass_patch = patch;
+                    self.chord_chart_bass_query = query;
+                }
                 _ => {}
             }
         }
@@ -144,6 +152,14 @@ impl TuiApp<'_> {
             PatchRole::Chord => self.chord_chart_patch.clone(),
             PatchRole::Bass => self.chord_chart_bass_patch.clone(),
             _ => None,
+        }
+    }
+
+    fn chord_chart_role_query(&self, role: PatchRole) -> &str {
+        match role {
+            PatchRole::Chord => &self.chord_chart_query,
+            PatchRole::Bass => &self.chord_chart_bass_query,
+            _ => "",
         }
     }
 }

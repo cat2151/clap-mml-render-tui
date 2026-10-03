@@ -144,6 +144,7 @@ impl TuiApp<'_> {
         if self.active_screen != crate::screen_switch::PrimaryScreen::ChordChart
             || self.mml_overlay.is_open()
             || self.chord_chart_patch_select.is_some()
+            || self.chord_chart_effect_overlay.is_some()
             || self.deferred_chord_chart_preview.is_none()
         {
             return;
@@ -227,7 +228,8 @@ impl TuiApp<'_> {
         );
         // selector の試聴と同じ解決（`chord_chart_live_patch`）で、layer ごとに chain を載せる。
         for layer in &mut preview.layers {
-            layer.effect_chain = self.chord_chart_effect_chain(layer.patch.as_deref());
+            let role = preview::layer_role(layer);
+            layer.effect_chain = self.chord_chart_effect_chain(role, layer.patch.as_deref());
         }
         preview
     }

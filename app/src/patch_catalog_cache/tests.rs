@@ -442,5 +442,6 @@ fn eta_format_uses_total_minutes_and_two_digit_seconds() {
     assert_eq!(format_eta(Duration::from_secs(7_445)), "124分05秒");
 }
 
+mod installed_catalog_roles;
 #[cfg(windows)]
 mod installed_sforzando;

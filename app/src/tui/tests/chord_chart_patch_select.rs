@@ -122,3 +122,78 @@ fn a_loading_catalog_shows_the_waiting_notice_and_opens_once_ready() {
         .as_ref()
         .is_some_and(|(_, select)| select.is_select_open()));
 }
+
+fn three_patches() -> PatchLoadState {
+    PatchLoadState::ready(make_patches(&[
+        "Basses/Bass 1.fxp",
+        "Pads/Other Pad.fxp",
+        "Pads/Warm Pad.fxp",
+    ]))
+}
+
+fn type_filter(app: &mut TuiApp<'_>, text: &str) {
+    app.handle_chord_chart_patch_select_key_event(plain(KeyCode::Char('/')));
+    for ch in text.chars() {
+        app.handle_chord_chart_patch_select_key_event(plain(KeyCode::Char(ch)));
+    }
+    app.handle_chord_chart_patch_select_key_event(plain(KeyCode::Enter));
+}
+
+fn shift_t() -> KeyEvent {
+    KeyEvent::new(KeyCode::Char('T'), KeyModifiers::SHIFT)
+}
+
+/// 開き直してすぐ `Enter` で、開いたときの絞り込みとカーソルをそのまま確定させる。
+/// 絞り込みが戻っていなければ確定値は空になり、カーソルが戻っていなければ音色が変わる。
+#[test]
+fn reopening_t_brings_back_the_confirmed_filter_and_the_patch_cursor() {
+    let mut app = app_with_patches(three_patches());
+    assert!(app.try_open_mml_overlay(plain(KeyCode::Char('t'))));
+    type_filter(&mut app, "other");
+    app.handle_chord_chart_patch_select_key_event(plain(KeyCode::Enter));
+    assert!(app.chord_chart_patch_select.is_none());
+    assert_eq!(app.chord_chart_patch.as_deref(), Some("Pads/Other Pad.fxp"));
+    assert_eq!(app.chord_chart_query, "other");
+
+    assert!(app.try_open_mml_overlay(plain(KeyCode::Char('t'))));
+    app.handle_chord_chart_patch_select_key_event(plain(KeyCode::Enter));
+
+    assert_eq!(app.chord_chart_patch.as_deref(), Some("Pads/Other Pad.fxp"));
+    assert_eq!(app.chord_chart_query, "other");
+}
+
+#[test]
+fn the_bass_selector_keeps_its_own_filter_apart_from_the_chord_one() {
+    let mut app = app_with_patches(three_patches());
+    assert!(app.try_open_mml_overlay(plain(KeyCode::Char('t'))));
+    type_filter(&mut app, "other");
+    app.handle_chord_chart_patch_select_key_event(plain(KeyCode::Enter));
+
+    assert!(app.try_open_mml_overlay(shift_t()));
+    app.handle_chord_chart_patch_select_key_event(plain(KeyCode::Enter));
+    assert_eq!(app.chord_chart_bass_query, "", "Chord の絞り込みで開かない");
+
+    assert!(app.try_open_mml_overlay(shift_t()));
+    type_filter(&mut app, "bass");
+    app.handle_chord_chart_patch_select_key_event(plain(KeyCode::Enter));
+
+    assert_eq!(app.chord_chart_bass_query, "bass");
+    assert_eq!(
+        app.chord_chart_bass_patch.as_deref(),
+        Some("Basses/Bass 1.fxp")
+    );
+    assert_eq!(app.chord_chart_query, "other");
+}
+
+#[test]
+fn esc_keeps_the_last_confirmed_filter() {
+    let mut app = app_with_patches(three_patches());
+    app.chord_chart_query = "other".to_string();
+    assert!(app.try_open_mml_overlay(plain(KeyCode::Char('t'))));
+    type_filter(&mut app, "warm");
+
+    app.handle_chord_chart_patch_select_key_event(plain(KeyCode::Esc));
+
+    assert!(app.chord_chart_patch_select.is_none());
+    assert_eq!(app.chord_chart_query, "other");
+}

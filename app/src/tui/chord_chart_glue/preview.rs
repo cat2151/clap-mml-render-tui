@@ -9,6 +9,7 @@ use cmrt_mml_overlay::{
 };
 
 use cmrt_chord_chart::PreviewRequest;
+use cmrt_patches::PatchRole;
 
 use super::{bass_patch::BassPatchResolution, voicing};
 
@@ -35,6 +36,15 @@ pub(in crate::tui) struct ChordChartPreview {
     pub bass_enabled: bool,
     /// 行全体ではなく chord 1 つに絞ったなら `(0 始まりの番号, 行の chord 総数)`。
     pub chord: Option<(usize, usize)>,
+}
+
+/// layer が鳴らす role。
+pub(super) fn layer_role(layer: &LineLayer) -> PatchRole {
+    if layer.instance_id == BASS_INSTANCE {
+        PatchRole::Bass
+    } else {
+        PatchRole::Chord
+    }
 }
 
 pub(super) fn build(

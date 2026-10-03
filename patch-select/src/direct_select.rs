@@ -27,6 +27,8 @@ pub struct DirectPatchSelectRequest {
     pub context: PatchAuditionContext,
     /// 今の音色。開いた直後の試聴と、selector の初期カーソルに使う。
     pub patch: Option<String>,
+    /// 絞り込みの初期値。前回閉じたときの [`DirectPatchSelect::query`] を渡せば絞り込みが戻る。
+    pub query: String,
     /// host の画面全体で共通の演奏設定。閉じたら [`DirectPatchSelect::play_settings`] を書き戻す。
     pub play_settings: PlaySettings,
     /// 試聴で鳴らすもの。`None` は「鳴らすものが無いので音色の差し替えだけ」。
@@ -74,6 +76,7 @@ impl<'a> DirectPatchSelect<'a> {
         let mut select = PatchAuditionSelect::default();
         select.open(request.context);
         select.set_patch(request.patch.clone());
+        select.set_query(request.query);
         select.set_play_settings(request.play_settings);
         select.set_auto_reverb(request.auto_reverb);
         select.request_select();
@@ -134,6 +137,11 @@ impl<'a> DirectPatchSelect<'a> {
     /// 今の音色。候補を動かしただけでは変わらず、`Enter` の確定でだけ変わる。
     pub fn patch(&self) -> Option<&str> {
         self.select.patch()
+    }
+
+    /// `Enter` で確定したときの絞り込み。確定するまでは開くときに渡した値のまま。
+    pub fn query(&self) -> &str {
+        self.select.query()
     }
 
     /// 開いている selector で `display` を試聴するときに chain へ足す auto reverb の 1 段。

@@ -3,6 +3,7 @@ use std::path::Path;
 
 mod migration;
 mod paths;
+mod session_file_roundtrip;
 mod storage;
 mod voicing_cache;
 
@@ -104,6 +105,9 @@ fn session_state_serialize_deserialize() {
         chord_chart_patch: Some("Keys/Piano.fxp".to_string()),
         chord_chart_bass_enabled: false,
         chord_chart_bass_patch: Some("Bass/Finger Bass.fxp".to_string()),
+        chord_chart_query: String::new(),
+        chord_chart_bass_query: String::new(),
+        chord_chart_effect_chain: Vec::new(),
         mml_overlay_play_settings: MmlOverlayPlaySettings {
             repeat: true,
             modulation: false,
@@ -163,6 +167,9 @@ fn session_state_serialize_deserialize_zero() {
         chord_chart_patch: None,
         chord_chart_bass_enabled: true,
         chord_chart_bass_patch: None,
+        chord_chart_query: String::new(),
+        chord_chart_bass_query: String::new(),
+        chord_chart_effect_chain: Vec::new(),
         mml_overlay_play_settings: MmlOverlayPlaySettings::default(),
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
@@ -179,6 +186,9 @@ fn session_state_patch_fields_round_trip_independently() {
         chord_chart_patch: Some("Chord Chart/Piano.fxp".to_string()),
         chord_chart_bass_enabled: false,
         chord_chart_bass_patch: Some("Bass/Upright.fxp".to_string()),
+        chord_chart_query: "plugin:floe".to_string(),
+        chord_chart_bass_query: "bass".to_string(),
+        chord_chart_effect_chain: Vec::new(),
         ..SessionState::default()
     };
 
@@ -195,6 +205,8 @@ fn session_state_patch_fields_round_trip_independently() {
         loaded.chord_chart_bass_patch.as_deref(),
         Some("Bass/Upright.fxp")
     );
+    assert_eq!(loaded.chord_chart_query, "plugin:floe");
+    assert_eq!(loaded.chord_chart_bass_query, "bass");
 }
 
 #[test]
@@ -211,6 +223,8 @@ fn history_without_chord_chart_patch_keeps_existing_patch_and_defaults_to_none()
     assert_eq!(loaded.chord_chart_patch, None);
     assert!(loaded.chord_chart_bass_enabled);
     assert_eq!(loaded.chord_chart_bass_patch, None);
+    assert_eq!(loaded.chord_chart_query, "");
+    assert_eq!(loaded.chord_chart_bass_query, "");
 }
 
 #[test]
@@ -233,6 +247,9 @@ fn session_state_serialize_deserialize_daw_screen() {
         chord_chart_patch: None,
         chord_chart_bass_enabled: true,
         chord_chart_bass_patch: None,
+        chord_chart_query: String::new(),
+        chord_chart_bass_query: String::new(),
+        chord_chart_effect_chain: Vec::new(),
         mml_overlay_play_settings: MmlOverlayPlaySettings::default(),
     };
     let json = serde_json::to_string_pretty(&state).unwrap();
@@ -317,121 +334,4 @@ fn session_state_json_empty_lines_passes_through_serde() {
     // load_session_state() がこれを検知して default_lines() で補填する。
     let raw: SessionState = serde_json::from_str(r#"{"cursor": 2, "lines": []}"#).unwrap();
     assert!(raw.lines.is_empty(), "serde は空配列をそのまま通す");
-}
-
-#[test]
-fn save_and_load_session_state_roundtrip() {
-    // 実ユーザーデータディレクトリに影響しないよう、一時ファイルに直接書き込んで
-    // JSON シリアライズ/デシリアライズの往復を検証する
-    let tmp_path = crate::test_support::unique_test_dir("history_roundtrip_json");
-
-    let state = SessionState {
-        cursor: 7,
-        lines: vec!["cde".to_string(), "fga".to_string()],
-        active_screen: PrimaryScreen::Notepad,
-        keyboard: KeyboardSessionState::default(),
-        grid_sequencer_track_count: 16,
-        grid_sequencer_chord_mode: false,
-        grid_sequencer: None,
-        grid_sequencer_bpm: None,
-        loop_browser_bpm: None,
-        grid_sequencer_bpm_range: None,
-        loop_browser_bpm_range: None,
-        keyboard_note_guide_overlay_date: None,
-        notepad_sound_check_guide_overlay_date: None,
-        mml_overlay_patch: None,
-        chord_chart_patch: None,
-        chord_chart_bass_enabled: true,
-        chord_chart_bass_patch: None,
-        mml_overlay_play_settings: MmlOverlayPlaySettings::default(),
-    };
-    let json = serde_json::to_string_pretty(&state).unwrap();
-    std::fs::write(&tmp_path, &json).unwrap();
-
-    let read_back = std::fs::read_to_string(&tmp_path).unwrap();
-    let loaded: SessionState = serde_json::from_str(&read_back).unwrap();
-    std::fs::remove_file(&tmp_path).ok();
-
-    assert_eq!(loaded.cursor, 7);
-    assert_eq!(loaded.lines, vec!["cde".to_string(), "fga".to_string()]);
-    assert_eq!(loaded.active_screen, PrimaryScreen::Notepad);
-}
-
-#[test]
-fn save_and_load_session_state_roundtrip_daw_mode() {
-    // DAW モードのセッション状態が正しく保存・復元されることを検証する
-    let tmp_path = crate::test_support::unique_test_dir("history_roundtrip_daw_json");
-
-    let state = SessionState {
-        cursor: 0,
-        lines: vec!["cde".to_string()],
-        active_screen: PrimaryScreen::Daw,
-        keyboard: KeyboardSessionState::default(),
-        grid_sequencer_track_count: 16,
-        grid_sequencer_chord_mode: false,
-        grid_sequencer: None,
-        grid_sequencer_bpm: None,
-        loop_browser_bpm: None,
-        grid_sequencer_bpm_range: None,
-        loop_browser_bpm_range: None,
-        keyboard_note_guide_overlay_date: None,
-        notepad_sound_check_guide_overlay_date: None,
-        mml_overlay_patch: None,
-        chord_chart_patch: None,
-        chord_chart_bass_enabled: true,
-        chord_chart_bass_patch: None,
-        mml_overlay_play_settings: MmlOverlayPlaySettings::default(),
-    };
-    let json = serde_json::to_string_pretty(&state).unwrap();
-    std::fs::write(&tmp_path, &json).unwrap();
-
-    let read_back = std::fs::read_to_string(&tmp_path).unwrap();
-    let loaded: SessionState = serde_json::from_str(&read_back).unwrap();
-    std::fs::remove_file(&tmp_path).ok();
-
-    assert_eq!(loaded.active_screen, PrimaryScreen::Daw);
-}
-
-#[test]
-fn save_and_load_session_state_roundtrip_mml_overlay_play_settings() {
-    // `Ctrl+L` の 3 値が、保存したファイルを読み直しても同じ組み合わせで戻ること。
-    // 3 値のうち一部だけ ON にして、取り違え（別の項目へ入る）も検出する。
-    let tmp_path = crate::test_support::unique_test_dir("history_roundtrip_play_settings_json");
-
-    let state = SessionState {
-        mml_overlay_play_settings: MmlOverlayPlaySettings {
-            repeat: true,
-            modulation: false,
-            velocity: true,
-        },
-        ..SessionState::default()
-    };
-    let json = serde_json::to_string_pretty(&state).unwrap();
-    std::fs::write(&tmp_path, &json).unwrap();
-
-    let read_back = std::fs::read_to_string(&tmp_path).unwrap();
-    let loaded: SessionState = serde_json::from_str(&read_back).unwrap();
-    std::fs::remove_file(&tmp_path).ok();
-
-    assert_eq!(
-        loaded.mml_overlay_play_settings,
-        MmlOverlayPlaySettings {
-            repeat: true,
-            modulation: false,
-            velocity: true,
-        }
-    );
-}
-
-#[test]
-fn a_history_file_written_before_the_play_settings_existed_loads_with_them_all_off() {
-    // 既存ユーザーの history.json にはこのキーが無い。既定は「全部 OFF」＝
-    // 設定が無かったころと同じ挙動でなければならない。
-    let json = r#"{ "cursor": 0, "lines": ["cde"] }"#;
-    let loaded: SessionState = serde_json::from_str(json).unwrap();
-    assert_eq!(
-        loaded.mml_overlay_play_settings,
-        MmlOverlayPlaySettings::default()
-    );
-    assert!(!loaded.mml_overlay_play_settings.repeat);
 }

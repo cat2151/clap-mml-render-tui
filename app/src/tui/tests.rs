@@ -8,6 +8,8 @@ mod chord_chart_bass_preview;
 mod chord_chart_catalog;
 mod chord_chart_chord_preview;
 mod chord_chart_chord_ranges;
+mod chord_chart_effect_chain;
+mod chord_chart_effect_chain_overlay;
 mod chord_chart_initial_song;
 mod chord_chart_overlay;
 mod chord_chart_patch_audition;

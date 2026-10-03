@@ -76,6 +76,7 @@ impl DawApp {
                 favorites: cmrt_history::favorite_patch_names(&self.patch_phrase_store),
             },
             patch: patch.clone(),
+            query: String::new(),
             // 演奏設定は `i` の入力欄と共通。閉じたら書き戻す。
             play_settings: self.mml_overlay.play_settings(),
             audition: measure_audition(&preview_line),

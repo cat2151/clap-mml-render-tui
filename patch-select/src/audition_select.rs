@@ -80,7 +80,7 @@ pub struct PatchAuditionContext {
     pub catalog: PatchCatalogSnapshot,
     /// Grid Sequencer と共有する、同じ catalog 世代の Role 索引。
     pub patch_role_index: PatchRoleIndex,
-    /// selector を開いた直後に選ぶ Role。`None` は今の音色の Role（分類できなければ `ALL`）。
+    /// 今の音色の Role が分からないときに開く Role。`None` なら `ALL`。
     /// catalog の Loading 完了待ちを挟んでも、この指定を使って開く。
     pub initial_role: Option<PatchRole>,
     /// catalog 構築時に計測した patch 別の load 結果。
@@ -100,6 +100,9 @@ pub struct PatchAuditionContext {
 pub struct PatchAuditionSelect<'a> {
     /// いまの音色。selector の確定と、持つ側の差し替えだけが書き換える。
     patch: Option<String>,
+    /// 最後に確定したときの絞り込み。次に開く selector の Regex 欄の初期値で、`patch` と同じく
+    /// 確定と持つ側の差し替えだけが書き換える。
+    query: String,
     catalog: PatchCatalogSnapshot,
     role_index: PatchRoleIndex,
     initial_role: Option<PatchRole>,
@@ -176,6 +179,16 @@ impl<'a> PatchAuditionSelect<'a> {
         self.patch = patch;
     }
 
+    /// 最後に確定したときの絞り込み（plugin solo/mute を含む）。
+    pub fn query(&self) -> &str {
+        &self.query
+    }
+
+    /// 次に開く selector の絞り込みを差し替える（セッションからの復元）。
+    pub fn set_query(&mut self, query: String) {
+        self.query = query;
+    }
+
     pub fn select(&self) -> Option<&PatchSelect<'a>> {
         self.select.as_ref()
     }
@@ -225,11 +238,13 @@ impl<'a> PatchAuditionSelect<'a> {
                     catalog_notes: self.catalog_notes.clone(),
                     load_measurements: self.load_measurements.clone(),
                     favorites: self.favorites.clone(),
-                    initial_query: String::new(),
+                    initial_query: self.query.clone(),
                     auto_reverb: self.auto_reverb.clone(),
                 });
+                let selected = self.select.as_ref().and_then(PatchSelect::selected);
                 crate::log_line(format!(
-                    "action=patch-select event=open result=success count={count}"
+                    "action=patch-select event=open result=success count={count} query={:?} selected={selected:?}",
+                    self.query
                 ));
             }
         }
@@ -281,6 +296,7 @@ impl<'a> PatchAuditionSelect<'a> {
             PatchSelectAction::PlayLine(patch) => audition(AuditionMoment::Replay, patch),
             PatchSelectAction::Confirm(patch) => {
                 self.confirmed_auto_reverb = select.auto_reverb_stage(&patch);
+                self.query = select.committed_query().to_string();
                 // 試聴で読み込み済みの音色がそのまま残るので、ここでは積み直さない。
                 self.select = None;
                 self.patch = Some(patch);

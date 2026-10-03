@@ -160,6 +160,9 @@ impl<'a> TuiApp<'a> {
             chord_chart_patch,
             chord_chart_bass_enabled,
             chord_chart_bass_patch,
+            chord_chart_query,
+            chord_chart_bass_query,
+            chord_chart_effect_chain,
             mml_overlay_play_settings,
         } = load_initial_session_state();
         apply_startup_keyboard(&mut active_screen, &mut keyboard, startup_keyboard);
@@ -318,9 +321,13 @@ impl<'a> TuiApp<'a> {
             },
             mml_overlay_owner: None,
             chord_chart_patch_select: None,
+            chord_chart_effect_overlay: None,
             mml_overlay_patch,
             chord_chart_patch,
             chord_chart_bass_patch,
+            chord_chart_query,
+            chord_chart_bass_query,
+            chord_chart_effect_chain_stages: chord_chart_effect_chain,
             chord_chart_auto_reverb_rules: Default::default(),
             mml_overlay_sender,
             voicing: super::voicing::VoicingState::with_catalog_voicings(

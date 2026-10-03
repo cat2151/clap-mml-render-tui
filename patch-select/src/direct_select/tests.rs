@@ -33,6 +33,7 @@ fn request(catalog: PatchCatalogSnapshot) -> DirectPatchSelectRequest {
             ..Default::default()
         },
         patch: Some("A.fxp".to_string()),
+        query: String::new(),
         play_settings: PlaySettings::default(),
         audition: Some(note()),
         auto_reverb: None,
@@ -139,4 +140,81 @@ fn an_empty_catalog_does_not_open() {
         select.handle_key(press(KeyCode::Esc)),
         DirectSelectOutcome::Closed { .. }
     ));
+}
+
+#[test]
+fn reopening_with_the_confirmed_patch_keeps_the_plugin_solo_and_the_cursor() {
+    let catalog = PatchCatalogSnapshot::Ready(vec![
+        PatchCatalogEntry::new(
+            "A.fxp".to_string(),
+            "a.fxp".to_string(),
+            "Surge XT".to_string(),
+            None,
+        ),
+        PatchCatalogEntry::new(
+            "B.floe-preset".to_string(),
+            "b.floe-preset".to_string(),
+            "Floe".to_string(),
+            None,
+        ),
+    ]);
+    let (mut select, _) = DirectPatchSelect::open(request(catalog.clone()));
+    select.handle_key(press(KeyCode::Char('m')));
+    select.handle_key(press(KeyCode::Char('f')));
+    select.handle_key(press(KeyCode::Enter));
+    assert_eq!(select.patch(), Some("B.floe-preset"));
+
+    assert_eq!(select.query(), "plugin:floe");
+
+    let mut reopen = request(catalog);
+    reopen.patch = select.patch().map(str::to_string);
+    reopen.query = select.query().to_string();
+    let (reopened, _) = DirectPatchSelect::open(reopen);
+
+    let patch_select = reopened.audition_select().select().expect("開いている");
+    assert_eq!(patch_select.committed_query(), "plugin:floe");
+    assert_eq!(patch_select.selected(), Some("B.floe-preset"));
+}
+
+#[test]
+fn cancelling_keeps_the_query_given_at_open() {
+    let catalog = PatchCatalogSnapshot::Ready(vec![
+        PatchCatalogEntry::new(
+            "A.fxp".to_string(),
+            "a.fxp".to_string(),
+            "Surge XT".to_string(),
+            None,
+        ),
+        PatchCatalogEntry::new(
+            "B.floe-preset".to_string(),
+            "b.floe-preset".to_string(),
+            "Floe".to_string(),
+            None,
+        ),
+    ]);
+    let mut opening = request(catalog);
+    opening.query = "plugin:surge-xt".to_string();
+    let (mut select, _) = DirectPatchSelect::open(opening);
+    select.handle_key(press(KeyCode::Char('m')));
+    select.handle_key(press(KeyCode::Char('f')));
+    assert_ne!(
+        select
+            .audition_select()
+            .select()
+            .expect("開いている")
+            .committed_query(),
+        "plugin:surge-xt",
+        "selector の中では絞り込みが変わっている"
+    );
+
+    let outcome = select.handle_key(press(KeyCode::Esc));
+
+    assert!(matches!(
+        outcome,
+        DirectSelectOutcome::Closed {
+            confirmed: false,
+            ..
+        }
+    ));
+    assert_eq!(select.query(), "plugin:surge-xt");
 }

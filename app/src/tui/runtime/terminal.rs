@@ -24,6 +24,10 @@ impl TuiApp<'_> {
         if self.mml_overlay.is_open() || self.chord_chart_patch_select.is_some() {
             return true;
         }
+        // effect の list の絞り込み欄だけが textarea。
+        if let Some(overlay) = &self.chord_chart_effect_overlay {
+            return overlay.adding && overlay.editor.add.filter_active;
+        }
         match self.active_screen {
             PrimaryScreen::Keyboard => self.keyboard.is_typing(),
             // loop browser の textarea は loop tree の `/` 絞り込み入力欄だけ。

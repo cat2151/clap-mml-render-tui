@@ -77,6 +77,15 @@ pub struct SessionState {
     /// Chord Chart の Bass layer 専用音色。Chord 用音色とは独立して保持する。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chord_chart_bass_patch: Option<String>,
+    /// Chord Chart の Chord 音色 selector で最後に確定した絞り込み（plugin solo/mute を含む）。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub chord_chart_query: String,
+    /// Chord Chart の Bass 音色 selector で最後に確定した絞り込み。Chord 側とは独立して保持する。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub chord_chart_bass_query: String,
+    /// Chord Chart の Chord 音色に掛ける effect chain（auto reverb の段は含めない）。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chord_chart_effect_chain: Vec<serde_json::Value>,
     /// MML 入力 overlay の演奏設定（`Ctrl+L`）。MML 本体は揮発だが、
     /// 「どう鳴らすか」は音色と同じく開き直しても引き継ぐ。
     #[serde(default)]
@@ -103,6 +112,9 @@ impl Default for SessionState {
             chord_chart_patch: None,
             chord_chart_bass_enabled: true,
             chord_chart_bass_patch: None,
+            chord_chart_query: String::new(),
+            chord_chart_bass_query: String::new(),
+            chord_chart_effect_chain: Vec::new(),
             mml_overlay_play_settings: MmlOverlayPlaySettings::default(),
         }
     }
@@ -147,6 +159,12 @@ struct SessionStateWire {
     #[serde(default)]
     chord_chart_bass_patch: Option<String>,
     #[serde(default)]
+    chord_chart_query: String,
+    #[serde(default)]
+    chord_chart_bass_query: String,
+    #[serde(default)]
+    chord_chart_effect_chain: Vec<serde_json::Value>,
+    #[serde(default)]
     mml_overlay_play_settings: MmlOverlayPlaySettings,
 }
 
@@ -185,6 +203,9 @@ impl<'de> serde::Deserialize<'de> for SessionState {
             chord_chart_patch: wire.chord_chart_patch,
             chord_chart_bass_enabled: wire.chord_chart_bass_enabled,
             chord_chart_bass_patch: wire.chord_chart_bass_patch,
+            chord_chart_query: wire.chord_chart_query,
+            chord_chart_bass_query: wire.chord_chart_bass_query,
+            chord_chart_effect_chain: wire.chord_chart_effect_chain,
             mml_overlay_play_settings: wire.mml_overlay_play_settings,
         })
     }
